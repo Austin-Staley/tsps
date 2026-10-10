@@ -72,7 +72,8 @@ function poolKey(x, y) {
 
 /**
  * Tile-targeted shots use OpenRune's capture-derived flight values (delay, duration,
- * arc angle, heights) and leave from her middle, not the corner of her 7x7 body.
+ * arc), with heights quartered like DoomShared does: this engine's height params run 4x
+ * below capture units. They leave from her middle, not the corner of her 7x7 body.
  */
 function sendTileProjectile(npc, tile, projectileId, flight) {
   new core.Projectile(
@@ -88,9 +89,9 @@ function sendTileProjectile(npc, tile, projectileId, flight) {
   ).withAngle(flight.angle).sendProjectile();
 }
 
-const ACID_LOB_FLIGHT = { delay: 32, duration: 90, angle: 46, startHeight: 340, endHeight: 0 };
-const RAPID_FLIGHT = { delay: 0, duration: 30, angle: 22, startHeight: 138, endHeight: 30 };
-const SPAWN_FLIGHT = { delay: 32, duration: 120, angle: 46, startHeight: 340, endHeight: 0 };
+const ACID_LOB_FLIGHT = { delay: 32, duration: 90, angle: 46, startHeight: 85, endHeight: 0 };
+const RAPID_FLIGHT = { delay: 0, duration: 30, angle: 22, startHeight: 35, endHeight: 8 };
+const SPAWN_FLIGHT = { delay: 32, duration: 120, angle: 46, startHeight: 85, endHeight: 0 };
 
 function globalGraphic(npc, gfxId, height, tile) {
   const viewers = npc.getPlayersWithinDistance(25);

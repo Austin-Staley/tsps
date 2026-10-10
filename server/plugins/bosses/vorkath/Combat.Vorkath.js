@@ -103,10 +103,6 @@ function breathOutcome(npc, player, variant) {
   return { damage, accurate, message };
 }
 
-/**
- * Tile-targeted shots use OpenRune's capture-derived flight values (delay, duration,
- * arc angle, heights) and leave from her middle, not the corner of her 7x7 body.
- */
 function homingShot(npc, target, projectileId) {
   // Leaves her head (43) for the target's chest (31), and scales flight time with
   // distance like KBD: a fixed speed reads as teleporting at range, then the hit
@@ -118,7 +114,8 @@ function homingShot(npc, target, projectileId) {
 
 /**
  * Tile-targeted shots use OpenRune's capture-derived flight values (delay, duration,
- * arc angle, heights) and leave from her middle, not the corner of her 7x7 body.
+ * arc), with heights quartered like DoomShared does: this engine's height params run 4x
+ * below capture units. They leave from her middle, not the corner of her 7x7 body.
  */
 function sendTileProjectile(npc, tile, projectileId, flight) {
   new core.Projectile(
@@ -134,7 +131,7 @@ function sendTileProjectile(npc, tile, projectileId, flight) {
   ).withAngle(flight.angle).sendProjectile();
 }
 
-const FIREBALL_FLIGHT = { delay: 0, duration: 120, angle: 46, startHeight: 340, endHeight: 38 };
+const FIREBALL_FLIGHT = { delay: 0, duration: 120, angle: 46, startHeight: 85, endHeight: 10 };
 
 function globalGraphic(npc, gfxId, height, tile) {
   const viewers = npc.getPlayersWithinDistance(25);
