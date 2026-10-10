@@ -177,7 +177,7 @@ function tickAcid(npc, fight) {
       if (!alive(target)) return;
       const current = target.getLocation();
       if (current.getX() !== tile.x || current.getY() !== tile.y) return;
-      globalGraphic(npc, RAPID_IMPACT_GFX, core.GraphicHeight.HIGH, tile);
+      // No impact graphic here: it renders as a second droplet next to the shot.
       damagePlayer(target, Shared.RAPID_MIN + core.Misc.getRandom(Shared.RAPID_MAX - Shared.RAPID_MIN));
     });
     fight.rapidFired += 1;
@@ -305,11 +305,7 @@ function tickSpawn(npc, fight) {
     endSpawn(npc, fight);
     return;
   }
-  // Hold the ice block around the fighter while the freeze lasts: a single graphic
-  // fades long before the spawn is handled.
-  if (core.World.getProcessCycle() % 4 === 0 && target.getTimers?.().has?.(core.TimerKey.FREEZE)) {
-    target.performGraphic(new core.Graphic(FREEZE_GFX, core.GraphicHeight.HIGH));
-  }
+  // The ice block shows once at impact (like Ancient Barrage), not for the freeze.
   if (spawnEdgeDistance(spawn, target) > 1) {
     // Failsafe: a spawn that never reaches its target (walled off, target gone
     // walkabout) must not hold her immune forever - detonate where it stands.
