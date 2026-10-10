@@ -103,19 +103,25 @@ function breathOutcome(npc, player, variant) {
   return { damage, accurate, message };
 }
 
-function sendTileProjectile(npc, tile, projectileId, endCycles) {
+/**
+ * Tile-targeted shots use OpenRune's capture-derived flight values (delay, duration,
+ * arc angle, heights) and leave from her middle, not the corner of her 7x7 body.
+ */
+function sendTileProjectile(npc, tile, projectileId, flight) {
   new core.Projectile(
-    npc.getLocation(),
+    core.Projectile.centreOf(npc),
     new core.Location(tile.x, tile.y, npc.getLocation().getZ()),
     null,
     projectileId,
-    40,
-    endCycles,
-    31,
-    43,
+    flight.delay,
+    flight.duration,
+    flight.startHeight,
+    flight.endHeight,
     npc.getPrivateArea(),
-  ).sendProjectile();
+  ).withAngle(flight.angle).sendProjectile();
 }
+
+const FIREBALL_FLIGHT = { delay: 0, duration: 120, angle: 46, startHeight: 340, endHeight: 38 };
 
 function globalGraphic(npc, gfxId, height, tile) {
   const viewers = npc.getPlayersWithinDistance(25);
@@ -133,7 +139,7 @@ function launchFireball(npc, target) {
     if (!npc.isRegistered?.() || (npc.getHitpoints?.() ?? 1) <= 0) return;
     const location = target.getLocation();
     const tile = { x: location.getX(), y: location.getY() };
-    sendTileProjectile(npc, tile, FIREBALL_PROJECTILE, 120);
+    sendTileProjectile(npc, tile, FIREBALL_PROJECTILE, FIREBALL_FLIGHT);
     afterTicks(3, target, () => explodeFireball(npc, tile));
   });
 }
@@ -258,9 +264,12 @@ function combatClass() {
       const outcome = target.isPlayer?.()
         ? breathOutcome(character, target.getAsPlayer(), variant)
         : { damage: core.Misc.getRandom(Shared.MAGIC_MAX), message: null };
+      const impactGfx = variant === Shared.Attack.VENOM ? VENOM_IMPACT_GFX
+        : variant === Shared.Attack.PRAYER ? PRAYER_IMPACT_GFX
+        : DRAGONFIRE_IMPACT_GFX;
       const hit = new core.PendingHit(character, target, this, { delay, rollAccuracy: false });
       hit.setTotalDamage(outcome.damage);
-      hit.vorkathBreath = { variant, message: outcome.message };
+      hit.vorkathBreath = { variant, message: outcome.message, impactGfx };
       return [hit];
     }
 
@@ -314,12 +323,7 @@ function combatClass() {
       }
       const breath = hit.vorkathBreath;
       if (!breath) return;
-      const graphics = {
-        [Shared.Attack.DRAGONFIRE]: DRAGONFIRE_IMPACT_GFX,
-        [Shared.Attack.VENOM]: VENOM_IMPACT_GFX,
-        [Shared.Attack.PRAYER]: PRAYER_IMPACT_GFX,
-      };
-      target.performGraphic(new core.Graphic(graphics[breath.variant] ?? DRAGONFIRE_IMPACT_GFX, core.GraphicHeight.HIGH));
+      target.performGraphic(new core.Graphic(breath.impactGfx ?? DRAGONFIRE_IMPACT_GFX, core.GraphicHeight.HIGH));
       if (breath.message) target.sendMessage(breath.message);
       if (breath.variant === Shared.Attack.VENOM && Math.random() < 0.5) {
         CombatFactory.poisonEntity(target, 6, 2);

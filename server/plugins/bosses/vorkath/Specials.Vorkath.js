@@ -70,19 +70,27 @@ function poolKey(x, y) {
   return Shared.tileKey(x, y);
 }
 
-function sendTileProjectile(npc, tile, projectileId, endCycles) {
+/**
+ * Tile-targeted shots use OpenRune's capture-derived flight values (delay, duration,
+ * arc angle, heights) and leave from her middle, not the corner of her 7x7 body.
+ */
+function sendTileProjectile(npc, tile, projectileId, flight) {
   new core.Projectile(
-    npc.getLocation(),
+    core.Projectile.centreOf(npc),
     new core.Location(tile.x, tile.y, npc.getLocation().getZ()),
     null,
     projectileId,
-    40,
-    endCycles,
-    31,
-    43,
+    flight.delay,
+    flight.duration,
+    flight.startHeight,
+    flight.endHeight,
     npc.getPrivateArea(),
-  ).sendProjectile();
+  ).withAngle(flight.angle).sendProjectile();
 }
+
+const ACID_LOB_FLIGHT = { delay: 32, duration: 90, angle: 46, startHeight: 340, endHeight: 0 };
+const RAPID_FLIGHT = { delay: 0, duration: 30, angle: 22, startHeight: 138, endHeight: 30 };
+const SPAWN_FLIGHT = { delay: 32, duration: 120, angle: 46, startHeight: 340, endHeight: 0 };
 
 function globalGraphic(npc, gfxId, height, tile) {
   const viewers = npc.getPlayersWithinDistance(25);
@@ -130,6 +138,9 @@ function startAcid(npc, target) {
     base.getX(), base.getY(), position.getX(), position.getY(),
     isWalkable, (n) => core.Misc.getRandom(n),
   );
+  for (const [x, y] of tiles) {
+    sendTileProjectile(npc, { x, y }, ACID_PROJECTILE, ACID_LOB_FLIGHT);
+  }
   later(Shared.ACID_POOL_LAND_DELAY, target, () => {
     if (!alive(npc) || (npc.getAttribute(Shared.ATTR_PHASE) ?? null) !== Shared.PHASE_ACID) return;
     for (const [x, y] of tiles) {
@@ -156,7 +167,7 @@ function tickAcid(npc, fight) {
   if (fight.rapidFired < Shared.ACID_RAPID_SHOTS && now >= fight.rapidNextCycle) {
     const location = target.getLocation();
     const tile = { x: location.getX(), y: location.getY() };
-    sendTileProjectile(npc, tile, RAPID_PROJECTILE, 30);
+    sendTileProjectile(npc, tile, RAPID_PROJECTILE, RAPID_FLIGHT);
     later(1, target, () => {
       if (!alive(target)) return;
       const current = target.getLocation();
@@ -239,7 +250,7 @@ function startSpawn(npc, target) {
       endSpawn(npc, fight);
       return;
     }
-    sendTileProjectile(npc, { x: tile[0], y: tile[1] }, SPAWN_PROJECTILE, 120);
+    sendTileProjectile(npc, { x: tile[0], y: tile[1] }, SPAWN_PROJECTILE, SPAWN_FLIGHT);
     later(4, target, () => {
       if (!alive(npc) || (npc.getAttribute(Shared.ATTR_PHASE) ?? null) !== Shared.PHASE_SPAWN) return;
       if (!alive(target)) {
