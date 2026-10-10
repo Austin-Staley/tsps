@@ -107,6 +107,19 @@ function breathOutcome(npc, player, variant) {
  * Tile-targeted shots use OpenRune's capture-derived flight values (delay, duration,
  * arc angle, heights) and leave from her middle, not the corner of her 7x7 body.
  */
+function homingShot(npc, target, projectileId) {
+  // Leaves her head (43) for the target's chest (31), and scales flight time with
+  // distance like KBD: a fixed speed reads as teleporting at range, then the hit
+  // lands into an empty gap.
+  core.Projectile.createProjectile(
+    npc, target, projectileId, 40, core.Projectile.arrivalCycles(npc, target), 43, 31,
+  ).sendProjectile();
+}
+
+/**
+ * Tile-targeted shots use OpenRune's capture-derived flight values (delay, duration,
+ * arc angle, heights) and leave from her middle, not the corner of her 7x7 body.
+ */
 function sendTileProjectile(npc, tile, projectileId, flight) {
   new core.Projectile(
     core.Projectile.centreOf(npc),
@@ -185,6 +198,8 @@ function modifyHit(event) {
   if (npcId !== Shared.AWAKE_ID) return;
   keepPoisonImmune(npc);
   const hits = hit.getHits?.() ?? [];
+  if (hits.length === 0) return;
+  console.info(`[vorkath-tmp] incoming phase=${npc.getAttribute?.(Shared.ATTR_PHASE) ?? "?"} attacker=${hit.getAttacker?.()?.isPlayer?.() ? "player" : "?"} dmg=${hits.map((p) => p.getDamage?.()).join("+")} total=${hit.getTotalDamage?.()} hpBefore=${npc.getHitpoints?.()}`);
   if (hits.length === 0) return;
   if (hits.some((part) => part.isReflected?.() === true)) {
     zeroHits(hit, hits);
@@ -294,6 +309,7 @@ function combatClass() {
         adjacent: isAdjacent(npc, target),
         roll: (n) => core.Misc.getRandom(n),
       });
+      console.info(`[vorkath-tmp] swings ${this.attack} adjacent=${isAdjacent(npc, target)}`);
       npc.setAttribute(Shared.ATTR_ATTACKS, attacks + 1);
       if (this.attack === Shared.Attack.MELEE) {
         npc.performAnimation(new core.Animation(MELEE_ANIMATION));
@@ -306,7 +322,7 @@ function combatClass() {
           : this.attack === Shared.Attack.VENOM ? VENOM_PROJECTILE
           : this.attack === Shared.Attack.PRAYER ? PRAYER_PROJECTILE
           : DRAGONFIRE_PROJECTILE;
-        core.Projectile.createProjectile(npc, target, projectileId, 40, 65, 31, 43).sendProjectile();
+        homingShot(npc, target, projectileId);
       }
     }
 

@@ -60,6 +60,11 @@ function defineAreaClass() {
       }
       super.postLeave(mobile, logout);
     }
+
+    /** Multi-way: fighters must switch to the zombified spawn while under attack. */
+    isMulti() {
+      return true;
+    }
   }
   VorkathPrivateArea = VorkathArea;
 }

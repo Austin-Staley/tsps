@@ -110,6 +110,7 @@ function damagePlayer(player, amount) {
 function healNpc(npc, amount) {
   if (!alive(npc) || amount <= 0) return;
   npc.setHitpoints?.(Math.min(Shared.MAX_HITPOINTS, (npc.getHitpoints?.() ?? 0) + amount));
+  console.info(`[vorkath-tmp] leech +${amount} hp=${npc.getHitpoints?.()} phase=${npc.getAttribute?.(Shared.ATTR_PHASE) ?? "?"}`);
 }
 
 function unfreeze(player) {
@@ -237,7 +238,7 @@ function startSpawn(npc, target) {
   fight.fighter = target;
   fight.spawn = null;
   fight.exploding = false;
-  core.Projectile.createProjectile(npc, target, ICE_PROJECTILE, 40, 65, 31, 43).sendProjectile();
+  core.Projectile.createProjectile(npc, target, ICE_PROJECTILE, 40, core.Projectile.arrivalCycles(npc, target), 43, 31).sendProjectile();
   const delay = core.Projectile.arrivalTicks(npc, target);
   later(delay, target, () => {
     if (!alive(npc) || (npc.getAttribute(Shared.ATTR_PHASE) ?? null) !== Shared.PHASE_SPAWN) return;
@@ -302,6 +303,11 @@ function tickSpawn(npc, fight) {
   if (!alive(spawn)) {
     endSpawn(npc, fight);
     return;
+  }
+  // Hold the ice block around the fighter while the freeze lasts: a single graphic
+  // fades long before the spawn is handled.
+  if (core.World.getProcessCycle() % 4 === 0 && target.getTimers?.().has?.(core.TimerKey.FREEZE)) {
+    target.performGraphic(new core.Graphic(FREEZE_GFX, core.GraphicHeight.HIGH));
   }
   if (spawnEdgeDistance(spawn, target) > 1) {
     // Failsafe: a spawn that never reaches its target (walled off, target gone
