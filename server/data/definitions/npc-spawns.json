@@ -21911,7 +21911,6 @@
   {"level":1,"name":"Red dragon","x":1910,"y":8995,"id":248},
   {"level":1,"name":"Red dragon","x":1911,"y":9002,"id":250},
   {"level":1,"name":"Red dragon","x":1918,"y":9005,"id":251},
-  {"level":0,"name":"Vorkath","x":2269,"y":4062,"id":8058},
   {"level":0,"name":"Torfinn","x":2278,"y":4034,"id":7505},
   {"level":0,"name":"Ent","x":3201,"y":3684,"id":6594},
   {"level":0,"name":"Ent","x":3202,"y":3669,"id":6594},
@@ -30570,5 +30569,6 @@
   {"level":2,"name":"Bloodveld","x":2931,"y":5357,"id":3138,"source":"wiki"},
   {"level":2,"name":"Bloodveld","x":2886,"y":5323,"id":3138,"source":"wiki"},
   {"level":2,"name":"Bloodveld","x":2920,"y":5358,"id":3138,"source":"wiki"},
-  {"level":2,"name":"Bloodveld","x":2927,"y":5354,"id":3138,"source":"wiki"}
+  {"level":2,"name":"Bloodveld","x":2927,"y":5354,"id":3138,"source":"wiki"},
+  {"level":0,"name":"Vorkath","x":2269,"y":4062,"id":8059,"wanderRadius":0,"source":"wiki"}
 ]

@@ -1518,6 +1518,13 @@
       "script": "climbOverLoc"
     },
     {
+      "name": "Ice chunks (Ungael)",
+      "object": 31990,
+      "level": 1,
+      "between": {"ends":[[2272,4052,0],[2272,4054,0]],"cross":[{"use":"climbOver","args":["to","CLIMB_OVER",2]}]},
+      "note": "Crater wall at 2272,4053 (dump:loc); fixed ends keep the crossing straight. 2-tick landing so the flight and climb anim finish."
+    },
+    {
       "name": "Broken fence (Rellekka)",
       "object": 544,
       "level": 57,

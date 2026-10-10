@@ -1,0 +1,379 @@
+/**
+ * Vorkath's two alternating specials plus the per-cycle fight engine.
+ *
+ * Acid/rapid-fire: pools land 3 ticks after the cast (object 32000), then 25 rapid
+ * dragonbreath shots chase the player's current tile, one per tick, hitting only a player
+ * still standing there (25-41, protection ignored). Standing in acid hits 1-10 and heals
+ * Vorkath the same amount; all incoming damage is halved throughout (Wiki + both oracles).
+ *
+ * Freeze/zombified spawn: icy breath freezes, a 38-HP spawn lands ~10 tiles out and walks
+ * in, exploding for up to 60 by remaining HP. Vorkath takes no damage until it resolves;
+ * Crumble Undead (handled in Combat.Vorkath.js) ends it instantly (Wiki + both oracles).
+ */
+const Shared = require("./Shared.Vorkath");
+
+const ACID_ANIMATION = 7957;
+const HIGH_ANIMATION = 7960;
+const BREATH_ANIMATION = 7952;
+
+const ACID_PROJECTILE = 1483;
+const RAPID_PROJECTILE = 1482;
+const ICE_PROJECTILE = 395;
+const SPAWN_PROJECTILE = 1484;
+
+const RAPID_IMPACT_GFX = 131;
+const FREEZE_GFX = 369;
+const SPAWN_EXPLOSION_GFX = 1460;
+
+const SPAWN_KILLED_MESSAGE = "You become unfrozen as you kill the spawn.";
+const WALKABLE_MASK = 0x1280100;
+
+let api = null;
+let core = null;
+let CombatFactory = null;
+
+/** Live fights by NPC: pools, rapid-fire progress, spawn ref and fighter. */
+const fights = new Map();
+
+function alive(entity) {
+  return !!entity?.isRegistered?.() && (entity.getHitpoints?.() ?? 1) > 0;
+}
+
+function later(ticks, target, execFunc) {
+  class DelayedTask extends core.Task {
+    constructor() {
+      super(Math.max(1, ticks), target, false);
+    }
+
+    execute() {
+      this.stop();
+      execFunc();
+    }
+  }
+  core.TaskManager.submit(new DelayedTask());
+}
+
+function getFight(npc) {
+  let fight = fights.get(npc);
+  if (!fight) {
+    fight = { pools: new Map(), rapidFired: 0, rapidNextCycle: 0, acidEndCycle: 0, spawn: null, fighter: null, exploding: false };
+    fights.set(npc, fight);
+  }
+  return fight;
+}
+
+function isWalkable(x, y) {
+  return (core.RegionManager.getClipping(x, y, 0, null) & WALKABLE_MASK) === 0;
+}
+
+function poolKey(x, y) {
+  return Shared.tileKey(x, y);
+}
+
+function sendTileProjectile(npc, tile, projectileId, endCycles) {
+  new core.Projectile(
+    npc.getLocation(),
+    new core.Location(tile.x, tile.y, npc.getLocation().getZ()),
+    null,
+    projectileId,
+    40,
+    endCycles,
+    31,
+    43,
+    npc.getPrivateArea(),
+  ).sendProjectile();
+}
+
+function globalGraphic(npc, gfxId, height, tile) {
+  const viewers = npc.getPlayersWithinDistance(25);
+  const at = new core.Location(tile.x, tile.y, npc.getLocation().getZ());
+  const gfx = new core.Graphic(gfxId, height);
+  for (const viewer of viewers) {
+    viewer.getPacketSender().sendGlobalGraphic(gfx, at);
+  }
+  return viewers;
+}
+
+function damagePlayer(player, amount) {
+  if (!alive(player) || amount <= 0) return;
+  player.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(amount, core.HitMask.RED)]);
+}
+
+function healNpc(npc, amount) {
+  if (!alive(npc) || amount <= 0) return;
+  npc.setHitpoints?.(Math.min(Shared.MAX_HITPOINTS, (npc.getHitpoints?.() ?? 0) + amount));
+}
+
+function unfreeze(player) {
+  if (!player?.isRegistered?.()) return;
+  player.getTimers?.().cancel?.(core.TimerKey.FREEZE);
+  player.getTimers?.().cancel?.(core.TimerKey.FREEZE_IMMUNITY);
+}
+
+function liveTarget(npc) {
+  const target = npc.getCombat?.().getTarget?.();
+  return alive(target) ? target : null;
+}
+
+function startAcid(npc, target) {
+  npc.setAttribute(Shared.ATTR_PHASE, Shared.PHASE_ACID);
+  npc.performAnimation(new core.Animation(ACID_ANIMATION));
+  const fight = getFight(npc);
+  fight.fighter = target;
+  fight.rapidFired = 0;
+  const now = core.World.getProcessCycle();
+  fight.rapidNextCycle = now + Shared.ACID_FIRST_SHOT_DELAY;
+  fight.acidEndCycle = now + Shared.ACID_FORCE_END_TICKS;
+  const base = npc.getLocation();
+  const position = target.getLocation();
+  const tiles = Shared.acidPoolTiles(
+    base.getX(), base.getY(), position.getX(), position.getY(),
+    isWalkable, (n) => core.Misc.getRandom(n),
+  );
+  later(Shared.ACID_POOL_LAND_DELAY, target, () => {
+    if (!alive(npc) || (npc.getAttribute(Shared.ATTR_PHASE) ?? null) !== Shared.PHASE_ACID) return;
+    for (const [x, y] of tiles) {
+      const object = new core.GameObject(
+        Shared.ACID_POOL_OBJECT, new core.Location(x, y, 0), 10, core.Misc.getRandom(3), null,
+      );
+      core.ObjectManager.register(object, true);
+      fight.pools.set(poolKey(x, y), object);
+    }
+  });
+}
+
+function tickAcid(npc, fight) {
+  const now = core.World.getProcessCycle();
+  if (now >= fight.acidEndCycle) {
+    endAcid(npc, fight);
+    return;
+  }
+  const target = liveTarget(npc);
+  if (!target) {
+    endAcid(npc, fight);
+    return;
+  }
+  if (fight.rapidFired < Shared.ACID_RAPID_SHOTS && now >= fight.rapidNextCycle) {
+    const location = target.getLocation();
+    const tile = { x: location.getX(), y: location.getY() };
+    sendTileProjectile(npc, tile, RAPID_PROJECTILE, 30);
+    later(1, target, () => {
+      if (!alive(target)) return;
+      const current = target.getLocation();
+      if (current.getX() !== tile.x || current.getY() !== tile.y) return;
+      globalGraphic(npc, RAPID_IMPACT_GFX, core.GraphicHeight.HIGH, tile);
+      damagePlayer(target, Shared.RAPID_MIN + core.Misc.getRandom(Shared.RAPID_MAX - Shared.RAPID_MIN));
+    });
+    fight.rapidFired += 1;
+    fight.rapidNextCycle = now + 1;
+    if (fight.rapidFired >= Shared.ACID_RAPID_SHOTS) {
+      endAcid(npc, fight);
+      return;
+    }
+  }
+  const players = npc.getPlayersWithinDistance(25);
+  for (const player of players) {
+    if (!alive(player)) continue;
+    const position = player.getLocation();
+    if (!fight.pools.has(poolKey(position.getX(), position.getY()))) continue;
+    const damage = Shared.POOL_MIN + core.Misc.getRandom(Shared.POOL_MAX - Shared.POOL_MIN);
+    damagePlayer(player, damage);
+    healNpc(npc, damage);
+  }
+}
+
+function endAcid(npc, fight) {
+  for (const object of fight.pools.values()) {
+    core.ObjectManager.deregister(object, true);
+  }
+  fight.pools.clear();
+  if ((npc.getAttribute?.(Shared.ATTR_PHASE) ?? null) === Shared.PHASE_ACID) {
+    npc.setAttribute(Shared.ATTR_PHASE, Shared.PHASE_ACTIVE);
+  }
+}
+
+function pickSpawnTile(npc, target) {
+  const position = target.getLocation();
+  const base = npc.getLocation();
+  const bossX = base.getX();
+  const bossY = base.getY();
+  for (const distance of [Shared.SPAWN_LAND_DISTANCE, 8, 9, 11, 12]) {
+    const candidates = [];
+    for (let dx = -distance; dx <= distance; dx++) {
+      for (let dy = -distance; dy <= distance; dy++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== distance) continue;
+        const x = position.getX() + dx;
+        const y = position.getY() + dy;
+        if (Shared.underBoss(bossX, bossY, x, y) || !isWalkable(x, y)) continue;
+        if (!Shared.hasClearPath(x, y, position.getX(), position.getY(), bossX, bossY, isWalkable)) continue;
+        candidates.push([x, y]);
+      }
+    }
+    if (candidates.length > 0) {
+      return candidates[core.Misc.getRandom(candidates.length - 1)];
+    }
+  }
+  return null;
+}
+
+function startSpawn(npc, target) {
+  npc.setAttribute(Shared.ATTR_PHASE, Shared.PHASE_SPAWN);
+  npc.performAnimation(new core.Animation(BREATH_ANIMATION));
+  const fight = getFight(npc);
+  fight.fighter = target;
+  fight.spawn = null;
+  fight.exploding = false;
+  core.Projectile.createProjectile(npc, target, ICE_PROJECTILE, 40, 65, 31, 43).sendProjectile();
+  const delay = core.Projectile.arrivalTicks(npc, target);
+  later(delay, target, () => {
+    if (!alive(npc) || (npc.getAttribute(Shared.ATTR_PHASE) ?? null) !== Shared.PHASE_SPAWN) return;
+    if (!alive(target)) {
+      endSpawn(npc, fight);
+      return;
+    }
+    target.performGraphic(new core.Graphic(FREEZE_GFX, core.GraphicHeight.HIGH));
+    CombatFactory.freeze(target, Shared.FREEZE_SECONDS);
+    npc.performAnimation(new core.Animation(HIGH_ANIMATION));
+    const tile = pickSpawnTile(npc, target);
+    if (!tile) {
+      endSpawn(npc, fight);
+      return;
+    }
+    sendTileProjectile(npc, { x: tile[0], y: tile[1] }, SPAWN_PROJECTILE, 120);
+    later(4, target, () => {
+      if (!alive(npc) || (npc.getAttribute(Shared.ATTR_PHASE) ?? null) !== Shared.PHASE_SPAWN) return;
+      if (!alive(target)) {
+        endSpawn(npc, fight);
+        return;
+      }
+      const spawn = core.NPC.create(Shared.SPAWN_ID, new core.Location(tile[0], tile[1], 0));
+      spawn.setHitpoints?.(Shared.SPAWN_HITPOINTS);
+      spawn.getMovementCoordinator?.().setRadius?.(30);
+      core.World.getAddNPCQueue().push(spawn);
+      fight.spawn = spawn;
+      spawn.getCombat?.().attack?.(target);
+    });
+  });
+}
+
+function spawnEdgeDistance(spawn, target) {
+  const base = spawn.getLocation();
+  const pos = target.getLocation();
+  const size = Math.max(1, spawn.getSize?.() ?? 1);
+  const maxX = base.getX() + size - 1;
+  const maxY = base.getY() + size - 1;
+  const dx = pos.getX() < base.getX() ? base.getX() - pos.getX()
+    : pos.getX() > maxX ? pos.getX() - maxX : 0;
+  const dy = pos.getY() < base.getY() ? base.getY() - pos.getY()
+    : pos.getY() > maxY ? pos.getY() - maxY : 0;
+  return Math.max(dx, dy);
+}
+
+function tickSpawn(npc, fight) {
+  const target = alive(fight.fighter) ? fight.fighter : null;
+  const spawn = fight.spawn;
+  if (!target) {
+    if (spawn && alive(spawn)) core.World.getRemoveNPCQueue().push(spawn);
+    endSpawn(npc, fight);
+    return;
+  }
+  if (!spawn || fight.exploding) return;
+  if (!alive(spawn)) {
+    endSpawn(npc, fight);
+    return;
+  }
+  if (spawnEdgeDistance(spawn, target) > 1) return;
+  fight.exploding = true;
+  const location = spawn.getLocation();
+  globalGraphic(npc, SPAWN_EXPLOSION_GFX, core.GraphicHeight.HIGH, { x: location.getX(), y: location.getY() });
+  unfreeze(target);
+  const hp = spawn.getHitpoints?.() ?? 0;
+  later(1, target, () => {
+    if (fight.spawn !== spawn || (npc.getAttribute?.(Shared.ATTR_PHASE) ?? null) !== Shared.PHASE_SPAWN) return;
+    damagePlayer(target, Shared.spawnExplosionDamage(hp));
+    core.World.getRemoveNPCQueue().push(spawn);
+    endSpawn(npc, fight);
+  });
+}
+
+function spawnDied({ npc }) {
+  if (!npc || npc.getId?.() !== Shared.SPAWN_ID) return;
+  for (const [boss, fight] of fights) {
+    if (fight.spawn !== npc) continue;
+    if (alive(fight.fighter)) {
+      unfreeze(fight.fighter);
+      fight.fighter.sendMessage(SPAWN_KILLED_MESSAGE);
+    }
+    endSpawn(boss, fight);
+    return;
+  }
+}
+
+function endSpawn(npc, fight) {
+  if (alive(fight.fighter)) unfreeze(fight.fighter);
+  fight.spawn = null;
+  fight.exploding = false;
+  if ((npc.getAttribute?.(Shared.ATTR_PHASE) ?? null) === Shared.PHASE_SPAWN) {
+    npc.setAttribute(Shared.ATTR_PHASE, Shared.PHASE_ACTIVE);
+  }
+}
+
+function endFight(npc) {
+  const fight = fights.get(npc);
+  if (!fight) return;
+  for (const object of fight.pools.values()) {
+    core.ObjectManager.deregister(object, true);
+  }
+  fight.pools.clear();
+  if (fight.spawn && alive(fight.spawn)) {
+    core.World.getRemoveNPCQueue().push(fight.spawn);
+  }
+  if (alive(fight.fighter)) unfreeze(fight.fighter);
+  fights.delete(npc);
+}
+
+function tick() {
+  for (const [npc, fight] of fights) {
+    if (!alive(npc)) {
+      endFight(npc);
+      continue;
+    }
+    const phase = npc.getAttribute?.(Shared.ATTR_PHASE) ?? Shared.PHASE_ACTIVE;
+    if (phase === Shared.PHASE_ACID) {
+      tickAcid(npc, fight);
+    } else if (phase === Shared.PHASE_SPAWN) {
+      tickSpawn(npc, fight);
+    } else if (fight.pools.size === 0 && !fight.spawn) {
+      fights.delete(npc);
+    }
+  }
+}
+
+function attach(pluginApi) {
+  api = pluginApi;
+  core = pluginApi.core;
+  CombatFactory = pluginApi.getCombatFactory();
+  class EngineTask extends core.Task {
+    constructor() {
+      super(1, null, false);
+    }
+
+    execute() {
+      tick();
+    }
+  }
+  core.TaskManager.submit(new EngineTask());
+  pluginApi.onNpcDeath(spawnDied);
+}
+
+module.exports = {
+  attach,
+  startAcid,
+  startSpawn,
+  endAcid,
+  endSpawn,
+  endFight,
+  spawnDied,
+  tick,
+  fights,
+};
