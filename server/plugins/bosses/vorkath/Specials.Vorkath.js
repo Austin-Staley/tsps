@@ -249,8 +249,12 @@ function startSpawn(npc, target) {
       const spawn = core.NPC.create(Shared.SPAWN_ID, new core.Location(tile[0], tile[1], 0));
       spawn.setHitpoints?.(Shared.SPAWN_HITPOINTS);
       spawn.getMovementCoordinator?.().setRadius?.(30);
+      // Walks through other NPCs (notably Vorkath's own 7x7 body): without this a spawn
+      // whose straight path crosses her stalls forever and her immunity never lifts.
+      spawn.setFlag?.(core.NPC.WALK_THROUGH_ENTITIES_FLAG, true);
       core.World.getAddNPCQueue().push(spawn);
       fight.spawn = spawn;
+      fight.spawnBornCycle = core.World.getProcessCycle();
       spawn.getCombat?.().attack?.(target);
     });
   });
@@ -282,7 +286,19 @@ function tickSpawn(npc, fight) {
     endSpawn(npc, fight);
     return;
   }
-  if (spawnEdgeDistance(spawn, target) > 1) return;
+  if (spawnEdgeDistance(spawn, target) > 1) {
+    // Failsafe: a spawn that never reaches its target (walled off, target gone
+    // walkabout) must not hold her immune forever - detonate where it stands.
+    if (core.World.getProcessCycle() - (fight.spawnBornCycle ?? 0) > Shared.SPAWN_FUSE_TICKS) {
+      finishExplosion(npc, fight, spawn, target);
+    }
+    return;
+  }
+  finishExplosion(npc, fight, spawn, target);
+}
+
+function finishExplosion(npc, fight, spawn, target) {
+  if (fight.exploding) return;
   fight.exploding = true;
   const location = spawn.getLocation();
   globalGraphic(npc, SPAWN_EXPLOSION_GFX, core.GraphicHeight.HIGH, { x: location.getX(), y: location.getY() });

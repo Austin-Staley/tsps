@@ -58,6 +58,8 @@ const ACID_CELL_SIZE = 3;
 
 const FREEZE_SECONDS = 60;
 const SPAWN_LAND_DISTANCE = 10;
+/** Spawn-phase failsafe: detonate in place rather than hold her immune forever. */
+const SPAWN_FUSE_TICKS = 60;
 
 /** NPC attribute keys (kebab-case, namespaced). */
 const ATTR_ATTACKS = "vorkath:attacks";
@@ -230,6 +232,7 @@ module.exports = {
   ACID_POOL_LAND_DELAY,
   FREEZE_SECONDS,
   SPAWN_LAND_DISTANCE,
+  SPAWN_FUSE_TICKS,
   ATTR_ATTACKS,
   ATTR_NEXT_SPECIAL,
   ATTR_PHASE,
