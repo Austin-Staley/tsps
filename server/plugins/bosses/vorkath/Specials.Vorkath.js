@@ -143,11 +143,14 @@ function startAcid(npc, target) {
   }
   later(Shared.ACID_POOL_LAND_DELAY, target, () => {
     if (!alive(npc) || (npc.getAttribute(Shared.ATTR_PHASE) ?? null) !== Shared.PHASE_ACID) return;
+    const area = npc.getPrivateArea?.() ?? null;
+    if (area?.isDestroyed?.() === true) return;
     for (const [x, y] of tiles) {
       const object = new core.GameObject(
-        Shared.ACID_POOL_OBJECT, new core.Location(x, y, 0), 10, core.Misc.getRandom(3), null,
+        Shared.ACID_POOL_OBJECT, new core.Location(x, y, 0), 10, core.Misc.getRandom(3), area,
       );
       core.ObjectManager.register(object, true);
+      area?.add?.(object);
       fight.pools.set(poolKey(x, y), object);
     }
   });
@@ -260,9 +263,12 @@ function startSpawn(npc, target) {
       const spawn = core.NPC.create(Shared.SPAWN_ID, new core.Location(tile[0], tile[1], 0));
       spawn.setHitpoints?.(Shared.SPAWN_HITPOINTS);
       spawn.getMovementCoordinator?.().setRadius?.(30);
-      // Walks through other NPCs (notably Vorkath's own 7x7 body): without this a spawn
-      // whose straight path crosses her stalls forever and her immunity never lifts.
+      // Walks through other NPCs (notably her own 7x7 body): without this a spawn
+      // whose path crosses her stalls and her immunity never lifts.
       spawn.setFlag?.(core.NPC.WALK_THROUGH_ENTITIES_FLAG, true);
+      const area = npc.getPrivateArea?.() ?? null;
+      if (area?.isDestroyed?.() === true) return;
+      area?.add?.(spawn);
       core.World.getAddNPCQueue().push(spawn);
       fight.spawn = spawn;
       fight.spawnBornCycle = core.World.getProcessCycle();

@@ -3,6 +3,18 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const Shared = require("../plugins/bosses/vorkath/Shared.Vorkath");
+const Area = require("../plugins/bosses/vorkath/Area.Vorkath");
+
+test("crater bounds cover the arena but not the wall line", () => {
+  const at = (x, y, z = 0) => ({ getX: () => x, getY: () => y, getZ: () => z });
+  assert.equal(Area.insideCrater(at(2272, 4054)), true);
+  assert.equal(Area.insideCrater(at(2269, 4062)), true);
+  assert.equal(Area.insideCrater(at(2282, 4075)), true);
+  assert.equal(Area.insideCrater(at(2272, 4053)), false);
+  assert.equal(Area.insideCrater(at(2272, 4052)), false);
+  assert.equal(Area.insideCrater(at(2272, 4054, 1)), false);
+  assert.equal(Area.insideCrater(null), false);
+});
 
 test("standard attacks follow the triangulated weights", () => {
   // Adjacent table: melee 1, ranged 4, magic 3, dragonfire 1, venom 1, prayer 1, fireball 1.

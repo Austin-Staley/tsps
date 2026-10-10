@@ -7,6 +7,7 @@
 const Wake = require("./vorkath/Wake.Vorkath");
 const Combat = require("./vorkath/Combat.Vorkath");
 const Specials = require("./vorkath/Specials.Vorkath");
+const Area = require("./vorkath/Area.Vorkath");
 
 module.exports = {
   name: "Vorkath",
@@ -15,5 +16,6 @@ module.exports = {
     Wake.attach(api);
     Combat.attach(api);
     Specials.attach(api);
+    Area.attach(api);
   },
 };

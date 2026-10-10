@@ -36,6 +36,7 @@ function alive(entity) {
 function pokeVorkath({ player, npc }) {
   if (!npc || npc.getId() !== Shared.SLEEPING_ID || !alive(npc)) return false;
   if (!alive(player)) return false;
+  if (player.getPrivateArea?.() !== npc.getPrivateArea?.()) return false;
   player.performAnimation(new core.Animation(POKE_ANIMATION));
   npc.setNpcTransformationId(Shared.AWAKE_ID);
   npc.setHitpoints?.(Shared.MAX_HITPOINTS);
@@ -73,13 +74,7 @@ function denyWakeAttack(event) {
 
 function vorkathDied({ npc }) {
   if (!npc || npc.getId() !== Shared.AWAKE_ID) return;
-  const location = npc.getLocation().clone();
   Specials.endFight(npc);
-  later(Shared.RESPAWN_TICKS, () => {
-    const sleeper = core.NPC.create(Shared.SLEEPING_ID, location.clone());
-    sleeper.getMovementCoordinator?.().setRadius?.(0);
-    core.World.getAddNPCQueue().push(sleeper);
-  });
 }
 
 function attach(pluginApi) {
