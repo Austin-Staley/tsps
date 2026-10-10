@@ -4,11 +4,11 @@
  * Acid/rapid-fire: pools land 3 ticks after the cast (object 32000), then 25 rapid
  * dragonbreath shots chase the player's current tile, one per tick, hitting only a player
  * still standing there (25-41, protection ignored). Standing in acid hits 1-10 and heals
- * Vorkath the same amount; all incoming damage is halved throughout (Wiki + both oracles).
+ * Vorkath the same amount; all incoming damage is halved throughout (Wiki).
  *
- * Freeze/zombified spawn: icy breath freezes, a 38-HP spawn lands ~10 tiles out and walks
+ * Freeze/zombified spawn: icy breath freezes, a 38-HP spawn lands 8 tiles out and walks
  * in, exploding for up to 60 by remaining HP. Vorkath takes no damage until it resolves;
- * Crumble Undead (handled in Combat.Vorkath.js) ends it instantly (Wiki + both oracles).
+ * Crumble Undead (handled in Combat.Vorkath.js) ends it instantly (Wiki).
  */
 const Shared = require("./Shared.Vorkath");
 
@@ -22,10 +22,12 @@ const ICE_PROJECTILE = 395;
 const SPAWN_PROJECTILE = 1484;
 
 const RAPID_IMPACT_GFX = 131;
+const RAPID_IMPACT_HEIGHT = 30;
 const FREEZE_GFX = 369;
 const SPAWN_EXPLOSION_GFX = 1460;
 
-const SPAWN_KILLED_MESSAGE = "You become unfrozen as you kill the spawn.";
+const SPAWN_KILLED_MESSAGE = "<col=229628>You become unfrozen as you kill the spawn.</col>";
+const FROZEN_MESSAGE = "<col=ff3045>You have been frozen!</col>";
 const WALKABLE_MASK = 0x1280100;
 
 let api = null;
@@ -71,8 +73,8 @@ function poolKey(x, y) {
 }
 
 /**
- * Tile-targeted shots use OpenRune's capture-derived flight values (delay, duration,
- * arc), with heights quartered like DoomShared does: this engine's height params run 4x
+ * Tile-targeted shots use the captured flight values (delay, duration, arc), with
+ * heights quartered like DoomShared does: this engine's height params run 4x
  * below capture units. They leave from her middle, not the corner of her 7x7 body.
  */
 function sendTileProjectile(npc, tile, projectileId, flight) {
@@ -94,13 +96,7 @@ const RAPID_FLIGHT = { delay: 0, duration: 30, angle: 22, startHeight: 35, endHe
 const SPAWN_FLIGHT = { delay: 32, duration: 120, angle: 46, startHeight: 85, endHeight: 0 };
 
 function globalGraphic(npc, gfxId, height, tile) {
-  const viewers = npc.getPlayersWithinDistance(25);
-  const at = new core.Location(tile.x, tile.y, npc.getLocation().getZ());
-  const gfx = new core.Graphic(gfxId, height);
-  for (const viewer of viewers) {
-    viewer.getPacketSender().sendGlobalGraphic(gfx, at);
-  }
-  return viewers;
+  return Shared.tileGraphic(core, npc, gfxId, height, tile);
 }
 
 function damagePlayer(player, amount) {
@@ -127,6 +123,7 @@ function liveTarget(npc) {
 function startAcid(npc, target) {
   npc.setAttribute(Shared.ATTR_PHASE, Shared.PHASE_ACID);
   npc.performAnimation(new core.Animation(ACID_ANIMATION));
+  Shared.playSound(target, Shared.SOUND.ACID_LAUNCH, 20);
   const fight = getFight(npc);
   fight.fighter = target;
   fight.rapidFired = 0;
@@ -153,6 +150,7 @@ function startAcid(npc, target) {
       core.ObjectManager.register(object, true);
       area?.add?.(object);
       fight.pools.set(poolKey(x, y), object);
+      Shared.areaSound(npc, Shared.SOUND.ACID_POOL, { x, y }, Shared.SOUND_RANGE.ACID_POOL);
     }
   });
 }
@@ -172,11 +170,16 @@ function tickAcid(npc, fight) {
     const location = target.getLocation();
     const tile = { x: location.getX(), y: location.getY() };
     sendTileProjectile(npc, tile, RAPID_PROJECTILE, RAPID_FLIGHT);
+    Shared.playSound(target, Shared.SOUND.RAPID_LAUNCH, 2);
     later(1, target, () => {
+      // Captured on the landing tile, hit or miss: graphic 131 at height 30 and area sound 158.
+      if (alive(npc)) {
+        globalGraphic(npc, RAPID_IMPACT_GFX, RAPID_IMPACT_HEIGHT, tile);
+        Shared.areaSound(npc, Shared.SOUND.RAPID_IMPACT, tile, Shared.SOUND_RANGE.RAPID_IMPACT);
+      }
       if (!alive(target)) return;
       const current = target.getLocation();
       if (current.getX() !== tile.x || current.getY() !== tile.y) return;
-      // No impact graphic here: it renders as a second droplet next to the shot.
       damagePlayer(target, Shared.RAPID_MIN + core.Misc.getRandom(Shared.RAPID_MAX - Shared.RAPID_MIN));
     });
     fight.rapidFired += 1;
@@ -212,7 +215,7 @@ function pickSpawnTile(npc, target) {
   const base = npc.getLocation();
   const bossX = base.getX();
   const bossY = base.getY();
-  for (const distance of [Shared.SPAWN_LAND_DISTANCE, 8, 9, 11, 12]) {
+  for (const distance of [Shared.SPAWN_LAND_DISTANCE, 7, 9, 6, 10]) {
     const candidates = [];
     for (let dx = -distance; dx <= distance; dx++) {
       for (let dy = -distance; dy <= distance; dy++) {
@@ -238,19 +241,18 @@ function startSpawn(npc, target) {
   fight.fighter = target;
   fight.spawn = null;
   fight.exploding = false;
-  core.Projectile.createProjectile(npc, target, ICE_PROJECTILE, 40, core.Projectile.arrivalCycles(npc, target), 43, 31).sendProjectile();
-  const delay = core.Projectile.arrivalTicks(npc, target);
+  // The ice block (369) goes out with the shot, as captured, so it lands with the freeze.
+  const end = Shared.sendShot(core, npc, target, ICE_PROJECTILE, FREEZE_GFX, 0);
+  Shared.playShotSounds(target, "ice", end);
+  const delay = Shared.shotHitDelay(end);
   later(delay, target, () => {
     if (!alive(npc) || (npc.getAttribute(Shared.ATTR_PHASE) ?? null) !== Shared.PHASE_SPAWN) return;
     if (!alive(target)) {
       endSpawn(npc, fight);
       return;
     }
-    // Exactly like an Ancient Barrage impact (MagicCombatMethod plays the spell's
-    // endGraphic): the block hugs the target. HIGH lifted it above the head, which
-    // is why it read as "no block".
-    target.performGraphic(new core.Graphic(FREEZE_GFX));
-    CombatFactory.freeze(target, Shared.FREEZE_SECONDS);
+    CombatFactory.freeze(target, Shared.FREEZE_SECONDS, FROZEN_MESSAGE);
+    Shared.playSound(target, Shared.SOUND.FREEZE, 28);
     npc.performAnimation(new core.Animation(HIGH_ANIMATION));
     const tile = pickSpawnTile(npc, target);
     if (!tile) {
@@ -275,6 +277,7 @@ function startSpawn(npc, target) {
       area?.add?.(spawn);
       core.World.getAddNPCQueue().push(spawn);
       fight.spawn = spawn;
+      Shared.areaSound(npc, Shared.SOUND.SPAWN_LANDS, { x: tile[0], y: tile[1] }, Shared.SOUND_RANGE.SPAWN_LANDS);
       fight.spawnBornCycle = core.World.getProcessCycle();
       spawn.getCombat?.().attack?.(target);
     });

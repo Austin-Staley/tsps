@@ -3,25 +3,27 @@
  *
  * Behaviour: https://oldschool.runescape.wiki/w/Vorkath and
  * https://oldschool.runescape.wiki/w/Vorkath/Strategies (attack pattern, specials, max hits,
- * dragonfire tiers, acid/rapid-fire, zombified spawn, drops). Triangulated against two RSPS
- * oracles, never justification on their own: OpenRune-Server PR #217 (instanced Vorkath
- * encounter) and kurdowns/RSPS-NEAR-REALITY (plugins/boss/vorkath). Where they conflict the
- * Wiki wins; remaining conflicts resolve to OpenRune (capture-derived) over Near-Reality,
- * whose deadly fireball is unwired dead code.
+ * dragonfire tiers, acid/rapid-fire, zombified spawn, drops), checked against rsprox
+ * captures (below).
  *
  * Ids from the cache (rev 241): NPCs 8059 (sleeping, Poke) / 8061 (awake) / 8063 (Zombified
- * Spawn, post-quest; 8062 is the quest twin); Vorkath is 7x7 at 2269,4062 (both oracles agree,
- * Wiki corroborates the crater). Anim 7950 wakes (210 cycles = 7 ticks), 7951 melees,
+ * Spawn, post-quest; 8062 is the quest twin); Vorkath is 7x7 at 2269,4062 (the captures place her
+ * there). Anim 7950 wakes (210 cycles = 7 ticks), 7951 melees,
  * 7952 breathes, 7957 channels acid (900 cycles), 7960 launches high; 7948 flinches (64
  * cycles) and 7949 dies (200 cycles) by length class. Projectiles 1477/1479/393/1470/1471/
- * 395/1481/1483/1482/1484 and graphics 1478/1480/1472/1473/131/369/1460/32000-object per the
- * oracles; the dragonfire impact uses 1466 per OpenRune's captures.
+ * 395/1481/1483/1482/1484 and graphics 1478/1480/1472/1473/1466/131/369/1460 and the acid
+ * object 32000, as captured.
  *
- * Approximations (no capture behind them): chat messages, the 8 acid edge segments (OpenRune
- * gives order but not tiles), spawn landing search (Wiki: exactly 10 tiles away), respawn
- * delay, and anything marked below.
+ * Checked against rsprox captures (https://rsprox.net/database; 61 recordings, ~500 fights,
+ * most on Leagues V or event worlds, so only Vorkath's own behaviour was taken from them, not
+ * damage): the special count, the wake and respawn timing, the attack mix, the acid edge
+ * pools, the spawn's landing distance, her projectiles' flights and impacts, the fireball's
+ * impact and the breath messages. The ids above all appear in them. Still unverified: acid
+ * and rapid-fire damage, the spawn's walk and explosion, and anything marked below.
  */
 const SLEEPING_ID = 8059;
+/** vorkath_sleeping_noop: what she is while she rises, between the poke and waking. */
+const WAKING_ID = 8058;
 const AWAKE_ID = 8061;
 const SPAWN_ID = 8063;
 
@@ -34,7 +36,14 @@ const SPAWN_HITPOINTS = 38;
 const ATTACK_SPEED_TICKS = 5;
 const ATTACK_DISTANCE = 10;
 const STANDARDS_BEFORE_SPECIAL = 6;
+/**
+ * rsprox captures (496 fights): the first special follows 5 standard attacks, every later one
+ * 6. The counter starts at this value on waking.
+ */
+const FIRST_SPECIAL_HEAD_START = 1;
+/** Captured: she turns awake (8061) 7 ticks into the rise and attacks 6 ticks after that. */
 const WAKE_TICKS = 7;
+const FIRST_ATTACK_TICKS = 13;
 
 const MELEE_MAX = 32;
 const RANGED_MAX = 32;
@@ -54,9 +63,14 @@ const ACID_POOL_LAND_DELAY = 3;
 const ACID_GRID_ORIGIN = [2262, 4055];
 const ACID_GRID_CELLS = 7;
 const ACID_CELL_SIZE = 3;
+/** The edge pools' first offsets along a side, and how many tiles each may land on. */
+const ACID_EDGE_NEAR = 4;
+const ACID_EDGE_FAR = 14;
+const ACID_EDGE_SPREAD = 3;
 
 const FREEZE_SECONDS = 60;
-const SPAWN_LAND_DISTANCE = 10;
+/** Captured: the spawn lands 8 tiles from the player (297 of 317 spawns). */
+const SPAWN_LAND_DISTANCE = 8;
 /** Spawn-phase failsafe: detonate in place rather than hold her immune forever. */
 const SPAWN_FUSE_TICKS = 60;
 
@@ -65,6 +79,7 @@ const ATTR_ATTACKS = "vorkath:attacks";
 const ATTR_NEXT_SPECIAL = "vorkath:next-special";
 const ATTR_PHASE = "vorkath:phase";
 const ATTR_WAKE_UNTIL = "vorkath:wake-until";
+const ATTR_FIRST_ATTACK_AT = "vorkath:first-attack-at";
 
 const PHASE_ACTIVE = "active";
 const PHASE_ACID = "acid";
@@ -84,17 +99,17 @@ const Attack = {
 };
 
 /**
- * One standard attack. Melee only when adjacent (the caller keeps players inside the 7x7
- * out: only ranged/magic/breaths/fireball). Weights: magic 3 / ranged 4 per Mod Ash (Wiki
- * Strategies references); every other face is unit weight (OpenRune flags the same).
+ * One standard attack. Melee only when adjacent. The weights are the rsprox captures' shares
+ * (3,734 attacks from range: ranged 30%, magic 24%, dragonfire 15%, venom 11%, fireball 11%,
+ * prayer 8%); in melee distance melee takes about 16% (139 of 879) on top of the same mix.
  * `roll(n)` returns 0..n like Misc.getRandom, so tests can pass a stub.
  */
+const RANGED_TABLE = [[Attack.RANGED, 30], [Attack.MAGIC, 24], [Attack.DRAGONFIRE, 15],
+  [Attack.VENOM, 11], [Attack.FIREBALL, 11], [Attack.PRAYER, 8]];
+const MELEE_WEIGHT = 19;
+
 function chooseStandard({ adjacent, roll }) {
-  const table = adjacent
-    ? [[Attack.MELEE, 1], [Attack.RANGED, 4], [Attack.MAGIC, 3], [Attack.DRAGONFIRE, 1],
-      [Attack.VENOM, 1], [Attack.PRAYER, 1], [Attack.FIREBALL, 1]]
-    : [[Attack.RANGED, 4], [Attack.MAGIC, 3], [Attack.DRAGONFIRE, 1],
-      [Attack.VENOM, 1], [Attack.PRAYER, 1], [Attack.FIREBALL, 1]];
+  const table = adjacent ? [[Attack.MELEE, MELEE_WEIGHT], ...RANGED_TABLE] : RANGED_TABLE;
   const total = table.reduce((sum, [, weight]) => sum + weight, 0);
   let pick = roll(total - 1);
   for (const [attack, weight] of table) {
@@ -105,7 +120,7 @@ function chooseStandard({ adjacent, roll }) {
 }
 
 /**
- * Dragonfire caps before the roll (OpenRune's Wiki-shaped pipeline): the shield/prayer
+ * Dragonfire caps before the roll (shaped on the Wiki's dragonfire table): the shield/prayer
  * combination sets the cap, an inaccurate roll drops to the resisted cap, then the potion
  * and the venom/prayer-breath penalty subtract.
  */
@@ -128,6 +143,104 @@ function fireballDamage(roll, distance) {
 function spawnExplosionDamage(hitpoints) {
   const clamped = Math.max(0, Math.min(SPAWN_HITPOINTS, hitpoints));
   return Math.floor((clamped * SPAWN_EXPLOSION_MAX) / SPAWN_HITPOINTS);
+}
+
+/**
+ * Her shots, as rsprox captures show them: from her head (two tiles from the middle of her
+ * 7x7 body toward the target), starting 30 cycles in and landing 70 + 5 cycles a tile later
+ * (80 at 2 tiles, 115 at 9), heights 35 to 31, angle 14, progress 128. The impact graphic
+ * goes out with the shot, delayed to land with it (height 124; the ice block has none).
+ */
+const SHOT = Object.freeze({ delay: 30, base: 70, perTile: 5, startHeight: 35, endHeight: 31, angle: 14, progress: 128 });
+const SHOT_IMPACT_HEIGHT = 124;
+
+function headTile(core, npc, target) {
+  const centre = core.Projectile.centreOf(npc);
+  const to = target.getLocation();
+  return centre.transform(2 * Math.sign(to.getX() - centre.getX()), 2 * Math.sign(to.getY() - centre.getY()));
+}
+
+/** Sends a shot and its impact graphic; returns the flight's end, in client cycles. */
+function sendShot(core, npc, target, projectileId, impactGfx, impactHeight = SHOT_IMPACT_HEIGHT) {
+  const from = headTile(core, npc, target);
+  const end = SHOT.base + SHOT.perTile * from.getDistance(target.getLocation());
+  new core.Projectile(
+    from, target.getLocation(), target, projectileId, SHOT.delay, end, SHOT.startHeight, SHOT.endHeight,
+    npc.getPrivateArea(),
+  ).withAngle(SHOT.angle).withProgress(SHOT.progress).sendProjectile();
+  if (impactGfx > 0) {
+    // Set directly: Graphic's overloads read a delay of 0/50/100 as a height.
+    const impact = new core.Graphic(impactGfx);
+    impact.delay = end;
+    impact.height = impactHeight;
+    target.performGraphic(impact);
+  }
+  return end;
+}
+
+/** Captured: the hit (or the freeze) lands floor(flight / 30) ticks after the attack. */
+function shotHitDelay(end) {
+  return Math.floor((end ?? SHOT.base) / 30);
+}
+
+/**
+ * Her sounds, from rsprox captures: each shot has its launch sounds (with their delays, in
+ * client cycles) and an impact sound timed to the projectile's landing.
+ */
+const SHOT_SOUNDS = Object.freeze({
+  ranged: { launch: [[408, 10], [1965, 20]], impact: 3403 },
+  magic: { launch: [[408, 10], [222, 20]], impact: 223 },
+  dragonfire: { launch: [[585, 0], [3750, 15]], impact: 156 },
+  venom: { launch: [[587, 0], [3750, 15]], impact: 129 },
+  prayer: { launch: [[284, 0], [3750, 15]], impact: 135 },
+  ice: { launch: [[586, 0], [3750, 15]], impact: 168 },
+});
+const SOUND = Object.freeze({
+  MELEE: 1521,
+  FIREBALL_LAUNCH: 1519,
+  FIREBALL_IMPACT: 163,
+  ACID_LAUNCH: 736,
+  ACID_POOL: 3308,
+  RAPID_LAUNCH: 3749,
+  RAPID_IMPACT: 158,
+  PRAYERS_DISABLED: 2675,
+  FREEZE: 1784,
+  SPAWN_LANDS: 232,
+});
+/** Area sounds' ranges, in tiles, as captured. */
+const SOUND_RANGE = Object.freeze({ FIREBALL_IMPACT: 12, ACID_POOL: 5, RAPID_IMPACT: 12, SPAWN_LANDS: 16 });
+
+function playSound(player, id, delay = 0) {
+  player?.getPacketSender?.()?.sendSoundEffect(id, 1, delay);
+}
+
+/** The shot's launch sounds and its impact sound, landing with it (`end` cycles). */
+function playShotSounds(player, kind, end) {
+  const sounds = SHOT_SOUNDS[kind];
+  if (!sounds) return;
+  for (const [id, delay] of sounds.launch) playSound(player, id, delay);
+  playSound(player, sounds.impact, end);
+}
+
+/** An area sound on a tile, for the players at her fight. */
+function areaSound(npc, id, tile, range) {
+  const z = npc.getLocation().getZ();
+  for (const viewer of npc.getPlayersWithinDistance(25)) {
+    viewer.getPacketSender().sendAreaSound(id, tile.x, tile.y, z, 1, 0, range);
+  }
+}
+
+/**
+ * A graphic on a tile for each player at her fight (once each); returns those players. Its
+ * fields are set directly: Graphic's overloads read a height of 30 or 38 as a delay.
+ */
+function tileGraphic(core, npc, gfxId, height, tile) {
+  const viewers = npc.getPlayersWithinDistance(25);
+  const at = new core.Location(tile.x, tile.y, npc.getLocation().getZ());
+  const gfx = new core.Graphic(gfxId);
+  gfx.height = height;
+  for (const viewer of viewers) viewer.getPacketSender().sendGraphic(gfx, at);
+  return viewers;
 }
 
 function tileKey(x, y) {
@@ -160,7 +273,8 @@ function hasClearPath(x0, y0, x1, y1, bossX, bossY, isWalkable) {
  * Acid pool tiles: one uniform pick per 3x3 cell of the 7x7 grid around the arena (minus
  * the centre cell), 8 edge tiles in S,S,N,N,W,W,E,E order, then the player's tile.
  * Candidates must be walkable and outside the boss body; `isWalkable(x, y)` is injected.
- * The edge tiles are an approximation: OpenRune gives their order but not their tiles.
+ * The edge tiles are as rsprox captures place them (297 acid phases): two a side, one tile
+ * outside the grid, each on one of three tiles at offsets 4-6 and 14-16 along that side.
  */
 function acidPoolTiles(bossX, bossY, playerX, playerY, isWalkable, pick) {
   const [originX, originY] = ACID_GRID_ORIGIN;
@@ -189,12 +303,14 @@ function acidPoolTiles(bossX, bossY, playerX, playerY, isWalkable, pick) {
       if (candidates.length > 0) take(...candidates[pick(candidates.length - 1)]);
     }
   }
-  const [minX, minY] = [originX, originY];
-  const [maxX, maxY] = [originX + ACID_GRID_CELLS * ACID_CELL_SIZE - 1, originY + ACID_GRID_CELLS * ACID_CELL_SIZE - 1];
-  const midX = Math.floor((minX + maxX) / 2);
-  const midY = Math.floor((minY + maxY) / 2);
-  for (const [x, y] of [[midX - 1, minY], [midX + 1, minY], [midX - 1, maxY], [midX + 1, maxY],
-    [minX, midY - 1], [minX, midY + 1], [maxX, midY - 1], [maxX, midY + 1]]) {
+  const span = ACID_GRID_CELLS * ACID_CELL_SIZE;
+  const along = (first) => first + pick(ACID_EDGE_SPREAD - 1);
+  for (const [x, y] of [
+    [originX + along(ACID_EDGE_NEAR), originY - 1], [originX + along(ACID_EDGE_FAR), originY - 1],
+    [originX + along(ACID_EDGE_NEAR), originY + span], [originX + along(ACID_EDGE_FAR), originY + span],
+    [originX - 1, originY + along(ACID_EDGE_NEAR)], [originX - 1, originY + along(ACID_EDGE_FAR)],
+    [originX + span, originY + along(ACID_EDGE_NEAR)], [originX + span, originY + along(ACID_EDGE_FAR)],
+  ]) {
     take(x, y);
   }
   take(playerX, playerY);
@@ -203,6 +319,7 @@ function acidPoolTiles(bossX, bossY, playerX, playerY, isWalkable, pick) {
 
 module.exports = {
   SLEEPING_ID,
+  WAKING_ID,
   AWAKE_ID,
   SPAWN_ID,
   SIZE,
@@ -213,7 +330,9 @@ module.exports = {
   ATTACK_SPEED_TICKS,
   ATTACK_DISTANCE,
   STANDARDS_BEFORE_SPECIAL,
+  FIRST_SPECIAL_HEAD_START,
   WAKE_TICKS,
+  FIRST_ATTACK_TICKS,
   MELEE_MAX,
   RANGED_MAX,
   MAGIC_MAX,
@@ -235,6 +354,7 @@ module.exports = {
   ATTR_NEXT_SPECIAL,
   ATTR_PHASE,
   ATTR_WAKE_UNTIL,
+  ATTR_FIRST_ATTACK_AT,
   PHASE_ACTIVE,
   PHASE_ACID,
   PHASE_SPAWN,
@@ -245,6 +365,16 @@ module.exports = {
   dragonfireCaps,
   fireballDamage,
   spawnExplosionDamage,
+  SHOT,
+  SOUND,
+  SOUND_RANGE,
+  playSound,
+  playShotSounds,
+  areaSound,
+  tileGraphic,
+  headTile,
+  sendShot,
+  shotHitDelay,
   tileKey,
   underBoss,
   hasClearPath,

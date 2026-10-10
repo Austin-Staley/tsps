@@ -29,11 +29,12 @@ const DRAGONFIRE_IMPACT_GFX = 1466;
 const VENOM_IMPACT_GFX = 1472;
 const PRAYER_IMPACT_GFX = 1473;
 
-const FULL_BURN_MESSAGE = "You're horribly burnt by the dragon fire!";
-const PARTIAL_RESIST_MESSAGE = "You manage to resist some of the dragon fire.";
-const FULL_PROTECTION_MESSAGE = "You are completely protected from the dragon fire.";
-const PRAYERS_DISABLED_MESSAGE = "Your prayers have been disabled!";
-
+/** The breaths' names in her messages (rsprox captures). */
+const BREATH_NAMES = Object.freeze({ dragonfire: "fiery", venom: "venomous", prayer: "corrupting" });
+const PRAYERS_DISABLED_MESSAGE = "<col=ff3045>Your prayers have been disabled!</col>";
+const IMMUNE_MESSAGE = "The dragon is currently immune to your attacks.";
+const IMMUNE_TOLD_ATTRIBUTE = "vorkath:immune-told";
+const IMMUNE_MESSAGE_SPACING = 5;
 /** CombatSpells.CRUMBLE_UNDEAD spell id: the spawn's instant kill. */
 const CRUMBLE_UNDEAD_SPELL_ID = 1169;
 /** Multi-hour poison immunity: Vorkath is immune outright (Wiki) and the engine has no
@@ -85,36 +86,38 @@ function potionTier(player) {
   return "none";
 }
 
-/** Rolled breath damage plus its message (Wiki table legend ties both to the roll). */
+/**
+ * The breath's lines, one per protection, as captured: prayer or shield first ("You're
+ * horribly burnt..." with neither), then the potion's.
+ */
+function breathMessages({ shield, prayer, potion }, variant) {
+  const name = BREATH_NAMES[variant] ?? BREATH_NAMES.dragonfire;
+  const lines = [];
+  if (prayer) lines.push(`Your prayers resist some of the dragon's ${name} breath!`);
+  if (shield) lines.push(`Your shield absorbs most of the dragon's ${name} breath!`);
+  if (!prayer && !shield) lines.push(`You're horribly burnt by the dragon's ${name} breath!`);
+  if (potion === "super") lines.push(`Your super antifire potion helps to protect you from the dragon's ${name} breath!`);
+  else if (potion === "antifire") lines.push("Your antifire potion helps to protect you from the dragon's breath!");
+  return lines;
+}
+
+/** Rolled breath damage plus its messages. */
 function breathOutcome(npc, player, variant) {
-  const caps = Shared.dragonfireCaps({
+  const protection = {
     shield: core.CombatEquipment.hasDragonProtectionGear(player),
     prayer: PrayerHandler.isActivated(player, PrayerHandler.PROTECT_FROM_MAGIC),
     potion: potionTier(player),
-    variant,
-  });
+  };
+  const caps = Shared.dragonfireCaps({ ...protection, variant });
   const accurate = core.AccuracyFormulasDpsCalc.rollAccuracy(npc, player, core.CombatType.MAGIC);
   const max = accurate ? caps.cap : caps.resistedCap;
   const damage = Math.max(0, core.Misc.getRandom(max) - caps.reduction - caps.variantPenalty);
-  let message = accurate ? PARTIAL_RESIST_MESSAGE : FULL_BURN_MESSAGE;
-  if (caps.cap - caps.reduction - caps.variantPenalty <= 0) {
-    message = FULL_PROTECTION_MESSAGE;
-  }
-  return { damage, accurate, message };
-}
-
-function homingShot(npc, target, projectileId) {
-  // Leaves her head (43) for the target's chest (31), and scales flight time with
-  // distance like KBD: a fixed speed reads as teleporting at range, then the hit
-  // lands into an empty gap.
-  core.Projectile.createProjectile(
-    npc, target, projectileId, 40, core.Projectile.arrivalCycles(npc, target), 43, 31,
-  ).sendProjectile();
+  return { damage, accurate, messages: breathMessages(protection, variant) };
 }
 
 /**
- * Tile-targeted shots use OpenRune's capture-derived flight values (delay, duration,
- * arc), with heights quartered like DoomShared does: this engine's height params run 4x
+ * Tile-targeted shots use the captured flight values (delay, duration, arc), with
+ * heights quartered like DoomShared does: this engine's height params run 4x
  * below capture units. They leave from her middle, not the corner of her 7x7 body.
  */
 function sendTileProjectile(npc, tile, projectileId, flight) {
@@ -131,31 +134,29 @@ function sendTileProjectile(npc, tile, projectileId, flight) {
   ).withAngle(flight.angle).sendProjectile();
 }
 
-const FIREBALL_FLIGHT = { delay: 0, duration: 120, angle: 46, startHeight: 85, endHeight: 10 };
+const FIREBALL_FLIGHT = { delay: 0, duration: 120, angle: 46, startHeight: 85, endHeight: 9 };
+const FIREBALL_IMPACT_HEIGHT = 38;
 
 function globalGraphic(npc, gfxId, height, tile) {
-  const viewers = npc.getPlayersWithinDistance(25);
-  const at = new core.Location(tile.x, tile.y, npc.getLocation().getZ());
-  const gfx = new core.Graphic(gfxId, height);
-  for (const viewer of viewers) {
-    viewer.getPacketSender().sendGlobalGraphic(gfx, at);
-  }
-  return viewers;
+  return Shared.tileGraphic(core, npc, gfxId, height, tile);
 }
 
 function launchFireball(npc, target) {
   npc.performAnimation(new core.Animation(HIGH_ANIMATION));
+  Shared.playSound(target, Shared.SOUND.FIREBALL_LAUNCH, 20);
   afterTicks(1, target, () => {
     if (!npc.isRegistered?.() || (npc.getHitpoints?.() ?? 1) <= 0) return;
     const location = target.getLocation();
     const tile = { x: location.getX(), y: location.getY() };
     sendTileProjectile(npc, tile, FIREBALL_PROJECTILE, FIREBALL_FLIGHT);
-    afterTicks(3, target, () => explodeFireball(npc, tile));
+    // Captured: the impact shows on the tile 4 ticks after the projectile, at height 38.
+    afterTicks(4, target, () => explodeFireball(npc, tile));
   });
 }
 
 function explodeFireball(npc, tile) {
-  const viewers = globalGraphic(npc, DRAGONFIRE_IMPACT_GFX, core.GraphicHeight.HIGH, tile);
+  const viewers = globalGraphic(npc, DRAGONFIRE_IMPACT_GFX, FIREBALL_IMPACT_HEIGHT, tile);
+  Shared.areaSound(npc, Shared.SOUND.FIREBALL_IMPACT, tile, Shared.SOUND_RANGE.FIREBALL_IMPACT);
   const roll = core.Misc.getRandom(Shared.FIREBALL_MAX);
   for (const viewer of viewers) {
     const position = viewer.getLocation();
@@ -213,6 +214,7 @@ function modifyHit(event) {
   const phase = npc.getAttribute?.(Shared.ATTR_PHASE) ?? Shared.PHASE_ACTIVE;
   if (phase === Shared.PHASE_SPAWN) {
     zeroHits(hit, hits);
+    tellImmune(attacker);
     return;
   }
   if (phase === Shared.PHASE_ACID) {
@@ -221,6 +223,20 @@ function modifyHit(event) {
     }
     hit.updateTotalDamage?.();
   }
+}
+
+/**
+ * During the spawn her hits land as 0 with "The dragon is currently immune to your attacks."
+ * (rsprox captures). The message shows on about 2 in 5 of those hits; the 5-tick spacing
+ * is ours.
+ */
+function tellImmune(attacker) {
+  const player = attacker?.isPlayer?.() ? attacker.getAsPlayer() : null;
+  if (!player) return;
+  const now = core.World.getProcessCycle();
+  if (now < (player.getAttribute(IMMUNE_TOLD_ATTRIBUTE) ?? 0)) return;
+  player.setAttribute(IMMUNE_TOLD_ATTRIBUTE, now + IMMUNE_MESSAGE_SPACING);
+  player.sendMessage(IMMUNE_MESSAGE);
 }
 
 function zeroHits(hit, hits) {
@@ -257,39 +273,40 @@ function combatClass() {
   return class VorkathCombat extends CombatMethod {
     hits(character, target) {
       if (!character || !target) return [];
-      if (this.attack === Shared.Attack.FIREBALL) return [];
+      // The engine asks for hits right after start(); a turn start() skipped has none.
+      if (!this.attack || this.attack === Shared.Attack.FIREBALL) return [];
       if (this.attack === Shared.Attack.MELEE) {
-        const hit = new core.PendingHit(character, target, this, 1);
+        // Captured: the melee hit lands on the animation's tick.
+        const hit = new core.PendingHit(character, target, this, 0);
         hit.setTotalDamage(Math.min(Shared.MELEE_MAX, hit.getTotalDamage()));
         return [hit];
       }
       if (this.attack === Shared.Attack.RANGED || this.attack === Shared.Attack.MAGIC) {
         const ranged = this.attack === Shared.Attack.RANGED;
-        const delay = core.Projectile.arrivalTicks(character, target);
+        const delay = Shared.shotHitDelay(this.shotEnd);
         const hit = new core.PendingHit(character, target, this, delay);
         hit.setTotalDamage(Math.min(ranged ? Shared.RANGED_MAX : Shared.MAGIC_MAX, hit.getTotalDamage()));
         return [hit];
       }
       const variant = this.attack ?? Shared.Attack.DRAGONFIRE;
-      const delay = core.Projectile.arrivalTicks(character, target);
+      const delay = Shared.shotHitDelay(this.shotEnd);
       const outcome = target.isPlayer?.()
         ? breathOutcome(character, target.getAsPlayer(), variant)
-        : { damage: core.Misc.getRandom(Shared.MAGIC_MAX), message: null };
-      const impactGfx = variant === Shared.Attack.VENOM ? VENOM_IMPACT_GFX
-        : variant === Shared.Attack.PRAYER ? PRAYER_IMPACT_GFX
-        : DRAGONFIRE_IMPACT_GFX;
+        : { damage: core.Misc.getRandom(Shared.MAGIC_MAX), messages: [] };
       const hit = new core.PendingHit(character, target, this, { delay, rollAccuracy: false });
       hit.setTotalDamage(outcome.damage);
-      hit.vorkathBreath = { variant, message: outcome.message, impactGfx };
+      hit.vorkathBreath = { variant, messages: outcome.messages };
       return [hit];
     }
 
     start(character, target) {
+      this.attack = null;
       if (!character || !target) return;
       const npc = character.getAsNpc();
       if (!npc || npc.getId() !== Shared.AWAKE_ID) return;
-      if (core.World.getProcessCycle() < (npc.getAttribute(Shared.ATTR_WAKE_UNTIL) ?? 0)) {
-        character.getCombat().setAttackDelay(2);
+      // Her first attack comes 6 ticks after she wakes (captured), even if hit sooner.
+      if (core.World.getProcessCycle() < (npc.getAttribute(Shared.ATTR_FIRST_ATTACK_AT) ?? 0)) {
+        character.getCombat().setAttackDelay(1);
         return;
       }
       if ((npc.getAttribute(Shared.ATTR_PHASE) ?? Shared.PHASE_ACTIVE) !== Shared.PHASE_ACTIVE) {
@@ -308,40 +325,36 @@ function combatClass() {
       npc.setAttribute(Shared.ATTR_ATTACKS, attacks + 1);
       if (this.attack === Shared.Attack.MELEE) {
         npc.performAnimation(new core.Animation(MELEE_ANIMATION));
+        Shared.playSound(target, Shared.SOUND.MELEE);
       } else if (this.attack === Shared.Attack.FIREBALL) {
         launchFireball(npc, target);
       } else {
         npc.performAnimation(new core.Animation(RANGED_ANIMATION));
-        const projectileId = this.attack === Shared.Attack.RANGED ? RANGED_PROJECTILE
-          : this.attack === Shared.Attack.MAGIC ? MAGIC_PROJECTILE
-          : this.attack === Shared.Attack.VENOM ? VENOM_PROJECTILE
-          : this.attack === Shared.Attack.PRAYER ? PRAYER_PROJECTILE
-          : DRAGONFIRE_PROJECTILE;
-        homingShot(npc, target, projectileId);
+        const [projectileId, impactGfx] = this.attack === Shared.Attack.RANGED ? [RANGED_PROJECTILE, RANGED_IMPACT_GFX]
+          : this.attack === Shared.Attack.MAGIC ? [MAGIC_PROJECTILE, MAGIC_IMPACT_GFX]
+          : this.attack === Shared.Attack.VENOM ? [VENOM_PROJECTILE, VENOM_IMPACT_GFX]
+          : this.attack === Shared.Attack.PRAYER ? [PRAYER_PROJECTILE, PRAYER_IMPACT_GFX]
+          : [DRAGONFIRE_PROJECTILE, DRAGONFIRE_IMPACT_GFX];
+        this.shotEnd = Shared.sendShot(core, npc, target, projectileId, impactGfx);
+        Shared.playShotSounds(target, this.attack, this.shotEnd);
       }
     }
 
     handleAfterHitEffects(hit) {
       const target = hit?.getTarget?.();
       if (!target?.isPlayer?.()) return;
-      if (this.attack === Shared.Attack.RANGED) {
-        target.performGraphic(new core.Graphic(RANGED_IMPACT_GFX, core.GraphicHeight.HIGH));
-        return;
-      }
-      if (this.attack === Shared.Attack.MAGIC) {
-        target.performGraphic(new core.Graphic(MAGIC_IMPACT_GFX, core.GraphicHeight.HIGH));
-        return;
-      }
+      // The impact graphics went out with the shots (Shared.sendShot).
       const breath = hit.vorkathBreath;
       if (!breath) return;
-      target.performGraphic(new core.Graphic(breath.impactGfx ?? DRAGONFIRE_IMPACT_GFX, core.GraphicHeight.HIGH));
-      if (breath.message) target.sendMessage(breath.message);
+      for (const line of breath.messages ?? []) target.sendMessage(line);
       if (breath.variant === Shared.Attack.VENOM && Math.random() < 0.5) {
         CombatFactory.poisonEntity(target, 6, 2);
       }
       if (breath.variant === Shared.Attack.PRAYER) {
         PrayerHandler.deactivatePrayers(target);
         target.sendMessage(PRAYERS_DISABLED_MESSAGE);
+        // Captured a tick after the hit.
+        afterTicks(1, target, () => Shared.playSound(target, Shared.SOUND.PRAYERS_DISABLED));
       }
     }
 
@@ -381,5 +394,5 @@ module.exports = {
   edgeDistance,
   isAdjacent,
   breathOutcome,
-  _test: { edgeDistance, isAdjacent },
+  _test: { edgeDistance, isAdjacent, breathMessages },
 };

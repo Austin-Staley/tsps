@@ -5,6 +5,7 @@
  * disconnecting destroys it; NPCs, pool objects and drops go with it.
  */
 const Shared = require("./Shared.Vorkath");
+const Hud = require("./Hud.Vorkath");
 
 /** Crater interior: the wall line y=4053 stays outside so climbers arrive cleanly. */
 const CRATER = { minX: 2258, maxX: 2286, minY: 4054, maxY: 4078 };
@@ -83,6 +84,7 @@ function clearArea(player, sourceArea) {
 }
 
 function destroyArea(player) {
+  Hud.dropFor(player);
   const area = player.getAttribute?.(ATTR_AREA);
   clearArea(player, area);
   if (area instanceof VorkathPrivateArea && area.isDestroyed?.() !== true) {
@@ -106,11 +108,14 @@ function ensureSleeper(area) {
   const awake = (area.entities ?? []).some((entity) => {
     if (!entity?.isNpc?.() || !entity?.getAsNpc) return false;
     const id = entity.getAsNpc().getId?.();
-    return id === Shared.SLEEPING_ID || id === Shared.AWAKE_ID;
+    return id === Shared.SLEEPING_ID || id === Shared.WAKING_ID || id === Shared.AWAKE_ID;
   });
   if (awake) return;
   const location = new core.Location(Shared.SPAWN_TILE[0], Shared.SPAWN_TILE[1], Shared.SPAWN_TILE[2]);
   const sleeper = core.NPC.create(Shared.SLEEPING_ID, location);
+  // The crater brings her back (here, as soon as she is gone, as captured); her own respawn
+  // timer would add a second one.
+  sleeper.__skipDefaultRespawn = true;
   sleeper.getMovementCoordinator?.().setRadius?.(0);
   area.add(sleeper);
   core.World.getAddNPCQueue().push(sleeper);
