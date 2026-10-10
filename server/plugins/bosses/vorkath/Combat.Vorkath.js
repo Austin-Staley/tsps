@@ -196,7 +196,6 @@ function modifyHit(event) {
   keepPoisonImmune(npc);
   const hits = hit.getHits?.() ?? [];
   if (hits.length === 0) return;
-  console.info(`[vorkath-tmp] incoming phase=${npc.getAttribute?.(Shared.ATTR_PHASE) ?? "?"} attacker=${hit.getAttacker?.()?.isPlayer?.() ? "player" : "?"} dmg=${hits.map((p) => p.getDamage?.()).join("+")} total=${hit.getTotalDamage?.()} hpBefore=${npc.getHitpoints?.()}`);
   if (hits.length === 0) return;
   if (hits.some((part) => part.isReflected?.() === true)) {
     zeroHits(hit, hits);
@@ -306,7 +305,6 @@ function combatClass() {
         adjacent: isAdjacent(npc, target),
         roll: (n) => core.Misc.getRandom(n),
       });
-      console.info(`[vorkath-tmp] swings ${this.attack} adjacent=${isAdjacent(npc, target)}`);
       npc.setAttribute(Shared.ATTR_ATTACKS, attacks + 1);
       if (this.attack === Shared.Attack.MELEE) {
         npc.performAnimation(new core.Animation(MELEE_ANIMATION));

@@ -111,7 +111,6 @@ function damagePlayer(player, amount) {
 function healNpc(npc, amount) {
   if (!alive(npc) || amount <= 0) return;
   npc.setHitpoints?.(Math.min(Shared.MAX_HITPOINTS, (npc.getHitpoints?.() ?? 0) + amount));
-  console.info(`[vorkath-tmp] leech +${amount} hp=${npc.getHitpoints?.()} phase=${npc.getAttribute?.(Shared.ATTR_PHASE) ?? "?"}`);
 }
 
 function unfreeze(player) {
@@ -247,7 +246,10 @@ function startSpawn(npc, target) {
       endSpawn(npc, fight);
       return;
     }
-    target.performGraphic(new core.Graphic(FREEZE_GFX, core.GraphicHeight.HIGH));
+    // Exactly like an Ancient Barrage impact (MagicCombatMethod plays the spell's
+    // endGraphic): the block hugs the target. HIGH lifted it above the head, which
+    // is why it read as "no block".
+    target.performGraphic(new core.Graphic(FREEZE_GFX));
     CombatFactory.freeze(target, Shared.FREEZE_SECONDS);
     npc.performAnimation(new core.Animation(HIGH_ANIMATION));
     const tile = pickSpawnTile(npc, target);
