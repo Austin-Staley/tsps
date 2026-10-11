@@ -222,11 +222,6 @@ export class PacketSender {
     ))) return this;
   }
 
-  sendPoisonType(type: number): this {
-    this.player.getSession().write(new PacketBuilder(184).put(type));
-    return this;
-  }
-
   /** Re-sends the login's setup for one side tab after it is mounted again (encodeGameframeTabSetup). */
   sendGameframeTabSetup(group: number): this {
     for (const packet of encodeGameframeTabSetup(group, resolveGameframeRoot(this.player))) {

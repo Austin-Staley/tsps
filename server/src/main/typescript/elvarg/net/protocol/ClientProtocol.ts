@@ -158,6 +158,8 @@ export type NpcView = Tile & ActorUpdateView & {
   exactMove?: ForcedMovementView;
   /** A tile to turn to once (OSRS npc face coord). */
   faceTile?: { x: number; y: number };
+  /** Body-model slot overrides (OSRS npc model customisation); an empty list resets them. */
+  modelCustomisation?: { slot: number; modelId: number }[];
   /** Its walk step is sent as a crawl (half walking speed on the client). */
   crawl?: boolean;
   rotation: number;
@@ -1858,7 +1860,7 @@ const QUEST_TAB_ICON_FLAGS = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4);
 const ACCOUNT_SUMMARY_ENTRY_LIST_UID = (INTERFACE_CHARACTER_SUMMARY_ID << 16) | 3;
 const ACCOUNT_SUMMARY_QUESTS_ROW = 3; // op1 "Quest List"
 const ACCOUNT_SUMMARY_ACHIEVEMENTS_ROW = 4; // op1 "Achievement Diaries"
-const ACCOUNT_SUMMARY_COMBAT_TASKS_ROW = 5; // op1-4 Overview/Bosses/Tasks/Rewards (Combat Achievements - not yet built)
+const ACCOUNT_SUMMARY_COMBAT_TASKS_ROW = 5; // op1 "Combat Achievements" (the last screen used; plugins/combatachievements/)
 const ACCOUNT_SUMMARY_COLLECTION_LOG_ROW = 6; // op1 "Collection Log", op2 "Collection Overview"
 const ACCOUNT_SUMMARY_PLAYTIME_ROW = 7; // op1 "Reveal"
 
@@ -2257,6 +2259,7 @@ const NPC_MASK = {
   HEAD_ICONS: 0x200,
   EXACT_MOVE: 0x400,
   FACE_TILE: 0x800,
+  MODEL_CUSTOMISATION: 0x1000,
   SPOT_ANIM: 0x20000,
 } as const;
 
@@ -2386,6 +2389,7 @@ function npcUpdateMask(view: NpcView, writeInteraction: boolean, writeHeadIcon =
     (view.forcedChat !== undefined ? NPC_MASK.FORCED_CHAT : 0) |
     (view.exactMove ? NPC_MASK.EXACT_MOVE : 0) |
     (view.faceTile ? NPC_MASK.FACE_TILE : 0) |
+    (view.modelCustomisation ? NPC_MASK.MODEL_CUSTOMISATION : 0) |
     (view.graphics?.length ? NPC_MASK.SPOT_ANIM : 0);
 }
 
@@ -2484,6 +2488,13 @@ function writeNpcUpdateBlock(view: NpcView, writeInteraction: boolean, writeHead
   if (view.faceTile) {
     shortBE(bytes, view.faceTile.x & 0xffff);
     shortBE(bytes, view.faceTile.y & 0xffff);
+  }
+  if (view.modelCustomisation) {
+    bytes.push(view.modelCustomisation.length & 0xff);
+    for (const entry of view.modelCustomisation) {
+      bytes.push(entry.slot & 0xff);
+      shortLE(bytes, entry.modelId & 0xffff);
+    }
   }
   return Buffer.from(bytes);
 }

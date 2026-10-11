@@ -127,6 +127,13 @@ export class NPC extends Mobile {
     private crawling = false;
     /** A tile to turn to this tick (OSRS npc face coord), sent with the NPC's update and cleared after it. */
     private faceTileState: { x: number; y: number } | null = null;
+    /**
+     * Body-model overrides (OSRS npc model customisation): slot -> replacement model id. Sent
+     * with every update while set, so late viewers see it too; an empty list is a reset and
+     * keeps being sent for a few ticks before the field clears.
+     */
+    private modelCustomisation: { slot: number; modelId: number }[] | undefined = undefined;
+    private modelCustomisationResetUntil = 0;
     private isDying: boolean;
     private owner: Player;
     private ownerOnly: boolean = false;
@@ -349,9 +356,11 @@ export class NPC extends Mobile {
         return this;
     }
 
-    /** Full health: the definition's hitpoints unless this NPC was scaled (raids). */
+    /** Full health of the current form (transforms resolve first): the definition's
+     * hitpoints unless this NPC was scaled (raids). */
     public getMaxHitpoints(): number {
-        return this.maxHitpointsOverride >= 0 ? this.maxHitpointsOverride : this.getDefinition().getHitpoints();
+        if (this.maxHitpointsOverride >= 0) return this.maxHitpointsOverride;
+        return this.getCurrentDefinition()?.getHitpoints() ?? this.getDefinition().getHitpoints();
     }
 
     /** Scales this one NPC's full health, e.g. by raid level or party size; -1 restores the definition's. */
@@ -535,6 +544,33 @@ export class NPC extends Mobile {
     public setMultiCombat(multiCombat: boolean): NPC {
         this.multiCombat = multiCombat;
         return this;
+    }
+
+    /**
+     * Replaces body-model slots on every viewer's client (OSRS npc model customisation), e.g.
+     * Araxxor's venom-coated legs on enrage. Null resets to the cache's models.
+     */
+    public setModelCustomisation(models: { slot: number; modelId: number }[] | null): NPC {
+        if (models && models.length > 0) {
+            this.modelCustomisation = models.map((entry) => ({ slot: entry.slot | 0, modelId: entry.modelId | 0 }));
+            this.modelCustomisationResetUntil = 0;
+        } else {
+            this.modelCustomisation = [];
+            this.modelCustomisationResetUntil = World.getProcessCycle() + 5;
+        }
+        return this;
+    }
+
+    /** The customisation to send this update, or undefined when there is none (or a reset expired). */
+    public getModelCustomisationForUpdate(): { slot: number; modelId: number }[] | undefined {
+        if (this.modelCustomisation === undefined) {
+            return undefined;
+        }
+        if (this.modelCustomisation.length === 0 && World.getProcessCycle() > this.modelCustomisationResetUntil) {
+            this.modelCustomisation = undefined;
+            return undefined;
+        }
+        return this.modelCustomisation;
     }
 
     public getMovementCoordinator(): NPCMovementCoordinator {
