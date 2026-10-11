@@ -186,6 +186,11 @@ export type ProjectileView = {
   startCycleOffset: number;
   endCycleOffset: number;
   targetActor?: { kind: "player" | "npc"; index: number };
+  /**
+   * The actor it is fired by: the client starts it from where that actor is drawn until it
+   * launches, so a caster still walking onto its tile doesn't fire from ahead of itself.
+   */
+  sourceActor?: { kind: "player" | "npc"; index: number };
 };
 
 export type SkillView = {
@@ -2890,8 +2895,9 @@ export function encodeProjectiles(projectiles: ProjectileView[]): Buffer {
     payload.writeUInt16BE(projectile.startPos & 0xffff, offset + 17);
     payload.writeUInt16BE(projectile.startCycleOffset & 0xffff, offset + 19);
     payload.writeUInt16BE(projectile.endCycleOffset & 0xffff, offset + 21);
-    payload[offset + 23] = 0;
-    payload.writeUInt16BE(0, offset + 24);
+    payload[offset + 23] = projectile.sourceActor?.kind === "player" ? 1
+      : projectile.sourceActor?.kind === "npc" ? 2 : 0;
+    payload.writeUInt16BE(projectile.sourceActor?.index ?? 0, offset + 24);
     payload[offset + 26] = projectile.targetActor?.kind === "player" ? 1
       : projectile.targetActor?.kind === "npc" ? 2 : 0;
     payload.writeUInt16BE(projectile.targetActor?.index ?? 0, offset + 27);
