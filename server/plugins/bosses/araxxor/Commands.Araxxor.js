@@ -43,8 +43,33 @@ function setAraxxorHitpoints({ player, parts }) {
   return true;
 }
 
+function debugAraxxor({ player }) {
+  const session = Area.sessions.get(player);
+  const boss = session?.npc ?? null;
+  if (!boss) {
+    player.sendMessage("You have no active Araxxor.");
+    return true;
+  }
+  const combat = boss.getCombat?.();
+  const target = combat?.getTarget?.() ?? null;
+  const method = boss.getCombatMethod?.() ?? null;
+  const me = player.getLocation();
+  const at = boss.getLocation();
+  player.sendMessage(
+    `boss=${boss.getId()} at=${at.getX()},${at.getY()} area=${boss.getArea?.()?.constructor?.name ?? "null"}` +
+    ` playerArea=${player.getArea?.()?.constructor?.name ?? "null"} privateSame=${boss.getPrivateArea?.() === player.getPrivateArea?.()}`,
+  );
+  player.sendMessage(
+    `target=${target ? (target.isPlayer?.() ? target.getAsPlayer?.().getUsername?.() : "npc:" + target.getAsNpc?.().getId?.()) : "none"}` +
+    ` underAttack=${combat?.getAttacker?.() ? "yes" : "no"} reach=${method?.attackDistance?.() ?? "?"} speed=${method?.attackSpeed?.() ?? "?"}` +
+    ` dist=${Math.max(Math.abs(me.getX() - at.getX()), Math.abs(me.getY() - at.getY()))}`,
+  );
+  return true;
+}
+
 module.exports = function attachCommands(api) {
   core = api.core;
   api.registerCommand("araxxorkill", killAraxxor, api.core.PlayerRights.DEVELOPER, "Defeat your active Araxxor");
   api.registerCommand("araxxorhp", setAraxxorHitpoints, api.core.PlayerRights.DEVELOPER, "Set your Araxxor's hitpoints");
+  api.registerCommand("araxxordebug", debugAraxxor, api.core.PlayerRights.DEVELOPER, "Print the Araxxor fight state");
 };
