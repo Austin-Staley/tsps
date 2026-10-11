@@ -11,6 +11,7 @@ const Specials = require("./araxxor/Specials.Araxxor");
 const Minions = require("./araxxor/Minions.Araxxor");
 const Corpse = require("./araxxor/Corpse.Araxxor");
 const Hud = require("./araxxor/Hud.Araxxor");
+const Commands = require("./araxxor/Commands.Araxxor");
 
 module.exports = {
   name: "Araxxor",
@@ -22,5 +23,6 @@ module.exports = {
     Corpse.attach(api);
     Area.attach(api);
     Hud.attach(api);
+    Commands(api);
   },
 };
