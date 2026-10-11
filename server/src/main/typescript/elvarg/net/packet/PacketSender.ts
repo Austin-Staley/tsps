@@ -1,4 +1,4 @@
-import { encodePlayerOption } from "../protocol/ClientProtocol";
+import { encodeGameframeTabSetup, encodePlayerOption, resolveGameframeRoot } from "../protocol/ClientProtocol";
 import { BIT_MASKS } from "../../game/cache/codec/rs/MathConstants";
 import { PacketBuilder } from "./PacketBuilder";
 import { ValueType } from "./ValueType";
@@ -224,6 +224,14 @@ export class PacketSender {
 
   sendPoisonType(type: number): this {
     this.player.getSession().write(new PacketBuilder(184).put(type));
+    return this;
+  }
+
+  /** Re-sends the login's setup for one side tab after it is mounted again (encodeGameframeTabSetup). */
+  sendGameframeTabSetup(group: number): this {
+    for (const packet of encodeGameframeTabSetup(group, resolveGameframeRoot(this.player))) {
+      this.player.getSession().sendClientPacket(packet);
+    }
     return this;
   }
 

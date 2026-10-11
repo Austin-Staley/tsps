@@ -1868,18 +1868,42 @@ const ACCOUNT_SUMMARY_PLAYTIME_ROW = 7; // op1 "Reveal"
 const EQUIPMENT_QUIVER_SLOT_UID = (387 << 16) | 28;
 const EQUIPMENT_QUIVER_SLOT_FLAGS = (1 << 1) | (1 << 2) | (1 << 10);
 
-export function encodeGameframeFlags(root: number = 161): Buffer[] {
+/** The login's widget flags, each with the component it is on (its interface is uid >>> 16). */
+function gameframeFlagEntries(root: number): Array<[number, Buffer]> {
   const questTabChild = QUEST_TAB_ICON_CHILD_BY_ROOT[root] ?? QUEST_TAB_ICON_CHILD_ID;
+  const questTabIcon = (root << 16) | questTabChild;
   return [
-    encodeWidgetSetFlagsRange(EQUIPMENT_QUIVER_SLOT_UID, -1, -1, EQUIPMENT_QUIVER_SLOT_FLAGS),
-    encodeWidgetSetFlagsRange(MAIN_INVENTORY_WIDGET_UID, 0, 27, MAIN_INVENTORY_SLOT_FLAGS),
-    encodeWidgetSetFlags((root << 16) | questTabChild, QUEST_TAB_ICON_FLAGS),
-    encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_QUESTS_ROW, ACCOUNT_SUMMARY_ACHIEVEMENTS_ROW, 1 << 1),
-    encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_COMBAT_TASKS_ROW, ACCOUNT_SUMMARY_COMBAT_TASKS_ROW, (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)),
-    encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_COLLECTION_LOG_ROW, ACCOUNT_SUMMARY_COLLECTION_LOG_ROW, (1 << 1) | (1 << 2)),
-    encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_PLAYTIME_ROW, ACCOUNT_SUMMARY_PLAYTIME_ROW, 1 << 1),
-    encodeWidgetSetFlagsRange(DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID, 0, DISPLAY_SETTINGS_DROPDOWN_OPTION_SLOTS, FIRST_OPTION_FLAG),
+    [EQUIPMENT_QUIVER_SLOT_UID, encodeWidgetSetFlagsRange(EQUIPMENT_QUIVER_SLOT_UID, -1, -1, EQUIPMENT_QUIVER_SLOT_FLAGS)],
+    [MAIN_INVENTORY_WIDGET_UID, encodeWidgetSetFlagsRange(MAIN_INVENTORY_WIDGET_UID, 0, 27, MAIN_INVENTORY_SLOT_FLAGS)],
+    [questTabIcon, encodeWidgetSetFlags(questTabIcon, QUEST_TAB_ICON_FLAGS)],
+    [ACCOUNT_SUMMARY_ENTRY_LIST_UID, encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_QUESTS_ROW, ACCOUNT_SUMMARY_ACHIEVEMENTS_ROW, 1 << 1)],
+    [ACCOUNT_SUMMARY_ENTRY_LIST_UID, encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_COMBAT_TASKS_ROW, ACCOUNT_SUMMARY_COMBAT_TASKS_ROW, (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4))],
+    [ACCOUNT_SUMMARY_ENTRY_LIST_UID, encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_COLLECTION_LOG_ROW, ACCOUNT_SUMMARY_COLLECTION_LOG_ROW, (1 << 1) | (1 << 2))],
+    [ACCOUNT_SUMMARY_ENTRY_LIST_UID, encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_PLAYTIME_ROW, ACCOUNT_SUMMARY_PLAYTIME_ROW, 1 << 1)],
+    [DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID, encodeWidgetSetFlagsRange(DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID, 0, DISPLAY_SETTINGS_DROPDOWN_OPTION_SLOTS, FIRST_OPTION_FLAG)],
   ];
+}
+
+export function encodeGameframeFlags(root: number = 161): Buffer[] {
+  return gameframeFlagEntries(root).map(([, packet]) => packet);
+}
+
+/**
+ * What the login sends for one side tab, for mounting it again: the client drops an
+ * interface's flags when it closes, so a tab the tutorial kept closed needs its flags (and the
+ * quest tab its journal, with the character summary's) once more when it opens.
+ */
+export function encodeGameframeTabSetup(group: number, root: number = 161): Buffer[] {
+  const packets: Buffer[] = [];
+  const groups = [group];
+  if (group === SIDE_JOURNAL_GROUP_ID) {
+    packets.push(encodeOpenSub(SIDE_JOURNAL_GROUP_ID, SIDE_JOURNAL_TAB_CONTAINER_CHILD_ID, INTERFACE_CHARACTER_SUMMARY_ID));
+    groups.push(INTERFACE_CHARACTER_SUMMARY_ID);
+  }
+  for (const [uid, packet] of gameframeFlagEntries(root)) {
+    if (groups.includes(uid >>> 16)) packets.push(packet);
+  }
+  return packets;
 }
 
 // Transient player attribute set from the handshake's clientType byte.
