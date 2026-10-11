@@ -121,6 +121,8 @@ const ATTR_ENCOUNTER = "araxxor:encounter";
 const ATTR_SPECIAL = "araxxor:special";
 const ATTR_LAST_ATTACK = "araxxor:last-attack";
 const ATTR_LAST_HATCH = "araxxor:last-hatch";
+const ATTR_LAST_SPECIAL = "araxxor:last-special";
+const ATTR_POOLS_SPAWNED = "araxxor:pools-spawned";
 
 const Attack = { MELEE: "melee", RANGED: "ranged", MAGIC: "magic", CLEAVE: "cleave" };
 
@@ -261,6 +263,8 @@ module.exports = {
   ATTR_SPECIAL,
   ATTR_LAST_ATTACK,
   ATTR_LAST_HATCH,
+  ATTR_LAST_SPECIAL,
+  ATTR_POOLS_SPAWNED,
   Attack,
   SPECIAL_FOR_PRIMARY,
   edgeDistance,

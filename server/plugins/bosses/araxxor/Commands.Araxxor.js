@@ -63,8 +63,10 @@ function debugAraxxor({ player }) {
   const cycle = core.World.getProcessCycle();
   const lastAttack = boss.getAttribute?.(Shared.ATTR_LAST_ATTACK) ?? 0;
   const lastHatch = boss.getAttribute?.(Shared.ATTR_LAST_HATCH) ?? 0;
+  const lastSpecial = boss.getAttribute?.(Shared.ATTR_LAST_SPECIAL) ?? 0;
   let line = `cycle=${cycle} bossHp=${boss.getHitpoints?.()} attacks=${boss.getAttribute?.(Shared.ATTR_ATTACKS) ?? 0}` +
     ` sinceAttack=${lastAttack ? cycle - lastAttack : "-"} sinceHatch=${lastHatch ? cycle - lastHatch : "-"}` +
+    ` sinceSpecial=${lastSpecial ? cycle - lastSpecial : "-"} poolsSpawned=${boss.getAttribute?.(Shared.ATTR_POOLS_SPAWNED) ?? 0}` +
     ` target=${who(target)} attackedBy=${who(combat?.getAttacker?.())} playerAttacks=${who(playerAttacker)}` +
     ` dist=${Math.max(Math.abs(me.getX() - at.getX()), Math.abs(me.getY() - at.getY()))}`;
   try {
