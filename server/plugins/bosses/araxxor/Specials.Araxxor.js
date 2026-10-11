@@ -52,6 +52,7 @@ function alive(entity) {
 function getFight(npc) {
   let fight = fights.get(npc);
   if (!fight) {
+    console.log("[araxxor-fight] CREATED for npc", npc?.getId?.(), "cycle", core.World.getProcessCycle());
     fight = { pools: new Map(), standing: new Map(), ball: null, ballTiles: 0, drips: [], nextHatchAt: 0 };
     fights.set(npc, fight);
   }
@@ -83,6 +84,7 @@ function spawnPool(npc, x, y) {
 function initFight(npc) {
   const fight = getFight(npc);
   fight.nextHatchAt = core.World.getProcessCycle() + Shared.FIRST_HATCH_TICKS;
+  console.log("[araxxor-fight] INIT next", fight.nextHatchAt, "cycle", core.World.getProcessCycle());
   return fight;
 }
 
@@ -313,6 +315,7 @@ function acidicAraxyteDied({ npc }) {
 function endFight(npc) {
   const fight = fights.get(npc);
   if (!fight) return;
+  console.log("[araxxor-fight] END for npc", npc?.getId?.(), "cycle", core.World.getProcessCycle(), new Error().stack?.split("\n")[2]?.trim());
   for (const object of fight.pools.values()) {
     core.ObjectManager.deregister(object, true);
   }
