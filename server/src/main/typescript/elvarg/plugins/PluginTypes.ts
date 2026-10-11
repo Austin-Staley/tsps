@@ -1245,6 +1245,7 @@ export interface PluginCoreApi {
   ItemDefinition: any;
   EquipPacketListener: any;
   CacheDefinitions: any;
+  Wilderness: any;
   PathFinder: any;
   RsmodRouteFinding: any;
   NpcDefinition: any;
@@ -1274,6 +1275,7 @@ export interface PluginCoreApi {
   Server: any;
   PluginManager: any;
   ShopManager: any;
+  ShopDefinition: any;
   MultiChatboxPrompt: any;
   dispatchClientMessages: (player: any, messages: any[]) => boolean;
   connectHeadlessClient: (username: string, password: string) => Promise<{ player?: any; error?: string }>;

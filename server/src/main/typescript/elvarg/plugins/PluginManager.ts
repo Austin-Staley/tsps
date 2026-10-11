@@ -754,6 +754,26 @@ export class PluginManager {
   }
 
   /** Spawns a plugin NPC (optionally owner-only) and returns it, or null. */
+  /** Equipment-tab click 1 is Remove; clicks 2+ are the worn options (item params 451+). */
+  private static readonly WORN_OPTION_PARAM = 451;
+  private static readonly FIRST_WORN_OPTION_CLICK = 2;
+
+  /**
+   * The option an item click names: a worn option when it came from the equipment tab
+   * (a Slayer helmet's worn Check is its inventory Disassemble's slot), else an inventory one.
+   */
+  private static itemActionOption(definition: any, event: PluginItemActionEvent): string | null {
+    const { Equipment } = require("../game/model/container/impl/Equipment");
+    if (event.interfaceId === Equipment.INVENTORY_INTERFACE_ID) {
+      if (event.option) return event.option;
+      const index = event.clickType - PluginManager.FIRST_WORN_OPTION_CLICK;
+      if (index < 0) return null;
+      const worn = definition.params?.get?.(PluginManager.WORN_OPTION_PARAM + index);
+      return typeof worn === "string" ? worn : null;
+    }
+    return definition.inventoryActions?.[event.clickType - 1] ?? null;
+  }
+
   public static spawnNpc(definition: PluginNpcSpawnDefinition): any {
     const id = Math.trunc(Number(definition?.id));
     if (!Number.isFinite(id) || id < 0) {
@@ -2057,6 +2077,7 @@ export class PluginManager {
       ItemDefinition: require("../game/definition/ItemDefinition").ItemDefinition,
       EquipPacketListener: require("../net/packet/impl/EquipPacketListener").EquipPacketListener,
       CacheDefinitions: require("../game/cache/CacheDefinitions").CacheDefinitions,
+      Wilderness: require("../game/content/wilderness/Wilderness").Wilderness,
       PathFinder: require(`${model}/movement/path/PathFinder`).PathFinder,
       RsmodRouteFinding: require(`${model}/movement/path/RsmodRouteFinding`).RsmodRouteFinding,
       NpcDefinition: require("../game/definition/NpcDefinition").NpcDefinition,
@@ -2087,6 +2108,7 @@ export class PluginManager {
       Server: require("../Server").Server,
       PluginManager: require("./PluginManager").PluginManager,
       ShopManager: require("../game/model/container/shop/ShopManager").ShopManager,
+      ShopDefinition: require("../game/definition/ShopDefinition").ShopDefinition,
       MultiChatboxPrompt: require("../game/model/menu/MultiChatboxPrompt").MultiChatboxPrompt,
       dispatchClientMessages: require("../net/NetworkBuilder").dispatchClientMessages,
       connectHeadlessClient: require("../net/NetworkBuilder").connectHeadlessClient,
@@ -3421,7 +3443,7 @@ export class PluginManager {
             }
             const definition = CacheDefinitions.getItem(event.itemId);
             if (definition?.name !== handler || event.clickType < 1 || event.clickType > 5) return;
-            const option = definition.inventoryActions[event.clickType - 1];
+            const option = PluginManager.itemActionOption(definition, event);
             const action = namedActions.get(option);
             if (action && action(event) !== false) event.handled = true;
           },
