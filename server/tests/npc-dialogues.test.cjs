@@ -319,6 +319,48 @@ test('"previous" on the first menu replays it instead of ending the dialogue', (
   assert.deepEqual(prompts, ['Q1', 'Q1']);
 });
 
+test('returning to a menu abandons the old handout branch and keeps the menu continuation once', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const condition = { pluginName: 'test', handler: ({ text }) => text === 'If already held:' ? true : null };
+  PluginManager.npcDialogueConditionHooks.unshift(condition);
+  const tree = [
+    { type: 'choice', options: [
+      { text: 'Acid', steps: [
+        { type: 'condition', text: 'If already held:', steps: [{ npc: 'You already have some.' }, { type: 'jump', reference: 'other' }] },
+        { type: 'action', id: 'handout', text: 'Give acid' },
+      ] },
+      { text: 'Bye' },
+    ] },
+    { type: 'action', id: 'after-menu', text: 'Menu finished' },
+  ];
+  const actions = [], picks = ['Acid', 'Bye'];
+  const player = {
+    getDialogueManager: () => ({ reset() {}, startDialogues(chain) {
+      for (const entry of [...chain.getDialogues().values()].sort((a, b) => a.getIndex() - b.getIndex())) {
+        if (entry.constructor.name === 'ActionDialogue') return entry.send(player);
+      }
+    } }),
+    getPacketSender: () => ({ sendInterfaceRemoval() {} }), sendMessage() {},
+  };
+  const definition = { getName: () => 'Daer Krand', getId: () => 9409 };
+  const event = { player, npcId: 9409, definition, npc: null };
+  const api = {
+    emitCustomEvent(name, request) { if (name === 'npc-dialogue:action' && request.stepId) actions.push(request.stepId); },
+    sendMultiChatboxPrompt(_player, _title, ...pairs) {
+      const pick = picks.shift();
+      assert.ok(pick, 'the menu did not end');
+      for (let i = 0; i < pairs.length; i += 2) if (pairs[i] === pick) { pairs[i + 1](); return true; }
+      assert.fail(`missing option ${pick}`);
+    },
+  };
+  try {
+    startDialogue(api, event, tree, {}, { ...event, pages: [] });
+    assert.deepEqual(actions, ['after-menu']);
+  } finally {
+    PluginManager.npcDialogueConditionHooks.splice(PluginManager.npcDialogueConditionHooks.indexOf(condition), 1);
+  }
+});
+
 test('a slayer master assigns from a slugged action, not literal prose', () => {
   const steps = talk('Krystilia');
   const found = { action: false, tip: false, spoken: false };
