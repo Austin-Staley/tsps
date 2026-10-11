@@ -20,7 +20,7 @@ const packetSender = {
     sendVarbit: (id: number, value: number) => { varbits.set(id, value); return packetSender; },
     getVarbit: (id: number) => varbits.get(id) ?? 0,
     getVarp: () => 0,
-    sendInterfaceDisplayState: () => packetSender,
+    sendInterfaceDisplayState: (_uid: number, _hidden: boolean) => packetSender,
 };
 class NpcDialogue {
     constructor(private npcId: number, private text: string) {}
@@ -152,6 +152,8 @@ const core = {
     Bank: {
         MAIN_INTERFACE_ID: 12,
         SIDE_INTERFACE_ID: 15,
+        ITEMS_CHILD: 12,
+        SIDE_ITEMS_CHILD: 3,
         isOpen: () => bankOpen,
         layout: () => [{ tab: 0, slot: 0, item: item(995, 23) }],
         displayItemId: (bankItem: any) => bankItem.getId(),
@@ -222,7 +224,7 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
     await call(client, "interact", { player: "agent1", target: "Tree", option: "chop down" });
     await call(client, "interact", { player: "agent1", target: "item 526", option: "Take" });
     assert.deepEqual(dispatched, [
-        { type: "move", worldX: 3230, worldY: 3230, modifierFlags: 2 },
+        { type: "move", worldX: 3230, worldY: 3230, modifierFlags: 0, run: true },
         { type: "move", worldX: 3222, worldY: 3218, modifierFlags: 0 },
         { type: "npc_option", index: 7, clickType: 4 },
         { type: "object_option", id: 1276, x: 3220, y: 3216, action: "Chop down" },
