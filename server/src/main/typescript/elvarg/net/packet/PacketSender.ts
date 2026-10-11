@@ -1270,7 +1270,7 @@ export class PacketSender {
 
   sendInterfaceScript(
     scriptId: number,
-    args: (number | string)[] = [],
+    args: (number | string | bigint)[] = [],
     varps?: Record<number, number>,
     varbits?: Record<number, number>,
     inventories?: Record<number, ScriptInventorySnapshot>

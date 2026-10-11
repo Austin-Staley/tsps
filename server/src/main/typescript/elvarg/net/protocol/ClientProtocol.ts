@@ -1760,7 +1760,7 @@ function scriptInventories(inventories?: Record<number, ScriptInventorySnapshot>
 
 export function encodeWidgetRunScript(
   scriptId: number,
-  args: (number | string)[] = [],
+  args: (number | string | bigint)[] = [],
   varps?: Record<number, number>,
   varbits?: Record<number, number>,
   inventories?: Record<number, ScriptInventorySnapshot>
@@ -1791,10 +1791,15 @@ export function encodeRunClientScript(scriptId: number, args: (number | string)[
   return encodeServerPacket(ServerPacketId.RUN_CLIENT_SCRIPT, Buffer.concat([id, scriptArgs(args)]));
 }
 
-function scriptArgs(args: (number | string)[]): Buffer {
+function scriptArgs(args: (number | string | bigint)[]): Buffer {
   const parts: Buffer[] = [Buffer.from([args.length])];
   for (const arg of args) {
-    if (typeof arg === "number") {
+    if (typeof arg === "bigint") {
+      const value = Buffer.alloc(9);
+      value[0] = 2;
+      value.writeBigInt64BE(arg, 1);
+      parts.push(value);
+    } else if (typeof arg === "number") {
       const value = Buffer.alloc(5);
       value[0] = 1;
       value.writeInt32BE(arg | 0, 1);
