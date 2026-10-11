@@ -73,6 +73,7 @@ const npc = {
     getCurrentDefinition: () => ({ getName: () => "Man", getActions: () => ["Talk-to", null, "Attack", "Pickpocket"] }),
 };
 const rival = { getUsername: () => "Agent2", getIndex: () => 2, getLocation: () => location(3223, 3218), getPacketSender: () => ({ sendMessage: () => {} }) };
+const foreignNpc = { ...npc, getIndex: () => 8, getLocation: () => location(3222, 3218), isOwnerOnly: () => true, getOwner: () => rival };
 const tree = { getId: () => 1276, getLocation: () => location(3220, 3216) };
 const dispatched: any[] = [];
 
@@ -138,7 +139,8 @@ const core = {
         getProcessCycle: () => Date.now(),
         getPlayerByName: (name: string) => (name.toLowerCase() === "agent1" ? player : name.toLowerCase() === "agent2" ? rival : loadOnline.get(name)),
         getPlayers: () => ({ stream: () => [player, ...loadOnline.values()] }),
-        getNpcs: () => ({ stream: () => [npc, null], get: (index: number) => (index === 7 ? npc : undefined) }),
+        getNpcsNear: (_location: any, _radius: number, privateArea: any) => privateArea ? [] : [npc, foreignNpc],
+        getNpcs: () => ({ stream: () => [npc, foreignNpc, null], get: (index: number) => (index === 7 ? npc : undefined) }),
         getItems: () => [{ getItem: () => item(526), getPosition: () => location(3223, 3218) }],
     },
     MapObjects: {
@@ -233,6 +235,7 @@ else process.env.AGENT_MCP = previousMcpFlag;
     assert.equal(snapshot.x, 3222);
     assert.deepEqual(snapshot.skills.Woodcutting, { level: 1, max: 1, xp: 0 });
     assert.deepEqual(snapshot.inventory[0], { slot: 0, id: 1351, name: "item 1351", amount: 1 });
+    assert.equal(snapshot.npcs.length, 1, "another player’s owned NPC is not a menu target");
     assert.equal(snapshot.npcs[0].hitpoints, 7);
     assert.equal(snapshot.npcs[0].maxHitpoints, 10);
     assert.deepEqual(snapshot.npcs[0].options, ["Talk-to", "Attack", "Pickpocket"]);
