@@ -5,8 +5,8 @@
  * Shape follows the Vorkath method: start() chooses and performs (animations and
  * projectiles only), hits() builds the PendingHits, handleAfterHitEffects() lands the
  * side-effects when the hit does. Counters live on NPC attributes (the method is rebuilt
- * every attack); the ticking fight engine (hatch timing, pools, the ball) is in
- * Specials.Araxxor.js.
+ * every attack); egg hatching is attack-counted via Specials.checkStandardHatch, while
+ * the ticking fight engine (pools, the ball) is in Specials.Araxxor.js.
  *
  * As captured: standards every 6 ticks, the special replaces every 7th attack (first at
  * attack 7), ranged fires projectile 2924 from the middle, magic has none, and no hit lands
@@ -90,11 +90,15 @@ function drainSkill(player, skill, factor) {
 }
 
 /** Hits that would take Araxxor past the threshold flip her into the enrage. */
-function checkEnrage(npc) {
+function checkEnrage(npc, incomingDamage = 0) {
   if (!alive(npc) || npc.getAttribute?.(Shared.ATTR_DYING) === true) return;
   if (npc.getAttribute?.(Shared.ATTR_ENRAGED) === true) return;
   const hp = npc.getHitpoints?.() ?? 0;
-  if (hp > Math.floor(Shared.MAX_HITPOINTS * Shared.ENRAGE_THRESHOLD)) return;
+  // onNpcHitModify runs before the hit lands, so project past it: the crossing hit
+  // itself enrages, not the hit after. Lethal hits skip it and go to the corpse.
+  const projected = hp - (Number.isFinite(incomingDamage) ? incomingDamage : 0);
+  if (projected <= 0) return;
+  if (projected > Math.floor(Shared.MAX_HITPOINTS * Shared.ENRAGE_THRESHOLD)) return;
   npc.setAttribute(Shared.ATTR_ENRAGED, true);
   // The captured body change: the two front legs coat in venom (model customisation).
   npc.setModelCustomisation?.(Shared.ENRAGE_MODELS);
@@ -141,6 +145,13 @@ function startCleave(npc, target) {
         }
       }
     }
+    // Wiki step-under: the recorded tile inside his own footprint hits him for 8-12,
+    // like a Ruptura burst (direct queue, no Mirrorback redirect on self-hits).
+    const feet = npc.getLocation();
+    if (Shared.underBoss(feet.getX(), feet.getY(), tile.x, tile.y)) {
+      const self = Shared.CLEAVE_SELF_MIN + core.Misc.getRandom(Shared.CLEAVE_SELF_MAX - Shared.CLEAVE_SELF_MIN);
+      npc.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(self, core.HitMask.BLUE)]);
+    }
     for (const [x, y] of Shared.cleavePoolTiles(tile.x, tile.y, dx, dy)) {
       Specials.spawnPool(npc, x, y);
     }
@@ -170,6 +181,8 @@ function combatClass() {
         Specials.startSpecial(npc, target);
         return;
       }
+      // Wiki: eggs hatch on standards only, so specials never advance the hatch count.
+      Specials.checkStandardHatch(npc);
       if (npc.getAttribute?.(Shared.ATTR_ENRAGED) === true && isAdjacent(npc, target)) {
         this.attack = Shared.Attack.CLEAVE;
         startCleave(npc, target);
@@ -268,7 +281,8 @@ function modifyHit(event) {
     return;
   }
   redirectToMirrorback(npc, hit);
-  checkEnrage(npc);
+  const incoming = (hit.getHits?.() ?? []).reduce((sum, part) => sum + (part.getDamage?.() ?? 0), 0);
+  checkEnrage(npc, incoming);
 }
 
 /**

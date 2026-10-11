@@ -50,6 +50,11 @@ function bossDied(event) {
   Hud.killed(npc);
   npc.setModelCustomisation?.(null);
   npc.setNpcTransformationId(Shared.CORPSE_ID);
+  // The walk-to validity gate needs HP above 0, so the corpse keeps 1: with 0, clicks
+  // from any distance are silently dropped and only adjacent Harvest/Destroy works.
+  // Nothing reads this as "alive": combat is id-gated to the boss, and the fight's
+  // own alive() checks below are additionally guarded by ATTR_DYING (set above).
+  npc.setHitpoints?.(1);
   session.corpse = npc;
   session.respawnAt = core.World.getProcessCycle() + Shared.CORPSE_TICKS + Shared.RESPAWN_TICKS;
 }

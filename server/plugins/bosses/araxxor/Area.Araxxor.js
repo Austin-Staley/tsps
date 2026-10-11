@@ -130,7 +130,6 @@ function createSession(player, area) {
     pendingPet: [],
     corpse: null,
     respawnAt: 0,
-    nextHatchAt: 0,
   };
   sessions.set(player, session);
   return session;
@@ -144,6 +143,10 @@ function spawnEncounter(session) {
   boss.setHitpoints?.(Shared.MAX_HITPOINTS);
   // Roams the lair to melee; without a radius she holds position and never closes.
   boss.getMovementCoordinator?.().setRadius?.(30);
+  // Wiki: out of melee range he closes the distance, attacking with magic/ranged on the
+  // way. The engine otherwise stands its ground once in range (Combat.ts); this is the
+  // same combat:close-in flag ToA's Akkha uses to keep walking in while attacking.
+  boss.setFlag?.("combat:close-in");
   // The lair is multiway: the boss and her brood may attack together.
   boss.setMultiCombat?.(true);
   boss.performAnimation(new core.Animation(11482));

@@ -1,14 +1,14 @@
 /**
- * Araxxor's three specials and the per-tick fight engine (hatch timing, acid pools, the
+ * Araxxor's three specials and the per-tick fight engine (acid pools, the
  * rolling acid ball, chasing drip pools).
  *
- * The special replaces every seventh attack and turns on the first egg's colour (as
- * captured, first at attack 7, then every 42 ticks):
+ * The special replaces every seventh attack and turns on the first egg's colour (Wiki:
+ * every six standards, first at attack 7):
  *  - Acidic: the boss rears (11476), a ball (13676) rolls from its feet two tiles a tick
  *    leaving acid pools, burning anyone within two tiles for 4 venom, then bursts (11492)
  *    into nine splatters;
- *  - Mirrorback: the boss splatters acid (11477) onto nine tiles around the player;
- *  - Ruptura: the boss drips (11478) a pool onto the player's tile that chases them for six
+ *  - Mirrorback: the boss splatters acid (11478) onto nine tiles around the player;
+ *  - Ruptura: the boss drips (11477) a pool onto the player's tile that chases them for six
  *    ticks.
  *
  * Pools (object 54148, shape 10) are the damage field: standing in acid hurts more the
@@ -18,7 +18,7 @@
 const Shared = require("./Shared.Araxxor");
 const Minions = require("./Minions.Araxxor");
 
-const SPECIAL_ANIMATION = Object.freeze({ ball: 11476, splatter: 11477, drip: 11478 });
+const SPECIAL_ANIMATION = Object.freeze({ ball: 11476, splatter: 11478, drip: 11477 });
 const BALL_ANIMATION = 11491;
 const BALL_BURST_ANIMATION = 11492;
 
@@ -52,15 +52,12 @@ function alive(entity) {
 function getFight(npc) {
   let fight = fights.get(npc);
   if (!fight) {
-    // Any creation starts the hatch clock: a fight rebuilt mid-battle (a stale cleanup)
-    // must never hatch every tick from a zero timer.
     fight = {
       pools: new Map(),
       standing: new Map(),
       ball: null,
       ballTiles: 0,
       drips: [],
-      nextHatchAt: core.World.getProcessCycle() + Shared.FIRST_HATCH_TICKS,
     };
     fights.set(npc, fight);
   }
@@ -88,11 +85,27 @@ function spawnPool(npc, x, y) {
   return object;
 }
 
-/** How long the fight has left; the hatch timer and specials share the 42-tick beat. */
+/** Starts the Wiki hatch count: first egg after 3 standards, then every 6. Never
+ * resets an in-progress fight (a stale cleanup rebuilding mid-battle). */
 function initFight(npc) {
   const fight = getFight(npc);
-  fight.nextHatchAt = core.World.getProcessCycle() + Shared.FIRST_HATCH_TICKS;
+  if (npc?.getAttribute?.(Shared.ATTR_STANDARDS) == null) npc.setAttribute(Shared.ATTR_STANDARDS, 0);
+  if (npc?.getAttribute?.(Shared.ATTR_NEXT_HATCH) == null) npc.setAttribute(Shared.ATTR_NEXT_HATCH, Shared.FIRST_HATCH_STANDARDS);
   return fight;
+}
+
+/** Counts one non-special attack; hatches the next egg when its standard is due.
+ * Overdamaged eggs despawn inside hatchNext, and the threshold still advances a
+ * full interval, so the next egg waits another six standards (Wiki). */
+function checkStandardHatch(npc) {
+  if (!npc) return;
+  const standards = (npc.getAttribute?.(Shared.ATTR_STANDARDS) ?? 0) + 1;
+  npc.setAttribute(Shared.ATTR_STANDARDS, standards);
+  const next = npc.getAttribute?.(Shared.ATTR_NEXT_HATCH) ?? Shared.FIRST_HATCH_STANDARDS;
+  if (standards >= next) {
+    npc.setAttribute(Shared.ATTR_NEXT_HATCH, next + Shared.HATCH_INTERVAL_STANDARDS);
+    Minions.hatchNext(npc);
+  }
 }
 
 function startSpecial(npc, target) {
@@ -101,7 +114,8 @@ function startSpecial(npc, target) {
   npc.performAnimation(new core.Animation(SPECIAL_ANIMATION[kind] ?? SPECIAL_ANIMATION.ball));
   if (kind === "ball") {
     later(2, target, () => {
-      if (alive(npc)) startBall(npc, target);
+      // A corpse keeps 1 HP so players can walk to it: never start a ball off one.
+      if (alive(npc) && npc.getAttribute?.(Shared.ATTR_DYING) !== true) startBall(npc, target);
     });
   } else if (kind === "splatter") {
     const pos = target?.getLocation?.();
@@ -134,7 +148,34 @@ function throwBlobs(npc, tiles) {
   }
   later(3, npc, () => {
     if (areaDestroyed()) return;
-    for (const [x, y] of tiles) spawnPool(npc, x, y);
+    // Captured: every blob bursts into the 2923 splat at ground height with the 4135
+    // splash (MapAnim + SoundArea at the projectile's arrival) on the same tick the
+    // pool object grows.
+    const session = npc.getAttribute?.(Shared.ATTR_ENCOUNTER) ?? null;
+    const viewer = session?.player ?? session?.fighter ?? null;
+    const sender = viewer?.getPacketSender?.() ?? null;
+    // Wiki: the splatter damages before the pool forms. Anyone standing on a landing
+    // tile takes the impact; the boss herself never does (captures + venom immunity).
+    const victims = npc.getPlayersWithinDistance?.(25) ?? [];
+    for (const [x, y] of tiles) {
+      if (sender) {
+        const at = new core.Location(x, y, npc.getLocation().getZ());
+        const impact = new core.Graphic(Shared.ACID_SPLAT_GFX);
+        impact.height = 0;
+        sender.sendGlobalGraphic(impact, at);
+        sender.sendAreaSound(Shared.ACID_SPLAT_SOUND, x, y, at.getZ(), 1, 0, 2, 0);
+      }
+      for (const player of victims) {
+        if (!alive(player)) continue;
+        const pos = player.getLocation();
+        if (pos.getX() !== x || pos.getY() !== y) continue;
+        player.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(Shared.SPLAT_IMPACT_DAMAGE, core.HitMask.RED)]);
+        if (player.isVenomed?.() !== true) {
+          CombatFactory?.poisonEntity?.(player, 6, 2);
+        }
+      }
+      spawnPool(npc, x, y);
+    }
   });
 }
 
@@ -210,7 +251,9 @@ function startDrip(npc, target) {
   if (!pos) return;
   const from = core.Projectile.centreOf(npc);
   const distance = Math.max(1, from.getDistance(pos));
-  const delay = Math.max(1, distance - 3);
+  // The pool must land with its blob: the packet's end time is delay + duration
+  // (30 + 30 per tile), i.e. 1 + distance ticks after the cast.
+  const delay = 1 + distance;
   new core.Projectile(
     from,
     new core.Location(pos.getX(), pos.getY(), npc.getLocation().getZ()),
@@ -225,7 +268,8 @@ function startDrip(npc, target) {
   const fight = getFight(npc);
   const landing = { x: pos.getX(), y: pos.getY() };
   later(delay, target, () => {
-    if (!alive(npc) || (npc.getPrivateArea?.() ?? null)?.isDestroyed?.() === true) return;
+    if (!alive(npc) || npc.getAttribute?.(Shared.ATTR_DYING) === true
+      || (npc.getPrivateArea?.() ?? null)?.isDestroyed?.() === true) return;
     const object = spawnPool(npc, landing.x, landing.y);
     if (object) fight.drips.push({ object, player: target, until: core.World.getProcessCycle() + Shared.DRIP_FOLLOW_TICKS });
   });
@@ -285,10 +329,8 @@ function tick() {
       continue;
     }
     const players = npc.getPlayersWithinDistance(25);
-    if (core.World.getProcessCycle() >= fight.nextHatchAt) {
-      fight.nextHatchAt += Shared.HATCH_INTERVAL_TICKS;
-      Minions.hatchNext(npc);
-    }
+    const session = npc.getAttribute?.(Shared.ATTR_ENCOUNTER) ?? null;
+    if (session) Minions.ensureTargets(session);
     tickBall(npc, fight, players);
     tickDrips(npc, fight);
     tickPools(npc, fight, players);
@@ -303,9 +345,10 @@ function acidicAraxyteDied({ npc }) {
   if (npc?.getId?.() !== Shared.MINION_ID.acidic) return;
   const session = npc.getAttribute?.(Shared.ATTR_ENCOUNTER) ?? null;
   const boss = session?.npc ?? null;
-  if (!boss || !alive(boss)) return;
+  if (!boss || !alive(boss) || boss.getAttribute?.(Shared.ATTR_DYING) === true) return;
   const location = npc.getLocation();
-  const tiles = Shared.splatterTiles(location.getX(), location.getY(), null);
+  // Captured as 13 blobs (both transcripts), not the special's nine.
+  const tiles = Shared.splatterTiles(location.getX(), location.getY(), null, null, Shared.ACIDIC_DEATH_SPLATTER_COUNT);
   const area = npc.getPrivateArea?.() ?? null;
   for (const [x, y] of tiles) {
     new core.Projectile(
@@ -321,7 +364,8 @@ function acidicAraxyteDied({ npc }) {
     ).sendProjectile();
   }
   later(3, npc, () => {
-    if (!alive(boss) || (boss.getPrivateArea?.() ?? null)?.isDestroyed?.() === true) return;
+    if (!alive(boss) || boss.getAttribute?.(Shared.ATTR_DYING) === true
+      || (boss.getPrivateArea?.() ?? null)?.isDestroyed?.() === true) return;
     for (const [x, y] of tiles) spawnPool(boss, x, y);
   });
 }
@@ -362,6 +406,7 @@ function attach(pluginApi) {
 module.exports = {
   attach,
   initFight,
+  checkStandardHatch,
   startSpecial,
   startBall,
   startDrip,

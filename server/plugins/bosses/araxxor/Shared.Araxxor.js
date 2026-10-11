@@ -18,8 +18,8 @@
  *
  * Checked against rsprox captures (https://rsprox.net/database; 48 recordings of 13668,
  * 27 of the corpse, 30-34 of each araxyte): the instance spawn of boss + all nine eggs, the
- * every-6-tick attack cadence, the special that replaces every seventh attack, the hatch at
- * +21 and every +42 ticks after (alternating with the special), the enrage at 25%, the death
+ * every-6-tick attack cadence, the special that replaces every seventh attack, the hatch
+ * after 3 standards then every 6 standards (Wiki), the enrage at 25%, the death
  * at +5 ticks into the corpse, and the harvest animation 2282. Still unverified: mirrorback
  * melee anim, drip flight values, cleave pool spread, pool ramp and the destroy clue roll.
  */
@@ -39,13 +39,15 @@ const HATCH_GFX = Object.freeze({ mirrorback: 2929, ruptura: 2928, acidic: 2927 
 const SPAWN_TILE = [3631, 9812, 0];
 const CENTRE_TILE = [3633, 9816];
 /**
- * The nine eggs in hatch order (Wiki): first the south-easternmost, then clockwise. The
- * first egg's colour picks the fight's special, so pattern[0] is the SE egg.
+ * The nine eggs in hatch order (Wiki): first the south-easternmost, then clockwise.
+ * Index 0 is the SE egg (3643, 9806); compass bearings from the centre increase
+ * through the table. The first egg's colour picks the fight's special, so
+ * pattern[0] is the SE egg.
  */
 const EGG_TILES = Object.freeze([
-  [3644, 9823], [3637, 9826], [3631, 9826],
-  [3621, 9822], [3621, 9813], [3626, 9807],
-  [3631, 9803], [3637, 9803], [3643, 9806],
+  [3643, 9806], [3637, 9803], [3631, 9803],
+  [3626, 9807], [3621, 9813], [3621, 9822],
+  [3631, 9826], [3637, 9826], [3644, 9823],
 ]);
 
 /** The lair interior: entering it grows the per-player instance, leaving destroys it.
@@ -63,9 +65,9 @@ const PATTERNS = Object.freeze([
 const ATTACK_SPEED_TICKS = 6;
 const ENRAGED_SPEED_TICKS = 4;
 const SPECIAL_EVERY_ATTACKS = 7;
-/** Captured: the first hatch at +21 ticks, then every +42 (interleaved with the specials). */
-const FIRST_HATCH_TICKS = 21;
-const HATCH_INTERVAL_TICKS = 42;
+/** Wiki: the first egg hatches after 3 standards, then every 6 standards. */
+const FIRST_HATCH_STANDARDS = 3;
+const HATCH_INTERVAL_STANDARDS = 6;
 /** Captured: boss + eggs spawn together, first attack 6 ticks after the spawn animation. */
 const ARM_TICKS = 6;
 /** Fires from up to 10 tiles like Vorkath; melee only when edge-adjacent (checked in start). */
@@ -79,6 +81,9 @@ const PROTECT_MELEE_CAP = 5;
 const PROTECT_RANGED_FACTOR = 0.55;
 const PROTECT_MAGIC_FACTOR = 0.5;
 const CLEAVE_PROTECT_FACTOR = 0.34;
+/** Wiki step-under: baiting him onto his own tiles hits him for 8-12. */
+const CLEAVE_SELF_MIN = 8;
+const CLEAVE_SELF_MAX = 12;
 /** A living Mirrorback redirects a fifth of boss damage to itself, half of that back (Wiki). */
 const MIRRORBACK_REDIRECT_FACTOR = 0.2;
 const MIRRORBACK_RECOIL_FACTOR = 0.5;
@@ -102,10 +107,19 @@ const BALL_ROLL_TILES = 13;
 const BALL_DAMAGE = 18;
 const SPLATTER_COUNT = 9;
 const SPLATTER_SPREAD = 3;
+/** Captured: the acidic death explodes into 13 blobs (both transcripts), not nine. */
+const ACIDIC_DEATH_SPLATTER_COUNT = 13;
+/** Estimated blob-landing damage: the Wiki says the splatter damages ("low venom damage")
+ * before the pool forms; the captures show recurring small player hits on impact ticks
+ * (8 at 1442 T74/T76, 1508 T410/T411/T454/T455) - well under the ~18 ball hit and above
+ * the pool's starting 4. Revisit if exact values surface. */
+const SPLAT_IMPACT_DAMAGE = 8;
 /** Acid blob projectile (captured MapProjAnim id) and its cache-internal impact graphic. */
 const ACID_PROJECTILE = 2924;
 const MINION_PROJECTILE = 2925;
+/** Captured landing of every blob: the 2923 splat at ground height with the 4135 splash. */
 const ACID_SPLAT_GFX = 2923;
+const ACID_SPLAT_SOUND = 4135;
 
 /** Pool damage ramps while a player keeps standing in acid (Wiki; step values ours). */
 const POOL_FIRST_DAMAGE = 4;
@@ -150,6 +164,8 @@ function playSound(player, id, delay = 0) {
 
 /** NPC attribute keys (kebab-case, namespaced). */
 const ATTR_ATTACKS = "araxxor:attacks";
+const ATTR_STANDARDS = "araxxor:standards";
+const ATTR_NEXT_HATCH = "araxxor:next-hatch";
 const ATTR_ARMED_AT = "araxxor:armed-at";
 const ATTR_ENRAGED = "araxxor:enraged";
 const ATTR_DYING = "araxxor:dying";
@@ -192,11 +208,11 @@ function tileKey(x, y) {
  * direction (dx, dy): a random spray biased outward along it - the Wiki's acid spray,
  * "sprays randomly outward in the player's general direction".
  */
-function splatterTiles(x, y, isWalkable, direction = null) {
+function splatterTiles(x, y, isWalkable, direction = null, count = SPLATTER_COUNT) {
   const tiles = [];
   const dx = direction ? Math.sign(direction.x) : 0;
   const dy = direction ? Math.sign(direction.y) : 0;
-  for (let index = 0; index < SPLATTER_COUNT; index++) {
+  for (let index = 0; index < count; index++) {
     let tile;
     if (dx === 0 && dy === 0) {
       const ox = -3 + Math.floor(Math.random() * 6);
@@ -265,8 +281,8 @@ module.exports = {
   ATTACK_SPEED_TICKS,
   ENRAGED_SPEED_TICKS,
   SPECIAL_EVERY_ATTACKS,
-  FIRST_HATCH_TICKS,
-  HATCH_INTERVAL_TICKS,
+  FIRST_HATCH_STANDARDS,
+  HATCH_INTERVAL_STANDARDS,
   ARM_TICKS,
   ATTACK_DISTANCE,
   MELEE_MAX,
@@ -276,6 +292,8 @@ module.exports = {
   PROTECT_RANGED_FACTOR,
   PROTECT_MAGIC_FACTOR,
   CLEAVE_PROTECT_FACTOR,
+  CLEAVE_SELF_MIN,
+  CLEAVE_SELF_MAX,
   MIRRORBACK_REDIRECT_FACTOR,
   MIRRORBACK_RECOIL_FACTOR,
   DRAIN_RANGED_DEFENCE,
@@ -290,9 +308,12 @@ module.exports = {
   BALL_DAMAGE,
   SPLATTER_COUNT,
   SPLATTER_SPREAD,
+  ACIDIC_DEATH_SPLATTER_COUNT,
+  SPLAT_IMPACT_DAMAGE,
   ACID_PROJECTILE,
   MINION_PROJECTILE,
   ACID_SPLAT_GFX,
+  ACID_SPLAT_SOUND,
   POOL_FIRST_DAMAGE,
   POOL_DAMAGE_STEP,
   POOL_MAX_DAMAGE,
@@ -305,6 +326,8 @@ module.exports = {
   DESTROY_PET_RATE,
   CORPSE_DESTROY_PROMPT,
   ATTR_ATTACKS,
+  ATTR_STANDARDS,
+  ATTR_NEXT_HATCH,
   ATTR_ARMED_AT,
   ATTR_ENRAGED,
   ATTR_DYING,

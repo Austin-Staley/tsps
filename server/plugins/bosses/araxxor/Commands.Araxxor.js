@@ -5,13 +5,15 @@
  */
 const Shared = require("./Shared.Araxxor");
 const Area = require("./Area.Araxxor");
+const Combat = require("./Combat.Araxxor");
 
 let core = null;
 
 function activeBoss(player) {
   const session = Area.sessions.get(player);
   const boss = session?.npc ?? null;
-  return boss?.isRegistered?.() && boss.getHitpoints?.() > 0 ? boss : null;
+  // The corpse is the same object at 1 HP: only the living boss counts.
+  return boss?.getId?.() === Shared.BOSS_ID && boss?.isRegistered?.() && boss.getHitpoints?.() > 0 ? boss : null;
 }
 
 function killAraxxor({ player }) {
@@ -39,6 +41,9 @@ function setAraxxorHitpoints({ player, parts }) {
     return true;
   }
   boss.setHitpoints(hitpoints);
+  // Setting HP below the threshold by hand must enrage exactly like a real hit:
+  // attribute, venom legs, screech, 4-tick/cleave phase. Above it this no-ops.
+  Combat.checkEnrage(boss);
   const enraged = boss.getAttribute?.(Shared.ATTR_ENRAGED) === true ? " (enraged)" : "";
   player.sendMessage(`Araxxor now has ${hitpoints} hitpoints${enraged}.`);
   return true;

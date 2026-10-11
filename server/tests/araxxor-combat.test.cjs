@@ -86,17 +86,79 @@ test("captured attack schedule: special on every seventh attack", () => {
   assert.deepEqual(specials, [7, 14, 21], "first special at attack 7, then every 7");
 });
 
-test("captured hatch schedule: +21 ticks, then every +42", () => {
-  let next = 0 + Shared.FIRST_HATCH_TICKS;
+test("wiki hatch schedule: first after 3 standards, then every 6", () => {
+  let standards = 0;
+  let next = Shared.FIRST_HATCH_STANDARDS;
   const hatches = [];
-  for (let i = 0; i < 3; i++) {
-    hatches.push(next);
-    next += Shared.HATCH_INTERVAL_TICKS;
+  for (let attack = 1; attack <= 30; attack++) {
+    if (attack % Shared.SPECIAL_EVERY_ATTACKS === 0) continue; // specials are not standards
+    standards += 1;
+    if (standards >= next) {
+      hatches.push(standards);
+      next += Shared.HATCH_INTERVAL_STANDARDS;
+    }
   }
-  assert.deepEqual(hatches, [21, 63, 105], "interleaved with the 42-tick specials");
+  assert.deepEqual(hatches, [3, 9, 15, 21], "alternating with the specials at 6, 12, 18");
 });
 
-test("instant-kill weapons are the halberd, crossbows and ballistas", () => {
+test("eggs sit SE-first, hatching clockwise around the centre", () => {
+  assert.deepEqual(Shared.EGG_TILES[0], [3643, 9806], "first egg is the south-easternmost");
+  const [cx, cy] = Shared.CENTRE_TILE;
+  const bearings = Shared.EGG_TILES.map(([x, y]) => (Math.atan2(x - cx, y - cy) * 180 / Math.PI + 360) % 360);
+  let prev = bearings[0];
+  for (let i = 1; i < bearings.length; i++) {
+    let cur = bearings[i];
+    if (cur <= prev) cur += 360; // unwrap past north
+    assert.ok(cur > prev, `tile ${i} continues clockwise`);
+    prev = cur;
+  }
+});
+
+test("idle minions are pointed back at the fighter, engaged ones untouched", () => {
+  const area = {};
+  const fighter = { isRegistered: () => true, getHitpoints: () => 99, getPrivateArea: () => area };
+  const calls = [];
+  const idle = {
+    isRegistered: () => true, getHitpoints: () => 58,
+    getCombat: () => ({ getTarget: () => null, attack: (t) => calls.push(["idle-attack", t]) }),
+    setTarget: (t) => calls.push(["idle-target", t]),
+  };
+  const busy = {
+    isRegistered: () => true, getHitpoints: () => 58,
+    getCombat: () => ({ getTarget: () => fighter, attack: () => calls.push(["busy-attack"]) }),
+    setTarget: () => calls.push(["busy-target"]),
+  };
+  const dead = { isRegistered: () => false, getHitpoints: () => 0 };
+  Minions.ensureTargets({ fighter, area, minions: [idle, busy, dead] });
+  assert.ok(calls.some(([k, t]) => k === "idle-target" && t === fighter), "idle minion retargeted");
+  assert.ok(calls.some(([k, t]) => k === "idle-attack" && t === fighter), "idle minion ordered to attack");
+  assert.ok(!calls.some(([k]) => k === "busy-target" || k === "busy-attack"), "engaged minion untouched");
+});
+
+test("minions stay idle when the fighter is gone or out of the instance", () => {
+  const area = {};
+  const elsewhere = {};
+  const fighter = { isRegistered: () => true, getHitpoints: () => 99, getPrivateArea: () => elsewhere };
+  let engaged = false;
+  const minion = {
+    isRegistered: () => true, getHitpoints: () => 58,
+    getCombat: () => ({ getTarget: () => null, attack: () => { engaged = true; } }),
+    setTarget: () => { engaged = true; },
+  };
+  Minions.ensureTargets({ fighter, area, minions: [minion] });
+  assert.equal(engaged, false, "no cross-instance aggression");
+  Minions.ensureTargets({ fighter: null, area, minions: [minion] });
+  assert.equal(engaged, false, "no target, no engage");
+});
+
+test("step-under cleave self-hit rolls 8-12 on his own footprint", () => {
+  assert.equal(Shared.CLEAVE_SELF_MIN, 8);
+  assert.equal(Shared.CLEAVE_SELF_MAX, 12);
+  assert.equal(Shared.underBoss(3631, 9812, 3633, 9815), true, "recorded tile under him");
+  assert.equal(Shared.underBoss(3631, 9812, 3638, 9815), false, "recorded tile outside him");
+});
+
+test("mirrorback-bypass weapons are the halberd, crossbows and ballistas", () => {
   const player = (name) => ({
     getEquipment: () => ({
       getWeapon: () => ({
@@ -110,6 +172,8 @@ test("instant-kill weapons are the halberd, crossbows and ballistas", () => {
   assert.equal(Minions.instantKillWeapon(player("Dragon ballista")), true);
   assert.equal(Minions.instantKillWeapon(player("Abyssal whip")), false);
   assert.equal(Minions.instantKillWeapon(null), false);
+  assert.equal(Minions.crushStyle(null), false, "null-safe without attach");
+  assert.equal(Minions.crushStyle({}), false, "missing bonuses never qualify");
 });
 
 test("captured line-of-sight stepping is diagonal-first", () => {

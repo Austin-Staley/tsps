@@ -2,22 +2,24 @@
  * Eggs and the three araxytes: hatching, minion attacks, the Mirrorback's damage reflection
  * and the Ruptura's burst.
  *
- * As captured / Near-Reality: eggs settle with 11506, hatch on the fight's 42-tick beat
- * (first at +21) into a fresh minion at the egg's tile (hatch mark 2927/2928/2929 + 11503),
- * which walks to the centre and starts attacking 3 ticks later. Acidic spits (11498,
+ * As captured / Near-Reality: eggs settle with 11506, hatch on the fight's standard
+ * count (Wiki: first after 3 standards, then every 6) into a fresh minion at the egg's
+ * tile (hatch mark 2927/2928/2929 + 11503), which walks to the centre and starts attacking 3 ticks later. Acidic spits (11498,
  * projectile 2925), Mirrorback melees (11500) and reflects half of every non-halberd,
  * non-ranged, non-magic hit back at its attacker, Ruptura never attacks: it runs at its
  * target and bursts (11510) for up to 49, hurting Araxxor 80/64 by distance as well
  * (captured: the boss took an 80 from a burst).
  *
- * Eggs and araxytes die to a noxious halberd, a crossbow or a ballista instantly (damage
- * equals their remaining hitpoints, Near-Reality); eggs keep their remaining health when
- * they hatch (Wiki strategy: hitting the eggs weakens the spiders).
+ * Eggs and araxytes: the Wiki's max-hit setups (noxious halberd, crush style at top
+ * accuracy, heavy ranged) always max-hit hatched araxytes, while unhatched eggs roll
+ * normally; eggs keep their remaining health when they hatch (Wiki strategy: hitting
+ * the eggs weakens the spiders).
  */
 const Shared = require("./Shared.Araxxor");
 
 let api = null;
 let core = null;
+let BonusManager = null;
 
 const HATCH_ANIMATION = 11503;
 const EGG_ANIMATION = 11506;
@@ -106,6 +108,23 @@ function hatchNext(bossNpc) {
   }
 }
 
+/** Points every idle araxyte back at the fighter: hatching with no target, a dead
+ * target, or a stalled pursuit must never leave a minion wandering its radius.
+ * Only engages while the fighter is alive in the same instance; engaged minions
+ * are untouched so attack delays are never reset. */
+function ensureTargets(session) {
+  const fighter = session?.fighter ?? null;
+  if (!fighter || !alive(fighter)) return;
+  if (session.area != null && fighter.getPrivateArea?.() !== session.area) return;
+  for (const minion of session.minions ?? []) {
+    if (!alive(minion)) continue;
+    const current = minion.getCombat?.().getTarget?.() ?? null;
+    if (current && alive(current)) continue;
+    minion.setTarget?.(fighter);
+    minion.getCombat?.().attack?.(fighter);
+  }
+}
+
 /** Everything still standing crumbles when the boss dies: eggs (11508) and minions go. */
 function crumbleAll(bossNpc) {
   const session = sessionOf(bossNpc);
@@ -139,7 +158,9 @@ function edgeDistance(npc, target) {
   return Math.max(dx, dy);
 }
 
-/** The Ruptura's burst: 11510, then 2 ticks later the spider and boss both take it. */
+/** The Ruptura's burst: 11510, then 2 ticks later the 8x8 blast lands (Wiki) on the
+ * boss, nearby players, minions and idle eggs — the egg-lure tactic works because
+ * a burst catches the next egg too. */
 function explodeRuptura(npc, target) {
   if (npc.getAttribute?.(RUPTURA_BURST_ATTRIBUTE) === true) return;
   npc.setAttribute?.(RUPTURA_BURST_ATTRIBUTE, true);
@@ -148,19 +169,43 @@ function explodeRuptura(npc, target) {
   later(2, npc, () => {
     const session = sessionOf(npc);
     const boss = session?.npc ?? null;
-    if (alive(boss)) {
-      const distance = edgeDistance(npc, boss);
+    // A corpse keeps 1 HP so players can walk to it: never burst one.
+    if (alive(boss) && boss.getAttribute?.(Shared.ATTR_DYING) !== true) {
+      // Footprint-aware: 80 needs the blast overlapping his 7x7, 64 next to it.
+      const feet = boss.getLocation();
+      const from = npc.getLocation();
+      const distance = Shared.edgeDistance(feet.getX(), feet.getY(), from.getX(), from.getY());
       if (distance < Shared.RUPTURA_BOSS_DAMAGE.length) {
         boss.getCombat().getHitQueue().addPendingDamage([
           new core.HitDamage(Shared.RUPTURA_BOSS_DAMAGE[distance], core.HitMask.BLUE),
         ]);
       }
     }
-    if (alive(target)) {
-      const distance = edgeDistance(npc, target);
+    for (const player of npc.getPlayersWithinDistance?.(5) ?? []) {
+      if (!alive(player)) continue;
+      const distance = edgeDistance(npc, player);
       if (distance < Shared.RUPTURA_PLAYER_DAMAGE.length) {
-        target.getCombat().getHitQueue().addPendingDamage([
+        player.getCombat().getHitQueue().addPendingDamage([
           new core.HitDamage(Shared.RUPTURA_PLAYER_DAMAGE[distance], core.HitMask.RED),
+        ]);
+      }
+    }
+    for (const minion of session?.minions ?? []) {
+      if (minion === npc || !alive(minion)) continue;
+      const distance = edgeDistance(npc, minion);
+      if (distance < Shared.RUPTURA_BOSS_DAMAGE.length) {
+        minion.getCombat().getHitQueue().addPendingDamage([
+          new core.HitDamage(Shared.RUPTURA_BOSS_DAMAGE[distance], core.HitMask.BLUE),
+        ]);
+      }
+    }
+    for (const entry of session?.eggs ?? []) {
+      const egg = entry?.npc ?? null;
+      if (!alive(egg)) continue;
+      const distance = edgeDistance(npc, egg);
+      if (distance < Shared.RUPTURA_BOSS_DAMAGE.length) {
+        egg.getCombat().getHitQueue().addPendingDamage([
+          new core.HitDamage(Shared.RUPTURA_BOSS_DAMAGE[distance], core.HitMask.BLUE),
         ]);
       }
     }
@@ -168,15 +213,45 @@ function explodeRuptura(npc, target) {
   });
 }
 
-/** Weapon names that one-shot araxytes and eggs (Near-Reality; the Wiki lists the halberd). */
-function instantKillWeapon(player) {
+/** Wielded weapon name, "" when unarmed. */
+function weaponName(player) {
   const weapon = player?.getEquipment?.().getWeapon?.();
-  const name = weapon && weapon.getId?.() >= 0 ? weapon.getDefinition?.()?.getName?.() ?? "" : "";
-  const lowered = name.toLowerCase();
+  return weapon && weapon.getId?.() >= 0 ? weapon.getDefinition?.()?.getName?.() ?? "" : "";
+}
+
+/** Wiki's bypass list for the Mirrorback's deflection: halberd, crossbow, ballista. */
+function instantKillWeapon(player) {
+  const lowered = weaponName(player).toLowerCase();
   return INSTANT_KILL_WEAPONS.some((entry) => lowered.includes(entry));
 }
 
-/** One-shots, then the Mirrorback's reflection: half back at melee attackers. */
+/** Wiki: crush weapons max-hit when crush is the attacker's top melee accuracy. */
+function crushStyle(player) {
+  if (!BonusManager) return false;
+  const atk = player?.getBonusManager?.().getAttackBonus?.() ?? [];
+  const crush = atk[BonusManager.ATTACK_CRUSH] ?? 0;
+  return player?.getFightType?.()?.getBonusType?.() === BonusManager.ATTACK_CRUSH
+    && crush > 0
+    && crush >= (atk[BonusManager.ATTACK_STAB] ?? 0)
+    && crush >= (atk[BonusManager.ATTACK_SLASH] ?? 0);
+}
+
+/** Wiki max hit against a hatched araxyte for this hit, or null to roll normally:
+ * heavy ranged rolls ranged max, halberd/crush-style rolls melee max. Magic and
+ * unlisted setups get no guarantee. */
+function maxHitVsAraxyte(player, hit) {
+  const type = hit.getCombatType?.();
+  if (type === core.CombatType.MAGIC) return null;
+  const lowered = weaponName(player).toLowerCase();
+  if (type === core.CombatType.RANGED) {
+    if (!lowered.includes("crossbow") && !lowered.includes("ballista")) return null;
+    return core.DamageFormulas.calculateMaxRangedHit(player);
+  }
+  if (!lowered.includes("noxious halberd") && !crushStyle(player)) return null;
+  return core.DamageFormulas.calculateMaxMeleeHit(player);
+}
+
+/** Max-hit setups, then the Mirrorback's reflection: half back at melee attackers. */
 function modifyHit(event) {
   const { npc, hit } = event;
   const id = npc?.getId?.();
@@ -187,12 +262,14 @@ function modifyHit(event) {
   const attacker = hit.getAttacker?.();
   const hits = hit.getHits?.() ?? [];
   if (hits.length === 0) return;
-  if (attacker?.isPlayer?.() && instantKillWeapon(attacker.getAsPlayer())) {
-    const hp = npc.getHitpoints?.() ?? 0;
-    for (let index = 0; index < hits.length; index++) {
-      hits[index].setDamage(index === 0 ? Math.max(1, hp) : 0);
+  if (isMinion && attacker?.isPlayer?.()) {
+    const max = maxHitVsAraxyte(attacker.getAsPlayer(), hit);
+    if (max != null && max > 0) {
+      for (let index = 0; index < hits.length; index++) {
+        hits[index].setDamage(index === 0 ? max : 0);
+      }
+      hit.updateTotalDamage?.();
     }
-    hit.updateTotalDamage?.();
   }
   if (id !== Shared.MINION_ID.mirrorback || !attacker?.isPlayer?.()) return;
   const player = attacker.getAsPlayer();
@@ -290,6 +367,7 @@ function minionClass() {
 function attach(pluginApi) {
   api = pluginApi;
   core = pluginApi.core;
+  BonusManager = pluginApi.getBonusManager();
   pluginApi.onNpcHitModify(modifyHit);
   pluginApi.registerNpcCombatMethodProvider(
     [core.NpcIdentifiers.EGG_10, core.NpcIdentifiers.EGG_11, core.NpcIdentifiers.EGG_12],
@@ -307,12 +385,14 @@ module.exports = {
   attach,
   spawnEggs,
   hatchNext,
+  ensureTargets,
   crumbleAll,
   explodeRuptura,
   modifyHit,
   instantKillWeapon,
+  crushStyle,
   minionClass,
   eggClass,
   edgeDistance,
-  _test: { instantKillWeapon, edgeDistance },
+  _test: { instantKillWeapon, crushStyle, edgeDistance },
 };
