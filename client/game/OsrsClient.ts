@@ -2904,9 +2904,12 @@ export class OsrsClient {
                     }
                     const intArgs: number[] = [];
                     const stringArgs: string[] = [];
+                    const longArgs: bigint[] = [];
                     for (const arg of args) {
                         if (typeof arg === "number") {
                             intArgs.push(arg | 0);
+                        } else if (typeof arg === "bigint") {
+                            longArgs.push(arg);
                         } else if (typeof arg === "string") {
                             stringArgs.push(arg);
                         }
@@ -2914,7 +2917,7 @@ export class OsrsClient {
 
                     // A negative id carries only vars and inventories, with no script to run.
                     const script = scriptId >= 0 ? this.cs2Vm.context.loadScript(scriptId) : null;
-                    if (script) this.cs2Vm.run(script, intArgs, stringArgs);
+                    if (script) this.cs2Vm.run(script, intArgs, stringArgs, undefined, longArgs);
                 }
             } else if ((payload as any)?.action === "set_varbits") {
                 // Server-initiated varbit sync without running a script
