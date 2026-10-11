@@ -4,8 +4,13 @@ import { CacheDefinitions } from "../cache/CacheDefinitions";
 import { ObjectIdentifiers } from "../../util/ObjectIdentifiers";
 import { Misc } from "../../util/Misc";
 
-/** Examine text by object id: the Wiki's, with live captures over it (yarn dump:object-examines). */
+/**
+ * Examine text by object id: the Wiki's (osrsreboxed-db's `scripts.examines` dump), with the
+ * examines captured live over it - they are what the server sent, and cover ids the Wiki's
+ * pages do not list. The dump is regenerated; the overrides are kept by hand.
+ */
 const EXAMINES_FILE = "data/definitions/object-examines.json";
+const EXAMINE_OVERRIDES_FILE = "data/definitions/object-examine-overrides.json";
 
 export class ObjectDefinition extends ObjectIdentifiers {
     private static readonly definitions = new Map<number, ObjectDefinition>();
@@ -100,7 +105,11 @@ export class ObjectDefinition extends ObjectIdentifiers {
 
     /** The examine text recorded for an object id, or null. */
     static examineText(id: number): string | null {
-        ObjectDefinition.examines ??= JSON.parse(fs.readFileSync(path.resolve(EXAMINES_FILE), "utf8")) as Record<string, string>;
+        // Read on the first examine, not at boot.
+        ObjectDefinition.examines ??= {
+            ...JSON.parse(fs.readFileSync(path.resolve(EXAMINES_FILE), "utf8")),
+            ...JSON.parse(fs.readFileSync(path.resolve(EXAMINE_OVERRIDES_FILE), "utf8")),
+        } as Record<string, string>;
         return ObjectDefinition.examines[String(id)] ?? null;
     }
 
