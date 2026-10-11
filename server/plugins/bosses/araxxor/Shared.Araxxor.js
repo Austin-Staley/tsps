@@ -38,10 +38,14 @@ const HATCH_GFX = Object.freeze({ mirrorback: 2929, ruptura: 2928, acidic: 2927 
 /** Boss tile, arena centre and the nine egg tiles, as Near-Reality and the captures place them. */
 const SPAWN_TILE = [3631, 9812, 0];
 const CENTRE_TILE = [3633, 9816];
+/**
+ * The nine eggs in hatch order (Wiki): first the south-easternmost, then clockwise. The
+ * first egg's colour picks the fight's special, so pattern[0] is the SE egg.
+ */
 const EGG_TILES = Object.freeze([
-  [3643, 9806], [3637, 9803], [3631, 9803],
-  [3626, 9807], [3621, 9813], [3621, 9822],
-  [3631, 9826], [3637, 9826], [3644, 9823],
+  [3644, 9823], [3637, 9826], [3631, 9826],
+  [3621, 9822], [3621, 9813], [3626, 9807],
+  [3631, 9803], [3637, 9803], [3643, 9806],
 ]);
 
 /** The lair interior: entering it grows the per-player instance, leaving destroys it.
@@ -70,10 +74,14 @@ const ATTACK_DISTANCE = 10;
 const MELEE_MAX = 38;
 const MAGIC_MAX = 21;
 const RANGED_MAX = 34;
-/** Protect prayers (Wiki): melee caps at 5, missiles -45%, magic -50%. */
+/** Protect prayers (Wiki): melee caps at 5, missiles -45%, magic -50%, cleave -66%. */
 const PROTECT_MELEE_CAP = 5;
 const PROTECT_RANGED_FACTOR = 0.55;
 const PROTECT_MAGIC_FACTOR = 0.5;
+const CLEAVE_PROTECT_FACTOR = 0.34;
+/** A living Mirrorback redirects a fifth of boss damage to itself, half of that back (Wiki). */
+const MIRRORBACK_REDIRECT_FACTOR = 0.2;
+const MIRRORBACK_RECOIL_FACTOR = 0.5;
 /** On-hit drains (Wiki): a ranged hit drains 9% defence, a magic hit 9% prayer. */
 const DRAIN_RANGED_DEFENCE = 0.09;
 const DRAIN_MAGIC_PRAYER = 0.09;
@@ -84,13 +92,14 @@ const ENRAGE_THRESHOLD = 0.25;
 const MINION_HITPOINTS = 58;
 const EGG_HITPOINTS = 65;
 const MINION_MAX = 15;
-const RUPTURA_BOSS_DAMAGE_CLOSE = 80;
-const RUPTURA_BOSS_DAMAGE_FAR = 64;
-const RUPTURA_PLAYER_DAMAGE = [49, 28, 7];
+/** Ruptura bursts by edge distance (Wiki): player 70/49/28/7, enemies 80/64/48/33. */
+const RUPTURA_PLAYER_DAMAGE = [70, 49, 28, 7];
+const RUPTURA_BOSS_DAMAGE = [80, 64, 48, 33];
 
 /** Captured: the ball crosses about thirteen tiles before bursting. */
 const BALL_ROLL_TILES = 13;
-const BALL_DAMAGE = 4;
+/** Captured as ~18 venom damage (Wiki). */
+const BALL_DAMAGE = 18;
 const SPLATTER_COUNT = 9;
 const SPLATTER_SPREAD = 3;
 /** Acid blob projectile (captured MapProjAnim id) and its cache-internal impact graphic. */
@@ -124,6 +133,15 @@ const ENRAGE_SOUNDS = Object.freeze({
   first: Object.freeze([[9478, 0], [9391, 9], [9409, 24]]),
   second: Object.freeze([[9480, 0], [9391, 24], [9478, 30]]),
 });
+
+/**
+ * The captured enrage body: slot 0 (54289) becomes 54288, the venom-coated front legs,
+ * while slot 1 (54290) stays (sent, as captured). Sent as an npc model customisation.
+ */
+const ENRAGE_MODELS = Object.freeze([
+  Object.freeze({ slot: 0, modelId: 54288 }),
+  Object.freeze({ slot: 1, modelId: 54290 }),
+]);
 
 function playSound(player, id, delay = 0) {
   player?.getPacketSender?.()?.sendSoundEffect(id, 1, delay);
@@ -241,15 +259,17 @@ module.exports = {
   PROTECT_MELEE_CAP,
   PROTECT_RANGED_FACTOR,
   PROTECT_MAGIC_FACTOR,
+  CLEAVE_PROTECT_FACTOR,
+  MIRRORBACK_REDIRECT_FACTOR,
+  MIRRORBACK_RECOIL_FACTOR,
   DRAIN_RANGED_DEFENCE,
   DRAIN_MAGIC_PRAYER,
   ENRAGE_THRESHOLD,
   MINION_HITPOINTS,
   EGG_HITPOINTS,
   MINION_MAX,
-  RUPTURA_BOSS_DAMAGE_CLOSE,
-  RUPTURA_BOSS_DAMAGE_FAR,
   RUPTURA_PLAYER_DAMAGE,
+  RUPTURA_BOSS_DAMAGE,
   BALL_ROLL_TILES,
   BALL_DAMAGE,
   SPLATTER_COUNT,
@@ -275,6 +295,7 @@ module.exports = {
   ATTR_ENCOUNTER,
   ATTR_SPECIAL,
   ENRAGE_SOUNDS,
+  ENRAGE_MODELS,
   playSound,
   Attack,
   SPECIAL_FOR_PRIMARY,

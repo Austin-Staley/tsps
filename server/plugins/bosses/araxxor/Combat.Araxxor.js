@@ -58,19 +58,15 @@ function protections(target) {
 }
 
 /**
- * Out of melee reach she attacks with the style the player is not protected from: missiles
- * up means magic, magic up means missiles (the recordings mix both as prayers flick), and
- * with neither prayer she uses whichever defence is lower (Wiki; Near-Reality).
+ * Out of melee reach she attacks with magic or ranged, whichever of the player's defensive
+ * rolls is lower (Wiki). Prayers shift it indirectly, through the rolls they boost - Rigour
+ * raises the ranged roll, so it can turn her onto magic.
  */
 function chooseDistantAttack(player) {
-  const prayer = protections(player);
-  if (prayer.ranged) return Shared.Attack.MAGIC;
-  if (prayer.magic) return Shared.Attack.RANGED;
-  const BonusManager = api.getBonusManager();
-  const defence = core.AccuracyFormulasDpsCalc.defenceBonus;
-  const rangedDefence = defence(player, BonusManager.DEFENCE_RANGE);
-  const magicDefence = defence(player, BonusManager.DEFENCE_MAGIC);
-  return rangedDefence < magicDefence ? Shared.Attack.RANGED : Shared.Attack.MAGIC;
+  const calculator = core.AccuracyFormulasDpsCalc;
+  const rangedRoll = calculator.defenseRangedRoll(player);
+  const magicRoll = calculator.defenseMagicRoll(player);
+  return rangedRoll < magicRoll ? Shared.Attack.RANGED : Shared.Attack.MAGIC;
 }
 
 /** Captured flight for the ranged blob: a 30-cycle wind-up, then about a tick per tile. */
@@ -100,6 +96,8 @@ function checkEnrage(npc) {
   const hp = npc.getHitpoints?.() ?? 0;
   if (hp > Math.floor(Shared.MAX_HITPOINTS * Shared.ENRAGE_THRESHOLD)) return;
   npc.setAttribute(Shared.ATTR_ENRAGED, true);
+  // The captured body change: the two front legs coat in venom (model customisation).
+  npc.setModelCustomisation?.(Shared.ENRAGE_MODELS);
   npc.performAnimation(new core.Animation(BOSS_ANIMATIONS.enrage));
   const fighter = npc.getCombat?.().getTarget?.();
   for (const [sound, delay] of Shared.ENRAGE_SOUNDS.first) Shared.playSound(fighter, sound, delay);
@@ -134,9 +132,10 @@ function startCleave(npc, target) {
     if (alive(target)) {
       const now = target.getLocation();
       if (now.getX() === tile.x && now.getY() === tile.y) {
+        // The cleave is reduced ~66% by Protect from Melee (Wiki), not capped at 5 like the jab.
         const protect = protections(target).melee;
         const rolled = core.Misc.getRandom(Shared.MELEE_MAX);
-        const damage = protect ? Math.min(rolled, Shared.PROTECT_MELEE_CAP) : rolled;
+        const damage = protect ? Math.floor(rolled * Shared.CLEAVE_PROTECT_FACTOR) : rolled;
         if (damage > 0) {
           target.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(damage, core.HitMask.RED)]);
         }
@@ -268,7 +267,38 @@ function modifyHit(event) {
     hit.updateTotalDamage?.();
     return;
   }
+  redirectToMirrorback(npc, hit);
   checkEnrage(npc);
+}
+
+/**
+ * While a Mirrorback araxyte lives, a fifth of the damage dealt to Araxxor moves onto it
+ * and half of that recoils to the attacker - a tenth of the boss hit (Wiki).
+ */
+function redirectToMirrorback(boss, hit) {
+  const attacker = hit.getAttacker?.();
+  if (!attacker?.isPlayer?.()) return;
+  const session = boss.getAttribute?.(Shared.ATTR_ENCOUNTER);
+  const mirrorback = (session?.minions ?? []).find((minion) =>
+    minion?.getId?.() === Shared.MINION_ID.mirrorback && alive(minion));
+  if (!mirrorback) return;
+  const hits = hit.getHits?.() ?? [];
+  const total = hits.reduce((sum, part) => sum + (part.getDamage?.() ?? 0), 0);
+  const redirect = Math.floor(total * Shared.MIRRORBACK_REDIRECT_FACTOR);
+  if (redirect <= 0) return;
+  for (const part of hits) {
+    part.setDamage(Math.floor((part.getDamage?.() ?? 0) * (1 - Shared.MIRRORBACK_REDIRECT_FACTOR)));
+  }
+  hit.updateTotalDamage?.();
+  mirrorback.getCombat().getHitQueue().addPendingDamage([
+    new core.HitDamage(redirect, core.HitMask.RED),
+  ]);
+  const recoil = Math.floor(redirect * Shared.MIRRORBACK_RECOIL_FACTOR);
+  if (recoil > 0) {
+    attacker.getAsPlayer().getCombat().getHitQueue().addPendingDamage([
+      new core.HitDamage(recoil, core.HitMask.RED),
+    ]);
+  }
 }
 
 function attach(pluginApi) {

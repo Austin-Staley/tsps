@@ -158,6 +158,8 @@ export type NpcView = Tile & ActorUpdateView & {
   exactMove?: ForcedMovementView;
   /** A tile to turn to once (OSRS npc face coord). */
   faceTile?: { x: number; y: number };
+  /** Body-model slot overrides (OSRS npc model customisation); an empty list resets them. */
+  modelCustomisation?: { slot: number; modelId: number }[];
   /** Its walk step is sent as a crawl (half walking speed on the client). */
   crawl?: boolean;
   rotation: number;
@@ -2233,6 +2235,7 @@ const NPC_MASK = {
   HEAD_ICONS: 0x200,
   EXACT_MOVE: 0x400,
   FACE_TILE: 0x800,
+  MODEL_CUSTOMISATION: 0x1000,
   SPOT_ANIM: 0x20000,
 } as const;
 
@@ -2362,6 +2365,7 @@ function npcUpdateMask(view: NpcView, writeInteraction: boolean, writeHeadIcon =
     (view.forcedChat !== undefined ? NPC_MASK.FORCED_CHAT : 0) |
     (view.exactMove ? NPC_MASK.EXACT_MOVE : 0) |
     (view.faceTile ? NPC_MASK.FACE_TILE : 0) |
+    (view.modelCustomisation ? NPC_MASK.MODEL_CUSTOMISATION : 0) |
     (view.graphics?.length ? NPC_MASK.SPOT_ANIM : 0);
 }
 
@@ -2460,6 +2464,13 @@ function writeNpcUpdateBlock(view: NpcView, writeInteraction: boolean, writeHead
   if (view.faceTile) {
     shortBE(bytes, view.faceTile.x & 0xffff);
     shortBE(bytes, view.faceTile.y & 0xffff);
+  }
+  if (view.modelCustomisation) {
+    bytes.push(view.modelCustomisation.length & 0xff);
+    for (const entry of view.modelCustomisation) {
+      bytes.push(entry.slot & 0xff);
+      shortLE(bytes, entry.modelId & 0xffff);
+    }
   }
   return Buffer.from(bytes);
 }

@@ -25,8 +25,6 @@ const EGG_DEATH_ANIMATION = 11508;
 const RUPTURA_ANIMATION = 11510;
 const RUPTURA_BURST_ATTRIBUTE = "araxxor:ruptura-burst";
 const INSTANT_KILL_WEAPONS = ["noxious halberd", "crossbow", "ballista"];
-const RUPTURA_BOSS_RANGE = 5;
-const RUPTURA_BOSS_RANGE_FAR = 6;
 
 function alive(entity) {
   return !!entity?.isRegistered?.() && (entity.getHitpoints?.() ?? 1) > 0;
@@ -77,6 +75,10 @@ function hatchNext(bossNpc) {
   if (!entry) return;
   const remaining = entry.npc.getHitpoints?.() ?? Shared.EGG_HITPOINTS;
   core.World.getRemoveNPCQueue().push(entry.npc);
+  // Overdamaged eggs despawn instead of hatching (Wiki): the next egg waits a full beat.
+  if (remaining <= Shared.EGG_HITPOINTS - Shared.MINION_HITPOINTS) {
+    return;
+  }
   const area = bossNpc.getPrivateArea?.() ?? null;
   if (area?.isDestroyed?.() === true) return;
   const minion = core.NPC.create(Shared.MINION_ID[entry.type], new core.Location(entry.x, entry.y, 0));
@@ -143,32 +145,23 @@ function explodeRuptura(npc, target) {
   npc.setAttribute?.(RUPTURA_BURST_ATTRIBUTE, true);
   npc.getMovementQueue?.().setBlockMovement?.(true);
   npc.performAnimation(new core.Animation(RUPTURA_ANIMATION));
-  const location = { x: npc.getLocation().getX(), y: npc.getLocation().getY() };
   later(2, npc, () => {
     const session = sessionOf(npc);
     const boss = session?.npc ?? null;
     if (alive(boss)) {
-      const centre = core.Projectile.centreOf(boss);
-      const distance = Math.max(
-        Math.abs(centre.getX() - location.x),
-        Math.abs(centre.getY() - location.y),
-      );
-      if (distance <= RUPTURA_BOSS_RANGE) {
+      const distance = edgeDistance(npc, boss);
+      if (distance < Shared.RUPTURA_BOSS_DAMAGE.length) {
         boss.getCombat().getHitQueue().addPendingDamage([
-          new core.HitDamage(Shared.RUPTURA_BOSS_DAMAGE_CLOSE, core.HitMask.BLUE),
-        ]);
-      } else if (distance <= RUPTURA_BOSS_RANGE_FAR) {
-        boss.getCombat().getHitQueue().addPendingDamage([
-          new core.HitDamage(Shared.RUPTURA_BOSS_DAMAGE_FAR, core.HitMask.BLUE),
+          new core.HitDamage(Shared.RUPTURA_BOSS_DAMAGE[distance], core.HitMask.BLUE),
         ]);
       }
     }
     if (alive(target)) {
-      const pos = target.getLocation();
-      const distance = Math.max(Math.abs(pos.getX() - location.x), Math.abs(pos.getY() - location.y));
-      if (distance <= 4) {
-        const damage = Shared.RUPTURA_PLAYER_DAMAGE[Math.max(0, Math.min(2, distance - 2))];
-        target.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(damage, core.HitMask.RED)]);
+      const distance = edgeDistance(npc, target);
+      if (distance < Shared.RUPTURA_PLAYER_DAMAGE.length) {
+        target.getCombat().getHitQueue().addPendingDamage([
+          new core.HitDamage(Shared.RUPTURA_PLAYER_DAMAGE[distance], core.HitMask.RED),
+        ]);
       }
     }
     core.World.getRemoveNPCQueue().push(npc);

@@ -48,6 +48,7 @@ function bossDied(event) {
   Minions.crumbleAll(npc);
   Specials.endFight(npc);
   Hud.killed(npc);
+  npc.setModelCustomisation?.(null);
   npc.setNpcTransformationId(Shared.CORPSE_ID);
   session.corpse = npc;
   session.respawnAt = core.World.getProcessCycle() + Shared.CORPSE_TICKS + Shared.RESPAWN_TICKS;
