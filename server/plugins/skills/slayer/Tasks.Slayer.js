@@ -118,7 +118,25 @@ function eligible(player, master, entry, blocked) {
   if (task.id === Data.BOSS_TASK_ID) return bossChoices(player).length > 0;
   if (player.getSkillManager().getMaxLevel(core.Skill.SLAYER) < Data.taskLevel(task.id)) return false;
   if (checksCombat(player, master) && player.getSkillManager().getCombatLevel() < task.minCombat) return false;
-  return meetsStats(player, task);
+  return meetsStats(player, task) && meetsQuests(player, task.id);
+}
+
+/**
+ * The task's quests (Data.taskQuests): any one complete, or only started for the ones the Wiki
+ * needs partly done. A quest no plugin answers for (not in tsps yet) doesn't block the task.
+ */
+function meetsQuests(player, taskId) {
+  const needs = Data.taskQuests(taskId);
+  if (!needs) return true;
+  const event = needs.started ? "quest:is-started" : "quest:is-complete";
+  const field = needs.started ? "started" : "complete";
+  const answers = needs.any.map((key) => {
+    const request = { player, key, [field]: null };
+    api.emitCustomEvent(event, request);
+    return request[field];
+  });
+  if (answers.some((answer) => answer === true)) return true;
+  return answers.every((answer) => answer == null);
 }
 
 /** The boss tasks the player has the levels for (their Slayer levels are stat requirements). */
@@ -323,6 +341,7 @@ module.exports = {
   clear,
   meetsMaster,
   countsFor,
+  meetsQuests,
   hasUnlockBit,
   hasUnlock,
   grantPoints,

@@ -40,7 +40,8 @@ The plugin is `server/plugins/skills/Slayer.plugin.js`; its units are in
 
 - **`slayer-masters.json`:** each master's names, requirements and points per task (Wiki, Slayer
   Master), the streak multipliers, the NPCs of the Boss task's bosses, and the sub-tasks whose
-  monsters carry their parent's task id (fever spiders, metal dragons, araxytes).
+  monsters carry their parent's task id (fever spiders, metal dragons, araxytes), and the quests
+  each task needs (Wiki, Slayer task).
 - **`slayer-areas.json`:** boxes around Konar's areas. A test checks that every Konar task has
   spawns inside each of its areas.
 - **`slayer-gear.json`, `slayer-finishers.json`, `slayer-superiors.json`:** protective gear,
@@ -71,6 +72,10 @@ A master only assigns rows the player qualifies for:
 - its combat level, unless combat checks are off (Krystilia never checks);
 - its stat requirements;
 - its required unlock, and no unlock that removes it;
+- its quests: any one of them complete (Abyssal demons take Priest in Peril or Fairytale II), or
+  only started where the Wiki needs a quest partly done (Dragon Slayer I for the dragons, Olaf's
+  Quest for brine rats...). A quest tsps doesn't have yet doesn't block its task, so Mogres
+  (Skippy and the Mogres) and Venators (The Blood Moon Rises) aren't in the list;
 - not blocked with that master.
 
 A row is picked by weight. Its amount is the row's range, or the extension's range with that
@@ -138,6 +143,5 @@ Konar's lines and the gem's task line are the Wiki's.
 - **Mortimer:** he assigns from his list like the other masters. He has no task choice or
   modifiers, and gives no points.
 - **Rewards:** task storage (Store/Unstore). Picking tasks to block from the task list.
-- **Requirements:** quest requirements on tasks (Cabin Fever for cave horrors and so on).
 - **Equipment and monsters:** the gem's Partner and Log, killerwatts, cave horrors, fever spiders,
   harpie bug swarms and mogres. Zygomites don't regenerate.
