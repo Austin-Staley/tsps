@@ -58,7 +58,10 @@ function debugAraxxor({ player }) {
     `boss=${boss.getId()} at=${at.getX()},${at.getY()} area=${boss.getArea?.()?.constructor?.name ?? "null"}` +
     ` playerArea=${player.getArea?.()?.constructor?.name ?? "null"} privateSame=${boss.getPrivateArea?.() === player.getPrivateArea?.()}`,
   );
-  let line = `target=${target ? (target.isPlayer?.() ? "player" : "npc") : "none"} underAttack=${combat?.getAttacker?.() ? "yes" : "no"}` +
+  const playerAttacker = player.getCombat?.().getAttacker?.() ?? null;
+  const who = (entity) => !entity ? "none" : entity.isPlayer?.() ? "player" : `npc:${entity.getAsNpc?.().getId?.()}`;
+  let line = `bossHp=${boss.getHitpoints?.()} attacks=${boss.getAttribute?.("araxxor:attacks") ?? 0}` +
+    ` target=${who(target)} attackedBy=${who(combat?.getAttacker?.())} playerAttacks=${who(playerAttacker)}` +
     ` dist=${Math.max(Math.abs(me.getX() - at.getX()), Math.abs(me.getY() - at.getY()))}`;
   try {
     const method = boss.getCombatMethod?.();
