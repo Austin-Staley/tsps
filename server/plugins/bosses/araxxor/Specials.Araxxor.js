@@ -97,7 +97,10 @@ function startSpecial(npc, target) {
   } else if (kind === "splatter") {
     const pos = target?.getLocation?.();
     if (!pos) return;
-    const tiles = Shared.splatterTiles(pos.getX(), pos.getY(), isWalkable);
+    // Sprayed outward along the boss-to-player line (Wiki: random, in their direction).
+    const centre = core.Projectile.centreOf(npc);
+    const direction = { x: pos.getX() - centre.getX(), y: pos.getY() - centre.getY() };
+    const tiles = Shared.splatterTiles(pos.getX(), pos.getY(), isWalkable, direction);
     throwBlobs(npc, tiles);
   } else if (kind === "drip") {
     startDrip(npc, target);
@@ -275,6 +278,37 @@ function tick() {
   }
 }
 
+/**
+ * A dying Acidic araxyte splashes acid onto nearby tiles (Wiki: "explode, splattering acid
+ * on random squares within a 7x7 AoE surrounding it"; Near-Reality's nine blobs).
+ */
+function acidicAraxyteDied({ npc }) {
+  if (npc?.getId?.() !== Shared.MINION_ID.acidic) return;
+  const session = npc.getAttribute?.(Shared.ATTR_ENCOUNTER) ?? null;
+  const boss = session?.npc ?? null;
+  if (!boss || !alive(boss)) return;
+  const location = npc.getLocation();
+  const tiles = Shared.splatterTiles(location.getX(), location.getY(), null);
+  const area = npc.getPrivateArea?.() ?? null;
+  for (const [x, y] of tiles) {
+    new core.Projectile(
+      location,
+      new core.Location(x, y, location.getZ()),
+      null,
+      Shared.ACID_PROJECTILE,
+      30,
+      90,
+      35,
+      0,
+      area,
+    ).sendProjectile();
+  }
+  later(3, npc, () => {
+    if (!alive(boss) || (boss.getPrivateArea?.() ?? null)?.isDestroyed?.() === true) return;
+    for (const [x, y] of tiles) spawnPool(boss, x, y);
+  });
+}
+
 function endFight(npc) {
   const fight = fights.get(npc);
   if (!fight) return;
@@ -295,6 +329,7 @@ function attach(pluginApi) {
   api = pluginApi;
   core = pluginApi.core;
   CombatFactory = pluginApi.getCombatFactory();
+  pluginApi.onNpcDeath(acidicAraxyteDied);
   class EngineTask extends core.Task {
     constructor() {
       super(1, null, false);
@@ -313,6 +348,7 @@ module.exports = {
   startSpecial,
   startBall,
   startDrip,
+  acidicAraxyteDied,
   throwBlobs,
   spawnPool,
   tick,

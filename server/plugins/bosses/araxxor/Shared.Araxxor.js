@@ -185,15 +185,29 @@ function tileKey(x, y) {
 }
 
 /**
- * The nine splatter tiles around a point: offsets -3..2 on both axes (Near-Reality's
- * getAcidSplatterLocation, nextInt(-3, 3)), kept even when clipped so the pool count holds.
+ * The nine splatter tiles around a point. Without a direction: offsets -3..2 on both axes
+ * (Near-Reality's getAcidSplatterLocation, the acidic spider's death splash). With a
+ * direction (dx, dy): a random spray biased outward along it - the Wiki's acid spray,
+ * "sprays randomly outward in the player's general direction".
  */
-function splatterTiles(x, y, isWalkable) {
+function splatterTiles(x, y, isWalkable, direction = null) {
   const tiles = [];
+  const dx = direction ? Math.sign(direction.x) : 0;
+  const dy = direction ? Math.sign(direction.y) : 0;
   for (let index = 0; index < SPLATTER_COUNT; index++) {
-    const ox = -3 + Math.floor(Math.random() * 6);
-    const oy = -3 + Math.floor(Math.random() * 6);
-    const tile = [x + ox, y + oy];
+    let tile;
+    if (dx === 0 && dy === 0) {
+      const ox = -3 + Math.floor(Math.random() * 6);
+      const oy = -3 + Math.floor(Math.random() * 6);
+      tile = [x + ox, y + oy];
+    } else {
+      const along = Math.floor(Math.random() * 5) - 1;
+      const lateral = -3 + Math.floor(Math.random() * 7);
+      tile = [
+        x + dx * along - dy * lateral,
+        y + dy * along + dx * lateral,
+      ];
+    }
     if (tile[0] === x && tile[1] === y) {
       tile[0] += 1;
     }

@@ -52,6 +52,18 @@ test("the splatter scatters nine blobs around a tile within three", () => {
   }
 });
 
+test("the spray fans outward along the boss-to-player direction", () => {
+  for (let run = 0; run < 50; run++) {
+    const tiles = Shared.splatterTiles(3633, 9816, null, { x: 10, y: 0 });
+    assert.equal(tiles.length, 9);
+    for (const [x, y] of tiles) {
+      assert.ok(x - 3633 >= -1 && x - 3633 <= 3, "along the direction, mostly outward");
+      assert.ok(Math.abs(y - 9816) <= 3, "lateral spread");
+      assert.ok(x !== 3633 || y !== 9816, "never the caster's own tile untouched");
+    }
+  }
+});
+
 test("cleave pools run perpendicular to the blow", () => {
   assert.deepEqual(Shared.cleavePoolTiles(10, 10, 0, -1), [[10, 10], [9, 10], [11, 10]]);
   assert.deepEqual(Shared.cleavePoolTiles(10, 10, 1, 0), [[10, 10], [10, 9], [10, 11]]);
