@@ -42,7 +42,7 @@ function restoreRights({ player }) {
 
 // Headless playthroughs need normal damage and death; command temporarily elevates itself.
 function normalPlayer(event) {
-  restoreRights(event);
+  event.player.setRights(pluginApi.core.PlayerRights.NONE);
   pluginApi.emitCustomEvent("account:refresh-chat-icons", { player: event.player });
 }
 
