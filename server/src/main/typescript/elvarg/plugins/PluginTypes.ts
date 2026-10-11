@@ -1222,6 +1222,7 @@ export interface PluginCoreApi {
   Sounds: any;
   Location: any;
   Mobile: any;
+  encodePluginMessage: typeof import("../net/protocol/ClientProtocol").encodePluginMessage;
   encodeFinePosition: typeof import("../net/protocol/ClientProtocol").encodeFinePosition;
   Boundary: any;
   PolygonalBoundary: any;

@@ -1,3 +1,4 @@
+import type { WidgetActionEvent } from "../widgets/widgetActionPayload";
 import type { Camera } from "../Camera";
 import type { HitsplatEventPayload } from "../GameRenderer";
 import type { InputManager } from "../InputManager";
@@ -142,6 +143,8 @@ export interface ClientPlugin {
     widgetOverlay?: WidgetOverlay;
     /** Handle a client-side `::command`; return true to consume it (no server round trip). */
     handleClientCommand?(command: string): boolean;
+    /** Handle a widget action locally; return true to consume it before CS2 or network dispatch. */
+    handleWidgetAction?(event: WidgetActionEvent): boolean;
     /** Reorders or extends a menu (top first); its first eligible entry is the left-click. */
     transformMenuEntries?(
         entries: SimpleMenuEntry[],
@@ -254,6 +257,10 @@ export class ClientPluginManager {
         const overlays: WidgetOverlay[] = [];
         for (const plugin of this.plugins) if (plugin.widgetOverlay) overlays.push(plugin.widgetOverlay);
         return overlays;
+    }
+
+    handleWidgetAction(event: WidgetActionEvent): boolean {
+        return this.plugins.some(plugin => plugin.handleWidgetAction?.(event) === true);
     }
 
     handleClientCommand(command: string): boolean {
