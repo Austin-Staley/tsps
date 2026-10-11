@@ -97,7 +97,7 @@ const advanced: any[] = [];
 const commandRights: string[] = [];
 const core = {
     connectHeadlessClient,
-    PlayerRights: { DEVELOPER: "DEVELOPER" },
+    PlayerRights: { NONE: "NONE", DEVELOPER: "DEVELOPER" },
     CanAttackResponse: { CAN_ATTACK: 0, CANT_ATTACK_IN_AREA: 1, 0: "CAN_ATTACK", 1: "CANT_ATTACK_IN_AREA" },
     CombatFactory: {
         canAttackPermission: (attacker: any, target: any) => {
@@ -188,6 +188,25 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
     const text = result.content[0].text;
     return { error: !!result.isError, text, value: result.isError ? null : JSON.parse(text) };
 };
+
+// Even an existing staff test account plays as a normal player until logout.
+const agentPlugin = require("../plugins/agent/AgentMcp.plugin.js");
+const sessionHooks: Record<string, any> = {};
+const previousMcpFlag = process.env.AGENT_MCP;
+process.env.AGENT_MCP = "0";
+agentPlugin.register({ core, onServerShutdown() {}, onPlayerLogin() {}, onPlayerLogout() {},
+    onCustomEvent: (name: string, handler: any) => { sessionHooks[name] = handler; }, emitCustomEvent() {} });
+process.env.AGENT_MCP = "1";
+rights = "MODERATOR";
+agentPlugin._test.grantDeveloperRights({ player });
+assert.equal(rights, "DEVELOPER");
+sessionHooks["agent-mcp:normal-player"]({ player });
+assert.equal(rights, "NONE", "staff ranks must not make headless combat immune");
+agentPlugin._test.restoreRights({ player });
+assert.equal(rights, "MODERATOR", "the real account rank survives logout");
+rights = "NONE";
+if (previousMcpFlag === undefined) delete process.env.AGENT_MCP;
+else process.env.AGENT_MCP = previousMcpFlag;
 
 (async () => {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
