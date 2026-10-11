@@ -43,63 +43,8 @@ function setAraxxorHitpoints({ player, parts }) {
   return true;
 }
 
-function debugAraxxor({ player }) {
-  const session = Area.sessions.get(player);
-  const boss = session?.npc ?? null;
-  const cycle0 = core.World.getProcessCycle();
-  if (!boss) {
-    player.sendMessage(
-      `session=${session ? "yes" : "no"} respawnIn=${session?.respawnAt ? session.respawnAt - cycle0 : "-"}` +
-      ` corpseRegistered=${session?.corpse?.isRegistered?.() ?? "-"} harvested=${session?.harvested ?? "-"} destroyed=${session?.destroyed ?? "-"}`,
-    );
-    return true;
-  }
-  const combat = boss.getCombat?.();
-  const target = combat?.getTarget?.() ?? null;
-  const me = player.getLocation();
-  const at = boss.getLocation();
-  player.sendMessage(
-    `boss=${boss.getId()} at=${at.getX()},${at.getY()} area=${boss.getArea?.()?.constructor?.name ?? "null"}` +
-    ` playerArea=${player.getArea?.()?.constructor?.name ?? "null"} privateSame=${boss.getPrivateArea?.() === player.getPrivateArea?.()}`,
-  );
-  const playerAttacker = player.getCombat?.().getAttacker?.() ?? null;
-  const who = (entity) => !entity ? "none" : entity.isPlayer?.() ? "player" : `npc:${entity.getAsNpc?.().getId?.()}`;
-  const cycle = core.World.getProcessCycle();
-  const lastAttack = boss.getAttribute?.(Shared.ATTR_LAST_ATTACK) ?? 0;
-  const lastHatch = boss.getAttribute?.(Shared.ATTR_LAST_HATCH) ?? 0;
-  const lastSpecial = boss.getAttribute?.(Shared.ATTR_LAST_SPECIAL) ?? 0;
-  let line = `cycle=${cycle} bossHp=${boss.getHitpoints?.()} attacks=${boss.getAttribute?.(Shared.ATTR_ATTACKS) ?? 0}` +
-    ` sinceAttack=${lastAttack ? cycle - lastAttack : "-"} sinceHatch=${lastHatch ? cycle - lastHatch : "-"}` +
-    ` sinceSpecial=${lastSpecial ? cycle - lastSpecial : "-"} poolsSpawned=${boss.getAttribute?.(Shared.ATTR_POOLS_SPAWNED) ?? 0}` +
-    ` target=${who(target)} attackedBy=${who(combat?.getAttacker?.())} playerAttacks=${who(playerAttacker)}` +
-    ` dist=${Math.max(Math.abs(me.getX() - at.getX()), Math.abs(me.getY() - at.getY()))}`;
-  try {
-    const method = boss.getCombatMethod?.();
-    const fakeRanged = { type: () => core.CombatType.MAGIC, attackDistance: () => 10, attackSpeed: () => 6 };
-    line += method ? ` ownReach=${core.CombatRange.canReach(boss, method, player)}` : " method=none";
-    line += ` rangedReach=${core.CombatRange.canReach(boss, fakeRanged, player)}`;
-  } catch (error) {
-    line += ` methodErr=${String(error?.message ?? error).slice(0, 90)}`;
-  }
-  try {
-    const permission = core.CombatFactory.canAttackPermission(boss, player, true);
-    line += ` permission=${permission}`;
-  } catch (error) {
-    line += ` permErr=${String(error?.message ?? error).slice(0, 90)}`;
-  }
-  try {
-    const clip = core.RegionManager.getClipping(me.getX(), me.getY(), me.getZ(), null);
-    line += ` clip=${clip} walkable=${(clip & 0x1280100) === 0} special=${boss.getAttribute?.(Shared.ATTR_SPECIAL) ?? "?"}`;
-  } catch (error) {
-    line += ` clipErr=${String(error?.message ?? error).slice(0, 90)}`;
-  }
-  player.sendMessage(line);
-  return true;
-}
-
 module.exports = function attachCommands(api) {
   core = api.core;
   api.registerCommand("araxxorkill", killAraxxor, api.core.PlayerRights.DEVELOPER, "Defeat your active Araxxor");
   api.registerCommand("araxxorhp", setAraxxorHitpoints, api.core.PlayerRights.DEVELOPER, "Set your Araxxor's hitpoints");
-  api.registerCommand("araxxordebug", debugAraxxor, api.core.PlayerRights.DEVELOPER, "Print the Araxxor fight state");
 };

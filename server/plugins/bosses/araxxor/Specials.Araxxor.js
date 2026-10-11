@@ -76,7 +76,6 @@ function spawnPool(npc, x, y) {
   core.ObjectManager.register(object, true);
   area?.add?.(object);
   fight.pools.set(key, object);
-  npc.setAttribute?.(Shared.ATTR_POOLS_SPAWNED, (npc.getAttribute?.(Shared.ATTR_POOLS_SPAWNED) ?? 0) + 1);
   return object;
 }
 
@@ -90,7 +89,6 @@ function initFight(npc) {
 function startSpecial(npc, target) {
   const kind = npc.getAttribute?.(Shared.ATTR_SPECIAL);
   if (!kind) return;
-  npc.setAttribute?.(Shared.ATTR_LAST_SPECIAL, core.World.getProcessCycle());
   npc.performAnimation(new core.Animation(SPECIAL_ANIMATION[kind] ?? SPECIAL_ANIMATION.ball));
   if (kind === "ball") {
     later(2, target, () => {
@@ -269,7 +267,6 @@ function tick() {
     const players = npc.getPlayersWithinDistance(25);
     if (core.World.getProcessCycle() >= fight.nextHatchAt) {
       fight.nextHatchAt += Shared.HATCH_INTERVAL_TICKS;
-      npc.setAttribute?.(Shared.ATTR_LAST_HATCH, core.World.getProcessCycle());
       Minions.hatchNext(npc);
     }
     tickBall(npc, fight, players);

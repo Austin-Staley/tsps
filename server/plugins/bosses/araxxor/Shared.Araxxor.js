@@ -87,7 +87,8 @@ const RUPTURA_BOSS_DAMAGE_CLOSE = 80;
 const RUPTURA_BOSS_DAMAGE_FAR = 64;
 const RUPTURA_PLAYER_DAMAGE = [49, 28, 7];
 
-const BALL_ROLL_TILES = 10;
+/** Captured: the ball crosses about thirteen tiles before bursting. */
+const BALL_ROLL_TILES = 13;
 const BALL_DAMAGE = 4;
 const SPLATTER_COUNT = 9;
 const SPLATTER_SPREAD = 3;
@@ -119,10 +120,6 @@ const ATTR_ENRAGED = "araxxor:enraged";
 const ATTR_DYING = "araxxor:dying";
 const ATTR_ENCOUNTER = "araxxor:encounter";
 const ATTR_SPECIAL = "araxxor:special";
-const ATTR_LAST_ATTACK = "araxxor:last-attack";
-const ATTR_LAST_HATCH = "araxxor:last-hatch";
-const ATTR_LAST_SPECIAL = "araxxor:last-special";
-const ATTR_POOLS_SPAWNED = "araxxor:pools-spawned";
 
 const Attack = { MELEE: "melee", RANGED: "ranged", MAGIC: "magic", CLEAVE: "cleave" };
 
@@ -261,10 +258,6 @@ module.exports = {
   ATTR_DYING,
   ATTR_ENCOUNTER,
   ATTR_SPECIAL,
-  ATTR_LAST_ATTACK,
-  ATTR_LAST_HATCH,
-  ATTR_LAST_SPECIAL,
-  ATTR_POOLS_SPAWNED,
   Attack,
   SPECIAL_FOR_PRIMARY,
   edgeDistance,

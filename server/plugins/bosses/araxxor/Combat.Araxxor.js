@@ -110,6 +110,10 @@ function startCleave(npc, target) {
   const tile = { x: target.getLocation().getX(), y: target.getLocation().getY() };
   npc.performAnimation(new core.Animation(BOSS_ANIMATIONS.cleave));
   npc.forceChat?.("Skree!");
+  // Captured with the say: spotanim 1542 at height 92 on the boss.
+  const cleaveGfx = new core.Graphic(1542);
+  cleaveGfx.height = 92;
+  npc.performGraphic(cleaveGfx);
   npc.getMovementQueue?.().setBlockMovement?.(true);
   const base = npc.getLocation();
   const dx = Math.sign(tile.x - (base.getX() + 3));
@@ -153,7 +157,6 @@ function combatClass() {
       }
       const attacks = (npc.getAttribute?.(Shared.ATTR_ATTACKS) ?? 0) + 1;
       npc.setAttribute(Shared.ATTR_ATTACKS, attacks);
-      npc.setAttribute?.(Shared.ATTR_LAST_ATTACK, core.World.getProcessCycle());
       if (attacks % Shared.SPECIAL_EVERY_ATTACKS === 0) {
         Specials.startSpecial(npc, target);
         return;
