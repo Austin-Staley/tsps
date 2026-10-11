@@ -38,8 +38,12 @@ function sessionOf(npc) {
 /** The captured death: the 11481 anim, five ticks later the harvestable corpse. */
 function bossDied({ npc }) {
   if (!npc || npc.getId?.() !== Shared.BOSS_ID) return;
+  console.log("[Araxxor] bossDied fired for", npc.getId?.(), "registered=", npc.isRegistered?.());
   const session = sessionOf(npc);
-  if (!session) return;
+  if (!session) {
+    console.log("[Araxxor] bossDied: no session attribute");
+    return;
+  }
   npc.setAttribute?.(Shared.ATTR_DYING, true);
   npc.getCombat?.().reset?.();
   Minions.crumbleAll(npc);
@@ -48,6 +52,7 @@ function bossDied({ npc }) {
   npc.setNpcTransformationId(Shared.CORPSE_ID);
   session.corpse = npc;
   session.respawnAt = core.World.getProcessCycle() + Shared.CORPSE_TICKS + Shared.RESPAWN_TICKS;
+  console.log("[Araxxor] corpse set, respawnAt=", session.respawnAt, "cycle=", core.World.getProcessCycle());
 }
 
 /**
