@@ -9,6 +9,7 @@ module.exports = function registerSongOfTheElves(api) {
   const START_HOOK = "quest:song-of-the-elves:start";
   const CHEMICAL_CHOICE = "quest.song_of_the_elves.chemical-choice";
   const FALLS_PILLARS = "quest.song_of_the_elves.falls-pillars";
+  const FALLS_ORDER = "quest.song_of_the_elves.falls-order";
   const INCITEMENTS = "quest.song_of_the_elves.incitements";
   const RESISTANCE_MEMBERS = "quest.song_of_the_elves.resistance-members";
   const RESISTANCE_BRIEFING = "quest.song_of_the_elves.resistance-briefing";
@@ -16,12 +17,17 @@ module.exports = function registerSongOfTheElves(api) {
   const EAST_BATTLE_KILLS = "quest.song_of_the_elves.east-battle-kills";
   const BATTLE_AREA = "quest.song_of_the_elves.battle-area";
   const LATE_CHAPTER = "quest.song_of_the_elves.late-chapter";
+  const LIBRARY_INSTANCE = "quest.song_of_the_elves.library-instance";
   const PILLAR_ITEMS = [
     [ItemIdentifiers.ADAMANT_CHAINBODY, "Adamant chainbody"],
     [ItemIdentifiers.WINE_OF_ZAMORAK, "Wine of zamorak"],
     [ItemIdentifiers.NATURE_RUNE, "Nature rune"],
     [ItemIdentifiers.BLACK_DAGGER, "Black dagger"],
     [ItemIdentifiers.CABBAGE, "Cabbage"],
+  ];
+  const FALLS_PILLAR_LOCATIONS = [
+    [1869, 4628, 2], [1869, 4650, 2], [1881, 4639, 2],
+    [1869, 4628, 0], [1869, 4650, 0],
   ];
   const CHEMICALS = [ItemIdentifiers.BLUE_LIQUID, ItemIdentifiers.GREEN_POWDER, ItemIdentifiers.CLEAR_LIQUID, ItemIdentifiers.RED_POWDER];
   const SULPHURIC_ACID = ItemIdentifiers.SULPHURIC_ACID;
@@ -82,6 +88,7 @@ module.exports = function registerSongOfTheElves(api) {
   ];
   let quest;
   const battleInstances = new Map();
+  const libraryInstances = new Map();
 
   class ArdougneBattleArea extends PrivateArea {
     constructor(battle, owner) {
@@ -107,6 +114,22 @@ module.exports = function registerSongOfTheElves(api) {
     postLeave(mobile, logout) {
       super.postLeave(mobile, logout);
       if (this.isDestroyed?.()) battleInstances.delete(this);
+    }
+  }
+
+  class GrandLibraryArea extends PrivateArea {
+    constructor(owner) {
+      super([
+        new Boundary(2548, 2690, 6078, 6220, 0),
+        new Boundary(2548, 2690, 6078, 6220, 1),
+        new Boundary(2548, 2690, 6078, 6220, 2),
+      ]);
+      this.owner = owner;
+    }
+
+    postLeave(mobile, logout) {
+      super.postLeave(mobile, logout);
+      if (this.isDestroyed()) libraryInstances.delete(this.owner);
     }
   }
 
@@ -179,6 +202,11 @@ module.exports = function registerSongOfTheElves(api) {
         if (inventory.getFreeSlots() > 0 && inventory.getAmount(itemId) === 0) {
           inventory.adds(itemId, 1);
           event.box = { items: [itemId] };
+          if (itemId === ItemIdentifiers.ODE_TO_ETERNITY) {
+            const order = PILLAR_ITEMS.map((_, index) => index).sort(() => Math.random() - 0.5);
+            player.setAttribute(FALLS_ORDER, order.join(","));
+            player.sendMessage(`Ode to Eternity's riddle: place ${order.map((index) => PILLAR_ITEMS[index][1]).join(", then ")}.`);
+          }
         } else if (inventory.getFreeSlots() === 0) {
           event.handled = true;
           player.sendMessage("You need an empty inventory slot before you can take that.");
@@ -228,6 +256,7 @@ module.exports = function registerSongOfTheElves(api) {
     if (event.stepId === "6nBDUf") setChapter(player, 16);
     if (event.stepId === "xfnkES") setChapter(player, 19);
     if (event.stepId === "yR9ETJ") setChapter(player, 20);
+    if (event.stepId === "eOtNFO") setChapter(player, 12);
     if (event.stepId === "W-ainS") quest.complete(player);
   }
   function setChapter(player, chapter) {
@@ -251,6 +280,14 @@ module.exports = function registerSongOfTheElves(api) {
       return startTranscript(api, player, event.npcId, PAGE, "starting-out-talking-to-edmond");
     }
     if (quest.isComplete(player)) return false;
+    if (npcName === "lord ieuan amlodd" && player.getArea?.() instanceof GrandLibraryArea) {
+      const area = player.getArea();
+      area.leave(player, false);
+      player.setAttribute(LIBRARY_INSTANCE, null);
+      player.moveTo(new Location(2353, 3172, 0));
+      player.sendMessage("Lord Ieuan guides you back to Lletya. You can return to the library when you are ready.");
+      return true;
+    }
     if (npcName === "elena" && currentChapter(player) === 4) {
       const enoughSupport = resistanceSupport(player) >= 80;
       return startTranscript(api, player, event.npcId, PAGE, enoughSupport
@@ -307,6 +344,29 @@ module.exports = function registerSongOfTheElves(api) {
       const hasChemical = CHEMICALS.some((id) => inventory.getAmount(id) > 0) || inventory.getAmount(SULPHURIC_ACID) > 0;
       return startTranscript(api, player, event.npcId, PAGE,
         hasChemical ? "freeing-elena-returning-to-elena" : "freeing-elena-talking-to-elena");
+    }
+    if (currentChapter(player) === 11 && npcName === "elena") {
+      const finishedPotion = player.getInventory().getAmount(ItemIdentifiers.INVERSION_POTION) > 0;
+      return startTranscript(api, player, event.npcId, PAGE, finishedPotion
+        ? "preparing-to-enter-prifddinas-making-the-inversion-potion-talking-to-elena-after-finishing-the-potion"
+        : "preparing-to-enter-prifddinas-making-the-inversion-potion-talking-to-elena-again");
+    }
+    if (currentChapter(player) === 11 && npcName === "arianwyn") {
+      const inventory = player.getInventory();
+      if (inventory.getAmount(ItemIdentifiers.INVERSION_POTION) > 0) {
+        inventory.deleteNumber(ItemIdentifiers.INVERSION_POTION, 1);
+        return startTranscript(api, player, event.npcId, PAGE,
+          "preparing-to-enter-prifddinas-making-the-inversion-potion-talking-to-arianwyn-after-finishing-the-potion");
+      }
+      return startTranscript(api, player, event.npcId, PAGE, inventory.getAmount(ItemIdentifiers.CRYSTAL_5) > 0
+        ? "preparing-to-enter-prifddinas-making-the-inversion-potion-talking-to-arianwyn-again"
+        : "preparing-to-enter-prifddinas-making-the-inversion-potion-talking-to-arianwyn");
+    }
+    if (currentChapter(player) === 11 && npcName === "baxtorian") {
+      const finishedPotion = player.getInventory().getAmount(ItemIdentifiers.INVERSION_POTION) > 0;
+      return startTranscript(api, player, event.npcId, PAGE, finishedPotion
+        ? "preparing-to-enter-prifddinas-making-the-inversion-potion-talking-to-baxtorian-after-finishing-the-potion"
+        : "preparing-to-enter-prifddinas-making-the-inversion-potion-talking-to-baxtorian");
     }
     if (npcName === "edmond" && currentChapter(player) === 2) {
       quest.setStage(player, STAGE.STARTED + 30);
@@ -423,6 +483,25 @@ module.exports = function registerSongOfTheElves(api) {
 
   function handleDialogueChoice(event) {
     if (!event?.player) return;
+    if (event.option === "Yes" && currentChapter(event.player) === 12 &&
+      String(event.definition?.getName?.() ?? "").toLowerCase() === "lord ieuan amlodd") {
+      if (event.player.getInventory().getFreeSlots() < 6) {
+        event.player.sendMessage("You need at least six free inventory spaces before entering the Grand Library.");
+        return;
+      }
+      const player = event.player;
+      const username = player.getUsername?.();
+      const area = new GrandLibraryArea(username);
+      libraryInstances.set(username, area);
+      player.setAttribute(LIBRARY_INSTANCE, area);
+      area.enter(player);
+      const guide = api.spawnNpc({ id: NpcIdentifiers.LORD_IEUAN_AMLODD, x: 2625, y: 6144, z: 0,
+        wanderRadius: 0, owner: player, ownerOnly: true });
+      if (guide) area.add(guide);
+      player.moveTo(new Location(2623, 6144, 0));
+      player.sendMessage("You enter the Grand Library. Its doors seal behind you; find the Seal of the Forgotten in the central chamber.");
+      return;
+    }
     if (event.player.getAttribute(RESISTANCE_BRIEFING) === true && currentChapter(event.player) === 3) {
       event.player.setAttribute(RESISTANCE_BRIEFING, false);
       if (event.option === "I am.") quest.setStage(event.player, STAGE.STARTED + 50);
@@ -658,22 +737,61 @@ module.exports = function registerSongOfTheElves(api) {
     if (!player || currentChapter(player) !== 10 || quest.isComplete(player)) return false;
     const index = PILLAR_ITEMS.findIndex(([id]) => id === event.itemId);
     if (index < 0) return false;
+    const location = event.location ?? event.object?.getLocation?.();
+    const x = location?.x ?? location?.getX?.();
+    const y = location?.y ?? location?.getY?.();
+    const z = location?.z ?? location?.getZ?.();
+    const pillarIndex = FALLS_PILLAR_LOCATIONS.findIndex(([px, py, pz]) => px === x && py === y && pz === z);
+    if (pillarIndex < 0) return false;
     const inventory = player.getInventory();
     if (inventory.getAmount(event.itemId) < 1) return false;
-    const bit = 1 << index;
+    const order = String(player.getAttribute(FALLS_ORDER) ?? "").split(",").map(Number);
+    if (order.length !== PILLAR_ITEMS.length || order.some((value) => !Number.isInteger(value))) {
+      player.sendMessage("The riddle in Ode to Eternity is incomplete. Speak to Arianwyn for another copy.");
+      return true;
+    }
+    const bit = 1 << pillarIndex;
     const placed = Number(player.getAttribute(FALLS_PILLARS)) || 0;
     if (placed & bit) {
       player.sendMessage("You have already placed that item on a pillar.");
       return true;
     }
+    if (order[pillarIndex] !== index) {
+      inventory.deleteNumber(event.itemId, 1);
+      player.sendMessage("The light rejects the item. You will need another one to try that pillar again.");
+      return true;
+    }
     inventory.deleteNumber(event.itemId, 1);
     player.setAttribute(FALLS_PILLARS, placed | bit);
-    player.sendMessage(`You place the ${PILLAR_ITEMS[index][1]} on the pillar. It disappears in a puff of smoke.`);
+    player.sendMessage(`The ${PILLAR_ITEMS[index][1]} disappears into the numbered pillar.`);
     if ((placed | bit) === (1 << PILLAR_ITEMS.length) - 1) {
       quest.setStage(player, STAGE.STARTED + 110);
       player.sendMessage("A hidden passage opens beneath the waterfall.");
     }
     return true;
+  }
+
+  function searchFallsPillar(event) {
+    const player = event?.player;
+    if (!player || currentChapter(player) !== 10 || quest.isComplete(player)) return false;
+    const location = event.object?.getLocation?.();
+    const index = FALLS_PILLAR_LOCATIONS.findIndex(([x, y, z]) =>
+      x === location?.getX?.() && y === location?.getY?.() && z === location?.getZ?.());
+    if (index < 0) return false;
+    event.handled = true;
+    const order = String(player.getAttribute(FALLS_ORDER) ?? "").split(",").map(Number);
+    if (order.length !== PILLAR_ITEMS.length) {
+      player.sendMessage("The markings are too faint to read without Ode to Eternity.");
+      return true;
+    }
+    player.sendMessage(`This is pillar ${index + 1}. The riddle calls for ${PILLAR_ITEMS[order[index]][1]} here.`);
+    return true;
+  }
+
+  function claimFallsPillarLocation(event) {
+    const location = event?.location;
+    if (FALLS_PILLAR_LOCATIONS.some(([x, y, z]) =>
+      x === location?.x && y === location?.y && z === location?.z)) event.claimed = true;
   }
 
   function lightWestArdougneSacks(event) {
@@ -747,7 +865,7 @@ module.exports = function registerSongOfTheElves(api) {
     "jtPiC1": 2, "LeWWCS": 3,
     "Rc0W1H": 7, "UeAKgA": 8,
     "x04RMY": 10, "D1wXY6": 11, "EMxiFg": 11,
-    "ycGZ1J": 12, "koxQh3": 13, "FoLVmk": 14,
+    "ycGZ1J": 12, "eOtNFO": 12, "koxQh3": 13, "FoLVmk": 14,
     "ZYvQiu": 18, "YAPX-R": 19, "FK0kOz": 19,
   };
   quest = registerQuest(api, {
@@ -785,6 +903,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onItemOnNpc(handleItemOnNpc);
   api.persistAttribute(CHEMICAL_CHOICE);
   api.persistAttribute(FALLS_PILLARS);
+  api.persistAttribute(FALLS_ORDER);
   api.persistAttribute(INCITEMENTS);
   api.persistAttribute(RESISTANCE_MEMBERS);
   api.persistAttribute(RESISTANCE_BRIEFING);
@@ -797,12 +916,14 @@ module.exports = function registerSongOfTheElves(api) {
   }
   api.onItemOnObject("Tinderbox", "Sacks", lightWestArdougneSacks, { noted: false });
   api.onItemOnObject("Tinderbox", "Barrel of fish", lightEastDockBarrels, { noted: false });
+  api.onObjectInteraction("Pillar of Light", { Search: searchFallsPillar });
   api.onObjectInteraction("Cabinet", { Search: searchElenaCabinet });
   api.onObjectInteraction("Bed", { Search: searchRehnisonBed });
   api.onObjectInteraction("Trapdoor", { Open: enterResistanceBasement, "Climb-down": enterResistanceBasement });
   api.onObjectInteraction("Staircase", { "Climb-down": enterPrison });
   api.onObjectRoute(routeCastleThroneStairs);
   api.onCustomEvent("ladders:climb", claimCastleThroneStairs);
+  api.onCustomEvent("quest:song-of-the-elves:claims-light-pillar", claimFallsPillarLocation);
   api.onNpcInteraction("Alrena", { "Talk-to": onTalk });
   api.onNpcInteraction("Edmond", { "Talk-to": onTalk });
   api.onNpcInteraction("Elena", { "Talk-to": onTalk });
