@@ -153,6 +153,7 @@ function combatClass() {
       }
       const attacks = (npc.getAttribute?.(Shared.ATTR_ATTACKS) ?? 0) + 1;
       npc.setAttribute(Shared.ATTR_ATTACKS, attacks);
+      npc.setAttribute?.(Shared.ATTR_LAST_ATTACK, core.World.getProcessCycle());
       if (attacks % Shared.SPECIAL_EVERY_ATTACKS === 0) {
         Specials.startSpecial(npc, target);
         return;

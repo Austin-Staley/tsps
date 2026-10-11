@@ -267,6 +267,7 @@ function tick() {
     const players = npc.getPlayersWithinDistance(25);
     if (core.World.getProcessCycle() >= fight.nextHatchAt) {
       fight.nextHatchAt += Shared.HATCH_INTERVAL_TICKS;
+      npc.setAttribute?.(Shared.ATTR_LAST_HATCH, core.World.getProcessCycle());
       Minions.hatchNext(npc);
     }
     tickBall(npc, fight, players);

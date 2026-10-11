@@ -60,7 +60,11 @@ function debugAraxxor({ player }) {
   );
   const playerAttacker = player.getCombat?.().getAttacker?.() ?? null;
   const who = (entity) => !entity ? "none" : entity.isPlayer?.() ? "player" : `npc:${entity.getAsNpc?.().getId?.()}`;
-  let line = `bossHp=${boss.getHitpoints?.()} attacks=${boss.getAttribute?.("araxxor:attacks") ?? 0}` +
+  const cycle = core.World.getProcessCycle();
+  const lastAttack = boss.getAttribute?.(Shared.ATTR_LAST_ATTACK) ?? 0;
+  const lastHatch = boss.getAttribute?.(Shared.ATTR_LAST_HATCH) ?? 0;
+  let line = `cycle=${cycle} bossHp=${boss.getHitpoints?.()} attacks=${boss.getAttribute?.(Shared.ATTR_ATTACKS) ?? 0}` +
+    ` sinceAttack=${lastAttack ? cycle - lastAttack : "-"} sinceHatch=${lastHatch ? cycle - lastHatch : "-"}` +
     ` target=${who(target)} attackedBy=${who(combat?.getAttacker?.())} playerAttacks=${who(playerAttacker)}` +
     ` dist=${Math.max(Math.abs(me.getX() - at.getX()), Math.abs(me.getY() - at.getY()))}`;
   try {
