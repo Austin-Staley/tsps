@@ -46,8 +46,12 @@ function setAraxxorHitpoints({ player, parts }) {
 function debugAraxxor({ player }) {
   const session = Area.sessions.get(player);
   const boss = session?.npc ?? null;
+  const cycle0 = core.World.getProcessCycle();
   if (!boss) {
-    player.sendMessage("You have no active Araxxor.");
+    player.sendMessage(
+      `session=${session ? "yes" : "no"} respawnIn=${session?.respawnAt ? session.respawnAt - cycle0 : "-"}` +
+      ` corpseRegistered=${session?.corpse?.isRegistered?.() ?? "-"} harvested=${session?.harvested ?? "-"} destroyed=${session?.destroyed ?? "-"}`,
+    );
     return true;
   }
   const combat = boss.getCombat?.();
