@@ -165,8 +165,10 @@ function createContext(core, server) {
       }
     }
 
+    const privateArea = p.getPrivateArea?.() ?? null;
+    const viewedArea = privateArea?.countsAsMainWorld() ? null : privateArea;
     return {
-      npcs: World.getNpcs().stream().filter((npc) => npc && near(npc.getLocation())).map((npc) => {
+      npcs: World.getNpcsNear(here, radius, viewedArea).filter((npc) => !npc.isOwnerOnly?.() || npc.getOwner?.() === p).map((npc) => {
         const definition = npc.getCurrentDefinition(p);
         return {
           index: npc.getIndex(), id: npc.getId(), name: definition?.getName(),
