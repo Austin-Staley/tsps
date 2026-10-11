@@ -142,6 +142,8 @@ function spawnEncounter(session) {
   boss.setHitpoints?.(Shared.MAX_HITPOINTS);
   // Roams the lair to melee; without a radius she holds position and never closes.
   boss.getMovementCoordinator?.().setRadius?.(30);
+  // The lair is multiway: the boss and her brood may attack together.
+  boss.setMultiCombat?.(true);
   boss.performAnimation(new core.Animation(11482));
   boss.setAttribute?.(Shared.ATTR_ENCOUNTER, session);
   boss.setAttribute?.(Shared.ATTR_ARMED_AT, core.World.getProcessCycle() + Shared.ARM_TICKS);

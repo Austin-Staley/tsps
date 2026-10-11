@@ -86,6 +86,7 @@ function hatchNext(bossNpc) {
   minion.setFlag?.(core.NPC.WALK_THROUGH_ENTITIES_FLAG, true);
   // Like Vorkath's spawn: a roaming radius, so the engine's pursuit actually walks it in.
   minion.getMovementCoordinator?.().setRadius?.(30);
+  minion.setMultiCombat?.(true);
   area?.add?.(minion);
   core.World.getAddNPCQueue().push(minion);
   session.minions.push(minion);
