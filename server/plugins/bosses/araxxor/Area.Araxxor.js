@@ -140,6 +140,8 @@ function spawnEncounter(session) {
   const boss = core.NPC.create(Shared.BOSS_ID, new core.Location(Shared.SPAWN_TILE[0], Shared.SPAWN_TILE[1], Shared.SPAWN_TILE[2]));
   boss.__skipDefaultRespawn = true;
   boss.setHitpoints?.(Shared.MAX_HITPOINTS);
+  // Roams the lair to melee; without a radius she holds position and never closes.
+  boss.getMovementCoordinator?.().setRadius?.(30);
   boss.performAnimation(new core.Animation(11482));
   boss.setAttribute?.(Shared.ATTR_ENCOUNTER, session);
   boss.setAttribute?.(Shared.ATTR_ARMED_AT, core.World.getProcessCycle() + Shared.ARM_TICKS);

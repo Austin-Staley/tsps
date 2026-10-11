@@ -63,8 +63,8 @@ const FIRST_HATCH_TICKS = 21;
 const HATCH_INTERVAL_TICKS = 42;
 /** Captured: boss + eggs spawn together, first attack 6 ticks after the spawn animation. */
 const ARM_TICKS = 6;
-/** Melee reach: edge-to-edge 4 tiles, like the recordings' crush range. */
-const ATTACK_DISTANCE = 4;
+/** Fires from up to 10 tiles like Vorkath; melee only when edge-adjacent (checked in start). */
+const ATTACK_DISTANCE = 10;
 
 const MELEE_MAX = 38;
 const MAGIC_MAX = 21;
