@@ -26,8 +26,15 @@ function itemId(name) {
   return Number.isInteger(id) ? id : null;
 }
 
-// The fletching knife does everything a knife does.
+// The fletching knife does everything a knife does, and held or worn it cuts logs
+// 1 tick faster after the first item (https://oldschool.runescape.wiki/w/Fletching_knife).
 const KNIFE_IDS = [itemId("KNIFE"), itemId("FLETCHING_KNIFE")];
+
+function fletchingKnifeBonus(player, recipe) {
+  const id = KNIFE_IDS[1];
+  return recipe.fletchingKnifeBonus &&
+    (player.getInventory().contains(id) || player.getEquipment().contains(id)) ? 1 : 0;
+}
 
 function buildRecipe(config) {
   const outputId = itemId(config.output);
@@ -59,6 +66,7 @@ function buildRecipe(config) {
     level: config.level,
     xp: config.xp,
     intervalTicks: config.intervalTicks,
+    fletchingKnifeBonus: config.fletchingKnifeBonus === true,
     animation:
       Number.isInteger(config.animationId) && config.animationId >= 0
         ? new Animation(config.animationId)
@@ -124,6 +132,7 @@ const LOG_RECIPE_DEFINITIONS = [
     level: entry.level,
     xp: entry.xp,
     intervalTicks: TICKS_CUT_LOGS,
+    fletchingKnifeBonus: true,
     animationId: 1248,
     requirements: [
       { item: "KNIFE", amount: 1, consume: false },
@@ -691,7 +700,7 @@ class FletchingTask extends Task {
         continue;
       }
 
-      session.nextActionTick = this.cycle + session.interval;
+      session.nextActionTick = this.cycle + session.interval - fletchingKnifeBonus(player, session.recipe);
 
       if (!performFletchingAction(player, session.recipe)) {
         stopFletchingSession(this.activeSessions, player);
