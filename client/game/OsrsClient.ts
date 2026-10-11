@@ -441,6 +441,11 @@ const SCRIPT_CHATBOX_SEARCH_CLOSE = 138;
 
 // Use shared OSRS rotation scale
 
+/** logout:world_switcher (182:3). */
+const LOGOUT_WORLD_SWITCHER_UID = (182 << 16) | 3;
+/** The logout tab's stone (stone10) in the modern, classic and fixed layouts (rsprox captures). */
+const LOGOUT_STONE_UIDS = new Set([(161 << 16) | 46, (164 << 16) | 34, (548 << 16) | 51]);
+
 export class OsrsClient {
     private static readonly CLIENT_TICK_MS = 20;
     // Maximum amount of client-tick backlog (in ms) we will attempt to simulate.
@@ -3865,7 +3870,11 @@ export class OsrsClient {
     }
 
     handleWidgetAction(event: Parameters<WidgetActionRouter["handleWidgetAction"]>[0]): void {
-        if ((event.widget?.uid | 0) === ((182 << 16) | 3)) {
+        const uid = event.widget?.uid | 0;
+        // The logout tab's "World Switcher" button, and the same option on the logout tab's
+        // stone (stone10 of each layout), open the server list.
+        const worldSwitcherOption = (event.option ?? "").replace(/<[^>]*>/g, "").trim() === "World Switcher";
+        if (uid === LOGOUT_WORLD_SWITCHER_UID || (worldSwitcherOption && LOGOUT_STONE_UIDS.has(uid))) {
             this.processLoginAction({ type: "open_server_list" });
             return;
         }
