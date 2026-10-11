@@ -180,6 +180,8 @@ function createContext(core, server) {
       if (options?.length) objects.push({ id: object.getId(), name: definition.getName(), options, x: at.getX(), y: at.getY() });
     }
 
+    const privateArea = p.getPrivateArea?.() ?? null;
+    const viewedArea = privateArea?.countsAsMainWorld() ? null : privateArea;
     return {
       npcs: World.getNpcsNear(here, radius, viewedArea).filter((npc) => !npc.isOwnerOnly?.() || npc.getOwner?.() === p).map((npc) => {
         const definition = npc.getCurrentDefinition(p);
