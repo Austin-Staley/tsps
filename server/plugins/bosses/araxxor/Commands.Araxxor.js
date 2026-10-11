@@ -81,6 +81,12 @@ function debugAraxxor({ player }) {
   } catch (error) {
     line += ` permErr=${String(error?.message ?? error).slice(0, 90)}`;
   }
+  try {
+    const clip = core.RegionManager.getClipping(me.getX(), me.getY(), me.getZ(), null);
+    line += ` clip=${clip} walkable=${(clip & 0x1280100) === 0} special=${boss.getAttribute?.(Shared.ATTR_SPECIAL) ?? "?"}`;
+  } catch (error) {
+    line += ` clipErr=${String(error?.message ?? error).slice(0, 90)}`;
+  }
   player.sendMessage(line);
   return true;
 }
