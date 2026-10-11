@@ -10,6 +10,7 @@ import type { ClickRegistry } from "../../widgets/gl/click-registry";
 import type { SimpleMenuEntry } from "../../ui/menu/MenuEngine";
 import type { MenuTransformContext } from "../../ui/menu/menuTransforms";
 import type { FontLoader } from "../../widgets/components/TextRenderer";
+import type { IndexedSprite } from "../../rs/sprite/IndexedSprite";
 import type {
     WebGPUSceneExtension,
     WebGPUSceneExtensionContext,
@@ -115,6 +116,8 @@ export type HealthBarEvent = {
 };
 
 export interface ClientPlugin {
+    /** Extra player headicons; return stable, immutable sprites so textures can be reused. */
+    getPlayerHeadIcons?(serverId: number): readonly IndexedSprite[] | undefined;
     transformSceneProgram?(source: ProgramSource): ProgramSource;
     sceneProgramsReady?(renderer: WebGLOsrsRenderer, programs: Program[]): void;
     beforeSceneRender?(renderer: WebGLOsrsRenderer, drawActors: () => void): void;
@@ -157,6 +160,15 @@ export class ClientPluginManager {
 
     add(plugin: ClientPlugin): void {
         this.plugins.push(plugin);
+    }
+
+    playerHeadIcons(serverId: number): IndexedSprite[] {
+        const icons: IndexedSprite[] = [];
+        for (const plugin of this.plugins) {
+            const sprites = plugin.getPlayerHeadIcons?.(serverId);
+            if (sprites) icons.push(...sprites);
+        }
+        return icons;
     }
 
     transformSceneProgram(source: ProgramSource): ProgramSource {

@@ -49,6 +49,8 @@ async function main(): Promise<void> {
             close(): Promise<void> { this.state = "closed"; return Promise.resolve(); }
             resume(): Promise<void> { return Promise.resolve(); }
             createMediaStreamSource(): any { return { connect() {}, disconnect() {} }; }
+            createAnalyser(): any { return { fftSize: 512, sample: 128, disconnect() {},
+                getByteTimeDomainData(samples: Uint8Array) { samples.fill(this.sample); } }; }
             createGain(): any { return { gain: { value: 0 }, connect() {}, disconnect() {} }; }
         },
         RTCPeerConnection: class {
@@ -121,7 +123,32 @@ async function main(): Promise<void> {
     assert.equal(listener.connection.direction, "recvonly");
     assert.equal(listener.connection.tracks, 0);
     listener.connection.ontrack({ track: { kind: "audio" } });
-    assert.ok(listener.source, "Listen plays incoming audio without a microphone");
+    assert.ok(listener.activity.source, "Listen plays incoming audio without a microphone");
+    assert.deepEqual(enginePlugins.playerHeadIcons(2), [], "silence has no speaking icon");
+    assert.deepEqual(enginePlugins.playerHeadIcons(1), [], "Listen has no local microphone icon");
+    const realNow = Date.now;
+    let now = realNow();
+    Date.now = () => now;
+    try {
+        listener.activity.analyser.sample = 129;
+        assert.deepEqual(enginePlugins.playerHeadIcons(2), [], "low background noise stays below the threshold");
+        listener.activity.analyser.sample = 145;
+        const icons = enginePlugins.playerHeadIcons(2);
+        assert.equal(icons.length, 1, "received audio adds a speaker headicon");
+        assert.equal(icons[0].subWidth, 24);
+        assert.equal(icons[0].pixels.length, 24 * 24);
+        listener.activity.analyser.sample = 128;
+        now += 250;
+        assert.equal(enginePlugins.playerHeadIcons(2)[0], icons[0], "short pauses keep the same sprite");
+        now += 101;
+        assert.deepEqual(enginePlugins.playerHeadIcons(2), [], "silence clears the speaking icon");
+        listener.activity.analyser.sample = 145;
+        (plugin as any).audioContext.state = "suspended";
+        assert.deepEqual(enginePlugins.playerHeadIcons(2), [], "suspended audio cannot mark a player speaking");
+        (plugin as any).audioContext.state = "running";
+    } finally {
+        Date.now = realNow;
+    }
 
     assert.equal(click(), true);
     assert.equal(requests, 1, "Listen -> On requests permission synchronously");
@@ -136,6 +163,8 @@ async function main(): Promise<void> {
     await flush();
     const peer = (plugin as any).peers.get(2);
     assert.equal(peer.connection.tracks, 1);
+    (plugin as any).microphoneActivity.analyser.sample = 145;
+    assert.equal(enginePlugins.playerHeadIcons(1).length, 1, "local microphone audio adds the same speaker icon");
     config.setConfiguration("voicechat", "volume", "50");
     assert.equal((plugin as any).peerVolume(2), 0.5);
     assert.equal(click(), true);
@@ -143,6 +172,9 @@ async function main(): Promise<void> {
     assert.equal(stream.track.stops, 1, "On -> Off releases the microphone");
     assert.equal(peer.connection.closed, true, "Off closes listening connections too");
     assert.equal((plugin as any).audioContext, undefined);
+    assert.deepEqual(enginePlugins.playerHeadIcons(1), [], "Off removes the local speaking icon");
+    assert.deepEqual(enginePlugins.playerHeadIcons(2), [], "Off removes remote speaking icons");
+    assert.equal((plugin as any).microphoneActivity, undefined);
     assert.deepEqual(packets.at(-1).data, { type: "voice-state", enabled: false });
     const packetCount = packets.length;
     tick();

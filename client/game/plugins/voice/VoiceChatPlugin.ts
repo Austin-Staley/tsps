@@ -9,18 +9,27 @@ import type { OsrsClient } from "../../OsrsClient";
 import type { WidgetNode } from "../../../widgets/WidgetNode";
 import type { WidgetActionEvent } from "../../widgets/widgetActionPayload";
 import { VoiceChatConfig } from "./VoiceChatConfig";
+import { SPEAKER_HEAD_ICONS } from "./speakerIcon";
+import type { IndexedSprite } from "../../../rs/sprite/IndexedSprite";
 
 // Cache chatbox: report button (162:31), label (162:33).
 const REPORT_BUTTON = (162 << 16) | 31;
 const REPORT_LABEL = (162 << 16) | 33;
 type VoiceMode = "listen" | "on" | "off";
 
+type VoiceActivity = {
+    source: MediaStreamAudioSourceNode;
+    analyser: AnalyserNode;
+    samples: Uint8Array<ArrayBuffer>;
+    speakingUntil: number;
+};
+
 type VoicePeer = {
     connection: RTCPeerConnection;
     connectionId: string;
     gain: GainNode;
     audio: HTMLAudioElement;
-    source?: MediaStreamAudioSourceNode;
+    activity?: VoiceActivity;
     candidates: RTCIceCandidateInit[];
     outgoingCandidates: RTCIceCandidateInit[];
     descriptionSent: boolean;
@@ -56,6 +65,7 @@ export class VoiceChatPlugin extends Plugin {
         lineHeight: WidgetNode["lineHeight"];
     };
     private stream?: MediaStream;
+    private microphoneActivity?: VoiceActivity;
     private audioContext?: AudioContext;
     private iceServers: RTCIceServer[] = [];
     private generation = 0;
@@ -69,6 +79,28 @@ export class VoiceChatPlugin extends Plugin {
     private readonly availablePeers = new Map<number, boolean>();
     private readonly peers = new Map<number, VoicePeer>();
     private readonly retryAt = new Map<number, number>();
+
+    getPlayerHeadIcons(serverId: number): readonly IndexedSprite[] | undefined {
+        if (!this.isEnabled() || !this.ready || this.audioContext?.state !== "running") return;
+        const activity = serverId === this.client.controlledPlayerServerId
+            ? this.microphoneActivity : this.peers.get(serverId)?.activity;
+        if (!activity) return;
+        activity.analyser.getByteTimeDomainData(activity.samples);
+        let power = 0;
+        for (const sample of activity.samples) power += ((sample - 128) / 128) ** 2;
+        const now = Date.now();
+        // Hold through brief gaps between words instead of flickering on every syllable.
+        if (power / activity.samples.length > 0.02 ** 2) activity.speakingUntil = now + 350;
+        return now < activity.speakingUntil ? SPEAKER_HEAD_ICONS : undefined;
+    }
+
+    private createActivity(stream: MediaStream): VoiceActivity {
+        const source = this.audioContext!.createMediaStreamSource(stream);
+        const analyser = this.audioContext!.createAnalyser();
+        analyser.fftSize = 512;
+        source.connect(analyser);
+        return { source, analyser, samples: new Uint8Array(analyser.fftSize), speakingUntil: 0 };
+    }
 
     private readonly resumeAudio = (): void => {
         if (this.audioContext?.state === "suspended") {
@@ -196,7 +228,10 @@ export class VoiceChatPlugin extends Plugin {
                 track.onended = () => this.fail("Microphone disconnected. Select On again to reconnect.");
             }
             await audioReady;
-            if (generation === this.microphoneGeneration) this.updateVoiceState();
+            if (generation === this.microphoneGeneration) {
+                this.microphoneActivity = this.createActivity(stream);
+                this.updateVoiceState();
+            }
         } catch (error) {
             if (generation !== this.microphoneGeneration) return;
             this.releaseMicrophone();
@@ -343,13 +378,14 @@ export class VoiceChatPlugin extends Plugin {
         };
         connection.ontrack = event => {
             if (this.peers.get(id) !== peer || event.track.kind !== "audio") return;
-            peer.source?.disconnect();
+            peer.activity?.source.disconnect();
+            peer.activity?.analyser.disconnect();
             const stream = new MediaStream([event.track]);
             // Chromium needs a playing media element to feed remote RTC audio into Web Audio.
             audio.srcObject = stream;
             void audio.play().catch(error => this.reportError(error));
-            peer.source = this.audioContext!.createMediaStreamSource(stream);
-            peer.source.connect(gain);
+            peer.activity = this.createActivity(stream);
+            peer.activity.source.connect(gain);
         };
         connection.onconnectionstatechange = () => {
             if (this.peers.get(id) === peer && ["failed", "closed"].includes(connection.connectionState)) this.closePeer(id);
@@ -394,7 +430,8 @@ export class VoiceChatPlugin extends Plugin {
         peer.audio.pause();
         peer.audio.srcObject = null;
         peer.audio.remove();
-        peer.source?.disconnect();
+        peer.activity?.source.disconnect();
+        peer.activity?.analyser.disconnect();
         peer.gain.disconnect();
         this.retryAt.set(id, Date.now() + 2000);
     }
@@ -418,6 +455,9 @@ export class VoiceChatPlugin extends Plugin {
     private releaseMicrophone(): void {
         this.microphoneGeneration++;
         this.acquiring = false;
+        this.microphoneActivity?.source.disconnect();
+        this.microphoneActivity?.analyser.disconnect();
+        this.microphoneActivity = undefined;
         for (const track of this.stream?.getTracks() ?? []) {
             track.onended = null;
             track.stop();
