@@ -39,7 +39,8 @@ function setAraxxorHitpoints({ player, parts }) {
     return true;
   }
   boss.setHitpoints(hitpoints);
-  player.sendMessage(`Araxxor now has ${hitpoints} hitpoints.`);
+  const enraged = boss.getAttribute?.(Shared.ATTR_ENRAGED) === true ? " (enraged)" : "";
+  player.sendMessage(`Araxxor now has ${hitpoints} hitpoints${enraged}.`);
   return true;
 }
 

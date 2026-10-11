@@ -44,8 +44,9 @@ const EGG_TILES = Object.freeze([
   [3631, 9826], [3637, 9826], [3644, 9823],
 ]);
 
-/** The lair interior: entering it grows the per-player instance, leaving destroys it. */
-const LAIR = Object.freeze({ minX: 3615, maxX: 3655, minY: 9797, maxY: 9835 });
+/** The lair interior: entering it grows the per-player instance, leaving destroys it.
+ * The east wall's web tile (3655) stays outside, so the tunnel decides entry. */
+const LAIR = Object.freeze({ minX: 3615, maxX: 3654, minY: 9797, maxY: 9835 });
 
 /** The three fixed egg patterns; the first egg's type picks the special for the fight. */
 const PATTERNS = Object.freeze([
@@ -103,7 +104,8 @@ const POOL_DAMAGE_STEP = 2;
 const POOL_MAX_DAMAGE = 20;
 const DRIP_FOLLOW_TICKS = 6;
 
-const CORPSE_TICKS = 25;
+/** The corpse lingers half a minute (Wiki) before sinking; the fight resets after. */
+const CORPSE_TICKS = 50;
 const RESPAWN_TICKS = 10;
 const HARVEST_ANIMATION = 2282;
 const NID_ITEM_ID = 29836;

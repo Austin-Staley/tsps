@@ -57,8 +57,15 @@ function protections(target) {
   };
 }
 
-/** Range when the player's ranged defence is the lower of the two, magic otherwise (Near-Reality). */
+/**
+ * Out of melee reach she attacks with the style the player is not protected from: missiles
+ * up means magic, magic up means missiles (the recordings mix both as prayers flick), and
+ * with neither prayer she uses whichever defence is lower (Wiki; Near-Reality).
+ */
 function chooseDistantAttack(player) {
+  const prayer = protections(player);
+  if (prayer.ranged) return Shared.Attack.MAGIC;
+  if (prayer.magic) return Shared.Attack.RANGED;
   const BonusManager = api.getBonusManager();
   const defence = core.AccuracyFormulasDpsCalc.defenceBonus;
   const rangedDefence = defence(player, BonusManager.DEFENCE_RANGE);
@@ -169,6 +176,8 @@ function combatClass() {
       this.attack = isAdjacent(npc, target)
         ? Shared.Attack.MELEE
         : chooseDistantAttack(target.getAsPlayer());
+      // Captured: she turns to the player with every attack.
+      npc.setPositionToFace?.(target.getLocation());
       if (this.attack === Shared.Attack.MELEE) {
         npc.performAnimation(new core.Animation(BOSS_ANIMATIONS.melee));
       } else {

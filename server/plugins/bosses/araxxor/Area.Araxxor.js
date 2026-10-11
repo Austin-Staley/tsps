@@ -101,6 +101,8 @@ function destroyArea(player) {
   if (area instanceof AraxxorPrivateArea && area.isDestroyed?.() !== true) {
     area.destroy();
   }
+  // Shots already in flight die with the instance: nothing follows the player out.
+  player.getCombat?.().getHitQueue?.().clear?.();
 }
 
 function moveIntoArea(player, area) {

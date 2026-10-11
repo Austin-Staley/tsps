@@ -59,6 +59,8 @@ function spawnEggs(session) {
     const egg = core.NPC.create(Shared.EGG_ID[type], new core.Location(x, y, 0));
     egg.__skipDefaultRespawn = true;
     egg.setHitpoints?.(Shared.EGG_HITPOINTS);
+    // Eggs sit where they were laid: no wander, no step toward whoever hits them.
+    egg.getMovementCoordinator?.().setRadius?.(0);
     egg.performAnimation(new core.Animation(EGG_ANIMATION));
     egg.setAttribute?.(Shared.ATTR_ENCOUNTER, session);
     area?.add?.(egg);
@@ -193,10 +195,14 @@ function modifyHit(event) {
   ]);
 }
 
-/** The eggs themselves are inert: no attacks, no retaliation. */
+/** The eggs themselves are inert: no attacks, no retaliation, no pursuit. */
 function eggClass() {
   const { CombatMethod, CombatType } = core;
   return class AraxyteEggCombat extends CombatMethod {
+    canAttack() {
+      return false;
+    }
+
     start() {}
 
     hits() {
