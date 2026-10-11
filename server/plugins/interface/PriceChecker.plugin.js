@@ -4,11 +4,11 @@ const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
 const { PlayerStatus } = require("../../src/main/typescript/elvarg/game/model/PlayerStatus");
 const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
 const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
-const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
 
 // OpenRune cache names: interface.ge_pricechecker and interface.ge_pricechecker_side.
 const PRICE_CHECKER_INTERFACE_ID = 464;
 const PRICE_CHECKER_SIDE_INTERFACE_ID = 238;
+const SIDE_MODAL = (161 << 16) | 74; // toplevel_osrs_stretch:sidemodal, as the GE and bank use
 const PRICE_CHECKER_CONTAINER_ID = (PRICE_CHECKER_INTERFACE_ID << 16) | 2;
 const PRICE_CHECKER_INVENTORY_CONTAINER_ID = (PRICE_CHECKER_SIDE_INTERFACE_ID << 16) | 0;
 const OPEN_PRICE_CHECKER_BUTTON = (387 << 16) | 3; // component.wornitems:pricechecker
@@ -36,6 +36,10 @@ class PriceCheckerContainer extends ItemContainer {
       this.player.getInterfaceId?.() !== PRICE_CHECKER_INTERFACE_ID;
     this.player.setStatus(PlayerStatus.PRICE_CHECKING);
     this.player.getMovementQueue().reset();
+    this.player
+      .getPacketSender()
+      .sendInterface(PRICE_CHECKER_INTERFACE_ID)
+      .sendSubInterface(SIDE_MODAL, PRICE_CHECKER_SIDE_INTERFACE_ID, 3);
     this.refreshItems();
     if (opening) {
       Sounds.sendSound(this.player, Sound.CONTAINER_OPEN);
@@ -57,12 +61,11 @@ class PriceCheckerContainer extends ItemContainer {
     }
     this.player
       .getPacketSender()
-      .sendInterfaceSet(PRICE_CHECKER_INTERFACE_ID, PRICE_CHECKER_SIDE_INTERFACE_ID)
       .sendInterfaceFlagsRange(PRICE_CHECKER_CONTAINER_ID, 0, PRICE_CHECKER_SLOTS - 1, PRICE_CHECKER_ITEM_FLAGS)
       .sendInterfaceFlagsRange(PRICE_CHECKER_INVENTORY_CONTAINER_ID, 0, PRICE_CHECKER_SLOTS - 1, PRICE_CHECKER_ITEM_FLAGS)
       .sendInterfaceScript(785, prices)
       .sendString(
-        `Total guide price:<br><col=ffffff>${Misc.insertCommasToNumber(Math.min(total, Number.MAX_SAFE_INTEGER))}</col>`,
+        `Total guide price:<br><col=ffffff>${Math.min(total, Number.MAX_SAFE_INTEGER).toLocaleString("en-US")}</col>`,
         PRICE_CHECKER_OUTPUT
       );
     this.player
@@ -154,6 +157,18 @@ class PriceCheckerContainer extends ItemContainer {
     }
     return false;
   }
+}
+
+// Closing the price checker (or logging out) hands everything back, like OSRS.
+function returnItems({ player, interfaceId }) {
+  const priceChecker = player?.__priceCheckerContainer;
+  if (interfaceId !== PRICE_CHECKER_INTERFACE_ID || !priceChecker) {
+    return;
+  }
+  for (const item of priceChecker.getValidItems()) {
+    priceChecker.switchItems(player.getInventory(), item.clone(), false, false);
+  }
+  player.getInventory().refreshItems();
 }
 
 function getPriceChecker(player) {
@@ -251,27 +266,23 @@ function handlePriceCheckerWithdraw(player, itemId, slot, clickType) {
 module.exports = {
   name: "PriceChecker",
   register(api) {
+    api.onCustomEvent("interface:closed", returnItems);
     api.onInterfaceActionButton(
       [OPEN_PRICE_CHECKER_BUTTON, PRICE_CHECKER_DEPOSIT_ALL_BUTTON],
       ({ player, buttonId }) => handlePriceCheckerButton(player, buttonId)
     );
 
-    // Clicking an item in the price checker's own inventory-mirror panel
-    // (widget PRICE_CHECKER_INVENTORY_CONTAINER_ID) always matches the
-    // player's real inventory slot-for-slot, so the live widget_action
-    // dispatch (NetworkBuilder.ts) routes it through the same inventory
-    // item-click path as any other inventory click.
-    api.onItemAction((event) => {
-      if (event.interfaceId !== PRICE_CHECKER_INVENTORY_CONTAINER_ID) {
-        return;
+    // Both item panels (238:0 mirrors the inventory slot-for-slot) arrive through
+    // the generic interface-action path, not the main inventory's item actions.
+    api.onInterfaceActionButton(
+      PRICE_CHECKER_INVENTORY_CONTAINER_ID,
+      ({ player, action, itemId, slot }) => {
+        if (itemId == null || slot == null) {
+          return false;
+        }
+        return handlePriceCheckerDeposit(player, itemId, slot, action);
       }
-      if (handlePriceCheckerDeposit(event.player, event.itemId, event.slot, event.clickType)) {
-        event.handled = true;
-      }
-    });
-
-    // The price checker's own container never matches a real inventory slot,
-    // so those clicks fall through to the generic interface-action path instead.
+    );
     api.onInterfaceActionButton(
       PRICE_CHECKER_CONTAINER_ID,
       ({ player, action, itemId, slot }) => {

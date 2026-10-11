@@ -26,6 +26,9 @@ function itemId(name) {
   return Number.isInteger(id) ? id : null;
 }
 
+// The fletching knife does everything a knife does.
+const KNIFE_IDS = [itemId("KNIFE"), itemId("FLETCHING_KNIFE")];
+
 function buildRecipe(config) {
   const outputId = itemId(config.output);
   if (!Number.isInteger(outputId)) {
@@ -40,6 +43,7 @@ function buildRecipe(config) {
     }
     requirements.push({
       id: reqItemId,
+      ids: reqItemId === KNIFE_IDS[0] ? KNIFE_IDS : [reqItemId],
       amount: Number.isInteger(req.amount) && req.amount > 0 ? req.amount : 1,
       consume: req.consume !== false,
     });
@@ -527,9 +531,13 @@ function stopFletchingSession(activeSessions, player, resetAnimation = true) {
   }
 }
 
+function heldAmount(inventory, req) {
+  return req.ids.reduce((total, id) => total + inventory.getAmount(id), 0);
+}
+
 function hasRequirements(inventory, recipe) {
   for (const req of recipe.requirements) {
-    if (inventory.getAmount(req.id) < req.amount) {
+    if (heldAmount(inventory, req) < req.amount) {
       return false;
     }
   }
@@ -540,7 +548,7 @@ function maxCraftable(inventory, recipe) {
   let max = Number.MAX_SAFE_INTEGER;
   for (const req of recipe.requirements) {
     if (!req.consume) {
-      if (inventory.getAmount(req.id) <= 0) {
+      if (heldAmount(inventory, req) <= 0) {
         return 0;
       }
       continue;
@@ -793,9 +801,8 @@ module.exports = {
     api.onItemOnItem((event) => {
       const { player, usedItemId, usedWithItemId } = event;
 
-      const knifeId = itemId("KNIFE");
-      if (usedItemId === knifeId || usedWithItemId === knifeId) {
-        const logId = usedItemId === knifeId ? usedWithItemId : usedItemId;
+      if (KNIFE_IDS.includes(usedItemId) || KNIFE_IDS.includes(usedWithItemId)) {
+        const logId = KNIFE_IDS.includes(usedItemId) ? usedWithItemId : usedItemId;
         const recipes = resolveKnifeOnLogsRecipe(logId);
         if (!recipes) {
           return;
