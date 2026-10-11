@@ -35,6 +35,9 @@ const COUNT_DRAYNOR_TELEPORT_DESTINATION = new Location(3077, 9772, 0);
 const DERANGED_ARCHAEOLOGIST_TELEPORT_DESTINATION = new Location(3682, 3718, 0);
 // Elvarg lives in the Crandor/Karamja dungeon lair (OSRS).
 const ELVARG_TELEPORT_DESTINATION = new Location(2852, 9637, 0);
+// Vorkath sleeps in the centre of Ungael's crater (2269, 4062); land outside by
+// the ice-chunks wall and climb over.
+const VORKATH_TELEPORT_DESTINATION = new Location(2272, 4052, 0);
 const BOSS_TELEPORT_DESTINATIONS = new Map([
   [28151, new Location(3290, 3847, 0)], // Callisto
   [28152, new Location(3261, 3927, 0)], // Chaos Elemental
@@ -224,6 +227,7 @@ function getBossTeleportPages() {
         { label: "Count Draynor", destination: BOSS_TELEPORT_DESTINATIONS.get(28159) },
         { label: "Deranged Archaeologist", destination: DERANGED_ARCHAEOLOGIST_TELEPORT_DESTINATION },
         { label: "Elvarg", destination: ELVARG_TELEPORT_DESTINATION },
+        { label: "Vorkath", destination: VORKATH_TELEPORT_DESTINATION },
         { label: "Back", nextPage: 1 },
         { label: "Close", close: true },
       ],
