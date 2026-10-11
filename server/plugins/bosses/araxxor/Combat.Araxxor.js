@@ -214,7 +214,20 @@ function combatClass() {
         : Shared.ATTACK_SPEED_TICKS;
     }
 
+    /**
+     * The engine asks type() before start() picks this cycle's attack, so it must read the
+     * distance itself: melee reach next to the player, magic/ranged from further out. With
+     * the stale last-attack type the boss would only ever walk in for melee.
+     */
     type() {
+      const npc = this.npc;
+      const target = npc?.getCombat?.().getTarget?.() ?? null;
+      if (npc && target) {
+        if (isAdjacent(npc, target)) return CombatType.MELEE;
+        return target.isPlayer?.() && chooseDistantAttack(target.getAsPlayer()) === Shared.Attack.RANGED
+          ? CombatType.RANGED
+          : CombatType.MAGIC;
+      }
       if (this.attack === Shared.Attack.MELEE || this.attack === Shared.Attack.CLEAVE) return CombatType.MELEE;
       if (this.attack === Shared.Attack.RANGED) return CombatType.RANGED;
       return CombatType.MAGIC;
