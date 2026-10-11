@@ -222,11 +222,6 @@ export class PacketSender {
     ))) return this;
   }
 
-  sendPoisonType(type: number): this {
-    this.player.getSession().write(new PacketBuilder(184).put(type));
-    return this;
-  }
-
   getVarp(id: number): number {
     return this.varps.get(id) ?? 0;
   }

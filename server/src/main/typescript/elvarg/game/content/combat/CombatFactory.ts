@@ -1027,7 +1027,6 @@ export class CombatFactory {
             if (!alreadyPoisoned) {
                 player.sendMessage("You have been poisoned!");
             }
-            player.getPacketSender().sendPoisonType(poisonOrbType);
         }
 
         entity.setVenomed(isVenom);
