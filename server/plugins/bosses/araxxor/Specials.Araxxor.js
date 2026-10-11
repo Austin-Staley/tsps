@@ -52,8 +52,16 @@ function alive(entity) {
 function getFight(npc) {
   let fight = fights.get(npc);
   if (!fight) {
-    console.log("[araxxor-fight] CREATED for npc", npc?.getId?.(), "cycle", core.World.getProcessCycle());
-    fight = { pools: new Map(), standing: new Map(), ball: null, ballTiles: 0, drips: [], nextHatchAt: 0 };
+    // Any creation starts the hatch clock: a fight rebuilt mid-battle (a stale cleanup)
+    // must never hatch every tick from a zero timer.
+    fight = {
+      pools: new Map(),
+      standing: new Map(),
+      ball: null,
+      ballTiles: 0,
+      drips: [],
+      nextHatchAt: core.World.getProcessCycle() + Shared.FIRST_HATCH_TICKS,
+    };
     fights.set(npc, fight);
   }
   return fight;
@@ -84,7 +92,6 @@ function spawnPool(npc, x, y) {
 function initFight(npc) {
   const fight = getFight(npc);
   fight.nextHatchAt = core.World.getProcessCycle() + Shared.FIRST_HATCH_TICKS;
-  console.log("[araxxor-fight] INIT next", fight.nextHatchAt, "cycle", core.World.getProcessCycle());
   return fight;
 }
 
@@ -265,13 +272,16 @@ function tickPools(npc, fight, players) {
 
 function tick() {
   for (const [npc, fight] of fights) {
+    // A freshly spawned boss sits in the add queue for a tick before it registers: that is
+    // not a dead fight, and cleaning up here would drop its hatch clock.
     if (!alive(npc)) {
-      endFight(npc);
+      if (!core.World.getAddNPCQueue().includes(npc)) {
+        endFight(npc);
+      }
       continue;
     }
     const players = npc.getPlayersWithinDistance(25);
     if (core.World.getProcessCycle() >= fight.nextHatchAt) {
-      console.log("[araxxor-hatch] cycle", core.World.getProcessCycle(), "next", fight.nextHatchAt, "fights", fights.size);
       fight.nextHatchAt += Shared.HATCH_INTERVAL_TICKS;
       Minions.hatchNext(npc);
     }
@@ -315,7 +325,6 @@ function acidicAraxyteDied({ npc }) {
 function endFight(npc) {
   const fight = fights.get(npc);
   if (!fight) return;
-  console.log("[araxxor-fight] END for npc", npc?.getId?.(), "cycle", core.World.getProcessCycle(), new Error().stack?.split("\n")[2]?.trim());
   for (const object of fight.pools.values()) {
     core.ObjectManager.deregister(object, true);
   }
