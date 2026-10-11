@@ -170,6 +170,7 @@ function createContext(core, server) {
         const definition = npc.getCurrentDefinition(p);
         return {
           index: npc.getIndex(), id: npc.getId(), name: definition?.getName(),
+          hitpoints: npc.getHitpoints(), maxHitpoints: npc.getMaxHitpoints(),
           options: (definition?.getActions() ?? []).filter(Boolean), ...tile(npc.getLocation()),
         };
       }),
