@@ -16,6 +16,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     HIDEOUT: 20,
     SLEPE: 30,
     CASTLE: 40,
+    ESCAPE: 45,
     BLOOD_HUNT: 50,
     PREPARATIONS: 60,
     SIEGE: 70,
@@ -29,6 +30,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     [STAGE.HIDEOUT, "starting-out-in-the-myreque-hideout"],
     [STAGE.SLEPE, "the-truth-hurtz"],
     [STAGE.CASTLE, "escape-from-castle-drakan"],
+    [STAGE.ESCAPE, "blood-hunt"],
     [STAGE.BLOOD_HUNT, "blood-hunt"],
     [STAGE.PREPARATIONS, "hallowed-preparations"],
     [STAGE.SIEGE, "drakan-s-siege"],
@@ -106,7 +108,6 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!player || quest.isComplete(player)) return;
     const next = ACTION_STAGE[event.stepId];
     if (next) advance(player, next);
-    if (event.stepId === "D5qF0g" || event.stepId === "sw9z49") advance(player, STAGE.FINAL);
     if (event.stepId === "BzMe5D") quest.complete(player);
   }
 
@@ -136,12 +137,12 @@ module.exports = function registerTheBloodMoonRises(api) {
   function buildJournal(player) {
     if (quest.isComplete(player)) return ["Lowerniel Drakan has fallen.", "The Myreque's long struggle is over."];
     const value = stage(player);
-    if (value >= STAGE.WYRDS) return ["Lowerniel Drakan has begun the Night of the Blood Moon.", "I must return through the northern door and stop him."];
+    if (value >= STAGE.FINAL) return ["Lowerniel Drakan has begun the Night of the Blood Moon.", "I must return through the northern door and stop him."];
     if (value >= STAGE.THEATRE) return ["Safalaan is becoming a wyrd.", "I must help Veliaf defeat him before he loses himself."];
     if (value >= STAGE.SIEGE) return ["The aranei hideout is under attack.", "I must help defend the bridge and protect the portal."];
     if (value >= STAGE.PREPARATIONS) return ["Sugadinti's followers are preparing to face Lowerniel.", "I should speak to Veliaf when I am ready."];
     if (value >= STAGE.BLOOD_HUNT) return ["I have escaped into Vampyrium.", "I must find the group and survive the hunt."];
-    if (value >= STAGE.TEMPLE) return ["Lowerniel has begun hunting us in Vampyrium.", "I must help the group escape through the forest."];
+    if (value >= STAGE.ESCAPE) return ["I am fleeing Castle Drakan with the others.", "I must escape the vampyres and get clear of the castle."];
     if (value >= STAGE.CASTLE) return ["I am trapped inside Castle Drakan.", "I must find the others and escape."];
     if (value >= STAGE.SLEPE) return ["I need to investigate the events in Slepe and Castle Drakan.", "I should follow Ivan's leads."];
     if (value >= STAGE.HIDEOUT) return ["Ivan has agreed to help me reach Castle Drakan.", "I should make sure we are both disguised before we leave."];
@@ -170,7 +171,9 @@ module.exports = function registerTheBloodMoonRises(api) {
   const ACTION_STAGE = {
     "gzCVlH": STAGE.SLEPE,
     "fiqzZ7": STAGE.SLEPE,
-    "XqVfhB": STAGE.BLOOD_HUNT,
+    "XqVfhB": STAGE.ESCAPE,
+    "D5qF0g": STAGE.BLOOD_HUNT,
+    "sw9z49": STAGE.BLOOD_HUNT,
     "lKvIyH": STAGE.BLOOD_HUNT,
     "kfvYPl": STAGE.PREPARATIONS,
     "Sut83Q": STAGE.SIEGE,
@@ -192,7 +195,6 @@ module.exports = function registerTheBloodMoonRises(api) {
     rewardItemLabel: "Tome of Experience (six chapters)",
     otherRewards: ["Access to Vampyrium", "A Hallowed flail", "Sunspear", "The vampyres of Morytania are tolerant of you"],
     buildJournal,
-    onReward(player) { player.setAttribute(ATTRIBUTE, 6); },
   });
   api.persistAttribute(ATTRIBUTE);
   api.onCustomEvent("npc-dialogue:hook", onStartHook);
