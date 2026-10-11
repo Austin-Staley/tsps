@@ -304,7 +304,10 @@ function flatten(steps, opts = {}) {
     if (opts.stopped) break;
     const step = steps[position];
     if (step.type === "jump") {
-      const target = resolveJump(step, steps[position - 1]);
+      // Some wiki exports inline the target body on a "continue" jump instead
+      // of storing it in the page-level jump table. Prefer that body so nested
+      // quest branches do not stop at the jump marker.
+      const target = Array.isArray(step.steps) ? step.steps : resolveJump(step, steps[position - 1]);
       // "end": a jump we cannot replay. Stop rather than leak into the next step.
       if (target === "end") {
         out.push({ type: "end" });
