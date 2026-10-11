@@ -141,11 +141,60 @@ function animateAndSound(player, { anim, sound }) {
 }
 
 /**
+ * An entry with `walk` crawls instead of jumping: the animation and sound play, then the
+ * player moves a tile a tick to the destination (the web tunnels), the crawl held throughout.
+ */
+function crawl(player, entry, destination) {
+  const { Task, TaskManager } = core;
+  const movement = player.getMovementQueue();
+  if (movement.isMovementBlocked()) return;
+  const start = player.getLocation().clone();
+  const dest = new core.Location(destination[0], destination[1], destination[2]);
+  const steps = Math.max(Math.abs(dest.getX() - start.getX()), Math.abs(dest.getY() - start.getY()));
+  if (steps === 0) return;
+  const animTick = fromClick(entry.animTick ?? entry.tick ?? 0);
+  const privateArea = player.getPrivateArea();
+  movement.setBlockMovement(true).reset();
+  let tick = 0;
+  TaskManager.submit(new (class extends Task {
+    constructor() { super(1, player, false); }
+    execute() {
+      tick++;
+      if (!player.isRegistered() || player.getHitpoints() <= 0 || player.getPrivateArea() !== privateArea) {
+        this.stop();
+        return;
+      }
+      if (tick === animTick) {
+        animateAndSound(player, entry);
+        return;
+      }
+      if (tick < animTick) return;
+      const step = Math.min(tick - animTick, steps);
+      player.moveTo(new core.Location(
+        start.getX() + Math.sign(dest.getX() - start.getX()) * Math.min(step, Math.abs(dest.getX() - start.getX())),
+        start.getY() + Math.sign(dest.getY() - start.getY()) * Math.min(step, Math.abs(dest.getY() - start.getY())),
+        dest.getZ(),
+      ));
+      if (entry.anim !== undefined) player.performAnimation(new core.Animation(entry.anim));
+      if (step >= steps) this.stop();
+    }
+    stop() {
+      movement.setBlockMovement(false);
+      super.stop();
+    }
+  })());
+}
+
+/**
  * A loc teleport: animation and sound (and the fade out) on the animation's tick, the minimap
  * off a tick later, the move, then the fade back in a tick after it and the overlay closed two
  * ticks later.
  */
 function travel(player, entry, destination, answer = null) {
+  if (entry.walk && answer === null) {
+    crawl(player, entry, destination);
+    return;
+  }
   const { steps, at } = schedule();
   // After a question, the captured ticks count from the answer, which is handled on its own tick.
   const animTick = answer ? answer.animTick : fromClick(entry.animTick ?? entry.tick);

@@ -101,10 +101,13 @@ function checkEnrage(npc) {
   if (hp > Math.floor(Shared.MAX_HITPOINTS * Shared.ENRAGE_THRESHOLD)) return;
   npc.setAttribute(Shared.ATTR_ENRAGED, true);
   npc.performAnimation(new core.Animation(BOSS_ANIMATIONS.enrage));
+  const fighter = npc.getCombat?.().getTarget?.();
+  for (const [sound, delay] of Shared.ENRAGE_SOUNDS.first) Shared.playSound(fighter, sound, delay);
   npc.getMovementQueue?.().setBlockMovement?.(true);
   afterTicks(2, npc, () => {
     if (!alive(npc)) return;
     npc.performAnimation(new core.Animation(BOSS_ANIMATIONS.enraged));
+    for (const [sound, delay] of Shared.ENRAGE_SOUNDS.second) Shared.playSound(fighter, sound, delay);
     npc.getMovementQueue?.().setBlockMovement?.(false);
   });
 }

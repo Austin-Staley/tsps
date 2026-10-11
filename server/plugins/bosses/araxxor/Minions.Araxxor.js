@@ -119,6 +119,24 @@ function crumbleAll(bossNpc) {
   session.minions.length = 0;
 }
 
+/**
+ * Edge-to-edge distance between the minion's footprint and its target: the engine stops a
+ * pursuer at this distance, so the Ruptura's burst must measure it the same way or never
+ * fires (base-to-base distance stays larger than its 2-tile reach).
+ */
+function edgeDistance(npc, target) {
+  const base = npc.getLocation();
+  const size = Math.max(1, npc.getSize?.() ?? 1);
+  const pos = target.getLocation();
+  const maxX = base.getX() + size - 1;
+  const maxY = base.getY() + size - 1;
+  const dx = pos.getX() < base.getX() ? base.getX() - pos.getX()
+    : pos.getX() > maxX ? pos.getX() - maxX : 0;
+  const dy = pos.getY() < base.getY() ? base.getY() - pos.getY()
+    : pos.getY() > maxY ? pos.getY() - maxY : 0;
+  return Math.max(dx, dy);
+}
+
 /** The Ruptura's burst: 11510, then 2 ticks later the spider and boss both take it. */
 function explodeRuptura(npc, target) {
   if (npc.getAttribute?.(RUPTURA_BURST_ATTRIBUTE) === true) return;
@@ -232,10 +250,7 @@ function minionClass() {
       if (!npc || !target) return;
       const id = npc.getId();
       if (id === Shared.MINION_ID.ruptura) {
-        const pos = target.getLocation();
-        const base = npc.getLocation();
-        const distance = Math.max(Math.abs(pos.getX() - base.getX()), Math.abs(pos.getY() - base.getY()));
-        if (distance <= 2) {
+        if (edgeDistance(npc, target) <= 2) {
           this.attack = "burst";
           explodeRuptura(npc, target);
         }
@@ -305,5 +320,6 @@ module.exports = {
   instantKillWeapon,
   minionClass,
   eggClass,
-  _test: { instantKillWeapon },
+  edgeDistance,
+  _test: { instantKillWeapon, edgeDistance },
 };

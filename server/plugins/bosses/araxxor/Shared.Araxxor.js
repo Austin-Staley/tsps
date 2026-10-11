@@ -115,6 +115,20 @@ const DESTROY_PET_RATE = 1500;
 const CORPSE_DESTROY_PROMPT =
   "Destroying the corpse will give no loot, but doubles your chance of receiving Nid (1/1500 instead of 1/3000). Are you sure you want to destroy it?";
 
+/**
+ * The enrage's screech, as the animations' embedded sounds read in the cache: 11488 rings
+ * 9478/9391/9409 (frames 1/3/8) and 11489 rings 9480/9391/9478 (frames 1/8/10). Delays are
+ * client cycles (three per frame).
+ */
+const ENRAGE_SOUNDS = Object.freeze({
+  first: Object.freeze([[9478, 0], [9391, 9], [9409, 24]]),
+  second: Object.freeze([[9480, 0], [9391, 24], [9478, 30]]),
+});
+
+function playSound(player, id, delay = 0) {
+  player?.getPacketSender?.()?.sendSoundEffect(id, 1, delay);
+}
+
 /** NPC attribute keys (kebab-case, namespaced). */
 const ATTR_ATTACKS = "araxxor:attacks";
 const ATTR_ARMED_AT = "araxxor:armed-at";
@@ -260,6 +274,8 @@ module.exports = {
   ATTR_DYING,
   ATTR_ENCOUNTER,
   ATTR_SPECIAL,
+  ENRAGE_SOUNDS,
+  playSound,
   Attack,
   SPECIAL_FOR_PRIMARY,
   edgeDistance,
