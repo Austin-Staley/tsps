@@ -145,6 +145,8 @@ function startBall(npc, target) {
   if (area?.isDestroyed?.() === true) return;
   const ball = core.NPC.create(Shared.BALL_ID, new core.Location(x, y, npc.getLocation().getZ()));
   ball.__skipDefaultRespawn = true;
+  // The cache has no hitpoints for 13676 (-1); the tracker's alive() needs a positive one.
+  ball.setHitpoints?.(1);
   // Rolls through bodies, notably the boss's own 7x7, instead of stalling on them.
   ball.setFlag?.(core.NPC.WALK_THROUGH_ENTITIES_FLAG, true);
   area?.add?.(ball);
@@ -157,7 +159,7 @@ function startBall(npc, target) {
 function tickBall(npc, fight, players) {
   const ball = fight.ball;
   if (!ball) return;
-  if (!alive(ball) || (npc.getPrivateArea?.() ?? null)?.isDestroyed?.() === true) {
+  if (!ball.isRegistered?.() || (npc.getPrivateArea?.() ?? null)?.isDestroyed?.() === true) {
     fight.ball = null;
     return;
   }
@@ -282,7 +284,7 @@ function endFight(npc) {
   fight.pools.clear();
   fight.standing.clear();
   fight.drips.length = 0;
-  if (fight.ball && alive(fight.ball)) {
+  if (fight.ball?.isRegistered?.()) {
     core.World.getRemoveNPCQueue().push(fight.ball);
   }
   fight.ball = null;
