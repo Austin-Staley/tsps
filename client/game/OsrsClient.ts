@@ -7662,6 +7662,7 @@ export class OsrsClient {
         const sid = serverId | 0;
         const key = `sid:${sid}`;
         const instance = this.npcInstances.instanceMap.get(key);
+        console.info("[npc-models] customisation for", sid, "entries", entries.length, "instance?", !!instance);
         if (!instance) return;
         const baseId = baseNpcTypeId(instance.typeId);
         if (entries.length === 0) {

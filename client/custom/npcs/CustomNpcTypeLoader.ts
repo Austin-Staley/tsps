@@ -21,6 +21,7 @@ export class CustomNpcTypeLoader implements NpcTypeLoader {
         if (cached) {
             return cached;
         }
+        console.info("[npc-models] resolving synthetic type", id, "base", override.baseId, "models", JSON.stringify(override.models));
         const baseType = this.base.load(override.baseId);
         const clone = Object.assign(Object.create(Object.getPrototypeOf(baseType)), baseType) as NpcType;
         const models = (baseType.modelIds ?? []).slice();

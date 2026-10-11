@@ -139,6 +139,7 @@ function registerInstanceModelOverrides(instances: NpcInstance[] | undefined): v
     for (const instance of instances ?? []) {
         const override = instance?.modelOverride;
         if (override) {
+            console.info("[npc-models] worker registers", instance.typeId, "models", override.models.length);
             registerNpcModelOverrideWithId(instance.typeId | 0, override.baseId | 0, override.models);
         }
     }
