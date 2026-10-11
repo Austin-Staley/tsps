@@ -5,6 +5,7 @@
  * disconnecting destroys it; NPCs, pool objects and drops go with it.
  */
 const Shared = require("./Shared.Vorkath");
+const CombatAchievements = require("./CombatAchievements.Vorkath");
 const Hud = require("./Hud.Vorkath");
 
 /** Crater interior: the wall line y=4053 stays outside so climbers arrive cleanly. */
@@ -55,8 +56,14 @@ function defineAreaClass() {
       super.destroy();
     }
 
+    /** Per tick, players in the crater only: what the Combat Achievements watch. */
+    process(mobile) {
+      if (mobile?.isPlayer?.()) CombatAchievements.tick(mobile.getAsPlayer());
+    }
+
     postLeave(mobile, logout) {
       if (mobile?.isPlayer?.()) {
+        CombatAchievements.left(mobile.getAsPlayer());
         clearArea(mobile.getAsPlayer(), this);
       }
       super.postLeave(mobile, logout);

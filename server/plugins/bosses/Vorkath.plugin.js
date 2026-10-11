@@ -10,6 +10,7 @@ const Combat = require("./vorkath/Combat.Vorkath");
 const Specials = require("./vorkath/Specials.Vorkath");
 const Area = require("./vorkath/Area.Vorkath");
 const Hud = require("./vorkath/Hud.Vorkath");
+const CombatAchievements = require("./vorkath/CombatAchievements.Vorkath");
 
 module.exports = {
   name: "Vorkath",
@@ -20,5 +21,6 @@ module.exports = {
     Specials.attach(api);
     Area.attach(api);
     Hud.attach(api);
+    CombatAchievements.attach(api);
   },
 };

@@ -11,6 +11,7 @@
  * Crumble Undead (handled in Combat.Vorkath.js) ends it instantly (Wiki).
  */
 const Shared = require("./Shared.Vorkath");
+const CombatAchievements = require("./CombatAchievements.Vorkath");
 
 const ACID_ANIMATION = 7957;
 const HIGH_ANIMATION = 7960;
@@ -126,6 +127,7 @@ function startAcid(npc, target) {
   Shared.playSound(target, Shared.SOUND.ACID_LAUNCH, 20);
   const fight = getFight(npc);
   fight.fighter = target;
+  CombatAchievements.acidStarted(target);
   fight.rapidFired = 0;
   const now = core.World.getProcessCycle();
   fight.rapidNextCycle = now + Shared.ACID_FIRST_SHOT_DELAY;
@@ -180,7 +182,9 @@ function tickAcid(npc, fight) {
       if (!alive(target)) return;
       const current = target.getLocation();
       if (current.getX() !== tile.x || current.getY() !== tile.y) return;
-      damagePlayer(target, Shared.RAPID_MIN + core.Misc.getRandom(Shared.RAPID_MAX - Shared.RAPID_MIN));
+      const rapid = Shared.RAPID_MIN + core.Misc.getRandom(Shared.RAPID_MAX - Shared.RAPID_MIN);
+      damagePlayer(target, rapid);
+      CombatAchievements.specialDamage(target, rapid, { acid: true });
     });
     fight.rapidFired += 1;
     fight.rapidNextCycle = now + 1;
@@ -196,6 +200,7 @@ function tickAcid(npc, fight) {
     if (!fight.pools.has(poolKey(position.getX(), position.getY()))) continue;
     const damage = Shared.POOL_MIN + core.Misc.getRandom(Shared.POOL_MAX - Shared.POOL_MIN);
     damagePlayer(player, damage);
+    CombatAchievements.specialDamage(player, damage, { acid: true });
     healNpc(npc, damage);
   }
 }
@@ -206,6 +211,7 @@ function endAcid(npc, fight) {
   }
   fight.pools.clear();
   if ((npc.getAttribute?.(Shared.ATTR_PHASE) ?? null) === Shared.PHASE_ACID) {
+    if (fight.fighter) CombatAchievements.acidEnded(fight.fighter);
     npc.setAttribute(Shared.ATTR_PHASE, Shared.PHASE_ACTIVE);
   }
 }
@@ -331,7 +337,9 @@ function finishExplosion(npc, fight, spawn, target) {
   const hp = spawn.getHitpoints?.() ?? 0;
   later(1, target, () => {
     if (fight.spawn !== spawn || (npc.getAttribute?.(Shared.ATTR_PHASE) ?? null) !== Shared.PHASE_SPAWN) return;
-    damagePlayer(target, Shared.spawnExplosionDamage(hp));
+    const explosion = Shared.spawnExplosionDamage(hp);
+    damagePlayer(target, explosion);
+    CombatAchievements.specialDamage(target, explosion);
     core.World.getRemoveNPCQueue().push(spawn);
     endSpawn(npc, fight);
   });

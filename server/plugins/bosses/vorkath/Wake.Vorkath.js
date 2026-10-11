@@ -13,6 +13,7 @@
  * the one nearest the player (either of two equally near ones).
  */
 const Shared = require("./Shared.Vorkath");
+const CombatAchievements = require("./CombatAchievements.Vorkath");
 const Specials = require("./Specials.Vorkath");
 const Hud = require("./Hud.Vorkath");
 
@@ -63,6 +64,7 @@ function pokeVorkath({ player, npc }) {
     npc.setAttribute(Shared.ATTR_PHASE, Shared.PHASE_ACTIVE);
     npc.setAttribute(Shared.ATTR_WAKE_UNTIL, cycle + Shared.WAKE_TICKS);
     npc.setAttribute(Shared.ATTR_FIRST_ATTACK_AT, cycle + Shared.FIRST_ATTACK_TICKS);
+    CombatAchievements.woke(player);
     later(Shared.WAKE_TICKS, () => {
       if (!alive(npc) || npc.getId() !== Shared.WAKING_ID) return;
       npc.setNpcTransformationId(Shared.AWAKE_ID);
@@ -95,8 +97,9 @@ function denyWakeAttack(event) {
   }
 }
 
-function vorkathDied({ npc }) {
+function vorkathDied({ npc, killer }) {
   if (!npc || npc.getId() !== Shared.AWAKE_ID) return;
+  if (killer) CombatAchievements.killed(killer);
   Specials.endFight(npc);
   Hud.killed(npc);
 }
