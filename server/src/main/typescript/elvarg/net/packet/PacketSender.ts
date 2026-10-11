@@ -890,7 +890,8 @@ export class PacketSender {
     lockon: any,
     delay: number,
     angle: number = 16,
-    distanceOffset: number = 64
+    distanceOffset: number = 64,
+    source: any = null
   ): this {
     if (
       !start ||
@@ -904,6 +905,7 @@ export class PacketSender {
     }
 
     const targetIndex = this.resolveProjectileTargetIndex(lockon);
+    const sourceIndex = source == null ? 0 : this.resolveProjectileTargetIndex(source);
     if (this.player.getSession().sendClientPacket(encodeProjectiles([{
       projectileId,
       source: { x: start.getX(), y: start.getY(), level: start.getZ?.() ?? 0 },
@@ -914,10 +916,16 @@ export class PacketSender {
       startPos: distanceOffset,
       startCycleOffset: delay,
       endCycleOffset: Math.max(delay + 1, speed),
-      targetActor: targetIndex < 0
-        ? { kind: "player", index: -targetIndex - 1 }
-        : targetIndex > 0 ? { kind: "npc", index: targetIndex - 1 } : undefined,
+      targetActor: PacketSender.projectileActor(targetIndex),
+      sourceActor: PacketSender.projectileActor(sourceIndex),
     }]))) return this;
+  }
+
+  /** A resolved lock-on index (players negative, NPCs positive, 0 none) as the packet's actor. */
+  private static projectileActor(index: number): { kind: "player" | "npc"; index: number } | undefined {
+    if (index < 0) return { kind: "player", index: -index - 1 };
+    if (index > 0) return { kind: "npc", index: index - 1 };
+    return undefined;
   }
 
   private resolveProjectileTargetIndex(lockon: any): number {
