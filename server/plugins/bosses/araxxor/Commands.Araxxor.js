@@ -62,13 +62,11 @@ function debugAraxxor({ player }) {
     ` dist=${Math.max(Math.abs(me.getX() - at.getX()), Math.abs(me.getY() - at.getY()))}`;
   try {
     const method = boss.getCombatMethod?.();
-    if (method) {
-      line += ` reach=${method.attackDistance?.()} speed=${method.attackSpeed?.()} type=${method.type?.()}`;
-    } else {
-      line += " method=none";
-    }
+    const fakeRanged = { type: () => core.CombatType.MAGIC, attackDistance: () => 10, attackSpeed: () => 6 };
+    line += method ? ` ownReach=${core.CombatRange.canReach(boss, method, player)}` : " method=none";
+    line += ` rangedReach=${core.CombatRange.canReach(boss, fakeRanged, player)}`;
   } catch (error) {
-    line += ` methodErr=${String(error?.message ?? error).slice(0, 80)}`;
+    line += ` methodErr=${String(error?.message ?? error).slice(0, 90)}`;
   }
   player.sendMessage(line);
   return true;
