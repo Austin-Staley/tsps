@@ -269,6 +269,7 @@ function tick() {
     }
     const players = npc.getPlayersWithinDistance(25);
     if (core.World.getProcessCycle() >= fight.nextHatchAt) {
+      console.log("[araxxor-hatch] cycle", core.World.getProcessCycle(), "next", fight.nextHatchAt, "fights", fights.size);
       fight.nextHatchAt += Shared.HATCH_INTERVAL_TICKS;
       Minions.hatchNext(npc);
     }
