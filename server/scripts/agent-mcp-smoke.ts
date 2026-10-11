@@ -67,6 +67,8 @@ const player = {
 const npc = {
     getIndex: () => 7,
     getId: () => 3106,
+    getHitpoints: () => 7,
+    getMaxHitpoints: () => 10,
     getLocation: () => location(3225, 3220),
     getCurrentDefinition: () => ({ getName: () => "Man", getActions: () => ["Talk-to", null, "Attack", "Pickpocket"] }),
 };
@@ -75,9 +77,11 @@ const tree = { getId: () => 1276, getLocation: () => location(3220, 3216) };
 const dispatched: any[] = [];
 
 let pluginProfiling = false;
+const normalPlayerRequests: any[] = [];
 // Headless load players: online until requestLogout.
 const loadOnline = new Map<string, any>();
 const connectHeadlessClient = async (username: string) => {
+    if (username.toLowerCase() === "agent1") return { player };
     const loadPlayer = {
         attributes: new Map<string, unknown>(),
         location: null as any,
@@ -107,6 +111,7 @@ const core = {
     },
     PluginManager: {
         emitCustomEvent: (name: string, event: any) => {
+            if (name === "agent-mcp:normal-player") { normalPlayerRequests.push(event.player); event.player.setRights("NONE"); return; }
             advanced.push([name, event.ms]);
             if (name === "agent:advance-time") event.handledBy.push("Farming");
         },
@@ -193,6 +198,11 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
     const { tools } = await client.listTools();
     assert.ok(tools.some((tool: any) => tool.name === "observe"));
 
+    rights = "DEVELOPER";
+    await call(client, "login", { username: "Agent1", password: "test" });
+    assert.equal(rights, "NONE", "headless playthroughs take normal damage instead of developer immunity");
+    assert.deepEqual(normalPlayerRequests, [player]);
+
     // Game messages are recorded once an agent has touched the player, and still reach the client.
     let { value: snapshot } = await call(client, "observe", { player: "agent1" });
     player.getPacketSender().sendMessage("You swing your axe at the tree.");
@@ -204,6 +214,8 @@ const call = async (client: any, name: string, args: Record<string, unknown>) =>
     assert.equal(snapshot.x, 3222);
     assert.deepEqual(snapshot.skills.Woodcutting, { level: 1, max: 1, xp: 0 });
     assert.deepEqual(snapshot.inventory[0], { slot: 0, id: 1351, name: "item 1351", amount: 1 });
+    assert.equal(snapshot.npcs[0].hitpoints, 7);
+    assert.equal(snapshot.npcs[0].maxHitpoints, 10);
     assert.deepEqual(snapshot.npcs[0].options, ["Talk-to", "Attack", "Pickpocket"]);
     assert.deepEqual(snapshot.objects, [{ id: 1276, name: "Tree", options: ["Chop down"], x: 3220, y: 3216 }]);
     assert.equal(snapshot.groundItems[0].id, 526);
