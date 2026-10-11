@@ -267,6 +267,10 @@ function tickPools(npc, fight, players) {
     fight.standing.set(player, { key, ticks });
     const damage = Shared.poolDamage(ticks);
     player.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(damage, core.HitMask.RED)]);
+    // The pools inflict venom too (Wiki); applied once so an active venom keeps escalating.
+    if (player.isVenomed?.() !== true) {
+      CombatFactory?.poisonEntity?.(player, 6, 2);
+    }
   }
 }
 
