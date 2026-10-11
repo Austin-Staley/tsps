@@ -38,6 +38,9 @@ const ELVARG_TELEPORT_DESTINATION = new Location(2852, 9637, 0);
 // Vorkath sleeps in the centre of Ungael's crater (2269, 4062); land outside by
 // the ice-chunks wall and climb over.
 const VORKATH_TELEPORT_DESTINATION = new Location(2272, 4052, 0);
+// Araxxor's lair sits behind the webbed tunnels (3631, 9812); land south of the
+// 7x7 body and the private instance arms around the arrival.
+const ARAXXOR_TELEPORT_DESTINATION = new Location(3633, 9821, 0);
 const BOSS_TELEPORT_DESTINATIONS = new Map([
   [28151, new Location(3290, 3847, 0)], // Callisto
   [28152, new Location(3261, 3927, 0)], // Chaos Elemental
@@ -228,7 +231,14 @@ function getBossTeleportPages() {
         { label: "Deranged Archaeologist", destination: DERANGED_ARCHAEOLOGIST_TELEPORT_DESTINATION },
         { label: "Elvarg", destination: ELVARG_TELEPORT_DESTINATION },
         { label: "Vorkath", destination: VORKATH_TELEPORT_DESTINATION },
-        { label: "Back", nextPage: 1 },
+        { label: "More options", nextPage: 3 },
+      ],
+    },
+    {
+      title: "Boss teleports",
+      options: [
+        { label: "Araxxor", destination: ARAXXOR_TELEPORT_DESTINATION },
+        { label: "Back", nextPage: 2 },
         { label: "Close", close: true },
       ],
     },
