@@ -47,6 +47,22 @@ test('prose conditions take their first branch and dead jumps fall through', () 
     "It seems you're missing out on some valuable experience. Would you like it?");
 });
 
+test('inline jump bodies play and missing external jumps still fall through', () => {
+  assert.deepEqual(flatten([
+    { player: 'before the jump' },
+    { type: 'jump', reference: 'continue', steps: [{ npc: 'inline continuation' }] },
+    { npc: 'tail' },
+  ]), [
+    { player: 'before the jump' },
+    { type: 'jump_to', steps: [{ npc: 'inline continuation' }] },
+    { npc: 'tail' },
+  ]);
+  assert.deepEqual(flatten([
+    { type: 'jump', reference: 'continue', id: 'missing-target' },
+    { npc: 'external jump fallthrough' },
+  ]), [{ npc: 'external jump fallthrough' }]);
+});
+
 test('a condition branch that continues reaches the next sibling check', () => {
   const steps = flatten([
     {
