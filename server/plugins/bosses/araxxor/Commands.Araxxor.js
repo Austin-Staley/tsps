@@ -68,6 +68,12 @@ function debugAraxxor({ player }) {
   } catch (error) {
     line += ` methodErr=${String(error?.message ?? error).slice(0, 90)}`;
   }
+  try {
+    const permission = core.CombatFactory.canAttackPermission(boss, player, true);
+    line += ` permission=${permission}`;
+  } catch (error) {
+    line += ` permErr=${String(error?.message ?? error).slice(0, 90)}`;
+  }
   player.sendMessage(line);
   return true;
 }
