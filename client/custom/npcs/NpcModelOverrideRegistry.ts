@@ -33,6 +33,20 @@ export function registerNpcModelOverride(baseId: number, models: NpcModelOverrid
     return id;
 }
 
+/**
+ * Registers a synthetic id decided elsewhere (the main thread's render instance carries it
+ * to the worker, which is a separate thread with its own copy of this module).
+ */
+export function registerNpcModelOverrideWithId(id: number, baseId: number, models: NpcModelOverride[]): void {
+    if (overrides.has(id | 0)) {
+        return;
+    }
+    overrides.set(id | 0, {
+        baseId: baseId | 0,
+        models: models.map((entry) => ({ slot: entry.slot | 0, modelId: entry.modelId | 0 })),
+    });
+}
+
 /** The overrides behind a synthetic id, or undefined for real cache types. */
 export function npcModelOverrideFor(id: number): { baseId: number; models: NpcModelOverride[] } | undefined {
     return overrides.get(id | 0);

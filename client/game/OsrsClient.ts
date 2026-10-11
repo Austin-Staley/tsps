@@ -7666,8 +7666,12 @@ export class OsrsClient {
         const baseId = baseNpcTypeId(instance.typeId);
         if (entries.length === 0) {
             this.npcModelOverrides.delete(sid);
+            delete instance.modelOverride;
         } else {
-            this.npcModelOverrides.set(sid, registerNpcModelOverride(baseId, entries));
+            const syntheticId = registerNpcModelOverride(baseId, entries);
+            this.npcModelOverrides.set(sid, syntheticId);
+            // The worker is another thread: the override rides the instance to it.
+            instance.modelOverride = { baseId, models: entries.map((entry) => ({ slot: entry.slot | 0, modelId: entry.modelId | 0 })) };
         }
         const nextTypeId = this.npcModelOverrides.get(sid) ?? baseId;
         if ((instance.typeId | 0) !== (nextTypeId | 0)) {
@@ -7699,6 +7703,7 @@ export class OsrsClient {
         const override = this.npcModelOverrides.get(sid);
         if (override !== undefined && baseNpcTypeId(override) !== (typeId | 0)) {
             this.npcModelOverrides.delete(sid);
+            if (prev) delete (prev as { modelOverride?: unknown }).modelOverride;
         }
         const renderTypeId = override !== undefined && baseNpcTypeId(override) === (typeId | 0) ? override : typeId | 0;
         const nextInstance: NpcInstance = {

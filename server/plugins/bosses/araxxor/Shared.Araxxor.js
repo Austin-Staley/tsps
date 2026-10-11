@@ -113,8 +113,9 @@ const POOL_DAMAGE_STEP = 2;
 const POOL_MAX_DAMAGE = 20;
 const DRIP_FOLLOW_TICKS = 6;
 
-/** The corpse lingers half a minute (Wiki) before sinking; the fight resets after. */
-const CORPSE_TICKS = 50;
+/** The corpse waits for the player's choice (Wiki: no respawn until Harvest or Destroy);
+ * the cap is a safety net, and leaving the lair destroys it anyway. */
+const CORPSE_TICKS = 6000;
 const RESPAWN_TICKS = 10;
 const HARVEST_ANIMATION = 2282;
 const NID_ITEM_ID = 29836;
@@ -154,6 +155,7 @@ const ATTR_ENRAGED = "araxxor:enraged";
 const ATTR_DYING = "araxxor:dying";
 const ATTR_ENCOUNTER = "araxxor:encounter";
 const ATTR_SPECIAL = "araxxor:special";
+const ATTR_DESTROY_NO_PROMPT = "araxxor:destroy-no-prompt";
 
 const Attack = { MELEE: "melee", RANGED: "ranged", MAGIC: "magic", CLEAVE: "cleave" };
 
@@ -308,6 +310,7 @@ module.exports = {
   ATTR_DYING,
   ATTR_ENCOUNTER,
   ATTR_SPECIAL,
+  ATTR_DESTROY_NO_PROMPT,
   ENRAGE_SOUNDS,
   ENRAGE_MODELS,
   playSound,

@@ -81,18 +81,29 @@ function validCorpse(npc, session) {
     && session.harvested !== true && session.destroyed !== true;
 }
 
-/** Turns drops (and a stashed Nid) out onto the floor by the corpse. */
+/** Turns drops (and a stashed Nid) into the player's inventory, excess to the floor (Wiki). */
 function spawnDrops(player, session, drops) {
   const { Item, ItemDefinition } = core;
   const manager = api.getItemOnGroundManager();
   const where = session.corpse?.getLocation?.() ?? null;
   if (!where) return;
   const area = session.corpse?.getPrivateArea?.() ?? null;
+  const inventory = player.getInventory?.() ?? null;
   for (const drop of drops) {
     if (!Number.isInteger(drop.itemId) || drop.amount <= 0) continue;
     const noteId = ItemDefinition.forId(drop.itemId).getNoteId();
     const itemId = drop.noted && noteId >= 0 && ItemDefinition.forId(noteId).isNoted() ? noteId : drop.itemId;
     const stackable = ItemDefinition.forId(itemId).isStackable();
+    if (inventory) {
+      if (stackable && (inventory.contains(itemId) || inventory.getFreeSlots() > 0)) {
+        inventory.adds(itemId, drop.amount);
+        continue;
+      }
+      if (!stackable && inventory.getFreeSlots() >= drop.amount) {
+        inventory.adds(itemId, drop.amount);
+        continue;
+      }
+    }
     if (stackable) {
       manager.registerLocation(player, new Item(itemId, drop.amount), where, area);
     } else {
@@ -149,10 +160,32 @@ function destroyConfirmed({ player, npc }) {
   });
 }
 
+/**
+ * The Wiki's prompt: destroy for the doubled pet chance, with a "don't ask again" that is
+ * remembered on the player.
+ */
 function destroy({ player, npc }) {
   const session = sessionOf(npc);
   if (!validCorpse(npc, session)) return false;
-  api.sendMultiChatboxPrompt(player, Shared.CORPSE_DESTROY_PROMPT, "Destroy", () => destroyConfirmed({ player, npc }));
+  if (player.getAttribute?.(Shared.ATTR_DESTROY_NO_PROMPT) === true) {
+    destroyConfirmed({ player, npc });
+    return true;
+  }
+  player.getDialogueManager().startDialogues(new core.DialogueChainBuilder().add(
+    new core.StatementDialogue(0, Shared.CORPSE_DESTROY_PROMPT),
+    new core.OptionDialogue(0, {
+      executeOption(option) {
+        player.getPacketSender().sendInterfaceRemoval();
+        const index = Number(option);
+        if (index === 0) {
+          destroyConfirmed({ player, npc });
+        } else if (index === 2) {
+          player.setAttribute?.(Shared.ATTR_DESTROY_NO_PROMPT, true);
+          destroyConfirmed({ player, npc });
+        }
+      },
+    }, "Yes, destroy it.", "No, keep it.", "Yes, and don't ask again."),
+  ));
   return true;
 }
 
