@@ -52,18 +52,25 @@ function debugAraxxor({ player }) {
   }
   const combat = boss.getCombat?.();
   const target = combat?.getTarget?.() ?? null;
-  const method = boss.getCombatMethod?.() ?? null;
   const me = player.getLocation();
   const at = boss.getLocation();
   player.sendMessage(
     `boss=${boss.getId()} at=${at.getX()},${at.getY()} area=${boss.getArea?.()?.constructor?.name ?? "null"}` +
     ` playerArea=${player.getArea?.()?.constructor?.name ?? "null"} privateSame=${boss.getPrivateArea?.() === player.getPrivateArea?.()}`,
   );
-  player.sendMessage(
-    `target=${target ? (target.isPlayer?.() ? target.getAsPlayer?.().getUsername?.() : "npc:" + target.getAsNpc?.().getId?.()) : "none"}` +
-    ` underAttack=${combat?.getAttacker?.() ? "yes" : "no"} reach=${method?.attackDistance?.() ?? "?"} speed=${method?.attackSpeed?.() ?? "?"}` +
-    ` dist=${Math.max(Math.abs(me.getX() - at.getX()), Math.abs(me.getY() - at.getY()))}`,
-  );
+  let line = `target=${target ? (target.isPlayer?.() ? "player" : "npc") : "none"} underAttack=${combat?.getAttacker?.() ? "yes" : "no"}` +
+    ` dist=${Math.max(Math.abs(me.getX() - at.getX()), Math.abs(me.getY() - at.getY()))}`;
+  try {
+    const method = boss.getCombatMethod?.();
+    if (method) {
+      line += ` reach=${method.attackDistance?.()} speed=${method.attackSpeed?.()} type=${method.type?.()}`;
+    } else {
+      line += " method=none";
+    }
+  } catch (error) {
+    line += ` methodErr=${String(error?.message ?? error).slice(0, 80)}`;
+  }
+  player.sendMessage(line);
   return true;
 }
 
