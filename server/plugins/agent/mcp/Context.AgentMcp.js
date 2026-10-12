@@ -223,7 +223,7 @@ function createContext(core, server) {
         const animation = lastNpcAnimation(npc, World);
         return {
           index: npc.getIndex(), id: npc.getContentId?.(p) ?? definition?.getId?.() ?? npc.getId(), name: definition?.getName(),
-          hitpoints: npc.getHitpoints(), maxHitpoints: npc.getMaxHitpoints(),
+          hitpoints: npc.getHitpoints(), maxHitpoints: npc.getMaxHitpoints(), headIcon: npc.getHeadIcon?.() ?? -1,
           animation: animation.id, animationTick: animation.tick,
           chat: animation.chat, chatTick: animation.chatTick,
           options: (definition?.getActions() ?? []).filter(Boolean), ...tile(npc.getLocation()),
