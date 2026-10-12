@@ -304,3 +304,13 @@ test("a ladder that asks up or down: the captured way goes there, the other is L
   runTicks(visit, 1);
   assert.equal(visit.player.getLocation().getZ(), 2);
 });
+
+
+test('The White Knights Castle west stairs connect every floor to the WGS herb patch', () => {
+ const stairs=data.locs.filter(e=>e.name.startsWith('fai_falador_castle_spiralstairs'));
+ assert.equal(stairs.length,6);
+ for(const [z,up] of [[0,true],[1,true],[2,true],[1,false],[2,false],[3,false]]){
+  const e=stairs.find(e=>e.z===z&&e.option===(up?'Climb-up':'Climb-down'));assert.ok(e);
+  assert.equal(e.to[2],z+(up?1:-1));
+ }
+});

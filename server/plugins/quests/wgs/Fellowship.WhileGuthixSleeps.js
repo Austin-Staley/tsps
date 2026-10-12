@@ -18,6 +18,8 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
  function atCastle(p){const l=p.getLocation();return l.getX()>=2948&&l.getX()<=3000&&l.getY()>=3328&&l.getY()<=3355;}
  function sync(p){
   const s=stage(p),r=val(p,RECRUITS_ATTRIBUTE);
+  p.getPacketSender().sendVarbit(10782,s>=650?2:s>=300?1:0);
+  p.getPacketSender().sendVarbit(10792,s>=650?2:s>=340?1:0);
   if(s===280&&(r&15)===15)advance(p,300);
   if(s===320&&(r&127)===127)advance(p,340);
   p.getPacketSender().sendVarbit(10781,stage(p)>=300?2:stage(p)>=280?1:0);
