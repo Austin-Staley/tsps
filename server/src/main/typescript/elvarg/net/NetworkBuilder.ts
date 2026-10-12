@@ -494,6 +494,9 @@ export class ClientConnection {
         }
         case "widget_action":
           if (this.player) {
+            const widgetAction = { player: this.player, packet, handled: false };
+            PluginManager.emitCustomEvent("player:widget-action", widgetAction);
+            if (widgetAction.handled) continue;
             const actionPacket = { ...packet, buttonNum: packet.buttonNum ?? 0 };
             const equipmentSlot = EquipPacketListener.resolveEquipmentSlot(actionPacket.groupId, actionPacket.childId);
             if (WORLD_MAP_ORB_WIDGET_IDS.includes(actionPacket.widgetId) && actionPacket.buttonNum === 2) {
@@ -673,6 +676,11 @@ export class ClientConnection {
           }
           continue;
         case "widget_drag":
+          if (this.player) {
+            const widgetDrag = { player: this.player, packet, handled: false };
+            PluginManager.emitCustomEvent("player:widget-action", widgetDrag);
+            if (widgetDrag.handled) continue;
+          }
           if (this.player && !Bank.handleDrag(this.player, packet)) SwitchItemSlotPacketListener.move(
             this.player, packet.sourceWidgetId, packet.sourceSlot, packet.targetSlot
           );

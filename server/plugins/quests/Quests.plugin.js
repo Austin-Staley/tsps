@@ -18,7 +18,7 @@ const QUESTS = [
   "ColdWar", "Contact", "CooksAssistant", "CorsairCurse",
   "CrabQuest", "CreatureOfFenkenstrain", "CurrentAffairs", "CurseOfArrav",
   "DarknessOfHallowvale", "DeathOnTheIsle", "DeathPlateau", "DeathToTheDorgeshuun",
-  "DefenderOfVarrock", "DemonSlayer", "DepthsOfDespair", "DesertTreasureI",
+  "DefenderOfVarrock", "DemonSlayer", "DepthsOfDespair", "DesertTreasureI", "DesertTreasureII",
   "DeviousMinds", "DigSite", "DoricsQuest", "DragonSlayer", "DragonSlayerII",
   "DreamMentor", "DruidicRitual", "DwarfCannon", "EadgarsRuse",
   "EaglesPeak", "ElementalWorkshopI", "ElementalWorkshopII", "EnakhrasLament",

@@ -269,14 +269,20 @@ test('Dragon Slayer II reforging requires three distinct dragon-head casts and c
   assert.equal(counts.get(core.ItemIdentifiers.DRAGON_KEY_PIECE_4), 0);
 });
 
-test('Desert Treasure II charges and places all eight machine cells individually', () => {
+test('Desert Treasure II requires and solves the real eight-cell golem grid', () => {
   const itemOnObject = [];
   const interactions = [];
+  const widgetActions = [];
+  const dialogueActions = [];
   const { api: base } = mockApi();
   const api = new Proxy(base, {
     get: (target, prop) => {
       if (prop === 'onItemOnObject') return (handler) => itemOnObject.push(handler);
       if (prop === 'onNpcInteraction') return (name, options) => interactions.push({ name, options });
+      if (prop === 'onCustomEvent') return (name, handler) => {
+        if (name === 'player:widget-action') widgetActions.push(handler);
+        if (name === 'npc-dialogue:action') dialogueActions.push(handler);
+      };
       return target[prop];
     },
   });
@@ -289,8 +295,10 @@ test('Desert Treasure II charges and places all eight machine cells individually
     const { ItemIdentifiers: I, ObjectIdentifiers: O } = api.core;
     const attrs = new Map();
     const counts = new Map([[I.UNCHARGED_CELL_2, 8]]);
-    const packet = new Proxy({}, { get: () => (..._args) => packet });
+    const packetCalls = [];
+    const packet = new Proxy({}, { get: (_target, name) => (...args) => packetCalls.push([name, ...args]) });
     const messages = [];
+    const damages = [];
     const player = {
       getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
       getInventory: () => ({
@@ -299,6 +307,8 @@ test('Desert Treasure II charges and places all eight machine cells individually
         adds: (id, amount) => counts.set(id, (counts.get(id) ?? 0) + amount),
       }),
       getPacketSender: () => packet, sendMessage: (message) => messages.push(message),
+      setEnteredSyntaxAction(action) { this.syntaxAction = action; },
+      getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => damages.push(...hits) }) }),
     };
     quest.setStage(player, 6);
     attrs.set('desert-treasure-ii:war-room', {
@@ -307,19 +317,108 @@ test('Desert Treasure II charges and places all eight machine cells individually
     const altar = { x: 8205, y: 1618, z: 0 };
     const golem = { x: 8215, y: 1620, z: 0 };
     const apply = (itemId, objectId, location) => itemOnObject[0]({ player, itemId, objectId, location });
-    for (let i = 0; i < 8; i++) apply(I.UNCHARGED_CELL_2, O.ALTAR_93, altar);
-    assert.equal(counts.get(I.UNCHARGED_CELL_2), 0);
+    for (let i = 0; i < 7; i++) apply(I.UNCHARGED_CELL_2, O.ALTAR_93, altar);
+    assert.equal(counts.get(I.UNCHARGED_CELL_2), 1);
+    assert.equal(counts.get(I.CHARGED_CELL), 7);
+    apply(I.CHARGED_CELL, O.GOLEM, golem);
+    assert.equal(counts.get(I.CHARGED_CELL), 7, 'the grid cannot be started with fewer than eight cells');
+    apply(I.UNCHARGED_CELL_2, O.ALTAR_93, altar);
     assert.equal(counts.get(I.CHARGED_CELL), 8);
-    for (let i = 0; i < 7; i++) apply(I.CHARGED_CELL, O.GOLEM, golem);
-    const smith = interactions.find(({ name }) => name === 'Asgarnia Smith').options['Talk-to'];
-    smith({ player, npcId: api.core.NpcIdentifiers.ASGARNIA_SMITH });
-    assert.equal(quest.getStage(player), 6, 'the golem cannot be operated before all eight cells are placed');
-    apply(I.CHARGED_CELL, O.GOLEM_2, golem);
+    apply(I.CHARGED_CELL, O.GOLEM, golem);
     assert.equal(counts.get(I.CHARGED_CELL), 0);
-    assert.equal(attrs.get('desert-treasure-ii:charged-cells-placed'), 8);
-    smith({ player, npcId: api.core.NpcIdentifiers.ASGARNIA_SMITH });
-    assert.equal(quest.getStage(player), 7, 'the eighth cell enables the real golem dialogue');
-    assert.match(messages.at(-1), /All eight cells are in place/);
+    assert.equal(attrs.get('desert-treasure-ii:cells-inserted'), true);
+    dialogueActions[0]({ player, stepId: 'EDEdng' });
+    assert.equal(attrs.get('desert-treasure-ii:cells-inserted'), true);
+    assert.ok(packetCalls.some(([name, id]) => name === 'sendInterface' && id === 838));
+    let positions = attrs.get('desert-treasure-ii:cell-positions');
+    const solution = [16, 10, 27, 33, 52, 5, 62, 47];
+    const groupWidget = (838 << 16) | 32;
+    const wrongPowerOn = { player, packet: { type: 'widget_action', groupId: 838, childId: 4, option: 'Power-on' }, handled: false };
+    widgetActions[0](wrongPowerOn);
+    assert.equal(wrongPowerOn.handled, true);
+    assert.equal(damages.length, 1, 'a wrong arrangement shocks the player instead of advancing the quest');
+    for (let cell = 0; cell < 8; cell++) {
+      let current = attrs.get('desert-treasure-ii:cell-positions');
+      const target = solution[cell];
+      if (current.includes(target)) {
+        const empty = Array.from({ length: 64 }, (_, i) => i).find((i) => !current.includes(i));
+        widgetActions[0]({ player, packet: { type: 'widget_drag', sourceWidgetId: groupWidget, targetWidgetId: groupWidget, sourceSlot: target, targetSlot: empty }, handled: false });
+        current = attrs.get('desert-treasure-ii:cell-positions');
+      }
+      const source = current[cell];
+      widgetActions[0]({ player, packet: { type: 'widget_drag', sourceWidgetId: groupWidget, targetWidgetId: groupWidget, sourceSlot: source, targetSlot: target }, handled: false });
+    }
+    positions = attrs.get('desert-treasure-ii:cell-positions');
+    assert.deepEqual(positions, solution);
+    const powerOn = { player, packet: { type: 'widget_action', groupId: 838, childId: 4, option: 'Power-on' }, handled: false };
+    widgetActions[0](powerOn);
+    assert.equal(powerOn.handled, true);
+    assert.equal(attrs.get('desert-treasure-ii:golem-solved'), true);
+    assert.equal(quest.getStage(player), 6, 'solving the grid opens the next search stage, rather than skipping straight to a boss');
+    assert.ok(player.syntaxAction);
+  } finally {
+    runtime.startTranscript = startTranscript;
+  }
+});
+
+test('Desert Treasure II starts the Vardorvis trail through Elissa, Barus, the botanist note and potion', () => {
+  const npcInteractions = [];
+  const objectInteractions = [];
+  const itemActions = [];
+  const { api: base } = mockApi();
+  const api = new Proxy(base, {
+    get: (target, prop) => {
+      if (prop === 'onNpcInteraction') return (name, options) => npcInteractions.push({ name, options });
+      if (prop === 'onObjectInteraction') return (handler) => objectInteractions.push(handler);
+      if (prop === 'onItemAction') return (handler) => itemActions.push(handler);
+      return target[prop];
+    },
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const startTranscript = runtime.startTranscript;
+  runtime.startTranscript = () => true;
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1);
+    const { ItemIdentifiers: I, ObjectIdentifiers: O } = api.core;
+    const attrs = new Map();
+    const noteId = I.POTION_NOTE;
+    const potionId = I.STRANGE_POTION_3;
+    assert.equal(noteId, 28382, 'the note uses the cache item id');
+    assert.equal(potionId, 28383, 'the potion uses the cache item id');
+    const counts = new Map([[potionId, 1]]);
+    const player = {
+      getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      getInventory: () => ({
+        getAmount: (id) => counts.get(id) ?? 0,
+        deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+        adds: (id, amount) => counts.set(id, (counts.get(id) ?? 0) + amount),
+      }),
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+      moveTo(location) { this.location = location; },
+      sendMessage() {},
+    };
+    quest.setStage(player, 7);
+    const talkTo = (name) => npcInteractions.find((entry) => entry.name === name).options['Talk-to']({ player, npcId: 1 });
+    talkTo('Elissa');
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 1);
+    talkTo('Barus');
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 2);
+    const searchDesk = objectInteractions[0]({ player, objectId: 49490, location: { x: 1781, y: 3619, z: 0 } });
+    assert.equal(searchDesk, true);
+    assert.equal(counts.get(noteId), 1);
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 3);
+    assert.equal(itemActions[0]({ player, itemId: potionId, option: 'Drink' }), true);
+    assert.equal(counts.get(potionId), 1, 'the potion cannot be used before reading the note');
+    itemActions[0]({ player, itemId: noteId, option: 'Read' });
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 4);
+    itemActions[0]({ player, itemId: potionId, option: 'Drink' });
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 5);
+    assert.equal(counts.get(potionId), 0);
+    const boat = objectInteractions[0]({ player, objectId: 49491, location: { x: 1227, y: 3469, z: 0 } });
+    assert.equal(boat, true);
+    assert.deepEqual([player.location.getX(), player.location.getY(), player.location.getZ()], [1196, 3450, 0]);
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 6);
   } finally {
     runtime.startTranscript = startTranscript;
   }

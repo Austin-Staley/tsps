@@ -10,9 +10,25 @@ module.exports = function registerDesertTreasureII(api) {
   // interaction and must also be read before the names are known.
   const STATUES = new Map([[49499, 0], [49501, 1], [49503, 2], [49505, 3]]);
   const PREREQUISITES = ["desert_treasure_i", "secrets_of_the_north", "enakhras_lament", "temple_of_the_eye", "the_garden_of_death", "below_ice_mountain"];
-  const CELLS_PLACED = "desert-treasure-ii:charged-cells-placed";
+  const CELLS_INSERTED = "desert-treasure-ii:cells-inserted";
+  const CELL_POSITIONS = "desert-treasure-ii:cell-positions";
+  const GOLEM_SOLVED = "desert-treasure-ii:golem-solved";
+  const SEARCHED_NAMES = "desert-treasure-ii:searched-names";
+  const BANIKAN_LEFT = "desert-treasure-ii:banikan-left";
+  const VARDORVIS_PROGRESS = "desert-treasure-ii:vardorvis-progress";
+  const PUZZLE_GROUP = 838;
+  const CELL_VARBITS = [15165, 15166, 15167, 15168, 15169, 15170, 15171, 15172];
+  // RuneLite QuestHelper reads these in reverse varbit order from the solution.
+  const CELL_SOLUTION = [16, 10, 27, 33, 52, 5, 62, 47];
   const ATTR = "desert-treasure-ii:boss";
   const ATTR_WAR_ROOM = "desert-treasure-ii:war-room";
+  // These three cache locs have no stable cache names, so use the IDs verified
+  // by dump:loc: desk 49490, inbound boat 49491, outbound Travel loc 48720.
+  const KASONDE_DESK_LOC = 49490;
+  const STRANGLEWOOD_BOAT_IN_LOC = 49491;
+  const STRANGLEWOOD_BOAT_OUT_LOC = O.ROWBOAT_17;
+  const KASONDE_NOTE = I.POTION_NOTE;
+  const KASONDE_POTION = I.STRANGE_POTION_3;
   let quest;
   let spawned = new WeakMap();
   let WarRoomArea;
@@ -125,10 +141,6 @@ module.exports = function registerDesertTreasureII(api) {
     if (stage(p) === S.STARTED && (Number(p.getAttribute("desert-treasure-ii:statues")) & 15) !== 15) {
       return p.sendMessage("Inspect all four statues and the plaque before speaking to Asgarnia Smith.");
     }
-    if (stage(p) === S.MACHINE) {
-      if ((Number(p.getAttribute(CELLS_PLACED)) || 0) < 8) return p.sendMessage("The golem is waiting for eight charged cells to be placed in its sockets.");
-      return talkAsgarniaForBoss({ player: p, npcId });
-    }
     const variant = stage(p) < S.VAULT ? "familiar-faces-talking-to-asgarnia-smith"
       : stage(p) < S.DIG ? "familiar-faces-talking-to-asgarnia-smith-after-inspecting-the-vault"
         : stage(p) < S.MACHINE ? "familiar-faces-talking-to-dr-banikan-after-clearing-rocks"
@@ -143,12 +155,129 @@ module.exports = function registerDesertTreasureII(api) {
     if (stage(p) < S.DIG) return p.sendMessage("Dr Banikan is busy with the excavation.");
     if (stage(p) < S.ROCKS) return talk(p, npcId, "familiar-faces-talking-to-dr-banikan", S.ROCKS);
     if (stage(p) < S.MACHINE) return talk(p, npcId, "familiar-faces-talking-to-dr-banikan-after-clearing-rocks", S.MACHINE);
-    talk(p, npcId, "familiar-faces-speaking-to-dr-banikan-again-after-he-decides-search-the-golem");
+    if (!p.getAttribute(GOLEM_SOLVED)) return talk(p, npcId, "familiar-faces-talking-to-dr-banikan-before-powering-up-the-golem-machine");
+    if ((Number(p.getAttribute(SEARCHED_NAMES)) || 0) !== 15) {
+      return talk(p, npcId, "familiar-faces-powering-up-the-golem-machine-talking-to-dr-banikan-before-finishing-searching-for-all-of-the-names");
+    }
+    p.setAttribute(BANIKAN_LEFT, true);
+    talk(p, npcId, "familiar-faces-speaking-to-dr-banikan-again-before-he-decides-search-the-golem");
   }
-  function talkAsgarniaForBoss({ player: p, npcId }) {
-    const s = stage(p);
-    if (s === S.MACHINE) { talk(p, npcId, "familiar-faces-operating-the-golem-to-find-out-what-dr-banikan-searched", S.VARDORVIS); spawnBoss(p, "vardorvis"); return; }
-    if (s >= S.VARDORVIS && s < S.COMPLETE) talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-asgarnia-smith");
+  function cellPositions(p) {
+    const value = p.getAttribute(CELL_POSITIONS);
+    return Array.isArray(value) && value.length === 8 ? value.map((x) => Number(x)) : null;
+  }
+  function syncCellPositions(p, positions) {
+    p.setAttribute(CELL_POSITIONS, positions.slice());
+    positions.forEach((position, index) => p.getPacketSender().sendVarbit(CELL_VARBITS[index], position));
+  }
+  function openGolemPuzzle(p) {
+    let positions = cellPositions(p);
+    if (!positions) {
+      // A fresh board is deliberately unsolved. These are eight distinct cache
+      // slots; the player must drag every cell into the correct 8x8 layout.
+      positions = [0, 9, 18, 27, 36, 45, 54, 63];
+    }
+    syncCellPositions(p, positions);
+    p.setAttribute(CELLS_INSERTED, true);
+    p.setAttribute("desert-treasure-ii:puzzle-open", true);
+    p.getPacketSender().sendInterface(PUZZLE_GROUP);
+  }
+  function wrongGolemSolution(p) {
+    p.sendMessage("The machine crackles and shocks you. The cell arrangement is incorrect.");
+    const damage = 5 + Math.floor(Math.random() * 6);
+    p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(damage, api.core.HitMask.RED)]);
+  }
+  function onWidgetAction(event) {
+    const p = event?.player, packet = event?.packet;
+    if (!packet || stage(p) < S.MACHINE || stage(p) >= S.VARDORVIS || !p.getAttribute(CELLS_INSERTED)) return;
+    if (packet.type === "widget_drag") {
+      if ((packet.sourceWidgetId >>> 16) !== PUZZLE_GROUP || (packet.targetWidgetId >>> 16) !== PUZZLE_GROUP) return;
+      const positions = cellPositions(p);
+      const from = Number(packet.sourceSlot), to = Number(packet.targetSlot);
+      if (!positions || !Number.isInteger(from) || !Number.isInteger(to) || from < 0 || from > 63 || to < 0 || to > 63) return;
+      const cell = positions.indexOf(from);
+      if (cell >= 0 && !positions.includes(to)) {
+        positions[cell] = to;
+        syncCellPositions(p, positions);
+      }
+      event.handled = true;
+      return;
+    }
+    if (packet.type !== "widget_action" || packet.groupId !== PUZZLE_GROUP || packet.childId !== 4) return;
+    event.handled = true;
+    const positions = cellPositions(p);
+    if (!positions || !CELL_SOLUTION.every((value, index) => positions[index] === value)) return wrongGolemSolution(p);
+    p.setAttribute(GOLEM_SOLVED, true);
+    p.setAttribute("desert-treasure-ii:puzzle-open", false);
+    p.getPacketSender().sendInterfaceRemoval();
+    p.sendMessage("The golem powers up. It asks you to specify a search term.");
+    promptGolemSearch(p);
+  }
+  function promptGolemSearch(p) {
+    p.setEnteredSyntaxAction({ execute: (term) => searchGolem(p, term) });
+    p.getPacketSender().sendEnterInputPrompt("Specify a search term");
+  }
+  function searchGolem(p, input) {
+    const term = String(input ?? "").trim().toLowerCase();
+    const names = new Map([["vardorvis", 1], ["perseriya", 2], ["sucellus", 4], ["whisperer", 8]]);
+    const searched = Number(p.getAttribute(SEARCHED_NAMES)) || 0;
+    if (term === "frostenhorn") {
+      if (searched !== 15 || !p.getAttribute(BANIKAN_LEFT)) {
+        p.sendMessage("Error: Access to data denied.");
+        return promptGolemSearch(p);
+      }
+      p.sendMessage("Data found. The golem reveals Banikan's search term: Frostenhorn.");
+      talk(p, N.GOLEM_3, "familiar-faces-operating-the-golem-to-find-out-what-dr-banikan-searched", S.VARDORVIS);
+      p.setAttribute(VARDORVIS_PROGRESS, 0);
+      p.setAttribute(ATTR, null);
+      return;
+    }
+    const bit = names.get(term);
+    if (!bit) {
+      p.sendMessage("Error: No data found.");
+      return promptGolemSearch(p);
+    }
+    if (searched & bit) {
+      p.sendMessage("Data found. You have already searched that term.");
+      return promptGolemSearch(p);
+    }
+    p.setAttribute(SEARCHED_NAMES, searched | bit);
+    const variant = `familiar-faces-powering-up-the-golem-machine-${term}`;
+    talk(p, N.GOLEM_3, variant);
+  }
+  function talkElissa({ player: p, npcId }) {
+    if (stage(p) !== S.VARDORVIS || (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) !== 0) return;
+    talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-elissa");
+    p.setAttribute(VARDORVIS_PROGRESS, 1);
+  }
+  function talkBarus({ player: p, npcId }) {
+    if (stage(p) !== S.VARDORVIS || (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) !== 1) return;
+    talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-barus");
+    p.setAttribute(VARDORVIS_PROGRESS, 2);
+  }
+  function handleItemAction({ player: p, itemId, option }) {
+    if (stage(p) !== S.VARDORVIS) return;
+    const action = String(option || "").toLowerCase();
+    if (itemId === KASONDE_NOTE && action === "read"
+      && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) === 3) {
+      p.setAttribute(VARDORVIS_PROGRESS, 4);
+      p.sendMessage("You read the botanist's note. It explains how to use the strange potion to enter the Stranglewood.");
+      return true;
+    }
+    if (itemId === KASONDE_POTION && action === "drink") {
+      const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
+      if (progress < 4) {
+        talk(p, N.GOLEM_3, "carnifex-maximus-vardorvis-attempting-to-drink-the-potion-before-reading-the-note");
+        return true;
+      }
+      if (progress === 4 && has(p, KASONDE_POTION)) {
+        p.getInventory().deleteNumber(KASONDE_POTION, 1);
+        p.setAttribute(VARDORVIS_PROGRESS, 5);
+        p.sendMessage("You drink the strange potion. Its effects prepare you to enter the Stranglewood.");
+        return true;
+      }
+    }
+    return false;
   }
   function handleObject({ player: p, objectId, location }) {
     const s = stage(p);
@@ -185,6 +314,36 @@ module.exports = function registerDesertTreasureII(api) {
       setStage(p, S.GUARDIAN);
       return true;
     }
+    if (s === S.VARDORVIS && objectId === KASONDE_DESK_LOC
+      && Math.abs(location.x - 1781) <= 2 && Math.abs(location.y - 3619) <= 2
+      && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) === 2) {
+      if (!has(p, KASONDE_NOTE)) p.getInventory().adds(KASONDE_NOTE, 1);
+      p.setAttribute(VARDORVIS_PROGRESS, 3);
+      talk(p, N.GOLEM_3, "carnifex-maximus-vardorvis-searching-the-botanist-s-desk");
+      return true;
+    }
+    if (s === S.VARDORVIS && objectId === STRANGLEWOOD_BOAT_IN_LOC
+      && Math.abs(location.x - 1227) <= 2 && Math.abs(location.y - 3469) <= 2) {
+      const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
+      if (progress < 4) {
+        talk(p, N.GOLEM_3, "carnifex-maximus-vardorvis-boarding-the-rowboat-before-reading-the-note");
+        return true;
+      }
+      if (progress < 5) {
+        talk(p, N.GOLEM_3, "carnifex-maximus-vardorvis-boarding-the-rowboat-before-drinking-the-potion");
+        return true;
+      }
+      talk(p, N.GOLEM_3, "carnifex-maximus-vardorvis-travelling-to-the-stranglewood-for-the-first-time");
+      p.setAttribute(VARDORVIS_PROGRESS, 6);
+      p.moveTo(new api.core.Location(1196, 3450, 0));
+      return true;
+    }
+    if (s === S.VARDORVIS && objectId === STRANGLEWOOD_BOAT_OUT_LOC
+      && Math.abs(location.x - 1193) <= 2 && Math.abs(location.y - 3453) <= 2) {
+      p.moveTo(new api.core.Location(1227, 3470, 0));
+      p.sendMessage("You row back from the Stranglewood.");
+      return true;
+    }
     if (s === S.GUARDIAN && objectId === O.CREVICE_45) {
       if (location.x !== 3411 || location.y !== 9811) return false;
       enterWarRoom(p);
@@ -209,9 +368,10 @@ module.exports = function registerDesertTreasureII(api) {
     }
     if (s >= S.MACHINE && s < S.VARDORVIS && [O.GOLEM, O.GOLEM_2].includes(objectId)
       && roomTile?.x === 2783 && roomTile?.y === 6444) {
-      return (Number(p.getAttribute(CELLS_PLACED)) || 0) < 8
-        ? p.sendMessage("Use a charged cell on an empty socket in the golem.")
-        : p.sendMessage("The golem's eye is glowing. Speak to Asgarnia Smith.");
+      if (p.getAttribute(GOLEM_SOLVED)) return promptGolemSearch(p);
+      if (p.getAttribute(CELLS_INSERTED)) { openGolemPuzzle(p); return true; }
+      talk(p, N.DR_BANIKAN_2, "familiar-faces-inspecting-the-golem-machine");
+      return true;
     }
     if (s >= S.FINALE && [O.VAULT_DOOR, O.VAULT_DOOR_2, O.VAULT_DOOR_3].includes(objectId) && IDS.every((id) => has(p, id))) {
       IDS.forEach((id) => p.getInventory().deleteNumber(id, 1));
@@ -224,6 +384,10 @@ module.exports = function registerDesertTreasureII(api) {
   function handleItemOnObject({ player: p, itemId, objectId, location }) {
     if (stage(p) < S.MACHINE || stage(p) >= S.VARDORVIS) return;
     const roomTile = warRoomSourceTile(p, location);
+    if ([O.GOLEM, O.GOLEM_2].includes(objectId) && roomTile?.x === 2783 && roomTile?.y === 6444 && itemId === I.UNCHARGED_CELL_2) {
+      talk(p, N.GOLEM_3, "familiar-faces-inspecting-the-golem-machine-using-uncharged-cells-on-the-golem-machine");
+      return true;
+    }
     if ([O.ALTAR_93, O.ALTAR_94].includes(objectId) && roomTile?.x === 2773 && roomTile?.y === 6442 && itemId === I.UNCHARGED_CELL_2) {
       if (!has(p, I.UNCHARGED_CELL_2)) return;
       p.getInventory().deleteNumber(I.UNCHARGED_CELL_2, 1);
@@ -232,13 +396,12 @@ module.exports = function registerDesertTreasureII(api) {
       return;
     }
     if ([O.GOLEM, O.GOLEM_2].includes(objectId) && roomTile?.x === 2783 && roomTile?.y === 6444 && itemId === I.CHARGED_CELL) {
-      if (!has(p, I.CHARGED_CELL)) return;
-      const placed = Number(p.getAttribute(CELLS_PLACED)) || 0;
-      if (placed >= 8) return p.sendMessage("All eight sockets are already filled.");
-      p.getInventory().deleteNumber(I.CHARGED_CELL, 1);
-      p.setAttribute(CELLS_PLACED, placed + 1);
-      p.sendMessage(`You place a charged cell in the machine (${placed + 1}/8).`);
-      if (placed === 7) p.sendMessage("All eight cells are in place. Speak to Asgarnia Smith to operate the golem.");
+      if (p.getAttribute(CELLS_INSERTED)) return openGolemPuzzle(p);
+      if (p.getInventory().getAmount(I.CHARGED_CELL) < 8) return p.sendMessage("You need all eight charged cells to power the golem.");
+      p.getInventory().deleteNumber(I.CHARGED_CELL, 8);
+      p.setAttribute(CELLS_INSERTED, true);
+      talk(p, N.GOLEM_3, "familiar-faces-inspecting-the-golem-machine-using-charged-cells-on-the-golem-machine");
+      return true;
     }
   }
   function spawnBoss(p, key) {
@@ -294,11 +457,14 @@ module.exports = function registerDesertTreasureII(api) {
   }
   function progressBosses({ player: p, npcId }) {
     const s = stage(p);
-    if (s === S.MACHINE) { talk(p, npcId, "familiar-faces-powering-up-the-golem-machine", S.VARDORVIS); spawnBoss(p, "vardorvis"); return; }
-    if (s === S.VARDORVIS) return talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-elissa");
+    if (s === S.VARDORVIS) { talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-elissa"); spawnBoss(p, "vardorvis"); return; }
     if (s === S.LEVIATHAN) return talk(p, npcId, "praefectus-classis-perseriya-talking-to-wizard-persten");
     if (s === S.SUCELLUS) return talk(p, npcId, "duke-sucellus-of-the-sixth-legion-talking-to-captain-malleta");
     if (s === S.WHISPERER) return talk(p, npcId, "the-whisperer-talking-to-ketla-after-coming-to");
+  }
+
+  function handleDialogueAction({ player: p, stepId }) {
+    if (stepId === "EDEdng" && stage(p) === S.MACHINE && p.getAttribute(CELLS_INSERTED)) openGolemPuzzle(p);
   }
 
   quest = registerQuest(api, {
@@ -307,14 +473,20 @@ module.exports = function registerDesertTreasureII(api) {
     xpRewards: [{ skillId: Skill.AGILITY.getIndex(), amount: 50000, label: "Agility" }, { skillId: Skill.HERBLORE.getIndex(), amount: 50000, label: "Herblore" }, { skillId: Skill.THIEVING.getIndex(), amount: 50000, label: "Thieving" }, { skillId: Skill.THIEVING.getIndex(), amount: 100000, label: "Chosen skill" }],
     rewardItemId: I.ANCIENT_LAMP, otherRewards: ["Access to Vardorvis, the Leviathan, Duke Sucellus and the Whisperer"], buildJournal,
   });
-  ["desert-treasure-ii:statues", "desert-treasure-ii:cells-collected", CELLS_PLACED].forEach((key) => api.persistAttribute(key));
+  ["desert-treasure-ii:statues", "desert-treasure-ii:cells-collected", CELLS_INSERTED, CELL_POSITIONS,
+    GOLEM_SOLVED, SEARCHED_NAMES, BANIKAN_LEFT].forEach((key) => api.persistAttribute(key));
   api.persistAttribute(ATTR);
+  api.persistAttribute(VARDORVIS_PROGRESS);
   api.onObjectInteraction(handleObject);
   api.onItemOnObject(handleItemOnObject, { noted: false });
+  api.onItemAction(handleItemAction);
+  api.onCustomEvent("player:widget-action", onWidgetAction);
+  api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onNpcInteraction("Asgarnia Smith", { "Talk-to": talkSmith });
   api.onNpcInteraction("Terry Balando", { "Talk-to": talkTerry });
   api.onNpcInteraction("Dr Banikan", { "Talk-to": talkBanikan });
-  api.onNpcInteraction("Elissa", { "Talk-to": progressBosses });
+  api.onNpcInteraction("Elissa", { "Talk-to": talkElissa });
+  api.onNpcInteraction("Barus", { "Talk-to": talkBarus });
   api.onNpcInteraction("Wizard Persten", { "Talk-to": progressBosses });
   api.onNpcInteraction("Captain Malleta", { "Talk-to": progressBosses });
   api.onNpcInteraction("Ketla", { "Talk-to": progressBosses });
