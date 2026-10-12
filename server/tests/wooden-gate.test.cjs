@@ -1,5 +1,4 @@
 
-const { crossingFor: shantayCrossingFor } = require('../plugins/objects/ShantayPass.plugin');
 // Run after `yarn build`: node --test tests/wooden-gate.test.cjs
 //
 // Wooden gates are two locs (hinge 12986 + extension 12987) that must swing together around
@@ -18,6 +17,8 @@ const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
 const { ObjectManager } = require('../dist/game/entity/impl/object/ObjectManager');
 const { RegionManager } = require('../dist/game/collision/RegionManager');
 const { TemplatedInstanceArea } = require('../dist/game/model/areas/impl/TemplatedInstanceArea');
+const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
+const { crossingFor: shantayCrossingFor } = require('../plugins/objects/ShantayPass.plugin');
 
 const tileKey = (id, x, y, z) => `${id}@${x},${y},${z}`;
 
@@ -132,6 +133,10 @@ test('Kourend Crypt cached Large doors keep their real double-leaf geometry and 
   const closedLowerCrossing = RegionManager.canMove(x, y, x, y + 1, 1, 1, 1, area);
   const closedUpperCrossing = RegionManager.canMove(x + 1, upperY - 1, x + 1, upperY, 1, 1, 1, area);
   const h = buildHarness({ cacheObjects: cachedDoors, objectManager: ObjectManager });
+  const routes = new RsmodRouteFinding();
+  const route = (startY, endY) => routes.findRoute({
+    level: 1, srcX: x, srcY: startY, srcSize: 1, destX: x, destY: endY, privateArea: area, moveNear: false,
+  });
   try {
     assert.ok(h.handlers.get('Large doors')?.Open, 'the plural cache name must be registered');
     const crossing = () => RegionManager.canMove(x, y, x, y + 1, 1, 1, 1, area);
@@ -153,6 +158,10 @@ test('Kourend Crypt cached Large doors keep their real double-leaf geometry and 
       'the complete four-step south-to-north approach stays open beyond the swung leaves');
     assert.equal(RegionManager.canMove(x, lowerExit, x, lowerApproach, 1, 1, 1, area), true,
       'the complete four-step north-to-south return route also stays open');
+    assert.equal(route(lowerApproach, lowerExit).success, true,
+      'the normal route finder can reach beyond the swung lower leaves from the south');
+    assert.equal(route(lowerExit, lowerApproach).success, true,
+      'the normal route finder can return beyond the swung lower leaves from the north');
 
     const movedLeaves = area.getObjects().filter((object) => [32406, 32407].includes(object.getId()));
     assert.deepEqual(movedLeaves.map((object) => [object.getId(), object.getLocation().getX(), object.getLocation().getY(), object.getFace()]).sort(), [
