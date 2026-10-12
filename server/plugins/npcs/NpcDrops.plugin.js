@@ -461,6 +461,21 @@ function rollTable(table, player, npc) {
   return drops;
 }
 
+/**
+ * Answers npc-drops:extra-rolls { player, npc, npcId, rolls, drops }: `rolls` more rolls of the
+ * NPC's table, without its always-drops, pushed onto `drops` (Chambers of Xeric scavenger beasts
+ * drop three items at a time).
+ */
+function extraRolls(event) {
+  ensureDropsLoaded?.();
+  const table = tableForNpc(event.npcId);
+  if (!table || !Array.isArray(event.drops)) return;
+  const rolling = { ...table, entries: (table.entries || []).filter((entry) => !entry.always), tertiary: [] };
+  for (let i = 0; i < (event.rolls ?? 0); i++) event.drops.push(...rollTable(rolling, event.player, event.npc));
+}
+
+let ensureDropsLoaded = null;
+
 function tableForNpc(npcId) {
   const tables = tablesByNpc.get(npcId);
   if (!tables || tables.length === 0) {
@@ -532,6 +547,8 @@ module.exports = {
       if (!stats) stats = loadDrops();
       return stats;
     };
+    ensureDropsLoaded = ensureDrops;
+    api.onCustomEvent("npc-drops:extra-rolls", extraRolls);
 
     // "npc-drops:roll-table" { player, table, drops }: a table outside an NPC's own (a boss's
     // chest) rolled with the same roller and shared tables; the drops are pushed onto `drops`.

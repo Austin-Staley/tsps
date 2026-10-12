@@ -1,4 +1,34 @@
-const { FriendsChatManager, CHAT_FILTERS_ATTRIBUTE, CLAN_CHAT_ATTRIBUTE } = require("./FriendsChatManager");
+const { FriendsChatManager, FriendsChatRank, CHAT_FILTERS_ATTRIBUTE, CLAN_CHAT_ATTRIBUTE } = require("./FriendsChatManager");
+
+let pluginApi = null;
+
+/**
+ * friends-chat:channel - { player } or { key } -> reply `channel` (the chat-channel the player
+ * is in, or with that key, or null: key, ownerName, name, members, kickRank, rankOf(member))
+ * and `ranks` (FriendsChatRank).
+ */
+function describeChannel(request) {
+  if (!request) return;
+  if (request.key) request.channel = FriendsChatManager.channelByKey(request.key);
+  else if (request.player) request.channel = FriendsChatManager.channelOf(request.player);
+  request.ranks = FriendsChatRank;
+}
+
+/** friends-chat:join - { player, owner, notify } -> reply `joined`. */
+function joinChannel(request) {
+  if (!request?.player) return;
+  request.joined = FriendsChatManager.join(request.player, request.owner, request.notify !== false);
+}
+
+/** friends-chat:leave - { player, notify }. */
+function leaveChannel(request) {
+  if (request?.player) FriendsChatManager.leave(request.player, request.notify !== false);
+}
+
+/** Tells other plugins a member left a chat-channel (left, kicked, or logged out). */
+function announceLeave(player, channelKey) {
+  pluginApi?.emitCustomEvent("friends-chat:left", { player, channelKey });
+}
 
 /** "friends:send-private-message" ({ sender, recipient, text, sent }): a message sent for a player, such as a bot's reply. */
 function sendPrivateMessage(event) {
@@ -11,6 +41,11 @@ module.exports = {
   name: "FriendsList",
   register(api) {
     api.onCustomEvent("friends:send-private-message", sendPrivateMessage);
+    pluginApi = api;
+    FriendsChatManager.memberRemoved = announceLeave;
+    api.onCustomEvent("friends-chat:channel", describeChannel);
+    api.onCustomEvent("friends-chat:join", joinChannel);
+    api.onCustomEvent("friends-chat:leave", leaveChannel);
     api.persistAttribute(CHAT_FILTERS_ATTRIBUTE);
     api.onCanAttack((event) => {
       if (event.allow !== null) return;
