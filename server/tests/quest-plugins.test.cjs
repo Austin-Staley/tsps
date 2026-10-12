@@ -829,7 +829,7 @@ test('WGS physical recruitment uses the visible definition of a transformed Guil
 
 
 test('Elite knights show adapting prayers, spend prayer on attacks and apply seven flat armour outside magic', () => {
- const {api}=mockApi();let area,modify;api.registerArea=a=>area=a;api.onNpcHitModify=h=>modify=h;
+ const {api}=mockApi();let area,modify,killed;api.registerArea=a=>area=a;api.onNpcHitModify=h=>modify=h;api.onNpcDeath=h=>killed=h;
  require('../plugins/quests/wgs/DarkSquall.WhileGuthixSleeps')({api,ATTRIBUTES:[],stage:()=>490});
  let icon;const npc={getId:()=>13463,getArea:()=>area,setHeadIcon:v=>icon=v,isNpc:()=>true};
  const p={isPlayer:()=>true,sendMessage(){}};
@@ -841,6 +841,7 @@ test('Elite knights show adapting prayers, spend prayer on attacks and apply sev
  assert.equal(hit(CombatType.MAGIC),20);assert.equal(icon,2);
  for(let i=0;i<23;i++)hit(i%2?CombatType.MAGIC:CombatType.RANGED);
  assert.equal(icon,-1);assert.equal(hit(CombatType.RANGED),13);
+ killed({npc,killer:null});assert.equal(hit(CombatType.RANGED),0, 'respawn restores the knight’s prayer');
 });
 
 

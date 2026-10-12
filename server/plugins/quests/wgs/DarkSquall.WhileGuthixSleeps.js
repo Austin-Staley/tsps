@@ -142,6 +142,7 @@ module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play
   if(stepId in known)return known[stepId];
  }
  function killed({npc,killer}){
+  if(KINSHRA.includes(npc.getId()))guards.delete(npc);
   const p=killer?.isPlayer?.()?killer.getAsPlayer():null;if(!p||!KNIGHTS.includes(npc.getId())||!active(p)||stage(p)<490)return;
   let bit=ELITE.findIndex((_,i)=>!(val(p,ARMOUR_ATTRIBUTE)&(1<<i)));if(bit<0)bit=Math.floor(Math.random()*3);
   p.setAttribute(ARMOUR_ATTRIBUTE,val(p,ARMOUR_ATTRIBUTE)|(1<<bit));ItemOnGroundManager.registerLocation(p,new Item(ELITE[bit],1),npc.getLocation().clone());
