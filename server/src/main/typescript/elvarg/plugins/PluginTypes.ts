@@ -577,8 +577,6 @@ export interface PluginSpellOnItemEvent {
   /** The inventory item the spell was cast on. */
   itemId: number;
   slot: number;
-  /** The core's item-use check for magic; handlers call it before using anything up. */
-  canUse: () => boolean;
   handled: boolean;
 }
 

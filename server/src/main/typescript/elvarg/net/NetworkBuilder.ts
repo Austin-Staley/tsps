@@ -675,7 +675,6 @@ export class ClientConnection {
             spellItemId: packet.sourceItemId,
             itemId: packet.targetItemId,
             slot: packet.targetSlot,
-            canUse: () => PluginManager.emitCanUseItem(this.player as Player, packet.targetItemId, "magic") !== false,
             handled: false,
           }) && !MAGIC_ITEMS.castOnItem(
             this.player,

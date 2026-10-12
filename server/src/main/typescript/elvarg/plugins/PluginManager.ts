@@ -1573,6 +1573,10 @@ export class PluginManager {
   }
 
   public static emitSpellOnItem(event: PluginSpellOnItemEvent): boolean {
+    if (event.player.getInventory().getItems()[event.slot]?.getId() !== event.itemId ||
+        PluginManager.emitCanUseItem(event.player, event.itemId, "magic") === false) {
+      return true;
+    }
     for (const hook of PluginManager.spellOnItemHooks) {
       if (event.handled) break;
       PluginManager.executeHook(hook, event, "spell_on_item", "spell_on_item");
