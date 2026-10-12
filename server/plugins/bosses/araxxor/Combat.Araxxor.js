@@ -15,6 +15,7 @@
  */
 const Shared = require("./Shared.Araxxor");
 const Specials = require("./Specials.Araxxor");
+const CombatAchievements = require("./CombatAchievements.Araxxor");
 
 const BOSS_ANIMATIONS = Object.freeze({ melee: 11480, magic: 11479, ranged: 11493, cleave: 11487, enrage: 11488, enraged: 11489 });
 /** Captured: the cleave's hit and its pools land two ticks after the swing. */
@@ -141,6 +142,8 @@ function startCleave(npc, target) {
         const damage = protect ? Math.floor(rolled * Shared.CLEAVE_PROTECT_FACTOR) : rolled;
         if (damage > 0) {
           target.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(damage, core.HitMask.RED)]);
+          // Perfect Araxxor forbids melee taken off prayer; the cleave is her melee.
+          if (!protect && target.isPlayer?.()) CombatAchievements.avoidableDamage(target.getAsPlayer(), damage);
         }
       }
     }
@@ -313,6 +316,7 @@ function redirectToMirrorback(boss, hit) {
     attacker.getAsPlayer().getCombat().getHitQueue().addPendingDamage([
       new core.HitDamage(recoil, core.HitMask.RED),
     ]);
+    CombatAchievements.avoidableDamage(attacker.getAsPlayer(), recoil);
   }
 }
 

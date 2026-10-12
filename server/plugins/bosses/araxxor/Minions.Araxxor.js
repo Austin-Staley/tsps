@@ -17,6 +17,7 @@
  * the eggs weakens the spiders).
  */
 const Shared = require("./Shared.Araxxor");
+const CombatAchievements = require("./CombatAchievements.Araxxor");
 
 let api = null;
 let core = null;
@@ -238,17 +239,22 @@ function explodeRuptura(npc, target) {
         player.getCombat().getHitQueue().addPendingDamage([
           new core.HitDamage(Shared.RUPTURA_PLAYER_DAMAGE[distance], core.HitMask.RED),
         ]);
+        CombatAchievements.avoidableDamage(player, Shared.RUPTURA_PLAYER_DAMAGE[distance]);
       }
     }
+    let araxytesKilled = 0;
     for (const minion of session?.minions ?? []) {
       if (minion === npc || !alive(minion)) continue;
       const distance = edgeDistance(npc, minion);
       if (distance < Shared.RUPTURA_BOSS_DAMAGE.length) {
+        const damage = Shared.RUPTURA_BOSS_DAMAGE[distance];
+        if (damage >= (minion.getHitpoints?.() ?? Infinity)) araxytesKilled++;
         minion.getCombat().getHitQueue().addPendingDamage([
-          new core.HitDamage(Shared.RUPTURA_BOSS_DAMAGE[distance], core.HitMask.BLUE),
+          new core.HitDamage(damage, core.HitMask.BLUE),
         ]);
       }
     }
+    CombatAchievements.betrayal(session?.player ?? null, araxytesKilled);
     for (const entry of session?.eggs ?? []) {
       const egg = entry?.npc ?? null;
       if (!alive(egg)) continue;
@@ -331,6 +337,7 @@ function modifyHit(event) {
   player.getCombat().getHitQueue().addPendingDamage([
     new core.HitDamage(Math.floor(damage / 2), core.HitMask.RED),
   ]);
+  CombatAchievements.avoidableDamage(player, Math.floor(damage / 2));
 }
 
 /** The eggs themselves are inert: no attacks, no retaliation, no pursuit. */

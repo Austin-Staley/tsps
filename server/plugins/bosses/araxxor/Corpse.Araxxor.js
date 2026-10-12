@@ -18,11 +18,11 @@ const Shared = require("./Shared.Araxxor");
 const Hud = require("./Hud.Araxxor");
 const Minions = require("./Minions.Araxxor");
 const Specials = require("./Specials.Araxxor");
+const CombatAchievements = require("./CombatAchievements.Araxxor");
 
-/** Cache varp total_araxxor_kills: the kill count the boss log and the HUD read. */
+/** Cache varp total_araxxor_kills: the kill count the boss log reads. Combat Achievements sends
+ * it (its count is the one the boss page shows); this plugin only does when that is not running. */
 const TOTAL_KILLS_VARP = 4260;
-const KILLS_ATTRIBUTE = "araxxor:kills";
-const BEST_TICKS_ATTRIBUTE = "araxxor:best-ticks";
 /** Captured: the kill messages five ticks into the death, timed to three ticks into it. */
 const KILL_MESSAGE_TICKS = 5;
 const DURATION_END_TICKS = 3;
@@ -87,24 +87,29 @@ function formatTicks(ticks) {
   return `${minutes}:${String(seconds).padStart(2, "0")}.${String(centis % 100).padStart(2, "0")}`;
 }
 
+/**
+ * One kill: Combat Achievements counts it (and finishes the tasks the fight earned), and its
+ * total is the one told, so the message, the boss page and the kill-count tasks agree.
+ */
 function recordKill(player, ticks) {
-  const kills = (Number(player.getAttribute(KILLS_ATTRIBUTE)) || 0) + 1;
-  player.setAttribute(KILLS_ATTRIBUTE, kills);
-  player.getPacketSender().sendConfig(TOTAL_KILLS_VARP, kills);
+  const own = (Number(player.getAttribute(Shared.ATTR_KILLS)) || 0) + 1;
+  const total = CombatAchievements.killed(player, own, (kills) => announceKill(player, kills, ticks));
+  player.setAttribute(Shared.ATTR_KILLS, Math.max(own, total ?? 0));
+  if (total == null) player.getPacketSender().sendConfig(TOTAL_KILLS_VARP, own);
+}
+
+/** The kill count and the fight's length against the personal best (captured messages). */
+function announceKill(player, kills, ticks) {
   player.sendMessage(`Your Araxxor kill count is: <col=ff0000>${kills}</col>.`);
-  const best = Number(player.getAttribute(BEST_TICKS_ATTRIBUTE)) || 0;
+  const best = Number(player.getAttribute(Shared.ATTR_BEST_TICKS)) || 0;
   if (!best || ticks < best) {
-    player.setAttribute(BEST_TICKS_ATTRIBUTE, ticks);
+    player.setAttribute(Shared.ATTR_BEST_TICKS, ticks);
     player.sendMessage(`Fight duration: <col=ff0000>${formatTicks(ticks)}</col> (new personal best)`);
   } else {
     player.sendMessage(`Fight duration: <col=ff0000>${formatTicks(ticks)}</col>. Personal best: ${formatTicks(best)}`);
   }
 }
 
-function sendKillCount({ player }) {
-  const kills = Number(player.getAttribute(KILLS_ATTRIBUTE)) || 0;
-  if (kills > 0) player.getPacketSender().sendConfig(TOTAL_KILLS_VARP, kills);
-}
 
 /**
  * The death roll: Nid is lifted out of the drops so the pet is only awarded when the
@@ -251,10 +256,9 @@ function denyAttack({ npc }) {
 function attach(pluginApi) {
   api = pluginApi;
   core = pluginApi.core;
-  pluginApi.persistAttribute(KILLS_ATTRIBUTE);
-  pluginApi.persistAttribute(BEST_TICKS_ATTRIBUTE);
+  pluginApi.persistAttribute(Shared.ATTR_KILLS);
+  pluginApi.persistAttribute(Shared.ATTR_BEST_TICKS);
   pluginApi.onNpcDeath(bossDied);
-  pluginApi.onPlayerLogin(sendKillCount);
   pluginApi.onCustomEvent("npc-drops:roll", stashRoll);
   pluginApi.onCustomEvent("npc-drops:generated", stashGenerated);
   pluginApi.onNpcInteraction("Araxxor", { Harvest: harvest, Destroy: destroy, Attack: denyAttack });

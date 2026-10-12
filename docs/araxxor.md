@@ -70,6 +70,24 @@ Ticks below count from the action named; the captured gamevals are in brackets.
 - **Kill messages:** on the same tick come "Your Araxxor kill count is: <col=ff0000>N</col>." (varp 4260, `total_araxxor_kills`) and "Fight duration: <col=ff0000>m:ss.cc</col>. Personal best: m:ss.cc". The duration runs from the spawn to three ticks into the death.
 - **Harvest:** the player plays 2282 on the click. The loot comes two ticks later, the corpse sinks (11486) the tick after, and it goes two ticks after that.
 
+## Combat Achievements
+
+`CombatAchievements.Araxxor.js` decides all twelve of her tasks. The kill count is Combat Achievements' own. Each kill is reported with `combat-achievements:kill`, and its `announce(total)` sends the kill-count and fight-duration messages before any task message, which is live's order (rsprox recording 91: kill count, duration, then tasks). The boss page's varp 4260 and the kill message therefore always agree. The plugin keeps its own count as well (`araxxor:kills`), answers `combat-achievements:kill-count` at login, and answers the personal best and its reset.
+
+| Task | How it is decided |
+| --- | --- |
+| Araxxor Veteran, Master (25, 75) | The kill count. |
+| Speed-Trialist, -Chaser, -Runner (4, 5, 6 kills in 10:00) | The last N kills of one stay in the lair, from the first of them spawning to the last dying. |
+| Perfect Araxxor | No damage from her ranged or magic, from her melee or cleave while not praying Protect from Melee, from any araxyte (attacks, Ruptura explosions, the Mirrorback's reflection, the share of damage it reflects) or from acid (pools, blobs, the ball). |
+| Perfect Araxxor 2 | Perfect Araxxor, and no hit on her while she is enraged. |
+| Relaxxor | Six eggs killed before they hatch, in the fight. Eggs she tries to hatch while overdamaged don't count (Wiki strategy). |
+| Let it seep in | The poison/venom immunity timer (antipoison, antivenom, serpentine helm) never running during the fight. |
+| Araxyte Betrayal | One Ruptura explosion killing three other hatched araxytes. |
+| Arachnid Lover | Ten kills in one stay. |
+| Swimming in Venom | Her tile never changing from spawn to death. |
+
+Where the task text is open (how the speed tasks are timed, whether Betrayal needs one explosion), these are our readings; the Wiki doesn't say.
+
 ## Not captured yet
 
 - **Destroy:** the clue roll and the corpse's timing after Destroy.

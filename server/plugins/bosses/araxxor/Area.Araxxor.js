@@ -18,6 +18,7 @@ const Shared = require("./Shared.Araxxor");
 const Hud = require("./Hud.Araxxor");
 const Minions = require("./Minions.Araxxor");
 const Specials = require("./Specials.Araxxor");
+const CombatAchievements = require("./CombatAchievements.Araxxor");
 
 const ATTR_AREA = "araxxor:instance-area";
 
@@ -93,11 +94,15 @@ function defineAreaClasses() {
 
     /** Per tick, players in this instance only: spawn (and respawn) the encounter. */
     process(mobile) {
-      if (mobile?.isPlayer?.()) ensureEncounter(mobile.getAsPlayer(), this);
+      if (!mobile?.isPlayer?.()) return;
+      const player = mobile.getAsPlayer();
+      ensureEncounter(player, this);
+      CombatAchievements.tick(player, sessions.get(player)?.npc ?? null);
     }
 
     postLeave(mobile, logout) {
       if (mobile?.isPlayer?.()) {
+        CombatAchievements.left(mobile.getAsPlayer());
         destroyArea(mobile.getAsPlayer(), this);
       }
       super.postLeave(mobile, logout);
@@ -193,6 +198,7 @@ function spawnEncounter(session) {
   Specials.initFight(boss);
   Minions.spawnEggs(session);
   Hud.show(boss, session.player);
+  CombatAchievements.spawned(session.player, boss);
   core.TaskManager.submit(new (class extends core.Task {
     constructor() {
       super(Math.max(1, Shared.ARM_TICKS), null, false);

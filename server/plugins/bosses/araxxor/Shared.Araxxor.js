@@ -225,6 +225,9 @@ const ATTR_DYING = "araxxor:dying";
 const ATTR_ENCOUNTER = "araxxor:encounter";
 const ATTR_SPECIAL = "araxxor:special";
 const ATTR_DESTROY_NO_PROMPT = "araxxor:destroy-no-prompt";
+/** Player attribute keys: the kill count and best fight time (ticks), persisted. */
+const ATTR_KILLS = "araxxor:kills";
+const ATTR_BEST_TICKS = "araxxor:best-ticks";
 
 const Attack = { MELEE: "melee", RANGED: "ranged", MAGIC: "magic", CLEAVE: "cleave" };
 
@@ -409,6 +412,8 @@ module.exports = {
   ATTR_ENCOUNTER,
   ATTR_SPECIAL,
   ATTR_DESTROY_NO_PROMPT,
+  ATTR_KILLS,
+  ATTR_BEST_TICKS,
   ENRAGE_MODELS,
   playSound,
   playCaptured,

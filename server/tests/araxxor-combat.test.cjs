@@ -263,3 +263,115 @@ test("pinEggs clears the fighting egg's interaction and combat target", () => {
   assert.ok(calls.some(([kind, value]) => kind === "mob" && value === null), "interaction cleared");
   assert.ok(calls.some(([kind]) => kind === "reset"), "combat target cleared");
 });
+
+test("combat achievements: the fight decides Araxxor's tasks", () => {
+  const CA = require("../plugins/bosses/araxxor/CombatAchievements.Araxxor");
+  let cycle = 0;
+  const completed = [];
+  let caTotal = 0;
+  const handlers = new Map();
+  CA.attach({
+    core: { World: { getProcessCycle: () => cycle } },
+    getPrayerHandler: () => ({ PROTECT_FROM_MELEE: 18, isActivated: (player) => player.praying === true }),
+    onCombatHitResolved: (handler) => handlers.set("hit", handler),
+    onNpcDeath: (handler) => handlers.set("death", handler),
+    onCustomEvent: () => {},
+    emitCustomEvent: (name, request) => {
+      if (name === "combat-achievements:complete") completed.push(request.task);
+      if (name === "combat-achievements:kill") {
+        request.total = caTotal = Math.max(caTotal + 1, request.count);
+        request.announce?.(caTotal);
+      }
+    },
+  });
+  const player = {
+    immune: false,
+    praying: false,
+    isPlayer: () => true,
+    isNpc: () => false,
+    getAsPlayer() { return this; },
+    getCombat: () => ({ getPoisonImmunityTimer: () => ({ finished: () => !player.immune }) }),
+  };
+  const at = (x, y) => ({ getX: () => x, getY: () => y });
+  const boss = {
+    tile: at(3631, 9814),
+    enraged: false,
+    getId: () => Shared.BOSS_ID,
+    isNpc: () => true,
+    isPlayer: () => false,
+    isRegistered: () => true,
+    getLocation() { return this.tile; },
+    getAttribute(key) { return key === Shared.ATTR_ENRAGED ? this.enraged : null; },
+  };
+  const hit = (damage, kind) => ({ getTotalDamage: () => damage, araxxorKind: kind });
+
+  // A clean first kill: perfect, both perfects, no immunity, she never moved.
+  CA.spawned(player, boss);
+  for (let egg = 0; egg < 6; egg++) {
+    handlers.get("death")({ npc: { getId: () => Shared.EGG_ID.acidic, getAttribute: () => ({ player }) } });
+  }
+  cycle = 200;
+  CA.tick(player, boss);
+  const order = [];
+  completed.push = function push(task) { order.push(`task ${task}`); return Array.prototype.push.call(this, task); };
+  assert.equal(CA.killed(player, 1, (kills) => order.push(`kc ${kills}`)), 1, "Combat Achievements' total comes back");
+  assert.equal(order[0], "kc 1", "the kill count is told before any task, as live orders them");
+  delete completed.push;
+  for (const task of ["Perfect Araxxor", "Perfect Araxxor 2", "Let it seep in", "Swimming in Venom", "Relaxxor"]) {
+    assert.ok(completed.includes(task), task);
+  }
+
+  // Second kill: melee off prayer, hit while enraged, antivenom up, she walked.
+  completed.length = 0;
+  CA.spawned(player, boss);
+  handlers.get("hit")({ attacker: boss, target: player, hit: hit(12) });
+  boss.enraged = true;
+  handlers.get("hit")({ attacker: player, target: boss, hit: hit(0) });
+  player.immune = true;
+  boss.tile = at(3632, 9814);
+  cycle = 400;
+  CA.tick(player, boss);
+  CA.killed(player, 2);
+  assert.deepEqual(completed, [], "nothing this time");
+
+  // Prayed melee is allowed; her magic never is.
+  player.immune = false;
+  player.praying = true;
+  boss.enraged = false;
+  CA.spawned(player, boss);
+  handlers.get("hit")({ attacker: boss, target: player, hit: hit(5) });
+  cycle = 600;
+  CA.killed(player, 3);
+  assert.ok(completed.includes("Perfect Araxxor"), "melee through Protect from Melee");
+  completed.length = 0;
+  CA.spawned(player, boss);
+  handlers.get("hit")({ attacker: boss, target: player, hit: hit(3, Shared.Attack.MAGIC) });
+  cycle = 800;
+  CA.killed(player, 4);
+  assert.ok(!completed.includes("Perfect Araxxor"), "her magic spoils it");
+  assert.ok(completed.includes("Araxxor Speed-Trialist"), "four kills within 10:00 of the first spawn");
+  assert.ok(!completed.includes("Araxxor Speed-Chaser"));
+
+  // Kills five to ten, too slow for the speed tasks; ten in one stay is Arachnid Lover.
+  for (let kill = 5; kill <= 10; kill++) {
+    completed.length = 0;
+    CA.spawned(player, boss);
+    cycle += 400;
+    CA.killed(player, kill);
+  }
+  assert.ok(completed.includes("Arachnid Lover"));
+  assert.ok(!completed.includes("Araxxor Speed-Chaser"), "400 ticks a kill is too slow");
+
+  // Leaving ends the run.
+  CA.left(player);
+  completed.length = 0;
+  CA.spawned(player, boss);
+  cycle += 100;
+  CA.killed(player, 11);
+  assert.ok(!completed.includes("Arachnid Lover"), "the count restarts after leaving");
+
+  CA.betrayal(player, 2);
+  assert.ok(!completed.includes("Araxyte Betrayal"));
+  CA.betrayal(player, 3);
+  assert.ok(completed.includes("Araxyte Betrayal"));
+});

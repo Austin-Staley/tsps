@@ -19,6 +19,7 @@
  */
 const Shared = require("./Shared.Araxxor");
 const Minions = require("./Minions.Araxxor");
+const CombatAchievements = require("./CombatAchievements.Araxxor");
 
 const SPECIAL_ANIMATION = Object.freeze({ ball: 11476, splatter: 11478, drip: 11477 });
 const BALL_ANIMATION = 11491;
@@ -168,6 +169,7 @@ function throwBlobs(npc, from, tiles, shape) {
         const pos = player.getLocation();
         if (pos.getX() !== x || pos.getY() !== y) continue;
         player.getCombat().getHitQueue().addPendingDamage([Shared.venomHit(core, Shared.SPLAT_IMPACT_DAMAGE)]);
+        CombatAchievements.avoidableDamage(player, Shared.SPLAT_IMPACT_DAMAGE);
         envenom(player);
       }
       spawnPool(npc, x, y);
@@ -221,6 +223,7 @@ function startBall(npc, target, landing) {
       if (!alive(player)) continue;
       const damage = Shared.randomBetween(Shared.BALL_DAMAGE_MIN, Shared.BALL_DAMAGE_MAX);
       player.getCombat().getHitQueue().addPendingDamage([Shared.venomHit(core, damage)]);
+      CombatAchievements.avoidableDamage(player, damage);
       envenom(player);
     }
   });
@@ -341,7 +344,9 @@ function tickPools(npc, fight, players) {
     if (!alive(player)) continue;
     const pos = player.getLocation();
     if (!fight.pools.has(Shared.tileKey(pos.getX(), pos.getY()))) continue;
-    player.getCombat().getHitQueue().addPendingDamage([Shared.venomHit(core, Shared.poolDamage())]);
+    const damage = Shared.poolDamage();
+    player.getCombat().getHitQueue().addPendingDamage([Shared.venomHit(core, damage)]);
+    CombatAchievements.avoidableDamage(player, damage);
     // The pools inflict venom too (Wiki).
     envenom(player);
   }
