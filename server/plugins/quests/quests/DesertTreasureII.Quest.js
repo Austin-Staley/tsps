@@ -51,6 +51,20 @@ module.exports = function registerDesertTreasureII(api) {
   const ATTR_VAULT_AREA = "desert-treasure-ii:ancient-vault";
   const ATTR_VAULT_SMITH = "desert-treasure-ii:vault-smith";
   const ATTR_SMITH_INTRO = "desert-treasure-ii:smith-intro";
+  const ATTR_FIRST_MEDALLION_MEETING = "desert-treasure-ii:first-medallion-meeting";
+  const FINAL_CELL_ACTIVE = "desert-treasure-ii:final-cell-active";
+  const FINAL_CELL_SOLUTION = "desert-treasure-ii:final-cell-solution";
+  const FINAL_CELL_GUESS = "desert-treasure-ii:final-cell-guess";
+  const FINAL_CELL_ATTEMPTS = "desert-treasure-ii:final-cell-attempts";
+  const FINAL_CELL_GEAR = "desert-treasure-ii:final-cell-gear";
+  const FINAL_CELL_OPEN = "desert-treasure-ii:final-cell-open";
+  const FINAL_CELL_CHEST = "desert-treasure-ii:final-cell-chest";
+  const FINAL_FIGURE_STARTED = "desert-treasure-ii:final-figure-started";
+  const FINAL_FIGURE_DEFEATED = "desert-treasure-ii:final-figure-defeated";
+  const FINAL_ROOM = "desert-treasure-ii:final-room";
+  const FINAL_WIGHT_INDEX = "desert-treasure-ii:final-wight-index";
+  const FINAL_WIGHTS_STARTED = "desert-treasure-ii:final-wights-started";
+  const FINAL_WIGHTS_COMPLETE = "desert-treasure-ii:final-wights-complete";
   // These three cache locs have no stable cache names, so use the IDs verified
   // by dump:loc: desk 49490, inbound boat 49491, outbound Travel loc 48720.
   const KASONDE_DESK_LOC = 49490;
@@ -225,6 +239,7 @@ module.exports = function registerDesertTreasureII(api) {
   let spawned = new WeakMap();
   let WarRoomArea;
   let AncientVaultArea;
+  let FinalVaultArea;
   let StranglewoodHideoutArea;
   let StranglewoodTempleArea;
   let VardorvisArea;
@@ -265,6 +280,24 @@ module.exports = function registerDesertTreasureII(api) {
       }
       super.destroy();
     }
+  };
+
+  FinalVaultArea = class DesertTreasureIIFinalVaultArea extends api.core.TemplatedInstanceArea {
+    constructor(owner) {
+      // The lower chamber is the cache's instanced vault room at
+      // 3264..3319, 6400..6463 (Quest Helper's final-room bounds include the
+      // adjacent entry row at y=6397). Copy the real map palette and collision.
+      super(7, 8);
+      this.owner = owner;
+      this.actors = [];
+      for (let x = 0; x < 7; x++) {
+        for (let y = 0; y < 8; y++) {
+          this.setChunk(0, x, y, { sourceChunkX: 408 + x, sourceChunkY: 800 + y, sourcePlane: 0, rotation: 0 });
+        }
+      }
+    }
+    getName() { return "Elder Vault (Desert Treasure II)"; }
+    allowSummonPet() { return false; }
   };
 
   WarRoomArea = class DesertTreasureIIWarRoomArea extends api.core.TemplatedInstanceArea {
@@ -1018,6 +1051,78 @@ module.exports = function registerDesertTreasureII(api) {
     api.core.World.getAddNPCQueue().push(smith);
     p.setAttribute(ATTR_VAULT_SMITH, smith);
     return area;
+  }
+
+  function enterFinalRoom(p) {
+    let area = p.getAttribute(FINAL_ROOM);
+    if (!(area instanceof FinalVaultArea) || area.isDestroyed()) {
+      area = new FinalVaultArea(p.getUsername?.());
+      p.setAttribute(FINAL_ROOM, area);
+    }
+    area.enter(p);
+    // The cutscene places the player just south of Sliske and the Elder Horn.
+    p.moveTo(area.tile(32, 44, 0));
+    return area;
+  }
+
+  function spawnFinalActor(p, id, sourceX, sourceY) {
+    const area = p.getAttribute(FINAL_ROOM);
+    if (!(area instanceof FinalVaultArea) || area.isDestroyed()) return null;
+    const npc = api.core.NPC.create(id, area.tile(sourceX - 3264, sourceY - 6400, 0));
+    if (!npc) return null;
+    npc.setOwner?.(p);
+    npc.setOwnerOnly?.(true);
+    npc.__skipDefaultRespawn = true;
+    area.add(npc);
+    area.actors.push(npc);
+    api.core.World.getAddNPCQueue().push(npc);
+    return npc;
+  }
+
+  function spawnFinalWight(p, index) {
+    const ids = [N.THE_FORSAKEN_ASSASSIN, N.KETLA_THE_UNWORTHY, N.KASONDE_THE_CRAVEN, N.PERSTEN_THE_DECEITFUL];
+    const id = ids[index];
+    if (!Number.isInteger(id)) return null;
+    const npc = spawnFinalActor(p, id, 3296, 6444);
+    if (!npc) return null;
+    const owned = spawned.get(p) ?? {};
+    spawned.set(p, owned);
+    owned.finalWight = npc;
+    p.setAttribute(FINAL_WIGHT_INDEX, index);
+    npc.__dt2FinalWight = index;
+    p.sendMessage(["The Forsaken Assassin steps forward.", "Ketla the Unworthy steps forward.", "Kasonde the Craven steps forward.", "Persten the Deceitful steps forward."][index]);
+    return npc;
+  }
+
+  function startFinalWights(p) {
+    if (p.getAttribute(FINAL_WIGHTS_COMPLETE)) return;
+    p.setAttribute(FINAL_WIGHTS_STARTED, true);
+    p.setAttribute(FINAL_WIGHT_INDEX, 0);
+    spawnFinalWight(p, 0);
+  }
+
+  function rewardFinalQuest(p) {
+    if (quest.isComplete(p)) return;
+    p.setAttribute(FINAL_WIGHTS_COMPLETE, true);
+    const inventory = p.getInventory();
+    const equipment = p.getEquipment();
+    const wornVisibility = equipment.getAmount(I.RING_OF_VISIBILITY) > 0;
+    for (const container of [inventory, equipment]) {
+      for (const id of [I.RING_OF_VISIBILITY, I.RING_OF_SHADOWS]) {
+        if (container.getAmount(id) > 0) container.deleteNumber(id, container.getAmount(id));
+      }
+    }
+    (wornVisibility ? equipment : inventory).adds(I.RING_OF_SHADOWS, 1);
+    for (let i = 0; i < 3; i++) {
+      if ((inventory.getFreeSlots?.() ?? 0) > 0) inventory.adds(I.ANCIENT_LAMP, 1);
+      else {
+        const groundItems = api.getItemOnGroundManager?.();
+        const location = p.getLocation?.();
+        if (location && groundItems?.registerLocation) groundItems.registerLocation(p, new Item(I.ANCIENT_LAMP, 1), location.clone?.() ?? location);
+        else inventory.adds(I.ANCIENT_LAMP, 1);
+      }
+    }
+    quest.complete(p);
   }
 
   function spawnSurfaceKasonde(p) {
@@ -1871,6 +1976,10 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function handleDialogueLine(event) {
+    if (event?.player?.getAttribute(FINAL_FIGURE_STARTED)
+      && event?.npcId === N.MYSTERIOUS_FIGURE_2 && event?.text === "Very well...") {
+      event.after = () => spawnFinalFigure(event.player);
+    }
     if (stage(event?.player) !== S.LEVIATHAN || event?.text !== "Yes.") return;
     if (![N.CATALYTIC_GUARDIAN, N.CATALYTIC_GUARDIAN_2].includes(event.npcId)) return;
     event.player.setAttribute(SCAR_GUARDIAN_ACCEPTED, true);
@@ -1883,6 +1992,13 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function handleLogin({ player: p }) {
+    if (stage(p) === S.FINALE && p.getAttribute("desert-treasure-ii:final-cutscene-started")
+      && !p.getAttribute(FINAL_WIGHTS_COMPLETE)) {
+      enterFinalRoom(p);
+      // The official sequence resets if the player leaves the chamber.
+      p.setAttribute(FINAL_WIGHT_INDEX, 0);
+      startFinalWights(p);
+    }
     if (stage(p) === S.SUCELLUS) {
       const escaped = p.getAttribute(SUCELLUS_CELL_ESCAPED) === true;
       const defeated = p.getAttribute(SUCELLUS_DEFEATED) === true;
@@ -2012,6 +2128,14 @@ module.exports = function registerDesertTreasureII(api) {
     return x >= 3920 && x < 3952 && y >= 9616 && y < 9648 ? { x, y } : null;
   }
 
+  function finalRoomSourceTile(p, location) {
+    const area = p.getAttribute(FINAL_ROOM);
+    if (!(area instanceof FinalVaultArea) || area.isDestroyed?.() || !location) return null;
+    const x = location.x - area.getBaseX() + 3264;
+    const y = location.y - area.getBaseY() + 6400;
+    return x >= 3264 && x < 3320 && y >= 6400 && y < 6464 ? { x, y } : null;
+  }
+
   function hideoutSourceTile(p, location) {
     const area = p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT);
     if (!(area instanceof StranglewoodHideoutArea) || area.isDestroyed?.() || !location) return null;
@@ -2115,7 +2239,7 @@ module.exports = function registerDesertTreasureII(api) {
 
   function handleLogout({ player: p }) {
     if (!p) return;
-    for (const key of [ATTR_VAULT_AREA, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO, ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA, SUCELLUS_AREA]) {
+    for (const key of [ATTR_VAULT_AREA, FINAL_ROOM, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO, ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA, SUCELLUS_AREA]) {
       const area = p.getAttribute(key);
       if (area && !area.isDestroyed?.()) {
         area.leave?.(p, false);
@@ -2133,7 +2257,20 @@ module.exports = function registerDesertTreasureII(api) {
   function buildJournal(player) {
     const s = quest.getStage(player);
     if (s >= S.COMPLETE) return ["<str>I found the Elder Horn and stopped Sliske.</str>", "", "<col=ff0000>QUEST COMPLETE!</col>"];
-    if (s >= S.FINALE) return ["Return the four medallions to the Ancient Vault."];
+    if (s >= S.FINALE) {
+      if (player.getAttribute(FINAL_WIGHTS_COMPLETE)) return ["Speak to Azzanadra as Sliske's plan concludes."];
+      if (player.getAttribute(FINAL_WIGHTS_STARTED)) return [`Defeat Sliske's four wights (${Math.min(4, (Number(player.getAttribute(FINAL_WIGHT_INDEX)) || 0) + 1)}/4).`];
+      if (player.getAttribute("desert-treasure-ii:final-cutscene-started")) return ["Descend into the vault and stop Sliske taking the Elder Horn."];
+      return ["Return to the Ancient Vault and speak to Asgarnia Smith."];
+    }
+    if (s === S.WHISPERER && player.getAttribute(FINAL_FIGURE_DEFEATED)) return ["Return the Whisperer's medallion to the Ancient Vault."];
+    if (s === S.WHISPERER && player.getAttribute(FINAL_CELL_ACTIVE)) {
+      if (!has(player, I.HAIR_CLIP_3)) return ["Search the bed in the temple prison cell for a hair clip."];
+      if (!player.getAttribute(FINAL_CELL_OPEN)) return ["Use the hair clip to pick the cell lock, then work out its four-number combination."];
+      if (!player.getAttribute(FINAL_CELL_CHEST)) return ["Escape the cell and search the chest in the eastern room for your equipment."];
+      if (!player.getAttribute(FINAL_FIGURE_DEFEATED)) return ["Inspect the altar in the western room and defeat the Mysterious Figure to recover the last medallion."];
+      return ["Return the Whisperer's medallion to the Ancient Vault."];
+    }
     if (s >= S.WHISPERER) return ["Search the Lassar Undercity and defeat the Whisperer."];
     if (s >= S.SUCELLUS) {
       if (player.getAttribute(SUCELLUS_DEFEATED)) {
@@ -2201,6 +2338,19 @@ module.exports = function registerDesertTreasureII(api) {
     }
     if (stage(p) === S.STARTED && (Number(p.getAttribute("desert-treasure-ii:statues")) & 31) !== 31) {
       return p.sendMessage("Asgarnia Smith asked you to inspect the four statues and plaque in the vault.");
+    }
+    if (stage(p) === S.FINALE && p.getAttribute("desert-treasure-ii:final-cutscene-started")
+      && !p.getAttribute(FINAL_WIGHTS_COMPLETE)) {
+      enterFinalRoom(p);
+      p.setAttribute(FINAL_WIGHT_INDEX, 0);
+      p.setAttribute(FINAL_WIGHTS_STARTED, true);
+      spawnFinalWight(p, 0);
+      return;
+    }
+    if (stage(p) === S.FINALE && !p.getAttribute("desert-treasure-ii:final-cutscene-started")) {
+      p.setAttribute("desert-treasure-ii:final-cutscene-started", true);
+      talk(p, npcId, "the-desert-treasure-disputes-of-the-mahjarrat");
+      return;
     }
     const variant = stage(p) < S.VAULT ? "familiar-faces-talking-to-asgarnia-smith-after-inspecting-the-vault"
       : stage(p) < S.DIG ? "familiar-faces-talking-to-asgarnia-smith-after-inspecting-the-vault"
@@ -2466,6 +2616,7 @@ module.exports = function registerDesertTreasureII(api) {
     const { player: p, objectId, definition, location } = event;
     const s = stage(p);
     const vaultTile = vaultSourceTile(p, location);
+    const finalTile = finalRoomSourceTile(p, location);
     const roomTile = warRoomSourceTile(p, location);
     const scarTile = scarSourceTile(p, location);
     const scarMazeTile = scarMazeSourceTile(p, location);
@@ -2474,6 +2625,52 @@ module.exports = function registerDesertTreasureII(api) {
     const leviathanTile = leviathanSourceTile(p, location);
     const sucellusTile = sucellusSourceTile(p, location);
     const visibleId = definition?.id ?? objectId;
+    const option = String(event.option ?? "").toLowerCase();
+    if ((s === S.FINALE || s === S.COMPLETE) && finalTile && visibleId === 48890 && finalTile.x === 3294 && finalTile.y === 6411 && option === "climb") {
+      const finalRoom = p.getAttribute(FINAL_ROOM);
+      finalRoom?.leave?.(p);
+      finalRoom?.destroy?.();
+      p.setAttribute(FINAL_ROOM, null);
+      if (!p.getAttribute(FINAL_WIGHTS_COMPLETE)) p.setAttribute(FINAL_WIGHTS_STARTED, false);
+      enterVault(p);
+      p.sendMessage(p.getAttribute(FINAL_WIGHTS_COMPLETE)
+        ? "You climb back into the Ancient Vault."
+        : "You retreat from the chamber. Sliske's wight trial will restart when you return.");
+      return true;
+    }
+    if (!vaultTile && location?.x === 3511 && Math.abs(location.y - 2970) <= 1
+      && [O.VAULT_DOOR_2, O.VAULT_DOOR_3].includes(objectId)
+      && s === S.WHISPERER && has(p, I.WHISPERERS_MEDALLION)
+      && !p.getAttribute(FINAL_CELL_ACTIVE) && !p.getAttribute(FINAL_FIGURE_DEFEATED)) {
+      p.setAttribute("desert-treasure-ii:final-cell-pending", true);
+      talk(p, N.MYSTERIOUS_FIGURE_2, "the-desert-treasure-entering-the-ancient-vault-with-the-last-medallion");
+      return true;
+    }
+    if (p.getAttribute(FINAL_CELL_ACTIVE) && location?.z === 0) {
+      if (visibleId === 48777 && location.x === 3103 && location.y === 9246 && option === "search") {
+        if (!has(p, I.HAIR_CLIP_3)) p.getInventory().adds(I.HAIR_CLIP_3, 1);
+        p.sendMessage("You find a hair clip under the bed. It should be thin enough to pick the lock.");
+        return true;
+      }
+      if (visibleId === 48774 && location.x === 3107 && location.y === 9248 && option === "open") {
+        if (!has(p, I.HAIR_CLIP_3)) { p.sendMessage("The cell door is locked. A hair clip might pick it."); return true; }
+        if (!p.getAttribute(FINAL_CELL_OPEN)) { startFinalCellLock(p); return true; }
+        return false;
+      }
+      if (visibleId === 48771 && location.x === 3115 && location.y === 9263 && option === "search") {
+        if (!p.getAttribute(FINAL_CELL_OPEN)) { p.sendMessage("The chest is beyond the locked cell door."); return true; }
+        restoreFinalCellGear(p);
+        p.setAttribute(FINAL_CELL_CHEST, true);
+        p.sendMessage("You search the chest and recover your equipment. The Whisperer's medallion is missing.");
+        return true;
+      }
+      if (location.x === 3086 && location.y === 9260 && option === "inspect"
+        && p.getAttribute(FINAL_CELL_CHEST) && !p.getAttribute(FINAL_FIGURE_STARTED)) {
+        p.setAttribute(FINAL_FIGURE_STARTED, true);
+        talk(p, N.MYSTERIOUS_FIGURE_2, "the-desert-treasure-inspecting-the-altar-in-the-temple");
+        return true;
+      }
+    }
     if (s === S.SUCELLUS) {
       const action = String(event.option ?? "").toLowerCase();
       const worldX = location?.x, worldY = location?.y, worldZ = location?.z ?? location?.getZ?.() ?? 0;
@@ -2961,6 +3158,16 @@ module.exports = function registerDesertTreasureII(api) {
     }
     if (s >= S.STARTED && s < S.COMPLETE && [O.VAULT_DOOR_2, O.VAULT_DOOR_3].includes(objectId)
       && !vaultTile && Math.abs(location.x - 3511) <= 4 && Math.abs(location.y - 2970) <= 4) {
+      // The first return with Vardorvis' medallion is interrupted by the
+      // Mysterious Figure before the player enters the vault. Keep the
+      // transcript's final action as the point where the vault scene resumes.
+      if (s === S.VARDORVIS && has(p, I.VARDORVIS_MEDALLION)
+        && !p.getAttribute(ATTR_FIRST_MEDALLION_MEETING)) {
+        p.setAttribute(ATTR_FIRST_MEDALLION_MEETING, true);
+        p.setAttribute("desert-treasure-ii:first-medallion-meeting-pending", true);
+        talk(p, N.MYSTERIOUS_FIGURE_2, "carnifex-maximus-vardorvis-returning-the-first-medallion");
+        return true;
+      }
       enterVault(p);
       return true;
     }
@@ -3513,6 +3720,27 @@ module.exports = function registerDesertTreasureII(api) {
     if (!killer) return;
     const owned = spawned.get(killer);
     if (!owned) return;
+    if (owned.finalWight === npc && stage(killer) === S.FINALE) {
+      owned.finalWight = null;
+      const next = (Number(killer.getAttribute(FINAL_WIGHT_INDEX)) || 0) + 1;
+      if (next < 4) {
+        spawnFinalWight(killer, next);
+        return;
+      }
+      killer.setAttribute(FINAL_WIGHTS_COMPLETE, true);
+      killer.sendMessage("Sliske's four wights are defeated. Speak with Azzanadra as the Mahjarrat's dispute concludes.");
+      talk(killer, N.SLISKE_2, "the-desert-treasure-aftermath");
+      return;
+    }
+    if (owned.finalFigure === npc && stage(killer) === S.WHISPERER) {
+      owned.finalFigure = null;
+      killer.setAttribute(FINAL_FIGURE_STARTED, false);
+      killer.setAttribute(FINAL_FIGURE_DEFEATED, true);
+      killer.setAttribute(FINAL_CELL_ACTIVE, false);
+      if (!has(killer, I.WHISPERERS_MEDALLION)) killer.getInventory().adds(I.WHISPERERS_MEDALLION, 1);
+      killer.sendMessage("The Mysterious Figure falls. You recover the Whisperer's medallion and can now return to the Ancient Vault.");
+      return;
+    }
     if (owned.leviathan === npc && stage(killer) === S.LEVIATHAN) {
       owned.leviathan = null;
       killer.setAttribute(ATTR, null);
@@ -3675,7 +3903,165 @@ module.exports = function registerDesertTreasureII(api) {
     if (s === S.WHISPERER) return talk(p, npcId, "the-whisperer-talking-to-ketla-after-coming-to");
   }
 
+  function startFinalCellLock(p) {
+    if (!p.getAttribute(FINAL_CELL_SOLUTION)) {
+      p.setAttribute(FINAL_CELL_SOLUTION, Array.from({ length: 4 }, () => Math.floor(Math.random() * 10)).join(","));
+      p.setAttribute(FINAL_CELL_ATTEMPTS, 0);
+    }
+    p.sendMessage("You work the hair clip into the lock and begin testing four-number combinations.");
+    chooseFinalLockDigit(p, 0, 0);
+  }
+  function chooseFinalLockDigit(p, slot, offset) {
+    const options = [];
+    for (const digit of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].slice(offset, offset + 4)) {
+      options.push(String(digit), () => setFinalLockDigit(p, slot, digit));
+    }
+    if (offset + 4 < 10) options.push("More...", () => chooseFinalLockDigit(p, slot, offset + 4));
+    else if (offset) options.push("Back...", () => chooseFinalLockDigit(p, slot, 0));
+    options.push("Cancel", () => {});
+    api.sendMultiChatboxPrompt(p, `Cell lock - number ${slot + 1} of 4`, ...options);
+  }
+  function setFinalLockDigit(p, slot, digit) {
+    const guess = String(p.getAttribute(FINAL_CELL_GUESS) ?? "").split(",").filter(Boolean);
+    guess[slot] = String(digit);
+    p.setAttribute(FINAL_CELL_GUESS, guess.join(","));
+    if (slot < 3) return chooseFinalLockDigit(p, slot + 1, 0);
+    const solution = String(p.getAttribute(FINAL_CELL_SOLUTION) ?? "").split(",").map(Number);
+    const attempt = guess.slice(0, 4).map(Number);
+    p.setAttribute(FINAL_CELL_GUESS, "");
+    let exact = 0;
+    const remainingSolution = [], remainingAttempt = [];
+    for (let i = 0; i < 4; i++) {
+      if (attempt[i] === solution[i]) exact++;
+      else { remainingSolution.push(solution[i]); remainingAttempt.push(attempt[i]); }
+    }
+    let misplaced = 0;
+    for (const value of remainingAttempt) {
+      const index = remainingSolution.indexOf(value);
+      if (index >= 0) { misplaced++; remainingSolution.splice(index, 1); }
+    }
+    if (exact === 4) {
+      p.setAttribute(FINAL_CELL_OPEN, true);
+      p.sendMessage("The four numbers are correct. The cell lock clicks open; open the gate to escape.");
+      return;
+    }
+    p.setAttribute(FINAL_CELL_ATTEMPTS, (Number(p.getAttribute(FINAL_CELL_ATTEMPTS)) || 0) + 1);
+    p.sendMessage(`The lock rejects that combination: ${exact} number${exact === 1 ? "" : "s"} in the correct place, ${misplaced} in the wrong place.`);
+    chooseFinalLockDigit(p, 0, 0);
+  }
+  function spawnFinalFigure(p) {
+    if (p.getAttribute(FINAL_FIGURE_DEFEATED)) return;
+    let owned = spawned.get(p);
+    if (!owned) spawned.set(p, owned = {});
+    if (owned.finalFigure?.isRegistered?.()) return owned.finalFigure;
+    owned.finalFigure = api.spawnNpc({ id: N.MYSTERIOUS_FIGURE_4, x: 3086, y: 9260, z: 0, wanderRadius: 0, owner: p, ownerOnly: true });
+    if (owned.finalFigure) {
+      owned.finalFigure.setMaxHitpoints?.(450);
+      owned.finalFigure.setHitpoints?.(450);
+      owned.finalFigure.__dt2FinalFigure = true;
+      owned.finalFigure.__skipDefaultRespawn = true;
+      p.sendMessage("The Mysterious Figure attacks. Protect from Magic and change combat styles when she prays against yours.");
+    }
+    return owned.finalFigure;
+  }
+  function handleFinalFigureHit({ npc, hit }) {
+    if (!npc?.__dt2FinalFigure || !hit) return;
+    const attacker = hit.getAttacker?.();
+    if (attacker?.isPlayer?.() !== true) return;
+    const attackType = attacker.getAsPlayer?.().getFightType?.()?.getBonusType?.();
+    if (!Number.isInteger(attackType)) return;
+    const style = attackType === 3 ? 3 : attackType === 4 ? 4 : 0;
+    if (npc.__dt2FinalFigurePrayer === style) {
+      for (const damage of hit.getHits?.() ?? []) damage.setDamage(0);
+      hit.updateTotalDamage?.();
+    }
+    npc.__dt2FinalFigureHits = (npc.__dt2FinalFigureHits || 0) + 1;
+    if (npc.__dt2FinalFigureHits % 3 === 0) {
+      npc.__dt2FinalFigurePrayer = style;
+      npc.forceChat?.("You will not break my defences so easily!");
+      attacker.sendMessage?.("The Mysterious Figure prays against your current attack style.");
+    }
+  }
+  function storeFinalCellGear(p) {
+    const save = (container) => container.getItems().map((item) => [item.getId(), item.getAmount(), item.meta ?? null]);
+    p.setAttribute(FINAL_CELL_GEAR, { inventory: save(p.getInventory()), equipment: save(p.getEquipment()) });
+    const clear = (container) => {
+      container.setItems(container.getItems().map(() => new Item(-1, 0)));
+      container.refreshItems();
+    };
+    clear(p.getInventory());
+    clear(p.getEquipment());
+  }
+  function restoreFinalCellGear(p) {
+    const gear = p.getAttribute(FINAL_CELL_GEAR);
+    if (!gear?.inventory || !gear?.equipment) return;
+    if (has(p, I.HAIR_CLIP_3)) p.getInventory().deleteNumber(I.HAIR_CLIP_3, p.getInventory().getAmount(I.HAIR_CLIP_3));
+    const restore = (container, saved) => {
+      const items = saved.slice(0, container.capacity()).map(([id, amount, meta]) => new Item(Number(id), Number(amount), meta));
+      while (items.length < container.capacity()) items.push(new Item(-1, 0));
+      container.setItems(items);
+      container.refreshItems();
+    };
+    restore(p.getInventory(), gear.inventory);
+    restore(p.getEquipment(), gear.equipment);
+    p.setAttribute(FINAL_CELL_GEAR, null);
+  }
+
   function handleDialogueAction({ player: p, stepId }) {
+    if (stepId === "qEMxBM" && p.getAttribute("desert-treasure-ii:final-cell-pending")) {
+      p.setAttribute("desert-treasure-ii:final-cell-pending", false);
+      p.setAttribute(FINAL_CELL_ACTIVE, true);
+      p.getInventory().deleteNumber(I.WHISPERERS_MEDALLION, 1);
+      storeFinalCellGear(p);
+      p.moveTo(new api.core.Location(3103, 9246, 0));
+    }
+    if (stepId === "NoRYcT" && p.getAttribute("desert-treasure-ii:first-medallion-meeting-pending")) {
+      p.setAttribute("desert-treasure-ii:first-medallion-meeting-pending", false);
+      enterVault(p);
+    }
+    if (stage(p) === S.FINALE) {
+      const actors = spawned.get(p) ?? {};
+      if (stepId === "lnBBaf") {
+        const area = enterFinalRoom(p);
+        const smith = spawnFinalActor(p, ASGARNIA_SMITH_VAULT_INITIAL, 3296, 6444);
+        actors.finalSmith = smith;
+      } else if (stepId === "2ucP4K") {
+        actors.finalBanikan = spawnFinalActor(p, N.DR_BANIKAN_2, 3298, 6441);
+        spawned.set(p, actors);
+      } else if (stepId === "s3g1xZ" && actors.finalBanikan) {
+        actors.finalBanikan.setNpcTransformationId?.(N.AZZANADRA_2);
+        actors.finalAzzanadra = actors.finalBanikan;
+      } else if (stepId === "CQXcy8") {
+        actors.finalHazeel = spawnFinalActor(p, N.HAZEEL_5, 3294, 6441);
+        spawned.set(p, actors);
+      } else if (stepId === "F2TgOo") {
+        actors.finalEnakhra = spawnFinalActor(p, N.ENAKHRA_4, 3292, 6441);
+        spawned.set(p, actors);
+      } else if (stepId === "t8wSqb") {
+        actors.finalAkthanakos = spawnFinalActor(p, N.AKTHANAKOS_2, 3300, 6441);
+        spawned.set(p, actors);
+      } else if (stepId === "fknd65") {
+        actors.finalSliske = spawnFinalActor(p, N.SLISKE, 3296, 6444);
+        spawned.set(p, actors);
+      } else if (stepId === "VyE7pP" && actors.finalSliske) {
+        actors.finalSliske.setNpcTransformationId?.(N.WIZARD_PERSTEN);
+      } else if (stepId === "j4r_NI" && actors.finalSliske) {
+        actors.finalSliske.setNpcTransformationId?.(N.ASSASSIN);
+      } else if (stepId === "2PDmE7" && actors.finalSliske) {
+        actors.finalSliske.setNpcTransformationId?.(N.KETLA);
+      } else if (stepId === "-qlPgg" && actors.finalSliske) {
+        actors.finalSliske.setNpcTransformationId?.(N.KASONDE);
+      } else if (stepId === "3rolVc" && actors.finalSliske) {
+        actors.finalSliske.setNpcTransformationId?.(N.SLISKE);
+      } else if (stepId === "2at3Ae") {
+        startFinalWights(p);
+        spawned.set(p, actors);
+      }
+    }
+    if (stepId === "acAj3M" && p.getAttribute(FINAL_WIGHTS_COMPLETE)) {
+      p.sendMessage("Sliske completes the spell and the Elder Horn vanishes in a burst of shadow.");
+    }
+    if (stepId === "xGIiPZ" && p.getAttribute(FINAL_WIGHTS_COMPLETE)) rewardFinalQuest(p);
     if (stepId === "EDEdng" && stage(p) === S.MACHINE && p.getAttribute(CELLS_INSERTED)) openGolemPuzzle(p);
     if (stepId === "4b6oDl" && stage(p) === S.LEVIATHAN && p.getAttribute(SCAR_BOAT_TRIED)) {
       const area = p.getAttribute(ATTR_SCAR_AREA);
@@ -3687,7 +4073,7 @@ module.exports = function registerDesertTreasureII(api) {
     key: "desert_treasure_ii", name: "Desert Treasure II - The Fallen Empire", varpId: 3786, varbitId: 14862,
     startedValue: S.STARTED, completionValue: S.COMPLETE, questPoints: 5,
     xpRewards: [{ skillId: Skill.AGILITY.getIndex(), amount: 50000, label: "Agility" }, { skillId: Skill.HERBLORE.getIndex(), amount: 50000, label: "Herblore" }, { skillId: Skill.THIEVING.getIndex(), amount: 50000, label: "Thieving" }, { skillId: Skill.THIEVING.getIndex(), amount: 100000, label: "Chosen skill" }],
-    rewardItemId: I.ANCIENT_LAMP, otherRewards: ["Access to Vardorvis, the Leviathan, Duke Sucellus and the Whisperer"], buildJournal,
+    otherRewards: ["Ring of shadows", "Three ancient lamps", "Access to Vardorvis, the Leviathan, Duke Sucellus and the Whisperer"], buildJournal,
   });
   ["desert-treasure-ii:statues", "desert-treasure-ii:cells-collected", CELLS_INSERTED, CELL_POSITIONS,
     GOLEM_SOLVED, SEARCHED_NAMES, BANIKAN_LEFT].forEach((key) => api.persistAttribute(key));
@@ -3695,6 +4081,10 @@ module.exports = function registerDesertTreasureII(api) {
   api.persistAttribute(VARDORVIS_PROGRESS);
   api.persistAttribute(ATTR_SMITH_INTRO);
   api.persistAttribute(STATUES_PLACED);
+  api.persistAttribute(ATTR_FIRST_MEDALLION_MEETING);
+  [FINAL_CELL_ACTIVE, FINAL_CELL_SOLUTION, FINAL_CELL_GUESS, FINAL_CELL_ATTEMPTS, FINAL_CELL_OPEN, FINAL_CELL_GEAR,
+    FINAL_CELL_CHEST, FINAL_FIGURE_STARTED, FINAL_FIGURE_DEFEATED, "desert-treasure-ii:final-cell-pending",
+    "desert-treasure-ii:final-cutscene-started", FINAL_WIGHT_INDEX, FINAL_WIGHTS_STARTED, FINAL_WIGHTS_COMPLETE].forEach((key) => api.persistAttribute(key));
   [SUCELLUS_MUSHROOMS, SUCELLUS_VATS, SUCELLUS_POISONS, SUCELLUS_DEFEATED, SUCELLUS_WEST_ROOM,
     SUCELLUS_CELL_PROGRESS, SUCELLUS_CELL_ENTERED, SUCELLUS_CELL_ESCAPED, SUCELLUS_ASSASSIN_GONE].forEach((key) => api.persistAttribute(key));
   [SCAR_DEMONS_DEFEATED, SCAR_BOAT_TRIED, SCAR_PERSTEN_TALKED, SCAR_PERSTEN_TALKED_BEFORE,
@@ -3735,6 +4125,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcHitModify(preventTotemDamage);
   api.onNpcHitModify(handleScarAxonHit);
   api.onNpcHitModify(preventScarSummonProtection);
+  api.onNpcHitModify(handleFinalFigureHit);
   api.onNpcInteraction("Asgarnia Smith", { "Talk-to": talkSmith });
   api.onNpcInteraction("Cerebral pathfinder", { Move: pushScarPathRunner });
   api.onNpcInteraction("Cerebral pathbreaker", { Move: pushScarPathRunner });

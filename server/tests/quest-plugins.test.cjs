@@ -908,6 +908,7 @@ test('Desert Treasure II requires each medallion on its matching Vault statue an
   };
   quest.setStage(p, 7);
   attrs.set('desert-treasure-ii:vardorvis-progress', 22);
+  attrs.set('desert-treasure-ii:first-medallion-meeting', true);
   assert.equal(objectHooks[0]({ player: p, objectId: O.VAULT_DOOR_2, location: { x: 3511, y: 2970, z: 0 } }), true);
   const area = attrs.get('desert-treasure-ii:ancient-vault');
   const location = area.tile(21, 19, 1);
@@ -918,6 +919,257 @@ test('Desert Treasure II requires each medallion on its matching Vault statue an
   assert.equal(counts.get(I.VARDORVIS_MEDALLION), 0);
   assert.equal(quest.getStage(p), 8);
   assert.equal(attrs.get('desert-treasure-ii:medallions-placed'), 1);
+});
+
+test('Desert Treasure II plays the first-medallion ambush before re-entering the Ancient Vault', () => {
+  const { api: base } = mockApi();
+  const objectHooks = [], customEvents = [];
+  class TestInstance {
+    constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
+    setChunk() {}
+    enter() {}
+    leave() {}
+    postLeave() {}
+    getBaseX() { return 8192; }
+    getBaseY() { return 1600; }
+    tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z }; }
+    add(npc) { this.entities.push(npc); }
+    isDestroyed() { return false; }
+    destroy() {}
+  }
+  const core = { ...base.core, TemplatedInstanceArea: TestInstance,
+    NPC: { create: (id, location) => ({ id, location, setOwner() {}, setOwnerOnly() {} }) },
+    World: { getAddNPCQueue: () => [], getRemoveNPCQueue: () => [] } };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
+        : prop === 'onCustomEvent' ? (name, handler) => customEvents.push({ name, handler })
+          : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const startTranscript = runtime.startTranscript;
+  const transcripts = [];
+  runtime.startTranscript = (_api, _player, npcId, page, variant) => { transcripts.push({ npcId, page, variant }); };
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1);
+    const attrs = new Map();
+    const counts = new Map([[core.ItemIdentifiers.VARDORVIS_MEDALLION, 1]]);
+    const player = {
+      getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      getUsername: () => 'dt2-first-medallion-test',
+      getSkillManager: () => ({ getMaxLevel: () => 99 }),
+      getInventory: () => ({ getAmount: (id) => counts.get(id) ?? 0 }),
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+      moveTo(location) { this.location = location; }, sendMessage() {},
+    };
+    quest.setStage(player, 7);
+    const door = { player, objectId: core.ObjectIdentifiers.VAULT_DOOR_2, location: { x: 3511, y: 2970, z: 0 } };
+    assert.equal(objectHooks[0](door), true);
+    assert.equal(transcripts[0].variant, 'carnifex-maximus-vardorvis-returning-the-first-medallion');
+    assert.equal(attrs.get('desert-treasure-ii:ancient-vault'), undefined,
+      'the scene does not skip the Mysterious Figure dialogue');
+    customEvents.find(({ name }) => name === 'npc-dialogue:action').handler({ player, stepId: 'NoRYcT' });
+    assert.ok(attrs.get('desert-treasure-ii:ancient-vault'), 'the dialogue action resumes the vault scene');
+    assert.equal(player.location.x, 8207);
+    assert.equal(player.location.y, 1606);
+  } finally {
+    runtime.startTranscript = startTranscript;
+  }
+});
+
+test('Desert Treasure II last medallion route traps the player, requires solving the cell lock, then makes the Figure fight reclaimable', () => {
+  const { api: base } = mockApi();
+  const objectHooks = [], customEvents = [], deathHooks = [], npcHitHooks = [], prompts = [];
+  let spawnedFigure;
+  const core = { ...base.core,
+    NPC: { create: (id, location) => ({ id, location }), },
+    World: { getAddNPCQueue: () => [], getRemoveNPCQueue: () => [] },
+  };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
+        : prop === 'onCustomEvent' ? (name, handler) => customEvents.push({ name, handler })
+          : prop === 'onNpcDeath' ? (handler) => deathHooks.push(handler)
+            : prop === 'onNpcHitModify' ? (handler) => npcHitHooks.push(handler)
+            : prop === 'sendMultiChatboxPrompt' ? (player, prompt, ...options) => prompts.push({ player, prompt, options })
+              : prop === 'spawnNpc' ? (args) => (spawnedFigure = { id: args.id, args, setMaxHitpoints(value) { this.maxHitpoints = value; }, setHitpoints(value) { this.hitpoints = value; } })
+                : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const startTranscript = runtime.startTranscript;
+  const transcripts = [];
+  runtime.startTranscript = (_api, _player, npcId, page, variant) => { transcripts.push({ npcId, page, variant }); };
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1);
+    const attrs = new Map();
+    const inventoryItems = Array.from({ length: 28 }, (_, index) => index === 0
+      ? new core.Item(core.ItemIdentifiers.WHISPERERS_MEDALLION, 1) : index === 1
+        ? new core.Item(995, 200) : new core.Item(-1, 0));
+    const equipmentItems = Array.from({ length: 14 }, (_, index) => index === 0 ? new core.Item(1275, 1) : new core.Item(-1, 0));
+    const container = (items) => ({ getItems: () => items, setItems(value) { items.splice(0, items.length, ...value); },
+      capacity: () => items.length, refreshItems() {},
+      getAmount(id) { return items.reduce((sum, item) => sum + (item.getId() === id ? item.getAmount() : 0), 0); },
+      adds(id, amount) { const free = items.findIndex((item) => item.getId() <= 0); if (free >= 0) items[free] = new core.Item(id, amount); },
+      deleteNumber(id, amount) { for (const item of items) { if (item.getId() !== id || amount <= 0) continue; const taken = Math.min(amount, item.getAmount()); item.setAmount?.(item.getAmount() - taken); if (!item.setAmount) item.amount -= taken; amount -= taken; if (item.getAmount() <= 0) { item.id = -1; item.amount = 0; } } },
+    });
+    const inventory = container(inventoryItems), equipment = container(equipmentItems);
+    const p = {
+      getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      getUsername: () => 'dt2-final-cell-test',
+      getSkillManager: () => ({ getMaxLevel: () => 99 }),
+      getInventory: () => inventory, getEquipment: () => equipment,
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+      moveTo(location) { this.location = location; }, sendMessage() {},
+    };
+    quest.setStage(p, 10);
+    assert.equal(objectHooks[0]({ player: p, objectId: core.ObjectIdentifiers.VAULT_DOOR_2, location: { x: 3511, y: 2970, z: 0 } }), true);
+    assert.equal(transcripts.at(-1).variant, 'the-desert-treasure-entering-the-ancient-vault-with-the-last-medallion');
+    customEvents.find(({ name }) => name === 'npc-dialogue:action').handler({ player: p, stepId: 'qEMxBM' });
+    assert.equal(p.location.x, 3103);
+    assert.equal(inventory.getAmount(995), 0, 'equipment is secured outside the prison cell');
+    assert.equal(equipment.getAmount(1275), 0, 'worn equipment is secured outside the prison cell');
+    assert.equal(objectHooks[0]({ player: p, objectId: 48777, option: 'Search', location: { x: 3103, y: 9246, z: 0 } }), true);
+    assert.equal(inventory.getAmount(core.ItemIdentifiers.HAIR_CLIP_3), 1);
+    attrs.set('desert-treasure-ii:final-cell-solution', '1,2,3,4');
+    assert.equal(objectHooks[0]({ player: p, objectId: 48774, option: 'Open', location: { x: 3107, y: 9248, z: 0 } }), true);
+    for (const digit of [1, 2, 3, 4]) {
+      let prompt = prompts.at(-1);
+      let optionIndex = prompt.options.findIndex((entry, index) => index % 2 === 0 && entry === String(digit));
+      if (optionIndex === -1) {
+        const moreIndex = prompt.options.findIndex((entry, index) => index % 2 === 0 && entry === 'More...');
+        assert.notEqual(moreIndex, -1, `lock offers another digit page for ${digit}`);
+        prompt.options[moreIndex + 1]();
+        prompt = prompts.at(-1);
+        optionIndex = prompt.options.findIndex((entry, index) => index % 2 === 0 && entry === String(digit));
+      }
+      assert.notEqual(optionIndex, -1, `lock exposes digit ${digit}`);
+      prompt.options[optionIndex + 1]();
+    }
+    assert.equal(attrs.get('desert-treasure-ii:final-cell-open'), true);
+    assert.equal(objectHooks[0]({ player: p, objectId: 48771, option: 'Search', location: { x: 3115, y: 9263, z: 0 } }), true);
+    assert.equal(attrs.get('desert-treasure-ii:final-cell-chest'), true);
+    assert.equal(inventory.getAmount(995), 200, 'the chest restores the stored inventory');
+    assert.equal(equipment.getAmount(1275), 1, 'the chest restores worn equipment');
+    assert.equal(objectHooks[0]({ player: p, objectId: 37633, option: 'Inspect', location: { x: 3086, y: 9260, z: 0 } }), true);
+    assert.equal(transcripts.at(-1).variant, 'the-desert-treasure-inspecting-the-altar-in-the-temple');
+    const line = { player: p, npcId: core.NpcIdentifiers.MYSTERIOUS_FIGURE_2, text: 'Very well...' };
+    customEvents.find(({ name }) => name === 'npc-dialogue:line').handler(line);
+    line.after();
+    assert.equal(spawnedFigure.id, core.NpcIdentifiers.MYSTERIOUS_FIGURE_4);
+    assert.equal(spawnedFigure.maxHitpoints, 450);
+    let attackStyle = 1;
+    p.isPlayer = () => true; p.getAsPlayer = () => p;
+    p.getFightType = () => ({ getBonusType: () => attackStyle });
+    const hitFor = (style) => {
+      attackStyle = style;
+      const part = { damage: 10, setDamage(value) { this.damage = value; } };
+      const hit = { getAttacker: () => p, getHits: () => [part], getTotalDamage: () => part.damage, updateTotalDamage() {} };
+      npcHitHooks.at(-1)({ npc: spawnedFigure, hit });
+      return part.damage;
+    };
+    assert.equal(hitFor(1), 10);
+    assert.equal(hitFor(1), 10);
+    assert.equal(hitFor(1), 10, 'the third attack lands before the Figure changes her prayer');
+    assert.equal(hitFor(1), 0, 'the Figure blocks the attack style she prayed against');
+    assert.equal(hitFor(4), 10, 'switching from melee to ranged bypasses her current protection');
+    deathHooks[0]({ killer: p, npc: spawnedFigure });
+    assert.equal(attrs.get('desert-treasure-ii:final-figure-defeated'), true);
+    assert.equal(inventory.getAmount(core.ItemIdentifiers.WHISPERERS_MEDALLION), 1);
+  } finally {
+    runtime.startTranscript = startTranscript;
+  }
+});
+
+test('Desert Treasure II descends into the copied Elder Vault, chains all four wights, and grants the ending rewards', () => {
+  const { api: base } = mockApi();
+  const interactions = [], deaths = [], objects = [], actions = new Map(), queue = [];
+  class TestInstance {
+    constructor(width, height) { this.width = width; this.height = height; this.entities = []; this.chunks = []; this.destroyed = false; }
+    setChunk(plane, x, y, chunk) { this.chunks.push([plane, x, y, chunk]); }
+    enter() {}
+    leave() {}
+    postLeave() {}
+    getBaseX() { return 8192; }
+    getBaseY() { return 1600; }
+    tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z }; }
+    add(npc) { this.entities.push(npc); }
+    isDestroyed() { return this.destroyed; }
+    destroy() { this.destroyed = true; }
+  }
+  const core = {
+    ...base.core,
+    TemplatedInstanceArea: TestInstance,
+    NPC: { create(id, location) { return { id, location, setOwner(owner) { this.owner = owner; }, setOwnerOnly() {}, setNpcTransformationId(id) { this.transformedTo = id; }, isNpc() { return true; }, getAsNpc() { return this; }, isRegistered() { return true; }, getOwner() { return this.owner; } }; } },
+    World: { getAddNPCQueue: () => queue, getRemoveNPCQueue: () => [] },
+  };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
+        : prop === 'onNpcDeath' ? (handler) => deaths.push(handler)
+          : prop === 'onObjectInteraction' ? (handler) => objects.push(handler)
+          : prop === 'onCustomEvent' ? (name, handler) => actions.set(name, handler)
+            : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const startTranscript = runtime.startTranscript;
+  const transcripts = [];
+  runtime.startTranscript = (_api, player, npcId, page, variant) => (transcripts.push({ npcId, page, variant }), true);
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1);
+    const attrs = new Map();
+    class Container {
+      constructor() { this.counts = new Map(); }
+      getAmount(id) { return this.counts.get(id) ?? 0; }
+      adds(id, amount) { this.counts.set(id, this.getAmount(id) + amount); }
+      deleteNumber(id, amount) { this.counts.set(id, Math.max(0, this.getAmount(id) - amount)); }
+    }
+    const inventory = new Container(), equipment = new Container();
+    inventory.adds(core.ItemIdentifiers.RING_OF_VISIBILITY, 1);
+    const p = {
+      getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      getUsername: () => 'dt2-final-room-test', getInventory: () => inventory, getEquipment: () => equipment,
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+      moveTo(location) { this.location = location; }, sendMessage() {}, isRegistered: () => false,
+    };
+    quest.setStage(p, 11);
+    const talkSmith = interactions.find(({ name }) => name === 'Asgarnia Smith').options['Talk-to'];
+    talkSmith({ player: p, npcId: core.NpcIdentifiers.ASGARNIA_SMITH });
+    assert.equal(transcripts.at(-1).variant, 'the-desert-treasure-disputes-of-the-mahjarrat');
+    const dialogueAction = actions.get('npc-dialogue:action');
+    dialogueAction({ player: p, stepId: 'lnBBaf' });
+    const area = attrs.get('desert-treasure-ii:final-room');
+    assert.equal(area.width, 7);
+    assert.equal(area.height, 8);
+    assert.equal(area.chunks.filter(([plane, , , chunk]) => plane === 0 && chunk).length, 56);
+    assert.deepEqual(area.getName(), 'Elder Vault (Desert Treasure II)');
+    for (const stepId of ['2ucP4K', 's3g1xZ', 'CQXcy8', 'F2TgOo', 't8wSqb', 'fknd65']) dialogueAction({ player: p, stepId });
+    const sliske = queue.find((npc) => npc.id === core.NpcIdentifiers.SLISKE);
+    assert.ok(sliske, 'the Mahjarrat scene reveals Sliske in the copied chamber');
+    dialogueAction({ player: p, stepId: '2at3Ae' });
+    for (const id of [core.NpcIdentifiers.THE_FORSAKEN_ASSASSIN, core.NpcIdentifiers.KETLA_THE_UNWORTHY,
+      core.NpcIdentifiers.KASONDE_THE_CRAVEN, core.NpcIdentifiers.PERSTEN_THE_DECEITFUL]) {
+      const wight = queue.findLast((npc) => npc.id === id);
+      assert.ok(wight, `quest spawns wight ${id}`);
+      assert.equal(wight.owner, p, 'the fight belongs to this player');
+      deaths[0]({ killer: p, npc: wight });
+    }
+    assert.equal(attrs.get('desert-treasure-ii:final-wights-complete'), true);
+    assert.equal(transcripts.at(-1).variant, 'the-desert-treasure-aftermath');
+    dialogueAction({ player: p, stepId: 'xGIiPZ' });
+    assert.equal(quest.isComplete(p), true);
+    assert.equal(inventory.getAmount(core.ItemIdentifiers.RING_OF_VISIBILITY), 0);
+    assert.equal(inventory.getAmount(core.ItemIdentifiers.RING_OF_SHADOWS), 1);
+    assert.equal(inventory.getAmount(core.ItemIdentifiers.ANCIENT_LAMP), 3);
+    assert.equal(objects[0]({ player: p, objectId: 48890, option: 'Climb', location: area.tile(30, 11, 0) }), true,
+      'the cache staircase returns the player to the upper Ancient Vault');
+    assert.equal(attrs.get('desert-treasure-ii:final-room'), null);
+    assert.equal(p.location.x, 8207, 'the player is back in the private upper vault');
+  } finally {
+    runtime.startTranscript = startTranscript;
+  }
 });
 
 test('Desert Treasure II opens the ritual site after the serum and grants the Temple key only after Vardorvis dies', () => {
