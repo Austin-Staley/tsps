@@ -5011,6 +5011,16 @@ test('Regicide leaves completed Well of Voyage crossings to the shared loc route
   assert.deepEqual(moves, []);
 });
 
+test('completed Underground Pass leaves Iban temple doors to normal door handling', () => {
+  const { api, handlers, quest, player } = questScene('UndergroundPass');
+  quest.setStage(player, 10);
+  const event = { player, objectId: api.core.ObjectIdentifiers.DOOR_109, handled: false };
+
+  handlers.custom.get('door:toggle').forEach((handler) => handler(event));
+
+  assert.equal(event.handled, false, 'completed players do not need the unsaved history bit');
+});
+
 test('Regicide leaf and stick traps use Agility checks and cross from the approached side', () => {
   const { api: base } = mockApi();
   const objectHooks = [];
