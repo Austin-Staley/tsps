@@ -254,3 +254,71 @@ test('a disconnect during login cannot build a half-logged-in player', async () 
   releaseSecond('hash');
   await second.idle();
 });
+
+
+test('inventory Drop and Release reach item action hooks before the ground/drop fallback', () => {
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { DropItemPacketListener } = require('../dist/net/packet/impl/DropItemPacketListener');
+  const originalDefinition = CacheDefinitions.getItem;
+  const originalAction = PluginManager.emitItemAction;
+  const originalCanUse = PluginManager.emitCanUseItem;
+  const originalDrop = DropItemPacketListener.drop;
+  const calls = [];
+  const item = { getId: () => 29519 };
+  const inventory = { getItems: () => [item], capacity: () => 28 };
+  const connection = new net.ClientConnection(stubChannel());
+  connection.player = { getInventory: () => inventory, clearPendingAction() {} };
+  CacheDefinitions.getItem = () => ({ inventoryActions: [null,null,null,'Drop','Release'] });
+  PluginManager.emitCanUseItem = () => true;
+  DropItemPacketListener.drop = () => calls.push('fallback');
+  try {
+    PluginManager.emitItemAction = event => { calls.push(event.option); return true; };
+    connection.inventoryAction({ slot:0,itemId:29519,widgetId:3214,option:'Drop' });
+    connection.inventoryAction({ slot:0,itemId:29519,widgetId:3214,option:'Release' });
+    assert.deepEqual(calls,['Drop','Release']);
+    PluginManager.emitItemAction = () => false;
+    connection.inventoryAction({ slot:0,itemId:29519,widgetId:3214,option:'Drop' });
+    assert.equal(calls.at(-1),'fallback');
+  } finally {
+    CacheDefinitions.getItem = originalDefinition;
+    PluginManager.emitItemAction = originalAction;
+    PluginManager.emitCanUseItem = originalCanUse;
+    DropItemPacketListener.drop = originalDrop;
+  }
+});
+
+
+test('alchemy policy keeps rune and spellbook checks before neutralising a permitted item', () => {
+  const {PluginManager}=require('../dist/plugins/PluginManager');
+  const {MagicOnItemPacketListener}=require('../dist/net/packet/impl/MagicOnItemPacketListener');
+  const {MagicSpellbook}=require('../dist/game/model/MagicSpellbook');
+  const original=PluginManager.emitCustomEvent, events=[];
+  const amounts=new Map([[29573,1],[561,1],[554,5]]), item={getId:()=>29573,isTradeable:()=>false,isSellable:()=>false,
+    getDefinition:()=>({getHighAlchValue:()=>0,getLowAlchValue:()=>0})};
+  const inventory={capacity:()=>28,getItems:()=>[item],contains:id=>(amounts.get(id)||0)>0,getAmount:id=>amounts.get(id)||0,
+    deleteNumber:(id,n)=>amounts.set(id,(amounts.get(id)||0)-n),adds:(id,n)=>amounts.set(id,(amounts.get(id)||0)+n)};
+  const player={getInventory:()=>inventory,getEquipment:()=>({getWeapon:()=>null}),getSkillManager:()=>({getCurrentLevel:()=>99,addExperiences(){}}),
+    getSpellbook:()=>MagicSpellbook.NORMAL,sendMessage(){},performAnimation(){},performGraphic(){},
+    getPacketSender:()=>({sendTab(){}})};
+  try {
+    PluginManager.emitCustomEvent=(name,event)=>{events.push(name);if(name==='magic:alchemy-policy'){event.allowed=true;event.coins=0;}};
+    const listener=new MagicOnItemPacketListener();
+    amounts.set(561,0);listener.castOnItem(player,1178,29573,0);assert.equal(amounts.get(29573),1);
+    assert.ok(!events.includes('magic:alchemy-completed'));
+    amounts.set(561,1);listener.castOnItem(player,1178,29573,0);
+    assert.equal(amounts.get(29573),0);assert.equal(amounts.get(561),0);assert.equal(amounts.get(554),0);
+    assert.ok(events.includes('magic:alchemy-completed'));assert.ok(!amounts.has(995),'zero-value neutralisation creates no coins');
+  } finally {PluginManager.emitCustomEvent=original;}
+});
+
+test('a target may suppress a spell hit effect without changing its damage', () => {
+  const {PluginManager}=require('../dist/plugins/PluginManager'),{CombatSpells}=require('../dist/game/content/combat/magic/CombatSpells');
+  const original=PluginManager.emitCustomEvent;let healed=0;
+  const hit={isAccurate:()=>true,getAttacker:()=>({heal:n=>healed+=n}),getTarget:()=>({}),getTotalDamage:()=>40};
+  try {
+    PluginManager.emitCustomEvent=(name,e)=>{if(name==='magic:hit-effects')e.allowed=false;};
+    CombatSpells.BLOOD_RUSH.onHitCalc(hit);assert.equal(healed,0);assert.equal(hit.getTotalDamage(),40);
+    PluginManager.emitCustomEvent=()=>{};CombatSpells.BLOOD_RUSH.onHitCalc(hit);assert.equal(healed,4);
+  } finally {PluginManager.emitCustomEvent=original;}
+});

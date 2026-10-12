@@ -159,6 +159,7 @@ export class MagicOnItemPacketListener {
 
     ItemOnGroundManager.deregister(groundItem);
     player.getInventory().addItem(groundItem.getItem().clone());
+    PluginManager.emitCustomEvent("magic:telekinetic-grab", { player, itemId: groundItemId, position });
     player.getSkillManager().addExperiences(Skill.MAGIC, MagicOnItemPacketListener.TELEKINETIC_GRAB_XP);
     player.getClickDelay().reset();
   }
@@ -188,13 +189,11 @@ export class MagicOnItemPacketListener {
       player.sendMessage(`You need a Magic level of ${requiredLevel} to cast this spell.`);
       return;
     }
-    if (
-      !item?.isTradeable?.() ||
-      !item?.isSellable?.() ||
-      itemId === ItemIdentifiers.COINS ||
-      definition.getHighAlchValue() <= 0 ||
-      definition.getLowAlchValue() <= 0
-    ) {
+    const policy = { player, itemId, spellId, allowed: !!item?.isTradeable?.() && !!item?.isSellable?.()
+      && definition.getHighAlchValue() > 0 && definition.getLowAlchValue() > 0,
+      coins: isHighAlch ? definition.getHighAlchValue() : definition.getLowAlchValue() };
+    PluginManager.emitCustomEvent("magic:alchemy-policy", policy);
+    if (itemId === ItemIdentifiers.COINS || !policy.allowed || !Number.isSafeInteger(policy.coins) || policy.coins < 0) {
       player.sendMessage("This spell can not be cast on this item.");
       return;
     }
@@ -218,11 +217,8 @@ export class MagicOnItemPacketListener {
 
     player.performAnimation(new Animation(712));
     Sounds.sendSound(player, isHighAlch ? Sound.HIGH_ALCHEMY : Sound.LOW_ALCHEMY);
-    if (isHighAlch) {
-      inventory.adds(ItemIdentifiers.COINS, definition.getHighAlchValue());
-    } else {
-      inventory.adds(ItemIdentifiers.COINS, definition.getLowAlchValue());
-    }
+    if (policy.coins > 0) inventory.adds(ItemIdentifiers.COINS, policy.coins);
+    PluginManager.emitCustomEvent("magic:alchemy-completed", { player, itemId, spellId });
     player.performGraphic(new Graphic(112, GraphicHeight.HIGH));
     player.getSkillManager().addExperiences(Skill.MAGIC, experience);
     player.getPacketSender().sendTab(6);
