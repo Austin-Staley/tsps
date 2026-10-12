@@ -910,6 +910,8 @@ export class PluginManager {
       event.definition = event.object.getDefinition();
     }
 
+    event.option ??= event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "";
+
     const hooks = [
       ...PluginManager.objectInteractionHooks,
       ...(PluginManager.objectHooksById.get(`${event.objectId}:${event.clickType}`) ?? []),
