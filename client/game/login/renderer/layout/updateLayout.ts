@@ -1,4 +1,5 @@
 import { isMobileMode } from "../../../../common/utils/DeviceUtil";
+import { LOGIN_LAYOUT } from "../constants";
 import type { LoginRendererHost } from "../host";
 import { computeLayoutConfig, getMobileKeyboardFocusTransform } from "./config";
 
@@ -78,15 +79,23 @@ export function updateLayout(
         host.containerX = 0;
 
         // Classic login UI is authored for 765×503. Scale it to fit when the viewport
-        // is smaller, then on mobile bias upward so the titlebox stays readable
-        // (full-scene fit alone leaves the 360px panel too small on short phones).
+        // is smaller, grow it with viewports taller than a 1080p screen's so it keeps
+        // the same share of a large monitor, then on mobile bias upward so the titlebox
+        // stays readable (full-scene fit alone leaves the 360px panel too small on short phones).
         const padX = 8;
         const padTop = 8;
-        const padBottom = host.BOTTOM_CONTROLS_RESERVE;
+        // Desktop draws the server/mute controls inside the scene (y 463, as the classic
+        // client does), so they need no reserve. Mobile can clip the scene and keeps them
+        // pinned above the bottom edge instead.
+        const padBottom = isMobileMode ? host.BOTTOM_CONTROLS_RESERVE : padTop;
         const availableW = Math.max(1, layoutWidth - padX * 2);
         const availableH = Math.max(1, layoutHeight - padTop - padBottom);
-        const sceneFit = Math.min(
+        const viewportGrowth = Math.max(
             1,
+            layoutHeight / LOGIN_LAYOUT.SCENE_REFERENCE_VIEWPORT_HEIGHT,
+        );
+        const sceneFit = Math.min(
+            viewportGrowth,
             availableW / host.SCENE_WIDTH,
             availableH / host.SCENE_HEIGHT,
         );
@@ -137,14 +146,9 @@ export function updateLayout(
                     : Math.max(minOriginY, Math.min(preferredOriginY, maxOriginY)),
             );
         } else {
-            // Desktop: center titlebox within the content band above bottom controls.
-            const availableMidY = padTop + availableH / 2;
-            const preferredOriginY =
-                availableMidY - titleboxMid * host.contentScale;
-            const minOriginY = padTop;
-            const maxOriginY = padTop + availableH - scaledH;
+            // Desktop: center the whole scene, bottom controls included.
             host.contentOriginY = Math.floor(
-                Math.max(minOriginY, Math.min(preferredOriginY, maxOriginY)),
+                padTop + Math.max(0, (availableH - scaledH) / 2),
             );
         }
         host.xPadding = host.contentOriginX;
