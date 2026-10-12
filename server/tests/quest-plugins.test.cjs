@@ -12,6 +12,7 @@ function mockApi() {
   const handlers = {
     variant: [],
     condition: [],
+    npcHitModify: [],
     custom: new Map(),
   };
   const noop = () => {};
@@ -19,6 +20,7 @@ function mockApi() {
     core: PluginManager.getCoreApi(),
     onNpcDialogueVariant: (h) => handlers.variant.push(h),
     onNpcDialogueCondition: (h) => handlers.condition.push(h),
+    onNpcHitModify: (h) => handlers.npcHitModify.push(h),
     onCustomEvent: (name, h) => {
       const list = handlers.custom.get(name) ?? [];
       list.push(h);
@@ -852,6 +854,23 @@ test('Night at the Theatre obtains and hands in the head once, and scopes shared
 
 });
 
+test('Entry Mode notice board starts its party prompt from the live cache object id', () => {
+  const { api } = mockApi();
+  const interactions=[];let prompt;
+  api.onObjectInteraction=(name,options)=>interactions.push([name,options]);
+  api.sendMultiChatboxPrompt=(...args)=>{prompt=args;};
+  const entry=require('../plugins/minigames/tob/Entry.TheatreOfBlood');entry(api);
+  const player={attributes:new Map(),setAttribute(k,v){this.attributes.set(k,v);},sendMessage(){}};
+  const actions=interactions.find(([name])=>name==='Notice board')[1];
+  const read=actions.Read;
+  assert.equal(typeof actions.read,'function','the live cache interaction may be lowercased by ObjectDefinition');
+  assert.equal(read({player,objectId:32655,definition:{id:24099}}),true);
+  assert.equal(prompt[1],'Theatre of Blood: solo Entry Mode');
+  assert.equal(prompt[2],'Create a party.');
+  prompt[3]();
+  assert.equal(player.attributes.get('tob:entry-party'),true);
+});
+
 test('Entry Mode Nylocas requires the correct style and Verzik transitions preserve one HP', () => {
   const { api } = mockApi();
   const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
@@ -886,12 +905,198 @@ test('Entry Mode Nylocas requires the correct style and Verzik transitions prese
   assert.equal(amount, 0, 'a small nylo ignores the wrong style');
   amount = 9; hit.getCombatType = () => api.core.CombatType.RANGED;
   entry._test.dealtDamage({ player, target, hit });
-  assert.equal(amount, 9, 'switching to the right style works after a mistake');
-  raid.boss = target;
-  raid.room = 5; raid.phase = 0; raid.redShield = 0; raid.tick = 1;
-  amount = 120;
-  entry._test.dealtDamage({ player, target, hit });
-  assert.equal(amount, 6, 'queued damage cannot kill Verzik before the phase transition');
+  assert.equal(amount, 0, 'the player stays locked out of that nylo after a wrong style');
+  const freshNylo = { ...target };
+  entry._test.NPC_RAIDS.set(freshNylo, { raid, style: 1, nylo: true });
+  amount = 9;
+  entry._test.dealtDamage({ player, target: freshNylo, hit });
+  assert.equal(amount, 9, 'the same player can damage a different nylo with the right style');
+  entry._test.NPC_RAIDS.set(target, { raid });
+});
+
+test('Entry Verzik phase caps run before damage so lethal hits cannot skip a phase', () => {
+  const { api, handlers } = mockApi();
+  const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
+  entry(api);
+  let hp = 100, queued = 0, weapon = 12926, amount = 120;
+  const player = { getEquipment: () => ({ get: () => ({ getId: () => weapon }) }) };
+  const npc = {
+    getHitpoints: () => hp,
+    getCombat: () => ({ getHitQueue: () => ({ getQueuedDamage: () => queued }) }),
+  };
+  const raid = { player, boss: npc, room: 5, phase: 0 };
+  entry._test.NPC_RAIDS.set(npc, { raid });
+  const hit = { getTotalDamage: () => amount, setTotalDamage: (value) => { amount = value; } };
+  assert.equal(handlers.npcHitModify.length, 1, 'registers the damage gate before NPC HP is reduced');
+  handlers.npcHitModify[0]({ npc, hit });
+  assert.equal(amount, 10, 'non-Dawnbringer phase-zero damage is capped before impact');
+  hp = 6; queued = 0; amount = 120;
+  handlers.npcHitModify[0]({ npc, hit });
+  assert.equal(amount, 5, 'an overkill hit leaves one HP for the phase transition');
+  hp -= amount;
+  assert.equal(hp, 1);
+  raid.phase = 1; hp = 9; queued = 4; amount = 120;
+  handlers.npcHitModify[0]({ npc, hit });
+  assert.equal(amount, 4, 'already queued damage also cannot skip phase two');
+  raid.phase = 2; hp = 9; queued = 0; amount = 120;
+  handlers.npcHitModify[0]({ npc, hit });
+  assert.equal(amount, 120, 'the final phase can be killed normally');
+});
+
+test('Entry Mode bandages apply the one-minute stamina effect and Dawnbringer is limited to Verzik phase one', () => {
+  const { api, handlers } = mockApi();
+  const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
+  entry(api);
+  let stamina;
+  api.emitCustomEvent = (name, payload) => { if (name === 'potions:apply-stamina') stamina = payload; };
+  let hitpoints = 40, energy = 10, deleted = 0;
+  const player = {
+    getInventory: () => ({ deleteNumber: (id, amount) => { deleted += amount; } }),
+    getSkillManager: () => ({ getMaxLevel: () => 99, increaseCurrentLevel() {} }),
+    heal: amount => { hitpoints += amount; },
+    getRunEnergy: () => energy,
+    setRunEnergy: value => { energy = value; },
+  };
+  const raid = { player, room: 5, phase: 0, boss: {} };
+  entry._test.RAIDS.set(player, raid);
+  const bandage = { player, itemId: api.core.ItemIdentifiers.BANDAGES_4, option: 'Heal' };
+  entry._test.item(bandage);
+  assert.equal(bandage.handled, true);
+  assert.equal(deleted, 1);
+  assert.equal(hitpoints, 60);
+  assert.equal(energy, 30);
+  assert.equal(stamina.player, player);
+  assert.equal(stamina.durationMs, 60_000);
+
+  const allow = handlers.custom.get('combat-special:can-use')[0];
+  const request = { specialId: 'dawnbringer', attacker: player, target: raid.boss, allow: false };
+  allow(request);
+  assert.equal(request.allow, true);
+  request.target = {};
+  request.allow = false;
+  allow(request);
+  assert.equal(request.allow, false, 'a different target is denied');
+  request.target = raid.boss;
+  raid.phase = 1;
+  allow(request);
+  assert.equal(request.allow, false, 'Dawnbringer is disallowed after Verzik leaves the throne');
+  request.specialId = 'another-special';
+  raid.phase = 0;
+  allow(request);
+  assert.equal(request.allow, false, 'the policy does not modify other specials');
+});
+
+test('Entry Nylocas waves match the complete 31-wave Wiki schedule and encode large, aggressive and flickering variants', () => {
+  const { api } = mockApi();
+  const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
+  entry(api);
+  const { NYLO_WAVES, readNyloSpec } = entry._test;
+  assert.equal(NYLO_WAVES.length, 31);
+  assert.deepEqual(NYLO_WAVES[0], ['m', 'a', 'r!']);
+  assert.deepEqual(NYLO_WAVES[9], ['r!+R', 'r+r', 'r+r!']);
+  assert.deepEqual(NYLO_WAVES[20], ['r/m/r+r!', 'm/r/m+m!', 'a/m/r+a/r/a']);
+  assert.deepEqual(NYLO_WAVES[27], ['a/m/a+r/a/m', 'm/r/m+a/m/r', 'm/r/m+r/m/a!']);
+  assert.deepEqual(NYLO_WAVES[28], ['a/r/m+r/m/a!', 'M', 'm/r/a!+r/m/r']);
+  assert.deepEqual(NYLO_WAVES[30], ['a/r/a+r/m/r', 'm/a/r+a/m/r', 'm/r/a+r/a/r']);
+  for (const wave of NYLO_WAVES) {
+    assert.equal(wave.length, 3, 'each chart row has east, south and west lanes');
+    for (const group of wave) for (const spec of group.split('+').filter(Boolean)) {
+      const parsed = readNyloSpec(spec);
+      assert.ok(parsed.styles.length === 1 || parsed.styles.length === 3, spec);
+      assert.ok(parsed.styles.every(style => style === 0 || style === 1 || style === 2), spec);
+      assert.equal(parsed.big, /^[MRA]/.test(spec), spec);
+    }
+  }
+  assert.deepEqual(readNyloSpec('R/a/m!'), { aggressive: true, big: true, styles: [1, 2, 0] });
+});
+
+test('Entry Nylocas first wave follows the room-entry 4-tick cycle', () => {
+  const { api } = mockApi();
+  const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
+  entry(api);
+  const { firstNyloWaveAt } = entry._test;
+  assert.equal(firstNyloWaveAt(100, 100), 106, 'the first wave is on the second cycle');
+  assert.equal(firstNyloWaveAt(100, 101), 106, 'a cycle phase is anchored to entering the room');
+  assert.equal(firstNyloWaveAt(102, 102), 106, 'entering on the first cycle still waits for the second');
+  assert.equal(firstNyloWaveAt(100, 106), 110, 'late barrier entry waits for the next room cycle');
+});
+
+test('Entry Nylocas pillars use the inferred solo inverse-scale cache baseline', () => {
+  const { api } = mockApi();
+  const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
+  entry(api);
+  assert.equal(entry._test.soloNyloPillarHitpoints(155), 775);
+  assert.equal(entry._test.soloNyloPillarHitpoints(130), 650);
+});
+
+test('Entry Nylocas count death animations when checking wave caps', () => {
+  const { api } = mockApi();
+  const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
+  entry(api);
+  const { activeNylocas, NPC_RAIDS } = entry._test;
+  const dying = { getHitpoints: () => 0, isDyingFunction: () => true };
+  const alive = { getHitpoints: () => 1, isDyingFunction: () => false };
+  const unrelated = { getHitpoints: () => 1, isDyingFunction: () => false };
+  const raid = { npcs: [dying, alive, unrelated] };
+  NPC_RAIDS.set(dying, { nylo: true, raid });
+  NPC_RAIDS.set(alive, { nylo: true, raid });
+  NPC_RAIDS.set(unrelated, { raid });
+  assert.equal(activeNylocas(raid), 2);
+  assert.equal(activeNylocas(raid, dying), 1);
+});
+
+test('Entry Nylocas retain wiki natural death timing and split only after the large death animation', () => {
+  const { api } = mockApi();
+  api.core = { ...api.core, CacheDefinitions: { getNpc: () => ({ hitpoints: 2 }) } };
+  let nextId = 1;
+  const removed = [];
+  api.spawnNpc = ({ id, x, y, z }) => {
+    const npc = {
+      id, hp: 2, location: new api.core.Location(x,y,z),
+      setMaxHitpoints(value) { this.maxHp = value; return this; },
+      setHitpoints(value) { this.hp = value; return this; },
+      setScriptedMovement() {},
+      getMovementQueue: () => ({ setBlockMovement() {} }),
+      getLocation() { return this.location; },
+      getHitpoints() { return this.hp; },
+      isDyingFunction() { return false; },
+    };
+    npc.id = id || nextId++;
+    return npc;
+  };
+  api.removeNpc = npc => removed.push(npc);
+  const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
+  entry(api);
+  const { activeNylocas, NPC_RAIDS, updateNyloExpiry } = entry._test;
+  const area = entry._test.createArea();
+  area.enter = () => {};
+  const player = { getLocation: () => new api.core.Location(3200,4300,0), getHitpoints: () => 99 };
+  const pillar = { getHitpoints: () => 155 };
+  const raid = { player, area, npcs: new Set(), pillars: [pillar], wave: 31, tick: 51, room: 2 };
+  const large = api.spawnNpc({ id: 10804, x: 3295, y: 4248, z: 0 });
+  raid.npcs.add(large);
+  const details = { raid, nylo: true, big: true, pillarTarget: pillar, expires: 52 };
+  NPC_RAIDS.set(large, details);
+  assert.equal(updateNyloExpiry(raid, large, details), false, 'a large spider remains through tick 51');
+  raid.tick = 52;
+  assert.equal(updateNyloExpiry(raid, large, details), true, 'natural explosion starts on alive tick 52');
+  assert.equal(activeNylocas(raid), 1, 'the large death animation still counts toward the cap');
+  raid.tick = 54;
+  updateNyloExpiry(raid, large, details);
+  assert.equal(activeNylocas(raid), 1, 'the large remains during its three-tick death animation');
+  raid.tick = 55;
+  updateNyloExpiry(raid, large, details);
+  assert.equal(removed.includes(large), true);
+  assert.equal(activeNylocas(raid), 2, 'the natural death splits into two small spiders at despawn');
+  for (const child of raid.npcs) {
+    const childDetails = NPC_RAIDS.get(child);
+    assert.equal(childDetails.expires, 108, 'split children receive the wiki small-spider lifetime');
+    raid.tick = 107;
+    assert.equal(updateNyloExpiry(raid, child, childDetails), false);
+    raid.tick = 108;
+    assert.equal(updateNyloExpiry(raid, child, childDetails), true, 'small spiders expire at alive tick 53');
+  }
+  assert.equal(activeNylocas(raid), 0);
 });
 
 
@@ -900,11 +1105,15 @@ test('Sotetseg random maze paths connect to the fixed cached portal', () => {
   api.core = { ...api.core, ObjectManager: { register() {} } };
   const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
   entry(api);
+  const cleared = [];
   for (let trial = 0; trial < 100; trial++) {
     const player = { getCombat: () => ({ reset() {} }), moveTo() {}, sendMessage() {} };
-    const raid = { player, area: null, objects: new Set() };
+    const area = { add() {}, setClip(location, mask) { cleared.push([location.getX(), location.getY(), location.getZ(), mask]); } };
+    const raid = { player, area, objects: new Set() };
     entry._test.startMaze(raid);
     assert.deepEqual(raid.maze.end, [3357, 4329, 3]);
+    assert.deepEqual(new Set(cleared.map(([x,y,z]) => `${x},${y},${z}`)), new Set([...raid.maze.path].map(tile => `${tile},3`)), 'only red path tiles clear their collision');
+    cleared.length = 0;
     const visited = new Set(['3359,4307']), pending = ['3359,4307'];
     while (pending.length) {
       const [x, y] = pending.pop().split(',').map(Number);
@@ -915,6 +1124,104 @@ test('Sotetseg random maze paths connect to the fixed cached portal', () => {
     }
     assert.ok(visited.has('3357,4329'), 'the player can follow red tiles to the portal');
   }
+});
+
+test('Entry Theatre completes a boss whose death hook did not arrive before the next area tick', () => {
+  const { api } = mockApi();
+  const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
+  entry(api);
+  let hp = 1;
+  const varbits = [];
+  const messages = [];
+  const player = {
+    getHitpoints: () => hp,
+    setHitpoints: value => { hp = value; },
+    getCombat: () => ({ reset() {} }),
+    getSkillManager: () => ({ getMaxLevel: () => 99, setCurrentLevel() {} }),
+    getPacketSender: () => ({ sendVarbit: (...args) => varbits.push(args) }),
+    sendMessage: message => messages.push(message),
+  };
+  const raid = {
+    player, room: 3, started: true, complete: false, dead: false, tick: 20,
+    boss: { getHitpoints: () => 0 }, npcs: new Set(), objects: new Set(), effects: [], pools: [],
+  };
+  entry._test.process(raid);
+  assert.equal(raid.complete, true);
+  assert.equal(raid.started, false);
+  assert.equal(hp, 99);
+  assert.ok(varbits.some(([id, value]) => id === 6448 && value === 100));
+  assert.ok(messages.includes('Sotetseg defeated. Your hitpoints and prayer are restored.'));
+});
+
+test('Blood Moon ToB entry waits at the Nylocas barrier and exposes four quest encounters', () => {
+  const { api, handlers } = mockApi();
+  const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
+  const spawned = [];
+  api.core = {
+    ...api.core,
+    Boundary: class {},
+    PrivateArea: class { enter() {} },
+    CacheDefinitions: { getNpc: () => ({ hitpoints: 10 }) },
+  };
+  api.spawnNpc = ({ id, x, y, z }) => {
+    const npc = {
+      hp: 10, maxHp: 10, location: new api.core.Location(x,y,z),
+      setHitpoints(value) { this.hp=value; return this; },
+      setMaxHitpoints(value) { this.maxHp=value; return this; },
+      setScriptedMovement() {}, getMovementQueue: () => ({ setBlockMovement() {} }),
+      getLocation() { return this.location; }, getHitpoints() { return this.hp; },
+    };
+    spawned.push({ id, npc });
+    return npc;
+  };
+  const emitted = [];
+  api.emitCustomEvent = (name, event) => emitted.push([name,event]);
+  const inventory = [];
+  const playerInventory = {
+    contains: id => inventory.includes(id),
+    getFreeSlots: () => 28 - inventory.length,
+    adds: id => inventory.push(id),
+  };
+  const player = {
+    moveTo() {}, getLocation: () => new api.core.Location(3295,4257,0),
+    getInventory: () => playerInventory,
+    getPacketSender: () => ({ sendVarbit() { return this; } }),
+    sendMessage() {}, getCombat: () => ({ reset() {} }),
+    getSkillManager: () => ({ getMaxLevel: () => 99, setCurrentLevel() {} }),
+    setHitpoints() {}, getHitpoints: () => 99,
+  };
+  entry(api);
+  handlers.custom.get('tob:bmr:start')[0]({ player });
+  const raid = entry._test.RAIDS.get(player);
+  assert.deepEqual(inventory,[api.core.ItemIdentifiers.ESCAPE_CRYSTAL_2], 'the scoped run supplies its normal escape crystal');
+  assert.equal(raid.mode, 'bmr');
+  assert.equal(raid.room, 2);
+  assert.equal(raid.bmrEncounter, 'wave');
+  assert.equal(raid.started, false, 'the quest dialogue and barrier crossing happen before any fight starts');
+  assert.equal(spawned.length, 1, 'only the entry Stranger is present before the player crosses the barrier');
+
+  entry._test.startRoom(raid);
+  assert.equal(raid.started, true);
+  assert.equal(spawned.length, 16, 'the first encounter spawns fifteen mixed-style nylocas');
+  const nylo = spawned.slice(1).map(({ npc }) => entry._test.NPC_RAIDS.get(npc));
+  assert.equal(nylo.filter(({ big }) => big).length, 7);
+  assert.deepEqual(new Set(nylo.map(({ style }) => style)), new Set([0,1,2]));
+  assert.deepEqual(entry._test.BMR_ENCOUNTERS.map(({ type }) => type), ['wave','maiden','wave','vasilias']);
+
+  raid.complete = true;
+  entry._test.passage({ player, objectId: 33113 });
+  assert.equal(raid.bmrIndex, 1);
+  assert.equal(raid.room, 0);
+  assert.equal(raid.bmrEncounter, 'maiden');
+  raid.complete = true;
+  entry._test.passage({ player, objectId: 33113 });
+  assert.equal(raid.bmrIndex, 2);
+  assert.equal(raid.room, 2);
+  assert.equal(raid.bmrEncounter, 'wave');
+
+  raid.bmrIndex = entry._test.BMR_ENCOUNTERS.length - 1;
+  entry._test.roomComplete(raid);
+  assert.equal(emitted.filter(([name]) => name === 'tob:bmr:completed').length, 1);
 });
 
 
@@ -964,12 +1271,18 @@ test('Maiden victory opens its cache walkway inside only that raid instance', ()
 test('Nylocas that attack pillars remain attackable, while the pillars do not', () => {
   const { api } = mockApi();
   api.core = { ...api.core, CacheDefinitions: { getNpc: () => ({ hitpoints: 2 }) } };
-  api.spawnNpc = () => {
+  api.spawnNpc = ({ id, x, y, z }) => {
     const npc = {
+      id, position: new api.core.Location(x,y,z),
       setMaxHitpoints: () => npc,
       setHitpoints: () => npc,
       setScriptedMovement() {},
       getMovementQueue: () => ({ setBlockMovement() {} }),
+      getLocation() { return this.position; },
+      getX() { return this.position.getX(); },
+      getY() { return this.position.getY(); },
+      getHitpoints() { return 2; },
+      isDyingFunction() { return false; },
     };
     return npc;
   };
@@ -978,12 +1291,29 @@ test('Nylocas that attack pillars remain attackable, while the pillars do not', 
   const area = entry._test.createArea();
   area.enter = () => {};
   const player = { isNpc: () => false, getPacketSender: () => ({ sendVarbit() {} }) };
-  const pillars = Array.from({ length: 4 }, () => ({ getHitpoints: () => 155 }));
+  const pillars = [[3290,4245],[3290,4251],[3299,4245],[3299,4251]].map(([x,y]) => ({
+    getLocation: () => new api.core.Location(x,y,0), getHitpoints: () => 155,
+  }));
   const raid = { player, area, npcs: new Set(), pillars, wave: 0, tick: 1, started: true, room: 2 };
   entry._test.RAIDS.set(player, raid);
   entry._test.nextWave(raid);
   assert.equal(raid.npcs.size, 3);
-  for (const spider of raid.npcs) assert.equal(entry._test.NPC_RAIDS.get(spider).expires,51,'spiders expire after thirty seconds');
+  const passiveTargets=[...raid.npcs].map(n=>entry._test.NPC_RAIDS.get(n)).filter(d=>!d.aggressive).map(d=>d.pillarTarget);
+  assert.equal(new Set(passiveTargets).size,2,'different spawn lanes split passive spiders across the nearest pillars');
+  const fallenTarget=passiveTargets[0];
+  fallenTarget.getHitpoints=()=>0;
+  const reassigned=entry._test.pillarTarget(raid,[...raid.npcs][0],entry._test.NPC_RAIDS.get([...raid.npcs][0]));
+  assert.notEqual(reassigned,fallenTarget,'passive spiders retarget a surviving pillar when their target falls');
+  assert.notEqual(reassigned,player,'passive spiders do not turn into player attackers when a pillar falls');
+  const first=raid.npcs.values().next().value,details=entry._test.NPC_RAIDS.get(first);
+  details.flashing=[0,1,0];
+  assert.equal(area.canAttack(player,first),false,'style flashes happen before the spider can be attacked');
+  details.flashing=null;
+  assert.equal(area.canAttack(player,first),null,'the spider becomes attackable when it settles on its final style');
+  for (const spider of raid.npcs) {
+    const details=entry._test.NPC_RAIDS.get(spider);
+    assert.equal(details.expires,1+(details.big?52:53),'spiders use the wiki large/small lifetimes');
+  }
   for (const spider of raid.npcs) assert.equal(area.canAttack(player, spider), null, 'pillar-targeting enemies can be killed');
   entry._test.NPC_RAIDS.set(pillars[0], { raid, pillar: true });
   assert.equal(area.canAttack(player, pillars[0]), false, 'players cannot attack the room supports');
@@ -998,25 +1328,27 @@ test('Nylocas that attack pillars remain attackable, while the pillars do not', 
 });
 
 
-test('Xarpus acid covers nine tiles without stacking damage when pools overlap', () => {
+test('Xarpus splat damages its 3x3 once and leaves one permanent acid tile', () => {
   const { api } = mockApi();
   api.core = { ...api.core, ObjectManager: { register() {} }, Projectile: { createProjectile: () => ({ sendProjectile() {} }) } };
   const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
   entry(api);
+  const hits = [];
   const player = {
     getLocation: () => new api.core.Location(3174, 4386, 1),
     getHitpoints: () => 99,
-    getCombat: () => ({ getHitQueue: () => ({ addPendingDamage() {} }) }),
+    getCombat: () => ({ getHitQueue: () => ({ addPendingDamage(value) { hits.push(value); } }) }),
   };
   const raid = { player, boss: { getHitpoints: () => 390, getMaxHitpoints: () => 520, performAnimation() {} }, tick: 52, effects: [], pools: [], objects: new Set(), area: null };
   entry._test.xarpus(raid);
   raid.effects.pop().fn();
-  assert.equal(raid.pools.length, 9);
-  assert.ok(raid.pools.some(pool => pool.tile[0] === 3173 && pool.tile[1] === 4385));
-  assert.ok(raid.pools.some(pool => pool.tile[0] === 3175 && pool.tile[1] === 4387));
+  assert.equal(raid.pools.length, 1);
+  assert.deepEqual(raid.pools[0].tile, [3174, 4386, 1]);
+  assert.equal(hits.length, 1, 'the player in the splat receives one immediate damage hit');
   entry._test.xarpus(raid);
   raid.effects.pop().fn();
-  assert.equal(raid.pools.length, 9, 'spitting on existing acid does not multiply floor damage');
+  assert.equal(raid.pools.length, 1, 'spitting on existing acid does not multiply persistent floor damage');
+  assert.equal(hits.length, 2, 'a later splat still causes its own single immediate hit');
 });
 
 

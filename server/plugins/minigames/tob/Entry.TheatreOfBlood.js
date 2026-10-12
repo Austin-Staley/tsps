@@ -8,7 +8,6 @@ const NPC_RAIDS = new WeakMap();
 const PARTY_ATTRIBUTE = "tob:entry-party";
 const COMPLETIONS_ATTRIBUTE = "tob:entry-completions";
 const RAID_ENTRANCE = 32653;
-const NOTICE_BOARD = 32655;
 const BARRIER = 32755;
 const PASSAGE = 33113;
 const XARPUS_EXIT = 32751;
@@ -35,6 +34,65 @@ const NYLO_FIGHTING_SMALL = [10780, 10781, 10782];
 const NYLO_FIGHTING_LARGE = [10783, 10784, 10785];
 const NYLO_BOSS = [10787, 10789, 10788]; // melee, ranged, magic
 const NYLO_PILLAR = 10790;
+// Official Entry Mode wave chart: lowercase is small, uppercase is large,
+// ! marks aggressive, and slash-separated styles are the two pre-arena flickers.
+const NYLO_WAVES = [
+  ["m", "a", "r!"], ["r", "m!", "a"], ["a!", "r", "m"], ["m", "A", "r"],
+  ["a", "m", "R"], ["M", "r", "a"], ["M", "a+R!", ""], ["r", "m", "A!"],
+  ["a", "", "R!+m"], ["r!+R", "r+r", "r+r!"], ["a!+a", "a+a", "A!"], ["m!+m", "M", "m+m!"],
+  ["M!", "r+m", "r+a!"], ["R!", "a+r", "a+m!"], ["a!+r", "A", "m+r!"], ["a/m/r", "m/a/r", "r/a/r"],
+  ["A/m/A", "A/m/A", "A/m/A"], ["R/a/R", "R/a/R", "R/a/R!"], ["A/m/A!", "a/m/a", "a/m/a"],
+  ["M/r/M", "A/r/m!", "M/r/M"], ["r/m/r+r!", "m/r/m+m!", "a/m/r+a/r/a"],
+  ["A/r/m!", "r/a/m+r/a/m", "M/r/M"], ["A/r/M", "A/r/m!", "a/r/m+r/a/r"],
+  ["M!", "A!", "R/a/m!"], ["A/m/A", "R", "M!"], ["A", "m/a/m", "A!"],
+  ["A/m/A", "M/a/R!", "A"], ["a/m/a+r/a/m", "m/r/m+a/m/r", "m/r/m+r/m/a!"],
+  ["a/r/m+r/m/a!", "M", "m/r/a!+r/m/r"], ["A!", "m/r/m+a/r/m", "R/m/R"],
+  ["a/r/a+r/m/r", "m/a/r+a/m/r", "m/r/a+r/a/r"],
+];
+const NYLO_STYLE = {m:0,r:1,a:2};
+const BMR_ENCOUNTERS = [
+  { room: 2, type: "wave" },
+  { room: 0, type: "maiden" },
+  { room: 2, type: "wave" },
+  { room: 2, type: "vasilias" },
+];
+const BMR_WAVE = [
+  [10804,0,true],[10805,1,true],[10806,2,true],
+  [10781,1,false],[10782,2,false],[10781,1,false],[10782,2,false],[10784,1,true],[10785,2,true],
+  [10781,1,false],[10782,2,false],[10784,1,true],[10785,2,true],[10781,1,false],[10782,2,false],
+].map(([id,style,big],index) => {
+  const lane=index%3,rank=Math.floor(index/3),base=[[3288,4248],[3295,4253],[3303,4248]][lane];
+  return {id,style,big,tile:[base[0]+rank%3-1,base[1]+Math.floor(rank/3),0]};
+});
+function readNyloSpec(spec) {
+  const aggressive=spec.endsWith("!"),sequence=spec.replace(/!$/,"").split("/");
+  return {aggressive,big:sequence[0]===sequence[0].toUpperCase(),styles:sequence.map(style=>NYLO_STYLE[style.toLowerCase()])};
+}
+function activeNylocas(raid,exclude) {
+  return [...raid.npcs].filter(n=>n!==exclude&&NPC_RAIDS.get(n)?.nylo&&(alive(n)||n.isDyingFunction?.()===true)).length;
+}
+function updateNyloExpiry(raid,npc,d) {
+  if(d.exploding) {
+    if(raid.tick>=d.despawnsAt){splitNylocas(raid,npc,d);remove(raid,npc);}
+    return true;
+  }
+  if(raid.tick<d.expires)return false;
+  if(distance(npc.getLocation(),raid.player.getLocation())<2)damage(raid.player,8);
+  if(d.big){d.exploding=true;d.despawnsAt=raid.tick+3;}
+  else remove(raid,npc);
+  return true;
+}
+function firstNyloWaveAt(roomStartedAt,currentTick) {
+  let tick=roomStartedAt;
+  while(tick%4!==2)tick++;
+  tick+=4;
+  while(tick<=currentTick)tick+=4;
+  return tick;
+}
+function soloNyloPillarHitpoints(cacheHitpoints) {
+  // shortcut: the Wiki documents more pillar HP at lower scales but no values; this solo-only raid uses five times the cache baseline.
+  return cacheHitpoints * 5;
+}
 const SOTETSEG = 10865;
 const XARPUS = 10768;
 const VERZIK_INITIAL = 10830;
@@ -99,6 +157,7 @@ function clearRoom(raid) {
 }
 function enterRoom(raid,index) {
   clearRoom(raid); raid.room = index; raid.roomTick = now(); raid.complete = false;
+  raid.bmrEncounter = raid.mode === "bmr" ? BMR_ENCOUNTERS[raid.bmrIndex]?.type : null;
   raid.player.getCombat().reset(); raid.player.moveTo(loc(ROOMS[index].entry));
   raid.player.sendMessage(`${ROOMS[index].name}: cross the barrier when ready.`);
   raid.stranger = spawn(raid,core.NpcIdentifiers.MYSTERIOUS_STRANGER_4, [ROOMS[index].entry[0]+1,ROOMS[index].entry[1],ROOMS[index].entry[2]]);
@@ -109,10 +168,26 @@ function startRoom(raid) {
   if (raid.started || raid.complete) return;
   raid.started = true; raid.tick=0;
   const room=ROOMS[raid.room]; raid.player.moveTo(loc(room.inside));
-  if (raid.room === 2) {
+  if (raid.mode === "bmr") {
+    if(raid.bmrEncounter === "maiden")raid.boss=spawn(raid,MAIDEN,room.boss,{boss:true});
+    else if(raid.bmrEncounter === "vasilias") {
+      raid.boss=spawn(raid,NYLO_BOSS[0],room.boss,{boss:true,style:0});
+      raid.nextStyle=raid.tick+10;
+    } else {
+      raid.wave=1;
+      for(const {id,style,big,tile} of BMR_WAVE) {
+        spawn(raid,id,tile,{nylo:true,style,big,aggressive:true,expires:raid.tick+(big?52:53)});
+      }
+    }
+  } else if (raid.room === 2) {
     raid.wave = 0;
-    raid.pillars = [[3290,4245,0],[3290,4251,0],[3299,4245,0],[3299,4251,0]].map(p=>spawn(raid,NYLO_PILLAR,p,{pillar:true}));
-    nextWave(raid);
+    const pillarHp=soloNyloPillarHitpoints(core.CacheDefinitions.getNpc(NYLO_PILLAR).hitpoints);
+    raid.pillars = [[3290,4245,0],[3290,4251,0],[3299,4245,0],[3299,4251,0]].map(p=>{
+      const pillar=spawn(raid,NYLO_PILLAR,p,{pillar:true});
+      pillar.setMaxHitpoints(pillarHp).setHitpoints(pillarHp);
+      return pillar;
+    });
+    raid.nextWave=firstNyloWaveAt(raid.roomTick,now());
   } else if (raid.room === 5) {
     raid.phase=0; raid.boss.setNpcTransformationId(VERZIK_PHASES[0]).setMaxHitpoints(300).setHitpoints(300);
     raid.pillars = [[3161,4318,0],[3161,4311,0],[3176,4318,0],[3176,4311,0]].map(tile=>({tile,hp:3,o:object(raid,PILLAR,tile)}));
@@ -122,6 +197,7 @@ function startRoom(raid) {
   }
 }
 function roomComplete(raid) {
+  if(raid.complete)return;
   raid.complete=true; raid.started=false; raid.player.getCombat().reset(); restore(raid.player);
   for(const npc of [...raid.npcs])if(npc!==raid.stranger)remove(raid,npc);
   for(const o of [...raid.objects])removeObject(raid,o);
@@ -137,6 +213,10 @@ function roomComplete(raid) {
   if(raid.room===5) {
     object(raid,TREASURE_ENTRANCE,[3170,4327,0]);
     raid.player.sendMessage("Verzik flees. Enter the treasure room to finish your raid.");
+  }
+  if(raid.mode==="bmr") {
+    raid.player.sendMessage("The encounter is complete. Use the passage to continue.");
+    if(raid.bmrIndex===BMR_ENCOUNTERS.length-1)api.emitCustomEvent("tob:bmr:completed",{player:raid.player});
   }
 }
 function leave(raid, teleport=true) {
@@ -228,21 +308,43 @@ function behindBloatPillar(player,boss) {
   return true;
 }
 function nextWave(raid) {
-  if(++raid.wave>31) {
-    if([...raid.npcs].some(n=>alive(n)&&NPC_RAIDS.get(n)?.nylo))return;
-    raid.boss=spawn(raid,NYLO_BOSS[0],ROOMS[2].boss,{boss:true,style:0});
-    raid.nextStyle=raid.tick+10;return;
+  if(++raid.wave>NYLO_WAVES.length)return;
+  const lanes=[[3288,4248,0],[3295,4253,0],[3303,4248,0]];
+  const pillarLoads=new Map(raid.pillars.filter(alive).map(pillar=>[pillar,0]));
+  for(const npc of raid.npcs) {
+    const d=NPC_RAIDS.get(npc);
+    if(d?.nylo&&!d.aggressive&&pillarLoads.has(d.pillarTarget))pillarLoads.set(d.pillarTarget,pillarLoads.get(d.pillarTarget)+1);
   }
-  // shortcut: solo waves use the three lanes and size progression, add the captured spawn-by-spawn schedule for precise raid speed records.
-  for(let lane=0;lane<3;lane++) {
-    const style=(raid.wave+lane)%3,big=raid.wave>10&&lane===raid.wave%3;
-    const tile=[[3288,4248,0],[3295,4253,0],[3303,4248,0]][lane];
-    const pillarTarget=raid.wave%3!==0?raid.pillars[(raid.wave+lane)%4]:null;
-    const ids=pillarTarget?(big?NYLO_LARGE:NYLO_SMALL):(big?NYLO_FIGHTING_LARGE:NYLO_FIGHTING_SMALL);
-    spawn(raid,ids[style],tile,{nylo:true,style,big,expires:raid.tick+50,pillarTarget});
-  }
-  raid.nextWave=raid.tick+10;
+  NYLO_WAVES[raid.wave-1].forEach((group,lane)=>{
+    for(const spec of group.split("+").filter(Boolean)) {
+      const {aggressive,big,styles}=readNyloSpec(spec);
+      const style=styles[0],pillarTarget=aggressive?null:choosePillar(raid,new core.Location(...lanes[lane]),pillarLoads);
+      if(pillarTarget)pillarLoads.set(pillarTarget,pillarLoads.get(pillarTarget)+1);
+      const ids=aggressive?(big?NYLO_FIGHTING_LARGE:NYLO_FIGHTING_SMALL):(big?NYLO_LARGE:NYLO_SMALL);
+      spawn(raid,ids[style],lanes[lane],{nylo:true,style,big,aggressive,flashing:styles.length>1?styles:null,flashStep:0,flashAt:raid.tick+1,expires:raid.tick+(big?52:53),pillarTarget});
+    }
+  });
+  raid.nextWave=now()+4;
   raid.player.getPacketSender().sendVarbit(6448,Math.floor(raid.wave*100/31));
+}
+function choosePillar(raid,position,loads=new Map()) {
+  const candidates=raid.pillars.filter(alive);
+  if(!candidates.length)return null;
+  const distanceTo=pillar=>{const tile=pillar.getLocation();return Math.max(Math.abs(tile.getX()-position.getX()),Math.abs(tile.getY()-position.getY()));};
+  const nearest=Math.min(...candidates.map(distanceTo));
+  return candidates.filter(pillar=>distanceTo(pillar)<=nearest+1).sort((a,b)=>(loads.get(a)||0)-(loads.get(b)||0)||distanceTo(a)-distanceTo(b))[0];
+}
+function pillarTarget(raid,npc,d) {
+  if(d.aggressive)return raid.player;
+  if(!alive(d.pillarTarget)) {
+    const loads=new Map(raid.pillars.filter(alive).map(pillar=>[pillar,0]));
+    for(const other of raid.npcs) {
+      const info=NPC_RAIDS.get(other);
+      if(other!==npc&&info?.nylo&&!info.aggressive&&loads.has(info.pillarTarget))loads.set(info.pillarTarget,loads.get(info.pillarTarget)+1);
+    }
+    d.pillarTarget=choosePillar(raid,npc.getLocation(),loads);
+  }
+  return d.pillarTarget||raid.player;
 }
 function nylocas(raid) {
   if(raid.boss) {
@@ -255,9 +357,16 @@ function nylocas(raid) {
   }
   for(const npc of [...raid.npcs]) {
     const d=NPC_RAIDS.get(npc);if(!alive(npc)||!d?.nylo)continue;
-    if(raid.tick>=d.expires){if(distance(npc.getLocation(),raid.player.getLocation())<2)damage(raid.player,8);splitNylocas(raid,npc,d);remove(raid,npc);continue;}
+    if(d.flashing&&raid.tick>=d.flashAt) {
+      d.flashStep++;
+      d.style=d.flashing[d.flashStep];
+      npc.setNpcTransformationId((d.aggressive?(d.big?NYLO_FIGHTING_LARGE:NYLO_FIGHTING_SMALL):(d.big?NYLO_LARGE:NYLO_SMALL))[d.style]);
+      if(d.flashStep>=d.flashing.length-1)d.flashing=null;
+      else d.flashAt=raid.tick+1;
+    }
+    if(updateNyloExpiry(raid,npc,d))continue;
     if(npc.getTimers().has(core.TimerKey.FREEZE))continue;
-    const target=d.pillarTarget&&alive(d.pillarTarget)?d.pillarTarget:raid.player;
+    const target=pillarTarget(raid,npc,d);
     if(!core.CombatRange.beside(npc,target)) {
       approachNylocas(npc,target);
     }else if(raid.tick%3===0) {
@@ -265,10 +374,20 @@ function nylocas(raid) {
       else {target.setHitpoints(target.getHitpoints()-1);if(!alive(target))damage(raid.player,30);}
     }
   }
+  if(raid.mode==="bmr") {
+    if(activeNylocas(raid)===0)roomComplete(raid);
+    return;
+  }
   if(!raid.pillars.some(alive)){damage(raid.player,raid.player.getHitpoints());return;}
-  if(raid.tick>=raid.nextWave) {
-    if(raid.wave>=31){if(![...raid.npcs].some(n=>alive(n)&&NPC_RAIDS.get(n)?.nylo))nextWave(raid);}
-    else if([...raid.npcs].filter(n=>alive(n)&&NPC_RAIDS.get(n)?.nylo).length<(raid.wave<20?12:24))nextWave(raid);
+  if(now()>=raid.nextWave) {
+    const living=activeNylocas(raid);
+    if(raid.wave>=NYLO_WAVES.length) {
+      if(!living&&!raid.boss) {
+        if(raid.bossAt===undefined)raid.bossAt=raid.tick+22;
+        else if(raid.tick>=raid.bossAt){raid.boss=spawn(raid,NYLO_BOSS[0],ROOMS[2].boss,{boss:true,style:0});raid.nextStyle=raid.tick+10;}
+      }
+    } else if(living<(raid.wave<20?12:24))nextWave(raid);
+    else raid.nextWave=now()+4;
   }
 }
 function attackNylocas(npc,player,style) {
@@ -276,6 +395,11 @@ function attackNylocas(npc,player,style) {
   const hit = new core.PendingHit(npc,player,method,{delay:0,experience:false});
   hit.setTotalDamage(protection(player,style)?0:Math.min(8,hit.getTotalDamage()));
   player.getCombat().getHitQueue().addPendingHit(hit);
+}
+function allowDawnbringer(event) {
+  if(event.specialId!=="dawnbringer")return;
+  const raid=RAIDS.get(event.attacker);
+  if(raid&&raid.room===5&&raid.phase===0&&event.target===raid.boss)event.allow=true;
 }
 function approachNylocas(npc,target) {
   const p=npc.getLocation(),t=target.getLocation(),size=npc.getSize(),targetSize=target.getSize();
@@ -315,7 +439,7 @@ function startMaze(raid) {
   // The cached portal is fixed; the randomized path must join its approach tile.
   for(let xx=Math.min(x,3357);xx<=Math.max(x,3357);xx++)path.add(`${xx},4329`);
   raid.maze={path,end:[3357,4329,3],objects:[]};
-  for(const tile of path){const [px,py]=tile.split(',').map(Number);raid.maze.objects.push(object(raid,SHADOW_TILE,[px,py,3],22));}
+  for(const tile of path){const [px,py]=tile.split(',').map(Number);raid.area.setClip(loc([px,py,3]),0);raid.maze.objects.push(object(raid,SHADOW_TILE,[px,py,3],22));}
   raid.player.moveTo(new core.Location(3359,4307,3));raid.player.sendMessage("Follow the red path to the portal. Straying off it is dangerous.");
 }
 function xarpus(raid) {
@@ -331,7 +455,7 @@ function xarpus(raid) {
     if(raid.tick%8===0){raid.look=roll(3);raid.player.sendMessage(`Xarpus turns to face the ${['north-east','north-west','south-west','south-east'][raid.look]} quadrant.`);}
   }else if(raid.tick%4===0) {
     const t=raid.player.getLocation(),tile=[t.getX(),t.getY(),t.getZ()];raid.boss.performAnimation(new core.Animation(8059));projectile(raid,1555);
-    later(raid,2,()=>{if(distance(raid.player.getLocation(),loc(tile))<=1)damage(raid.player,roll(15));for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)addPool(raid,[tile[0]+dx,tile[1]+dy,tile[2]],ACID_POOL,0,3);});
+    later(raid,2,()=>{if(distance(raid.player.getLocation(),loc(tile))<=1)damage(raid.player,roll(15));addPool(raid,tile,ACID_POOL,0,3);});
   }
 }
 function quadrant(player,centre) { const p=player.getLocation();return p.getX()>=centre[0]?(p.getY()>=centre[1]?0:3):(p.getY()>=centre[1]?1:2); }
@@ -406,6 +530,9 @@ function verzik(raid) {
 }
 function process(raid) {
   if(!raid.started||raid.dead||raid.player.getHitpoints()<=0)return;
+  // NPC death hooks normally complete the room. Also observe HP directly: the
+  // core can remove a scripted boss after its death tick before that hook runs.
+  if(raid.boss&&!alive(raid.boss)){roomComplete(raid);return;}
   raid.tick++;
   // Scripted fights stay engaged during mechanics where players must stop attacking.
   for(const npc of raid.npcs)npc.getCombat().getLastAttack().reset();
@@ -426,6 +553,7 @@ function createArea() {
       if(attacker.isNpc?.())return false;
       const raid=RAIDS.get(attacker),data=NPC_RAIDS.get(target);
       if(!raid||!data||data.raid!==raid||!raid.started||raid.maze||raid.dead||data.pillar||target===raid.stranger)return false;
+      if(data.flashing)return false;
       if(target===raid.boss&&((raid.room===4&&raid.tick<=48)||(raid.room===5&&raid.safe>raid.tick)))return false;
       return null;
     }
@@ -436,11 +564,23 @@ function createArea() {
 function enter({player,objectId}) {
   if(objectId!==RAID_ENTRANCE)return false;
   if(!player.getAttribute(PARTY_ATTRIBUTE)){player.sendMessage("Read the notice board to create your Entry Mode party first.");return true;}
+  if(!ensureEscapeCrystal(player))return true;
   const area=createArea(),raid={player,area,npcs:new Set(),objects:new Set(),effects:[],pools:[],room:0};
   RAIDS.set(player,raid);area.enter(player);player.getPacketSender().sendVarbit(6440,2);enterRoom(raid,0);return true;
 }
-function notice({player,objectId}) {
-  if(objectId!==NOTICE_BOARD)return false;
+function ensureEscapeCrystal(player) {
+  const inventory=player.getInventory(),id=core.ItemIdentifiers.ESCAPE_CRYSTAL_2;
+  if(inventory.contains(id))return true;
+  if(inventory.getFreeSlots()<1){player.sendMessage("You need one free inventory space to enter the Theatre.");return false;}
+  inventory.adds(id,1);return true;
+}
+function startBmr({player}) {
+  if(!player||RAIDS.has(player))return;
+  if(!ensureEscapeCrystal(player))return;
+  const area=createArea(),raid={player,area,npcs:new Set(),objects:new Set(),effects:[],pools:[],room:2,mode:"bmr",bmrIndex:0};
+  RAIDS.set(player,raid);area.enter(player);player.getPacketSender().sendVarbit(6440,2);enterRoom(raid,BMR_ENCOUNTERS[0].room);
+}
+function notice({player}) {
   api.sendMultiChatboxPrompt(player,"Theatre of Blood: solo Entry Mode","Create a party.",()=>{player.setAttribute(PARTY_ATTRIBUTE,true);player.sendMessage("Your Entry Mode party is ready. Enter the Theatre when prepared.");},"Cancel.",()=>{});return true;
 }
 function barrier({player,objectId,location}) {
@@ -455,6 +595,10 @@ function barrier({player,objectId,location}) {
 function passage({player,objectId}) {
   const raid=RAIDS.get(player);if(!raid||![PASSAGE,XARPUS_EXIT].includes(objectId))return false;
   if(!raid.complete){player.sendMessage("You must defeat this room's challenge first.");return true;}
+  if(raid.mode==="bmr") {
+    if(raid.bmrIndex<BMR_ENCOUNTERS.length-1){raid.bmrIndex++;enterRoom(raid,BMR_ENCOUNTERS[raid.bmrIndex].room);}
+    return true;
+  }
   if(raid.room<5)enterRoom(raid,raid.room+1);return true;
 }
 function treasure({player,objectId}) {
@@ -498,34 +642,39 @@ function talkStranger({player,npcId,npc}) {
   const raid=RAIDS.get(player);if(!raid||npc!==raid.stranger)return false;
   require("../../quests/QuestRuntime").startTranscript(api,player,npcId,"A Night at the Theatre",`a-night-at-the-theatre-${ROOMS[raid.room].advice}`);return true;
 }
-function hitRoll(event) {
-  const d=NPC_RAIDS.get(event.target);if(!d?.nylo)return;
-  if(typeIndex(event.combatType)===d.style)event.forceAccurate=true;
-}
 function dealtDamage({player,target,hit}) {
   const d=NPC_RAIDS.get(target),raid=d?.raid;if(!raid||raid.player!==player)return;
   const amount=hit.getTotalDamage(),type=typeIndex(hit.getCombatType());
-  if(d.nylo&&type!==d.style)hit.setTotalDamage(0);
+  if(d.nylo) {
+    d.lockedPlayers ||= new WeakSet();
+    if(d.lockedPlayers.has(player)||type!==d.style) {
+      if(type!==d.style)d.lockedPlayers.add(player);
+      hit.setTotalDamage(0);
+    }
+  }
   if(target===raid.boss&&raid.room===2&&type!==d.style){hit.setTotalDamage(0);target.heal(amount);damage(player,amount);}
   if(target===raid.boss&&raid.room===1){if(amount>0)raid.attacks++;if((raid.tick-1)%74<42)hit.setTotalDamage(Math.floor(amount/2));}
   if(target===raid.boss&&raid.room===4&&raid.look===quadrant(player,ROOMS[4].centre)){hit.setTotalDamage(0);damage(player,amount*2);}
-  if(raid.room===5&&target===raid.boss) {
-    if(raid.redShield>raid.tick){hit.setTotalDamage(0);target.heal(amount);}
-    if(raid.phase===0&&player.getEquipment().get(core.Equipment.WEAPON_SLOT)?.getId()!==core.ItemIdentifiers.DAWNBRINGER)hit.setTotalDamage(Math.min(amount,10));
-    if(raid.phase<2)hit.setTotalDamage(Math.min(hit.getTotalDamage(),Math.max(0,target.getHitpoints()-target.getCombat().getHitQueue().getQueuedDamage()-1)));
-  }
+  if(raid.room===5&&target===raid.boss&&raid.redShield>raid.tick){hit.setTotalDamage(0);target.heal(amount);}
   if(d.purple){const weapon=player.getEquipment().get(core.Equipment.WEAPON_SLOT)?.getId();const name=core.ItemDefinition.forId(weapon??-1)?.getName?.()||"";if(/\(p\+*\)|tentacle|blowpipe/i.test(name)){hit.setTotalDamage(target.getHitpoints());}else hit.setTotalDamage(0);}
+}
+function modifyVerzikHit({npc,hit}) {
+  const d=NPC_RAIDS.get(npc),raid=d?.raid;
+  if(!raid||raid.room!==5||npc!==raid.boss)return;
+  if(raid.phase===0&&raid.player.getEquipment().get(core.Equipment.WEAPON_SLOT)?.getId()!==core.ItemIdentifiers.DAWNBRINGER)hit.setTotalDamage(Math.min(hit.getTotalDamage(),10));
+  if(raid.phase<2)hit.setTotalDamage(Math.min(hit.getTotalDamage(),Math.max(0,npc.getHitpoints()-npc.getCombat().getHitQueue().getQueuedDamage()-1)));
 }
 function npcDeath({npc}) {
   const d=NPC_RAIDS.get(npc);if(!d)return;const raid=d.raid;
   splitNylocas(raid,npc,d);
+  if(d.nylo&&raid.wave>=NYLO_WAVES.length&&!raid.boss&&activeNylocas(raid,npc)===0)raid.bossAt=raid.tick+22;
   if(npc===raid.boss)roomComplete(raid);
 }
 function splitNylocas(raid,npc,d) {
   if(!d.big)return;
   for(let i=0;i<2;i++) {
     const style=roll(2),p=npc.getLocation(),pillarTarget=d.pillarTarget;
-    spawn(raid,(pillarTarget?NYLO_SMALL:NYLO_FIGHTING_SMALL)[style],[p.getX()+i,p.getY(),p.getZ()],{nylo:true,style,expires:raid.tick+50,pillarTarget});
+    spawn(raid,(pillarTarget?NYLO_SMALL:NYLO_FIGHTING_SMALL)[style],[p.getX()+i,p.getY(),p.getZ()],{nylo:true,style,expires:raid.tick+53,pillarTarget});
   }
 }
 function drops(event) {if(NPC_RAIDS.has(event.npc))event.handled=true;}
@@ -546,6 +695,7 @@ function item(event) {
   event.handled=true;player.getInventory().deleteNumber(itemId,1);player.heal(20);player.setRunEnergy(Math.min(100,player.getRunEnergy()+20));
   const skills=player.getSkillManager();skills.increaseCurrentLevel(core.Skill.PRAYER,Math.floor(skills.getMaxLevel(core.Skill.PRAYER)*0.25)+7,skills.getMaxLevel(core.Skill.PRAYER));
   for(const skill of [core.Skill.ATTACK,core.Skill.STRENGTH,core.Skill.DEFENCE,core.Skill.RANGED,core.Skill.MAGIC])skills.increaseCurrentLevel(skill,Math.floor(skills.getMaxLevel(skill)*0.15)+5,Math.floor(skills.getMaxLevel(skill)*1.15)+5);
+  api.emitCustomEvent("potions:apply-stamina",{player,durationMs:60_000});
 }
 function login({player}) {
   const p=player.getLocation();if(p.getX()>=3136&&p.getX()<=3391&&p.getY()>=4224&&p.getY()<=4479){player.moveTo(new core.Location(3676,3217,0));player.sendMessage("Your previous Theatre run is no longer available. Start a new party at the notice board.");}
@@ -560,7 +710,7 @@ module.exports=function registerEntryTheatreOfBlood(pluginApi) {
   NYLO_METHODS=[core.CombatType.MELEE,core.CombatType.RANGED,core.CombatType.MAGIC].map(type=>new NylocasCombatMethod(type));
   api.persistAttribute(COMPLETIONS_ATTRIBUTE);
   api.onObjectInteraction("Theatre of Blood",{Enter:enter});
-  api.onObjectInteraction("Notice board",{Read:notice});
+  api.onObjectInteraction("Notice board",{Read:notice,read:notice});
   api.onObjectInteraction("Barrier",{Pass:barrier});
   api.onObjectInteraction("Formidable passage",{Enter:passage,"Quick-Enter":passage});
   api.onObjectInteraction("Door",{Enter:passage,"Quick-enter":passage});
@@ -572,14 +722,16 @@ module.exports=function registerEntryTheatreOfBlood(pluginApi) {
   api.onObjectInteraction("Skeleton",{Search:skeleton});
   api.onNpcInteraction("Verzik Vitur",{"Talk-to":talkVerzik});
   api.onNpcInteraction("Mysterious Stranger",{"Talk-to":talkStranger});
-  api.onCombatHitRoll(hitRoll);
   api.onPlayerDealtDamage(dealtDamage);
+  api.onNpcHitModify(modifyVerzikHit);
   api.onNpcDeath(npcDeath);
   api.onCustomEvent("npc-drops:generated",drops);
+  api.onCustomEvent("tob:bmr:start",startBmr);
   api.onCustomEvent("tob:has-completion",hasCompletion);
+  api.onCustomEvent("combat-special:can-use",allowDawnbringer);
   api.onShouldDropItemsOnDeath(keepItems);
   api.onPlayerDeath(died);
   api.onItemAction(item);
   api.onPlayerLogin(login);
 };
-module.exports._test={ROOMS,typeIndex,quadrant,behindBloatPillar,bloatHands,dealtDamage,NPC_RAIDS,startMaze,maiden,roomComplete,nextWave,createArea,RAIDS,xarpus,splitNylocas,approachNylocas,attackNylocas};
+module.exports._test={ROOMS,NYLO_WAVES,BMR_ENCOUNTERS,BMR_WAVE,readNyloSpec,firstNyloWaveAt,soloNyloPillarHitpoints,activeNylocas,updateNyloExpiry,typeIndex,quadrant,behindBloatPillar,bloatHands,dealtDamage,modifyVerzikHit,NPC_RAIDS,startMaze,maiden,roomComplete,nextWave,process,createArea,RAIDS,xarpus,splitNylocas,approachNylocas,attackNylocas,allowDawnbringer,item,choosePillar,pillarTarget,startBmr,startRoom,passage,ensureEscapeCrystal};
