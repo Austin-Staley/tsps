@@ -1240,19 +1240,25 @@ module.exports = function registerDragonSlayerII(api) {
     p.setAttribute(ATTR_ORB_TARGET, targets[Math.floor(Math.random() * targets.length)]);
     talk(p, npcId, "tristan-s-key-piece-talking-to-ava-after-making-the-orb");
   }
-  function feelLocatorOrb({ player: p }) {
+  function feelLocatorOrb(event) {
+    const { player: p } = event;
     if (stage(p) < S.KEYS || stage(p) >= S.FORGE || !has(p, I.LOCATOR_ORB) || (Number(p.getAttribute(ATTR_MORYTANIA)) || 0) < 5) return;
     const loc = p.getLocation();
     const [x, y] = p.getAttribute(ATTR_ORB_TARGET);
     const dx = x - loc.getX(), dy = y - loc.getY();
-    const direction = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "east" : "west") : (dy > 0 ? "north" : "south");
-    p.getCombat().getHitQueue().addPendingDamage([new HitDamage(1 + Math.floor(Math.random() * 6), HitMask.RED)]);
+    const directions = ["north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west"];
+    const direction = directions[((Math.round(Math.atan2(dx, dy) / (Math.PI / 4)) % 8) + 8) % 8];
+    const damage = Math.min(10, Math.max(0, p.getHitpoints() - 1));
+    event.handled = true;
+    if (damage > 0) p.getCombat().getHitQueue().addPendingDamage([new HitDamage(damage, HitMask.RED)]);
     p.sendMessage(Math.max(Math.abs(dx), Math.abs(dy)) <= 1
       ? "The locator orb pulses strongly. The key piece must be buried very close by."
       : `The locator orb glows and pulls you ${direction}. It shocks you as you use it.`);
   }
-  function digForMorytaniaPiece({ player: p }) {
+  function digForMorytaniaPiece(event) {
+    const { player: p } = event;
     if (stage(p) < S.KEYS || stage(p) >= S.FORGE || !has(p, I.LOCATOR_ORB) || !has(p, I.SPADE) || (Number(p.getAttribute(ATTR_MORYTANIA)) || 0) < 5) return false;
+    event.handled = true;
     const { x, y } = p.getLocation();
     const target = p.getAttribute(ATTR_ORB_TARGET);
     if (!target || Math.max(Math.abs(x - target[0]), Math.abs(y - target[1])) > 1) {

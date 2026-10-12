@@ -302,6 +302,53 @@ test('Dragon Slayer II unlocks the northern Ungael exit from Vorkath completion 
   assert.deepEqual(values.at(-1), [6108, 0], 'unfinished players see the blocked cache morph');
 });
 
+test('Dragon Slayer II locator orb points on eight compass directions and cannot kill its user', () => {
+  const actions = new Map();
+  const { api: base } = mockApi();
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onItemAction'
+      ? (name, handlers) => actions.set(name, handlers)
+      : target[prop],
+  });
+  require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  const attrs = new Map([
+    ['quest.dragon_slayer_ii.stage', 6],
+    ['dragon-slayer-ii:morytania-step', 5],
+    ['dragon-slayer-ii:locator-target', [10, 10]],
+  ]);
+  const inventory = new Map([[api.core.ItemIdentifiers.LOCATOR_ORB, 1], [api.core.ItemIdentifiers.SPADE, 1]]);
+  const pending = [];
+  const messages = [];
+  let hitpoints = 99;
+  const player = {
+    getAttribute: (key) => attrs.get(key),
+    getInventory: () => ({ getAmount: (id) => inventory.get(id) ?? 0, getFreeSlots: () => 20, adds: () => {} }),
+    getLocation: () => ({ x: 0, y: 0, getX: () => 0, getY: () => 0 }),
+    getHitpoints: () => hitpoints,
+    getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => pending.push(...hits) }) }),
+    sendMessage: (message) => messages.push(message),
+  };
+  const orbAction = { player, handled: false };
+  actions.get('Locator orb').Feel(orbAction);
+  assert.equal(orbAction.handled, true, 'the quest action suppresses the item fallback');
+  assert.match(messages.at(-1), /north-east/);
+  assert.equal(pending.at(-1).getDamage(), 10);
+
+  hitpoints = 4;
+  actions.get('Locator orb').Feel({ player, handled: false });
+  assert.equal(pending.at(-1).getDamage(), 3, 'orb damage stops at 1 hitpoint');
+  const before = pending.length;
+  hitpoints = 1;
+  const lastOrbAction = { player, handled: false };
+  actions.get('Locator orb').Feel(lastOrbAction);
+  assert.equal(lastOrbAction.handled, true);
+  assert.equal(pending.length, before, 'the orb never queues lethal damage');
+
+  const digAction = { player, handled: false };
+  actions.get('Spade').Dig(digAction);
+  assert.equal(digAction.handled, true, 'wrong dig spots are handled by the quest');
+});
+
 test('Dragon Slayer II restores the Karamja plinth when its key piece was lost', () => {
   const objectHandlers = [];
   const objects = [];
