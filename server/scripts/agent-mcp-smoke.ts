@@ -73,6 +73,7 @@ const npc = {
     getMaxHitpoints: () => 10,
     getAnimation: (): any => ({ getId: () => 8082 }),
     performAnimation: (_animation: any) => {},
+    forceChat: (_text: string) => {},
     getLocation: () => location(3225, 3220),
     getCurrentDefinition: () => ({ getName: () => "Man", getActions: () => ["Talk-to", null, "Attack", "Pickpocket"] }),
 };
@@ -257,6 +258,12 @@ else process.env.AGENT_MCP = previousMcpFlag;
     npc.performAnimation({ getId: () => 8080 });
     npc.getAnimation = () => null;
     assert.equal((await call(client, "observe", { player: "agent1" })).value.npcs[0].animation, 8080, "warnings survive the engine clearing its update flags");
+    npc.forceChat("Now!");
+    assert.equal((await call(client, "observe", { player: "agent1" })).value.npcs[0].chat, "Now!", "boss chat cues survive cleared update flags");
+    const originalDefinition = npc.getCurrentDefinition;
+    npc.getCurrentDefinition = () => ({ ...originalDefinition(), getId: () => 10789 });
+    assert.equal((await call(client, "observe", { player: "agent1" })).value.npcs[0].id, 10789, "boss style transforms expose their visible ID");
+    npc.getCurrentDefinition = originalDefinition;
 
     packetSender.sendGraphic({ getId: () => 1560 }, location(3222, 3218));
     assert.deepEqual((await call(client, "observe", { player: "agent1" })).value.client.graphics, [{ id: 1560, x: 3222, y: 3218, z: 0 }]);
