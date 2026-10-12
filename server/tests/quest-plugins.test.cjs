@@ -1402,7 +1402,13 @@ test('Desert Treasure II requires and solves the real eight-cell golem grid', ()
   });
   const runtime = require('../plugins/quests/QuestRuntime');
   const startTranscript = runtime.startTranscript;
-  runtime.startTranscript = () => true;
+  const transcripts = require('../data/definitions/npc-dialogues.json')['Desert Treasure II - The Fallen Empire'].variants;
+  const searches = [];
+  runtime.startTranscript = (_api, _player, _npcId, _page, variant) => {
+    assert.ok(transcripts[variant], `missing golem transcript: ${variant}`);
+    searches.push(variant);
+    return true;
+  };
   try {
     require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
     const quest = runtime.getRegisteredQuests().at(-1);
@@ -1503,6 +1509,13 @@ test('Desert Treasure II requires and solves the real eight-cell golem grid', ()
     assert.equal(attrs.get('desert-treasure-ii:golem-solved'), true);
     assert.equal(quest.getStage(player), 6, 'solving the grid opens the next search stage, rather than skipping straight to a boss');
     assert.ok(player.syntaxAction);
+    const previousTranscripts = searches.length;
+    for (const term of ['Vardorvis', 'Perseriya', 'Sucellus', 'Whisperer']) {
+      objectInteractions[0]({ player, objectId: O.GOLEM, location: golem, option: 'Operate' });
+      player.syntaxAction.execute(term);
+    }
+    assert.equal(attrs.get('desert-treasure-ii:searched-names'), 15);
+    assert.equal(searches.length - previousTranscripts, 4, 'each search must display its canonical NPC dialogue');
   } finally {
     runtime.startTranscript = startTranscript;
   }
