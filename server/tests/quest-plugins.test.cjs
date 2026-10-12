@@ -209,3 +209,58 @@ test('Priest in Peril unlocks the mausoleum Holy barrier only after completion',
     'the Hallowed Sepulchre barrier is handled by its own content');
   assert.deepEqual([moves.length, messages.length], before);
 });
+
+test('Song of the Elves rubs the seed to the Enchanted Valley and returns to Lletya', () => {
+  const { api: base } = mockApi();
+  const itemActions = [];
+  const custom = new Map();
+  const spawns = [];
+  const locations = [];
+  const started = [];
+  const api = new Proxy(base, {
+    get(target, prop) {
+      if (prop === 'onItemAction') return (handler) => itemActions.push(handler);
+      if (prop === 'onCustomEvent') return (name, handler) => custom.set(name, handler);
+      if (prop === 'spawnNpc') return (spawn) => (spawns.push(spawn), null);
+      return target[prop];
+    },
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  runtime.startTranscript = (...args) => (started.push(args.slice(1)), true);
+  try {
+    require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  } finally {
+    runtime.startTranscript = originalStartTranscript;
+  }
+
+  const quest = runtime.getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map();
+  const player = {
+    getUsername: () => 'SoteTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ getAmount: () => 0, getFreeSlots: () => 28 }),
+    getEquipment: () => ({ get: () => null }),
+    getSkillManager: () => ({ getMaxLevel: () => 99 }),
+    getArea: () => null,
+    moveTo: (location) => locations.push(location),
+    sendMessage() {},
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+  };
+  quest.setStage(player, 120);
+
+  const itemEvent = { player, itemId: api.core.ItemIdentifiers.CRYSTAL_SEED_3, handled: false };
+  itemActions.at(-1)(itemEvent);
+  assert.equal(itemEvent.handled, true);
+  assert.equal(started.at(-1)[3], 'preparing-to-enter-prifddinas-a-mysterious-figure');
+
+  custom.get('npc-dialogue:action')({ player, stepId: 'UeAKgA' });
+  assert.deepEqual([locations.at(-1).getX(), locations.at(-1).getY()], [2440, 6090]);
+  assert.equal(spawns.at(-1).id, api.core.NpcIdentifiers.MYSTERIOUS_FIGURE);
+  assert.equal(spawns.at(-1).owner, player);
+
+  custom.get('npc-dialogue:action')({ player, stepId: 'D1wXY6' });
+  assert.deepEqual([locations.at(-1).getX(), locations.at(-1).getY()], [2353, 3172]);
+  assert.equal(attributes.get('quest.song_of_the_elves.valley-figure'), false);
+});
