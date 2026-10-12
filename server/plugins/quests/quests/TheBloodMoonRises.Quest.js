@@ -1881,7 +1881,6 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onNpcHitModify(handleSiegeDrakanHit);
   api.persistAttribute(WYRD_DEFEATED_ATTRIBUTE);
   api.persistAttribute(DRAKAN_ENCOUNTER_COMPLETE);
-  api.persistAttribute(SIEGE_DRAKAN_AREA_ATTRIBUTE);
   api.persistAttribute(SIEGE_DRAKAN_COMPLETE);
   api.persistAttribute(SIEGE_DEFENCE_ATTRIBUTE);
   api.persistAttribute(TOB_CHALLENGE_ATTRIBUTE);
