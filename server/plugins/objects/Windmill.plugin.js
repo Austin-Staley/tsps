@@ -6,8 +6,8 @@
  *   Flour bin > Empty    fill an empty pot with the flour
  *
  * The bin amount (0-30) and the hopper contents are per-player and shared
- * between windmills. The bin's empty/full appearance is the object transform on
- * the varbit the cache uses (5325), so we set it and re-send the resolved bin.
+ * between windmills. Send the native flour count as well as the bin's
+ * empty/full appearance, including when restoring saved flour on login.
  */
 const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
 const { GameObject } = require("../../src/main/typescript/elvarg/game/entity/impl/object/GameObject");
@@ -16,6 +16,8 @@ const { Location } = require("../../src/main/typescript/elvarg/game/model/Locati
 const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
 
 const MAX_FLOUR = 30;
+/** Cache gameval mill_flour: five-bit flour count in varp 203. */
+const FLOUR_AMOUNT_VARBIT = 4920;
 /** Varbit on the flour bin loc that selects its empty/full ("has flour") model. */
 const FLOUR_STATE_VARBIT = 5325;
 
@@ -30,8 +32,13 @@ function flourAmount(player) {
 function setFlourAmount(player, amount) {
   const value = Math.max(0, Math.min(MAX_FLOUR, amount | 0));
   player.setAttribute(FLOUR_ATTRIBUTE, value);
+  player.getPacketSender().sendVarbit(FLOUR_AMOUNT_VARBIT, value);
   player.getPacketSender().sendVarbit(FLOUR_STATE_VARBIT, value > 0 ? 1 : 0);
   return value;
+}
+
+function restoreFlourState({ player }) {
+  setFlourAmount(player, flourAmount(player));
 }
 
 function hopperHasGrain(player) {
@@ -160,6 +167,7 @@ module.exports = {
   register(api) {
     api.persistAttribute(HOPPER_ATTRIBUTE);
     api.persistAttribute(FLOUR_ATTRIBUTE);
+    api.onPlayerLogin(restoreFlourState);
     api.onObjectInteraction("Hopper", { Fill: fillHopper });
     api.onObjectInteraction("Hopper controls", { Operate: operateHopperControls });
     api.onObjectInteraction("Flour bin", { Empty: emptyFlourBin });
