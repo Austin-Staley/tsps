@@ -64,6 +64,7 @@ function defineAreaClass() {
     postLeave(mobile) {
       if (mobile?.isPlayer?.()) {
         clearSession(mobile.getAsPlayer(), this);
+        mobile.getCombat?.().getHitQueue?.().clear?.();
       }
       super.postLeave(mobile);
     }
@@ -95,8 +96,9 @@ function clearSession(player, sourceArea) {
 }
 
 function destroyArea(player) {
-  Hud.dropFor(player);
   const area = player.getAttribute?.(ATTR_AREA);
+  if (!area && !sessions.has(player)) return;
+  Hud.dropFor(player);
   clearSession(player, area);
   if (area instanceof AraxxorPrivateArea && area.isDestroyed?.() !== true) {
     area.destroy();
