@@ -543,3 +543,16 @@ test('Movario notes claim the inventory action and require every page before the
  next();next();assert.equal(attributes.get('while-guthix-sleeps:notes-read'),undefined);next();
  assert.equal(attributes.get('while-guthix-sleeps:notes-read'),1);
 });
+
+
+test('McGrubor mercenaries wait for the opening cutscene to finish', () => {
+ const {api}=mockApi();let area;api.registerArea=a=>area=a;
+ const battles=[];api.spawnNpc=()=>({setMaxHitpoints(){return this},setHitpoints(){return this},setScriptedMovement(){},getHitpoints:()=>140,getCombat:()=>({getLastAttack:()=>({reset(){}})})});
+ // The live battle process must not count ticks or attack until its dialogue callback.
+ const {PrivateArea}=api.core;
+ const original=PrivateArea.prototype.enter;PrivateArea.prototype.enter=function(m){if(m===player)battles.push(this);};
+ const player={isPlayer:()=>true,getAsPlayer(){return this;},sendMessage(){}};
+ try {require('../plugins/quests/wgs/Fellowship.WhileGuthixSleeps')({api,stage:()=>200,val:()=>0,ATTRIBUTES:[],play(){},hit(){throw Error('cutscene attacked player');}});
+ area.process(player);const battle=battles[0];battle.process(player);assert.equal(battle.ticks,0);
+ }finally{PrivateArea.prototype.enter=original;}
+});
