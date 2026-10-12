@@ -11,13 +11,23 @@
  *   blunt weapon turns it red and stuns it: 50-60 ticks solo, 30-40 for 2-3 raiders, 20-30
  *   for 4-5, 10-20 for 6+.
  * - Points come with each crystal lit, to whoever's crab sent the orb there.
- * Not on the Wiki (to check against a capture): the tiles; the orb leaves its spot every 5 ticks and moves a tile a tick,
- *   starting in the room's direction and turning clockwise at each crab it meets (two crabs at
- *   once fizzle it); a player in its way takes 25% of their hitpoints (and anyone beside them)
- *   and it fizzles; the crystals by index need white, blue, green, red orbs; a crab's colour
- *   lasts 5 seconds; crabs bite for up to 10 every 4 ticks (sound 718); smashing anim 401,
- *   crab anim 1313, gfx 245, sounds 556 and 2727; each lit crystal gives 1,600 points; the
- *   dark crystal brightens a step per crystal and, all four lit, shatters (gfx 1326).
+ * rsprox captures (recording 3389, a solo room):
+ * - The orb fizzles at the end of its path (gfx 119 at height 80 on it, sound 219 x6, range 6)
+ *   and goes the tick after, the next one appearing then. Meeting a crab it takes its colour
+ *   (sound 3274, range 6). At the wrong crystal it bursts as its colour's bolt (red: gfx 128,
+ *   sound 1294), on a player as its wave (white: gfx 160, sound 223); both at height 80 with
+ *   10 client cycles' delay.
+ * - Lighting a crystal: it turns white (29762) with gfx 119 and sound 1476 (10 cycles' delay),
+ *   400 points, and the dark crystal brightens a step 1-3 ticks later. With four lit: the
+ *   crabs go 4 ticks later and the dark crystal shatters at 5 (gfx 1326 on three tiles, 5
+ *   cycles apart).
+ * - Struck, a crab blocks (1313) and keeps its colour about 12 ticks. Smashing: the player
+ *   1755; on the crab gfx 245 (30 cycles' delay, height 100), sounds 556 and 2727 (range 5).
+ *   Crabs bite with 2368 every 4 ticks.
+ * Not on the Wiki (to check against a capture): the tiles; the orb leaving every 5 ticks and
+ *   its turning clockwise at each crab (two at once fizzle it); a player in its way taking 25%
+ *   of their hitpoints (and anyone beside them); which crystal needs which colour; crabs
+ *   biting for up to 10; bursting colours other than red and white.
  */
 
 const Shared = require("./CoxShared");
@@ -27,8 +37,10 @@ const CRAB = { WHITE: 7576, RED: 7577, GREEN: 7578, BLUE: 7579 };
 const FOCUS = { WHITE: 7580, RED: 7581, GREEN: 7582, BLUE: 7583 };
 const OBJECT = { DARK: 29753, LIT: 29762 };
 const HAMMER = 2347;
-const COLOUR_TICKS = 8;
-const POINTS_PER_CRYSTAL = 1600;
+const COLOUR_TICKS = 12;
+const POINTS_PER_CRYSTAL = 400;
+const SOUND = { FIZZLE: 219, COLOUR: 3274, LIT: 1476, SMASH: 556, STUN: 2727 };
+const ANIM = { SMASH: 1755, BITE: 2368 };
 const FOCUS_DELAY = 5;
 /** The orb each small crystal (by index) needs. */
 const NEEDS = [FOCUS.WHITE, FOCUS.BLUE, FOCUS.GREEN, FOCUS.RED];
@@ -53,6 +65,8 @@ const SMALL_CRYSTAL_TILES = [
  * hits (unverified) - wind bolt/wave, fire bolt/wave, wind bolt/earth wave, water bolt/wave.
  */
 const BURST = { [FOCUS.WHITE]: [119, 160], [FOCUS.RED]: [128, 157], [FOCUS.GREEN]: [119, 166], [FOCUS.BLUE]: [122, 163] };
+/** The burst's sound: bolts 1294, waves 223 (captured for red and white). */
+const BURST_SOUND = [1294, 223];
 
 /** Wiki (Mod Ash): the stun by party size. */
 function stunTicks(raiders) {
@@ -117,18 +131,27 @@ class CrabsRoom extends Raid.Room {
     this.sender = null;
   }
 
-  /** The orb is gone (fizzled, burst or used): the next one comes 5 ticks later. */
-  endFocus(graphicSize) {
+  /**
+   * The orb is gone: fizzling on itself, bursting on its tile, or used; it is removed the tick
+   * after, when the next one comes.
+   */
+  endFocus(how) {
     const focus = this.focus;
     this.focus = null;
     this.nextFocusAt = this.raid.ticks + 1;
     if (!focus) return;
-    if (graphicSize != null) {
-      const viewers = this.raiders();
-      Shared.graphicAt(viewers, BURST[focus.__coxColour][graphicSize], focus.getLocation(), { height: 100 });
-      for (const player of viewers) Shared.sound(player, 219);
+    const viewers = this.raiders();
+    const at = focus.getLocation().clone();
+    if (how === "fizzle") {
+      focus.performGraphic(Shared.gfx(BURST[focus.__coxColour][0], { height: 80 }));
+      Shared.areaSound(viewers, SOUND.FIZZLE, at, { loops: 6, range: 6 });
+    } else if (how === "bolt" || how === "wave") {
+      const size = how === "bolt" ? 0 : 1;
+      Shared.graphicAt(viewers, BURST[focus.__coxColour][size], at, { height: 80, delay: 10 });
+      Shared.areaSound(viewers, BURST_SOUND[size], at, { delay: 10, range: 6 });
     }
-    this.removeNpc(focus);
+    focus.getMovementQueue().reset();
+    Shared.later(this.raid, 1, () => this.removeNpc(focus));
   }
 
   crabAt(x, y) {
@@ -156,14 +179,15 @@ class CrabsRoom extends Raid.Room {
       const crab = this.crabAt(x, y);
       if (crab) {
         const crabColour = crab.getNpcTransformationId() > 0 ? crab.getNpcTransformationId() : crab.getId();
-        if (crabColour !== CRAB.WHITE) {
+        if (crabColour !== CRAB.WHITE && focus.__coxColour !== FOCUS.WHITE + (crabColour - CRAB.WHITE)) {
           focus.__coxColour = FOCUS.WHITE + (crabColour - CRAB.WHITE);
           focus.setNpcTransformationId(focus.__coxColour);
+          Shared.areaSound(this.raiders(), SOUND.COLOUR, here, { range: 6 });
         }
         const target = crab.getCombat().getTarget();
         this.sender = target?.isPlayer?.() ? target.getAsPlayer() : this.sender;
         if (++turns >= 2) {
-          this.endFocus(0);
+          this.endFocus("fizzle");
           return;
         }
         this.direction = (this.direction + 1) & 3;
@@ -173,7 +197,7 @@ class CrabsRoom extends Raid.Room {
       const next = new Location(x, y, here.getZ());
       const atCrystal = this.crystalTiles.some((tile) => tile.equals(next));
       if (!atCrystal && RegionManager.blocked(next, this.map)) {
-        this.endFocus(0);
+        this.endFocus("fizzle");
         return;
       }
       Shared.walkStraight(focus, next);
@@ -189,32 +213,43 @@ class CrabsRoom extends Raid.Room {
     for (const raider of this.raiders()) {
       if (raider.getLocation().getDistance(player.getLocation()) <= 1) Shared.damage(raider, damage);
     }
-    this.endFocus(1);
+    this.endFocus("wave");
     return true;
   }
 
   reachCrystal(index) {
     const colour = this.focus.__coxColour;
     if (this.lit[index] || colour !== NEEDS[index]) {
-      this.endFocus(0);
+      this.endFocus("bolt");
       return;
     }
     this.lit[index] = true;
     const tile = this.crystalTiles[index];
     const small = this.map.getTemplateObjects(tile).find((object) => object.getType() === 10);
     if (small) Shared.replaceObject(this.map, small, OBJECT.LIT);
+    const viewers = this.raiders();
+    Shared.graphicAt(viewers, 119, tile, { height: 80, delay: 10 });
+    Shared.areaSound(viewers, SOUND.LIT, tile, { delay: 10, range: 6 });
     if (this.sender && this.raid.players.has(this.sender)) this.raid.addPoints(this.sender, POINTS_PER_CRYSTAL);
-    this.endFocus(0);
+    this.endFocus("used");
     const litCount = this.lit.filter(Boolean).length;
-    this.dark = Shared.replaceObject(this.map, this.dark, OBJECT.DARK + litCount);
-    if (litCount < 4) return;
+    const last = litCount >= 4;
+    Shared.later(this.raid, last ? 1 : 3, () => {
+      this.dark = Shared.replaceObject(this.map, this.dark, OBJECT.DARK + litCount);
+    });
+    if (!last) return;
     this.completed = true;
-    Shared.later(this.raid, 1, () => {
+    Shared.later(this.raid, 4, () => {
       for (const crab of this.crabs) this.removeNpc(crab);
     });
-    Shared.later(this.raid, 2, () => {
-      Shared.graphicAt(this.raiders(), 1326, this.dark.getLocation());
-      Shared.core().ObjectManager.deregister(this.dark, true);
+    Shared.later(this.raid, 5, () => {
+      const { Location, ObjectManager } = Shared.core();
+      const at = this.dark.getLocation();
+      const offsets = [[0, 0, 0, 10], [-1, 1, 5, 0], [-1, 0, 10, 0]];
+      for (const [dx, dy, delay, height] of offsets) {
+        Shared.graphicAt(this.raiders(), 1326, new Location(at.getX() + dx, at.getY() + dy, at.getZ()), { delay, height });
+      }
+      ObjectManager.deregister(this.dark, true);
     });
   }
 
@@ -243,15 +278,12 @@ class CrabsRoom extends Raid.Room {
       player.sendMessage("You don't have a suitable weapon equipped for hammering the crab.");
       return;
     }
-    Shared.animate(player, 401);
-    for (const viewer of this.raiders()) {
-      Shared.sound(viewer, 556);
-      Shared.sound(viewer, 2727);
-    }
+    Shared.animate(player, ANIM.SMASH);
+    Shared.areaSound(this.raiders(), SOUND.SMASH, crab.getLocation(), { delay: 20, range: 5 });
+    Shared.areaSound(this.raiders(), SOUND.STUN, crab.getLocation(), { delay: 30, range: 5 });
     const ticks = stunTicks(this.raid.scale);
     this.colour(crab, CRAB.RED, ticks);
-    crab.performGraphic(Shared.gfx(245, { height: 140 }));
-    Shared.animate(crab, 1313);
+    crab.performGraphic(Shared.gfx(245, { delay: 30, height: 100 }));
     crab.getCombat().reset();
     crab.getMovementQueue().reset();
     crab.getMovementQueue().setBlockMovement?.(true);
@@ -282,9 +314,8 @@ function crabCombat(api) {
     }
 
     start(npc, target) {
-      npc.performAnimation(new Animation(1312));
+      npc.performAnimation(new Animation(ANIM.BITE));
       if (target?.isPlayer?.()) {
-        Shared.sound(target.getAsPlayer(), 718);
         Shared.strike(npc, target.getAsPlayer(), "melee", 10, 0);
       }
     }

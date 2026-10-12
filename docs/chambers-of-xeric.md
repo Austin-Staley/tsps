@@ -284,6 +284,14 @@ All five recordings.
 - Crossing: the walk starts 2 ticks after arriving, a tile a tick, with sound 2495 (2 loops) each tick and the XP the tick after landing; there are no messages.
 - Mages cast 1162 (gfx 129, sound 155, projectile 130, impact gfx 131 / 85 and sound 156); rangers shoot 426 (gfx 24, sound 2693, projectile 15) landing the next tick. They shout one a tick once fighting.
 
+## Crab puzzle, from rsprox captures
+
+Recording 3389 (solo).
+
+- The orb fizzles at the end of its path (gfx 119, sound 219) and the next comes as it goes a tick later; meeting a crab it takes its colour (sound 3274). At the wrong crystal it bursts as a bolt, on a player as a wave.
+- Lighting a crystal turns it white (29762, sound 1476), gives 400 points, and the dark crystal brightens a step 1-3 ticks later; with all four the crabs go at 4 ticks and the dark crystal shatters at 5 (gfx 1326).
+- Struck crabs keep their colour about 12 ticks; smashing: player 1755, crab gfx 245, sounds 556 and 2727; crabs bite with 2368.
+
 ## Values not on the Wiki, to check against a capture
 
 | Value | Where |
