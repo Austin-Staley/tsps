@@ -3,9 +3,11 @@
 // assembled with ffmpeg when available). Drives the client through its own
 // handles: ?username=&password= auto-login, window.__osrsClient for the camera.
 //
-// Run: node client/tests/vision-capture.browser.cjs --url http://localhost:3103
+// Run: node client/tests/vision-capture.browser.cjs [--url <client URL>]
 //   --user visionbot --pass vision1234 --out shot.png [--yaw 1024 --pitch 300]
 //   [--clip-secs 5 --clip-fps 10 --clip-out clip.mp4]
+// --url defaults to this worktree's client (PORT in the root .env, see
+// docs/worktrees.md), then http://localhost:3000; VISION_CLIENT_URL overrides.
 //
 // Notes:
 // - Plain `--headless=new` with NO webgpu/swiftshader flags: on modern Chromium

@@ -5,29 +5,51 @@
 // camera, captures, and shuts down. Scene setup stays with the existing tools
 // (command/teleport, interact, npc_option, ...); these only observe.
 //
-// Export layout, all under <worktree>/vision-exports/ (git-ignored):
-//   <run-id>/logs/run.log                 one tick-stamped line per vision call
-//   <run-id>/logs/harness-<ts>.json       full harness summary per call
-//   <run-id>/screenshots/t<TICK>-<label>.png
-//   <run-id>/videos/t<TICK>-<label>.mp4   (+ t<TICK>-<label>-frames/)
+// Export layout, all under <worktree>/exports/ (git-ignored):
+//   <run>/logs/run.log                    one tick-stamped line per vision call
+//   <run>/logs/harness-<ts>.json          full harness summary per call
+//   <run>/screenshots/t<TICK>-<label>.png
+//   <run>/videos/t<TICK>-<label>.mp4      (frames kept only if no video)
+// <run> is the `run` tool argument (same label groups a whole test session);
+// without one, each call gets its own <timestamp>-<username> folder.
 // The server tick in file names ties media to run.log lines (completion tick;
 // capture and naming are seconds apart, so within a few ticks). Results are
-// file paths as text; agents read the PNG/JPEG frames back to inspect them.
+// file paths as text; agents read the PNGs back to inspect them.
+// Toggles: VISION_EXPORTS=0 (false/off) sends captures to the OS temp dir and
+// writes no logs; VISION_KEEP_FRAMES=1 keeps clip frame JPEGs after a video
+// builds. VISION_EXPORT_DIR overrides the exports folder; VISION_CLIENT_URL
+// overrides the auto-detected worktree client URL; VISION_CHROME_PATH picks a
+// specific browser.
 // ASYNC on purpose: spawnSync would block this server's event loop for the
 // whole capture, so the browser's own login request could never be processed
 // (server and harness waiting on each other = deadlock). Async spawn keeps the
 // world ticking while the capture runs.
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 
 function worktreeRoot() {
   return path.resolve(__dirname, "..", "..", "..", "..");
 }
 
+// Exports on by default (worktree exports/ folder, git-ignored). VISION_EXPORTS=0
+// (or false/off) redirects captures to the OS temp dir and writes no run logs or
+// harness JSONs, so repeated probing does not accumulate repo data.
+function exportsEnabled() {
+  const value = String(process.env.VISION_EXPORTS ?? "1").toLowerCase();
+  return !(value === "0" || value === "false" || value === "off");
+}
+
+// Clip frame JPEGs are a fallback for when ffmpeg cannot produce a video;
+// once a video exists they are deleted unless VISION_KEEP_FRAMES=1.
+function keepFrames() {
+  return String(process.env.VISION_KEEP_FRAMES ?? "0") === "1";
+}
+
 function exportsRoot() {
   if (process.env.VISION_EXPORT_DIR) return process.env.VISION_EXPORT_DIR;
-  return path.join(worktreeRoot(), "vision-exports");
+  return path.join(worktreeRoot(), "exports");
 }
 
 function clientUrl() {
@@ -59,14 +81,16 @@ function sanitizeLabel(label, fallback) {
   return clean || fallback;
 }
 
+// One folder per run label; without a label, per call (<stamp>-<username>).
 function resolveRunDir(runLabel, username) {
-  const base = exportsRoot();
+  const enabled = exportsEnabled();
   const runId = sanitizeLabel(runLabel, `${stamp()}-${String(username).toLowerCase()}`);
+  const base = enabled ? exportsRoot() : path.join(os.tmpdir(), "tsps-vision");
   const runDir = path.join(base, runId);
   for (const sub of ["logs", "screenshots", "videos"]) {
     fs.mkdirSync(path.join(runDir, sub), { recursive: true });
   }
-  return { runDir, runId };
+  return { runDir, runId, enabled };
 }
 
 function logRun(runDir, line) {
@@ -138,17 +162,17 @@ module.exports = function registerVisionTools(ctx) {
   const pitch = z.number().int().min(0).max(512).optional()
     .describe("Camera pitch (0 level - 512 down). Omit to keep the player's current view.");
   const run = z.string().min(1).max(60).optional()
-    .describe("Run label grouping captures into one vision-exports/<run>/ folder (default: timestamped per call).");
+    .describe("Run label grouping captures into one exports/<run>/ folder (default: timestamped per call).");
   const label = z.string().min(1).max(60).optional()
     .describe("Short label for the file names, e.g. lumbridge, araxxor-lair (default: tool name).");
 
   tool(
     "vision_screenshot",
-    "Capture what the named online player sees right now through a headless game client (WebGPU): logs them in through it, aims the optional camera, screenshots to PNG under vision-exports/<run>/screenshots with the server tick in the name. Arrange the scene first (command/teleport, interact, ...). Returns paths for inspection.",
+    "Capture what the named online player sees right now through a headless game client (WebGPU): logs them in through it, aims the optional camera, screenshots to PNG under exports/<run>/screenshots with the server tick in the name. Arrange the scene first (command/teleport, interact, ...). Returns paths for inspection.",
     { player, yaw, pitch, run, label },
     async ({ player: username, yaw: y, pitch: p, run: runLabel, label: name }) => {
       const tickStart = serverTick(ctx);
-      const { runDir, runId } = resolveRunDir(runLabel, username);
+      const { runDir, runId, enabled } = resolveRunDir(runLabel, username);
       const args = ["--url", clientUrl(), "--user", username, "--pass", process.env.VISION_BOT_PASSWORD ?? "vision1234",
         "--settle-ms", "2500"];
       if (y !== undefined) args.push("--yaw", String(y));
@@ -158,23 +182,26 @@ module.exports = function registerVisionTools(ctx) {
         `t${String(tickShot ?? 0).padStart(7, "0")}-${sanitizeLabel(name, "screenshot")}.png`);
       const summary = await runHarness([...args, "--out", out], 240000);
       const tickEnd = serverTick(ctx);
-      fs.writeFileSync(path.join(runDir, "logs", `harness-${stamp()}.json`), JSON.stringify(summary, null, 2));
-      logRun(runDir, `tick ${tickStart}->${tickEnd} tool=vision_screenshot player=${username} ` +
-        `camera=${JSON.stringify(summary.camera ?? null)} files=${path.relative(runDir, summary.screenshot)}`);
-      return { run: runId, screenshot: summary.screenshot, tick: tickEnd, camera: summary.camera ?? null, client: summary.client ?? null, ms: summary.wallMs };
+      if (enabled) {
+        fs.writeFileSync(path.join(runDir, "logs", `harness-${stamp()}.json`), JSON.stringify(summary, null, 2));
+        logRun(runDir, `tick ${tickStart}->${tickEnd} tool=vision_screenshot player=${username} ` +
+          `camera=${JSON.stringify(summary.camera ?? null)} files=${path.relative(runDir, summary.screenshot)}`);
+      }
+      return { run: runId, exported: enabled, screenshot: summary.screenshot, tick: tickEnd,
+        camera: summary.camera ?? null, client: summary.client ?? null, ms: summary.wallMs };
     }
   );
 
   tool(
     "vision_clip",
-    "Record a short clip of what the named online player sees (CDP screencast frames assembled to MP4 with ffmpeg when available, else JPEG frames), stored under vision-exports/<run>/videos with the server tick in the name. Keep under ~15 seconds. Returns paths for inspection.",
+    "Record a short clip of what the named online player sees (CDP screencast frames assembled to MP4 with ffmpeg when available, else JPEG frames), stored under exports/<run>/videos with the server tick in the name. Keep under ~15 seconds. Returns paths for inspection.",
     {
       player, yaw, pitch, run, label,
       seconds: z.number().int().min(1).max(30).default(8).describe("Clip length in seconds."),
     },
     async ({ player: username, yaw: y, pitch: p, run: runLabel, label: name, seconds }) => {
       const tickStart = serverTick(ctx);
-      const { runDir, runId } = resolveRunDir(runLabel, username);
+      const { runDir, runId, enabled } = resolveRunDir(runLabel, username);
       const args = ["--url", clientUrl(), "--user", username, "--pass", process.env.VISION_BOT_PASSWORD ?? "vision1234",
         "--settle-ms", "2500"];
       if (y !== undefined) args.push("--yaw", String(y));
@@ -188,18 +215,30 @@ module.exports = function registerVisionTools(ctx) {
         "--clip-out", path.join(videoDir, `${base}.mp4`),
         "--frames-dir", path.join(videoDir, `${base}-frames`)], 240000 + seconds * 1000);
       const tickEnd = serverTick(ctx);
-      fs.writeFileSync(path.join(runDir, "logs", `harness-${stamp()}.json`), JSON.stringify(summary, null, 2));
-      const files = [summary.screenshot, summary.clip?.video ?? summary.clip?.framesDir ?? null].filter(Boolean)
-        .map((f) => path.relative(runDir, f)).join(",");
-      logRun(runDir, `tick ${tickStart}->${tickEnd} tool=vision_clip player=${username} seconds=${seconds} ` +
-        `camera=${JSON.stringify(summary.camera ?? null)} files=${files}`);
+      // Frames are only a fallback: drop them once the video exists.
+      let framesDeleted = false;
+      if (summary.clip?.video && summary.clip?.framesDir && !keepFrames()) {
+        try {
+          fs.rmSync(summary.clip.framesDir, { recursive: true, force: true });
+          framesDeleted = true;
+        } catch {}
+      }
+      if (enabled) {
+        fs.writeFileSync(path.join(runDir, "logs", `harness-${stamp()}.json`), JSON.stringify(summary, null, 2));
+        const files = [summary.screenshot, summary.clip?.video ?? summary.clip?.framesDir ?? null].filter(Boolean)
+          .map((f) => path.relative(runDir, f)).join(",");
+        logRun(runDir, `tick ${tickStart}->${tickEnd} tool=vision_clip player=${username} seconds=${seconds} ` +
+          `camera=${JSON.stringify(summary.camera ?? null)}${framesDeleted ? " frames=deleted" : ""} files=${files}`);
+      }
       return {
         run: runId,
+        exported: enabled,
         video: summary.clip?.video ?? null,
         videoCodec: summary.clip?.videoCodec ?? null,
         videoError: summary.clip?.videoError ?? null,
         frames: summary.clip?.frames ?? 0,
-        framesDir: summary.clip?.framesDir ?? null,
+        framesDir: framesDeleted ? null : (summary.clip?.framesDir ?? null),
+        framesDeleted,
         screenshot: summary.screenshot ?? null,
         tick: tickEnd,
         ms: summary.wallMs,

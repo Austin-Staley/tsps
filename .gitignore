@@ -90,7 +90,7 @@ docs/node_modules/
 client/tests/artifacts/
 
 # Agent vision captures (per-run exports: logs/screenshots/videos)
-vision-exports/
+/exports/
 
 # Per-deployment world overrides (WorldDefinition.readWorldConfig)
 server/data/definitions/world.local.json
