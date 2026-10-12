@@ -1110,7 +1110,8 @@ test('Blood Moon siege barrier action starts the second private Lowerniel fight 
 
 test('Blood Moon hall defence supplies hammers and potions, records repairs and heals a fallen Aranei', () => {
   const { api, handlers } = mockApi();
-  let cycle = 0;
+  let cycle = 0, palace;
+  api.registerArea = area => { palace = area; };
   const originalGetProcessCycle = api.core.World.getProcessCycle;
   api.core.World.getProcessCycle = () => cycle;
   const spawns = [];
@@ -1134,6 +1135,7 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
     deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
   };
   const player = {
+    isPlayer: () => true, getAsPlayer: () => player,
     getUsername: () => 'SiegeHallTest',
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
@@ -1185,7 +1187,8 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
   assert.equal(state.healed.length, 1);
   assert.equal(state.integrity, 100, 'repairs and healing support the integrity hold instead of completing it directly');
   assert.equal(replaced.filter(([kind]) => kind === 'add').length, 3, 'each fixed cache loc is replaced with its repaired variant');
-  const process = handlers.playerProcess.find((handler) => handler.name === 'processSiegeDefence');
+  assert.equal(handlers.playerProcess.some(h=>h.name==='processSiegeDefence'),false,'hall timing belongs to its area');
+  const process = ({player}) => palace.process(player);
   attributes.set('quest.the_blood_moon_rises.siege-defence', { ...state, integrity: 51, participation: 0, nextIntegrityLossCycle: 20 });
   cycle = 20;
   const npcDefinition = api.core.NpcDefinition;
@@ -1200,11 +1203,15 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
     });
     cycle = 40;
     process({ player });
+    assert.equal(attributes.get('quest.the_blood_moon_rises.siege-defence').qualified, true);
+    assert.equal(attributes.get('quest.the_blood_moon_rises.siege-defence').phase, 'hall', '50% qualifies participation without starting the breach');
+    attributes.set('quest.the_blood_moon_rises.siege-defence', { ...attributes.get('quest.the_blood_moon_rises.siege-defence'), integrity: 1 });
+    cycle = 60; process({ player });
   } finally {
     npcDefinition.forId = originalForId;
   }
   assert.equal(attributes.get('quest.the_blood_moon_rises.siege-defence').phase, 'breach',
-    'the barricade cutscene begins at the 50% hideout-integrity threshold');
+    'the barricade cutscene begins only at zero integrity');
   objectManager.deregister = originalDeregister;
   objectManager.register = originalRegister;
   api.core.World.getProcessCycle = originalGetProcessCycle;

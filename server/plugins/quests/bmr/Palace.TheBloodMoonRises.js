@@ -1,5 +1,5 @@
 /** Quest Helper palace positions, with the cache's playable NPC variants. */
-module.exports = function registerPalace({ api, stage, preparationAttribute }) {
+module.exports = function registerPalace({ api, stage, preparationAttribute, processHall }) {
   const { Area, Boundary, NpcIdentifiers: N } = api.core;
   const residents = new WeakMap();
   function cleanup(player) {
@@ -24,7 +24,7 @@ module.exports = function registerPalace({ api, stage, preparationAttribute }) {
   }
   class PalaceArea extends Area {
     constructor() { super([new Boundary(3154, 3183, 7823, 7861, 1)]); }
-    process(member) { if (member.isPlayer?.()) sync(member.getAsPlayer()); }
+    process(member) { if (member.isPlayer?.()) { const player = member.getAsPlayer(); sync(player); processHall?.({ player }); } }
     postLeave(member) { if (member.isPlayer?.()) cleanup(member.getAsPlayer()); }
   }
   api.registerArea(new PalaceArea());

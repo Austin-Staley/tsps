@@ -564,15 +564,20 @@ module.exports = function registerTheBloodMoonRises(api) {
     const updated = { ...state, integrity,
       participation: (state.participation ?? 0) + (participated ? 1 : 0) };
     player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
-    if (integrity <= HALL_INTEGRITY_THRESHOLD && state.phase === "hall") {
+    if (integrity <= HALL_INTEGRITY_THRESHOLD && !updated.qualified) {
       if (updated.participation < HALL_PARTICIPATION_REQUIRED) {
         updated.integrity = HALL_INTEGRITY_THRESHOLD + 1;
         player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
         player.sendMessage("The Aranei need more help before the doors give way. Repair another damaged window or pillar, or heal a fallen Aranei.");
         return;
       }
+      updated.qualified = true;
+      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
+    }
+    if (integrity === 0 && updated.qualified) {
       updated.phase = "breach";
       player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
+      quest.setStage(player, STAGE.SIEGE);
       startTranscript(api, player, NpcIdentifiers.LOWERNIEL_DRAKAN_19, PAGE,
         "drakan-s-siege-upon-reaching-0-hideout-integrity");
     }
@@ -656,7 +661,7 @@ module.exports = function registerTheBloodMoonRises(api) {
 
     if (objectId === SIEGE_HALL.barricade && x === 3167 && y === 7844 && z === 1 && state.phase === "hall") {
       event.handled = true;
-      player.sendMessage("The reinforced door is still holding. Keep repairing the hall and helping the Aranei until its integrity falls to half.");
+      player.sendMessage("The reinforced door is still holding. Keep repairing the hall and helping the Aranei until Lowerniel breaks through.");
       return;
     }
 
@@ -1817,7 +1822,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     otherRewards: ["Access to Vampyrium", "A Hallowed flail", "Sunspear", "The vampyres of Morytania are tolerant of you"],
     buildJournal,
   });
-  require("../bmr/Palace.TheBloodMoonRises")({ api, stage, preparationAttribute: PREP_ATTRIBUTE });
+  require("../bmr/Palace.TheBloodMoonRises")({ api, stage, preparationAttribute: PREP_ATTRIBUTE, processHall: processSiegeDefence });
   const bridge = require("../bmr/Bridge.TheBloodMoonRises")({ api, stage, attribute: SIEGE_DEFENCE_ATTRIBUTE,
     sync: player => quest.setStage(player, STAGE.SIEGE),
     ready: player => { const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {}; return prep.flail && prep.stakes; },
@@ -1858,7 +1863,6 @@ module.exports = function registerTheBloodMoonRises(api) {
     api.onNpcInteraction(id, { Heal: healSiegeAranei });
   }
   api.onPlayerProcess(syncHuntGroundItems);
-  api.onPlayerProcess(processSiegeDefence);
   api.onPlayerLogin(handleSiegeLogin);
   api.onPlayerLogout(handleSiegeLogout);
   api.onNpcDeath(handleWyrdDeath);
