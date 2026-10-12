@@ -420,6 +420,7 @@ module.exports = function registerSongOfTheElves(api) {
         inventory.deleteNumber(ItemIdentifiers.HAMMER, 1);
         inventory.deleteNumber(ItemIdentifiers.RUNITE_BAR, 1);
       }
+      if (event.stepId === "koxQh3") player.setAttribute(REVELATIONS_MEETING_STARTED, true);
       if (event.stepId === "UNrb5z") recordElder(player, 1);
       if (event.stepId === "K9K0W4") recordElder(player, 2);
       if (event.stepId === "U-Vihn") recordElder(player, 4);
@@ -473,7 +474,6 @@ module.exports = function registerSongOfTheElves(api) {
     if (chapter !== undefined && (event.stepId !== "jtPiC1" || wearingDisguise(player))) {
       setChapter(player, chapter);
     }
-    if (event.stepId === "koxQh3") player.setAttribute(REVELATIONS_MEETING_STARTED, true);
     if (event.stepId === "UeAKgA") {
       player.moveTo(new Location(2440, 6090, 0));
       player.setAttribute(VALLEY_FIGURE, true);

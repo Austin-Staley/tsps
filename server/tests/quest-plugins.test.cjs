@@ -415,7 +415,8 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-the-curse-of-seren');
   assert.equal(interact('Baxtorian'), true);
   assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-dialogue-with-npcs-post-library-visit-talking-to-baxtorian');
-  handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'koxQh3' });
+  handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'koxQh3' });
+  assert.equal(attributes.get('quest.song_of_the_elves.revelations-meeting-started'), true);
   assert.equal(interact('Baxtorian'), true);
   assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-talking-to-baxtorian-after-the-meeting');
   const handoff = { player, npcId: api.core.NpcIdentifiers.ARIANWYN_6, handled: false };
