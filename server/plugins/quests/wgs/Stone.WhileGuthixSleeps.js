@@ -58,7 +58,7 @@ module.exports=function registerStone({api,stage,advance,play,replace,hit}){
   const p=a.player;advance(p,850);a.started=false;p.getMovementQueue().setBlockMovement(false);
   for(const n of [...a.cast])remove(a,n);replace(p,PLINTH,[4139,4383,0]);
   for(const s of COMBAT_SKILLS)p.getSkillManager().setCurrentLevel(s,255,true);
-  a.demons=DEMONS.map((id,i)=>{const n=spawn(a,id,4130+i*15,4386,600);demonStates.set(n,{style:i,prayer:0,damage:0,nextAttack:a.ticks+6,switchAt:a.ticks+27});n.performGraphic(new Graphic(2847));return n;});
+  a.demons=DEMONS.map((id,i)=>{const n=spawn(a,id,4130+i*15,4386,600);demonStates.set(n,{style:i,prayer:0,damage:0,nextAttack:a.ticks+6,switchAt:a.ticks+27});n.setHeadIcon(0);n.performGraphic(new Graphic(2847));return n;});
   a.idria=spawn(a,IDRIA,4133,4381);spawn(a,GUARDIAN,4131,4381);spawn(a,GUARDIAN,4135,4381);p.sendMessage('The Stone of Jas fills you with extraordinary strength. The Guardians of Armadyl join the battle.');
  }
  function processDemons(a){
@@ -97,5 +97,5 @@ module.exports=function registerStone({api,stage,advance,play,replace,hit}){
  api.onNpcDeath(death);
  api.onPlayerDeathItemDrop(deathDrop);
  api.onPlayerLogin(login);
- return {StoneArea,enter,modify,protect,processDemons,sessions,demonStates};
+ return {StoneArea,enter,modify,protect,processDemons,startDemons,sessions,demonStates};
 };
