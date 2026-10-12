@@ -491,6 +491,40 @@ test('Blood Moon clocks require the proper hands and both poem times before the 
   assert.equal(inventory.contains(api.core.ItemIdentifiers.DRAKAN_EMBLEM_2), true);
 });
 
+test('Blood Moon gallery chest arrow puzzle resets mistakes and gives the crescent key after the right sequence', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  const counts = new Map();
+  const inventory = {
+    contains: (id) => (counts.get(id) ?? 0) > 0,
+    adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
+    deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+  };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+  };
+  quest.setStage(player, 40);
+  const chest = handlers.objects.find((handler) => handler.name === 'handleGalleryChest');
+  const interact = () => chest({ player, objectId: 61681, location: { x: 2379, y: 7372, z: 0 }, handled: false });
+  api.sendMultiChatboxPrompt = (who, title, ...pairs) => pairs[1]();
+  interact();
+  assert.equal(attributes.get('quest.the_blood_moon_rises.gallery-chest').step, 0, 'an incorrect first arrow resets the sequence');
+  const correct = [1, 2, 1, 3, 3];
+  let currentStep = 0;
+  api.sendMultiChatboxPrompt = (who, title, ...pairs) => pairs[correct[currentStep++] * 2 + 1]();
+  interact();
+  assert.equal(attributes.get('quest.the_blood_moon_rises.gallery-chest').solved, true);
+  interact();
+  assert.equal(inventory.contains(api.core.ItemIdentifiers.CRESCENT_MOON_KEY), true);
+});
+
 test('Blood Moon refiner requires the four correct chemical vials totalling 53 before destroying the stockpile', () => {
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);

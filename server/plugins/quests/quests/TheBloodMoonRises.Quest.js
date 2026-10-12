@@ -14,6 +14,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const BASIN_PUZZLE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-basin-puzzle";
   const SOLID_KEY_ATTRIBUTE = "quest.the_blood_moon_rises.castle-solid-key-puzzle";
   const CLOCK_ATTRIBUTE = "quest.the_blood_moon_rises.castle-clocks";
+  const GALLERY_CHEST_ATTRIBUTE = "quest.the_blood_moon_rises.gallery-chest";
   const REFINER_ATTRIBUTE = "quest.the_blood_moon_rises.castle-refiner";
   const PREP = {
     leaves: ItemIdentifiers.AMITIRE_LEAVES,
@@ -850,6 +851,57 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.sendMessage(`You fit the ${side === "west" ? "small" : "large"} clock hand to the ${side} clock.`);
   }
 
+  function promptGalleryChest(player) {
+    const state = player.getAttribute(GALLERY_CHEST_ATTRIBUTE) ?? { step: 0, solved: false, key: false };
+    const solution = ["right", "down", "right", "left", "left"];
+    if (state.step >= solution.length) {
+      player.setAttribute(GALLERY_CHEST_ATTRIBUTE, { ...state, solved: true });
+      player.sendMessage("The chest's arrow mechanism clicks open. Search it for the crescent moon key.");
+      return;
+    }
+    const options = ["Up", "Right", "Down", "Left"];
+    const callbacks = options.map((label) => () => {
+      const direction = label.toLowerCase();
+      const current = player.getAttribute(GALLERY_CHEST_ATTRIBUTE) ?? { step: 0, solved: false, key: false };
+      if (direction !== solution[current.step]) {
+        player.setAttribute(GALLERY_CHEST_ATTRIBUTE, { ...current, step: 0, solved: false });
+        player.sendMessage("The arrows click back to their starting positions. The chest puzzle resets.");
+        return;
+      }
+      const step = current.step + 1;
+      player.setAttribute(GALLERY_CHEST_ATTRIBUTE, { ...current, step, solved: step === solution.length });
+      if (step === solution.length) {
+        player.sendMessage("The chest's arrow mechanism clicks open. Search it for the crescent moon key.");
+      } else {
+        player.sendMessage(`One arrow locks into place (${step} of ${solution.length}).`);
+        promptGalleryChest(player);
+      }
+    });
+    const pairs = [];
+    options.forEach((label, index) => pairs.push(label, callbacks[index]));
+    api.sendMultiChatboxPrompt(player, `Chest arrows (${state.step + 1} of ${solution.length})`, ...pairs);
+  }
+
+  function handleGalleryChest(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      event.objectId !== 61681 || event.location?.x !== 2379 || event.location?.y !== 7372 || event.location?.z !== 0) return;
+    event.handled = true;
+    const state = player.getAttribute(GALLERY_CHEST_ATTRIBUTE) ?? { step: 0, solved: false, key: false };
+    if (!state.solved) {
+      promptGalleryChest(player);
+      return;
+    }
+    if (state.key) {
+      player.sendMessage("The chest is empty now.");
+      return;
+    }
+    if (player.getInventory().adds(ItemIdentifiers.CRESCENT_MOON_KEY, 1)) {
+      player.setAttribute(GALLERY_CHEST_ATTRIBUTE, { ...state, key: true });
+      player.sendMessage("You search the chest and take the crescent moon key.");
+    }
+  }
+
   function handleAncientShieldAssembly(event) {
     const player = event?.player;
     if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE) return;
@@ -1119,6 +1171,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction(handleBasinAltar);
   api.onObjectInteraction(handleSolidKeyObjects);
   api.onObjectInteraction(handleCastleClocks);
+  api.onObjectInteraction(handleGalleryChest);
   api.onItemOnObject(handleBasinPotion, { noted: false });
   api.onItemOnObject(handleMountShield, { noted: false });
   api.onItemOnObject(handleClockHandOnClock, { noted: false });
@@ -1138,6 +1191,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.persistAttribute(BASIN_PUZZLE_ATTRIBUTE);
   api.persistAttribute(SOLID_KEY_ATTRIBUTE);
   api.persistAttribute(CLOCK_ATTRIBUTE);
+  api.persistAttribute(GALLERY_CHEST_ATTRIBUTE);
   api.persistAttribute(REFINER_ATTRIBUTE);
   api.onItemAction("Tome of Experience", { Read: readTome });
 };
