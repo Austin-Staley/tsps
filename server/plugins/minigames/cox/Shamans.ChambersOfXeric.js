@@ -11,7 +11,7 @@
  * - Two shamans for solo and small teams, up to five in large ones.
  * rsprox captures (recordings 3282 and 3389):
  * - The spirit tendrils (29768) and the exit's two blocking spawns (7575) are there when the
- *   room is loaded.
+ *   room is loaded. Passing the tendrils is a two-tile walk through them with sound 3728.
  * - Ranged: 7193, projectile 1291 (from 61 client cycles to 96-106, angle 5, heights 420 to
  *   146; sound 385, range 10), landing 3 ticks later. The acid: 7193, projectile 1293 (from 61
  *   to 150-180, angle 30, heights 420 to 5), landing as gfx 1294 with sound 1070 (range 8).
@@ -247,6 +247,22 @@ class ShamansRoom extends Raid.Room {
 
 Raid.registerRoom("LIZARDMEN_SHAMAN", ShamansRoom);
 
+/** rsprox captures: passing the spirit tendrils is a two-tile walk through them with sound 3728. */
+function passTendrils(event) {
+  const { player, object } = event;
+  const room = Raid.raidOf(player)?.roomAt(player.getLocation());
+  if (!(room instanceof ShamansRoom)) return false;
+  if (player.__coxBalancing) return true;
+  Shared.sound(player, 3728);
+  const at = object.getLocation();
+  const here = player.getLocation();
+  const { Location } = Shared.core();
+  const dx = Math.sign(at.getX() - here.getX());
+  const dy = dx === 0 ? Math.sign(at.getY() - here.getY()) : 0;
+  Shared.balanceWalk(player, new Location(here.getX() + dx * 2, here.getY() + dy * 2, here.getZ()), -1, null);
+  return true;
+}
+
 /**
  * The shamans' spit and acid: from 61 client cycles, angle `angle`, from height 420 (105 here)
  * to `endHeight`, ending `base` cycles plus 5 a tile on. Returns the ticks until it lands.
@@ -295,6 +311,7 @@ function shamanCombat(api) {
 
 module.exports = function registerCoxShamans(api) {
   Shared.bind(api);
+  Shared.onObjectIds(api, [OBJECT.TENDRIL], passTendrils);
   api.registerNpcCombatMethodProvider(NPC.SHAMANS, shamanCombat(api));
 };
 
