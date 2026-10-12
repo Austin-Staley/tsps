@@ -3,6 +3,7 @@ import { ConfigManager } from "@runelite/client/config/ConfigManager";
 import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
 import { inject } from "@runelite/client/plugins/PluginInjector";
 import { scaleFromRuneliteResizableScalingPercent } from "../../../ui/UiScale";
+import type { LoginStretch } from "../../login/renderer/types";
 import { StretchedModeConfig } from "./StretchedModeConfig";
 
 /** Size of the fixed gameframe (toplevel 548) in layout units. */
@@ -57,7 +58,8 @@ export function computeResizableScale(uiScale: number, factor: number, width: nu
 /**
  * Stretched mode, as in RuneLite: the fixed gameframe is scaled up to fill the window instead
  * of sitting at 765x503 in a corner of it, resizable mode is drawn larger by a percentage, and
- * the 3D scene can be drawn at a lower resolution. Interfaces are drawn at the scaled size
+ * the 3D scene can be drawn at a lower resolution. The login screen grows with large windows
+ * instead of staying 1:1, though not to fill them. Interfaces are drawn at the scaled size
  * rather than stretched from a smaller image, so they stay sharp. The renderer asks
  * fixedStretch, resizableScale and sceneResolutionScale each frame.
  */
@@ -106,6 +108,11 @@ export class StretchedModePlugin extends Plugin {
         if (!this.isStretchingResizable()) return uiScale;
         const factor = scaleFromRuneliteResizableScalingPercent(this.resizableScaling);
         return computeResizableScale(uiScale, factor, width, height);
+    }
+
+    /** The login screen's stretch settings, or null when it should stay 1:1. */
+    loginStretch(): LoginStretch | null {
+        return this.isEnabled() ? { integerScaling: this.integerScaling } : null;
     }
 
     isStretchingResizable(): boolean {

@@ -1197,6 +1197,7 @@ export class OsrsClient {
         this.attackTimerPlugin = pluginManager.getPlugin(AttackTimerPlugin)!;
         this.animationSmoothingPlugin = pluginManager.getPlugin(AnimationSmoothingPlugin)!;
         this.stretchedModePlugin = pluginManager.getPlugin(StretchedModePlugin)!;
+        this.loginRenderer.loginStretch = () => this.stretchedModePlugin.loginStretch();
         this.menuSwapperPlugin = pluginManager.getPlugin(MenuSwapperPlugin)!;
         this.splitPrivateChatPlugin = pluginManager.getPlugin(SplitPrivateChatPlugin)!;
         this.firstPersonPlugin = pluginManager.getPlugin(FirstPersonPlugin)!;

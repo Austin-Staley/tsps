@@ -79,8 +79,9 @@ export function updateLayout(
         host.containerX = 0;
 
         // Classic login UI is authored for 765×503. Scale it to fit when the viewport
-        // is smaller, grow it with viewports taller than a 1080p screen's so it keeps
-        // the same share of a large monitor, then on mobile bias upward so the titlebox
+        // is smaller. OSRS never draws it larger, so it only grows past 1:1 with Stretched
+        // Mode on: with viewports taller than a 1080p screen's, keeping the same share of a
+        // large monitor rather than filling it. On mobile, bias upward so the titlebox
         // stays readable (full-scene fit alone leaves the 360px panel too small on short phones).
         const padX = 8;
         const padTop = 8;
@@ -90,10 +91,10 @@ export function updateLayout(
         const padBottom = isMobileMode ? host.BOTTOM_CONTROLS_RESERVE : padTop;
         const availableW = Math.max(1, layoutWidth - padX * 2);
         const availableH = Math.max(1, layoutHeight - padTop - padBottom);
-        const viewportGrowth = Math.max(
-            1,
-            layoutHeight / LOGIN_LAYOUT.SCENE_REFERENCE_VIEWPORT_HEIGHT,
-        );
+        const stretch = host.loginStretch();
+        const viewportGrowth = stretch
+            ? Math.max(1, layoutHeight / LOGIN_LAYOUT.SCENE_REFERENCE_VIEWPORT_HEIGHT)
+            : 1;
         const sceneFit = Math.min(
             viewportGrowth,
             availableW / host.SCENE_WIDTH,
@@ -101,6 +102,13 @@ export function updateLayout(
         );
         let contentScale =
             Number.isFinite(sceneFit) && sceneFit > 0 ? sceneFit : 1;
+        if (stretch?.integerScaling && contentScale > 1) {
+            // Whole device pixels per scene pixel, as Stretched Mode's integer scaling does.
+            contentScale = Math.max(
+                1,
+                Math.floor(contentScale * safeSurfaceScale) / safeSurfaceScale,
+            );
+        }
 
         if (isMobileMode) {
             const titleboxW =
@@ -120,6 +128,7 @@ export function updateLayout(
         }
 
         host.contentScale = contentScale;
+        host.contentSmoothing = !!stretch && !stretch.integerScaling && contentScale > 1;
 
         const scaledW = host.SCENE_WIDTH * host.contentScale;
         const scaledH = host.SCENE_HEIGHT * host.contentScale;

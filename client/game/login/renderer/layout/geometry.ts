@@ -158,8 +158,8 @@ function getUpscaleContext(width: number, height: number): OffscreenCanvasRender
 }
 
 /**
- * Draws classic 765x503 content into the scaled content band. When enlarged, the
- * content is drawn "sharp bilinear": nearest-neighbour up to the next whole multiple of
+ * Draws classic 765x503 content into the scaled content band. When Stretched Mode
+ * enlarges it without integer scaling, the content is drawn "sharp bilinear": nearest-neighbour up to the next whole multiple of
  * the device scale in a buffer, then filtered down once to the exact size. Edges stay
  * crisp without the uneven blocks of fractional nearest-neighbour or the blur and
  * per-sprite fringes of filtering every sprite on its own.
@@ -169,7 +169,7 @@ export function withContentTransform(host: LoginRendererHost, ctx: RenderContext
         const deviceScale = host.contentScale * (host.renderScale > 0 ? host.renderScale : 1);
         const factor = Math.ceil(deviceScale - 0.01);
         const buffer =
-            host.contentScale > 1 && factor > 1
+            host.contentSmoothing && factor > 1
                 ? getUpscaleContext(host.SCENE_WIDTH * factor, host.SCENE_HEIGHT * factor)
                 : undefined;
 
