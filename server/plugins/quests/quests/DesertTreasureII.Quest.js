@@ -3799,8 +3799,9 @@ module.exports = function registerDesertTreasureII(api) {
     if (s >= S.MACHINE && s < S.VARDORVIS && [O.GOLEM, O.GOLEM_2, WAR_ROOM_GOLEM_LOC].includes(objectId)
       && roomTile?.x === 2782 && roomTile?.y === 6443) {
       if (p.getAttribute(GOLEM_SOLVED)) {
-        if (p.getAttribute(BANIKAN_LEFT) && Number(p.getAttribute(SEARCHED_NAMES)) === 15) return searchGolem(p, "frostenhorn");
-        return promptGolemSearch(p);
+        if (p.getAttribute(BANIKAN_LEFT) && Number(p.getAttribute(SEARCHED_NAMES)) === 15) searchGolem(p, "frostenhorn");
+        else promptGolemSearch(p);
+        return true;
       }
       if (!p.getAttribute(GOLEM_INSPECTED)) {
         p.setAttribute(GOLEM_INSPECTED, true);
