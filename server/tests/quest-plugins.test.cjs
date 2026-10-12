@@ -1789,7 +1789,7 @@ test('Desert Treasure II enters a private copy of the real war room from the cle
     quest.setStage(p, 6);
     assert.equal(handlers[0]({ player: p, objectId: O.RUBBLE_74, location: { x: 8215, y: 1601, z: 0 } }), true,
       'the cache Climb-up rubble is the return route');
-    assert.deepEqual([p.location.getX(), p.location.getY(), p.location.getZ()], [3411, 9811, 0]);
+    assert.deepEqual([p.location.getX(), p.location.getY(), p.location.getZ()], [3411, 9813, 0]);
     assert.equal(p.getAttribute('desert-treasure-ii:war-room'), null);
     assert.equal(room.destroyed, true);
   } finally {
