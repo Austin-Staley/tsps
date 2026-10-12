@@ -1073,6 +1073,7 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function spawnWarRoomBanikan(player, area) {
+    if (player.getAttribute(BANIKAN_LEFT)) return;
     const owned = spawned.get(player) ?? {};
     if (owned.banikan && area.entities.includes(owned.banikan)) return owned.banikan;
     const banikan = api.core.NPC.create(N.DR_BANIKAN, area.tile(23, 7, 0));
@@ -2695,7 +2696,6 @@ module.exports = function registerDesertTreasureII(api) {
     if ((Number(p.getAttribute(SEARCHED_NAMES)) || 0) !== 15) {
       return talk(p, npcId, "familiar-faces-powering-up-the-golem-machine-talking-to-dr-banikan-before-finishing-searching-for-all-of-the-names");
     }
-    p.setAttribute(BANIKAN_LEFT, true);
     talk(p, npcId, "familiar-faces-speaking-to-dr-banikan-again-before-he-decides-search-the-golem");
   }
   function cellPositions(p) {
@@ -2775,13 +2775,16 @@ module.exports = function registerDesertTreasureII(api) {
       p.sendMessage("Error: No data found.");
       return promptGolemSearch(p);
     }
-    if (searched & bit) {
-      p.sendMessage("Data found. You have already searched that term.");
-      return promptGolemSearch(p);
-    }
     p.setAttribute(SEARCHED_NAMES, searched | bit);
+    // shortcut: archive reports use golem dialogue until the cache's data interface is mapped.
     const variant = `familiar-faces-powering-up-the-golem-machine-${term === "whisperer" ? "the-whisperer-true-name-classified" : term}`;
     talk(p, N.GOLEM_3, variant);
+  }
+  function resolveGolemSearchCondition({ player, text }) {
+    if (stage(player) !== S.MACHINE) return null;
+    if (!/^If (Vardorvis|Perseriya|Sucellus|The Whisperer) was (not )?the final term for which the player searched$/i.test(text)) return null;
+    const finished = Number(player.getAttribute(SEARCHED_NAMES)) === 15;
+    return /was not /i.test(text) ? !finished : finished;
   }
   function talkElissa({ player: p, npcId }) {
     if (stage(p) !== S.VARDORVIS || (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) !== 0) return;
@@ -3795,7 +3798,10 @@ module.exports = function registerDesertTreasureII(api) {
     }
     if (s >= S.MACHINE && s < S.VARDORVIS && [O.GOLEM, O.GOLEM_2, WAR_ROOM_GOLEM_LOC].includes(objectId)
       && roomTile?.x === 2782 && roomTile?.y === 6443) {
-      if (p.getAttribute(GOLEM_SOLVED)) return promptGolemSearch(p);
+      if (p.getAttribute(GOLEM_SOLVED)) {
+        if (p.getAttribute(BANIKAN_LEFT) && Number(p.getAttribute(SEARCHED_NAMES)) === 15) return searchGolem(p, "frostenhorn");
+        return promptGolemSearch(p);
+      }
       if (!p.getAttribute(GOLEM_INSPECTED)) {
         p.setAttribute(GOLEM_INSPECTED, true);
         talk(p, N.DR_BANIKAN_2, "familiar-faces-inspecting-the-golem-machine");
@@ -4855,6 +4861,11 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function handleDialogueAction({ player: p, stepId }) {
+    if (stepId === "T24jg_" && stage(p) === S.MACHINE && Number(p.getAttribute(SEARCHED_NAMES)) === 15) {
+      p.setAttribute(BANIKAN_LEFT, true);
+      const owned = spawned.get(p);
+      if (owned?.banikan) { api.removeNpc(owned.banikan); delete owned.banikan; }
+    }
     const lassar = p.getAttribute(LASSAR) ?? {};
     if (stepId === "AYDmc1" && stage(p) === S.WHISPERER && has(p, I.PERFECTED_SHADOW_TORCH_SCHEMATIC_2)) {
       p.getInventory().deleteNumber(I.PERFECTED_SHADOW_TORCH_SCHEMATIC_2, 1);
@@ -5442,6 +5453,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onItemAction(handleItemAction);
   api.onCustomEvent("player:widget-action", onWidgetAction);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
+  api.onNpcDialogueCondition(resolveGolemSearchCondition);
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("magic:hit-effects", activateTotem);
   api.onCustomEvent("magic:hit-effects", stunLeviathan);
