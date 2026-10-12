@@ -4,8 +4,9 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
  const MERCENARIES_ATTRIBUTE='while-guthix-sleeps:mercenaries-defeated', RECRUITS_ATTRIBUTE='while-guthix-sleeps:recruits';
  const SEED_ATTRIBUTE='while-guthix-sleeps:seed-on-counter',FREE_SEED_ATTRIBUTE='while-guthix-sleeps:free-seed';
  const DRAYNOR_ATTRIBUTE='while-guthix-sleeps:draynor-teleport',SARIM_ATTRIBUTE='while-guthix-sleeps:sarim-teleport';
+ const SKETCHED_ATTRIBUTE='while-guthix-sleeps:spy-sketched';
  const SPY_ALERT_ATTRIBUTE='while-guthix-sleeps:spy-alert-until';
- ATTRIBUTES.push(MERCENARIES_ATTRIBUTE,RECRUITS_ATTRIBUTE,SEED_ATTRIBUTE,FREE_SEED_ATTRIBUTE,DRAYNOR_ATTRIBUTE,SARIM_ATTRIBUTE);
+ ATTRIBUTES.push(MERCENARIES_ATTRIBUTE,RECRUITS_ATTRIBUTE,SEED_ATTRIBUTE,FREE_SEED_ATTRIBUTE,DRAYNOR_ATTRIBUTE,SARIM_ATTRIBUTE,SKETCHED_ATTRIBUTE);
  const IDRIA=13540,WOOD_IDRIA=13542,THAERISK=13511,AKRISAE=13543,SILIF=13519;
  const MERCENARIES=[13535,13536,13537],SPY=13545,CAPTIVE=13546,OUTSIDER=13555,FARMER=13554;
  const TELEORB=29536,SEED=5300,ENRICHED_SEED=29538,ENRICHED_HERB=29530;
@@ -74,7 +75,7 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
    if(s<300){play(player,npcId,PREFIX+'capturing-a-spy-talking-to-the-shady-stranger-after-the-truth-serum-breaks');return true;}
    if(player.getLocation().getX()>=2988){player.sendMessage('Go inside the cell to speak privately with the stranger.');return true;}
    let v='using-the-serum-talking-to-the-shady-stranger-while-inside-the-cell-with-the-serum';
-   if(s===310)v+='-talking-to-the-shady-stranger-again-'+(held(player,SKETCH)?'after-sketching-the-suspect':held(player,PAPYRUS)&&held(player,CHARCOAL)?'with-the-materials-to-make-a-sketch':'without-the-materials-to-make-a-sketch');
+   if(s===310)v+='-talking-to-the-shady-stranger-again-'+(val(player,SKETCHED_ATTRIBUTE)||held(player,SKETCH)?'after-sketching-the-suspect':held(player,PAPYRUS)&&held(player,CHARCOAL)?'with-the-materials-to-make-a-sketch':'without-the-materials-to-make-a-sketch');
    else if(!held(player,SUPER_SERUM)){player.sendMessage('Bring the super truth serum to the spy.');return true;}
    play(player,npcId,PREFIX+v);return true;
   }
@@ -124,14 +125,15 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
   if(stepId==='1fOFAG'&&held(player,SEED)){player.getInventory().deleteNumber(SEED,1);player.setAttribute(SEED_ATTRIBUTE,1);sync(player);}
   if(stepId==='PilX__'&&player.getInventory().getAmount(COINS)>=20&&player.getInventory().getFreeSlots()){player.getInventory().deleteNumber(COINS,20);player.getInventory().adds(DYE,1);}
   if(stepId==='btLOw_'&&held(player,ENRICHED_HERB))give(player,SERUM);
-  if(stepId==='gZGuU3'&&held(player,SUPER_SERUM)){player.getInventory().deleteNumber(SUPER_SERUM,1);advance(player,310);}
-  if(stepId==='_-H5WQ'&&s===310&&held(player,PAPYRUS)&&held(player,CHARCOAL)){player.getInventory().deleteNumber(PAPYRUS,1);player.getInventory().deleteNumber(CHARCOAL,1);player.getInventory().adds(SKETCH,1);}
+  if(stepId==='gZGuU3'&&s===300&&held(player,SUPER_SERUM)){player.getInventory().deleteNumber(SUPER_SERUM,1);advance(player,310);}
+  if(['_-H5WQ','SqlKov'].includes(stepId)&&s===310&&!held(player,SKETCH)&&held(player,PAPYRUS)&&held(player,CHARCOAL)){player.getInventory().deleteNumber(PAPYRUS,1);player.getInventory().deleteNumber(CHARCOAL,1);player.getInventory().adds(SKETCH,1);player.setAttribute(SKETCHED_ATTRIBUTE,1);}
+  if(stepId==='IcllDi'&&s===310&&val(player,SKETCHED_ATTRIBUTE)&&!held(player,SKETCH))give(player,SKETCH);
   if(stepId==='jRTuWB'&&s===310&&held(player,SKETCH)){player.getInventory().deleteNumber(SKETCH,1);advance(player,320);}
   if(stepId==='sFonMo'&&s===340)advance(player,400);
  }
  function condition({player,stepId,pages}){
   if(!pages?.some(p=>p.page.replace(/^Transcript:/,'')==='While Guthix Sleeps'))return;
-  const s=stage(player),known={'xbH70-':s<240,XJEoYS:s>=240,TRfR8_:!val(player,DRAYNOR_ATTRIBUTE),LegVrw:!!val(player,DRAYNOR_ATTRIBUTE),mQUtt5:!val(player,FREE_SEED_ATTRIBUTE),'8EZ6Py':!!val(player,FREE_SEED_ATTRIBUTE),SGVzwh:held(player,SEED),VbHcV3:!held(player,SEED),Pl4Rma:held(player,ROSE_LENS),'v-3xu5':!held(player,ROSE_LENS),SofZ28:held(player,ROSE_LENS),nomyMm:player.getInventory().getAmount(COINS)<20,atEpSr:!player.getInventory().getFreeSlots(),YaOsDJ:!held(player,PAPYRUS)||!held(player,CHARCOAL),j99nP_:held(player,PAPYRUS)&&held(player,CHARCOAL),'3E4qX2':held(player,SKETCH),Xz5LGu:!held(player,SKETCH)};
+  const s=stage(player),known={'xbH70-':s<240,XJEoYS:s>=240,TRfR8_:!val(player,DRAYNOR_ATTRIBUTE),LegVrw:!!val(player,DRAYNOR_ATTRIBUTE),mQUtt5:!val(player,FREE_SEED_ATTRIBUTE),'8EZ6Py':!!val(player,FREE_SEED_ATTRIBUTE),SGVzwh:held(player,SEED),VbHcV3:!held(player,SEED),Pl4Rma:held(player,ROSE_LENS),'v-3xu5':!held(player,ROSE_LENS),SofZ28:held(player,ROSE_LENS),nomyMm:player.getInventory().getAmount(COINS)<20,atEpSr:!player.getInventory().getFreeSlots(),YaOsDJ:!held(player,PAPYRUS)||!held(player,CHARCOAL),j99nP_:held(player,PAPYRUS)&&held(player,CHARCOAL),'wgs-sketch-lost':!held(player,SKETCH),'3E4qX2':held(player,SKETCH),Xz5LGu:!held(player,SKETCH)};
   if(stepId in known)return known[stepId];
  }
  function plantOrb(event){

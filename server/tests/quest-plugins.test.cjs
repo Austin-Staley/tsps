@@ -815,3 +815,18 @@ test('WGS NPC Contact recruits only the first four heroes; Guild heroes require 
  selected={player,name:'Ghommal'};handlers.custom.get('magic:npc-contact-selected')(selected);
  assert.equal(selected.handled,undefined);assert.deepEqual(played,[]);
 });
+
+
+test('WGS delayed sketches consume their materials and lost sketches are reclaimed without a prose menu', () => {
+ const {api,handlers,player,attributes,removed}=movarioFixture();const items=new Set([970,973]);let given=0;
+ player.getInventory=()=>({deleteNumber:(id,n)=>{items.delete(id);removed.push([id,n]);},adds:id=>items.add(id)});
+ require('../plugins/quests/wgs/Fellowship.WhileGuthixSleeps')({...api.context,stage:()=>310,held:(p,id)=>items.has(id),give:(p,id)=>{items.add(id);given++;}});
+ handlers.custom.get('npc-dialogue:action')({player,stepId:'SqlKov'});
+ assert.deepEqual(removed,[[970,1],[973,1]]);assert(items.has(29533));
+ assert.equal(attributes.get('while-guthix-sleeps:spy-sketched'),1);
+ handlers.custom.get('npc-dialogue:action')({player,stepId:'IcllDi'});assert.equal(given,0);
+ items.delete(29533);handlers.custom.get('npc-dialogue:action')({player,stepId:'IcllDi'});assert.equal(given,1);
+ const data=require('../data/definitions/npc-dialogues.json')['While Guthix Sleeps'].variants;
+ const steps=data['forming-a-fellowship-using-the-serum-talking-to-the-shady-stranger-while-inside-the-cell-with-the-serum-talking-to-the-shady-stranger-again-after-sketching-the-suspect'];
+ assert(!steps.some(s=>s.type==='choice'));assert(steps.some(s=>s.type==='condition'&&s.id==='wgs-sketch-lost'));
+});
