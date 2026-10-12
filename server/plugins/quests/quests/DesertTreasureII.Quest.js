@@ -3400,8 +3400,8 @@ module.exports = function registerDesertTreasureII(api) {
       npc.setOwner?.(p);
       npc.setOwnerOnly?.(true);
       npc.setScriptedMovement?.(true);
-      npc.setMaxHitpoints?.(500);
-      npc.setHitpoints?.(500);
+      npc.setMaxHitpoints?.(440);
+      npc.setHitpoints?.(440);
       npc.__dt2Sucellus = true;
       npc.__dt2SucellusAwake = false;
       npc.__skipDefaultRespawn = true;

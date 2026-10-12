@@ -1743,6 +1743,7 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   assert.equal(objects.at(-1)({ player, objectId: 49138, location: sourceLocation(3039, 6433) }), false, 'the asylum gate leads from the real prison into Duke’s chamber');
   const boss = attrs.get('desert-treasure-ii:boss');
   assert.equal(boss.__dt2SucellusAwake, false);
+  assert.equal(boss.hp, 440, 'the quest Duke uses the documented normal 440 hitpoints');
   interactObject(O.PESTLE_AND_MORTAR_2, 3034, 6434);
   interactObject(O.PICKAXE_3, 3044, 6434);
   for (let i = 0; i < 3; i++) interactObject(O.MUSCA_MUSHROOMS_2, 3048, 6453);
