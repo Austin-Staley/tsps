@@ -146,6 +146,7 @@ module.exports = function registerRegicideQuest(api) {
   const TRIPWIRE_IDS = new Set([ObjectIdentifiers.TRIPWIRE_3, ObjectIdentifiers.TRIPWIRE]);
   const STICKS_IDS = new Set([ObjectIdentifiers.STICKS]);
   const LEAVES_IDS = new Set([ObjectIdentifiers.LEAVES, ObjectIdentifiers.LEAVES_2, ObjectIdentifiers.LEAVES_3]);
+  const ISAFDAR_LOG_BALANCE_ID = ObjectIdentifiers.LOG_BALANCE_10;
   const SULPHUR_ROCK_IDS = new Set([
     ObjectIdentifiers.SULPHUR,
     ObjectIdentifiers.SULPHUR_2,
@@ -534,11 +535,57 @@ module.exports = function registerRegicideQuest(api) {
     const position = player.getLocation();
     let x = position.getX();
     let y = position.getY();
-    if (x < location.x) x = location.x + width;
+    // This cache placement opens onto the north-side path only at these two
+    // collision-clear tiles. Object routing keeps the approach outside its
+    // three-tile footprint so the clicker's side is still unambiguous here.
+    if (location.x === 2302 && location.y === 3214 && objectId === ObjectIdentifiers.DENSE_FOREST) {
+      if (x < location.x) {
+        x = 2305;
+        y = 3213;
+      } else {
+        x = 2301;
+        y = 3215;
+      }
+    } else if (x < location.x) x = location.x + width;
     else if (x >= location.x + width) x = location.x - 1;
     else if (y < location.y) y = location.y + height;
     else y = location.y - 1;
     player.moveTo(new Location(x, y, position.getZ()));
+  }
+
+  function routeMeilyrDenseForest(event) {
+    if (LEAVES_IDS.has(event.objectId)) {
+      const objectLocation = event.object?.getLocation?.();
+      if (!objectLocation) return;
+      const location = {
+        x: objectLocation.getX(),
+        y: objectLocation.getY(),
+        z: objectLocation.getZ(),
+      };
+      const bounds = leafTrapBounds({ ...event, location });
+      const from = event.sourceLocation;
+      const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+      if (from.x < bounds.minX) {
+        event.destination = { x: bounds.minX - 1, y: clamp(from.y, bounds.minY, bounds.maxY), z: from.z };
+      } else if (from.x > bounds.maxX) {
+        event.destination = { x: bounds.maxX + 1, y: clamp(from.y, bounds.minY, bounds.maxY), z: from.z };
+      } else if (from.y < bounds.minY) {
+        event.destination = { x: clamp(from.x, bounds.minX, bounds.maxX), y: bounds.minY - 1, z: from.z };
+      } else if (from.y > bounds.maxY) {
+        event.destination = { x: clamp(from.x, bounds.minX, bounds.maxX), y: bounds.maxY + 1, z: from.z };
+      }
+      return;
+    }
+    if (
+      event.objectId !== ObjectIdentifiers.DENSE_FOREST ||
+      event.object?.getLocation?.()?.getX() !== 2302 ||
+      event.object?.getLocation?.()?.getY() !== 3214
+    ) return;
+    const from = event.sourceLocation;
+    const z = event.object.getLocation().getZ();
+    event.destination = from.x < 2302
+      ? { x: 2301, y: 3215, z }
+      : { x: 2305, y: 3213, z };
   }
 
   /** Wiki's chance chart is 31/256 at level 1, rising to 156/256 at level 99. */
@@ -577,7 +624,7 @@ module.exports = function registerRegicideQuest(api) {
     const queue = [[originX, originY]];
     const visited = new Set([`${originX},${originY}`]);
     const tiles = [];
-    for (let i = 0; i < queue.length && i < 16; i++) {
+    for (let i = 0; i < queue.length && i < 25; i++) {
       const [x, y] = queue[i];
       const tile = new Location(x, y, z);
       const objects = [
@@ -661,6 +708,20 @@ module.exports = function registerRegicideQuest(api) {
     });
   }
 
+  /** The two cache Log balance endpoints bridge the river south of Prifddinas. */
+  function crossIsafdarLogBalance(event) {
+    const { player, location, sourceLocation } = event;
+    if (location.z !== 0 || location.y !== 3250 || ![2259, 2263].includes(location.x) ||
+      (event.option && event.option !== "Cross")) return;
+    event.handled = true;
+    const sourceX = sourceLocation?.x ?? player.getLocation().getX();
+    const destinationX = location.x === 2259
+      ? (sourceX > location.x ? 2258 : 2259)
+      : (sourceX < location.x ? 2264 : 2262);
+    player.performAnimation?.(new api.core.Animation(762));
+    player.moveTo(new Location(destinationX, 3250, 0));
+  }
+
   function inspectFootprints(event) {
     const { player } = event;
     const stage = quest.getStage(player);
@@ -683,7 +744,10 @@ module.exports = function registerRegicideQuest(api) {
 
   function climbWell(event) {
     const { player } = event;
-    if (quest.getStage(player) < STAGE_RECEIVED_MESSAGE) return; // the well is only repaired for Regicide
+    // While the Regicide repair quest is active, its story route handles the
+    // well. Once complete, let the shared captured loc route own it: the same
+    // cache well is also the Underground Pass connection used by later quests.
+    if (quest.getStage(player) < STAGE_RECEIVED_MESSAGE || quest.isComplete(player)) return;
     event.handled = true;
     const pos = player.getLocation();
     player.sendMessage("You climb into the well..");
@@ -736,6 +800,10 @@ module.exports = function registerRegicideQuest(api) {
     }
     if (LEAVES_IDS.has(objectId)) {
       jumpLeaves(event);
+      return;
+    }
+    if (objectId === ISAFDAR_LOG_BALANCE_ID) {
+      crossIsafdarLogBalance(event);
       return;
     }
     if (STICKS_IDS.has(objectId)) {
@@ -964,6 +1032,7 @@ module.exports = function registerRegicideQuest(api) {
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:condition", handleDialogueCondition);
   api.onObjectInteraction(handleObjectInteraction);
+  api.onObjectRoute(routeMeilyrDenseForest);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemOnItem(handleItemOnItem);
   api.onPlayerLogout(handleLogout);

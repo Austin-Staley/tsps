@@ -4153,6 +4153,19 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   handlers.custom.get('quest-song-of-the-elves:claim-arianwyn').at(-1)(handoff);
   assert.equal(handoff.handled, true, 'the completed Mourning’s End handler can hand the NPC to SOTE');
   assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-the-curse-of-seren');
+  quest.setStage(player, 160);
+  attributes.set('quest.song_of_the_elves.lletya-traitor-revealed', true);
+  const lletyaHandoff = { player, npcId: api.core.NpcIdentifiers.ARIANWYN_6, handled: false };
+  handlers.custom.get('quest-song-of-the-elves:claim-arianwyn').at(-1)(lletyaHandoff);
+  assert.equal(lletyaHandoff.handled, true, 'ME2 hands Arianwyn to SOTE during the Lletya attack');
+  assert.equal(started.at(-1)[3], 'attack-on-lletya-confronting-the-traitor');
+  handlers.custom.get('npc-dialogue:line').at(-1)({
+    player, text: 'So be it.', step: { player: 'So be it.' },
+    definition: { getName: () => 'Arianwyn' },
+  });
+  assert.equal(attributes.get('quest.song_of_the_elves.lletya-arianwyn-confronted'), true,
+    'the final player line starts the encounter even though this wiki step has no NPC speaker field');
+  quest.setStage(player, 140);
   handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'koxQh3' });
   assert.equal(attributes.get('quest.song_of_the_elves.revelations-meeting-started'), true);
   handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'J6osYV' });
@@ -4196,6 +4209,336 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   assert.ok(persistedAttributes.includes('quest.song_of_the_elves.hefin-clue-heard'));
 });
 
+test('Song of the Elves keeps Arianwyn engaged so ranged hits are not erased by generic NPC regeneration', () => {
+  class TestPrivateArea {
+    enter(mobile) { mobile.area = this; }
+    leave(mobile) { mobile.area = null; }
+    isDestroyed() { return false; }
+  }
+  const { api, handlers } = mockApi();
+  api.core = { ...api.core, PrivateArea: TestPrivateArea, World: { getProcessCycle: () => 100 } };
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const started = [];
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const original = runtime.startTranscript;
+  runtime.startTranscript = (...args) => (started.push(args.slice(1)), true);
+  let engagementResets = 0;
+  const boss = {
+    hitpoints: 300,
+    getHitpoints() { return this.hitpoints; },
+    getMaxHitpoints() { return 300; },
+    setMultiCombat() {},
+    setScriptedMovement() {},
+    getCombat() {
+      return {
+        attack() {},
+        getLastAttack: () => ({ reset: () => engagementResets++ }),
+      };
+    },
+  };
+  api.spawnNpc = () => boss;
+  try { require('../plugins/quests/quests/SongOfTheElves.Quest')(api); }
+  finally { runtime.startTranscript = original; }
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map([['quest.song_of_the_elves.lletya-traitor-revealed', true]]);
+  const player = {
+    area: null,
+    getUsername: () => 'ArianwynEngagementTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => ({ getX: () => 2351, getY: () => 3172, getZ: () => 0 }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    moveTo() {},
+    sendMessage() {},
+  };
+  quest.setStage(player, 160);
+  handlers.custom.get('npc-dialogue:line').at(-1)({
+    player, text: 'So be it.', step: { player: 'So be it.' },
+    definition: { getName: () => 'Arianwyn' },
+  });
+  assert.equal(attributes.get('quest.song_of_the_elves.lletya-boss') instanceof TestPrivateArea, true);
+  assert.equal(started.length, 0, 'the final challenge line enters combat rather than leaving a queued dialogue over it');
+  attributes.get('quest.song_of_the_elves.lletya-boss').process(player);
+  assert.equal(engagementResets, 1, 'private-area ticks refresh the boss combat timer so real hit queues can damage it');
+});
+
+test('Song of the Elves tracks Ysgawyn clues in order through normal object examine packets', () => {
+  const { api, handlers } = mockApi();
+  const areas = [];
+  const spawns = [];
+  api.registerArea = (area) => areas.push(area);
+  api.spawnNpc = (definition) => (spawns.push(definition), { isRegistered: () => true });
+  api.removeNpc = () => {};
+  const persistedAttributes = [];
+  api.persistAttribute = (key) => persistedAttributes.push(key);
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map();
+  const messages = [];
+  let tile = { x: 2306, y: 3194, z: 0 };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ getAmount: (id) => id === api.core.ItemIdentifiers.ORB_OF_LIGHT_5 ? 1 : 0 }),
+    getLocation: () => ({ getX: () => tile.x, getY: () => tile.y, getZ: () => tile.z }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage: (message) => messages.push(message),
+    isPlayer: () => true,
+    getAsPlayer: () => player,
+  };
+  quest.setStage(player, 150);
+  assert.ok(persistedAttributes.includes('quest.song_of_the_elves.ysgawyn-track-step'));
+  const examine = handlers.custom.get('world:object-examine').at(-1);
+  const outOfOrder = { player, objectId: 37297, handled: false };
+  examine(outOfOrder);
+  assert.equal(outOfOrder.handled, false);
+  assert.equal(attributes.has('quest.song_of_the_elves.ysgawyn-track-step'), false);
+  const mushroom = { player, objectId: 37292, handled: false };
+  examine(mushroom);
+  assert.equal(mushroom.handled, true);
+  assert.equal(attributes.get('quest.song_of_the_elves.ysgawyn-track-step'), 1);
+  assert.match(messages.at(-1), /mushrooms/);
+  tile = { x: 2294, y: 3189, z: 0 };
+  examine({ player, objectId: 37297, handled: false });
+  tile = { x: 2279, y: 3186, z: 0 };
+  examine({ player, objectId: 37296, handled: false });
+  assert.equal(attributes.get('quest.song_of_the_elves.ysgawyn-track-step'), 3);
+  const route = {
+    player, objectId: 3923, clickType: 1, destination: null,
+    definition: { getInteractions: () => ['Jump'] },
+    sourceLocation: { x: 2274, y: 3177, z: 0 },
+  };
+  for (const hook of handlers.routes) hook(route);
+  assert.deepEqual(route.destination, route.sourceLocation,
+    'the natural Regicide Jump handler keeps the original approach edge before it applies Agility');
+  for (const [id, x, y] of [[3918, 2272, 3168], [3916, 2259, 3159], [37297, 2244, 3170]]) {
+    tile = { x, y, z: 0 };
+    examine({ player, objectId: id, handled: false });
+  }
+  assert.equal(attributes.get('quest.song_of_the_elves.ysgawyn-track-step'), 6);
+  tile = { x: 2254, y: 3168, z: 0 };
+  for (const process of handlers.playerProcess) process({ player });
+  assert.equal(attributes.get('quest.song_of_the_elves.ysgawyn-track-step'), 7,
+    'the tripwire clearing is required after all six clues');
+  const clearing = areas.find((area) => area.constructor.name === 'YsgawynClearingArea');
+  clearing.process(player);
+  assert.deepEqual(spawns.at(-1), { id: api.core.NpcIdentifiers.YSGAWYN, x: 2256, y: 3168, z: 0,
+    wanderRadius: 0, owner: player, ownerOnly: true });
+});
+
+test('Song of the Elves rescue searches require the east table before Iona and preserve both rescues', () => {
+  const { api, handlers } = mockApi();
+  const started = [];
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const original = runtime.startTranscript;
+  runtime.startTranscript = (...args) => (started.push(args.slice(1)), true);
+  try { require('../plugins/quests/quests/SongOfTheElves.Quest')(api); }
+  finally { runtime.startTranscript = original; }
+  const quest = runtime.getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map();
+  let playerLocation = { x: 2340, y: 3158, z: 0 };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({}),
+    moveTo() {},
+    getLocation: () => ({ getX: () => playerLocation.x, getY: () => playerLocation.y, getZ: () => playerLocation.z }),
+    getPrivateArea: () => null,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+  };
+  quest.setStage(player, 150);
+  handlers.custom.get('npc-dialogue:action').at(-1)({
+    player, kind: 'message', stepId: 'XhOxpi', npcId: api.core.NpcIdentifiers.ARIANWYN_6,
+  });
+  assert.equal(quest.getStage(player), 160);
+  assert.equal(started.at(-1)[3], 'attack-on-lletya-a-village-on-fire');
+  const mapObjects = api.core.MapObjects;
+  const originalGet = mapObjects.get;
+  mapObjects.get = (id) => ({ getId: () => id });
+  const examine = (objectId) => {
+    const event = { player, objectId, handled: false };
+    for (const hook of handlers.custom.get('world:object-examine') ?? []) hook(event);
+    return event.handled;
+  };
+  playerLocation = { x: 2338, y: 3157, z: 1 };
+  assert.equal(examine(api.core.ObjectIdentifiers.COOKING_POTS_2), true);
+  assert.equal(attributes.get('quest.song_of_the_elves.lletya-children'), undefined,
+    'Iona cannot be rescued before finding Eoin');
+  playerLocation = { x: 2340, y: 3158, z: 0 };
+  assert.equal(examine(api.core.ObjectIdentifiers.TABLE_75), true);
+  assert.equal(attributes.get('quest.song_of_the_elves.lletya-children').eoin, true);
+  assert.equal(started.at(-1)[3], 'attack-on-lletya-a-village-on-fire-finding-eoin');
+  playerLocation = { x: 2338, y: 3157, z: 1 };
+  assert.equal(examine(api.core.ObjectIdentifiers.COOKING_POTS_2), true);
+  assert.equal(attributes.get('quest.song_of_the_elves.lletya-children').iona, true);
+  assert.equal(started.at(-1)[3], 'attack-on-lletya-a-village-on-fire-finding-iona');
+  mapObjects.get = originalGet;
+});
+
+test('Song of the Elves spawns Baxtorian in Lletya for the post-attack clan clues', () => {
+  const { api } = mockApi();
+  const areas = [];
+  const spawns = [];
+  api.registerArea = (area) => areas.push(area);
+  api.spawnNpc = (definition) => (spawns.push(definition), { isRegistered: () => true });
+  api.removeNpc = () => {};
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map();
+  const player = {
+    getUsername: () => 'PostAttackCluesTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    isPlayer: () => true,
+    getAsPlayer: () => player,
+  };
+  quest.setStage(player, 170);
+  const lletya = areas.find((area) => area.constructor.name === 'LletyaStoryArea');
+  lletya.process(player);
+  assert.deepEqual(spawns.at(-1), { id: api.core.NpcIdentifiers.BAXTORIAN, x: 2352, y: 3170, z: 0,
+    wanderRadius: 0, owner: player, ownerOnly: true });
+});
+
+test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clue digs and spin', () => {
+  const { api: base, handlers } = mockApi();
+  const custom = handlers.custom;
+  const areas = [];
+  const npcHooks = [];
+  const spawned = [];
+  const started = [];
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  runtime.startTranscript = (...args) => (started.push(args.slice(1)), true);
+  apiSetup();
+  function apiSetup() {
+    base.registerArea = (area) => areas.push(area);
+    base.spawnNpc = (definition) => {
+      spawned.push(definition);
+      return { isRegistered: () => true };
+    };
+    base.removeNpc = () => {};
+    base.onAnyNpcInteraction = (hook) => npcHooks.push(hook);
+    require('../plugins/quests/quests/SongOfTheElves.Quest')(base);
+  }
+  runtime.startTranscript = originalStartTranscript;
+
+  const quest = runtime.getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map([['quest.song_of_the_elves.recruited-elders', 7]]);
+  const inventory = new Map();
+  const varbits = new Map();
+  const location = { x: 2352, y: 3170, z: 0 };
+  const player = {
+    getUsername: () => 'SoteChapter16Test',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({
+      getAmount: (id) => inventory.get(id) ?? 0,
+      getFreeSlots: () => 28 - [...inventory.values()].filter((amount) => amount > 0).length,
+      adds: (id, amount) => inventory.set(id, (inventory.get(id) ?? 0) + amount),
+      deleteNumber: (id, amount) => inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - amount)),
+    }),
+    getPacketSender: () => new Proxy({}, { get: (_, key) => key === 'sendVarbit' ? (id, value) => varbits.set(id, value) : () => {} }),
+    getLocation: () => ({ getX: () => location.x, getY: () => location.y, getZ: () => location.z }),
+    getEquipment: () => ({ getItems: () => [] }),
+    getArea: () => areas[0],
+    isPlayer: () => true,
+    getAsPlayer: () => player,
+    moveTo() {}, sendMessage() {}, performAnimation() {},
+  };
+  quest.setStage(player, 170);
+
+  const choices = custom.get('npc-dialogue:choice');
+  choices.at(-1)({ player, option: "What's Lady Ithell's clue?", definition: { getName: () => 'Baxtorian' } });
+  assert.equal(varbits.get(9035), 1);
+  const examineSymbol = custom.get('world:object-examine')[1];
+  location.x = 2322; location.y = 3163; location.z = 0;
+  const examined = { player, objectId: 37305, handled: false };
+  examineSymbol(examined);
+  assert.equal(examined.handled, true, 'missing cache actions use the current-tile wall Examine fallback');
+  const remoteExamine = { player, objectId: 37306, handled: false };
+  examineSymbol(remoteExamine);
+  assert.equal(remoteExamine.handled, false, 'an Examine packet cannot claim a different symbol across Lletya');
+  for (const symbol of [
+    { id: 37307, x: 2349, y: 3161, z: 0 }, { id: 37306, x: 2340, y: 3181, z: 0 },
+    { id: 37304, x: 2334, y: 3183, z: 1 }, { id: 37303, x: 2351, y: 3172, z: 1 },
+  ]) {
+    const event = { player, objectId: symbol.id, location: symbol, option: 'Touch', handled: false };
+    for (const handler of handlers.objects) if (handler(event) === true) break;
+    assert.equal(event.handled, true);
+  }
+  assert.equal(attributes.get('quest.song_of_the_elves.ithell-clue-stage'), 2);
+  assert.equal(varbits.get(9035), 2);
+  inventory.set(base.core.ItemIdentifiers.LIMESTONE_BRICK, 8);
+  inventory.set(base.core.ItemIdentifiers.SAW, 1);
+  inventory.set(base.core.ItemIdentifiers.HAMMER, 1);
+  const statue = { player, objectId: 37308, location: { x: 2337, y: 3171, z: 0 }, option: 'Build', handled: false };
+  for (const handler of handlers.objects) if (handler(statue) === true) break;
+  assert.equal(attributes.get('quest.song_of_the_elves.ithell-statue'), true);
+  assert.equal(inventory.get(base.core.ItemIdentifiers.LIMESTONE_BRICK), 0);
+  attributes.set('quest.song_of_the_elves.ithell-clue-stage', 0);
+  areas[0].process(player);
+  attributes.set('quest.song_of_the_elves.ithell-clue-stage', 2);
+  assert.equal(spawned.at(-1).id, base.core.NpcIdentifiers.LADY_KELYN_ITHELL);
+
+  choices.at(-1)({ player, option: "What's Lady Meilyr's clue?", definition: { getName: () => 'Baxtorian' } });
+  assert.equal(inventory.get(base.core.ItemIdentifiers.CLUE_SCROLL_HARD_), 1);
+  const dig = handlers.itemAction.find((actions) => actions?.Dig)?.Dig;
+  assert.ok(dig);
+  for (const spot of [{ x: 2225, y: 3133 }, { x: 2203, y: 3061 }, { x: 2240, y: 3269 }]) {
+    location.x = spot.x; location.y = spot.y; location.z = 0;
+    const event = { player, itemId: base.core.ItemIdentifiers.SPADE, handled: false };
+    assert.equal(dig(event), true);
+    assert.equal(event.handled, true);
+  }
+  assert.equal(varbits.get(9036), 4);
+  location.x = 2309; location.y = 3215; location.z = 0;
+  custom.get('player:emote').at(-1)({ player, sequence: 2107 });
+  assert.equal(varbits.get(9036), 5);
+  assert.equal(spawned.at(-1).id, base.core.NpcIdentifiers.LADY_FFION_MEILYR);
+  const talk = npcHooks.at(-1)['Talk-to'];
+  assert.equal(talk({ player, npcId: base.core.NpcIdentifiers.LADY_FFION_MEILYR,
+    definition: { getName: () => 'Lady Ffion Meilyr' } }), true);
+  assert.equal(started.at(-1)[3], 'after-the-attack-finding-lady-meilyr');
+  custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'S3ME_F' });
+  assert.equal(inventory.get(base.core.ItemIdentifiers.CLUE_SCROLL_HARD_), 0);
+  assert.equal(quest.getStage(player), 180);
+});
+
+test('Song of the Elves Iorwerth scroll lands on the walkable camp tile', () => {
+  const { api: base, handlers } = mockApi();
+  let destination;
+  let consumed;
+  const core = {
+    ...base.core,
+    TeleportHandler: {
+      checkReqs: () => true,
+      teleport: (player, location) => player.moveTo(location),
+    },
+  };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core : target[prop],
+  });
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const player = {
+    getInventory: () => ({ deleteNumber: (id, amount) => { consumed = [id, amount]; } }),
+    moveTo: (location) => { destination = [location.getX(), location.getY(), location.getZ()]; },
+  };
+  const event = {
+    player,
+    itemId: core.ItemIdentifiers.IORWERTH_CAMP_TELEPORT,
+    option: 'Teleport',
+    handled: false,
+  };
+  handlers.itemAction.at(-1)(event);
+  assert.equal(event.handled, true);
+  assert.deepEqual(consumed, [core.ItemIdentifiers.IORWERTH_CAMP_TELEPORT, 1]);
+  assert.deepEqual(destination, [2194, 3258, 0]);
+});
+
 test('Song of the Elves library mirrors must follow the previous beam direction', () => {
   class TestPrivateArea {
     constructor() { this.objects = []; }
@@ -4206,7 +4549,7 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
         [2609, 6130, 0], [2609, 6116, 0], [2609, 6102, 0], [2623, 6102, 0], [2581, 6130, 0]]
         .some(([x, y, z]) => tile?.getX?.() === x && tile?.getY?.() === y && tile?.getZ?.() === z)
         ? [{ getId: () => tile.getX() === 2609 && tile.getY() === 6158
-          ? 35222 : api.core.ObjectIdentifiers.PILLAR_OF_LIGHT_41 }]
+          ? 35222 : base.core.ObjectIdentifiers.PILLAR_OF_LIGHT_41 }]
         : [];
     }
   }
@@ -4520,6 +4863,154 @@ test('Regicide dense forest crossing checks Agility and clears the full rotated 
   assert.deepEqual(state.moves, [[2271, 3191, 0]], 'crosses from the east edge to the west edge of the rotated 2×3 obstacle');
 });
 
+test('Regicide routes the Meilyr dense forest from outside its footprint in both directions', () => {
+  const { api: base } = mockApi();
+  const objectHooks = [];
+  const routeHooks = [];
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onObjectInteraction'
+      ? (handler) => objectHooks.push(handler)
+      : prop === 'onObjectRoute'
+        ? (handler) => routeHooks.push(handler)
+        : target[prop],
+  });
+  require('../plugins/quests/quests/Regicide.Quest')(api);
+  const forest = {
+    getLocation: () => ({ getX: () => 2302, getY: () => 3214, getZ: () => 0 }),
+    getFace: () => 0,
+  };
+  const route = (source) => {
+    const event = {
+      object: forest,
+      objectId: api.core.ObjectIdentifiers.DENSE_FOREST,
+      sourceLocation: source,
+      destination: null,
+    };
+    routeHooks.at(-1)(event);
+    return event.destination;
+  };
+  assert.deepEqual(route({ x: 2299, y: 3215, z: 0 }), { x: 2301, y: 3215, z: 0 });
+  assert.deepEqual(route({ x: 2307, y: 3215, z: 0 }), { x: 2305, y: 3213, z: 0 });
+
+  const attributes = new Map([['quest.regicide.stage', 15]]);
+  const cross = (x, y) => {
+    const state = { moves: [] };
+    const player = {
+      getAttribute: (key) => attributes.get(key),
+      setAttribute: (key, value) => attributes.set(key, value),
+      getSkillManager: () => ({ getCurrentLevel: () => 99 }),
+      getLocation: () => ({ getX: () => x, getY: () => y, getZ: () => 0 }),
+      moveTo: (destination) => state.moves.push([destination.getX(), destination.getY(), destination.getZ()]),
+      sendMessage() {},
+    };
+    objectHooks.at(-1)({
+      player,
+      object: forest,
+      objectId: api.core.ObjectIdentifiers.DENSE_FOREST,
+      location: { x: 2302, y: 3214, z: 0 },
+      definition: { getSizeX: () => 3, getSizeY: () => 2 },
+      handled: false,
+    });
+    return state.moves;
+  };
+  assert.deepEqual(cross(2301, 3215), [[2305, 3213, 0]], 'west-to-east lands beyond the full forest footprint');
+  assert.deepEqual(cross(2305, 3213), [[2301, 3215, 0]], 'east-to-west lands west of the footprint');
+});
+
+test('Regicide keeps the approach side clear when routing to the Isafdar leaf trap', () => {
+  const { api: base } = mockApi();
+  const routeHooks = [];
+  const leaves = new Set([
+    '2273,3173', '2274,3173', '2275,3173',
+    '2273,3174', '2274,3174', '2275,3174',
+    '2273,3175', '2274,3175', '2275,3175',
+  ]);
+  const core = { ...base.core };
+  core.ObjectManager = {
+    objectsAt: (location) => leaves.has(`${location.getX()},${location.getY()}`)
+      ? [{ getId: () => core.ObjectIdentifiers.LEAVES }]
+      : [],
+  };
+  core.MapObjects = { mapObjects: new Map(), getHash: () => 0 };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core'
+      ? core
+      : prop === 'onObjectRoute'
+        ? (handler) => routeHooks.push(handler)
+        : target[prop],
+  });
+  require('../plugins/quests/quests/Regicide.Quest')(api);
+  const event = {
+    objectId: core.ObjectIdentifiers.LEAVES,
+    object: { getLocation: () => ({ getX: () => 2273, getY: () => 3175, getZ: () => 0 }) },
+    sourceLocation: { x: 2274, y: 3176, z: 0 },
+    destination: null,
+  };
+  routeHooks.at(-1)(event);
+  assert.deepEqual(event.destination, { x: 2274, y: 3176, z: 0 }, 'north approach remains outside the whole 3×3 trap');
+});
+
+test('Regicide supports both cache Log balance endpoints on the Isafdar bridge', () => {
+  const { api: base } = mockApi();
+  const objectHooks = [];
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onObjectInteraction'
+      ? (handler) => objectHooks.push(handler)
+      : target[prop],
+  });
+  require('../plugins/quests/quests/Regicide.Quest')(api);
+  const interact = objectHooks[0];
+  const run = (objectX, sourceX) => {
+    const state = { moves: [], animations: [] };
+    const player = {
+      getLocation: () => ({ getX: () => sourceX, getY: () => 3250, getZ: () => 0 }),
+      moveTo: (destination) => state.moves.push([destination.getX(), destination.getY(), destination.getZ()]),
+      performAnimation: (animation) => state.animations.push(animation.getId()),
+    };
+    const event = {
+      player, objectId: api.core.ObjectIdentifiers.LOG_BALANCE_10, option: 'Cross',
+      location: { x: objectX, y: 3250, z: 0 }, sourceLocation: { x: sourceX, y: 3250, z: 0 }, handled: false,
+    };
+    interact(event);
+    assert.equal(event.handled, true);
+    assert.deepEqual(state.animations, [762]);
+    return state.moves;
+  };
+  assert.deepEqual(run(2259, 2258), [[2259, 3250, 0]], 'western endpoint steps onto the balance');
+  assert.deepEqual(run(2259, 2260), [[2258, 3250, 0]], 'western endpoint returns to the west bank');
+  assert.deepEqual(run(2263, 2262), [[2264, 3250, 0]], 'eastern endpoint steps onto the east bank');
+  assert.deepEqual(run(2263, 2264), [[2262, 3250, 0]], 'eastern endpoint returns to the balance');
+  const unrelated = { player: {}, objectId: api.core.ObjectIdentifiers.LOG_BALANCE_10,
+    option: 'Cross', location: { x: 2259, y: 3251, z: 0 }, handled: false };
+  interact(unrelated);
+  assert.equal(unrelated.handled, false, 'the handler is limited to the verified bridge placements');
+});
+
+test('Regicide leaves completed Well of Voyage crossings to the shared loc route', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/Regicide.Quest')(api);
+  const attributes = new Map([['quest.regicide.stage', 15]]);
+  const moves = [];
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => ({ getX: () => 2340, getY: () => 9623, getZ: () => 0 }),
+    moveTo: (destination) => moves.push([destination.getX(), destination.getY(), destination.getZ()]),
+    sendMessage() {},
+  };
+  const event = {
+    player,
+    objectId: api.core.ObjectIdentifiers.WELL_9,
+    location: { x: 2341, y: 9622, z: 0 },
+    handled: false,
+  };
+
+  for (const handler of handlers.objects) handler(event);
+
+  assert.equal(event.handled, false, 'the native Well of Voyage route can handle the completed-quest traversal');
+  assert.deepEqual(moves, []);
+});
+
 test('Regicide leaf and stick traps use Agility checks and cross from the approached side', () => {
   const { api: base } = mockApi();
   const objectHooks = [];
@@ -4568,7 +5059,7 @@ test('Regicide leaf and stick traps use Agility checks and cross from the approa
   }
 });
 
-test("Mourning's End I teleport crystals consume a charge and take the player to Lletya", () => {
+test("Mourning's End I last teleport crystal charge becomes a saveable seed", () => {
   const { api: base } = mockApi();
   const itemActions = new Map();
   const api = new Proxy(base, {
@@ -4577,7 +5068,7 @@ test("Mourning's End I teleport crystals consume a charge and take the player to
       : target[prop],
   });
   require('../plugins/quests/quests/MourningsEndPartI.Quest')(api);
-  const items = new Map([[6099, 1]]);
+  const items = new Map([[6102, 1]]);
   const moved = [];
   const messages = [];
   const inventory = {
@@ -4594,11 +5085,13 @@ test("Mourning's End I teleport crystals consume a charge and take the player to
     moveTo: (location) => moved.push([location.getX(), location.getY(), location.getZ()]),
     sendMessage: (message) => messages.push(message),
   };
-  const event = { player, itemId: 6099, handled: false };
-  itemActions.get('Teleport crystal (4)').Lletya(event);
+  const event = { player, itemId: 6102, handled: false };
+  itemActions.get('Teleport crystal (1)').Lletya(event);
   assert.equal(event.handled, true);
-  assert.equal(items.get(6099), undefined);
-  assert.equal(items.get(6100), 1);
+  assert.equal(items.get(6102), undefined);
+  assert.equal(items.get(6103), 1);
+  assert.equal(items.has(undefined), false, 'a depleted crystal must not add an undefined item id');
+  assert.ok([...items.keys()].every(Number.isFinite));
   assert.deepEqual(moved, [[2352, 3170, 0]]);
   assert.equal(messages.length, 1);
 
