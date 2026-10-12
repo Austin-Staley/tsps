@@ -92,7 +92,7 @@ module.exports=function registerSurok({api,stage,advance,held,give,play}){
  function action({player,stepId}){const f=fights.get(player);if(f&&stepId==='tJmXJA')f.intro?.setNpcTransformationId(REVEALED);}
  function hit({npc,hit}){
   const p=hit.getAttacker(),f=fights.get(p);if(!f||!f.enemies.has(npc))return;
-  const s=spell(p),t=targets.get(npc),magic=hit.getCombatType()===CombatType.MAGIC;
+  const s=hit.getSpell?.(),t=targets.get(npc),magic=hit.getCombatType()===CombatType.MAGIC;
   if(npc===f.boss){if(!magic||!s){hit.setTotalDamage(0);npc.forceChat('Powered staves are no match for my magic!');}return;}
   if(!t){hit.setTotalDamage(0);return;}
   if(!t.surge){if(!t.weak)hit.setTotalDamage(0);return;}
