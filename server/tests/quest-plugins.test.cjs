@@ -415,6 +415,10 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'koxQh3' });
   assert.equal(interact('Baxtorian'), true);
   assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-talking-to-baxtorian-after-the-meeting');
+  const handoff = { player, npcId: api.core.NpcIdentifiers.ARIANWYN_6, handled: false };
+  handlers.custom.get('quest-song-of-the-elves:claim-arianwyn').at(-1)(handoff);
+  assert.equal(handoff.handled, true, 'the completed Mourning’s End handler can hand the NPC to SOTE');
+  assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-the-curse-of-seren');
 });
 
 test('Song of the Elves library mirrors must follow the previous beam direction', () => {

@@ -541,6 +541,14 @@ module.exports = function registerSongOfTheElves(api) {
     player.setAttribute(LATE_CHAPTER, 0);
     quest.setStage(player, Math.max(10, STAGE.STARTED + chapter * 10));
   }
+  function claimArianwynAfterLibrary(event) {
+    const player = event?.player;
+    if (!player || currentChapter(player) !== 13) return false;
+    event.handled = true;
+    return startTranscript(api, player, event.npcId, PAGE,
+      "reporting-back-after-the-revelations-the-curse-of-seren");
+  }
+
   function onTalk(event) {
     const player = event?.player;
     if (!player) return false;
@@ -1991,6 +1999,7 @@ module.exports = function registerSongOfTheElves(api) {
     return null;
   });
   api.onCustomEvent("npc-dialogue:hook", onStart);
+  api.onCustomEvent("quest-song-of-the-elves:claim-arianwyn", claimArianwynAfterLibrary);
   api.onCustomEvent("npc-dialogue:action", onAction);
   api.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);
   api.onItemOnItem(handleItemOnItem);

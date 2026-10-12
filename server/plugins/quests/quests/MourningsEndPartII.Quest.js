@@ -415,6 +415,9 @@ module.exports = function registerMourningsEndPartIIQuest(api) {
     if (!ARIANWYN_IDS.has(npcId)) return false;
     const stage = stageOf(player);
     if (stage >= STAGE_COMPLETE) {
+      const soteRequest = { player, npcId, handled: false };
+      api.emitCustomEvent("quest-song-of-the-elves:claim-arianwyn", soteRequest);
+      if (soteRequest.handled) return;
       playVariant(player, npcId, POST_QUEST_VARIANT);
       return;
     }
