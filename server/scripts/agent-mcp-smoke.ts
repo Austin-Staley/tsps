@@ -15,6 +15,7 @@ const skill = { getName: () => "Woodcutting" };
 const clientMessages: string[] = [];
 const varbits = new Map<number, number>();
 const packetSender = {
+    sendGraphic: (_graphic: any, _location: any) => packetSender,
     getChatboxGroupId: () => 231,
     sendMessage: (message: string) => clientMessages.push(message),
     sendVarbit: (id: number, value: number) => { varbits.set(id, value); return packetSender; },
@@ -70,6 +71,7 @@ const npc = {
     getId: () => 3106,
     getHitpoints: () => 7,
     getMaxHitpoints: () => 10,
+    getAnimation: () => ({ getId: () => 8082 }),
     getLocation: () => location(3225, 3220),
     getCurrentDefinition: () => ({ getName: () => "Man", getActions: () => ["Talk-to", null, "Attack", "Pickpocket"] }),
 };
@@ -244,11 +246,16 @@ else process.env.AGENT_MCP = previousMcpFlag;
     assert.equal(snapshot.npcs.length, 1, "another player’s owned NPC is not a menu target");
     assert.equal(snapshot.npcs[0].hitpoints, 7);
     assert.equal(snapshot.npcs[0].maxHitpoints, 10);
+    assert.equal(snapshot.npcs[0].animation, 8082, "boss animations are observable warning cues");
     assert.deepEqual(snapshot.npcs[0].options, ["Talk-to", "Attack", "Pickpocket"]);
     assert.deepEqual(snapshot.objects, [{ id: 1276, name: "Tree", options: ["Chop down"], x: 3220, y: 3216 }]);
     assert.equal(snapshot.groundItems[0].id, 526);
     assert.deepEqual(snapshot.messages, ["You swing your axe at the tree."]);
     assert.deepEqual((await call(client, "observe", { player: "agent1" })).value.messages, []);
+
+    packetSender.sendGraphic({ getId: () => 1560 }, location(3222, 3218));
+    assert.deepEqual((await call(client, "observe", { player: "agent1" })).value.client.graphics, [{ id: 1560, x: 3222, y: 3218, z: 0 }]);
+    assert.equal((await call(client, "observe", { player: "agent1" })).value.client.graphics, undefined, "graphics are reported once");
 
     observedPrivateArea = {
         countsAsMainWorld: () => false,
