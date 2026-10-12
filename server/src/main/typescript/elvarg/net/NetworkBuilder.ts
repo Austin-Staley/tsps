@@ -464,9 +464,7 @@ export class ClientConnection {
           })) {
             continue;
           }
-          if (this.player?.getDialogueManager().canContinue(packet.widgetId)) {
-            this.player.getDialogueManager().advance();
-          }
+          this.player?.getDialogueManager().handleResume(packet.widgetId, packet.childIndex);
           continue;
         }
         case "dialogue_amount": {

@@ -630,3 +630,18 @@ test('Quest transcripts preserve each named speaker instead of borrowing the cli
   assert.ok(lines.some(([id,text])=>id===13543&&text.includes('Glad to have you')));
   assert.ok(lines.some(([id,text])=>id===13540&&text.includes('theology')));
 });
+
+
+test('Core choice dialogues use native options and validate the resume without losing their chain', () => {
+ const {PluginManager}=require('../dist/plugins/PluginManager'),{DialogueManager}=require('../dist/game/model/dialogues/DialogueManager');
+ const {OptionDialogue,DialogueChainBuilder,StatementDialogue}=PluginManager.getCoreApi();const packets=[];let chosen;
+ const sender={sendInterfaceScript:id=>packets.push(['script',id]),sendVarbit(){},sendChatboxInterface:id=>packets.push(['open',id]),sendClientScript:(...a)=>packets.push(['cs2',...a]),sendInterfaceFlagsRange:(...a)=>packets.push(['flags',...a]),isChatboxInterface:id=>id===219,sendInterfaceRemoval(){}};
+ const player={getPacketSender:()=>sender};const manager=new DialogueManager(player);
+ const option=new OptionDialogue(0,{executeOption:n=>chosen=n},'First','Second');
+ manager.startDialogues(new DialogueChainBuilder().add(option,new StatementDialogue(1,'The conversation continues.')));
+ assert.ok(packets.some(a=>a[0]==='open'&&a[1]===219));assert.deepEqual(packets.find(a=>a[0]==='cs2'),['cs2',58,'Select an Option','First|Second']);
+ assert.equal(manager.getCurrent(),option);
+ for(const [uid,n]of [[OptionDialogue.OPTIONS_WIDGET_ID,0],[OptionDialogue.OPTIONS_WIDGET_ID,3],[OptionDialogue.OPTIONS_WIDGET_ID,1.5],[231<<16,1]])assert.equal(manager.handleResume(uid,n),false);
+ assert.equal(chosen,undefined);assert.equal(manager.handleResume(OptionDialogue.OPTIONS_WIDGET_ID,2),true);assert.equal(chosen,2);
+ assert.equal(manager.getCurrent(),option,'selecting must not erase entries owned by the option callback');
+});
