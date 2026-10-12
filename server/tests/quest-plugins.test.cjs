@@ -738,6 +738,12 @@ test('Regicide tripwires use the Agility success roll and apply the dart hit and
     assert.equal(success.handled, true);
     assert.deepEqual(safe.state.moves, [[2284, 3188, 0]], 'a successful westward crossing reaches the opposite side');
 
+    Math.random = () => 0.12;
+    const levelOne = createPlayer(1);
+    const lowLevelSuccess = interactWith(levelOne.player);
+    interact(lowLevelSuccess);
+    assert.deepEqual(levelOne.state.moves, [[2284, 3188, 0]], 'the 31/256 level-one success rate is preserved');
+
     Math.random = () => 0.99;
     const caught = createPlayer(99);
     const failure = interactWith(caught.player);

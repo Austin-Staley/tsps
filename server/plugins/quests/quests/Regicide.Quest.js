@@ -541,7 +541,7 @@ module.exports = function registerRegicideQuest(api) {
     player.moveTo(new Location(x, y, position.getZ()));
   }
 
-  /** Isafdar's Step-over click succeeds at 12.11% + 0.4983% per Agility level. */
+  /** Wiki's chance chart is 31/256 at level 1, rising to 156/256 at level 99. */
   function stepOverTripwire(event) {
     const { player, object, location } = event;
     const option = event.definition?.getActions?.()?.[event.clickType - 1];
@@ -549,7 +549,7 @@ module.exports = function registerRegicideQuest(api) {
     event.handled = true;
     const position = player.getLocation();
     const level = Math.max(1, Math.min(99, player.getSkillManager().getCurrentLevel(Skill.AGILITY)));
-    const successChance = (30 + ((level - 1) * (155 - 30)) / 98) / 255;
+    const successChance = (31 + ((level - 1) * (156 - 31)) / 98) / 256;
     if (Math.random() >= successChance) {
       player.getCombat().getHitQueue().addPendingDamage([new HitDamage(10, HitMask.RED)]);
       const immunity = player.getCombat().getPoisonImmunityTimer?.();
