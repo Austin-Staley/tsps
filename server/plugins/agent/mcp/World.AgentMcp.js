@@ -24,6 +24,7 @@ module.exports = function registerWorldTools(ctx) {
       const sender = p.getPacketSender();
       const skills = p.getSkillManager();
       return {
+        worldTick: World.getProcessCycle(),
         ...tile(p.getLocation()),
         area: area(p),
         hitpoints: p.getHitpoints(),

@@ -239,6 +239,7 @@ else process.env.AGENT_MCP = previousMcpFlag;
     const observed = await call(client, "observe", { player: "agent1" });
     if (observed.error) throw new Error(observed.text);
     snapshot = observed.value;
+    assert.equal(typeof snapshot.worldTick, "number", "observe exposes a read-only process-cycle counter for timing live mechanics");
     assert.equal(snapshot.x, 3222);
     assert.deepEqual(snapshot.skills.Woodcutting, { level: 1, max: 1, xp: 0 });
     assert.deepEqual(snapshot.inventory[0], { slot: 0, id: 1351, name: "item 1351", amount: 1 });
