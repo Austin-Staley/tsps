@@ -99,6 +99,7 @@ export interface PluginObjectInteractionEvent {
   definition?: ObjectDefinition;
   objectId: number;
   clickType: number;
+  option?: string;
   location: { x: number; y: number; z: number };
   sourceLocation?: { x: number; y: number; z: number };
   handled: boolean;

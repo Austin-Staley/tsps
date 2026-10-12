@@ -388,3 +388,24 @@ test('changing floors in one map region refreshes ground items, including Drayno
     MapRegionReplacementManager.sendVisibleReplacementsToPlayer = oldReplacements;
   }
 });
+
+
+test('generic object hooks receive the actual clicked cache action', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const hooks = [...PluginManager.objectInteractionHooks], order = PluginManager.nextObjectHookOrder;
+  const seen = [];
+  try {
+    PluginManager.createApi('ObjectActionTest').onObjectInteraction(event => {
+      seen.push(event.option); event.handled = true;
+    });
+    const definition = { getName: () => 'Statue Space', getInteractions: () => ['Inspect', 'Build'] };
+    for (const clickType of [2, 1]) {
+      const event = { player: {}, object: {}, definition, objectId: 37308, clickType,
+        location: { x: 0, y: 0, z: 0 }, handled: false };
+      assert.equal(PluginManager.emitObjectInteraction(event), true);
+    }
+    assert.deepEqual(seen, ['Build', 'Inspect']);
+  } finally {
+    PluginManager.objectInteractionHooks = hooks; PluginManager.nextObjectHookOrder = order;
+  }
+});
