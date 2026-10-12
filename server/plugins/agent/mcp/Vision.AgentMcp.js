@@ -7,7 +7,7 @@
 //
 // Export layout, all under <worktree>/exports/ (git-ignored):
 //   <run>/logs/run.log                    one tick-stamped line per vision call
-//   <run>/logs/harness-<ts>.json          full harness summary per call
+//   <run>/logs/harness-t<TICK>-<label>.json   full harness summary per call
 //   <run>/screenshots/t<TICK>-<label>.png
 //   <run>/videos/t<TICK>-<label>.mp4      (frames kept only if no video)
 // <run> is the `run` tool argument (same label groups a whole test session);
@@ -178,12 +178,14 @@ module.exports = function registerVisionTools(ctx) {
       if (y !== undefined) args.push("--yaw", String(y));
       if (p !== undefined) args.push("--pitch", String(p));
       const tickShot = serverTick(ctx);
-      const out = uniquePath(path.join(runDir, "screenshots"),
-        `t${String(tickShot ?? 0).padStart(7, "0")}-${sanitizeLabel(name, "screenshot")}.png`);
+      const fileBase = `t${String(tickShot ?? 0).padStart(7, "0")}-${sanitizeLabel(name, "screenshot")}`;
+      const out = uniquePath(path.join(runDir, "screenshots"), `${fileBase}.png`);
       const summary = await runHarness([...args, "--out", out], 240000);
       const tickEnd = serverTick(ctx);
       if (enabled) {
-        fs.writeFileSync(path.join(runDir, "logs", `harness-${stamp()}.json`), JSON.stringify(summary, null, 2));
+        // Named like the media it belongs to (t<tick>-<label>), so the summary
+        // is matchable to its screenshot/video at a glance.
+        fs.writeFileSync(path.join(runDir, "logs", `harness-${fileBase}.json`), JSON.stringify(summary, null, 2));
         logRun(runDir, `tick ${tickStart}->${tickEnd} tool=vision_screenshot player=${username} ` +
           `camera=${JSON.stringify(summary.camera ?? null)} files=${path.relative(runDir, summary.screenshot)}`);
       }
@@ -224,7 +226,7 @@ module.exports = function registerVisionTools(ctx) {
         } catch {}
       }
       if (enabled) {
-        fs.writeFileSync(path.join(runDir, "logs", `harness-${stamp()}.json`), JSON.stringify(summary, null, 2));
+        fs.writeFileSync(path.join(runDir, "logs", `harness-${base}.json`), JSON.stringify(summary, null, 2));
         const files = [summary.screenshot, summary.clip?.video ?? summary.clip?.framesDir ?? null].filter(Boolean)
           .map((f) => path.relative(runDir, f)).join(",");
         logRun(runDir, `tick ${tickStart}->${tickEnd} tool=vision_clip player=${username} seconds=${seconds} ` +

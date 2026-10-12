@@ -38,9 +38,9 @@ scene first with the tools above.
 - **Camera:** yaw 0-2047, pitch 0 (level) to 512 (down); omit both to keep the player's view.
 - **Runs:** pass the same `run` label across calls to group a session under
   `exports/<run>/`; without one, each call gets its own `<timestamp>-<username>` folder.
-  Layout: `logs/run.log` (one tick-stamped line per call), `logs/harness-<ts>.json`, 
-  `screenshots/t<tick>-<label>.png`, `videos/t<tick>-<label>.mp4`. The tick ties media to
-  the run.log lines.
+  Layout: `logs/run.log` (one tick-stamped line per call), `logs/harness-t<tick>-<label>.json`
+  (one per call, named like its media), `screenshots/t<tick>-<label>.png`,
+  `videos/t<tick>-<label>.mp4`. The tick ties media to the run.log lines.
 - **Inspect:** read the PNGs/videos back; screenshots are also the fastest way to verify
   visual fixes a PR describes.
 - **Toggles:** `VISION_EXPORTS=0` sends captures to the OS temp dir and writes no logs (use
