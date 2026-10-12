@@ -476,6 +476,9 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   assert.equal(quest.getStage(player), 150, 'Baxtorian’s follow-up opens the clan-leader chapter');
   handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'FoLVmk' });
   assert.equal(quest.getStage(player), 150, 'the meeting ending advances into the clan-leader chapter');
+  assert.equal(interact('Baxtorian'), true);
+  assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-talking-to-baxtorian-after-the-meeting',
+    'players who closed the council dialogue can still ask for both elder clues');
 
   const choice = handlers.custom.get('npc-dialogue:choice').at(-1);
   choice({ player, option: 'How do I find Lord Crwys?', definition: { getName: () => 'Baxtorian' } });
@@ -689,6 +692,96 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
   useObject({ player, objectId: 36726, handled: false });
   assert.ok(!messages.slice(beforeReplay).some((message) => message.includes('seal remains dark')),
     'touching a completed seal replays its memory so its return transport stays available');
+});
+
+test('Regicide tripwires use the Agility success roll and apply the dart hit and poison on failure', () => {
+  const { api: base } = mockApi();
+  const objectHooks = [];
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onObjectInteraction'
+      ? (handler) => objectHooks.push(handler)
+      : target[prop],
+  });
+  require('../plugins/quests/quests/Regicide.Quest')(api);
+  const interact = objectHooks[0];
+  assert.equal(typeof interact, 'function');
+
+  const location = { x: 2285, y: 3187, z: 0 };
+  const object = { getFace: () => 3 };
+  const createPlayer = (agility) => {
+    const state = { moves: [], hits: [], poison: 0 };
+    const position = { x: 2286, y: 3188, z: 0 };
+    const player = {
+      getLocation: () => ({ getX: () => position.x, getY: () => position.y, getZ: () => position.z }),
+      getSkillManager: () => ({ getCurrentLevel: () => agility }),
+      getCombat: () => ({
+        getHitQueue: () => ({ addPendingDamage: (damage) => state.hits.push(damage) }),
+        getPoisonImmunityTimer: () => ({ finished: () => true }),
+      }),
+      isPoisoned: () => false,
+      setPoisonDamage: (amount) => { state.poison = amount; },
+      moveTo: (destination) => state.moves.push([destination.getX(), destination.getY(), destination.getZ()]),
+    };
+    return { player, state };
+  };
+  const interactWith = (player) => ({
+    player, object, objectId: api.core.ObjectIdentifiers.TRIPWIRE_3, clickType: 1,
+    location, definition: { getActions: () => ['Step-over'] }, handled: false,
+  });
+
+  const originalRandom = Math.random;
+  try {
+    Math.random = () => 0;
+    const safe = createPlayer(99);
+    const success = interactWith(safe.player);
+    interact(success);
+    assert.equal(success.handled, true);
+    assert.deepEqual(safe.state.moves, [[2284, 3188, 0]], 'a successful westward crossing reaches the opposite side');
+
+    Math.random = () => 0.99;
+    const caught = createPlayer(99);
+    const failure = interactWith(caught.player);
+    interact(failure);
+    assert.equal(failure.handled, true);
+    assert.equal(caught.state.hits[0][0].getDamage(), 10);
+    assert.equal(caught.state.poison, 2);
+    assert.deepEqual(caught.state.moves, [], 'a triggered tripwire leaves the player on the near side');
+  } finally {
+    Math.random = originalRandom;
+  }
+});
+
+test('Regicide dense forest crossing checks Agility and clears the full rotated cache footprint', () => {
+  const { api: base } = mockApi();
+  const objectHooks = [];
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onObjectInteraction'
+      ? (handler) => objectHooks.push(handler)
+      : target[prop],
+  });
+  require('../plugins/quests/quests/Regicide.Quest')(api);
+  const attributes = new Map([['quest.regicide.stage', 15]]);
+  const state = { moves: [], messages: [] };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getSkillManager: () => ({ getCurrentLevel: () => 99 }),
+    getLocation: () => ({ getX: () => 2274, getY: () => 3191, getZ: () => 0 }),
+    moveTo: (destination) => state.moves.push([destination.getX(), destination.getY(), destination.getZ()]),
+    sendMessage: (message) => state.messages.push(message),
+  };
+  const event = {
+    player,
+    object: { getFace: () => 1 },
+    objectId: api.core.ObjectIdentifiers.DENSE_FOREST,
+    clickType: 1,
+    location: { x: 2272, y: 3191, z: 0 },
+    definition: { getSizeX: () => 3, getSizeY: () => 2 },
+    handled: false,
+  };
+  objectHooks[0](event);
+  assert.equal(event.handled, true);
+  assert.deepEqual(state.moves, [[2271, 3191, 0]], 'crosses from the east edge to the west edge of the rotated 2×3 obstacle');
 });
 
 test("Mourning's End I teleport crystals consume a charge and take the player to Lletya", () => {

@@ -622,6 +622,14 @@ module.exports = function registerSongOfTheElves(api) {
         "reporting-back-after-the-revelations-finding-lady-hefin");
     }
     if (currentChapter(player) === 14 && npcName === "baxtorian") {
+      // The meeting advances the quest into chapter 14 before its two clue
+      // choices are made. If a player closes the dialogue at that point,
+      // resume those choices instead of skipping straight to the orb chapter.
+      if (player.getAttribute(CRWYS_CLUE_HEARD) !== true ||
+        player.getAttribute(HEFIN_CLUE_HEARD) !== true) {
+        return startTranscript(api, player, event.npcId, PAGE,
+          "reporting-back-after-the-revelations-talking-to-baxtorian-after-the-meeting");
+      }
       const hasOrb = player.getInventory().getAmount(ItemIdentifiers.ORB_OF_LIGHT_5) > 0;
       return startTranscript(api, player, event.npcId, PAGE, hasOrb
         ? "recovering-the-orb-talking-to-baxtorian-after-getting-the-orb"

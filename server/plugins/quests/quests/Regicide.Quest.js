@@ -26,6 +26,8 @@
  */
 module.exports = function registerRegicideQuest(api) {
   const {
+    HitDamage,
+    HitMask,
     Skill,
     Location,
     ItemIdentifiers,
@@ -139,6 +141,7 @@ module.exports = function registerRegicideQuest(api) {
     ObjectIdentifiers.DENSE_FOREST_4,
     ObjectIdentifiers.DENSE_FOREST_5,
   ]);
+  const TRIPWIRE_IDS = new Set([ObjectIdentifiers.TRIPWIRE_3, ObjectIdentifiers.TRIPWIRE]);
   const SULPHUR_ROCK_IDS = new Set([
     ObjectIdentifiers.SULPHUR,
     ObjectIdentifiers.SULPHUR_2,
@@ -501,7 +504,7 @@ module.exports = function registerRegicideQuest(api) {
   }
 
   function crossDenseForest(event) {
-    const { player, objectId, location } = event;
+    const { player, object, objectId, location } = event;
     const stage = quest.getStage(player);
     event.handled = true;
     if (stage < STAGE_SPOKEN_TRACKER_2) {
@@ -518,7 +521,48 @@ module.exports = function registerRegicideQuest(api) {
     } else if (stage === STAGE_DEFEATED_GUARD && objectId === ObjectIdentifiers.DENSE_FOREST_4) {
       quest.setStage(player, STAGE_ENTERED_CAMP);
     }
-    squeezeThrough(player, location);
+    const definition = event.definition ?? object?.getDefinition?.();
+    const face = object?.getFace?.() ?? 0;
+    const sizeX = definition?.getSizeX?.() ?? 1;
+    const sizeY = definition?.getSizeY?.() ?? 1;
+    const width = face % 2 === 0 ? sizeX : sizeY;
+    const height = face % 2 === 0 ? sizeY : sizeX;
+    const position = player.getLocation();
+    let x = position.getX();
+    let y = position.getY();
+    if (x < location.x) x = location.x + width;
+    else if (x >= location.x + width) x = location.x - 1;
+    else if (y < location.y) y = location.y + height;
+    else y = location.y - 1;
+    player.moveTo(new Location(x, y, position.getZ()));
+  }
+
+  /** Isafdar's Step-over click succeeds at 12.11% + 0.4983% per Agility level. */
+  function stepOverTripwire(event) {
+    const { player, object, location } = event;
+    const option = event.definition?.getActions?.()?.[event.clickType - 1];
+    if (option !== "Step-over") return;
+    event.handled = true;
+    const position = player.getLocation();
+    const level = Math.max(1, Math.min(99, player.getSkillManager().getCurrentLevel(Skill.AGILITY)));
+    const successChance = (12.11 + ((level - 1) * (60.94 - 12.11)) / 98) / 100;
+    if (Math.random() >= successChance) {
+      player.getCombat().getHitQueue().addPendingDamage([new HitDamage(10, HitMask.RED)]);
+      const immunity = player.getCombat().getPoisonImmunityTimer?.();
+      if (!player.isPoisoned?.() && (!immunity || immunity.finished())) player.setPoisonDamage(2);
+      return;
+    }
+    const face = object?.getFace?.() ?? 0;
+    // The wire's footprint follows the even faces; cross it on the perpendicular axis.
+    const axis = face % 2 === 0 ? "y" : "x";
+    const current = axis === "x" ? position.getX() : position.getY();
+    const wire = location[axis];
+    const delta = current > wire ? -2 : 2;
+    player.moveTo(new Location(
+      position.getX() + (axis === "x" ? delta : 0),
+      position.getY() + (axis === "y" ? delta : 0),
+      position.getZ(),
+    ));
   }
 
   function inspectFootprints(event) {
@@ -582,6 +626,10 @@ module.exports = function registerRegicideQuest(api) {
     }
     if (DENSE_FOREST_IDS.has(objectId)) {
       crossDenseForest(event);
+      return;
+    }
+    if (TRIPWIRE_IDS.has(objectId)) {
+      stepOverTripwire(event);
       return;
     }
     if (SULPHUR_ROCK_IDS.has(objectId)) {
