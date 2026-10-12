@@ -2875,11 +2875,13 @@ module.exports = function registerDesertTreasureII(api) {
       talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-back-on-the-surface-talking-to-kasonde-again-before-retrieving-the-ingredients");
       return;
     }
-    if (progress === 13) {
-      talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-killing-the-strangled-in-the-temple");
-      if (!has(p, I.UNFINISHED_SERUM)) p.getInventory().adds(I.UNFINISHED_SERUM, 1);
-      p.setAttribute(VARDORVIS_PROGRESS, 14);
-      return;
+    if (progress === 13 || progress === 14) {
+      const carried = [I.UNFINISHED_SERUM, I.UNFINISHED_SERUM_2, I.STRANGLER_SERUM].some(id => has(p, id));
+      if (progress === 14 && carried) return p.sendMessage("Mix the Korbal herb into the unfinished serum, then add the Argian berries.");
+      if (!carried && p.getInventory().getFreeSlots() < 1) return p.sendMessage("You need inventory space for Kasonde's unfinished serum.");
+      return talk(p, npcId, progress === 13
+        ? "carnifex-maximus-vardorvis-talking-to-kasonde-after-killing-the-strangled-in-the-temple"
+        : "carnifex-maximus-vardorvis-talking-to-kasonde-after-killing-the-strangled-in-the-temple-reclaiming-the-unfinished-serum");
     }
     if (progress === 15) {
       talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-killing-the-strangled-in-the-temple-talking-to-kasonde-after-making-the-potion");
@@ -3812,7 +3814,13 @@ module.exports = function registerDesertTreasureII(api) {
     if (s === S.VARDORVIS && objectId === KASONDE_MEDALLION_CHEST
       && Math.abs(location.x - 1196) <= 2 && Math.abs(location.y - 3411) <= 2
       && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 21) {
-      if (!has(p, I.VARDORVIS_MEDALLION)) p.getInventory().adds(I.VARDORVIS_MEDALLION, 1);
+      if (!has(p, I.VARDORVIS_MEDALLION)) {
+        if (p.getInventory().getFreeSlots() < 1) {
+          p.sendMessage("You need inventory space for Vardorvis' medallion.");
+          return true;
+        }
+        p.getInventory().adds(I.VARDORVIS_MEDALLION, 1);
+      }
       p.setAttribute(VARDORVIS_PROGRESS, 22);
       p.sendMessage("You search Kasonde's chest and find Vardorvis' medallion.");
       return true;
@@ -3820,14 +3828,14 @@ module.exports = function registerDesertTreasureII(api) {
     if (s === S.VARDORVIS && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 11
       && objectId === O.KORBAL_HERBS && Math.abs(location.x - 1155) <= 2 && Math.abs(location.y - 3447) <= 2) {
       if (!has(p, I.KORBAL_HERB)) p.getInventory().adds(I.KORBAL_HERB, 1);
-      if (has(p, I.KORBAL_HERB) && has(p, I.ARGIAN_BERRIES)) p.setAttribute(VARDORVIS_PROGRESS, 12);
+      if (Number(p.getAttribute(VARDORVIS_PROGRESS)) === 11 && has(p, I.KORBAL_HERB) && has(p, I.ARGIAN_BERRIES)) p.setAttribute(VARDORVIS_PROGRESS, 12);
       p.sendMessage("You pick a Korbal herb from the north-west of the Stranglewood.");
       return true;
     }
     if (s === S.VARDORVIS && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 11
       && objectId === O.ARGIAN_BUSH && Math.abs(location.x - 1126) <= 2 && Math.abs(location.y - 3323) <= 2) {
       if (!has(p, I.ARGIAN_BERRIES)) p.getInventory().adds(I.ARGIAN_BERRIES, 1);
-      if (has(p, I.KORBAL_HERB) && has(p, I.ARGIAN_BERRIES)) p.setAttribute(VARDORVIS_PROGRESS, 12);
+      if (Number(p.getAttribute(VARDORVIS_PROGRESS)) === 11 && has(p, I.KORBAL_HERB) && has(p, I.ARGIAN_BERRIES)) p.setAttribute(VARDORVIS_PROGRESS, 12);
       p.sendMessage("You pick Argian berries from the south-west of the Stranglewood.");
       return true;
     }
@@ -4918,7 +4926,21 @@ module.exports = function registerDesertTreasureII(api) {
     p.setAttribute(FINAL_CELL_GEAR, null);
   }
 
-  function handleDialogueAction({ player: p, stepId }) {
+  function handleDialogueAction(event) {
+    const { player: p, stepId } = event;
+    if (stage(p) === S.VARDORVIS && [13, 14].includes(Number(p.getAttribute(VARDORVIS_PROGRESS)))
+      && ["ixrOLP", "e7yS62"].includes(stepId)) {
+      if (![I.UNFINISHED_SERUM, I.UNFINISHED_SERUM_2, I.STRANGLER_SERUM].some(id => has(p, id))) {
+        if (p.getInventory().getFreeSlots() < 1) {
+          event.handled = true;
+          event.end = true;
+          p.sendMessage("You need inventory space for Kasonde's unfinished serum.");
+          return;
+        }
+        p.getInventory().adds(I.UNFINISHED_SERUM, 1);
+      }
+      p.setAttribute(VARDORVIS_PROGRESS, 14);
+    }
     if (stage(p) === S.VARDORVIS && Number(p.getAttribute(VARDORVIS_PROGRESS)) === 6 && stepId === "nJRAbJ") {
       p.setAttribute(STRANGLEWOOD_CITY_ENTERED, true);
       // shortcut: adjacent house landing is inferred from the cache, calibrate against a live cutscene capture.

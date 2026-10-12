@@ -1824,7 +1824,7 @@ test('Desert Treasure II makes the Strangler serum with the two real ingredients
 });
 
 test('Desert Treasure II requires both Stranglewood ingredients and defeating temple Strangled before Kasonde gives serum', () => {
-  const { api: base } = mockApi();
+  const { api: base, handlers } = mockApi();
   const objectHooks = [], deathHooks = [], interactions = [];
   class TestInstance {
     constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
@@ -1864,11 +1864,13 @@ test('Desert Treasure II requires both Stranglewood ingredients and defeating te
     const { ItemIdentifiers: I, ObjectIdentifiers: O, NpcIdentifiers: N } = core;
     const attrs = new Map([['desert-treasure-ii:vardorvis-progress', 11]]);
     const counts = new Map();
+    let freeSlots = 28;
     const p = {
       getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
       getUsername: () => 'dt2-temple-test', moveTo(location) { this.location = location; },
       getInventory: () => ({
         getAmount: (id) => counts.get(id) ?? 0,
+        getFreeSlots: () => freeSlots,
         deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
         adds: (id, amount) => counts.set(id, (counts.get(id) ?? 0) + amount),
       }),
@@ -1893,8 +1895,32 @@ test('Desert Treasure II requires both Stranglewood ingredients and defeating te
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 13);
     assert.ok(area.entities.some((npc) => npc.getRealId?.() === N.KASONDE), 'Kasonde appears after the attackers are defeated');
     interactions.find((entry) => entry.name === 'Kasonde').options['Talk-to']({ player: p, npcId: N.KASONDE });
+    assert.equal(counts.get(I.UNFINISHED_SERUM), undefined, 'the serum is handed over during dialogue');
+    const giveSerum = stepId => handlers.custom.get('npc-dialogue:action')[0]({player:p,stepId});
+    freeSlots = 0;
+    giveSerum('ixrOLP');
+    assert.equal(counts.get(I.UNFINISHED_SERUM), undefined);
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),13,'a full bag cannot lose the reward');
+    freeSlots = 1;
+    giveSerum('ixrOLP');
     assert.equal(counts.get(I.UNFINISHED_SERUM), 1);
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 14);
+    counts.delete(I.UNFINISHED_SERUM);
+    interactions.find(entry=>entry.name==='Kasonde').options['Talk-to']({player:p,npcId:N.KASONDE});
+    giveSerum('e7yS62');
+    giveSerum('e7yS62');
+    assert.equal(counts.get(I.UNFINISHED_SERUM),1,'a lost serum is recovered once');
+    interact(O.KORBAL_HERBS,1155,3447);
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),14,'gathering again cannot undo later progress');
+    attrs.set('desert-treasure-ii:vardorvis-progress',21);
+    freeSlots=0;
+    interact(49496,1196,3411);
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),21);
+    assert.equal(counts.get(I.VARDORVIS_MEDALLION),undefined);
+    freeSlots=1;
+    interact(49496,1196,3411);
+    assert.equal(counts.get(I.VARDORVIS_MEDALLION),1);
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),22);
   } finally {
     runtime.startTranscript = startTranscript;
   }
