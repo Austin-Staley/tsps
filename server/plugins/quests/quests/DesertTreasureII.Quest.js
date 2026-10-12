@@ -25,7 +25,8 @@ module.exports = function registerDesertTreasureII(api) {
       return 76;
     }
     if (stage === S.MACHINE) {
-      if (attr(BANIKAN_LEFT)) return 38;
+      if (attr(BANIKAN_LEFT)) return 40;
+      if (Number(attr(SEARCHED_NAMES)) === 15) return 38;
       if (attr(GOLEM_SOLVED)) return 36;
       if (attr(CELLS_INSERTED)) return 32;
       if (attr(GOLEM_INSPECTED)) return 30;
@@ -54,6 +55,7 @@ module.exports = function registerDesertTreasureII(api) {
   const STATUES = new Map([[49499, 0], [49501, 1], [49503, 2], [49505, 3]]);
   const PREREQUISITES = ["desert_treasure_i", "secrets_of_the_north", "enakhras_lament", "temple_of_the_eye", "the_garden_of_death", "below_ice_mountain"];
   const CELLS_INSERTED = "desert-treasure-ii:cells-inserted";
+  const PUZZLE_OPEN = "desert-treasure-ii:puzzle-open";
   const CELL_POSITIONS = "desert-treasure-ii:cell-positions";
   const GOLEM_SOLVED = "desert-treasure-ii:golem-solved";
   const GOLEM_INSPECTED = "desert-treasure-ii:golem-inspected";
@@ -376,6 +378,17 @@ module.exports = function registerDesertTreasureII(api) {
       if (attacker?.__dt2Guardian) return false;
       if (target?.__dt2Guardian) return attacker?.isPlayer?.() && attacker.getUsername() === this.owner;
       return null;
+    }
+    canCastOnNpc(player, npc, spell) {
+      if (!npc?.__dt2Totem) return null;
+      if (player.getUsername() !== this.owner || npc.getOwner?.() !== player || !this.entities.includes(npc)
+        || stage(player) < S.MACHINE || stage(player) >= S.VARDORVIS
+        || !player.getAttribute(GOLEM_INSPECTED) || !player.getAttribute(ALTAR_INSPECTED)) return false;
+      if (!totemSpellIds.get(npc.__dt2Totem)?.has(spell?.spellId?.())) {
+        player.sendMessage(`That totem requires a ${npc.__dt2Totem} burst spell or higher.`);
+        return false;
+      }
+      return true;
     }
     process(actor) {
       if (actor?.isPlayer?.() && actor.getUsername() === this.owner) processGuardian(this, actor.getAsPlayer());
@@ -2428,6 +2441,7 @@ module.exports = function registerDesertTreasureII(api) {
     p.setAttribute(SCAR_RIFT_LIVE, false);
     p.setAttribute(SCAR_GROWTH_LIVE, false);
     p.setAttribute(ATTR, null);
+    p.setAttribute(PUZZLE_OPEN, false);
     spawned.delete(p);
   }
 
@@ -2701,7 +2715,7 @@ module.exports = function registerDesertTreasureII(api) {
     }
     syncCellPositions(p, positions);
     p.setAttribute(CELLS_INSERTED, true);
-    p.setAttribute("desert-treasure-ii:puzzle-open", true);
+    p.setAttribute(PUZZLE_OPEN, true);
     p.getPacketSender().sendInterface(PUZZLE_GROUP);
   }
   function wrongGolemSolution(p) {
@@ -2711,7 +2725,9 @@ module.exports = function registerDesertTreasureII(api) {
   }
   function onWidgetAction(event) {
     const p = event?.player, packet = event?.packet;
-    if (!packet || stage(p) < S.MACHINE || stage(p) >= S.VARDORVIS || !p.getAttribute(CELLS_INSERTED)) return;
+    const area = p?.getAttribute(ATTR_WAR_ROOM);
+    if (!packet || stage(p) < S.MACHINE || stage(p) >= S.VARDORVIS || !p.getAttribute(CELLS_INSERTED)
+      || !p.getAttribute(PUZZLE_OPEN) || !area || area.isDestroyed?.() || p.getPrivateArea?.() !== area) return;
     if (packet.type === "widget_drag") {
       if ((packet.sourceWidgetId >>> 16) !== PUZZLE_GROUP || (packet.targetWidgetId >>> 16) !== PUZZLE_GROUP) return;
       const positions = cellPositions(p);
@@ -2730,7 +2746,7 @@ module.exports = function registerDesertTreasureII(api) {
     const positions = cellPositions(p);
     if (!positions || !CELL_SOLUTION.every((value, index) => positions[index] === value)) return wrongGolemSolution(p);
     p.setAttribute(GOLEM_SOLVED, true);
-    p.setAttribute("desert-treasure-ii:puzzle-open", false);
+    p.setAttribute(PUZZLE_OPEN, false);
     p.getPacketSender().sendInterfaceRemoval();
     p.sendMessage("The golem powers up. It asks you to specify a search term.");
     promptGolemSearch(p);
@@ -3756,7 +3772,7 @@ module.exports = function registerDesertTreasureII(api) {
       enterWarRoom(p);
       return true;
     }
-    if (s >= S.MACHINE && s < S.VARDORVIS && objectId === O.RUBBLE_74
+    if (s >= S.MACHINE && objectId === O.RUBBLE_74
       && roomTile?.x === 2783 && roomTile?.y === 6425) {
       leaveWarRoom(p);
       return true;
@@ -4098,10 +4114,12 @@ module.exports = function registerDesertTreasureII(api) {
     if (stage(p) < S.MACHINE || stage(p) >= S.VARDORVIS) return;
     const roomTile = warRoomSourceTile(p, location);
     if ([O.GOLEM, O.GOLEM_2, WAR_ROOM_GOLEM_LOC].includes(objectId) && roomTile?.x === 2782 && roomTile?.y === 6443 && itemId === I.UNCHARGED_CELL_2) {
+      event.handled = true;
       talk(p, N.GOLEM_3, "familiar-faces-inspecting-the-golem-machine-using-uncharged-cells-on-the-golem-machine");
       return true;
     }
     if ([O.ALTAR_93, O.ALTAR_94, WAR_ROOM_ALTAR_LOC].includes(objectId) && roomTile?.x === 2772 && roomTile?.y === 6441 && itemId === I.UNCHARGED_CELL_2) {
+      event.handled = true;
       if (!has(p, I.UNCHARGED_CELL_2)) return;
       if (!p.getAttribute(TOTEMS_CHARGED)) return p.sendMessage("Activate all four elemental totems before charging the cells.");
       const inventory = p.getInventory();
@@ -4112,6 +4130,7 @@ module.exports = function registerDesertTreasureII(api) {
       return;
     }
     if ([O.GOLEM, O.GOLEM_2, WAR_ROOM_GOLEM_LOC].includes(objectId) && roomTile?.x === 2782 && roomTile?.y === 6443 && itemId === I.CHARGED_CELL) {
+      event.handled = true;
       if (!p.getAttribute(TOTEMS_CHARGED)) return p.sendMessage("Activate all four elemental totems before powering the machine.");
       if (p.getAttribute(CELLS_INSERTED)) return openGolemPuzzle(p);
       if (p.getInventory().getAmount(I.CHARGED_CELL) < 8) return p.sendMessage("You need all eight charged cells to power the golem.");

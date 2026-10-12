@@ -1399,12 +1399,13 @@ test('Desert Treasure II requires and solves the real eight-cell golem grid', ()
     const { ItemIdentifiers: I, ObjectIdentifiers: O } = api.core;
     const attrs = new Map();
     const counts = new Map();
-    let freeSlots = 0;
+    let freeSlots = 0, inRoom = true;
     const packetCalls = [];
     const packet = new Proxy({}, { get: (_target, name) => (...args) => packetCalls.push([name, ...args]) });
     const messages = [];
     const damages = [];
     const player = {
+      getPrivateArea: () => inRoom ? attrs.get('desert-treasure-ii:war-room') : null,
       getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
       getInventory: () => ({
         getAmount: (id) => counts.get(id) ?? 0,
@@ -1437,7 +1438,7 @@ test('Desert Treasure II requires and solves the real eight-cell golem grid', ()
     assert.equal(counts.get(I.UNCHARGED_CELL_2), 8, 'destroyed cells can be recovered from the crate');
     const altar = { x: 8204, y: 1617, z: 0 };
     const golem = { x: 8214, y: 1619, z: 0 };
-    const apply = (itemId, objectId, location) => itemOnObject[0]({ player, itemId, objectId, location });
+    const apply = (itemId, objectId, location) => {const event={player,itemId,objectId,location,handled:false};itemOnObject[0](event);assert.equal(event.handled,true, "cell interactions must suppress the generic Nothing interesting happens message");};
     apply(I.UNCHARGED_CELL_2, O.ALTAR_93, altar);
     assert.equal(counts.get(I.UNCHARGED_CELL_2), 8, 'the altar needs the four activated totems');
     attrs.set('desert-treasure-ii:totems-charged', true);
@@ -1462,6 +1463,14 @@ test('Desert Treasure II requires and solves the real eight-cell golem grid', ()
     const solution = [16, 10, 27, 33, 52, 5, 62, 47];
     const groupWidget = (838 << 16) | 32;
     const wrongPowerOn = { player, packet: { type: 'widget_action', groupId: 838, childId: 4, option: 'Power-on' }, handled: false };
+    attrs.set('desert-treasure-ii:puzzle-open', false);
+    widgetActions[0](wrongPowerOn);
+    assert.equal(wrongPowerOn.handled, false, 'closed puzzle packets cannot advance progress');
+    attrs.set('desert-treasure-ii:puzzle-open', true);
+    inRoom = false;
+    widgetActions[0](wrongPowerOn);
+    assert.equal(wrongPowerOn.handled, false, 'leaving the owned room invalidates puzzle input');
+    inRoom = true;
     widgetActions[0](wrongPowerOn);
     assert.equal(wrongPowerOn.handled, true);
     assert.equal(damages.length, 1, 'a wrong arrangement shocks the player instead of advancing the quest');
@@ -1893,6 +1902,9 @@ test('Desert Treasure II requires the four matching ancient combat spells to cha
       assert.equal(area.entities.includes(target), true);
       assert.equal(attrs.get('desert-treasure-ii:golem-inspected'), true);
       assert.equal(attrs.get('desert-treasure-ii:altar-inspected'), true);
+      assert.equal(area.canCastOnNpc(p, target, spell), true, 'the actionless NPC accepts its matching spell');
+      assert.equal(area.canCastOnNpc(p, target, spells.FIRE_STRIKE), false, 'ordinary spells cannot charge it');
+      assert.equal(area.canCastOnNpc({getUsername:()=> 'other-player'},target,spell),false, 'only the owner can charge the totem');
       p.isPlayer = () => true;
       p.getCombat = () => ({ getSelectedSpell: () => spell });
       const attacker = p;
@@ -1920,6 +1932,12 @@ test('Desert Treasure II requires the four matching ancient combat spells to cha
     const restored = attrs.get('desert-treasure-ii:war-room').entities.filter(npc=>npc.__dt2Totem);
     assert.equal(restored.length,4);
     assert.ok(restored.every(npc=>npc.__dt2TotemCharged && npc.transform !== -1), 're-entering restores charged totems');
+    quest.setStage(p,7);
+    const finalArea = attrs.get('desert-treasure-ii:war-room');
+    assert.equal(objectHooks[0]({player:p,objectId:O.RUBBLE_74,location:finalArea.tile(23,1,0)}),true,
+      'learning Frostenhorn must not lock the installation exit');
+    assert.equal(attrs.get('desert-treasure-ii:war-room'),null);
+    assert.deepEqual([p.location.getX(),p.location.getY(),p.location.getZ()],[3411,9813,0]);
   } finally {
     runtime.startTranscript = startTranscript;
   }
@@ -6677,6 +6695,12 @@ test('DT2 keeps internal stages separate from native progress and the cache comp
   attrs.set('desert-treasure-ii:statues', 31);
   handlers.playerProcess[0]({ player });
   assert.deepEqual(sent.at(-1), [14862,8]);
+  attrs.set('desert-treasure-ii:golem-solved', true);
+  assert.equal(quest.varbitValue(6,player),36);
+  attrs.set('desert-treasure-ii:searched-names',15);
+  assert.equal(quest.varbitValue(6,player),38);
+  attrs.set('desert-treasure-ii:banikan-left',true);
+  assert.equal(quest.varbitValue(6,player),40);
 });
 
 test('DT2 ancient lamps offer only combat skills, require level 60, and consume once after 100,000 XP', () => {
