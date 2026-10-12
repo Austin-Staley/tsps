@@ -1672,12 +1672,16 @@ module.exports = function registerTheBloodMoonRises(api) {
     } else if (name === "anvil" && prepObjectAt(event, 3179, 7842, 1) && inventory.contains(PREP.enhancedSickle) && inventory.contains(PREP.marks) &&
       inventory.contains(PREP.blisterwoodFlail) && inventory.contains(PREP.hammer) &&
       player.getSkillManager().getMaxLevel(Skill.SMITHING) >= 72) {
-      changed = replaceItems(player, [PREP.enhancedSickle, PREP.marks, PREP.blisterwoodFlail, PREP.hammer],
-        [PREP.enhancedSickle, PREP.marks, PREP.blisterwoodFlail], [[PREP.flail, 1]]);
-      if (changed) {
-        player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), flail: true });
-        variant = "hallowed-preparations-creating-the-hallowed-flail";
-      }
+      event.handled = true;
+      api.sendMultiChatboxPrompt(player, "Upgrade your flail?", "Yes.", () => {
+        if (stage(player) !== STAGE.PREPARATIONS || player.getSkillManager().getMaxLevel(Skill.SMITHING) < 72) return;
+        if (replaceItems(player, [PREP.enhancedSickle, PREP.marks, PREP.blisterwoodFlail, PREP.hammer],
+          [PREP.enhancedSickle, PREP.marks, PREP.blisterwoodFlail], [[PREP.flail, 1]])) {
+          player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), flail: true });
+          player.sendMessage("You upgrade your flail by swapping out the sickle and shortening the shaft before enhancing it with pure silvthrill.");
+        }
+      }, "No.", () => {});
+      return;
     }
     if (!changed) return;
     event.handled = true;

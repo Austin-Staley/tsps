@@ -622,7 +622,8 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
   use(ids.DIAMOND_SICKLE_B_, ids.ENCHANT_DIAMOND);
   use(ids.ENCHANTED_DIAMOND_SICKLE_B_, ids.BLISTERWOOD_LOGS); choose(1);
   inventory.adds(ids.BLISTERWOOD_FLAIL, 1);
-  interact('Anvil', 3179, 7842);
+  interact('Anvil', 3179, 7842); choose(2); assert.equal(inventory.contains(ids.BLISTERWOOD_FLAIL), true);
+  interact('Anvil', 3179, 7842); choose(1);
   assert.equal(inventory.contains(ids.HALLOWED_FLAIL), true, 'the anvil consumes the sickle/marks/flail and makes a hallowed flail');
   interact('Crate', 3177, 7843);
   use(ids.BLISTERWOOD_LOGS, ids.KNIFE);
