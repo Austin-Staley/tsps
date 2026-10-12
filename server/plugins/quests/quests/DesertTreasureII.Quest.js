@@ -3,6 +3,10 @@ module.exports = function registerDesertTreasureII(api) {
   const { Skill, Item, MagicSpellbook, ItemIdentifiers: I, NpcIdentifiers: N, ObjectIdentifiers: O } = api.core;
   const { registerQuest, startTranscript } = require("../QuestRuntime");
   const PAGE = "Desert Treasure II - The Fallen Empire";
+  const { findBestPickaxe } = require("../../skills/Mining.plugin");
+  const WAR_ROOM_GOLEM_LOC = 49511; // Cache multiloc bases are the actual map objects.
+  const WAR_ROOM_ALTAR_LOC = 49512;
+  const DIGSITE_CREVICE_LOC = 49510; // Cache dt2_digsite_crevice multiloc has no generated constant.
   const S = { STARTED: 1, VAULT: 2, DIG: 3, ROCKS: 4, GUARDIAN: 5, MACHINE: 6, VARDORVIS: 7, LEVIATHAN: 8, SUCELLUS: 9, WHISPERER: 10, FINALE: 11, COMPLETE: 12 };
   // Cache quest dbrow 2343, column 19 completes at 118; QuestHelper records the intervening milestones.
   function nativeProgress(stage, player) {
@@ -24,7 +28,8 @@ module.exports = function registerDesertTreasureII(api) {
       if (attr(BANIKAN_LEFT)) return 38;
       if (attr(GOLEM_SOLVED)) return 36;
       if (attr(CELLS_INSERTED)) return 32;
-      if (attr(GOLEM_INSPECTED)) return 28;
+      if (attr(GOLEM_INSPECTED)) return 30;
+      if (attr(BANIKAN_BRIEFED)) return 28;
       return 24;
     }
     if (stage === S.STARTED) {
@@ -54,6 +59,8 @@ module.exports = function registerDesertTreasureII(api) {
   const GOLEM_INSPECTED = "desert-treasure-ii:golem-inspected";
   const ALTAR_INSPECTED = "desert-treasure-ii:altar-inspected";
   const TOTEMS_CHARGED = "desert-treasure-ii:totems-charged";
+  const TOTEM_MASK = "desert-treasure-ii:totem-mask";
+  const BANIKAN_BRIEFED = "desert-treasure-ii:banikan-briefed";
   const SEARCHED_NAMES = "desert-treasure-ii:searched-names";
   const BANIKAN_LEFT = "desert-treasure-ii:banikan-left";
   const VARDORVIS_PROGRESS = "desert-treasure-ii:vardorvis-progress";
@@ -269,10 +276,10 @@ module.exports = function registerDesertTreasureII(api) {
   }
   const ASGARNIA_SMITH_VAULT_INITIAL = 12401;
   const TOTEMS = [
-    { kind: "blood", inactive: 12343, active: 12344, x: 2775, y: 6445, spells: ["BLOOD_BURST", "BLOOD_BLITZ", "BLOOD_BARRAGE"] },
-    { kind: "shadow", inactive: 12341, active: 12342, x: 2771, y: 6445, spells: ["SHADOW_BURST", "SHADOW_BLITZ", "SHADOW_BARRAGE"] },
-    { kind: "smoke", inactive: 12339, active: 12340, x: 2771, y: 6439, spells: ["SMOKE_BURST", "SMOKE_BLITZ", "SMOKE_BARRAGE"] },
-    { kind: "ice", inactive: 12345, active: 12346, x: 2775, y: 6439, spells: ["ICE_BURST", "ICE_BLITZ", "ICE_BARRAGE"] },
+    { kind: "blood", mask: 4, inactive: 12343, active: 12344, x: 2775, y: 6445, spells: ["BLOOD_BURST", "BLOOD_BLITZ", "BLOOD_BARRAGE"] },
+    { kind: "shadow", mask: 2, inactive: 12341, active: 12342, x: 2771, y: 6445, spells: ["SHADOW_BURST", "SHADOW_BLITZ", "SHADOW_BARRAGE"] },
+    { kind: "smoke", mask: 1, inactive: 12339, active: 12340, x: 2771, y: 6439, spells: ["SMOKE_BURST", "SMOKE_BLITZ", "SMOKE_BARRAGE"] },
+    { kind: "ice", mask: 8, inactive: 12345, active: 12346, x: 2775, y: 6439, spells: ["ICE_BURST", "ICE_BLITZ", "ICE_BARRAGE"] },
   ];
   const SCAR_PATHS = [
     { npc: N.CEREBRAL_PATHFINDER, from: "north", points: [[2195, 6450], [2195, 6444], [2197, 6444]] },
@@ -365,6 +372,14 @@ module.exports = function registerDesertTreasureII(api) {
       }
     }
     getName() { return "Ancient Vault war room (Desert Treasure II)"; }
+    canAttack(attacker, target) {
+      if (attacker?.__dt2Guardian) return false;
+      if (target?.__dt2Guardian) return attacker?.isPlayer?.() && attacker.getUsername() === this.owner;
+      return null;
+    }
+    process(actor) {
+      if (actor?.isPlayer?.() && actor.getUsername() === this.owner) processGuardian(this, actor.getAsPlayer());
+    }
     allowSummonPet() { return false; }
     destroy() {
       if (this.isDestroyed()) return;
@@ -947,29 +962,131 @@ module.exports = function registerDesertTreasureII(api) {
     p.moveTo(area.tile(23, 7, 0));
     let owned = spawned.get(p);
     if (!owned) spawned.set(p, owned = {});
-    if (!owned.guardian) {
+    if (stage(p) === S.GUARDIAN && !owned.guardian) {
       const guardian = api.core.NPC.create(N.ANCIENT_GUARDIAN_3, area.tile(23, 7, 0));
       guardian.setOwner?.(p);
       guardian.setOwnerOnly?.(true);
       guardian.__skipDefaultRespawn = true;
+      guardian.setScriptedMovement?.(true);
+      guardian.setMaxHitpoints?.(200);
+      guardian.setHitpoints?.(200);
+      const cycle = api.core.World.getProcessCycle?.() ?? 0;
+      guardian.__dt2Guardian = { shielded: true, bodyHp: 100, lastAttack: cycle, nextAttack: cycle + 5, attacks: 0, rocks: [] };
       area.add(guardian);
       api.core.World.getAddNPCQueue().push(guardian);
       owned.guardian = guardian;
       p.setAttribute(ATTR, guardian);
     }
+    if (stage(p) === S.MACHINE) {
+      spawnTotems(p, area);
+      spawnWarRoomBanikan(p, area);
+    }
     return area;
+  }
+
+  function modifyGuardianHit({ npc, hit }) {
+    const state = npc?.__dt2Guardian;
+    const player = hit.getAttacker?.();
+    if (!state || player !== npc.getOwner?.()) return;
+    const type = hit.getCombatMethod?.().type();
+    const melee = type === api.core.CombatType.MELEE;
+    const allowed = melee || (type === api.core.CombatType.MAGIC && player.getSpellbook() === MagicSpellbook.ANCIENT);
+    if (state.shielded && !allowed) {
+      for (const damage of hit.getHits()) damage.setDamage(0);
+      hit.updateTotalDamage();
+      return;
+    }
+    if (allowed) state.lastAttack = api.core.World.getProcessCycle();
+    if (hit.getTotalDamage() <= 0) return;
+    if (!state.shielded) return;
+    if (hit.getTotalDamage() < npc.getHitpoints() - state.bodyHp) return;
+    // Cache shielded HP includes the retained body: shield overkill must not kill it.
+    for (const damage of hit.getHits()) damage.setDamage(0);
+    hit.updateTotalDamage();
+    state.shielded = false;
+    npc.setNpcTransformationId(N.ANCIENT_GUARDIAN_4);
+    npc.setMaxHitpoints(100);
+    npc.setHitpoints(state.bodyHp);
+    player.sendMessage("The Guardian's shield crumbles. Keep attacking before it reforms!");
+  }
+
+  function processGuardian(area, player) {
+    const boss = spawned.get(player)?.guardian;
+    const state = boss?.__dt2Guardian;
+    if (!state || boss.getHitpoints() <= 0 || player.getHitpoints() <= 0) return;
+    const cycle = api.core.World.getProcessCycle();
+    if (state.lastCycle === cycle) return;
+    state.lastCycle = cycle;
+    boss.getCombat().getLastAttack().reset();
+    const here = player.getLocation();
+    for (const rock of state.rocks.filter(rock => rock.due <= cycle)) {
+      if (here.getX() === rock.x && here.getY() === rock.y) {
+        player.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(15 + Math.floor(Math.random() * 11), api.core.HitMask.RED)]);
+      }
+    }
+    state.rocks = state.rocks.filter(rock => rock.due > cycle);
+    // shortcut: shield recharge and the three-tick rock warning need live OSRS timing calibration.
+    if (cycle - state.lastAttack > 4) {
+      if (!state.shielded) {
+        state.bodyHp = boss.getHitpoints();
+        state.shielded = true;
+        boss.setNpcTransformationId(N.ANCIENT_GUARDIAN_3);
+        boss.setMaxHitpoints(200);
+        boss.setHitpoints(state.bodyHp + 20);
+        player.sendMessage("The Guardian's shield reforms.");
+      } else boss.setHitpoints(Math.min(state.bodyHp + 100, boss.getHitpoints() + 20));
+    }
+    if (boss.calculateDistance(player) > 1) {
+      if (boss.getMovementQueue().size() === 0) api.core.PathFinder.calculateEntityRoute(boss, player);
+      return;
+    }
+    if (cycle < state.nextAttack) return;
+    state.nextAttack = cycle + 5;
+    state.attacks++;
+    if (state.attacks % 5 === 0) {
+      boss.performAnimation(new api.core.Animation(10403)); // Cache guardian ground smash.
+      for (const [dx,dy] of [[0,0],[-2,0],[2,0]]) {
+        const tile = new api.core.Location(here.getX()+dx, here.getY()+dy, here.getZ());
+        player.getPacketSender().sendGraphic(new api.core.Graphic(2529), tile); // Cache dt2_guardian_rock_fall.
+        state.rocks.push({ x:tile.getX(), y:tile.getY(), due:cycle+3 });
+      }
+      player.sendMessage("Boulders fall from above. Move away from the shadows!");
+    } else {
+      boss.performAnimation(new api.core.Animation(10402)); // Cache guardian melee attack.
+      if (player.getPacketSender().getVarbit(4118) !== 1) {
+        player.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(Math.floor(Math.random()*13), api.core.HitMask.RED)]);
+      }
+    }
+  }
+
+  function spawnWarRoomBanikan(player, area) {
+    const owned = spawned.get(player) ?? {};
+    if (owned.banikan && area.entities.includes(owned.banikan)) return owned.banikan;
+    const banikan = api.core.NPC.create(N.DR_BANIKAN, area.tile(23, 7, 0));
+    banikan.setOwner?.(player);
+    banikan.setOwnerOnly?.(true);
+    banikan.__skipDefaultRespawn = true;
+    area.add(banikan);
+    api.core.World.getAddNPCQueue().push(banikan);
+    owned.banikan = banikan;
+    spawned.set(player, owned);
+    return banikan;
   }
 
   function spawnTotems(player, area) {
     let owned = spawned.get(player);
     if (!owned) spawned.set(player, owned = {});
-    if (owned.totems) return owned.totems;
+    if (owned.totems?.every(npc => area.entities.includes(npc))) return owned.totems;
+    const mask = Number(player.getAttribute(TOTEM_MASK)) || (player.getAttribute(TOTEMS_CHARGED) ? 15 : 0);
+    player.getPacketSender().sendVarbit(15116, mask);
     owned.totems = TOTEMS.map((totem) => {
       const npc = api.core.NPC.create(totem.inactive, area.tile(totem.x - 2760, totem.y - 6424, 0));
       npc.setOwner?.(player);
       npc.setOwnerOnly?.(true);
       npc.__skipDefaultRespawn = true;
       npc.__dt2Totem = totem.kind;
+      npc.__dt2TotemCharged = Boolean(mask & totem.mask);
+      if (npc.__dt2TotemCharged) npc.setNpcTransformationId?.(totem.active);
       area.add(npc);
       api.core.World.getAddNPCQueue().push(npc);
       return npc;
@@ -992,6 +1109,9 @@ module.exports = function registerDesertTreasureII(api) {
       return;
     }
     if (target.__dt2TotemCharged) return;
+    const mask = (Number(player.getAttribute(TOTEM_MASK)) || 0) | totem.mask;
+    player.setAttribute(TOTEM_MASK, mask);
+    player.getPacketSender().sendVarbit(15116, mask);
     target.__dt2TotemCharged = true;
     target.setNpcTransformationId?.(totem.active);
     player.sendMessage(`The ${kind} totem ignites with ancient power.`);
@@ -2041,6 +2161,7 @@ module.exports = function registerDesertTreasureII(api) {
 
   function handleLogin({ player: p }) {
     syncNativeProgress(p);
+    p.getPacketSender().sendVarbit(15116, Number(p.getAttribute(TOTEM_MASK)) || (p.getAttribute(TOTEMS_CHARGED) ? 15 : 0));
     if (stage(p) === S.WHISPERER) setLassar(p, p.getAttribute(LASSAR) ?? {});
     if (stage(p) === S.FINALE && p.getAttribute("desert-treasure-ii:final-cutscene-started")
       && !p.getAttribute(FINAL_WIGHTS_COMPLETE)) {
@@ -2291,6 +2412,7 @@ module.exports = function registerDesertTreasureII(api) {
     if (!p) return;
     const current = p.getPrivateArea?.();
     const returnToVaultEntrance = current && [p.getAttribute(ATTR_VAULT_AREA), p.getAttribute(FINAL_ROOM)].includes(current);
+    const returnToDigsite = current && current === p.getAttribute(ATTR_WAR_ROOM);
     for (const key of [ATTR_VAULT_AREA, FINAL_ROOM, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO, ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA, SUCELLUS_AREA]) {
       const area = p.getAttribute(key);
       if (area && !area.isDestroyed?.()) {
@@ -2301,9 +2423,11 @@ module.exports = function registerDesertTreasureII(api) {
       p.setAttribute(key, null);
     }
     if (returnToVaultEntrance) p.moveTo(new api.core.Location(3510, 2971, 0));
+    else if (returnToDigsite) p.moveTo(new api.core.Location(3411, 9813, 0));
     p.setAttribute(SCAR_PATH_COMPLETE, false);
     p.setAttribute(SCAR_RIFT_LIVE, false);
     p.setAttribute(SCAR_GROWTH_LIVE, false);
+    p.setAttribute(ATTR, null);
     spawned.delete(p);
   }
 
@@ -2512,7 +2636,7 @@ module.exports = function registerDesertTreasureII(api) {
     if (next) setStage(p, next);
   }
   function talkSmith({ player: p, npcId }) {
-    if (stage(p) < S.STARTED) return p.sendMessage("Asgarnia Smith is studying the vault.");
+    if (![S.STARTED, S.VAULT, S.FINALE].includes(stage(p))) return false;
     if (stage(p) === S.STARTED && !p.getAttribute(ATTR_SMITH_INTRO)) {
       p.setAttribute(ATTR_SMITH_INTRO, true);
       talk(p, npcId, "familiar-faces-talking-to-asgarnia-smith");
@@ -2541,13 +2665,18 @@ module.exports = function registerDesertTreasureII(api) {
     talk(p, npcId, variant, stage(p) === S.STARTED ? S.VAULT : undefined);
   }
   function talkTerry({ player: p, npcId }) {
-    if (stage(p) < S.VAULT) return p.sendMessage("Terry has no reason to discuss the vault yet.");
+    if (stage(p) !== S.VAULT) return false;
     talk(p, npcId, "familiar-faces-talking-to-terry-balando", S.DIG);
   }
   function talkBanikan({ player: p, npcId }) {
-    if (stage(p) < S.DIG) return p.sendMessage("Dr Banikan is busy with the excavation.");
+    if (stage(p) < S.DIG || stage(p) >= S.VARDORVIS || npcId !== N.DR_BANIKAN) return false;
     if (stage(p) < S.ROCKS) return talk(p, npcId, "familiar-faces-talking-to-dr-banikan", S.ROCKS);
-    if (stage(p) < S.MACHINE) return talk(p, npcId, "familiar-faces-talking-to-dr-banikan-after-clearing-rocks", S.MACHINE);
+    if (stage(p) === S.ROCKS) return talk(p, npcId, "familiar-faces-talking-to-dr-banikan");
+    if (stage(p) === S.GUARDIAN) return p.sendMessage("Defeat the Ancient Guardian in the military installation first.");
+    if (!p.getAttribute(BANIKAN_BRIEFED)) {
+      p.setAttribute(BANIKAN_BRIEFED, true);
+      return talk(p, npcId, "familiar-faces-entering-the-military-installation");
+    }
     if (!p.getAttribute(GOLEM_SOLVED)) return talk(p, npcId, "familiar-faces-talking-to-dr-banikan-before-powering-up-the-golem-machine");
     if ((Number(p.getAttribute(SEARCHED_NAMES)) || 0) !== 15) {
       return talk(p, npcId, "familiar-faces-powering-up-the-golem-machine-talking-to-dr-banikan-before-finishing-searching-for-all-of-the-names");
@@ -3482,8 +3611,30 @@ module.exports = function registerDesertTreasureII(api) {
       leaveVault(p);
       return true;
     }
-    if (s >= S.ROCKS && s < S.GUARDIAN && [O.ROCKS, O.ROCKS_2, O.ROCKS_3, O.ROCKSLIDE].includes(objectId)) {
-      if (!has(p, I.BRONZE_PICKAXE) && !has(p, I.IRON_PICKAXE)) return p.sendMessage("You need a pickaxe to clear the rocks.");
+    if (objectId === O.WINCH_14 && location.x === 3384 && location.y === 3418 && location.z === 0 && option === "operate") {
+      if (s < S.DIG) return false;
+      p.moveTo(new api.core.Location(3404, 9804, 0));
+      p.sendMessage("You descend the winch into the excavation.");
+      return true;
+    }
+    if (objectId === O.CRATE_301 && location.x === 3414 && location.y === 9819 && location.z === 0 && option === "search") {
+      if (s < S.DIG) return false;
+      if (findBestPickaxe(p)) p.sendMessage("You already have a pickaxe you can use.");
+      else if (p.getInventory().getFreeSlots() < 1) p.sendMessage("You need a free inventory slot for the pickaxe.");
+      else {
+        p.getInventory().adds(I.BRONZE_PICKAXE, 1);
+        p.sendMessage("You take a bronze pickaxe from the crate.");
+      }
+      return true;
+    }
+    if (s === S.ROCKS && (visibleId === O.ROCKS_141 || objectId === DIGSITE_CREVICE_LOC)
+      && location.x === 3411 && location.y === 9811 && location.z === 0 && option === "mine") {
+      const pickaxe = findBestPickaxe(p);
+      if (!pickaxe) {
+        p.sendMessage("You need a pickaxe you can use to clear the rocks.");
+        return true;
+      }
+      p.performAnimation?.(pickaxe.animation);
       p.sendMessage("You mine away the rocks and uncover a passage into the installation.");
       setStage(p, S.GUARDIAN);
       return true;
@@ -3600,7 +3751,7 @@ module.exports = function registerDesertTreasureII(api) {
       p.sendMessage("You row back from the Stranglewood.");
       return true;
     }
-    if (s === S.GUARDIAN && objectId === O.CREVICE_45) {
+    if (s >= S.GUARDIAN && s <= S.MACHINE && (visibleId === O.CREVICE_45 || objectId === DIGSITE_CREVICE_LOC)) {
       if (location.x !== 3411 || location.y !== 9811) return false;
       enterWarRoom(p);
       return true;
@@ -3612,20 +3763,22 @@ module.exports = function registerDesertTreasureII(api) {
     }
     if (s >= S.MACHINE && s < S.VARDORVIS && objectId === O.CRATE_302
       && roomTile?.x === 2780 && roomTile?.y === 6440) {
-      if (!p.getAttribute(TOTEMS_CHARGED)) return p.sendMessage("Activate all four elemental totems before searching the crate.");
-      if (p.getAttribute("desert-treasure-ii:cells-collected")) return p.sendMessage("The crate is empty.");
-      p.setAttribute("desert-treasure-ii:cells-collected", true);
-      p.getInventory().adds(I.UNCHARGED_CELL_2, 8);
-      p.sendMessage("You search the crate and take eight uncharged cells.");
+      const inventory = p.getInventory();
+      const missing = 8 - inventory.getAmount(I.UNCHARGED_CELL_2) - inventory.getAmount(I.CHARGED_CELL);
+      if (p.getAttribute(CELLS_INSERTED) || missing <= 0) return p.sendMessage("You already have the cells needed for the machine.");
+      if (!inventory.getAmount(I.UNCHARGED_CELL_2) && inventory.getFreeSlots() < 1) return p.sendMessage("You need a free inventory slot for the cells.");
+      inventory.adds(I.UNCHARGED_CELL_2, missing);
+      p.sendMessage(`You search the crate and take ${missing} uncharged cells.`);
       return true;
     }
-    if (s >= S.MACHINE && s < S.VARDORVIS && [O.ALTAR_93, O.ALTAR_94].includes(objectId)
-      && roomTile?.x === 2773 && roomTile?.y === 6442) {
+    if (s >= S.MACHINE && s < S.VARDORVIS && [O.ALTAR_93, O.ALTAR_94, WAR_ROOM_ALTAR_LOC].includes(objectId)
+      && roomTile?.x === 2772 && roomTile?.y === 6441) {
       p.setAttribute(ALTAR_INSPECTED, true);
-      return p.sendMessage("You inspect the altar. Its elemental charge is now available.");
+      talk(p, N.DR_BANIKAN, "familiar-faces-inspecting-the-altar");
+      return true;
     }
-    if (s >= S.MACHINE && s < S.VARDORVIS && [O.GOLEM, O.GOLEM_2].includes(objectId)
-      && roomTile?.x === 2783 && roomTile?.y === 6444) {
+    if (s >= S.MACHINE && s < S.VARDORVIS && [O.GOLEM, O.GOLEM_2, WAR_ROOM_GOLEM_LOC].includes(objectId)
+      && roomTile?.x === 2782 && roomTile?.y === 6443) {
       if (p.getAttribute(GOLEM_SOLVED)) return promptGolemSearch(p);
       if (!p.getAttribute(GOLEM_INSPECTED)) {
         p.setAttribute(GOLEM_INSPECTED, true);
@@ -3944,18 +4097,21 @@ module.exports = function registerDesertTreasureII(api) {
     }
     if (stage(p) < S.MACHINE || stage(p) >= S.VARDORVIS) return;
     const roomTile = warRoomSourceTile(p, location);
-    if ([O.GOLEM, O.GOLEM_2].includes(objectId) && roomTile?.x === 2783 && roomTile?.y === 6444 && itemId === I.UNCHARGED_CELL_2) {
+    if ([O.GOLEM, O.GOLEM_2, WAR_ROOM_GOLEM_LOC].includes(objectId) && roomTile?.x === 2782 && roomTile?.y === 6443 && itemId === I.UNCHARGED_CELL_2) {
       talk(p, N.GOLEM_3, "familiar-faces-inspecting-the-golem-machine-using-uncharged-cells-on-the-golem-machine");
       return true;
     }
-    if ([O.ALTAR_93, O.ALTAR_94].includes(objectId) && roomTile?.x === 2773 && roomTile?.y === 6442 && itemId === I.UNCHARGED_CELL_2) {
+    if ([O.ALTAR_93, O.ALTAR_94, WAR_ROOM_ALTAR_LOC].includes(objectId) && roomTile?.x === 2772 && roomTile?.y === 6441 && itemId === I.UNCHARGED_CELL_2) {
       if (!has(p, I.UNCHARGED_CELL_2)) return;
+      if (!p.getAttribute(TOTEMS_CHARGED)) return p.sendMessage("Activate all four elemental totems before charging the cells.");
+      const inventory = p.getInventory();
+      if (!inventory.getAmount(I.CHARGED_CELL) && inventory.getAmount(I.UNCHARGED_CELL_2) > 1 && inventory.getFreeSlots() < 1) return p.sendMessage("You need a free inventory slot for the charged cells.");
       p.getInventory().deleteNumber(I.UNCHARGED_CELL_2, 1);
       p.getInventory().adds(I.CHARGED_CELL, 1);
       p.sendMessage("The altar charges the cell.");
       return;
     }
-    if ([O.GOLEM, O.GOLEM_2].includes(objectId) && roomTile?.x === 2783 && roomTile?.y === 6444 && itemId === I.CHARGED_CELL) {
+    if ([O.GOLEM, O.GOLEM_2, WAR_ROOM_GOLEM_LOC].includes(objectId) && roomTile?.x === 2782 && roomTile?.y === 6443 && itemId === I.CHARGED_CELL) {
       if (!p.getAttribute(TOTEMS_CHARGED)) return p.sendMessage("Activate all four elemental totems before powering the machine.");
       if (p.getAttribute(CELLS_INSERTED)) return openGolemPuzzle(p);
       if (p.getInventory().getAmount(I.CHARGED_CELL) < 8) return p.sendMessage("You need all eight charged cells to power the golem.");
@@ -4508,13 +4664,7 @@ module.exports = function registerDesertTreasureII(api) {
       const area = killer.getAttribute(ATTR_WAR_ROOM);
       if (area instanceof WarRoomArea && !area.isDestroyed()) {
         spawnTotems(killer, area);
-        let banikan = api.core.NPC.create(N.DR_BANIKAN_2, area.tile(23, 7, 0));
-        banikan.setOwner?.(killer);
-        banikan.setOwnerOnly?.(true);
-        banikan.__skipDefaultRespawn = true;
-        area.add(banikan);
-        api.core.World.getAddNPCQueue().push(banikan);
-        owned.banikan = banikan;
+        spawnWarRoomBanikan(killer, area);
       }
       owned.guardian = null;
       killer.setAttribute(ATTR, null);
@@ -5229,9 +5379,8 @@ module.exports = function registerDesertTreasureII(api) {
     startedValue: S.STARTED, completionValue: S.COMPLETE, questPoints: 5, varbitValue: nativeProgress,
     otherRewards: ["Ring of shadows", "Three ancient lamps", "Access to Vardorvis, the Leviathan, Duke Sucellus and the Whisperer"], buildJournal,
   });
-  ["desert-treasure-ii:statues", "desert-treasure-ii:cells-collected", CELLS_INSERTED, CELL_POSITIONS,
+  ["desert-treasure-ii:statues", CELLS_INSERTED, CELL_POSITIONS,
     GOLEM_SOLVED, SEARCHED_NAMES, BANIKAN_LEFT].forEach((key) => api.persistAttribute(key));
-  api.persistAttribute(ATTR);
   api.persistAttribute(LASSAR);
   api.persistAttribute(VARDORVIS_PROGRESS);
   api.persistAttribute(ATTR_SMITH_INTRO);
@@ -5261,7 +5410,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.persistAttribute(SCAR_GROWTH_STEP);
   api.persistAttribute(SCAR_GROWTH_ORDER);
   api.persistAttribute("desert-treasure-ii:scar-growth-repaired");
-  [GOLEM_INSPECTED, ALTAR_INSPECTED, TOTEMS_CHARGED].forEach((key) => api.persistAttribute(key));
+  [GOLEM_INSPECTED, ALTAR_INSPECTED, TOTEMS_CHARGED, TOTEM_MASK, BANIKAN_BRIEFED].forEach((key) => api.persistAttribute(key));
   api.onObjectInteraction((event) => {
     const handled = handleObject(event);
     if (handled === true) event.handled = true;
@@ -5278,6 +5427,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onCustomEvent("magic:hit-effects", activateTotem);
   api.onCustomEvent("magic:hit-effects", stunLeviathan);
   api.onCombatHitRoll(forceTotemAccuracy);
+  api.onNpcHitModify(modifyGuardianHit);
   api.onNpcHitModify(preventTotemDamage);
   api.onNpcHitModify(handleScarAxonHit);
   api.onNpcHitModify(preventScarSummonProtection);

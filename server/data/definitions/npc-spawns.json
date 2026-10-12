@@ -30558,5 +30558,6 @@
   {"id":13516,"x":2565,"y":3202,"level":0,"name":"Khazard Launderer","wanderRadius":0},
   {"level":0,"name":"Achtryn","x":3511,"y":3509,"id":13653},
   {"level":0,"name":"Laidee Gnonock","x":2879,"y":3547,"id":13647},
-  {"level":1,"name":"Yadech Strongarm","x":2855,"y":3553,"id":13650}
+  {"level":1,"name":"Yadech Strongarm","x":2855,"y":3553,"id":13650},
+  {"level":0,"name":"Dr Banikan","x":3409,"y":9815,"id":12293,"wanderRadius":0}
 ]

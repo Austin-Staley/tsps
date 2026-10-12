@@ -1373,13 +1373,14 @@ test('Dragon Slayer II reforging requires three distinct dragon-head casts and c
 });
 
 test('Desert Treasure II requires and solves the real eight-cell golem grid', () => {
-  const itemOnObject = [];
+  const itemOnObject = [], objectInteractions = [];
   const interactions = [];
   const widgetActions = [];
   const dialogueActions = [];
   const { api: base } = mockApi();
   const api = new Proxy(base, {
     get: (target, prop) => {
+      if (prop === 'onObjectInteraction') return (handler) => objectInteractions.push(handler);
       if (prop === 'onItemOnObject') return (handler) => itemOnObject.push(handler);
       if (prop === 'onNpcInteraction') return (name, options) => interactions.push({ name, options });
       if (prop === 'onCustomEvent') return (name, handler) => {
@@ -1397,7 +1398,8 @@ test('Desert Treasure II requires and solves the real eight-cell golem grid', ()
     const quest = runtime.getRegisteredQuests().at(-1);
     const { ItemIdentifiers: I, ObjectIdentifiers: O } = api.core;
     const attrs = new Map();
-    const counts = new Map([[I.UNCHARGED_CELL_2, 8]]);
+    const counts = new Map();
+    let freeSlots = 0;
     const packetCalls = [];
     const packet = new Proxy({}, { get: (_target, name) => (...args) => packetCalls.push([name, ...args]) });
     const messages = [];
@@ -1406,6 +1408,7 @@ test('Desert Treasure II requires and solves the real eight-cell golem grid', ()
       getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
       getInventory: () => ({
         getAmount: (id) => counts.get(id) ?? 0,
+        getFreeSlots: () => freeSlots,
         deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
         adds: (id, amount) => counts.set(id, (counts.get(id) ?? 0) + amount),
       }),
@@ -1420,9 +1423,28 @@ test('Desert Treasure II requires and solves the real eight-cell golem grid', ()
     attrs.set('desert-treasure-ii:war-room', {
       getBaseX: () => 8192, getBaseY: () => 1600, isDestroyed: () => false,
     });
-    const altar = { x: 8205, y: 1618, z: 0 };
-    const golem = { x: 8215, y: 1620, z: 0 };
+    const crate = () => objectInteractions[0]({player, objectId: O.CRATE_302, location:{x:8212,y:1616,z:0}, option:'Search'});
+    attrs.set('desert-treasure-ii:totems-charged', false);
+    crate();
+    assert.equal(counts.get(I.UNCHARGED_CELL_2), undefined, 'a full bag cannot lose the cells permanently');
+    freeSlots = 1;
+    crate();
+    assert.equal(counts.get(I.UNCHARGED_CELL_2), 8, 'the cells can be collected before charging the totems');
+    crate();
+    assert.equal(counts.get(I.UNCHARGED_CELL_2), 8, 'repeating Search does not duplicate cells');
+    counts.set(I.UNCHARGED_CELL_2, 2);
+    crate();
+    assert.equal(counts.get(I.UNCHARGED_CELL_2), 8, 'destroyed cells can be recovered from the crate');
+    const altar = { x: 8204, y: 1617, z: 0 };
+    const golem = { x: 8214, y: 1619, z: 0 };
     const apply = (itemId, objectId, location) => itemOnObject[0]({ player, itemId, objectId, location });
+    apply(I.UNCHARGED_CELL_2, O.ALTAR_93, altar);
+    assert.equal(counts.get(I.UNCHARGED_CELL_2), 8, 'the altar needs the four activated totems');
+    attrs.set('desert-treasure-ii:totems-charged', true);
+    freeSlots = 0;
+    apply(I.UNCHARGED_CELL_2, O.ALTAR_93, altar);
+    assert.equal(counts.get(I.UNCHARGED_CELL_2), 8, 'a full bag cannot consume a cell before creating its charged stack');
+    freeSlots = 1;
     for (let i = 0; i < 7; i++) apply(I.UNCHARGED_CELL_2, O.ALTAR_93, altar);
     assert.equal(counts.get(I.UNCHARGED_CELL_2), 1);
     assert.equal(counts.get(I.CHARGED_CELL), 7);
@@ -1850,15 +1872,15 @@ test('Desert Treasure II requires the four matching ancient combat spells to cha
     const O = core.ObjectIdentifiers;
     quest.setStage(p, 5);
     assert.equal(objectHooks[0]({ player: p, objectId: O.CREVICE_45, location: { x: 3411, y: 9811, z: 0 } }), true);
-    const area = attrs.get('desert-treasure-ii:war-room');
+    let area = attrs.get('desert-treasure-ii:war-room');
     assert.equal(p.getAttribute('desert-treasure-ii:war-room'), area);
     const guardian = area.entities[0];
     deathHooks[0]({ killer: p, npc: guardian });
     assert.equal(quest.getStage(p), 6);
     assert.equal(area.entities.filter((npc) => npc.__dt2Totem).length, 4);
     const onRoomObject = (id, x, y) => objectHooks[0]({ player: p, objectId: id, location: area.tile(x - 2760, y - 6424, 0) });
-    onRoomObject(O.GOLEM, 2783, 6444);
-    onRoomObject(O.ALTAR_93, 2773, 6442);
+    onRoomObject(49511, 2782, 6443);
+    onRoomObject(49512, 2772, 6441);
     const spells = core.CombatSpells;
     const entries = [
       ['blood', 12344, 'BLOOD_BURST'], ['shadow', 12342, 'SHADOW_BURST'],
@@ -1881,10 +1903,23 @@ test('Desert Treasure II requires the four matching ancient combat spells to cha
       assert.equal(target.__dt2TotemCharged, true, `${kind} matching hit activates its totem (messages: ${messages.join(' | ')})`);
       assert.equal(target.transform, activeId);
       const damage = { setDamage(value) { this.value = value; } };
-      damageHooks[0]({ npc: target, hit: { isAccurate: () => true, getHits: () => [damage], updateTotalDamage() {} } });
+      damageHooks.forEach(handler => handler({ npc: target, hit: { isAccurate: () => true, getHits: () => [damage], updateTotalDamage() {} } }));
       assert.equal(damage.value, 0, 'totem activation does not damage the target');
+      if (kind === 'blood') {
+        assert.equal(attrs.get('desert-treasure-ii:totem-mask'), 4);
+        attrs.set('desert-treasure-ii:war-room', null);
+        objectHooks[0]({player:p, objectId:O.CREVICE_45, location:{x:3411,y:9811,z:0}});
+        area = attrs.get('desert-treasure-ii:war-room');
+        assert.equal(area.entities.filter(npc=>npc.__dt2TotemCharged).length,1, 'partial totem charging survives re-entry');
+      }
     }
     assert.equal(attrs.get('desert-treasure-ii:totems-charged'), true);
+    assert.equal(attrs.get('desert-treasure-ii:totem-mask'), 15, 'all four cache altar bits are persisted');
+    attrs.set('desert-treasure-ii:war-room', null);
+    objectHooks[0]({player:p, objectId:O.CREVICE_45, location:{x:3411,y:9811,z:0}});
+    const restored = attrs.get('desert-treasure-ii:war-room').entities.filter(npc=>npc.__dt2Totem);
+    assert.equal(restored.length,4);
+    assert.ok(restored.every(npc=>npc.__dt2TotemCharged && npc.transform !== -1), 're-entering restores charged totems');
   } finally {
     runtime.startTranscript = startTranscript;
   }
@@ -6170,4 +6205,151 @@ test('DT2 ancient lamps offer only combat skills, require level 60, and consume 
   assert.equal(xp,101000);
   const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
   assert.equal(quest.xpRewards, undefined, 'the quest grants no extra fixed XP alongside its lamps');
+});
+
+test('DT2 excavation uses the cache winch, pickaxe crate and crevice without letting Banikan skip combat', () => {
+  const { api, handlers } = mockApi();
+  const runtime = require('../plugins/quests/QuestRuntime'), original = runtime.startTranscript;
+  runtime.startTranscript = () => true;
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1), { ItemIdentifiers: I, ObjectIdentifiers: O, NpcIdentifiers: N } = api.core;
+    const attrs = new Map(), amounts = new Map(), messages = [], equipment = [];
+    const player = { getUsername: () => 'dt2-excavation', getAttribute: key => attrs.get(key), setAttribute: (key,value) => attrs.set(key,value),
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }), getSkillManager: () => ({ getCurrentLevel: () => 99 }),
+      getInventory: () => ({ contains: id => (amounts.get(id) ?? 0) > 0, getAmount: id => amounts.get(id) ?? 0,
+        getFreeSlots: () => 28 - amounts.size, adds: (id,n) => amounts.set(id,(amounts.get(id) ?? 0)+n) }),
+      getEquipment: () => ({ getItems: () => equipment }), moveTo(location) { this.location = location; }, sendMessage: text => messages.push(text) };
+    const click = (objectId,x,y,option,visibleId=objectId) => handlers.objects[0]({ player,objectId,definition:{id:visibleId},location:{x,y,z:0},option });
+    quest.setStage(player,2);
+    assert.equal(click(O.WINCH_14,3384,3418,'Operate'),false);
+    quest.setStage(player,3);
+    assert.equal(click(O.WINCH_14,3384,3418,'Operate'),true);
+    assert.deepEqual([player.location.x,player.location.y], [3404,9804]);
+    const talk = handlers.npcInteractions.get('Dr Banikan')['Talk-to'];
+    talk({ player,npcId:N.DR_BANIKAN });
+    assert.equal(quest.getStage(player),4);
+    talk({ player,npcId:N.DR_BANIKAN });
+    assert.equal(quest.getStage(player),4, 'repeating the excavation conversation cannot skip the Guardian');
+    assert.equal(click(49510,3411,9811,'Mine',O.ROCKS_141),true);
+    assert.equal(quest.getStage(player),4, 'no pickaxe leaves the obstruction intact');
+    assert.equal(click(O.CRATE_301,3414,9819,'Search'),true);
+    assert.equal(amounts.get(I.BRONZE_PICKAXE),1);
+    click(O.CRATE_301,3414,9819,'Search');
+    assert.equal(amounts.get(I.BRONZE_PICKAXE),1, 'the crate does not duplicate a carried pickaxe');
+    amounts.clear();
+    equipment[require('../dist/game/model/container/impl/Equipment').Equipment.WEAPON_SLOT] = { getId: () => I.RUNE_PICKAXE };
+    assert.equal(click(49510,3411,9811,'Mine',O.ROCKS_141),true);
+    assert.equal(quest.getStage(player),5, 'an equipped usable rune pickaxe clears the real obstruction');
+    talk({ player,npcId:N.DR_BANIKAN });
+    assert.equal(quest.getStage(player),5, 'Banikan still waits for the actual Guardian defeat');
+    assert.match(messages.at(-1), /Defeat the Ancient Guardian/);
+    const spawns = require('../data/definitions/npc-spawns.json');
+    assert.ok(spawns.some(n => n.id===N.DR_BANIKAN && n.x===3409 && n.y===9815));
+  } finally { runtime.startTranscript = original; }
+});
+
+test('DT2 Guardian absorbs ranged shield hits and survives a melee overkill into its cache body phase', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const { CombatType, Skill, ItemIdentifiers: I, NpcIdentifiers: N } = api.core;
+  const original = api.core.World.getProcessCycle;
+  api.core.World.getProcessCycle = () => 10;
+  try {
+    const player = { getSpellbook: () => api.core.MagicSpellbook.ANCIENT, sendMessage() {},
+      getSkillManager: () => ({ getCurrentLevel: skill => skill===Skill.MINING ? 99 : 1 }),
+      getEquipment: () => ({ getItems: () => [] }), getInventory: () => ({ contains: id => id===I.BRONZE_PICKAXE }) };
+    const npc = { hp:95, max:200, __dt2Guardian:{shielded:true,bodyHp:75,lastAttack:0}, getOwner: () => player,
+      getHitpoints() {return this.hp;}, setHitpoints(n) {this.hp=n;}, setMaxHitpoints(n) {this.max=n;}, setNpcTransformationId(id) {this.transform=id;} };
+    const incoming = (type,value) => {
+      const part = {getDamage:()=>value,setDamage:n=>value=n};
+      const hit = { getAttacker:()=>player,getCombatMethod:()=>({type:()=>type}),getHits:()=>[part],getTotalDamage:()=>value,updateTotalDamage(){} };
+      handlers.npcHitModify.forEach(handler => handler({npc,hit}));
+      return value;
+    };
+    assert.equal(incoming(CombatType.RANGED,40),0);
+    assert.equal(npc.hp,95);
+    assert.equal(npc.__dt2Guardian.lastAttack,0,'an ineffective ranged attack does not stop recharge');
+    assert.equal(incoming(CombatType.MELEE,0),0);
+    assert.equal(npc.__dt2Guardian.lastAttack,10,'a four-tick melee miss still interrupts shield recharge');
+    assert.equal(incoming(CombatType.MAGIC,3),3,'Ancient Magicks can damage the shield');
+    assert.equal(incoming(CombatType.MELEE,6),6,'a carried pickaxe does not multiply weapon damage');
+    assert.equal(incoming(CombatType.MELEE,25),0,'shield overkill is consumed by the phase change');
+    assert.equal(npc.hp,75,'the wounded body resumes at its retained HP');
+    assert.equal(npc.max,100);
+    assert.equal(npc.transform,N.ANCIENT_GUARDIAN_4);
+    assert.equal(npc.__dt2Guardian.shielded,false);
+    assert.equal(incoming(CombatType.RANGED,8),8,'the exposed body can be damaged normally');
+  } finally { api.core.World.getProcessCycle=original; }
+});
+
+test('DT2 Guardian reforms its shield and its warned rocks can be dodged but bypass melee prayer', () => {
+  const { api: base, handlers } = mockApi();
+  let cycle=0;
+  const npcs=[],graphics=[],damage=[],attrs=new Map();
+  class Instance {
+    constructor() {this.entities=[];}
+    setChunk() {} enter() {} leave() {} postLeave() {} destroy() {} isDestroyed() {return false;}
+    tile(x,y,z) {return new base.core.Location(8192+x,1600+y,z);}
+    add(npc) {this.entities.push(npc);}
+  }
+  const core={...base.core,TemplatedInstanceArea:Instance,
+    World:{getProcessCycle:()=>cycle,getAddNPCQueue:()=>npcs,getRemoveNPCQueue:()=>[]},
+    NPC:{create(id,location){return {id,location,hp:200,max:200,setOwner(p){this.owner=p;},getOwner(){return this.owner;},setOwnerOnly(){},setScriptedMovement(){},
+      getHitpoints(){return this.hp;},setHitpoints(n){this.hp=n;},setMaxHitpoints(n){this.max=n;},setNpcTransformationId(id){this.transform=id;},
+      getCombat:()=>({getLastAttack:()=>({reset(){}})}),calculateDistance:()=>1,performAnimation(){}};}}};
+  const api=new Proxy(base,{get:(target,key)=>key==='core'?core:target[key]});
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const quest=require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
+  let here=new core.Location(8215,1607,0);
+  const sender=new Proxy({getVarbit:()=>1,sendGraphic:(graphic,tile)=>graphics.push([graphic,tile])},{get:(target,key)=>target[key]??(()=>{})});
+  const player={getUsername:()=> 'guardian-timing',isPlayer:()=>true,getAsPlayer:()=>player,getHitpoints:()=>99,getLocation:()=>here,
+    getAttribute:key=>attrs.get(key),setAttribute:(key,value)=>attrs.set(key,value),getPacketSender:()=>sender,
+    getCombat:()=>({getHitQueue:()=>({addPendingDamage:hits=>damage.push(...hits)})}),moveTo:location=>here=location,sendMessage(){}};
+  quest.setStage(player,5);
+  handlers.objects[0]({player,objectId:core.ObjectIdentifiers.CREVICE_45,location:{x:3411,y:9811,z:0},option:'Enter'});
+  const area=attrs.get('desert-treasure-ii:war-room'),boss=npcs.find(n=>n.__dt2Guardian);
+  assert.ok(area&&boss);
+  boss.__dt2Guardian.shielded=false;boss.hp=65;boss.max=100;
+  cycle=5;area.process(player);
+  assert.equal(boss.__dt2Guardian.bodyHp,65);
+  assert.equal(boss.hp,85, "shield recharge retains the wounded body instead of restoring it");
+  assert.equal(boss.max,200);
+  assert.equal(boss.__dt2Guardian.shielded,true);
+  assert.equal(damage.length,0,'Protect from Melee blocks the ordinary attack');
+  boss.__dt2Guardian.attacks=4;boss.__dt2Guardian.nextAttack=25;
+  cycle=25;area.process(player);area.process(player);
+  assert.equal(graphics.length,3,'the warning is emitted once per world tick');
+  here=here.transform(0,1,0);
+  cycle=28;area.process(player);
+  assert.equal(damage.length,0,'moving off all warned tiles avoids the rocks');
+  boss.__dt2Guardian.attacks=4;boss.__dt2Guardian.nextAttack=30;
+  cycle=30;area.process(player);
+  cycle=33;area.process(player);
+  assert.equal(damage.length,1,'standing under a rock is hit despite the melee prayer');
+  assert.ok(damage[0].getDamage()>=15&&damage[0].getDamage()<=25);
+});
+
+test('DT2 persists progress and puzzle state without serializing its live boss NPC', () => {
+  const {api}=mockApi(),keys=[];
+  api.persistAttribute=key=>keys.push(key);
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  assert.ok(keys.includes('quest.desert_treasure_ii.stage'));
+  assert.ok(keys.includes('desert-treasure-ii:medallions-placed'));
+  assert.ok(keys.includes('desert-treasure-ii:cell-positions'));
+  assert.ok(!keys.includes('desert-treasure-ii:boss'),'NPC references fail PlayerSave JSON validation and must remain runtime state');
+});
+
+
+test('DT2 leaves shared Smith and Terry NPC conversations available outside their quest chapters', () => {
+  const {api,handlers}=mockApi();
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  let stage=0;
+  const player={getAttribute:()=>stage,sendMessage(){throw Error('outside-scope DT2 dialogue');}};
+  const smith=handlers.npcInteractions.get('Asgarnia Smith')['Talk-to'];
+  const terry=handlers.npcInteractions.get('Terry Balando')['Talk-to'];
+  for (stage of [0,3,6,12]) {
+    assert.equal(smith({player}),false);
+    assert.equal(terry({player}),false);
+  }
 });
