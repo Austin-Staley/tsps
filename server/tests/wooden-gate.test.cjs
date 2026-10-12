@@ -13,6 +13,7 @@ const { GameObject } = require('../dist/game/entity/impl/object/GameObject');
 const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
 const { Sounds } = require('../dist/game/Sounds');
 const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+const { crossingFor: shantayCrossingFor } = require('../plugins/objects/ShantayPass.plugin');
 
 const tileKey = (id, x, y, z) => `${id}@${x},${y},${z}`;
 
@@ -712,6 +713,43 @@ test('the Gnome Ball pitch gate 2394 rotates in place and closes back onto its w
       ['register', 2394, 2383, 3488, 0],
       ['deregister', 2394, 2382, 3488, 1],
     ], 'it closes back onto the pitch wall');
+  } finally {
+    h.restore();
+  }
+});
+
+test('the Shantay pass crosses the desert fence in the right direction', () => {
+  assert.deepEqual(shantayCrossingFor({ x: 3303, y: 3117, z: 0 }), {
+    desert: true,
+    path: [[3303, 3116], [3303, 3115]],
+  });
+  assert.deepEqual(shantayCrossingFor({ x: 3303, y: 3115, z: 0 }), {
+    desert: false,
+    path: [[3303, 3116], [3303, 3117]],
+  });
+  assert.equal(shantayCrossingFor({ x: 3303, y: 3115, z: 1 }), null);
+});
+
+test('Sophanem north gate opens and closes both nameless gate leaves', () => {
+  const h = buildHarness();
+  try {
+    h.place(44036, 3283, 2809, 1);
+    h.place(44038, 3284, 2809, 1);
+    assert.deepEqual(h.click(44036, 3283, 2809, 1), [
+      ['deregister', 44036, 3283, 2809, 1],
+      ['deregister', 44038, 3284, 2809, 1],
+      ['register', 44037, 3283, 2810, 0],
+      ['register', 44039, 3284, 2810, 2],
+    ]);
+
+    h.place(44037, 3283, 2810, 0);
+    h.place(44039, 3284, 2810, 2);
+    assert.deepEqual(h.click(44037, 3283, 2810, 0, 'Close'), [
+      ['deregister', 44037, 3283, 2810, 0],
+      ['deregister', 44039, 3284, 2810, 2],
+      ['register', 44036, 3283, 2809, 1],
+      ['register', 44038, 3284, 2809, 1],
+    ]);
   } finally {
     h.restore();
   }

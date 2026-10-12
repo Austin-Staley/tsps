@@ -129,6 +129,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     Object.freeze([O.GATE_8, O.GATE_9, 28853, 28854]),
     // Large doors sharing model 639 with 1521/1524; they open into that family's 1522/1525.
     Object.freeze([O.LARGE_DOOR_98, O.LARGE_DOOR_99, O.LARGE_DOOR_16, O.LARGE_DOOR_18]),
+    // Sophanem's north entrance: closed leaves 44036/44038, nameless open leaves 44037/44039.
+    Object.freeze([O.GATE_232, O.GATE_233, 44037, 44039]),
   ]);
   // Both leaves of each pair are partners of the other.
   SPECIAL_DOUBLE_DOOR_PAIRS = Object.freeze([
@@ -143,11 +145,14 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.GATE_92, O.GATE_93],
     [O.GATE_94, O.GATE_95],
     [O.GATE_8, O.GATE_9],
+    [O.GATE_232, O.GATE_233],
+    [44037, 44039],
     [O.LARGE_DOOR_24, O.LARGE_DOOR_25],
     [O.LARGE_DOOR_26, O.LARGE_DOOR_27],
     [O.LARGE_DOOR_29, O.LARGE_DOOR_28],
     [O.LARGE_DOOR_31, O.LARGE_DOOR_30],
     [O.LARGE_DOOR_98, O.LARGE_DOOR_99],
+    [O.GATE_232, O.GATE_233],
     [O.LARGE_DOOR_16, O.LARGE_DOOR_18],
     [O.LARGE_DOOR_7, O.LARGE_DOOR_9],
     [O.LARGE_DOOR_8, O.LARGE_DOOR_10],
@@ -178,6 +183,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.LARGE_DOOR_29, O.LARGE_DOOR_31],
     [O.LARGE_DOOR_28, O.LARGE_DOOR_30],
     [O.LARGE_DOOR_98, O.LARGE_DOOR_16],
+    [O.GATE_232, 44037],
+    [O.GATE_233, 44039],
     [O.LARGE_DOOR_99, O.LARGE_DOOR_18],
     [O.LARGE_DOOR_7, O.LARGE_DOOR_8],
     [O.LARGE_DOOR_9, O.LARGE_DOOR_10],
