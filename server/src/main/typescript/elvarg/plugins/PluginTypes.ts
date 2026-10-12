@@ -1222,6 +1222,7 @@ export interface PluginCoreApi {
   Sounds: any;
   Location: any;
   Mobile: any;
+  encodePluginMessage: typeof import("../net/protocol/ClientProtocol").encodePluginMessage;
   encodeFinePosition: typeof import("../net/protocol/ClientProtocol").encodeFinePosition;
   Boundary: any;
   PolygonalBoundary: any;
@@ -1282,6 +1283,9 @@ export interface PluginCoreApi {
   ShopManager: any;
   ShopDefinition: any;
   MultiChatboxPrompt: any;
+  /** Public chat as a client sends it (filter, mute, broadcast): bots speak through it too. */
+  ChatPacketListener: any;
+  TradeState: any;
   dispatchClientMessages: (player: any, messages: any[]) => boolean;
   connectHeadlessClient: (username: string, password: string) => Promise<{ player?: any; error?: string }>;
 }

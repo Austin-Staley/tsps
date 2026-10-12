@@ -2055,6 +2055,7 @@ export class PluginManager {
       Sounds: require("../game/Sounds").Sounds,
       Location: require(`${model}/Location`).Location,
       Mobile: require("../game/entity/impl/Mobile").Mobile,
+      encodePluginMessage: require("../net/protocol/ClientProtocol").encodePluginMessage,
       encodeFinePosition: require("../net/protocol/ClientProtocol").encodeFinePosition,
       Boundary: require(`${model}/Boundary`).Boundary,
       PolygonalBoundary: require(`${model}/PolygonalBoundary`).PolygonalBoundary,
@@ -2113,6 +2114,8 @@ export class PluginManager {
       ShopManager: require("../game/model/container/shop/ShopManager").ShopManager,
       ShopDefinition: require("../game/definition/ShopDefinition").ShopDefinition,
       MultiChatboxPrompt: require("../game/model/menu/MultiChatboxPrompt").MultiChatboxPrompt,
+      ChatPacketListener: require("../net/packet/impl/ChatPacketListener").ChatPacketListener,
+      TradeState: require("../game/content/Trading").TradeState,
       dispatchClientMessages: require("../net/NetworkBuilder").dispatchClientMessages,
       connectHeadlessClient: require("../net/NetworkBuilder").connectHeadlessClient,
     });

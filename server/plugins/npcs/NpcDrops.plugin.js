@@ -128,6 +128,14 @@ function applyOverrides(dump, subtables, overrides) {
         if (!table[field].some((existing) => existing.item_id === entry.item_id)) table[field].push(entry);
       }
     }
+    // Sections the Wiki lists on the page but that are not this table's normal kill (a boss's
+    // contract rewards, say): left out of every roll.
+    const removed = new Set(change.removeSections ?? []);
+    if (removed.size > 0) {
+      for (const field of ["entries", "tertiary"]) {
+        if (table[field]) table[field] = table[field].filter((entry) => !removed.has(entry.section));
+      }
+    }
   }
   for (const [name, table] of Object.entries(overrides.subtables ?? {})) subtables[name] ??= table;
 }
