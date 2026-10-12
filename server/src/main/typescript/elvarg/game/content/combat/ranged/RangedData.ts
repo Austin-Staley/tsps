@@ -297,6 +297,7 @@ export class Ammunition {
     public static readonly ADAMANT_JAVELIN = new Ammunition(829, null, 204, 107)
     public static readonly RUNE_JAVELIN = new Ammunition(830, null, 205, 124)
     public static readonly DRAGON_JAVELIN = new Ammunition(19484, null, 1301, 150)
+    public static readonly SILVTHRILL_JAVELIN = new Ammunition(ItemIdentifiers.SILVTHRILL_JAVELIN, null, 1301, 0)
     public static readonly MORRIGANS_JAVELIN = new Ammunition(ItemIdentifiers.MORRIGANS_JAVELIN, null, 200, 145)
 
     public static readonly TOKTZ_XIL_UL = new Ammunition(6522, null, 442, 58)
@@ -540,6 +541,8 @@ export class RangedWeapon {
     public static readonly KARILS_CROSSBOW = new RangedWeapon([4734], [Ammunition.BOLT_RACK], RangedWeaponType.CROSSBOW)
 
     public static readonly BALLISTA = new RangedWeapon([19478, 19481], [Ammunition.BRONZE_JAVELIN, Ammunition.IRON_JAVELIN, Ammunition.STEEL_JAVELIN, Ammunition.MITHRIL_JAVELIN, Ammunition.ADAMANT_JAVELIN, Ammunition.RUNE_JAVELIN, Ammunition.DRAGON_JAVELIN], RangedWeaponType.BALLISTA)
+    public static readonly SILVTHRILL_BALLISTA = new RangedWeapon([ItemIdentifiers.SILVTHRILL_BALLISTA], [Ammunition.SILVTHRILL_JAVELIN], RangedWeaponType.BALLISTA)
+
 
     public static readonly TOXIC_BLOWPIPE = new RangedWeapon([12926], [Ammunition.BRONZE_DART, Ammunition.IRON_DART, Ammunition.STEEL_DART, Ammunition.BLACK_DART, Ammunition.MITHRIL_DART, Ammunition.ADAMANT_DART, Ammunition.RUNE_DART, Ammunition.AMETHYST_DART, Ammunition.DRAGON_DART], RangedWeaponType.BLOWPIPE)
     public static readonly ROSEWOOD_BLOWPIPE = new RangedWeapon([ItemIdentifiers.ROSEWOOD_BLOWPIPE, ItemIdentifiers.ROSEWOOD_BLOWPIPE_2], [Ammunition.BRONZE_DART, Ammunition.IRON_DART, Ammunition.STEEL_DART, Ammunition.BLACK_DART, Ammunition.MITHRIL_DART, Ammunition.ADAMANT_DART, Ammunition.RUNE_DART, Ammunition.AMETHYST_DART, Ammunition.DRAGON_DART], RangedWeaponType.BLOWPIPE)
