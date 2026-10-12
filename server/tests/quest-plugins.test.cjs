@@ -1136,7 +1136,10 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
     setNpcTransformationId(id) { this.transformedId = id; },
   };
   api.spawnNpc = (definition) => (spawns.push(definition), injured);
+  const persisted = []; api.persistAttribute = key => persisted.push(key);
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  assert(!persisted.includes('quest.the_blood_moon_rises.siege-drakan-area'), 'live combat areas must not enter JSON player saves');
+  assert(persisted.includes('quest.the_blood_moon_rises.siege-defence'), 'the earned siege checkpoint is saved');
   const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
   const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
   const attributes = new Map();
