@@ -13,6 +13,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const THRONE_PUZZLE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-throne-puzzle";
   const BASIN_PUZZLE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-basin-puzzle";
   const SOLID_KEY_ATTRIBUTE = "quest.the_blood_moon_rises.castle-solid-key-puzzle";
+  const CLOCK_ATTRIBUTE = "quest.the_blood_moon_rises.castle-clocks";
   const REFINER_ATTRIBUTE = "quest.the_blood_moon_rises.castle-refiner";
   const PREP = {
     leaves: ItemIdentifiers.AMITIRE_LEAVES,
@@ -760,6 +761,95 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
   }
 
+  function setClockValue(player, side, hand, value) {
+    const state = player.getAttribute(CLOCK_ATTRIBUTE) ?? { west: {}, east: {}, emblem: false };
+    const clock = { ...(state[side] ?? {}), [hand]: value };
+    player.setAttribute(CLOCK_ATTRIBUTE, { ...state, [side]: clock });
+    player.sendMessage(`You set the ${hand === "large" ? "large" : "small"} clock hand to ${value}.`);
+  }
+
+  function promptClockValue(player, side, hand) {
+    const choices = [];
+    for (let value = 0; value < 12; value++) {
+      choices.push(String(value), () => setClockValue(player, side, hand, value));
+    }
+    api.sendMultiChatboxPrompt(player, `Set the ${side} ${hand} clock hand`, ...choices);
+  }
+
+  function handleCastleClocks(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE) return;
+    const { x, y, z } = event.location ?? {};
+    if (z !== 0) return;
+    const state = player.getAttribute(CLOCK_ATTRIBUTE) ?? { west: {}, east: {}, emblem: false };
+    if (event.objectId === 61752 && x === 2323 && y === 7386) {
+      event.handled = true;
+      if (!player.getInventory().contains(ItemIdentifiers.SMALL_CLOCK_HAND)) {
+        player.getInventory().adds(ItemIdentifiers.SMALL_CLOCK_HAND, 1);
+      }
+      player.sendMessage("You search the shelves and take a small clock hand.");
+      return;
+    }
+    if (event.objectId === 61751 && x === 2466 && y === 7370) {
+      event.handled = true;
+      if (!player.getInventory().contains(ItemIdentifiers.LARGE_CLOCK_HAND)) {
+        player.getInventory().adds(ItemIdentifiers.LARGE_CLOCK_HAND, 1);
+      }
+      player.sendMessage("You search the crate and take a large clock hand.");
+      return;
+    }
+    const side = event.objectId === 61656 && x === 2344 && y === 7372 ? "west" :
+      event.objectId === 61657 && x === 2350 && y === 7372 ? "east" : null;
+    if (side) {
+      event.handled = true;
+      const clock = state[side] ?? {};
+      if (!clock.installed) {
+        player.sendMessage("The clock is missing its hand. Fit the small hand to the western clock and the large hand to the eastern clock.");
+        return;
+      }
+      api.sendMultiChatboxPrompt(player, `Adjust the ${side} grandfather clock`,
+        "Set the large hand", () => promptClockValue(player, side, "large"),
+        "Set the small hand", () => promptClockValue(player, side, "small"));
+      return;
+    }
+    if (event.objectId === 61662 && x === 2346 && y === 7372) {
+      event.handled = true;
+      const west = state.west ?? {};
+      const east = state.east ?? {};
+      if (west.large !== 11 || west.small !== 9 || east.large !== 0 || east.small !== 4) {
+        player.sendMessage("The fireplace mechanism remains locked. The western clock must show 11:45 and the eastern clock 12:20.");
+        return;
+      }
+      if (!player.getInventory().contains(ItemIdentifiers.DRAKAN_EMBLEM_2)) {
+        player.getInventory().adds(ItemIdentifiers.DRAKAN_EMBLEM_2, 1);
+        player.setAttribute(CLOCK_ATTRIBUTE, { ...state, emblem: true });
+        player.sendMessage("You search the fireplace and take a second Drakan emblem.");
+      }
+    }
+  }
+
+  function handleClockHandOnClock(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE || event.location?.z !== 0) return;
+    const side = event.objectId === 61656 && event.location.x === 2344 && event.location.y === 7372 ? "west" :
+      event.objectId === 61657 && event.location.x === 2350 && event.location.y === 7372 ? "east" : null;
+    const itemId = event.itemId;
+    const expectedItem = side === "west" ? ItemIdentifiers.SMALL_CLOCK_HAND :
+      side === "east" ? ItemIdentifiers.LARGE_CLOCK_HAND : null;
+    if (!side || itemId !== expectedItem) return;
+    event.handled = true;
+    const inventory = player.getInventory();
+    if (!inventory.contains(itemId)) return;
+    const state = player.getAttribute(CLOCK_ATTRIBUTE) ?? { west: {}, east: {}, emblem: false };
+    if (state[side]?.installed) {
+      player.sendMessage("A clock hand is already fitted there.");
+      return;
+    }
+    inventory.deleteNumber(itemId, 1);
+    player.setAttribute(CLOCK_ATTRIBUTE, { ...state, [side]: { ...(state[side] ?? {}), installed: true } });
+    player.sendMessage(`You fit the ${side === "west" ? "small" : "large"} clock hand to the ${side} clock.`);
+  }
+
   function handleAncientShieldAssembly(event) {
     const player = event?.player;
     if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE) return;
@@ -815,7 +905,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
     if (name !== "blood stockpile" || x !== 2535 || y !== 7385 || z !== 0) return;
     event.handled = true;
-    const state = player.getAttribute(REFINER_ATTRIBUTE) ?? { mixtures: [], used: 0, total: 0, destroyed: false };
+    const state = player.getAttribute(REFINER_ATTRIBUTE) ?? { mixtures: [], made: [], used: 0, total: 0, destroyed: false };
     if (state.used !== 4 || state.total !== 53) {
       player.sendMessage("The stockpile is protected by the refiner. Make mixtures totalling 53 haemalchemic potential and use all four on the basin.");
       return;
@@ -831,14 +921,15 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (x !== 2520 || y !== 7385 || z !== 0) return;
     const inventory = player.getInventory();
     const state = player.getAttribute(REFINER_ATTRIBUTE) ?? { mixtures: [], used: 0, total: 0, destroyed: false };
-    const recipes = [
-      { items: [ItemIdentifiers.VIAL_OF_BLOOD_5, ItemIdentifiers.PURE_ESSENCE_4], value: 17 },
-      { items: [ItemIdentifiers.VIAL_OF_BLOOD_5, ItemIdentifiers.PURE_ESSENCE_4], value: 17 },
-      { items: [ItemIdentifiers.VIAL_OF_BLOOD_5, ItemIdentifiers.VIAL_OF_WATER_6], value: 13 },
-      { items: [ItemIdentifiers.PURE_ESSENCE_4, ItemIdentifiers.VIAL_OF_WATER_6], value: 6 },
+    const made = state.made ?? state.mixtures;
+    const candidates = [
+      { items: [ItemIdentifiers.VIAL_OF_BLOOD_5, ItemIdentifiers.PURE_ESSENCE_4], value: 17, max: 2 },
+      { items: [ItemIdentifiers.VIAL_OF_BLOOD_5, ItemIdentifiers.VIAL_OF_WATER_6], value: 13, max: 1 },
+      { items: [ItemIdentifiers.PURE_ESSENCE_4, ItemIdentifiers.VIAL_OF_WATER_6], value: 6, max: 1 },
     ];
-    const recipe = recipes[state.mixtures.length];
-    if (!recipe || !recipe.items.includes(event.itemId) || !recipe.items.every((id) => inventory.contains(id))) return;
+    const recipe = candidates.find(({ items, value, max }) => items.includes(event.itemId) &&
+      items.every((id) => inventory.contains(id)) && made.filter((entry) => entry === value).length < max);
+    if (!recipe) return;
     event.handled = true;
     for (const id of recipe.items) inventory.deleteNumber(id, 1);
     if (!inventory.adds(ItemIdentifiers.CHEMICAL_VIAL, 1)) {
@@ -847,7 +938,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       return;
     }
     const mixtures = [...state.mixtures, recipe.value];
-    player.setAttribute(REFINER_ATTRIBUTE, { ...state, mixtures });
+    player.setAttribute(REFINER_ATTRIBUTE, { ...state, mixtures, made: [...made, recipe.value] });
     player.sendMessage(`The refiner fills a chemical vial with ${recipe.value} haemalchemic potential.`);
   }
 
@@ -1027,8 +1118,10 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction(handleCastleBasinPuzzle);
   api.onObjectInteraction(handleBasinAltar);
   api.onObjectInteraction(handleSolidKeyObjects);
+  api.onObjectInteraction(handleCastleClocks);
   api.onItemOnObject(handleBasinPotion, { noted: false });
   api.onItemOnObject(handleMountShield, { noted: false });
+  api.onItemOnObject(handleClockHandOnClock, { noted: false });
   api.onItemOnObject(handleRefinerVial, { noted: false });
   api.onObjectInteraction(handlePrepObject);
   api.onObjectInteraction(handleRefiner);
@@ -1044,6 +1137,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.persistAttribute(THRONE_PUZZLE_ATTRIBUTE);
   api.persistAttribute(BASIN_PUZZLE_ATTRIBUTE);
   api.persistAttribute(SOLID_KEY_ATTRIBUTE);
+  api.persistAttribute(CLOCK_ATTRIBUTE);
   api.persistAttribute(REFINER_ATTRIBUTE);
   api.onItemAction("Tome of Experience", { Read: readTome });
 };

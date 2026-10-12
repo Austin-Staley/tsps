@@ -447,6 +447,50 @@ test('Blood Moon solid key requires the symbol, shield assembly, and southern wa
   assert.equal(inventory.contains(I.SOLID_KEY), true, 'searching the mounted shield yields the solid key');
 });
 
+test('Blood Moon clocks require the proper hands and both poem times before the fireplace gives an emblem', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  const counts = new Map();
+  const inventory = {
+    contains: (id) => (counts.get(id) ?? 0) > 0,
+    adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
+    deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+  };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+  };
+  quest.setStage(player, 40);
+  const interact = handlers.objects.find((handler) => handler.name === 'handleCastleClocks');
+  interact({ player, objectId: 61752, location: { x: 2323, y: 7386, z: 0 }, handled: false });
+  interact({ player, objectId: 61751, location: { x: 2466, y: 7370, z: 0 }, handled: false });
+  const hand = handlers.itemOnObject.find((handler) => handler.name === 'handleClockHandOnClock');
+  hand({ player, objectId: 61656, itemId: api.core.ItemIdentifiers.SMALL_CLOCK_HAND, location: { x: 2344, y: 7372, z: 0 }, handled: false });
+  hand({ player, objectId: 61657, itemId: api.core.ItemIdentifiers.LARGE_CLOCK_HAND, location: { x: 2350, y: 7372, z: 0 }, handled: false });
+  const adjusted = { west: 0, east: 0 };
+  api.sendMultiChatboxPrompt = (who, title, ...pairs) => {
+    if (title.startsWith('Adjust the')) {
+      const side = title.includes('west') ? 'west' : 'east';
+      pairs[adjusted[side]++ === 0 ? 1 : 3]();
+    } else if (title.startsWith('Set the')) {
+      const target = title.includes('large') ? (title.includes('west') ? 11 : 0) : (title.includes('west') ? 9 : 4);
+      pairs[target * 2 + 1]();
+    }
+  };
+  interact({ player, objectId: 61656, location: { x: 2344, y: 7372, z: 0 }, handled: false });
+  interact({ player, objectId: 61656, location: { x: 2344, y: 7372, z: 0 }, handled: false });
+  interact({ player, objectId: 61657, location: { x: 2350, y: 7372, z: 0 }, handled: false });
+  interact({ player, objectId: 61657, location: { x: 2350, y: 7372, z: 0 }, handled: false });
+  interact({ player, objectId: 61662, location: { x: 2346, y: 7372, z: 0 }, handled: false });
+  assert.equal(inventory.contains(api.core.ItemIdentifiers.DRAKAN_EMBLEM_2), true);
+});
+
 test('Blood Moon refiner requires the four correct chemical vials totalling 53 before destroying the stockpile', () => {
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
