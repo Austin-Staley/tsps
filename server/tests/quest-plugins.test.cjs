@@ -975,8 +975,8 @@ test('Desert Treasure II opens the ritual site after the serum and grants the Te
 
 test('Desert Treasure II enters the Scar through the Catalytic Guardian and requires the six opening demons', () => {
   const { api: base } = mockApi();
-  const objectHooks = [], deathHooks = [], lineHooks = [], actionHooks = [], interactions = [];
-  const transcripts = [], queues = { add: [], remove: [] }, varbits = new Map();
+  const objectHooks = [], deathHooks = [], itemOnItemHooks = [], lineHooks = [], actionHooks = [], interactions = [];
+  const transcripts = [], queues = { add: [], remove: [] }, varbits = new Map(), inventoryCounts = new Map();
   let processCycle = 0;
   class TestInstance {
     constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
@@ -1000,6 +1000,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
   const api = new Proxy(base, {
     get: (target, prop) => prop === 'core' ? core
       : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
+        : prop === 'onItemOnItem' ? (handler) => itemOnItemHooks.push(handler)
         : prop === 'onNpcDeath' ? (handler) => deathHooks.push(handler)
           : prop === 'onCustomEvent' ? (name, handler) => ({ 'npc-dialogue:line': lineHooks, 'npc-dialogue:action': actionHooks }[name]?.push(handler))
             : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
@@ -1017,6 +1018,11 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
       getUsername: () => 'dt2-scar-test',
       isPlayer: () => true, getAsPlayer() { return this; },
       getLocation() { return { getX: () => this.location.x, getY: () => this.location.y }; },
+      getInventory: () => ({
+        getAmount: (id) => inventoryCounts.get(id) ?? 0,
+        adds: (id, amount) => inventoryCounts.set(id, (inventoryCounts.get(id) ?? 0) + amount),
+        deleteNumber: (id, amount) => inventoryCounts.set(id, Math.max(0, (inventoryCounts.get(id) ?? 0) - amount)),
+      }),
       getPacketSender: () => new Proxy({}, { get: (_target, prop) => prop === 'sendVarbit' ? (id, value) => varbits.set(id, value) : () => {} }),
       moveTo(location) { this.location = location; }, sendMessage() {},
     };
@@ -1081,6 +1087,23 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.ABYSSAL_TETHER, location: maze.tile(50, 33, 0) }), true);
     assert.equal(attrs.get('desert-treasure-ii:scar-tether-destroyed'), true);
     assert.equal(varbits.get(15258), 1, 'destroying the tether sets the canonical challenge varbit');
+    assert.equal(objectHooks[0]({ player, objectId: 49415, location: maze.tile(73, 61, 0) }), true,
+      'the green neural teleporter is usable only after severing the tether');
+    assert.equal(player.location.x, 8223);
+    assert.equal(objectHooks[0]({ player, objectId: 49411, location: maze.tile(30, 12, 0) }), true,
+      'the catalyst room is entered through its real cache passage');
+    assert.equal(attrs.get('desert-treasure-ii:scar-rift-live-nerves'), true);
+    assert.equal(objectHooks[0]({ player, objectId: 49183, location: maze.tile(35, 18, 0) }), true,
+      'breaking the mapped air nerve ending awards a nerve item');
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.AIR_NERVE), 1);
+    assert.equal(objectHooks[0]({ player, objectId: 49182, location: maze.tile(38, 11, 0) }), true);
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.EARTH_NERVE), 1);
+    assert.equal(itemOnItemHooks[0]({ player, usedItemId: core.ItemIdentifiers.AIR_NERVE,
+      usedWithItemId: core.ItemIdentifiers.EARTH_NERVE }), true);
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.AIR_NERVE), 0);
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.EARTH_NERVE), 0);
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.DUST_NERVE), 1,
+      'the documented air + earth recipe makes dust nerve');
   } finally {
     runtime.startTranscript = startTranscript;
   }

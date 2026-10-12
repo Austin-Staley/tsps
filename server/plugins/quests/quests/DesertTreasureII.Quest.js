@@ -55,6 +55,27 @@ module.exports = function registerDesertTreasureII(api) {
   const SCAR_MAZE_ONE_ENTERED = "desert-treasure-ii:scar-maze-one-entered";
   const SCAR_GUARDIAN_ACCEPTED = "desert-treasure-ii:scar-guardian-accepted";
   const SCAR_PASSAGE_OPEN = 49205;
+  const SCAR_RIFT_LIVE = "desert-treasure-ii:scar-rift-live-nerves";
+  const SCAR_NERVES_BROKEN = "desert-treasure-ii:scar-nerves-broken";
+  const SCAR_NERVE_LOCATIONS = [
+    { object: 49182, item: I.EARTH_NERVE, tiles: [[2198, 6411], [2204, 6419]] },
+    { object: 49183, item: I.AIR_NERVE, tiles: [[2195, 6418], [2206, 6416]] },
+    { object: 49184, item: I.WATER_NERVE, tiles: [[2202, 6410], [2204, 6414]] },
+    { object: 49185, item: I.FIRE_NERVE, tiles: [[2193, 6415], [2200, 6407]] },
+    { object: 49186, item: I.MIND_NERVE, tiles: [[2194, 6410], [2205, 6408], [2205, 6411]] },
+  ];
+  const SCAR_NERVE_RECIPES = [
+    [I.AIR_NERVE, I.EARTH_NERVE, I.DUST_NERVE],
+    [I.EARTH_NERVE, I.FIRE_NERVE, I.LAVA_NERVE],
+    [I.FIRE_NERVE, I.AIR_NERVE, I.SMOKE_NERVE],
+    [I.WATER_NERVE, I.FIRE_NERVE, I.STEAM_NERVE],
+    [I.MIND_NERVE, I.MIND_NERVE, I.SOUL_NERVE],
+    [I.WATER_NERVE, I.EARTH_NERVE, I.NATURE_NERVE],
+    [I.MIND_NERVE, I.WATER_NERVE, I.BLOOD_NERVE],
+    [I.SOUL_NERVE, I.NATURE_NERVE, I.COSMIC_NERVE],
+    [I.COSMIC_NERVE, I.EARTH_NERVE, I.ASTRAL_NERVE],
+    [I.SMOKE_NERVE, I.BLOOD_NERVE, I.WRATH_NERVE],
+  ];
   const ASGARNIA_SMITH_VAULT_INITIAL = 12401;
   const TOTEMS = [
     { kind: "blood", inactive: 12343, active: 12344, x: 2775, y: 6445, spells: ["BLOOD_BURST", "BLOOD_BLITZ", "BLOOD_BARRAGE"] },
@@ -1041,6 +1062,17 @@ module.exports = function registerDesertTreasureII(api) {
     return false;
   }
   function handleItemOnItem({ player: p, usedItemId: itemId1, usedWithItemId: itemId2 }) {
+    if (stage(p) === S.LEVIATHAN && p.getAttribute(SCAR_RIFT_LIVE)) {
+      const recipe = SCAR_NERVE_RECIPES.find(([first, second]) =>
+        (itemId1 === first && itemId2 === second) || (itemId1 === second && itemId2 === first));
+      if (recipe && has(p, recipe[0]) && has(p, recipe[1])) {
+        p.getInventory().deleteNumber(recipe[0], 1);
+        p.getInventory().deleteNumber(recipe[1], 1);
+        p.getInventory().adds(recipe[2], 1);
+        p.sendMessage("You combine the two nerve fibres into a stronger rune nerve.");
+        return true;
+      }
+    }
     if (stage(p) !== S.VARDORVIS || (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) < 11) return false;
     const pair = new Set([itemId1, itemId2]);
     if (pair.has(I.UNFINISHED_SERUM) && pair.has(I.KORBAL_HERB) && has(p, I.UNFINISHED_SERUM) && has(p, I.KORBAL_HERB)) {
@@ -1066,6 +1098,31 @@ module.exports = function registerDesertTreasureII(api) {
     const roomTile = warRoomSourceTile(p, location);
     const scarTile = scarSourceTile(p, location);
     const scarMazeTile = scarMazeSourceTile(p, location);
+    const visibleId = definition?.id ?? objectId;
+    if (s === S.LEVIATHAN && scarMazeTile && p.getAttribute(SCAR_TETHER_DESTROYED)) {
+      if (objectId === 49415 && scarMazeTile.x === 2233 && scarMazeTile.y === 6461) {
+        p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_ONE).tile(31, 12, 0));
+        p.sendMessage("The green neural teleporter carries you toward the catalyst chamber.");
+        return true;
+      }
+      if (objectId === 49411 && scarMazeTile.x === 2190 && scarMazeTile.y === 6412) {
+        p.setAttribute(SCAR_RIFT_LIVE, true);
+        p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_ONE).tile(39, 12, 0));
+        p.sendMessage("You enter the catalyst chamber. Break the nerve endings and combine them to match its rune.");
+        return true;
+      }
+      const nerve = SCAR_NERVE_LOCATIONS.find(({ object, tiles }) => object === visibleId
+        && tiles.some(([x, y]) => x === scarMazeTile.x && y === scarMazeTile.y));
+      if (nerve && p.getAttribute(SCAR_RIFT_LIVE)) {
+        const broken = p.getAttribute(SCAR_NERVES_BROKEN) ?? [];
+        const tileKey = `${visibleId}:${scarMazeTile.x}:${scarMazeTile.y}`;
+        if (broken.includes(tileKey)) return p.sendMessage("That nerve ending has already been broken.");
+        p.setAttribute(SCAR_NERVES_BROKEN, [...broken, tileKey]);
+        p.getInventory().adds(nerve.item, 1);
+        p.sendMessage("You break the nerve ending and take its elemental rune nerve.");
+        return true;
+      }
+    }
     if (s === S.LEVIATHAN && scarMazeTile?.x === 2210 && scarMazeTile.y === 6433 && objectId === O.ABYSSAL_TETHER) {
       if (!p.getAttribute(SCAR_PATH_COMPLETE)) return p.sendMessage("Follow each pathfinder through the maze to reach the tether.");
       p.setAttribute(SCAR_TETHER_DESTROYED, true);
