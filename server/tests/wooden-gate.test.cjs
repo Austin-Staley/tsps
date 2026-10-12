@@ -1,3 +1,4 @@
+
 // Run after `yarn build`: node --test tests/wooden-gate.test.cjs
 //
 // Wooden gates are two locs (hinge 12986 + extension 12987) that must swing together around
@@ -13,10 +14,15 @@ const { GameObject } = require('../dist/game/entity/impl/object/GameObject');
 const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
 const { Sounds } = require('../dist/game/Sounds');
 const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+const { ObjectManager } = require('../dist/game/entity/impl/object/ObjectManager');
+const { RegionManager } = require('../dist/game/collision/RegionManager');
+const { TemplatedInstanceArea } = require('../dist/game/model/areas/impl/TemplatedInstanceArea');
+const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
+const { crossingFor: shantayCrossingFor } = require('../plugins/objects/ShantayPass.plugin');
 
 const tileKey = (id, x, y, z) => `${id}@${x},${y},${z}`;
 
-function buildHarness() {
+function buildHarness({ cacheObjects, objectManager: suppliedObjectManager } = {}) {
   const world = new Map();
   const ops = [];
   const sounds = [];
@@ -29,15 +35,19 @@ function buildHarness() {
   MapObjects.get = (id, location) =>
     world.get(tileKey(id, location.getX(), location.getY(), location.getZ())) ?? null;
   Sounds.sendSound = (...args) => sounds.push(args);
-  CacheDefinitions.getObject = (id) => (id === 2394
+  CacheDefinitions.getObject = (id) => cacheObjects?.get(id) ?? (id === 3743
+    ? { name: 'Large door', actions: ['Open'], models: [[14930], [14931]] }
+    : id === 3747 ? { name: 'Door', actions: ['Open'], models: [[14928], [14929]] }
+    : id === 2394
     ? { name: 'Gate', actions: ['Open'], models: [[1298]] }
+    : id === 2606 ? { name: 'Wall', actions: ['Open'], models: [[633]] }
     : id === 8738 || id === 8739
       ? { name: 'Ardougne Wall Door', actions: ['Open'], models: [[1298]] }
       : { name: 'Gate' });
-  CacheDefinitions.getCounts = () => ({ npcs: 0, items: 0, objects: 8740 });
+  CacheDefinitions.getCounts = () => ({ npcs: 0, items: 0, objects: cacheObjects ? 62522 : 8740 });
 
   const handlers = new Map();
-  const objectManager = {
+  const objectManager = suppliedObjectManager ?? {
     register: (o) => ops.push(['register', o.getId(), o.getLocation().getX(), o.getLocation().getY(), o.getFace()]),
     deregister: (o) => ops.push(['deregister', o.getId(), o.getLocation().getX(), o.getLocation().getY(), o.getFace()]),
   };
@@ -60,6 +70,7 @@ function buildHarness() {
     onRegionLoaded: () => {},
     onPlayerProcess: () => {},
   };
+  delete require.cache[require.resolve('../plugins/objects/Doors.plugin')];
   require('../plugins/objects/Doors.plugin').register(api);
 
   const place = (id, x, y, face) => {
@@ -67,13 +78,13 @@ function buildHarness() {
     world.set(tileKey(id, x, y, 0), object);
   };
 
-  const click = (id, x, y, face, action = 'Open', name = 'Gate', type = 0) => {
-    const object = new GameObject(id, new Location(x, y, 0), type, face, null);
+  const click = (id, x, y, face, action = 'Open', name = 'Gate', type = 0, privateArea = null, z = 0) => {
+    const object = new GameObject(id, new Location(x, y, z), type, face, privateArea);
     const location = object.getLocation();
     const player = {
       getUsername: () => 'tester',
       isPlayerBot: () => false,
-      getPrivateArea: () => null,
+      getPrivateArea: () => privateArea,
       getLocation: () => location,
       getAttribute: () => 0,
       setAttribute: () => {},
@@ -82,7 +93,7 @@ function buildHarness() {
       getPacketSender: () => ({}),
     };
     ops.length = 0;
-    handlers.get(name)[action]({ player, object, objectId: id, location: { x, y, z: 0 } });
+    handlers.get(name)[action]({ player, object, objectId: id, location: { x, y, z } });
     return ops.splice(0);
   };
 
@@ -93,8 +104,98 @@ function buildHarness() {
     CacheDefinitions.getCounts = originalGetCounts;
   };
 
-  return { place, click, sounds, ops, submitted, restore };
+  return { place, click, sounds, ops, submitted, handlers, restore };
 }
+
+test('Kourend Crypt cached Large doors keep their real double-leaf geometry and clear the plane-1 threshold', async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(process.cwd());
+  RegionManager.init();
+  const cachedDoors = new Map([32404, 32405, 32406, 32407].map((id) => [
+    id,
+    CacheDefinitions.getObject(id),
+  ]));
+  for (const id of cachedDoors.keys()) {
+    const definition = cachedDoors.get(id);
+    assert.equal(definition.name, 'Large doors');
+    assert.equal(definition.actions[0], 'Open');
+    assert.deepEqual(definition.models, [[6623]]);
+  }
+
+  const area = new TemplatedInstanceArea(12, 8);
+  for (let chunkX = 0; chunkX < 12; chunkX++) {
+    for (let chunkY = 0; chunkY < 8; chunkY++) {
+      area.setChunk(1, chunkX, chunkY, { sourceChunkX: 184 + chunkX, sourceChunkY: 1240 + chunkY, sourcePlane: 1, rotation: 0 });
+    }
+  }
+  const x = area.getBaseX() + 31;
+  const y = area.getBaseY() + 36;
+  const upperY = area.getBaseY() + 24;
+  const closedLowerCrossing = RegionManager.canMove(x, y, x, y + 1, 1, 1, 1, area);
+  const closedUpperCrossing = RegionManager.canMove(x + 1, upperY - 1, x + 1, upperY, 1, 1, 1, area);
+  const h = buildHarness({ cacheObjects: cachedDoors, objectManager: ObjectManager });
+  const routes = new RsmodRouteFinding();
+  const route = (startY, endY) => routes.findRoute({
+    level: 1, srcX: x, srcY: startY, srcSize: 1, destX: x, destY: endY, privateArea: area, moveNear: false,
+  });
+  try {
+    assert.ok(h.handlers.get('Large doors')?.Open, 'the plural cache name must be registered');
+    const crossing = () => RegionManager.canMove(x, y, x, y + 1, 1, 1, 1, area);
+    assert.equal(closedLowerCrossing, false, 'the closed shape-0 leaves block the real source-map approach edge');
+    assert.equal(RegionManager.canMove(x, y - 2, x, y + 2, 1, 1, 1, area), false,
+      'the closed lower leaves block the complete south-to-north route');
+    assert.equal(RegionManager.canMove(x, y + 2, x, y - 2, 1, 1, 1, area), false,
+      'the closed lower leaves block the complete north-to-south route');
+    const westLeaf = area.resolveObject(32406, new Location(x, y, 1));
+    assert.ok(westLeaf, 'the west cached leaf is resolved from the template, not MapObjects');
+    const player = { getPrivateArea: () => area, getUsername: () => 'tester' };
+    h.handlers.get('Large doors').Open({ player, object: westLeaf, objectId: 32406, location: westLeaf.getLocation() });
+    assert.equal(crossing(), true, 'opening both cached leaves removes their original clipping and leaves the route walkable');
+    const lowerApproach = y - 2;
+    const lowerExit = y + 2;
+    assert.equal(area.getClip(new Location(x, lowerExit, 1)) & RegionManager.BLOCKED_TILE, 0,
+      'the cache terrain tile beyond the swung row at source y=9958 is not itself blocked');
+    assert.equal(RegionManager.canMove(x, lowerApproach, x, lowerExit, 1, 1, 1, area), true,
+      'the complete four-step south-to-north approach stays open beyond the swung leaves');
+    assert.equal(RegionManager.canMove(x, lowerExit, x, lowerApproach, 1, 1, 1, area), true,
+      'the complete four-step north-to-south return route also stays open');
+    assert.equal(route(lowerApproach, lowerExit).success, true,
+      'the normal route finder can reach beyond the swung lower leaves from the south');
+    assert.equal(route(lowerExit, lowerApproach).success, true,
+      'the normal route finder can return beyond the swung lower leaves from the north');
+
+    const movedLeaves = area.getObjects().filter((object) => [32406, 32407].includes(object.getId()));
+    assert.deepEqual(movedLeaves.map((object) => [object.getId(), object.getLocation().getX(), object.getLocation().getY(), object.getFace()]).sort(), [
+      [32406, x, y + 1, 0],
+      [32407, x + 1, y + 1, 2],
+    ]);
+    assert.ok(movedLeaves.every((object) => object.getPrivateArea() === area), 'open panels remain private to this crypt instance');
+
+    const upperCrossing = () => RegionManager.canMove(x + 1, upperY - 1, x + 1, upperY, 1, 1, 1, area);
+    assert.equal(closedUpperCrossing, false, 'the rotation-3 upper pair blocks the opposite approach edge');
+    assert.equal(RegionManager.canMove(x + 1, upperY - 2, x + 1, upperY + 2, 1, 1, 1, area), false,
+      'the closed upper leaves block the complete south-to-north route');
+    assert.equal(RegionManager.canMove(x + 1, upperY + 2, x + 1, upperY - 2, 1, 1, 1, area), false,
+      'the closed upper leaves block the complete north-to-south route');
+    const upperWestLeaf = area.resolveObject(32405, new Location(x, upperY, 1));
+    h.handlers.get('Large doors').Open({ player, object: upperWestLeaf, objectId: 32405, location: upperWestLeaf.getLocation() });
+    assert.equal(upperCrossing(), true, 'the rotation-3 pair also opens its template collision gap');
+    assert.equal(RegionManager.canMove(x + 1, upperY - 2, x + 1, upperY + 2, 1, 1, 1, area), true,
+      'the complete four-step south-to-north upper approach stays open beyond the swung leaves');
+    assert.equal(RegionManager.canMove(x + 1, upperY + 2, x + 1, upperY - 2, 1, 1, 1, area), true,
+      'the complete upper north-to-south return route also stays open');
+
+    const closeTask = h.submitted.at(-1);
+    closeTask.execute();
+    assert.equal(upperCrossing(), false, 'the ordinary auto-close restores both cached leaves and their collision');
+    const closedLeaves = area.getObjects().filter((object) => [32404, 32405].includes(object.getId()));
+    assert.equal(closedLeaves.length, 2);
+    assert.ok(closedLeaves.every((object) => object.getPrivateArea() === area), 'auto-close keeps both leaves in the private instance');
+  } finally {
+    area.destroy();
+    h.restore();
+  }
+});
+
 
 test('Tree Gnome Stronghold doors use their nameless open variants and restore on auto-close', () => {
   const h = buildHarness();
@@ -717,4 +818,101 @@ test('the Gnome Ball pitch gate 2394 rotates in place and closes back onto its w
   } finally {
     h.restore();
   }
+});
+
+
+test('the catacomb outer jail gate uses its actionless open cache variant and auto-closes', () => {
+ const h=buildHarness();try{
+  assert.deepEqual(h.click(53441,4126,4788,2),[
+   ['register',53442,4127,4788,3],['deregister',53441,4126,4788,2],
+  ]);
+  h.submitted.at(-1).execute();assert.deepEqual(h.ops.splice(0),[
+   ['deregister',53442,4127,4788,3],['register',53441,4126,4788,2],
+  ]);
+ }finally{h.restore();}
+});
+
+
+
+test('Dragon Slayer secret wall opens with the normal door interaction', () => {
+  const h = buildHarness();
+  try {
+    assert.ok(h.handlers.get('Wall')?.Open, 'the cache calls the Dragon Slayer passage a Wall');
+    h.place(2606, 2836, 9600, 3);
+    assert.deepEqual(h.click(2606, 2836, 9600, 3, 'Open', 'Wall'), [
+      ['register', 2606, 2836, 9599, 0],
+      ['deregister', 2606, 2836, 9600, 3],
+    ], 'opening rotates the wall out of the doorway so ordinary pathfinding can cross');
+  } finally {
+    h.restore();
+  }
+});
+
+
+test('the Shantay pass crosses the desert fence in the right direction', () => {
+  assert.deepEqual(shantayCrossingFor({ x: 3303, y: 3117, z: 0 }), {
+    desert: true,
+    path: [[3303, 3116], [3303, 3115]],
+  });
+  assert.deepEqual(shantayCrossingFor({ x: 3303, y: 3115, z: 0 }), {
+    desert: false,
+    path: [[3303, 3116], [3303, 3117]],
+  });
+  assert.equal(shantayCrossingFor({ x: 3303, y: 3115, z: 1 }), null);
+});
+
+
+test('Sophanem north gate opens and closes both nameless gate leaves', () => {
+  const h = buildHarness();
+  try {
+    h.place(44036, 3283, 2809, 1);
+    h.place(44038, 3284, 2809, 1);
+    assert.deepEqual(h.click(44036, 3283, 2809, 1), [
+      ['deregister', 44036, 3283, 2809, 1],
+      ['deregister', 44038, 3284, 2809, 1],
+      ['register', 44037, 3283, 2810, 0],
+      ['register', 44039, 3284, 2810, 2],
+    ]);
+
+    h.place(44037, 3283, 2810, 0);
+    h.place(44039, 3284, 2810, 2);
+    assert.deepEqual(h.click(44037, 3283, 2810, 0, 'Close'), [
+      ['deregister', 44037, 3283, 2810, 0],
+      ['deregister', 44039, 3284, 2810, 2],
+      ['register', 44036, 3283, 2809, 1],
+      ['register', 44038, 3284, 2809, 1],
+    ]);
+  } finally {
+    h.restore();
+  }
+});
+
+
+test("Harold's bedroom door rotates without needing a separate open cache loc", () => {
+  const h = buildHarness();
+  try {
+    assert.deepEqual(h.click(3747, 2906, 3543, 3, 'Open', 'Door'), [
+      ['register', 3747, 2906, 3542, 0],
+      ['deregister', 3747, 2906, 3543, 3],
+    ]);
+    assert.deepEqual(h.click(3747, 2906, 3542, 0, 'Open', 'Door'), [
+      ['register', 3747, 2906, 3543, 3],
+      ['deregister', 3747, 2906, 3542, 0],
+    ]);
+  } finally { h.restore(); }
+});
+
+
+test('Death Plateau equipment door swings open after the quest unlocks it', () => {
+  const h = buildHarness();
+  try {
+    assert.deepEqual(h.click(3743, 2894, 3566, 1, 'Open', 'Large door'), [
+      ['register', 3743, 2894, 3567, 2],
+      ['deregister', 3743, 2894, 3566, 1],
+    ]);
+    assert.deepEqual(h.click(3743, 2894, 3567, 2, 'Open', 'Large door'), [
+      ['register', 3743, 2894, 3566, 1],
+      ['deregister', 3743, 2894, 3567, 2],
+    ]);
+  } finally { h.restore(); }
 });

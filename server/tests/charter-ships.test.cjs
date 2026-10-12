@@ -32,7 +32,7 @@ CharterShips.register({
     },
     TeleportType: { NORMAL: "NORMAL" },
   },
-  sendMultiChatboxPrompt: (player, title, ...options) => { prompt = { player, title, options }; return true; },
+  sendMultiChatboxPrompt: (player, title, ...options) => { prompt = { title, options }; return true; },
   onNpcInteraction: (name, actions) => npcHooks.push({ name, actions }),
   emitCustomEvent,
   log() {},
@@ -97,7 +97,7 @@ test("sailing fails closed on missing or incomplete required quests and charges 
   assert.match(player.messages.at(-1), /pay 1600 coins/);
 });
 
-test("the menu identifies the current port and pages through destinations within chatbox limits", () => {
+test("the menu identifies the current port and lists the others with fares", () => {
   quests = [];
   prompt = null;
   const brimhaven = CharterShips._test.loadData().ports.find((port) => port.name === "Brimhaven");
@@ -105,22 +105,33 @@ test("the menu identifies the current port and pages through destinations within
     CharterShips._test.currentPort({ getLocation: () => brimhaven.destination })?.name,
     "Brimhaven"
   );
-  const player = createPlayer({ ring: ItemIdentifiers.RING_OF_CHAROS_A_ });
-  const event = {
-    player,
+  CharterShips._test.openMenu({
+    player: createPlayer({ ring: ItemIdentifiers.RING_OF_CHAROS_A_ }),
     npc: { getLocation: () => brimhaven.destination },
-  };
-  assert.equal(CharterShips._test.openMenu(event), true);
+  });
   const labels = prompt.options.filter((option) => typeof option === "string");
   assert.ok(labels.some((label) => label.startsWith("Catherby (240 coins)")));
   assert.ok(!labels.some((label) => label.startsWith("Brimhaven")));
-  assert.ok(labels.includes("More..."));
-  assert.ok(labels.length <= 5);
-  const more = prompt.options[prompt.options.indexOf("More...") + 1];
-  more();
-  const secondPage = prompt.options.filter((option) => typeof option === "string");
-  assert.ok(secondPage.includes("Previous..."));
-  assert.ok(secondPage.length <= 5);
-  assert.equal(prompt.player, player);
   assert.equal(npcHooks.filter((hook) => hook.name.toLowerCase().includes("trader")).length >= 2, true);
+});
+
+test("charter destinations page within the five-option chatbox and still sail to Port Phasmatys", () => {
+  teleports.length = 0;
+  quests = [{ key: "priest_in_peril", isComplete: () => true }];
+  const player = createPlayer();
+  const { ports } = CharterShips._test.loadData();
+  const sarim = ports.find((port) => port.name === "Port Sarim");
+  assert.equal(CharterShips._test.openMenu({ player, npc: { getLocation: () => sarim.destination } }), true);
+  let labels = prompt.options.filter((option) => typeof option === "string");
+  assert.equal(labels.length, 5);
+  assert.ok(labels.includes("More destinations..."));
+  assert.ok(!labels.some((label) => label.startsWith("Port Phasmatys")));
+
+  prompt.options[prompt.options.indexOf("More destinations...") + 1]();
+  labels = prompt.options.filter((option) => typeof option === "string");
+  assert.ok(labels.includes("Port Phasmatys (1300 coins)"));
+  prompt.options[prompt.options.indexOf("Port Phasmatys (1300 coins)") + 1]();
+  assert.equal(player.balance, 8700);
+  assert.equal(teleports.length, 1);
+  assert.deepEqual(teleports[0].destination, ports.find((port) => port.name === "Port Phasmatys").destination);
 });

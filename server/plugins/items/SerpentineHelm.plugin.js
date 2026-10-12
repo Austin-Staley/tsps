@@ -111,7 +111,7 @@ function checkCharges({ player, item }) {
 
 function chargeHelm(event) {
   const { player, usedItem, usedWithItem, usedItemId, usedWithItemId } = event;
-  const helm = chargedIds.has(usedItemId) || chargedFromUncharged.has(usedItemId) ? usedItem : usedWithItem;
+  const helm = chargedIds.has(usedItemId) || chargedFromUncharged.has(usedItemId) ? usedItem : chargedIds.has(usedWithItemId) || chargedFromUncharged.has(usedWithItemId) ? usedWithItem : null;
   const otherId = helm === usedItem ? usedWithItemId : usedItemId;
   if (!helm || Number(otherId) !== core.ItemIdentifiers.ZULRAHS_SCALES) {
     return;

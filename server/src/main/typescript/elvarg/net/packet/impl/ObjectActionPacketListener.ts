@@ -91,11 +91,6 @@ export class ObjectActionPacketListener {
         return;
       }
 
-      console.warn(
-        `[object-click-debug] unhandled id=${object.getId()} name="${definition?.getName() ?? "?"}" ` +
-        `type=${object.getType()} face=${object.getFace()} loc=${object.getLocation().getX()},${object.getLocation().getY()},${object.getLocation().getZ()} ` +
-        `action="${definition?.getInteractions()?.[clickType - 1] ?? "?"}"`
-      );
     };
 
     // From a boat deck there is no path across the water: main-world locs (a dock's

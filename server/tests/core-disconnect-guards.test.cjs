@@ -255,6 +255,90 @@ test('a disconnect during login cannot build a half-logged-in player', async () 
   await second.idle();
 });
 
+
+test('inventory Drop and Release reach item action hooks before the ground/drop fallback', () => {
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { DropItemPacketListener } = require('../dist/net/packet/impl/DropItemPacketListener');
+  const originalDefinition = CacheDefinitions.getItem;
+  const originalAction = PluginManager.emitItemAction;
+  const originalCanUse = PluginManager.emitCanUseItem;
+  const originalDrop = DropItemPacketListener.drop;
+  const calls = [];
+  const item = { getId: () => 29519 };
+  const inventory = { getItems: () => [item], capacity: () => 28 };
+  const connection = new net.ClientConnection(stubChannel());
+  connection.player = { getInventory: () => inventory, clearPendingAction() {} };
+  CacheDefinitions.getItem = () => ({ inventoryActions: [null,null,null,'Drop','Release'] });
+  PluginManager.emitCanUseItem = () => true;
+  DropItemPacketListener.drop = () => calls.push('fallback');
+  try {
+    PluginManager.emitItemAction = event => { calls.push(event.option); return true; };
+    connection.inventoryAction({ slot:0,itemId:29519,widgetId:3214,option:'Drop' });
+    connection.inventoryAction({ slot:0,itemId:29519,widgetId:3214,option:'Release' });
+    assert.deepEqual(calls,['Drop','Release']);
+    PluginManager.emitItemAction = () => false;
+    connection.inventoryAction({ slot:0,itemId:29519,widgetId:3214,option:'Drop' });
+    assert.equal(calls.at(-1),'fallback');
+  } finally {
+    CacheDefinitions.getItem = originalDefinition;
+    PluginManager.emitItemAction = originalAction;
+    PluginManager.emitCanUseItem = originalCanUse;
+    DropItemPacketListener.drop = originalDrop;
+  }
+});
+
+
+test('alchemy policy keeps rune and spellbook checks before neutralising a permitted item', () => {
+  const {PluginManager}=require('../dist/plugins/PluginManager');
+  const {MagicOnItemPacketListener}=require('../dist/net/packet/impl/MagicOnItemPacketListener');
+  const {MagicSpellbook}=require('../dist/game/model/MagicSpellbook');
+  const original=PluginManager.emitCustomEvent, events=[];
+  const amounts=new Map([[29573,1],[561,1],[554,5]]), item={getId:()=>29573,isTradeable:()=>false,isSellable:()=>false,
+    getDefinition:()=>({getHighAlchValue:()=>0,getLowAlchValue:()=>0})};
+  const inventory={capacity:()=>28,getItems:()=>[item],contains:id=>(amounts.get(id)||0)>0,getAmount:id=>amounts.get(id)||0,
+    deleteNumber:(id,n)=>amounts.set(id,(amounts.get(id)||0)-n),adds:(id,n)=>amounts.set(id,(amounts.get(id)||0)+n)};
+  const player={getInventory:()=>inventory,getEquipment:()=>({getWeapon:()=>null}),getSkillManager:()=>({getCurrentLevel:()=>99,addExperiences(){}}),
+    getSpellbook:()=>MagicSpellbook.NORMAL,sendMessage(){},performAnimation(){},performGraphic(){},
+    getPacketSender:()=>({sendTab(){}})};
+  try {
+    PluginManager.emitCustomEvent=(name,event)=>{events.push(name);if(name==='magic:alchemy-policy'){event.allowed=true;event.coins=0;}};
+    const listener=new MagicOnItemPacketListener();
+    amounts.set(561,0);listener.castOnItem(player,1178,29573,0);assert.equal(amounts.get(29573),1);
+    assert.ok(!events.includes('magic:alchemy-completed'));
+    amounts.set(561,1);listener.castOnItem(player,1178,29573,0);
+    assert.equal(amounts.get(29573),0);assert.equal(amounts.get(561),0);assert.equal(amounts.get(554),0);
+    assert.ok(events.includes('magic:alchemy-completed'));assert.ok(!amounts.has(995),'zero-value neutralisation creates no coins');
+  } finally {PluginManager.emitCustomEvent=original;}
+});
+
+test('a target may suppress a spell hit effect without changing its damage', () => {
+  const {PluginManager}=require('../dist/plugins/PluginManager'),{CombatSpells}=require('../dist/game/content/combat/magic/CombatSpells');
+  const original=PluginManager.emitCustomEvent;let healed=0;
+  const hit={isAccurate:()=>true,getAttacker:()=>({heal:n=>healed+=n}),getTarget:()=>({}),getTotalDamage:()=>40};
+  try {
+    PluginManager.emitCustomEvent=(name,e)=>{if(name==='magic:hit-effects')e.allowed=false;};
+    CombatSpells.BLOOD_RUSH.onHitCalc(hit);assert.equal(healed,0);assert.equal(hit.getTotalDamage(),40);
+    PluginManager.emitCustomEvent=()=>{};CombatSpells.BLOOD_RUSH.onHitCalc(hit);assert.equal(healed,4);
+  } finally {PluginManager.emitCustomEvent=original;}
+});
+
+
+test('Casting a utility spell cannot immediately select its newly opened choice dialogue', async () => {
+ const {LunarSpells}=require('../dist/game/content/combat/magic/LunarSpells');
+ const {SpellTeleports}=require('../dist/game/content/combat/magic/SpellTeleports');
+ const {PlayerStatus}=require('../dist/game/model/PlayerStatus');
+ const original=LunarSpells.handleSelf,teleport=SpellTeleports.handleSelf;let active=false,selected=0;
+ const connection=new net.ClientConnection(stubChannel());
+ connection.resolveSpellName=()=> 'Astral Contact';
+ connection.player={getAttribute(){},getInterfaceId:()=>-1,getStatus:()=>PlayerStatus.NONE,
+  getQuickPrayers:()=>({handleWidgetAction:()=>false}),getDialogueManager:()=>({isActive:()=>active,getCurrent:()=>active?{}:null,handleOption:()=>selected++})};
+ try {
+  SpellTeleports.handleSelf=()=>false;LunarSpells.handleSelf=()=>{active=true;return true;};
+  await connection.dispatch([{type:'widget_action',widgetId:(218<<16)|113,groupId:218,childId:113,buttonNum:1,itemId:9109}]);
+  assert.equal(active,true);assert.equal(selected,0);
+ }finally{LunarSpells.handleSelf=original;SpellTeleports.handleSelf=teleport;}
+});
 test('changing floors in one map region refreshes ground items, including Draynor fish food', () => {
   const { State } = require('../dist/game/entity/impl/grounditem/ItemOnGround');
   const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
@@ -324,4 +408,24 @@ test('generic object hooks receive the actual clicked cache action', () => {
   } finally {
     PluginManager.objectInteractionHooks = hooks; PluginManager.nextObjectHookOrder = order;
   }
+});
+
+test('NPC spell targeting requires explicit area permission for actionless puzzle NPCs', () => {
+  const {NPCOptionPacketListener}=require('../dist/net/packet/impl/NPCOptionPacketListener');
+  const {CombatSpells}=require('../dist/game/content/combat/magic/CombatSpells');
+  const originalNpc=World.getNpcs, originalSpell=CombatSpells.getCombatSpell;
+  let permission=null, attackable=false, valid=true, casts=0;
+  const npc={getHitpoints:()=>10,getLocation:()=>({}),getCurrentDefinition:()=>({isAttackable:()=>attackable}),
+    getPrivateArea:()=>({canCastOnNpc:()=>permission})};
+  const spell={canCastOnTarget:()=>valid};
+  const player={getHitpoints:()=>99,busy:()=>false,getLocation:()=>({isWithinDistance:()=>true}),
+    getMovementQueue:()=>({reset(){}}),getCombat:()=>({castSpellOn:(target,chosen)=>{assert.equal(target,npc);assert.equal(chosen,spell);casts++;}})};
+  World.getNpcs=()=>({capacityReturn:()=>10,get:()=>npc});CombatSpells.getCombatSpell=()=>spell;
+  try {
+    assert.equal(NPCOptionPacketListener.castSpell(player,1,1),false);
+    permission=true;assert.equal(NPCOptionPacketListener.castSpell(player,1,1),true);assert.equal(casts,1);
+    valid=false;assert.equal(NPCOptionPacketListener.castSpell(player,1,1),false,'normal spell requirements remain enforced');
+    valid=true;attackable=true;permission=false;assert.equal(NPCOptionPacketListener.castSpell(player,1,1),false);
+    permission=null;assert.equal(NPCOptionPacketListener.castSpell(player,1,1),true,'ordinary combat NPC targeting is unchanged');
+  } finally {World.getNpcs=originalNpc;CombatSpells.getCombatSpell=originalSpell;}
 });

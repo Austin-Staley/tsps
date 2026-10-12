@@ -47,6 +47,22 @@ test('prose conditions take their first branch and dead jumps fall through', () 
     "It seems you're missing out on some valuable experience. Would you like it?");
 });
 
+test('inline jump bodies play and missing external jumps still fall through', () => {
+  assert.deepEqual(flatten([
+    { player: 'before the jump' },
+    { type: 'jump', reference: 'continue', steps: [{ npc: 'inline continuation' }] },
+    { npc: 'tail' },
+  ]), [
+    { player: 'before the jump' },
+    { type: 'jump_to', steps: [{ npc: 'inline continuation' }] },
+    { npc: 'tail' },
+  ]);
+  assert.deepEqual(flatten([
+    { type: 'jump', reference: 'continue', id: 'missing-target' },
+    { npc: 'external jump fallthrough' },
+  ]), [{ npc: 'external jump fallthrough' }]);
+});
+
 test('a condition branch that continues reaches the next sibling check', () => {
   const steps = flatten([
     {
@@ -132,6 +148,34 @@ test('a nested "jump above" reaches an unselected sibling instead of looping', (
   startDialogue(api, event, tree, {}, { player, npc: event.npc, npcId: 4626, definition, pages: [] });
 
   assert.deepEqual(prompts, ['Q1', 'Q2', 'Q3']);
+});
+
+test('action dialogue events carry their Wiki step id', () => {
+  const actions = [];
+  const player = {
+    getDialogueManager: () => ({
+      reset() {},
+      startDialogues(chain) {
+        for (const entry of [...chain.getDialogues().values()].sort((a, b) => a.getIndex() - b.getIndex())) {
+          try { entry.send(player); } catch { /* action callbacks need no client */ }
+        }
+      },
+    }),
+    getPacketSender: () => ({ sendInterfaceRemoval() {} }),
+    sendMessage() {},
+  };
+  const definition = { getName: () => 'Bob', getId: () => 6750 };
+  const event = { player, npc: null, npcId: 6750, definition };
+  const api = {
+    emitCustomEvent(name, request) {
+      if (name !== 'npc-dialogue:action') return;
+      actions.push(request.stepId);
+      request.handled = true;
+    },
+  };
+  startDialogue(api, event, [{ type: 'action', text: 'The memory returns.', id: 'memory-restored' }], {},
+    { ...event, pages: [] });
+  assert.deepEqual(actions, ['memory-restored']);
 });
 
 test('a random alternative ending "same as above" repeats the previous alternative, not another menu', () => {
@@ -626,6 +670,40 @@ test('Morgan warns low-combat players and still offers to start Vampyre Slayer',
   assert.ok(!steps.some((step) => step.type === 'unavailable'));
   assert.ok(steps.some((step) => step.type === 'choice' && step.prompt === 'Start the Vampyre Slayer quest?'));
 });
+
+test('Quest transcripts preserve each named speaker instead of borrowing the clicked NPC head', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { startTranscript } = require('../plugins/quests/QuestRuntime');
+  const names = new Map([[13511,'Thaerisk'],[13543,'Akrisae'],[13540,'Idria'],[13519,'Silif']]);
+  const api = {
+    core: { ...PluginManager.getCoreApi(), NpcDefinition: { forId: id => ({getId:()=>id,getName:()=>names.get(id)||'null'}) } },
+    emitCustomEvent() {},
+  };
+  const lines=[];
+  const player={getUsername:()=> 'Test',getDialogueManager:()=>({reset(){},startDialogues:chain=>{
+    for(const e of chain.getDialogues().values())if(e.getNpcId)lines.push([e.getNpcId(),e.getText()]);
+  }})};
+  assert.equal(startTranscript(api,player,13543,'While Guthix Sleeps','forming-a-fellowship-capturing-a-spy-talking-to-thaerisk-idria-or-akrisae'),true);
+  assert.equal(lines[0][0],13511);
+  assert.ok(lines.some(([id,text])=>id===13543&&text.includes('Glad to have you')));
+  assert.ok(lines.some(([id,text])=>id===13540&&text.includes('theology')));
+});
+
+
+test('Core choice dialogues use native options and validate the resume without losing their chain', () => {
+ const {PluginManager}=require('../dist/plugins/PluginManager'),{DialogueManager}=require('../dist/game/model/dialogues/DialogueManager');
+ const {OptionDialogue,DialogueChainBuilder,StatementDialogue}=PluginManager.getCoreApi();const packets=[];let chosen;
+ const sender={sendInterfaceScript:id=>packets.push(['script',id]),sendVarbit(){},sendChatboxInterface:id=>packets.push(['open',id]),sendClientScript:(...a)=>packets.push(['cs2',...a]),sendInterfaceFlagsRange:(...a)=>packets.push(['flags',...a]),isChatboxInterface:id=>id===219,sendInterfaceRemoval(){}};
+ const player={getPacketSender:()=>sender};const manager=new DialogueManager(player);
+ const option=new OptionDialogue(0,{executeOption:n=>chosen=n},'First','Second');
+ manager.startDialogues(new DialogueChainBuilder().add(option,new StatementDialogue(1,'The conversation continues.')));
+ assert.ok(packets.some(a=>a[0]==='open'&&a[1]===219));assert.deepEqual(packets.find(a=>a[0]==='cs2'),['cs2',58,'Select an Option','First|Second']);
+ assert.equal(manager.getCurrent(),option);
+ for(const [uid,n]of [[OptionDialogue.OPTIONS_WIDGET_ID,0],[OptionDialogue.OPTIONS_WIDGET_ID,3],[OptionDialogue.OPTIONS_WIDGET_ID,1.5],[231<<16,1]])assert.equal(manager.handleResume(uid,n),false);
+ assert.equal(chosen,undefined);assert.equal(manager.handleResume(OptionDialogue.OPTIONS_WIDGET_ID,2),true);assert.equal(chosen,2);
+ assert.equal(manager.getCurrent(),option,'selecting must not erase entries owned by the option callback');
+});
+
 
 test('continuing a quest line preserves a new conversation started by its after callback', () => {
  let current,chain;const replacement={newConversation:true};

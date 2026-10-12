@@ -24,9 +24,9 @@ const DOOR_AUTO_CLOSE_TICKS = 500;
 // Not id+1 -> SINGLE_DOOR_OPEN_IDS. Two leaves -> DOUBLE_DOOR_ID_FAMILIES (+ SPECIAL_* maps when
 // the open ids are not closed+1). Same trick works for NPCs/items via C.getNpc / C.getItem.
 const DOOR_NAMES = new Set([
-  "Door", "Doors", "Large door", "Castle door", "Cell Door", "Cell door",
-  "Glass door", "Magic door", "Metal door", "Mind Door", "Tent door",
-  "Gate", "Metal gate", "Doorway", "Tree Door", "Ardougne Wall Door",
+  "Door", "Doors", "Large door", "Large doors", "Castle door", "Cell Door", "Cell door",
+  "Glass door", "Magic door", "Metal door", "Mind Door", "Tent door", "Wall",
+  "Gate", "Metal gate", "Doorway", "Tree Door", "Storeroom Door", "Ardougne Wall Door",
 ]);
 
 // Always name locs by their core.ObjectIdentifiers property (O.DOOR_358), never a raw id: the
@@ -45,7 +45,7 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   // door whose same-model "Close" locs (5245, 11617, 15205, 17115) all belong to other doors.
   // GATE_52 (Gnome Ball pitch and Tree Gnome Village): its same-model open variants (193, 2395)
   // are nameless with no actions and are never placed, so the pairing below cannot find them.
-  SELF_OPENING_DOOR_IDS = new Set([O.DOOR_223, O.DOOR_225, O.DOOR_226, O.DOOR_227, O.DOOR_228, O.DOOR_229, O.DOOR_230, O.DOOR_231, O.DOOR_358, O.GATE_52,
+  SELF_OPENING_DOOR_IDS = new Set([O.DOOR_223, O.DOOR_225, O.DOOR_226, O.DOOR_227, O.DOOR_228, O.DOOR_229, O.DOOR_230, O.DOOR_231, O.DOOR_358, O.GATE_52, O.WALL_9, O.DOOR_115, O.LARGE_DOOR_23,
     // The Blood Moon Rises crank-wheel house exit (61824) has no cache Close partner.
     O.DOOR_831,
     // The two Ardougne Wall Door loc variants swing open by rotating the same cache loc.
@@ -60,9 +60,14 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.LARGE_DOOR_11, O.LARGE_DOOR_14],
     [O.DOOR_180, O.DOOR_181],
     [O.DOOR_499, O.DOOR_498],
+    // Catacomb outer jail gate: its open cache variant has no Close action.
+    [O.GATE_301, O.GATE_302],
     // Tree Gnome Stronghold doors: 1967/1968 open into the cache's nameless 1969/1970.
     [O.TREE_DOOR, 1969],
     [O.TREE_DOOR_2, 1970],
+    // Troll Stronghold's cache has an action-less open loc 3811 with the same
+    // model as closed 3810, so it cannot be paired by the normal action scan.
+    [O.STOREROOM_DOOR, O.STOREROOM_DOOR + 1],
   ]);
 
   // Tree Gnome Stronghold main gate: one 5x2 loc (190, face 2) opens into two
@@ -106,6 +111,13 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   }
 
   DOUBLE_DOOR_ID_FAMILIES = Object.freeze([
+    // White Knights' Castle: the two leaves share model 639; their open ids are reversed.
+    Object.freeze([O.CASTLE_DOOR, O.CASTLE_DOOR_6, O.CASTLE_DOOR_7, O.CASTLE_DOOR_8]),
+    // Kourend Crypt's two thresholds have two adjacent shape-0 leaves with the same
+    // definition. They keep their loc ids while swinging, so they must not be paired
+    // by the single-door consecutive-id heuristic above.
+    Object.freeze([O.LARGE_DOORS, O.LARGE_DOORS_2]),
+    Object.freeze([O.LARGE_DOORS_3, O.LARGE_DOORS_4]),
     // Large doors (model 633): 1511 opens to 1512, 1513 to 1516 (1514 is an unnamed loc).
     Object.freeze([O.LARGE_DOOR_7, O.LARGE_DOOR_9, O.LARGE_DOOR_8, O.LARGE_DOOR_10]),
     Object.freeze([O.LARGE_DOOR_10, O.LARGE_DOOR_13]),
@@ -130,9 +142,17 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     Object.freeze([O.GATE_8, O.GATE_9, 28853, 28854]),
     // Large doors sharing model 639 with 1521/1524; they open into that family's 1522/1525.
     Object.freeze([O.LARGE_DOOR_98, O.LARGE_DOOR_99, O.LARGE_DOOR_16, O.LARGE_DOOR_18]),
+    // Sophanem's north entrance: closed leaves 44036/44038, nameless open leaves 44037/44039.
+    Object.freeze([O.GATE_232, O.GATE_233, 44037, 44039]),
   ]);
   // Both leaves of each pair are partners of the other.
   SPECIAL_DOUBLE_DOOR_PAIRS = Object.freeze([
+    [O.CASTLE_DOOR, O.CASTLE_DOOR_6],
+    [O.CASTLE_DOOR_7, O.CASTLE_DOOR_8],
+    // Kourend Crypt has two real double-door thresholds at z1. Both closed leaves
+    // use the same "Open" loc definition/model; they swing in place and keep their ids.
+    [O.LARGE_DOORS, O.LARGE_DOORS_2],
+    [O.LARGE_DOORS_3, O.LARGE_DOORS_4],
     [O.GATE_26, O.GATE_27],
     [O.GATE_29, O.GATE_30],
     [O.GATE_33, O.GATE_34],
@@ -144,11 +164,14 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.GATE_92, O.GATE_93],
     [O.GATE_94, O.GATE_95],
     [O.GATE_8, O.GATE_9],
+    [O.GATE_232, O.GATE_233],
+    [44037, 44039],
     [O.LARGE_DOOR_24, O.LARGE_DOOR_25],
     [O.LARGE_DOOR_26, O.LARGE_DOOR_27],
     [O.LARGE_DOOR_29, O.LARGE_DOOR_28],
     [O.LARGE_DOOR_31, O.LARGE_DOOR_30],
     [O.LARGE_DOOR_98, O.LARGE_DOOR_99],
+    [O.GATE_232, O.GATE_233],
     [O.LARGE_DOOR_16, O.LARGE_DOOR_18],
     [O.LARGE_DOOR_7, O.LARGE_DOOR_9],
     [O.LARGE_DOOR_8, O.LARGE_DOOR_10],
@@ -160,6 +183,12 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     }
   }
   SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
+    [O.CASTLE_DOOR, O.CASTLE_DOOR_7],
+    [O.CASTLE_DOOR_6, O.CASTLE_DOOR_8],
+    [O.LARGE_DOORS, O.LARGE_DOORS],
+    [O.LARGE_DOORS_2, O.LARGE_DOORS_2],
+    [O.LARGE_DOORS_3, O.LARGE_DOORS_3],
+    [O.LARGE_DOORS_4, O.LARGE_DOORS_4],
     [O.GATE_26, O.GATE_29],
     [O.GATE_27, O.GATE_30],
     [O.GATE_33, O.GATE_29],
@@ -179,6 +208,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.LARGE_DOOR_29, O.LARGE_DOOR_31],
     [O.LARGE_DOOR_28, O.LARGE_DOOR_30],
     [O.LARGE_DOOR_98, O.LARGE_DOOR_16],
+    [O.GATE_232, 44037],
+    [O.GATE_233, 44039],
     [O.LARGE_DOOR_99, O.LARGE_DOOR_18],
     [O.LARGE_DOOR_7, O.LARGE_DOOR_8],
     [O.LARGE_DOOR_9, O.LARGE_DOOR_10],
@@ -323,16 +354,23 @@ function toObjectSnapshot(object) {
       y: location?.getY?.() ?? location?.y ?? 0,
       z: location?.getZ?.() ?? location?.z ?? 0,
     },
+    privateArea: object?.getPrivateArea?.() ?? object?.privateArea ?? null,
   };
 }
 
 function objectFromSnapshot(snapshot, privateArea = null) {
+  const area = privateArea ?? snapshot.privateArea ?? null;
+  const existing = area?.getObjects?.().find((object) =>
+    object.getId?.() === snapshot.id && object.getType?.() === snapshot.type && object.getFace?.() === snapshot.face &&
+    locationKey(object.getLocation?.()) === locationKey(snapshot.location)
+  );
+  if (existing) return existing;
   return new core.GameObject(
     snapshot.id,
     cloneLocation(snapshot.location.x, snapshot.location.y, snapshot.location.z),
     snapshot.type,
     snapshot.face,
-    privateArea
+    area
   );
 }
 
@@ -384,7 +422,9 @@ function autoCloseDoor(anchorKey) {
     return;
   }
   for (const snapshot of state.current ?? []) {
-    core.ObjectManager.deregister(objectFromSnapshot(snapshot), true);
+    const object = objectFromSnapshot(snapshot);
+    core.ObjectManager.deregister(object, true);
+    object.getPrivateArea?.()?.detach?.(object);
   }
   for (const snapshot of state.closed ?? []) {
     core.ObjectManager.register(objectFromSnapshot(snapshot), true);
@@ -678,6 +718,7 @@ function createDynamicDoubleDoorRecord(object, location, originalId) {
     currentFace: Number(object.getFace?.() ?? object.face ?? 0) & 0x3,
     originalFace: Number(object.getFace?.() ?? object.face ?? 0) & 0x3,
     type: Number(object.getType?.() ?? object.type ?? 0),
+    privateArea: object.getPrivateArea?.() ?? object.privateArea ?? null,
   };
 }
 
@@ -698,7 +739,8 @@ function ensureDynamicDoubleDoorRecords(object, objectId, location, privateArea 
       location.getZ?.() ?? location.z ?? 0
     );
     for (const partnerId of familyIds) {
-      const partnerObject = core.MapObjects.get(partnerId, candidateLocation, privateArea);
+      const partnerObject = core.MapObjects.get(partnerId, candidateLocation, privateArea)
+        ?? privateArea?.resolveObject?.(partnerId, candidateLocation);
       if (!partnerObject) {
         continue;
       }
@@ -737,7 +779,12 @@ function isDoubleDoorOpen(record) {
   );
 }
 
-function doubleDoorRecordToObject(record, privateArea = null) {
+function doubleDoorRecordToObject(record, privateArea = record.privateArea ?? null) {
+  const existing = privateArea?.getObjects?.().find((object) =>
+    object.getId?.() === record.currentId && object.getType?.() === record.type && object.getFace?.() === record.currentFace &&
+    object.getLocation?.().getX?.() === record.x && object.getLocation?.().getY?.() === record.y && object.getLocation?.().getZ?.() === record.z
+  );
+  if (existing) return existing;
   return new core.GameObject(
     record.currentId,
     cloneLocation(record.x, record.y, record.z),
@@ -820,6 +867,7 @@ function handleDoubleDoor(player, object, objectId, location) {
   const currentObjects = pair.map((record) => doubleDoorRecordToObject(record));
   for (const previousObject of previousObjects) {
     core.ObjectManager.deregister(previousObject, true);
+    previousObject.getPrivateArea?.()?.detach?.(previousObject);
   }
   for (const currentObject of currentObjects) {
     core.ObjectManager.register(currentObject, true);

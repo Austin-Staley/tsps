@@ -38,7 +38,7 @@ const SMITHING_COMPONENT_BY_PRODUCT = new Map([
   ["Plate skirt", 21], ["Plate body", 22], ["Nails", 23], ["Med helm", 24],
   ["Full helm", 25], ["Square shield", 26], ["Kite shield", 27],
   ["Dart tips", 29], ["Arrowtips", 30], ["Throwing knives", 31],
-  ["Studs", 32], ["Bolts (unf)", 34],
+  ["Lamp frame", 28], ["Studs", 32], ["Bolts (unf)", 34],
 ]);
 const SMITHING_PRODUCT_BY_COMPONENT = new Map(
   [...SMITHING_COMPONENT_BY_PRODUCT].map(([product, component]) => [component, product])
@@ -301,6 +301,7 @@ const SMITHABLE_EQUIPMENT_DATA = [
   ["Bolts (unf)", 2353, 9378, 10, 1121, 4, 11461, 33, 1, 11459],
   ["Cannon ball", 2353, 2, 4, 1123, 3, 1096, 35, 1, 1132],
   ["Studs", 2353, 2370, 1, 1123, 4, 1134, 36, 1, 1135],
+  ["Lamp frame", 2353, 4544, 1, 0, 0, 0, 49, 1, 0, 25],
   ["Dagger", 2359, 1209, 1, 1119, 0, 1094, 50, 1, 1125],
   ["Axe", 2359, 1355, 1, 1120, 0, 1091, 51, 1, 1126],
   ["Mace", 2359, 1428, 1, 1120, 1, 1093, 52, 1, 1129],
@@ -384,6 +385,7 @@ const SMITHABLE_EQUIPMENT = SMITHABLE_EQUIPMENT_DATA.map(
     requiredLevel,
     barsRequired,
     barFrame,
+    xp,
   ]) => ({
     name,
     barId,
@@ -395,6 +397,7 @@ const SMITHABLE_EQUIPMENT = SMITHABLE_EQUIPMENT_DATA.map(
     requiredLevel,
     barsRequired,
     barFrame,
+    xp,
   })
 );
 
@@ -552,7 +555,7 @@ function performSmithAction(player, smithable) {
   inventory.deleteNumber(smithable.barId, smithable.barsRequired);
   inventory.addItem(new Item(smithable.itemId, smithable.amount));
   player.performAnimation(SMITH_ANIMATION);
-  player.getSkillManager().addExperiences(Skill.SMITHING, 10);
+  player.getSkillManager().addExperiences(Skill.SMITHING, smithable.xp ?? 10);
 
   player.sendMessage("You hammer the metal and shape an item.");
   pluginApi?.emitCustomEvent("smithing:success", {

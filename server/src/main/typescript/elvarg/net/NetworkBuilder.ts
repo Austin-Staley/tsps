@@ -47,7 +47,6 @@ import {
 import { ObjectActionPacketListener } from "./packet/impl/ObjectActionPacketListener";
 import { NPCOptionPacketListener } from "./packet/impl/NPCOptionPacketListener";
 import { ChatPacketListener } from "./packet/impl/ChatPacketListener";
-import { DialogueOption } from "../game/model/dialogues/DialogueOption";
 import { PlayerOptionPacketListener } from "./packet/impl/PlayerOptionPacketListener";
 import { MagicOnPlayerPacketListener } from "./packet/impl/MagicOnPlayerPacketListener";
 import { LunarSpells } from "../game/content/combat/magic/LunarSpells";
@@ -480,9 +479,7 @@ export class ClientConnection {
           })) {
             continue;
           }
-          if (this.player?.getDialogueManager().canContinue(packet.widgetId)) {
-            this.player.getDialogueManager().advance();
-          }
+          this.player?.getDialogueManager().handleResume(packet.widgetId, packet.childIndex);
           continue;
         }
         case "dialogue_amount": {
@@ -510,7 +507,13 @@ export class ClientConnection {
         }
         case "widget_action":
           if (this.player) {
+            const widgetAction = { player: this.player, packet, handled: false };
+            PluginManager.emitCustomEvent("player:widget-action", widgetAction);
+            if (widgetAction.handled) continue;
             const actionPacket = { ...packet, buttonNum: packet.buttonNum ?? 0 };
+            // The dialogue this click can answer: one opened by the click itself (an inventory
+            // option's statement) must not take the same click as its option.
+            const openDialogue = this.player.getDialogueManager().getCurrent();
             const equipmentSlot = EquipPacketListener.resolveEquipmentSlot(actionPacket.groupId, actionPacket.childId);
             if (WORLD_MAP_ORB_WIDGET_IDS.includes(actionPacket.widgetId) && actionPacket.buttonNum === 2) {
               this.player.getPacketSender().toggleWorldMap();
@@ -634,7 +637,9 @@ export class ClientConnection {
                 });
               }
             }
-            if (this.player.getDialogueManager().isActive() && actionPacket.buttonNum > 0 && actionPacket.buttonNum <= 5) {
+            if (this.player.getDialogueManager().isActive() && openDialogue != null &&
+                this.player.getDialogueManager().getCurrent() === openDialogue &&
+                actionPacket.buttonNum > 0 && actionPacket.buttonNum <= 5) {
               this.player.getDialogueManager().handleOption(actionPacket.buttonNum - 1 as DialogueOption);
             }
           }
@@ -697,6 +702,11 @@ export class ClientConnection {
           }
           continue;
         case "widget_drag":
+          if (this.player) {
+            const widgetDrag = { player: this.player, packet, handled: false };
+            PluginManager.emitCustomEvent("player:widget-action", widgetDrag);
+            if (widgetDrag.handled) continue;
+          }
           if (this.player && !Bank.handleDrag(this.player, packet)) SwitchItemSlotPacketListener.move(
             this.player, packet.sourceWidgetId, packet.sourceSlot, packet.targetSlot
           );
@@ -1044,11 +1054,17 @@ export class ClientConnection {
       ? (CacheDefinitions.getItem(packet.itemId)?.inventoryActions ?? [])
           .findIndex((action) => action?.toLowerCase() === option) + 1
       : packet.optionIndex;
-    if (optionIndex === 0) return;
-    if (/^(wield|wear|equip|hold)$/.test(option)) {
+    // Quest greegrees have equipment slots but no cache Wield action.
+    if (/^(wield|wear|equip|hold)$/.test(option)
+      && ItemDefinition.forId(packet.itemId).getEquipmentType().getSlot() >= 0) {
       EquipPacketListener.equip(player, packet.itemId, packet.slot, 3214);
-    } else if (ItemActionPacketListener.isDropOption(option, optionIndex)) {
-      DropItemPacketListener.drop(player, packet.itemId, 3214, packet.slot);
+      return;
+    }
+    if (optionIndex === 0) return;
+    if (ItemActionPacketListener.isDropOption(option, optionIndex)) {
+      if (!ItemActionPacketListener.handleAction(player, packet.widgetId, packet.itemId, packet.slot, optionIndex ?? 5, packet.option)) {
+        DropItemPacketListener.drop(player, packet.itemId, 3214, packet.slot);
+      }
     } else if (option === "examine") {
       const definition = ItemDefinition.forId(packet.itemId);
       player.sendMessage(definition.getExamine() || definition.getName());
@@ -1180,3 +1196,4 @@ export class ClientConnection {
     });
   }
 }
+import { DialogueOption } from "../game/model/dialogues/DialogueOption";

@@ -478,7 +478,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   function startSiegeDrakanBattle(player) {
     const existing = player.getAttribute(SIEGE_DRAKAN_AREA_ATTRIBUTE);
     if (existing && existing.isDestroyed?.() !== true) return true;
-    if (stage(player) !== STAGE.SIEGE) return false;
+    if (stage(player) !== STAGE.SIEGE || hallDefenceState(player).phase !== "breach") return false;
     const area = new SiegeDrakanArea(player.getUsername?.());
     const boss = api.spawnNpc({ id: NpcIdentifiers.LOWERNIEL_DRAKAN_19, x: 3168, y: 7853, z: 1,
       wanderRadius: 0, owner: player, ownerOnly: true });
@@ -564,15 +564,20 @@ module.exports = function registerTheBloodMoonRises(api) {
     const updated = { ...state, integrity,
       participation: (state.participation ?? 0) + (participated ? 1 : 0) };
     player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
-    if (integrity <= HALL_INTEGRITY_THRESHOLD && state.phase === "hall") {
+    if (integrity <= HALL_INTEGRITY_THRESHOLD && !updated.qualified) {
       if (updated.participation < HALL_PARTICIPATION_REQUIRED) {
         updated.integrity = HALL_INTEGRITY_THRESHOLD + 1;
         player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
         player.sendMessage("The Aranei need more help before the doors give way. Repair another damaged window or pillar, or heal a fallen Aranei.");
         return;
       }
+      updated.qualified = true;
+      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
+    }
+    if (integrity === 0 && updated.qualified) {
       updated.phase = "breach";
       player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
+      quest.setStage(player, STAGE.SIEGE);
       startTranscript(api, player, NpcIdentifiers.LOWERNIEL_DRAKAN_19, PAGE,
         "drakan-s-siege-upon-reaching-0-hideout-integrity");
     }
@@ -607,12 +612,13 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (old && old.isRegistered?.() && old.getHitpoints?.() > 0) return;
     const npc = api.spawnNpc({ id: NpcIdentifiers.ARANEI_112, x: 3173, y: 7855, z: 1,
       wanderRadius: 0, owner: player, ownerOnly: true });
-    if (npc) siegeHallInjured.set(key, npc);
+    if (npc) { player.getPrivateArea?.()?.enter(npc); siegeHallInjured.set(key, npc); }
   }
 
   function handleSiegeLogin({ player }) {
     if (!player || stage(player) !== STAGE.SIEGE) return;
     const state = hallDefenceState(player);
+    hall.enter(player);
     if (state.phase === "hall") player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE,
       { ...state, nextIntegrityLossCycle: World.getProcessCycle() + HALL_INTEGRITY_INTERVAL });
     spawnSiegeInjuredAranei(player);
@@ -630,8 +636,9 @@ module.exports = function registerTheBloodMoonRises(api) {
     const object = event.object;
     if (!object) return false;
     const location = object.getLocation();
-    const replacement = new api.core.GameObject(replacementId, location.clone(), object.getType(), object.getFace(),
-      object.getPrivateArea?.() ?? null);
+    const area = hall.sessions.get(event.player);
+    if (!area || object.getPrivateArea?.() !== area) return false;
+    const replacement = new api.core.GameObject(replacementId, location.clone(), object.getType(), object.getFace(), area);
     api.core.ObjectManager.deregister(object, true);
     api.core.ObjectManager.register(replacement, true);
     return true;
@@ -644,7 +651,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     const { x, y, z } = event.location ?? {};
     const state = hallDefenceState(player);
     const inventory = player.getInventory();
-    if (state.phase !== "hall") return;
+    if (!["hall", "breach"].includes(state.phase) || event.object?.getPrivateArea?.() !== hall.sessions.get(player)) return;
 
     if (objectId === SIEGE_HALL.hammerCrate || objectId === SIEGE_HALL.potionCrate) {
       event.handled = true;
@@ -654,13 +661,14 @@ module.exports = function registerTheBloodMoonRises(api) {
       return;
     }
 
-    if (objectId === SIEGE_HALL.barricade && x === 3167 && y === 7844 && z === 1 && state.phase === "hall") {
+    if (objectId === SIEGE_HALL.barricade && x === 3167 && y === 7844 && z === 1) {
       event.handled = true;
-      player.sendMessage("The reinforced door is still holding. Keep repairing the hall and helping the Aranei until its integrity falls to half.");
+      if (state.phase === "breach") { startSiegeDrakanBattle(player); return; }
+      player.sendMessage("The reinforced door is still holding. Keep repairing the hall and helping the Aranei until Lowerniel breaks through.");
       return;
     }
 
-    if (z !== 1) return;
+    if (z !== 1 || state.phase !== "hall") return;
     const repairKey = `${x},${y}`;
     const repair = SIEGE_HALL.repairLocations.get(repairKey);
     if (!repair || objectId !== repair[0]) return;
@@ -684,7 +692,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     const npc = event?.npc ?? event?.target;
     const npcId = event?.npcId ?? npc?.getId?.();
     if (!player || !npc || !SIEGE_HALL.injuredAranei.includes(npcId) ||
-      stage(player) !== STAGE.SIEGE || hallDefenceState(player).phase !== "hall") return;
+      stage(player) !== STAGE.SIEGE || hallDefenceState(player).phase !== "hall") return false;
+    if (npc.getOwner?.() !== player || npc.getArea?.() !== hall.sessions.get(player)) return false;
     event.handled = true;
     const state = hallDefenceState(player);
     const key = injuredAraneiKey(npc);
@@ -781,6 +790,22 @@ module.exports = function registerTheBloodMoonRises(api) {
     return startTranscript(api, player, 0, PAGE, "fighting-wyrds-inspecting-the-broken-fence");
   }
 
+  function nativeStage(value, player) {
+    if (value === STAGE.COMPLETE) return 176;
+    if (value === STAGE.PREPARATIONS) {
+      const prep = player?.getAttribute(PREP_ATTRIBUTE) ?? {};
+      if (prep.flail && prep.stakes) return 114;
+      if (prep.flail) return 112;
+      if (prep.stewFed) return 110;
+      return player?.getInventory?.().contains(PREP.stew) ? 104 : 102;
+    }
+    if (value === STAGE.SIEGE) {
+      const phase = player?.getAttribute(SIEGE_DEFENCE_ATTRIBUTE)?.phase;
+      return ({ 'fall-back': 118, hall: 120, breach: 122 })[phase] ?? 116;
+    }
+    return value;
+  }
+
   function stage(player) { return quest.getStage(player); }
   function advance(player, value) {
     if (stage(player) < value) quest.setStage(player, value);
@@ -849,8 +874,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!player || quest.isComplete(player)) return;
     const next = ACTION_STAGE[event.stepId];
     if (event.stepId === "vqg4qO") {
-      bridge.finish(player);
+      if (stage(player) !== STAGE.SIEGE || !bridge.finish(player)) return;
       player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { phase: "hall", integrity: 100, healed: [], repaired: [] });
+      quest.setStage(player, STAGE.SIEGE);
+      hall.enter(player);
       spawnSiegeInjuredAranei(player);
     }
     if (event.stepId === "Sut83Q") {
@@ -1636,20 +1663,21 @@ module.exports = function registerTheBloodMoonRises(api) {
     } else if (name === "shelves" && prepObjectAt(event, 3159, 7824, 1) && !hasItem(player, PREP.bowl)) {
       changed = inventory.adds(PREP.bowl, 1);
       variant = "hallowed-preparations-searching-the-shelves";
-    } else if (name === "sink" && prepObjectAt(event, 3157, 7825, 1) && inventory.contains(PREP.bowl)) {
-      changed = replaceItems(player, [PREP.bowl], [PREP.bowl], [[PREP.bowlWater, 1]]);
     } else if (name === "cupboard" && prepObjectAt(event, 3155, 7832, 1)) {
-      if (inventory.contains(PREP.incompleteStew) && !hasItem(player, PREP.rawMeat)) {
-        changed = inventory.adds(PREP.rawMeat, 1);
-      } else if (inventory.contains(PREP.bowlWater) && !hasItem(player, PREP.potato)) {
-        changed = inventory.adds(PREP.potato, 1);
-      }
-      if (changed) variant = "hallowed-preparations-searching-the-cupboard";
-    } else if (name === "workbench" && prepObjectAt(event, 3176, 7841, 1) &&
-      (!hasItem(player, PREP.hammer) || !hasItem(player, PREP.chisel) || !hasItem(player, PREP.knife))) {
-      const next = !hasItem(player, PREP.hammer) ? PREP.hammer : !hasItem(player, PREP.chisel) ? PREP.chisel : PREP.knife;
-      changed = inventory.adds(next, 1);
-      variant = "hallowed-preparations-searching-the-workbench";
+      event.handled = true;
+      api.sendMultiChatboxPrompt(player, "What would you like to take?",
+        "Potato.", () => takePrepItem(player, PREP.potato, "You take a potato from the cupboard."),
+        "Raw meat.", () => takePrepItem(player, PREP.rawMeat, "You take some raw meat from the cupboard."),
+        "Nothing.", () => {});
+      return;
+    } else if (name === "workbench" && prepObjectAt(event, 3176, 7841, 1)) {
+      event.handled = true;
+      api.sendMultiChatboxPrompt(player, "What would you like to take?",
+        "Hammer.", () => takePrepItem(player, PREP.hammer, "You take a hammer from the workbench."),
+        "Chisel.", () => takePrepItem(player, PREP.chisel, "You take a chisel from the workbench."),
+        "Knife.", () => takePrepItem(player, PREP.knife, "You take a knife from the workbench."),
+        "Nothing.", () => {});
+      return;
     } else if ((name.includes("crate") || name.includes("blisterwood")) && prepObjectAt(event, 3177, 7843, 1) && !hasItem(player, PREP.logs)) {
       changed = inventory.adds(PREP.logs, 1);
       variant = "hallowed-preparations-searching-the-blisterwood-crate";
@@ -1671,17 +1699,36 @@ module.exports = function registerTheBloodMoonRises(api) {
     } else if (name === "anvil" && prepObjectAt(event, 3179, 7842, 1) && inventory.contains(PREP.enhancedSickle) && inventory.contains(PREP.marks) &&
       inventory.contains(PREP.blisterwoodFlail) && inventory.contains(PREP.hammer) &&
       player.getSkillManager().getMaxLevel(Skill.SMITHING) >= 72) {
-      changed = replaceItems(player, [PREP.enhancedSickle, PREP.marks, PREP.blisterwoodFlail, PREP.hammer],
-        [PREP.enhancedSickle, PREP.marks, PREP.blisterwoodFlail], [[PREP.flail, 1]]);
-      if (changed) {
-        player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), flail: true });
-        variant = "hallowed-preparations-creating-the-hallowed-flail";
-      }
+      event.handled = true;
+      api.sendMultiChatboxPrompt(player, "Upgrade your flail?", "Yes.", () => {
+        if (stage(player) !== STAGE.PREPARATIONS || player.getSkillManager().getMaxLevel(Skill.SMITHING) < 72) return;
+        if (replaceItems(player, [PREP.enhancedSickle, PREP.marks, PREP.blisterwoodFlail, PREP.hammer],
+          [PREP.enhancedSickle, PREP.marks, PREP.blisterwoodFlail], [[PREP.flail, 1]])) {
+          player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), flail: true });
+          quest.setStage(player, STAGE.PREPARATIONS);
+          player.sendMessage("You upgrade your flail by swapping out the sickle and shortening the shaft before enhancing it with pure silvthrill.");
+        }
+      }, "No.", () => {});
+      return;
     }
     if (!changed) return;
     event.handled = true;
     if (variant) prepAction(player, variant);
     else player.sendMessage(`You ${option === "search" ? "search" : "use"} the ${name}.`);
+  }
+
+  function handlePrepItemOnObject(event) {
+    const player = event?.player;
+    if (!player || stage(player) !== STAGE.PREPARATIONS) return;
+    let result;
+    if (event.objectId === ObjectIdentifiers.SINK_40 && prepObjectAt(event, 3156, 7824, 1) && event.itemId === PREP.bowl) result = PREP.bowlWater;
+    if (event.objectId === ObjectIdentifiers.RANGE_24 && prepObjectAt(event, 3160, 7826, 1)) {
+      if (event.itemId === PREP.rawMeat) result = PREP.cookedMeat;
+      if (event.itemId === PREP.uncookedStew) result = PREP.cookedStew;
+    }
+    if (!result || !replaceItems(player, [event.itemId], [event.itemId], [[result, 1]])) return;
+    event.handled = true;
+    player.sendMessage(result === PREP.bowlWater ? 'You fill the bowl with water.' : 'You cook the ingredient for Safalaan’s stew.');
   }
 
   function handlePrepItemOnItem(event) {
@@ -1707,24 +1754,34 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
     if (!recipe) return;
     event.handled = true;
-    if (!recipe[0].every((id) => inventory.contains(id))) return;
-    for (const id of recipe[1]) inventory.deleteNumber(id, 1);
-    for (const [id, count] of recipe[2]) inventory.adds(id, count);
+    if (pair.has(PREP.blessedSickle) || pair.has(PREP.enchantedSickle)) {
+      const diamond = pair.has(PREP.blessedSickle);
+      api.sendMultiChatboxPrompt(player, diamond ? "Craft a diamond sickle?" : "Craft an enhanced blisterwood sickle?",
+        "Yes.", () => craftPrepRecipe(player, recipe, pair), "No.", () => {});
+    } else craftPrepRecipe(player, recipe, pair);
+  }
+
+  function takePrepItem(player, id, message) {
+    if (stage(player) !== STAGE.PREPARATIONS || hasItem(player, id)) return;
+    if (player.getInventory().adds(id, 1)) player.sendMessage(message);
+  }
+
+  function craftPrepRecipe(player, recipe, pair) {
+    if (stage(player) !== STAGE.PREPARATIONS || !replaceItems(player, ...recipe)) return;
     if (pair.has(PREP.logs) && pair.has(PREP.knife)) {
       player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), stakes: true });
       player.sendMessage("You cut the blisterwood logs into five stakes.");
     } else if (pair.has(PREP.blessedSickle)) {
-      prepAction(player, "hallowed-preparations-creating-the-diamond-sickle");
+      player.sendMessage("You embed the diamond into the sickle.");
     } else if (pair.has(PREP.diamondSickle)) {
-      prepAction(player, "hallowed-preparations-creating-the-diamond-sickle");
+      player.sendMessage("You enchant the diamond sickle.");
     } else if (pair.has(PREP.enchantedSickle)) {
-      prepAction(player, "hallowed-preparations-creating-the-blisterwood-sickle-e");
+      player.sendMessage("You enhance the diamond sickle with blisterwood, making an enhanced blisterwood sickle.");
       player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), sickle: true });
     } else if (pair.has(PREP.cookedStew)) {
       prepAction(player, "hallowed-preparations-making-the-amitire-stew");
-    } else {
-      player.sendMessage("You combine the ingredients.");
-    }
+    } else player.sendMessage("You combine the ingredients.");
+    quest.setStage(player, STAGE.PREPARATIONS);
   }
 
   function feedSafalaan(event) {
@@ -1736,6 +1793,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.getInventory().deleteNumber(PREP.stew, 1);
     player.getInventory().adds(PREP.marks, 1);
     player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), stewFed: true });
+    quest.setStage(player, STAGE.PREPARATIONS);
     prepAction(player, "hallowed-preparations-feeding-safalaan-the-stew", event.npcId);
   }
 
@@ -1760,7 +1818,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     varpId: 5618,
     varbitId: 15464,
     // shortcut: other chapter native stages need their cache morphs validated before mapping.
-    varpValue: value => ({ [STAGE.PREPARATIONS]: 102, [STAGE.SIEGE]: 116, [STAGE.COMPLETE]: 176 })[value] ?? value,
+    varpValue: nativeStage,
     startedValue: STAGE.STARTED,
     completionValue: STAGE.COMPLETE,
     questPoints: 4,
@@ -1769,8 +1827,19 @@ module.exports = function registerTheBloodMoonRises(api) {
     otherRewards: ["Access to Vampyrium", "A Hallowed flail", "Sunspear", "The vampyres of Morytania are tolerant of you"],
     buildJournal,
   });
-  require("../bmr/Palace.TheBloodMoonRises")({ api, stage, preparationAttribute: PREP_ATTRIBUTE });
+  const hall = require("../bmr/Hall.TheBloodMoonRises")({ api, state: hallDefenceState,
+    process: processSiegeDefence, cleanup: handleSiegeLogout, scenery: player => {
+      const repaired = hallDefenceState(player).repaired ?? [];
+      // shortcut: potion-crate placement is inferred on reachable hall flooring; calibrate against a live OSRS capture.
+      return [[SIEGE_HALL.hammerCrate, 3177, 7843], [SIEGE_HALL.potionCrate, 3171, 7847],
+        [SIEGE_HALL.barricade, 3167, 7844], ...[...SIEGE_HALL.repairLocations].map(([key, ids]) => {
+          const [x, y] = key.split(',').map(Number);
+          return [ids[repaired.includes(key) ? 1 : 0], x, y, ids[0] === SIEGE_HALL.damagedWindow ? 0 : 10, ids[0] === SIEGE_HALL.damagedWindow ? 2 : 0];
+        })];
+    } });
+  require("../bmr/Palace.TheBloodMoonRises")({ api, stage, preparationAttribute: PREP_ATTRIBUTE, processHall: ({ player }) => hall.enter(player) });
   const bridge = require("../bmr/Bridge.TheBloodMoonRises")({ api, stage, attribute: SIEGE_DEFENCE_ATTRIBUTE,
+    sync: player => quest.setStage(player, STAGE.SIEGE),
     ready: player => { const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {}; return prep.flail && prep.stakes; },
     play: (player, npc, variant) => startTranscript(api, player, npc, PAGE, variant) });
   api.persistAttribute(ATTRIBUTE);
@@ -1791,6 +1860,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction(handleGalleryChest);
   api.onObjectInteraction(handleBloodHuntObjects);
   api.onObjectRoute(routeBloodHuntObjects);
+  api.onItemOnObject(handlePrepItemOnObject, { noted: false });
   api.onItemOnObject(handleBasinPotion, { noted: false });
   api.onItemOnObject(handleMountShield, { noted: false });
   api.onItemOnObject(handleClockHandOnClock, { noted: false });
@@ -1804,18 +1874,14 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onItemOnItem(handleBloodHuntItemOnItem);
   api.onItemOnNpc(feedSafalaan);
   api.onItemAction("Dusty book", { Read: readDustyBook });
-  for (const id of SIEGE_HALL.injuredAranei) {
-    api.onNpcInteraction(id, { Heal: healSiegeAranei });
-  }
+  api.onNpcInteraction("Aranei", { Heal: healSiegeAranei });
   api.onPlayerProcess(syncHuntGroundItems);
-  api.onPlayerProcess(processSiegeDefence);
   api.onPlayerLogin(handleSiegeLogin);
   api.onPlayerLogout(handleSiegeLogout);
   api.onNpcDeath(handleWyrdDeath);
   api.onNpcHitModify(handleSiegeDrakanHit);
   api.persistAttribute(WYRD_DEFEATED_ATTRIBUTE);
   api.persistAttribute(DRAKAN_ENCOUNTER_COMPLETE);
-  api.persistAttribute(SIEGE_DRAKAN_AREA_ATTRIBUTE);
   api.persistAttribute(SIEGE_DRAKAN_COMPLETE);
   api.persistAttribute(SIEGE_DEFENCE_ATTRIBUTE);
   api.persistAttribute(TOB_CHALLENGE_ATTRIBUTE);

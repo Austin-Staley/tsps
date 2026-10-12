@@ -7,6 +7,9 @@
  * (King Roald, Reldo, ...) fall back to it after the other quests' handlers.
  */
 const QUESTS = [
+  "RecipeForDisaster",
+  "WhileGuthixSleeps",
+  "ANightAtTheTheatre",
   // Sins of the Father is the last Myreque chapter, so it registers before the
   // earlier ones (In Search of/In Aid/Darkness of Hallowvale, A Taste of Hope):
   // its stage window wins the shared Myreque NPCs and it defers outside it.
@@ -18,8 +21,8 @@ const QUESTS = [
   "ColdWar", "Contact", "CooksAssistant", "CorsairCurse",
   "CrabQuest", "CreatureOfFenkenstrain", "CurrentAffairs", "CurseOfArrav",
   "DarknessOfHallowvale", "DeathOnTheIsle", "DeathPlateau", "DeathToTheDorgeshuun",
-  "DefenderOfVarrock", "DemonSlayer", "DepthsOfDespair", "DesertTreasureI",
-  "DeviousMinds", "DigSite", "DoricsQuest", "DragonSlayer",
+  "DefenderOfVarrock", "DemonSlayer", "DepthsOfDespair", "DesertTreasureI", "DesertTreasureII",
+  "DeviousMinds", "DigSite", "DoricsQuest", "DragonSlayer", "DragonSlayerII",
   "DreamMentor", "DruidicRitual", "DwarfCannon", "EadgarsRuse",
   "EaglesPeak", "ElementalWorkshopI", "ElementalWorkshopII", "EnakhrasLament",
   "EnlightenedJourney", "ErnestTheChicken", "EthicallyAcquiredAntiquities", "EyesOfGlouphrie",

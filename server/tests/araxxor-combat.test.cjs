@@ -64,12 +64,6 @@ test("the spray fans outward along the boss-to-player direction", () => {
   }
 });
 
-test("cleave pools run perpendicular to the blow", () => {
-  assert.deepEqual(Shared.cleavePoolTiles(10, 10, 0, -1), [[10, 10], [9, 10], [11, 10]]);
-  assert.deepEqual(Shared.cleavePoolTiles(10, 10, 1, 0), [[10, 10], [10, 9], [10, 11]]);
-  assert.deepEqual(Shared.cleavePoolTiles(10, 10, 0, 0), [[10, 10], [9, 10], [11, 10]]);
-});
-
 test("pool damage ramps to the Wiki's cap", () => {
   assert.equal(Shared.poolDamage(1), 4);
   assert.equal(Shared.poolDamage(2), 6);
@@ -206,4 +200,65 @@ test("Araxxor cleanup leaves incoming hits alone for players without a lair", ()
   assert.equal(cleared, 1, "the departing Araxxor player's pending shots are cleared");
   processPlayer({ player });
   assert.equal(cleared, 1, "cleanup ends with the actual instance");
+});
+
+
+test("cleave pools run along the blow", () => {
+  assert.deepEqual(Shared.cleavePoolTiles(10, 10, 0, -1), [[10, 10], [10, 9], [10, 11]]);
+  assert.deepEqual(Shared.cleavePoolTiles(10, 10, 1, 0), [[10, 10], [9, 10], [11, 10]]);
+  assert.deepEqual(Shared.cleavePoolTiles(10, 10, 0, 0), [[10, 10], [9, 10], [11, 10]]);
+});
+
+
+test("spawned eggs are pinned: scripted movement and zero wander radius", () => {  const eggs = [];
+  const fakeCore = {
+    NPC: {
+      create: () => {
+        const egg = {
+          scripted: undefined,
+          radius: undefined,
+          setHitpoints: () => {},
+          performAnimation: () => {},
+          setAttribute: () => {},
+          setScriptedMovement: (value) => { egg.scripted = value; },
+          getMovementCoordinator: () => ({ setRadius: (value) => { egg.radius = value; } }),
+        };
+        eggs.push(egg);
+        return egg;
+      },
+    },
+    Location: class {},
+    Animation: class {},
+    World: { getAddNPCQueue: () => [] },
+    NpcIdentifiers: { EGG_10: 1, EGG_11: 2, EGG_12: 3, MIRRORBACK_ARAXYTE: 4, RUPTURA_ARAXYTE: 5, ACIDIC_ARAXYTE: 6 },
+    CombatMethod: class {},
+    CombatType: { MELEE: 0, RANGED: 1, MAGIC: 2 },
+  };
+  Minions.attach({
+    core: fakeCore,
+    onNpcHitModify: () => {},
+    registerNpcCombatMethodProvider: () => {},
+    getBonusManager: () => null,
+  });
+  const session = { npc: { getPrivateArea: () => null }, pattern: Shared.PATTERNS[0], eggs: [] };
+  Minions.spawnEggs(session);
+  assert.equal(eggs.length, 9, "one egg per pattern tile");
+  for (const egg of eggs) {
+    assert.equal(egg.radius, 0, "no wander radius");
+    assert.equal(egg.scripted, true, "pinned: no retaliation chase when attacked");
+  }
+});
+
+
+test("pinEggs clears the fighting egg's interaction and combat target", () => {
+  const calls = [];
+  const egg = {
+    isRegistered: () => true,
+    getInteractingMobile: () => ({ fake: "player" }),
+    setMobileInteraction: (value) => calls.push(["mob", value]),
+    getCombat: () => ({ reset: () => calls.push(["reset"]) }),
+  };
+  Minions.pinEggs({ eggs: [{ npc: egg }] });
+  assert.ok(calls.some(([kind, value]) => kind === "mob" && value === null), "interaction cleared");
+  assert.ok(calls.some(([kind]) => kind === "reset"), "combat target cleared");
 });

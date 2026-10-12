@@ -117,33 +117,30 @@ function sail(player, port, fare) {
   core.TeleportHandler.teleport(player, port.destination, core.TeleportType.NORMAL, false);
 }
 
-const DESTINATIONS_PER_PAGE = 3;
-
-function openMenu(event, page = 0) {
-  const { player, object, npc } = event;
-  const from = currentPort(object ?? npc);
+function openMenu(event) {
+  const { player, npc } = event;
+  const from = currentPort(npc);
   const destinations = [...portsByName.values()].filter((port) => port.name !== from?.name);
-  const pageCount = Math.max(1, Math.ceil(destinations.length / DESTINATIONS_PER_PAGE));
-  const pageIndex = Math.max(0, Math.min(pageCount - 1, Math.trunc(Number(page) || 0)));
-  const options = [];
-  const first = pageIndex * DESTINATIONS_PER_PAGE;
-  for (const port of destinations.slice(first, first + DESTINATIONS_PER_PAGE)) {
-    const fare = fareFor(player, from?.name, port.name);
-    options.push(`${port.name}${fare == null ? "" : ` (${fare} coins)`}`, () => {
-      if (fare == null) {
-        player.sendMessage("There is no route to that port.");
-        return;
-      }
-      sail(player, port, fare);
-    });
-  }
-  if (pageIndex > 0) {
-    options.push("Previous...", () => openMenu(event, pageIndex - 1));
-  }
-  if (pageIndex < pageCount - 1) {
-    options.push("More...", () => openMenu(event, pageIndex + 1));
-  }
-  return pluginApi.sendMultiChatboxPrompt(player, "Where would you like to sail to?", ...options);
+  const showPage = (offset) => {
+    const options = [];
+    for (const port of destinations.slice(offset, offset + 4)) {
+      const fare = fareFor(player, from?.name, port.name);
+      options.push(`${port.name}${fare == null ? "" : ` (${fare} coins)`}`, () => {
+        if (fare == null) {
+          player.sendMessage("There is no route to that port.");
+          return;
+        }
+        sail(player, port, fare);
+      });
+    }
+    if (offset + 4 < destinations.length) {
+      options.push("More destinations...", () => showPage(offset + 4));
+    }
+    return pluginApi.sendMultiChatboxPrompt(player, "Where would you like to sail to?", ...options);
+  };
+  // Return the prompt's success so a quest's Trader Crewmember can own Talk-to
+  // when this handler cannot open its destination list.
+  return showPage(0);
 }
 module.exports = {
   name: "CharterShips",

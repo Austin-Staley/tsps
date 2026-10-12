@@ -35,8 +35,6 @@ const PRAYERS_DISABLED_MESSAGE = "<col=ff3045>Your prayers have been disabled!</
 const IMMUNE_MESSAGE = "The dragon is currently immune to your attacks.";
 const IMMUNE_TOLD_ATTRIBUTE = "vorkath:immune-told";
 const IMMUNE_MESSAGE_SPACING = 5;
-/** CombatSpells.CRUMBLE_UNDEAD spell id: the spawn's instant kill. */
-const CRUMBLE_UNDEAD_SPELL_ID = 1169;
 /** Multi-hour poison immunity: Vorkath is immune outright (Wiki) and the engine has no
  * innate NPC immunity, so hits keep the timer topped up (see modifyHit). */
 const POISON_IMMUNITY_SECONDS = 3600;
@@ -256,7 +254,7 @@ function crumbleSpawn(npc, hit) {
   const attacker = hit.getAttacker?.();
   if (!attacker?.isPlayer?.()) return;
   const spellId = attacker.getCombat?.().getCastSpell?.()?.spellId?.() ?? null;
-  if (spellId !== CRUMBLE_UNDEAD_SPELL_ID) return;
+  if (spellId !== core.CombatSpells.CRUMBLE_UNDEAD.spellId()) return;
   const hits = hit.getHits?.() ?? [];
   if (hits.length === 0) return;
   const hp = npc.getHitpoints?.() ?? 0;

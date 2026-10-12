@@ -891,6 +891,11 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         this.locUpdates.refreshGamemodeWorldLocs();
     }
 
+    protected override reloadMultiLocSquare(mapX: number, mapY: number): void {
+        if (this.instanceActive) this.scheduleInstanceLocRebuild();
+        else this.locUpdates.scheduleReload(mapX, mapY, "full");
+    }
+
     override onRegionReplacement(payload: RegionReplacementEvent): void {
         this.locUpdates.onRegionReplacement(payload);
     }

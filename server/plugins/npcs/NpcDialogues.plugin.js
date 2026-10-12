@@ -105,9 +105,11 @@ function pickVariant(npc) {
 
 /** Transcript page name -> an NPC id that speaks it, so cutscene/paired speakers
  * get their own chathead instead of borrowing the NPC being talked to. */
-function speakerIdIndex(index) {
+function speakerIdIndex(index, NpcDefinition) {
   const byName = new Map();
   for (const [id, pages] of Object.entries(index ?? {})) {
+    const npcName = NpcDefinition?.forId(Number(id))?.getName();
+    if (npcName && npcName !== "null" && !byName.has(npcName)) byName.set(npcName, Number(id));
     for (const entry of pages ?? []) {
       const name = String(entry.page ?? "").replace(/^Transcript:/, "");
       if (name && !byName.has(name)) byName.set(name, Number(id));
@@ -304,7 +306,10 @@ function flatten(steps, opts = {}) {
     if (opts.stopped) break;
     const step = steps[position];
     if (step.type === "jump") {
-      const target = resolveJump(step, steps[position - 1]);
+      // Some wiki exports inline the target body on a "continue" jump instead
+      // of storing it in the page-level jump table. Prefer that body so nested
+      // quest branches do not stop at the jump marker.
+      const target = Array.isArray(step.steps) ? step.steps : resolveJump(step, steps[position - 1]);
       // "end": a jump we cannot replay. Stop rather than leak into the next step.
       if (target === "end") {
         out.push({ type: "end" });
@@ -758,6 +763,7 @@ module.exports = {
   startDialogue,
   collectPageLines,
   collectPageOptions,
+  speakerIdIndex,
   register(api) {
     const dialogueFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json");
     const indexFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogue-index.json");
@@ -784,7 +790,7 @@ module.exports = {
       } catch {
         index = {};
       }
-      loaded = { data, aliases: aliasKeys(data), index, speakerIdByName: speakerIdIndex(index) };
+      loaded = { data, aliases: aliasKeys(data), index, speakerIdByName: speakerIdIndex(index, api.core.NpcDefinition) };
       return loaded;
     };
 
