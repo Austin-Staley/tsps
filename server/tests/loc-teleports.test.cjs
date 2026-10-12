@@ -130,6 +130,49 @@ test("the Well of Voyage enters Iban's temple beside its real well and door", ()
     "the reachable route ends at the cache-placed Iban temple doors");
 });
 
+test("the Underground Pass south-wall cave links to the dwarf camp and back", () => {
+  const down = data.locs.find((loc) => loc.name === "underground_pass_dwarf_camp_down");
+  const up = data.locs.find((loc) => loc.name === "underground_pass_dwarf_camp_up");
+  assert.deepEqual([down.id, down.x, down.y, down.z, down.option, down.to], [3222, 2150, 4545, 1, "Descend", [2336, 9795, 0]]);
+  assert.deepEqual([up.id, up.x, up.y, up.z, up.option, up.to], [3223, 2336, 9793, 0, "Ascend", [2150, 4546, 1]]);
+  assert.equal(CacheDefinitions.getObject(down.id).actions[down.op - 1], down.option);
+  assert.equal(CacheDefinitions.getObject(up.id).actions[up.op - 1], up.option);
+
+  core.RegionManager.loadMapFiles(2150, 4545);
+  core.RegionManager.loadMapFiles(2336, 9795);
+  assert.equal(core.RegionManager.getClipping(2150, 4546, 1, null), 0, "upper arrival is a clear tile beside Cave3222");
+  assert.equal(core.RegionManager.getClipping(2336, 9795, 0, null), 0, "lower arrival is an open floor tile");
+  const queue = [[2336, 9795]];
+  const seen = new Set(["2336,9795"]);
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+  let reachesNiloof = false;
+  for (let i = 0; i < queue.length; i++) {
+    const [x, y] = queue[i];
+    if (Math.max(Math.abs(x - 2315), Math.abs(y - 9806)) <= 1) { reachesNiloof = true; break; }
+    for (const [dx, dy] of dirs) {
+      const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
+      if (nx < 2304 || nx > 2352 || ny < 9760 || ny > 9840) continue;
+      if (!seen.has(key) && core.RegionManager.canMove(x, y, nx, ny, 0, 1, 1, null)) {
+        seen.add(key);
+        queue.push([nx, ny]);
+      }
+    }
+  }
+  assert.equal(reachesNiloof, true, "the lower arrival can reach Niloof's cache spawn");
+
+  const upper = explorer([2150, 4546, 1]);
+  const downObject = locAt(down.id, down.x, down.y, down.z);
+  hooks.object({ player: upper.player, object: downObject, objectId: down.id, clickType: 1, handled: false });
+  runTicks(upper, 2);
+  assert.deepEqual([upper.player.getLocation().getX(), upper.player.getLocation().getY(), upper.player.getLocation().getZ()], down.to);
+
+  const lower = explorer(up.to);
+  const upObject = locAt(up.id, up.x, up.y, up.z);
+  hooks.object({ player: lower.player, object: upObject, objectId: up.id, clickType: 1, handled: false });
+  runTicks(lower, 2);
+  assert.deepEqual([lower.player.getLocation().getX(), lower.player.getLocation().getY(), lower.player.getLocation().getZ()], up.to);
+});
+
 /** A real player whose packets are recorded per tick. */
 function explorer(at) {
   const player = new Player(null);

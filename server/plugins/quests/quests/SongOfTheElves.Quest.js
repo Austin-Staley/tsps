@@ -230,11 +230,14 @@ module.exports = function registerSongOfTheElves(api) {
         player.setAttribute(LLETYA_ARIANWYN_NPC, null);
       }
       const baxtorian = player.getAttribute(LLETYA_BAXTORIAN_NPC);
-      if (currentChapter(player) === 16 && !baxtorian?.isRegistered?.()) {
+      const chapter = currentChapter(player);
+      const campRetry = chapter === 19 && player.getAttribute(CAMP_DEFENSE_COMPLETE) === true &&
+        player.getAttribute(FRAGMENT_DEFEATED) !== true;
+      if (([16, 17].includes(chapter) || campRetry) && !baxtorian?.isRegistered?.()) {
         const npc = api.spawnNpc({ id: NpcIdentifiers.BAXTORIAN, x: 2352, y: 3170, z: 0,
           wanderRadius: 0, owner: player, ownerOnly: true });
         if (npc) player.setAttribute(LLETYA_BAXTORIAN_NPC, npc);
-      } else if (currentChapter(player) !== 16 && baxtorian) {
+      } else if (!([16, 17].includes(chapter) || campRetry) && baxtorian) {
         api.removeNpc(baxtorian);
         player.setAttribute(LLETYA_BAXTORIAN_NPC, null);
       }
@@ -389,7 +392,7 @@ module.exports = function registerSongOfTheElves(api) {
       mobile.getCombat().getLastAttack().reset();
       if (!state.introStarted) {
         state.introStarted = true;
-        startTranscript(api, state.player, NpcIdentifiers.FRAGMENT_OF_SEREN_3, PAGE,
+        startTranscript(api, state.player, NpcIdentifiers.FRAGMENT_OF_SEREN, PAGE,
           "the-fragment-of-seren-the-fragment-enraged");
       }
       if (state.healers.size > 0 && state.boss.getHitpoints() > 0) {
@@ -472,7 +475,11 @@ module.exports = function registerSongOfTheElves(api) {
       if (!mobile?.isPlayer?.()) return;
       const player = mobile.getAsPlayer();
       if (currentChapter(player) !== 19 || player.getAttribute(CAMP_BATTLE) !== true ||
-        player.getAttribute(FRAGMENT_DEFEATED) === true || player.getAttribute(TEMPLE_CUTSCENE_STARTED) === true) return;
+        player.getAttribute(FRAGMENT_DEFEATED) === true || player.getAttribute(FRAGMENT_AREA)) return;
+      if (player.getAttribute(TEMPLE_CUTSCENE_STARTED) === true) {
+        if (player.getDialogueManager?.()?.isActive?.()) return;
+        player.setAttribute(TEMPLE_CUTSCENE_STARTED, false);
+      }
       player.setAttribute(TEMPLE_CUTSCENE_STARTED, true);
       startTranscript(api, player, NpcIdentifiers.LORD_IORWERTH_2, PAGE,
         "the-fragment-of-seren-the-fragment-freed-at-last");
@@ -1185,6 +1192,13 @@ module.exports = function registerSongOfTheElves(api) {
       return startTranscript(api, player, event.npcId, PAGE, wasAtCamp
         ? "preparations-at-the-dwarf-camp-talking-to-baxtorian"
         : "preparations-at-the-dwarf-camp-talking-to-baxtorian-at-lletya");
+    }
+    if (npcName === "baxtorian" && currentChapter(player) === 19 &&
+      player.getAttribute(CAMP_DEFENSE_COMPLETE) === true &&
+      player.getAttribute(FRAGMENT_DEFEATED) !== true && !(player.getArea?.() instanceof DwarvenCampArea)) {
+      ensureDwarvenCamp(player);
+      player.sendMessage("Baxtorian leads you back to the dwarven camp to face Essyllt.");
+      return true;
     }
     if (npcName === "elena" && currentChapter(player) === 17 && player.getArea?.() instanceof DwarvenCampArea) {
       if (!player.getInventory().getAmount(ItemIdentifiers.EXPLOSIVE_POTION)) {
@@ -2213,6 +2227,7 @@ module.exports = function registerSongOfTheElves(api) {
     const area = player.getAttribute(FRAGMENT_AREA);
     const state = area && fragmentInstances.get(area);
     if (!state || state.player !== player || state.finished) return;
+    event.handled = true;
     state.finished = true;
     for (const npc of [...state.healers, ...state.clones, state.boss]) api.removeNpc(npc);
     state.healers.clear();
@@ -2314,7 +2329,7 @@ module.exports = function registerSongOfTheElves(api) {
     if (existing && existing.isDestroyed?.() !== true) return true;
     const area = new FragmentArea(player.getUsername?.());
     const spawn = new Location(3294, 5918, 1);
-    const boss = api.spawnNpc({ id: NpcIdentifiers.FRAGMENT_OF_SEREN_3, x: 3294, y: 5918, z: 1,
+    const boss = api.spawnNpc({ id: NpcIdentifiers.FRAGMENT_OF_SEREN, x: 3294, y: 5918, z: 1,
       wanderRadius: 0, owner: player, ownerOnly: true });
     if (!boss) {
       player.sendMessage("The Fragment of Seren could not be reached. Return to Arianwyn and try again.");
