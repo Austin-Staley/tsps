@@ -34,6 +34,7 @@ const NPC = { SHAMANS: [7573, 7574], SPAWN: 7575 };
 const OBJECT = { TENDRIL: 29768 };
 const BASE = { RANGED: 24, MELEE: 24 };
 const ANIM = { RANGED: 7193, MELEE: 7158, JUMP: 7152, LAND: 6946, SPAWN_EXPLODE: 7159 };
+const JUMP_TICKS = 6;
 /** Shayzien armour (5): gloves, boots, helm, greaves, body. */
 const SHAYZIEN = [13377, 13378, 13379, 13380, 13381];
 
@@ -214,20 +215,20 @@ class ShamansRoom extends Raid.Room {
     }
     npc.__coxJumping = true;
     npc.getCombat().reset();
+    // rsprox captures (the Molch shamans): up with 7152 and sound 2467; 6 ticks later down beside
+    // the target with 6946 and sound 1695, the move and the landing on one tick.
     Shared.animate(npc, ANIM.JUMP);
-    Shared.later(this.raid, 4, () => {
+    Shared.areaSound(this.raiders(), 2467, npc.getLocation(), { range: 8 });
+    Shared.later(this.raid, JUMP_TICKS, () => {
       if (!npc.isRegistered()) return;
       npc.moveTo(landing);
       Shared.animate(npc, ANIM.LAND);
-      for (const viewer of this.raiders()) Shared.sound(viewer, 1695);
-    });
-    Shared.later(this.raid, 5, () => {
-      if (!npc.isRegistered()) return;
+      Shared.areaSound(this.raiders(), 1695, at, { range: 8 });
       for (const raider of this.raiders()) {
         if (raider.getLocation().getDistance(at) <= 1) Shared.damage(raider, Shared.random(20, 25));
       }
     });
-    Shared.later(this.raid, 6, () => {
+    Shared.later(this.raid, JUMP_TICKS + 2, () => {
       npc.__coxJumping = false;
       if (npc.isRegistered()) npc.getCombat().attack(player);
     });

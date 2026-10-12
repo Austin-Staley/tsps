@@ -56,8 +56,10 @@ class TightropeRoom extends Raid.Room {
   load() {
     const variant = this.record.variant;
     const { rangers, mages } = counts(this.raid.scale);
-    for (let i = 0; i < mages; i++) this.addGuard(NPC.MAGE, Shared.randomOf(MAGE_TILES[variant]));
-    for (let i = 0; i < rangers; i++) this.addGuard(NPC.RANGER, Shared.randomOf(RANGER_TILES[variant]));
+    // rsprox captures: the guards stand on tiles of their own, in a little group by their spots.
+    const taken = new Set();
+    for (const spot of this.guardTiles(MAGE_TILES[variant], mages, taken)) this.addGuard(NPC.MAGE, spot);
+    for (const spot of this.guardTiles(RANGER_TILES[variant], rangers, taken)) this.addGuard(NPC.RANGER, spot);
     const barrier = BARRIERS[variant];
     const [sizeX, sizeY] = barrier.face % 2 === 0 ? [1, 2] : [2, 1];
     const { GameObject, ObjectManager } = Shared.core();
@@ -68,6 +70,26 @@ class TightropeRoom extends Raid.Room {
     const raiders = [...this.raid.players];
     const average = raiders.reduce((sum, player) => sum + Shared.baseLevel(player, "AGILITY"), 0) / Math.max(1, raiders.length);
     this.requirement = Math.max(1, Math.floor(average * (0.8 + Math.random() * 0.2)));
+  }
+
+  /** `count` free tiles: the spots first, then the tiles around them. */
+  guardTiles(spots, count, taken) {
+    const { RegionManager } = Shared.core();
+    const candidates = [...spots];
+    for (const spot of spots) {
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) {
+        candidates.push({ x: spot.x + dx, y: spot.y + dy });
+      }
+    }
+    const chosen = [];
+    for (const spot of candidates) {
+      if (chosen.length >= count) break;
+      const key = `${spot.x},${spot.y}`;
+      if (taken.has(key) || RegionManager.blocked(this.tile(spot.x, spot.y), this.map)) continue;
+      taken.add(key);
+      chosen.push(spot);
+    }
+    return chosen;
   }
 
   addGuard(id, spot) {

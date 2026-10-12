@@ -29,6 +29,7 @@ module.exports = {
     require("./cox/Guardians.ChambersOfXeric")(api);
     require("./cox/Vespula.ChambersOfXeric")(api);
     require("./cox/Olm.ChambersOfXeric")(api);
+    require("./cox/Hud.ChambersOfXeric")(api);
     require("./cox/Rewards.ChambersOfXeric")(api);
     require("./cox/Commands.ChambersOfXeric")(api);
   },
