@@ -760,6 +760,13 @@ export class ClientConnection {
           continue;
         case "examine_object":
           if (this.player) {
+            const examineEvent = {
+              player: this.player,
+              objectId: packet.id,
+              handled: false,
+            };
+            PluginManager.emitCustomEvent("world:object-examine", examineEvent);
+            if (examineEvent.handled) continue;
             // A multi-loc's text can be recorded under the variant this player sees.
             const definition = ObjectDefinition.forId(packet.id);
             const seen = ObjectDefinition.examineText(packet.id) === null ? ObjectDefinition.forPlayer(packet.id, this.player) : null;

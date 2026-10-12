@@ -1225,6 +1225,51 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   assert.ok(persistedAttributes.includes('quest.song_of_the_elves.hefin-clue-heard'));
 });
 
+test('Song of the Elves tracks Ysgawyn clues in order through normal object examine packets', () => {
+  const { api, handlers } = mockApi();
+  const persistedAttributes = [];
+  api.persistAttribute = (key) => persistedAttributes.push(key);
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map();
+  const messages = [];
+  let tile = { x: 2306, y: 3194, z: 0 };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ getAmount: (id) => id === api.core.ItemIdentifiers.ORB_OF_LIGHT_5 ? 1 : 0 }),
+    getLocation: () => ({ getX: () => tile.x, getY: () => tile.y, getZ: () => tile.z }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage: (message) => messages.push(message),
+  };
+  quest.setStage(player, 150);
+  assert.ok(persistedAttributes.includes('quest.song_of_the_elves.ysgawyn-track-step'));
+  const examine = handlers.custom.get('world:object-examine').at(-1);
+  const outOfOrder = { player, objectId: 37297, handled: false };
+  examine(outOfOrder);
+  assert.equal(outOfOrder.handled, false);
+  assert.equal(attributes.has('quest.song_of_the_elves.ysgawyn-track-step'), false);
+  const mushroom = { player, objectId: 37292, handled: false };
+  examine(mushroom);
+  assert.equal(mushroom.handled, true);
+  assert.equal(attributes.get('quest.song_of_the_elves.ysgawyn-track-step'), 1);
+  assert.match(messages.at(-1), /mushrooms/);
+  tile = { x: 2294, y: 3189, z: 0 };
+  examine({ player, objectId: 37297, handled: false });
+  tile = { x: 2279, y: 3186, z: 0 };
+  examine({ player, objectId: 37296, handled: false });
+  assert.equal(attributes.get('quest.song_of_the_elves.ysgawyn-track-step'), 3);
+  const route = {
+    player, objectId: 3923, clickType: 1, destination: null,
+    definition: { getInteractions: () => ['Jump'] },
+    sourceLocation: { x: 2274, y: 3177, z: 0 },
+  };
+  for (const hook of handlers.routes) hook(route);
+  assert.deepEqual(route.destination, route.sourceLocation,
+    'the natural Regicide Jump handler keeps the original approach edge before it applies Agility');
+});
+
 test('Song of the Elves library mirrors must follow the previous beam direction', () => {
   class TestPrivateArea {
     constructor() { this.objects = []; }

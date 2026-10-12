@@ -31,6 +31,15 @@ module.exports = function registerSongOfTheElves(api) {
   // Cache transform for the Crwys disguise: hidden tree, chop-able tree, revealed elf.
   const CRWYS_TREE_TRANSFORM_VARBIT = 9022;
   const HEFIN_CLUE_HEARD = "quest.song_of_the_elves.hefin-clue-heard";
+  const YSGAWYN_TRACK_STEP = "quest.song_of_the_elves.ysgawyn-track-step";
+  const YSGAWYN_TRACKS = [
+    { id: 37292, x: 2302, y: 3195, clue: "You notice a disturbed patch among the mushrooms." },
+    { id: 37297, x: 2291, y: 3187, clue: "The marks on the rock show where someone climbed down." },
+    { id: 37296, x: 2277, y: 3184, clue: "You find another set of boot prints on the rock." },
+    { id: 3918, x: 2269, y: 3164, clue: "You inspect the old lamp and find fresh signs of passage." },
+    { id: 3916, x: 2259, y: 3159, clue: "You find more disturbed mushrooms leading north-west." },
+    { id: 37297, x: 2244, y: 3170, clue: "The final rock bears fresh climbing marks." },
+  ];
   const HEFIN_CROSSING = "quest.song_of_the_elves.hefin-crossing";
   const HEFIN_JUMP_ANIMATION = 769; // human_steppingstonejump
   const HEFIN_STONE_ROUTE = [
@@ -120,6 +129,10 @@ module.exports = function registerSongOfTheElves(api) {
   };
   const FIRE_SUPPORT = { "y9pqh3": 8, "Nn3EkA": 8, "AWdFbp": 8 };
   const STAGE = { NOT_STARTED: 0, STARTED: 10, COMPLETE: 200 };
+  const IORWERTH_CAMP_TELEPORT_IDS = new Set([
+    ItemIdentifiers.IORWERTH_CAMP_TELEPORT,
+    ItemIdentifiers.IORWERTH_CAMP_TELEPORT_2,
+  ]);
   const CHAPTERS = [
     "starting-out", "making-a-knightly-disguise", "freeing-elena",
     "meet-the-ardougne-resistance", "causing-an-insurrection",
@@ -727,10 +740,15 @@ module.exports = function registerSongOfTheElves(api) {
     }
     if (currentChapter(player) === 14 && npcName === "elena" &&
       player.getInventory().getAmount(ItemIdentifiers.ORB_OF_LIGHT_5) > 0) {
+      if (player.getAttribute(YSGAWYN_TRACK_STEP) == null) player.setAttribute(YSGAWYN_TRACK_STEP, 0);
       return startTranscript(api, player, event.npcId, PAGE, "recovering-the-orb-talking-to-elena");
     }
     if (currentChapter(player) === 14 && npcName === "ysgawyn" &&
       player.getInventory().getAmount(ItemIdentifiers.ORB_OF_LIGHT_5) > 0) {
+      if (Number(player.getAttribute(YSGAWYN_TRACK_STEP) ?? 0) < 7) {
+        player.sendMessage("Follow the trail from the mushrooms, rocks and lamp before confronting Ysgawyn.");
+        return true;
+      }
       return startTranscript(api, player, event.npcId, PAGE, "recovering-the-orb-confronting-ysgawyn");
     }
     if (npcName === "baxtorian" && currentChapter(player) === 17) {
@@ -902,6 +920,51 @@ module.exports = function registerSongOfTheElves(api) {
     const selected = candidates.find((variant) => variant.includes("talking-to") && !variant.includes("again")) ??
       candidates.find((variant) => variant.includes("talking-to")) ?? candidates[0];
     return selected ? startTranscript(api, player, event.npcId, PAGE, selected) : false;
+  }
+
+  function handleYsgawynTrackExamine(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || currentChapter(player) !== 14 ||
+      player.getInventory().getAmount(ItemIdentifiers.ORB_OF_LIGHT_5) <= 0) return;
+    const step = Number(player.getAttribute(YSGAWYN_TRACK_STEP) ?? 0);
+    const clue = YSGAWYN_TRACKS[step];
+    if (!clue || event.objectId !== clue.id) return;
+    const location = player.getLocation();
+    if (location.getZ() !== 0 || Math.max(Math.abs(location.getX() - clue.x), Math.abs(location.getY() - clue.y)) > 5) return;
+    event.handled = true;
+    player.setAttribute(YSGAWYN_TRACK_STEP, step + 1);
+    player.sendMessage(clue.clue);
+    if (step + 1 === YSGAWYN_TRACKS.length) {
+      player.sendMessage("The tracks lead through the tripwire into a clearing to the north-west.");
+    }
+  }
+
+  function processYsgawynTrail({ player }) {
+    if (!player || quest.isComplete(player) || currentChapter(player) !== 14 ||
+      Number(player.getAttribute(YSGAWYN_TRACK_STEP) ?? 0) !== YSGAWYN_TRACKS.length) return;
+    const location = player.getLocation();
+    if (location.getZ() !== 0 || location.getX() < 2253 || location.getX() > 2258 ||
+      location.getY() < 3166 || location.getY() > 3170) return;
+    player.setAttribute(YSGAWYN_TRACK_STEP, YSGAWYN_TRACKS.length + 1);
+    player.sendMessage("You follow the final tracks through the tripwire and find Ysgawyn in the clearing.");
+  }
+
+  function routeYsgawynLeafTrap(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || currentChapter(player) !== 14 ||
+      player.getInventory().getAmount(ItemIdentifiers.ORB_OF_LIGHT_5) <= 0 ||
+      ![3923, 3924, 3925].includes(event.objectId)) return;
+    const option = event.definition?.getInteractions?.()?.[event.clickType - 1]?.toLowerCase();
+    if (option !== "jump") return;
+    const source = event.sourceLocation;
+    if (!source) return;
+    const inside = source.x >= 2273 && source.x <= 2275 && source.y >= 3173 && source.y <= 3175;
+    const beside = source.x >= 2271 && source.x <= 2277 && source.y >= 3171 && source.y <= 3177;
+    if (inside || !beside) return;
+    // Keep the normal Regicide Jump handler's source side intact. Without this
+    // route stop, pathfinding walks onto the multi-tile trap before its Agility
+    // handler runs, so it cannot tell which edge the player approached.
+    event.destination = { x: source.x, y: source.y, z: source.z };
   }
 
   function onCrwysTreeInteraction(event) {
@@ -1363,7 +1426,7 @@ module.exports = function registerSongOfTheElves(api) {
     const y = event?.location?.y ?? event?.location?.getY?.();
     if (!player || quest.isComplete(player) || currentChapter(player) !== 14 ||
       (Number(player.getAttribute(RECRUITED_ELDERS)) & 3) !== 3 ||
-      x !== 2202 || y !== 3263 || !(event.objectId === ObjectIdentifiers.CAVE_69 || name === "cave")) return false;
+      x !== 2200 || y !== 3262 || !(event.objectId === ObjectIdentifiers.CAVE_69 || name === "cave")) return false;
     event.handled = true;
     let area = player.getAttribute(ORB_CAVE_AREA);
     let state = area && orbCaveInstances.get(area);
@@ -1371,7 +1434,7 @@ module.exports = function registerSongOfTheElves(api) {
       area = new OrbSupplyArea(player.getUsername?.());
       state = { area, player, guards: new Set(), defeated: false };
       orbCaveInstances.set(area, state);
-      const chest = new GameObject(ObjectIdentifiers.CHEST_122, new Location(2200, 9681, 0), 10, 0, area);
+      const chest = new GameObject(ObjectIdentifiers.CHEST_122, new Location(2200, 9681, 0), 10, 2, area);
       area.add(chest);
       ObjectManager.register(chest, true);
       for (const [id, gx] of [[NpcIdentifiers.IORWERTH_ARCHER_7, 2199], [NpcIdentifiers.IORWERTH_WARRIOR_9, 2202]]) {
@@ -2096,6 +2159,15 @@ module.exports = function registerSongOfTheElves(api) {
     startTranscript(api, player, 0, PAGE, "preparing-to-enter-prifddinas-a-mysterious-figure");
   }
 
+  function useIorwerthCampTeleport(event) {
+    if (!event?.player || !IORWERTH_CAMP_TELEPORT_IDS.has(event.itemId) || String(event.option).toLowerCase() !== "teleport") return;
+    event.handled = true;
+    const destination = new Location(2200, 3262, 0);
+    if (!api.core.TeleportHandler.checkReqs(event.player, destination)) return;
+    event.player.getInventory().deleteNumber(event.itemId, 1);
+    api.core.TeleportHandler.teleport(event.player, destination, api.core.TeleportType.NORMAL, false);
+  }
+
   function placeFallsPillarItem(event) {
     const player = event?.player;
     if (!player || currentChapter(player) !== 10 || quest.isComplete(player)) return false;
@@ -2262,13 +2334,17 @@ module.exports = function registerSongOfTheElves(api) {
     return null;
   });
   api.onCustomEvent("npc-dialogue:hook", onStart);
+  api.onCustomEvent("world:object-examine", handleYsgawynTrackExamine);
   api.onCustomEvent("quest-song-of-the-elves:claim-arianwyn", claimArianwynAfterLibrary);
   api.onCustomEvent("npc-dialogue:action", onAction);
   api.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemOnObject("Explosive potion", "Hole", placeCampExplosive, { noted: false });
-  api.onItemAction(handleCrystalSeedAction);
+  api.onItemAction((event) => {
+    handleCrystalSeedAction(event);
+    useIorwerthCampTeleport(event);
+  });
   api.onItemOnObject("Hand mirror", "Pillar of Light", useLibraryMirror, { noted: false });
   for (const color of Object.keys(LIBRARY_CRYSTAL_ITEMS)) {
     const name = color === "fractured" ? "Fractured crystal" : `${color[0].toUpperCase()}${color.slice(1)} crystal`;
@@ -2283,6 +2359,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.persistAttribute(REVELATIONS_MEETING_STARTED);
   api.persistAttribute(CRWYS_CLUE_HEARD);
   api.persistAttribute(HEFIN_CLUE_HEARD);
+  api.persistAttribute(YSGAWYN_TRACK_STEP);
   api.persistAttribute(FALLS_PILLARS);
   api.persistAttribute(FALLS_ORDER);
   api.persistAttribute(INCITEMENTS);
@@ -2320,6 +2397,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onObjectInteraction("Staircase", { "Climb-down": enterPrison });
   api.onObjectRoute(routeCastleThroneStairs);
   api.onWalkRoute(routeToLadyHefin);
+  api.onObjectRoute(routeYsgawynLeafTrap);
   api.onCustomEvent("ladders:climb", claimCastleThroneStairs);
   api.onCustomEvent("quest:song-of-the-elves:claims-light-pillar", claimFallsPillarLocation);
   api.registerArea(new LletyaStoryArea([new Boundary(2320, 2390, 3150, 3210, 0)]));
@@ -2327,6 +2405,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.registerArea(new DwarvenCampAccessArea([new Boundary(2424, 2472, 6078, 6142, 0)]));
   api.registerArea(new FragmentThresholdArea([new Boundary(3282, 3307, 5906, 5930, 1)]));
   api.onNpcInteraction("Alrena", { "Talk-to": onTalk });
+  api.onPlayerProcess(processYsgawynTrail);
   api.onNpcInteraction("Edmond", { "Talk-to": onTalk });
   api.onNpcInteraction("Elena", { "Talk-to": onTalk });
   api.onNpcInteraction("Knight of Ardougne", { "Talk-to": onTalk });
