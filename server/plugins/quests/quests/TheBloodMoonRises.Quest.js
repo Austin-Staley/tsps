@@ -73,9 +73,12 @@ module.exports = function registerTheBloodMoonRises(api) {
   const WYRD_DEFEATED_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-defeated";
   const DRAKAN_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.drakan-area";
   const DRAKAN_ENCOUNTER_COMPLETE = "quest.the_blood_moon_rises.drakan-defeated";
+  const SIEGE_DRAKAN_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.siege-drakan-area";
+  const SIEGE_DRAKAN_COMPLETE = "quest.the_blood_moon_rises.siege-drakan-defeated";
   const PREP_COMPLETE = "quest.the_blood_moon_rises.preparations-complete";
   const wyrdEncounters = new Map();
   const drakanEncounters = new Map();
+  const siegeDrakanEncounters = new Map();
   const CHAPTERS = [
     [STAGE.STARTED, "starting-out"],
     [STAGE.HIDEOUT, "starting-out-in-the-myreque-hideout"],
@@ -324,6 +327,106 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
   }
 
+  class SiegeDrakanArea extends PrivateArea {
+    constructor(owner) {
+      super([new Boundary(3155, 3181, 7823, 7863, 1)]);
+      this.owner = owner;
+    }
+    isMulti() { return true; }
+    canAttack(attacker, target) {
+      const attackerHere = attacker?.getArea?.() === this;
+      const targetHere = target?.getArea?.() === this;
+      if (attackerHere || targetHere) return attackerHere && targetHere;
+      return null;
+    }
+    postLeave(mobile, logout) {
+      super.postLeave(mobile, logout);
+      if (this.isDestroyed()) siegeDrakanEncounters.delete(this);
+    }
+    process(mobile) {
+      if (!mobile?.isNpc?.()) return;
+      const fight = siegeDrakanEncounters.get(this);
+      if (!fight || mobile !== fight.boss || fight.finished || mobile.getHitpoints() <= 0) return;
+      const now = World.getProcessCycle();
+      if (fight.lastCycle === now) return;
+      fight.lastCycle = now;
+      mobile.setScriptedMovement(true);
+      mobile.getCombat().getLastAttack().reset();
+      const player = fight.player;
+      if (player.getArea?.() !== this || player.getHitpoints() <= 0 || fight.ending) return;
+      if (mobile.getHitpoints() <= fight.thresholdHp) {
+        fight.ending = true;
+        startTranscript(api, player, mobile.getId(), PAGE,
+          "drakan-s-siege-fighting-lowerniel-upon-lowerniel-reaching-58-hp");
+        return;
+      }
+      if (fight.impactAt && now >= fight.impactAt) {
+        const warning = fight.warning;
+        fight.impactAt = 0;
+        fight.warning = null;
+        const location = player.getLocation();
+        const x = location.getX();
+        const y = location.getY();
+        const prayers = player.getPrayerActive?.() ?? [];
+        const melee = prayers[PrayerHandler.PROTECT_FROM_MELEE] === true;
+        const magic = prayers[PrayerHandler.PROTECT_FROM_MAGIC] === true;
+        if (warning === "thrust") {
+          const distance = Math.max(Math.abs(x - fight.markedX), Math.abs(y - fight.markedY));
+          if (distance === 0) this.hit(player, mobile, 30, "The spear thrust catches you. Step aside when Lowerniel draws the spear back.");
+          else player.sendMessage("You sidestep Lowerniel's spear thrust.");
+          return;
+        }
+        if (warning === "blood-spear") {
+          if (!magic) this.hit(player, mobile, 32, "The blood spear strikes you. Protect from Magic before it lands.");
+          else player.sendMessage("Your Protect from Magic prayer turns aside the blood spear.");
+          return;
+        }
+        if (warning === "front-back") {
+          const distance = Math.max(Math.abs(x - fight.markedX), Math.abs(y - fight.markedY));
+          if (distance <= 2 && x === fight.markedX) {
+            this.hit(player, mobile, 25, "Drakan's blood burst catches you in front of him. Move to either side.");
+          } else player.sendMessage("You move to the side and avoid Drakan's blood burst.");
+          return;
+        }
+        if (warning === "melee") {
+          if (!melee) this.hit(player, mobile, 7 + Math.floor(Math.random() * 10), "Lowerniel's melee strike lands.");
+          return;
+        }
+      }
+      if (fight.impactAt || now < fight.nextAttackAt) return;
+      fight.nextAttackAt = now + 4;
+      fight.attackIndex++;
+      const loc = player.getLocation();
+      if (fight.attackIndex % 4 === 1) {
+        fight.warning = "thrust";
+        fight.markedX = loc.getX();
+        fight.markedY = loc.getY();
+        fight.impactAt = now + 2;
+        player.sendMessage("Lowerniel draws his spear back and lines up a thrust. Step to either side.");
+      } else if (fight.attackIndex % 4 === 2) {
+        fight.warning = "front-back";
+        fight.markedX = loc.getX();
+        fight.markedY = loc.getY();
+        fight.impactAt = now + 2;
+        player.sendMessage("Lowerniel gathers blood in front of and behind him. Move to one of his sides.");
+      } else if (fight.attackIndex % 4 === 3) {
+        fight.warning = "blood-spear";
+        fight.impactAt = now + 2;
+        player.sendMessage("Lowerniel fires a blood spear. Protect from Magic before it lands.");
+      } else {
+        fight.warning = "melee";
+        fight.impactAt = now + 1;
+        player.sendMessage("Lowerniel closes in with a melee strike. Protect from Melee.");
+      }
+    }
+    hit(player, source, damage, message) {
+      player.sendMessage(message);
+      player.getCombat().getHitQueue().addPendingDamage([
+        new HitDamage(damage, HitMask.RED).setSource(source),
+      ]);
+    }
+  }
+
   function startDrakanBattle(player) {
     const existing = player.getAttribute(DRAKAN_AREA_ATTRIBUTE);
     if (existing && existing.isDestroyed?.() !== true) return true;
@@ -369,6 +472,78 @@ module.exports = function registerTheBloodMoonRises(api) {
     return true;
   }
 
+  function startSiegeDrakanBattle(player) {
+    const existing = player.getAttribute(SIEGE_DRAKAN_AREA_ATTRIBUTE);
+    if (existing && existing.isDestroyed?.() !== true) return true;
+    if (stage(player) !== STAGE.SIEGE) return false;
+    const area = new SiegeDrakanArea(player.getUsername?.());
+    const boss = api.spawnNpc({ id: NpcIdentifiers.LOWERNIEL_DRAKAN_19, x: 3168, y: 7853, z: 1,
+      wanderRadius: 0, owner: player, ownerOnly: true });
+    if (!boss) {
+      player.sendMessage("Lowerniel could not be reached. Pass through the barricade into the palace hall and try again.");
+      return false;
+    }
+    boss.setMultiCombat?.(true);
+    boss.setMaxHitpoints(3000);
+    boss.setHitpoints(2550);
+    area.enter(player);
+    area.enter(boss);
+    player.setAttribute(SIEGE_DRAKAN_AREA_ATTRIBUTE, area);
+    player.setAttribute(SIEGE_DRAKAN_COMPLETE, false);
+    siegeDrakanEncounters.set(area, { area, boss, player, thresholdHp: 1740, lastCycle: -1,
+      nextAttackAt: World.getProcessCycle() + 4, attackIndex: 0, impactAt: 0, warning: null,
+      markedX: 3168, markedY: 7853, ending: false, finished: false });
+    player.sendMessage("Lowerniel has breached the entrance hall. Dodge his spear thrusts and front-and-back blood bursts, and protect from Magic against his blood spears.");
+    return true;
+  }
+
+  function finishSiegeDrakanBattle(player) {
+    const area = player.getAttribute(SIEGE_DRAKAN_AREA_ATTRIBUTE);
+    const fight = area && siegeDrakanEncounters.get(area);
+    if (!fight || fight.player !== player) return false;
+    fight.finished = true;
+    api.removeNpc(fight.boss);
+    area.leave(player, false);
+    player.setAttribute(SIEGE_DRAKAN_AREA_ATTRIBUTE, null);
+    player.setAttribute(SIEGE_DRAKAN_COMPLETE, true);
+    siegeDrakanEncounters.delete(area);
+    advance(player, STAGE.THEATRE);
+    // The cutscene sends the party to the Haunted Woods; this is its canonical
+    // post-scene checkpoint from the Quest Helper route.
+    api.spawnNpc({ id: NpcIdentifiers.IVAN_STROM_13, x: 3606, y: 3416, z: 0,
+      wanderRadius: 0, owner: player, ownerOnly: true });
+    player.moveTo(new Location(3605, 3416, 0));
+    return true;
+  }
+
+  function handleSiegeDrakanHit(event) {
+    const npc = event?.npc;
+    const hit = event?.hit;
+    const fight = npc && siegeDrakanEncounters.get(npc.getArea?.());
+    if (!fight || npc !== fight.boss || fight.ending || !hit) return;
+    let remaining = Math.max(0, npc.getHitpoints() - fight.thresholdHp);
+    for (const part of hit.getHits?.() ?? []) {
+      const damage = part.getDamage?.() ?? 0;
+      if (damage <= 0) continue;
+      const allowed = Math.min(remaining, damage);
+      if (allowed < damage) part.setDamage(allowed);
+      remaining -= allowed;
+    }
+    hit.updateTotalDamage?.();
+  }
+
+  function handleSiegeDrakanDeath(event) {
+    const npc = event?.npc;
+    const fight = npc && siegeDrakanEncounters.get(npc.getArea?.());
+    if (!fight || npc !== fight.boss || fight.finished) return false;
+    // The story exits at 58% health; never let the combat hit skip its cutscene.
+    npc.setHitpoints(Math.max(1, fight.thresholdHp));
+    fight.ending = true;
+    startTranscript(api, fight.player, npc.getId(), PAGE,
+      "drakan-s-siege-fighting-lowerniel-upon-lowerniel-reaching-58-hp");
+    return true;
+  }
+
   function startWyrdBattle(player) {
     const existing = player.getAttribute(WYRD_AREA_ATTRIBUTE);
     if (existing && existing.isDestroyed?.() !== true) return true;
@@ -394,6 +569,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function handleWyrdDeath(event) {
+    if (handleSiegeDrakanDeath(event)) return;
     if (handleDrakanDeath(event)) return;
     const npc = event?.npc;
     const area = npc?.getArea?.();
@@ -502,6 +678,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (event.stepId === "4G5OZg") startWyrdBattle(player);
     if (event.stepId === "t7FMNM") startDrakanBattle(player);
     if (event.stepId === "4ebW6l" || event.stepId === "BzMe5D") finishDrakanEncounter(player);
+    if (event.stepId === "Xz7d4O") startSiegeDrakanBattle(player);
+    if (event.stepId === "zPiZ9c") finishSiegeDrakanBattle(player);
     if (event.stepId === "dJZbqF") {
       const area = player.getAttribute(WYRD_AREA_ATTRIBUTE);
       const encounter = area && wyrdEncounters.get(area);
@@ -1412,8 +1590,11 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onItemAction("Dusty book", { Read: readDustyBook });
   api.onPlayerProcess(syncHuntGroundItems);
   api.onNpcDeath(handleWyrdDeath);
+  api.onNpcHitModify(handleSiegeDrakanHit);
   api.persistAttribute(WYRD_DEFEATED_ATTRIBUTE);
   api.persistAttribute(DRAKAN_ENCOUNTER_COMPLETE);
+  api.persistAttribute(SIEGE_DRAKAN_AREA_ATTRIBUTE);
+  api.persistAttribute(SIEGE_DRAKAN_COMPLETE);
   api.persistAttribute(PREP_ATTRIBUTE);
   api.persistAttribute(PREP_COMPLETE);
   api.persistAttribute(THRONE_PUZZLE_ATTRIBUTE);

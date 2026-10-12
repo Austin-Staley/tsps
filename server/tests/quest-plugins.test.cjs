@@ -21,6 +21,7 @@ function mockApi() {
     itemAction: [],
     routes: [],
     playerProcess: [],
+    npcHitModify: [],
   };
   const noop = () => {};
   const base = {
@@ -30,6 +31,7 @@ function mockApi() {
     onObjectInteraction: (h) => handlers.objects.push(h),
     onObjectRoute: (h) => handlers.routes.push(h),
     onPlayerProcess: (h) => handlers.playerProcess.push(h),
+    onNpcHitModify: (h) => handlers.npcHitModify.push(h),
     onItemOnItem: (h) => handlers.itemOnItem.push(h),
     onItemOnNpc: (h) => handlers.itemOnNpc.push(h),
     onItemOnObject: (h) => handlers.itemOnObject.push(h),
@@ -745,6 +747,60 @@ test('Blood Moon northern-door transcript starts the private Lowerniel encounter
   assert.equal(player.getArea(), bossArea, 'the player and Lowerniel share an owner-only final arena');
   assert.equal(boss.getArea(), bossArea);
   assert.equal(boss.hitpoints, 1600);
+});
+
+test('Blood Moon siege barrier action starts the second private Lowerniel fight and caps damage at the 58% cutscene', () => {
+  const { api, handlers } = mockApi();
+  const attributes = new Map();
+  const spawns = [];
+  let bossArea = null;
+  const boss = {
+    isNpc: () => true,
+    isPlayer: () => false,
+    getAsNpc: () => boss,
+    getIndex: () => 202,
+    getArea: () => bossArea,
+    setArea: (area) => { bossArea = area; },
+    setMultiCombat() {},
+    setMaxHitpoints(value) { this.maxHitpoints = value; },
+    setHitpoints(value) { this.hitpoints = value; },
+    getHitpoints() { return this.hitpoints; },
+    getId: () => api.core.NpcIdentifiers.LOWERNIEL_DRAKAN_19,
+  };
+  api.spawnNpc = (definition) => (spawns.push(definition), boss);
+  api.emitCustomEvent = (name, request) => {
+    for (const handler of handlers.custom.get(name) ?? []) handler(request);
+  };
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const player = {
+    getUsername: () => 'SiegeDrakanTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    isPlayer: () => true,
+    isNpc: () => false,
+    getAsPlayer: () => player,
+    getIndex: () => 102,
+    getArea: () => player.area,
+    setArea: (area) => { player.area = area; },
+    sendMessage() {},
+  };
+  quest.setStage(player, 70);
+  handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'Xz7d4O' });
+  assert.deepEqual(spawns.map(({ id, x, y, z, ownerOnly }) => ({ id, x, y, z, ownerOnly })), [
+    { id: api.core.NpcIdentifiers.LOWERNIEL_DRAKAN_19, x: 3168, y: 7853, z: 1, ownerOnly: true },
+  ]);
+  assert.equal(boss.maxHitpoints, 3000, 'the second fight begins at 85% of the boss’s 3,000 HP');
+  assert.equal(boss.hitpoints, 2550);
+  assert.equal(player.getArea(), bossArea);
+  assert.equal(boss.getArea(), bossArea);
+  let total = 900;
+  const parts = [{ damage: 400, getDamage() { return this.damage; }, setDamage(value) { this.damage = value; } },
+    { damage: 500, getDamage() { return this.damage; }, setDamage(value) { this.damage = value; } }];
+  handlers.npcHitModify.at(-1)({ npc: boss, hit: { getHits: () => parts, updateTotalDamage() { total = parts.reduce((sum, part) => sum + part.damage, 0); } } });
+  assert.equal(total, 810, 'the lethal multi-hit is capped at 58% so the escape cutscene cannot be skipped');
 });
 
 test('Priest in Peril unlocks the mausoleum Holy barrier only after completion', () => {
