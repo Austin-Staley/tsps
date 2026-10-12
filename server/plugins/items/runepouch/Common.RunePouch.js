@@ -27,6 +27,10 @@ const RUNE_TYPE_ENUM = 982;
 /** if1: how many slots the open pouch has; the cache scripts lay out 3 or 4 and title "Divine Rune Pouch" at 4. */
 const POUCH_SLOTS_VARP = 261;
 
+/** meslayer_close: closes the chatbox input if it is in the given mode; 7 is the count prompt (meslayer_mode7). */
+const MESLAYER_CLOSE_SCRIPT = 101;
+const COUNT_INPUT_MODE = 7;
+
 const MESSAGE = {
   CANT_HOLD: "The pouch can't hold that.",
   EMPTY: "Your pouch is empty.",
@@ -38,6 +42,8 @@ const MESSAGE = {
 let api = null;
 let core = null;
 let typeByRune = null;
+/** The amount prompt each player has open from the pouch, so closing its interface can close it. */
+const prompts = new WeakMap();
 
 /** Set once by the plugin before any unit attaches. */
 function init(pluginApi) {
@@ -234,6 +240,29 @@ function sendPouchSlots(player, pouch = findPouch(player)) {
   if (sender.getVarp(POUCH_SLOTS_VARP) !== count) sender.sendConfig(POUCH_SLOTS_VARP, count);
 }
 
+// ------------------------------------------------------------------ amount prompts
+
+/** Asks for an amount in the chatbox; `action` is an EnteredAmountAction. */
+function askAmount(player, title, action) {
+  prompts.set(player, action);
+  player.setEnteredAmountAction(action);
+  player.getPacketSender().sendEnterAmountPrompt(title);
+}
+
+/**
+ * Closing the bank or the pouch interface closes a pouch prompt still open in the chatbox. Closing
+ * an interface has already dropped the prompt's action; one that another prompt replaced is left.
+ */
+function closePrompt(player) {
+  const action = prompts.get(player);
+  if (!action) return;
+  prompts.delete(player);
+  const current = player.getEnteredAmountAction?.() ?? null;
+  if (current !== null && current !== action) return;
+  player.setEnteredAmountAction(null);
+  player.getPacketSender().sendClientScript(MESLAYER_CLOSE_SCRIPT, COUNT_INPUT_MODE);
+}
+
 /** Login: runes from an old pouch's meta move onto the player, then every var is sent. */
 function login(player) {
   migrateLegacyMeta(player);
@@ -312,5 +341,7 @@ module.exports = {
   setCustomQuantity,
   selectedQuantity,
   setSelectedQuantity,
+  askAmount,
+  closePrompt,
   login,
 };

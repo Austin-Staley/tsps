@@ -100,7 +100,7 @@ function clickPouchSlot(player, event) {
   const op = Number(event.action);
   // The client asks for Withdraw-X itself and sends the amount first; any other X op asks here.
   if (op === X_PROMPT_OP && !/-x$/i.test(event.option ?? "")) {
-    player.setEnteredAmountAction({
+    Pouch.askAmount(player, AMOUNT_PROMPT, {
       execute(amount) {
         if (!(amount > 0)) return;
         player.setBankCustomQuantity(amount);
@@ -111,7 +111,6 @@ function clickPouchSlot(player, event) {
         }
       },
     });
-    player.getPacketSender().sendEnterAmountPrompt(AMOUNT_PROMPT);
     return;
   }
   const amount = Bank.actionAmount("withdraw", op, event.option, entry.amount,
@@ -134,8 +133,14 @@ function click(event) {
   else if (Number.isInteger(event.slot)) clickPouchSlot(player, event);
 }
 
+/** Closing the bank closes a pouch view or loadout prompt left open in the chatbox. */
+function closed({ player, interfaceId }) {
+  if (interfaceId === Pouch.core.Bank.MAIN_INTERFACE_ID) Pouch.closePrompt(player);
+}
+
 module.exports = function attach(api) {
   api.onCustomEvent(Pouch.core.Bank.INVENTORY_OP_EVENT, inventoryOp);
+  api.onCustomEvent("interface:closed", closed);
   api.onInterfaceActionClick(click);
 };
 

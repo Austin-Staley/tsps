@@ -137,6 +137,7 @@ function createPlayer(inventoryItems = [], bankItems = []) {
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     setEnteredAmountAction: (action) => { player.enteredAmountAction = action; },
+    getEnteredAmountAction: () => player.enteredAmountAction,
     setEnteredSyntaxAction: (action) => { player.enteredSyntaxAction = action; },
     getPacketSender: () => sender,
     getHitpoints: () => 10,
@@ -404,6 +405,21 @@ test("a loadout slot takes the picked rune and its limit, packed into the cache'
   assert.equal(sender.getVarbit(varbit("rune_pouch_loadout_a_cap1")), 0);
   assert.equal(player.enteredAmountAction, null, "no limit is asked for an empty slot");
   assert.equal(Loadouts._test.loadouts(player)[0].runes[0], null);
+});
+
+test("closing the bank closes a loadout's limit prompt still open in the chatbox", () => {
+  const pouch = new Item(Items.RUNE_POUCH, 1);
+  const player = createPlayer([pouch]);
+  openBank(player);
+  PluginManager.emitCustomEvent(Bank.INVENTORY_OP_EVENT, { player, item: pouch, slot: 0, op: 1, handled: false });
+  clickComponent(player, "bankside:runepouch_loadout_a", 1, { slot: 1 });
+  player.enteredSyntaxAction.execute(String(Items.AIR_RUNE));
+  assert.ok(player.enteredAmountAction);
+
+  // As PacketSender.sendInterfaceRemoval does: the prompt's action is dropped before the event.
+  player.enteredAmountAction = null;
+  PluginManager.emitCustomEvent("interface:closed", { player, interfaceId: Bank.MAIN_INTERFACE_ID });
+  assert.equal(player.log.at(-1), "script 101 [7]", "meslayer_close for the count prompt");
 });
 
 test("loading a loadout banks the pouch, then fills it from the inventory first and the bank", () => {

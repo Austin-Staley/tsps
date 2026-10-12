@@ -64,6 +64,7 @@ function open({ player, item }) {
 
 function closed({ player, interfaceId }) {
   if (interfaceId !== RUNE_POUCH) return;
+  Pouch.closePrompt(player);
   player.getPacketSender()
     .sendSubInterface(INVENTORY_TAB_UID, INVENTORY, 1)
     .sendClientScript(TOPLEVEL_SIDEBUTTON_SWITCH_SCRIPT, INVENTORY_TAB);
@@ -80,14 +81,13 @@ function opAmount(player, op) {
 
 /** Op5 asks for an amount, which becomes the remembered X, then moves it. */
 function askAmount(player, then) {
-  player.setEnteredAmountAction({
+  Pouch.askAmount(player, AMOUNT_PROMPT, {
     execute(amount) {
       const value = Math.min(Pouch.MAX_AMOUNT, Math.max(1, Math.floor(amount)));
       Pouch.setCustomQuantity(player, value);
       if (isOpen(player)) then(value);
     },
   });
-  player.getPacketSender().sendEnterAmountPrompt(AMOUNT_PROMPT);
 }
 
 function withdraw(player, slot, amount) {
@@ -134,13 +134,12 @@ function clickX(player, op) {
     Pouch.setSelectedQuantity(player, MODE.X);
     return;
   }
-  player.setEnteredAmountAction({
+  Pouch.askAmount(player, QUANTITY_PROMPT, {
     execute(amount) {
       Pouch.setCustomQuantity(player, Math.min(Pouch.MAX_AMOUNT, Math.max(1, Math.floor(amount))));
       Pouch.setSelectedQuantity(player, MODE.X);
     },
   });
-  player.getPacketSender().sendEnterAmountPrompt(QUANTITY_PROMPT);
 }
 
 function click(event) {

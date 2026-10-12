@@ -119,7 +119,7 @@ function pickRune(player, index, slot, picked) {
   sendSlot(player, index, slot, null);
   sendSlot(player, index, slot, all[index].runes[slot]);
   const name = Pouch.core.ItemDefinition.forId(runeId).getName();
-  player.setEnteredAmountAction({
+  Pouch.askAmount(player, MESSAGE.LIMIT(name), {
     acceptsZero: true,
     execute(amount) {
       const latest = loadouts(player);
@@ -130,7 +130,6 @@ function pickRune(player, index, slot, picked) {
       sendSlot(player, index, slot, rune);
     },
   });
-  player.getPacketSender().sendEnterAmountPrompt(MESSAGE.LIMIT(name));
 }
 
 function clearSlot(player, index, slot) {
