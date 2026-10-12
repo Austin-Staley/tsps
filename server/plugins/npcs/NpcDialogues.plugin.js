@@ -733,13 +733,8 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           if (request.line) return run([{ npc: request.line }, ...rest], currentRecord);
         }
         if (step.type === "action") {
-          // "npc-dialogue:action": a plugin that owns this stage direction (an interface to
-          // open, say) sets handled and takes over the conversation from here.
-          const request = { player, npcId, action: step.action, target: step.target, handled: false };
-          api.emitCustomEvent("npc-dialogue:action", request);
-          if (request.handled) return;
-          // Unhandled prose stage directions ("The player lights a tinderbox.")
-          // have no executable contract; continue the branch rather than abort.
+          // The step was already emitted with its id above. An unhandled prose
+          // direction ("The player lights a tinderbox.") has no further contract.
           return run(rest, currentRecord);
         }
         // ponytail: unknown step type with no executable contract. Stop safely.
