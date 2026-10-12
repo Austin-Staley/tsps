@@ -230,6 +230,13 @@ All five recordings have the room (four solo, one duo).
 - Below half health they eat from the tree: 3 bites on consecutive ticks, 15% of their hitpoints each (35 at 236, 37 at 250), at most three meals. Heals show as hitsplat 6.
 - Chopping the tree rolls every 5 ticks: "You swing your axe...", then "You hack away some of the meat." with a hitsplat on the tree.
 
+## Vanguards, from rsprox captures
+
+Recordings 843, 3285 and 3389.
+
+- Woken, they stir (7428) and take their roles 5 ticks later. Each attacks every 4 ticks: melee 7441, ranged 7446 with three different projectiles (1332-1334) landing 2 ticks later as gfx 305, magic 7436 with three projectiles 1331 landing 3 ticks later as gfx 659.
+- Swirls (57 healthy, 56 low) flash every 2 ticks before a shuffle; they fall into their shells on one tick, heal to full 4 ticks in when out of balance (7431), and stand up 9-13 ticks later.
+
 ## Values not on the Wiki, to check against a capture
 
 | Value | Where |
