@@ -11,6 +11,9 @@ module.exports = function registerTheBloodMoonRises(api) {
   const TOME_ID = ItemIdentifiers.TOME_OF_EXPERIENCE_3;
   const PREP_ATTRIBUTE = "quest.the_blood_moon_rises.preparations";
   const THRONE_PUZZLE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-throne-puzzle";
+  const BASIN_PUZZLE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-basin-puzzle";
+  const SOLID_KEY_ATTRIBUTE = "quest.the_blood_moon_rises.castle-solid-key-puzzle";
+  const REFINER_ATTRIBUTE = "quest.the_blood_moon_rises.castle-refiner";
   const PREP = {
     leaves: ItemIdentifiers.AMITIRE_LEAVES,
     stew: ItemIdentifiers.AMITIRE_STEW,
@@ -455,6 +458,17 @@ module.exports = function registerTheBloodMoonRises(api) {
     advance(event.player, STAGE.STARTED);
   }
 
+  function enterVampyriumCastle(event) {
+    const player = event?.player;
+    const { x, y, z } = event?.location ?? {};
+    const name = String(event?.definition?.getName?.() ?? "").toLowerCase();
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.SLEPE ||
+      x !== 3161 || y !== 7710 || z !== 0 || !name.includes("portal")) return;
+    // The story's portal interaction has no transcript action. This is the
+    // actual transition into the Vampyrium castle chapter.
+    advance(player, STAGE.CASTLE);
+  }
+
   // Transcript cutscenes mark the major route changes. The separate object,
   // puzzle and boss handlers below remain responsible for the actual mechanics.
   function onTranscriptAction(event) {
@@ -650,6 +664,212 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.sendMessage(solved ? "The busts turn into alignment, and a compartment opens beneath the throne." : "The bust lever locks into place.");
   }
 
+  function handleCastleBasinPuzzle(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE) return;
+    const { x, y, z } = event.location ?? {};
+    const name = String(event.definition?.getName?.() ?? "").toLowerCase();
+    if (name !== "shelves" || x !== 2380 || y !== 7396 || z !== 0) return;
+    event.handled = true;
+    const state = player.getAttribute(BASIN_PUZZLE_ATTRIBUTE) ?? { basins: {}, symbol: false };
+    const inventory = player.getInventory();
+    const potions = [ItemIdentifiers.CLOUDY_GREY_POTION, ItemIdentifiers.WEIGHTLESS_BLACK_POTION,
+      ItemIdentifiers.THICK_RED_POTION, ItemIdentifiers.COLD_BLUISH_WHITE_POTION];
+    for (const potion of potions) if (!inventory.contains(potion)) inventory.adds(potion, 1);
+    player.sendMessage("You search the north-west shelves and take one potion of each colour.");
+  }
+
+  function handleBasinPotion(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE) return;
+    const { x, y, z } = event.location ?? {};
+    if (z !== 0) return;
+    const basin = `${x},${y}`;
+    const correctBasin = new Map([
+      [ItemIdentifiers.THICK_RED_POTION, "2380,7389"], // north-west: blood
+      [ItemIdentifiers.WEIGHTLESS_BLACK_POTION, "2387,7389"], // north-east: shadow
+      [ItemIdentifiers.CLOUDY_GREY_POTION, "2380,7384"], // south-west: smoke
+      [ItemIdentifiers.COLD_BLUISH_WHITE_POTION, "2387,7384"], // south-east: ice
+    ]);
+    const expected = correctBasin.get(event.itemId);
+    if (!expected || !["61702", "61703", "61704", "61705"].includes(String(event.objectId))) return;
+    event.handled = true;
+    const state = player.getAttribute(BASIN_PUZZLE_ATTRIBUTE) ?? { basins: {}, symbol: false };
+    if (!player.getInventory().contains(event.itemId)) return;
+    if (basin !== expected) {
+      player.sendMessage("The basin rejects the potion. Read its inscription and choose another basin.");
+      return;
+    }
+    if (state.basins[basin]) {
+      player.sendMessage("A potion has already been poured into this basin.");
+      return;
+    }
+    player.getInventory().deleteNumber(event.itemId, 1);
+    const basins = { ...state.basins, [basin]: true };
+    player.setAttribute(BASIN_PUZZLE_ATTRIBUTE, { ...state, basins });
+    player.sendMessage("You pour the potion into the basin. The liquid settles beneath its inscription.");
+  }
+
+  function handleBasinAltar(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE) return;
+    const { x, y, z } = event.location ?? {};
+    const name = String(event.definition?.getName?.() ?? "").toLowerCase();
+    if (name !== "altar" || x !== 2382 || y !== 7393 || z !== 0) return;
+    event.handled = true;
+    const state = player.getAttribute(BASIN_PUZZLE_ATTRIBUTE) ?? { basins: {}, symbol: false };
+    if (!Object.values(state.basins).length || Object.keys(state.basins).length !== 4) {
+      player.sendMessage("The altar remains still. The four inscriptions must each receive the correct potion.");
+      return;
+    }
+    if (!player.getInventory().contains(ItemIdentifiers.ANCIENT_SYMBOL)) {
+      player.getInventory().adds(ItemIdentifiers.ANCIENT_SYMBOL, 1);
+      player.setAttribute(BASIN_PUZZLE_ATTRIBUTE, { ...state, symbol: true });
+      player.sendMessage("You search the altar and take an ancient symbol.");
+    } else {
+      player.sendMessage("The altar's ancient symbol is already in your inventory.");
+    }
+  }
+
+  function handleSolidKeyObjects(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE) return;
+    const { x, y, z } = event.location ?? {};
+    if (z !== 0) return;
+    const name = String(event.definition?.getName?.() ?? "").toLowerCase();
+    const basinState = player.getAttribute(BASIN_PUZZLE_ATTRIBUTE) ?? { basins: {}, symbol: false };
+    const state = player.getAttribute(SOLID_KEY_ATTRIBUTE) ?? { shield: false, mounted: false, key: false };
+    if (name === "crate" && x === 2439 && y === 7378) {
+      event.handled = true;
+      if (!basinState.symbol || !player.getInventory().contains(ItemIdentifiers.ANCIENT_SYMBOL)) {
+        player.sendMessage("The ancient shield's room lies beyond the chapel. Find the ancient symbol first.");
+        return;
+      }
+      if (!player.getInventory().contains(ItemIdentifiers.ANCIENT_SHIELD)) player.getInventory().adds(ItemIdentifiers.ANCIENT_SHIELD, 1);
+      player.setAttribute(SOLID_KEY_ATTRIBUTE, { ...state, shield: true });
+      player.sendMessage("You search the crate and take an ancient shield.");
+      return;
+    }
+    if (x !== 2543 || y !== 7361) return;
+    if (state.mounted) {
+      event.handled = true;
+      if (!state.key && player.getInventory().adds(ItemIdentifiers.SOLID_KEY, 1)) {
+        player.setAttribute(SOLID_KEY_ATTRIBUTE, { ...state, key: true });
+        player.sendMessage("You search the mounted shield and take the solid key.");
+      }
+    }
+  }
+
+  function handleAncientShieldAssembly(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE) return;
+    const pair = new Set([event.usedItemId, event.usedWithItemId]);
+    if (!pair.has(ItemIdentifiers.ANCIENT_SYMBOL) || !pair.has(ItemIdentifiers.ANCIENT_SHIELD)) return;
+    event.handled = true;
+    const inventory = player.getInventory();
+    if (!inventory.contains(ItemIdentifiers.ANCIENT_SYMBOL) || !inventory.contains(ItemIdentifiers.ANCIENT_SHIELD)) return;
+    inventory.deleteNumber(ItemIdentifiers.ANCIENT_SYMBOL, 1);
+    inventory.deleteNumber(ItemIdentifiers.ANCIENT_SHIELD, 1);
+    if (!inventory.adds(ItemIdentifiers.SHIELD_WITH_SYMBOL, 1)) {
+      inventory.adds(ItemIdentifiers.ANCIENT_SYMBOL, 1);
+      inventory.adds(ItemIdentifiers.ANCIENT_SHIELD, 1);
+      player.sendMessage("Make room for the shield with symbol.");
+      return;
+    }
+    player.setAttribute(SOLID_KEY_ATTRIBUTE, { ...(player.getAttribute(SOLID_KEY_ATTRIBUTE) ?? {}), assembled: true });
+    player.sendMessage("You fit the ancient symbol onto the shield.");
+  }
+
+  function handleMountShield(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      event.itemId !== ItemIdentifiers.SHIELD_WITH_SYMBOL) return;
+    const { x, y, z } = event.location ?? {};
+    if (x !== 2543 || y !== 7361 || z !== 0) return;
+    event.handled = true;
+    const state = player.getAttribute(SOLID_KEY_ATTRIBUTE) ?? { shield: false, mounted: false, key: false };
+    if (!state.assembled || !player.getInventory().contains(ItemIdentifiers.SHIELD_WITH_SYMBOL)) {
+      player.sendMessage("The shield is missing its ancient symbol.");
+      return;
+    }
+    player.getInventory().deleteNumber(ItemIdentifiers.SHIELD_WITH_SYMBOL, 1);
+    player.setAttribute(SOLID_KEY_ATTRIBUTE, { ...state, mounted: true });
+    player.sendMessage("You mount the shield on the southern wall.");
+  }
+
+  function handleRefiner(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE) return;
+    const { x, y, z } = event.location ?? {};
+    const name = String(event.definition?.getName?.() ?? "").toLowerCase();
+    if (name === "shelves" && x === 2513 && y === 7387 && z === 0) {
+      event.handled = true;
+      const inventory = player.getInventory();
+      for (const [id, amount] of [[ItemIdentifiers.VIAL_OF_WATER_6, 2],
+        [ItemIdentifiers.VIAL_OF_BLOOD_5, 3], [ItemIdentifiers.PURE_ESSENCE_4, 3]]) {
+        const missing = amount - (inventory.getAmount?.(id) ?? (inventory.contains(id) ? 1 : 0));
+        if (missing > 0) inventory.adds(id, missing);
+      }
+      player.sendMessage("You search the north-west shelves and take two vials of water, three vials of blood, and three pure essences.");
+      return;
+    }
+    if (name !== "blood stockpile" || x !== 2535 || y !== 7385 || z !== 0) return;
+    event.handled = true;
+    const state = player.getAttribute(REFINER_ATTRIBUTE) ?? { mixtures: [], used: 0, total: 0, destroyed: false };
+    if (state.used !== 4 || state.total !== 53) {
+      player.sendMessage("The stockpile is protected by the refiner. Make mixtures totalling 53 haemalchemic potential and use all four on the basin.");
+      return;
+    }
+    player.setAttribute(REFINER_ATTRIBUTE, { ...state, destroyed: true });
+    player.sendMessage("You destroy the blood stockpile. The refiner's north door is now clear.");
+  }
+
+  function handleRefinerMixture(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE || event.objectId !== 61709) return;
+    const { x, y, z } = event.location ?? {};
+    if (x !== 2520 || y !== 7385 || z !== 0) return;
+    const inventory = player.getInventory();
+    const state = player.getAttribute(REFINER_ATTRIBUTE) ?? { mixtures: [], used: 0, total: 0, destroyed: false };
+    const recipes = [
+      { items: [ItemIdentifiers.VIAL_OF_BLOOD_5, ItemIdentifiers.PURE_ESSENCE_4], value: 17 },
+      { items: [ItemIdentifiers.VIAL_OF_BLOOD_5, ItemIdentifiers.PURE_ESSENCE_4], value: 17 },
+      { items: [ItemIdentifiers.VIAL_OF_BLOOD_5, ItemIdentifiers.VIAL_OF_WATER_6], value: 13 },
+      { items: [ItemIdentifiers.PURE_ESSENCE_4, ItemIdentifiers.VIAL_OF_WATER_6], value: 6 },
+    ];
+    const recipe = recipes[state.mixtures.length];
+    if (!recipe || !recipe.items.includes(event.itemId) || !recipe.items.every((id) => inventory.contains(id))) return;
+    event.handled = true;
+    for (const id of recipe.items) inventory.deleteNumber(id, 1);
+    if (!inventory.adds(ItemIdentifiers.CHEMICAL_VIAL, 1)) {
+      for (const id of recipe.items) inventory.adds(id, 1);
+      player.sendMessage("Make room in your inventory for the chemical vial.");
+      return;
+    }
+    const mixtures = [...state.mixtures, recipe.value];
+    player.setAttribute(REFINER_ATTRIBUTE, { ...state, mixtures });
+    player.sendMessage(`The refiner fills a chemical vial with ${recipe.value} haemalchemic potential.`);
+  }
+
+  function handleRefinerVial(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      event.itemId !== ItemIdentifiers.CHEMICAL_VIAL || event.objectId !== 61707) return;
+    const { x, y, z } = event.location ?? {};
+    if (x !== 2518 || y !== 7389 || z !== 0) return;
+    event.handled = true;
+    const state = player.getAttribute(REFINER_ATTRIBUTE) ?? { mixtures: [], used: 0, total: 0, destroyed: false };
+    if (!state.mixtures.length || !player.getInventory().contains(ItemIdentifiers.CHEMICAL_VIAL)) {
+      player.sendMessage("The refiner's basin is waiting for a prepared chemical vial.");
+      return;
+    }
+    player.getInventory().deleteNumber(ItemIdentifiers.CHEMICAL_VIAL, 1);
+    const [value, ...mixtures] = state.mixtures;
+    const total = state.total + value;
+    player.setAttribute(REFINER_ATTRIBUTE, { ...state, mixtures, used: state.used + 1, total });
+    player.sendMessage(`The basin absorbs the vial. Haemalchemic potential: ${total} HP.`);
+  }
+
   function handlePrepObject(event) {
     const player = event?.player;
     if (!player || quest.isComplete(player) || stage(player) < STAGE.PREPARATIONS || stage(player) >= STAGE.SIEGE) return;
@@ -801,9 +1021,19 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("npc-dialogue:choice", onChoice);
   api.onNpcDialogueVariant(selectVariant);
   api.onAnyNpcInteraction({ "Talk-to": talkQuestNpc });
+  api.onObjectInteraction(enterVampyriumCastle);
   api.onObjectInteraction(inspectWyrdFence);
   api.onObjectInteraction(handleCastleThronePuzzle);
+  api.onObjectInteraction(handleCastleBasinPuzzle);
+  api.onObjectInteraction(handleBasinAltar);
+  api.onObjectInteraction(handleSolidKeyObjects);
+  api.onItemOnObject(handleBasinPotion, { noted: false });
+  api.onItemOnObject(handleMountShield, { noted: false });
+  api.onItemOnObject(handleRefinerVial, { noted: false });
   api.onObjectInteraction(handlePrepObject);
+  api.onObjectInteraction(handleRefiner);
+  api.onItemOnObject(handleRefinerMixture, { noted: false });
+  api.onItemOnItem(handleAncientShieldAssembly);
   api.onItemOnItem(handlePrepItemOnItem);
   api.onItemOnNpc(feedSafalaan);
   api.onNpcDeath(handleWyrdDeath);
@@ -812,5 +1042,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.persistAttribute(PREP_ATTRIBUTE);
   api.persistAttribute(PREP_COMPLETE);
   api.persistAttribute(THRONE_PUZZLE_ATTRIBUTE);
+  api.persistAttribute(BASIN_PUZZLE_ATTRIBUTE);
+  api.persistAttribute(SOLID_KEY_ATTRIBUTE);
+  api.persistAttribute(REFINER_ATTRIBUTE);
   api.onItemAction("Tome of Experience", { Read: readTome });
 };

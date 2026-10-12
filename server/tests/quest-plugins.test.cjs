@@ -16,6 +16,7 @@ function mockApi() {
     objects: [],
     itemOnItem: [],
     itemOnNpc: [],
+    itemOnObject: [],
   };
   const noop = () => {};
   const base = {
@@ -25,6 +26,7 @@ function mockApi() {
     onObjectInteraction: (h) => handlers.objects.push(h),
     onItemOnItem: (h) => handlers.itemOnItem.push(h),
     onItemOnNpc: (h) => handlers.itemOnNpc.push(h),
+    onItemOnObject: (h) => handlers.itemOnObject.push(h),
     onCustomEvent: (name, h) => {
       const list = handlers.custom.get(name) ?? [];
       list.push(h);
@@ -227,6 +229,23 @@ test('The Blood Moon Rises starts only after Sarius accepts the yes choice and r
   assert.equal(reclaimed, 1, 'the explicit option delegates to Night at the Theatre’s inventory-safe reclaim event');
 });
 
+test('Blood Moon portal entry starts the Castle Drakan chapter where the physical puzzle handlers become active', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+  };
+  quest.setStage(player, 30);
+  const enter = handlers.objects.find((handler) => handler.name === 'enterVampyriumCastle');
+  enter({ player, definition: { getName: () => 'Ominous red portal' }, location: { x: 3161, y: 7710, z: 0 }, handled: false });
+  assert.equal(quest.getStage(player), 40);
+});
+
 test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes before the siege stage', () => {
   const { api, handlers } = mockApi();
   const originalForId = api.core.NpcDefinition.forId;
@@ -242,6 +261,7 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
   const counts = new Map();
   const inventory = {
     contains: (id) => (counts.get(id) ?? 0) > 0,
+    getAmount: (id) => counts.get(id) ?? 0,
     adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
     deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
   };
@@ -256,7 +276,7 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
     sendMessage: (text) => messages.push(text),
   };
   quest.setStage(player, 60);
-  const object = handlers.objects.at(-1);
+  const object = handlers.objects.find((handler) => handler.name === 'handlePrepObject');
   const itemOnItem = handlers.itemOnItem.at(-1);
   const itemOnNpc = handlers.itemOnNpc.at(-1);
   const ids = api.core.ItemIdentifiers;
@@ -344,6 +364,130 @@ test('Blood Moon Castle Drakan throne opens only after the ordered bust mechanis
   assert.equal(inventory.contains(api.core.ItemIdentifiers.HALF_MOON_KEY), true);
   action({ player, stepId: 'XqVfhB' });
   assert.equal(quest.getStage(player), 45, 'the escape chapter advances only after claiming the key');
+});
+
+test('Blood Moon Castle basin puzzle requires all four correct potions before revealing the ancient symbol', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  const counts = new Map();
+  const inventory = {
+    contains: (id) => (counts.get(id) ?? 0) > 0,
+    adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
+    deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+  };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getSkillManager: () => ({ getMaxLevel: () => 99 }),
+    getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+  };
+  quest.setStage(player, 40);
+  const objects = handlers.objects;
+  const shelves = objects.find((handler) => handler.name === 'handleCastleBasinPuzzle');
+  const altar = objects.find((handler) => handler.name === 'handleBasinAltar');
+  shelves({ player, definition: { getName: () => 'Shelves' }, location: { x: 2380, y: 7396, z: 0 }, handled: false });
+  const I = api.core.ItemIdentifiers;
+  for (const id of [I.CLOUDY_GREY_POTION, I.WEIGHTLESS_BLACK_POTION, I.THICK_RED_POTION, I.COLD_BLUISH_WHITE_POTION]) {
+    assert.equal(inventory.contains(id), true, 'searching the shelves gives each distinct potion');
+  }
+  const pour = (itemId, objectId, x, y) => {
+    const event = { player, itemId, objectId, location: { x, y, z: 0 }, handled: false };
+    handlers.itemOnObject.find((handler) => handler.name === 'handleBasinPotion')(event);
+    return event;
+  };
+  assert.equal(pour(I.CLOUDY_GREY_POTION, 61704, 2380, 7389).handled, true);
+  assert.equal(inventory.contains(I.CLOUDY_GREY_POTION), true, 'a wrong basin keeps the potion');
+  pour(I.THICK_RED_POTION, 61704, 2380, 7389);
+  pour(I.WEIGHTLESS_BLACK_POTION, 61703, 2387, 7389);
+  pour(I.CLOUDY_GREY_POTION, 61702, 2380, 7384);
+  pour(I.COLD_BLUISH_WHITE_POTION, 61705, 2387, 7384);
+  altar({ player, definition: { getName: () => 'Altar' }, location: { x: 2382, y: 7393, z: 0 }, handled: false });
+  assert.equal(inventory.contains(I.ANCIENT_SYMBOL), true, 'all four correctly poured potions reveal the symbol');
+});
+
+test('Blood Moon solid key requires the symbol, shield assembly, and southern wall mount', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.castle-basin-puzzle', { basins: { one: true, two: true, three: true, four: true }, symbol: true }],
+  ]);
+  const counts = new Map([[api.core.ItemIdentifiers.ANCIENT_SYMBOL, 1]]);
+  const inventory = {
+    contains: (id) => (counts.get(id) ?? 0) > 0,
+    adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
+    deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+  };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+  };
+  quest.setStage(player, 40);
+  const I = api.core.ItemIdentifiers;
+  const object = handlers.objects.find((handler) => handler.name === 'handleSolidKeyObjects');
+  object({ player, definition: { getName: () => 'Crate' }, location: { x: 2439, y: 7378, z: 0 }, handled: false });
+  assert.equal(inventory.contains(I.ANCIENT_SHIELD), true, 'the room crate supplies the ancient shield after the symbol is found');
+  handlers.itemOnItem.find((handler) => handler.name === 'handleAncientShieldAssembly')({
+    player, usedItemId: I.ANCIENT_SYMBOL, usedWithItemId: I.ANCIENT_SHIELD, handled: false,
+  });
+  assert.equal(inventory.contains(I.SHIELD_WITH_SYMBOL), true);
+  const mount = handlers.itemOnObject.find((handler) => handler.name === 'handleMountShield');
+  mount({ player, itemId: I.SHIELD_WITH_SYMBOL, location: { x: 2543, y: 7361, z: 0 }, handled: false });
+  object({ player, definition: { getName: () => 'Shield' }, location: { x: 2543, y: 7361, z: 0 }, handled: false });
+  assert.equal(inventory.contains(I.SOLID_KEY), true, 'searching the mounted shield yields the solid key');
+});
+
+test('Blood Moon refiner requires the four correct chemical vials totalling 53 before destroying the stockpile', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  const counts = new Map();
+  const inventory = {
+    contains: (id) => (counts.get(id) ?? 0) > 0,
+    getAmount: (id) => counts.get(id) ?? 0,
+    adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
+    deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+  };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+  };
+  quest.setStage(player, 40);
+  const interact = handlers.objects.find((handler) => handler.name === 'handleRefiner');
+  const shelves = { player, definition: { getName: () => 'Shelves' }, location: { x: 2513, y: 7387, z: 0 }, handled: false };
+  interact(shelves);
+  const I = api.core.ItemIdentifiers;
+  const makeVial = (itemId) => handlers.itemOnObject.find((handler) => handler.name === 'handleRefinerMixture')({
+    player, itemId, objectId: 61709, location: { x: 2520, y: 7385, z: 0 }, handled: false,
+  });
+  makeVial(I.VIAL_OF_BLOOD_5);
+  makeVial(I.VIAL_OF_BLOOD_5);
+  makeVial(I.VIAL_OF_BLOOD_5);
+  makeVial(I.PURE_ESSENCE_4);
+  const vial = handlers.itemOnObject.find((handler) => handler.name === 'handleRefinerVial');
+  for (let i = 0; i < 4; i++) {
+    const event = { player, itemId: I.CHEMICAL_VIAL, objectId: 61707, location: { x: 2518, y: 7389, z: 0 }, handled: false };
+    vial(event);
+    assert.equal(event.handled, true);
+  }
+  const stockpile = { player, definition: { getName: () => 'Blood stockpile' }, location: { x: 2535, y: 7385, z: 0 }, handled: false };
+  interact(stockpile);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-refiner').destroyed, true);
 });
 
 test('The Wyrd transcript action starts a private encounter with the cache-mapped boss', () => {
