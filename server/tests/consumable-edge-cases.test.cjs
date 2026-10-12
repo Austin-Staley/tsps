@@ -10,9 +10,10 @@ const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
 
 const Potions = require("../plugins/items/Potions.plugin");
 const { Item } = require("../dist/game/model/Item");
-let combinePotions;
+let combinePotions, staminaFromHook;
 Potions.register(new Proxy({}, {
   get: (_, key) => key === "core" ? { Item } : (...args) => {
+    if (key === "onCustomEvent" && args[0] === "potions:apply-stamina") staminaFromHook = args[1];
     if (key === "onItemOnItem") {
       combinePotions = args[0];
       assert.deepEqual(args[1], { noted: false });
@@ -424,4 +425,12 @@ test("Overload needs more than 50 Hitpoints and a Saradomin brew may over-heal",
   Potions._test.findPotionEntry(ItemIdentifiers.SARADOMIN_BREW_4_).potion.effect(brewed);
   assert.equal(brewed.levels.get(Skill.HITPOINTS), 50 + Math.floor(2 + 99 * 0.15), "the brew may heal over max");
   assert.equal(brewed.levels.get(Skill.ATTACK), 50 - (2 + Math.floor(50 * 0.1)));
+});
+
+
+test("shared stamina requests support timed restorative food without consuming a potion",()=>{
+ const attrs=new Map();let energy=10;const player={getRunEnergy:()=>energy,setRunEnergy:n=>energy=n,getPacketSender:()=>({sendRunEnergy(){}}),setAttribute:(k,v)=>attrs.set(k,v)};
+ const now=Date.now();staminaFromHook({player,energy:20,durationMs:60000});
+ assert.equal(energy,30);assert.equal(attrs.get("potions:stamina:acc"),0);
+ assert.ok(attrs.get("potions:stamina:end")>=now+60000&&attrs.get("potions:stamina:end")<=Date.now()+60000);
 });

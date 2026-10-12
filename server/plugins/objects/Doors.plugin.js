@@ -26,7 +26,7 @@ const DOOR_AUTO_CLOSE_TICKS = 500;
 const DOOR_NAMES = new Set([
   "Door", "Doors", "Large door", "Castle door", "Cell Door", "Cell door",
   "Glass door", "Magic door", "Metal door", "Mind Door", "Tent door",
-  "Gate", "Metal gate", "Doorway", "Tree Door",
+  "Gate", "Metal gate", "Doorway", "Tree Door", "Ardougne Wall Door",
 ]);
 
 // Always name locs by their core.ObjectIdentifiers property (O.DOOR_358), never a raw id: the
@@ -45,7 +45,11 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   // door whose same-model "Close" locs (5245, 11617, 15205, 17115) all belong to other doors.
   // GATE_52 (Gnome Ball pitch and Tree Gnome Village): its same-model open variants (193, 2395)
   // are nameless with no actions and are never placed, so the pairing below cannot find them.
-  SELF_OPENING_DOOR_IDS = new Set([O.DOOR_223, O.DOOR_225, O.DOOR_226, O.DOOR_227, O.DOOR_228, O.DOOR_229, O.DOOR_230, O.DOOR_231, O.DOOR_358, O.GATE_52]);
+  SELF_OPENING_DOOR_IDS = new Set([O.DOOR_223, O.DOOR_225, O.DOOR_226, O.DOOR_227, O.DOOR_228, O.DOOR_229, O.DOOR_230, O.DOOR_231, O.DOOR_358, O.GATE_52,
+    // The Blood Moon Rises crank-wheel house exit (61824) has no cache Close partner.
+    O.DOOR_831,
+    // The two Ardougne Wall Door loc variants swing open by rotating the same cache loc.
+    O.ARDOUGNE_WALL_DOOR, O.ARDOUGNE_WALL_DOOR_2]);
 
   // Single doors the pairing below can't find: the open variant is not closedId + 1 (e.g. Large
   // door 1517 -> 1520, same models), or it has no "Close" (DOOR_181, the open Keldagrim door on
@@ -56,6 +60,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.LARGE_DOOR_11, O.LARGE_DOOR_14],
     [O.DOOR_180, O.DOOR_181],
     [O.DOOR_499, O.DOOR_498],
+    // Catacomb outer jail gate: its open cache variant has no Close action.
+    [O.GATE_301, O.GATE_302],
     // Tree Gnome Stronghold doors: 1967/1968 open into the cache's nameless 1969/1970.
     [O.TREE_DOOR, 1969],
     [O.TREE_DOOR_2, 1970],
@@ -102,6 +108,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   }
 
   DOUBLE_DOOR_ID_FAMILIES = Object.freeze([
+    // White Knights' Castle: the two leaves share model 639; their open ids are reversed.
+    Object.freeze([O.CASTLE_DOOR, O.CASTLE_DOOR_6, O.CASTLE_DOOR_7, O.CASTLE_DOOR_8]),
     // Large doors (model 633): 1511 opens to 1512, 1513 to 1516 (1514 is an unnamed loc).
     Object.freeze([O.LARGE_DOOR_7, O.LARGE_DOOR_9, O.LARGE_DOOR_8, O.LARGE_DOOR_10]),
     Object.freeze([O.LARGE_DOOR_10, O.LARGE_DOOR_13]),
@@ -129,6 +137,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   ]);
   // Both leaves of each pair are partners of the other.
   SPECIAL_DOUBLE_DOOR_PAIRS = Object.freeze([
+    [O.CASTLE_DOOR, O.CASTLE_DOOR_6],
+    [O.CASTLE_DOOR_7, O.CASTLE_DOOR_8],
     [O.GATE_26, O.GATE_27],
     [O.GATE_29, O.GATE_30],
     [O.GATE_33, O.GATE_34],
@@ -156,6 +166,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     }
   }
   SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
+    [O.CASTLE_DOOR, O.CASTLE_DOOR_7],
+    [O.CASTLE_DOOR_6, O.CASTLE_DOOR_8],
     [O.GATE_26, O.GATE_29],
     [O.GATE_27, O.GATE_30],
     [O.GATE_33, O.GATE_29],

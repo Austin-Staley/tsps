@@ -324,6 +324,21 @@ test('a target may suppress a spell hit effect without changing its damage', () 
 });
 
 
+test('Casting a utility spell cannot immediately select its newly opened choice dialogue', async () => {
+ const {LunarSpells}=require('../dist/game/content/combat/magic/LunarSpells');
+ const {SpellTeleports}=require('../dist/game/content/combat/magic/SpellTeleports');
+ const {PlayerStatus}=require('../dist/game/model/PlayerStatus');
+ const original=LunarSpells.handleSelf,teleport=SpellTeleports.handleSelf;let active=false,selected=0;
+ const connection=new net.ClientConnection(stubChannel());
+ connection.resolveSpellName=()=> 'Astral Contact';
+ connection.player={getAttribute(){},getInterfaceId:()=>-1,getStatus:()=>PlayerStatus.NONE,
+  getQuickPrayers:()=>({handleWidgetAction:()=>false}),getDialogueManager:()=>({isActive:()=>active,handleOption:()=>selected++})};
+ try {
+  SpellTeleports.handleSelf=()=>false;LunarSpells.handleSelf=()=>{active=true;return true;};
+  await connection.dispatch([{type:'widget_action',widgetId:(218<<16)|113,groupId:218,childId:113,buttonNum:1,itemId:9109}]);
+  assert.equal(active,true);assert.equal(selected,0);
+ }finally{LunarSpells.handleSelf=original;SpellTeleports.handleSelf=teleport;}
+});
 test('changing floors in one map region refreshes ground items, including Draynor fish food', () => {
   const { State } = require('../dist/game/entity/impl/grounditem/ItemOnGround');
   const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');

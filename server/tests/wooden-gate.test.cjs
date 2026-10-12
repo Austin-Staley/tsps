@@ -31,8 +31,10 @@ function buildHarness() {
   Sounds.sendSound = (...args) => sounds.push(args);
   CacheDefinitions.getObject = (id) => (id === 2394
     ? { name: 'Gate', actions: ['Open'], models: [[1298]] }
-    : { name: 'Gate' });
-  CacheDefinitions.getCounts = () => ({ npcs: 0, items: 0, objects: 2395 });
+    : id === 8738 || id === 8739
+      ? { name: 'Ardougne Wall Door', actions: ['Open'], models: [[1298]] }
+      : { name: 'Gate' });
+  CacheDefinitions.getCounts = () => ({ npcs: 0, items: 0, objects: 8740 });
 
   const handlers = new Map();
   const objectManager = {
@@ -108,6 +110,21 @@ test('Tree Gnome Stronghold doors use their nameless open variants and restore o
         ['deregister', open, openX, 3492, openFace], ['register', closed, x, 3492, face],
       ]);
     }
+  } finally {
+    h.restore();
+  }
+});
+
+test('Ardougne Wall Doors are registered and swing by rotating the same loc', () => {
+  const h = buildHarness();
+  try {
+    h.place(8738, 2557, 3299, 0);
+    assert.deepEqual(h.click(8738, 2557, 3299, 0, 'Open', 'Ardougne Wall Door'), [
+      ['register', 8738, 2556, 3299, 1], ['deregister', 8738, 2557, 3299, 0],
+    ]);
+    assert.deepEqual(h.click(8738, 2557, 3299, 0, 'Open', 'Ardougne Wall Door'), [
+      ['register', 8738, 2557, 3299, 0], ['deregister', 8738, 2556, 3299, 1],
+    ]);
   } finally {
     h.restore();
   }
@@ -700,4 +717,16 @@ test('the Gnome Ball pitch gate 2394 rotates in place and closes back onto its w
   } finally {
     h.restore();
   }
+});
+
+
+test('the catacomb outer jail gate uses its actionless open cache variant and auto-closes', () => {
+ const h=buildHarness();try{
+  assert.deepEqual(h.click(53441,4126,4788,2),[
+   ['register',53442,4127,4788,3],['deregister',53441,4126,4788,2],
+  ]);
+  h.submitted.at(-1).execute();assert.deepEqual(h.ops.splice(0),[
+   ['deregister',53442,4127,4788,3],['register',53441,4126,4788,2],
+  ]);
+ }finally{h.restore();}
 });

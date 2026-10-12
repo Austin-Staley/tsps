@@ -47,7 +47,6 @@ import {
 import { ObjectActionPacketListener } from "./packet/impl/ObjectActionPacketListener";
 import { NPCOptionPacketListener } from "./packet/impl/NPCOptionPacketListener";
 import { ChatPacketListener } from "./packet/impl/ChatPacketListener";
-import { DialogueOption } from "../game/model/dialogues/DialogueOption";
 import { PlayerOptionPacketListener } from "./packet/impl/PlayerOptionPacketListener";
 import { MagicOnPlayerPacketListener } from "./packet/impl/MagicOnPlayerPacketListener";
 import { LunarSpells } from "../game/content/combat/magic/LunarSpells";
@@ -480,9 +479,7 @@ export class ClientConnection {
           })) {
             continue;
           }
-          if (this.player?.getDialogueManager().canContinue(packet.widgetId)) {
-            this.player.getDialogueManager().advance();
-          }
+          this.player?.getDialogueManager().handleResume(packet.widgetId, packet.childIndex);
           continue;
         }
         case "dialogue_amount": {
@@ -636,9 +633,6 @@ export class ClientConnection {
                   handled: false,
                 });
               }
-            }
-            if (this.player.getDialogueManager().isActive() && actionPacket.buttonNum > 0 && actionPacket.buttonNum <= 5) {
-              this.player.getDialogueManager().handleOption(actionPacket.buttonNum - 1 as DialogueOption);
             }
           }
           continue;
@@ -1049,7 +1043,7 @@ export class ClientConnection {
     if (/^(wield|wear|equip|hold)$/.test(option)) {
       EquipPacketListener.equip(player, packet.itemId, packet.slot, 3214);
     } else if (ItemActionPacketListener.isDropOption(option, optionIndex)) {
-      if (!ItemActionPacketListener.handleAction(player, packet.widgetId, packet.itemId, packet.slot, optionIndex ?? 1, packet.option)) {
+      if (!ItemActionPacketListener.handleAction(player, packet.widgetId, packet.itemId, packet.slot, optionIndex ?? 5, packet.option)) {
         DropItemPacketListener.drop(player, packet.itemId, 3214, packet.slot);
       }
     } else if (option === "examine") {

@@ -105,9 +105,11 @@ function pickVariant(npc) {
 
 /** Transcript page name -> an NPC id that speaks it, so cutscene/paired speakers
  * get their own chathead instead of borrowing the NPC being talked to. */
-function speakerIdIndex(index) {
+function speakerIdIndex(index, NpcDefinition) {
   const byName = new Map();
   for (const [id, pages] of Object.entries(index ?? {})) {
+    const npcName = NpcDefinition?.forId(Number(id))?.getName();
+    if (npcName && npcName !== "null" && !byName.has(npcName)) byName.set(npcName, Number(id));
     for (const entry of pages ?? []) {
       const name = String(entry.page ?? "").replace(/^Transcript:/, "");
       if (name && !byName.has(name)) byName.set(name, Number(id));
@@ -304,7 +306,10 @@ function flatten(steps, opts = {}) {
     if (opts.stopped) break;
     const step = steps[position];
     if (step.type === "jump") {
-      const target = resolveJump(step, steps[position - 1]);
+      // Some wiki exports inline the target body on a "continue" jump instead
+      // of storing it in the page-level jump table. Prefer that body so nested
+      // quest branches do not stop at the jump marker.
+      const target = Array.isArray(step.steps) ? step.steps : resolveJump(step, steps[position - 1]);
       // "end": a jump we cannot replay. Stop rather than leak into the next step.
       if (target === "end") {
         out.push({ type: "end" });
@@ -586,8 +591,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         manager.startDialogues(chain);
         return;
       }
-      // "shows other/previous options": replay a menu already shown, then carry
-      // on with whatever followed the jump in this queue.
+      // A menu jump abandons this option; the menu already owns its continuation.
       if (step.type === "gomenu" && step.menu) {
         // A parser-split "shows other options" jump immediately before a choice
         // really means "show that choice" (Wanted!'s squireship offer); replaying
@@ -596,8 +600,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         if (next && next.type === "choice") {
           continue;
         }
-        const after = queue.slice(position + 1);
-        chain.add(new ActionDialogue(index++, { execute: () => presentMenu(step.menu, 0, after) }));
+        chain.add(new ActionDialogue(index++, { execute: () => presentMenu(step.menu) }));
         manager.startDialogues(chain);
         return;
       }
@@ -636,7 +639,9 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         // before the conversation carries on: a teleport the wiki only narrates, say.
         if (step.steps?.length || typeof request.after === "function") {
           chain.add(new ActionDialogue(index++, { execute: () => {
+            const current = manager.getCurrent?.();
             request.after?.();
+            if (current && manager.getCurrent() !== current) return;
             run(rest, currentRecord);
           } }));
           manager.startDialogues(chain);
@@ -732,13 +737,8 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           if (request.line) return run([{ npc: request.line }, ...rest], currentRecord);
         }
         if (step.type === "action") {
-          // "npc-dialogue:action": a plugin that owns this stage direction (an interface to
-          // open, say) sets handled and takes over the conversation from here.
-          const request = { player, npcId, action: step.action, target: step.target, handled: false };
-          api.emitCustomEvent("npc-dialogue:action", request);
-          if (request.handled) return;
-          // Unhandled prose stage directions ("The player lights a tinderbox.")
-          // have no executable contract; continue the branch rather than abort.
+          // The step was already emitted with its id above. An unhandled prose
+          // direction ("The player lights a tinderbox.") has no further contract.
           return run(rest, currentRecord);
         }
         // ponytail: unknown step type with no executable contract. Stop safely.
@@ -763,6 +763,7 @@ module.exports = {
   startDialogue,
   collectPageLines,
   collectPageOptions,
+  speakerIdIndex,
   register(api) {
     const dialogueFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json");
     const indexFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogue-index.json");
@@ -789,7 +790,7 @@ module.exports = {
       } catch {
         index = {};
       }
-      loaded = { data, aliases: aliasKeys(data), index, speakerIdByName: speakerIdIndex(index) };
+      loaded = { data, aliases: aliasKeys(data), index, speakerIdByName: speakerIdIndex(index, api.core.NpcDefinition) };
       return loaded;
     };
 

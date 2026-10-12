@@ -183,6 +183,29 @@ test("a staircase used from either end takes the side the player stands on", () 
   assert.deepEqual(destinationFor(entry, new core.Location(3549, 10473, 0)), [3549, 10468, 0]);
 });
 
+test("Lletya's north and south tree passes cross the western wall from either side", () => {
+  for (const [name, x, y, inside, outside] of [
+    ["lletya_tree_pass_west_north", 2305, 3191, [2306, 3192, 0], [2304, 3192, 0]],
+    ["lletya_tree_pass_west_south", 2305, 3195, [2306, 3195, 0], [2304, 3195, 0]],
+  ]) {
+    const entry = data.locs.find((loc) => loc.name === name);
+    assert.deepEqual(entry?.sides.map((side) => [side.from, side.to]), [[inside, outside], [outside, inside]]);
+    const object = locAt(8742, x, y, 0);
+    for (const [start, destination] of [[inside, outside], [outside, inside]]) {
+      const visit = explorer(start);
+      const event = { player: visit.player, object, objectId: object.getId(), clickType: 1, handled: false };
+      hooks.object(event);
+      assert.equal(event.handled, true, `${name} claims Pass from ${start}`);
+      runTicks(visit, 2);
+      assert.deepEqual(
+        [visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()],
+        destination,
+        `${name} moves to the tile on the opposite side`,
+      );
+    }
+  }
+});
+
 test("trapdoor swaps: each loc has its option, and becomes the other state", () => {
   const swaps = require("../plugins/world/data/loc-swaps.json").swaps;
   for (const swap of swaps) {
@@ -303,4 +326,31 @@ test("a ladder that asks up or down: the captured way goes there, the other is L
   prompts.pop().pick("Climb Up.");
   runTicks(visit, 1);
   assert.equal(visit.player.getLocation().getZ(), 2);
+});
+
+
+test('The White Knights Castle west stairs connect every floor to the WGS herb patch', () => {
+ const stairs=data.locs.filter(e=>e.name.startsWith('fai_falador_castle_spiralstairs'));
+ assert.equal(stairs.length,6);
+ for(const [z,up] of [[0,true],[1,true],[2,true],[1,false],[2,false],[3,false]]){
+  const e=stairs.find(e=>e.z===z&&e.option===(up?'Climb-up':'Climb-down'));assert.ok(e);
+  assert.equal(e.to[2],z+(up?1:-1));
+ }
+});
+
+
+test("Tears of Guthix northern rocks let both cave shelves cross in either direction", () => {
+  const { RegionManager } = core;
+  RegionManager.loadMapFiles(3240, 9524);
+  for (const y of [9524, 9525]) {
+    const object = locAt(6673, 3240, y, 2);
+    for (const [from, to] of [[[3241, y, 2], [3239, y, 2]], [[3239, y, 2], [3241, y, 2]]]) {
+      const visit = explorer(from);
+      const event = { player: visit.player, object, objectId: 6673, clickType: 1, handled: false };
+      hooks.object(event); assert.equal(event.handled, true); runTicks(visit, 3);
+      assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], to);
+      const outward = to[0] < 3240 ? -1 : 1;
+      assert.equal(RegionManager.canMove(to[0], to[1], to[0] + outward, to[1], 2, 1, 1), true, 'landing is on a walkable shelf');
+    }
+  }
 });

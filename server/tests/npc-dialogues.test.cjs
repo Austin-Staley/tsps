@@ -47,6 +47,22 @@ test('prose conditions take their first branch and dead jumps fall through', () 
     "It seems you're missing out on some valuable experience. Would you like it?");
 });
 
+test('inline jump bodies play and missing external jumps still fall through', () => {
+  assert.deepEqual(flatten([
+    { player: 'before the jump' },
+    { type: 'jump', reference: 'continue', steps: [{ npc: 'inline continuation' }] },
+    { npc: 'tail' },
+  ]), [
+    { player: 'before the jump' },
+    { type: 'jump_to', steps: [{ npc: 'inline continuation' }] },
+    { npc: 'tail' },
+  ]);
+  assert.deepEqual(flatten([
+    { type: 'jump', reference: 'continue', id: 'missing-target' },
+    { npc: 'external jump fallthrough' },
+  ]), [{ npc: 'external jump fallthrough' }]);
+});
+
 test('a condition branch that continues reaches the next sibling check', () => {
   const steps = flatten([
     {
@@ -275,6 +291,36 @@ test('menu navigation jumps become replayable gomenu steps', () => {
   assert.deepEqual(steps[0].menu, { marker: true });
 });
 
+test('an action step is dispatched once with its transcript step id', () => {
+  const actions = [];
+  const said = [];
+  const player = {
+    getDialogueManager: () => ({
+      reset() {},
+      startDialogues(chain) {
+        for (const entry of [...chain.getDialogues().values()].sort((a, b) => a.getIndex() - b.getIndex())) {
+          if (entry.text) said.push(String(entry.text));
+          try { entry.send(player); } catch { /* unwired dialogue entries are fine here */ }
+        }
+      },
+    }),
+    getPacketSender: () => ({ sendInterfaceRemoval() {} }),
+    sendMessage() {},
+  };
+  const definition = { getName: () => 'Guard', getId: () => 1 };
+  const event = { player, npc: { getId: () => 1 }, npcId: 1, definition };
+  startDialogue({
+    emitCustomEvent(name, payload) { if (name === 'npc-dialogue:action') actions.push(payload); },
+  }, event, [
+    { type: 'action', id: 'quest-step-1', action: 'open the gate' },
+    { npc: 'The gate swings open.' },
+  ], {}, { player, npc: event.npc, npcId: 1, definition, pages: [] });
+
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].stepId, 'quest-step-1');
+  assert.deepEqual(said, ['The gate swings open.']);
+});
+
 test('"previous" on the first menu replays it instead of ending the dialogue', () => {
   // Ulsquire's "What did you find out about the remains?" ends in {{tact|previous}}:
   // the player must land back on the question menu, not have the chat closed.
@@ -317,6 +363,48 @@ test('"previous" on the first menu replays it instead of ending the dialogue', (
   const event = { player, npc: { getId: () => 1288 }, npcId: 1288, definition };
   startDialogue(api, event, tree, {}, { player, npc: event.npc, npcId: 1288, definition, pages: [] });
   assert.deepEqual(prompts, ['Q1', 'Q1']);
+});
+
+test('returning to a menu abandons the old handout branch and keeps the menu continuation once', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const condition = { pluginName: 'test', handler: ({ text }) => text === 'If already held:' ? true : null };
+  PluginManager.npcDialogueConditionHooks.unshift(condition);
+  const tree = [
+    { type: 'choice', options: [
+      { text: 'Acid', steps: [
+        { type: 'condition', text: 'If already held:', steps: [{ npc: 'You already have some.' }, { type: 'jump', reference: 'other' }] },
+        { type: 'action', id: 'handout', text: 'Give acid' },
+      ] },
+      { text: 'Bye' },
+    ] },
+    { type: 'action', id: 'after-menu', text: 'Menu finished' },
+  ];
+  const actions = [], picks = ['Acid', 'Bye'];
+  const player = {
+    getDialogueManager: () => ({ reset() {}, startDialogues(chain) {
+      for (const entry of [...chain.getDialogues().values()].sort((a, b) => a.getIndex() - b.getIndex())) {
+        if (entry.constructor.name === 'ActionDialogue') return entry.send(player);
+      }
+    } }),
+    getPacketSender: () => ({ sendInterfaceRemoval() {} }), sendMessage() {},
+  };
+  const definition = { getName: () => 'Daer Krand', getId: () => 9409 };
+  const event = { player, npcId: 9409, definition, npc: null };
+  const api = {
+    emitCustomEvent(name, request) { if (name === 'npc-dialogue:action' && request.stepId) actions.push(request.stepId); },
+    sendMultiChatboxPrompt(_player, _title, ...pairs) {
+      const pick = picks.shift();
+      assert.ok(pick, 'the menu did not end');
+      for (let i = 0; i < pairs.length; i += 2) if (pairs[i] === pick) { pairs[i + 1](); return true; }
+      assert.fail(`missing option ${pick}`);
+    },
+  };
+  try {
+    startDialogue(api, event, tree, {}, { ...event, pages: [] });
+    assert.deepEqual(actions, ['after-menu']);
+  } finally {
+    PluginManager.npcDialogueConditionHooks.splice(PluginManager.npcDialogueConditionHooks.indexOf(condition), 1);
+  }
 });
 
 test('a slayer master assigns from a slugged action, not literal prose', () => {
@@ -553,4 +641,50 @@ test('Morgan warns low-combat players and still offers to start Vampyre Slayer',
   assert.ok(steps.some((step) => step.type === 'message' && step.id === 'KjL0_I'));
   assert.ok(!steps.some((step) => step.type === 'unavailable'));
   assert.ok(steps.some((step) => step.type === 'choice' && step.prompt === 'Start the Vampyre Slayer quest?'));
+});
+
+test('Quest transcripts preserve each named speaker instead of borrowing the clicked NPC head', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { startTranscript } = require('../plugins/quests/QuestRuntime');
+  const names = new Map([[13511,'Thaerisk'],[13543,'Akrisae'],[13540,'Idria'],[13519,'Silif']]);
+  const api = {
+    core: { ...PluginManager.getCoreApi(), NpcDefinition: { forId: id => ({getId:()=>id,getName:()=>names.get(id)||'null'}) } },
+    emitCustomEvent() {},
+  };
+  const lines=[];
+  const player={getUsername:()=> 'Test',getDialogueManager:()=>({reset(){},startDialogues:chain=>{
+    for(const e of chain.getDialogues().values())if(e.getNpcId)lines.push([e.getNpcId(),e.getText()]);
+  }})};
+  assert.equal(startTranscript(api,player,13543,'While Guthix Sleeps','forming-a-fellowship-capturing-a-spy-talking-to-thaerisk-idria-or-akrisae'),true);
+  assert.equal(lines[0][0],13511);
+  assert.ok(lines.some(([id,text])=>id===13543&&text.includes('Glad to have you')));
+  assert.ok(lines.some(([id,text])=>id===13540&&text.includes('theology')));
+});
+
+
+test('Core choice dialogues use native options and validate the resume without losing their chain', () => {
+ const {PluginManager}=require('../dist/plugins/PluginManager'),{DialogueManager}=require('../dist/game/model/dialogues/DialogueManager');
+ const {OptionDialogue,DialogueChainBuilder,StatementDialogue}=PluginManager.getCoreApi();const packets=[];let chosen;
+ const sender={sendInterfaceScript:id=>packets.push(['script',id]),sendVarbit(){},sendChatboxInterface:id=>packets.push(['open',id]),sendClientScript:(...a)=>packets.push(['cs2',...a]),sendInterfaceFlagsRange:(...a)=>packets.push(['flags',...a]),isChatboxInterface:id=>id===219,sendInterfaceRemoval(){}};
+ const player={getPacketSender:()=>sender};const manager=new DialogueManager(player);
+ const option=new OptionDialogue(0,{executeOption:n=>chosen=n},'First','Second');
+ manager.startDialogues(new DialogueChainBuilder().add(option,new StatementDialogue(1,'The conversation continues.')));
+ assert.ok(packets.some(a=>a[0]==='open'&&a[1]===219));assert.deepEqual(packets.find(a=>a[0]==='cs2'),['cs2',58,'Select an Option','First|Second']);
+ assert.equal(manager.getCurrent(),option);
+ for(const [uid,n]of [[OptionDialogue.OPTIONS_WIDGET_ID,0],[OptionDialogue.OPTIONS_WIDGET_ID,3],[OptionDialogue.OPTIONS_WIDGET_ID,1.5],[231<<16,1]])assert.equal(manager.handleResume(uid,n),false);
+ assert.equal(chosen,undefined);assert.equal(manager.handleResume(OptionDialogue.OPTIONS_WIDGET_ID,2),true);assert.equal(chosen,2);
+ assert.equal(manager.getCurrent(),option,'selecting must not erase entries owned by the option callback');
+});
+
+
+test('continuing a quest line preserves a new conversation started by its after callback', () => {
+ let current,chain;const replacement={newConversation:true};
+ const manager={getCurrent:()=>current,reset:()=>current=null,startDialogues:builder=>{chain=builder;current=[...builder.getDialogues().values()][0];}};
+ const player={getUsername:()=> 'Test',getDialogueManager:()=>manager,getPacketSender:()=>({sendInterfaceRemoval(){}})};
+ const definition={getName:()=> 'Guard',getId:()=>13566};
+ const api={emitCustomEvent:(name,e)=>{if(name==='npc-dialogue:line'&&e.text==='Yes master!')e.after=()=>manager.startDialogues({getDialogues:()=>new Map([[0,replacement]])});}};
+ const event={player,npc:null,npcId:13566,definition};
+ startDialogue(api,event,[{npc:'Yes master!'},{npc:'Old conversation tail'}],{},{...event,pages:[]});
+ const after=[...chain.getDialogues().values()].at(-1);current=after;after.send(player);
+ assert.equal(current,replacement,'the new Surok conversation must survive the guard continuation');
 });
