@@ -108,6 +108,7 @@ module.exports=function registerSurok({api,stage,advance,held,give,play}){
   if(correct){t.weak=true;t.boundUntil=f.ticks+(strong?0:20);e.attacker.sendMessage(strong?'The Strong Warrior is weakened.':'The Agile Warrior is bound.');}
  }
  function hitRoll(e){const t=targets.get(e.target),s=spell(e.attacker);if(t&&((e.target.getId()===STRONG?WEAKEN:BIND).includes(s)||t.surge&&ELEMENTS.some(list=>list.includes(s))))e.forceAccurate=true;}
+ function pickup(e){const f=fights.get(e.player);if(!f?.explosive||e.groundItemId!==LIT_EXPLOSIVE||e.groundItem!==f.explosive.ground)return false;e.handled=true;explode(f);return true;}
  function telegrab({player,itemId,position}){const f=fights.get(player);if(itemId===LIT_EXPLOSIVE&&f?.explosive&&f.explosive.position.equals(position)){f.explosive.grabbed=true;f.explosive.ground=null;}}
  function alchemy(e){const f=fights.get(e.player);if(e.itemId===LIT_EXPLOSIVE&&f?.explosive?.grabbed){e.allowed=true;e.coins=0;}}
  function alchemised({player,itemId}){const f=fights.get(player);if(itemId===LIT_EXPLOSIVE&&f?.explosive?.grabbed){f.explosive=null;player.sendMessage('The lit explosive is safely neutralised.');}}
@@ -134,6 +135,7 @@ module.exports=function registerSurok({api,stage,advance,held,give,play}){
  api.onNpcHitModify(hit);
  api.onCombatHitRoll(hitRoll);
  api.onNpcDeath(death);
+ api.onGroundItemPickup(pickup);
  api.onCustomEvent('npc-dialogue:line',line);
  api.onCustomEvent('npc-dialogue:action',action);
  api.onCustomEvent('magic:hit-effects',spellEffects);
@@ -141,5 +143,5 @@ module.exports=function registerSurok({api,stage,advance,held,give,play}){
  api.onCustomEvent('magic:alchemy-policy',alchemy);
  api.onCustomEvent('magic:alchemy-completed',alchemised);
  api.onPlayerLogin(login);
- return {hit,hitRoll,spellEffects,telegrab,alchemy,alchemised,climb,guardCondition,line,climbing,fights,targets,SurokArea};
+ return {hit,hitRoll,spellEffects,pickup,telegrab,alchemy,alchemised,climb,guardCondition,line,climbing,fights,targets,SurokArea};
 };
