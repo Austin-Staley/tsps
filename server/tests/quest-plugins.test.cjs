@@ -1783,3 +1783,47 @@ test('Prince Ali key print and bronze bar go to Osman, then Leela gives the key'
   handlers.custom.get('npc-dialogue:action').forEach((h) => h(event));
   assert.equal(items.get(I.BRONZE_KEY), 1, 'replaying the handoff must not duplicate the key');
 });
+test('all four Surok elemental surges launch from his reachable tile', () => {
+ const {api}=mockApi(),created=[],L=api.core.Location;
+ api.core={...api.core,PrivateArea:class{enter(){}},CombatSpells:{...api.core.CombatSpells,FIRE_SURGE:{castAnimation:()=>null,castProjectile:()=>null}}};
+ const location=new L(4145,4850,2),combat={getLastAttack:()=>({reset(){}})};
+ const npc=(id)=>({getId:()=>id,getLocation:()=>location,getHitpoints:()=>1,getCombat:()=>combat,performAnimation(){},forceChat(){},setMaxHitpoints(){return this;},setHitpoints(){return this;},setScriptedMovement(){},getMovementQueue:()=>({setBlockMovement(){}})});
+ api.spawnNpc=spec=>{created.push(spec);return npc(spec.id);};
+ const player={getLocation:()=>new L(4135,4850,2),getHitpoints:()=>99,getPrayerActive:()=>[],getCombat:()=>({getHitQueue:()=>({addPendingDamage(){}})})};
+ const f=require('../plugins/quests/wgs/Surok.WhileGuthixSleeps')({api});
+ const room=new f.SurokArea(player);room.boss=npc(13482);room.enemies.add(room.boss);room.started=true;room.specials=2;room.specialAt=1;room.nextAttack=0;room.process(player);
+ assert.equal(created.length,4);for(const spell of created){assert.ok([13505,13506,13507,13508].includes(spell.id));assert.deepEqual([spell.x,spell.y,spell.z],[4145,4850,2]);}
+});
+
+function bloodBridgeFixture() {
+ const {api}=mockApi(),attrs=new Map(),items=new Map(),eq=[];let tick=0,progress=70,allowed=true,free=28;const scenes=[];
+ api.core={...api.core,World:{getProcessCycle:()=>tick},PrivateArea:class{enter(m){m.area=this;}leave(m,logout){this.postLeave(m,logout);m.area=null;}postLeave(){}}};
+ const player={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getInventory:()=>({contains:id=>items.has(id),getFreeSlots:()=>free,adds:(id,n)=>items.set(id,n)}),getEquipment:()=>({contains:id=>eq.some(i=>i?.getId()===id),getItems:()=>eq}),getCombat:()=>({reset(){}}),moveTo:l=>player.position=l,sendMessage(){},getDialogueManager:()=>({isActive:()=>false})};
+ api.spawnNpc=spec=>({getOwner:()=>spec.owner,getHitpoints:()=>1,setMaxHitpoints(){return this;},setHitpoints(){return this;},setScriptedMovement(){},getMovementQueue:()=>({setBlockMovement(){}})});api.removeNpc=()=>{};
+ const f=require('../plugins/quests/bmr/Bridge.TheBloodMoonRises')({api,stage:()=>progress,attribute:'bridge',ready:()=>allowed,play:(...args)=>scenes.push(args)});
+ return {api,player,f,attrs,items,eq,scenes,advance:n=>tick+=n,setStage:n=>progress=n,setReady:v=>allowed=v,setFree:v=>free=v};
+}
+
+test('bridge handoff checks quest readiness and inventory before creating the encounter',()=>{
+ const t=bloodBridgeFixture();t.setStage(60);assert.equal(t.f.start(t.player),false);t.setStage(70);t.setReady(false);assert.equal(t.f.start(t.player),false);t.setReady(true);t.setFree(1);assert.equal(t.f.start(t.player),false);assert.equal(t.items.size,0);assert.equal(t.attrs.size,0);
+ t.setFree(2);assert.equal(t.f.start(t.player),true);assert.equal(t.items.get(t.api.core.ItemIdentifiers.SILVTHRILL_BALLISTA),1);assert.equal(t.items.get(t.api.core.ItemIdentifiers.SILVTHRILL_JAVELIN),100);assert.equal(t.f.start(t.player),false);
+});
+
+test('bridge portals require the owned silvthrill ranged hit; passive defence retries',()=>{
+ const t=bloodBridgeFixture();t.f.start(t.player);const area=t.f.sessions.get(t.player);t.advance(5);area.process(t.player);const npc=[...area.cast][0];let damage=42,type=t.api.core.CombatType.RANGED;
+ const hit={getAttacker:()=>t.player,getCombatType:()=>type,setTotalDamage:n=>damage=n};t.f.hit({npc,hit});assert.equal(damage,0);
+ t.eq[t.api.core.Equipment.WEAPON_SLOT]=new t.api.core.Item(t.api.core.ItemIdentifiers.SILVTHRILL_BALLISTA);t.f.hit({npc,hit});assert.equal(damage,1);type=t.api.core.CombatType.MAGIC;t.f.hit({npc,hit});assert.equal(damage,0);
+ const event={target:npc,attacker:t.player};t.f.roll(event);assert.equal(event.forceAccurate,true);
+ t.attrs.set('bridge',{phase:'bridge',integrity:60,shots:0});area.process(t.player);assert.equal(t.attrs.get('bridge').integrity,100);assert.equal(t.scenes.length,0);
+});
+
+test('bridge qualification falls back only at zero and portal kills cannot count twice',()=>{
+ const t=bloodBridgeFixture();t.f.start(t.player);const area=t.f.sessions.get(t.player);
+ for(let i=0;i<3;i++){t.advance(10);area.process(t.player);const npc=[...area.cast][0];t.f.death({npc,killer:t.player});t.f.death({npc,killer:t.player});}
+ assert.equal(t.attrs.get('bridge').shots,3);t.attrs.get('bridge').integrity=60;area.process(t.player);assert.equal(t.attrs.get('bridge').qualified,true);assert.equal(t.scenes.length,0);t.attrs.get('bridge').integrity=0;area.process(t.player);assert.equal(t.scenes.length,1);assert.equal(t.scenes[0][2],'drakan-s-siege-upon-reaching-0-defender-integrity');assert.equal(t.f.finish(t.player),true);assert.equal(t.f.sessions.has(t.player),false);assert.deepEqual([t.player.position.getX(),t.player.position.getY(),t.player.position.getZ()],[3168,7855,1]);
+});
+
+test('silvthrill ballista uses its actual javelins through the shared ranged checks',()=>{
+ const {RangedWeapon,Ammunition}=require('../dist/game/content/combat/ranged/RangedData');const {Item,Equipment,ItemIdentifiers:I}=PluginManager.getCoreApi(),eq=[];eq[Equipment.WEAPON_SLOT]=new Item(I.SILVTHRILL_BALLISTA);eq[Equipment.AMMUNITION_SLOT]=new Item(I.SILVTHRILL_JAVELIN,100);const p={getEquipment:()=>({getItems:()=>eq})};
+ assert.deepEqual(RangedWeapon.getFor(p).getAmmunitionData(),[Ammunition.getFor(p)]);assert.equal(Ammunition.getFor(p).getItemId(),I.SILVTHRILL_JAVELIN);
+});
