@@ -1013,9 +1013,7 @@ export class ClientConnection {
       ? (CacheDefinitions.getItem(packet.itemId)?.inventoryActions ?? [])
           .findIndex((action) => action?.toLowerCase() === option) + 1
       : packet.optionIndex;
-    // Some cache items (including quest greegrees) have no inventory Wield
-    // action even though item-gameplay gives them a real equipment slot. MCP
-    // and explicit menu actions must still reach the normal equip validator.
+    // Quest greegrees have equipment slots but no cache Wield action.
     if (/^(wield|wear|equip|hold)$/.test(option)
       && ItemDefinition.forId(packet.itemId).getEquipmentType().getSlot() >= 0) {
       EquipPacketListener.equip(player, packet.itemId, packet.slot, 3214);
@@ -1023,3 +1021,137 @@ export class ClientConnection {
     }
     if (optionIndex === 0) return;
     if (ItemActionPacketListener.isDropOption(option, optionIndex)) {
+      if (!ItemActionPacketListener.handleAction(player, 3214, packet.itemId, packet.slot, optionIndex ?? 5, packet.option)) {
+        DropItemPacketListener.drop(player, packet.itemId, 3214, packet.slot);
+      }
+    } else if (option === "examine") {
+      const definition = ItemDefinition.forId(packet.itemId);
+      player.sendMessage(definition.getExamine() || definition.getName());
+    } else {
+      ItemActionPacketListener.handleAction(player, packet.widgetId, packet.itemId, packet.slot, optionIndex ?? 1, packet.option);
+    }
+  }
+
+  private resolveClientCombatSpellId(spellWidget: number, spellChild: number, spellItemId: number): number {
+    for (const id of [spellChild, spellWidget & 0xffff, spellItemId]) {
+      const spell = CombatSpells.getCombatSpell(id);
+      if (spell) return spell.spellId();
+    }
+    try {
+      const widgetId = ((spellWidget >>> 16) << 16) | (spellChild & 0xffff);
+      const name = CacheDefinitions.getSpellName(spellWidget, spellItemId) ??
+        CacheDefinitions.getSpellName(widgetId, spellItemId);
+      const spell = name ? CombatSpells.getCombatSpellByName(name) : null;
+      if (spell) return spell.spellId();
+      return MAGIC_ITEMS.resolveSpellId(name);
+    } catch {
+      // Invalid cache-backed selections are rejected by the combat listener.
+    }
+    return -1;
+  }
+
+  private resolveSpellName(widgetId: number, groupId: number, childId: number, itemId?: number): string | undefined {
+    const packed = (groupId << 16) | (childId & 0xffff);
+    return CacheDefinitions.getSpellName(widgetId, itemId ?? -1) ??
+      CacheDefinitions.getSpellName(packed, itemId ?? -1) ??
+      CacheDefinitions.getSpellName(childId, itemId ?? -1);
+  }
+
+  private groundItemAction(packet: Extract<ReturnType<typeof decodeClientPackets>[number], { type: "ground_item_action" }>): void {
+    const player = this.player!;
+    const option = packet.option?.toLowerCase() ?? "";
+    if (option === "examine") {
+      const definition = ItemDefinition.forId(packet.itemId);
+      player.sendMessage(definition.getExamine() || definition.getName());
+    } else if (option === "take" || (!option && (player.getPrivateArea() || packet.optionIndex === 3 || packet.optionIndex == null))) {
+      // A named option other than Take is the item's own, even in a private area (giant
+      // bones' "Bury" is their op3, where Take usually sits).
+      PickupItemPacketListener.pickup(player, packet.itemId, packet.x, packet.y, packet.stackId);
+    } else {
+      SecondGroundItemOptionPacketListener.interact(
+        player, packet.itemId, packet.x, packet.y, packet.optionIndex ?? 2
+      );
+    }
+  }
+
+  private tradeAction(packet: Extract<ReturnType<typeof decodeClientPackets>[number], { type: "trade_action" }>): void {
+    const player = this.player!;
+    const trading = player.getTrading();
+    if (packet.action === "accept" || packet.action === "confirm_accept") {
+      trading.acceptTrade();
+    } else if (packet.action === "decline" || packet.action === "confirm_decline") {
+      trading.closeTrade();
+    } else if (packet.itemId != null && packet.quantity > 0) {
+      const offer = packet.action === "offer";
+      trading.handleItem(
+        packet.itemId, packet.quantity, packet.slot,
+        offer ? player.getInventory() : trading.getContainer(),
+        offer ? trading.getContainer() : player.getInventory()
+      );
+    }
+  }
+
+  private getPlayerAppearance(player: Player): PlayerAppearance {
+    const look = player.getAppearance().getLook();
+    const displayEquipment = player.getEquipment().getItems();
+    return {
+      gender: look[Appearance.GENDER] ?? 0,
+      colors: [
+        look[Appearance.HAIR_COLOUR],
+        look[Appearance.TORSO_COLOUR],
+        look[Appearance.LEG_COLOUR],
+        look[Appearance.FEET_COLOUR],
+        look[Appearance.SKIN_COLOUR],
+      ].map((value) => value ?? 0),
+      kits: [
+        look[Appearance.HEAD],
+        look[Appearance.BEARD],
+        look[Appearance.CHEST],
+        look[Appearance.ARMS],
+        look[Appearance.HANDS],
+        look[Appearance.LEGS],
+        look[Appearance.FEET],
+      ].map((value) => value ?? -1),
+      equip: displayEquipment.map((item) => item?.getId?.() ?? -1),
+      equipQty: displayEquipment.map((item) => item?.getAmount?.() ?? 0),
+      headIcons: {
+        skull: player.isSkulled() ? player.getSkullIconId() : -1,
+        prayer: player.getAppearance().getHeadHint(),
+      },
+    };
+  }
+
+  private failLogin(code: number, message: string): void {
+    this.loginFailure = message;
+    this.send(encodeLoginResponse(false, code, message));
+  }
+
+  private send(packet: Buffer): void {
+    if (this.player) {
+      this.player.getSession().sendClientPacket(packet);
+    } else if (this.channel.isOpen()) {
+      this.channel.send(packet);
+    }
+  }
+
+  private releasePendingName(): void {
+    if (this.reservedName) ClientConnection.pendingNames.delete(this.reservedName);
+    this.reservedName = undefined;
+    this.pending = undefined;
+  }
+
+  private cleanup(source: string): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.releasePendingName();
+    if (!this.player) return;
+    if (!World.getRemovePlayerQueue().includes(this.player)) {
+      World.getRemovePlayerQueue().push(this.player);
+    }
+    PluginManager.emitPlayerDisconnect({
+      player: this.player,
+      username: this.player.getUsername(),
+      source,
+    });
+  }
+}

@@ -2572,4 +2572,3 @@ test('RFD Mother cycles six weaknesses and the final room suppresses prayer and 
     'a transformed Mother reports its live cache id and still advances to the Culinaromancer');
   assert.equal(spawns.at(-1).definition.id, api.core.NpcIdentifiers.CULINAROMANCER_9);
 });
-
