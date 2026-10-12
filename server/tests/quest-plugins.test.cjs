@@ -836,6 +836,7 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
     setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => inventory,
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
     sendMessage() {},
   };
   quest.setStage(player, 70);
@@ -884,8 +885,14 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
   const process = handlers.playerProcess.find((handler) => handler.name === 'processSiegeDefence');
   attributes.set('quest.the_blood_moon_rises.siege-defence', { ...state, integrity: 51, nextIntegrityLossCycle: 20 });
   cycle = 20;
-  assert.throws(() => process({ player }), /Cache pipeline has not been initialized/,
-    'the mock cannot load the cutscene transcript, but the threshold must still update before it starts');
+  const npcDefinition = api.core.NpcDefinition;
+  const originalForId = npcDefinition.forId;
+  npcDefinition.forId = (id) => ({ getId: () => id, getName: () => 'Lowerniel Drakan' });
+  try {
+    process({ player });
+  } finally {
+    npcDefinition.forId = originalForId;
+  }
   assert.equal(attributes.get('quest.the_blood_moon_rises.siege-defence').phase, 'breach',
     'the barricade cutscene begins at the 50% hideout-integrity threshold');
   objectManager.deregister = originalDeregister;
