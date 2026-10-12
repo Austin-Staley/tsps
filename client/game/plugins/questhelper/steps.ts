@@ -6,7 +6,7 @@ import type { QuestStep } from "./types";
 export const CooksAssistant: Record<string, QuestStep> = {
     getBucket: { text: "Purchase a bucket from the Lumbridge General Store.", target: { x: 3212, y: 3246, plane: 0 }, items: [{ id: Item.COINS, name: "Coins", amount: 2, alternates: [Item.MAGICTRAINING_COINS, Item.CERT_ROLL] }] },
     getPot: { text: "Purchase a pot from the Lumbridge General Store.", target: { x: 3212, y: 3246, plane: 0 }, items: [{ id: Item.COINS, name: "Coins", amount: 1, alternates: [Item.MAGICTRAINING_COINS, Item.CERT_ROLL] }] },
-    getEgg: { text: "Grab an egg from the farm north of Lumbridge.", target: { x: 3177, y: 3296, plane: 0 }, items: [{ id: Item.EGG, name: "Egg", amount: 1 }] },
+    getEgg: { text: "Grab an egg from the farm north of Lumbridge.", target: { x: 3177, y: 3296, plane: 0 }, items: [{ id: Item.EGG, name: "Egg", amount: 1 }], type: "item" },
     getWheat: { text: "Pick some wheat north of Lumbridge.", target: { x: 3161, y: 3292, plane: 0 } },
     climbLadderOne: { text: "Climb up the ladder in the Mill north of Lumbridge to the top floor.", target: { x: 3164, y: 3307, plane: 0 }, items: [{ id: Item.POT_EMPTY, name: "Pot", amount: 1 }, { id: Item.GRAIN, name: "Grain", amount: 1 }] },
     climbLadderTwoUp: { text: "Climb up the ladder in the Mill north of Lumbridge to the top floor.", target: { x: 3164, y: 3307, plane: 1 }, items: [{ id: Item.POT_EMPTY, name: "Pot", amount: 1 }, { id: Item.GRAIN, name: "Grain", amount: 1 }], choices: ["Climb Up."] },
@@ -21,7 +21,7 @@ export const CooksAssistant: Record<string, QuestStep> = {
 
 export const SheepShearer: Record<string, QuestStep> = {
     startStep: { text: "Talk to Fred the Farmer north of Lumbridge to start the quest. Bring 20 balls of wool to autocomplete the quest.", target: { x: 3190, y: 3273, plane: 0 }, choices: ["I'm looking for a quest.", "Yes, okay. I can do that.", "Yes."] },
-    getSheers: { text: "Pickup the shears in Fred's house.", target: { x: 3190, y: 3273, plane: 0 }, items: [{ id: Item.SHEARS, name: "Shears", amount: 1 }] },
+    getSheers: { text: "Pickup the shears in Fred's house.", target: { x: 3190, y: 3273, plane: 0 }, items: [{ id: Item.SHEARS, name: "Shears", amount: 1 }], type: "item" },
     shearSheep: { text: "Shear sheep in the nearby field.", target: { x: 3201, y: 3268, plane: 0 }, items: [{ id: Item.SHEARS, name: "Shears", amount: 1 }, { id: Item.WOOL, name: "Wool", amount: 20, alternates: [Item.BALL_OF_WOOL] }] },
     climbStairsUp: { text: "Climb the staircase in the Lumbridge Castle to spin the wool in your inventory into balls of wool.", target: { x: 3204, y: 3207, plane: 0 }, items: [{ id: Item.WOOL, name: "Wool", amount: 20, alternates: [Item.BALL_OF_WOOL] }] },
     spinBalls: { text: "Spin your wool into balls.", target: { x: 3209, y: 3212, plane: 1 }, items: [{ id: Item.WOOL, name: "Wool", amount: 20, alternates: [Item.BALL_OF_WOOL] }] },

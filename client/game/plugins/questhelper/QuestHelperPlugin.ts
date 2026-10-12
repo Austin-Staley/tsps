@@ -9,13 +9,14 @@ import type { NavigationButton } from "@runelite/client/ui/NavigationButton";
 import * as InterfaceID from "../../../runelite/api/gameval/InterfaceID";
 import type { OsrsClient } from "../../OsrsClient";
 import { ClientState } from "../../ClientState";
-import { questHintArrow } from "../../HintArrow";
+import { questHintArrow, questSceneHintArrows } from "../../HintArrow";
 import { COOK_DIALOGS, QUEST_GUIDES } from "./guides";
 import catalog from "./catalog.json";
 import { createQuestHelperNavigationButton } from "./QuestHelperPanel";
 import { requirementCount, type ImportedGuide, type QuestCatalogEntry, type QuestContext, type QuestStep, type QuestSummary } from "./types";
 
 const HIGHLIGHT_SLOT = 65000;
+const QUEST_ARROW_HEIGHT = 15; // RuneLite's 30-unit offset, encoded as an OSRS height byte.
 // RuneLite ScriptID.QUEST_STATUS_GET, also used by upstream QuestHelperQuest.getQuestState().
 const QUEST_STATUS_GET = 4029;
 export const QuestHelperConfig = ConfigGroup("questhelper", {
@@ -39,6 +40,7 @@ export function validGuide(value: unknown, source: string): value is ImportedGui
     const guide = value as ImportedGuide | null;
     return !!guide && guide.source === source && Array.isArray(guide.steps) && guide.steps.length > 0 && guide.steps.length <= 1000 &&
         guide.steps.every((step) => !!step && typeof step.text === "string" && step.text.length > 0 && step.text.length <= 20000 &&
+            (step.type === undefined || step.type === "item") &&
             (!step.target || (Number.isInteger(step.target.x) && Number.isInteger(step.target.y) && Number.isInteger(step.target.plane) && step.target.plane >= 0 && step.target.plane <= 3)) &&
             (!step.choices || (Array.isArray(step.choices) && step.choices.length <= 100 && step.choices.every((text) => typeof text === "string" && text.length <= 2000))) &&
             (!step.items || (Array.isArray(step.items) && step.items.length <= 100 && step.items.every((item) => !!item && Number.isInteger(item.id) && item.id >= 0 &&
@@ -63,7 +65,7 @@ export class QuestHelperPlugin extends Plugin {
     private nav?: NavigationButton;
     private state: HelperState = { quests: [], counts: [], showOverlay: true };
     private signature = "";
-    private targetCoord: number | undefined;
+    private targetCoords = "";
     private selectionVersion = 0;
     private loggedIn = false;
 
@@ -202,7 +204,7 @@ export class QuestHelperPlugin extends Plugin {
             position: {
                 x: player === undefined ? 0 : this.client.playerEcs.getX(player) >> 7,
                 y: player === undefined ? 0 : this.client.playerEcs.getY(player) >> 7,
-                plane: ClientState.plane,
+                plane: player === undefined ? 0 : this.client.playerEcs.getLevel(player),
             },
         };
     }
@@ -230,15 +232,23 @@ export class QuestHelperPlugin extends Plugin {
         this.state = { ...this.state, quests, quest, step, counts, showOverlay: this.config.showOverlay() };
         const target = this.getTarget();
         questHintArrow.type = target ? 2 : 0;
-        if (target) Object.assign(questHintArrow, { ...target, height: 60, position: 2 });
-        const coord = target ? (target.plane << 28) | (target.x << 14) | target.y : undefined;
-        if (coord !== this.targetCoord) {
+        if (target) Object.assign(questHintArrow, { ...target, height: QUEST_ARROW_HEIGHT, position: 2 });
+        const sceneTargets = active && this.config.showTarget() && !ClientState.inInstance && step?.type === "item"
+            ? this.client.groundItems.getAllStacks()
+                .filter((stack) => stack.tile.level === context!.position.plane && step.items?.some((item) => item.id === stack.itemId || item.alternates?.includes(stack.itemId)))
+                .map((stack) => ({ x: stack.tile.x, y: stack.tile.y, plane: stack.tile.level }))
+            : target ? [target] : [];
+        const tiles = new Map(sceneTargets.map((tile) => [(tile.plane << 28) | (tile.x << 14) | tile.y, tile]));
+        questSceneHintArrows.length = 0;
+        for (const tile of tiles.values()) questSceneHintArrows.push({ ...questHintArrow, ...tile, type: 2, height: QUEST_ARROW_HEIGHT });
+        const targetCoords = [...tiles.keys()].join(",");
+        if (targetCoords !== this.targetCoords) {
             this.client.tileHighlightManager.clear(HIGHLIGHT_SLOT);
-            if (coord !== undefined) {
+            if (tiles.size) {
                 this.client.tileHighlightManager.configure(HIGHLIGHT_SLOT, 0x00ffff, 2, 35, 0x10);
-                this.client.tileHighlightManager.set(coord, HIGHLIGHT_SLOT, 0);
+                for (const coord of tiles.keys()) this.client.tileHighlightManager.set(coord, HIGHLIGHT_SLOT, 0);
             }
-            this.targetCoord = coord;
+            this.targetCoords = targetCoords;
         }
         const signature = JSON.stringify(this.state);
         if (signature === this.signature) return;

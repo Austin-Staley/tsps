@@ -17,6 +17,7 @@ export type QuestStep = {
     target?: QuestTarget;
     items?: ItemRequirement[];
     choices?: string[];
+    type?: "item";
 };
 export type QuestContext = {
     stage: number;

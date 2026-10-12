@@ -8,7 +8,7 @@ import {
     VertexBuffer,
 } from "picogl";
 
-import { getActiveHintArrow, hintArrowTileOffset, isHintArrowBlinkOn } from "../../game/HintArrow";
+import { getSceneHintArrows, hintArrowTileOffset, isHintArrowBlinkOn } from "../../game/HintArrow";
 import { IndexType } from "../../rs/cache/IndexType";
 import type { CacheSystem } from "../../rs/cache/CacheSystem";
 import { IndexedSprite } from "../../rs/sprite/IndexedSprite";
@@ -101,9 +101,9 @@ export class TutorialHintOverlay implements Overlay {
     draw(phase: RenderPhase): void {
         if (phase !== RenderPhase.ToFrameTexture) return;
         if (!this.drawCall || !this.positions || !this.uvs || !this.array) return;
-        const hintArrow = getActiveHintArrow();
+        const arrows = getSceneHintArrows().filter((arrow) => arrow.type === 1 || arrow.type === 2);
         // Actor hints (type 3) are overhead head icons, drawn by OverheadPrayerOverlay.
-        if (hintArrow.type !== 1 && hintArrow.type !== 2) return;
+        if (!arrows.length) return;
 
         const args = this.lastArgs;
         const helpers = args?.helpers;
@@ -116,82 +116,84 @@ export class TutorialHintOverlay implements Overlay {
 
         if (!isHintArrowBlinkOn()) return;
 
-        let worldX: number;
-        let worldY: number;
-        let plane: number;
-        let heightOffsetTiles: number;
-        if (hintArrow.type === 1) {
-            // Follow the rendered (interpolated) NPC like the native head icons do.
-            const client = this.ctx.getClient?.();
-            const npcEcs = client?.npcEcs;
-            const ecsId = npcEcs?.getEcsIdForServer?.(hintArrow.npcId);
-            if (ecsId === undefined || ecsId < 0) return;
-            const mid = npcEcs.getMapId(ecsId) | 0;
-            const typeId = npcEcs.getNpcTypeId(ecsId) | 0;
-            // Native: worldToScreenActor(npc, getLogicalHeightWithAnimationOffset() + 15).
-            const anchor = this.ctx.resolveNpcOverlayAnchor?.(
-                ecsId,
-                ((mid >> 8) & 0xff) * 64 + (npcEcs.getX(ecsId) | 0) / 128,
-                (mid & 0xff) * 64 + (npcEcs.getY(ecsId) | 0) / 128,
-                typeId,
-            );
-            if (!anchor) return;
-            worldX = anchor.worldX;
-            worldY = anchor.worldZ;
-            plane = npcEcs.getLevel(ecsId) | 0;
-            heightOffsetTiles = anchor.logicalHeightTiles + 15 / 128;
-        } else {
-            // Tile hints carry their own floor: another floor's target is not drawn here.
-            const localPlane = args?.state.playerLevel ?? 0;
-            if ((hintArrow.plane | 0) !== localPlane) return;
-            // As the OSRS client: the tile's centre or edge, `height * 2` world units up.
-            const [subX, subY] = hintArrowTileOffset(hintArrow.position);
-            worldX = hintArrow.x + subX / 128;
-            worldY = hintArrow.y + subY / 128;
-            plane = localPlane;
-            heightOffsetTiles = ((hintArrow.height | 0) * 2) / 128;
+        for (const hintArrow of arrows) {
+            let worldX: number;
+            let worldY: number;
+            let plane: number;
+            let heightOffsetTiles: number;
+            if (hintArrow.type === 1) {
+                // Follow the rendered (interpolated) NPC like the native head icons do.
+                const client = this.ctx.getClient?.();
+                const npcEcs = client?.npcEcs;
+                const ecsId = npcEcs?.getEcsIdForServer?.(hintArrow.npcId);
+                if (ecsId === undefined || ecsId < 0) continue;
+                const mid = npcEcs.getMapId(ecsId) | 0;
+                const typeId = npcEcs.getNpcTypeId(ecsId) | 0;
+                // Native: worldToScreenActor(npc, getLogicalHeightWithAnimationOffset() + 15).
+                const anchor = this.ctx.resolveNpcOverlayAnchor?.(
+                    ecsId,
+                    ((mid >> 8) & 0xff) * 64 + (npcEcs.getX(ecsId) | 0) / 128,
+                    (mid & 0xff) * 64 + (npcEcs.getY(ecsId) | 0) / 128,
+                    typeId,
+                );
+                if (!anchor) continue;
+                worldX = anchor.worldX;
+                worldY = anchor.worldZ;
+                plane = npcEcs.getLevel(ecsId) | 0;
+                heightOffsetTiles = anchor.logicalHeightTiles + 15 / 128;
+            } else {
+                // Tile hints carry their own floor: another floor's target is not drawn here.
+                const localPlane = args?.state.playerLevel ?? 0;
+                if ((hintArrow.plane | 0) !== localPlane) continue;
+                // As the OSRS client: the tile's centre or edge, `height * 2` world units up.
+                const [subX, subY] = hintArrowTileOffset(hintArrow.position);
+                worldX = hintArrow.x + subX / 128;
+                worldY = hintArrow.y + subY / 128;
+                plane = localPlane;
+                heightOffsetTiles = ((hintArrow.height | 0) * 2) / 128;
+            }
+
+            // Scene Y points down, so "up" is ground minus the offset.
+            const ground =
+                helpers.getMinTileHeightInRadius?.(worldX, worldY, plane, 0) ?? 0;
+            const screen = helpers.worldToScreen(
+                worldX,
+                ground - heightOffsetTiles,
+                worldY,
+            ) as number[] | Float32Array | undefined;
+            if (!screen || typeof screen[0] !== "number" || typeof screen[1] !== "number") continue;
+
+            // Native draws at (x - 12, y - 28) in UI pixels; scale to buffer pixels.
+            const scale = Number.isFinite(this.scale) && this.scale > 0 ? this.scale : 1;
+            const left = Math.round(screen[0] - 12 * scale);
+            const top = Math.round(screen[1] - 28 * scale);
+            const right = left + Math.round(this.spriteW * scale);
+            const bottom = top + Math.round(this.spriteH * scale);
+
+            this.quadVerts[0] = left;
+            this.quadVerts[1] = top;
+            this.quadVerts[2] = left;
+            this.quadVerts[3] = bottom;
+            this.quadVerts[4] = right;
+            this.quadVerts[5] = bottom;
+            this.quadVerts[6] = left;
+            this.quadVerts[7] = top;
+            this.quadVerts[8] = right;
+            this.quadVerts[9] = bottom;
+            this.quadVerts[10] = right;
+            this.quadVerts[11] = top;
+
+            this.screenSize[0] = this.app.width;
+            this.screenSize[1] = this.app.height;
+            this.positions.data(this.quadVerts);
+            this.uvs.data(this.quadUvs);
+            this.app.enable(PicoGL.BLEND);
+            this.app.disable(PicoGL.DEPTH_TEST);
+            this.drawCall
+                .uniform("u_resolution", this.screenSize)
+                .texture("u_sprite", this.texture)
+                .draw();
         }
-
-        // Scene Y points down, so "up" is ground minus the offset.
-        const ground =
-            helpers.getMinTileHeightInRadius?.(worldX, worldY, plane, 0) ?? 0;
-        const screen = helpers.worldToScreen(
-            worldX,
-            ground - heightOffsetTiles,
-            worldY,
-        ) as number[] | Float32Array | undefined;
-        if (!screen || typeof screen[0] !== "number" || typeof screen[1] !== "number") return;
-
-        // Native draws at (x - 12, y - 28) in UI pixels; scale to buffer pixels.
-        const scale = Number.isFinite(this.scale) && this.scale > 0 ? this.scale : 1;
-        const left = Math.round(screen[0] - 12 * scale);
-        const top = Math.round(screen[1] - 28 * scale);
-        const right = left + Math.round(this.spriteW * scale);
-        const bottom = top + Math.round(this.spriteH * scale);
-
-        this.quadVerts[0] = left;
-        this.quadVerts[1] = top;
-        this.quadVerts[2] = left;
-        this.quadVerts[3] = bottom;
-        this.quadVerts[4] = right;
-        this.quadVerts[5] = bottom;
-        this.quadVerts[6] = left;
-        this.quadVerts[7] = top;
-        this.quadVerts[8] = right;
-        this.quadVerts[9] = bottom;
-        this.quadVerts[10] = right;
-        this.quadVerts[11] = top;
-
-        this.screenSize[0] = this.app.width;
-        this.screenSize[1] = this.app.height;
-        this.positions.data(this.quadVerts);
-        this.uvs.data(this.quadUvs);
-        this.app.enable(PicoGL.BLEND);
-        this.app.disable(PicoGL.DEPTH_TEST);
-        this.drawCall
-            .uniform("u_resolution", this.screenSize)
-            .texture("u_sprite", this.texture)
-            .draw();
     }
 
     dispose(): void {

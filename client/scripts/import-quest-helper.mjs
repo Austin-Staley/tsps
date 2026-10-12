@@ -112,6 +112,7 @@ export function extractSteps(source, itemIds, itemCollections = {}) {
             return requirement && { ...requirement, ...(quantity ? { amount: Number(quantity) } : {}) };
         }).filter(Boolean);
         const step = { text, ...(point ? { target: { x: Number(point[1]), y: Number(point[2]), plane: Number(point[3]) } } : {}), ...(items.length ? { items } : {}) };
+        if (call.kind === "ItemStep") step.type = "item";
         if (call.variable) {
             const choices = [...source.matchAll(new RegExp(`${name}\\.addDialogSteps?\\(([^;]+)\\);`, "g"))]
                 .flatMap((match) => splitArguments(match[1]).map(authoredText)).filter(Boolean);

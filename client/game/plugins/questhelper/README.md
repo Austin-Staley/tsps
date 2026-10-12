@@ -18,6 +18,10 @@ automatic step selection: Cook's Assistant, Sheep Shearer, Doric's Quest, Imp Ca
 Witch's Potion, Rune Mysteries, The Restless Ghost, Druidic Ritual and Waterfall Quest.
 These resolvers follow upstream's stage tables and ordered conditions, using the client's
 OSRS varps/varbits, inventory, equipment, observed bank, dialogue and scene state.
+Player location, including the floor, comes from the synced local player. Item steps keep
+their upstream minimap/world-map navigation point, while scene arrows and highlights follow
+actual matching ground items on the player's floor. Empty navigation tiles are not marked
+as item spawns, and despawned items lose their markers.
 The sidebar labels the other **204 guides as manual step selection**. Select an upstream
 step to show its instructions, item checks and available target markers. Importing their
 text does not port their Java condition graphs, computed instructions or puzzle solvers.
@@ -76,7 +80,9 @@ Asset byte sizes are not measurements of browser heap usage.
 Client tests validate every catalog asset, parser edge cases, alternative items, OSRS
 conditional examples for all nine resolvers, unknown stages, CS2 completion, default-off
 behavior, manual selection, lazy loading, malformed data, stale responses, logout/disable
-cleanup and server hint precedence. The server quest suites have 190 passing tests.
+cleanup and server hint precedence. Regression checks also cover synced floor changes,
+the mill's Fill/Operate steps, multiple actual egg spawns, despawn cleanup and wrong-floor
+items. The server quest suites have 190 passing tests.
 
 Live checks used this worktree's browser client and agent MCP at port 49812. The plugin
 was visibly off before enabling; the catalog, Cook's raw-varp status and upstream egg tile,

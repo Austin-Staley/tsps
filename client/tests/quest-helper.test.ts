@@ -10,7 +10,8 @@ import * as Varbit from "../runelite/api/gameval/VarbitID";
 import * as InterfaceID from "../runelite/api/gameval/InterfaceID";
 import { Inventory } from "../rs/inventory/Inventory";
 import { TileHighlightManager } from "../game/highlights/TileHighlightManager";
-import { clearHintArrow, getActiveHintArrow, hintArrow, questHintArrow, setHintArrowNpc } from "../game/HintArrow";
+import { GroundItemStore } from "../game/data/ground/GroundItemStore";
+import { clearHintArrow, getActiveHintArrow, getSceneHintArrows, hintArrow, questHintArrow, setHintArrowNpc } from "../game/HintArrow";
 import { GameState } from "../runelite/api/GameState";
 import { GameStateChanged } from "../runelite/api/events";
 import { ClientState } from "../game/ClientState";
@@ -116,9 +117,11 @@ void (async () => {
     assert.equal(validGuide({ source: "expected", steps: [{ text: "Step", target: { x: 1, y: 2, plane: 4 } }] }, "expected"), false);
     assert.equal(QuestHelperPlugin.descriptor.enabledByDefault, false);
     const inventory = new Inventory(), equipment = new Inventory(14), bankInventory = new Inventory(1410);
+    const groundItems = new GroundItemStore();
     const tileHighlightManager = new TileHighlightManager();
     const varps = new Map<number, number>(), varbits = new Map<number, number>();
     let loggedOut = false, scriptRuns = 0, loads = 0, dialogText = "", completedThroughSharedState = false;
+    let playerX = 3200, playerY = 3200, playerPlane = 0;
     const pending = new Map<string, (guide: ImportedGuide) => void>();
     const vm = { context: { loadScript: () => ({}) }, intStack: [1], run: (_script: unknown, [questId]: number[]) => {
         scriptRuns++;
@@ -126,10 +129,10 @@ void (async () => {
         const stage = "varp" in quest ? varps.get(quest.varp!) ?? 0 : "varbit" in quest ? varbits.get(quest.varbit!) ?? 0 : 0;
         vm.intStack[0] = quest.key === "cooks_assistant" && (stage === 2 || completedThroughSharedState) ? 2 : stage === 0 ? 1 : 0;
     } };
-    const client = { inventory, equipment, bankInventory, tileHighlightManager, cs2Vm: vm,
+    const client = { inventory, equipment, bankInventory, groundItems, tileHighlightManager, cs2Vm: vm,
         varManager: { getVarp: (id: number) => varps.get(id) ?? 0, getVarbit: (id: number) => varbits.get(id) ?? 0 },
         isOnLoginScreen: () => loggedOut, controlledPlayerServerId: 1,
-        playerEcs: { getIndexForServerId: () => 0, getX: () => 3200 << 7, getY: () => 3200 << 7 },
+        playerEcs: { getIndexForServerId: () => 0, getX: () => playerX << 7, getY: () => playerY << 7, getLevel: () => playerPlane },
         widgetManager: { interfaceParents: new Map([[1, { group: InterfaceID.CHAT_RIGHT }]]),
             getWidgetsForGroup: () => [{ uid: 1, text: dialogText }], isEffectivelyHidden: () => false },
     };
@@ -147,7 +150,31 @@ void (async () => {
     inventory.setSlot(0, Item.BUCKET_EMPTY); inventory.setSlot(1, Item.POT_EMPTY);
     plugin.onGameTick();
     assert.equal(plugin.getTarget()?.x, 3177);
-    assert.equal(tileHighlightManager.getRenderEntries().length, 1);
+    assert.equal(tileHighlightManager.getRenderEntries().length, 0, "An ItemStep's navigation point is not a ground item");
+    assert.equal(getSceneHintArrows().length, 0, "Do not draw an egg arrow on an empty tile");
+    groundItems.update({ kind: "snapshot", stacks: [
+        { id: 1, itemId: Item.EGG, quantity: 1, tile: { x: 3185, y: 3297, level: 0 } },
+        { id: 2, itemId: Item.EGG, quantity: 1, tile: { x: 3175, y: 3305, level: 0 } },
+        { id: 3, itemId: Item.EGG, quantity: 1, tile: { x: 3177, y: 3296, level: 1 } },
+        { id: 4, itemId: Item.SHEARS, quantity: 1, tile: { x: 3177, y: 3296, level: 0 } },
+    ] });
+    plugin.onGameTick();
+    assert.deepEqual(getSceneHintArrows().map((arrow) => [arrow.x, arrow.y, arrow.plane]), [[3185, 3297, 0], [3175, 3305, 0]], "Point at every actual required item on the player's floor");
+    assert.equal(tileHighlightManager.getRenderEntries().length, 2);
+    assert.equal(plugin.getTarget()?.x, 3177, "Keep upstream minimap/world-map navigation separate from scene items");
+    groundItems.update({ kind: "delta", removes: [1], upserts: [] }); plugin.onGameTick();
+    assert.equal(getSceneHintArrows().length, 1, "Despawned items lose their arrows");
+    groundItems.clear(); plugin.onGameTick();
+    assert.equal(getSceneHintArrows().length, 0);
+    inventory.setSlot(2, Item.EGG); inventory.setSlot(3, Item.GRAIN);
+    playerX = 3166; playerY = 3308; playerPlane = 1; plugin.onGameTick();
+    assert.equal(plugin.getTarget()?.plane, 1, "Read the synced player's first floor");
+    playerPlane = 2; ClientState.plane = 0; plugin.onGameTick();
+    assert.match(plugin.getState().step!.text, /Fill the hopper/, "Top-floor state must come from the player, not the unused global plane");
+    assert.equal(plugin.getTarget()?.plane, 2);
+    inventory.setSlot(3, -1, 0); plugin.onGameTick();
+    assert.match(plugin.getState().step!.text, /Operate the hopper controls/, "After filling on the top floor, do not send the player back for wheat");
+    playerX = 3200; playerY = 3200; playerPlane = 0;
     inventory.setSlot(2, Item.EGG); inventory.setSlot(3, Item.BUCKET_MILK); inventory.setSlot(4, Item.POT_FLOUR);
     plugin.onGameTick();
     assert.deepEqual(plugin.getState().counts, [1, 1, 1]);
@@ -159,8 +186,10 @@ void (async () => {
     plugin.onClientTick(); plugin.onGameTick();
     assert.equal(plugin.getState().step!.items!.some((item) => item.id === Item.EGG), false, "Observe mounted OSRS dialogue widgets for partial hand-ins");
     setHintArrowNpc(42); assert.equal(getActiveHintArrow(), hintArrow);
+    assert.deepEqual(getSceneHintArrows(), [hintArrow], "Server hints suppress all quest scene arrows");
     clearHintArrow(); assert.equal(getActiveHintArrow(), questHintArrow);
     ClientState.inInstance = true; plugin.onGameTick(); assert.equal(plugin.getTarget(), undefined);
+    assert.equal(getSceneHintArrows().length, 0);
     ClientState.inInstance = false;
     varps.set(29, 37); plugin.onGameTick();
     assert.equal(plugin.getState().step, undefined, "Unknown stage must not be translated or replaced by a journal");
@@ -191,5 +220,6 @@ void (async () => {
     assert.equal(plugin.getState().guide, undefined, "Disabling releases selected guide data");
     assert.equal(tileHighlightManager.getRenderEntries().length, 0);
     assert.equal(questHintArrow.type, 0);
+    assert.equal(getSceneHintArrows().length, 0);
     console.log("Upstream guide catalog, OSRS conditions, default-off behavior, lazy loading and lifecycle passed");
 })().catch((error) => { console.error(error); process.exitCode = 1; });
