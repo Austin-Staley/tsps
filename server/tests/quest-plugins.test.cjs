@@ -508,12 +508,12 @@ test('Elite Kinshra protection can be bypassed by switching styles and expires i
 
 test('Surok requires real combat spells and the opposite element for surges', () => {
   const { api } = mockApi(), module = require('../plugins/quests/wgs/Surok.WhileGuthixSleeps');
-  const f = module({api}), player = { getCombat: () => ({ getSelectedSpell: () => selected, getCastSpell: () => null, getPreviousCast: () => null }), sendMessage() {} };
+  const f = module({api}), player = { getCombat: () => ({ getSelectedSpell: () => selected, getCastSpell: () => null, getPreviousCast: () => api.core.CombatSpells.FIRE_WAVE }), sendMessage() {} };
   let selected = null, damage = 20;
   const boss = { forceChat() {} }, surge = {};
   f.fights.set(player,{boss,enemies:new Set([boss,surge])});
   const hit = {getAttacker:()=>player,getCombatType:()=>api.core.CombatType.MAGIC,setTotalDamage:n=>damage=n};
-  f.hit({npc:boss,hit});assert.equal(damage,0,'powered staff is blocked');
+  f.hit({npc:boss,hit});assert.equal(damage,0,'powered staff is blocked even after a previous standard cast');
   selected=api.core.CombatSpells.FIRE_WAVE;damage=20;f.hit({npc:boss,hit});assert.equal(damage,20);
   f.targets.set(surge,{surge:true,index:0});damage=20;f.hit({npc:surge,hit});assert.equal(damage,0,'fire cannot counter earth');
   selected=api.core.CombatSpells.WIND_WAVE;damage=20;f.hit({npc:surge,hit});assert.equal(damage,20);
@@ -557,6 +557,121 @@ test('McGrubor mercenaries wait for the opening cutscene to finish', () => {
  }finally{PrivateArea.prototype.enter=original;}
 });
 
+test('Chasm orb sockets enforce symbols and recover a lost unplaced block',()=>{
+ const {api}=mockApi(),a=new Map(),items=new Map([[569,1],[571,1]]),messages=[];
+ const sender={sendVarbit(){return sender}};
+ const p={getAttribute:k=>a.get(k),setAttribute:(k,v)=>a.set(k,v),getPacketSender:()=>sender,sendMessage:m=>messages.push(m),getInventory:()=>({contains:id=>!!items.get(id),deleteNumber:(id,n)=>items.set(id,(items.get(id)||0)-n)})};
+ const f=require('../plugins/quests/wgs/Chasm.WhileGuthixSleeps')({api,ATTRIBUTES:[],stage:()=>720,held:(p,id)=>!!items.get(id),give:(p,id)=>{items.set(id,1);return true},val:(p,k)=>Number(a.get(k))||0});
+ f.sessions.set(p,{});
+ f.use({player:p,itemId:569,definition:{id:53617}});assert.equal(items.get(569),1);assert.equal(items.get(29554),undefined);
+ f.use({player:p,itemId:569,definition:{id:53615}});assert.equal(items.get(569),0);assert.equal(items.get(29554),1);
+ items.delete(29554);f.search({player:p,definition:{id:53615}});assert.equal(items.get(29554),1);
+ f.use({player:p,itemId:29554,definition:{id:53625},object:{getLocation:()=>new api.core.Location(4147,5094)}});assert.equal(items.get(29554),1);
+ f.use({player:p,itemId:29554,definition:{id:53618},object:{getLocation:()=>new api.core.Location(4062,4548,2)}});assert.equal(items.get(29554),0);assert.equal(a.get('while-guthix-sleeps:elemental-blocks'),4);
+});
+
+test('Temple has eight distinct persisted statues and consumes only a matching recipe',()=>{
+ const {api}=mockApi(),attrs=new Map(),items=new Map([[255,1],[1975,1],[261,1],[2970,1],[573,1]]),drops=[];
+ api.core={...api.core,ItemOnGroundManager:{registerLocation:(p,item)=>drops.push(item.getId())}};
+ const sender={sendVarbit(){return sender}};
+ const p={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getPacketSender:()=>sender,sendMessage(){},getInventory:()=>({contains:id=>!!items.get(id),deleteNumber:(id,n)=>items.set(id,(items.get(id)||0)-n)})};
+ const f=require('../plugins/quests/wgs/Temple.WhileGuthixSleeps')({api,ATTRIBUTES:[],stage:()=>760,held:(p,id)=>!!items.get(id),give:(p,id)=>{items.set(id,1);return true},val:(p,k)=>Number(attrs.get(k))||0,replace(){}});
+ p.getLocation=()=>new api.core.Location(4041,4453);p.getPrivateArea=()=>null;
+ const random=f.state(p);assert.equal(new Set(random.types).size,8);assert.equal(f.state(p),random);
+ const state={types:[2,0,1,3,4,5,6,7],ingredients:Array.from({length:8},()=>[]),finished:0,placed:0,revealed:0};attrs.set('while-guthix-sleeps:temple-puzzle',state);f.sessions.set(p,{});
+ const event=id=>({player:p,itemId:id,definition:{id:53644},object:{getLocation:()=>new api.core.Location(4041,4454)},handled:false});
+ f.use(event(573));assert.equal(items.get(573),1,'unrelated orb must remain');
+ f.use(event(255));assert.equal(items.get(255),0);assert.equal(state.finished,0);
+ // Changing to the alternative herb returns the old herb instead of losing it.
+ f.use(event(261));assert.deepEqual(drops,[255]);assert.equal(state.finished,0);
+ f.use(event(1975));assert.equal(state.finished,0,'crossing two alternate recipes is not a potion');
+ f.use(event(2970));assert.equal(state.finished,1);assert.equal(items.get(29540),1);assert.deepEqual(drops,[255,1975]);
+ f.use({player:p,itemId:29540,definition:{id:53666}});assert.equal(state.placed,1);assert.equal(items.get(29540),0);
+ items.set(29540,1);f.use({player:p,itemId:29540,definition:{id:53666}});assert.equal(items.get(29540),1,'the same statue cannot supply two table positions');
+});
+
+test('Balance Elemental protection changes require switching all three styles',()=>{
+ const {api}=mockApi(),f=require('../plugins/quests/wgs/Stone.WhileGuthixSleeps')({api}),p={},boss={getHitpoints:()=>hp,setHeadIcon:n=>icon=n};
+ let hp=750,icon,damage=20,type=api.core.CombatType.MELEE;
+ const a={boss,protection:[],lastStyle:0};f.sessions.set(p,a);
+ const hit={getAttacker:()=>p,getCombatType:()=>type,getTotalDamage:()=>damage,setTotalDamage:n=>damage=n};
+ f.protect(a,0);assert.deepEqual(a.protection,[]);assert.equal(icon,-1);
+ hp=500;f.protect(a,0);f.modify({npc:boss,hit});assert.equal(damage,0);
+ type=api.core.CombatType.RANGED;damage=20;f.modify({npc:boss,hit});assert.equal(damage,20);assert.equal(a.lastStyle,1);
+ hp=180;f.protect(a,1);assert.deepEqual(a.protection,[1,2]);
+ for(const t of [api.core.CombatType.RANGED,api.core.CombatType.MAGIC]){type=t;damage=20;f.modify({npc:boss,hit});assert.equal(damage,0);}
+ type=api.core.CombatType.MELEE;damage=20;f.modify({npc:boss,hit});assert.equal(damage,20);
+});
+
+test('Balance Elemental checks protection at impact rather than its wind-up',()=>{
+ const {api}=mockApi();let boss,damage=0;
+ api.core={...api.core,World:{getNpcs:()=>({get:()=>boss})},RegionManager:{canProjectileAttackBounds:()=>true}};
+ const prayers=[],p={getPrayerActive:()=>prayers,getHitpoints:()=>99,getLocation:()=>new api.core.Location(4134,4380)};
+ const f=require('../plugins/quests/wgs/Stone.WhileGuthixSleeps')({api,stage:()=>805,hit:(p,n)=>damage+=n});
+ const a=new f.StoneArea(p);boss={getHitpoints:()=>750,getIndex:()=>1,performAnimation(){},getLocation:()=>new api.core.Location(4135,4383)};a.boss=boss;a.started=true;
+ for(let i=0;i<6;i++)a.process(p);assert.equal(a.pending.length,1);assert.equal(a.pending[0].tick,8);
+ prayers[api.core.PrayerHandler.PROTECT_FROM_MISSILES]=true;
+ a.process(p);a.process(p);assert.equal(damage,0);assert.equal(a.pending.length,0);
+});
+
+
+test('Surok ladder uses the guard transcript before entering, with separate disguise branches', () => {
+ const {api}=mockApi();let robe=false,elite=false,played;
+ const player={getEquipment:()=>({contains:id=>([29566,29568,29570].includes(id)&&robe)||([29560,29562,29564].includes(id)&&elite)})};
+ const f=require('../plugins/quests/wgs/Surok.WhileGuthixSleeps')({api,stage:()=>580,play:(p,id,variant)=>{played={id,variant};}});
+ const branch=id=>f.guardCondition({player,stepId:id,pages:[{page:'While Guthix Sleeps'}]});
+ assert.equal(branch('a-SLUY'),true);elite=true;assert.equal(branch('a-SLUY'),false);assert.equal(branch('KE9ZPi'),true);
+ elite=false;robe=true;assert.equal(branch('sRYfCo'),true);assert.equal(branch('3gavgP'),false);
+ f.climb({player,objectId:53370});assert.equal(played.id,13566);assert.equal(f.fights.has(player),false);
+ assert.equal(branch('sRYfCo'),false);assert.equal(branch('3gavgP'),true);
+ const e={player,npcId:13566,text:'Yes master!'};f.line(e);assert.equal(typeof e.after,'function');
+});
+
+test('Movario gas confiscates research notes from every bank tab', () => {
+ const {api,handlers,player,attributes}=movarioFixture();
+ const banks=Array.from({length:api.core.Bank.TOTAL_BANK_TABS},()=>new Map([[29525,1],[29526,2]]));
+ player.getBank=tab=>({getAmount:id=>banks[tab].get(id)||0,deleteNumber:id=>banks[tab].delete(id)});
+ player.getInventory=()=>({getItems:()=>[],getAmount:()=>1,deleteNumber(){}});
+ player.getLocation=()=>new api.core.Location(4186,4953,1);
+ attributes.set('while-guthix-sleeps:pressure-gauge',10);attributes.set('while-guthix-sleeps:door-tries',2);
+ require('../plugins/quests/wgs/Movario.WhileGuthixSleeps')(api.context);
+ handlers.custom.get('wgs:enter-movario')({player});
+ handlers.objects.find(h=>h.name==='Door').options.Open({player,objectId:53897});
+ assert.ok(banks.every(bank=>bank.size===0));assert.deepEqual(player.position,[4128,4938,0]);
+});
+
+test('Temple vine picking allows the three flowers needed to refill a pouch', () => {
+ const {api}=movarioFixture();let flowers=0,replaced=0,space=3;
+ const player={getInventory:()=>({getFreeSlots:()=>space,adds:(id,n)=>{assert.equal(id,29556);flowers+=n;space-=n;}}),sendMessage(){}};
+ const f=require('../plugins/quests/wgs/Temple.WhileGuthixSleeps')({api,ATTRIBUTES:[],replace:()=>replaced++});f.sessions.set(player,{});
+ const event={player,definition:{id:53724},object:{getLocation:()=>new api.core.Location(4080,4450),getType:()=>22,getFace:()=>0}};
+ for(let i=0;i<3;i++)assert.equal(f.pick(event),true);
+ assert.equal(flowers,3);assert.equal(replaced,3);f.pick(event);assert.equal(flowers,3,'a full inventory leaves the vine intact');
+});
+
+
+test('Druid pouch refills existing charges using three produce, preferring pears and stems', () => {
+ const {api}=mockApi(),handlers=[];
+ api.onItemAction=handler=>handlers.push(handler);
+ require('../plugins/quests/quests/NatureSpirit.Quest')(api);
+ const items=new Map([[2958,6],[2974,2],[2972,1],[29556,3]]);
+ const inventory={contains:id=>(items.get(id)||0)>0,getAmount:id=>items.get(id)||0,deleteNumber:(id,n)=>items.set(id,(items.get(id)||0)-n),adds:(id,n)=>items.set(id,(items.get(id)||0)+n)};
+ const player={getInventory:()=>inventory,sendMessage(){}};
+ const fill=()=>{const e={player,itemId:2958,option:'Fill'};for(const handler of handlers)handler(e);assert.equal(e.handled,true);};
+ fill();assert.equal(items.get(2958),14);assert.equal(items.get(29556),3);assert.equal(items.get(2974),0);assert.equal(items.get(2972),0);
+ fill();assert.equal(items.get(2958),17);assert.equal(items.get(29556),0);
+ items.set(29556,2);fill();assert.equal(items.get(2958),17);assert.equal(items.get(29556),2,'insufficient produce stays intact');
+});
+
+test('Akrisae’s Ice Mountain teleport requires the castle chapter and can be used once', () => {
+ const {api,handlers,player,attributes}=movarioFixture();let progress=400,resets=0;
+ player.getCombat=()=>({reset:()=>resets++});player.getLocation=()=>new api.core.Location(2990,3342,0);
+ require('../plugins/quests/wgs/DarkSquall.WhileGuthixSleeps')({...api.context,stage:()=>progress});
+ const teleport=handlers.custom.get('npc-dialogue:choice'),e={player,npcId:13543,stepId:'wgs-ice-mountain'};
+ teleport(e);assert.deepEqual(player.position,[3006,3499,0]);assert.equal(attributes.get('while-guthix-sleeps:ice-mountain-teleport'),1);
+ player.position=null;teleport(e);assert.equal(player.position,null);assert.equal(resets,1);
+ progress=490;attributes.delete('while-guthix-sleeps:ice-mountain-teleport');teleport(e);assert.equal(player.position,null);
+});
 
 test('Duradel’s notes can be reclaimed until read and only grant Slayer XP once', () => {
  const {api}=mockApi(),attrs=new Map(),items=new Map();let banked=false,xp=0;
@@ -582,6 +697,15 @@ test('Movario resource pallets preserve the unnoted remainder when inventory fil
  assert.deepEqual(attributes.get('while-guthix-sleeps:base-resources'),[31,100,0,0]);api.core.ItemDefinition=old;
 });
 
+
+test('Quest tormented demons display their starting melee protection prayer', () => {
+ const {api}=mockApi(),spawned=[];let progress=820;
+ const player={getMovementQueue:()=>({setBlockMovement(){}}),getSkillManager:()=>({setCurrentLevel(){}}),sendMessage(){}};
+ api.spawnNpc=spec=>{const n={...spec,setMaxHitpoints(){return n;},setHitpoints(){return n;},setScriptedMovement(){},setHeadIcon:icon=>n.headIcon=icon,performGraphic(){}};spawned.push(n);return n;};
+ const f=require('../plugins/quests/wgs/Stone.WhileGuthixSleeps')({api,stage:()=>progress,advance:(p,next)=>progress=next,replace(){}}),area={player,cast:new Set(),enter(){},ticks:0};
+ f.startDemons(area);assert.equal(progress,850);assert.equal(area.demons.length,2);
+ for(const n of area.demons){assert.equal(n.headIcon,0);assert.equal(f.demonStates.get(n).prayer,0);}
+});
 
 test('WGS completed alliance talks stay post-quest and Silif only replaces missing robes', () => {
  const {api}=mockApi(),played=[],given=[];let slots=1;

@@ -9,10 +9,11 @@ module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play
  const ELITE=[29560,29562,29564],SQUALL=[29566,29568,29570],CELL_KEY=29534,STRANGE_ORB=29535,TELEORB=29536;
  const FOOD=379,RESTORE=2430,KNIGHTS=[13463,13464],KINSHRA=[13463,13464,13465,13466,13467,13468,13469,13470];
  const DISGUISE_HELM=1139,DISGUISE_BODY=1101,UNPOWERED_ORB=567,COSMIC=564;
+ const ICE_TELEPORT_ATTRIBUTE='while-guthix-sleeps:ice-mountain-teleport';
  const ORB_ATTRIBUTE='while-guthix-sleeps:catacomb-open',ARMOUR_ATTRIBUTE='while-guthix-sleeps:elite-armour-drops';
  const FOOD_ATTRIBUTE='while-guthix-sleeps:silif-fed',POTION_ATTRIBUTE='while-guthix-sleeps:silif-restored';
  const ARMOUR_GIVEN_ATTRIBUTE='while-guthix-sleeps:silif-armour',SHORTCUT_ATTRIBUTE='while-guthix-sleeps:catacomb-shortcut';
- ATTRIBUTES.push(ORB_ATTRIBUTE,ARMOUR_ATTRIBUTE,FOOD_ATTRIBUTE,POTION_ATTRIBUTE,ARMOUR_GIVEN_ATTRIBUTE,SHORTCUT_ATTRIBUTE);
+ ATTRIBUTES.push(ICE_TELEPORT_ATTRIBUTE,ORB_ATTRIBUTE,ARMOUR_ATTRIBUTE,FOOD_ATTRIBUTE,POTION_ATTRIBUTE,ARMOUR_GIVEN_ATTRIBUTE,SHORTCUT_ATTRIBUTE);
  const guards=new WeakMap(),followers=new WeakMap();
  const dressed=(p,ids)=>ids.every(id=>p.getEquipment().contains(id));
  const disguise=p=>dressed(p,ELITE)||dressed(p,SQUALL);
@@ -30,6 +31,12 @@ module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play
   if(stage(player)<400||stage(player)>=490||![13540,13511,AKRISAE].includes(npcId))return false;
   const who=npcId===13540?'idria':npcId===13511?'thaerisk':'akrisae';
   play(player,npcId,'forming-a-fellowship-second-recruitment-talking-to-the-akrisae-after-all-the-heroes-are-assembled-talking-to-'+who+'-again');return true;
+ }
+ function iceTeleport({player:p,npcId,stepId}){
+  if(npcId!==AKRISAE||stepId!=='wgs-ice-mountain'||stage(p)<400||stage(p)>=490)return;
+  const l=p.getLocation();if(l.getZ()!==0||l.getX()<2948||l.getX()>3001||l.getY()<3327||l.getY()>3356)return;
+  if(val(p,ICE_TELEPORT_ATTRIBUTE)){p.sendMessage('You have already used Akrisae’s teleport to Ice Mountain.');return;}
+  p.setAttribute(ICE_TELEPORT_ATTRIBUTE,1);p.getCombat().reset();p.moveTo(new Location(3006,3499,0));
  }
  function sync(p){if(!active(p))return;p.getPacketSender().sendVarbit(10803,val(p,ORB_ATTRIBUTE)?2:0).sendVarbit(10780,val(p,ARMOUR_GIVEN_ATTRIBUTE)?3:2);}
  function cleanup({player}){const n=followers.get(player);if(n)api.removeNpc(n);followers.delete(player);}
@@ -163,6 +170,7 @@ module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play
  api.onNpcHitModify(modifyHit);
  api.onNpcDialogueCondition(condition);
  api.onCustomEvent('npc-dialogue:line',line);
+ api.onCustomEvent('npc-dialogue:choice',iceTeleport);
  api.onCustomEvent('npc-dialogue:action',action);
  api.onPlayerLogin(login);
  api.onPlayerMapSquareChange(mapChange);
