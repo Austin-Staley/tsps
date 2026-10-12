@@ -27,28 +27,29 @@ function arg(name, def) {
   return i >= 0 && i + 1 < process.argv.length ? process.argv[i + 1] : def;
 }
 
-function findBrowser() {
+// Ordered browser candidates: explicit path first, then Chrome before Edge on
+// each platform (both Chromium; either works). The harness probes each for a
+// WebGPU adapter and uses the first that has one — a present binary without
+// WebGPU (seen on some installs) is skipped, never fatal.
+function findBrowsers() {
   if (process.env.VISION_CHROME_PATH && fs.existsSync(process.env.VISION_CHROME_PATH)) {
-    return process.env.VISION_CHROME_PATH;
+    return [process.env.VISION_CHROME_PATH];
   }
-  for (const p of [
+  return [
     // Windows.
-    "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
-    "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
-    "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
     "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+    "C:/Program Files/Microsoft/Edge/Application/msedge.exe",
+    "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
     // macOS.
-    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
     // Linux.
-    "/usr/bin/microsoft-edge",
     "/usr/bin/google-chrome",
     "/usr/bin/chromium",
     "/usr/bin/chromium-browser",
-  ]) {
-    if (fs.existsSync(p)) return p;
-  }
-  throw new Error("no Chromium found (set VISION_CHROME_PATH)");
+    "/usr/bin/microsoft-edge",
+  ].filter((p) => { try { return fs.existsSync(p); } catch { return false; } });
 }
 
 // Default client URL: explicit --url, then VISION_CLIENT_URL, then this
@@ -75,25 +76,29 @@ function freePort() {
   });
 }
 
-// Chromium children outlive a plain kill on the wrapper pid (detached tree),
-// which then holds the bot's login and blocks the next run. Kill the wrapper
-// tree plus any browser pid that appeared after harness start (baseline diff),
-// so a lingering renderer can never squat the account. Never touches browsers
-// that were already running (e.g. the user's own window).
-function browserPids() {
+// Kill only browsers this harness launched, identified by their unique
+// --user-data-dir (mkdtemp temp profile, prefix vision-cap-). Never touches
+// other Chrome/Edge processes: the user's own windows keep running, even if
+// they spawn tabs mid-capture. (A blanket PID-diff kill used to catch them.)
+const PROFILE_MARKER = "vision-cap-";
+
+function killOurBrowserProcesses() {
+  if (process.platform !== "win32") return;
   try {
     const { execFileSync } = require("node:child_process");
-    const out = execFileSync("tasklist", ["/FI", "IMAGENAME eq msedge.exe", "/FI", "IMAGENAME eq chrome.exe", "/FO", "CSV", "/NH"],
+    const out = execFileSync("powershell", ["-NoProfile", "-Command",
+      `Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*${PROFILE_MARKER}*' } | ForEach-Object { $_.ProcessId }`],
       { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 15000 });
-    const pids = new Set();
-    for (const m of out.matchAll(/"(\d+)"\s*$/gm)) pids.add(Number(m[1]));
-    return pids;
-  } catch {
-    return new Set();
-  }
+    for (const line of out.split(/\r?\n/)) {
+      const pid = line.trim();
+      if (/^\d+$/.test(pid)) {
+        try { execFileSync("taskkill", ["/PID", pid, "/T", "/F"], { stdio: "ignore", timeout: 10000 }); } catch {}
+      }
+    }
+  } catch {}
 }
 
-function killBrowser(proc, baseline) {
+function killBrowser(proc) {
   if (proc && proc.pid != null) {
     try {
       if (process.platform === "win32") {
@@ -106,16 +111,8 @@ function killBrowser(proc, baseline) {
       try { proc.kill(); } catch {}
     }
   }
-  if (process.platform === "win32" && baseline) {
-    try {
-      const { execFileSync } = require("node:child_process");
-      for (const pid of browserPids()) {
-        if (!baseline.has(pid)) {
-          try { execFileSync("taskkill", ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", timeout: 15000 }); } catch {}
-        }
-      }
-    } catch {}
-  }
+  // Sweep any of ours that outlived the tree kill (re-parented children).
+  killOurBrowserProcesses();
 }
 
 function createCdp(url) {
@@ -136,6 +133,7 @@ function createCdp(url) {
   return {
     ws,
     opened: new Promise((res, rej) => { ws.on("open", res); ws.on("error", rej); }),
+    close() { try { ws.close(); } catch {} },
     send(method, params = {}) {
       return new Promise((resolve, reject) => {
         const myId = ++id;
@@ -160,6 +158,73 @@ function createCdp(url) {
 
 const CLIENT_JS = `(() => window.osrsClient ?? window.__WEBGPU_RENDERER__?.osrsClient ?? window.__osrsClient ?? null)()`;
 
+// Boots one candidate headless, navigates it to the target URL and probes for
+// WebGPU there: navigator.gpu is a secure-context API, so it must be checked
+// on the game page (localhost is trustworthy) — on about:blank (opaque
+// origin) it is hidden and every browser looks "WebGPU-less".
+// Returns { ok, proc, cdp, adapter } on success; cleans up and returns
+// { ok: false, reason } otherwise. Adapter label distinguishes hardware from
+// SwiftShader.
+async function tryBrowser(bin, viewport, budgetMs, targetHref) {
+  const debugPort = await freePort();
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), "vision-cap-"));
+  const proc = spawn(bin, [
+    "--headless=new", "--no-first-run", "--no-default-browser-check",
+    "--mute-audio", "--hide-scrollbars",
+    `--window-size=${viewport[0] | 0},${viewport[1] | 0}`,
+    `--remote-debugging-port=${debugPort}`,
+    `--user-data-dir=${profile}`,
+    "about:blank",
+  ], { stdio: "ignore", detached: true });
+  proc.unref();
+  let cdp = null;
+  const cleanup = () => {
+    try { cdp?.close?.(); } catch {}
+    killBrowser(proc);
+  };
+  try {
+    const tab = await waitForTab(debugPort, Math.min(Math.max(15000, budgetMs), 30000));
+    cdp = createCdp(tab.webSocketDebuggerUrl);
+    await cdp.opened;
+    await cdp.send("Page.enable");
+    await cdp.send("Page.navigate", { url: targetHref });
+    // Probe on the secure page; poll briefly in case the document is mid-load.
+    let webgpu = false;
+    let attempts = 0;
+    const gpuEnd = Date.now() + 30000;
+    while (!webgpu && Date.now() < gpuEnd) {
+      attempts++;
+      try {
+        webgpu = await cdp.evaluate(`!!navigator.gpu`);
+      } catch (e) {
+        webgpu = false;
+        if (process.env.VISION_DEBUG) console.log(`[vision] gpu poll #${attempts} threw: ${String(e?.message ?? e).slice(0, 120)}`);
+      }
+      if (process.env.VISION_DEBUG) console.log(`[vision] gpu poll #${attempts}: ${webgpu}`);
+      if (!webgpu) await sleep(1000);
+    }
+    if (!webgpu) {
+      cleanup();
+      cdp = null;
+      return { ok: false, reason: "no WebGPU adapter on the game page" };
+    }
+    let adapter = "adapter";
+    try {
+      adapter = await cdp.evaluate(`(async () => { try {
+        const a = await navigator.gpu.requestAdapter();
+        if (!a) return "none";
+        const i = a.info || {};
+        return ("adapter " + (i.vendor || "") + " " + (i.device || a.backend || "")).trim();
+      } catch (e) { return "error"; } })()`);
+    } catch {}
+    return { ok: true, proc, cdp, adapter };
+  } catch (error) {
+    cleanup();
+    cdp = null;
+    return { ok: false, reason: String(error?.message ?? error).slice(0, 120) };
+  }
+}
+
 async function main() {
   const started = Date.now();
   const summary = { ok: false };
@@ -169,7 +234,6 @@ async function main() {
   const deadline = Date.now() + timeoutMs;
   const viewport = (arg("viewport", "1280x800") || "1280x800").split("x").map(Number);
   let proc = null;
-  let baseline = null;
   try {
     const target = new URL(arg("url", defaultUrl()));
     if (arg("user", null)) {
@@ -179,26 +243,31 @@ async function main() {
     if (arg("renderer", "webgpu") !== "none") target.searchParams.set("renderer", arg("renderer", "webgpu"));
     summary.url = target.href.replace(/password=[^&]*/, "password=***");
 
-    const debugPort = await freePort();
-    const profile = fs.mkdtempSync(path.join(os.tmpdir(), "vision-cap-"));
-    const bin = findBrowser();
-    summary.browser = bin;
-    baseline = browserPids();
-    proc = spawn(bin, [
-      "--headless=new", "--no-first-run", "--no-default-browser-check",
-      "--mute-audio", "--hide-scrollbars",
-      `--window-size=${viewport[0] | 0},${viewport[1] | 0}`,
-      `--remote-debugging-port=${debugPort}`,
-      `--user-data-dir=${profile}`,
-      "about:blank",
-    ], { stdio: "ignore", detached: true });
-    proc.unref();
-
-    const tab = await waitForTab(debugPort, Math.min(deadline - Date.now(), 30000));
-    const cdp = createCdp(tab.webSocketDebuggerUrl);
-    await cdp.opened;
-    await cdp.send("Page.enable");
-    await cdp.send("Page.navigate", { url: target.href });
+    const candidates = findBrowsers();
+    if (candidates.length === 0) throw new Error("no Chromium found (set VISION_CHROME_PATH)");
+    // Reap stale harness browsers from earlier (crashed) runs before probing.
+    killOurBrowserProcesses();
+    const tried = [];
+    let cdp = null;
+    for (const bin of candidates) {
+      if (Date.now() > deadline) throw new Error("deadline passed before a browser was ready");
+      const attempt = await tryBrowser(bin, viewport, Math.min(deadline - Date.now(), 45000), target.href);
+      tried.push(`${bin} (${attempt.ok ? attempt.adapter : attempt.reason})`);
+      if (!attempt.ok) {
+        // Let the failed candidate's GPU process fully tear down before the
+        // next launch contends for the adapter.
+        await sleep(2500);
+        continue;
+      }
+      proc = attempt.proc;
+      cdp = attempt.cdp;
+      summary.browser = bin;
+      summary.webgpu = attempt.adapter;
+      break;
+    }
+    if (!cdp) throw new Error(`no WebGPU-capable Chromium found. Tried: ${tried.join("; ")}`);
+    summary.browserTried = tried;
+    // (tryBrowser already enabled Page events and navigated to the target URL.)
 
     // Wait for frames, then for a logged-in world (or time out with a login-screen shot).
     // Field paths mirror webgpu-smoke's rendererState: stats.frameCount,
@@ -215,11 +284,14 @@ async function main() {
             running: r.running === true,
             frames: Number(r.stats && r.stats.frameCount) || 0,
             loggedIn: !!(c && c.isLoggedIn && c.isLoggedIn()),
+            // GameState.LOGGED_IN (30): LOADING_GAME (25) still shows the
+            // "Loading - please wait." overlay with a black viewport.
+            gameState: c && typeof c.gameState === "number" ? c.gameState : -1,
             maps: (r.mapManager && r.mapManager.visibleMaps) ? r.mapManager.visibleMaps.length : 0,
           };
         })()`);
       } catch { return { present: false }; }
-    }, (s) => s && s.present && (s.frames > 0) && (!needLogin || (s.loggedIn && s.maps > 0)));
+    }, (s) => s && s.present && (s.frames > 0) && (!needLogin || (s.loggedIn && s.maps > 0 && s.gameState === 30)));
     summary.client = state;
     await dismissWelcome(cdp);
 
@@ -264,11 +336,20 @@ async function main() {
         viewport,
       });
     }
-    summary.ok = true;
+    // A world-wait timeout with --user means login/loads never finished (server
+    // restarting, session torn down, ...): fail loudly instead of handing the
+    // caller a loading-screen image as if it were gameplay.
+    if (needLogin && !(state && state.loggedIn && state.gameState === 30)) {
+      summary.error = "login did not complete within the wait window" +
+        (summary.screenshot ? `; login-screen screenshot saved: ${summary.screenshot}` : "");
+      summary.ok = false;
+    } else {
+      summary.ok = true;
+    }
   } catch (error) {
     summary.error = String(error?.message ?? error);
   } finally {
-    if (proc) killBrowser(proc, baseline);
+    if (proc) killBrowser(proc);
   }
   summary.ms = Date.now() - started;
   console.log(JSON.stringify(summary));
