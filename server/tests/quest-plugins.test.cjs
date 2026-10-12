@@ -7876,6 +7876,33 @@ test('Entry Verzik phase caps run before damage so lethal hits cannot skip a pha
   assert.equal(amount, 120, 'the final phase can be killed normally');
 });
 
+test('Entry Verzik red summon converts hits to healing for eight ticks, independent of red crab deaths', () => {
+  const { api } = mockApi();
+  const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
+  entry(api);
+  const player = {};
+  let dealt = 20, healed = 0;
+  const boss = { heal: amount => { healed += amount; } };
+  const raid = { player, boss, room: 5, tick: 7, redShield: 8 };
+  entry._test.NPC_RAIDS.set(boss, { raid });
+  const hit = {
+    getTotalDamage: () => dealt,
+    setTotalDamage: amount => { dealt = amount; },
+    getCombatType: () => api.core.CombatType.RANGED,
+  };
+
+  entry._test.dealtDamage({ player, target: boss, hit });
+  assert.equal(dealt, 0);
+  assert.equal(healed, 20);
+
+  // The Wiki specifies an eight-tick conversion window within the 12-tick
+  // summon. Killing both crabs does not shorten that window or extend it.
+  raid.tick = 8;
+  dealt = 20;
+  entry._test.dealtDamage({ player, target: boss, hit });
+  assert.equal(dealt, 20);
+  assert.equal(healed, 20);
+});
 
 test('Entry Verzik queued overkill deaths advance phases and only the live 600 HP form completes the room', () => {
   const { api, handlers } = mockApi();
