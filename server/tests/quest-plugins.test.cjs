@@ -311,6 +311,9 @@ test('Desert Treasure II requires and solves the real eight-cell golem grid', ()
       getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => damages.push(...hits) }) }),
     };
     quest.setStage(player, 6);
+    attrs.set('desert-treasure-ii:golem-inspected', true);
+    attrs.set('desert-treasure-ii:altar-inspected', true);
+    attrs.set('desert-treasure-ii:totems-charged', true);
     attrs.set('desert-treasure-ii:war-room', {
       getBaseX: () => 8192, getBaseY: () => 1600, isDestroyed: () => false,
     });
@@ -486,6 +489,174 @@ test('Desert Treasure II enters a private copy of the real war room from the cle
     assert.deepEqual([p.location.getX(), p.location.getY(), p.location.getZ()], [3411, 9811, 0]);
     assert.equal(p.getAttribute('desert-treasure-ii:war-room'), null);
     assert.equal(room.destroyed, true);
+  } finally {
+    runtime.startTranscript = startTranscript;
+  }
+});
+
+test('Desert Treasure II requires the four matching ancient combat spells to charge its totems', () => {
+  const { api: base } = mockApi();
+  const objectHooks = [], deathHooks = [], accuracyHooks = [], damageHooks = [], magicHooks = [];
+  const chunks = [], addQueue = [], removeQueue = [];
+  class TestInstance {
+    constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
+    setChunk(...args) { chunks.push(args); }
+    enter(player) { this.player = player; }
+    leave() {}
+    postLeave() {}
+    getBaseX() { return 8192; }
+    getBaseY() { return 1600; }
+    tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z }; }
+    add(npc) { this.entities.push(npc); }
+    isDestroyed() { return false; }
+    destroy() { this.destroyed = true; }
+  }
+  const core = {
+    ...base.core,
+    TemplatedInstanceArea: TestInstance,
+    NPC: { create: (id, location) => ({
+      id, location, owner: null, transform: -1,
+      setOwner(owner) { this.owner = owner; }, getOwner() { return this.owner; },
+      setOwnerOnly() {}, setNpcTransformationId(id) { this.transform = id; },
+      getRealId() { return this.id; }, isNpc() { return true; }, getAsNpc() { return this; },
+    }) },
+    World: { getAddNPCQueue: () => addQueue, getRemoveNPCQueue: () => removeQueue },
+  };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
+        : prop === 'onNpcDeath' ? (handler) => deathHooks.push(handler)
+          : prop === 'onCombatHitRoll' ? (handler) => accuracyHooks.push(handler)
+            : prop === 'onNpcHitModify' ? (handler) => damageHooks.push(handler)
+              : prop === 'onCustomEvent' ? (name, handler) => { if (name === 'magic:hit-effects') magicHooks.push(handler); }
+                : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const startTranscript = runtime.startTranscript;
+  runtime.startTranscript = () => true;
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1);
+    const attrs = new Map();
+    const messages = [];
+    const p = {
+      getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      getUsername: () => 'dt2-totem-test', moveTo(location) { this.location = location; },
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }), sendMessage(message) { messages.push(message); },
+    };
+    const O = core.ObjectIdentifiers;
+    quest.setStage(p, 5);
+    assert.equal(objectHooks[0]({ player: p, objectId: O.CREVICE_45, location: { x: 3411, y: 9811, z: 0 } }), true);
+    const area = attrs.get('desert-treasure-ii:war-room');
+    assert.equal(p.getAttribute('desert-treasure-ii:war-room'), area);
+    const guardian = area.entities[0];
+    deathHooks[0]({ killer: p, npc: guardian });
+    assert.equal(quest.getStage(p), 6);
+    assert.equal(area.entities.filter((npc) => npc.__dt2Totem).length, 4);
+    const onRoomObject = (id, x, y) => objectHooks[0]({ player: p, objectId: id, location: area.tile(x - 2760, y - 6424, 0) });
+    onRoomObject(O.GOLEM, 2783, 6444);
+    onRoomObject(O.ALTAR_93, 2773, 6442);
+    const spells = core.CombatSpells;
+    const entries = [
+      ['blood', 12344, 'BLOOD_BURST'], ['shadow', 12342, 'SHADOW_BURST'],
+      ['smoke', 12340, 'SMOKE_BURST'], ['ice', 12346, 'ICE_BURST'],
+    ];
+    for (const [kind, activeId, spellName] of entries) {
+      const target = area.entities.find((npc) => npc.__dt2Totem === kind);
+      const spell = spells[spellName];
+      assert.equal(target.getOwner(), p);
+      assert.equal(area.entities.includes(target), true);
+      assert.equal(attrs.get('desert-treasure-ii:golem-inspected'), true);
+      assert.equal(attrs.get('desert-treasure-ii:altar-inspected'), true);
+      p.isPlayer = () => true;
+      p.getCombat = () => ({ getSelectedSpell: () => spell });
+      const attacker = p;
+      const roll = { attacker, target, combatType: core.CombatType.MAGIC, forceAccurate: false };
+      accuracyHooks[0](roll);
+      assert.equal(roll.forceAccurate, true, `${kind} activation casts are accurate`);
+      magicHooks[0]({ attacker, target, spell, allowed: true, hit: { isAccurate: () => true } });
+      assert.equal(target.__dt2TotemCharged, true, `${kind} matching hit activates its totem (messages: ${messages.join(' | ')})`);
+      assert.equal(target.transform, activeId);
+      const damage = { setDamage(value) { this.value = value; } };
+      damageHooks[0]({ npc: target, hit: { isAccurate: () => true, getHits: () => [damage], updateTotalDamage() {} } });
+      assert.equal(damage.value, 0, 'totem activation does not damage the target');
+    }
+    assert.equal(attrs.get('desert-treasure-ii:totems-charged'), true);
+  } finally {
+    runtime.startTranscript = startTranscript;
+  }
+});
+
+test('Desert Treasure II enters the cache Ancient Vault and requires the four statues plus plaque', () => {
+  const interactions = [];
+  const objectInteractions = [];
+  const { api: base } = mockApi();
+  const chunks = [];
+  class TestInstance {
+    constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
+    setChunk(...args) { chunks.push(args); }
+    enter(player) { this.player = player; }
+    leave() {}
+    postLeave() {}
+    getBaseX() { return 8192; }
+    getBaseY() { return 1600; }
+    tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z }; }
+    add(npc) { this.entities.push(npc); }
+    isDestroyed() { return false; }
+    destroy() { this.destroyed = true; }
+  }
+  const queues = { add: [], remove: [] };
+  const core = {
+    ...base.core,
+    TemplatedInstanceArea: TestInstance,
+    NPC: { create: (id, location) => ({ id, location, setOwner() {}, setOwnerOnly() {} }) },
+    World: { getAddNPCQueue: () => queues.add, getRemoveNPCQueue: () => queues.remove },
+  };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
+        : prop === 'onObjectInteraction' ? (handler) => objectInteractions.push(handler)
+          : prop === 'emitCustomEvent' ? (_name, event) => { event.complete = true; }
+            : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const startTranscript = runtime.startTranscript;
+  runtime.startTranscript = () => true;
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1);
+    const { ObjectIdentifiers: O } = core;
+    const attrs = new Map();
+    const player = {
+      getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      getUsername: () => 'vault-test',
+      getSkillManager: () => ({ getMaxLevel: () => 99 }),
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+      moveTo(location) { this.location = location; },
+      sendMessage() {},
+    };
+    const outerDoor = { player, objectId: O.VAULT_DOOR_2, location: { x: 3511, y: 2970, z: 0 } };
+    assert.equal(objectInteractions[0](outerDoor), true);
+    assert.equal(quest.getStage(player), 1);
+    const area = attrs.get('desert-treasure-ii:ancient-vault');
+    assert.equal(area.width, 4);
+    assert.equal(area.height, 4);
+    assert.equal(player.location.x, 8207);
+    assert.equal(player.location.y, 1606);
+    assert.equal(queues.add[0].id, 12401, 'the room receives the cache initial Asgarnia Smith variant');
+    assert.equal(chunks.filter(([plane, , , chunk]) => plane === 1 && chunk !== null).length, 16);
+    const inspect = (id, x, y) => objectInteractions[0]({
+      player, objectId: id, location: area.tile(x - 3920, y - 9616, 1),
+    });
+    assert.equal(inspect(49499, 3941, 9635), true);
+    assert.equal(interactions.find((entry) => entry.name === 'Asgarnia Smith').options['Talk-to']({ player, npcId: 1 }), undefined);
+    assert.equal(quest.getStage(player), 1, 'the NPC sends the player to inspect the remaining objects');
+    inspect(49501, 3931, 9635);
+    inspect(49503, 3931, 9625);
+    inspect(49505, 3941, 9625);
+    inspect(O.PLAQUE_35, 3944, 9631);
+    interactions.find((entry) => entry.name === 'Asgarnia Smith').options['Talk-to']({ player, npcId: 1 });
+    assert.equal(quest.getStage(player), 2, 'only the four statues and plaque advance the vault step');
   } finally {
     runtime.startTranscript = startTranscript;
   }
