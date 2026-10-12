@@ -121,7 +121,8 @@ const ATTR = {
   INSIDE: "cox:inside",
 };
 
-const OVERLAY_HUD_UID = (161 << 16) | 8;
+/** rsprox captures: the points overlay (513) opens on toplevel_osrs_stretch:overlay_atmosphere. */
+const OVERLAY_UID = (161 << 16) | 1;
 const CHAT_CHANNEL_TAB_UID = (161 << 16) | 83;
 const MAIN_MODAL_UID = (161 << 16) | 16;
 
@@ -206,7 +207,7 @@ function raidMessage(player, text) {
 /** The raid overlay's own fade: out, run `action` a tick later, then back in (not on the Wiki). */
 function fadeMove(player, action) {
   const sender = player.getPacketSender();
-  sender.sendSubInterface(OVERLAY_HUD_UID, INTERFACE.OVERLAY, 1);
+  sender.sendSubInterface(OVERLAY_UID, INTERFACE.OVERLAY, 1);
   sender.sendClientScript(SCRIPT.FADE_OUT);
   later(player, 1, () => {
     action();
@@ -527,7 +528,7 @@ function displayName(player) {
 module.exports = {
   bind, core, api,
   OUTSIDE, MOUNT_QUIDAMORTEM, OBJECT, NPC, INTERFACE, VARBIT, VARP, SCRIPT, BOARD_ROWS, MAX_RAIDERS,
-  MAX_POINTS, PARTY_SKILLS, ATTR, OVERLAY_HUD_UID, CHAT_CHANNEL_TAB_UID, MAIN_MODAL_UID, EVENT,
+  MAX_POINTS, PARTY_SKILLS, ATTR, OVERLAY_UID, CHAT_CHANNEL_TAB_UID, MAIN_MODAL_UID, EVENT,
   isRaidItem, loc, inBox, onMount, cycle, later, repeat, statement, options, raidMessage, fadeMove, sound,
   channelOf, channelByKey, joinChannel, leaveChannel, formatTicks, displayName,
   balanceWalk, crossFire, random, randomOf, shuffle, gfx, graphicAt, damage, isProtected, projectile, walkStraight, styleMethod, strike,
