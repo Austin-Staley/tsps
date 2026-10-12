@@ -1105,3 +1105,16 @@ test('Prince Ali key print and bronze bar go to Osman, then Leela gives the key'
   handlers.custom.get('npc-dialogue:action').forEach((h) => h(event));
   assert.equal(items.get(I.BRONZE_KEY), 1, 'replaying the handoff must not duplicate the key');
 });
+
+
+test('all four Surok elemental surges launch from his reachable tile', () => {
+ const {api}=mockApi(),created=[],L=api.core.Location;
+ api.core={...api.core,PrivateArea:class{enter(){}},CombatSpells:{...api.core.CombatSpells,FIRE_SURGE:{castAnimation:()=>null,castProjectile:()=>null}}};
+ const location=new L(4145,4850,2),combat={getLastAttack:()=>({reset(){}})};
+ const npc=(id)=>({getId:()=>id,getLocation:()=>location,getHitpoints:()=>1,getCombat:()=>combat,performAnimation(){},forceChat(){},setMaxHitpoints(){return this;},setHitpoints(){return this;},setScriptedMovement(){},getMovementQueue:()=>({setBlockMovement(){}})});
+ api.spawnNpc=spec=>{created.push(spec);return npc(spec.id);};
+ const player={getLocation:()=>new L(4135,4850,2),getHitpoints:()=>99,getPrayerActive:()=>[],getCombat:()=>({getHitQueue:()=>({addPendingDamage(){}})})};
+ const f=require('../plugins/quests/wgs/Surok.WhileGuthixSleeps')({api});
+ const room=new f.SurokArea(player);room.boss=npc(13482);room.enemies.add(room.boss);room.started=true;room.specials=2;room.specialAt=1;room.nextAttack=0;room.process(player);
+ assert.equal(created.length,4);for(const spell of created){assert.ok([13505,13506,13507,13508].includes(spell.id));assert.deepEqual([spell.x,spell.y,spell.z],[4145,4850,2]);}
+});

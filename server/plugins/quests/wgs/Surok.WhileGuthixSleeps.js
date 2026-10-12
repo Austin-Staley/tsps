@@ -58,8 +58,9 @@ module.exports=function registerSurok({api,stage,advance,held,give,play}){
    clearExplosive(f);const position=f.player.getLocation().transform(2,0);f.explosive={expires:f.ticks+20,grabbed:false,position};
    f.explosive.ground=ItemOnGroundManager.registerLocation(f.player,new Item(LIT_EXPLOSIVE,1),position);b.forceChat('Magicus ignitus!');
   }else{
+   // Launch from Surok: the old horizontal spread placed the fourth spell inside the east wall.
    const count=Math.min(4,1+Math.floor((450-b.getHitpoints())/113));
-   for(let i=0;i<count;i++){const index=random(0,3),n=spawn(f,SURGES[index],l.getX()-2+i*2,l.getY(),16);targets.set(n,{surge:true,index});}
+   for(let i=0;i<count;i++){const index=random(0,3),n=spawn(f,SURGES[index],l.getX(),l.getY(),16);targets.set(n,{surge:true,index});}
    b.forceChat('Witness true sorcery!');
   }
  }
