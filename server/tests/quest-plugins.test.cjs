@@ -269,6 +269,129 @@ test('Dragon Slayer II reforging requires three distinct dragon-head casts and c
   assert.equal(counts.get(core.ItemIdentifiers.DRAGON_KEY_PIECE_4), 0);
 });
 
+test('Desert Treasure II charges and places all eight machine cells individually', () => {
+  const itemOnObject = [];
+  const interactions = [];
+  const { api: base } = mockApi();
+  const api = new Proxy(base, {
+    get: (target, prop) => {
+      if (prop === 'onItemOnObject') return (handler) => itemOnObject.push(handler);
+      if (prop === 'onNpcInteraction') return (name, options) => interactions.push({ name, options });
+      return target[prop];
+    },
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const startTranscript = runtime.startTranscript;
+  runtime.startTranscript = () => true;
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1);
+    const { ItemIdentifiers: I, ObjectIdentifiers: O } = api.core;
+    const attrs = new Map();
+    const counts = new Map([[I.UNCHARGED_CELL_2, 8]]);
+    const packet = new Proxy({}, { get: () => (..._args) => packet });
+    const messages = [];
+    const player = {
+      getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      getInventory: () => ({
+        getAmount: (id) => counts.get(id) ?? 0,
+        deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+        adds: (id, amount) => counts.set(id, (counts.get(id) ?? 0) + amount),
+      }),
+      getPacketSender: () => packet, sendMessage: (message) => messages.push(message),
+    };
+    quest.setStage(player, 6);
+    attrs.set('desert-treasure-ii:war-room', {
+      getBaseX: () => 8192, getBaseY: () => 1600, isDestroyed: () => false,
+    });
+    const altar = { x: 8205, y: 1618, z: 0 };
+    const golem = { x: 8215, y: 1620, z: 0 };
+    const apply = (itemId, objectId, location) => itemOnObject[0]({ player, itemId, objectId, location });
+    for (let i = 0; i < 8; i++) apply(I.UNCHARGED_CELL_2, O.ALTAR_93, altar);
+    assert.equal(counts.get(I.UNCHARGED_CELL_2), 0);
+    assert.equal(counts.get(I.CHARGED_CELL), 8);
+    for (let i = 0; i < 7; i++) apply(I.CHARGED_CELL, O.GOLEM, golem);
+    const smith = interactions.find(({ name }) => name === 'Asgarnia Smith').options['Talk-to'];
+    smith({ player, npcId: api.core.NpcIdentifiers.ASGARNIA_SMITH });
+    assert.equal(quest.getStage(player), 6, 'the golem cannot be operated before all eight cells are placed');
+    apply(I.CHARGED_CELL, O.GOLEM_2, golem);
+    assert.equal(counts.get(I.CHARGED_CELL), 0);
+    assert.equal(attrs.get('desert-treasure-ii:charged-cells-placed'), 8);
+    smith({ player, npcId: api.core.NpcIdentifiers.ASGARNIA_SMITH });
+    assert.equal(quest.getStage(player), 7, 'the eighth cell enables the real golem dialogue');
+    assert.match(messages.at(-1), /All eight cells are in place/);
+  } finally {
+    runtime.startTranscript = startTranscript;
+  }
+});
+
+test('Desert Treasure II enters a private copy of the real war room from the cleared Digsite hole', () => {
+  const { api: base } = mockApi();
+  const handlers = [];
+  const chunks = [];
+  class TestInstance {
+    constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
+    setChunk(...args) { chunks.push(args); }
+    enter(player) { this.player = player; }
+    leave() {}
+    postLeave() {}
+    getBaseX() { return 8192; }
+    getBaseY() { return 1600; }
+    tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z }; }
+    add(npc) { this.entities.push(npc); }
+    isDestroyed() { return false; }
+    destroy() { this.destroyed = true; }
+  }
+  const queues = { add: [], remove: [] };
+  const core = {
+    ...base.core,
+    TemplatedInstanceArea: TestInstance,
+    NPC: { create: (id, location) => ({ id, location, setOwner() {}, setOwnerOnly() {} }) },
+    World: { getAddNPCQueue: () => queues.add, getRemoveNPCQueue: () => queues.remove },
+  };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'onObjectInteraction' ? (handler) => handlers.push(handler)
+        : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const startTranscript = runtime.startTranscript;
+  runtime.startTranscript = () => true;
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1);
+    const p = {
+      attrs: new Map(),
+      getAttribute(key) { return this.attrs.get(key); },
+      setAttribute(key, value) { this.attrs.set(key, value); },
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+      getUsername: () => 'dt2-room-test',
+      moveTo(location) { this.location = location; },
+    };
+    quest.setStage(p, 5);
+    const { ObjectIdentifiers: O, NpcIdentifiers: N } = core;
+    assert.equal(handlers[0]({ player: p, objectId: O.CREVICE_45, location: { x: 3411, y: 9811, z: 0 } }), true);
+    const room = p.getAttribute('desert-treasure-ii:war-room');
+    assert.equal(room.width, 6);
+    assert.equal(room.height, 5);
+    assert.deepEqual(p.location, { x: 8215, y: 1607, z: 0 });
+    assert.deepEqual(chunks.filter(([plane, , , chunk]) => plane === 0).map(([, x, y, chunk]) => [x, y, chunk.sourceChunkX, chunk.sourceChunkY]),
+      Array.from({ length: 30 }, (_, i) => [Math.floor(i / 5), i % 5, 345 + Math.floor(i / 5), 803 + i % 5]));
+    assert.equal(room.entities[0].id, N.ANCIENT_GUARDIAN_3);
+    assert.deepEqual(queues.add, [room.entities[0]]);
+    assert.equal(handlers[0]({ player: p, objectId: O.CREVICE_45, location: { x: 3412, y: 9811, z: 0 } }), false,
+      'only the real excavation hole opens the room');
+    quest.setStage(p, 6);
+    assert.equal(handlers[0]({ player: p, objectId: O.RUBBLE_74, location: { x: 8215, y: 1601, z: 0 } }), true,
+      'the cache Climb-up rubble is the return route');
+    assert.deepEqual([p.location.getX(), p.location.getY(), p.location.getZ()], [3411, 9811, 0]);
+    assert.equal(p.getAttribute('desert-treasure-ii:war-room'), null);
+    assert.equal(room.destroyed, true);
+  } finally {
+    runtime.startTranscript = startTranscript;
+  }
+});
+
 test('Dragon Slayer II Torfinn starts both ordered dragon waves before Galvek', async () => {
   await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
   const { api: base } = mockApi();
