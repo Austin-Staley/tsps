@@ -896,8 +896,8 @@ module.exports = function registerSongOfTheElves(api) {
       case "west": if (dz === 0 && dy === 0 && dx < 0) step = [-1, 0, 0]; break;
       case "north": if (dz === 0 && dx === 0 && dy > 0) step = [0, 1, 0]; break;
       case "south": if (dz === 0 && dx === 0 && dy < 0) step = [0, -1, 0]; break;
-      case "up": if (dx === 0 && dy === 0 && dz === 1) step = [0, 0, 1]; break;
-      case "down": if (dx === 0 && dy === 0 && dz === -1) step = [0, 0, -1]; break;
+      case "up": if (dx === 0 && dy === 0 && dz > 0) step = [0, 0, 1]; break;
+      case "down": if (dx === 0 && dy === 0 && dz < 0) step = [0, 0, -1]; break;
       // A fractured crystal sends light down both branches; the next mirror
       // must be on one of those rays. Its own direction is checked afterward.
       case "fractured":

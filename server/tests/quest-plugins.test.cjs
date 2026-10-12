@@ -449,6 +449,15 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
   place(2567, 6144, 'south', 2);
   assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '5:20',
     `Hefin’s final blue beam has its own north-west source: ${messages.slice(-2).join(' | ')}`);
+  attributes.set('quest.song_of_the_elves.library-seals', 127);
+  attributes.set('quest.song_of_the_elves.library-puzzle', '6:6');
+  attributes.set('quest.song_of_the_elves.library-pillar-state', JSON.stringify({
+    '2581,6116,0': { operation: 'U', direction: 'up', x: 2581, y: 6116, z: 0, step: 5 },
+  }));
+  amounts.set(api.core.ItemIdentifiers.HAND_MIRROR_2, 1);
+  place(2581, 6116, 'north', 2);
+  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '6:7',
+    `Trahaearn’s vertical beam travels through an unmirrored middle floor: ${messages.slice(-2).join(' | ')}`);
   const beforeReplay = messages.length;
   useObject({ player, objectId: 36726, handled: false });
   assert.ok(!messages.slice(beforeReplay).some((message) => message.includes('seal remains dark')),
