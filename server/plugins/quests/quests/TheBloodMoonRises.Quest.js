@@ -564,15 +564,20 @@ module.exports = function registerTheBloodMoonRises(api) {
     const updated = { ...state, integrity,
       participation: (state.participation ?? 0) + (participated ? 1 : 0) };
     player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
-    if (integrity <= HALL_INTEGRITY_THRESHOLD && state.phase === "hall") {
+    if (integrity <= HALL_INTEGRITY_THRESHOLD && !updated.qualified) {
       if (updated.participation < HALL_PARTICIPATION_REQUIRED) {
         updated.integrity = HALL_INTEGRITY_THRESHOLD + 1;
         player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
         player.sendMessage("The Aranei need more help before the doors give way. Repair another damaged window or pillar, or heal a fallen Aranei.");
         return;
       }
+      updated.qualified = true;
+      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
+    }
+    if (integrity === 0 && updated.qualified) {
       updated.phase = "breach";
       player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
+      quest.setStage(player, STAGE.SIEGE);
       startTranscript(api, player, NpcIdentifiers.LOWERNIEL_DRAKAN_19, PAGE,
         "drakan-s-siege-upon-reaching-0-hideout-integrity");
     }
@@ -607,12 +612,13 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (old && old.isRegistered?.() && old.getHitpoints?.() > 0) return;
     const npc = api.spawnNpc({ id: NpcIdentifiers.ARANEI_112, x: 3173, y: 7855, z: 1,
       wanderRadius: 0, owner: player, ownerOnly: true });
-    if (npc) siegeHallInjured.set(key, npc);
+    if (npc) { player.getPrivateArea?.()?.enter(npc); siegeHallInjured.set(key, npc); }
   }
 
   function handleSiegeLogin({ player }) {
     if (!player || stage(player) !== STAGE.SIEGE) return;
     const state = hallDefenceState(player);
+    if (state.phase === "hall") hall.enter(player);
     if (state.phase === "hall") player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE,
       { ...state, nextIntegrityLossCycle: World.getProcessCycle() + HALL_INTEGRITY_INTERVAL });
     spawnSiegeInjuredAranei(player);
@@ -630,8 +636,9 @@ module.exports = function registerTheBloodMoonRises(api) {
     const object = event.object;
     if (!object) return false;
     const location = object.getLocation();
-    const replacement = new api.core.GameObject(replacementId, location.clone(), object.getType(), object.getFace(),
-      object.getPrivateArea?.() ?? null);
+    const area = hall.sessions.get(event.player);
+    if (!area || object.getPrivateArea?.() !== area) return false;
+    const replacement = new api.core.GameObject(replacementId, location.clone(), object.getType(), object.getFace(), area);
     api.core.ObjectManager.deregister(object, true);
     api.core.ObjectManager.register(replacement, true);
     return true;
@@ -656,7 +663,7 @@ module.exports = function registerTheBloodMoonRises(api) {
 
     if (objectId === SIEGE_HALL.barricade && x === 3167 && y === 7844 && z === 1 && state.phase === "hall") {
       event.handled = true;
-      player.sendMessage("The reinforced door is still holding. Keep repairing the hall and helping the Aranei until its integrity falls to half.");
+      player.sendMessage("The reinforced door is still holding. Keep repairing the hall and helping the Aranei until Lowerniel breaks through.");
       return;
     }
 
@@ -684,7 +691,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     const npc = event?.npc ?? event?.target;
     const npcId = event?.npcId ?? npc?.getId?.();
     if (!player || !npc || !SIEGE_HALL.injuredAranei.includes(npcId) ||
-      stage(player) !== STAGE.SIEGE || hallDefenceState(player).phase !== "hall") return;
+      stage(player) !== STAGE.SIEGE || hallDefenceState(player).phase !== "hall") return false;
+    if (npc.getOwner?.() !== player || npc.getArea?.() !== hall.sessions.get(player)) return false;
     event.handled = true;
     const state = hallDefenceState(player);
     const key = injuredAraneiKey(npc);
@@ -865,9 +873,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!player || quest.isComplete(player)) return;
     const next = ACTION_STAGE[event.stepId];
     if (event.stepId === "vqg4qO") {
-      bridge.finish(player);
+      if (stage(player) !== STAGE.SIEGE || !bridge.finish(player)) return;
       player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { phase: "hall", integrity: 100, healed: [], repaired: [] });
       quest.setStage(player, STAGE.SIEGE);
+      hall.enter(player);
       spawnSiegeInjuredAranei(player);
     }
     if (event.stepId === "Sut83Q") {
@@ -1817,7 +1826,17 @@ module.exports = function registerTheBloodMoonRises(api) {
     otherRewards: ["Access to Vampyrium", "A Hallowed flail", "Sunspear", "The vampyres of Morytania are tolerant of you"],
     buildJournal,
   });
-  require("../bmr/Palace.TheBloodMoonRises")({ api, stage, preparationAttribute: PREP_ATTRIBUTE });
+  const hall = require("../bmr/Hall.TheBloodMoonRises")({ api, state: hallDefenceState,
+    process: processSiegeDefence, cleanup: handleSiegeLogout, scenery: player => {
+      const repaired = hallDefenceState(player).repaired ?? [];
+      // shortcut: potion-crate placement is inferred on reachable hall flooring; calibrate against a live OSRS capture.
+      return [[SIEGE_HALL.hammerCrate, 3177, 7843], [SIEGE_HALL.potionCrate, 3171, 7847],
+        [SIEGE_HALL.barricade, 3167, 7844], ...[...SIEGE_HALL.repairLocations].map(([key, ids]) => {
+          const [x, y] = key.split(',').map(Number);
+          return [ids[repaired.includes(key) ? 1 : 0], x, y, ids[0] === SIEGE_HALL.damagedWindow ? 0 : 10, ids[0] === SIEGE_HALL.damagedWindow ? 2 : 0];
+        })];
+    } });
+  require("../bmr/Palace.TheBloodMoonRises")({ api, stage, preparationAttribute: PREP_ATTRIBUTE, processHall: ({ player }) => hall.enter(player) });
   const bridge = require("../bmr/Bridge.TheBloodMoonRises")({ api, stage, attribute: SIEGE_DEFENCE_ATTRIBUTE,
     sync: player => quest.setStage(player, STAGE.SIEGE),
     ready: player => { const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {}; return prep.flail && prep.stakes; },
@@ -1854,11 +1873,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onItemOnItem(handleBloodHuntItemOnItem);
   api.onItemOnNpc(feedSafalaan);
   api.onItemAction("Dusty book", { Read: readDustyBook });
-  for (const id of SIEGE_HALL.injuredAranei) {
-    api.onNpcInteraction(id, { Heal: healSiegeAranei });
-  }
+  api.onNpcInteraction("Aranei", { Heal: healSiegeAranei });
   api.onPlayerProcess(syncHuntGroundItems);
-  api.onPlayerProcess(processSiegeDefence);
   api.onPlayerLogin(handleSiegeLogin);
   api.onPlayerLogout(handleSiegeLogout);
   api.onNpcDeath(handleWyrdDeath);

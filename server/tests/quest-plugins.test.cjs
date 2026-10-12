@@ -41,7 +41,7 @@ function mockApi() {
         return false;
       });
     },
-    onNpcInteraction: (target, actions) => handlers.npcInteractions.set(target, actions),
+    onNpcInteraction: (target, actions) => { assert(['string', 'function'].includes(typeof target), 'NPC hooks accept names or generic handlers'); handlers.npcInteractions.set(target, actions); },
     onObjectRoute: (h) => handlers.routes.push(h),
     onWalkRoute: (h) => handlers.walkRoutes.push(h),
     onPlayerProcess: (h) => handlers.playerProcess.push(h),
@@ -1110,7 +1110,20 @@ test('Blood Moon siege barrier action starts the second private Lowerniel fight 
 
 test('Blood Moon hall defence supplies hammers and potions, records repairs and heals a fallen Aranei', () => {
   const { api, handlers } = mockApi();
-  let cycle = 0;
+  const replaced = [], objectManager = api.core.ObjectManager;
+  const originalDeregister = objectManager.deregister, originalRegister = objectManager.register;
+  objectManager.deregister = object => replaced.push(['remove', object]);
+  objectManager.register = object => replaced.push(['add', object]);
+  api.core = { ...api.core, PrivateArea: class extends api.core.PrivateArea {
+    constructor() { super([]); this.objects = []; }
+    enter(member) { member.area = this; }
+    add(object) { object.setArea(this); this.objects.push(object); }
+    getObjects() { return this.objects; }
+    postLeave() {}
+  } };
+  let cycle = 0, palace, loginHook;
+  api.onPlayerLogin = handler => { if(handler.name==='handleSiegeLogin')loginHook=handler; };
+  api.registerArea = area => { palace = area; };
   const originalGetProcessCycle = api.core.World.getProcessCycle;
   api.core.World.getProcessCycle = () => cycle;
   const spawns = [];
@@ -1134,7 +1147,9 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
     deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
   };
   const player = {
+    isPlayer: () => true, getAsPlayer: () => player,
     getUsername: () => 'SiegeHallTest',
+    getPrivateArea: () => player.area,
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => inventory,
@@ -1143,37 +1158,38 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
     sendMessage() {},
   };
   quest.setStage(player, 70);
-  handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'vqg4qO' });
+  attributes.set('quest.the_blood_moon_rises.siege-defence',{phase:'hall',integrity:100,healed:[],repaired:[]});
+  palace.process(player);
+  loginHook({player});
   assert.deepEqual(spawns.map(({ id, x, y, z, ownerOnly }) => ({ id, x, y, z, ownerOnly })), [
     { id: api.core.NpcIdentifiers.ARANEI_112, x: 3173, y: 7855, z: 1, ownerOnly: true },
   ]);
-  const objectManager = api.core.ObjectManager;
-  const replaced = [];
-  const originalDeregister = objectManager.deregister;
-  const originalRegister = objectManager.register;
-  objectManager.deregister = (object) => replaced.push(['remove', object]);
-  objectManager.register = (object) => replaced.push(['add', object]);
+  assert.equal(replaced.filter(([kind])=>kind==='add').length,9,'the actual hall scenery is spawned inside its private instance');
+  assert.ok(replaced.every(([,object])=>object.getPrivateArea()===player.area));
+  replaced.length=0;
   const interact = handlers.objects.find((handler) => handler.name === 'handleSiegeHallObject');
   const objectEvent = (id, x, y, option = 'Repair') => {
     const location = new api.core.Location(x, y, 1);
-    const object = { getLocation: () => location, getType: () => 10, getFace: () => 0, getPrivateArea: () => null };
+    const object = { getLocation: () => location, getType: () => 10, getFace: () => 0, getPrivateArea: () => player.area };
     const event = { player, object, objectId: id, definition: { id }, location: { x, y, z: 1 }, option, handled: false };
     interact(event);
     return event;
   };
   const ids = api.core.ObjectIdentifiers;
   objectEvent(ids.CRATE_OF_HAMMERS_2, 3177, 7843, 'Take-from');
-  objectEvent(ids.CRATE_OF_POTIONS, 3177, 7846, 'Take-from');
+  objectEvent(ids.CRATE_OF_POTIONS, 3171, 7847, 'Take-from');
   assert.equal(inventory.contains(api.core.ItemIdentifiers.HAMMER), true);
   assert.equal(inventory.contains(api.core.ItemIdentifiers.HEALING_POTION), true);
   const npc = {
     getId: () => api.core.NpcIdentifiers.ARANEI_108,
+    getOwner: () => player, getArea: () => player.area,
     getIndex: () => 800,
     getLocation: () => new api.core.Location(3173, 7855, 1),
     setNpcTransformationId(id) { this.transformedId = id; },
   };
-  const heal = handlers.npcInteractions.get(api.core.NpcIdentifiers.ARANEI_108).Heal;
+  const heal = handlers.npcInteractions.get('Aranei').Heal;
   const healEvent = { player, npc, npcId: npc.getId(), handled: false };
+  const otherEvent={...healEvent,npc:{...npc,getOwner:()=>({})}};heal(otherEvent);assert.equal(otherEvent.handled,false,'another defender cannot heal this player’s instance');
   heal(healEvent);
   assert.equal(healEvent.handled, true);
   assert.equal(npc.transformedId, api.core.NpcIdentifiers.ARANEI_106);
@@ -1185,7 +1201,8 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
   assert.equal(state.healed.length, 1);
   assert.equal(state.integrity, 100, 'repairs and healing support the integrity hold instead of completing it directly');
   assert.equal(replaced.filter(([kind]) => kind === 'add').length, 3, 'each fixed cache loc is replaced with its repaired variant');
-  const process = handlers.playerProcess.find((handler) => handler.name === 'processSiegeDefence');
+  assert.equal(handlers.playerProcess.some(h=>h.name==='processSiegeDefence'),false,'hall timing belongs to its area');
+  const process = ({player}) => player.area.process(player);
   attributes.set('quest.the_blood_moon_rises.siege-defence', { ...state, integrity: 51, participation: 0, nextIntegrityLossCycle: 20 });
   cycle = 20;
   const npcDefinition = api.core.NpcDefinition;
@@ -1200,11 +1217,15 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
     });
     cycle = 40;
     process({ player });
+    assert.equal(attributes.get('quest.the_blood_moon_rises.siege-defence').qualified, true);
+    assert.equal(attributes.get('quest.the_blood_moon_rises.siege-defence').phase, 'hall', '50% qualifies participation without starting the breach');
+    attributes.set('quest.the_blood_moon_rises.siege-defence', { ...attributes.get('quest.the_blood_moon_rises.siege-defence'), integrity: 1 });
+    cycle = 60; process({ player });
   } finally {
     npcDefinition.forId = originalForId;
   }
   assert.equal(attributes.get('quest.the_blood_moon_rises.siege-defence').phase, 'breach',
-    'the barricade cutscene begins at the 50% hideout-integrity threshold');
+    'the barricade cutscene begins only at zero integrity');
   objectManager.deregister = originalDeregister;
   objectManager.register = originalRegister;
   api.core.World.getProcessCycle = originalGetProcessCycle;
