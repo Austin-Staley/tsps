@@ -91,7 +91,7 @@ const tile = (location) => ({ x: location.getX(), y: location.getY(), z: locatio
 
 function createContext(core, server) {
   const {
-    World, MapObjects, ObjectDefinition, ItemDefinition, GameConstants, TaskManager, MultiChatboxPrompt,
+    World, MapObjects, ObjectDefinition, ItemDefinition, GameConstants, TaskManager, MultiChatboxPrompt, RegionManager,
   } = core;
 
   const find = (username) => {
@@ -182,8 +182,16 @@ function createContext(core, server) {
     const viewedArea = privateArea?.countsAsMainWorld() ? null : privateArea;
     const sceneObjects = new Map();
     const keyOf = object => { const at = object.getLocation(); return `${at.getX()},${at.getY()},${at.getZ()},${object.getType()}`; };
+    const loadedRegions = new Set();
     for (let x = here.getX() - radius; x <= here.getX() + radius; x++) {
+      const regionX = Math.floor(x / 64);
       for (let y = here.getY() - radius; y <= here.getY() + radius; y++) {
+        const regionY = Math.floor(y / 64);
+        const regionKey = `${regionX},${regionY}`;
+        if (!loadedRegions.has(regionKey)) {
+          RegionManager?.loadMapFiles?.(x, y, false);
+          loadedRegions.add(regionKey);
+        }
         const tile = new core.Location(x, y, here.getZ());
         for (const object of [...(MapObjects.mapObjects.get(MapObjects.getHash(x, y, here.getZ())) ?? []), ...(viewedArea?.getTemplateObjects?.(tile) ?? [])]) {
           const at = object.getLocation();
