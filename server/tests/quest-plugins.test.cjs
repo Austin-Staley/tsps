@@ -872,16 +872,16 @@ test('WGS catacomb crossings bind the native Jump-to and Jump-down options', () 
 
 
 test('WGS spawns jailed Silif only for the player’s rescue stage and transforms his earned disguise', () => {
- const {api,player,attributes}=movarioFixture();let progress=480,mapChange,login;const spawned=[],removed=[];
+ const {api,player,attributes}=movarioFixture();let progress=480,mapChange,login,logout;const spawned=[],removed=[];
  const sender={sendVarbit:(id,n)=>{player.varbits.set(id,n);return sender;}};player.getPacketSender=()=>sender;
  player.getLocation=()=>new api.core.Location(4133,4791,2);
- api.onPlayerMapSquareChange=h=>mapChange=h;api.onPlayerLogin=h=>login=h;
+ api.onPlayerMapSquareChange=h=>mapChange=h;api.onPlayerLogin=h=>login=h;api.onPlayerLogout=h=>logout=h;
  api.spawnNpc=args=>{const n={args,setNpcTransformationId:id=>n.transformed=id};spawned.push(n);return n;};api.removeNpc=n=>removed.push(n);
  require('../plugins/quests/wgs/DarkSquall.WhileGuthixSleeps')({...api.context,stage:()=>progress});
  login({player});assert.equal(spawned.length,0);
  progress=520;mapChange({player});assert.equal(spawned.length,1);assert.equal(spawned[0].args.id,13524);assert.equal(spawned[0].args.owner,player);
  attributes.set('while-guthix-sleeps:silif-armour',1);progress=550;mapChange({player});assert.equal(spawned[0].transformed,13521);
- progress=560;mapChange({player});assert.deepEqual(removed,[spawned[0]]);
+ progress=560;mapChange({player});assert.deepEqual(removed,[spawned[0]]);assert.equal(spawned[1].args.id,13521);assert.equal(spawned[1].args.z,2);logout({player});login({player});assert.equal(spawned[2].args.id,13521);assert.equal(spawned[2].args.owner,player);
  const spawns=require('../data/definitions/npc-spawns.json');assert(!spawns.some(n=>n.id===13524&&n.x===4135&&n.y===4790));
 });
 
@@ -907,4 +907,16 @@ test('Rescued Silif acknowledges the rescue before quest completion', () => {
  require('../plugins/quests/wgs/Alliance.WhileGuthixSleeps')({api,stage:()=>610,play:(p,id,variant)=>played=variant});
  assert.equal(interaction({player,npcId:13519}),true);
  assert.equal(played,'the-dark-squall-talking-to-silif-after-rescuing-him');
+});
+
+
+test('Silif’s unlocked cell visibly opens and leaves a walkable exit', () => {
+ const {api,handlers,player}=movarioFixture(),changed=[];let progress=490;
+ api.core={...api.core,ObjectManager:{deregister:(o)=>changed.push(['remove',o.getId()]),register:o=>changed.push(['add',o.getId(),o.getLocation().getX(),o.getLocation().getY(),o.getFace()])}};
+ require('../plugins/quests/wgs/DarkSquall.WhileGuthixSleeps')({...api.context,stage:()=>progress,advance:(p,n)=>progress=Math.max(progress,n)});
+ const open=handlers.objects.find(h=>h.name==='Gate').options.Open;
+ const object=new api.core.GameObject(53443,new api.core.Location(4132,4791,2),0,0,null);
+ assert.equal(open({player,objectId:53443,object}),true);assert.equal(progress,520);
+ assert.deepEqual(changed,[['remove',53443],['add',53444,4131,4791,1]]);
+ assert.equal(player.position,null,'opening the gate leaves movement to the player');
 });
