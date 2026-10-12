@@ -2,7 +2,6 @@ import { useCallback, useState, useSyncExternalStore } from "react";
 import { NavigationButton } from "@runelite/client/ui/NavigationButton";
 import type { QuestHelperPlugin } from "./QuestHelperPlugin";
 import { QUEST_GUIDES } from "./guides";
-import { journalText } from "./types";
 import "./QuestHelper.css";
 
 export function useQuestHelper(plugin: QuestHelperPlugin) {
@@ -15,12 +14,16 @@ export function QuestHelperPanel({ plugin }: { plugin: QuestHelperPlugin }): JSX
     const state = useQuestHelper(plugin);
     const [search, setSearch] = useState("");
     const [filter, setFilter] = useState("unfinished");
-    const guide = state.quest ? QUEST_GUIDES[state.quest.key] : undefined;
+    const automatic = state.selectedKey ? !!QUEST_GUIDES[state.selectedKey] : false;
     return <div className="rl-sidebar-panel-content quest-helper-panel">
         <h2>Quest Helper</h2>
         {state.selectedKey ? <>
             <button onClick={() => plugin.stopQuest()}>Stop helper / Quest list</button>
             <h3>{state.quest?.name ?? "Loading quest…"}</h3>
+            {state.error && <p role="alert">{state.error}</p>}
+            {!state.guide && !state.error && <p>Loading guide…</p>}
+            {state.guide && !state.step && <p>{automatic ? "No upstream step matches the current quest state." : "Select a step below to follow this guide."}</p>}
+            {state.manualStep !== undefined && automatic && <button onClick={() => plugin.selectStep(undefined)}>Resume automatic steps</button>}
             {state.step && <p className="quest-helper-current" aria-live="polite">{state.step.text}</p>}
             {state.step?.target && <p>Target: {state.step.target.x}, {state.step.target.y}, floor {state.step.target.plane}</p>}
             {state.step?.items && <><h3>Items for this step</h3><ul>{state.step.items.map((item, index) =>
@@ -28,21 +31,20 @@ export function QuestHelperPanel({ plugin }: { plugin: QuestHelperPlugin }): JSX
                     {state.counts[index] >= item.amount ? "✓" : "○"} {item.name}: {state.counts[index]}/{item.amount}{item.equipped ? " equipped" : ""}
                 </li>)}</ul></>}
             {state.step?.choices && <p>Dialogue: {state.step.choices.join(" → ")}</p>}
-            {guide ? <><p className="quest-helper-note">{guide.note}</p><details><summary>All steps</summary><ol>{guide.steps.map((text) => <li key={text}>{text}</li>)}</ol></details></>
-                : state.quest && <p className="quest-helper-note">Live TSPS journal. This quest still needs an adapted step guide and target markers.</p>}
-            {state.quest && <details open={!guide}><summary>Live quest journal</summary>{state.quest.journal.map((line, index) =>
-                <p key={index} className={line.includes("<str>") ? "quest-helper-done" : undefined}>{journalText(line) || "\u00a0"}</p>)}</details>}
+            {state.guide && <><p><a href={state.guide.source} target="_blank" rel="noreferrer">RuneLite guide source</a></p>
+                <details open={!automatic}><summary>All upstream steps</summary><ol>{state.guide.steps.map((step, index) =>
+                    <li key={index}><button aria-pressed={state.manualStep === index} onClick={() => plugin.selectStep(index)}>{step.text}</button></li>)}</ol></details></>}
         </> : <>
             <input aria-label="Search quests" placeholder="Search quests…" value={search} onChange={(event) => setSearch(event.target.value)} />
             <select aria-label="Filter quests" value={filter} onChange={(event) => setFilter(event.target.value)}>
                 <option value="unfinished">Unfinished</option><option value="started">In progress</option><option value="all">All quests</option>
             </select>
-            {state.quests.length === 0 && <p>Log in to see this world's available quests.</p>}
+            {state.quests.length === 0 && <p>Log in to see the OSRS quest guides.</p>}
             <ul className="quest-helper-list">{state.quests.filter((quest) => quest.name.toLowerCase().includes(search.toLowerCase()) &&
                 (filter === "all" || (filter === "started" ? quest.status === 0 : quest.status !== 2))).map((quest) =>
                 <li key={quest.key}><button onClick={() => plugin.selectQuest(quest.key)}>
                     <span>{quest.status === 2 ? "✓ " : quest.status === 0 ? "◐ " : "○ "}{quest.name}</span>
-                    <small>{QUEST_GUIDES[quest.key] ? "Step guide" : "Live journal"}</small>
+                    <small>{QUEST_GUIDES[quest.key] ? "Automatic steps" : "Select steps manually"}</small>
                 </button></li>)}</ul>
         </>}
     </div>;

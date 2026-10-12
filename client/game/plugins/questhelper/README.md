@@ -1,64 +1,69 @@
 # Quest Helper
 
-A TSPS adaptation of [Zoinkwiz's RuneLite Quest Helper](https://github.com/Zoinkwiz/quest-helper),
-reviewed at commit `08bb7c55ffc5aa61b7f4df61820967d63157e389`.
-The original copyright notices and BSD terms are in `LICENSE-QuestHelper.txt`.
+OSRS guide content from [Zoinkwiz's RuneLite Quest Helper](https://github.com/Zoinkwiz/quest-helper),
+pinned to `08bb7c55ffc5aa61b7f4df61820967d63157e389`.
+**Disabled by default.** Enable Quest Helper in Configuration to open its sidebar.
+An existing saved enablement preference still follows the normal plugin settings behavior.
 
-Enable **Quest Helper** in Configuration, open its sidebar icon, search for a quest and select it.
-The sidebar shows the current step, required item counts, the live journal and, for adapted guides,
-the full step list. Cyan targets appear in the scene, minimap and world map. Server hint arrows
-take precedence. Stop, disable or log out to remove the helper's markers.
+## Coverage
 
-## Coverage and compatibility
+The catalog includes all **213 F2P, P2P and miniquest entries** in the pinned upstream catalog,
+including separate Shield of Arrav routes, RFD subquests and the additional balloon guides.
+Guide assets contain upstream authored static instructions, literal world points, dialogue
+choices and statically resolvable item requirements/alternatives. No guide is adapted to this
+server's quest implementations. The catalog includes guides regardless of server registration.
 
-This is a partial port of RuneLite's detailed guides, with live TSPS journal support for every
-registered quest. On this branch there are **177 registered quests: nine detailed guides and
-168 journal guides**. The sidebar labels these modes. Newly registered quests become available
-automatically as journal guides, including on worlds that load only free-to-play quests.
+**This is not yet a complete executable port of RuneLite Quest Helper.** Nine guides have
+automatic step selection: Cook's Assistant, Sheep Shearer, Doric's Quest, Imp Catcher,
+Witch's Potion, Rune Mysteries, The Restless Ghost, Druidic Ritual and Waterfall Quest.
+These resolvers follow upstream's stage tables and ordered conditions, using the client's
+OSRS varps/varbits, inventory, equipment, observed bank, dialogue and scene state.
+The sidebar labels the other **204 guides as manual step selection**. Select an upstream
+step to show its instructions, item checks and available target markers. Importing their
+text does not port their Java condition graphs, computed instructions or puzzle solvers.
+The source link for each guide points to the exact upstream revision for comparison.
 
-| Detailed guide | TSPS adaptation |
-| --- | --- |
-| Cook's Assistant | Requires all three ingredients together. Uses a real farm egg spawn at 3185,3297; the general store supplies the bucket and pot. Uses the mill ladder, hopper, controls and per-player flour state. |
-| Sheep Shearer | Tracks partial wool deliveries through saved stages 1–21 and subtracts wool already delivered. |
-| Doric's Quest | Uses TSPS stages 10/100 and checks unnoted ore quantities 6/4/2. |
-| Imp Catcher | Checks four separate bead IDs and the complete hand-in. |
-| Witch's Potion | Separates the ingredient hand-in from drinking the cauldron at stage 2. |
-| Rune Mysteries | Tracks all six stages; guides through the Wizards' Tower basement entrance. |
-| The Restless Ghost | Checks that the ghostspeak amulet is equipped. Uses the basement altar and supports reclaiming a lost skull. |
-| Druidic Ritual | Checks each enchanted meat, highlights only missing raw meats, and uses the dungeon entrance. |
-| Waterfall Quest | Uses TSPS's stages and simplified relic/puzzle interactions. Its known travel gaps are shown in the panel. |
+Quest status comes from the same cache script as RuneLite (`QUEST_STATUS_GET`, 4029).
+The helper has no server plugin, saved-stage translation, mill facts, journal fallback or
+`::questhelper` command. Unknown stages have no automatic step: there is no replacement
+walkthrough that conceals a quest-state mismatch. The helper never changes quest progress.
 
-The server supplies its own saved stage and completion status. The client never assumes that a
-RuneLite varp or varbit encodes the same stage. This avoids parent-varp bitfield collisions,
-custom completion values and the server's mapped cache varps. Only the selected quest's journal
-is evaluated each tick, and a compressed update is sent only when its snapshot changes.
-The helper does not set quest stages, consume items or grant rewards.
+Examples of upstream behavior retained:
 
-## What needs work for full RuneLite parity
+- Cook's Assistant gathers ingredients before starting, uses egg tile **3177,3296**, checks
+  `MILL_FLOUR`, and remembers partial hand-ins through the original dialogue messages.
+- Sheep Shearer uses OSRS varp 179 for remaining wool, picks up shears from Fred's house,
+  allows partial hand-ins, and handles a full inventory. Doric's stage 10 is also upstream.
+- Rune Mysteries checks package/notes varbits rather than treating the stage alone as sufficient.
+- The Restless Ghost checks the spawned ghost, open coffin and skull varbit. The Wizards'
+  Tower basement altar is upstream behavior, not a server workaround.
+- Waterfall includes the raft, rope crossings, barrel, bookcase, separate tomb relics,
+  equipped amulet, dungeon key, six pillars and **urn-on-chalice** interaction. It does not
+  bypass missing server interactions or replace this route with the simplified TSPS route.
 
-- **168 quests still need detailed guide ports.** Their current journal is live and usable,
-  but automatic item requirements, dialogue recommendations and target markers need explicit
-  mappings against the corresponding `server/plugins/quests/quests/*.Quest.js` handlers.
-  Copying the upstream stage table directly is unsafe because TSPS stages differ.
-- **Waterfall Quest needs server travel/content work:** raft/barrel/swimming access, dungeon
-  doors and rune-on-pillar placements are documented as missing in its existing quest file.
-  TSPS currently grants both relics at the tombstone, consumes both at the statue, then checks
-  six air/water/earth runes at the chalice. The helper follows that implementation, but cannot
-  supply a missing route. Complete those handlers before using the upstream route unchanged.
-- **Windmill item-use parity:** using grain on the hopper currently says "Nothing interesting
-  happens"; the hopper's **Fill** option works. The guide uses **Fill**. Add an item-on-object
-  handler delegating to the existing milling handler if the upstream item-use interaction is wanted.
-- **Instance markers need template-coordinate mapping.** Guidance continues inside instances,
-  but static world markers are suppressed to avoid highlighting an unrelated tile.
-- **RuneLite's puzzle solvers, bank checking, quest ordering, inventory/widget highlighting and
-  NPC/object model outlines are not ported.** This version provides live text, inventory/equipment
-  checks for the adapted steps, tile highlights and arrows. It does not automate gameplay.
-- **Not every quest has been played end to end.** Journal validation proves the read path and
-  registration, not that every quest's existing server interactions can be completed.
+Server quest bugs are deliberately left for separate gameplay fixes. Static world markers
+are still suppressed inside instances until template-coordinate mapping is implemented.
+Bank observations only cover the client's bank container; potion/group storage, inventory
+and widget highlighting, model outlines, quest ordering and puzzle overlays remain unported.
+Not every quest has been played end to end.
 
-The Cook's Assistant file contains an outdated comment saying eggs are sold at the general store;
-canonical `ground-items.json` and `shops.json` were checked instead. No egg-shop workaround or
-ladder gameplay change is needed.
+## Importing and memory
+
+From the repository root:
+
+```sh
+node client/scripts/import-quest-helper.mjs <pinned-quest-helper-checkout> <RuneLite-Quest.java>
+```
+
+The current import uses RuneLite `3bcd3ce4ddd3490394a9a3dec72b6aa3c4462e91`, matching
+the generated gameval identifiers. The importer refuses a different quest-helper revision.
+It writes the small catalog and separate JSON guide assets in `client/public/quest-helper/`.
+BSD notices are retained in `LICENSE-QuestHelper.txt` and the distributed `quest-helper/LICENSE.txt`.
+
+Only the selected JSON guide is fetched and retained. Switching, stopping, disabling or
+logging out releases it; stale fetch responses are ignored. Disabled plugins do not fetch
+guides or run quest checks. Guide assets are outside the initial JavaScript bundle.
+Asset byte sizes are not measurements of browser heap usage.
 
 ## Verification
 
@@ -66,19 +71,15 @@ ladder gameplay change is needed.
 - `yarn --cwd client test quest-helper hint-arrow-tile`
 - `yarn --cwd client build`
 - `yarn --cwd server build`
-- From `server/`: `node --test tests/quest-plugins.test.cjs tests/quest-command.test.cjs tests/quest-dialogue.test.cjs tests/quest-helper.test.cjs`
+- From `server/`: `node --test tests/quest-plugins.test.cjs tests/quest-command.test.cjs tests/quest-dialogue.test.cjs`
 
-The server tests cover all 177 journals at unstarted, started and completed stages, catalog
-membership, inventory-driven updates, unchanged-snapshot suppression and read-only tracking.
-Client checks cover all nine resolvers, partial wool deliveries, item quantities, equipped
-requirements, late responses, completion, logout, disable, malformed data and hint precedence.
+Client tests validate every catalog asset, parser edge cases, alternative items, OSRS
+conditional examples for all nine resolvers, unknown stages, CS2 completion, default-off
+behavior, manual selection, lazy loading, malformed data, stale responses, logout/disable
+cleanup and server hint precedence. The server quest suites have 190 passing tests.
 
-Live checks on this workspace's agent MCP and browser confirmed login, the sidebar catalog,
-selection and current-step overlay, picking up the farm egg and advancing the helper, and the
-mill ladder's floor 0→1→2 transitions. The grain/pot/bucket for milling were admin test fixtures;
-the egg was taken from the actual ground spawn. Hopper **Fill** and controls **Operate** were
-tested through real interaction handlers; grain-on-hopper was also tested and exposed the gap above.
-The flour bin's **Empty** and the cow's **Milk** actions produced the remaining ingredients;
-the Cook's real hand-in then completed the quest and removed the helper's target markers.
-The starting stage was set with the admin quest command, so this was a gathering/hand-in check,
-not a full walkthrough of the starting dialogue.
+Live checks used this worktree's browser client and agent MCP at port 49812. The plugin
+was visibly off before enabling; the catalog, Cook's raw-varp status and upstream egg tile,
+Dragon Slayer II manual selection, overlay and disable cleanup were checked. Inventory and
+starting stage were admin fixtures, not an end-to-end quest walkthrough. The removed
+`::questhelper` command was confirmed unavailable. Quest Helper was disabled again after testing.

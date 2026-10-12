@@ -1,11 +1,17 @@
 export type QuestSummary = { key: string; name: string; status: 0 | 1 | 2 };
-export type QuestSnapshot = QuestSummary & {
-    stage: number;
-    journal: string[];
-    facts: { flour?: number; hopper?: boolean };
+export type QuestCatalogEntry = {
+    key: string;
+    name: string;
+    type: string;
+    questId?: number;
+    varp?: number;
+    varbit?: number;
+    completeValue?: number;
+    source: string;
 };
+export type ImportedGuide = { source: string; steps: QuestStep[] };
 export type QuestTarget = { x: number; y: number; plane: number };
-export type ItemRequirement = { id: number; name: string; amount: number; equipped?: boolean };
+export type ItemRequirement = { id: number; name: string; amount: number; equipped?: boolean; alternates?: number[] };
 export type QuestStep = {
     text: string;
     target?: QuestTarget;
@@ -13,25 +19,30 @@ export type QuestStep = {
     choices?: string[];
 };
 export type QuestContext = {
-    quest: QuestSnapshot;
+    stage: number;
     count(id: number): number;
+    bankCount(id: number): number;
     equipped(id: number): boolean;
+    varbit(id: number): number;
+    seenDialog(text: string): boolean;
+    hasNpc(id: number): boolean;
+    hasObject(id: number, target: QuestTarget): boolean;
+    inventoryFull: boolean;
     position: QuestTarget;
 };
 export type QuestGuide = {
-    steps: string[];
-    note?: string;
+    stages: readonly number[];
+    steps: QuestStep[];
     resolve(context: QuestContext): QuestStep;
 };
 
-export function journalText(line: string): string {
-    return line.replace(/<br\s*\/?\s*>/gi, " ").replace(/<[^>]*>/g, "");
+export function requirementCount(requirement: ItemRequirement, context: QuestContext): number {
+    const ids = [requirement.id, ...(requirement.alternates ?? [])];
+    return requirement.equipped ? Number(ids.some((id) => context.equipped(id)))
+        : ids.reduce((total, id) => total + context.count(id), 0);
 }
 
-export function currentJournal(quest: QuestSnapshot): string {
-    return quest.journal.filter((line) => line.trim() && !line.includes("<str>")).map(journalText).join(" ");
-}
-
-export function requirementMet(requirement: ItemRequirement, context: QuestContext): boolean {
-    return requirement.equipped ? context.equipped(requirement.id) : context.count(requirement.id) >= requirement.amount;
+export function inZone(position: QuestTarget, x1: number, y1: number, x2: number, y2: number, plane = 0): boolean {
+    return position.plane === plane && position.x >= Math.min(x1, x2) && position.x <= Math.max(x1, x2) &&
+        position.y >= Math.min(y1, y2) && position.y <= Math.max(y1, y2);
 }

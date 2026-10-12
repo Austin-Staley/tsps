@@ -15,8 +15,6 @@
 .quest-helper-current { border-left: 3px solid cyan; padding: 8px; background: #252e30; }
 .quest-helper-met { color: #8edb93; }
 .quest-helper-missing { color: #ffb28e; }
-.quest-helper-note { color: #d8bc83; }
-.quest-helper-done { text-decoration: line-through; color: #999; }
 .quest-helper-panel details { margin-top: 12px; }
 .quest-helper-panel summary { cursor: pointer; }
 .quest-helper-overlay {

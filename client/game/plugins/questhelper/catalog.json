@@ -1,0 +1,1706 @@
+[
+  {
+    "key": "a_kingdom_divided",
+    "name": "A Kingdom Divided",
+    "type": "P2P",
+    "questId": 81,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/akingdomdivided/AKingdomDivided.java",
+    "varbit": 12296
+  },
+  {
+    "key": "a_night_at_the_theatre",
+    "name": "A Night at the Theatre",
+    "type": "P2P",
+    "questId": 104,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/anightatthetheatre/ANightAtTheTheatre.java",
+    "varbit": 12276
+  },
+  {
+    "key": "a_porcine_of_interest",
+    "name": "A Porcine of Interest",
+    "type": "P2P",
+    "questId": 110,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/aporcineofinterest/APorcineOfInterest.java",
+    "varbit": 10582
+  },
+  {
+    "key": "a_souls_bane",
+    "name": "A Soul's Bane",
+    "type": "P2P",
+    "questId": 138,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/asoulsbane/ASoulsBane.java",
+    "varbit": 2011
+  },
+  {
+    "key": "a_tail_of_two_cats",
+    "name": "A Tail of Two Cats",
+    "type": "P2P",
+    "questId": 142,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/atailoftwocats/ATailOfTwoCats.java",
+    "varbit": 1028
+  },
+  {
+    "key": "a_taste_of_hope",
+    "name": "A Taste of Hope",
+    "type": "P2P",
+    "questId": 144,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/atasteofhope/ATasteOfHope.java",
+    "varbit": 6396
+  },
+  {
+    "key": "alfred_grimhands_barcrawl",
+    "name": "Alfred Grimhand's Barcrawl",
+    "type": "MINIQUEST",
+    "questId": 4,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/alfredgrimhandsbarcrawl/AlfredGrimhandsBarcrawl.java",
+    "varp": 77
+  },
+  {
+    "key": "animal_magnetism",
+    "name": "Animal Magnetism",
+    "type": "P2P",
+    "questId": 0,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/animalmagnetism/AnimalMagnetism.java",
+    "varbit": 3185
+  },
+  {
+    "key": "another_slice_of_ham",
+    "name": "Another Slice of H.A.M.",
+    "type": "P2P",
+    "questId": 1,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/anothersliceofham/AnotherSliceOfHam.java",
+    "varbit": 3550
+  },
+  {
+    "key": "at_first_light",
+    "name": "At First Light",
+    "type": "P2P",
+    "questId": 3513,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/atfirstlight/AtFirstLight.java",
+    "varbit": 9835
+  },
+  {
+    "key": "balloon_transport_castle_wars",
+    "name": "Balloon Transport - Castle Wars",
+    "type": "MINIQUEST",
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/enlightenedjourney/CastleWarsBalloonFlight.java",
+    "varbit": 2869,
+    "completeValue": 1
+  },
+  {
+    "key": "balloon_transport_crafting_guild",
+    "name": "Balloon Transport - Crafting Guild",
+    "type": "MINIQUEST",
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/enlightenedjourney/CraftingGuildBalloonFlight.java",
+    "varbit": 2871,
+    "completeValue": 1
+  },
+  {
+    "key": "balloon_transport_grand_tree",
+    "name": "Balloon Transport - Grand Tree",
+    "type": "MINIQUEST",
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/enlightenedjourney/GrandTreeBalloonFlight.java",
+    "varbit": 2870,
+    "completeValue": 1
+  },
+  {
+    "key": "balloon_transport_varrock",
+    "name": "Balloon Transport - Varrock",
+    "type": "MINIQUEST",
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/enlightenedjourney/VarrockBalloonFlight.java",
+    "varbit": 2872,
+    "completeValue": 1
+  },
+  {
+    "key": "barbarian_training",
+    "name": "Barbarian Training",
+    "type": "MINIQUEST",
+    "questId": 3451,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/barbariantraining/BarbarianTraining.java",
+    "varbit": 9613
+  },
+  {
+    "key": "bear_your_soul",
+    "name": "Bear Your Soul",
+    "type": "MINIQUEST",
+    "questId": 5,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/bearyoursoul/BearYourSoul.java",
+    "varbit": 5078
+  },
+  {
+    "key": "below_ice_mountain",
+    "name": "Below Ice Mountain",
+    "type": "F2P",
+    "questId": 6,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/belowicemountain/BelowIceMountain.java",
+    "varbit": 12063
+  },
+  {
+    "key": "beneath_cursed_sands",
+    "name": "Beneath Cursed Sands",
+    "type": "P2P",
+    "questId": 168,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/beneathcursedsands/BeneathCursedSands.java",
+    "varbit": 13841
+  },
+  {
+    "key": "between_a_rock",
+    "name": "Between a Rock...",
+    "type": "P2P",
+    "questId": 7,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/betweenarock/BetweenARock.java",
+    "varbit": 299
+  },
+  {
+    "key": "big_chompy_bird_hunting",
+    "name": "Big Chompy Bird Hunting",
+    "type": "P2P",
+    "questId": 8,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/bigchompybirdhunting/BigChompyBirdHunting.java",
+    "varp": 293
+  },
+  {
+    "key": "biohazard",
+    "name": "Biohazard",
+    "type": "P2P",
+    "questId": 9,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/biohazard/Biohazard.java",
+    "varp": 68
+  },
+  {
+    "key": "black_knights_fortress",
+    "name": "Black Knights' Fortress",
+    "type": "F2P",
+    "questId": 10,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/blackknightfortress/BlackKnightFortress.java",
+    "varp": 130
+  },
+  {
+    "key": "bone_voyage",
+    "name": "Bone Voyage",
+    "type": "P2P",
+    "questId": 11,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/bonevoyage/BoneVoyage.java",
+    "varbit": 5795
+  },
+  {
+    "key": "cabin_fever",
+    "name": "Cabin Fever",
+    "type": "P2P",
+    "questId": 12,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/cabinfever/CabinFever.java",
+    "varp": 655
+  },
+  {
+    "key": "children_of_the_sun",
+    "name": "Children of the Sun",
+    "type": "P2P",
+    "questId": 3450,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/childrenofthesun/ChildrenOfTheSun.java",
+    "varbit": 9632
+  },
+  {
+    "key": "client_of_kourend",
+    "name": "Client of Kourend",
+    "type": "P2P",
+    "questId": 13,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/clientofkourend/ClientOfKourend.java",
+    "varbit": 5619
+  },
+  {
+    "key": "clock_tower",
+    "name": "Clock Tower",
+    "type": "P2P",
+    "questId": 14,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/clocktower/ClockTower.java",
+    "varp": 10
+  },
+  {
+    "key": "cold_war",
+    "name": "Cold War",
+    "type": "P2P",
+    "questId": 15,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/coldwar/ColdWar.java",
+    "varbit": 3293
+  },
+  {
+    "key": "contact",
+    "name": "Contact!",
+    "type": "P2P",
+    "questId": 16,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/contact/Contact.java",
+    "varbit": 3274
+  },
+  {
+    "key": "cooks_assistant",
+    "name": "Cook's Assistant",
+    "type": "F2P",
+    "questId": 17,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/cooksassistant/CooksAssistant.java",
+    "varp": 29
+  },
+  {
+    "key": "creature_of_fenkenstrain",
+    "name": "Creature of Fenkenstrain",
+    "type": "P2P",
+    "questId": 19,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/creatureoffenkenstrain/CreatureOfFenkenstrain.java",
+    "varp": 399
+  },
+  {
+    "key": "current_affairs",
+    "name": "Current Affairs",
+    "type": "P2P",
+    "questId": 7105,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/currentaffairs/CurrentAffairs.java",
+    "varbit": 18282
+  },
+  {
+    "key": "curse_of_the_empty_lord",
+    "name": "Curse of the Empty Lord",
+    "type": "MINIQUEST",
+    "questId": 20,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/curseoftheemptylord/CurseOfTheEmptyLord.java",
+    "varbit": 821
+  },
+  {
+    "key": "daddys_home",
+    "name": "Daddy's Home",
+    "type": "MINIQUEST",
+    "questId": 21,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/daddyshome/DaddysHome.java",
+    "varbit": 10570
+  },
+  {
+    "key": "darkness_of_hallowvale",
+    "name": "Darkness of Hallowvale",
+    "type": "P2P",
+    "questId": 22,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/darknessofhallowvale/DarknessOfHallowvale.java",
+    "varbit": 2573
+  },
+  {
+    "key": "death_on_the_isle",
+    "name": "Death on the Isle",
+    "type": "P2P",
+    "questId": 3711,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/deathontheisle/DeathOnTheIsle.java",
+    "varbit": 11210
+  },
+  {
+    "key": "death_plateau",
+    "name": "Death Plateau",
+    "type": "P2P",
+    "questId": 23,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/deathplateau/DeathPlateau.java",
+    "varp": 314
+  },
+  {
+    "key": "death_to_the_dorgeshuun",
+    "name": "Death to the Dorgeshuun",
+    "type": "P2P",
+    "questId": 24,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/deathtothedorgeshuun/DeathToTheDorgeshuun.java",
+    "varbit": 2258
+  },
+  {
+    "key": "defender_of_varrock",
+    "name": "Defender of Varrock",
+    "type": "P2P",
+    "questId": 3466,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/defenderofvarrock/DefenderOfVarrock.java",
+    "varbit": 9655
+  },
+  {
+    "key": "demon_slayer",
+    "name": "Demon Slayer",
+    "type": "F2P",
+    "questId": 25,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/demonslayer/DemonSlayer.java",
+    "varbit": 2561
+  },
+  {
+    "key": "desert_treasure",
+    "name": "Desert Treasure I",
+    "type": "P2P",
+    "questId": 27,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/deserttreasure/DesertTreasure.java",
+    "varbit": 358
+  },
+  {
+    "key": "desert_treasure_ii",
+    "name": "Desert Treasure II - The Fallen Empire",
+    "type": "P2P",
+    "questId": 2343,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/deserttreasureii/DesertTreasureII.java",
+    "varbit": 14862
+  },
+  {
+    "key": "devious_minds",
+    "name": "Devious Minds",
+    "type": "P2P",
+    "questId": 28,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/deviousminds/DeviousMinds.java",
+    "varbit": 1465
+  },
+  {
+    "key": "dorics_quest",
+    "name": "Doric's Quest",
+    "type": "F2P",
+    "questId": 30,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/doricsquest/DoricsQuest.java",
+    "varp": 31
+  },
+  {
+    "key": "dragon_slayer_i",
+    "name": "Dragon Slayer I",
+    "type": "F2P",
+    "questId": 31,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/dragonslayer/DragonSlayer.java",
+    "varp": 176
+  },
+  {
+    "key": "dragon_slayer_ii",
+    "name": "Dragon Slayer II",
+    "type": "P2P",
+    "questId": 32,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/dragonslayerii/DragonSlayerII.java",
+    "varbit": 6104
+  },
+  {
+    "key": "dream_mentor",
+    "name": "Dream Mentor",
+    "type": "P2P",
+    "questId": 33,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/dreammentor/DreamMentor.java",
+    "varbit": 3618
+  },
+  {
+    "key": "druidic_ritual",
+    "name": "Druidic Ritual",
+    "type": "P2P",
+    "questId": 34,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/druidicritual/DruidicRitual.java",
+    "varp": 80
+  },
+  {
+    "key": "dwarf_cannon",
+    "name": "Dwarf Cannon",
+    "type": "P2P",
+    "questId": 35,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/dwarfcannon/DwarfCannon.java",
+    "varp": 0
+  },
+  {
+    "key": "eadgars_ruse",
+    "name": "Eadgar's Ruse",
+    "type": "P2P",
+    "questId": 36,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/eadgarsruse/EadgarsRuse.java",
+    "varp": 335
+  },
+  {
+    "key": "eagles_peak",
+    "name": "Eagles' Peak",
+    "type": "P2P",
+    "questId": 37,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/eaglespeak/EaglesPeak.java",
+    "varbit": 2780
+  },
+  {
+    "key": "elemental_workshop_i",
+    "name": "Elemental Workshop I",
+    "type": "P2P",
+    "questId": 38,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/elementalworkshopi/ElementalWorkshopI.java",
+    "varp": 299
+  },
+  {
+    "key": "elemental_workshop_ii",
+    "name": "Elemental Workshop II",
+    "type": "P2P",
+    "questId": 39,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/elementalworkshopii/ElementalWorkshopII.java",
+    "varbit": 2639
+  },
+  {
+    "key": "enakhras_lament",
+    "name": "Enakhra's Lament",
+    "type": "P2P",
+    "questId": 40,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/enakhraslament/EnakhrasLament.java",
+    "varbit": 1560
+  },
+  {
+    "key": "enlightened_journey",
+    "name": "Enlightened Journey",
+    "type": "P2P",
+    "questId": 42,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/enlightenedjourney/EnlightenedJourney.java",
+    "varbit": 2866
+  },
+  {
+    "key": "enter_the_abyss",
+    "name": "Enter the Abyss",
+    "type": "MINIQUEST",
+    "questId": 43,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/entertheabyss/EnterTheAbyss.java",
+    "varp": 492
+  },
+  {
+    "key": "ernest_the_chicken",
+    "name": "Ernest the Chicken",
+    "type": "F2P",
+    "questId": 44,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/ernestthechicken/ErnestTheChicken.java",
+    "varp": 32
+  },
+  {
+    "key": "ethically_acquired_antiquities",
+    "name": "Ethically Acquired Antiquities",
+    "type": "P2P",
+    "questId": 3713,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/ethicallyacquiredantiquities/EthicallyAcquiredAntiquities.java",
+    "varbit": 11193
+  },
+  {
+    "key": "fairytale_i__growing_pains",
+    "name": "Fairytale I - Growing Pains",
+    "type": "P2P",
+    "questId": 46,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/fairytalei/FairytaleI.java",
+    "varbit": 1803
+  },
+  {
+    "key": "fairytale_ii__cure_a_queen",
+    "name": "Fairytale II - Cure a Queen",
+    "type": "P2P",
+    "questId": 47,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/fairytaleii/FairytaleII.java",
+    "varbit": 2326
+  },
+  {
+    "key": "fallen_from_grace",
+    "name": "Fallen From Grace",
+    "type": "P2P",
+    "questId": 7133,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/fallenfromgrace/FallenFromGrace.java",
+    "varbit": 15759
+  },
+  {
+    "key": "family_crest",
+    "name": "Family Crest",
+    "type": "P2P",
+    "questId": 48,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/familycrest/FamilyCrest.java",
+    "varp": 148
+  },
+  {
+    "key": "family_pest",
+    "name": "Family Pest",
+    "type": "MINIQUEST",
+    "questId": 49,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/familypest/FamilyPest.java",
+    "varbit": 5347
+  },
+  {
+    "key": "fight_arena",
+    "name": "Fight Arena",
+    "type": "P2P",
+    "questId": 51,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/fightarena/FightArena.java",
+    "varp": 17
+  },
+  {
+    "key": "fishing_contest",
+    "name": "Fishing Contest",
+    "type": "P2P",
+    "questId": 52,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/fishingcontest/FishingContest.java",
+    "varp": 11
+  },
+  {
+    "key": "forgettable_tale",
+    "name": "Forgettable Tale...",
+    "type": "P2P",
+    "questId": 53,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/forgettabletale/ForgettableTale.java",
+    "varbit": 822
+  },
+  {
+    "key": "garden_of_tranquillity",
+    "name": "Garden of Tranquillity",
+    "type": "P2P",
+    "questId": 58,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/gardenoftranquility/GardenOfTranquillity.java",
+    "varbit": 961
+  },
+  {
+    "key": "gertrudes_cat",
+    "name": "Gertrude's Cat",
+    "type": "P2P",
+    "questId": 60,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/gertrudescat/GertrudesCat.java",
+    "varp": 180
+  },
+  {
+    "key": "getting_ahead",
+    "name": "Getting Ahead",
+    "type": "P2P",
+    "questId": 61,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/gettingahead/GettingAhead.java",
+    "varbit": 693
+  },
+  {
+    "key": "ghosts_ahoy",
+    "name": "Ghosts Ahoy",
+    "type": "P2P",
+    "questId": 62,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/ghostsahoy/GhostsAhoy.java",
+    "varbit": 217
+  },
+  {
+    "key": "goblin_diplomacy",
+    "name": "Goblin Diplomacy",
+    "type": "F2P",
+    "questId": 64,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/goblindiplomacy/GoblinDiplomacy.java",
+    "varbit": 2378
+  },
+  {
+    "key": "grim_tales",
+    "name": "Grim Tales",
+    "type": "P2P",
+    "questId": 68,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/grimtales/GrimTales.java",
+    "varbit": 2783
+  },
+  {
+    "key": "haunted_mine",
+    "name": "Haunted Mine",
+    "type": "P2P",
+    "questId": 70,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/hauntedmine/HauntedMine.java",
+    "varp": 382
+  },
+  {
+    "key": "hazeel_cult",
+    "name": "Hazeel Cult",
+    "type": "P2P",
+    "questId": 71,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/hazeelcult/HazeelCult.java",
+    "varp": 223
+  },
+  {
+    "key": "heroes_quest",
+    "name": "Heroes' Quest",
+    "type": "P2P",
+    "questId": 72,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/heroesquest/HeroesQuest.java",
+    "varp": 188
+  },
+  {
+    "key": "his_faithful_servants",
+    "name": "His Faithful Servants",
+    "type": "MINIQUEST",
+    "questId": 3250,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/hisfaithfulservants/HisFaithfulServants.java",
+    "varbit": 14973
+  },
+  {
+    "key": "holy_grail",
+    "name": "Holy Grail",
+    "type": "P2P",
+    "questId": 73,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/holygrail/HolyGrail.java",
+    "varp": 5
+  },
+  {
+    "key": "hopespears_will",
+    "name": "Hopespear's Will",
+    "type": "MINIQUEST",
+    "questId": 166,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/hopespearswill/HopespearsWill.java",
+    "varbit": 13619
+  },
+  {
+    "key": "horror_from_the_deep",
+    "name": "Horror from the Deep",
+    "type": "P2P",
+    "questId": 74,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/horrorfromthedeep/HorrorFromTheDeep.java",
+    "varbit": 34
+  },
+  {
+    "key": "icthlarins_little_helper",
+    "name": "Icthlarin's Little Helper",
+    "type": "P2P",
+    "questId": 75,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/icthlarinslittlehelper/IcthlarinsLittleHelper.java",
+    "varbit": 418
+  },
+  {
+    "key": "imp_catcher",
+    "name": "Imp Catcher",
+    "type": "F2P",
+    "questId": 76,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/impcatcher/ImpCatcher.java",
+    "varp": 160
+  },
+  {
+    "key": "in_aid_of_the_myreque",
+    "name": "In Aid of the Myreque",
+    "type": "P2P",
+    "questId": 77,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/inaidofthemyreque/InAidOfTheMyreque.java",
+    "varbit": 1990
+  },
+  {
+    "key": "in_search_of_knowledge",
+    "name": "In Search of Knowledge",
+    "type": "MINIQUEST",
+    "questId": 78,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/insearchofknowledge/InSearchOfKnowledge.java",
+    "varbit": 8403
+  },
+  {
+    "key": "in_search_of_the_myreque",
+    "name": "In Search of the Myreque",
+    "type": "P2P",
+    "questId": 79,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/insearchofthemyreque/InSearchOfTheMyreque.java",
+    "varp": 387
+  },
+  {
+    "key": "jungle_potion",
+    "name": "Jungle Potion",
+    "type": "P2P",
+    "questId": 80,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/junglepotion/JunglePotion.java",
+    "varp": 175
+  },
+  {
+    "key": "kings_ransom",
+    "name": "King's Ransom",
+    "type": "P2P",
+    "questId": 82,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/kingsransom/KingsRansom.java",
+    "varbit": 3888
+  },
+  {
+    "key": "knight_waves_training_grounds",
+    "name": "Knight Waves Training Grounds",
+    "type": "MINIQUEST",
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/mischelpers/knightswaves/KnightWaves.java",
+    "varbit": 3909,
+    "completeValue": 8
+  },
+  {
+    "key": "lair_of_tarn_razorlor",
+    "name": "Lair of Tarn Razorlor",
+    "type": "MINIQUEST",
+    "questId": 84,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/lairoftarnrazorlor/LairOfTarnRazorlor.java",
+    "varbit": 3290
+  },
+  {
+    "key": "land_of_the_goblins",
+    "name": "Land of the Goblins",
+    "type": "P2P",
+    "questId": 165,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/landofthegoblins/LandOfTheGoblins.java",
+    "varbit": 13599
+  },
+  {
+    "key": "legends_quest",
+    "name": "Legends' Quest",
+    "type": "P2P",
+    "questId": 85,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/legendsquest/LegendsQuest.java",
+    "varp": 139
+  },
+  {
+    "key": "lost_city",
+    "name": "Lost City",
+    "type": "P2P",
+    "questId": 86,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/lostcity/LostCity.java",
+    "varp": 147
+  },
+  {
+    "key": "lunar_diplomacy",
+    "name": "Lunar Diplomacy",
+    "type": "P2P",
+    "questId": 88,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/lunardiplomacy/LunarDiplomacy.java",
+    "varbit": 2448
+  },
+  {
+    "key": "the_mage_arena",
+    "name": "Mage Arena I",
+    "type": "MINIQUEST",
+    "questId": 89,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/themagearenai/TheMageArenaI.java",
+    "varp": 267
+  },
+  {
+    "key": "the_mage_arena_ii",
+    "name": "Mage Arena II",
+    "type": "MINIQUEST",
+    "questId": 90,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/themagearenaii/TheMageArenaII.java",
+    "varbit": 6067
+  },
+  {
+    "key": "making_friends_with_my_arm",
+    "name": "Making Friends with My Arm",
+    "type": "P2P",
+    "questId": 91,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/makingfriendswithmyarm/MakingFriendsWithMyArm.java",
+    "varbit": 6528
+  },
+  {
+    "key": "making_history",
+    "name": "Making History",
+    "type": "P2P",
+    "questId": 92,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/makinghistory/MakingHistory.java",
+    "varbit": 1383
+  },
+  {
+    "key": "meat_and_greet",
+    "name": "Meat and Greet",
+    "type": "P2P",
+    "questId": 3712,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/meatandgreet/MeatAndGreet.java",
+    "varbit": 11182
+  },
+  {
+    "key": "merlins_crystal",
+    "name": "Merlin's Crystal",
+    "type": "P2P",
+    "questId": 93,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/merlinscrystal/MerlinsCrystal.java",
+    "varp": 14
+  },
+  {
+    "key": "misthalin_mystery",
+    "name": "Misthalin Mystery",
+    "type": "F2P",
+    "questId": 94,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/misthalinmystery/MisthalinMystery.java",
+    "varbit": 3468
+  },
+  {
+    "key": "monks_friend",
+    "name": "Monk's Friend",
+    "type": "P2P",
+    "questId": 97,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/monksfriend/MonksFriend.java",
+    "varp": 30
+  },
+  {
+    "key": "monkey_madness_i",
+    "name": "Monkey Madness I",
+    "type": "P2P",
+    "questId": 95,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/monkeymadnessi/MonkeyMadnessI.java",
+    "varp": 365
+  },
+  {
+    "key": "monkey_madness_ii",
+    "name": "Monkey Madness II",
+    "type": "P2P",
+    "questId": 96,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/monkeymadnessii/MonkeyMadnessII.java",
+    "varbit": 5027
+  },
+  {
+    "key": "mountain_daughter",
+    "name": "Mountain Daughter",
+    "type": "P2P",
+    "questId": 98,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/mountaindaughter/MountainDaughter.java",
+    "varbit": 260
+  },
+  {
+    "key": "mournings_end_part_i",
+    "name": "Mourning's End Part I",
+    "type": "P2P",
+    "questId": 99,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/mourningsendparti/MourningsEndPartI.java",
+    "varp": 517
+  },
+  {
+    "key": "mournings_end_part_ii",
+    "name": "Mourning's End Part II",
+    "type": "P2P",
+    "questId": 100,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/mourningsendpartii/MourningsEndPartII.java",
+    "varbit": 1103
+  },
+  {
+    "key": "murder_mystery",
+    "name": "Murder Mystery",
+    "type": "P2P",
+    "questId": 101,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/murdermystery/MurderMystery.java",
+    "varp": 192
+  },
+  {
+    "key": "my_arms_big_adventure",
+    "name": "My Arm's Big Adventure",
+    "type": "P2P",
+    "questId": 102,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/myarmsbigadventure/MyArmsBigAdventure.java",
+    "varbit": 2790
+  },
+  {
+    "key": "nature_spirit",
+    "name": "Nature Spirit",
+    "type": "P2P",
+    "questId": 103,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/naturespirit/NatureSpirit.java",
+    "varp": 307
+  },
+  {
+    "key": "observatory_quest",
+    "name": "Observatory Quest",
+    "type": "P2P",
+    "questId": 105,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/observatoryquest/ObservatoryQuest.java",
+    "varp": 112
+  },
+  {
+    "key": "olafs_quest",
+    "name": "Olaf's Quest",
+    "type": "P2P",
+    "questId": 106,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/olafsquest/OlafsQuest.java",
+    "varbit": 3534
+  },
+  {
+    "key": "one_small_favour",
+    "name": "One Small Favour",
+    "type": "P2P",
+    "questId": 107,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/onesmallfavour/OneSmallFavour.java",
+    "varp": 416
+  },
+  {
+    "key": "pandemonium",
+    "name": "Pandemonium",
+    "type": "P2P",
+    "questId": 7103,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/pandemonium/Pandemonium.java",
+    "varbit": 18314
+  },
+  {
+    "key": "perilous_moon",
+    "name": "Perilous Moons",
+    "type": "P2P",
+    "questId": 3514,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/perilousmoon/PerilousMoon.java",
+    "varbit": 9819
+  },
+  {
+    "key": "pirates_treasure",
+    "name": "Pirate's Treasure",
+    "type": "F2P",
+    "questId": 108,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/piratestreasure/PiratesTreasure.java",
+    "varp": 71
+  },
+  {
+    "key": "plague_city",
+    "name": "Plague City",
+    "type": "P2P",
+    "questId": 109,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/plaguecity/PlagueCity.java",
+    "varp": 165
+  },
+  {
+    "key": "priest_in_peril",
+    "name": "Priest in Peril",
+    "type": "P2P",
+    "questId": 111,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/priestinperil/PriestInPeril.java",
+    "varp": 302
+  },
+  {
+    "key": "prince_ali_rescue",
+    "name": "Prince Ali Rescue",
+    "type": "F2P",
+    "questId": 112,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/princealirescue/PrinceAliRescue.java",
+    "varp": 273
+  },
+  {
+    "key": "prying_times",
+    "name": "Prying Times",
+    "type": "P2P",
+    "questId": 7104,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/pryingtimes/PryingTimes.java",
+    "varbit": 18317
+  },
+  {
+    "key": "rag_and_bone_man_i",
+    "name": "Rag and Bone Man I",
+    "type": "P2P",
+    "questId": 114,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/ragandboneman/RagAndBoneManI.java",
+    "varp": 714
+  },
+  {
+    "key": "rag_and_bone_man_ii",
+    "name": "Rag and Bone Man II",
+    "type": "P2P",
+    "questId": 115,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/ragandboneman/RagAndBoneManII.java",
+    "varp": 714
+  },
+  {
+    "key": "ratcatchers",
+    "name": "Ratcatchers",
+    "type": "P2P",
+    "questId": 116,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/ratcatchers/RatCatchers.java",
+    "varbit": 1404
+  },
+  {
+    "key": "recruitment_drive",
+    "name": "Recruitment Drive",
+    "type": "P2P",
+    "questId": 118,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recruitmentdrive/RecruitmentDrive.java",
+    "varbit": 657
+  },
+  {
+    "key": "regicide",
+    "name": "Regicide",
+    "type": "P2P",
+    "questId": 119,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/regicide/Regicide.java",
+    "varp": 328
+  },
+  {
+    "key": "recipe_for_disaster_evil_dave",
+    "name": "RFD - Evil Dave",
+    "type": "P2P",
+    "questId": 117,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDEvilDave.java",
+    "varbit": 1878
+  },
+  {
+    "key": "recipe_for_disaster_finale",
+    "name": "RFD - Finale",
+    "type": "P2P",
+    "questId": 117,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDFinal.java",
+    "varbit": 1850
+  },
+  {
+    "key": "recipe_for_disaster_monkey_ambassador",
+    "name": "RFD - King Awowogei",
+    "type": "P2P",
+    "questId": 117,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDAwowogei.java",
+    "varbit": 1914
+  },
+  {
+    "key": "recipe_for_disaster_lumbridge_guide",
+    "name": "RFD - Lumbridge Guide",
+    "type": "P2P",
+    "questId": 117,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDLumbridgeGuide.java",
+    "varbit": 1896
+  },
+  {
+    "key": "recipe_for_disaster_dwarf",
+    "name": "RFD - Mountain Dwarf",
+    "type": "P2P",
+    "questId": 117,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDDwarf.java",
+    "varbit": 1892
+  },
+  {
+    "key": "recipe_for_disaster_pirate_pete",
+    "name": "RFD - Pirate Pete",
+    "type": "P2P",
+    "questId": 117,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDPiratePete.java",
+    "varbit": 1895
+  },
+  {
+    "key": "recipe_for_disaster_sir_amik_varze",
+    "name": "RFD - Sir Amik Varze",
+    "type": "P2P",
+    "questId": 117,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDSirAmikVarze.java",
+    "varbit": 1910
+  },
+  {
+    "key": "recipe_for_disaster_skrach_uglogwee",
+    "name": "RFD - Skrach Uglogwee",
+    "type": "P2P",
+    "questId": 117,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDSkrachUglogwee.java",
+    "varbit": 1904
+  },
+  {
+    "key": "recipe_for_disaster_start",
+    "name": "RFD - Start",
+    "type": "P2P",
+    "questId": 117,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDStart.java",
+    "varbit": 1850
+  },
+  {
+    "key": "recipe_for_disaster_wartface_and_bentnoze",
+    "name": "RFD - Wartface & Bentnoze",
+    "type": "P2P",
+    "questId": 117,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDGoblins.java",
+    "varbit": 1867
+  },
+  {
+    "key": "romeo__juliet",
+    "name": "Romeo & Juliet",
+    "type": "F2P",
+    "questId": 121,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/romeoandjuliet/RomeoAndJuliet.java",
+    "varp": 144
+  },
+  {
+    "key": "roving_elves",
+    "name": "Roving Elves",
+    "type": "P2P",
+    "questId": 122,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/rovingelves/RovingElves.java",
+    "varp": 402
+  },
+  {
+    "key": "royal_trouble",
+    "name": "Royal Trouble",
+    "type": "P2P",
+    "questId": 123,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/royaltrouble/RoyalTrouble.java",
+    "varbit": 2140
+  },
+  {
+    "key": "rum_deal",
+    "name": "Rum Deal",
+    "type": "P2P",
+    "questId": 124,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/rumdeal/RumDeal.java",
+    "varp": 600
+  },
+  {
+    "key": "rune_mysteries",
+    "name": "Rune Mysteries",
+    "type": "F2P",
+    "questId": 125,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/runemysteries/RuneMysteries.java",
+    "varp": 63
+  },
+  {
+    "key": "scorpion_catcher",
+    "name": "Scorpion Catcher",
+    "type": "P2P",
+    "questId": 126,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/scorpioncatcher/ScorpionCatcher.java",
+    "varp": 76
+  },
+  {
+    "key": "scrambled",
+    "name": "Scrambled!",
+    "type": "P2P",
+    "questId": 5191,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/scrambled/Scrambled.java",
+    "varbit": 16758
+  },
+  {
+    "key": "sea_slug",
+    "name": "Sea Slug",
+    "type": "P2P",
+    "questId": 127,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/seaslug/SeaSlug.java",
+    "varp": 159
+  },
+  {
+    "key": "secrets_of_the_north",
+    "name": "Secrets of the North",
+    "type": "P2P",
+    "questId": 2338,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/secretsofthenorth/SecretsOfTheNorth.java",
+    "varbit": 14722
+  },
+  {
+    "key": "shades_of_mortton",
+    "name": "Shades of Mort'ton",
+    "type": "P2P",
+    "questId": 128,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/shadesofmortton/ShadesOfMortton.java",
+    "varp": 339
+  },
+  {
+    "key": "shadow_of_the_storm",
+    "name": "Shadow of the Storm",
+    "type": "P2P",
+    "questId": 129,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/shadowofthestorm/ShadowOfTheStorm.java",
+    "varbit": 1372
+  },
+  {
+    "key": "shadows_of_custodia",
+    "name": "Shadows of Custodia",
+    "type": "P2P",
+    "questId": 5190,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/shadowsofcustodia/ShadowsOfCustodia.java",
+    "varbit": 16632
+  },
+  {
+    "key": "sheep_herder",
+    "name": "Sheep Herder",
+    "type": "P2P",
+    "questId": 130,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/sheepherder/SheepHerder.java",
+    "varp": 60
+  },
+  {
+    "key": "sheep_shearer",
+    "name": "Sheep Shearer",
+    "type": "F2P",
+    "questId": 131,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/sheepshearer/SheepShearer.java",
+    "varp": 179
+  },
+  {
+    "key": "shield_of_arrav_black_arm_gang",
+    "name": "Shield of Arrav - Black Arm Gang",
+    "type": "F2P",
+    "questId": 132,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/shieldofarrav/ShieldOfArravBlackArmGang.java",
+    "varp": 146
+  },
+  {
+    "key": "shield_of_arrav_phoenix_gang",
+    "name": "Shield of Arrav - Phoenix Gang",
+    "type": "F2P",
+    "questId": 132,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/shieldofarrav/ShieldOfArravPhoenixGang.java",
+    "varp": 145
+  },
+  {
+    "key": "shilo_village",
+    "name": "Shilo Village",
+    "type": "P2P",
+    "questId": 133,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/shilovillage/ShiloVillage.java",
+    "varp": 116
+  },
+  {
+    "key": "sins_of_the_father",
+    "name": "Sins of the Father",
+    "type": "P2P",
+    "questId": 134,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/sinsofthefather/SinsOfTheFather.java",
+    "varbit": 7255
+  },
+  {
+    "key": "skippy_and_the_mogres",
+    "name": "Skippy and the Mogres",
+    "type": "MINIQUEST",
+    "questId": 135,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/skippyandthemogres/SkippyAndTheMogres.java",
+    "varbit": 1344
+  },
+  {
+    "key": "sleeping_giants",
+    "name": "Sleeping Giants",
+    "type": "P2P",
+    "questId": 169,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/sleepinggiants/SleepingGiants.java",
+    "varbit": 13902
+  },
+  {
+    "key": "song_of_the_elves",
+    "name": "Song of the Elves",
+    "type": "P2P",
+    "questId": 137,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/songoftheelves/SongOfTheElves.java",
+    "varbit": 9016
+  },
+  {
+    "key": "spirits_of_the_elid",
+    "name": "Spirits of the Elid",
+    "type": "P2P",
+    "questId": 139,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/spiritsoftheelid/SpiritsOfTheElid.java",
+    "varbit": 1444
+  },
+  {
+    "key": "swan_song",
+    "name": "Swan Song",
+    "type": "P2P",
+    "questId": 140,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/swansong/SwanSong.java",
+    "varbit": 2098
+  },
+  {
+    "key": "tai_bwo_wannai_trio",
+    "name": "Tai Bwo Wannai Trio",
+    "type": "P2P",
+    "questId": 141,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/taibwowannaitrio/TaiBwoWannaiTrio.java",
+    "varp": 320
+  },
+  {
+    "key": "tale_of_the_righteous",
+    "name": "Tale of the Righteous",
+    "type": "P2P",
+    "questId": 143,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/taleoftherighteous/TaleOfTheRighteous.java",
+    "varbit": 6358
+  },
+  {
+    "key": "tears_of_guthix",
+    "name": "Tears of Guthix",
+    "type": "P2P",
+    "questId": 145,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/tearsofguthix/TearsOfGuthix.java",
+    "varbit": 451
+  },
+  {
+    "key": "temple_of_ikov",
+    "name": "Temple of Ikov",
+    "type": "P2P",
+    "questId": 146,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/templeofikov/TempleOfIkov.java",
+    "varp": 26
+  },
+  {
+    "key": "temple_of_the_eye",
+    "name": "Temple of the Eye",
+    "type": "P2P",
+    "questId": 167,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/templeoftheeye/TempleOfTheEye.java",
+    "varbit": 13738
+  },
+  {
+    "key": "the_ascent_of_arceuus",
+    "name": "The Ascent of Arceuus",
+    "type": "P2P",
+    "questId": 3,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theascentofarceuus/TheAscentOfArceuus.java",
+    "varbit": 7856
+  },
+  {
+    "key": "the_blood_moon_rises",
+    "name": "The Blood Moon Rises",
+    "type": "P2P",
+    "questId": 16414,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thebloodmoonrises/TheBloodMoonRises.java",
+    "varbit": 15464
+  },
+  {
+    "key": "the_corsair_curse",
+    "name": "The Corsair Curse",
+    "type": "F2P",
+    "questId": 18,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thecorsaircurse/TheCorsairCurse.java",
+    "varbit": 6071
+  },
+  {
+    "key": "the_curse_of_arrav",
+    "name": "The Curse of Arrav",
+    "type": "P2P",
+    "questId": 3937,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thecurseofarrav/TheCurseOfArrav.java",
+    "varbit": 11479
+  },
+  {
+    "key": "the_depths_of_despair",
+    "name": "The Depths of Despair",
+    "type": "P2P",
+    "questId": 26,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thedepthsofdespair/TheDepthsOfDespair.java",
+    "varbit": 6027
+  },
+  {
+    "key": "the_dig_site",
+    "name": "The Dig Site",
+    "type": "P2P",
+    "questId": 29,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thedigsite/TheDigSite.java",
+    "varp": 131
+  },
+  {
+    "key": "enchanted_key",
+    "name": "The Enchanted Key",
+    "type": "MINIQUEST",
+    "questId": 41,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/enchantedkey/EnchantedKey.java",
+    "varbit": 1391
+  },
+  {
+    "key": "the_eyes_of_glouphrie",
+    "name": "The Eyes of Glouphrie",
+    "type": "P2P",
+    "questId": 45,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theeyesofglouphrie/TheEyesOfGlouphrie.java",
+    "varbit": 2497
+  },
+  {
+    "key": "the_feud",
+    "name": "The Feud",
+    "type": "P2P",
+    "questId": 50,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thefeud/TheFeud.java",
+    "varbit": 334
+  },
+  {
+    "key": "the_final_dawn",
+    "name": "The Final Dawn",
+    "type": "P2P",
+    "questId": 5189,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thefinaldawn/TheFinalDawn.java",
+    "varbit": 16663
+  },
+  {
+    "key": "the_forsaken_tower",
+    "name": "The Forsaken Tower",
+    "type": "P2P",
+    "questId": 54,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theforsakentower/TheForsakenTower.java",
+    "varbit": 7796
+  },
+  {
+    "key": "the_fremennik_exiles",
+    "name": "The Fremennik Exiles",
+    "type": "P2P",
+    "questId": 55,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thefremennikexiles/TheFremennikExiles.java",
+    "varbit": 9459
+  },
+  {
+    "key": "the_fremennik_isles",
+    "name": "The Fremennik Isles",
+    "type": "P2P",
+    "questId": 56,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thefremennikisles/TheFremennikIsles.java",
+    "varbit": 3311
+  },
+  {
+    "key": "the_fremennik_trials",
+    "name": "The Fremennik Trials",
+    "type": "P2P",
+    "questId": 57,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thefremenniktrials/TheFremennikTrials.java",
+    "varp": 347
+  },
+  {
+    "key": "the_garden_of_death",
+    "name": "The Garden of Death",
+    "type": "P2P",
+    "questId": 180,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thegardenofdeath/TheGardenOfDeath.java",
+    "varbit": 14609
+  },
+  {
+    "key": "the_generals_shadow",
+    "name": "The General's Shadow",
+    "type": "MINIQUEST",
+    "questId": 59,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/thegeneralsshadow/TheGeneralsShadow.java",
+    "varbit": 3330
+  },
+  {
+    "key": "the_giant_dwarf",
+    "name": "The Giant Dwarf",
+    "type": "P2P",
+    "questId": 63,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thegiantdwarf/TheGiantDwarf.java",
+    "varbit": 571
+  },
+  {
+    "key": "the_golem",
+    "name": "The Golem",
+    "type": "P2P",
+    "questId": 65,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thegolem/TheGolem.java",
+    "varbit": 346
+  },
+  {
+    "key": "the_grand_tree",
+    "name": "The Grand Tree",
+    "type": "P2P",
+    "questId": 66,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thegrandtree/TheGrandTree.java",
+    "varp": 150
+  },
+  {
+    "key": "the_great_brain_robbery",
+    "name": "The Great Brain Robbery",
+    "type": "P2P",
+    "questId": 67,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thegreatbrainrobbery/TheGreatBrainRobbery.java",
+    "varp": 980
+  },
+  {
+    "key": "the_hand_in_the_sand",
+    "name": "The Hand in the Sand",
+    "type": "P2P",
+    "questId": 69,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thehandinthesand/TheHandInTheSand.java",
+    "varbit": 1527
+  },
+  {
+    "key": "the_heart_of_darkness",
+    "name": "The Heart of Darkness",
+    "type": "P2P",
+    "questId": 3710,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theheartofdarkness/TheHeartOfDarkness.java",
+    "varbit": 11117
+  },
+  {
+    "key": "the_ides_of_milk",
+    "name": "The Ides of Milk",
+    "type": "F2P",
+    "questId": 9645,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theidesofmilk/TheIdesOfMilk.java",
+    "varbit": 20106
+  },
+  {
+    "key": "the_knights_sword",
+    "name": "The Knight's Sword",
+    "type": "F2P",
+    "questId": 83,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theknightssword/TheKnightsSword.java",
+    "varp": 122
+  },
+  {
+    "key": "the_lost_tribe",
+    "name": "The Lost Tribe",
+    "type": "P2P",
+    "questId": 87,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thelosttribe/TheLostTribe.java",
+    "varbit": 532
+  },
+  {
+    "key": "the_path_of_glouphrie",
+    "name": "The Path of Glouphrie",
+    "type": "P2P",
+    "questId": 3425,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thepathofglouphrie/ThePathOfGlouphrie.java",
+    "varbit": 15288
+  },
+  {
+    "key": "the_queen_of_thieves",
+    "name": "The Queen of Thieves",
+    "type": "P2P",
+    "questId": 113,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thequeenofthieves/TheQueenOfThieves.java",
+    "varbit": 6037
+  },
+  {
+    "key": "the_red_reef",
+    "name": "The Red Reef",
+    "type": "P2P",
+    "questId": 7107,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theredreef/TheRedReef.java",
+    "varbit": 18335
+  },
+  {
+    "key": "the_restless_ghost",
+    "name": "The Restless Ghost",
+    "type": "F2P",
+    "questId": 120,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/therestlessghost/TheRestlessGhost.java",
+    "varp": 107
+  },
+  {
+    "key": "the_ribbiting_tale_of_a_lily_pad_labour_dispute",
+    "name": "The Ribbiting Tale of a Lily Pad Labour Dispute",
+    "type": "P2P",
+    "questId": 3515,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theribbitingtaleofalilypadlabourdispute/TheRibbitingTaleOfALilyPadLabourDispute.java",
+    "varbit": 9844
+  },
+  {
+    "key": "the_slug_menace",
+    "name": "The Slug Menace",
+    "type": "P2P",
+    "questId": 136,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theslugmenace/TheSlugMenace.java",
+    "varbit": 2610
+  },
+  {
+    "key": "the_tourist_trap",
+    "name": "The Tourist Trap",
+    "type": "P2P",
+    "questId": 148,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thetouristtrap/TheTouristTrap.java",
+    "varp": 197
+  },
+  {
+    "key": "throne_of_miscellania",
+    "name": "Throne of Miscellania",
+    "type": "P2P",
+    "questId": 147,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/throneofmiscellania/ThroneOfMiscellania.java",
+    "varp": 359
+  },
+  {
+    "key": "tower_of_life",
+    "name": "Tower of Life",
+    "type": "P2P",
+    "questId": 149,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/toweroflife/TowerOfLife.java",
+    "varbit": 3337
+  },
+  {
+    "key": "tree_gnome_village",
+    "name": "Tree Gnome Village",
+    "type": "P2P",
+    "questId": 150,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/treegnomevillage/TreeGnomeVillage.java",
+    "varp": 111
+  },
+  {
+    "key": "tribal_totem",
+    "name": "Tribal Totem",
+    "type": "P2P",
+    "questId": 151,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/tribaltotem/TribalTotem.java",
+    "varp": 200
+  },
+  {
+    "key": "troll_romance",
+    "name": "Troll Romance",
+    "type": "P2P",
+    "questId": 152,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/trollromance/TrollRomance.java",
+    "varp": 385
+  },
+  {
+    "key": "troll_stronghold",
+    "name": "Troll Stronghold",
+    "type": "P2P",
+    "questId": 153,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/trollstronghold/TrollStronghold.java",
+    "varp": 317
+  },
+  {
+    "key": "troubled_tortugans",
+    "name": "Troubled Tortugans",
+    "type": "P2P",
+    "questId": 7106,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/troubledtortugans/TroubledTortugans.java",
+    "varbit": 18321
+  },
+  {
+    "key": "twilights_promise",
+    "name": "Twilight's Promise",
+    "type": "P2P",
+    "questId": 3512,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/twilightspromise/TwilightsPromise.java",
+    "varbit": 9649
+  },
+  {
+    "key": "underground_pass",
+    "name": "Underground Pass",
+    "type": "P2P",
+    "questId": 154,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/undergroundpass/UndergroundPass.java",
+    "varp": 161
+  },
+  {
+    "key": "vale_totems",
+    "name": "Vale Totems",
+    "type": "MINIQUEST",
+    "questId": 5194,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/valetotems/ValeTotems.java",
+    "varbit": 17227
+  },
+  {
+    "key": "vampyre_slayer",
+    "name": "Vampyre Slayer",
+    "type": "F2P",
+    "questId": 155,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/vampyreslayer/VampyreSlayer.java",
+    "varp": 178
+  },
+  {
+    "key": "wanted",
+    "name": "Wanted!",
+    "type": "P2P",
+    "questId": 156,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/wanted/Wanted.java",
+    "varbit": 1051
+  },
+  {
+    "key": "watchtower",
+    "name": "Watchtower",
+    "type": "P2P",
+    "questId": 157,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/watchtower/Watchtower.java",
+    "varp": 212
+  },
+  {
+    "key": "waterfall_quest",
+    "name": "Waterfall Quest",
+    "type": "P2P",
+    "questId": 158,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/waterfallquest/WaterfallQuest.java",
+    "varp": 65
+  },
+  {
+    "key": "what_lies_below",
+    "name": "What Lies Below",
+    "type": "P2P",
+    "questId": 159,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/whatliesbelow/WhatLiesBelow.java",
+    "varbit": 3523
+  },
+  {
+    "key": "while_guthix_sleeps",
+    "name": "While Guthix Sleeps",
+    "type": "P2P",
+    "questId": 3467,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/whileguthixsleeps/WhileGuthixSleeps.java",
+    "varbit": 9653
+  },
+  {
+    "key": "witchs_house",
+    "name": "Witch's House",
+    "type": "P2P",
+    "questId": 160,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/witchshouse/WitchsHouse.java",
+    "varp": 226
+  },
+  {
+    "key": "witchs_potion",
+    "name": "Witch's Potion",
+    "type": "F2P",
+    "questId": 161,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/witchspotion/WitchsPotion.java",
+    "varp": 67
+  },
+  {
+    "key": "x_marks_the_spot",
+    "name": "X Marks the Spot",
+    "type": "F2P",
+    "questId": 162,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/xmarksthespot/XMarksTheSpot.java",
+    "varbit": 8063
+  },
+  {
+    "key": "zogre_flesh_eaters",
+    "name": "Zogre Flesh Eaters",
+    "type": "P2P",
+    "questId": 163,
+    "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/zogreflesheaters/ZogreFleshEaters.java",
+    "varbit": 487
+  }
+]
