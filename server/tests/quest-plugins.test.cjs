@@ -369,6 +369,12 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
   assert.equal(climbFloatingBooks(bookCrossing), true);
   assert.equal(bookCrossing.handled, true);
   assert.deepEqual(player.destination, [2606, 6173, 2]);
+  const returnCrossing = { player, objectId: api.core.ObjectIdentifiers.FLOATING_BOOK + 1,
+    location: { x: 2606, y: 6173, z: 2 }, handled: false };
+  assert.equal(climbFloatingBooks(returnCrossing), true,
+    'the far-end cache variant also routes back across the book handhold');
+  assert.equal(returnCrossing.handled, true);
+  assert.deepEqual(player.destination, [2598, 6173, 2]);
   custom.get('npc-dialogue:choice')({
     player, option: 'Yes please.', definition: { getName: () => 'Memory of Seren' },
   });
@@ -435,6 +441,14 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
   place(2581, 6130, 'north', 0);
   assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '5:15',
     `Hefin’s blue beam branches north from the shared floor-zero pillar while the green beam rises: ${messages.slice(-2).join(' | ')}`);
+  attributes.set('quest.song_of_the_elves.library-puzzle', '5:19');
+  attributes.set('quest.song_of_the_elves.library-pillar-state', JSON.stringify({
+    '2581,6130,2': { operation: 'W', direction: 'west', x: 2581, y: 6130, z: 2, step: 18 },
+  }));
+  amounts.set(api.core.ItemIdentifiers.HAND_MIRROR_2, 1);
+  place(2567, 6144, 'south', 2);
+  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '5:20',
+    `Hefin’s final blue beam has its own north-west source: ${messages.slice(-2).join(' | ')}`);
   const beforeReplay = messages.length;
   useObject({ player, objectId: 36726, handled: false });
   assert.ok(!messages.slice(beforeReplay).some((message) => message.includes('seal remains dark')),
