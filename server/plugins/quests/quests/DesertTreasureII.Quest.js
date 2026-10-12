@@ -29,6 +29,7 @@ module.exports = function registerDesertTreasureII(api) {
   const ATTR_WAR_ROOM = "desert-treasure-ii:war-room";
   const ATTR_STRANGLEWOOD_HIDEOUT = "desert-treasure-ii:stranglewood-hideout";
   const ATTR_STRANGLEWOOD_TEMPLE = "desert-treasure-ii:stranglewood-temple";
+  const ATTR_VARDORVIS_AREA = "desert-treasure-ii:vardorvis-area";
   const ATTR_VAULT_AREA = "desert-treasure-ii:ancient-vault";
   const ATTR_VAULT_SMITH = "desert-treasure-ii:vault-smith";
   const ATTR_SMITH_INTRO = "desert-treasure-ii:smith-intro";
@@ -54,6 +55,7 @@ module.exports = function registerDesertTreasureII(api) {
   let AncientVaultArea;
   let StranglewoodHideoutArea;
   let StranglewoodTempleArea;
+  let VardorvisArea;
   const totemSpellIds = new Map(TOTEMS.map((totem) => [totem.kind, new Set(totem.spells.map((name) => api.core.CombatSpells[name]?.spellId?.()).filter(Number.isInteger))]));
 
   AncientVaultArea = class DesertTreasureIIAncientVaultArea extends api.core.TemplatedInstanceArea {
@@ -206,6 +208,36 @@ module.exports = function registerDesertTreasureII(api) {
     getName() { return "Stranglewood temple (Desert Treasure II)"; }
     allowSummonPet() { return false; }
     isMulti() { return true; }
+    destroy() {
+      if (this.isDestroyed()) return;
+      for (const entity of [...this.entities]) {
+        if (!entity?.isNpc?.() || !entity.getAsNpc) continue;
+        const npc = entity.getAsNpc();
+        const add = api.core.World.getAddNPCQueue();
+        for (let i = add.indexOf(npc); i >= 0; i = add.indexOf(npc)) add.splice(i, 1);
+        if (npc.isRegistered?.() && !api.core.World.getRemoveNPCQueue().includes(npc)) api.core.World.getRemoveNPCQueue().push(npc);
+      }
+      super.destroy();
+    }
+  };
+
+  VardorvisArea = class DesertTreasureIIVardorvisArea extends api.core.TemplatedInstanceArea {
+    constructor(owner) {
+      super(5, 5);
+      this.owner = owner;
+      // Copy the actual ritual site (including its walls, rocks and escape passage).
+      for (let x = 0; x < 5; x++) {
+        for (let y = 0; y < 5; y++) {
+          for (let plane = 0; plane < 4; plane++) {
+            this.setChunk(plane, x, y, plane === 0 ? {
+              sourceChunkX: 139 + x, sourceChunkY: 425 + y, sourcePlane: 0, rotation: 0,
+            } : null);
+          }
+        }
+      }
+    }
+    getName() { return "Vardorvis ritual site (Desert Treasure II)"; }
+    allowSummonPet() { return false; }
     destroy() {
       if (this.isDestroyed()) return;
       for (const entity of [...this.entities]) {
@@ -412,6 +444,22 @@ module.exports = function registerDesertTreasureII(api) {
     return area;
   }
 
+  function enterVardorvisArena(p) {
+    const current = p.getAttribute(ATTR_VARDORVIS_AREA);
+    if (current instanceof VardorvisArea && !current.isDestroyed()) {
+      current.enter(p);
+      p.moveTo(current.tile(13, 18, 0));
+      spawnBoss(p, "vardorvis");
+      return current;
+    }
+    const area = new VardorvisArea(p.getUsername?.());
+    area.enter(p);
+    p.setAttribute(ATTR_VARDORVIS_AREA, area);
+    p.moveTo(area.tile(13, 18, 0));
+    spawnBoss(p, "vardorvis");
+    return area;
+  }
+
   function spawnTempleKasonde(p, area) {
     let owned = spawned.get(p);
     if (!owned) spawned.set(p, owned = {});
@@ -480,6 +528,25 @@ module.exports = function registerDesertTreasureII(api) {
     const x = location.x - area.getBaseX() + 1176;
     const y = location.y - area.getBaseY() + 9808;
     return x >= 1176 && x < 1192 && y >= 9808 && y < 9848 ? { x, y } : null;
+  }
+
+  function vardorvisSourceTile(p, location) {
+    const area = p.getAttribute(ATTR_VARDORVIS_AREA);
+    if (!(area instanceof VardorvisArea) || area.isDestroyed?.() || !location) return null;
+    const x = location.x - area.getBaseX() + 1112;
+    const y = location.y - area.getBaseY() + 3400;
+    return x >= 1112 && x < 1152 && y >= 3400 && y < 3440 ? { x, y } : null;
+  }
+
+  function leaveVardorvisArena(p) {
+    const area = p.getAttribute(ATTR_VARDORVIS_AREA);
+    if (!(area instanceof VardorvisArea) || area.isDestroyed()) return false;
+    area.leave(p, false);
+    area.postLeave(p, false);
+    area.destroy();
+    p.setAttribute(ATTR_VARDORVIS_AREA, null);
+    p.moveTo(new api.core.Location(1147, 3433, 0));
+    return true;
   }
 
   function buildJournal(player) {
@@ -833,8 +900,9 @@ module.exports = function registerDesertTreasureII(api) {
       p.moveTo(new api.core.Location(1174, 3428, 0));
       return true;
     }
-    if (s === S.VARDORVIS && objectId === VARDORVIS_ENTRY
-      && Math.abs(location.x - 1118) <= 2 && Math.abs(location.y - 3428) <= 2) {
+    const ritualTile = vardorvisSourceTile(p, location);
+    if (s === S.VARDORVIS && ritualTile && [VARDORVIS_ENTRY, O.ROCKS_139].includes(objectId)
+      && ritualTile.x === 1118 && ritualTile.y === 3428) {
       const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
       if (progress >= 17) {
         if (!has(p, I.TEMPLE_KEY_3)) p.getInventory().adds(I.TEMPLE_KEY_3, 1);
@@ -842,17 +910,16 @@ module.exports = function registerDesertTreasureII(api) {
         p.sendMessage("You search the rocks and find the Temple key.");
         return true;
       }
-      if (progress < 16) return p.sendMessage("The ritual site is too dangerous until you have prepared the Strangler serum.");
-      p.moveTo(new api.core.Location(1125, 3418, 0));
-      spawnBoss(p, "vardorvis");
-      return true;
+      return p.sendMessage("There is nothing useful among the rocks yet.");
     }
-    if (s === S.VARDORVIS && objectId === O.ROCKS_139
-      && Math.abs(location.x - 1118) <= 2 && Math.abs(location.y - 3428) <= 2
-      && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 17) {
-      if (!has(p, I.TEMPLE_KEY_3)) p.getInventory().adds(I.TEMPLE_KEY_3, 1);
-      p.setAttribute(VARDORVIS_PROGRESS, 18);
-      p.sendMessage("You search the rocks and find the Temple key.");
+    if (s === S.VARDORVIS && ritualTile && [O.ENTRY_22, O.ENTRY_23].includes(objectId)) {
+      return leaveVardorvisArena(p);
+    }
+    if (s === S.VARDORVIS && objectId === VARDORVIS_ENTRY
+      && Math.abs(location.x - 1118) <= 2 && Math.abs(location.y - 3428) <= 2) {
+      const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
+      if (progress < 16) return p.sendMessage("The ritual site is too dangerous until you have prepared the Strangler serum.");
+      enterVardorvisArena(p);
       return true;
     }
     if (s === S.VARDORVIS && objectId === KASONDE_MEDALLION_CHEST
@@ -975,7 +1042,22 @@ module.exports = function registerDesertTreasureII(api) {
     const [id, x, y] = table[key];
     let npcs = spawned.get(p);
     if (!npcs) spawned.set(p, npcs = {});
+    if (key === "vardorvis") {
+      const area = p.getAttribute(ATTR_VARDORVIS_AREA);
+      if (!(area instanceof VardorvisArea) || area.isDestroyed()) return;
+      if (npcs[key]?.isRegistered?.() && area.entities.includes(npcs[key])) return;
+      const npc = api.core.NPC.create(id, area.tile(x - 1112, y - 3400, 0));
+      npc.setOwner?.(p);
+      npc.setOwnerOnly?.(true);
+      npc.__skipDefaultRespawn = true;
+      area.add(npc);
+      api.core.World.getAddNPCQueue().push(npc);
+      npcs[key] = npc;
+      p.setAttribute(ATTR, npc);
+      return npc;
+    }
     if (!npcs[key]) npcs[key] = api.spawnNpc({ id, x, y, z: 0, owner: p, ownerOnly: true });
+    return npcs[key];
   }
   function handleBossTalk({ player: p, npcId, npc }) {
     const s = stage(p);

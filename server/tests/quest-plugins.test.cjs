@@ -918,11 +918,30 @@ test('Desert Treasure II requires each medallion on its matching Vault statue an
 test('Desert Treasure II opens the ritual site after the serum and grants the Temple key only after Vardorvis dies', () => {
   const { api: base } = mockApi();
   const objectHooks = [], deathHooks = [];
-  let boss;
+  const queues = { add: [], remove: [] };
+  class TestInstance {
+    constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
+    setChunk() {}
+    enter() {}
+    leave() {}
+    postLeave() {}
+    getBaseX() { return 8192; }
+    getBaseY() { return 1600; }
+    tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z }; }
+    add(npc) { this.entities.push(npc); }
+    isDestroyed() { return false; }
+    destroy() {}
+  }
+  const core = {
+    ...base.core,
+    TemplatedInstanceArea: TestInstance,
+    NPC: { create: (id, location) => ({ id, location, owner: null, setOwner(value) { this.owner = value; }, setOwnerOnly() {}, isNpc() { return true; }, getAsNpc() { return this; }, isRegistered() { return true; } }) },
+    World: { getAddNPCQueue: () => queues.add, getRemoveNPCQueue: () => queues.remove },
+  };
   const api = new Proxy(base, {
-    get: (target, prop) => prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
       : prop === 'onNpcDeath' ? (handler) => deathHooks.push(handler)
-        : prop === 'spawnNpc' ? (spec) => (boss = { ...spec, isRegistered: () => true })
           : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
   });
   require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
@@ -939,12 +958,17 @@ test('Desert Treasure II opens the ritual site after the serum and grants the Te
   };
   quest.setStage(p, 7);
   assert.equal(objectHooks[0]({ player: p, objectId: 49495, location: { x: 1118, y: 3428, z: 0 } }), true);
+  const area = attrs.get('desert-treasure-ii:vardorvis-area');
+  const boss = queues.add[0];
   assert.equal(boss.id, api.core.NpcIdentifiers.VARDORVIS_2, 'the quest form spawns at the documented ritual site');
   assert.equal(boss.owner, p);
+  assert.equal(boss.location.x, 8209, 'Vardorvis is placed at source coordinate 1129,3419 inside the copied ritual site');
+  assert.equal(boss.location.y, 1619);
+  const rocks = { x: area.tile(6, 28, 0).x, y: area.tile(6, 28, 0).y, z: 0 };
   deathHooks[0]({ killer: p, npc: boss });
   assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 17);
   assert.equal(counts.get(I.VARDORVIS_MEDALLION) ?? 0, 0, 'Vardorvis does not skip the Temple key and Kasonde aftermath');
-  assert.equal(objectHooks[0]({ player: p, objectId: 49495, location: { x: 1118, y: 3428, z: 0 } }), true);
+  assert.equal(objectHooks[0]({ player: p, objectId: api.core.ObjectIdentifiers.ROCKS_139, location: rocks }), true);
   assert.equal(counts.get(I.TEMPLE_KEY_3), 1);
   assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 18);
 });
