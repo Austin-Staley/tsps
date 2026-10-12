@@ -71,7 +71,8 @@ const npc = {
     getId: () => 3106,
     getHitpoints: () => 7,
     getMaxHitpoints: () => 10,
-    getAnimation: () => ({ getId: () => 8082 }),
+    getAnimation: (): any => ({ getId: () => 8082 }),
+    performAnimation: (_animation: any) => {},
     getLocation: () => location(3225, 3220),
     getCurrentDefinition: () => ({ getName: () => "Man", getActions: () => ["Talk-to", null, "Attack", "Pickpocket"] }),
 };
@@ -248,6 +249,10 @@ else process.env.AGENT_MCP = previousMcpFlag;
     assert.equal(snapshot.groundItems[0].id, 526);
     assert.deepEqual(snapshot.messages, ["You swing your axe at the tree."]);
     assert.deepEqual((await call(client, "observe", { player: "agent1" })).value.messages, []);
+
+    npc.performAnimation({ getId: () => 8080 });
+    npc.getAnimation = () => null;
+    assert.equal((await call(client, "observe", { player: "agent1" })).value.npcs[0].animation, 8080, "warnings survive the engine clearing its update flags");
 
     packetSender.sendGraphic({ getId: () => 1560 }, location(3222, 3218));
     assert.deepEqual((await call(client, "observe", { player: "agent1" })).value.client.graphics, [{ id: 1560, x: 3222, y: 3218, z: 0 }]);
