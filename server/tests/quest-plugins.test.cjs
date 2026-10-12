@@ -842,3 +842,17 @@ test('Elite knights show adapting prayers, spend prayer on attacks and apply sev
  for(let i=0;i<23;i++)hit(i%2?CombatType.MAGIC:CombatType.RANGED);
  assert.equal(icon,-1);assert.equal(hit(CombatType.RANGED),13);
 });
+
+
+test('WGS fortress door crosses north when routing places the player on the door tile', () => {
+ const {api,handlers,player}=movarioFixture();
+ require('../plugins/quests/wgs/DarkSquall.WhileGuthixSleeps')({...api.context,stage:()=>400});
+ player.getEquipment=()=>({contains:()=>true});
+ const open=handlers.objects.find(h=>h.name==='Sturdy door').options.Open;
+ const object={getLocation:()=>new api.core.Location(3016,3514,0)};
+ for(const y of[3513,3514,3515]){
+  player.getLocation=()=>new api.core.Location(3016,y,0);
+  assert.equal(open({player,object,objectId:2337}),true);
+  assert.deepEqual(player.position,[3016,y<=3514?3515:3513,0]);
+ }
+});
