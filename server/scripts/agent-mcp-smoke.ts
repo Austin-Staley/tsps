@@ -151,7 +151,9 @@ const core = {
     },
     ObjectDefinition: { forPlayer: (id: number) => id === 2284
         ? ({ getName: () => "Plinth", getInteractions: () => null })
-        : ({ getName: () => "Tree", getInteractions: () => ["Chop down", null] }) },
+        : id === 2283
+            ? ({ getName: () => "Acid pool", getInteractions: () => [] })
+            : ({ getName: () => "Tree", getInteractions: () => ["Chop down", null] }) },
     ItemDefinition: { forId: (id: number) => ({ getName: () => `item ${id}` }) },
     NpcDefinition: { forId: () => ({ getName: () => "Man" }) },
     MultiChatboxPrompt: { OPTIONS_WIDGET_ID: (219 << 16) | 1, getPending: () => prompt },
@@ -254,13 +256,15 @@ else process.env.AGENT_MCP = previousMcpFlag;
             ? [{ getType: () => 10, getId: () => 2282, getLocation: () => location(3224, 3219) }]
             : at.getX() === 3224 && at.getY() === 3220
                 ? [{ getType: () => 10, getId: () => 2284, getLocation: () => location(3224, 3220) }] : [],
-        getObjects: () => [{ getType: () => 10, getId: () => 2280, getLocation: tree.getLocation }],
+        getObjects: () => [{ getType: () => 10, getId: () => 2280, getLocation: tree.getLocation },
+            { getType: () => 22, getId: () => 2283, getLocation: () => location(3223, 3219) }],
     };
     const instanced = (await call(client, "observe", { player: "agent1" })).value;
     assert.deepEqual(instanced.objects, [
         { id: 2280, name: "Tree", options: ["Chop down"], x: 3220, y: 3216 },
         { id: 2282, name: "Tree", options: ["Chop down"], x: 3224, y: 3219 },
         { id: 2284, name: "Plinth", options: [], x: 3224, y: 3220 },
+        { id: 2283, name: "Acid pool", options: [], x: 3223, y: 3219 },
     ], "private replacements and template scenery are actual menu targets");
     assert.deepEqual(instanced.npcs, [], "world NPCs are hidden in the instance");
     observedPrivateArea = null;

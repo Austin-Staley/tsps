@@ -178,7 +178,10 @@ function createContext(core, server) {
       const options = definition?.getInteractions()?.filter(Boolean);
       const at = object.getLocation();
       const name = definition?.getName?.();
-      if (name) objects.push({ id: object.getId(), name, options: options ?? [], x: at.getX(), y: at.getY() });
+      // Named scenery and private encounter effects stay observable without menu actions.
+      if (name || privateObjects.has(object)) {
+        objects.push({ id: object.getId(), name: name ?? "Unknown object", options: options ?? [], x: at.getX(), y: at.getY() });
+      }
     }
 
     return {
