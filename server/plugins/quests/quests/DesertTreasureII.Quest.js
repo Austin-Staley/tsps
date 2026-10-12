@@ -790,6 +790,9 @@ module.exports = function registerDesertTreasureII(api) {
     }
     process(actor) {
       if (!actor?.isPlayer?.() || actor.getAsPlayer?.() !== this.questPlayer) return;
+      const cycle = api.core.World.getProcessCycle();
+      if (cycle === this.lastProcessCycle) return;
+      this.lastProcessCycle = cycle;
       const player = this.questPlayer;
       if (!player.getAttribute(SUCELLUS_CELL_ENTERED)) {
         const loc = player.getLocation();
@@ -808,6 +811,32 @@ module.exports = function registerDesertTreasureII(api) {
         // Keep the ordinary combat hit queue and regeneration rules; only the
         // scripted wake-up phase is owned by the quest.
         boss.getCombat?.().getLastAttack?.().reset?.();
+        if (!Number.isFinite(boss.__dt2SucellusNextAttack)) boss.__dt2SucellusNextAttack = cycle + 5;
+        if (!Number.isFinite(boss.__dt2SucellusAttackCount)) boss.__dt2SucellusAttackCount = 0;
+        if (cycle >= boss.__dt2SucellusNextAttack) {
+          boss.__dt2SucellusNextAttack = cycle + 5;
+          boss.__dt2SucellusAttackCount++;
+          if (boss.__dt2SucellusAttackCount % 5 === 0) {
+            boss.__dt2SucellusGaze = { due: cycle + 5 };
+            boss.forceChat?.("Duke Sucellus turns his gaze upon you...");
+            player.sendMessage("Duke Sucellus turns his gaze upon you. Hide directly behind a pillar before the gaze lands!");
+          }
+        }
+        if (boss.__dt2SucellusGaze && cycle >= boss.__dt2SucellusGaze.due) {
+          const source = boss.getLocation?.();
+          const destination = player.getLocation?.();
+          const clearShot = source && destination && api.core.RegionManager?.canProjectileAttackBounds?.(
+            source, destination, boss.getSize?.() ?? 1, boss.getSize?.() ?? 1,
+            player.getSize?.() ?? 1, player.getSize?.() ?? 1, this,
+          );
+          if (clearShot) {
+            player.getCombat().getHitQueue().addPendingDamage([
+              new api.core.HitDamage(1 + Math.floor(Math.random() * 101), api.core.HitMask.RED),
+            ]);
+            player.sendMessage("Duke Sucellus' freezing gaze strikes you!");
+          } else player.sendMessage("You manage to avoid Duke Sucellus' gaze behind the pillar.");
+          boss.__dt2SucellusGaze = null;
+        }
       }
     }
     destroy() {

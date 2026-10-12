@@ -1663,6 +1663,8 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   const { api: base } = mockApi();
   const objects = [], itemItems = [], itemObjects = [], itemNpcs = [], itemActions = [], deaths = [], groundPickups = [];
   const queues = { add: [], remove: [] };
+  let cycle = 0, hasPillarCover = true;
+  const pendingHits = [];
   class TestArea {
     constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
     setChunk() {}
@@ -1679,13 +1681,16 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   const core = {
     ...base.core,
     TemplatedInstanceArea: TestArea,
+    RegionManager: { canProjectileAttackBounds: () => !hasPillarCover },
     NPC: { create: (id, location) => ({
       id, location, owner: null, hp: 500,
       setOwner(value) { this.owner = value; }, getOwner() { return this.owner; }, setOwnerOnly() {},
       setScriptedMovement() {}, setMaxHitpoints(value) { this.hp = value; }, setHitpoints(value) { this.hp = value; },
-      getHitpoints() { return this.hp; }, isRegistered() { return true; }, isNpc() { return true; }, getAsNpc() { return this; },
+      getHitpoints() { return this.hp; }, getLocation() { return this.location; }, getSize() { return 7; }, forceChat() {},
+      getCombat() { return { getLastAttack: () => ({ reset() {} }) }; },
+      isRegistered() { return true; }, isNpc() { return true; }, getAsNpc() { return this; },
     }) },
-    World: { getAddNPCQueue: () => queues.add, getRemoveNPCQueue: () => queues.remove },
+    World: { getAddNPCQueue: () => queues.add, getRemoveNPCQueue: () => queues.remove, getProcessCycle: () => cycle++ },
   };
   const api = new Proxy(base, {
     get: (target, prop) => prop === 'core' ? core
@@ -1707,6 +1712,8 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
     getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
     moveTo(location) { this.location = location; }, getLocation() { return this.location; }, sendMessage: (message) => messages.push(message),
     getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
+    getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => pendingHits.push(...hits) }) }),
+    getSize: () => 1,
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
     getInventory: () => ({ getAmount: (id) => inventory.get(id) ?? 0,
       getFreeSlots: () => 28,
@@ -1767,6 +1774,15 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   itemNpcs.at(-1)({ player, npc: boss, itemId: I.ARDER_MUSCA_POISON });
   assert.equal(boss.__dt2SucellusAwake, true);
   assert.equal(inventory.get(I.ARDER_MUSCA_POISON), 0);
+  player.moveTo(area.tile(167, 97, 0));
+  for (let i = 0; i < 31; i++) area.process(player);
+  assert.ok(messages.some((message) => message.includes('turns his gaze upon you')));
+  assert.ok(messages.some((message) => message.includes('avoid Duke Sucellus')));
+  assert.equal(pendingHits.length, 0, 'the cached pillar collision protects against the freezing gaze');
+  hasPillarCover = false;
+  for (let i = 0; i < 30; i++) area.process(player);
+  assert.equal(pendingHits.length, 1, 'the exposed freezing gaze queues its real hit');
+  assert.ok(pendingHits[0].getDamage() > 0 && pendingHits[0].getDamage() <= 101);
   deaths.at(-1)({ killer: player, npc: boss });
   groundPickups.at(-1)({ player, groundItemId: I.ODD_KEY, location: sourceLocation(3039, 6454) });
   inventory.set(I.ODD_KEY, 1);
