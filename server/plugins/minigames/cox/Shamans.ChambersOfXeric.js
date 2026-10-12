@@ -9,13 +9,19 @@
  * - Their attacks are the surface shamans', the poison blob ~25% stronger: up to 39 without
  *   Shayzien armour.
  * - Two shamans for solo and small teams, up to five in large ones.
- * Not on the Wiki (to check against a capture): the tiles; counts (2, 3 at 4+, 4 at 8+); the spirit tendrils (29768) and the
- *   exit's two blocking spawns (7575) appear when someone comes within 6 tiles; attacks every
- *   4 ticks: ranged anim 7193 with projectile 1291 (base 24), the blob (projectile 1293,
- *   splash 1294, 20-35 within 2 tiles, poison 1 in 4), melee anim 7158 (base 24, crush), the
- *   jump (anim 7152, landing 6946 4 ticks later beside its target, 20-25 within a tile, then a
- *   pause); now and then (1 in 61 a tick, at most every 20 seconds) three spawns by the target
- *   that explode; the blocking spawns explode (anim 7159, gfx 1295) once the shamans are dead.
+ * rsprox captures (recordings 3282 and 3389):
+ * - The spirit tendrils (29768) and the exit's two blocking spawns (7575) are there when the
+ *   room is loaded.
+ * - Ranged: 7193, projectile 1291 (from 61 client cycles to 96-106, angle 5, heights 420 to
+ *   146; sound 385, range 10), landing 3 ticks later. The acid: 7193, projectile 1293 (from 61
+ *   to 150-180, angle 30, heights 420 to 5), landing as gfx 1294 with sound 1070 (range 8).
+ * - Dying: 7196; gone 3 ticks later. 5 ticks after the last one starts dying the blocking
+ *   spawns raise their hands (7159, sound 665), the tendrils go a tick later, and the spawns
+ *   burst 3 ticks after that (gfx 1295, sound 1021, range 5).
+ * Not on the Wiki (to check against a capture): the tiles; counts (2, 3 at 4+, 4 at 8+); bases
+ *   (ranged and melee 24); the blob 20-35 within 2 tiles, poison 1 in 4; melee 7158 (crush);
+ *   the jump (7152, landing 6946 4 ticks later beside its target, 20-25 within a tile, then a
+ *   pause); the spawns (1 in 61 a tick, at most every 20 seconds, three by the target).
  * Not from a source: the spawns explode 6 ticks after appearing for up to 10 within a tile
  *   (the surface shaman's).
  */
@@ -70,6 +76,7 @@ class ShamansRoom extends Raid.Room {
       if (shaman) this.shamans.push(shaman);
     }
     this.tendrilTiles = TENDRIL_TILES[variant].map((spot) => this.tile(spot.x, spot.y));
+    this.wake();
   }
 
   combatPoints() {
@@ -81,7 +88,6 @@ class ShamansRoom extends Raid.Room {
   }
 
   tick() {
-    if (!this.woken && this.raiders().some((player) => player.getLocation().getDistance(this.tendrilTiles[0]) <= 6)) this.wake();
     for (const shaman of this.living()) {
       if (!shaman.__coxJumping) this.engage(shaman);
       const target = shaman.getCombat().getTarget();
@@ -140,13 +146,14 @@ class ShamansRoom extends Raid.Room {
     }
   }
 
-  explode(spawn, max) {
+  explode(spawn, max, burstAfter = 2) {
     if (!spawn.isRegistered()) return;
     Shared.animate(spawn, ANIM.SPAWN_EXPLODE);
-    for (const player of this.raiders()) Shared.sound(player, 665);
-    Shared.later(this.raid, 2, () => {
+    Shared.areaSound(this.raiders(), 665, spawn.getLocation(), { range: 7 });
+    Shared.later(this.raid, burstAfter, () => {
       if (!spawn.isRegistered()) return;
       Shared.graphicAt(this.raiders(), 1295, spawn.getLocation());
+      Shared.areaSound(this.raiders(), 1021, spawn.getLocation(), { range: 5 });
       for (const player of this.raiders()) {
         if (player.getLocation().getDistance(spawn.getLocation()) <= 1) Shared.damage(player, Shared.random(0, max));
       }
@@ -167,7 +174,8 @@ class ShamansRoom extends Raid.Room {
     let style = Shared.random(0, this.adjacent(npc, player) ? 6 : 5);
     if (style === 5 && !this.jump(npc, player)) style = this.adjacent(npc, player) ? 6 : 4;
     if (style === 5) return;
-    Shared.sound(player, style === 6 ? 1695 : 385);
+    if (style === 6) Shared.sound(player, 1695);
+    else Shared.areaSound(this.raiders(), 385, npc.getLocation(), { range: 10 });
     if (style === 6) {
       Shared.animate(npc, ANIM.MELEE);
       Shared.strike(npc, player, "melee", Monsters.maxHitFor(npc, BASE.MELEE, Monsters.LEVELS.STRENGTH), 0);
@@ -176,10 +184,11 @@ class ShamansRoom extends Raid.Room {
     Shared.animate(npc, ANIM.RANGED);
     if (style === 4) {
       const tile = player.getLocation().clone();
-      const delay = Shared.projectile(this.map, npc, tile, 1293, { delay: 15, duration: 60, startHeight: 70, endHeight: 15 });
+      const delay = spit(this.map, npc, tile, 1293, 30, 1, 90);
       Shared.later(this.raid, delay, () => {
         if (!npc.isRegistered()) return;
         Shared.graphicAt(this.raiders(), 1294, tile);
+        Shared.areaSound(this.raiders(), 1070, tile, { range: 8 });
         const { CombatFactory } = Shared.core();
         for (const raider of this.raiders()) {
           if (raider.getLocation().getDistance(tile) > 2) continue;
@@ -189,7 +198,7 @@ class ShamansRoom extends Raid.Room {
       });
       return;
     }
-    const delay = Shared.projectile(this.map, npc, player, 1291, { delay: 15, duration: 60, startHeight: 70, endHeight: 15 });
+    const delay = spit(this.map, npc, player, 1291, 5, 36, 35);
     Shared.strike(npc, player, "ranged", Monsters.maxHitFor(npc, BASE.RANGED, Monsters.LEVELS.RANGED), delay);
   }
 
@@ -228,15 +237,31 @@ class ShamansRoom extends Raid.Room {
   onNpcDeath(npc) {
     if (!this.shamans.includes(npc) || this.living().some((other) => other !== npc)) return;
     this.completed = true;
-    Shared.later(this.raid, 2, () => this.tendrils.forEach((tendril) => Shared.core().ObjectManager.deregister(tendril, true)));
-    Shared.later(this.raid, 6, () => {
-      this.blockerClip(false);
-      for (const blocker of this.blockers) this.explode(blocker, 1);
+    Shared.later(this.raid, 5, () => {
+      for (const blocker of this.blockers) this.explode(blocker, 1, 3);
     });
+    Shared.later(this.raid, 6, () => this.tendrils.forEach((tendril) => Shared.core().ObjectManager.deregister(tendril, true)));
+    Shared.later(this.raid, 8, () => this.blockerClip(false));
   }
 }
 
 Raid.registerRoom("LIZARDMEN_SHAMAN", ShamansRoom);
+
+/**
+ * The shamans' spit and acid: from 61 client cycles, angle `angle`, from height 420 (105 here)
+ * to `endHeight`, ending `base` cycles plus 5 a tile on. Returns the ticks until it lands.
+ */
+function spit(area, npc, to, id, angle, endHeight, base) {
+  const { Projectile } = Shared.core();
+  const from = Projectile.centreOf(npc);
+  const tile = to.getLocation ? to.getLocation() : to;
+  const end = 61 + base + 5 * from.getDistance(tile);
+  new Projectile(from, tile, to.getLocation ? to : null, id, 61, end, 105, endHeight, area)
+    .withAngle(angle)
+    .withProgress(128)
+    .sendProjectile();
+  return Math.max(1, Math.floor(end / 30));
+}
 
 function shamanCombat(api) {
   const { CombatMethod, CombatType } = api.core;

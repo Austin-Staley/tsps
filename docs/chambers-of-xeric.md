@@ -269,6 +269,14 @@ Recordings 3282, 3285 and 3389.
 - They cast with 5528: fire (gfx 1322, projectile 130, sounds 155 / 156, impact gfx 131 or splash 85) or Vulnerability (gfx 1321, projectile 109, sounds 127 / 3012, impact gfx 110). Dying 5491, gone 5 ticks later.
 - The portals appear when the last one dies (49996 start, 49997 middle with "Choose location", 49998 end). Travelling shows the portal overlay (634) and moves the player 2 ticks later. Live then leaves the points overlay closed until the next floor; we put it back.
 
+## Lizardman Shamans, from rsprox captures
+
+Recordings 3282 and 3389.
+
+- The tendrils and the exit's blocking spawns are there from the start.
+- Ranged 7193 with projectile 1291 (sound 385) landing 3 ticks later; the acid (projectile 1293) lands 5-6 ticks later as gfx 1294 with sound 1070.
+- Dying 7196, gone 3 ticks later. After the last: the blockers raise their hands (7159, sound 665) at 5 ticks, the tendrils go at 6, the blockers burst (gfx 1295, sound 1021) at 8.
+
 ## Values not on the Wiki, to check against a capture
 
 | Value | Where |
