@@ -1536,7 +1536,7 @@ test('Desert Treasure II starts the Vardorvis trail through Elissa, Barus, the b
   const npcInteractions = [];
   const objectInteractions = [];
   const itemActions = [];
-  const { api: base } = mockApi();
+  const { api: base, handlers } = mockApi();
   const api = new Proxy(base, {
     get: (target, prop) => {
       if (prop === 'onNpcInteraction') return (name, options) => npcInteractions.push({ name, options });
@@ -1570,10 +1570,19 @@ test('Desert Treasure II starts the Vardorvis trail through Elissa, Barus, the b
       sendMessage() {},
     };
     quest.setStage(player, 7);
-    const talkTo = (name) => npcInteractions.find((entry) => entry.name === name).options['Talk-to']({ player, npcId: 1 });
+    const talkTo = (name) => npcInteractions.find((entry) => entry.name === name).options['Talk-to']({ player, npcId: api.core.NpcIdentifiers[name.toUpperCase()] });
     talkTo('Elissa');
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), undefined, 'opening the menu is not accepting the lead');
+    const elissa = { player, npcId: api.core.NpcIdentifiers.ELISSA, text: 'Great! Thanks for the help.' };
+    handlers.custom.get('npc-dialogue:line').forEach(h => h(elissa));
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), undefined, 'the final line must be continued');
+    elissa.after();
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 1);
     talkTo('Barus');
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 1);
+    const barus = { player, npcId: api.core.NpcIdentifiers.BARUS, text: "Don't mention it!" };
+    handlers.custom.get('npc-dialogue:line').forEach(h => h(barus));
+    barus.after();
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 2);
     const searchDesk = objectInteractions[0]({ player, objectId: 49490, location: { x: 1781, y: 3619, z: 0 } });
     assert.equal(searchDesk, true);
@@ -6952,6 +6961,26 @@ test('DT2 leaves shared Smith and Terry NPC conversations available outside thei
     assert.equal(smith({player}),false);
     assert.equal(terry({player}),false);
   }
+});
+
+test('DT2 shared NPC hooks fall through outside their own chapter and cannot spawn another chapter boss', () => {
+  const { api, handlers } = mockApi(), runtime = require('../plugins/quests/QuestRuntime');
+  const original = runtime.startTranscript;
+  runtime.startTranscript = () => { throw Error('wrong chapter dialogue'); };
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1), attrs = new Map();
+    const player = { getAttribute:key=>attrs.get(key), setAttribute:(key,value)=>attrs.set(key,value), getPacketSender:()=>new Proxy({}, {get:()=>()=>{}}) };
+    const ids = api.core.NpcIdentifiers;
+    for (const stage of [0, 1, 6, 12]) {
+      quest.setStage(player,stage);
+      for (const name of ['Elissa','Barus','Kasonde','Ramarno','Prescott','Wizard Persten','Captain Malleta','Ketla','Catalytic Guardian'])
+        assert.equal(handlers.npcInteractions.get(name)['Talk-to']({player,npcId:ids[name.toUpperCase().replaceAll(' ','_')]}),false,name+' retains its normal dialogue');
+    }
+    quest.setStage(player,7);
+    for (const [name,id] of [['Wizard Persten',ids.WIZARD_PERSTEN_5],['Captain Malleta',ids.CAPTAIN_MALLETA],['Ketla',ids.KETLA]])
+      assert.equal(handlers.npcInteractions.get(name)['Talk-to']({player,npcId:id}),false,'unrelated NPCs cannot trigger Vardorvis');
+  } finally { runtime.startTranscript = original; }
 });
 
 

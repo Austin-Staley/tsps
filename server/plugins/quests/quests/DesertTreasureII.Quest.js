@@ -1692,7 +1692,7 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function talkCatalyticGuardian({ player: p, npcId }) {
-    if (stage(p) !== S.LEVIATHAN || p.getAttribute(ATTR_SCAR_AREA)) return;
+    if (stage(p) !== S.LEVIATHAN || p.getAttribute(ATTR_SCAR_AREA)) return false;
     talk(p, npcId, "praefectus-classis-perseriya-talking-to-the-catalytic-guardian");
   }
 
@@ -2158,6 +2158,13 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function handleDialogueLine(event) {
+    if (stage(event.player) === S.VARDORVIS) {
+      const progress = Number(event.player.getAttribute(VARDORVIS_PROGRESS)) || 0;
+      if (event.npcId === N.ELISSA && progress === 0 && event.text === "Great! Thanks for the help.")
+        event.after = () => event.player.setAttribute(VARDORVIS_PROGRESS, 1);
+      if (event.npcId === N.BARUS && progress === 1 && event.text === "Don't mention it!")
+        event.after = () => event.player.setAttribute(VARDORVIS_PROGRESS, 2);
+    }
     if (event?.player?.getAttribute(FINAL_FIGURE_STARTED)
       && event?.npcId === N.MYSTERIOUS_FIGURE_2 && event?.text === "Very well...") {
       event.after = () => spawnFinalFigure(event.player);
@@ -2787,17 +2794,19 @@ module.exports = function registerDesertTreasureII(api) {
     return /was not /i.test(text) ? !finished : finished;
   }
   function talkElissa({ player: p, npcId }) {
-    if (stage(p) !== S.VARDORVIS || (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) !== 0) return;
+    if (stage(p) !== S.VARDORVIS) return false;
+    if (Number(p.getAttribute(VARDORVIS_PROGRESS)) > 0) return talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-elissa-again");
     talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-elissa");
-    p.setAttribute(VARDORVIS_PROGRESS, 1);
   }
   function talkBarus({ player: p, npcId }) {
-    if (stage(p) !== S.VARDORVIS || (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) !== 1) return;
+    if (stage(p) !== S.VARDORVIS) return false;
+    const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
+    if (progress === 0) return p.sendMessage("Speak to Elissa at the Digsite about Vardorvis first.");
+    if (progress > 1) return talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-barus-talking-to-barus-again");
     talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-barus");
-    p.setAttribute(VARDORVIS_PROGRESS, 2);
   }
   function talkKasonde({ player: p, npcId }) {
-    if (stage(p) !== S.VARDORVIS) return;
+    if (stage(p) !== S.VARDORVIS) return false;
     const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
     if (progress === 6) {
       talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde");
@@ -4702,20 +4711,10 @@ module.exports = function registerDesertTreasureII(api) {
   }
   function progressBosses({ player: p, npcId }) {
     const s = stage(p);
-    if (s === S.VARDORVIS) { talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-elissa"); spawnBoss(p, "vardorvis"); return; }
-    if (s === S.LEVIATHAN) return handleBossTalk({ player: p, npcId });
-    if (s === S.SUCELLUS) return talk(p, npcId, "duke-sucellus-of-the-sixth-legion-talking-to-captain-malleta");
-    if (s === S.WHISPERER) {
+    if (s === S.LEVIATHAN && [N.WIZARD_PERSTEN_5, N.WIZARD_PERSTEN_6, N.WIZARD_PERSTEN_7].includes(npcId)) return handleBossTalk({ player: p, npcId });
+    if (s === S.SUCELLUS && npcId === N.CAPTAIN_MALLETA) return talk(p, npcId, "duke-sucellus-of-the-sixth-legion-talking-to-captain-malleta");
+    if (s === S.WHISPERER && [N.KETLA, N.KETLA_2].includes(npcId)) {
       const state = p.getAttribute(LASSAR) ?? {};
-      if ([N.ODD_FIGURE, N.THE_WHISPERER, N.THE_WHISPERER_2, N.THE_WHISPERER_3, N.THE_WHISPERER_4].includes(npcId)) {
-        if (!state.cathedralTentacles || !state.perfectTorch) {
-          return p.sendMessage("Clear the cathedral tentacles with Ketla's perfected shadow torch before disturbing the figure.");
-        }
-        if (state.whispererDefeated) return p.sendMessage("Search the Whisperer's remains for her medallion.");
-        spawnBoss(p, "whisperer");
-        setLassar(p, { ...state, cathedralEntered: true, whispererStarted: true });
-        return;
-      }
       if (npcId === N.KETLA || npcId === N.KETLA_2) {
         if (state.fakeSchematicFound && !state.perfectSchematicGiven && has(p, I.PERFECTED_SHADOW_TORCH_SCHEMATIC_2))
           return talk(p, npcId, "the-whisperer-talking-to-ketla-with-a-schematic-2");
@@ -4738,18 +4737,18 @@ module.exports = function registerDesertTreasureII(api) {
         }
         return talk(p, npcId, "the-whisperer-talking-to-ketla-after-coming-to");
       }
-      return talk(p, npcId, "the-whisperer-talking-to-ketla-after-coming-to");
     }
+    return false;
   }
 
   function talkRamarno({ player: p, npcId }) {
-    if (stage(p) !== S.WHISPERER) return;
+    if (stage(p) !== S.WHISPERER) return false;
     const state = p.getAttribute(LASSAR) ?? {};
     if (state.entered) return p.sendMessage("Ramarno's directions brought you to the Lassar Undercity. Continue through its shadow devices.");
     talk(p, npcId, "the-whisperer-talking-to-ramarno");
   }
   function talkPrescott({ player: p, npcId }) {
-    if (stage(p) !== S.WHISPERER) return;
+    if (stage(p) !== S.WHISPERER) return false;
     const state = p.getAttribute(LASSAR) ?? {};
     if (!state.ramarno) return p.sendMessage("Prescott points you toward Ramarno by the Sacred Forge.");
     talk(p, npcId, has(p, I.VERY_LONG_ROPE)
