@@ -75,7 +75,7 @@ The runes are kept on the player, not on the item. Slot N is two varbits:
 
 ## The pouch in the bank (captured)
 In the bank's inventory panel, the pouch's op1 shows it in place of the inventory:
-- `bank_viewcontainer` (varbit 9727) is set to 3, and `bank_viewcontainer_obj` (varp 4385) to the pouch's id;
+- `bank_viewcontainer` (varbit 9727) is set to 3, or 4 for the divine pouch (captured on a Leagues world; the cache's script 4881 lays out 3 slots at 3 and 4 otherwise), and `bank_viewcontainer_obj` (varp 4385) to the pouch's id;
 - events are set on `bankside:runepouch_top` (slots 1–3: OP1–7, OP10, DEPTH1, DRAGTARGET), `runepouch_name_select_list` (112–223: OP1, DRAGTARGET) and `runepouch_loadout_a`–`j` (slots 1–3: OP1).
 
 The pouch's other ops:

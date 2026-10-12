@@ -1,13 +1,16 @@
 /**
  * The pouch in the bank (docs/rune-pouch.md). Its op1 in the bank's inventory panel shows the
- * pouch in place of the inventory (bank_viewcontainer 3, bank_viewcontainer_obj the pouch);
+ * pouch in place of the inventory (bank_viewcontainer 3, or 4 for the divine pouch, and
+ * bank_viewcontainer_obj the pouch);
  * op9 empties it into the bank. In the view, a rune's ops bank 1, 5, 10, X or all of it (op1
  * follows the bank's quantity buttons), "Bank all" banks every slot and "Dismiss" goes back to
  * the inventory. Loadouts are in Loadouts.RunePouch.js.
  */
 const Pouch = require("./Common.RunePouch");
 
-const VIEW_POUCH = 3;
+/** bank_viewcontainer for the pouch, by its slots (captured: 3 for the rune pouch, 4 for the divine). */
+const VIEW_BY_SLOTS = { 3: 3, 4: 4 };
+const VIEWS = new Set(Object.values(VIEW_BY_SLOTS));
 const BANK_SIDE = 15;
 const VIEW_OP = 1;
 const EMPTY_OP = 9;
@@ -38,7 +41,7 @@ function components() {
 
 function viewing(player) {
   const { Bank } = Pouch.core;
-  return Bank.isOpen(player) && player.getPacketSender().getVarbit(Bank.VIEW_CONTAINER_VARBIT) === VIEW_POUCH;
+  return Bank.isOpen(player) && VIEWS.has(player.getPacketSender().getVarbit(Bank.VIEW_CONTAINER_VARBIT));
 }
 
 function nameRows() {
@@ -50,7 +53,7 @@ function openView(player, pouch) {
   const sender = player.getPacketSender();
   const { top, nameList, loadouts } = components();
   const slots = Pouch.slotCount(player, pouch);
-  Pouch.setVarbit(player, Bank.VIEW_CONTAINER_VARBIT, VIEW_POUCH);
+  Pouch.setVarbit(player, Bank.VIEW_CONTAINER_VARBIT, VIEW_BY_SLOTS[slots]);
   sender.sendConfig(Bank.VIEW_CONTAINER_OBJ_VARP, pouch.getId());
   sender.sendInterfaceFlagsRange(top, 1, slots, POUCH_SLOT_FLAGS);
   sender.sendInterfaceFlagsRange(nameList, nameRows(), nameRows() * 2 - 1, NAME_LIST_FLAGS);

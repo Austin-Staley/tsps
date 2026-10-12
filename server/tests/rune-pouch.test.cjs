@@ -354,6 +354,20 @@ test("op1 on the pouch in the bank shows it, and op9 empties it into the bank", 
   assert.equal(sender.getVarp(Bank.VIEW_CONTAINER_OBJ_VARP), -1);
 });
 
+test("the divine pouch's bank view is bank_viewcontainer 4, even with a rune pouch carried", () => {
+  const divine = new Item(Items.DIVINE_RUNE_POUCH, 1);
+  const player = createPlayer([new Item(Items.RUNE_POUCH, 1), divine]);
+  openBank(player);
+  pouchWith(player, [[Items.AIR_RUNE, 10]]);
+  PluginManager.emitCustomEvent(Bank.INVENTORY_OP_EVENT, { player, item: divine, slot: 1, op: 1, handled: false });
+  const sender = player.getPacketSender();
+  assert.equal(sender.getVarbit(Bank.VIEW_CONTAINER_VARBIT), 4);
+  assert.equal(sender.getVarp(Bank.VIEW_CONTAINER_OBJ_VARP), Items.DIVINE_RUNE_POUCH);
+  assert.ok(player.log.some((line) => line.startsWith("flags 15:26 1-4")));
+  clickComponent(player, "bankside:runepouch_bankall", 1);
+  assert.equal(player.getBank(0).getAmount(Items.AIR_RUNE), 10, "the view's buttons work in the divine view");
+});
+
 test("a rune's ops in the bank view bank 1, 5, 10, X or all of it", () => {
   const pouch = new Item(Items.RUNE_POUCH, 1);
   const player = createPlayer([pouch]);
