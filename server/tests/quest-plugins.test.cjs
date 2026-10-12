@@ -5,6 +5,7 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 
 const { PluginManager } = require('../dist/plugins/PluginManager');
+const apiMethods = new Set(Object.keys(PluginManager.createApi('QuestTest')));
 
 // A stand-in for the live PluginApi: real core, every hook a no-op. Quests must
 // register cleanly through it and hand back their variant/condition resolvers.
@@ -29,7 +30,8 @@ function mockApi() {
   const api = new Proxy(base, {
     get(target, prop) {
       if (prop in target) return target[prop];
-      return noop;
+      if (apiMethods.has(prop)) return noop;
+      throw Error('Unknown PluginApi member: '+String(prop));
     },
   });
   return { api, handlers };
