@@ -416,6 +416,21 @@ test('scaling follows the Wiki DPS calculator (CM Tekton at 126 combat, 99 Hitpo
   assert.equal(Monsters.scale(7551, { size: 1, maxCombat: 126, maxHitpoints: 99 }).hitpoints, 800, 'the Olm head solo');
 });
 
+test('the ice demon follows rsprox captures: the storm bar, the boulder flight, the burst pattern', () => {
+  // One 28-kindling brazier thaws 0.71% of the storm a tick (captured: about 0.75%).
+  assert.equal(IceDemon.thawRate(28), 71);
+  assert.equal(IceDemon.stormFill(10000), 100);
+  assert.equal(IceDemon.stormFill(9929), 99);
+  assert.equal(IceDemon.stormFill(99), 0);
+  // The boulder lands 2 ticks after it is thrown within 3 tiles, 3 ticks at 4-5.
+  assert.deepEqual([1, 3, 4, 5].map(IceDemon.boulderCycles), [60, 60, 90, 90]);
+  // Ice Burst: nine tiles, the centre first and each side 3 client cycles after the last.
+  assert.equal(IceDemon.BURST_TILES.length, 9);
+  assert.deepEqual(IceDemon.BURST_TILES[0], [0, 0, 0]);
+  assert.equal(new Set(IceDemon.BURST_TILES.map(([dx, dy]) => `${dx},${dy}`)).size, 9);
+  assert.deepEqual([...new Set(IceDemon.BURST_TILES.map(([, , delay]) => delay))], [0, 3, 6, 9, 12]);
+});
+
 test('puzzle rules from the Wiki: brazier, chest and grub rolls, stuns, tightrope guards', () => {
   assert.equal(IceDemon.lightChance(1), 0.08);
   assert.ok(Math.abs(IceDemon.lightChance(99) - 0.78) < 1e-9);
@@ -460,6 +475,16 @@ test('a Challenge Mode raid loads every room without errors', () => {
   assert.ok(demon, 'the frozen ice demon');
   assert.equal(demon.getMaxHitpoints(), Monsters.scale(7584, raid.scaling).hitpoints, 'scaled at spawn');
   assert.ok(spawned.some((npc) => npc.getId() === 7586), 'an icefiend');
+  // rsprox captures: the bar reaching 0 thaws the storm; the demon turns hostile 8 ticks later.
+  const ice = raid.rooms.find((room) => room.key === 'ICE_DEMON');
+  demon.isRegistered = () => true;
+  ice.stormLeft = 50;
+  ice.tick();
+  assert.equal(ice.stage, 'thawing');
+  assert.equal(ice.icefiends.size, 0);
+  ticks(8);
+  assert.equal(ice.stage, 'fighting');
+  assert.equal(demon.getNpcTransformationId(), 7585);
   assert.ok(spawned.some((npc) => npc.getId() === 7602), 'the corrupted scavenger');
   assert.ok(spawned.filter((npc) => npc.getId() === 7576).length === 4, 'four crabs');
   assert.ok(spawned.some((npc) => npc.getId() === 7540), 'Tekton at his anvil');

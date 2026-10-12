@@ -158,7 +158,7 @@ The rooms' set-up is covered by `server/tests/chambers-of-xeric.test.cjs` (a Cha
 
 | Room | Wiki rules used | Not on the Wiki |
 | --- | --- | --- |
-| Ice Demon | Lighting 8%-78%, icefiends steal a charge 1 in 6 every 3-4 ticks, 32 + 36 points, damage a third (fire 250%, demonbane full), prayer-chosen attacks, drops for everyone | storm strength 250/raider, burn rates, attack bases 30/25 |
+| Ice Demon | Lighting 8%-78%, icefiends steal a kindling 1 in 6 every 3-4 ticks, 32 + 36 points, damage a third (fire 250%, demonbane full), prayer-chosen attacks, drops for everyone. From rsprox captures: the storm bar, thaw rate, thaw and death sequences, both attacks' projectiles, impacts and sounds, the freeze (see below) | attack bases 30/25, prayer reduction, freeze length |
 | Thieving | Open chance 39%-61% (+21 lockpick), grubs 0..level/25 (min 1, 2 at 95), 16 grubs/raider (30 solo), 115 points, cap max(4500, Thieving/6 x 150), bats chest 5-25 | eating rate, tiles, XP |
 | Tightrope | Agility 80-100% of the party average, keystone dispels and kills the guards | counts, attacks |
 | Crabs | Style colours, smash stun by party size | orb movement, 1,600 points a crystal |
@@ -201,6 +201,16 @@ The rooms' set-up is covered by `server/tests/chambers-of-xeric.test.cjs` (a Cha
 
 The raid is also in `::teleports` under Minigames.
 
+## Ice Demon, from rsprox captures
+
+Five recordings (820, 843, 3282, 3285, 3389; revisions 234-235, all on event worlds) cover seven Ice Demon rooms, six of them solo and one a duo.
+
+- **Lighting** is retried every tick (anim 3687, area sound 2066). The tick after a success the brazier is lit and all the kindling held goes in, with no message. Without a tinderbox or kindling: "You need a tinderbox and some suitable kindling to light the brazier." in a message box. Points come as 12 a kindling plus 32 + 24 a kindling (the Wiki's 32 + 36).
+- **The storm** is headbar 7 over the frozen demon (100 to 0, every tick). Party size and Firemaking level (54, 75, 99) don't change it: four raids that fed two braziers 28 kindling each follow the same curve to within a point. Fitted from them: each lit brazier thaws 0.15% + 0.02% per kindling in it a tick and burns a kindling every 8 ticks; an icefiend's successful steal takes a kindling; with nothing lit the storm regrows 0.17% a tick. The fit is within about a point of the captured bar throughout.
+- **Thawed**: the braziers go out with smoke puffs (gfx 188) and sound 1930; a tick later the icefiends die (anim 1580, sound 532) and the demon walks out; it turns hostile 8 ticks after the thaw.
+- **Fighting**: it stands still and every 3 ticks attacks a random raider in the room (anim 69), with the style that raider prays against, or either. Boulder: projectile 1324, 2 ticks to land within 3 tiles and 3 beyond, gfx 1325 and sound 1021 on landing. Ice Burst: projectile 366, 2 ticks, gfx 363 rippling over the 3x3, sound 170; "You have been frozen!" 2 ticks after a hit, renewable by the next burst.
+- **Dying**: anim 67; it goes 5 ticks later and takes the storm with it.
+
 ## Values not on the Wiki, to check against a capture
 
 | Value | Where |
@@ -218,7 +228,7 @@ The raid is also in `::teleports` under Minigames.
 | Resource room tiles (fishing, snake, bats), snake timings and damage, catch and fishing chances | `Resources.ChambersOfXeric` |
 | Patch growth (12 ticks a stage), keep chance, raking cycles; a fallen sapling's 15 ticks | `Resources.ChambersOfXeric` |
 | Every room's tiles, animations, graphics, projectiles and sounds | each room unit |
-| Ice Demon storm (250/raider, 5 charges a kindling) | `IceDemon.ChambersOfXeric` |
+| Ice Demon attack max hits (30/25 base), prayer letting 50%/33% through, a 3-tick freeze, Firemaking XP (5 a kindling), fuelling a lit brazier | `IceDemon.ChambersOfXeric` |
 | Exit crystal tiles and ids (30017, 30018, 30016) | the room units |
 | Boss attack bases where the Wiki says "varies" | the room units |
 | The Olm's rising/transition timings, special timings and damage ranges not on the Wiki | `Olm.ChambersOfXeric` |

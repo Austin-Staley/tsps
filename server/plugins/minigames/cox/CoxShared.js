@@ -373,6 +373,13 @@ function gfx(id, { delay = 0, height = 0 } = {}) {
   return graphic;
 }
 
+/** A sound played at a tile (sound_area), heard by every given viewer within `range` tiles of it. */
+function areaSound(viewers, id, location, { loops = 1, delay = 0, range = 10 } = {}) {
+  for (const viewer of viewers) {
+    viewer.getPacketSender().sendAreaSound(id, location.getX(), location.getY(), location.getZ(), loops, delay, range);
+  }
+}
+
 /** A graphic on a tile, shown to every given viewer. */
 function graphicAt(viewers, id, location, options) {
   for (const viewer of viewers) viewer.getPacketSender().sendGlobalGraphic(gfx(id, options), location);
@@ -531,6 +538,6 @@ module.exports = {
   MAX_POINTS, PARTY_SKILLS, ATTR, OVERLAY_UID, CHAT_CHANNEL_TAB_UID, MAIN_MODAL_UID, EVENT,
   isRaidItem, loc, inBox, onMount, cycle, later, repeat, statement, options, raidMessage, fadeMove, sound,
   channelOf, channelByKey, joinChannel, leaveChannel, formatTicks, displayName,
-  balanceWalk, crossFire, random, randomOf, shuffle, gfx, graphicAt, damage, isProtected, projectile, walkStraight, styleMethod, strike,
+  balanceWalk, crossFire, random, randomOf, shuffle, gfx, graphicAt, areaSound, damage, isProtected, projectile, walkStraight, styleMethod, strike,
   onObjectIds, replaceObject, action, stopAction, level, baseLevel, addXp, has, wielding, give, animate, axeOf, pickaxeOf, PICKAXES,
 };
