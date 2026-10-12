@@ -8,11 +8,26 @@
  * yet, and keeps the drops (and any Nid) until the player chooses. Harvest turns them out;
  * Destroy keeps only elite clues and re-rolls Nid at 1/1500. Either way the corpse sinks
  * (11486) and the fight resets on the lair's respawn timer.
+ *
+ * As captured: five ticks into the death the kill count goes up ("Your Araxxor kill count is:
+ * N.", varp total_araxxor_kills) and the fight's length is told against the personal best,
+ * timed from the spawn to three ticks into the death. Harvest (2282) turns the loot out two
+ * ticks after the click, the corpse sinks the tick after and goes two ticks later.
  */
 const Shared = require("./Shared.Araxxor");
 const Hud = require("./Hud.Araxxor");
 const Minions = require("./Minions.Araxxor");
 const Specials = require("./Specials.Araxxor");
+
+/** Cache varp total_araxxor_kills: the kill count the boss log and the HUD read. */
+const TOTAL_KILLS_VARP = 4260;
+const KILLS_ATTRIBUTE = "araxxor:kills";
+const BEST_TICKS_ATTRIBUTE = "araxxor:best-ticks";
+/** Captured: the kill messages five ticks into the death, timed to three ticks into it. */
+const KILL_MESSAGE_TICKS = 5;
+const DURATION_END_TICKS = 3;
+const HARVEST_LOOT_TICKS = 2;
+const HARVEST_SINK_TICKS = 3;
 
 let api = null;
 let core = null;
@@ -57,6 +72,38 @@ function bossDied(event) {
   npc.setHitpoints?.(1);
   session.corpse = npc;
   session.respawnAt = core.World.getProcessCycle() + Shared.CORPSE_TICKS + Shared.RESPAWN_TICKS;
+  const ticks = core.World.getProcessCycle() + DURATION_END_TICKS - (session.spawnedAt ?? core.World.getProcessCycle());
+  const player = session.player;
+  later(KILL_MESSAGE_TICKS, npc, () => {
+    if (player?.isRegistered?.()) recordKill(player, ticks);
+  });
+}
+
+/** Minutes, seconds and hundredths, as the fight-duration message shows them. */
+function formatTicks(ticks) {
+  const centis = Math.round(ticks * 60);
+  const minutes = Math.floor(centis / 6000);
+  const seconds = Math.floor((centis % 6000) / 100);
+  return `${minutes}:${String(seconds).padStart(2, "0")}.${String(centis % 100).padStart(2, "0")}`;
+}
+
+function recordKill(player, ticks) {
+  const kills = (Number(player.getAttribute(KILLS_ATTRIBUTE)) || 0) + 1;
+  player.setAttribute(KILLS_ATTRIBUTE, kills);
+  player.getPacketSender().sendConfig(TOTAL_KILLS_VARP, kills);
+  player.sendMessage(`Your Araxxor kill count is: <col=ff0000>${kills}</col>.`);
+  const best = Number(player.getAttribute(BEST_TICKS_ATTRIBUTE)) || 0;
+  if (!best || ticks < best) {
+    player.setAttribute(BEST_TICKS_ATTRIBUTE, ticks);
+    player.sendMessage(`Fight duration: <col=ff0000>${formatTicks(ticks)}</col> (new personal best)`);
+  } else {
+    player.sendMessage(`Fight duration: <col=ff0000>${formatTicks(ticks)}</col>. Personal best: ${formatTicks(best)}`);
+  }
+}
+
+function sendKillCount({ player }) {
+  const kills = Number(player.getAttribute(KILLS_ATTRIBUTE)) || 0;
+  if (kills > 0) player.getPacketSender().sendConfig(TOTAL_KILLS_VARP, kills);
 }
 
 /**
@@ -135,13 +182,15 @@ function harvest({ player, npc }) {
   player.performAnimation(new core.Animation(Shared.HARVEST_ANIMATION));
   const stash = session.stash ?? [];
   const pet = session.pendingPet ?? [];
-  later(1, npc, () => {
+  later(HARVEST_LOOT_TICKS, npc, () => {
     if (!npc.isRegistered?.()) return;
     spawnDrops(player, session, stash);
     if (pet.length > 0) {
       api.emitCustomEvent("npc-drops:roll", { player, npc, npcId: Shared.BOSS_ID, drops: pet });
     }
-    endCorpse(npc, session, 2);
+  });
+  later(HARVEST_SINK_TICKS, npc, () => {
+    if (npc.isRegistered?.()) endCorpse(npc, session, 2);
   });
   return true;
 }
@@ -202,7 +251,10 @@ function denyAttack({ npc }) {
 function attach(pluginApi) {
   api = pluginApi;
   core = pluginApi.core;
+  pluginApi.persistAttribute(KILLS_ATTRIBUTE);
+  pluginApi.persistAttribute(BEST_TICKS_ATTRIBUTE);
   pluginApi.onNpcDeath(bossDied);
+  pluginApi.onPlayerLogin(sendKillCount);
   pluginApi.onCustomEvent("npc-drops:roll", stashRoll);
   pluginApi.onCustomEvent("npc-drops:generated", stashGenerated);
   pluginApi.onNpcInteraction("Araxxor", { Harvest: harvest, Destroy: destroy, Attack: denyAttack });
@@ -218,4 +270,5 @@ module.exports = {
   stashGenerated,
   spawnDrops,
   validCorpse,
+  formatTicks,
 };

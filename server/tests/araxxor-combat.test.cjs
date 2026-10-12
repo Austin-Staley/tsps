@@ -64,18 +64,42 @@ test("the spray fans outward along the boss-to-player direction", () => {
   }
 });
 
-test("cleave pools run along the blow", () => {
-  assert.deepEqual(Shared.cleavePoolTiles(10, 10, 0, -1), [[10, 10], [10, 9], [10, 11]]);
-  assert.deepEqual(Shared.cleavePoolTiles(10, 10, 1, 0), [[10, 10], [9, 10], [11, 10]]);
+test("cleave pools run across the blow, as captured", () => {
+  // A player south of her gets an east-west line, west of her a north-south one.
+  assert.deepEqual(Shared.cleavePoolTiles(10, 10, 0, -1), [[10, 10], [9, 10], [11, 10]]);
+  assert.deepEqual(Shared.cleavePoolTiles(10, 10, 1, 0), [[10, 10], [10, 9], [10, 11]]);
+  assert.deepEqual(Shared.cleavePoolTiles(10, 10, -4, 3), [[10, 10], [10, 9], [10, 11]]);
   assert.deepEqual(Shared.cleavePoolTiles(10, 10, 0, 0), [[10, 10], [9, 10], [11, 10]]);
 });
 
-test("pool damage ramps to the Wiki's cap", () => {
-  assert.equal(Shared.poolDamage(1), 4);
-  assert.equal(Shared.poolDamage(2), 6);
-  assert.equal(Shared.poolDamage(5), 12);
-  assert.equal(Shared.poolDamage(9), 20);
-  assert.equal(Shared.poolDamage(30), 20, "capped");
+test("pool damage is a flat 4-5 a tick, as captured", () => {
+  const seen = new Set();
+  for (let run = 0; run < 200; run++) seen.add(Shared.poolDamage());
+  assert.deepEqual([...seen].sort(), [4, 5]);
+});
+
+test("blob spreads: six within two for the ball's burst, thirteen within four for an acidic death", () => {
+  for (let run = 0; run < 50; run++) {
+    const burst = Shared.splatterTiles(100, 100, null, null, Shared.BALL_BURST_COUNT, Shared.BALL_BURST_SPREAD);
+    assert.equal(burst.length, 6);
+    for (const [x, y] of burst) assert.ok(Math.abs(x - 100) <= 3 && Math.abs(y - 100) <= 2);
+    const death = Shared.splatterTiles(100, 100, null, null, Shared.ACIDIC_DEATH_SPLATTER_COUNT, Shared.ACIDIC_DEATH_SPREAD);
+    assert.equal(death.length, 13);
+    for (const [x, y] of death) assert.ok(Math.abs(x - 100) <= 5 && Math.abs(y - 100) <= 4);
+  }
+});
+
+test("captured projectile flights land on the captured ticks", () => {
+  const { spray, acidicDeath, ballBurst, drip, ranged, magic } = Shared.PROJECTILE;
+  // Spray blobs ended at 130-160 and pooled 5-6 ticks after the cast.
+  assert.equal(Shared.projectileEnd(spray, 3), 130);
+  assert.equal(Shared.landingTicks(Shared.projectileEnd(spray, 3)), 5);
+  assert.equal(Shared.landingTicks(Shared.projectileEnd(spray, 6)), 6);
+  // The acidic death (110-130) pooled 4-5 ticks after, the ball's burst (100-110) after 4.
+  assert.equal(Shared.landingTicks(Shared.projectileEnd(acidicDeath, 2)), 4);
+  assert.equal(Shared.landingTicks(Shared.projectileEnd(ballBurst, 1)), 4);
+  // Ranged, magic and the drip have a fixed 120-cycle flight: four ticks.
+  for (const shape of [ranged, magic, drip]) assert.equal(Shared.landingTicks(Shared.projectileEnd(shape, 9)), 4);
 });
 
 test("captured attack schedule: special on every seventh attack", () => {
@@ -102,9 +126,10 @@ test("wiki hatch schedule: first after 3 standards, then every 6", () => {
 });
 
 test("eggs sit SE-first, hatching clockwise around the centre", () => {
-  assert.deepEqual(Shared.EGG_TILES[0], [3643, 9806], "first egg is the south-easternmost");
+  assert.deepEqual(Shared.EGG_TILES[0], [3643, 9805], "first egg is the south-easternmost");
   const [cx, cy] = Shared.CENTRE_TILE;
-  const bearings = Shared.EGG_TILES.map(([x, y]) => (Math.atan2(x - cx, y - cy) * 180 / Math.PI + 360) % 360);
+  // Eggs are 2x2: measure from the middle of each.
+  const bearings = Shared.EGG_TILES.map(([x, y]) => (Math.atan2(x + 0.5 - cx, y + 0.5 - cy) * 180 / Math.PI + 360) % 360);
   let prev = bearings[0];
   for (let i = 1; i < bearings.length; i++) {
     let cur = bearings[i];
@@ -205,6 +230,8 @@ test("spawned eggs are pinned: scripted movement and zero wander radius", () => 
     Location: class {},
     Animation: class {},
     World: { getAddNPCQueue: () => [] },
+    Task: class { constructor() {} stop() {} },
+    TaskManager: { submit: () => {} },
     NpcIdentifiers: { EGG_10: 1, EGG_11: 2, EGG_12: 3, MIRRORBACK_ARAXYTE: 4, RUPTURA_ARAXYTE: 5, ACIDIC_ARAXYTE: 6 },
     CombatMethod: class {},
     CombatType: { MELEE: 0, RANGED: 1, MAGIC: 2 },
