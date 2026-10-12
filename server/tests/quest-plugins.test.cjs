@@ -176,7 +176,15 @@ test('Current Affairs and Prying Times start gates require every registered prer
 
 test('The Blood Moon Rises starts only after Sarius accepts the yes choice and requirements pass', () => {
   const { api, handlers } = mockApi();
-  api.emitCustomEvent = (name, event) => { if (name === 'quest:is-complete') event.complete = true; };
+  const npcHooks = [];
+  const prompts = [];
+  let reclaimed = 0;
+  api.emitCustomEvent = (name, event) => {
+    if (name === 'quest:is-complete') event.complete = true;
+    if (name === 'night-at-the-theatre:claim-lamps') { reclaimed++; event.handled = true; }
+  };
+  api.onAnyNpcInteraction = (hook) => npcHooks.push(hook);
+  api.sendMultiChatboxPrompt = (_player, title, ...options) => prompts.push({ title, options });
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
   const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
   const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
@@ -198,6 +206,15 @@ test('The Blood Moon Rises starts only after Sarius accepts the yes choice and r
   assert.equal(quest.getStage(player), 10, 'accepting Sarius’s invitation starts the quest');
   choose({ ...event, definition: { getName: () => 'Ivan Strom' } });
   assert.equal(quest.getStage(player), 10, 'another NPC’s yes choice cannot start this quest');
+  quest.setStage(player, quest.completionValue);
+  const stranger = npcHooks.at(-1)['Talk-to'];
+  const interaction = { player, definition: { getName: () => 'Mysterious Stranger' }, handled: false };
+  assert.equal(stranger(interaction), true);
+  assert.equal(interaction.handled, true);
+  assert.match(prompts.at(-1).options[0], /Claim unused Hallowed lamps/);
+  assert.equal(reclaimed, 0, 'opening the menu does not reclaim lamps before the player chooses');
+  prompts.at(-1).options[1]();
+  assert.equal(reclaimed, 1, 'the explicit option delegates to Night at the Theatre’s inventory-safe reclaim event');
 });
 
 test('Priest in Peril unlocks the mausoleum Holy barrier only after completion', () => {

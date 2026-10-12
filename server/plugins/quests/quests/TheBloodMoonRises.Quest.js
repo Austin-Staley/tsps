@@ -122,10 +122,26 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
   }
 
+  function claimNightLamps(player) {
+    const request = { player, handled: false };
+    api.emitCustomEvent("night-at-the-theatre:claim-lamps", request);
+    if (!request.handled) player.sendMessage("There are no unused Hallowed lamps to reclaim.");
+  }
+
   function talkQuestNpc(event) {
     const player = event?.player;
-    if (!player || quest.isComplete(player)) return false;
+    if (!player) return false;
     const npcName = String(event.definition?.getName?.() ?? "").toLowerCase();
+    // Night at the Theatre owns this same Stranger while that quest is active.
+    // Once both quests are complete, retain its unused-lamp service explicitly.
+    if (npcName === "mysterious stranger" && quest.isComplete(player) && hasQuest(player, "a_night_at_the_theatre")) {
+      api.sendMultiChatboxPrompt(player, "What would you like to do?",
+        "Claim unused Hallowed lamps", () => claimNightLamps(player),
+        "I'm off", () => {});
+      event.handled = true;
+      return true;
+    }
+    if (quest.isComplete(player)) return false;
     if (stage(player) === STAGE.NOT_STARTED) {
       if (npcName !== "sarius guile") return false;
       if (!meetsRequirements(player)) { explainRequirements(player); return true; }
