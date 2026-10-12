@@ -230,6 +230,9 @@ function generate(raid, inTime) {
 
 // ---------------------------------------------------------------- the chest
 
+/** raids_client_needsrewardbook: set as the chest is searched. */
+const VARBIT_NEEDS_REWARD_BOOK = 5457;
+
 function openChest(event) {
   const { player } = event;
   const raid = Raid.raidOf(player);
@@ -240,9 +243,11 @@ function openChest(event) {
     return true;
   }
   const sender = player.getPacketSender();
+  // rsprox captures: raids_client_needsrewardbook is set, then the rewards open with slots 0-5 clickable.
+  sender.sendVarbit(VARBIT_NEEDS_REWARD_BOOK, 1);
   sender.sendInterface(INTERFACE.REWARDS);
   sender.sendInventory(INVENTORY, Math.max(items.length, 9), items);
-  sender.sendInterfaceFlagsRange((INTERFACE.REWARDS << 16) | INTERFACE.ITEMS, 0, Math.max(items.length, 9),
+  sender.sendInterfaceFlagsRange((INTERFACE.REWARDS << 16) | INTERFACE.ITEMS, 0, Math.max(items.length - 1, 5),
     Shared.EVENT.OP1 | (1 << 10));
   return true;
 }

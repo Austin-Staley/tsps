@@ -213,11 +213,12 @@ class Room {
 class EntranceRoom extends Room {
   canPass(player) {
     if (this.raid.stage !== STAGE.WAITING) return true;
+    // rsprox captures: the leader is pointed at the side-panel, the rest told to wait.
     if (this.raid.party.isLeader(player)) {
-      Shared.statement(player, "Use the controls on the <col=ff0000>side-panel</col><br><br>when you are ready to begin the raid.");
+      Shared.statement(player, "Use the controls on the <col=7f0000>side-panel</col><br>when you are ready to begin the raid.");
       Shared.sound(player, 2277);
     } else {
-      player.sendMessage("The party leader must start the party before you may pass.");
+      Shared.statement(player, `You cannot proceed until ${this.raid.party.leader} has started the raid.`);
     }
     return false;
   }
@@ -435,7 +436,8 @@ class Raid {
     if (respawn) this.respawn = this.map.landing(respawn);
     const prefix = stage === STAGE.UPPER_DONE ? "Upper" : stage === STAGE.OLM || !this.challenge ? "Lower" : "Middle";
     const duration = Shared.formatTicks(this.ticksSinceStart());
-    for (const player of this.players) Shared.raidMessage(player, `${prefix} level complete! Duration: <col=ff0000>${duration}</col>`);
+    // rsprox captures: "<col=ff289d>Upper level complete! Duration: </col><col=ff0000>9:03</col>".
+    for (const player of this.players) player.sendMessage(`<col=ff289d>${prefix} level complete! Duration: </col><col=ff0000>${duration}</col>`);
     this.refreshTabs();
   }
 

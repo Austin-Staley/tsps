@@ -312,6 +312,15 @@ All five recordings (820 a long multi-player fight, 3389 a quick solo one).
 - A claw falls (7352 / 7370), its cave 2 ticks later; with the right claw down the left grips (7363). The last claw down: the head falls 4 ticks later, its cave at 6, and it rises across the chamber at 38.
 - The live messages (sphere colours ff3045 / 229628 / 3366ff, swaps, pairing, the clench, Life Siphon, deep burn) are used word for word.
 
+## Getting around the raid, from rsprox captures
+
+All five recordings.
+
+- Passages: the player faces it and is through 2 ticks after arriving. Before the start the leader gets "Use the controls on the <col=7f0000>side-panel</col><br>when you are ready to begin the raid." and the rest "You cannot proceed until <leader> has started the raid." (message boxes).
+- Holes down: 2 ticks after arriving, the climb and fade; "<col=ff289d>Upper level complete! Duration: </col><col=ff0000>m:ss</col>" (Middle, Lower).
+- The exit steps ask "You won't be able to re-enter." - "Leave." / "Stay.".
+- The ancient chest sets raids_client_needsrewardbook (5457) and opens the rewards with slots 0-5 clickable.
+
 ## Values not on the Wiki, to check against a capture
 
 | Value | Where |

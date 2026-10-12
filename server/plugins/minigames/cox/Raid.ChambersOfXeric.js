@@ -56,8 +56,9 @@ function startRaid({ player }) {
 function climbSteps(event) {
   const raid = inside(event.player);
   if (!raid) return false;
-  Shared.options(event.player, "You will not be able to rejoin this raid again.",
-    "Leave the raid.", () => raid.leave(event.player),
+  // rsprox captures: "You won't be able to re-enter." - "Leave." or "Stay.".
+  Shared.options(event.player, "You won't be able to re-enter.",
+    "Leave.", () => raid.leave(event.player),
     "Stay.", () => {});
   return true;
 }
@@ -76,9 +77,16 @@ function enterPassage(event) {
   let y = here.getY();
   if (face === 1 || face === 3) y = here.getY() > at.getY() ? at.getY() - 1 : at.getY() + 3;
   else x = here.getX() < at.getX() ? at.getX() + 3 : at.getX() - 1;
-  player.moveTo(Shared.loc({ x, y, z: here.getZ() }));
+  // rsprox captures: the player faces the passage and is through it 2 ticks later.
+  const to = Shared.loc({ x, y, z: here.getZ() });
+  player.setPositionToFace(at);
+  Shared.later(player, PASSAGE_TICKS, () => {
+    if (player.isRegistered?.() && player.getLocation().equals(here)) player.moveTo(to);
+  });
   return true;
 }
+
+const PASSAGE_TICKS = 2;
 
 function climb(player, animation, destination) {
   const { Animation } = Shared.core();
@@ -91,7 +99,10 @@ function enterHole(event) {
   const raid = inside(event.player);
   const room = raid?.roomAt(event.player.getLocation());
   if (!room || room.key !== "FLOOR_END_DOWNSTAIRS" || !room.record.bound) return false;
-  climb(event.player, ANIM.CLIMB_DOWN, raid.map.landing(room.record.bound));
+  // rsprox captures: down 2 ticks after arriving, with the fade.
+  const player = event.player;
+  player.setPositionToFace(event.object.getLocation());
+  Shared.later(player, PASSAGE_TICKS, () => player.isRegistered?.() && climb(player, ANIM.CLIMB_DOWN, raid.map.landing(room.record.bound)));
   return true;
 }
 
