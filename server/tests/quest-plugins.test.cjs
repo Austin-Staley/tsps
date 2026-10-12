@@ -7878,12 +7878,26 @@ test('Entry Verzik phase caps run before damage so lethal hits cannot skip a pha
 
 test('Entry Verzik red summon converts hits to healing for eight ticks, independent of red crab deaths', () => {
   const { api } = mockApi();
+  const spawned = [];
+  api.spawnNpc = () => {
+    const npc = {
+      setMaxHitpoints() { return this; }, setHitpoints() { return this; },
+      setScriptedMovement() { return this; },
+      getMovementQueue: () => ({ setBlockMovement() {} }),
+    };
+    spawned.push(npc);
+    return npc;
+  };
+  api.core = { ...api.core, CacheDefinitions: { getNpc: () => ({ hitpoints: 100 }) } };
   const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
   entry(api);
   const player = {};
   let dealt = 20, healed = 0;
   const boss = { heal: amount => { healed += amount; } };
-  const raid = { player, boss, room: 5, tick: 7, redShield: 8 };
+  const raid = { player, boss, room: 5, tick: 20, npcs: new Set(), effects: [], area: { enter() {} } };
+  entry._test.spawnVerzikAdds(raid, true);
+  assert.equal(raid.redShield, 28, 'the summon path sets the Wiki 8-tick damage window');
+  for (const crab of spawned) entry._test.npcDeath({ npc: crab });
   entry._test.NPC_RAIDS.set(boss, { raid });
   const hit = {
     getTotalDamage: () => dealt,
@@ -7891,13 +7905,14 @@ test('Entry Verzik red summon converts hits to healing for eight ticks, independ
     getCombatType: () => api.core.CombatType.RANGED,
   };
 
+  raid.tick = 27;
   entry._test.dealtDamage({ player, target: boss, hit });
   assert.equal(dealt, 0);
   assert.equal(healed, 20);
 
   // The Wiki specifies an eight-tick conversion window within the 12-tick
   // summon. Killing both crabs does not shorten that window or extend it.
-  raid.tick = 8;
+  raid.tick = 28;
   dealt = 20;
   entry._test.dealtDamage({ player, target: boss, hit });
   assert.equal(dealt, 20);
