@@ -28,8 +28,9 @@ module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play
    if(!captives.has(p))captives.set(p,api.spawnNpc({id:JAIL_SILIF,x:4135,y:4790,z:2,wanderRadius:0,owner:p,ownerOnly:true}));
    if(val(p,ARMOUR_GIVEN_ATTRIBUTE))captives.get(p).setNpcTransformationId(ARMOURED_SILIF);
   }else if(captives.has(p)){api.removeNpc(captives.get(p));captives.delete(p);}
-  if(stage(p)<580||stage(p)>=610||followers.has(p)||(l.getX()>>6)!==64||(l.getY()>>6)!==75||l.getZ()!==1)return;
-  followers.set(p,api.spawnNpc({id:ARMOURED_SILIF,x:4120,y:4840,z:1,wanderRadius:0,owner:p,ownerOnly:true}));
+  if(s<560||s>=610||followers.has(p)||l.getX()<4096||l.getX()>4163||l.getY()<4660||l.getY()>4863||![1,2].includes(l.getZ()))return;
+  const position=s>=580&&l.getZ()===1?new Location(4120,4840,1):l.transform(-1,0);
+  followers.set(p,api.spawnNpc({id:ARMOURED_SILIF,x:position.getX(),y:position.getY(),z:position.getZ(),wanderRadius:0,owner:p,ownerOnly:true}));
  }
 
  function group({player,npcId}){
@@ -110,7 +111,9 @@ module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play
  function openCell(e){
   if(!active(e.player)||id(e)!==CELL)return false;const p=e.player;
   if(!held(p,CELL_KEY)&&stage(p)<520){p.sendMessage('The cell is locked. Find its key in the inner base.');return true;}
-  advance(p,520);p.moveTo(new Location(4133,4791,2));return true;
+  api.core.ObjectManager.deregister(e.object,true);
+  api.core.ObjectManager.register(new api.core.GameObject(CELL+1,new Location(4131,4791,2),0,1,null),true);
+  advance(p,520);return true;
  }
  function silif({player,npcId,npc}){
   if(!active(player)||![JAIL_SILIF,ARMOURED_SILIF].includes(npcId))return false;
