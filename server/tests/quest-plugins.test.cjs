@@ -1212,6 +1212,7 @@ test('Desert Treasure II opens the ritual site after the serum and grants the Te
   const { ItemIdentifiers: I } = api.core;
   const attrs = new Map([['desert-treasure-ii:vardorvis-progress', 16]]);
   const counts = new Map();
+  const varbits = new Map();
   const p = {
     getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
     getUsername: () => 'dt2-vardorvis-test',
@@ -1722,6 +1723,316 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
   }
 });
 
+test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the cathedral and blackstone fragment behind real caches', () => {
+  const { api: base } = mockApi();
+  const objectHooks = [], itemOnObjectHooks = [], itemActionHooks = [], itemOnItemHooks = [], groundPickupHooks = [], actionHooks = [], interactions = [], transcripts = [], groundSpawns = [], playerProcesses = [];
+  const counts = new Map();
+  const varbits = new Map();
+  const core = {
+    ...base.core,
+    NPC: { create: (id, location) => ({ id, location, setOwner() {}, setOwnerOnly() {}, setScriptedMovement() {}, setMaxHitpoints() {}, setHitpoints() {} }) },
+    World: { getAddNPCQueue: () => [] },
+  };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
+        : prop === 'onItemOnObject' ? (handler) => itemOnObjectHooks.push(handler)
+          : prop === 'onItemAction' ? (handler) => itemActionHooks.push(handler)
+            : prop === 'onItemOnItem' ? (handler) => itemOnItemHooks.push(handler)
+          : prop === 'onGroundItemPickup' ? (handler) => groundPickupHooks.push(handler)
+            : prop === 'onPlayerProcess' ? (handler) => playerProcesses.push(handler)
+            : prop === 'getItemOnGroundManager' ? () => ({ getGroundItem: () => null, registerLocation: (...args) => groundSpawns.push(args) })
+          : prop === 'onCustomEvent' ? (name, handler) => name === 'npc-dialogue:action' && actionHooks.push(handler)
+            : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
+              : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const startTranscript = runtime.startTranscript;
+  runtime.startTranscript = (_api, _player, _id, _page, variant) => (transcripts.push(variant), true);
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1);
+    const attrs = new Map();
+    const player = {
+      getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      getUsername: () => 'dt2-lassar-test',
+      getSkillManager: () => ({ getMaxLevel: () => 99 }),
+      getInventory: () => ({
+        getAmount: (id) => counts.get(id) ?? 0,
+        adds: (id, amount) => counts.set(id, (counts.get(id) ?? 0) + amount),
+        deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+      }),
+      getPacketSender: () => new Proxy({}, { get: (_target, key) => key === 'sendVarbit'
+        ? (id, value) => varbits.set(id, value)
+        : () => {} }),
+      getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: () => {} }) }),
+      getLocation() { return this.location; },
+      moveTo(location) { this.location = location; }, sendMessage(message) { (this.messages ??= []).push(message); },
+    };
+    quest.setStage(player, 10);
+    const interact = objectHooks[0];
+    const ramarno = interactions.find((entry) => entry.name === 'Ramarno').options['Talk-to'];
+    const prescott = interactions.find((entry) => entry.name === 'Prescott').options['Talk-to'];
+    ramarno({ player, npcId: core.NpcIdentifiers.RAMARNO });
+    assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ramarno');
+    actionHooks[0]({ player, stepId: 'xu7yT_' });
+    prescott({ player, npcId: core.NpcIdentifiers.PRESCOTT });
+    assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-prescott');
+    actionHooks[0]({ player, stepId: 'em2ULK' });
+    assert.equal(counts.get(core.ItemIdentifiers.VERY_LONG_ROPE), 1);
+    const rock = { player, objectId: 48195, location: { x: 2922, y: 5827, z: 0 }, option: 'Climb-down' };
+    assert.equal(interact(rock), true, 'the sinkhole cannot be descended before the rope is tied');
+    assert.equal(itemOnObjectHooks[0]({ player, objectId: 48195, itemId: core.ItemIdentifiers.VERY_LONG_ROPE, location: rock.location }), true);
+    assert.equal(interact(rock), true);
+    assert.equal(player.location.x, 2587);
+    assert.equal(player.location.y, 6436);
+    const portals = [[2593, 6424, 49479], [2617, 6417, 49480], [2611, 6379, 49482], [2599, 6341, 49483], [2643, 6434, 49484], [2652, 6405, 49481]];
+    assert.equal(interact({ player, objectId: portals[1][2], definition: { id: portals[1][2] }, location: { x: portals[1][0], y: portals[1][1], z: 0 }, option: 'Activate' }), true);
+    assert.match(player.messages.at(-1), /earlier Lassar teleporters/);
+    for (const [x, y, id] of portals.slice(0, 3)) {
+      assert.equal(interact({ player, objectId: id, definition: { id }, location: { x, y, z: 0 }, option: 'Activate' }), true);
+    }
+    assert.equal(interact({ player, objectId: 49483, definition: { id: 49483 }, location: { x: 2599, y: 6341, z: 0 }, option: 'Activate' }), true);
+    assert.match(player.messages.at(-1), /sealed district/);
+    const findProp = (id, x, y, option = 'Search') => interact({ player, objectId: id, definition: { id }, location: { x, y, z: 0 }, option });
+    findProp(48186, 2589, 6380, 'Search');
+    findProp(48159, 2581, 6387, 'Search');
+    findProp(48168, 2594, 6352, 'Search');
+    assert.equal(counts.get(core.ItemIdentifiers.SHADOW_BLOCKER_SCHEMATIC), 1);
+    assert.equal(counts.get(core.ItemIdentifiers.SHADOW_KEY_5), 1);
+    assert.equal(counts.get(core.ItemIdentifiers.SHADOW_KEY), 1);
+    for (const [x, y, id] of portals.slice(3)) {
+      assert.equal(interact({ player, objectId: id, definition: { id }, location: { x, y, z: 0 }, option: 'Activate' }), true);
+    }
+    assert.equal(interact({ player, objectId: 48254, location: { x: 2656, y: 6424, z: 0 }, option: 'Open' }), true);
+    assert.equal(player.location.x, 2648, 'the cathedral blackout moves the player to Ketla’s house');
+    assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-after-coming-to');
+    counts.set(core.ItemIdentifiers.RING_OF_VISIBILITY, 1);
+    interactions.find((entry) => entry.name === 'Ketla').options['Talk-to']({ player, npcId: core.NpcIdentifiers.KETLA });
+    assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-with-the-ring-of-visibility');
+    actionHooks[0]({ player, stepId: 'JQeeJF' });
+    interactions.find((entry) => entry.name === 'Ketla').options['Talk-to']({ player, npcId: core.NpcIdentifiers.KETLA });
+    assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-with-the-ring-of-visibility-reclaiming-the-blackstone-fragment');
+    actionHooks[0]({ player, stepId: '5mQjA2' });
+    assert.equal(counts.get(core.ItemIdentifiers.BLACKSTONE_FRAGMENT), 1);
+    interactions.find((entry) => entry.name === 'Ketla').options['Talk-to']({ player, npcId: core.NpcIdentifiers.KETLA });
+    assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-with-a-schematic');
+    actionHooks[0]({ player, stepId: 'tOep7b' });
+    assert.equal(counts.get(core.ItemIdentifiers.SHADOW_BLOCKER_SCHEMATIC), 0, 'Ketla takes the schematic to build the blocker');
+    assert.equal(interact({ player, objectId: 48163, location: { x: 2645, y: 6440, z: 0 }, option: 'Search' }), true);
+    assert.equal(counts.get(core.ItemIdentifiers.SHADOW_BLOCKER), 1);
+    assert.equal(interact({ player, objectId: 48200, location: { x: 2598, y: 6365, z: 0 }, option: 'Enter' }), true);
+    assert.equal(player.location.x, 2342, 'the puddle carries the player into the mirrored shadow region');
+    assert.equal(interact({ player, objectId: 48264, location: { x: 2350, y: 6360, z: 0 }, option: 'Open' }), true);
+    assert.match(player.messages.at(-1), /lost souls overwhelm/);
+    itemActionHooks[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+    assert.equal(player.location.x, 2598, 'the fragment returns the player to the material world');
+    assert.equal(itemOnObjectHooks[0]({ player, objectId: 48264, itemId: core.ItemIdentifiers.SHADOW_BLOCKER, location: { x: 2606, y: 6359, z: 0 } }), true);
+    assert.equal(counts.get(core.ItemIdentifiers.SHADOW_BLOCKER), 0, 'the blocker is placed by the furnace-house door');
+    assert.equal(interact({ player, objectId: 48200, location: { x: 2598, y: 6365, z: 0 }, option: 'Enter' }), true);
+    const unlocked = interact({ player, objectId: 48264, location: { x: 2350, y: 6360, z: 0 }, option: 'Open' });
+    assert.equal(unlocked, false, 'the purple key opens the real locked shadow door after the blocker is placed');
+    assert.equal(counts.get(core.ItemIdentifiers.SHADOW_KEY), 0);
+    assert.equal(groundSpawns.length, 1, 'the basic torch schematic appears at its cache tile behind the door');
+    groundPickupHooks[0]({ player, groundItemId: core.ItemIdentifiers.BASIC_SHADOW_TORCH_SCHEMATIC, location: { x: 2353, y: 6367, z: 0 } });
+    assert.equal(attrs.get('desert-treasure-ii:lassar').torchSchematicFound, true);
+    const state = attrs.get('desert-treasure-ii:lassar');
+    assert.equal(state.teleporters.filter(Boolean).length, 6);
+    assert.equal(state.entered, true);
+    assert.equal(state.blackstone, true);
+    assert.equal(varbits.get(15126), 20, 'the Lassar progress varbit reflects the recovered basic-torch schematic');
+    assert.equal(varbits.get(15088), 1, 'the cache palace teleporter varbit follows the per-player activation');
+    assert.equal(varbits.get(15090), 1, 'the cache cathedral teleporter varbit follows the per-player activation');
+    attrs.set('desert-treasure-ii:lassar', { ...state, inShadow: true, sanity: 100 });
+    playerProcesses[0]({ player });
+    assert.equal(attrs.get('desert-treasure-ii:lassar').sanity, 99, 'sanity drains 1 point per shadow tick');
+    assert.equal(varbits.get(15064), 99, 'the cache sanity bar stays in sync with shadow time');
+    attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), inShadow: false });
+    playerProcesses[0]({ player });
+    assert.equal(attrs.get('desert-treasure-ii:lassar').sanity, 100, 'sanity recovers 10 points per material-realm tick');
+    attrs.set('desert-treasure-ii:lassar', {
+      ...attrs.get('desert-treasure-ii:lassar'), cathedralTentacles: true, perfectTorch: true,
+    });
+    interactions.find((entry) => entry.name === 'The Whisperer').options['Talk-to']({
+      player, npcId: core.NpcIdentifiers.THE_WHISPERER_3,
+    });
+    assert.equal(attrs.get('desert-treasure-ii:lassar').whispererStarted, true,
+      'disturbing the Odd Figure persists the boss start so the encounter can resume after relog');
+    assert.equal(attrs.get('desert-treasure-ii:lassar').cathedralEntered, true);
+    const deviceState = { ...attrs.get('desert-treasure-ii:lassar'), inShadow: true, whiteKey: true, sanity: 100 };
+    attrs.set('desert-treasure-ii:lassar', deviceState);
+    counts.set(core.ItemIdentifiers.SHADOW_BLOCKER, 1);
+    counts.set(core.ItemIdentifiers.ANIMA_PORTAL, 1);
+    counts.set(core.ItemIdentifiers.REVITALISING_IDOL, 1);
+    counts.set(core.ItemIdentifiers.SUPERIOR_SHADOW_TORCH, 1);
+    assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.SHADOW_BLOCKER, objectId: 48228, location: { x: 2574, y: 6449, z: 0 } }), true);
+    assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.ANIMA_PORTAL, objectId: 48228, location: { x: 2576, y: 6447, z: 0 } }), true);
+    assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.REVITALISING_IDOL, objectId: 48228, location: { x: 2578, y: 6445, z: 0 } }), true);
+    for (const [x, y] of [[2311, 6445], [2317, 6445], [2311, 6451], [2317, 6451]]) {
+      assert.equal(interact({ player, objectId: 48253, definition: { id: 48253 }, location: { x, y, z: 0 }, option: 'Light' }), true);
+    }
+    assert.equal(attrs.get('desert-treasure-ii:lassar').braziersComplete, true, 'all four distinct cache braziers must light');
+    assert.equal(interact({ player, objectId: 48232, definition: { id: 48232 }, location: { x: 2316, y: 6450, z: 0 }, option: 'Open' }), true);
+    assert.equal(counts.get(core.ItemIdentifiers.PERFECTED_SHADOW_TORCH_SCHEMATIC_2), 1, 'the palace chest yields the marked false schematic only after the device puzzle');
+    assert.equal(attrs.get('desert-treasure-ii:lassar').fakeSchematicFound, true);
+    interactions.find((entry) => entry.name === 'Ketla').options['Talk-to']({ player, npcId: core.NpcIdentifiers.KETLA });
+    assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-with-a-schematic-2');
+    actionHooks[0]({ player, stepId: 'AYDmc1' });
+    assert.equal(counts.get(core.ItemIdentifiers.PERFECTED_SHADOW_TORCH_SCHEMATIC_2), 0);
+    assert.equal(attrs.get('desert-treasure-ii:lassar').silentChoir, true);
+    attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), blueKey: true, pubBlocker: true });
+    counts.set(core.ItemIdentifiers.SHADOW_KEY_2, 1);
+    assert.equal(interact({ player, objectId: 48278, definition: { id: 48278 }, location: { x: 2385, y: 6427, z: 0 }, option: 'Open' }), false,
+      'the purple pub doors open only after the blocker and blue key, with the cache opening the real door');
+    assert.equal(interact({ player, objectId: 48278, definition: { id: 48278 }, location: { x: 2372, y: 6430, z: 0 }, option: 'Climb-up' }), true);
+    assert.equal(player.location.z, 1, 'the pub stairs use their real upper plane');
+    assert.equal(interact({ player, objectId: 48245, definition: { id: 48245 }, location: { x: 2380, y: 6430, z: 1 }, option: 'Touch' }), true);
+    assert.equal(transcripts.at(-1), 'the-whisperer-viewing-the-remnant-in-the-pub');
+    itemActionHooks[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+    assert.equal(interact({ player, objectId: 48200, definition: { id: 48200 }, location: { x: 2665, y: 6418, z: 0 }, option: 'Enter' }), true);
+    for (const [x, y, id] of [[2392, 6411, 48208], [2383, 6408, 48205]]) {
+      assert.equal(interact({ player, objectId: id, definition: { id }, location: { x, y, z: 0 }, option: 'Burn' }), true);
+    }
+    assert.equal(attrs.get('desert-treasure-ii:lassar').redKeyFound, true, 'both residential barriers expose the red key');
+    groundPickupHooks[0]({ player, groundItemId: core.ItemIdentifiers.SHADOW_KEY_4, location: { x: 2638, y: 6405, z: 0 } });
+    counts.set(core.ItemIdentifiers.SHADOW_KEY_4, 1);
+    counts.set(core.ItemIdentifiers.SHADOW_BLOCKER, 1);
+    assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.SHADOW_BLOCKER, objectId: 48228, location: { x: 2649, y: 6406, z: 0 } }), true);
+    assert.equal(interact({ player, objectId: 48232, definition: { id: 48232 }, location: { x: 2392, y: 6405, z: 0 }, option: 'Open' }), true);
+    assert.equal(counts.get(core.ItemIdentifiers.ICON_SEGMENT), 1, 'the red-key chest gives the first icon half');
+    assert.equal(interact({ player, objectId: 48205, definition: { id: 48205 }, location: { x: 2349, y: 6343, z: 0 }, option: 'Burn' }), true);
+    assert.equal(interact({ player, objectId: 48232, definition: { id: 48232 }, location: { x: 2354, y: 6339, z: 0 }, option: 'Open' }), true);
+    assert.equal(counts.get(core.ItemIdentifiers.ICON_SEGMENT_2), 1, 'the Science District chest gives the second icon half');
+    assert.equal(itemOnItemHooks[0]({ player, usedItemId: core.ItemIdentifiers.ICON_SEGMENT, usedWithItemId: core.ItemIdentifiers.ICON_SEGMENT_2 }), true);
+    assert.equal(counts.get(core.ItemIdentifiers.STRANGE_ICON), 1, 'the two halves combine into Prescott’s strange icon');
+    interactions.find((entry) => entry.name === 'Ketla').options['Talk-to']({ player, npcId: core.NpcIdentifiers.KETLA });
+    assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-with-the-icon');
+    assert.equal(interact({ player, objectId: 49488, definition: { id: 49488 }, location: { x: 2656, y: 6424, z: 0 }, option: 'Enter' }), true);
+    assert.equal(player.location.x, 2784);
+    assert.equal(interact({ player, objectId: 48301, definition: { id: 48301 }, location: { x: 2784, y: 6287, z: 1 }, option: 'Open' }), true);
+    assert.equal(interact({ player, objectId: 48304, definition: { id: 48304 }, location: { x: 2806, y: 6303, z: 1 }, option: 'Climb-down' }), true);
+    assert.equal(interact({ player, objectId: 47734, definition: { id: 47734 }, location: { x: 2784, y: 6304, z: 0 }, option: 'Inspect' }), true);
+    assert.equal(transcripts.at(-1), 'the-whisperer-inspecting-the-totem-in-the-cistern');
+    actionHooks[0]({ player, stepId: 'dUbk4i' });
+    assert.equal(player.location.x, 3232, 'the vision action takes the player into the cistern water');
+    actionHooks[0]({ player, stepId: '8nNqFG' });
+    assert.equal(attrs.get('desert-treasure-ii:lassar').escapedVision, true);
+    assert.equal(attrs.get('desert-treasure-ii:lassar').perfectTorchSchematic, true, 'Ketla supplies the real torch after the vision');
+  } finally {
+    runtime.startTranscript = startTranscript;
+  }
+});
+
+test('Desert Treasure II runs the Whisperer specials, enrage and medallion recovery', () => {
+  const { api: base } = mockApi();
+  const interactions = [], playerProcesses = [], itemActions = [], deathHooks = [], objectInteractions = [];
+  const addQueue = [], removeQueue = [], created = [];
+  const core = {
+    ...base.core,
+    NPC: { create: (id, location) => {
+      const npc = {
+        id, location, hp: 660, maxHp: 660, registered: true,
+        getId() { return this.id; }, getOwner() { return this.owner; }, setOwner(owner) { this.owner = owner; }, setOwnerOnly() {},
+        setScriptedMovement() {}, setMaxHitpoints(hp) { this.maxHp = hp; }, setHitpoints(hp) { this.hp = hp; },
+        getHitpoints() { return this.hp; }, getMaxHitpoints() { return this.maxHp; },
+        isRegistered() { return this.registered; }, forceChat(text) { this.chat = text; },
+        getCombat() { return { getLastAttack: () => ({ reset() {} }) }; },
+      };
+      created.push(npc);
+      return npc;
+    } },
+    World: { getAddNPCQueue: () => addQueue, getRemoveNPCQueue: () => removeQueue },
+  };
+  const api = new Proxy(base, { get: (target, prop) => prop === 'core' ? core
+    : prop === 'onNpcInteraction' ? (name, opts) => interactions.push({ name, opts })
+      : prop === 'onPlayerProcess' ? (handler) => playerProcesses.push(handler)
+        : prop === 'onItemAction' ? (handler) => itemActions.push(handler)
+          : prop === 'onNpcDeath' ? (handler) => deathHooks.push(handler)
+          : prop === 'onObjectInteraction' ? (handler) => typeof handler === 'function' && objectInteractions.push(handler)
+            : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop] });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const quest = runtime.getRegisteredQuests().at(-1);
+  const attrs = new Map([['desert-treasure-ii:lassar', {
+    entered: true, cathedralTentacles: true, perfectTorch: true, sanity: 100, inShadow: false,
+  }]]);
+  const items = new Map([[core.ItemIdentifiers.BLACKSTONE_FRAGMENT, 1]]);
+  let username = 'whisperer-regression';
+  const player = {
+    getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getUsername: () => username, getSkillManager: () => ({ getMaxLevel: () => 99 }),
+    getPacketSender: () => new Proxy({}, { get: (_target, key) => key === 'sendVarbit' ? () => {} : () => {} }),
+    getInventory: () => ({
+      getAmount: (id) => items.get(id) ?? 0,
+      adds: (id, amount = 1) => items.set(id, (items.get(id) ?? 0) + amount),
+      deleteNumber: (id, amount = 1) => items.set(id, Math.max(0, (items.get(id) ?? 0) - amount)),
+    }),
+    getCombat: () => ({ getHitQueue: () => ({ addPendingDamage() {} }) }),
+    location: { x: 2656, y: 6370, z: 0 }, getLocation() { return this.location; }, moveTo(location) { this.location = location; },
+    sendMessage() {},
+  };
+  quest.setStage(player, 10);
+  interactions.find((entry) => entry.name === 'Odd Figure').opts.Disturb({ player, npcId: core.NpcIdentifiers.ODD_FIGURE });
+  const boss = created.find((npc) => npc.id === core.NpcIdentifiers.THE_WHISPERER_3);
+  assert.ok(boss, 'disturbing the figure creates the quest Whisperer');
+  assert.equal(attrs.get('desert-treasure-ii:lassar').whispererStarted, true, 'the fight start survives logout');
+  boss.hp = 440;
+  playerProcesses.forEach((handler) => handler({ player }));
+  assert.equal(boss.__dt2WhispererSpecial, 'soul-siphon', 'the first special starts at one-third health');
+  assert.equal(created.filter((npc) => npc.__dt2WhispererSoul).length, 12);
+  itemActions[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+  assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, true, 'the fragment reaches the shadow realm for the special');
+  const firstChant = created.filter((npc) => npc.__dt2WhispererSoul && npc.__dt2WhispererSoulSet === 0);
+  for (const soul of firstChant) {
+    soul.registered = false;
+    deathHooks[0]({ npc: soul, killer: player });
+  }
+  assert.equal(boss.__dt2WhispererSpecial, null, 'killing one full matching chant set interrupts the siphon');
+  itemActions[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+  username = 'c';
+  boss.__dt2WhispererSpecialStarted = false;
+  playerProcesses.forEach((handler) => handler({ player }));
+  assert.equal(boss.__dt2WhispererSpecial, 'corrupted-seeds');
+  assert.equal(boss.__dt2WhispererSeeds.length, 6, 'the seed special creates light and dark seed tiles');
+  itemActions[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+  for (const seed of boss.__dt2WhispererSeeds.filter((entry) => entry.light)) {
+    player.location = { x: seed.x, y: seed.y, z: 0 };
+    playerProcesses.forEach((handler) => handler({ player }));
+  }
+  assert.equal(boss.__dt2WhispererSpecial, null, 'stepping on every light seed interrupts the seed special');
+  itemActions[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+  username = 'd';
+  boss.__dt2WhispererSpecialStarted = false;
+  playerProcesses.forEach((handler) => handler({ player }));
+  assert.equal(boss.__dt2WhispererSpecial, 'screech');
+  assert.equal(boss.__dt2WhispererColumns.length, 3, 'the screech special creates three cover columns');
+  itemActions[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+  for (const column of boss.__dt2WhispererColumns) {
+    player.location = { x: column.x, y: column.y, z: 0 };
+    for (let tick = 0; tick < 5; tick++) playerProcesses.forEach((handler) => handler({ player }));
+  }
+  assert.equal(boss.__dt2WhispererSpecial, null, 'standing by each remaining column survives all three screeches');
+
+  itemActions[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+  assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, false, 'the fragment returns the player to the material world');
+  boss.registered = false;
+  deathHooks[0]({ npc: boss, killer: player });
+  assert.equal(attrs.get('desert-treasure-ii:lassar').whispererEnraged, true, 'the first defeat starts her 100-hitpoint enrage');
+  assert.equal(player.location.x, 2404, 'the enrage pulls the player back into the Shadow Realm');
+  playerProcesses.forEach((handler) => handler({ player }));
+  const enraged = created.filter((npc) => npc.__dt2Whisperer).at(-1);
+  assert.equal(enraged.maxHp, 100);
+  assert.equal(enraged.__dt2WhispererEnraged, true);
+  enraged.registered = false;
+  deathHooks[0]({ npc: enraged, killer: player });
+  assert.equal(attrs.get('desert-treasure-ii:lassar').whispererDefeated, true, 'the second defeat opens the remains search');
+  objectInteractions[0]({ player, objectId: 47578, definition: { id: 47578 }, option: 'Search', location: { x: 2400, y: 6370, z: 0 } });
+  assert.equal(items.get(core.ItemIdentifiers.WHISPERERS_MEDALLION), 1, 'the remains yield the actual medallion');
+  assert.equal(attrs.get('desert-treasure-ii:lassar').medallion, true);
+  objectInteractions[0]({ player, objectId: 48310, definition: { id: 48310 }, option: 'Climb', location: { x: 2400, y: 6370, z: 0 } });
+  assert.deepEqual([player.location.x, player.location.y], [2587, 6436], 'the cathedral exit returns to Camdozaal');
+});
+
 test('Dragon Slayer II Torfinn starts both ordered dragon waves before Galvek', async () => {
   await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
   const { api: base } = mockApi();
@@ -2050,6 +2361,34 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   assert.equal(quest.getStage(player), 10);
 });
 
+
+function questScene(name) {
+  const { api, handlers } = mockApi();
+  require(`../plugins/quests/quests/${name}.Quest`)(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
+  const attributes = new Map();
+  const items = new Map();
+  const messages = [];
+  let location;
+  const inventory = {
+    getAmount: (id) => items.get(id) ?? 0,
+    isFull: () => false,
+    adds: (id, amount) => items.set(id, inventory.getAmount(id) + amount),
+    deleteNumber: (id, amount) => items.set(id, inventory.getAmount(id) - amount),
+  };
+  const sender = new Proxy({}, { get: () => () => sender });
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getPacketSender: () => sender,
+    getLocation: () => location,
+    moveTo: (tile) => { location = tile; },
+    sendMessage: (text) => messages.push(text),
+  };
+  const tile = (x, y, z = 0) => new api.core.Location(x, y, z);
+  return { api, handlers, quest, player, items, messages, tile };
+}
 
 test('manor front doors close after entry and the back door crosses both ways', () => {
   const { api, handlers, player, tile, messages } = questScene('ErnestTheChicken');

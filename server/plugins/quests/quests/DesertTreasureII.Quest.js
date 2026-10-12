@@ -65,6 +65,17 @@ module.exports = function registerDesertTreasureII(api) {
   const FINAL_WIGHT_INDEX = "desert-treasure-ii:final-wight-index";
   const FINAL_WIGHTS_STARTED = "desert-treasure-ii:final-wights-started";
   const FINAL_WIGHTS_COMPLETE = "desert-treasure-ii:final-wights-complete";
+  const LASSAR = "desert-treasure-ii:lassar";
+  const LASSAR_TELEPORTERS = [
+    [2593, 6424, 49479], [2617, 6417, 49480], [2611, 6379, 49482], [2599, 6341, 49483],
+    [2643, 6434, 49484], [2652, 6405, 49481], [2691, 6415, 49485],
+  ];
+  const LASSAR_ACTIONS = { ramarno: "xu7yT_", rope: "em2ULK", ropeAgain: "ws5gAK" };
+  const LASSAR_TELEPORTER_VARBITS = [15088, 15089, 15091, 15092, 15093, 15090, 15094];
+  const LASSAR_SCHEMATIC_VARBITS = [
+    ["blockerDesigned", 15082], ["idolSchematic", 15083], ["animaSchematic", 15084],
+    ["torchSchematic", 15085], ["superiorTorchSchematic", 15086], ["perfectTorchSchematic", 15087],
+  ];
   // These three cache locs have no stable cache names, so use the IDs verified
   // by dump:loc: desk 49490, inbound boat 49491, outbound Travel loc 48720.
   const KASONDE_DESK_LOC = 49490;
@@ -1992,6 +2003,7 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function handleLogin({ player: p }) {
+    if (stage(p) === S.WHISPERER) setLassar(p, p.getAttribute(LASSAR) ?? {});
     if (stage(p) === S.FINALE && p.getAttribute("desert-treasure-ii:final-cutscene-started")
       && !p.getAttribute(FINAL_WIGHTS_COMPLETE)) {
       enterFinalRoom(p);
@@ -2271,6 +2283,44 @@ module.exports = function registerDesertTreasureII(api) {
       if (!player.getAttribute(FINAL_FIGURE_DEFEATED)) return ["Inspect the altar in the western room and defeat the Mysterious Figure to recover the last medallion."];
       return ["Return the Whisperer's medallion to the Ancient Vault."];
     }
+    if (s === S.WHISPERER) {
+      const lassar = player.getAttribute(LASSAR) ?? {};
+      if (!lassar.ramarno) return ["In Camdozaal, ask Ramarno whether he has seen the archaeologists investigating Lassar."];
+      if (!has(player, I.VERY_LONG_ROPE) && !lassar.ropeTied && !lassar.entered) return ["Speak to Prescott in Camdozaal about the Lassar sinkhole and take his very long rope."];
+      if (!lassar.ropeTied) return ["Tie Prescott's very long rope to the rock beside the sinkhole in Camdozaal."];
+      if (!lassar.entered) return ["Descend into the Lassar Undercity through the sinkhole."];
+      const portals = lassar.teleporters ?? [];
+      if (portals.filter(Boolean).length < 3) return [`Activate the first three Lassar teleporters (${portals.filter(Boolean).length}/3).`];
+      if (!lassar.blockerSchematic) return ["Search the Science District for the shadow blocker schematic."];
+      if (!lassar.greenKey || !lassar.purpleKey) return ["Search the northern and southern Science District rooms for the green and purple shadow keys."];
+      if (portals.filter(Boolean).length < 6) return [`Activate the remaining Science and Residential teleporters (${portals.filter(Boolean).length}/6).`];
+      if (!lassar.blackstone) return ["Show Ketla the Ring of visibility so she can make the blackstone fragment safe to use."];
+      if (!lassar.blockerDesigned) return ["Give Ketla the shadow blocker schematic, then take the finished device from her workbench."];
+      if (!lassar.blockerPlaced) return ["Place the shadow blocker beside the locked doors in the Science District furnace house."];
+      if (!lassar.doorUnlocked) return ["Enter the shadow realm with the blackstone fragment, stay near the blocker, and unlock the furnace-house door with the purple key."];
+      if (!lassar.basicTorch) return ["Take the basic shadow torch schematic beyond the locked furnace-house door and have Ketla build the torch."];
+      if (!lassar.tentacles?.["2417,6413"]) return ["Burn the western residential tentacles with the basic shadow torch, using the blocker to stay safe from lost souls."];
+      if (!lassar.idolPlaced) return ["Find the revitalising idol schematic in the newly opened house, have Ketla build the idol, and place it beside the eastern teleporter."];
+      if (!lassar.tentacles?.["2424,6439"]) return ["Activate the eastern teleporter, return through the shadow puddle, and burn the tentacle barrier to reach the blue key."];
+      if (!lassar.superiorTorch) return ["Use the blue key and blocker to open the pub in the shadow realm, then take its superior torch schematic to Ketla."];
+      if (!lassar.animaPortal) return ["Use the superior torch to clear the deeper Science District tentacles, then have Ketla build an anima portal from the schematic."];
+      if (!lassar.plazaTentacle) return ["Use the superior torch to clear the plaza tentacles, then search the opened house for the white shadow key."];
+      if (!lassar.whiteKey) return ["Search the opened western palace house for the white shadow key."];
+      if (!lassar.whiteBlockerPlaced || !lassar.whiteAnimaPlaced || !lassar.whiteIdolPlaced) return ["Place the shadow blocker, anima portal and revitalising idol at the marked palace chest tiles."];
+      if (!lassar.braziersComplete) return [`Enter the Shadow Realm and light the four braziers around the palace chest (${Object.keys(lassar.braziers ?? {}).length}/4). Use the idol to restore sanity.`];
+      if (!lassar.perfectSchematicGiven) return ["Take the marked perfected-torch schematic from the palace chest and show it to Ketla."];
+      if (!lassar.pubRemnant) return ["Enter the shadow pub upstairs and touch the remnant to learn where the Silent Choir gathers."];
+      if (!lassar.redKeyUsed) return ["Clear the southern and western residential tentacles, take the red key, and open the square-room chest with a blocker beside it."];
+      if (!lassar.greenKeyUsed) return ["In the southern Science District, burn the small-house tentacles and use the green key on its chest for the second icon segment."];
+      if (!lassar.strangeIcon) return ["Combine the two icon segments into Prescott's strange icon."];
+      if (!lassar.iconPresented) return ["Show Ketla the strange icon before entering the cistern drain."];
+      if (!lassar.escapedVision) return ["Enter the Residential District drain, pass its icon-marked gate, descend the ladder and inspect the ancient pillar."];
+      if (!lassar.perfectTorch) return ["Take the perfected shadow torch from Ketla's workbench."];
+      if (!lassar.cathedralTentacles) return ["Enter the Shadow Realm and burn away the Sunken Cathedral tentacles with the perfected torch."];
+      if (!lassar.whispererDefeated) return ["Disturb the Odd Figure in the Sunken Cathedral and defeat the Whisperer."];
+      if (!lassar.medallion && !has(player, I.WHISPERERS_MEDALLION)) return ["Search the Whisperer's remains for her medallion."];
+      return ["Return the Whisperer's medallion to the Ancient Vault."];
+    }
     if (s >= S.WHISPERER) return ["Search the Lassar Undercity and defeat the Whisperer."];
     if (s >= S.SUCELLUS) {
       if (player.getAttribute(SUCELLUS_DEFEATED)) {
@@ -2323,6 +2373,96 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   const stage = (p) => quest.getStage(p);
+  function setLassar(p, state) {
+    if (state.entered && !Number.isFinite(Number(state.sanity))) state = { ...state, sanity: 100 };
+    p.setAttribute(LASSAR, state);
+    const sender = p.getPacketSender?.();
+    if (!sender?.sendVarbit) return;
+    const progress = state.medallion ? 46 : state.whispererDefeated ? 44 : state.cathedralEntered ? 42
+      : state.perfectTorch ? 40 : state.escapedVision ? 38 : state.iconUsed ? 36 : state.pubRemnant ? 32
+      : state.silentChoir ? 30 : state.perfectSchematicGiven ? 28 : state.fakeSchematicFound || state.perfectTorchSchematic ? 26
+          : state.animaSchematic || state.animaSchematicFound ? 24 : state.superiorTorchSchematic || state.superiorSchematicFound ? 22
+            : state.torchSchematic || state.torchSchematicFound ? 20 : state.blockerDesigned ? 18
+              : state.blackstone ? 14 : state.ringShown ? 12 : state.cameTo ? 10 : state.entered ? 8
+                : state.ropeTied ? 6 : state.rope ? 4 : state.ramarno ? 2 : 0;
+    sender.sendVarbit(15126, progress);
+    LASSAR_TELEPORTER_VARBITS.forEach((varbit, index) => sender.sendVarbit(varbit, state.teleporters?.[index] ? 1 : 0));
+    LASSAR_SCHEMATIC_VARBITS.forEach(([key, varbit]) => sender.sendVarbit(varbit, state[key] ? 1 : 0));
+    sender.sendVarbit(15162, state.inShadow ? 1 : 0);
+    sender.sendVarbit(15064, Math.max(0, Math.min(100, Number(state.sanity ?? (state.entered ? 100 : 0)) || 0)));
+  }
+  function handleLassarProcess({ player: p }) {
+    if (!p || p.isPlayerBot?.() === true || stage(p) !== S.WHISPERER) return;
+    const lassarState = p.getAttribute(LASSAR) ?? {};
+    if (!spawned.get(p)?.whisperer && lassarState.whispererStarted && !lassarState.whispererDefeated) {
+      if (spawnBoss(p, "whisperer")) p.sendMessage("The Whisperer returns to the cathedral.");
+    }
+    const boss = spawned.get(p)?.whisperer;
+    if (boss?.isRegistered?.() && boss.getHitpoints?.() > 0) {
+      boss.getCombat?.()?.getLastAttack?.()?.reset?.();
+      if (!boss.__dt2WhispererEnraged && boss.getHitpoints() <= 440 && !boss.__dt2WhispererSpecialStarted) {
+        boss.__dt2WhispererSpecialStarted = true;
+        // The quest encounter selects one of its three shadow-realm specials.
+        // Keeping the choice stable for a character also makes a failed attempt
+        // recoverable without silently changing the mechanic on re-entry.
+        const username = String(p.getUsername?.() ?? "");
+        const variant = [...username].reduce((hash, character) => (hash * 31 + character.charCodeAt(0)) | 0, 0);
+        const special = ["soul-siphon", "corrupted-seeds", "screech"][(((variant + 1) % 3) + 3) % 3];
+        if (special === "soul-siphon") startWhispererSoulSiphon(p, boss);
+        else if (special === "corrupted-seeds") startWhispererSeeds(p, boss);
+        else startWhispererScreech(p, boss);
+      }
+      if (boss.__dt2WhispererSpecial === "soul-siphon" && lassarState.inShadow) {
+        boss.__dt2WhispererSpecialTicks--;
+        if (boss.__dt2WhispererSpecialTicks <= 0) {
+          boss.__dt2WhispererSpecial = null;
+          boss.__dt2WhispererBindingTicks = 5;
+          removeWhispererSouls(p);
+          boss.setHitpoints?.(Math.min(boss.getMaxHitpoints?.() ?? 660, boss.getHitpoints() + 75));
+          p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(30, api.core.HitMask.RED)]);
+          const current = p.getAttribute(LASSAR) ?? {};
+          setLassar(p, { ...current, sanity: Math.max(0, Number(current.sanity ?? 100) - 30) });
+          p.sendMessage("The Whisperer siphons the remaining souls, heals 75 hitpoints and blasts you for 30 damage, draining 30% sanity.");
+        }
+      } else if (boss.__dt2WhispererSpecial === "corrupted-seeds") {
+        processWhispererSeeds(p, boss);
+      } else if (boss.__dt2WhispererSpecial === "screech") {
+        processWhispererScreech(p, boss);
+      }
+      if (Number(boss.__dt2WhispererBindingTicks) > 0) {
+        boss.__dt2WhispererBindingTicks--;
+        if (boss.__dt2WhispererBindingTicks === 0) {
+          const location = p.getLocation?.();
+          const px = (location?.getX?.() ?? location?.x) - (lassarState.inShadow ? 256 : 0);
+          const py = location?.getY?.() ?? location?.y;
+          const distance = Math.max(Math.abs(px - 2656), Math.abs(py - 6370));
+          if (Number.isFinite(distance) && distance <= 10) {
+            p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(20, api.core.HitMask.RED)]);
+            p.sendMessage("The Whisperer's binding blow catches you as she closes in.");
+          } else p.sendMessage("You outrun the Whisperer's binding blow.");
+          boss.__dt2WhispererBindingTicks = -1;
+        }
+      }
+    }
+    const state = p.getAttribute(LASSAR);
+    if (!state?.entered) return;
+    const sanity = Math.max(0, Math.min(100, Number(state.sanity ?? 100)));
+    const here = p.getLocation?.();
+    const px = here?.getX?.() ?? here?.x;
+    const py = here?.getY?.() ?? here?.y;
+    const protectedByBlocker = state.inShadow && state.blockerPlaced
+      && px != null && py != null && Math.max(Math.abs(px - 2350), Math.abs(py - 6360)) <= 1;
+    const nextSanity = state.inShadow && !protectedByBlocker
+      ? Math.max(0, sanity - 1)
+      : Math.min(100, sanity + (state.inShadow ? 0 : 10));
+    if (nextSanity === sanity) {
+      if (state.inShadow && sanity === 0) {
+        p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(2, api.core.HitMask.RED)]);
+      }
+      return;
+    }
+    setLassar(p, { ...state, sanity: nextSanity });
+  }
   const setStage = (p, v) => { if (stage(p) < v) quest.setStage(p, v); };
   const has = (p, id) => p.getInventory().getAmount(id) > 0;
   function talk(p, npcId, variant, next) {
@@ -2509,6 +2649,63 @@ module.exports = function registerDesertTreasureII(api) {
   function handleItemAction(event) {
     const { player: p, itemId, option } = event;
     const action = String(option || "").toLowerCase();
+    if (stage(p) === S.WHISPERER && [I.BLACKSTONE_FRAGMENT, I.BLACKSTONE_FRAGMENT_2, I.BLACKSTONE_FRAGMENT_3].includes(itemId)
+      && (action === "activate" || action === "use") && has(p, itemId)) {
+      const state = p.getAttribute(LASSAR) ?? {};
+      const location = p.getLocation?.();
+      const x = location?.getX?.() ?? location?.x;
+      const y = location?.getY?.() ?? location?.y;
+      const z = location?.getZ?.() ?? location?.z ?? 0;
+      const whisperer = spawned.get(p)?.whisperer;
+      if (whisperer?.__dt2WhispererSpecial === "soul-siphon") {
+        if (state.inShadow) {
+          p.sendMessage("The Whisperer still siphons souls. Kill all three Lost Souls chanting the same phrase before leaving the Shadow Realm.");
+        } else {
+          p.moveTo(new api.core.Location(x - 256, y, z));
+          setLassar(p, { ...state, inShadow: true });
+          p.sendMessage("The blackstone fragment draws you into the cathedral's Shadow Realm. Kill a complete set of chanting souls.");
+        }
+        event.handled = true;
+        return true;
+      }
+      if (whisperer?.__dt2WhispererSpecial && !state.inShadow) {
+        p.moveTo(new api.core.Location(x - 256, y, z));
+        setLassar(p, { ...state, inShadow: true });
+        showWhispererSpecial(p, whisperer);
+        p.sendMessage("The blackstone fragment draws you into the cathedral's Shadow Realm. Face the Whisperer's special attack.");
+        event.handled = true;
+        return true;
+      }
+      if (!state.inShadow) { p.sendMessage("The blackstone fragment is quiet in the material world."); event.handled = true; return true; }
+      p.moveTo(new api.core.Location(x + 256, y, z));
+      setLassar(p, { ...state, inShadow: false });
+      p.sendMessage("The blackstone fragment pulls you out of the shadow realm.");
+      event.handled = true;
+      return true;
+    }
+    if (stage(p) === S.WHISPERER && [I.BLACKSTONE_FRAGMENT, I.BLACKSTONE_FRAGMENT_2, I.BLACKSTONE_FRAGMENT_3].includes(itemId)
+      && action === "recall" && has(p, itemId)) {
+      const state = p.getAttribute(LASSAR) ?? {};
+      const next = { ...state };
+      let recalled = 0;
+      const devices = [
+        ["blockerPlaced", I.SHADOW_BLOCKER], ["pubBlocker", I.SHADOW_BLOCKER], ["redBlockerPlaced", I.SHADOW_BLOCKER],
+        ["whiteBlockerPlaced", I.SHADOW_BLOCKER], ["whiteAnimaPlaced", I.ANIMA_PORTAL],
+        ["whiteIdolPlaced", I.REVITALISING_IDOL], ["idolPlaced", I.REVITALISING_IDOL],
+      ];
+      for (const [key, id] of devices) {
+        if (!state[key]) continue;
+        if (!has(p, id)) p.getInventory().adds(id, 1);
+        next[key] = false;
+        recalled++;
+      }
+      if (recalled) {
+        setLassar(p, next);
+        p.sendMessage(`The blackstone fragment recalls ${recalled} placed shadow device${recalled === 1 ? "" : "s"}.`);
+      } else p.sendMessage("The blackstone fragment has no placed device to recall here.");
+      event.handled = true;
+      return true;
+    }
     if (stage(p) === S.LEVIATHAN && itemId === I.OLD_TABLET && action === "read"
       && p.getAttribute(SCAR_BOAT_ROOM) && has(p, I.OLD_TABLET)) {
       p.setAttribute(SCAR_OLD_TABLET_READ, true);
@@ -2567,7 +2764,21 @@ module.exports = function registerDesertTreasureII(api) {
     }
     return false;
   }
-  function handleItemOnItem({ player: p, usedItemId: itemId1, usedWithItemId: itemId2 }) {
+  function handleItemOnItem(event) {
+    const { player: p, usedItemId: itemId1, usedWithItemId: itemId2 } = event;
+    if (stage(p) === S.WHISPERER) {
+      const pair = new Set([itemId1, itemId2]);
+      if (pair.has(I.ICON_SEGMENT) && pair.has(I.ICON_SEGMENT_2)
+        && has(p, I.ICON_SEGMENT) && has(p, I.ICON_SEGMENT_2)) {
+        p.getInventory().deleteNumber(I.ICON_SEGMENT, 1);
+        p.getInventory().deleteNumber(I.ICON_SEGMENT_2, 1);
+        p.getInventory().adds(I.STRANGE_ICON, 1);
+        setLassar(p, { ...(p.getAttribute(LASSAR) ?? {}), strangeIcon: true });
+        p.sendMessage("You fit the two icon segments together into Prescott's strange icon.");
+        event.handled = true;
+        return true;
+      }
+    }
     if (stage(p) === S.SUCELLUS && has(p, I.PESTLE_AND_MORTAR)) {
       const pair = new Set([itemId1, itemId2]);
       const powder = pair.has(I.MUSCA_MUSHROOM) ? I.MUSCA_POWDER
@@ -2626,6 +2837,22 @@ module.exports = function registerDesertTreasureII(api) {
     const sucellusTile = sucellusSourceTile(p, location);
     const visibleId = definition?.id ?? objectId;
     const option = String(event.option ?? "").toLowerCase();
+    if (handleLassarObject(event, visibleId, option)) return true;
+    if (s === S.WHISPERER && [47578, 47579, 49555, 49556].includes(visibleId)
+      && p.getAttribute(LASSAR)?.whispererDefeated
+      && (option === "search" || option === "take" || option === "inspect")) {
+      const state = p.getAttribute(LASSAR) ?? {};
+      if (!state.medallion && !has(p, I.WHISPERERS_MEDALLION)) p.getInventory().adds(I.WHISPERERS_MEDALLION, 1);
+      setLassar(p, { ...state, medallion: true });
+      p.sendMessage("You search the Whisperer's remains and recover her medallion.");
+      return true;
+    }
+    if (s === S.WHISPERER && visibleId === 48310 && p.getAttribute(LASSAR)?.medallion
+      && (option === "exit" || option === "climb" || option === "leave")) {
+      p.moveTo(new api.core.Location(2587, 6436, 0));
+      p.sendMessage("You leave the Sunken Cathedral with the Whisperer's medallion.");
+      return true;
+    }
     if ((s === S.FINALE || s === S.COMPLETE) && finalTile && visibleId === 48890 && finalTile.x === 3294 && finalTile.y === 6411 && option === "climb") {
       const finalRoom = p.getAttribute(FINAL_ROOM);
       finalRoom?.leave?.(p);
@@ -3346,6 +3573,90 @@ module.exports = function registerDesertTreasureII(api) {
   }
   function handleItemOnObject(event) {
     const { player: p, itemId, objectId, location } = event;
+    const lassar = p.getAttribute(LASSAR) ?? {};
+    if (stage(p) === S.WHISPERER && lassar.inShadow && itemId === I.SHADOW_BLOCKER
+      && location?.x === 2649 && location?.y === 6406) {
+      event.handled = true;
+      if (!lassar.choirSouth || !lassar.choirWest || !lassar.redKey || !has(p, itemId)) {
+        p.sendMessage("Clear the two residential tentacle barriers and take the red shadow key before placing the blocker by this chest.");
+        return true;
+      }
+      p.getInventory().deleteNumber(I.SHADOW_BLOCKER, 1);
+      setLassar(p, { ...lassar, redBlockerPlaced: true });
+      p.sendMessage("You place the shadow blocker beside the red-key chest to hold back the lost souls.");
+      return true;
+    }
+    if (stage(p) === S.WHISPERER && itemId === I.SHADOW_BLOCKER && location?.x === 2574 && location?.y === 6449) {
+      event.handled = true;
+      if (!lassar.whiteKey || !has(p, itemId)) { p.sendMessage("The palace chest is still sealed. Find the white shadow key first."); return true; }
+      p.getInventory().deleteNumber(I.SHADOW_BLOCKER, 1);
+      setLassar(p, { ...lassar, whiteBlockerPlaced: true });
+      p.sendMessage("You place the shadow blocker in front of the palace chest.");
+      return true;
+    }
+    if (stage(p) === S.WHISPERER && itemId === I.ANIMA_PORTAL && location?.x === 2576 && location?.y === 6447) {
+      event.handled = true;
+      if (!lassar.whiteKey || !has(p, itemId)) { p.sendMessage("The palace chest is still sealed. Find the white shadow key first."); return true; }
+      p.getInventory().deleteNumber(I.ANIMA_PORTAL, 1);
+      setLassar(p, { ...lassar, whiteAnimaPlaced: true });
+      p.sendMessage("You place the anima portal between the palace chest's braziers.");
+      return true;
+    }
+    if (stage(p) === S.WHISPERER && itemId === I.REVITALISING_IDOL && location?.x === 2578 && location?.y === 6445) {
+      event.handled = true;
+      if (!lassar.whiteKey || !has(p, itemId)) { p.sendMessage("The palace chest is still sealed. Find the white shadow key first."); return true; }
+      p.getInventory().deleteNumber(I.REVITALISING_IDOL, 1);
+      setLassar(p, { ...lassar, whiteIdolPlaced: true });
+      p.sendMessage("You place the revitalising idol south-east of the anima portal.");
+      return true;
+    }
+    if (stage(p) === S.WHISPERER && location?.x === 2922 && location.y === 5827 && itemId === I.VERY_LONG_ROPE
+      && [48195, 48196, 48197].includes(objectId)) {
+      event.handled = true;
+      if (!lassar.ramarno || !has(p, I.VERY_LONG_ROPE)) {
+        p.sendMessage("Ask Ramarno about the Lassar archaeologists before tying a rope to the sinkhole rock.");
+        return true;
+      }
+      p.getInventory().deleteNumber(I.VERY_LONG_ROPE, 1);
+      setLassar(p, { ...lassar, ropeTied: true });
+      p.sendMessage("You tie Prescott's very long rope to the sinkhole rock.");
+      return true;
+    }
+    if (stage(p) === S.WHISPERER && itemId === I.SHADOW_BLOCKER && has(p, itemId)
+      && [48228, 48229, 48230, 48231, 48232, 48233, 48234, 48235, 48254, 48255, 48256, 48257, 48258, 48259, 48260, 48261, 48262, 48263, 48264, 48265, 48266, 48267, 48278, 48279, 48289, 48290].includes(objectId)
+      && ((location?.x === 2606 && location?.y === 6359) || (location?.x === 2350 && location?.y === 6360)
+        || (location?.x === 2641 && location?.y === 6428) || (location?.x === 2385 && location?.y === 6427)
+        || (location?.x === 2649 && location?.y === 6406))) {
+      const state = p.getAttribute(LASSAR) ?? {};
+      event.handled = true;
+      if ((location.x === 2641 || location.x === 2385) && !state.blueKey) {
+        p.sendMessage("Clear the eastern residential tentacles and take their blue key before opening the pub passage.");
+        return true;
+      }
+      p.getInventory().deleteNumber(I.SHADOW_BLOCKER, 1);
+      setLassar(p, location.x === 2641 || location.x === 2385
+        ? { ...state, pubBlocker: true }
+        : location.x === 2649
+          ? { ...state, redBlockerPlaced: true }
+        : { ...state, blockerPlaced: true });
+      p.sendMessage(location.x === 2641 || location.x === 2385
+        ? "You place the shadow blocker by the pub doors, containing the lost souls that guard the passage."
+        : "You place the shadow blocker beside the furnace-house doors. It creates a small safe zone from the lost souls.");
+      return true;
+    }
+    if (stage(p) === S.WHISPERER && itemId === I.REVITALISING_IDOL && has(p, itemId)
+      && (location?.x === 2689 || location?.x === 2691) && location?.y === 6415
+      && [49485, 48201, 48202, 48203].includes(objectId)) {
+      event.handled = true;
+      if (!lassar.idol || !lassar.basicTorch || !(lassar.teleporters ?? []).slice(0, 6).every(Boolean)) {
+        p.sendMessage("The idol belongs by the eastern teleporter, after Ketla has made it and you have cleared the residential path.");
+        return true;
+      }
+      p.getInventory().deleteNumber(I.REVITALISING_IDOL, 1);
+      setLassar(p, { ...lassar, idolPlaced: true });
+      p.sendMessage("You place the revitalising idol beside the eastern teleporter. Its light steadies your sanity in the Shadow Realm.");
+      return true;
+    }
     const sucellusTile = sucellusSourceTile(p, location);
     if (stage(p) === S.SUCELLUS && p.getAttribute(SUCELLUS_CELL_ESCAPED)
       && objectId === 49120 && sucellusTile?.x === 2945 && sucellusTile.y === 6389
@@ -3591,7 +3902,7 @@ module.exports = function registerDesertTreasureII(api) {
       vardorvis: [N.VARDORVIS_2, 1129, 3419],
       leviathan: [N.THE_LEVIATHAN_3, 2078, 6368],
       sucellus: [N.DUKE_SUCELLUS_6, 3036, 6452],
-      whisperer: [N.THE_WHISPERER_3, 2399, 6369],
+      whisperer: [N.THE_WHISPERER_3, 2656, 6370],
     };
     const [id, x, y] = table[key];
     let npcs = spawned.get(p);
@@ -3647,8 +3958,186 @@ module.exports = function registerDesertTreasureII(api) {
       p.setAttribute(ATTR, npc);
       return npc;
     }
+    if (key === "whisperer") {
+      const state = p.getAttribute(LASSAR) ?? {};
+      if (!state.cathedralTentacles || state.whispererDefeated) return;
+      if (npcs[key]?.isRegistered?.() && npcs[key].getHitpoints?.() > 0) return npcs[key];
+      const npc = api.core.NPC.create(N.THE_WHISPERER_3,
+        new api.core.Location(state.whispererEnraged ? 2400 : x, y, 0));
+      npc.setOwner?.(p);
+      npc.setOwnerOnly?.(true);
+      npc.setScriptedMovement?.(true);
+      npc.setMaxHitpoints?.(state.whispererEnraged ? 100 : 660);
+      npc.setHitpoints?.(state.whispererEnraged ? 100 : 660);
+      npc.__dt2Whisperer = true;
+      npc.__dt2WhispererEnraged = Boolean(state.whispererEnraged);
+      npc.__dt2WhispererSpecial = 0;
+      npc.__skipDefaultRespawn = true;
+      api.core.World.getAddNPCQueue().push(npc);
+      npcs[key] = npc;
+      p.setAttribute(ATTR, npc);
+      p.sendMessage("The Whisperer rises from the cathedral. Watch her changing attacks and protect your sanity in the Shadow Realm.");
+      return npc;
+    }
     if (!npcs[key]) npcs[key] = api.spawnNpc({ id, x, y, z: 0, owner: p, ownerOnly: true });
     return npcs[key];
+  }
+  function startWhispererSoulSiphon(p, boss) {
+    if (boss.__dt2WhispererSpecial) return;
+    boss.__dt2WhispererSpecial = "soul-siphon";
+    boss.__dt2WhispererSpecialTicks = 25;
+    boss.forceChat?.("The souls will feed me!");
+    p.sendMessage("The blackstone fragment glows yellow. Activate it, enter the Shadow Realm and kill all three souls chanting the same phrase before the siphon completes.");
+    const owned = spawned.get(p) ?? {};
+    const souls = [];
+    const chants = ["Vita!", "Mors!", "Umbra!", "Aeternus!"];
+    for (let group = 0; group < chants.length; group++) {
+      for (let member = 0; member < 3; member++) {
+        const x = 2411 + group * 3 + (member % 2);
+        const y = 6365 + member * 3 + Math.floor(group / 2) * 2;
+        const soul = api.core.NPC.create(N.LOST_SOUL, new api.core.Location(x, y, 0));
+        soul.setOwner?.(p);
+        soul.setOwnerOnly?.(true);
+        soul.setScriptedMovement?.(true);
+        soul.setMaxHitpoints?.(20);
+        soul.setHitpoints?.(20);
+        soul.forceChat?.(chants[group]);
+        soul.__dt2WhispererSoul = true;
+        soul.__dt2WhispererSoulSet = group;
+        soul.__skipDefaultRespawn = true;
+        souls.push(soul);
+        api.core.World.getAddNPCQueue().push(soul);
+      }
+    }
+    owned.whispererSouls = souls;
+    spawned.set(p, owned);
+  }
+  function whispererEffectObject(p, id, x, y, type = 22) {
+    const object = new api.core.GameObject(id, new api.core.Location(x, y, 0), type, 0, null);
+    p.getPacketSender?.()?.sendObject?.(object);
+    return object;
+  }
+  function clearWhispererObjects(p, objects) {
+    for (const object of objects ?? []) p.getPacketSender?.()?.sendObjectRemoval?.(object);
+  }
+  function showWhispererSpecial(p, boss) {
+    if (boss.__dt2WhispererSpecial === "corrupted-seeds") {
+      for (const seed of boss.__dt2WhispererSeeds ?? []) {
+        if (seed.active !== false) seed.object = whispererEffectObject(p, seed.id, seed.x, seed.y);
+      }
+    } else if (boss.__dt2WhispererSpecial === "screech") {
+      for (const column of boss.__dt2WhispererColumns ?? []) {
+        if (column.active) column.object = whispererEffectObject(p, O.FLOATING_COLUMN, column.x, column.y, 10);
+      }
+    }
+  }
+  function startWhispererSeeds(p, boss) {
+    boss.__dt2WhispererSpecial = "corrupted-seeds";
+    boss.__dt2WhispererSpecialTicks = 50;
+    boss.forceChat?.("Let the seeds of fear take root!");
+    // These are the cache loc variants used by the real encounter. The pattern
+    // is centered on the cathedral's mirrored boss tile in the Shadow Realm.
+    const seeds = [
+      { x: 2398, y: 6368, light: true, id: O.CORRUPTED_SEED },
+      { x: 2402, y: 6368, light: true, id: O.CORRUPTED_SEED },
+      { x: 2400, y: 6372, light: true, id: O.CORRUPTED_SEED },
+      { x: 2398, y: 6371, light: false, id: O.CORRUPTED_SEED_3 },
+      { x: 2402, y: 6371, light: false, id: O.CORRUPTED_SEED_3 },
+      { x: 2400, y: 6366, light: false, id: O.CORRUPTED_SEED_3 },
+    ].map((seed) => ({ ...seed, object: null, active: true }));
+    boss.__dt2WhispererSeeds = seeds;
+    p.sendMessage("The Whisperer scatters corrupted seeds. Activate the blackstone fragment, step on every light-green seed, and avoid the dark-green seeds.");
+  }
+  function finishWhispererSeeds(p, boss, success) {
+    clearWhispererObjects(p, boss.__dt2WhispererSeeds?.map((seed) => seed.object));
+    boss.__dt2WhispererSeeds = [];
+    boss.__dt2WhispererSpecial = null;
+    boss.__dt2WhispererBindingTicks = 5;
+    if (success) {
+      const state = p.getAttribute(LASSAR) ?? {};
+      setLassar(p, { ...state, sanity: Math.min(100, Number(state.sanity ?? 100) + 15) });
+      p.sendMessage("You stamp out each light-green seed. The Whisperer's attack is broken and your sanity steadies.");
+    } else {
+      p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(75, api.core.HitMask.RED)]);
+      const state = p.getAttribute(LASSAR) ?? {};
+      setLassar(p, { ...state, sanity: Math.max(0, Number(state.sanity ?? 100) - 75) });
+      p.sendMessage("The corrupted seeds erupt before you can stop them, blasting you and draining your sanity.");
+    }
+  }
+  function processWhispererSeeds(p, boss) {
+    if (!(p.getAttribute(LASSAR) ?? {}).inShadow) return;
+    boss.__dt2WhispererSpecialTicks--;
+    const location = p.getLocation?.();
+    const x = location?.getX?.() ?? location?.x;
+    const y = location?.getY?.() ?? location?.y;
+    const seed = boss.__dt2WhispererSeeds?.find((entry) => entry.active !== false && entry.x === x && entry.y === y);
+    if (seed) {
+      seed.active = false;
+      p.getPacketSender?.()?.sendObjectRemoval?.(seed.object);
+      if (!seed.light) p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(20, api.core.HitMask.RED)]);
+      const remaining = boss.__dt2WhispererSeeds.filter((entry) => entry.light && entry.active !== false);
+      if (!remaining.length) return finishWhispererSeeds(p, boss, true);
+    }
+    if (boss.__dt2WhispererSpecialTicks <= 0) finishWhispererSeeds(p, boss, false);
+  }
+  function startWhispererScreech(p, boss) {
+    boss.__dt2WhispererSpecial = "screech";
+    boss.__dt2WhispererSpecialTicks = 5;
+    boss.__dt2WhispererScreeches = 3;
+    boss.forceChat?.("Hear my screech!");
+    const columns = [[2397, 6370, 20], [2401, 6373, 40], [2404, 6369, 60]];
+    boss.__dt2WhispererColumns = columns.map(([x, y, hp]) => ({
+      x, y, hp, object: null, active: true,
+    }));
+    p.sendMessage("The Whisperer unleashes three screeches. Take cover behind a floating column; the weakest columns will fall first.");
+  }
+  function processWhispererScreech(p, boss) {
+    if (!(p.getAttribute(LASSAR) ?? {}).inShadow) return;
+    boss.__dt2WhispererSpecialTicks--;
+    if (boss.__dt2WhispererSpecialTicks > 0) return;
+    const location = p.getLocation?.();
+    const x = location?.getX?.() ?? location?.x;
+    const y = location?.getY?.() ?? location?.y;
+    const columns = boss.__dt2WhispererColumns ?? [];
+    const cover = columns.find((column) => column.active && Math.max(Math.abs(x - column.x), Math.abs(y - column.y)) <= 1);
+    if (!cover) {
+      p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(35, api.core.HitMask.RED)]);
+      const state = p.getAttribute(LASSAR) ?? {};
+      setLassar(p, { ...state, sanity: Math.max(0, Number(state.sanity ?? 100) - 35) });
+      p.sendMessage("The screech catches you in the open, tearing at your body and sanity.");
+    } else {
+      p.sendMessage("A floating column absorbs the Whisperer's screech.");
+    }
+    cover && clearWhispererObjects(p, [cover.object]);
+    if (cover) cover.active = false;
+    boss.__dt2WhispererScreeches--;
+    if (boss.__dt2WhispererScreeches <= 0) {
+      clearWhispererObjects(p, columns.filter((column) => column.active).map((column) => column.object));
+      boss.__dt2WhispererColumns = [];
+      boss.__dt2WhispererSpecial = null;
+      boss.__dt2WhispererBindingTicks = 5;
+      p.sendMessage("The Whisperer finishes her screeching sequence and prepares a binding blow.");
+    } else {
+      boss.__dt2WhispererSpecialTicks = 5;
+    }
+  }
+  function removeWhispererSouls(p, keepSet = -1) {
+    const owned = spawned.get(p);
+    if (!owned) return;
+    for (const soul of owned.whispererSouls ?? []) {
+      if (!soul?.isRegistered?.() || soul.__dt2WhispererSoulSet === keepSet) continue;
+      const add = api.core.World.getAddNPCQueue();
+      for (let i = add.indexOf(soul); i >= 0; i = add.indexOf(soul)) add.splice(i, 1);
+      if (!api.core.World.getRemoveNPCQueue().includes(soul)) api.core.World.getRemoveNPCQueue().push(soul);
+    }
+    owned.whispererSouls = keepSet < 0
+      ? []
+      : (owned.whispererSouls ?? []).filter((soul) => soul?.isRegistered?.() && soul.__dt2WhispererSoulSet === keepSet);
+  }
+  function handleWhispererHit({ npc, hit }) {
+    if (!npc?.__dt2Whisperer || npc.__dt2WhispererSpecial !== "soul-siphon" || !hit) return;
+    for (const damage of hit.getHits?.() ?? []) damage.setDamage(0);
+    hit.updateTotalDamage?.();
   }
   function handleBossTalk({ player: p, npcId, npc }) {
     const s = stage(p);
@@ -3691,7 +4180,43 @@ module.exports = function registerDesertTreasureII(api) {
       if (npc?.__dt2Sucellus && !npc.__dt2SucellusAwake) return p.sendMessage("The Duke is in a deep slumber. Weaken him with two Arder-musca poisons first.");
       return p.sendMessage("Duke Sucellus turns his attention to you.");
     }
-    if (s === S.WHISPERER) { talk(p, npcId, "the-whisperer-talking-to-ketla-after-coming-to"); }
+    if (s === S.WHISPERER) {
+      const state = p.getAttribute(LASSAR) ?? {};
+      if ([N.ODD_FIGURE, N.THE_WHISPERER, N.THE_WHISPERER_2, N.THE_WHISPERER_3, N.THE_WHISPERER_4].includes(npcId)) {
+        if (!state.cathedralTentacles || !state.perfectTorch) {
+          return p.sendMessage("Clear the cathedral tentacles with Ketla's perfected shadow torch before disturbing the figure.");
+        }
+        if (state.whispererDefeated) return p.sendMessage("Search the Whisperer's remains for her medallion.");
+        spawnBoss(p, "whisperer");
+        setLassar(p, { ...state, cathedralEntered: true, whispererStarted: true });
+        return;
+      }
+      if (npcId === N.KETLA || npcId === N.KETLA_2) {
+        if (state.fakeSchematicFound && !state.perfectSchematicGiven && has(p, I.PERFECTED_SHADOW_TORCH_SCHEMATIC_2))
+          return talk(p, npcId, "the-whisperer-talking-to-ketla-with-a-schematic-2");
+        if (state.strangeIcon && !state.iconPresented) {
+          setLassar(p, { ...state, iconPresented: true });
+          return talk(p, npcId, "the-whisperer-talking-to-ketla-with-the-icon");
+        }
+        if (state.escapedVision && state.perfectTorchSchematic)
+          return talk(p, npcId, "the-whisperer-inspecting-the-totem-in-the-cistern-talking-to-ketla-again");
+        if (state.cameTo && !state.blackstone && state.ringShown) {
+          return talk(p, npcId, "the-whisperer-talking-to-ketla-with-the-ring-of-visibility-reclaiming-the-blackstone-fragment");
+        }
+        if (state.cameTo && !state.blackstone && has(p, I.RING_OF_VISIBILITY)) {
+          return talk(p, npcId, "the-whisperer-talking-to-ketla-with-the-ring-of-visibility");
+        }
+        if (state.blockerSchematic && !state.ketlaBriefed) {
+          setLassar(p, { ...state, ketlaBriefed: true });
+          talk(p, npcId, "the-whisperer-talking-to-ketla-with-a-schematic");
+          return;
+        }
+        if (state.entered && !state.blockerSchematic) { talk(p, npcId, "the-whisperer-while-in-the-shadow-realm"); return; }
+        talk(p, npcId, "the-whisperer-talking-to-ketla-after-coming-to");
+        return;
+      }
+      talk(p, npcId, "the-whisperer-talking-to-ketla-after-coming-to");
+    }
   }
   function handleDeath({ killer, npc }) {
     if (npc?.__dt2ScarAntibody) {
@@ -3717,6 +4242,25 @@ module.exports = function registerDesertTreasureII(api) {
       }
       return;
     }
+    if (npc?.__dt2WhispererSoul) {
+      const owner = npc.getOwner?.();
+      const actors = owner && spawned.get(owner);
+      if (!owner || !actors) return;
+      const group = npc.__dt2WhispererSoulSet;
+      actors.whispererSouls = (actors.whispererSouls ?? []).filter((soul) => soul !== npc);
+      const remaining = actors.whispererSouls.filter((soul) => soul?.isRegistered?.() && soul.__dt2WhispererSoulSet === group);
+      if (!remaining.length) {
+        removeWhispererSouls(owner);
+        const boss = actors.whisperer;
+        if (boss?.isRegistered?.()) {
+          boss.__dt2WhispererSpecial = null;
+          boss.__dt2WhispererBindingTicks = 5;
+          boss.forceChat?.("The souls are silenced!");
+        }
+        owner.sendMessage("You silence one complete set of souls. The Whisperer's siphon fails; leave the Shadow Realm with the blackstone fragment.");
+      }
+      return;
+    }
     if (!killer) return;
     const owned = spawned.get(killer);
     if (!owned) return;
@@ -3739,6 +4283,23 @@ module.exports = function registerDesertTreasureII(api) {
       killer.setAttribute(FINAL_CELL_ACTIVE, false);
       if (!has(killer, I.WHISPERERS_MEDALLION)) killer.getInventory().adds(I.WHISPERERS_MEDALLION, 1);
       killer.sendMessage("The Mysterious Figure falls. You recover the Whisperer's medallion and can now return to the Ancient Vault.");
+      return;
+    }
+    if (owned.whisperer === npc && stage(killer) === S.WHISPERER) {
+      owned.whisperer = null;
+      const state = killer.getAttribute(LASSAR) ?? {};
+      if (!state.whispererEnraged) {
+        setLassar(killer, { ...state, whispererEnraged: true, inShadow: true });
+        const here = killer.getLocation?.();
+        const x = here?.getX?.() ?? here?.x;
+        const y = here?.getY?.() ?? here?.y;
+        const z = here?.getZ?.() ?? here?.z ?? 0;
+        if (x != null && y != null) killer.moveTo(new api.core.Location(x - 256, y, z));
+        killer.sendMessage("The Whisperer surges back with 100 hitpoints and drags you into the Shadow Realm. Finish her enrage phase.");
+      } else {
+        setLassar(killer, { ...state, whispererDefeated: true, inShadow: false });
+        killer.sendMessage("The Whisperer is defeated. Search her remains for the medallion before returning to the Ancient Vault.");
+      }
       return;
     }
     if (owned.leviathan === npc && stage(killer) === S.LEVIATHAN) {
@@ -3900,7 +4461,56 @@ module.exports = function registerDesertTreasureII(api) {
     if (s === S.VARDORVIS) { talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-elissa"); spawnBoss(p, "vardorvis"); return; }
     if (s === S.LEVIATHAN) return handleBossTalk({ player: p, npcId });
     if (s === S.SUCELLUS) return talk(p, npcId, "duke-sucellus-of-the-sixth-legion-talking-to-captain-malleta");
-    if (s === S.WHISPERER) return talk(p, npcId, "the-whisperer-talking-to-ketla-after-coming-to");
+    if (s === S.WHISPERER) {
+      const state = p.getAttribute(LASSAR) ?? {};
+      if ([N.ODD_FIGURE, N.THE_WHISPERER, N.THE_WHISPERER_2, N.THE_WHISPERER_3, N.THE_WHISPERER_4].includes(npcId)) {
+        if (!state.cathedralTentacles || !state.perfectTorch) {
+          return p.sendMessage("Clear the cathedral tentacles with Ketla's perfected shadow torch before disturbing the figure.");
+        }
+        if (state.whispererDefeated) return p.sendMessage("Search the Whisperer's remains for her medallion.");
+        spawnBoss(p, "whisperer");
+        setLassar(p, { ...state, cathedralEntered: true, whispererStarted: true });
+        return;
+      }
+      if (npcId === N.KETLA || npcId === N.KETLA_2) {
+        if (state.fakeSchematicFound && !state.perfectSchematicGiven && has(p, I.PERFECTED_SHADOW_TORCH_SCHEMATIC_2))
+          return talk(p, npcId, "the-whisperer-talking-to-ketla-with-a-schematic-2");
+        if (state.strangeIcon && !state.iconPresented) {
+          setLassar(p, { ...state, iconPresented: true });
+          return talk(p, npcId, "the-whisperer-talking-to-ketla-with-the-icon");
+        }
+        if (state.escapedVision && state.perfectTorchSchematic)
+          return talk(p, npcId, "the-whisperer-inspecting-the-totem-in-the-cistern-talking-to-ketla-again");
+        if (state.cameTo && !state.blackstone && state.ringShown) {
+          return talk(p, npcId, "the-whisperer-talking-to-ketla-with-the-ring-of-visibility-reclaiming-the-blackstone-fragment");
+        }
+        if (state.cameTo && !state.blackstone && has(p, I.RING_OF_VISIBILITY)) {
+          return talk(p, npcId, "the-whisperer-talking-to-ketla-with-the-ring-of-visibility");
+        }
+        if (has(p, I.SHADOW_BLOCKER_SCHEMATIC) || has(p, I.BASIC_SHADOW_TORCH_SCHEMATIC) || has(p, I.REVITALISING_IDOL_SCHEMATIC)
+          || has(p, I.SUPERIOR_SHADOW_TORCH_SCHEMATIC) || has(p, I.ANIMA_PORTAL_SCHEMATIC)) {
+          setLassar(p, { ...state, ketlaBriefed: true });
+          return talk(p, npcId, "the-whisperer-talking-to-ketla-with-a-schematic");
+        }
+        return talk(p, npcId, "the-whisperer-talking-to-ketla-after-coming-to");
+      }
+      return talk(p, npcId, "the-whisperer-talking-to-ketla-after-coming-to");
+    }
+  }
+
+  function talkRamarno({ player: p, npcId }) {
+    if (stage(p) !== S.WHISPERER) return;
+    const state = p.getAttribute(LASSAR) ?? {};
+    if (state.entered) return p.sendMessage("Ramarno's directions brought you to the Lassar Undercity. Continue through its shadow devices.");
+    talk(p, npcId, "the-whisperer-talking-to-ramarno");
+  }
+  function talkPrescott({ player: p, npcId }) {
+    if (stage(p) !== S.WHISPERER) return;
+    const state = p.getAttribute(LASSAR) ?? {};
+    if (!state.ramarno) return p.sendMessage("Prescott points you toward Ramarno by the Sacred Forge.");
+    talk(p, npcId, has(p, I.VERY_LONG_ROPE)
+      ? "the-whisperer-talking-to-prescott-talking-to-prescott-after-entering-the-undercity"
+      : state.rope ? "the-whisperer-talking-to-prescott-talking-to-prescott-again" : "the-whisperer-talking-to-prescott");
   }
 
   function startFinalCellLock(p) {
@@ -4008,6 +4618,60 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function handleDialogueAction({ player: p, stepId }) {
+    const lassar = p.getAttribute(LASSAR) ?? {};
+    if (stepId === "AYDmc1" && stage(p) === S.WHISPERER && has(p, I.PERFECTED_SHADOW_TORCH_SCHEMATIC_2)) {
+      p.getInventory().deleteNumber(I.PERFECTED_SHADOW_TORCH_SCHEMATIC_2, 1);
+      setLassar(p, { ...lassar, perfectSchematicGiven: true, silentChoir: true });
+    }
+    if (stepId === "1Y6l8H" && stage(p) === S.WHISPERER) {
+      setLassar(p, { ...(p.getAttribute(LASSAR) ?? {}), visionStarted: true });
+    }
+    if (stepId === "dUbk4i" && stage(p) === S.WHISPERER) {
+      p.moveTo(new api.core.Location(3232, 6308, 0));
+    }
+    if (stepId === "8nNqFG" && stage(p) === S.WHISPERER) {
+      const current = p.getAttribute(LASSAR) ?? {};
+      p.moveTo(new api.core.Location(2648, 6442, 0));
+      setLassar(p, { ...current, escapedVision: true, perfectTorchSchematic: true });
+    }
+    if (stepId === LASSAR_ACTIONS.ramarno) {
+      setLassar(p, { ...lassar, ramarno: true });
+    }
+    if (stepId === LASSAR_ACTIONS.rope || stepId === LASSAR_ACTIONS.ropeAgain) {
+      if (stage(p) === S.WHISPERER && !has(p, I.VERY_LONG_ROPE)) {
+        p.getInventory().adds(I.VERY_LONG_ROPE, 1);
+        p.sendMessage("Prescott gives you a very long rope.");
+        setLassar(p, { ...lassar, ramarno: true, rope: true });
+      }
+    }
+    if (stepId === "JQeeJF") {
+      const current = p.getAttribute(LASSAR) ?? {};
+      setLassar(p, { ...current, ringShown: true });
+    }
+    if (stepId === "5mQjA2" && stage(p) === S.WHISPERER) {
+      const current = p.getAttribute(LASSAR) ?? {};
+      if (!has(p, I.BLACKSTONE_FRAGMENT) && !has(p, I.BLACKSTONE_FRAGMENT_2) && !has(p, I.BLACKSTONE_FRAGMENT_3)) p.getInventory().adds(I.BLACKSTONE_FRAGMENT, 1);
+      setLassar(p, { ...current, blackstone: true });
+    }
+    if (stepId === "tOep7b" && stage(p) === S.WHISPERER) {
+      const current = p.getAttribute(LASSAR) ?? {};
+      if (has(p, I.SHADOW_BLOCKER_SCHEMATIC)) {
+        p.getInventory().deleteNumber(I.SHADOW_BLOCKER_SCHEMATIC, 1);
+        setLassar(p, { ...current, blockerSchematic: true, blockerDesigned: true });
+      } else if (has(p, I.BASIC_SHADOW_TORCH_SCHEMATIC)) {
+        p.getInventory().deleteNumber(I.BASIC_SHADOW_TORCH_SCHEMATIC, 1);
+        setLassar(p, { ...current, torchSchematic: true });
+      } else if (has(p, I.REVITALISING_IDOL_SCHEMATIC)) {
+        p.getInventory().deleteNumber(I.REVITALISING_IDOL_SCHEMATIC, 1);
+        setLassar(p, { ...current, idolSchematic: true });
+      } else if (has(p, I.SUPERIOR_SHADOW_TORCH_SCHEMATIC)) {
+        p.getInventory().deleteNumber(I.SUPERIOR_SHADOW_TORCH_SCHEMATIC, 1);
+        setLassar(p, { ...current, superiorTorchSchematic: true });
+      } else if (has(p, I.ANIMA_PORTAL_SCHEMATIC)) {
+        p.getInventory().deleteNumber(I.ANIMA_PORTAL_SCHEMATIC, 1);
+        setLassar(p, { ...current, animaSchematic: true });
+      }
+    }
     if (stepId === "qEMxBM" && p.getAttribute("desert-treasure-ii:final-cell-pending")) {
       p.setAttribute("desert-treasure-ii:final-cell-pending", false);
       p.setAttribute(FINAL_CELL_ACTIVE, true);
@@ -4069,6 +4733,429 @@ module.exports = function registerDesertTreasureII(api) {
     }
   }
 
+  function handleLassarObject(event, visibleId, option) {
+    const { player: p, location } = event;
+    const state = p.getAttribute(LASSAR) ?? {};
+    const x = location?.x, y = location?.y, z = location?.z ?? 0;
+    if (stage(p) !== S.WHISPERER || !location) return false;
+
+    // Prescott's route starts on the real Camdozaal sinkhole. Tying the rope
+    // consumes his rope, and descending lands at Lassar's cache rope entrance.
+    if (x === 2922 && y === 5827 && z === 0 && [48195, 48196, 48197].includes(visibleId)) {
+      if (option === "use" || option === "tie") {
+        if (!state.ramarno || !has(p, I.VERY_LONG_ROPE)) {
+          p.sendMessage("Ask Ramarno about the archaeologists, then get Prescott's very long rope.");
+          return true;
+        }
+        p.getInventory().deleteNumber(I.VERY_LONG_ROPE, 1);
+        setLassar(p, { ...state, ropeTied: true });
+        p.sendMessage("You tie Prescott's very long rope securely to the rock.");
+        return true;
+      }
+      if (option === "climb-down" || option === "climb down" || option === "enter" || option === "climb") {
+        if (!state.ropeTied) { p.sendMessage("The sinkhole is too deep to descend without a rope."); return true; }
+        setLassar(p, { ...state, entered: true });
+        p.moveTo(new api.core.Location(2587, 6436, 0));
+        p.sendMessage("You descend into the Lassar Undercity. The rope remains tied above.");
+        return true;
+      }
+    }
+    if (!state.entered) return false;
+    if (visibleId === 48198 && state.medallion && (option === "climb" || option === "exit" || option === "leave")) {
+      setLassar(p, { ...state, exited: true });
+      p.moveTo(new api.core.Location(2922, 5827, 0));
+      p.sendMessage("You climb out of Lassar through the sinkhole and return to Camdozaal with the Whisperer's medallion.");
+      return true;
+    }
+
+    // The Silent Choir's entry clue is the remnant above the pub. The cache's
+    // stairs are one tile below the upper-floor remnant and preserve the real
+    // plane transition instead of jumping directly to later puzzle stages.
+    if (x === 2372 && y === 6430 && z === 0 && option.startsWith("climb")) {
+      if (!state.pubOpened) { p.sendMessage("The pub is still sealed in the material realm."); return true; }
+      p.moveTo(new api.core.Location(2372, 6430, 1));
+      return true;
+    }
+    if (x === 2380 && y === 6430 && z === 1 && state.inShadow
+      && visibleId === 48245 && option.startsWith("touch")) {
+      setLassar(p, { ...state, pubRemnant: true });
+      talk(p, N.MYSTERIOUS_VOICE_8, "the-whisperer-viewing-the-remnant-in-the-pub");
+      p.sendMessage("The remnant reveals the Silent Choir's church beneath Lassar. An icon is needed to pass its gate.");
+      return true;
+    }
+
+    // Later Shadow Realm tentacle rows require the superior torch. Their doors
+    // open only after both barriers are cleared, matching the Silent Choir route.
+    if (state.inShadow && has(p, I.SUPERIOR_SHADOW_TORCH)
+      && [48205, 48208, 48211].includes(visibleId)) {
+      const tentacles = { ...(state.tentacles ?? {}) };
+      const key = `${x},${y}`;
+      const barriers = new Map([["2392,6411", "choirSouth"], ["2383,6408", "choirWest"], ["2349,6343", "green"]]);
+      const barrier = barriers.get(key);
+      if (barrier && !tentacles[key]) {
+        tentacles[key] = true;
+        const next = { ...state, tentacles, [barrier]: true };
+        if (barrier === "choirWest" && next.choirSouth && !next.redKeyFound) {
+          registerLassarGroundItem(p, I.SHADOW_KEY_4, 2638, 6405);
+          next.redKeyFound = true;
+        }
+        setLassar(p, next);
+        p.sendMessage("The superior shadow torch burns through the deeper tentacles.");
+        return true;
+      }
+    }
+
+    if (x === 2392 && y === 6405 && state.inShadow && [48232, 48233, 48234, 48235].includes(visibleId)
+      && (option === "open" || option === "search")) {
+      if (!state.choirSouth || !state.choirWest || !state.redBlockerPlaced) {
+        p.sendMessage("The square chest is still guarded. Clear both nearby tentacle doors and place the shadow blocker beside it.");
+        return true;
+      }
+      if (!state.redKey || !has(p, I.SHADOW_KEY_4)) { p.sendMessage("The chest needs the red shadow key from the south-western house."); return true; }
+      p.getInventory().deleteNumber(I.SHADOW_KEY_4, 1);
+      setLassar(p, { ...state, redKey: false, redKeyUsed: true, iconSegment1: true });
+      p.getInventory().adds(I.ICON_SEGMENT, 1);
+      p.sendMessage("The chest opens with the red shadow key. You take the first icon segment.");
+      return true;
+    }
+
+    if (x === 2354 && y === 6339 && state.inShadow && [48232, 48233, 48234, 48235].includes(visibleId)
+      && (option === "open" || option === "search")) {
+      if (!state.green || !state.greenKey || !has(p, I.SHADOW_KEY_5)) {
+        p.sendMessage("The south Science District chest is sealed until you clear its tentacles and bring the green shadow key.");
+        return true;
+      }
+      p.getInventory().deleteNumber(I.SHADOW_KEY_5, 1);
+      setLassar(p, { ...state, greenKey: false, greenKeyUsed: true, iconSegment2: true });
+      p.getInventory().adds(I.ICON_SEGMENT_2, 1);
+      p.sendMessage("The chest opens with the green shadow key. You take the second icon segment.");
+      return true;
+    }
+    if (x === 2351 && y === 6386 && state.inShadow && visibleId === 48208
+      && (option === "burn" || option === "clear" || option === "open")) {
+      if (!has(p, I.SUPERIOR_SHADOW_TORCH)) { p.sendMessage("The deeper tentacles only yield to the superior shadow torch."); return true; }
+      setLassar(p, { ...state, plazaTentacle: true });
+      p.sendMessage("The superior torch burns through the tentacles south of the Plaza.");
+      return true;
+    }
+    if (x === 2597 && y === 6392 && !state.inShadow && [48228, 48229, 48230, 48231].includes(visibleId)
+      && (option === "open" || option === "search")) {
+      if (!state.plazaTentacle) { p.sendMessage("The white-key house is still sealed by shadow tentacles."); return true; }
+      if (!has(p, I.SHADOW_KEY_3)) p.getInventory().adds(I.SHADOW_KEY_3, 1);
+      setLassar(p, { ...state, whiteKey: true });
+      p.sendMessage("You search the opened house and take the white shadow key.");
+      return true;
+    }
+    if (state.inShadow && visibleId === 48253 && x >= 2308 && x <= 2321 && y >= 6440 && y <= 6455
+      && (option === "light" || option === "ignite" || option === "activate")) {
+      if (!state.whiteBlockerPlaced || !state.whiteAnimaPlaced || !state.whiteIdolPlaced) {
+        p.sendMessage("The lost souls still guard this chest. Place the blocker, anima portal and revitalising idol at the marked tiles first.");
+        return true;
+      }
+      const braziers = { ...(state.braziers ?? {}) };
+      braziers[`${x},${y}`] = true;
+      setLassar(p, { ...state, braziers });
+      const count = Object.keys(braziers).length;
+      p.sendMessage(`You light a shadow brazier near the chest (${count}/4).`);
+      if (count >= 4) setLassar(p, { ...p.getAttribute(LASSAR), braziersComplete: true });
+      return true;
+    }
+    if (state.inShadow && x === 2316 && y === 6450 && [48232, 48233, 48234, 48235].includes(visibleId)
+      && (option === "open" || option === "search")) {
+      if (!state.braziersComplete) { p.sendMessage("The four braziers around the palace chest must be lit first."); return true; }
+      if (!has(p, I.PERFECTED_SHADOW_TORCH_SCHEMATIC_2)) p.getInventory().adds(I.PERFECTED_SHADOW_TORCH_SCHEMATIC_2, 1);
+      setLassar(p, { ...state, fakeSchematicFound: true });
+      p.sendMessage("The chest opens. Its perfected shadow torch schematic bears a black mark.");
+      return true;
+    }
+
+    if ((x === 2656 && y === 6424 && (option === "enter" || option === "climb-down" || option === "climb down"))
+      && (visibleId === 49488 || visibleId === 48295 || visibleId === 48296)) {
+      if (!state.strangeIcon || !has(p, I.STRANGE_ICON)) {
+        p.sendMessage("A strange icon matching the mark Prescott described is needed to enter the cistern.");
+        return true;
+      }
+      setLassar(p, { ...state, drainEntered: true });
+      p.moveTo(new api.core.Location(2784, 6287, 1));
+      return true;
+    }
+    if (x === 2784 && y === 6287 && z === 1 && state.drainEntered
+      && (visibleId === 48301 || visibleId === 48302) && (option === "open" || option === "pass")) {
+      if (!has(p, I.STRANGE_ICON)) { p.sendMessage("The cistern gate is marked with the icon. Carry it to pass."); return true; }
+      setLassar(p, { ...state, drainGateOpen: true, iconUsed: true });
+      p.moveTo(new api.core.Location(2790, 6287, 1));
+      return true;
+    }
+    if (x === 2806 && y === 6303 && z === 1 && state.drainGateOpen && visibleId === 48304
+      && (option === "climb-down" || option === "climb down" || option === "descend")) {
+      p.moveTo(new api.core.Location(2806, 6303, 0));
+      setLassar(p, { ...state, drainLower: true });
+      return true;
+    }
+    if (x === 2784 && y === 6304 && z === 0 && state.drainLower && [47734, 48305].includes(visibleId)
+      && (option === "inspect" || option === "search")) {
+      if (!has(p, I.STRANGE_ICON)) { p.sendMessage("The pillar's inscription only responds to the strange icon."); return true; }
+      setLassar(p, { ...state, visionStarted: true });
+      talk(p, N.KETLA, "the-whisperer-inspecting-the-totem-in-the-cistern");
+      return true;
+    }
+
+    // The cathedral is sealed until the first six city links are active. Trying
+    // its actual entrance causes the scripted blackout that introduces Ketla.
+    if (x === 2656 && y === 6424 && z === 0) {
+      if (!(state.teleporters ?? []).slice(0, 6).every(Boolean)) {
+        p.sendMessage("The Sunken Cathedral is sealed. Activate the six teleporters throughout the palace, plaza, science and residential districts first.");
+        return true;
+      }
+      if (!state.cameTo) {
+        setLassar(p, { ...state, cameTo: true });
+        p.moveTo(new api.core.Location(2648, 6442, 0));
+        talk(p, N.KETLA, "the-whisperer-talking-to-ketla-after-coming-to");
+      }
+      return true;
+    }
+
+    if (x === 2350 && y === 6360 && state.inShadow && [48254, 48255, 48256, 48257, 48258, 48259, 48260, 48261, 48262, 48263, 48264, 48265, 48266, 48267].includes(visibleId)
+      && (option === "open" || option === "unlock")) {
+      if (!state.blockerPlaced) { p.sendMessage("The lost souls overwhelm you here. Place the shadow blocker beside the locked doors before crossing the furnace building."); return true; }
+      if (!has(p, I.SHADOW_KEY) || !state.purpleKey) { p.sendMessage("The shadow realm door needs its purple shadow key."); return true; }
+      p.getInventory().deleteNumber(I.SHADOW_KEY, 1);
+      setLassar(p, { ...state, doorUnlocked: true, purpleKey: false });
+      const manager = api.getItemOnGroundManager?.();
+      const tile = new api.core.Location(2353, 6367, 0);
+      if (manager?.registerLocation && !manager.getGroundItem?.(p.getUsername(), I.BASIC_SHADOW_TORCH_SCHEMATIC, tile, p.getPrivateArea?.() ?? null)) {
+        manager.registerLocation(p, new Item(I.BASIC_SHADOW_TORCH_SCHEMATIC, 1), tile);
+      }
+      p.sendMessage("You unlock the furnace-house door with the purple key. Beyond it, you see a basic shadow torch schematic.");
+      return false;
+    }
+
+    const teleporter = LASSAR_TELEPORTERS.find(([tx, ty, id]) => x === tx && y === ty
+      && (visibleId === id || visibleId === 48201 || visibleId === 48202 || visibleId === 48203));
+    if (teleporter && (option === "activate" || option === "travel" || option === "use" || option === "")) {
+      const portalIndex = LASSAR_TELEPORTERS.indexOf(teleporter);
+      const active = [...(state.teleporters ?? [])];
+      const available = portalIndex < 3 || (state.blockerSchematic && state.greenKey && state.purpleKey)
+        || (portalIndex === 6 && state.idolPlaced && state.basicTorch);
+      if (!available) { p.sendMessage("This teleporter is still beyond a sealed district. Follow the Lassar devices and shadow keys first."); return true; }
+      if (active[portalIndex]) {
+        if (option === "activate") {
+          p.sendMessage(`This Lassar teleporter is already active (${active.filter(Boolean).length}/7).`);
+          return true;
+        }
+        const destinations = LASSAR_TELEPORTERS
+          .map(([dx, dy], index) => active[index] ? [`${["Palace", "Plaza", "Northern Science District", "Southern Science District", "Western Residential District", "Cathedral", "Eastern Residential District"][index]}.`, () => {
+            p.moveTo(new api.core.Location(dx, dy, 0));
+            p.sendMessage(`The teleporter carries you to the ${["Palace", "Plaza", "Northern Science District", "Southern Science District", "Western Residential District", "Cathedral", "Eastern Residential District"][index]}.`);
+          }] : null)
+          .filter(Boolean);
+        if (destinations.length) api.sendMultiChatboxPrompt(p, "Choose an active Lassar teleporter", ...destinations);
+        return true;
+      }
+      // The city record routes the first six teleporters in the same order as
+      // the cache quest varbits; the final eastern device is unlocked by the idol.
+      if (active.slice(0, portalIndex).length !== portalIndex || !active.slice(0, portalIndex).every(Boolean)) {
+        p.sendMessage("Activate the earlier Lassar teleporters before this one.");
+        return true;
+      }
+      active[portalIndex] = true;
+      setLassar(p, { ...state, teleporters: active });
+      p.sendMessage(`You activate the Lassar teleporter (${active.filter(Boolean).length}/7). Its routes now answer to the shadow network.`);
+      return true;
+    }
+
+    if (state.inShadow && [48278, 48279, 48205, 48206, 48207, 48208, 48209, 48210, 48211, 48212].includes(visibleId)
+      && ((x === 2417 && y === 6413) || (x === 2424 && y === 6439))) {
+      const tentacles = { ...(state.tentacles ?? {}) };
+      const key = `${x},${y}`;
+      if (tentacles[key]) { p.sendMessage("The shadow tentacles have already been burned away."); return true; }
+      if (!has(p, I.BASIC_SHADOW_TORCH)) { p.sendMessage("The tentacles only yield to the cleansing flame of the basic shadow torch."); return true; }
+      if (x === 2417 && !state.blockerPlaced) { p.sendMessage("First place the shadow blocker beside the furnace-house doors, where it can protect you from lost souls."); return true; }
+      if (x === 2424 && (!(state.teleporters ?? [])[6] || !state.idolPlaced || !tentacles["2417,6413"])) {
+        p.sendMessage("The eastern tentacle path is sealed until the idol is placed beside its teleporter and the western tentacles are burned.");
+        return true;
+      }
+      tentacles[key] = true;
+      const next = { ...state, tentacles };
+      if (x === 2417) {
+        const manager = api.getItemOnGroundManager?.();
+        if (manager?.registerLocation) registerLassarGroundItem(p, I.REVITALISING_IDOL_SCHEMATIC, 2677, 6422);
+        p.sendMessage("The shadow tentacles recoil from the torch. The newly accessible residential house contains a revitalising idol schematic.");
+      } else {
+        if (!has(p, I.SHADOW_KEY_2)) registerLassarGroundItem(p, I.SHADOW_KEY_2, 2416, 6443);
+        p.sendMessage("The second tentacle barrier burns away, revealing the blue shadow key beyond it.");
+      }
+      setLassar(p, next);
+      return true;
+    }
+    if (state.inShadow && x === 2385 && y === 6427 && [48278, 48279, 48289, 48290].includes(visibleId)
+      && (option === "open" || option === "enter")) {
+      if (!state.pubBlocker) { p.sendMessage("Place the shadow blocker at the pub entrance in the material world before approaching these doors."); return true; }
+      if (!has(p, I.SHADOW_KEY_2) || !state.blueKey) { p.sendMessage("The pub's shadow doors need the blue shadow key."); return true; }
+      p.getInventory().deleteNumber(I.SHADOW_KEY_2, 1);
+      const manager = api.getItemOnGroundManager?.();
+      if (manager?.registerLocation) registerLassarGroundItem(p, I.SUPERIOR_SHADOW_TORCH_SCHEMATIC, 2381, 6423);
+      setLassar(p, { ...state, pubOpened: true, blueKey: false });
+      p.sendMessage("The blue key opens the shadow pub. You find a superior shadow torch schematic upstairs.");
+      return false;
+    }
+    if (state.inShadow && visibleId === 48216 && option
+      && (option === "restore sanity" || option === "touch" || option === "activate")) {
+      if (!state.idolPlaced) { p.sendMessage("The revitalising idol has not been placed in Lassar yet."); return true; }
+      const sanity = Math.max(0, Math.min(100, Number(state.sanity ?? 100)));
+      setLassar(p, { ...state, sanity: Math.min(100, sanity + 50) });
+      p.sendMessage("You draw strength from the revitalising idol, restoring 50% sanity.");
+      return true;
+    }
+    if (state.inShadow && x === 2324 && y === 6402 && [48205, 48206, 48207, 48208, 48209, 48210, 48211, 48212].includes(visibleId)
+      && (option === "open" || option === "burn" || option === "clear")) {
+      if (!has(p, I.SUPERIOR_SHADOW_TORCH) || !state.superiorTorch) { p.sendMessage("Only the superior shadow torch can clear the deeper tentacles."); return true; }
+      if (state.animaSchematicFound) { p.sendMessage("The tentacles have already been burned away here."); return true; }
+      const manager = api.getItemOnGroundManager?.();
+      if (manager?.registerLocation) registerLassarGroundItem(p, I.ANIMA_PORTAL_SCHEMATIC, 2324, 6402);
+      setLassar(p, { ...state, animaSchematicFound: true });
+      p.sendMessage("The superior torch burns through the tentacles and reveals an anima portal schematic.");
+      return true;
+    }
+    if (state.inShadow && x === 2400 && y === 6393 && visibleId === 48211
+      && (option === "burn" || option === "clear" || option === "open")) {
+      if (!state.perfectTorch || !has(p, I.PERFECTED_SHADOW_TORCH)) {
+        p.sendMessage("The cathedral's tentacles resist every light except the perfected shadow torch.");
+        return true;
+      }
+      setLassar(p, { ...state, cathedralTentacles: true });
+      p.sendMessage("The perfected torch burns away the tentacles sealing the Sunken Cathedral.");
+      return true;
+    }
+
+    // Searchable cache scenery at the two Science District rooms holds the
+    // blocker schematic and the first pair of shadow keys.
+    const hasFirstThree = (state.teleporters ?? []).slice(0, 3).every(Boolean);
+    if (hasFirstThree && x >= 2588 && x <= 2591 && y >= 6378 && y <= 6381
+      && [48186, 48163, 48174].includes(visibleId) && (option === "search" || option === "read")) {
+      if (!has(p, I.SHADOW_BLOCKER_SCHEMATIC)) p.getInventory().adds(I.SHADOW_BLOCKER_SCHEMATIC, 1);
+      p.sendMessage("You find a shadow blocker schematic among the Science District records.");
+      setLassar(p, { ...state, blockerSchematic: true });
+      return true;
+    }
+    if (hasFirstThree && x >= 2580 && x <= 2583 && y >= 6385 && y <= 6389
+      && [48159, 48177].includes(visibleId) && (option === "search" || option === "open")) {
+      if (!has(p, I.SHADOW_KEY_5)) p.getInventory().adds(I.SHADOW_KEY_5, 1);
+      p.sendMessage("You find a green shadow key in the northern Science District.");
+      setLassar(p, { ...state, greenKey: true });
+      return true;
+    }
+    if (hasFirstThree && x >= 2592 && x <= 2595 && y >= 6350 && y <= 6353
+      && [48168, 48159, 48164].includes(visibleId) && (option === "search" || option === "open")) {
+      if (!has(p, I.SHADOW_KEY)) p.getInventory().adds(I.SHADOW_KEY, 1);
+      p.sendMessage("You find a purple shadow key in the southern Science District.");
+      setLassar(p, { ...state, purpleKey: true });
+      return true;
+    }
+
+    // The Ketla workshop and the real mirrored puddles are the puzzle's
+    // intended device and realm transitions; retain their cache locations.
+    if (x === 2645 && y >= 6438 && y <= 6442 && [48163, 49486].includes(visibleId)
+      && (option === "search" || option === "make" || option === "operate")) {
+      if (!state.ketlaBriefed) { p.sendMessage("Talk to Ketla and give her the appropriate schematic first."); return true; }
+      if (state.blockerDesigned && !has(p, I.SHADOW_BLOCKER)) {
+        p.getInventory().adds(I.SHADOW_BLOCKER, 1);
+        setLassar(p, { ...state, blocker: true });
+        p.sendMessage("You take the shadow blocker Ketla assembled from her workbench.");
+        return true;
+      }
+      if (state.torchSchematic && !has(p, I.BASIC_SHADOW_TORCH)) {
+        p.getInventory().adds(I.BASIC_SHADOW_TORCH, 1);
+        setLassar(p, { ...state, basicTorch: true });
+        p.sendMessage("You take the basic shadow torch Ketla assembled from her workbench.");
+        return true;
+      }
+      if (state.idolSchematic && !has(p, I.REVITALISING_IDOL)) {
+        p.getInventory().adds(I.REVITALISING_IDOL, 1);
+        setLassar(p, { ...state, idol: true });
+        p.sendMessage("You take the revitalising idol Ketla assembled from her workbench.");
+        return true;
+      }
+      if (state.superiorTorchSchematic && !has(p, I.SUPERIOR_SHADOW_TORCH)) {
+        p.getInventory().adds(I.SUPERIOR_SHADOW_TORCH, 1);
+        setLassar(p, { ...state, superiorTorch: true });
+        p.sendMessage("You take the superior shadow torch Ketla assembled from her workbench.");
+        return true;
+      }
+      if (state.animaSchematic && !has(p, I.ANIMA_PORTAL)) {
+        p.getInventory().adds(I.ANIMA_PORTAL, 1);
+        setLassar(p, { ...state, animaPortal: true });
+        p.sendMessage("You take the anima portal Ketla assembled from her workbench.");
+        return true;
+      }
+      if (state.perfectTorchSchematic && !has(p, I.PERFECTED_SHADOW_TORCH)) {
+        p.getInventory().adds(I.PERFECTED_SHADOW_TORCH, 1);
+        setLassar(p, { ...state, perfectTorch: true });
+        p.sendMessage("You take the perfected shadow torch from Ketla's workbench.");
+        return true;
+      }
+      p.sendMessage("The workbench is clear. Bring Ketla another Lassar schematic to assemble.");
+      return true;
+    }
+    if (visibleId === 48200 && option && (option === "enter" || option === "touch" || option === "activate")) {
+      const inShadow = Boolean(state.inShadow);
+      if (!has(p, I.BLACKSTONE_FRAGMENT) && !has(p, I.BLACKSTONE_FRAGMENT_2) && !has(p, I.BLACKSTONE_FRAGMENT_3)) {
+        p.sendMessage("The blackstone fragment is needed to cross safely into the shadow realm.");
+        return true;
+      }
+      const worldSide = x >= 2560;
+      const nextX = worldSide ? x - 256 : x + 256;
+      setLassar(p, { ...state, inShadow: !inShadow });
+      p.moveTo(new api.core.Location(nextX, y, z));
+      p.sendMessage(inShadow ? "You step back into the material world." : "You pass through the puddle into Lassar's shadow realm.");
+      return true;
+    }
+    return false;
+  }
+
+  function registerLassarGroundItem(p, itemId, x, y, z = 0) {
+    const manager = api.getItemOnGroundManager?.();
+    if (!manager?.registerLocation) return;
+    const tile = new api.core.Location(x, y, z);
+    if (!manager.getGroundItem?.(p.getUsername(), itemId, tile, p.getPrivateArea?.() ?? null)) {
+      manager.registerLocation(p, new Item(itemId, 1), tile);
+    }
+  }
+
+  function handleLassarGroundItemPickup(event) {
+    const { player: p, groundItemId, location } = event;
+    if (stage(p) !== S.WHISPERER || ![I.BASIC_SHADOW_TORCH_SCHEMATIC, I.REVITALISING_IDOL_SCHEMATIC, I.SHADOW_KEY_2,
+      I.SHADOW_KEY_4, I.SUPERIOR_SHADOW_TORCH_SCHEMATIC, I.ANIMA_PORTAL_SCHEMATIC].includes(groundItemId)) return;
+    const state = p.getAttribute(LASSAR) ?? {};
+    const x = location?.getX?.() ?? location?.x;
+    const y = location?.getY?.() ?? location?.y;
+    const basicTorchSchematic = groundItemId === I.BASIC_SHADOW_TORCH_SCHEMATIC;
+    const idolSchematic = groundItemId === I.REVITALISING_IDOL_SCHEMATIC;
+    const blueKey = groundItemId === I.SHADOW_KEY_2;
+    const redKey = groundItemId === I.SHADOW_KEY_4;
+    const superiorSchematic = groundItemId === I.SUPERIOR_SHADOW_TORCH_SCHEMATIC;
+    const animaSchematic = groundItemId === I.ANIMA_PORTAL_SCHEMATIC;
+    const accessible = basicTorchSchematic ? x === 2353 && y === 6367 && state.doorUnlocked && state.inShadow
+      : idolSchematic ? x === 2677 && y === 6422 && state.tentacles?.["2417,6413"]
+        : blueKey ? x === 2416 && y === 6443 && state.tentacles?.["2424,6439"] && state.inShadow
+          : redKey ? x === 2638 && y === 6405 && state.redKeyFound
+          : superiorSchematic ? x === 2381 && y === 6423 && state.pubOpened && state.inShadow
+            : x === 2324 && y === 6402 && state.animaSchematicFound && state.inShadow;
+    if (!accessible) {
+      event.handled = true;
+      p.sendMessage("That Lassar item is not accessible yet. Complete the shadow devices blocking its room.");
+      return;
+    }
+    setLassar(p, { ...state,
+      ...(basicTorchSchematic ? { torchSchematicFound: true } : {}),
+      ...(idolSchematic ? { idolSchematicFound: true } : {}),
+      ...(blueKey ? { blueKey: true } : {}),
+      ...(redKey ? { redKey: true } : {}),
+      ...(superiorSchematic ? { superiorSchematicFound: true } : {}),
+      ...(animaSchematic ? { animaSchematicFound: true } : {}),
+    });
+  }
+
   quest = registerQuest(api, {
     key: "desert_treasure_ii", name: "Desert Treasure II - The Fallen Empire", varpId: 3786, varbitId: 14862,
     startedValue: S.STARTED, completionValue: S.COMPLETE, questPoints: 5,
@@ -4078,6 +5165,7 @@ module.exports = function registerDesertTreasureII(api) {
   ["desert-treasure-ii:statues", "desert-treasure-ii:cells-collected", CELLS_INSERTED, CELL_POSITIONS,
     GOLEM_SOLVED, SEARCHED_NAMES, BANIKAN_LEFT].forEach((key) => api.persistAttribute(key));
   api.persistAttribute(ATTR);
+  api.persistAttribute(LASSAR);
   api.persistAttribute(VARDORVIS_PROGRESS);
   api.persistAttribute(ATTR_SMITH_INTRO);
   api.persistAttribute(STATUES_PLACED);
@@ -4114,6 +5202,7 @@ module.exports = function registerDesertTreasureII(api) {
   });
   api.onObjectRoute(handleScarStoneRoute);
   api.onItemOnObject(handleItemOnObject, { noted: false });
+  api.onGroundItemPickup(handleLassarGroundItemPickup);
   api.onItemOnItem(handleItemOnItem, { noted: false });
   api.onItemAction(handleItemAction);
   api.onCustomEvent("player:widget-action", onWidgetAction);
@@ -4125,6 +5214,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcHitModify(preventTotemDamage);
   api.onNpcHitModify(handleScarAxonHit);
   api.onNpcHitModify(preventScarSummonProtection);
+  api.onNpcHitModify(handleWhispererHit);
   api.onNpcHitModify(handleFinalFigureHit);
   api.onNpcInteraction("Asgarnia Smith", { "Talk-to": talkSmith });
   api.onNpcInteraction("Cerebral pathfinder", { Move: pushScarPathRunner });
@@ -4135,6 +5225,8 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("Elissa", { "Talk-to": talkElissa });
   api.onNpcInteraction("Barus", { "Talk-to": talkBarus });
   api.onNpcInteraction("Kasonde", { "Talk-to": talkKasonde });
+  api.onNpcInteraction("Ramarno", { "Talk-to": talkRamarno });
+  api.onNpcInteraction("Prescott", { "Talk-to": talkPrescott });
   api.onNpcInteraction("Wizard Persten", { "Talk-to": progressBosses });
   api.onNpcInteraction("Captain Malleta", { "Talk-to": progressBosses });
   api.onNpcInteraction("Ketla", { "Talk-to": progressBosses });
@@ -4145,11 +5237,13 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("The Leviathan", { "Talk-to": handleBossTalk });
   api.onNpcInteraction("Duke Sucellus", { "Talk-to": handleBossTalk });
   api.onNpcInteraction("The Whisperer", { "Talk-to": handleBossTalk });
+  api.onNpcInteraction("Odd Figure", { Disturb: handleBossTalk, "Talk-to": handleBossTalk });
   api.onNpcDeath(handleDeath);
   api.onItemOnNpc(handleNerveOnCatalyst);
   api.onItemOnNpc(handleSucellusItemOnNpc);
   api.onGroundItemPickup(handleSucellusGroundItemPickup);
   api.onPlayerLogin(handleLogin);
+  api.onPlayerProcess(handleLassarProcess);
   api.onPlayerLogout(handleLogout);
   api.onPlayerDisconnect(handleLogout);
 };
