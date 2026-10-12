@@ -976,7 +976,8 @@ test('Desert Treasure II opens the ritual site after the serum and grants the Te
 test('Desert Treasure II enters the Scar through the Catalytic Guardian and requires the six opening demons', () => {
   const { api: base } = mockApi();
   const objectHooks = [], deathHooks = [], lineHooks = [], actionHooks = [], interactions = [];
-  const transcripts = [], queues = { add: [], remove: [] };
+  const transcripts = [], queues = { add: [], remove: [] }, varbits = new Map();
+  let processCycle = 0;
   class TestInstance {
     constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
     setChunk() {}
@@ -985,7 +986,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     postLeave() {}
     getBaseX() { return 8192; }
     getBaseY() { return 1600; }
-    tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z }; }
+    tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z, getX() { return this.x; }, getY() { return this.y; } }; }
     add(npc) { this.entities.push(npc); }
     isDestroyed() { return false; }
     destroy() {}
@@ -993,8 +994,8 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
   const core = {
     ...base.core,
     TemplatedInstanceArea: TestInstance,
-    NPC: { create: (id, location) => ({ id, location, owner: null, setOwner(value) { this.owner = value; }, setOwnerOnly() {}, isNpc() { return true; }, getAsNpc() { return this; }, isRegistered() { return true; }, getHitpoints() { return 100; } }) },
-    World: { getAddNPCQueue: () => queues.add, getRemoveNPCQueue: () => queues.remove },
+    NPC: { create: (id, location) => ({ id, location, owner: null, setOwner(value) { this.owner = value; }, setOwnerOnly() {}, setScriptedMovement() {}, getMovementQueue() { return this.movement ??= { steps: [], addSteps(tile) { this.steps.push(tile); }, setBlockMovement(blocked) { this.blocked = blocked; } }; }, getLocation() { return { getX: () => this.location.x, getY: () => this.location.y }; }, isNpc() { return true; }, getAsNpc() { return this; }, isRegistered() { return true; }, getHitpoints() { return 100; } }) },
+    World: { getAddNPCQueue: () => queues.add, getRemoveNPCQueue: () => queues.remove, getProcessCycle: () => processCycle++ },
   };
   const api = new Proxy(base, {
     get: (target, prop) => prop === 'core' ? core
@@ -1014,7 +1015,9 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     const player = {
       getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
       getUsername: () => 'dt2-scar-test',
-      getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+      isPlayer: () => true, getAsPlayer() { return this; },
+      getLocation() { return { getX: () => this.location.x, getY: () => this.location.y }; },
+      getPacketSender: () => new Proxy({}, { get: (_target, prop) => prop === 'sendVarbit' ? (id, value) => varbits.set(id, value) : () => {} }),
       moveTo(location) { this.location = location; }, sendMessage() {},
     };
     quest.setStage(player, 8);
@@ -1024,6 +1027,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     const afterYes = { player, npcId: core.NpcIdentifiers.CATALYTIC_GUARDIAN, text: 'Yes.' };
     lineHooks[0](afterYes);
     afterYes.after();
+    assert.equal(varbits.get(15128), 6, 'entering the Scar advances the canonical quest varbit');
     const area = attrs.get('desert-treasure-ii:scar-area');
     assert.equal(area.width, 9);
     assert.equal(area.height, 8);
@@ -1033,7 +1037,8 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.ok(queues.add.every((npc) => npc.owner === player));
     for (const npc of [...queues.add]) deathHooks[0]({ killer: player, npc });
     assert.equal(attrs.get('desert-treasure-ii:scar-demons-defeated'), true);
-    assert.equal(objectHooks[0]({ player, objectId: 1, location: area.tile(65, 36, 0) }), true,
+    assert.equal(varbits.get(15128), 8);
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.ROWBOAT_19, location: area.tile(65, 35, 0) }), true,
       'the map boat is usable after naturally crossing the Scar fight');
     assert.equal(transcripts.at(-1), 'praefectus-classis-perseriya-attempting-to-board-the-rowboat-in-the-scar');
     actionHooks[0]({ player, stepId: '4b6oDl' });
@@ -1042,6 +1047,40 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     interactions.find((entry) => entry.name === 'Wizard Persten').options['Talk-to']({ player, npcId: core.NpcIdentifiers.WIZARD_PERSTEN_5 });
     assert.equal(attrs.get('desert-treasure-ii:scar-persten-talked'), true);
     assert.equal(transcripts.at(-1), 'praefectus-classis-perseriya-talking-to-wizard-persten');
+    assert.equal(varbits.get(15128), 14);
+    assert.equal(objectHooks[0]({ player, objectId: 49526, definition: { id: 49206 }, location: area.tile(43, 41, 0) }), false,
+      'the closed cache morph cannot be entered');
+    assert.equal(objectHooks[0]({ player, objectId: 49526, definition: { id: 49205 }, location: area.tile(43, 41, 0) }), true,
+      'the north-west cache passage is available after Persten explains the ship plan');
+    const maze = attrs.get('desert-treasure-ii:scar-maze-one');
+    assert.equal(maze.width, 11);
+    assert.equal(maze.height, 9);
+    assert.equal(player.location.x, 8228, 'the maze entry lands at the real pathfinder-room entrance tile');
+    assert.equal(player.location.y, 1654);
+    assert.equal(varbits.get(15128), 16);
+    let runner = queues.add.at(-1);
+    assert.equal(runner.id, core.NpcIdentifiers.CEREBRAL_PATHFINDER,
+      'the first cache pathfinder runs its prescribed route instead of opening a puzzle skip');
+    assert.deepEqual(runner.getMovementQueue().steps.map((point) => [point.x, point.y]), [[8227, 1644], [8229, 1644]]);
+    runner.location = maze.tile(37, 44, 0);
+    player.location = maze.tile(37, 44, 0);
+    maze.process(player);
+    assert.equal(maze.pathIndex, 1, 'the next pathbreaker appears only after the player follows the first within three tiles');
+    for (let pathIndex = 1; pathIndex < 6; pathIndex++) {
+      runner = maze.pathRunner;
+      const routeEnd = [[37, 44], [42, 42], [38, 38], [36, 35], [47, 36], [49, 33]][pathIndex];
+      runner.location = maze.tile(routeEnd[0], routeEnd[1], 0);
+      player.location = maze.tile(routeEnd[0] + 4, routeEnd[1], 0);
+      maze.process(player);
+      assert.equal(attrs.get('desert-treasure-ii:scar-pathfinder-complete'), false,
+        'the route cannot complete while the player is outside the pathfinder follow distance');
+      player.location = maze.tile(routeEnd[0], routeEnd[1], 0);
+      maze.process(player);
+    }
+    assert.equal(attrs.get('desert-treasure-ii:scar-pathfinder-complete'), true);
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.ABYSSAL_TETHER, location: maze.tile(50, 33, 0) }), true);
+    assert.equal(attrs.get('desert-treasure-ii:scar-tether-destroyed'), true);
+    assert.equal(varbits.get(15258), 1, 'destroying the tether sets the canonical challenge varbit');
   } finally {
     runtime.startTranscript = startTranscript;
   }

@@ -31,6 +31,7 @@ module.exports = function registerDesertTreasureII(api) {
   const ATTR_STRANGLEWOOD_TEMPLE = "desert-treasure-ii:stranglewood-temple";
   const ATTR_VARDORVIS_AREA = "desert-treasure-ii:vardorvis-area";
   const ATTR_SCAR_AREA = "desert-treasure-ii:scar-area";
+  const ATTR_SCAR_MAZE_ONE = "desert-treasure-ii:scar-maze-one";
   const ATTR_VAULT_AREA = "desert-treasure-ii:ancient-vault";
   const ATTR_VAULT_SMITH = "desert-treasure-ii:vault-smith";
   const ATTR_SMITH_INTRO = "desert-treasure-ii:smith-intro";
@@ -47,12 +48,27 @@ module.exports = function registerDesertTreasureII(api) {
   const SCAR_BOAT_TRIED = "desert-treasure-ii:scar-boat-tried";
   const SCAR_PERSTEN_TALKED = "desert-treasure-ii:scar-persten-talked";
   const SCAR_PERSTEN_TALKED_BEFORE = "desert-treasure-ii:scar-persten-talked-before";
+  const SCAR_PATH_COMPLETE = "desert-treasure-ii:scar-pathfinder-complete";
+  const SCAR_TETHER_DESTROYED = "desert-treasure-ii:scar-tether-destroyed";
+  const SCAR_VARBIT = 15128;
+  const SCAR_TETHER_VARBIT = 15258;
+  const SCAR_MAZE_ONE_ENTERED = "desert-treasure-ii:scar-maze-one-entered";
+  const SCAR_GUARDIAN_ACCEPTED = "desert-treasure-ii:scar-guardian-accepted";
+  const SCAR_PASSAGE_OPEN = 49205;
   const ASGARNIA_SMITH_VAULT_INITIAL = 12401;
   const TOTEMS = [
     { kind: "blood", inactive: 12343, active: 12344, x: 2775, y: 6445, spells: ["BLOOD_BURST", "BLOOD_BLITZ", "BLOOD_BARRAGE"] },
     { kind: "shadow", inactive: 12341, active: 12342, x: 2771, y: 6445, spells: ["SHADOW_BURST", "SHADOW_BLITZ", "SHADOW_BARRAGE"] },
     { kind: "smoke", inactive: 12339, active: 12340, x: 2771, y: 6439, spells: ["SMOKE_BURST", "SMOKE_BLITZ", "SMOKE_BARRAGE"] },
     { kind: "ice", inactive: 12345, active: 12346, x: 2775, y: 6439, spells: ["ICE_BURST", "ICE_BLITZ", "ICE_BARRAGE"] },
+  ];
+  const SCAR_PATHS = [
+    { npc: N.CEREBRAL_PATHFINDER, points: [[2195, 6450], [2195, 6444], [2197, 6444]] },
+    { npc: N.CEREBRAL_PATHBREAKER, points: [[2199, 6444], [2202, 6444], [2202, 6442]] },
+    { npc: N.CEREBRAL_PATHBREAKER, points: [[2202, 6440], [2201, 6439], [2198, 6438]] },
+    { npc: N.CEREBRAL_PATHBREAKER, points: [[2197, 6438], [2196, 6435]] },
+    { npc: N.CEREBRAL_PATHBREAKER, points: [[2196, 6435], [2207, 6436]] },
+    { npc: N.CEREBRAL_PATHBREAKER, points: [[2207, 6436], [2207, 6433], [2209, 6433]] },
   ];
   let quest;
   let spawned = new WeakMap();
@@ -62,6 +78,7 @@ module.exports = function registerDesertTreasureII(api) {
   let StranglewoodTempleArea;
   let VardorvisArea;
   let ScarArea;
+  let ScarMazeOneArea;
   const totemSpellIds = new Map(TOTEMS.map((totem) => [totem.kind, new Set(totem.spells.map((name) => api.core.CombatSpells[name]?.spellId?.()).filter(Number.isInteger))]));
 
   AncientVaultArea = class DesertTreasureIIAncientVaultArea extends api.core.TemplatedInstanceArea {
@@ -289,6 +306,67 @@ module.exports = function registerDesertTreasureII(api) {
     }
   };
 
+  ScarMazeOneArea = class DesertTreasureIIScarMazeOneArea extends api.core.TemplatedInstanceArea {
+    constructor(owner, questPlayer) {
+      super(11, 9);
+      this.owner = owner;
+      this.questPlayer = questPlayer;
+      this.pathIndex = 0;
+      this.pathRunner = null;
+      this.lastProcessCycle = -1;
+      // The north-west passage contains the pathfinder, catalyst, growth and
+      // first ship rooms. This is the full unmodified cache region the Wiki
+      // route walks between; room progress intentionally resets on exit.
+      for (let x = 0; x < 11; x++) {
+        for (let y = 0; y < 9; y++) {
+          for (let plane = 0; plane < 4; plane++) {
+            this.setChunk(plane, x, y, plane === 0 ? {
+              sourceChunkX: 270 + x, sourceChunkY: 800 + y, sourcePlane: 0, rotation: 0,
+            } : null);
+          }
+        }
+      }
+    }
+    getName() { return "The Scar north-west passage (Desert Treasure II)"; }
+    allowSummonPet() { return false; }
+    isMulti() { return true; }
+    process(actor) {
+      if (!actor?.isPlayer?.() || actor.getAsPlayer?.() !== this.questPlayer) return;
+      const cycle = api.core.World.getProcessCycle();
+      if (cycle === this.lastProcessCycle || this.questPlayer.getAttribute(SCAR_PATH_COMPLETE)) return;
+      this.lastProcessCycle = cycle;
+      const runner = this.pathRunner;
+      if (!runner?.isRegistered?.()) return;
+      const playerLoc = actor.getLocation();
+      const runnerLoc = runner.getLocation();
+      const distance = Math.max(Math.abs(playerLoc.getX() - runnerLoc.getX()), Math.abs(playerLoc.getY() - runnerLoc.getY()));
+      const movement = runner.getMovementQueue();
+      movement.setBlockMovement?.(distance > 3);
+      const points = SCAR_PATHS[this.pathIndex].points;
+      const finish = this.tile(points.at(-1)[0] - 2160, points.at(-1)[1] - 6400, 0);
+      const arrived = runnerLoc.getX() === finish.getX() && runnerLoc.getY() === finish.getY();
+      if (!arrived || distance > 3) return;
+      if (this.pathIndex < SCAR_PATHS.length - 1) {
+        this.pathIndex++;
+        spawnScarPathRunner(this.questPlayer, this, this.pathIndex);
+      } else {
+        this.questPlayer.setAttribute(SCAR_PATH_COMPLETE, true);
+        this.questPlayer.sendMessage("The pathfinders have reached the abyssal tether. Destroy it to continue.");
+      }
+    }
+    destroy() {
+      if (this.isDestroyed()) return;
+      for (const entity of [...this.entities]) {
+        if (!entity?.isNpc?.() || !entity.getAsNpc) continue;
+        const npc = entity.getAsNpc();
+        const add = api.core.World.getAddNPCQueue();
+        for (let i = add.indexOf(npc); i >= 0; i = add.indexOf(npc)) add.splice(i, 1);
+        if (npc.isRegistered?.() && !api.core.World.getRemoveNPCQueue().includes(npc)) api.core.World.getRemoveNPCQueue().push(npc);
+      }
+      super.destroy();
+    }
+  };
+
   function enterWarRoom(p) {
     const current = p.getAttribute(ATTR_WAR_ROOM);
     if (current instanceof WarRoomArea && !current.isDestroyed()) {
@@ -503,15 +581,58 @@ module.exports = function registerDesertTreasureII(api) {
     if (current instanceof ScarArea && !current.isDestroyed()) {
       current.enter(p);
       p.moveTo(current.tile(21, 33, 0));
+      setScarVarbit(p, 6);
       if (!p.getAttribute(SCAR_DEMONS_DEFEATED)) spawnScarDemons(p, current);
       return current;
     }
     const area = new ScarArea(p.getUsername?.());
     area.enter(p);
     p.setAttribute(ATTR_SCAR_AREA, area);
+    setScarVarbit(p, 6);
     p.moveTo(area.tile(21, 33, 0));
     if (!p.getAttribute(SCAR_DEMONS_DEFEATED)) spawnScarDemons(p, area);
     return area;
+  }
+
+  function enterScarMazeOne(p) {
+    const current = p.getAttribute(ATTR_SCAR_MAZE_ONE);
+    if (current instanceof ScarMazeOneArea && !current.isDestroyed()) {
+      current.enter(p);
+      p.moveTo(current.tile(36, 54, 0));
+      return current;
+    }
+    const area = new ScarMazeOneArea(p.getUsername?.(), p);
+    area.enter(p);
+    p.setAttribute(ATTR_SCAR_MAZE_ONE, area);
+    p.setAttribute(SCAR_MAZE_ONE_ENTERED, true);
+    setScarVarbit(p, 16);
+    p.getPacketSender().sendVarbit(15193, 1);
+    p.getPacketSender().sendVarbit(15192, 2);
+    p.getPacketSender().sendVarbit(15194, 1);
+    p.setAttribute(SCAR_PATH_COMPLETE, false);
+    p.getPacketSender().sendVarbit(SCAR_TETHER_VARBIT, p.getAttribute(SCAR_TETHER_DESTROYED) ? 1 : 0);
+    p.moveTo(area.tile(36, 54, 0));
+    spawnScarPathRunner(p, area, 0);
+    return area;
+  }
+
+  function spawnScarPathRunner(p, area, index) {
+    const path = SCAR_PATHS[index];
+    if (!path) return;
+    const owned = spawned.get(p) ?? {};
+    spawned.set(p, owned);
+    const [startX, startY] = path.points[0];
+    const runner = api.core.NPC.create(path.npc, area.tile(startX - 2160, startY - 6400, 0));
+    runner.setOwner?.(p);
+    runner.setOwnerOnly?.(true);
+    runner.setScriptedMovement?.(true);
+    runner.__skipDefaultRespawn = true;
+    area.add(runner);
+    api.core.World.getAddNPCQueue().push(runner);
+    const movement = runner.getMovementQueue();
+    for (const [x, y] of path.points.slice(1)) movement.addSteps(area.tile(x - 2160, y - 6400, 0));
+    area.pathRunner = runner;
+    owned.scarPathRunner = runner;
   }
 
   function spawnScarDemons(p, area) {
@@ -559,7 +680,24 @@ module.exports = function registerDesertTreasureII(api) {
   function handleDialogueLine(event) {
     if (stage(event?.player) !== S.LEVIATHAN || event?.text !== "Yes.") return;
     if (![N.CATALYTIC_GUARDIAN, N.CATALYTIC_GUARDIAN_2].includes(event.npcId)) return;
+    event.player.setAttribute(SCAR_GUARDIAN_ACCEPTED, true);
+    setScarVarbit(event.player, 4);
     event.after = () => enterScar(event.player);
+  }
+
+  function setScarVarbit(p, value) {
+    p.getPacketSender().sendVarbit(SCAR_VARBIT, value);
+  }
+
+  function handleLogin({ player: p }) {
+    if (stage(p) < S.LEVIATHAN) return;
+    const value = p.getAttribute(SCAR_MAZE_ONE_ENTERED) ? 16
+      : p.getAttribute(SCAR_PERSTEN_TALKED) ? 14
+        : p.getAttribute(SCAR_BOAT_TRIED) ? 10
+          : p.getAttribute(SCAR_DEMONS_DEFEATED) ? 8
+            : p.getAttribute(SCAR_GUARDIAN_ACCEPTED) ? 6 : 2;
+    setScarVarbit(p, value);
+    p.getPacketSender().sendVarbit(SCAR_TETHER_VARBIT, p.getAttribute(SCAR_TETHER_DESTROYED) ? 1 : 0);
   }
 
   function spawnTempleKasonde(p, area) {
@@ -648,6 +786,14 @@ module.exports = function registerDesertTreasureII(api) {
     return x >= 2000 && x < 2072 && y >= 6400 && y < 6464 ? { x, y } : null;
   }
 
+  function scarMazeSourceTile(p, location) {
+    const area = p.getAttribute(ATTR_SCAR_MAZE_ONE);
+    if (!(area instanceof ScarMazeOneArea) || area.isDestroyed?.() || !location) return null;
+    const x = location.x - area.getBaseX() + 2160;
+    const y = location.y - area.getBaseY() + 6400;
+    return x >= 2160 && x < 2248 && y >= 6400 && y < 6472 ? { x, y } : null;
+  }
+
   function leaveVardorvisArena(p) {
     const area = p.getAttribute(ATTR_VARDORVIS_AREA);
     if (!(area instanceof VardorvisArea) || area.isDestroyed()) return false;
@@ -661,7 +807,7 @@ module.exports = function registerDesertTreasureII(api) {
 
   function handleLogout({ player: p }) {
     if (!p) return;
-    for (const key of [ATTR_VAULT_AREA, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA]) {
+    for (const key of [ATTR_VAULT_AREA, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE]) {
       const area = p.getAttribute(key);
       if (area && !area.isDestroyed?.()) {
         area.leave?.(p, false);
@@ -670,6 +816,7 @@ module.exports = function registerDesertTreasureII(api) {
       }
       p.setAttribute(key, null);
     }
+    p.setAttribute(SCAR_PATH_COMPLETE, false);
     spawned.delete(p);
   }
 
@@ -913,14 +1060,33 @@ module.exports = function registerDesertTreasureII(api) {
     }
     return false;
   }
-  function handleObject({ player: p, objectId, location }) {
+  function handleObject({ player: p, objectId, definition, location }) {
     const s = stage(p);
     const vaultTile = vaultSourceTile(p, location);
     const roomTile = warRoomSourceTile(p, location);
     const scarTile = scarSourceTile(p, location);
-    if (s === S.LEVIATHAN && scarTile?.x === 2065 && scarTile.y === 6436) {
+    const scarMazeTile = scarMazeSourceTile(p, location);
+    if (s === S.LEVIATHAN && scarMazeTile?.x === 2210 && scarMazeTile.y === 6433 && objectId === O.ABYSSAL_TETHER) {
+      if (!p.getAttribute(SCAR_PATH_COMPLETE)) return p.sendMessage("Follow each pathfinder through the maze to reach the tether.");
+      p.setAttribute(SCAR_TETHER_DESTROYED, true);
+      p.getPacketSender().sendVarbit(SCAR_TETHER_VARBIT, 1);
+      p.sendMessage("The abyssal tether is severed. The teleporter to the catalyst room is now reachable.");
+      return true;
+    }
+    if (s === S.LEVIATHAN && scarMazeTile?.x === 2190 && scarMazeTile.y === 6412
+      && !p.getAttribute(SCAR_TETHER_DESTROYED)) {
+      return p.sendMessage("The abyssal tether still powers the barrier to this chamber.");
+    }
+    if (s === S.LEVIATHAN && scarTile?.x === 2043 && scarTile.y === 6441
+      && (definition?.id ?? objectId) === SCAR_PASSAGE_OPEN) {
+      if (!p.getAttribute(SCAR_PERSTEN_TALKED)) return p.sendMessage("Speak to Wizard Persten before entering the Scar passage.");
+      enterScarMazeOne(p);
+      return true;
+    }
+    if (s === S.LEVIATHAN && objectId === O.ROWBOAT_19 && scarTile?.x === 2065 && scarTile.y === 6435) {
       if (!p.getAttribute(SCAR_DEMONS_DEFEATED)) return p.sendMessage("The creatures fighting near the entrance still need to be dealt with.");
       p.setAttribute(SCAR_BOAT_TRIED, true);
+      setScarVarbit(p, 10);
       const area = p.getAttribute(ATTR_SCAR_AREA);
       spawnScarPersten(p, area);
       talk(p, N.WIZARD_PERSTEN_5, "praefectus-classis-perseriya-attempting-to-board-the-rowboat-in-the-scar");
@@ -1136,7 +1302,10 @@ module.exports = function registerDesertTreasureII(api) {
         p.setAttribute(STATUES_PLACED, placed);
         p.sendMessage(`You place ${index === 0 ? "Vardorvis'" : index === 1 ? "the Whisperer's" : index === 2 ? "Sucellus'" : "Perseriya's"} medallion on the statue.`);
         if (placed === 15) setStage(p, S.FINALE);
-        else if (index === 0) setStage(p, S.LEVIATHAN);
+        else if (index === 0) {
+          setStage(p, S.LEVIATHAN);
+          setScarVarbit(p, 2);
+        }
         else if (index === 3) setStage(p, S.SUCELLUS);
         else if (index === 2) setStage(p, S.WHISPERER);
         return true;
@@ -1198,6 +1367,7 @@ module.exports = function registerDesertTreasureII(api) {
     if (s === S.LEVIATHAN) {
       if (!p.getAttribute(SCAR_BOAT_TRIED)) return;
       p.setAttribute(SCAR_PERSTEN_TALKED, true);
+      setScarVarbit(p, 14);
       talk(p, npcId, p.getAttribute(SCAR_PERSTEN_TALKED_BEFORE)
         ? "praefectus-classis-perseriya-talking-to-wizard-persten-talking-to-wizard-persten-again"
         : "praefectus-classis-perseriya-talking-to-wizard-persten");
@@ -1215,6 +1385,7 @@ module.exports = function registerDesertTreasureII(api) {
       owned.scarEnemies = owned.scarEnemies.filter((enemy) => enemy !== npc);
       if (owned.scarEnemies.length === 0) {
         killer.setAttribute(SCAR_DEMONS_DEFEATED, true);
+        setScarVarbit(killer, 8);
         killer.sendMessage("The Scarred demons are defeated. The stepping stones to the rowboat are now safe to cross.");
       }
       return;
@@ -1314,6 +1485,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.persistAttribute(ATTR_SMITH_INTRO);
   api.persistAttribute(STATUES_PLACED);
   [SCAR_DEMONS_DEFEATED, SCAR_BOAT_TRIED, SCAR_PERSTEN_TALKED, SCAR_PERSTEN_TALKED_BEFORE].forEach((key) => api.persistAttribute(key));
+  [SCAR_GUARDIAN_ACCEPTED, SCAR_MAZE_ONE_ENTERED, SCAR_TETHER_DESTROYED].forEach((key) => api.persistAttribute(key));
   [GOLEM_INSPECTED, ALTAR_INSPECTED, TOTEMS_CHARGED].forEach((key) => api.persistAttribute(key));
   [SCAR_DEMONS_DEFEATED, SCAR_BOAT_TRIED, SCAR_PERSTEN_TALKED, SCAR_PERSTEN_TALKED_BEFORE].forEach((key) => api.persistAttribute(key));
   api.onObjectInteraction(handleObject);
@@ -1341,6 +1513,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("Duke Sucellus", { "Talk-to": handleBossTalk });
   api.onNpcInteraction("The Whisperer", { "Talk-to": handleBossTalk });
   api.onNpcDeath(handleDeath);
+  api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
   api.onPlayerDisconnect(handleLogout);
 };
