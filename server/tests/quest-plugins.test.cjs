@@ -930,3 +930,14 @@ test('Surok claims his ladder before the generic climb fallback', () => {
  assert.equal(event.handled,true);assert(f.climbing.has(player));assert.equal(played,'the-dark-squall-talking-to-the-elite-black-knight-by-the-ladder');
  const unrelated={player,objectId:25843,handled:false};handlers.custom.get('ladders:climb')[0](unrelated);assert.equal(unrelated.handled,false);
 });
+
+
+test('Picking up Surok’s lit explosive detonates it instead of giving the item', () => {
+ const {api}=mockApi(),removed=[],damage=[];const ground={};
+ api.core={...api.core,ItemOnGroundManager:{deregister:item=>removed.push(item)}};
+ const player={getCombat:()=>({getHitQueue:()=>({addPendingDamage:h=>damage.push(...h)})}),getInventory:()=>({deleteNumber(){}}),sendMessage(){}};
+ const f=require('../plugins/quests/wgs/Surok.WhileGuthixSleeps')({api});const fight={player,explosive:{ground}};f.fights.set(player,fight);
+ const unrelated={player,groundItemId:29573,groundItem:{},handled:false};assert.equal(f.pickup(unrelated),false);assert.equal(damage.length,0);
+ const take={player,groundItemId:29573,groundItem:ground,handled:false};assert.equal(f.pickup(take),true);assert(take.handled);assert.deepEqual(removed,[ground]);assert.equal(fight.explosive,null);
+ assert.equal(damage.length,1);assert(damage[0].getDamage()>=45&&damage[0].getDamage()<=55);
+});
