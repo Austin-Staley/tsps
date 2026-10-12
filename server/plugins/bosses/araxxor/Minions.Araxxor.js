@@ -59,8 +59,11 @@ function spawnEggs(session) {
     const egg = core.NPC.create(Shared.EGG_ID[type], new core.Location(x, y, 0));
     egg.__skipDefaultRespawn = true;
     egg.setHitpoints?.(Shared.EGG_HITPOINTS);
-    // Eggs sit where they were laid: no wander, no step toward whoever hits them.
+    // Eggs sit where they were laid: the radius stops wandering, and scripted
+    // movement stops the retaliation chase (Combat keeps pursuing transient
+    // denials like a canPursue refusal, so the flag is what actually pins them).
     egg.getMovementCoordinator?.().setRadius?.(0);
+    egg.setScriptedMovement?.(true);
     egg.performAnimation(new core.Animation(EGG_ANIMATION));
     egg.setAttribute?.(Shared.ATTR_ENCOUNTER, session);
     area?.add?.(egg);
