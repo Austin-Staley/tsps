@@ -37,10 +37,10 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
   if(spawns.length)actors.set(player,spawns.map(([id,x,y,z])=>api.spawnNpc({id,x,y,z,wanderRadius:0,owner:player,ownerOnly:true})));
  }
  class MercenaryBattle extends PrivateArea{
-  constructor(p){super([new Boundary(2635,2670,3478,3510,0)]);this.player=p;this.enemies=[];this.ticks=0;}
+  constructor(p){super([new Boundary(2635,2670,3478,3510,0)]);this.player=p;this.enemies=[];this.ticks=0;this.started=false;}
   isMulti(){return true;}
   process(m){
-   if(m!==this.player)return;const p=this.player;this.ticks++;
+   if(m!==this.player||!this.started)return;const p=this.player;this.ticks++;
    this.enemies.forEach((n,i)=>{
     if(!n||n.getHitpoints()<=0||n.getArea?.()===null||(n.getIndex&&(n.getIndex()<0||World.getNpcs().get(n.getIndex())!==n))){p.setAttribute(MERCENARIES_ATTRIBUTE,val(p,MERCENARIES_ATTRIBUTE)|(1<<i));return;}
     if(i===2&&n.getHitpoints()<30){p.setAttribute(MERCENARIES_ATTRIBUTE,val(p,MERCENARIES_ATTRIBUTE)|4);api.removeNpc(n);this.enemies[i]=null;return;}
@@ -103,7 +103,9 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
  function contacts(e){if(stage(e.player)>=280&&stage(e.player)<400)for(const name of [...FIRST,...SECOND])if(!e.contacts.includes(name))e.contacts.push(name);}
  function selected(e){if(recruitName(e.player,e.name))e.handled=true;}
  function line(e){
-  const {player,text}=e,s=stage(player);if(s<280||s>=400)return;
+  const {player,text}=e,s=stage(player);
+  if(s===200&&text==='Kill the Armadyl-worshipping scum!'){const battle=battles.get(player);if(battle)e.after=()=>{battle.started=true;};return;}
+  if(s<280||s>=400)return;
   const endings=["Eh, you know what... I'm in!",'I would be glad to','It seems my years of waiting','Then I shall join you there.','I will need to make arrangements','I will join you there as soon as I', 'If by lending my axe'];
   const i=RECRUIT_IDS.indexOf(e.npcId);
   if(i>=0&&text.startsWith(endings[i]))e.after=()=>{player.setAttribute(RECRUITS_ATTRIBUTE,val(player,RECRUITS_ATTRIBUTE)|(1<<i));sync(player);};
