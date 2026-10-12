@@ -1868,3 +1868,15 @@ test('silvthrill ballista uses its actual javelins through the shared ranged che
  const {RangedWeapon,Ammunition}=require('../dist/game/content/combat/ranged/RangedData');const {Item,Equipment,ItemIdentifiers:I}=PluginManager.getCoreApi(),eq=[];eq[Equipment.WEAPON_SLOT]=new Item(I.SILVTHRILL_BALLISTA);eq[Equipment.AMMUNITION_SLOT]=new Item(I.SILVTHRILL_JAVELIN,100);const p={getEquipment:()=>({getItems:()=>eq})};
  assert.deepEqual(RangedWeapon.getFor(p).getAmmunitionData(),[Ammunition.getFor(p)]);assert.equal(Ammunition.getFor(p).getItemId(),I.SILVTHRILL_JAVELIN);
 });
+
+test('Blood Moon palace spawns usable preparation NPCs once and removes them on departure',()=>{
+ const {api}=mockApi(),cast=[],removed=[],attrs=new Map();let progress=60;
+ api.spawnNpc=spec=>{const npc={...spec,transformed:spec.id,getId:()=>spec.id,setScriptedMovement(){},getMovementQueue:()=>({setBlockMovement(){}}),setNpcTransformationId(id){npc.transformed=id;}};cast.push(npc);return npc;};api.removeNpc=n=>removed.push(n);
+ const player={getAttribute:k=>attrs.get(k)};const f=require('../plugins/quests/bmr/Palace.TheBloodMoonRises')({api,stage:()=>progress,preparationAttribute:'prep'});
+ f.sync(player);f.sync(player);assert.equal(cast.length,4);assert.ok(cast.every(n=>n.owner===player&&n.ownerOnly&&n.z===1));assert.deepEqual(cast.map(n=>[n.x,n.y]),[[3157,7841],[3157,7839],[3175,7834],[3168,7828]]);
+ attrs.set('prep',{stewFed:true});f.sync(player);assert.equal(cast[0].transformed,api.core.NpcIdentifiers.SAFALAAN_HALLOW_12);progress=70;f.sync(player);assert.equal(removed.length,4);assert.equal(f.residents.has(player),false);
+});
+
+test('bridge uses the actual cache palace exit and lets a full-inventory handoff retry',()=>{
+ const t=bloodBridgeFixture();t.setFree(0);assert.equal(t.f.start(t.player),false);t.setFree(2);assert.equal(t.f.doors({player:t.player,objectId:t.api.core.ObjectIdentifiers.DOORS_46,location:{x:3167,y:7860,z:1}}),true);assert.ok(t.f.sessions.has(t.player));
+});
