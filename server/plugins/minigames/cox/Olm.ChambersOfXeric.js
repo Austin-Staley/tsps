@@ -34,14 +34,29 @@
  * - Transition and final-stand falling crystals: 16-25 under, 10-16 beside.
  * - Life Siphon (last phase): two safe tiles; everyone else takes moderate damage and the Olm
  *   heals five times the total.
- * Not on the Wiki (to check against a capture): the chamber's tiles and the side objects (holes 29880-29882, left claws
- *   29883-29885, right claws 29886-29888) and their animations; NPCs 7554 head, 7555 left claw,
- *   7553 right claw; rising takes 10 + 4 ticks (sound 3405); attacks every 4 ticks; the
- *   transition: 33 ticks of crystals, rising again 24 ticks later; projectiles and graphics of
- *   every attack; acid pools last 16 ticks (30032); crystal clusters (30033 / 30034) burst 3
- *   ticks after appearing for 10-40; lightning runs 18 ticks for 15-25 and a 5-second bind;
- *   Swap waits 8 ticks; deep burn every 7 ticks; the claws' clench lasts 45 ticks; a fallen claw
- *   in the last phase rises again after 34 ticks; Life Siphon 1 in 16 in the final stand.
+ * rsprox captures (recordings 820, 843, 3282, 3285, 3389):
+ * - It rises 7 ticks after the first raider passes the barrier: "The Great Olm rises with the
+ *   power of <col=00ff00>acid</col>." (flame ff0000, crystal ff00ff; none in the last phase)
+ *   with the rising locs; their animations (7335, 7350, 7354) and sound 3405 a tick later; the
+ *   risen head and claws 6 ticks in, and its first attack the tick after.
+ * - Its head's projectiles leave 32 client cycles in, from height 340-360 to 160, angle 5,
+ *   progress 0: magic 1339 (sound 3749), ranged 1340, spheres 1341 / 1343 / 1345 (sound
+ *   1784), acid 1354 (sound 1784), the burn 1349 (sound 585), the fire walls 1347 (sound 3750).
+ * - A claw falling: 7352 / 7370, its cave loc 2 ticks later, gone at 3. With the right claw
+ *   down the left grips (7363, then the gripping set). The last claw down: the head falls
+ *   (7348) 4 ticks later, its cave loc at 6, and it rises on the other side 38 ticks after
+ *   the claw fell.
+ * - Messages: "The Great Olm had no one to pair you with! The magical power will enact
+ *   soon...", "Yourself and <name> have swapped places!", "The teleport attack has no
+ *   effect!", "The falling crystal shatters into you.", "The Great Olm infects you with a
+ *   burning overwhelming power.", "The Great Olm prepares to absorb energy from anyone
+ *   unprotected...", "The Great Olm's left claw clenches to protect itself temporarily."; the
+ *   burnt say "Burn with me!", "I will burn with you." and "It burns like an inferno!".
+ * Not on the Wiki (to check against a capture): the chamber's tiles; attacks every 4 ticks;
+ *   the transition's crystals; acid pools lasting 16 ticks; crystal clusters bursting 3 ticks
+ *   after appearing for 10-40; lightning running 18 ticks for 15-25 and a 5-second bind; Swap
+ *   waiting 8 ticks; deep burn every 7 ticks; the clench lasting 45 ticks; a fallen claw in the
+ *   last phase rising again after 34 ticks; Life Siphon 1 in 16 in the final stand.
  * Not like OSRS: dousing a fire wall is its Douse option with a watering can or a water or ice
  *   spell set to autocast (casting spells on NPCs has no hook here).
  */
@@ -59,7 +74,9 @@ const OBJECT = {
 const SIDE = { LEFT: 0, RIGHT: 1 };
 const ZONE = { SOUTH: 0, MIDDLE: 1, NORTH: 2, ALL: 3 };
 const POWER = { ACID: 0, FLAME: 1, CRYSTAL: 2 };
-const POWER_NAMES = ["<col=00ff00>Acid", "<col=ff0000>Flame", "<col=006000>Crystals"];
+const POWER_NAMES = ["<col=00ff00>acid", "<col=ff0000>flame", "<col=ff00ff>crystal"];
+/** Ticks: the barrier to rising, rising to risen, the last claw down to the next rise. */
+const TIMING = { RISE_AFTER_BARRIER: 7, RISE_ANIM: 1, RISEN: 6, FIRST_ATTACK: 1, HEAD_FALL: 4, HEAD_GONE: 6, NEXT_RISE: 38, CLAW_CAVE: 2 };
 /** [normal, final phase] animations. */
 const ANIM = {
   HEAD_RISE: [7335, 7383], HEAD_FALL: [7348, 7348], HEAD_MIDDLE: [7336, 7374], HEAD_LEFT: [7338, 7375], HEAD_RIGHT: [7337, 7376],
@@ -73,6 +90,9 @@ const ANIM = {
 const SEQUENCE = ["auto", "skip", "auto", "burst", "auto", "skip", "auto", "lightning", "auto", "skip", "auto", "swap"];
 const LAST_SEQUENCE = [...SEQUENCE, "auto", "skip", "auto", "protect"];
 const SPECIALS = new Set(["burst", "lightning", "swap", "protect"]);
+/** rsprox captures: spheres land 180 client cycles in; bombs go off 11 ticks after the throw. */
+const SPHERE_END = 180;
+const BOMB_FUSE = 11;
 const BASE_MAX = 27;
 const WATERING_CANS = [5333, 5334, 5335, 5336, 5337, 5338, 5339, 5340];
 const WATER_OR_ICE = /water|ice (rush|burst|blitz|barrage)/i;
@@ -174,7 +194,9 @@ class OlmRoom extends Raid.Room {
   animate(object, anim) {
     if (!object) return;
     const { Animation } = Shared.core();
-    const id = Array.isArray(anim) ? anim[this.isLastPhase() ? 1 : 0] : anim;
+    // The head's pairs are [normal, last phase]; the left claw's [normal, gripping without the right].
+    const second = object === this.objects.leftClaw ? this.rightGone === true : this.isLastPhase();
+    const id = Array.isArray(anim) ? anim[second ? 1 : 0] : anim;
     for (const player of this.viewers()) player.getPacketSender().sendObjectAnimation(object, new Animation(id));
   }
 
@@ -209,7 +231,10 @@ class OlmRoom extends Raid.Room {
       const { Location } = Shared.core();
       const at = player.getLocation();
       Shared.balanceWalk(player, new Location(at.getX(), at.getY() + (inside ? -2 : 2), at.getZ()), -1, null);
-      if (!this.risen && !this.raid.completed) this.rise();
+      if (!this.risen && !this.raid.completed) {
+        this.risen = true;
+        Shared.later(this.raid, TIMING.RISE_AFTER_BARRIER, () => this.rise());
+      }
     };
     if (!confirm || this.raid.completed) {
       pass();
@@ -220,19 +245,27 @@ class OlmRoom extends Raid.Room {
   }
 
   rise() {
+    if (this.raid.destroyed) return;
     this.risen = true;
+    this.rightGone = false;
     const side = T.SIDES[this.side];
+    this.power = Shared.randomOf([POWER.ACID, POWER.FLAME, POWER.CRYSTAL].filter((power) => power !== this.power));
+    if (!this.isLastPhase()) {
+      for (const player of this.raiders()) player.sendMessage(`The Great Olm rises with the power of ${POWER_NAMES[this.power]}</col>.`);
+    }
     this.placeObject("head", OBJECT.HOLE_RISING, side.head);
     this.placeObject("leftClaw", OBJECT.LEFT_RISING, side.leftClaw);
     this.placeObject("rightClaw", OBJECT.RIGHT_RISING, side.rightClaw);
-    Shared.later(this.raid, 10, () => {
+    Shared.later(this.raid, TIMING.RISE_ANIM, () => {
       if (this.raid.destroyed) return;
-      for (const player of this.viewers()) Shared.sound(player, 3405);
+      const { Location } = Shared.core();
+      const at = this.objects.head.getLocation();
+      Shared.areaSound(this.viewers(), 3405, new Location(at.getX() + 5, at.getY() + 2, 0), { delay: 15, range: 15 });
       this.animate(this.objects.head, ANIM.HEAD_RISE);
       this.animate(this.objects.leftClaw, ANIM.LEFT_CLAW_RISE);
       this.animate(this.objects.rightClaw, ANIM.RIGHT_CLAW_RISE);
     });
-    Shared.later(this.raid, 14, () => this.risenUp());
+    Shared.later(this.raid, TIMING.RISEN, () => this.risenUp());
   }
 
   risenUp() {
@@ -247,14 +280,10 @@ class OlmRoom extends Raid.Room {
     this.leftClaw = this.spawnPart(NPC.LEFT_CLAW, at(leftObject));
     this.rightClaw = this.spawnPart(NPC.RIGHT_CLAW, at(rightObject));
     if (this.head) this.head.__coxPointsMultiplier = 0;
-    this.power = Shared.randomOf([POWER.ACID, POWER.FLAME, POWER.CRYSTAL].filter((power) => power !== this.power));
     this.usedThisPhase.clear();
     this.counter = 0;
-    this.attackWait = 5;
+    this.attackWait = TIMING.FIRST_ATTACK;
     this.direction = ZONE.MIDDLE;
-    if (!this.isLastPhase()) {
-      for (const player of this.raiders()) player.sendMessage(`The Great Olm rises with the power of ${POWER_NAMES[this.power]}</col>.`);
-    }
     this.animate(this.objects.head, ANIM.HEAD_MIDDLE);
     this.animate(this.objects.leftClaw, ANIM.LEFT_CLAW_DEFAULT);
     this.animate(this.objects.rightClaw, ANIM.RIGHT_CLAW_DEFAULT);
@@ -374,6 +403,28 @@ class OlmRoom extends Raid.Room {
     return new Location(this.x(x), this.y(y) + shift, 0);
   }
 
+  /**
+   * A shot from the head (rsprox captures): leaving 32 client cycles in from height 340-360 to
+   * 160 (0 on a tile), angle 5, progress 0; `end` defaults to 26 + 5 a tile. Returns the ticks
+   * until it lands.
+   */
+  headShot(to, id, end = null) {
+    const { Projectile } = Shared.core();
+    const from = this.face();
+    const tile = to.getLocation ? to.getLocation() : to;
+    const finish = end ?? 26 + 5 * from.getDistance(tile);
+    new Projectile(from, tile, to.getLocation ? to : null, id, 32, finish, 88, to.getLocation ? 40 : 0, this.map)
+      .withAngle(5)
+      .withProgress(0)
+      .sendProjectile();
+    return Math.max(1, Math.floor(finish / 30));
+  }
+
+  /** A head sound: from the head's face, range 13-15, 10-12 client cycles in. */
+  headSound(id, { delay = 12, range = 15 } = {}) {
+    Shared.areaSound(this.viewers(), id, this.face(), { delay, range });
+  }
+
   leftClawUnavailable() {
     return !this.leftClaw?.isRegistered() || this.leftClaw.__coxClenched || this.leftClaw.__coxDown;
   }
@@ -431,9 +482,9 @@ class OlmRoom extends Raid.Room {
     this.headAttackAnim();
     const ranged = this.ranging;
     const face = this.face();
+    this.headSound(ranged ? 1784 : 3749, { range: ranged ? 15 : 13 });
     for (const player of targets) {
-      Shared.sound(player, ranged ? 1784 : 3749);
-      const delay = Shared.projectile(this.map, face, player, ranged ? 1340 : 1339, { delay: 30, duration: 18, startHeight: 65, endHeight: 15 });
+      const delay = this.headShot(player, ranged ? 1340 : 1339);
       Shared.strike(this.head, player, ranged ? "ranged" : "magic", this.maxHit(), delay, { prayerMultiplier: 0.2 });
     }
   }
@@ -444,6 +495,7 @@ class OlmRoom extends Raid.Room {
     this.headAttackAnim();
     const face = this.face();
     const types = Shared.shuffle([0, 1, 2]);
+    this.headSound(1784, { delay: 10 });
     const { PrayerHandler, Skill } = Shared.core();
     targets.forEach((player, index) => {
       const type = types[index];
@@ -454,12 +506,12 @@ class OlmRoom extends Raid.Room {
         const skills = player.getSkillManager();
         skills.setCurrentLevel(Skill.PRAYER, Math.floor(skills.getCurrentLevel(Skill.PRAYER) / 2), true);
       }
-      const text = ["<col=ff0000>The Great Olm fires a sphere of aggression your way.</col>",
-        "<col=00ff00>The Great Olm fires a sphere of accuracy and dexterity your way.</col>",
-        "<col=0000ff>The Great Olm fires a sphere of magical power your way.</col>"][type];
+      const text = ["<col=ff3045>The Great Olm fires a sphere of aggression your way.</col>",
+        "<col=229628>The Great Olm fires a sphere of accuracy and dexterity your way.</col>",
+        "<col=3366ff>The Great Olm fires a sphere of magical power your way.</col>"][type];
       player.sendMessage(text + (praying ? " Your prayers have been sapped." : ""));
-      Shared.projectile(this.map, face, player, [1345, 1343, 1341][type], { delay: 30, duration: 120, startHeight: 60, endHeight: 20 });
-      Shared.later(this.raid, 4, () => {
+      const lands = this.headShot(player, [1345, 1343, 1341][type], SPHERE_END);
+      Shared.later(this.raid, lands, () => {
         if (player.getHitpoints() <= 0) return;
         player.performGraphic(Shared.gfx([1346, 1344, 1342][type], { height: 96 }));
         if (!Shared.isProtected(player, styles[type])) Shared.damage(player, Math.min(99, Math.floor(player.getHitpoints() / 2)));
@@ -474,8 +526,8 @@ class OlmRoom extends Raid.Room {
     for (let tries = 0; tries < 20 && (!second || second.equals(first)); tries++) second = this.randomTile(this.direction);
     if (!second || second.equals(first)) return;
     this.headAttackAnim();
-    const face = this.face();
-    for (const tile of [first, second]) Shared.projectile(this.map, face, tile, 1355, { delay: 30, duration: 90, startHeight: 65, endHeight: 0 });
+    for (const player of this.raiders()) player.sendMessage("The Great Olm prepares to absorb energy from anyone unprotected...");
+    for (const tile of [first, second]) this.headShot(tile, 1355, 120);
     Shared.later(this.raid, 3, () => {
       Shared.graphicAt(this.viewers(), 1363, first);
       Shared.graphicAt(this.viewers(), 1363, second);
@@ -529,8 +581,8 @@ class OlmRoom extends Raid.Room {
     if (!target) return;
     this.busy.add("acidDrip");
     this.headAttackAnim();
-    for (const player of this.viewers()) Shared.sound(player, 1784);
-    const delay = Shared.projectile(this.map, this.face(), target, 1364, { delay: 30, duration: 30, startHeight: 60, endHeight: 20 });
+    this.headSound(1784);
+    const delay = this.headShot(target, 1354);
     Shared.later(this.raid, delay, () => {
       target.__coxAcidUntil = this.raid.ticks + 21;
       target.sendMessage("<col=ff0000>The Great Olm has smothered you in acid. It starts to drip off slowly.");
@@ -541,16 +593,15 @@ class OlmRoom extends Raid.Room {
 
   acidSpray() {
     this.headAttackAnim();
-    for (const player of this.viewers()) Shared.sound(player, 1784);
-    const face = this.face();
+    this.headSound(1784);
     for (let count = Shared.random(7, 12), tries = 100; count > 0 && tries > 0; tries--) {
       const tile = this.randomTile(this.direction);
       if (!tile || this.pools.has(`${tile.getX()},${tile.getY()}`)) continue;
       count--;
-      const delay = Shared.projectile(this.map, face, tile, 1364, { delay: 30, duration: 15, startHeight: 65, endHeight: 0 });
+      const delay = this.headShot(tile, 1354, 26 + 7 * this.face().getDistance(tile));
       Shared.later(this.raid, delay, () => {
         this.addPool(tile);
-        for (const player of this.viewers()) Shared.sound(player, 3308);
+        Shared.areaSound(this.viewers(), 3308, tile, { range: 3 });
       });
     }
   }
@@ -563,9 +614,10 @@ class OlmRoom extends Raid.Room {
     if (!target) return;
     this.busy.add("deepBurn");
     this.headAttackAnim();
-    for (const player of this.viewers()) Shared.sound(player, 585);
+    this.headSound(585, { delay: 0, range: 13 });
     const burning = new Map([[target, 6]]);
-    const delay = Shared.projectile(this.map, this.face(), target, 1349, { delay: 30, duration: 18, startHeight: 65, endHeight: 0 });
+    const delay = this.headShot(target, 1349);
+    Shared.later(this.raid, delay, () => target.sendMessage("The Great Olm infects you with a burning overwhelming power."));
     const { Skill } = Shared.core();
     const skills = [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE, Skill.RANGED, Skill.MAGIC];
     const burn = (player, text) => {
@@ -595,7 +647,7 @@ class OlmRoom extends Raid.Room {
           for (const other of chamber) {
             if (burning.has(other) || next.has(other) || other.getLocation().getDistance(player.getLocation()) > 1) continue;
             next.set(other, 6);
-            burn(other, "I will burn with you!");
+            burn(other, "I will burn with you.");
           }
         }
         burning.clear();
@@ -624,8 +676,8 @@ class OlmRoom extends Raid.Room {
     const north = new Location(fromX, y + 1, 0);
     const south = new Location(fromX, y - 1, 0);
     const face = this.face();
-    for (const tile of [north, south]) Shared.projectile(this.map, face, tile, 1347, { delay: 30, duration: 30, startHeight: 65, endHeight: 0 });
-    for (const player of this.viewers()) Shared.sound(player, 3750);
+    for (const tile of [north, south]) this.headShot(tile, 1347, 60);
+    this.headSound(3750, { range: 13 });
     const fires = [];
     Shared.later(this.raid, 2, () => {
       if (this.dead || this.raid.destroyed) return;
@@ -685,29 +737,32 @@ class OlmRoom extends Raid.Room {
     const target = Shared.randomOf(this.everyone(this.direction));
     if (!target) return;
     this.busy.add("fallingCrystals");
-    for (const player of this.viewers()) Shared.sound(player, 324);
-    target.sendMessage("<col=ff0000>The Great Olm has chosen you as its target - watch out!");
-    for (const player of this.raiders()) if (player !== target) player.sendMessage("The Great Olm sounds a cry...");
+    this.headSound(324);
+    for (const player of this.raiders()) player.sendMessage("The Great Olm sounds a cry...");
+    target.sendMessage("<col=ff0000>The Great Olm has chosen you as its target - watch out!</col>");
     this.headAttackAnim();
     let left = 11;
-    Shared.later(this.raid, 2, () => Shared.repeat(this.raid, 1, () => {
+    const drop = () => {
       if (this.raid.destroyed || this.dead || left-- <= 0 || target.getHitpoints() <= 0 || !this.inChamber(target.getLocation())) {
         this.busy.delete("fallingCrystals");
         return false;
       }
-      target.performGraphic(Shared.gfx(246));
       const tile = target.getLocation().clone();
-      const { Location } = Shared.core();
-      Shared.projectile(this.map, new Location(tile.getX() - 1, tile.getY(), 0), tile, 1352, { delay: 0, duration: 60, startHeight: 255, endHeight: 0 });
-      Shared.later(this.raid, 1, () => {
-        Shared.graphicAt(this.viewers(), 1338, tile);
+      const { Projectile } = Shared.core();
+      // rsprox captures: one every 2 ticks from high above, shattering 2 ticks later (gfx 1353).
+      new Projectile(tile, tile, null, 1352, 0, 60, 250, 0, this.map).withAngle(10).withProgress(64).sendProjectile();
+      Shared.later(this.raid, 2, () => {
+        Shared.graphicAt(this.viewers(), 1353, tile, { height: 10 });
+        Shared.areaSound(this.viewers(), 3821, tile, { range: 3 });
         for (const player of this.raiders()) {
-          Shared.sound(player, 3821);
-          if (player.getLocation().equals(tile)) Shared.damage(player, Shared.random(15, 20));
+          if (!player.getLocation().equals(tile)) continue;
+          Shared.damage(player, Shared.random(15, 20));
+          player.sendMessage("The falling crystal shatters into you.");
         }
       });
       return true;
-    }));
+    };
+    Shared.later(this.raid, 2, () => drop() && Shared.repeat(this.raid, 2, drop));
   }
 
   /** Wiki: two bombs, three in big groups; 15 at 4 tiles, 15 more each tile closer. */
@@ -722,26 +777,27 @@ class OlmRoom extends Raid.Room {
       if (!tile || bombs.some((bomb) => bomb.getDistance(tile) <= 2)) continue;
       bombs.push(tile);
       made++;
-      Shared.projectile(this.map, face, tile, 1357, { delay: 30, duration: 90, startHeight: 60, endHeight: 0 });
     }
+    this.headSound(1784);
     const { GameObject, ObjectManager } = Shared.core();
     const objects = [];
-    Shared.later(this.raid, 3, () => {
-      for (const tile of bombs) {
+    // rsprox captures: each bomb sits where it lands; all explode 11 ticks after the throw.
+    for (const tile of bombs) {
+      const lands = this.headShot(tile, 1357, 26 + 7 * face.getDistance(tile));
+      Shared.later(this.raid, lands, () => {
         const object = new GameObject(OBJECT.BOMB, tile, 10, 0, this.map);
         ObjectManager.register(object, true);
         objects.push(object);
-        for (const player of this.viewers()) Shared.sound(player, 3120);
-      }
-    });
-    Shared.later(this.raid, 9, () => {
+      });
+    }
+    Shared.later(this.raid, BOMB_FUSE, () => {
       for (const object of objects) {
-        Shared.graphicAt(this.viewers(), 40, object.getLocation());
+        Shared.graphicAt(this.viewers(), 40, object.getLocation(), { height: 40 });
+        Shared.areaSound(this.viewers(), 1021, object.getLocation(), { range: 10 });
         ObjectManager.deregister(object, true);
       }
-      for (const player of this.viewers()) Shared.sound(player, 1021);
     });
-    Shared.later(this.raid, 10, () => {
+    Shared.later(this.raid, BOMB_FUSE, () => {
       for (const tile of bombs) {
         for (const player of this.raiders()) {
           const distance = player.getLocation().getDistance(tile);
@@ -824,7 +880,7 @@ class OlmRoom extends Raid.Room {
         for (const player of this.raiders()) {
           if (!player.getLocation().equals(bolt.tile)) continue;
           Shared.damage(player, Shared.random(15, 25));
-          player.sendMessage("<col=ff0000>You've been electrocuted to the spot!");
+          player.sendMessage("<col=ff0000>You've been electrocuted to the spot!</col>");
           for (const prayer of [PrayerHandler.PROTECT_FROM_MAGIC, PrayerHandler.PROTECT_FROM_MELEE, PrayerHandler.PROTECT_FROM_MISSILES]) {
             if (PrayerHandler.isActivated(player, prayer)) PrayerHandler.deactivatePrayer(player, prayer);
           }
@@ -854,10 +910,10 @@ class OlmRoom extends Raid.Room {
           if (candidate && candidate.getDistance(primary.getLocation()) <= 5) tile = candidate;
         }
         if (!tile) continue;
-        primary.sendMessage("The Olm has no one to pair you with! The magical power will enact soon...");
+        primary.sendMessage("The Great Olm had no one to pair you with! The magical power will enact soon...");
       } else {
-        primary.sendMessage(`You have been paired with <col=ff0000>${Shared.displayName(secondary)}</col>! The magical power will enact soon.`);
-        secondary.sendMessage(`You have been paired with <col=ff0000>${Shared.displayName(primary)}</col>! The magical power will enact soon.`);
+        primary.sendMessage(`You have been paired with <col=ff0000>${Shared.displayName(secondary)}</col>! The magical power will enact soon...`);
+        secondary.sendMessage(`You have been paired with <col=ff0000>${Shared.displayName(primary)}</col>! The magical power will enact soon...`);
       }
       pairs.push({ primary, secondary, tile, colour: colours[pairs.length] });
     }
@@ -880,8 +936,8 @@ class OlmRoom extends Raid.Room {
         const destination = secondary ? secondary.getLocation().clone() : pair.tile;
         const distance = primary.getLocation().getDistance(destination);
         if (distance === 0) {
-          primary.sendMessage("The teleport attack had no effect on you.");
-          secondary?.sendMessage("The teleport attack had no effect on you.");
+          primary.sendMessage("The teleport attack has no effect!");
+          secondary?.sendMessage("The teleport attack has no effect!");
           continue;
         }
         const damage = Math.min(95, 5 * distance);
@@ -895,6 +951,8 @@ class OlmRoom extends Raid.Room {
           Shared.damage(secondary, damage);
           Shared.sound(secondary, 200);
           secondary.moveTo(from);
+          primary.sendMessage(`Yourself and ${Shared.displayName(secondary)} have swapped places!`);
+          secondary.sendMessage(`Yourself and ${Shared.displayName(primary)} have swapped places!`);
         }
       }
     });
@@ -946,6 +1004,7 @@ class OlmRoom extends Raid.Room {
     if (damage < threshold) return;
     claw.__coxClenched = true;
     claw.__coxClench = 45;
+    for (const player of this.raiders()) player.sendMessage("The Great Olm's left claw clenches to protect itself temporarily.");
     Shared.later(this.raid, 1, () => {
       this.animate(this.objects.leftClaw, ANIM.LEFT_CLAW_CLENCH);
       Shared.later(this.raid, 1, () => this.animate(this.objects.leftClaw, ANIM.LEFT_CLAW_TWITCHING));
@@ -990,9 +1049,18 @@ class OlmRoom extends Raid.Room {
     const left = npc === this.leftClaw;
     this.animate(left ? this.objects.leftClaw : this.objects.rightClaw, left ? ANIM.LEFT_CLAW_FALL : ANIM.RIGHT_CLAW_FALL);
     const side = T.SIDES[this.side];
-    Shared.later(this.raid, 1, () => this.placeObject(left ? "leftClaw" : "rightClaw", left ? OBJECT.LEFT_GONE : OBJECT.RIGHT_GONE, left ? side.leftClaw : side.rightClaw));
+    Shared.later(this.raid, TIMING.CLAW_CAVE, () => this.placeObject(left ? "leftClaw" : "rightClaw", left ? OBJECT.LEFT_GONE : OBJECT.RIGHT_GONE, left ? side.leftClaw : side.rightClaw));
     if (left) this.leftClaw = null;
-    else this.rightClaw = null;
+    else {
+      this.rightClaw = null;
+      this.rightGone = true;
+      // rsprox captures: the left claw takes a grip (7363) and idles gripping.
+      Shared.later(this.raid, 4, () => {
+        if (!this.leftClaw?.isRegistered()) return;
+        this.animate(this.objects.leftClaw, 7363);
+        Shared.later(this.raid, 2, () => this.leftClaw?.isRegistered() && this.animate(this.objects.leftClaw, ANIM.LEFT_CLAW_DEFAULT));
+      });
+    }
     const other = left ? this.rightClaw : this.leftClaw;
     if (!left && this.leftClaw?.__coxClench > 2) this.leftClaw.__coxClench = 2;
     if (other?.isRegistered() && !other.__coxDown) return undefined;
@@ -1003,7 +1071,7 @@ class OlmRoom extends Raid.Room {
       if (left) this.rightClaw = null;
       else this.leftClaw = null;
       const otherSide = left ? "rightClaw" : "leftClaw";
-      Shared.later(this.raid, 1, () => this.placeObject(otherSide, left ? OBJECT.RIGHT_GONE : OBJECT.LEFT_GONE, left ? side.rightClaw : side.leftClaw));
+      Shared.later(this.raid, TIMING.CLAW_CAVE, () => this.placeObject(otherSide, left ? OBJECT.RIGHT_GONE : OBJECT.LEFT_GONE, left ? side.rightClaw : side.leftClaw));
     }
     if (this.isLastPhase()) return this.beginFinalStand();
     return this.switchSides();
@@ -1015,19 +1083,20 @@ class OlmRoom extends Raid.Room {
     this.fallingCrystals$ = this.transitionCrystals(Infinity);
   }
 
+  /** The last claw down: the head falls 4 ticks later, goes at 6, and rises across the chamber at 38. */
   switchSides() {
     this.transitioning = true;
     this.transitionCrystals(33);
-    this.animate(this.objects.head, ANIM.HEAD_FALL);
-    const head = this.head;
-    this.head = null;
-    if (head) this.removeNpc(head);
-    Shared.later(this.raid, 4, () => {
+    Shared.later(this.raid, TIMING.HEAD_FALL, () => this.animate(this.objects.head, ANIM.HEAD_FALL));
+    Shared.later(this.raid, TIMING.HEAD_GONE, () => {
+      const head = this.head;
+      this.head = null;
+      if (head) this.removeNpc(head);
       const side = T.SIDES[this.side];
       this.placeObject("head", OBJECT.HOLE, side.head);
       this.side = this.side === SIDE.LEFT ? SIDE.RIGHT : SIDE.LEFT;
     });
-    Shared.later(this.raid, 24, () => {
+    Shared.later(this.raid, TIMING.NEXT_RISE, () => {
       if (this.raid.destroyed) return;
       this.phase++;
       this.transitioning = false;

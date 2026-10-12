@@ -303,6 +303,15 @@ Recording 3389.
 
 - Scavenger beasts bite with 255 and die with 258; one is gone 2 ticks after dying and another takes its place 2 ticks later (recording 3389), so the rooms never empty.
 
+## The Great Olm, from rsprox captures
+
+All five recordings (820 a long multi-player fight, 3389 a quick solo one).
+
+- It rises 7 ticks after the barrier is passed, with "The Great Olm rises with the power of <col=00ff00>acid</col>." (flame ff0000, crystal ff00ff) at once, the rising animations a tick later, risen at 6 and attacking at 7.
+- Head projectiles leave 32 cycles in from height 340-360: magic 1339 (sound 3749), ranged 1340 (1784), spheres 1341/1343/1345 landing at 180 cycles (1784), acid 1354, the burn 1349 (585), fire walls 1347 (3750), bombs 1357 (exploding 11 ticks after the throw, gfx 40, sound 1021). Targeted falling crystals come every 2 ticks (projectile 1352, gfx 1353, sound 3821, "The falling crystal shatters into you.").
+- A claw falls (7352 / 7370), its cave 2 ticks later; with the right claw down the left grips (7363). The last claw down: the head falls 4 ticks later, its cave at 6, and it rises across the chamber at 38.
+- The live messages (sphere colours ff3045 / 229628 / 3366ff, swaps, pairing, the clench, Life Siphon, deep burn) are used word for word.
+
 ## Values not on the Wiki, to check against a capture
 
 | Value | Where |

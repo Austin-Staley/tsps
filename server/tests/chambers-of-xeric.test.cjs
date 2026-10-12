@@ -111,6 +111,7 @@ function fakePlayer(name, location = new Location(1234, 3566, 0)) {
         sendClientScript: (id, ...args) => { p.scripts.push([id, ...args]); return sender; },
         sendInterfaceFlagsRange: () => sender,
         sendSound: () => sender,
+        sendAreaSound: () => sender,
         sendEnterAmountPrompt: () => sender,
         sendObjectAnimation: () => sender,
         sendGlobalGraphic: () => sender,
