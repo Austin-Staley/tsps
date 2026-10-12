@@ -322,3 +322,114 @@ test('Prince Ali key print and bronze bar go to Osman, then Leela gives the key'
   handlers.custom.get('npc-dialogue:action').forEach((h) => h(event));
   assert.equal(items.get(I.BRONZE_KEY), 1, 'replaying the handoff must not duplicate the key');
 });
+
+test('Death Plateau keeps Eohric and Harold dialogue in order', () => {
+  const { api, handlers, quest, player } = questScene('DeathPlateau');
+  const { EOHRIC, HAROLD, DENULTH } = api.core.NpcIdentifiers;
+  const select = handlers.variant.at(-1);
+  const talk = npcId => select({ npcId, player });
+  quest.setStage(player, 10);
+  assert.equal(talk(DENULTH), 'getting-started-talking-to-denulth-again');
+  assert.equal(talk(EOHRIC), 'finding-the-combination-talking-to-eohric');
+  assert.equal(quest.getStage(player), 20);
+  assert.equal(talk(EOHRIC), 'finding-the-combination-talking-to-eohric-talking-to-eohric-again');
+  assert.equal(quest.getStage(player), 20, 'revisiting Eohric cannot pretend Harold was met');
+  assert.equal(talk(HAROLD), 'finding-the-combination-talking-to-harold');
+  assert.equal(quest.getStage(player), 30);
+  assert.equal(talk(HAROLD), 'finding-the-combination-talking-to-harold-again');
+  assert.equal(talk(EOHRIC), 'finding-the-combination-talking-to-eohric-after-talking-to-harold');
+  assert.equal(quest.getStage(player), 40);
+  assert.equal(talk(EOHRIC), 'finding-the-combination-talking-to-eohric-again-after-learning-harold-s-weakness');
+  assert.equal(talk(HAROLD), 'finding-the-combination-talking-to-harold-after-learning-his-weakness');
+  quest.setStage(player, 60);
+  assert.equal(talk(EOHRIC), 'finding-the-combination-talking-to-eohric-after-opening-the-equipment-room');
+});
+
+test("Harold's door requires Eohric's hint and leaves other doors alone", () => {
+  const { api, handlers, quest, player, messages } = questScene('DeathPlateau');
+  const door = api.core.ObjectIdentifiers.DOOR_115;
+  const toggle = objectId => {
+    const event = { player, objectId, handled: false };
+    handlers.custom.get('door:toggle').forEach(handler => handler(event));
+    return event.handled;
+  };
+  for (const stage of [0, 10]) {
+    quest.setStage(player, stage);
+    assert.equal(toggle(door), true);
+    assert.match(messages.at(-1), /without a reason/);
+  }
+  for (const stage of [20, 30, 40, 60, 80]) {
+    quest.setStage(player, stage);
+    assert.equal(toggle(door), false, 'the shared door handler opens it');
+  }
+  quest.setStage(player, 0);
+  assert.equal(toggle(api.core.ObjectIdentifiers.DOOR), false);
+});
+
+test('Tenzing sells climbing boots after Death Plateau, including during Troll Stronghold', () => {
+  const { api, handlers, quest, player, items } = questScene('DeathPlateau');
+  const { TENZING } = api.core.NpcIdentifiers;
+  const { COINS, CLIMBING_BOOTS } = api.core.ItemIdentifiers;
+  quest.setStage(player, quest.completionValue);
+  assert.deepEqual(handlers.variant.at(-1)({ player, npcId: TENZING }), { page: 'Tenzing', variant: 'after-death-plateau' });
+  const condition = text => handlers.condition.at(-1)({ player, npcId: TENZING, text });
+  const action = event => handlers.custom.get('npc-dialogue:action').forEach(handler => handler(event));
+  for (const stepId of ['FgkYXO', '7mwtJo']) {
+    items.set(COINS, 24);
+    items.set(CLIMBING_BOOTS, 0);
+    assert.equal(condition('If the player has enough coins in their inventory:'), true);
+    assert.equal(condition('If the player does not have enough coins in their inventory:'), false);
+    assert.equal(condition('If the player has 12 gp:'), true);
+    action({ player, npcId: TENZING, stepId });
+    assert.equal(items.get(COINS), 24, 'generic action events do not charge');
+    action({ player, npcId: TENZING, stepId, kind: 'message' });
+    assert.equal(items.get(COINS), 12);
+    assert.equal(items.get(CLIMBING_BOOTS), 1);
+  }
+  player.setAttribute('quest.troll_stronghold.stage', 10);
+  assert.equal(handlers.variant.at(-1)({ player, npcId: TENZING }), null, 'active Troll Stronghold keeps its dialogue');
+  assert.equal(condition('If the player has 12 gp:'), true, 'its purchase uses the same coin check');
+});
+
+test('Tenzing refuses unpaid/full-inventory purchases and accepts payment that frees a slot', () => {
+  const { api, handlers, quest, player, items } = questScene('DeathPlateau');
+  const { COINS, CLIMBING_BOOTS } = api.core.ItemIdentifiers;
+  const inventory = player.getInventory();
+  let fullMessage = false;
+  inventory.full = () => { fullMessage = true; };
+  const buy = () => {
+    const event = { player, npcId: api.core.NpcIdentifiers.TENZING, stepId: 'FgkYXO', kind: 'message' };
+    handlers.custom.get('npc-dialogue:action').forEach(handler => handler(event));
+    return event;
+  };
+  items.set(COINS, 12);
+  assert.equal(buy().end, true, 'cannot buy before completing Death Plateau');
+  assert.equal(items.get(COINS), 12);
+  quest.setStage(player, quest.completionValue);
+  items.set(COINS, 11);
+  assert.equal(buy().end, true);
+  assert.equal(items.get(COINS), 11);
+  items.set(COINS, 13);
+  inventory.isFull = () => true;
+  assert.equal(buy().end, true);
+  assert.equal(fullMessage, true);
+  assert.equal(items.get(COINS), 13);
+  assert.equal(items.get(CLIMBING_BOOTS), undefined);
+  items.set(COINS, 12);
+  buy();
+  assert.equal(items.get(COINS), 0);
+  assert.equal(items.get(CLIMBING_BOOTS), 1, 'spending the last coins makes room for the boots');
+});
+
+test('Death Plateau final handover conditions require both the map and combination', () => {
+  const { api, handlers, quest, player, items } = questScene('DeathPlateau');
+  const { SECRET_WAY_MAP, COMBINATION } = api.core.ItemIdentifiers;
+  quest.setStage(player, 75);
+  const condition = text => handlers.condition.at(-1)({ player, npcId: api.core.NpcIdentifiers.DENULTH, text });
+  for (const have of [[], [SECRET_WAY_MAP], [COMBINATION], [SECRET_WAY_MAP, COMBINATION]]) {
+    items.clear();
+    have.forEach(id => items.set(id, 1));
+    assert.equal(condition('If the player has not turned in all the items:'), have.length < 2);
+    assert.equal(condition('If the player has turned in all the items:'), have.length === 2);
+  }
+});

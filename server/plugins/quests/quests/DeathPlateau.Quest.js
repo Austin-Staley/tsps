@@ -7,7 +7,8 @@
  * the item hand-outs keyed off transcript message ids, and the final map +
  * combination hand-in that completes the quest.
  *
- * Stages (varp 314): 10 started, 20 spoken to Eohric, 60 decoded Harold's IOU,
+ * Stages (varp 314): 10 started, 20 spoken to Eohric, 30 met Harold, 40 learned his weakness,
+ * 60 decoded Harold's IOU,
  * 70 Saba's directions, 72 Tenzing's map/boots, 75 Dunstan's spiked boots,
  * 80 complete.
  *
@@ -18,7 +19,7 @@
  * Transcendent archer detour is not wired.
  */
 module.exports = function registerDeathPlateauQuest(api) {
-  const { Skill, ItemIdentifiers, NpcIdentifiers } = api.core;
+  const { Skill, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
   const { registerQuest, refreshQuestList, getRegisteredQuests } = require("../QuestRuntime");
 
   const DENULTH_NPC_IDS = new Set([NpcIdentifiers.DENULTH, NpcIdentifiers.DENULTH_2]);
@@ -36,6 +37,8 @@ module.exports = function registerDeathPlateauQuest(api) {
   const VARP_DEATH_PLATEAU = 314;
   const STAGE_STARTED = 10;
   const STAGE_EOHRIC = 20;
+  const STAGE_HAROLD = 30;
+  const STAGE_WEAKNESS = 40;
   const STAGE_COMBINATION = 60;
   const STAGE_SABA = 70;
   const STAGE_MAP = 72;
@@ -54,6 +57,9 @@ module.exports = function registerDeathPlateauQuest(api) {
   const SPIKED_BOOTS_ITEM_ID = ItemIdentifiers.SPIKED_BOOTS;
   const CERTIFICATE_ITEM_ID = ItemIdentifiers.CERTIFICATE_2;
   const COINS_ITEM_ID = ItemIdentifiers.COINS;
+  const HAROLD_DOOR_ID = ObjectIdentifiers.DOOR_115;
+  const CLIMBING_BOOTS_PRICE = 12;
+  const BUY_CLIMBING_BOOTS_IDS = new Set(["FgkYXO", "7mwtJo"]);
 
   const START_HOOK = "quest:death-plateau:start";
 
@@ -124,6 +130,12 @@ module.exports = function registerDeathPlateauQuest(api) {
         "I should ask <col=800000>Saba</col> about another route.",
       ];
     }
+    if (stage >= STAGE_WEAKNESS) {
+      return ["I should buy <col=800000>Harold</col> an Asgarnian ale."];
+    }
+    if (stage >= STAGE_HAROLD) {
+      return ["Harold won't talk. I should ask <col=800000>Eohric</col> for help."];
+    }
     if (stage >= STAGE_EOHRIC) {
       return [
         "Harold may know how the trolls reach the plateau.",
@@ -159,12 +171,15 @@ module.exports = function registerDeathPlateauQuest(api) {
   /** Which transcript variant each speaker plays, by quest stage. */
   function selectVariant({ npcId, player }) {
     const stage = quest.getStage(player);
+    if (npcId === TENZING_NPC_ID && quest.isComplete(player) && !trollStrongholdActive(player)) {
+      return { page: "Tenzing", variant: "after-death-plateau" };
+    }
     if (sharedWithTrollStronghold(npcId) && (quest.isComplete(player) || trollStrongholdActive(player))) {
       return null;
     }
     if (DENULTH_NPC_IDS.has(npcId)) {
       if (stage === 0) return "getting-started-talking-to-denulth";
-      if (stage < STAGE_STARTED) return "getting-started-talking-to-denulth-again";
+      if (stage < STAGE_COMBINATION) return "getting-started-talking-to-denulth-again";
       if (stage >= STAGE_BOOTS) {
         if (hasMap(player) && hasCombination(player)) {
           return "finishing-up-talking-to-denulth-after-opening-the-equipment-room-and-exploring-the-path";
@@ -187,16 +202,20 @@ module.exports = function registerDeathPlateauQuest(api) {
       if (stage >= STAGE_COMBINATION) {
         return "finding-the-combination-talking-to-eohric-after-opening-the-equipment-room";
       }
-      if (stage >= STAGE_EOHRIC) return "finding-the-combination-talking-to-eohric-after-talking-to-harold";
+      if (stage >= STAGE_WEAKNESS) return "finding-the-combination-talking-to-eohric-again-after-learning-harold-s-weakness";
+      if (stage >= STAGE_HAROLD) {
+        quest.setStage(player, STAGE_WEAKNESS);
+        return "finding-the-combination-talking-to-eohric-after-talking-to-harold";
+      }
+      if (stage >= STAGE_EOHRIC) return "finding-the-combination-talking-to-eohric-talking-to-eohric-again";
       return "finding-the-combination-talking-to-eohric";
     }
     if (npcId === HAROLD_NPC_ID) {
       if (stage >= STAGE_COMBINATION) return "finding-the-combination-talking-to-harold-after-losing-the-iou";
-      // After Eohric's hint Harold asks for the Asgarnian ale straight away. The
-      // pre-hint "talking-to-harold" page option jumps "below" into the later
-      // Blurberry branch, so the ale route is only reachable through this variant.
-      if (stage >= STAGE_EOHRIC) return "finding-the-combination-talking-to-harold-after-learning-his-weakness";
-      return "finding-the-combination-talking-to-harold-again";
+      if (stage >= STAGE_WEAKNESS) return "finding-the-combination-talking-to-harold-after-learning-his-weakness";
+      if (stage >= STAGE_HAROLD) return "finding-the-combination-talking-to-harold-again";
+      if (stage >= STAGE_EOHRIC) quest.setStage(player, STAGE_HAROLD);
+      return "finding-the-combination-talking-to-harold";
     }
     if (npcId === SABA_NPC_ID) {
       if (stage === STAGE_COMBINATION) quest.setStage(player, STAGE_SABA);
@@ -229,11 +248,15 @@ module.exports = function registerDeathPlateauQuest(api) {
 
   /** Answer the page's prose conditions. */
   function answerCondition({ player, npcId, text }) {
+    const value = String(text).toLowerCase();
+    if (npcId === TENZING_NPC_ID && quest.isComplete(player)) {
+      if (value.includes("does not have enough coins") || value.includes("does not have enough money")) return !held(player, COINS_ITEM_ID, CLIMBING_BOOTS_PRICE);
+      if (value.includes("has enough coins") || value.includes("has 12 gp")) return held(player, COINS_ITEM_ID, CLIMBING_BOOTS_PRICE);
+    }
     // Same shared speakers as selectVariant: once Troll Stronghold owns them, its conditions are not ours.
     if (sharedWithTrollStronghold(npcId) && (quest.isComplete(player) || trollStrongholdActive(player))) {
       return null;
     }
-    const value = String(text).toLowerCase();
     const has = (itemId, amount = 1) => held(player, itemId, amount);
     if (value.includes("does not have an asgarnian ale")) return !has(ASGARNIAN_ALE_ITEM_ID);
     if (value.includes("has an asgarnian ale")) return has(ASGARNIAN_ALE_ITEM_ID);
@@ -266,9 +289,9 @@ module.exports = function registerDeathPlateauQuest(api) {
     if (value.includes("has the map")) return hasMap(player);
     if (value.includes("doesn't have the combination")) return !hasCombination(player);
     if (value.includes("has the combination")) return hasCombination(player);
-    if (value.startsWith("If the player has not turned in all the items"))
+    if (value.startsWith("if the player has not turned in all the items"))
       return !(hasMap(player) && hasCombination(player));
-    if (value.startsWith("If the player has turned in all the items"))
+    if (value.startsWith("if the player has turned in all the items"))
       return hasMap(player) && hasCombination(player);
     return null;
   }
@@ -310,9 +333,24 @@ module.exports = function registerDeathPlateauQuest(api) {
       }
       return;
     }
-    // Message steps are emitted twice (an action event and a kind "message" one):
-    // consume and hand out only on the message event so nothing runs twice.
+    // Only message events consume and hand out items.
     if (kind !== "message") return;
+    if (npcId === TENZING_NPC_ID && BUY_CLIMBING_BOOTS_IDS.has(stepId)) {
+      const inventory = player.getInventory();
+      const coins = inventory.getAmount(COINS_ITEM_ID);
+      if (!quest.isComplete(player) || coins < CLIMBING_BOOTS_PRICE) {
+        request.handled = request.end = true;
+        return;
+      }
+      if (inventory.isFull() && coins > CLIMBING_BOOTS_PRICE) {
+        inventory.full();
+        request.handled = request.end = true;
+        return;
+      }
+      inventory.deleteNumber(COINS_ITEM_ID, CLIMBING_BOOTS_PRICE);
+      inventory.adds(CLIMBING_BOOTS_ITEM_ID, 1);
+      return;
+    }
     if (stepId === GIVE_ALE_STEP_ID) {
       player.getInventory().deleteNumber(ASGARNIAN_ALE_ITEM_ID, 1);
       return;
@@ -363,6 +401,12 @@ module.exports = function registerDeathPlateauQuest(api) {
     }
   }
 
+  function guardHaroldDoor(request) {
+    if (request.objectId !== HAROLD_DOOR_ID || quest.getStage(request.player) >= STAGE_EOHRIC) return;
+    request.player.sendMessage("I'd better not go into someone's bedroom without a reason!");
+    request.handled = true;
+  }
+
   function handleLogin({ player }) {
     refreshQuestList(player);
   }
@@ -386,5 +430,6 @@ module.exports = function registerDeathPlateauQuest(api) {
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("door:toggle", guardHaroldDoor);
   api.onPlayerLogin(handleLogin);
 };
