@@ -12,6 +12,22 @@ const MAX_CLICKS = 50;
 // Skilling plugins replay their animation every 4-5 ticks, so one this recent means still at it.
 const ANIMATION_TICKS = 5;
 const tracked = new WeakMap();
+const npcAnimations = new WeakMap();
+
+function lastNpcAnimation(npc, World) {
+  let animation = npcAnimations.get(npc);
+  if (!animation) {
+    animation = { id: npc.getAnimation?.()?.getId?.() ?? null, tick: World.getProcessCycle() };
+    npcAnimations.set(npc, animation);
+    const perform = npc.performAnimation?.bind(npc);
+    if (perform) npc.performAnimation = (next) => {
+      animation.id = next?.getId?.() ?? null;
+      animation.tick = World.getProcessCycle();
+      return perform(next);
+    };
+  }
+  return animation;
+}
 
 // Records game messages, animation timing and what the client was told (varbits, varps,
 // interfaces) for players an agent has touched; the client still receives everything.
@@ -189,10 +205,11 @@ function createContext(core, server) {
     return {
       npcs: World.getNpcsNear(here, radius, viewedArea).filter((npc) => !npc.isOwnerOnly?.() || npc.getOwner?.() === p).map((npc) => {
         const definition = npc.getCurrentDefinition(p);
+        const animation = lastNpcAnimation(npc, World);
         return {
           index: npc.getIndex(), id: npc.getId(), name: definition?.getName(),
           hitpoints: npc.getHitpoints(), maxHitpoints: npc.getMaxHitpoints(),
-          animation: npc.getAnimation?.()?.getId?.() ?? null,
+          animation: animation.id, animationTick: animation.tick,
           options: (definition?.getActions() ?? []).filter(Boolean), ...tile(npc.getLocation()),
         };
       }),
