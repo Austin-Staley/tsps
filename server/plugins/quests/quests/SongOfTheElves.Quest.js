@@ -32,6 +32,7 @@ module.exports = function registerSongOfTheElves(api) {
   const CRWYS_TREE_TRANSFORM_VARBIT = 9022;
   const HEFIN_CLUE_HEARD = "quest.song_of_the_elves.hefin-clue-heard";
   const YSGAWYN_TRACK_STEP = "quest.song_of_the_elves.ysgawyn-track-step";
+  const YSGAWYN_CLEARING_NPC = "quest.song_of_the_elves.ysgawyn-clearing-npc";
   const YSGAWYN_TRACKS = [
     { id: 37292, x: 2302, y: 3195, clue: "You notice a disturbed patch among the mushrooms." },
     { id: 37297, x: 2291, y: 3187, clue: "The marks on the rock show where someone climbed down." },
@@ -50,6 +51,7 @@ module.exports = function registerSongOfTheElves(api) {
   ];
   const MEILYR_CLUE = "quest.song_of_the_elves.meilyr-clue";
   const LLETYA_GUIDE_SPAWNED = "quest.song_of_the_elves.lletya-guide-spawned";
+  const LLETYA_BAXTORIAN_NPC = "quest.song_of_the_elves.lletya-baxtorian-npc";
   const HEFIN_GUIDE_SPAWNED = "quest.song_of_the_elves.hefin-guide-spawned";
   const LLETYA_ARIANWYN_NPC = "quest.song_of_the_elves.lletya-arianwyn-npc";
   const FRAGMENT_DEFEATED = "quest.song_of_the_elves.fragment-defeated";
@@ -191,6 +193,33 @@ module.exports = function registerSongOfTheElves(api) {
         if (arianwyn) api.removeNpc(arianwyn);
         player.setAttribute(LLETYA_ARIANWYN_NPC, null);
       }
+      const baxtorian = player.getAttribute(LLETYA_BAXTORIAN_NPC);
+      if (currentChapter(player) === 16 && !baxtorian?.isRegistered?.()) {
+        const npc = api.spawnNpc({ id: NpcIdentifiers.BAXTORIAN, x: 2352, y: 3170, z: 0,
+          wanderRadius: 0, owner: player, ownerOnly: true });
+        if (npc) player.setAttribute(LLETYA_BAXTORIAN_NPC, npc);
+      } else if (currentChapter(player) !== 16 && baxtorian) {
+        api.removeNpc(baxtorian);
+        player.setAttribute(LLETYA_BAXTORIAN_NPC, null);
+      }
+    }
+  }
+
+  class YsgawynClearingArea extends Area {
+    process(mobile) {
+      if (!mobile?.isPlayer?.()) return;
+      const player = mobile.getAsPlayer();
+      const existing = player.getAttribute(YSGAWYN_CLEARING_NPC);
+      if (quest.isComplete(player) || currentChapter(player) !== 14 ||
+        Number(player.getAttribute(YSGAWYN_TRACK_STEP) ?? 0) < YSGAWYN_TRACKS.length + 1) {
+        if (existing) api.removeNpc(existing);
+        player.setAttribute(YSGAWYN_CLEARING_NPC, null);
+        return;
+      }
+      if (existing?.isRegistered?.()) return;
+      const ysgawyn = api.spawnNpc({ id: NpcIdentifiers.YSGAWYN, x: 2256, y: 3168, z: 0,
+        wanderRadius: 0, owner: player, ownerOnly: true });
+      if (ysgawyn) player.setAttribute(YSGAWYN_CLEARING_NPC, ysgawyn);
     }
   }
 
@@ -873,6 +902,12 @@ module.exports = function registerSongOfTheElves(api) {
         return true;
       }
       return startTranscript(api, player, event.npcId, PAGE, "after-the-attack-finding-lady-meilyr");
+    }
+    if (currentChapter(player) === 16 && npcName === "baxtorian") {
+      const variant = player.getInventory().getAmount(ItemIdentifiers.CLUE_SCROLL_HARD_) > 0
+        ? "after-the-attack-talking-to-baxtorian-talking-to-baxtorian-again"
+        : "after-the-attack-talking-to-baxtorian";
+      return startTranscript(api, player, event.npcId, PAGE, variant);
     }
     if (currentChapter(player) === 11 && npcName === "lord ieuan amlodd" && player.getAttribute(VALLEY_FIGURE) === true) {
       player.setAttribute(VALLEY_FIGURE, false);
@@ -2401,6 +2436,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onCustomEvent("ladders:climb", claimCastleThroneStairs);
   api.onCustomEvent("quest:song-of-the-elves:claims-light-pillar", claimFallsPillarLocation);
   api.registerArea(new LletyaStoryArea([new Boundary(2320, 2390, 3150, 3210, 0)]));
+  api.registerArea(new YsgawynClearingArea([new Boundary(2248, 2268, 3159, 3180, 0)]));
   api.registerArea(new HefinStoryArea([new Boundary(2270, 2308, 3087, 3117, 0)]));
   api.registerArea(new DwarvenCampAccessArea([new Boundary(2424, 2472, 6078, 6142, 0)]));
   api.registerArea(new FragmentThresholdArea([new Boundary(3282, 3307, 5906, 5930, 1)]));

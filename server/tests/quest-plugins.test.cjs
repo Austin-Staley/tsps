@@ -1234,6 +1234,11 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
 
 test('Song of the Elves tracks Ysgawyn clues in order through normal object examine packets', () => {
   const { api, handlers } = mockApi();
+  const areas = [];
+  const spawns = [];
+  api.registerArea = (area) => areas.push(area);
+  api.spawnNpc = (definition) => (spawns.push(definition), { isRegistered: () => true });
+  api.removeNpc = () => {};
   const persistedAttributes = [];
   api.persistAttribute = (key) => persistedAttributes.push(key);
   require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
@@ -1249,6 +1254,8 @@ test('Song of the Elves tracks Ysgawyn clues in order through normal object exam
     getLocation: () => ({ getX: () => tile.x, getY: () => tile.y, getZ: () => tile.z }),
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
     sendMessage: (message) => messages.push(message),
+    isPlayer: () => true,
+    getAsPlayer: () => player,
   };
   quest.setStage(player, 150);
   assert.ok(persistedAttributes.includes('quest.song_of_the_elves.ysgawyn-track-step'));
@@ -1275,6 +1282,45 @@ test('Song of the Elves tracks Ysgawyn clues in order through normal object exam
   for (const hook of handlers.routes) hook(route);
   assert.deepEqual(route.destination, route.sourceLocation,
     'the natural Regicide Jump handler keeps the original approach edge before it applies Agility');
+  for (const [id, x, y] of [[3918, 2272, 3168], [3916, 2259, 3159], [37297, 2244, 3170]]) {
+    tile = { x, y, z: 0 };
+    examine({ player, objectId: id, handled: false });
+  }
+  assert.equal(attributes.get('quest.song_of_the_elves.ysgawyn-track-step'), 6);
+  tile = { x: 2254, y: 3168, z: 0 };
+  for (const process of handlers.playerProcess) process({ player });
+  assert.equal(attributes.get('quest.song_of_the_elves.ysgawyn-track-step'), 7,
+    'the tripwire clearing is required after all six clues');
+  const clearing = areas.find((area) => area.constructor.name === 'YsgawynClearingArea');
+  clearing.process(player);
+  assert.deepEqual(spawns.at(-1), { id: api.core.NpcIdentifiers.YSGAWYN, x: 2256, y: 3168, z: 0,
+    wanderRadius: 0, owner: player, ownerOnly: true });
+});
+
+test('Song of the Elves spawns Baxtorian in Lletya for the post-attack clan clues', () => {
+  const { api } = mockApi();
+  const areas = [];
+  const spawns = [];
+  api.registerArea = (area) => areas.push(area);
+  api.spawnNpc = (definition) => (spawns.push(definition), { isRegistered: () => true });
+  api.removeNpc = () => {};
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map();
+  const player = {
+    getUsername: () => 'PostAttackCluesTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    isPlayer: () => true,
+    getAsPlayer: () => player,
+  };
+  quest.setStage(player, 170);
+  const lletya = areas.find((area) => area.constructor.name === 'LletyaStoryArea');
+  lletya.process(player);
+  assert.deepEqual(spawns.at(-1), { id: api.core.NpcIdentifiers.BAXTORIAN, x: 2352, y: 3170, z: 0,
+    wanderRadius: 0, owner: player, ownerOnly: true });
 });
 
 test('Song of the Elves library mirrors must follow the previous beam direction', () => {
