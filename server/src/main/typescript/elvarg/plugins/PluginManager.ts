@@ -1,5 +1,6 @@
 import { CacheDefinitions } from "../game/cache/CacheDefinitions";
 import { ItemDefinition } from "../game/definition/ItemDefinition";
+import { ObjectDefinition } from "../game/definition/ObjectDefinition";
 import { PlayerSave } from "../game/entity/impl/player/persistence/PlayerSave";
 import { ContentApi } from "../net/http/ContentApi";
 import { CustomInterfaceRegistry } from "../game/interfaces/CustomInterfaceRegistry";
@@ -3300,7 +3301,7 @@ export class PluginManager {
             if (filter?.noted !== undefined && (ItemDefinition.forId(event.itemId).isNoted() !== filter.noted)) return;
             if (named) {
               if (ItemDefinition.forId(event.itemId).getName() !== itemNameOrHandler
-                || event.object.getDefinition()?.getName() !== objectNameOrFilter) return;
+                || ObjectDefinition.forPlayer(event.objectId, event.player)?.getName() !== objectNameOrFilter) return;
               if (handler(event) !== false) event.handled = true;
             } else {
               handler(event);
