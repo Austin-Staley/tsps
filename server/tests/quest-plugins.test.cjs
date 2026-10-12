@@ -930,6 +930,7 @@ test('Blood Moon starts the scoped Theatre encounter and advances after Vasilias
     started++;
   });
   handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: '1Z5SGt' });
+  handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: '1Z5SGt' });
   assert.equal(started, 1, 'the ready dialogue enters the shared scoped raid instead of starting a duplicate arena');
   assert.equal(attributes.get('quest.the_blood_moon_rises.tob-challenge').started, true);
   const npcDefinition = api.core.NpcDefinition;

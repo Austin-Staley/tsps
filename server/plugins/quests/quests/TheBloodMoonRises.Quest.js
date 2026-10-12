@@ -873,7 +873,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (event.stepId === "4ebW6l" || event.stepId === "BzMe5D") finishDrakanEncounter(player);
     if (event.stepId === "Xz7d4O") startSiegeDrakanBattle(player);
     if (event.stepId === "zPiZ9c") finishSiegeDrakanBattle(player);
-    if (event.stepId === "1Z5SGt" && stage(player) === STAGE.THEATRE) {
+    if (event.stepId === "1Z5SGt" && stage(player) === STAGE.THEATRE &&
+      !player.getAttribute(TOB_CHALLENGE_ATTRIBUTE)?.started) {
       player.setAttribute(TOB_CHALLENGE_ATTRIBUTE, { started: true, completed: false });
       api.emitCustomEvent("tob:bmr:start", { player });
     }
