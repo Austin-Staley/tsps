@@ -1,4 +1,5 @@
 import { getClientCycle } from "../../../network/ServerConnection";
+import { baseNpcTypeId } from "../../../custom/npcs/NpcModelOverrideRegistry";
 import { mat4, vec3, vec4 } from "gl-matrix";
 import { Scene } from "../../../rs/scene/Scene";
 import type { HitsplatEventPayload } from "../../../game/GameRenderer";
@@ -266,7 +267,9 @@ export class OverlayHost {
                 kind: "npc",
                 ecsId,
                 serverId,
-                npcTypeId: this.osrsClient.npcEcs.getNpcTypeId(ecsId),
+                // The pick type is the cache's (a model customisation's synthetic id
+                // only changes rendering, never what the interaction path reads).
+                npcTypeId: baseNpcTypeId(this.osrsClient.npcEcs.getNpcTypeId(ecsId)),
                 plane: 0,
             });
         this.boundToCssEvent = (gx?: number, gy?: number) =>

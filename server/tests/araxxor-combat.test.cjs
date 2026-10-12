@@ -185,8 +185,7 @@ test("captured line-of-sight stepping is diagonal-first", () => {
   assert.equal(Shared.hasClearPath(0, 0, 0, 3, blocked), true, "straight line misses the block");
 });
 
-test("spawned eggs are pinned: scripted movement and zero wander radius", () => {
-  const eggs = [];
+test("spawned eggs are pinned: scripted movement and zero wander radius", () => {  const eggs = [];
   const fakeCore = {
     NPC: {
       create: () => {
@@ -223,4 +222,17 @@ test("spawned eggs are pinned: scripted movement and zero wander radius", () => 
     assert.equal(egg.radius, 0, "no wander radius");
     assert.equal(egg.scripted, true, "pinned: no retaliation chase when attacked");
   }
+});
+
+test("pinEggs clears the fighting egg's interaction and combat target", () => {
+  const calls = [];
+  const egg = {
+    isRegistered: () => true,
+    getInteractingMobile: () => ({ fake: "player" }),
+    setMobileInteraction: (value) => calls.push(["mob", value]),
+    getCombat: () => ({ reset: () => calls.push(["reset"]) }),
+  };
+  Minions.pinEggs({ eggs: [{ npc: egg }] });
+  assert.ok(calls.some(([kind, value]) => kind === "mob" && value === null), "interaction cleared");
+  assert.ok(calls.some(([kind]) => kind === "reset"), "combat target cleared");
 });

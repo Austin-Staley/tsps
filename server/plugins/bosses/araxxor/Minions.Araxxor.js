@@ -128,6 +128,20 @@ function ensureTargets(session) {
   }
 }
 
+/**
+ * Eggs neither move nor turn: retaliation keeps handing them a mobile
+ * interaction (which the client renders as turning to face the attacker as
+ * they walk), so the fight engine clears it and the combat target every tick.
+ */
+function pinEggs(session) {
+  for (const entry of session?.eggs ?? []) {
+    const egg = entry?.npc ?? null;
+    if (!egg?.isRegistered?.()) continue;
+    if (egg.getInteractingMobile?.() != null) egg.setMobileInteraction?.(null);
+    egg.getCombat?.().reset?.();
+  }
+}
+
 /** Everything still standing crumbles when the boss dies: eggs (11508) and minions go. */
 function crumbleAll(bossNpc) {
   const session = sessionOf(bossNpc);
@@ -389,6 +403,7 @@ module.exports = {
   spawnEggs,
   hatchNext,
   ensureTargets,
+  pinEggs,
   crumbleAll,
   explodeRuptura,
   modifyHit,

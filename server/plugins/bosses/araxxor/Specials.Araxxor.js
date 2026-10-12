@@ -331,6 +331,7 @@ function tick() {
     const players = npc.getPlayersWithinDistance(25);
     const session = npc.getAttribute?.(Shared.ATTR_ENCOUNTER) ?? null;
     if (session) Minions.ensureTargets(session);
+    if (session) Minions.pinEggs(session);
     tickBall(npc, fight, players);
     tickDrips(npc, fight);
     tickPools(npc, fight, players);
