@@ -701,3 +701,15 @@ test('the Gnome Ball pitch gate 2394 rotates in place and closes back onto its w
     h.restore();
   }
 });
+
+
+test('the catacomb outer jail gate uses its actionless open cache variant and auto-closes', () => {
+ const h=buildHarness();try{
+  assert.deepEqual(h.click(53441,4126,4788,2),[
+   ['register',53442,4127,4788,3],['deregister',53441,4126,4788,2],
+  ]);
+  h.submitted.at(-1).execute();assert.deepEqual(h.ops.splice(0),[
+   ['deregister',53442,4127,4788,3],['register',53441,4126,4788,2],
+  ]);
+ }finally{h.restore();}
+});
