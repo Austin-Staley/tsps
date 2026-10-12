@@ -103,7 +103,7 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
   const i=[...FIRST,...SECOND].indexOf(name),s=stage(p);if(i<0||(i<4?s<280||s>310:s<320||s>=400))return false;
   const slug=name.toLowerCase().replace(/ /g,'-');play(p,RECRUIT_IDS[i],PREFIX+(i<4?'first':'second')+'-recruitment-talking-to-'+slug+((i!==3&&(val(p,RECRUITS_ATTRIBUTE)&(1<<i)))?'-talking-to-'+slug+'-again':''));return true;
  }
- function recruit({player,npc}){return recruitName(player,npc.getDefinition().getName());}
+ function recruit({player,npc,definition}){return recruitName(player,(definition??npc.getCurrentDefinition(player)).getName());}
  function contacts(e){if(stage(e.player)>=280&&stage(e.player)<=310)for(const name of FIRST)if(!e.contacts.includes(name))e.contacts.push(name);}
  function selected(e){if(FIRST.includes(e.name)&&recruitName(e.player,e.name))e.handled=true;}
  function line(e){

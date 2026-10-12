@@ -830,3 +830,13 @@ test('WGS delayed sketches consume their materials and lost sketches are reclaim
  const steps=data['forming-a-fellowship-using-the-serum-talking-to-the-shady-stranger-while-inside-the-cell-with-the-serum-talking-to-the-shady-stranger-again-after-sketching-the-suspect'];
  assert(!steps.some(s=>s.type==='choice'));assert(steps.some(s=>s.type==='condition'&&s.id==='wgs-sketch-lost'));
 });
+
+
+test('WGS physical recruitment uses the visible definition of a transformed Guild NPC', () => {
+ const {api,player,handlers}=movarioFixture();const hooks=new Map(),played=[];
+ api.onNpcInteraction=(name,actions)=>hooks.set(name,actions);
+ require('../plugins/quests/wgs/Fellowship.WhileGuthixSleeps')({...api.context,stage:()=>320,play:(p,id,v)=>played.push([id,v])});
+ const npc={getDefinition:()=>({getName:()=> 'null'})};
+ assert.equal(hooks.get('Ghommal')['Talk-to']({player,npc,definition:{getName:()=> 'Ghommal'}}),true);
+ assert.equal(played[0][0],13613);assert.match(played[0][1],/second-recruitment-talking-to-ghommal/);
+});
