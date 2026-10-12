@@ -291,6 +291,36 @@ test('menu navigation jumps become replayable gomenu steps', () => {
   assert.deepEqual(steps[0].menu, { marker: true });
 });
 
+test('an action step is dispatched once with its transcript step id', () => {
+  const actions = [];
+  const said = [];
+  const player = {
+    getDialogueManager: () => ({
+      reset() {},
+      startDialogues(chain) {
+        for (const entry of [...chain.getDialogues().values()].sort((a, b) => a.getIndex() - b.getIndex())) {
+          if (entry.text) said.push(String(entry.text));
+          try { entry.send(player); } catch { /* unwired dialogue entries are fine here */ }
+        }
+      },
+    }),
+    getPacketSender: () => ({ sendInterfaceRemoval() {} }),
+    sendMessage() {},
+  };
+  const definition = { getName: () => 'Guard', getId: () => 1 };
+  const event = { player, npc: { getId: () => 1 }, npcId: 1, definition };
+  startDialogue({
+    emitCustomEvent(name, payload) { if (name === 'npc-dialogue:action') actions.push(payload); },
+  }, event, [
+    { type: 'action', id: 'quest-step-1', action: 'open the gate' },
+    { npc: 'The gate swings open.' },
+  ], {}, { player, npc: event.npc, npcId: 1, definition, pages: [] });
+
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].stepId, 'quest-step-1');
+  assert.deepEqual(said, ['The gate swings open.']);
+});
+
 test('"previous" on the first menu replays it instead of ending the dialogue', () => {
   // Ulsquire's "What did you find out about the remains?" ends in {{tact|previous}}:
   // the player must land back on the question menu, not have the chat closed.

@@ -26,7 +26,7 @@ const DOOR_AUTO_CLOSE_TICKS = 500;
 const DOOR_NAMES = new Set([
   "Door", "Doors", "Large door", "Castle door", "Cell Door", "Cell door",
   "Glass door", "Magic door", "Metal door", "Mind Door", "Tent door",
-  "Gate", "Metal gate", "Doorway", "Tree Door",
+  "Gate", "Metal gate", "Doorway", "Tree Door", "Ardougne Wall Door",
 ]);
 
 // Always name locs by their core.ObjectIdentifiers property (O.DOOR_358), never a raw id: the
@@ -45,7 +45,11 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   // door whose same-model "Close" locs (5245, 11617, 15205, 17115) all belong to other doors.
   // GATE_52 (Gnome Ball pitch and Tree Gnome Village): its same-model open variants (193, 2395)
   // are nameless with no actions and are never placed, so the pairing below cannot find them.
-  SELF_OPENING_DOOR_IDS = new Set([O.DOOR_223, O.DOOR_225, O.DOOR_226, O.DOOR_227, O.DOOR_228, O.DOOR_229, O.DOOR_230, O.DOOR_231, O.DOOR_358, O.GATE_52]);
+  SELF_OPENING_DOOR_IDS = new Set([O.DOOR_223, O.DOOR_225, O.DOOR_226, O.DOOR_227, O.DOOR_228, O.DOOR_229, O.DOOR_230, O.DOOR_231, O.DOOR_358, O.GATE_52,
+    // The Blood Moon Rises crank-wheel house exit (61824) has no cache Close partner.
+    O.DOOR_831,
+    // The two Ardougne Wall Door loc variants swing open by rotating the same cache loc.
+    O.ARDOUGNE_WALL_DOOR, O.ARDOUGNE_WALL_DOOR_2]);
 
   // Single doors the pairing below can't find: the open variant is not closedId + 1 (e.g. Large
   // door 1517 -> 1520, same models), or it has no "Close" (DOOR_181, the open Keldagrim door on

@@ -77,6 +77,10 @@ module.exports = function registerBiohazardQuest(api) {
   ]);
 
   const VARP_BIOHAZARD = 68;
+  const ARDOUGNE_WALL_DOOR_IDS = new Set([
+    api.core.ObjectIdentifiers.ARDOUGNE_WALL_DOOR,
+    api.core.ObjectIdentifiers.ARDOUGNE_WALL_DOOR_2,
+  ]);
 
   const STAGE_STARTED = 1;
   const STAGE_SPOKEN_TO_JERICO = 2;
@@ -327,6 +331,21 @@ module.exports = function registerBiohazardQuest(api) {
     refreshQuestList(player);
   }
 
+  function handleArdougneWallDoor(event) {
+    const { player, objectId, location } = event ?? {};
+    if (!player || !ARDOUGNE_WALL_DOOR_IDS.has(objectId) || !location) return false;
+    // There are four locs in the West Ardougne gate; both id variants are used
+    // on both rows. Leave every unrelated use of these cache ids untouched.
+    const x = location.getX?.() ?? location.x;
+    const y = location.getY?.() ?? location.y;
+    const z = location.getZ?.() ?? location.z;
+    if (x < 2557 || x > 2558 || y < 3299 || y > 3300 || z !== 0) return false;
+    if (quest.isComplete(player)) return false;
+    event.handled = true;
+    player.sendMessage("The guards will not let you into West Ardougne until you have exposed the plague plot.");
+    return true;
+  }
+
   quest = registerQuest(api, {
     key: "biohazard",
     name: "Biohazard",
@@ -347,5 +366,6 @@ module.exports = function registerBiohazardQuest(api) {
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("door:toggle", handleArdougneWallDoor);
   api.onPlayerLogin(handleLogin);
 };

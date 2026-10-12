@@ -344,11 +344,11 @@ function sendQuestVarps({ player }) {
     // Bitfield stages must write their varbit: writing the whole parent varp
     // clobbers sibling bits (X Marks/Client of Kourend share veos_quest).
     if (quest.varbitId !== undefined) {
-      sender.sendVarbit(quest.varbitId, quest.getStage(player));
+      sender.sendVarbit(quest.varbitId, quest.varpValue(quest.getStage(player), player));
       continue;
     }
     if (!Number.isInteger(quest.varpId) || quest.varpId < 0) continue;
-    sender.sendConfig(quest.varpId, quest.varpValue(quest.getStage(player)));
+    sender.sendConfig(quest.varpId, quest.varpValue(quest.getStage(player), player));
   }
 }
 
@@ -363,7 +363,7 @@ function sendQuestVarps({ player }) {
  * @param def  { key, name, varpId, startedValue, completionValue, questPoints,
  *               xpRewards?, rewardItemId?, rewardItemLabel?, otherRewards?,
  *               buildJournal?(player, quest), onReward?(player, quest),
- *               varpValue?(stage) }
+ *               varpValue?(stage, player) }
  */
 function registerQuest(api, def) {
   if (!def || !def.key || !def.name) throw new Error("registerQuest requires a key and name");
@@ -375,8 +375,8 @@ function registerQuest(api, def) {
   const quest = {
     ...def,
     /** The varp value the client sees for a stage; def.varpValue maps stages the cache keys on. */
-    varpValue(stage) {
-      return def.varpValue ? def.varpValue(stage) | 0 : stage;
+    varpValue(stage, player) {
+      return def.varpValue ? def.varpValue(stage, player) | 0 : stage;
     },
     getStage(player) {
       const value = Number(player.getAttribute(stageKey));
@@ -387,9 +387,9 @@ function registerQuest(api, def) {
       // Quests whose stage lives in a varbit of a shared varp (most post-2007
       // quests) set the varbit, so sibling bits in the same varp survive.
       if (def.varbitId !== undefined) {
-        player.getPacketSender().sendVarbit(def.varbitId, value | 0);
+        player.getPacketSender().sendVarbit(def.varbitId, quest.varpValue(value | 0, player));
       } else {
-        player.getPacketSender().sendConfig(def.varpId, quest.varpValue(value | 0));
+        player.getPacketSender().sendConfig(def.varpId, quest.varpValue(value | 0, player));
       }
       refreshQuestList(player);
       // Quests whose progress shows in more than their varp (a varbit the cache reads) follow it.

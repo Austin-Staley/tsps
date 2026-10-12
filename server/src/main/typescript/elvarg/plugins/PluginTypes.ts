@@ -114,6 +114,12 @@ export interface PluginObjectRouteEvent {
   destination: { x: number; y: number; z: number } | null;
 }
 
+export interface PluginWalkRouteEvent {
+  player: any;
+  destination: { x: number; y: number; z: number };
+  handled: boolean;
+}
+
 export interface PluginNpcInteractionEvent {
   player: any;
   npc: any;
@@ -788,6 +794,7 @@ export interface PluginApi {
   onPathBlocked(handler: (event: PluginPathBlockedEvent) => void): void;
   onPlayerPathBlocked(handler: (event: PluginPlayerPathBlockedEvent) => void): void;
   onObjectRoute(handler: (event: PluginObjectRouteEvent) => void): void;
+  onWalkRoute(handler: (event: PluginWalkRouteEvent) => void): void;
   onObjectInteraction(handler: (event: PluginObjectInteractionEvent) => void): void;
   /** Exact, case-sensitive object name and option matching. Return false to fall through. */
   onObjectInteraction(
