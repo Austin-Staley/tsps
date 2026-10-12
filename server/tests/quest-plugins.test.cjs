@@ -5,6 +5,7 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 
 const { PluginManager } = require('../dist/plugins/PluginManager');
+const apiMethods = new Set(Object.keys(PluginManager.createApi('QuestTest')));
 
 // A stand-in for the live PluginApi: real core, every hook a no-op. Quests must
 // register cleanly through it and hand back their variant/condition resolvers.
@@ -17,6 +18,9 @@ function mockApi() {
     itemOnItem: [],
     itemOnNpc: [],
     itemOnObject: [],
+    itemAction: [],
+    routes: [],
+    playerProcess: [],
   };
   const noop = () => {};
   const base = {
@@ -24,9 +28,12 @@ function mockApi() {
     onNpcDialogueVariant: (h) => handlers.variant.push(h),
     onNpcDialogueCondition: (h) => handlers.condition.push(h),
     onObjectInteraction: (h) => handlers.objects.push(h),
+    onObjectRoute: (h) => handlers.routes.push(h),
+    onPlayerProcess: (h) => handlers.playerProcess.push(h),
     onItemOnItem: (h) => handlers.itemOnItem.push(h),
     onItemOnNpc: (h) => handlers.itemOnNpc.push(h),
     onItemOnObject: (h) => handlers.itemOnObject.push(h),
+    onItemAction: (...args) => handlers.itemAction.push(args.at(-1)),
     onCustomEvent: (name, h) => {
       const list = handlers.custom.get(name) ?? [];
       list.push(h);
@@ -37,7 +44,8 @@ function mockApi() {
   const api = new Proxy(base, {
     get(target, prop) {
       if (prop in target) return target[prop];
-      return noop;
+      if (apiMethods.has(prop)) return noop;
+      throw Error('Unknown PluginApi member: ' + String(prop));
     },
   });
   return { api, handlers };
@@ -277,7 +285,7 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
   };
   quest.setStage(player, 60);
   const object = handlers.objects.find((handler) => handler.name === 'handlePrepObject');
-  const itemOnItem = handlers.itemOnItem.at(-1);
+  const itemOnItem = handlers.itemOnItem.find((handler) => handler.name === 'handlePrepItemOnItem');
   const itemOnNpc = handlers.itemOnNpc.at(-1);
   const ids = api.core.ItemIdentifiers;
   const use = (a, b) => itemOnItem({ player, usedItemId: a, usedWithItemId: b, handled: false });
@@ -523,6 +531,87 @@ test('Blood Moon gallery chest arrow puzzle resets mistakes and gives the cresce
   assert.equal(attributes.get('quest.the_blood_moon_rises.gallery-chest').solved, true);
   interact();
   assert.equal(inventory.contains(api.core.ItemIdentifiers.CRESCENT_MOON_KEY), true);
+});
+
+test('Blood Moon hunt requires the crank, bookcase key and TOOLS shed code before yielding bolt cutters', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  const counts = new Map();
+  const inventory = {
+    contains: (id) => (counts.get(id) ?? 0) > 0,
+    adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
+    deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+  };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+  };
+  quest.setStage(player, 50);
+  const route = handlers.routes.find((handler) => handler.name === 'routeBloodHuntObjects');
+  const bookcaseRoute = { player, objectId: 61818, object: { getLocation: () => ({}) }, destination: null };
+  bookcaseRoute.object.getLocation = () => ({ getX: () => 2585, getY: () => 7861, getZ: () => 0 });
+  route(bookcaseRoute);
+  assert.deepEqual(bookcaseRoute.destination, { x: 2584, y: 7862, z: 0 }, 'the bookcase is approached from its reachable southern side');
+  let spawned = null;
+  api.getItemOnGroundManager = () => ({
+    getGroundItem: () => null,
+    registerLocation: (_who, item, tile) => { spawned = { item, tile }; },
+  });
+  player.getUsername = () => 'BloodHuntFixture';
+  player.isPlayerBot = () => false;
+  player.getPrivateArea = () => null;
+  handlers.playerProcess.find((handler) => handler.name === 'syncHuntGroundItems')({ player });
+  assert.equal(spawned.item.id, api.core.ItemIdentifiers.CRANK_WHEEL, 'the crank wheel spawns at the mapped hunt tile');
+  assert.deepEqual([spawned.tile.getX(), spawned.tile.getY(), spawned.tile.getZ()], [2603, 7847, 0]);
+  const hunt = handlers.objects.find((handler) => handler.name === 'handleBloodHuntObjects');
+  const interact = (x, y) => hunt({ player, location: { x, y, z: 0 }, handled: false });
+  const ids = api.core.ItemIdentifiers;
+  inventory.adds(ids.CRANK_WHEEL, 1);
+  interact(2588, 7855);
+  interact(2585, 7861);
+  assert.equal(inventory.contains(ids.DUSTY_BOOK), true, 'the crank chase unlocks the bookcase');
+  const read = handlers.itemAction.find((actions) => actions.Read)?.Read;
+  read({ player, itemId: ids.DUSTY_BOOK, handled: false });
+  assert.equal(inventory.contains(ids.VITUR_KEY), true, 'reading the dusty book gives the Vitur key');
+  let digit = 0;
+  const sequence = [0, 1, 1, 2, 3];
+  api.sendMultiChatboxPrompt = (who, title, ...pairs) => pairs[sequence[digit++] * 2 + 1]();
+  interact(2616, 7855);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').shedOpen, true);
+  interact(2616, 7855);
+  assert.equal(inventory.contains(ids.BOLT_CUTTERS), true, 'the opened shed provides the bolt cutters');
+  interact(2600, 7845);
+  interact(2590, 7818);
+  interact(2588, 7816);
+  assert.equal(inventory.contains(ids.TOOTH_HALF_OF_KEY_6), true);
+  assert.equal(inventory.contains(ids.LOOP_HALF_OF_KEY_6), true);
+  const combine = handlers.itemOnItem.find((handler) => handler.name === 'handleBloodHuntItemOnItem');
+  combine({ player, usedItemId: ids.LOOP_HALF_OF_KEY_6, usedWithItemId: ids.TOOTH_HALF_OF_KEY_6, handled: false });
+  assert.equal(inventory.contains(ids.MYRMEL_KEY), true, 'both halves combine into the pub key');
+  interact(2596, 7833);
+  const useOnObject = handlers.itemOnObject.find((handler) => handler.name === 'handleBloodHuntItemOnObject');
+  useOnObject({ player, itemId: ids.BUCKET, objectId: 1, location: { x: 2592, y: 7825, z: 0 }, handled: false });
+  useOnObject({ player, itemId: ids.BUCKET_OF_WATER, objectId: 1, location: { x: 2592, y: 7833, z: 0 }, handled: false });
+  assert.equal(inventory.contains(ids.SHADUM_KEY), true, 'water on the northern barrel reveals the Shadum key');
+  interact(2619, 7812);
+  assert.equal(inventory.contains(ids.TRAPDOOR_KEY), true, 'the Shadum house contains the trapdoor key');
+  interact(2580, 7835);
+  interact(2582, 7834);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').bankCrank, true);
+  interact(2579, 7830);
+  let chestDigit = 0;
+  const chestCode = [2, 4, 0, 4, 7];
+  api.sendMultiChatboxPrompt = (who, title, ...pairs) => pairs[chestCode[chestDigit++] * 2 + 1]();
+  interact(2576, 7846);
+  assert.equal(inventory.contains(ids.JOVKAI_KEY), true, 'the altar chest code yields the Jovkai key');
+  interact(2582, 7817);
+  assert.equal(inventory.contains(ids.OLD_COG), true, 'the smithy provides the old cog after the key');
 });
 
 test('Blood Moon refiner requires the four correct chemical vials totalling 53 before destroying the stockpile', () => {

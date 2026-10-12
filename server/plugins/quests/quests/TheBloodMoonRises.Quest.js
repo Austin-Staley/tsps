@@ -4,7 +4,7 @@
  * quest state uses the cache's myq6 varbit (15464 in varp 5618).
  */
 module.exports = function registerTheBloodMoonRises(api) {
-  const { Boundary, HitDamage, HitMask, ItemIdentifiers, Location, NpcIdentifiers, PrayerHandler, PrivateArea, Skill, World } = api.core;
+  const { Boundary, HitDamage, HitMask, Item, ItemIdentifiers, Location, NpcIdentifiers, PrayerHandler, PrivateArea, Skill, World } = api.core;
   const { registerQuest, loadTranscripts, startTranscript } = require("../QuestRuntime");
   const PAGE = "The Blood Moon Rises";
   const START_HOOK = "quest:the-blood-moon-rises:start";
@@ -16,6 +16,15 @@ module.exports = function registerTheBloodMoonRises(api) {
   const CLOCK_ATTRIBUTE = "quest.the_blood_moon_rises.castle-clocks";
   const GALLERY_CHEST_ATTRIBUTE = "quest.the_blood_moon_rises.gallery-chest";
   const REFINER_ATTRIBUTE = "quest.the_blood_moon_rises.castle-refiner";
+  const HUNT_ATTRIBUTE = "quest.the_blood_moon_rises.blood-hunt";
+  const HUNT_ITEMS = {
+    crank: ItemIdentifiers.CRANK_WHEEL, dustyBook: ItemIdentifiers.DUSTY_BOOK, viturKey: ItemIdentifiers.VITUR_KEY,
+    boltCutters: ItemIdentifiers.BOLT_CUTTERS, toothHalf: ItemIdentifiers.TOOTH_HALF_OF_KEY_6,
+    loopHalf: ItemIdentifiers.LOOP_HALF_OF_KEY_6, myrmelKey: ItemIdentifiers.MYRMEL_KEY,
+    bucket: ItemIdentifiers.BUCKET, bucketWater: ItemIdentifiers.BUCKET_OF_WATER,
+    shadumKey: ItemIdentifiers.SHADUM_KEY, trapdoorKey: ItemIdentifiers.TRAPDOOR_KEY,
+    jovkaiKey: ItemIdentifiers.JOVKAI_KEY, oldCog: ItemIdentifiers.OLD_COG,
+  };
   const PREP = {
     leaves: ItemIdentifiers.AMITIRE_LEAVES,
     stew: ItemIdentifiers.AMITIRE_STEW,
@@ -902,6 +911,220 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
   }
 
+  function syncHuntGroundItems(event) {
+    const player = event?.player ?? event;
+    if (!player || player.isPlayerBot?.() === true || stage(player) !== STAGE.BLOOD_HUNT) return;
+    const hunt = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
+    if (hunt.crankStarted || hasItem(player, HUNT_ITEMS.crank)) return;
+    const manager = api.getItemOnGroundManager();
+    const tile = new Location(2603, 7847, 0);
+    if (!manager?.registerLocation || manager.getGroundItem(player.getUsername(), HUNT_ITEMS.crank, tile, player.getPrivateArea?.() ?? null)) return;
+    manager.registerLocation(player, new Item(HUNT_ITEMS.crank, 1), tile);
+  }
+
+  function promptHuntCode(player, kind) {
+    const code = kind === "shed" ? "TOOLS" : "35158";
+    const key = kind === "shed" ? "shedDigits" : "chestDigits";
+    const state = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
+    const entered = state[key] ?? "";
+    const options = kind === "shed" ? ["T", "O", "L", "S"] : ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
+    const pairs = [];
+    for (const label of options) pairs.push(label, () => {
+      const current = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
+      const value = (current[key] ?? "") + label;
+      if (value !== code.slice(0, value.length)) {
+        player.setAttribute(HUNT_ATTRIBUTE, { ...current, [key]: "" });
+        player.sendMessage("The lock clicks and resets.");
+        return;
+      }
+      player.setAttribute(HUNT_ATTRIBUTE, { ...current, [key]: value });
+      if (value === code) {
+        player.setAttribute(HUNT_ATTRIBUTE, { ...current, [key]: value, [`${kind}Open`]: true });
+        if (kind === "shed" && !player.getInventory().contains(HUNT_ITEMS.boltCutters)) player.getInventory().adds(HUNT_ITEMS.boltCutters, 1);
+        if (kind === "chest" && !player.getInventory().contains(HUNT_ITEMS.jovkaiKey)) player.getInventory().adds(HUNT_ITEMS.jovkaiKey, 1);
+        player.sendMessage(kind === "shed" ? "The shed lock opens. You take a pair of bolt cutters." : "The altar chest opens. You take the Jovkai key.");
+        return;
+      }
+      promptHuntCode(player, kind);
+    });
+    api.sendMultiChatboxPrompt(player, `${kind === "shed" ? "Shed" : "Altar chest"} combination (${entered.length + 1} of ${code.length})`, ...pairs);
+  }
+
+  function handleBloodHuntObjects(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.BLOOD_HUNT) return;
+    const { x, y, z } = event.location ?? {};
+    if (z !== 0) return;
+    const state = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
+    const inventory = player.getInventory();
+    const has = (itemId) => inventory.contains(itemId);
+    const locked = (message) => { event.handled = true; player.sendMessage(message); };
+    if (x === 2612 && y === 7853 && !has(HUNT_ITEMS.viturKey)) return locked("The Vitur manor is locked. Find the key in the bookcase north-west of the crank.");
+    if ((x === 2612 && y === 7852 || x === 2598 && y === 7843) && !has(HUNT_ITEMS.viturKey)) return locked("The door is locked. You need the Vitur key.");
+    if (x === 2590 && y === 7818) {
+      if (!has(HUNT_ITEMS.boltCutters)) return locked("The clothes-shop door is chained shut. You need bolt cutters.");
+      player.setAttribute(HUNT_ATTRIBUTE, { ...state, chainCut: true });
+      player.sendMessage("You cut through the chain on the clothes-shop door.");
+      return;
+    }
+    if (x === 2599 && y === 7826 && !has(HUNT_ITEMS.myrmelKey)) return locked("The pub door is locked. Join the two halves of the key to make a Myrmel key.");
+    if (x === 2614 && y === 7814 && !has(HUNT_ITEMS.shadumKey)) return locked("The house is locked. The barrel in the Myrmel pub may hold a key.");
+    if (x === 2580 && y === 7812 && !has(HUNT_ITEMS.jovkaiKey)) return locked("The smithy is locked. Search the altar chest for its key.");
+    if (x === 2580 && y === 7835 && (!has(HUNT_ITEMS.myrmelKey) || !has(HUNT_ITEMS.trapdoorKey) || !has(HUNT_ITEMS.crank))) {
+      return locked("The bank requires the Myrmel key, trapdoor key, and crank wheel.");
+    }
+    if (x === 2582 && y === 7834) {
+      if (!has(HUNT_ITEMS.trapdoorKey) || !has(HUNT_ITEMS.crank)) return locked("The bank crank needs the trapdoor key and crank wheel.");
+      inventory.deleteNumber(HUNT_ITEMS.crank, 1);
+      player.setAttribute(HUNT_ATTRIBUTE, { ...state, bankCrank: true });
+      player.sendMessage("You fit the wheel and turn the bank crank; the trapdoor latch releases.");
+      return;
+    }
+    if (x === 2579 && y === 7830) {
+      if (!has(HUNT_ITEMS.trapdoorKey) || !state.bankCrank) return locked("The trapdoor is locked. Find its key and operate the bank crank.");
+      player.setAttribute(HUNT_ATTRIBUTE, { ...state, enteredTrapdoor: true });
+      return;
+    }
+    if (x === 2588 && y === 7855) {
+      event.handled = true;
+      if (!inventory.contains(HUNT_ITEMS.crank)) { player.sendMessage("The crank base needs its wheel."); return; }
+      player.setAttribute(HUNT_ATTRIBUTE, { ...state, crankStarted: true });
+      player.sendMessage("You fit the wheel and turn the crank. A presence stirs behind you. Run!");
+      return;
+    }
+    if (x === 2585 && y === 7861) {
+      event.handled = true;
+      if (!state.crankStarted) { player.sendMessage("You should get the nearby crank working first."); return; }
+      if (!inventory.contains(HUNT_ITEMS.dustyBook)) inventory.adds(HUNT_ITEMS.dustyBook, 1);
+      player.sendMessage("You search the bookcase and find a dusty book. Read it to discover the Vitur key.");
+      return;
+    }
+    if (x === 2616 && y === 7855) {
+      event.handled = true;
+      if (!inventory.contains(HUNT_ITEMS.viturKey)) { player.sendMessage("The shed lock needs the Vitur key."); return; }
+      if (!state.shedOpen) promptHuntCode(player, "shed");
+      else if (!inventory.contains(HUNT_ITEMS.boltCutters)) inventory.adds(HUNT_ITEMS.boltCutters, 1);
+      return;
+    }
+    if (x === 2600 && y === 7845) {
+      event.handled = true;
+      if (!inventory.contains(HUNT_ITEMS.viturKey)) { player.sendMessage("The manor's doors are locked. Find the Vitur key in the bookcase north-west of here."); return; }
+      if (!inventory.contains(HUNT_ITEMS.toothHalf)) inventory.adds(HUNT_ITEMS.toothHalf, 1);
+      player.sendMessage("You take the tooth half of a key from the table.");
+      return;
+    }
+    if (x === 2588 && y === 7816) {
+      event.handled = true;
+      if (!state.chainCut || !inventory.contains(HUNT_ITEMS.boltCutters)) { player.sendMessage("The door is chained shut. Cut the chain with bolt cutters first."); return; }
+      if (!inventory.contains(HUNT_ITEMS.loopHalf)) inventory.adds(HUNT_ITEMS.loopHalf, 1);
+      player.sendMessage("You cut the chain and take the loop half of a key.");
+      return;
+    }
+    if (x === 2596 && y === 7833) {
+      event.handled = true;
+      if (!inventory.contains(HUNT_ITEMS.myrmelKey)) { player.sendMessage("The pub door's lock needs the Myrmel key."); return; }
+      if (!inventory.contains(HUNT_ITEMS.bucket) && !inventory.contains(HUNT_ITEMS.bucketWater)) inventory.adds(HUNT_ITEMS.bucket, 1);
+      player.sendMessage("You take a bucket from the house.");
+      return;
+    }
+    if (x === 2592 && y === 7825) {
+      if (!event.itemId && !event.usedItemId) return;
+      const itemId = event.itemId ?? event.usedItemId;
+      if (itemId !== HUNT_ITEMS.bucket) return;
+      event.handled = true;
+      if (!inventory.contains(HUNT_ITEMS.bucket)) return;
+      inventory.deleteNumber(HUNT_ITEMS.bucket, 1);
+      inventory.adds(HUNT_ITEMS.bucketWater, 1);
+      player.sendMessage("You fill the bucket with water from the well.");
+      return;
+    }
+    if (x === 2592 && y === 7833 && event.itemId === HUNT_ITEMS.bucketWater) {
+      event.handled = true;
+      if (!inventory.contains(HUNT_ITEMS.bucketWater)) return;
+      inventory.deleteNumber(HUNT_ITEMS.bucketWater, 1);
+      inventory.adds(HUNT_ITEMS.shadumKey, 1);
+      player.sendMessage("The water washes away the grime on the barrel and reveals a Shadum key.");
+      return;
+    }
+    if (x === 2619 && y === 7812) {
+      event.handled = true;
+      if (!inventory.contains(HUNT_ITEMS.shadumKey)) { player.sendMessage("The locked house needs its Shadum key."); return; }
+      if (!inventory.contains(HUNT_ITEMS.trapdoorKey)) inventory.adds(HUNT_ITEMS.trapdoorKey, 1);
+      player.sendMessage("You find the trapdoor key inside the house.");
+      return;
+    }
+    if (x === 2576 && y === 7846) {
+      event.handled = true;
+      if (!state.enteredTrapdoor || !inventory.contains(HUNT_ITEMS.trapdoorKey)) { player.sendMessage("The chest is below the bank. Operate the crank and enter with the trapdoor key first."); return; }
+      if (!state.chestOpen) promptHuntCode(player, "chest");
+      else if (!inventory.contains(HUNT_ITEMS.jovkaiKey)) inventory.adds(HUNT_ITEMS.jovkaiKey, 1);
+      return;
+    }
+    if (x === 2582 && y === 7817) {
+      event.handled = true;
+      if (!inventory.contains(HUNT_ITEMS.jovkaiKey)) { player.sendMessage("The smithy lock needs the Jovkai key."); return; }
+      if (!inventory.contains(HUNT_ITEMS.oldCog)) inventory.adds(HUNT_ITEMS.oldCog, 1);
+      player.sendMessage("You take the old cog from the table.");
+    }
+  }
+
+  function routeBloodHuntObjects(event) {
+    const player = event?.player;
+    if (!player || stage(player) !== STAGE.BLOOD_HUNT || event.objectId !== 61818) return;
+    const location = event.object?.getLocation?.() ?? event.object?.location ?? {};
+    const x = location.getX?.() ?? location.x;
+    const y = location.getY?.() ?? location.y;
+    const z = location.getZ?.() ?? location.z;
+    if (x === 2585 && y === 7861 && z === 0) event.destination = { x: 2584, y: 7862, z: 0 };
+  }
+
+  function handleBloodHuntItemOnObject(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.BLOOD_HUNT) return;
+    const { x, y, z } = event.location ?? {};
+    if (z !== 0) return;
+    const itemId = event.itemId;
+    const inventory = player.getInventory();
+    if (x === 2592 && y === 7825 && itemId === HUNT_ITEMS.bucket) {
+      handleBloodHuntObjects({ ...event, player, itemId });
+    } else if (x === 2592 && y === 7833 && itemId === HUNT_ITEMS.bucketWater) {
+      handleBloodHuntObjects({ ...event, player, itemId });
+    } else if (x === 2582 && y === 7834 && itemId === HUNT_ITEMS.crank) {
+      event.handled = true;
+      if (inventory.contains(HUNT_ITEMS.trapdoorKey)) {
+        inventory.deleteNumber(HUNT_ITEMS.crank, 1);
+        player.setAttribute(HUNT_ATTRIBUTE, { ...(player.getAttribute(HUNT_ATTRIBUTE) ?? {}), bankCrank: true });
+        player.sendMessage("You fit the wheel to the bank's crank. The mechanism lifts the trapdoor latch.");
+      }
+    }
+  }
+
+  function handleBloodHuntItemOnItem(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.BLOOD_HUNT) return;
+    const pair = new Set([event.usedItemId, event.usedWithItemId]);
+    const inventory = player.getInventory();
+    if (pair.has(HUNT_ITEMS.toothHalf) && pair.has(HUNT_ITEMS.loopHalf)) {
+      event.handled = true;
+      if (!inventory.contains(HUNT_ITEMS.toothHalf) || !inventory.contains(HUNT_ITEMS.loopHalf)) return;
+      inventory.deleteNumber(HUNT_ITEMS.toothHalf, 1);
+      inventory.deleteNumber(HUNT_ITEMS.loopHalf, 1);
+      inventory.adds(HUNT_ITEMS.myrmelKey, 1);
+      player.sendMessage("The two halves fit together to make a Myrmel key.");
+    }
+  }
+
+  function readDustyBook(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.BLOOD_HUNT || event.itemId !== HUNT_ITEMS.dustyBook) return;
+    event.handled = true;
+    if (!player.getInventory().contains(HUNT_ITEMS.dustyBook)) return;
+    player.getInventory().deleteNumber(HUNT_ITEMS.dustyBook, 1);
+    player.getInventory().adds(HUNT_ITEMS.viturKey, 1);
+    player.setAttribute(HUNT_ATTRIBUTE, { ...(player.getAttribute(HUNT_ATTRIBUTE) ?? {}), readBook: true });
+    player.sendMessage("A key falls from the dusty book. It is marked with the Vitur crest.");
+  }
+
   function handleAncientShieldAssembly(event) {
     const player = event?.player;
     if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE) return;
@@ -1172,6 +1395,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction(handleSolidKeyObjects);
   api.onObjectInteraction(handleCastleClocks);
   api.onObjectInteraction(handleGalleryChest);
+  api.onObjectInteraction(handleBloodHuntObjects);
+  api.onObjectRoute(routeBloodHuntObjects);
   api.onItemOnObject(handleBasinPotion, { noted: false });
   api.onItemOnObject(handleMountShield, { noted: false });
   api.onItemOnObject(handleClockHandOnClock, { noted: false });
@@ -1179,9 +1404,13 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction(handlePrepObject);
   api.onObjectInteraction(handleRefiner);
   api.onItemOnObject(handleRefinerMixture, { noted: false });
+  api.onItemOnObject(handleBloodHuntItemOnObject, { noted: false });
   api.onItemOnItem(handleAncientShieldAssembly);
   api.onItemOnItem(handlePrepItemOnItem);
+  api.onItemOnItem(handleBloodHuntItemOnItem);
   api.onItemOnNpc(feedSafalaan);
+  api.onItemAction("Dusty book", { Read: readDustyBook });
+  api.onPlayerProcess(syncHuntGroundItems);
   api.onNpcDeath(handleWyrdDeath);
   api.persistAttribute(WYRD_DEFEATED_ATTRIBUTE);
   api.persistAttribute(DRAKAN_ENCOUNTER_COMPLETE);
@@ -1193,5 +1422,6 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.persistAttribute(CLOCK_ATTRIBUTE);
   api.persistAttribute(GALLERY_CHEST_ATTRIBUTE);
   api.persistAttribute(REFINER_ATTRIBUTE);
+  api.persistAttribute(HUNT_ATTRIBUTE);
   api.onItemAction("Tome of Experience", { Read: readTome });
 };
