@@ -493,6 +493,7 @@ function startDialogue(api, player, context, steps) {
 // ============================================================================
 
 let transcriptCache = null;
+let transcriptSpeakers = null;
 
 function loadTranscripts(api) {
   if (transcriptCache) return transcriptCache;
@@ -501,23 +502,6 @@ function loadTranscripts(api) {
   const file = path.join(api.core.GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json");
   transcriptCache = JSON.parse(fs.readFileSync(file, "utf8"));
   return transcriptCache;
-}
-
-/** Wiki multi-speaker lines -> generic NPC lines so one chathead renders them. */
-function flattenSpeakers(steps) {
-  if (!Array.isArray(steps)) return [];
-  return steps.map((step) => {
-    const copy = { ...step };
-    if (copy.type === "line" && typeof copy.speaker === "string") {
-      copy.npc = copy.text;
-      delete copy.speaker;
-    }
-    if (Array.isArray(copy.steps)) copy.steps = flattenSpeakers(copy.steps);
-    if (Array.isArray(copy.options)) {
-      copy.options = copy.options.map((option) => ({ ...option, steps: flattenSpeakers(option.steps) }));
-    }
-    return copy;
-  });
 }
 
 /**
@@ -532,11 +516,16 @@ function startTranscript(api, player, npcId, page, variant, select) {
   if (!Array.isArray(raw)) return false;
   const steps = typeof select === "function" ? select(raw) : raw;
   if (!Array.isArray(steps) || steps.length === 0) return false;
-  const { startDialogue: playDialogue } = require("../npcs/NpcDialogues.plugin.js");
+  const { startDialogue: playDialogue, speakerIdIndex } = require("../npcs/NpcDialogues.plugin.js");
+  if (!transcriptSpeakers) {
+    const fs = require("fs"), path = require("path");
+    const index = JSON.parse(fs.readFileSync(path.join(api.core.GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogue-index.json"), "utf8"));
+    transcriptSpeakers = speakerIdIndex(index, api.core.NpcDefinition);
+  }
   const definition = api.core.NpcDefinition.forId(npcId);
   const event = { player, npcId, npc: null, definition };
-  const context = { player, npc: null, npcId, definition, pages: [{ page, variants: [variant] }] };
-  playDialogue(api, event, flattenSpeakers(steps), record.branches, context);
+  const context = { player, npc: null, npcId, definition, pages: [{ page, variants: [variant] }], speakerIdByName: transcriptSpeakers };
+  playDialogue(api, event, steps, record.branches, context);
   return true;
 }
 

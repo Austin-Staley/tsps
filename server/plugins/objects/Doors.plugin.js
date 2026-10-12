@@ -102,6 +102,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   }
 
   DOUBLE_DOOR_ID_FAMILIES = Object.freeze([
+    // White Knights' Castle: the two leaves share model 639; their open ids are reversed.
+    Object.freeze([O.CASTLE_DOOR, O.CASTLE_DOOR_6, O.CASTLE_DOOR_7, O.CASTLE_DOOR_8]),
     // Large doors (model 633): 1511 opens to 1512, 1513 to 1516 (1514 is an unnamed loc).
     Object.freeze([O.LARGE_DOOR_7, O.LARGE_DOOR_9, O.LARGE_DOOR_8, O.LARGE_DOOR_10]),
     Object.freeze([O.LARGE_DOOR_10, O.LARGE_DOOR_13]),
@@ -129,6 +131,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   ]);
   // Both leaves of each pair are partners of the other.
   SPECIAL_DOUBLE_DOOR_PAIRS = Object.freeze([
+    [O.CASTLE_DOOR, O.CASTLE_DOOR_6],
+    [O.CASTLE_DOOR_7, O.CASTLE_DOOR_8],
     [O.GATE_26, O.GATE_27],
     [O.GATE_29, O.GATE_30],
     [O.GATE_33, O.GATE_34],
@@ -156,6 +160,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     }
   }
   SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
+    [O.CASTLE_DOOR, O.CASTLE_DOOR_7],
+    [O.CASTLE_DOOR_6, O.CASTLE_DOOR_8],
     [O.GATE_26, O.GATE_29],
     [O.GATE_27, O.GATE_30],
     [O.GATE_33, O.GATE_29],
