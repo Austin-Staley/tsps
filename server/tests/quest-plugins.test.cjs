@@ -4429,6 +4429,58 @@ test('Song of the Elves spawns the attackable Fragment variant for the final fig
   assert.equal(player.location.getY(), 5918);
 });
 
+test('Song of the Elves clears the Fragment instance on logout so the Temple cutscene can retry', () => {
+  const { api, handlers } = mockApi();
+  const areas = [];
+  api.registerArea = (area) => areas.push(area);
+  api.spawnNpc = () => ({
+    isPlayer: () => false,
+    isNpc: () => true,
+    getAsNpc() { return this; },
+    getIndex: () => 200,
+    setArea(area) { this.area = area; },
+    getArea() { return this.area ?? null; },
+    isRegistered: () => false,
+    setMultiCombat() {},
+    setMaxHitpoints() {},
+    setHitpoints() {},
+  });
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map([
+    ['quest.song_of_the_elves.late-chapter', 19],
+    ['quest.song_of_the_elves.camp-battle', true],
+    ['quest.song_of_the_elves.fragment-defeated', false],
+    ['quest.song_of_the_elves.temple-cutscene-started', true],
+  ]);
+  const player = {
+    getUsername: () => 'FragmentDisconnectTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ getFreeSlots: () => 10, getAmount: () => 0, adds: () => {} }),
+    getArea: () => player.area ?? null,
+    setArea(area) { player.area = area; },
+    moveTo(location) { player.location = location; },
+    getIndex: () => 1,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage: () => {},
+    isPlayer: () => true,
+    isNpc: () => false,
+    getAsPlayer: () => player,
+  };
+  quest.setStage(player, 190);
+  handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'xfnkES', handled: false });
+  const area = player.getArea();
+  assert.equal(area.constructor.name, 'FragmentArea');
+  area.leave(player, true);
+  assert.equal(area.isDestroyed(), true);
+  assert.equal(player.getArea(), null);
+  assert.equal(attributes.get('quest.song_of_the_elves.fragment-area'), null);
+  assert.equal(attributes.get('quest.song_of_the_elves.temple-cutscene-started'), false);
+  assert.equal(quest.getStage(player), 190, 'disconnecting does not consume quest progress');
+});
+
 test('Song of the Elves keeps the Fragment death return at the dwarf camp', () => {
   const { api, handlers } = mockApi();
   const areas = [];
