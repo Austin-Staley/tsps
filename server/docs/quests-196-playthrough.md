@@ -14,7 +14,7 @@ The final alliance dialogue awarded exactly 5 QP, 80,000 Thieving XP, 75,000 Far
 
 The preparation component collects materials from the palace and performs the stew, sickle, flail and stake recipes, including their confirmation menus. The bridge component uses the supplied ballista/javelins to defeat portals through ordinary ranged attacks. The hall component takes a potion from the crate, heals its owned injured Aranei and repairs pillars; the natural integrity timer reaches the breach and creates Lowerniel's encounter. The saved defence checkpoint retains participation, repairs/healing, zero integrity and the breach phase after logout.
 
-Blood Moon's earlier/later story chapters, the remaining bosses and resuming the breach encounter still need further checks. The hall timer and some scripted placements are inferred and marked `shortcut:` for later calibration against live OSRS recordings.
+Blood Moon's earlier/later story chapters, the remaining bosses still need further checks. MCP also verified that relog restores the barricade and passing it resumes Lowerniel's owned encounter. The hall timer and some scripted placements are inferred and marked `shortcut:` for later calibration against live OSRS recordings.
 
 ## Checks
 
