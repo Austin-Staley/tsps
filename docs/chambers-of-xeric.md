@@ -246,6 +246,14 @@ Recording 820 has a whole fight (five specials), 3282 the end of one.
 - At a crystal: 7412 and the healing form on one tick, sound 2885 every 2 ticks, 66-67 ticks, then 7414, the crystal going 2 ticks later.
 - Dying: 7415; 3 ticks later he and his crystal go, the exit crystals shatter and the fire goes.
 
+## Vespula, from rsprox captures
+
+Recordings 820 (a whole fight at the portal), 843 and 3389.
+
+- She stings a grub with 7454 and sound 570; hitting the portal enrages her and closes the tendrils, and enraged she stings every 3 ticks (sound 819), dropping to flying for a tick every 21. The portal fires projectile 1366 every 2 ticks.
+- A drained grub dies as a soldier hatches (7460, gfx 1365) and is healthy again 37 ticks later; soldiers heal every 5 ticks (gfx 1367, sound 808).
+- The portal falling: everything dies on that tick (7459) with "As the link to the Abyss disintegrates, the abyssal creatures perish."; 2 ticks later they are gone and the boils burst; the pillars close 2 ticks after.
+
 ## Values not on the Wiki, to check against a capture
 
 | Value | Where |

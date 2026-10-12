@@ -15,18 +15,25 @@
  * - Attacking the portal while she flies enrages her: she flies before it stinging anyone in
  *   melee range for 5-20 typeless and stomping those under her for 2-8 a tick.
  * - Septic tendrils close the way in once the fight starts, hurting those passing them.
- * Not on the Wiki (to check against a capture): the tiles; the portal fires (projectile 1366) at whoever stands on the two
- *   tiles before it every 2 ticks, draining 1 + 3% prayer (or 1-2 damage with none) and heals
- *   17 per live soldier every 8 ticks; Vespula's attacks: anim 7455 (7450 landed), projectile
- *   1364 at the target and a tile near it (base 15, poison 1 in 4); stinging anim 7454, sound
- *   570; landing 7457, rising 7452; soldiers rise (7460) beside their grub and heal Vespula and
- *   the portal to full; soldiers land at 20%, chase someone and explode 17 ticks later (gfx
- *   1368, 15-30 within 3); grub bursting anims 7466 / 7467, back to an unstung grub 16 ticks
- *   later; blossoms heal a grub 20%; roots (30068) regrow 8 ticks after picking; boils (30070)
- *   burst (30071) and the pillars (30072) vanish (anim 7500, 30073) as the portal falls:
- *   "As the link to the abyss disintegrates, the abyssal creatures perish."
- * Not from a source: a stung grub's meter drains 1 every 4 ticks;
- *   landed Vespula stays down 33 ticks (~20 seconds).
+ * rsprox captures (recordings 820, 843, 3389):
+ * - Stinging a grub: 7454 (15 client cycles' delay) and sound 570 (range 8) at the grub, which
+ *   turns sickly (7535) the tick after, infected (7536) lower down.
+ * - Hitting the portal enrages her (7531) and closes the tendrils; enraged she stings every 3
+ *   ticks (7454, sound 819, range 5); every 21 ticks of it she is flying for a tick and, still
+ *   provoked, enraged again. The portal fires projectile 1366 every 2 ticks (0 to 60 cycles,
+ *   angle 2, heights 140 to 120).
+ * - A grub at zero dies (7537) as a soldier hatches beside it (7460, gfx 1365); it is healthy
+ *   again 37 ticks later. Soldiers heal every 5 ticks (gfx 1367 at height 200, sound 808).
+ * - The portal falling: the grubs go, Vespula and the soldiers die (7459, landed 7458), the roots
+ *   empty and the pillars play 7500 on that tick, with "As the link to the Abyss disintegrates,
+ *   the abyssal creatures perish."; 2 ticks later they are gone and the boils burst (gfx 240,
+ *   sound 1457); the pillars close 2 ticks after that.
+ * Not on the Wiki (to check against a capture): the tiles; the portal draining 1 + 3% prayer
+ *   (or 1-2 damage with none); soldiers healing 17; Vespula's ranged (anim 7455 / 7450 landed,
+ *   projectile 1364 at the target and a tile near it, base 15, poison 1 in 4); landing 7457,
+ *   rising 7452; soldiers landing at 20% and exploding 17 ticks later (gfx 1368, 15-30 within
+ *   3); blossoms healing a grub 20%; roots regrowing 8 ticks after picking; a stung grub's meter
+ *   draining 1 every 4 ticks; landed Vespula staying down 33 ticks (~20 seconds).
  */
 
 const Shared = require("./CoxShared");
@@ -39,6 +46,10 @@ const BLOSSOM = 20892;
 const HALBERD = /halberd/i;
 const LANDED_TICKS = 33;
 const GRUB_DRAIN_TICKS = 4;
+const GRUB_REGROW_TICKS = 37;
+const ENRAGED_TICKS = 20;
+const SOLDIER_HEAL = { EVERY: 5, AMOUNT: 17, GFX: 1367, SOUND: 808 };
+const SOUND = { STING: 570, ENRAGED_STING: 819, BOIL: 1457 };
 
 /** Cache tiles by version (centres). */
 const GRUB_TILES = [
@@ -147,25 +158,19 @@ class VespulaRoom extends Raid.Room {
     }
   }
 
+  /** The grub dies as a soldier hatches beside it; it is a healthy grub again 37 ticks later. */
   burst(grub) {
-    Shared.animate(grub, 7466);
-    grub.__coxBurstUntil = this.raid.ticks + 16;
-    Shared.later(this.raid, 1, () => {
-      grub.setNpcTransformationId(NPC.BURST);
-      Shared.animate(grub, 7467);
-      const soldier = this.spawnNpc(NPC.SOLDIER, grub.getLocation().clone());
-      if (!soldier) return;
-      grub.__coxSoldier = soldier;
-      Shared.animate(soldier, 7460);
-      for (const player of this.raiders()) Shared.sound(player, 552);
-      // Not on the Wiki (to check against a capture): a rising soldier heals Vespula and the portal to full.
-      if (this.alive(this.portal)) {
-        this.vespula.setHitpoints(this.vespula.getMaxHitpoints());
-        this.portal.setHitpoints(this.portal.getMaxHitpoints());
-      }
-      Shared.walkStraight(soldier, grub.__coxSoldierTile);
-      soldier.__coxDelay = this.raid.ticks + 5;
-    });
+    grub.__coxBurstUntil = this.raid.ticks + GRUB_REGROW_TICKS;
+    grub.setNpcTransformationId(NPC.BURST);
+    Shared.animate(grub, -1);
+    const soldier = this.spawnNpc(NPC.SOLDIER, grub.getLocation().clone());
+    if (!soldier) return;
+    grub.__coxSoldier = soldier;
+    Shared.animate(soldier, 7460);
+    soldier.performGraphic(Shared.gfx(1365));
+    soldier.__coxHealAt = this.raid.ticks + SOLDIER_HEAL.EVERY;
+    Shared.walkStraight(soldier, grub.__coxSoldierTile);
+    soldier.__coxDelay = this.raid.ticks + 5;
   }
 
   liveSoldiers() {
@@ -175,15 +180,19 @@ class VespulaRoom extends Raid.Room {
   tickPortal() {
     const portal = this.portal;
     if (!this.alive(portal)) return;
-    if (this.raid.ticks % 8 === 0) {
-      const soldiers = this.liveSoldiers().length;
-      if (soldiers > 0) portal.heal(17 * soldiers);
+    for (const soldier of this.liveSoldiers()) {
+      if (this.raid.ticks < soldier.__coxHealAt) continue;
+      soldier.__coxHealAt = this.raid.ticks + SOLDIER_HEAL.EVERY;
+      soldier.performGraphic(Shared.gfx(SOLDIER_HEAL.GFX, { height: 200 }));
+      Shared.areaSound(this.raiders(), SOLDIER_HEAL.SOUND, soldier.getLocation(), { range: 6 });
+      portal.heal(SOLDIER_HEAL.AMOUNT);
+      this.vespula.heal(SOLDIER_HEAL.AMOUNT);
     }
     if (this.raid.ticks % 2 !== 0) return;
     for (const player of this.raiders()) {
       if (!this.portalHitTiles.some((tile) => tile.equals(player.getLocation()))) continue;
       const tile = player.getLocation().clone();
-      Shared.projectile(this.map, this.portalShotFrom, tile, 1366, { delay: 0, duration: 60, startHeight: 10, endHeight: 0 });
+      new (Shared.core().Projectile)(this.portalShotFrom, tile, null, 1366, 0, 60, 35, 30, this.map).withAngle(2).withProgress(128).sendProjectile();
       Shared.later(this.raid, 1, () => {
         if (!player.getLocation().equals(tile)) return;
         const { Skill } = Shared.core();
@@ -196,7 +205,7 @@ class VespulaRoom extends Raid.Room {
   }
 
   portalUnderAttack() {
-    return this.portalHitAt != null && this.raid.ticks - this.portalHitAt < 9;
+    return this.portalHitAt != null && this.raid.ticks - this.portalHitAt < ENRAGED_TICKS;
   }
 
   tickVespula() {
@@ -222,10 +231,10 @@ class VespulaRoom extends Raid.Room {
     if (grub && grub.getHitpoints() >= grub.getMaxHitpoints() && grub.__coxBurstUntil == null) {
       if (!vespula.getMovementQueue().isMovings()) {
         this.stinging = null;
-        Shared.animate(vespula, 7454);
-        for (const player of this.raiders()) Shared.sound(player, 570);
+        vespula.performAnimation(new (Shared.core().Animation)(7454, 15));
+        Shared.areaSound(this.raiders(), SOUND.STING, grub.getLocation(), { delay: 15, range: 8 });
         vespula.setPositionToFace(grub.getLocation());
-        grub.setHitpoints(Math.floor(grub.getMaxHitpoints() / 2));
+        Shared.later(this.raid, 1, () => grub.setHitpoints(Math.floor(grub.getMaxHitpoints() / 2)));
         this.stingDelay = 4;
       }
       return;
@@ -255,12 +264,20 @@ class VespulaRoom extends Raid.Room {
         this.enraging = true;
         vespula.getMovementQueue().reset();
       }
-      if (vespula.getLocation().equals(this.home)) vespula.setNpcTransformationId(NPC.ENRAGED);
+      if (vespula.getLocation().equals(this.home)) {
+        vespula.setNpcTransformationId(NPC.ENRAGED);
+        this.enragedAt = this.raid.ticks;
+      }
       else if (!vespula.getMovementQueue().isMovings()) Shared.core().PathFinder.calculateWalkRoute(vespula, this.home.getX(), this.home.getY());
       return;
     }
+    // Every 21 ticks enraged she is flying for a tick; still provoked, she is enraged again.
+    if (this.raid.ticks - this.enragedAt >= ENRAGED_TICKS) {
+      vespula.setNpcTransformationId(-1);
+      return;
+    }
     if (--this.stingDelay > 0) return;
-    this.stingDelay = 2;
+    this.stingDelay = 3;
     const reach = this.raiders().filter((player) => {
       const x = player.getLocation().getX() - at.getX();
       const y = player.getLocation().getY() - at.getY();
@@ -270,6 +287,7 @@ class VespulaRoom extends Raid.Room {
     const tile = Shared.randomOf(reach).getLocation();
     vespula.setPositionToFace(tile);
     Shared.animate(vespula, 7454);
+    Shared.areaSound(this.raiders(), SOUND.ENRAGED_STING, tile, { range: 5 });
     const { CombatFactory } = Shared.core();
     for (const player of reach) {
       if (player.getLocation().getDistance(tile) > 1) continue;
@@ -390,26 +408,38 @@ class VespulaRoom extends Raid.Room {
     if (this.pillars) {
       for (const player of viewers) player.getPacketSender().sendObjectAnimation(this.pillars, new Animation(7500));
       const pillars = this.pillars;
-      Shared.later(this.raid, 1, () => Shared.replaceObject(this.map, pillars, OBJECT.GONE_PILLARS));
+      Shared.later(this.raid, 4, () => Shared.replaceObject(this.map, pillars, OBJECT.GONE_PILLARS));
     }
-    for (const player of this.raid.players) Shared.raidMessage(player, "As the link to the abyss disintegrates, the abyssal creatures perish.");
+    for (const player of this.raid.players) {
+      player.sendMessage("<col=ef20ff>As the link to the Abyss disintegrates, the abyssal creatures perish.</col>");
+    }
+    const dying = [];
     if (this.alive(this.vespula)) {
       Shared.animate(this.vespula, this.vespula.getNpcTransformationId() === NPC.LANDED ? 7458 : 7459);
-      const vespula = this.vespula;
-      Shared.later(this.raid, 3, () => {
-        vespula.setHitpoints(0);
-        this.removeNpc(vespula);
-      });
+      dying.push(this.vespula);
     }
     for (const grub of this.grubs) {
-      if (grub.__coxSoldier) this.removeNpc(grub.__coxSoldier);
+      const soldier = grub.__coxSoldier;
+      if (this.alive(soldier)) {
+        Shared.animate(soldier, 7459);
+        dying.push(soldier);
+      }
       this.removeNpc(grub);
     }
-    Shared.later(this.raid, 1, () => {
-      for (const boil of this.boils ?? []) Shared.replaceObject(this.map, boil, OBJECT.BURST_BOIL);
+    for (const root of this.roots ?? []) Shared.replaceObject(this.map, root, OBJECT.PICKED_ROOT);
+    Shared.later(this.raid, 2, () => {
+      for (const creature of dying) {
+        creature.setHitpoints(0);
+        this.removeNpc(creature);
+      }
+      const now = this.raiders();
+      for (const boil of this.boils ?? []) {
+        const burst = Shared.replaceObject(this.map, boil, OBJECT.BURST_BOIL);
+        Shared.graphicAt(now, 240, burst.getLocation(), { height: 5 });
+        Shared.areaSound(now, SOUND.BOIL, burst.getLocation(), { range: 10 });
+      }
       for (const tendril of this.tendrils) ObjectManager.deregister(tendril, true);
       this.tendrils = [];
-      for (const root of this.roots ?? []) Shared.replaceObject(this.map, root, OBJECT.PICKED_ROOT);
     });
   }
 
