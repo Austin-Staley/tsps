@@ -52,6 +52,7 @@ function buildMcpServer(core) {
   require("./mcp/Testing.AgentMcp")(ctx);
   require("./mcp/Load.AgentMcp")(ctx);
   require("./mcp/Perf.AgentMcp")(ctx);
+  require("./mcp/Vision.AgentMcp")(ctx);
   return server;
 }
 
