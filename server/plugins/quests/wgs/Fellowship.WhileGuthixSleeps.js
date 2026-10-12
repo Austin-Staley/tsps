@@ -117,7 +117,7 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
   if(stepId==='uTUT10'&&!val(player,DRAYNOR_ATTRIBUTE)){player.setAttribute(DRAYNOR_ATTRIBUTE,1);player.moveTo(new Location(3093,3248,0));mapChange({player});}
   if(stepId==='IEZmjv'&&s===240){advance(player,250);mapChange({player});}
   if(stepId==='z_F_Aq'&&!val(player,FREE_SEED_ATTRIBUTE)&&give(player,SEED))player.setAttribute(FREE_SEED_ATTRIBUTE,1);
-  if(stepId==='PZqoXK'&&!val(player,SARIM_ATTRIBUTE)){player.setAttribute(SARIM_ATTRIBUTE,1);player.moveTo(new Location(3013,3258,0));}
+  if(['PZqoXK','wgs-sarim-after-seed'].includes(stepId)&&!val(player,SARIM_ATTRIBUTE)){player.setAttribute(SARIM_ATTRIBUTE,1);player.moveTo(new Location(3013,3258,0));}
   if(stepId==='1fOFAG'&&held(player,SEED)){player.getInventory().deleteNumber(SEED,1);player.setAttribute(SEED_ATTRIBUTE,1);sync(player);}
   if(stepId==='PilX__'&&player.getInventory().getAmount(COINS)>=20&&player.getInventory().getFreeSlots()){player.getInventory().deleteNumber(COINS,20);player.getInventory().adds(DYE,1);}
   if(stepId==='btLOw_'&&held(player,ENRICHED_HERB))give(player,SERUM);

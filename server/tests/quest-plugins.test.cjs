@@ -729,3 +729,12 @@ test('Completed WGS restores the alliance and captured Surok on login', () => {
  assert.equal(f.postQuestTalk({player,npcId:13548}),true);assert.equal(played[0][1],'post-quest-dialogue-talking-to-surok');
  assert.equal(f.postQuestTalk({player,npcId:13522}),false);
 });
+
+
+test('Thaerisk offers an explicit choice before the Port Sarim teleport after giving the seed', () => {
+ const data=require('../data/definitions/npc-dialogues.json')['While Guthix Sleeps'].variants;
+ const steps=data['forming-a-fellowship-capturing-a-spy-talking-to-the-group-after-planting-a-teleorb'].at(-1).options[0].steps;
+ const choice=steps.find(s=>s.type==='choice');assert.deepEqual(choice.options.map(o=>o.text),['Yes.','No.']);
+ assert.equal(choice.options[0].steps.find(s=>s.type==='action').id,'wgs-sarim-after-seed');
+ assert.ok(!choice.options[1].steps.some(s=>s.type==='action'));assert.ok(!steps.some(s=>s.type==='jump'));
+});
