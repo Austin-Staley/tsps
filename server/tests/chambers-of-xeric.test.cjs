@@ -491,6 +491,16 @@ test('a Challenge Mode raid loads every room without errors', () => {
   ticks(8);
   assert.equal(ice.stage, 'fighting');
   assert.equal(demon.getNpcTransformationId(), 7585);
+  // rsprox captures: Vasa's special runs 13 ticks from 7409 to lighting his next crystal.
+  const vasa = raid.rooms.find((room) => room.key === 'VASA_NISTIRIO');
+  vasa.vasa.isRegistered = () => true;
+  vasa.special();
+  assert.equal(vasa.state, 'special');
+  ticks(12);
+  assert.equal(vasa.state, 'special');
+  ticks(1);
+  assert.equal(vasa.state, 'walking');
+  assert.ok(vasa.crystals.some(Boolean), 'a crystal is lit');
   assert.ok(spawned.some((npc) => npc.getId() === 7602), 'the corrupted scavenger');
   assert.ok(spawned.filter((npc) => npc.getId() === 7576).length === 4, 'four crabs');
   assert.ok(spawned.some((npc) => npc.getId() === 7540), 'Tekton at his anvil');

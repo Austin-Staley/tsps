@@ -237,6 +237,15 @@ Recordings 843, 3285 and 3389.
 - Woken, they stir (7428) and take their roles 5 ticks later. Each attacks every 4 ticks: melee 7441, ranged 7446 with three different projectiles (1332-1334) landing 2 ticks later as gfx 305, magic 7436 with three projectiles 1331 landing 3 ticks later as gfx 659.
 - Swirls (57 healthy, 56 low) flash every 2 ticks before a shuffle; they fall into their shells on one tick, heal to full 4 ticks in when out of balance (7431), and stand up 9-13 ticks later.
 
+## Vasa Nistirio, from rsprox captures
+
+Recording 820 has a whole fight (five specials), 3282 the end of one.
+
+- Woken: 7408, the fire 4 ticks later, then 7409 and his first special. A special runs from 7409: the teleport 3 ticks later (those beside him stunned, gfx 245), "Vasa Nistirio has blocked your use of prayers." 2 ticks after, the explosion (7410, eight falling projectiles) at 8 and the blast landing at 12; he lights the next crystal about then.
+- Walking, he throws a boulder at each raider every 3 ticks (landing 2 ticks later) and stomps twice a tick (sound 3834).
+- At a crystal: 7412 and the healing form on one tick, sound 2885 every 2 ticks, 66-67 ticks, then 7414, the crystal going 2 ticks later.
+- Dying: 7415; 3 ticks later he and his crystal go, the exit crystals shatter and the fire goes.
+
 ## Values not on the Wiki, to check against a capture
 
 | Value | Where |

@@ -17,13 +17,24 @@
  *   starts, running only while a crystal is active; at zero he leaves it for the centre and his
  *   special. Disabling the crystal first undoes the healing.
  * - The crystals are immune to Ranged and take a third from Magic.
- * Not on the Wiki (to check against a capture): the tiles (the four crystals, the centre, the fire, the exit crystals 30016);
- *   anims rise 7408, swirl 7409, explode 7410; the special's timing (teleport 3865 / gfx 1296,
- *   10-tick stun, projectiles 1327 falling around him, explosions 1328, stun gfx 80, sound
- *   2727); boulders every 4 ticks while walking (projectile 1329, impact 1330, base 18);
- *   form 7567 while siphoning; the crystal objects 29774 (lit) / 29775; stomps 1-5;
- *   "Vasa Nistirio is preparing a powerful spell and can ignore your puny attack.",
- *   "The crystal is currently invulerable to damage."; prayers blocked 5 seconds.
+ * rsprox captures (recordings 820, a whole fight with five specials, and 3282):
+ * - Woken: 7408 with sounds 1724 and 1595 (range 15); the fire 4 ticks later; 7409 and the
+ *   walking form (7566) the tick after. Each special starts with 7409: 3 ticks later the
+ *   party is teleported (those beside him: gfx 245, sound 2727), and 2 ticks after that they
+ *   are told "Vasa Nistirio has blocked your use of prayers." (sound 2673); 8 ticks after 7409
+ *   he explodes (7410, sound 1781) with eight projectiles 1327 (8 client cycles apart, to 125,
+ *   heights 420 to 10) landing 4 ticks later as gfx 1328 round him (3 cycles apart; sound 3428)
+ *   with the blast. He lights his next crystal about then and walks to it.
+ * - Walking he stomps (sound 3834, range 12, twice a tick) and throws boulders every 3 ticks,
+ *   one per raider: projectile 1329 (0, 5, 10 cycles to 90, angle 5, heights 150 to 10; sound
+ *   781 looped once per boulder) landing 2 ticks later as gfx 1330 with sound 1021.
+ * - At the crystal: 7412 and the healing form (7567) on one tick, sound 2885 every 2 ticks;
+ *   66-67 ticks later 7414 and walking again, the crystal gone 2 ticks after.
+ * - Dying: 7415; he and his crystal go 3 ticks later, as the exit crystals shatter and the fire
+ *   goes.
+ * Not on the Wiki (to check against a capture): the tiles (the four crystals, the centre, the
+ *   fire, the exit crystals 30016); where the far half is sent; the boulder base (18) and its
+ *   3x3; stomps 1-5; "The crystal is currently invulerable to damage."; prayers blocked 8 ticks.
  */
 
 const Shared = require("./CoxShared");
@@ -32,8 +43,16 @@ const Monsters = require("./CoxMonsters");
 
 const NPC = { ROCKS: 7565, VASA: 7566, SIPHONING: 7567, CRYSTAL: 7568 };
 const OBJECT = { LIT: 29774, DARK: 29775, EXIT: 30016, FIRE: 30019 };
-const ANIM = { RISE: 7408, SWIRL: 7409, EXPLODE: 7410, TELEPORTED: 3865 };
-const GFX = { TELEPORT: 1296, STUN: 80, FALLING: 1327, EXPLOSION: 1328, BOULDER: 1329, BOULDER_HIT: 1330 };
+const ANIM = { RISE: 7408, SWIRL: 7409, EXPLODE: 7410, SIPHON: 7412, SIPHONED: 7414 };
+const GFX = { STUNNED: 245, FALLING: 1327, EXPLOSION: 1328, BOULDER: 1329, BOULDER_HIT: 1330 };
+const SOUND = {
+  WAKE: 1724, WAKE_2: 1595, STUNNED: 2727, PRAYERS: 2673, EXPLODE: 1781, BLAST: 3428,
+  STEP: 3834, BOULDER: 781, BOULDER_HIT: 1021, SIPHON: 2885,
+};
+/** Ticks from 7409: the teleport, the prayer message, the explosion, its landing, the next crystal. */
+const SPECIAL = { TELEPORT: 3, PRAYERS: 5, EXPLODE: 8, BLAST: 12, CRYSTAL: 13 };
+const WAKE = { FIRE: 4, SWIRL: 5 };
+const BOULDER_EVERY = 3;
 const CRYSTAL_TIMER = [66, 67];
 const BOULDER_BASE = 18;
 const PRAYER_BLOCK_TICKS = 8;
@@ -115,100 +134,105 @@ class VasaRoom extends Raid.Room {
 
   watch() {
     if (!this.raiders().some((player) => player.getLocation().getDistance(this.centre()) <= 7)) return;
-    const spot = FIRE_TILES[this.record.variant];
-    const { GameObject, ObjectManager } = Shared.core();
-    this.fire = new GameObject(OBJECT.FIRE, this.tile(spot.x, spot.y, 2), 10, this.record.rotation, this.map);
-    ObjectManager.register(this.fire, true);
     this.state = "waking";
     this.stage = 0;
   }
 
+  /** 7408 and its sounds; the fire 4 ticks later; 7409 and the walking form, his special. */
   wake() {
     const stage = this.stage++;
-    if (stage === 0) Shared.animate(this.vasa, ANIM.RISE);
-    else if (stage === 5) Shared.animate(this.vasa, ANIM.SWIRL);
-    else if (stage === 10) Shared.animate(this.vasa, ANIM.EXPLODE);
-    else if (stage === 12) {
+    if (stage === 0) {
+      Shared.animate(this.vasa, ANIM.RISE);
+      Shared.areaSound(this.raiders(), SOUND.WAKE, this.centre(), { range: 15 });
+      Shared.areaSound(this.raiders(), SOUND.WAKE_2, this.centre(), { delay: 15, range: 15 });
+    } else if (stage === WAKE.FIRE) {
+      const spot = FIRE_TILES[this.record.variant];
+      const { GameObject, ObjectManager } = Shared.core();
+      this.fire = new GameObject(OBJECT.FIRE, this.tile(spot.x, spot.y, 2), 10, this.record.rotation, this.map);
+      ObjectManager.register(this.fire, true);
+    } else if (stage === WAKE.SWIRL) {
       this.vasa.setNpcTransformationId(NPC.VASA);
       this.special();
     }
   }
 
-  /** The teleport and blast. */
+  /** 7409; the teleport 3 ticks on, the prayer block 2 after, the explosion at 8, the blast at 12. */
   special() {
     this.state = "special";
-    const raiders = Shared.shuffle(this.raiders().filter((player) => player.getHitpoints() > 0));
-    if (raiders.length === 0) {
-      this.chooseCrystal();
-      return;
-    }
-    this.near = [raiders.shift()];
-    this.far = [];
-    for (const player of raiders) (this.far.length < this.near.length ? this.far : this.near).push(player);
-    const { CombatFactory, PrayerHandler } = Shared.core();
-    for (const player of [...this.near, ...this.far]) {
-      player.performGraphic(Shared.gfx(GFX.TELEPORT));
-      Shared.animate(player, ANIM.TELEPORTED);
-      Shared.sound(player, 199);
-    }
-    for (const player of this.near) CombatFactory.stun(player, 6, true);
-    Shared.later(this.raid, 3, () => {
-      if (!this.alive()) return;
-      Shared.animate(this.vasa, ANIM.SWIRL);
-      const middle = this.centre();
-      for (const player of this.far) {
-        if (this.raid.roomAt(player.getLocation()) === this) player.moveTo(this.tileAround(middle, 10, 14));
-      }
-      this.blast = 0;
-      for (const player of this.near) {
+    Shared.animate(this.vasa, ANIM.SWIRL);
+    Shared.later(this.raid, SPECIAL.TELEPORT, () => this.teleport());
+    Shared.later(this.raid, SPECIAL.PRAYERS, () => {
+      for (const player of this.near ?? []) {
         if (this.raid.roomAt(player.getLocation()) !== this) continue;
-        player.moveTo(this.tileAround(middle, 3, 4));
-        PrayerHandler.deactivatePrayers(player);
-        player.__coxNoPrayerUntil = this.raid.ticks + PRAYER_BLOCK_TICKS;
-        player.performGraphic(Shared.gfx(GFX.STUN, { height: 96 }));
-        Shared.sound(player, 2727);
-        this.blast += Math.max(0, Math.min(99, player.getHitpoints()) - 5);
+        player.sendMessage("Vasa Nistirio has blocked your use of prayers.");
+        Shared.sound(player, SOUND.PRAYERS);
       }
-      for (const player of this.raiders()) Shared.sound(player, 1781);
     });
-    Shared.later(this.raid, 5, () => {
+    Shared.later(this.raid, SPECIAL.EXPLODE, () => {
       if (!this.alive()) return;
       Shared.animate(this.vasa, ANIM.EXPLODE);
-      for (const tile of this.ring()) Shared.projectile(this.map, this.centre(), tile, GFX.FALLING, { delay: 15, duration: 150, startHeight: 70, endHeight: 0 });
+      Shared.areaSound(this.raiders(), SOUND.EXPLODE, this.centre(), { range: 15 });
+      const { Projectile } = Shared.core();
+      this.ring().forEach((tile, index) => {
+        new Projectile(this.centre(), tile, null, GFX.FALLING, index * 8, 125, 105, 2, this.map)
+          .withAngle(0)
+          .withProgress(30)
+          .sendProjectile();
+      });
     });
-    Shared.later(this.raid, 10, () => this.explode());
+    Shared.later(this.raid, SPECIAL.BLAST, () => this.explode());
+    Shared.later(this.raid, SPECIAL.CRYSTAL, () => this.alive() && this.chooseCrystal());
   }
 
-  /** The eight tiles around him the blast falls on. */
+  /** Half the party beside him, stunned and without prayers; the rest by the walls. */
+  teleport() {
+    if (!this.alive()) return;
+    const raiders = Shared.shuffle(this.raiders().filter((player) => player.getHitpoints() > 0));
+    this.near = [];
+    this.far = [];
+    this.blast = 0;
+    if (raiders.length === 0) return;
+    this.near.push(raiders.shift());
+    for (const player of raiders) (this.far.length < this.near.length ? this.far : this.near).push(player);
+    const { CombatFactory, PrayerHandler } = Shared.core();
+    const middle = this.centre();
+    for (const player of this.far) player.moveTo(this.tileAround(middle, 10, 14));
+    for (const player of this.near) {
+      player.moveTo(this.tileAround(middle, 3, 4));
+      CombatFactory.stun(player, 6, true);
+      PrayerHandler.deactivatePrayers(player);
+      player.__coxNoPrayerUntil = this.raid.ticks + PRAYER_BLOCK_TICKS;
+      player.performGraphic(Shared.gfx(GFX.STUNNED, { height: 124 }));
+      Shared.sound(player, SOUND.STUNNED);
+      this.blast += Math.max(0, Math.min(99, player.getHitpoints()) - 5);
+    }
+  }
+
+  /** The eight tiles around him the blast falls on, in the order it lands. */
   ring() {
     const { Location } = Shared.core();
     const at = this.vasa.getLocation();
-    const tiles = [];
-    for (let x = -1; x <= 5; x += 3) {
-      for (let y = -1; y <= 5; y += 3) {
-        if (x === 2 && y === 2) continue;
-        tiles.push(new Location(at.getX() + x, at.getY() + y, at.getZ()));
-      }
-    }
-    return tiles;
+    const order = [[-1, -1], [2, -1], [5, -1], [5, 2], [5, 5], [2, 5], [-1, 5], [-1, 2]];
+    return order.map(([x, y]) => new Location(at.getX() + x, at.getY() + y, at.getZ()));
   }
 
   explode() {
     if (!this.alive()) return;
     const middle = this.centre();
     const viewers = this.raiders();
-    for (const tile of this.ring()) Shared.graphicAt(viewers, GFX.EXPLOSION, tile);
+    this.ring().forEach((tile, index) => Shared.graphicAt(viewers, GFX.EXPLOSION, tile, { delay: index * 3 }));
+    Shared.areaSound(viewers, SOUND.BLAST, middle, { delay: 5, range: 15 });
+    const near = this.near ?? [];
+    const far = this.far ?? [];
     const close = viewers.filter((player) => player.getLocation().getDistance(middle) <= 4);
-    const sharing = Math.max(this.near.filter((player) => close.includes(player)).length, close.length);
-    if (sharing > 0) {
+    const sharing = Math.max(near.filter((player) => close.includes(player)).length, close.length);
+    if (sharing > 0 && this.blast > 0) {
       const damage = Math.min(99, Math.floor(this.blast / sharing));
       for (const player of close) {
-        const ranIn = this.far.includes(player);
-        if (ranIn && Shared.isProtected(player, "magic")) continue;
+        if (far.includes(player) && Shared.isProtected(player, "magic")) continue;
         Shared.damage(player, damage);
       }
     }
-    this.chooseCrystal();
   }
 
   tileAround(middle, min, max) {
@@ -236,6 +260,7 @@ class VasaRoom extends Raid.Room {
     if (this.timer <= 0) this.timer = Shared.random(...CRYSTAL_TIMER);
     this.state = "walking";
     this.boulderTicks = 0;
+    this.stepped = 0;
     this.siphoned = 0;
     Shared.core().PathFinder.calculateEntityRoute(this.vasa, this.crystals[this.current]);
   }
@@ -258,6 +283,8 @@ class VasaRoom extends Raid.Room {
     }
     this.state = "siphoning";
     this.siphonTicks = 0;
+    Shared.animate(this.vasa, ANIM.SIPHON);
+    this.vasa.setNpcTransformationId(NPC.SIPHONING);
     return undefined;
   }
 
@@ -271,18 +298,21 @@ class VasaRoom extends Raid.Room {
       this.vasa.setNpcTransformationId(NPC.VASA);
       return this.goHome();
     }
-    if (++this.siphonTicks === 3) this.vasa.setNpcTransformationId(NPC.SIPHONING);
-    if (this.siphonTicks % 3 === 0) for (const player of this.raiders()) Shared.sound(player, 2885);
+    if (++this.siphonTicks % 2 === 0) Shared.areaSound(this.raiders(), SOUND.SIPHON, this.centre(), { range: 12 });
     if (this.siphonTicks % 2 === 0) {
       const before = this.vasa.getHitpoints();
       this.vasa.heal(Math.max(1, Math.floor(this.vasa.getMaxHitpoints() * 0.01)));
       this.siphoned += this.vasa.getHitpoints() - before;
     }
     if (--this.timer <= 0) {
-      this.removeNpc(crystal);
-      this.crystalObjects[this.current] = Shared.replaceObject(this.map, this.crystalObjects[this.current], OBJECT.DARK);
-      this.crystals[this.current] = null;
+      const index = this.current;
+      this.crystals[index] = null;
+      Shared.animate(this.vasa, ANIM.SIPHONED);
       this.vasa.setNpcTransformationId(NPC.VASA);
+      Shared.later(this.raid, 2, () => {
+        this.removeNpc(crystal);
+        this.crystalObjects[index] = Shared.replaceObject(this.map, this.crystalObjects[index], OBJECT.DARK);
+      });
       this.goHome(true);
     }
     return undefined;
@@ -311,24 +341,32 @@ class VasaRoom extends Raid.Room {
     if (this.waited++ >= 3) this.chooseCrystal();
   }
 
-  /** Every 4 ticks a boulder at each raider within 8 tiles, not under him. */
+  /** His footsteps, and every 3 ticks a boulder at each raider within 8 tiles, not under him. */
   boulders() {
-    if (this.boulderTicks++ % 4 !== 0) return;
+    Shared.areaSound(this.raiders(), SOUND.STEP, this.vasa.getLocation(), { range: 12 });
+    Shared.areaSound(this.raiders(), SOUND.STEP, this.vasa.getLocation(), { delay: Shared.random(5, 9), range: 12 });
+    if (this.boulderTicks++ % BOULDER_EVERY !== 0) return;
     const middle = this.centre();
     const max = Monsters.maxHitFor(this.vasa, BOULDER_BASE, Monsters.LEVELS.RANGED);
-    for (const player of this.raiders()) {
-      if (this.under(player) || player.getLocation().getDistance(middle) > 8 + 2) continue;
-      Shared.sound(player, 781);
+    const targets = this.raiders().filter((player) => !this.under(player) && player.getLocation().getDistance(middle) <= 8 + 2);
+    if (targets.length === 0) return;
+    const { Projectile } = Shared.core();
+    Shared.areaSound(this.raiders(), SOUND.BOULDER, middle, { loops: targets.length, range: 15 });
+    targets.forEach((player, index) => {
       const tile = player.getLocation().clone();
-      Shared.projectile(this.map, middle, tile, GFX.BOULDER, { delay: 15, duration: 90, startHeight: 60, endHeight: 0 });
+      new Projectile(middle, tile, null, GFX.BOULDER, index * 5, 90, 37, 2, this.map)
+        .withAngle(5)
+        .withProgress(30)
+        .sendProjectile();
       Shared.later(this.raid, 2, () => {
         if (!this.alive()) return;
         Shared.graphicAt(this.raiders(), GFX.BOULDER_HIT, tile);
+        Shared.areaSound(this.raiders(), SOUND.BOULDER_HIT, tile, { range: 8 });
         for (const raider of this.raiders()) {
           if (raider.getLocation().getDistance(tile) <= 1) Shared.strike(this.vasa, raider, "ranged", max, 0, { prayerMultiplier: 1 / 3 });
         }
       });
-    }
+    });
   }
 
   modifyHit(npc, hit) {
@@ -363,20 +401,22 @@ class VasaRoom extends Raid.Room {
     }
     this.state = "dead";
     this.completed = true;
-    for (const crystal of this.crystals) if (crystal) this.removeNpc(crystal);
     for (const player of [...(this.near ?? []), ...(this.far ?? [])]) player.__coxNoPrayerUntil = 0;
     const { ObjectManager, Animation } = Shared.core();
-    const viewers = this.raiders();
-    for (const exit of this.exits) {
-      for (const player of viewers) player.getPacketSender().sendObjectAnimation(exit, new Animation(7506));
-      Shared.later(this.raid, 2, () => ObjectManager.deregister(exit, true));
-    }
-    if (this.fire) {
-      Shared.graphicAt(viewers, GFX.TELEPORT, this.fire.getLocation());
-      const fire = this.fire;
-      this.fire = null;
-      Shared.later(this.raid, 1, () => ObjectManager.deregister(fire, true));
-    }
+    const crystals = this.crystals.filter(Boolean);
+    const fire = this.fire;
+    this.fire = null;
+    Shared.later(this.raid, 3, () => {
+      for (const crystal of crystals) this.removeNpc(crystal);
+      if (fire) ObjectManager.deregister(fire, true);
+      const viewers = this.raiders();
+      for (const exit of this.exits) {
+        for (const player of viewers) player.getPacketSender().sendObjectAnimation(exit, new Animation(7506));
+        Shared.areaSound(viewers, 1021, exit.getLocation(), { range: 10 });
+        Shared.areaSound(viewers, 3821, exit.getLocation(), { delay: 5, range: 10 });
+        Shared.later(this.raid, 4, () => ObjectManager.deregister(exit, true));
+      }
+    });
   }
 }
 
