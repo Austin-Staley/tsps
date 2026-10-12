@@ -276,7 +276,8 @@ module.exports = function registerBiohazardQuest(api) {
     return null;
   }
 
-  function answerCondition({ player, text, stepId }) {
+  function answerCondition({ player, text, stepId, pages }) {
+    if (!pages?.some(({ page }) => page === "Biohazard")) return null;
     const value = String(text).toLowerCase();
     const inventory = player.getInventory();
     const wearingGasMask = player.getEquipment().get(Equipment.HEAD_SLOT)?.getId?.() === GAS_MASK_ITEM_ID;

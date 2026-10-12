@@ -16,6 +16,7 @@ const { Bank } = require("../../src/main/typescript/elvarg/game/model/container/
 const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
 const { NpcIdentifiers } = require("../../src/main/typescript/elvarg/util/NpcIdentifiers");
 const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
+const { NPCRespawnTask } = require("../../src/main/typescript/elvarg/game/task/impl/NPCRespawnTask");
 
 const CURRENT_PET_ATTRIBUTE = "pets:current";
 /** The item of the follower the player logged out with; re-summoned on login. */
@@ -818,7 +819,7 @@ function clearCatState(player) {
 function stopCatTask(player) {
   const key = CAT_TASK_KEY.get(player);
   if (key) {
-    TaskManagerRef?.cancelTask?.(key);
+    TaskManagerRef?.cancelTasks?.(key);
     CAT_TASK_KEY.delete(player);
   }
 }
@@ -1122,7 +1123,18 @@ function chaseVermin(player, npc, pet) {
     player.sendMessage(`Your ${catNoun(info)} pounces, but the ${name.toLowerCase()} gets away.`);
     return true;
   }
+  const caughtLocation = vermin.getLocation?.().clone?.();
   despawnPetNpc(vermin);
+  const respawnTicks = vermin.getDefinition?.()?.getRespawn?.() ?? 0;
+  if (respawnTicks > 0 && TaskManagerRef?.submit) {
+    TaskManagerRef.submit(new NPCRespawnTask(vermin, respawnTicks));
+  }
+  pluginApi?.emitCustomEvent?.("pets:vermin-caught", {
+    player,
+    cat: npc,
+    verminName: name,
+    location: caughtLocation,
+  });
   if (name === "Hell-Rat" && info.stage === "kitten") {
     // Chasing a hell-rat turns any kitten into the generic Hell-kitten (Wiki, Cat).
     const state = getCatState(player);

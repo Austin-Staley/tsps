@@ -19,6 +19,7 @@ const logoutHooks = [];
 const deathHooks = [];
 const collectionLogObtains = [];
 const prompts = [];
+const respawnTasks = [];
 const npcApi = {};
 const world = {
   sendMessage: (message) => broadcasts.push(message),
@@ -37,7 +38,7 @@ npcApi[Symbol.iterator] = function* () {
 
 const Pets = require("../plugins/npcs/Pets.plugin");
 Pets.register({
-  core: { ItemIdentifiers, NpcIdentifiers, ItemDefinition },
+  core: { ItemIdentifiers, NpcIdentifiers, ItemDefinition, TaskManager: { submit: (task) => respawnTasks.push(task) } },
   getWorld: () => world,
   getRegionManager: () => ({ blocked: () => true }),
   getItemOnGroundManager: () => ({ registerNonGlobal() {}, registerLocation() {} }),
@@ -133,6 +134,7 @@ beforeEach(() => {
   broadcasts.length = 0;
   collectionLogObtains.length = 0;
   prompts.length = 0;
+  respawnTasks.length = 0;
   npcApi.npcs.length = 0;
   npcApi.addQueue.length = 0;
   npcApi.removeQueue.length = 0;
@@ -570,7 +572,8 @@ test("chasing vermin catches a rat and a hell-rat makes a hell-kitten", () => {
   const hellRat = {
     isRegistered: () => true,
     getLocation: () => new Location(1, 0, 0),
-    getDefinition: () => ({ getName: () => "Hell-Rat" }),
+    getDefinition: () => ({ getName: () => "Hell-Rat", getRespawn: () => 25 }),
+    clone: () => ({ source: hellRat }),
   };
   npcApi.npcs.length = 0;
   npcApi.npcs.push(hellRat);
@@ -578,6 +581,8 @@ test("chasing vermin catches a rat and a hell-rat makes a hell-kitten", () => {
   assert.equal(player.getAttribute("pets:current").getId(), 5597);
   assert.equal(player.getAttribute("pets:cat").stage, "hellkitten");
   assert.equal(player.getAttribute("pets:last"), 7583);
+  assert.equal(respawnTasks.length, 1, "catching a hell-rat queues its normal respawn");
+  assert.equal(respawnTasks[0].getDelay(), 25);
 });
 
 test("a generic pet runs off when its owner dies", () => {

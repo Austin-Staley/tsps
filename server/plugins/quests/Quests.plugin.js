@@ -15,7 +15,7 @@ const QUESTS = [
   "AtFirstLight", "BelowIceMountain", "BeneathCursedSands", "BetweenARock",
   "BigChompyBirdHunting", "Biohazard", "BlackKnightsFortress", "BoneVoyage",
   "CabinFever", "ChildrenOfTheSun", "ClientOfKourend", "ClockTower",
-  "ColdWar", "Contact", "CooksAssistant", "CorsairCurse",
+  "ColdWar", "Contact", "RecipeForDisaster", "CooksAssistant", "CorsairCurse",
   "CrabQuest", "CreatureOfFenkenstrain", "CurrentAffairs", "CurseOfArrav",
   "DarknessOfHallowvale", "DeathOnTheIsle", "DeathPlateau", "DeathToTheDorgeshuun",
   "DefenderOfVarrock", "DemonSlayer", "DepthsOfDespair", "DesertTreasureI",
