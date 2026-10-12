@@ -369,6 +369,11 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
   assert.equal(climbFloatingBooks(bookCrossing), true);
   assert.equal(bookCrossing.handled, true);
   assert.deepEqual(player.destination, [2606, 6173, 2]);
+  custom.get('npc-dialogue:choice')({
+    player, option: 'Yes please.', definition: { getName: () => 'Memory of Seren' },
+  });
+  assert.deepEqual(player.destination, [2623, 6144, 0],
+    'the memory transport returns the player to the Grand Library entrance chamber');
 
   const useObject = objectInteractions.find((handler) => handler({
     player, objectId: api.core.ObjectIdentifiers.SEAL_OF_THE_FORGOTTEN,

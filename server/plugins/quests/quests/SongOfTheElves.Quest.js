@@ -793,6 +793,12 @@ module.exports = function registerSongOfTheElves(api) {
 
   function handleDialogueChoice(event) {
     if (!event?.player) return;
+    if (event.option === "Yes please." && inLibrary(event.player) &&
+      String(event.definition?.getName?.() ?? "").toLowerCase() === "memory of seren") {
+      event.player.moveTo(new Location(2623, 6144, 0));
+      event.player.sendMessage("Seren's memory returns you to the central chamber of the Grand Library.");
+      return;
+    }
     if (event.option === "Yes" && currentChapter(event.player) === 12 &&
       String(event.definition?.getName?.() ?? "").toLowerCase() === "lord ieuan amlodd") {
       if (event.player.getInventory().getFreeSlots() < 6) {
