@@ -1083,11 +1083,17 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   const quest = runtime.getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
   assert.ok(persistedAttributes.includes('quest.song_of_the_elves.revelations-meeting-started'));
   const attributes = new Map();
+  const sentVarbits = [];
+  let hasAxe = false;
   const player = {
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
-    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
-    getInventory: () => ({ getAmount: () => 0, getFreeSlots: () => 28, deleteNumber: () => {}, adds: () => {} }),
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => sentVarbits.push([id, value]) }, {
+      get: (target, prop) => prop in target ? target[prop] : () => {},
+    }),
+    getInventory: () => ({ getAmount: () => 0, getFreeSlots: () => 28, deleteNumber: () => {}, adds: () => {}, contains: (id) => hasAxe && id === api.core.ItemIdentifiers.BRONZE_AXE }),
+    getEquipment: () => ({ getItems: () => [] }),
+    getSkillManager: () => ({ getCurrentLevel: () => 99 }),
     sendMessage() {},
   };
   quest.setStage(player, 140);
@@ -1117,11 +1123,24 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   const choice = handlers.custom.get('npc-dialogue:choice').at(-1);
   choice({ player, option: 'How do I find Lord Crwys?', definition: { getName: () => 'Baxtorian' } });
   assert.equal(attributes.get('quest.song_of_the_elves.crwys-clue-heard'), true);
+  assert.deepEqual(sentVarbits.at(-1), [9022, 1], 'the clue selects the cache tree variant with Chop down');
   const treeHook = npcHooks.find(([handler]) => typeof handler === 'function')?.[0];
   assert.equal(typeof treeHook, 'function');
-  treeHook({ player, npcId: api.core.NpcIdentifiers.LORD_PIQUAN_CRWYS_2, clickType: 1,
-    location: { x: 2176, y: 3211 }, definition: { getName: () => 'Lord Piquan Crwys', getActions: () => ['Chop down'] } });
+  const chopTree = (extra = {}) => {
+    const event = { player, npcId: api.core.NpcIdentifiers.LORD_PIQUAN_CRWYS_2, clickType: 1,
+      npc: { getContentId: () => api.core.NpcIdentifiers.COL_00FFFF_TREE_COL_2, getSpawnPosition: () => ({ getX: () => 2176, getY: () => 3211 }) },
+      location: { x: 2176, y: 3211 }, definition: { getName: () => '<col=00ffff>Tree</col>', getActions: () => ['Chop down'] }, ...extra };
+    treeHook(event);
+    return event;
+  };
+  const noAxe = chopTree();
+  assert.equal(noAxe.handled, true, 'a missing axe is handled by the quest instead of starting woodcutting');
+  assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-talking-to-baxtorian-after-the-meeting',
+    'the disguised leader cannot be revealed without a usable axe');
+  hasAxe = true;
+  chopTree();
   assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-finding-lord-crwys');
+  assert.deepEqual(sentVarbits.at(-1), [9022, 2], 'chopping reveals Lord Crwys');
   handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'UNrb5z' });
   choice({ player, option: 'How do I find Lady Hefin?', definition: { getName: () => 'Baxtorian' } });
   assert.equal(attributes.get('quest.song_of_the_elves.hefin-clue-heard'), true);

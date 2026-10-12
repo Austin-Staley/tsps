@@ -5,6 +5,7 @@
 module.exports = function registerSongOfTheElves(api) {
   const { Area, Boundary, Equipment, GameObject, HitDamage, HitMask, ItemIdentifiers, Location, NpcIdentifiers, ObjectIdentifiers, ObjectManager, PrivateArea, Skill, World } = api.core;
   const { registerQuest, loadTranscripts, startTranscript } = require("../QuestRuntime");
+  const { findBestUsableAxe } = require("../../skills/Woodcutting.plugin.js");
   const PAGE = "Song of the Elves";
   const START_HOOK = "quest:song-of-the-elves:start";
   const CHEMICAL_CHOICE = "quest.song_of_the_elves.chemical-choice";
@@ -27,6 +28,8 @@ module.exports = function registerSongOfTheElves(api) {
   const RECRUITED_ELDERS = "quest.song_of_the_elves.recruited-elders";
   const REVELATIONS_MEETING_STARTED = "quest.song_of_the_elves.revelations-meeting-started";
   const CRWYS_CLUE_HEARD = "quest.song_of_the_elves.crwys-clue-heard";
+  // Cache transform for the Crwys disguise: hidden tree, chop-able tree, revealed elf.
+  const CRWYS_TREE_TRANSFORM_VARBIT = 9022;
   const HEFIN_CLUE_HEARD = "quest.song_of_the_elves.hefin-clue-heard";
   const MEILYR_CLUE = "quest.song_of_the_elves.meilyr-clue";
   const LLETYA_GUIDE_SPAWNED = "quest.song_of_the_elves.lletya-guide-spawned";
@@ -542,6 +545,7 @@ module.exports = function registerSongOfTheElves(api) {
   function recordElder(player, bit) {
     const recruited = (Number(player.getAttribute(RECRUITED_ELDERS)) || 0) | bit;
     player.setAttribute(RECRUITED_ELDERS, recruited);
+    syncCrwysTree(player);
     if ((recruited & 3) === 3 && currentChapter(player) === 14) {
       const arianwyn = player.getAttribute(LLETYA_ARIANWYN_NPC);
       if (arianwyn) api.removeNpc(arianwyn);
@@ -817,14 +821,32 @@ module.exports = function registerSongOfTheElves(api) {
   function onCrwysTreeInteraction(event) {
     const player = event?.player;
     const action = event?.definition?.getActions?.()?.[event.clickType - 1];
+    const npc = event?.npc;
+    const spawn = npc?.getSpawnPosition?.();
+    const spawnX = spawn?.getX?.() ?? event?.location?.x;
+    const spawnY = spawn?.getY?.() ?? event?.location?.y;
+    const id = npc?.getContentId?.(player) ?? event?.npcId;
     if (!player || currentChapter(player) !== 14 ||
       player.getAttribute(CRWYS_CLUE_HEARD) !== true ||
-      String(event.definition?.getName?.() ?? "").toLowerCase() !== "lord piquan crwys" ||
+      id !== NpcIdentifiers.COL_00FFFF_TREE_COL_2 ||
       !/^(chop down|chop)$/i.test(String(action ?? "")) ||
-      event.location?.x !== 2176 || event.location?.y !== 3211) return false;
+      Math.abs((spawnX ?? 0) - 2176) > 2 || Math.abs((spawnY ?? 0) - 3211) > 2) return false;
     event.handled = true;
-    return startTranscript(api, player, event.npcId, PAGE,
+    if (!findBestUsableAxe(player)) {
+      player.sendMessage("You need an axe to chop through Lord Crwys's tree disguise.");
+      return true;
+    }
+    player.getPacketSender().sendVarbit(CRWYS_TREE_TRANSFORM_VARBIT, 2);
+    return startTranscript(api, player, NpcIdentifiers.LORD_PIQUAN_CRWYS, PAGE,
       "reporting-back-after-the-revelations-finding-lord-crwys");
+  }
+
+  function syncCrwysTree(player) {
+    if (!player?.getPacketSender) return;
+    const recruited = Number(player.getAttribute(RECRUITED_ELDERS)) || 0;
+    const transform = (recruited & 1) !== 0 ? 2 :
+      currentChapter(player) === 14 && player.getAttribute(CRWYS_CLUE_HEARD) === true ? 1 : 0;
+    player.getPacketSender().sendVarbit(CRWYS_TREE_TRANSFORM_VARBIT, transform);
   }
 
   function hasItems(player, ids) {
@@ -927,7 +949,10 @@ module.exports = function registerSongOfTheElves(api) {
     }
     if (currentChapter(event.player) === 14 &&
       String(event.definition?.getName?.() ?? "").toLowerCase() === "baxtorian") {
-      if (event.option === "How do I find Lord Crwys?") event.player.setAttribute(CRWYS_CLUE_HEARD, true);
+      if (event.option === "How do I find Lord Crwys?") {
+        event.player.setAttribute(CRWYS_CLUE_HEARD, true);
+        syncCrwysTree(event.player);
+      }
       if (event.option === "How do I find Lady Hefin?") event.player.setAttribute(HEFIN_CLUE_HEARD, true);
     }
     if (event.option === "I'm ready." && currentChapter(event.player) === 18 &&
@@ -2140,6 +2165,7 @@ module.exports = function registerSongOfTheElves(api) {
     },
   });
   api.onNpcDialogueVariant(selectVariant);
+  api.onPlayerLogin(({ player }) => syncCrwysTree(player));
   api.onNpcDialogueCondition((event) => {
     if (!event?.player) return null;
     const answer = disguiseCondition(event);
