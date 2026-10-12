@@ -14,7 +14,7 @@ module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play
  const FOOD_ATTRIBUTE='while-guthix-sleeps:silif-fed',POTION_ATTRIBUTE='while-guthix-sleeps:silif-restored';
  const ARMOUR_GIVEN_ATTRIBUTE='while-guthix-sleeps:silif-armour',SHORTCUT_ATTRIBUTE='while-guthix-sleeps:catacomb-shortcut';
  ATTRIBUTES.push(ICE_TELEPORT_ATTRIBUTE,ORB_ATTRIBUTE,ARMOUR_ATTRIBUTE,FOOD_ATTRIBUTE,POTION_ATTRIBUTE,ARMOUR_GIVEN_ATTRIBUTE,SHORTCUT_ATTRIBUTE);
- const guards=new WeakMap(),followers=new WeakMap();
+ const guards=new WeakMap(),followers=new WeakMap(),captives=new WeakMap();
  const dressed=(p,ids)=>ids.every(id=>p.getEquipment().contains(id));
  const disguise=p=>dressed(p,ELITE)||dressed(p,SQUALL);
  const active=p=>stage(p)>=400&&stage(p)<900;
@@ -23,7 +23,12 @@ module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play
  const hasArmour=p=>ELITE.every(item=>held(p,item));
  function login({player}){sync(player);mapChange({player});}
  function mapChange({player:p}){
-  const l=p.getLocation();if(stage(p)<580||stage(p)>=610||followers.has(p)||(l.getX()>>6)!==64||(l.getY()>>6)!==75||l.getZ()!==1)return;
+  const l=p.getLocation(),s=stage(p);
+  if(s>=490&&s<560&&l.getZ()===2&&l.getX()>=4096&&l.getX()<=4163&&l.getY()>=4660&&l.getY()<=4863){
+   if(!captives.has(p))captives.set(p,api.spawnNpc({id:JAIL_SILIF,x:4135,y:4790,z:2,wanderRadius:0,owner:p,ownerOnly:true}));
+   if(val(p,ARMOUR_GIVEN_ATTRIBUTE))captives.get(p).setNpcTransformationId(ARMOURED_SILIF);
+  }else if(captives.has(p)){api.removeNpc(captives.get(p));captives.delete(p);}
+  if(stage(p)<580||stage(p)>=610||followers.has(p)||(l.getX()>>6)!==64||(l.getY()>>6)!==75||l.getZ()!==1)return;
   followers.set(p,api.spawnNpc({id:ARMOURED_SILIF,x:4120,y:4840,z:1,wanderRadius:0,owner:p,ownerOnly:true}));
  }
 
@@ -39,7 +44,7 @@ module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play
   p.setAttribute(ICE_TELEPORT_ATTRIBUTE,1);p.getCombat().reset();p.moveTo(new Location(3006,3499,0));
  }
  function sync(p){if(!active(p))return;p.getPacketSender().sendVarbit(10803,val(p,ORB_ATTRIBUTE)?2:0).sendVarbit(10780,val(p,ARMOUR_GIVEN_ATTRIBUTE)?3:2);}
- function cleanup({player}){const n=followers.get(player);if(n)api.removeNpc(n);followers.delete(player);}
+ function cleanup({player}){const c=captives.get(player);if(c)api.removeNpc(c);captives.delete(player);const n=followers.get(player);if(n)api.removeNpc(n);followers.delete(player);}
  function follow(p){cleanup({player:p});const l=p.getLocation();followers.set(p,api.spawnNpc({id:ARMOURED_SILIF,x:l.getX(),y:l.getY(),z:l.getZ(),wanderRadius:0,owner:p,ownerOnly:true}));advance(p,560);}
  class CatacombsArea extends Area{
   constructor(){super([new Boundary(4096,4163,4660,4863,1),new Boundary(4096,4163,4660,4863,2)]);}
@@ -123,7 +128,7 @@ module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play
  }
  function use(e){
   const {player:p,target:npc,itemId}=e;if(!active(p)||npc.getId()!==JAIL_SILIF||stage(p)<520)return;
-  if(ELITE.includes(itemId)&&ready(p)&&hasArmour(p)){e.handled=true;for(const item of ELITE)p.getInventory().deleteNumber(item,1);p.setAttribute(ARMOUR_GIVEN_ATTRIBUTE,1);advance(p,550);play(p,JAIL_SILIF,'the-dark-squall-talking-to-silif-after-he-returns-to-his-cell');return;}
+  if(ELITE.includes(itemId)&&ready(p)&&hasArmour(p)){e.handled=true;for(const item of ELITE)p.getInventory().deleteNumber(item,1);p.setAttribute(ARMOUR_GIVEN_ATTRIBUTE,1);advance(p,550);sync(p);mapChange({player:p});play(p,JAIL_SILIF,'the-dark-squall-talking-to-silif-after-he-returns-to-his-cell');return;}
   e.handled=feed(p,itemId);
  }
  function line(e){if(active(e.player)&&e.text==='Very well. I\'m right behind you.'&&[JAIL_SILIF,ARMOURED_SILIF].includes(e.npcId))e.after=()=>follow(e.player);}
@@ -131,7 +136,7 @@ module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play
   if(!active(p))return;
   if(stepId==='V0u4qK'&&!val(p,FOOD_ATTRIBUTE)){const item=p.getInventory().getItems().find(i=>i?.getId()>=0&&api.core.CacheDefinitions.getItem(i.getId())?.inventoryActions?.includes('Eat'));if(item)feed(p,item.getId());}
   if(stepId==='Fe1qbj'&&!val(p,POTION_ATTRIBUTE)){const item=p.getInventory().getItems().find(i=>/^Restore potion\([1-4]\)$/.test(i?.getDefinition().getName()||''));if(item)feed(p,item.getId());}
-  if(stepId==='HNclnD'&&hasArmour(p)){for(const item of ELITE)p.getInventory().deleteNumber(item,1);p.setAttribute(ARMOUR_GIVEN_ATTRIBUTE,1);advance(p,550);}
+  if(stepId==='HNclnD'&&hasArmour(p)){for(const item of ELITE)p.getInventory().deleteNumber(item,1);p.setAttribute(ARMOUR_GIVEN_ATTRIBUTE,1);advance(p,550);sync(p);mapChange({player:p});}
   if(stepId==='IjPhKv')give(p,TELEORB);
  }
  function condition({player:p,stepId,pages}){
