@@ -41,7 +41,7 @@ function mockApi() {
         return false;
       });
     },
-    onNpcInteraction: (target, actions) => handlers.npcInteractions.set(target, actions),
+    onNpcInteraction: (target, actions) => { assert(['string', 'function'].includes(typeof target), 'NPC hooks accept names or generic handlers'); handlers.npcInteractions.set(target, actions); },
     onObjectRoute: (h) => handlers.routes.push(h),
     onWalkRoute: (h) => handlers.walkRoutes.push(h),
     onPlayerProcess: (h) => handlers.playerProcess.push(h),
@@ -1187,7 +1187,7 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
     getLocation: () => new api.core.Location(3173, 7855, 1),
     setNpcTransformationId(id) { this.transformedId = id; },
   };
-  const heal = handlers.npcInteractions.get(api.core.NpcIdentifiers.ARANEI_108).Heal;
+  const heal = handlers.npcInteractions.get('Aranei').Heal;
   const healEvent = { player, npc, npcId: npc.getId(), handled: false };
   const otherEvent={...healEvent,npc:{...npc,getOwner:()=>({})}};heal(otherEvent);assert.equal(otherEvent.handled,false,'another defender cannot heal this player’s instance');
   heal(healEvent);

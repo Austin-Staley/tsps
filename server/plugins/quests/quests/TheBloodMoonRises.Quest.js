@@ -691,8 +691,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     const npc = event?.npc ?? event?.target;
     const npcId = event?.npcId ?? npc?.getId?.();
     if (!player || !npc || !SIEGE_HALL.injuredAranei.includes(npcId) ||
-      stage(player) !== STAGE.SIEGE || hallDefenceState(player).phase !== "hall") return;
-    if (npc.getOwner?.() !== player || npc.getArea?.() !== hall.sessions.get(player)) return;
+      stage(player) !== STAGE.SIEGE || hallDefenceState(player).phase !== "hall") return false;
+    if (npc.getOwner?.() !== player || npc.getArea?.() !== hall.sessions.get(player)) return false;
     event.handled = true;
     const state = hallDefenceState(player);
     const key = injuredAraneiKey(npc);
@@ -1873,9 +1873,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onItemOnItem(handleBloodHuntItemOnItem);
   api.onItemOnNpc(feedSafalaan);
   api.onItemAction("Dusty book", { Read: readDustyBook });
-  for (const id of SIEGE_HALL.injuredAranei) {
-    api.onNpcInteraction(id, { Heal: healSiegeAranei });
-  }
+  api.onNpcInteraction("Aranei", { Heal: healSiegeAranei });
   api.onPlayerProcess(syncHuntGroundItems);
   api.onPlayerLogin(handleSiegeLogin);
   api.onPlayerLogout(handleSiegeLogout);
