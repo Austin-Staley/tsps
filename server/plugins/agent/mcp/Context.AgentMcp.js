@@ -165,7 +165,8 @@ function createContext(core, server) {
         }
       }
     }
-    for (const object of viewedArea?.getObjects() ?? []) {
+    const privateObjects = new Set(viewedArea?.getObjects() ?? []);
+    for (const object of privateObjects) {
       if (near(object.getLocation())) sceneObjects.set(keyOf(object), object);
     }
     for (const removed of World.getRemovedObjects()) {
@@ -177,7 +178,8 @@ function createContext(core, server) {
       const definition = ObjectDefinition.forPlayer(object.getId(), p);
       const options = definition?.getInteractions()?.filter(Boolean);
       const at = object.getLocation();
-      if (options?.length) objects.push({ id: object.getId(), name: definition.getName(), options, x: at.getX(), y: at.getY() });
+      // Private encounter effects (pools, beams) are visible even without menu actions.
+      if (options?.length || privateObjects.has(object)) objects.push({ id: object.getId(), name: definition.getName(), options: options ?? [], x: at.getX(), y: at.getY() });
     }
 
     return {
