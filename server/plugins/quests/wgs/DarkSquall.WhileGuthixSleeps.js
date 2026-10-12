@@ -17,7 +17,7 @@ module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play
  const guards=new WeakMap(),followers=new WeakMap(),captives=new WeakMap();
  const dressed=(p,ids)=>ids.every(id=>p.getEquipment().contains(id));
  const disguise=p=>dressed(p,ELITE)||dressed(p,SQUALL);
- const active=p=>stage(p)>=400&&stage(p)<900;
+ const active=p=>stage(p)>=400;
  const id=e=>e.definition?.id??api.core.ObjectDefinition.forPlayer(e.objectId,e.player)?.id??e.objectId;
  const ready=p=>val(p,FOOD_ATTRIBUTE)&&val(p,POTION_ATTRIBUTE);
  const hasArmour=p=>ELITE.every(item=>held(p,item));
@@ -148,7 +148,7 @@ module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play
  }
  function killed({npc,killer}){
   if(KINSHRA.includes(npc.getId()))guards.delete(npc);
-  const p=killer?.isPlayer?.()?killer.getAsPlayer():null;if(!p||!KNIGHTS.includes(npc.getId())||!active(p)||stage(p)<490)return;
+  const p=killer?.isPlayer?.()?killer.getAsPlayer():null;if(!p||!KNIGHTS.includes(npc.getId())||!active(p)||stage(p)<490||stage(p)>=900)return;
   let bit=ELITE.findIndex((_,i)=>!(val(p,ARMOUR_ATTRIBUTE)&(1<<i)));if(bit<0)bit=Math.floor(Math.random()*3);
   p.setAttribute(ARMOUR_ATTRIBUTE,val(p,ARMOUR_ATTRIBUTE)|(1<<bit));ItemOnGroundManager.registerLocation(p,new Item(ELITE[bit],1),npc.getLocation().clone());
  }

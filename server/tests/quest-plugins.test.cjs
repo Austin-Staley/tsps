@@ -501,6 +501,7 @@ test('Surok requires real combat spells and the opposite element for surges', ()
   f.fights.set(player,{boss,enemies:new Set([boss,surge])});
   const hit = {getAttacker:()=>player,getSpell:()=>launched,getCombatType:()=>api.core.CombatType.MAGIC,setTotalDamage:n=>damage=n};
   f.hit({npc:boss,hit});assert.equal(damage,0,'powered staff is blocked even after a previous standard cast');
+  launched=api.core.CombatSpells.TRIDENT_OF_THE_SEAS;damage=20;f.hit({npc:boss,hit});assert.equal(damage,0,'the powered spell object is blocked too');
   launched=api.core.CombatSpells.FIRE_WAVE;selected=null;damage=20;f.hit({npc:boss,hit});assert.equal(damage,20);
   f.targets.set(surge,{surge:true,index:0});damage=20;f.hit({npc:surge,hit});assert.equal(damage,0,'fire cannot counter earth');
   launched=api.core.CombatSpells.WIND_WAVE;selected=api.core.CombatSpells.FIRE_WAVE;damage=20;f.hit({npc:surge,hit});assert.equal(damage,20);
@@ -882,4 +883,18 @@ test('WGS spawns jailed Silif only for the player’s rescue stage and transform
  attributes.set('while-guthix-sleeps:silif-armour',1);progress=550;mapChange({player});assert.equal(spawned[0].transformed,13521);
  progress=560;mapChange({player});assert.deepEqual(removed,[spawned[0]]);
  const spawns=require('../data/definitions/npc-spawns.json');assert(!spawns.some(n=>n.id===13524&&n.x===4135&&n.y===4790));
+});
+
+
+test('Completed WGS retains the unlocked catacomb route without replaying quest progress', () => {
+ const {api,handlers,player,attributes}=movarioFixture();let login;
+ const sender={sendVarbit:(id,n)=>{player.varbits.set(id,n);return sender;}};player.getPacketSender=()=>sender;
+ player.getLocation=()=>new api.core.Location(3016,3515,0);api.onPlayerLogin=h=>login=h;
+ attributes.set('while-guthix-sleeps:catacomb-open',1);
+ require('../plugins/quests/wgs/DarkSquall.WhileGuthixSleeps')({...api.context,stage:()=>900,advance:(p,n)=>assert(n<=900)});
+ login({player});assert.equal(player.varbits.get(10803),2);
+ const enter=handlers.objects.find(h=>h.name==='Trapdoor').options['Climb-down'];
+ assert.equal(enter({player,objectId:53350}),true);assert.deepEqual(player.position,[4105,4675,1]);
+ const bridge=handlers.objects.find(h=>h.name==='Bridge').options['Jump-to'];
+ assert.equal(bridge({player,objectId:53512}),true);assert.deepEqual(player.position,[4112,4703,1]);
 });
