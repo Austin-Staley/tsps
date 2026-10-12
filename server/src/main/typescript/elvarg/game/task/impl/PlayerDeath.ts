@@ -273,7 +273,8 @@ export class PlayerDeathTask extends Task {
         });
     }
 
-    private static getItemsToKeep(player: Player): Item[] {
+    /** The items a death lets the player keep: the three most valuable (four with Protect Item, none skulled). */
+    public static getItemsToKeep(player: Player): Item[] {
         const items: Item[] = [];
         const alwaysKept: Item[] = [];
         for (const item of [...player.getInventory().getItems(), ...player.getEquipment().getItems()]) {

@@ -108,6 +108,7 @@ module.exports = function registerPriestInPerilQuest(api) {
   const NORTH_TRAPDOOR_LANDING = new Location(3405, 9906, 0);
   const CHURCH_TRAPDOOR_LANDING = new Location(3422, 9885, 0);
   const MAUSOLEUM_LADDER_LANDING = new Location(3405, 3506, 0);
+  const HOLY_BARRIER_LANDING = new Location(3423, 3485, 0);
   const GUARDIAN_SPAWN = { x: 3405, y: 9902, z: 0 };
   /** The mausoleum's own map square, for deciding whether a login is inside it. */
   const MAUSOLEUM_BOUNDS = { minX: 3395, maxX: 3455, minY: 9878, maxY: 9912 };
@@ -468,6 +469,17 @@ module.exports = function registerPriestInPerilQuest(api) {
     request.handled = true;
   }
 
+  function handleHolyBarrier({ player, objectId }) {
+    if (objectId !== ObjectIdentifiers.HOLY_BARRIER) return false;
+    if (!quest.isComplete(player)) {
+      player.sendMessage("You need to complete Priest in Peril before passing through this barrier.");
+      return true;
+    }
+    player.moveTo(HOLY_BARRIER_LANDING.clone());
+    player.sendMessage("You pass through the holy barrier.");
+    return true;
+  }
+
   /**
    * Knocking the large door: the Mysterious Voice asks about the dog before the
    * kill and thanks the player after it. Once the King has been told, the door
@@ -529,6 +541,7 @@ module.exports = function registerPriestInPerilQuest(api) {
   api.onNpcInteraction(handleMonkInteraction);
   api.onObjectRoute(handleTrapdoorRoute);
   api.onObjectInteraction("Trapdoor", { Open: handleTrapdoorOpen });
+  api.onObjectInteraction("Holy barrier", { "Pass-through": handleHolyBarrier });
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

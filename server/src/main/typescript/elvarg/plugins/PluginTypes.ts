@@ -1246,6 +1246,10 @@ export interface PluginCoreApi {
   ItemOnGroundManager: any;
   ItemDefinition: any;
   EquipPacketListener: any;
+  /** The death task; `getItemsToKeep(player)` is what a death would let the player keep. */
+  PlayerDeathTask: any;
+  /** Which items poison, and how strongly. */
+  CombatPoisonData: any;
   CacheDefinitions: any;
   Wilderness: any;
   PathFinder: any;

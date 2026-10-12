@@ -31,8 +31,8 @@ test('an unknown gameframe is rejected', () => {
   assert.throws(() => parseWorldDefinition(world({ gameframe: 'classic-resizable' })), WorldDefinitionValidationError);
 });
 
-test('voice plugin is available in the default world', () => {
-  assert.ok(!require('../data/definitions/world.json').disabledPlugins.includes('VoiceChat'));
+test('voice plugin is disabled in the default world', () => {
+  assert.ok(require('../data/definitions/world.json').disabledPlugins.includes('VoiceChat'));
 });
 
 test('plugin loading counts disabled files and logs only the final persistence override', () => {
