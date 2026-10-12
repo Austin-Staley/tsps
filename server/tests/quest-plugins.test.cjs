@@ -41,6 +41,37 @@ function mockApi() {
   return { api, handlers };
 }
 
+test('completed Lunar Diplomacy players can replace a lost Seal of Passage from Brundt', () => {
+  const { api: base } = mockApi();
+  let talkToBrundt;
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onNpcInteraction'
+      ? (handler) => { if (typeof handler === 'function') talkToBrundt = handler; }
+      : target[prop],
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  let transcript;
+  runtime.startTranscript = (...args) => { transcript = args.slice(3, 5); return true; };
+  try {
+    delete require.cache[require.resolve('../plugins/quests/quests/LunarDiplomacy.Quest')];
+    require('../plugins/quests/quests/LunarDiplomacy.Quest')(api);
+    const player = {
+      getAttribute: (key) => key === 'quest.lunar_diplomacy.stage' ? 190 : 0,
+      getInventory: () => ({ getAmount: () => 0 }),
+    };
+    const event = { player, npcId: api.core.NpcIdentifiers.BRUNDT_THE_CHIEFTAIN_6, clickType: 1, handled: false };
+    assert.equal(talkToBrundt(event), true);
+    assert.deepEqual(transcript, [
+      'Lunar Diplomacy',
+      'getting-started-talking-to-brundt-the-chieftain-after-losing-the-seal-of-passage',
+    ]);
+    assert.equal(event.handled, true);
+  } finally {
+    runtime.startTranscript = originalStartTranscript;
+  }
+});
+
 test('Quests.plugin registers every quest through api.core without throwing', () => {
   const { api } = mockApi();
   const plugin = require('../plugins/quests/Quests.plugin');

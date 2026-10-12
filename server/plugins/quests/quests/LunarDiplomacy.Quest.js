@@ -929,7 +929,12 @@ module.exports = function registerLunarDiplomacyQuest(api) {
 
   function selectBrundt(player) {
     const stage = stageOf(player);
-    if (stage >= STAGE_COMPLETE) return null;
+    if (stage >= STAGE_COMPLETE) {
+      if (!held(player, SEAL_OF_PASSAGE)) {
+        return "getting-started-talking-to-brundt-the-chieftain-after-losing-the-seal-of-passage";
+      }
+      return "post-quest-talking-to-brundt-the-chieftain-after-the-quest";
+    }
     if (stage >= STAGE_SEAL) {
       return held(player, SEAL_OF_PASSAGE)
         ? "getting-started-talking-to-brundt-the-chieftain-holding-the-seal-of-passage"
