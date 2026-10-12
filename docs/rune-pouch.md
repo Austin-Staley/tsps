@@ -25,7 +25,7 @@ The runes are kept on the player, not on the item. Slot N is two varbits:
 | `rune_pouch_type_N` | the rune, as a key of enum 982 (1 air, 2 water, 3 earth, 4 fire … 23 aether) |
 | `rune_pouch_quantity_N` | up to 16,000 |
 
-- **Slots:** three, or four in the divine pouch.
+- **Slots:** three, or four in the divine pouch. A player can own only one pouch (Wiki); **ours:** if more are carried (spawned), the one with the most slots counts.
 - **Where a rune goes:** onto its own slot if it has one, otherwise into the first empty slot. Slots don't shift when one empties.
 - **Sending:** only changed varbits are sent, and all of them again at login. The spellbook, the pouch interface and the bank view all draw from these varbits.
 - **On the server:** the slots are saved as the `rune-pouch:runes` attribute.

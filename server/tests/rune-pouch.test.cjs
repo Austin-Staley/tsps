@@ -231,6 +231,13 @@ test("the divine pouch takes a 4th type", () => {
   assert.deepEqual(varbitSlots(player).map(([id]) => id), [Items.AIR_RUNE, Items.WATER_RUNE, Items.EARTH_RUNE, Items.FIRE_RUNE]);
 });
 
+test("carrying both pouches, the divine pouch's 4th slot counts", () => {
+  const player = createPlayer([new Item(Items.RUNE_POUCH, 1), new Item(Items.DIVINE_RUNE_POUCH, 1)]);
+  pouchWith(player, [[Items.AIR_RUNE, 1], [Items.WATER_RUNE, 1], [Items.EARTH_RUNE, 1]]);
+  assert.equal(Pouch.store(player, Items.FIRE_RUNE, 1), 1);
+  assert.equal(Pouch.slotCount(player), 4);
+});
+
 test("a non-rune on the pouch is left alone", () => {
   const pouch = new Item(Items.RUNE_POUCH, 1);
   const coins = new Item(Items.COINS, 1);

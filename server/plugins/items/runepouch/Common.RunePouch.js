@@ -85,9 +85,13 @@ function isPouch(item) {
   return SLOTS_BY_POUCH.has(itemName(item));
 }
 
-/** The pouch the player carries, or null. */
+/**
+ * The pouch the player carries, or null. OSRS lets a player own only one (Wiki); with more
+ * (spawned), the one with the most slots counts, so a divine pouch keeps its 4th slot.
+ */
 function findPouch(player) {
-  return player?.getInventory?.()?.getValidItems?.()?.find(isPouch) ?? null;
+  const pouches = player?.getInventory?.()?.getValidItems?.()?.filter(isPouch) ?? [];
+  return pouches.reduce((best, pouch) => (!best || slotCount(player, pouch) > slotCount(player, best) ? pouch : best), null);
 }
 
 /** How many slots the carried pouch has (3, or 4 for the divine pouch); 0 without one. */
