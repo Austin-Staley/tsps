@@ -4393,6 +4393,7 @@ test('Song of the Elves spawns the attackable Fragment variant for the final fig
       setMultiCombat() {},
       setMaxHitpoints() {},
       setHitpoints() {},
+      setScriptedMovement() {},
     };
   };
   require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
@@ -4429,6 +4430,96 @@ test('Song of the Elves spawns the attackable Fragment variant for the final fig
   assert.equal(player.location.getY(), 5918);
 });
 
+test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle', () => {
+  const { api, handlers } = mockApi();
+  const originalCycle = api.core.World.getProcessCycle;
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  let cycle = 100;
+  const queued = [];
+  const attributes = new Map([
+    ['quest.song_of_the_elves.late-chapter', 19],
+    ['quest.song_of_the_elves.camp-battle', true],
+    ['quest.song_of_the_elves.fragment-defeated', false],
+  ]);
+  const activePrayers = [];
+  const playerCombat = {
+    getLastAttack: () => ({ reset() {} }),
+    getHitQueue: () => ({ addPendingDamage: hits => queued.push(...hits) }),
+  };
+  const player = {
+    getUsername: () => 'FragmentPrayerTest',
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ getFreeSlots: () => 10, getAmount: () => 0, adds() {} }),
+    getArea: () => player.area ?? null,
+    setArea(area) { player.area = area; },
+    moveTo() {},
+    getLocation: () => ({ getDistance: () => 10 }),
+    getIndex: () => 1,
+    getCombat: () => playerCombat,
+    getPrayerActive: () => activePrayers,
+    sendMessage() {},
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    isPlayer: () => true,
+    isNpc: () => false,
+    getAsPlayer: () => player,
+  };
+  let boss;
+  api.registerArea = () => {};
+  api.spawnNpc = () => {
+    boss = {
+      getIndex: () => 2,
+      getArea: () => boss.area ?? null,
+      setArea(area) { boss.area = area; },
+      setMultiCombat() {},
+      setMaxHitpoints() {},
+      setHitpoints(value) { boss.hitpoints = value; },
+      getHitpoints: () => boss.hitpoints,
+      getMaxHitpoints: () => 1000,
+      setScriptedMovement(value) { boss.scriptedMovement = value; },
+      getCurrentDefinition: () => ({ getAttackSpeed: () => 7 }),
+      getCombat: () => ({ getLastAttack: () => ({ reset() {} }) }),
+      getLocation: () => ({ getDistance: () => 10 }),
+      isPlayer: () => false,
+      isNpc: () => true,
+      getAsNpc() { return boss; },
+    };
+    return boss;
+  };
+  api.core.World.getProcessCycle = () => cycle;
+  runtime.startTranscript = () => true;
+  try {
+    require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+    const quest = runtime.getRegisteredQuests().filter(entry => entry.key === 'song_of_the_elves').at(-1);
+    quest.setStage(player, 190);
+    handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'xfnkES', handled: false });
+    assert.equal(boss.scriptedMovement, true, 'the manually driven encounter cannot also use default NPC combat');
+    const area = player.getArea();
+
+    activePrayers[api.core.PrayerHandler.PROTECT_FROM_MISSILES] = true;
+    const originalRandom = Math.random;
+    Math.random = () => 0.999999;
+    try {
+      cycle = 107;
+      area.process(boss);
+      assert.equal(queued.length, 1);
+      assert.equal(queued[0].getDamage(), 3, 'Protect from Missiles reduces a 12-damage ranged attack to 3');
+
+      activePrayers[api.core.PrayerHandler.PROTECT_FROM_MISSILES] = false;
+      cycle = 114;
+      area.process(boss);
+      assert.equal(queued.length, 2);
+      assert.equal(queued[1].getDamage(), 12, 'without the overhead, the same ranged roll deals 12');
+    } finally {
+      Math.random = originalRandom;
+    }
+  } finally {
+    api.core.World.getProcessCycle = originalCycle;
+    runtime.startTranscript = originalStartTranscript;
+  }
+});
+
 test('Song of the Elves clears the Fragment instance on logout so the Temple cutscene can retry', () => {
   const { api, handlers } = mockApi();
   const areas = [];
@@ -4444,6 +4535,7 @@ test('Song of the Elves clears the Fragment instance on logout so the Temple cut
     setMultiCombat() {},
     setMaxHitpoints() {},
     setHitpoints() {},
+    setScriptedMovement() {},
   });
   require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
   const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
@@ -4500,6 +4592,7 @@ test('Song of the Elves keeps the Fragment death return at the dwarf camp', () =
       setMultiCombat() {},
       setMaxHitpoints() {},
       setHitpoints() {},
+      setScriptedMovement() {},
     };
   };
   api.removeNpc = () => {};

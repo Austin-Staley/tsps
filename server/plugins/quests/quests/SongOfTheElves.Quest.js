@@ -7,6 +7,8 @@ module.exports = function registerSongOfTheElves(api) {
   const { registerQuest, loadTranscripts, startTranscript } = require("../QuestRuntime");
   const { findBestUsableAxe } = require("../../skills/Woodcutting.plugin.js");
   const PAGE = "Song of the Elves";
+  const FRAGMENT_BASIC_ATTACK_MAX = 12;
+  const FRAGMENT_BASIC_ATTACK_SPEED = 7;
   const START_HOOK = "quest:song-of-the-elves:start";
   const CHEMICAL_CHOICE = "quest.song_of_the_elves.chemical-choice";
   const FALLS_PILLARS = "quest.song_of_the_elves.falls-pillars";
@@ -411,10 +413,19 @@ module.exports = function registerSongOfTheElves(api) {
         state.boss.setHitpoints(Math.min(state.boss.getMaxHitpoints(), state.boss.getHitpoints() + heal));
       }
       if (now >= state.nextBasicAttackAt) {
-        state.nextBasicAttackAt = now + 4;
-        state.player.getCombat().getHitQueue().addPendingDamage([
-          new HitDamage(2 + Math.floor(Math.random() * 7), HitMask.RED).setSource(state.boss),
-        ]);
+        state.nextBasicAttackAt = now + state.basicAttackSpeed;
+        let damage = Math.floor(Math.random() * (FRAGMENT_BASIC_ATTACK_MAX + 1));
+        // Wiki: Protect from Missiles reduces Seren's 12-damage auto-attack to
+        // at most 3. This custom ranged hit is separate from the typeless blast,
+        // which intentionally bypasses protection prayers.
+        if (api.core.PrayerHandler.isActivated(state.player, api.core.PrayerHandler.PROTECT_FROM_MISSILES)) {
+          damage = Math.floor(damage * 0.25);
+        }
+        if (damage > 0) {
+          state.player.getCombat().getHitQueue().addPendingDamage([
+            new HitDamage(damage, HitMask.RED).setSource(state.boss),
+          ]);
+        }
       }
       const hp = state.boss.getHitpoints();
       if (state.cloneThresholds.length && state.healers.size === 0 &&
@@ -2349,6 +2360,9 @@ module.exports = function registerSongOfTheElves(api) {
     boss.setMultiCombat?.(true);
     boss.setMaxHitpoints(1000);
     boss.setHitpoints(1000);
+    // This encounter owns the Fragment's attack cycle. Prevent the cached NPC
+    // combat AI from adding a second attack beside the prayer-aware scripted hit.
+    boss.setScriptedMovement(true);
     area.enter(player);
     area.enter(boss);
     player.setAttribute(FRAGMENT_AREA, area);
@@ -2356,7 +2370,8 @@ module.exports = function registerSongOfTheElves(api) {
     player.moveTo(spawn);
     fragmentInstances.set(area, {
       player, boss, area, lastCycle: -1, nextSpecialAt: World.getProcessCycle() + 12,
-      nextBasicAttackAt: World.getProcessCycle() + 4,
+      nextBasicAttackAt: World.getProcessCycle() + FRAGMENT_BASIC_ATTACK_SPEED,
+      basicAttackSpeed: boss.getCurrentDefinition?.()?.getAttackSpeed?.() || FRAGMENT_BASIC_ATTACK_SPEED,
       clones: [], realClone: null, cloneThresholds: [666, 333], introStarted: false,
       healerThresholds: [666, 333], healers: new Set(), specialImpactAt: 0, finished: false,
     });
