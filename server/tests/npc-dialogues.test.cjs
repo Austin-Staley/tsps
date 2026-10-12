@@ -612,3 +612,21 @@ test('Morgan warns low-combat players and still offers to start Vampyre Slayer',
   assert.ok(!steps.some((step) => step.type === 'unavailable'));
   assert.ok(steps.some((step) => step.type === 'choice' && step.prompt === 'Start the Vampyre Slayer quest?'));
 });
+
+test('Quest transcripts preserve each named speaker instead of borrowing the clicked NPC head', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { startTranscript } = require('../plugins/quests/QuestRuntime');
+  const names = new Map([[13511,'Thaerisk'],[13543,'Akrisae'],[13540,'Idria'],[13519,'Silif']]);
+  const api = {
+    core: { ...PluginManager.getCoreApi(), NpcDefinition: { forId: id => ({getId:()=>id,getName:()=>names.get(id)||'null'}) } },
+    emitCustomEvent() {},
+  };
+  const lines=[];
+  const player={getUsername:()=> 'Test',getDialogueManager:()=>({reset(){},startDialogues:chain=>{
+    for(const e of chain.getDialogues().values())if(e.getNpcId)lines.push([e.getNpcId(),e.getText()]);
+  }})};
+  assert.equal(startTranscript(api,player,13543,'While Guthix Sleeps','forming-a-fellowship-capturing-a-spy-talking-to-thaerisk-idria-or-akrisae'),true);
+  assert.equal(lines[0][0],13511);
+  assert.ok(lines.some(([id,text])=>id===13543&&text.includes('Glad to have you')));
+  assert.ok(lines.some(([id,text])=>id===13540&&text.includes('theology')));
+});
