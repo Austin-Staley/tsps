@@ -409,3 +409,23 @@ test('generic object hooks receive the actual clicked cache action', () => {
     PluginManager.objectInteractionHooks = hooks; PluginManager.nextObjectHookOrder = order;
   }
 });
+
+test('NPC spell targeting requires explicit area permission for actionless puzzle NPCs', () => {
+  const {NPCOptionPacketListener}=require('../dist/net/packet/impl/NPCOptionPacketListener');
+  const {CombatSpells}=require('../dist/game/content/combat/magic/CombatSpells');
+  const originalNpc=World.getNpcs, originalSpell=CombatSpells.getCombatSpell;
+  let permission=null, attackable=false, valid=true, casts=0;
+  const npc={getHitpoints:()=>10,getLocation:()=>({}),getCurrentDefinition:()=>({isAttackable:()=>attackable}),
+    getPrivateArea:()=>({canCastOnNpc:()=>permission})};
+  const spell={canCastOnTarget:()=>valid};
+  const player={getHitpoints:()=>99,busy:()=>false,getLocation:()=>({isWithinDistance:()=>true}),
+    getMovementQueue:()=>({reset(){}}),getCombat:()=>({castSpellOn:(target,chosen)=>{assert.equal(target,npc);assert.equal(chosen,spell);casts++;}})};
+  World.getNpcs=()=>({capacityReturn:()=>10,get:()=>npc});CombatSpells.getCombatSpell=()=>spell;
+  try {
+    assert.equal(NPCOptionPacketListener.castSpell(player,1,1),false);
+    permission=true;assert.equal(NPCOptionPacketListener.castSpell(player,1,1),true);assert.equal(casts,1);
+    valid=false;assert.equal(NPCOptionPacketListener.castSpell(player,1,1),false,'normal spell requirements remain enforced');
+    valid=true;attackable=true;permission=false;assert.equal(NPCOptionPacketListener.castSpell(player,1,1),false);
+    permission=null;assert.equal(NPCOptionPacketListener.castSpell(player,1,1),true,'ordinary combat NPC targeting is unchanged');
+  } finally {World.getNpcs=originalNpc;CombatSpells.getCombatSpell=originalSpell;}
+});
