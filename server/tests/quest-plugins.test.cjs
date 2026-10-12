@@ -943,3 +943,52 @@ test('Picking up Surok’s lit explosive detonates it instead of giving the item
  const take={player,groundItemId:29573,groundItem:ground,handled:false};assert.equal(f.pickup(take),true);assert(take.handled);assert.deepEqual(removed,[ground]);assert.equal(fight.explosive,null);
  assert.equal(damage.length,1);assert(damage[0].getDamage()>=45&&damage[0].getDamage()<=55);
 });
+
+function synapseFixture() {
+ const {api}=mockApi(),attrs=new Map([['while-guthix-sleeps:duradel-notes-read',1]]),items=[],tasks=[],xp=[],damage=[];
+ const current=new Map(),base=new Map();let progress=900,registered=true,position=new api.core.Location(3200,3200,0),prompt;
+ api.core={...api.core,Task:class{constructor(ticks){this.ticks=ticks;}stop(){}},TaskManager:{submit:t=>tasks.push(t)},ObjectDefinition:{forPlayer:()=>({getName:()=> 'Anvil'})}};
+ api.sendMultiChatboxPrompt=(p,title,...pairs)=>prompt=pairs;
+ const inventory={getItems:()=>items,contains:id=>items.some(i=>i.getId()===id),getAmount:id=>items.filter(i=>i.getId()===id).length,refreshItems(){},deleteNumber:(id,n)=>{while(n--){const at=items.findIndex(i=>i.getId()===id);assert(at>=0);items.splice(at,1);}}};
+ const player={getInventory:()=>inventory,getEquipment:()=>({getItems:()=>items,refreshItems(){}}),getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getHitpoints:()=>99,getLocation:()=>position,isRegistered:()=>registered,sendMessage(){},getCombat:()=>({getHitQueue:()=>({addPendingDamage:d=>damage.push(...d)})}),getSkillManager:()=>({getCurrentLevel:s=>current.get(s)??99,getMaxLevel:s=>base.get(s)??99,addExperience:(s,n)=>xp.push([s,n]),stopSkillable(){}})};
+ const arc=require('../plugins/items/Arclight.plugin');arc.register({core:api.core,onItemOnObject(){},onItemOnItem(){},onItemAction(){},onCombatHitResolved(){}});
+ const f=require('../plugins/quests/wgs/Rewards.WhileGuthixSleeps')({api,stage:()=>progress,held:(p,id)=>inventory.contains(id),val:(p,k)=>attrs.get(k)||0,ATTRIBUTES:[]});
+ const add=id=>{const i=new api.core.Item(id,1);items.push(i);return i;};
+ return {api,f,arc,attrs,items,tasks,xp,damage,player,current,base,add,prompt:()=>prompt,setStage:s=>progress=s,move:()=>position=new api.core.Location(3201,3200,0),disconnect:()=>registered=false};
+}
+
+test('synapses require notes, skills and the complete recipe, and award first/repeat XP',()=>{
+ const t=synapseFixture(),r=t.f.recipes[0];t.add(29580);t.add(70);t.attrs.delete('while-guthix-sleeps:duradel-notes-read');t.f.craft(t.player,r);assert.equal(t.tasks.length,0);
+ t.attrs.set('while-guthix-sleeps:duradel-notes-read',1);t.setStage(880);t.f.craft(t.player,r);assert.equal(t.tasks.length,0);t.setStage(900);
+ t.current.set(t.api.core.Skill.FLETCHING,73);t.f.craft(t.player,r);assert.equal(t.tasks.length,0);assert.equal(t.damage[0].getDamage(),4);
+ t.current.set(t.api.core.Skill.FLETCHING,74);t.f.craft(t.player,r);t.f.craft(t.player,r);assert.equal(t.tasks.length,1);assert.equal(t.tasks[0].ticks,6);t.tasks[0].execute();assert.deepEqual(t.items.map(i=>i.getId()),[29591]);assert.deepEqual(t.xp,[[t.api.core.Skill.FLETCHING,730]]);
+ t.f.revert({player:t.player,item:t.items[0]});t.prompt()[1]();assert.deepEqual(t.items.map(i=>i.getId()),[29580]);t.add(70);t.f.craft(t.player,r);t.tasks[1].execute();assert.deepEqual(t.xp.at(-1),[t.api.core.Skill.FLETCHING,73]);
+});
+
+test('synapse crafting preserves materials when interrupted or the recipe changes',()=>{
+ for(const interruption of ['move','disconnect','material']){const t=synapseFixture();t.add(29580);t.add(70);t.f.craft(t.player,t.f.recipes[0]);if(interruption==='material')t.items[1].setId(72);else t[interruption]();t.tasks[0].execute();assert(t.items.some(i=>i.getId()===29580));assert.equal(t.xp.length,0);}
+});
+
+test('purging staff uses boosted Crafting, unboosted Smithing, an iron bar and a retained hammer',()=>{
+ const t=synapseFixture(),r=t.f.recipes[1];for(const id of[29580,1391,2347,2351])t.add(id);t.current.set(t.api.core.Skill.CRAFTING,74);t.base.set(t.api.core.Skill.CRAFTING,70);t.current.set(t.api.core.Skill.SMITHING,60);t.base.set(t.api.core.Skill.SMITHING,54);t.f.anvil({player:t.player,itemId:29580,objectId:1});assert.equal(t.tasks.length,0);
+ t.base.set(t.api.core.Skill.SMITHING,55);t.f.anvil({player:t.player,itemId:29580,objectId:1});assert.equal(t.tasks[0].ticks,7);t.tasks[0].execute();assert.deepEqual(t.items.map(i=>i.getId()).sort((a,b)=>a-b),[2347,29594]);assert.deepEqual(t.xp,[[t.api.core.Skill.CRAFTING,730],[t.api.core.Skill.SMITHING,13]]);
+});
+
+test('Arclight charges and infusion are per sword and must total 10,000 for Emberlight',()=>{
+ const t=synapseFixture(),I=t.api.core.ItemIdentifiers,r=t.f.recipes[2],sword=t.add(I.DARKLIGHT);for(let n=0;n<30;n++)t.add(I.ANCIENT_SHARD);
+ t.arc._test.enhance({player:t.player,item:sword,objectId:t.api.core.ObjectIdentifiers.ALTAR_52});assert.equal(sword.getId(),I.ARCLIGHT);assert.equal(t.arc.state(sword).charges,1000);assert.equal(t.player.getInventory().getAmount(I.ANCIENT_SHARD),27);
+ t.add(29580);t.add(2347);t.f.craft(t.player,r);assert.equal(t.tasks.length,0);
+ const shard=t.items.find(i=>i.getId()===I.ANCIENT_SHARD);t.arc._test.charge({player:t.player,usedItem:sword,usedWithItem:shard,usedItemId:sword.getId(),usedWithItemId:I.ANCIENT_SHARD});assert.equal(t.arc.state(sword).charges,10000);assert.equal(t.player.getInventory().getAmount(I.ANCIENT_SHARD),0);
+ const other=new t.api.core.Item(I.ARCLIGHT,1);assert.equal(t.arc.state(other).charges,1000);
+ sword.setId(I.ARCLIGHT_INACTIVE_).setMetaValue('arclight',{charges:0,infusion:10000});t.f.craft(t.player,r);assert.equal(t.tasks[0].ticks,5);t.tasks[0].execute();assert.deepEqual(t.items.map(i=>i.getId()).sort((a,b)=>a-b),[2347,29589]);
+ t.f.revert({player:t.player,item:t.items.find(i=>i.getId()===29589)});t.prompt()[1]();assert.deepEqual(t.items.map(i=>i.getId()).sort((a,b)=>a-b),[2347,29580]);
+});
+
+test('normal Arclight hits spend charges and preserve infusion at zero; special attacks do not',()=>{
+ const t=synapseFixture(),I=t.api.core.ItemIdentifiers,sword=t.add(I.ARCLIGHT),normal={},special={};sword.setMetaValue('arclight',{charges:1,infusion:300});
+ const equipment=[];equipment[t.api.core.Equipment.WEAPON_SLOT]=sword;t.player.getEquipment=()=>({getItems:()=>equipment,refreshItems(){}});t.player.isPlayer=()=>true;t.player.getAsPlayer=()=>t.player;
+ t.api.core.CombatSpecial={getById:()=>({getCombatMethod:()=>special})};
+ const hit=(accurate,damage,method=normal)=>({isAccurate:()=>accurate,getTotalDamage:()=>damage,getCombatType:()=>t.api.core.CombatType.MELEE,getCombatMethod:()=>method});
+ for(const h of[hit(false,0),hit(true,0),hit(true,5,special)])t.arc._test.hitResolved({attacker:t.player,hit:h});assert.deepEqual(t.arc.state(sword),{charges:1,infusion:300});
+ t.arc._test.hitResolved({attacker:t.player,hit:hit(true,5)});assert.equal(sword.getId(),I.ARCLIGHT_INACTIVE_);assert.deepEqual(t.arc.state(sword),{charges:0,infusion:301});
+});
