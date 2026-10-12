@@ -46,7 +46,6 @@ import {
 import { ObjectActionPacketListener } from "./packet/impl/ObjectActionPacketListener";
 import { NPCOptionPacketListener } from "./packet/impl/NPCOptionPacketListener";
 import { ChatPacketListener } from "./packet/impl/ChatPacketListener";
-import { DialogueOption } from "../game/model/dialogues/DialogueOption";
 import { PlayerOptionPacketListener } from "./packet/impl/PlayerOptionPacketListener";
 import { MagicOnPlayerPacketListener } from "./packet/impl/MagicOnPlayerPacketListener";
 import { LunarSpells } from "../game/content/combat/magic/LunarSpells";
@@ -615,9 +614,6 @@ export class ClientConnection {
                   handled: false,
                 });
               }
-            }
-            if (this.player.getDialogueManager().isActive() && actionPacket.buttonNum > 0 && actionPacket.buttonNum <= 5) {
-              this.player.getDialogueManager().handleOption(actionPacket.buttonNum - 1 as DialogueOption);
             }
           }
           continue;
