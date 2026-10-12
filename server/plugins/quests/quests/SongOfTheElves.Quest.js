@@ -32,6 +32,7 @@ module.exports = function registerSongOfTheElves(api) {
   const LLETYA_GUIDE_SPAWNED = "quest.song_of_the_elves.lletya-guide-spawned";
   const LLETYA_ARIANWYN_NPC = "quest.song_of_the_elves.lletya-arianwyn-npc";
   const FRAGMENT_DEFEATED = "quest.song_of_the_elves.fragment-defeated";
+  const ORB_CAVE_AREA = "quest.song_of_the_elves.orb-cave-area";
   const CAMP_AREA = "quest.song_of_the_elves.camp-area";
   const CAMP_HOLES = "quest.song_of_the_elves.camp-holes";
   const CAMP_EXPLOSIVES = "quest.song_of_the_elves.camp-explosives";
@@ -140,6 +141,7 @@ module.exports = function registerSongOfTheElves(api) {
   const libraryInstances = new Map();
   const fragmentInstances = new Map();
   const campInstances = new Map();
+  const orbCaveInstances = new Map();
 
   class LletyaStoryArea extends Area {
     process(mobile) {
@@ -191,6 +193,24 @@ module.exports = function registerSongOfTheElves(api) {
     postLeave(mobile, logout) {
       super.postLeave(mobile, logout);
       if (this.isDestroyed?.()) battleInstances.delete(this);
+    }
+  }
+
+  class OrbSupplyArea extends PrivateArea {
+    constructor(owner) {
+      super([new Boundary(2194, 2208, 9674, 9686, 0)]);
+      this.owner = owner;
+    }
+    isMulti() { return true; }
+    canAttack(attacker, target) {
+      const attackerHere = attacker?.getArea?.() === this;
+      const targetHere = target?.getArea?.() === this;
+      if (attackerHere || targetHere) return attackerHere && targetHere;
+      return null;
+    }
+    postLeave(mobile, logout) {
+      super.postLeave(mobile, logout);
+      if (this.isDestroyed()) orbCaveInstances.delete(this);
     }
   }
 
@@ -423,6 +443,7 @@ module.exports = function registerSongOfTheElves(api) {
         inventory.deleteNumber(ItemIdentifiers.RUNITE_BAR, 1);
       }
       if (event.stepId === "koxQh3") player.setAttribute(REVELATIONS_MEETING_STARTED, true);
+      if (event.stepId === "XhOxpi") player.moveTo(new Location(2353, 3172, 0));
       if (event.stepId === "UNrb5z") recordElder(player, 1);
       if (event.stepId === "K9K0W4") recordElder(player, 2);
       const messageChapter = ACTION_CHAPTER[event.stepId];
@@ -599,7 +620,18 @@ module.exports = function registerSongOfTheElves(api) {
         "reporting-back-after-the-revelations-finding-lady-hefin");
     }
     if (currentChapter(player) === 14 && npcName === "baxtorian") {
-      return startTranscript(api, player, event.npcId, PAGE, "recovering-the-orb-ysgawyn-returns");
+      const hasOrb = player.getInventory().getAmount(ItemIdentifiers.ORB_OF_LIGHT_5) > 0;
+      return startTranscript(api, player, event.npcId, PAGE, hasOrb
+        ? "recovering-the-orb-talking-to-baxtorian-after-getting-the-orb"
+        : "recovering-the-orb-ysgawyn-returns");
+    }
+    if (currentChapter(player) === 14 && npcName === "elena" &&
+      player.getInventory().getAmount(ItemIdentifiers.ORB_OF_LIGHT_5) > 0) {
+      return startTranscript(api, player, event.npcId, PAGE, "recovering-the-orb-talking-to-elena");
+    }
+    if (currentChapter(player) === 14 && npcName === "ysgawyn" &&
+      player.getInventory().getAmount(ItemIdentifiers.ORB_OF_LIGHT_5) > 0) {
+      return startTranscript(api, player, event.npcId, PAGE, "recovering-the-orb-confronting-ysgawyn");
     }
     if (npcName === "baxtorian" && currentChapter(player) === 17) {
       const wasAtCamp = player.getArea?.() instanceof DwarvenCampArea;
@@ -1203,6 +1235,78 @@ module.exports = function registerSongOfTheElves(api) {
     return true;
   }
 
+  function enterOrbSupplyCave(event) {
+    const player = event?.player;
+    const name = String(event?.definition?.getName?.() ?? "").toLowerCase();
+    const x = event?.location?.x ?? event?.location?.getX?.();
+    const y = event?.location?.y ?? event?.location?.getY?.();
+    if (!player || quest.isComplete(player) || currentChapter(player) !== 14 ||
+      (Number(player.getAttribute(RECRUITED_ELDERS)) & 3) !== 3 ||
+      x !== 2202 || y !== 3263 || !(event.objectId === ObjectIdentifiers.CAVE_69 || name === "cave")) return false;
+    event.handled = true;
+    let area = player.getAttribute(ORB_CAVE_AREA);
+    let state = area && orbCaveInstances.get(area);
+    if (!state || area.isDestroyed?.()) {
+      area = new OrbSupplyArea(player.getUsername?.());
+      state = { area, player, guards: new Set(), defeated: false };
+      orbCaveInstances.set(area, state);
+      const chest = new GameObject(ObjectIdentifiers.CHEST_122, new Location(2200, 9681, 0), 10, 0, area);
+      area.add(chest);
+      ObjectManager.register(chest, true);
+      for (const [id, gx] of [[NpcIdentifiers.IORWERTH_ARCHER_7, 2199], [NpcIdentifiers.IORWERTH_WARRIOR_9, 2202]]) {
+        const guard = api.spawnNpc({ id, x: gx, y: 9678, z: 0, wanderRadius: 2, owner: player, ownerOnly: true });
+        if (guard) { area.enter(guard); state.guards.add(guard); }
+      }
+      if (!state.guards.size) {
+        orbCaveInstances.delete(area);
+        player.sendMessage("The cave guards are missing. Try entering the Iorwerth supply cave again.");
+        return false;
+      }
+      player.setAttribute(ORB_CAVE_AREA, area);
+    }
+    area.enter(player);
+    player.moveTo(new Location(2198, 9677, 0));
+    player.sendMessage("The Iorwerth guards block the supply chest. Defeat both guards to search it.");
+    return true;
+  }
+
+  function searchOrbChest(event) {
+    const player = event?.player;
+    const area = player?.getArea?.();
+    const state = area && orbCaveInstances.get(area);
+    const name = String(event?.definition?.getName?.() ?? "").toLowerCase();
+    const x = event?.location?.x ?? event?.location?.getX?.();
+    const y = event?.location?.y ?? event?.location?.getY?.();
+    if (!state || state.player !== player || x !== 2200 || y !== 9681 ||
+      !(event.objectId === ObjectIdentifiers.CHEST_122 || name === "chest")) return false;
+    event.handled = true;
+    if (state.guards.size) {
+      player.sendMessage("The Iorwerth guards still protect the chest.");
+      return true;
+    }
+    state.defeated = true;
+    if (player.getInventory().getFreeSlots() < 1) {
+      player.sendMessage("You need an empty inventory slot to take the Orb of Light.");
+      return true;
+    }
+    if (player.getInventory().getAmount(ItemIdentifiers.ORB_OF_LIGHT_5) > 0) {
+      player.sendMessage("You already have the Orb of Light. Return to Baxtorian in Lletya.");
+      return true;
+    }
+    return startTranscript(api, player, 0, PAGE, "recovering-the-orb-entering-the-iorwerth-camp-s-supply-cave-searching-the-chest");
+  }
+
+  function handleOrbCaveDeath(event) {
+    const npc = event?.npc;
+    const area = npc?.getArea?.();
+    const state = area && orbCaveInstances.get(area);
+    if (!state || !state.guards.delete(npc)) return false;
+    if (event.killer === state.player && state.guards.size === 0) {
+      state.player.sendMessage("The supply cave guards are defeated. Search the chest for the orb.");
+    }
+    return true;
+  }
+
   function handleLibraryObject(event) {
     const player = event?.player;
     if (!player || !inLibrary(player)) return false;
@@ -1512,6 +1616,7 @@ module.exports = function registerSongOfTheElves(api) {
   }
 
   function handleBattleDeath(event) {
+    if (handleOrbCaveDeath(event)) return;
     if (handleFragmentDeath(event)) return;
     if (handleCampDeath(event)) return;
     const player = event?.killer;
@@ -2004,7 +2109,7 @@ module.exports = function registerSongOfTheElves(api) {
     "Rc0W1H": 7, "UeAKgA": 11,
     "x04RMY": 10, "D1wXY6": 11, "EMxiFg": 11,
     "ycGZ1J": 12, "eOtNFO": 12, "koxQh3": 13, "FoLVmk": 14,
-    "ZYvQiu": 18, "YAPX-R": 19, "FK0kOz": 19,
+    "ZYvQiu": 18, "XhOxpi": 15, "YAPX-R": 19, "FK0kOz": 19,
   };
   quest = registerQuest(api, {
     key: "song_of_the_elves",
@@ -2048,6 +2153,8 @@ module.exports = function registerSongOfTheElves(api) {
     api.onItemOnObject(name, "Pillar of Light", useLibraryCrystal, { noted: false });
   }
   api.onObjectInteraction(handleLibraryObject);
+  api.onObjectInteraction(enterOrbSupplyCave);
+  api.onObjectInteraction(searchOrbChest);
   api.onObjectInteraction("Floating Book", { Climb: crossLibraryFloatingBooks });
   api.onObjectInteraction("Cave", { Ascend: enterTemplePassage });
   api.persistAttribute(CHEMICAL_CHOICE);
