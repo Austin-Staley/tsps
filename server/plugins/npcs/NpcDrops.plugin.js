@@ -36,6 +36,20 @@ const KALPHITE_QUEEN_NOTED_ITEMS = new Set([
   1391, 3049, 207, 3051, 219, 2363, 1783, 444, 1513, 1621, 1619, 1617, 245, 3138, 1987, 5940, 6016,
 ]);
 
+/**
+ * Wiki, Looting bag: "obtained as a drop from any monster in the Wilderness, excluding aviansie,
+ * abyssal demons, and Black chinchompas". The tables list it on monsters found everywhere (rats,
+ * black demons...), so where the monster dies decides it.
+ */
+const LOOTING_BAG = "Looting bag";
+const LOOTING_BAG_EXCLUDED = new Set(["Aviansie", "Abyssal demon", "Black chinchompa"]);
+
+function lootingBagDrops(npc) {
+  if (!Wilderness.isInLocation(npc?.getLocation?.())) return false;
+  const name = (npc.getCurrentDefinition?.() ?? npc.getDefinition?.())?.getName?.();
+  return !LOOTING_BAG_EXCLUDED.has(name);
+}
+
 /** npcId -> array of shared table objects (one instance per distinct table) */
 const tablesByNpc = new Map();
 /** shared table name -> [{ itemId, quantity, weight }] */
@@ -114,6 +128,14 @@ function applyOverrides(dump, subtables, overrides) {
         if (!table[field].some((existing) => existing.item_id === entry.item_id)) table[field].push(entry);
       }
     }
+    // Sections the Wiki lists on the page but that are not this table's normal kill (a boss's
+    // contract rewards, say): left out of every roll.
+    const removed = new Set(change.removeSections ?? []);
+    if (removed.size > 0) {
+      for (const field of ["entries", "tertiary"]) {
+        if (table[field]) table[field] = table[field].filter((entry) => !removed.has(entry.section));
+      }
+    }
   }
   for (const [name, table] of Object.entries(overrides.subtables ?? {})) subtables[name] ??= table;
 }
@@ -129,6 +151,10 @@ function applyWikiCorrections(tableById) {
   // Zulrah: two rolls on its table per kill, tertiary drops excluded (Wiki, Drops).
   if (tableById.zulrah) {
     tableById.zulrah.rolls = 2;
+  }
+  // Vorkath: two rolls on its table per kill, tertiary drops excluded (Wiki, Drops).
+  if (tableById.vorkath) {
+    tableById.vorkath.rolls = 2;
   }
   correctMadAngel(tableById.mad_angel);
   const kalphiteQueen = tableById.kalphite_queen;
@@ -424,6 +450,7 @@ function rollTable(table, player, npc) {
       conditionalTertiarySkipped++;
       continue;
     }
+    if (entry.name === LOOTING_BAG && !lootingBagDrops(npc)) continue;
     const wildernessClue = /^clue scroll \((?!beginner\))/i.test(entry.name || "") &&
       isWearingImbuedRingOfWealth(player) && Wilderness.isInLocation(npc?.getLocation?.());
     if (hits(entry, wildernessClue)) {

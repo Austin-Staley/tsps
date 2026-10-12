@@ -13,6 +13,9 @@ function mockApi() {
     variant: [],
     condition: [],
     custom: new Map(),
+    object: [],
+    route: [],
+    itemOnNpc: [],
   };
   const noop = () => {};
   const base = {
@@ -25,6 +28,9 @@ function mockApi() {
       handlers.custom.set(name, list);
     },
     persistAttribute: noop,
+    onObjectInteraction: (handler) => { if (typeof handler === 'function') handlers.object.push(handler); },
+    onObjectRoute: (handler) => handlers.route.push(handler),
+    onItemOnNpc: (handler) => handlers.itemOnNpc.push(handler),
   };
   const api = new Proxy(base, {
     get(target, prop) {
@@ -172,4 +178,147 @@ test('Current Affairs and Prying Times start gates require every registered prer
   hasPortTaskSlot = true;
   assert.equal(pryingTimes({ npcId: api.core.NpcIdentifiers.SQUAWKING_STEVE_BEANIE, player, stepId: 'PSw89b' }), false,
     'an available task slot clears the full-ledger condition');
+});
+
+test('Priest in Peril unlocks the mausoleum Holy barrier only after completion', () => {
+  const { api: base } = mockApi();
+  const objects = new Map();
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onObjectInteraction'
+      ? (name, actions) => objects.set(name, actions)
+      : target[prop],
+  });
+  require('../plugins/quests/quests/PriestInPeril.Quest')(api);
+  const pass = objects.get('Holy barrier')?.['Pass-through'];
+  assert.equal(typeof pass, 'function');
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
+  const moves = [];
+  const messages = [];
+  let stage = 0;
+  const player = {
+    getAttribute: () => stage,
+    moveTo: (location) => moves.push([location.getX(), location.getY(), location.getZ()]),
+    sendMessage: (text) => messages.push(text),
+  };
+  for (stage of [0, 10, 50, quest.completionValue - 1]) {
+    assert.equal(pass({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER }), true);
+    assert.deepEqual(moves, [], 'unfinished quests cannot cross');
+    assert.match(messages.at(-1), /complete Priest in Peril/);
+  }
+  for (stage of [quest.completionValue, quest.completionValue + 1]) {
+    assert.equal(pass({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER }), true);
+    assert.deepEqual(moves.at(-1), [3423, 3485, 0]);
+    assert.equal(messages.at(-1), 'You pass through the holy barrier.');
+  }
+  const before = [moves.length, messages.length];
+  assert.equal(pass({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER_2 }), false,
+    'the Hallowed Sepulchre barrier is handled by its own content');
+  assert.deepEqual([moves.length, messages.length], before);
+});
+
+function questScene(name) {
+  const { api, handlers } = mockApi();
+  require(`../plugins/quests/quests/${name}.Quest`)(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
+  const attributes = new Map();
+  const items = new Map();
+  const messages = [];
+  let location;
+  const inventory = {
+    getAmount: (id) => items.get(id) ?? 0,
+    isFull: () => false,
+    adds: (id, amount) => items.set(id, inventory.getAmount(id) + amount),
+    deleteNumber: (id, amount) => items.set(id, inventory.getAmount(id) - amount),
+  };
+  const sender = new Proxy({}, { get: () => () => sender });
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getPacketSender: () => sender,
+    getLocation: () => location,
+    moveTo: (tile) => { location = tile; },
+    sendMessage: (text) => messages.push(text),
+  };
+  const tile = (x, y, z = 0) => new api.core.Location(x, y, z);
+  return { api, handlers, quest, player, items, messages, tile };
+}
+
+test('manor front doors close after entry and the back door crosses both ways', () => {
+  const { api, handlers, player, tile, messages } = questScene('ErnestTheChicken');
+  const { ObjectIdentifiers: O, GameObject } = api.core;
+  const open = (id, x, y, face, from) => {
+    player.moveTo(from);
+    const object = new GameObject(id, tile(x, y), 0, face);
+    const route = { player, object, objectId: id, sourceLocation: { x: from.getX(), y: from.getY(), z: 0 } };
+    handlers.route.forEach((h) => h(route));
+    assert.ok(route.destination);
+    player.moveTo(tile(route.destination.x, route.destination.y));
+    const event = { player, object, objectId: id, location: { x, y, z: 0 }, clickType: 1,
+      definition: { getInteractions: () => ['Open'] } };
+    handlers.custom.get('door:toggle').forEach((h) => h(event));
+    if (!event.handled) handlers.object.forEach((h) => h(event));
+    assert.equal(event.handled, true);
+    return [player.getLocation().getX(), player.getLocation().getY()];
+  };
+  for (const [id, x] of [[O.LARGE_DOOR_5, 3108], [O.LARGE_DOOR_6, 3109]]) {
+    assert.deepEqual(open(id, x, 3353, 1, tile(x, 3353)), [x, 3354]);
+    assert.match(messages.at(-1), /slam shut/);
+    assert.deepEqual(open(id, x, 3353, 1, tile(x, 3354)), [x, 3354]);
+    assert.match(messages.at(-1), /another way out/);
+  }
+  assert.deepEqual(open(O.DOOR_15, 3123, 3361, 3, tile(3123, 3360)), [3123, 3362]);
+  assert.deepEqual(open(O.DOOR_15, 3123, 3361, 3, tile(3123, 3361)), [3123, 3360]);
+});
+
+test('fortress sturdy doors and secret walls can be crossed and recrossed from their own tile', () => {
+  const { api, handlers, quest, player, tile } = questScene('BlackKnightsFortress');
+  const { ObjectIdentifiers: O, GameObject } = api.core;
+  for (const stage of [1, 2, 3]) {
+    quest.setStage(player, stage);
+    for (const [id, x, y, face, option] of [
+      [O.STURDY_DOOR_2, 3025, 3511, 2, 'Open'],
+      [O.WALL_8, 3016, 3517, 3, 'Push'],
+      [O.WALL_8, 3030, 3510, 3, 'Push'],
+    ]) {
+      const object = new GameObject(id, tile(x, y, 1), 0, face);
+      const axis = face === 2 ? 'x' : 'y';
+      for (const side of [-1, 0, 1]) {
+        const from = { x, y, z: 1, [axis]: (axis === 'x' ? x : y) + side };
+        player.moveTo(tile(from.x, from.y, from.z));
+        const route = { player, object, objectId: id, sourceLocation: from };
+        handlers.route.forEach((h) => h(route));
+        player.moveTo(tile(route.destination.x, route.destination.y, 1));
+        const event = { player, object, objectId: id, location: { x, y, z: 1 }, clickType: 1,
+          definition: { getInteractions: () => [option] } };
+        handlers.object.forEach((h) => h(event));
+        const direction = side || (face === 2 ? -1 : 1);
+        assert.equal(player.getLocation()[axis === 'x' ? 'getX' : 'getY'](), (axis === 'x' ? x : y) - direction);
+        assert.equal(event.handled, true);
+      }
+    }
+  }
+});
+
+test('Prince Ali key print and bronze bar go to Osman, then Leela gives the key', () => {
+  const { api, handlers, quest, player, items } = questScene('PrinceAliRescue');
+  const { ItemIdentifiers: I, NpcIdentifiers: N } = api.core;
+  quest.setStage(player, 20);
+  items.set(I.KEY_PRINT, 1);
+  const give = () => handlers.itemOnNpc.forEach((h) => h({ player, npcId: N.OSMAN_9, itemId: I.KEY_PRINT }));
+  give();
+  assert.equal(items.get(I.KEY_PRINT), 1, 'missing bronze must not consume the print');
+  assert.equal(quest.getStage(player), 20);
+  items.set(I.BRONZE_BAR, 1);
+  give();
+  assert.equal(quest.getStage(player), 21);
+  assert.equal(items.get(I.KEY_PRINT), 0);
+  assert.equal(items.get(I.BRONZE_BAR), 0);
+  assert.match(quest.buildJournal(player, quest).join('\n'), /collect the bronze key from.*Leela/);
+  const event = { player, npcId: N.LEELA, stepId: 'NVdPNU' };
+  handlers.custom.get('npc-dialogue:action').forEach((h) => h(event));
+  assert.equal(quest.getStage(player), 22);
+  assert.equal(items.get(I.BRONZE_KEY), 1);
+  handlers.custom.get('npc-dialogue:action').forEach((h) => h(event));
+  assert.equal(items.get(I.BRONZE_KEY), 1, 'replaying the handoff must not duplicate the key');
 });
