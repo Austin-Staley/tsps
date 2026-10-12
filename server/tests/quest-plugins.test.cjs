@@ -298,7 +298,7 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
     getObjects() { return this.objects; }
     getTemplateObjects(tile) {
       return [[2609, 6158, 1], [2623, 6158, 1], [2623, 6159, 1], [2623, 6158, 0], [2623, 6130, 0],
-        [2609, 6130, 0], [2609, 6116, 0], [2609, 6102, 0], [2623, 6102, 0]]
+        [2609, 6130, 0], [2609, 6116, 0], [2609, 6102, 0], [2623, 6102, 0], [2581, 6130, 0]]
         .some(([x, y, z]) => tile?.getX?.() === x && tile?.getY?.() === y && tile?.getZ?.() === z)
         ? [{ getId: () => tile.getX() === 2609 && tile.getY() === 6158
           ? 35222 : api.core.ObjectIdentifiers.PILLAR_OF_LIGHT_41 }]
@@ -420,4 +420,14 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
   amounts.set(api.core.ItemIdentifiers.HAND_MIRROR_2, 1);
   place(2595, 6172, 'east', 0, 35259);
   assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '3:19');
+
+  attributes.set('quest.song_of_the_elves.library-seals', 62);
+  attributes.set('quest.song_of_the_elves.library-puzzle', '5:14');
+  attributes.set('quest.song_of_the_elves.library-pillar-state', JSON.stringify({
+    '2581,6116,0': { operation: 'U', direction: 'up', x: 2581, y: 6116, z: 0, step: 13 },
+  }));
+  amounts.set(api.core.ItemIdentifiers.HAND_MIRROR_2, 1);
+  place(2581, 6130, 'north', 0);
+  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '5:15',
+    `Hefin’s blue beam branches north from the shared floor-zero pillar while the green beam rises: ${messages.slice(-2).join(' | ')}`);
 });
