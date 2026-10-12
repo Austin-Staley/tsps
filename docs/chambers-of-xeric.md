@@ -292,6 +292,13 @@ Recording 3389 (solo).
 - Lighting a crystal turns it white (29762, sound 1476), gives 400 points, and the dark crystal brightens a step 1-3 ticks later; with all four the crabs go at 4 ticks and the dark crystal shatters at 5 (gfx 1326).
 - Struck crabs keep their colour about 12 ticks; smashing: player 1755, crab gfx 245, sounds 556 and 2727; crabs bite with 2368.
 
+## Thieving, from rsprox captures
+
+Recording 3389.
+
+- Opening a chest gives its grubs the tick after the animation (sound 52, "Some cavern grubs have hatched; you take them."); it locks again about 12 ticks later. A full stack gets a message box. Depositing (sound 3637) has no message; the trough fills the tick after.
+- The scavenger's hunger is headbar 7; it eats every 3 ticks. Fed, it walks aside, yawns ("Yawwwwwn!") 7 ticks later, sleeps at 14 and snores (gfx 277, sound 869) every 8 ticks from 21.
+
 ## Values not on the Wiki, to check against a capture
 
 | Value | Where |

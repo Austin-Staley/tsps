@@ -14,12 +14,20 @@
  *   up to max(4500, (party's total Thieving / 6) x 150) points.
  * - Hunger comes back after 60 seconds without food. Asleep, it lets the party through, and
  *   the raiders get a batch of endarkened juice, stinkhorn mushrooms and cicely.
- * Not on the Wiki (to check against a capture): the scavenger's tiles (by the room's version and turn) and where it sleeps;
- *   it eats every 4 ticks min(5, grubs/6) (at least 1) from the trough; anims 7496 eating,
- *   7497 yawning ("Yawwwwn!"), then 7603 asleep with gfx 277; open anim 536, poison gfx 184;
- *   chest objects 29745 (grubs taken), 29743 (poison, bats); chests lock again 5 seconds later
- *   (poison 6); trough 29874 while it holds grubs; Thieving XP 40 / 60 / 73 by grubs; the
- *   creature keeper's body gives his journal.
+ * rsprox captures (recording 3389):
+ * - Opening: the open-chest animation, and the tick after sound 52 (range 5), "Some cavern
+ *   grubs have hatched; you take them." and the hatched chest (29745), locked again about 12
+ *   ticks later. A full stack: "You don't have space to take any more grubs from the chest."
+ *   in a message box.
+ * - Depositing: 832 and sound 3637 (range 5), every grub held, no message; the trough fills
+ *   (29874) the tick after.
+ * - The scavenger's hunger is headbar 7 (100 to 0 as it eats what it needs). It eats every 3
+ *   ticks (7496); fed, it walks aside the tick after, yawns 7 ticks later (7497, "Yawwwwwn!",
+ *   sound 1734), sleeps (7603) at 14 and from 21 shows gfx 277 with sound 869 every 8 ticks.
+ * Not on the Wiki (to check against a capture): the scavenger's tiles (by the room's version
+ *   and turn) and where it sleeps; how much it eats at once (min(5, grubs/6), at least 1); the
+ *   poison chests (gfx 184, locked again 10 ticks later) and the bats' chest (29743); Thieving
+ *   XP 40 / 60 / 73 by grubs; the creature keeper's body giving his journal.
  * Not from a source: the batch on clearing (7 / 7 / 5, as the Ice Demon's) and the XP for 4
  *   grubs (as 3).
  */
@@ -34,6 +42,9 @@ const ITEM = { GRUBS: 20885, JOURNAL: 20886, PSYKK_BAT: 20883, LOCKPICKS: [1523,
 const GRUB_CAP = 28;
 const POINTS_PER_GRUB = 115;
 const HUNGER_TICKS = 100;
+const HUNGER = { HEADBAR: 7, WIDTH: 100, EAT_EVERY: 3 };
+/** Ticks from being fed: the yawn, sleep, and the snoring from then every 8 ticks. */
+const SLEEP = { YAWN: 7, ASLEEP: 14, SNORE: 21, SNORE_EVERY: 8 };
 const POISON_CHESTS = 3;
 const GRUB_XP = [40, 60, 73, 73];
 const CLEAR_REWARD = [[20910, 7], [20911, 7], [20912, 5]];
@@ -116,16 +127,20 @@ class ThievingRoom extends Raid.Room {
         this.chests.delete(at);
       }
     }
-    if (this.fed || !this.scavenger || this.ticks++ % 4 !== 0) return;
+    if (this.fed || !this.scavenger) return;
+    this.scavenger.showHeadbar(HUNGER.HEADBAR, { fill: Math.max(0, Math.floor((HUNGER.WIDTH * (this.needed - this.eaten)) / this.needed)) });
+    if (this.ticks++ % HUNGER.EAT_EVERY !== 0) return;
     if (this.trough.grubs > 0) {
       const amount = Math.max(1, Math.min(5, Math.floor(this.trough.grubs / 6), this.trough.grubs));
       this.trough.grubs -= amount;
       this.eaten += amount;
       this.hunger = 0;
       Shared.animate(this.scavenger, 7496);
-      for (const player of this.raiders()) Shared.sound(player, 2393);
       if (this.trough.grubs <= 0 && this.trough.object) this.trough.object = Shared.replaceObject(this.map, this.trough.object, OBJECT.TROUGH);
-      if (this.eaten >= this.needed) this.fallAsleep();
+      if (this.eaten >= this.needed) {
+        this.scavenger.showHeadbar(HUNGER.HEADBAR, { fill: 0 });
+        this.fallAsleep();
+      }
       return;
     }
     // Wiki: hunger returns after 60 seconds without food.
@@ -142,17 +157,24 @@ class ThievingRoom extends Raid.Room {
       Shared.animate(npc, -1);
       Shared.walkStraight(npc, this.tile(bed.x, bed.y, 2));
     });
-    Shared.later(this.raid, 5, () => {
+    Shared.later(this.raid, SLEEP.YAWN, () => {
       if (!npc.isRegistered()) return;
-      npc.forceChat("Yawwwwn!");
+      npc.forceChat("Yawwwwwn!");
       Shared.animate(npc, 7497);
-      for (const player of this.raiders()) Shared.sound(player, 1734);
+      Shared.areaSound(this.raiders(), 1734, npc.getLocation(), { delay: 10, range: 5 });
     });
-    Shared.later(this.raid, 10, () => {
+    Shared.later(this.raid, SLEEP.ASLEEP, () => {
       if (!npc.isRegistered()) return;
       npc.setNpcTransformationId(NPC.ASLEEP);
       Shared.animate(npc, -1);
     });
+    const snore = () => {
+      if (!npc.isRegistered() || this.raid.destroyed) return false;
+      npc.performGraphic(Shared.gfx(277));
+      Shared.areaSound(this.raiders(), 869, npc.getLocation(), { range: 8 });
+      return true;
+    };
+    Shared.later(this.raid, SLEEP.SNORE, () => snore() && Shared.repeat(this.raid, SLEEP.SNORE_EVERY, snore));
     const { Item, ItemOnGroundManager } = Shared.core();
     for (const player of this.raiders()) {
       for (const [id, amount] of CLEAR_REWARD) ItemOnGroundManager.registerLocation(player, new Item(id, amount), player.getLocation().clone());
@@ -172,12 +194,13 @@ class ThievingRoom extends Raid.Room {
     const amount = Math.min(GRUB_CAP, held);
     player.getInventory().delete(ITEM.GRUBS, held);
     Shared.animate(player, 832);
-    Shared.sound(player, 3637);
-    player.sendMessage("You deposit some cavern grubs in the trough.");
+    Shared.areaSound(this.raiders(), 3637, player.getLocation(), { range: 5 });
     this.trough.grubs += amount;
-    if (!this.trough.object || this.trough.object.getId() !== OBJECT.TROUGH_FULL) {
-      this.trough.object = Shared.replaceObject(this.map, this.trough.object ?? object, OBJECT.TROUGH_FULL);
-    }
+    Shared.later(this.raid, 1, () => {
+      if (this.trough.grubs > 0 && (!this.trough.object || this.trough.object.getId() !== OBJECT.TROUGH_FULL)) {
+        this.trough.object = Shared.replaceObject(this.map, this.trough.object ?? object, OBJECT.TROUGH_FULL);
+      }
+    });
     const points = Math.max(0, Math.min(this.pointsCap - this.grubPoints, amount * POINTS_PER_GRUB));
     this.grubPoints += points;
     this.raid.addPoints(player, points);
@@ -198,7 +221,7 @@ class ThievingRoom extends Raid.Room {
     Shared.sound(player, 2402);
     const lockpick = ITEM.LOCKPICKS.some((id) => Shared.has(player, id));
     if (Math.random() >= openChance(Shared.level(player, "THIEVING"), lockpick)) return true;
-    this.openChest(player, object, at);
+    Shared.later(player, 1, () => this.openChest(player, object, at));
     return false;
   }
 
@@ -213,7 +236,8 @@ class ThievingRoom extends Raid.Room {
       for (let i = 0; i < bats; i++) Supplies.recordMade(this.raid, Supplies.supplyKey(ITEM.PSYKK_BAT), player);
       return;
     }
-    Shared.sound(player, 52);
+    if (this.chests.has(at)) return;
+    Shared.areaSound(this.raiders(), 52, object.getLocation(), { range: 5 });
     if (this.poisonChests.has(at)) {
       for (const raider of this.raiders()) {
         if (raider.getLocation().getDistance(player.getLocation()) <= 1) Shared.damage(raider, Shared.random(1, 3));
@@ -225,14 +249,14 @@ class ThievingRoom extends Raid.Room {
     }
     const held = player.getInventory().getAmount(ITEM.GRUBS);
     if (held >= GRUB_CAP) {
-      player.sendMessage("You already have the maximum amount of cavern grubs.");
+      Shared.statement(player, "You don't have space to take any more grubs from the chest.");
       return;
     }
     const amount = Math.min(grubsFound(Shared.level(player, "THIEVING")), GRUB_CAP - held);
     player.sendMessage("Some cavern grubs have hatched; you take them.");
     Shared.give(player, ITEM.GRUBS, amount);
     Shared.addXp(player, "THIEVING", GRUB_XP[amount - 1] ?? GRUB_XP[0]);
-    this.chests.set(at, { object: Shared.replaceObject(this.map, object, OBJECT.CHEST_GRUBS), relockAt: this.raid.ticks + 8 });
+    this.chests.set(at, { object: Shared.replaceObject(this.map, object, OBJECT.CHEST_GRUBS), relockAt: this.raid.ticks + 12 });
   }
 }
 
