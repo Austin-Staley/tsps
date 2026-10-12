@@ -36,6 +36,7 @@ const MAX_XP = 200000000;
 let pluginApi = null;
 let TaskClass = null;
 let TaskManagerRef = null;
+let NPCRespawnTaskRef = null;
 let ItemDefinitionClass = null;
 /** Per-player task keys, so cancelling the cat clock never touches another plugin's tasks. */
 const CAT_TASK_KEY = new WeakMap();
@@ -1131,7 +1132,18 @@ function chaseVermin(player, npc, pet) {
     player.sendMessage(`Your ${catNoun(info)} pounces, but the ${name.toLowerCase()} gets away.`);
     return true;
   }
+  const caughtLocation = vermin.getLocation?.().clone?.();
   despawnPetNpc(vermin);
+  const respawnTicks = vermin.getDefinition?.()?.getRespawn?.() ?? 0;
+  if (respawnTicks > 0 && TaskManagerRef?.submit && NPCRespawnTaskRef) {
+    TaskManagerRef.submit(new NPCRespawnTaskRef(vermin, respawnTicks));
+  }
+  pluginApi?.emitCustomEvent?.("pets:vermin-caught", {
+    player,
+    cat: npc,
+    verminName: name,
+    location: caughtLocation,
+  });
   if (name === "Hell-Rat" && info.stage === "kitten") {
     // Chasing a hell-rat turns any kitten into the generic Hell-kitten (Wiki, Cat).
     const state = getCatState(player);
@@ -1718,6 +1730,7 @@ module.exports = {
     pluginApi = api;
     TaskClass = api.core?.Task ?? null;
     TaskManagerRef = api.core?.TaskManager ?? null;
+    NPCRespawnTaskRef = api.core?.NPCRespawnTask ?? null;
     ItemDefinitionClass = api.core?.ItemDefinition ?? null;
     fillSkillPetVariants(api.core);
     api.persistAttribute(OWNED_ATTRIBUTE);

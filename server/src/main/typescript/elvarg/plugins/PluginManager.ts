@@ -2072,6 +2072,7 @@ export class PluginManager {
       ForceMovement: require(`${model}/ForceMovement`).ForceMovement,
       ForceMovementTask: require("../game/task/impl/ForceMovementTask").ForceMovementTask,
       TaskManager: require("../game/task/TaskManager").TaskManager,
+      NPCRespawnTask: require("../game/task/impl/NPCRespawnTask").NPCRespawnTask,
       ItemIdentifiers: require("../util/ItemIdentifiers").ItemIdentifiers,
       ItemIds: require("../util/IdEnums").ItemIds,
       NpcIdentifiers: require("../util/NpcIdentifiers").NpcIdentifiers,

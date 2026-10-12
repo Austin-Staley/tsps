@@ -1232,6 +1232,7 @@ export interface PluginCoreApi {
   ForceMovement: any;
   ForceMovementTask: any;
   TaskManager: any;
+  NPCRespawnTask: any;
   ItemIdentifiers: any;
   ItemIds: any;
   NpcIdentifiers: any;
