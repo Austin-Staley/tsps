@@ -752,3 +752,18 @@ test('Lantern lenses and unpowered orbs are glassblown without consuming the pip
  choices[1]();assert.equal(items.get(567),1);assert.equal(items.get(1775),0);assert.equal(xp,107.5);
  choices[3]();assert.equal(items.get(4542),1,'a stale menu cannot create more glass');
 });
+
+
+test('WGS restores native Slayer and Warriors Guild replacement states on login', () => {
+ const {api}=mockApi();let login,progress=300;const bits=new Map();
+ api.onPlayerLogin=h=>login=h;
+ const sender={sendVarbit:(id,v)=>{bits.set(id,v);return sender;}};
+ const player={getPacketSender:()=>sender,getLocation:()=>new api.core.Location(2869,2982,1)};
+ require('../plugins/quests/wgs/Fellowship.WhileGuthixSleeps')({api,stage:()=>progress,val:()=>0,ATTRIBUTES:[]});
+ for(const [stage,slayer,guild] of [[0,0,0],[300,1,0],[340,1,1],[650,2,2],[900,2,2]]){
+  progress=stage;login({player});assert.equal(bits.get(10782),slayer);assert.equal(bits.get(10792),guild);
+ }
+ const spawns=require('../data/definitions/npc-spawns.json');
+ assert.equal(spawns.find(n=>n.name==='Duradel').id,13654);assert.equal(spawns.find(n=>n.name==='Turael').id,13651);
+ assert.equal(spawns.find(n=>n.name==='Laidee Gnonock').id,13647);
+});
