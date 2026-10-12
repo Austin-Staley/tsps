@@ -706,3 +706,13 @@ test('Quest tormented demons display their starting melee protection prayer', ()
  f.startDemons(area);assert.equal(progress,850);assert.equal(area.demons.length,2);
  for(const n of area.demons){assert.equal(n.headIcon,0);assert.equal(f.demonStates.get(n).prayer,0);}
 });
+
+test('WGS completed alliance talks stay post-quest and Silif only replaces missing robes', () => {
+ const {api}=mockApi(),played=[],given=[];let slots=1;
+ const player={getLocation:()=>new api.core.Location(2990,3343),getEquipment:()=>({contains:id=>id===29566}),getBank:()=>({contains:id=>id===29568}),getInventory:()=>({getFreeSlots:()=>slots}),sendMessage(){}};
+ const f=require('../plugins/quests/wgs/Alliance.WhileGuthixSleeps')({api,stage:()=>900,held:()=>false,give:(p,id)=>given.push(id),play:(p,id,variant)=>played.push(variant)});
+ for(const npcId of[13540,13543,13511])assert.equal(f.group({player,npcId}),true);
+ assert.deepEqual(played,['post-quest-dialogue-talking-to-idria','post-quest-dialogue-talking-to-akrisae','post-quest-dialogue-talking-to-thaerisk']);
+ f.action({player,npcId:13519,stepId:'h_h2X8'});assert.deepEqual(given,[29570]);
+ slots=0;f.action({player,npcId:13519,stepId:'h_h2X8'});assert.deepEqual(given,[29570]);
+});

@@ -64,6 +64,7 @@ module.exports = function registerWhileGuthixSleeps(api) {
   }
   function thaerisk({player,npcId}) {
     const s=stage(player);
+    if(s>=900){play(player,npcId,'post-quest-dialogue-talking-to-thaerisk');return true;}
     if(s>=300)return false;
     let v=s===0?'the-crux-eqal-talking-to-thaerisk-before-starting-the-quest':s<30?'the-crux-eqal-talking-to-thaerisk-after-starting-the-quest':s<40?'the-crux-eqal-talking-to-thaerisk-after-killing-the-assassins':'the-crux-eqal-talking-to-thaerisk-after-killing-the-assassins-talking-to-thaerisk-again';
     if(s>=100&&s<200&&held(player,29525)&&held(player,29526)&&val(player,'while-guthix-sleeps:notes-read')!==3){player.sendMessage('Read both volumes of Movario’s notes all the way through before showing them to Thaerisk.');return true;}
