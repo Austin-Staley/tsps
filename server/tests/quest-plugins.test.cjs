@@ -16,6 +16,11 @@ function mockApi() {
     object: [],
     route: [],
     itemOnNpc: [],
+    itemOnObject: [],
+    itemAction: new Map(),
+    npc: new Map(),
+    area: [],
+    ground: [],
   };
   const noop = () => {};
   const base = {
@@ -31,6 +36,11 @@ function mockApi() {
     onObjectInteraction: (handler) => { if (typeof handler === 'function') handlers.object.push(handler); },
     onObjectRoute: (handler) => handlers.route.push(handler),
     onItemOnNpc: (handler) => handlers.itemOnNpc.push(handler),
+    onItemOnObject: (item, object, handler) => { if (typeof handler === 'function') handlers.itemOnObject.push(handler); },
+    onItemAction: (name, actions) => handlers.itemAction.set(name, actions),
+    onNpcInteraction: (name, actions) => handlers.npc.set(name, actions),
+    registerArea: (area) => handlers.area.push(area),
+    onGroundItemPickup: (handler) => handlers.ground.push(handler),
   };
   const api = new Proxy(base, {
     get(target, prop) {
@@ -228,7 +238,7 @@ function questScene(name) {
     getAmount: (id) => items.get(id) ?? 0,
     isFull: () => false,
     adds: (id, amount) => items.set(id, inventory.getAmount(id) + amount),
-    deleteNumber: (id, amount) => items.set(id, inventory.getAmount(id) - amount),
+    deleteNumber: (id, amount) => items.set(id, Math.max(0, inventory.getAmount(id) - amount)),
   };
   const sender = new Proxy({}, { get: () => () => sender });
   const player = {
@@ -236,6 +246,10 @@ function questScene(name) {
     setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => inventory,
     getPacketSender: () => sender,
+    getUsername: () => 'QuestTester',
+    getPrivateArea: () => null,
+    isPlayer: () => true,
+    getAsPlayer: () => player,
     getLocation: () => location,
     moveTo: (tile) => { location = tile; },
     sendMessage: (text) => messages.push(text),
@@ -341,11 +355,11 @@ test('Death Plateau keeps Eohric and Harold dialogue in order', () => {
   assert.equal(quest.getStage(player), 40);
   assert.equal(talk(EOHRIC), 'finding-the-combination-talking-to-eohric-again-after-learning-harold-s-weakness');
   assert.equal(talk(HAROLD), 'finding-the-combination-talking-to-harold-after-learning-his-weakness');
-  quest.setStage(player, 60);
+  quest.setStage(player, 65);
   assert.equal(talk(EOHRIC), 'finding-the-combination-talking-to-eohric-after-opening-the-equipment-room');
 });
 
-test("Harold's door requires Eohric's hint and leaves other doors alone", () => {
+test("Death Plateau doors require Eohric's hint and the solved puzzle", () => {
   const { api, handlers, quest, player, messages } = questScene('DeathPlateau');
   const door = api.core.ObjectIdentifiers.DOOR_115;
   const toggle = objectId => {
@@ -361,6 +375,10 @@ test("Harold's door requires Eohric's hint and leaves other doors alone", () => 
   for (const stage of [20, 30, 40, 60, 80]) {
     quest.setStage(player, stage);
     assert.equal(toggle(door), false, 'the shared door handler opens it');
+  }
+  for (const stage of [0, 55, 60, 65, 70, 80]) {
+    quest.setStage(player, stage);
+    assert.equal(toggle(api.core.ObjectIdentifiers.LARGE_DOOR_23), stage < 65);
   }
   quest.setStage(player, 0);
   assert.equal(toggle(api.core.ObjectIdentifiers.DOOR), false);
@@ -424,7 +442,7 @@ test('Tenzing refuses unpaid/full-inventory purchases and accepts payment that f
 test('Death Plateau final handover conditions require both the map and combination', () => {
   const { api, handlers, quest, player, items } = questScene('DeathPlateau');
   const { SECRET_WAY_MAP, COMBINATION } = api.core.ItemIdentifiers;
-  quest.setStage(player, 75);
+  quest.setStage(player, 78);
   const condition = text => handlers.condition.at(-1)({ player, npcId: api.core.NpcIdentifiers.DENULTH, text });
   for (const have of [[], [SECRET_WAY_MAP], [COMBINATION], [SECRET_WAY_MAP, COMBINATION]]) {
     items.clear();
@@ -432,4 +450,156 @@ test('Death Plateau final handover conditions require both the map and combinati
     assert.equal(condition('If the player has not turned in all the items:'), have.length < 2);
     assert.equal(condition('If the player has turned in all the items:'), have.length === 2);
   }
+});
+
+test('Harold keeps his ale/drunk state and accepts either Blurberry special', () => {
+  for (const drink of ['BLURBERRY_SPECIAL', 'PREMADE_BLURB_SP']) {
+    const { api, handlers, quest, player, items } = questScene('DeathPlateau');
+    const { HAROLD } = api.core.NpcIdentifiers;
+    const I = api.core.ItemIdentifiers;
+    const select = () => handlers.variant.at(-1)({ player, npcId: HAROLD });
+    const act = stepId => handlers.custom.get('npc-dialogue:action').forEach(h => h({ player, npcId: HAROLD, kind: 'message', stepId }));
+    quest.setStage(player, 40); items.set(I.ASGARNIAN_ALE, 1); act('_ELP6x');
+    assert.equal(quest.getStage(player), 50);
+    assert.equal(items.get(I.ASGARNIAN_ALE), 0);
+    assert.equal(select(), 'finding-the-combination-talking-to-harold-after-giving-him-an-asgarnian-ale');
+    items.set(I[drink], 1);
+    assert.equal(handlers.condition.at(-1)({ player, npcId: HAROLD, text: 'If the player does not have a Blurberry special:' }), false);
+    act('VZS4Rq');
+    assert.equal(items.get(I[drink]), 0);
+    assert.equal(player.getAttribute('death-plateau:harold-drunk'), true);
+    assert.equal(select(), 'finding-the-combination-talking-to-harold-after-giving-him-a-blurberry-special');
+  }
+});
+
+test('Harold gives an IOU first and reading it replaces it with one combination', () => {
+  const { api, handlers, quest, player, items } = questScene('DeathPlateau');
+  const I = api.core.ItemIdentifiers, { HAROLD } = api.core.NpcIdentifiers;
+  const act = stepId => handlers.custom.get('npc-dialogue:action').forEach(h => h({ player, npcId: HAROLD, kind: 'message', stepId }));
+  quest.setStage(player, 50); act('4p9H2-'); act('MBm6Sz');
+  assert.equal(quest.getStage(player), 55);
+  assert.equal(items.get(I.IOU), 1); assert.equal(items.get(I.COMBINATION), undefined);
+  act('abx6jE'); act('hYvfps');
+  assert.equal(quest.getStage(player), 60);
+  assert.equal(items.get(I.IOU), 0); assert.equal(items.get(I.COMBINATION), 1);
+  items.delete(I.COMBINATION); act('23tpMt');
+  assert.equal(items.get(I.COMBINATION), 1, 'lost combination comes back without gambling');
+  assert.equal(items.get(I.IOU), 0);
+  assert.equal(handlers.itemAction.get('Combination').Read({ player, itemId: I.COMBINATION }), true);
+});
+
+function puzzleScene() {
+  const scene = questScene('DeathPlateau'), ground = new Map();
+  const key = (id, tile) => `${id}:${tile.getX()},${tile.getY()}`;
+  scene.api.getItemOnGroundManager = () => ({
+    getGroundItem: (_owner, id, tile) => ground.get(key(id, tile)),
+    registerNonGlobals: (player, item, tile) => ground.set(key(item.id, tile), { id: item.id, tile, getOwner: () => player.getUsername() }),
+    deregister: item => ground.delete(key(item.id, item.tile)),
+  });
+  scene.place = (id, x, y) => scene.handlers.itemOnObject.forEach(h => h({ player: scene.player, itemId: id, objectId: scene.api.core.ObjectIdentifiers.STONE_MECHANISM, location: { x, y, z: 0 } }));
+  scene.ground = ground;
+  return scene;
+}
+
+test('five correct colours unlock only after reading; placements are private and reversible', () => {
+  const { quest, player, items, place, handlers, ground } = puzzleScene();
+  const solution = [[3109,2894,3563],[3110,2894,3562],[3111,2895,3562],[3112,2895,3563],[3113,2895,3564]];
+  quest.setStage(player, 55);
+  solution.forEach(([id,x,y]) => { items.set(id,1); place(id,x,y); });
+  assert.equal(quest.getStage(player),55,'unread IOU does not unlock the room');
+  quest.setStage(player,60); items.set(3113,1); place(3113,2895,3564);
+  assert.equal(quest.getStage(player),65);
+  const green = ground.get('3113:2895,3564');
+  const pickup = { player, groundItem:green, groundItemId:3113, location:{x:2895,y:3564,z:0}, handled:false };
+  handlers.ground.forEach(h => h(pickup));
+  assert.equal(pickup.handled,true);
+  assert.equal(items.get(3113),2,'the replacement and the placed ball each return once');
+  assert.equal(player.getAttribute('death-plateau:stone-balls')['2895,3564'],undefined);
+  assert.equal(ground.size,4);
+  ground.clear(); handlers.area.find(a => a.constructor.name==='PuzzleArea').process(player);
+  assert.equal(ground.size,4,'saved placements restore after floor-item expiry/relogin');
+});
+
+test('wrong colours and a sixth occupied mechanism tile keep the room locked', () => {
+  const { quest, player, items, place } = puzzleScene();
+  quest.setStage(player,60);
+  for (const [id,x,y] of [[3110,2894,3563],[3109,2894,3562],[3111,2895,3562],[3112,2895,3563],[3113,2895,3564]]) {items.set(id,1);place(id,x,y);}
+  assert.equal(quest.getStage(player),60);
+  items.set(3109,1);place(3109,2894,3564);
+  items.set(3109,1);place(3109,2894,3563);
+  items.set(3110,1);place(3110,2894,3562);
+  assert.equal(quest.getStage(player),60,'the spare top-left tile must be empty');
+  assert.equal(Object.keys(player.getAttribute('death-plateau:stone-balls')).length,6);
+});
+
+test('Dunstan introduces his son first and remembers a delivered certificate', () => {
+  const { api, handlers, quest, player, items } = questScene('DeathPlateau');
+  const { DUNSTAN, DENULTH } = api.core.NpcIdentifiers, I = api.core.ItemIdentifiers;
+  const talk = npcId => handlers.variant.at(-1)({ player, npcId });
+  quest.setStage(player,72);items.set(I.CLIMBING_BOOTS,1);
+  assert.equal(talk(DENULTH),'new-route-up-death-plateau-talking-to-denulth-after-opening-the-equipment-room');
+  assert.equal(talk(DUNSTAN),'new-route-up-death-plateau-talking-to-dunstan');
+  assert.equal(quest.getStage(player),73);
+  assert.equal(talk(DUNSTAN),'new-route-up-death-plateau-talking-to-dunstan-again');
+  assert.equal(talk(DENULTH),'new-route-up-death-plateau-talking-to-denulth-after-talking-to-dunstan');
+  items.set(I.CERTIFICATE_2,1);
+  handlers.custom.get('npc-dialogue:action').forEach(h => h({ player,npcId:DUNSTAN,stepId:'jmuuX8',kind:'message' }));
+  assert.equal(talk(DUNSTAN),'new-route-up-death-plateau-talking-to-dunstan-before-getting-the-spiked-boots');
+});
+
+test('scouting is required and lost maps can be replaced without paying supplies again', () => {
+  const runtime=require('../plugins/quests/QuestRuntime'), original=runtime.startTranscript;
+  let scene;
+  runtime.startTranscript=()=>true;
+  try { scene=questScene('DeathPlateau'); } finally { runtime.startTranscript=original; }
+  const { api, handlers, quest, player, items, tile }=scene;
+  const I=api.core.ItemIdentifiers, { TENZING, DENULTH }=api.core.NpcIdentifiers;
+  quest.setStage(player,77);items.set(I.SECRET_WAY_MAP,1);items.set(I.COMBINATION,1);
+  const ready=()=>handlers.condition.at(-1)({ player,npcId:DENULTH,text:'If the player has turned in all the items:' });
+  assert.equal(ready(),false);
+  assert.equal(handlers.npc.get('Denulth')['Talk-to']({ player }),true);
+  const scout=handlers.area.find(a=>a.constructor.name==='ScoutArea');
+  player.moveTo(tile(2865,3609,1));scout.process(player);assert.equal(quest.getStage(player),77);
+  items.delete(I.SECRET_WAY_MAP);
+  assert.equal(handlers.variant.at(-1)({ player,npcId:TENZING }),'new-route-up-death-plateau-talking-to-tenzing-after-losing-the-map');
+  player.moveTo(tile(2865,3609));scout.process(player);assert.equal(quest.getStage(player),77,'the scout needs the map');
+  handlers.custom.get('npc-dialogue:action').forEach(h=>h({ player,npcId:TENZING,stepId:'TgL2Wy',kind:'message' }));
+  assert.equal(items.get(I.SECRET_WAY_MAP),1);
+  scout.process(player);assert.equal(quest.getStage(player),78);
+  assert.equal(handlers.npc.get('Denulth')['Talk-to']({ player }),false);
+  assert.equal(ready(),true);
+});
+
+
+test('Denulth remembers partial note hand-ins and completes after the missing note is recovered', () => {
+  const { api, handlers, quest, player, items } = questScene('DeathPlateau');
+  const I = api.core.ItemIdentifiers, { DENULTH } = api.core.NpcIdentifiers;
+  const act = stepId => handlers.custom.get('npc-dialogue:action').forEach(h => h({ player, npcId: DENULTH, kind: 'message', stepId }));
+  player.getSkillManager = () => ({ addExperiences: () => {} });
+  player.isRegistered = () => false;
+  quest.setStage(player,77);items.set(I.SECRET_WAY_MAP,1);
+  act('sdE5c5');assert.equal(items.get(I.SECRET_WAY_MAP),1,'cannot submit before scouting');
+  quest.setStage(player,78);act('sdE5c5');
+  assert.equal(items.get(I.SECRET_WAY_MAP),0);
+  assert.equal(handlers.condition.at(-1)({ player,npcId:DENULTH,text:"If the player has the map:" }),true);
+  act('IRymYG');assert.equal(quest.getStage(player),78);
+  items.set(I.COMBINATION,1);act('liaDgz');act('IRymYG');
+  assert.equal(items.get(I.COMBINATION),0);assert.equal(quest.isComplete(player),true);
+});
+
+
+test('boot and map exchanges happen together and cannot strand a cancelled dialogue', () => {
+  const { api, handlers, quest, player, items } = questScene('DeathPlateau');
+  const I = api.core.ItemIdentifiers, { DUNSTAN, TENZING } = api.core.NpcIdentifiers;
+  const act = (npcId, stepId) => handlers.custom.get('npc-dialogue:action').forEach(h => h({ player, npcId, kind: 'message', stepId }));
+  quest.setStage(player,73);items.set(I.CLIMBING_BOOTS,1);items.set(I.IRON_BAR,1);
+  act(DUNSTAN,'V1M373');assert.equal(items.get(I.CLIMBING_BOOTS),1,'cancelling before reward retains materials');
+  act(DUNSTAN,'1TFYaK');act(DUNSTAN,'WryBLk');
+  assert.equal(items.get(I.CLIMBING_BOOTS),0);assert.equal(items.get(I.IRON_BAR),0);assert.equal(items.get(I.SPIKED_BOOTS),1);
+  items.set(I.BREAD,10);items.set(I.TROUT,10);
+  act(TENZING,'_ZbFCb');act(TENZING,'JM8S8J');assert.equal(items.get(I.SPIKED_BOOTS),1);
+  act(TENZING,'yDYvE0');act(TENZING,'MtULDz');
+  assert.equal(items.get(I.SPIKED_BOOTS),0);assert.equal(items.get(I.BREAD),0);assert.equal(items.get(I.TROUT),0);
+  assert.equal(items.get(I.SECRET_WAY_MAP),1);assert.equal(quest.getStage(player),77);
+  items.delete(I.SECRET_WAY_MAP);act(TENZING,'TgL2Wy');assert.equal(items.get(I.SECRET_WAY_MAP),1);
 });
