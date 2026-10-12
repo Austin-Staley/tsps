@@ -1630,7 +1630,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     const inventory = player.getInventory();
     let variant = null;
     let changed = false;
-    if (name === "vines" && prepObjectAt(event, 2982, 7679, 0) && !hasItem(player, PREP.leaves)) {
+    if (name === "amitire plant" && prepObjectAt(event, 2982, 7679, 0) && !hasItem(player, PREP.leaves)) {
       changed = inventory.adds(PREP.leaves, 1);
       variant = "hallowed-preparations-picking-the-amitire-plant";
     } else if (name === "shelves" && prepObjectAt(event, 3159, 7824, 1) && !hasItem(player, PREP.bowl)) {
@@ -1760,7 +1760,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     varpId: 5618,
     varbitId: 15464,
     // shortcut: other chapter native stages need their cache morphs validated before mapping.
-    varpValue: value => ({ [STAGE.PREPARATIONS]: 106, [STAGE.SIEGE]: 116, [STAGE.COMPLETE]: 176 })[value] ?? value,
+    varpValue: value => ({ [STAGE.PREPARATIONS]: 102, [STAGE.SIEGE]: 116, [STAGE.COMPLETE]: 176 })[value] ?? value,
     startedValue: STAGE.STARTED,
     completionValue: STAGE.COMPLETE,
     questPoints: 4,
