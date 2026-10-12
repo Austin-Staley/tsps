@@ -13,11 +13,14 @@ const { GameObject } = require('../dist/game/entity/impl/object/GameObject');
 const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
 const { Sounds } = require('../dist/game/Sounds');
 const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+const { ObjectManager } = require('../dist/game/entity/impl/object/ObjectManager');
+const { RegionManager } = require('../dist/game/collision/RegionManager');
+const { TemplatedInstanceArea } = require('../dist/game/model/areas/impl/TemplatedInstanceArea');
 const { crossingFor: shantayCrossingFor } = require('../plugins/objects/ShantayPass.plugin');
 
 const tileKey = (id, x, y, z) => `${id}@${x},${y},${z}`;
 
-function buildHarness({ cacheObjects } = {}) {
+function buildHarness({ cacheObjects, objectManager: suppliedObjectManager } = {}) {
   const world = new Map();
   const ops = [];
   const sounds = [];
@@ -37,7 +40,7 @@ function buildHarness({ cacheObjects } = {}) {
   CacheDefinitions.getCounts = () => ({ npcs: 0, items: 0, objects: cacheObjects ? 62522 : 2607 });
 
   const handlers = new Map();
-  const objectManager = {
+  const objectManager = suppliedObjectManager ?? {
     register: (o) => ops.push(['register', o.getId(), o.getLocation().getX(), o.getLocation().getY(), o.getFace()]),
     deregister: (o) => ops.push(['deregister', o.getId(), o.getLocation().getX(), o.getLocation().getY(), o.getFace()]),
   };
@@ -68,13 +71,13 @@ function buildHarness({ cacheObjects } = {}) {
     world.set(tileKey(id, x, y, 0), object);
   };
 
-  const click = (id, x, y, face, action = 'Open', name = 'Gate', type = 0) => {
-    const object = new GameObject(id, new Location(x, y, 0), type, face, null);
+  const click = (id, x, y, face, action = 'Open', name = 'Gate', type = 0, privateArea = null, z = 0) => {
+    const object = new GameObject(id, new Location(x, y, z), type, face, privateArea);
     const location = object.getLocation();
     const player = {
       getUsername: () => 'tester',
       isPlayerBot: () => false,
-      getPrivateArea: () => null,
+      getPrivateArea: () => privateArea,
       getLocation: () => location,
       getAttribute: () => 0,
       setAttribute: () => {},
@@ -83,7 +86,7 @@ function buildHarness({ cacheObjects } = {}) {
       getPacketSender: () => ({}),
     };
     ops.length = 0;
-    handlers.get(name)[action]({ player, object, objectId: id, location: { x, y, z: 0 } });
+    handlers.get(name)[action]({ player, object, objectId: id, location: { x, y, z } });
     return ops.splice(0);
   };
 
@@ -111,8 +114,9 @@ test('Dragon Slayer secret wall opens with the normal door interaction', () => {
   }
 });
 
-test('Kourend Crypt cached Large doors open through the generic door handler', async () => {
+test('Kourend Crypt cached Large doors keep their real double-leaf geometry and clear the plane-1 threshold', async () => {
   await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(process.cwd());
+  RegionManager.init();
   const cachedDoors = new Map([32404, 32405, 32406, 32407].map((id) => [
     id,
     CacheDefinitions.getObject(id),
@@ -124,15 +128,48 @@ test('Kourend Crypt cached Large doors open through the generic door handler', a
     assert.deepEqual(definition.models, [[6623]]);
   }
 
-  const h = buildHarness({ cacheObjects: cachedDoors });
+  const area = new TemplatedInstanceArea(12, 8);
+  area.setChunk(1, 3, 3, { sourceChunkX: 187, sourceChunkY: 1243, sourcePlane: 1, rotation: 0 });
+  area.setChunk(1, 4, 3, { sourceChunkX: 188, sourceChunkY: 1243, sourcePlane: 1, rotation: 0 });
+  area.setChunk(1, 3, 4, { sourceChunkX: 187, sourceChunkY: 1244, sourcePlane: 1, rotation: 0 });
+  area.setChunk(1, 4, 4, { sourceChunkX: 188, sourceChunkY: 1244, sourcePlane: 1, rotation: 0 });
+  const x = area.getBaseX() + 31;
+  const y = area.getBaseY() + 36;
+  const upperY = area.getBaseY() + 24;
+  const closedLowerCrossing = RegionManager.canMove(x, y, x, y + 1, 1, 1, 1, area);
+  const closedUpperCrossing = RegionManager.canMove(x + 1, upperY - 1, x + 1, upperY, 1, 1, 1, area);
+  const h = buildHarness({ cacheObjects: cachedDoors, objectManager: ObjectManager });
   try {
     assert.ok(h.handlers.get('Large doors')?.Open, 'the plural cache name must be registered');
-    const operations = h.click(32404, 8223, 1624, 0, 'Open', 'Large doors');
-    assert.equal(operations[0][0], 'register');
-    assert.equal(operations[0][1], 32405, 'opening the west leaf uses its cached open partner');
-    assert.equal(operations[1][0], 'deregister');
-    assert.equal(operations[1][1], 32404);
+    const crossing = () => RegionManager.canMove(x, y, x, y + 1, 1, 1, 1, area);
+    assert.equal(closedLowerCrossing, false, 'the closed shape-0 leaves block the real source-map approach edge');
+    const westLeaf = area.resolveObject(32406, new Location(x, y, 1));
+    assert.ok(westLeaf, 'the west cached leaf is resolved from the template, not MapObjects');
+    const player = { getPrivateArea: () => area, getUsername: () => 'tester' };
+    h.handlers.get('Large doors').Open({ player, object: westLeaf, objectId: 32406, location: westLeaf.getLocation() });
+    assert.equal(crossing(), true, 'opening both cached leaves removes their original clipping and leaves the route walkable');
+
+    const movedLeaves = area.getObjects().filter((object) => [32406, 32407].includes(object.getId()));
+    assert.deepEqual(movedLeaves.map((object) => [object.getId(), object.getLocation().getX(), object.getLocation().getY(), object.getFace()]).sort(), [
+      [32406, x, y + 1, 0],
+      [32407, x + 1, y + 1, 2],
+    ]);
+    assert.ok(movedLeaves.every((object) => object.getPrivateArea() === area), 'open panels remain private to this crypt instance');
+
+    const upperCrossing = () => RegionManager.canMove(x + 1, upperY - 1, x + 1, upperY, 1, 1, 1, area);
+    assert.equal(closedUpperCrossing, false, 'the rotation-3 upper pair blocks the opposite approach edge');
+    const upperWestLeaf = area.resolveObject(32405, new Location(x, upperY, 1));
+    h.handlers.get('Large doors').Open({ player, object: upperWestLeaf, objectId: 32405, location: upperWestLeaf.getLocation() });
+    assert.equal(upperCrossing(), true, 'the rotation-3 pair also opens its template collision gap');
+
+    const closeTask = h.submitted.at(-1);
+    closeTask.execute();
+    assert.equal(upperCrossing(), false, 'the ordinary auto-close restores both cached leaves and their collision');
+    const closedLeaves = area.getObjects().filter((object) => [32404, 32405].includes(object.getId()));
+    assert.equal(closedLeaves.length, 2);
+    assert.ok(closedLeaves.every((object) => object.getPrivateArea() === area), 'auto-close keeps both leaves in the private instance');
   } finally {
+    area.destroy();
     h.restore();
   }
 });
