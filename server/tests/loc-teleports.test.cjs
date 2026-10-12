@@ -97,6 +97,39 @@ test("every entry is a placed loc with that option in the rev 241 cache, once pe
   assert.ok(!data.locs.some((entry) => /^(sailing_|spirittree|fossil_magic_mushtree)/.test(entry.name)));
 });
 
+test("the Well of Voyage enters Iban's temple beside its real well and door", () => {
+  const entry = data.locs.find((loc) => loc.id === 4005);
+  assert.deepEqual([entry.x, entry.y, entry.z, entry.op, entry.to], [2341, 9622, 0, 1, [2138, 4647, 1]]);
+  const source = CacheDefinitions.getObject(entry.id);
+  assert.equal(source.actions[entry.op - 1], "Climb-down");
+
+  // QH puts the temple well at 2136,4647. Its 2x2 cache footprint is not a valid landing tile,
+  // and its only action is Search. The inferred landing is the first clear tile east of it.
+  const well = CacheDefinitions.getObject(3359);
+  assert.deepEqual([well.sizeX, well.sizeY, well.actions[0]], [2, 2, "Search"]);
+  const [x, y, z] = entry.to;
+  assert.ok(x >= 2138 && y >= 4647 && x <= 2139 && y <= 4648, "landing is beside the temple well footprint");
+
+  core.RegionManager.loadMapFiles(x, y);
+  const doorApproach = [[2138, 4647], [2139, 4647], [2140, 4647], [2141, 4647], [2142, 4647]];
+  for (let i = 1; i < doorApproach.length; i++) {
+    const [fromX, fromY] = doorApproach[i - 1];
+    const [toX, toY] = doorApproach[i];
+    assert.equal(core.RegionManager.canMove(fromX, fromY, toX, toY, z, 1, 1, null), true,
+      `clear path from the landing to the temple door at ${toX},${toY}`);
+  }
+  const doorIds = new Set([3333, 3334]);
+  const doors = [];
+  for (let dx = 2138; dx <= 2145; dx++) for (let dy = 4645; dy <= 4650; dy++) {
+    for (const id of doorIds) {
+      const object = MapObjects.get(id, new core.Location(dx, dy, z), null);
+      if (object) doors.push(object);
+    }
+  }
+  assert.ok(doors.some((door) => door.getLocation().getX() === 2143 && door.getLocation().getY() >= 4647 && door.getLocation().getY() <= 4648),
+    "the reachable route ends at the cache-placed Iban temple doors");
+});
+
 /** A real player whose packets are recorded per tick. */
 function explorer(at) {
   const player = new Player(null);
