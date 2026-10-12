@@ -92,6 +92,7 @@ test('Fellowship recruitment waits for dialogue continuation and all four heroes
   }
   assert.equal(progress, 300);
   assert.equal(player.varbits.get(10781), 2);
+  assert.equal(player.varbits.get(10782), 1);
 });
 
 test('Fellowship seed enrichment requires the seed on Betty’s counter and the doorway tile', () => {
