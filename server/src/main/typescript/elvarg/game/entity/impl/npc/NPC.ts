@@ -119,6 +119,7 @@ export class NPC extends Mobile {
     private rollFactor = 1;
     private spawnPosition: Location;
     private headIcon = -1;
+    private defenceBonusOverrides: Array<number | null> | null = null;
     /** This tick's glide, sent with the NPC's update and cleared after it. */
     private exactMoveState: NpcExactMove | null = null;
     /** This tick's headbars besides the hitpoints one, sent with the NPC's update and cleared after it. */
@@ -413,17 +414,32 @@ export class NPC extends Mobile {
         // 4 = magic
     }
 
+    /**
+     * A defence bonus (BonusManager.DEFENCE_STAB..DEFENCE_RANGE) as this NPC has it now: the
+     * definition's, unless a fight has changed it for this NPC (setDefenceBonusOverrides).
+     */
+    public getDefenceBonus(index: number): number {
+        const override = this.defenceBonusOverrides?.[index];
+        if (typeof override === "number") return override;
+        return this.getCurrentDefinition().getStats()[10 + index] ?? 0;
+    }
+
+    /** Per-NPC defence bonuses by index (null entries keep the definition's); null clears them. */
+    public setDefenceBonusOverrides(bonuses: Array<number | null> | null): void {
+        this.defenceBonusOverrides = bonuses ? [...bonuses] : null;
+    }
+
     public getBaseDefence(type: CombatType): number {
         let base = 0;
         switch (type) {
             case CombatType.MAGIC:
-                base = this.getCurrentDefinition().getStats()[13];
+                base = this.getDefenceBonus(3);
                 break;
             case CombatType.MELEE:
-                base = this.getCurrentDefinition().getStats()[10];
+                base = this.getDefenceBonus(0);
                 break;
             case CombatType.RANGED:
-                base = this.getCurrentDefinition().getStats()[14];
+                base = this.getDefenceBonus(4);
                 break;
         }
         // 10,11,12 = melee

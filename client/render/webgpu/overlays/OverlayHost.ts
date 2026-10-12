@@ -357,6 +357,7 @@ export class OverlayHost {
             entry.headIconPk = -1;
             entry.headIconPrayer = -1;
             entry.npcHeadIcons = undefined;
+            entry.customHeadIcons = undefined;
             entry.heightOffsetTiles = 0.9;
             this.overheadPrayerPool.push(entry);
         }
@@ -1297,7 +1298,8 @@ export class OverlayHost {
                     if (!this.shouldRenderPlayerIndex(i)) continue;
                     const headIconPk = pe.getHeadIconPk(i);
                     const headIconPrayer = pe.getHeadIconPrayer(i);
-                    if (headIconPk < 0 && headIconPrayer < 0) continue;
+                    const customHeadIcons = osrsClient.clientPlugins.playerHeadIcons(pe.getServerIdForIndex(i) ?? -1);
+                    if (headIconPk < 0 && headIconPrayer < 0 && customHeadIcons.length === 0) continue;
 
                     const px = pe.getX(i) | 0;
                     const py = pe.getY(i) | 0;
@@ -1316,6 +1318,7 @@ export class OverlayHost {
                     );
                     entry.headIconPk = headIconPk;
                     entry.headIconPrayer = headIconPrayer;
+                    entry.customHeadIcons = customHeadIcons;
                     entry.heightOffsetTiles = this.resolvePlayerHeadIconOffset(
                         i,
                         playerDefaultHeightTiles,

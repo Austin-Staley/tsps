@@ -901,7 +901,7 @@ export class WebGPUActors {
         const overlayView = this.renderer.osrsClient?.worldViewManager?.getWorldViewByOverlayMapId?.(map.id);
         const instances = overlayView
             ? runtime.manager.listWorldInstancesInView(overlayView)
-            : runtime.manager.listWorldInstancesForMap(map.mapX, map.mapY);
+            : runtime.manager.listWorldInstancesForDrawnMap(map);
         for (const inst of instances) {
             const world = inst.world;
             if (!world) continue;
