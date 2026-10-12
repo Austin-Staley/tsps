@@ -2015,6 +2015,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onObjectInteraction("Floating Book", { Climb: crossLibraryFloatingBooks });
   api.onObjectInteraction("Cave", { Ascend: enterTemplePassage });
   api.persistAttribute(CHEMICAL_CHOICE);
+  api.persistAttribute(REVELATIONS_MEETING_STARTED);
   api.persistAttribute(FALLS_PILLARS);
   api.persistAttribute(FALLS_ORDER);
   api.persistAttribute(INCITEMENTS);

@@ -391,6 +391,8 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   const { api, handlers } = mockApi();
   const hooks = [];
   const started = [];
+  const persistedAttributes = [];
+  api.persistAttribute = (key) => persistedAttributes.push(key);
   api.onAnyNpcInteraction = (hook) => hooks.push(hook);
   const runtime = require('../plugins/quests/QuestRuntime');
   const original = runtime.startTranscript;
@@ -398,6 +400,7 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   try { require('../plugins/quests/quests/SongOfTheElves.Quest')(api); }
   finally { runtime.startTranscript = original; }
   const quest = runtime.getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  assert.ok(persistedAttributes.includes('quest.song_of_the_elves.revelations-meeting-started'));
   const attributes = new Map();
   const player = {
     getAttribute: (key) => attributes.get(key),
