@@ -337,3 +337,20 @@ test('The White Knights Castle west stairs connect every floor to the WGS herb p
   assert.equal(e.to[2],z+(up?1:-1));
  }
 });
+
+
+test("Tears of Guthix northern rocks let both cave shelves cross in either direction", () => {
+  const { RegionManager } = core;
+  RegionManager.loadMapFiles(3240, 9524);
+  for (const y of [9524, 9525]) {
+    const object = locAt(6673, 3240, y, 2);
+    for (const [from, to] of [[[3241, y, 2], [3239, y, 2]], [[3239, y, 2], [3241, y, 2]]]) {
+      const visit = explorer(from);
+      const event = { player: visit.player, object, objectId: 6673, clickType: 1, handled: false };
+      hooks.object(event); assert.equal(event.handled, true); runTicks(visit, 3);
+      assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], to);
+      const outward = to[0] < 3240 ? -1 : 1;
+      assert.equal(RegionManager.canMove(to[0], to[1], to[0] + outward, to[1], 2, 1, 1), true, 'landing is on a walkable shelf');
+    }
+  }
+});
