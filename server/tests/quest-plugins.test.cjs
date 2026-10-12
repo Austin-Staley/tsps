@@ -4229,6 +4229,264 @@ test('Song of the Elves exposes the post-library meeting through a talkable Aria
   assert.equal(spawns[0].ownerOnly, true);
 });
 
+test('Song of the Elves makes Baxtorian available in Lletya for the dwarf-camp chapter', () => {
+  const { api } = mockApi();
+  const areas = [];
+  const spawns = [];
+  const removed = [];
+  api.registerArea = (area) => areas.push(area);
+  api.spawnNpc = (definition) => (spawns.push(definition), { isRegistered: () => true });
+  api.removeNpc = (npc) => removed.push(npc);
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map();
+  const player = {
+    getUsername: () => 'DwarfCampBaxtorianTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    isPlayer: () => true,
+    getAsPlayer: () => player,
+  };
+  quest.setStage(player, 180);
+  const lletya = areas[0];
+  lletya.process(player);
+  lletya.process(player);
+  assert.equal(spawns.length, 1, 'Baxtorian is spawned once for the stage-180 chapter');
+  assert.equal(spawns[0].id, api.core.NpcIdentifiers.BAXTORIAN);
+  assert.deepEqual([spawns[0].x, spawns[0].y, spawns[0].z], [2352, 3170, 0]);
+  assert.equal(spawns[0].owner, player);
+  assert.equal(spawns[0].ownerOnly, true);
+
+  quest.setStage(player, 190);
+  lletya.process(player);
+  assert.equal(removed.length, 1, 'the temporary Lletya actor is removed after leaving this chapter');
+
+  attributes.set('quest.song_of_the_elves.camp-defense-complete', true);
+  attributes.set('quest.song_of_the_elves.fragment-defeated', false);
+  attributes.set('quest.song_of_the_elves.late-chapter', 19);
+  lletya.process(player);
+  assert.equal(spawns.length, 2, 'Baxtorian returns only while the defended camp still needs Essyllt');
+  assert.equal(spawns[1].id, api.core.NpcIdentifiers.BAXTORIAN);
+  attributes.set('quest.song_of_the_elves.fragment-defeated', true);
+  lletya.process(player);
+  assert.equal(spawns.length, 2, 'Baxtorian is not respawned after the Fragment is defeated');
+});
+
+test('Song of the Elves can re-enter the defended dwarf camp to retry Essyllt after a death', () => {
+  const { api } = mockApi();
+  const areas = [];
+  const spawns = [];
+  let talk;
+  api.registerArea = (area) => areas.push(area);
+  api.spawnNpc = (definition) => {
+    spawns.push(definition);
+    return {
+      isRegistered: () => true,
+      isPlayer: () => false,
+      isNpc: () => true,
+      getAsNpc() { return this; },
+      getIndex: () => 100 + spawns.length,
+      setArea(area) { this.area = area; },
+      getArea() { return this.area ?? null; },
+    };
+  };
+  api.onAnyNpcInteraction = (actions) => { talk = actions['Talk-to']; };
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map([
+    ['quest.song_of_the_elves.camp-defense-complete', true],
+    ['quest.song_of_the_elves.fragment-defeated', false],
+    ['quest.song_of_the_elves.late-chapter', 19],
+  ]);
+  const player = {
+    getUsername: () => 'DwarfCampRetryTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ getFreeSlots: () => 10, getAmount: () => 0, adds: () => {} }),
+    getArea: () => player.area ?? null,
+    setArea(area) { player.area = area; },
+    moveTo(location) { player.location = location; },
+    getLocation: () => player.location,
+    getIndex: () => 1,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage: (message) => (player.messages ??= []).push(message),
+    isPlayer: () => true,
+    isNpc: () => false,
+    getAsPlayer: () => player,
+  };
+  quest.setStage(player, 190);
+  const lletya = areas.find((area) => area.constructor.name === 'LletyaStoryArea');
+  lletya.process(player);
+  const baxtorian = { getName: () => 'Baxtorian' };
+  const result = talk({ player, npcId: api.core.NpcIdentifiers.BAXTORIAN, option: 'Talk-to', definition: baxtorian,
+    target: baxtorian });
+  assert.equal(result, true);
+  assert.equal(player.location.getX(), 2445);
+  assert.equal(player.location.getY(), 6092);
+  assert.equal(quest.getStage(player), 190, 'returning to camp does not advance quest progress');
+  assert.equal(player.getArea().constructor.name, 'DwarvenCampArea');
+  assert.equal(spawns.filter((entry) => entry.id === api.core.NpcIdentifiers.ESSYLLT_5).length, 0,
+    'the fight begins through the saved post-defense transcript after re-entry');
+});
+
+test('Song of the Elves retries the Temple cutscene after a disconnect but not during the Fragment fight', () => {
+  const { api } = mockApi();
+  const areas = [];
+  const started = [];
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  runtime.startTranscript = (...args) => (started.push(args.slice(1)), true);
+  try {
+    api.registerArea = (area) => areas.push(area);
+    require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  } finally {
+    runtime.startTranscript = originalStartTranscript;
+  }
+  const quest = runtime.getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map([
+    ['quest.song_of_the_elves.late-chapter', 19],
+    ['quest.song_of_the_elves.camp-battle', true],
+    ['quest.song_of_the_elves.fragment-defeated', false],
+    ['quest.song_of_the_elves.temple-cutscene-started', true],
+  ]);
+  let dialogueActive = false;
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getDialogueManager: () => ({ isActive: () => dialogueActive }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    isPlayer: () => true,
+    getAsPlayer: () => player,
+  };
+  quest.setStage(player, 190);
+  const threshold = areas.find((area) => area.constructor.name === 'FragmentThresholdArea');
+  threshold.process(player);
+  assert.equal(started.length, 1, 'a saved cutscene-started flag with no live dialogue restarts the transcript');
+  assert.equal(attributes.get('quest.song_of_the_elves.temple-cutscene-started'), true);
+  dialogueActive = true;
+  threshold.process(player);
+  assert.equal(started.length, 1, 'an active transcript is not restarted');
+  attributes.set('quest.song_of_the_elves.fragment-area', {});
+  dialogueActive = false;
+  threshold.process(player);
+  assert.equal(started.length, 1, 'the fight instance owns the scene while it is active');
+});
+
+test('Song of the Elves spawns the attackable Fragment variant for the final fight', () => {
+  const { api, handlers } = mockApi();
+  const areas = [];
+  const spawned = [];
+  api.registerArea = (area) => areas.push(area);
+  api.spawnNpc = (definition) => {
+    spawned.push(definition);
+    return {
+      isPlayer: () => false,
+      isNpc: () => true,
+      getAsNpc() { return this; },
+      getIndex: () => spawned.length + 100,
+      setArea(area) { this.area = area; },
+      getArea() { return this.area ?? null; },
+      isRegistered: () => true,
+      setMultiCombat() {},
+      setMaxHitpoints() {},
+      setHitpoints() {},
+    };
+  };
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map([
+    ['quest.song_of_the_elves.late-chapter', 19],
+    ['quest.song_of_the_elves.camp-battle', true],
+    ['quest.song_of_the_elves.fragment-defeated', false],
+  ]);
+  const player = {
+    getUsername: () => 'FragmentBossVariantTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ getFreeSlots: () => 10, getAmount: () => 0, adds: () => {} }),
+    getArea: () => player.area ?? null,
+    setArea(area) { player.area = area; },
+    moveTo(location) { player.location = location; },
+    getIndex: () => 1,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage: () => {},
+    isPlayer: () => true,
+    isNpc: () => false,
+    getAsPlayer: () => player,
+  };
+  quest.setStage(player, 190);
+  const action = handlers.custom.get('npc-dialogue:action').at(-1);
+  action({ player, stepId: 'xfnkES', handled: false });
+  assert.equal(spawned.length, 1);
+  assert.equal(spawned[0].id, api.core.NpcIdentifiers.FRAGMENT_OF_SEREN);
+  assert.notEqual(spawned[0].id, api.core.NpcIdentifiers.FRAGMENT_OF_SEREN_3);
+  assert.equal(player.getArea().constructor.name, 'FragmentArea');
+  assert.equal(player.location.getX(), 3294);
+  assert.equal(player.location.getY(), 5918);
+});
+
+test('Song of the Elves keeps the Fragment death return at the dwarf camp', () => {
+  const { api, handlers } = mockApi();
+  const areas = [];
+  const spawned = [];
+  const deaths = [];
+  api.registerArea = (area) => areas.push(area);
+  api.spawnNpc = (definition) => {
+    spawned.push(definition);
+    return {
+      isPlayer: () => false,
+      isNpc: () => true,
+      getAsNpc() { return this; },
+      getIndex: () => spawned.length + 100,
+      setArea(area) { this.area = area; },
+      getArea() { return this.area ?? null; },
+      isRegistered: () => true,
+      setMultiCombat() {},
+      setMaxHitpoints() {},
+      setHitpoints() {},
+    };
+  };
+  api.removeNpc = () => {};
+  api.onPlayerDeath = (hook) => deaths.push(hook);
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map([
+    ['quest.song_of_the_elves.late-chapter', 19],
+    ['quest.song_of_the_elves.camp-battle', true],
+    ['quest.song_of_the_elves.fragment-defeated', false],
+  ]);
+  const player = {
+    getUsername: () => 'FragmentDeathReturnTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ getFreeSlots: () => 10, getAmount: () => 0, adds: () => {} }),
+    getArea: () => player.area ?? null,
+    setArea(area) { player.area = area; },
+    moveTo(location) { player.location = location; },
+    getIndex: () => 1,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage: () => {},
+    isPlayer: () => true,
+    isNpc: () => false,
+    getAsPlayer: () => player,
+  };
+  quest.setStage(player, 190);
+  handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'xfnkES', handled: false });
+  const event = { player, killer: null, handled: false };
+  deaths.at(-1)(event);
+  assert.equal(event.handled, true, 'generic death must not overwrite the quest return location');
+  assert.equal(player.getArea().constructor.name, 'DwarvenCampArea');
+  assert.equal(player.location.getX(), 2445);
+  assert.equal(player.location.getY(), 6092);
+  assert.equal(quest.getStage(player), 190);
+  assert.equal(attributes.get('quest.song_of_the_elves.fragment-defeated'), false);
+});
+
 test('Song of the Elves starts the post-library council and switches Baxtorian after it', () => {
   const { api, handlers } = mockApi();
   const hooks = [];
