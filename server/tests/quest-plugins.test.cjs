@@ -784,6 +784,54 @@ test('Regicide dense forest crossing checks Agility and clears the full rotated 
   assert.deepEqual(state.moves, [[2271, 3191, 0]], 'crosses from the east edge to the west edge of the rotated 2×3 obstacle');
 });
 
+test('Regicide leaf and stick traps use Agility checks and cross from the approached side', () => {
+  const { api: base } = mockApi();
+  const objectHooks = [];
+  const leaves = new Set();
+  for (let x = 2273; x <= 2275; x++) for (let y = 3173; y <= 3175; y++) leaves.add(`${x},${y}`);
+  const core = { ...base.core, ObjectManager: { objectsAt: (location) =>
+    leaves.has(`${location.getX()},${location.getY()}`) ? [{ getId: () => 3923 }] : [] } };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core : prop === 'onObjectInteraction'
+      ? (handler) => objectHooks.push(handler)
+      : target[prop],
+  });
+  require('../plugins/quests/quests/Regicide.Quest')(api);
+  const interact = objectHooks[0];
+  const createPlayer = (agility, position) => {
+    const state = { moves: [], hits: [] };
+    const player = {
+      getLocation: () => ({ getX: () => position.x, getY: () => position.y, getZ: () => 0 }),
+      getSkillManager: () => ({ getCurrentLevel: () => agility }),
+      getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => state.hits.push(hits) }) }),
+      moveTo: (destination) => state.moves.push([destination.getX(), destination.getY(), destination.getZ()]),
+      sendMessage() {},
+    };
+    return { player, state };
+  };
+  const event = (player, objectId, option, location, sourceLocation) => ({ player, objectId,
+    clickType: 1, location, sourceLocation, definition: { getActions: () => [option] }, handled: false });
+  const originalRandom = Math.random;
+  try {
+    Math.random = () => 0;
+    const leafRunner = createPlayer(99, { x: 2274, y: 3176 });
+    const leafCrossing = event(leafRunner.player, 3923, 'Jump', { x: 2274, y: 3175, z: 0 }, { x: 2274, y: 3176, z: 0 });
+    interact(leafCrossing);
+    assert.equal(leafCrossing.handled, true);
+    assert.deepEqual(leafRunner.state.moves, [[2274, 3172, 0]], 'the full 3×3 leaf pit is crossed southward');
+
+    Math.random = () => 0.99;
+    const stickRunner = createPlayer(99, { x: 2301, y: 3190 });
+    const stickCrossing = event(stickRunner.player, 3922, 'Pass', { x: 2300, y: 3190, z: 0 }, { x: 2301, y: 3190, z: 0 });
+    interact(stickCrossing);
+    assert.equal(stickCrossing.handled, true);
+    assert.equal(stickRunner.state.hits[0][0].getDamage(), 8);
+    assert.deepEqual(stickRunner.state.moves, [[2302, 3190, 0]], 'a failed stick pass knocks the player back');
+  } finally {
+    Math.random = originalRandom;
+  }
+});
+
 test("Mourning's End I teleport crystals consume a charge and take the player to Lletya", () => {
   const { api: base } = mockApi();
   const itemActions = new Map();
