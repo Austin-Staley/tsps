@@ -164,7 +164,11 @@ let allowTeleport = true;
 let breakTablet;
 SpellTeleports.register({
   core: {
-    ItemDefinition: { forId: (id) => ({ getName: () => (id === ItemIdentifiers.VARROCK_TELEPORT ? "Varrock teleport" : "Teleport to house") }) },
+    Location: require("../dist/game/model/Location").Location,
+    ItemDefinition: { forId: (id) => ({ getName: () => (
+      id === ItemIdentifiers.VARROCK_TELEPORT ? "Varrock teleport" :
+      id === ItemIdentifiers.RELLEKKA_TELEPORT ? "Rellekka teleport" : "Teleport to house"
+    ) }) },
     TeleportHandler: {
       checkReqs: () => allowTeleport,
       teleport: (player, destination, type, warning, onArrival, onMiddle) =>
@@ -199,6 +203,22 @@ test("breaking a tablet teleports to its spell's destination and uses one tablet
   teleports[0].onMiddle();
   assert.equal(player.items.length, 1);
   assert.deepEqual([teleports[0].destination.getX(), teleports[0].destination.getY()], [3213, 3424]);
+  assert.equal(teleports[0].type, "TELE_TAB");
+});
+
+test("a redirected Rellekka house tablet goes to the portal outside the Fremennik gates", () => {
+  teleports.length = 0;
+  allowTeleport = true;
+  const player = tabletHolder(1);
+  const event = { player, itemId: ItemIdentifiers.RELLEKKA_TELEPORT, option: "Break", handled: false };
+  player.items[0] = ItemIdentifiers.RELLEKKA_TELEPORT;
+  breakTablet(event);
+  assert.equal(event.handled, true);
+  assert.equal(teleports.length, 1);
+  assert.deepEqual(
+    [teleports[0].destination.getX(), teleports[0].destination.getY(), teleports[0].destination.getZ()],
+    [2670, 3632, 0]
+  );
   assert.equal(teleports[0].type, "TELE_TAB");
 });
 

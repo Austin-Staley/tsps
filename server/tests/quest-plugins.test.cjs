@@ -626,6 +626,110 @@ test('Dragon Slayer II reforging requires three distinct dragon-head casts and c
   assert.equal(counts.get(core.ItemIdentifiers.DRAGON_KEY_PIECE_4), 0);
 });
 
+test('Dragon Slayer II registers the Ungael Cave Enter action with a cache ID guard', () => {
+  const { api: base } = mockApi();
+  let caveActions;
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onObjectInteraction'
+      ? (name, actions) => { if (name === 'Cave') caveActions = actions; }
+      : target[prop],
+  });
+  require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  assert.equal(typeof caveActions?.Enter, 'function');
+
+  const messages = [];
+  const attrs = new Map([['quest.dragon_slayer_ii.stage', 8]]);
+  const player = {
+    getAttribute: (key) => attrs.get(key),
+    sendMessage: (message) => messages.push(message),
+  };
+  const wrongCave = caveActions.Enter({
+    player, objectId: api.core.ObjectIdentifiers.CAVE_62,
+    definition: { id: api.core.ObjectIdentifiers.CAVE_62 + 1 },
+    location: { x: 2248, y: 4077, z: 0 },
+  });
+  assert.equal(wrongCave, false, 'another Cave with Enter must fall through');
+
+  const blocked = caveActions.Enter({
+    player, objectId: api.core.ObjectIdentifiers.CAVE_62,
+    definition: { id: api.core.ObjectIdentifiers.CAVE_62 },
+    location: { x: 2248, y: 4077, z: 0 },
+  });
+  assert.equal(blocked, true, 'the actual Ungael cave consumes its locked entrance action');
+  assert.match(messages.at(-1), /Vorkath blocks the way/);
+});
+
+test('Dragon Slayer II completes Veos boat travel after the narrated destination is chosen', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  const attrs = new Map([['quest.dragon_slayer_ii.stage', 8]]);
+  let movedTo;
+  const player = {
+    getAttribute: (key) => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    moveTo: (location) => { movedTo = [location.getX(), location.getY(), location.getZ()]; },
+  };
+  const choose = (option) => handlers.custom.get('npc-dialogue:choice').forEach((handler) =>
+    handler({ player, npcId: api.core.NpcIdentifiers.VEOS_4, option }));
+  const line = () => {
+    const event = { player, npcId: api.core.NpcIdentifiers.VEOS_4, text: "As you wish, I hope you don't get seasick, it is a  long voyage." };
+    handlers.custom.get('npc-dialogue:line').forEach((handler) => handler(event));
+    event.after?.();
+  };
+
+  choose("I'd like to travel to Port Piscarilius, please.");
+  line();
+  assert.deepEqual(movedTo, [1825, 3691, 0]);
+  assert.equal(attrs.get('dragon-slayer-ii:veos-travel-destination'), null);
+
+  movedTo = undefined;
+  choose("I'd like to travel to Land's End, please.");
+  line();
+  assert.deepEqual(movedTo, [1504, 3401, 0]);
+});
+
+test('Dragon Slayer II handles Veos direct cache travel options by their visible action', () => {
+  const { api: base } = mockApi();
+  const actions = [];
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onNpcInteraction'
+      ? (name, options) => { if (name === 'Veos') actions.push(options); }
+      : target[prop],
+  });
+  require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  const attrs = new Map([['quest.dragon_slayer_ii.stage', 8]]);
+  let movedTo;
+  const player = {
+    getAttribute: (key) => attrs.get(key),
+    moveTo: (location) => { movedTo = [location.getX(), location.getY(), location.getZ()]; },
+    sendMessage: () => {},
+  };
+  const handler = actions[0]["Land's End"];
+  assert.equal(typeof handler, 'function');
+  const event = {
+    player, npcId: api.core.NpcIdentifiers.VEOS_5, clickType: 3, handled: false,
+    definition: { getActions: () => ['Talk-to', 'Port Piscarilius', "Land's End"] },
+  };
+  assert.equal(handler(event), true);
+  assert.deepEqual(movedTo, [1504, 3401, 0]);
+  assert.equal(handler({ ...event, npcId: api.core.NpcIdentifiers.VEOS_5 + 100 }), false);
+  attrs.set('quest.dragon_slayer_ii.stage', 7);
+  assert.equal(handler(event), false, 'the voyage is scoped to the DS2 key chapters');
+});
+
+test('Port Piscarilius spawns the cache-active Veos with both onward boat options', async () => {
+  const spawn = require('../data/definitions/npc-spawns.json')
+    .find(({ x, y, name }) => name === 'Veos' && x === 1825 && y === 3691);
+  assert.equal(spawn?.id, 10724, '2147 is a null transform parent with no interaction options');
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  await CachePipeline.initialize();
+  const actions = CacheDefinitions.getNpc(spawn.id).actions;
+  assert.equal(actions[0], 'Talk-to');
+  assert.equal(actions[2], 'Port Piscarilius');
+  assert.equal(actions[3], "Land's End");
+});
+
 test('Dragon Slayer II unlocks the northern Ungael exit from Vorkath completion on login', () => {
   const deaths = [];
   const logins = [];
@@ -1169,6 +1273,64 @@ test('Dragon Slayer II Ungael notes require all six real pieces before combining
   assert.equal(counts.get(I.UNGAEL_LAB_NOTES), 1);
 });
 
+test('Dragon Slayer II follows Reldo to the cache-marked red bookcase in Varrock Library', () => {
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  const objectInteractions = new Map();
+  const actionHandlers = [];
+  const transcriptVariants = [];
+  const { api: base } = mockApi();
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onObjectInteraction'
+      ? (name, actions) => { if (typeof name === 'string') objectInteractions.set(name, actions); }
+      : prop === 'onCustomEvent'
+        ? (name, handler) => { if (name === 'npc-dialogue:action') actionHandlers.push(handler); }
+      : target[prop],
+  });
+  runtime.startTranscript = (_api, _player, _npcId, _page, variant) => {
+    transcriptVariants.push(variant);
+    return true;
+  };
+  try {
+    require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  } finally {
+    runtime.startTranscript = originalStartTranscript;
+  }
+  const attrs = new Map([
+    ['quest.dragon_slayer_ii.stage', 8],
+    ['dragon-slayer-ii:morytania-step', 1],
+  ]);
+  const items = new Map();
+  const inventory = {
+    getAmount: (id) => items.get(id) ?? 0,
+    getFreeSlots: () => 28 - [...items.values()].reduce((sum, amount) => sum + amount, 0),
+    adds: (id, amount) => items.set(id, (items.get(id) ?? 0) + amount),
+    deleteNumber: (id, amount) => items.set(id, Math.max(0, (items.get(id) ?? 0) - amount)),
+  };
+  const player = {
+    getAttribute: (key) => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getInventory: () => inventory,
+    sendMessage() {},
+  };
+  const search = objectInteractions.get('Bookcase').Search;
+  const wrongShelf = { player, objectId: 7181, location: { x: 3207, y: 3491, z: 0 }, handled: false };
+  assert.equal(search(wrongShelf), false, 'an ordinary shelf does not substitute for the red census book');
+  const markedShelf = { player, objectId: 32462, location: { x: 3211, y: 3495, z: 0 }, handled: false };
+  search(markedShelf);
+  assert.equal(markedShelf.handled, true);
+  assert.equal(attrs.get('dragon-slayer-ii:morytania-step'), 2);
+  assert.deepEqual(transcriptVariants, ['tristan-s-key-piece-finding-the-book']);
+  const foundBook = { player, stepId: 'mF7UO1', handled: false };
+  actionHandlers.forEach((handler) => handler(foundBook));
+  assert.equal(foundBook.handled, true);
+  assert.equal(inventory.getAmount(api.core.ItemIdentifiers.VARROCK_CENSUS_RECORDS), 1);
+  const handBookToReldo = { player, stepId: '0ordv0', handled: false };
+  actionHandlers.forEach((handler) => handler(handBookToReldo));
+  assert.equal(handBookToReldo.handled, true);
+  assert.equal(inventory.getAmount(api.core.ItemIdentifiers.VARROCK_CENSUS_RECORDS), 0);
+});
+
 test('Dragon Slayer II Robert death plays Bob’s memories before unlocking the key hunt', async () => {
   await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
   const runtime = require('../plugins/quests/QuestRuntime');
@@ -1196,9 +1358,15 @@ test('Dragon Slayer II Robert death plays Bob’s memories before unlocking the 
   } finally {
     runtime.startTranscript = originalStartTranscript;
   }
-  const attrs = new Map([['quest.dragon_slayer_ii.stage', 7]]);
-  const packet = new Proxy({}, { get: () => () => packet });
+  const attrs = new Map([
+    ['quest.dragon_slayer_ii.stage', 7],
+    ['dragon-slayer-ii:dream-progress', 2],
+  ]);
+  let brazierLit = 0;
+  const packet = new Proxy({}, { get: (_target, property) => property === 'getVarbit' ? () => brazierLit : () => packet });
   let currentArea = null;
+  const moves = [];
+  const messages = [];
   const player = {
     getAttribute: (key) => attrs.get(key),
     setAttribute: (key, value) => attrs.set(key, value),
@@ -1209,7 +1377,7 @@ test('Dragon Slayer II Robert death plays Bob’s memories before unlocking the 
     getIndex: () => 1,
     isPlayer: () => true,
     getAsPlayer: () => player,
-    moveTo() {},
+    moveTo(location) { moves.push([location.getX(), location.getY(), location.getZ()]); },
     getUsername: () => 'BobMemoryTest',
     getInventory: () => ({
       getAmount: (id) => inventory.get(id) ?? 0,
@@ -1217,15 +1385,30 @@ test('Dragon Slayer II Robert death plays Bob’s memories before unlocking the 
       adds: (id, amount) => inventory.set(id, (inventory.get(id) ?? 0) + amount),
       getFreeSlots: () => 20,
     }),
-    sendMessage() {},
+    sendMessage: (message) => messages.push(message),
   };
   const inventory = new Map([[api.core.ItemIdentifiers.DREAM_POTION, 1]]);
-  itemObjectHandlers[0]({
+  const usePotion = {
     player,
     itemId: api.core.ItemIdentifiers.DREAM_POTION,
-    objectId: api.core.ObjectIdentifiers.BRAZIER,
-  });
+    // This is the actual Lunar Isle ceremonial brazier cache multiloc.
+    objectId: 17025,
+    handled: false,
+  };
+  itemObjectHandlers[0](usePotion);
+  assert.equal(usePotion.handled, true);
+  assert.equal(inventory.get(api.core.ItemIdentifiers.DREAM_POTION), 1, 'an unlit brazier does not consume the potion');
+  assert.equal(attrs.get('dragon-slayer-ii:instance-boss'), undefined);
+  assert.match(messages.at(-1), /light the ceremonial brazier/i);
+  brazierLit = 1;
+  usePotion.handled = false;
+  itemObjectHandlers[0](usePotion);
+  assert.equal(usePotion.handled, true, 'the quest suppresses the generic Nothing interesting fallback');
+  assert.equal(inventory.get(api.core.ItemIdentifiers.DREAM_POTION), 0);
+  assert.equal(attrs.get('dragon-slayer-ii:instance-boss'), undefined, 'the dream starts only after the Yes choice');
+  for (const handler of custom.get('npc-dialogue:action')) handler({ player, stepId: 'z9kHar' });
   const dreamBoss = attrs.get('dragon-slayer-ii:instance-boss');
+  assert.ok(dreamBoss, 'the transcript Yes action enters the dream');
   deathHandler({
     killer: player,
     npc: dreamBoss,
@@ -1237,6 +1420,7 @@ test('Dragon Slayer II Robert death plays Bob’s memories before unlocking the 
     handler({ player, stepId: 'dragon-slayer-ii:bob-memories-complete' });
   }
   assert.equal(attrs.get('quest.dragon_slayer_ii.stage'), 8, 'the key hunt opens after the scene finishes');
+  assert.deepEqual(moves.at(-1), [2074, 3912, 0], 'the player returns to Bob beside Lunar Isle’s brazier');
 });
 
 test('Dragon Slayer II routes the roaming Bob and Sphinx dialogues before Lunar Isle', () => {

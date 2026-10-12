@@ -35,13 +35,18 @@ module.exports = function registerDragonSlayerII(api) {
   const { Skill, Location, Boundary, PrivateArea, TemplatedInstanceArea, GameObject, ObjectManager, NPC, World, PrayerHandler, HitDamage, HitMask, ItemIdentifiers: I, NpcIdentifiers: N, ObjectIdentifiers: O } = api.core;
   const { registerQuest, startTranscript } = require("../QuestRuntime");
   const PAGE = "Dragon Slayer II";
+  // The Lunar Isle ceremonial brazier is a cache multiloc with no generated
+  // ObjectIdentifiers member; 17025 is the base id at (2072, 3911).
+  const LUNAR_MOONCLAN_BRAZIER = 17025;
+  const LUNAR_BOB_TILE = new Location(2074, 3912, 0);
   const S = { START: 1, KARAMJA: 2, TUNNEL: 3, MURAL: 4, MAP: 5, TO_LITHKREN: 6, DREAM: 7, KEYS: 8, FORGE: 9, LITHKREN: 10, LEADERS: 11, FLEET: 12, GALVEK: 13, COMPLETE: 14 };
   // DS2's native main-progress varbit uses the milestones consumed by cache NPC/loc
   // transforms and the client journal. Keep the plugin's compact stage enum private.
   const NATIVE_STAGE = { 0: 0, 1: 5, 2: 10, 3: 15, 4: 30, 5: 40, 6: 55, 7: 90,
     8: 125, 9: 130, 10: 135, 11: 140, 12: 170, 13: 200, 14: 210 };
   const KEY_PARTS = [I.DRAGON_KEY_PIECE, I.DRAGON_KEY_PIECE_2, I.DRAGON_KEY_PIECE_3, I.DRAGON_KEY_PIECE_4];
-  const RELDO_BOOKCASE_IDS = [O.BOOKCASE_29, O.BOOKCASE_32];
+  // RuneLite QH's DS2_VARROCK_BOOKCASE: the marked red census-book shelf.
+  const RELDO_BOOKCASE_ID = 32462;
   const UNGAEL_NOTES = [I.OLD_NOTES, I.OLD_NOTES_2, I.OLD_NOTES_3, I.OLD_NOTES_4, I.OLD_NOTES_5, I.OLD_NOTES_6];
   const UNGAEL_LAB_SOURCE_X = 2248;
   const UNGAEL_LAB_SOURCE_Y = 10448;
@@ -86,6 +91,16 @@ module.exports = function registerDragonSlayerII(api) {
   const QUEST_POINTS_ATTRIBUTE = "quest.points";
   const ATTR_MORYTANIA = "dragon-slayer-ii:morytania-step";
   const ATTR_ORB_TARGET = "dragon-slayer-ii:locator-target";
+  const ATTR_VEOS_TRAVEL_DESTINATION = "dragon-slayer-ii:veos-travel-destination";
+  const VEOS_NPC_IDS = new Set([
+    N.VEOS, N.VEOS_2, N.VEOS_3, N.VEOS_4, N.VEOS_5, N.VEOS_6, N.VEOS_7, N.VEOS_8,
+  ]);
+  // The cache's named port arrivals are the reliable landing tiles for Veos's
+  // two narrated destinations. The boat dialogue itself is transcript-driven.
+  const VEOS_DESTINATIONS = {
+    "I'd like to travel to Port Piscarilius, please.": new Location(1825, 3691, 0),
+    "I'd like to travel to Land's End, please.": new Location(1504, 3401, 0),
+  };
   const ATTR_MURAL_READ = "dragon-slayer-ii:mural-read";
   const ATTR_CRANDOR_BLOCKAGE_PROGRESS = "dragon-slayer-ii:crandor-blockage-progress";
   const ATTR_MURAL_GUARDIAN_DEFEATED = "dragon-slayer-ii:mural-guardian-defeated";
@@ -761,6 +776,15 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function onQuestDialogueAction(event) {
     const { player: p, stepId } = event;
+    // The transcript's Yes choice is the actual point at which Bob and the
+    // player enter the dream. A No choice leaves them at the brazier.
+    if (stepId === "z9kHar" && stage(p) === S.DREAM
+      && Number(p.getAttribute(ATTR_DREAM_PROGRESS)) >= 2) {
+      event.handled = true;
+      event.end = true;
+      enterArea(p, N.ROBERT_THE_STRONG_2, 1761, 3850, 18);
+      return;
+    }
     if (stepId === ACTION_BOB_FIRST_TALK_COMPLETE && stage(p) === S.DREAM) {
       p.setAttribute(ATTR_DREAM_PROGRESS, 1);
       event.handled = true;
@@ -803,6 +827,9 @@ module.exports = function registerDragonSlayerII(api) {
     }
     if (stepId === ACTION_BOB_MEMORIES_COMPLETE && stage(p) === S.DREAM) {
       advance(p, S.KEYS);
+      // Dream maps use a private cave at 1760,3850; the live world destination
+      // after the scene is Bob's Lunar Isle tile beside the brazier.
+      p.moveTo(LUNAR_BOB_TILE);
       return;
     }
     if (stepId === "b5j1wa" && stage(p) === S.GALVEK && p.getAttribute(ATTR_GALVEK_DEFEATED)) {
@@ -949,12 +976,34 @@ module.exports = function registerDragonSlayerII(api) {
     talk(p, npcId, variant);
     if (step === 0) p.setAttribute(ATTR_MORYTANIA, 1);
   }
-  function searchReldoBook({ player: p, objectId, location }) {
-    if (stage(p) < S.KEYS || stage(p) >= S.FORGE || (Number(p.getAttribute(ATTR_MORYTANIA)) || 0) !== 1) return false;
-    if (!RELDO_BOOKCASE_IDS.includes(objectId) || location.x !== 3207 || ![3491, 3492, 3493, 3495].includes(location.y)) return false;
+  function searchReldoBook(event) {
+    const { player: p, objectId, location } = event;
+    const progress = Number(p.getAttribute(ATTR_MORYTANIA)) || 0;
+    const needsRecovery = progress === 2 && !has(p, I.VARROCK_CENSUS_RECORDS);
+    if (stage(p) < S.KEYS || stage(p) >= S.FORGE || (progress !== 1 && !needsRecovery)) return false;
+    if (objectId !== RELDO_BOOKCASE_ID || location.x !== 3211 || location.y !== 3495) return false;
+    event.handled = true;
     talk(p, N.RELDO, "tristan-s-key-piece-finding-the-book");
-    p.setAttribute(ATTR_MORYTANIA, 2);
+    if (progress === 1) p.setAttribute(ATTR_MORYTANIA, 2);
     return true;
+  }
+  function handleReldoBookMessage(event) {
+    const { player: p, stepId } = event;
+    if (stage(p) < S.KEYS || stage(p) >= S.FORGE) return;
+    if (stepId === "mF7UO1" && Number(p.getAttribute(ATTR_MORYTANIA)) === 2) {
+      event.handled = true;
+      if (!has(p, I.VARROCK_CENSUS_RECORDS) && !give(p, I.VARROCK_CENSUS_RECORDS)) event.end = true;
+      return;
+    }
+    if (stepId === "0ordv0" && Number(p.getAttribute(ATTR_MORYTANIA)) >= 2) {
+      event.handled = true;
+      if (!has(p, I.VARROCK_CENSUS_RECORDS)) {
+        p.sendMessage("You need to search the marked red bookcase for the census records first.");
+        event.end = true;
+        return;
+      }
+      remove(p, I.VARROCK_CENSUS_RECORDS);
+    }
   }
   function talkSarah({ player: p, npcId }) {
     const step = Number(p.getAttribute(ATTR_MORYTANIA)) || 0;
@@ -1413,13 +1462,15 @@ module.exports = function registerDragonSlayerII(api) {
     }
     return false;
   }
-  function placeCryptBust({ player: p, itemId, objectId, location }) {
+  function placeCryptBust(event) {
+    const { player: p, itemId, objectId, location } = event;
     const area = p.getAttribute(ATTR_AREA);
     if (!(area instanceof KourendCryptArea) || objectId !== O.PLINTH_10 || !CRYPT_BUSTS.some((bust) => bust.item === itemId)) return false;
     const sourceX = CRYPT_SOURCE.x + location.x - area.getBaseX();
     const sourceY = CRYPT_SOURCE.y + location.y - area.getBaseY();
     const direction = Object.entries(CRYPT_PLINTHS).find(([, [x, y]]) => x === sourceX && y === sourceY)?.[0];
     if (!direction) return false;
+    event.handled = true;
     const order = p.getAttribute(ATTR_CRYPT_ORDER);
     const expected = { north: order?.[0], south: order?.[1], west: order?.[2], east: order?.[3] }[direction];
     if (itemId !== expected) {
@@ -1802,12 +1853,18 @@ module.exports = function registerDragonSlayerII(api) {
       return true;
     }
     if (stage(p) === S.DREAM && itemId === I.DREAM_VIAL_EMPTY_ && [O.SINK, O.SINK_2, O.SINK_3, O.FOUNTAIN, O.FOUNTAIN_2].includes(objectId)) {
+      event.handled = true;
       remove(p, I.DREAM_VIAL_EMPTY_); give(p, I.DREAM_VIAL_WATER_); return true;
     }
-    if (stage(p) === S.DREAM && itemId === I.DREAM_POTION && [O.BRAZIER, O.BRAZIER_2, O.BRAZIER_3].includes(objectId)) {
+    if (stage(p) === S.DREAM && itemId === I.DREAM_POTION
+      && [LUNAR_MOONCLAN_BRAZIER, O.BRAZIER, O.BRAZIER_2, O.BRAZIER_3].includes(objectId)) {
+      event.handled = true;
+      if ((p.getPacketSender?.().getVarbit?.(2430) ?? 0) < 1) {
+        p.sendMessage("Light the ceremonial brazier with a tinderbox first.");
+        return true;
+      }
       remove(p, I.DREAM_POTION);
       talk(p, N.BOB, "robert-the-strong-using-the-potion-on-the-brazier");
-      enterArea(p, N.ROBERT_THE_STRONG_2, 1761, 3850, 18);
       return true;
     }
     if (stage(p) >= S.KEYS && p.getAttribute(ATTR_LITHKREN_ARRIVED) && itemId === I.DRAGON_KEY
@@ -1953,6 +2010,33 @@ module.exports = function registerDragonSlayerII(api) {
       ? "The locator orb pulses strongly. The key piece must be buried very close by."
       : `The locator orb glows and pulls you ${direction}. It shocks you as you use it.`);
   }
+  function rememberVeosTravelDestination(event) {
+    if (!VEOS_NPC_IDS.has(event.npcId) || stage(event.player) < S.KEYS || stage(event.player) >= S.FORGE) return;
+    const destination = VEOS_DESTINATIONS[event.option];
+    if (destination) event.player.setAttribute(ATTR_VEOS_TRAVEL_DESTINATION, [destination.getX(), destination.getY(), destination.getZ()]);
+  }
+  function travelWithVeos(event) {
+    const { player: p, npcId, definition, clickType } = event;
+    if (!VEOS_NPC_IDS.has(npcId) || stage(p) < S.KEYS || stage(p) >= S.FORGE) return false;
+    const option = definition?.getActions?.()?.[clickType - 1];
+    const destination = VEOS_DESTINATIONS[option === "Port Piscarilius"
+      ? "I'd like to travel to Port Piscarilius, please."
+      : option === "Land's End" ? "I'd like to travel to Land's End, please." : ""];
+    if (!destination) return false;
+    p.moveTo(destination);
+    p.sendMessage(`Veos takes you to ${option}.`);
+    return true;
+  }
+  function finishVeosTravel(event) {
+    const { player: p, npcId, text } = event;
+    if (!VEOS_NPC_IDS.has(npcId) || !/^As you wish, I hope you don't get seasick, it is a\s+long voyage\.$/.test(text ?? "")) return;
+    const destination = p.getAttribute(ATTR_VEOS_TRAVEL_DESTINATION);
+    if (!Array.isArray(destination) || destination.length !== 3) return;
+    event.after = () => {
+      p.setAttribute(ATTR_VEOS_TRAVEL_DESTINATION, null);
+      p.moveTo(new Location(destination[0], destination[1], destination[2]));
+    };
+  }
   function digForMorytaniaPiece(event) {
     const { player: p } = event;
     if (stage(p) < S.KEYS || stage(p) >= S.FORGE || !has(p, I.LOCATOR_ORB) || !has(p, I.SPADE) || (Number(p.getAttribute(ATTR_MORYTANIA)) || 0) < 5) return false;
@@ -2007,6 +2091,7 @@ module.exports = function registerDragonSlayerII(api) {
   api.persistAttribute(ATTR_ASSAULT_INDEX); api.persistAttribute(ATTR_ASSAULT_CHECKPOINT);
   api.persistAttribute(ATTR_ASSAULT_DEFENSE_ACTIVE); api.persistAttribute(ATTR_ASSAULT_DEFENDED);
   api.persistAttribute(ATTR_MORYTANIA); api.persistAttribute(ATTR_ORB_TARGET);
+  api.persistAttribute(ATTR_VEOS_TRAVEL_DESTINATION);
   api.persistAttribute(ATTR_MURAL_READ); api.persistAttribute(ATTR_NOTES_READ); api.persistAttribute(ATTR_KARAMJA_JOURNAL);
   api.persistAttribute(ATTR_CRANDOR_BLOCKAGE_PROGRESS);
   api.persistAttribute(ATTR_MURAL_GUARDIAN_DEFEATED);
@@ -2035,6 +2120,7 @@ module.exports = function registerDragonSlayerII(api) {
   api.onNpcDialogueCondition(answerDreamDialogueCondition);
   api.onCustomEvent("npc-dialogue:line", handleDreamDialogueLine);
   api.onNpcDialogueCondition(answerAlecStartRequirements);
+  onNpcInteractions(["Veos"], { "Port Piscarilius": travelWithVeos, "Land's End": travelWithVeos });
   onNpcInteractions(["Jardric"], { "Talk-to": talkJardric });
   // The cache names Bob's roaming cat NPC "Bob"; the explicit alias is kept
   // for cache revisions that expose the descriptive name instead.
@@ -2064,9 +2150,18 @@ module.exports = function registerDragonSlayerII(api) {
   api.onObjectFirstClick([...MAP_OBJECT_IDS], interactWithFossilMap);
   api.onCustomEvent("npc-dialogue:action", onLithkrenDialogueAction);
   api.onCustomEvent("npc-dialogue:action", onQuestDialogueAction);
+  api.onCustomEvent("npc-dialogue:action", handleReldoBookMessage);
   api.onCustomEvent("npc-dialogue:action", handleEllenTrainingAction);
+  api.onCustomEvent("npc-dialogue:choice", rememberVeosTravelDestination);
+  api.onCustomEvent("npc-dialogue:line", finishVeosTravel);
   api.onObjectFirstClick(O.CAVE_63, enterKaramjaMaze);
-  api.onObjectInteraction(O.CAVE_62, enterUngaelLaboratory);
+  api.onObjectInteraction("Cave", {
+    Enter(event) {
+      const visibleObjectId = event.definition?.id ?? event.objectId;
+      if (visibleObjectId !== O.CAVE_62) return false;
+      return enterUngaelLaboratory({ ...event, objectId: visibleObjectId });
+    },
+  });
   api.onObjectFirstClick(O.CRYPT_ENTRANCE, enterKourendCrypt);
   api.onObjectFirstClick([O.TOMB_6, O.TOMB_7, ...CRYPT_BUSTS.map((bust) => bust.object), ...CRYPT_STAIRS.keys()], handleCryptObject);
   api.onObjectFirstClick([O.PLINTH_16, O.PLINTH_17, O.PLINTH_18], handleKaramjaPlinth);

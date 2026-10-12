@@ -2252,7 +2252,10 @@ module.exports = function registerLunarDiplomacyQuest(api) {
   }
 
   function ensureBabaYaga(player) {
-    if (quest.isComplete(player) || stageOf(player) < STAGE_LUNAR_ISLE) {
+    // Her cache spawn is misplaced far from the Lunar Isle chicken house. Keep the
+    // canonical shop NPC available after Lunar Diplomacy too: later quests (notably
+    // Dragon Slayer II) need the astral runes sold here.
+    if (stageOf(player) < STAGE_LUNAR_ISLE) {
       removeOwnedBabaYaga(player);
       return;
     }
