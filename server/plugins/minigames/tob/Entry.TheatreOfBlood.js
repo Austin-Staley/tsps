@@ -197,6 +197,7 @@ function startRoom(raid) {
   }
 }
 function roomComplete(raid) {
+  if(raid.room===5&&(raid.phase!==2||alive(raid.boss)))return;
   if(raid.complete)return;
   raid.complete=true; raid.started=false; raid.player.getCombat().reset(); restore(raid.player);
   for(const npc of [...raid.npcs])if(npc!==raid.stranger)remove(raid,npc);
@@ -532,7 +533,11 @@ function process(raid) {
   if(!raid.started||raid.dead||raid.player.getHitpoints()<=0)return;
   // NPC death hooks normally complete the room. Also observe HP directly: the
   // core can remove a scripted boss after its death tick before that hook runs.
-  if(raid.boss&&!alive(raid.boss)){roomComplete(raid);return;}
+  if(raid.boss&&!alive(raid.boss)){
+    if(raid.room===5&&raid.phase<2)phaseVerzik(raid,raid.phase+1);
+    else roomComplete(raid);
+    return;
+  }
   raid.tick++;
   // Scripted fights stay engaged during mechanics where players must stop attacking.
   for(const npc of raid.npcs)npc.getCombat().getLastAttack().reset();
@@ -664,11 +669,19 @@ function modifyVerzikHit({npc,hit}) {
   if(raid.phase===0&&raid.player.getEquipment().get(core.Equipment.WEAPON_SLOT)?.getId()!==core.ItemIdentifiers.DAWNBRINGER)hit.setTotalDamage(Math.min(hit.getTotalDamage(),10));
   if(raid.phase<2)hit.setTotalDamage(Math.min(hit.getTotalDamage(),Math.max(0,npc.getHitpoints()-npc.getCombat().getHitQueue().getQueuedDamage()-1)));
 }
+function verzikBeforeDeath(event) {
+  const {npc}=event;
+  const d=NPC_RAIDS.get(npc),raid=d?.raid;
+  if(!raid||raid.room!==5||npc!==raid.boss||raid.phase>=2)return;
+  event.preventDeath=true;
+  npc.getCombat().getHitQueue().clear();
+  phaseVerzik(raid,raid.phase+1);
+}
 function npcDeath({npc}) {
   const d=NPC_RAIDS.get(npc);if(!d)return;const raid=d.raid;
   splitNylocas(raid,npc,d);
   if(d.nylo&&raid.wave>=NYLO_WAVES.length&&!raid.boss&&activeNylocas(raid,npc)===0)raid.bossAt=raid.tick+22;
-  if(npc===raid.boss)roomComplete(raid);
+  if(npc===raid.boss&&(raid.room!==5||(raid.phase===2&&!alive(npc))))roomComplete(raid);
 }
 function splitNylocas(raid,npc,d) {
   if(!d.big)return;
@@ -724,6 +737,7 @@ module.exports=function registerEntryTheatreOfBlood(pluginApi) {
   api.onNpcInteraction("Mysterious Stranger",{"Talk-to":talkStranger});
   api.onPlayerDealtDamage(dealtDamage);
   api.onNpcHitModify(modifyVerzikHit);
+  api.onNpcBeforeDeath(verzikBeforeDeath);
   api.onNpcDeath(npcDeath);
   api.onCustomEvent("npc-drops:generated",drops);
   api.onCustomEvent("tob:bmr:start",startBmr);
@@ -734,4 +748,4 @@ module.exports=function registerEntryTheatreOfBlood(pluginApi) {
   api.onItemAction(item);
   api.onPlayerLogin(login);
 };
-module.exports._test={ROOMS,NYLO_WAVES,BMR_ENCOUNTERS,BMR_WAVE,readNyloSpec,firstNyloWaveAt,soloNyloPillarHitpoints,activeNylocas,updateNyloExpiry,typeIndex,quadrant,behindBloatPillar,bloatHands,dealtDamage,modifyVerzikHit,NPC_RAIDS,startMaze,maiden,roomComplete,nextWave,process,createArea,RAIDS,xarpus,splitNylocas,approachNylocas,attackNylocas,allowDawnbringer,item,choosePillar,pillarTarget,startBmr,startRoom,passage,ensureEscapeCrystal};
+module.exports._test={ROOMS,NYLO_WAVES,BMR_ENCOUNTERS,BMR_WAVE,readNyloSpec,firstNyloWaveAt,soloNyloPillarHitpoints,activeNylocas,updateNyloExpiry,typeIndex,quadrant,behindBloatPillar,bloatHands,dealtDamage,modifyVerzikHit,verzikBeforeDeath,npcDeath,NPC_RAIDS,startMaze,maiden,roomComplete,nextWave,process,createArea,RAIDS,xarpus,splitNylocas,approachNylocas,attackNylocas,allowDawnbringer,item,choosePillar,pillarTarget,startBmr,startRoom,passage,ensureEscapeCrystal};

@@ -13,6 +13,8 @@ function mockApi() {
     variant: [],
     condition: [],
     npcHitModify: [],
+    npcBeforeDeath: [],
+    npcDeath: [],
     custom: new Map(),
   };
   const noop = () => {};
@@ -21,6 +23,8 @@ function mockApi() {
     onNpcDialogueVariant: (h) => handlers.variant.push(h),
     onNpcDialogueCondition: (h) => handlers.condition.push(h),
     onNpcHitModify: (h) => handlers.npcHitModify.push(h),
+    onNpcBeforeDeath: (h) => handlers.npcBeforeDeath.push(h),
+    onNpcDeath: (h) => handlers.npcDeath.push(h),
     onCustomEvent: (name, h) => {
       const list = handlers.custom.get(name) ?? [];
       list.push(h);
@@ -941,6 +945,64 @@ test('Entry Verzik phase caps run before damage so lethal hits cannot skip a pha
   raid.phase = 2; hp = 9; queued = 0; amount = 120;
   handlers.npcHitModify[0]({ npc, hit });
   assert.equal(amount, 120, 'the final phase can be killed normally');
+});
+
+test('Entry Verzik queued overkill deaths advance phases and only the live 600 HP form completes the room', () => {
+  const { api, handlers } = mockApi();
+  api.core = { ...api.core, GameObject: class {}, ObjectManager: { register() {}, deregister() {} } };
+  const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
+  entry(api);
+  let hp=1, queued=1, maxHp=300, amount=100;
+  const queue={getQueuedDamage:()=>queued,clear(){queued=0;}};
+  const npc={
+    getHitpoints:()=>hp,getCombat:()=>({getHitQueue:()=>queue}),
+    setHitpoints(value){hp=value;return this;},setMaxHitpoints(value){maxHp=value;return this;},
+    setNpcTransformationId(){return this;},moveTo(){return this;},
+  };
+  const player={
+    getEquipment:()=>({get:()=>({getId:()=>api.core.ItemIdentifiers.DAWNBRINGER})}),
+    getCombat:()=>({reset(){}}),setHitpoints(){},
+    getSkillManager:()=>({getMaxLevel:()=>99,setCurrentLevel(){}}),
+    getPacketSender:()=>({sendVarbit(){}}),sendMessage(){},
+  };
+  const raid={player,boss:npc,room:5,phase:0,pillars:[],complete:false,started:true,dead:false,
+    npcs:new Set(),objects:new Set(),effects:[],pools:[],area:{}};
+  entry._test.NPC_RAIDS.set(npc,{raid});
+  assert.equal(handlers.npcBeforeDeath.length,1);
+  assert.equal(handlers.npcDeath.length,1);
+
+  const hit={getTotalDamage:()=>amount,setTotalDamage:value=>{amount=value;}};
+  handlers.npcHitModify[0]({npc,hit});
+  assert.equal(amount,0,'a second queued overkill hit is suppressed at the one-HP boundary');
+
+  hp=0;
+  const phaseZeroDeath={npc,preventDeath:false};
+  handlers.npcBeforeDeath[0](phaseZeroDeath);
+  assert.equal(phaseZeroDeath.preventDeath,true);
+  assert.equal(raid.phase,1);
+  assert.equal(hp,400);
+  assert.equal(maxHp,400);
+  assert.equal(queued,0,'queued phase-zero hits are discarded during the transition');
+  handlers.npcDeath[0]({npc});
+  assert.equal(raid.complete,false,'a delayed phase-zero death callback cannot finish the raid');
+
+  hp=0;
+  const phaseOneDeath={npc,preventDeath:false};
+  handlers.npcBeforeDeath[0](phaseOneDeath);
+  assert.equal(phaseOneDeath.preventDeath,true);
+  assert.equal(raid.phase,2);
+  assert.equal(hp,600);
+  assert.equal(maxHp,600);
+  handlers.npcDeath[0]({npc});
+  assert.equal(raid.complete,false,'a delayed phase-one death callback cannot finish the restored final form');
+
+  hp=0;
+  const staleNpc={};
+  entry._test.NPC_RAIDS.set(staleNpc,{raid});
+  handlers.npcDeath[0]({npc:staleNpc});
+  assert.equal(raid.complete,false,'a stale NPC death cannot complete the current boss encounter');
+  handlers.npcDeath[0]({npc});
+  assert.equal(raid.complete,true,'the current phase-two form completes only after it reaches zero HP');
 });
 
 test('Entry Mode bandages apply the one-minute stamina effect and Dawnbringer is limited to Verzik phase one', () => {
