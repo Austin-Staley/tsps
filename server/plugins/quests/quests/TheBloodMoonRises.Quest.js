@@ -10,6 +10,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const START_HOOK = "quest:the-blood-moon-rises:start";
   const TOME_ID = ItemIdentifiers.TOME_OF_EXPERIENCE_3;
   const PREP_ATTRIBUTE = "quest.the_blood_moon_rises.preparations";
+  const THRONE_PUZZLE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-throne-puzzle";
   const PREP = {
     leaves: ItemIdentifiers.AMITIRE_LEAVES,
     stew: ItemIdentifiers.AMITIRE_STEW,
@@ -468,6 +469,10 @@ module.exports = function registerTheBloodMoonRises(api) {
       }
       player.setAttribute(PREP_COMPLETE, true);
     }
+    if (event.stepId === "XqVfhB" && !player.getAttribute(THRONE_PUZZLE_ATTRIBUTE)?.keyClaimed) {
+      player.sendMessage("Solve the throne-room bust puzzle and take the half moon key before leaving the castle.");
+      return;
+    }
     if (next) advance(player, next);
     if (event.stepId === "4G5OZg") startWyrdBattle(player);
     if (event.stepId === "t7FMNM") startDrakanBattle(player);
@@ -591,6 +596,58 @@ module.exports = function registerTheBloodMoonRises(api) {
   function prepObjectAt(event, x, y, z) {
     const tile = event?.location;
     return tile?.x === x && tile?.y === y && tile?.z === z;
+  }
+
+  function handleCastleThronePuzzle(event) {
+    const player = event?.player;
+    const value = player && stage(player);
+    if (!player || quest.isComplete(player) || value < STAGE.CASTLE || value > STAGE.ESCAPE) return;
+    const tile = event.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    const name = String(event.definition?.getName?.() ?? "").toLowerCase();
+    const state = player.getAttribute(THRONE_PUZZLE_ATTRIBUTE) ?? { step: 0, solved: false, keyClaimed: false };
+    if (name.includes("throne") && x === 2313 && y === 7392 && z === 0) {
+      event.handled = true;
+      const throneOption = String(event.option ?? "").toLowerCase();
+      if (["investigate", "search"].includes(throneOption) && !state.started && !state.solved) {
+        player.setAttribute(THRONE_PUZZLE_ATTRIBUTE, { ...state, started: true });
+        player.sendMessage("The four busts conceal a mechanism. Their levers must be pulled in the right order.");
+        return;
+      }
+      if (state.solved && !state.keyClaimed && ["search", "take", "investigate"].includes(throneOption)) {
+        if (player.getInventory().adds(ItemIdentifiers.HALF_MOON_KEY, 1)) {
+          player.setAttribute(THRONE_PUZZLE_ATTRIBUTE, { ...state, keyClaimed: true });
+          player.sendMessage("You find a half moon key inside the throne.");
+        }
+        return;
+      }
+      player.sendMessage(state.solved ? "The throne's hidden compartment is empty." : "There is nothing more to learn from the throne yet.");
+      return;
+    }
+    const leverRow = x === 2317 && [7393, 7392, 7391, 7390].indexOf(y);
+    if (!name.includes("bust") || !name.includes("lever") || z !== 0 || leverRow < 0) return;
+    event.handled = true;
+    if (!state.started) {
+      player.sendMessage("Investigate the throne first; the busts must be part of its mechanism.");
+      return;
+    }
+    if (state.solved) {
+      player.sendMessage("The busts are already set in the correct order.");
+      return;
+    }
+    // The OSRS puzzle order is the third bust, fourth, first, then second.
+    const order = [2, 3, 0, 1];
+    if (leverRow !== order[state.step]) {
+      player.setAttribute(THRONE_PUZZLE_ATTRIBUTE, { ...state, step: 0 });
+      player.sendMessage("The mechanism clicks back into place. The bust sequence has reset.");
+      return;
+    }
+    const step = state.step + 1;
+    const solved = step === order.length;
+    player.setAttribute(THRONE_PUZZLE_ATTRIBUTE, { ...state, step, solved });
+    player.sendMessage(solved ? "The busts turn into alignment, and a compartment opens beneath the throne." : "The bust lever locks into place.");
   }
 
   function handlePrepObject(event) {
@@ -745,6 +802,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onNpcDialogueVariant(selectVariant);
   api.onAnyNpcInteraction({ "Talk-to": talkQuestNpc });
   api.onObjectInteraction(inspectWyrdFence);
+  api.onObjectInteraction(handleCastleThronePuzzle);
   api.onObjectInteraction(handlePrepObject);
   api.onItemOnItem(handlePrepItemOnItem);
   api.onItemOnNpc(feedSafalaan);
@@ -753,5 +811,6 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.persistAttribute(DRAKAN_ENCOUNTER_COMPLETE);
   api.persistAttribute(PREP_ATTRIBUTE);
   api.persistAttribute(PREP_COMPLETE);
+  api.persistAttribute(THRONE_PUZZLE_ATTRIBUTE);
   api.onItemAction("Tome of Experience", { Read: readTome });
 };

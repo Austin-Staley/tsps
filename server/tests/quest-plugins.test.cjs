@@ -299,6 +299,53 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
   api.core.NpcDefinition.forId = originalForId;
 });
 
+test('Blood Moon Castle Drakan throne opens only after the ordered bust mechanism and awards its key', () => {
+  const { api, handlers } = mockApi();
+  const messages = [];
+  api.emitCustomEvent = (name, event) => {
+    for (const handler of handlers.custom.get(name) ?? []) handler(event);
+  };
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  const counts = new Map();
+  const inventory = {
+    contains: (id) => (counts.get(id) ?? 0) > 0,
+    adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
+    deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+  };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getSkillManager: () => ({ getMaxLevel: () => 99 }),
+    getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage: (text) => messages.push(text),
+  };
+  quest.setStage(player, 40);
+  const interact = (name, x, y, option) => {
+    const event = { player, definition: { getName: () => name }, location: { x, y, z: 0 }, option, handled: false };
+    for (const handler of handlers.objects) {
+      handler(event);
+      if (event.handled) break;
+    }
+    return event;
+  };
+  const action = handlers.custom.get('npc-dialogue:action').at(-1);
+  action({ player, stepId: 'XqVfhB' });
+  assert.equal(quest.getStage(player), 40, 'the escape transcript cannot bypass the throne puzzle');
+  interact('Throne', 2313, 7392, 'Search');
+  interact('Bust with lever', 2317, 7393, 'Pull');
+  assert.ok(messages.some((message) => message.includes('reset')), 'the wrong first lever resets the mechanism');
+  for (const y of [7391, 7390, 7393, 7392]) interact('Bust with lever', 2317, y, 'Pull');
+  interact('Throne', 2313, 7392, 'Search');
+  assert.equal(inventory.contains(api.core.ItemIdentifiers.HALF_MOON_KEY), true);
+  action({ player, stepId: 'XqVfhB' });
+  assert.equal(quest.getStage(player), 45, 'the escape chapter advances only after claiming the key');
+});
+
 test('The Wyrd transcript action starts a private encounter with the cache-mapped boss', () => {
   const { api, handlers } = mockApi();
   const attributes = new Map();
