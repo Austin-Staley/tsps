@@ -889,11 +889,12 @@ module.exports = function registerDragonSlayerII(api) {
     }));
   }
   function talkBrundtForKey({ player: p, npcId }) {
-    if (stage(p) < S.KEYS || stage(p) >= S.FORGE) return;
+    if (stage(p) < S.KEYS || stage(p) >= S.FORGE) return false;
     talk(p, npcId, p.getAttribute(ATTR_UNGAEL_TRIP)
       ? "robert-s-ungael-key-piece-talking-to-brundt-the-chieftain-talking-to-brundt-again"
       : "robert-s-ungael-key-piece-talking-to-brundt-the-chieftain");
     p.setAttribute(ATTR_UNGAEL_TRIP, true);
+    return true;
   }
   function talkTorfinnForKey({ player: p, npcId }) {
     if (stage(p) === S.FLEET) {
@@ -980,7 +981,7 @@ module.exports = function registerDragonSlayerII(api) {
     if (name === "Brundt the Chieftain" && stage(p) >= S.KEYS && stage(p) < S.FORGE) {
       return talkBrundtForKey({ player: p, npcId });
     }
-    if (stage(p) < S.LEADERS || stage(p) >= S.COMPLETE) return;
+    if (stage(p) < S.LEADERS || stage(p) >= S.COMPLETE) return false;
     const variants = {
       "Sir Amik Varze": "a-world-united-talking-to-sir-amik-varze",
       "King Lathas": "a-world-united-talking-to-king-lathas-thoros-king-lathas",
@@ -988,12 +989,13 @@ module.exports = function registerDragonSlayerII(api) {
       "King Roald": "a-world-united-talking-to-king-roald",
     };
     const idx = ["Sir Amik Varze", "King Lathas", "Brundt the Chieftain", "King Roald"].indexOf(name);
-    if (idx < 0) return;
+    if (idx < 0) return false;
     talk(p, npcId, variants[name]);
     const bits = Number(p.getAttribute(ATTR_LEADERS)) || 0;
     const next = bits | (1 << idx);
     p.setAttribute(ATTR_LEADERS, next);
     if (next === 15) advance(p, S.FLEET);
+    return true;
   }
   function enterArea(p, bossId, x, y, radius) {
     leaveArea(p);

@@ -72,6 +72,31 @@ test('completed Lunar Diplomacy players can replace a lost Seal of Passage from 
   }
 });
 
+test('Fremennik Exiles yields Longhall Brundt to Lunar Seal recovery before its start menu', () => {
+  const { api: base } = mockApi();
+  let brundtTalk;
+  const api = new Proxy(base, {
+    get: (target, prop) => {
+      if (prop === 'onNpcInteraction') return (name, options) => {
+        if (name === 'Brundt the Chieftain') brundtTalk = options['Talk-to'];
+      };
+      if (prop === 'emitCustomEvent') return (name, request) => {
+        if (name === 'quest:is-complete') request.complete = request.key === 'lunar_diplomacy';
+      };
+      return target[prop];
+    },
+  });
+  delete require.cache[require.resolve('../plugins/quests/quests/TheFremennikExiles.Quest')];
+  require('../plugins/quests/quests/TheFremennikExiles.Quest')(api);
+  const player = {
+    getAttribute: () => 0,
+    getInventory: () => ({ getAmount: () => 0 }),
+  };
+  const event = { player, npcId: api.core.NpcIdentifiers.BRUNDT_THE_CHIEFTAIN_6, clickType: 1, handled: false };
+  assert.equal(brundtTalk(event), false);
+  assert.equal(event.handled, false, 'the later Lunar Diplomacy hook can play its replacement transcript');
+});
+
 test('Quests.plugin registers every quest through api.core without throwing', () => {
   const { api } = mockApi();
   const plugin = require('../plugins/quests/Quests.plugin');
@@ -402,6 +427,25 @@ test('Dragon Slayer II mirrors compact stages to the cache quest milestones in v
   assert.equal(varbits.get(6104), 5, 'the same native value is restored at login');
   quest.setStage(player, quest.completionValue);
   assert.equal(varbits.get(6104), 210, 'completion follows the native QuestHelper terminal stage');
+});
+
+test('Dragon Slayer II Brundt handler yields before the leader council stage', () => {
+  const { api: base } = mockApi();
+  let brundtTalk;
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onNpcInteraction'
+      ? (name, options) => { if (name === 'Brundt the Chieftain') brundtTalk = options['Talk-to']; }
+      : target[prop],
+  });
+  delete require.cache[require.resolve('../plugins/quests/quests/DragonSlayerII.Quest')];
+  require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  const player = { getAttribute: (key) => key === 'quest.dragon_slayer_ii.stage' ? 7 : 0 };
+  const event = {
+    player,
+    npcId: api.core.NpcIdentifiers.BRUNDT_THE_CHIEFTAIN_6,
+    definition: { getName: () => 'Brundt the Chieftain' },
+  };
+  assert.equal(brundtTalk(event), false, 'other quests may handle Longhall Brundt before the leader chapter');
 });
 
 test('Dragon Slayer II follows the cache blockage Investigate → Mine → Enter morphs', () => {
