@@ -124,6 +124,8 @@ module.exports=function registerSurok({api,stage,advance,held,give,play}){
  }
  function use(e){if(e.itemId===TELEORB&&plant(e))e.handled=true;}
  function login({player}){const l=player.getLocation();if(l.getZ()===2&&l.getX()>=4126&&l.getX()<=4152&&l.getY()>=4840&&l.getY()<=4861)player.moveTo(loc(4142,4854,1));}
+ function claimLadder(e){if(climb(e))e.handled=true;}
+ api.onCustomEvent('ladders:climb',claimLadder);
  api.onObjectInteraction('Ladder',{'Climb-up':climb,'Climb-down':climb});
  api.onNpcInteraction('Surok Magis',{'Plant-orb':plant});
  api.onNpcInteraction('Elite Black Knight',{'Talk-to':guardTalk});
