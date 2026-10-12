@@ -325,11 +325,11 @@ module.exports = function registerMourningsEndPartIQuest(api) {
 
   function activateTeleportCrystal(event) {
     const { player, itemId } = event ?? {};
-    if (!player || !TELEPORT_CRYSTALS.has(itemId) || itemId === ItemIdentifiers.CRYSTAL_TELEPORT_SEED_2) return;
+    if (!player || !TELEPORT_CRYSTALS.has(itemId) || itemId === ItemIdentifiers.CRYSTAL_TELEPORT_SEED) return;
     event.handled = true;
     take(player, itemId, 1);
     if (itemId < ItemIdentifiers.TELEPORT_CRYSTAL_1_) give(player, itemId + 1, 1);
-    else give(player, ItemIdentifiers.CRYSTAL_TELEPORT_SEED_2, 1);
+    else give(player, ItemIdentifiers.CRYSTAL_TELEPORT_SEED, 1);
     player.moveTo(new Location(LLETYA_SQUARE.x, LLETYA_SQUARE.y, LLETYA_SQUARE.z));
     player.sendMessage("You activate the teleport crystal and arrive in Lletya.");
   }

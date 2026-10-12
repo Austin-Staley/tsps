@@ -1695,7 +1695,7 @@ test('Regicide leaf and stick traps use Agility checks and cross from the approa
   }
 });
 
-test("Mourning's End I teleport crystals consume a charge and take the player to Lletya", () => {
+test("Mourning's End I last teleport crystal charge becomes a saveable seed", () => {
   const { api: base } = mockApi();
   const itemActions = new Map();
   const api = new Proxy(base, {
@@ -1704,7 +1704,7 @@ test("Mourning's End I teleport crystals consume a charge and take the player to
       : target[prop],
   });
   require('../plugins/quests/quests/MourningsEndPartI.Quest')(api);
-  const items = new Map([[6099, 1]]);
+  const items = new Map([[6102, 1]]);
   const moved = [];
   const messages = [];
   const inventory = {
@@ -1721,11 +1721,13 @@ test("Mourning's End I teleport crystals consume a charge and take the player to
     moveTo: (location) => moved.push([location.getX(), location.getY(), location.getZ()]),
     sendMessage: (message) => messages.push(message),
   };
-  const event = { player, itemId: 6099, handled: false };
-  itemActions.get('Teleport crystal (4)').Lletya(event);
+  const event = { player, itemId: 6102, handled: false };
+  itemActions.get('Teleport crystal (1)').Lletya(event);
   assert.equal(event.handled, true);
-  assert.equal(items.get(6099), undefined);
-  assert.equal(items.get(6100), 1);
+  assert.equal(items.get(6102), undefined);
+  assert.equal(items.get(6103), 1);
+  assert.equal(items.has(undefined), false, 'a depleted crystal must not add an undefined item id');
+  assert.ok([...items.keys()].every(Number.isFinite));
   assert.deepEqual(moved, [[2352, 3170, 0]]);
   assert.equal(messages.length, 1);
 });
