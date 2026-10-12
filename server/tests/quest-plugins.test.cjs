@@ -448,6 +448,11 @@ test('Desert Treasure II requires Kasonde dialogue and the full 400-tick hideout
   const core = {
     ...base.core,
     TemplatedInstanceArea: TestInstance,
+    GameObject: class TestGameObject {
+      constructor(id, location, type, face, privateArea) { Object.assign(this, { id, location, type, face, privateArea }); }
+      getId() { return this.id; }
+      getLocation() { return this.location; }
+    },
     NPC: { create: (id, location) => ({
       id, location, setOwner() {}, setOwnerOnly() {}, setMaxHitpoints() {}, setHitpoints(value) { this.hp = value; },
       getHitpoints() { return this.hp ?? 10; }, isRegistered() { return true; }, getCombat() { return { attack() {} }; },
@@ -975,8 +980,9 @@ test('Desert Treasure II opens the ritual site after the serum and grants the Te
 
 test('Desert Treasure II enters the Scar through the Catalytic Guardian and requires the six opening demons', () => {
   const { api: base } = mockApi();
-  const objectHooks = [], deathHooks = [], itemOnItemHooks = [], lineHooks = [], actionHooks = [], interactions = [];
+  const objectHooks = [], objectRouteHooks = [], deathHooks = [], itemOnItemHooks = [], itemOnNpcHooks = [], itemOnObjectHooks = [], itemActionHooks = [], hitModifyHooks = [], lineHooks = [], actionHooks = [], interactions = [];
   const transcripts = [], queues = { add: [], remove: [] }, varbits = new Map(), inventoryCounts = new Map();
+  const routes = [];
   let processCycle = 0;
   class TestInstance {
     constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
@@ -988,19 +994,26 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     getBaseY() { return 1600; }
     tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z, getX() { return this.x; }, getY() { return this.y; } }; }
     add(npc) { this.entities.push(npc); }
+    remove(npc) { this.entities = this.entities.filter((entity) => entity !== npc); }
     isDestroyed() { return false; }
     destroy() {}
   }
   const core = {
     ...base.core,
     TemplatedInstanceArea: TestInstance,
-    NPC: { create: (id, location) => ({ id, location, owner: null, setOwner(value) { this.owner = value; }, setOwnerOnly() {}, setScriptedMovement() {}, getMovementQueue() { return this.movement ??= { steps: [], addSteps(tile) { this.steps.push(tile); }, setBlockMovement(blocked) { this.blocked = blocked; } }; }, getLocation() { return { getX: () => this.location.x, getY: () => this.location.y }; }, isNpc() { return true; }, getAsNpc() { return this; }, isRegistered() { return true; }, getHitpoints() { return 100; } }) },
+    NPC: { create: (id, location) => ({ id, location, owner: null, setOwner(value) { this.owner = value; }, getOwner() { return this.owner; }, setOwnerOnly() {}, setScriptedMovement() {}, getMovementQueue() { return this.movement ??= { steps: [], addSteps(tile) { this.steps.push(tile); }, setBlockMovement(blocked) { this.blocked = blocked; } }; }, getLocation() { return { getX: () => this.location.x, getY: () => this.location.y }; }, isNpc() { return true; }, getAsNpc() { return this; }, isRegistered() { return true; }, getHitpoints() { return 100; } }) },
+    PathFinder: { calculateWalkRoute: (npc, x, y) => { routes.push([x, y]); npc.getMovementQueue().addSteps({ x, y }); } },
     World: { getAddNPCQueue: () => queues.add, getRemoveNPCQueue: () => queues.remove, getProcessCycle: () => processCycle++ },
   };
   const api = new Proxy(base, {
     get: (target, prop) => prop === 'core' ? core
       : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
+        : prop === 'onObjectRoute' ? (handler) => objectRouteHooks.push(handler)
         : prop === 'onItemOnItem' ? (handler) => itemOnItemHooks.push(handler)
+        : prop === 'onItemOnNpc' ? (handler) => itemOnNpcHooks.push(handler)
+          : prop === 'onItemOnObject' ? (handler) => itemOnObjectHooks.push(handler)
+            : prop === 'onItemAction' ? (handler) => itemActionHooks.push(handler)
+                : prop === 'onNpcHitModify' ? (handler) => hitModifyHooks.push(handler)
         : prop === 'onNpcDeath' ? (handler) => deathHooks.push(handler)
           : prop === 'onCustomEvent' ? (name, handler) => ({ 'npc-dialogue:line': lineHooks, 'npc-dialogue:action': actionHooks }[name]?.push(handler))
             : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
@@ -1024,7 +1037,8 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
         deleteNumber: (id, amount) => inventoryCounts.set(id, Math.max(0, (inventoryCounts.get(id) ?? 0) - amount)),
       }),
       getPacketSender: () => new Proxy({}, { get: (_target, prop) => prop === 'sendVarbit' ? (id, value) => varbits.set(id, value) : () => {} }),
-      moveTo(location) { this.location = location; }, sendMessage() {},
+      moveTo(location) { this.location = location; }, sendMessage(message) { (this.messages ??= []).push(message); },
+      getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => pendingAirHits.push(...hits) }) }),
     };
     quest.setStage(player, 8);
     const guardian = interactions.find((entry) => entry.name === 'Catalytic Guardian').options['Talk-to'];
@@ -1044,6 +1058,22 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     for (const npc of [...queues.add]) deathHooks[0]({ killer: player, npc });
     assert.equal(attrs.get('desert-treasure-ii:scar-demons-defeated'), true);
     assert.equal(varbits.get(15128), 8);
+    const firstStone = area.tile(31, 30, 0);
+    player.location = area.tile(29, 30, 0);
+    const firstRoute = { player, objectId: 49209, clickType: 1, object: { getLocation: () => firstStone } };
+    objectRouteHooks[0](firstRoute);
+    assert.deepEqual(firstRoute.destination, { x: area.tile(29, 30, 0).x, y: area.tile(29, 30, 0).y, z: 0 },
+      'the first crossing routes to a walkable near-bank approach tile');
+    assert.equal(objectHooks[0]({ player, objectId: 49209, location: firstStone }), true);
+    assert.deepEqual([player.location.x, player.location.y], [area.tile(32, 30, 0).x, area.tile(32, 30, 0).y],
+      'crossing the first stone moves only to the next safe tile');
+    const secondStone = area.tile(33, 30, 0);
+    const secondRoute = { player, objectId: 49209, clickType: 1, object: { getLocation: () => secondStone } };
+    objectRouteHooks[0](secondRoute);
+    assert.deepEqual(secondRoute.destination, { x: area.tile(32, 30, 0).x, y: area.tile(32, 30, 0).y, z: 0 },
+      'the second crossing uses the approach from the near side');
+    assert.equal(objectHooks[0]({ player, objectId: 49209, location: secondStone }), true);
+    assert.deepEqual([player.location.x, player.location.y], [area.tile(34, 30, 0).x, area.tile(34, 30, 0).y]);
     assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.ROWBOAT_19, location: area.tile(65, 35, 0) }), true,
       'the map boat is usable after naturally crossing the Scar fight');
     assert.equal(transcripts.at(-1), 'praefectus-classis-perseriya-attempting-to-board-the-rowboat-in-the-scar');
@@ -1054,6 +1084,9 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(attrs.get('desert-treasure-ii:scar-persten-talked'), true);
     assert.equal(transcripts.at(-1), 'praefectus-classis-perseriya-talking-to-wizard-persten');
     assert.equal(varbits.get(15128), 14);
+    assert.equal(area.scarMazeEntry.id, 49205,
+      'Persten opens the canonical cache passage at its real Scar entrance');
+    assert.deepEqual([area.scarMazeEntry.location.x, area.scarMazeEntry.location.y], [8235, 1641]);
     assert.equal(objectHooks[0]({ player, objectId: 49526, definition: { id: 49206 }, location: area.tile(43, 41, 0) }), false,
       'the closed cache morph cannot be entered');
     assert.equal(objectHooks[0]({ player, objectId: 49526, definition: { id: 49205 }, location: area.tile(43, 41, 0) }), true,
@@ -1066,27 +1099,56 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(varbits.get(15128), 16);
     let runner = queues.add.at(-1);
     assert.equal(runner.id, core.NpcIdentifiers.CEREBRAL_PATHFINDER,
-      'the first cache pathfinder runs its prescribed route instead of opening a puzzle skip');
-    assert.deepEqual(runner.getMovementQueue().steps.map((point) => [point.x, point.y]), [[8227, 1644], [8229, 1644]]);
+      'the first cache pathfinder is moved with the documented Move interaction');
+    const movePathfinder = interactions.find((entry) => entry.name === 'Cerebral pathfinder').options.Move;
+    const movePathbreaker = interactions.find((entry) => entry.name === 'Cerebral pathbreaker').options.Move;
+    const push = (npc, handler) => handler({ player, npc, npcId: npc.id, clickType: 1,
+      definition: { getActions: () => ['Move', 'Reset-room'] }, handled: false });
+    const firstMoveEvent = { player, npc: runner, npcId: runner.id, clickType: 1,
+      definition: { getActions: () => ['Move', 'Reset-room'] }, handled: false };
+    player.location = maze.tile(36, 50, 0);
+    movePathfinder(firstMoveEvent);
+    assert.equal(firstMoveEvent.handled, true);
+    assert.equal(runner.getMovementQueue().steps.length, 0, 'pushing from the wrong side does not move an orb');
+    assert.match(player.messages.at(-1), /Stand north/);
+    player.location = maze.tile(35, 51, 0);
+    push(runner, movePathfinder);
+    assert.deepEqual(routes.at(-1), [8227, 1644], 'a green orb follows the documented north push to its first waypoint');
+    runner.location = maze.tile(35, 44, 0);
+    maze.process(player);
+    assert.deepEqual(routes.at(-1), [8229, 1644], 'the pathfinder follows the second cache waypoint without another push');
     runner.location = maze.tile(37, 44, 0);
     player.location = maze.tile(37, 44, 0);
     maze.process(player);
-    assert.equal(maze.pathIndex, 1, 'the next pathbreaker appears only after the player follows the first within three tiles');
+    assert.equal(maze.pathIndex, 1, 'the next pathbreaker appears after the first orb reaches both Wiki waypoints');
+    assert.ok(queues.remove.includes(runner), 'each orb leaves after reaching its waypoint');
     for (let pathIndex = 1; pathIndex < 6; pathIndex++) {
       runner = maze.pathRunner;
-      const routeEnd = [[37, 44], [42, 42], [38, 38], [36, 35], [47, 36], [49, 33]][pathIndex];
-      runner.location = maze.tile(routeEnd[0], routeEnd[1], 0);
-      player.location = maze.tile(routeEnd[0] + 4, routeEnd[1], 0);
+      const handler = runner.id === core.NpcIdentifiers.CEREBRAL_PATHFINDER ? movePathfinder : movePathbreaker;
+      const path = [
+        { points: [[2199, 6444], [2202, 6444], [2202, 6442]], side: [ -1, 0 ] },
+        { points: [[2202, 6440], [2201, 6439], [2198, 6438]], side: [0, 1] },
+        { points: [[2197, 6438], [2196, 6435]], side: [-1, 0] },
+        { points: [[2196, 6435], [2207, 6436]], side: [1, 0] },
+        { points: [[2207, 6436], [2207, 6433], [2209, 6433]], side: [0, -1] },
+      ][pathIndex - 1];
+      const source = path.points[0];
+      player.location = maze.tile(source[0] - 2160 + path.side[0], source[1] - 6400 + path.side[1], 0);
+      push(runner, handler);
+      assert.deepEqual([runner.location.x, runner.location.y], [source[0] - 2160 + 8192, source[1] - 6400 + 1600]);
+      for (const [pointX, pointY] of path.points.slice(1)) {
+        runner.location = maze.tile(pointX - 2160, pointY - 6400, 0);
+        maze.process(player);
+      }
+      player.location = runner.location;
       maze.process(player);
-      assert.equal(attrs.get('desert-treasure-ii:scar-pathfinder-complete'), false,
-        'the route cannot complete while the player is outside the pathfinder follow distance');
-      player.location = maze.tile(routeEnd[0], routeEnd[1], 0);
-      maze.process(player);
+      assert.equal(queues.remove.includes(runner), true, 'each completed orb is cleaned up before the next step');
     }
     assert.equal(attrs.get('desert-treasure-ii:scar-pathfinder-complete'), true);
     assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.ABYSSAL_TETHER, location: maze.tile(50, 33, 0) }), true);
     assert.equal(attrs.get('desert-treasure-ii:scar-tether-destroyed'), true);
-    assert.equal(varbits.get(15258), 1, 'destroying the tether sets the canonical challenge varbit');
+    assert.equal(attrs.get('desert-treasure-ii:scar-tether-destroyed'), true,
+      'the tether completion is saved independently from the reused passage challenge varbits');
     assert.equal(objectHooks[0]({ player, objectId: 49415, location: maze.tile(73, 61, 0) }), true,
       'the green neural teleporter is usable only after severing the tether');
     assert.equal(player.location.x, 8223);
@@ -1104,6 +1166,299 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(inventoryCounts.get(core.ItemIdentifiers.EARTH_NERVE), 0);
     assert.equal(inventoryCounts.get(core.ItemIdentifiers.DUST_NERVE), 1,
       'the documented air + earth recipe makes dust nerve');
+    for (const id of attrs.get('desert-treasure-ii:scar-catalyst-order')) inventoryCounts.set(id, 1);
+    const catalystId = core.NpcIdentifiers.DT2_SCAR_MAZE_1_RITUAL_CATALYST;
+    inventoryCounts.delete(core.ItemIdentifiers.DUST_NERVE);
+    assert.equal(itemOnNpcHooks[0]({ player, npcId: catalystId, itemId: core.ItemIdentifiers.DUST_NERVE }), true,
+      'a mismatched nerve is handled without advancing or consuming it');
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.DUST_NERVE), undefined);
+    const catalystOrder = attrs.get('desert-treasure-ii:scar-catalyst-order');
+    const catalystParts = new Map([
+      [core.ItemIdentifiers.SMOKE_NERVE, [core.ItemIdentifiers.FIRE_NERVE, core.ItemIdentifiers.AIR_NERVE]],
+      [core.ItemIdentifiers.BLOOD_NERVE, [core.ItemIdentifiers.MIND_NERVE, core.ItemIdentifiers.WATER_NERVE]],
+      [core.ItemIdentifiers.SOUL_NERVE, [core.ItemIdentifiers.MIND_NERVE, core.ItemIdentifiers.MIND_NERVE]],
+      [core.ItemIdentifiers.NATURE_NERVE, [core.ItemIdentifiers.WATER_NERVE, core.ItemIdentifiers.EARTH_NERVE]],
+      [core.ItemIdentifiers.COSMIC_NERVE, [core.ItemIdentifiers.MIND_NERVE, core.ItemIdentifiers.MIND_NERVE, core.ItemIdentifiers.WATER_NERVE, core.ItemIdentifiers.EARTH_NERVE]],
+      [core.ItemIdentifiers.ASTRAL_NERVE, [core.ItemIdentifiers.MIND_NERVE, core.ItemIdentifiers.MIND_NERVE, core.ItemIdentifiers.WATER_NERVE, core.ItemIdentifiers.EARTH_NERVE, core.ItemIdentifiers.EARTH_NERVE]],
+    ]);
+    const firstCatalystPart = catalystParts.get(catalystOrder[0])[0];
+    inventoryCounts.set(firstCatalystPart, 1);
+    assert.equal(itemOnNpcHooks[0]({ player, npcId: catalystId, itemId: firstCatalystPart }), true,
+      'a matching elemental nerve can damage the Catalyst without finishing its symbol');
+    assert.equal(Number(attrs.get('desert-treasure-ii:scar-catalyst-progress')) || 0, 0);
+    assert.equal(inventoryCounts.get(firstCatalystPart), 0);
+    for (const nerve of catalystOrder) {
+      assert.equal(itemOnNpcHooks[0]({ player, npcId: catalystId, itemId: nerve }), true);
+    }
+    assert.equal(Number(attrs.get('desert-treasure-ii:scar-catalyst-progress')), 6,
+      'the Catalyst only completes after all matching nerves are used');
+    assert.equal(objectHooks[0]({ player, objectId: 49414, location: maze.tile(21, 24, 0) }), true,
+      'the blue teleporter becomes reachable after the Catalyst is disrupted');
+    assert.equal(objectHooks[0]({ player, objectId: 49412, location: maze.tile(65, 21, 0) }), true,
+      'the damaged growth room has its own cache entrance');
+    const takeLure = interactions.find((entry) => entry.name === 'Light leech').options['Take-lure'];
+    const random = Math.random;
+    Math.random = () => 0;
+    try {
+      for (const leech of queues.add.filter((npc) => npc.id === core.NpcIdentifiers.DT2_SCAR_MAZE_LIGHT_LEECH)) takeLure({ player, npc: leech });
+    } finally {
+      Math.random = random;
+    }
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.ILLUMINATING_LURE), 4,
+      'each real light leech can yield a lure');
+    for (const [x, y] of [[2219, 6435], [2220, 6423], [2231, 6423], [2232, 6435]]) {
+      assert.equal(itemOnObjectHooks[0]({ player, objectId: 49436, itemId: core.ItemIdentifiers.ILLUMINATING_LURE,
+        location: maze.tile(x - 2160, y - 6400, 0) }), true);
+    }
+    assert.equal(varbits.get(15210), 4, 'repairing all four growths reveals the rune sequence');
+    const energies = new Map([[1, [49520, 49189, [2227, 6430]]], [2, [49521, 49190, [2224, 6433]]],
+      [3, [49522, 49191, [2227, 6433]]], [4, [49523, 49192, [2224, 6427]]],
+      [5, [49524, 49193, [2227, 6427]]], [6, [49525, 49194, [2224, 6430]]]]);
+    const order = attrs.get('desert-treasure-ii:scar-growth-order');
+    const wrong = energies.get(order[0] === 1 ? 2 : 1);
+    assert.equal(objectHooks[0]({ player, objectId: wrong[0], definition: { id: wrong[1] },
+      location: maze.tile(wrong[2][0] - 2160, wrong[2][1] - 6400, 0) }), true);
+    assert.equal(varbits.get(15209), 0, 'touching the wrong energy preserves the current puzzle step');
+    for (const rune of order) {
+      const [baseId, visibleId, [x, y]] = energies.get(rune);
+      assert.equal(objectHooks[0]({ player, objectId: baseId, definition: { id: visibleId },
+        location: maze.tile(x - 2160, y - 6400, 0) }), true);
+    }
+    assert.equal(attrs.get('desert-treasure-ii:scar-growth-complete'), true,
+      'the exact six-energy order completes the growth challenge');
+    assert.equal(objectHooks[0]({ player, objectId: 49418, location: maze.tile(60, 2, 0) }), true,
+      'the southern shipwreck passage opens only after restoring the six-energy sequence');
+    assert.equal(objectHooks[0]({ player, objectId: 49425, location: maze.tile(76, 2, 0) }), true,
+      'searching the mapped crate provides the tinderbox');
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.TINDERBOX), 1);
+    assert.equal(objectHooks[0]({ player, objectId: 49426, location: maze.tile(61, 14, 0) }), true,
+      'the north-west skeleton contains the slimy key');
+    assert.equal(objectHooks[0]({ player, objectId: 49427, location: maze.tile(63, 2, 0) }), true,
+      'the south-west skeleton contains gunpowder');
+    assert.equal(objectHooks[0]({ player, objectId: 49420, location: maze.tile(71, 13, 0) }), true,
+      'the slimy key opens the actual cache chest for the old tablet');
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.OLD_TABLET), 1);
+    const readTablet = { player, itemId: core.ItemIdentifiers.OLD_TABLET, option: 'Read' };
+    assert.equal(itemActionHooks[0](readTablet), true);
+    assert.equal(readTablet.handled, true);
+    assert.equal(itemOnObjectHooks[0]({ player, objectId: 49423, itemId: core.ItemIdentifiers.TINDERBOX,
+      location: maze.tile(75, 9, 0) }), true, 'the tinderbox lights gunpowder around the wreck after reading the tablet');
+    assert.equal(attrs.get('desert-treasure-ii:scar-boat-burned'), true);
+    assert.equal(varbits.get(15128), 20);
+    interactions.find((entry) => entry.name === 'Wizard Persten').options['Talk-to']({
+      player, npcId: core.NpcIdentifiers.WIZARD_PERSTEN_5,
+    });
+    assert.equal(transcripts.at(-1), 'praefectus-classis-perseriya-talking-to-wizard-persten-after-completing-the-first-passage');
+    assert.equal(attrs.get('desert-treasure-ii:scar-persten-room1-talked'), true);
+    assert.equal(varbits.get(15128), 22, 'Persten advances the quest only after the boat room is complete');
+    assert.equal(area.scarMazeTwoEntry.id, core.ObjectIdentifiers.PASSAGE_15,
+      'Persten opens the cache passage to the middle level after the first ship is destroyed');
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_15, location: area.tile(51, 34, 0) }), true);
+    const middle = attrs.get('desert-treasure-ii:scar-maze-two');
+    assert.equal(middle.width, 12);
+    assert.equal(middle.height, 8);
+    assert.equal(varbits.get(15128), 24);
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_18, location: middle.tile(60, 20, 0) }), true,
+      'the cache doorway starts the four-axon terminal puzzle');
+    let axons = queues.add.filter((npc) => npc.__dt2ScarAxon);
+    assert.equal(axons.length, 4);
+    const firstMove = axons[0].__dt2AxonPath.points[1];
+    const firstStart = axons[0].__dt2AxonPath.points[0];
+    const firstDx = Math.sign(firstMove[0] - firstStart[0]), firstDy = Math.sign(firstMove[1] - firstStart[1]);
+    player.moveTo(middle.tile(firstStart[0] - 1696 + firstDx, firstStart[1] - 6400 + firstDy, 0));
+    const wrongSideHit = { getAttacker: () => player, isAccurate: () => true,
+      getHits: () => [{ setDamage(value) { this.damage = value; } }], updateTotalDamage() {} };
+    hitModifyHooks.find((handler) => handler.name === 'handleScarAxonHit')({ npc: axons[0], hit: wrongSideHit });
+    assert.equal(axons[0].__dt2AxonIndex, 0, 'hitting an axon from the wrong side does not push it away from its terminal');
+    for (const axon of axons) {
+      while (axon.__dt2AxonIndex < axon.__dt2AxonPath.points.length - 1) {
+        const current = axon.__dt2AxonPath.points[axon.__dt2AxonIndex];
+        const next = axon.__dt2AxonPath.points[axon.__dt2AxonIndex + 1];
+        const dx = Math.sign(next[0] - current[0]), dy = Math.sign(next[1] - current[1]);
+        player.moveTo(middle.tile(current[0] - 1696 - dx, current[1] - 6400 - dy, 0));
+        const hit = { getAttacker: () => player, isAccurate: () => true,
+          getHits: () => [{ setDamage(value) { this.damage = value; } }], updateTotalDamage() {} };
+        hitModifyHooks.find((handler) => handler.name === 'handleScarAxonHit')({ npc: axon, hit });
+        axon.location = middle.tile(next[0] - 1696, next[1] - 6400, 0);
+      }
+      assert.equal(axon.__dt2AxonComplete, true);
+    }
+    assert.equal(attrs.get('desert-treasure-ii:scar-axon-room-complete'), true);
+    assert.equal(varbits.get(15258), 1, 'all four axons must reach their matching terminals');
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_19, location: middle.tile(86, 20, 0) }), true,
+      'the broken nerve chamber opens after all axon terminals activate');
+    assert.equal(attrs.get('desert-treasure-ii:scar-nerve-room-two-active'), true);
+    assert.equal(varbits.get(15211), 100, 'the underwater room starts with full oxygen');
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.AIR_BUBBLE, location: middle.tile(84, 25, 0) }), true);
+    assert.equal(varbits.get(15211), 100, 'air bubbles restore oxygen while underwater');
+    const roomNerves = [
+      [core.ObjectIdentifiers.NERVE_ENDING_EARTH_, 1784, 6423, core.ItemIdentifiers.EARTH_NERVE],
+      [core.ObjectIdentifiers.NERVE_ENDING_AIR_, 1789, 6429, core.ItemIdentifiers.AIR_NERVE],
+      [core.ObjectIdentifiers.NERVE_ENDING_WATER_, 1775, 6426, core.ItemIdentifiers.WATER_NERVE],
+      [core.ObjectIdentifiers.NERVE_ENDING_FIRE_, 1777, 6422, core.ItemIdentifiers.FIRE_NERVE],
+    ];
+    for (const [objectId, x, y, itemId] of roomNerves) {
+      assert.equal(objectHooks[0]({ player, objectId, location: middle.tile(x - 1696, y - 6400, 0) }), true);
+      assert.equal(inventoryCounts.get(itemId), 1);
+    }
+    for (const [ingredients, result] of [
+      [[core.ItemIdentifiers.AIR_NERVE, core.ItemIdentifiers.EARTH_NERVE], core.ItemIdentifiers.DUST_NERVE],
+      [[core.ItemIdentifiers.EARTH_NERVE, core.ItemIdentifiers.FIRE_NERVE], core.ItemIdentifiers.LAVA_NERVE],
+      [[core.ItemIdentifiers.FIRE_NERVE, core.ItemIdentifiers.AIR_NERVE], core.ItemIdentifiers.SMOKE_NERVE],
+      [[core.ItemIdentifiers.WATER_NERVE, core.ItemIdentifiers.FIRE_NERVE], core.ItemIdentifiers.STEAM_NERVE],
+    ]) {
+      inventoryCounts.set(ingredients[0], 2);
+      inventoryCounts.set(ingredients[1], 2);
+      assert.equal(itemOnItemHooks[0]({ player, usedItemId: ingredients[0], usedWithItemId: ingredients[1] }), true);
+      assert.equal(inventoryCounts.get(result), 1);
+    }
+    const repairs = [
+      [49445, 1778, 6431, core.ItemIdentifiers.SMOKE_NERVE],
+      [49446, 1783, 6430, core.ItemIdentifiers.STEAM_NERVE],
+      [49447, 1784, 6433, core.ItemIdentifiers.DUST_NERVE],
+      [49448, 1779, 6435, core.ItemIdentifiers.LAVA_NERVE],
+    ];
+    for (const [objectId, x, y, itemId] of repairs) {
+      const location = middle.tile(x - 1696, y - 6400, 0);
+      const wrong = { player, itemId: core.ItemIdentifiers.DUST_NERVE, objectId, location };
+      assert.equal(itemOnObjectHooks[0](wrong), true);
+      assert.equal(wrong.handled, true);
+      const repair = { player, itemId, objectId, location };
+      assert.equal(itemOnObjectHooks[0](repair), true);
+      assert.equal(repair.handled, true);
+    }
+    assert.equal(attrs.get('desert-treasure-ii:scar-nerve-room-two-complete'), true);
+    assert.equal(varbits.get(15259), 1);
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_20, location: middle.tile(48, 57, 0) }), true);
+    let imps = queues.add.filter((npc) => npc.__dt2SummonImp);
+    let demons = queues.add.filter((npc) => npc.__dt2SummonDemon);
+    assert.equal(imps.length, 3);
+    assert.equal(demons.length, 2);
+    const protectedHits = [{ setDamage(value) { this.damage = value; } }];
+    const protectedHit = { isAccurate: () => true, getHits: () => protectedHits, updateTotalDamage() {} };
+    hitModifyHooks.find((handler) => handler.name === 'preventScarSummonProtection')({ npc: demons[0], hit: protectedHit });
+    assert.equal(protectedHits[0].damage, 0, 'the imps protect the lesser demons until they die');
+    for (const imp of imps) deathHooks[0]({ killer: player, npc: imp });
+    assert.equal(attrs.get('desert-treasure-ii:scar-summoning-imps'), 0);
+    for (const demon of demons) deathHooks[0]({ killer: player, npc: demon });
+    assert.equal(attrs.get('desert-treasure-ii:scar-summoning-room-complete'), true);
+    assert.equal(varbits.get(15260), 1);
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_23, location: middle.tile(75, 59, 0) }), true);
+    for (const [objectId, x, y] of [[49425, 1774, 6448], [49427, 1779, 6448], [49426, 1789, 6449]]) {
+      assert.equal(objectHooks[0]({ player, objectId, location: middle.tile(x - 1696, y - 6400, 0) }), true);
+    }
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.TINDERBOX), 1);
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.GUNPOWDER_2), 1);
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.SLIMY_KEY), 1);
+    assert.equal(objectHooks[0]({ player, objectId: 49420, location: middle.tile(79, 60, 0) }), true);
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.DAMP_TABLET), 1);
+    const readDamp = { player, itemId: core.ItemIdentifiers.DAMP_TABLET, option: 'Read' };
+    assert.equal(itemActionHooks[0](readDamp), true);
+    assert.equal(readDamp.handled, true);
+    const burnSecondWreck = { player, itemId: core.ItemIdentifiers.TINDERBOX, objectId: core.ObjectIdentifiers.SHIPWRECK,
+      location: middle.tile(90, 53, 0) };
+    assert.equal(itemOnObjectHooks[0](burnSecondWreck), true);
+    assert.equal(burnSecondWreck.handled, true);
+    assert.equal(attrs.get('desert-treasure-ii:scar-boat2-burned'), true);
+    assert.equal(varbits.get(15128), 28);
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_17, location: middle.tile(94, 5, 0) }), true,
+      'the real passage exit returns the player to Persten after the second ship');
+    interactions.find((entry) => entry.name === 'Wizard Persten').options['Talk-to']({
+      player, npcId: core.NpcIdentifiers.WIZARD_PERSTEN_5,
+    });
+    assert.equal(transcripts.at(-1), 'praefectus-classis-perseriya-talking-to-wizard-persten-after-completing-the-second-passage');
+    assert.equal(attrs.get('desert-treasure-ii:scar-persten-room2-talked'), true);
+    assert.equal(varbits.get(15128), 30);
+    assert.equal(area.scarMazeTwoEntry.id, 49410, 'Persten reveals the third passage after the second boat is burned');
+    assert.equal(objectHooks[0]({ player, objectId: 49410, location: area.tile(51, 34, 0) }), true);
+    const finalPassage = attrs.get('desert-treasure-ii:scar-maze-three');
+    assert.equal(finalPassage.width, 9);
+    assert.equal(finalPassage.height, 9);
+    assert.equal(varbits.get(15128), 32);
+    const pendingAirHits = [];
+    attrs.set('desert-treasure-ii:scar-maze-three-air', 2);
+    finalPassage.process(player);
+    assert.equal(varbits.get(15211), 1, 'the third passage drains oxygen once per world cycle');
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.AIR_BUBBLE,
+      location: finalPassage.tile(1900 - 1856, 6430 - 6400, 0) }), true);
+    assert.equal(varbits.get(15211), 100, 'the correct cache air bubble restores oxygen');
+    attrs.set('desert-treasure-ii:scar-maze-three-air', 0);
+    finalPassage.process(player);
+    assert.equal(pendingAirHits.length, 1, 'running out of air forces the player back and causes damage');
+    assert.equal(objectHooks[0]({ player, objectId: 49410, location: finalPassage.tile(41, 36, 0) }), true,
+      'the Abyssal Stem starts the final passage memory puzzle');
+    const memory = attrs.get('desert-treasure-ii:scar-memory-order');
+    assert.equal(memory.length, 4);
+    assert.equal(new Set(memory).size, 4);
+    const wrongStep = memory[0] === 0 ? 1 : 0;
+    const [wx, wy] = [[1903, 6431], [1900, 6442], [1909, 6441], [1914, 6434]][wrongStep];
+    assert.equal(objectHooks[0]({ player, objectId: 49391, location: finalPassage.tile(wx - 1856, wy - 6400, 0) }), true);
+    assert.equal(varbits.get(15212), 0, 'a wrong memory growth resets the sequence');
+    assert.equal(objectHooks[0]({ player, objectId: 49410, location: finalPassage.tile(41, 36, 0) }), true,
+      'touching the stem shows the same stored sequence again');
+    for (const growth of memory) {
+      const [x, y] = [[1903, 6431], [1900, 6442], [1909, 6441], [1914, 6434]][growth];
+      assert.equal(objectHooks[0]({ player, objectId: 49391, location: finalPassage.tile(x - 1856, y - 6400, 0) }), true);
+    }
+    assert.equal(attrs.get('desert-treasure-ii:scar-memory-complete'), true);
+    assert.equal(varbits.get(15258), 1);
+    assert.equal(objectHooks[0]({ player, objectId: 49412, location: finalPassage.tile(46, 11, 0) }), true,
+      'the Brain Pillar room only opens after solving the memory puzzle');
+    for (let wave = 0; wave < 4; wave++) {
+      const enemies = queues.add.filter((npc) => npc.__dt2ScarTreeEnemy === true);
+      assert.equal(enemies.length, 2);
+      for (const enemy of enemies) deathHooks[0]({ killer: player, npc: enemy });
+    }
+    assert.equal(attrs.get('desert-treasure-ii:scar-tree-complete'), true,
+      'the Brain Pillar heals after the player clears four actual enemy waves');
+    assert.equal(varbits.get(15260), 1);
+    assert.equal(objectHooks[0]({ player, objectId: 49416, location: finalPassage.tile(35, 57, 0) }), true,
+      'the north neural teleporter leads to the Unlit Veins');
+    const takeMazeThreeLure = interactions.find((entry) => entry.name === 'Light leech').options['Take-lure'];
+    const oldRandom = Math.random;
+    Math.random = () => 0;
+    try {
+      for (const leech of queues.add.filter((npc) => npc.__dt2ScarMazeThreeLeech)) takeMazeThreeLure({ player, npc: leech });
+    } finally { Math.random = oldRandom; }
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.ILLUMINATING_LURE), 4);
+    for (const [x, y] of [[1862, 6432], [1869, 6423], [1869, 6440], [1876, 6432]]) {
+      assert.equal(itemOnObjectHooks[0]({ player, objectId: 49436, itemId: core.ItemIdentifiers.ILLUMINATING_LURE,
+        location: finalPassage.tile(x - 1856, y - 6400, 0) }), true);
+    }
+    assert.equal(varbits.get(15210), 4);
+    for (const cell of queues.add.filter((npc) => npc.__dt2ScarBloodCell)) deathHooks[0]({ killer: player, npc: cell });
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.CRIMSON_FIBRE), 3);
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.RADIANT_FIBRE), 3);
+    for (const [x, y] of [[1865, 6438], [1874, 6429], [1874, 6434]]) {
+      assert.equal(itemOnObjectHooks[0]({ player, objectId: 49537, itemId: core.ItemIdentifiers.CRIMSON_FIBRE,
+        location: finalPassage.tile(x - 1856, y - 6400, 0) }), true);
+    }
+    for (const [x, y] of [[1867, 6427], [1867, 6433], [1874, 6425]]) {
+      assert.equal(itemOnObjectHooks[0]({ player, objectId: 49536, itemId: core.ItemIdentifiers.RADIANT_FIBRE,
+        location: finalPassage.tile(x - 1856, y - 6400, 0) }), true);
+    }
+    assert.equal(attrs.get('desert-treasure-ii:scar-leech-complete'), true);
+    assert.equal(varbits.get(15259), 1);
+    assert.equal(objectHooks[0]({ player, objectId: 49419, location: finalPassage.tile(43, 56, 0) }), true);
+    for (const [objectId, x, y] of [[49425, 1915, 6460], [49427, 1912, 6446], [49426, 1902, 6459]]) {
+      assert.equal(objectHooks[0]({ player, objectId, location: finalPassage.tile(x - 1856, y - 6400, 0) }), true);
+    }
+    assert.equal(objectHooks[0]({ player, objectId: 49420, location: finalPassage.tile(53, 49, 0) }), true);
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.DAMP_TABLET_2), 1);
+    const readThirdTablet = { player, itemId: core.ItemIdentifiers.DAMP_TABLET_2, option: 'Read' };
+    assert.equal(itemActionHooks[0](readThirdTablet), true);
+    assert.equal(readThirdTablet.handled, true);
+    const burnThirdWreck = { player, itemId: core.ItemIdentifiers.TINDERBOX, objectId: core.ObjectIdentifiers.SHIPWRECK,
+      location: finalPassage.tile(58, 55, 0) };
+    assert.equal(itemOnObjectHooks[0](burnThirdWreck), true);
+    assert.equal(burnThirdWreck.handled, true);
+    assert.equal(attrs.get('desert-treasure-ii:scar-boat3-burned'), true);
+    assert.equal(varbits.get(15128), 34);
+    assert.equal(objectHooks[0]({ player, objectId: 49410, location: finalPassage.tile(41, 36, 0) }), true,
+      'the passage exit returns to camp after the third ship burns');
+    interactions.find((entry) => entry.name === 'Wizard Persten').options['Talk-to']({ player, npcId: core.NpcIdentifiers.WIZARD_PERSTEN_5 });
+    assert.equal(transcripts.at(-1), 'praefectus-classis-perseriya-talking-to-wizard-persten-after-completing-the-third-passage');
+    assert.equal(varbits.get(15128), 36);
   } finally {
     runtime.startTranscript = startTranscript;
   }
@@ -1285,4 +1640,21 @@ test('Dragon Slayer II rowboat build consumes the Wiki supplies and uses the rea
   assert.equal(amounts.get(I.DRAGON_KEY), 0);
   assert.equal(attributes.get('quest.dragon_slayer_ii.stage'), 9);
   assert.ok(messages.includes('You successfully build the boat.'));
+});
+
+test('Desert Treasure II shadow spells interrupt the private Leviathan encounter', () => {
+  const { api: base } = mockApi();
+  const custom = new Map();
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onCustomEvent'
+      ? (name, handler) => custom.set(name, [...(custom.get(name) ?? []), handler])
+      : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const messages = [];
+  const attacker = { isPlayer: () => true, sendMessage: (message) => messages.push(message) };
+  const target = { __dt2Leviathan: true, getOwner: () => attacker };
+  custom.get('magic:hit-effects').at(-1)({ attacker, target, spell: { getName: () => 'Shadow Barrage' } });
+  assert.ok(target.__dt2LeviathanStunnedUntil > api.core.World.getProcessCycle());
+  assert.match(messages[0], /stuns the Leviathan/);
 });

@@ -32,6 +32,9 @@ module.exports = function registerDesertTreasureII(api) {
   const ATTR_VARDORVIS_AREA = "desert-treasure-ii:vardorvis-area";
   const ATTR_SCAR_AREA = "desert-treasure-ii:scar-area";
   const ATTR_SCAR_MAZE_ONE = "desert-treasure-ii:scar-maze-one";
+  const ATTR_SCAR_MAZE_TWO = "desert-treasure-ii:scar-maze-two";
+  const ATTR_SCAR_MAZE_THREE = "desert-treasure-ii:scar-maze-three";
+  const ATTR_LEVIATHAN_AREA = "desert-treasure-ii:leviathan-area";
   const ATTR_VAULT_AREA = "desert-treasure-ii:ancient-vault";
   const ATTR_VAULT_SMITH = "desert-treasure-ii:vault-smith";
   const ATTR_SMITH_INTRO = "desert-treasure-ii:smith-intro";
@@ -46,17 +49,78 @@ module.exports = function registerDesertTreasureII(api) {
   const KASONDE_MEDALLION_CHEST = 49496;
   const SCAR_DEMONS_DEFEATED = "desert-treasure-ii:scar-demons-defeated";
   const SCAR_BOAT_TRIED = "desert-treasure-ii:scar-boat-tried";
+  const SCAR_BOAT_ROOM = "desert-treasure-ii:scar-boat-room-entered";
+  const SCAR_TINDERBOX_FOUND = "desert-treasure-ii:scar-tinderbox-found";
+  const SCAR_SLIMY_KEY_FOUND = "desert-treasure-ii:scar-slimy-key-found";
+  const SCAR_GUNPOWDER_FOUND = "desert-treasure-ii:scar-gunpowder-found";
+  const SCAR_OLD_TABLET_READ = "desert-treasure-ii:scar-old-tablet-read";
+  const SCAR_BOAT_CHEST_OPEN = "desert-treasure-ii:scar-boat-chest-open";
+  const SCAR_BOAT_BURNED = "desert-treasure-ii:scar-boat-burned";
+  const SCAR_PERSTEN_ROOM2_TALKED = "desert-treasure-ii:scar-persten-room2-talked";
+  const SCAR_BOAT2_BURNED = "desert-treasure-ii:scar-boat2-burned";
+  const SCAR_NERVE_ROOM_TWO_ACTIVE = "desert-treasure-ii:scar-nerve-room-two-active";
+  const SCAR_NERVE_ROOM_TWO_BROKEN = "desert-treasure-ii:scar-nerve-room-two-broken";
+  const SCAR_NERVE_ROOM_TWO_REPAIRED = "desert-treasure-ii:scar-nerve-room-two-repaired";
+  const SCAR_NERVE_ROOM_TWO_COMPLETE = "desert-treasure-ii:scar-nerve-room-two-complete";
+  const SCAR_NERVE_ROOM_TWO_AIR = "desert-treasure-ii:scar-nerve-room-two-air";
+  const SCAR_MAZE_THREE_ACTIVE = "desert-treasure-ii:scar-maze-three-active";
+  const SCAR_MAZE_THREE_AIR = "desert-treasure-ii:scar-maze-three-air";
+  const SCAR_MEMORY_ORDER = "desert-treasure-ii:scar-memory-order";
+  const SCAR_MEMORY_STEP = "desert-treasure-ii:scar-memory-step";
+  const SCAR_MEMORY_COMPLETE = "desert-treasure-ii:scar-memory-complete";
+  const SCAR_TREE_STARTED = "desert-treasure-ii:scar-tree-started";
+  const SCAR_TREE_COMPLETE = "desert-treasure-ii:scar-tree-complete";
+  const SCAR_LEECH_GROWTHS_REPAIRED = "desert-treasure-ii:scar-leech-growths";
+  const SCAR_BLOOD_RED_COUNT = "desert-treasure-ii:scar-blood-red-count";
+  const SCAR_BLOOD_WHITE_COUNT = "desert-treasure-ii:scar-blood-white-count";
+  const SCAR_BLOOD_RED_REPAIRED = "desert-treasure-ii:scar-blood-red-repaired";
+  const SCAR_BLOOD_WHITE_REPAIRED = "desert-treasure-ii:scar-blood-white-repaired";
+  const SCAR_LEECH_COMPLETE = "desert-treasure-ii:scar-leech-complete";
+  const SCAR_BOAT3_BURNED = "desert-treasure-ii:scar-boat3-burned";
+  const SCAR_BOAT3_ROOM = "desert-treasure-ii:scar-boat-room-three";
+  const SCAR_PERSTEN_ROOM3_TALKED = "desert-treasure-ii:scar-persten-room3-talked";
+  const SCAR_LEVIATHAN_READY = "desert-treasure-ii:scar-leviathan-ready";
+  const SCAR_LEVIATHAN_KILLED = "desert-treasure-ii:scar-leviathan-killed";
+  const SCAR_PERSTEN_AT_SHIP = "desert-treasure-ii:persten-at-ship";
+  const SCAR_PERSTEN_LEFT_SHIP = "desert-treasure-ii:persten-left-ship";
+  const SCAR_LEVIATHAN_DEBRIS_SEARCHED = "desert-treasure-ii:leviathan-debris-searched";
+  const SCAR_AXON_ROOM_COMPLETE = "desert-treasure-ii:scar-axon-room-complete";
+  const SCAR_SUMMON_ROOM_STARTED = "desert-treasure-ii:scar-summoning-room-started";
+  const SCAR_SUMMON_IMPS = "desert-treasure-ii:scar-summoning-imps";
+  const SCAR_SUMMON_DEMONS = "desert-treasure-ii:scar-summoning-demons";
+  const SCAR_SUMMON_ROOM_COMPLETE = "desert-treasure-ii:scar-summoning-room-complete";
   const SCAR_PERSTEN_TALKED = "desert-treasure-ii:scar-persten-talked";
+  const SCAR_PERSTEN_ROOM1_TALKED = "desert-treasure-ii:scar-persten-room1-talked";
   const SCAR_PERSTEN_TALKED_BEFORE = "desert-treasure-ii:scar-persten-talked-before";
   const SCAR_PATH_COMPLETE = "desert-treasure-ii:scar-pathfinder-complete";
   const SCAR_TETHER_DESTROYED = "desert-treasure-ii:scar-tether-destroyed";
   const SCAR_VARBIT = 15128;
-  const SCAR_TETHER_VARBIT = 15258;
   const SCAR_MAZE_ONE_ENTERED = "desert-treasure-ii:scar-maze-one-entered";
+  const SCAR_MAZE_TWO_ENTERED = "desert-treasure-ii:scar-maze-two-entered";
   const SCAR_GUARDIAN_ACCEPTED = "desert-treasure-ii:scar-guardian-accepted";
   const SCAR_PASSAGE_OPEN = 49205;
   const SCAR_RIFT_LIVE = "desert-treasure-ii:scar-rift-live-nerves";
   const SCAR_NERVES_BROKEN = "desert-treasure-ii:scar-nerves-broken";
+  const SCAR_CATALYST_PROGRESS = "desert-treasure-ii:scar-catalyst-progress";
+  const SCAR_CATALYST_BASE_HITS = "desert-treasure-ii:scar-catalyst-base-hits";
+  const SCAR_CATALYST_ORDER = "desert-treasure-ii:scar-catalyst-order";
+  const SCAR_CATALYST_NPC = "desert-treasure-ii:scar-catalyst-npc";
+  const SCAR_GROWTH_LIVE = "desert-treasure-ii:scar-growth-live";
+  const SCAR_GROWTH_LURES = "desert-treasure-ii:scar-growth-lures";
+  const SCAR_GROWTH_STEP = "desert-treasure-ii:scar-growth-step";
+  const SCAR_GROWTH_ORDER = "desert-treasure-ii:scar-growth-order";
+  const SCAR_GROWTH_ORDER_VARBITS = [15203, 15204, 15205, 15206, 15207, 15208];
+  const SCAR_GROWTH_STEP_VARBIT = 15209;
+  const SCAR_GROWTH_LIT_VARBIT = 15210;
+  const SCAR_GROWTHS = [[2219, 6435], [2220, 6423], [2231, 6423], [2232, 6435]];
+  const SCAR_ENERGIES = [
+    { visible: 49189, base: 49520, state: 15197, rune: 1, tile: [2227, 6430] },
+    { visible: 49190, base: 49521, state: 15198, rune: 2, tile: [2224, 6433] },
+    { visible: 49191, base: 49522, state: 15199, rune: 3, tile: [2227, 6433] },
+    { visible: 49192, base: 49523, state: 15200, rune: 4, tile: [2224, 6427] },
+    { visible: 49193, base: 49524, state: 15201, rune: 5, tile: [2227, 6427] },
+    { visible: 49194, base: 49525, state: 15202, rune: 6, tile: [2224, 6430] },
+  ];
   const SCAR_NERVE_LOCATIONS = [
     { object: 49182, item: I.EARTH_NERVE, tiles: [[2198, 6411], [2204, 6419]] },
     { object: 49183, item: I.AIR_NERVE, tiles: [[2195, 6418], [2206, 6416]] },
@@ -64,6 +128,39 @@ module.exports = function registerDesertTreasureII(api) {
     { object: 49185, item: I.FIRE_NERVE, tiles: [[2193, 6415], [2200, 6407]] },
     { object: 49186, item: I.MIND_NERVE, tiles: [[2194, 6410], [2205, 6408], [2205, 6411]] },
   ];
+  const SCAR_NERVE_LOCATIONS_TWO = [
+    { object: O.NERVE_ENDING_EARTH_, item: I.EARTH_NERVE, tiles: [[1780, 6440], [1784, 6423], [1789, 6435]] },
+    { object: O.NERVE_ENDING_AIR_, item: I.AIR_NERVE, tiles: [[1770, 6432], [1789, 6429]] },
+    { object: O.NERVE_ENDING_WATER_, item: I.WATER_NERVE, tiles: [[1772, 6436], [1775, 6426]] },
+    { object: O.NERVE_ENDING_FIRE_, item: I.FIRE_NERVE, tiles: [[1773, 6433], [1777, 6422]] },
+  ];
+  const SCAR_NERVE_REPAIRS_TWO = [
+    { object: 49445, item: I.SMOKE_NERVE, tile: [1778, 6431] },
+    { object: 49446, item: I.STEAM_NERVE, tile: [1783, 6430] },
+    { object: 49447, item: I.DUST_NERVE, tile: [1784, 6433] },
+    { object: 49448, item: I.LAVA_NERVE, tile: [1779, 6435] },
+  ];
+  const SCAR_NERVE_AIR_BUBBLES = [[1779, 6437], [1780, 6425]];
+  const SCAR_MEMORY_GROWTHS = [[1903, 6431], [1900, 6442], [1909, 6441], [1914, 6434]];
+  const SCAR_MAZE_THREE_AIR_BUBBLES = [[1900, 6430], [1900, 6439], [1906, 6443], [1908, 6436], [1913, 6431]];
+  const SCAR_LEECH_GROWTHS = [[1862, 6432], [1869, 6423], [1869, 6440], [1876, 6432]];
+  const SCAR_BLOOD_RED_VEINS = [[1865, 6438], [1874, 6429], [1874, 6434]];
+  const SCAR_BLOOD_WHITE_VEINS = [[1867, 6427], [1867, 6433], [1874, 6425]];
+  const SCAR_AXON_PATHS = [
+    { terminal: 49443, points: [[1749, 6419], [1747, 6419], [1747, 6414]] },
+    { terminal: 49441, points: [[1744, 6413], [1744, 6421], [1742, 6421], [1742, 6424], [1740, 6424], [1740, 6427], [1747, 6427]] },
+    { terminal: 49442, points: [[1743, 6424], [1740, 6424], [1740, 6422], [1734, 6422], [1734, 6425]] },
+    { terminal: 49440, points: [[1735, 6422], [1743, 6422], [1743, 6417], [1736, 6417], [1736, 6414]] },
+  ].map((path) => {
+    const points = [path.points[0]];
+    for (const [x, y] of path.points.slice(1)) {
+      const [lastX, lastY] = points.at(-1);
+      const steps = Math.max(Math.abs(x - lastX), Math.abs(y - lastY));
+      const dx = Math.sign(x - lastX), dy = Math.sign(y - lastY);
+      for (let step = 1; step <= steps; step++) points.push([lastX + dx * step, lastY + dy * step]);
+    }
+    return { ...path, points };
+  });
   const SCAR_NERVE_RECIPES = [
     [I.AIR_NERVE, I.EARTH_NERVE, I.DUST_NERVE],
     [I.EARTH_NERVE, I.FIRE_NERVE, I.LAVA_NERVE],
@@ -76,6 +173,26 @@ module.exports = function registerDesertTreasureII(api) {
     [I.COSMIC_NERVE, I.EARTH_NERVE, I.ASTRAL_NERVE],
     [I.SMOKE_NERVE, I.BLOOD_NERVE, I.WRATH_NERVE],
   ];
+  const SCAR_CATALYST_RUNES = [I.SMOKE_NERVE, I.BLOOD_NERVE, I.SOUL_NERVE, I.NATURE_NERVE, I.COSMIC_NERVE, I.ASTRAL_NERVE];
+  const SCAR_CATALYST_RUNE_NAMES = ["smoke", "blood", "soul", "nature", "cosmic", "astral"];
+  const SCAR_CATALYST_BASE_PARTS = new Map([
+    [I.SMOKE_NERVE, [I.FIRE_NERVE, I.AIR_NERVE]],
+    [I.BLOOD_NERVE, [I.MIND_NERVE, I.WATER_NERVE]],
+    [I.SOUL_NERVE, [I.MIND_NERVE, I.MIND_NERVE]],
+    [I.NATURE_NERVE, [I.WATER_NERVE, I.EARTH_NERVE]],
+    [I.COSMIC_NERVE, [I.MIND_NERVE, I.MIND_NERVE, I.WATER_NERVE, I.EARTH_NERVE]],
+    [I.ASTRAL_NERVE, [I.MIND_NERVE, I.MIND_NERVE, I.WATER_NERVE, I.EARTH_NERVE, I.EARTH_NERVE]],
+  ]);
+  const SCAR_ENERGY_RUNES = [1, 2, 3, 4, 5, 6];
+
+  function shuffled(values) {
+    const result = [...values];
+    for (let i = result.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [result[i], result[j]] = [result[j], result[i]];
+    }
+    return result;
+  }
   const ASGARNIA_SMITH_VAULT_INITIAL = 12401;
   const TOTEMS = [
     { kind: "blood", inactive: 12343, active: 12344, x: 2775, y: 6445, spells: ["BLOOD_BURST", "BLOOD_BLITZ", "BLOOD_BARRAGE"] },
@@ -84,12 +201,12 @@ module.exports = function registerDesertTreasureII(api) {
     { kind: "ice", inactive: 12345, active: 12346, x: 2775, y: 6439, spells: ["ICE_BURST", "ICE_BLITZ", "ICE_BARRAGE"] },
   ];
   const SCAR_PATHS = [
-    { npc: N.CEREBRAL_PATHFINDER, points: [[2195, 6450], [2195, 6444], [2197, 6444]] },
-    { npc: N.CEREBRAL_PATHBREAKER, points: [[2199, 6444], [2202, 6444], [2202, 6442]] },
-    { npc: N.CEREBRAL_PATHBREAKER, points: [[2202, 6440], [2201, 6439], [2198, 6438]] },
-    { npc: N.CEREBRAL_PATHBREAKER, points: [[2197, 6438], [2196, 6435]] },
-    { npc: N.CEREBRAL_PATHBREAKER, points: [[2196, 6435], [2207, 6436]] },
-    { npc: N.CEREBRAL_PATHBREAKER, points: [[2207, 6436], [2207, 6433], [2209, 6433]] },
+    { npc: N.CEREBRAL_PATHFINDER, from: "north", points: [[2195, 6450], [2195, 6444], [2197, 6444]] },
+    { npc: N.CEREBRAL_PATHFINDER, from: "west", points: [[2199, 6444], [2202, 6444], [2202, 6442]] },
+    { npc: N.CEREBRAL_PATHBREAKER, from: "north", points: [[2202, 6440], [2201, 6439], [2198, 6438]] },
+    { npc: N.CEREBRAL_PATHBREAKER, from: "west", points: [[2197, 6438], [2196, 6435]] },
+    { npc: N.CEREBRAL_PATHBREAKER, from: "east", points: [[2196, 6435], [2207, 6436]] },
+    { npc: N.CEREBRAL_PATHBREAKER, from: "south", points: [[2207, 6436], [2207, 6433], [2209, 6433]] },
   ];
   let quest;
   let spawned = new WeakMap();
@@ -100,6 +217,9 @@ module.exports = function registerDesertTreasureII(api) {
   let VardorvisArea;
   let ScarArea;
   let ScarMazeOneArea;
+  let ScarMazeTwoArea;
+  let ScarMazeThreeArea;
+  let LeviathanArea;
   const totemSpellIds = new Map(TOTEMS.map((totem) => [totem.kind, new Set(totem.spells.map((name) => api.core.CombatSpells[name]?.spellId?.()).filter(Number.isInteger))]));
 
   AncientVaultArea = class DesertTreasureIIAncientVaultArea extends api.core.TemplatedInstanceArea {
@@ -361,18 +481,259 @@ module.exports = function registerDesertTreasureII(api) {
       const playerLoc = actor.getLocation();
       const runnerLoc = runner.getLocation();
       const distance = Math.max(Math.abs(playerLoc.getX() - runnerLoc.getX()), Math.abs(playerLoc.getY() - runnerLoc.getY()));
-      const movement = runner.getMovementQueue();
-      movement.setBlockMovement?.(distance > 3);
       const points = SCAR_PATHS[this.pathIndex].points;
+      if (runner.__dt2ScarMoving) {
+        const target = points[runner.__dt2ScarRouteIndex];
+        const targetTile = target && this.tile(target[0] - 2160, target[1] - 6400, 0);
+        // OSRS pathing can settle on the nearest reachable tile when the marked
+        // dot itself is clipped by a room edge. Treat the two-tile approach as
+        // reached, then route to the next documented dot from the live position.
+        if (targetTile && Math.max(Math.abs(runnerLoc.getX() - targetTile.getX()), Math.abs(runnerLoc.getY() - targetTile.getY())) <= 2) {
+          runner.__dt2ScarRouteIndex++;
+          const [nextX, nextY] = points[runner.__dt2ScarRouteIndex] ?? [];
+          if (nextX !== undefined) {
+            const next = this.tile(nextX - 2160, nextY - 6400, 0);
+            api.core.PathFinder.calculateWalkRoute(runner, next.getX(), next.getY());
+          }
+        }
+      }
       const finish = this.tile(points.at(-1)[0] - 2160, points.at(-1)[1] - 6400, 0);
-      const arrived = runnerLoc.getX() === finish.getX() && runnerLoc.getY() === finish.getY();
+      const arrived = Math.max(Math.abs(runnerLoc.getX() - finish.getX()), Math.abs(runnerLoc.getY() - finish.getY())) <= 2;
       if (!arrived || distance > 3) return;
+      const remove = api.core.World.getRemoveNPCQueue();
+      if (runner.isRegistered?.() && !remove.includes(runner)) remove.push(runner);
+      this.remove(runner);
+      this.pathRunner = null;
       if (this.pathIndex < SCAR_PATHS.length - 1) {
         this.pathIndex++;
         spawnScarPathRunner(this.questPlayer, this, this.pathIndex);
       } else {
         this.questPlayer.setAttribute(SCAR_PATH_COMPLETE, true);
         this.questPlayer.sendMessage("The pathfinders have reached the abyssal tether. Destroy it to continue.");
+      }
+    }
+    destroy() {
+      if (this.isDestroyed()) return;
+      for (const entity of [...this.entities]) {
+        if (!entity?.isNpc?.() || !entity.getAsNpc) continue;
+        const npc = entity.getAsNpc();
+        const add = api.core.World.getAddNPCQueue();
+        for (let i = add.indexOf(npc); i >= 0; i = add.indexOf(npc)) add.splice(i, 1);
+        if (npc.isRegistered?.() && !api.core.World.getRemoveNPCQueue().includes(npc)) api.core.World.getRemoveNPCQueue().push(npc);
+      }
+      super.destroy();
+    }
+  };
+
+  ScarMazeTwoArea = class DesertTreasureIIScarMazeTwoArea extends api.core.TemplatedInstanceArea {
+    constructor(owner, questPlayer) {
+      super(12, 8);
+      this.owner = owner;
+      this.questPlayer = questPlayer;
+      this.lastProcessCycle = -1;
+      // Copy the middle passage as it appears in the cache. This is a separate
+      // instance from the north-west room so no other quest player can see its
+      // moving axons, underwater nerves or room state.
+      for (let x = 0; x < 12; x++) {
+        for (let y = 0; y < 8; y++) {
+          for (let plane = 0; plane < 4; plane++) {
+            this.setChunk(plane, x, y, plane === 0 ? {
+              sourceChunkX: 212 + x, sourceChunkY: 800 + y, sourcePlane: 0, rotation: 0,
+            } : null);
+          }
+        }
+      }
+    }
+    getName() { return "The Scar middle passage (Desert Treasure II)"; }
+    allowSummonPet() { return false; }
+    isMulti() { return true; }
+    process(actor) {
+      if (!actor?.isPlayer?.() || actor.getAsPlayer?.() !== this.questPlayer
+        || !this.questPlayer.getAttribute(SCAR_NERVE_ROOM_TWO_ACTIVE)) return;
+      const cycle = api.core.World.getProcessCycle();
+      if (cycle === this.lastProcessCycle) return;
+      this.lastProcessCycle = cycle;
+      const air = Math.max(0, (Number(this.questPlayer.getAttribute(SCAR_NERVE_ROOM_TWO_AIR)) || 0) - 1);
+      this.questPlayer.setAttribute(SCAR_NERVE_ROOM_TWO_AIR, air);
+      this.questPlayer.getPacketSender().sendVarbit(15211, air);
+      if (air > 0) return;
+      this.questPlayer.setAttribute(SCAR_NERVE_ROOM_TWO_AIR, 100);
+      this.questPlayer.getPacketSender().sendVarbit(15211, 100);
+      this.questPlayer.moveTo(this.tile(60, 20, 0));
+      this.questPlayer.getCombat().getHitQueue().addPendingDamage([
+        new api.core.HitDamage(5 + Math.floor(Math.random() * 6), api.core.HitMask.RED),
+      ]);
+      this.questPlayer.sendMessage("You run out of air and are forced back to the entrance.");
+    }
+    destroy() {
+      if (this.isDestroyed()) return;
+      for (const entity of [...this.entities]) {
+        if (!entity?.isNpc?.() || !entity.getAsNpc) continue;
+        const npc = entity.getAsNpc();
+        const add = api.core.World.getAddNPCQueue();
+        for (let i = add.indexOf(npc); i >= 0; i = add.indexOf(npc)) add.splice(i, 1);
+        if (npc.isRegistered?.() && !api.core.World.getRemoveNPCQueue().includes(npc)) api.core.World.getRemoveNPCQueue().push(npc);
+      }
+      super.destroy();
+    }
+  };
+
+  ScarMazeThreeArea = class DesertTreasureIIScarMazeThreeArea extends api.core.TemplatedInstanceArea {
+    constructor(owner, questPlayer) {
+      super(9, 9);
+      this.owner = owner;
+      this.questPlayer = questPlayer;
+      this.lastProcessCycle = -1;
+      // The final passage contains the memory, Brain Pillar, leech and ship rooms.
+      // These chunks preserve the actual cache layout and its collision.
+      for (let x = 0; x < 9; x++) {
+        for (let y = 0; y < 9; y++) {
+          for (let plane = 0; plane < 4; plane++) {
+            this.setChunk(plane, x, y, plane === 0 ? {
+              sourceChunkX: 232 + x, sourceChunkY: 800 + y, sourcePlane: 0, rotation: 0,
+            } : null);
+          }
+        }
+      }
+    }
+    getName() { return "The Scar final passage (Desert Treasure II)"; }
+    allowSummonPet() { return false; }
+    isMulti() { return true; }
+    canAttack(attacker, target) {
+      if (attacker?.__dt2ScarTreeEnemy) return target?.__dt2ScarAntibody && target.getOwner?.() === this.questPlayer;
+      if (attacker?.isPlayer?.() && attacker === this.questPlayer && target?.__dt2ScarTreeEnemy) return true;
+      if (target?.__dt2ScarAntibody || target?.__dt2ScarTreeEnemy) return false;
+      return null;
+    }
+    process(actor) {
+      if (!actor?.isPlayer?.() || actor.getAsPlayer?.() !== this.questPlayer
+        || !this.questPlayer.getAttribute(SCAR_MAZE_THREE_ACTIVE)) return;
+      const cycle = api.core.World.getProcessCycle();
+      if (cycle === this.lastProcessCycle) return;
+      this.lastProcessCycle = cycle;
+      const air = Math.max(0, (Number(this.questPlayer.getAttribute(SCAR_MAZE_THREE_AIR)) || 0) - 1);
+      this.questPlayer.setAttribute(SCAR_MAZE_THREE_AIR, air);
+      this.questPlayer.getPacketSender().sendVarbit(15211, air);
+      if (air > 0) return;
+      this.questPlayer.setAttribute(SCAR_MAZE_THREE_AIR, 100);
+      this.questPlayer.getPacketSender().sendVarbit(15211, 100);
+      this.questPlayer.moveTo(this.tile(41, 36, 0));
+      this.questPlayer.getCombat().getHitQueue().addPendingDamage([
+        new api.core.HitDamage(5 + Math.floor(Math.random() * 6), api.core.HitMask.RED),
+      ]);
+      this.questPlayer.sendMessage("You run out of air and are forced back to the passage entrance.");
+    }
+    destroy() {
+      if (this.isDestroyed()) return;
+      for (const entity of [...this.entities]) {
+        if (!entity?.isNpc?.() || !entity.getAsNpc) continue;
+        const npc = entity.getAsNpc();
+        const add = api.core.World.getAddNPCQueue();
+        for (let i = add.indexOf(npc); i >= 0; i = add.indexOf(npc)) add.splice(i, 1);
+        if (npc.isRegistered?.() && !api.core.World.getRemoveNPCQueue().includes(npc)) api.core.World.getRemoveNPCQueue().push(npc);
+      }
+      super.destroy();
+    }
+  };
+
+  LeviathanArea = class DesertTreasureIILeviathanArea extends api.core.TemplatedInstanceArea {
+    constructor(owner, questPlayer) {
+      super(6, 8);
+      this.owner = owner;
+      this.questPlayer = questPlayer;
+      this.lastProcessCycle = -1;
+      for (let x = 0; x < 6; x++) {
+        for (let y = 0; y < 8; y++) {
+          for (let plane = 0; plane < 4; plane++) {
+            this.setChunk(plane, x, y, plane === 0 ? {
+              sourceChunkX: 258 + x, sourceChunkY: 792 + y, sourcePlane: 0, rotation: 0,
+            } : null);
+          }
+        }
+      }
+    }
+    getName() { return "The Leviathan's lair (Desert Treasure II)"; }
+    allowSummonPet() { return false; }
+    isMulti() { return true; }
+    canAttack(attacker, target) {
+      if (attacker?.__dt2Leviathan) return false;
+      if (target?.__dt2Leviathan) return attacker?.isPlayer?.() && attacker === this.questPlayer;
+      return null;
+    }
+    process(actor) {
+      if (!actor?.isPlayer?.() || actor.getAsPlayer?.() !== this.questPlayer) return;
+      const cycle = api.core.World.getProcessCycle();
+      if (cycle === this.lastProcessCycle) return;
+      this.lastProcessCycle = cycle;
+      const player = this.questPlayer;
+      const boss = player.getAttribute(ATTR);
+      if (!boss?.__dt2Leviathan || boss.getHitpoints?.() <= 0 || player.getAttribute(SCAR_LEVIATHAN_KILLED)) return;
+      // The encounter owns its projectiles and overhead cues; reset the generic
+      // out-of-combat timer so the cache NPC cannot heal through the real fight.
+      boss.getCombat?.().getLastAttack?.().reset?.();
+      if (cycle < (boss.__dt2LeviathanStunnedUntil ?? 0)) return;
+      if (!Number.isFinite(boss.__dt2LeviathanNextAttack)) boss.__dt2LeviathanNextAttack = cycle + 2;
+      if (boss.__dt2LeviathanPendingAttack && cycle >= boss.__dt2LeviathanPendingAttack.due) {
+        const { style } = boss.__dt2LeviathanPendingAttack;
+        const varbit = style === "magic" ? 4116 : style === "ranged" ? 4117 : 4118;
+        if (player.getPacketSender().getVarbit(varbit) !== 1) {
+          const nearPathfinder = boss.__dt2LeviathanEnraged
+            && boss.__dt2LeviathanPathfinder?.isRegistered?.()
+            && player.getLocation().getDistance(boss.__dt2LeviathanPathfinder.getLocation()) <= 4;
+          const damage = nearPathfinder ? 2 + Math.floor(Math.random() * 4) : 8 + Math.floor(Math.random() * 13);
+          player.getCombat().getHitQueue().addPendingDamage([
+            new api.core.HitDamage(damage, api.core.HitMask.RED),
+          ]);
+        } else player.sendMessage(`You block the Leviathan's ${style} volley.`);
+        boss.__dt2LeviathanPendingAttack = null;
+      }
+      if (boss.__dt2LeviathanSpecial && cycle >= boss.__dt2LeviathanSpecial.due) {
+        const special = boss.__dt2LeviathanSpecial;
+        const loc = player.getLocation();
+        const dx = loc.getX() - special.x, dy = loc.getY() - special.y;
+        if (special.type === "rocks" ? Math.max(Math.abs(dx), Math.abs(dy)) <= 1
+          : (special.axis === "x" ? loc.getY() === special.y : loc.getX() === special.x)) {
+          player.getCombat().getHitQueue().addPendingDamage([
+            new api.core.HitDamage(12 + Math.floor(Math.random() * 11), api.core.HitMask.RED),
+          ]);
+          player.sendMessage(special.type === "rocks"
+            ? "Falling rocks crash down around you. Keep moving and line them up as cover."
+            : "A lightning blast tears across the marked lane. Move out of its path.");
+        }
+        boss.__dt2LeviathanSpecial = null;
+      }
+      if (cycle >= boss.__dt2LeviathanNextAttack && !boss.__dt2LeviathanPendingAttack) {
+        const styles = ["magic", "ranged", "melee"];
+        const style = styles[Math.floor(Math.random() * styles.length)];
+        const names = { magic: "blue", ranged: "green", melee: "orange" };
+        boss.performAnimation(new api.core.Animation(10278));
+        player.sendMessage(`The Leviathan launches a ${names[style]} orb. Protect from ${style === "ranged" ? "missiles" : style} on impact.`);
+        boss.__dt2LeviathanPendingAttack = { style, due: cycle + 2 };
+        const max = Math.max(1, boss.getMaxHitpoints?.() ?? 593);
+        const healthRatio = boss.getHitpoints() / max;
+        boss.__dt2LeviathanNextAttack = cycle + (healthRatio < 0.2 ? 1 : healthRatio < 0.5 ? 2 : 4);
+      }
+      if (!boss.__dt2LeviathanSpecial && cycle % 13 === 0) {
+        const loc = player.getLocation();
+        const type = Math.random() < 0.5 ? "rocks" : "lane";
+        boss.__dt2LeviathanSpecial = {
+          type, x: loc.getX(), y: loc.getY(), axis: Math.random() < 0.5 ? "x" : "y", due: cycle + 2,
+        };
+        player.sendMessage(type === "rocks"
+          ? "The Leviathan tears up the cavern roof. Move away from the falling rocks."
+          : "The Leviathan charges a lightning strike along a line. Move out of the marked lane.");
+      }
+      if (boss.getHitpoints() <= Math.floor((boss.getMaxHitpoints?.() ?? 593) * 0.2) && !boss.__dt2LeviathanEnraged) {
+        boss.__dt2LeviathanEnraged = true;
+        const pathfinder = api.core.NPC.create(N.CEREBRAL_PATHFINDER, this.tile(26, 38, 0));
+        pathfinder.setOwner?.(player);
+        pathfinder.setOwnerOnly?.(true);
+        pathfinder.setScriptedMovement?.(true);
+        pathfinder.__skipDefaultRespawn = true;
+        this.add(pathfinder);
+        api.core.World.getAddNPCQueue().push(pathfinder);
+        boss.__dt2LeviathanPathfinder = pathfinder;
+        player.sendMessage("The Leviathan enrages. Stay near the cerebral pathfinder to blunt its attacks.");
       }
     }
     destroy() {
@@ -458,6 +819,15 @@ module.exports = function registerDesertTreasureII(api) {
     }
   }
 
+  function stunLeviathan({ attacker, target, spell }) {
+    if (!attacker?.isPlayer?.() || !target?.__dt2Leviathan || attacker !== target.getOwner?.()) return;
+    const name = spell?.getName?.() ?? spell?.name ?? "";
+    if (!/shadow (burst|blitz|barrage|rush)/i.test(name)) return;
+    target.__dt2LeviathanStunnedUntil = api.core.World.getProcessCycle() + 6;
+    target.__dt2LeviathanPendingAttack = null;
+    attacker.sendMessage("The shadow spell stuns the Leviathan, interrupting its attack.");
+  }
+
   function forceTotemAccuracy(event) {
     const npc = event?.target;
     const player = event?.attacker;
@@ -474,6 +844,54 @@ module.exports = function registerDesertTreasureII(api) {
 
   function preventTotemDamage({ npc, hit }) {
     if (!npc?.__dt2Totem || !hit?.isAccurate?.()) return;
+    for (const damage of hit.getHits?.() ?? []) damage.setDamage(0);
+    hit.updateTotalDamage?.();
+  }
+
+  function handleScarAxonHit({ npc, hit }) {
+    if (!npc?.__dt2ScarAxon || !hit?.isAccurate?.()) return;
+    const attacker = hit.getAttacker?.();
+    const p = npc.getOwner?.();
+    const area = p?.getAttribute?.(ATTR_SCAR_MAZE_TWO);
+    if (!p || attacker !== p || !(area instanceof ScarMazeTwoArea) || area.isDestroyed?.()
+      || !area.entities?.includes(npc)) return;
+    const path = npc.__dt2AxonPath;
+    const index = Number(npc.__dt2AxonIndex) || 0;
+    const next = Math.min(index + 1, path.points.length - 1);
+    for (const damage of hit.getHits?.() ?? []) damage.setDamage(0);
+    hit.updateTotalDamage?.();
+    const [x, y] = path.points[index];
+    const [nextX, nextY] = path.points[next];
+    const directionX = Math.sign(nextX - x), directionY = Math.sign(nextY - y);
+    const playerLocation = p.getLocation?.();
+    const playerX = playerLocation ? playerLocation.getX() - area.getBaseX() + 1696 : NaN;
+    const playerY = playerLocation ? playerLocation.getY() - area.getBaseY() + 6400 : NaN;
+    const adjacent = Math.max(Math.abs(playerX - x), Math.abs(playerY - y)) === 1;
+    const pushesTowardTerminal = (directionX === 0 || Math.sign(playerX - x) === -directionX)
+      && (directionY === 0 || Math.sign(playerY - y) === -directionY);
+    if (!adjacent || !pushesTowardTerminal) {
+      p.sendMessage(`Push the ${npc.__dt2AxonElement} axon from the opposite side so it moves toward its terminal.`);
+      return;
+    }
+    npc.__dt2AxonIndex = next;
+    npc.getMovementQueue?.().addSteps(area.tile(nextX - 1696, nextY - 6400, 0));
+    if (next !== path.points.length - 1 || npc.__dt2AxonComplete) return;
+    npc.__dt2AxonComplete = true;
+    const done = (Number(p.getAttribute("desert-treasure-ii:scar-axon-terminals")) || 0) + 1;
+    p.setAttribute("desert-treasure-ii:scar-axon-terminals", done);
+    p.getPacketSender().sendVarbit(15220, done);
+    p.sendMessage(`The ${npc.__dt2AxonElement} axon reaches its terminal.`);
+    if (done < SCAR_AXON_PATHS.length) return;
+    p.setAttribute(SCAR_AXON_ROOM_COMPLETE, true);
+    p.getPacketSender().sendVarbit(15258, 1);
+    p.sendMessage("All four axons have reached their terminals. The passage to the nerve chamber opens.");
+  }
+
+  function preventScarSummonProtection({ npc, hit }) {
+    if (!npc?.__dt2SummonDemon || !hit?.isAccurate?.()) return;
+    const p = npc.getOwner?.();
+    const owned = spawned.get(p);
+    if (!p || (owned?.scarSummonImps ?? []).every((imp) => !imp?.isRegistered?.() || imp.getHitpoints?.() <= 0)) return;
     for (const damage of hit.getHits?.() ?? []) damage.setDamage(0);
     hit.updateTotalDamage?.();
   }
@@ -603,6 +1021,9 @@ module.exports = function registerDesertTreasureII(api) {
       current.enter(p);
       p.moveTo(current.tile(21, 33, 0));
       setScarVarbit(p, 6);
+      if (p.getAttribute(SCAR_PERSTEN_TALKED)) revealScarMazeEntry(p, current);
+      if (p.getAttribute(SCAR_PERSTEN_ROOM1_TALKED)) revealScarMazeTwoEntry(p, current);
+      if (p.getAttribute(SCAR_BOAT_TRIED)) spawnScarPersten(p, current);
       if (!p.getAttribute(SCAR_DEMONS_DEFEATED)) spawnScarDemons(p, current);
       return current;
     }
@@ -611,7 +1032,119 @@ module.exports = function registerDesertTreasureII(api) {
     p.setAttribute(ATTR_SCAR_AREA, area);
     setScarVarbit(p, 6);
     p.moveTo(area.tile(21, 33, 0));
+    if (p.getAttribute(SCAR_PERSTEN_TALKED)) revealScarMazeEntry(p, area);
+    if (p.getAttribute(SCAR_PERSTEN_ROOM1_TALKED)) revealScarMazeTwoEntry(p, area);
+    if (p.getAttribute(SCAR_BOAT_TRIED)) spawnScarPersten(p, area);
     if (!p.getAttribute(SCAR_DEMONS_DEFEATED)) spawnScarDemons(p, area);
+    return area;
+  }
+
+  function enterLeviathanArea(p) {
+    let area = p.getAttribute(ATTR_LEVIATHAN_AREA);
+    if (!(area instanceof LeviathanArea) || area.isDestroyed()) {
+      area = new LeviathanArea(p.getUsername?.(), p);
+      area.enter(p);
+      p.setAttribute(ATTR_LEVIATHAN_AREA, area);
+    } else area.enter(p);
+    p.moveTo(area.tile(7, 41, 0));
+    setScarVarbit(p, p.getAttribute(SCAR_LEVIATHAN_DEBRIS_SEARCHED) ? 48
+      : p.getAttribute(SCAR_PERSTEN_LEFT_SHIP) ? 46
+        : p.getAttribute(SCAR_LEVIATHAN_KILLED) ? 42 : 40);
+    if (!p.getAttribute(SCAR_LEVIATHAN_KILLED)) spawnBoss(p, "leviathan");
+    else {
+      p.moveTo(area.tile(32, 46, 0));
+      spawnScarPerstenAtShip(p, area);
+    }
+    return area;
+  }
+
+  function spawnScarPerstenAtShip(p, area) {
+    let owned = spawned.get(p);
+    if (!owned) spawned.set(p, owned = {});
+    if (owned.scarPerstenShip?.isRegistered?.()) return owned.scarPerstenShip;
+    const npc = api.core.NPC.create(N.WIZARD_PERSTEN_5, area.tile(34, 38, 0));
+    npc.setOwner?.(p);
+    npc.setOwnerOnly?.(true);
+    npc.setScriptedMovement?.(true);
+    npc.__skipDefaultRespawn = true;
+    area.add(npc);
+    api.core.World.getAddNPCQueue().push(npc);
+    owned.scarPerstenShip = npc;
+    p.setAttribute(SCAR_PERSTEN_AT_SHIP, true);
+    return npc;
+  }
+
+  function revealScarMazeEntry(p, area) {
+    if (!(area instanceof ScarArea) || area.isDestroyed?.() || area.scarMazeEntry) return;
+    // The live cache has only an unclickable wall at this tile; the quest opens
+    // the passage after Persten's camp dialogue. Use the cache's canonical
+    // Passage loc in this owner's Scar copy, matching the actual scene change.
+    const passage = new api.core.GameObject(SCAR_PASSAGE_OPEN, area.tile(43, 41, 0), 10, 0, area);
+    area.add(passage);
+    area.scarMazeEntry = passage;
+    p.getPacketSender().sendObject(passage);
+  }
+
+  function revealScarMazeTwoEntry(p, area) {
+    if (!(area instanceof ScarArea) || area.isDestroyed?.()) return;
+    const objectId = p.getAttribute(SCAR_PERSTEN_ROOM2_TALKED) ? 49410 : O.PASSAGE_15;
+    if (area.scarMazeTwoEntry?.id === objectId) return;
+    if (area.scarMazeTwoEntry) area.detach?.(area.scarMazeTwoEntry);
+    const passage = new api.core.GameObject(objectId, area.tile(51, 34, 0), 10, 0, area);
+    area.add(passage);
+    area.scarMazeTwoEntry = passage;
+    p.getPacketSender().sendObject(passage);
+  }
+
+  function enterScarMazeThree(p) {
+    const current = p.getAttribute(ATTR_SCAR_MAZE_THREE);
+    if (current instanceof ScarMazeThreeArea && !current.isDestroyed()) {
+      current.enter(p);
+      current.scarMazeThreeActive = true;
+      p.setAttribute(SCAR_MAZE_THREE_ACTIVE, true);
+      p.moveTo(current.tile(41, 36, 0));
+      setScarVarbit(p, 32);
+      return current;
+    }
+    const area = new ScarMazeThreeArea(p.getUsername?.(), p);
+    area.enter(p);
+    p.setAttribute(ATTR_SCAR_MAZE_THREE, area);
+    p.setAttribute(SCAR_MAZE_THREE_ACTIVE, true);
+    if (!Number.isFinite(Number(p.getAttribute(SCAR_MAZE_THREE_AIR)))) p.setAttribute(SCAR_MAZE_THREE_AIR, 100);
+    if (!Array.isArray(p.getAttribute(SCAR_MEMORY_ORDER)) || p.getAttribute(SCAR_MEMORY_ORDER).length !== 4) {
+      p.setAttribute(SCAR_MEMORY_ORDER, shuffled([0, 1, 2, 3]));
+    }
+    if (!Number.isFinite(Number(p.getAttribute(SCAR_MEMORY_STEP)))) p.setAttribute(SCAR_MEMORY_STEP, 0);
+    area.scarMazeThreeActive = true;
+    p.moveTo(area.tile(41, 36, 0));
+    setScarVarbit(p, 32);
+    p.getPacketSender().sendVarbit(15211, Number(p.getAttribute(SCAR_MAZE_THREE_AIR)) || 100);
+    p.getPacketSender().sendVarbit(15212, Number(p.getAttribute(SCAR_MEMORY_STEP)) || 0);
+    const order = p.getAttribute(SCAR_MEMORY_ORDER);
+    order.forEach((growth, index) => p.getPacketSender().sendVarbit(15213 + index, growth));
+    p.getPacketSender().sendVarbit(15258, p.getAttribute(SCAR_MEMORY_COMPLETE) ? 1 : 0);
+    p.getPacketSender().sendVarbit(15259, p.getAttribute(SCAR_LEECH_COMPLETE) ? 1 : 0);
+    p.getPacketSender().sendVarbit(15260, p.getAttribute(SCAR_TREE_COMPLETE) ? 1 : 0);
+    return area;
+  }
+
+  function enterScarMazeTwo(p) {
+    const current = p.getAttribute(ATTR_SCAR_MAZE_TWO);
+    if (current instanceof ScarMazeTwoArea && !current.isDestroyed()) {
+      current.enter(p);
+      p.moveTo(current.tile(60, 20, 0));
+      setScarVarbit(p, 24);
+      return current;
+    }
+    const area = new ScarMazeTwoArea(p.getUsername?.(), p);
+    area.enter(p);
+    p.setAttribute(ATTR_SCAR_MAZE_TWO, area);
+    p.setAttribute(SCAR_MAZE_TWO_ENTERED, true);
+    p.moveTo(area.tile(60, 20, 0));
+    setScarVarbit(p, 24);
+    p.getPacketSender().sendVarbit(15258, p.getAttribute(SCAR_AXON_ROOM_COMPLETE) ? 1 : 0);
+    p.getPacketSender().sendVarbit(15259, p.getAttribute(SCAR_NERVE_ROOM_TWO_COMPLETE) ? 1 : 0);
+    p.getPacketSender().sendVarbit(15260, p.getAttribute(SCAR_SUMMON_ROOM_COMPLETE) ? 1 : 0);
     return area;
   }
 
@@ -630,10 +1163,10 @@ module.exports = function registerDesertTreasureII(api) {
     p.getPacketSender().sendVarbit(15193, 1);
     p.getPacketSender().sendVarbit(15192, 2);
     p.getPacketSender().sendVarbit(15194, 1);
-    p.setAttribute(SCAR_PATH_COMPLETE, false);
-    p.getPacketSender().sendVarbit(SCAR_TETHER_VARBIT, p.getAttribute(SCAR_TETHER_DESTROYED) ? 1 : 0);
+    if (!p.getAttribute(SCAR_PATH_COMPLETE)) p.setAttribute(SCAR_PATH_COMPLETE, false);
     p.moveTo(area.tile(36, 54, 0));
-    spawnScarPathRunner(p, area, 0);
+    if (!p.getAttribute(SCAR_PATH_COMPLETE)) spawnScarPathRunner(p, area, 0);
+    if (p.getAttribute("desert-treasure-ii:scar-growth-complete")) revealScarBoatPassage(p);
     return area;
   }
 
@@ -650,10 +1183,65 @@ module.exports = function registerDesertTreasureII(api) {
     runner.__skipDefaultRespawn = true;
     area.add(runner);
     api.core.World.getAddNPCQueue().push(runner);
-    const movement = runner.getMovementQueue();
-    for (const [x, y] of path.points.slice(1)) movement.addSteps(area.tile(x - 2160, y - 6400, 0));
+    runner.__dt2ScarPathPointIndex = 0;
     area.pathRunner = runner;
     owned.scarPathRunner = runner;
+  }
+
+  function pushScarPathRunner(event) {
+    const { player, npc, npcId, definition, clickType } = event;
+    if (stage(player) !== S.LEVIATHAN) return;
+    const area = player.getAttribute(ATTR_SCAR_MAZE_ONE);
+    if (!(area instanceof ScarMazeOneArea) || area.isDestroyed?.() || area.pathRunner !== npc
+      || npc?.getOwner?.() !== player) return;
+    const option = definition?.getActions?.()?.[clickType - 1];
+    if (option !== "Move" || ![N.CEREBRAL_PATHFINDER, N.CEREBRAL_PATHBREAKER].includes(npcId)) return;
+    event.handled = true;
+    const path = SCAR_PATHS[area.pathIndex];
+    const [fromX, fromY] = path?.points[0] ?? [];
+    if (!path) {
+      player.sendMessage("That pathfinder has reached the end of its marked route.");
+      return;
+    }
+    if (npc.__dt2ScarMoving) {
+      // The area process normally advances the next runner as soon as the player
+      // catches up. Also check on interaction so a completed route cannot strand
+      // the puzzle if the final movement and player process share a game cycle.
+      const finish = area.tile(path.points.at(-1)[0] - 2160, path.points.at(-1)[1] - 6400, 0);
+      const runnerLoc = npc.getLocation();
+      const playerLoc = player.getLocation();
+      const distance = Math.max(Math.abs(playerLoc.getX() - runnerLoc.getX()), Math.abs(playerLoc.getY() - runnerLoc.getY()));
+      if (Math.max(Math.abs(runnerLoc.getX() - finish.getX()), Math.abs(runnerLoc.getY() - finish.getY())) <= 2 && distance <= 3) {
+        area.lastProcessCycle = -1;
+        area.process(player);
+        if (area.pathRunner !== npc) return;
+      }
+      player.sendMessage("The pathfinder is already moving along its marked route.");
+      return;
+    }
+    const side = { north: [0, 1], south: [0, -1], east: [1, 0], west: [-1, 0] }[path.from];
+    const expectedPlayerX = fromX + side[0];
+    const expectedPlayerY = fromY + side[1];
+    const playerLoc = player.getLocation();
+    const playerX = playerLoc.getX() - area.getBaseX() + 2160;
+    const playerY = playerLoc.getY() - area.getBaseY() + 6400;
+    if (playerX !== expectedPlayerX || playerY !== expectedPlayerY) {
+      player.sendMessage(`Stand ${path.from} of the pathfinder and move it along the open path.`);
+      return;
+    }
+    npc.__dt2ScarMoving = true;
+    npc.__dt2ScarRouteIndex = 1;
+    const [nextX, nextY] = path.points[1];
+    const next = area.tile(nextX - 2160, nextY - 6400, 0);
+    api.core.PathFinder.calculateWalkRoute(npc, next.getX(), next.getY());
+  }
+
+  function routeToScarPathRunner(event) {
+    const area = event.player?.getAttribute?.(ATTR_SCAR_MAZE_ONE);
+    if (stage(event.player) === S.LEVIATHAN && area instanceof ScarMazeOneArea
+      && area.pathRunner === event.npc && [N.CEREBRAL_PATHFINDER, N.CEREBRAL_PATHBREAKER].includes(event.npcId)) {
+      event.range = 1;
+    }
   }
 
   function spawnScarDemons(p, area) {
@@ -698,6 +1286,415 @@ module.exports = function registerDesertTreasureII(api) {
     return npc;
   }
 
+  function spawnScarAxons(p, area) {
+    const owned = spawned.get(p) ?? {};
+    spawned.set(p, owned);
+    if (owned.scarAxons?.some((npc) => npc?.isRegistered?.())) return owned.scarAxons;
+    owned.scarAxons = SCAR_AXON_PATHS.map((path, index) => {
+      const [x, y] = path.points[0];
+      const npc = api.core.NPC.create(N.ABYSSAL_AXON, area.tile(x - 1696, y - 6400, 0));
+      npc.setOwner?.(p);
+      npc.setOwnerOnly?.(true);
+      npc.setScriptedMovement?.(true);
+      npc.__skipDefaultRespawn = true;
+      npc.__dt2ScarAxon = true;
+      npc.__dt2AxonPath = path;
+      npc.__dt2AxonIndex = 0;
+      npc.__dt2AxonElement = ["Cosmic", "Fire", "Nature", "Water"][index];
+      area.add(npc);
+      api.core.World.getAddNPCQueue().push(npc);
+      return npc;
+    });
+    return owned.scarAxons;
+  }
+
+  function spawnScarSummoningRoom(p, area) {
+    const owned = spawned.get(p) ?? {};
+    spawned.set(p, owned);
+    if (p.getAttribute(SCAR_SUMMON_ROOM_STARTED)) return;
+    p.setAttribute(SCAR_SUMMON_ROOM_STARTED, true);
+    owned.scarSummonImps = [[1740, 6447], [1743, 6448], [1747, 6447]].map(([x, y]) => {
+      const npc = api.core.NPC.create(N.SCARRED_IMP, area.tile(x - 1696, y - 6400, 0));
+      npc.setOwner?.(p);
+      npc.setOwnerOnly?.(true);
+      npc.__skipDefaultRespawn = true;
+      npc.__dt2SummonImp = true;
+      area.add(npc);
+      api.core.World.getAddNPCQueue().push(npc);
+      return npc;
+    });
+    owned.scarSummonDemons = [[1743, 6444], [1747, 6444]].map(([x, y]) => {
+      const npc = api.core.NPC.create(N.LESSER_DEMON_18, area.tile(x - 1696, y - 6400, 0));
+      npc.setOwner?.(p);
+      npc.setOwnerOnly?.(true);
+      npc.__skipDefaultRespawn = true;
+      npc.__dt2SummonDemon = true;
+      area.add(npc);
+      api.core.World.getAddNPCQueue().push(npc);
+      return npc;
+    });
+    p.setAttribute(SCAR_SUMMON_IMPS, owned.scarSummonImps.length);
+    p.setAttribute(SCAR_SUMMON_DEMONS, owned.scarSummonDemons.length);
+  }
+
+  function spawnScarCatalyst(p, area) {
+    const owned = spawned.get(p) ?? {};
+    spawned.set(p, owned);
+    if (owned.scarCatalyst?.isRegistered?.()) return owned.scarCatalyst;
+    const npc = api.core.NPC.create(N.DT2_SCAR_MAZE_1_RITUAL_CATALYST, area.tile(40, 12, 0));
+    npc.setOwner?.(p);
+    npc.setOwnerOnly?.(true);
+    npc.__skipDefaultRespawn = true;
+    area.add(npc);
+    api.core.World.getAddNPCQueue().push(npc);
+    owned.scarCatalyst = npc;
+    return npc;
+  }
+
+  function revealScarBoatPassage(p) {
+    const area = p.getAttribute(ATTR_SCAR_MAZE_ONE);
+    if (!(area instanceof ScarMazeOneArea) || area.isDestroyed?.() || area.scarBoatPassage) return;
+    // This passage is created by the room's completion state; it has no static map placement.
+    const object = new api.core.GameObject(49418, area.tile(60, 2, 0), 10, 0, area);
+    area.add(object);
+    area.scarBoatPassage = object;
+    p.getPacketSender().sendObject(object);
+  }
+
+  function spawnScarLightLeeches(p, area) {
+    const owned = spawned.get(p) ?? {};
+    spawned.set(p, owned);
+    if (owned.scarLightLeeches?.some((npc) => npc?.isRegistered?.())) return owned.scarLightLeeches;
+    // Four leeches wait beside the cache's four damaged growths.
+    owned.scarLightLeeches = [[2220, 6435], [2219, 6424], [2230, 6423], [2231, 6434]].map(([x, y]) => {
+      const npc = api.core.NPC.create(N.DT2_SCAR_MAZE_LIGHT_LEECH, area.tile(x - 2160, y - 6400, 0));
+      npc.setOwner?.(p);
+      npc.setOwnerOnly?.(true);
+      npc.__skipDefaultRespawn = true;
+      area.add(npc);
+      api.core.World.getAddNPCQueue().push(npc);
+      return npc;
+    });
+    return owned.scarLightLeeches;
+  }
+
+  function spawnScarTreeRoom(p, area) {
+    const owned = spawned.get(p) ?? {};
+    spawned.set(p, owned);
+    if (owned.scarTreeAntibodies?.some((npc) => npc?.isRegistered?.())) return;
+    p.setAttribute(SCAR_TREE_STARTED, true);
+    p.setAttribute("desert-treasure-ii:scar-tree-wave", 0);
+    owned.scarTreeAntibodies = [[1902, 6412], [1905, 6412], [1908, 6412]].map(([x, y]) => {
+      const npc = api.core.NPC.create(12377, area.tile(x - 1856, y - 6400, 0));
+      npc.setOwner?.(p);
+      npc.setOwnerOnly?.(true);
+      npc.__skipDefaultRespawn = true;
+      npc.__dt2ScarAntibody = true;
+      area.add(npc);
+      api.core.World.getAddNPCQueue().push(npc);
+      return npc;
+    });
+    spawnScarTreeWave(p, area);
+  }
+
+  function spawnScarTreeWave(p, area) {
+    const owned = spawned.get(p) ?? {};
+    spawned.set(p, owned);
+    const wave = Number(p.getAttribute("desert-treasure-ii:scar-tree-wave")) || 0;
+    if (wave >= 4 || (owned.scarTreeEnemies ?? []).some((npc) => npc?.isRegistered?.() && npc.getHitpoints?.() > 0)) return;
+    const ids = wave % 2 === 0 ? [12379, 12378] : [12378, 12379];
+    owned.scarTreeEnemies = ids.map((id, index) => {
+      const npc = api.core.NPC.create(id, area.tile(41 + index * 2, 8 + (wave % 2) * 2, 0));
+      npc.setOwner?.(p);
+      npc.setOwnerOnly?.(true);
+      npc.__skipDefaultRespawn = true;
+      npc.__dt2ScarTreeEnemy = true;
+      npc.getCombat?.().attack?.(owned.scarTreeAntibodies?.[index % 3]);
+      area.add(npc);
+      api.core.World.getAddNPCQueue().push(npc);
+      return npc;
+    });
+    p.setAttribute("desert-treasure-ii:scar-tree-wave", wave + 1);
+  }
+
+  function enterScarTreeRoom(p, area) {
+    const tile = area.tile(46, 11, 0);
+    p.moveTo(tile);
+    p.setAttribute("desert-treasure-ii:scar-tree-in-room", true);
+    if (!p.getAttribute(SCAR_TREE_COMPLETE)) {
+      spawnScarTreeRoom(p, area);
+      p.sendMessage("Defend the abyssal antibodies from the Scarred hellhounds and lesser demons until the Brain Pillar is healed.");
+    }
+  }
+
+  function enterScarLeechRoom(p, area) {
+    p.moveTo(area.tile(6, 30, 0));
+    p.setAttribute("desert-treasure-ii:scar-leech-in-room", true);
+    if (!p.getAttribute(SCAR_LEECH_GROWTHS_REPAIRED)) p.setAttribute(SCAR_LEECH_GROWTHS_REPAIRED, []);
+    const owned = spawned.get(p) ?? {};
+    spawned.set(p, owned);
+    if (!owned.scarMazeThreeLightLeeches?.some((npc) => npc?.isRegistered?.())) {
+      owned.scarMazeThreeLightLeeches = [[1868, 6430], [1864, 6430], [1872, 6430], [1877, 6430]].map(([x, y]) => {
+        const npc = api.core.NPC.create(N.DT2_SCAR_MAZE_LIGHT_LEECH, area.tile(x - 1856, y - 6400, 0));
+        npc.setOwner?.(p);
+        npc.setOwnerOnly?.(true);
+        npc.__skipDefaultRespawn = true;
+        npc.__dt2ScarMazeThreeLeech = true;
+        area.add(npc);
+        api.core.World.getAddNPCQueue().push(npc);
+        return npc;
+      });
+    }
+    if (!owned.scarMazeThreeBloodCells?.some((npc) => npc?.isRegistered?.())) {
+      owned.scarMazeThreeBloodCells = [
+        ...Array.from({ length: 3 }, (_, i) => ({ id: 12369, x: 1866 + i * 2, y: 6436, type: "crimson" })),
+        ...Array.from({ length: 3 }, (_, i) => ({ id: 12370, x: 1866 + i * 2, y: 6425, type: "radiant" })),
+      ].map(({ id, x, y, type }) => {
+        const npc = api.core.NPC.create(id, area.tile(x - 1856, y - 6400, 0));
+        npc.setOwner?.(p);
+        npc.setOwnerOnly?.(true);
+        npc.__skipDefaultRespawn = true;
+        npc.__dt2ScarBloodCell = type;
+        area.add(npc);
+        api.core.World.getAddNPCQueue().push(npc);
+        return npc;
+      });
+    }
+    p.sendMessage("Take four illuminating lures from the light leeches and use them on the damaged growths.");
+  }
+
+  function handleScarMazeThreeObject(event, tile) {
+    const p = event?.player;
+    if (!p || stage(p) !== S.LEVIATHAN || !tile || !p.getAttribute(SCAR_MAZE_THREE_ACTIVE)) return false;
+    const { objectId, definition } = event;
+    const id = definition?.id ?? objectId;
+    const area = p.getAttribute(ATTR_SCAR_MAZE_THREE);
+    if (id === 49410 && tile.x === 1897 && tile.y === 6436) {
+      if (p.getAttribute(SCAR_MEMORY_COMPLETE)) {
+        p.sendMessage("The Abyssal Stem's sequence is already restored.");
+        return true;
+      }
+      if (p.getAttribute(SCAR_BOAT3_BURNED)) {
+        const scar = p.getAttribute(ATTR_SCAR_AREA);
+        if (scar instanceof ScarArea && !scar.isDestroyed()) {
+          area.leave(p, false);
+          area.postLeave(p, false);
+          p.moveTo(scar.tile(51, 43, 0));
+          p.setAttribute(SCAR_MAZE_THREE_ACTIVE, false);
+          setScarVarbit(p, 34);
+          p.sendMessage("You leave the final passage and return to Persten's camp.");
+        }
+        return true;
+      }
+      let order = p.getAttribute(SCAR_MEMORY_ORDER);
+      if (!Array.isArray(order) || order.length !== 4) {
+        order = shuffled([0, 1, 2, 3]);
+        p.setAttribute(SCAR_MEMORY_ORDER, order);
+      }
+      p.setAttribute(SCAR_MEMORY_STEP, 0);
+      p.getPacketSender().sendVarbit(15212, 0);
+      order.forEach((value, index) => p.getPacketSender().sendVarbit(15213 + index, value));
+      p.sendMessage("The Abyssal Stem reveals a sequence. Touch the four growths in that order, surfacing at air bubbles as needed.");
+      return true;
+    }
+    if (id === 49391 && SCAR_MEMORY_GROWTHS.some(([x, y]) => x === tile.x && y === tile.y)) {
+      const index = SCAR_MEMORY_GROWTHS.findIndex(([x, y]) => x === tile.x && y === tile.y);
+      const order = p.getAttribute(SCAR_MEMORY_ORDER) ?? [];
+      const step = Number(p.getAttribute(SCAR_MEMORY_STEP)) || 0;
+      if (p.getAttribute(SCAR_MEMORY_COMPLETE)) { p.sendMessage("The Abyssal Stem's sequence is already restored."); return true; }
+      if (order[step] !== index) {
+        p.setAttribute(SCAR_MEMORY_STEP, 0);
+        p.getPacketSender().sendVarbit(15212, 0);
+        p.sendMessage("The growths dim and the sequence resets. Touch the Abyssal Stem to observe it again.");
+        return true;
+      }
+      const next = step + 1;
+      p.setAttribute(SCAR_MEMORY_STEP, next);
+      p.getPacketSender().sendVarbit(15212, next);
+      if (next === 4) {
+        p.setAttribute(SCAR_MEMORY_COMPLETE, true);
+        p.getPacketSender().sendVarbit(15258, 1);
+        p.sendMessage("The Abyssal Stem glows steadily. The memory puzzle is complete.");
+      }
+      return true;
+    }
+    if (id === 49412 && tile.x === 1902 && tile.y === 6411) {
+      if (!p.getAttribute(SCAR_MEMORY_COMPLETE)) { p.sendMessage("The Brain Pillar room remains sealed until the Abyssal Stem is restored."); return true; }
+      enterScarTreeRoom(p, area);
+      return true;
+    }
+    if (id === 49416 && tile.x === 1891 && tile.y === 6457) {
+      if (!p.getAttribute(SCAR_TREE_COMPLETE)) { p.sendMessage("Defend the Brain Pillar before entering the Unlit Veins."); return true; }
+      enterScarLeechRoom(p, area);
+      return true;
+    }
+    if (id === 49411 && tile.x === 1862 && tile.y === 6421) {
+      if (!p.getAttribute(SCAR_TREE_COMPLETE)) { p.sendMessage("Defend the Brain Pillar before entering the Unlit Veins."); return true; }
+      enterScarLeechRoom(p, area);
+      return true;
+    }
+    if (id === 49415 && tile.x === 1861 && tile.y === 6410) {
+      if (!p.getAttribute(SCAR_LEECH_COMPLETE)) { p.sendMessage("The Unlit Veins remain incomplete."); return true; }
+      p.sendMessage("You return through the green neural portal.");
+      return true;
+    }
+    if (id === 49419 && tile.x === 1899 && tile.y === 6456) {
+      if (!p.getAttribute(SCAR_MEMORY_COMPLETE) || !p.getAttribute(SCAR_TREE_COMPLETE) || !p.getAttribute(SCAR_LEECH_COMPLETE)) {
+        p.sendMessage("The shipwreck passage remains sealed until the three rooms are complete.");
+        return true;
+      }
+      p.setAttribute(SCAR_BOAT3_ROOM, true);
+      p.getPacketSender().sendVarbit(15261, 1);
+      p.sendMessage("You enter the eastern shipwreck chamber.");
+      return true;
+    }
+    if (p.getAttribute(SCAR_BOAT3_ROOM)) {
+      if (id === 49425 && tile.x === 1915 && tile.y === 6460) {
+        if (!has(p, I.TINDERBOX)) p.getInventory().adds(I.TINDERBOX, 1);
+        p.sendMessage("You search the north-east crate and find a tinderbox.");
+        return true;
+      }
+      if (id === 49427 && tile.x === 1912 && tile.y === 6446) {
+        if (!has(p, I.GUNPOWDER_2)) p.getInventory().adds(I.GUNPOWDER_2, 1);
+        p.sendMessage("You search the south-east skeleton and find gunpowder.");
+        return true;
+      }
+      if (id === 49426 && tile.x === 1902 && tile.y === 6459) {
+        if (!has(p, I.SLIMY_KEY)) p.getInventory().adds(I.SLIMY_KEY, 1);
+        p.sendMessage("You search the north-west skeleton and find a slimy key.");
+        return true;
+      }
+      if ([49420, 49421, 49422].includes(id) && tile.x === 1909 && tile.y === 6449) {
+        if (!has(p, I.SLIMY_KEY)) { p.sendMessage("The chest is locked. A slimy key may fit it."); return true; }
+        p.getInventory().deleteNumber(I.SLIMY_KEY, 1);
+        if (!has(p, I.DAMP_TABLET_2)) p.getInventory().adds(I.DAMP_TABLET_2, 1);
+        p.setAttribute("desert-treasure-ii:scar-boat3-chest-open", true);
+        p.sendMessage("The slimy key opens the chest. You take a damp tablet.");
+        return true;
+      }
+    }
+    if (id === O.AIR_BUBBLE && SCAR_MAZE_THREE_AIR_BUBBLES.some(([x, y]) => x === tile.x && y === tile.y)) {
+      p.setAttribute(SCAR_MAZE_THREE_AIR, 100);
+      p.getPacketSender().sendVarbit(15211, 100);
+      p.sendMessage("You surface at the air bubble and replenish your oxygen.");
+      return true;
+    }
+    return false;
+  }
+
+  function takeScarLightLure({ player: p, npc }) {
+    if (stage(p) !== S.LEVIATHAN || (!p.getAttribute(SCAR_GROWTH_LIVE) && !p.getAttribute("desert-treasure-ii:scar-leech-in-room"))) return;
+    const owned = spawned.get(p);
+    const mazeThree = owned?.scarMazeThreeLightLeeches?.includes(npc);
+    if (!owned?.scarLightLeeches?.includes(npc) && !mazeThree) return;
+    if (Math.random() < 0.5) {
+      p.getInventory().adds(I.ILLUMINATING_LURE, 1);
+      const area = mazeThree ? p.getAttribute(ATTR_SCAR_MAZE_THREE) : p.getAttribute(ATTR_SCAR_MAZE_ONE);
+      area?.remove?.(npc);
+      if (npc.isRegistered?.() && !api.core.World.getRemoveNPCQueue().includes(npc)) api.core.World.getRemoveNPCQueue().push(npc);
+      if (mazeThree) owned.scarMazeThreeLightLeeches = owned.scarMazeThreeLightLeeches.filter((entry) => entry !== npc);
+      else owned.scarLightLeeches = owned.scarLightLeeches.filter((entry) => entry !== npc);
+      p.sendMessage("You take an illuminating lure from the light leech.");
+      return true;
+    }
+    const damage = 2 + Math.floor(Math.random() * 5);
+    p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(damage, api.core.HitMask.RED)]);
+    p.sendMessage("The light leech lashes out before you can take its lure.");
+    return true;
+  }
+
+  function finishScarGrowthRepair(p) {
+    p.setAttribute(SCAR_GROWTH_LURES, 4);
+    let order = p.getAttribute(SCAR_GROWTH_ORDER);
+    if (!Array.isArray(order) || order.length !== SCAR_ENERGY_RUNES.length) {
+      order = shuffled(SCAR_ENERGY_RUNES);
+      p.setAttribute(SCAR_GROWTH_ORDER, order);
+    }
+    SCAR_GROWTH_ORDER_VARBITS.forEach((id, index) => p.getPacketSender().sendVarbit(id, order[index]));
+    SCAR_ENERGIES.forEach((energy) => p.getPacketSender().sendVarbit(energy.state, 1));
+    p.getPacketSender().sendVarbit(SCAR_GROWTH_STEP_VARBIT, 0);
+    p.getPacketSender().sendVarbit(SCAR_GROWTH_LIT_VARBIT, 4);
+    p.setAttribute(SCAR_GROWTH_STEP, 0);
+    p.sendMessage("The room brightens. Touch the six runic energies in their hidden order.");
+  }
+
+  function touchScarEnergy({ player: p, objectId, definition, location }) {
+    if (stage(p) !== S.LEVIATHAN || !p.getAttribute(SCAR_GROWTH_LIVE)
+      || Number(p.getAttribute(SCAR_GROWTH_LURES)) < 4) return false;
+    const tile = scarMazeSourceTile(p, location);
+    if (!tile || tile.x < 2218 || tile.x > 2233 || tile.y < 6422 || tile.y > 6437) return false;
+    const visibleId = definition?.id ?? objectId;
+    const energy = SCAR_ENERGIES.find((entry) => entry.visible === visibleId || entry.base === objectId);
+    if (!energy || tile.x !== energy.tile[0] || tile.y !== energy.tile[1]) return false;
+    const step = Number(p.getAttribute(SCAR_GROWTH_STEP)) || 0;
+    const order = p.getAttribute(SCAR_GROWTH_ORDER) ?? [];
+    if (order[step] !== energy.rune) {
+      p.sendMessage("The energy flares, but it isn't next in the sequence.");
+      return true;
+    }
+    p.setAttribute(SCAR_GROWTH_STEP, step + 1);
+    p.getPacketSender().sendVarbit(energy.state, 2);
+    p.getPacketSender().sendVarbit(SCAR_GROWTH_STEP_VARBIT, step + 1);
+    if (step + 1 === SCAR_ENERGY_RUNES.length) {
+      p.setAttribute("desert-treasure-ii:scar-growth-complete", true);
+      revealScarBoatPassage(p);
+      p.sendMessage("The damaged growths restore the passage. The shipwreck chamber is now reachable.");
+    }
+    return true;
+  }
+
+  function inspectScarCatalyst({ player: p }) {
+    if (stage(p) !== S.LEVIATHAN || !p.getAttribute(SCAR_RIFT_LIVE)) return;
+    const progress = Number(p.getAttribute(SCAR_CATALYST_PROGRESS)) || 0;
+    const order = p.getAttribute(SCAR_CATALYST_ORDER) ?? [];
+    const expected = order[progress] ?? SCAR_CATALYST_RUNES[0];
+    const name = SCAR_CATALYST_RUNE_NAMES[SCAR_CATALYST_RUNES.indexOf(expected)] ?? "unknown";
+    p.sendMessage(`The Catalyst is currently resonating with ${name} nerve.`);
+  }
+
+  function handleNerveOnCatalyst(event) {
+    const { player: p, npcId, itemId } = event ?? {};
+    if (stage(p) !== S.LEVIATHAN || !p.getAttribute(SCAR_RIFT_LIVE)
+      || npcId !== N.DT2_SCAR_MAZE_1_RITUAL_CATALYST) return false;
+    event.handled = true;
+    const progress = Number(p.getAttribute(SCAR_CATALYST_PROGRESS)) || 0;
+    let order = p.getAttribute(SCAR_CATALYST_ORDER);
+    if (!Array.isArray(order) || order.length !== SCAR_CATALYST_RUNES.length) {
+      order = shuffled(SCAR_CATALYST_RUNES);
+      p.setAttribute(SCAR_CATALYST_ORDER, order);
+    }
+    const expected = order[progress];
+    if (itemId === expected && has(p, expected)) {
+      p.getInventory().deleteNumber(expected, 1);
+      p.setAttribute(SCAR_CATALYST_BASE_HITS, {});
+    } else {
+      const needed = SCAR_CATALYST_BASE_PARTS.get(expected) ?? [];
+      const counts = { ...(p.getAttribute(SCAR_CATALYST_BASE_HITS) ?? {}) };
+      const requiredCount = needed.filter((id) => id === itemId).length;
+      if (!requiredCount || !has(p, itemId) || (Number(counts[itemId]) || 0) >= requiredCount) {
+        p.sendMessage("That rune nerve does not match the symbol on the Catalyst.");
+        return true;
+      }
+      p.getInventory().deleteNumber(itemId, 1);
+      counts[itemId] = (Number(counts[itemId]) || 0) + 1;
+      p.setAttribute(SCAR_CATALYST_BASE_HITS, counts);
+      if (!needed.every((id) => (Number(counts[id]) || 0) >= needed.filter((part) => part === id).length)) {
+        p.sendMessage("The elemental nerve weakens the Catalyst. Combine the remaining matching nerves to disrupt it fully.");
+        return true;
+      }
+      p.setAttribute(SCAR_CATALYST_BASE_HITS, {});
+    }
+    const next = progress + 1;
+    p.setAttribute(SCAR_CATALYST_PROGRESS, next);
+    if (next >= order.length) {
+      p.sendMessage("The matching rune nerves disrupt the Catalyst. The damaged growth room is exposed.");
+      return true;
+    }
+    p.sendMessage("The rune nerve disrupts the Catalyst. Its symbol changes.");
+    inspectScarCatalyst({ player: p });
+    return true;
+  }
+
   function handleDialogueLine(event) {
     if (stage(event?.player) !== S.LEVIATHAN || event?.text !== "Yes.") return;
     if (![N.CATALYTIC_GUARDIAN, N.CATALYTIC_GUARDIAN_2].includes(event.npcId)) return;
@@ -712,13 +1709,66 @@ module.exports = function registerDesertTreasureII(api) {
 
   function handleLogin({ player: p }) {
     if (stage(p) < S.LEVIATHAN) return;
-    const value = p.getAttribute(SCAR_MAZE_ONE_ENTERED) ? 16
-      : p.getAttribute(SCAR_PERSTEN_TALKED) ? 14
-        : p.getAttribute(SCAR_BOAT_TRIED) ? 10
-          : p.getAttribute(SCAR_DEMONS_DEFEATED) ? 8
-            : p.getAttribute(SCAR_GUARDIAN_ACCEPTED) ? 6 : 2;
+    const value = p.getAttribute(SCAR_LEVIATHAN_DEBRIS_SEARCHED) ? 48
+      : p.getAttribute(SCAR_PERSTEN_LEFT_SHIP) ? 46
+        : p.getAttribute(SCAR_LEVIATHAN_KILLED) ? 42
+          : p.getAttribute(SCAR_LEVIATHAN_READY) ? 38
+      : p.getAttribute(SCAR_PERSTEN_ROOM3_TALKED) ? 36
+        : p.getAttribute(SCAR_BOAT3_BURNED) ? 34
+          : p.getAttribute(SCAR_MAZE_THREE_ACTIVE) ? 32
+            : p.getAttribute(SCAR_PERSTEN_ROOM2_TALKED) ? 30
+      : p.getAttribute(SCAR_BOAT2_BURNED) ? 28
+        : p.getAttribute(SCAR_MAZE_TWO_ENTERED) ? 24
+          : p.getAttribute(SCAR_PERSTEN_ROOM1_TALKED) ? 22
+            : p.getAttribute(SCAR_BOAT_BURNED) ? 20
+              : p.getAttribute(SCAR_MAZE_ONE_ENTERED) ? 16
+                : p.getAttribute(SCAR_PERSTEN_TALKED) ? 14
+                  : p.getAttribute(SCAR_BOAT_TRIED) ? 10
+                    : p.getAttribute(SCAR_DEMONS_DEFEATED) ? 8
+                      : p.getAttribute(SCAR_GUARDIAN_ACCEPTED) ? 6 : 2;
     setScarVarbit(p, value);
-    p.getPacketSender().sendVarbit(SCAR_TETHER_VARBIT, p.getAttribute(SCAR_TETHER_DESTROYED) ? 1 : 0);
+    p.getPacketSender().sendVarbit(SCAR_GROWTH_STEP_VARBIT, Number(p.getAttribute(SCAR_GROWTH_STEP)) || 0);
+    p.getPacketSender().sendVarbit(15220, Number(p.getAttribute("desert-treasure-ii:scar-axon-terminals")) || 0);
+    p.getPacketSender().sendVarbit(15221, (p.getAttribute(SCAR_NERVE_ROOM_TWO_REPAIRED) ?? []).length);
+    p.getPacketSender().sendVarbit(15258, p.getAttribute(SCAR_MAZE_THREE_ACTIVE)
+      ? (p.getAttribute(SCAR_MEMORY_COMPLETE) ? 1 : 0) : p.getAttribute(SCAR_AXON_ROOM_COMPLETE) ? 1 : 0);
+    p.getPacketSender().sendVarbit(15259, p.getAttribute(SCAR_MAZE_THREE_ACTIVE)
+      ? (p.getAttribute(SCAR_LEECH_COMPLETE) ? 1 : 0) : p.getAttribute(SCAR_NERVE_ROOM_TWO_COMPLETE) ? 1 : 0);
+    p.getPacketSender().sendVarbit(15260, p.getAttribute(SCAR_MAZE_THREE_ACTIVE)
+      ? (p.getAttribute(SCAR_TREE_COMPLETE) ? 1 : 0) : p.getAttribute(SCAR_SUMMON_ROOM_COMPLETE) ? 1 : 0);
+    p.getPacketSender().sendVarbit(15261, p.getAttribute(SCAR_BOAT3_ROOM)
+      ? 1 : p.getAttribute("desert-treasure-ii:scar-boat-room-two") ? 1 : 0);
+    if (p.getAttribute(SCAR_MAZE_THREE_ACTIVE)) {
+      p.getPacketSender().sendVarbit(15211, Number(p.getAttribute(SCAR_MAZE_THREE_AIR)) || 100);
+      p.getPacketSender().sendVarbit(15212, Number(p.getAttribute(SCAR_MEMORY_STEP)) || 0);
+      (p.getAttribute(SCAR_MEMORY_ORDER) ?? []).forEach((value, index) => p.getPacketSender().sendVarbit(15213 + index, value));
+      p.getPacketSender().sendVarbit(15210, (p.getAttribute(SCAR_LEECH_GROWTHS_REPAIRED) ?? []).length);
+      p.getPacketSender().sendVarbit(15219, Number(p.getAttribute(SCAR_BLOOD_RED_COUNT)) || 0);
+      p.getPacketSender().sendVarbit(15218, Number(p.getAttribute(SCAR_BLOOD_WHITE_COUNT)) || 0);
+    }
+    if (!p.getAttribute(SCAR_CATALYST_ORDER)) p.setAttribute(SCAR_CATALYST_ORDER, shuffled(SCAR_CATALYST_RUNES));
+    const repaired = p.getAttribute("desert-treasure-ii:scar-growth-repaired") ?? [];
+    p.getPacketSender().sendVarbit(SCAR_GROWTH_LIT_VARBIT, repaired.length);
+    if (repaired.length === SCAR_GROWTHS.length) {
+      let order = p.getAttribute(SCAR_GROWTH_ORDER);
+      if (!Array.isArray(order) || order.length !== SCAR_ENERGY_RUNES.length) {
+        order = shuffled(SCAR_ENERGY_RUNES);
+        p.setAttribute(SCAR_GROWTH_ORDER, order);
+      }
+      SCAR_GROWTH_ORDER_VARBITS.forEach((id, index) => p.getPacketSender().sendVarbit(id, order[index]));
+      SCAR_ENERGIES.forEach((energy) => p.getPacketSender().sendVarbit(energy.state,
+        (Number(p.getAttribute(SCAR_GROWTH_STEP)) || 0) > order.indexOf(energy.rune) ? 2 : 1));
+      p.getPacketSender().sendVarbit(SCAR_GROWTH_STEP_VARBIT, Number(p.getAttribute(SCAR_GROWTH_STEP)) || 0);
+    }
+    if (p.getAttribute(SCAR_LEVIATHAN_READY)) {
+      enterLeviathanArea(p);
+    } else if (p.getAttribute(SCAR_MAZE_THREE_ACTIVE)
+      && !(p.getAttribute(ATTR_SCAR_MAZE_THREE) instanceof ScarMazeThreeArea)) enterScarMazeThree(p);
+    else if (p.getAttribute(SCAR_MAZE_TWO_ENTERED) && !p.getAttribute(SCAR_BOAT2_BURNED)
+      && !(p.getAttribute(ATTR_SCAR_MAZE_TWO) instanceof ScarMazeTwoArea)) enterScarMazeTwo(p);
+    else if (p.getAttribute(SCAR_MAZE_ONE_ENTERED) && !p.getAttribute(SCAR_BOAT_BURNED)
+      && !(p.getAttribute(ATTR_SCAR_MAZE_ONE) instanceof ScarMazeOneArea)) enterScarMazeOne(p);
+    else if (p.getAttribute(SCAR_BOAT_TRIED) && !p.getAttribute(ATTR_SCAR_AREA)) enterScar(p);
   }
 
   function spawnTempleKasonde(p, area) {
@@ -807,12 +1857,53 @@ module.exports = function registerDesertTreasureII(api) {
     return x >= 2000 && x < 2072 && y >= 6400 && y < 6464 ? { x, y } : null;
   }
 
+  function leviathanSourceTile(p, location) {
+    const area = p.getAttribute(ATTR_LEVIATHAN_AREA);
+    if (!(area instanceof LeviathanArea) || area.isDestroyed?.() || !location) return null;
+    const x = location.x - area.getBaseX() + 2064;
+    const y = location.y - area.getBaseY() + 6336;
+    return x >= 2064 && x < 2112 && y >= 6336 && y < 6400 ? { x, y } : null;
+  }
+
   function scarMazeSourceTile(p, location) {
     const area = p.getAttribute(ATTR_SCAR_MAZE_ONE);
     if (!(area instanceof ScarMazeOneArea) || area.isDestroyed?.() || !location) return null;
     const x = location.x - area.getBaseX() + 2160;
     const y = location.y - area.getBaseY() + 6400;
     return x >= 2160 && x < 2248 && y >= 6400 && y < 6472 ? { x, y } : null;
+  }
+
+  function scarMazeTwoSourceTile(p, location) {
+    const area = p.getAttribute(ATTR_SCAR_MAZE_TWO);
+    if (!(area instanceof ScarMazeTwoArea) || area.isDestroyed?.() || !location) return null;
+    const x = location.x - area.getBaseX() + 1696;
+    const y = location.y - area.getBaseY() + 6400;
+    return x >= 1696 && x < 1792 && y >= 6400 && y < 6464 ? { x, y } : null;
+  }
+
+  function scarMazeThreeSourceTile(p, location) {
+    const area = p.getAttribute(ATTR_SCAR_MAZE_THREE);
+    if (!(area instanceof ScarMazeThreeArea) || area.isDestroyed?.() || !location) return null;
+    const x = location.x - area.getBaseX() + 1856;
+    const y = location.y - area.getBaseY() + 6400;
+    return x >= 1856 && x < 1928 && y >= 6400 && y < 6472 ? { x, y } : null;
+  }
+
+  function handleScarStoneRoute(event) {
+    if (event.clickType !== 1 || event.objectId !== 49209) return;
+    const p = event.player;
+    const area = p?.getAttribute(ATTR_SCAR_AREA);
+    const objectLoc = event.object?.getLocation?.();
+    if (!(area instanceof ScarArea) || area.isDestroyed?.() || !objectLoc) return;
+    const stone = scarSourceTile(p, { x: objectLoc.getX(), y: objectLoc.getY() });
+    if (!stone || ![[2031, 6430], [2033, 6430]].some(([x, y]) => stone.x === x && stone.y === y)) return;
+    const current = p.getLocation();
+    const sourceX = current.getX() - area.getBaseX() + 2000;
+    const approachX = sourceX <= stone.x
+      ? (stone.x === 2031 ? stone.x - 2 : stone.x - 1)
+      : stone.x + 1;
+    const approach = area.tile(approachX - 2000, stone.y - 6400, 0);
+    event.destination = { x: approach.getX(), y: approach.getY(), z: 0 };
   }
 
   function leaveVardorvisArena(p) {
@@ -828,7 +1919,7 @@ module.exports = function registerDesertTreasureII(api) {
 
   function handleLogout({ player: p }) {
     if (!p) return;
-    for (const key of [ATTR_VAULT_AREA, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE]) {
+    for (const key of [ATTR_VAULT_AREA, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO, ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA]) {
       const area = p.getAttribute(key);
       if (area && !area.isDestroyed?.()) {
         area.leave?.(p, false);
@@ -838,6 +1929,8 @@ module.exports = function registerDesertTreasureII(api) {
       p.setAttribute(key, null);
     }
     p.setAttribute(SCAR_PATH_COMPLETE, false);
+    p.setAttribute(SCAR_RIFT_LIVE, false);
+    p.setAttribute(SCAR_GROWTH_LIVE, false);
     spawned.delete(p);
   }
 
@@ -847,7 +1940,32 @@ module.exports = function registerDesertTreasureII(api) {
     if (s >= S.FINALE) return ["Return the four medallions to the Ancient Vault."];
     if (s >= S.WHISPERER) return ["Search the Lassar Undercity and defeat the Whisperer."];
     if (s >= S.SUCELLUS) return ["Investigate Ghorrock and defeat Duke Sucellus."];
-    if (s >= S.LEVIATHAN) return ["Search the Scar and defeat the Leviathan."];
+    if (s >= S.LEVIATHAN) {
+      if (!player.getAttribute(SCAR_DEMONS_DEFEATED)) return ["Defeat the Scarred demons near the rowboat."];
+      if (!player.getAttribute(SCAR_BOAT_TRIED)) return ["Try to board the rowboat at the Scar entrance."];
+      if (!player.getAttribute(SCAR_PERSTEN_TALKED)) return ["Speak to Wizard Persten about entering the Scar."];
+      if (!player.getAttribute(SCAR_MAZE_ONE_ENTERED)) return ["Enter the open passage in the north-west of the Scar."];
+      if (!player.getAttribute(SCAR_TETHER_DESTROYED)) return ["Guide the pathfinders through the maze and sever the Abyssal Tether."];
+      if ((Number(player.getAttribute(SCAR_CATALYST_PROGRESS)) || 0) < SCAR_CATALYST_RUNES.length) {
+        return ["Break nerve endings, combine runes, and disrupt the Catalyst with matching nerves."];
+      }
+      const repaired = player.getAttribute("desert-treasure-ii:scar-growth-repaired") ?? [];
+      if (repaired.length < SCAR_GROWTHS.length) return ["Take illuminating lures from the light leeches and repair the four damaged growths."];
+      if (!player.getAttribute("desert-treasure-ii:scar-growth-complete")) return ["Touch the six runic energies in their revealed order."];
+      if (!player.getAttribute(SCAR_BOAT_ROOM)) return ["Enter the southern passage to search the shipwreck chamber."];
+      if (!has(player, I.SLIMY_KEY)) return ["Search the north-west skeleton for the slimy key."];
+      if (!has(player, I.OLD_TABLET)) return ["Use the slimy key on the chest and read the old tablet."];
+      if (!player.getAttribute(SCAR_OLD_TABLET_READ)) return ["Read the old tablet before burning the shipwreck."];
+      if (!has(player, I.GUNPOWDER_2)) return ["Search the south-west skeleton for gunpowder."];
+      if (!has(player, I.TINDERBOX)) return ["Search the south-east crate for a tinderbox."];
+      if (!player.getAttribute(SCAR_BOAT_BURNED)) return ["Use the tinderbox on the shipwreck to ignite the gunpowder."];
+      if (!player.getAttribute(SCAR_PERSTEN_ROOM1_TALKED)) return ["Report the destroyed shipwreck to Wizard Persten."];
+      if (!player.getAttribute(SCAR_LEVIATHAN_READY)) return ["Complete the three Scar passages and report to Persten before boarding the ship."];
+      if (!player.getAttribute(SCAR_LEVIATHAN_KILLED)) return ["Defeat the Leviathan. Switch protection prayers when its colored projectiles land and dodge its special attacks."];
+      if (!player.getAttribute(SCAR_PERSTEN_LEFT_SHIP)) return ["Climb the northern handholds and cross the stepping stone to speak to Persten."];
+      if (!player.getAttribute(SCAR_LEVIATHAN_DEBRIS_SEARCHED)) return ["Search the debris by the ship for Perseriya's medallion."];
+      return ["Continue through the Scar and defeat the Leviathan."];
+    }
     if (s >= S.VARDORVIS) return ["Follow Kasonde's trail and defeat Vardorvis."];
     if (s >= S.MACHINE) return ["Use the golem to learn the forgotten four's names."];
     if (s >= S.GUARDIAN) return ["Search the military installation beneath the Digsite."];
@@ -1029,9 +2147,31 @@ module.exports = function registerDesertTreasureII(api) {
       p.setAttribute(VARDORVIS_PROGRESS, 21);
     }
   }
-  function handleItemAction({ player: p, itemId, option }) {
-    if (stage(p) !== S.VARDORVIS) return;
+  function handleItemAction(event) {
+    const { player: p, itemId, option } = event;
     const action = String(option || "").toLowerCase();
+    if (stage(p) === S.LEVIATHAN && itemId === I.OLD_TABLET && action === "read"
+      && p.getAttribute(SCAR_BOAT_ROOM) && has(p, I.OLD_TABLET)) {
+      p.setAttribute(SCAR_OLD_TABLET_READ, true);
+      p.sendMessage("The old tablet describes the shipwreck and the gunpowder needed to destroy it.");
+      event.handled = true;
+      return true;
+    }
+    if (stage(p) === S.LEVIATHAN && itemId === I.DAMP_TABLET && action === "read"
+      && p.getAttribute("desert-treasure-ii:scar-boat-room-two") && has(p, I.DAMP_TABLET)) {
+      p.setAttribute("desert-treasure-ii:scar-boat-room-two-tablet-read", true);
+      p.sendMessage("The damp tablet describes the shipwreck and the gunpowder needed to destroy it.");
+      event.handled = true;
+      return true;
+    }
+    if (stage(p) === S.LEVIATHAN && itemId === I.DAMP_TABLET_2 && action === "read"
+      && p.getAttribute(SCAR_BOAT3_ROOM) && has(p, I.DAMP_TABLET_2)) {
+      p.setAttribute("desert-treasure-ii:scar-boat3-tablet-read", true);
+      p.sendMessage("The damp tablet describes the shipwreck and the gunpowder needed to destroy it.");
+      event.handled = true;
+      return true;
+    }
+    if (stage(p) !== S.VARDORVIS) return;
     if (itemId === KASONDE_NOTE && action === "read"
       && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) === 3) {
       p.setAttribute(VARDORVIS_PROGRESS, 4);
@@ -1092,13 +2232,256 @@ module.exports = function registerDesertTreasureII(api) {
     }
     return false;
   }
-  function handleObject({ player: p, objectId, definition, location }) {
+  function handleObject(event) {
+    const { player: p, objectId, definition, location } = event;
     const s = stage(p);
     const vaultTile = vaultSourceTile(p, location);
     const roomTile = warRoomSourceTile(p, location);
     const scarTile = scarSourceTile(p, location);
     const scarMazeTile = scarMazeSourceTile(p, location);
+    const scarMazeTwoTile = scarMazeTwoSourceTile(p, location);
+    const scarMazeThreeTile = scarMazeThreeSourceTile(p, location);
+    const leviathanTile = leviathanSourceTile(p, location);
     const visibleId = definition?.id ?? objectId;
+    if (s === S.LEVIATHAN && leviathanTile) {
+      if ([47594, 49210].includes(visibleId) && leviathanTile.x === 2091 && leviathanTile.y === 6380) {
+        if (!p.getAttribute(SCAR_LEVIATHAN_KILLED)) { p.sendMessage("The Leviathan still bars your way."); return true; }
+        const area = p.getAttribute(ATTR_LEVIATHAN_AREA);
+        p.setAttribute(SCAR_PERSTEN_AT_SHIP, true);
+        p.moveTo(area.tile(27, 44, 0));
+        p.sendMessage("You climb the handholds onto the northern ledge.");
+        setScarVarbit(p, 42);
+        return true;
+      }
+      if ([49529, 49210].includes(visibleId) && leviathanTile.x === 2096 && leviathanTile.y === 6382) {
+        if (!p.getAttribute(SCAR_LEVIATHAN_KILLED)) { p.sendMessage("The stepping stone is out of reach while the Leviathan attacks."); return true; }
+        p.moveTo(p.getAttribute(ATTR_LEVIATHAN_AREA).tile(32, 46, 0));
+        p.sendMessage("You cross the stepping stone to Persten's ship.");
+        return true;
+      }
+      if ([49218, 49219].includes(visibleId) && leviathanTile.x === 2099 && leviathanTile.y === 6374) {
+        if (!p.getAttribute(SCAR_PERSTEN_LEFT_SHIP)) { p.sendMessage("Persten asks you to search the debris for the medallion."); return true; }
+        if (!p.getAttribute(SCAR_LEVIATHAN_DEBRIS_SEARCHED)) {
+          if (p.getInventory().getFreeSlots() < 1 && !has(p, I.PERSERIYAS_MEDALLION)) {
+            p.sendMessage("You need an empty inventory slot to take the medallion.");
+            return true;
+          }
+          p.setAttribute(SCAR_LEVIATHAN_DEBRIS_SEARCHED, true);
+          p.getInventory().adds(I.PERSERIYAS_MEDALLION, 1);
+          setScarVarbit(p, 48);
+          p.sendMessage("You search the debris and find Perseriya's medallion.");
+        } else p.sendMessage("You find nothing else in the debris.");
+        return true;
+      }
+    }
+    if (touchScarEnergy(event)) return true;
+    if (handleScarMazeThreeObject(event, scarMazeThreeTile)) return true;
+    if (s === S.LEVIATHAN && scarMazeTwoTile) {
+      if (objectId === O.PASSAGE_17 && scarMazeTwoTile.x === 1790 && scarMazeTwoTile.y === 6405) {
+        const scar = p.getAttribute(ATTR_SCAR_AREA);
+        const maze = p.getAttribute(ATTR_SCAR_MAZE_TWO);
+        if (scar instanceof ScarArea && !scar.isDestroyed() && maze instanceof ScarMazeTwoArea && !maze.isDestroyed()) {
+          maze.leave(p, false);
+          maze.postLeave(p, false);
+          p.moveTo(scar.tile(51, 43, 0));
+          setScarVarbit(p, p.getAttribute(SCAR_BOAT2_BURNED) ? 28 : 24);
+          p.sendMessage("You leave the middle passage and return to Persten's camp.");
+        }
+        return true;
+      }
+      if (objectId === O.PASSAGE_18 && scarMazeTwoTile.x === 1756 && scarMazeTwoTile.y === 6420) {
+        if (!p.getAttribute(SCAR_AXON_ROOM_COMPLETE)) {
+          spawnScarAxons(p, p.getAttribute(ATTR_SCAR_MAZE_TWO));
+          p.sendMessage("Guide the four abyssal axons into their matching elemental terminals by attacking them.");
+        } else p.sendMessage("All four axons have reached their terminals.");
+        return true;
+      }
+      if (objectId === O.PASSAGE_19 && scarMazeTwoTile.x === 1782 && scarMazeTwoTile.y === 6420) {
+        if (!p.getAttribute(SCAR_AXON_ROOM_COMPLETE)) {
+          p.sendMessage("The axon terminals are still inactive.");
+          return true;
+        }
+        p.setAttribute(SCAR_NERVE_ROOM_TWO_ACTIVE, true);
+        p.setAttribute(SCAR_RIFT_LIVE, true);
+        p.setAttribute(SCAR_NERVE_ROOM_TWO_AIR, 100);
+        p.setAttribute(SCAR_NERVE_ROOM_TWO_BROKEN, []);
+        p.setAttribute(SCAR_NERVE_ROOM_TWO_REPAIRED, []);
+        p.getPacketSender().sendVarbit(15211, 100);
+        p.getPacketSender().sendVarbit(15259, 0);
+        p.sendMessage("You dive into the nerve chamber. Break elemental endings, combine the matching nerves, and surface at the air bubbles.");
+        return true;
+      }
+      if (objectId === O.PASSAGE_20 && scarMazeTwoTile.x === 1744 && scarMazeTwoTile.y === 6457) {
+        if (!p.getAttribute(SCAR_NERVE_ROOM_TWO_COMPLETE)) {
+          p.sendMessage("The four broken nerve endings still need their matching combined nerves.");
+          return true;
+        }
+        p.setAttribute(SCAR_NERVE_ROOM_TWO_ACTIVE, false);
+        p.setAttribute(SCAR_SUMMON_ROOM_STARTED, false);
+        p.setAttribute(SCAR_SUMMON_ROOM_COMPLETE, false);
+        p.getPacketSender().sendVarbit(15260, 0);
+        spawnScarSummoningRoom(p, p.getAttribute(ATTR_SCAR_MAZE_TWO));
+        p.sendMessage("Scarred imps shield the lesser demons with their prayers. Defeat the imps first, then the demons.");
+        return true;
+      }
+      if (objectId === O.PASSAGE_23 && scarMazeTwoTile.x === 1771 && scarMazeTwoTile.y === 6459) {
+        if (!p.getAttribute(SCAR_SUMMON_ROOM_COMPLETE)) {
+          p.sendMessage("The summoning circle still protects the shipwreck passage.");
+          return true;
+        }
+        p.setAttribute("desert-treasure-ii:scar-boat-room-two", true);
+        p.getPacketSender().sendVarbit(15261, 1);
+        p.sendMessage("You enter the northern shipwreck chamber.");
+        return true;
+      }
+      if (p.getAttribute(SCAR_NERVE_ROOM_TWO_ACTIVE)) {
+        if (objectId === O.AIR_BUBBLE && SCAR_NERVE_AIR_BUBBLES.some(([x, y]) => x === scarMazeTwoTile.x && y === scarMazeTwoTile.y)) {
+          p.setAttribute(SCAR_NERVE_ROOM_TWO_AIR, 100);
+          p.getPacketSender().sendVarbit(15211, 100);
+          p.sendMessage("You surface at the air bubble and replenish your oxygen.");
+          return true;
+        }
+        const nerve = SCAR_NERVE_LOCATIONS_TWO.find(({ object, tiles }) =>
+          object === (definition?.id ?? objectId) && tiles.some(([x, y]) => x === scarMazeTwoTile.x && y === scarMazeTwoTile.y));
+        if (nerve) {
+          const broken = p.getAttribute(SCAR_NERVE_ROOM_TWO_BROKEN) ?? [];
+          const key = `${nerve.object}:${scarMazeTwoTile.x}:${scarMazeTwoTile.y}`;
+          if (broken.includes(key)) {
+            p.sendMessage("That nerve ending has already been broken.");
+            return true;
+          }
+          p.setAttribute(SCAR_NERVE_ROOM_TWO_BROKEN, [...broken, key]);
+          p.getInventory().adds(nerve.item, 1);
+          p.sendMessage(`You break the ${nerve.item === I.EARTH_NERVE ? "earth" : nerve.item === I.AIR_NERVE ? "air" : nerve.item === I.WATER_NERVE ? "water" : "fire"} nerve ending and take its rune nerve.`);
+          return true;
+        }
+      }
+      if (p.getAttribute("desert-treasure-ii:scar-boat-room-two")) {
+        if (objectId === 49425 && scarMazeTwoTile.x === 1774 && scarMazeTwoTile.y === 6448) {
+          if (!has(p, I.TINDERBOX)) p.getInventory().adds(I.TINDERBOX, 1);
+          p.sendMessage("You search the south-west crate and find a tinderbox.");
+          return true;
+        }
+        if (objectId === 49427 && scarMazeTwoTile.x === 1779 && scarMazeTwoTile.y === 6448) {
+          if (!has(p, I.GUNPOWDER_2)) p.getInventory().adds(I.GUNPOWDER_2, 1);
+          p.sendMessage("You search the skeleton near the crate and find gunpowder.");
+          return true;
+        }
+        if (objectId === 49426 && scarMazeTwoTile.x === 1789 && scarMazeTwoTile.y === 6449) {
+          if (!has(p, I.SLIMY_KEY)) p.getInventory().adds(I.SLIMY_KEY, 1);
+          p.sendMessage("You search the south-east skeleton and find a slimy key.");
+          return true;
+        }
+        if (objectId === 49420 && scarMazeTwoTile.x === 1775 && scarMazeTwoTile.y === 6460) {
+          if (p.getAttribute("desert-treasure-ii:scar-boat-room-two-chest-open")) {
+            if (!has(p, I.DAMP_TABLET)) p.getInventory().adds(I.DAMP_TABLET, 1);
+            p.sendMessage("The chest is already open. You recover the damp tablet.");
+            return true;
+          }
+          if (!has(p, I.SLIMY_KEY)) {
+            p.sendMessage("The chest is locked. A slimy key may fit it.");
+            return true;
+          }
+          if (!has(p, I.DAMP_TABLET)) p.getInventory().adds(I.DAMP_TABLET, 1);
+          p.getInventory().deleteNumber(I.SLIMY_KEY, 1);
+          p.setAttribute("desert-treasure-ii:scar-boat-room-two-chest-open", true);
+          p.sendMessage("The slimy key opens the chest. You take a damp tablet.");
+          return true;
+        }
+        if (objectId === O.SHIPWRECK && scarMazeTwoTile.x === 1786 && scarMazeTwoTile.y === 6453) {
+          p.sendMessage("Use the tinderbox on the wreck after reading the damp tablet and collecting gunpowder.");
+          return true;
+        }
+      }
+    }
+    if (s === S.LEVIATHAN && objectId === 49209 && scarTile
+      && [[2031, 6430], [2033, 6430]].some(([x, y]) => scarTile.x === x && scarTile.y === y)) {
+      if (!p.getAttribute(SCAR_DEMONS_DEFEATED)) {
+        p.sendMessage("The Scarred demons must be defeated before you cross these stones.");
+      } else {
+        const area = p.getAttribute(ATTR_SCAR_AREA);
+        const sourceX = p.getLocation().getX() - area.getBaseX() + 2000;
+        const destinationX = sourceX <= scarTile.x ? scarTile.x + 1 : scarTile.x - 1;
+        p.moveTo(area.tile(destinationX - 2000, scarTile.y - 6400, 0));
+        p.sendMessage("You carefully cross the stepping stone.");
+      }
+      event.handled = true;
+      return true;
+    }
+    if (s === S.LEVIATHAN && scarMazeTile && objectId === 49418
+      && scarMazeTile.x === 2220 && scarMazeTile.y === 6402) {
+      if (!p.getAttribute("desert-treasure-ii:scar-growth-complete")) {
+        p.sendMessage("The passage remains sealed until the damaged growths restore the neural route.");
+        event.handled = true;
+        return true;
+      }
+      p.setAttribute(SCAR_BOAT_ROOM, true);
+      p.sendMessage("You enter the shipwreck chamber beyond the restored Scar passage.");
+      event.handled = true;
+      return true;
+    }
+    if (s === S.LEVIATHAN && scarMazeTile?.x === 2237 && scarMazeTile.y === 6443
+      && objectId === O.NEURAL_TELEPORTER && p.getAttribute(SCAR_BOAT_BURNED)) {
+      const passage = p.getAttribute(ATTR_SCAR_AREA);
+      const maze = p.getAttribute(ATTR_SCAR_MAZE_ONE);
+      if (passage instanceof ScarArea && !passage.isDestroyed() && maze instanceof ScarMazeOneArea && !maze.isDestroyed()) {
+        maze.leave(p, false);
+        maze.postLeave(p, false);
+        p.moveTo(passage.tile(51, 43, 0));
+        setScarVarbit(p, 20);
+        p.sendMessage("The neural teleporter carries you back to Persten's camp.");
+        return true;
+      }
+    }
+    if (s === S.LEVIATHAN && p.getAttribute(SCAR_BOAT_ROOM) && scarMazeTile) {
+      if (objectId === 49425 && scarMazeTile.x === 2236 && scarMazeTile.y === 6402) {
+        if (!has(p, I.TINDERBOX)) {
+          p.getInventory().adds(I.TINDERBOX, 1);
+          p.setAttribute(SCAR_TINDERBOX_FOUND, true);
+          p.sendMessage("You search the crate and find a tinderbox.");
+        } else p.sendMessage("The crate is empty.");
+        event.handled = true;
+        return true;
+      }
+      if (objectId === 49426 && scarMazeTile.x === 2221 && scarMazeTile.y === 6414) {
+        if (!has(p, I.SLIMY_KEY)) {
+          p.getInventory().adds(I.SLIMY_KEY, 1);
+          p.setAttribute(SCAR_SLIMY_KEY_FOUND, true);
+          p.sendMessage("You search the north-west skeleton and find a slimy key.");
+        } else p.sendMessage("The skeleton has nothing else of use.");
+        event.handled = true;
+        return true;
+      }
+      if (objectId === 49427 && scarMazeTile.x === 2223 && scarMazeTile.y === 6402) {
+        if (!has(p, I.GUNPOWDER_2)) {
+          p.getInventory().adds(I.GUNPOWDER_2, 1);
+          p.setAttribute(SCAR_GUNPOWDER_FOUND, true);
+          p.sendMessage("You search the south-west skeleton and find gunpowder.");
+        } else p.sendMessage("The skeleton has nothing else of use.");
+        event.handled = true;
+        return true;
+      }
+      if (objectId === 49420 && scarMazeTile.x === 2231 && scarMazeTile.y === 6413) {
+        if (p.getAttribute(SCAR_BOAT_CHEST_OPEN)) {
+          if (!has(p, I.OLD_TABLET)) p.getInventory().adds(I.OLD_TABLET, 1);
+          p.sendMessage("The chest is already open.");
+          event.handled = true;
+          return true;
+        }
+        if (!has(p, I.SLIMY_KEY)) {
+          p.sendMessage("The chest is locked. A slimy key may fit it.");
+          event.handled = true;
+          return true;
+        }
+        p.getInventory().deleteNumber(I.SLIMY_KEY, 1);
+        p.getInventory().adds(I.OLD_TABLET, 1);
+        p.setAttribute(SCAR_BOAT_CHEST_OPEN, true);
+        p.setAttribute(SCAR_SLIMY_KEY_FOUND, false);
+        p.sendMessage("The slimy key opens the chest. You take an old tablet.");
+        event.handled = true;
+        return true;
+      }
+    }
     if (s === S.LEVIATHAN && scarMazeTile && p.getAttribute(SCAR_TETHER_DESTROYED)) {
       if (objectId === 49415 && scarMazeTile.x === 2233 && scarMazeTile.y === 6461) {
         p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_ONE).tile(31, 12, 0));
@@ -1107,8 +2490,25 @@ module.exports = function registerDesertTreasureII(api) {
       }
       if (objectId === 49411 && scarMazeTile.x === 2190 && scarMazeTile.y === 6412) {
         p.setAttribute(SCAR_RIFT_LIVE, true);
+        if (!p.getAttribute(SCAR_CATALYST_ORDER)) p.setAttribute(SCAR_CATALYST_ORDER, shuffled(SCAR_CATALYST_RUNES));
         p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_ONE).tile(39, 12, 0));
+        spawnScarCatalyst(p, p.getAttribute(ATTR_SCAR_MAZE_ONE));
         p.sendMessage("You enter the catalyst chamber. Break the nerve endings and combine them to match its rune.");
+        inspectScarCatalyst({ player: p });
+        return true;
+      }
+      if (objectId === 49414 && scarMazeTile.x === 2181 && scarMazeTile.y === 6424
+        && (Number(p.getAttribute(SCAR_CATALYST_PROGRESS)) || 0) >= SCAR_CATALYST_RUNES.length) {
+        p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_ONE).tile(64, 24, 0));
+        p.sendMessage("The blue neural teleporter carries you toward the damaged growth room.");
+        return true;
+      }
+      if (objectId === 49412 && scarMazeTile.x === 2225 && scarMazeTile.y === 6421
+        && (Number(p.getAttribute(SCAR_CATALYST_PROGRESS)) || 0) >= SCAR_CATALYST_RUNES.length) {
+        p.setAttribute(SCAR_GROWTH_LIVE, true);
+        p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_ONE).tile(66, 22, 0));
+        spawnScarLightLeeches(p, p.getAttribute(ATTR_SCAR_MAZE_ONE));
+        p.sendMessage("Four damaged growths need illuminating lures. The light leeches carry them.");
         return true;
       }
       const nerve = SCAR_NERVE_LOCATIONS.find(({ object, tiles }) => object === visibleId
@@ -1126,7 +2526,6 @@ module.exports = function registerDesertTreasureII(api) {
     if (s === S.LEVIATHAN && scarMazeTile?.x === 2210 && scarMazeTile.y === 6433 && objectId === O.ABYSSAL_TETHER) {
       if (!p.getAttribute(SCAR_PATH_COMPLETE)) return p.sendMessage("Follow each pathfinder through the maze to reach the tether.");
       p.setAttribute(SCAR_TETHER_DESTROYED, true);
-      p.getPacketSender().sendVarbit(SCAR_TETHER_VARBIT, 1);
       p.sendMessage("The abyssal tether is severed. The teleporter to the catalyst room is now reachable.");
       return true;
     }
@@ -1140,7 +2539,27 @@ module.exports = function registerDesertTreasureII(api) {
       enterScarMazeOne(p);
       return true;
     }
+    if (s === S.LEVIATHAN && scarTile?.x === 2051 && scarTile.y === 6434
+      && [O.PASSAGE_15, 49410].includes(definition?.id ?? objectId)) {
+      if (!p.getAttribute(SCAR_PERSTEN_ROOM1_TALKED)) {
+        p.sendMessage("Speak to Persten about the first passage before entering the middle passage.");
+        return true;
+      }
+      if (p.getAttribute(SCAR_PERSTEN_ROOM2_TALKED)) {
+        enterScarMazeThree(p);
+        return true;
+      }
+      enterScarMazeTwo(p);
+      return true;
+    }
     if (s === S.LEVIATHAN && objectId === O.ROWBOAT_19 && scarTile?.x === 2065 && scarTile.y === 6435) {
+      if (p.getAttribute(SCAR_BOAT3_BURNED) && p.getAttribute("desert-treasure-ii:scar-persten-room3-talked")) {
+        p.setAttribute(SCAR_LEVIATHAN_READY, true);
+        setScarVarbit(p, 38);
+        enterLeviathanArea(p);
+        p.sendMessage("You board Persten's ship and sail toward the Leviathan's lair.");
+        return true;
+      }
       if (!p.getAttribute(SCAR_DEMONS_DEFEATED)) return p.sendMessage("The creatures fighting near the entrance still need to be dealt with.");
       p.setAttribute(SCAR_BOAT_TRIED, true);
       setScarVarbit(p, 10);
@@ -1345,7 +2764,8 @@ module.exports = function registerDesertTreasureII(api) {
     }
     return false;
   }
-  function handleItemOnObject({ player: p, itemId, objectId, location }) {
+  function handleItemOnObject(event) {
+    const { player: p, itemId, objectId, location } = event;
     const vaultTile = vaultSourceTile(p, location);
     if (vaultTile && STATUES.has(objectId)) {
       const index = STATUES.get(objectId);
@@ -1367,6 +2787,138 @@ module.exports = function registerDesertTreasureII(api) {
         else if (index === 2) setStage(p, S.WHISPERER);
         return true;
       }
+    }
+    const mazeTile = scarMazeSourceTile(p, location);
+    const mazeTwoTile = scarMazeTwoSourceTile(p, location);
+    const mazeThreeTile = scarMazeThreeSourceTile(p, location);
+    if (stage(p) === S.LEVIATHAN && mazeThreeTile && p.getAttribute(SCAR_MAZE_THREE_ACTIVE)) {
+      if (objectId === 49436 && itemId === I.ILLUMINATING_LURE) {
+        const index = SCAR_LEECH_GROWTHS.findIndex(([x, y]) => x === mazeThreeTile.x && y === mazeThreeTile.y);
+        if (index < 0 || !has(p, I.ILLUMINATING_LURE)) return false;
+        const fixed = p.getAttribute(SCAR_LEECH_GROWTHS_REPAIRED) ?? [];
+        event.handled = true;
+        if (fixed.includes(index)) return p.sendMessage("That damaged growth already glows.");
+        p.getInventory().deleteNumber(I.ILLUMINATING_LURE, 1);
+        fixed.push(index);
+        p.setAttribute(SCAR_LEECH_GROWTHS_REPAIRED, fixed);
+        p.getPacketSender().sendVarbit(15210, fixed.length);
+        if (fixed.length === SCAR_LEECH_GROWTHS.length) p.sendMessage("The damaged growths light the room. Crimson and Radiant Veins appear.");
+        return true;
+      }
+      const vein = [...SCAR_BLOOD_RED_VEINS.map((tile) => ({ color: "crimson", item: I.CRIMSON_FIBRE, tile })),
+        ...SCAR_BLOOD_WHITE_VEINS.map((tile) => ({ color: "radiant", item: I.RADIANT_FIBRE, tile }))]
+        .find(({ tile }) => tile[0] === mazeThreeTile.x && tile[1] === mazeThreeTile.y);
+      if (vein) {
+        event.handled = true;
+        if ((p.getAttribute(SCAR_LEECH_GROWTHS_REPAIRED) ?? []).length !== 4) return p.sendMessage("Light all four damaged growths first.");
+        if (itemId !== vein.item || !has(p, vein.item)) return p.sendMessage(`That vein needs ${vein.color} fibre.`);
+        const key = vein.color === "crimson" ? SCAR_BLOOD_RED_REPAIRED : SCAR_BLOOD_WHITE_REPAIRED;
+        const repaired = p.getAttribute(key) ?? [];
+        const id = vein.color === "crimson" ? 49537 : 49536;
+        if (repaired.includes(vein.tile.join(","))) return p.sendMessage("That vein has already been repaired.");
+        p.getInventory().deleteNumber(vein.item, 1);
+        repaired.push(vein.tile.join(","));
+        p.setAttribute(key, repaired);
+        p.getPacketSender().sendVarbit(vein.color === "crimson" ? 15219 : 15218, repaired.length);
+        if (repaired.length === 3) p.sendMessage(`All three ${vein.color} veins are repaired.`);
+        if ((p.getAttribute(SCAR_BLOOD_RED_REPAIRED) ?? []).length === 3
+          && (p.getAttribute(SCAR_BLOOD_WHITE_REPAIRED) ?? []).length === 3) {
+          p.setAttribute(SCAR_LEECH_COMPLETE, true);
+          p.getPacketSender().sendVarbit(15259, 1);
+          p.sendMessage("The Unlit Veins are restored. The shipwreck passage is now accessible.");
+        }
+        return true;
+      }
+    }
+    if (stage(p) === S.LEVIATHAN && mazeTwoTile && p.getAttribute(SCAR_NERVE_ROOM_TWO_ACTIVE)) {
+      const nerve = SCAR_NERVE_REPAIRS_TWO.find(({ object, tile }) =>
+        object === objectId && tile[0] === mazeTwoTile.x && tile[1] === mazeTwoTile.y);
+      if (nerve) {
+        event.handled = true;
+        if (itemId !== nerve.item || !has(p, nerve.item)) {
+          p.sendMessage("That combined nerve does not match this broken ending.");
+          return true;
+        }
+        const fixed = p.getAttribute(SCAR_NERVE_ROOM_TWO_REPAIRED) ?? [];
+        if (fixed.includes(nerve.object)) {
+          p.sendMessage("That nerve ending has already been repaired.");
+          return true;
+        }
+        p.getInventory().deleteNumber(nerve.item, 1);
+        fixed.push(nerve.object);
+        p.setAttribute(SCAR_NERVE_ROOM_TWO_REPAIRED, fixed);
+        p.getPacketSender().sendVarbit(15221, fixed.length);
+        p.sendMessage("You repair the matching combined nerve ending.");
+        if (fixed.length === SCAR_NERVE_REPAIRS_TWO.length) {
+          p.setAttribute(SCAR_NERVE_ROOM_TWO_COMPLETE, true);
+          p.setAttribute(SCAR_NERVE_ROOM_TWO_ACTIVE, false);
+          p.getPacketSender().sendVarbit(15259, 1);
+          p.sendMessage("All four nerve endings are restored. The summoning chamber has opened.");
+        }
+        return true;
+      }
+    }
+    if (stage(p) === S.LEVIATHAN && p.getAttribute(SCAR_GROWTH_LIVE)
+      && objectId === 49436 && itemId === I.ILLUMINATING_LURE && mazeTile) {
+      const growthIndex = SCAR_GROWTHS.findIndex(([x, y]) => x === mazeTile.x && y === mazeTile.y);
+      if (growthIndex < 0 || !has(p, I.ILLUMINATING_LURE)) return false;
+      const fixed = p.getAttribute("desert-treasure-ii:scar-growth-repaired") ?? [];
+      if (fixed.includes(growthIndex)) return p.sendMessage("That damaged growth already glows.");
+      p.getInventory().deleteNumber(I.ILLUMINATING_LURE, 1);
+      const next = [...fixed, growthIndex];
+      p.setAttribute("desert-treasure-ii:scar-growth-repaired", next);
+      p.setAttribute(SCAR_GROWTH_LURES, next.length);
+      p.getPacketSender().sendVarbit(SCAR_GROWTH_LIT_VARBIT, next.length);
+      p.sendMessage("You use the illuminating lure to repair a damaged growth.");
+      if (next.length === SCAR_GROWTHS.length) finishScarGrowthRepair(p);
+      return true;
+    }
+    if (stage(p) === S.LEVIATHAN && p.getAttribute(SCAR_BOAT_ROOM)
+      && objectId === 49423 && mazeTile?.x === 2235 && mazeTile.y === 6409 && itemId === I.TINDERBOX) {
+      if (p.getAttribute(SCAR_BOAT_BURNED)) return p.sendMessage("The shipwreck has already been destroyed.");
+      if (!p.getAttribute(SCAR_OLD_TABLET_READ) || !has(p, I.OLD_TABLET)) {
+        return p.sendMessage("Read the old tablet before trying to destroy the shipwreck.");
+      }
+      if (!has(p, I.GUNPOWDER_2)) return p.sendMessage("You need gunpowder to destroy the shipwreck.");
+      if (!has(p, I.TINDERBOX)) return p.sendMessage("You need a tinderbox to light the gunpowder.");
+      p.getInventory().deleteNumber(I.GUNPOWDER_2, 1);
+      p.setAttribute(SCAR_BOAT_BURNED, true);
+      setScarVarbit(p, 20);
+      p.sendMessage("You spread the gunpowder around the wreck and ignite it. The shipwreck burns away.");
+      return true;
+    }
+    if (stage(p) === S.LEVIATHAN && p.getAttribute("desert-treasure-ii:scar-boat-room-two")
+      && objectId === O.SHIPWRECK && mazeTwoTile?.x === 1786 && mazeTwoTile.y === 6453 && itemId === I.TINDERBOX) {
+      event.handled = true;
+      if (p.getAttribute(SCAR_BOAT2_BURNED)) {
+        p.sendMessage("The shipwreck has already been destroyed.");
+        return true;
+      }
+      if (!p.getAttribute("desert-treasure-ii:scar-boat-room-two-tablet-read") || !has(p, I.DAMP_TABLET)) {
+        p.sendMessage("Read the damp tablet before trying to destroy the shipwreck.");
+        return true;
+      }
+      if (!has(p, I.GUNPOWDER_2) || !has(p, I.TINDERBOX)) {
+        p.sendMessage("You need gunpowder and a tinderbox to destroy the shipwreck.");
+        return true;
+      }
+      p.getInventory().deleteNumber(I.GUNPOWDER_2, 1);
+      p.setAttribute(SCAR_BOAT2_BURNED, true);
+      setScarVarbit(p, 28);
+      p.sendMessage("You spread the gunpowder around the wreck and ignite it. The shipwreck burns away.");
+      return true;
+    }
+    if (stage(p) === S.LEVIATHAN && p.getAttribute(SCAR_BOAT3_ROOM)
+      && mazeThreeTile && objectId === O.SHIPWRECK && mazeThreeTile.x === 1914 && mazeThreeTile.y === 6455 && itemId === I.TINDERBOX) {
+      event.handled = true;
+      if (p.getAttribute(SCAR_BOAT3_BURNED)) return p.sendMessage("The shipwreck has already been destroyed.");
+      if (!p.getAttribute("desert-treasure-ii:scar-boat3-tablet-read") || !has(p, I.DAMP_TABLET_2)) return p.sendMessage("Read the damp tablet before trying to destroy the shipwreck.");
+      if (!has(p, I.GUNPOWDER_2) || !has(p, I.TINDERBOX)) return p.sendMessage("You need gunpowder and a tinderbox to destroy the shipwreck.");
+      p.getInventory().deleteNumber(I.GUNPOWDER_2, 1);
+      p.setAttribute(SCAR_BOAT3_BURNED, true);
+      setScarVarbit(p, 34);
+      p.sendMessage("You spread the gunpowder around the wreck and ignite it. The shipwreck burns away.");
+      return true;
     }
     if (stage(p) < S.MACHINE || stage(p) >= S.VARDORVIS) return;
     const roomTile = warRoomSourceTile(p, location);
@@ -1415,6 +2967,24 @@ module.exports = function registerDesertTreasureII(api) {
       p.setAttribute(ATTR, npc);
       return npc;
     }
+    if (key === "leviathan") {
+      const area = p.getAttribute(ATTR_LEVIATHAN_AREA);
+      if (!(area instanceof LeviathanArea) || area.isDestroyed() || p.getAttribute(SCAR_LEVIATHAN_KILLED)) return;
+      if (npcs[key]?.isRegistered?.() && area.entities.includes(npcs[key])) return npcs[key];
+      const npc = api.core.NPC.create(id, area.tile(x - 2064, y - 6336, 0));
+      npc.setOwner?.(p);
+      npc.setOwnerOnly?.(true);
+      npc.setScriptedMovement?.(true);
+      npc.setMaxHitpoints?.(600);
+      npc.setHitpoints?.(600);
+      npc.__dt2Leviathan = true;
+      npc.__skipDefaultRespawn = true;
+      area.add(npc);
+      api.core.World.getAddNPCQueue().push(npc);
+      npcs[key] = npc;
+      p.setAttribute(ATTR, npc);
+      return npc;
+    }
     if (!npcs[key]) npcs[key] = api.spawnNpc({ id, x, y, z: 0, owner: p, ownerOnly: true });
     return npcs[key];
   }
@@ -1423,21 +2993,134 @@ module.exports = function registerDesertTreasureII(api) {
     if (s === S.VARDORVIS) { talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-elissa"); return; }
     if (s === S.LEVIATHAN) {
       if (!p.getAttribute(SCAR_BOAT_TRIED)) return;
+      if (p.getAttribute(SCAR_LEVIATHAN_KILLED) && p.getAttribute(SCAR_PERSTEN_AT_SHIP)) {
+        p.setAttribute(SCAR_PERSTEN_LEFT_SHIP, true);
+        setScarVarbit(p, 46);
+        talk(p, npcId, "praefectus-classis-perseriya-crossing-the-stones-after-defeating-the-leviathan");
+        return;
+      }
       p.setAttribute(SCAR_PERSTEN_TALKED, true);
-      setScarVarbit(p, 14);
-      talk(p, npcId, p.getAttribute(SCAR_PERSTEN_TALKED_BEFORE)
-        ? "praefectus-classis-perseriya-talking-to-wizard-persten-talking-to-wizard-persten-again"
-        : "praefectus-classis-perseriya-talking-to-wizard-persten");
-      p.setAttribute(SCAR_PERSTEN_TALKED_BEFORE, true);
+      const scarArea = p.getAttribute(ATTR_SCAR_AREA);
+      if (p.getAttribute(SCAR_BOAT3_BURNED)) {
+        setScarVarbit(p, 36);
+        p.setAttribute(SCAR_PERSTEN_ROOM3_TALKED, true);
+        talk(p, npcId, "praefectus-classis-perseriya-talking-to-wizard-persten-after-completing-the-third-passage");
+      } else if (p.getAttribute(SCAR_BOAT2_BURNED)) {
+        setScarVarbit(p, 30);
+        p.setAttribute(SCAR_PERSTEN_ROOM2_TALKED, true);
+        if (scarArea instanceof ScarArea && !scarArea.isDestroyed()) revealScarMazeTwoEntry(p, scarArea);
+        talk(p, npcId, "praefectus-classis-perseriya-talking-to-wizard-persten-after-completing-the-second-passage");
+      } else if (p.getAttribute(SCAR_BOAT_BURNED)) {
+        setScarVarbit(p, 22);
+        p.setAttribute(SCAR_PERSTEN_ROOM1_TALKED, true);
+        if (scarArea instanceof ScarArea && !scarArea.isDestroyed()) revealScarMazeTwoEntry(p, scarArea);
+        talk(p, npcId, "praefectus-classis-perseriya-talking-to-wizard-persten-after-completing-the-first-passage");
+      } else {
+        if (scarArea instanceof ScarArea && !scarArea.isDestroyed()) revealScarMazeEntry(p, scarArea);
+        setScarVarbit(p, 14);
+        talk(p, npcId, p.getAttribute(SCAR_PERSTEN_TALKED_BEFORE)
+          ? "praefectus-classis-perseriya-talking-to-wizard-persten-talking-to-wizard-persten-again"
+          : "praefectus-classis-perseriya-talking-to-wizard-persten");
+        p.setAttribute(SCAR_PERSTEN_TALKED_BEFORE, true);
+      }
       return;
     }
     if (s === S.SUCELLUS) { talk(p, npcId, "duke-sucellus-of-the-sixth-legion-talking-to-captain-malleta"); return; }
     if (s === S.WHISPERER) { talk(p, npcId, "the-whisperer-talking-to-ketla-after-coming-to"); }
   }
   function handleDeath({ killer, npc }) {
+    if (npc?.__dt2ScarAntibody) {
+      const owner = npc.getOwner?.();
+      const owned = spawned.get(owner);
+      if (owner && Array.isArray(owned?.scarTreeAntibodies)) {
+        owned.scarTreeAntibodies = owned.scarTreeAntibodies.filter((ally) => ally !== npc);
+        const alive = owned.scarTreeAntibodies.some((ally) => ally?.isRegistered?.() && ally.getHitpoints?.() > 0);
+        if (!alive) {
+          const area = owner.getAttribute(ATTR_SCAR_MAZE_THREE);
+          for (const enemy of owned.scarTreeEnemies ?? []) {
+            if (enemy?.isRegistered?.() && !api.core.World.getRemoveNPCQueue().includes(enemy)) api.core.World.getRemoveNPCQueue().push(enemy);
+          }
+          owned.scarTreeEnemies = [];
+          owner.setAttribute(SCAR_TREE_STARTED, false);
+          owner.setAttribute("desert-treasure-ii:scar-tree-wave", 0);
+          if (area instanceof ScarMazeThreeArea && !area.isDestroyed()) owner.moveTo(area.tile(41, 36, 0));
+          owner.getCombat().getHitQueue().addPendingDamage([
+            new api.core.HitDamage(20, api.core.HitMask.RED),
+          ]);
+          owner.sendMessage("The antibodies fall. The Scar ejects you from the Brain Pillar room.");
+        }
+      }
+      return;
+    }
     if (!killer) return;
     const owned = spawned.get(killer);
     if (!owned) return;
+    if (owned.leviathan === npc && stage(killer) === S.LEVIATHAN) {
+      owned.leviathan = null;
+      killer.setAttribute(ATTR, null);
+      killer.setAttribute(SCAR_LEVIATHAN_KILLED, true);
+      killer.setAttribute(SCAR_PERSTEN_AT_SHIP, true);
+      setScarVarbit(killer, 42);
+      const area = killer.getAttribute(ATTR_LEVIATHAN_AREA);
+      if (area instanceof LeviathanArea && !area.isDestroyed()) spawnScarPerstenAtShip(killer, area);
+      killer.sendMessage("The Leviathan is defeated. Climb the northern handholds and cross the stepping stone to Persten's ship.");
+      return;
+    }
+    if (Array.isArray(owned.scarTreeEnemies) && owned.scarTreeEnemies.includes(npc)) {
+      npc.__dt2ScarTreeEnemy = false;
+      owned.scarTreeEnemies = owned.scarTreeEnemies.filter((enemy) => enemy !== npc);
+      if (owned.scarTreeEnemies.some((enemy) => enemy?.isRegistered?.() && enemy.getHitpoints?.() > 0)) return;
+      const area = killer.getAttribute(ATTR_SCAR_MAZE_THREE);
+      const wave = Number(killer.getAttribute("desert-treasure-ii:scar-tree-wave")) || 0;
+      if (wave >= 4) {
+        killer.setAttribute(SCAR_TREE_COMPLETE, true);
+        killer.getPacketSender().sendVarbit(15260, 1);
+        killer.sendMessage("The Brain Pillar finishes healing. The Unlit Veins can now be reached.");
+      } else if (area instanceof ScarMazeThreeArea && !area.isDestroyed()) {
+        spawnScarTreeWave(killer, area);
+        killer.sendMessage(`The antibodies hold. Another wave enters the chamber (${wave + 1} of 4).`);
+      }
+      return;
+    }
+    if (Array.isArray(owned.scarMazeThreeBloodCells) && owned.scarMazeThreeBloodCells.includes(npc)) {
+      owned.scarMazeThreeBloodCells = owned.scarMazeThreeBloodCells.filter((entry) => entry !== npc);
+      const type = npc.__dt2ScarBloodCell;
+      if (type === "crimson") {
+        const count = Math.min(3, (Number(killer.getAttribute(SCAR_BLOOD_RED_COUNT)) || 0) + 1);
+        killer.setAttribute(SCAR_BLOOD_RED_COUNT, count);
+        killer.getPacketSender().sendVarbit(15219, count);
+        killer.getInventory().adds(I.CRIMSON_FIBRE, 1);
+        killer.sendMessage("The crimson sanguisphera leaves a crimson fibre.");
+      } else if (type === "radiant") {
+        const count = Math.min(3, (Number(killer.getAttribute(SCAR_BLOOD_WHITE_COUNT)) || 0) + 1);
+        killer.setAttribute(SCAR_BLOOD_WHITE_COUNT, count);
+        killer.getPacketSender().sendVarbit(15218, count);
+        killer.getInventory().adds(I.RADIANT_FIBRE, 1);
+        killer.sendMessage("The radiant sanguisphera leaves a radiant fibre.");
+      }
+      return;
+    }
+    if (Array.isArray(owned.scarMazeThreeLightLeeches) && owned.scarMazeThreeLightLeeches.includes(npc)) {
+      owned.scarMazeThreeLightLeeches = owned.scarMazeThreeLightLeeches.filter((entry) => entry !== npc);
+      return;
+    }
+    if (Array.isArray(owned.scarSummonImps) && owned.scarSummonImps.includes(npc)) {
+      owned.scarSummonImps = owned.scarSummonImps.filter((imp) => imp !== npc);
+      killer.setAttribute(SCAR_SUMMON_IMPS, owned.scarSummonImps.filter((imp) => imp?.isRegistered?.() && imp.getHitpoints?.() > 0).length);
+      if (killer.getAttribute(SCAR_SUMMON_IMPS) === 0) killer.sendMessage("The Scarred imps' prayers fade. The lesser demons can now be hurt.");
+      return;
+    }
+    if (Array.isArray(owned.scarSummonDemons) && owned.scarSummonDemons.includes(npc)) {
+      owned.scarSummonDemons = owned.scarSummonDemons.filter((demon) => demon !== npc);
+      const left = owned.scarSummonDemons.filter((demon) => demon?.isRegistered?.() && demon.getHitpoints?.() > 0).length;
+      killer.setAttribute(SCAR_SUMMON_DEMONS, left);
+      if (left === 0 && stage(killer) === S.LEVIATHAN) {
+        killer.setAttribute(SCAR_SUMMON_ROOM_COMPLETE, true);
+        killer.getPacketSender().sendVarbit(15260, 1);
+        killer.sendMessage("The summoning circle is quiet. The shipwreck passage is now accessible.");
+      }
+      return;
+    }
     if (Array.isArray(owned.scarEnemies) && owned.scarEnemies.includes(npc) && stage(killer) === S.LEVIATHAN) {
       owned.scarEnemies = owned.scarEnemies.filter((enemy) => enemy !== npc);
       if (owned.scarEnemies.length === 0) {
@@ -1541,11 +3224,32 @@ module.exports = function registerDesertTreasureII(api) {
   api.persistAttribute(VARDORVIS_PROGRESS);
   api.persistAttribute(ATTR_SMITH_INTRO);
   api.persistAttribute(STATUES_PLACED);
-  [SCAR_DEMONS_DEFEATED, SCAR_BOAT_TRIED, SCAR_PERSTEN_TALKED, SCAR_PERSTEN_TALKED_BEFORE].forEach((key) => api.persistAttribute(key));
-  [SCAR_GUARDIAN_ACCEPTED, SCAR_MAZE_ONE_ENTERED, SCAR_TETHER_DESTROYED].forEach((key) => api.persistAttribute(key));
+  [SCAR_DEMONS_DEFEATED, SCAR_BOAT_TRIED, SCAR_PERSTEN_TALKED, SCAR_PERSTEN_TALKED_BEFORE,
+    SCAR_PERSTEN_ROOM1_TALKED, SCAR_BOAT_ROOM, SCAR_TINDERBOX_FOUND, SCAR_SLIMY_KEY_FOUND,
+    SCAR_GUNPOWDER_FOUND, SCAR_OLD_TABLET_READ, SCAR_BOAT_CHEST_OPEN, SCAR_BOAT_BURNED,
+    SCAR_PERSTEN_ROOM2_TALKED, SCAR_BOAT2_BURNED, SCAR_MAZE_TWO_ENTERED, SCAR_AXON_ROOM_COMPLETE,
+    SCAR_NERVE_ROOM_TWO_COMPLETE, SCAR_NERVE_ROOM_TWO_REPAIRED, SCAR_SUMMON_ROOM_COMPLETE,
+    "desert-treasure-ii:scar-boat-room-two-chest-open", "desert-treasure-ii:scar-growth-complete",
+    SCAR_MAZE_THREE_ACTIVE, SCAR_MEMORY_ORDER, SCAR_MEMORY_STEP, SCAR_MEMORY_COMPLETE,
+    SCAR_TREE_COMPLETE, SCAR_LEECH_GROWTHS_REPAIRED, SCAR_BLOOD_RED_COUNT, SCAR_BLOOD_WHITE_COUNT,
+    SCAR_BLOOD_RED_REPAIRED, SCAR_BLOOD_WHITE_REPAIRED, SCAR_LEECH_COMPLETE, SCAR_BOAT3_BURNED,
+    SCAR_BOAT3_ROOM, SCAR_PERSTEN_ROOM3_TALKED, SCAR_LEVIATHAN_READY, SCAR_LEVIATHAN_KILLED,
+    SCAR_PERSTEN_AT_SHIP, SCAR_PERSTEN_LEFT_SHIP, SCAR_LEVIATHAN_DEBRIS_SEARCHED,
+    "desert-treasure-ii:scar-boat3-chest-open", "desert-treasure-ii:scar-boat3-tablet-read"].forEach((key) => api.persistAttribute(key));
+  [SCAR_GUARDIAN_ACCEPTED, SCAR_MAZE_ONE_ENTERED, SCAR_TETHER_DESTROYED, SCAR_PATH_COMPLETE].forEach((key) => api.persistAttribute(key));
+  api.persistAttribute(SCAR_CATALYST_PROGRESS);
+  api.persistAttribute(SCAR_CATALYST_ORDER);
+  api.persistAttribute(SCAR_GROWTH_LURES);
+  api.persistAttribute(SCAR_GROWTH_STEP);
+  api.persistAttribute(SCAR_GROWTH_ORDER);
+  api.persistAttribute("desert-treasure-ii:scar-growth-repaired");
   [GOLEM_INSPECTED, ALTAR_INSPECTED, TOTEMS_CHARGED].forEach((key) => api.persistAttribute(key));
-  [SCAR_DEMONS_DEFEATED, SCAR_BOAT_TRIED, SCAR_PERSTEN_TALKED, SCAR_PERSTEN_TALKED_BEFORE].forEach((key) => api.persistAttribute(key));
-  api.onObjectInteraction(handleObject);
+  api.onObjectInteraction((event) => {
+    const handled = handleObject(event);
+    if (handled === true) event.handled = true;
+    return handled;
+  });
+  api.onObjectRoute(handleScarStoneRoute);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemOnItem(handleItemOnItem, { noted: false });
   api.onItemAction(handleItemAction);
@@ -1553,9 +3257,15 @@ module.exports = function registerDesertTreasureII(api) {
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("magic:hit-effects", activateTotem);
+  api.onCustomEvent("magic:hit-effects", stunLeviathan);
   api.onCombatHitRoll(forceTotemAccuracy);
   api.onNpcHitModify(preventTotemDamage);
+  api.onNpcHitModify(handleScarAxonHit);
+  api.onNpcHitModify(preventScarSummonProtection);
   api.onNpcInteraction("Asgarnia Smith", { "Talk-to": talkSmith });
+  api.onNpcInteraction("Cerebral pathfinder", { Move: pushScarPathRunner });
+  api.onNpcInteraction("Cerebral pathbreaker", { Move: pushScarPathRunner });
+  api.onNpcRoute(routeToScarPathRunner);
   api.onNpcInteraction("Terry Balando", { "Talk-to": talkTerry });
   api.onNpcInteraction("Dr Banikan", { "Talk-to": talkBanikan });
   api.onNpcInteraction("Elissa", { "Talk-to": talkElissa });
@@ -1565,11 +3275,14 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("Captain Malleta", { "Talk-to": progressBosses });
   api.onNpcInteraction("Ketla", { "Talk-to": progressBosses });
   api.onNpcInteraction("Catalytic Guardian", { "Talk-to": talkCatalyticGuardian });
+  api.onNpcInteraction("Catalyst", { Observe: inspectScarCatalyst });
+  api.onNpcInteraction("Light leech", { "Take-lure": takeScarLightLure });
   api.onNpcInteraction("Vardorvis", { "Talk-to": handleBossTalk });
   api.onNpcInteraction("The Leviathan", { "Talk-to": handleBossTalk });
   api.onNpcInteraction("Duke Sucellus", { "Talk-to": handleBossTalk });
   api.onNpcInteraction("The Whisperer", { "Talk-to": handleBossTalk });
   api.onNpcDeath(handleDeath);
+  api.onItemOnNpc(handleNerveOnCatalyst);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
   api.onPlayerDisconnect(handleLogout);
