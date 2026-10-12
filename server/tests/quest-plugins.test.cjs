@@ -973,6 +973,80 @@ test('Desert Treasure II opens the ritual site after the serum and grants the Te
   assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 18);
 });
 
+test('Desert Treasure II enters the Scar through the Catalytic Guardian and requires the six opening demons', () => {
+  const { api: base } = mockApi();
+  const objectHooks = [], deathHooks = [], lineHooks = [], actionHooks = [], interactions = [];
+  const transcripts = [], queues = { add: [], remove: [] };
+  class TestInstance {
+    constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
+    setChunk() {}
+    enter() {}
+    leave() {}
+    postLeave() {}
+    getBaseX() { return 8192; }
+    getBaseY() { return 1600; }
+    tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z }; }
+    add(npc) { this.entities.push(npc); }
+    isDestroyed() { return false; }
+    destroy() {}
+  }
+  const core = {
+    ...base.core,
+    TemplatedInstanceArea: TestInstance,
+    NPC: { create: (id, location) => ({ id, location, owner: null, setOwner(value) { this.owner = value; }, setOwnerOnly() {}, isNpc() { return true; }, getAsNpc() { return this; }, isRegistered() { return true; }, getHitpoints() { return 100; } }) },
+    World: { getAddNPCQueue: () => queues.add, getRemoveNPCQueue: () => queues.remove },
+  };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
+        : prop === 'onNpcDeath' ? (handler) => deathHooks.push(handler)
+          : prop === 'onCustomEvent' ? (name, handler) => ({ 'npc-dialogue:line': lineHooks, 'npc-dialogue:action': actionHooks }[name]?.push(handler))
+            : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
+              : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const startTranscript = runtime.startTranscript;
+  runtime.startTranscript = (_api, _player, _npcId, _page, variant) => (transcripts.push(variant), true);
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1);
+    const attrs = new Map();
+    const player = {
+      getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      getUsername: () => 'dt2-scar-test',
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+      moveTo(location) { this.location = location; }, sendMessage() {},
+    };
+    quest.setStage(player, 8);
+    const guardian = interactions.find((entry) => entry.name === 'Catalytic Guardian').options['Talk-to'];
+    guardian({ player, npcId: core.NpcIdentifiers.CATALYTIC_GUARDIAN });
+    assert.equal(transcripts.at(-1), 'praefectus-classis-perseriya-talking-to-the-catalytic-guardian');
+    const afterYes = { player, npcId: core.NpcIdentifiers.CATALYTIC_GUARDIAN, text: 'Yes.' };
+    lineHooks[0](afterYes);
+    afterYes.after();
+    const area = attrs.get('desert-treasure-ii:scar-area');
+    assert.equal(area.width, 9);
+    assert.equal(area.height, 8);
+    assert.equal(player.location.x, 8213);
+    assert.equal(player.location.y, 1633);
+    assert.equal(queues.add.length, 6);
+    assert.ok(queues.add.every((npc) => npc.owner === player));
+    for (const npc of [...queues.add]) deathHooks[0]({ killer: player, npc });
+    assert.equal(attrs.get('desert-treasure-ii:scar-demons-defeated'), true);
+    assert.equal(objectHooks[0]({ player, objectId: 1, location: area.tile(65, 36, 0) }), true,
+      'the map boat is usable after naturally crossing the Scar fight');
+    assert.equal(transcripts.at(-1), 'praefectus-classis-perseriya-attempting-to-board-the-rowboat-in-the-scar');
+    actionHooks[0]({ player, stepId: '4b6oDl' });
+    assert.equal(player.location.x, 8243);
+    assert.equal(player.location.y, 1643);
+    interactions.find((entry) => entry.name === 'Wizard Persten').options['Talk-to']({ player, npcId: core.NpcIdentifiers.WIZARD_PERSTEN_5 });
+    assert.equal(attrs.get('desert-treasure-ii:scar-persten-talked'), true);
+    assert.equal(transcripts.at(-1), 'praefectus-classis-perseriya-talking-to-wizard-persten');
+  } finally {
+    runtime.startTranscript = startTranscript;
+  }
+});
+
 test('Dragon Slayer II Torfinn starts both ordered dragon waves before Galvek', async () => {
   await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
   const { api: base } = mockApi();

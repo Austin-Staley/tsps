@@ -30,6 +30,7 @@ module.exports = function registerDesertTreasureII(api) {
   const ATTR_STRANGLEWOOD_HIDEOUT = "desert-treasure-ii:stranglewood-hideout";
   const ATTR_STRANGLEWOOD_TEMPLE = "desert-treasure-ii:stranglewood-temple";
   const ATTR_VARDORVIS_AREA = "desert-treasure-ii:vardorvis-area";
+  const ATTR_SCAR_AREA = "desert-treasure-ii:scar-area";
   const ATTR_VAULT_AREA = "desert-treasure-ii:ancient-vault";
   const ATTR_VAULT_SMITH = "desert-treasure-ii:vault-smith";
   const ATTR_SMITH_INTRO = "desert-treasure-ii:smith-intro";
@@ -42,6 +43,10 @@ module.exports = function registerDesertTreasureII(api) {
   const KASONDE_POTION = I.STRANGE_POTION_3;
   const VARDORVIS_ENTRY = 49495;
   const KASONDE_MEDALLION_CHEST = 49496;
+  const SCAR_DEMONS_DEFEATED = "desert-treasure-ii:scar-demons-defeated";
+  const SCAR_BOAT_TRIED = "desert-treasure-ii:scar-boat-tried";
+  const SCAR_PERSTEN_TALKED = "desert-treasure-ii:scar-persten-talked";
+  const SCAR_PERSTEN_TALKED_BEFORE = "desert-treasure-ii:scar-persten-talked-before";
   const ASGARNIA_SMITH_VAULT_INITIAL = 12401;
   const TOTEMS = [
     { kind: "blood", inactive: 12343, active: 12344, x: 2775, y: 6445, spells: ["BLOOD_BURST", "BLOOD_BLITZ", "BLOOD_BARRAGE"] },
@@ -56,6 +61,7 @@ module.exports = function registerDesertTreasureII(api) {
   let StranglewoodHideoutArea;
   let StranglewoodTempleArea;
   let VardorvisArea;
+  let ScarArea;
   const totemSpellIds = new Map(TOTEMS.map((totem) => [totem.kind, new Set(totem.spells.map((name) => api.core.CombatSpells[name]?.spellId?.()).filter(Number.isInteger))]));
 
   AncientVaultArea = class DesertTreasureIIAncientVaultArea extends api.core.TemplatedInstanceArea {
@@ -238,6 +244,38 @@ module.exports = function registerDesertTreasureII(api) {
     }
     getName() { return "Vardorvis ritual site (Desert Treasure II)"; }
     allowSummonPet() { return false; }
+    destroy() {
+      if (this.isDestroyed()) return;
+      for (const entity of [...this.entities]) {
+        if (!entity?.isNpc?.() || !entity.getAsNpc) continue;
+        const npc = entity.getAsNpc();
+        const add = api.core.World.getAddNPCQueue();
+        for (let i = add.indexOf(npc); i >= 0; i = add.indexOf(npc)) add.splice(i, 1);
+        if (npc.isRegistered?.() && !api.core.World.getRemoveNPCQueue().includes(npc)) api.core.World.getRemoveNPCQueue().push(npc);
+      }
+      super.destroy();
+    }
+  };
+
+  ScarArea = class DesertTreasureIIScarArea extends api.core.TemplatedInstanceArea {
+    constructor(owner) {
+      super(9, 8);
+      this.owner = owner;
+      // The entry combat, stepping stones, Persten's camp and rowboat occupy
+      // the cache's continuous 2000..2071, 6400..6463 Scar template.
+      for (let x = 0; x < 9; x++) {
+        for (let y = 0; y < 8; y++) {
+          for (let plane = 0; plane < 4; plane++) {
+            this.setChunk(plane, x, y, plane === 0 ? {
+              sourceChunkX: 250 + x, sourceChunkY: 800 + y, sourcePlane: 0, rotation: 0,
+            } : null);
+          }
+        }
+      }
+    }
+    getName() { return "The Scar (Desert Treasure II)"; }
+    allowSummonPet() { return false; }
+    isMulti() { return true; }
     destroy() {
       if (this.isDestroyed()) return;
       for (const entity of [...this.entities]) {
@@ -460,6 +498,70 @@ module.exports = function registerDesertTreasureII(api) {
     return area;
   }
 
+  function enterScar(p) {
+    const current = p.getAttribute(ATTR_SCAR_AREA);
+    if (current instanceof ScarArea && !current.isDestroyed()) {
+      current.enter(p);
+      p.moveTo(current.tile(21, 33, 0));
+      if (!p.getAttribute(SCAR_DEMONS_DEFEATED)) spawnScarDemons(p, current);
+      return current;
+    }
+    const area = new ScarArea(p.getUsername?.());
+    area.enter(p);
+    p.setAttribute(ATTR_SCAR_AREA, area);
+    p.moveTo(area.tile(21, 33, 0));
+    if (!p.getAttribute(SCAR_DEMONS_DEFEATED)) spawnScarDemons(p, area);
+    return area;
+  }
+
+  function spawnScarDemons(p, area) {
+    const owned = spawned.get(p) ?? {};
+    spawned.set(p, owned);
+    if (owned.scarEnemies?.some((npc) => npc?.isRegistered?.() && npc.getHitpoints?.() > 0)) return;
+    // The opening confrontation is one ordinary/scarred lesser, greater and
+    // black demon. Their cache variants preserve the real combat stats.
+    const enemies = [
+      [N.LESSER_DEMON_15, 2017, 6436], [N.SCARRED_LESSER_DEMON, 2021, 6437],
+      [N.GREATER_DEMON_15, 2025, 6435], [N.SCARRED_GREATER_DEMON, 2020, 6429],
+      [N.BLACK_DEMON_18, 2016, 6429], [N.SCARRED_BLACK_DEMON, 2025, 6430],
+    ].map(([id, x, y]) => {
+      const npc = api.core.NPC.create(id, area.tile(x - 2000, y - 6400, 0));
+      npc.setOwner?.(p);
+      npc.setOwnerOnly?.(true);
+      npc.__skipDefaultRespawn = true;
+      npc.__dt2ScarEnemy = true;
+      area.add(npc);
+      api.core.World.getAddNPCQueue().push(npc);
+      return npc;
+    });
+    owned.scarEnemies = enemies;
+  }
+
+  function talkCatalyticGuardian({ player: p, npcId }) {
+    if (stage(p) !== S.LEVIATHAN || p.getAttribute(ATTR_SCAR_AREA)) return;
+    talk(p, npcId, "praefectus-classis-perseriya-talking-to-the-catalytic-guardian");
+  }
+
+  function spawnScarPersten(p, area) {
+    const owned = spawned.get(p) ?? {};
+    spawned.set(p, owned);
+    if (owned.scarPersten?.isRegistered?.()) return owned.scarPersten;
+    const npc = api.core.NPC.create(N.WIZARD_PERSTEN_5, area.tile(51, 43, 0));
+    npc.setOwner?.(p);
+    npc.setOwnerOnly?.(true);
+    npc.__skipDefaultRespawn = true;
+    area.add(npc);
+    api.core.World.getAddNPCQueue().push(npc);
+    owned.scarPersten = npc;
+    return npc;
+  }
+
+  function handleDialogueLine(event) {
+    if (stage(event?.player) !== S.LEVIATHAN || event?.text !== "Yes.") return;
+    if (![N.CATALYTIC_GUARDIAN, N.CATALYTIC_GUARDIAN_2].includes(event.npcId)) return;
+    event.after = () => enterScar(event.player);
+  }
+
   function spawnTempleKasonde(p, area) {
     let owned = spawned.get(p);
     if (!owned) spawned.set(p, owned = {});
@@ -538,6 +640,14 @@ module.exports = function registerDesertTreasureII(api) {
     return x >= 1112 && x < 1152 && y >= 3400 && y < 3440 ? { x, y } : null;
   }
 
+  function scarSourceTile(p, location) {
+    const area = p.getAttribute(ATTR_SCAR_AREA);
+    if (!(area instanceof ScarArea) || area.isDestroyed?.() || !location) return null;
+    const x = location.x - area.getBaseX() + 2000;
+    const y = location.y - area.getBaseY() + 6400;
+    return x >= 2000 && x < 2072 && y >= 6400 && y < 6464 ? { x, y } : null;
+  }
+
   function leaveVardorvisArena(p) {
     const area = p.getAttribute(ATTR_VARDORVIS_AREA);
     if (!(area instanceof VardorvisArea) || area.isDestroyed()) return false;
@@ -547,6 +657,20 @@ module.exports = function registerDesertTreasureII(api) {
     p.setAttribute(ATTR_VARDORVIS_AREA, null);
     p.moveTo(new api.core.Location(1147, 3433, 0));
     return true;
+  }
+
+  function handleLogout({ player: p }) {
+    if (!p) return;
+    for (const key of [ATTR_VAULT_AREA, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA]) {
+      const area = p.getAttribute(key);
+      if (area && !area.isDestroyed?.()) {
+        area.leave?.(p, false);
+        area.postLeave?.(p, false);
+        area.destroy?.();
+      }
+      p.setAttribute(key, null);
+    }
+    spawned.delete(p);
   }
 
   function buildJournal(player) {
@@ -793,6 +917,15 @@ module.exports = function registerDesertTreasureII(api) {
     const s = stage(p);
     const vaultTile = vaultSourceTile(p, location);
     const roomTile = warRoomSourceTile(p, location);
+    const scarTile = scarSourceTile(p, location);
+    if (s === S.LEVIATHAN && scarTile?.x === 2065 && scarTile.y === 6436) {
+      if (!p.getAttribute(SCAR_DEMONS_DEFEATED)) return p.sendMessage("The creatures fighting near the entrance still need to be dealt with.");
+      p.setAttribute(SCAR_BOAT_TRIED, true);
+      const area = p.getAttribute(ATTR_SCAR_AREA);
+      spawnScarPersten(p, area);
+      talk(p, N.WIZARD_PERSTEN_5, "praefectus-classis-perseriya-attempting-to-board-the-rowboat-in-the-scar");
+      return true;
+    }
     if (s === 0 && [O.VAULT_DOOR_2, O.VAULT_DOOR_3].includes(objectId)) {
       // This is the cache entrance north-east of Nardah (loc 46743, 3511,2970).
       if (Math.abs(location.x - 3511) > 4 || Math.abs(location.y - 2970) > 4) return false;
@@ -1062,7 +1195,15 @@ module.exports = function registerDesertTreasureII(api) {
   function handleBossTalk({ player: p, npcId, npc }) {
     const s = stage(p);
     if (s === S.VARDORVIS) { talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-elissa"); return; }
-    if (s === S.LEVIATHAN) { talk(p, npcId, "praefectus-classis-perseriya-talking-to-wizard-persten"); return; }
+    if (s === S.LEVIATHAN) {
+      if (!p.getAttribute(SCAR_BOAT_TRIED)) return;
+      p.setAttribute(SCAR_PERSTEN_TALKED, true);
+      talk(p, npcId, p.getAttribute(SCAR_PERSTEN_TALKED_BEFORE)
+        ? "praefectus-classis-perseriya-talking-to-wizard-persten-talking-to-wizard-persten-again"
+        : "praefectus-classis-perseriya-talking-to-wizard-persten");
+      p.setAttribute(SCAR_PERSTEN_TALKED_BEFORE, true);
+      return;
+    }
     if (s === S.SUCELLUS) { talk(p, npcId, "duke-sucellus-of-the-sixth-legion-talking-to-captain-malleta"); return; }
     if (s === S.WHISPERER) { talk(p, npcId, "the-whisperer-talking-to-ketla-after-coming-to"); }
   }
@@ -1070,6 +1211,14 @@ module.exports = function registerDesertTreasureII(api) {
     if (!killer) return;
     const owned = spawned.get(killer);
     if (!owned) return;
+    if (Array.isArray(owned.scarEnemies) && owned.scarEnemies.includes(npc) && stage(killer) === S.LEVIATHAN) {
+      owned.scarEnemies = owned.scarEnemies.filter((enemy) => enemy !== npc);
+      if (owned.scarEnemies.length === 0) {
+        killer.setAttribute(SCAR_DEMONS_DEFEATED, true);
+        killer.sendMessage("The Scarred demons are defeated. The stepping stones to the rowboat are now safe to cross.");
+      }
+      return;
+    }
     if (owned.kasondeBoss === npc && stage(killer) === S.VARDORVIS) {
       owned.kasondeBoss = null;
       killer.setAttribute(VARDORVIS_PROGRESS, 20);
@@ -1139,13 +1288,17 @@ module.exports = function registerDesertTreasureII(api) {
   function progressBosses({ player: p, npcId }) {
     const s = stage(p);
     if (s === S.VARDORVIS) { talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-elissa"); spawnBoss(p, "vardorvis"); return; }
-    if (s === S.LEVIATHAN) return talk(p, npcId, "praefectus-classis-perseriya-talking-to-wizard-persten");
+    if (s === S.LEVIATHAN) return handleBossTalk({ player: p, npcId });
     if (s === S.SUCELLUS) return talk(p, npcId, "duke-sucellus-of-the-sixth-legion-talking-to-captain-malleta");
     if (s === S.WHISPERER) return talk(p, npcId, "the-whisperer-talking-to-ketla-after-coming-to");
   }
 
   function handleDialogueAction({ player: p, stepId }) {
     if (stepId === "EDEdng" && stage(p) === S.MACHINE && p.getAttribute(CELLS_INSERTED)) openGolemPuzzle(p);
+    if (stepId === "4b6oDl" && stage(p) === S.LEVIATHAN && p.getAttribute(SCAR_BOAT_TRIED)) {
+      const area = p.getAttribute(ATTR_SCAR_AREA);
+      if (area instanceof ScarArea && !area.isDestroyed()) p.moveTo(area.tile(51, 43, 0));
+    }
   }
 
   quest = registerQuest(api, {
@@ -1160,13 +1313,16 @@ module.exports = function registerDesertTreasureII(api) {
   api.persistAttribute(VARDORVIS_PROGRESS);
   api.persistAttribute(ATTR_SMITH_INTRO);
   api.persistAttribute(STATUES_PLACED);
+  [SCAR_DEMONS_DEFEATED, SCAR_BOAT_TRIED, SCAR_PERSTEN_TALKED, SCAR_PERSTEN_TALKED_BEFORE].forEach((key) => api.persistAttribute(key));
   [GOLEM_INSPECTED, ALTAR_INSPECTED, TOTEMS_CHARGED].forEach((key) => api.persistAttribute(key));
+  [SCAR_DEMONS_DEFEATED, SCAR_BOAT_TRIED, SCAR_PERSTEN_TALKED, SCAR_PERSTEN_TALKED_BEFORE].forEach((key) => api.persistAttribute(key));
   api.onObjectInteraction(handleObject);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemOnItem(handleItemOnItem, { noted: false });
   api.onItemAction(handleItemAction);
   api.onCustomEvent("player:widget-action", onWidgetAction);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
+  api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("magic:hit-effects", activateTotem);
   api.onCombatHitRoll(forceTotemAccuracy);
   api.onNpcHitModify(preventTotemDamage);
@@ -1179,9 +1335,12 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("Wizard Persten", { "Talk-to": progressBosses });
   api.onNpcInteraction("Captain Malleta", { "Talk-to": progressBosses });
   api.onNpcInteraction("Ketla", { "Talk-to": progressBosses });
+  api.onNpcInteraction("Catalytic Guardian", { "Talk-to": talkCatalyticGuardian });
   api.onNpcInteraction("Vardorvis", { "Talk-to": handleBossTalk });
   api.onNpcInteraction("The Leviathan", { "Talk-to": handleBossTalk });
   api.onNpcInteraction("Duke Sucellus", { "Talk-to": handleBossTalk });
   api.onNpcInteraction("The Whisperer", { "Talk-to": handleBossTalk });
   api.onNpcDeath(handleDeath);
+  api.onPlayerLogout(handleLogout);
+  api.onPlayerDisconnect(handleLogout);
 };
