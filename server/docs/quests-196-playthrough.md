@@ -14,10 +14,10 @@ The final alliance dialogue awarded exactly 5 QP, 80,000 Thieving XP, 75,000 Far
 
 The preparation component collects materials from the palace and performs the stew, sickle, flail and stake recipes, including their confirmation menus. The bridge component uses the supplied ballista/javelins to defeat portals through ordinary ranged attacks. The hall component takes a potion from the crate, heals its owned injured Aranei and repairs pillars; the natural integrity timer reaches the breach and creates Lowerniel's encounter. The saved defence checkpoint retains participation, repairs/healing, zero integrity and the breach phase after logout.
 
-Blood Moon's earlier/later story chapters, the remaining bosses still need further checks. MCP also verified that relog restores the barricade and passing it resumes Lowerniel's owned encounter. The hall timer and some scripted placements are inferred and marked `shortcut:` for later calibration against live OSRS recordings.
+Blood Moon's earlier/later story chapters and remaining bosses still need further checks. MCP also verified that relog restores the barricade and passing it resumes Lowerniel's owned encounter. The hall timer and some scripted placements are inferred and marked `shortcut:` for later calibration against live OSRS recordings.
 
 ## Checks
 
-The server build passes. The focused quest, quest dialogue, NPC dialogue, rune pouch, disconnect, object teleport and death-item regression suites pass: 361 tests, zero failures.
+The server build passes. The focused quest, quest dialogue, NPC dialogue, rune pouch, disconnect, object teleport and death-item regression suites pass: 362 tests, zero failures.
 
 For manual WGS testing, use this worktree's client URL, complete its prerequisites and start with Ivy Sophista in Taverley. Follow the quest journal and check that re-entering completed puzzle rooms or talking after completion does not duplicate rewards. Source references are the [OSRS Wiki quest guide](https://oldschool.runescape.wiki/w/While_Guthix_Sleeps) and transcript, with IDs validated against this repository's cache.
