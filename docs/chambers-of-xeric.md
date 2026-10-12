@@ -1,6 +1,6 @@
 # Chambers of Xeric
 
-The Chambers of Xeric raid, Normal and Challenge Mode, ported from Near-Reality (Kris's Zenyte raid) and checked against the OSRS Wiki. There is no rsprox capture yet; every value that comes only from Near-Reality is listed at the end, to check against one later.
+The Chambers of Xeric raid, Normal and Challenge Mode, built from the OSRS Wiki. There is no rsprox capture yet; every value the Wiki does not give is listed at the end, to check against one later.
 
 The plugin is `server/plugins/minigames/ChambersOfXeric.plugin.js`, which loads one unit per area from `server/plugins/minigames/cox/`.
 
@@ -50,7 +50,7 @@ The rooms' set-up is covered by `server/tests/chambers-of-xeric.test.cjs` (a Cha
 | Captain Rimor (7595) | (1234, 3568) | Already spawned. Talk-to is his transcript; Claim-cape comes in phase 7. |
 | Bank chest, private storage unit (30107) | (1254, 3572), (1256, 3572) | The unit holds what was left in private storage; it must be emptied before entering again. |
 
-**Parties belong to chat-channels** (OSRS; Near-Reality):
+**Parties belong to chat-channels** (OSRS):
 - You need to be in a chat-channel and be at least a Recruit in it to make a party; the channel's owner's party is the channel's.
 - The party page lists the channel's members standing on the mountain.
 - Leaving the channel leaves the party (and the raid). A leader who leaves hands the party to the best-ranked raider who can kick from the channel, or else the party is disbanded.
@@ -84,7 +84,7 @@ The rooms' set-up is covered by `server/tests/chambers-of-xeric.test.cjs` (a Cha
 
 ## The raid
 
-**Layouts** (Near-Reality; the Wiki for the rotations and Challenge Mode):
+**Layouts** (unverified patterns; the Wiki for the rotations and Challenge Mode):
 - A normal raid takes one of 26 patterns: room kinds and the direction each is entered from, two floors.
 - Its combat rooms are a run from one of two rotations:
   - Tekton, Vasa, Guardians, Mystics, Shamans, Muttadiles, Vanguards, Vespula;
@@ -99,7 +99,7 @@ The rooms' set-up is covered by `server/tests/chambers-of-xeric.test.cjs` (a Cha
 - Floors go on planes 3, 2 and (Challenge Mode) 1. The gaps are a wall chunk (416, 647) turned at random.
 - The Olm's chamber, 5x7 chunks from (402, 713), is copied beside the raid on plane 0, so the whole raid is one 16x16 instance.
 - Tiles inside rooms are given as they are on the cache's map and turned with the room.
-- Landings on ropes and holes move to the nearest open tile (Near-Reality walks the player off them).
+- Landings on ropes and holes move to the nearest open tile (the player is then walked off them).
 
 **Starting and stages:**
 - Everyone lands in the first room. Its passage stays shut until the leader starts the raid from the party tab ("No-one may join the party after the raid begins."); the leader gets "Use the controls on the side-panel when you are ready to begin the raid.", everyone else "The party leader must start the party before you may pass.".
@@ -110,14 +110,13 @@ The rooms' set-up is covered by `server/tests/chambers-of-xeric.test.cjs` (a Cha
 - The points overlay (513) is on the HUD: 5431 total and 5422 your points.
 
 **Points:**
-- Damage dealt to the raid's NPCs gives 5 points per hitpoint, within a per-room cap of 5 x its NPCs' hitpoints + 5% (Near-Reality).
+- Damage dealt to the raid's NPCs gives 5 points per hitpoint, within a per-room cap of 5 x its NPCs' hitpoints + 5% (unverified).
 - Only raiders there at the start earn points.
 - Personal points aren't capped during the raid; the overlay shows up to 131,071 (Wiki).
 
 **Deaths are safe** (Wiki):
 - 40% of the player's points are lost; if they had under 5% of the team's total, the team loses 5% instead.
 - Raid-only items drop where they fell, and they wake at the floor's respawn.
-- (Near-Reality used an 8,400-point threshold and 10%.)
 
 **Leaving:**
 - The first room's steps: "You will not be able to rejoin this raid again." (Leave the raid. / Stay.). Out is (1246, 3558) on the mountain.
@@ -127,7 +126,7 @@ The rooms' set-up is covered by `server/tests/chambers-of-xeric.test.cjs` (a Cha
 
 **Rules:** no teleporting ("You cannot teleport from the Chambers of Xeric."); no dropping items before the raid starts ("You should keep your raiding dungeon tidy until your raid has begun."); the raid is multi-combat.
 
-**Not ported** (Near-Reality only): its "layouts" feature (choosing which patterns a party gets), its daily advert quota (the page shows 99 adverts left), member-rank point boosts, and the 0.8x points below combat level 115.
+**Not in OSRS, so not built:** choosing which layout patterns a party gets, a daily advert quota, member-rank point boosts, and reduced points below combat level 115.
 
 ## Supplies
 
@@ -136,10 +135,10 @@ The rooms' set-up is covered by `server/tests/chambers-of-xeric.test.cjs` (a Cha
 - Personal / shared space: 30 / 250, 60 / 500, 90 / 1,000, 120 / 1,500.
 - The shared storage takes the items of cache enum 1666 only. Kindling can't be stored (since December 2023).
 - Raid-only items left in private storage are gone once outside; anything else waits in the mountain's unit, which must be emptied before entering again.
-- Interfaces (Near-Reality): private 271 (inventory 583), shared 550 (inventory 582), side panel 551. Withdraw/deposit 1, 5, 10, All, X.
+- Interfaces (unverified): private 271 (inventory 583), shared 550 (inventory 582), side panel 551. Withdraw/deposit 1, 5, 10, All, X.
 - Not like OSRS: the creation menu is a chatbox choice, because the cache's furniture menu table (DB table 110) has no rows for these units.
 
-**Resource rooms** (Wiki for levels and XP, Near-Reality for timings):
+**Resource rooms** (Wiki for levels and XP, unverified timings):
 - Fishing (room A): rod and cave worms, fish 1/15/30/45/60/75/90 for 20-38 XP. One of three spots hides a cave snake that rises, bites (3-6) and steals a food when fished; the spot moves every 50 ticks or after 10 rises.
 - Bats (room B): a butterfly net wielded; 2 + raiders/8 bats (at most 6) of one type among the three best the raid's top Hunter level allows.
 - Herb patches: golpar 27, buchu 39, noxifer 55 Farming; seeds from raking weeds (five rakes of 1-3 seeds) or later from bosses. A stage every 12 ticks, grown at 4; three lives when picking.
@@ -155,9 +154,9 @@ The rooms' set-up is covered by `server/tests/chambers-of-xeric.test.cjs` (a Cha
 
 **Scaling** (`CoxMonsters.js`): base stats and bonuses from the Wiki's DPS calculator data, scaled as its Chambers of Xeric code does (checked against its tests): levels by the party's highest Hitpoints level, hitpoints by its highest combat level, both by party size, +50% in Challenge Mode (Tekton's defence +20%/+35%). Scavengers and vespine soldiers scale as solo monsters; the Olm's hitpoints follow its own formula. Core gives an NPC its own stats and max hit with `NPC.setCombatOverride` (core change). Max hits grow with the scaled offence (a derived rule; the Wiki gives them at base scale).
 
-**Rooms** share the `Room` base: exit crystals (`blockExit`/`clearExit`), the room's raiders, template objects, and death, before-death and hit hooks dispatched from `Raid.Cox`. Each room's header comment lists what comes from the Wiki and what from Near-Reality. In short:
+**Rooms** share the `Room` base: exit crystals (`blockExit`/`clearExit`), the room's raiders, template objects, and death, before-death and hit hooks dispatched from `Raid.ChambersOfXeric`. Each room's header comment lists what comes from the Wiki and what is unverified. In short:
 
-| Room | Wiki rules used | Near-Reality only |
+| Room | Wiki rules used | Not on the Wiki |
 | --- | --- | --- |
 | Ice Demon | Lighting 8%-78%, icefiends steal a charge 1 in 6 every 3-4 ticks, 32 + 36 points, damage a third (fire 250%, demonbane full), prayer-chosen attacks, drops for everyone | storm strength 250/raider, burn rates, attack bases 30/25 |
 | Thieving | Open chance 39%-61% (+21 lockpick), grubs 0..level/25 (min 1, 2 at 95), 16 grubs/raider (30 solo), 115 points, cap max(4500, Thieving/6 x 150), bats chest 5-25 | eating rate, tiles, XP |
@@ -175,7 +174,7 @@ The rooms' set-up is covered by `server/tests/chambers-of-xeric.test.cjs` (a Cha
 
 ## The Great Olm
 
-`Olm.Cox.js`, a room registered for the chamber (`raid.olmRoom`):
+`Olm.ChambersOfXeric.js`, a room registered for the chamber (`raid.olmRoom`):
 - The mystical barrier ("Pass" asks, "Quick-pass" doesn't; no way back) wakes it; it rises on a random side with a power (acid, flame, crystal), never the same twice in a row.
 - The head attacks every 4 ticks through the Wiki's rotation (standard / empty / Crystal Burst / ... / Swap, plus the infinity sign in the last phase), facing the zone with most players and catching up a skipped standard attack.
 - Standard attacks (1 in 5 to switch style, prayer lets 20% through), spheres, phase attacks (1 in 3, 1 in 2 in the last phase, preferring unused ones), claw specials, Life Siphon in the final stand.
@@ -184,7 +183,7 @@ The rooms' set-up is covered by `server/tests/chambers-of-xeric.test.cjs` (a Cha
 
 ## Rewards
 
-`Rewards.Cox.js` on `Raid.onComplete`:
+`Rewards.ChambersOfXeric.js` on `Raid.onComplete`:
 - Completion message, Normal / Challenge Mode counts (attributes), personal bests by mode and team size.
 - Challenge Mode within the Wiki's target time: +5,000 points each, the kit (1/75) and dust (1/400) rolls.
 - Uniques by the Wiki: 1% per 8,676 points, 570,000 a roll, the 2026 weights, the receiver by personal points (left raiders' uniques discarded), olmlet 1/53. Otherwise two different commons scaled by points (a third of herbs as seeds), the ancient tablet, elite clue 1/12; the dark journal if not banked.
@@ -202,7 +201,7 @@ The rooms' set-up is covered by `server/tests/chambers-of-xeric.test.cjs` (a Cha
 
 The raid is also in `::teleports` under Minigames.
 
-## Near-Reality values to check against a capture
+## Values not on the Wiki, to check against a capture
 
 | Value | Where |
 | --- | --- |
@@ -213,17 +212,17 @@ The raid is also in `::teleports` under Minigames.
 | The 26 layout codes and Challenge Mode's floors | `CoxLayout` |
 | Interface/varbit/script ids of the board, party page, tab and overlay | `CoxShared` |
 | Damage points (5 per hitpoint, room cap +5%) | `CoxRaid` |
-| Build delay (3 ticks), climb animations 827/828 | `CoxRaid`, `Raid.Cox` |
-| Storage interfaces and components, build delay (2 ticks) | `Storage.Cox` |
-| Points per potion sip (overload 400, Xeric's aid 200, others 100, x 0.25/0.5/1) | `Supplies.Cox` |
-| Resource room tiles (fishing, snake, bats), snake timings and damage, catch and fishing chances | `Resources.Cox` |
-| Patch growth (12 ticks a stage), keep chance, raking cycles; a fallen sapling's 15 ticks | `Resources.Cox` |
+| Build delay (3 ticks), climb animations 827/828 | `CoxRaid`, `Raid.ChambersOfXeric` |
+| Storage interfaces and components, build delay (2 ticks) | `Storage.ChambersOfXeric` |
+| Points per potion sip (overload 400, Xeric's aid 200, others 100, x 0.25/0.5/1) | `Supplies.ChambersOfXeric` |
+| Resource room tiles (fishing, snake, bats), snake timings and damage, catch and fishing chances | `Resources.ChambersOfXeric` |
+| Patch growth (12 ticks a stage), keep chance, raking cycles; a fallen sapling's 15 ticks | `Resources.ChambersOfXeric` |
 | Every room's tiles, animations, graphics, projectiles and sounds | each room unit |
-| Ice Demon storm (250/raider, 5 charges a kindling) | `IceDemon.Cox` |
+| Ice Demon storm (250/raider, 5 charges a kindling) | `IceDemon.ChambersOfXeric` |
 | Exit crystal tiles and ids (30017, 30018, 30016) | the room units |
 | Boss attack bases where the Wiki says "varies" | the room units |
-| The Olm's rising/transition timings, special timings and damage ranges not on the Wiki | `Olm.Cox` |
-| Reward interface components, chest light varbit 5456 | `Rewards.Cox` |
+| The Olm's rising/transition timings, special timings and damage ranges not on the Wiki | `Olm.ChambersOfXeric` |
+| Reward interface components, chest light varbit 5456 | `Rewards.ChambersOfXeric` |
 
 **Derived, not from a source** (to check): max hits grown with scaled offence; Guardians' Challenge Mode hitpoints +50%; lux grub drain (1 every 4 ticks); Vespula grounded 33 ticks; shaman spawns' explosion; Thieving's clearing batch; tightrope barrier tile turn.
 

@@ -15,17 +15,17 @@ const Layout = require('../plugins/minigames/cox/CoxLayout');
 const CoxMap = require('../plugins/minigames/cox/CoxMap');
 const Parties = require('../plugins/minigames/cox/CoxParties');
 const RaidModule = require('../plugins/minigames/cox/CoxRaid');
-const Lobby = require('../plugins/minigames/cox/Lobby.Cox');
-const RaidUnit = require('../plugins/minigames/cox/Raid.Cox');
-const Storage = require('../plugins/minigames/cox/Storage.Cox');
-const Herblore = require('../plugins/minigames/cox/Herblore.Cox');
-const Supplies = require('../plugins/minigames/cox/Supplies.Cox');
+const Lobby = require('../plugins/minigames/cox/Lobby.ChambersOfXeric');
+const RaidUnit = require('../plugins/minigames/cox/Raid.ChambersOfXeric');
+const Storage = require('../plugins/minigames/cox/Storage.ChambersOfXeric');
+const Herblore = require('../plugins/minigames/cox/Herblore.ChambersOfXeric');
+const Supplies = require('../plugins/minigames/cox/Supplies.ChambersOfXeric');
 const Monsters = require('../plugins/minigames/cox/CoxMonsters');
-const IceDemon = require('../plugins/minigames/cox/IceDemon.Cox');
-const Thieving = require('../plugins/minigames/cox/Thieving.Cox');
-const Tightrope = require('../plugins/minigames/cox/Tightrope.Cox');
-const Crabs = require('../plugins/minigames/cox/Crabs.Cox');
-for (const unit of ['Resources', 'Tekton', 'Muttadiles', 'Vanguards', 'Vasa', 'Scavengers', 'Mystics', 'Shamans', 'Guardians', 'Vespula', 'Olm']) require(`../plugins/minigames/cox/${unit}.Cox`);
+const IceDemon = require('../plugins/minigames/cox/IceDemon.ChambersOfXeric');
+const Thieving = require('../plugins/minigames/cox/Thieving.ChambersOfXeric');
+const Tightrope = require('../plugins/minigames/cox/Tightrope.ChambersOfXeric');
+const Crabs = require('../plugins/minigames/cox/Crabs.ChambersOfXeric');
+for (const unit of ['Resources', 'Tekton', 'Muttadiles', 'Vanguards', 'Vasa', 'Scavengers', 'Mystics', 'Shamans', 'Guardians', 'Vespula', 'Olm']) require(`../plugins/minigames/cox/${unit}.ChambersOfXeric`);
 
 /** NPCs the raid spawned. */
 const spawned = [];
@@ -470,7 +470,7 @@ test('a Challenge Mode raid loads every room without errors', () => {
   assert.equal(spawned.filter((npc) => [7604, 7605, 7606].includes(npc.getId())).length, 3, 'three mystics solo');
   assert.equal(spawned.filter((npc) => [7573, 7574].includes(npc.getId())).length, 2, 'two shamans solo');
   const guardian = spawned.find((npc) => npc.getId() === 7569);
-  const Guardians = require('../plugins/minigames/cox/Guardians.Cox');
+  const Guardians = require('../plugins/minigames/cox/Guardians.ChambersOfXeric');
   assert.equal(guardian.getMaxHitpoints(), Guardians.guardianHitpoints(1, 90, true), 'Wiki: 151 x (1 + team/2) + mining x team, +50% CM');
   assert.ok(raid.olmRoom, 'the Olm\'s chamber has its room');
   assert.equal(raid.olmRoom.totalPhases, 3, 'solo: three claw phases, then the final stand');
@@ -511,7 +511,7 @@ test('the Great Olm rises when the barrier is passed: head, claws and a power', 
 // ------------------------------------------------------------------ phase 7: rewards
 
 test('rewards follow the Wiki: unique odds, common amounts, target times', () => {
-  const Rewards = require('../plugins/minigames/cox/Rewards.Cox');
+  const Rewards = require('../plugins/minigames/cox/Rewards.ChambersOfXeric');
   // 8,676 points per 1%; 570,000 points per roll at most.
   let hits = 0;
   for (let i = 0; i < 20000; i++) hits += Rewards.uniqueRolls(86760);
@@ -530,7 +530,7 @@ test('rewards follow the Wiki: unique odds, common amounts, target times', () =>
 });
 
 test('a completed raid: counts, the chest\'s loot for each raider', () => {
-  const Rewards = require('../plugins/minigames/cox/Rewards.Cox');
+  const Rewards = require('../plugins/minigames/cox/Rewards.ChambersOfXeric');
   const party = new Parties.Party(fakePlayer('Winner'), { key: 'Winner' });
   const raid = new RaidModule.Raid(party);
   raid.stage = RaidModule.STAGE.STARTED;

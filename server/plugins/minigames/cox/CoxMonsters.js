@@ -146,7 +146,7 @@ function apply(npc, raidInputs) {
 }
 
 /**
- * A max hit given at the base scale (the Wiki's, or Near-Reality's for attacks the Wiki lists as
+ * A max hit given at the base scale (the Wiki's, or an unverified one for attacks the Wiki lists as
  * "varies"), grown with the NPC's scaled level of a stat as the max hit follows it.
  */
 function maxHitFor(npc, base, statIndex) {

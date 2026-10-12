@@ -34,7 +34,7 @@
  * - Transition and final-stand falling crystals: 16-25 under, 10-16 beside.
  * - Life Siphon (last phase): two safe tiles; everyone else takes moderate damage and the Olm
  *   heals five times the total.
- * Near-Reality: the chamber's tiles and the side objects (holes 29880-29882, left claws
+ * Not on the Wiki (to check against a capture): the chamber's tiles and the side objects (holes 29880-29882, left claws
  *   29883-29885, right claws 29886-29888) and their animations; NPCs 7554 head, 7555 left claw,
  *   7553 right claw; rising takes 10 + 4 ticks (sound 3405); attacks every 4 ticks; the
  *   transition: 33 ticks of crystals, rising again 24 ticks later; projectiles and graphics of
@@ -1166,7 +1166,7 @@ module.exports = function registerCoxOlm(api) {
   Shared.bind(api);
   Shared.onObjectIds(api, [OBJECT.BARRIER], useBarrier);
   api.onNpcInteraction("Fire", { Douse: douseFire });
-  api.onCanAttack(outOfReach);
+  Raid.onRaidArea("canAttack", outOfReach);
   api.registerNpcCombatMethodProvider([NPC.HEAD, NPC.LEFT_CLAW, NPC.RIGHT_CLAW, NPC.FIRE], olmCombat(api));
 };
 

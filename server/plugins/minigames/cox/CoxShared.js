@@ -5,7 +5,7 @@
  *
  * Cache: Mount Quidamortem's locs (recruiting boards 29776, the entrance 29777 at 1232,3573,
  * the bank chest and the private storage unit) and the raid interfaces' scripts.
- * Near-Reality (Kris's Zenyte raid): the interface ids (499 recruiting board, 507 party,
+ * Not on the Wiki (to check against a capture): the interface ids (499 recruiting board, 507 party,
  * 500 the in-raid party tab, 513 the points overlay), the varbits they read, and the raid's
  * own locs (steps, passages, holes, ropes, crystals).
  * Wiki: https://oldschool.runescape.wiki/w/Chambers_of_Xeric
@@ -26,7 +26,7 @@ function api() {
   return state.api;
 }
 
-/** Where leaving the raid puts you (Near-Reality), at the foot of the entrance's steps. */
+/** Where leaving the raid puts you (not on the Wiki), at the foot of the entrance's steps. */
 const OUTSIDE = { x: 1246, y: 3558, z: 0 };
 /** Mount Quidamortem, around the entrance: party pages only reach players standing here. */
 const MOUNT_QUIDAMORTEM = { minX: 1200, maxX: 1280, minY: 3540, maxY: 3600 };
@@ -127,7 +127,7 @@ const MAIN_MODAL_UID = (161 << 16) | 16;
 
 const EVENT = { OP1: 1 << 1, OP2: 1 << 2, OP3: 1 << 3, OP4: 1 << 4, OP5: 1 << 5, CONTINUE: 1 << 0 };
 
-/** Items that only exist inside the chambers and are dropped on leaving (Near-Reality's ranges). */
+/** Items that only exist inside the chambers and are dropped on leaving (unverified ranges). */
 function isRaidItem(id) {
   if (id === 20899) return false; // the dark journal is kept
   return (id >= 20799 && id <= 20801) || (id >= 20853 && id <= 20996) || (id >= 21036 && id <= 21042);
@@ -198,12 +198,12 @@ function options(player, title, ...pairs) {
   api().sendMultiChatboxPrompt(player, title, ...args);
 }
 
-/** Pink game messages, as the raid sends them (Near-Reality). */
+/** Pink game messages, as the raid sends them (not on the Wiki). */
 function raidMessage(player, text) {
   player.sendMessage(`<col=ef20ff>${text}</col>`);
 }
 
-/** The raid overlay's own fade: out, run `action` a tick later, then back in (Near-Reality). */
+/** The raid overlay's own fade: out, run `action` a tick later, then back in (not on the Wiki). */
 function fadeMove(player, action) {
   const sender = player.getPacketSender();
   sender.sendSubInterface(OVERLAY_HUD_UID, INTERFACE.OVERLAY, 1);

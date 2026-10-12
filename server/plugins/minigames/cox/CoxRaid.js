@@ -5,7 +5,7 @@
  * and the timer. Rooms are classes registered by the room units; every room of the layout gets
  * one, and the raid ticks them.
  *
- * Near-Reality (Kris's Zenyte raid):
+ * Not on the Wiki (to check against a capture):
  * - Entering builds the layout the first time; everyone lands at the first room's spawn. The
  *   leader starts the raid from the party tab; no one can join after that.
  * - Stages: 1 started, 2 the upper floor done (reaching plane 2), 3 the middle floor done
@@ -101,7 +101,7 @@ class Room {
   /** The raid has started: spawn what the room holds. */
   load() {}
 
-  /** Combat points the room can give (5 x its NPCs' hitpoints, Near-Reality's +5%). */
+  /** Combat points the room can give (5 x its NPCs' hitpoints, an unverified +5%). */
   combatPoints() {
     return 0;
   }
@@ -170,7 +170,7 @@ class Room {
 
   /**
    * Blocks the room's exit with a crystal (30018, 2x2) at one of three cache tiles by the room's
-   * version (west, north, east), turned with the room (Near-Reality's tiles).
+   * version (west, north, east), turned with the room (unverified tiles).
    */
   blockExit(tiles, crystalId = Shared.OBJECT.CRYSTAL) {
     const tile = tiles[this.record.variant];
@@ -624,4 +624,4 @@ function takeRejoin(username) {
   return raid && !raid.destroyed && raid.original.has(username) ? raid : null;
 }
 
-module.exports = { ATTR_RAID, STAGE, DEATH, POINTS_PER_DAMAGE, Room, EntranceRoom, Raid, registerRoom, onTick, onComplete, onLeave, raidOf, all, takeRejoin, roomTypes };
+module.exports = { ATTR_RAID, STAGE, DEATH, POINTS_PER_DAMAGE, Room, EntranceRoom, Raid, registerRoom, onTick, onComplete, onLeave, onRaidArea: CoxMap.onRaidArea, raidOf, all, takeRejoin, roomTypes };

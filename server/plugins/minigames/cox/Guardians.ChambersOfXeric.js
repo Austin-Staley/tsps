@@ -11,7 +11,7 @@
  * - Melee (max 20, attack speed 4), and now and then a stomp hitting a 3x3 for moderate to
  *   heavy damage.
  * - Stepping between them gets you knocked back for moderate damage, and some points.
- * Near-Reality: the tiles; the invisible blockers (26209) between them; the knock-back every 3
+ * Not on the Wiki (to check against a capture): the tiles; the invisible blockers (26209) between them; the knock-back every 3
  *   ticks for anyone within a tile of them: 15-30 damage, 40 points, back to the tile behind
  *   (and the other guardian stomps); attacks: anim 1203 (base 20), stomp anim 4278 with
  *   projectile 645 and gfx 71 (base 15); they never move; their remains (id + 2) stay.

@@ -15,7 +15,7 @@
  * - Attacking the portal while she flies enrages her: she flies before it stinging anyone in
  *   melee range for 5-20 typeless and stomping those under her for 2-8 a tick.
  * - Septic tendrils close the way in once the fight starts, hurting those passing them.
- * Near-Reality: the tiles; the portal fires (projectile 1366) at whoever stands on the two
+ * Not on the Wiki (to check against a capture): the tiles; the portal fires (projectile 1366) at whoever stands on the two
  *   tiles before it every 2 ticks, draining 1 + 3% prayer (or 1-2 damage with none) and heals
  *   17 per live soldier every 8 ticks; Vespula's attacks: anim 7455 (7450 landed), projectile
  *   1364 at the target and a tile near it (base 15, poison 1 in 4); stinging anim 7454, sound
@@ -25,8 +25,8 @@
  *   later; blossoms heal a grub 20%; roots (30068) regrow 8 ticks after picking; boils (30070)
  *   burst (30071) and the pillars (30072) vanish (anim 7500, 30073) as the portal falls:
  *   "As the link to the abyss disintegrates, the abyssal creatures perish."
- * Not from a source: a stung grub's meter drains 1 every 4 ticks (Near-Reality drains 1 every
- *   16 of its 30); landed Vespula stays down 33 ticks (~20 seconds).
+ * Not from a source: a stung grub's meter drains 1 every 4 ticks;
+ *   landed Vespula stays down 33 ticks (~20 seconds).
  */
 
 const Shared = require("./CoxShared");
@@ -79,7 +79,7 @@ class VespulaRoom extends Raid.Room {
     return Math.floor(5 * (vespula + portal) * 1.05) + 100 * 4 * 4;
   }
 
-  /** The fight is set up when the first raider walks in (Near-Reality). */
+  /** The fight is set up when the first raider walks in (not on the Wiki). */
   enter(player) {
     super.enter?.(player);
     if (this.loaded || this.raid.stage === Raid.STAGE.WAITING) return;
@@ -158,7 +158,7 @@ class VespulaRoom extends Raid.Room {
       grub.__coxSoldier = soldier;
       Shared.animate(soldier, 7460);
       for (const player of this.raiders()) Shared.sound(player, 552);
-      // Near-Reality: a rising soldier heals Vespula and the portal to full.
+      // Not on the Wiki (to check against a capture): a rising soldier heals Vespula and the portal to full.
       if (this.alive(this.portal)) {
         this.vespula.setHitpoints(this.vespula.getMaxHitpoints());
         this.portal.setHitpoints(this.portal.getMaxHitpoints());
@@ -538,7 +538,7 @@ function passTendrils(event) {
 module.exports = function registerCoxVespula(api) {
   Shared.bind(api);
   api.registerNpcCombatMethodProvider([NPC.VESPULA, NPC.ENRAGED, NPC.LANDED, NPC.SOLDIER, NPC.SOLDIER_LANDED, NPC.PORTAL], vespulaCombat(api));
-  api.onCanAttack(flyingTooHigh);
+  Raid.onRaidArea("canAttack", flyingTooHigh);
   api.onNpcInteraction("Lux grub", { Feed: feedGrub });
   api.onItemOnNpc(blossomOnGrub);
   Shared.onObjectIds(api, [OBJECT.ROOT], pickRoot);

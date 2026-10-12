@@ -3,7 +3,7 @@
 /**
  * Mount Quidamortem: the recruiting board, the party page and the way in.
  *
- * Near-Reality:
+ * Not on the Wiki (to check against a capture):
  * - The board (499) lists up to 40 advertised parties (script 1566 a row: leader, members,
  *   preferred size, combat and total, Challenge Mode, age in ticks); its buttons are Refresh,
  *   Make party and View party. Making a party needs a chat-channel and the rank of Recruit.
@@ -14,14 +14,13 @@
  *   large raid (not offered).
  * - The entrance warns once, then lets a party member in; the raid is built on first entry,
  *   and no one can enter once it has started.
- * Not ported: Near-Reality's "layouts" (choosing which layouts a party gets) and its daily
- * advert quota, neither of which OSRS has.
+ * Not ported: choosing which layouts a party gets, or a daily advert quota; OSRS has neither.
  */
 
 const Shared = require("./CoxShared");
 const Parties = require("./CoxParties");
 const { Raid } = require("./CoxRaid");
-const Storage = require("./Storage.Cox");
+const Storage = require("./Storage.ChambersOfXeric");
 
 const BOARD = { BUTTONS: 3, ROWS: 14 };
 const BOARD_BUTTON = { REFRESH: 0, MAKE: 1 };

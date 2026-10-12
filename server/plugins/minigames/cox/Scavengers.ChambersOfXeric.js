@@ -8,13 +8,13 @@
  * - The number of scavengers and (mildly) their strength follow the party size. They drop
  *   three items at a time.
  * - Clearing a shortcut gives points of 5 x its level requirement.
- * Near-Reality: the counts (1 solo, 2 up to 4, 3 to 7, 4 to 15, 5 to 23, 6 to 31, 7 to 39,
+ * Not on the Wiki (to check against a capture): the counts (1 solo, 2 up to 4, 3 to 7, 4 to 15, 5 to 23, 6 to 31, 7 to 39,
  *   8 beyond); they spawn around the room's middle, 2 tiles apart; bite anim 255; the
  *   shortcut's tile; its level is random between the party's lowest and highest level + 2 (at
  *   most 99); each swing has a 1 in max(5, min(20, raiders / 3)) chance to clear it (rubble
  *   29739, stump 29737, crossed with anim 839); 4.5 Mining XP a swing; the boulder needs
  *   Strength and rolls 3 tiles (anim 6131), hurting whoever it lands on for 4-6.
- * Not like Near-Reality: scavengers don't come back (it respawns them 2 ticks later; the Wiki
+ * Not like Not on the Wiki (to check against a capture): scavengers don't come back (it respawns them 2 ticks later; the Wiki
  *   says nothing of it).
  */
 
@@ -139,7 +139,7 @@ function roomOf(player) {
   return room instanceof ScavengerRoom ? room : null;
 }
 
-/** Over the rubble or stump to the far side (Near-Reality: anim 839). */
+/** Over the rubble or stump to the far side (Not on the Wiki (to check against a capture): anim 839). */
 function crossRemnant(player, object) {
   const { Location } = Shared.core();
   const at = object.getLocation();

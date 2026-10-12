@@ -5,7 +5,7 @@
  * channel's members on Mount Quidamortem are its raiders, and leaving the channel leaves the
  * party. A party can be advertised on the recruiting board.
  *
- * Near-Reality: one party per chat-channel, made by a Recruit or above; the board lists 40;
+ * Not on the Wiki (to check against a capture): one party per chat-channel, made by a Recruit or above; the board lists 40;
  * the preferred size, combat level and skill total are only shown, never enforced; Challenge
  * Mode is a party setting that can't change once the party is inside; a leader leaving hands
  * the party to the highest-ranked raider who can kick, or else disbands it.

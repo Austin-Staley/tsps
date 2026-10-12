@@ -14,7 +14,7 @@
  *   up to max(4500, (party's total Thieving / 6) x 150) points.
  * - Hunger comes back after 60 seconds without food. Asleep, it lets the party through, and
  *   the raiders get a batch of endarkened juice, stinkhorn mushrooms and cicely.
- * Near-Reality: the scavenger's tiles (by the room's version and turn) and where it sleeps;
+ * Not on the Wiki (to check against a capture): the scavenger's tiles (by the room's version and turn) and where it sleeps;
  *   it eats every 4 ticks min(5, grubs/6) (at least 1) from the trough; anims 7496 eating,
  *   7497 yawning ("Yawwwwn!"), then 7603 asleep with gfx 277; open anim 536, poison gfx 184;
  *   chest objects 29745 (grubs taken), 29743 (poison, bats); chests lock again 5 seconds later
@@ -26,7 +26,7 @@
 
 const Shared = require("./CoxShared");
 const Raid = require("./CoxRaid");
-const Supplies = require("./Supplies.Cox");
+const Supplies = require("./Supplies.ChambersOfXeric");
 
 const OBJECT = { CHEST: 29742, CHEST_EMPTY: 29743, CHEST_GRUBS: 29745, TROUGH: 29746, TROUGH_FULL: 29874, KEEPER: 29875 };
 const NPC = { SCAVENGER: 7602, ASLEEP: 7603 };
@@ -87,7 +87,7 @@ class ThievingRoom extends Raid.Room {
     this.pointsCap = Math.max(4500, Math.floor(thieving / 6) * 150);
   }
 
-  /** Where the awake scavenger stands nobody walks (Near-Reality marks its tiles as floor). */
+  /** Where the awake scavenger stands nobody walks (the tiles are marked its tiles as floor). */
   blockScavenger(on) {
     const npc = this.scavenger;
     if (!npc) return;

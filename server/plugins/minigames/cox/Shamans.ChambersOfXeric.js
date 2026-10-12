@@ -9,7 +9,7 @@
  * - Their attacks are the surface shamans', the poison blob ~25% stronger: up to 39 without
  *   Shayzien armour.
  * - Two shamans for solo and small teams, up to five in large ones.
- * Near-Reality: the tiles; counts (2, 3 at 4+, 4 at 8+); the spirit tendrils (29768) and the
+ * Not on the Wiki (to check against a capture): the tiles; counts (2, 3 at 4+, 4 at 8+); the spirit tendrils (29768) and the
  *   exit's two blocking spawns (7575) appear when someone comes within 6 tiles; attacks every
  *   4 ticks: ranged anim 7193 with projectile 1291 (base 24), the blob (projectile 1293,
  *   splash 1294, 20-35 within 2 tiles, poison 1 in 4), melee anim 7158 (base 24, crush), the

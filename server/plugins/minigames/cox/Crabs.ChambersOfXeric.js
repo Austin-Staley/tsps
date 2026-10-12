@@ -11,7 +11,7 @@
  *   blunt weapon turns it red and stuns it: 50-60 ticks solo, 30-40 for 2-3 raiders, 20-30
  *   for 4-5, 10-20 for 6+.
  * - Points come with each crystal lit, to whoever's crab sent the orb there.
- * Near-Reality: the tiles; the orb leaves its spot every 5 ticks and moves a tile a tick,
+ * Not on the Wiki (to check against a capture): the tiles; the orb leaves its spot every 5 ticks and moves a tile a tick,
  *   starting in the room's direction and turning clockwise at each crab it meets (two crabs at
  *   once fizzle it); a player in its way takes 25% of their hitpoints (and anyone beside them)
  *   and it fizzles; the crystals by index need white, blue, green, red orbs; a crab's colour
@@ -49,8 +49,8 @@ const SMALL_CRYSTAL_TILES = [
   [{ x: 3341, y: 5355 }, { x: 3337, y: 5354 }, { x: 3340, y: 5363 }, { x: 3340, y: 5367 }],
 ];
 /**
- * Splash graphics by orb colour, small (fizzling) and large (bursting on a player): Near-Reality's
- * spell hits - wind bolt/wave, fire bolt/wave, wind bolt/earth wave, water bolt/wave.
+ * Splash graphics by orb colour, small (fizzling) and large (bursting on a player): spell
+ * hits (unverified) - wind bolt/wave, fire bolt/wave, wind bolt/earth wave, water bolt/wave.
  */
 const BURST = { [FOCUS.WHITE]: [119, 160], [FOCUS.RED]: [128, 157], [FOCUS.GREEN]: [119, 166], [FOCUS.BLUE]: [122, 163] };
 
@@ -98,7 +98,7 @@ class CrabsRoom extends Raid.Room {
         crab.setNpcTransformationId(-1);
       }
     }
-    // Near-Reality: the crabs go for anyone within 3 tiles.
+    // Not on the Wiki (to check against a capture): the crabs go for anyone within 3 tiles.
     for (const crab of this.crabs) {
       if (crab.__coxColourUntil != null || crab.getCombat().getTarget()) continue;
       const near = this.raiders().find((player) => player.getLocation().getDistance(crab.getLocation()) <= 3);

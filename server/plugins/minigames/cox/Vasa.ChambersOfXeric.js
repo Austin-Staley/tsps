@@ -17,7 +17,7 @@
  *   starts, running only while a crystal is active; at zero he leaves it for the centre and his
  *   special. Disabling the crystal first undoes the healing.
  * - The crystals are immune to Ranged and take a third from Magic.
- * Near-Reality: the tiles (the four crystals, the centre, the fire, the exit crystals 30016);
+ * Not on the Wiki (to check against a capture): the tiles (the four crystals, the centre, the fire, the exit crystals 30016);
  *   anims rise 7408, swirl 7409, explode 7410; the special's timing (teleport 3865 / gfx 1296,
  *   10-tick stun, projectiles 1327 falling around him, explosions 1328, stun gfx 80, sound
  *   2727); boulders every 4 ticks while walking (projectile 1329, impact 1330, base 18);

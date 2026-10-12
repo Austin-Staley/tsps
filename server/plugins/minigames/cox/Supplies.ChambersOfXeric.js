@@ -10,7 +10,7 @@
  *   of 40 x raiders.
  * - Potions: their maker gets points per sip, more when someone else drinks; capped at 5 sips
  *   per raider plus 5 more at a reduced amount.
- * Wiki-derived amounts (the Wiki gives no numbers per sip; also Near-Reality's): an overload sip
+ * Wiki-derived amounts (the Wiki gives no numbers per sip): an overload sip
  *   400, Xeric's aid 200, others 100, x 0.25 / 0.5 / 1 by strength, x 1.5 someone else's.
  * Not like OSRS: items carry no maker here, so the raid keeps who made each kind; a sip or bite
  *   is credited to the eater if they made some of that kind, otherwise to the first other maker,

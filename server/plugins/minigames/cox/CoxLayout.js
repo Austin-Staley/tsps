@@ -8,7 +8,7 @@
  * The cache has three versions of most rooms - the path turning left, going straight on, or
  * turning right - side by side, at chunk x 408, 412 and 416.
  *
- * Near-Reality (Kris's Zenyte raid): the 26 layout patterns (room types and turns, as the
+ * Not on the Wiki (to check against a capture): the 26 layout patterns (room types and turns, as the
  * RuneLite raids plugin names them), the two combat-room rotations, how rooms are drawn from
  * them, how the path is laid out and cropped, and Challenge Mode's fixed three floors.
  * Wiki: the two rotations of combat rooms (Tekton, Vasa, Guardians, Mystics, Shamans,
@@ -74,7 +74,7 @@ const LAYOUT_CODES = [
 const KIND_OF_CHAR = { "#": "start", "*": "end", S: "scavengers", C: "combat", F: "farming", P: "puzzle" };
 const DIRECTION_OF_CHAR = { N: "NORTH", E: "EAST", S: "SOUTH", W: "WEST" };
 
-/** Challenge Mode's fixed floors (Wiki; Near-Reality): each room and the way the path leaves it. */
+/** Challenge Mode's fixed floors (Wiki): each room and the way the path leaves it. */
 const CHALLENGE_FLOORS = [
   [["RAID_START", "WEST"], ["TEKTON", "WEST"], ["CRAB_PUZZLE", "NORTH"], ["SMALL_SCAVENGER_RUNT", "EAST"],
     ["ICE_DEMON", "EAST"], ["LIZARDMEN_SHAMAN", "EAST"], ["RESOURCES_B", "SOUTH"], ["FLOOR_END_DOWNSTAIRS", "SOUTH"]],

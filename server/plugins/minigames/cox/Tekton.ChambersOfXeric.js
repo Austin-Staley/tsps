@@ -16,7 +16,7 @@
  * - Done repairing he is enraged (higher max hit and defences) for a short while.
  * - Drops: 5 stinkhorn mushrooms, 2 overload (+), a revitalisation (+) and a prayer enhance
  *   (+) (its drop table).
- * Near-Reality: the tiles; anims (rise 7474 / 7487 enraged, stance 7478 / 7488, leave stance
+ * Not on the Wiki (to check against a capture): the tiles; anims (rise 7474 / 7487 enraged, stance 7478 / 7488, leave stance
  *   7479 / 7489, lean to anvil 7475, stab 7482 / 7493, slash 7483 / 7494, crush 7484 / 7492);
  *   forms 7540 idle, 7541 walking, 7542 fighting, 7543 / 7544 enraged, 7545 at the anvil
  *   (untouchable: "Tekton's anvil protects him from your attacks."); a fire (30021) shuts the

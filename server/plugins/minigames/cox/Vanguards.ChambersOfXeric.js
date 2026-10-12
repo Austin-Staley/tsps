@@ -13,7 +13,7 @@
  *   shuffle at once and heal to full. Otherwise they shuffle every 20-36 ticks.
  * - In their shells they can't be hurt; a fatal hit landing in the shell leaves 1 hitpoint.
  *   Shuffling, they drop their targets.
- * Near-Reality: the tiles; rise anim 7428, then 7438 / 7443 / 7433 (melee / ranged / magic,
+ * Not on the Wiki (to check against a capture): the tiles; rise anim 7428, then 7438 / 7443 / 7433 (melee / ranged / magic,
  *   whose form 7526 becomes 7529); falls 7442 / 7447 / 7437; shells walk (7526) to the next
  *   spot, clockwise or not, standing up 10 ticks later; walking over someone hurts 1-5; the
  *   ranged one never moves out of turn; attacks every 4 ticks: melee anim 7441 (3 x base 18),

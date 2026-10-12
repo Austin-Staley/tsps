@@ -951,7 +951,7 @@ registerPotion({
 });
 
 // ---------------------------------------------------------------- Chambers of Xeric gourd potions
-// Near-Reality (Kris's GourdPotion): the boosts by strength (weak / normal / strong). Wiki:
+// Not on the Wiki (to check against a capture): the boosts by strength (weak / normal / strong). Wiki:
 // they can only be sipped inside the raid, and the gourd breaks when finished.
 
 /** Gourd potion ids are 1-4 doses ascending; the chain runs 4 down to 1. */

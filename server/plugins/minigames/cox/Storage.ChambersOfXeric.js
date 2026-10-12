@@ -15,7 +15,7 @@
  * - The shared storage only takes raid items (cache enum 1666: raid items and their tools).
  * - Items left in a private storage are kept, and taken out at the storage unit by the bank
  *   chest on the mountain, which must be emptied before entering again.
- * Near-Reality: the interfaces - private 271 (inventory 583; 4 size, 5 to shared, 6 items,
+ * Not on the Wiki (to check against a capture): the interfaces - private 271 (inventory 583; 4 size, 5 to shared, 6 items,
  *   9 withdraw all, 10 deposit all / bank all), shared 550 (inventory 582; 4 size, 5 to private,
  *   7 items), and their side panel 551 (1 the inventory, varbit 3459 private or shared) -
  *   withdraw / deposit 1, 5, 10, All, X; one unit being built at a time ("Someone else is

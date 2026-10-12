@@ -10,7 +10,7 @@
  *   fighting becomes their target.
  * - Crossing needs an Agility level between 80% and 100% of the party's average, at random.
  * - Using the keystone on the barrier kills any of them still standing.
- * Near-Reality: the tiles; counts by raiders (rangers 2 / 3 at 4+ / 4 at 7+, mages 2 / 3 at 4+
+ * Not on the Wiki (to check against a capture): the tiles; counts by raiders (rangers 2 / 3 at 4+ / 4 at 7+, mages 2 / 3 at 4+
  *   / 4 at 10+); 1-4 of them shout ("Intruder!", "Stop them at all costs!", "Protect the
  *   keystone!"); crossing takes 10 ticks with walk anim 762, sound 2495, 7.5 Agility XP;
  *   attacks: ranger anim 426, arrow 15, sound 2693; mage anim 711, gfx 129, projectile 130,

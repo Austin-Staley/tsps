@@ -58,7 +58,7 @@ const COOKABLES = Object.freeze([
   { raw: ItemIds.RAW_ANGLERFISH, cooked: ItemIds.ANGLERFISH, burnt: ItemIds.BURNT_ANGLERFISH, level: 84, xp: 230, stopBurn: 98, name: "anglerfish" },
   { raw: ItemIds.RAW_DARK_CRAB, cooked: ItemIds.DARK_CRAB, burnt: ItemIds.BURNT_DARK_CRAB, level: 90, xp: 215, stopBurn: 99, name: "dark crab" },
   { raw: ItemIds.RAW_MANTA_RAY, cooked: ItemIds.MANTA_RAY, burnt: ItemIds.BURNT_MANTA_RAY, level: 91, xp: 216.2, stopBurn: 99, name: "manta ray" },
-  // Chambers of Xeric fish and bats (Wiki levels and XP; Near-Reality's burn levels).
+  // Chambers of Xeric fish and bats (Wiki levels and XP; burn levels not on the Wiki).
   { raw: 20855, cooked: 20856, burnt: 20854, level: 1, xp: 10, stopBurn: 21, name: "pysk fish" },
   { raw: 20857, cooked: 20858, burnt: 20854, level: 15, xp: 13, stopBurn: 35, name: "suphi fish" },
   { raw: 20859, cooked: 20860, burnt: 20854, level: 30, xp: 16, stopBurn: 50, name: "leckish fish" },

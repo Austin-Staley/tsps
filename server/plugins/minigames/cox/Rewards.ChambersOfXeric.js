@@ -21,7 +21,7 @@
  * - Unclaimed loot is placed on the ground on leaving.
  * - Capes by Challenge Mode completions: Xeric's guard 100, warrior 500, sentinel 1,000,
  *   general 1,500, champion 2,000.
- * Near-Reality: the reward interface (539: component 5 the items, 6 Bank-all, 8 Take-all, 10
+ * Not on the Wiki (to check against a capture): the reward interface (539: component 5 the items, 6 Bank-all, 8 Take-all, 10
  *   Discard-all; inventory 581), the chest light varbit 5456 (1 white, 2 purple), the messages
  *   ("Congratulations - your raid is complete! Duration: ", the completion counts, "Special
  *   loot:", the target time), the raid counts on the attributes.

@@ -9,7 +9,7 @@
  * - Two Magic attacks (a standard one and a damaging Vulnerability) and Melee. They answer
  *   overhead prayers: one that can reach its target who prays against Magic melees it; one
  *   that can't keeps casting.
- * Near-Reality: the tiles; counts by raiders (3, 4 at 3+, 5 at 5+, 6 at 8+); fire 1 in 5 is a
+ * Not on the Wiki (to check against a capture): the tiles; counts by raiders (3, 4 at 3+, 5 at 5+, 6 at 8+); fire 1 in 5 is a
  *   Vulnerability (gfx 1321, projectile 168, impact 169, Defence drained 4-8), else fire (gfx
  *   1322, projectile 130, impact 157, base 25 + raiders / 4); melee anim 5485 (base 25); casting
  *   anim 5523; splash 339; protection prayers let half through; the Mark of Power (29741) and

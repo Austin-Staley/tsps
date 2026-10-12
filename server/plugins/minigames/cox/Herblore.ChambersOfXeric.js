@@ -11,13 +11,13 @@
  *   Buchu: revitalisation, prayer enhance or Xeric's aid. Noxifer with cicely: antipoison.
  * - The strength made is the best the Herblore level allows (weak / normal / strong levels below);
  *   an overload made from stronger potions than the level allows comes out weaker.
- * Near-Reality: mixing is a make-X choice of every potion the inventory allows, one each tick
+ * Not on the Wiki (to check against a capture): mixing is a make-X choice of every potion the inventory allows, one each tick
  *   (anim 363, sound 2608), cleaning one every 2 ticks (sound 3923); the messages.
  */
 
 const Shared = require("./CoxShared");
 const Raid = require("./CoxRaid");
-const Supplies = require("./Supplies.Cox");
+const Supplies = require("./Supplies.ChambersOfXeric");
 
 const WATER_GOURD = 20801;
 const SECONDARY = { STINKHORN: 20910, ENDARKENED: 20911, CICELY: 20912 };
@@ -26,6 +26,7 @@ const HERBS = [
   { name: "buchu leaf", grimy: 20907, clean: 20908, level: 52, xp: 2 },
   { name: "noxifer", grimy: 20901, clean: 20902, level: 60, xp: 3 },
 ];
+const GRIMY_NAMES = HERBS.map((herb) => `Grimy ${herb.name}`);
 const HERB_BY_GRIMY = new Map(HERBS.map((herb) => [herb.grimy, herb]));
 const [GOLPAR, BUCHU, NOXIFER] = HERBS;
 
@@ -156,9 +157,7 @@ function itemOnItem(event) {
 
 module.exports = function registerCoxHerblore(api) {
   Shared.bind(api);
-  for (const herb of HERBS) {
-    api.onItemAction(Shared.core().ItemDefinition.forId(herb.grimy).getName(), { Clean: cleanHerbs });
-  }
+  for (const name of GRIMY_NAMES) api.onItemAction(name, { Clean: cleanHerbs });
   api.onItemOnItem(itemOnItem);
 };
 

@@ -16,7 +16,7 @@
  * - The meat tree has 5 x the party's total Woodcutting (at least 100). A chop succeeds 20% at
  *   Woodcutting 1 to 78% at 99 and takes off (level / 2) -7 to +3; the axe doesn't matter.
  *   Cutting it gives points.
- * Near-Reality: the tiles; the tendrils (29767) appear and the muttadiles rise when someone
+ * Not on the Wiki (to check against a capture): the tiles; the tendrils (29767) appear and the muttadiles rise when someone
  *   comes within 6 tiles, and passing them again costs 22.5% of your hitpoints; the submerged
  *   one fires every 5 ticks (projectile 393, gfx 157, base 25); emerging anim 7423, 5 tiles
  *   out, form 7563 after 4 ticks, attackable at 5; attacks: small melee anim 7420 (sound 2548),
@@ -200,7 +200,7 @@ class MuttadileRoom extends Raid.Room {
     Shared.later(this.raid, 2, () => tendrils.forEach((tendril) => Shared.core().ObjectManager.deregister(tendril, true)));
   }
 
-  /** Passing the tendrils (Near-Reality): two tiles on, 22.5% of your hitpoints after the first time. */
+  /** Passing the tendrils (not on the Wiki): two tiles on, 22.5% of your hitpoints after the first time. */
   passTendrils(player, tendril) {
     if (this.completed) {
       player.sendMessage("The tendril is about to collapse!");
@@ -326,7 +326,7 @@ function muttadileCombat(api) {
       const delay = Shared.projectile(room.map, npc, player, PROJECTILE.MAGIC, { delay: 25, duration: 40, startHeight: 25, endHeight: 15 });
       const max = Monsters.maxHitFor(npc, BASE.MAGIC, Monsters.LEVELS.MAGIC);
       Shared.strike(npc, player, "magic", max, delay, { prayerMultiplier: 1 / 3 });
-      // Near-Reality: the magic splashes anyone beside its path.
+      // Not on the Wiki (to check against a capture): the magic splashes anyone beside its path.
       const from = npc.getLocation();
       const to = player.getLocation();
       for (const raider of room.raiders()) {

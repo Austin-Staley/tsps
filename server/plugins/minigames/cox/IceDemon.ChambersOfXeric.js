@@ -16,7 +16,7 @@
  * - All damage to it is a third, but fire spells deal 250% and demonbane weapons aren't cut.
  * - It drops fiendish ashes, 7 stinkhorn mushrooms, 7 endarkened juice and 5 cicely for each
  *   raider.
- * Near-Reality: the tiles; the storm's strength (250 per raider); each kindling is 5 charges,
+ * Not on the Wiki (to check against a capture): the tiles; the storm's strength (250 per raider); each kindling is 5 charges,
  *   a brazier burns min(raiders, charges) a tick, each charge thawing 2; with nothing lit the
  *   storm regrows 2-5 a tick. A failed lighting tries again 2 ticks later (anim 3687, sound
  *   2066); fuelling anim 832; 5 Firemaking XP a kindling. Thawing: gfx 86 on the braziers,
@@ -65,7 +65,7 @@ let fireSpells = null;
 function isFireSpell(spell) {
   if (!spell) return false;
   if (!fireSpells) {
-    const { CombatSpells } = require("../../../src/main/typescript/elvarg/game/content/combat/magic/CombatSpells");
+    const { CombatSpells } = Shared.core();
     fireSpells = new Set(FIRE_SPELLS.map((name) => CombatSpells[name]).filter(Boolean));
   }
   return fireSpells.has(spell);
@@ -367,7 +367,7 @@ module.exports = function registerCoxIceDemon(api) {
   Shared.bind(api);
   Shared.onObjectIds(api, [OBJECT.BRAZIER, OBJECT.LIT_BRAZIER], useBrazier);
   api.registerNpcCombatMethodProvider([NPC.DEMON], demonCombat(api));
-  api.onCanAttack(frozenDemon);
+  Raid.onRaidArea("canAttack", frozenDemon);
 };
 
 Object.assign(module.exports, { IceDemonRoom, lightChance });

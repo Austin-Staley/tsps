@@ -4,11 +4,11 @@
  * A raid's private copy of the chambers: its rooms copied from the cache's raid map, turned to
  * face the path, floor above floor, with the Great Olm's chamber beside them.
  *
- * Near-Reality: rooms are 4x4 chunks; floors go on planes 3, 2 (and 1 in Challenge Mode); the
+ * Not on the Wiki (to check against a capture): rooms are 4x4 chunks; floors go on planes 3, 2 (and 1 in Challenge Mode); the
  * gaps around them are filled with a plain wall chunk (416, 647) turned at random; the Olm's
  * chamber is 5x7 chunks copied from (402, 713) on every plane. Tiles inside a room are given
  * as they are on the cache's map and turned with the room. The rope and hole tiles between
- * floors and the raid's first respawn tile are Near-Reality's.
+ * floors and the raid's first respawn tile are unverified too.
  *
  * Every layout is 16x8 chunks, so the Olm's chamber fits above it in one 16x16 instance.
  */
@@ -48,6 +48,23 @@ function rotateRoomTile(x, y, rotation, size = 1, sizeY = size) {
     case 2: return [last - x - farX, last - y - farY];
     default: return [last - y - farY, x];
   }
+}
+
+// Raid-scoped rules from the unit files. The raid's area runs them, so nobody outside a raid
+// pays for them. Handlers take the old hook event ({ attacker, target, method, allow } /
+// { player, allow }) and the first to set `allow` decides.
+const areaHandlers = { canAttack: [], canTeleport: [] };
+
+function onRaidArea(kind, handler) {
+  areaHandlers[kind].push(handler);
+}
+
+function firstVerdict(handlers, event) {
+  for (const handler of handlers) {
+    handler(event);
+    if (event.allow !== null) return event.allow;
+  }
+  return null;
 }
 
 function mapClass() {
@@ -109,7 +126,14 @@ function mapClass() {
       super.postLeave(mobile, logout);
     }
 
-    /** A tile of a room, given where it is on the cache's map; `size` for an NPC's south-west. */
+    canAttack(attacker, target, method) {
+      return firstVerdict(areaHandlers.canAttack, { attacker, target, method, allow: null });
+    }
+
+    canTeleport(player, wildernessLevelLimit, destination) {
+      return firstVerdict(areaHandlers.canTeleport, { player, wildernessLevelLimit, destination, allow: null });
+    }
+
     /** A cache tile of a room's source, where it lands in the raid; size is the footprint there (x by y). */
     roomTile(room, x, y, size = 1, sizeY = size) {
       const localX = x - room.source.chunkX * 8;
@@ -174,7 +198,7 @@ function mapClass() {
 
     /**
      * Where a player lands on a bound tile: the tile itself, or the nearest open one. The
-     * ropes, holes and the Olm's rope stand on their landing tiles; Near-Reality then walks the
+     * ropes, holes and the Olm's rope stand on their landing tiles; the raid then walks the
      * player a step off them.
      */
     landing(tile) {
@@ -211,4 +235,4 @@ function createMap(layout, random) {
   return new (mapClass())(layout, random);
 }
 
-module.exports = { INSTANCE_CHUNKS, ROOM_TILES, OLM, OLM_TILES, BOUND, rotateRoomTile, createMap };
+module.exports = { INSTANCE_CHUNKS, ROOM_TILES, OLM, OLM_TILES, BOUND, rotateRoomTile, createMap, onRaidArea };

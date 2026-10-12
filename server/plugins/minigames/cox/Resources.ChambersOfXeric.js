@@ -11,7 +11,7 @@
  * - Herbs grow from golpar (Farming 27), buchu (39) and noxifer (55) seeds raked from weeds, in
  *   herb patches, with a seed dibber; picked herbs are grimy.
  * - Gourds come from the gourd tree (Pick, Pick-lots) and are filled with water at a geyser.
- * Near-Reality (Kris):
+ * Not on the Wiki (to check against a capture):
  * - Resource room A has fishing (the snake spot one of three per version, moving every 50 ticks
  *   or after 10 snake rises; catch chance min(round((level - req) x 0.6) + 30, 70)%, every 4
  *   ticks); room B has 2 + raiders/8 bats (at most 6) of one type among the three best the
@@ -50,17 +50,22 @@ const FISH = [
   { item: 20867, level: 90, xp: 38 },
 ];
 const BATS = [
-  { npc: 7587, item: 20870, level: 1, xp: 5 }, { npc: 7588, item: 20872, level: 15, xp: 9 },
-  { npc: 7589, item: 20874, level: 30, xp: 13 }, { npc: 7590, item: 20876, level: 45, xp: 17 },
-  { npc: 7591, item: 20878, level: 60, xp: 21 }, { npc: 7592, item: 20880, level: 75, xp: 25 },
-  { npc: 7593, item: 20882, level: 90, xp: 29 },
+  { npc: 7587, name: "Guanic bat", item: 20870, level: 1, xp: 5 }, { npc: 7588, name: "Prael bat", item: 20872, level: 15, xp: 9 },
+  { npc: 7589, name: "Giral bat", item: 20874, level: 30, xp: 13 }, { npc: 7590, name: "Phluxia bat", item: 20876, level: 45, xp: 17 },
+  { npc: 7591, name: "Kryket bat", item: 20878, level: 60, xp: 21 }, { npc: 7592, name: "Murng bat", item: 20880, level: 75, xp: 25 },
+  { npc: 7593, name: "Psykk bat", item: 20882, level: 90, xp: 29 },
 ];
+const BAT_NAMES = BATS.map((bat) => bat.name);
 const HERBS = [
   { name: "golpar", patch: 29998, seed: 20906, grimy: 20904, level: 27, plantXp: 4, pickXp: 10 },
   { name: "buchu", patch: 29999, seed: 20909, grimy: 20907, level: 39, plantXp: 6, pickXp: 15 },
   { name: "noxifer", patch: 29997, seed: 20903, grimy: 20901, level: 55, plantXp: 12, pickXp: 30 },
 ];
 const SEEDS = HERBS.map((herb) => herb.seed);
+/** The herb patch's growing and grown forms (29997-30011), after the empty patch. */
+const GROWING_PATCHES = { FIRST: 29997, LAST: 30011 };
+const PATCH_IDS = [OBJECT.EMPTY_PATCH];
+for (let id = GROWING_PATCHES.FIRST; id <= GROWING_PATCHES.LAST; id++) PATCH_IDS.push(id);
 const GROWN_STAGE = 4;
 const STAGE_TICKS = 12;
 const PATCH_LIVES = 3;
@@ -687,6 +692,15 @@ function tickFarming(raid) {
   if (raid.patches?.size) growPatches(raid);
 }
 
+function itemOnRaidObject(event) {
+  const id = event.objectId ?? event.object?.getId?.();
+  if (id === OBJECT.GEYSER && event.itemId === ITEM.EMPTY_GOURD) return fillGourds(event) || undefined;
+  if (PATCH_IDS.includes(id) && (SEEDS.includes(event.itemId) || event.itemId === ITEM.SPADE)) {
+    if (itemOnPatch(event)) event.handled = true;
+  }
+  return undefined;
+}
+
 module.exports = function registerCoxResources(api) {
   Shared.bind(api);
   Shared.onObjectIds(api, [OBJECT.BUBBLES], fish);
@@ -694,25 +708,15 @@ module.exports = function registerCoxResources(api) {
   Shared.onObjectIds(api, [OBJECT.GOURD_TREE], pickGourds);
   Shared.onObjectIds(api, [OBJECT.GEYSER], fillGourds);
   Shared.onObjectIds(api, [OBJECT.OLD_TOOLS], takeTools);
-  Shared.onObjectIds(api, [OBJECT.EMPTY_PATCH, ...Array.from({ length: 15 }, (_, i) => 29997 + i)], usePatch);
+  Shared.onObjectIds(api, PATCH_IDS, usePatch);
   Shared.onObjectIds(api, [OBJECT.WEEDS], rakeWeeds);
   Shared.onObjectIds(api, [OBJECT.ENERGY_WELL], touchWell);
   Shared.onObjectIds(api, [OBJECT.BRONZE_AXE], pickUpTool(ITEM.BRONZE_AXE, "bronze axe", { one: true }));
   Shared.onObjectIds(api, [OBJECT.HAMMER], pickUpTool(ITEM.HAMMER, "hammer"));
   Shared.onObjectIds(api, [OBJECT.TINDERBOX], pickUpTool(ITEM.TINDERBOX, "tinderbox"));
   Shared.onObjectIds(api, [OBJECT.IRON_PICKAXE], pickUpTool(ITEM.IRON_PICKAXE, "pickaxe", { one: true }));
-  api.onItemOnObject(function itemOnRaidObject(event) {
-    const id = event.objectId ?? event.object?.getId?.();
-    if (id === OBJECT.GEYSER && event.itemId === ITEM.EMPTY_GOURD) return fillGourds(event) || undefined;
-    if ((id === OBJECT.EMPTY_PATCH || (id >= 29997 && id <= 30011)) && (SEEDS.includes(event.itemId) || event.itemId === ITEM.SPADE)) {
-      if (itemOnPatch(event)) event.handled = true;
-    }
-    return undefined;
-  });
-  for (const bat of BATS) {
-    const name = Shared.core().NpcDefinition.forId(bat.npc)?.getName?.();
-    if (name) api.onNpcInteraction(name, { Catch: catchBat });
-  }
+  api.onItemOnObject(itemOnRaidObject);
+  api.onNpcsInteraction(BAT_NAMES, { Catch: catchBat });
   api.onItemAction("Water-filled gourd vial", { Empty: emptyGourd });
   Raid.onTick(tickFarming);
 };

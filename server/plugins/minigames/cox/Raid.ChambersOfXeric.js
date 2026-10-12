@@ -4,7 +4,7 @@
  * Inside the chambers: the party tab, the steps out, passages between rooms, the holes and
  * ropes between floors, deaths, points for damage, and the raid's rules.
  *
- * Near-Reality:
+ * Not on the Wiki (to check against a capture):
  * - The party tab (500): Refresh, and the leader's Start raid ("No-one may join the party
  *   after the raid begins.").
  * - The first room's steps leave the raid: "You will not be able to rejoin this raid again."
@@ -187,7 +187,7 @@ module.exports = function registerCoxRaid(api) {
   api.onShouldDropItemsOnDeath(keepItemsOnDeath);
   api.onPlayerDeath(respawnInRaid);
   api.onPlayerDealtDamage(damagePoints);
-  api.onCanTeleport(noTeleporting);
+  Raid.onRaidArea("canTeleport", noTeleporting);
   api.onItemDropPolicy(tidyUntilStarted);
   api.onPlayerLogin(returnOnLogin);
   api.onNpcDeath(roomNpcDied);
