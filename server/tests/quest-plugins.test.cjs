@@ -325,7 +325,7 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
   const use = (a, b) => itemOnItem({ player, usedItemId: a, usedWithItemId: b, handled: false });
   const interact = (name, x = 0, y = 0, z = 1) => object({ player, definition: { getName: () => name }, option: 'Search', location: { x, y, z }, handled: false });
 
-  interact('Vines', 2982, 7679, 0);
+  interact('Amitire plant', 2982, 7679, 0);
   interact('Shelves', 3159, 7824);
   interact('Sink', 3157, 7825);
   interact('Cupboard', 3155, 7832);
@@ -1883,7 +1883,7 @@ test('bridge uses the actual cache palace exit and lets a full-inventory handoff
 
 test('Blood Moon native bitfield mapping reveals preparations and survives relog without changing quest stage',()=>{
  const {api}=mockApi();require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);const runtime=require('../plugins/quests/QuestRuntime'),quest=runtime.getRegisteredQuests().filter(q=>q.key==='the_blood_moon_rises').at(-1),attrs=new Map(),bits=new Map();const sender=new Proxy({}, {get:(_,key)=>key==='sendVarbit'?(id,n)=>bits.set(id,n):()=>sender});const player={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getPacketSender:()=>sender};
- quest.setStage(player,60);assert.equal(quest.getStage(player),60);assert.equal(bits.get(15464),106);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),106);quest.setStage(player,70);assert.equal(bits.get(15464),116);quest.setStage(player,110);assert.equal(bits.get(15464),176);assert.equal(quest.isComplete(player),true);
+ quest.setStage(player,60);assert.equal(quest.getStage(player),60);assert.equal(bits.get(15464),102);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),102);quest.setStage(player,70);assert.equal(bits.get(15464),116);quest.setStage(player,110);assert.equal(bits.get(15464),176);assert.equal(quest.isComplete(player),true);
 });
 
 test('Blood Moon preparation exit allows gathering leaves before the defence is ready',()=>{
