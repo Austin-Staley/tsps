@@ -10,10 +10,6 @@ const Hud = require("./Hud.Vorkath");
 
 /** Crater interior: the wall line y=4053 stays outside so climbers arrive cleanly. */
 const CRATER = { minX: 2258, maxX: 2286, minY: 4054, maxY: 4078 };
-// The cave to the north-west laboratory is outside the arena crater. Keep the
-// private area attached along the cache's western footpath so reaching it does
-// not destroy Vorkath's quest encounter before Dragon Slayer II handles Cave.
-const LAB_FOOTPATH = { minX: 2240, maxX: 2257, minY: 4050, maxY: 4084 };
 
 const ATTR_AREA = "vorkath:instance-area";
 
@@ -32,19 +28,10 @@ function insideCrater(location) {
   return x >= CRATER.minX && x <= CRATER.maxX && y >= CRATER.minY && y <= CRATER.maxY;
 }
 
-function insidePrivateFootprint(location) {
-  if (!location || location.getZ?.() !== 0) return false;
-  const x = location.getX();
-  const y = location.getY();
-  return (x >= CRATER.minX && x <= CRATER.maxX && y >= CRATER.minY && y <= CRATER.maxY)
-    || (x >= LAB_FOOTPATH.minX && x <= LAB_FOOTPATH.maxX && y >= LAB_FOOTPATH.minY && y <= LAB_FOOTPATH.maxY);
-}
-
 function defineAreaClass() {
   class VorkathArea extends core.PrivateArea {
     constructor(ownerName) {
-      super([craterBoundary(), new core.Boundary(LAB_FOOTPATH.minX, LAB_FOOTPATH.maxX,
-        LAB_FOOTPATH.minY, LAB_FOOTPATH.maxY, 0)]);
+      super([craterBoundary()]);
       this.ownerName = ownerName ?? "unknown";
     }
 
@@ -143,16 +130,12 @@ function ensureSleeper(area) {
 
 function enterCrater({ player }) {
   if (!player) return;
-  const location = player.getLocation?.();
-  let area = areaOf(player);
-  if (area && !insidePrivateFootprint(location)) {
+  if (!insideCrater(player.getLocation?.())) {
     destroyArea(player);
     return;
   }
+  let area = areaOf(player);
   if (!area) {
-    // Enter the instance at the crater, never by walking through the outer
-    // footpath from the public world.
-    if (!insideCrater(location)) return;
     area = new VorkathPrivateArea(player.getUsername?.());
     player.setAttribute?.(ATTR_AREA, area);
   }
@@ -180,5 +163,5 @@ module.exports = {
   areaOf,
   ensureSleeper,
   destroyArea,
-  _test: { insideCrater, insidePrivateFootprint },
+  _test: { insideCrater },
 };

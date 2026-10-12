@@ -32,6 +32,7 @@ module.exports = function registerDragonSlayerII(api) {
   const ATTR_FORGE_HEADS = "dragon-slayer-ii:forge-heads";
   const ATTR_UNGAEL_TRIP = "dragon-slayer-ii:ungael-trip";
   const ATTR_VORKATH_DEFEATED = "dragon-slayer-ii:vorkath-defeated";
+  const VARBIT_UNGAEL_EXIT = 6108;
   const ATTR_LAB_TIMER = "dragon-slayer-ii:lab-timer";
   const ATTR_UNGAEL_LAB_ACTIVE = "dragon-slayer-ii:ungael-lab-active";
   const ATTR_CRYPT_ACTIVE = "dragon-slayer-ii:kourend-crypt-active";
@@ -1013,6 +1014,7 @@ module.exports = function registerDragonSlayerII(api) {
     if (killer && stage(killer) === S.KEYS && killer.getAttribute(ATTR_UNGAEL_TRIP)
       && npc?.getId?.() === N.VORKATH_5) {
       killer.setAttribute(ATTR_VORKATH_DEFEATED, true);
+      syncUngaelExit(killer);
       killer.sendMessage("Vorkath falls. The cave to the north-west leads to the Dragonkin laboratory.");
       return;
     }
@@ -1054,6 +1056,13 @@ module.exports = function registerDragonSlayerII(api) {
       talk(killer, N.BRUNDT_THE_CHIEFTAIN_9, "the-assault-end-of-the-battle");
     }
     leaveArea(killer);
+  }
+  function syncUngaelExit(player) {
+    // Cache loc 25337 at the north crater wall transforms to climbable loc
+    // 31992 at varbit 6108 value 30.
+    player.getPacketSender?.().sendVarbit?.(VARBIT_UNGAEL_EXIT,
+      // The final transform is the default child after transform value 29.
+      player.getAttribute(ATTR_VORKATH_DEFEATED) ? 30 : 0);
   }
   function handleObject({ player: p, objectId, location, clickType, definition }) {
     const s = stage(p);
@@ -1182,6 +1191,7 @@ module.exports = function registerDragonSlayerII(api) {
     return false;
   }
   function onLogin({ player: p }) {
+    syncUngaelExit(p);
     const area = p.getAttribute(ATTR_AREA);
     if ((area instanceof QuestArea || area instanceof KaramjaArea || area instanceof UngaelLabArea || area instanceof KourendCryptArea) && !area.isDestroyed?.()) {
       leaveArea(p);

@@ -269,6 +269,39 @@ test('Dragon Slayer II reforging requires three distinct dragon-head casts and c
   assert.equal(counts.get(core.ItemIdentifiers.DRAGON_KEY_PIECE_4), 0);
 });
 
+test('Dragon Slayer II unlocks the northern Ungael exit from Vorkath completion on login', () => {
+  const deaths = [];
+  const logins = [];
+  const { api: base } = mockApi();
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onNpcDeath' ? (handler) => deaths.push(handler)
+      : prop === 'onPlayerLogin' ? (handler) => logins.push(handler)
+        : target[prop],
+  });
+  require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  const values = [];
+  const attrs = new Map([
+    ['quest.dragon_slayer_ii.stage', 6],
+    ['dragon-slayer-ii:ungael-trip', true],
+  ]);
+  const player = {
+    getAttribute: (key) => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getPacketSender: () => ({ sendVarbit: (id, value) => values.push([id, value]) }),
+    sendMessage() {},
+  };
+  const npc = { getId: () => api.core.NpcIdentifiers.VORKATH_5 };
+  deaths[0]({ killer: player, npc });
+  assert.equal(attrs.get('dragon-slayer-ii:vorkath-defeated'), true);
+  assert.deepEqual(values.at(-1), [6108, 30], 'the cache morph exposes the northern climb-over after Vorkath dies');
+  values.length = 0;
+  logins[0]({ player });
+  assert.deepEqual(values, [[6108, 30]], 'the climb-over stays open after relogging');
+  attrs.set('dragon-slayer-ii:vorkath-defeated', false);
+  logins[0]({ player });
+  assert.deepEqual(values.at(-1), [6108, 0], 'unfinished players see the blocked cache morph');
+});
+
 test('Dragon Slayer II Torfinn starts both ordered dragon waves before Galvek', async () => {
   await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
   const { api: base } = mockApi();

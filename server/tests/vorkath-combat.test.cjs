@@ -14,12 +14,6 @@ test("crater bounds cover the arena but not the wall line", () => {
   assert.equal(Area.insideCrater(at(2272, 4052)), false);
   assert.equal(Area.insideCrater(at(2272, 4054, 1)), false);
   assert.equal(Area.insideCrater(null), false);
-  assert.equal(Area._test.insidePrivateFootprint(at(2248, 4077)), true,
-    'the northwest laboratory cave remains in the private encounter while approached');
-  assert.equal(Area._test.insidePrivateFootprint(at(2239, 4077)), false,
-    'leaving the measured footpath still ends the private encounter');
-  assert.equal(Area._test.insidePrivateFootprint(at(2248, 4077, 1)), false,
-    'the cave footpath only applies on ground level');
 });
 
 test("standard attacks follow the captured mix", () => {
