@@ -29,11 +29,11 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
   removeActors(player);sync(player);
   const s=stage(player),l=player.getLocation(),spawns=[];
   if((l.getX()>>6)===46&&(l.getY()>>6)===52&&s>=220&&s<900){
-   spawns.push([IDRIA,2991,3342,0],[AKRISAE,2991,3345,0],[THAERISK,2994,3343,0],[SILIF,2994,3345,0]);
+   spawns.push([IDRIA,2989,3343,0],[AKRISAE,2989,3342,0],[THAERISK,2990,3342,0],[SILIF,2990,3343,0]);
    if(s>=250)spawns.push([s>=620?13548:CAPTIVE,2987,3343,0]);
    if(s>=280)spawns.push([FARMER,2963,3338,3]);
   }else if(s===230&&l.getX()>=3070&&l.getX()<=3110&&l.getY()>=3220&&l.getY()<=3270)spawns.push([SPY,3096,3248,0],[OUTSIDER,3088,3251,0]);
-  else if(s===210&&l.getX()>=2630&&l.getX()<=2675&&l.getY()>=3475&&l.getY()<=3515)spawns.push([WOOD_IDRIA,2646,3491,0]);
+  else if(s===210&&l.getX()>=2630&&l.getX()<=2675&&l.getY()>=3475&&l.getY()<=3515)spawns.push([WOOD_IDRIA,2657,3504,0]);
   if(spawns.length)actors.set(player,spawns.map(([id,x,y,z])=>api.spawnNpc({id,x,y,z,wanderRadius:0,owner:player,ownerOnly:true})));
  }
  class MercenaryBattle extends PrivateArea{
@@ -49,18 +49,18 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
     // Idria also fights; waiting for her is an explicit Wiki route.
     if(this.ticks%8===0)n.getCombat().getHitQueue().addPendingDamage([new HitDamage(8,HitMask.RED)]);
    });
-   if(val(p,MERCENARIES_ATTRIBUTE)===7){advance(p,210);p.sendMessage('The mercenaries have been defeated. Speak to Idria.');this.leave(p,false);p.moveTo(new Location(2646,3490,0));mapChange({player:p});}
+   if(val(p,MERCENARIES_ATTRIBUTE)===7){advance(p,210);p.sendMessage('The mercenaries have been defeated. Speak to Idria.');this.leave(p,false);p.moveTo(new Location(2657,3501,0));mapChange({player:p});}
   }
   postLeave(m,logout){if(m===this.player){for(const n of this.enemies)if(n)api.removeNpc(n);if(this.idria)api.removeNpc(this.idria);battles.delete(m);}super.postLeave(m,logout);}
  }
  function ambush(p){
   if(battles.has(p))return;const area=new MercenaryBattle(p);battles.set(p,area);area.enter(p);
-  area.idria=api.spawnNpc({id:WOOD_IDRIA,x:2646,y:3491,z:0,wanderRadius:0,owner:p,ownerOnly:true});area.enter(area.idria);
-  MERCENARIES.forEach((id,i)=>{if(val(p,MERCENARIES_ATTRIBUTE)&(1<<i))return;const n=api.spawnNpc({id,x:2644+i*2,y:3493,z:0,wanderRadius:0,owner:p,ownerOnly:true});n.setMaxHitpoints(i===2?100:140).setHitpoints(i===2?100:140).setScriptedMovement(true);area.enter(n);area.enemies[i]=n;});
+  area.idria=api.spawnNpc({id:WOOD_IDRIA,x:2657,y:3504,z:0,wanderRadius:0,owner:p,ownerOnly:true});area.enter(area.idria);
+  MERCENARIES.forEach((id,i)=>{if(val(p,MERCENARIES_ATTRIBUTE)&(1<<i))return;const n=api.spawnNpc({id,x:2654+i*2,y:3502,z:0,wanderRadius:0,owner:p,ownerOnly:true});n.setMaxHitpoints(i===2?100:140).setHitpoints(i===2?100:140).setScriptedMovement(true);area.enter(n);area.enemies[i]=n;});
   play(p,WOOD_IDRIA,PREFIX+'arriving-at-mcgrubor-s-wood');
  }
  class McGruborArrival extends Area{
-  constructor(){super([new Boundary(2640,2650,3486,3496,0)]);}
+  constructor(){super([new Boundary(2650,2661,3497,3505,0)]);}
   process(m){if(m.isPlayer?.()&&stage(m)===200)ambush(m);}
  }
  function talk({player,npcId}){
