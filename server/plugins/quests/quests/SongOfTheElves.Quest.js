@@ -590,9 +590,6 @@ module.exports = function registerSongOfTheElves(api) {
     // Stage is advanced by the transcript milestones below; cap it to the final chapter.
     return Math.min(CHAPTERS.length - 1, Math.max(0, Math.floor((value - STAGE.STARTED) / 10)));
   }
-  function objectOption(event) {
-    return event?.definition?.getInteractions?.()?.[event.clickType - 1] ?? event?.option;
-  }
   function onAction(event) {
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
@@ -888,7 +885,7 @@ module.exports = function registerSongOfTheElves(api) {
 
   function touchIthellSymbol(event) {
     const player = event?.player;
-    if (!player || objectOption(event) !== "Touch" || quest.isComplete(player) || currentChapter(player) !== 16 ||
+    if (!player || event.option !== "Touch" || quest.isComplete(player) || currentChapter(player) !== 16 ||
       (Number(player.getAttribute(ITHELL_CLUE_STAGE)) || 0) < 1) return false;
     const location = event.location ?? event.object?.getLocation?.();
     const x = location?.x ?? location?.getX?.();
@@ -922,7 +919,7 @@ module.exports = function registerSongOfTheElves(api) {
     const x = location?.x ?? location?.getX?.();
     const y = location?.y ?? location?.getY?.();
     const z = location?.z ?? location?.getZ?.();
-    if (!player || !["Build", "Construct"].includes(objectOption(event)) || currentChapter(player) !== 16 ||
+    if (!player || !["Build", "Construct"].includes(event.option) || currentChapter(player) !== 16 ||
       (Number(player.getAttribute(ITHELL_CLUE_STAGE)) || 0) < 2 || !ITHELL_WELL_IDS.has(event.objectId) ||
       x !== 2337 || ![3170, 3171].includes(y) || z !== 0) return false;
     event.handled = true;
@@ -1026,7 +1023,7 @@ module.exports = function registerSongOfTheElves(api) {
   function searchLletyaChild(event) {
     const player = event?.player;
     const { objectId, location } = event ?? {};
-    if (!player || currentChapter(player) !== 15 || !location || objectOption(event) !== "Search") return false;
+    if (!player || currentChapter(player) !== 15 || !location || event.option !== "Search") return false;
     const children = { ...(player.getAttribute(LLETYA_CHILDREN) ?? {}) };
     if (objectId === ObjectIdentifiers.TABLE_75 && location.x === 2340 && location.y === 3158 && location.z === 0) {
       event.handled = true;

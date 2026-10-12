@@ -1502,8 +1502,7 @@ test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clu
     { id: 37307, x: 2349, y: 3161, z: 0 }, { id: 37306, x: 2340, y: 3181, z: 0 },
     { id: 37304, x: 2334, y: 3183, z: 1 }, { id: 37303, x: 2351, y: 3172, z: 1 },
   ]) {
-    const event = { player, objectId: symbol.id, location: symbol, clickType: 1,
-      definition: { getInteractions: () => ['Touch'] }, handled: false };
+    const event = { player, objectId: symbol.id, location: symbol, option: 'Touch', handled: false };
     for (const handler of handlers.objects) if (handler(event) === true) break;
     assert.equal(event.handled, true);
   }
@@ -1512,8 +1511,7 @@ test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clu
   inventory.set(base.core.ItemIdentifiers.LIMESTONE_BRICK, 8);
   inventory.set(base.core.ItemIdentifiers.SAW, 1);
   inventory.set(base.core.ItemIdentifiers.HAMMER, 1);
-  const statue = { player, objectId: 37308, location: { x: 2337, y: 3171, z: 0 }, clickType: 1,
-    definition: { getInteractions: () => ['Build'] }, handled: false };
+  const statue = { player, objectId: 37308, location: { x: 2337, y: 3171, z: 0 }, option: 'Build', handled: false };
   for (const handler of handlers.objects) if (handler(statue) === true) break;
   assert.equal(attributes.get('quest.song_of_the_elves.ithell-statue'), true);
   assert.equal(inventory.get(base.core.ItemIdentifiers.LIMESTONE_BRICK), 0);
