@@ -612,12 +612,13 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (old && old.isRegistered?.() && old.getHitpoints?.() > 0) return;
     const npc = api.spawnNpc({ id: NpcIdentifiers.ARANEI_112, x: 3173, y: 7855, z: 1,
       wanderRadius: 0, owner: player, ownerOnly: true });
-    if (npc) siegeHallInjured.set(key, npc);
+    if (npc) { player.getPrivateArea?.()?.enter(npc); siegeHallInjured.set(key, npc); }
   }
 
   function handleSiegeLogin({ player }) {
     if (!player || stage(player) !== STAGE.SIEGE) return;
     const state = hallDefenceState(player);
+    if (state.phase === "hall") hall.enter(player);
     if (state.phase === "hall") player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE,
       { ...state, nextIntegrityLossCycle: World.getProcessCycle() + HALL_INTEGRITY_INTERVAL });
     spawnSiegeInjuredAranei(player);
@@ -635,8 +636,9 @@ module.exports = function registerTheBloodMoonRises(api) {
     const object = event.object;
     if (!object) return false;
     const location = object.getLocation();
-    const replacement = new api.core.GameObject(replacementId, location.clone(), object.getType(), object.getFace(),
-      object.getPrivateArea?.() ?? null);
+    const area = hall.sessions.get(event.player);
+    if (!area || object.getPrivateArea?.() !== area) return false;
+    const replacement = new api.core.GameObject(replacementId, location.clone(), object.getType(), object.getFace(), area);
     api.core.ObjectManager.deregister(object, true);
     api.core.ObjectManager.register(replacement, true);
     return true;
@@ -690,6 +692,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     const npcId = event?.npcId ?? npc?.getId?.();
     if (!player || !npc || !SIEGE_HALL.injuredAranei.includes(npcId) ||
       stage(player) !== STAGE.SIEGE || hallDefenceState(player).phase !== "hall") return;
+    if (npc.getOwner?.() !== player || npc.getArea?.() !== hall.sessions.get(player)) return;
     event.handled = true;
     const state = hallDefenceState(player);
     const key = injuredAraneiKey(npc);
@@ -870,9 +873,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!player || quest.isComplete(player)) return;
     const next = ACTION_STAGE[event.stepId];
     if (event.stepId === "vqg4qO") {
-      bridge.finish(player);
+      if (stage(player) !== STAGE.SIEGE || !bridge.finish(player)) return;
       player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { phase: "hall", integrity: 100, healed: [], repaired: [] });
       quest.setStage(player, STAGE.SIEGE);
+      hall.enter(player);
       spawnSiegeInjuredAranei(player);
     }
     if (event.stepId === "Sut83Q") {
@@ -1822,7 +1826,16 @@ module.exports = function registerTheBloodMoonRises(api) {
     otherRewards: ["Access to Vampyrium", "A Hallowed flail", "Sunspear", "The vampyres of Morytania are tolerant of you"],
     buildJournal,
   });
-  require("../bmr/Palace.TheBloodMoonRises")({ api, stage, preparationAttribute: PREP_ATTRIBUTE, processHall: processSiegeDefence });
+  const hall = require("../bmr/Hall.TheBloodMoonRises")({ api, state: hallDefenceState,
+    process: processSiegeDefence, cleanup: handleSiegeLogout, scenery: player => {
+      const repaired = hallDefenceState(player).repaired ?? [];
+      return [[SIEGE_HALL.hammerCrate, 3177, 7843], [SIEGE_HALL.potionCrate, 3177, 7846],
+        [SIEGE_HALL.barricade, 3167, 7844], ...[...SIEGE_HALL.repairLocations].map(([key, ids]) => {
+          const [x, y] = key.split(',').map(Number);
+          return [ids[repaired.includes(key) ? 1 : 0], x, y, ids[0] === SIEGE_HALL.damagedWindow ? 0 : 10, ids[0] === SIEGE_HALL.damagedWindow ? 2 : 0];
+        })];
+    } });
+  require("../bmr/Palace.TheBloodMoonRises")({ api, stage, preparationAttribute: PREP_ATTRIBUTE, processHall: ({ player }) => hall.enter(player) });
   const bridge = require("../bmr/Bridge.TheBloodMoonRises")({ api, stage, attribute: SIEGE_DEFENCE_ATTRIBUTE,
     sync: player => quest.setStage(player, STAGE.SIEGE),
     ready: player => { const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {}; return prep.flail && prep.stakes; },
