@@ -43,6 +43,9 @@ function mockApi() {
       list.push(h);
       handlers.custom.set(name, list);
     },
+    emitCustomEvent: (name, event) => {
+      for (const handler of handlers.custom.get(name) ?? []) handler(event);
+    },
     persistAttribute: noop,
   };
   const api = new Proxy(base, {
@@ -905,6 +908,40 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
   objectManager.deregister = originalDeregister;
   objectManager.register = originalRegister;
   api.core.World.getProcessCycle = originalGetProcessCycle;
+});
+
+test('Blood Moon starts the scoped Theatre encounter and advances after Vasilias', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
+    sendMessage() {},
+  };
+  quest.setStage(player, 80);
+  let started = 0;
+  api.onCustomEvent('tob:bmr:start', ({ player: eventPlayer }) => {
+    assert.equal(eventPlayer, player);
+    started++;
+  });
+  handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: '1Z5SGt' });
+  assert.equal(started, 1, 'the ready dialogue enters the shared scoped raid instead of starting a duplicate arena');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.tob-challenge').started, true);
+  const npcDefinition = api.core.NpcDefinition;
+  const originalForId = npcDefinition.forId;
+  npcDefinition.forId = (id) => ({ getId: () => id, getName: () => 'Sugadinti Vitur' });
+  try {
+    api.emitCustomEvent('tob:bmr:completed', { player });
+  } finally {
+    npcDefinition.forId = originalForId;
+  }
+  assert.equal(quest.getStage(player), 90, 'the Vasilias clear advances to the Wyrd chapter');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.tob-challenge').completed, true);
 });
 
 test('Priest in Peril unlocks the mausoleum Holy barrier only after completion', () => {

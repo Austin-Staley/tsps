@@ -76,6 +76,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const SIEGE_DRAKAN_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.siege-drakan-area";
   const SIEGE_DRAKAN_COMPLETE = "quest.the_blood_moon_rises.siege-drakan-defeated";
   const SIEGE_DEFENCE_ATTRIBUTE = "quest.the_blood_moon_rises.siege-defence";
+  const TOB_CHALLENGE_ATTRIBUTE = "quest.the_blood_moon_rises.tob-challenge";
   const PREP_COMPLETE = "quest.the_blood_moon_rises.preparations-complete";
   const wyrdEncounters = new Map();
   const drakanEncounters = new Map();
@@ -610,7 +611,11 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function handleSiegeLogin({ player }) {
-    if (player && stage(player) === STAGE.SIEGE) spawnSiegeInjuredAranei(player);
+    if (!player || stage(player) !== STAGE.SIEGE) return;
+    const state = hallDefenceState(player);
+    if (state.phase === "hall") player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE,
+      { ...state, nextIntegrityLossCycle: World.getProcessCycle() + HALL_INTEGRITY_INTERVAL });
+    spawnSiegeInjuredAranei(player);
   }
 
   function handleSiegeLogout({ player }) {
@@ -868,6 +873,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (event.stepId === "4ebW6l" || event.stepId === "BzMe5D") finishDrakanEncounter(player);
     if (event.stepId === "Xz7d4O") startSiegeDrakanBattle(player);
     if (event.stepId === "zPiZ9c") finishSiegeDrakanBattle(player);
+    if (event.stepId === "1Z5SGt" && stage(player) === STAGE.THEATRE) {
+      player.setAttribute(TOB_CHALLENGE_ATTRIBUTE, { started: true, completed: false });
+      api.emitCustomEvent("tob:bmr:start", { player });
+    }
     if (event.stepId === "dJZbqF") {
       const area = player.getAttribute(WYRD_AREA_ATTRIBUTE);
       const encounter = area && wyrdEncounters.get(area);
@@ -884,6 +893,16 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (event.stepId === "xt3dPV") advance(player, STAGE.FENCE_FOUND);
     if (event.stepId === "2QgFZA" && player.getAttribute(WYRD_DEFEATED_ATTRIBUTE)) advance(player, STAGE.FINAL);
     if (event.stepId === "BzMe5D") quest.complete(player);
+  }
+
+  function onBloodMoonTobCompleted(event) {
+    const player = event?.player;
+    const challenge = player?.getAttribute(TOB_CHALLENGE_ATTRIBUTE);
+    if (!player || stage(player) !== STAGE.THEATRE || !challenge?.started || challenge.completed) return;
+    player.setAttribute(TOB_CHALLENGE_ATTRIBUTE, { ...challenge, completed: true });
+    advance(player, STAGE.WYRDS);
+    startTranscript(api, player, NpcIdentifiers.SUGADINTI_VITUR_6, PAGE,
+      "another-night-at-the-theatre-after-killing-the-nylocas-vasilias");
   }
 
   function onChoice(event) {
@@ -1751,6 +1770,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("npc-dialogue:hook", onStartHook);
   api.onCustomEvent("npc-dialogue:action", onTranscriptAction);
   api.onCustomEvent("npc-dialogue:choice", onChoice);
+  api.onCustomEvent("tob:bmr:completed", onBloodMoonTobCompleted);
   api.onNpcDialogueVariant(selectVariant);
   api.onAnyNpcInteraction({ "Talk-to": talkQuestNpc });
   api.onObjectInteraction(enterVampyriumCastle);
@@ -1791,6 +1811,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.persistAttribute(SIEGE_DRAKAN_AREA_ATTRIBUTE);
   api.persistAttribute(SIEGE_DRAKAN_COMPLETE);
   api.persistAttribute(SIEGE_DEFENCE_ATTRIBUTE);
+  api.persistAttribute(TOB_CHALLENGE_ATTRIBUTE);
   api.persistAttribute(PREP_ATTRIBUTE);
   api.persistAttribute(PREP_COMPLETE);
   api.persistAttribute(THRONE_PUZZLE_ATTRIBUTE);
