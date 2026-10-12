@@ -9,6 +9,7 @@ import { Scene } from "../../rs/scene/Scene";
 import { MapManager } from "../MapManager";
 import { OsrsClient } from "../OsrsClient";
 import { Ray, rayIntersectsBox } from "../math/Raycast";
+import { baseNpcTypeId } from "../../custom/npcs/NpcModelOverrideRegistry";
 import { InteractType } from "../../render/InteractType";
 import { WebGLMapSquare } from "../../render/WebGLMapSquare";
 import { interpolateActorHeight, sampleBridgeHeightForWorldTile } from "./BridgeHeightSampler";
@@ -660,7 +661,10 @@ export class SceneRaycaster {
             const worldX = (npcEcs.getWorldX(ecsId) | 0) / 128.0;
             const worldZ = (npcEcs.getWorldY(ecsId) | 0) / 128.0;
             const size = Math.max(1, npcEcs.getSize(ecsId) | 0);
-            const interactId = npcEcs.getNpcTypeId(ecsId) | 0;
+            // Interaction always speaks the cache's type id: a model customisation
+            // re-points the RENDER type to a synthetic id, and everything the pick
+            // path feeds (menu names, actions, heights) must stay the server's id.
+            const interactId = baseNpcTypeId(npcEcs.getNpcTypeId(ecsId) | 0);
             if (!(interactId > 0)) continue;
             const npcPlane = npcEcs.getLevel(ecsId) | 0;
             if (typeof basePlane === "number" && (npcPlane | 0) !== (basePlane | 0)) {

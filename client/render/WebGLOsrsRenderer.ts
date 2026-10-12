@@ -27,6 +27,7 @@ import {
     subscribeTick,
 } from "../network/ServerConnection";
 import { sendLogin } from "../network/ServerConnection";
+import { baseNpcTypeId } from "../custom/npcs/NpcModelOverrideRegistry";
 import { flushPackets } from "../network/packet";
 import { createTextureArray } from "../picogl/PicoTexture";
 import { RS_TO_RADIANS } from "../rs/MathConstants";
@@ -810,7 +811,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
                 kind: "npc",
                 ecsId,
                 serverId,
-                npcTypeId: this.osrsClient.npcEcs.getNpcTypeId(ecsId),
+                // Cache type for picking; the synthetic render type stays visual only.
+                npcTypeId: baseNpcTypeId(this.osrsClient.npcEcs.getNpcTypeId(ecsId)),
                 plane: 0,
             });
         const previousOnMapRemoved = this.mapManager.onMapRemoved;
