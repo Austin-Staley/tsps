@@ -319,7 +319,7 @@ module.exports = {
     api.onPlayerDisconnect(({ player }) => {
       stopCooking(activeSessions, player, false);
     });
-    api.onPlayerLevelUp(({ player }) => {
+    api.onCustomEvent("level-up:popup-opened", ({ player }) => {
       stopCooking(activeSessions, player, false);
     });
 
