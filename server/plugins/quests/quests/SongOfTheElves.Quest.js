@@ -917,6 +917,44 @@ module.exports = function registerSongOfTheElves(api) {
     return true;
   }
 
+  // Keep every numbered solution honest, including the independent cyan and
+  // blue rays that branch away from a route's last mirror. This runs at plugin
+  // load so a bad later-puzzle source cannot survive until a full live replay.
+  function validateLibraryRoutes() {
+    for (const seal of LIBRARY_SEAL_DATA) {
+      if (seal.steps.length !== seal.targets.length) {
+        throw new Error(`Incomplete ${seal.name} light-puzzle route: every operation needs a pillar.`);
+      }
+      const placements = {};
+      for (let step = 0; step < seal.steps.length; step++) {
+        const operation = seal.steps[step];
+        const [x, y, z] = seal.targets[step] ?? [];
+        if ((!LIBRARY_OPERATIONS[operation] && !Object.hasOwn(LIBRARY_CRYSTAL_ITEMS, operation)) ||
+          !Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(z)) {
+          throw new Error(`Invalid ${seal.name} light-puzzle step ${step + 1}.`);
+        }
+        const branch = seal.branches?.[step];
+        const previous = branch?.fromStep !== undefined
+          ? Object.values(placements).find((placed) => placed.step === branch.fromStep) ?? null
+          : branch?.source
+            ? { x: branch.source[0], y: branch.source[1], z: branch.source[2], direction: branch.direction }
+            : Object.values(placements).at(-1) ?? {
+              x: seal.source[0], y: seal.source[1], z: seal.source[2], direction: seal.sourceDirection,
+            };
+        const key = `${x},${y},${z}`;
+        if (Object.hasOwn(placements, key) || !beamReaches(previous, { x, y, z }, null, placements)) {
+          throw new Error(`Unreachable ${seal.name} light-puzzle step ${step + 1}; check its independent beam source.`);
+        }
+        placements[key] = {
+          operation,
+          direction: LIBRARY_OPERATIONS[operation] ?? previous?.direction ?? "",
+          x, y, z, step,
+        };
+      }
+    }
+  }
+  validateLibraryRoutes();
+
   function dispenserCollect(event) {
     const player = event?.player;
     if (!player || !inLibrary(player) || quest.isComplete(player)) return false;
