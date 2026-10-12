@@ -38,7 +38,7 @@ function track(player, World) {
   return state;
 }
 
-const emptyClientLog = () => ({ varbits: {}, varps: {}, interfaces: [] });
+const emptyClientLog = () => ({ varbits: {}, varps: {}, interfaces: [], graphics: [] });
 
 // Wraps the PacketSender calls a test asserts on. Varbits and varps keep their latest value;
 // interface events keep their order.
@@ -52,6 +52,10 @@ function recordClient(sender, state) {
       return original(...args);
     };
   };
+  wrap("sendGraphic", (graphic, at) => {
+    state.client.graphics.push({ id: graphic.getId(), x: at.getX(), y: at.getY(), z: at.getZ() });
+    if (state.client.graphics.length > MAX_MESSAGES) state.client.graphics.shift();
+  });
   wrap("sendVarbit", (id, value) => { state.client.varbits[id] = value; });
   wrap("sendConfig", (id, value) => { state.client.varps[id] = value; });
   wrap("sendInterface", (id) => state.client.interfaces.push(`open ${id}`));
@@ -190,6 +194,7 @@ function createContext(core, server) {
         return {
           index: npc.getIndex(), id: npc.getId(), name: definition?.getName(),
           hitpoints: npc.getHitpoints(), maxHitpoints: npc.getMaxHitpoints(),
+          animation: npc.getAnimation?.()?.getId?.() ?? null,
           options: (definition?.getActions() ?? []).filter(Boolean), ...tile(npc.getLocation()),
         };
       }),
