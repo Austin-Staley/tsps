@@ -2113,6 +2113,8 @@ export class PluginManager {
       ShopManager: require("../game/model/container/shop/ShopManager").ShopManager,
       ShopDefinition: require("../game/definition/ShopDefinition").ShopDefinition,
       MultiChatboxPrompt: require("../game/model/menu/MultiChatboxPrompt").MultiChatboxPrompt,
+      ChatPacketListener: require("../net/packet/impl/ChatPacketListener").ChatPacketListener,
+      TradeState: require("../game/content/Trading").TradeState,
       dispatchClientMessages: require("../net/NetworkBuilder").dispatchClientMessages,
       connectHeadlessClient: require("../net/NetworkBuilder").connectHeadlessClient,
     });
