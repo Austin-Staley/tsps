@@ -500,6 +500,128 @@ test('Desert Treasure II requires Kasonde dialogue and the full 400-tick hideout
   }
 });
 
+test('Desert Treasure II makes the Strangler serum with the two real ingredients and requires Kasonde dialogue', () => {
+  const { api: base } = mockApi();
+  let combine, itemAction;
+  const interactions = [];
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onItemOnItem' ? (handler) => { combine = handler; }
+      : prop === 'onItemAction' ? (handler) => { itemAction = handler; }
+        : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
+          : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const startTranscript = runtime.startTranscript;
+  runtime.startTranscript = () => true;
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1);
+    const { ItemIdentifiers: I, NpcIdentifiers: N } = api.core;
+    const attrs = new Map([['desert-treasure-ii:vardorvis-progress', 14]]);
+    const counts = new Map([[I.UNFINISHED_SERUM, 1], [I.KORBAL_HERB, 1], [I.ARGIAN_BERRIES, 1]]);
+    const p = {
+      getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      getInventory: () => ({
+        getAmount: (id) => counts.get(id) ?? 0,
+        deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+        adds: (id, amount) => counts.set(id, (counts.get(id) ?? 0) + amount),
+      }), getPacketSender: () => new Proxy({}, { get: () => () => {} }), sendMessage() {},
+    };
+    quest.setStage(p, 7);
+    assert.equal(combine({ player: p, usedItemId: I.UNFINISHED_SERUM, usedWithItemId: I.KORBAL_HERB }), true);
+    assert.equal(counts.get(I.UNFINISHED_SERUM_2), 1);
+    assert.equal(combine({ player: p, usedItemId: I.UNFINISHED_SERUM_2, usedWithItemId: I.ARGIAN_BERRIES }), true);
+    assert.equal(counts.get(I.STRANGLER_SERUM), 1);
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 15);
+    assert.equal(itemAction({ player: p, itemId: I.STRANGLER_SERUM, option: 'Drink' }), undefined,
+      'Kasonde must explain the completed serum before it can be drunk');
+    interactions.find((entry) => entry.name === 'Kasonde').options['Talk-to']({ player: p, npcId: N.KASONDE });
+    assert.equal(attrs.get('desert-treasure-ii:kasonde-serum-discussed'), true);
+    assert.equal(itemAction({ player: p, itemId: I.STRANGLER_SERUM, option: 'Drink' }), true);
+    assert.equal(counts.get(I.STRANGLER_SERUM), 0);
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 16);
+  } finally {
+    runtime.startTranscript = startTranscript;
+  }
+});
+
+test('Desert Treasure II requires both Stranglewood ingredients and defeating temple Strangled before Kasonde gives serum', () => {
+  const { api: base } = mockApi();
+  const objectHooks = [], deathHooks = [], interactions = [];
+  class TestInstance {
+    constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
+    setChunk() {}
+    enter(player) { this.player = player; }
+    leave() {}
+    postLeave() {}
+    getBaseX() { return 8192; }
+    getBaseY() { return 1600; }
+    tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z }; }
+    add(npc) { this.entities.push(npc); }
+    isDestroyed() { return false; }
+    destroy() { this.destroyed = true; }
+  }
+  const queues = { add: [], remove: [] };
+  const core = {
+    ...base.core, TemplatedInstanceArea: TestInstance,
+    NPC: { create: (id, location) => ({
+      id, location, setOwner() {}, setOwnerOnly() {}, getRealId() { return this.id; },
+      isNpc() { return true; }, getAsNpc() { return this; },
+    }) },
+    World: { getAddNPCQueue: () => queues.add, getRemoveNPCQueue: () => queues.remove },
+  };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
+        : prop === 'onNpcDeath' ? (handler) => deathHooks.push(handler)
+          : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
+            : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const startTranscript = runtime.startTranscript;
+  runtime.startTranscript = () => true;
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1);
+    const { ItemIdentifiers: I, ObjectIdentifiers: O, NpcIdentifiers: N } = core;
+    const attrs = new Map([['desert-treasure-ii:vardorvis-progress', 11]]);
+    const counts = new Map();
+    const p = {
+      getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      getUsername: () => 'dt2-temple-test', moveTo(location) { this.location = location; },
+      getInventory: () => ({
+        getAmount: (id) => counts.get(id) ?? 0,
+        deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+        adds: (id, amount) => counts.set(id, (counts.get(id) ?? 0) + amount),
+      }),
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }), sendMessage() {},
+    };
+    quest.setStage(p, 7);
+    const interact = (objectId, x, y) => objectHooks[0]({ player: p, objectId, location: { x, y, z: 0 } });
+    assert.equal(interact(O.ENTRY_21, 1174, 3428), undefined, 'the temple refuses entry before both ingredients are found');
+    interact(O.KORBAL_HERBS, 1155, 3447);
+    assert.equal(counts.get(I.KORBAL_HERB), 1);
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 11);
+    interact(O.ARGIAN_BUSH, 1126, 3323);
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 12);
+    assert.equal(interact(O.ENTRY_21, 1174, 3428), true);
+    const area = attrs.get('desert-treasure-ii:stranglewood-temple');
+    assert.equal(area.width, 2);
+    assert.equal(area.height, 5);
+    assert.deepEqual([p.location.x, p.location.y], [8198, 1616]);
+    const attackers = area.entities.filter((npc) => npc.__dt2TempleEnemy);
+    assert.equal(attackers.length, 3);
+    attackers.forEach((npc) => deathHooks[0]({ killer: p, npc }));
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 13);
+    assert.ok(area.entities.some((npc) => npc.getRealId?.() === N.KASONDE), 'Kasonde appears after the attackers are defeated');
+    interactions.find((entry) => entry.name === 'Kasonde').options['Talk-to']({ player: p, npcId: N.KASONDE });
+    assert.equal(counts.get(I.UNFINISHED_SERUM), 1);
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 14);
+  } finally {
+    runtime.startTranscript = startTranscript;
+  }
+});
+
 test('Desert Treasure II enters a private copy of the real war room from the cleared Digsite hole', () => {
   const { api: base } = mockApi();
   const handlers = [];

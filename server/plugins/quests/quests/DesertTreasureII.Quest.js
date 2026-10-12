@@ -674,7 +674,7 @@ module.exports = function registerDesertTreasureII(api) {
     }
     return false;
   }
-  function handleItemOnItem({ player: p, itemId1, itemId2 }) {
+  function handleItemOnItem({ player: p, usedItemId: itemId1, usedWithItemId: itemId2 }) {
     if (stage(p) !== S.VARDORVIS || (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) < 11) return false;
     const pair = new Set([itemId1, itemId2]);
     if (pair.has(I.UNFINISHED_SERUM) && pair.has(I.KORBAL_HERB) && has(p, I.UNFINISHED_SERUM) && has(p, I.KORBAL_HERB)) {
