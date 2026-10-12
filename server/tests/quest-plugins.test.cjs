@@ -1660,8 +1660,8 @@ test('DT2 enters the barricaded house through its ruins scene and restores Kason
   } finally { runtime.startTranscript = original; }
 });
 
-test('Desert Treasure II requires Kasonde dialogue and the full 400-tick hideout defence', () => {
-  const { api: base } = mockApi();
+test('Desert Treasure II requires Kasonde dialogue and the full three-minute hideout defence', () => {
+  const { api: base, handlers } = mockApi();
   const interactions = [], objectHooks = [], chunks = [];
   let cycle = 0;
   const queues = { add: [], remove: [] };
@@ -1717,25 +1717,65 @@ test('Desert Treasure II requires Kasonde dialogue and the full 400-tick hideout
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 6);
     const kasonde = interactions.find((entry) => entry.name === 'Kasonde').options['Talk-to'];
     kasonde({ player: p, npcId: core.NpcIdentifiers.KASONDE });
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 6, 'opening dialogue cannot accept Kasonde’s instructions');
+    const line = {player:p,npcId:core.NpcIdentifiers.KASONDE,text:"They'll be coming. We've got no chance up here. Head down below! Now!"};
+    handlers.custom.get('npc-dialogue:line').forEach(h => h(line));
+    line.after();
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 7);
     kasonde({ player: p, npcId: core.NpcIdentifiers.KASONDE });
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 7);
+    line.text = "What are you waiting for? They're coming! Quick, head down below!";
+    handlers.custom.get('npc-dialogue:line').forEach(h => h(line));
+    line.after();
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 8);
     assert.equal(objectHooks[0]({ player: p, objectId: core.ObjectIdentifiers.ENTRY_20, location: { x: 1191, y: 3411, z: 0 } }), true);
     const area = attrs.get('desert-treasure-ii:stranglewood-hideout');
     assert.equal(area.width, 7);
     assert.equal(area.height, 5);
-    assert.deepEqual([p.location.x, p.location.y], [8223, 1620]);
+    assert.deepEqual([p.location.x, p.location.y], [8223, 1624]);
     assert.equal(chunks.filter(([plane, , , chunk]) => plane === 0 && chunk !== null).length, 35);
-    for (let tick = 0; tick < 399; tick++) area.process(p);
+    area.kasonde.isRegistered = () => false;
+    area.process(p);
+    assert.equal(area.failed, undefined, 'queued NPC registration must not fail the encounter');
+    assert.equal(area.remainingTicks, 300);
+    area.kasonde.isRegistered = () => true;
+    for (let tick = 0; tick < 299; tick++) area.process(p);
     assert.equal(area.defended, undefined, 'the horde defence cannot be skipped by a short wait');
     area.process(p);
-    assert.equal(area.defended, true, 'Kasonde survives the documented 400-tick holdout');
-    assert.equal(objectHooks[0]({ player: p, objectId: core.ObjectIdentifiers.LADDER_439, location: area.tile(27, 24, 0) }), true);
+    assert.equal(area.defended, true, 'Kasonde survives the documented three-minute holdout');
+    assert.equal(objectHooks[0]({ player: p, objectId: core.ObjectIdentifiers.LADDER_439, location: area.tile(27, 28, 0) }), true);
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 9);
     assert.deepEqual([p.location.getX(), p.location.getY(), p.location.getZ()], [1187, 3411, 0]);
   } finally {
     runtime.startTranscript = startTranscript;
   }
+});
+
+test('DT2 hideout landing can reach Kasonde and the cache ladder through the real template', async () => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { TemplatedInstanceArea } = require('../dist/game/model/areas/impl/TemplatedInstanceArea');
+  const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  await CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
+  RegionManager.init();
+  const area = new TemplatedInstanceArea(7,5);
+  try {
+    for (let x=0;x<7;x++) for(let y=0;y<5;y++) for(let plane=0;plane<4;plane++)
+      area.setChunk(plane,x,y,plane===0?{sourceChunkX:145+x,sourceChunkY:1217+y,sourcePlane:0,rotation:0}:null);
+    const route = new RsmodRouteFinding();
+    for (const [x,y] of [[24,21],[26,28]]) {
+      const result = route.findRoute({level:0,srcX:area.getBaseX()+31,srcY:area.getBaseY()+24,srcSize:1,
+        destX:area.getBaseX()+x,destY:area.getBaseY()+y,privateArea:area,moveNear:false});
+      assert.equal(result.success,true,'the arrival must reach Kasonde and the real ladder');
+    }
+    for (const [x,y] of [[13,8],[20,8],[39,9],[37,24],[13,24],[24,27]]) {
+      const result = route.findRoute({level:0,srcX:area.getBaseX()+x,srcY:area.getBaseY()+y,srcSize:1,
+        destX:area.getBaseX()+24,destY:area.getBaseY()+21,privateArea:area,moveNear:false});
+      assert.equal(result.success,true,'every horde entrance must reach Kasonde through the cache corridor');
+    }
+    const ladder = area.resolveObject(48732,new (require('../dist/game/model/Location').Location)(area.getBaseX()+27,area.getBaseY()+28,0));
+    assert.ok(ladder,'source ladder1187,9764 is at template offset27,28');
+  } finally { area.destroy(); }
 });
 
 test('Desert Treasure II makes the Strangler serum with the two real ingredients and requires Kasonde dialogue', () => {

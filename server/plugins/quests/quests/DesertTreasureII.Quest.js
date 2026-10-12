@@ -418,7 +418,7 @@ module.exports = function registerDesertTreasureII(api) {
       super(7, 5);
       this.owner = owner;
       this.questPlayer = questPlayer;
-      this.remainingTicks = 400;
+      this.remainingTicks = 300;
       this.lastProcessCycle = -1;
       this.nextSpawnTick = 0;
       this.enemies = [];
@@ -442,7 +442,8 @@ module.exports = function registerDesertTreasureII(api) {
       this.lastProcessCycle = cycle;
       if (this.remainingTicks <= 0) return;
       const kasonde = this.kasonde;
-      if (!kasonde?.isRegistered?.() || kasonde.getHitpoints?.() <= 0) {
+      if (!kasonde?.isRegistered?.()) return;
+      if (kasonde.getHitpoints?.() <= 0) {
         this.remainingTicks = 0;
         this.failed = true;
         return;
@@ -450,16 +451,19 @@ module.exports = function registerDesertTreasureII(api) {
       this.remainingTicks--;
       if (this.remainingTicks <= 0) {
         this.defended = true;
+        for (const enemy of this.enemies) if (enemy.isRegistered?.() && !api.core.World.getRemoveNPCQueue().includes(enemy)) api.core.World.getRemoveNPCQueue().push(enemy);
+        this.questPlayer.sendMessage("Kasonde has survived the horde for three minutes. Speak to him, then climb out of the hideout.");
         return;
       }
-      const elapsed = 400 - this.remainingTicks;
+      const elapsed = 300 - this.remainingTicks;
       if (elapsed >= this.nextSpawnTick && this.enemies.filter((npc) => npc?.isRegistered?.() && npc.getHitpoints?.() > 0).length < 4) {
         this.spawnEnemy(elapsed);
         this.nextSpawnTick += 16;
       }
     }
     spawnEnemy(elapsed) {
-      const tiles = [[13, 8], [20, 8], [39, 9], [44, 28], [10, 29], [27, 31]];
+      // shortcut: entrances use walkable cache corridors, calibrate the wave positions from a live capture.
+      const tiles = [[13, 8], [20, 8], [39, 9], [37, 24], [13, 24], [24, 27]];
       const [x, y] = tiles[Math.floor(elapsed / 16) % tiles.length];
       const npc = api.core.NPC.create(N.STRANGLED, this.tile(x, y, 0));
       npc.setOwner?.(this.questPlayer);
@@ -1341,13 +1345,13 @@ module.exports = function registerDesertTreasureII(api) {
     const current = p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT);
     if (current instanceof StranglewoodHideoutArea && !current.isDestroyed()) {
       current.enter(p);
-      p.moveTo(current.tile(31, 20, 0));
+      p.moveTo(current.tile(31, 24, 0));
       return current;
     }
     const area = new StranglewoodHideoutArea(p.getUsername?.(), p);
     area.enter(p);
     p.setAttribute(ATTR_STRANGLEWOOD_HIDEOUT, area);
-    p.moveTo(area.tile(31, 20, 0));
+    p.moveTo(area.tile(31, 24, 0));
     const kasonde = api.core.NPC.create(N.KASONDE, area.tile(24, 20, 0));
     kasonde.setOwner?.(p);
     kasonde.setOwnerOnly?.(true);
@@ -1357,8 +1361,13 @@ module.exports = function registerDesertTreasureII(api) {
     area.kasonde = kasonde;
     area.add(kasonde);
     api.core.World.getAddNPCQueue().push(kasonde);
-    area.spawnEnemy(0);
-    area.nextSpawnTick = 16;
+    if (Number(p.getAttribute(VARDORVIS_PROGRESS)) >= 9) {
+      area.defended = true;
+      area.remainingTicks = 0;
+    } else {
+      area.spawnEnemy(0);
+      area.nextSpawnTick = 16;
+    }
     return area;
   }
 
@@ -2186,6 +2195,14 @@ module.exports = function registerDesertTreasureII(api) {
         event.after = () => event.player.setAttribute(VARDORVIS_PROGRESS, 1);
       if (event.npcId === N.BARUS && progress === 1 && event.text === "Don't mention it!")
         event.after = () => event.player.setAttribute(VARDORVIS_PROGRESS, 2);
+      if (event.npcId === N.KASONDE && progress === 6 && event.text === "They'll be coming. We've got no chance up here. Head down below! Now!")
+        event.after = () => event.player.setAttribute(VARDORVIS_PROGRESS, 7);
+      if (event.npcId === N.KASONDE && progress === 7 && event.text === "What are you waiting for? They're coming! Quick, head down below!")
+        event.after = () => event.player.setAttribute(VARDORVIS_PROGRESS, 8);
+      if (event.npcId === N.KASONDE && progress === 9 && event.text === "I need to gather some additional ingredients from within the temple. I will meet you back here once I'm done.")
+        event.after = () => event.player.setAttribute(VARDORVIS_PROGRESS, 11);
+      if (event.npcId === N.KASONDE && progress === 10 && event.text === "Okay, I'll see if I can find them.")
+        event.after = () => event.player.setAttribute(VARDORVIS_PROGRESS, 11);
     }
     if (event?.player?.getAttribute(FINAL_FIGURE_STARTED)
       && event?.npcId === N.MYSTERIOUS_FIGURE_2 && event?.text === "Very well...") {
@@ -2356,8 +2373,8 @@ module.exports = function registerDesertTreasureII(api) {
     const area = p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT);
     if (!(area instanceof StranglewoodHideoutArea) || area.isDestroyed?.() || !location) return null;
     const x = location.x - area.getBaseX() + 1160;
-    const y = location.y - area.getBaseY() + 9740;
-    return x >= 1160 && x < 1216 && y >= 9740 && y < 9780 ? { x, y } : null;
+    const y = location.y - area.getBaseY() + 9736;
+    return x >= 1160 && x < 1216 && y >= 9736 && y < 9776 ? { x, y } : null;
   }
 
   function templeSourceTile(p, location) {
@@ -2840,24 +2857,22 @@ module.exports = function registerDesertTreasureII(api) {
   function talkKasonde({ player: p, npcId }) {
     if (stage(p) !== S.VARDORVIS) return false;
     const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
+    const hideout = p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT);
+    if (hideout) {
+      if (hideout.defended) return talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-holding-back-the-horde");
+      return p.sendMessage("Keep the Strangled away from Kasonde until the horde is held back.");
+    }
     if (progress === 6) {
       talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde");
-      p.setAttribute(VARDORVIS_PROGRESS, 7);
       return;
     }
-    if (progress === 7) {
-      talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-talking-to-kasonde-again");
-      p.setAttribute(VARDORVIS_PROGRESS, 8);
-      return;
-    }
+    if (progress === 7 || progress === 8) return talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-talking-to-kasonde-again");
     if (progress === 9) {
-      talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-holding-back-the-horde");
-      p.setAttribute(VARDORVIS_PROGRESS, 10);
+      talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-back-on-the-surface");
       return;
     }
-    if (progress === 10) {
+    if (progress === 10 || progress === 11) {
       talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-back-on-the-surface-talking-to-kasonde-again-before-retrieving-the-ingredients");
-      p.setAttribute(VARDORVIS_PROGRESS, 11);
       return;
     }
     if (progress === 13) {
@@ -3737,7 +3752,7 @@ module.exports = function registerDesertTreasureII(api) {
     }
     if (s === S.VARDORVIS && [O.ENTRY_20, O.ENTRY_21].includes(objectId)
       && Math.abs(location.x - 1191) <= 2 && Math.abs(location.y - 3411) <= 2) {
-      if ((Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) < 8) {
+      if ((Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) < 7) {
         return p.sendMessage("Talk to Kasonde before entering the hideout.");
       }
       enterHideout(p);
