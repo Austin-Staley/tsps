@@ -1410,6 +1410,9 @@ test('Desert Treasure II requires and solves the real eight-cell golem grid', ()
   const searches = [];
   runtime.startTranscript = (_api, _player, _npcId, _page, variant) => {
     assert.ok(transcripts[variant], `missing golem transcript: ${variant}`);
+    if (variant.includes('powering-up-the-golem-machine-') && !variant.includes('banikan')) {
+      assert.equal(transcripts[variant][0].type, 'line', 'the archive report must display before Banikan speaks');
+    }
     searches.push(variant);
     return true;
   };
@@ -1520,6 +1523,10 @@ test('Desert Treasure II requires and solves the real eight-cell golem grid', ()
     }
     assert.equal(attrs.get('desert-treasure-ii:searched-names'), 15);
     assert.equal(searches.length - previousTranscripts, 4, 'each search must display its canonical NPC dialogue');
+    objectInteractions[0]({ player, objectId: O.GOLEM, location: golem, option: 'Operate' });
+    player.syntaxAction.execute('Vardorvis');
+    assert.equal(searches.length - previousTranscripts, 5, 'known reports can be read again after relog');
+    assert.equal(attrs.get('desert-treasure-ii:searched-names'), 15);
   } finally {
     runtime.startTranscript = startTranscript;
   }
@@ -6888,6 +6895,39 @@ test('DT2 Guardian reforms its shield and its warned rocks can be dodged but byp
   cycle=33;area.process(player);
   assert.equal(damage.length,1,'standing under a rock is hit despite the melee prayer');
   assert.ok(damage[0].getDamage()>=15&&damage[0].getDamage()<=25);
+});
+
+test('DT2 completes Banikan departure during dialogue and reveals the last search on Operate', () => {
+  const { api, handlers } = mockApi(), runtime = require('../plugins/quests/QuestRuntime');
+  const original = runtime.startTranscript, played = [];
+  runtime.startTranscript = (_api, _player, _npc, _page, variant) => { played.push(variant); return true; };
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1), attrs = new Map();
+    const room = { getBaseX:()=>8192, getBaseY:()=>1600 };
+    const player = {getAttribute:key=>attrs.get(key),setAttribute:(key,value)=>attrs.set(key,value),sendMessage(){},getPacketSender:()=>new Proxy({}, {get:()=>()=>{}})};
+    quest.setStage(player,6);
+    attrs.set('desert-treasure-ii:war-room',room);
+    attrs.set('desert-treasure-ii:golem-solved',true);
+    attrs.set('desert-treasure-ii:banikan-briefed',true);
+    attrs.set('desert-treasure-ii:searched-names',15);
+    handlers.npcInteractions.get('Dr Banikan')['Talk-to']({player,npcId:api.core.NpcIdentifiers.DR_BANIKAN});
+    assert.equal(attrs.get('desert-treasure-ii:banikan-left'),undefined,'opening the conversation does not finish it');
+    assert.equal(quest.varbitValue(6,player),38);
+    const variants = require('../data/definitions/npc-dialogues.json')['Desert Treasure II - The Fallen Empire'].variants;
+    const resolve = handlers.condition[0];
+    const { flatten } = require('../plugins/npcs/NpcDialogues.plugin');
+    const queue = flatten(variants['familiar-faces-powering-up-the-golem-machine-the-whisperer-true-name-classified'],{resolveCondition:step=>resolve({player,text:step.text})});
+    assert.ok(queue.some(step=>step.id==='T24jg_'),'the last report flows into the departure conversation');
+    handlers.custom.get('npc-dialogue:action')[0]({player,stepId:'T24jg_'});
+    assert.equal(quest.varbitValue(6,player),40);
+    handlers.objects[0]({player,objectId:49511,location:{x:8214,y:1619,z:0},option:'Operate'});
+    assert.equal(quest.getStage(player),7);
+    const report = variants[played.at(-1)];
+    assert.ok(report.some(step=>step.player==='Repeat last search.'));
+    assert.ok(report.some(step=>step.type==='line'&&step.text==='Frostenhorn'),'the archived name must be shown');
+    assert.equal(quest.varbitValue(7,player),42);
+  } finally { runtime.startTranscript = original; }
 });
 
 test('DT2 persists progress and puzzle state without serializing its live boss NPC', () => {
