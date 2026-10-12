@@ -313,6 +313,9 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
     ...PluginManager.getCoreApi(), PrivateArea: TestPrivateArea,
     ObjectDefinition: { forId: (id) => id === 35222 ? { name: 'Pillar of Light' } : null },
   } };
+  base.core.ObjectDefinition.forPlayer = (id) => [35222, 35259, 35194].includes(id)
+    ? { id: id === 35259 ? 35194 : id, name: 'Pillar of Light', getName: () => 'Pillar of Light' }
+    : null;
   const api = new Proxy(base, {
     get(target, prop) {
       if (prop in target) return target[prop];
@@ -366,9 +369,9 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
   attributes.set('quest.song_of_the_elves.library-seals', 3);
   useObject({ player, objectId: api.core.ObjectIdentifiers.CRYSTAL_DISPENSER_3, handled: false });
   const useMirror = itemObjects.get('Hand mirror');
-  const place = (x, y, direction, z = 0) => {
-    const objectId = x === 2609 && y === 6158
-      ? 35222 : api.core.ObjectIdentifiers.PILLAR_OF_LIGHT_41;
+  const place = (x, y, direction, z = 0, overrideId = null) => {
+    const objectId = overrideId ?? (x === 2609 && y === 6158
+      ? 35222 : api.core.ObjectIdentifiers.PILLAR_OF_LIGHT_41);
     useMirror({
       player, itemId: api.core.ItemIdentifiers.HAND_MIRROR_2,
       objectId,
@@ -400,4 +403,13 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
   assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '1:1');
   place(2623, 6158, 'down', 1);
   assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '1:2');
+
+  attributes.set('quest.song_of_the_elves.library-seals', 14);
+  attributes.set('quest.song_of_the_elves.library-puzzle', '3:18');
+  attributes.set('quest.song_of_the_elves.library-pillar-state', JSON.stringify({
+    '2595,6186,0': { operation: 'S', direction: 'south', x: 2595, y: 6186, z: 0, step: 7 },
+  }));
+  amounts.set(api.core.ItemIdentifiers.HAND_MIRROR_2, 1);
+  place(2595, 6172, 'east', 0, 35259);
+  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '3:19');
 });

@@ -44,7 +44,7 @@ module.exports = function registerSongOfTheElves(api) {
     { name: "ithell", id: ObjectIdentifiers.SEAL_OF_ITHELL, mapId: 36730, memory: NpcIdentifiers.MEMORY_OF_SEREN_2, tile: [2676, 6101, 1], tileRotation: 1, source: [2651, 6102, 1], sourceDirection: "south", steps: ["E", "N", "E", "N", "E", "S", "W", "S", "E", "N", "E", "N", "E"], targets: [[2651, 6098, 1], [2655, 6098, 1], [2655, 6106, 1], [2659, 6106, 1], [2659, 6110, 1], [2663, 6110, 1], [2663, 6098, 1], [2659, 6098, 1], [2659, 6094, 1], [2667, 6094, 1], [2667, 6098, 1], [2671, 6098, 1], [2671, 6102, 1]] },
     { name: "cadarn", id: ObjectIdentifiers.SEAL_OF_CADARN, mapId: 36725, memory: NpcIdentifiers.MEMORY_OF_SEREN_3, tile: [2622, 6097, 0], tileRotation: 2, source: [2609, 6130, 1], sourceDirection: "north", steps: ["E", "D", "S", "W", "S", "red", "E", "S"], targets: [[2609, 6158, 1], [2623, 6158, 1], [2623, 6158, 0], [2623, 6130, 0], [2609, 6130, 0], [2609, 6116, 0], [2609, 6102, 0], [2623, 6102, 0]] },
     { name: "crwys", id: ObjectIdentifiers.SEAL_OF_CRWYS, mapId: 36726, memory: NpcIdentifiers.MEMORY_OF_SEREN_4, tile: [2576, 6171, 1], tileRotation: 3, source: [2609, 6158, 1], sourceDirection: "south", steps: ["W", "N", "W", "fractured", "N", "green", "D", "E", "U", "cyan", "S", "D", "S"], targets: [[2609, 6144, 1], [2595, 6144, 1], [2595, 6158, 1], [2581, 6158, 1], [2567, 6158, 1], [2567, 6172, 1], [2567, 6200, 1], [2567, 6200, 0], [2581, 6200, 0], [2581, 6200, 1], [2581, 6200, 2], [2581, 6186, 2], [2581, 6186, 1]] },
-    { name: "amlodd", id: ObjectIdentifiers.SEAL_OF_AMLODD, mapId: 36727, memory: NpcIdentifiers.MEMORY_OF_SEREN_5, tile: [2614, 6157, 0], tileRotation: 1, source: [2623, 6144, 1], sourceDirection: "west", steps: ["fractured", "N", "red", "E", "N", "W", "D", "S", "E", "D", "S", "W", "S", "W", "N", "green", "yellow", "E", "E", "S"], targets: [[2609, 6144, 1], [2595, 6144, 1], [2595, 6158, 1], [2595, 6172, 1], [2609, 6172, 1], [2609, 6186, 1], [2595, 6186, 1], [2595, 6186, 0], [2609, 6158, 1], [2623, 6158, 1], [2623, 6158, 0], [2623, 6130, 0], [2609, 6130, 0], [2609, 6116, 0], [2595, 6116, 0], [2595, 6130, 0], [2595, 6144, 0], [2595, 6158, 0], [2595, 6172, 0], [2609, 6172, 0]], branches: { 8: { fromStep: 0 } } },
+    { name: "amlodd", id: ObjectIdentifiers.SEAL_OF_AMLODD, mapId: 36727, memory: NpcIdentifiers.MEMORY_OF_SEREN_5, tile: [2614, 6157, 0], tileRotation: 1, source: [2623, 6144, 1], sourceDirection: "west", steps: ["fractured", "N", "red", "E", "N", "W", "D", "S", "E", "D", "S", "W", "S", "W", "N", "green", "yellow", "E", "E", "S"], targets: [[2609, 6144, 1], [2595, 6144, 1], [2595, 6158, 1], [2595, 6172, 1], [2609, 6172, 1], [2609, 6186, 1], [2595, 6186, 1], [2595, 6186, 0], [2609, 6158, 1], [2623, 6158, 1], [2623, 6158, 0], [2623, 6130, 0], [2609, 6130, 0], [2609, 6116, 0], [2595, 6116, 0], [2595, 6130, 0], [2595, 6144, 0], [2595, 6158, 0], [2595, 6172, 0], [2609, 6172, 0]], branches: { 8: { fromStep: 0 }, 18: { fromStep: 7 } } },
     { name: "meilyr", id: ObjectIdentifiers.SEAL_OF_MEILYR, mapId: 36731, memory: NpcIdentifiers.MEMORY_OF_SEREN_6, tile: [2580, 6163, 2], tileRotation: 0, source: [2595, 6158, 1], sourceDirection: "east", steps: ["E", "D", "S", "W", "S", "W", "N", "W", "N", "U", "red", "N", "U", "N", "W", "N", "W", "S", "W"], targets: [[2609, 6158, 1], [2623, 6158, 1], [2623, 6158, 0], [2623, 6130, 0], [2609, 6130, 0], [2609, 6116, 0], [2595, 6116, 0], [2595, 6130, 0], [2581, 6130, 0], [2581, 6144, 0], [2581, 6144, 1], [2581, 6144, 2], [2637, 6144, 1], [2637, 6144, 2], [2637, 6158, 2], [2609, 6158, 2], [2609, 6172, 2], [2595, 6172, 2], [2595, 6158, 2]], branches: { 12: { source: [2637, 6130, 1], direction: "north" } } },
     { name: "hefin", id: ObjectIdentifiers.SEAL_OF_HEFIN, mapId: 36728, memory: NpcIdentifiers.MEMORY_OF_SEREN_7, tile: [2562, 6129, 2], tileRotation: 3, source: [2595, 6158, 1], sourceDirection: "east", steps: ["E", "D", "S", "W", "S", "W", "N", "W", "S", "W", "N", "D", "E", "U", "N", "W", "U", "N", "W", "S"], targets: [[2609, 6158, 1], [2623, 6158, 1], [2623, 6158, 0], [2623, 6130, 0], [2609, 6130, 0], [2609, 6116, 0], [2595, 6116, 0], [2595, 6130, 0], [2595, 6102, 1], [2595, 6088, 1], [2567, 6088, 1], [2567, 6116, 1], [2567, 6116, 0], [2581, 6116, 0], [2581, 6130, 0], [2581, 6144, 0], [2567, 6144, 0], [2581, 6116, 2], [2581, 6130, 2], [2567, 6144, 2]], branches: { 8: { source: [2595, 6116, 1], direction: "south" }, 17: { source: [2581, 6102, 2], direction: "north" } } },
     { name: "trahaearn", id: ObjectIdentifiers.SEAL_OF_TRAHAEARN, mapId: 36732, memory: NpcIdentifiers.MEMORY_OF_SEREN_8, tile: [2646, 6143, 2], tileRotation: 3, source: [2595, 6116, 1], sourceDirection: "south", steps: ["S", "W", "N", "D", "E", "U", "N", "E", "S", "E", "blue", "S", "E", "N", "W", "N", "N", "E", "U", "E", "N", "W", "S"], targets: [[2595, 6102, 1], [2595, 6088, 1], [2567, 6088, 1], [2567, 6116, 1], [2567, 6116, 0], [2581, 6116, 0], [2581, 6116, 2], [2581, 6130, 2], [2609, 6130, 2], [2609, 6102, 2], [2637, 6102, 2], [2651, 6102, 2], [2651, 6094, 2], [2665, 6094, 2], [2665, 6110, 2], [2651, 6110, 2], [2651, 6130, 1], [2651, 6144, 1], [2665, 6144, 1], [2665, 6144, 2], [2679, 6144, 2], [2679, 6158, 2], [2651, 6158, 2]], branches: { 16: { source: [2651, 6116, 1], direction: "north" } } },
@@ -942,14 +942,13 @@ module.exports = function registerSongOfTheElves(api) {
 
   function isLibraryPillar(player, objectId, location, seal) {
     if (!inLibrary(player) || !location || !seal) return false;
-    const cacheName = api.core.ObjectDefinition?.forId?.(objectId)?.name;
-    if (!LIBRARY_PILLAR_IDS.has(objectId) && cacheName !== "Pillar of Light") return false;
-    const tile = new Location(location.x, location.y, location.z);
-    const area = player.getArea();
-    const mapObject = api.core.MapObjects?.get?.(objectId, tile, area);
-    if (mapObject?.getId?.() === objectId) return true;
-    return area.getTemplateObjects?.(tile)?.some((object) => object.getId() === objectId) === true ||
-      area.getObjects?.().some((object) => object.getId() === objectId && object.getLocation().equals(tile)) === true;
+    const definition = api.core.ObjectDefinition?.forPlayer?.(objectId, player);
+    const cacheName = definition?.getName?.() ?? definition?.name;
+    // The item-on-object hook already selected the visible Pillar of Light
+    // name. Static library locs can have a different raw map id from their
+    // resolved menu variant, so do not require that variant id to equal the
+    // map object's parent id here; the exact seal route validates the tile.
+    return cacheName === "Pillar of Light" || LIBRARY_PILLAR_IDS.has(objectId);
   }
 
   function submitLibraryOperation(player, sealIndex, operation, location) {
@@ -1006,7 +1005,12 @@ module.exports = function registerSongOfTheElves(api) {
     const seal = LIBRARY_SEAL_DATA[sealIndex];
     const state = libraryPuzzleState(player);
     const loc = event.location;
-    if (!isLibraryPillar(player, event.objectId, loc, seal)) return false;
+    // A library pillar is commonly a transformed loc. The generic item-on-
+    // object event retains the raw parent id in objectId; its definition is
+    // the visible cache variant the player actually used.
+    const visibleObjectId = event.definition?.id ??
+      api.core.ObjectDefinition?.forPlayer?.(event.objectId, player)?.id ?? event.objectId;
+    if (!isLibraryPillar(player, visibleObjectId, loc, seal)) return false;
     if (state.seal !== sealIndex || !LIBRARY_OPERATIONS[seal.steps[state.step]]) {
       player.sendMessage("This pillar is not where the current beam needs to be redirected.");
       return true;
