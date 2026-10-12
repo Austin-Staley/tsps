@@ -1,0 +1,230 @@
+# Chambers of Xeric
+
+The Chambers of Xeric raid, Normal and Challenge Mode, ported from Near-Reality (Kris's Zenyte raid) and checked against the OSRS Wiki. There is no rsprox capture yet; every value that comes only from Near-Reality is listed at the end, to check against one later.
+
+The plugin is `server/plugins/minigames/ChambersOfXeric.plugin.js`, which loads one unit per area from `server/plugins/minigames/cox/`.
+
+## Status
+
+| Phase | What | State |
+| --- | --- | --- |
+| 1 | Mount Quidamortem, parties, entry, layouts (Normal and Challenge Mode), points overlay, party tab, floors, deaths, leaving | Built, untested in game |
+| 2 | Resource rooms, storage units, skilling, raid Herblore, food and potion points | Built, untested in game |
+| 3 | Monster scaling, exit crystals; puzzle rooms: Ice Demon, Thieving, Tightrope, Crabs | Built, untested in game |
+| 4 | Tekton, Muttadiles, Vanguards, Vasa Nistirio | Built, untested in game |
+| 5 | Vespula, Guardians, Shamans, Mystics, scavengers and shortcuts | Built, untested in game |
+| 6 | The Great Olm | Built, untested in game |
+| 7 | Completion, counts and personal bests, Challenge Mode target time, the ancient chest, Captain Rimor's capes | Built, untested in game |
+
+The rooms' set-up is covered by `server/tests/chambers-of-xeric.test.cjs` (a Challenge Mode raid loads every room); the fights themselves need testing in game.
+
+## Layout
+
+| File | What it owns |
+| --- | --- |
+| `CoxShared.js` | Ids, tiles, vars, the chat-channel bridge and helpers. |
+| `CoxLayout.js` | The 26 layout patterns, the combat rotations, room generation, laying floors out, Challenge Mode's floors. |
+| `CoxMap.js` | The raid's instance: rooms copied and turned, wall chunks between them, the Olm's chamber, tiles inside rooms. |
+| `CoxParties.js` | Parties: one per chat-channel, the advertised list, leaders. |
+| `CoxRaid.js` | A raid: entering, starting, stages, points, deaths, leaving; the `Room` base class rooms extend. |
+| `Lobby.*` | The recruiting board, the party page, the entrance. |
+| `Raid.*` | The party tab, steps, passages, holes and ropes, deaths, damage points, the raid's rules. |
+| `Storage.*` | Private and shared storage, building and upgrading the units, the mountain's unit. |
+| `Resources.*` | Resource rooms: fishing and the cave snake, bats, herb patches, weeds, gourds and geysers, saplings, tools, the energy well. |
+| `Herblore.*` | Cleaning the raid's herbs, mixing its potions. |
+| `Supplies.*` | Points for food and potions to their makers; answers `potions:area`. |
+| `CoxMonsters.js` | The monsters' base stats and the Wiki DPS calculator's scaling. |
+| `IceDemon.*`, `Thieving.*`, `Tightrope.*`, `Crabs.*` | The puzzle rooms. |
+| `Tekton.*`, `Muttadiles.*`, `Vanguards.*`, `Vasa.*`, `Vespula.*`, `Guardians.*`, `Shamans.*`, `Mystics.*` | The combat rooms. |
+| `Scavengers.*` | Scavenger rooms and the large room's shortcut. |
+| `Olm.*` | The Great Olm's chamber. |
+| `Rewards.*` | Completion, the ancient chest, Captain Rimor's capes. |
+| `Commands.*` | Developer commands. |
+
+## Mount Quidamortem
+
+| What | Where (cache) | Notes |
+| --- | --- | --- |
+| Recruiting boards (29776, Read) | (1240, 3549), (1246, 3562) | Open the board. |
+| Chambers of Xeric (29777, Enter) | (1232, 3573) | The way in. |
+| Captain Rimor (7595) | (1234, 3568) | Already spawned. Talk-to is his transcript; Claim-cape comes in phase 7. |
+| Bank chest, private storage unit (30107) | (1254, 3572), (1256, 3572) | The unit holds what was left in private storage; it must be emptied before entering again. |
+
+**Parties belong to chat-channels** (OSRS; Near-Reality):
+- You need to be in a chat-channel and be at least a Recruit in it to make a party; the channel's owner's party is the channel's.
+- The party page lists the channel's members standing on the mountain.
+- Leaving the channel leaves the party (and the raid). A leader who leaves hands the party to the best-ranked raider who can kick from the channel, or else the party is disbanded.
+- The friends chat plugin answers `friends-chat:channel` ({ player } or { key }), `friends-chat:join` and `friends-chat:leave`, and announces `friends-chat:left` when anyone leaves a channel.
+
+**The recruiting board (499)** lists 40 advertised parties. Each row (script 1566) is leader, members, preferred size, combat level and skill total, Challenge Mode, and age in ticks. Its buttons are Refresh, Make party, and each row's View.
+
+**The party page (507):**
+- One script 1517 per member: name, combat, total, kill count (Challenge Mode's when it is on), then 23 skills in the script's order.
+- Then the header (script 1524): the title, your state (0 outsider, 1 member, 2 leader), advertised, and adverts left.
+- Varbits:
+
+  | Varbit | What |
+  | --- | --- |
+  | 5428 | You lead the party |
+  | 6385 | Challenge Mode |
+  | 5433 | Preferred size |
+  | 5426 | Preferred combat level |
+  | 5427 | Preferred skill total |
+
+- Buttons (component 3, slots 0-9): Join/Leave, Advertise/Delist, Disband, Refresh, Back, the three preferences, Challenge Mode, and large raid ("Large raids are not available.").
+- Settings can't change once the party has entered.
+
+**The entrance:**
+1. The first time, a warning: "Items left in a dungeon cannot be retrieved. Participants may be ejected at any time. Don't risk dropping items that you want to keep." with "Accept warning and proceed." or "Cancel.".
+2. Then it checks, in order:
+   - you need a chat-channel and a party;
+   - you can't enter a started raid;
+   - before the leader is in, only Generals and up may enter.
+3. The raid is built on the first entry ("Please wait a few moments as your raid is being constructed...", 3 ticks).
+
+## The raid
+
+**Layouts** (Near-Reality; the Wiki for the rotations and Challenge Mode):
+- A normal raid takes one of 26 patterns: room kinds and the direction each is entered from, two floors.
+- Its combat rooms are a run from one of two rotations:
+  - Tekton, Vasa, Guardians, Mystics, Shamans, Muttadiles, Vanguards, Vespula;
+  - or Tekton, Muttadiles, Guardians, Vespula, Shamans, Vasa, Vanguards, Mystics.
+- Two of the four puzzles are drawn (a layout with a third puzzle slot repeats any of the four); scavenger and resource rooms are drawn from their two kinds.
+- Challenge Mode is always the same three floors with every combat and puzzle room.
+- Every layout is 4x2 rooms (16x8 chunks).
+
+**The instance** (`CoxMap`):
+- Rooms are 4x4 chunks of the cache's raid map: chunk x 408, 412 or 416 for the path turning west, going straight or turning east; chunk y and plane per room.
+- Each room is turned to face the way the path enters it.
+- Floors go on planes 3, 2 and (Challenge Mode) 1. The gaps are a wall chunk (416, 647) turned at random.
+- The Olm's chamber, 5x7 chunks from (402, 713), is copied beside the raid on plane 0, so the whole raid is one 16x16 instance.
+- Tiles inside rooms are given as they are on the cache's map and turned with the room.
+- Landings on ropes and holes move to the nearest open tile (Near-Reality walks the player off them).
+
+**Starting and stages:**
+- Everyone lands in the first room. Its passage stays shut until the leader starts the raid from the party tab ("No-one may join the party after the raid begins."); the leader gets "Use the controls on the side-panel when you are ready to begin the raid.", everyone else "The party leader must start the party before you may pass.".
+- Reaching plane 2, plane 1 (Challenge Mode) and the Olm's chamber completes the Upper, Middle and Lower levels: "<Level> level complete! Duration: mm:ss", and the respawn moves to that floor's start.
+- The party tab (500) replaces the chat-channel tab:
+  - Varbits: 5423 you lead, 5424 raiders, 5425 the stage, 6386 the timer.
+  - Scripts: 1547 the list's size, 1548 a member, 1553 who you can kick.
+- The points overlay (513) is on the HUD: 5431 total and 5422 your points.
+
+**Points:**
+- Damage dealt to the raid's NPCs gives 5 points per hitpoint, within a per-room cap of 5 x its NPCs' hitpoints + 5% (Near-Reality).
+- Only raiders there at the start earn points.
+- Personal points aren't capped during the raid; the overlay shows up to 131,071 (Wiki).
+
+**Deaths are safe** (Wiki):
+- 40% of the player's points are lost; if they had under 5% of the team's total, the team loses 5% instead.
+- Raid-only items drop where they fell, and they wake at the floor's respawn.
+- (Near-Reality used an 8,400-point threshold and 10%.)
+
+**Leaving:**
+- The first room's steps: "You will not be able to rejoin this raid again." (Leave the raid. / Stay.). Out is (1246, 3558) on the mountain.
+- Raid-only items are dropped on the way out.
+- The raid is destroyed when no one left inside can lead it ("As there is no one else eligible to kick players from this channel, the raid has been destroyed.").
+- Logging out inside puts you back in when you log in, if the raid is still going and you were in it from the start; otherwise you are put outside ("Your party could not be re-found.").
+
+**Rules:** no teleporting ("You cannot teleport from the Chambers of Xeric."); no dropping items before the raid starts ("You should keep your raiding dungeon tidy until your raid has begun."); the raid is multi-combat.
+
+**Not ported** (Near-Reality only): its "layouts" feature (choosing which patterns a party gets), its daily advert quota (the page shows 99 adverts left), member-rank point boosts, and the 0.8x points below combat level 115.
+
+## Supplies
+
+**Storage units** (Wiki):
+- Every unit in the raid starts tiny (25 personal items, no shared space) and is built up together: small (Construction 30), medium (60), large (90), massive (99), two mallignum root planks and 150 XP a tier, 100 points a tier. Building past a tier costs the tiers between.
+- Personal / shared space: 30 / 250, 60 / 500, 90 / 1,000, 120 / 1,500.
+- The shared storage takes the items of cache enum 1666 only. Kindling can't be stored (since December 2023).
+- Raid-only items left in private storage are gone once outside; anything else waits in the mountain's unit, which must be emptied before entering again.
+- Interfaces (Near-Reality): private 271 (inventory 583), shared 550 (inventory 582), side panel 551. Withdraw/deposit 1, 5, 10, All, X.
+- Not like OSRS: the creation menu is a chatbox choice, because the cache's furniture menu table (DB table 110) has no rows for these units.
+
+**Resource rooms** (Wiki for levels and XP, Near-Reality for timings):
+- Fishing (room A): rod and cave worms, fish 1/15/30/45/60/75/90 for 20-38 XP. One of three spots hides a cave snake that rises, bites (3-6) and steals a food when fished; the spot moves every 50 ticks or after 10 rises.
+- Bats (room B): a butterfly net wielded; 2 + raiders/8 bats (at most 6) of one type among the three best the raid's top Hunter level allows.
+- Herb patches: golpar 27, buchu 39, noxifer 55 Farming; seeds from raking weeds (five rakes of 1-3 seeds) or later from bosses. A stage every 12 ticks, grown at 4; three lives when picking.
+- Gourds: Pick or Pick-lots at the gourd tree, filled at a geyser (click it, or use a gourd on it).
+- Saplings give kindling (28 at most), Woodcutting XP by how many a chop gave (Mod Bruno's table). Kindling lights a fire for cooking (Firemaking 48 XP).
+- Tools lying about: old tools (rake, spade, seed dibber), bronze axe, iron pickaxe, hammer, tinderbox. The energy well restores run energy.
+
+**Herblore** (Wiki): herbs clean at 47/52/60 for 1/2/3 XP. A clean herb, a second ingredient and a water-filled gourd make a 4-dose potion of the best strength the level allows; overloads take noxifer and an elder, twisted and kodai potion of one strength and come out no stronger than the level allows. Antipoisons (noxifer and cicely) give 90 seconds, six and nine minutes.
+
+**Food and potion points** (Wiki): the cook gets 4 + 8 x tier per piece eaten (x1.5 when someone else eats it; soft cap 20 x raiders pieces, hard cap 40 x raiders). Potion makers get points per sip (x1.5 for someone else's), up to 5 sips per raider plus 5 at half. Not like OSRS: items carry no maker here, so the raid keeps a list of who made each kind and credits the eater's own first.
+
+## Monsters and rooms
+
+**Scaling** (`CoxMonsters.js`): base stats and bonuses from the Wiki's DPS calculator data, scaled as its Chambers of Xeric code does (checked against its tests): levels by the party's highest Hitpoints level, hitpoints by its highest combat level, both by party size, +50% in Challenge Mode (Tekton's defence +20%/+35%). Scavengers and vespine soldiers scale as solo monsters; the Olm's hitpoints follow its own formula. Core gives an NPC its own stats and max hit with `NPC.setCombatOverride` (core change). Max hits grow with the scaled offence (a derived rule; the Wiki gives them at base scale).
+
+**Rooms** share the `Room` base: exit crystals (`blockExit`/`clearExit`), the room's raiders, template objects, and death, before-death and hit hooks dispatched from `Raid.Cox`. Each room's header comment lists what comes from the Wiki and what from Near-Reality. In short:
+
+| Room | Wiki rules used | Near-Reality only |
+| --- | --- | --- |
+| Ice Demon | Lighting 8%-78%, icefiends steal a charge 1 in 6 every 3-4 ticks, 32 + 36 points, damage a third (fire 250%, demonbane full), prayer-chosen attacks, drops for everyone | storm strength 250/raider, burn rates, attack bases 30/25 |
+| Thieving | Open chance 39%-61% (+21 lockpick), grubs 0..level/25 (min 1, 2 at 95), 16 grubs/raider (30 solo), 115 points, cap max(4500, Thieving/6 x 150), bats chest 5-25 | eating rate, tiles, XP |
+| Tightrope | Agility 80-100% of the party average, keystone dispels and kills the guards | counts, attacks |
+| Crabs | Style colours, smash stun by party size | orb movement, 1,600 points a crystal |
+| Tekton | Ranged immune, magic a fifth, 10-14 attacks, sparks 10-20, ~1.33% heals | timings, tiles |
+| Muttadiles | Meat tree (health, chance, damage), 1/3 erratic hits, eating at half health up to 3 times, stomp 1.5x | timings, bases |
+| Vanguards | 40% / 33.3% imbalance, shuffles every 20-36 ticks, shells | attacks |
+| Vasa | Teleport and blast rules, 1% every 2 ticks siphon, 66-67 tick crystal timer, crystal resistances | attacks, tiles |
+| Vespula | Flying (magic, ranged, halberds), landing from 20%, enraged stings, grubs 125 | portal fire, timings |
+| Guardians | Pickaxes only with the Mining multiplier, hitpoints formula | knock-backs |
+| Shamans | Blob up to 39 | counts, spawns |
+| Mystics | Prayer-reactive melee | Vulnerability chance |
+| Scavengers | Three drops each (via `npc-drops:extra-rolls`), shortcut points 5 x level | counts, no respawn |
+
+## The Great Olm
+
+`Olm.Cox.js`, a room registered for the chamber (`raid.olmRoom`):
+- The mystical barrier ("Pass" asks, "Quick-pass" doesn't; no way back) wakes it; it rises on a random side with a power (acid, flame, crystal), never the same twice in a row.
+- The head attacks every 4 ticks through the Wiki's rotation (standard / empty / Crystal Burst / ... / Swap, plus the infinity sign in the last phase), facing the zone with most players and catching up a skipped standard attack.
+- Standard attacks (1 in 5 to switch style, prayer lets 20% through), spheres, phase attacks (1 in 3, 1 in 2 in the last phase, preferring unused ones), claw specials, Life Siphon in the final stand.
+- Phases: 3 + raiders/8 claw phases. Both claws down: falling crystals, then it rises on the other side. In the last one the claws must fall within 34 ticks of each other, then the final stand.
+- Its death shatters the exit crystal and turns the crystal by the steps into the ancient chest.
+
+## Rewards
+
+`Rewards.Cox.js` on `Raid.onComplete`:
+- Completion message, Normal / Challenge Mode counts (attributes), personal bests by mode and team size.
+- Challenge Mode within the Wiki's target time: +5,000 points each, the kit (1/75) and dust (1/400) rolls.
+- Uniques by the Wiki: 1% per 8,676 points, 570,000 a roll, the 2026 weights, the receiver by personal points (left raiders' uniques discarded), olmlet 1/53. Otherwise two different commons scaled by points (a third of herbs as seeds), the ancient tablet, elite clue 1/12; the dark journal if not banked.
+- The ancient chest opens interface 539 (Take, Take-all, Bank-all, Discard-all); unclaimed loot is placed on the ground on leaving.
+- Captain Rimor's Claim-cape gives the cape for the Challenge Mode count.
+
+## Developer commands
+
+| Command | What it does |
+| --- | --- |
+| `::cox` | To Mount Quidamortem. |
+| `::coxlayout` | The raid's layout and the room you're in. |
+| `::coxpoints <amount>` | Points for you in your raid. |
+| `::coxnext` | To the next floor's start (or the Olm's chamber). |
+
+The raid is also in `::teleports` under Minigames.
+
+## Near-Reality values to check against a capture
+
+| Value | Where |
+| --- | --- |
+| Outside tile (1246, 3558) | Leaving |
+| Room landing tiles (start 3278,5187 / 3298,5188 / 3330,5188; floor-end 3278,5168 / 3308,5173; floor-start 3280,5711 / 3312,5711 / 3344,5711) | `CoxMap.BOUND` |
+| Olm chamber entrance (3232, 5720) and centre (3232, 5734) | `CoxMap.OLM_TILES` |
+| Wall chunk (416, 647) and its random turn | `CoxMap` |
+| The 26 layout codes and Challenge Mode's floors | `CoxLayout` |
+| Interface/varbit/script ids of the board, party page, tab and overlay | `CoxShared` |
+| Damage points (5 per hitpoint, room cap +5%) | `CoxRaid` |
+| Build delay (3 ticks), climb animations 827/828 | `CoxRaid`, `Raid.Cox` |
+| Storage interfaces and components, build delay (2 ticks) | `Storage.Cox` |
+| Points per potion sip (overload 400, Xeric's aid 200, others 100, x 0.25/0.5/1) | `Supplies.Cox` |
+| Resource room tiles (fishing, snake, bats), snake timings and damage, catch and fishing chances | `Resources.Cox` |
+| Patch growth (12 ticks a stage), keep chance, raking cycles; a fallen sapling's 15 ticks | `Resources.Cox` |
+| Every room's tiles, animations, graphics, projectiles and sounds | each room unit |
+| Ice Demon storm (250/raider, 5 charges a kindling) | `IceDemon.Cox` |
+| Exit crystal tiles and ids (30017, 30018, 30016) | the room units |
+| Boss attack bases where the Wiki says "varies" | the room units |
+| The Olm's rising/transition timings, special timings and damage ranges not on the Wiki | `Olm.Cox` |
+| Reward interface components, chest light varbit 5456 | `Rewards.Cox` |
+
+**Derived, not from a source** (to check): max hits grown with scaled offence; Guardians' Challenge Mode hitpoints +50%; lux grub drain (1 every 4 ticks); Vespula grounded 33 ticks; shaman spawns' explosion; Thieving's clearing batch; tightrope barrier tile turn.
+
+**Not like OSRS:** fire walls are doused with the Douse option (watering can or an autocast water/ice spell); the storage creation menu is a chat choice; items carry no maker for points.
