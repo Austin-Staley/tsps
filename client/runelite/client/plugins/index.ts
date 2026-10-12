@@ -13,6 +13,7 @@ import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
 import { RememberLoginPlugin } from "../../../game/plugins/rememberlogin/RememberLoginPlugin";
 import { SplitPrivateChatPlugin } from "../../../game/plugins/splitprivatechat/SplitPrivateChatPlugin";
 import { StatusBarsPlugin } from "../../../game/plugins/statusbars/StatusBarsPlugin";
+import { StretchedModePlugin } from "../../../game/plugins/stretchedmode/StretchedModePlugin";
 import { OpponentInfoPlugin } from "../../../game/plugins/opponentinfo/OpponentInfoPlugin";
 import {
     FreezeTimerPlugin,
@@ -47,6 +48,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     WeatherPlugin,
     StatusBarsPlugin,
     OpponentInfoPlugin,
+    StretchedModePlugin,
 ];
 
 /** Legacy `osrs.plugin.*.v1` localStorage blobs to fold into rl.config. */

@@ -1,6 +1,7 @@
 import { hintArrow } from "../../../game/HintArrow";
 import { appendAttackTimerOverhead } from "../../../game/plugins/attacktimer/AttackTimerOverhead";
 import { updateSkyColor } from "../environment";
+import { syncCameraViewportUnitScale } from "../quality";
 import Denque from "denque";
 import { mat4, vec2, vec3, vec4 } from "gl-matrix";
 import { button, folder } from "leva";
@@ -574,6 +575,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         // Ensure camera uses valid dimensions
         const camWidth = Math.max(1, host.app.width || host.canvas.width || 1);
         const camHeight = Math.max(1, host.app.height || host.canvas.height || 1);
+        syncCameraViewportUnitScale(host);
         const sceneViewport = host.getSceneViewportWidgetRect();
         const sceneFramebufferViewport = host.scaleViewportRectToSceneBuffer(sceneViewport);
         camera.update(
