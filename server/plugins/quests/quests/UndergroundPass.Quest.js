@@ -1266,6 +1266,9 @@ module.exports = function registerUndergroundPassQuest(api) {
       return;
     }
     if (TEMPLE_DOOR_IDS.has(event.objectId)) {
+      // Completing the quest necessarily means the history was read and the
+      // temple was entered; do not keep enforcing its pre-completion bits.
+      if (quest.isComplete(event.player)) return;
       event.handled = true;
       useTempleDoor(event.player);
     }
