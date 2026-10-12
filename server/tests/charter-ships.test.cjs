@@ -32,7 +32,7 @@ CharterShips.register({
     },
     TeleportType: { NORMAL: "NORMAL" },
   },
-  sendMultiChatboxPrompt: (player, title, ...options) => { prompt = { title, options }; },
+  sendMultiChatboxPrompt: (player, title, ...options) => { prompt = { player, title, options }; return true; },
   onNpcInteraction: (name, actions) => npcHooks.push({ name, actions }),
   emitCustomEvent,
   log() {},
@@ -97,7 +97,7 @@ test("sailing fails closed on missing or incomplete required quests and charges 
   assert.match(player.messages.at(-1), /pay 1600 coins/);
 });
 
-test("the menu identifies the current port and lists the others with fares", () => {
+test("the menu identifies the current port and pages through destinations within chatbox limits", () => {
   quests = [];
   prompt = null;
   const brimhaven = CharterShips._test.loadData().ports.find((port) => port.name === "Brimhaven");
@@ -105,12 +105,22 @@ test("the menu identifies the current port and lists the others with fares", () 
     CharterShips._test.currentPort({ getLocation: () => brimhaven.destination })?.name,
     "Brimhaven"
   );
-  CharterShips._test.openMenu({
-    player: createPlayer({ ring: ItemIdentifiers.RING_OF_CHAROS_A_ }),
+  const player = createPlayer({ ring: ItemIdentifiers.RING_OF_CHAROS_A_ });
+  const event = {
+    player,
     object: { getLocation: () => brimhaven.destination },
-  });
+  };
+  assert.equal(CharterShips._test.openMenu(event), true);
   const labels = prompt.options.filter((option) => typeof option === "string");
   assert.ok(labels.some((label) => label.startsWith("Catherby (240 coins)")));
   assert.ok(!labels.some((label) => label.startsWith("Brimhaven")));
+  assert.ok(labels.includes("More..."));
+  assert.ok(labels.length <= 5);
+  const more = prompt.options[prompt.options.indexOf("More...") + 1];
+  more();
+  const secondPage = prompt.options.filter((option) => typeof option === "string");
+  assert.ok(secondPage.includes("Previous..."));
+  assert.ok(secondPage.length <= 5);
+  assert.equal(prompt.player, player);
   assert.equal(npcHooks.filter((hook) => hook.name.toLowerCase().includes("trader")).length >= 2, true);
 });

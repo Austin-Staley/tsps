@@ -117,12 +117,17 @@ function sail(player, port, fare) {
   core.TeleportHandler.teleport(player, port.destination, core.TeleportType.NORMAL, false);
 }
 
-function openMenu(event) {
+const DESTINATIONS_PER_PAGE = 3;
+
+function openMenu(event, page = 0) {
   const { player, object } = event;
   const from = currentPort(object);
   const destinations = [...portsByName.values()].filter((port) => port.name !== from?.name);
+  const pageCount = Math.max(1, Math.ceil(destinations.length / DESTINATIONS_PER_PAGE));
+  const pageIndex = Math.max(0, Math.min(pageCount - 1, Math.trunc(Number(page) || 0)));
   const options = [];
-  for (const port of destinations) {
+  const first = pageIndex * DESTINATIONS_PER_PAGE;
+  for (const port of destinations.slice(first, first + DESTINATIONS_PER_PAGE)) {
     const fare = fareFor(player, from?.name, port.name);
     options.push(`${port.name}${fare == null ? "" : ` (${fare} coins)`}`, () => {
       if (fare == null) {
@@ -132,9 +137,12 @@ function openMenu(event) {
       sail(player, port, fare);
     });
   }
-  // Return the prompt's success: when the destination list is too long for the
-  // chatbox the click is not handled, so another plugin (a quest's Trader
-  // Crewmember) can own the Talk-to instead.
+  if (pageIndex > 0) {
+    options.push("Previous...", () => openMenu(event, pageIndex - 1));
+  }
+  if (pageIndex < pageCount - 1) {
+    options.push("More...", () => openMenu(event, pageIndex + 1));
+  }
   return pluginApi.sendMultiChatboxPrompt(player, "Where would you like to sail to?", ...options);
 }
 module.exports = {
