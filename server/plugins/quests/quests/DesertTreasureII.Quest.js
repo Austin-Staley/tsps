@@ -5,6 +5,8 @@ module.exports = function registerDesertTreasureII(api) {
   const PAGE = "Desert Treasure II - The Fallen Empire";
   const S = { STARTED: 1, VAULT: 2, DIG: 3, ROCKS: 4, GUARDIAN: 5, MACHINE: 6, VARDORVIS: 7, LEVIATHAN: 8, SUCELLUS: 9, WHISPERER: 10, FINALE: 11, COMPLETE: 12 };
   const IDS = [I.VARDORVIS_MEDALLION, I.PERSERIYAS_MEDALLION, I.SUCELLUS_MEDALLION, I.WHISPERERS_MEDALLION];
+  const STATUE_ITEMS = [I.VARDORVIS_MEDALLION, I.WHISPERERS_MEDALLION, I.SUCELLUS_MEDALLION, I.PERSERIYAS_MEDALLION];
+  const STATUES_PLACED = "desert-treasure-ii:medallions-placed";
   // Cache morphs in the Ancient Vault have no operation text, but the server
   // still dispatches their underlying object ids. The plaque is a separate
   // interaction and must also be read before the names are known.
@@ -37,6 +39,8 @@ module.exports = function registerDesertTreasureII(api) {
   const STRANGLEWOOD_BOAT_OUT_LOC = O.ROWBOAT_17;
   const KASONDE_NOTE = I.POTION_NOTE;
   const KASONDE_POTION = I.STRANGE_POTION_3;
+  const VARDORVIS_ENTRY = 49495;
+  const KASONDE_MEDALLION_CHEST = 49496;
   const ASGARNIA_SMITH_VAULT_INITIAL = 12401;
   const TOTEMS = [
     { kind: "blood", inactive: 12343, active: 12344, x: 2775, y: 6445, spells: ["BLOOD_BURST", "BLOOD_BLITZ", "BLOOD_BARRAGE"] },
@@ -381,12 +385,17 @@ module.exports = function registerDesertTreasureII(api) {
     if (current instanceof StranglewoodTempleArea && !current.isDestroyed()) {
       current.enter(p);
       p.moveTo(current.tile(6, 16, 0));
+      if ((Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 18 && has(p, I.TEMPLE_KEY_3)) spawnTempleKasonde(p, current);
       return current;
     }
     const area = new StranglewoodTempleArea(p.getUsername?.());
     area.enter(p);
     p.setAttribute(ATTR_STRANGLEWOOD_TEMPLE, area);
     p.moveTo(area.tile(6, 16, 0));
+    if ((Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 18 && has(p, I.TEMPLE_KEY_3)) {
+      spawnTempleKasonde(p, area);
+      return area;
+    }
     const enemies = [[4, 13], [9, 15], [14, 20]].map(([x, y]) => {
       const npc = api.core.NPC.create(N.STRANGLED, area.tile(x, y, 0));
       npc.setOwner?.(p);
@@ -401,6 +410,21 @@ module.exports = function registerDesertTreasureII(api) {
     if (!owned) spawned.set(p, owned = {});
     owned.templeEnemies = enemies;
     return area;
+  }
+
+  function spawnTempleKasonde(p, area) {
+    let owned = spawned.get(p);
+    if (!owned) spawned.set(p, owned = {});
+    if (owned.kasondeBoss?.isRegistered?.()) return owned.kasondeBoss;
+    const npc = api.core.NPC.create(N.KASONDE_7, area.tile(7, 16, 0));
+    npc.setOwner?.(p);
+    npc.setOwnerOnly?.(true);
+    npc.__skipDefaultRespawn = true;
+    area.add(npc);
+    api.core.World.getAddNPCQueue().push(npc);
+    owned.kasondeBoss = npc;
+    p.setAttribute(VARDORVIS_PROGRESS, 19);
+    return npc;
   }
 
   function leaveVault(p) {
@@ -641,6 +665,10 @@ module.exports = function registerDesertTreasureII(api) {
       return;
     }
     if (progress === 16) talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-killing-the-strangled-in-the-temple-talking-to-kasonde-after-drinking-the-potion");
+    if (progress === 20) {
+      talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-defeating-him");
+      p.setAttribute(VARDORVIS_PROGRESS, 21);
+    }
   }
   function handleItemAction({ player: p, itemId, option }) {
     if (stage(p) !== S.VARDORVIS) return;
@@ -716,7 +744,7 @@ module.exports = function registerDesertTreasureII(api) {
       enterVault(p);
       return true;
     }
-    if (s >= S.STARTED && s < S.DIG && [O.VAULT_DOOR_2, O.VAULT_DOOR_3].includes(objectId)
+    if (s >= S.STARTED && s < S.COMPLETE && [O.VAULT_DOOR_2, O.VAULT_DOOR_3].includes(objectId)
       && !vaultTile && Math.abs(location.x - 3511) <= 4 && Math.abs(location.y - 2970) <= 4) {
       enterVault(p);
       return true;
@@ -784,8 +812,12 @@ module.exports = function registerDesertTreasureII(api) {
     }
     if (s === S.VARDORVIS && objectId === O.ENTRY_21
       && Math.abs(location.x - 1174) <= 2 && Math.abs(location.y - 3428) <= 2) {
-      if ((Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) < 12
-        || !has(p, I.KORBAL_HERB) || !has(p, I.ARGIAN_BERRIES)) {
+      const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
+      if (progress >= 18 && has(p, I.TEMPLE_KEY_3)) {
+        enterStranglewoodTemple(p);
+        return true;
+      }
+      if (progress < 12 || !has(p, I.KORBAL_HERB) || !has(p, I.ARGIAN_BERRIES)) {
         return p.sendMessage("Find the Korbal herb and Argian berries before entering Kasonde's temple.");
       }
       enterStranglewoodTemple(p);
@@ -799,6 +831,36 @@ module.exports = function registerDesertTreasureII(api) {
       area.destroy();
       p.setAttribute(ATTR_STRANGLEWOOD_TEMPLE, null);
       p.moveTo(new api.core.Location(1174, 3428, 0));
+      return true;
+    }
+    if (s === S.VARDORVIS && objectId === VARDORVIS_ENTRY
+      && Math.abs(location.x - 1118) <= 2 && Math.abs(location.y - 3428) <= 2) {
+      const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
+      if (progress >= 17) {
+        if (!has(p, I.TEMPLE_KEY_3)) p.getInventory().adds(I.TEMPLE_KEY_3, 1);
+        p.setAttribute(VARDORVIS_PROGRESS, 18);
+        p.sendMessage("You search the rocks and find the Temple key.");
+        return true;
+      }
+      if (progress < 16) return p.sendMessage("The ritual site is too dangerous until you have prepared the Strangler serum.");
+      p.moveTo(new api.core.Location(1125, 3418, 0));
+      spawnBoss(p, "vardorvis");
+      return true;
+    }
+    if (s === S.VARDORVIS && objectId === O.ROCKS_139
+      && Math.abs(location.x - 1118) <= 2 && Math.abs(location.y - 3428) <= 2
+      && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 17) {
+      if (!has(p, I.TEMPLE_KEY_3)) p.getInventory().adds(I.TEMPLE_KEY_3, 1);
+      p.setAttribute(VARDORVIS_PROGRESS, 18);
+      p.sendMessage("You search the rocks and find the Temple key.");
+      return true;
+    }
+    if (s === S.VARDORVIS && objectId === KASONDE_MEDALLION_CHEST
+      && Math.abs(location.x - 1196) <= 2 && Math.abs(location.y - 3411) <= 2
+      && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 21) {
+      if (!has(p, I.VARDORVIS_MEDALLION)) p.getInventory().adds(I.VARDORVIS_MEDALLION, 1);
+      p.setAttribute(VARDORVIS_PROGRESS, 22);
+      p.sendMessage("You search Kasonde's chest and find Vardorvis' medallion.");
       return true;
     }
     if (s === S.VARDORVIS && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 11
@@ -858,15 +920,28 @@ module.exports = function registerDesertTreasureII(api) {
       if (p.getAttribute(CELLS_INSERTED)) { openGolemPuzzle(p); return true; }
       return p.sendMessage("Collect and charge eight cells before operating the golem.");
     }
-    if (s >= S.FINALE && [O.VAULT_DOOR, O.VAULT_DOOR_2, O.VAULT_DOOR_3].includes(objectId) && IDS.every((id) => has(p, id))) {
-      IDS.forEach((id) => p.getInventory().deleteNumber(id, 1));
-      setStage(p, S.COMPLETE);
-      quest.complete(p);
-      return true;
-    }
     return false;
   }
   function handleItemOnObject({ player: p, itemId, objectId, location }) {
+    const vaultTile = vaultSourceTile(p, location);
+    if (vaultTile && STATUES.has(objectId)) {
+      const index = STATUES.get(objectId);
+      const locations = [[3941, 9635], [3931, 9635], [3931, 9625], [3941, 9625]];
+      const medal = STATUE_ITEMS[index];
+      const expectedStage = [S.VARDORVIS, S.WHISPERER, S.SUCELLUS, S.LEVIATHAN][index];
+      if (vaultTile.x === locations[index][0] && vaultTile.y === locations[index][1]
+        && stage(p) === expectedStage && itemId === medal && has(p, medal)) {
+        p.getInventory().deleteNumber(medal, 1);
+        const placed = (Number(p.getAttribute(STATUES_PLACED)) || 0) | (1 << index);
+        p.setAttribute(STATUES_PLACED, placed);
+        p.sendMessage(`You place ${index === 0 ? "Vardorvis'" : index === 1 ? "the Whisperer's" : index === 2 ? "Sucellus'" : "Perseriya's"} medallion on the statue.`);
+        if (placed === 15) setStage(p, S.FINALE);
+        else if (index === 0) setStage(p, S.LEVIATHAN);
+        else if (index === 3) setStage(p, S.SUCELLUS);
+        else if (index === 2) setStage(p, S.WHISPERER);
+        return true;
+      }
+    }
     if (stage(p) < S.MACHINE || stage(p) >= S.VARDORVIS) return;
     const roomTile = warRoomSourceTile(p, location);
     if ([O.GOLEM, O.GOLEM_2].includes(objectId) && roomTile?.x === 2783 && roomTile?.y === 6444 && itemId === I.UNCHARGED_CELL_2) {
@@ -892,7 +967,7 @@ module.exports = function registerDesertTreasureII(api) {
   }
   function spawnBoss(p, key) {
     const table = {
-      vardorvis: [N.VARDORVIS_3, 1128, 3417],
+      vardorvis: [N.VARDORVIS_2, 1129, 3419],
       leviathan: [N.THE_LEVIATHAN_3, 2078, 6368],
       sucellus: [N.DUKE_SUCELLUS_7, 3036, 6452],
       whisperer: [N.THE_WHISPERER_3, 2399, 6369],
@@ -913,6 +988,29 @@ module.exports = function registerDesertTreasureII(api) {
     if (!killer) return;
     const owned = spawned.get(killer);
     if (!owned) return;
+    if (owned.kasondeBoss === npc && stage(killer) === S.VARDORVIS) {
+      owned.kasondeBoss = null;
+      killer.setAttribute(VARDORVIS_PROGRESS, 20);
+      const area = killer.getAttribute(ATTR_STRANGLEWOOD_TEMPLE);
+      if (area instanceof StranglewoodTempleArea && !area.isDestroyed()) {
+        const injured = api.core.NPC.create(N.KASONDE_9, area.tile(7, 16, 0));
+        injured.setOwner?.(killer);
+        injured.setOwnerOnly?.(true);
+        injured.__skipDefaultRespawn = true;
+        area.add(injured);
+        api.core.World.getAddNPCQueue().push(injured);
+        owned.kasondeInjured = injured;
+      }
+      return;
+    }
+    if (owned.vardorvis === npc && stage(killer) === S.VARDORVIS) {
+      owned.vardorvis = null;
+      owned.vardorvisDead = true;
+      killer.setAttribute(VARDORVIS_PROGRESS, 17);
+      killer.setAttribute(ATTR, null);
+      killer.sendMessage("Vardorvis collapses. Search the rocks at the ritual site's entrance for the Temple key.");
+      return;
+    }
     if (Array.isArray(owned.templeEnemies) && owned.templeEnemies.includes(npc)) {
       owned.templeEnemies = owned.templeEnemies.filter((enemy) => enemy !== npc);
       if (owned.templeEnemies.length === 0 && stage(killer) === S.VARDORVIS) {
@@ -953,12 +1051,8 @@ module.exports = function registerDesertTreasureII(api) {
       return;
     }
     if (!has(killer, IDS[idx])) killer.getInventory().adds(IDS[idx], 1);
-    const next = [S.LEVIATHAN, S.SUCELLUS, S.WHISPERER, S.FINALE][idx];
-    setStage(killer, next);
     owned[key] = null;
-    if (next === S.LEVIATHAN) spawnBoss(killer, "leviathan");
-    if (next === S.SUCELLUS) spawnBoss(killer, "sucellus");
-    if (next === S.WHISPERER) spawnBoss(killer, "whisperer");
+    killer.sendMessage("The medallion has fallen. Take it back to the Ancient Vault and place it on its statue.");
   }
   function progressBosses({ player: p, npcId }) {
     const s = stage(p);
@@ -983,6 +1077,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.persistAttribute(ATTR);
   api.persistAttribute(VARDORVIS_PROGRESS);
   api.persistAttribute(ATTR_SMITH_INTRO);
+  api.persistAttribute(STATUES_PLACED);
   [GOLEM_INSPECTED, ALTAR_INSPECTED, TOTEMS_CHARGED].forEach((key) => api.persistAttribute(key));
   api.onObjectInteraction(handleObject);
   api.onItemOnObject(handleItemOnObject, { noted: false });

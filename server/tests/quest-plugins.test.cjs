@@ -857,6 +857,98 @@ test('Desert Treasure II enters the cache Ancient Vault and requires the four st
   }
 });
 
+test('Desert Treasure II requires each medallion on its matching Vault statue and returns the Vardorvis trail to Persten', () => {
+  const { api: base } = mockApi();
+  const objectHooks = [], itemHooks = [];
+  class TestInstance {
+    constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
+    setChunk() {}
+    enter() {}
+    leave() {}
+    postLeave() {}
+    getBaseX() { return 8192; }
+    getBaseY() { return 1600; }
+    tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z }; }
+    add(npc) { this.entities.push(npc); }
+    isDestroyed() { return false; }
+    destroy() {}
+  }
+  const core = {
+    ...base.core,
+    TemplatedInstanceArea: TestInstance,
+    NPC: { create: (id, location) => ({ id, location, setOwner() {}, setOwnerOnly() {}, isNpc() { return true; }, getAsNpc() { return this; } }) },
+    World: { getAddNPCQueue: () => [], getRemoveNPCQueue: () => [] },
+  };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
+        : prop === 'onItemOnObject' ? (handler) => itemHooks.push(handler)
+          : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
+  const { ItemIdentifiers: I, ObjectIdentifiers: O } = core;
+  const attrs = new Map();
+  const counts = new Map([[I.VARDORVIS_MEDALLION, 1]]);
+  const p = {
+    getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getUsername: () => 'dt2-medallion-test', getSkillManager: () => ({ getMaxLevel: () => 99 }),
+    getInventory: () => ({
+      getAmount: (id) => counts.get(id) ?? 0,
+      deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+      adds: (id, amount) => counts.set(id, (counts.get(id) ?? 0) + amount),
+    }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    moveTo(location) { this.location = location; }, sendMessage() {},
+  };
+  quest.setStage(p, 7);
+  attrs.set('desert-treasure-ii:vardorvis-progress', 22);
+  assert.equal(objectHooks[0]({ player: p, objectId: O.VAULT_DOOR_2, location: { x: 3511, y: 2970, z: 0 } }), true);
+  const area = attrs.get('desert-treasure-ii:ancient-vault');
+  const location = area.tile(21, 19, 1);
+  assert.equal(itemHooks[0]({ player: p, itemId: I.VARDORVIS_MEDALLION, objectId: 49501, location }), undefined,
+    'a medallion cannot be placed on another general’s statue');
+  assert.equal(counts.get(I.VARDORVIS_MEDALLION), 1);
+  assert.equal(itemHooks[0]({ player: p, itemId: I.VARDORVIS_MEDALLION, objectId: 49499, location }), true);
+  assert.equal(counts.get(I.VARDORVIS_MEDALLION), 0);
+  assert.equal(quest.getStage(p), 8);
+  assert.equal(attrs.get('desert-treasure-ii:medallions-placed'), 1);
+});
+
+test('Desert Treasure II opens the ritual site after the serum and grants the Temple key only after Vardorvis dies', () => {
+  const { api: base } = mockApi();
+  const objectHooks = [], deathHooks = [];
+  let boss;
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
+      : prop === 'onNpcDeath' ? (handler) => deathHooks.push(handler)
+        : prop === 'spawnNpc' ? (spec) => (boss = { ...spec, isRegistered: () => true })
+          : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
+  const { ItemIdentifiers: I } = api.core;
+  const attrs = new Map([['desert-treasure-ii:vardorvis-progress', 16]]);
+  const counts = new Map();
+  const p = {
+    getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getUsername: () => 'dt2-vardorvis-test',
+    getInventory: () => ({ getAmount: (id) => counts.get(id) ?? 0, adds: (id, n) => counts.set(id, (counts.get(id) ?? 0) + n) }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    moveTo(location) { this.location = location; }, sendMessage() {},
+  };
+  quest.setStage(p, 7);
+  assert.equal(objectHooks[0]({ player: p, objectId: 49495, location: { x: 1118, y: 3428, z: 0 } }), true);
+  assert.equal(boss.id, api.core.NpcIdentifiers.VARDORVIS_2, 'the quest form spawns at the documented ritual site');
+  assert.equal(boss.owner, p);
+  deathHooks[0]({ killer: p, npc: boss });
+  assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 17);
+  assert.equal(counts.get(I.VARDORVIS_MEDALLION) ?? 0, 0, 'Vardorvis does not skip the Temple key and Kasonde aftermath');
+  assert.equal(objectHooks[0]({ player: p, objectId: 49495, location: { x: 1118, y: 3428, z: 0 } }), true);
+  assert.equal(counts.get(I.TEMPLE_KEY_3), 1);
+  assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 18);
+});
+
 test('Dragon Slayer II Torfinn starts both ordered dragon waves before Galvek', async () => {
   await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
   const { api: base } = mockApi();
