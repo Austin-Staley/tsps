@@ -2682,7 +2682,9 @@ module.exports = function registerSongOfTheElves(api) {
   function useIorwerthCampTeleport(event) {
     if (!event?.player || !IORWERTH_CAMP_TELEPORT_IDS.has(event.itemId) || String(event.option).toLowerCase() !== "teleport") return;
     event.handled = true;
-    const destination = new Location(2200, 3262, 0);
+    // Cache map location confirmed against the Wiki. The old coordinate landed
+    // on the Cave object's blocked footprint and trapped the player.
+    const destination = new Location(2194, 3258, 0);
     if (!api.core.TeleportHandler.checkReqs(event.player, destination)) return;
     event.player.getInventory().deleteNumber(event.itemId, 1);
     api.core.TeleportHandler.teleport(event.player, destination, api.core.TeleportType.NORMAL, false);

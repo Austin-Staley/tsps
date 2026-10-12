@@ -1544,6 +1544,37 @@ test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clu
   assert.equal(quest.getStage(player), 180);
 });
 
+test('Song of the Elves Iorwerth scroll lands on the walkable camp tile', () => {
+  const { api: base, handlers } = mockApi();
+  let destination;
+  let consumed;
+  const core = {
+    ...base.core,
+    TeleportHandler: {
+      checkReqs: () => true,
+      teleport: (player, location) => player.moveTo(location),
+    },
+  };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core : target[prop],
+  });
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const player = {
+    getInventory: () => ({ deleteNumber: (id, amount) => { consumed = [id, amount]; } }),
+    moveTo: (location) => { destination = [location.getX(), location.getY(), location.getZ()]; },
+  };
+  const event = {
+    player,
+    itemId: core.ItemIdentifiers.IORWERTH_CAMP_TELEPORT,
+    option: 'Teleport',
+    handled: false,
+  };
+  handlers.itemAction.at(-1)(event);
+  assert.equal(event.handled, true);
+  assert.deepEqual(consumed, [core.ItemIdentifiers.IORWERTH_CAMP_TELEPORT, 1]);
+  assert.deepEqual(destination, [2194, 3258, 0]);
+});
+
 test('Song of the Elves library mirrors must follow the previous beam direction', () => {
   class TestPrivateArea {
     constructor() { this.objects = []; }
