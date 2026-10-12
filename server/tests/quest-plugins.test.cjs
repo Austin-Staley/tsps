@@ -493,20 +493,6 @@ test('Catacomb orb spell consumes its real ingredients and reveals only the ques
   assert.deepEqual([...amounts.values()],[0,0,0]);
 });
 
-test('Elite Kinshra protection can be bypassed by switching styles and expires in the area', () => {
-  const {api,player}=movarioFixture();let area,modify;
-  api.registerArea=a=>{area=a;};api.onNpcHitModify=h=>{modify=h;};
-  require('../plugins/quests/wgs/DarkSquall.WhileGuthixSleeps')({...api.context,api,stage:()=>490});
-  player.isPlayer=()=>true;
-  const npc={getId:()=>13463,getArea:()=>area,isNpc:()=>true};let amount=12,type=api.core.CombatType.MELEE;
-  const hit={getAttacker:()=>player,getCombatType:()=>type,setTotalDamage:n=>{amount=n;}};
-  modify({npc,hit});assert.equal(amount,0);
-  type=api.core.CombatType.MAGIC;amount=12;modify({npc,hit});assert.equal(amount,12);
-  for(let i=0;i<100;i++)area.process(npc);
-  type=api.core.CombatType.MELEE;amount=12;modify({npc,hit});assert.equal(amount,12);
-});
-
-
 test('Surok requires real combat spells and the opposite element for surges', () => {
   const { api } = mockApi(), module = require('../plugins/quests/wgs/Surok.WhileGuthixSleeps');
   const f = module({api}), player = { getCombat: () => ({ getSelectedSpell: () => selected, getCastSpell: () => null, getPreviousCast: () => api.core.CombatSpells.FIRE_WAVE }), sendMessage() {} };
@@ -839,4 +825,20 @@ test('WGS physical recruitment uses the visible definition of a transformed Guil
  const npc={getDefinition:()=>({getName:()=> 'null'})};
  assert.equal(hooks.get('Ghommal')['Talk-to']({player,npc,definition:{getName:()=> 'Ghommal'}}),true);
  assert.equal(played[0][0],13613);assert.match(played[0][1],/second-recruitment-talking-to-ghommal/);
+});
+
+
+test('Elite knights show adapting prayers, spend prayer on attacks and apply seven flat armour outside magic', () => {
+ const {api}=mockApi();let area,modify;api.registerArea=a=>area=a;api.onNpcHitModify=h=>modify=h;
+ require('../plugins/quests/wgs/DarkSquall.WhileGuthixSleeps')({api,ATTRIBUTES:[],stage:()=>490});
+ let icon;const npc={getId:()=>13463,getArea:()=>area,setHeadIcon:v=>icon=v,isNpc:()=>true};
+ const p={isPlayer:()=>true,sendMessage(){}};
+ function hit(type){let damage=20;const splat={getDamage:()=>damage,setDamage:d=>damage=d};modify({npc,hit:{getAttacker:()=>p,getCombatType:()=>type,getCombatMethod:()=>({attackSpeed:()=>4}),setTotalDamage:d=>damage=d,getHits:()=>[splat],updateTotalDamage(){}}});return damage;}
+ const {CombatType}=api.core;
+ assert.equal(hit(CombatType.MELEE),0);assert.equal(icon,0);
+ for(let i=0;i<100;i++)area.process(npc);assert.equal(hit(CombatType.MELEE),0,'waiting does not drain the knight’s prayer');
+ assert.equal(hit(CombatType.RANGED),13);assert.equal(icon,1);
+ assert.equal(hit(CombatType.MAGIC),20);assert.equal(icon,2);
+ for(let i=0;i<23;i++)hit(i%2?CombatType.MAGIC:CombatType.RANGED);
+ assert.equal(icon,-1);assert.equal(hit(CombatType.RANGED),13);
 });

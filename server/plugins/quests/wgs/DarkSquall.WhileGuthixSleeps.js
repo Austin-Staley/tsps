@@ -1,6 +1,6 @@
 /** Black Knight Catacombs: Wiki route, cache scenery, Silif's rescue and escort. */
 module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play,ATTRIBUTES}){
- const {Area,Boundary,Location,Item,ItemOnGroundManager,Skill,MagicSpellbook}=api.core;
+ const {Area,Boundary,Location,Item,ItemOnGroundManager,Skill,MagicSpellbook,CombatType}=api.core;
  const TILE=53349,TRAPDOOR=53350,TILE_PARENT=54076;
  const BRIDGE_NORTH=53511,BRIDGE_SOUTH=53512,WALL_BOTTOM=53513,WALL_TOP=53514;
  const BASE_DOOR=53365,BASE_EXIT=53366,SHORTCUT_INNER=53478,SHORTCUT_OUTER=53479,CELL=53443;
@@ -45,7 +45,7 @@ module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play
   constructor(){super([new Boundary(4096,4163,4660,4863,1),new Boundary(4096,4163,4660,4863,2)]);}
   npcAggression(p,n){return KINSHRA.includes(n.getId())?!disguise(p):null;}
   process(m){
-   if(m.isNpc?.()){const prayer=guards.get(m);if(prayer&&prayer.remaining>0)prayer.remaining--;return;}
+   if(m.isNpc?.())return;
    if(!m.isPlayer?.())return;const p=m.getAsPlayer(),f=followers.get(p);if(!f)return;
    const l=p.getLocation(),n=f.getLocation();
    if(stage(p)>=580)return;
@@ -149,8 +149,15 @@ module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play
  function modifyHit({npc,hit}){
   if(!KINSHRA.includes(npc.getId())||!(npc.getArea() instanceof CatacombsArea)||!hit.getAttacker().isPlayer())return;
   const type=hit.getCombatType();let prayer=guards.get(npc);
-  if(!prayer){prayer={style:type,remaining:100};guards.set(npc,prayer);}
-  if(prayer.remaining>0&&prayer.style===type){hit.setTotalDamage(0);hit.getAttacker().sendMessage('The elite guard’s protection prayer blocks your attack. Switch combat styles.');}
+  if(!prayer){prayer={style:type,remaining:99};guards.set(npc,prayer);}
+  const blocked=prayer.remaining>0&&prayer.style===type;
+  if(blocked){hit.setTotalDamage(0);hit.getAttacker().sendMessage('The elite guard’s protection prayer blocks your attack. Switch combat styles.');}
+  else {
+   prayer.remaining=Math.max(0,prayer.remaining-hit.getCombatMethod().attackSpeed(hit.getAttacker()));
+   if(KNIGHTS.includes(npc.getId())&&type!==CombatType.MAGIC){for(const splat of hit.getHits())splat.setDamage(Math.max(0,splat.getDamage()-7));hit.updateTotalDamage();}
+  }
+  prayer.style=type;
+  npc.setHeadIcon(prayer.remaining>0?type===CombatType.MELEE?0:type===CombatType.RANGED?1:2:-1);
  }
  api.registerArea(new CatacombsArea());
  api.onObjectInteraction('Sturdy door',{Open:fortress});
