@@ -67,6 +67,8 @@ module.exports=function registerAlliance({api,quest,stage,advance,held,give,play
  }
  api.onNpcInteraction('Silif',{'Talk-to':postQuestTalk});api.onNpcInteraction('Surok Magis',{'Talk-to':postQuestTalk});
  api.onNpcInteraction('Akrisae',{'Talk-to':group});api.onNpcInteraction('Idria',{'Talk-to':group});api.onNpcInteraction('Thaerisk',{'Talk-to':group});
+ function claimLadder(e){if(ladder(e))e.handled=true;}
+ api.onCustomEvent('ladders:climb',claimLadder);
  api.onObjectInteraction('Cell gate',{Open:cell});api.onObjectInteraction('Ladder',{'Climb-up':ladder,'Climb-down':ladder});
  api.onObjectInteraction('Ice wall',{Climb:wall,'Climb-up':wall});api.onObjectInteraction('Ledge',{'Jump-across':ledge,Jump:ledge});
  api.onItemAction(orb);api.onNpcDialogueCondition(condition);api.onCustomEvent('npc-dialogue:line',line);api.onCustomEvent('npc-dialogue:action',action);

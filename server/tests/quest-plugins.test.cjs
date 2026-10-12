@@ -920,3 +920,13 @@ test('Silif’s unlocked cell visibly opens and leaves a walkable exit', () => {
  assert.deepEqual(changed,[['remove',53443],['add',53444,4131,4791,1]]);
  assert.equal(player.position,null,'opening the gate leaves movement to the player');
 });
+
+
+test('Surok claims his ladder before the generic climb fallback', () => {
+ const {api,handlers}=mockApi();let played;
+ const player={};
+ const f=require('../plugins/quests/wgs/Surok.WhileGuthixSleeps')({api,stage:()=>580,play:(p,id,variant)=>played=variant});
+ const event={player,objectId:53370,handled:false};handlers.custom.get('ladders:climb')[0](event);
+ assert.equal(event.handled,true);assert(f.climbing.has(player));assert.equal(played,'the-dark-squall-talking-to-the-elite-black-knight-by-the-ladder');
+ const unrelated={player,objectId:25843,handled:false};handlers.custom.get('ladders:climb')[0](unrelated);assert.equal(unrelated.handled,false);
+});
