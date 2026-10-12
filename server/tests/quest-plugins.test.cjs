@@ -449,6 +449,19 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
   place(2567, 6144, 'south', 2);
   assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '5:20',
     `Hefin’s final blue beam has its own north-west source: ${messages.slice(-2).join(' | ')}`);
+  attributes.set('quest.song_of_the_elves.library-seals', 255);
+  attributes.set('quest.song_of_the_elves.library-puzzle', '7:16');
+  attributes.set('quest.song_of_the_elves.library-pillar-state', JSON.stringify({
+    '2651,6200,1': { operation: 'S', direction: 'south', x: 2651, y: 6200, z: 1, step: 15 },
+  }));
+  amounts.set(api.core.ItemIdentifiers.MAGENTA_CRYSTAL_2, 1);
+  itemObjects.get('Magenta crystal')({
+    player, itemId: api.core.ItemIdentifiers.MAGENTA_CRYSTAL_2,
+    objectId: api.core.ObjectIdentifiers.PILLAR_OF_LIGHT_41,
+    location: { x: 2637, y: 6200, z: 1 }, handled: false,
+  });
+  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '7:17',
+    `Iorwerth’s magenta crystal follows the cyan beam beside mirror 12, independently of mirror 12’s south branch: ${messages.slice(-2).join(' | ')}`);
   attributes.set('quest.song_of_the_elves.library-seals', 127);
   attributes.set('quest.song_of_the_elves.library-puzzle', '6:6');
   attributes.set('quest.song_of_the_elves.library-pillar-state', JSON.stringify({
