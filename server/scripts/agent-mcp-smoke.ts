@@ -153,7 +153,7 @@ const core = {
         mapObjects: new Map([["3220,3216,0", [tree]]]),
         getHash: (x: number, y: number, z: number) => `${x},${y},${z}`,
     },
-    ObjectDefinition: { forPlayer: (id: number) => ({ getName: () => "Tree", getInteractions: () => id === 2283 ? [] : ["Chop down", null] }) },
+    ObjectDefinition: { forPlayer: (id: number) => ({ getName: () => id === 2284 ? "Plinth" : "Tree", getInteractions: () => [2283,2284].includes(id) ? [] : ["Chop down", null] }) },
     ItemDefinition: { forId: (id: number) => ({ getName: () => `item ${id}` }) },
     NpcDefinition: { forId: () => ({ getName: () => "Man" }) },
     MultiChatboxPrompt: { OPTIONS_WIDGET_ID: (219 << 16) | 1, getPending: () => prompt },
@@ -268,7 +268,9 @@ else process.env.AGENT_MCP = previousMcpFlag;
     observedPrivateArea = {
         countsAsMainWorld: () => false,
         getTemplateObjects: (at: any) => at.getX() === 3224 && at.getY() === 3219
-            ? [{ getType: () => 10, getId: () => 2282, getLocation: () => location(3224, 3219) }] : [],
+            ? [{ getType: () => 10, getId: () => 2282, getLocation: () => location(3224, 3219) }]
+            : at.getX() === 3224 && at.getY() === 3220
+                ? [{ getType: () => 10, getId: () => 2284, getLocation: () => location(3224, 3220) }] : [],
         getObjects: () => [{ getType: () => 10, getId: () => 2280, getLocation: tree.getLocation },
             { getType: () => 22, getId: () => 2283, getLocation: () => location(3223, 3219) }],
     };
@@ -276,6 +278,7 @@ else process.env.AGENT_MCP = previousMcpFlag;
     assert.deepEqual(instanced.objects, [
         { id: 2280, name: "Tree", options: ["Chop down"], x: 3220, y: 3216 },
         { id: 2282, name: "Tree", options: ["Chop down"], x: 3224, y: 3219 },
+        { id: 2284, name: "Plinth", options: [], x: 3224, y: 3220 },
         { id: 2283, name: "Tree", options: [], x: 3223, y: 3219 },
     ], "private replacements and template scenery are actual menu targets");
     assert.deepEqual(instanced.npcs, [], "world NPCs are hidden in the instance");
