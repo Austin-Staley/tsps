@@ -11,7 +11,7 @@ const QUESTS = [
   // Sins of the Father is the last Myreque chapter, so it registers before the
   // earlier ones (In Search of/In Aid/Darkness of Hallowvale, A Taste of Hope):
   // its stage window wins the shared Myreque NPCs and it defers outside it.
-  "SinsOfTheFather",
+  "SinsOfTheFather", "TheBloodMoonRises",
   "AKingdomDivided", "AnimalMagnetism", "AnotherSliceOfHAM", "ARuffSituation", "AscentOfArceuus",
   "AtFirstLight", "BelowIceMountain", "BeneathCursedSands", "BetweenARock",
   "BigChompyBirdHunting", "Biohazard", "BlackKnightsFortress", "BoneVoyage",
@@ -45,7 +45,7 @@ const QUESTS = [
   "RibbitingTale", "RomeoAndJuliet", "RovingElves", "RoyalTrouble",
   "RumDeal", "RuneMysteries", "ScorpionCatcher", "Scrambled",
   "SeaSlug", "SecretsOfTheNorth", "ShadesOfMortton", "ShadowOfTheStorm",
-  "ShadowsOfCustodia", "SheepHerder", "SheepShearer", "ShieldOfArrav",
+  "ShadowsOfCustodia", "SheepHerder", "SheepShearer", "ShieldOfArrav", "SongOfTheElves",
   "ShiloVillage", "SleepingGiants", "SlugMenace", "SoulsBane",
   "SpiritsOfTheElid", "SwanSong", "TaiBwoWannaiTrio", "TailOfTwoCats",
   "TaleOfTheRighteous", "TasteOfHope", "TearsOfGuthix", "TempleOfIkov", "TempleOfTheEye",

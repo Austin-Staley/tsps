@@ -54,6 +54,7 @@ import {
   PluginZoneEvent,
   PluginNpcSpawnDefinition,
   PluginObjectRouteEvent,
+  PluginWalkRouteEvent,
   PluginNpcRouteEvent,
   PluginObjectInteractionEvent,
   PluginPlayerDefeatedEvent,
@@ -190,6 +191,7 @@ export class PluginManager {
   private static activeRegionsHooks: PluginHook<PluginActiveRegionsEvent>[] = [];
   private static pathBlockedHooks: PluginHook<PluginPathBlockedEvent>[] = [];
   private static objectRouteHooks: PluginHook<PluginObjectRouteEvent>[] = [];
+  private static walkRouteHooks: PluginHook<PluginWalkRouteEvent>[] = [];
   private static npcRouteHooks: PluginHook<PluginNpcRouteEvent>[] = [];
   private static objectInteractionHooks: ObjectInteractionHook[] = [];
   private static objectHooksById = new Map<string, ObjectInteractionHook[]>();
@@ -939,6 +941,15 @@ export class PluginManager {
         return;
       }
     }
+  }
+
+  public static emitWalkRoute(event: PluginWalkRouteEvent): boolean {
+    if (!event?.player || !event.destination) return false;
+    for (const hook of PluginManager.walkRouteHooks) {
+      PluginManager.executeHook(hook, event, "walk_route", "walk_route");
+      if (event.handled) return true;
+    }
+    return false;
   }
 
   public static emitNpcRoute(event: PluginNpcRouteEvent): void {
@@ -2741,6 +2752,11 @@ export class PluginManager {
           return;
         }
         PluginManager.objectRouteHooks.push({ pluginName, handler });
+      },
+      onWalkRoute: (handler) => {
+        if (typeof handler === "function") {
+          PluginManager.walkRouteHooks.push({ pluginName, handler });
+        }
       },
       onNpcRoute: (handler) => {
         if (typeof handler === "function") PluginManager.npcRouteHooks.push({ pluginName, handler });
