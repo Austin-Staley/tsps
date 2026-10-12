@@ -254,6 +254,14 @@ Recordings 820 (a whole fight at the portal), 843 and 3389.
 - A drained grub dies as a soldier hatches (7460, gfx 1365) and is healthy again 37 ticks later; soldiers heal every 5 ticks (gfx 1367, sound 808).
 - The portal falling: everything dies on that tick (7459) with "As the link to the Abyss disintegrates, the abyssal creatures perish."; 2 ticks later they are gone and the boils burst; the pillars close 2 ticks after.
 
+## Guardians, from rsprox captures
+
+Recordings 820, 3282 and 3389.
+
+- Stepping into the gap: both sweep (440, sound 2524); the player is thrown a tile back (anim 1258), hit by each, 38 points from each.
+- Melee 1203 (sound 2533); stomp 4278 (sound 3188) with a falling rock (projectile 645, gfx 305) landing the next tick (sound 360).
+- Crumbling: 836, then the same NPC turns to its remains 2 ticks later; with both down the gap opens 3 ticks after.
+
 ## Values not on the Wiki, to check against a capture
 
 | Value | Where |

@@ -11,10 +11,18 @@
  * - Melee (max 20, attack speed 4), and now and then a stomp hitting a 3x3 for moderate to
  *   heavy damage.
  * - Stepping between them gets you knocked back for moderate damage, and some points.
- * Not on the Wiki (to check against a capture): the tiles; the invisible blockers (26209) between them; the knock-back every 3
- *   ticks for anyone within a tile of them: 15-30 damage, 40 points, back to the tile behind
- *   (and the other guardian stomps); attacks: anim 1203 (base 20), stomp anim 4278 with
- *   projectile 645 and gfx 71 (base 15); they never move; their remains (id + 2) stay.
+ * rsprox captures (recordings 820, 3282, 3389):
+ * - Stepping into the gap: both guardians sweep (440) with sound 2524 (range 4) at the gap;
+ *   the player is thrown a tile back (exact move over 10 client cycles, anim 1258), takes a
+ *   hit from each, and gets 38 points from each.
+ * - Melee: 1203 with sound 2533 (range 6), landing that tick. Stomp: 4278 and sound 3188
+ *   (range 6); a rock falls (projectile 645 from 15 to 30 cycles, from height 900 to 25) as
+ *   gfx 305 (30 cycles' delay) on the tile, landing the next tick with sound 360.
+ * - Crumbling: 836, then 2 ticks later the guardian turns to its remains (id + 2); with both
+ *   down, the gap opens 3 ticks after the second.
+ * Not on the Wiki (to check against a capture): the tiles; the invisible blockers (26209);
+ *   the knock-back reach (a tile from the gap) and damage (each guardian 0-15); the stomp's
+ *   base (15) and 3x3; their never moving.
  * Not from a source: Challenge Mode hitpoints +50%, as the Wiki's scaling for other monsters.
  */
 
@@ -25,9 +33,10 @@ const Monsters = require("./CoxMonsters");
 const NPC = { GUARDIANS: [7569, 7570] };
 const OBJECT = { BLOCKER: 26209 };
 const BASE = { MELEE: 20, STOMP: 15 };
-const ANIM = { ATTACK: 1203, STOMP: 4278 };
+const ANIM = { ATTACK: 1203, STOMP: 4278, SWEEP: 440, KNOCKED: 1258, CRUMBLE: 836 };
+const SOUND = { SWEEP: 2524, ATTACK: 2533, STOMP: 3188, STOMP_HIT: 360 };
 const DRAGON_PICKAXE_LEVEL = 61;
-const KNOCK_BACK_POINTS = 40;
+const KNOCK_BACK = { POINTS: 38, MAX: 15 };
 
 /** Cache tiles by version: the two guardians, then the tiles behind each gap side. */
 const GUARDIAN_TILES = [
@@ -98,30 +107,42 @@ class GuardiansRoom extends Raid.Room {
     }
   }
 
-  /** Back to the tile behind, 15-30 damage and some points; the other guardian stomps. */
+  /** Both sweep; thrown a tile back, a hit and 38 points from each. */
   knockBack(player, index) {
     const living = this.living();
     if (living.length === 0) return;
-    const nearest = [...living].sort((a, b) => a.getLocation().getDistance(player.getLocation()) - b.getLocation().getDistance(player.getLocation()))[0];
-    nearest.setPositionToFace(player.getLocation());
-    Shared.animate(nearest, ANIM.ATTACK);
-    for (const viewer of this.raiders()) Shared.sound(viewer, 851);
+    for (const guardian of living) {
+      guardian.setPositionToFace(player.getLocation());
+      Shared.animate(guardian, ANIM.SWEEP);
+    }
+    for (const tile of this.blocked) Shared.areaSound(this.raiders(), SOUND.SWEEP, tile, { range: 4 });
+    const at = player.getLocation();
+    const to = this.behind[index];
+    const dx = Math.sign(to.getX() - at.getX());
+    const dy = Math.sign(to.getY() - at.getY());
+    const direction = dx < 0 ? 512 : dx > 0 ? 1536 : dy > 0 ? 1024 : 0;
+    const { ForceMovement, ForceMovementTask, Location, TaskManager } = Shared.core();
     player.getMovementQueue().reset();
-    Shared.balanceWalk(player, this.behind[index], -1, null);
-    Shared.damage(player, Shared.random(15, 30));
-    this.raid.addPoints(player, KNOCK_BACK_POINTS);
-    const other = living.find((guardian) => guardian !== nearest);
-    if (other) this.stomp(other, this.behind[index === 0 ? 1 : 0]);
+    if (dx !== 0 || dy !== 0) {
+      TaskManager.submit(new ForceMovementTask(player, 1,
+        new ForceMovement(at.clone(), new Location(dx, dy), 0, 10, direction, ANIM.KNOCKED)));
+    }
+    for (const guardian of living) {
+      Shared.damage(player, Shared.random(0, KNOCK_BACK.MAX));
+      this.raid.addPoints(player, KNOCK_BACK.POINTS);
+    }
   }
 
   stomp(npc, tile) {
     Shared.animate(npc, ANIM.STOMP);
     const at = tile.clone();
-    Shared.projectile(this.map, npc, at, 645, { delay: 0, duration: 15, startHeight: 255, endHeight: 0 });
-    for (const viewer of this.raiders()) Shared.sound(viewer, 360);
+    const { Projectile } = Shared.core();
+    new Projectile(at, at, null, 645, 15, 30, 225, 6, this.map).withAngle(0).withProgress(0).sendProjectile();
+    Shared.areaSound(this.raiders(), SOUND.STOMP, npc.getLocation(), { range: 6 });
+    Shared.graphicAt(this.raiders(), 305, at, { delay: 30 });
     const max = Monsters.maxHitFor(npc, BASE.STOMP, Monsters.LEVELS.STRENGTH);
     Shared.later(this.raid, 1, () => {
-      Shared.graphicAt(this.raiders(), 71, at, { height: 30 });
+      Shared.areaSound(this.raiders(), SOUND.STOMP_HIT, at, { range: 6 });
       for (const player of this.raiders()) {
         if (player.getLocation().getDistance(at) <= 1) Shared.damage(player, Shared.random(0, max));
       }
@@ -140,7 +161,7 @@ class GuardiansRoom extends Raid.Room {
   attack(npc, player) {
     if (this.adjacent(npc, player) && Shared.random(0, 1) === 0) {
       Shared.animate(npc, ANIM.ATTACK);
-      Shared.sound(player, 2533);
+      Shared.areaSound(this.raiders(), SOUND.ATTACK, npc.getLocation(), { range: 6 });
       Shared.strike(npc, player, "melee", Monsters.maxHitFor(npc, BASE.MELEE, Monsters.LEVELS.STRENGTH), 0);
       return;
     }
@@ -156,19 +177,24 @@ class GuardiansRoom extends Raid.Room {
     hit.updateTotalDamage();
   }
 
-  /** They crumble and their remains (id + 2) stay; both down, the way on opens. */
-  onNpcDeath(npc) {
-    if (!this.guardians.includes(npc)) return;
+  /** They crumble (836) and 2 ticks later turn to their remains (id + 2); both down, the gap opens 3 ticks on. */
+  beforeNpcDeath(npc) {
+    if (!this.guardians.includes(npc) || npc.__coxCrumbled) return false;
     npc.__coxCrumbled = true;
-    const at = npc.getLocation().clone();
+    npc.setHitpoints(1);
+    npc.getCombat().reset();
+    Shared.animate(npc, ANIM.CRUMBLE);
     Shared.later(this.raid, 2, () => {
-      const remains = this.spawnNpc(npc.getId() + 2, at, { scale: false });
-      remains?.getMovementQueue().setBlockMovement?.(true);
+      if (!npc.isRegistered()) return;
+      npc.setNpcTransformationId(npc.getId() + 2);
+      if (this.guardians.some((guardian) => !guardian.__coxCrumbled) || this.completed) return;
+      this.completed = true;
+      Shared.later(this.raid, 3, () => {
+        for (const blocker of this.blockers) Shared.core().ObjectManager.deregister(blocker, true);
+        this.blockers = [];
+      });
     });
-    if (this.guardians.some((guardian) => !guardian.__coxCrumbled)) return;
-    this.completed = true;
-    for (const blocker of this.blockers) Shared.core().ObjectManager.deregister(blocker, true);
-    this.blockers = [];
+    return true;
   }
 }
 
