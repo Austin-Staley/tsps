@@ -3,7 +3,7 @@
  * for dialogue and cutscene ids; quest state mirrors the cache's sote varbit.
  */
 module.exports = function registerSongOfTheElves(api) {
-  const { Boundary, Equipment, ItemIdentifiers, Location, NpcIdentifiers, PrivateArea, Skill } = api.core;
+  const { Area, Boundary, Equipment, GameObject, HitDamage, HitMask, ItemIdentifiers, Location, NpcIdentifiers, ObjectIdentifiers, ObjectManager, PrivateArea, Skill, World } = api.core;
   const { registerQuest, loadTranscripts, startTranscript } = require("../QuestRuntime");
   const PAGE = "Song of the Elves";
   const START_HOOK = "quest:song-of-the-elves:start";
@@ -19,6 +19,50 @@ module.exports = function registerSongOfTheElves(api) {
   const LATE_CHAPTER = "quest.song_of_the_elves.late-chapter";
   const VALLEY_FIGURE = "quest.song_of_the_elves.valley-figure";
   const LIBRARY_INSTANCE = "quest.song_of_the_elves.library-instance";
+  const LIBRARY_SEALS = "quest.song_of_the_elves.library-seals";
+  const LIBRARY_PUZZLE = "quest.song_of_the_elves.library-puzzle";
+  const LIBRARY_MIRRORS = "quest.song_of_the_elves.library-mirrors";
+  const LIBRARY_CRYSTALS = "quest.song_of_the_elves.library-crystals";
+  const LIBRARY_PILLAR_STATE = "quest.song_of_the_elves.library-pillar-state";
+  const RECRUITED_ELDERS = "quest.song_of_the_elves.recruited-elders";
+  const MEILYR_CLUE = "quest.song_of_the_elves.meilyr-clue";
+  const LLETYA_GUIDE_SPAWNED = "quest.song_of_the_elves.lletya-guide-spawned";
+  const FRAGMENT_DEFEATED = "quest.song_of_the_elves.fragment-defeated";
+  const CAMP_AREA = "quest.song_of_the_elves.camp-area";
+  const CAMP_HOLES = "quest.song_of_the_elves.camp-holes";
+  const CAMP_EXPLOSIVES = "quest.song_of_the_elves.camp-explosives";
+  const CAMP_DEFENSE = "quest.song_of_the_elves.camp-defense";
+  const CAMP_DEFENSE_COMPLETE = "quest.song_of_the_elves.camp-defense-complete";
+  const CAMP_BATTLE = "quest.song_of_the_elves.camp-battle";
+  const CAMP_ARRIVAL_STARTED = "quest.song_of_the_elves.camp-arrival-started";
+  const TEMPLE_CUTSCENE_STARTED = "quest.song_of_the_elves.temple-cutscene-started";
+  const CAMP_HOLE_ID = 35887;
+  const CAMP_CAVE_ID = ObjectIdentifiers.CAVE_STAIRS_2;
+  const CAMP_HOLE_TILES = [[2439, 6126], [2444, 6129], [2450, 6127], [2452, 6122], [2456, 6119], [2459, 6114], [2457, 6109]];
+  const CAMP_CENTER = new Location(2445, 6092, 0);
+  const LIBRARY_SEAL_DATA = [
+    { name: "ithell", id: ObjectIdentifiers.SEAL_OF_ITHELL, mapId: 36730, memory: NpcIdentifiers.MEMORY_OF_SEREN_2, tile: [2676, 6101, 1], steps: ["E", "S", "W", "N"] },
+    { name: "cadarn", id: ObjectIdentifiers.SEAL_OF_CADARN, mapId: 36725, memory: NpcIdentifiers.MEMORY_OF_SEREN_3, tile: [2622, 6097, 0], steps: ["E", "D", "S", "W", "S", "red", "E", "S"], targets: [[2609, 6102, 1], [2623, 6102, 1], [2623, 6158, 0], [2623, 6130, 0], [2609, 6130, 0], [2609, 6102, 0], [2623, 6102, 0]] },
+    { name: "crwys", id: ObjectIdentifiers.SEAL_OF_CRWYS, mapId: 36726, memory: NpcIdentifiers.MEMORY_OF_SEREN_4, tile: [2576, 6171, 1], steps: ["W", "N", "W", "fractured", "N", "green", "D", "E", "U", "cyan", "S", "D", "S"] },
+    { name: "amlodd", id: ObjectIdentifiers.SEAL_OF_AMLODD, mapId: 36727, memory: NpcIdentifiers.MEMORY_OF_SEREN_5, tile: [2614, 6157, 0], steps: ["fractured", "N", "red", "E", "N", "W", "D", "S", "E", "D", "S", "W", "S", "W", "N", "green", "yellow", "E", "E", "S"] },
+    { name: "meilyr", id: ObjectIdentifiers.SEAL_OF_MEILYR, mapId: 36731, memory: NpcIdentifiers.MEMORY_OF_SEREN_6, tile: [2580, 6163, 2], steps: ["E", "D", "S", "W", "S", "W", "N", "W", "N", "U", "red", "N", "U", "N", "W", "N", "W", "S", "W"] },
+    { name: "hefin", id: ObjectIdentifiers.SEAL_OF_HEFIN, mapId: 36728, memory: NpcIdentifiers.MEMORY_OF_SEREN_7, tile: [2562, 6129, 2], steps: ["E", "D", "S", "W", "S", "W", "N", "W", "S", "W", "N", "D", "E", "U", "N", "W", "U", "N", "W", "S"] },
+    { name: "trahaearn", id: ObjectIdentifiers.SEAL_OF_TRAHAEARN, mapId: 36732, memory: NpcIdentifiers.MEMORY_OF_SEREN_8, tile: [2646, 6143, 2], steps: ["S", "W", "N", "D", "E", "U", "N", "E", "S", "E", "blue", "S", "E", "N", "W", "N", "N", "E", "U", "E", "N", "W", "S"] },
+    { name: "iorwerth", id: ObjectIdentifiers.SEAL_OF_IORWERTH, mapId: 36729, memory: NpcIdentifiers.MEMORY_OF_SEREN_9, tile: [2650, 6167, 1], steps: ["cyan", "blue", "W", "D", "N", "fractured", "E", "U", "S", "E", "yellow", "N", "W", "N", "U", "S", "magenta", "N", "E", "red", "N", "W", "N", "E", "N", "U", "N", "W", "S", "D", "S", "D"] },
+  ];
+  const LIBRARY_OPERATIONS = { E: "east", W: "west", N: "north", S: "south", U: "up", D: "down" };
+  const LIBRARY_CRYSTAL_ITEMS = {
+    red: ItemIdentifiers.RED_CRYSTAL_2, yellow: ItemIdentifiers.YELLOW_CRYSTAL_2,
+    green: ItemIdentifiers.GREEN_CRYSTAL_2, cyan: ItemIdentifiers.CYAN_CRYSTAL_2,
+    blue: ItemIdentifiers.BLUE_CRYSTAL_2, magenta: ItemIdentifiers.MAGENTA_CRYSTAL_2,
+    fractured: ItemIdentifiers.FRACTURED_CRYSTAL_3,
+  };
+  const LIBRARY_PILLAR_IDS = new Set(Object.entries(ObjectIdentifiers)
+    .filter(([name]) => name.startsWith("PILLAR_OF_LIGHT"))
+    .map(([, id]) => id)
+    // The cache substitutes these ids into its static library beam pillars.
+    .concat(Array.from({ length: 20 }, (_, index) => 36705 + index)));
+  const LIBRARY_DIRECTIONS = { east: "E", west: "W", north: "N", south: "S", up: "U", down: "D" };
   const PILLAR_ITEMS = [
     [ItemIdentifiers.ADAMANT_CHAINBODY, "Adamant chainbody"],
     [ItemIdentifiers.WINE_OF_ZAMORAK, "Wine of zamorak"],
@@ -90,6 +134,24 @@ module.exports = function registerSongOfTheElves(api) {
   let quest;
   const battleInstances = new Map();
   const libraryInstances = new Map();
+  const fragmentInstances = new Map();
+  const campInstances = new Map();
+
+  class LletyaStoryArea extends Area {
+    process(mobile) {
+      if (!mobile?.isPlayer?.()) return;
+      const player = mobile.getAsPlayer();
+      if (currentChapter(player) !== 12 || quest.isComplete(player)) return;
+      if (player.getAttribute(LLETYA_GUIDE_SPAWNED) === true) return;
+      player.setAttribute(LLETYA_GUIDE_SPAWNED, true);
+      const npc = api.spawnNpc({ id: NpcIdentifiers.LORD_IEUAN_AMLODD_2, x: 2349, y: 3170, z: 0,
+        wanderRadius: 0, owner: player, ownerOnly: true });
+      if (!npc) {
+        player.setAttribute(LLETYA_GUIDE_SPAWNED, false);
+        return;
+      }
+    }
+  }
 
   class ArdougneBattleArea extends PrivateArea {
     constructor(battle, owner) {
@@ -131,6 +193,130 @@ module.exports = function registerSongOfTheElves(api) {
     postLeave(mobile, logout) {
       super.postLeave(mobile, logout);
       if (this.isDestroyed()) libraryInstances.delete(this.owner);
+    }
+
+    resolveObject(id, location) {
+      return this.getObjects().find((object) => object.getId() === id &&
+        object.getLocation().equals(location)) ?? null;
+    }
+  }
+
+  class FragmentArea extends PrivateArea {
+    constructor(owner) {
+      super([new Boundary(3282, 3307, 5906, 5930, 1)]);
+      this.owner = owner;
+    }
+
+    isMulti() { return true; }
+
+    canAttack(attacker, target) {
+      const attackerHere = attacker?.getArea?.() === this;
+      const targetHere = target?.getArea?.() === this;
+      if (attackerHere || targetHere) return attackerHere && targetHere;
+      return null;
+    }
+
+    process(mobile) {
+      if (!mobile?.isNpc?.()) return;
+      const state = fragmentInstances.get(this);
+      if (!state || mobile !== state.boss || state.finished) return;
+      const now = World.getProcessCycle();
+      if (state.lastCycle === now) return;
+      state.lastCycle = now;
+      mobile.setScriptedMovement(true);
+      mobile.getCombat().getLastAttack().reset();
+      if (!state.introStarted) {
+        state.introStarted = true;
+        startTranscript(api, state.player, NpcIdentifiers.FRAGMENT_OF_SEREN_3, PAGE,
+          "the-fragment-of-seren-the-fragment-enraged");
+      }
+      if (state.healers.size > 0 && state.boss.getHitpoints() > 0) {
+        const heal = state.healers.size * (4 + Math.floor(Math.random() * 5));
+        state.boss.setHitpoints(Math.min(state.boss.getMaxHitpoints(), state.boss.getHitpoints() + heal));
+      }
+      if (now >= state.nextBasicAttackAt) {
+        state.nextBasicAttackAt = now + 4;
+        state.player.getCombat().getHitQueue().addPendingDamage([
+          new HitDamage(2 + Math.floor(Math.random() * 7), HitMask.RED).setSource(state.boss),
+        ]);
+      }
+      const hp = state.boss.getHitpoints();
+      if (state.cloneThresholds.length && state.healers.size === 0 &&
+        hp <= state.cloneThresholds[0]) spawnFragmentClones(this, state);
+      if (now >= state.nextSpecialAt) {
+        resolveFragmentSpecial(this, state, now);
+      }
+    }
+  }
+
+  class FragmentThresholdArea extends Area {
+    process(mobile) {
+      if (!mobile?.isPlayer?.()) return;
+      const player = mobile.getAsPlayer();
+      if (currentChapter(player) !== 19 || player.getAttribute(CAMP_BATTLE) !== true ||
+        player.getAttribute(FRAGMENT_DEFEATED) === true || player.getAttribute(TEMPLE_CUTSCENE_STARTED) === true) return;
+      player.setAttribute(TEMPLE_CUTSCENE_STARTED, true);
+      startTranscript(api, player, NpcIdentifiers.LORD_IORWERTH_2, PAGE,
+        "the-fragment-of-seren-the-fragment-freed-at-last");
+    }
+  }
+
+  class DwarvenCampArea extends PrivateArea {
+    constructor(owner) {
+      super([new Boundary(2424, 2472, 6078, 6142, 0)]);
+      this.owner = owner;
+    }
+    isMulti() { return true; }
+    canAttack(attacker, target) {
+      const a = attacker?.getArea?.() === this;
+      const t = target?.getArea?.() === this;
+      if (a || t) return a && t;
+      return null;
+    }
+    process(mobile) {
+      const state = campInstances.get(this);
+      if (!state) return;
+      // Drive the siege from its owner so it keeps advancing after the last
+      // add dies; relying on an NPC tick can strand the timer when the Set
+      // still contains a dead or despawned attacker.
+      if (mobile !== state.player) return;
+      const cycle = World.getProcessCycle();
+      if (state.lastCycle === cycle) return;
+      state.lastCycle = cycle;
+      if (state.pendingArrivalAt && cycle >= state.pendingArrivalAt) {
+        state.pendingArrivalAt = 0;
+        state.arrivalTranscriptStarted = true;
+        state.player.setAttribute(CAMP_ARRIVAL_STARTED, true);
+        startTranscript(api, state.player, NpcIdentifiers.ELENA_3, PAGE,
+          "sealing-the-underground-pass-attack-of-the-iorwerth-upon-killing-essyllt");
+        return;
+      }
+      if (state.pendingEssylltAt && cycle >= state.pendingEssylltAt) {
+        state.pendingEssylltAt = 0;
+        startTranscript(api, state.player, NpcIdentifiers.ELENA_3, PAGE,
+          "sealing-the-underground-pass-attack-of-the-iorwerth-upon-successfully-defending-the-dwarf-camp");
+        return;
+      }
+      if (!state.defending || state.finished) return;
+      for (const npc of state.attackers) {
+        if (npc.getHitpoints?.() <= 0 || npc.getArea?.() !== this) state.attackers.delete(npc);
+      }
+      if (cycle >= state.endsAt) finishCampDefense(this, state);
+      else if (cycle >= state.nextWaveAt && state.attackers.size < 3) spawnCampAttacker(this, state);
+    }
+    postLeave(mobile, logout) {
+      super.postLeave(mobile, logout);
+      if (this.isDestroyed()) campInstances.delete(this);
+    }
+  }
+
+  class DwarvenCampAccessArea extends Area {
+    process(mobile) {
+      if (!mobile?.isPlayer?.()) return;
+      const player = mobile.getAsPlayer();
+      if (currentChapter(player) < 17 || currentChapter(player) > 19 || quest.isComplete(player)) return;
+      if (player.getArea?.() instanceof DwarvenCampArea) return;
+      ensureDwarvenCamp(player);
     }
   }
 
@@ -197,6 +383,7 @@ module.exports = function registerSongOfTheElves(api) {
         "0lNCRc": ItemIdentifiers.ELDER_CADANTINE,
         "edE31_": ItemIdentifiers.CRYSTAL_5,
         "_Q1RaJ": ItemIdentifiers.ORB_OF_LIGHT_5,
+        "vh7Q_s": ItemIdentifiers.CLUE_SCROLL_HARD_,
       };
       const itemId = itemByMessage[event.stepId];
       if (itemId) {
@@ -220,6 +407,24 @@ module.exports = function registerSongOfTheElves(api) {
       if (event.stepId === "ITn7ep") {
         inventory.deleteNumber(ItemIdentifiers.HAMMER, 1);
         inventory.deleteNumber(ItemIdentifiers.RUNITE_BAR, 1);
+      }
+      if (event.stepId === "UNrb5z") recordElder(player, 1);
+      if (event.stepId === "K9K0W4") recordElder(player, 2);
+      if (event.stepId === "U-Vihn") recordElder(player, 4);
+      if (event.stepId === "S3ME_F") {
+        inventory.deleteNumber(ItemIdentifiers.CLUE_SCROLL_HARD_, 1);
+        recordElder(player, 8);
+      }
+      if (event.stepId === "gBRsQm") {
+        if (inventory.getFreeSlots() < 7) {
+          event.handled = true;
+          player.sendMessage("You need seven empty inventory slots for the explosives.");
+          return;
+        }
+        if (inventory.getAmount(ItemIdentifiers.EXPLOSIVE_POTION) === 0) inventory.adds(ItemIdentifiers.EXPLOSIVE_POTION, 7);
+        event.box = { items: [ItemIdentifiers.EXPLOSIVE_POTION] };
+        player.setAttribute(CAMP_EXPLOSIVES, 7);
+        player.sendMessage("You take seven explosive potions from Elena.");
       }
       return;
     }
@@ -261,7 +466,7 @@ module.exports = function registerSongOfTheElves(api) {
       player.setAttribute(VALLEY_FIGURE, true);
       const figure = api.spawnNpc({ id: NpcIdentifiers.MYSTERIOUS_FIGURE, x: 2440, y: 6092, z: 0,
         wanderRadius: 0, owner: player, ownerOnly: true });
-      if (figure) player.getArea?.()?.add?.(figure);
+      if (figure) player.getArea?.()?.enter?.(figure);
     }
     if (event.stepId === "v3r3p_") player.moveTo(new Location(2353, 3172, 0));
     if (event.stepId === "D1wXY6") {
@@ -270,11 +475,45 @@ module.exports = function registerSongOfTheElves(api) {
     }
     if (["9yLw8T", "o4CmGU", "eIlh1C"].includes(event.stepId)) setChapter(player, 15);
     if (event.stepId === "6nBDUf") setChapter(player, 16);
-    if (event.stepId === "xfnkES") setChapter(player, 19);
-    if (event.stepId === "yR9ETJ") setChapter(player, 20);
+    if (event.stepId === "xfnkES") {
+      event.handled = true;
+      setChapter(player, 19);
+      if (!startFragmentBattle(player)) player.setAttribute(TEMPLE_CUTSCENE_STARTED, false);
+    }
+    if (event.stepId === "YAPX-R") {
+      event.handled = true;
+      beginEssylltEncounter(player);
+    }
+    if (event.stepId === "vdBzNa") spawnPostEssylltArrival(player);
+    if (event.stepId === "FK0kOz") {
+      setChapter(player, 19);
+      player.sendMessage("Lord Iorwerth and Arianwyn have entered the Temple of Light. Follow them through the Underground Pass.");
+    }
+    if (event.stepId === "yR9ETJ" && player.getAttribute(FRAGMENT_DEFEATED) === true) setChapter(player, 20);
     if (event.stepId === "eOtNFO") setChapter(player, 12);
-    if (event.stepId === "W-ainS") quest.complete(player);
+    if (event.stepId === "W-ainS") {
+      if (player.getAttribute(FRAGMENT_DEFEATED) !== true || currentChapter(player) !== 20) {
+        event.handled = true;
+        player.sendMessage("The Fragment must be defeated before the quest can end.");
+        return;
+      }
+      quest.complete(player);
+    }
   }
+
+  function recordElder(player, bit) {
+    const recruited = (Number(player.getAttribute(RECRUITED_ELDERS)) || 0) | bit;
+    player.setAttribute(RECRUITED_ELDERS, recruited);
+    if ((recruited & 3) === 3 && currentChapter(player) === 13) {
+      setChapter(player, 14);
+      player.sendMessage("Lord Crwys and Lady Hefin are on their way to Lletya. Return to Baxtorian for the next part of the plan.");
+    }
+    if ((recruited & 15) === 15 && currentChapter(player) === 16) {
+      setChapter(player, 17);
+      player.sendMessage("The clan elders are reunited. Return to Baxtorian and help the dwarves prepare to seal the Pass.");
+    }
+  }
+
   function setChapter(player, chapter) {
     if (chapter >= 19) {
       // Stage 200 is the cache completion value; retain stage 190 through the
@@ -296,6 +535,45 @@ module.exports = function registerSongOfTheElves(api) {
       return startTranscript(api, player, event.npcId, PAGE, "starting-out-talking-to-edmond");
     }
     if (quest.isComplete(player)) return false;
+    const camp = player.getArea?.() instanceof DwarvenCampArea ? player.getArea() : null;
+    const campState = camp && campInstances.get(camp);
+    if (npcName === "elena" && campState?.finished) {
+      if (player.getAttribute(CAMP_BATTLE) === true) {
+        if (player.getAttribute(CAMP_ARRIVAL_STARTED) !== true && !campState.arrivalTranscriptStarted && !campState.pendingArrivalAt) {
+          campState.pendingArrivalAt = World.getProcessCycle() + 2;
+        } else if (player.getAttribute(CAMP_ARRIVAL_STARTED) === true || campState.arrivalTranscriptStarted) {
+          player.sendMessage("The elven leaders have gone into the Temple of Light. Follow them through the Underground Pass.");
+        }
+        return true;
+      }
+      return startTranscript(api, player, event.npcId, PAGE,
+        "sealing-the-underground-pass-attack-of-the-iorwerth-upon-successfully-defending-the-dwarf-camp");
+    }
+    if (npcName === "baxtorian" && currentChapter(player) === 17) {
+      const wasAtCamp = player.getArea?.() instanceof DwarvenCampArea;
+      ensureDwarvenCamp(player);
+      return startTranscript(api, player, event.npcId, PAGE, wasAtCamp
+        ? "preparations-at-the-dwarf-camp-talking-to-baxtorian"
+        : "preparations-at-the-dwarf-camp-talking-to-baxtorian-at-lletya");
+    }
+    if (npcName === "elena" && currentChapter(player) === 17 && player.getArea?.() instanceof DwarvenCampArea) {
+      if (!player.getInventory().getAmount(ItemIdentifiers.EXPLOSIVE_POTION)) {
+        if (player.getInventory().getFreeSlots() < 7) {
+          player.sendMessage("Make seven inventory spaces so Elena can hand you the explosive potions.");
+          return true;
+        }
+        player.getInventory().adds(ItemIdentifiers.EXPLOSIVE_POTION, 7);
+        player.setAttribute(CAMP_EXPLOSIVES, 7);
+      }
+      return startTranscript(api, player, event.npcId, PAGE, "preparations-at-the-dwarf-camp-talking-to-elena-after-talking-to-baxtorian");
+    }
+    if (npcName === "baxtorian" && currentChapter(player) === 18 && player.getArea?.() instanceof DwarvenCampArea) {
+      if ((Number(player.getAttribute(CAMP_HOLES)) || 0) !== 127) {
+        player.sendMessage("Fill all seven holes with Elena's explosive potions before the final meeting.");
+        return true;
+      }
+      return startTranscript(api, player, event.npcId, PAGE, "preparations-at-the-dwarf-camp-a-final-meeting");
+    }
     if (npcName === "lord ieuan amlodd" && player.getArea?.() instanceof GrandLibraryArea) {
       const area = player.getArea();
       area.leave(player, false);
@@ -386,6 +664,13 @@ module.exports = function registerSongOfTheElves(api) {
     }
     if (currentChapter(player) === 11 && npcName === "mysterious figure" && player.getAttribute(VALLEY_FIGURE) === true) {
       return startTranscript(api, player, event.npcId, PAGE, "preparing-to-enter-prifddinas-a-mysterious-figure");
+    }
+    if (currentChapter(player) === 16 && npcName === "lady ffion meilyr") {
+      if (!player.getInventory().getAmount(ItemIdentifiers.CLUE_SCROLL_HARD_)) {
+        player.sendMessage("Ask Baxtorian for Lady Meilyr's clue scroll before following it.");
+        return true;
+      }
+      return startTranscript(api, player, event.npcId, PAGE, "after-the-attack-finding-lady-meilyr");
     }
     if (currentChapter(player) === 11 && npcName === "lord ieuan amlodd" && player.getAttribute(VALLEY_FIGURE) === true) {
       player.setAttribute(VALLEY_FIGURE, false);
@@ -522,9 +807,23 @@ module.exports = function registerSongOfTheElves(api) {
       area.enter(player);
       const guide = api.spawnNpc({ id: NpcIdentifiers.LORD_IEUAN_AMLODD, x: 2625, y: 6144, z: 0,
         wanderRadius: 0, owner: player, ownerOnly: true });
-      if (guide) area.add(guide);
+      if (guide) area.enter(guide);
       player.moveTo(new Location(2623, 6144, 0));
       player.sendMessage("You enter the Grand Library. Its doors seal behind you; find the Seal of the Forgotten in the central chamber.");
+      return;
+    }
+    if (event.option === "I'm ready." && currentChapter(event.player) === 18 &&
+      String(event.definition?.getName?.() ?? "").toLowerCase() === "baxtorian") {
+      const player = event.player;
+      const area = ensureDwarvenCamp(player);
+      const holes = Number(player.getAttribute(CAMP_HOLES)) || 0;
+      if (holes < 7) {
+        player.sendMessage(`The dwarves are not ready. You have filled ${holes} of the seven explosive holes.`);
+        return;
+      }
+      spawnCampNpc(area, NpcIdentifiers.LORD_IORWERTH_2, 2448, 6110);
+      startTranscript(api, player, NpcIdentifiers.LORD_IORWERTH_2, PAGE, "sealing-the-underground-pass-meeting-with-lord-iorwerth");
+      beginCampDefense(player, area);
       return;
     }
     if (event.player.getAttribute(RESISTANCE_BRIEFING) === true && currentChapter(event.player) === 3) {
@@ -554,6 +853,465 @@ module.exports = function registerSongOfTheElves(api) {
     event.player.setAttribute(CHEMICAL_CHOICE, chemical);
   }
 
+  function inLibrary(player) {
+    return player.getArea?.() instanceof GrandLibraryArea;
+  }
+
+  function currentLibrarySeal(player) {
+    const completed = Number(player.getAttribute(LIBRARY_SEALS)) || 0;
+    return LIBRARY_SEAL_DATA.findIndex((_, index) => !(completed & (1 << (index + 1))));
+  }
+
+  function libraryPuzzleState(player) {
+    const [seal, step] = String(player.getAttribute(LIBRARY_PUZZLE) ?? "0:0").split(":").map(Number);
+    return { seal: Number.isInteger(seal) ? seal : 0, step: Number.isInteger(step) ? step : 0 };
+  }
+
+  function libraryPillarState(player) {
+    try { return JSON.parse(String(player.getAttribute(LIBRARY_PILLAR_STATE) || "{}")); }
+    catch { return {}; }
+  }
+  function resetLibraryPuzzle(player, sealIndex) {
+    player.setAttribute(LIBRARY_PUZZLE, `${sealIndex}:0`);
+    player.setAttribute(LIBRARY_PILLAR_STATE, "{}");
+  }
+
+  function beamReaches(previous, location, area, placements) {
+    const direction = previous?.operation === "fractured" ? "fractured" :
+      (LIBRARY_OPERATIONS[previous?.operation] ?? previous?.direction);
+    if (!previous || !location || !direction) return true;
+    const { x, y, z } = previous;
+    const dx = location.x - x;
+    const dy = location.y - y;
+    const dz = location.z - z;
+    let step;
+    switch (direction) {
+      case "east": if (dz === 0 && dy === 0 && dx > 0) step = [1, 0, 0]; break;
+      case "west": if (dz === 0 && dy === 0 && dx < 0) step = [-1, 0, 0]; break;
+      case "north": if (dz === 0 && dx === 0 && dy > 0) step = [0, 1, 0]; break;
+      case "south": if (dz === 0 && dx === 0 && dy < 0) step = [0, -1, 0]; break;
+      case "up": if (dx === 0 && dy === 0 && dz === 1) step = [0, 0, 1]; break;
+      case "down": if (dx === 0 && dy === 0 && dz === -1) step = [0, 0, -1]; break;
+      // A fractured crystal sends light down both branches; the next mirror
+      // must be on one of those rays. Its own direction is checked afterward.
+      case "fractured":
+        if (dz === 0 && dx !== 0 && dy === 0) step = [Math.sign(dx), 0, 0];
+        else if (dz === 0 && dy !== 0 && dx === 0) step = [0, Math.sign(dy), 0];
+        break;
+    }
+    if (!step) return false;
+    const used = new Set(Object.keys(placements ?? {}));
+    for (let x = previous.x + step[0], y = previous.y + step[1], z = previous.z + step[2];
+      x !== location.x || y !== location.y || z !== location.z;
+      x += step[0], y += step[1], z += step[2]) {
+      const key = `${x},${y},${z}`;
+      if (LIBRARY_PILLAR_IDS.size && area?.getTemplateObjects?.(new Location(x, y, z))?.some((object) =>
+        LIBRARY_PILLAR_IDS.has(object.getId()) && !used.has(key))) return false;
+      if (api.core.RegionManager?.blocked?.(new Location(x, y, z), area)) return false;
+    }
+    return true;
+  }
+
+  function dispenserCollect(event) {
+    const player = event?.player;
+    if (!player || !inLibrary(player) || quest.isComplete(player)) return false;
+    const sealIndex = currentLibrarySeal(player);
+    if (sealIndex < 0) return false;
+    event.handled = true;
+    const inventory = player.getInventory();
+    const seal = LIBRARY_SEAL_DATA[sealIndex];
+    const mirrors = seal.steps.filter((step) => LIBRARY_OPERATIONS[step]).length;
+    const colors = seal.steps.filter((step) => LIBRARY_CRYSTAL_ITEMS[step]);
+    const supplies = [[ItemIdentifiers.HAND_MIRROR_2, mirrors], ...[...new Set(colors)].map((color) =>
+      [LIBRARY_CRYSTAL_ITEMS[color], colors.filter((entry) => entry === color).length])];
+    const neededSlots = supplies.filter(([id, amount]) => inventory.getAmount(id) < amount).length;
+    if (inventory.getFreeSlots() < neededSlots) {
+      player.sendMessage(`You need ${neededSlots} free inventory spaces to collect the ${seal.name} puzzle tools.`);
+      return true;
+    }
+    for (const [id, amount] of supplies) {
+      const missing = amount - inventory.getAmount(id);
+      if (missing > 0) inventory.adds(id, missing);
+    }
+    player.setAttribute(LIBRARY_MIRRORS, mirrors);
+    player.setAttribute(LIBRARY_CRYSTALS, colors.join(","));
+    player.setAttribute(LIBRARY_PUZZLE, `${sealIndex}:0`);
+    player.setAttribute(LIBRARY_PILLAR_STATE, "{}");
+    player.sendMessage(`You collect ${mirrors} hand mirrors and the crystals needed to direct light to the Seal of ${seal.name[0].toUpperCase()}${seal.name.slice(1)}.`);
+    return true;
+  }
+
+  function isLibraryPillar(player, objectId, location, seal) {
+    if (!inLibrary(player) || !location || !seal) return false;
+    if (!LIBRARY_PILLAR_IDS.has(objectId)) return false;
+    const tile = new Location(location.x, location.y, location.z);
+    const area = player.getArea();
+    return area.getTemplateObjects?.(tile)?.some((object) => object.getId() === objectId) === true ||
+      area.getObjects?.().some((object) => object.getId() === objectId && object.getLocation().equals(tile)) === true;
+  }
+
+  function submitLibraryOperation(player, sealIndex, operation, location) {
+    const seal = LIBRARY_SEAL_DATA[sealIndex];
+    const state = libraryPuzzleState(player);
+    if (currentLibrarySeal(player) !== sealIndex || state.seal !== sealIndex || state.step >= seal.steps.length) return;
+    const target = seal.targets?.[state.step];
+    if (target && (!location || target[0] !== location.x || target[1] !== location.y || target[2] !== location.z)) {
+      resetLibraryPuzzle(player, sealIndex);
+      player.sendMessage("The light has reached a different pillar. Return to the numbered route and direct it from the correct pillar.");
+      return;
+    }
+    if (seal.steps[state.step] !== operation) {
+      resetLibraryPuzzle(player, sealIndex);
+      player.sendMessage("The light scatters. The seal's mirror sequence has reset; follow the beam from its source and try again.");
+      return;
+    }
+    const next = state.step + 1;
+    if (location) {
+      const key = `${location.x},${location.y},${location.z}`;
+      const placements = libraryPillarState(player);
+      if (Object.hasOwn(placements, key)) {
+        resetLibraryPuzzle(player, sealIndex);
+        player.sendMessage("The beam returns to a mirror you have already placed. The seal's route resets; use a fresh pillar for each turn.");
+        return;
+      }
+      const previous = Object.values(placements).at(-1);
+      if (!beamReaches(previous, location, player.getArea(), placements)) {
+        resetLibraryPuzzle(player, sealIndex);
+        player.sendMessage("The beam cannot reach that pillar from the previous mirror. The seal's route resets; follow the lit beam to the next pillar.");
+        return;
+      }
+      placements[key] = { operation, direction: LIBRARY_OPERATIONS[operation] ?? previous?.direction ?? "", x: location.x, y: location.y, z: location.z };
+      player.setAttribute(LIBRARY_PILLAR_STATE, JSON.stringify(placements));
+    }
+    player.setAttribute(LIBRARY_PUZZLE, `${sealIndex}:${next}`);
+    player.sendMessage(next === seal.steps.length
+      ? `The beam reaches the Seal of ${seal.name[0].toUpperCase()}${seal.name.slice(1)}. Touch it to receive the memory.`
+      : "The light bends along the passage. Follow its new direction to the next pillar.");
+  }
+
+  function useLibraryMirror(event) {
+    const player = event?.player;
+    if (!player || !inLibrary(player)) return false;
+    const sealIndex = currentLibrarySeal(player);
+    if (sealIndex < 0) return false;
+    const seal = LIBRARY_SEAL_DATA[sealIndex];
+    const state = libraryPuzzleState(player);
+    const loc = event.location;
+    if (!isLibraryPillar(player, event.objectId, loc, seal)) return false;
+    if (state.seal !== sealIndex || !LIBRARY_OPERATIONS[seal.steps[state.step]]) {
+      player.sendMessage("This pillar is not where the current beam needs to be redirected.");
+      return true;
+    }
+    if (player.getInventory().getAmount(ItemIdentifiers.HAND_MIRROR_2) < 1) {
+      player.sendMessage("You need a hand mirror from the crystal dispenser.");
+      return true;
+    }
+    const options = ["east", "south", "west", "north", "up", "down"];
+    const pairs = [];
+    for (const direction of options) pairs.push(`Reflect ${direction}`, () => {
+      const current = libraryPuzzleState(player);
+      if (current.seal !== sealIndex) return;
+      player.getInventory().deleteNumber(ItemIdentifiers.HAND_MIRROR_2, 1);
+      submitLibraryOperation(player, sealIndex, LIBRARY_DIRECTIONS[direction], loc);
+    });
+    api.sendMultiChatboxPrompt(player, "Which direction should the mirror face?", ...pairs);
+    event.handled = true;
+    return true;
+  }
+
+  function useLibraryCrystal(event) {
+    const player = event?.player;
+    if (!player || !inLibrary(player)) return false;
+    const color = Object.keys(LIBRARY_CRYSTAL_ITEMS).find((name) => LIBRARY_CRYSTAL_ITEMS[name] === event.itemId);
+    const sealIndex = currentLibrarySeal(player);
+    if (!color || sealIndex < 0) return false;
+    const seal = LIBRARY_SEAL_DATA[sealIndex];
+    const state = libraryPuzzleState(player);
+    if (!isLibraryPillar(player, event.objectId, event.location, seal)) return false;
+    if (state.seal !== sealIndex || seal.steps[state.step] !== color) {
+      player.sendMessage("The crystal colour does not match the light at this pillar.");
+      event.handled = true;
+      return true;
+    }
+    player.getInventory().deleteNumber(event.itemId, 1);
+    submitLibraryOperation(player, sealIndex, color, event.location);
+    event.handled = true;
+    return true;
+  }
+
+  function touchLibrarySeal(event) {
+    const player = event?.player;
+    if (!player || !inLibrary(player)) return false;
+    const completed = Number(player.getAttribute(LIBRARY_SEALS)) || 0;
+    if (event.objectId === ObjectIdentifiers.SEAL_OF_THE_FORGOTTEN) {
+      if (completed & 1) return startTranscript(api, player, NpcIdentifiers.MEMORY_OF_SEREN, PAGE,
+        "the-grand-library-of-prifddinas-the-seal-of-the-forgotten-talking-to-the-memory-again");
+      player.setAttribute(LIBRARY_SEALS, completed | 1);
+      resetLibraryPuzzle(player, 0);
+      return startTranscript(api, player, NpcIdentifiers.MEMORY_OF_SEREN, PAGE, "the-grand-library-of-prifddinas-the-seal-of-the-forgotten");
+    }
+    const index = LIBRARY_SEAL_DATA.findIndex((seal) => seal.id === event.objectId || seal.mapId === event.objectId);
+    if (index < 0) return false;
+    const seal = LIBRARY_SEAL_DATA[index];
+    const state = libraryPuzzleState(player);
+    if (currentLibrarySeal(player) !== index || state.seal !== index || state.step < seal.steps.length ||
+      Object.keys(libraryPillarState(player)).length !== seal.steps.length) {
+      player.sendMessage("The seal remains dark. Direct every beam of light to it first.");
+      return true;
+    }
+    player.setAttribute(LIBRARY_SEALS, completed | (1 << (index + 1)));
+    resetLibraryPuzzle(player, index + 1);
+    const done = LIBRARY_SEAL_DATA.every((_, sealIndex) => (Number(player.getAttribute(LIBRARY_SEALS)) & (1 << (sealIndex + 1))) !== 0);
+    if (done) setChapter(player, 13);
+    startTranscript(api, player, seal.memory, PAGE, `the-grand-library-of-prifddinas-the-seal-of-${seal.name}`);
+    return true;
+  }
+
+  function handleLibraryObject(event) {
+    const player = event?.player;
+    if (!player || !inLibrary(player)) return false;
+    if (event.objectId === ObjectIdentifiers.CRYSTAL_DISPENSER_3) return dispenserCollect(event);
+    if (event.objectId === ObjectIdentifiers.SEAL_OF_THE_FORGOTTEN ||
+      LIBRARY_SEAL_DATA.some((seal) => seal.id === event.objectId || seal.mapId === event.objectId)) return touchLibrarySeal(event);
+    return false;
+  }
+
+  function enterTemplePassage(event) {
+    const player = event?.player;
+    const location = event?.location;
+    const x = location?.x ?? location?.getX?.();
+    const y = location?.y ?? location?.getY?.();
+    if (!player || event.objectId !== CAMP_CAVE_ID || x !== 2464 || y !== 6081 ||
+      !(player.getArea?.() instanceof DwarvenCampArea) || currentChapter(player) !== 19 ||
+      player.getAttribute(CAMP_BATTLE) !== true) return false;
+    event.handled = true;
+    if (player.getAttribute(FRAGMENT_DEFEATED) === true) {
+      player.moveTo(CAMP_CENTER);
+      player.sendMessage("You return through the passage to the dwarven camp.");
+      return true;
+    }
+    player.setAttribute(TEMPLE_CUTSCENE_STARTED, false);
+    // The cache's Ascend cave is the passage the elves used to enter the temple.
+    // The tunnel lands west of the Fragment chamber; the player still walks in.
+    player.moveTo(new Location(3278, 5918, 1));
+    player.sendMessage("You climb through the crack and follow the old passage toward the Temple of Light.");
+    return true;
+  }
+
+  function ensureDwarvenCamp(player) {
+    const existing = player.getAttribute(CAMP_AREA);
+    if (existing && !existing.isDestroyed?.()) {
+      existing.enter(player);
+      return existing;
+    }
+    const area = new DwarvenCampArea(player.getUsername?.());
+    player.setAttribute(CAMP_AREA, area);
+    area.enter(player);
+    const atFinalBattle = (player.getAttribute(CAMP_DEFENSE_COMPLETE) === true || currentChapter(player) >= 19) &&
+      player.getAttribute(FRAGMENT_DEFEATED) !== true;
+    const postEssyllt = atFinalBattle && player.getAttribute(CAMP_BATTLE) === true;
+    const retryingEssyllt = atFinalBattle && !postEssyllt;
+    campInstances.set(area, { player, attackers: new Set(), nextWaveAt: 0, endsAt: 0,
+      lastCycle: -1, defending: false, finished: atFinalBattle, essyllt: null,
+      pendingArrivalAt: postEssyllt && player.getAttribute(CAMP_ARRIVAL_STARTED) !== true
+        ? World.getProcessCycle() + 2 : 0,
+      pendingEssylltAt: retryingEssyllt ? World.getProcessCycle() + 2 : 0 });
+    const holesFilled = Number(player.getAttribute(CAMP_HOLES)) || 0;
+    for (const [index, [x, y]] of CAMP_HOLE_TILES.entries()) {
+      const id = holesFilled & (1 << index) ? ObjectIdentifiers.HOLE_59 : CAMP_HOLE_ID;
+      const object = new GameObject(id, new Location(x, y, 0), 10, 0, area);
+      area.add(object);
+      ObjectManager.register(object, true);
+      player.getPacketSender().sendObject(object);
+    }
+    for (const [id, x, y] of [
+      [NpcIdentifiers.BAXTORIAN_2, 2444, 6092], [NpcIdentifiers.ELENA_3, 2454, 6091],
+      [NpcIdentifiers.NILOOF_2, 2437, 6084], [NpcIdentifiers.KAMEN_2, 2453, 6087],
+      [NpcIdentifiers.THORGEL_2, 2441, 6083], [NpcIdentifiers.KLANK_2, 2451, 6094],
+      [NpcIdentifiers.GENERAL_HINING_2, 2446, 6094], [NpcIdentifiers.LORD_IEUAN_AMLODD, 2437, 6092],
+      [NpcIdentifiers.LADY_CARYS_HEFIN, 2440, 6088], [NpcIdentifiers.LADY_TANGWEN_TRAHAEARN_2, 2442, 6087],
+      [NpcIdentifiers.LADY_KELYN_ITHELL_2, 2444, 6097], [NpcIdentifiers.LADY_FFION_MEILYR_2, 2452, 6090],
+      [NpcIdentifiers.LORD_PIQUAN_CRWYS_2, 2450, 6084], [NpcIdentifiers.ISLWYN_4, 2438, 6110],
+      [NpcIdentifiers.ELUNED_4, 2448, 6089], [NpcIdentifiers.IESTIN_3, 2459, 6089],
+    ]) {
+      const npc = api.spawnNpc({ id, x, y, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
+      if (npc) area.enter(npc);
+    }
+    player.moveTo(CAMP_CENTER);
+    player.sendMessage("You follow the winding pass to the dwarven camp. The clan elders and resistance are gathering there.");
+    return area;
+  }
+
+  function spawnCampNpc(area, id, x, y) {
+    const state = campInstances.get(area);
+    if (!state) return null;
+    const npc = api.spawnNpc({ id, x, y, z: 0, wanderRadius: 0, owner: state.player, ownerOnly: true });
+    if (npc) area.enter(npc);
+    return npc;
+  }
+
+  function placeCampExplosive(event) {
+    const player = event?.player;
+    if (!player || currentChapter(player) !== 17 || event.itemId !== ItemIdentifiers.EXPLOSIVE_POTION) return false;
+    const area = player.getArea?.();
+    if (!(area instanceof DwarvenCampArea) || area.owner !== player.getUsername?.()) return false;
+    const targetLocation = event.location ?? event.object?.getLocation?.();
+    const x = targetLocation?.x ?? targetLocation?.getX?.();
+    const y = targetLocation?.y ?? targetLocation?.getY?.();
+    const index = CAMP_HOLE_TILES.findIndex(([hx, hy]) => hx === x && hy === y);
+    if (![CAMP_HOLE_ID, ObjectIdentifiers.HOLE_58].includes(event.objectId) || index < 0) return false;
+    event.handled = true;
+    const placed = Number(player.getAttribute(CAMP_HOLES)) || 0;
+    if (placed & (1 << index)) {
+      player.sendMessage("This hole has already been filled with an explosive potion.");
+      return true;
+    }
+    const inventory = player.getInventory();
+    if (inventory.getAmount(ItemIdentifiers.EXPLOSIVE_POTION) < 1) {
+      player.sendMessage("You need one of Elena's explosive potions to fill this hole.");
+      return true;
+    }
+    inventory.deleteNumber(ItemIdentifiers.EXPLOSIVE_POTION, 1);
+    player.setAttribute(CAMP_HOLES, placed | (1 << index));
+    const object = event.object;
+    const location = object?.getLocation?.() ?? new Location(x, y, 0);
+    if (object) ObjectManager.deregister(object, true);
+    const filled = new GameObject(ObjectIdentifiers.HOLE_59, location.clone(), 10, object?.getFace?.() ?? 0, area);
+    area.add(filled);
+    ObjectManager.register(filled, true);
+    player.getPacketSender().sendObject(filled);
+    player.sendMessage("You place the potion in the hole and gently cover the top with dirt.");
+    if ((placed | (1 << index)) === 127) {
+      setChapter(player, 18);
+      player.sendMessage("All seven charges are in place. Return to Baxtorian and report that the camp is ready.");
+    }
+    return true;
+  }
+
+  function beginCampDefense(player, area) {
+    if (!area) return;
+    const state = campInstances.get(area);
+    if (!state || state.defending || state.finished) return;
+    state.defending = true;
+    state.endsAt = World.getProcessCycle() + 400; // 240 seconds at the 600ms world tick.
+    state.nextWaveAt = World.getProcessCycle();
+    state.lastCycle = -1;
+    player.setAttribute(CAMP_DEFENSE, state.endsAt);
+    player.sendMessage("Iorwerth's forces attack the barricade. Hold the camp for four minutes; draw their warriors and archers away from the barrier.");
+    spawnCampAttacker(area, state);
+  }
+
+  function spawnCampAttacker(area, state) {
+    const cycle = World.getProcessCycle();
+    state.nextWaveAt = cycle + 7;
+    const ranged = Math.random() < 0.45;
+    const index = state.attackers.size;
+    const npc = api.spawnNpc({ id: ranged ? NpcIdentifiers.IORWERTH_ARCHER_10 : NpcIdentifiers.IORWERTH_WARRIOR_12,
+      // The statue line north of the camp blocks direct melee routes. Keep the
+      // spawned raiders on the open approach beside the player's barricade.
+      x: 2444 + (index % 2), y: 6105 + (index % 3), z: 0, wanderRadius: 0,
+      owner: state.player, ownerOnly: true });
+    if (!npc) return;
+    npc.setMultiCombat?.(true);
+    area.enter(npc);
+    state.attackers.add(npc);
+    npc.getCombat().attack(state.player);
+  }
+
+  function finishCampDefense(area, state) {
+    if (state.finished) return;
+    state.defending = false;
+    state.finished = true;
+    state.player.setAttribute(CAMP_DEFENSE_COMPLETE, true);
+    for (const npc of state.attackers) api.removeNpc(npc);
+    state.attackers.clear();
+    state.player.setAttribute(CAMP_DEFENSE, 0);
+    state.player.sendMessage("The dwarves finish sealing the tunnel. The camp has held for four minutes.");
+    state.rebel = spawnCampNpc(area, NpcIdentifiers.REBEL_WARRIOR_8, 2444, 6096);
+    state.player.sendMessage("Elena has an urgent message after the siege. Speak to her.");
+  }
+
+  function beginEssylltEncounter(player) {
+    const area = player.getAttribute(CAMP_AREA);
+    const state = area && campInstances.get(area);
+    if (!state || !state.finished || state.essyllt) return;
+    const boss = api.spawnNpc({ id: NpcIdentifiers.ESSYLLT_5, x: 2448, y: 6118, z: 0, wanderRadius: 0,
+      owner: player, ownerOnly: true });
+    if (!boss) {
+      player.sendMessage("Essyllt could not be reached in the chaos. Speak to Elena to draw him out again.");
+      return;
+    }
+    boss.setMultiCombat?.(true);
+    area.enter(boss);
+    state.essyllt = boss;
+    setChapter(player, 19);
+    for (const [id, x, y] of [[NpcIdentifiers.IORWERTH_WARRIOR_12, 2446, 6117],
+      [NpcIdentifiers.IORWERTH_WARRIOR_12, 2449, 6117]]) {
+      const guard = api.spawnNpc({ id, x, y, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
+      if (!guard) continue;
+      guard.setMultiCombat?.(true);
+      area.enter(guard);
+      (state.essylltAdds ??= new Set()).add(guard);
+      guard.getCombat().attack(player);
+    }
+    boss.getCombat().attack(player);
+  }
+
+  function spawnPostEssylltArrival(player) {
+    const area = player.getAttribute(CAMP_AREA);
+    const state = area && campInstances.get(area);
+    if (!state || state.arrivals) return;
+    state.arrivals = true;
+    for (const [id, x, y] of [[NpcIdentifiers.LORD_IORWERTH_2, 2448, 6110],
+      [NpcIdentifiers.ARIANWYN_2, 2447, 6112], [NpcIdentifiers.IORWERTH_WARRIOR_12, 2446, 6112],
+      [NpcIdentifiers.IORWERTH_WARRIOR_12, 2449, 6112], [NpcIdentifiers.IORWERTH_ARCHER_10, 2445, 6113],
+      [NpcIdentifiers.IORWERTH_ARCHER_10, 2450, 6113]]) spawnCampNpc(area, id, x, y);
+  }
+
+  function handleCampDeath(event) {
+    const npc = event?.npc;
+    const area = npc?.getArea?.();
+    const state = area && campInstances.get(area);
+    if (!state || !state.player || event?.killer !== state.player) return false;
+    if (state.attackers.delete(npc)) return true;
+    if (state.essylltAdds?.delete(npc)) return true;
+    if (npc !== state.essyllt) return false;
+    state.essyllt = null;
+    state.player.setAttribute(CAMP_BATTLE, true);
+    // Let the death animation and combat cleanup finish before the cutscene
+    // replaces the active dialogue manager. Its first action owns the arrivals.
+    state.pendingArrivalAt = World.getProcessCycle() + 2;
+    return true;
+  }
+
+  function handleQuestPlayerDeath(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player)) return;
+    const camp = player.getAttribute(CAMP_AREA);
+    const campState = camp && campInstances.get(camp);
+    if (campState?.essyllt) {
+      api.removeNpc(campState.essyllt);
+      campState.essyllt = null;
+      for (const npc of campState.essylltAdds ?? []) api.removeNpc(npc);
+      campState.essylltAdds?.clear();
+      campState.pendingEssylltAt = World.getProcessCycle() + 4;
+    }
+    const area = player.getAttribute(FRAGMENT_AREA);
+    const state = area && fragmentInstances.get(area);
+    if (!state || state.player !== player || state.finished) return;
+    state.finished = true;
+    for (const npc of [...state.healers, ...state.clones, state.boss]) api.removeNpc(npc);
+    state.healers.clear();
+    state.clones = [];
+    fragmentInstances.delete(area);
+    area.leave(player, false);
+    player.setAttribute(FRAGMENT_AREA, null);
+    player.setAttribute(TEMPLE_CUTSCENE_STARTED, false);
+    ensureDwarvenCamp(player);
+    player.moveTo(CAMP_CENTER);
+    player.sendMessage("You can return through the cave by the camp and face the Fragment again.");
+  }
+
   function spawnBattleWave(player, area, wave) {
     const westWaveOne = Array.from({ length: 10 }, (_, i) => ({
       id: NpcIdentifiers.MOURNER_2,
@@ -571,14 +1329,16 @@ module.exports = function registerSongOfTheElves(api) {
       y: 3290 + Math.floor(i / 5) * 3,
     }));
     const waveNpcs = area.battle === "west" ? (wave === 0 ? westWaveOne : westWaveTwo) : eastWave;
+    let target = 0;
     for (const spawn of waveNpcs) {
       const npc = api.spawnNpc({ ...spawn, z: 0, wanderRadius: 2, owner: player, ownerOnly: true });
       if (npc) {
         npc.setMultiCombat?.(true);
-        area.add(npc);
+        area.enter(npc);
+        target++;
       }
     }
-    battleInstances.set(area, { player, battle: area.battle, wave, kills: 0, target: waveNpcs.length });
+    battleInstances.set(area, { player, battle: area.battle, wave, kills: 0, target });
   }
 
   function startBattle(player, battle) {
@@ -596,6 +1356,8 @@ module.exports = function registerSongOfTheElves(api) {
   }
 
   function handleBattleDeath(event) {
+    if (handleFragmentDeath(event)) return;
+    if (handleCampDeath(event)) return;
     const player = event?.killer;
     const npc = event?.npc;
     if (!player || !npc || quest.isComplete(player)) return;
@@ -629,6 +1391,194 @@ module.exports = function registerSongOfTheElves(api) {
       player.moveTo(new Location(2585, 3295, 0));
       return;
     }
+  }
+
+  function startFragmentBattle(player) {
+    const existing = player.getAttribute(FRAGMENT_AREA);
+    if (existing && existing.isDestroyed?.() !== true) return true;
+    const area = new FragmentArea(player.getUsername?.());
+    const spawn = new Location(3294, 5918, 1);
+    const boss = api.spawnNpc({ id: NpcIdentifiers.FRAGMENT_OF_SEREN_3, x: 3294, y: 5918, z: 1,
+      wanderRadius: 0, owner: player, ownerOnly: true });
+    if (!boss) {
+      player.sendMessage("The Fragment of Seren could not be reached. Return to Arianwyn and try again.");
+      return false;
+    }
+    boss.setMultiCombat?.(true);
+    boss.setMaxHitpoints(1000);
+    boss.setHitpoints(1000);
+    area.enter(player);
+    area.enter(boss);
+    player.setAttribute(FRAGMENT_AREA, area);
+    player.setAttribute(FRAGMENT_DEFEATED, false);
+    player.moveTo(spawn);
+    fragmentInstances.set(area, {
+      player, boss, area, lastCycle: -1, nextSpecialAt: World.getProcessCycle() + 12,
+      nextBasicAttackAt: World.getProcessCycle() + 4,
+      clones: [], realClone: null, cloneThresholds: [666, 333], introStarted: false,
+      healerThresholds: [666, 333], healers: new Set(), specialImpactAt: 0, finished: false,
+    });
+    player.sendMessage("The Fragment of Seren emerges. Watch for its teleport, true echo, healing whirlwinds, and devastating blast.");
+    return true;
+  }
+
+  const FRAGMENT_AREA = "quest.song_of_the_elves.fragment-area";
+
+  function spawnFragmentAdds(area, ids, points) {
+    const state = fragmentInstances.get(area);
+    if (!state) return [];
+    const spawned = [];
+    for (const [index, id] of ids.entries()) {
+      const [x, y] = points[index];
+      const npc = api.spawnNpc({ id, x, y, z: 1, wanderRadius: 0, owner: state.player, ownerOnly: true });
+      if (!npc) continue;
+      npc.setMultiCombat?.(true);
+      npc.setMaxHitpoints(1);
+      npc.setHitpoints(1);
+      area.enter(npc);
+      spawned.push(npc);
+    }
+    return spawned;
+  }
+
+  function spawnFragmentClones(area, state) {
+    state.cloneThresholds.shift();
+    state.clones = spawnFragmentAdds(area, [
+      NpcIdentifiers.FRAGMENT_OF_SEREN, NpcIdentifiers.FRAGMENT_OF_SEREN_2,
+    ], [[3290, 5918], [3298, 5918]]);
+    state.realClone = state.clones[Math.floor(Math.random() * state.clones.length)] ?? null;
+    state.boss.sendMessage?.("The Fragment splits into two echoes. One is real; strike the true one before they fade.");
+    state.player.sendMessage("The Fragment divides. Strike the true echo; the false one cannot be harmed.");
+  }
+
+  function spawnFragmentHealers(area, state) {
+    state.healerThresholds.shift();
+    state.healers = new Set(spawnFragmentAdds(area, [NpcIdentifiers.COL_00FFFF_CRYSTAL_WHIRLWIND_COL, NpcIdentifiers.COL_00FFFF_CRYSTAL_WHIRLWIND_COL],
+      [[3289, 5922], [3299, 5922]]));
+    state.player.sendMessage("Two Crystal Whirlwinds appear. They heal the Fragment while they remain; attack them to stop the healing.");
+  }
+
+  function zeroHit(hit) {
+    for (const part of hit?.getHits?.() ?? []) part.setDamage(0);
+    hit?.updateTotalDamage?.();
+  }
+
+  function handleFragmentHit(event) {
+    const npc = event?.npc;
+    const hit = event?.hit;
+    const state = npc && fragmentInstances.get(npc.getArea?.());
+    if (!state || state.finished || !hit) return;
+    const attacker = hit.getAttacker?.();
+    if (!attacker?.isPlayer?.() || attacker.getUsername?.() !== state.player.getUsername?.()) {
+      zeroHit(hit);
+      return;
+    }
+    if (state.healers.has(npc)) {
+      const remaining = npc.getHitpoints?.() ?? 1;
+      const damage = hit.getTotalDamage?.() ?? 0;
+      if (damage > 0) {
+        for (const part of hit.getHits?.() ?? []) if (part.getDamage() > 0) part.setDamage(Math.max(remaining, part.getDamage()));
+        hit.updateTotalDamage?.();
+      }
+      return;
+    }
+    if (state.clones.includes(npc)) {
+      if (npc !== state.realClone) zeroHit(hit);
+      return;
+    }
+    if (npc !== state.boss) return;
+    if (state.realClone) {
+      zeroHit(hit);
+      attacker.sendMessage("Destroy the true echo before attacking the Fragment again.");
+      return;
+    }
+    // Seren's fragment has a hard 24 damage cap per hit, regardless of style.
+    for (const part of hit.getHits?.() ?? []) {
+      if (part.getDamage() > 24) part.setDamage(22 + Math.floor(Math.random() * 3));
+    }
+    hit.updateTotalDamage?.();
+  }
+
+  function queueFragmentBlast(state) {
+    const player = state.player;
+    const max = player.getSkillManager().getMaxLevel(Skill.HITPOINTS);
+    const hp = player.getSkillManager().getCurrentLevel(Skill.HITPOINTS);
+    const damage = Math.max(1, max - 1);
+    player.getCombat().getHitQueue().addPendingDamage([new HitDamage(damage, HitMask.RED).setSource(state.boss)]);
+    player.sendMessage(hp <= damage
+      ? "The Fragment's blast leaves you barely standing."
+      : "Your overhealed vitality lets you endure the Fragment's blast.");
+  }
+
+  function resolveFragmentSpecial(area, state, now) {
+    if (state.followupAt && now >= state.followupAt) {
+      state.followupAt = 0;
+      if (state.player.getLocation().getDistance(state.boss.getLocation()) <= 1) {
+        const damage = 8 + Math.floor(Math.random() * 13);
+        state.player.getCombat().getHitQueue().addPendingDamage([
+          new HitDamage(damage, HitMask.RED).setSource(state.boss),
+        ]);
+        state.player.sendMessage("The Fragment's melee strike catches you before you can escape.");
+      } else {
+        state.player.sendMessage("You dodge the Fragment's follow-up strike.");
+      }
+      state.nextSpecialAt = now + 22;
+      return;
+    }
+    state.nextSpecialAt = now + 24;
+    if (state.specialImpactAt && now >= state.specialImpactAt) {
+      state.specialImpactAt = 0;
+      queueFragmentBlast(state);
+      return;
+    }
+    if (state.specialImpactAt) return;
+    state.specialCount = (state.specialCount || 0) + 1;
+    if (state.specialCount % 4 === 0) {
+      state.player.sendMessage("The Fragment gathers a devastating burst of magic. Restore your health before it lands!");
+      state.specialImpactAt = now + 3;
+      state.nextSpecialAt = now + 3;
+      return;
+    }
+    const loc = state.player.getLocation();
+    if (loc.getDistance(state.boss.getLocation()) > 3) {
+      state.player.sendMessage("The Fragment tries to pull you close, but you are out of its reach.");
+      return;
+    }
+    state.player.sendMessage("The Fragment teleports you beside it and winds up a melee strike. Step away before it lands!");
+    state.player.moveTo(new Location(3294, 5918, 1));
+    state.followupAt = now + 2;
+    state.nextSpecialAt = now + 2;
+  }
+
+  function handleFragmentDeath(event) {
+    const npc = event?.npc;
+    const state = npc && fragmentInstances.get(npc.getArea?.());
+    if (!state || state.finished) return false;
+    if (state.healers.delete(npc)) return true;
+    if (state.clones.includes(npc)) {
+      if (npc !== state.realClone) return true;
+      state.realClone = null;
+      for (const clone of state.clones) if (clone !== npc) api.removeNpc(clone);
+      state.clones = [];
+      state.player.sendMessage("The false echoes vanish. The Fragment is vulnerable again.");
+      if (state.healerThresholds.length && state.boss.getHitpoints() <= state.healerThresholds[0]) {
+        spawnFragmentHealers(state.area, state);
+      }
+      return true;
+    }
+    if (npc !== state.boss) return false;
+    state.finished = true;
+    state.player.setAttribute(FRAGMENT_DEFEATED, true);
+    for (const add of [...state.healers, ...state.clones]) api.removeNpc(add);
+    state.healers.clear();
+    state.clones = [];
+    const area = npc.getArea?.();
+    area?.leave(state.player, false);
+    state.player.setAttribute(FRAGMENT_AREA, null);
+    fragmentInstances.delete(area);
+    state.player.moveTo(new Location(3278, 5918, 1));
+    startTranscript(api, state.player, NpcIdentifiers.LORD_IORWERTH, PAGE, "the-fragment-of-seren-the-fragment-defeated");
+    return true;
   }
 
   function searchElenaCabinet(event) {
@@ -933,7 +1883,15 @@ module.exports = function registerSongOfTheElves(api) {
   api.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnNpc(handleItemOnNpc);
+  api.onItemOnObject("Explosive potion", "Hole", placeCampExplosive, { noted: false });
   api.onItemAction(handleCrystalSeedAction);
+  api.onItemOnObject("Hand mirror", "Pillar of Light", useLibraryMirror, { noted: false });
+  for (const color of Object.keys(LIBRARY_CRYSTAL_ITEMS)) {
+    const name = color === "fractured" ? "Fractured crystal" : `${color[0].toUpperCase()}${color.slice(1)} crystal`;
+    api.onItemOnObject(name, "Pillar of Light", useLibraryCrystal, { noted: false });
+  }
+  api.onObjectInteraction(handleLibraryObject);
+  api.onObjectInteraction("Cave", { Ascend: enterTemplePassage });
   api.persistAttribute(CHEMICAL_CHOICE);
   api.persistAttribute(FALLS_PILLARS);
   api.persistAttribute(FALLS_ORDER);
@@ -944,6 +1902,21 @@ module.exports = function registerSongOfTheElves(api) {
   api.persistAttribute(EAST_BATTLE_KILLS);
   api.persistAttribute(LATE_CHAPTER);
   api.persistAttribute(VALLEY_FIGURE);
+  api.persistAttribute(LIBRARY_SEALS);
+  api.persistAttribute(LIBRARY_PUZZLE);
+  api.persistAttribute(LIBRARY_MIRRORS);
+  api.persistAttribute(LIBRARY_CRYSTALS);
+  api.persistAttribute(LIBRARY_PILLAR_STATE);
+  api.persistAttribute(RECRUITED_ELDERS);
+  api.persistAttribute(MEILYR_CLUE);
+  api.persistAttribute(CAMP_HOLES);
+  api.persistAttribute(CAMP_EXPLOSIVES);
+  api.persistAttribute(CAMP_DEFENSE);
+  api.persistAttribute(CAMP_DEFENSE_COMPLETE);
+  api.persistAttribute(CAMP_BATTLE);
+  api.persistAttribute(CAMP_ARRIVAL_STARTED);
+  api.persistAttribute(TEMPLE_CUTSCENE_STARTED);
+  api.persistAttribute(FRAGMENT_DEFEATED);
   for (const [, itemName] of PILLAR_ITEMS) {
     api.onItemOnObject(itemName, "Pillar of Light", placeFallsPillarItem, { noted: false });
     api.onItemOnObject(itemName, "Pillar", placeFallsPillarItem, { noted: false });
@@ -958,6 +1931,9 @@ module.exports = function registerSongOfTheElves(api) {
   api.onObjectRoute(routeCastleThroneStairs);
   api.onCustomEvent("ladders:climb", claimCastleThroneStairs);
   api.onCustomEvent("quest:song-of-the-elves:claims-light-pillar", claimFallsPillarLocation);
+  api.registerArea(new LletyaStoryArea([new Boundary(2320, 2390, 3150, 3210, 0)]));
+  api.registerArea(new DwarvenCampAccessArea([new Boundary(2424, 2472, 6078, 6142, 0)]));
+  api.registerArea(new FragmentThresholdArea([new Boundary(3282, 3307, 5906, 5930, 1)]));
   api.onNpcInteraction("Alrena", { "Talk-to": onTalk });
   api.onNpcInteraction("Edmond", { "Talk-to": onTalk });
   api.onNpcInteraction("Elena", { "Talk-to": onTalk });
@@ -968,4 +1944,6 @@ module.exports = function registerSongOfTheElves(api) {
   api.onNpcsInteraction(Object.keys(CITIZEN_SUPPORT), { "Talk-to": onTalk });
   api.onAnyNpcInteraction({ "Talk-to": onTalk });
   api.onNpcDeath(handleBattleDeath);
+  api.onPlayerDeath(handleQuestPlayerDeath);
+  api.onNpcHitModify(handleFragmentHit);
 };

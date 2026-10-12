@@ -264,3 +264,101 @@ test('Song of the Elves rubs the seed to the Enchanted Valley and returns to Lle
   assert.deepEqual([locations.at(-1).getX(), locations.at(-1).getY()], [2353, 3172]);
   assert.equal(attributes.get('quest.song_of_the_elves.valley-figure'), false);
 });
+
+test('Song of the Elves library mirrors must follow the previous beam direction', () => {
+  class TestPrivateArea {
+    constructor() { this.objects = []; }
+    enter(player) { player.area = this; }
+    getObjects() { return this.objects; }
+    getTemplateObjects(tile) {
+      return [[10, 10, 0], [12, 10, 0], [12, 11, 0], [2609, 6102, 1], [2623, 6102, 1],
+        [2623, 6158, 0], [2623, 6130, 0], [2609, 6130, 0], [2609, 6102, 0], [2623, 6102, 0]]
+        .some(([x, y, z]) => tile?.getX?.() === x && tile?.getY?.() === y && tile?.getZ?.() === z)
+        ? [{ getId: () => api.core.ObjectIdentifiers.PILLAR_OF_LIGHT_41 }]
+        : [];
+    }
+  }
+  const itemObjects = new Map();
+  const objectInteractions = [];
+  const custom = new Map();
+  const prompts = [];
+  const base = { core: { ...PluginManager.getCoreApi(), PrivateArea: TestPrivateArea } };
+  const api = new Proxy(base, {
+    get(target, prop) {
+      if (prop in target) return target[prop];
+      if (prop === 'onItemOnObject') return (itemName, objectName, handler) => itemObjects.set(itemName, handler);
+      if (prop === 'onObjectInteraction') return (...args) => { if (typeof args[0] === 'function') objectInteractions.push(args[0]); };
+      if (prop === 'onCustomEvent') return (name, handler) => custom.set(name, handler);
+      if (prop === 'sendMultiChatboxPrompt') return (player, prompt, ...choices) => prompts.push(choices);
+      if (prop === 'spawnNpc') return () => null;
+      return () => {};
+    },
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  runtime.startTranscript = () => true;
+  try {
+    require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  } finally {
+    runtime.startTranscript = originalStartTranscript;
+  }
+  const quest = runtime.getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map();
+  const amounts = new Map();
+  const messages = [];
+  const inventory = {
+    getAmount: (id) => amounts.get(id) ?? 0,
+    getFreeSlots: () => 28,
+    adds: (id, amount) => amounts.set(id, (amounts.get(id) ?? 0) + amount),
+    deleteNumber: (id, amount) => amounts.set(id, Math.max(0, (amounts.get(id) ?? 0) - amount)),
+  };
+  const player = {
+    getUsername: () => 'SoteLibraryTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getArea: () => player.area ?? null,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    getEquipment: () => ({ get: () => null }),
+    getSkillManager: () => ({ getMaxLevel: () => 99 }),
+    sendMessage: (message) => messages.push(message),
+    moveTo() {},
+  };
+  quest.setStage(player, 130);
+  custom.get('npc-dialogue:choice')({
+    player, option: 'Yes', definition: { getName: () => 'Lord Ieuan Amlodd' },
+  });
+
+  const useObject = objectInteractions.find((handler) => handler({
+    player, objectId: api.core.ObjectIdentifiers.SEAL_OF_THE_FORGOTTEN,
+  }) === true);
+  assert.ok(useObject, 'the central seal interaction is registered');
+  useObject({ player, objectId: api.core.ObjectIdentifiers.CRYSTAL_DISPENSER_3, handled: false });
+  const useMirror = itemObjects.get('Hand mirror');
+  const place = (x, y, direction, z = 0) => {
+    useMirror({
+      player, itemId: api.core.ItemIdentifiers.HAND_MIRROR_2,
+      objectId: api.core.ObjectIdentifiers.PILLAR_OF_LIGHT_41,
+      location: { x, y, z }, handled: false,
+    });
+    const choice = prompts.at(-1).findIndex((value) => value === `Reflect ${direction}`);
+    assert.notEqual(choice, -1);
+    prompts.at(-1)[choice + 1]();
+  };
+  place(10, 10, 'east');
+  place(12, 11, 'south');
+  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '0:0');
+  assert.ok(messages.some((message) => message.includes('cannot reach that pillar')));
+  place(10, 10, 'east');
+  place(12, 10, 'south');
+  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '0:2');
+
+  attributes.set('quest.song_of_the_elves.library-seals', 3);
+  useObject({ player, objectId: api.core.ObjectIdentifiers.CRYSTAL_DISPENSER_3, handled: false });
+  place(2622, 6102, 'east', 1);
+  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '1:0');
+  place(2609, 6102, 'east', 1);
+  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '1:1');
+  place(2623, 6102, 'down', 1);
+  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '1:2');
+});
