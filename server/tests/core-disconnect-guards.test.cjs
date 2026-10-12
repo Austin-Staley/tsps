@@ -271,6 +271,38 @@ test('Casting a utility spell cannot immediately select its newly opened choice 
  }finally{LunarSpells.handleSelf=original;SpellTeleports.handleSelf=teleport;}
 });
 
+test('inventory Drop and Release reach item action hooks before the ground/drop fallback', () => {
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { DropItemPacketListener } = require('../dist/net/packet/impl/DropItemPacketListener');
+  const originalDefinition = CacheDefinitions.getItem;
+  const originalAction = PluginManager.emitItemAction;
+  const originalCanUse = PluginManager.emitCanUseItem;
+  const originalDrop = DropItemPacketListener.drop;
+  const calls = [];
+  const item = { getId: () => 29519 };
+  const inventory = { getItems: () => [item], capacity: () => 28 };
+  const connection = new net.ClientConnection(stubChannel());
+  connection.player = { getInventory: () => inventory, clearPendingAction() {} };
+  CacheDefinitions.getItem = () => ({ inventoryActions: [null,null,null,'Drop','Release'] });
+  PluginManager.emitCanUseItem = () => true;
+  DropItemPacketListener.drop = () => calls.push('fallback');
+  try {
+    PluginManager.emitItemAction = event => { calls.push(event.option); return true; };
+    connection.inventoryAction({ slot:0,itemId:29519,widgetId:3214,option:'Drop' });
+    connection.inventoryAction({ slot:0,itemId:29519,widgetId:3214,option:'Release' });
+    assert.deepEqual(calls,['Drop','Release']);
+    PluginManager.emitItemAction = () => false;
+    connection.inventoryAction({ slot:0,itemId:29519,widgetId:3214,option:'Drop' });
+    assert.equal(calls.at(-1),'fallback');
+  } finally {
+    CacheDefinitions.getItem = originalDefinition;
+    PluginManager.emitItemAction = originalAction;
+    PluginManager.emitCanUseItem = originalCanUse;
+    DropItemPacketListener.drop = originalDrop;
+  }
+});
+
 test('changing floors in one map region refreshes ground items, including Draynor fish food', () => {
   const { State } = require('../dist/game/entity/impl/grounditem/ItemOnGround');
   const { ItemIdentifiers } = require('../dist/util/ItemIdentifiers');
