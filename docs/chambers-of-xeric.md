@@ -262,6 +262,13 @@ Recordings 820, 3282 and 3389.
 - Melee 1203 (sound 2533); stomp 4278 (sound 3188) with a falling rock (projectile 645, gfx 305) landing the next tick (sound 360).
 - Crumbling: 836, then the same NPC turns to its remains 2 ticks later; with both down the gap opens 3 ticks after.
 
+## Skeletal Mystics, from rsprox captures
+
+Recordings 3282, 3285 and 3389.
+
+- They cast with 5528: fire (gfx 1322, projectile 130, sounds 155 / 156, impact gfx 131 or splash 85) or Vulnerability (gfx 1321, projectile 109, sounds 127 / 3012, impact gfx 110). Dying 5491, gone 5 ticks later.
+- The portals appear when the last one dies (49996 start, 49997 middle with "Choose location", 49998 end). Travelling shows the portal overlay (634) and moves the player 2 ticks later. Live then leaves the points overlay closed until the next floor; we put it back.
+
 ## Values not on the Wiki, to check against a capture
 
 | Value | Where |

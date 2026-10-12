@@ -9,11 +9,20 @@
  * - Two Magic attacks (a standard one and a damaging Vulnerability) and Melee. They answer
  *   overhead prayers: one that can reach its target who prays against Magic melees it; one
  *   that can't keeps casting.
- * Not on the Wiki (to check against a capture): the tiles; counts by raiders (3, 4 at 3+, 5 at 5+, 6 at 8+); fire 1 in 5 is a
- *   Vulnerability (gfx 1321, projectile 168, impact 169, Defence drained 4-8), else fire (gfx
- *   1322, projectile 130, impact 157, base 25 + raiders / 4); melee anim 5485 (base 25); casting
- *   anim 5523; splash 339; protection prayers let half through; the Mark of Power (29741) and
- *   the portals (49996 start, 49997 middle, 49998 end).
+ * rsprox captures (recordings 3282, 3285, 3389):
+ * - Casting: 5528. Fire: gfx 1322 (height 164) on the mystic, projectile 130 (from 30 client
+ *   cycles to 116-136, heights 340 to 124), sounds 155 then 156 on landing, and on the target
+ *   gfx 131 (or 85 splashing) sent with the flight's delay. Vulnerability: gfx 1321, projectile
+ *   109, sounds 127 then 3012, impact gfx 110.
+ * - Dying: 5491; gone 5 ticks later.
+ * - The portals appear once the last mystic dies: 49996 at the start (Travel-End), 49997 in
+ *   the middle (Travel: "Choose location", "End of the room" or "Start of the room") and 49998
+ *   at the end (Travel-Start). Travelling opens the portal overlay (634, script 2893, sound
+ *   3952) and moves the player 2 ticks later as it closes (script 2894). Live leaves the
+ *   points overlay closed after that until the next floor; here it is put back.
+ * Not on the Wiki (to check against a capture): the tiles; counts by raiders (3, 4 at 3+, 5 at
+ *   5+, 6 at 8+); 1 in 5 a Vulnerability, draining Defence 4-8; fire's base 25 + raiders / 4;
+ *   melee anim 5485 (base 25); protection prayers letting half through.
  */
 
 const Shared = require("./CoxShared");
@@ -21,7 +30,14 @@ const Raid = require("./CoxRaid");
 const Monsters = require("./CoxMonsters");
 
 const NPC = { MYSTICS: [7604, 7605, 7606] };
-const OBJECT = { MARK: 29741, PORTAL_END: 49996, PORTAL_MIDDLE: 49997, PORTAL_START: 49998 };
+const OBJECT = { MARK: 29741, PORTAL_START: 49996, PORTAL_MIDDLE: 49997, PORTAL_END: 49998 };
+const ANIM = { CAST: 5528, MELEE: 5485 };
+const SPELL = {
+  FIRE: { cast: 1322, projectile: 130, hit: 131, sound: 155, landing: 156 },
+  VULNERABILITY: { cast: 1321, projectile: 109, hit: 110, sound: 127, landing: 3012 },
+};
+const SPLASH = 85;
+const PORTAL_OVERLAY = { INTERFACE: 634, OPEN: 2893, CLOSE: 2894, MODEL: 39504, COLOUR: 4128927, SOUND: 3952, MOVE_AFTER: 2 };
 const BASE = { MELEE: 25, FIRE: 25 };
 
 /** Cache tiles by version. */
@@ -55,11 +71,7 @@ class MysticsRoom extends Raid.Room {
       if (mystic) this.mystics.push(mystic);
     }
     const { GameObject, ObjectManager } = Shared.core();
-    const portals = [OBJECT.PORTAL_START, OBJECT.PORTAL_MIDDLE, OBJECT.PORTAL_END];
     this.portalTiles = PORTAL_TILES[variant].map((spot) => this.tile(spot.x, spot.y));
-    this.portalTiles.forEach((tile, index) => {
-      ObjectManager.register(new GameObject(portals[index], tile, 10, this.record.rotation, this.map), true);
-    });
     const mark = MARK_TILES[variant];
     this.mark = new GameObject(OBJECT.MARK, this.tile(mark.x, mark.y, 2), 10, this.record.rotation, this.map);
     ObjectManager.register(this.mark, true);
@@ -79,8 +91,13 @@ class MysticsRoom extends Raid.Room {
     if (!this.mystics.includes(npc)) return;
     if (this.mystics.some((other) => other !== npc && other.isRegistered() && other.getHitpoints() > 0)) return;
     this.completed = true;
-    if (this.mark) Shared.core().ObjectManager.deregister(this.mark, true);
+    const { GameObject, ObjectManager } = Shared.core();
+    if (this.mark) ObjectManager.deregister(this.mark, true);
     this.mark = null;
+    const portals = [OBJECT.PORTAL_START, OBJECT.PORTAL_MIDDLE, OBJECT.PORTAL_END];
+    Shared.later(this.raid, 1, () => this.portalTiles.forEach((tile, index) => {
+      ObjectManager.register(new GameObject(portals[index], tile, 10, this.record.rotation, this.map), true);
+    }));
   }
 
   adjacent(npc, player) {
@@ -94,47 +111,64 @@ class MysticsRoom extends Raid.Room {
 
   attack(npc, player) {
     if (this.adjacent(npc, player) && (Shared.isProtected(player, "magic") || Shared.random(0, 1) === 0)) {
-      Shared.animate(npc, 5485);
+      Shared.animate(npc, ANIM.MELEE);
       Shared.sound(player, 511);
       Shared.strike(npc, player, "melee", Monsters.maxHitFor(npc, BASE.MELEE, Monsters.LEVELS.STRENGTH), 0, { prayerMultiplier: 0.5 });
       return;
     }
-    Shared.animate(npc, 5523);
+    const spell = Shared.random(0, 4) === 0 ? SPELL.VULNERABILITY : SPELL.FIRE;
+    Shared.animate(npc, ANIM.CAST);
+    npc.performGraphic(Shared.gfx(spell.cast, { height: 164 }));
+    const { Projectile } = Shared.core();
+    const end = 86 + 5 * Projectile.centreOf(npc).getDistance(player.getLocation());
+    new Projectile(Projectile.centreOf(npc), player.getLocation(), player, spell.projectile, 30, end, 85, 31, this.map)
+      .withAngle(0)
+      .withProgress(96)
+      .sendProjectile();
+    const lands = Math.floor(end / 30);
     const max = Monsters.maxHitFor(npc, BASE.FIRE + Math.floor(this.raid.scale / 4), Monsters.LEVELS.MAGIC);
-    if (Shared.random(0, 4) === 0) {
-      npc.performGraphic(Shared.gfx(1321, { height: 96 }));
-      Shared.sound(player, 127);
-      const delay = Shared.projectile(this.map, npc, player, 168, { delay: 50, duration: 25, startHeight: 45, endHeight: 15 });
-      const hit = Shared.strike(npc, player, "magic", max, delay, { prayerMultiplier: 0.5 });
-      Shared.later(this.raid, delay, () => {
-        if (hit.getTotalDamage() <= 0) {
-          player.performGraphic(Shared.gfx(339, { height: 60 }));
-          return;
-        }
-        player.performGraphic(Shared.gfx(169, { height: 90 }));
+    const hit = Shared.strike(npc, player, "magic", max, lands, { prayerMultiplier: 0.5 });
+    const landed = hit.isAccurate?.() !== false;
+    Shared.sound(player, spell.sound);
+    Shared.sound(player, spell.landing, end);
+    player.performGraphic(Shared.gfx(landed ? spell.hit : SPLASH, { delay: end, height: 124 }));
+    if (spell === SPELL.VULNERABILITY && landed) {
+      Shared.later(this.raid, lands, () => {
         const { Skill } = Shared.core();
         const skills = player.getSkillManager();
         skills.setCurrentLevel(Skill.DEFENCE, Math.max(0, skills.getCurrentLevel(Skill.DEFENCE) - Shared.random(4, 8)), true);
       });
-      return;
     }
-    npc.performGraphic(Shared.gfx(1322, { height: 96 }));
-    Shared.sound(player, 155);
-    const delay = Shared.projectile(this.map, npc, player, 130, { delay: 50, duration: 25, startHeight: 45, endHeight: 15 });
-    const hit = Shared.strike(npc, player, "magic", max, delay, { prayerMultiplier: 0.5 });
-    Shared.later(this.raid, delay, () => player.performGraphic(Shared.gfx(hit.getTotalDamage() > 0 ? 157 : 339, { height: 90 })));
   }
 
-  /** The portals: Travel-Start, Travel-End, or from the middle either way. */
+  /** The portals: Travel-End, Travel-Start, or from the middle either way. */
   travel(player, option) {
+    const start = this.portalTiles[0];
+    const end = this.portalTiles[2];
     if (option === "Travel") {
-      Shared.options(player, "Where would you like to go?",
-        "Start", () => player.moveTo(this.portalTiles[0].clone()),
-        "End", () => player.moveTo(this.portalTiles[2].clone()),
-        "Cancel.", () => {});
+      Shared.options(player, "Choose location",
+        "End of the room", () => this.portal(player, end),
+        "Start of the room", () => this.portal(player, start));
       return;
     }
-    player.moveTo(this.portalTiles[option === "Travel-Start" ? 0 : 2].clone());
+    this.portal(player, option === "Travel-Start" ? start : end);
+  }
+
+  /** The portal overlay, the move 2 ticks later as it closes, and the points overlay back. */
+  portal(player, tile) {
+    const sender = player.getPacketSender();
+    const uid = (component) => (PORTAL_OVERLAY.INTERFACE << 16) | component;
+    sender.sendSubInterface(Shared.OVERLAY_UID, PORTAL_OVERLAY.INTERFACE, 1);
+    sender.sendClientScript(PORTAL_OVERLAY.OPEN, uid(1), uid(2), PORTAL_OVERLAY.MODEL, PORTAL_OVERLAY.COLOUR, -1, -1);
+    Shared.sound(player, PORTAL_OVERLAY.SOUND);
+    Shared.later(player, PORTAL_OVERLAY.MOVE_AFTER, () => {
+      player.moveTo(tile.clone());
+      sender.sendClientScript(PORTAL_OVERLAY.CLOSE, uid(1), uid(2), -1, -1);
+      Shared.later(player, 1, () => {
+        sender.sendSubInterface(Shared.OVERLAY_UID, Shared.INTERFACE.OVERLAY, 1);
+        this.raid.refreshPoints(player);
+      });
+    });
   }
 }
 
