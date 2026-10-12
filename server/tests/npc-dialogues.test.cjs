@@ -626,3 +626,15 @@ test('Morgan warns low-combat players and still offers to start Vampyre Slayer',
   assert.ok(!steps.some((step) => step.type === 'unavailable'));
   assert.ok(steps.some((step) => step.type === 'choice' && step.prompt === 'Start the Vampyre Slayer quest?'));
 });
+
+test('continuing a quest line preserves a new conversation started by its after callback', () => {
+ let current,chain;const replacement={newConversation:true};
+ const manager={getCurrent:()=>current,reset:()=>current=null,startDialogues:builder=>{chain=builder;current=[...builder.getDialogues().values()][0];}};
+ const player={getUsername:()=> 'Test',getDialogueManager:()=>manager,getPacketSender:()=>({sendInterfaceRemoval(){}})};
+ const definition={getName:()=> 'Guard',getId:()=>13566};
+ const api={emitCustomEvent:(name,e)=>{if(name==='npc-dialogue:line'&&e.text==='Yes master!')e.after=()=>manager.startDialogues({getDialogues:()=>new Map([[0,replacement]])});}};
+ const event={player,npc:null,npcId:13566,definition};
+ startDialogue(api,event,[{npc:'Yes master!'},{npc:'Old conversation tail'}],{},{...event,pages:[]});
+ const after=[...chain.getDialogues().values()].at(-1);current=after;after.send(player);
+ assert.equal(current,replacement,'the new Surok conversation must survive the guard continuation');
+});

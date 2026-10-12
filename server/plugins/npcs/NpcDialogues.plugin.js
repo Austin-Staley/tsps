@@ -634,7 +634,9 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         // before the conversation carries on: a teleport the wiki only narrates, say.
         if (step.steps?.length || typeof request.after === "function") {
           chain.add(new ActionDialogue(index++, { execute: () => {
+            const current = manager.getCurrent?.();
             request.after?.();
+            if (current && manager.getCurrent() !== current) return;
             run(rest, currentRecord);
           } }));
           manager.startDialogues(chain);
