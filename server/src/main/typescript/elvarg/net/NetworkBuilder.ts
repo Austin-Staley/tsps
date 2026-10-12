@@ -1013,10 +1013,16 @@ export class ClientConnection {
       ? (CacheDefinitions.getItem(packet.itemId)?.inventoryActions ?? [])
           .findIndex((action) => action?.toLowerCase() === option) + 1
       : packet.optionIndex;
-    if (optionIndex === 0) return;
-    if (/^(wield|wear|equip|hold)$/.test(option)) {
+    // Some cache items (including quest greegrees) have no inventory Wield
+    // action even though item-gameplay gives them a real equipment slot. MCP
+    // and explicit menu actions must still reach the normal equip validator.
+    if (/^(wield|wear|equip|hold)$/.test(option)
+      && ItemDefinition.forId(packet.itemId).getEquipmentType().getSlot() >= 0) {
       EquipPacketListener.equip(player, packet.itemId, packet.slot, 3214);
-    } else if (ItemActionPacketListener.isDropOption(option, optionIndex)) {
+      return;
+    }
+    if (optionIndex === 0) return;
+    if (ItemActionPacketListener.isDropOption(option, optionIndex)) {
       if (!ItemActionPacketListener.handleAction(player, 3214, packet.itemId, packet.slot, optionIndex ?? 5, packet.option)) {
         DropItemPacketListener.drop(player, packet.itemId, 3214, packet.slot);
       }
