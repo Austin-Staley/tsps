@@ -1557,11 +1557,13 @@ test('Desert Treasure II starts the Vardorvis trail through Elissa, Barus, the b
     const potionId = I.STRANGE_POTION_3;
     assert.equal(noteId, 28382, 'the note uses the cache item id');
     assert.equal(potionId, 28383, 'the potion uses the cache item id');
-    const counts = new Map([[potionId, 1]]);
+    const counts = new Map();
+    let freeSlots = 28;
     const player = {
       getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
       getInventory: () => ({
         getAmount: (id) => counts.get(id) ?? 0,
+        getFreeSlots: () => freeSlots,
         deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
         adds: (id, amount) => counts.set(id, (counts.get(id) ?? 0) + amount),
       }),
@@ -1584,9 +1586,23 @@ test('Desert Treasure II starts the Vardorvis trail through Elissa, Barus, the b
     handlers.custom.get('npc-dialogue:line').forEach(h => h(barus));
     barus.after();
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 2);
-    const searchDesk = objectInteractions[0]({ player, objectId: 49490, location: { x: 1781, y: 3619, z: 0 } });
+    const desk = () => objectInteractions[0]({ player, objectId: 49490, location: { x: 1781, y: 3619, z: 0 } });
+    freeSlots = 1;
+    assert.equal(desk(), true);
+    assert.equal(counts.size, 0, 'a full bag cannot lose either desk item');
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 2);
+    freeSlots = 28;
+    const searchDesk = desk();
     assert.equal(searchDesk, true);
     assert.equal(counts.get(noteId), 1);
+    assert.equal(counts.get(potionId), 1, 'the desk supplies the potion without a fixture');
+    desk();
+    assert.equal(counts.get(potionId), 1, 'searching again cannot duplicate it');
+    counts.delete(potionId);
+    desk();
+    assert.equal(counts.get(potionId), 1, 'a lost potion can be recovered before drinking');
+    const spawns = require('../data/definitions/npc-spawns.json');
+    assert.ok(spawns.some(n => n.id === api.core.NpcIdentifiers.BARUS && n.x === 1460 && n.y === 3780));
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 3);
     assert.equal(itemActions[0]({ player, itemId: potionId, option: 'Drink' }), true);
     assert.equal(counts.get(potionId), 1, 'the potion cannot be used before reading the note');
@@ -6750,6 +6766,15 @@ test('DT2 keeps internal stages separate from native progress and the cache comp
   assert.equal(quest.varbitValue(6,player),38);
   attrs.set('desert-treasure-ii:banikan-left',true);
   assert.equal(quest.varbitValue(6,player),40);
+  const desk = api.core.CacheDefinitions.getObject(49490);
+  assert.equal(desk.transformVarbit, 15125);
+  quest.setStage(player, 7);
+  for (const [lead, value] of [[1,4], [2,6], [3,6], [4,8], [5,10], [6,16]]) {
+    attrs.set('desert-treasure-ii:vardorvis-progress', lead);
+    handlers.playerProcess[0]({ player });
+    assert.equal(sent.findLast(([id]) => id === 15125)[1], value);
+    if (lead >= 2 && lead <= 5) assert.ok(api.core.CacheDefinitions.getObject(desk.transforms[value]).actions.includes('Search'));
+  }
 });
 
 test('DT2 ancient lamps offer only combat skills, require level 60, and consume once after 100,000 XP', () => {
