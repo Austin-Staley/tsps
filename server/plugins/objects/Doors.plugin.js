@@ -113,6 +113,11 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   DOUBLE_DOOR_ID_FAMILIES = Object.freeze([
     // White Knights' Castle: the two leaves share model 639; their open ids are reversed.
     Object.freeze([O.CASTLE_DOOR, O.CASTLE_DOOR_6, O.CASTLE_DOOR_7, O.CASTLE_DOOR_8]),
+    // Kourend Crypt's two thresholds have two adjacent shape-0 leaves with the same
+    // definition. They keep their loc ids while swinging, so they must not be paired
+    // by the single-door consecutive-id heuristic above.
+    Object.freeze([O.LARGE_DOORS, O.LARGE_DOORS_2]),
+    Object.freeze([O.LARGE_DOORS_3, O.LARGE_DOORS_4]),
     // Large doors (model 633): 1511 opens to 1512, 1513 to 1516 (1514 is an unnamed loc).
     Object.freeze([O.LARGE_DOOR_7, O.LARGE_DOOR_9, O.LARGE_DOOR_8, O.LARGE_DOOR_10]),
     Object.freeze([O.LARGE_DOOR_10, O.LARGE_DOOR_13]),
@@ -144,6 +149,10 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   SPECIAL_DOUBLE_DOOR_PAIRS = Object.freeze([
     [O.CASTLE_DOOR, O.CASTLE_DOOR_6],
     [O.CASTLE_DOOR_7, O.CASTLE_DOOR_8],
+    // Kourend Crypt has two real double-door thresholds at z1. Both closed leaves
+    // use the same "Open" loc definition/model; they swing in place and keep their ids.
+    [O.LARGE_DOORS, O.LARGE_DOORS_2],
+    [O.LARGE_DOORS_3, O.LARGE_DOORS_4],
     [O.GATE_26, O.GATE_27],
     [O.GATE_29, O.GATE_30],
     [O.GATE_33, O.GATE_34],
@@ -176,6 +185,10 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID = new Map([
     [O.CASTLE_DOOR, O.CASTLE_DOOR_7],
     [O.CASTLE_DOOR_6, O.CASTLE_DOOR_8],
+    [O.LARGE_DOORS, O.LARGE_DOORS],
+    [O.LARGE_DOORS_2, O.LARGE_DOORS_2],
+    [O.LARGE_DOORS_3, O.LARGE_DOORS_3],
+    [O.LARGE_DOORS_4, O.LARGE_DOORS_4],
     [O.GATE_26, O.GATE_29],
     [O.GATE_27, O.GATE_30],
     [O.GATE_33, O.GATE_29],
@@ -341,16 +354,23 @@ function toObjectSnapshot(object) {
       y: location?.getY?.() ?? location?.y ?? 0,
       z: location?.getZ?.() ?? location?.z ?? 0,
     },
+    privateArea: object?.getPrivateArea?.() ?? object?.privateArea ?? null,
   };
 }
 
 function objectFromSnapshot(snapshot, privateArea = null) {
+  const area = privateArea ?? snapshot.privateArea ?? null;
+  const existing = area?.getObjects?.().find((object) =>
+    object.getId?.() === snapshot.id && object.getType?.() === snapshot.type && object.getFace?.() === snapshot.face &&
+    locationKey(object.getLocation?.()) === locationKey(snapshot.location)
+  );
+  if (existing) return existing;
   return new core.GameObject(
     snapshot.id,
     cloneLocation(snapshot.location.x, snapshot.location.y, snapshot.location.z),
     snapshot.type,
     snapshot.face,
-    privateArea
+    area
   );
 }
 
@@ -402,7 +422,9 @@ function autoCloseDoor(anchorKey) {
     return;
   }
   for (const snapshot of state.current ?? []) {
-    core.ObjectManager.deregister(objectFromSnapshot(snapshot), true);
+    const object = objectFromSnapshot(snapshot);
+    core.ObjectManager.deregister(object, true);
+    object.getPrivateArea?.()?.detach?.(object);
   }
   for (const snapshot of state.closed ?? []) {
     core.ObjectManager.register(objectFromSnapshot(snapshot), true);
@@ -696,6 +718,7 @@ function createDynamicDoubleDoorRecord(object, location, originalId) {
     currentFace: Number(object.getFace?.() ?? object.face ?? 0) & 0x3,
     originalFace: Number(object.getFace?.() ?? object.face ?? 0) & 0x3,
     type: Number(object.getType?.() ?? object.type ?? 0),
+    privateArea: object.getPrivateArea?.() ?? object.privateArea ?? null,
   };
 }
 
@@ -716,7 +739,8 @@ function ensureDynamicDoubleDoorRecords(object, objectId, location, privateArea 
       location.getZ?.() ?? location.z ?? 0
     );
     for (const partnerId of familyIds) {
-      const partnerObject = core.MapObjects.get(partnerId, candidateLocation, privateArea);
+      const partnerObject = core.MapObjects.get(partnerId, candidateLocation, privateArea)
+        ?? privateArea?.resolveObject?.(partnerId, candidateLocation);
       if (!partnerObject) {
         continue;
       }
@@ -755,7 +779,12 @@ function isDoubleDoorOpen(record) {
   );
 }
 
-function doubleDoorRecordToObject(record, privateArea = null) {
+function doubleDoorRecordToObject(record, privateArea = record.privateArea ?? null) {
+  const existing = privateArea?.getObjects?.().find((object) =>
+    object.getId?.() === record.currentId && object.getType?.() === record.type && object.getFace?.() === record.currentFace &&
+    object.getLocation?.().getX?.() === record.x && object.getLocation?.().getY?.() === record.y && object.getLocation?.().getZ?.() === record.z
+  );
+  if (existing) return existing;
   return new core.GameObject(
     record.currentId,
     cloneLocation(record.x, record.y, record.z),
@@ -838,6 +867,7 @@ function handleDoubleDoor(player, object, objectId, location) {
   const currentObjects = pair.map((record) => doubleDoorRecordToObject(record));
   for (const previousObject of previousObjects) {
     core.ObjectManager.deregister(previousObject, true);
+    previousObject.getPrivateArea?.()?.detach?.(previousObject);
   }
   for (const currentObject of currentObjects) {
     core.ObjectManager.register(currentObject, true);
