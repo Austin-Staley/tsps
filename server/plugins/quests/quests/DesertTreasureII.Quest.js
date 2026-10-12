@@ -2780,7 +2780,7 @@ module.exports = function registerDesertTreasureII(api) {
       return promptGolemSearch(p);
     }
     p.setAttribute(SEARCHED_NAMES, searched | bit);
-    const variant = `familiar-faces-powering-up-the-golem-machine-${term}`;
+    const variant = `familiar-faces-powering-up-the-golem-machine-${term === "whisperer" ? "the-whisperer-true-name-classified" : term}`;
     talk(p, N.GOLEM_3, variant);
   }
   function talkElissa({ player: p, npcId }) {
