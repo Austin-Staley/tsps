@@ -17,13 +17,19 @@ const npcAnimations = new WeakMap();
 function lastNpcAnimation(npc, World) {
   let animation = npcAnimations.get(npc);
   if (!animation) {
-    animation = { id: npc.getAnimation?.()?.getId?.() ?? null, tick: World.getProcessCycle() };
+    animation = { id: npc.getAnimation?.()?.getId?.() ?? null, tick: World.getProcessCycle(), chat: npc.forcedChat ?? null, chatTick: World.getProcessCycle() };
     npcAnimations.set(npc, animation);
     const perform = npc.performAnimation?.bind(npc);
     if (perform) npc.performAnimation = (next) => {
       animation.id = next?.getId?.() ?? null;
       animation.tick = World.getProcessCycle();
       return perform(next);
+    };
+    const chat = npc.forceChat?.bind(npc);
+    if (chat) npc.forceChat = (text) => {
+      animation.chat = text;
+      animation.chatTick = World.getProcessCycle();
+      return chat(text);
     };
   }
   return animation;
@@ -208,9 +214,10 @@ function createContext(core, server) {
         const definition = npc.getCurrentDefinition(p);
         const animation = lastNpcAnimation(npc, World);
         return {
-          index: npc.getIndex(), id: npc.getId(), name: definition?.getName(),
+          index: npc.getIndex(), id: npc.getContentId?.(p) ?? definition?.getId?.() ?? npc.getId(), name: definition?.getName(),
           hitpoints: npc.getHitpoints(), maxHitpoints: npc.getMaxHitpoints(),
           animation: animation.id, animationTick: animation.tick,
+          chat: animation.chat, chatTick: animation.chatTick,
           options: (definition?.getActions() ?? []).filter(Boolean), ...tile(npc.getLocation()),
         };
       }),
