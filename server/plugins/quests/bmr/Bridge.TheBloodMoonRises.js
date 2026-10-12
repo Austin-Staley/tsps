@@ -1,5 +1,5 @@
 /** Wiki bridge defence: silvthrill shots destroy portals; defenders eventually fall back. */
-module.exports = function registerBridge({ api, stage, attribute, ready, play }) {
+module.exports = function registerBridge({ api, stage, attribute, ready, play, sync }) {
   const { PrivateArea, Boundary, Location, ItemIdentifiers: I, NpcIdentifiers: N, Equipment, CombatType, World } = api.core;
   const sessions = new WeakMap(), portals = new WeakMap();
   const SIEGE = 70, PORTAL = N.COL_00FFFF_PORTAL_COL_4;
@@ -46,6 +46,7 @@ module.exports = function registerBridge({ api, stage, attribute, ready, play })
       }
       if (current.integrity === 0 && current.qualified) {
         clear(this); current.phase = 'fall-back'; member.setAttribute(attribute, current);
+        sync?.(member);
         member.getCombat().reset();
         play(member, N.SAREI_5, 'drakan-s-siege-upon-reaching-0-defender-integrity');
         return;

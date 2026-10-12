@@ -781,6 +781,22 @@ module.exports = function registerTheBloodMoonRises(api) {
     return startTranscript(api, player, 0, PAGE, "fighting-wyrds-inspecting-the-broken-fence");
   }
 
+  function nativeStage(value, player) {
+    if (value === STAGE.COMPLETE) return 176;
+    if (value === STAGE.PREPARATIONS) {
+      const prep = player?.getAttribute(PREP_ATTRIBUTE) ?? {};
+      if (prep.flail && prep.stakes) return 114;
+      if (prep.flail) return 112;
+      if (prep.stewFed) return 110;
+      return player?.getInventory?.().contains(PREP.stew) ? 104 : 102;
+    }
+    if (value === STAGE.SIEGE) {
+      const phase = player?.getAttribute(SIEGE_DEFENCE_ATTRIBUTE)?.phase;
+      return ({ 'fall-back': 118, hall: 120, breach: 122 })[phase] ?? 116;
+    }
+    return value;
+  }
+
   function stage(player) { return quest.getStage(player); }
   function advance(player, value) {
     if (stage(player) < value) quest.setStage(player, value);
@@ -851,6 +867,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (event.stepId === "vqg4qO") {
       bridge.finish(player);
       player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { phase: "hall", integrity: 100, healed: [], repaired: [] });
+      quest.setStage(player, STAGE.SIEGE);
       spawnSiegeInjuredAranei(player);
     }
     if (event.stepId === "Sut83Q") {
@@ -1678,6 +1695,7 @@ module.exports = function registerTheBloodMoonRises(api) {
         if (replaceItems(player, [PREP.enhancedSickle, PREP.marks, PREP.blisterwoodFlail, PREP.hammer],
           [PREP.enhancedSickle, PREP.marks, PREP.blisterwoodFlail], [[PREP.flail, 1]])) {
           player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), flail: true });
+          quest.setStage(player, STAGE.PREPARATIONS);
           player.sendMessage("You upgrade your flail by swapping out the sickle and shortening the shaft before enhancing it with pure silvthrill.");
         }
       }, "No.", () => {});
@@ -1753,6 +1771,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     } else if (pair.has(PREP.cookedStew)) {
       prepAction(player, "hallowed-preparations-making-the-amitire-stew");
     } else player.sendMessage("You combine the ingredients.");
+    quest.setStage(player, STAGE.PREPARATIONS);
   }
 
   function feedSafalaan(event) {
@@ -1764,6 +1783,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.getInventory().deleteNumber(PREP.stew, 1);
     player.getInventory().adds(PREP.marks, 1);
     player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), stewFed: true });
+    quest.setStage(player, STAGE.PREPARATIONS);
     prepAction(player, "hallowed-preparations-feeding-safalaan-the-stew", event.npcId);
   }
 
@@ -1788,7 +1808,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     varpId: 5618,
     varbitId: 15464,
     // shortcut: other chapter native stages need their cache morphs validated before mapping.
-    varpValue: value => ({ [STAGE.PREPARATIONS]: 102, [STAGE.SIEGE]: 116, [STAGE.COMPLETE]: 176 })[value] ?? value,
+    varpValue: nativeStage,
     startedValue: STAGE.STARTED,
     completionValue: STAGE.COMPLETE,
     questPoints: 4,
@@ -1799,6 +1819,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   });
   require("../bmr/Palace.TheBloodMoonRises")({ api, stage, preparationAttribute: PREP_ATTRIBUTE });
   const bridge = require("../bmr/Bridge.TheBloodMoonRises")({ api, stage, attribute: SIEGE_DEFENCE_ATTRIBUTE,
+    sync: player => quest.setStage(player, STAGE.SIEGE),
     ready: player => { const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {}; return prep.flail && prep.stakes; },
     play: (player, npc, variant) => startTranscript(api, player, npc, PAGE, variant) });
   api.persistAttribute(ATTRIBUTE);

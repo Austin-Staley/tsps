@@ -2598,7 +2598,12 @@ test('bridge uses the actual cache palace exit and lets a full-inventory handoff
 
 test('Blood Moon native bitfield mapping reveals preparations and survives relog without changing quest stage',()=>{
  const {api}=mockApi();require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);const runtime=require('../plugins/quests/QuestRuntime'),quest=runtime.getRegisteredQuests().filter(q=>q.key==='the_blood_moon_rises').at(-1),attrs=new Map(),bits=new Map();const sender=new Proxy({}, {get:(_,key)=>key==='sendVarbit'?(id,n)=>bits.set(id,n):()=>sender});const player={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getPacketSender:()=>sender};
- quest.setStage(player,60);assert.equal(quest.getStage(player),60);assert.equal(bits.get(15464),102);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),102);quest.setStage(player,70);assert.equal(bits.get(15464),116);quest.setStage(player,110);assert.equal(bits.get(15464),176);assert.equal(quest.isComplete(player),true);
+ quest.setStage(player,60);assert.equal(quest.getStage(player),60);assert.equal(bits.get(15464),102);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),102);quest.setStage(player,70);assert.equal(bits.get(15464),116);
+ attrs.set('quest.the_blood_moon_rises.preparations',{stewFed:true});quest.setStage(player,60);assert.equal(bits.get(15464),110);
+ attrs.set('quest.the_blood_moon_rises.preparations',{flail:true,stakes:true});quest.setStage(player,60);assert.equal(bits.get(15464),114);
+ attrs.set('quest.the_blood_moon_rises.siege-defence',{phase:'hall'});quest.setStage(player,70);assert.equal(bits.get(15464),120);
+ bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),120);assert.equal(quest.getStage(player),70);
+ quest.setStage(player,110);assert.equal(bits.get(15464),176);assert.equal(quest.isComplete(player),true);
 });
 
 test('Blood Moon preparation exit allows gathering leaves before the defence is ready',()=>{
