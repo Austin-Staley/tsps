@@ -426,6 +426,8 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   handlers.custom.get('quest-song-of-the-elves:claim-arianwyn').at(-1)(handoff);
   assert.equal(handoff.handled, true, 'the completed Mourning’s End handler can hand the NPC to SOTE');
   assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-the-curse-of-seren');
+  handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'FoLVmk' });
+  assert.equal(quest.getStage(player), 150, 'the meeting ending advances into the clan-leader chapter');
 
   const choice = handlers.custom.get('npc-dialogue:choice').at(-1);
   choice({ player, option: 'How do I find Lord Crwys?', definition: { getName: () => 'Baxtorian' } });
@@ -439,7 +441,7 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   choice({ player, option: 'How do I find Lady Hefin?', definition: { getName: () => 'Baxtorian' } });
   assert.equal(attributes.get('quest.song_of_the_elves.hefin-clue-heard'), true);
   handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'K9K0W4' });
-  assert.equal(quest.getStage(player), 150, 'both clan leaders advance the quest to the orb chapter');
+  assert.equal(quest.getStage(player), 150, 'both clan leaders keep the quest in the orb chapter');
   assert.ok(persistedAttributes.includes('quest.song_of_the_elves.crwys-clue-heard'));
   assert.ok(persistedAttributes.includes('quest.song_of_the_elves.hefin-clue-heard'));
 });
