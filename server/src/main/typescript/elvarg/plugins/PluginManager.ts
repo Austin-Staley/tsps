@@ -2077,6 +2077,8 @@ export class PluginManager {
       ItemOnGroundManager: require("../game/entity/impl/grounditem/ItemOnGroundManager").ItemOnGroundManager,
       ItemDefinition: require("../game/definition/ItemDefinition").ItemDefinition,
       EquipPacketListener: require("../net/packet/impl/EquipPacketListener").EquipPacketListener,
+      PlayerDeathTask: require("../game/task/impl/PlayerDeath").PlayerDeathTask,
+      CombatPoisonData: require("../game/task/impl/CombatPoisonEffect").CombatPoisonData,
       CacheDefinitions: require("../game/cache/CacheDefinitions").CacheDefinitions,
       Wilderness: require("../game/content/wilderness/Wilderness").Wilderness,
       PathFinder: require(`${model}/movement/path/PathFinder`).PathFinder,
