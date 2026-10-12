@@ -250,7 +250,7 @@ export class MagicCombatMethod extends CombatMethod {
             return;
         }
 
-        const previousSpell = attacker.getCombat().getPreviousCast();
+        const previousSpell = hit.getSpell();
 
         if (previousSpell) {
             if (accurate) {
