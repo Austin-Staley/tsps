@@ -874,10 +874,9 @@ function handlePlayerDisconnect({ player }) {
   stopFiremaking(activeSessionsRef, player, false);
 }
 
-function handlePlayerLevelUp({ player, skill }) {
-  if (skill === Skill.FIREMAKING) {
-    stopFiremaking(activeSessionsRef, player, false);
-  }
+/** A level-up pop-up interrupts lighting, whichever skill it is for. */
+function handlePlayerLevelUp({ player }) {
+  stopFiremaking(activeSessionsRef, player, false);
 }
 
 function onItemOnItemEvent(event) {
@@ -942,7 +941,7 @@ module.exports = {
     TaskManager.submit(new FiremakingTask(activeSessions));
     api.onCustomEvent("firemaking:log-xp", answerLogXp);
     api.onPlayerDisconnect(handlePlayerDisconnect);
-    api.onPlayerLevelUp(handlePlayerLevelUp);
+    api.onCustomEvent("level-up:popup-opened", handlePlayerLevelUp);
     api.onItemOnItem(onItemOnItemEvent, { noted: false });
     api.onItemOnGroundItem(onItemOnGroundItemEvent, { noted: false });
     api.onGroundItemSecondClick(

@@ -293,6 +293,7 @@ import { VengeanceTimerPlugin } from "./plugins/vengeancetimer/VengeanceTimerPlu
 import { FreezeTimerPlugin, PoisonTimerPlugin } from "./plugins/statustimer/StatusTimerPlugin";
 import { AttackTimerPlugin } from "./plugins/attacktimer/AttackTimerPlugin";
 import { AnimationSmoothingPlugin } from "./plugins/animationsmoothing/AnimationSmoothingPlugin";
+import { StretchedModePlugin } from "./plugins/stretchedmode/StretchedModePlugin";
 import { MenuSwapperPlugin } from "./plugins/menuswapper/MenuSwapperPlugin";
 import { WeatherPlugin } from "./plugins/weather/WeatherPlugin";
 import { RuneLite } from "../runelite/client/RuneLite";
@@ -582,6 +583,7 @@ export class OsrsClient {
     readonly freezeTimerPlugin: FreezeTimerPlugin;
     readonly attackTimerPlugin: AttackTimerPlugin;
     readonly animationSmoothingPlugin: AnimationSmoothingPlugin;
+    readonly stretchedModePlugin: StretchedModePlugin;
     readonly menuSwapperPlugin: MenuSwapperPlugin;
     readonly splitPrivateChatPlugin: SplitPrivateChatPlugin;
     readonly clientPlugins: ClientPluginManager = new ClientPluginManager();
@@ -1194,6 +1196,8 @@ export class OsrsClient {
         this.freezeTimerPlugin = pluginManager.getPlugin(FreezeTimerPlugin)!;
         this.attackTimerPlugin = pluginManager.getPlugin(AttackTimerPlugin)!;
         this.animationSmoothingPlugin = pluginManager.getPlugin(AnimationSmoothingPlugin)!;
+        this.stretchedModePlugin = pluginManager.getPlugin(StretchedModePlugin)!;
+        this.loginRenderer.loginStretch = () => this.stretchedModePlugin.loginStretch();
         this.menuSwapperPlugin = pluginManager.getPlugin(MenuSwapperPlugin)!;
         this.splitPrivateChatPlugin = pluginManager.getPlugin(SplitPrivateChatPlugin)!;
         this.firstPersonPlugin = pluginManager.getPlugin(FirstPersonPlugin)!;
@@ -1469,6 +1473,7 @@ export class OsrsClient {
             executeScriptListener: (widget, listener, eventContext) =>
                 this.executeScriptListener(widget, listener, eventContext),
             handleWidgetAction: (event) => this.handleWidgetAction(event),
+            handlePluginWidgetAction: (event) => this.clientPlugins.handleWidgetAction(event),
             handleTradeWidgetAction: (widget, event, groupId, childId) =>
                 this.handleTradeWidgetAction(widget, event, groupId, childId),
             handleInventorySlotMove: (from, to) => this.handleInventorySlotMove(from, to),
@@ -3873,6 +3878,7 @@ export class OsrsClient {
     }
 
     handleWidgetAction(event: Parameters<WidgetActionRouter["handleWidgetAction"]>[0]): void {
+        if (this.clientPlugins.handleWidgetAction(event)) return;
         const uid = event.widget?.uid | 0;
         // The logout tab's "World Switcher" button, and the same option on the logout tab's
         // stone (stone10 of each layout), open the server list.
