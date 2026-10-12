@@ -1620,6 +1620,46 @@ test('Desert Treasure II starts the Vardorvis trail through Elissa, Barus, the b
   }
 });
 
+test('DT2 enters the barricaded house through its ruins scene and restores Kasonde across relog', () => {
+  const { api, handlers } = mockApi(), runtime = require('../plugins/quests/QuestRuntime');
+  const original = runtime.startTranscript, played = [], spawned = [], removed = [];
+  let login, logout;
+  api.onPlayerLogin = handler => login = handler;
+  api.onPlayerLogout = handler => logout = handler;
+  api.spawnNpc = spec => { const npc = { ...spec, isRegistered: () => true }; spawned.push(npc); return npc; };
+  api.removeNpc = npc => removed.push(npc);
+  runtime.startTranscript = (...args) => { played.push(args[4]); return true; };
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1), attrs = new Map([['desert-treasure-ii:vardorvis-progress',6]]);
+    const player = { getAttribute:key=>attrs.get(key), setAttribute:(key,value)=>attrs.set(key,value),
+      getPacketSender:()=>new Proxy({}, {get:()=>()=>{}}), getMovementQueue:()=>({reset(){}}),
+      getPrivateArea:()=>attrs.get('desert-treasure-ii:stranglewood-hideout'), moveTo(tile){this.tile=tile;},
+      getUsername:()=> 'ruins-check' };
+    quest.setStage(player,7);
+    const actor = {isPlayer:()=>true,getAsPlayer:()=>player}, area = handlers.area[0];
+    assert.ok(area.getBoundaries()[0].inside(new api.core.Location(1194,3394,0)));
+    area.postEnter(actor);
+    area.process(actor);
+    assert.equal(played.length,1,'the scene does not restart every tick');
+    assert.equal(attrs.get('desert-treasure-ii:city-entered'),undefined,'opening the scene does not cross the barricade');
+    handlers.custom.get('npc-dialogue:action')[0]({player,stepId:'nJRAbJ'});
+    assert.equal(attrs.get('desert-treasure-ii:city-entered'),true);
+    assert.deepEqual([player.tile.getX(),player.tile.getY()],[1193,3405]);
+    logout({player});
+    assert.deepEqual(removed,[spawned[0]]);
+    login({player});
+    assert.equal(spawned.length,2,'the same earned checkpoint recreates the owned conversation NPC');
+    attrs.set('desert-treasure-ii:vardorvis-progress',18);
+    handlers.objects[0]({player,objectId:49491,location:{x:1227,y:3469,z:0}});
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),18,'returning by boat retains the completed trail');
+    attrs.set('desert-treasure-ii:stranglewood-hideout',{defended:true,isDestroyed:()=>false,leave(){},postLeave(){},destroy(){}});
+    logout({player});
+    assert.deepEqual([player.tile.getX(),player.tile.getY(),player.tile.getZ()],[1193,3405,0],'logout leaves the instance at its public house');
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),9,'a completed defense is retained');
+  } finally { runtime.startTranscript = original; }
+});
+
 test('Desert Treasure II requires Kasonde dialogue and the full 400-tick hideout defence', () => {
   const { api: base } = mockApi();
   const interactions = [], objectHooks = [], chunks = [];
@@ -6769,7 +6809,7 @@ test('DT2 keeps internal stages separate from native progress and the cache comp
   const desk = api.core.CacheDefinitions.getObject(49490);
   assert.equal(desk.transformVarbit, 15125);
   quest.setStage(player, 7);
-  for (const [lead, value] of [[1,4], [2,6], [3,6], [4,8], [5,10], [6,16]]) {
+  for (const [lead, value] of [[1,4], [2,6], [3,6], [4,8], [5,10], [6,12]]) {
     attrs.set('desert-treasure-ii:vardorvis-progress', lead);
     handlers.playerProcess[0]({ player });
     assert.equal(sent.findLast(([id]) => id === 15125)[1], value);

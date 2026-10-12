@@ -44,7 +44,7 @@ module.exports = function registerDesertTreasureII(api) {
     const value = nativeProgress(stage(player), player);
     // QuestHelper DT2_STRANGLEWOOD milestones drive the cache desk, boat and later scenery.
     const progress = Number(player.getAttribute(VARDORVIS_PROGRESS)) || 0;
-    const stranglewood = [0, 4, 6, 6, 8, 10, 16, 18, 18, 22, 24, 24, 24, 34, 36, 36, 38, 42, 44, 48, 50, 52, 54][progress] ?? 0;
+    const stranglewood = [0, 4, 6, 6, 8, 10, player.getAttribute(STRANGLEWOOD_CITY_ENTERED) ? 16 : 12, 18, 18, 22, 24, 24, 24, 34, 36, 36, 38, 42, 44, 48, 50, 52, 54][progress] ?? 0;
     const state = `${value}:${stranglewood}`;
     if (nativeProgressSent.get(player) === state) return;
     nativeProgressSent.set(player, state);
@@ -71,6 +71,7 @@ module.exports = function registerDesertTreasureII(api) {
   const SEARCHED_NAMES = "desert-treasure-ii:searched-names";
   const BANIKAN_LEFT = "desert-treasure-ii:banikan-left";
   const VARDORVIS_PROGRESS = "desert-treasure-ii:vardorvis-progress";
+  const STRANGLEWOOD_CITY_ENTERED = "desert-treasure-ii:city-entered";
   const SUCELLUS_AREA = "desert-treasure-ii:sucellus-area";
   const SUCELLUS_MUSHROOMS = "desert-treasure-ii:sucellus-mushrooms";
   const SUCELLUS_VATS = "desert-treasure-ii:sucellus-vats";
@@ -1312,6 +1313,22 @@ module.exports = function registerDesertTreasureII(api) {
     quest.complete(p);
   }
 
+  const ruinsStarted = new WeakSet();
+  function enterStranglewoodRuins(p) {
+    if (stage(p) !== S.VARDORVIS || Number(p.getAttribute(VARDORVIS_PROGRESS)) !== 6
+      || p.getAttribute(STRANGLEWOOD_CITY_ENTERED) || ruinsStarted.has(p)) return;
+    ruinsStarted.add(p);
+    p.getMovementQueue?.().reset?.();
+    spawnSurfaceKasonde(p);
+    talk(p, N.KASONDE, "carnifex-maximus-vardorvis-entering-the-stranglewood-ruins");
+  }
+  class StranglewoodRuinsArea extends api.core.Area {
+    getName() { return "The Stranglewood"; }
+    postEnter(actor) { if (actor.isPlayer()) enterStranglewoodRuins(actor.getAsPlayer()); }
+    process(actor) { if (actor.isPlayer()) enterStranglewoodRuins(actor.getAsPlayer()); }
+    postLeave(actor) { if (actor.isPlayer()) ruinsStarted.delete(actor.getAsPlayer()); }
+  }
+
   function spawnSurfaceKasonde(p) {
     let owned = spawned.get(p);
     if (!owned) spawned.set(p, owned = {});
@@ -2188,6 +2205,8 @@ module.exports = function registerDesertTreasureII(api) {
   function handleLogin({ player: p }) {
     syncNativeProgress(p);
     p.getPacketSender().sendVarbit(15116, Number(p.getAttribute(TOTEM_MASK)) || (p.getAttribute(TOTEMS_CHARGED) ? 15 : 0));
+    if (stage(p) === S.VARDORVIS && p.getAttribute(STRANGLEWOOD_CITY_ENTERED)
+      && Number(p.getAttribute(VARDORVIS_PROGRESS)) >= 6 && Number(p.getAttribute(VARDORVIS_PROGRESS)) <= 16) spawnSurfaceKasonde(p);
     if (stage(p) === S.WHISPERER) setLassar(p, p.getAttribute(LASSAR) ?? {});
     if (stage(p) === S.FINALE && p.getAttribute("desert-treasure-ii:final-cutscene-started")
       && !p.getAttribute(FINAL_WIGHTS_COMPLETE)) {
@@ -2439,6 +2458,10 @@ module.exports = function registerDesertTreasureII(api) {
     const current = p.getPrivateArea?.();
     const returnToVaultEntrance = current && [p.getAttribute(ATTR_VAULT_AREA), p.getAttribute(FINAL_ROOM)].includes(current);
     const returnToDigsite = current && current === p.getAttribute(ATTR_WAR_ROOM);
+    const stranglewoodExit = current && (current === p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT) ? [1193, 3405]
+      : current === p.getAttribute(ATTR_STRANGLEWOOD_TEMPLE) ? [1174, 3427]
+        : current === p.getAttribute(ATTR_VARDORVIS_AREA) ? [1147, 3433] : null);
+    if (current && current === p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT) && current.defended) p.setAttribute(VARDORVIS_PROGRESS, 9);
     for (const key of [ATTR_VAULT_AREA, FINAL_ROOM, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO, ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA, SUCELLUS_AREA]) {
       const area = p.getAttribute(key);
       if (area && !area.isDestroyed?.()) {
@@ -2450,11 +2473,15 @@ module.exports = function registerDesertTreasureII(api) {
     }
     if (returnToVaultEntrance) p.moveTo(new api.core.Location(3510, 2971, 0));
     else if (returnToDigsite) p.moveTo(new api.core.Location(3411, 9813, 0));
+    else if (stranglewoodExit) p.moveTo(new api.core.Location(...stranglewoodExit, 0));
     p.setAttribute(SCAR_PATH_COMPLETE, false);
     p.setAttribute(SCAR_RIFT_LIVE, false);
     p.setAttribute(SCAR_GROWTH_LIVE, false);
     p.setAttribute(ATTR, null);
     p.setAttribute(PUZZLE_OPEN, false);
+    const kasonde = spawned.get(p)?.kasonde;
+    if (kasonde) api.removeNpc(kasonde);
+    ruinsStarted.delete(p);
     spawned.delete(p);
   }
 
@@ -3703,9 +3730,9 @@ module.exports = function registerDesertTreasureII(api) {
         return true;
       }
       talk(p, N.GOLEM_3, "carnifex-maximus-vardorvis-travelling-to-the-stranglewood-for-the-first-time");
-      p.setAttribute(VARDORVIS_PROGRESS, 6);
+      if (progress < 6) p.setAttribute(VARDORVIS_PROGRESS, 6);
       p.moveTo(new api.core.Location(1196, 3450, 0));
-      spawnSurfaceKasonde(p);
+      if (p.getAttribute(STRANGLEWOOD_CITY_ENTERED)) spawnSurfaceKasonde(p);
       return true;
     }
     if (s === S.VARDORVIS && [O.ENTRY_20, O.ENTRY_21].includes(objectId)
@@ -4877,6 +4904,11 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function handleDialogueAction({ player: p, stepId }) {
+    if (stage(p) === S.VARDORVIS && Number(p.getAttribute(VARDORVIS_PROGRESS)) === 6 && stepId === "nJRAbJ") {
+      p.setAttribute(STRANGLEWOOD_CITY_ENTERED, true);
+      // shortcut: adjacent house landing is inferred from the cache, calibrate against a live cutscene capture.
+      p.moveTo(new api.core.Location(1193, 3405, 0));
+    }
     if (stepId === "T24jg_" && stage(p) === S.MACHINE && Number(p.getAttribute(SEARCHED_NAMES)) === 15) {
       p.setAttribute(BANIKAN_LEFT, true);
       const owned = spawned.get(p);
@@ -5429,6 +5461,7 @@ module.exports = function registerDesertTreasureII(api) {
     GOLEM_SOLVED, SEARCHED_NAMES, BANIKAN_LEFT].forEach((key) => api.persistAttribute(key));
   api.persistAttribute(LASSAR);
   api.persistAttribute(VARDORVIS_PROGRESS);
+  api.persistAttribute(STRANGLEWOOD_CITY_ENTERED);
   api.persistAttribute(ATTR_SMITH_INTRO);
   api.persistAttribute(STATUES_PLACED);
   api.persistAttribute(ATTR_FIRST_MEDALLION_MEETING);
@@ -5486,6 +5519,8 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcRoute(routeToScarPathRunner);
   api.onNpcInteraction("Terry Balando", { "Talk-to": talkTerry });
   api.onNpcInteraction("Dr Banikan", { "Talk-to": talkBanikan });
+  // QuestHelper marks the ruins approach at 1194,3394.
+  api.registerArea(new StranglewoodRuinsArea([new api.core.Boundary(1189, 1200, 3392, 3398, 0)]));
   api.onNpcInteraction("Elissa", { "Talk-to": talkElissa });
   api.onNpcInteraction("Barus", { "Talk-to": talkBarus });
   api.onNpcInteraction("Kasonde", { "Talk-to": talkKasonde });
