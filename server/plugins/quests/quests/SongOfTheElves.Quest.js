@@ -381,6 +381,17 @@ module.exports = function registerSongOfTheElves(api) {
       return null;
     }
 
+    postLeave(mobile, logout) {
+      super.postLeave(mobile, logout);
+      if (!this.isDestroyed()) return;
+      const state = fragmentInstances.get(this);
+      if (!state) return;
+      state.finished = true;
+      if (state.player.getAttribute(FRAGMENT_AREA) === this) state.player.setAttribute(FRAGMENT_AREA, null);
+      state.player.setAttribute(TEMPLE_CUTSCENE_STARTED, false);
+      fragmentInstances.delete(this);
+    }
+
     process(mobile) {
       if (!mobile?.isNpc?.()) return;
       const state = fragmentInstances.get(this);
