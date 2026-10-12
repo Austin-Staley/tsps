@@ -1659,9 +1659,9 @@ test('Desert Treasure II shadow spells interrupt the private Leviathan encounter
   assert.match(messages[0], /stuns the Leviathan/);
 });
 
-test('Desert Treasure II Duke prep requires the cache supplies and two real poisons before the boss can wake', () => {
+test('Desert Treasure II prison escape leads to the cache Duke arena and requires two real poisons', () => {
   const { api: base } = mockApi();
-  const objects = [], itemItems = [], itemObjects = [], itemNpcs = [], deaths = [], groundPickups = [];
+  const objects = [], itemItems = [], itemObjects = [], itemNpcs = [], itemActions = [], deaths = [], groundPickups = [];
   const queues = { add: [], remove: [] };
   class TestArea {
     constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
@@ -1671,7 +1671,7 @@ test('Desert Treasure II Duke prep requires the cache supplies and two real pois
     postLeave() {}
     getBaseX() { return 5000; }
     getBaseY() { return 6000; }
-    tile(x, y, z) { return { x: 5000 + x, y: 6000 + y, z, getX() { return this.x; }, getY() { return this.y; } }; }
+    tile(x, y, z) { return { x: 5000 + x, y: 6000 + y, z, getX() { return this.x; }, getY() { return this.y; }, getZ() { return this.z; } }; }
     add(npc) { this.entities.push(npc); }
     isDestroyed() { return false; }
     destroy() {}
@@ -1695,6 +1695,7 @@ test('Desert Treasure II Duke prep requires the cache supplies and two real pois
             : prop === 'onItemOnNpc' ? (handler) => itemNpcs.push(handler)
                 : prop === 'onGroundItemPickup' ? (handler) => groundPickups.push(handler)
               : prop === 'onNpcDeath' ? (handler) => deaths.push(handler)
+                : prop === 'onItemAction' ? (handler) => itemActions.push(handler)
                 : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
   });
   const runtime = require('../plugins/quests/QuestRuntime');
@@ -1704,7 +1705,8 @@ test('Desert Treasure II Duke prep requires the cache supplies and two real pois
   const player = {
     isPlayer: () => true, getAsPlayer() { return this; }, getUsername: () => 'dt2-sucellus-test',
     getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
-    moveTo(location) { this.location = location; }, sendMessage: (message) => messages.push(message),
+    moveTo(location) { this.location = location; }, getLocation() { return this.location; }, sendMessage: (message) => messages.push(message),
+    getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
     getInventory: () => ({ getAmount: (id) => inventory.get(id) ?? 0,
       getFreeSlots: () => 28,
@@ -1712,11 +1714,33 @@ test('Desert Treasure II Duke prep requires the cache supplies and two real pois
       deleteNumber: (id, amount) => inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - amount)) }),
   };
   const I = core.ItemIdentifiers, O = core.ObjectIdentifiers;
-  const sourceLocation = (x, y, z = 0) => ({ x: 5000 + x - 3008, y: 6000 + y - 6416, z });
+  const sourceLocation = (x, y, z = 0) => ({ x: 5000 + x - 2872, y: 6000 + y - 6336, z });
   const interactObject = (id, x, y, option = 'Search') => objects.at(-1)({ player, objectId: id, option, location: sourceLocation(x, y) });
   quest.setStage(player, 9);
-  assert.equal(objects.at(-1)({ player, objectId: 49138, location: { x: 3039, y: 6433, z: 0 } }), true, 'enter the cache asylum gate');
+  assert.equal(objects.at(-1)({ player, objectId: 49513, location: { x: 2926, y: 10354, z: 0 } }), true, 'enter through the prison entrance');
   assert.equal(attrs.get('desert-treasure-ii:sucellus-area') instanceof TestArea, true);
+  const area = attrs.get('desert-treasure-ii:sucellus-area');
+  player.moveTo(area.tile(40, 12, 2));
+  area.process(player);
+  assert.equal(attrs.get('desert-treasure-ii:sucellus-cell-entered'), true, 'the prison guard knocks the player out at the cell passage');
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], [sourceLocation(3040, 6370).x, sourceLocation(3040, 6370).y, 0]);
+  interactObject(49099, 3040, 6370, 'Inspect');
+  interactObject(49094, 3042, 6369);
+  assert.equal(inventory.get(I.PRISONERS_LETTER), 1);
+  itemActions.at(-1)({ player, itemId: I.PRISONERS_LETTER, option: 'Read' });
+  interactObject(49095, 3039, 6367);
+  assert.equal(inventory.get(I.KNIFE_5), 1);
+  itemObjects.at(-1)({ player, itemId: I.KNIFE_5, objectId: 49099, location: sourceLocation(3040, 6370) });
+  assert.equal(inventory.get(I.KNIFE_5), 0);
+  assert.equal(inventory.get(I.CHISEL_5), 1);
+  interactObject(49514, 3041, 6367);
+  assert.equal(inventory.get(I.LOCKPICK_4), 1);
+  itemObjects.at(-1)({ player, itemId: I.LOCKPICK_4, objectId: 49099, location: sourceLocation(3040, 6370) });
+  assert.equal(attrs.get('desert-treasure-ii:sucellus-cell-escaped'), true);
+  assert.equal(area.entities.some((npc) => npc.id === core.NpcIdentifiers.ASSASSIN_7), true, 'the cell guard is present after the escape');
+  objects.at(-1)({ player, objectId: 49120, option: 'Pick-lock', location: sourceLocation(2945, 6389, 2) });
+  assert.equal(attrs.get('desert-treasure-ii:sucellus-assassin-gone'), true);
+  assert.equal(objects.at(-1)({ player, objectId: 49138, location: sourceLocation(3039, 6433) }), false, 'the asylum gate leads from the real prison into Duke’s chamber');
   const boss = attrs.get('desert-treasure-ii:boss');
   assert.equal(boss.__dt2SucellusAwake, false);
   interactObject(O.PESTLE_AND_MORTAR_2, 3034, 6434);
