@@ -211,6 +211,15 @@ Five recordings (820, 843, 3282, 3285, 3389; revisions 234-235, all on event wor
 - **Fighting**: it stands still and every 3 ticks attacks a random raider in the room (anim 69), with the style that raider prays against, or either. Boulder: projectile 1324, 2 ticks to land within 3 tiles and 3 beyond, gfx 1325 and sound 1021 on landing. Ice Burst: projectile 366, 2 ticks, gfx 363 rippling over the 3x3, sound 170; "You have been frozen!" 2 ticks after a hit, renewable by the next burst.
 - **Dying**: anim 67; it goes 5 ticks later and takes the storm with it.
 
+## Tekton, from rsprox captures
+
+Recordings 820 (a duo, six anvil visits) and 3389 (solo) show the whole fight.
+
+- Woken, he rises (7474) and walks 2 ticks later as the fire shuts the way in. In reach, the fighting form, his stance and the walk-blocker come on one tick, and he swings 3 ticks later (2 enraged), then every 3. Stab and crush land the tick after the swing, slash two ticks after.
+- He leaves on his 9th swing the first time and his 16th after each repair; back from the anvil he is enraged until his 6th swing.
+- At the anvil (12-21 ticks) sparks come every 4 ticks, two at each raider, and he heals every 3 ticks (85 at 8,400 hitpoints).
+- Every room's exit crystal shatters with loc anim 7506 and area sounds 1021 and 3821, and is gone 4 ticks later.
+
 ## Values not on the Wiki, to check against a capture
 
 | Value | Where |

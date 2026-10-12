@@ -182,20 +182,21 @@ class Room {
     return this.exitCrystal;
   }
 
-  /** The room is done: its crystal shatters (anim 7506, sounds 1021 and 3821) and is gone 2 ticks later. */
+  /**
+   * The room is done: its crystal shatters (rsprox captures: loc anim 7506, area sounds 1021 and
+   * 3821 five cycles later, range 10) and is gone 4 ticks later.
+   */
   clearExit() {
     this.completed = true;
     const crystal = this.exitCrystal;
     if (!crystal) return;
     this.exitCrystal = null;
     const { Animation, ObjectManager } = Shared.core();
-    for (const player of this.raid.players) {
-      if (player.getLocation().getZ() !== crystal.getLocation().getZ()) continue;
-      player.getPacketSender().sendObjectAnimation(crystal, new Animation(7506));
-      Shared.sound(player, 1021);
-      Shared.sound(player, 3821);
-    }
-    Shared.later(this.raid, 2, () => ObjectManager.deregister(crystal, true));
+    const viewers = [...this.raid.players].filter((player) => player.getLocation().getZ() === crystal.getLocation().getZ());
+    for (const player of viewers) player.getPacketSender().sendObjectAnimation(crystal, new Animation(7506));
+    Shared.areaSound(viewers, 1021, crystal.getLocation(), { range: 10 });
+    Shared.areaSound(viewers, 3821, crystal.getLocation(), { delay: 5, range: 10 });
+    Shared.later(this.raid, 4, () => ObjectManager.deregister(crystal, true));
   }
 
   removeNpc(npc) {

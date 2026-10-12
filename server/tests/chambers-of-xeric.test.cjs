@@ -431,6 +431,12 @@ test('the ice demon follows rsprox captures: the storm bar, the boulder flight, 
   assert.deepEqual([...new Set(IceDemon.BURST_TILES.map(([, , delay]) => delay))], [0, 3, 6, 9, 12]);
 });
 
+test('Tekton follows rsprox captures: swings before the anvil, anvil heals', () => {
+  const Tekton = require('../plugins/minigames/cox/Tekton.ChambersOfXeric');
+  assert.deepEqual(Tekton.SWINGS, { FIRST: 9, AFTER_REPAIR: 16, ENRAGED: 6 });
+  assert.equal(Tekton.anvilHeal(8400), 85);
+});
+
 test('puzzle rules from the Wiki: brazier, chest and grub rolls, stuns, tightrope guards', () => {
   assert.equal(IceDemon.lightChance(1), 0.08);
   assert.ok(Math.abs(IceDemon.lightChance(99) - 0.78) < 1e-9);
