@@ -581,3 +581,14 @@ test('Movario resource pallets preserve the unnoted remainder when inventory fil
  slots=1;handlers.objects.find(h=>h.name==='Fire rune pile').options['Take-from']({player,definition:{id:53964}});assert.equal(items.get(554),100);assert.equal(player.varbits.get(10794),0);
  assert.deepEqual(attributes.get('while-guthix-sleeps:base-resources'),[31,100,0,0]);api.core.ItemDefinition=old;
 });
+
+
+test('WGS completed alliance talks stay post-quest and Silif only replaces missing robes', () => {
+ const {api}=mockApi(),played=[],given=[];let slots=1;
+ const player={getLocation:()=>new api.core.Location(2990,3343),getEquipment:()=>({contains:id=>id===29566}),getBank:()=>({contains:id=>id===29568}),getInventory:()=>({getFreeSlots:()=>slots}),sendMessage(){}};
+ const f=require('../plugins/quests/wgs/Alliance.WhileGuthixSleeps')({api,stage:()=>900,held:()=>false,give:(p,id)=>given.push(id),play:(p,id,variant)=>played.push(variant)});
+ for(const npcId of[13540,13543,13511])assert.equal(f.group({player,npcId}),true);
+ assert.deepEqual(played,['post-quest-dialogue-talking-to-idria','post-quest-dialogue-talking-to-akrisae','post-quest-dialogue-talking-to-thaerisk']);
+ f.action({player,npcId:13519,stepId:'h_h2X8'});assert.deepEqual(given,[29570]);
+ slots=0;f.action({player,npcId:13519,stepId:'h_h2X8'});assert.deepEqual(given,[29570]);
+});

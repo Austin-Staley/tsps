@@ -1,6 +1,6 @@
 /** Surok's capture, the one-use exchange teleport, and Lucien's ambush. */
 module.exports=function registerAlliance({api,quest,stage,advance,held,give,play}){
- const {Area,PrivateArea,Boundary,Location,Item,Spell,MagicSpellbook}=api.core;
+ const {Area,PrivateArea,Boundary,Location,Item,Spell,MagicSpellbook,Bank}=api.core;
  const GROUP=[13540,13543,13511],SILIF=13519,STRANGE_ORB=29535,ROBES=[29566,29568,29570];
  const CELL=53281,ICE_WALL=53607,LEDGE=53288,LADDER=53370,LADDER_TOP=53371;
  const scenes=new WeakMap(),dressed=p=>ROBES.every(id=>p.getEquipment().contains(id));
@@ -11,7 +11,18 @@ module.exports=function registerAlliance({api,quest,stage,advance,held,give,play
   else if(s===620)v='the-dark-squall-talking-to-'+(npcId===13540?'idria':npcId===13511?'thaerisk':'akrisae')+'-again';
   else if(s>=650&&s<700)v='into-the-chasm-talking-to-the-group';
   else if(s>=880&&s<900)v='into-the-chasm-talking-to-the-group-2';
+  else if(s>=900)v='post-quest-dialogue-talking-to-'+(npcId===13540?'idria':npcId===13511?'thaerisk':'akrisae');
   else return false;play(p,npcId,v);return true;
+ }
+ function postQuestTalk({player:p,npcId}){
+  if(stage(p)<900||!atCastle(p))return false;
+  if(npcId===SILIF)play(p,npcId,'post-quest-dialogue-talking-to-silif');
+  else if([13482,13522,13523].includes(npcId))play(p,npcId,'post-quest-dialogue-talking-to-surok');else return false;return true;
+ }
+ function reclaimRobes(p){
+  const missing=ROBES.filter(id=>!held(p,id)&&!p.getEquipment().contains(id)&&!Array.from({length:Bank.TOTAL_BANK_TABS},(_,tab)=>p.getBank(tab)).some(bank=>bank.contains(id)));
+  if(p.getInventory().getFreeSlots()<missing.length){p.sendMessage('You need '+missing.length+' free inventory spaces for the robes.');return;}
+  for(const id of missing)give(p,id);
  }
  function line(e){
   const s=stage(e.player);
@@ -22,7 +33,7 @@ module.exports=function registerAlliance({api,quest,stage,advance,held,give,play
  }
  function swap(p){if(stage(p)!==620)return;if(!dressed(p)){p.sendMessage('Put on the Dark Squall robes before exchanging places with Surok.');return;}advance(p,630);p.getCombat().reset();p.moveTo(new Location(4136,4849,2));p.sendMessage('Akrisae swaps your location with Surok’s.');}
  function cell({player:p,objectId,definition}){if((definition?.id??objectId)!==CELL||stage(p)!==620)return false;play(p,13543,'the-dark-squall-talking-to-akrisae-again');return true;}
- function action({player:p,stepId}){if(stepId==='Wfq-j9')swap(p);if(stepId==='MvBtiO'&&scenes.has(p)){const f=scenes.get(p);for(const n of f.cast)if([13618,13622,13559,13613,13616,13564].includes(n.getId()))api.removeNpc(n);}
+ function action({player:p,stepId,npcId}){if(stepId==='h_h2X8'&&npcId===SILIF&&stage(p)>=900&&atCastle(p))reclaimRobes(p);if(stepId==='Wfq-j9')swap(p);if(stepId==='MvBtiO'&&scenes.has(p)){const f=scenes.get(p);for(const n of f.cast)if([13618,13622,13559,13613,13616,13564].includes(n.getId()))api.removeNpc(n);}
   if(stepId==='MWB2tX'&&scenes.has(p)){advance(p,650);p.getMovementQueue().setBlockMovement(false);p.moveTo(new Location(2945,3820,0));}}
  function ladder({player:p,objectId,definition}){const n=definition?.id??objectId;if(stage(p)<630||stage(p)>=700||![LADDER,LADDER_TOP].includes(n))return false;p.moveTo(new Location(4142,4854,n===LADDER?2:1));return true;}
  class TeleorbRunes extends Spell{
@@ -54,9 +65,10 @@ module.exports=function registerAlliance({api,quest,stage,advance,held,give,play
   const ds2={player:p,key:'dragon_slayer_ii',complete:false};if(['QKDh3l','TAXtQB'].includes(stepId))api.emitCustomEvent('quest:is-complete',ds2);
   const values={'5Wt8Mm':held(p,STRANGE_ORB),hhVM2j:!held(p,STRANGE_ORB),'_4EMtV':dressed(p),XJb36e:!dressed(p),QKDh3l:!ds2.complete,TAXtQB:ds2.complete};if(stepId in values)return values[stepId];
  }
+ api.onNpcInteraction('Silif',{'Talk-to':postQuestTalk});api.onNpcInteraction('Surok Magis',{'Talk-to':postQuestTalk});
  api.onNpcInteraction('Akrisae',{'Talk-to':group});api.onNpcInteraction('Idria',{'Talk-to':group});api.onNpcInteraction('Thaerisk',{'Talk-to':group});
  api.onObjectInteraction('Cell gate',{Open:cell});api.onObjectInteraction('Ladder',{'Climb-up':ladder,'Climb-down':ladder});
  api.onObjectInteraction('Ice wall',{Climb:wall,'Climb-up':wall});api.onObjectInteraction('Ledge',{'Jump-across':ledge,Jump:ledge});
  api.onItemAction(orb);api.onNpcDialogueCondition(condition);api.onCustomEvent('npc-dialogue:line',line);api.onCustomEvent('npc-dialogue:action',action);
- return {swap,orb,condition,line};
+ return {swap,orb,condition,line,group,postQuestTalk,action};
 };
