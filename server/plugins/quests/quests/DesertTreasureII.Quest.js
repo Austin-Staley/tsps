@@ -42,8 +42,13 @@ module.exports = function registerDesertTreasureII(api) {
   const nativeProgressSent = new WeakMap();
   function syncNativeProgress(player) {
     const value = nativeProgress(stage(player), player);
-    if (nativeProgressSent.get(player) === value) return;
-    nativeProgressSent.set(player, value);
+    // QuestHelper DT2_STRANGLEWOOD milestones drive the cache desk, boat and later scenery.
+    const progress = Number(player.getAttribute(VARDORVIS_PROGRESS)) || 0;
+    const stranglewood = [0, 4, 6, 6, 8, 10, 16, 18, 18, 22, 24, 24, 24, 34, 36, 36, 38, 42, 44, 48, 50, 52, 54][progress] ?? 0;
+    const state = `${value}:${stranglewood}`;
+    if (nativeProgressSent.get(player) === state) return;
+    nativeProgressSent.set(player, state);
+    player.getPacketSender().sendVarbit(15125, stranglewood);
     player.getPacketSender().sendVarbit(14862, value);
   }
   const IDS = [I.VARDORVIS_MEDALLION, I.PERSERIYAS_MEDALLION, I.SUCELLUS_MEDALLION, I.WHISPERERS_MEDALLION];
@@ -2959,22 +2964,26 @@ module.exports = function registerDesertTreasureII(api) {
       && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) === 3) {
       p.setAttribute(VARDORVIS_PROGRESS, 4);
       p.sendMessage("You read the botanist's note. It explains how to use the strange potion to enter the Stranglewood.");
+      event.handled = true;
       return true;
     }
     if (itemId === KASONDE_POTION && action === "drink") {
       const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
       if (progress < 4) {
         talk(p, N.GOLEM_3, "carnifex-maximus-vardorvis-attempting-to-drink-the-potion-before-reading-the-note");
+        event.handled = true;
         return true;
       }
       if (progress === 4 && has(p, KASONDE_POTION)) {
         p.getInventory().deleteNumber(KASONDE_POTION, 1);
         p.setAttribute(VARDORVIS_PROGRESS, 5);
         p.sendMessage("You drink the strange potion. Its effects prepare you to enter the Stranglewood.");
+        event.handled = true;
         return true;
       }
     }
     if (itemId === I.STRANGLER_SERUM && action === "drink") {
+      event.handled = true;
       if (!has(p, I.STRANGLER_SERUM) || (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) < 15
         || !p.getAttribute("desert-treasure-ii:kasonde-serum-discussed")) return p.sendMessage("Talk to Kasonde about the completed serum before drinking it.");
       p.getInventory().deleteNumber(I.STRANGLER_SERUM, 1);
@@ -3669,9 +3678,16 @@ module.exports = function registerDesertTreasureII(api) {
     }
     if (s === S.VARDORVIS && objectId === KASONDE_DESK_LOC
       && Math.abs(location.x - 1781) <= 2 && Math.abs(location.y - 3619) <= 2
-      && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) === 2) {
-      if (!has(p, KASONDE_NOTE)) p.getInventory().adds(KASONDE_NOTE, 1);
-      p.setAttribute(VARDORVIS_PROGRESS, 3);
+      && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 2) {
+      const progress = Number(p.getAttribute(VARDORVIS_PROGRESS));
+      if (progress >= 5) return true;
+      const missing = [KASONDE_NOTE, KASONDE_POTION].filter(id => !has(p, id));
+      if (p.getInventory().getFreeSlots() < missing.length) {
+        p.sendMessage("You need enough inventory space for the note and potion.");
+        return true;
+      }
+      for (const id of missing) p.getInventory().adds(id, 1);
+      if (progress === 2) p.setAttribute(VARDORVIS_PROGRESS, 3);
       talk(p, N.GOLEM_3, "carnifex-maximus-vardorvis-searching-the-botanist-s-desk");
       return true;
     }
