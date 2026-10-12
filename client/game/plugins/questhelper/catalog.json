@@ -3,1704 +3,3071 @@
     "key": "a_kingdom_divided",
     "name": "A Kingdom Divided",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 81,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/akingdomdivided/AKingdomDivided.java",
-    "varbit": 12296
+    "varbit": 12296,
+    "skills": [
+      "Agility",
+      "Thieving",
+      "Woodcutting",
+      "Herblore",
+      "Mining",
+      "Crafting",
+      "Magic"
+    ],
+    "questPoints": 2
   },
   {
     "key": "a_night_at_the_theatre",
     "name": "A Night at the Theatre",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 104,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/anightatthetheatre/ANightAtTheTheatre.java",
-    "varbit": 12276
+    "varbit": 12276,
+    "skills": [],
+    "questPoints": 2
   },
   {
     "key": "a_porcine_of_interest",
     "name": "A Porcine of Interest",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 110,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/aporcineofinterest/APorcineOfInterest.java",
-    "varbit": 10582
+    "varbit": 10582,
+    "skills": [
+      "Slayer"
+    ],
+    "questPoints": 1
   },
   {
     "key": "a_souls_bane",
     "name": "A Soul's Bane",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 138,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/asoulsbane/ASoulsBane.java",
-    "varbit": 2011
+    "varbit": 2011,
+    "skills": [
+      "Defence",
+      "Hitpoints"
+    ],
+    "questPoints": 1
   },
   {
     "key": "a_tail_of_two_cats",
     "name": "A Tail of Two Cats",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 142,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/atailoftwocats/ATailOfTwoCats.java",
-    "varbit": 1028
+    "varbit": 1028,
+    "skills": [],
+    "questPoints": 2
   },
   {
     "key": "a_taste_of_hope",
     "name": "A Taste of Hope",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 144,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/atasteofhope/ATasteOfHope.java",
-    "varbit": 6396
+    "varbit": 6396,
+    "skills": [
+      "Crafting",
+      "Agility",
+      "Attack",
+      "Herblore",
+      "Slayer"
+    ],
+    "questPoints": 1
   },
   {
     "key": "alfred_grimhands_barcrawl",
     "name": "Alfred Grimhand's Barcrawl",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "questId": 4,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/alfredgrimhandsbarcrawl/AlfredGrimhandsBarcrawl.java",
-    "varp": 77
+    "varp": 77,
+    "skills": [],
+    "questPoints": 0
   },
   {
     "key": "animal_magnetism",
     "name": "Animal Magnetism",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 0,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/animalmagnetism/AnimalMagnetism.java",
-    "varbit": 3185
+    "varbit": 3185,
+    "skills": [
+      "Crafting",
+      "Fletching",
+      "Slayer",
+      "Woodcutting",
+      "Ranged"
+    ],
+    "questPoints": 1
   },
   {
     "key": "another_slice_of_ham",
     "name": "Another Slice of H.A.M.",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 1,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/anothersliceofham/AnotherSliceOfHam.java",
-    "varbit": 3550
+    "varbit": 3550,
+    "skills": [
+      "Mining",
+      "Prayer",
+      "Attack"
+    ],
+    "questPoints": 1
   },
   {
     "key": "at_first_light",
     "name": "At First Light",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 3513,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/atfirstlight/AtFirstLight.java",
-    "varbit": 9835
+    "varbit": 9835,
+    "skills": [
+      "Hunter",
+      "Herblore",
+      "Construction"
+    ],
+    "questPoints": 1
   },
   {
     "key": "balloon_transport_castle_wars",
     "name": "Balloon Transport - Castle Wars",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/enlightenedjourney/CastleWarsBalloonFlight.java",
     "varbit": 2869,
-    "completeValue": 1
+    "completeValue": 1,
+    "skills": [
+      "Firemaking"
+    ],
+    "questPoints": 0
   },
   {
     "key": "balloon_transport_crafting_guild",
     "name": "Balloon Transport - Crafting Guild",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/enlightenedjourney/CraftingGuildBalloonFlight.java",
     "varbit": 2871,
-    "completeValue": 1
+    "completeValue": 1,
+    "skills": [
+      "Firemaking"
+    ],
+    "questPoints": 0
   },
   {
     "key": "balloon_transport_grand_tree",
     "name": "Balloon Transport - Grand Tree",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/enlightenedjourney/GrandTreeBalloonFlight.java",
     "varbit": 2870,
-    "completeValue": 1
+    "completeValue": 1,
+    "skills": [
+      "Firemaking"
+    ],
+    "questPoints": 0
   },
   {
     "key": "balloon_transport_varrock",
     "name": "Balloon Transport - Varrock",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/enlightenedjourney/VarrockBalloonFlight.java",
     "varbit": 2872,
-    "completeValue": 1
+    "completeValue": 1,
+    "skills": [
+      "Firemaking"
+    ],
+    "questPoints": 0
   },
   {
     "key": "barbarian_training",
     "name": "Barbarian Training",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "questId": 3451,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/barbariantraining/BarbarianTraining.java",
-    "varbit": 9613
+    "varbit": 9613,
+    "skills": [
+      "Fishing",
+      "Agility",
+      "Strength",
+      "Firemaking",
+      "Crafting",
+      "Farming",
+      "Smithing"
+    ],
+    "questPoints": 0
   },
   {
     "key": "bear_your_soul",
     "name": "Bear Your Soul",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "questId": 5,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/bearyoursoul/BearYourSoul.java",
-    "varbit": 5078
+    "varbit": 5078,
+    "skills": [],
+    "questPoints": 0
   },
   {
     "key": "below_ice_mountain",
     "name": "Below Ice Mountain",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 6,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/belowicemountain/BelowIceMountain.java",
-    "varbit": 12063
+    "varbit": 12063,
+    "skills": [],
+    "questPoints": 1
   },
   {
     "key": "beneath_cursed_sands",
     "name": "Beneath Cursed Sands",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 168,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/beneathcursedsands/BeneathCursedSands.java",
-    "varbit": 13841
+    "varbit": 13841,
+    "skills": [
+      "Agility",
+      "Crafting",
+      "Firemaking"
+    ],
+    "questPoints": 2
   },
   {
     "key": "between_a_rock",
     "name": "Between a Rock...",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 7,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/betweenarock/BetweenARock.java",
-    "varbit": 299
+    "varbit": 299,
+    "skills": [
+      "Defence",
+      "Mining",
+      "Smithing"
+    ],
+    "questPoints": 2
   },
   {
     "key": "big_chompy_bird_hunting",
     "name": "Big Chompy Bird Hunting",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 8,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/bigchompybirdhunting/BigChompyBirdHunting.java",
-    "varp": 293
+    "varp": 293,
+    "skills": [
+      "Fletching",
+      "Cooking",
+      "Ranged"
+    ],
+    "questPoints": 2
   },
   {
     "key": "biohazard",
     "name": "Biohazard",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 9,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/biohazard/Biohazard.java",
-    "varp": 68
+    "varp": 68,
+    "skills": [
+      "Thieving"
+    ],
+    "questPoints": 3
   },
   {
     "key": "black_knights_fortress",
     "name": "Black Knights' Fortress",
     "type": "F2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 10,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/blackknightfortress/BlackKnightFortress.java",
-    "varp": 130
+    "varp": 130,
+    "skills": [],
+    "questPoints": 3
   },
   {
     "key": "bone_voyage",
     "name": "Bone Voyage",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 11,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/bonevoyage/BoneVoyage.java",
-    "varbit": 5795
+    "varbit": 5795,
+    "skills": [
+      "Woodcutting"
+    ],
+    "questPoints": 1
   },
   {
     "key": "cabin_fever",
     "name": "Cabin Fever",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 12,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/cabinfever/CabinFever.java",
-    "varp": 655
+    "varp": 655,
+    "skills": [
+      "Smithing",
+      "Crafting",
+      "Agility",
+      "Ranged"
+    ],
+    "questPoints": 2
   },
   {
     "key": "children_of_the_sun",
     "name": "Children of the Sun",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 3450,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/childrenofthesun/ChildrenOfTheSun.java",
-    "varbit": 9632
+    "varbit": 9632,
+    "skills": [],
+    "questPoints": 1
   },
   {
     "key": "client_of_kourend",
     "name": "Client of Kourend",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 13,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/clientofkourend/ClientOfKourend.java",
-    "varbit": 5619
+    "varbit": 5619,
+    "skills": [],
+    "questPoints": 1
   },
   {
     "key": "clock_tower",
     "name": "Clock Tower",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 14,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/clocktower/ClockTower.java",
-    "varp": 10
+    "varp": 10,
+    "skills": [],
+    "questPoints": 1
   },
   {
     "key": "cold_war",
     "name": "Cold War",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 15,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/coldwar/ColdWar.java",
-    "varbit": 3293
+    "varbit": 3293,
+    "skills": [
+      "Crafting",
+      "Agility",
+      "Construction",
+      "Attack",
+      "Hunter",
+      "Thieving"
+    ],
+    "questPoints": 1
   },
   {
     "key": "contact",
     "name": "Contact!",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 16,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/contact/Contact.java",
-    "varbit": 3274
+    "varbit": 3274,
+    "skills": [
+      "Thieving"
+    ],
+    "questPoints": 1
   },
   {
     "key": "cooks_assistant",
     "name": "Cook's Assistant",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 17,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/cooksassistant/CooksAssistant.java",
-    "varp": 29
+    "varp": 29,
+    "skills": [
+      "Cooking"
+    ],
+    "questPoints": 1
   },
   {
     "key": "creature_of_fenkenstrain",
     "name": "Creature of Fenkenstrain",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 19,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/creatureoffenkenstrain/CreatureOfFenkenstrain.java",
-    "varp": 399
+    "varp": 399,
+    "skills": [
+      "Crafting",
+      "Thieving"
+    ],
+    "questPoints": 2
   },
   {
     "key": "current_affairs",
     "name": "Current Affairs",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 7105,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/currentaffairs/CurrentAffairs.java",
-    "varbit": 18282
+    "varbit": 18282,
+    "skills": [
+      "Sailing",
+      "Fishing"
+    ],
+    "questPoints": 1
   },
   {
     "key": "curse_of_the_empty_lord",
     "name": "Curse of the Empty Lord",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "questId": 20,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/curseoftheemptylord/CurseOfTheEmptyLord.java",
-    "varbit": 821
+    "varbit": 821,
+    "skills": [],
+    "questPoints": 0
   },
   {
     "key": "daddys_home",
     "name": "Daddy's Home",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "questId": 21,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/daddyshome/DaddysHome.java",
-    "varbit": 10570
+    "varbit": 10570,
+    "skills": [
+      "Construction"
+    ],
+    "questPoints": 0
   },
   {
     "key": "darkness_of_hallowvale",
     "name": "Darkness of Hallowvale",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 22,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/darknessofhallowvale/DarknessOfHallowvale.java",
-    "varbit": 2573
+    "varbit": 2573,
+    "skills": [
+      "Construction",
+      "Mining",
+      "Thieving",
+      "Agility",
+      "Crafting",
+      "Magic",
+      "Strength"
+    ],
+    "questPoints": 2
   },
   {
     "key": "death_on_the_isle",
     "name": "Death on the Isle",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 3711,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/deathontheisle/DeathOnTheIsle.java",
-    "varbit": 11210
+    "varbit": 11210,
+    "skills": [
+      "Thieving",
+      "Agility",
+      "Crafting"
+    ],
+    "questPoints": 2
   },
   {
     "key": "death_plateau",
     "name": "Death Plateau",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 23,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/deathplateau/DeathPlateau.java",
-    "varp": 314
+    "varp": 314,
+    "skills": [
+      "Attack"
+    ],
+    "questPoints": 1
   },
   {
     "key": "death_to_the_dorgeshuun",
     "name": "Death to the Dorgeshuun",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 24,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/deathtothedorgeshuun/DeathToTheDorgeshuun.java",
-    "varbit": 2258
+    "varbit": 2258,
+    "skills": [
+      "Thieving",
+      "Ranged",
+      "Agility"
+    ],
+    "questPoints": 1
   },
   {
     "key": "defender_of_varrock",
     "name": "Defender of Varrock",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 3466,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/defenderofvarrock/DefenderOfVarrock.java",
-    "varbit": 9655
+    "varbit": 9655,
+    "skills": [
+      "Smithing",
+      "Hunter"
+    ],
+    "questPoints": 2
   },
   {
     "key": "demon_slayer",
     "name": "Demon Slayer",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 25,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/demonslayer/DemonSlayer.java",
-    "varbit": 2561
+    "varbit": 2561,
+    "skills": [],
+    "questPoints": 3
   },
   {
     "key": "desert_treasure",
     "name": "Desert Treasure I",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 27,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/deserttreasure/DesertTreasure.java",
-    "varbit": 358
+    "varbit": 358,
+    "skills": [
+      "Magic",
+      "Thieving",
+      "Firemaking",
+      "Slayer"
+    ],
+    "questPoints": 3
   },
   {
     "key": "desert_treasure_ii",
     "name": "Desert Treasure II - The Fallen Empire",
     "type": "P2P",
+    "difficulty": "GRANDMASTER",
     "questId": 2343,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/deserttreasureii/DesertTreasureII.java",
-    "varbit": 14862
+    "varbit": 14862,
+    "skills": [
+      "Magic",
+      "Firemaking",
+      "Thieving",
+      "Herblore",
+      "Runecraft",
+      "Construction"
+    ],
+    "questPoints": 5
   },
   {
     "key": "devious_minds",
     "name": "Devious Minds",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 28,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/deviousminds/DeviousMinds.java",
-    "varbit": 1465
+    "varbit": 1465,
+    "skills": [
+      "Smithing",
+      "Runecraft",
+      "Fletching"
+    ],
+    "questPoints": 1
   },
   {
     "key": "dorics_quest",
     "name": "Doric's Quest",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 30,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/doricsquest/DoricsQuest.java",
-    "varp": 31
+    "varp": 31,
+    "skills": [
+      "Mining"
+    ],
+    "questPoints": 1
   },
   {
     "key": "dragon_slayer_i",
     "name": "Dragon Slayer I",
     "type": "F2P",
+    "difficulty": "EXPERIENCED",
     "questId": 31,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/dragonslayer/DragonSlayer.java",
-    "varp": 176
+    "varp": 176,
+    "skills": [
+      "Strength",
+      "Defence"
+    ],
+    "questPoints": 2
   },
   {
     "key": "dragon_slayer_ii",
     "name": "Dragon Slayer II",
     "type": "P2P",
+    "difficulty": "GRANDMASTER",
     "questId": 32,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/dragonslayerii/DragonSlayerII.java",
-    "varbit": 6104
+    "varbit": 6104,
+    "skills": [
+      "Smithing",
+      "Mining",
+      "Agility",
+      "Thieving",
+      "Magic",
+      "Crafting",
+      "Construction",
+      "Hitpoints"
+    ],
+    "questPoints": 5
   },
   {
     "key": "dream_mentor",
     "name": "Dream Mentor",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 33,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/dreammentor/DreamMentor.java",
-    "varbit": 3618
+    "varbit": 3618,
+    "skills": [
+      "Hitpoints",
+      "Magic"
+    ],
+    "questPoints": 2
   },
   {
     "key": "druidic_ritual",
     "name": "Druidic Ritual",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 34,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/druidicritual/DruidicRitual.java",
-    "varp": 80
+    "varp": 80,
+    "skills": [
+      "Herblore"
+    ],
+    "questPoints": 4
   },
   {
     "key": "dwarf_cannon",
     "name": "Dwarf Cannon",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 35,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/dwarfcannon/DwarfCannon.java",
-    "varp": 0
+    "varp": 0,
+    "skills": [
+      "Crafting"
+    ],
+    "questPoints": 1
   },
   {
     "key": "eadgars_ruse",
     "name": "Eadgar's Ruse",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 36,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/eadgarsruse/EadgarsRuse.java",
-    "varp": 335
+    "varp": 335,
+    "skills": [
+      "Herblore"
+    ],
+    "questPoints": 1
   },
   {
     "key": "eagles_peak",
     "name": "Eagles' Peak",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 37,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/eaglespeak/EaglesPeak.java",
-    "varbit": 2780
+    "varbit": 2780,
+    "skills": [
+      "Hunter"
+    ],
+    "questPoints": 2
   },
   {
     "key": "elemental_workshop_i",
     "name": "Elemental Workshop I",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 38,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/elementalworkshopi/ElementalWorkshopI.java",
-    "varp": 299
+    "varp": 299,
+    "skills": [
+      "Crafting",
+      "Smithing",
+      "Mining"
+    ],
+    "questPoints": 1
   },
   {
     "key": "elemental_workshop_ii",
     "name": "Elemental Workshop II",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 39,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/elementalworkshopii/ElementalWorkshopII.java",
-    "varbit": 2639
+    "varbit": 2639,
+    "skills": [
+      "Magic",
+      "Smithing",
+      "Crafting"
+    ],
+    "questPoints": 1
   },
   {
     "key": "enakhras_lament",
     "name": "Enakhra's Lament",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 40,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/enakhraslament/EnakhrasLament.java",
-    "varbit": 1560
+    "varbit": 1560,
+    "skills": [
+      "Mining",
+      "Crafting",
+      "Firemaking",
+      "Prayer",
+      "Magic"
+    ],
+    "questPoints": 2
   },
   {
     "key": "enlightened_journey",
     "name": "Enlightened Journey",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 42,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/enlightenedjourney/EnlightenedJourney.java",
-    "varbit": 2866
+    "varbit": 2866,
+    "skills": [
+      "Firemaking",
+      "Farming",
+      "Crafting",
+      "Woodcutting"
+    ],
+    "questPoints": 1
   },
   {
     "key": "enter_the_abyss",
     "name": "Enter the Abyss",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "questId": 43,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/entertheabyss/EnterTheAbyss.java",
-    "varp": 492
+    "varp": 492,
+    "skills": [
+      "Runecraft"
+    ],
+    "questPoints": 0
   },
   {
     "key": "ernest_the_chicken",
     "name": "Ernest the Chicken",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 44,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/ernestthechicken/ErnestTheChicken.java",
-    "varp": 32
+    "varp": 32,
+    "skills": [],
+    "questPoints": 4
   },
   {
     "key": "ethically_acquired_antiquities",
     "name": "Ethically Acquired Antiquities",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 3713,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/ethicallyacquiredantiquities/EthicallyAcquiredAntiquities.java",
-    "varbit": 11193
+    "varbit": 11193,
+    "skills": [
+      "Thieving"
+    ],
+    "questPoints": 1
   },
   {
     "key": "fairytale_i__growing_pains",
     "name": "Fairytale I - Growing Pains",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 46,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/fairytalei/FairytaleI.java",
-    "varbit": 1803
+    "varbit": 1803,
+    "skills": [
+      "Farming",
+      "Attack",
+      "Magic"
+    ],
+    "questPoints": 2
   },
   {
     "key": "fairytale_ii__cure_a_queen",
     "name": "Fairytale II - Cure a Queen",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 47,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/fairytaleii/FairytaleII.java",
-    "varbit": 2326
+    "varbit": 2326,
+    "skills": [
+      "Thieving",
+      "Farming",
+      "Herblore"
+    ],
+    "questPoints": 2
   },
   {
     "key": "fallen_from_grace",
     "name": "Fallen From Grace",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 7133,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/fallenfromgrace/FallenFromGrace.java",
-    "varbit": 15759
+    "varbit": 15759,
+    "skills": [
+      "Sailing",
+      "Crafting",
+      "Runecraft",
+      "Mining"
+    ],
+    "questPoints": 2
   },
   {
     "key": "family_crest",
     "name": "Family Crest",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 48,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/familycrest/FamilyCrest.java",
-    "varp": 148
+    "varp": 148,
+    "skills": [
+      "Mining",
+      "Smithing",
+      "Magic",
+      "Crafting"
+    ],
+    "questPoints": 1
   },
   {
     "key": "family_pest",
     "name": "Family Pest",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "questId": 49,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/familypest/FamilyPest.java",
-    "varbit": 5347
+    "varbit": 5347,
+    "skills": [],
+    "questPoints": 0
   },
   {
     "key": "fight_arena",
     "name": "Fight Arena",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 51,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/fightarena/FightArena.java",
-    "varp": 17
+    "varp": 17,
+    "skills": [
+      "Attack",
+      "Thieving"
+    ],
+    "questPoints": 2
   },
   {
     "key": "fishing_contest",
     "name": "Fishing Contest",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 52,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/fishingcontest/FishingContest.java",
-    "varp": 11
+    "varp": 11,
+    "skills": [
+      "Fishing"
+    ],
+    "questPoints": 1
   },
   {
     "key": "forgettable_tale",
     "name": "Forgettable Tale...",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 53,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/forgettabletale/ForgettableTale.java",
-    "varbit": 822
+    "varbit": 822,
+    "skills": [
+      "Cooking",
+      "Farming"
+    ],
+    "questPoints": 2
   },
   {
     "key": "garden_of_tranquillity",
     "name": "Garden of Tranquillity",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 58,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/gardenoftranquility/GardenOfTranquillity.java",
-    "varbit": 961
+    "varbit": 961,
+    "skills": [
+      "Farming"
+    ],
+    "questPoints": 2
   },
   {
     "key": "gertrudes_cat",
     "name": "Gertrude's Cat",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 60,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/gertrudescat/GertrudesCat.java",
-    "varp": 180
+    "varp": 180,
+    "skills": [
+      "Cooking"
+    ],
+    "questPoints": 1
   },
   {
     "key": "getting_ahead",
     "name": "Getting Ahead",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 61,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/gettingahead/GettingAhead.java",
-    "varbit": 693
+    "varbit": 693,
+    "skills": [
+      "Crafting",
+      "Construction"
+    ],
+    "questPoints": 1
   },
   {
     "key": "ghosts_ahoy",
     "name": "Ghosts Ahoy",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 62,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/ghostsahoy/GhostsAhoy.java",
-    "varbit": 217
+    "varbit": 217,
+    "skills": [
+      "Prayer",
+      "Agility",
+      "Cooking"
+    ],
+    "questPoints": 2
   },
   {
     "key": "goblin_diplomacy",
     "name": "Goblin Diplomacy",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 64,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/goblindiplomacy/GoblinDiplomacy.java",
-    "varbit": 2378
+    "varbit": 2378,
+    "skills": [
+      "Crafting"
+    ],
+    "questPoints": 5
   },
   {
     "key": "grim_tales",
     "name": "Grim Tales",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 68,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/grimtales/GrimTales.java",
-    "varbit": 2783
+    "varbit": 2783,
+    "skills": [
+      "Farming",
+      "Herblore",
+      "Hitpoints",
+      "Woodcutting",
+      "Agility",
+      "Thieving"
+    ],
+    "questPoints": 1
   },
   {
     "key": "haunted_mine",
     "name": "Haunted Mine",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 70,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/hauntedmine/HauntedMine.java",
-    "varp": 382
+    "varp": 382,
+    "skills": [
+      "Strength",
+      "Crafting"
+    ],
+    "questPoints": 2
   },
   {
     "key": "hazeel_cult",
     "name": "Hazeel Cult",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 71,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/hazeelcult/HazeelCult.java",
-    "varp": 223
+    "varp": 223,
+    "skills": [
+      "Thieving"
+    ],
+    "questPoints": 1
   },
   {
     "key": "heroes_quest",
     "name": "Heroes' Quest",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 72,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/heroesquest/HeroesQuest.java",
-    "varp": 188
+    "varp": 188,
+    "skills": [
+      "Agility",
+      "Attack",
+      "Defence",
+      "Strength",
+      "Ranged",
+      "Hitpoints",
+      "Fishing",
+      "Cooking",
+      "Woodcutting",
+      "Firemaking",
+      "Smithing",
+      "Mining",
+      "Herblore"
+    ],
+    "questPoints": 1
   },
   {
     "key": "his_faithful_servants",
     "name": "His Faithful Servants",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "questId": 3250,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/hisfaithfulservants/HisFaithfulServants.java",
-    "varbit": 14973
+    "varbit": 14973,
+    "skills": [
+      "Prayer"
+    ],
+    "questPoints": 0
   },
   {
     "key": "holy_grail",
     "name": "Holy Grail",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 73,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/holygrail/HolyGrail.java",
-    "varp": 5
+    "varp": 5,
+    "skills": [
+      "Attack",
+      "Prayer",
+      "Defence"
+    ],
+    "questPoints": 2
   },
   {
     "key": "hopespears_will",
     "name": "Hopespear's Will",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "questId": 166,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/hopespearswill/HopespearsWill.java",
-    "varbit": 13619
+    "varbit": 13619,
+    "skills": [
+      "Prayer"
+    ],
+    "questPoints": 0
   },
   {
     "key": "horror_from_the_deep",
     "name": "Horror from the Deep",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 74,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/horrorfromthedeep/HorrorFromTheDeep.java",
-    "varbit": 34
+    "varbit": 34,
+    "skills": [
+      "Agility",
+      "Magic",
+      "Strength",
+      "Ranged"
+    ],
+    "questPoints": 2
   },
   {
     "key": "icthlarins_little_helper",
     "name": "Icthlarin's Little Helper",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 75,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/icthlarinslittlehelper/IcthlarinsLittleHelper.java",
-    "varbit": 418
+    "varbit": 418,
+    "skills": [
+      "Thieving",
+      "Agility",
+      "Woodcutting"
+    ],
+    "questPoints": 2
   },
   {
     "key": "imp_catcher",
     "name": "Imp Catcher",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 76,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/impcatcher/ImpCatcher.java",
-    "varp": 160
+    "varp": 160,
+    "skills": [
+      "Magic"
+    ],
+    "questPoints": 1
   },
   {
     "key": "in_aid_of_the_myreque",
     "name": "In Aid of the Myreque",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 77,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/inaidofthemyreque/InAidOfTheMyreque.java",
-    "varbit": 1990
+    "varbit": 1990,
+    "skills": [
+      "Crafting",
+      "Mining",
+      "Magic",
+      "Attack",
+      "Strength",
+      "Defence"
+    ],
+    "questPoints": 2
   },
   {
     "key": "in_search_of_knowledge",
     "name": "In Search of Knowledge",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "questId": 78,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/insearchofknowledge/InSearchOfKnowledge.java",
-    "varbit": 8403
+    "varbit": 8403,
+    "skills": [],
+    "questPoints": 0
   },
   {
     "key": "in_search_of_the_myreque",
     "name": "In Search of the Myreque",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 79,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/insearchofthemyreque/InSearchOfTheMyreque.java",
-    "varp": 387
+    "varp": 387,
+    "skills": [
+      "Attack",
+      "Defence",
+      "Strength",
+      "Hitpoints",
+      "Crafting",
+      "Agility"
+    ],
+    "questPoints": 2
   },
   {
     "key": "jungle_potion",
     "name": "Jungle Potion",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 80,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/junglepotion/JunglePotion.java",
-    "varp": 175
+    "varp": 175,
+    "skills": [
+      "Herblore"
+    ],
+    "questPoints": 1
   },
   {
     "key": "kings_ransom",
     "name": "King's Ransom",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 82,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/kingsransom/KingsRansom.java",
-    "varbit": 3888
+    "varbit": 3888,
+    "skills": [
+      "Magic",
+      "Defence"
+    ],
+    "questPoints": 1
   },
   {
     "key": "knight_waves_training_grounds",
     "name": "Knight Waves Training Grounds",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/mischelpers/knightswaves/KnightWaves.java",
     "varbit": 3909,
-    "completeValue": 8
+    "completeValue": 8,
+    "skills": [
+      "Attack",
+      "Strength",
+      "Defence",
+      "Hitpoints"
+    ],
+    "questPoints": 0
   },
   {
     "key": "lair_of_tarn_razorlor",
     "name": "Lair of Tarn Razorlor",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "questId": 84,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/lairoftarnrazorlor/LairOfTarnRazorlor.java",
-    "varbit": 3290
+    "varbit": 3290,
+    "skills": [
+      "Slayer"
+    ],
+    "questPoints": 0
   },
   {
     "key": "land_of_the_goblins",
     "name": "Land of the Goblins",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 165,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/landofthegoblins/LandOfTheGoblins.java",
-    "varbit": 13599
+    "varbit": 13599,
+    "skills": [
+      "Agility",
+      "Fishing",
+      "Thieving",
+      "Herblore"
+    ],
+    "questPoints": 2
   },
   {
     "key": "legends_quest",
     "name": "Legends' Quest",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 85,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/legendsquest/LegendsQuest.java",
-    "varp": 139
+    "varp": 139,
+    "skills": [
+      "Prayer",
+      "Magic",
+      "Agility",
+      "Crafting",
+      "Herblore",
+      "Mining",
+      "Smithing",
+      "Strength",
+      "Thieving",
+      "Woodcutting"
+    ],
+    "questPoints": 4
   },
   {
     "key": "lost_city",
     "name": "Lost City",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 86,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/lostcity/LostCity.java",
-    "varp": 147
+    "varp": 147,
+    "skills": [
+      "Crafting",
+      "Woodcutting"
+    ],
+    "questPoints": 3
   },
   {
     "key": "lunar_diplomacy",
     "name": "Lunar Diplomacy",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 88,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/lunardiplomacy/LunarDiplomacy.java",
-    "varbit": 2448
+    "varbit": 2448,
+    "skills": [
+      "Herblore",
+      "Crafting",
+      "Defence",
+      "Firemaking",
+      "Magic",
+      "Mining",
+      "Woodcutting",
+      "Runecraft"
+    ],
+    "questPoints": 2
   },
   {
     "key": "the_mage_arena",
     "name": "Mage Arena I",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "questId": 89,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/themagearenai/TheMageArenaI.java",
-    "varp": 267
+    "varp": 267,
+    "skills": [
+      "Magic"
+    ],
+    "questPoints": 0
   },
   {
     "key": "the_mage_arena_ii",
     "name": "Mage Arena II",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "questId": 90,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/themagearenaii/TheMageArenaII.java",
-    "varbit": 6067
+    "varbit": 6067,
+    "skills": [
+      "Magic"
+    ],
+    "questPoints": 0
   },
   {
     "key": "making_friends_with_my_arm",
     "name": "Making Friends with My Arm",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 91,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/makingfriendswithmyarm/MakingFriendsWithMyArm.java",
-    "varbit": 6528
+    "varbit": 6528,
+    "skills": [
+      "Construction",
+      "Firemaking",
+      "Mining",
+      "Agility"
+    ],
+    "questPoints": 2
   },
   {
     "key": "making_history",
     "name": "Making History",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 92,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/makinghistory/MakingHistory.java",
-    "varbit": 1383
+    "varbit": 1383,
+    "skills": [
+      "Crafting",
+      "Prayer"
+    ],
+    "questPoints": 3
   },
   {
     "key": "meat_and_greet",
     "name": "Meat and Greet",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 3712,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/meatandgreet/MeatAndGreet.java",
-    "varbit": 11182
+    "varbit": 11182,
+    "skills": [
+      "Prayer",
+      "Cooking"
+    ],
+    "questPoints": 1
   },
   {
     "key": "merlins_crystal",
     "name": "Merlin's Crystal",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 93,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/merlinscrystal/MerlinsCrystal.java",
-    "varp": 14
+    "varp": 14,
+    "skills": [],
+    "questPoints": 6
   },
   {
     "key": "misthalin_mystery",
     "name": "Misthalin Mystery",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 94,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/misthalinmystery/MisthalinMystery.java",
-    "varbit": 3468
+    "varbit": 3468,
+    "skills": [
+      "Crafting"
+    ],
+    "questPoints": 1
   },
   {
     "key": "monks_friend",
     "name": "Monk's Friend",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 97,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/monksfriend/MonksFriend.java",
-    "varp": 30
+    "varp": 30,
+    "skills": [
+      "Woodcutting"
+    ],
+    "questPoints": 1
   },
   {
     "key": "monkey_madness_i",
     "name": "Monkey Madness I",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 95,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/monkeymadnessi/MonkeyMadnessI.java",
-    "varp": 365
+    "varp": 365,
+    "skills": [],
+    "questPoints": 3
   },
   {
     "key": "monkey_madness_ii",
     "name": "Monkey Madness II",
     "type": "P2P",
+    "difficulty": "GRANDMASTER",
     "questId": 96,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/monkeymadnessii/MonkeyMadnessII.java",
-    "varbit": 5027
+    "varbit": 5027,
+    "skills": [
+      "Slayer",
+      "Agility",
+      "Thieving",
+      "Hunter",
+      "Crafting",
+      "Firemaking"
+    ],
+    "questPoints": 4
   },
   {
     "key": "mountain_daughter",
     "name": "Mountain Daughter",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 98,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/mountaindaughter/MountainDaughter.java",
-    "varbit": 260
+    "varbit": 260,
+    "skills": [
+      "Agility",
+      "Attack",
+      "Prayer"
+    ],
+    "questPoints": 2
   },
   {
     "key": "mournings_end_part_i",
     "name": "Mourning's End Part I",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 99,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/mourningsendparti/MourningsEndPartI.java",
-    "varp": 517
+    "varp": 517,
+    "skills": [
+      "Ranged",
+      "Thieving",
+      "Hitpoints"
+    ],
+    "questPoints": 2
   },
   {
     "key": "mournings_end_part_ii",
     "name": "Mourning's End Part II",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 100,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/mourningsendpartii/MourningsEndPartII.java",
-    "varbit": 1103
+    "varbit": 1103,
+    "skills": [
+      "Agility"
+    ],
+    "questPoints": 2
   },
   {
     "key": "murder_mystery",
     "name": "Murder Mystery",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 101,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/murdermystery/MurderMystery.java",
-    "varp": 192
+    "varp": 192,
+    "skills": [
+      "Crafting"
+    ],
+    "questPoints": 3
   },
   {
     "key": "my_arms_big_adventure",
     "name": "My Arm's Big Adventure",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 102,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/myarmsbigadventure/MyArmsBigAdventure.java",
-    "varbit": 2790
+    "varbit": 2790,
+    "skills": [
+      "Woodcutting",
+      "Farming",
+      "Herblore"
+    ],
+    "questPoints": 1
   },
   {
     "key": "nature_spirit",
     "name": "Nature Spirit",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 103,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/naturespirit/NatureSpirit.java",
-    "varp": 307
+    "varp": 307,
+    "skills": [
+      "Crafting",
+      "Defence",
+      "Hitpoints"
+    ],
+    "questPoints": 2
   },
   {
     "key": "observatory_quest",
     "name": "Observatory Quest",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 105,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/observatoryquest/ObservatoryQuest.java",
-    "varp": 112
+    "varp": 112,
+    "skills": [
+      "Crafting"
+    ],
+    "questPoints": 2
   },
   {
     "key": "olafs_quest",
     "name": "Olaf's Quest",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 106,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/olafsquest/OlafsQuest.java",
-    "varbit": 3534
+    "varbit": 3534,
+    "skills": [
+      "Firemaking",
+      "Woodcutting",
+      "Defence"
+    ],
+    "questPoints": 1
   },
   {
     "key": "one_small_favour",
     "name": "One Small Favour",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 107,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/onesmallfavour/OneSmallFavour.java",
-    "varp": 416
+    "varp": 416,
+    "skills": [
+      "Agility",
+      "Crafting",
+      "Herblore",
+      "Smithing"
+    ],
+    "questPoints": 2
   },
   {
     "key": "pandemonium",
     "name": "Pandemonium",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 7103,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/pandemonium/Pandemonium.java",
-    "varbit": 18314
+    "varbit": 18314,
+    "skills": [
+      "Sailing"
+    ],
+    "questPoints": 1
   },
   {
     "key": "perilous_moon",
     "name": "Perilous Moons",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 3514,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/perilousmoon/PerilousMoon.java",
-    "varbit": 9819
+    "varbit": 9819,
+    "skills": [
+      "Slayer",
+      "Hunter",
+      "Fishing",
+      "Runecraft",
+      "Construction"
+    ],
+    "questPoints": 2
   },
   {
     "key": "pirates_treasure",
     "name": "Pirate's Treasure",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 108,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/piratestreasure/PiratesTreasure.java",
-    "varp": 71
+    "varp": 71,
+    "skills": [],
+    "questPoints": 2
   },
   {
     "key": "plague_city",
     "name": "Plague City",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 109,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/plaguecity/PlagueCity.java",
-    "varp": 165
+    "varp": 165,
+    "skills": [
+      "Mining"
+    ],
+    "questPoints": 1
   },
   {
     "key": "priest_in_peril",
     "name": "Priest in Peril",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 111,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/priestinperil/PriestInPeril.java",
-    "varp": 302
+    "varp": 302,
+    "skills": [
+      "Prayer"
+    ],
+    "questPoints": 1
   },
   {
     "key": "prince_ali_rescue",
     "name": "Prince Ali Rescue",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 112,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/princealirescue/PrinceAliRescue.java",
-    "varp": 273
+    "varp": 273,
+    "skills": [],
+    "questPoints": 3
   },
   {
     "key": "prying_times",
     "name": "Prying Times",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 7104,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/pryingtimes/PryingTimes.java",
-    "varbit": 18317
+    "varbit": 18317,
+    "skills": [
+      "Sailing",
+      "Smithing"
+    ],
+    "questPoints": 1
   },
   {
     "key": "rag_and_bone_man_i",
     "name": "Rag and Bone Man I",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 114,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/ragandboneman/RagAndBoneManI.java",
-    "varp": 714
+    "varp": 714,
+    "skills": [
+      "Cooking",
+      "Prayer"
+    ],
+    "questPoints": 1
   },
   {
     "key": "rag_and_bone_man_ii",
     "name": "Rag and Bone Man II",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 115,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/ragandboneman/RagAndBoneManII.java",
-    "varp": 714
+    "varp": 714,
+    "skills": [
+      "Slayer",
+      "Agility",
+      "Defence",
+      "Prayer"
+    ],
+    "questPoints": 1
   },
   {
     "key": "ratcatchers",
     "name": "Ratcatchers",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 116,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/ratcatchers/RatCatchers.java",
-    "varbit": 1404
+    "varbit": 1404,
+    "skills": [
+      "Thieving"
+    ],
+    "questPoints": 2
   },
   {
     "key": "recruitment_drive",
     "name": "Recruitment Drive",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 118,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recruitmentdrive/RecruitmentDrive.java",
-    "varbit": 657
+    "varbit": 657,
+    "skills": [
+      "Prayer",
+      "Agility",
+      "Herblore"
+    ],
+    "questPoints": 1
   },
   {
     "key": "regicide",
     "name": "Regicide",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 119,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/regicide/Regicide.java",
-    "varp": 328
+    "varp": 328,
+    "skills": [
+      "Agility",
+      "Crafting"
+    ],
+    "questPoints": 3
   },
   {
     "key": "recipe_for_disaster_evil_dave",
     "name": "RFD - Evil Dave",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 117,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDEvilDave.java",
-    "varbit": 1878
+    "varbit": 1878,
+    "skills": [
+      "Cooking"
+    ],
+    "questPoints": 1
   },
   {
     "key": "recipe_for_disaster_finale",
     "name": "RFD - Finale",
     "type": "P2P",
+    "difficulty": "GRANDMASTER",
     "questId": 117,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDFinal.java",
-    "varbit": 1850
+    "varbit": 1850,
+    "skills": [],
+    "questPoints": 1
   },
   {
     "key": "recipe_for_disaster_monkey_ambassador",
     "name": "RFD - King Awowogei",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 117,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDAwowogei.java",
-    "varbit": 1914
+    "varbit": 1914,
+    "skills": [
+      "Agility",
+      "Cooking"
+    ],
+    "questPoints": 1
   },
   {
     "key": "recipe_for_disaster_lumbridge_guide",
     "name": "RFD - Lumbridge Guide",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 117,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDLumbridgeGuide.java",
-    "varbit": 1896
+    "varbit": 1896,
+    "skills": [
+      "Cooking",
+      "Magic"
+    ],
+    "questPoints": 1
   },
   {
     "key": "recipe_for_disaster_dwarf",
     "name": "RFD - Mountain Dwarf",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 117,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDDwarf.java",
-    "varbit": 1892
+    "varbit": 1892,
+    "skills": [
+      "Cooking",
+      "Slayer"
+    ],
+    "questPoints": 1
   },
   {
     "key": "recipe_for_disaster_pirate_pete",
     "name": "RFD - Pirate Pete",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 117,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDPiratePete.java",
-    "varbit": 1895
+    "varbit": 1895,
+    "skills": [
+      "Cooking",
+      "Crafting",
+      "Fishing",
+      "Smithing"
+    ],
+    "questPoints": 1
   },
   {
     "key": "recipe_for_disaster_sir_amik_varze",
     "name": "RFD - Sir Amik Varze",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 117,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDSirAmikVarze.java",
-    "varbit": 1910
+    "varbit": 1910,
+    "skills": [
+      "Cooking",
+      "Hitpoints"
+    ],
+    "questPoints": 1
   },
   {
     "key": "recipe_for_disaster_skrach_uglogwee",
     "name": "RFD - Skrach Uglogwee",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 117,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDSkrachUglogwee.java",
-    "varbit": 1904
+    "varbit": 1904,
+    "skills": [
+      "Cooking",
+      "Firemaking",
+      "Woodcutting",
+      "Crafting",
+      "Ranged"
+    ],
+    "questPoints": 1
   },
   {
     "key": "recipe_for_disaster_start",
     "name": "RFD - Start",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 117,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDStart.java",
-    "varbit": 1850
+    "varbit": 1850,
+    "skills": [
+      "Cooking"
+    ],
+    "questPoints": 1
   },
   {
     "key": "recipe_for_disaster_wartface_and_bentnoze",
     "name": "RFD - Wartface & Bentnoze",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 117,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/recipefordisaster/RFDGoblins.java",
-    "varbit": 1867
+    "varbit": 1867,
+    "skills": [
+      "Cooking",
+      "Farming",
+      "Crafting"
+    ],
+    "questPoints": 1
   },
   {
     "key": "romeo__juliet",
     "name": "Romeo & Juliet",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 121,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/romeoandjuliet/RomeoAndJuliet.java",
-    "varp": 144
+    "varp": 144,
+    "skills": [],
+    "questPoints": 5
   },
   {
     "key": "roving_elves",
     "name": "Roving Elves",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 122,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/rovingelves/RovingElves.java",
-    "varp": 402
+    "varp": 402,
+    "skills": [
+      "Agility",
+      "Strength"
+    ],
+    "questPoints": 1
   },
   {
     "key": "royal_trouble",
     "name": "Royal Trouble",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 123,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/royaltrouble/RoyalTrouble.java",
-    "varbit": 2140
+    "varbit": 2140,
+    "skills": [
+      "Agility",
+      "Slayer",
+      "Hitpoints"
+    ],
+    "questPoints": 1
   },
   {
     "key": "rum_deal",
     "name": "Rum Deal",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 124,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/rumdeal/RumDeal.java",
-    "varp": 600
+    "varp": 600,
+    "skills": [
+      "Fishing",
+      "Prayer",
+      "Farming",
+      "Crafting",
+      "Slayer"
+    ],
+    "questPoints": 2
   },
   {
     "key": "rune_mysteries",
     "name": "Rune Mysteries",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 125,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/runemysteries/RuneMysteries.java",
-    "varp": 63
+    "varp": 63,
+    "skills": [],
+    "questPoints": 1
   },
   {
     "key": "scorpion_catcher",
     "name": "Scorpion Catcher",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 126,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/scorpioncatcher/ScorpionCatcher.java",
-    "varp": 76
+    "varp": 76,
+    "skills": [
+      "Agility",
+      "Prayer",
+      "Strength"
+    ],
+    "questPoints": 1
   },
   {
     "key": "scrambled",
     "name": "Scrambled!",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 5191,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/scrambled/Scrambled.java",
-    "varbit": 16758
+    "varbit": 16758,
+    "skills": [
+      "Agility",
+      "Construction",
+      "Cooking",
+      "Smithing"
+    ],
+    "questPoints": 1
   },
   {
     "key": "sea_slug",
     "name": "Sea Slug",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 127,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/seaslug/SeaSlug.java",
-    "varp": 159
+    "varp": 159,
+    "skills": [
+      "Firemaking",
+      "Fishing"
+    ],
+    "questPoints": 1
   },
   {
     "key": "secrets_of_the_north",
     "name": "Secrets of the North",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 2338,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/secretsofthenorth/SecretsOfTheNorth.java",
-    "varbit": 14722
+    "varbit": 14722,
+    "skills": [
+      "Agility",
+      "Thieving",
+      "Hunter"
+    ],
+    "questPoints": 2
   },
   {
     "key": "shades_of_mortton",
     "name": "Shades of Mort'ton",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 128,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/shadesofmortton/ShadesOfMortton.java",
-    "varp": 339
+    "varp": 339,
+    "skills": [
+      "Crafting",
+      "Herblore",
+      "Firemaking"
+    ],
+    "questPoints": 3
   },
   {
     "key": "shadow_of_the_storm",
     "name": "Shadow of the Storm",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 129,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/shadowofthestorm/ShadowOfTheStorm.java",
-    "varbit": 1372
+    "varbit": 1372,
+    "skills": [
+      "Crafting"
+    ],
+    "questPoints": 1
   },
   {
     "key": "shadows_of_custodia",
     "name": "Shadows of Custodia",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 5190,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/shadowsofcustodia/ShadowsOfCustodia.java",
-    "varbit": 16632
+    "varbit": 16632,
+    "skills": [
+      "Slayer",
+      "Fishing",
+      "Construction",
+      "Hunter"
+    ],
+    "questPoints": 2
   },
   {
     "key": "sheep_herder",
     "name": "Sheep Herder",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 130,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/sheepherder/SheepHerder.java",
-    "varp": 60
+    "varp": 60,
+    "skills": [],
+    "questPoints": 4
   },
   {
     "key": "sheep_shearer",
     "name": "Sheep Shearer",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 131,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/sheepshearer/SheepShearer.java",
-    "varp": 179
+    "varp": 179,
+    "skills": [
+      "Crafting"
+    ],
+    "questPoints": 1
   },
   {
     "key": "shield_of_arrav_black_arm_gang",
     "name": "Shield of Arrav - Black Arm Gang",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 132,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/shieldofarrav/ShieldOfArravBlackArmGang.java",
-    "varp": 146
+    "varp": 146,
+    "skills": [],
+    "questPoints": 1
   },
   {
     "key": "shield_of_arrav_phoenix_gang",
     "name": "Shield of Arrav - Phoenix Gang",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 132,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/shieldofarrav/ShieldOfArravPhoenixGang.java",
-    "varp": 145
+    "varp": 145,
+    "skills": [],
+    "questPoints": 1
   },
   {
     "key": "shilo_village",
     "name": "Shilo Village",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 133,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/shilovillage/ShiloVillage.java",
-    "varp": 116
+    "varp": 116,
+    "skills": [
+      "Crafting",
+      "Agility"
+    ],
+    "questPoints": 2
   },
   {
     "key": "sins_of_the_father",
     "name": "Sins of the Father",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 134,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/sinsofthefather/SinsOfTheFather.java",
-    "varbit": 7255
+    "varbit": 7255,
+    "skills": [
+      "Woodcutting",
+      "Fletching",
+      "Crafting",
+      "Agility",
+      "Attack",
+      "Slayer",
+      "Magic"
+    ],
+    "questPoints": 2
   },
   {
     "key": "skippy_and_the_mogres",
     "name": "Skippy and the Mogres",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "questId": 135,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/skippyandthemogres/SkippyAndTheMogres.java",
-    "varbit": 1344
+    "varbit": 1344,
+    "skills": [
+      "Cooking"
+    ],
+    "questPoints": 0
   },
   {
     "key": "sleeping_giants",
     "name": "Sleeping Giants",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 169,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/sleepinggiants/SleepingGiants.java",
-    "varbit": 13902
+    "varbit": 13902,
+    "skills": [
+      "Smithing"
+    ],
+    "questPoints": 1
   },
   {
     "key": "song_of_the_elves",
     "name": "Song of the Elves",
     "type": "P2P",
+    "difficulty": "GRANDMASTER",
     "questId": 137,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/songoftheelves/SongOfTheElves.java",
-    "varbit": 9016
+    "varbit": 9016,
+    "skills": [
+      "Agility",
+      "Construction",
+      "Farming",
+      "Herblore",
+      "Hunter",
+      "Mining",
+      "Smithing",
+      "Woodcutting"
+    ],
+    "questPoints": 4
   },
   {
     "key": "spirits_of_the_elid",
     "name": "Spirits of the Elid",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 139,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/spiritsoftheelid/SpiritsOfTheElid.java",
-    "varbit": 1444
+    "varbit": 1444,
+    "skills": [
+      "Magic",
+      "Ranged",
+      "Mining",
+      "Thieving",
+      "Prayer"
+    ],
+    "questPoints": 2
   },
   {
     "key": "swan_song",
     "name": "Swan Song",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 140,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/swansong/SwanSong.java",
-    "varbit": 2098
+    "varbit": 2098,
+    "skills": [
+      "Magic",
+      "Cooking",
+      "Fishing",
+      "Smithing",
+      "Crafting",
+      "Firemaking",
+      "Prayer"
+    ],
+    "questPoints": 2
   },
   {
     "key": "tai_bwo_wannai_trio",
     "name": "Tai Bwo Wannai Trio",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 141,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/taibwowannaitrio/TaiBwoWannaiTrio.java",
-    "varp": 320
+    "varp": 320,
+    "skills": [
+      "Firemaking",
+      "Agility",
+      "Cooking",
+      "Fishing",
+      "Attack",
+      "Strength"
+    ],
+    "questPoints": 2
   },
   {
     "key": "tale_of_the_righteous",
     "name": "Tale of the Righteous",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 143,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/taleoftherighteous/TaleOfTheRighteous.java",
-    "varbit": 6358
+    "varbit": 6358,
+    "skills": [
+      "Strength",
+      "Mining"
+    ],
+    "questPoints": 1
   },
   {
     "key": "tears_of_guthix",
     "name": "Tears of Guthix",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 145,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/tearsofguthix/TearsOfGuthix.java",
-    "varbit": 451
+    "varbit": 451,
+    "skills": [
+      "Firemaking",
+      "Crafting",
+      "Mining"
+    ],
+    "questPoints": 1
   },
   {
     "key": "temple_of_ikov",
     "name": "Temple of Ikov",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 146,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/templeofikov/TempleOfIkov.java",
-    "varp": 26
+    "varp": 26,
+    "skills": [
+      "Thieving",
+      "Ranged",
+      "Fletching"
+    ],
+    "questPoints": 1
   },
   {
     "key": "temple_of_the_eye",
     "name": "Temple of the Eye",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 167,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/templeoftheeye/TempleOfTheEye.java",
-    "varbit": 13738
+    "varbit": 13738,
+    "skills": [
+      "Runecraft"
+    ],
+    "questPoints": 1
   },
   {
     "key": "the_ascent_of_arceuus",
     "name": "The Ascent of Arceuus",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 3,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theascentofarceuus/TheAscentOfArceuus.java",
-    "varbit": 7856
+    "varbit": 7856,
+    "skills": [
+      "Hunter",
+      "Runecraft"
+    ],
+    "questPoints": 1
   },
   {
     "key": "the_blood_moon_rises",
     "name": "The Blood Moon Rises",
     "type": "P2P",
+    "difficulty": "GRANDMASTER",
     "questId": 16414,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thebloodmoonrises/TheBloodMoonRises.java",
-    "varbit": 15464
+    "varbit": 15464,
+    "skills": [
+      "Slayer",
+      "Woodcutting",
+      "Smithing",
+      "Cooking",
+      "Fletching",
+      "Mining",
+      "Hunter",
+      "Crafting",
+      "Herblore",
+      "Magic"
+    ],
+    "questPoints": 4
   },
   {
     "key": "the_corsair_curse",
     "name": "The Corsair Curse",
     "type": "F2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 18,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thecorsaircurse/TheCorsairCurse.java",
-    "varbit": 6071
+    "varbit": 6071,
+    "skills": [],
+    "questPoints": 2
   },
   {
     "key": "the_curse_of_arrav",
     "name": "The Curse of Arrav",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 3937,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thecurseofarrav/TheCurseOfArrav.java",
-    "varbit": 11479
+    "varbit": 11479,
+    "skills": [
+      "Prayer",
+      "Mining",
+      "Ranged",
+      "Thieving",
+      "Agility",
+      "Strength",
+      "Slayer"
+    ],
+    "questPoints": 2
   },
   {
     "key": "the_depths_of_despair",
     "name": "The Depths of Despair",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 26,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thedepthsofdespair/TheDepthsOfDespair.java",
-    "varbit": 6027
+    "varbit": 6027,
+    "skills": [
+      "Agility"
+    ],
+    "questPoints": 1
   },
   {
     "key": "the_dig_site",
     "name": "The Dig Site",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 29,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thedigsite/TheDigSite.java",
-    "varp": 131
+    "varp": 131,
+    "skills": [
+      "Agility",
+      "Herblore",
+      "Thieving",
+      "Mining"
+    ],
+    "questPoints": 2
   },
   {
     "key": "enchanted_key",
     "name": "The Enchanted Key",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "questId": 41,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/enchantedkey/EnchantedKey.java",
-    "varbit": 1391
+    "varbit": 1391,
+    "skills": [],
+    "questPoints": 0
   },
   {
     "key": "the_eyes_of_glouphrie",
     "name": "The Eyes of Glouphrie",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 45,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theeyesofglouphrie/TheEyesOfGlouphrie.java",
-    "varbit": 2497
+    "varbit": 2497,
+    "skills": [
+      "Construction",
+      "Magic",
+      "Woodcutting",
+      "Runecraft"
+    ],
+    "questPoints": 2
   },
   {
     "key": "the_feud",
     "name": "The Feud",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 50,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thefeud/TheFeud.java",
-    "varbit": 334
+    "varbit": 334,
+    "skills": [
+      "Thieving"
+    ],
+    "questPoints": 1
   },
   {
     "key": "the_final_dawn",
     "name": "The Final Dawn",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 5189,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thefinaldawn/TheFinalDawn.java",
-    "varbit": 16663
+    "varbit": 16663,
+    "skills": [
+      "Agility",
+      "Thieving",
+      "Fletching",
+      "Runecraft"
+    ],
+    "questPoints": 3
   },
   {
     "key": "the_forsaken_tower",
     "name": "The Forsaken Tower",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 54,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theforsakentower/TheForsakenTower.java",
-    "varbit": 7796
+    "varbit": 7796,
+    "skills": [
+      "Mining",
+      "Smithing"
+    ],
+    "questPoints": 1
   },
   {
     "key": "the_fremennik_exiles",
     "name": "The Fremennik Exiles",
     "type": "P2P",
+    "difficulty": "MASTER",
     "questId": 55,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thefremennikexiles/TheFremennikExiles.java",
-    "varbit": 9459
+    "varbit": 9459,
+    "skills": [
+      "Crafting",
+      "Slayer",
+      "Smithing",
+      "Fishing",
+      "Mining",
+      "Runecraft"
+    ],
+    "questPoints": 2
   },
   {
     "key": "the_fremennik_isles",
     "name": "The Fremennik Isles",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 56,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thefremennikisles/TheFremennikIsles.java",
-    "varbit": 3311
+    "varbit": 3311,
+    "skills": [
+      "Mining",
+      "Agility",
+      "Construction",
+      "Woodcutting",
+      "Crafting"
+    ],
+    "questPoints": 1
   },
   {
     "key": "the_fremennik_trials",
     "name": "The Fremennik Trials",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 57,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thefremenniktrials/TheFremennikTrials.java",
-    "varp": 347
+    "varp": 347,
+    "skills": [
+      "Fletching",
+      "Woodcutting",
+      "Crafting",
+      "Agility",
+      "Attack",
+      "Defence",
+      "Fishing",
+      "Hitpoints",
+      "Strength",
+      "Thieving"
+    ],
+    "questPoints": 3
   },
   {
     "key": "the_garden_of_death",
     "name": "The Garden of Death",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 180,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thegardenofdeath/TheGardenOfDeath.java",
-    "varbit": 14609
+    "varbit": 14609,
+    "skills": [
+      "Farming"
+    ],
+    "questPoints": 1
   },
   {
     "key": "the_generals_shadow",
     "name": "The General's Shadow",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "questId": 59,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/thegeneralsshadow/TheGeneralsShadow.java",
-    "varbit": 3330
+    "varbit": 3330,
+    "skills": [
+      "Slayer"
+    ],
+    "questPoints": 0
   },
   {
     "key": "the_giant_dwarf",
     "name": "The Giant Dwarf",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 63,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thegiantdwarf/TheGiantDwarf.java",
-    "varbit": 571
+    "varbit": 571,
+    "skills": [
+      "Crafting",
+      "Firemaking",
+      "Magic",
+      "Thieving",
+      "Mining",
+      "Smithing"
+    ],
+    "questPoints": 2
   },
   {
     "key": "the_golem",
     "name": "The Golem",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 65,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thegolem/TheGolem.java",
-    "varbit": 346
+    "varbit": 346,
+    "skills": [
+      "Crafting",
+      "Thieving"
+    ],
+    "questPoints": 1
   },
   {
     "key": "the_grand_tree",
     "name": "The Grand Tree",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 66,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thegrandtree/TheGrandTree.java",
-    "varp": 150
+    "varp": 150,
+    "skills": [
+      "Agility",
+      "Attack",
+      "Magic"
+    ],
+    "questPoints": 5
   },
   {
     "key": "the_great_brain_robbery",
     "name": "The Great Brain Robbery",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 67,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thegreatbrainrobbery/TheGreatBrainRobbery.java",
-    "varp": 980
+    "varp": 980,
+    "skills": [
+      "Crafting",
+      "Construction",
+      "Prayer"
+    ],
+    "questPoints": 2
   },
   {
     "key": "the_hand_in_the_sand",
     "name": "The Hand in the Sand",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 69,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thehandinthesand/TheHandInTheSand.java",
-    "varbit": 1527
+    "varbit": 1527,
+    "skills": [
+      "Thieving",
+      "Crafting"
+    ],
+    "questPoints": 1
   },
   {
     "key": "the_heart_of_darkness",
     "name": "The Heart of Darkness",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 3710,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theheartofdarkness/TheHeartOfDarkness.java",
-    "varbit": 11117
+    "varbit": 11117,
+    "skills": [
+      "Mining",
+      "Thieving",
+      "Slayer",
+      "Agility"
+    ],
+    "questPoints": 2
   },
   {
     "key": "the_ides_of_milk",
     "name": "The Ides of Milk",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 9645,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theidesofmilk/TheIdesOfMilk.java",
-    "varbit": 20106
+    "varbit": 20106,
+    "skills": [],
+    "questPoints": 1
   },
   {
     "key": "the_knights_sword",
     "name": "The Knight's Sword",
     "type": "F2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 83,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theknightssword/TheKnightsSword.java",
-    "varp": 122
+    "varp": 122,
+    "skills": [
+      "Mining",
+      "Smithing"
+    ],
+    "questPoints": 1
   },
   {
     "key": "the_lost_tribe",
     "name": "The Lost Tribe",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 87,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thelosttribe/TheLostTribe.java",
-    "varbit": 532
+    "varbit": 532,
+    "skills": [
+      "Agility",
+      "Thieving",
+      "Mining"
+    ],
+    "questPoints": 1
   },
   {
     "key": "the_path_of_glouphrie",
     "name": "The Path of Glouphrie",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 3425,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thepathofglouphrie/ThePathOfGlouphrie.java",
-    "varbit": 15288
+    "varbit": 15288,
+    "skills": [
+      "Strength",
+      "Slayer",
+      "Thieving",
+      "Magic",
+      "Ranged",
+      "Agility"
+    ],
+    "questPoints": 2
   },
   {
     "key": "the_queen_of_thieves",
     "name": "The Queen of Thieves",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 113,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thequeenofthieves/TheQueenOfThieves.java",
-    "varbit": 6037
+    "varbit": 6037,
+    "skills": [
+      "Thieving"
+    ],
+    "questPoints": 1
   },
   {
     "key": "the_red_reef",
     "name": "The Red Reef",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 7107,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theredreef/TheRedReef.java",
-    "varbit": 18335
+    "varbit": 18335,
+    "skills": [
+      "Sailing",
+      "Smithing",
+      "Prayer"
+    ],
+    "questPoints": 2
   },
   {
     "key": "the_restless_ghost",
     "name": "The Restless Ghost",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 120,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/therestlessghost/TheRestlessGhost.java",
-    "varp": 107
+    "varp": 107,
+    "skills": [
+      "Prayer"
+    ],
+    "questPoints": 1
   },
   {
     "key": "the_ribbiting_tale_of_a_lily_pad_labour_dispute",
     "name": "The Ribbiting Tale of a Lily Pad Labour Dispute",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 3515,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theribbitingtaleofalilypadlabourdispute/TheRibbitingTaleOfALilyPadLabourDispute.java",
-    "varbit": 9844
+    "varbit": 9844,
+    "skills": [
+      "Woodcutting"
+    ],
+    "questPoints": 1
   },
   {
     "key": "the_slug_menace",
     "name": "The Slug Menace",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 136,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/theslugmenace/TheSlugMenace.java",
-    "varbit": 2610
+    "varbit": 2610,
+    "skills": [
+      "Crafting",
+      "Runecraft",
+      "Slayer",
+      "Thieving"
+    ],
+    "questPoints": 1
   },
   {
     "key": "the_tourist_trap",
     "name": "The Tourist Trap",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 148,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/thetouristtrap/TheTouristTrap.java",
-    "varp": 197
+    "varp": 197,
+    "skills": [
+      "Fletching",
+      "Smithing"
+    ],
+    "questPoints": 2
   },
   {
     "key": "throne_of_miscellania",
     "name": "Throne of Miscellania",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 147,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/throneofmiscellania/ThroneOfMiscellania.java",
-    "varp": 359
+    "varp": 359,
+    "skills": [
+      "Woodcutting",
+      "Farming",
+      "Mining",
+      "Smithing"
+    ],
+    "questPoints": 1
   },
   {
     "key": "tower_of_life",
     "name": "Tower of Life",
     "type": "P2P",
+    "difficulty": "NOVICE",
     "questId": 149,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/toweroflife/TowerOfLife.java",
-    "varbit": 3337
+    "varbit": 3337,
+    "skills": [
+      "Construction",
+      "Crafting",
+      "Thieving"
+    ],
+    "questPoints": 2
   },
   {
     "key": "tree_gnome_village",
     "name": "Tree Gnome Village",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 150,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/treegnomevillage/TreeGnomeVillage.java",
-    "varp": 111
+    "varp": 111,
+    "skills": [
+      "Attack"
+    ],
+    "questPoints": 2
   },
   {
     "key": "tribal_totem",
     "name": "Tribal Totem",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 151,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/tribaltotem/TribalTotem.java",
-    "varp": 200
+    "varp": 200,
+    "skills": [
+      "Thieving"
+    ],
+    "questPoints": 1
   },
   {
     "key": "troll_romance",
     "name": "Troll Romance",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 152,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/trollromance/TrollRomance.java",
-    "varp": 385
+    "varp": 385,
+    "skills": [
+      "Agility",
+      "Strength"
+    ],
+    "questPoints": 2
   },
   {
     "key": "troll_stronghold",
     "name": "Troll Stronghold",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 153,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/trollstronghold/TrollStronghold.java",
-    "varp": 317
+    "varp": 317,
+    "skills": [
+      "Agility"
+    ],
+    "questPoints": 1
   },
   {
     "key": "troubled_tortugans",
     "name": "Troubled Tortugans",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 7106,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/troubledtortugans/TroubledTortugans.java",
-    "varbit": 18321
+    "varbit": 18321,
+    "skills": [
+      "Sailing",
+      "Slayer",
+      "Hunter",
+      "Construction",
+      "Woodcutting",
+      "Crafting"
+    ],
+    "questPoints": 1
   },
   {
     "key": "twilights_promise",
     "name": "Twilight's Promise",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 3512,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/twilightspromise/TwilightsPromise.java",
-    "varbit": 9649
+    "varbit": 9649,
+    "skills": [
+      "Thieving"
+    ],
+    "questPoints": 1
   },
   {
     "key": "underground_pass",
     "name": "Underground Pass",
     "type": "P2P",
+    "difficulty": "EXPERIENCED",
     "questId": 154,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/undergroundpass/UndergroundPass.java",
-    "varp": 161
+    "varp": 161,
+    "skills": [
+      "Ranged",
+      "Agility",
+      "Attack"
+    ],
+    "questPoints": 5
   },
   {
     "key": "vale_totems",
     "name": "Vale Totems",
     "type": "MINIQUEST",
+    "difficulty": "MINIQUEST",
     "questId": 5194,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/miniquests/valetotems/ValeTotems.java",
-    "varbit": 17227
+    "varbit": 17227,
+    "skills": [
+      "Fletching"
+    ],
+    "questPoints": 0
   },
   {
     "key": "vampyre_slayer",
     "name": "Vampyre Slayer",
     "type": "F2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 155,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/vampyreslayer/VampyreSlayer.java",
-    "varp": 178
+    "varp": 178,
+    "skills": [
+      "Attack"
+    ],
+    "questPoints": 3
   },
   {
     "key": "wanted",
     "name": "Wanted!",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 156,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/wanted/Wanted.java",
-    "varbit": 1051
+    "varbit": 1051,
+    "skills": [
+      "Slayer"
+    ],
+    "questPoints": 1
   },
   {
     "key": "watchtower",
     "name": "Watchtower",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 157,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/watchtower/Watchtower.java",
-    "varp": 212
+    "varp": 212,
+    "skills": [
+      "Magic",
+      "Thieving",
+      "Agility",
+      "Herblore",
+      "Mining"
+    ],
+    "questPoints": 4
   },
   {
     "key": "waterfall_quest",
     "name": "Waterfall Quest",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 158,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/waterfallquest/WaterfallQuest.java",
-    "varp": 65
+    "varp": 65,
+    "skills": [
+      "Strength",
+      "Attack"
+    ],
+    "questPoints": 1
   },
   {
     "key": "what_lies_below",
     "name": "What Lies Below",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 159,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/whatliesbelow/WhatLiesBelow.java",
-    "varbit": 3523
+    "varbit": 3523,
+    "skills": [
+      "Mining",
+      "Runecraft",
+      "Defence"
+    ],
+    "questPoints": 1
   },
   {
     "key": "while_guthix_sleeps",
     "name": "While Guthix Sleeps",
     "type": "P2P",
+    "difficulty": "GRANDMASTER",
     "questId": 3467,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/whileguthixsleeps/WhileGuthixSleeps.java",
-    "varbit": 9653
+    "varbit": 9653,
+    "skills": [
+      "Magic",
+      "Thieving",
+      "Agility",
+      "Herblore",
+      "Farming",
+      "Hunter"
+    ],
+    "questPoints": 5
   },
   {
     "key": "witchs_house",
     "name": "Witch's House",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 160,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/witchshouse/WitchsHouse.java",
-    "varp": 226
+    "varp": 226,
+    "skills": [
+      "Hitpoints"
+    ],
+    "questPoints": 4
   },
   {
     "key": "witchs_potion",
     "name": "Witch's Potion",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 161,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/witchspotion/WitchsPotion.java",
-    "varp": 67
+    "varp": 67,
+    "skills": [
+      "Magic"
+    ],
+    "questPoints": 1
   },
   {
     "key": "x_marks_the_spot",
     "name": "X Marks the Spot",
     "type": "F2P",
+    "difficulty": "NOVICE",
     "questId": 162,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/xmarksthespot/XMarksTheSpot.java",
-    "varbit": 8063
+    "varbit": 8063,
+    "skills": [],
+    "questPoints": 1
   },
   {
     "key": "zogre_flesh_eaters",
     "name": "Zogre Flesh Eaters",
     "type": "P2P",
+    "difficulty": "INTERMEDIATE",
     "questId": 163,
     "source": "https://github.com/Zoinkwiz/quest-helper/blob/08bb7c55ffc5aa61b7f4df61820967d63157e389/src/main/java/com/questhelper/helpers/quests/zogreflesheaters/ZogreFleshEaters.java",
-    "varbit": 487
+    "varbit": 487,
+    "skills": [
+      "Smithing",
+      "Herblore",
+      "Ranged",
+      "Fletching"
+    ],
+    "questPoints": 1
   }
 ]

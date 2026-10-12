@@ -2,7 +2,7 @@
 // shortcut: static authored content only; port Java conditions and puzzle solvers before claiming full RuneLite parity.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { readFileSync, readdirSync, mkdirSync, writeFileSync } from "node:fs";
+import { readFileSync, readdirSync, mkdirSync, writeFileSync, copyFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -59,7 +59,7 @@ function constructors(source) {
     return calls;
 }
 
-export function extractSteps(source, itemIds, itemCollections = {}) {
+function parseGuide(source, itemIds, itemCollections = {}) {
     source = stripComments(source);
     const calls = constructors(source);
     const textValues = new Map();
@@ -79,12 +79,14 @@ export function extractSteps(source, itemIds, itemCollections = {}) {
         if (text !== undefined) textValues.set(match[1], text);
     }
     const requirements = new Map();
+    const displayRequirements = new Map();
     for (const call of calls.filter((call) => call.kind === "ItemRequirement" && call.variable)) {
         const name = literalText(call.args[0]);
         const ids = call.args[1]?.startsWith("ItemCollections.") ? itemCollections[call.args[1].replace("ItemCollections.", "")]
             : [itemIds[call.args[1]?.replace("ItemID.", "")]];
         const id = ids?.[0];
         const amount = call.args[2] === undefined ? 1 : Number(call.args[2]);
+        if (name) displayRequirements.set(call.variable, { name });
         if (name && id !== undefined && Number.isInteger(amount) && amount > 0) {
             requirements.set(call.variable, { id, name, amount, ...(call.args[3] === "true" ? { equipped: true } : {}), ...(ids.length > 1 ? { alternates: ids.slice(1) } : {}) });
         }
@@ -99,6 +101,7 @@ export function extractSteps(source, itemIds, itemCollections = {}) {
         if (requirement) requirements.set(match[1], { ...requirement, ...(match[3] ? { amount: Number(match[3]) } : {}) });
     }
     const steps = [];
+    const stepVariables = new Map();
     for (const call of calls.filter((call) => call.args[0] === "this" || call.kind === "super")) {
         const textIndex = call.args.findIndex((arg) => authoredText(arg) !== undefined);
         const name = call.variable?.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -121,9 +124,73 @@ export function extractSteps(source, itemIds, itemCollections = {}) {
                 .flatMap((match) => splitArguments(match[1]).map(literalText)).filter(Boolean);
             if (extra.length) step.text += " " + extra.join(" ");
         }
+        if (call.variable) stepVariables.set(call.variable, steps.length);
         steps.push(step);
     }
-    return steps;
+    for (const [name, requirement] of requirements) displayRequirements.set(name, requirement);
+    return { source, calls, steps, stepVariables, requirements: displayRequirements };
+}
+
+export function extractSteps(source, itemIds, itemCollections = {}) {
+    return parseGuide(source, itemIds, itemCollections).steps;
+}
+
+const titleCase = (text) => text.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+export function extractPresentation(source, itemIds, itemCollections = {}, questNames = {}) {
+    const parsed = parseGuide(source, itemIds, itemCollections);
+    const { calls, steps, stepVariables, requirements } = parsed;
+    source = parsed.source;
+    const method = (name) => source.match(new RegExp(`\\b${name}\\(\\)\\s*\\{([\\s\\S]*?)\\n\\t\\}`))?.[1] ?? "";
+    const list = (expression) => {
+        const match = expression?.trim().match(/^(?:List\.of|Arrays\.asList|Collections\.singletonList)\(([\s\S]*)\)$/);
+        return match ? splitArguments(match[1]) : expression ? [expression.trim()] : [];
+    };
+    const items = (expression) => list(expression).map((name) => {
+        const item = requirements.get(name.split(".")[0]);
+        const quantity = name.match(/\.quantity\((\d+)\)/)?.[1];
+        return item && { ...item, ...(quantity ? { amount: Number(quantity) } : {}) };
+    }).filter(Boolean);
+    const returnedItems = (name) => items(method(name).match(/return\s+([\s\S]*?);/)?.[1]);
+    const substeps = new Map();
+    for (const match of source.matchAll(/(\w+)\.addSubSteps\(([^;]+)\);/g)) {
+        substeps.set(match[1], splitArguments(match[2]).map((name) => stepVariables.get(name)).filter((index) => index !== undefined));
+    }
+    const panels = calls.filter((call) => call.kind === "PanelDetails").flatMap((call) => {
+        const header = literalText(call.args[0]);
+        const names = list(call.args[1]);
+        const indices = names.map((name) => stepVariables.get(name)).filter((index) => index !== undefined);
+        if (!header || !indices.length) return [];
+        const children = names.flatMap((name) => substeps.get(name) ?? []);
+        return [{ header, steps: indices, ...(children.length ? { substeps: children } : {}),
+            ...(call.args[2] ? { items: items(call.args[2]) } : {}),
+            ...(call.args[3] ? { recommended: items(call.args[3]) } : {}) }];
+    });
+    const general = (name) => constructors(method(name)).flatMap((call) => {
+        if (call.kind === "SkillRequirement" && /^Skill\.\w+$/.test(call.args[0]) && /^\d+$/.test(call.args[1])) {
+            return [literalText(call.args[3] ?? "") ?? `${call.args[1]} ${titleCase(call.args[0].slice(6))}`];
+        }
+        if (call.kind === "QuestRequirement") {
+            const key = call.args[0]?.replace("QuestHelperQuest.", "");
+            return questNames[key] ? [questNames[key]] : [];
+        }
+        if (call.kind === "QuestPointRequirement" && /^\d+$/.test(call.args[0])) return [`${call.args[0]} Quest Points`];
+        if (call.kind === "ItemRequirement") return literalText(call.args[0]) ? [literalText(call.args[0])] : [];
+        return [];
+    });
+    const rewards = calls.flatMap((call) => {
+        if (call.kind === "QuestPointReward" && /^\d+$/.test(call.args[0])) return [`${call.args[0]} Quest Point${call.args[0] === "1" ? "" : "s"}`];
+        if (call.kind === "ExperienceReward" && /^Skill\.\w+$/.test(call.args[0]) && /^\d+$/.test(call.args[1])) {
+            return [`${Number(call.args[1]).toLocaleString("en-US")} ${titleCase(call.args[0].slice(6))} Experience${call.args[2] === "true" ? " Lamp" : ""}`];
+        }
+        if (call.kind === "ItemReward" && literalText(call.args[0])) return [`${Number(call.args[2]) > 1 ? `${call.args[2]} x ` : ""}${literalText(call.args[0])}`];
+        if (call.kind === "UnlockReward" && literalText(call.args[0])) return [literalText(call.args[0])];
+        return [];
+    });
+    const strings = (name) => [...method(name).matchAll(/"(?:\\.|[^"\\])*"/g)].map((match) => literalText(match[0]));
+    return { steps, panels, overview: { required: returnedItems("getItemRequirements"), recommended: returnedItems("getItemRecommended"),
+        general: general("getGeneralRequirements"), generalRecommended: general("getGeneralRecommended"),
+        combat: strings("getCombatRequirements"), notes: strings("getNotes"), rewards } };
 }
 
 function javaFiles(directory) {
@@ -153,8 +220,17 @@ export function importGuides(upstreamRoot, questApiFile) {
     const varps = new Map([...readFileSync(join(sourceRoot, "questinfo/QuestVarPlayer.java"), "utf8").matchAll(/\b(\w+)\((\d+|VarPlayerID\.\w+)\)/g)].map((match) => [match[1], /^\d+$/.test(match[2]) ? Number(match[2]) : varpIds[match[2].replace("VarPlayerID.", "")]]));
     const varbits = new Map([...readFileSync(join(sourceRoot, "questinfo/QuestVarbits.java"), "utf8").matchAll(/\b(\w+)\((\d+|VarbitID\.\w+)\)/g)].map((match) => [match[1], /^\d+$/.test(match[2]) ? Number(match[2]) : varbitIds[match[2].replace("VarbitID.", "")]]));
     const info = stripComments(readFileSync(join(sourceRoot, "questinfo/QuestHelperQuest.java"), "utf8"));
+    const questNames = Object.fromEntries([...info.matchAll(/\b(\w+)\(new \w+\(\),([\s\S]*?)QuestDetails\.Difficulty\.\w+\)/g)]
+        .map((match) => [match[1], match[2].match(/"([^"]+)"/)?.[1] ?? questIds.get(match[2].match(/Quest\.(\w+)/)?.[1])?.name]));
+    const orders = Object.fromEntries(["OptimalQuestGuide", "IronmanOptimalQuestGuide", "ReleaseDate"].map((name) => {
+        const text = stripComments(readFileSync(join(sourceRoot, `panel/questorders/${name}.java`), "utf8"));
+        return [name, [...text.matchAll(/QuestHelperQuest\.(\w+)/g)].map((match) => match[1].toLowerCase())];
+    }));
     const catalog = [], guides = new Map(), notices = new Set();
     notices.add(collectionsSource.match(/^\/\*[\s\S]*?\*\//)[0]);
+    for (const file of ["panel/QuestHelperPanel.java", "panel/QuestSelectPanel.java", "panel/QuestOverviewPanel.java", "panel/QuestRequirementsPanel.java", "panel/QuestRewardsPanel.java", "panel/queststepsection/QuestStepPanel.java", "steps/overlay/DirectionArrow.java"]) {
+        notices.add(readFileSync(join(sourceRoot, file), "utf8").match(/^\/\*[\s\S]*?\*\//)[0]);
+    }
     for (const match of info.matchAll(/\b(\w+)\(new (\w+)\(\),([\s\S]*?)QuestDetails\.Difficulty\.\w+\)/g)) {
         const type = match[3].match(/QuestDetails\.Type\.(F2P|P2P|MINIQUEST)\b/)?.[1];
         if (!type) continue;
@@ -167,7 +243,8 @@ export function importGuides(upstreamRoot, questApiFile) {
         const key = match[1].toLowerCase();
         const binding = match[3].match(/Quest(VarPlayer|Varbits)\.(\w+)/);
         const source = `https://github.com/Zoinkwiz/quest-helper/blob/${UPSTREAM_COMMIT}/src/main/java/com/questhelper/${relative(sourceRoot, path)}`;
-        const entry = { key, name: explicitName ?? metadata.name, type, ...(metadata ? { questId: metadata.questId } : {}), source };
+        const entry = { key, name: explicitName ?? metadata.name, type, difficulty: match[0].match(/QuestDetails\.Difficulty\.(\w+)/)[1],
+            ...(metadata ? { questId: metadata.questId } : {}), source };
         if (binding) {
             const value = (binding[1] === "VarPlayer" ? varps : varbits).get(binding[2]);
             assert.ok(Number.isInteger(value), `Missing var binding: ${key}`);
@@ -187,20 +264,43 @@ export function importGuides(upstreamRoot, questApiFile) {
             }
         }
         include(path);
-        const steps = [...related].flatMap((file) => {
+        const steps = [], panels = [];
+        let overview;
+        for (const file of related) {
             const text = readFileSync(file, "utf8");
             const notice = text.match(/^\/\*[\s\S]*?\*\//)?.[0];
             if (notice) notices.add(notice);
-            return extractSteps(text, itemIds, itemCollections);
-        });
+            const presentation = extractPresentation(text, itemIds, itemCollections, questNames);
+            const offset = steps.length;
+            panels.push(...presentation.panels.map((panel) => ({ ...panel, steps: panel.steps.map((index) => index + offset),
+                ...(panel.substeps ? { substeps: panel.substeps.map((index) => index + offset) } : {}) })));
+            steps.push(...presentation.steps);
+            if (file === path) overview = presentation.overview;
+        }
+        const text = stripComments(readFileSync(path, "utf8"));
+        entry.skills = [...new Set([...text.matchAll(/new (?:SkillRequirement|ExperienceReward)\(Skill\.(\w+)/g)].map((match) => titleCase(match[1])))];
+        entry.questPoints = Number(text.match(/new QuestPointReward\((\d+)\)/)?.[1] ?? 0);
         assert.ok(steps.length, `No authored steps imported for ${key}`);
         catalog.push(entry);
-        guides.set(key, { source, steps });
+        guides.set(key, { source, steps, panels, overview });
     }
     assert.ok(catalog.length > 200, "The complete quest and miniquest catalog must be imported");
     catalog.sort((a, b) => a.name.localeCompare(b.name, "en"));
     const destination = join(clientRoot, "public/quest-helper");
     mkdirSync(destination, { recursive: true });
+    const icons = ["close", "collapsed", "expanded", "start", "discord", "github", "patreon", "settings_icon", "quest_icon"];
+    mkdirSync(join(destination, "icons"), { recursive: true });
+    for (const icon of icons) copyFileSync(join(upstreamRoot, `src/main/resources/${icon}.png`), join(destination, `icons/${icon}.png`));
+    const runeLiteRoot = resolve(dirname(questApiFile), "../../../../../../..");
+    const skillIcons = join(runeLiteRoot, "runelite-client/src/main/resources/skill_icons_small");
+    mkdirSync(join(destination, "icons/skills"), { recursive: true });
+    for (const file of readdirSync(skillIcons).filter((file) => file.endsWith(".png"))) copyFileSync(join(skillIcons, file), join(destination, "icons/skills", file));
+    copyFileSync(join(runeLiteRoot, "LICENSE"), join(destination, "icons/skills/LICENSE.txt"));
+    const fonts = join(clientRoot, "game/plugins/questhelper/fonts");
+    mkdirSync(fonts, { recursive: true });
+    for (const font of ["runescape.ttf", "runescape_bold.ttf"]) copyFileSync(join(runeLiteRoot, `runelite-client/src/main/resources/net/runelite/client/ui/${font}`), join(fonts, font));
+    copyFileSync(join(runeLiteRoot, "LICENSE"), join(fonts, "LICENSE.txt"));
+    writeFileSync(join(clientRoot, "game/plugins/questhelper/orders.json"), JSON.stringify(orders) + "\n");
     for (const [key, guide] of guides) writeFileSync(join(destination, `${key}.json`), JSON.stringify(guide) + "\n");
     writeFileSync(join(clientRoot, "game/plugins/questhelper/catalog.json"), JSON.stringify(catalog, null, 2) + "\n");
     writeFileSync(join(destination, "LICENSE.txt"), readFileSync(join(upstreamRoot, "LICENSE"), "utf8") + "\n" + [...notices].join("\n\n") + "\n");

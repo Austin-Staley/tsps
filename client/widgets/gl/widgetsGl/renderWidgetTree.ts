@@ -1,5 +1,6 @@
 import { ClientState } from "../../../game/ClientState";
-import { getActiveHintArrow, hintArrowTileOffset, isHintArrowBlinkOn } from "../../../game/HintArrow";
+import { getActiveHintArrow, hintArrowTileOffset, isHintArrowBlinkOn, questHintArrow } from "../../../game/HintArrow";
+import { questMinimapArrowCanvas, questMinimapArrowPosition } from "../../../game/plugins/questhelper/minimap";
 import type { InputManager } from "../../../game/InputManager";
 import { profiler } from "../../../render/PerformanceProfiler";
 import { packWorldMapCoord } from "../../../rs/map/WorldMapArea";
@@ -2773,7 +2774,16 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                                 (playerFineY - targetFineY) / 32,
                             );
                             const distSq = dx * dx + dy * dy;
-                            if (distSq > 4225 && distSq < 90000) {
+                            if (hintArrow === questHintArrow) {
+                                const position = questMinimapArrowPosition(screen, { x: centerX, y: centerY },
+                                    Math.max(Math.abs((targetFineX >> 7) - playerTileX), Math.abs((targetFineY >> 7) - playerTileY)),
+                                    zoomScale, minimapRenderScale);
+                                const key = "quest-helper:minimap-arrow";
+                                const arrow = glr.getTexture(key) ?? glr.createTextureFromCanvas(key, questMinimapArrowCanvas());
+                                minimapRenderer.drawOverlay(arrow, position.x, position.y,
+                                    arrow.w * minimapRenderScale, arrow.h * minimapRenderScale, position.angle,
+                                    11 * minimapRenderScale, 13 * minimapRenderScale);
+                            } else if (distSq > 4225 && distSq < 90000) {
                                 // Off the map: rotated edge arrow pinned inside the rim.
                                 const edgeTex = tc.getByNameToken("mapedge,0");
                                 if (edgeTex) {

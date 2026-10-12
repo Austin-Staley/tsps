@@ -13,7 +13,7 @@ import { questHintArrow, questSceneHintArrows } from "../../HintArrow";
 import { COOK_DIALOGS, QUEST_GUIDES } from "./guides";
 import catalog from "./catalog.json";
 import { createQuestHelperNavigationButton } from "./QuestHelperPanel";
-import { requirementCount, type ImportedGuide, type QuestCatalogEntry, type QuestContext, type QuestStep, type QuestSummary } from "./types";
+import { requirementCount, type ImportedGuide, type ItemRequirement, type QuestCatalogEntry, type QuestContext, type QuestStep, type QuestSummary } from "./types";
 
 const HIGHLIGHT_SLOT = 65000;
 const QUEST_ARROW_HEIGHT = 15; // RuneLite's 30-unit offset, encoded as an OSRS height byte.
@@ -22,6 +22,7 @@ const QUEST_STATUS_GET = 4029;
 export const QuestHelperConfig = ConfigGroup("questhelper", {
     showOverlay: ConfigItem({ name: "Show current step", description: "Show the active step over the game view.", default: true }),
     showTarget: ConfigItem({ name: "Highlight target", description: "Mark the target tile and show an arrow on the scene, minimap and world map.", default: true }),
+    showCompletedQuests: ConfigItem({ name: "Show Completed Quests", description: "Include completed quests in the selected filters.", default: false }),
 });
 
 type HelperState = {
@@ -34,7 +35,17 @@ type HelperState = {
     step?: QuestStep;
     counts: number[];
     showOverlay: boolean;
+    showCompletedQuests: boolean;
 };
+
+const validText = (text: unknown): text is string => typeof text === "string" && text.length > 0 && text.length <= 20000;
+const validItem = (item: ItemRequirement): boolean => !!item && Number.isInteger(item.id) && item.id >= 0 &&
+    validText(item.name) && Number.isInteger(item.amount) && item.amount > 0 &&
+    (item.equipped === undefined || typeof item.equipped === "boolean") &&
+    (!item.alternates || (Array.isArray(item.alternates) && item.alternates.length <= 1000 && item.alternates.every((id) => Number.isInteger(id) && id >= 0)));
+const validRequirements = (items: unknown): boolean => Array.isArray(items) && items.length <= 100 && items.every((item) =>
+    !!item && validText(item.name) && ("id" in item ? validItem(item) :
+        Object.keys(item).every((key) => key === "name" || key === "amount") && (item.amount === undefined || (Number.isInteger(item.amount) && item.amount > 0))));
 
 export function validGuide(value: unknown, source: string): value is ImportedGuide {
     const guide = value as ImportedGuide | null;
@@ -43,10 +54,15 @@ export function validGuide(value: unknown, source: string): value is ImportedGui
             (step.type === undefined || step.type === "item") &&
             (!step.target || (Number.isInteger(step.target.x) && Number.isInteger(step.target.y) && Number.isInteger(step.target.plane) && step.target.plane >= 0 && step.target.plane <= 3)) &&
             (!step.choices || (Array.isArray(step.choices) && step.choices.length <= 100 && step.choices.every((text) => typeof text === "string" && text.length <= 2000))) &&
-            (!step.items || (Array.isArray(step.items) && step.items.length <= 100 && step.items.every((item) => !!item && Number.isInteger(item.id) && item.id >= 0 &&
-                typeof item.name === "string" && item.name.length <= 2000 && Number.isInteger(item.amount) && item.amount > 0 &&
-                (item.equipped === undefined || typeof item.equipped === "boolean") &&
-                (!item.alternates || (Array.isArray(item.alternates) && item.alternates.length <= 1000 && item.alternates.every((id) => Number.isInteger(id) && id >= 0)))))));
+            (!step.items || (Array.isArray(step.items) && step.items.length <= 100 && step.items.every(validItem)))) &&
+        (!guide.panels || (Array.isArray(guide.panels) && guide.panels.length <= 200 && guide.panels.every((panel) =>
+            !!panel && validText(panel.header) && Array.isArray(panel.steps) && panel.steps.length <= 1000 &&
+            panel.steps.every((index) => Number.isInteger(index) && index >= 0 && index < guide.steps.length) &&
+            (!panel.substeps || (Array.isArray(panel.substeps) && panel.substeps.length <= 1000 && panel.substeps.every((index) => Number.isInteger(index) && index >= 0 && index < guide.steps.length))) &&
+            (!panel.items || validRequirements(panel.items)) && (!panel.recommended || validRequirements(panel.recommended))))) &&
+        (!guide.overview || (validRequirements(guide.overview.required) && validRequirements(guide.overview.recommended) &&
+            [guide.overview.general, guide.overview.generalRecommended, guide.overview.combat, guide.overview.notes, guide.overview.rewards]
+                .every((lines) => Array.isArray(lines) && lines.length <= 200 && lines.every(validText))));
 }
 
 export class QuestHelperPlugin extends Plugin {
@@ -59,11 +75,12 @@ export class QuestHelperPlugin extends Plugin {
     };
     static config = QuestHelperConfig;
     private readonly toolbar = inject(ClientToolbar);
-    private readonly config = inject(ConfigManager).getConfig(QuestHelperConfig);
+    private readonly configManager = inject(ConfigManager);
+    private readonly config = this.configManager.getConfig(QuestHelperConfig);
     private readonly listeners = new Set<() => void>();
     private readonly dialogs = new Set<string>();
     private nav?: NavigationButton;
-    private state: HelperState = { quests: [], counts: [], showOverlay: true };
+    private state: HelperState = { quests: [], counts: [], showOverlay: true, showCompletedQuests: false };
     private signature = "";
     private targetCoords = "";
     private selectionVersion = 0;
@@ -96,6 +113,12 @@ export class QuestHelperPlugin extends Plugin {
         return () => { this.listeners.delete(listener); };
     }
     getState(): HelperState { return this.state; }
+    getConfigManager(): ConfigManager { return this.configManager; }
+    getItemCount(item: ItemRequirement): number { return requirementCount(item, this.getContext(0)); }
+    getBankCount(item: ItemRequirement): number {
+        const context = this.getContext(0);
+        return [item.id, ...(item.alternates ?? [])].reduce((count, id) => count + context.bankCount(id), 0);
+    }
     getTarget(): QuestStep["target"] {
         // shortcut: targets use world tiles; map instance templates before enabling instance markers.
         return this.isEnabled() && this.isStarted() && this.config.showTarget() && !ClientState.inInstance ? this.state.step?.target : undefined;
@@ -145,7 +168,7 @@ export class QuestHelperPlugin extends Plugin {
     onGameStateChanged(event: GameStateChanged): void {
         if ([GameState.LOGIN_SCREEN, GameState.CONNECTION_LOST, GameState.HOPPING].includes(event.getGameState())) {
             this.clearSelection();
-            this.state = { quests: [], counts: [], showOverlay: this.config.showOverlay() };
+            this.state = { quests: [], counts: [], showOverlay: this.config.showOverlay(), showCompletedQuests: this.config.showCompletedQuests() };
             this.refresh();
         } else if (event.getGameState() === GameState.LOGGED_IN) {
             this.refresh();
@@ -225,7 +248,7 @@ export class QuestHelperPlugin extends Plugin {
                     : resolver?.stages.includes(context.stage) ? resolver.resolve(context) : undefined
             : undefined;
         const counts = (step?.items ?? []).map((item) => requirementCount(item, context!));
-        this.state = { ...this.state, quests, quest, step, counts, showOverlay: this.config.showOverlay() };
+        this.state = { ...this.state, quests, quest, step, counts, showOverlay: this.config.showOverlay(), showCompletedQuests: this.config.showCompletedQuests() };
         const target = this.getTarget();
         questHintArrow.type = target ? 2 : 0;
         if (target) Object.assign(questHintArrow, { ...target, height: QUEST_ARROW_HEIGHT, position: 2 });

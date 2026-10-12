@@ -3,13 +3,20 @@ export type QuestCatalogEntry = {
     key: string;
     name: string;
     type: string;
+    difficulty?: string;
+    skills?: string[];
+    questPoints?: number;
     questId?: number;
     varp?: number;
     varbit?: number;
     completeValue?: number;
     source: string;
 };
-export type ImportedGuide = { source: string; steps: QuestStep[] };
+export type GuideRequirement = ItemRequirement | { name: string; amount?: number };
+export type GuidePanel = { header: string; steps: number[]; substeps?: number[]; items?: GuideRequirement[]; recommended?: GuideRequirement[] };
+export type GuideOverview = { required: GuideRequirement[]; recommended: GuideRequirement[]; general: string[];
+    generalRecommended: string[]; combat: string[]; notes: string[]; rewards: string[] };
+export type ImportedGuide = { source: string; steps: QuestStep[]; panels?: GuidePanel[]; overview?: GuideOverview };
 export type QuestTarget = { x: number; y: number; plane: number };
 export type ItemRequirement = { id: number; name: string; amount: number; equipped?: boolean; alternates?: number[] };
 export type QuestStep = {

@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { readFileSync, readdirSync } from "node:fs";
 import { QUEST_GUIDES } from "../game/plugins/questhelper/guides";
 import catalog from "../game/plugins/questhelper/catalog.json";
 import { requirementCount, type QuestContext, type ImportedGuide } from "../game/plugins/questhelper/types";
-import { extractSteps, literalText, splitArguments } from "../scripts/import-quest-helper.mjs";
+import { extractSteps, extractPresentation, literalText, splitArguments } from "../scripts/import-quest-helper.mjs";
 import * as Item from "../runelite/api/gameval/ItemID";
 import * as Varbit from "../runelite/api/gameval/VarbitID";
 import * as InterfaceID from "../runelite/api/gameval/InterfaceID";
@@ -60,6 +62,11 @@ assert.equal(weapons[0].text, "Sword - Unicorn Mace - Rat", "Preserve upstream m
 const coins = loadGuide("cooks_assistant").steps[0].items![0];
 assert.equal(coins.amount, 2);
 assert.ok(coins.alternates?.includes(Item.MAGICTRAINING_COINS), "Preserve upstream ItemCollections alternatives");
+assert.deepEqual(loadGuide("cooks_assistant").panels?.map((panel) => panel.header), ["Starting off", "Getting the Egg", "Getting the Flour", "Getting the Milk", "Finishing up"]);
+assert.ok(loadGuide("cooks_assistant").overview?.rewards.includes("300 Cooking Experience"));
+assert.ok(loadGuide("waterfall_quest").overview?.recommended.some((item) => item.name === "Food"), "Keep authored requirements without a static item ID as text");
+const sections = extractPresentation(`\n\tvoid setup() {\n\tpot = new ItemRequirement("Pot", ItemID.POT);\n\tup = new ObjectStep(this, 7, "Climb up.");\n\ttop = new ObjectStep(this, 8, "Climb to the top.");\n\tup.addSubSteps(top);\n\t}\n\tList<PanelDetails> getPanels() {\n\treturn List.of(new PanelDetails("The mill", List.of(up), List.of(pot)));\n\t}`, { POT: Item.POT_EMPTY });
+assert.deepEqual(sections.panels, [{ header: "The mill", steps: [0], substeps: [1], items: [{ id: Item.POT_EMPTY, name: "Pot", amount: 1 }] }]);
 
 for (const [key, guide] of Object.entries(QUEST_GUIDES)) {
     const imported = loadGuide(key);
@@ -111,10 +118,13 @@ const require = createRequire(import.meta.url);
 require.extensions[".css"] = () => {};
 void (async () => {
     const { QuestHelperPlugin, validGuide } = await import("../game/plugins/questhelper/QuestHelperPlugin");
+    const { QuestHelperPanel, filterQuests } = await import("../game/plugins/questhelper/QuestHelperPanel");
     for (const quest of catalog) assert.equal(validGuide(loadGuide(quest.key), quest.source), true, quest.key);
     assert.equal(validGuide(null, ""), false);
     assert.equal(validGuide({ source: "bad", steps: [] }, "expected"), false);
     assert.equal(validGuide({ source: "expected", steps: [{ text: "Step", target: { x: 1, y: 2, plane: 4 } }] }, "expected"), false);
+    assert.equal(validGuide({ source: "expected", steps: [{ text: "Step" }], panels: [{ header: "Bad index", steps: [1] }] }, "expected"), false);
+    assert.equal(validGuide({ source: "expected", steps: [{ text: "Step" }], overview: {} }, "expected"), false);
     assert.equal(QuestHelperPlugin.descriptor.enabledByDefault, false);
     const inventory = new Inventory(), equipment = new Inventory(14), bankInventory = new Inventory(1410);
     const groundItems = new GroundItemStore();
@@ -147,6 +157,15 @@ void (async () => {
     loggedOut = false;
     plugin.onGameTick();
     assert.equal(plugin.getState().quests.length, 213);
+    const listMarkup = renderToStaticMarkup(createElement(QuestHelperPanel, { plugin }));
+    assert.ok(listMarkup.includes('aria-label="Start Cook&#x27;s Assistant"'));
+    assert.ok(listMarkup.includes('aria-label="Quest ordering"'));
+    assert.ok(!listMarkup.includes("Automatic steps</small>"), "Use RuneLite's compact quest rows");
+    assert.deepEqual(filterQuests(plugin.getState().quests, "cook", "SHOW_ALL", "NOVICE", "A_TO_Z", []).map((quest) => quest.key), ["cooks_assistant"]);
+    assert.equal(filterQuests(plugin.getState().quests, "cook", "SHOW_ALL", "NOVICE", "A_TO_Z", ["Cooking"]).length, 0);
+    assert.equal(filterQuests(plugin.getState().quests, "", "SHOW_ALL", "ALL", "OPTIMAL", [])[0].key, "cooks_assistant");
+    assert.equal(filterQuests([{ key: "cooks_assistant", name: "Cook's Assistant", status: 2 }], "", "SHOW_ALL", "ALL", "A_TO_Z", []).length, 0);
+    assert.equal(filterQuests([{ key: "cooks_assistant", name: "Cook's Assistant", status: 2 }], "", "SHOW_ALL", "ALL", "A_TO_Z", [], true).length, 1);
     const cookLoad = plugin.selectQuest("cooks_assistant");
     pending.get("cooks_assistant")!(loadGuide("cooks_assistant")); await cookLoad;
     assert.match(plugin.getState().step!.text, /Purchase a bucket/);
@@ -177,6 +196,13 @@ void (async () => {
     assert.equal(plugin.getTarget()?.plane, 2);
     inventory.setSlot(3, -1, 0); plugin.onGameTick();
     assert.match(plugin.getState().step!.text, /Operate the hopper controls/, "After filling on the top floor, do not send the player back for wheat");
+    const guideMarkup = renderToStaticMarkup(createElement(QuestHelperPanel, { plugin }));
+    assert.ok(guideMarkup.includes("Getting the Flour"));
+    assert.ok(guideMarkup.includes("qh-active-section"));
+    assert.ok(guideMarkup.includes("qh-current-step"));
+    assert.ok(guideMarkup.includes("Item requirements:"));
+    assert.ok(guideMarkup.includes("300 Cooking Experience"));
+    assert.ok(!guideMarkup.includes("Target:"), "Raw client coordinates do not belong in the upstream sidebar");
     playerX = 3200; playerY = 3200; playerPlane = 0;
     inventory.setSlot(2, Item.EGG); inventory.setSlot(3, Item.BUCKET_MILK); inventory.setSlot(4, Item.POT_FLOUR);
     plugin.onGameTick();
@@ -204,6 +230,7 @@ void (async () => {
     assert.equal(plugin.getState().guide, undefined, "Ignore a late guide load after switching quest");
     pending.get("dragon_slayer_ii")!(loadGuide("dragon_slayer_ii")); await next;
     assert.equal(plugin.getState().step, undefined, "Manual guides must not fabricate automatic progress");
+    assert.ok(renderToStaticMarkup(createElement(QuestHelperPanel, { plugin })).includes("Automatic quest conditions have not been ported"));
     plugin.selectStep(0); assert.ok(plugin.getState().step);
     plugin.selectStep(-1); assert.equal(plugin.getState().manualStep, 0);
     plugin.stopQuest(); assert.equal(questHintArrow.type, 0);
