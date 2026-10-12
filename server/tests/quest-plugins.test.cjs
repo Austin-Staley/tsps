@@ -174,6 +174,32 @@ test('Current Affairs and Prying Times start gates require every registered prer
     'an available task slot clears the full-ledger condition');
 });
 
+test('The Blood Moon Rises starts only after Sarius accepts the yes choice and requirements pass', () => {
+  const { api, handlers } = mockApi();
+  api.emitCustomEvent = (name, event) => { if (name === 'quest:is-complete') event.complete = true; };
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  let skillLevel = 70;
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getSkillManager: () => ({ getMaxLevel: () => skillLevel }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+  };
+  const choose = handlers.custom.get('npc-dialogue:choice').at(-1);
+  const event = { player, option: 'Yes.', definition: { getName: () => 'Sarius Guile' } };
+  choose(event);
+  assert.equal(quest.getStage(player), 0, 'the skill gate blocks the start');
+  skillLevel = 99;
+  choose(event);
+  assert.equal(quest.getStage(player), 10, 'accepting Sarius’s invitation starts the quest');
+  choose({ ...event, definition: { getName: () => 'Ivan Strom' } });
+  assert.equal(quest.getStage(player), 10, 'another NPC’s yes choice cannot start this quest');
+});
+
 test('Priest in Peril unlocks the mausoleum Holy barrier only after completion', () => {
   const { api: base } = mockApi();
   const objects = new Map();
@@ -271,8 +297,8 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
     enter(player) { player.area = this; }
     getObjects() { return this.objects; }
     getTemplateObjects(tile) {
-      return [[10, 10, 0], [12, 10, 0], [12, 11, 0], [2609, 6102, 1], [2623, 6102, 1],
-        [2623, 6158, 0], [2623, 6130, 0], [2609, 6130, 0], [2609, 6102, 0], [2623, 6102, 0]]
+      return [[10, 10, 0], [12, 10, 0], [12, 11, 0], [2609, 6158, 1], [2623, 6158, 1],
+        [2623, 6158, 0], [2623, 6130, 0], [2609, 6130, 0], [2609, 6116, 0], [2609, 6102, 0], [2623, 6102, 0]]
         .some(([x, y, z]) => tile?.getX?.() === x && tile?.getY?.() === y && tile?.getZ?.() === z)
         ? [{ getId: () => api.core.ObjectIdentifiers.PILLAR_OF_LIGHT_41 }]
         : [];
@@ -282,7 +308,11 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
   const objectInteractions = [];
   const custom = new Map();
   const prompts = [];
-  const base = { core: { ...PluginManager.getCoreApi(), PrivateArea: TestPrivateArea } };
+  let wallBlocked = false;
+  const base = { core: {
+    ...PluginManager.getCoreApi(), PrivateArea: TestPrivateArea,
+    RegionManager: { blocked: (tile) => wallBlocked && tile.getX() === 11 && tile.getY() === 10 },
+  } };
   const api = new Proxy(base, {
     get(target, prop) {
       if (prop in target) return target[prop];
@@ -349,16 +379,24 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
   place(12, 11, 'south');
   assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '0:0');
   assert.ok(messages.some((message) => message.includes('cannot reach that pillar')));
+  useObject({ player, objectId: api.core.ObjectIdentifiers.CRYSTAL_DISPENSER_3, handled: false });
+  place(10, 10, 'east');
+  wallBlocked = true;
+  place(12, 10, 'south');
+  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '0:0');
+  assert.ok(messages.some((message) => message.includes('cannot reach that pillar')));
+  wallBlocked = false;
+  useObject({ player, objectId: api.core.ObjectIdentifiers.CRYSTAL_DISPENSER_3, handled: false });
   place(10, 10, 'east');
   place(12, 10, 'south');
   assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '0:2');
 
   attributes.set('quest.song_of_the_elves.library-seals', 3);
   useObject({ player, objectId: api.core.ObjectIdentifiers.CRYSTAL_DISPENSER_3, handled: false });
-  place(2622, 6102, 'east', 1);
+  place(2608, 6158, 'east', 1);
   assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '1:0');
-  place(2609, 6102, 'east', 1);
+  place(2609, 6158, 'east', 1);
   assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '1:1');
-  place(2623, 6102, 'down', 1);
+  place(2623, 6158, 'down', 1);
   assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '1:2');
 });

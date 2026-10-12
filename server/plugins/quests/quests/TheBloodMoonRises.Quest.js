@@ -113,7 +113,13 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function onChoice(event) {
     if (!event?.player) return;
-    if (event.option === "I'm ready." && stage(event.player) === STAGE.STARTED) advance(event.player, STAGE.HIDEOUT);
+    const player = event.player;
+    if (event.option === "Yes." && stage(player) === STAGE.NOT_STARTED &&
+      event.definition?.getName?.() === "Sarius Guile" && meetsRequirements(player)) {
+      advance(player, STAGE.STARTED);
+    } else if (event.option === "I'm ready." && stage(player) === STAGE.STARTED) {
+      advance(player, STAGE.HIDEOUT);
+    }
   }
 
   function talkQuestNpc(event) {

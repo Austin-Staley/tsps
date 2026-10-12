@@ -42,7 +42,7 @@ module.exports = function registerSongOfTheElves(api) {
   const CAMP_CENTER = new Location(2445, 6092, 0);
   const LIBRARY_SEAL_DATA = [
     { name: "ithell", id: ObjectIdentifiers.SEAL_OF_ITHELL, mapId: 36730, memory: NpcIdentifiers.MEMORY_OF_SEREN_2, tile: [2676, 6101, 1], steps: ["E", "S", "W", "N"] },
-    { name: "cadarn", id: ObjectIdentifiers.SEAL_OF_CADARN, mapId: 36725, memory: NpcIdentifiers.MEMORY_OF_SEREN_3, tile: [2622, 6097, 0], steps: ["E", "D", "S", "W", "S", "red", "E", "S"], targets: [[2609, 6102, 1], [2623, 6102, 1], [2623, 6158, 0], [2623, 6130, 0], [2609, 6130, 0], [2609, 6102, 0], [2623, 6102, 0]] },
+    { name: "cadarn", id: ObjectIdentifiers.SEAL_OF_CADARN, mapId: 36725, memory: NpcIdentifiers.MEMORY_OF_SEREN_3, tile: [2622, 6097, 0], source: [2609, 6116, 1], sourceDirection: "north", steps: ["E", "D", "S", "W", "S", "red", "E", "S"], targets: [[2609, 6158, 1], [2623, 6158, 1], [2623, 6158, 0], [2623, 6130, 0], [2609, 6130, 0], [2609, 6116, 0], [2609, 6102, 0], [2623, 6102, 0]] },
     { name: "crwys", id: ObjectIdentifiers.SEAL_OF_CRWYS, mapId: 36726, memory: NpcIdentifiers.MEMORY_OF_SEREN_4, tile: [2576, 6171, 1], steps: ["W", "N", "W", "fractured", "N", "green", "D", "E", "U", "cyan", "S", "D", "S"] },
     { name: "amlodd", id: ObjectIdentifiers.SEAL_OF_AMLODD, mapId: 36727, memory: NpcIdentifiers.MEMORY_OF_SEREN_5, tile: [2614, 6157, 0], steps: ["fractured", "N", "red", "E", "N", "W", "D", "S", "E", "D", "S", "W", "S", "W", "N", "green", "yellow", "E", "E", "S"] },
     { name: "meilyr", id: ObjectIdentifiers.SEAL_OF_MEILYR, mapId: 36731, memory: NpcIdentifiers.MEMORY_OF_SEREN_6, tile: [2580, 6163, 2], steps: ["E", "D", "S", "W", "S", "W", "N", "W", "N", "U", "red", "N", "U", "N", "W", "N", "W", "S", "W"] },
@@ -900,13 +900,9 @@ module.exports = function registerSongOfTheElves(api) {
         break;
     }
     if (!step) return false;
-    const used = new Set(Object.keys(placements ?? {}));
     for (let x = previous.x + step[0], y = previous.y + step[1], z = previous.z + step[2];
       x !== location.x || y !== location.y || z !== location.z;
       x += step[0], y += step[1], z += step[2]) {
-      const key = `${x},${y},${z}`;
-      if (LIBRARY_PILLAR_IDS.size && area?.getTemplateObjects?.(new Location(x, y, z))?.some((object) =>
-        LIBRARY_PILLAR_IDS.has(object.getId()) && !used.has(key))) return false;
       if (api.core.RegionManager?.blocked?.(new Location(x, y, z), area)) return false;
     }
     return true;
@@ -974,7 +970,9 @@ module.exports = function registerSongOfTheElves(api) {
         player.sendMessage("The beam returns to a mirror you have already placed. The seal's route resets; use a fresh pillar for each turn.");
         return;
       }
-      const previous = Object.values(placements).at(-1);
+      const previous = Object.values(placements).at(-1) ?? (seal.source ? {
+        x: seal.source[0], y: seal.source[1], z: seal.source[2], direction: seal.sourceDirection,
+      } : null);
       if (!beamReaches(previous, location, player.getArea(), placements)) {
         resetLibraryPuzzle(player, sealIndex);
         player.sendMessage("The beam cannot reach that pillar from the previous mirror. The seal's route resets; follow the lit beam to the next pillar.");
