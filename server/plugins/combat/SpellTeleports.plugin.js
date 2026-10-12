@@ -16,6 +16,13 @@ let pluginApi;
 
 const HOUSE_TABLET = "teleport to house";
 const HOUSE_TABLET_OPTIONS = new Set(["break", "inside", "outside"]);
+const REDIRECTED_HOUSE_TABLETS = new Map([
+  ["rimmington teleport", [2953, 3224, 0]],
+  ["taverley teleport", [2893, 3466, 0]],
+  ["pollnivneach teleport", [3340, 3004, 0]],
+  ["rellekka teleport", [2670, 3632, 0]],
+  ["brimhaven teleport", [2757, 3179, 0]],
+]);
 
 /**
  * Teleport tablets share their spell's name ("Varrock teleport") and destination;
@@ -38,6 +45,10 @@ function breakTablet(event) {
     event.handled = true;
   } else {
     destination = SpellTeleports.getTeleportDestinations().find((spell) => spell.name === name)?.destination;
+    if (!destination) {
+      const tile = REDIRECTED_HOUSE_TABLETS.get(name);
+      if (tile) destination = new core.Location(...tile);
+    }
     if (destination) event.handled = true;
   }
   if (!destination) return;

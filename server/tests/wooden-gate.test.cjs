@@ -1,3 +1,5 @@
+
+const { crossingFor: shantayCrossingFor } = require('../plugins/objects/ShantayPass.plugin');
 // Run after `yarn build`: node --test tests/wooden-gate.test.cjs
 //
 // Wooden gates are two locs (hinge 12986 + extension 12987) that must swing together around
@@ -31,6 +33,7 @@ function buildHarness() {
   Sounds.sendSound = (...args) => sounds.push(args);
   CacheDefinitions.getObject = (id) => (id === 2394
     ? { name: 'Gate', actions: ['Open'], models: [[1298]] }
+    : id === 2606 ? { name: 'Wall', actions: ['Open'], models: [[633]] }
     : id === 8738 || id === 8739
       ? { name: 'Ardougne Wall Door', actions: ['Open'], models: [[1298]] }
       : { name: 'Gate' });
@@ -93,7 +96,7 @@ function buildHarness() {
     CacheDefinitions.getCounts = originalGetCounts;
   };
 
-  return { place, click, sounds, ops, submitted, restore };
+  return { place, click, sounds, ops, submitted, handlers, restore };
 }
 
 test('Tree Gnome Stronghold doors use their nameless open variants and restore on auto-close', () => {
@@ -729,4 +732,59 @@ test('the catacomb outer jail gate uses its actionless open cache variant and au
    ['deregister',53442,4127,4788,3],['register',53441,4126,4788,2],
   ]);
  }finally{h.restore();}
+});
+
+
+
+test('Dragon Slayer secret wall opens with the normal door interaction', () => {
+  const h = buildHarness();
+  try {
+    assert.ok(h.handlers.get('Wall')?.Open, 'the cache calls the Dragon Slayer passage a Wall');
+    h.place(2606, 2836, 9600, 3);
+    assert.deepEqual(h.click(2606, 2836, 9600, 3, 'Open', 'Wall'), [
+      ['register', 2606, 2836, 9599, 0],
+      ['deregister', 2606, 2836, 9600, 3],
+    ], 'opening rotates the wall out of the doorway so ordinary pathfinding can cross');
+  } finally {
+    h.restore();
+  }
+});
+
+
+test('the Shantay pass crosses the desert fence in the right direction', () => {
+  assert.deepEqual(shantayCrossingFor({ x: 3303, y: 3117, z: 0 }), {
+    desert: true,
+    path: [[3303, 3116], [3303, 3115]],
+  });
+  assert.deepEqual(shantayCrossingFor({ x: 3303, y: 3115, z: 0 }), {
+    desert: false,
+    path: [[3303, 3116], [3303, 3117]],
+  });
+  assert.equal(shantayCrossingFor({ x: 3303, y: 3115, z: 1 }), null);
+});
+
+
+test('Sophanem north gate opens and closes both nameless gate leaves', () => {
+  const h = buildHarness();
+  try {
+    h.place(44036, 3283, 2809, 1);
+    h.place(44038, 3284, 2809, 1);
+    assert.deepEqual(h.click(44036, 3283, 2809, 1), [
+      ['deregister', 44036, 3283, 2809, 1],
+      ['deregister', 44038, 3284, 2809, 1],
+      ['register', 44037, 3283, 2810, 0],
+      ['register', 44039, 3284, 2810, 2],
+    ]);
+
+    h.place(44037, 3283, 2810, 0);
+    h.place(44039, 3284, 2810, 2);
+    assert.deepEqual(h.click(44037, 3283, 2810, 0, 'Close'), [
+      ['deregister', 44037, 3283, 2810, 0],
+      ['deregister', 44039, 3284, 2810, 2],
+      ['register', 44036, 3283, 2809, 1],
+      ['register', 44038, 3284, 2809, 1],
+    ]);
+  } finally {
+    h.restore();
+  }
 });

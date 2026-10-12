@@ -507,6 +507,9 @@ export class ClientConnection {
         }
         case "widget_action":
           if (this.player) {
+            const widgetAction = { player: this.player, packet, handled: false };
+            PluginManager.emitCustomEvent("player:widget-action", widgetAction);
+            if (widgetAction.handled) continue;
             const actionPacket = { ...packet, buttonNum: packet.buttonNum ?? 0 };
             const equipmentSlot = EquipPacketListener.resolveEquipmentSlot(actionPacket.groupId, actionPacket.childId);
             if (WORLD_MAP_ORB_WIDGET_IDS.includes(actionPacket.widgetId) && actionPacket.buttonNum === 2) {
@@ -691,6 +694,11 @@ export class ClientConnection {
           }
           continue;
         case "widget_drag":
+          if (this.player) {
+            const widgetDrag = { player: this.player, packet, handled: false };
+            PluginManager.emitCustomEvent("player:widget-action", widgetDrag);
+            if (widgetDrag.handled) continue;
+          }
           if (this.player && !Bank.handleDrag(this.player, packet)) SwitchItemSlotPacketListener.move(
             this.player, packet.sourceWidgetId, packet.sourceSlot, packet.targetSlot
           );
@@ -1035,7 +1043,7 @@ export class ClientConnection {
     if (/^(wield|wear|equip|hold)$/.test(option)) {
       EquipPacketListener.equip(player, packet.itemId, packet.slot, 3214);
     } else if (ItemActionPacketListener.isDropOption(option, optionIndex)) {
-      if (!ItemActionPacketListener.handleAction(player, 3214, packet.itemId, packet.slot, optionIndex ?? 5, packet.option)) {
+      if (!ItemActionPacketListener.handleAction(player, packet.widgetId, packet.itemId, packet.slot, optionIndex ?? 5, packet.option)) {
         DropItemPacketListener.drop(player, packet.itemId, 3214, packet.slot);
       }
     } else if (option === "examine") {

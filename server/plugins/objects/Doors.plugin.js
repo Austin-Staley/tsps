@@ -25,8 +25,8 @@ const DOOR_AUTO_CLOSE_TICKS = 500;
 // the open ids are not closed+1). Same trick works for NPCs/items via C.getNpc / C.getItem.
 const DOOR_NAMES = new Set([
   "Door", "Doors", "Large door", "Castle door", "Cell Door", "Cell door",
-  "Glass door", "Magic door", "Metal door", "Mind Door", "Tent door",
-  "Gate", "Metal gate", "Doorway", "Tree Door", "Ardougne Wall Door",
+  "Glass door", "Magic door", "Metal door", "Mind Door", "Tent door", "Wall",
+  "Gate", "Metal gate", "Doorway", "Tree Door", "Storeroom Door", "Ardougne Wall Door",
 ]);
 
 // Always name locs by their core.ObjectIdentifiers property (O.DOOR_358), never a raw id: the
@@ -45,7 +45,7 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   // door whose same-model "Close" locs (5245, 11617, 15205, 17115) all belong to other doors.
   // GATE_52 (Gnome Ball pitch and Tree Gnome Village): its same-model open variants (193, 2395)
   // are nameless with no actions and are never placed, so the pairing below cannot find them.
-  SELF_OPENING_DOOR_IDS = new Set([O.DOOR_223, O.DOOR_225, O.DOOR_226, O.DOOR_227, O.DOOR_228, O.DOOR_229, O.DOOR_230, O.DOOR_231, O.DOOR_358, O.GATE_52,
+  SELF_OPENING_DOOR_IDS = new Set([O.DOOR_223, O.DOOR_225, O.DOOR_226, O.DOOR_227, O.DOOR_228, O.DOOR_229, O.DOOR_230, O.DOOR_231, O.DOOR_358, O.GATE_52, O.WALL_9,
     // The Blood Moon Rises crank-wheel house exit (61824) has no cache Close partner.
     O.DOOR_831,
     // The two Ardougne Wall Door loc variants swing open by rotating the same cache loc.
@@ -65,6 +65,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     // Tree Gnome Stronghold doors: 1967/1968 open into the cache's nameless 1969/1970.
     [O.TREE_DOOR, 1969],
     [O.TREE_DOOR_2, 1970],
+    // Troll Stronghold's cache has an action-less open loc 3811 with the same
+    // model as closed 3810, so it cannot be paired by the normal action scan.
+    [O.STOREROOM_DOOR, O.STOREROOM_DOOR + 1],
   ]);
 
   // Tree Gnome Stronghold main gate: one 5x2 loc (190, face 2) opens into two
@@ -134,6 +137,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     Object.freeze([O.GATE_8, O.GATE_9, 28853, 28854]),
     // Large doors sharing model 639 with 1521/1524; they open into that family's 1522/1525.
     Object.freeze([O.LARGE_DOOR_98, O.LARGE_DOOR_99, O.LARGE_DOOR_16, O.LARGE_DOOR_18]),
+    // Sophanem's north entrance: closed leaves 44036/44038, nameless open leaves 44037/44039.
+    Object.freeze([O.GATE_232, O.GATE_233, 44037, 44039]),
   ]);
   // Both leaves of each pair are partners of the other.
   SPECIAL_DOUBLE_DOOR_PAIRS = Object.freeze([
@@ -150,11 +155,14 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.GATE_92, O.GATE_93],
     [O.GATE_94, O.GATE_95],
     [O.GATE_8, O.GATE_9],
+    [O.GATE_232, O.GATE_233],
+    [44037, 44039],
     [O.LARGE_DOOR_24, O.LARGE_DOOR_25],
     [O.LARGE_DOOR_26, O.LARGE_DOOR_27],
     [O.LARGE_DOOR_29, O.LARGE_DOOR_28],
     [O.LARGE_DOOR_31, O.LARGE_DOOR_30],
     [O.LARGE_DOOR_98, O.LARGE_DOOR_99],
+    [O.GATE_232, O.GATE_233],
     [O.LARGE_DOOR_16, O.LARGE_DOOR_18],
     [O.LARGE_DOOR_7, O.LARGE_DOOR_9],
     [O.LARGE_DOOR_8, O.LARGE_DOOR_10],
@@ -187,6 +195,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.LARGE_DOOR_29, O.LARGE_DOOR_31],
     [O.LARGE_DOOR_28, O.LARGE_DOOR_30],
     [O.LARGE_DOOR_98, O.LARGE_DOOR_16],
+    [O.GATE_232, 44037],
+    [O.GATE_233, 44039],
     [O.LARGE_DOOR_99, O.LARGE_DOOR_18],
     [O.LARGE_DOOR_7, O.LARGE_DOOR_8],
     [O.LARGE_DOOR_9, O.LARGE_DOOR_10],
