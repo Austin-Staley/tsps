@@ -1658,3 +1658,91 @@ test('Desert Treasure II shadow spells interrupt the private Leviathan encounter
   assert.ok(target.__dt2LeviathanStunnedUntil > api.core.World.getProcessCycle());
   assert.match(messages[0], /stuns the Leviathan/);
 });
+
+test('Desert Treasure II Duke prep requires the cache supplies and two real poisons before the boss can wake', () => {
+  const { api: base } = mockApi();
+  const objects = [], itemItems = [], itemObjects = [], itemNpcs = [], deaths = [];
+  const queues = { add: [], remove: [] };
+  class TestArea {
+    constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
+    setChunk() {}
+    enter() {}
+    leave() {}
+    postLeave() {}
+    getBaseX() { return 5000; }
+    getBaseY() { return 6000; }
+    tile(x, y, z) { return { x: 5000 + x, y: 6000 + y, z, getX() { return this.x; }, getY() { return this.y; } }; }
+    add(npc) { this.entities.push(npc); }
+    isDestroyed() { return false; }
+    destroy() {}
+  }
+  const core = {
+    ...base.core,
+    TemplatedInstanceArea: TestArea,
+    NPC: { create: (id, location) => ({
+      id, location, owner: null, hp: 500,
+      setOwner(value) { this.owner = value; }, getOwner() { return this.owner; }, setOwnerOnly() {},
+      setScriptedMovement() {}, setMaxHitpoints(value) { this.hp = value; }, setHitpoints(value) { this.hp = value; },
+      getHitpoints() { return this.hp; }, isRegistered() { return true; }, isNpc() { return true; }, getAsNpc() { return this; },
+    }) },
+    World: { getAddNPCQueue: () => queues.add, getRemoveNPCQueue: () => queues.remove },
+  };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'onObjectInteraction' ? (handler) => objects.push(handler)
+        : prop === 'onItemOnItem' ? (handler) => itemItems.push(handler)
+          : prop === 'onItemOnObject' ? (handler) => itemObjects.push(handler)
+            : prop === 'onItemOnNpc' ? (handler) => itemNpcs.push(handler)
+              : prop === 'onNpcDeath' ? (handler) => deaths.push(handler)
+                : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const quest = runtime.getRegisteredQuests().at(-1);
+  const attrs = new Map(), inventory = new Map(), messages = [];
+  const player = {
+    isPlayer: () => true, getAsPlayer() { return this; }, getUsername: () => 'dt2-sucellus-test',
+    getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    moveTo(location) { this.location = location; }, sendMessage: (message) => messages.push(message),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    getInventory: () => ({ getAmount: (id) => inventory.get(id) ?? 0,
+      adds: (id, amount) => inventory.set(id, (inventory.get(id) ?? 0) + amount),
+      deleteNumber: (id, amount) => inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - amount)) }),
+  };
+  const I = core.ItemIdentifiers, O = core.ObjectIdentifiers;
+  const sourceLocation = (x, y, z = 0) => ({ x: 5000 + x - 3008, y: 6000 + y - 6416, z });
+  const interactObject = (id, x, y, option = 'Search') => objects.at(-1)({ player, objectId: id, option, location: sourceLocation(x, y) });
+  quest.setStage(player, 9);
+  assert.equal(objects.at(-1)({ player, objectId: 1, location: { x: 3039, y: 6433, z: 0 } }), true, 'enter the cache asylum gate');
+  assert.equal(attrs.get('desert-treasure-ii:sucellus-area') instanceof TestArea, true);
+  const boss = attrs.get('desert-treasure-ii:boss');
+  assert.equal(boss.__dt2SucellusAwake, false);
+  interactObject(O.PESTLE_AND_MORTAR, 3035, 6440);
+  interactObject(O.PICKAXE_2, 3035, 6441);
+  for (let i = 0; i < 3; i++) interactObject(O.MUSCA_MUSHROOMS, 3035, 6442);
+  for (let i = 0; i < 3; i++) interactObject(O.ARDER_MUSHROOMS, 3045, 6442);
+  for (let i = 0; i < 12; i++) interactObject(O.SALT_DEPOSIT, 3039, 6447, 'Mine');
+  for (const id of [I.MUSCA_MUSHROOM, I.MUSCA_MUSHROOM, I.MUSCA_MUSHROOM, I.ARDER_MUSHROOM, I.ARDER_MUSHROOM, I.ARDER_MUSHROOM]) {
+    itemItems.at(-1)({ player, usedItemId: I.PESTLE_AND_MORTAR, usedWithItemId: id });
+  }
+  assert.equal(inventory.get(I.MUSCA_POWDER), 3);
+  assert.equal(inventory.get(I.ARDER_POWDER), 3);
+  for (const vat of [47536, 47537]) {
+    for (const powder of [I.MUSCA_POWDER, I.ARDER_POWDER]) {
+      itemObjects.at(-1)({ player, itemId: powder, objectId: vat, location: sourceLocation(3038, 6438) });
+    }
+    for (let i = 0; i < 6; i++) itemObjects.at(-1)({ player, itemId: I.SALAX_SALT, objectId: vat, location: sourceLocation(3038, 6438) });
+    interactObject(vat, 3038, 6438, 'Empty');
+  }
+  assert.equal(inventory.get(I.ARDER_MUSCA_POISON), 2);
+  itemNpcs.at(-1)({ player, npc: boss, itemId: I.ARDER_MUSCA_POISON });
+  assert.equal(boss.__dt2SucellusAwake, false);
+  itemNpcs.at(-1)({ player, npc: boss, itemId: I.ARDER_MUSCA_POISON });
+  assert.equal(boss.__dt2SucellusAwake, true);
+  assert.equal(inventory.get(I.ARDER_MUSCA_POISON), 0);
+  deaths.at(-1)({ killer: player, npc: boss });
+  assert.equal(inventory.get(I.ODD_KEY), 1);
+  interactObject(O.GATE_256, 3021, 6420, 'Open');
+  assert.equal(inventory.get(I.SUCELLUS_MEDALLION), 1);
+  assert.equal(quest.getStage(player), 10);
+});

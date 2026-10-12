@@ -21,6 +21,11 @@ module.exports = function registerDesertTreasureII(api) {
   const SEARCHED_NAMES = "desert-treasure-ii:searched-names";
   const BANIKAN_LEFT = "desert-treasure-ii:banikan-left";
   const VARDORVIS_PROGRESS = "desert-treasure-ii:vardorvis-progress";
+  const SUCELLUS_AREA = "desert-treasure-ii:sucellus-area";
+  const SUCELLUS_MUSHROOMS = "desert-treasure-ii:sucellus-mushrooms";
+  const SUCELLUS_VATS = "desert-treasure-ii:sucellus-vats";
+  const SUCELLUS_POISONS = "desert-treasure-ii:sucellus-poisons";
+  const SUCELLUS_DEFEATED = "desert-treasure-ii:sucellus-defeated";
   const PUZZLE_GROUP = 838;
   const CELL_VARBITS = [15165, 15166, 15167, 15168, 15169, 15170, 15171, 15172];
   // RuneLite QuestHelper reads these in reverse varbit order from the solution.
@@ -220,6 +225,7 @@ module.exports = function registerDesertTreasureII(api) {
   let ScarMazeTwoArea;
   let ScarMazeThreeArea;
   let LeviathanArea;
+  let SucellusArea;
   const totemSpellIds = new Map(TOTEMS.map((totem) => [totem.kind, new Set(totem.spells.map((name) => api.core.CombatSpells[name]?.spellId?.()).filter(Number.isInteger))]));
 
   AncientVaultArea = class DesertTreasureIIAncientVaultArea extends api.core.TemplatedInstanceArea {
@@ -749,6 +755,51 @@ module.exports = function registerDesertTreasureII(api) {
     }
   };
 
+  SucellusArea = class DesertTreasureIISucellusArea extends api.core.TemplatedInstanceArea {
+    constructor(owner, questPlayer) {
+      super(6, 6);
+      this.owner = owner;
+      this.questPlayer = questPlayer;
+      for (let x = 0; x < 6; x++) {
+        for (let y = 0; y < 6; y++) {
+          for (let plane = 0; plane < 4; plane++) {
+            this.setChunk(plane, x, y, plane === 0 ? {
+              sourceChunkX: 376 + x, sourceChunkY: 802 + y, sourcePlane: 0, rotation: 0,
+            } : null);
+          }
+        }
+      }
+    }
+    getName() { return "Ghorrock asylum (Desert Treasure II)"; }
+    allowSummonPet() { return false; }
+    isMulti() { return true; }
+    canAttack(attacker, target) {
+      if (target?.__dt2Sucellus) return attacker?.isPlayer?.() && attacker === this.questPlayer && target.__dt2SucellusAwake;
+      if (attacker?.__dt2Sucellus) return target?.isPlayer?.() && target === this.questPlayer && attacker.__dt2SucellusAwake;
+      return null;
+    }
+    process(actor) {
+      if (!actor?.isPlayer?.() || actor.getAsPlayer?.() !== this.questPlayer) return;
+      const boss = this.questPlayer.getAttribute(ATTR);
+      if (boss?.__dt2Sucellus && boss.getHitpoints?.() > 0 && boss.__dt2SucellusAwake) {
+        // Keep the ordinary combat hit queue and regeneration rules; only the
+        // scripted wake-up phase is owned by the quest.
+        boss.getCombat?.().getLastAttack?.().reset?.();
+      }
+    }
+    destroy() {
+      if (this.isDestroyed()) return;
+      for (const entity of [...this.entities]) {
+        if (!entity?.isNpc?.() || !entity.getAsNpc) continue;
+        const npc = entity.getAsNpc();
+        const add = api.core.World.getAddNPCQueue();
+        for (let i = add.indexOf(npc); i >= 0; i = add.indexOf(npc)) add.splice(i, 1);
+        if (npc.isRegistered?.() && !api.core.World.getRemoveNPCQueue().includes(npc)) api.core.World.getRemoveNPCQueue().push(npc);
+      }
+      super.destroy();
+    }
+  };
+
   function enterWarRoom(p) {
     const current = p.getAttribute(ATTR_WAR_ROOM);
     if (current instanceof WarRoomArea && !current.isDestroyed()) {
@@ -1055,6 +1106,19 @@ module.exports = function registerDesertTreasureII(api) {
       p.moveTo(area.tile(32, 46, 0));
       spawnScarPerstenAtShip(p, area);
     }
+    return area;
+  }
+
+  function enterSucellusArea(p) {
+    let area = p.getAttribute(SUCELLUS_AREA);
+    if (!(area instanceof SucellusArea) || area.isDestroyed()) {
+      area = new SucellusArea(p.getUsername?.(), p);
+      area.enter(p);
+      p.setAttribute(SUCELLUS_AREA, area);
+      p.setAttribute(SUCELLUS_POISONS, 0);
+    } else area.enter(p);
+    p.moveTo(area.tile(31, 17, 0));
+    spawnBoss(p, "sucellus");
     return area;
   }
 
@@ -1695,6 +1759,28 @@ module.exports = function registerDesertTreasureII(api) {
     return true;
   }
 
+  function handleSucellusItemOnNpc(event) {
+    const { player: p, itemId } = event ?? {};
+    const npc = event?.npc ?? event?.target;
+    if (stage(p) !== S.SUCELLUS || itemId !== I.ARDER_MUSCA_POISON
+      || !npc?.__dt2Sucellus || npc.getOwner?.() !== p || !has(p, itemId)) return false;
+    event.handled = true;
+    if (npc.__dt2SucellusAwake) {
+      p.sendMessage("Duke Sucellus has already awakened.");
+      return true;
+    }
+    p.getInventory().deleteNumber(I.ARDER_MUSCA_POISON, 1);
+    const poisons = Math.min(2, (Number(p.getAttribute(SUCELLUS_POISONS)) || 0) + 1);
+    p.setAttribute(SUCELLUS_POISONS, poisons);
+    p.sendMessage(`The poison seeps into Duke Sucellus (${poisons}/2).`);
+    if (poisons === 2) {
+      npc.__dt2SucellusAwake = true;
+      npc.setScriptedMovement?.(false);
+      p.sendMessage("Duke Sucellus stirs awake and attacks!");
+    }
+    return true;
+  }
+
   function handleDialogueLine(event) {
     if (stage(event?.player) !== S.LEVIATHAN || event?.text !== "Yes.") return;
     if (![N.CATALYTIC_GUARDIAN, N.CATALYTIC_GUARDIAN_2].includes(event.npcId)) return;
@@ -1865,6 +1951,14 @@ module.exports = function registerDesertTreasureII(api) {
     return x >= 2064 && x < 2112 && y >= 6336 && y < 6400 ? { x, y } : null;
   }
 
+  function sucellusSourceTile(p, location) {
+    const area = p.getAttribute(SUCELLUS_AREA);
+    if (!(area instanceof SucellusArea) || area.isDestroyed?.() || !location) return null;
+    const x = location.x - area.getBaseX() + 3008;
+    const y = location.y - area.getBaseY() + 6416;
+    return x >= 3008 && x < 3056 && y >= 6416 && y < 6464 ? { x, y } : null;
+  }
+
   function scarMazeSourceTile(p, location) {
     const area = p.getAttribute(ATTR_SCAR_MAZE_ONE);
     if (!(area instanceof ScarMazeOneArea) || area.isDestroyed?.() || !location) return null;
@@ -1919,7 +2013,7 @@ module.exports = function registerDesertTreasureII(api) {
 
   function handleLogout({ player: p }) {
     if (!p) return;
-    for (const key of [ATTR_VAULT_AREA, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO, ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA]) {
+    for (const key of [ATTR_VAULT_AREA, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO, ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA, SUCELLUS_AREA]) {
       const area = p.getAttribute(key);
       if (area && !area.isDestroyed?.()) {
         area.leave?.(p, false);
@@ -1939,7 +2033,16 @@ module.exports = function registerDesertTreasureII(api) {
     if (s >= S.COMPLETE) return ["<str>I found the Elder Horn and stopped Sliske.</str>", "", "<col=ff0000>QUEST COMPLETE!</col>"];
     if (s >= S.FINALE) return ["Return the four medallions to the Ancient Vault."];
     if (s >= S.WHISPERER) return ["Search the Lassar Undercity and defeat the Whisperer."];
-    if (s >= S.SUCELLUS) return ["Investigate Ghorrock and defeat Duke Sucellus."];
+    if (s >= S.SUCELLUS) {
+      if (player.getAttribute(SUCELLUS_DEFEATED)) return ["Use the odd key on the western gate in Duke Sucellus's chamber and take his medallion."];
+      if (!player.getAttribute(SUCELLUS_AREA)) return ["Reach the Ghorrock asylum beneath Weiss and enter Duke Sucellus's chamber."];
+      if ((Number(player.getAttribute(SUCELLUS_POISONS)) || 0) >= 2) return ["Use both Arder-musca poisons on Duke Sucellus, then defeat him."];
+      if ((Number(player.getAttribute(SUCELLUS_POISONS)) || 0) === 1) return ["Use the second Arder-musca poison on Duke Sucellus."];
+      if (player.getInventory().getAmount(I.ARDER_MUSCA_POISON) >= 2) return ["Use both Arder-musca poisons on Duke Sucellus to wake him."];
+      if (player.getInventory().getAmount(I.SALAX_SALT) < 12) return ["Mine 12 salax salt in the asylum. Each fermentation vat needs six salt and both ground mushroom powders."];
+      if (player.getInventory().getAmount(I.ARDER_POWDER) < 2 || player.getInventory().getAmount(I.MUSCA_POWDER) < 2) return ["Take the pestle and mortar, gather Arder and Musca mushrooms, and grind two of each into powder."];
+      return ["Add both powders and six salax salt to each of two fermentation vats, then empty both to collect the poisons."];
+    }
     if (s >= S.LEVIATHAN) {
       if (!player.getAttribute(SCAR_DEMONS_DEFEATED)) return ["Defeat the Scarred demons near the rowboat."];
       if (!player.getAttribute(SCAR_BOAT_TRIED)) return ["Try to board the rowboat at the Scar entrance."];
@@ -2202,6 +2305,20 @@ module.exports = function registerDesertTreasureII(api) {
     return false;
   }
   function handleItemOnItem({ player: p, usedItemId: itemId1, usedWithItemId: itemId2 }) {
+    if (stage(p) === S.SUCELLUS && has(p, I.PESTLE_AND_MORTAR)) {
+      const pair = new Set([itemId1, itemId2]);
+      const powder = pair.has(I.MUSCA_MUSHROOM) ? I.MUSCA_POWDER
+        : pair.has(I.ARDER_MUSHROOM) ? I.ARDER_POWDER : null;
+      const mushroom = pair.has(I.MUSCA_MUSHROOM) || pair.has(I.ARDER_MUSHROOM);
+      if (powder && mushroom) {
+        const raw = pair.has(I.MUSCA_MUSHROOM) ? I.MUSCA_MUSHROOM : I.ARDER_MUSHROOM;
+        if (!has(p, raw)) return false;
+        p.getInventory().deleteNumber(raw, 1);
+        p.getInventory().adds(powder, 1);
+        p.sendMessage(`You grind the ${powder === I.MUSCA_POWDER ? "Musca" : "Arder"} mushroom into powder.`);
+        return true;
+      }
+    }
     if (stage(p) === S.LEVIATHAN && p.getAttribute(SCAR_RIFT_LIVE)) {
       const recipe = SCAR_NERVE_RECIPES.find(([first, second]) =>
         (itemId1 === first && itemId2 === second) || (itemId1 === second && itemId2 === first));
@@ -2242,7 +2359,109 @@ module.exports = function registerDesertTreasureII(api) {
     const scarMazeTwoTile = scarMazeTwoSourceTile(p, location);
     const scarMazeThreeTile = scarMazeThreeSourceTile(p, location);
     const leviathanTile = leviathanSourceTile(p, location);
+    const sucellusTile = sucellusSourceTile(p, location);
     const visibleId = definition?.id ?? objectId;
+    if (s === S.SUCELLUS) {
+      const action = String(event.option ?? "").toLowerCase();
+      const worldX = location?.x, worldY = location?.y, worldZ = location?.z ?? location?.getZ?.() ?? 0;
+      // The cache's asylum entrance is at the far north-east of the prison.
+      // Entering the boss gate copies the real arena template into an owner-only
+      // instance so quest supplies and encounter state remain per player.
+      if (!sucellusTile && worldX === 3039 && worldY === 6433 && worldZ === 0) {
+        enterSucellusArea(p);
+        p.sendMessage("You pass through the asylum gate into Duke Sucellus's chamber.");
+        return true;
+      }
+      if (sucellusTile) {
+        if (sucellusTile.x === 3039 && sucellusTile.y === 6433 && [O.GATE_256, O.GATE_257].includes(visibleId)) {
+          const area = p.getAttribute(SUCELLUS_AREA);
+          if (area instanceof SucellusArea && !area.isDestroyed()) {
+            area.leave(p, false);
+            area.postLeave(p, false);
+            area.destroy();
+            p.setAttribute(SUCELLUS_AREA, null);
+            p.setAttribute(ATTR, null);
+            p.moveTo(new api.core.Location(2974, 6440, 2));
+          }
+          return true;
+        }
+        const mushrooms = p.getAttribute(SUCELLUS_MUSHROOMS) ?? { musca: 0, arder: 0 };
+        if ([O.PESTLE_AND_MORTAR, O.PESTLE_AND_MORTAR_2].includes(visibleId)) {
+          if (!has(p, I.PESTLE_AND_MORTAR)) p.getInventory().adds(I.PESTLE_AND_MORTAR, 1);
+          p.sendMessage("You take a pestle and mortar from the shelf.");
+          return true;
+        }
+        if ([O.PICKAXE_2, O.PICKAXE_3].includes(visibleId)) {
+          if (!has(p, I.IRON_PICKAXE)) p.getInventory().adds(I.IRON_PICKAXE, 1);
+          p.sendMessage("You take a pickaxe from the rack.");
+          return true;
+        }
+        if ([O.MUSCA_MUSHROOMS, O.MUSCA_MUSHROOMS_2].includes(visibleId)) {
+          const count = Math.min(3, mushrooms.musca + 1);
+          if (count === mushrooms.musca) return p.sendMessage("You have gathered enough Musca mushrooms.");
+          mushrooms.musca = count;
+          p.setAttribute(SUCELLUS_MUSHROOMS, mushrooms);
+          p.getInventory().adds(I.MUSCA_MUSHROOM, 1);
+          p.sendMessage(`You gather a Musca mushroom (${count}/3).`);
+          return true;
+        }
+        if ([O.ARDER_MUSHROOMS, O.ARDER_MUSHROOMS_2].includes(visibleId)) {
+          const count = Math.min(3, mushrooms.arder + 1);
+          if (count === mushrooms.arder) return p.sendMessage("You have gathered enough Arder mushrooms.");
+          mushrooms.arder = count;
+          p.setAttribute(SUCELLUS_MUSHROOMS, mushrooms);
+          p.getInventory().adds(I.ARDER_MUSHROOM, 1);
+          p.sendMessage(`You gather an Arder mushroom (${count}/3).`);
+          return true;
+        }
+        if ([O.SALT_DEPOSIT, O.SALT_DEPOSIT_2].includes(visibleId)) {
+          if (!has(p, I.IRON_PICKAXE) && !has(p, I.BRONZE_PICKAXE) && !has(p, I.STEEL_PICKAXE)
+            && !has(p, I.MITHRIL_PICKAXE) && !has(p, I.ADAMANT_PICKAXE) && !has(p, I.RUNE_PICKAXE)) {
+            return p.sendMessage("You need a pickaxe to mine the salax salt.");
+          }
+          const amount = p.getInventory().getAmount(I.SALAX_SALT);
+          if (amount >= 12) return p.sendMessage("You have mined enough salax salt.");
+          p.getInventory().adds(I.SALAX_SALT, 1);
+          p.sendMessage(`You mine a piece of salax salt (${amount + 1}/12).`);
+          return true;
+        }
+        if (sucellusTile.x === 3021 && sucellusTile.y === 6420 && [O.GATE_256, O.GATE_257].includes(visibleId)) {
+          if (!p.getAttribute(SUCELLUS_DEFEATED)) return p.sendMessage("The Duke still blocks the room beyond the gate.");
+          if (!has(p, I.ODD_KEY)) return p.sendMessage("The gate is locked. The odd key from Duke Sucellus should fit.");
+          p.getInventory().deleteNumber(I.ODD_KEY, 1);
+          if (!has(p, I.SUCELLUS_MEDALLION)) p.getInventory().adds(I.SUCELLUS_MEDALLION, 1);
+          p.sendMessage("The odd key opens the western room. You take Sucellus' medallion from the chest.");
+          const area = p.getAttribute(SUCELLUS_AREA);
+          if (area instanceof SucellusArea && !area.isDestroyed()) {
+            area.leave(p, false);
+            area.postLeave(p, false);
+            area.destroy();
+            p.setAttribute(SUCELLUS_AREA, null);
+            p.moveTo(new api.core.Location(2974, 6440, 2));
+          }
+          setStage(p, S.WHISPERER);
+          return true;
+        }
+        // OSRS Wiki's DT2 quick guide: gather both mushroom types, grind them,
+        // mine 12 salax salt, fill two vats, and take two Arder-musca poisons.
+        if ([47536, 47537, 47538, 47539, 47540, 47541, 47542, 47543].includes(visibleId)) {
+          const vats = { ...(p.getAttribute(SUCELLUS_VATS) ?? {}) };
+          const vat = { ...(vats[visibleId] ?? { powders: [], salt: 0 }) };
+          if (vat.powders?.includes(I.ARDER_POWDER) && vat.powders?.includes(I.MUSCA_POWDER)
+            && vat.salt >= 6 && action.includes("empty")) {
+            vat.powders = [];
+            vat.salt = 0;
+            vats[visibleId] = vat;
+            p.setAttribute(SUCELLUS_VATS, vats);
+            p.getInventory().adds(I.ARDER_MUSCA_POISON, 1);
+            p.sendMessage(`You empty the vat and collect an Arder-musca poison (${Math.min(2, p.getInventory().getAmount(I.ARDER_MUSCA_POISON))}/2).`);
+          } else if (vat.salt < 6) p.sendMessage(`This vat needs ${6 - vat.salt} more salax salt and both ground mushroom powders.`);
+          else if (!vat.powders?.includes(I.ARDER_POWDER) || !vat.powders?.includes(I.MUSCA_POWDER)) p.sendMessage("Add both ground mushroom powders to this vat before emptying it.");
+          else p.sendMessage("The vat is ready. Empty it to collect Arder-musca poison.");
+          return true;
+        }
+      }
+    }
     if (s === S.LEVIATHAN && leviathanTile) {
       if ([47594, 49210].includes(visibleId) && leviathanTile.x === 2091 && leviathanTile.y === 6380) {
         if (!p.getAttribute(SCAR_LEVIATHAN_KILLED)) { p.sendMessage("The Leviathan still bars your way."); return true; }
@@ -2766,6 +2985,36 @@ module.exports = function registerDesertTreasureII(api) {
   }
   function handleItemOnObject(event) {
     const { player: p, itemId, objectId, location } = event;
+    const sucellusTile = sucellusSourceTile(p, location);
+    if (stage(p) === S.SUCELLUS && sucellusTile
+      && [47536, 47537, 47538, 47539, 47540, 47541, 47542, 47543].includes(objectId)) {
+      event.handled = true;
+      const vats = { ...(p.getAttribute(SUCELLUS_VATS) ?? {}) };
+      const vat = { ...(vats[objectId] ?? { powders: [], salt: 0 }) };
+      if (itemId === I.ARDER_POWDER || itemId === I.MUSCA_POWDER) {
+        if (!has(p, itemId)) return true;
+        if (itemId !== I.ARDER_POWDER && itemId !== I.MUSCA_POWDER) return true;
+        if (vat.powders.includes(itemId)) return p.sendMessage("This vat already contains that mushroom powder.");
+        p.getInventory().deleteNumber(itemId, 1);
+        vat.powders.push(itemId);
+        vats[objectId] = vat;
+        p.setAttribute(SUCELLUS_VATS, vats);
+        p.sendMessage(`You add the ${itemId === I.ARDER_POWDER ? "Arder" : "Musca"} powder to the fermentation vat.`);
+        return true;
+      }
+      if (itemId === I.SALAX_SALT) {
+        if (!has(p, I.SALAX_SALT)) return true;
+        if (!vat.powders.length) return p.sendMessage("Add ground mushroom powder to the vat before salax salt.");
+        if (vat.salt >= 6) return p.sendMessage("This vat already has enough salax salt.");
+        p.getInventory().deleteNumber(I.SALAX_SALT, 1);
+        vat.salt++;
+        vats[objectId] = vat;
+        p.setAttribute(SUCELLUS_VATS, vats);
+        p.sendMessage(`You add salax salt to the vat (${vat.salt}/6).`);
+        return true;
+      }
+      return true;
+    }
     const vaultTile = vaultSourceTile(p, location);
     if (vaultTile && STATUES.has(objectId)) {
       const index = STATUES.get(objectId);
@@ -2985,6 +3234,25 @@ module.exports = function registerDesertTreasureII(api) {
       p.setAttribute(ATTR, npc);
       return npc;
     }
+    if (key === "sucellus") {
+      const area = p.getAttribute(SUCELLUS_AREA);
+      if (!(area instanceof SucellusArea) || area.isDestroyed() || p.getAttribute(SUCELLUS_DEFEATED)) return;
+      if (npcs[key]?.isRegistered?.() && area.entities.includes(npcs[key])) return npcs[key];
+      const npc = api.core.NPC.create(id, area.tile(31, 38, 0));
+      npc.setOwner?.(p);
+      npc.setOwnerOnly?.(true);
+      npc.setScriptedMovement?.(true);
+      npc.setMaxHitpoints?.(500);
+      npc.setHitpoints?.(500);
+      npc.__dt2Sucellus = true;
+      npc.__dt2SucellusAwake = false;
+      npc.__skipDefaultRespawn = true;
+      area.add(npc);
+      api.core.World.getAddNPCQueue().push(npc);
+      npcs[key] = npc;
+      p.setAttribute(ATTR, npc);
+      return npc;
+    }
     if (!npcs[key]) npcs[key] = api.spawnNpc({ id, x, y, z: 0, owner: p, ownerOnly: true });
     return npcs[key];
   }
@@ -3064,6 +3332,14 @@ module.exports = function registerDesertTreasureII(api) {
       const area = killer.getAttribute(ATTR_LEVIATHAN_AREA);
       if (area instanceof LeviathanArea && !area.isDestroyed()) spawnScarPerstenAtShip(killer, area);
       killer.sendMessage("The Leviathan is defeated. Climb the northern handholds and cross the stepping stone to Persten's ship.");
+      return;
+    }
+    if (owned.sucellus === npc && stage(killer) === S.SUCELLUS) {
+      owned.sucellus = null;
+      killer.setAttribute(ATTR, null);
+      killer.setAttribute(SUCELLUS_DEFEATED, true);
+      if (!has(killer, I.ODD_KEY)) killer.getInventory().adds(I.ODD_KEY, 1);
+      killer.sendMessage("Duke Sucellus falls. Take the odd key to the locked western room for his medallion.");
       return;
     }
     if (Array.isArray(owned.scarTreeEnemies) && owned.scarTreeEnemies.includes(npc)) {
@@ -3224,6 +3500,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.persistAttribute(VARDORVIS_PROGRESS);
   api.persistAttribute(ATTR_SMITH_INTRO);
   api.persistAttribute(STATUES_PLACED);
+  [SUCELLUS_MUSHROOMS, SUCELLUS_VATS, SUCELLUS_DEFEATED].forEach((key) => api.persistAttribute(key));
   [SCAR_DEMONS_DEFEATED, SCAR_BOAT_TRIED, SCAR_PERSTEN_TALKED, SCAR_PERSTEN_TALKED_BEFORE,
     SCAR_PERSTEN_ROOM1_TALKED, SCAR_BOAT_ROOM, SCAR_TINDERBOX_FOUND, SCAR_SLIMY_KEY_FOUND,
     SCAR_GUNPOWDER_FOUND, SCAR_OLD_TABLET_READ, SCAR_BOAT_CHEST_OPEN, SCAR_BOAT_BURNED,
@@ -3283,6 +3560,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("The Whisperer", { "Talk-to": handleBossTalk });
   api.onNpcDeath(handleDeath);
   api.onItemOnNpc(handleNerveOnCatalyst);
+  api.onItemOnNpc(handleSucellusItemOnNpc);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
   api.onPlayerDisconnect(handleLogout);
