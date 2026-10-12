@@ -4,7 +4,7 @@
  * quest state uses the cache's myq6 varbit (15464 in varp 5618).
  */
 module.exports = function registerTheBloodMoonRises(api) {
-  const { Boundary, HitDamage, HitMask, Item, ItemIdentifiers, Location, NpcIdentifiers, PrayerHandler, PrivateArea, Skill, World } = api.core;
+  const { Boundary, HitDamage, HitMask, Item, ItemIdentifiers, Location, NpcIdentifiers, ObjectIdentifiers, PrayerHandler, PrivateArea, Skill, World } = api.core;
   const { registerQuest, loadTranscripts, startTranscript } = require("../QuestRuntime");
   const PAGE = "The Blood Moon Rises";
   const START_HOOK = "quest:the-blood-moon-rises:start";
@@ -75,10 +75,12 @@ module.exports = function registerTheBloodMoonRises(api) {
   const DRAKAN_ENCOUNTER_COMPLETE = "quest.the_blood_moon_rises.drakan-defeated";
   const SIEGE_DRAKAN_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.siege-drakan-area";
   const SIEGE_DRAKAN_COMPLETE = "quest.the_blood_moon_rises.siege-drakan-defeated";
+  const SIEGE_DEFENCE_ATTRIBUTE = "quest.the_blood_moon_rises.siege-defence";
   const PREP_COMPLETE = "quest.the_blood_moon_rises.preparations-complete";
   const wyrdEncounters = new Map();
   const drakanEncounters = new Map();
   const siegeDrakanEncounters = new Map();
+  const siegeHallInjured = new Map();
   const CHAPTERS = [
     [STAGE.STARTED, "starting-out"],
     [STAGE.HIDEOUT, "starting-out-in-the-myreque-hideout"],
@@ -516,6 +518,148 @@ module.exports = function registerTheBloodMoonRises(api) {
     return true;
   }
 
+  const SIEGE_HALL = {
+    hammerCrate: ObjectIdentifiers.CRATE_OF_HAMMERS_2,
+    potionCrate: ObjectIdentifiers.CRATE_OF_POTIONS,
+    damagedPillar: ObjectIdentifiers.DAMAGED_PILLAR_2,
+    pillar: ObjectIdentifiers.PILLAR_150,
+    damagedWindow: ObjectIdentifiers.DAMAGED_WINDOW,
+    window: ObjectIdentifiers.WINDOW_20,
+    barricade: ObjectIdentifiers.BARRICADE_60,
+    hammer: ItemIdentifiers.HAMMER,
+    healingPotion: ItemIdentifiers.HEALING_POTION,
+    injuredAranei: [NpcIdentifiers.ARANEI_108, NpcIdentifiers.ARANEI_109, NpcIdentifiers.ARANEI_110,
+      NpcIdentifiers.ARANEI_111, NpcIdentifiers.ARANEI_112, NpcIdentifiers.ARANEI_113],
+    repairLocations: new Map([
+      ["3174,7855", [ObjectIdentifiers.DAMAGED_PILLAR_2, ObjectIdentifiers.PILLAR_150]],
+      ["3162,7855", [ObjectIdentifiers.DAMAGED_PILLAR_2, ObjectIdentifiers.PILLAR_150]],
+      ["3176,7858", [ObjectIdentifiers.DAMAGED_WINDOW, ObjectIdentifiers.WINDOW_20]],
+      ["3174,7858", [ObjectIdentifiers.DAMAGED_WINDOW, ObjectIdentifiers.WINDOW_20]],
+      ["3162,7858", [ObjectIdentifiers.DAMAGED_WINDOW, ObjectIdentifiers.WINDOW_20]],
+      ["3164,7858", [ObjectIdentifiers.DAMAGED_WINDOW, ObjectIdentifiers.WINDOW_20]],
+    ]),
+  };
+
+  function hallDefenceState(player) {
+    return player.getAttribute(SIEGE_DEFENCE_ATTRIBUTE) ?? { phase: "bridge", healed: [], repaired: [] };
+  }
+
+  function hallTasks(state) {
+    return new Set([...(state.healed ?? []), ...(state.repaired ?? [])]).size;
+  }
+
+  function injuredAraneiKey(npc) {
+    const location = npc.getLocation?.();
+    return `aranei:${location?.getX?.()},${location?.getY?.()},${location?.getZ?.()}`;
+  }
+
+  function spawnSiegeInjuredAranei(player) {
+    const state = hallDefenceState(player);
+    if (state.phase !== "hall" || (state.healed ?? []).includes("aranei:3173,7855,1")) return;
+    const key = player.getUsername?.() ?? player.getIndex?.();
+    const old = siegeHallInjured.get(key);
+    if (old && old.isRegistered?.() && old.getHitpoints?.() > 0) return;
+    const npc = api.spawnNpc({ id: NpcIdentifiers.ARANEI_112, x: 3173, y: 7855, z: 1,
+      wanderRadius: 0, owner: player, ownerOnly: true });
+    if (npc) siegeHallInjured.set(key, npc);
+  }
+
+  function handleSiegeLogin({ player }) {
+    if (player && stage(player) === STAGE.SIEGE) spawnSiegeInjuredAranei(player);
+  }
+
+  function handleSiegeLogout({ player }) {
+    if (!player) return;
+    const key = player.getUsername?.() ?? player.getIndex?.();
+    const npc = siegeHallInjured.get(key);
+    if (npc) api.removeNpc(npc);
+    siegeHallInjured.delete(key);
+  }
+
+  function replaceHallObject(event, replacementId) {
+    const object = event.object;
+    if (!object) return false;
+    const location = object.getLocation();
+    const replacement = new api.core.GameObject(replacementId, location.clone(), object.getType(), object.getFace(),
+      object.getPrivateArea?.() ?? null);
+    api.core.ObjectManager.deregister(object, true);
+    api.core.ObjectManager.register(replacement, true);
+    return true;
+  }
+
+  function handleSiegeHallObject(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.SIEGE) return;
+    const objectId = event.definition?.id ?? event.objectId;
+    const { x, y, z } = event.location ?? {};
+    const state = hallDefenceState(player);
+    const inventory = player.getInventory();
+    if (state.phase !== "hall") return;
+
+    if (objectId === SIEGE_HALL.hammerCrate || objectId === SIEGE_HALL.potionCrate) {
+      event.handled = true;
+      const item = objectId === SIEGE_HALL.hammerCrate ? SIEGE_HALL.hammer : SIEGE_HALL.healingPotion;
+      if (!inventory.contains(item)) inventory.adds(item, 1);
+      player.sendMessage(item === SIEGE_HALL.hammer ? "You take a hammer from the crate." : "You take a healing potion from the crate.");
+      return;
+    }
+
+    if (objectId === SIEGE_HALL.barricade && x === 3167 && y === 7844 && z === 1) {
+      event.handled = true;
+      if (hallTasks(state) < 4) {
+        player.sendMessage("Heal the fallen Aranei and repair at least three damaged windows or pillars before passing through the barricade.");
+        return;
+      }
+      if (!(state.healed ?? []).includes("aranei:3173,7855,1") || (state.repaired ?? []).length < 3) {
+        player.sendMessage("Heal the fallen Aranei and repair at least three damaged windows or pillars before passing through the barricade.");
+        return;
+      }
+      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { ...state, phase: "boss" });
+      startTranscript(api, player, NpcIdentifiers.LOWERNIEL_DRAKAN_19, PAGE,
+        "drakan-s-siege-upon-reaching-0-hideout-integrity");
+      return;
+    }
+
+    if (z !== 1) return;
+    const repairKey = `${x},${y}`;
+    const repair = SIEGE_HALL.repairLocations.get(repairKey);
+    if (!repair || objectId !== repair[0]) return;
+    event.handled = true;
+    if (!(state.repaired ?? []).includes(repairKey) && !inventory.contains(SIEGE_HALL.hammer)) {
+      player.sendMessage("You need a hammer from the crate in the hall to repair this.");
+      return;
+    }
+    if ((state.repaired ?? []).includes(repairKey)) {
+      player.sendMessage("You have already repaired this part of the hall.");
+      return;
+    }
+    if (!replaceHallObject(event, repair[1])) return;
+    player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { ...state, repaired: [...(state.repaired ?? []), repairKey] });
+    player.sendMessage(repair[0] === SIEGE_HALL.damagedPillar ? "You brace and repair the damaged pillar." : "You repair the damaged window.");
+  }
+
+  function healSiegeAranei(event) {
+    const player = event?.player;
+    const npc = event?.npc ?? event?.target;
+    const npcId = event?.npcId ?? npc?.getId?.();
+    if (!player || !npc || !SIEGE_HALL.injuredAranei.includes(npcId) ||
+      stage(player) !== STAGE.SIEGE || hallDefenceState(player).phase !== "hall") return;
+    event.handled = true;
+    const state = hallDefenceState(player);
+    const key = injuredAraneiKey(npc);
+    if ((state.healed ?? []).includes(key)) return;
+    const inventory = player.getInventory();
+    if (!inventory.contains(SIEGE_HALL.healingPotion)) {
+      player.sendMessage("The Aranei needs a healing potion from the crate in the hall.");
+      return;
+    }
+    inventory.deleteNumber(SIEGE_HALL.healingPotion, 1);
+    npc.setNpcTransformationId?.(NpcIdentifiers.ARANEI_106);
+    player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { ...state, healed: [...(state.healed ?? []), key] });
+    siegeHallInjured.delete(player.getUsername?.() ?? player.getIndex?.());
+    player.sendMessage("You give the healing potion to the Aranei and help them back to their feet.");
+  }
+
   function handleSiegeDrakanHit(event) {
     const npc = event?.npc;
     const hit = event?.hit;
@@ -662,6 +806,13 @@ module.exports = function registerTheBloodMoonRises(api) {
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
     const next = ACTION_STAGE[event.stepId];
+    if (event.stepId === "Sut83Q") {
+      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { phase: "bridge", healed: [], repaired: [] });
+    }
+    if (event.stepId === "vqg4qO") {
+      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { phase: "hall", healed: [], repaired: [] });
+      spawnSiegeInjuredAranei(player);
+    }
     if (event.stepId === "Sut83Q") {
       const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {};
       if (!prep.flail || !prep.stakes) {
@@ -1566,6 +1717,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onNpcDialogueVariant(selectVariant);
   api.onAnyNpcInteraction({ "Talk-to": talkQuestNpc });
   api.onObjectInteraction(enterVampyriumCastle);
+  api.onObjectInteraction(handleSiegeHallObject);
   api.onObjectInteraction(inspectWyrdFence);
   api.onObjectInteraction(handleCastleThronePuzzle);
   api.onObjectInteraction(handleCastleBasinPuzzle);
@@ -1588,13 +1740,19 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onItemOnItem(handleBloodHuntItemOnItem);
   api.onItemOnNpc(feedSafalaan);
   api.onItemAction("Dusty book", { Read: readDustyBook });
+  for (const id of SIEGE_HALL.injuredAranei) {
+    api.onNpcInteraction(id, { Heal: healSiegeAranei });
+  }
   api.onPlayerProcess(syncHuntGroundItems);
+  api.onPlayerLogin(handleSiegeLogin);
+  api.onPlayerLogout(handleSiegeLogout);
   api.onNpcDeath(handleWyrdDeath);
   api.onNpcHitModify(handleSiegeDrakanHit);
   api.persistAttribute(WYRD_DEFEATED_ATTRIBUTE);
   api.persistAttribute(DRAKAN_ENCOUNTER_COMPLETE);
   api.persistAttribute(SIEGE_DRAKAN_AREA_ATTRIBUTE);
   api.persistAttribute(SIEGE_DRAKAN_COMPLETE);
+  api.persistAttribute(SIEGE_DEFENCE_ATTRIBUTE);
   api.persistAttribute(PREP_ATTRIBUTE);
   api.persistAttribute(PREP_COMPLETE);
   api.persistAttribute(THRONE_PUZZLE_ATTRIBUTE);

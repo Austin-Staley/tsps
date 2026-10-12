@@ -14,6 +14,7 @@ function mockApi() {
     variant: [],
     condition: [],
     custom: new Map(),
+    npcInteractions: new Map(),
     objects: [],
     itemOnItem: [],
     itemOnNpc: [],
@@ -29,6 +30,7 @@ function mockApi() {
     onNpcDialogueVariant: (h) => handlers.variant.push(h),
     onNpcDialogueCondition: (h) => handlers.condition.push(h),
     onObjectInteraction: (h) => handlers.objects.push(h),
+    onNpcInteraction: (target, actions) => handlers.npcInteractions.set(target, actions),
     onObjectRoute: (h) => handlers.routes.push(h),
     onPlayerProcess: (h) => handlers.playerProcess.push(h),
     onNpcHitModify: (h) => handlers.npcHitModify.push(h),
@@ -801,6 +803,82 @@ test('Blood Moon siege barrier action starts the second private Lowerniel fight 
     { damage: 500, getDamage() { return this.damage; }, setDamage(value) { this.damage = value; } }];
   handlers.npcHitModify.at(-1)({ npc: boss, hit: { getHits: () => parts, updateTotalDamage() { total = parts.reduce((sum, part) => sum + part.damage, 0); } } });
   assert.equal(total, 810, 'the lethal multi-hit is capped at 58% so the escape cutscene cannot be skipped');
+});
+
+test('Blood Moon hall defence supplies hammers and potions, records repairs and heals a fallen Aranei', () => {
+  const { api, handlers } = mockApi();
+  const spawns = [];
+  const injured = {
+    getId: () => api.core.NpcIdentifiers.ARANEI_112,
+    getIndex: () => 800,
+    getLocation: () => new api.core.Location(3173, 7855, 1),
+    getHitpoints: () => 30,
+    isRegistered: () => true,
+    setNpcTransformationId(id) { this.transformedId = id; },
+  };
+  api.spawnNpc = (definition) => (spawns.push(definition), injured);
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  const counts = new Map();
+  const inventory = {
+    contains: (id) => (counts.get(id) ?? 0) > 0,
+    adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
+    deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+  };
+  const player = {
+    getUsername: () => 'SiegeHallTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+  };
+  quest.setStage(player, 70);
+  handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'vqg4qO' });
+  assert.deepEqual(spawns.map(({ id, x, y, z, ownerOnly }) => ({ id, x, y, z, ownerOnly })), [
+    { id: api.core.NpcIdentifiers.ARANEI_112, x: 3173, y: 7855, z: 1, ownerOnly: true },
+  ]);
+  const objectManager = api.core.ObjectManager;
+  const replaced = [];
+  const originalDeregister = objectManager.deregister;
+  const originalRegister = objectManager.register;
+  objectManager.deregister = (object) => replaced.push(['remove', object]);
+  objectManager.register = (object) => replaced.push(['add', object]);
+  const interact = handlers.objects.find((handler) => handler.name === 'handleSiegeHallObject');
+  const objectEvent = (id, x, y, option = 'Repair') => {
+    const location = new api.core.Location(x, y, 1);
+    const object = { getLocation: () => location, getType: () => 10, getFace: () => 0, getPrivateArea: () => null };
+    const event = { player, object, objectId: id, definition: { id }, location: { x, y, z: 1 }, option, handled: false };
+    interact(event);
+    return event;
+  };
+  const ids = api.core.ObjectIdentifiers;
+  objectEvent(ids.CRATE_OF_HAMMERS_2, 3177, 7843, 'Take-from');
+  objectEvent(ids.CRATE_OF_POTIONS, 3177, 7846, 'Take-from');
+  assert.equal(inventory.contains(api.core.ItemIdentifiers.HAMMER), true);
+  assert.equal(inventory.contains(api.core.ItemIdentifiers.HEALING_POTION), true);
+  const npc = {
+    getId: () => api.core.NpcIdentifiers.ARANEI_108,
+    getIndex: () => 800,
+    getLocation: () => new api.core.Location(3173, 7855, 1),
+    setNpcTransformationId(id) { this.transformedId = id; },
+  };
+  const heal = handlers.npcInteractions.get(api.core.NpcIdentifiers.ARANEI_108).Heal;
+  const healEvent = { player, npc, npcId: npc.getId(), handled: false };
+  heal(healEvent);
+  assert.equal(healEvent.handled, true);
+  assert.equal(npc.transformedId, api.core.NpcIdentifiers.ARANEI_106);
+  objectEvent(ids.DAMAGED_PILLAR_2, 3174, 7855);
+  objectEvent(ids.DAMAGED_PILLAR_2, 3162, 7855);
+  objectEvent(ids.DAMAGED_WINDOW, 3176, 7858);
+  const state = attributes.get('quest.the_blood_moon_rises.siege-defence');
+  assert.equal(state.repaired.length, 3);
+  assert.equal(state.healed.length, 1);
+  assert.equal(replaced.filter(([kind]) => kind === 'add').length, 3, 'each fixed cache loc is replaced with its repaired variant');
+  objectManager.deregister = originalDeregister;
+  objectManager.register = originalRegister;
 });
 
 test('Priest in Peril unlocks the mausoleum Holy barrier only after completion', () => {
