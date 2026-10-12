@@ -1091,6 +1091,23 @@ module.exports = function registerSongOfTheElves(api) {
     return false;
   }
 
+  function crossLibraryFloatingBooks(event) {
+    const player = event?.player;
+    const location = event?.location;
+    if (!player || !inLibrary(player) || event.objectId !== ObjectIdentifiers.FLOATING_BOOK ||
+      !location || location.z !== 2 || player.getSkillManager().getMaxLevel(Skill.AGILITY) < 70) return false;
+    // The cache models the two ends of the top-floor handhold as separate
+    // climbable objects. Crossing the books is an Agility shortcut, not a
+    // ground collision bypass: land on the matching far-end cache tile.
+    const endpoints = new Map([["2640,6101", [2648, 6101]], ["2648,6101", [2640, 6101]]]);
+    const destination = endpoints.get(`${location.x},${location.y}`);
+    if (!destination) return false;
+    event.handled = true;
+    player.moveTo(new Location(destination[0], destination[1], 2));
+    player.sendMessage("You cross the floating books to the other side of the library.");
+    return true;
+  }
+
   function enterTemplePassage(event) {
     const player = event?.player;
     const location = event?.location;
@@ -1906,6 +1923,7 @@ module.exports = function registerSongOfTheElves(api) {
     api.onItemOnObject(name, "Pillar of Light", useLibraryCrystal, { noted: false });
   }
   api.onObjectInteraction(handleLibraryObject);
+  api.onObjectInteraction("Floating Book", { Climb: crossLibraryFloatingBooks });
   api.onObjectInteraction("Cave", { Ascend: enterTemplePassage });
   api.persistAttribute(CHEMICAL_CHOICE);
   api.persistAttribute(FALLS_PILLARS);
