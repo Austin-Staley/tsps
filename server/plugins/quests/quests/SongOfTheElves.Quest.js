@@ -1078,6 +1078,9 @@ module.exports = function registerSongOfTheElves(api) {
     const index = LIBRARY_SEAL_DATA.findIndex((seal) => seal.id === event.objectId || seal.mapId === event.objectId);
     if (index < 0) return false;
     const seal = LIBRARY_SEAL_DATA[index];
+    if (completed & (1 << (index + 1))) {
+      return startTranscript(api, player, seal.memory, PAGE, `the-grand-library-of-prifddinas-the-seal-of-${seal.name}`);
+    }
     const state = libraryPuzzleState(player);
     if (currentLibrarySeal(player) !== index || state.seal !== index || state.step < seal.steps.length ||
       Object.keys(libraryPillarState(player)).length !== seal.steps.length) {

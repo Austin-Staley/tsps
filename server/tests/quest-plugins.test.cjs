@@ -435,4 +435,8 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
   place(2581, 6130, 'north', 0);
   assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '5:15',
     `Hefin’s blue beam branches north from the shared floor-zero pillar while the green beam rises: ${messages.slice(-2).join(' | ')}`);
+  const beforeReplay = messages.length;
+  useObject({ player, objectId: 36726, handled: false });
+  assert.ok(!messages.slice(beforeReplay).some((message) => message.includes('seal remains dark')),
+    'touching a completed seal replays its memory so its return transport stays available');
 });
