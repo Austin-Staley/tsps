@@ -541,11 +541,46 @@ module.exports = function registerTheBloodMoonRises(api) {
   };
 
   function hallDefenceState(player) {
-    return player.getAttribute(SIEGE_DEFENCE_ATTRIBUTE) ?? { phase: "bridge", healed: [], repaired: [] };
+    return player.getAttribute(SIEGE_DEFENCE_ATTRIBUTE) ?? { phase: "bridge", integrity: 100, healed: [], repaired: [] };
   }
 
-  function hallTasks(state) {
-    return new Set([...(state.healed ?? []), ...(state.repaired ?? [])]).size;
+  // The live defense uses a continuously falling integrity meter. Cache data
+  // and the transcript expose the 50% story threshold, but not its server tick
+  // cadence or exact repair gains. These two timing/gain values are shortcuts
+  // pending live calibration; integrity, rather than a repair-count gate, is
+  // the actual win condition.
+  const HALL_INTEGRITY_INTERVAL = 20;
+  const HALL_INTEGRITY_LOSS = 1;
+  const HALL_INTEGRITY_THRESHOLD = 50;
+
+  function applyHallIntegrity(player, delta) {
+    const state = hallDefenceState(player);
+    if (state.phase !== "hall") return;
+    const integrity = Math.max(0, Math.min(100, (state.integrity ?? 100) + delta));
+    const updated = { ...state, integrity };
+    player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
+    if (integrity <= HALL_INTEGRITY_THRESHOLD && state.phase === "hall") {
+      updated.phase = "breach";
+      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
+      startTranscript(api, player, NpcIdentifiers.LOWERNIEL_DRAKAN_19, PAGE,
+        "drakan-s-siege-upon-reaching-0-hideout-integrity");
+    }
+  }
+
+  function processSiegeDefence({ player }) {
+    if (!player || stage(player) !== STAGE.SIEGE) return;
+    const state = hallDefenceState(player);
+    if (state.phase !== "hall") return;
+    const cycle = World.getProcessCycle();
+    if (cycle < (state.nextIntegrityLossCycle ?? cycle + HALL_INTEGRITY_INTERVAL)) {
+      if (state.nextIntegrityLossCycle === undefined) player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE,
+        { ...state, nextIntegrityLossCycle: cycle + HALL_INTEGRITY_INTERVAL });
+      return;
+    }
+    applyHallIntegrity(player, -HALL_INTEGRITY_LOSS);
+    const updated = hallDefenceState(player);
+    player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE,
+      { ...updated, nextIntegrityLossCycle: cycle + HALL_INTEGRITY_INTERVAL });
   }
 
   function injuredAraneiKey(npc) {
@@ -604,19 +639,9 @@ module.exports = function registerTheBloodMoonRises(api) {
       return;
     }
 
-    if (objectId === SIEGE_HALL.barricade && x === 3167 && y === 7844 && z === 1) {
+    if (objectId === SIEGE_HALL.barricade && x === 3167 && y === 7844 && z === 1 && state.phase === "hall") {
       event.handled = true;
-      if (hallTasks(state) < 4) {
-        player.sendMessage("Heal the fallen Aranei and repair at least three damaged windows or pillars before passing through the barricade.");
-        return;
-      }
-      if (!(state.healed ?? []).includes("aranei:3173,7855,1") || (state.repaired ?? []).length < 3) {
-        player.sendMessage("Heal the fallen Aranei and repair at least three damaged windows or pillars before passing through the barricade.");
-        return;
-      }
-      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { ...state, phase: "boss" });
-      startTranscript(api, player, NpcIdentifiers.LOWERNIEL_DRAKAN_19, PAGE,
-        "drakan-s-siege-upon-reaching-0-hideout-integrity");
+      player.sendMessage("The reinforced door is still holding. Keep repairing the hall and helping the Aranei until its integrity falls to half.");
       return;
     }
 
@@ -635,6 +660,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
     if (!replaceHallObject(event, repair[1])) return;
     player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { ...state, repaired: [...(state.repaired ?? []), repairKey] });
+    applyHallIntegrity(player, 8);
     player.sendMessage(repair[0] === SIEGE_HALL.damagedPillar ? "You brace and repair the damaged pillar." : "You repair the damaged window.");
   }
 
@@ -656,6 +682,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     inventory.deleteNumber(SIEGE_HALL.healingPotion, 1);
     npc.setNpcTransformationId?.(NpcIdentifiers.ARANEI_106);
     player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { ...state, healed: [...(state.healed ?? []), key] });
+    applyHallIntegrity(player, 12);
     siegeHallInjured.delete(player.getUsername?.() ?? player.getIndex?.());
     player.sendMessage("You give the healing potion to the Aranei and help them back to their feet.");
   }
@@ -807,10 +834,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!player || quest.isComplete(player)) return;
     const next = ACTION_STAGE[event.stepId];
     if (event.stepId === "Sut83Q") {
-      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { phase: "bridge", healed: [], repaired: [] });
+      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { phase: "bridge", integrity: 100, healed: [], repaired: [] });
     }
     if (event.stepId === "vqg4qO") {
-      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { phase: "hall", healed: [], repaired: [] });
+      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { phase: "hall", integrity: 100, healed: [], repaired: [] });
       spawnSiegeInjuredAranei(player);
     }
     if (event.stepId === "Sut83Q") {
@@ -1744,6 +1771,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     api.onNpcInteraction(id, { Heal: healSiegeAranei });
   }
   api.onPlayerProcess(syncHuntGroundItems);
+  api.onPlayerProcess(processSiegeDefence);
   api.onPlayerLogin(handleSiegeLogin);
   api.onPlayerLogout(handleSiegeLogout);
   api.onNpcDeath(handleWyrdDeath);

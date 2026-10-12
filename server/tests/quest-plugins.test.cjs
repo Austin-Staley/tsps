@@ -807,6 +807,9 @@ test('Blood Moon siege barrier action starts the second private Lowerniel fight 
 
 test('Blood Moon hall defence supplies hammers and potions, records repairs and heals a fallen Aranei', () => {
   const { api, handlers } = mockApi();
+  let cycle = 0;
+  const originalGetProcessCycle = api.core.World.getProcessCycle;
+  api.core.World.getProcessCycle = () => cycle;
   const spawns = [];
   const injured = {
     getId: () => api.core.NpcIdentifiers.ARANEI_112,
@@ -876,9 +879,18 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
   const state = attributes.get('quest.the_blood_moon_rises.siege-defence');
   assert.equal(state.repaired.length, 3);
   assert.equal(state.healed.length, 1);
+  assert.equal(state.integrity, 100, 'repairs and healing support the integrity hold instead of completing it directly');
   assert.equal(replaced.filter(([kind]) => kind === 'add').length, 3, 'each fixed cache loc is replaced with its repaired variant');
+  const process = handlers.playerProcess.find((handler) => handler.name === 'processSiegeDefence');
+  attributes.set('quest.the_blood_moon_rises.siege-defence', { ...state, integrity: 51, nextIntegrityLossCycle: 20 });
+  cycle = 20;
+  assert.throws(() => process({ player }), /Cache pipeline has not been initialized/,
+    'the mock cannot load the cutscene transcript, but the threshold must still update before it starts');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.siege-defence').phase, 'breach',
+    'the barricade cutscene begins at the 50% hideout-integrity threshold');
   objectManager.deregister = originalDeregister;
   objectManager.register = originalRegister;
+  api.core.World.getProcessCycle = originalGetProcessCycle;
 });
 
 test('Priest in Peril unlocks the mausoleum Holy barrier only after completion', () => {
