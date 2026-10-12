@@ -92,6 +92,7 @@ test('Fellowship recruitment waits for dialogue continuation and all four heroes
   }
   assert.equal(progress, 300);
   assert.equal(player.varbits.get(10781), 2);
+  assert.equal(player.varbits.get(10782), 1);
 });
 
 test('Fellowship seed enrichment requires the seed on Betty’s counter and the doorway tile', () => {
@@ -780,4 +781,37 @@ test('Astral Contact and its former name use one astral, one cosmic and two air 
   }
   assert.equal(xp,126);
  }finally{Spell.prototype.canCast=original;PluginManager.emitCustomEvent=emit;}
+});
+
+
+test('WGS super truth serum starts the captive conversation only for its owner at stage 300', () => {
+ const {api,player,removed}=movarioFixture(), handlers=[],played=[];
+ let progress=300,carrying=true;
+ api.onItemOnNpc=h=>handlers.push(h);
+ player.getLocation=()=>new api.core.Location(2987,3343,0);
+ require('../plugins/quests/wgs/Fellowship.WhileGuthixSleeps')({...api.context,stage:()=>progress,held:()=>carrying,play:(p,id,v)=>played.push([id,v])});
+ const target={getId:()=>13546,getOwner:()=>player},handler=handlers.at(-1);
+ const attempt=(itemId=29531,npc=target)=>{const e={player,itemId,target:npc};handler(e);return e;};
+ assert.equal(attempt().handled,true);
+ assert.match(played.at(-1)[1],/using-the-serum-talking-to-the-shady-stranger-while-inside/);
+ assert.deepEqual(removed,[], 'the dialogue acceptance consumes the serum');
+ assert.equal(attempt(29532).handled,undefined);
+ assert.equal(attempt(29531,{getId:()=>13546,getOwner:()=>({})}).handled,undefined);
+ assert.equal(attempt(29531,{getId:()=>13545,getOwner:()=>player}).handled,undefined);
+ progress=310;assert.equal(attempt().handled,undefined);
+ progress=300;carrying=false;assert.equal(attempt().handled,undefined);
+ assert.equal(played.length,1);
+});
+
+test('WGS NPC Contact recruits only the first four heroes; Guild heroes require a visit', () => {
+ const {api,handlers,player}=movarioFixture();let progress=280;const played=[];
+ require('../plugins/quests/wgs/Fellowship.WhileGuthixSleeps')({...api.context,stage:()=>progress,play:(p,id,v)=>played.push(v)});
+ const e={player,contacts:[]};handlers.custom.get('magic:npc-contact')(e);
+ assert.deepEqual(e.contacts,['Turael','Mazchna','Duradel','Cyrisus']);
+ let selected={player,name:'Ghommal'};handlers.custom.get('magic:npc-contact-selected')(selected);
+ assert.equal(selected.handled,undefined);
+ progress=320;const second={player,contacts:[]};handlers.custom.get('magic:npc-contact')(second);
+ assert.deepEqual(second.contacts,[]);
+ selected={player,name:'Ghommal'};handlers.custom.get('magic:npc-contact-selected')(selected);
+ assert.equal(selected.handled,undefined);assert.deepEqual(played,[]);
 });

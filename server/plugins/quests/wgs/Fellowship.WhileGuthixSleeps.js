@@ -17,11 +17,12 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
  const PREFIX='forming-a-fellowship-',battles=new WeakMap(),actors=new WeakMap();
  function atCastle(p){const l=p.getLocation();return l.getX()>=2948&&l.getX()<=3000&&l.getY()>=3328&&l.getY()<=3355;}
  function sync(p){
-  const s=stage(p),r=val(p,RECRUITS_ATTRIBUTE);
+  const r=val(p,RECRUITS_ATTRIBUTE);
+  if(stage(p)===280&&(r&15)===15)advance(p,300);
+  if(stage(p)===320&&(r&127)===127)advance(p,340);
+  const s=stage(p);
   p.getPacketSender().sendVarbit(10782,s>=650?2:s>=300?1:0);
   p.getPacketSender().sendVarbit(10792,s>=650?2:s>=340?1:0);
-  if(s===280&&(r&15)===15)advance(p,300);
-  if(s===320&&(r&127)===127)advance(p,340);
   p.getPacketSender().sendVarbit(10781,stage(p)>=300?2:stage(p)>=280?1:0);
   if(s>=250&&s<280)p.getPacketSender().sendVarbit(1537,val(p,SEED_ATTRIBUTE)===2?3:val(p,SEED_ATTRIBUTE)===1?2:0);
   if(s>=220&&s<900)p.getPacketSender().sendVarbit(10839,1);
@@ -102,8 +103,8 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
   const slug=name.toLowerCase().replace(/ /g,'-');play(p,RECRUIT_IDS[i],PREFIX+(i<4?'first':'second')+'-recruitment-talking-to-'+slug+((i!==3&&(val(p,RECRUITS_ATTRIBUTE)&(1<<i)))?'-talking-to-'+slug+'-again':''));return true;
  }
  function recruit({player,npc}){return recruitName(player,npc.getDefinition().getName());}
- function contacts(e){if(stage(e.player)>=280&&stage(e.player)<400)for(const name of [...FIRST,...SECOND])if(!e.contacts.includes(name))e.contacts.push(name);}
- function selected(e){if(recruitName(e.player,e.name))e.handled=true;}
+ function contacts(e){if(stage(e.player)>=280&&stage(e.player)<=310)for(const name of FIRST)if(!e.contacts.includes(name))e.contacts.push(name);}
+ function selected(e){if(FIRST.includes(e.name)&&recruitName(e.player,e.name))e.handled=true;}
  function line(e){
   const {player,text}=e,s=stage(player);
   if(s===200&&text==='Kill the Armadyl-worshipping scum!'){const battle=battles.get(player);if(battle)e.after=()=>{battle.started=true;};return;}
@@ -140,6 +141,11 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
   if(npc.getId()===OUTSIDER||val(player,SPY_ALERT_ATTRIBUTE)>Date.now()){player.sendMessage('This person is too alert for you to plant anything on them.');return true;}
   if(Math.random()<0.15){hit(player,3);player.sendMessage('The stranger notices your attempt. Try again.');return true;}
   player.getInventory().deleteNumber(TELEORB,1);advance(player,240);player.sendMessage('You plant the teleorb on the stranger.');return true;
+ }
+ function serumOnSpy(e){
+  const {player,itemId,target}=e;
+  if(itemId!==SUPER_SERUM||stage(player)!==300||target.getId()!==CAPTIVE||target.getOwner?.()!==player||!held(player,SUPER_SERUM))return false;
+  e.handled=true;return talk({player,npcId:CAPTIVE});
  }
  function combine(e){
   const {player}=e;if(stage(player)<250||stage(player)>=320)return;
@@ -180,6 +186,7 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
  for(const name of [...FIRST,...SECOND])api.onNpcInteraction(name,{'Talk-to':recruit});
  api.onNpcDeath(killed);
  api.onItemOnNpc(plantOrb,{noted:false});
+ api.onItemOnNpc(serumOnSpy,{noted:false});
  api.onItemOnItem(combine);
  api.onItemOnObject('Rose-tinted lens','Counter',enrich,{noted:false});
  api.onItemOnObject('Enriched snapdragon seed','Herb patch',plant,{noted:false});
