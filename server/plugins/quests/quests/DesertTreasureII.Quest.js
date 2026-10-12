@@ -25,6 +25,8 @@ module.exports = function registerDesertTreasureII(api) {
   const CELL_SOLUTION = [16, 10, 27, 33, 52, 5, 62, 47];
   const ATTR = "desert-treasure-ii:boss";
   const ATTR_WAR_ROOM = "desert-treasure-ii:war-room";
+  const ATTR_STRANGLEWOOD_HIDEOUT = "desert-treasure-ii:stranglewood-hideout";
+  const ATTR_STRANGLEWOOD_TEMPLE = "desert-treasure-ii:stranglewood-temple";
   const ATTR_VAULT_AREA = "desert-treasure-ii:ancient-vault";
   const ATTR_VAULT_SMITH = "desert-treasure-ii:vault-smith";
   const ATTR_SMITH_INTRO = "desert-treasure-ii:smith-intro";
@@ -46,6 +48,8 @@ module.exports = function registerDesertTreasureII(api) {
   let spawned = new WeakMap();
   let WarRoomArea;
   let AncientVaultArea;
+  let StranglewoodHideoutArea;
+  let StranglewoodTempleArea;
   const totemSpellIds = new Map(TOTEMS.map((totem) => [totem.kind, new Set(totem.spells.map((name) => api.core.CombatSpells[name]?.spellId?.()).filter(Number.isInteger))]));
 
   AncientVaultArea = class DesertTreasureIIAncientVaultArea extends api.core.TemplatedInstanceArea {
@@ -98,6 +102,106 @@ module.exports = function registerDesertTreasureII(api) {
     }
     getName() { return "Ancient Vault war room (Desert Treasure II)"; }
     allowSummonPet() { return false; }
+    destroy() {
+      if (this.isDestroyed()) return;
+      for (const entity of [...this.entities]) {
+        if (!entity?.isNpc?.() || !entity.getAsNpc) continue;
+        const npc = entity.getAsNpc();
+        const add = api.core.World.getAddNPCQueue();
+        for (let i = add.indexOf(npc); i >= 0; i = add.indexOf(npc)) add.splice(i, 1);
+        if (npc.isRegistered?.() && !api.core.World.getRemoveNPCQueue().includes(npc)) api.core.World.getRemoveNPCQueue().push(npc);
+      }
+      super.destroy();
+    }
+  };
+
+  StranglewoodHideoutArea = class DesertTreasureIIStranglewoodHideoutArea extends api.core.TemplatedInstanceArea {
+    constructor(owner, questPlayer) {
+      super(7, 5);
+      this.owner = owner;
+      this.questPlayer = questPlayer;
+      this.remainingTicks = 400;
+      this.lastProcessCycle = -1;
+      this.nextSpawnTick = 0;
+      this.enemies = [];
+      for (let x = 0; x < 7; x++) {
+        for (let y = 0; y < 5; y++) {
+          for (let plane = 0; plane < 4; plane++) {
+            this.setChunk(plane, x, y, plane === 0 ? {
+              sourceChunkX: 145 + x, sourceChunkY: 1217 + y, sourcePlane: 0, rotation: 0,
+            } : null);
+          }
+        }
+      }
+    }
+    getName() { return "Kasonde's Hideout (Desert Treasure II)"; }
+    allowSummonPet() { return false; }
+    isMulti() { return true; }
+    process(actor) {
+      if (!actor?.isPlayer?.() || actor.getAsPlayer?.() !== this.questPlayer) return;
+      const cycle = api.core.World.getProcessCycle();
+      if (cycle === this.lastProcessCycle) return;
+      this.lastProcessCycle = cycle;
+      if (this.remainingTicks <= 0) return;
+      const kasonde = this.kasonde;
+      if (!kasonde?.isRegistered?.() || kasonde.getHitpoints?.() <= 0) {
+        this.remainingTicks = 0;
+        this.failed = true;
+        return;
+      }
+      this.remainingTicks--;
+      if (this.remainingTicks <= 0) {
+        this.defended = true;
+        return;
+      }
+      const elapsed = 400 - this.remainingTicks;
+      if (elapsed >= this.nextSpawnTick && this.enemies.filter((npc) => npc?.isRegistered?.() && npc.getHitpoints?.() > 0).length < 4) {
+        this.spawnEnemy(elapsed);
+        this.nextSpawnTick += 16;
+      }
+    }
+    spawnEnemy(elapsed) {
+      const tiles = [[13, 8], [20, 8], [39, 9], [44, 28], [10, 29], [27, 31]];
+      const [x, y] = tiles[Math.floor(elapsed / 16) % tiles.length];
+      const npc = api.core.NPC.create(N.STRANGLED, this.tile(x, y, 0));
+      npc.setOwner?.(this.questPlayer);
+      npc.setOwnerOnly?.(true);
+      npc.__skipDefaultRespawn = true;
+      this.add(npc);
+      api.core.World.getAddNPCQueue().push(npc);
+      this.enemies.push(npc);
+      npc.getCombat?.()?.attack?.(this.kasonde);
+    }
+    destroy() {
+      if (this.isDestroyed()) return;
+      for (const entity of [...this.entities]) {
+        if (!entity?.isNpc?.() || !entity.getAsNpc) continue;
+        const npc = entity.getAsNpc();
+        const add = api.core.World.getAddNPCQueue();
+        for (let i = add.indexOf(npc); i >= 0; i = add.indexOf(npc)) add.splice(i, 1);
+        if (npc.isRegistered?.() && !api.core.World.getRemoveNPCQueue().includes(npc)) api.core.World.getRemoveNPCQueue().push(npc);
+      }
+      super.destroy();
+    }
+  };
+
+  StranglewoodTempleArea = class DesertTreasureIIStranglewoodTempleArea extends api.core.TemplatedInstanceArea {
+    constructor(owner) {
+      super(2, 5);
+      this.owner = owner;
+      for (let x = 0; x < 2; x++) {
+        for (let y = 0; y < 5; y++) {
+          for (let plane = 0; plane < 4; plane++) {
+            this.setChunk(plane, x, y, plane === 0 ? {
+              sourceChunkX: 147 + x, sourceChunkY: 1226 + y, sourcePlane: 0, rotation: 0,
+            } : null);
+          }
+        }
+      }
+    }
+    getName() { return "Stranglewood temple (Desert Treasure II)"; }
+    allowSummonPet() { return false; }
+    isMulti() { return true; }
     destroy() {
       if (this.isDestroyed()) return;
       for (const entity of [...this.entities]) {
@@ -222,6 +326,83 @@ module.exports = function registerDesertTreasureII(api) {
     return area;
   }
 
+  function spawnSurfaceKasonde(p) {
+    let owned = spawned.get(p);
+    if (!owned) spawned.set(p, owned = {});
+    if (owned.kasonde?.isRegistered?.()) return owned.kasonde;
+    owned.kasonde = api.spawnNpc({ id: N.KASONDE, x: 1191, y: 3404, z: 0, wanderRadius: 0, owner: p, ownerOnly: true });
+    return owned.kasonde;
+  }
+
+  function enterHideout(p) {
+    const current = p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT);
+    if (current instanceof StranglewoodHideoutArea && !current.isDestroyed()) {
+      current.enter(p);
+      p.moveTo(current.tile(31, 20, 0));
+      return current;
+    }
+    const area = new StranglewoodHideoutArea(p.getUsername?.(), p);
+    area.enter(p);
+    p.setAttribute(ATTR_STRANGLEWOOD_HIDEOUT, area);
+    p.moveTo(area.tile(31, 20, 0));
+    const kasonde = api.core.NPC.create(N.KASONDE, area.tile(24, 20, 0));
+    kasonde.setOwner?.(p);
+    kasonde.setOwnerOnly?.(true);
+    kasonde.setMaxHitpoints?.(85);
+    kasonde.setHitpoints?.(85);
+    kasonde.__skipDefaultRespawn = true;
+    area.kasonde = kasonde;
+    area.add(kasonde);
+    api.core.World.getAddNPCQueue().push(kasonde);
+    area.spawnEnemy(0);
+    area.nextSpawnTick = 16;
+    return area;
+  }
+
+  function leaveHideout(p) {
+    const area = p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT);
+    if (!(area instanceof StranglewoodHideoutArea) || area.isDestroyed()) return false;
+    if (area.failed) {
+      p.setAttribute(VARDORVIS_PROGRESS, 6);
+      p.sendMessage("Kasonde did not survive the horde. You will need to start the defence again.");
+    } else if (area.defended) {
+      p.setAttribute(VARDORVIS_PROGRESS, 9);
+    }
+    area.leave(p, false);
+    area.postLeave(p, false);
+    area.destroy();
+    p.setAttribute(ATTR_STRANGLEWOOD_HIDEOUT, null);
+    p.moveTo(new api.core.Location(1187, 3411, 0));
+    return true;
+  }
+
+  function enterStranglewoodTemple(p) {
+    const current = p.getAttribute(ATTR_STRANGLEWOOD_TEMPLE);
+    if (current instanceof StranglewoodTempleArea && !current.isDestroyed()) {
+      current.enter(p);
+      p.moveTo(current.tile(6, 16, 0));
+      return current;
+    }
+    const area = new StranglewoodTempleArea(p.getUsername?.());
+    area.enter(p);
+    p.setAttribute(ATTR_STRANGLEWOOD_TEMPLE, area);
+    p.moveTo(area.tile(6, 16, 0));
+    const enemies = [[4, 13], [9, 15], [14, 20]].map(([x, y]) => {
+      const npc = api.core.NPC.create(N.STRANGLED, area.tile(x, y, 0));
+      npc.setOwner?.(p);
+      npc.setOwnerOnly?.(true);
+      npc.__skipDefaultRespawn = true;
+      npc.__dt2TempleEnemy = true;
+      area.add(npc);
+      api.core.World.getAddNPCQueue().push(npc);
+      return npc;
+    });
+    let owned = spawned.get(p);
+    if (!owned) spawned.set(p, owned = {});
+    owned.templeEnemies = enemies;
+    return area;
+  }
+
   function leaveVault(p) {
     const area = p.getAttribute(ATTR_VAULT_AREA);
     if (!(area instanceof AncientVaultArea) || area.isDestroyed()) return false;
@@ -259,6 +440,22 @@ module.exports = function registerDesertTreasureII(api) {
     const x = location.x - area.getBaseX() + 3920;
     const y = location.y - area.getBaseY() + 9616;
     return x >= 3920 && x < 3952 && y >= 9616 && y < 9648 ? { x, y } : null;
+  }
+
+  function hideoutSourceTile(p, location) {
+    const area = p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT);
+    if (!(area instanceof StranglewoodHideoutArea) || area.isDestroyed?.() || !location) return null;
+    const x = location.x - area.getBaseX() + 1160;
+    const y = location.y - area.getBaseY() + 9740;
+    return x >= 1160 && x < 1216 && y >= 9740 && y < 9780 ? { x, y } : null;
+  }
+
+  function templeSourceTile(p, location) {
+    const area = p.getAttribute(ATTR_STRANGLEWOOD_TEMPLE);
+    if (!(area instanceof StranglewoodTempleArea) || area.isDestroyed?.() || !location) return null;
+    const x = location.x - area.getBaseX() + 1176;
+    const y = location.y - area.getBaseY() + 9808;
+    return x >= 1176 && x < 1192 && y >= 9808 && y < 9848 ? { x, y } : null;
   }
 
   function buildJournal(player) {
@@ -409,6 +606,42 @@ module.exports = function registerDesertTreasureII(api) {
     talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-barus");
     p.setAttribute(VARDORVIS_PROGRESS, 2);
   }
+  function talkKasonde({ player: p, npcId }) {
+    if (stage(p) !== S.VARDORVIS) return;
+    const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
+    if (progress === 6) {
+      talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde");
+      p.setAttribute(VARDORVIS_PROGRESS, 7);
+      return;
+    }
+    if (progress === 7) {
+      talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-talking-to-kasonde-again");
+      p.setAttribute(VARDORVIS_PROGRESS, 8);
+      return;
+    }
+    if (progress === 9) {
+      talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-holding-back-the-horde");
+      p.setAttribute(VARDORVIS_PROGRESS, 10);
+      return;
+    }
+    if (progress === 10) {
+      talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-back-on-the-surface-talking-to-kasonde-again-before-retrieving-the-ingredients");
+      p.setAttribute(VARDORVIS_PROGRESS, 11);
+      return;
+    }
+    if (progress === 13) {
+      talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-killing-the-strangled-in-the-temple");
+      if (!has(p, I.UNFINISHED_SERUM)) p.getInventory().adds(I.UNFINISHED_SERUM, 1);
+      p.setAttribute(VARDORVIS_PROGRESS, 14);
+      return;
+    }
+    if (progress === 15) {
+      talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-killing-the-strangled-in-the-temple-talking-to-kasonde-after-making-the-potion");
+      p.setAttribute("desert-treasure-ii:kasonde-serum-discussed", true);
+      return;
+    }
+    if (progress === 16) talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-killing-the-strangled-in-the-temple-talking-to-kasonde-after-drinking-the-potion");
+  }
   function handleItemAction({ player: p, itemId, option }) {
     if (stage(p) !== S.VARDORVIS) return;
     const action = String(option || "").toLowerCase();
@@ -430,6 +663,34 @@ module.exports = function registerDesertTreasureII(api) {
         p.sendMessage("You drink the strange potion. Its effects prepare you to enter the Stranglewood.");
         return true;
       }
+    }
+    if (itemId === I.STRANGLER_SERUM && action === "drink") {
+      if (!has(p, I.STRANGLER_SERUM) || (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) < 15
+        || !p.getAttribute("desert-treasure-ii:kasonde-serum-discussed")) return p.sendMessage("Talk to Kasonde about the completed serum before drinking it.");
+      p.getInventory().deleteNumber(I.STRANGLER_SERUM, 1);
+      p.setAttribute(VARDORVIS_PROGRESS, 16);
+      p.sendMessage("You drink the Strangler serum. It lets you approach the ritual site.");
+      return true;
+    }
+    return false;
+  }
+  function handleItemOnItem({ player: p, itemId1, itemId2 }) {
+    if (stage(p) !== S.VARDORVIS || (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) < 11) return false;
+    const pair = new Set([itemId1, itemId2]);
+    if (pair.has(I.UNFINISHED_SERUM) && pair.has(I.KORBAL_HERB) && has(p, I.UNFINISHED_SERUM) && has(p, I.KORBAL_HERB)) {
+      p.getInventory().deleteNumber(I.UNFINISHED_SERUM, 1);
+      p.getInventory().deleteNumber(I.KORBAL_HERB, 1);
+      p.getInventory().adds(I.UNFINISHED_SERUM_2, 1);
+      p.sendMessage("You add the Korbal herb to the unfinished serum.");
+      return true;
+    }
+    if (pair.has(I.UNFINISHED_SERUM_2) && pair.has(I.ARGIAN_BERRIES) && has(p, I.UNFINISHED_SERUM_2) && has(p, I.ARGIAN_BERRIES)) {
+      p.getInventory().deleteNumber(I.UNFINISHED_SERUM_2, 1);
+      p.getInventory().deleteNumber(I.ARGIAN_BERRIES, 1);
+      p.getInventory().adds(I.STRANGLER_SERUM, 1);
+      p.setAttribute(VARDORVIS_PROGRESS, 15);
+      p.sendMessage("You mix the Argian berries into the serum and make a Strangler serum.");
+      return true;
     }
     return false;
   }
@@ -504,6 +765,54 @@ module.exports = function registerDesertTreasureII(api) {
       talk(p, N.GOLEM_3, "carnifex-maximus-vardorvis-travelling-to-the-stranglewood-for-the-first-time");
       p.setAttribute(VARDORVIS_PROGRESS, 6);
       p.moveTo(new api.core.Location(1196, 3450, 0));
+      spawnSurfaceKasonde(p);
+      return true;
+    }
+    if (s === S.VARDORVIS && [O.ENTRY_20, O.ENTRY_21].includes(objectId)
+      && Math.abs(location.x - 1191) <= 2 && Math.abs(location.y - 3411) <= 2) {
+      if ((Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) < 8) {
+        return p.sendMessage("Talk to Kasonde before entering the hideout.");
+      }
+      enterHideout(p);
+      return true;
+    }
+    const hideoutTile = hideoutSourceTile(p, location);
+    if (hideoutTile && [O.LADDER_439, O.LADDER_440].includes(objectId)
+      && hideoutTile.x === 1187 && hideoutTile.y === 9764) {
+      leaveHideout(p);
+      return true;
+    }
+    if (s === S.VARDORVIS && objectId === O.ENTRY_21
+      && Math.abs(location.x - 1174) <= 2 && Math.abs(location.y - 3428) <= 2) {
+      if ((Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) < 12
+        || !has(p, I.KORBAL_HERB) || !has(p, I.ARGIAN_BERRIES)) {
+        return p.sendMessage("Find the Korbal herb and Argian berries before entering Kasonde's temple.");
+      }
+      enterStranglewoodTemple(p);
+      return true;
+    }
+    const templeTile = templeSourceTile(p, location);
+    if (templeTile && [O.ENTRY_20, O.ENTRY_21, O.ENTRY_22, O.ENTRY_23].includes(objectId)) {
+      const area = p.getAttribute(ATTR_STRANGLEWOOD_TEMPLE);
+      area.leave(p, false);
+      area.postLeave(p, false);
+      area.destroy();
+      p.setAttribute(ATTR_STRANGLEWOOD_TEMPLE, null);
+      p.moveTo(new api.core.Location(1174, 3428, 0));
+      return true;
+    }
+    if (s === S.VARDORVIS && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 11
+      && objectId === O.KORBAL_HERBS && Math.abs(location.x - 1155) <= 2 && Math.abs(location.y - 3447) <= 2) {
+      if (!has(p, I.KORBAL_HERB)) p.getInventory().adds(I.KORBAL_HERB, 1);
+      if (has(p, I.KORBAL_HERB) && has(p, I.ARGIAN_BERRIES)) p.setAttribute(VARDORVIS_PROGRESS, 12);
+      p.sendMessage("You pick a Korbal herb from the north-west of the Stranglewood.");
+      return true;
+    }
+    if (s === S.VARDORVIS && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 11
+      && objectId === O.ARGIAN_BUSH && Math.abs(location.x - 1126) <= 2 && Math.abs(location.y - 3323) <= 2) {
+      if (!has(p, I.ARGIAN_BERRIES)) p.getInventory().adds(I.ARGIAN_BERRIES, 1);
+      if (has(p, I.KORBAL_HERB) && has(p, I.ARGIAN_BERRIES)) p.setAttribute(VARDORVIS_PROGRESS, 12);
+      p.sendMessage("You pick Argian berries from the south-west of the Stranglewood.");
       return true;
     }
     if (s === S.VARDORVIS && objectId === STRANGLEWOOD_BOAT_OUT_LOC
@@ -604,6 +913,24 @@ module.exports = function registerDesertTreasureII(api) {
     if (!killer) return;
     const owned = spawned.get(killer);
     if (!owned) return;
+    if (Array.isArray(owned.templeEnemies) && owned.templeEnemies.includes(npc)) {
+      owned.templeEnemies = owned.templeEnemies.filter((enemy) => enemy !== npc);
+      if (owned.templeEnemies.length === 0 && stage(killer) === S.VARDORVIS) {
+        killer.setAttribute(VARDORVIS_PROGRESS, 13);
+        const area = killer.getAttribute(ATTR_STRANGLEWOOD_TEMPLE);
+        if (area instanceof StranglewoodTempleArea && !area.isDestroyed()) {
+          const kasonde = api.core.NPC.create(N.KASONDE, area.tile(7, 16, 0));
+          kasonde.setOwner?.(killer);
+          kasonde.setOwnerOnly?.(true);
+          kasonde.__skipDefaultRespawn = true;
+          area.add(kasonde);
+          api.core.World.getAddNPCQueue().push(kasonde);
+          owned.templeKasonde = kasonde;
+        }
+        killer.sendMessage("The Strangled stop attacking. Kasonde is safe; speak to him in the temple.");
+      }
+      return;
+    }
     const entries = [["guardian", S.GUARDIAN], ["vardorvis", S.VARDORVIS], ["leviathan", S.LEVIATHAN], ["sucellus", S.SUCELLUS], ["whisperer", S.WHISPERER]];
     const key = entries.find(([name]) => owned[name] === npc)?.[0];
     if (!key) return;
@@ -659,6 +986,7 @@ module.exports = function registerDesertTreasureII(api) {
   [GOLEM_INSPECTED, ALTAR_INSPECTED, TOTEMS_CHARGED].forEach((key) => api.persistAttribute(key));
   api.onObjectInteraction(handleObject);
   api.onItemOnObject(handleItemOnObject, { noted: false });
+  api.onItemOnItem(handleItemOnItem, { noted: false });
   api.onItemAction(handleItemAction);
   api.onCustomEvent("player:widget-action", onWidgetAction);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
@@ -670,6 +998,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("Dr Banikan", { "Talk-to": talkBanikan });
   api.onNpcInteraction("Elissa", { "Talk-to": talkElissa });
   api.onNpcInteraction("Barus", { "Talk-to": talkBarus });
+  api.onNpcInteraction("Kasonde", { "Talk-to": talkKasonde });
   api.onNpcInteraction("Wizard Persten", { "Talk-to": progressBosses });
   api.onNpcInteraction("Captain Malleta", { "Talk-to": progressBosses });
   api.onNpcInteraction("Ketla", { "Talk-to": progressBosses });

@@ -427,6 +427,79 @@ test('Desert Treasure II starts the Vardorvis trail through Elissa, Barus, the b
   }
 });
 
+test('Desert Treasure II requires Kasonde dialogue and the full 400-tick hideout defence', () => {
+  const { api: base } = mockApi();
+  const interactions = [], objectHooks = [], chunks = [];
+  let cycle = 0;
+  const queues = { add: [], remove: [] };
+  class TestInstance {
+    constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
+    setChunk(...args) { chunks.push(args); }
+    enter(player) { this.player = player; }
+    leave() {}
+    postLeave() {}
+    getBaseX() { return 8192; }
+    getBaseY() { return 1600; }
+    tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z }; }
+    add(npc) { this.entities.push(npc); }
+    isDestroyed() { return false; }
+    destroy() { this.destroyed = true; }
+  }
+  const core = {
+    ...base.core,
+    TemplatedInstanceArea: TestInstance,
+    NPC: { create: (id, location) => ({
+      id, location, setOwner() {}, setOwnerOnly() {}, setMaxHitpoints() {}, setHitpoints(value) { this.hp = value; },
+      getHitpoints() { return this.hp ?? 10; }, isRegistered() { return true; }, getCombat() { return { attack() {} }; },
+    }) },
+    World: { getAddNPCQueue: () => queues.add, getRemoveNPCQueue: () => queues.remove, getProcessCycle: () => cycle++ },
+  };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
+        : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
+          : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const startTranscript = runtime.startTranscript;
+  runtime.startTranscript = () => true;
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1);
+    const attrs = new Map([['desert-treasure-ii:vardorvis-progress', 5]]);
+    const messages = [];
+    const p = {
+      getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      getUsername: () => 'dt2-defence-test', getAsPlayer() { return this; }, isPlayer: () => true,
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+      moveTo(location) { this.location = location; }, sendMessage: (message) => messages.push(message),
+    };
+    quest.setStage(p, 7);
+    assert.equal(objectHooks[0]({ player: p, objectId: 49491, location: { x: 1227, y: 3469, z: 0 } }), true);
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 6);
+    const kasonde = interactions.find((entry) => entry.name === 'Kasonde').options['Talk-to'];
+    kasonde({ player: p, npcId: core.NpcIdentifiers.KASONDE });
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 7);
+    kasonde({ player: p, npcId: core.NpcIdentifiers.KASONDE });
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 8);
+    assert.equal(objectHooks[0]({ player: p, objectId: core.ObjectIdentifiers.ENTRY_20, location: { x: 1191, y: 3411, z: 0 } }), true);
+    const area = attrs.get('desert-treasure-ii:stranglewood-hideout');
+    assert.equal(area.width, 7);
+    assert.equal(area.height, 5);
+    assert.deepEqual([p.location.x, p.location.y], [8223, 1620]);
+    assert.equal(chunks.filter(([plane, , , chunk]) => plane === 0 && chunk !== null).length, 35);
+    for (let tick = 0; tick < 399; tick++) area.process(p);
+    assert.equal(area.defended, undefined, 'the horde defence cannot be skipped by a short wait');
+    area.process(p);
+    assert.equal(area.defended, true, 'Kasonde survives the documented 400-tick holdout');
+    assert.equal(objectHooks[0]({ player: p, objectId: core.ObjectIdentifiers.LADDER_439, location: area.tile(27, 24, 0) }), true);
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 9);
+    assert.deepEqual([p.location.getX(), p.location.getY(), p.location.getZ()], [1187, 3411, 0]);
+  } finally {
+    runtime.startTranscript = startTranscript;
+  }
+});
+
 test('Desert Treasure II enters a private copy of the real war room from the cleared Digsite hole', () => {
   const { api: base } = mockApi();
   const handlers = [];
