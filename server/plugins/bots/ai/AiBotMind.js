@@ -28,6 +28,9 @@ const PRIVATE_REPLY_MS = 10 * 60000;
 const DEFEND_HOLD_MS = 1800;
 // An attacker further off than this (it walked home) is no longer a fight.
 const DEFEND_RANGE_TILES = 15;
+// Decisions no player asked for. A bot no real player is near skips them: the brain plays
+// on and nobody misses a choice no one sees, so quiet worlds cost no model calls.
+const UNWATCHED_REASONS = new Set(["login", "idle", "checkIn"]);
 
 const ASKS = Object.freeze({
   reply: "Someone is talking to you or dealing with you. Answer them (say, or reply_private for a private message) and act if you want to.",
@@ -123,6 +126,9 @@ class AiBotMind {
       this.doing = { label: activity.label ?? activity.id, since: nowMs };
       return activity;
     }
+    if (!this.services.watched(this.bot)) {
+      return null;
+    }
     if (!this.idleSince) {
       this.idleSince = nowMs;
       this.addEvent("You finished what you were doing.");
@@ -159,6 +165,11 @@ class AiBotMind {
     if (nowMs >= this.nextCheckInAt) {
       this.nextCheckInAt = nowMs + this.checkInDelay();
       this.requestDecision("checkIn");
+    }
+    if (this.want && !this.want.reply && !this.services.watched(this.bot) &&
+        [...this.want.reasons].every((reason) => UNWATCHED_REASONS.has(reason))) {
+      this.want = null;
+      this.idleSince = 0;
     }
     if (this.want && !this.inFlight && nowMs >= this.want.notBefore) {
       if (this.want.reply && nowMs - this.want.at > STALE_REPLY_MS) {

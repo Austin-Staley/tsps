@@ -58,6 +58,12 @@ const DEFAULTS = Object.freeze({
   },
   // Minutes between a bot's own check-ins (keep going, or do something else?).
   checkInMinutes: [8, 15],
+  // A bot with no real player within this many tiles makes no model calls of its own (no
+  // check-ins, no idle choices: its brain picks). Chat, messages and trades still get answers.
+  watchTiles: 64,
+  // Minutes with no real player online before AI bots log out (0: they stay). They come
+  // back a few at a time when someone logs in. Saves server time, not just model calls.
+  logoutWhenEmptyMinutes: 0,
   // How long a bot takes between things, in ms ([min, max], rolled each time), so it doesn't
   // act every tick: after an action, before a new activity, sometimes between walk legs.
   pacing: {

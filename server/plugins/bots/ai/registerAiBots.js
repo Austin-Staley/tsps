@@ -8,6 +8,7 @@ const { createProviders, providerFor } = require("./AiBotProviders");
 const { AiBotRoster } = require("./AiBotRoster");
 const { AiBotMind } = require("./AiBotMind");
 const { AiBotCallLimiter, AiBotChatRouter } = require("./AiBotChat");
+const { AiBotPresence } = require("./AiBotPresence");
 const { buildSystemPrompt } = require("./AiBotPrompt");
 const { buildTools } = require("./AiBotTools");
 const { chooseName } = require("./AiBotNames");
@@ -101,6 +102,7 @@ function registerAiBots({ api, botApi, runtime, registry, world, resetMovementSt
     router: null,
     givenToday: new Map(),
     world,
+    watched: (bot) => presence.watched(bot),
     getEntry: (name) => runtime.entriesByUsername.get(name) ?? null,
     log,
     emitCustomEvent: (name, payload) => api.emitCustomEvent(name, payload),
@@ -144,11 +146,18 @@ function registerAiBots({ api, botApi, runtime, registry, world, resetMovementSt
     bot.getInventory().addItem(new core.Item(core.ItemIdentifiers.COINS, rollBetween(START_COINS[profile.tier] ?? START_COINS.novices)));
   }
 
+  /** Logs in AI bot `index`. Returns "spawned", "online", "retry" (still logging out) or "failed". */
   function spawnAiBot(index) {
     const profile = profileFor(index);
     if (!profile) {
       log("ai_bot_no_name", { index });
-      return;
+      return "failed";
+    }
+    if (minds.has(profile.name.toLowerCase())) {
+      return "online";
+    }
+    if (core.World.getPlayerByName(profile.name)) {
+      return "retry";
     }
     const provider = providerFor(providers, profile, index);
     if (profile.provider !== provider.name || profile.model !== provider.model) {
@@ -161,7 +170,7 @@ function registerAiBots({ api, botApi, runtime, registry, world, resetMovementSt
     const bot = runtime.spawnPvpBot(startLocation(profile, place), { username: profile.name, persistent: true, mode: "roaming" });
     if (!bot) {
       log("ai_bot_spawn_failed", { name: profile.name });
-      return;
+      return "retry";
     }
     bot.setAttribute(AI_BOT_ATTRIBUTE, true);
     bot.setPasswordHashWithSalt(lockedPassword());
@@ -188,15 +197,17 @@ function registerAiBots({ api, botApi, runtime, registry, world, resetMovementSt
     });
     mind.doing = { label: "hanging around", since: Date.now() };
     mind.addEvent("You logged in.");
-    mind.requestDecision("login", { delayMs: 3000 + index * 1500 });
+    mind.requestDecision("login", { delayMs: 3000 });
     log("ai_bot_spawned", { name: profile.name, provider: provider.name, model: provider.model, isNew });
+    return "spawned";
   }
 
-  function spawnAll() {
-    for (let index = 0; index < config.count; index++) {
-      spawnAiBot(index);
-    }
+  function logOut(bot) {
+    bot.getForcedLogoutTimer?.().start?.(0);
+    bot.requestLogout?.();
   }
+
+  const presence = new AiBotPresence({ core, config, minds, spawn: spawnAiBot, logOut, log });
 
   function mindOf(player) {
     return minds.get(String(player?.getUsername?.() ?? "").toLowerCase()) ?? null;
@@ -258,6 +269,7 @@ function registerAiBots({ api, botApi, runtime, registry, world, resetMovementSt
 
     execute() {
       const nowMs = Date.now();
+      presence.tick(nowMs);
       for (const mind of minds.values()) {
         try {
           mind.tick(nowMs);
@@ -277,7 +289,7 @@ function registerAiBots({ api, botApi, runtime, registry, world, resetMovementSt
   api.registerCommand("aibots", listAiBots, core.PlayerRights.OWNER, "List the AI bots and what they're doing");
   api.onServerStartup(() => {
     core.TaskManager.submit(new AiBotTick());
-    setTimeout(spawnAll, SPAWN_DELAY_MS);
+    setTimeout(() => presence.start(), SPAWN_DELAY_MS);
   });
   log("ai_bots_enabled", { count: config.count, providers: providers.map((provider) => `${provider.name}:${provider.model}`) });
   return { minds, roster };

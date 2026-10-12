@@ -46,6 +46,8 @@ All of them live under `"PlayerBots:ai"`; see `AiBotConfig.js` for the defaults.
 | `chat` | | Who answers chat (below). |
 | `limits.callsPerBotPerMinute` / `callsPerMinute` | `4` / `30` | Hard caps on model calls. |
 | `checkInMinutes` | `[8, 15]` | How often a bot reconsiders what it's doing. |
+| `watchTiles` | `64` | A bot with no real player this near makes no model calls of its own (check-ins, idle choices, login); its brain plays on. Chat, private messages and trades are still answered. |
+| `logoutWhenEmptyMinutes` | `0` (off) | Minutes without any real player online before AI bots log out. They log back in, one every 1.5 seconds, when someone arrives; with it on and nobody online at startup, they wait. |
 | `pacing` | | Pauses so a bot doesn't act every tick, in ms ranges: `actionPauseMs` `[600, 2400]` after each action, `activityPauseMs` `[2000, 8000]` before a new activity, `walkPauseChance` `0.3` / `walkPauseMs` `[600, 2400]` between walk legs, `dropsPerTick` `[1, 2]`. |
 | `gifts.perTrade` / `gifts.perPlayerPerDay` | `10000` / `25000` | The most a bot gives away (Grand Exchange value). |
 
@@ -64,6 +66,14 @@ background and their results are applied on a later tick, so the game loop never
 allow, optionally at a place: the bot walks there first. When an activity ends, the brain asks
 the bot for its next one (`BotBrain` `chooseNext`). If the model doesn't answer within 25
 seconds, the brain picks one itself.
+
+## Quiet worlds
+
+Model calls follow the players. A bot no real player is within `watchTiles` of asks its
+model nothing on its own: no check-ins, no choice after an activity (its brain picks), no
+login decision. A world nobody is playing on costs no calls, however many bots it has.
+`logoutWhenEmptyMinutes` goes further and logs the bots out, which also saves server time.
+Bots log in one every 1.5 seconds, at startup too.
 
 ## Who answers chat
 

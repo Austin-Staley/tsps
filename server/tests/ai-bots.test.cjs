@@ -10,6 +10,7 @@ Server.installProductionPathResolver();
 const { readAiBotConfig } = require("../plugins/bots/ai/AiBotConfig");
 const { AiBotCallLimiter, AiBotChatRouter, addresses } = require("../plugins/bots/ai/AiBotChat");
 const { AiBotMind } = require("../plugins/bots/ai/AiBotMind");
+const { AiBotPresence, SPAWN_GAP_MS } = require("../plugins/bots/ai/AiBotPresence");
 const { AiBotTrade, containerValue } = require("../plugins/bots/ai/AiBotTrade");
 const { buildTools, validateCall } = require("../plugins/bots/ai/AiBotTools");
 const { buildSystemPrompt, buildSituation } = require("../plugins/bots/ai/AiBotPrompt");
@@ -323,6 +324,7 @@ function mindSetup({ results = [], places = new Map() } = {}) {
     limiter: new AiBotCallLimiter({ callsPerBotPerMinute: 10, callsPerMinute: 10 }),
     router: { noteConversation() {} },
     givenToday: new Map(),
+    watched: () => true,
     getEntry: () => ({ brain, state }),
     log: () => {},
     emitCustomEvent: () => {},
@@ -417,6 +419,82 @@ test("the situation shows what the bot can see", () => {
   assert.match(text, /saving for a rune scim/);
   assert.match(text, /\[5s ago\] Real: hey dave/);
   assert.match(text, /Not yet \(levels too low\): yew_trees/);
+});
+
+test("a bot with no real player near makes no calls of its own, but still answers", () => {
+  const { mind, provider } = mindSetup();
+  mind.services.watched = () => false;
+  const now = Date.now();
+  assert.equal(mind.chooseNext(now), null, "the brain picks; no idle call");
+  mind.requestDecision("checkIn");
+  mind.tick(now);
+  assert.equal(provider.calls, 0);
+  assert.equal(mind.want, null);
+  mind.requestDecision("private", { reply: true, from: "Real" });
+  mind.tick(now);
+  assert.equal(provider.calls, 1, "a private message is still answered");
+});
+
+function presenceSetup({ logoutWhenEmptyMinutes = 0, real = [], count = 3 } = {}) {
+  const players = [...real];
+  const minds = new Map();
+  const spawned = [];
+  const loggedOut = [];
+  const core = { World: { getPlayers: () => players } };
+  const config = { ...readAiBotConfig({ count, logoutWhenEmptyMinutes }) };
+  const presence = new AiBotPresence({
+    core,
+    config,
+    minds,
+    spawn: (index) => {
+      spawned.push(index);
+      minds.set(`bot${index}`, { bot: { index } });
+      return "spawned";
+    },
+    logOut: (bot) => {
+      loggedOut.push(bot.index);
+      minds.delete(`bot${bot.index}`);
+    },
+  });
+  return { presence, players, minds, spawned, loggedOut };
+}
+
+test("only a real player within watchTiles counts as watching a bot", () => {
+  const { presence, players } = presenceSetup();
+  players.push(fakePlayer("Real", 3200, 3200), fakePlayer("Other bot", 3205, 3205, { bot: true }));
+  presence.refresh();
+  assert.equal(presence.watched(fakePlayer("A", 3260, 3200, { bot: true })), true);
+  assert.equal(presence.watched(fakePlayer("B", 3300, 3200, { bot: true })), false);
+});
+
+test("AI bots log in one at a time, not all in one tick", () => {
+  const { presence, spawned } = presenceSetup({ real: [fakePlayer("Real")] });
+  presence.start(0);
+  presence.tick(0);
+  presence.tick(600);
+  assert.deepEqual(spawned, [0]);
+  presence.tick(SPAWN_GAP_MS);
+  presence.tick(SPAWN_GAP_MS * 2);
+  assert.deepEqual(spawned, [0, 1, 2]);
+});
+
+test("with logoutWhenEmptyMinutes, bots log out on an empty world and return with a player", () => {
+  const { presence, players, spawned, loggedOut } = presenceSetup({ logoutWhenEmptyMinutes: 10, count: 2 });
+  presence.start(0);
+  presence.tick(0);
+  assert.deepEqual(spawned, [], "nobody online at startup: wait");
+  players.push(fakePlayer("Real"));
+  presence.tick(1000);
+  presence.tick(1000 + SPAWN_GAP_MS);
+  assert.deepEqual(spawned, [0, 1]);
+  players.length = 0;
+  presence.tick(60000);
+  assert.deepEqual(loggedOut, [], "not empty long enough yet");
+  presence.tick(60000 + 10 * 60000);
+  assert.deepEqual(loggedOut.sort(), [0, 1]);
+  players.push(fakePlayer("Real"));
+  presence.tick(800000);
+  assert.deepEqual(spawned, [0, 1, 0], "back, one at a time");
 });
 
 // --- Brain hooks ---------------------------------------------------------------
