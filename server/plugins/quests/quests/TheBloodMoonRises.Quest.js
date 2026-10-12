@@ -4,7 +4,7 @@
  * quest state uses the cache's myq6 varbit (15464 in varp 5618).
  */
 module.exports = function registerTheBloodMoonRises(api) {
-  const { ItemIdentifiers, Skill } = api.core;
+  const { Boundary, HitDamage, HitMask, ItemIdentifiers, Location, NpcIdentifiers, PrayerHandler, PrivateArea, Skill, World } = api.core;
   const { registerQuest, loadTranscripts, startTranscript } = require("../QuestRuntime");
   const PAGE = "The Blood Moon Rises";
   const START_HOOK = "quest:the-blood-moon-rises:start";
@@ -22,9 +22,14 @@ module.exports = function registerTheBloodMoonRises(api) {
     SIEGE: 70,
     THEATRE: 80,
     WYRDS: 90,
+    WYRD_DEFEATED: 95,
+    FENCE_FOUND: 96,
     FINAL: 100,
     COMPLETE: 110,
   };
+  const WYRD_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-area";
+  const WYRD_DEFEATED_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-defeated";
+  const wyrdEncounters = new Map();
   const CHAPTERS = [
     [STAGE.STARTED, "starting-out"],
     [STAGE.HIDEOUT, "starting-out-in-the-myreque-hideout"],
@@ -50,6 +55,177 @@ module.exports = function registerTheBloodMoonRises(api) {
     [Skill.HERBLORE, 64, "Herblore"], [Skill.MAGIC, 57, "Magic"],
   ];
   let quest;
+
+  class WyrdEncounterArea extends PrivateArea {
+    constructor(owner) {
+      super([new Boundary(2944, 3007, 7424, 7487, 0)]);
+      this.owner = owner;
+    }
+
+    isMulti() { return true; }
+
+    canAttack(attacker, target) {
+      const attackerHere = attacker?.getArea?.() === this;
+      const targetHere = target?.getArea?.() === this;
+      if (attackerHere || targetHere) return attackerHere && targetHere;
+      return null;
+    }
+
+    postLeave(mobile, logout) {
+      super.postLeave(mobile, logout);
+      if (this.isDestroyed()) wyrdEncounters.delete(this);
+    }
+
+    process(mobile) {
+      if (!mobile?.isNpc?.()) return;
+      const encounter = wyrdEncounters.get(this);
+      if (!encounter || mobile !== encounter.boss || encounter.finished || mobile.getHitpoints() <= 0) return;
+      const now = World.getProcessCycle();
+      if (encounter.lastCycle === now) return;
+      encounter.lastCycle = now;
+      mobile.setScriptedMovement(true);
+      mobile.getCombat().getLastAttack().reset();
+      const player = encounter.player;
+      if (player.getArea?.() !== this || player.getHitpoints() <= 0) return;
+
+      const hpPercent = mobile.getHitpoints() / mobile.getMaxHitpoints();
+      const threshold = hpPercent <= 0.1 ? 10 : hpPercent <= 0.5 ? 50 : hpPercent <= 0.8 ? 80 : 0;
+      if (threshold && !encounter.thresholdsSeen.has(threshold)) {
+        encounter.thresholdsSeen.add(threshold);
+        if (threshold === 10) encounter.ending = true;
+        startTranscript(api, player, mobile.getId(), PAGE, `fighting-wyrds-upon-reaching-${threshold}-hp`);
+        return;
+      }
+      if (encounter.ending) return;
+
+      const phase = hpPercent <= 0.5 ? 2 : 1;
+      if (phase === 2 && encounter.phase !== 2) {
+        encounter.phase = 2;
+        player.sendMessage("The Wyrd's body crackles with lightning. Leave its blood pools when it calls the storm, and lower every protection prayer during the screech.");
+      }
+      if (encounter.impactAt && now >= encounter.impactAt) {
+        const warning = encounter.warning;
+        encounter.impactAt = 0;
+        encounter.warning = null;
+        if (warning === "screech") {
+          const prayers = player.getPrayerActive?.() ?? [];
+          const overheadActive = [PrayerHandler.PROTECT_FROM_MAGIC, PrayerHandler.PROTECT_FROM_MISSILES,
+            PrayerHandler.PROTECT_FROM_MELEE].some((id) => prayers[id] === true);
+          const damage = overheadActive ? 30 : 0;
+          if (damage) player.sendMessage("Your protection prayer amplifies the Wyrd's screech.");
+          else player.sendMessage("The screech passes over you as you lower your prayers.");
+          if (damage) player.getCombat().getHitQueue().addPendingDamage([
+            new HitDamage(damage, HitMask.RED).setSource(mobile),
+          ]);
+          encounter.screeches++;
+          return;
+        }
+        if (warning === "storm") {
+          const distance = Math.max(Math.abs(player.getLocation().getX() - encounter.markedX),
+            Math.abs(player.getLocation().getY() - encounter.markedY));
+          const prayers = player.getPrayerActive?.() ?? [];
+          const overheadActive = [PrayerHandler.PROTECT_FROM_MAGIC, PrayerHandler.PROTECT_FROM_MISSILES,
+            PrayerHandler.PROTECT_FROM_MELEE].some((id) => prayers[id] === true);
+          if (distance <= 2) {
+            player.sendMessage("The lightning strikes around you. Move clear of the blood pools and turn off your protection prayers.");
+            player.getCombat().getHitQueue().addPendingDamage([
+              new HitDamage(overheadActive ? 24 : 16, HitMask.RED).setSource(mobile),
+            ]);
+          } else {
+            player.sendMessage("You escape the lightning strike and its blood pools.");
+          }
+          return;
+        }
+        if (warning === "slam") {
+          const distance = Math.max(Math.abs(player.getLocation().getX() - encounter.markedX),
+            Math.abs(player.getLocation().getY() - encounter.markedY));
+          if (distance <= 1) player.getCombat().getHitQueue().addPendingDamage([
+            new HitDamage(35, HitMask.RED).setSource(mobile),
+          ]);
+          else player.sendMessage("The Wyrd's ground slam crashes where you stood.");
+          return;
+        }
+      }
+      if (encounter.impactAt) return;
+      if (now < encounter.nextAttackAt) return;
+      encounter.nextAttackAt = now + 4;
+      if (phase === 1 && encounter.punches < 2) {
+        encounter.punches++;
+        const protectedFromMelee = (player.getPrayerActive?.() ?? [])[PrayerHandler.PROTECT_FROM_MELEE] === true;
+        if (!protectedFromMelee) player.getCombat().getHitQueue().addPendingDamage([
+          new HitDamage(5 + Math.floor(Math.random() * 7), HitMask.RED).setSource(mobile),
+        ]);
+        player.sendMessage("The Wyrd swings a heavy fist at you.");
+        return;
+      }
+      if (phase === 1 && encounter.screeches < 2) {
+        encounter.punches = 0;
+        encounter.warning = "screech";
+        encounter.impactAt = now + 2;
+        player.sendMessage("The Wyrd draws breath for a screech. Turn off all protection prayers before it lands.");
+        return;
+      }
+      encounter.screeches = 0;
+      encounter.punches = 0;
+      const loc = player.getLocation();
+      encounter.markedX = loc.getX();
+      encounter.markedY = loc.getY();
+      encounter.warning = phase === 2 ? "storm" : "slam";
+      encounter.impactAt = now + 2;
+      player.sendMessage(phase === 2
+        ? "The Wyrd calls down lightning around you. Move away from the marked ground and turn off your protection prayers."
+        : "The Wyrd winds back for a ground slam. Move away from your current tile.");
+    }
+  }
+
+  function startWyrdBattle(player) {
+    const existing = player.getAttribute(WYRD_AREA_ATTRIBUTE);
+    if (existing && existing.isDestroyed?.() !== true) return true;
+    const area = new WyrdEncounterArea(player.getUsername?.());
+    const boss = api.spawnNpc({ id: NpcIdentifiers.WYRD_8, x: 2976, y: 7456, z: 0,
+      wanderRadius: 0, owner: player, ownerOnly: true });
+    if (!boss) {
+      player.sendMessage("The Wyrd could not be reached. Return to Veliaf and try again.");
+      return false;
+    }
+    boss.setMultiCombat?.(true);
+    boss.setMaxHitpoints(1100);
+    boss.setHitpoints(1100);
+    area.enter(player);
+    area.enter(boss);
+    player.setAttribute(WYRD_AREA_ATTRIBUTE, area);
+    player.moveTo(new Location(2976, 7452, 0));
+    wyrdEncounters.set(area, { area, boss, player, phase: 1, lastCycle: -1, nextAttackAt: World.getProcessCycle() + 4,
+      impactAt: 0, warning: null, punches: 0, screeches: 0, markedX: 2976, markedY: 7452, finished: false,
+      ending: false, thresholdsSeen: new Set() });
+    player.sendMessage("The Wyrd breaks free. Protect from its fists, lower all protection prayers for the screech, and move away from the ground slam.");
+    return true;
+  }
+
+  function handleWyrdDeath(event) {
+    const npc = event?.npc;
+    const area = npc?.getArea?.();
+    const encounter = area && wyrdEncounters.get(area);
+    if (!encounter || npc !== encounter.boss || encounter.finished || event?.killer !== encounter.player) return;
+    // A lethal hit can skip over 10% between NPC processing ticks. Keep the same
+    // story outcome as the threshold trigger: Safalaan knocks the player out and flees.
+    if (!encounter.ending) {
+      encounter.ending = true;
+      encounter.thresholdsSeen.add(10);
+      startTranscript(api, encounter.player, npc.getId(), PAGE, "fighting-wyrds-upon-reaching-10-hp");
+    }
+  }
+
+  function inspectWyrdFence(event) {
+    const player = event?.player;
+    const name = String(event?.definition?.getName?.() ?? "").toLowerCase();
+    if (!player || !player.getAttribute(WYRD_DEFEATED_ATTRIBUTE) || name !== "broken fence") return false;
+    const x = event.location?.getX?.() ?? event.location?.x;
+    const y = event.location?.getY?.() ?? event.location?.y;
+    if (x !== 3562 || y !== 3323) return false;
+    event.handled = true;
+    return startTranscript(api, player, 0, PAGE, "fighting-wyrds-inspecting-the-broken-fence");
+  }
 
   function stage(player) { return quest.getStage(player); }
   function advance(player, value) {
@@ -108,6 +284,22 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!player || quest.isComplete(player)) return;
     const next = ACTION_STAGE[event.stepId];
     if (next) advance(player, next);
+    if (event.stepId === "4G5OZg") startWyrdBattle(player);
+    if (event.stepId === "dJZbqF") {
+      const area = player.getAttribute(WYRD_AREA_ATTRIBUTE);
+      const encounter = area && wyrdEncounters.get(area);
+      if (encounter) {
+        encounter.finished = true;
+        api.removeNpc(encounter.boss);
+        area.leave(player, false);
+      }
+      player.setAttribute(WYRD_AREA_ATTRIBUTE, null);
+      player.setAttribute(WYRD_DEFEATED_ATTRIBUTE, true);
+      advance(player, STAGE.WYRD_DEFEATED);
+      player.moveTo(new Location(3562, 3323, 0));
+    }
+    if (event.stepId === "xt3dPV") advance(player, STAGE.FENCE_FOUND);
+    if (event.stepId === "2QgFZA" && player.getAttribute(WYRD_DEFEATED_ATTRIBUTE)) advance(player, STAGE.FINAL);
     if (event.stepId === "BzMe5D") quest.complete(player);
   }
 
@@ -159,7 +351,9 @@ module.exports = function registerTheBloodMoonRises(api) {
   function buildJournal(player) {
     if (quest.isComplete(player)) return ["Lowerniel Drakan has fallen.", "The Myreque's long struggle is over."];
     const value = stage(player);
-    if (value >= STAGE.FINAL) return ["Lowerniel Drakan has begun the Night of the Blood Moon.", "I must return through the northern door and stop him."];
+    if (value >= STAGE.FINAL) return ["The Myreque have set out for Castle Drakan.", "I must follow them and stop Lowerniel Drakan."];
+    if (value >= STAGE.FENCE_FOUND) return ["Safalaan escaped toward Castle Drakan.", "I should join the Myreque in Burgh de Rott and prepare to pursue him."];
+    if (value >= STAGE.WYRD_DEFEATED) return ["The Wyrd knocked me unconscious and fled north.", "I should inspect the broken fence beyond Barrows and follow Safalaan's trail."];
     if (value >= STAGE.THEATRE) return ["Safalaan is becoming a wyrd.", "I must help Veliaf defeat him before he loses himself."];
     if (value >= STAGE.SIEGE) return ["The aranei hideout is under attack.", "I must help defend the bridge and protect the portal."];
     if (value >= STAGE.PREPARATIONS) return ["Sugadinti's followers are preparing to face Lowerniel.", "I should speak to Veliaf when I am ready."];
@@ -224,5 +418,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("npc-dialogue:choice", onChoice);
   api.onNpcDialogueVariant(selectVariant);
   api.onAnyNpcInteraction({ "Talk-to": talkQuestNpc });
+  api.onObjectInteraction(inspectWyrdFence);
+  api.onNpcDeath(handleWyrdDeath);
+  api.persistAttribute(WYRD_DEFEATED_ATTRIBUTE);
   api.onItemAction("Tome of Experience", { Read: readTome });
 };

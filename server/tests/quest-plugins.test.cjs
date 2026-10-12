@@ -217,6 +217,51 @@ test('The Blood Moon Rises starts only after Sarius accepts the yes choice and r
   assert.equal(reclaimed, 1, 'the explicit option delegates to Night at the Theatre’s inventory-safe reclaim event');
 });
 
+test('The Wyrd transcript action starts a private encounter with the cache-mapped boss', () => {
+  const { api, handlers } = mockApi();
+  const attributes = new Map();
+  const spawns = [];
+  let bossArea = null;
+  const boss = {
+    isNpc: () => true,
+    isPlayer: () => false,
+    getAsNpc: () => boss,
+    getIndex: () => 200,
+    getArea: () => bossArea,
+    setArea: (area) => { bossArea = area; },
+    setMultiCombat() {},
+    setMaxHitpoints(value) { this.maxHitpoints = value; },
+    setHitpoints(value) { this.hitpoints = value; },
+  };
+  api.spawnNpc = (definition) => (spawns.push(definition), boss);
+  api.emitCustomEvent = (name, request) => {
+    for (const handler of handlers.custom.get(name) ?? []) handler(request);
+  };
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const player = {
+    getUsername: () => 'WyrdFightTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    isPlayer: () => true,
+    isNpc: () => false,
+    getAsPlayer: () => player,
+    getIndex: () => 100,
+    getArea: () => player.area,
+    setArea: (area) => { player.area = area; },
+    moveTo: (location) => { player.destination = [location.getX(), location.getY(), location.getZ()]; },
+    sendMessage() {},
+  };
+  handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: '4G5OZg' });
+  assert.deepEqual(spawns.map(({ id, x, y, z, ownerOnly }) => ({ id, x, y, z, ownerOnly })), [
+    { id: api.core.NpcIdentifiers.WYRD_8, x: 2976, y: 7456, z: 0, ownerOnly: true },
+  ]);
+  assert.deepEqual(player.destination, [2976, 7452, 0]);
+  assert.equal(player.getArea(), bossArea, 'the player and owner-only Wyrd share a private combat area');
+  assert.equal(boss.getArea(), bossArea);
+  assert.equal(boss.hitpoints, 1100);
+});
+
 test('Priest in Peril unlocks the mausoleum Holy barrier only after completion', () => {
   const { api: base } = mockApi();
   const objects = new Map();
