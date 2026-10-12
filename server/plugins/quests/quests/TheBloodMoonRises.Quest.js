@@ -29,7 +29,10 @@ module.exports = function registerTheBloodMoonRises(api) {
   };
   const WYRD_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-area";
   const WYRD_DEFEATED_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-defeated";
+  const DRAKAN_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.drakan-area";
+  const DRAKAN_DEFEATED_ATTRIBUTE = "quest.the_blood_moon_rises.drakan-defeated";
   const wyrdEncounters = new Map();
+  const drakanEncounters = new Map();
   const CHAPTERS = [
     [STAGE.STARTED, "starting-out"],
     [STAGE.HIDEOUT, "starting-out-in-the-myreque-hideout"],
@@ -178,6 +181,151 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
   }
 
+  class DrakanEncounterArea extends PrivateArea {
+    constructor(owner) {
+      super([new Boundary(2495, 2514, 7823, 7853, 3)]);
+      this.owner = owner;
+    }
+    isMulti() { return true; }
+    canAttack(attacker, target) {
+      const attackerHere = attacker?.getArea?.() === this;
+      const targetHere = target?.getArea?.() === this;
+      if (attackerHere || targetHere) return attackerHere && targetHere;
+      return null;
+    }
+    postLeave(mobile, logout) {
+      super.postLeave(mobile, logout);
+      if (this.isDestroyed()) drakanEncounters.delete(this);
+    }
+    process(mobile) {
+      if (!mobile?.isNpc?.()) return;
+      const fight = drakanEncounters.get(this);
+      if (!fight || mobile !== fight.boss || fight.finished || mobile.getHitpoints() <= 0) return;
+      const now = World.getProcessCycle();
+      if (fight.lastCycle === now) return;
+      fight.lastCycle = now;
+      mobile.setScriptedMovement(true);
+      mobile.getCombat().getLastAttack().reset();
+      const player = fight.player;
+      if (player.getArea?.() !== this || player.getHitpoints() <= 0 || fight.ending) return;
+      const hpPercent = mobile.getHitpoints() / mobile.getMaxHitpoints();
+      if (hpPercent <= 0.3 && !fight.thresholdSeen) {
+        fight.thresholdSeen = true;
+        fight.ending = true;
+        startTranscript(api, player, mobile.getId(), PAGE, "night-of-the-blood-moon-upon-lowerniel-reaching-30-hp");
+        return;
+      }
+      if (fight.impactAt && now >= fight.impactAt) {
+        const warning = fight.warning;
+        fight.impactAt = 0;
+        fight.warning = null;
+        const location = player.getLocation();
+        const x = location.getX();
+        const y = location.getY();
+        const prayers = player.getPrayerActive?.() ?? [];
+        const melee = prayers[PrayerHandler.PROTECT_FROM_MELEE] === true;
+        const magic = prayers[PrayerHandler.PROTECT_FROM_MAGIC] === true;
+        if (warning === "thrust") {
+          const distance = Math.max(Math.abs(x - fight.markedX), Math.abs(y - fight.markedY));
+          if (distance === 0) this.hit(player, mobile, 30, "The spear thrust catches you. Step away when Lowerniel draws the spear back.");
+          else player.sendMessage("You sidestep Lowerniel's spear thrust.");
+          return;
+        }
+        if (warning === "blood-spear") {
+          if (!magic) this.hit(player, mobile, 32, "The blood spear strikes you. Protect from Magic when he fires it.");
+          else player.sendMessage("Your Protect from Magic prayer turns aside the blood spear.");
+          return;
+        }
+        if (warning === "wave") {
+          if (y === fight.markedY) this.hit(player, mobile, 36, "The blood wave crashes through your lane. Move to another row when it gathers.");
+          else player.sendMessage("You dodge sideways out of the blood wave's path.");
+          return;
+        }
+        if (warning === "shadow") {
+          const distance = Math.max(Math.abs(x - fight.markedX), Math.abs(y - fight.markedY));
+          if (distance <= 1) this.hit(player, mobile, 28, "The shadow pool erupts beneath you. Move clear of the marked ground.");
+          else player.sendMessage("You move clear before the shadow pool erupts.");
+          return;
+        }
+        if (warning === "melee") {
+          if (!melee) this.hit(player, mobile, 7 + Math.floor(Math.random() * 10), "Lowerniel's melee strike lands.");
+          return;
+        }
+      }
+      if (fight.impactAt || now < fight.nextAttackAt) return;
+      fight.nextAttackAt = now + 4;
+      fight.attackIndex++;
+      const loc = player.getLocation();
+      if (fight.attackIndex % 5 === 1) {
+        fight.warning = "thrust"; fight.markedX = loc.getX(); fight.markedY = loc.getY(); fight.impactAt = now + 2;
+        player.sendMessage("Lowerniel draws his spear back and lines up a thrust. Step at least one tile aside.");
+      } else if (fight.attackIndex % 5 === 2) {
+        fight.warning = "blood-spear"; fight.impactAt = now + 2;
+        player.sendMessage("Lowerniel fires a blood spear. Protect from Magic before it lands.");
+      } else if (fight.attackIndex % 5 === 3) {
+        fight.warning = "wave"; fight.markedY = loc.getY(); fight.impactAt = now + 2;
+        player.sendMessage("A blood wave gathers across your row. Move to another row before it sweeps through.");
+      } else if (fight.attackIndex % 5 === 4) {
+        fight.warning = "shadow"; fight.markedX = loc.getX(); fight.markedY = loc.getY(); fight.impactAt = now + 2;
+        player.sendMessage("A shadow pool forms beneath you. Move more than one tile away.");
+      } else {
+        fight.warning = "melee"; fight.impactAt = now + 1;
+        player.sendMessage("Lowerniel closes in with a melee strike. Protect from Melee.");
+      }
+    }
+    hit(player, source, damage, message) {
+      player.sendMessage(message);
+      player.getCombat().getHitQueue().addPendingDamage([
+        new HitDamage(damage, HitMask.RED).setSource(source),
+      ]);
+    }
+  }
+
+  function startDrakanBattle(player) {
+    const existing = player.getAttribute(DRAKAN_AREA_ATTRIBUTE);
+    if (existing && existing.isDestroyed?.() !== true) return true;
+    const area = new DrakanEncounterArea(player.getUsername?.());
+    const boss = api.spawnNpc({ id: NpcIdentifiers.LOWERNIEL_DRAKAN_17, x: 2505, y: 7838, z: 3,
+      wanderRadius: 0, owner: player, ownerOnly: true });
+    if (!boss) { player.sendMessage("Lowerniel could not be reached. Return to the northern chamber door."); return false; }
+    boss.setMultiCombat?.(true);
+    boss.setMaxHitpoints(1600);
+    boss.setHitpoints(1600);
+    area.enter(player);
+    area.enter(boss);
+    player.setAttribute(DRAKAN_AREA_ATTRIBUTE, area);
+    player.moveTo(new Location(2502, 7838, 3));
+    drakanEncounters.set(area, { area, boss, player, lastCycle: -1,
+      nextAttackAt: World.getProcessCycle() + 4, attackIndex: 0, impactAt: 0, warning: null,
+      markedX: 2502, markedY: 7838, thresholdSeen: false, ending: false, finished: false });
+    player.sendMessage("Lowerniel attacks. Dodge his spear thrust and blood wave, protect from Magic against blood spears, and leave the shadow pools.");
+    return true;
+  }
+
+  function finishDrakanEncounter(player) {
+    const area = player.getAttribute(DRAKAN_AREA_ATTRIBUTE);
+    const fight = area && drakanEncounters.get(area);
+    if (!fight) return false;
+    fight.finished = true;
+    api.removeNpc(fight.boss);
+    area.leave(player, false);
+    player.setAttribute(DRAKAN_AREA_ATTRIBUTE, null);
+    player.setAttribute(DRAKAN_DEFEATED_ATTRIBUTE, true);
+    drakanEncounters.delete(area);
+    return true;
+  }
+
+  function handleDrakanDeath(event) {
+    const npc = event?.npc;
+    const area = npc?.getArea?.();
+    const fight = area && drakanEncounters.get(area);
+    if (!fight || npc !== fight.boss || fight.finished) return false;
+    fight.ending = true;
+    fight.thresholdSeen = true;
+    startTranscript(api, fight.player, npc.getId(), PAGE, "night-of-the-blood-moon-upon-killing-lowerniel-drakan");
+    return true;
+  }
+
   function startWyrdBattle(player) {
     const existing = player.getAttribute(WYRD_AREA_ATTRIBUTE);
     if (existing && existing.isDestroyed?.() !== true) return true;
@@ -203,6 +351,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function handleWyrdDeath(event) {
+    if (handleDrakanDeath(event)) return;
     const npc = event?.npc;
     const area = npc?.getArea?.();
     const encounter = area && wyrdEncounters.get(area);
@@ -285,6 +434,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     const next = ACTION_STAGE[event.stepId];
     if (next) advance(player, next);
     if (event.stepId === "4G5OZg") startWyrdBattle(player);
+    if (event.stepId === "t7FMNM") startDrakanBattle(player);
+    if (event.stepId === "4ebW6l" || event.stepId === "BzMe5D") finishDrakanEncounter(player);
     if (event.stepId === "dJZbqF") {
       const area = player.getAttribute(WYRD_AREA_ATTRIBUTE);
       const encounter = area && wyrdEncounters.get(area);
@@ -422,5 +573,6 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction(inspectWyrdFence);
   api.onNpcDeath(handleWyrdDeath);
   api.persistAttribute(WYRD_DEFEATED_ATTRIBUTE);
+  api.persistAttribute(DRAKAN_DEFEATED_ATTRIBUTE);
   api.onItemAction("Tome of Experience", { Read: readTome });
 };

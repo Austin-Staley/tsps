@@ -266,6 +266,51 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
   assert.equal(boss.hitpoints, 1100);
 });
 
+test('Blood Moon northern-door transcript starts the private Lowerniel encounter', () => {
+  const { api, handlers } = mockApi();
+  const attributes = new Map();
+  const spawns = [];
+  let bossArea = null;
+  const boss = {
+    isNpc: () => true,
+    isPlayer: () => false,
+    getAsNpc: () => boss,
+    getIndex: () => 201,
+    getArea: () => bossArea,
+    setArea: (area) => { bossArea = area; },
+    setMultiCombat() {},
+    setMaxHitpoints(value) { this.maxHitpoints = value; },
+    setHitpoints(value) { this.hitpoints = value; },
+  };
+  api.spawnNpc = (definition) => (spawns.push(definition), boss);
+  api.emitCustomEvent = (name, request) => {
+    for (const handler of handlers.custom.get(name) ?? []) handler(request);
+  };
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const player = {
+    getUsername: () => 'DrakanFightTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    isPlayer: () => true,
+    isNpc: () => false,
+    getAsPlayer: () => player,
+    getIndex: () => 101,
+    getArea: () => player.area,
+    setArea: (area) => { player.area = area; },
+    moveTo: (location) => { player.destination = [location.getX(), location.getY(), location.getZ()]; },
+    sendMessage() {},
+  };
+  handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 't7FMNM' });
+  assert.deepEqual(spawns.map(({ id, x, y, z, ownerOnly }) => ({ id, x, y, z, ownerOnly })), [
+    { id: api.core.NpcIdentifiers.LOWERNIEL_DRAKAN_17, x: 2505, y: 7838, z: 3, ownerOnly: true },
+  ]);
+  assert.deepEqual(player.destination, [2502, 7838, 3]);
+  assert.equal(player.getArea(), bossArea, 'the player and Lowerniel share an owner-only final arena');
+  assert.equal(boss.getArea(), bossArea);
+  assert.equal(boss.hitpoints, 1600);
+});
+
 test('Priest in Peril unlocks the mausoleum Holy barrier only after completion', () => {
   const { api: base } = mockApi();
   const objects = new Map();
