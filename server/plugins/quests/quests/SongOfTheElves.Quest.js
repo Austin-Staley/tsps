@@ -41,14 +41,14 @@ module.exports = function registerSongOfTheElves(api) {
   const CAMP_HOLE_TILES = [[2439, 6126], [2444, 6129], [2450, 6127], [2452, 6122], [2456, 6119], [2459, 6114], [2457, 6109]];
   const CAMP_CENTER = new Location(2445, 6092, 0);
   const LIBRARY_SEAL_DATA = [
-    { name: "ithell", id: ObjectIdentifiers.SEAL_OF_ITHELL, mapId: 36730, memory: NpcIdentifiers.MEMORY_OF_SEREN_2, tile: [2676, 6101, 1], steps: ["E", "S", "W", "N"] },
-    { name: "cadarn", id: ObjectIdentifiers.SEAL_OF_CADARN, mapId: 36725, memory: NpcIdentifiers.MEMORY_OF_SEREN_3, tile: [2622, 6097, 0], source: [2609, 6130, 1], sourceDirection: "north", steps: ["E", "D", "S", "W", "S", "red", "E", "S"], targets: [[2609, 6158, 1], [2623, 6158, 1], [2623, 6158, 0], [2623, 6130, 0], [2609, 6130, 0], [2609, 6116, 0], [2609, 6102, 0], [2623, 6102, 0]] },
-    { name: "crwys", id: ObjectIdentifiers.SEAL_OF_CRWYS, mapId: 36726, memory: NpcIdentifiers.MEMORY_OF_SEREN_4, tile: [2576, 6171, 1], steps: ["W", "N", "W", "fractured", "N", "green", "D", "E", "U", "cyan", "S", "D", "S"] },
-    { name: "amlodd", id: ObjectIdentifiers.SEAL_OF_AMLODD, mapId: 36727, memory: NpcIdentifiers.MEMORY_OF_SEREN_5, tile: [2614, 6157, 0], steps: ["fractured", "N", "red", "E", "N", "W", "D", "S", "E", "D", "S", "W", "S", "W", "N", "green", "yellow", "E", "E", "S"] },
-    { name: "meilyr", id: ObjectIdentifiers.SEAL_OF_MEILYR, mapId: 36731, memory: NpcIdentifiers.MEMORY_OF_SEREN_6, tile: [2580, 6163, 2], steps: ["E", "D", "S", "W", "S", "W", "N", "W", "N", "U", "red", "N", "U", "N", "W", "N", "W", "S", "W"] },
-    { name: "hefin", id: ObjectIdentifiers.SEAL_OF_HEFIN, mapId: 36728, memory: NpcIdentifiers.MEMORY_OF_SEREN_7, tile: [2562, 6129, 2], steps: ["E", "D", "S", "W", "S", "W", "N", "W", "S", "W", "N", "D", "E", "U", "N", "W", "U", "N", "W", "S"] },
-    { name: "trahaearn", id: ObjectIdentifiers.SEAL_OF_TRAHAEARN, mapId: 36732, memory: NpcIdentifiers.MEMORY_OF_SEREN_8, tile: [2646, 6143, 2], steps: ["S", "W", "N", "D", "E", "U", "N", "E", "S", "E", "blue", "S", "E", "N", "W", "N", "N", "E", "U", "E", "N", "W", "S"] },
-    { name: "iorwerth", id: ObjectIdentifiers.SEAL_OF_IORWERTH, mapId: 36729, memory: NpcIdentifiers.MEMORY_OF_SEREN_9, tile: [2650, 6167, 1], steps: ["cyan", "blue", "W", "D", "N", "fractured", "E", "U", "S", "E", "yellow", "N", "W", "N", "U", "S", "magenta", "N", "E", "red", "N", "W", "N", "E", "N", "U", "N", "W", "S", "D", "S", "D"] },
+    { name: "ithell", id: ObjectIdentifiers.SEAL_OF_ITHELL, mapId: 36730, memory: NpcIdentifiers.MEMORY_OF_SEREN_2, tile: [2676, 6101, 1], tileRotation: 1, source: [2651, 6102, 1], sourceDirection: "south", steps: ["E", "N", "E", "N", "E", "S", "W", "S", "E", "N", "E", "N", "E"], targets: [[2651, 6098, 1], [2655, 6098, 1], [2655, 6106, 1], [2659, 6106, 1], [2659, 6110, 1], [2663, 6110, 1], [2663, 6098, 1], [2659, 6098, 1], [2659, 6094, 1], [2667, 6094, 1], [2667, 6098, 1], [2671, 6098, 1], [2671, 6102, 1]] },
+    { name: "cadarn", id: ObjectIdentifiers.SEAL_OF_CADARN, mapId: 36725, memory: NpcIdentifiers.MEMORY_OF_SEREN_3, tile: [2622, 6097, 0], tileRotation: 2, source: [2609, 6130, 1], sourceDirection: "north", steps: ["E", "D", "S", "W", "S", "red", "E", "S"], targets: [[2609, 6158, 1], [2623, 6158, 1], [2623, 6158, 0], [2623, 6130, 0], [2609, 6130, 0], [2609, 6116, 0], [2609, 6102, 0], [2623, 6102, 0]] },
+    { name: "crwys", id: ObjectIdentifiers.SEAL_OF_CRWYS, mapId: 36726, memory: NpcIdentifiers.MEMORY_OF_SEREN_4, tile: [2576, 6171, 1], tileRotation: 3, source: [2609, 6158, 1], sourceDirection: "south", steps: ["W", "N", "W", "fractured", "N", "green", "D", "E", "U", "cyan", "S", "D", "S"], targets: [[2609, 6144, 1], [2595, 6144, 1], [2595, 6158, 1], [2581, 6158, 1], [2567, 6158, 1], [2567, 6172, 1], [2567, 6200, 1], [2567, 6200, 0], [2581, 6200, 0], [2581, 6200, 1], [2581, 6200, 2], [2581, 6186, 2], [2581, 6186, 1]] },
+    { name: "amlodd", id: ObjectIdentifiers.SEAL_OF_AMLODD, mapId: 36727, memory: NpcIdentifiers.MEMORY_OF_SEREN_5, tile: [2614, 6157, 0], tileRotation: 1, source: [2623, 6144, 1], sourceDirection: "west", steps: ["fractured", "N", "red", "E", "N", "W", "D", "S", "E", "D", "S", "W", "S", "W", "N", "green", "yellow", "E", "E", "S"], targets: [[2609, 6144, 1], [2595, 6144, 1], [2595, 6158, 1], [2595, 6172, 1], [2609, 6172, 1], [2609, 6186, 1], [2595, 6186, 1], [2595, 6186, 0], [2609, 6158, 1], [2623, 6158, 1], [2623, 6158, 0], [2623, 6130, 0], [2609, 6130, 0], [2609, 6116, 0], [2595, 6116, 0], [2595, 6130, 0], [2595, 6144, 0], [2595, 6158, 0], [2595, 6172, 0], [2609, 6172, 0]], branches: { 8: { fromStep: 0 } } },
+    { name: "meilyr", id: ObjectIdentifiers.SEAL_OF_MEILYR, mapId: 36731, memory: NpcIdentifiers.MEMORY_OF_SEREN_6, tile: [2580, 6163, 2], tileRotation: 0, source: [2595, 6158, 1], sourceDirection: "east", steps: ["E", "D", "S", "W", "S", "W", "N", "W", "N", "U", "red", "N", "U", "N", "W", "N", "W", "S", "W"], targets: [[2609, 6158, 1], [2623, 6158, 1], [2623, 6158, 0], [2623, 6130, 0], [2609, 6130, 0], [2609, 6116, 0], [2595, 6116, 0], [2595, 6130, 0], [2581, 6130, 0], [2581, 6144, 0], [2581, 6144, 1], [2581, 6144, 2], [2637, 6144, 1], [2637, 6144, 2], [2637, 6158, 2], [2609, 6158, 2], [2609, 6172, 2], [2595, 6172, 2], [2595, 6158, 2]], branches: { 12: { source: [2637, 6130, 1], direction: "north" } } },
+    { name: "hefin", id: ObjectIdentifiers.SEAL_OF_HEFIN, mapId: 36728, memory: NpcIdentifiers.MEMORY_OF_SEREN_7, tile: [2562, 6129, 2], tileRotation: 3, source: [2595, 6158, 1], sourceDirection: "east", steps: ["E", "D", "S", "W", "S", "W", "N", "W", "S", "W", "N", "D", "E", "U", "N", "W", "U", "N", "W", "S"], targets: [[2609, 6158, 1], [2623, 6158, 1], [2623, 6158, 0], [2623, 6130, 0], [2609, 6130, 0], [2609, 6116, 0], [2595, 6116, 0], [2595, 6130, 0], [2595, 6102, 1], [2595, 6088, 1], [2567, 6088, 1], [2567, 6116, 1], [2567, 6116, 0], [2581, 6116, 0], [2581, 6130, 0], [2581, 6144, 0], [2567, 6144, 0], [2581, 6116, 2], [2581, 6130, 2], [2567, 6144, 2]], branches: { 8: { source: [2595, 6116, 1], direction: "south" }, 17: { source: [2581, 6102, 2], direction: "north" } } },
+    { name: "trahaearn", id: ObjectIdentifiers.SEAL_OF_TRAHAEARN, mapId: 36732, memory: NpcIdentifiers.MEMORY_OF_SEREN_8, tile: [2646, 6143, 2], tileRotation: 3, source: [2595, 6116, 1], sourceDirection: "south", steps: ["S", "W", "N", "D", "E", "U", "N", "E", "S", "E", "blue", "S", "E", "N", "W", "N", "N", "E", "U", "E", "N", "W", "S"], targets: [[2595, 6102, 1], [2595, 6088, 1], [2567, 6088, 1], [2567, 6116, 1], [2567, 6116, 0], [2581, 6116, 0], [2581, 6116, 2], [2581, 6130, 2], [2609, 6130, 2], [2609, 6102, 2], [2637, 6102, 2], [2651, 6102, 2], [2651, 6094, 2], [2665, 6094, 2], [2665, 6110, 2], [2651, 6110, 2], [2651, 6130, 1], [2651, 6144, 1], [2665, 6144, 1], [2665, 6144, 2], [2679, 6144, 2], [2679, 6158, 2], [2651, 6158, 2]], branches: { 16: { source: [2651, 6116, 1], direction: "north" } } },
+    { name: "iorwerth", id: ObjectIdentifiers.SEAL_OF_IORWERTH, mapId: 36729, memory: NpcIdentifiers.MEMORY_OF_SEREN_9, tile: [2650, 6167, 1], tileRotation: 2, source: [2637, 6130, 1], sourceDirection: "north", steps: ["cyan", "blue", "W", "D", "N", "fractured", "E", "U", "S", "E", "yellow", "N", "W", "N", "U", "S", "magenta", "N", "E", "red", "N", "W", "N", "E", "N", "U", "N", "W", "S", "D", "S", "D"], targets: [[2637, 6144, 1], [2637, 6158, 1], [2637, 6172, 1], [2623, 6172, 1], [2623, 6172, 0], [2623, 6186, 0], [2623, 6200, 0], [2637, 6200, 0], [2637, 6186, 0], [2637, 6172, 0], [2651, 6172, 0], [2665, 6172, 0], [2665, 6186, 0], [2651, 6186, 0], [2651, 6200, 0], [2651, 6200, 1], [2637, 6200, 1], [2651, 6130, 1], [2651, 6144, 1], [2665, 6144, 1], [2679, 6144, 1], [2679, 6158, 1], [2665, 6158, 1], [2665, 6172, 1], [2679, 6172, 1], [2679, 6186, 1], [2679, 6186, 2], [2679, 6200, 2], [2665, 6200, 2], [2665, 6186, 2], [2637, 6200, 2], [2637, 6186, 2]], branches: { 8: { fromStep: 5 }, 17: { source: [2651, 6116, 1], direction: "north" } } },
   ];
   const LIBRARY_OPERATIONS = { E: "east", W: "west", N: "north", S: "south", U: "up", D: "down" };
   const LIBRARY_CRYSTAL_ITEMS = {
@@ -903,7 +903,10 @@ module.exports = function registerSongOfTheElves(api) {
     for (let x = previous.x + step[0], y = previous.y + step[1], z = previous.z + step[2];
       x !== location.x || y !== location.y || z !== location.z;
       x += step[0], y += step[1], z += step[2]) {
-      if (api.core.RegionManager?.blocked?.(new Location(x, y, z), area)) return false;
+      // A placed mirror/crystal intercepts the outgoing beam. Ground walking
+      // collision is unrelated: the puzzle's light travels above scenery.
+      if (Object.values(placements ?? {}).some((placed) =>
+        placed.x === x && placed.y === y && placed.z === z)) return false;
     }
     return true;
   }
@@ -939,9 +942,12 @@ module.exports = function registerSongOfTheElves(api) {
 
   function isLibraryPillar(player, objectId, location, seal) {
     if (!inLibrary(player) || !location || !seal) return false;
-    if (!LIBRARY_PILLAR_IDS.has(objectId)) return false;
+    const cacheName = api.core.ObjectDefinition?.forId?.(objectId)?.name;
+    if (!LIBRARY_PILLAR_IDS.has(objectId) && cacheName !== "Pillar of Light") return false;
     const tile = new Location(location.x, location.y, location.z);
     const area = player.getArea();
+    const mapObject = api.core.MapObjects?.get?.(objectId, tile, area);
+    if (mapObject?.getId?.() === objectId) return true;
     return area.getTemplateObjects?.(tile)?.some((object) => object.getId() === objectId) === true ||
       area.getObjects?.().some((object) => object.getId() === objectId && object.getLocation().equals(tile)) === true;
   }
@@ -970,15 +976,20 @@ module.exports = function registerSongOfTheElves(api) {
         player.sendMessage("The beam returns to a mirror you have already placed. The seal's route resets; use a fresh pillar for each turn.");
         return;
       }
-      const previous = Object.values(placements).at(-1) ?? (seal.source ? {
-        x: seal.source[0], y: seal.source[1], z: seal.source[2], direction: seal.sourceDirection,
-      } : null);
+      const branch = seal.branches?.[state.step];
+      const previous = branch?.fromStep !== undefined
+        ? Object.values(placements).find((placed) => placed.step === branch.fromStep) ?? null
+        : branch?.source
+          ? { x: branch.source[0], y: branch.source[1], z: branch.source[2], direction: branch.direction }
+          : Object.values(placements).at(-1) ?? (seal.source ? {
+            x: seal.source[0], y: seal.source[1], z: seal.source[2], direction: seal.sourceDirection,
+          } : null);
       if (!beamReaches(previous, location, player.getArea(), placements)) {
         resetLibraryPuzzle(player, sealIndex);
         player.sendMessage("The beam cannot reach that pillar from the previous mirror. The seal's route resets; follow the lit beam to the next pillar.");
         return;
       }
-      placements[key] = { operation, direction: LIBRARY_OPERATIONS[operation] ?? previous?.direction ?? "", x: location.x, y: location.y, z: location.z };
+      placements[key] = { operation, direction: LIBRARY_OPERATIONS[operation] ?? previous?.direction ?? "", x: location.x, y: location.y, z: location.z, step: state.step };
       player.setAttribute(LIBRARY_PILLAR_STATE, JSON.stringify(placements));
     }
     player.setAttribute(LIBRARY_PUZZLE, `${sealIndex}:${next}`);
@@ -1004,15 +1015,21 @@ module.exports = function registerSongOfTheElves(api) {
       player.sendMessage("You need a hand mirror from the crystal dispenser.");
       return true;
     }
-    const options = ["east", "south", "west", "north", "up", "down"];
-    const pairs = [];
-    for (const direction of options) pairs.push(`Reflect ${direction}`, () => {
+    const choose = (direction) => {
       const current = libraryPuzzleState(player);
       if (current.seal !== sealIndex) return;
       player.getInventory().deleteNumber(ItemIdentifiers.HAND_MIRROR_2, 1);
       submitLibraryOperation(player, sealIndex, LIBRARY_DIRECTIONS[direction], loc);
-    });
-    api.sendMultiChatboxPrompt(player, "Which direction should the mirror face?", ...pairs);
+    };
+    api.sendMultiChatboxPrompt(player, "Which direction should the mirror face?",
+      "Reflect east", () => choose("east"),
+      "Reflect south", () => choose("south"),
+      "Reflect west", () => choose("west"),
+      "Reflect north", () => choose("north"),
+      "More directions...", () => api.sendMultiChatboxPrompt(player, "Choose a vertical direction.",
+        "Reflect up", () => choose("up"),
+        "Reflect down", () => choose("down"),
+        "Back", () => useLibraryMirror(event)));
     event.handled = true;
     return true;
   }

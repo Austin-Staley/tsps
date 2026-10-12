@@ -297,10 +297,11 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
     enter(player) { player.area = this; }
     getObjects() { return this.objects; }
     getTemplateObjects(tile) {
-      return [[10, 10, 0], [12, 10, 0], [12, 11, 0], [2609, 6158, 1], [2623, 6158, 1],
-        [2623, 6158, 0], [2623, 6130, 0], [2609, 6130, 0], [2609, 6116, 0], [2609, 6102, 0], [2623, 6102, 0]]
+      return [[2609, 6158, 1], [2623, 6158, 1], [2623, 6159, 1], [2623, 6158, 0], [2623, 6130, 0],
+        [2609, 6130, 0], [2609, 6116, 0], [2609, 6102, 0], [2623, 6102, 0]]
         .some(([x, y, z]) => tile?.getX?.() === x && tile?.getY?.() === y && tile?.getZ?.() === z)
-        ? [{ getId: () => api.core.ObjectIdentifiers.PILLAR_OF_LIGHT_41 }]
+        ? [{ getId: () => tile.getX() === 2609 && tile.getY() === 6158
+          ? 35222 : api.core.ObjectIdentifiers.PILLAR_OF_LIGHT_41 }]
         : [];
     }
   }
@@ -308,10 +309,9 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
   const objectInteractions = [];
   const custom = new Map();
   const prompts = [];
-  let wallBlocked = false;
   const base = { core: {
     ...PluginManager.getCoreApi(), PrivateArea: TestPrivateArea,
-    RegionManager: { blocked: (tile) => wallBlocked && tile.getX() === 11 && tile.getY() === 10 },
+    ObjectDefinition: { forId: (id) => id === 35222 ? { name: 'Pillar of Light' } : null },
   } };
   const api = new Proxy(base, {
     get(target, prop) {
@@ -363,38 +363,39 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
     player, objectId: api.core.ObjectIdentifiers.SEAL_OF_THE_FORGOTTEN,
   }) === true);
   assert.ok(useObject, 'the central seal interaction is registered');
+  attributes.set('quest.song_of_the_elves.library-seals', 3);
   useObject({ player, objectId: api.core.ObjectIdentifiers.CRYSTAL_DISPENSER_3, handled: false });
   const useMirror = itemObjects.get('Hand mirror');
   const place = (x, y, direction, z = 0) => {
+    const objectId = x === 2609 && y === 6158
+      ? 35222 : api.core.ObjectIdentifiers.PILLAR_OF_LIGHT_41;
     useMirror({
       player, itemId: api.core.ItemIdentifiers.HAND_MIRROR_2,
-      objectId: api.core.ObjectIdentifiers.PILLAR_OF_LIGHT_41,
+      objectId,
       location: { x, y, z }, handled: false,
     });
-    const choice = prompts.at(-1).findIndex((value) => value === `Reflect ${direction}`);
+    let options = prompts.at(-1);
+    let choice = options.findIndex((value) => value === `Reflect ${direction}`);
+    if (choice === -1) {
+      const more = options.findIndex((value) => value === 'More directions...');
+      assert.notEqual(more, -1);
+      options[more + 1]();
+      options = prompts.at(-1);
+      choice = options.findIndex((value) => value === `Reflect ${direction}`);
+    }
     assert.notEqual(choice, -1);
-    prompts.at(-1)[choice + 1]();
+    options[choice + 1]();
   };
-  place(10, 10, 'east');
-  place(12, 11, 'south');
-  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '0:0');
-  assert.ok(messages.some((message) => message.includes('cannot reach that pillar')));
-  useObject({ player, objectId: api.core.ObjectIdentifiers.CRYSTAL_DISPENSER_3, handled: false });
-  place(10, 10, 'east');
-  wallBlocked = true;
-  place(12, 10, 'south');
-  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '0:0');
-  assert.ok(messages.some((message) => message.includes('cannot reach that pillar')));
-  wallBlocked = false;
-  useObject({ player, objectId: api.core.ObjectIdentifiers.CRYSTAL_DISPENSER_3, handled: false });
-  place(10, 10, 'east');
-  place(12, 10, 'south');
-  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '0:2');
-
-  attributes.set('quest.song_of_the_elves.library-seals', 3);
-  useObject({ player, objectId: api.core.ObjectIdentifiers.CRYSTAL_DISPENSER_3, handled: false });
-  place(2608, 6158, 'east', 1);
+  place(2609, 6158, 'east', 1);
+  place(2623, 6158, 'south', 1);
   assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '1:0');
+  assert.ok(messages.some((message) => message.includes('sequence has reset')));
+  useObject({ player, objectId: api.core.ObjectIdentifiers.CRYSTAL_DISPENSER_3, handled: false });
+  place(2609, 6158, 'east', 1);
+  place(2623, 6159, 'down', 1);
+  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '1:0');
+  assert.ok(messages.some((message) => message.includes('different pillar')));
+  useObject({ player, objectId: api.core.ObjectIdentifiers.CRYSTAL_DISPENSER_3, handled: false });
   place(2609, 6158, 'east', 1);
   assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '1:1');
   place(2623, 6158, 'down', 1);
