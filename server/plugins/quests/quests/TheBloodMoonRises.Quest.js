@@ -9,6 +9,33 @@ module.exports = function registerTheBloodMoonRises(api) {
   const PAGE = "The Blood Moon Rises";
   const START_HOOK = "quest:the-blood-moon-rises:start";
   const TOME_ID = ItemIdentifiers.TOME_OF_EXPERIENCE_3;
+  const PREP_ATTRIBUTE = "quest.the_blood_moon_rises.preparations";
+  const PREP = {
+    leaves: ItemIdentifiers.AMITIRE_LEAVES,
+    stew: ItemIdentifiers.AMITIRE_STEW,
+    bowl: ItemIdentifiers.BOWL,
+    bowlWater: ItemIdentifiers.BOWL_OF_WATER,
+    potato: ItemIdentifiers.POTATO,
+    incompleteStew: ItemIdentifiers.INCOMPLETE_STEW,
+    rawMeat: ItemIdentifiers.RAW_IMPALER_MEAT,
+    cookedMeat: ItemIdentifiers.COOKED_MEAT,
+    uncookedStew: ItemIdentifiers.UNCOOKED_STEW,
+    cookedStew: ItemIdentifiers.STEW,
+    hammer: ItemIdentifiers.HAMMER,
+    chisel: ItemIdentifiers.CHISEL,
+    knife: ItemIdentifiers.KNIFE,
+    logs: ItemIdentifiers.BLISTERWOOD_LOGS,
+    blessedSickle: ItemIdentifiers.SILVER_SICKLE_B_,
+    diamond: ItemIdentifiers.DIAMOND,
+    diamondTablet: ItemIdentifiers.ENCHANT_DIAMOND,
+    diamondSickle: ItemIdentifiers.DIAMOND_SICKLE_B_,
+    enchantedSickle: ItemIdentifiers.ENCHANTED_DIAMOND_SICKLE_B_,
+    enhancedSickle: ItemIdentifiers.BLISTERWOOD_SICKLE_E_,
+    marks: ItemIdentifiers.HALLOWED_MARKS,
+    blisterwoodFlail: ItemIdentifiers.BLISTERWOOD_FLAIL,
+    flail: ItemIdentifiers.HALLOWED_FLAIL,
+    stakes: ItemIdentifiers.BLISTERWOOD_STAKE,
+  };
   const ATTRIBUTE = "quest.the_blood_moon_rises.tome-uses";
   const STAGE = {
     NOT_STARTED: 0,
@@ -31,6 +58,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const WYRD_DEFEATED_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-defeated";
   const DRAKAN_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.drakan-area";
   const DRAKAN_ENCOUNTER_COMPLETE = "quest.the_blood_moon_rises.drakan-defeated";
+  const PREP_COMPLETE = "quest.the_blood_moon_rises.preparations-complete";
   const wyrdEncounters = new Map();
   const drakanEncounters = new Map();
   const CHAPTERS = [
@@ -432,6 +460,14 @@ module.exports = function registerTheBloodMoonRises(api) {
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
     const next = ACTION_STAGE[event.stepId];
+    if (event.stepId === "Sut83Q") {
+      const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {};
+      if (!prep.flail || !prep.stakes) {
+        player.sendMessage("Before the siege, finish the hallowed flail and cut blisterwood stakes for the defence.");
+        return;
+      }
+      player.setAttribute(PREP_COMPLETE, true);
+    }
     if (next) advance(player, next);
     if (event.stepId === "4G5OZg") startWyrdBattle(player);
     if (event.stepId === "t7FMNM") startDrakanBattle(player);
@@ -536,6 +572,144 @@ module.exports = function registerTheBloodMoonRises(api) {
     return true;
   }
 
+  function hasItem(player, itemId) {
+    return player.getInventory().contains(itemId) || player.getEquipment?.().contains?.(itemId) === true;
+  }
+
+  function replaceItems(player, required, removed, added) {
+    const inventory = player.getInventory();
+    if (!required.every((itemId) => inventory.contains(itemId))) return false;
+    for (const itemId of removed) inventory.deleteNumber(itemId, 1);
+    for (const [itemId, amount] of added) inventory.adds(itemId, amount);
+    return true;
+  }
+
+  function prepAction(player, variant, npcId = 0) {
+    return startTranscript(api, player, npcId, PAGE, variant);
+  }
+
+  function prepObjectAt(event, x, y, z) {
+    const tile = event?.location;
+    return tile?.x === x && tile?.y === y && tile?.z === z;
+  }
+
+  function handlePrepObject(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) < STAGE.PREPARATIONS || stage(player) >= STAGE.SIEGE) return;
+    const name = String(event.definition?.getName?.() ?? "").toLowerCase();
+    const option = String(event.option ?? "").toLowerCase();
+    const inventory = player.getInventory();
+    let variant = null;
+    let changed = false;
+    if (name === "vines" && prepObjectAt(event, 2982, 7679, 0) && !hasItem(player, PREP.leaves)) {
+      changed = inventory.adds(PREP.leaves, 1);
+      variant = "hallowed-preparations-picking-the-amitire-plant";
+    } else if (name === "shelves" && prepObjectAt(event, 3159, 7824, 1) && !hasItem(player, PREP.bowl)) {
+      changed = inventory.adds(PREP.bowl, 1);
+      variant = "hallowed-preparations-searching-the-shelves";
+    } else if (name === "sink" && prepObjectAt(event, 3157, 7825, 1) && inventory.contains(PREP.bowl)) {
+      changed = replaceItems(player, [PREP.bowl], [PREP.bowl], [[PREP.bowlWater, 1]]);
+    } else if (name === "cupboard" && prepObjectAt(event, 3155, 7832, 1)) {
+      if (inventory.contains(PREP.incompleteStew) && !hasItem(player, PREP.rawMeat)) {
+        changed = inventory.adds(PREP.rawMeat, 1);
+      } else if (inventory.contains(PREP.bowlWater) && !hasItem(player, PREP.potato)) {
+        changed = inventory.adds(PREP.potato, 1);
+      }
+      if (changed) variant = "hallowed-preparations-searching-the-cupboard";
+    } else if (name === "workbench" && prepObjectAt(event, 3176, 7841, 1) &&
+      (!hasItem(player, PREP.hammer) || !hasItem(player, PREP.chisel) || !hasItem(player, PREP.knife))) {
+      const next = !hasItem(player, PREP.hammer) ? PREP.hammer : !hasItem(player, PREP.chisel) ? PREP.chisel : PREP.knife;
+      changed = inventory.adds(next, 1);
+      variant = "hallowed-preparations-searching-the-workbench";
+    } else if ((name.includes("crate") || name.includes("blisterwood")) && prepObjectAt(event, 3177, 7843, 1) && !hasItem(player, PREP.logs)) {
+      changed = inventory.adds(PREP.logs, 1);
+      variant = "hallowed-preparations-searching-the-blisterwood-crate";
+    } else if ((name.includes("crate") || name.includes("sickle")) && prepObjectAt(event, 3181, 7841, 1) && !hasItem(player, PREP.blessedSickle)) {
+      changed = inventory.adds(PREP.blessedSickle, 1);
+      variant = "hallowed-preparations-searching-the-sickle-crate";
+    } else if (name === "chest" && !hasItem(player, PREP.diamond) && hasItem(player, PREP.blessedSickle) &&
+      prepObjectAt(event, 3181, 7835, 1)) {
+      changed = inventory.adds(PREP.diamond, 1);
+      variant = "hallowed-preparations-searching-the-workshop-s-eastern-chest";
+    } else if (name === "chest" && !hasItem(player, PREP.diamondTablet) && hasItem(player, PREP.diamondSickle) &&
+      prepObjectAt(event, 3175, 7836, 1)) {
+      changed = inventory.adds(PREP.diamondTablet, 1);
+      variant = "hallowed-preparations-searching-the-workshop-s-western-chest";
+    } else if (name.includes("range") && prepObjectAt(event, 3160, 7826, 1) && inventory.contains(PREP.rawMeat)) {
+      changed = replaceItems(player, [PREP.rawMeat], [PREP.rawMeat], [[PREP.cookedMeat, 1]]);
+    } else if (name.includes("range") && prepObjectAt(event, 3160, 7826, 1) && inventory.contains(PREP.uncookedStew)) {
+      changed = replaceItems(player, [PREP.uncookedStew], [PREP.uncookedStew], [[PREP.cookedStew, 1]]);
+    } else if (name === "anvil" && prepObjectAt(event, 3179, 7842, 1) && inventory.contains(PREP.enhancedSickle) && inventory.contains(PREP.marks) &&
+      inventory.contains(PREP.blisterwoodFlail) && inventory.contains(PREP.hammer) &&
+      player.getSkillManager().getMaxLevel(Skill.SMITHING) >= 72) {
+      changed = replaceItems(player, [PREP.enhancedSickle, PREP.marks, PREP.blisterwoodFlail, PREP.hammer],
+        [PREP.enhancedSickle, PREP.marks, PREP.blisterwoodFlail], [[PREP.flail, 1]]);
+      if (changed) {
+        player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), flail: true });
+        variant = "hallowed-preparations-creating-the-hallowed-flail";
+      }
+    }
+    if (!changed) return;
+    event.handled = true;
+    if (variant) prepAction(player, variant);
+    else player.sendMessage(`You ${option === "search" ? "search" : "use"} the ${name}.`);
+  }
+
+  function handlePrepItemOnItem(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) < STAGE.PREPARATIONS || stage(player) >= STAGE.SIEGE) return;
+    const pair = new Set([event.usedItemId, event.usedWithItemId]);
+    const inventory = player.getInventory();
+    let recipe = null;
+    if (pair.has(PREP.bowlWater) && pair.has(PREP.potato)) {
+      recipe = [[PREP.bowlWater, PREP.potato], [PREP.bowlWater, PREP.potato], [[PREP.incompleteStew, 1]]];
+    } else if (pair.has(PREP.incompleteStew) && pair.has(PREP.cookedMeat)) {
+      recipe = [[PREP.incompleteStew, PREP.cookedMeat], [PREP.incompleteStew, PREP.cookedMeat], [[PREP.uncookedStew, 1]]];
+    } else if (pair.has(PREP.cookedStew) && pair.has(PREP.leaves)) {
+      recipe = [[PREP.cookedStew, PREP.leaves], [PREP.cookedStew, PREP.leaves], [[PREP.stew, 1]]];
+    } else if (pair.has(PREP.blessedSickle) && pair.has(PREP.diamond)) {
+      recipe = [[PREP.blessedSickle, PREP.diamond], [PREP.blessedSickle, PREP.diamond], [[PREP.diamondSickle, 1]]];
+    } else if (pair.has(PREP.diamondSickle) && pair.has(PREP.diamondTablet)) {
+      recipe = [[PREP.diamondSickle, PREP.diamondTablet], [PREP.diamondSickle, PREP.diamondTablet], [[PREP.enchantedSickle, 1]]];
+    } else if (pair.has(PREP.enchantedSickle) && pair.has(PREP.logs)) {
+      recipe = [[PREP.enchantedSickle, PREP.logs], [PREP.enchantedSickle, PREP.logs], [[PREP.enhancedSickle, 1]]];
+    } else if (pair.has(PREP.logs) && pair.has(PREP.knife)) {
+      recipe = [[PREP.logs, PREP.knife], [PREP.logs], [[PREP.stakes, 5]]];
+    }
+    if (!recipe) return;
+    event.handled = true;
+    if (!recipe[0].every((id) => inventory.contains(id))) return;
+    for (const id of recipe[1]) inventory.deleteNumber(id, 1);
+    for (const [id, count] of recipe[2]) inventory.adds(id, count);
+    if (pair.has(PREP.logs) && pair.has(PREP.knife)) {
+      player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), stakes: true });
+      player.sendMessage("You cut the blisterwood logs into five stakes.");
+    } else if (pair.has(PREP.blessedSickle)) {
+      prepAction(player, "hallowed-preparations-creating-the-diamond-sickle");
+    } else if (pair.has(PREP.diamondSickle)) {
+      prepAction(player, "hallowed-preparations-creating-the-diamond-sickle");
+    } else if (pair.has(PREP.enchantedSickle)) {
+      prepAction(player, "hallowed-preparations-creating-the-blisterwood-sickle-e");
+      player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), sickle: true });
+    } else if (pair.has(PREP.cookedStew)) {
+      prepAction(player, "hallowed-preparations-making-the-amitire-stew");
+    } else {
+      player.sendMessage("You combine the ingredients.");
+    }
+  }
+
+  function feedSafalaan(event) {
+    const player = event?.player;
+    const targetName = String(event?.target?.getDefinition?.()?.getName?.() ?? event?.target?.getName?.() ?? "").toLowerCase();
+    if (!player || !targetName.includes("safalaan") || event.itemId !== PREP.stew || stage(player) < STAGE.PREPARATIONS || stage(player) >= STAGE.SIEGE) return;
+    event.handled = true;
+    if (!player.getInventory().contains(PREP.stew)) return;
+    player.getInventory().deleteNumber(PREP.stew, 1);
+    player.getInventory().adds(PREP.marks, 1);
+    player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), stewFed: true });
+    prepAction(player, "hallowed-preparations-feeding-safalaan-the-stew", event.npcId);
+  }
+
   const ACTION_STAGE = {
     "gzCVlH": STAGE.SLEPE,
     "fiqzZ7": STAGE.SLEPE,
@@ -571,8 +745,13 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onNpcDialogueVariant(selectVariant);
   api.onAnyNpcInteraction({ "Talk-to": talkQuestNpc });
   api.onObjectInteraction(inspectWyrdFence);
+  api.onObjectInteraction(handlePrepObject);
+  api.onItemOnItem(handlePrepItemOnItem);
+  api.onItemOnNpc(feedSafalaan);
   api.onNpcDeath(handleWyrdDeath);
   api.persistAttribute(WYRD_DEFEATED_ATTRIBUTE);
   api.persistAttribute(DRAKAN_ENCOUNTER_COMPLETE);
+  api.persistAttribute(PREP_ATTRIBUTE);
+  api.persistAttribute(PREP_COMPLETE);
   api.onItemAction("Tome of Experience", { Read: readTome });
 };

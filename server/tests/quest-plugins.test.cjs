@@ -13,12 +13,18 @@ function mockApi() {
     variant: [],
     condition: [],
     custom: new Map(),
+    objects: [],
+    itemOnItem: [],
+    itemOnNpc: [],
   };
   const noop = () => {};
   const base = {
     core: PluginManager.getCoreApi(),
     onNpcDialogueVariant: (h) => handlers.variant.push(h),
     onNpcDialogueCondition: (h) => handlers.condition.push(h),
+    onObjectInteraction: (h) => handlers.objects.push(h),
+    onItemOnItem: (h) => handlers.itemOnItem.push(h),
+    onItemOnNpc: (h) => handlers.itemOnNpc.push(h),
     onCustomEvent: (name, h) => {
       const list = handlers.custom.get(name) ?? [];
       list.push(h);
@@ -219,6 +225,78 @@ test('The Blood Moon Rises starts only after Sarius accepts the yes choice and r
   assert.equal(reclaimed, 0, 'opening the menu does not reclaim lamps before the player chooses');
   prompts.at(-1).options[1]();
   assert.equal(reclaimed, 1, 'the explicit option delegates to Night at the Theatre’s inventory-safe reclaim event');
+});
+
+test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes before the siege stage', () => {
+  const { api, handlers } = mockApi();
+  const originalForId = api.core.NpcDefinition.forId;
+  api.core.NpcDefinition.forId = () => ({ getName: () => 'Safalaan Hallow' });
+  const messages = [];
+  api.emitCustomEvent = (name, event) => {
+    for (const handler of handlers.custom.get(name) ?? []) handler(event);
+  };
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  const counts = new Map();
+  const inventory = {
+    contains: (id) => (counts.get(id) ?? 0) > 0,
+    adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
+    deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+  };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getEquipment: () => ({ contains: () => false }),
+    getSkillManager: () => ({ getMaxLevel: () => 99 }),
+    getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage: (text) => messages.push(text),
+  };
+  quest.setStage(player, 60);
+  const object = handlers.objects.at(-1);
+  const itemOnItem = handlers.itemOnItem.at(-1);
+  const itemOnNpc = handlers.itemOnNpc.at(-1);
+  const ids = api.core.ItemIdentifiers;
+  const use = (a, b) => itemOnItem({ player, usedItemId: a, usedWithItemId: b, handled: false });
+  const interact = (name, x = 0, y = 0, z = 1) => object({ player, definition: { getName: () => name }, option: 'Search', location: { x, y, z }, handled: false });
+
+  interact('Vines', 2982, 7679, 0);
+  interact('Shelves', 3159, 7824);
+  interact('Sink', 3157, 7825);
+  interact('Cupboard', 3155, 7832);
+  use(ids.BOWL_OF_WATER, ids.POTATO);
+  interact('Cupboard', 3155, 7832);
+  interact('Range', 3160, 7826);
+  use(ids.INCOMPLETE_STEW, ids.COOKED_MEAT);
+  interact('Range', 3160, 7826);
+  use(ids.STEW, ids.AMITIRE_LEAVES);
+  assert.equal(inventory.contains(ids.AMITIRE_STEW), true, 'the ordered ingredients create the quest stew');
+  const feeding = { player, target: { getName: () => 'Safalaan Hallow' }, npcId: api.core.NpcIdentifiers.SAFALAAN_HALLOW, itemId: ids.AMITIRE_STEW, handled: false };
+  itemOnNpc(feeding);
+  assert.equal(feeding.handled, true);
+  assert.equal(inventory.contains(ids.HALLOWED_MARKS), true, 'feeding Safalaan grants the hallowed marks');
+
+  interact('Workbench', 3176, 7841); interact('Workbench', 3176, 7841); interact('Workbench', 3176, 7841);
+  interact('Crate', 3177, 7843);
+  interact('Crate', 3181, 7841);
+  interact('Chest', 3181, 7835);
+  use(ids.SILVER_SICKLE_B_, ids.DIAMOND);
+  interact('Chest', 3175, 7836);
+  use(ids.DIAMOND_SICKLE_B_, ids.ENCHANT_DIAMOND);
+  use(ids.ENCHANTED_DIAMOND_SICKLE_B_, ids.BLISTERWOOD_LOGS);
+  inventory.adds(ids.BLISTERWOOD_FLAIL, 1);
+  interact('Anvil', 3179, 7842);
+  assert.equal(inventory.contains(ids.HALLOWED_FLAIL), true, 'the anvil consumes the sickle/marks/flail and makes a hallowed flail');
+  interact('Crate', 3177, 7843);
+  use(ids.BLISTERWOOD_LOGS, ids.KNIFE);
+  const action = handlers.custom.get('npc-dialogue:action').at(-1);
+  action({ player, stepId: 'Sut83Q' });
+  assert.equal(quest.getStage(player), 70, 'the siege starts after the player crafts both required defence items');
+  assert.ok(messages.length > 0, 'interactions give feedback while ingredients and equipment are prepared');
+  api.core.NpcDefinition.forId = originalForId;
 });
 
 test('The Wyrd transcript action starts a private encounter with the cache-mapped boss', () => {
