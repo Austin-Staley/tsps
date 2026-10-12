@@ -1,7 +1,7 @@
 /** Surok's capture, the one-use exchange teleport, and Lucien's ambush. */
 module.exports=function registerAlliance({api,quest,stage,advance,held,give,play}){
  const {Area,PrivateArea,Boundary,Location,Item,Spell,MagicSpellbook,Bank}=api.core;
- const GROUP=[13540,13543,13511],SILIF=13519,STRANGE_ORB=29535,ROBES=[29566,29568,29570];
+ const GROUP=[13540,13543,13511],SILIF=13519,SUROK=13548,STRANGE_ORB=29535,ROBES=[29566,29568,29570];
  const CELL=53281,ICE_WALL=53607,LEDGE=53288,LADDER=53370,LADDER_TOP=53371;
  const scenes=new WeakMap(),dressed=p=>ROBES.every(id=>p.getEquipment().contains(id));
  const atCastle=p=>p.getLocation().getZ()===0&&p.getLocation().getX()>2948&&p.getLocation().getX()<3001&&p.getLocation().getY()>3327&&p.getLocation().getY()<3356;
@@ -17,7 +17,7 @@ module.exports=function registerAlliance({api,quest,stage,advance,held,give,play
  function postQuestTalk({player:p,npcId}){
   if(stage(p)<900||!atCastle(p))return false;
   if(npcId===SILIF)play(p,npcId,'post-quest-dialogue-talking-to-silif');
-  else if([13482,13522,13523].includes(npcId))play(p,npcId,'post-quest-dialogue-talking-to-surok');else return false;return true;
+  else if(npcId===SUROK)play(p,npcId,'post-quest-dialogue-talking-to-surok');else return false;return true;
  }
  function reclaimRobes(p){
   const missing=ROBES.filter(id=>!held(p,id)&&!p.getEquipment().contains(id)&&!Array.from({length:Bank.TOTAL_BANK_TABS},(_,tab)=>p.getBank(tab)).some(bank=>bank.contains(id)));

@@ -28,10 +28,10 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
  function mapChange({player}){
   removeActors(player);sync(player);
   const s=stage(player),l=player.getLocation(),spawns=[];
-  if((l.getX()>>6)===46&&(l.getY()>>6)===52&&s>=220&&s<900){
+  if((l.getX()>>6)===46&&(l.getY()>>6)===52&&s>=220&&s<=900){
    spawns.push([IDRIA,2989,3343,0],[AKRISAE,2989,3342,0],[THAERISK,2990,3342,0],[SILIF,2990,3343,0]);
    if(s>=250)spawns.push([s>=620?13548:CAPTIVE,2987,3343,0]);
-   if(s>=280)spawns.push([FARMER,2963,3338,3]);
+   if(s>=280&&s<320)spawns.push([FARMER,2963,3338,3]);
   }else if(s===230&&l.getX()>=3070&&l.getX()<=3110&&l.getY()>=3220&&l.getY()<=3270)spawns.push([SPY,3096,3248,0],[OUTSIDER,3088,3251,0]);
   else if(s===210&&l.getX()>=2630&&l.getX()<=2675&&l.getY()>=3475&&l.getY()<=3515)spawns.push([WOOD_IDRIA,2657,3504,0]);
   if(spawns.length)actors.set(player,spawns.map(([id,x,y,z])=>api.spawnNpc({id,x,y,z,wanderRadius:0,owner:player,ownerOnly:true})));
@@ -117,7 +117,7 @@ module.exports=function registerFellowship({api,stage,advance,held,give,val,play
   if(stepId==='uTUT10'&&!val(player,DRAYNOR_ATTRIBUTE)){player.setAttribute(DRAYNOR_ATTRIBUTE,1);player.moveTo(new Location(3093,3248,0));mapChange({player});}
   if(stepId==='IEZmjv'&&s===240){advance(player,250);mapChange({player});}
   if(stepId==='z_F_Aq'&&!val(player,FREE_SEED_ATTRIBUTE)&&give(player,SEED))player.setAttribute(FREE_SEED_ATTRIBUTE,1);
-  if(stepId==='PZqoXK'&&!val(player,SARIM_ATTRIBUTE)){player.setAttribute(SARIM_ATTRIBUTE,1);player.moveTo(new Location(3013,3258,0));}
+  if(['PZqoXK','wgs-sarim-after-seed'].includes(stepId)&&!val(player,SARIM_ATTRIBUTE)){player.setAttribute(SARIM_ATTRIBUTE,1);player.moveTo(new Location(3013,3258,0));}
   if(stepId==='1fOFAG'&&held(player,SEED)){player.getInventory().deleteNumber(SEED,1);player.setAttribute(SEED_ATTRIBUTE,1);sync(player);}
   if(stepId==='PilX__'&&player.getInventory().getAmount(COINS)>=20&&player.getInventory().getFreeSlots()){player.getInventory().deleteNumber(COINS,20);player.getInventory().adds(DYE,1);}
   if(stepId==='btLOw_'&&held(player,ENRICHED_HERB))give(player,SERUM);

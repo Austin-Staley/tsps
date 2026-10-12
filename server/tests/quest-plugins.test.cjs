@@ -716,3 +716,25 @@ test('WGS completed alliance talks stay post-quest and Silif only replaces missi
  f.action({player,npcId:13519,stepId:'h_h2X8'});assert.deepEqual(given,[29570]);
  slots=0;f.action({player,npcId:13519,stepId:'h_h2X8'});assert.deepEqual(given,[29570]);
 });
+
+
+test('Completed WGS restores the alliance and captured Surok on login', () => {
+ const {api}=mockApi(),spawned=[];let login;
+ api.onPlayerLogin=h=>login=h;api.spawnNpc=spec=>{spawned.push(spec);return spec;};
+ const player={getLocation:()=>new api.core.Location(2989,3343),getPacketSender:()=>({sendVarbit(){return this;}})};
+ require('../plugins/quests/wgs/Fellowship.WhileGuthixSleeps')({api,stage:()=>900,val:()=>0,ATTRIBUTES:[]});
+ login({player});assert.deepEqual(spawned.map(n=>n.id),[13540,13543,13511,13519,13548]);
+ assert.ok(spawned.every(n=>n.owner===player&&n.ownerOnly));
+ const played=[],f=require('../plugins/quests/wgs/Alliance.WhileGuthixSleeps')({api,stage:()=>900,play:(p,id,v)=>played.push([id,v])});
+ assert.equal(f.postQuestTalk({player,npcId:13548}),true);assert.equal(played[0][1],'post-quest-dialogue-talking-to-surok');
+ assert.equal(f.postQuestTalk({player,npcId:13522}),false);
+});
+
+
+test('Thaerisk offers an explicit choice before the Port Sarim teleport after giving the seed', () => {
+ const data=require('../data/definitions/npc-dialogues.json')['While Guthix Sleeps'].variants;
+ const steps=data['forming-a-fellowship-capturing-a-spy-talking-to-the-group-after-planting-a-teleorb'].at(-1).options[0].steps;
+ const choice=steps.find(s=>s.type==='choice');assert.deepEqual(choice.options.map(o=>o.text),['Yes.','No.']);
+ assert.equal(choice.options[0].steps.find(s=>s.type==='action').id,'wgs-sarim-after-seed');
+ assert.ok(!choice.options[1].steps.some(s=>s.type==='action'));assert.ok(!steps.some(s=>s.type==='jump'));
+});
