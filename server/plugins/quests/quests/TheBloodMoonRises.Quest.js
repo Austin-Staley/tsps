@@ -324,9 +324,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     const player = event?.player;
     if (!player) return false;
     const npcName = String(event.definition?.getName?.() ?? "").toLowerCase();
-    // Night at the Theatre owns this same Stranger while that quest is active.
-    // Once both quests are complete, retain its unused-lamp service explicitly.
-    if (npcName === "mysterious stranger" && quest.isComplete(player) && hasQuest(player, "a_night_at_the_theatre")) {
+    // Night at the Theatre owns this same Stranger until its story is complete.
+    // Once Night is done, preserve its lamp reclaim service while Blood Moon is active.
+    if (npcName === "mysterious stranger") {
+      if (!hasQuest(player, "a_night_at_the_theatre")) return false;
       api.sendMultiChatboxPrompt(player, "What would you like to do?",
         "Claim unused Hallowed lamps", () => claimNightLamps(player),
         "I'm off", () => {});

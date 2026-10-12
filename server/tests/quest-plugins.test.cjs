@@ -179,8 +179,9 @@ test('The Blood Moon Rises starts only after Sarius accepts the yes choice and r
   const npcHooks = [];
   const prompts = [];
   let reclaimed = 0;
+  let nightComplete = true;
   api.emitCustomEvent = (name, event) => {
-    if (name === 'quest:is-complete') event.complete = true;
+    if (name === 'quest:is-complete') event.complete = event.key === 'a_night_at_the_theatre' ? nightComplete : true;
     if (name === 'night-at-the-theatre:claim-lamps') { reclaimed++; event.handled = true; }
   };
   api.onAnyNpcInteraction = (hook) => npcHooks.push(hook);
@@ -206,10 +207,13 @@ test('The Blood Moon Rises starts only after Sarius accepts the yes choice and r
   assert.equal(quest.getStage(player), 10, 'accepting Sarius’s invitation starts the quest');
   choose({ ...event, definition: { getName: () => 'Ivan Strom' } });
   assert.equal(quest.getStage(player), 10, 'another NPC’s yes choice cannot start this quest');
-  quest.setStage(player, quest.completionValue);
+  nightComplete = false;
   const stranger = npcHooks.at(-1)['Talk-to'];
   const interaction = { player, definition: { getName: () => 'Mysterious Stranger' }, handled: false };
-  assert.equal(stranger(interaction), true);
+  assert.equal(stranger(interaction), false, 'Night at the Theatre retains the Stranger until it is complete');
+  nightComplete = true;
+  quest.setStage(player, 10);
+  assert.equal(stranger(interaction), true, 'Blood Moon preserves the lamp service without swallowing Night dialogue');
   assert.equal(interaction.handled, true);
   assert.match(prompts.at(-1).options[0], /Claim unused Hallowed lamps/);
   assert.equal(reclaimed, 0, 'opening the menu does not reclaim lamps before the player chooses');
