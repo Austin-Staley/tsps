@@ -99,6 +99,8 @@ const VERZIK_INITIAL = 10830;
 const VERZIK_PHASES = [10831, 10833, 10835];
 const VERZIK_PURPLE = 10844;
 const VERZIK_RED = 10845;
+// Wiki: the 12-tick red-crab summon converts damage to healing for its first 8 ticks.
+const VERZIK_RED_HEAL_TICKS = 8;
 const VERZIK_WEB = 10837;
 const VERZIK_TORNADO = 10846;
 const ROOMS = [
@@ -471,7 +473,7 @@ function spawnVerzikAdds(raid,red=false) {
   const id=red?VERZIK_RED:VERZIK_PURPLE;
   const adds=[spawn(raid,id,[3162,4316,0],{red,purple:!red})];
   if(red)adds.push(spawn(raid,id,[3177,4316,0],{red:true}));
-  if(red)raid.redShield=raid.tick+12;
+  if(red)raid.redShield=raid.tick+VERZIK_RED_HEAL_TICKS;
   later(raid,12,()=>{for(const n of adds){if(alive(n)){raid.boss.heal(n.getHitpoints());remove(raid,n);}}});
 }
 function verzik(raid) {
