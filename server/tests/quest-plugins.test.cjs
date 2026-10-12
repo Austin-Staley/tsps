@@ -557,6 +557,9 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
   const originalForId = api.core.NpcDefinition.forId;
   api.core.NpcDefinition.forId = () => ({ getName: () => 'Safalaan Hallow' });
   const messages = [];
+  let menu;
+  api.sendMultiChatboxPrompt = (player, title, ...options) => { menu = options; };
+  const choose = option => menu[option*2-1]();
   api.emitCustomEvent = (name, event) => {
     for (const handler of handlers.custom.get(name) ?? []) handler(event);
   };
@@ -594,9 +597,10 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
   interact('Shelves', 3159, 7824);
   const itemOnObject = handlers.itemOnObject.find(handler => handler.name === 'handlePrepItemOnObject');
   itemOnObject({ player, itemId: ids.BOWL, objectId: 62097, location: { x: 3156, y: 7824, z: 1 } });
-  interact('Cupboard', 3155, 7832);
+  interact('Cupboard', 3155, 7832); choose(3); assert.equal(inventory.contains(ids.POTATO), false, 'Nothing does not award ingredients');
+  interact('Cupboard', 3155, 7832); choose(1);
   use(ids.BOWL_OF_WATER, ids.POTATO);
-  interact('Cupboard', 3155, 7832);
+  interact('Cupboard', 3155, 7832); choose(2);
   interact('Range', 3160, 7826);
   use(ids.INCOMPLETE_STEW, ids.COOKED_MEAT);
   interact('Range', 3160, 7826);
@@ -607,14 +611,16 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
   assert.equal(feeding.handled, true);
   assert.equal(inventory.contains(ids.HALLOWED_MARKS), true, 'feeding Safalaan grants the hallowed marks');
 
-  interact('Workbench', 3176, 7841); interact('Workbench', 3176, 7841); interact('Workbench', 3176, 7841);
+  interact('Workbench', 3176, 7841); choose(3); assert.equal(inventory.contains(ids.KNIFE), true); assert.equal(inventory.contains(ids.HAMMER), false);
+  interact('Workbench', 3176, 7841); choose(1); interact('Workbench', 3176, 7841); choose(2);
   interact('Crate', 3177, 7843);
   interact('Crate', 3181, 7841);
   interact('Chest', 3181, 7835);
-  use(ids.SILVER_SICKLE_B_, ids.DIAMOND);
+  use(ids.SILVER_SICKLE_B_, ids.DIAMOND); choose(2); assert.equal(inventory.contains(ids.DIAMOND), true, 'No preserves crafting materials');
+  use(ids.SILVER_SICKLE_B_, ids.DIAMOND); choose(1);
   interact('Chest', 3175, 7836);
   use(ids.DIAMOND_SICKLE_B_, ids.ENCHANT_DIAMOND);
-  use(ids.ENCHANTED_DIAMOND_SICKLE_B_, ids.BLISTERWOOD_LOGS);
+  use(ids.ENCHANTED_DIAMOND_SICKLE_B_, ids.BLISTERWOOD_LOGS); choose(1);
   inventory.adds(ids.BLISTERWOOD_FLAIL, 1);
   interact('Anvil', 3179, 7842);
   assert.equal(inventory.contains(ids.HALLOWED_FLAIL), true, 'the anvil consumes the sickle/marks/flail and makes a hallowed flail');

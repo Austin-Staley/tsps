@@ -1637,17 +1637,20 @@ module.exports = function registerTheBloodMoonRises(api) {
       changed = inventory.adds(PREP.bowl, 1);
       variant = "hallowed-preparations-searching-the-shelves";
     } else if (name === "cupboard" && prepObjectAt(event, 3155, 7832, 1)) {
-      if (inventory.contains(PREP.incompleteStew) && !hasItem(player, PREP.rawMeat)) {
-        changed = inventory.adds(PREP.rawMeat, 1);
-      } else if (inventory.contains(PREP.bowlWater) && !hasItem(player, PREP.potato)) {
-        changed = inventory.adds(PREP.potato, 1);
-      }
-      if (changed) variant = "hallowed-preparations-searching-the-cupboard";
-    } else if (name === "workbench" && prepObjectAt(event, 3176, 7841, 1) &&
-      (!hasItem(player, PREP.hammer) || !hasItem(player, PREP.chisel) || !hasItem(player, PREP.knife))) {
-      const next = !hasItem(player, PREP.hammer) ? PREP.hammer : !hasItem(player, PREP.chisel) ? PREP.chisel : PREP.knife;
-      changed = inventory.adds(next, 1);
-      variant = "hallowed-preparations-searching-the-workbench";
+      event.handled = true;
+      api.sendMultiChatboxPrompt(player, "What would you like to take?",
+        "Potato.", () => takePrepItem(player, PREP.potato, "You take a potato from the cupboard."),
+        "Raw meat.", () => takePrepItem(player, PREP.rawMeat, "You take some raw meat from the cupboard."),
+        "Nothing.", () => {});
+      return;
+    } else if (name === "workbench" && prepObjectAt(event, 3176, 7841, 1)) {
+      event.handled = true;
+      api.sendMultiChatboxPrompt(player, "What would you like to take?",
+        "Hammer.", () => takePrepItem(player, PREP.hammer, "You take a hammer from the workbench."),
+        "Chisel.", () => takePrepItem(player, PREP.chisel, "You take a chisel from the workbench."),
+        "Knife.", () => takePrepItem(player, PREP.knife, "You take a knife from the workbench."),
+        "Nothing.", () => {});
+      return;
     } else if ((name.includes("crate") || name.includes("blisterwood")) && prepObjectAt(event, 3177, 7843, 1) && !hasItem(player, PREP.logs)) {
       changed = inventory.adds(PREP.logs, 1);
       variant = "hallowed-preparations-searching-the-blisterwood-crate";
@@ -1719,24 +1722,33 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
     if (!recipe) return;
     event.handled = true;
-    if (!recipe[0].every((id) => inventory.contains(id))) return;
-    for (const id of recipe[1]) inventory.deleteNumber(id, 1);
-    for (const [id, count] of recipe[2]) inventory.adds(id, count);
+    if (pair.has(PREP.blessedSickle) || pair.has(PREP.enchantedSickle)) {
+      const diamond = pair.has(PREP.blessedSickle);
+      api.sendMultiChatboxPrompt(player, diamond ? "Craft a diamond sickle?" : "Craft an enhanced blisterwood sickle?",
+        "Yes.", () => craftPrepRecipe(player, recipe, pair), "No.", () => {});
+    } else craftPrepRecipe(player, recipe, pair);
+  }
+
+  function takePrepItem(player, id, message) {
+    if (stage(player) !== STAGE.PREPARATIONS || hasItem(player, id)) return;
+    if (player.getInventory().adds(id, 1)) player.sendMessage(message);
+  }
+
+  function craftPrepRecipe(player, recipe, pair) {
+    if (stage(player) !== STAGE.PREPARATIONS || !replaceItems(player, ...recipe)) return;
     if (pair.has(PREP.logs) && pair.has(PREP.knife)) {
       player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), stakes: true });
       player.sendMessage("You cut the blisterwood logs into five stakes.");
     } else if (pair.has(PREP.blessedSickle)) {
-      prepAction(player, "hallowed-preparations-creating-the-diamond-sickle");
+      player.sendMessage("You embed the diamond into the sickle.");
     } else if (pair.has(PREP.diamondSickle)) {
-      prepAction(player, "hallowed-preparations-creating-the-diamond-sickle");
+      player.sendMessage("You enchant the diamond sickle.");
     } else if (pair.has(PREP.enchantedSickle)) {
-      prepAction(player, "hallowed-preparations-creating-the-blisterwood-sickle-e");
+      player.sendMessage("You enhance the diamond sickle with blisterwood, making an enhanced blisterwood sickle.");
       player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), sickle: true });
     } else if (pair.has(PREP.cookedStew)) {
       prepAction(player, "hallowed-preparations-making-the-amitire-stew");
-    } else {
-      player.sendMessage("You combine the ingredients.");
-    }
+    } else player.sendMessage("You combine the ingredients.");
   }
 
   function feedSafalaan(event) {
