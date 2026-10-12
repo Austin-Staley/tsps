@@ -40,6 +40,7 @@ import {
   PluginItemOnPlayerEvent,
   PluginItemOnObjectEvent,
   PluginSpellOnObjectEvent,
+  PluginSpellOnItemEvent,
   PluginNpcDeathEvent,
   PluginNpcBeforeDeathEvent,
   PluginNpcHitModifyEvent,
@@ -261,6 +262,7 @@ export class PluginManager {
   private static itemOnGroundItemHooks: PluginHook<PluginItemOnGroundItemEvent>[] =
     [];
   private static spellOnObjectHooks: PluginHook<PluginSpellOnObjectEvent>[] = [];
+  private static spellOnItemHooks: PluginHook<PluginSpellOnItemEvent>[] = [];
   private static groundItemInteractionHooks: PluginHook<PluginGroundItemInteractionEvent>[] =
     [];
   private static groundItemPickupHooks: PluginHook<PluginGroundItemInteractionEvent>[] = [];
@@ -1566,6 +1568,18 @@ export class PluginManager {
   public static emitSpellOnObject(event: PluginSpellOnObjectEvent): boolean {
     for (const hook of PluginManager.spellOnObjectHooks) {
       PluginManager.executeHook(hook, event, "spell_on_object", "spell_on_object");
+    }
+    return event.handled === true;
+  }
+
+  public static emitSpellOnItem(event: PluginSpellOnItemEvent): boolean {
+    if (event.player.getInventory().getItems()[event.slot]?.getId() !== event.itemId ||
+        PluginManager.emitCanUseItem(event.player, event.itemId, "magic") === false) {
+      return true;
+    }
+    for (const hook of PluginManager.spellOnItemHooks) {
+      if (event.handled) break;
+      PluginManager.executeHook(hook, event, "spell_on_item", "spell_on_item");
     }
     return event.handled === true;
   }
@@ -3415,6 +3429,20 @@ export class PluginManager {
           pluginName,
           handler: (event) => {
             if (!event || event.handled || !event.player || !event.object) {
+              return;
+            }
+            handler(event);
+          },
+        });
+      },
+      onSpellOnItem: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.spellOnItemHooks.push({
+          pluginName,
+          handler: (event) => {
+            if (!event || event.handled || !event.player) {
               return;
             }
             handler(event);
