@@ -462,6 +462,17 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
   });
   assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '7:17',
     `Iorwerth’s magenta crystal follows the cyan beam beside mirror 12, independently of mirror 12’s south branch: ${messages.slice(-2).join(' | ')}`);
+  attributes.set('quest.song_of_the_elves.library-puzzle', '7:30');
+  attributes.set('quest.song_of_the_elves.library-pillar-state', JSON.stringify({
+    '2665,6186,2': { operation: 'D', direction: 'down', x: 2665, y: 6186, z: 2, step: 29 },
+  }));
+  amounts.set(api.core.ItemIdentifiers.HAND_MIRROR_2, 2);
+  place(2637, 6200, 'south', 2);
+  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '7:31',
+    `Iorwerth’s final blue ray starts at the cache-mapped F7 pillar on floor two: ${messages.slice(-2).join(' | ')}`);
+  place(2637, 6186, 'down', 2);
+  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '7:32',
+    `Iorwerth’s final mirror sends the branch down toward the seal: ${messages.slice(-2).join(' | ')}`);
   attributes.set('quest.song_of_the_elves.library-seals', 127);
   attributes.set('quest.song_of_the_elves.library-puzzle', '6:6');
   attributes.set('quest.song_of_the_elves.library-pillar-state', JSON.stringify({
