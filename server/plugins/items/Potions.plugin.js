@@ -358,8 +358,12 @@ function startStamina(player) {
 }
 
 function applyStamina(player) {
+  applyStaminaRequest({player});
+}
+
+function applyStaminaRequest({player,energy=20,durationMs=STAMINA_DURATION_MS}) {
   // Ring of endurance doubles this by mutating the payload (Wiki).
-  const request = { player, energy: 20, durationMs: STAMINA_DURATION_MS };
+  const request = { player, energy, durationMs };
   pluginApi.emitCustomEvent("potions:stamina-effect", request);
   restoreRunEnergy(player, request.energy);
   player.setAttribute(ATTR_STAMINA_END, Date.now() + request.durationMs);
@@ -1198,6 +1202,7 @@ module.exports = {
     return POTION_BY_ITEM_ID.get(itemId)?.potion?.name ?? null;
   },
   register(api) {
+    api.onCustomEvent("potions:apply-stamina", applyStaminaRequest);
     pluginApi = api;
     initDragonfireProtectionCoreAccess(api);
     PERSISTED_ATTRIBUTES.forEach((key) => api.persistAttribute(key));

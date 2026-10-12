@@ -136,7 +136,7 @@ module.exports = function registerWhileGuthixSleeps(api) {
     if(![TAVERLEY_UP,TAVERLEY_DOWN].includes(objectId))return false;
     player.moveTo(new Location(2914,3450,objectId===TAVERLEY_UP?1:0));return true;
   }
-  function replace(player,id,tile,type=10,face=0){const area=player.getPrivateArea();if(!area)throw Error('Quest scenery must belong to a private area');const old=api.core.ObjectManager.objectsAt(new Location(...tile)).find(o=>o.getPrivateArea()===area&&o.getType()===type);if(old)api.core.ObjectManager.deregister(old,true);const o=new api.core.GameObject(id,new Location(...tile),type,face,area);api.core.ObjectManager.register(o,true);return o;}
+  function replace(player,id,tile,type=10,face=0){const area=player.getPrivateArea();if(!area)throw Error('Quest scenery must belong to a private area');let old=api.core.ObjectManager.objectsAt(new Location(...tile)).find(o=>o.getPrivateArea()===area&&o.getType()===type);if(!old){const placed=(api.core.MapObjects.mapObjects.get(api.core.MapObjects.getHash(...tile))||[]).find(o=>o.getType()===type);if(placed)old=new api.core.GameObject(placed.getId(),placed.getLocation(),type,placed.getFace(),area);}if(old)api.core.ObjectManager.deregister(old,true);const o=new api.core.GameObject(id,new Location(...tile),type,face,area);api.core.ObjectManager.register(o,true);return o;}
   function track(event){
     const {player,itemId,target:npc}=event;
     if(itemId!==DIRTY_SHIRT||npc?.getId()!==BROAV||npc.getOwner?.()!==player)return false;
@@ -161,6 +161,9 @@ module.exports = function registerWhileGuthixSleeps(api) {
   require('../wgs/DarkSquall.WhileGuthixSleeps')(context);
   require('../wgs/Surok.WhileGuthixSleeps')(context);
   require('../wgs/Alliance.WhileGuthixSleeps')(context);
+  require('../wgs/Chasm.WhileGuthixSleeps')(context);
+  require('../wgs/Temple.WhileGuthixSleeps')(context);
+  require('../wgs/Stone.WhileGuthixSleeps')(context);
   for(const key of ATTRIBUTES)api.persistAttribute(key);
   api.onNpcInteraction('Ivy Sophista',{'Talk-to':ivy});
   api.onNpcInteraction('Thaerisk',{'Talk-to':thaerisk});

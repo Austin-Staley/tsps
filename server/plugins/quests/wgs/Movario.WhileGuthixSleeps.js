@@ -1,6 +1,6 @@
 /** Movario's base: cache scene coordinates and OSRS Wiki puzzle rules. */
 module.exports = function registerMovario({api,quest,stage,advance,held,give,val,replace,hit,ATTRIBUTES}) {
-  const {Location,PrivateArea,Boundary,ItemDefinition}=api.core;
+  const {Location,PrivateArea,Boundary,ItemDefinition,Bank}=api.core;
   const RUNE_ATTRIBUTE='while-guthix-sleeps:door-rune';
   const WIRES_ATTRIBUTE='while-guthix-sleeps:wires';
   const STAIRS_ATTRIBUTE='while-guthix-sleeps:stairs-safe';
@@ -160,7 +160,7 @@ module.exports = function registerMovario({api,quest,stage,advance,held,give,val
     if(weight(player)!==val(player,GAUGE_ATTRIBUTE)+val(player,WEIGHTS_ATTRIBUTE)){
       const tries=(val(player,TRIES_ATTRIBUTE)+1)%3;player.setAttribute(TRIES_ATTRIBUTE,tries);
       if(tries){player.sendMessage(`The door stays locked. ${3-tries} attempts remain.`);return true;}
-      for(const id of NOTES){player.getInventory().deleteNumber(id,player.getInventory().getAmount(id));player.getBank().deleteNumber(id,player.getBank().getAmount(id));}
+      for(const id of NOTES){player.getInventory().deleteNumber(id,player.getInventory().getAmount(id));for(let tab=0;tab<Bank.TOTAL_BANK_TABS;tab++){const bank=player.getBank(tab);bank.deleteNumber(id,bank.getAmount(id));}}
       player.sendMessage('Gas fills the room. You wake in a jail cell, and your research notes have been confiscated.');player.moveTo(new Location(4128,4938,0));return true;
     }
     player.setAttribute(TRIES_ATTRIBUTE,3);player.moveTo(new Location(4188,4953,1));player.sendMessage('The weights balance and the eastern door unlocks. You can now teleport out.');return true;

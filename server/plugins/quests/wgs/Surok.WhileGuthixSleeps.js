@@ -1,15 +1,15 @@
 /** Wiki Surok encounter; warriors and elemental spell targets use the live cache models. */
 module.exports=function registerSurok({api,stage,advance,held,give,play}){
  const {PrivateArea,Boundary,Location,HitDamage,HitMask,Animation,CombatFactory,CombatType,CombatSpells,Item,ItemOnGroundManager}=api.core;
- const LADDER=53370,LADDER_TOP=53371,SUROK=13482,SQUALL=13565,REVEALED=13549,FALLEN=13551;
+ const GUARD=13566,LADDER=53370,LADDER_TOP=53371,SUROK=13482,SQUALL=13565,REVEALED=13549,FALLEN=13551;
  const STRONG=13484,AGILE=13483,SURGES=[13505,13506,13507,13508],OPPOSITES=['wind','fire','water','earth'];
  const LIT_EXPLOSIVE=29573,TELEORB=29536,ROBES=[29566,29568,29570];
  const BLOOD=[CombatSpells.BLOOD_RUSH,CombatSpells.BLOOD_BURST,CombatSpells.BLOOD_BLITZ,CombatSpells.BLOOD_BARRAGE];
  const WEAKEN=[CombatSpells.WEAKEN,CombatSpells.ENFEEBLE],BIND=[CombatSpells.BIND,CombatSpells.SNARE,CombatSpells.ENTANGLE];
  const ELEMENTS=['WIND','WATER','EARTH','FIRE'].map(element=>['STRIKE','BOLT','BLAST','WAVE','SURGE'].map(tier=>CombatSpells[element+'_'+tier]).filter(Boolean));
- const fights=new WeakMap(),targets=new WeakMap();
+ const fights=new WeakMap(),targets=new WeakMap(),climbing=new WeakSet();
  const loc=(x,y,z=2)=>new Location(x,y,z),dressed=p=>ROBES.every(id=>p.getEquipment().contains(id));
- const spell=p=>p.getCombat().getSelectedSpell()??p.getCombat().getCastSpell()??p.getCombat().getPreviousCast();
+ const spell=p=>p.getCombat().getSelectedSpell()??p.getCombat().getCastSpell();
  const damage=(p,n)=>p.getCombat().getHitQueue().addPendingDamage([new HitDamage(n,HitMask.RED)]);
  const random=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
  function remove(f,n){if(n){targets.delete(n);f.enemies.delete(n);api.removeNpc(n);}}
@@ -67,13 +67,28 @@ module.exports=function registerSurok({api,stage,advance,held,give,play}){
   const id=definition?.id??objectId;
   if(id===LADDER_TOP&&fights.has(p)){p.moveTo(loc(4142,4854,1));return true;}
   if(id!==LADDER||stage(p)<580||stage(p)>=610)return false;
-  if(stage(p)<597&&!dressed(p)){p.sendMessage('You need the Dark Squall robes to fool the guard at the ladder.');return true;}
+  if(stage(p)<597){climbing.add(p);play(p,GUARD,'the-dark-squall-talking-to-the-elite-black-knight-by-the-ladder');return true;}
+  enterRoom(p);return true;
+ }
+ function enterRoom(p){
   const f=new SurokArea(p);fights.set(p,f);f.enter(p);p.moveTo(loc(4142,4854));
   if(stage(p)>=597)f.fallen=spawn(f,FALLEN,4145,4850,1);
   else{advance(p,590);f.intro=spawn(f,SQUALL,4145,4850,1);play(p,SQUALL,'the-dark-squall-climbing-up-the-ladder-in-the-inner-base');}
   return true;
  }
- function line(e){const f=fights.get(e.player);if(f&&e.text==="You've been quite the problem for some time. I'll be glad to finally have rid of you...")e.after=()=>start(f);}
+ function guardTalk({player:p,npcId}){
+  if(npcId!==GUARD||stage(p)<580||stage(p)>=610)return false;
+  climbing.delete(p);play(p,GUARD,'the-dark-squall-talking-to-the-elite-black-knight-by-the-ladder');return true;
+ }
+ function guardCondition({player:p,stepId,pages}){
+  if(!['a-SLUY','KE9ZPi','sRYfCo','3gavgP'].includes(stepId)||!pages?.some(v=>v.page.replace(/^Transcript:/,'')==='While Guthix Sleeps'))return;
+  const robes=dressed(p),elite=[29560,29562,29564].every(id=>p.getEquipment().contains(id));
+  const known={'a-SLUY':!robes&&!elite,KE9ZPi:elite,sRYfCo:robes&&!climbing.has(p),'3gavgP':robes&&climbing.has(p)};
+  if(stepId in known)return known[stepId];
+ }
+ function line(e){
+  if(e.npcId===GUARD&&e.text==='Yes master!'&&climbing.has(e.player)&&dressed(e.player))e.after=()=>{climbing.delete(e.player);if(stage(e.player)>=580&&stage(e.player)<597)enterRoom(e.player);};
+  const f=fights.get(e.player);if(f&&e.text==="You've been quite the problem for some time. I'll be glad to finally have rid of you...")e.after=()=>start(f);}
  function action({player,stepId}){const f=fights.get(player);if(f&&stepId==='tJmXJA')f.intro?.setNpcTransformationId(REVEALED);}
  function hit({npc,hit}){
   const p=hit.getAttacker(),f=fights.get(p);if(!f||!f.enemies.has(npc))return;
@@ -110,6 +125,8 @@ module.exports=function registerSurok({api,stage,advance,held,give,play}){
  function login({player}){const l=player.getLocation();if(l.getZ()===2&&l.getX()>=4126&&l.getX()<=4152&&l.getY()>=4840&&l.getY()<=4861)player.moveTo(loc(4142,4854,1));}
  api.onObjectInteraction('Ladder',{'Climb-up':climb,'Climb-down':climb});
  api.onNpcInteraction('Surok Magis',{'Plant-orb':plant});
+ api.onNpcInteraction('Elite Black Knight',{'Talk-to':guardTalk});
+ api.onNpcDialogueCondition(guardCondition);
  api.onItemOnNpc(use,{noted:false});
  api.onNpcHitModify(hit);
  api.onCombatHitRoll(hitRoll);
@@ -121,5 +138,5 @@ module.exports=function registerSurok({api,stage,advance,held,give,play}){
  api.onCustomEvent('magic:alchemy-policy',alchemy);
  api.onCustomEvent('magic:alchemy-completed',alchemised);
  api.onPlayerLogin(login);
- return {hit,hitRoll,spellEffects,telegrab,alchemy,alchemised,climb,fights,targets,SurokArea};
+ return {hit,hitRoll,spellEffects,telegrab,alchemy,alchemised,climb,guardCondition,line,climbing,fights,targets,SurokArea};
 };
