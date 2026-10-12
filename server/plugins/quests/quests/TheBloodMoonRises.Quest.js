@@ -1759,6 +1759,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     name: PAGE,
     varpId: 5618,
     varbitId: 15464,
+    // shortcut: other chapter native stages need their cache morphs validated before mapping.
+    varpValue: value => ({ [STAGE.PREPARATIONS]: 106, [STAGE.SIEGE]: 116, [STAGE.COMPLETE]: 176 })[value] ?? value,
     startedValue: STAGE.STARTED,
     completionValue: STAGE.COMPLETE,
     questPoints: 4,
