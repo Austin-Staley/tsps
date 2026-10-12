@@ -22,9 +22,11 @@ const Parties = require("./CoxParties");
 const { Raid } = require("./CoxRaid");
 const Storage = require("./Storage.ChambersOfXeric");
 
-const BOARD = { BUTTONS: 3, ROWS: 14 };
+// rsprox captures: the board's buttons (contents, 0-1) and party rows (list, 0-39) and the party
+// page's buttons (contents, 0-10) are pause buttons, so a click comes back as resume_pausebutton.
+const BOARD = { BUTTONS: 3, ROWS: 15 };
 const BOARD_BUTTON = { REFRESH: 0, MAKE: 1 };
-const PARTY = { BUTTONS: 3 };
+const PARTY = { BUTTONS: 3, LAST_BUTTON: 10 };
 const PARTY_BUTTON = {
   JOIN_LEAVE: 0, ADVERTISE: 1, DISBAND: 2, REFRESH: 3, BACK: 4,
   SIZE: 5, COMBAT: 6, TOTAL: 7, CHALLENGE: 8, LARGE: 9,
@@ -34,6 +36,11 @@ const ATTR_VIEWING = "cox:viewing-party";
 const ADVERTS_LEFT = 99;
 
 const uid = (group, component) => (group << 16) | component;
+
+/** The slot clicked: a pause button's comes as the packet's child index (event.action). */
+function slotOf(event) {
+  return Number.isInteger(event.slot) && event.slot >= 0 && event.slot < 0xffff ? event.slot : event.action;
+}
 
 // ---------------------------------------------------------------- the recruiting board
 
@@ -57,8 +64,8 @@ function openBoard(player) {
       listing.preferredTotal, listing.challenge ? 1 : 0, now - listing.created,
     ].join("|"));
   }
-  sender.sendInterfaceFlagsRange(uid(Shared.INTERFACE.RECRUITING_BOARD, BOARD.BUTTONS), 0, 1, Shared.EVENT.OP1);
-  sender.sendInterfaceFlagsRange(uid(Shared.INTERFACE.RECRUITING_BOARD, BOARD.ROWS), 0, Shared.BOARD_ROWS - 1, Shared.EVENT.OP1);
+  sender.sendInterfaceFlagsRange(uid(Shared.INTERFACE.RECRUITING_BOARD, BOARD.BUTTONS), 0, 1, Shared.EVENT.CONTINUE);
+  sender.sendInterfaceFlagsRange(uid(Shared.INTERFACE.RECRUITING_BOARD, BOARD.ROWS), 0, Shared.BOARD_ROWS - 1, Shared.EVENT.CONTINUE);
 }
 
 function readBoard(event) {
@@ -85,14 +92,14 @@ function makeParty(player) {
 }
 
 function clickBoardButton(event) {
-  const slot = event.slot ?? event.childId;
+  const slot = slotOf(event);
   if (slot === BOARD_BUTTON.REFRESH) openBoard(event.player);
   else if (slot === BOARD_BUTTON.MAKE) makeParty(event.player);
   return true;
 }
 
 function viewListedParty(event) {
-  const party = Parties.listed()[event.slot ?? -1];
+  const party = Parties.listed()[slotOf(event)];
   if (!party) return true;
   openParty(event.player, party);
   return true;
@@ -125,7 +132,7 @@ function openParty(player, party) {
   const state = !viewerChannel ? 0 : party.isLeader(player) ? 2 : 1;
   sender.sendClientScript(Shared.SCRIPT.PARTY_HEADER, `Raiding Party of ${party.leader} (${members.length})`,
     state, party.isAdvertised() ? 1 : 0, ADVERTS_LEFT);
-  sender.sendInterfaceFlagsRange(uid(Shared.INTERFACE.PARTY, PARTY.BUTTONS), 0, 9, Shared.EVENT.OP1);
+  sender.sendInterfaceFlagsRange(uid(Shared.INTERFACE.PARTY, PARTY.BUTTONS), 0, PARTY.LAST_BUTTON, Shared.EVENT.CONTINUE);
   sender.sendVarbit(Shared.VARBIT.PREFERRED_SIZE, party.preferredSize)
     .sendVarbit(Shared.VARBIT.PREFERRED_COMBAT, party.preferredCombat)
     .sendVarbit(Shared.VARBIT.PREFERRED_TOTAL, party.preferredTotal);
@@ -231,7 +238,7 @@ function toggleChallenge(player) {
 
 function clickPartyButton(event) {
   const { player } = event;
-  switch (event.slot ?? event.childId) {
+  switch (slotOf(event)) {
     case PARTY_BUTTON.JOIN_LEAVE: joinOrLeave(player); break;
     case PARTY_BUTTON.ADVERTISE: toggleAdvert(player); break;
     case PARTY_BUTTON.DISBAND: disband(player); break;
