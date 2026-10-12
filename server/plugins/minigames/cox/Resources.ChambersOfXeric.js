@@ -24,10 +24,12 @@
  *   of keeping each of the patch's 3 lives; clearing with a spade (anim 830). XP planting /
  *   picking: golpar 4/10, buchu 6/15, noxifer 12/30.
  * - Raking weeds (anim 2273) gives 1-3 of a seed type five times, never the same type twice.
- * - Saplings give kindling (at most 28) with any axe, a 5-in-6 chance every 2 ticks; a fallen
- *   sapling comes back 15 ticks later.
+ * - Saplings give kindling (at most 28) with any axe.
  * Wiki (Ice demon; Mod Ash): a sapling falls at 1 in max(3, 2 x raiders), five times rarer in
  *   the Ice Demon's room.
+ * rsprox captures (sapling chopping in all five recordings): "You swing your axe...", kindling
+ *   every 5 ticks of chopping without fail (sound 2070, no message), the fallen sapling's sound
+ *   2734, and its growing back 54-64 ticks later.
  */
 
 const Shared = require("./CoxShared");
@@ -70,6 +72,7 @@ const GROWN_STAGE = 4;
 const STAGE_TICKS = 12;
 const PATCH_LIVES = 3;
 const KINDLING_CAP = 28;
+const SAPLING_CHOP_TICKS = 5;
 const FOOD_IDS = new Set([...FISH.map((fish) => fish.item + 1), ...BATS.map((bat) => bat.item + 1)]);
 
 /** Resource room tiles on the cache's map by version (west, north, east). */
@@ -567,7 +570,7 @@ function chopSapling(event) {
     player.sendMessage("Not enough space in your inventory.");
     return true;
   }
-  player.sendMessage("You swing your hatchet at the sapling...");
+  player.sendMessage("You swing your axe...");
   let ticks = 0;
   Shared.action(player, {
     first: 1,
@@ -575,7 +578,8 @@ function chopSapling(event) {
     step() {
       if (object.__coxFelled) return false;
       if (ticks++ % 4 === 0) Shared.animate(player, axe.animation);
-      if (ticks % 2 !== 0 || Math.random() >= 5 / 6) return true;
+      // rsprox captures: kindling every 5 ticks of chopping, without fail.
+      if (ticks % SAPLING_CHOP_TICKS !== 0) return true;
       const have = player.getInventory().getAmount(ITEM.KINDLING);
       if (have >= KINDLING_CAP) {
         player.sendMessage("You already have the maximum amount of kindlings.");
@@ -585,7 +589,6 @@ function chopSapling(event) {
       const amount = Math.min(KINDLING_CAP - have, iceDemonRoom ? kindlingPerChop(player) : 1);
       Shared.give(player, ITEM.KINDLING, amount);
       Shared.addXp(player, "WOODCUTTING", KINDLING_XP[amount - 1] ?? KINDLING_XP[0]);
-      player.sendMessage("You get some kindling.");
       Shared.sound(player, 2070);
       const fallOdds = Math.max(3, 2 * raid.scale) * (iceDemonRoom ? 5 : 1);
       if (Math.floor(Math.random() * fallOdds) === 0) {
@@ -614,7 +617,10 @@ function fellSapling(raid, sapling) {
   if (sapling.__coxFelled) return;
   sapling.__coxFelled = true;
   const stump = Shared.replaceObject(raid.map, sapling, OBJECT.STUMP);
-  Shared.later(raid, 15, () => {
+  const viewers = [...raid.players].filter((player) => raid.roomAt(player.getLocation()) === raid.roomAt(stump.getLocation()));
+  Shared.areaSound(viewers, 2734, stump.getLocation(), { range: 4 });
+  // rsprox captures: a sapling grows back 54-64 ticks after falling.
+  Shared.later(raid, Shared.random(54, 64), () => {
     if (!raid.destroyed) Shared.replaceObject(raid.map, stump, OBJECT.SAPLING);
   });
 }
