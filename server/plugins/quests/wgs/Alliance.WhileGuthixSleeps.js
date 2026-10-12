@@ -15,9 +15,9 @@ module.exports=function registerAlliance({api,quest,stage,advance,held,give,play
   else return false;play(p,npcId,v);return true;
  }
  function postQuestTalk({player:p,npcId}){
-  if(stage(p)<900||!atCastle(p))return false;
-  if(npcId===SILIF)play(p,npcId,'post-quest-dialogue-talking-to-silif');
-  else if(npcId===SUROK)play(p,npcId,'post-quest-dialogue-talking-to-surok');else return false;return true;
+  if(stage(p)<610||!atCastle(p))return false;
+  if(npcId===SILIF)play(p,npcId,stage(p)>=900?'post-quest-dialogue-talking-to-silif':'the-dark-squall-talking-to-silif-after-rescuing-him');
+  else if(npcId===SUROK&&stage(p)>=900)play(p,npcId,'post-quest-dialogue-talking-to-surok');else return false;return true;
  }
  function reclaimRobes(p){
   const missing=ROBES.filter(id=>!held(p,id)&&!p.getEquipment().contains(id)&&!Array.from({length:Bank.TOTAL_BANK_TABS},(_,tab)=>p.getBank(tab)).some(bank=>bank.contains(id)));
