@@ -101,6 +101,7 @@ const connectHeadlessClient = async (username: string) => {
 
 const advanced: any[] = [];
 const commandRights: string[] = [];
+const loadedMapRegions: any[] = [];
 const core = {
     connectHeadlessClient,
     PlayerRights: { NONE: "NONE", DEVELOPER: "DEVELOPER" },
@@ -123,7 +124,7 @@ const core = {
         },
     },
     Location: class { constructor(private x: number, private y: number, private z: number) {} getX() { return this.x; } getY() { return this.y; } getZ() { return this.z; } },
-    RegionManager: { blocked: () => false },
+    RegionManager: { blocked: () => false, loadMapFiles: (x: number, y: number, surroundings: boolean) => loadedMapRegions.push([Math.floor(x / 64), Math.floor(y / 64), surroundings]) },
     ServerPerf: {
         getSummary: (ticks: number) => ({
             ticks, avgTickMs: 12.34567, maxTickMs: 40, avgDriftMs: 0, maxDriftMs: 1, lastTickNumber: 9,
@@ -249,6 +250,11 @@ else process.env.AGENT_MCP = previousMcpFlag;
     assert.deepEqual(snapshot.objects, [{ id: 1276, name: "Tree", options: ["Chop down"], x: 3220, y: 3216 }]);
     assert.equal(snapshot.groundItems[0].id, 526);
     assert.deepEqual(snapshot.messages, ["You swing your axe at the tree."]);
+    loadedMapRegions.length = 0;
+    await call(client, "observe", { player: "agent1", radius: 32 });
+    assert.deepEqual(loadedMapRegions.sort((a, b) => a[0] - b[0] || a[1] - b[1]), [
+        [49, 49, false], [49, 50, false], [50, 49, false], [50, 50, false],
+    ], "scene observations load each intersecting map region once");
     assert.deepEqual((await call(client, "observe", { player: "agent1" })).value.messages, []);
 
     npc.performAnimation({ getId: () => 8080 });
