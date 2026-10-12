@@ -184,3 +184,26 @@ test("captured line-of-sight stepping is diagonal-first", () => {
   assert.equal(Shared.hasClearPath(0, 0, 3, 3, blocked), false);
   assert.equal(Shared.hasClearPath(0, 0, 0, 3, blocked), true, "straight line misses the block");
 });
+
+test("Araxxor cleanup leaves incoming hits alone for players without a lair", () => {
+  let processPlayer, cleared = 0;
+  Area.attach({
+    core: { PrivateArea: class {} },
+    onPlayerProcess: handler => { processPlayer = handler; },
+    onCanAttack() {}, onPlayerLogout() {}, onPlayerDisconnect() {},
+  });
+  const attrs = new Map();
+  const player = {
+    getLocation: () => ({ getX: () => 3183, getY: () => 4446, getZ: () => 0 }),
+    getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getCombat: () => ({ getHitQueue: () => ({ clear: () => { cleared++; } }) }),
+  };
+  processPlayer({ player });
+  Area.destroyArea(player);
+  assert.equal(cleared, 0, "other quest and raid damage must reach the player");
+  attrs.set("araxxor:instance-area", {});
+  Area.destroyArea(player);
+  assert.equal(cleared, 1, "the departing Araxxor player's pending shots are cleared");
+  processPlayer({ player });
+  assert.equal(cleared, 1, "cleanup ends with the actual instance");
+});
