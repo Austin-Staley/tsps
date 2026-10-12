@@ -50,10 +50,40 @@ module.exports = function registerSongOfTheElves(api) {
     [2290, 3095], [2287, 3095], [2284, 3095], [2284, 3092], [2280, 3092],
   ];
   const MEILYR_CLUE = "quest.song_of_the_elves.meilyr-clue";
+  const ITHELL_SYMBOLS = "quest.song_of_the_elves.ithell-symbols";
+  const ITHELL_STATUE = "quest.song_of_the_elves.ithell-statue";
+  const ITHELL_CLUE_STAGE = "quest.song_of_the_elves.ithell-clue-stage";
+  const ITHELL_RECRUITED = "quest.song_of_the_elves.ithell-recruited";
+  const ITHELL_KELYN_NPC = "quest.song_of_the_elves.ithell-kelyn-npc";
+  const MEILYR_FFION_NPC = "quest.song_of_the_elves.meilyr-ffion-npc";
+  const ITHELL_VARBIT = 9035;
+  const MEILYR_VARBIT = 9036;
+  const ITHELL_SYMBOL_VARBITS = [9041, 9039, 9040, 9038, 9037];
+  const ITHELL_SYMBOLS_BY_TILE = [
+    { id: 37307, x: 2349, y: 3161, z: 0 }, // Lletya bank
+    { id: 37305, x: 2322, y: 3163, z: 0 }, // north of Elena
+    { id: 37306, x: 2340, y: 3181, z: 0 }, // general store, ground floor
+    { id: 37304, x: 2334, y: 3183, z: 1 }, // general store, upper floor
+    { id: 37303, x: 2351, y: 3172, z: 1 }, // altar
+  ];
+  const ITHELL_WELL_IDS = new Set([37308, 37309, 37310, 35880, 35881, 35882, 35883, 35884]);
+  const ITHELL_EXAMINE_MARKERS = [
+    new Set([37307, 1189, 10529]), new Set([37305, 8773]), new Set([37306]),
+    new Set([37304, 8744]), new Set([37303]),
+  ];
+  const MEILYR_DIG_SPOTS = [
+    { x: 2225, y: 3133, message: "The first scroll points to the marsh near Port Tyras." },
+    { x: 2203, y: 3061, message: "The next clue leads to Zul-Andra." },
+    { x: 2240, y: 3269, message: "The final clue points outside Prifddinas's southern gate." },
+  ];
   const LLETYA_GUIDE_SPAWNED = "quest.song_of_the_elves.lletya-guide-spawned";
   const LLETYA_BAXTORIAN_NPC = "quest.song_of_the_elves.lletya-baxtorian-npc";
   const HEFIN_GUIDE_SPAWNED = "quest.song_of_the_elves.hefin-guide-spawned";
   const LLETYA_ARIANWYN_NPC = "quest.song_of_the_elves.lletya-arianwyn-npc";
+  const LLETYA_CHILDREN = "quest.song_of_the_elves.lletya-children";
+  const LLETYA_TRAITOR_REVEALED = "quest.song_of_the_elves.lletya-traitor-revealed";
+  const LLETYA_ARIANWYN_CONFRONTED = "quest.song_of_the_elves.lletya-arianwyn-confronted";
+  const LLETYA_BOSS = "quest.song_of_the_elves.lletya-boss";
   const FRAGMENT_DEFEATED = "quest.song_of_the_elves.fragment-defeated";
   const ORB_CAVE_AREA = "quest.song_of_the_elves.orb-cave-area";
   const CAMP_AREA = "quest.song_of_the_elves.camp-area";
@@ -165,16 +195,21 @@ module.exports = function registerSongOfTheElves(api) {
   ];
   let quest;
   const battleInstances = new Map();
+  const arianwynInstances = new Map();
   const libraryInstances = new Map();
   const fragmentInstances = new Map();
   const campInstances = new Map();
   const orbCaveInstances = new Map();
+  let ithellSymbolsInstalled = false;
 
   class LletyaStoryArea extends Area {
     process(mobile) {
       if (!mobile?.isPlayer?.()) return;
       const player = mobile.getAsPlayer();
       if (quest.isComplete(player)) return;
+      if (currentChapter(player) === 16 && (Number(player.getAttribute(ITHELL_CLUE_STAGE)) || 0) > 0) {
+        ensureIthellSymbolObjects();
+      }
       if (currentChapter(player) === 12 && player.getAttribute(LLETYA_GUIDE_SPAWNED) !== true) {
         player.setAttribute(LLETYA_GUIDE_SPAWNED, true);
         const guide = api.spawnNpc({ id: NpcIdentifiers.LORD_IEUAN_AMLODD_2, x: 2349, y: 3170, z: 0,
@@ -183,12 +218,13 @@ module.exports = function registerSongOfTheElves(api) {
       }
       // Lletya's map NPC is a cache scenery variant (5292) with no Talk-to
       // action. Use the cache's actual Talk-to Arianwyn variant for this chapter.
-      if (currentChapter(player) === 13 && !player.getAttribute(LLETYA_ARIANWYN_NPC)) {
+      const arianwynCurrent = player.getAttribute(LLETYA_ARIANWYN_NPC);
+      if ([13, 15].includes(currentChapter(player)) && !arianwynCurrent?.isRegistered?.()) {
         const arianwyn = api.spawnNpc({ id: NpcIdentifiers.ARIANWYN_6, x: 2354, y: 3172, z: 0,
           wanderRadius: 0, owner: player, ownerOnly: true });
         if (arianwyn) player.setAttribute(LLETYA_ARIANWYN_NPC, arianwyn);
       }
-      if (currentChapter(player) !== 13) {
+      if (![13, 15].includes(currentChapter(player))) {
         const arianwyn = player.getAttribute(LLETYA_ARIANWYN_NPC);
         if (arianwyn) api.removeNpc(arianwyn);
         player.setAttribute(LLETYA_ARIANWYN_NPC, null);
@@ -202,6 +238,30 @@ module.exports = function registerSongOfTheElves(api) {
         api.removeNpc(baxtorian);
         player.setAttribute(LLETYA_BAXTORIAN_NPC, null);
       }
+      const kelyn = player.getAttribute(ITHELL_KELYN_NPC);
+      if (currentChapter(player) === 16 && player.getAttribute(ITHELL_STATUE) === true && !kelyn?.isRegistered?.()) {
+        const npc = api.spawnNpc({ id: NpcIdentifiers.LADY_KELYN_ITHELL, x: 2334, y: 3169, z: 0,
+          wanderRadius: 0, owner: player, ownerOnly: true });
+        if (npc) player.setAttribute(ITHELL_KELYN_NPC, npc);
+      } else if ((currentChapter(player) !== 16 || player.getAttribute(ITHELL_STATUE) !== true) && kelyn) {
+        api.removeNpc(kelyn);
+        player.setAttribute(ITHELL_KELYN_NPC, null);
+      }
+    }
+  }
+
+  class MeilyrPassArea extends Area {
+    process(mobile) {
+      if (!mobile?.isPlayer?.()) return;
+      const player = mobile.getAsPlayer();
+      const existing = player.getAttribute(MEILYR_FFION_NPC);
+      if (quest.isComplete(player) || currentChapter(player) !== 16 ||
+        (Number(player.getAttribute(MEILYR_CLUE)) || 0) < 4) {
+        if (existing) api.removeNpc(existing);
+        player.setAttribute(MEILYR_FFION_NPC, null);
+        return;
+      }
+      ensureMeilyrAtPass(player);
     }
   }
 
@@ -348,6 +408,62 @@ module.exports = function registerSongOfTheElves(api) {
       if (now >= state.nextSpecialAt) {
         resolveFragmentSpecial(this, state, now);
       }
+    }
+  }
+
+  class LletyaArianwynArea extends PrivateArea {
+    constructor(owner) {
+      super([new Boundary(2320, 2390, 3150, 3210, 0)]);
+      this.owner = owner;
+    }
+    isMulti() { return true; }
+    canAttack(attacker, target) {
+      const a = attacker?.getArea?.() === this;
+      const t = target?.getArea?.() === this;
+      if (a || t) return a && t;
+      return null;
+    }
+    process(mobile) {
+      const state = arianwynInstances.get(this);
+      if (!state || mobile !== state.player || state.finished) return;
+      const cycle = World.getProcessCycle();
+      if (state.lastCycle === cycle) return;
+      state.lastCycle = cycle;
+      // This fight uses normal hit queues but drives its warning specials from
+      // the private-area tick. Refresh engagement so generic NPC regeneration
+      // does not erase ranged hits between player attack cycles.
+      state.boss.getCombat().getLastAttack().reset();
+      if (state.boss.getHitpoints() <= 60) {
+        finishArianwynEncounter(this, state);
+        return;
+      }
+      if (state.bomb && cycle >= state.bomb.impactAt) {
+        const loc = state.player.getLocation();
+        if (loc.getX() === state.bomb.x && loc.getY() === state.bomb.y) {
+          const damage = 18 + Math.floor(Math.random() * 19);
+          state.player.getCombat().getHitQueue().addPendingDamage([
+            new HitDamage(damage, HitMask.RED).setSource(state.boss),
+          ]);
+          state.player.sendMessage("The orange arrow explodes beneath you.");
+        } else {
+          state.player.sendMessage("You avoid the orange arrow's blast.");
+        }
+        state.bomb = null;
+      }
+      if (cycle < state.nextSpecialAt) return;
+      state.nextSpecialAt = cycle + 9;
+      if (state.specialCount++ % 2 === 0) {
+        api.core.PrayerHandler.deactivatePrayers(state.player);
+        state.player.sendMessage("Arianwyn's purple arrow disables your prayers!");
+      } else {
+        const loc = state.player.getLocation();
+        state.bomb = { x: loc.getX(), y: loc.getY(), impactAt: cycle + 2 };
+        state.player.sendMessage("An orange arrow lands at your feet. Move before it explodes!");
+      }
+    }
+    postLeave(mobile, logout) {
+      super.postLeave(mobile, logout);
+      if (this.isDestroyed()) arianwynInstances.delete(this);
     }
   }
 
@@ -506,20 +622,30 @@ module.exports = function registerSongOfTheElves(api) {
           player.sendMessage("You need an empty inventory slot before you can take that.");
         }
       }
+      if (event.stepId === "vh7Q_s") giveMeilyrClue(player, event);
       if (event.stepId === "ITn7ep") {
         inventory.deleteNumber(ItemIdentifiers.HAMMER, 1);
         inventory.deleteNumber(ItemIdentifiers.RUNITE_BAR, 1);
       }
       if (event.stepId === "koxQh3") player.setAttribute(REVELATIONS_MEETING_STARTED, true);
-      if (event.stepId === "XhOxpi") player.moveTo(new Location(2353, 3172, 0));
+      if (event.stepId === "XhOxpi") {
+        player.moveTo(new Location(2353, 3172, 0));
+        setChapter(player, 15);
+        startTranscript(api, player, NpcIdentifiers.MAWRTH_3, PAGE, "attack-on-lletya-a-village-on-fire");
+      }
       if (event.stepId === "UNrb5z") recordElder(player, 1);
       if (event.stepId === "K9K0W4") recordElder(player, 2);
       const messageChapter = ACTION_CHAPTER[event.stepId];
       if (messageChapter !== undefined) setChapter(player, messageChapter);
-      if (event.stepId === "U-Vihn") recordElder(player, 4);
+      if (event.stepId === "U-Vihn") {
+        player.setAttribute(ITHELL_RECRUITED, true);
+        recordElder(player, 4);
+        sendIthellMeilyrVarbits(player);
+      }
       if (event.stepId === "S3ME_F") {
         inventory.deleteNumber(ItemIdentifiers.CLUE_SCROLL_HARD_, 1);
         recordElder(player, 8);
+        sendIthellMeilyrVarbits(player);
       }
       if (event.stepId === "gBRsQm") {
         if (inventory.getFreeSlots() < 7) {
@@ -580,6 +706,7 @@ module.exports = function registerSongOfTheElves(api) {
       player.moveTo(new Location(2353, 3172, 0));
     }
     if (["9yLw8T", "o4CmGU", "eIlh1C"].includes(event.stepId)) setChapter(player, 15);
+    if (event.stepId === "eIlh1C") player.setAttribute(LLETYA_TRAITOR_REVEALED, true);
     if (event.stepId === "6nBDUf") setChapter(player, 16);
     if (event.stepId === "xfnkES") {
       event.handled = true;
@@ -687,6 +814,179 @@ module.exports = function registerSongOfTheElves(api) {
     }
   }
 
+  function sendIthellMeilyrVarbits(player) {
+    const sender = player?.getPacketSender?.();
+    if (!sender) return;
+    const symbols = Number(player.getAttribute(ITHELL_SYMBOLS)) || 0;
+    const ithell = player.getAttribute(ITHELL_RECRUITED) === true ? 4 :
+      player.getAttribute(ITHELL_STATUE) === true ? 3 :
+      symbols === 31 ? 2 : Number(player.getAttribute(ITHELL_CLUE_STAGE)) || 0;
+    sender.sendVarbit(ITHELL_VARBIT, ithell);
+    sender.sendVarbit(MEILYR_VARBIT, Number(player.getAttribute(MEILYR_CLUE)) || 0);
+    for (let index = 0; index < ITHELL_SYMBOL_VARBITS.length; index++) {
+      sender.sendVarbit(ITHELL_SYMBOL_VARBITS[index], symbols & (1 << index) ? 2 : 0);
+    }
+  }
+
+  function handleIthellSymbolExamine(event) {
+    const player = event?.player;
+    if (!player || currentChapter(player) !== 16 || (Number(player.getAttribute(ITHELL_CLUE_STAGE)) || 0) < 1) return;
+    // The client sends only the object ID for Examine. Validate it against the
+    // nearby mapped symbol/marker and the player's current tile before using
+    // that packet, so an Examine packet from elsewhere cannot grant a clue.
+    const location = player.getLocation();
+    const x = location?.getX?.();
+    const y = location?.getY?.();
+    const z = location?.getZ?.();
+    const index = ITHELL_SYMBOLS_BY_TILE.findIndex((tile, i) => tile.z === z &&
+      ITHELL_EXAMINE_MARKERS[i].has(event.objectId) &&
+      Math.max(Math.abs(tile.x - x), Math.abs(tile.y - y)) <= 1);
+    if (index < 0) return;
+    // This map export omits some symbols (and all five cache locs lack the
+    // Touch action). Examine at the matching wall is the cache-safe fallback.
+    const proxyEvent = { player, objectId: ITHELL_SYMBOLS_BY_TILE[index].id,
+      location: ITHELL_SYMBOLS_BY_TILE[index], option: "Touch", handled: false };
+    if (touchIthellSymbol(proxyEvent)) {
+      event.handled = true;
+      player.sendMessage("You trace the glowing symbol on the wall and absorb its knowledge.");
+    }
+  }
+
+  function ensureIthellSymbolObjects() {
+    if (ithellSymbolsInstalled) return;
+    ithellSymbolsInstalled = true;
+    for (const symbol of ITHELL_SYMBOLS_BY_TILE) {
+      const location = new Location(symbol.x, symbol.y, symbol.z);
+      if (ObjectManager.objectsAt(location).some((object) =>
+        object.getId() === symbol.id && !object.getPrivateArea?.())) continue;
+      // The map export has none of the five quest locs. Add the cache-backed
+      // Touch locs at the official Wiki/Quest Helper positions; each remains
+      // gated by its own chapter-16 varbit and can only be absorbed once.
+      ObjectManager.register(new GameObject(symbol.id, location, 10, 0, null), true);
+    }
+  }
+
+  function giveMeilyrClue(player, event) {
+    if (currentChapter(player) !== 16) return;
+    const inventory = player.getInventory();
+    if (inventory.getAmount(ItemIdentifiers.CLUE_SCROLL_HARD_) === 0) {
+      if (inventory.getFreeSlots() < 1) {
+        if (event) event.handled = true;
+        player.sendMessage("You need an empty inventory slot before you can take the clue scroll.");
+        return false;
+      }
+      inventory.adds(ItemIdentifiers.CLUE_SCROLL_HARD_, 1);
+      if (event) event.box = { items: [ItemIdentifiers.CLUE_SCROLL_HARD_] };
+    }
+    player.setAttribute(MEILYR_CLUE, Math.max(1, Number(player.getAttribute(MEILYR_CLUE)) || 0));
+    sendIthellMeilyrVarbits(player);
+    return true;
+  }
+
+  function touchIthellSymbol(event) {
+    const player = event?.player;
+    if (!player || event.option !== "Touch" || quest.isComplete(player) || currentChapter(player) !== 16 ||
+      (Number(player.getAttribute(ITHELL_CLUE_STAGE)) || 0) < 1) return false;
+    const location = event.location ?? event.object?.getLocation?.();
+    const x = location?.x ?? location?.getX?.();
+    const y = location?.y ?? location?.getY?.();
+    const z = location?.z ?? event.sourceLocation?.z ?? location?.getZ?.();
+    const symbol = ITHELL_SYMBOLS_BY_TILE.find((entry) => entry.id === event.objectId && entry.x === x && entry.y === y && entry.z === z);
+    if (!symbol) return false;
+    event.handled = true;
+    const index = ITHELL_SYMBOLS_BY_TILE.indexOf(symbol);
+    const bit = 1 << index;
+    const mask = Number(player.getAttribute(ITHELL_SYMBOLS)) || 0;
+    if ((mask & bit) !== 0) {
+      player.sendMessage("You have already absorbed the knowledge from this symbol.");
+      return true;
+    }
+    const next = mask | bit;
+    player.setAttribute(ITHELL_SYMBOLS, next);
+    if (next === 31) {
+      player.setAttribute(ITHELL_CLUE_STAGE, 2);
+      startTranscript(api, player, 0, PAGE, "after-the-attack-finding-lady-ithell-touching-the-final-symbol");
+    } else {
+      startTranscript(api, player, 0, PAGE, "after-the-attack-finding-lady-ithell-touching-the-symbols");
+    }
+    sendIthellMeilyrVarbits(player);
+    return true;
+  }
+
+  function buildIthellStatue(event) {
+    const player = event?.player;
+    const location = event?.location;
+    const x = location?.x ?? location?.getX?.();
+    const y = location?.y ?? location?.getY?.();
+    const z = location?.z ?? location?.getZ?.();
+    if (!player || !["Build", "Construct"].includes(event.option) || currentChapter(player) !== 16 ||
+      (Number(player.getAttribute(ITHELL_CLUE_STAGE)) || 0) < 2 || !ITHELL_WELL_IDS.has(event.objectId) ||
+      x !== 2337 || ![3170, 3171].includes(y) || z !== 0) return false;
+    event.handled = true;
+    if (player.getAttribute(ITHELL_STATUE) === true) {
+      player.sendMessage("The statue is already complete.");
+      return true;
+    }
+    const inventory = player.getInventory();
+    if (inventory.getAmount(ItemIdentifiers.LIMESTONE_BRICK) < 8 ||
+      inventory.getAmount(ItemIdentifiers.SAW) < 1 || inventory.getAmount(ItemIdentifiers.HAMMER) < 1) {
+      player.sendMessage("You need a saw, a hammer, and eight limestone bricks to build Lady Ithell's statue.");
+      return true;
+    }
+    inventory.deleteNumber(ItemIdentifiers.LIMESTONE_BRICK, 8);
+    player.setAttribute(ITHELL_STATUE, true);
+    sendIthellMeilyrVarbits(player);
+    const area = player.getArea?.();
+    if (area instanceof LletyaStoryArea) area.process(player);
+    player.sendMessage("You build Lady Ithell's statue from the plans. Speak to Kelyn.");
+    return true;
+  }
+
+  function handleMeilyrDig(event) {
+    const player = event?.player;
+    if (!player || event.itemId !== ItemIdentifiers.SPADE || quest.isComplete(player) ||
+      currentChapter(player) !== 16 || player.getInventory().getAmount(ItemIdentifiers.CLUE_SCROLL_HARD_) === 0) return false;
+    const location = player.getLocation();
+    const x = location?.getX?.();
+    const y = location?.getY?.();
+    const step = Number(player.getAttribute(MEILYR_CLUE)) || 0;
+    const spot = MEILYR_DIG_SPOTS[step - 1];
+    if (!spot || x !== spot.x || y !== spot.y || location?.getZ?.() !== 0) return false;
+    event.handled = true;
+    player.performAnimation?.(new api.core.Animation(831));
+    const next = Math.min(4, step + 1);
+    player.setAttribute(MEILYR_CLUE, next);
+    sendIthellMeilyrVarbits(player);
+    player.sendMessage(spot.message);
+    return true;
+  }
+
+  function handleMeilyrSpin(event) {
+    const player = event?.player;
+    if (!player || event.sequence !== 2107 || currentChapter(player) !== 16 || (Number(player.getAttribute(MEILYR_CLUE)) || 0) < 4 ||
+      player.getInventory().getAmount(ItemIdentifiers.CLUE_SCROLL_HARD_) === 0) return;
+    const loc = player.getLocation();
+    if (Math.abs(loc.getX() - 2309) > 1 || Math.abs(loc.getY() - 3215) > 1 || loc.getZ() !== 0) return;
+    if (player.getEquipment().getItems().some(Boolean)) {
+      player.sendMessage("You need to remove all your equipment before following the final clue.");
+      return;
+    }
+    player.setAttribute(MEILYR_CLUE, 5);
+    sendIthellMeilyrVarbits(player);
+    ensureMeilyrAtPass(player);
+    player.sendMessage("You spin by the Underground Pass entrance and hear a voice answer the final clue.");
+    return true;
+  }
+
+  function ensureMeilyrAtPass(player) {
+    const npc = player.getAttribute(MEILYR_FFION_NPC);
+    if (npc?.isRegistered?.()) return npc;
+    const ffion = api.spawnNpc({ id: NpcIdentifiers.LADY_FFION_MEILYR, x: 2311, y: 3215, z: 0,
+      wanderRadius: 0, owner: player, ownerOnly: true });
+    if (ffion) player.setAttribute(MEILYR_FFION_NPC, ffion);
+    return ffion;
+  }
+
   function setChapter(player, chapter) {
     if (chapter >= 19) {
       // Stage 200 is the cache completion value; retain stage 190 through the
@@ -700,10 +1000,88 @@ module.exports = function registerSongOfTheElves(api) {
   }
   function claimArianwynAfterLibrary(event) {
     const player = event?.player;
-    if (!player || currentChapter(player) !== 13) return false;
+    if (!player) return false;
+    const chapter = currentChapter(player);
+    if (chapter === 15) {
+      event.handled = true;
+      if (player.getAttribute(LLETYA_TRAITOR_REVEALED) !== true) {
+        player.sendMessage("You need to find Eoin and Iona and learn why Lord Iorwerth has come to Lletya.");
+        return true;
+      }
+      if (player.getAttribute(LLETYA_ARIANWYN_CONFRONTED) === true) {
+        player.sendMessage("Arianwyn stands in your way. Prepare to fight.");
+        return startArianwynBattle(player);
+      }
+      return startTranscript(api, player, event.npcId, PAGE, "attack-on-lletya-confronting-the-traitor");
+    }
+    if (chapter !== 13) return false;
     event.handled = true;
     return startTranscript(api, player, event.npcId, PAGE,
       "reporting-back-after-the-revelations-the-curse-of-seren");
+  }
+
+  function searchLletyaChild(event) {
+    const player = event?.player;
+    const { objectId, location } = event ?? {};
+    if (!player || currentChapter(player) !== 15 || !location || event.option !== "Search") return false;
+    const children = { ...(player.getAttribute(LLETYA_CHILDREN) ?? {}) };
+    if (objectId === ObjectIdentifiers.TABLE_75 && location.x === 2340 && location.y === 3158 && location.z === 0) {
+      event.handled = true;
+      if (children.eoin) {
+        player.sendMessage("Eoin has already escaped from the table.");
+        return true;
+      }
+      if (startTranscript(api, player, NpcIdentifiers.EOIN_2, PAGE, "attack-on-lletya-a-village-on-fire-finding-eoin")) {
+        children.eoin = true;
+        player.setAttribute(LLETYA_CHILDREN, children);
+      }
+      return true;
+    }
+    const isIonaPot = [ObjectIdentifiers.COOKING_POTS, ObjectIdentifiers.COOKING_POTS_2].includes(objectId) &&
+      ((location.x === 2338 && location.y === 3157) || (location.x === 2339 && location.y === 3156)) && location.z === 1;
+    if (!isIonaPot) return false;
+    event.handled = true;
+    if (!children.eoin) {
+      player.sendMessage("You hear movement in the pots upstairs, but should search the table downstairs first.");
+      return true;
+    }
+    if (children.iona) {
+      player.sendMessage("Iona has already climbed out of the cooking pots.");
+      return true;
+    }
+    if (startTranscript(api, player, NpcIdentifiers.IONA_2, PAGE, "attack-on-lletya-a-village-on-fire-finding-iona")) {
+      children.iona = true;
+      player.setAttribute(LLETYA_CHILDREN, children);
+      player.sendMessage("Take the children back to Mawrth in the village square.");
+    }
+    return true;
+  }
+
+  function examineLletyaChild(event) {
+    const player = event?.player;
+    if (!player || currentChapter(player) !== 15) return;
+    const targets = [
+      { id: ObjectIdentifiers.TABLE_75, x: 2340, y: 3158, z: 0 },
+      { id: ObjectIdentifiers.COOKING_POTS_2, x: 2338, y: 3157, z: 1 },
+      { id: ObjectIdentifiers.COOKING_POTS, x: 2339, y: 3156, z: 1 },
+    ];
+    const location = player.getLocation();
+    const target = targets.find((tile) => tile.id === event.objectId &&
+      location.getZ() === tile.z && Math.max(Math.abs(location.getX() - tile.x), Math.abs(location.getY() - tile.y)) <= 1);
+    if (!target) return;
+    const object = api.core.MapObjects.get(target.id, new Location(target.x, target.y, target.z), player.getPrivateArea?.());
+    if (!object) return;
+    event.handled = true;
+    searchLletyaChild({
+      player, object, objectId: target.id, location: target, option: "Search", handled: false,
+    });
+  }
+
+  function handleLletyaConfrontationLine(event) {
+    if (!event?.player || currentChapter(event.player) !== 15 || event.text !== "So be it." ||
+      String(event.definition?.getName?.() ?? "").toLowerCase() !== "arianwyn") return;
+    event.player.setAttribute(LLETYA_ARIANWYN_CONFRONTED, true);
+    startArianwynBattle(event.player);
   }
 
   function onTalk(event) {
@@ -716,6 +1094,27 @@ module.exports = function registerSongOfTheElves(api) {
       return startTranscript(api, player, event.npcId, PAGE, "starting-out-talking-to-edmond");
     }
     if (quest.isComplete(player)) return false;
+    if (currentChapter(player) === 15 && npcName === "mawrth") {
+      const children = player.getAttribute(LLETYA_CHILDREN) ?? {};
+      if (!children.eoin || !children.iona) {
+        player.sendMessage("Mawrth begs you to search the burning house for Eoin and Iona.");
+        return true;
+      }
+      if (player.getAttribute(LLETYA_TRAITOR_REVEALED) === true) return false;
+      return startTranscript(api, player, NpcIdentifiers.LORD_IORWERTH_2, PAGE,
+        "attack-on-lletya-lord-iorwerth-arrives");
+    }
+    if (currentChapter(player) === 15 && npcName === "arianwyn") {
+      if (player.getAttribute(LLETYA_TRAITOR_REVEALED) !== true) {
+        player.sendMessage("You need to find Eoin and Iona and learn why Lord Iorwerth has come to Lletya.");
+        return true;
+      }
+      if (player.getAttribute(LLETYA_ARIANWYN_CONFRONTED) === true) {
+        player.sendMessage("Arianwyn stands in your way. Prepare to fight.");
+        return startArianwynBattle(player);
+      }
+      return startTranscript(api, player, event.npcId, PAGE, "attack-on-lletya-confronting-the-traitor");
+    }
     const camp = player.getArea?.() instanceof DwarvenCampArea ? player.getArea() : null;
     const campState = camp && campInstances.get(camp);
     if (npcName === "elena" && campState?.finished) {
@@ -901,7 +1300,22 @@ module.exports = function registerSongOfTheElves(api) {
         player.sendMessage("Ask Baxtorian for Lady Meilyr's clue scroll before following it.");
         return true;
       }
+      if ((Number(player.getAttribute(MEILYR_CLUE)) || 0) < 5) {
+        player.sendMessage("Follow the three marked locations, then spin by the Underground Pass entrance.");
+        return true;
+      }
       return startTranscript(api, player, event.npcId, PAGE, "after-the-attack-finding-lady-meilyr");
+    }
+    if (currentChapter(player) === 16 && npcName === "lady kelyn ithell") {
+      if (player.getAttribute(ITHELL_STATUE) !== true) {
+        player.sendMessage("Finish the statue using the five symbols' design before speaking to Kelyn.");
+        return true;
+      }
+      if (player.getAttribute(ITHELL_RECRUITED) === true) {
+        player.sendMessage("Lady Ithell is already on her way to the Underground Pass.");
+        return true;
+      }
+      return startTranscript(api, player, event.npcId, PAGE, "after-the-attack-finding-lady-ithell-her-greatest-work");
     }
     if (currentChapter(player) === 16 && npcName === "baxtorian") {
       const variant = player.getInventory().getAmount(ItemIdentifiers.CLUE_SCROLL_HARD_) > 0
@@ -1138,6 +1552,17 @@ module.exports = function registerSongOfTheElves(api) {
         syncCrwysTree(event.player);
       }
       if (event.option === "How do I find Lady Hefin?") event.player.setAttribute(HEFIN_CLUE_HEARD, true);
+    }
+    if (currentChapter(event.player) === 16 &&
+      String(event.definition?.getName?.() ?? "").toLowerCase() === "baxtorian") {
+      if (event.option === "What's Lady Ithell's clue?") {
+        event.player.setAttribute(ITHELL_CLUE_STAGE, Math.max(1, Number(event.player.getAttribute(ITHELL_CLUE_STAGE)) || 0));
+        sendIthellMeilyrVarbits(event.player);
+      } else if (event.option === "What's Lady Meilyr's clue?") {
+        // The message action gives the scroll, and this exact choice is a safe
+        // fallback for clients that don't forward the nested message action.
+        giveMeilyrClue(event.player);
+      }
     }
     if (event.option === "I'm ready." && currentChapter(event.player) === 18 &&
       String(event.definition?.getName?.() ?? "").toLowerCase() === "baxtorian") {
@@ -1766,6 +2191,16 @@ module.exports = function registerSongOfTheElves(api) {
   function handleQuestPlayerDeath(event) {
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
+    const aArea = player.getAttribute(LLETYA_BOSS);
+    const aState = aArea && arianwynInstances.get(aArea);
+    if (aState) {
+      api.removeNpc(aState.boss);
+      aState.finished = true;
+      arianwynInstances.delete(aArea);
+      aArea.leave(player, false);
+      player.setAttribute(LLETYA_BOSS, null);
+      player.sendMessage("Arianwyn is still waiting in Lletya. Recover and speak to him to continue the fight.");
+    }
     const camp = player.getAttribute(CAMP_AREA);
     const campState = camp && campInstances.get(camp);
     if (campState?.essyllt) {
@@ -1836,6 +2271,7 @@ module.exports = function registerSongOfTheElves(api) {
 
   function handleBattleDeath(event) {
     if (handleOrbCaveDeath(event)) return;
+    if (handleArianwynDeath(event)) return;
     if (handleFragmentDeath(event)) return;
     if (handleCampDeath(event)) return;
     const player = event?.killer;
@@ -1903,6 +2339,55 @@ module.exports = function registerSongOfTheElves(api) {
   }
 
   const FRAGMENT_AREA = "quest.song_of_the_elves.fragment-area";
+
+  function startArianwynBattle(player) {
+    const existing = player.getAttribute(LLETYA_BOSS);
+    if (existing && !existing.isDestroyed?.()) return true;
+    if (player.getAttribute(LLETYA_TRAITOR_REVEALED) !== true || currentChapter(player) !== 15) return false;
+    const area = new LletyaArianwynArea(player.getUsername?.());
+    const boss = api.spawnNpc({ id: NpcIdentifiers.ARIANWYN_2, x: 2354, y: 3172, z: 0,
+      wanderRadius: 0, owner: player, ownerOnly: true });
+    if (!boss) {
+      player.sendMessage("Arianwyn cannot be reached in the chaos. Speak to him again to try.");
+      return false;
+    }
+    boss.setMultiCombat?.(true);
+    boss.setScriptedMovement?.(true);
+    area.enter(player);
+    area.enter(boss);
+    player.setAttribute(LLETYA_BOSS, area);
+    player.moveTo(new Location(2351, 3172, 0));
+    arianwynInstances.set(area, {
+      player, boss, finished: false, lastCycle: -1, nextSpecialAt: World.getProcessCycle() + 8,
+      specialCount: 0, bomb: null,
+    });
+    boss.getCombat().attack(player);
+    player.sendMessage("Arianwyn attacks with a bow. Protect from Range blocks his normal arrows; avoid the orange arrow's marked tile.");
+    return true;
+  }
+
+  function finishArianwynEncounter(area, state) {
+    if (state.finished) return;
+    state.finished = true;
+    api.removeNpc(state.boss);
+    state.player.setAttribute(LLETYA_BOSS, null);
+    state.player.setAttribute(LLETYA_ARIANWYN_NPC, null);
+    area.leave(state.player, false);
+    state.player.moveTo(new Location(2353, 3172, 0));
+    arianwynInstances.delete(area);
+    // shortcut: the Wiki says the cutscene begins when Arianwyn is near death
+    // but gives no exact hitpoint threshold; 20% of his cached 300 HP starts it.
+    startTranscript(api, state.player, NpcIdentifiers.ISLWYN, PAGE, "after-the-attack-a-rebellion-divided");
+  }
+
+  function handleArianwynDeath(event) {
+    const npc = event?.npc;
+    const area = npc?.getArea?.();
+    const state = area && arianwynInstances.get(area);
+    if (!state || npc !== state.boss || event?.killer !== state.player) return false;
+    finishArianwynEncounter(area, state);
+    return true;
+  }
 
   function spawnFragmentAdds(area, ids, points) {
     const state = fragmentInstances.get(area);
@@ -2358,7 +2843,10 @@ module.exports = function registerSongOfTheElves(api) {
     },
   });
   api.onNpcDialogueVariant(selectVariant);
-  api.onPlayerLogin(({ player }) => syncCrwysTree(player));
+  api.onPlayerLogin(({ player }) => {
+    syncCrwysTree(player);
+    sendIthellMeilyrVarbits(player);
+  });
   api.onNpcDialogueCondition((event) => {
     if (!event?.player) return null;
     const answer = disguiseCondition(event);
@@ -2369,13 +2857,18 @@ module.exports = function registerSongOfTheElves(api) {
     return null;
   });
   api.onCustomEvent("npc-dialogue:hook", onStart);
+  api.onCustomEvent("npc-dialogue:line", handleLletyaConfrontationLine);
+  api.onCustomEvent("world:object-examine", examineLletyaChild);
+  api.onCustomEvent("world:object-examine", handleIthellSymbolExamine);
   api.onCustomEvent("world:object-examine", handleYsgawynTrackExamine);
   api.onCustomEvent("quest-song-of-the-elves:claim-arianwyn", claimArianwynAfterLibrary);
   api.onCustomEvent("npc-dialogue:action", onAction);
   api.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);
+  api.onCustomEvent("player:emote", handleMeilyrSpin);
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemOnObject("Explosive potion", "Hole", placeCampExplosive, { noted: false });
+  api.onItemAction("Spade", { Dig: handleMeilyrDig });
   api.onItemAction((event) => {
     handleCrystalSeedAction(event);
     useIorwerthCampTeleport(event);
@@ -2386,6 +2879,10 @@ module.exports = function registerSongOfTheElves(api) {
     api.onItemOnObject(name, "Pillar of Light", useLibraryCrystal, { noted: false });
   }
   api.onObjectInteraction(handleLibraryObject);
+  api.onObjectInteraction(touchIthellSymbol);
+  api.onObjectInteraction(buildIthellStatue);
+  api.onObjectInteraction("Table", { Search: searchLletyaChild });
+  api.onObjectInteraction("Cooking Pots", { Search: searchLletyaChild });
   api.onObjectInteraction(enterOrbSupplyCave);
   api.onObjectInteraction(searchOrbChest);
   api.onObjectInteraction("Floating Book", { Climb: crossLibraryFloatingBooks });
@@ -2411,6 +2908,10 @@ module.exports = function registerSongOfTheElves(api) {
   api.persistAttribute(LIBRARY_PILLAR_STATE);
   api.persistAttribute(RECRUITED_ELDERS);
   api.persistAttribute(MEILYR_CLUE);
+  api.persistAttribute(ITHELL_SYMBOLS);
+  api.persistAttribute(ITHELL_STATUE);
+  api.persistAttribute(ITHELL_CLUE_STAGE);
+  api.persistAttribute(ITHELL_RECRUITED);
   api.persistAttribute(CAMP_HOLES);
   api.persistAttribute(CAMP_EXPLOSIVES);
   api.persistAttribute(CAMP_DEFENSE);
@@ -2419,6 +2920,9 @@ module.exports = function registerSongOfTheElves(api) {
   api.persistAttribute(CAMP_ARRIVAL_STARTED);
   api.persistAttribute(TEMPLE_CUTSCENE_STARTED);
   api.persistAttribute(FRAGMENT_DEFEATED);
+  api.persistAttribute(LLETYA_CHILDREN);
+  api.persistAttribute(LLETYA_TRAITOR_REVEALED);
+  api.persistAttribute(LLETYA_ARIANWYN_CONFRONTED);
   for (const [, itemName] of PILLAR_ITEMS) {
     api.onItemOnObject(itemName, "Pillar of Light", placeFallsPillarItem, { noted: false });
     api.onItemOnObject(itemName, "Pillar", placeFallsPillarItem, { noted: false });
@@ -2435,7 +2939,10 @@ module.exports = function registerSongOfTheElves(api) {
   api.onObjectRoute(routeYsgawynLeafTrap);
   api.onCustomEvent("ladders:climb", claimCastleThroneStairs);
   api.onCustomEvent("quest:song-of-the-elves:claims-light-pillar", claimFallsPillarLocation);
-  api.registerArea(new LletyaStoryArea([new Boundary(2320, 2390, 3150, 3210, 0)]));
+  api.registerArea(new LletyaStoryArea([
+    new Boundary(2320, 2390, 3150, 3210, 0), new Boundary(2320, 2390, 3150, 3210, 1),
+  ]));
+  api.registerArea(new MeilyrPassArea([new Boundary(2298, 2320, 3202, 3222, 0)]));
   api.registerArea(new YsgawynClearingArea([new Boundary(2248, 2268, 3159, 3180, 0)]));
   api.registerArea(new HefinStoryArea([new Boundary(2270, 2308, 3087, 3117, 0)]));
   api.registerArea(new DwarvenCampAccessArea([new Boundary(2424, 2472, 6078, 6142, 0)]));
@@ -2445,7 +2952,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onNpcInteraction("Edmond", { "Talk-to": onTalk });
   api.onNpcInteraction("Elena", { "Talk-to": onTalk });
   api.onNpcInteraction("Knight of Ardougne", { "Talk-to": onTalk });
-  for (const name of ["King Lathas", "King Thoros", "Councillor Halgrive", "Arianwyn", "Baxtorian", "Ysgawyn", "Lord Ieuan Amlodd", "Lord Iorwerth", "General Hining", "Essyllt", "Lord Piquan Crwys", "Lady Carys Hefin", "Elf Hermit"]) {
+  for (const name of ["King Lathas", "King Thoros", "Councillor Halgrive", "Arianwyn", "Baxtorian", "Ysgawyn", "Mawrth", "Lord Ieuan Amlodd", "Lord Iorwerth", "General Hining", "Essyllt", "Lord Piquan Crwys", "Lady Carys Hefin", "Elf Hermit"]) {
     api.onNpcInteraction(name, { "Talk-to": onTalk });
   }
   api.onNpcInteraction(onCrwysTreeInteraction);

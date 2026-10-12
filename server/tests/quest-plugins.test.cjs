@@ -1189,6 +1189,19 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   handlers.custom.get('quest-song-of-the-elves:claim-arianwyn').at(-1)(handoff);
   assert.equal(handoff.handled, true, 'the completed Mourning’s End handler can hand the NPC to SOTE');
   assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-the-curse-of-seren');
+  quest.setStage(player, 160);
+  attributes.set('quest.song_of_the_elves.lletya-traitor-revealed', true);
+  const lletyaHandoff = { player, npcId: api.core.NpcIdentifiers.ARIANWYN_6, handled: false };
+  handlers.custom.get('quest-song-of-the-elves:claim-arianwyn').at(-1)(lletyaHandoff);
+  assert.equal(lletyaHandoff.handled, true, 'ME2 hands Arianwyn to SOTE during the Lletya attack');
+  assert.equal(started.at(-1)[3], 'attack-on-lletya-confronting-the-traitor');
+  handlers.custom.get('npc-dialogue:line').at(-1)({
+    player, text: 'So be it.', step: { player: 'So be it.' },
+    definition: { getName: () => 'Arianwyn' },
+  });
+  assert.equal(attributes.get('quest.song_of_the_elves.lletya-arianwyn-confronted'), true,
+    'the final player line starts the encounter even though this wiki step has no NPC speaker field');
+  quest.setStage(player, 140);
   handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'koxQh3' });
   assert.equal(attributes.get('quest.song_of_the_elves.revelations-meeting-started'), true);
   handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'J6osYV' });
@@ -1230,6 +1243,59 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   assert.equal(quest.getStage(player), 150, 'both clan leaders keep the quest in the orb chapter');
   assert.ok(persistedAttributes.includes('quest.song_of_the_elves.crwys-clue-heard'));
   assert.ok(persistedAttributes.includes('quest.song_of_the_elves.hefin-clue-heard'));
+});
+
+test('Song of the Elves keeps Arianwyn engaged so ranged hits are not erased by generic NPC regeneration', () => {
+  class TestPrivateArea {
+    enter(mobile) { mobile.area = this; }
+    leave(mobile) { mobile.area = null; }
+    isDestroyed() { return false; }
+  }
+  const { api, handlers } = mockApi();
+  api.core = { ...api.core, PrivateArea: TestPrivateArea, World: { getProcessCycle: () => 100 } };
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const started = [];
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const original = runtime.startTranscript;
+  runtime.startTranscript = (...args) => (started.push(args.slice(1)), true);
+  let engagementResets = 0;
+  const boss = {
+    hitpoints: 300,
+    getHitpoints() { return this.hitpoints; },
+    getMaxHitpoints() { return 300; },
+    setMultiCombat() {},
+    setScriptedMovement() {},
+    getCombat() {
+      return {
+        attack() {},
+        getLastAttack: () => ({ reset: () => engagementResets++ }),
+      };
+    },
+  };
+  api.spawnNpc = () => boss;
+  try { require('../plugins/quests/quests/SongOfTheElves.Quest')(api); }
+  finally { runtime.startTranscript = original; }
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map([['quest.song_of_the_elves.lletya-traitor-revealed', true]]);
+  const player = {
+    area: null,
+    getUsername: () => 'ArianwynEngagementTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => ({ getX: () => 2351, getY: () => 3172, getZ: () => 0 }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    moveTo() {},
+    sendMessage() {},
+  };
+  quest.setStage(player, 160);
+  handlers.custom.get('npc-dialogue:line').at(-1)({
+    player, text: 'So be it.', step: { player: 'So be it.' },
+    definition: { getName: () => 'Arianwyn' },
+  });
+  assert.equal(attributes.get('quest.song_of_the_elves.lletya-boss') instanceof TestPrivateArea, true);
+  assert.equal(started.length, 0, 'the final challenge line enters combat rather than leaving a queued dialogue over it');
+  attributes.get('quest.song_of_the_elves.lletya-boss').process(player);
+  assert.equal(engagementResets, 1, 'private-area ticks refresh the boss combat timer so real hit queues can damage it');
 });
 
 test('Song of the Elves tracks Ysgawyn clues in order through normal object examine packets', () => {
@@ -1297,6 +1363,56 @@ test('Song of the Elves tracks Ysgawyn clues in order through normal object exam
     wanderRadius: 0, owner: player, ownerOnly: true });
 });
 
+test('Song of the Elves rescue searches require the east table before Iona and preserve both rescues', () => {
+  const { api, handlers } = mockApi();
+  const started = [];
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const original = runtime.startTranscript;
+  runtime.startTranscript = (...args) => (started.push(args.slice(1)), true);
+  try { require('../plugins/quests/quests/SongOfTheElves.Quest')(api); }
+  finally { runtime.startTranscript = original; }
+  const quest = runtime.getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map();
+  let playerLocation = { x: 2340, y: 3158, z: 0 };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({}),
+    moveTo() {},
+    getLocation: () => ({ getX: () => playerLocation.x, getY: () => playerLocation.y, getZ: () => playerLocation.z }),
+    getPrivateArea: () => null,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+  };
+  quest.setStage(player, 150);
+  handlers.custom.get('npc-dialogue:action').at(-1)({
+    player, kind: 'message', stepId: 'XhOxpi', npcId: api.core.NpcIdentifiers.ARIANWYN_6,
+  });
+  assert.equal(quest.getStage(player), 160);
+  assert.equal(started.at(-1)[3], 'attack-on-lletya-a-village-on-fire');
+  const mapObjects = api.core.MapObjects;
+  const originalGet = mapObjects.get;
+  mapObjects.get = (id) => ({ getId: () => id });
+  const examine = (objectId) => {
+    const event = { player, objectId, handled: false };
+    for (const hook of handlers.custom.get('world:object-examine') ?? []) hook(event);
+    return event.handled;
+  };
+  playerLocation = { x: 2338, y: 3157, z: 1 };
+  assert.equal(examine(api.core.ObjectIdentifiers.COOKING_POTS_2), true);
+  assert.equal(attributes.get('quest.song_of_the_elves.lletya-children'), undefined,
+    'Iona cannot be rescued before finding Eoin');
+  playerLocation = { x: 2340, y: 3158, z: 0 };
+  assert.equal(examine(api.core.ObjectIdentifiers.TABLE_75), true);
+  assert.equal(attributes.get('quest.song_of_the_elves.lletya-children').eoin, true);
+  assert.equal(started.at(-1)[3], 'attack-on-lletya-a-village-on-fire-finding-eoin');
+  playerLocation = { x: 2338, y: 3157, z: 1 };
+  assert.equal(examine(api.core.ObjectIdentifiers.COOKING_POTS_2), true);
+  assert.equal(attributes.get('quest.song_of_the_elves.lletya-children').iona, true);
+  assert.equal(started.at(-1)[3], 'attack-on-lletya-a-village-on-fire-finding-iona');
+  mapObjects.get = originalGet;
+});
+
 test('Song of the Elves spawns Baxtorian in Lletya for the post-attack clan clues', () => {
   const { api } = mockApi();
   const areas = [];
@@ -1323,6 +1439,111 @@ test('Song of the Elves spawns Baxtorian in Lletya for the post-attack clan clue
     wanderRadius: 0, owner: player, ownerOnly: true });
 });
 
+test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clue digs and spin', () => {
+  const { api: base, handlers } = mockApi();
+  const custom = handlers.custom;
+  const areas = [];
+  const npcHooks = [];
+  const spawned = [];
+  const started = [];
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  runtime.startTranscript = (...args) => (started.push(args.slice(1)), true);
+  apiSetup();
+  function apiSetup() {
+    base.registerArea = (area) => areas.push(area);
+    base.spawnNpc = (definition) => {
+      spawned.push(definition);
+      return { isRegistered: () => true };
+    };
+    base.removeNpc = () => {};
+    base.onAnyNpcInteraction = (hook) => npcHooks.push(hook);
+    require('../plugins/quests/quests/SongOfTheElves.Quest')(base);
+  }
+  runtime.startTranscript = originalStartTranscript;
+
+  const quest = runtime.getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map([['quest.song_of_the_elves.recruited-elders', 7]]);
+  const inventory = new Map();
+  const varbits = new Map();
+  const location = { x: 2352, y: 3170, z: 0 };
+  const player = {
+    getUsername: () => 'SoteChapter16Test',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({
+      getAmount: (id) => inventory.get(id) ?? 0,
+      getFreeSlots: () => 28 - [...inventory.values()].filter((amount) => amount > 0).length,
+      adds: (id, amount) => inventory.set(id, (inventory.get(id) ?? 0) + amount),
+      deleteNumber: (id, amount) => inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - amount)),
+    }),
+    getPacketSender: () => new Proxy({}, { get: (_, key) => key === 'sendVarbit' ? (id, value) => varbits.set(id, value) : () => {} }),
+    getLocation: () => ({ getX: () => location.x, getY: () => location.y, getZ: () => location.z }),
+    getEquipment: () => ({ getItems: () => [] }),
+    getArea: () => areas[0],
+    isPlayer: () => true,
+    getAsPlayer: () => player,
+    moveTo() {}, sendMessage() {}, performAnimation() {},
+  };
+  quest.setStage(player, 170);
+
+  const choices = custom.get('npc-dialogue:choice');
+  choices.at(-1)({ player, option: "What's Lady Ithell's clue?", definition: { getName: () => 'Baxtorian' } });
+  assert.equal(varbits.get(9035), 1);
+  const examineSymbol = custom.get('world:object-examine')[1];
+  location.x = 2322; location.y = 3163; location.z = 0;
+  const examined = { player, objectId: 37305, handled: false };
+  examineSymbol(examined);
+  assert.equal(examined.handled, true, 'missing cache actions use the current-tile wall Examine fallback');
+  const remoteExamine = { player, objectId: 37306, handled: false };
+  examineSymbol(remoteExamine);
+  assert.equal(remoteExamine.handled, false, 'an Examine packet cannot claim a different symbol across Lletya');
+  for (const symbol of [
+    { id: 37307, x: 2349, y: 3161, z: 0 }, { id: 37306, x: 2340, y: 3181, z: 0 },
+    { id: 37304, x: 2334, y: 3183, z: 1 }, { id: 37303, x: 2351, y: 3172, z: 1 },
+  ]) {
+    const event = { player, objectId: symbol.id, location: symbol, option: 'Touch', handled: false };
+    for (const handler of handlers.objects) if (handler(event) === true) break;
+    assert.equal(event.handled, true);
+  }
+  assert.equal(attributes.get('quest.song_of_the_elves.ithell-clue-stage'), 2);
+  assert.equal(varbits.get(9035), 2);
+  inventory.set(base.core.ItemIdentifiers.LIMESTONE_BRICK, 8);
+  inventory.set(base.core.ItemIdentifiers.SAW, 1);
+  inventory.set(base.core.ItemIdentifiers.HAMMER, 1);
+  const statue = { player, objectId: 37309, location: { x: 2337, y: 3170, z: 0 }, option: 'Build', handled: false };
+  for (const handler of handlers.objects) if (handler(statue) === true) break;
+  assert.equal(attributes.get('quest.song_of_the_elves.ithell-statue'), true);
+  assert.equal(inventory.get(base.core.ItemIdentifiers.LIMESTONE_BRICK), 0);
+  attributes.set('quest.song_of_the_elves.ithell-clue-stage', 0);
+  areas[0].process(player);
+  attributes.set('quest.song_of_the_elves.ithell-clue-stage', 2);
+  assert.equal(spawned.at(-1).id, base.core.NpcIdentifiers.LADY_KELYN_ITHELL);
+
+  choices.at(-1)({ player, option: "What's Lady Meilyr's clue?", definition: { getName: () => 'Baxtorian' } });
+  assert.equal(inventory.get(base.core.ItemIdentifiers.CLUE_SCROLL_HARD_), 1);
+  const dig = handlers.itemAction.find((actions) => actions?.Dig)?.Dig;
+  assert.ok(dig);
+  for (const spot of [{ x: 2225, y: 3133 }, { x: 2203, y: 3061 }, { x: 2240, y: 3269 }]) {
+    location.x = spot.x; location.y = spot.y; location.z = 0;
+    const event = { player, itemId: base.core.ItemIdentifiers.SPADE, handled: false };
+    assert.equal(dig(event), true);
+    assert.equal(event.handled, true);
+  }
+  assert.equal(varbits.get(9036), 4);
+  location.x = 2309; location.y = 3215; location.z = 0;
+  custom.get('player:emote').at(-1)({ player, sequence: 2107 });
+  assert.equal(varbits.get(9036), 5);
+  assert.equal(spawned.at(-1).id, base.core.NpcIdentifiers.LADY_FFION_MEILYR);
+  const talk = npcHooks.at(-1)['Talk-to'];
+  assert.equal(talk({ player, npcId: base.core.NpcIdentifiers.LADY_FFION_MEILYR,
+    definition: { getName: () => 'Lady Ffion Meilyr' } }), true);
+  assert.equal(started.at(-1)[3], 'after-the-attack-finding-lady-meilyr');
+  custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'S3ME_F' });
+  assert.equal(inventory.get(base.core.ItemIdentifiers.CLUE_SCROLL_HARD_), 0);
+  assert.equal(quest.getStage(player), 180);
+});
+
 test('Song of the Elves library mirrors must follow the previous beam direction', () => {
   class TestPrivateArea {
     constructor() { this.objects = []; }
@@ -1333,7 +1554,7 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
         [2609, 6130, 0], [2609, 6116, 0], [2609, 6102, 0], [2623, 6102, 0], [2581, 6130, 0]]
         .some(([x, y, z]) => tile?.getX?.() === x && tile?.getY?.() === y && tile?.getZ?.() === z)
         ? [{ getId: () => tile.getX() === 2609 && tile.getY() === 6158
-          ? 35222 : api.core.ObjectIdentifiers.PILLAR_OF_LIGHT_41 }]
+          ? 35222 : base.core.ObjectIdentifiers.PILLAR_OF_LIGHT_41 }]
         : [];
     }
   }
