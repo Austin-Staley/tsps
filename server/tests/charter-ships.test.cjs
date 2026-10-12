@@ -108,7 +108,7 @@ test("the menu identifies the current port and pages through destinations within
   const player = createPlayer({ ring: ItemIdentifiers.RING_OF_CHAROS_A_ });
   const event = {
     player,
-    object: { getLocation: () => brimhaven.destination },
+    npc: { getLocation: () => brimhaven.destination },
   };
   assert.equal(CharterShips._test.openMenu(event), true);
   const labels = prompt.options.filter((option) => typeof option === "string");

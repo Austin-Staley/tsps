@@ -120,8 +120,8 @@ function sail(player, port, fare) {
 const DESTINATIONS_PER_PAGE = 3;
 
 function openMenu(event, page = 0) {
-  const { player, object } = event;
-  const from = currentPort(object);
+  const { player, object, npc } = event;
+  const from = currentPort(object ?? npc);
   const destinations = [...portsByName.values()].filter((port) => port.name !== from?.name);
   const pageCount = Math.max(1, Math.ceil(destinations.length / DESTINATIONS_PER_PAGE));
   const pageIndex = Math.max(0, Math.min(pageCount - 1, Math.trunc(Number(page) || 0)));
