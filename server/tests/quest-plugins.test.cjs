@@ -1893,6 +1893,7 @@ test('Desert Treasure II requires the four matching ancient combat spells to cha
 test('Desert Treasure II enters the cache Ancient Vault and requires the four statues plus plaque', () => {
   const interactions = [];
   const objectInteractions = [];
+  const logoutHooks = [];
   const { api: base } = mockApi();
   const chunks = [];
   class TestInstance {
@@ -1919,6 +1920,7 @@ test('Desert Treasure II enters the cache Ancient Vault and requires the four st
     get: (target, prop) => prop === 'core' ? core
       : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
         : prop === 'onObjectInteraction' ? (handler) => objectInteractions.push(handler)
+          : prop === 'onPlayerLogout' ? handler => logoutHooks.push(handler)
           : prop === 'emitCustomEvent' ? (_name, event) => { event.complete = true; }
             : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
   });
@@ -1930,9 +1932,12 @@ test('Desert Treasure II enters the cache Ancient Vault and requires the four st
     const quest = runtime.getRegisteredQuests().at(-1);
     const { ObjectIdentifiers: O } = core;
     const attrs = new Map();
+    let spellbook = core.MagicSpellbook.NORMAL;
     const player = {
       getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
       getUsername: () => 'vault-test',
+      getPrivateArea: () => attrs.get('desert-treasure-ii:ancient-vault'),
+      getSpellbook: () => spellbook,
       getSkillManager: () => ({ getMaxLevel: () => 99 }),
       getPacketSender: () => new Proxy({}, { get: () => () => {} }),
       moveTo(location) { this.location = location; },
@@ -1940,12 +1945,16 @@ test('Desert Treasure II enters the cache Ancient Vault and requires the four st
     };
     const outerDoor = { player, objectId: O.VAULT_DOOR_2, location: { x: 3511, y: 2970, z: 0 } };
     assert.equal(objectInteractions[0](outerDoor), true);
+    assert.equal(quest.getStage(player), 0, 'the normal spellbook cannot open the ancient vault');
+    assert.equal(queues.add.length, 0);
+    spellbook = core.MagicSpellbook.ANCIENT;
+    assert.equal(objectInteractions[0](outerDoor), true);
     assert.equal(quest.getStage(player), 1);
     const area = attrs.get('desert-treasure-ii:ancient-vault');
     assert.equal(area.width, 4);
     assert.equal(area.height, 4);
-    assert.equal(player.location.x, 8207);
-    assert.equal(player.location.y, 1606);
+    assert.equal(player.location.x, 8202);
+    assert.equal(player.location.y, 1615);
     assert.equal(queues.add[0].id, 12401, 'the room receives the cache initial Asgarnia Smith variant');
     assert.equal(chunks.filter(([plane, , , chunk]) => plane === 1 && chunk !== null).length, 16);
     const inspect = (id, x, y) => objectInteractions[0]({
@@ -1960,6 +1969,12 @@ test('Desert Treasure II enters the cache Ancient Vault and requires the four st
     inspect(O.PLAQUE_35, 3944, 9631);
     interactions.find((entry) => entry.name === 'Asgarnia Smith').options['Talk-to']({ player, npcId: 1 });
     assert.equal(quest.getStage(player), 2, 'only the four statues and plaque advance the vault step');
+    assert.equal(inspect(O.STEPS_23, 3925, 9630), true, 'the actual entrance steps let the player leave');
+    assert.deepEqual([player.location.x, player.location.y, player.location.z], [3510,2971,0]);
+    objectInteractions[0](outerDoor);
+    logoutHooks[0]({ player });
+    assert.equal(attrs.get('desert-treasure-ii:ancient-vault'), null);
+    assert.deepEqual([player.location.x, player.location.y, player.location.z], [3510,2971,0], 'logout saves a public return point instead of orphaned instance coordinates');
   } finally {
     runtime.startTranscript = startTranscript;
   }
@@ -2074,8 +2089,8 @@ test('Desert Treasure II plays the first-medallion ambush before re-entering the
       'the scene does not skip the Mysterious Figure dialogue');
     customEvents.find(({ name }) => name === 'npc-dialogue:action').handler({ player, stepId: 'NoRYcT' });
     assert.ok(attrs.get('desert-treasure-ii:ancient-vault'), 'the dialogue action resumes the vault scene');
-    assert.equal(player.location.x, 8207);
-    assert.equal(player.location.y, 1606);
+    assert.equal(player.location.x, 8202);
+    assert.equal(player.location.y, 1615);
   } finally {
     runtime.startTranscript = startTranscript;
   }
@@ -2269,7 +2284,7 @@ test('Desert Treasure II descends into the copied Elder Vault, chains all four w
     assert.equal(objects[0]({ player: p, objectId: 48890, option: 'Climb', location: area.tile(30, 11, 0) }), true,
       'the cache staircase returns the player to the upper Ancient Vault');
     assert.equal(attrs.get('desert-treasure-ii:final-room'), null);
-    assert.equal(p.location.x, 8207, 'the player is back in the private upper vault');
+    assert.equal(p.location.x, 8202, 'the player is back in the private upper vault');
   } finally {
     runtime.startTranscript = startTranscript;
   }
@@ -6098,4 +6113,61 @@ test('Dragon Slayer II resolves both Alec prerequisite transcript branches', asy
   } finally {
     runtime.startTranscript = oldStartTranscript;
   }
+});
+
+test('DT2 keeps internal stages separate from native progress and the cache completion threshold', async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
+  const attrs = new Map(), sent = [];
+  const player = { getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => sent.push([id, value]) }, { get: (target, key) => target[key] ?? (() => {}) }) };
+  for (const [stage, value] of [[0,0], [1,4], [2,10], [3,12], [4,18], [5,20], [6,24], [7,42], [8,54], [9,66], [10,76], [11,100], [12,118]]) {
+    quest.setStage(player, stage);
+    assert.equal(quest.getStage(player), stage);
+    assert.equal(sent.findLast(([id]) => id === 14862)[1], value);
+  }
+  assert.equal(quest.varbitValue(12, player), api.core.CacheDefinitions.getDbRow(2343).int(19));
+  attrs.set('quest.desert_treasure_ii.stage', 1);
+  attrs.set('desert-treasure-ii:smith-intro', true);
+  handlers.playerProcess[0]({ player });
+  assert.deepEqual(sent.at(-1), [14862,6]);
+  const count = sent.length;
+  handlers.playerProcess[0]({ player });
+  assert.equal(sent.length, count, 'unchanged progress is not sent every tick');
+  attrs.set('desert-treasure-ii:statues', 31);
+  handlers.playerProcess[0]({ player });
+  assert.deepEqual(sent.at(-1), [14862,8]);
+});
+
+test('DT2 ancient lamps offer only combat skills, require level 60, and consume once after 100,000 XP', () => {
+  const { api, handlers } = mockApi();
+  let reward;
+  api.emitCustomEvent = (name, event) => { if (name === 'xpreward:open') reward = event; };
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const { Skill, ItemIdentifiers: I } = api.core;
+  const item = { getId: () => I.ANCIENT_LAMP }, items = [item];
+  let level = 59, xp = 1000, blocked = false;
+  const player = { getAttribute: key => key === 'quest.desert_treasure_ii.stage' ? 12 : undefined,
+    getInventory: () => ({ get: slot => items[slot], deleteAtSlot: slot => items.splice(slot,1) }),
+    getSkillManager: () => ({ getMaxLevel: () => level, getExperience: () => xp, addExperience: (_skill, amount) => { if (!blocked) xp += amount; } }) };
+  const event = { player, itemId: I.ANCIENT_LAMP, item, slot: 0, option: 'Rub' };
+  assert.equal(handlers.itemAction[0](event), true);
+  assert.equal(reward.minLevel, 60);
+  assert.equal(reward.skills.length, 7);
+  assert.equal(reward.onConfirm(Skill.ATTACK, 'Attack'), null);
+  level = 60;
+  assert.equal(reward.onConfirm(Skill.AGILITY, 'Agility'), null);
+  blocked = true;
+  assert.equal(reward.onConfirm(Skill.ATTACK, 'Attack'), null);
+  assert.equal(items.length,1);
+  blocked = false;
+  assert.match(reward.onConfirm(Skill.ATTACK, 'Attack'), /100,000 Attack/);
+  assert.equal(xp,101000);
+  assert.equal(items.length,0);
+  assert.equal(reward.onConfirm(Skill.ATTACK, 'Attack'), null);
+  assert.equal(xp,101000);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
+  assert.equal(quest.xpRewards, undefined, 'the quest grants no extra fixed XP alongside its lamps');
 });

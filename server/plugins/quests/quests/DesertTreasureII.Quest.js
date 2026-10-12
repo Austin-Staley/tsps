@@ -1,9 +1,45 @@
 /** Desert Treasure II - The Fallen Empire. */
 module.exports = function registerDesertTreasureII(api) {
-  const { Skill, Item, ItemIdentifiers: I, NpcIdentifiers: N, ObjectIdentifiers: O } = api.core;
+  const { Skill, Item, MagicSpellbook, ItemIdentifiers: I, NpcIdentifiers: N, ObjectIdentifiers: O } = api.core;
   const { registerQuest, startTranscript } = require("../QuestRuntime");
   const PAGE = "Desert Treasure II - The Fallen Empire";
   const S = { STARTED: 1, VAULT: 2, DIG: 3, ROCKS: 4, GUARDIAN: 5, MACHINE: 6, VARDORVIS: 7, LEVIATHAN: 8, SUCELLUS: 9, WHISPERER: 10, FINALE: 11, COMPLETE: 12 };
+  // Cache quest dbrow 2343, column 19 completes at 118; QuestHelper records the intervening milestones.
+  function nativeProgress(stage, player) {
+    const attr = key => player?.getAttribute(key);
+    if (stage >= S.COMPLETE) return 118;
+    if (stage === S.FINALE) {
+      if (attr(FINAL_WIGHTS_COMPLETE)) return 112;
+      if (attr(FINAL_WIGHTS_STARTED)) return 102 + 2 * (Number(attr(FINAL_WIGHT_INDEX)) || 0);
+      return 100;
+    }
+    if (stage === S.WHISPERER) {
+      if (attr(FINAL_FIGURE_DEFEATED)) return 94;
+      if (attr(FINAL_FIGURE_STARTED)) return 92;
+      if (attr(FINAL_CELL_ACTIVE)) return attr(FINAL_CELL_OPEN) ? 90 : 88;
+      if (attr(LASSAR)?.medallion) return 86;
+      return 76;
+    }
+    if (stage === S.MACHINE) {
+      if (attr(BANIKAN_LEFT)) return 38;
+      if (attr(GOLEM_SOLVED)) return 36;
+      if (attr(CELLS_INSERTED)) return 32;
+      if (attr(GOLEM_INSPECTED)) return 28;
+      return 24;
+    }
+    if (stage === S.STARTED) {
+      if ((Number(attr("desert-treasure-ii:statues")) & 31) === 31) return 8;
+      return attr(ATTR_SMITH_INTRO) ? 6 : 4;
+    }
+    return ({ 0: 0, 2: 10, 3: 12, 4: 18, 5: 20, 7: 42, 8: 54, 9: 66 })[stage] ?? 0;
+  }
+  const nativeProgressSent = new WeakMap();
+  function syncNativeProgress(player) {
+    const value = nativeProgress(stage(player), player);
+    if (nativeProgressSent.get(player) === value) return;
+    nativeProgressSent.set(player, value);
+    player.getPacketSender().sendVarbit(14862, value);
+  }
   const IDS = [I.VARDORVIS_MEDALLION, I.PERSERIYAS_MEDALLION, I.SUCELLUS_MEDALLION, I.WHISPERERS_MEDALLION];
   const STATUE_ITEMS = [I.VARDORVIS_MEDALLION, I.WHISPERERS_MEDALLION, I.SUCELLUS_MEDALLION, I.PERSERIYAS_MEDALLION];
   const STATUES_PLACED = "desert-treasure-ii:medallions-placed";
@@ -1044,16 +1080,17 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function enterVault(p) {
+    // shortcut: arrival beside the cache entrance steps is collision-verified; calibrate the exact tile against a live OSRS entry capture.
     const current = p.getAttribute(ATTR_VAULT_AREA);
     if (current instanceof AncientVaultArea && !current.isDestroyed()) {
       current.enter(p);
-      p.moveTo(current.tile(15, 6, 1));
+      p.moveTo(current.tile(10, 15, 1));
       return current;
     }
     const area = new AncientVaultArea(p.getUsername?.());
     area.enter(p);
     p.setAttribute(ATTR_VAULT_AREA, area);
-    p.moveTo(area.tile(15, 6, 1));
+    p.moveTo(area.tile(10, 15, 1));
     const smith = api.core.NPC.create(ASGARNIA_SMITH_VAULT_INITIAL, area.tile(12, 15, 1));
     smith.setOwner?.(p);
     smith.setOwnerOnly?.(true);
@@ -2003,6 +2040,7 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function handleLogin({ player: p }) {
+    syncNativeProgress(p);
     if (stage(p) === S.WHISPERER) setLassar(p, p.getAttribute(LASSAR) ?? {});
     if (stage(p) === S.FINALE && p.getAttribute("desert-treasure-ii:final-cutscene-started")
       && !p.getAttribute(FINAL_WIGHTS_COMPLETE)) {
@@ -2109,7 +2147,7 @@ module.exports = function registerDesertTreasureII(api) {
     area.destroy();
     p.setAttribute(ATTR_VAULT_AREA, null);
     p.setAttribute(ATTR_VAULT_SMITH, null);
-    p.moveTo(new api.core.Location(3510, 2969, 0));
+    p.moveTo(new api.core.Location(3510, 2971, 0));
     return true;
   }
 
@@ -2120,7 +2158,7 @@ module.exports = function registerDesertTreasureII(api) {
     area.postLeave(p, false);
     area.destroy();
     p.setAttribute(ATTR_WAR_ROOM, null);
-    p.moveTo(new api.core.Location(3411, 9811, 0));
+    p.moveTo(new api.core.Location(3411, 9813, 0));
     return true;
   }
 
@@ -2251,6 +2289,8 @@ module.exports = function registerDesertTreasureII(api) {
 
   function handleLogout({ player: p }) {
     if (!p) return;
+    const current = p.getPrivateArea?.();
+    const returnToVaultEntrance = current && [p.getAttribute(ATTR_VAULT_AREA), p.getAttribute(FINAL_ROOM)].includes(current);
     for (const key of [ATTR_VAULT_AREA, FINAL_ROOM, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO, ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA, SUCELLUS_AREA]) {
       const area = p.getAttribute(key);
       if (area && !area.isDestroyed?.()) {
@@ -2260,6 +2300,7 @@ module.exports = function registerDesertTreasureII(api) {
       }
       p.setAttribute(key, null);
     }
+    if (returnToVaultEntrance) p.moveTo(new api.core.Location(3510, 2971, 0));
     p.setAttribute(SCAR_PATH_COMPLETE, false);
     p.setAttribute(SCAR_RIFT_LIVE, false);
     p.setAttribute(SCAR_GROWTH_LIVE, false);
@@ -2392,6 +2433,7 @@ module.exports = function registerDesertTreasureII(api) {
     sender.sendVarbit(15064, Math.max(0, Math.min(100, Number(state.sanity ?? (state.entered ? 100 : 0)) || 0)));
   }
   function handleLassarProcess({ player: p }) {
+    if (p && stage(p) > 0) syncNativeProgress(p);
     if (!p || p.isPlayerBot?.() === true || stage(p) !== S.WHISPERER) return;
     const lassarState = p.getAttribute(LASSAR) ?? {};
     if (!spawned.get(p)?.whisperer && lassarState.whispererStarted && !lassarState.whispererDefeated) {
@@ -2649,6 +2691,27 @@ module.exports = function registerDesertTreasureII(api) {
   function handleItemAction(event) {
     const { player: p, itemId, option } = event;
     const action = String(option || "").toLowerCase();
+    if (itemId === I.ANCIENT_LAMP && action === "rub") {
+      if (!quest.isComplete(p)) return false;
+      const { item, slot } = event;
+      const inventory = p.getInventory();
+      if (!item || inventory.get(slot) !== item) return true;
+      const skills = [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE, Skill.HITPOINTS, Skill.RANGED, Skill.MAGIC, Skill.PRAYER];
+      api.emitCustomEvent("xpreward:open", {
+        player: p, minLevel: 60, skills,
+        onConfirm: (skill, name) => {
+          if (inventory.get(slot) !== item || !skills.includes(skill)) return null;
+          const manager = p.getSkillManager();
+          if (manager.getMaxLevel(skill) < 60) return null;
+          const before = manager.getExperience(skill);
+          manager.addExperience(skill, 100000, false);
+          if (manager.getExperience(skill) === before) return null;
+          inventory.deleteAtSlot(slot, 1);
+          return `You have been awarded 100,000 ${name} XP!`;
+        },
+      });
+      return true;
+    }
     if (stage(p) === S.WHISPERER && [I.BLACKSTONE_FRAGMENT, I.BLACKSTONE_FRAGMENT_2, I.BLACKSTONE_FRAGMENT_3].includes(itemId)
       && (action === "activate" || action === "use") && has(p, itemId)) {
       const state = p.getAttribute(LASSAR) ?? {};
@@ -3368,6 +3431,10 @@ module.exports = function registerDesertTreasureII(api) {
     if (s === 0 && [O.VAULT_DOOR_2, O.VAULT_DOOR_3].includes(objectId)) {
       // This is the cache entrance north-east of Nardah (loc 46743, 3511,2970).
       if (Math.abs(location.x - 3511) > 4 || Math.abs(location.y - 2970) > 4) return false;
+      if (p.getSpellbook() !== MagicSpellbook.ANCIENT) {
+        p.sendMessage("You need to be on the Ancient Magicks spellbook to investigate the vault.");
+        return true;
+      }
       const skills = p.getSkillManager();
       const requirements = [["Firemaking", Skill.FIREMAKING, 75], ["Magic", Skill.MAGIC, 75], ["Thieving", Skill.THIEVING, 70], ["Herblore", Skill.HERBLORE, 62], ["Runecraft", Skill.RUNECRAFTING, 60], ["Construction", Skill.CONSTRUCTION, 60]];
       const missing = requirements.find(([, skill, level]) => skills.getMaxLevel(skill) < level);
@@ -3410,7 +3477,8 @@ module.exports = function registerDesertTreasureII(api) {
       else p.sendMessage("You inspect the plaque. It describes the fallen empire and its four generals.");
       return true;
     }
-    if (vaultTile && [O.VAULT_DOOR, O.VAULT_DOOR_2, O.VAULT_DOOR_3].includes(objectId)) {
+    if (vaultTile && ([O.VAULT_DOOR, O.VAULT_DOOR_2, O.VAULT_DOOR_3].includes(objectId)
+      || (objectId === O.STEPS_23 && vaultTile.x === 3925 && vaultTile.y === 9630))) {
       leaveVault(p);
       return true;
     }
@@ -5158,8 +5226,7 @@ module.exports = function registerDesertTreasureII(api) {
 
   quest = registerQuest(api, {
     key: "desert_treasure_ii", name: "Desert Treasure II - The Fallen Empire", varpId: 3786, varbitId: 14862,
-    startedValue: S.STARTED, completionValue: S.COMPLETE, questPoints: 5,
-    xpRewards: [{ skillId: Skill.AGILITY.getIndex(), amount: 50000, label: "Agility" }, { skillId: Skill.HERBLORE.getIndex(), amount: 50000, label: "Herblore" }, { skillId: Skill.THIEVING.getIndex(), amount: 50000, label: "Thieving" }, { skillId: Skill.THIEVING.getIndex(), amount: 100000, label: "Chosen skill" }],
+    startedValue: S.STARTED, completionValue: S.COMPLETE, questPoints: 5, varbitValue: nativeProgress,
     otherRewards: ["Ring of shadows", "Three ancient lamps", "Access to Vardorvis, the Leviathan, Duke Sucellus and the Whisperer"], buildJournal,
   });
   ["desert-treasure-ii:statues", "desert-treasure-ii:cells-collected", CELLS_INSERTED, CELL_POSITIONS,
