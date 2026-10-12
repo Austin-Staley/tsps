@@ -60,7 +60,7 @@ module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play
  function fortress({player,objectId,object}){
   if(!active(player)||objectId!==api.core.ObjectIdentifiers.STURDY_DOOR)return false;
   if(!disguise(player)&&!dressed(player,[DISGUISE_HELM,DISGUISE_BODY])){player.sendMessage('You need a guard disguise to enter the fortress.');return true;}
-  const l=object.getLocation();player.moveTo(new Location(l.getX(),player.getLocation().getY()<l.getY()?l.getY()+1:l.getY()-1,l.getZ()));return true;
+  const l=object.getLocation();player.moveTo(new Location(l.getX(),player.getLocation().getY()<=l.getY()?l.getY()+1:l.getY()-1,l.getZ()));return true;
  }
  function inspect(e){if(!active(e.player)||id(e)!==TILE)return false;e.player.sendMessage('The green carved tile bears the symbol of an orb.');return true;}
  function charge(e){
