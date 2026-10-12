@@ -29,10 +29,12 @@ function buildHarness() {
   MapObjects.get = (id, location) =>
     world.get(tileKey(id, location.getX(), location.getY(), location.getZ())) ?? null;
   Sounds.sendSound = (...args) => sounds.push(args);
-  CacheDefinitions.getObject = (id) => (id === 2394
+  CacheDefinitions.getObject = (id) => id === 3747
+    ? { name: 'Door', actions: ['Open'], models: [[14928], [14929]] }
+    : (id === 2394
     ? { name: 'Gate', actions: ['Open'], models: [[1298]] }
     : { name: 'Gate' });
-  CacheDefinitions.getCounts = () => ({ npcs: 0, items: 0, objects: 2395 });
+  CacheDefinitions.getCounts = () => ({ npcs: 0, items: 0, objects: 3749 });
 
   const handlers = new Map();
   const objectManager = {
@@ -700,4 +702,19 @@ test('the Gnome Ball pitch gate 2394 rotates in place and closes back onto its w
   } finally {
     h.restore();
   }
+});
+
+
+test("Harold's bedroom door rotates without needing a separate open cache loc", () => {
+  const h = buildHarness();
+  try {
+    assert.deepEqual(h.click(3747, 2906, 3543, 3, 'Open', 'Door'), [
+      ['register', 3747, 2906, 3542, 0],
+      ['deregister', 3747, 2906, 3543, 3],
+    ]);
+    assert.deepEqual(h.click(3747, 2906, 3542, 0, 'Open', 'Door'), [
+      ['register', 3747, 2906, 3543, 3],
+      ['deregister', 3747, 2906, 3542, 0],
+    ]);
+  } finally { h.restore(); }
 });
