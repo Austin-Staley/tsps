@@ -1,5 +1,5 @@
 import { ClientState } from "../../../game/ClientState";
-import { hintArrow, hintArrowTileOffset, isHintArrowBlinkOn } from "../../../game/HintArrow";
+import { getActiveHintArrow, hintArrowTileOffset, isHintArrowBlinkOn } from "../../../game/HintArrow";
 import type { InputManager } from "../../../game/InputManager";
 import { profiler } from "../../../render/PerformanceProfiler";
 import { packWorldMapCoord } from "../../../rs/map/WorldMapArea";
@@ -2194,6 +2194,17 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                         });
                     }
                 }
+                const questTarget = worldMapRenderHost?.questHelperPlugin?.getTarget();
+                if (questTarget) {
+                    const displayPos = currentArea.position(questTarget.plane, questTarget.x, questTarget.y);
+                    if (displayPos) {
+                        const dot = projectDisplayToScreen(displayPos.x + 0.5, displayPos.y + 0.5);
+                        if (dot.x >= x && dot.y >= y && dot.x <= x + width && dot.y <= y + height) {
+                            const size = 7 * renderScale;
+                            glr.drawRect(dot.x - size / 2, dot.y - size / 2, size, size, [0, 1, 1, 1]);
+                        }
+                    }
+                }
                 const playerDots: number[][] = worldMapRenderHost?.worldMapPlayers ?? [];
                 const dotSize = Math.max(2, 3 * renderScale);
                 for (const [dotX, dotY, dotPlane, isBot] of playerDots) {
@@ -2726,6 +2737,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                         );
                     }
 
+                    const hintArrow = getActiveHintArrow();
                     // Hint arrow marker (client.drawHintArrowOnMinimap -> worldToMinimap).
                     if (hintArrow.type !== 0 && isHintArrowBlinkOn()) {
                         let targetFineX = -1;

@@ -8,6 +8,7 @@ import { HdPlugin } from "../../../game/plugins/hd/HdPlugin";
 import { InteractHighlightConfig } from "../../../game/plugins/interacthighlight/InteractHighlightConfig";
 import { InteractHighlightPlugin } from "../../../game/plugins/interacthighlight/InteractHighlightPlugin";
 import { MenuSwapperPlugin } from "../../../game/plugins/menuswapper/MenuSwapperPlugin";
+import { QuestHelperPlugin } from "../../../game/plugins/questhelper/QuestHelperPlugin";
 import { NotesConfig } from "../../../game/plugins/notes/NotesPlugin";
 import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
 import { RememberLoginPlugin } from "../../../game/plugins/rememberlogin/RememberLoginPlugin";
@@ -37,6 +38,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     TileMarkersPlugin,
     MenuSwapperPlugin,
     NotesPlugin,
+    QuestHelperPlugin,
     RememberLoginPlugin,
     SplitPrivateChatPlugin,
     AnimationSmoothingPlugin,

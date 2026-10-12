@@ -13,6 +13,7 @@ import "./GameContainer.css";
 import { GameRenderer } from "./GameRenderer";
 import { OsrsClient } from "./OsrsClient";
 import { SplitPrivateChatOverlay } from "./plugins/splitprivatechat/SplitPrivateChatOverlay";
+import { QuestHelperOverlay } from "./plugins/questhelper/QuestHelperPanel";
 import { VengeanceTimerOverlay } from "./plugins/vengeancetimer/VengeanceTimerOverlay";
 import { FreezeTimerOverlay, PoisonTimerOverlay } from "./plugins/statustimer/StatusTimerOverlay";
 import { WeatherOverlay } from "./plugins/weather/WeatherOverlay";
@@ -368,6 +369,7 @@ export function GameContainer({ osrsClient }: OsrsContainerProps): JSX.Element {
                     <div className="game-canvas-stage">
                         {loadingBarOverlay}
 
+                        {!hideUi && <QuestHelperOverlay plugin={osrsClient.questHelperPlugin} />}
                         {!hideUi && <VengeanceTimerOverlay osrsClient={osrsClient} />}
 
                         {!hideUi && <PoisonTimerOverlay osrsClient={osrsClient} />}

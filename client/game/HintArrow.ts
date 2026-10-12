@@ -24,6 +24,13 @@ export interface HintArrowState {
 
 export const hintArrow: HintArrowState = { type: 0, npcId: 0, playerId: 0, x: 0, y: 0, height: 0, position: 2, plane: 0 };
 
+/** Client quest hints yield to server hints (tutorials, minigames and actor hints). */
+export const questHintArrow: HintArrowState = { ...hintArrow };
+
+export function getActiveHintArrow(): HintArrowState {
+    return hintArrow.type !== 0 ? hintArrow : questHintArrow;
+}
+
 export function setHintArrowNpc(npcId: number): void {
     hintArrow.type = 1;
     hintArrow.npcId = npcId | 0;

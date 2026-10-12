@@ -285,6 +285,7 @@ import { GameFrame317Plugin } from "./plugins/gameframe317/GameFrame317Plugin";
 import { HdPlugin } from "./plugins/hd/HdPlugin";
 import { GroundItemsPlugin } from "./plugins/grounditems/GroundItemsPlugin";
 import { InteractHighlightPlugin } from "./plugins/interacthighlight/InteractHighlightPlugin";
+import { QuestHelperPlugin } from "./plugins/questhelper/QuestHelperPlugin";
 import { NotesPlugin } from "./plugins/notes/NotesPlugin";
 import { RememberLoginPlugin } from "./plugins/rememberlogin/RememberLoginPlugin";
 import { TileMarkersPlugin } from "./plugins/tilemarkers/TileMarkersPlugin";
@@ -575,6 +576,7 @@ export class OsrsClient {
     readonly groundItemsPlugin: GroundItemsPlugin;
     readonly interactHighlightPlugin: InteractHighlightPlugin;
     readonly notesPlugin: NotesPlugin;
+    readonly questHelperPlugin: QuestHelperPlugin;
     readonly rememberLoginPlugin: RememberLoginPlugin;
     readonly tileMarkersPlugin: TileMarkersPlugin;
     readonly vengeanceTimerPlugin: VengeanceTimerPlugin;
@@ -1187,6 +1189,7 @@ export class OsrsClient {
         this.groundItemsPlugin = pluginManager.getPlugin(GroundItemsPlugin)!;
         this.interactHighlightPlugin = pluginManager.getPlugin(InteractHighlightPlugin)!;
         this.notesPlugin = pluginManager.getPlugin(NotesPlugin)!;
+        this.questHelperPlugin = pluginManager.getPlugin(QuestHelperPlugin)!;
         this.rememberLoginPlugin = pluginManager.getPlugin(RememberLoginPlugin)!;
         this.tileMarkersPlugin = pluginManager.getPlugin(TileMarkersPlugin)!;
         this.vengeanceTimerPlugin = pluginManager.getPlugin(VengeanceTimerPlugin)!;

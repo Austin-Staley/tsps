@@ -1,0 +1,28 @@
+.quest-helper-panel { color: #ddd; font-size: 13px; }
+.quest-helper-panel h2 { font-size: 18px; }
+.quest-helper-panel h3 { font-size: 14px; }
+.quest-helper-panel input, .quest-helper-panel select, .quest-helper-panel button {
+    color: inherit; background: #292929; border: 1px solid #555; border-radius: 3px;
+    padding: 8px; box-sizing: border-box; font: inherit;
+}
+.quest-helper-panel input, .quest-helper-panel select { width: 100%; margin-bottom: 8px; }
+.quest-helper-panel button { cursor: pointer; }
+.quest-helper-panel button:hover { background: #414141; }
+.quest-helper-panel button:focus-visible { outline: 2px solid cyan; outline-offset: 2px; }
+.quest-helper-list { padding: 0; list-style: none; }
+.quest-helper-list button { width: 100%; text-align: left; margin-bottom: 4px; }
+.quest-helper-list small { display: block; color: #aaa; margin-top: 4px; }
+.quest-helper-current { border-left: 3px solid cyan; padding: 8px; background: #252e30; }
+.quest-helper-met { color: #8edb93; }
+.quest-helper-missing { color: #ffb28e; }
+.quest-helper-note { color: #d8bc83; }
+.quest-helper-done { text-decoration: line-through; color: #999; }
+.quest-helper-panel details { margin-top: 12px; }
+.quest-helper-panel summary { cursor: pointer; }
+.quest-helper-overlay {
+    position: absolute; top: 74px; left: 8px; max-width: min(300px, 65%);
+    padding: 8px 10px; background: rgba(35, 35, 35, .85); border-left: 3px solid cyan;
+    color: #eee; font: 13px/1.4 sans-serif; pointer-events: none; z-index: 10;
+}
+.quest-helper-overlay strong { color: cyan; }
+.quest-helper-overlay p { margin: 5px 0 0; }

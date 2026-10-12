@@ -8,7 +8,7 @@ import {
     VertexBuffer,
 } from "picogl";
 
-import { hintArrow, hintArrowTileOffset, isHintArrowBlinkOn } from "../../game/HintArrow";
+import { getActiveHintArrow, hintArrowTileOffset, isHintArrowBlinkOn } from "../../game/HintArrow";
 import { IndexType } from "../../rs/cache/IndexType";
 import type { CacheSystem } from "../../rs/cache/CacheSystem";
 import { IndexedSprite } from "../../rs/sprite/IndexedSprite";
@@ -101,6 +101,7 @@ export class TutorialHintOverlay implements Overlay {
     draw(phase: RenderPhase): void {
         if (phase !== RenderPhase.ToFrameTexture) return;
         if (!this.drawCall || !this.positions || !this.uvs || !this.array) return;
+        const hintArrow = getActiveHintArrow();
         // Actor hints (type 3) are overhead head icons, drawn by OverheadPrayerOverlay.
         if (hintArrow.type !== 1 && hintArrow.type !== 2) return;
 
