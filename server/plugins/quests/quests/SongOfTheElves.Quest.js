@@ -1103,7 +1103,10 @@ module.exports = function registerSongOfTheElves(api) {
     // The cache models the two ends of the top-floor handhold as separate
     // climbable objects. Crossing the books is an Agility shortcut, not a
     // ground collision bypass: land on the matching far-end cache tile.
-    const endpoints = new Map([["2640,6101", [2648, 6101]], ["2648,6101", [2640, 6101]]]);
+    const endpoints = new Map([
+      ["2598,6173", [2606, 6173]], ["2606,6173", [2598, 6173]],
+      ["2640,6101", [2648, 6101]], ["2648,6101", [2640, 6101]],
+    ]);
     const destination = endpoints.get(`${location.x},${location.y}`);
     if (!destination) return false;
     event.handled = true;

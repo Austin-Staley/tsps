@@ -320,7 +320,10 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
     get(target, prop) {
       if (prop in target) return target[prop];
       if (prop === 'onItemOnObject') return (itemName, objectName, handler) => itemObjects.set(itemName, handler);
-      if (prop === 'onObjectInteraction') return (...args) => { if (typeof args[0] === 'function') objectInteractions.push(args[0]); };
+      if (prop === 'onObjectInteraction') return (...args) => {
+        if (typeof args[0] === 'function') objectInteractions.push(args[0]);
+        else if (args[0] === 'Floating Book') objectInteractions.push(args[1].Climb);
+      };
       if (prop === 'onCustomEvent') return (name, handler) => custom.set(name, handler);
       if (prop === 'sendMultiChatboxPrompt') return (player, prompt, ...choices) => prompts.push(choices);
       if (prop === 'spawnNpc') return () => null;
@@ -355,12 +358,17 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
     getEquipment: () => ({ get: () => null }),
     getSkillManager: () => ({ getMaxLevel: () => 99 }),
     sendMessage: (message) => messages.push(message),
-    moveTo() {},
+    moveTo(location) { player.destination = [location.getX(), location.getY(), location.getZ()]; },
   };
   quest.setStage(player, 130);
   custom.get('npc-dialogue:choice')({
     player, option: 'Yes', definition: { getName: () => 'Lord Ieuan Amlodd' },
   });
+  const climbFloatingBooks = objectInteractions.at(-1);
+  const bookCrossing = { player, objectId: api.core.ObjectIdentifiers.FLOATING_BOOK, location: { x: 2598, y: 6173, z: 2 }, handled: false };
+  assert.equal(climbFloatingBooks(bookCrossing), true);
+  assert.equal(bookCrossing.handled, true);
+  assert.deepEqual(player.destination, [2606, 6173, 2]);
 
   const useObject = objectInteractions.find((handler) => handler({
     player, objectId: api.core.ObjectIdentifiers.SEAL_OF_THE_FORGOTTEN,
