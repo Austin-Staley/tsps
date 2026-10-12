@@ -167,8 +167,20 @@ class FriendsChatManager {
             const relations = player.getRelations();
             this.setChatFilters(player, relations.getPublicChatMode(), 1, relations.getTradeChatMode());
         }
-        recipient.getSession().sendClientPacket(encodeChatMessage("private_in", text, player.getUsername(), "", player.getIndex(), 3));
-        player.getSession().sendClientPacket(encodeChatMessage("private_out", text, recipient.getUsername(), "", recipient.getIndex(), 6));
+        this.deliverPrivateMessage(player, recipient, text);
+        return { recipient, text };
+    }
+    /**
+     * Shows `text` to both sides of a private message. The recipient's own privacy settings
+     * still apply; whether the sender may message them (friends list) is the caller's check.
+     */
+    static deliverPrivateMessage(sender, recipient, rawText) {
+        const text = this.cleanMessage(rawText, 160);
+        if (!text || !recipient?.getRelations?.().canReceivePrivateMessageFrom(sender))
+            return false;
+        recipient.getSession().sendClientPacket(encodeChatMessage("private_in", text, sender.getUsername(), "", sender.getIndex(), 3));
+        sender.getSession().sendClientPacket(encodeChatMessage("private_out", text, recipient.getUsername(), "", recipient.getIndex(), 6));
+        return true;
     }
     static setChatFilters(player, publicMode, privateMode, tradeMode) {
         player.getRelations().setChatModes(publicMode, privateMode, tradeMode);
