@@ -1010,12 +1010,16 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                     const mid = (ne as any).mapId?.[ecsId] ?? 0;
                     const mapX = (mid >> 8) & 0xff;
                     const mapY = mid & 0xff;
-                    const worldX = mapX * 64 + localX / 128.0;
-                    const worldZ = mapY * 64 + localY / 128.0;
+                    const baseWorldX = mapX * 64 + localX / 128.0;
+                    const baseWorldZ = mapY * 64 + localY / 128.0;
                     const plane = ne.getLevel(ecsId) | 0;
+                    // Same anchor as hitsplats and health bars: the posed model's
+                    // height, not the static bounds (see OverlayHost for details).
+                    const npcTypeId = ne.getNpcTypeId(ecsId) | 0;
+                    const anchor = host.resolveNpcOverlayAnchor(ecsId, baseWorldX, baseWorldZ, npcTypeId);
                     const overhead = host.acquireOverheadTextEntry();
-                    overhead.worldX = worldX;
-                    overhead.worldZ = worldZ;
+                    overhead.worldX = anchor.worldX;
+                    overhead.worldZ = anchor.worldZ;
                     overhead.plane = plane;
                     overhead.text = text;
                     overhead.color = host.mapOverheadColor(0);
@@ -1028,11 +1032,9 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                     overhead.duration = duration;
                     overhead.remaining = remaining;
                     overhead.life = host.computeOverheadAlpha(overhead);
-                    const npcTypeId = ne.getNpcTypeId(ecsId) | 0;
-                    const npcHeight = npcTypeId > 0 ? host.getNpcDefaultHeight(npcTypeId) : 200;
                     overhead.footprintRadius = host.getNpcFootprintRadius(npcTypeId);
                     overhead.groupKey = host.makeActorGroupKey(true, ne.getServerId(ecsId) | 0);
-                    overhead.heightOffsetTiles = npcHeight / 128.0;
+                    overhead.heightOffsetTiles = anchor.logicalHeightTiles + 15 / 128;
                     overheadTexts.push(overhead);
                 });
             } catch {}
@@ -1126,12 +1128,16 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                     const mid = (ne as any).mapId?.[ecsId] ?? 0;
                     const npcTypeId = ne.getNpcTypeId(ecsId) | 0;
                     const entry = host.acquireOverheadPrayerEntry();
-                    entry.worldX = ((mid >> 8) & 0xff) * 64 + (ne.getX(ecsId) | 0) / 128.0;
-                    entry.worldZ = (mid & 0xff) * 64 + (ne.getY(ecsId) | 0) / 128.0;
+                    const baseWorldX = ((mid >> 8) & 0xff) * 64 + (ne.getX(ecsId) | 0) / 128.0;
+                    const baseWorldZ = (mid & 0xff) * 64 + (ne.getY(ecsId) | 0) / 128.0;
+                    // Posed-model anchor like the health bar, not the raw model bounds.
+                    const anchor = host.resolveNpcOverlayAnchor(ecsId, baseWorldX, baseWorldZ, npcTypeId);
+                    entry.worldX = anchor.worldX;
+                    entry.worldZ = anchor.worldZ;
                     entry.plane = ne.getLevel(ecsId) | 0;
                     entry.footprintRadius = host.getNpcFootprintRadius(npcTypeId);
                     entry.groupKey = host.makeActorGroupKey(true, ne.getServerId(ecsId) | 0);
-                    entry.heightOffsetTiles = host.getNpcDefaultHeight(npcTypeId) / 128.0;
+                    entry.heightOffsetTiles = anchor.logicalHeightTiles + 15 / 128;
                     entry.headIconPk = -1;
                     entry.headIconPrayer = -1;
                     entry.npcHeadIcons = npcHeadIcons;

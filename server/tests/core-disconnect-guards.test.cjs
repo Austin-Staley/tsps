@@ -332,7 +332,7 @@ test('Casting a utility spell cannot immediately select its newly opened choice 
  const connection=new net.ClientConnection(stubChannel());
  connection.resolveSpellName=()=> 'Astral Contact';
  connection.player={getAttribute(){},getInterfaceId:()=>-1,getStatus:()=>PlayerStatus.NONE,
-  getQuickPrayers:()=>({handleWidgetAction:()=>false}),getDialogueManager:()=>({isActive:()=>active,handleOption:()=>selected++})};
+  getQuickPrayers:()=>({handleWidgetAction:()=>false}),getDialogueManager:()=>({isActive:()=>active,getCurrent:()=>active?{}:null,handleOption:()=>selected++})};
  try {
   SpellTeleports.handleSelf=()=>false;LunarSpells.handleSelf=()=>{active=true;return true;};
   await connection.dispatch([{type:'widget_action',widgetId:(218<<16)|113,groupId:218,childId:113,buttonNum:1,itemId:9109}]);

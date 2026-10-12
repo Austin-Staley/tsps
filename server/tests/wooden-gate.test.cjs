@@ -31,7 +31,10 @@ function buildHarness({ cacheObjects } = {}) {
   MapObjects.get = (id, location) =>
     world.get(tileKey(id, location.getX(), location.getY(), location.getZ())) ?? null;
   Sounds.sendSound = (...args) => sounds.push(args);
-  CacheDefinitions.getObject = (id) => cacheObjects?.get(id) ?? (id === 2394
+  CacheDefinitions.getObject = (id) => cacheObjects?.get(id) ?? (id === 3743
+    ? { name: 'Large door', actions: ['Open'], models: [[14930], [14931]] }
+    : id === 3747 ? { name: 'Door', actions: ['Open'], models: [[14928], [14929]] }
+    : id === 2394
     ? { name: 'Gate', actions: ['Open'], models: [[1298]] }
     : id === 2606 ? { name: 'Wall', actions: ['Open'], models: [[633]] }
     : id === 8738 || id === 8739
@@ -815,4 +818,34 @@ test('Sophanem north gate opens and closes both nameless gate leaves', () => {
   } finally {
     h.restore();
   }
+});
+
+
+test("Harold's bedroom door rotates without needing a separate open cache loc", () => {
+  const h = buildHarness();
+  try {
+    assert.deepEqual(h.click(3747, 2906, 3543, 3, 'Open', 'Door'), [
+      ['register', 3747, 2906, 3542, 0],
+      ['deregister', 3747, 2906, 3543, 3],
+    ]);
+    assert.deepEqual(h.click(3747, 2906, 3542, 0, 'Open', 'Door'), [
+      ['register', 3747, 2906, 3543, 3],
+      ['deregister', 3747, 2906, 3542, 0],
+    ]);
+  } finally { h.restore(); }
+});
+
+
+test('Death Plateau equipment door swings open after the quest unlocks it', () => {
+  const h = buildHarness();
+  try {
+    assert.deepEqual(h.click(3743, 2894, 3566, 1, 'Open', 'Large door'), [
+      ['register', 3743, 2894, 3567, 2],
+      ['deregister', 3743, 2894, 3566, 1],
+    ]);
+    assert.deepEqual(h.click(3743, 2894, 3567, 2, 'Open', 'Large door'), [
+      ['register', 3743, 2894, 3566, 1],
+      ['deregister', 3743, 2894, 3567, 2],
+    ]);
+  } finally { h.restore(); }
 });
