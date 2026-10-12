@@ -120,7 +120,7 @@ void (async () => {
     const groundItems = new GroundItemStore();
     const tileHighlightManager = new TileHighlightManager();
     const varps = new Map<number, number>(), varbits = new Map<number, number>();
-    let loggedOut = false, scriptRuns = 0, loads = 0, dialogText = "", completedThroughSharedState = false;
+    let loggedOut = true, scriptRuns = 0, loads = 0, dialogText = "", completedThroughSharedState = false;
     let playerX = 3200, playerY = 3200, playerPlane = 0;
     const pending = new Map<string, (guide: ImportedGuide) => void>();
     const vm = { context: { loadScript: () => ({}) }, intStack: [1], run: (_script: unknown, [questId]: number[]) => {
@@ -131,7 +131,7 @@ void (async () => {
     } };
     const client = { inventory, equipment, bankInventory, groundItems, tileHighlightManager, cs2Vm: vm,
         varManager: { getVarp: (id: number) => varps.get(id) ?? 0, getVarbit: (id: number) => varbits.get(id) ?? 0 },
-        isOnLoginScreen: () => loggedOut, controlledPlayerServerId: 1,
+        isLoggedIn: () => !loggedOut, controlledPlayerServerId: 1,
         playerEcs: { getIndexForServerId: () => 0, getX: () => playerX << 7, getY: () => playerY << 7, getLevel: () => playerPlane },
         widgetManager: { interfaceParents: new Map([[1, { group: InterfaceID.CHAT_RIGHT }]]),
             getWidgetsForGroup: () => [{ uid: 1, text: dialogText }], isEffectivelyHidden: () => false },
@@ -143,6 +143,9 @@ void (async () => {
     assert.equal(loads, 0, "Disabled plugin does not load guide data");
     plugin.setEnabledState(true);
     await plugin.start();
+    assert.equal(plugin.getState().quests.length, 0);
+    loggedOut = false;
+    plugin.onGameTick();
     assert.equal(plugin.getState().quests.length, 213);
     const cookLoad = plugin.selectQuest("cooks_assistant");
     pending.get("cooks_assistant")!(loadGuide("cooks_assistant")); await cookLoad;
@@ -212,7 +215,8 @@ void (async () => {
     assert.equal(plugin.getState().error, "Invalid quest guide data.");
     loggedOut = true; plugin.onGameStateChanged(new GameStateChanged(GameState.LOGIN_SCREEN));
     assert.equal(plugin.getState().quests.length, 0);
-    loggedOut = false; plugin.onGameStateChanged(new GameStateChanged(GameState.LOGGED_IN));
+    loggedOut = false; plugin.onGameTick();
+    assert.equal(plugin.getState().quests.length, 213, "Recover the catalog after login without depending on a login event");
     const selected = plugin.selectQuest("waterfall_quest"); pending.get("waterfall_quest")!(loadGuide("waterfall_quest")); await selected;
     assert.ok(plugin.getTarget());
     plugin.setEnabledState(false); await plugin.stop();

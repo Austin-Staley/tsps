@@ -67,7 +67,6 @@ export class QuestHelperPlugin extends Plugin {
     private signature = "";
     private targetCoords = "";
     private selectionVersion = 0;
-    private loggedIn = false;
 
     constructor(
         private readonly client: OsrsClient = inject<OsrsClient>(CLIENT_TOKEN),
@@ -79,7 +78,6 @@ export class QuestHelperPlugin extends Plugin {
     ) { super(); }
 
     protected async startUp(): Promise<void> {
-        this.loggedIn = !this.client.isOnLoginScreen();
         this.nav = createQuestHelperNavigationButton(this);
         this.toolbar.addNavigation(this.nav);
         this.refresh();
@@ -104,7 +102,7 @@ export class QuestHelperPlugin extends Plugin {
     }
 
     async selectQuest(key: string): Promise<void> {
-        if (!this.isEnabled() || !this.isStarted() || !this.loggedIn || this.client.isOnLoginScreen() || !catalog.some((quest) => quest.key === key)) return;
+        if (!this.isEnabled() || !this.isStarted() || !this.client.isLoggedIn() || !catalog.some((quest) => quest.key === key)) return;
         const version = ++this.selectionVersion;
         this.dialogs.clear();
         this.state = { ...this.state, selectedKey: key, quest: undefined, guide: undefined, manualStep: undefined, error: undefined, step: undefined };
@@ -146,12 +144,10 @@ export class QuestHelperPlugin extends Plugin {
     }
     onGameStateChanged(event: GameStateChanged): void {
         if ([GameState.LOGIN_SCREEN, GameState.CONNECTION_LOST, GameState.HOPPING].includes(event.getGameState())) {
-            this.loggedIn = false;
             this.clearSelection();
             this.state = { quests: [], counts: [], showOverlay: this.config.showOverlay() };
             this.refresh();
         } else if (event.getGameState() === GameState.LOGGED_IN) {
-            this.loggedIn = true;
             this.refresh();
         }
     }
@@ -217,7 +213,7 @@ export class QuestHelperPlugin extends Plugin {
     }
 
     private refresh(): void {
-        const active = this.isEnabled() && this.isStarted() && this.loggedIn && !this.client.isOnLoginScreen();
+        const active = this.isEnabled() && this.isStarted() && this.client.isLoggedIn();
         const quests = active ? catalog.map((quest) => ({ key: quest.key, name: quest.name, status: this.status(quest) })) : [];
         const selected = catalog.find((quest) => quest.key === this.state.selectedKey);
         const quest = quests.find((quest) => quest.key === this.state.selectedKey);
