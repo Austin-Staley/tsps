@@ -302,6 +302,54 @@ test('Dragon Slayer II unlocks the northern Ungael exit from Vorkath completion 
   assert.deepEqual(values.at(-1), [6108, 0], 'unfinished players see the blocked cache morph');
 });
 
+test('Dragon Slayer II restores the Karamja plinth when its key piece was lost', () => {
+  const objectHandlers = [];
+  const objects = [];
+  const { api: base } = mockApi();
+  const objectManager = { register() {}, deregister() {} };
+  const core = Object.assign({}, base.core, {
+    ObjectManager: objectManager,
+    TemplatedInstanceArea: class {
+      constructor(width, height) { this.width = width; this.height = height; this.objects = []; }
+      setChunk() {}
+      enter() {}
+      tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z }; }
+      getBaseX() { return 8192; }
+      getBaseY() { return 1600; }
+      add(object) { this.objects.push(object); objects.push(object); }
+      remove(object) { this.objects = this.objects.filter((entry) => entry !== object); }
+      getName() { return 'Karamja test'; }
+    },
+  });
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'spawnNpc' ? () => null
+        : prop === 'onObjectFirstClick' ? (...args) => {
+          const handler = args.find((arg) => typeof arg === 'function');
+          if (handler) objectHandlers.push(handler);
+        }
+          : target[prop],
+  });
+  require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  const attrs = new Map([
+    ['quest.dragon_slayer_ii.stage', 6],
+    ['dragon-slayer-ii:key-parts', 1],
+  ]);
+  const player = {
+    getAttribute: (key) => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getUsername: () => 'Karamja recovery test',
+    getInventory: () => ({ getAmount: () => 0 }),
+    moveTo() {},
+    sendMessage() {},
+  };
+  const enter = objectHandlers.find((handler) => handler.toString().includes('KARAMJA_START'));
+  assert.equal(typeof enter, 'function');
+  enter({ player, objectId: core.ObjectIdentifiers.CAVE_63, location: { x: 2943, y: 2894, z: 0 } });
+  assert.equal(attrs.get('dragon-slayer-ii:key-parts'), 0, 'a stale possession bit cannot strand the player');
+  assert.equal(objects.at(-1).getId(), core.ObjectIdentifiers.PLINTH_17, 'the piece becomes available again');
+});
+
 test('Dragon Slayer II laboratory copies every cache chunk containing its six notes', () => {
   const objectHandlers = [];
   const chunks = [];

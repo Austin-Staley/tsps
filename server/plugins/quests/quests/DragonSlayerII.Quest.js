@@ -117,7 +117,12 @@ module.exports = function registerDragonSlayerII(api) {
           }
         }
         this.plinth = null;
-        this.installPlinth(owner.getAttribute(ATTR_PARTS) & 1 ? O.PLINTH_18 : O.PLINTH_17);
+        let parts = Number(owner.getAttribute(ATTR_PARTS)) || 0;
+        if ((parts & 1) && !has(owner, KEY_PARTS[0])) {
+          parts &= ~1;
+          owner.setAttribute(ATTR_PARTS, parts);
+        }
+        this.installPlinth(parts & 1 ? O.PLINTH_18 : O.PLINTH_17);
       }
       getName() { return "Karamjan Temple (Dragon Slayer II)"; }
       isMulti() { return true; }
