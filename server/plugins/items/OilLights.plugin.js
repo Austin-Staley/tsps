@@ -1,5 +1,6 @@
 /** Wiki oil lamps and sapphire lanterns: assemble, distil fuel, light and extinguish. */
 const OIL_ATTRIBUTE='oil-lights:distilled-oil';
+const RIMMINGTON_STILL_LOCATION='2937,3210,0',RIMMINGTON_OIL_VARBIT=281;
 let core;
 let families,filled,lit,empty;
 function refresh(p){p.getInventory().refreshItems();}
@@ -12,14 +13,15 @@ function light(e){
  item.setId(f.lit);refresh(p);p.performAnimation(new core.Animation(733));
 }
 function extinguish({player,item}){const f=lit.get(item.getId());if(!f)return false;item.setId(f.filled);refresh(player);return true;}
+function syncOil({player}){player.getPacketSender().sendVarbit(RIMMINGTON_OIL_VARBIT,player.getAttribute(OIL_ATTRIBUTE)===RIMMINGTON_STILL_LOCATION?1:0);}
 function fuel(e){
- const p=e.player,I=core.ItemIdentifiers,name=e.object?.getDefinition()?.getName();if(!['Lamp oil still','Lamp still'].includes(name))return;
+ const p=e.player,I=core.ItemIdentifiers,name=core.ObjectDefinition.forPlayer(e.objectId??e.object.getId(),p)?.getName();if(!['Lamp oil still','Lamp still'].includes(name))return;
  const f=empty.get(e.itemId);if(e.itemId!==I.SWAMP_TAR&&!f)return;e.handled=true;
  const l=e.object.getLocation(),still=l.getX()+','+l.getY()+','+l.getZ();
- if(e.itemId===I.SWAMP_TAR){if(p.getAttribute(OIL_ATTRIBUTE)===still){p.sendMessage('The still already contains lamp oil.');return;}if(!p.getInventory().contains(I.SWAMP_TAR))return;p.getInventory().deleteNumber(I.SWAMP_TAR,1);p.setAttribute(OIL_ATTRIBUTE,still);p.sendMessage('You distil the swamp tar into lamp oil.');return;}
+ if(e.itemId===I.SWAMP_TAR){if(p.getAttribute(OIL_ATTRIBUTE)===still){p.sendMessage('The still already contains lamp oil.');return;}if(!p.getInventory().contains(I.SWAMP_TAR))return;p.getInventory().deleteNumber(I.SWAMP_TAR,1);p.setAttribute(OIL_ATTRIBUTE,still);syncOil({player:p});p.sendMessage('You distil the swamp tar into lamp oil.');return;}
  if(p.getAttribute(OIL_ATTRIBUTE)!==still){p.sendMessage('Use swamp tar on the still to make lamp oil first.');return;}
  const item=p.getInventory().getItems().find(i=>i?.getId()===e.itemId);if(!item)return;
- item.setId(f.filled);p.setAttribute(OIL_ATTRIBUTE,0);refresh(p);p.sendMessage('You fill the lantern with lamp oil.');
+ item.setId(f.filled);p.setAttribute(OIL_ATTRIBUTE,0);syncOil({player:p});refresh(p);p.sendMessage('You fill the lantern with lamp oil.');
 }
 function lens(e){
  const p=e.player,I=core.ItemIdentifiers,ids=[e.usedItemId,e.usedWithItemId],sapphire=ids.includes(I.SAPPHIRE),glass=ids.includes(I.LANTERN_LENS);
@@ -35,7 +37,7 @@ function attach(api){
  core=api.core;const I=core.ItemIdentifiers;
  families=[{empty:I.EMPTY_OIL_LAMP,filled:I.OIL_LAMP,lit:I.OIL_LAMP_3,level:12},{empty:I.EMPTY_OIL_LANTERN,filled:I.OIL_LANTERN,lit:I.OIL_LANTERN_3,level:26},{empty:I.BULLSEYE_LANTERN_EMPTY_,filled:I.BULLSEYE_LANTERN,lit:I.BULLSEYE_LANTERN_3,level:49},{empty:I.SAPPHIRE_LANTERN,filled:I.SAPPHIRE_LANTERN_2,lit:I.SAPPHIRE_LANTERN_3,level:49}];
  empty=new Map(families.map(f=>[f.empty,f]));filled=new Map(families.map(f=>[f.filled,f]));lit=new Map(families.map(f=>[f.lit,f]));
- api.persistAttribute(OIL_ATTRIBUTE);
+ api.persistAttribute(OIL_ATTRIBUTE);api.onPlayerLogin(syncOil);
  api.onItemOnItem(light,{noted:false});api.onItemOnItem(lens,{noted:false});api.onItemOnObject(fuel,{noted:false});
  api.onItemAction('Oil lamp',{Extinguish:extinguish});api.onItemAction('Oil lantern',{Extinguish:extinguish});api.onItemAction('Bullseye lantern',{Extinguish:extinguish});api.onItemAction('Sapphire lantern',{Extinguish:extinguish});
 }
