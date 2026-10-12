@@ -1636,8 +1636,6 @@ module.exports = function registerTheBloodMoonRises(api) {
     } else if (name === "shelves" && prepObjectAt(event, 3159, 7824, 1) && !hasItem(player, PREP.bowl)) {
       changed = inventory.adds(PREP.bowl, 1);
       variant = "hallowed-preparations-searching-the-shelves";
-    } else if (name === "sink" && prepObjectAt(event, 3157, 7825, 1) && inventory.contains(PREP.bowl)) {
-      changed = replaceItems(player, [PREP.bowl], [PREP.bowl], [[PREP.bowlWater, 1]]);
     } else if (name === "cupboard" && prepObjectAt(event, 3155, 7832, 1)) {
       if (inventory.contains(PREP.incompleteStew) && !hasItem(player, PREP.rawMeat)) {
         changed = inventory.adds(PREP.rawMeat, 1);
@@ -1682,6 +1680,20 @@ module.exports = function registerTheBloodMoonRises(api) {
     event.handled = true;
     if (variant) prepAction(player, variant);
     else player.sendMessage(`You ${option === "search" ? "search" : "use"} the ${name}.`);
+  }
+
+  function handlePrepItemOnObject(event) {
+    const player = event?.player;
+    if (!player || stage(player) !== STAGE.PREPARATIONS) return;
+    let result;
+    if (event.objectId === ObjectIdentifiers.SINK_40 && prepObjectAt(event, 3156, 7824, 1) && event.itemId === PREP.bowl) result = PREP.bowlWater;
+    if (event.objectId === ObjectIdentifiers.RANGE_24 && prepObjectAt(event, 3160, 7826, 1)) {
+      if (event.itemId === PREP.rawMeat) result = PREP.cookedMeat;
+      if (event.itemId === PREP.uncookedStew) result = PREP.cookedStew;
+    }
+    if (!result || !replaceItems(player, [event.itemId], [event.itemId], [[result, 1]])) return;
+    event.handled = true;
+    player.sendMessage(result === PREP.bowlWater ? 'You fill the bowl with water.' : 'You cook the ingredient for Safalaan’s stew.');
   }
 
   function handlePrepItemOnItem(event) {
@@ -1791,6 +1803,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction(handleGalleryChest);
   api.onObjectInteraction(handleBloodHuntObjects);
   api.onObjectRoute(routeBloodHuntObjects);
+  api.onItemOnObject(handlePrepItemOnObject, { noted: false });
   api.onItemOnObject(handleBasinPotion, { noted: false });
   api.onItemOnObject(handleMountShield, { noted: false });
   api.onItemOnObject(handleClockHandOnClock, { noted: false });

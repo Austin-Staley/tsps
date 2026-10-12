@@ -592,7 +592,8 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
 
   interact('Amitire plant', 2982, 7679, 0);
   interact('Shelves', 3159, 7824);
-  interact('Sink', 3157, 7825);
+  const itemOnObject = handlers.itemOnObject.find(handler => handler.name === 'handlePrepItemOnObject');
+  itemOnObject({ player, itemId: ids.BOWL, objectId: 62097, location: { x: 3156, y: 7824, z: 1 } });
   interact('Cupboard', 3155, 7832);
   use(ids.BOWL_OF_WATER, ids.POTATO);
   interact('Cupboard', 3155, 7832);
