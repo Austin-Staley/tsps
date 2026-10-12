@@ -317,7 +317,7 @@ class TektonRoom extends Raid.Room {
     if ((tick - 1) % SPARK.EVERY === 0) {
       for (const player of targets) for (let i = 0; i < SPARK.PER_RAIDER; i++) this.spark(player);
     }
-    if (tick % TIMING.HEAL === 0) this.tekton.heal(anvilHeal(this.tekton.getMaxHitpoints()));
+    if (tick % TIMING.HEAL === 0) Shared.healSplat(this.tekton, anvilHeal(this.tekton.getMaxHitpoints()));
     if (tick >= this.anvilFor) {
       this.enraged = true;
       this.repaired = true;

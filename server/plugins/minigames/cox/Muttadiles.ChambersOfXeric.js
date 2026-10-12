@@ -16,14 +16,26 @@
  * - The meat tree has 5 x the party's total Woodcutting (at least 100). A chop succeeds 20% at
  *   Woodcutting 1 to 78% at 99 and takes off (level / 2) -7 to +3; the axe doesn't matter.
  *   Cutting it gives points.
- * Not on the Wiki (to check against a capture): the tiles; the tendrils (29767) appear and the muttadiles rise when someone
- *   comes within 6 tiles, and passing them again costs 22.5% of your hitpoints; the submerged
- *   one fires every 5 ticks (projectile 393, gfx 157, base 25); emerging anim 7423, 5 tiles
- *   out, form 7563 after 4 ticks, attackable at 5; attacks: small melee anim 7420 (sound 2548),
- *   ranged 7421 with projectile 1291 (base 30); large ranged 7421 / 1291 (base 30), magic 7422
- *   / 393 (base 25, its path splashing those beside it), stomp 7424; Ranged and Magic prayers
- *   let a third through; eating: 2 bites (3 under 40%) of 10% every 3 ticks; chopping every 4
- *   ticks, 45 XP and 2 points a success; the felled tree 30013; the exit crystal.
+ * rsprox captures (recordings 820, 843, 3282, 3285, 3389):
+ * - The tendrils, the meat tree and both muttadiles are there when the room is loaded.
+ *   Passing the tendrils is a two-tile walk with sound 3728.
+ * - Submerged, the large one fires every 6 ticks at raiders it picks: projectile 393 (from 61
+ *   client cycles, angle 5, progress 128, heights 250 to 146; sound 162, range 15).
+ * - The small one bites (7420) up close and spits (7421) at range: projectile 1291 (from 5
+ *   cycles, angle 5, progress 115, heights 100 to 146; sound 385, range 10), every 4 ticks.
+ * - The small one dies (7426) and goes 3 ticks later; that tick the large one emerges (7423),
+ *   crawling out a tile a tick for 5 ticks, turns to 7563 the tick after and attacks 2 later:
+ *   the same spit (progress 250, from height 185), its magic 7422 with projectile 393 (sound
+ *   162, range 10), a slam 7424 up close (sound 163, range 6, 30 cycles' delay) and bites.
+ * - Below half health they go to the meat tree and eat: 3 bites on 3 ticks running (7420),
+ *   each healing 15% of their hitpoints; at most three meals.
+ * - Chopping the tree: "You swing your axe...", a roll every 5 ticks, "You hack away some of
+ *   the meat." and a hitsplat on the tree when it takes.
+ * Not on the Wiki (to check against a capture): the tiles; the room waking when someone comes
+ *   within 6 tiles of the tendrils; passing them again costing 22.5% of your hitpoints; the
+ *   attacks' bases (submerged and large magic 25, spits 30); Ranged and Magic prayers letting
+ *   a third through; the large one's magic splashing those beside its path; 45 XP and 2
+ *   points a chop; the felled tree 30013; the exit crystal.
  */
 
 const Shared = require("./CoxShared");
@@ -33,9 +45,18 @@ const Monsters = require("./CoxMonsters");
 const NPC = { SUBMERGED: 7561, SMALL: 7562, LARGE: 7563, TREE: 7564 };
 const OBJECT = { TENDRILS: 29767, ROCKS: 30012, FELLED_TREE: 30013 };
 const BASE = { SUBMERGED_MAGIC: 25, RANGED: 30, MAGIC: 25 };
-const ANIM = { EMERGE: 7423, BITE: 7420, RANGED: 7421, MAGIC: 7422, STOMP: 7424, SMALL_MELEE: 7420 };
-const PROJECTILE = { RANGED: 1291, MAGIC: 393 };
-const EAT = { TIMES: 3, GIVE_UP: 25, BITE_TICKS: 3, SHARE: 0.1 };
+const ANIM = { EMERGE: 7423, BITE: 7420, RANGED: 7421, MAGIC: 7422, STOMP: 7424 };
+const SOUND = { SPIT: 385, MAGIC: 162, SLAM: 163, TENDRILS: 3728 };
+/** Captured flights: start and the arc; the end grows with the distance. */
+const FLIGHT = {
+  SPIT: { id: 1291, start: 5, angle: 5, progress: 115, startHeight: 25, endHeight: 36 },
+  LARGE_SPIT: { id: 1291, start: 5, angle: 5, progress: 250, startHeight: 46, endHeight: 36 },
+  MAGIC: { id: 393, start: 61, angle: 5, progress: 128, startHeight: 62, endHeight: 36 },
+};
+const EAT = { TIMES: 3, GIVE_UP: 25, BITES: 3, SHARE: 0.15 };
+const SUBMERGED_EVERY = 6;
+const EMERGE = { STEPS: 5, ATTACK_AFTER: 2 };
+const CHOP_EVERY = 5;
 
 /** Cache tiles by version. */
 const TREE_TILES = [{ x: 3269, y: 5320 }, { x: 3301, y: 5320 }, { x: 3350, y: 5317 }];
@@ -77,6 +98,17 @@ class MuttadileRoom extends Raid.Room {
     }
     this.blockExit(CRYSTAL_TILES);
     this.tendrilTiles = TENDRIL_TILES[variant].map((spot) => this.tile(spot.x, spot.y));
+    this.tendrils = this.tendrilTiles.map((tile) => {
+      const tendril = new GameObject(OBJECT.TENDRILS, tile, 10, 0, this.map);
+      ObjectManager.register(tendril, true);
+      return tendril;
+    });
+    this.small = this.spawnNpc(NPC.SMALL, this.tile(SMALL_TILES[variant].x, SMALL_TILES[variant].y, 3));
+    this.large = this.spawnNpc(NPC.SUBMERGED, this.tile(LARGE_TILES[variant].x, LARGE_TILES[variant].y, 8));
+    this.largeState = "submerged";
+    for (const npc of [this.small, this.large]) {
+      if (npc) npc.__coxMeals = 0;
+    }
   }
 
   combatPoints() {
@@ -86,8 +118,7 @@ class MuttadileRoom extends Raid.Room {
   tick() {
     if (!this.woken) return this.watch();
     if (this.completed) return undefined;
-    const ticks = this.raid.ticks;
-    if (this.large && this.largeState === "submerged" && this.small?.isRegistered() && ticks % 5 === 0) this.erratic();
+    if (this.large && this.largeState === "submerged" && this.small?.isRegistered() && this.raid.ticks % SUBMERGED_EVERY === 0) this.erratic();
     for (const npc of [this.small, this.large]) {
       if (!npc?.isRegistered() || npc.getHitpoints() <= 0) continue;
       if (npc.__coxEating) this.eat(npc);
@@ -102,21 +133,7 @@ class MuttadileRoom extends Raid.Room {
   /** Someone within 6 tiles of the tendrils wakes the room. */
   watch() {
     const near = this.raiders().some((player) => player.getLocation().getDistance(this.tendrilTiles[0]) <= 6);
-    if (!near) return;
-    this.woken = true;
-    const { GameObject, ObjectManager } = Shared.core();
-    this.tendrils = this.tendrilTiles.map((tile) => {
-      const tendril = new GameObject(OBJECT.TENDRILS, tile, 10, 0, this.map);
-      ObjectManager.register(tendril, true);
-      return tendril;
-    });
-    const variant = this.record.variant;
-    this.small = this.spawnNpc(NPC.SMALL, this.tile(SMALL_TILES[variant].x, SMALL_TILES[variant].y, 3));
-    this.large = this.spawnNpc(NPC.SUBMERGED, this.tile(LARGE_TILES[variant].x, LARGE_TILES[variant].y, 8));
-    this.largeState = "submerged";
-    for (const npc of [this.small, this.large]) {
-      if (npc) npc.__coxMeals = 0;
-    }
+    if (near) this.woken = true;
   }
 
   /** Wiki (Mod Ash): each raider it can see has a 1 in 3 chance of being hit. */
@@ -124,8 +141,8 @@ class MuttadileRoom extends Raid.Room {
     const large = this.large;
     for (const player of this.raiders()) {
       if (player.getHitpoints() <= 0 || Shared.random(1, 3) !== 1) continue;
-      const delay = Shared.projectile(this.map, large, player, PROJECTILE.MAGIC, { delay: 20, duration: 25, startHeight: 10, endHeight: 15 });
-      Shared.later(this.raid, delay, () => player.performGraphic(Shared.gfx(157, { height: 96 })));
+      const delay = fly(this.map, large, player, FLIGHT.MAGIC);
+      Shared.areaSound(this.raiders(), SOUND.MAGIC, large.getLocation(), { delay: 10, range: 15 });
       Shared.strike(large, player, "magic", Monsters.maxHitFor(large, BASE.SUBMERGED_MAGIC, Monsters.LEVELS.MAGIC), delay, { prayerMultiplier: 1 / 3 });
     }
   }
@@ -134,7 +151,7 @@ class MuttadileRoom extends Raid.Room {
   considerEating(npc) {
     if (!this.tree?.isRegistered() || this.tree.getHitpoints() <= 0) return;
     if (npc.__coxMeals >= EAT.TIMES || npc.getHitpoints() >= npc.getMaxHitpoints() / 2 || Shared.random(0, 2) !== 0) return;
-    npc.__coxEating = { since: this.raid.ticks, bites: npc.getHitpoints() < npc.getMaxHitpoints() * 0.4 ? 3 : 2, wait: 0 };
+    npc.__coxEating = { since: this.raid.ticks, bites: EAT.BITES };
     npc.__coxMeals++;
     npc.getCombat().reset();
     npc.setPositionToFace(this.treeTile);
@@ -152,15 +169,13 @@ class MuttadileRoom extends Raid.Room {
       if (!npc.getMovementQueue().isMovings()) Shared.core().PathFinder.calculateEntityRoute(npc, this.tree);
       return;
     }
-    if (meal.wait-- > 0) return;
     meal.bitten = true;
     Shared.animate(npc, ANIM.BITE);
-    npc.heal(Math.floor(npc.getMaxHitpoints() * EAT.SHARE));
-    meal.wait = EAT.BITE_TICKS;
+    Shared.healSplat(npc, Math.floor(npc.getMaxHitpoints() * EAT.SHARE));
     if (--meal.bites <= 0) npc.__coxEating = null;
   }
 
-  /** The small one is dead: the large one comes out of the water. */
+  /** The small one is gone: the large one crawls out a tile a tick, then turns and fights. */
   emerge() {
     const large = this.large;
     if (!large?.isRegistered()) return;
@@ -171,10 +186,10 @@ class MuttadileRoom extends Raid.Room {
     const towards = this.small?.getLocation() ?? this.tendrilTiles[0];
     const dx = towards.getX() - from.getX();
     const dy = towards.getY() - from.getY();
-    const step = Math.abs(dx) > Math.abs(dy) ? [Math.sign(dx) * 5, 0] : [0, Math.sign(dy) * 5];
-    Shared.walkStraight(large, new Location(from.getX() + step[0], from.getY() + step[1], from.getZ()));
-    Shared.later(this.raid, 4, () => large.isRegistered() && large.setNpcTransformationId(NPC.LARGE));
-    Shared.later(this.raid, 5, () => {
+    const step = Math.abs(dx) > Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy)];
+    Shared.walkStraight(large, new Location(from.getX() + step[0] * EMERGE.STEPS, from.getY() + step[1] * EMERGE.STEPS, from.getZ()));
+    Shared.later(this.raid, EMERGE.STEPS, () => large.isRegistered() && large.setNpcTransformationId(NPC.LARGE));
+    Shared.later(this.raid, EMERGE.STEPS + EMERGE.ATTACK_AFTER, () => {
       this.largeState = "out";
     });
   }
@@ -187,7 +202,7 @@ class MuttadileRoom extends Raid.Room {
 
   onNpcDeath(npc) {
     if (npc === this.small) {
-      Shared.later(this.raid, 1, () => this.emerge());
+      Shared.later(this.raid, 3, () => this.emerge());
       return;
     }
     if (npc === this.tree) {
@@ -210,6 +225,7 @@ class MuttadileRoom extends Raid.Room {
     const name = player.getUsername();
     if (this.tendrilCrossers.has(name)) Shared.damage(player, Math.floor(player.getHitpoints() * 0.225));
     this.tendrilCrossers.add(name);
+    Shared.sound(player, SOUND.TENDRILS);
     const at = tendril.getLocation();
     const here = player.getLocation();
     const { Location } = Shared.core();
@@ -228,7 +244,7 @@ class MuttadileRoom extends Raid.Room {
       player.sendMessage("The tree has died.");
       return;
     }
-    player.sendMessage("You swing your hatchet at the meat tree...");
+    player.sendMessage("You swing your axe...");
     let ticks = 0;
     Shared.action(player, {
       first: 1,
@@ -236,7 +252,7 @@ class MuttadileRoom extends Raid.Room {
       step: () => {
         if (!this.tree?.isRegistered() || this.tree.getHitpoints() <= 0) return false;
         if (ticks % 4 === 0) Shared.animate(player, axe.animation);
-        if (++ticks < 3 || (ticks - 3) % 4 !== 0) return true;
+        if (++ticks % CHOP_EVERY !== 0) return true;
         const level = Shared.level(player, "WOODCUTTING");
         if (Math.random() >= chopChance(level)) return true;
         Shared.addXp(player, "WOODCUTTING", 45);
@@ -250,7 +266,7 @@ class MuttadileRoom extends Raid.Room {
           this.onNpcDeath(this.tree);
           return false;
         }
-        this.tree.setHitpoints(left);
+        Shared.damage(this.tree, this.tree.getHitpoints() - left);
         Shared.sound(player, 2070);
         player.sendMessage("You hack away some of the meat.");
         return true;
@@ -261,6 +277,21 @@ class MuttadileRoom extends Raid.Room {
 }
 
 Raid.registerRoom("MUTTADILES", MuttadileRoom);
+
+/**
+ * A captured flight from an NPC to a player: it ends 5 client cycles a tile further out
+ * (spits 76-106, magic 96-131 at the room's distances). Returns the ticks until it lands.
+ */
+function fly(area, npc, player, flight) {
+  const { Projectile } = Shared.core();
+  const from = Projectile.centreOf(npc);
+  const end = flight.start + (flight.id === FLIGHT.MAGIC.id ? 15 : 40) + 5 * from.getDistance(player.getLocation());
+  new Projectile(from, player.getLocation(), player, flight.id, flight.start, end, flight.startHeight, flight.endHeight, area)
+    .withAngle(flight.angle)
+    .withProgress(flight.progress)
+    .sendProjectile();
+  return Math.max(1, Math.floor(end / 30));
+}
 
 function roomOf(player) {
   const room = Raid.raidOf(player)?.roomAt(player.getLocation());
@@ -293,17 +324,18 @@ function muttadileCombat(api) {
       const player = target.getAsPlayer();
       const large = npc === room.large;
       if (room.reachableBy(npc, player)) {
-        if (large) {
-          // Its definition's max hit is the stomp's (Wiki: 72, half again its melee).
+        if (large && Shared.random(0, 1) === 0) {
+          // Its definition's max hit is the slam's (Wiki: 72, half again its melee).
           Shared.animate(npc, ANIM.STOMP);
+          Shared.areaSound(room.raiders(), SOUND.SLAM, player.getLocation(), { delay: 30, range: 6 });
           const max = npc.getDefinition().getMaxHit();
           for (const raider of room.raiders()) {
-            if (room.reachableBy(npc, raider)) Shared.strike(npc, raider, "melee", max, 0);
+            if (room.reachableBy(npc, raider)) Shared.strike(npc, raider, "melee", max, 1);
           }
         } else {
-          Shared.animate(npc, ANIM.SMALL_MELEE);
-          Shared.sound(player, 2548);
-          Shared.strike(npc, player, "melee", npc.getDefinition().getMaxHit(), 0);
+          Shared.animate(npc, ANIM.BITE);
+          const max = large ? Math.floor((npc.getDefinition().getMaxHit() * 2) / 3) : npc.getDefinition().getMaxHit();
+          Shared.strike(npc, player, "melee", max, 1);
         }
         return;
       }
@@ -318,12 +350,14 @@ function muttadileCombat(api) {
       }
       if (style === "ranged") {
         Shared.animate(npc, ANIM.RANGED);
-        const delay = Shared.projectile(room.map, npc, player, PROJECTILE.RANGED, { delay: 25, duration: 15, startHeight: 25, endHeight: 15 });
+        const delay = fly(room.map, npc, player, large ? FLIGHT.LARGE_SPIT : FLIGHT.SPIT);
+        Shared.areaSound(room.raiders(), SOUND.SPIT, npc.getLocation(), { range: 10 });
         Shared.strike(npc, player, "ranged", Monsters.maxHitFor(npc, BASE.RANGED, Monsters.LEVELS.RANGED), delay, { prayerMultiplier: 1 / 3 });
         return;
       }
       Shared.animate(npc, ANIM.MAGIC);
-      const delay = Shared.projectile(room.map, npc, player, PROJECTILE.MAGIC, { delay: 25, duration: 40, startHeight: 25, endHeight: 15 });
+      const delay = fly(room.map, npc, player, FLIGHT.MAGIC);
+      Shared.areaSound(room.raiders(), SOUND.MAGIC, npc.getLocation(), { delay: 10, range: 10 });
       const max = Monsters.maxHitFor(npc, BASE.MAGIC, Monsters.LEVELS.MAGIC);
       Shared.strike(npc, player, "magic", max, delay, { prayerMultiplier: 1 / 3 });
       // Not on the Wiki (to check against a capture): the magic splashes anyone beside its path.

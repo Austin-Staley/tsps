@@ -220,6 +220,16 @@ Recordings 820 (a duo, six anvil visits) and 3389 (solo) show the whole fight.
 - At the anvil (12-21 ticks) sparks come every 4 ticks, two at each raider, and he heals every 3 ticks (85 at 8,400 hitpoints).
 - Every room's exit crystal shatters with loc anim 7506 and area sounds 1021 and 3821, and is gone 4 ticks later.
 
+## Muttadiles, from rsprox captures
+
+All five recordings have the room (four solo, one duo).
+
+- The tendrils, meat tree and both muttadiles are there from the start; passing the tendrils is a two-tile walk with sound 3728.
+- Submerged, the large one fires projectile 393 every 6 ticks. The small one spits (7421, projectile 1291, sound 385) about every 4 ticks and bites up close.
+- The small one dies and goes 3 ticks later; the large one then crawls out a tile a tick for 5 ticks, turns, and attacks 2 ticks later with spits, magic (7422, projectile 393), bites and slams (7424, sound 163).
+- Below half health they eat from the tree: 3 bites on consecutive ticks, 15% of their hitpoints each (35 at 236, 37 at 250), at most three meals. Heals show as hitsplat 6.
+- Chopping the tree rolls every 5 ticks: "You swing your axe...", then "You hack away some of the meat." with a hitsplat on the tree.
+
 ## Values not on the Wiki, to check against a capture
 
 | Value | Where |
