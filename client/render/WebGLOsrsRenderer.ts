@@ -2531,6 +2531,11 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         return render.onLocChange(this, oldId, newId, tile, level, opts);
     }
 
+    protected override reloadMultiLocSquare(mapX: number, mapY: number): void {
+        if (this.instanceActive) this.scheduleInstanceLocRebuild();
+        else this.scheduleLocGeometryUpdate(mapX, mapY, "full");
+    }
+
     onRegionReplacement(payload: {
         regionId: number;
         allowReload: boolean;

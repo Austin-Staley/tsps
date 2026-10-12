@@ -511,6 +511,9 @@ export class ClientConnection {
         case "widget_action":
           if (this.player) {
             const actionPacket = { ...packet, buttonNum: packet.buttonNum ?? 0 };
+            // The dialogue this click can answer: one opened by the click itself (an inventory
+            // option's statement) must not take the same click as its option.
+            const openDialogue = this.player.getDialogueManager().getCurrent();
             const equipmentSlot = EquipPacketListener.resolveEquipmentSlot(actionPacket.groupId, actionPacket.childId);
             if (WORLD_MAP_ORB_WIDGET_IDS.includes(actionPacket.widgetId) && actionPacket.buttonNum === 2) {
               this.player.getPacketSender().toggleWorldMap();
@@ -634,7 +637,9 @@ export class ClientConnection {
                 });
               }
             }
-            if (this.player.getDialogueManager().isActive() && actionPacket.buttonNum > 0 && actionPacket.buttonNum <= 5) {
+            if (this.player.getDialogueManager().isActive() && openDialogue != null &&
+                this.player.getDialogueManager().getCurrent() === openDialogue &&
+                actionPacket.buttonNum > 0 && actionPacket.buttonNum <= 5) {
               this.player.getDialogueManager().handleOption(actionPacket.buttonNum - 1 as DialogueOption);
             }
           }

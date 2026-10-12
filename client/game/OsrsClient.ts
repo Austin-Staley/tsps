@@ -6520,6 +6520,7 @@ export class OsrsClient {
                     markVarTransmit(varpId);
                 }
                 this.applyAudioVarpChange(varpId, newValue);
+                this.renderer?.onVarpChange(varpId);
                 if (!this._serverVarpSync && TRANSMIT_VARPS.has(varpId) && isServerConnected()) {
                     try {
                         sendVarpTransmit(varpId, newValue);
