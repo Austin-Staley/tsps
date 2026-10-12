@@ -848,10 +848,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
     const next = ACTION_STAGE[event.stepId];
-    if (event.stepId === "Sut83Q") {
-      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { phase: "bridge", integrity: 100, healed: [], repaired: [] });
-    }
     if (event.stepId === "vqg4qO") {
+      bridge.finish(player);
       player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { phase: "hall", integrity: 100, healed: [], repaired: [] });
       spawnSiegeInjuredAranei(player);
     }
@@ -862,6 +860,8 @@ module.exports = function registerTheBloodMoonRises(api) {
         return;
       }
       player.setAttribute(PREP_COMPLETE, true);
+      advance(player, STAGE.SIEGE);
+      bridge.start(player);
     }
     if (event.stepId === "XqVfhB" && !player.getAttribute(THRONE_PUZZLE_ATTRIBUTE)?.keyClaimed) {
       player.sendMessage("Solve the throne-room bust puzzle and take the half moon key before leaving the castle.");
@@ -1767,6 +1767,9 @@ module.exports = function registerTheBloodMoonRises(api) {
     otherRewards: ["Access to Vampyrium", "A Hallowed flail", "Sunspear", "The vampyres of Morytania are tolerant of you"],
     buildJournal,
   });
+  const bridge = require("../bmr/Bridge.TheBloodMoonRises")({ api, stage, attribute: SIEGE_DEFENCE_ATTRIBUTE,
+    ready: player => { const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {}; return prep.flail && prep.stakes; },
+    play: (player, npc, variant) => startTranscript(api, player, npc, PAGE, variant) });
   api.persistAttribute(ATTRIBUTE);
   api.onCustomEvent("npc-dialogue:hook", onStartHook);
   api.onCustomEvent("npc-dialogue:action", onTranscriptAction);

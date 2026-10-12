@@ -34,7 +34,13 @@ function mockApi() {
     core: PluginManager.getCoreApi(),
     onNpcDialogueVariant: (h) => handlers.variant.push(h),
     onNpcDialogueCondition: (h) => handlers.condition.push(h),
-    onObjectInteraction: (h) => handlers.objects.push(h),
+    onObjectInteraction: (target, actions) => {
+      if (typeof target === 'function') return handlers.objects.push(target);
+      for (const [option, handler] of Object.entries(actions)) handlers.objects.push(event => {
+        if (event.definition?.getName?.() === target && event.option === option) return handler(event);
+        return false;
+      });
+    },
     onNpcInteraction: (target, actions) => handlers.npcInteractions.set(target, actions),
     onObjectRoute: (h) => handlers.routes.push(h),
     onWalkRoute: (h) => handlers.walkRoutes.push(h),
@@ -295,6 +301,7 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
   const attributes = new Map();
   const counts = new Map();
   const inventory = {
+    getFreeSlots: () => 0,
     contains: (id) => (counts.get(id) ?? 0) > 0,
     getAmount: (id) => counts.get(id) ?? 0,
     adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
