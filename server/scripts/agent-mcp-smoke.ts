@@ -45,13 +45,14 @@ let bankOpen = false;
 let prompt: { title: string; options: string[] } | null = null;
 let movingTicks = 0;
 let rights = "NONE";
+let observedPrivateArea: any = null;
 const player = {
     getUsername: () => "Agent1",
     getIndex: () => 1,
     getRights: () => rights,
     setRights: (next: string) => { rights = next; },
     getArea: () => ({ getName: () => "Wilderness", pluginName: "Wilderness" }),
-    getPrivateArea: () => null,
+    getPrivateArea: () => observedPrivateArea,
     getMovementQueue: () => ({ hasPendingWork: () => movingTicks-- > 0 }),
     getDialogueManager: () => dialogueManager,
     getInterfaceId: () => -1,
@@ -74,7 +75,7 @@ const npc = {
 };
 const rival = { getUsername: () => "Agent2", getIndex: () => 2, getLocation: () => location(3223, 3218), getPacketSender: () => ({ sendMessage: () => {} }) };
 const foreignNpc = { ...npc, getIndex: () => 8, getLocation: () => location(3222, 3218), isOwnerOnly: () => true, getOwner: () => rival };
-const tree = { getId: () => 1276, getLocation: () => location(3220, 3216) };
+const tree = { getType: () => 10, getId: () => 1276, getLocation: () => location(3220, 3216) };
 const dispatched: any[] = [];
 
 let pluginProfiling = false;
@@ -141,6 +142,7 @@ const core = {
         getPlayers: () => ({ stream: () => [player, ...loadOnline.values()] }),
         getNpcsNear: (_location: any, _radius: number, privateArea: any) => privateArea ? [] : [npc, foreignNpc],
         getNpcs: () => ({ stream: () => [npc, foreignNpc, null], get: (index: number) => (index === 7 ? npc : undefined) }),
+        getRemovedObjects: () => [],
         getItems: () => [{ getItem: () => item(526), getPosition: () => location(3223, 3218) }],
     },
     MapObjects: {
@@ -243,6 +245,20 @@ else process.env.AGENT_MCP = previousMcpFlag;
     assert.equal(snapshot.groundItems[0].id, 526);
     assert.deepEqual(snapshot.messages, ["You swing your axe at the tree."]);
     assert.deepEqual((await call(client, "observe", { player: "agent1" })).value.messages, []);
+
+    observedPrivateArea = {
+        countsAsMainWorld: () => false,
+        getTemplateObjects: (at: any) => at.getX() === 3224 && at.getY() === 3219
+            ? [{ getType: () => 10, getId: () => 2282, getLocation: () => location(3224, 3219) }] : [],
+        getObjects: () => [{ getType: () => 10, getId: () => 2280, getLocation: tree.getLocation }],
+    };
+    const instanced = (await call(client, "observe", { player: "agent1" })).value;
+    assert.deepEqual(instanced.objects, [
+        { id: 2280, name: "Tree", options: ["Chop down"], x: 3220, y: 3216 },
+        { id: 2282, name: "Tree", options: ["Chop down"], x: 3224, y: 3219 },
+    ], "private replacements and template scenery are actual menu targets");
+    assert.deepEqual(instanced.npcs, [], "world NPCs are hidden in the instance");
+    observedPrivateArea = null;
 
     // The mock player never moves, so a walk elsewhere reports stuck and a walk to its own tile arrives.
     assert.equal((await call(client, "walk_to", { player: "agent1", x: 3230, y: 3230, run: true })).value.result, "stuck");
