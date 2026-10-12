@@ -898,3 +898,13 @@ test('Completed WGS retains the unlocked catacomb route without replaying quest 
  const bridge=handlers.objects.find(h=>h.name==='Bridge').options['Jump-to'];
  assert.equal(bridge({player,objectId:53512}),true);assert.deepEqual(player.position,[4112,4703,1]);
 });
+
+
+test('Rescued Silif acknowledges the rescue before quest completion', () => {
+ const {api}=mockApi();let interaction,played;
+ api.onNpcInteraction=(name,options)=>{if(name==='Silif')interaction=options['Talk-to'];};
+ const player={getLocation:()=>new api.core.Location(2989,3338,0)};
+ require('../plugins/quests/wgs/Alliance.WhileGuthixSleeps')({api,stage:()=>610,play:(p,id,variant)=>played=variant});
+ assert.equal(interaction({player,npcId:13519}),true);
+ assert.equal(played,'the-dark-squall-talking-to-silif-after-rescuing-him');
+});
