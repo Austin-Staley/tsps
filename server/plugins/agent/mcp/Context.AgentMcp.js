@@ -177,7 +177,8 @@ function createContext(core, server) {
       const definition = ObjectDefinition.forPlayer(object.getId(), p);
       const options = definition?.getInteractions()?.filter(Boolean);
       const at = object.getLocation();
-      if (options?.length) objects.push({ id: object.getId(), name: definition.getName(), options, x: at.getX(), y: at.getY() });
+      const name = definition?.getName?.();
+      if (name) objects.push({ id: object.getId(), name, options: options ?? [], x: at.getX(), y: at.getY() });
     }
 
     return {
