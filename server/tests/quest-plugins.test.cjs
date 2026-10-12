@@ -463,14 +463,17 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-the-curse-of-seren');
   assert.equal(interact('Baxtorian'), true);
   assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-dialogue-with-npcs-post-library-visit-talking-to-baxtorian');
-  handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'koxQh3' });
-  assert.equal(attributes.get('quest.song_of_the_elves.revelations-meeting-started'), true);
-  assert.equal(interact('Baxtorian'), true);
-  assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-talking-to-baxtorian-after-the-meeting');
   const handoff = { player, npcId: api.core.NpcIdentifiers.ARIANWYN_6, handled: false };
   handlers.custom.get('quest-song-of-the-elves:claim-arianwyn').at(-1)(handoff);
   assert.equal(handoff.handled, true, 'the completed Mourning’s End handler can hand the NPC to SOTE');
   assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-the-curse-of-seren');
+  handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'koxQh3' });
+  assert.equal(attributes.get('quest.song_of_the_elves.revelations-meeting-started'), true);
+  handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'J6osYV' });
+  assert.equal(quest.getStage(player), 140, 'closing the revelations meeting waits for Baxtorian’s follow-up');
+  assert.equal(interact('Baxtorian'), true);
+  assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-talking-to-baxtorian-after-the-meeting');
+  assert.equal(quest.getStage(player), 150, 'Baxtorian’s follow-up opens the clan-leader chapter');
   handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'FoLVmk' });
   assert.equal(quest.getStage(player), 150, 'the meeting ending advances into the clan-leader chapter');
 
@@ -686,4 +689,39 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
   useObject({ player, objectId: 36726, handled: false });
   assert.ok(!messages.slice(beforeReplay).some((message) => message.includes('seal remains dark')),
     'touching a completed seal replays its memory so its return transport stays available');
+});
+
+test("Mourning's End I teleport crystals consume a charge and take the player to Lletya", () => {
+  const { api: base } = mockApi();
+  const itemActions = new Map();
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onItemAction'
+      ? (name, actions) => itemActions.set(name, actions)
+      : target[prop],
+  });
+  require('../plugins/quests/quests/MourningsEndPartI.Quest')(api);
+  const items = new Map([[6099, 1]]);
+  const moved = [];
+  const messages = [];
+  const inventory = {
+    getAmount: (id) => items.get(id) ?? 0,
+    deleteNumber(id, amount) {
+      const left = (items.get(id) ?? 0) - amount;
+      if (left > 0) items.set(id, left); else items.delete(id);
+      return true;
+    },
+    adds(id, amount) { items.set(id, (items.get(id) ?? 0) + amount); return true; },
+  };
+  const player = {
+    getInventory: () => inventory,
+    moveTo: (location) => moved.push([location.getX(), location.getY(), location.getZ()]),
+    sendMessage: (message) => messages.push(message),
+  };
+  const event = { player, itemId: 6099, handled: false };
+  itemActions.get('Teleport crystal (4)').Lletya(event);
+  assert.equal(event.handled, true);
+  assert.equal(items.get(6099), undefined);
+  assert.equal(items.get(6100), 1);
+  assert.deepEqual(moved, [[2352, 3170, 0]]);
+  assert.equal(messages.length, 1);
 });

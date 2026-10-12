@@ -603,7 +603,9 @@ module.exports = function registerSongOfTheElves(api) {
         "reporting-back-after-the-revelations-the-curse-of-seren");
     }
     if (currentChapter(player) === 13 && npcName === "baxtorian") {
-      const variant = player.getAttribute(REVELATIONS_MEETING_STARTED) === true
+      const afterMeeting = player.getAttribute(REVELATIONS_MEETING_STARTED) === true;
+      if (afterMeeting) setChapter(player, 14);
+      const variant = afterMeeting
         ? "reporting-back-after-the-revelations-talking-to-baxtorian-after-the-meeting"
         : "reporting-back-after-the-revelations-dialogue-with-npcs-post-library-visit-talking-to-baxtorian";
       return startTranscript(api, player, event.npcId, PAGE, variant);
