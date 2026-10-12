@@ -1177,7 +1177,7 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
   };
   const ids = api.core.ObjectIdentifiers;
   objectEvent(ids.CRATE_OF_HAMMERS_2, 3177, 7843, 'Take-from');
-  objectEvent(ids.CRATE_OF_POTIONS, 3177, 7846, 'Take-from');
+  objectEvent(ids.CRATE_OF_POTIONS, 3171, 7847, 'Take-from');
   assert.equal(inventory.contains(api.core.ItemIdentifiers.HAMMER), true);
   assert.equal(inventory.contains(api.core.ItemIdentifiers.HEALING_POTION), true);
   const npc = {

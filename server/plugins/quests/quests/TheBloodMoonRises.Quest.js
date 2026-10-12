@@ -1829,7 +1829,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   const hall = require("../bmr/Hall.TheBloodMoonRises")({ api, state: hallDefenceState,
     process: processSiegeDefence, cleanup: handleSiegeLogout, scenery: player => {
       const repaired = hallDefenceState(player).repaired ?? [];
-      return [[SIEGE_HALL.hammerCrate, 3177, 7843], [SIEGE_HALL.potionCrate, 3177, 7846],
+      // shortcut: potion-crate placement is inferred on reachable hall flooring; calibrate against a live OSRS capture.
+      return [[SIEGE_HALL.hammerCrate, 3177, 7843], [SIEGE_HALL.potionCrate, 3171, 7847],
         [SIEGE_HALL.barricade, 3167, 7844], ...[...SIEGE_HALL.repairLocations].map(([key, ids]) => {
           const [x, y] = key.split(',').map(Number);
           return [ids[repaired.includes(key) ? 1 : 0], x, y, ids[0] === SIEGE_HALL.damagedWindow ? 0 : 10, ids[0] === SIEGE_HALL.damagedWindow ? 2 : 0];
