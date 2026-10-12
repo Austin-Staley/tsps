@@ -99,7 +99,8 @@ module.exports=function registerSurok({api,stage,advance,held,give,play}){
   if(!t){hit.setTotalDamage(0);return;}
   if(!t.surge){if(!t.weak)hit.setTotalDamage(0);return;}
   const element=['wind','water','earth','fire'][ELEMENTS.findIndex(spells=>spells.includes(s))];
-  if(!magic||element!==OPPOSITES[t.index])hit.setTotalDamage(0);
+  // Wiki: one opposing elemental spell dispels the incoming attack, regardless of tier.
+  hit.setTotalDamage(magic&&element===OPPOSITES[t.index]?npc.getHitpoints():0);
  }
  function spellEffects(e){
   const f=fights.get(e.attacker);if(!f)return;

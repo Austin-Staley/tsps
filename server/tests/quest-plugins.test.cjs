@@ -505,14 +505,15 @@ test('Surok requires real combat spells and the opposite element for surges', ()
   const { api } = mockApi(), module = require('../plugins/quests/wgs/Surok.WhileGuthixSleeps');
   const f = module({api}), player = { getCombat: () => ({ getSelectedSpell: () => selected, getCastSpell: () => null, getPreviousCast: () => api.core.CombatSpells.FIRE_WAVE }), sendMessage() {} };
   let selected = null, launched = null, damage = 20;
-  const boss = { forceChat() {} }, surge = {};
+  const boss = { forceChat() {} }, surge = {getHitpoints:()=>16};
   f.fights.set(player,{boss,enemies:new Set([boss,surge])});
   const hit = {getAttacker:()=>player,getSpell:()=>launched,getCombatType:()=>api.core.CombatType.MAGIC,setTotalDamage:n=>damage=n};
   f.hit({npc:boss,hit});assert.equal(damage,0,'powered staff is blocked even after a previous standard cast');
   launched=api.core.CombatSpells.TRIDENT_OF_THE_SEAS;damage=20;f.hit({npc:boss,hit});assert.equal(damage,0,'the powered spell object is blocked too');
   launched=api.core.CombatSpells.FIRE_WAVE;selected=null;damage=20;f.hit({npc:boss,hit});assert.equal(damage,20);
   f.targets.set(surge,{surge:true,index:0});damage=20;f.hit({npc:surge,hit});assert.equal(damage,0,'fire cannot counter earth');
-  launched=api.core.CombatSpells.WIND_WAVE;selected=api.core.CombatSpells.FIRE_WAVE;damage=20;f.hit({npc:surge,hit});assert.equal(damage,20);
+  launched=api.core.CombatSpells.WIND_WAVE;selected=api.core.CombatSpells.FIRE_WAVE;damage=20;f.hit({npc:surge,hit});assert.equal(damage,16);
+  launched=api.core.CombatSpells.WIND_STRIKE;damage=0;f.hit({npc:surge,hit});assert.equal(damage,16,'even a zero-damage opposing strike dispels the spell');
   const effect={attacker:player,target:boss,spell:api.core.CombatSpells.BLOOD_BARRAGE,allowed:true};
   f.spellEffects(effect);assert.equal(effect.allowed,false,'blood damage must not heal off Surok');
 });
