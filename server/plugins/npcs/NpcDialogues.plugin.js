@@ -732,7 +732,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         if (step.type === "action") {
           // "npc-dialogue:action": a plugin that owns this stage direction (an interface to
           // open, say) sets handled and takes over the conversation from here.
-          const request = { player, npcId, action: step.action, target: step.target, handled: false };
+          const request = { player, npcId, action: step.action, target: step.target, text: step.text, stepId: step.id, handled: false };
           api.emitCustomEvent("npc-dialogue:action", request);
           if (request.handled) return;
           // Unhandled prose stage directions ("The player lights a tinderbox.")

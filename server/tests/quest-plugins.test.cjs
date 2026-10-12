@@ -622,6 +622,77 @@ test('Dragon Slayer II Ungael notes require all six real pieces before combining
   assert.equal(counts.get(I.UNGAEL_LAB_NOTES), 1);
 });
 
+test('Dragon Slayer II Robert death plays Bob’s memories before unlocking the key hunt', async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  const custom = new Map();
+  const itemObjectHandlers = [];
+  let deathHandler;
+  let transcript;
+  const api = new Proxy(mockApi().api, {
+    get: (target, prop) => {
+      if (prop === 'onNpcDeath') return (handler) => { deathHandler = handler; };
+      if (prop === 'onItemOnObject') return (handler) => itemObjectHandlers.push(handler);
+      if (prop === 'onCustomEvent') return (name, handler) => custom.set(name, [...(custom.get(name) ?? []), handler]);
+      if (prop === 'emitCustomEvent') return () => {};
+      return target[prop];
+    },
+  });
+  runtime.startTranscript = (_api, _player, _npcId, _page, variant, select) => {
+    const raw = require('../data/definitions/npc-dialogues.json')['Dragon Slayer II'].variants[variant];
+    transcript = { variant, steps: select ? select(raw) : raw };
+    return true;
+  };
+  try {
+    require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  } finally {
+    runtime.startTranscript = originalStartTranscript;
+  }
+
+  const attrs = new Map([['quest.dragon_slayer_ii.stage', 5]]);
+  const packet = new Proxy({}, { get: () => () => packet });
+  let currentArea = null;
+  const player = {
+    getAttribute: (key) => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getPacketSender: () => packet,
+    getLocation: () => new api.core.Location(1761, 3850, 0),
+    getArea: () => currentArea,
+    setArea: (area) => { currentArea = area; },
+    getIndex: () => 1,
+    isPlayer: () => true,
+    getAsPlayer: () => player,
+    moveTo() {},
+    getUsername: () => 'BobMemoryTest',
+    getInventory: () => ({
+      getAmount: (id) => inventory.get(id) ?? 0,
+      deleteNumber: (id, amount) => inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - amount)),
+      adds: (id, amount) => inventory.set(id, (inventory.get(id) ?? 0) + amount),
+      getFreeSlots: () => 20,
+    }),
+    sendMessage() {},
+  };
+  const inventory = new Map([[api.core.ItemIdentifiers.DREAM_POTION, 1]]);
+  itemObjectHandlers[0]({
+    player,
+    itemId: api.core.ItemIdentifiers.DREAM_POTION,
+    objectId: api.core.ObjectIdentifiers.BRAZIER,
+  });
+  const dreamBoss = attrs.get('dragon-slayer-ii:instance-boss');
+  deathHandler({
+    killer: player,
+    npc: dreamBoss,
+  });
+  assert.equal(transcript.variant, 'robert-the-strong-robert-s-memories');
+  assert.equal(transcript.steps.at(-1).id, 'dragon-slayer-ii:bob-memories-complete');
+  assert.equal(attrs.get('quest.dragon_slayer_ii.stage'), 5, 'the next chapter waits for Bob’s memory scene');
+  for (const handler of custom.get('npc-dialogue:action')) {
+    handler({ player, stepId: 'dragon-slayer-ii:bob-memories-complete' });
+  }
+  assert.equal(attrs.get('quest.dragon_slayer_ii.stage'), 6, 'the key hunt opens after the scene finishes');
+});
+
 test('Dragon Slayer II rowboat build consumes the Wiki supplies and uses the ready dialogue to travel', () => {
   const objects = new Map();
   const objectHandlers = [];

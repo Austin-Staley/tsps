@@ -48,6 +48,7 @@ module.exports = function registerDragonSlayerII(api) {
   const ATTR_AIVAS_DIARY = "dragon-slayer-ii:aivas-diary";
   const ATTR_AIVAS_DIARY_FOUND = "dragon-slayer-ii:aivas-diary-found";
   const ATTR_GALVEK_DEFEATED = "dragon-slayer-ii:galvek-defeated";
+  const ACTION_BOB_MEMORIES_COMPLETE = "dragon-slayer-ii:bob-memories-complete";
   // No cached loc exists for the quest-built boat; place the space beside the
   // Lithkren NPC anchors on a shoreline tile confirmed reachable by normal routing.
   const ROWBOAT_SPACE_TILE = { x: 3661, y: 3847, z: 0 };
@@ -244,7 +245,7 @@ module.exports = function registerDragonSlayerII(api) {
     p.getInventory().adds(id, amount); return true;
   }
   function remove(p, id, amount = 1) { p.getInventory().deleteNumber(id, amount); }
-  function talk(p, npcId, variant) { return startTranscript(api, p, npcId, PAGE, variant); }
+  function talk(p, npcId, variant, select) { return startTranscript(api, p, npcId, PAGE, variant, select); }
   function buildJournal(p) {
     const s = stage(p);
     if (s >= S.COMPLETE) return ["<str>I defeated Galvek and saved the kingdoms.</str>", "", "<col=ff0000>QUEST COMPLETE!</col>"];
@@ -367,6 +368,10 @@ module.exports = function registerDragonSlayerII(api) {
     p.setAttribute(ATTR_LITHKREN_ARRIVED, true);
   }
   function onQuestDialogueAction({ player: p, stepId }) {
+    if (stepId === ACTION_BOB_MEMORIES_COMPLETE && stage(p) === S.DREAM) {
+      advance(p, S.KEYS);
+      return;
+    }
     if (stepId === "b5j1wa" && stage(p) === S.GALVEK && p.getAttribute(ATTR_GALVEK_DEFEATED)) {
       quest.complete(p);
       p.setAttribute(ATTR_GALVEK_DEFEATED, false);
@@ -1054,8 +1059,10 @@ module.exports = function registerDragonSlayerII(api) {
       killer.sendMessage("The Spawn collapses. You should investigate the mural again.");
     }
     if (s === S.DREAM) {
-      advance(killer, S.KEYS);
-      killer.sendMessage("Robert's memories return. Bob tells you he hid four dragon key pieces around Gielinor.");
+      talk(killer, N.BOB, "robert-the-strong-robert-s-memories", (steps) => [
+        ...steps,
+        { type: "action", text: "Bob's recovered memories are complete.", id: ACTION_BOB_MEMORIES_COMPLETE },
+      ]);
     }
     else if (s === S.GALVEK) {
       killer.setAttribute(ATTR_GALVEK_DEFEATED, true);

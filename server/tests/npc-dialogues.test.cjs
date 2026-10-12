@@ -134,6 +134,34 @@ test('a nested "jump above" reaches an unselected sibling instead of looping', (
   assert.deepEqual(prompts, ['Q1', 'Q2', 'Q3']);
 });
 
+test('action dialogue events carry their Wiki step id', () => {
+  const actions = [];
+  const player = {
+    getDialogueManager: () => ({
+      reset() {},
+      startDialogues(chain) {
+        for (const entry of [...chain.getDialogues().values()].sort((a, b) => a.getIndex() - b.getIndex())) {
+          try { entry.send(player); } catch { /* action callbacks need no client */ }
+        }
+      },
+    }),
+    getPacketSender: () => ({ sendInterfaceRemoval() {} }),
+    sendMessage() {},
+  };
+  const definition = { getName: () => 'Bob', getId: () => 6750 };
+  const event = { player, npc: null, npcId: 6750, definition };
+  const api = {
+    emitCustomEvent(name, request) {
+      if (name !== 'npc-dialogue:action') return;
+      actions.push(request.stepId);
+      request.handled = true;
+    },
+  };
+  startDialogue(api, event, [{ type: 'action', text: 'The memory returns.', id: 'memory-restored' }], {},
+    { ...event, pages: [] });
+  assert.deepEqual(actions, ['memory-restored']);
+});
+
 test('a random alternative ending "same as above" repeats the previous alternative, not another menu', () => {
   const said = [];
   const acted = [];
