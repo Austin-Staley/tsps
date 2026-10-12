@@ -1414,6 +1414,37 @@ test('Regicide tripwires use the Agility success roll and apply the dart hit and
   }
 });
 
+test('Regicide Huge Gate passes the player to the far side from either approach', () => {
+  const { api: base } = mockApi();
+  const objectHooks = [];
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onObjectInteraction'
+      ? (handler) => objectHooks.push(handler)
+      : target[prop],
+  });
+  require('../plugins/quests/quests/Regicide.Quest')(api);
+  const interact = objectHooks[0];
+  const run = (sourceY, id, objectY) => {
+    const attributes = new Map([['quest.regicide.stage', 13]]);
+    const state = { moves: [], messages: [] };
+    const position = { x: 2386, y: sourceY, z: 0 };
+    const player = {
+      getAttribute: (key) => attributes.get(key),
+      setAttribute: (key, value) => attributes.set(key, value),
+      getLocation: () => ({ getX: () => position.x, getY: () => position.y, getZ: () => position.z }),
+      moveTo: (destination) => state.moves.push([destination.getX(), destination.getY(), destination.getZ()]),
+      sendMessage: (message) => state.messages.push(message),
+    };
+    const event = { player, objectId: id, location: { x: 2386, y: objectY, z: 0 }, sourceLocation: { x: 2386, y: sourceY, z: 0 }, handled: false };
+    interact(event);
+    assert.equal(event.handled, true);
+    assert.match(state.messages[0], /guards recognise Lord Iorwerth's seal/);
+    return state.moves;
+  };
+  assert.deepEqual(run(3335, api.core.ObjectIdentifiers.HUGE_GATE, 3334), [[2386, 3332, 0]], 'south approach crosses north');
+  assert.deepEqual(run(3333, api.core.ObjectIdentifiers.HUGE_GATE_2, 3334), [[2386, 3336, 0]], 'north approach crosses south');
+});
+
 test('Regicide dense forest crossing checks Agility and clears the full rotated cache footprint', () => {
   const { api: base } = mockApi();
   const objectHooks = [];

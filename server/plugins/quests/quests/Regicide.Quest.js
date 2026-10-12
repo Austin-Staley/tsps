@@ -695,14 +695,20 @@ module.exports = function registerRegicideQuest(api) {
   }
 
   function passArandarGate(event) {
-    const { player, location } = event;
+    const { player, location, sourceLocation } = event;
     event.handled = true;
     if (quest.getStage(player) < STAGE_REPORTED_IORWERTH) {
       player.sendMessage("No human may enter Tirannwn. Unless you have the proper documentation, sealed by one of the great houses.");
       return;
     }
     player.sendMessage("The guards recognise Lord Iorwerth's seal and let you pass.");
-    squeezeThrough(player, location);
+    // Both Huge Gate leaves (3944/3945) form a north/south barrier. The
+    // object route puts the player beside the clicked leaf before this hook,
+    // so use that approach side and move across the full gate row.
+    const sourceY = sourceLocation?.y ?? player.getLocation().getY();
+    const destinationY = sourceY < location.y ? location.y + 2 : location.y - 2;
+    const position = player.getLocation();
+    player.moveTo(new Location(position.getX(), destinationY, position.getZ()));
   }
 
   function handleObjectInteraction(event) {
