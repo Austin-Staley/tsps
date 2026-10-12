@@ -81,6 +81,39 @@ test("spawn explosion scales with remaining hitpoints", () => {
   assert.equal(Shared.spawnExplosionDamage(-5), 0);
 });
 
+test("only the canonical Crumble Undead spell one-shots Vorkath's spawn", () => {
+  require("../dist/Server").Server.installProductionPathResolver();
+  const { attach } = require("../plugins/bosses/vorkath/Combat.Vorkath");
+  let onHit;
+  attach({
+    core: {
+      CombatSpells: { CRUMBLE_UNDEAD: { spellId: () => 1171 } },
+      NpcIdentifiers: { VORKATH_5: 8061 },
+      CombatMethod: class {},
+      CombatType: { MELEE: 0, RANGED: 1, MAGIC: 2 },
+    },
+    getPrayerHandler: () => ({}),
+    getCombatFactory: () => ({}),
+    onNpcHitModify: (callback) => { onHit = callback; },
+    registerNpcCombatMethodProvider() {},
+  });
+
+  const damageBySpell = (spellId) => {
+    let damage = 8;
+    const part = { setDamage: (value) => { damage = value; } };
+    const hit = {
+      getAttacker: () => ({ isPlayer: () => true, getCombat: () => ({ getCastSpell: () => ({ spellId: () => spellId }) }) }),
+      getHits: () => [part],
+      updateTotalDamage() {},
+    };
+    onHit({ npc: { getId: () => Shared.SPAWN_ID, getHitpoints: () => 38 }, hit });
+    return damage;
+  };
+
+  assert.equal(damageBySpell(1171), 38, "Crumble Undead kills the spawn in one hit");
+  assert.equal(damageBySpell(1169), 8, "Fire Bolt keeps its ordinary damage");
+});
+
 test("acid pools cover the grid, the player tile, and never the boss", () => {
   const walkable = () => true;
   const pools = Shared.acidPoolTiles(2269, 4062, 2272, 4058, walkable, () => 0);

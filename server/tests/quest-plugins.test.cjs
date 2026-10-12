@@ -209,3 +209,240 @@ test('Priest in Peril unlocks the mausoleum Holy barrier only after completion',
     'the Hallowed Sepulchre barrier is handled by its own content');
   assert.deepEqual([moves.length, messages.length], before);
 });
+
+test('Dragon Slayer II reforging requires three distinct dragon-head casts and consumes the right runes', () => {
+  const spells = [];
+  const objectInteractions = [];
+  const { api: base } = mockApi();
+  const core = Object.assign({}, base.core, {
+    CacheDefinitions: { getSpellName: () => 'Fire Wave' },
+  });
+  const api = new Proxy(base, {
+    get: (target, prop) => {
+      if (prop === 'core') return core;
+      if (prop === 'onSpellOnObject') return (handler) => spells.push(handler);
+      if (prop === 'onObjectInteraction') return (handler) => objectInteractions.push(handler);
+      return target[prop];
+    },
+  });
+  require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  const attrs = new Map([['quest.dragon_slayer_ii.stage', 7]]);
+  const counts = new Map([
+    [core.ItemIdentifiers.DRAGON_KEY_PIECE, 1], [core.ItemIdentifiers.DRAGON_KEY_PIECE_2, 1],
+    [core.ItemIdentifiers.DRAGON_KEY_PIECE_3, 1], [core.ItemIdentifiers.DRAGON_KEY_PIECE_4, 1],
+    [core.ItemIdentifiers.ANCIENT_KEY, 1], [core.ItemIdentifiers.HAMMER, 1],
+    [core.ItemIdentifiers.FIRE_RUNE, 21], [core.ItemIdentifiers.AIR_RUNE, 15],
+    [core.ItemIdentifiers.BLOOD_RUNE, 3],
+  ]);
+  const packet = new Proxy({}, { get: (_target, key) => (..._args) => packet });
+  const player = {
+    getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getInventory: () => ({
+      getAmount: (id) => counts.get(id) ?? 0,
+      deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+      adds: (id, amount) => counts.set(id, (counts.get(id) ?? 0) + amount),
+      getFreeSlots: () => 20,
+    }),
+    getPacketSender: () => packet,
+    sendMessage: () => {},
+  };
+  const cast = (objectId, x, y) => {
+    const event = { player, objectId, location: { x, y, z: 1 }, spellWidget: 1, spellItemId: 0 };
+    spells[0](event);
+    return event;
+  };
+  cast(core.ObjectIdentifiers.DRAGON_HEAD_2, 1616, 5284);
+  cast(core.ObjectIdentifiers.DRAGON_HEAD_3, 1622, 5279);
+  assert.equal(attrs.get('dragon-slayer-ii:forge-heads') ?? 0, 3, 'two distinct heads only set two bits');
+  const wrongHead = cast(core.ObjectIdentifiers.DRAGON_HEAD_3, 1744, 5284);
+  assert.equal(wrongHead.handled, true, 'the spell interaction is consumed');
+  assert.equal(counts.get(core.ItemIdentifiers.FIRE_RUNE), 7, 'wrong room head does not charge runes');
+  cast(core.ObjectIdentifiers.DRAGON_HEAD_3, 1626, 5284);
+  assert.equal(attrs.get('dragon-slayer-ii:forge-heads'), 7, 'the third distinct head lights the forge');
+  assert.equal(counts.get(core.ItemIdentifiers.FIRE_RUNE), 0);
+  assert.equal(counts.get(core.ItemIdentifiers.AIR_RUNE), 0);
+  assert.equal(counts.get(core.ItemIdentifiers.BLOOD_RUNE), 0);
+  objectInteractions[0]({ player, objectId: core.ObjectIdentifiers.ANVIL });
+  assert.equal(attrs.get('quest.dragon_slayer_ii.stage'), 8, 'anvil advances only after the forge is lit');
+  assert.equal(counts.get(core.ItemIdentifiers.DRAGON_KEY), 1);
+  assert.equal(counts.get(core.ItemIdentifiers.ANCIENT_KEY), 0);
+  assert.equal(counts.get(core.ItemIdentifiers.DRAGON_KEY_PIECE_4), 0);
+});
+
+test('Dragon Slayer II Torfinn starts both ordered dragon waves before Galvek', async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
+  const { api: base } = mockApi();
+  const interactions = [];
+  const deaths = [];
+  const playerDeaths = [];
+  const dialogueActions = [];
+  const api = new Proxy(base, {
+    get: (target, prop) => {
+      if (prop === 'onNpcInteraction') return (name, options) => interactions.push({ name, options });
+      if (prop === 'onNpcDeath') return (handler) => deaths.push(handler);
+      if (prop === 'onPlayerDeath') return (handler) => playerDeaths.push(handler);
+      if (prop === 'onCustomEvent') return (name, handler) => {
+        if (name === 'npc-dialogue:action') dialogueActions.push(handler);
+      };
+      return target[prop];
+    },
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const startTranscript = runtime.startTranscript;
+  runtime.startTranscript = () => true;
+  try {
+    require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+    const core = api.core;
+    const attributes = new Map([['quest.dragon_slayer_ii.stage', 10]]);
+    let at = new core.Location(1456, 2968, 0);
+    const messages = [];
+    const pendingHits = [];
+    const packet = new Proxy({}, { get: (_target, _key) => (..._args) => packet });
+    const player = {
+      isPlayer: () => true, getAsPlayer: () => player, getIndex: () => 987654, getUsername: () => 'quest-wave-test',
+      getArea: () => null, setArea: () => {}, getLocation: () => at, moveTo: (location) => { at = location; },
+      getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+      getPacketSender: () => packet, sendMessage: (message) => messages.push(message),
+      getInventory: () => ({ adds: () => {} }),
+      getHitpoints: () => 99, getRunEnergy: () => 100, setRunEnergy: () => {},
+      getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => pendingHits.push(...hits) }) }),
+      getSkillManager: () => ({ decreaseCurrentLevel: () => {} }),
+    };
+    const torfinn = interactions.find(({ name }) => name === 'Torfinn').options['Talk-to'];
+    torfinn({ player, npcId: core.NpcIdentifiers.TORFINN });
+    const wave = [core.NpcIdentifiers.BLACK_DRAGON, core.NpcIdentifiers.STEEL_DRAGON,
+      core.NpcIdentifiers.BRUTAL_RED_DRAGON, core.NpcIdentifiers.MITHRIL_DRAGON,
+      core.NpcIdentifiers.ADAMANT_DRAGON, core.NpcIdentifiers.RUNE_DRAGON];
+    for (let index = 0; index < 3; index++) {
+      const dragon = attributes.get('dragon-slayer-ii:instance-boss');
+      assert.equal(dragon.getId(), wave[index], `wave opponent ${index + 1}`);
+      deaths[0]({ killer: player, npc: dragon });
+    }
+    assert.equal(attributes.get('dragon-slayer-ii:assault-checkpoint'), 3);
+    playerDeaths[0]({ player });
+    torfinn({ player, npcId: core.NpcIdentifiers.TORFINN });
+    assert.equal(attributes.get('dragon-slayer-ii:instance-boss').getId(), wave[3], 'death resumes at wave two checkpoint');
+    for (let index = 3; index < wave.length; index++) {
+      const dragon = attributes.get('dragon-slayer-ii:instance-boss');
+      assert.equal(dragon.getId(), wave[index], `wave opponent ${index + 1}`);
+      deaths[0]({ killer: player, npc: dragon });
+    }
+    assert.equal(attributes.get('quest.dragon_slayer_ii.stage'), 11);
+    assert.equal(attributes.get('dragon-slayer-ii:instance-boss').getId(), core.NpcIdentifiers.GALVEK_2);
+    assert.equal(attributes.get('dragon-slayer-ii:instance-boss').getMaxHitpoints(), 1200);
+    const area = attributes.get('dragon-slayer-ii:instance-area');
+    for (let tick = 0; tick < 7; tick++) area.process(player);
+    assert.ok(messages.some((message) => message.includes('launches a fireball')));
+    at = new core.Location(at.getX() + 2, at.getY(), 0);
+    for (let tick = 0; tick < 3; tick++) area.process(player);
+    assert.equal(pendingHits.length, 0, 'moving two tiles avoids Galvek’s lethal fireball');
+    const galvek = attributes.get('dragon-slayer-ii:instance-boss');
+    deaths[0]({ killer: player, npc: galvek });
+    assert.equal(attributes.get('dragon-slayer-ii:galvek-defeated'), true,
+      'only Galvek’s death marks the final boss as defeated');
+    assert.equal(attributes.get('quest.dragon_slayer_ii.stage'), 11,
+      'the quest remains active until Alec receives the report');
+    dialogueActions.forEach((handler) => handler({ player, stepId: 'b5j1wa' }));
+    assert.equal(attributes.get('quest.dragon_slayer_ii.stage'), 12,
+      'Alec’s final transcript action completes the quest');
+  } finally {
+    runtime.startTranscript = startTranscript;
+  }
+});
+
+test('Dragon Slayer II Ungael notes require all six real pieces before combining', () => {
+  const handlers = [];
+  const { api: base } = mockApi();
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onItemOnItem' ? (handler) => handlers.push(handler) : target[prop],
+  });
+  require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  const { ItemIdentifiers: I } = api.core;
+  const notes = [I.OLD_NOTES, I.OLD_NOTES_2, I.OLD_NOTES_3, I.OLD_NOTES_4, I.OLD_NOTES_5, I.OLD_NOTES_6];
+  const counts = new Map(notes.slice(0, 5).map((id) => [id, 1]));
+  const player = {
+    getInventory: () => ({
+      getAmount: (id) => counts.get(id) ?? 0,
+      getFreeSlots: () => 28 - [...counts.values()].reduce((sum, amount) => sum + amount, 0),
+      deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+      adds: (id, amount) => counts.set(id, (counts.get(id) ?? 0) + amount),
+    }),
+    sendMessage: () => {},
+  };
+  assert.equal(handlers[0]({ player, usedItemId: notes[0], usedWithItemId: notes[1] }), true);
+  assert.equal(counts.get(notes[0]), 1, 'incomplete notes are not consumed');
+  counts.set(notes[5], 1);
+  assert.equal(handlers[0]({ player, usedItemId: notes[0], usedWithItemId: notes[1] }), true);
+  assert.ok(notes.every((id) => counts.get(id) === 0));
+  assert.equal(counts.get(I.UNGAEL_LAB_NOTES), 1);
+});
+
+test('Dragon Slayer II rowboat build consumes the Wiki supplies and uses the ready dialogue to travel', () => {
+  const objects = new Map();
+  const objectHandlers = [];
+  const custom = new Map();
+  const { api: base } = mockApi();
+  const objectManager = base.core.ObjectManager;
+  const register = objectManager.register;
+  const deregister = objectManager.deregister;
+  objectManager.register = () => {};
+  objectManager.deregister = () => {};
+  const api = new Proxy(base, {
+    get: (target, prop) => {
+      if (prop === 'onObjectInteraction') return (handler, actions) => {
+        if (typeof handler === 'function') objectHandlers.push(handler);
+        else if (typeof handler === 'string' && actions) objects.set(handler, actions);
+      };
+      if (prop === 'onCustomEvent') return (name, handler) => custom.set(name, [...(custom.get(name) ?? []), handler]);
+      return target[prop];
+    },
+  });
+  try {
+    require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  } finally {
+    objectManager.register = register;
+    objectManager.deregister = deregister;
+  }
+  const { ItemIdentifiers: I, ObjectIdentifiers: O } = api.core;
+  const attributes = new Map([['quest.dragon_slayer_ii.stage', 6]]);
+  const amounts = new Map([[I.HAMMER, 1], [I.SAW, 1], [I.OAK_PLANK, 8], [I.SWAMP_PASTE, 10], [I.BRONZE_NAILS, 7], [I.IRON_NAILS, 5], [I.DRAGON_KEY, 1]]);
+  const messages = [];
+  let destination;
+  const packet = new Proxy({}, { get: () => () => packet });
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getSkillManager: () => ({ getMaxLevel: () => 50 }),
+    getPacketSender: () => packet,
+    getInventory: () => ({
+      getAmount: (id) => amounts.get(id) ?? 0,
+      deleteNumber: (id, count) => amounts.set(id, (amounts.get(id) ?? 0) - count),
+    }),
+    sendMessage: (message) => messages.push(message),
+    moveTo: (location) => { destination = [location.getX(), location.getY(), location.getZ()]; },
+  };
+  const buildEvent = {
+    player, objectId: O.ROWBOAT_SPACE, clickType: 1,
+    definition: { getInteractions: () => ['Build'] },
+    location: { x: 3661, y: 3847, z: 0 },
+  };
+  assert.equal(objectHandlers[0](buildEvent), true);
+  assert.equal(attributes.get('dragon-slayer-ii:lithkren-rowboat-built'), true);
+  assert.deepEqual([I.OAK_PLANK, I.SWAMP_PASTE, I.BRONZE_NAILS, I.IRON_NAILS].map((id) => amounts.get(id)), [0, 0, 0, 0]);
+  assert.equal(objectHandlers[0]({
+    player, objectId: O.ROWBOAT_SPACE, clickType: 1,
+    definition: { getInteractions: () => ['Build'] },
+    location: { x: 3661, y: 3847, z: 0 },
+  }), true);
+  assert.deepEqual(destination, [3760, 3869, 0]);
+  destination = undefined;
+  for (const handler of custom.get('npc-dialogue:action')) handler({ player, stepId: 'wKz-eF' });
+  assert.deepEqual(destination, [3760, 3869, 0]);
+  assert.equal(attributes.get('dragon-slayer-ii:lithkren-arrived'), true);
+  assert.equal(objectHandlers[0]({
+    player, objectId: O.ANCIENT_DOORS, location: { x: 3760, y: 3869, z: 0 },
+  }), true);
+  assert.equal(amounts.get(I.DRAGON_KEY), 0);
+  assert.equal(attributes.get('quest.dragon_slayer_ii.stage'), 9);
+  assert.ok(messages.includes('You successfully build the boat.'));
+});
