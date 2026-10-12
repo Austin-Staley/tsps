@@ -17,7 +17,7 @@ const { crossingFor: shantayCrossingFor } = require('../plugins/objects/ShantayP
 
 const tileKey = (id, x, y, z) => `${id}@${x},${y},${z}`;
 
-function buildHarness() {
+function buildHarness({ cacheObjects } = {}) {
   const world = new Map();
   const ops = [];
   const sounds = [];
@@ -30,11 +30,11 @@ function buildHarness() {
   MapObjects.get = (id, location) =>
     world.get(tileKey(id, location.getX(), location.getY(), location.getZ())) ?? null;
   Sounds.sendSound = (...args) => sounds.push(args);
-  CacheDefinitions.getObject = (id) => (id === 2394
+  CacheDefinitions.getObject = (id) => cacheObjects?.get(id) ?? (id === 2394
     ? { name: 'Gate', actions: ['Open'], models: [[1298]] }
     : id === 2606 ? { name: 'Wall', actions: ['Open'], models: [[633]] }
       : { name: 'Gate' });
-  CacheDefinitions.getCounts = () => ({ npcs: 0, items: 0, objects: 2607 });
+  CacheDefinitions.getCounts = () => ({ npcs: 0, items: 0, objects: cacheObjects ? 62522 : 2607 });
 
   const handlers = new Map();
   const objectManager = {
@@ -60,6 +60,7 @@ function buildHarness() {
     onRegionLoaded: () => {},
     onPlayerProcess: () => {},
   };
+  delete require.cache[require.resolve('../plugins/objects/Doors.plugin')];
   require('../plugins/objects/Doors.plugin').register(api);
 
   const place = (id, x, y, face) => {
@@ -105,6 +106,32 @@ test('Dragon Slayer secret wall opens with the normal door interaction', () => {
       ['register', 2606, 2836, 9599, 0],
       ['deregister', 2606, 2836, 9600, 3],
     ], 'opening rotates the wall out of the doorway so ordinary pathfinding can cross');
+  } finally {
+    h.restore();
+  }
+});
+
+test('Kourend Crypt cached Large doors open through the generic door handler', async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(process.cwd());
+  const cachedDoors = new Map([32404, 32405, 32406, 32407].map((id) => [
+    id,
+    CacheDefinitions.getObject(id),
+  ]));
+  for (const id of cachedDoors.keys()) {
+    const definition = cachedDoors.get(id);
+    assert.equal(definition.name, 'Large doors');
+    assert.equal(definition.actions[0], 'Open');
+    assert.deepEqual(definition.models, [[6623]]);
+  }
+
+  const h = buildHarness({ cacheObjects: cachedDoors });
+  try {
+    assert.ok(h.handlers.get('Large doors')?.Open, 'the plural cache name must be registered');
+    const operations = h.click(32404, 8223, 1624, 0, 'Open', 'Large doors');
+    assert.equal(operations[0][0], 'register');
+    assert.equal(operations[0][1], 32405, 'opening the west leaf uses its cached open partner');
+    assert.equal(operations[1][0], 'deregister');
+    assert.equal(operations[1][1], 32404);
   } finally {
     h.restore();
   }
