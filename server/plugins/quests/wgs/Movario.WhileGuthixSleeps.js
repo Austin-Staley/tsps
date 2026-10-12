@@ -11,8 +11,10 @@ module.exports = function registerMovario({api,quest,stage,advance,held,give,val
   const GAUGE_ATTRIBUTE='while-guthix-sleeps:pressure-gauge';
   const WEIGHTS_ATTRIBUTE='while-guthix-sleeps:statue-weights';
   const TRIES_ATTRIBUTE='while-guthix-sleeps:door-tries';
+  const RESOURCES_ATTRIBUTE='while-guthix-sleeps:base-resources';
+  const RESOURCES=[[53959,53955,10793,453],[53965,53961,10794,554],[53971,53967,10795,560],[53977,53973,10796,1513]];
   const BASE_ATTRIBUTE='while-guthix-sleeps:in-base';
-  ATTRIBUTES.push(RUNE_ATTRIBUTE,WIRES_ATTRIBUTE,STAIRS_ATTRIBUTE,BOOKCASE_ATTRIBUTE,BED_ATTRIBUTE,READ_ATTRIBUTE,PAINTING_ATTRIBUTE,GAUGE_ATTRIBUTE,WEIGHTS_ATTRIBUTE,TRIES_ATTRIBUTE,BASE_ATTRIBUTE);
+  ATTRIBUTES.push(RESOURCES_ATTRIBUTE,RUNE_ATTRIBUTE,WIRES_ATTRIBUTE,STAIRS_ATTRIBUTE,BOOKCASE_ATTRIBUTE,BED_ATTRIBUTE,READ_ATTRIBUTE,PAINTING_ATTRIBUTE,GAUGE_ATTRIBUTE,WEIGHTS_ATTRIBUTE,TRIES_ATTRIBUTE,BASE_ATTRIBUTE);
   const NOTES=[29525,29526], KEY=29523, BASKET=29522, PRESSURE_NOTES=29524;
   const RUNES=[556,557,554,555,558], WEIGHTS=[29527,29528,29529], KILOS=[1,2,5];
   const ENTRY_LADDER=53892, DOWN_STAIRS=53895, UP_STAIRS=53896, RUNE_CHEST=54117;
@@ -45,7 +47,23 @@ module.exports = function registerMovario({api,quest,stage,advance,held,give,val
     restoreScenery(player);
   }
   function active(p){return areas.has(p)&&stage(p)>=100;}
+  function resources(p){let claimed=p.getAttribute(RESOURCES_ATTRIBUTE);if(!Array.isArray(claimed)){claimed=[0,0,0,0];p.setAttribute(RESOURCES_ATTRIBUTE,claimed);}return claimed;}
+  function resourceVars(p){const claimed=resources(p);RESOURCES.forEach((r,i)=>p.getPacketSender().sendVarbit(r[2],100-claimed[i]));}
+  function tunnel({player,object,objectId,definition}){
+    if(!active(player)||(definition?.id??objectId)!==53942)return false;
+    player.moveTo(new Location(4173,object.getLocation().getY()===4948?4937:4949,1));return true;
+  }
+  function takeResource({player,objectId,definition}){
+    if(!active(player))return false;const id=definition?.id??objectId;
+    const index=RESOURCES.findIndex(([parent,first])=>id===parent||(id>=first&&id<=first+3));if(index<0)return false;
+    const claimed=resources(player),item=RESOURCES[index][3],inventory=player.getInventory(),remaining=100-claimed[index];
+    const stackable=ItemDefinition.forId(item).isStackable(),amount=stackable?(inventory.contains(item)||inventory.getFreeSlots()?remaining:0):Math.min(remaining,inventory.getFreeSlots());
+    if(amount<=0){player.sendMessage(remaining?'You need a free inventory space.':'The pallet is empty.');return true;}
+    const before=inventory.getAmount(item);inventory.adds(item,amount);claimed[index]+=inventory.getAmount(item)-before;
+    player.setAttribute(RESOURCES_ATTRIBUTE,claimed);resourceVars(player);return true;
+  }
   function restoreScenery(p){
+    resourceVars(p);
     if(val(p,BOOKCASE_ATTRIBUTE))replace(p,MECHANICAL_STAIRS,[4172,4954,1],10,3);
     if(val(p,BED_ATTRIBUTE))replace(p,val(p,BED_ATTRIBUTE)>=3?CHESTS[2]:CHESTS[1],[4179,4954,2],10,1);
     if(val(p,PAINTING_ATTRIBUTE))replace(p,WALL,[4179,4948,1],4,3);
@@ -196,6 +214,8 @@ module.exports = function registerMovario({api,quest,stage,advance,held,give,val
   api.onObjectInteraction('Pressure gauge',{Check:gauge});
   api.onObjectInteraction('Pile of weights',{'Take-from':pile});
   api.onObjectInteraction('Door',{Open:exit});
+  api.onObjectInteraction('Tunnel',{Enter:tunnel});
+  for(const name of ['Coal pile','Fire rune pile','Death rune pile','Magic logs pile'])api.onObjectInteraction(name,{'Take-from':takeResource});
   for(const name of ['Air rune','Earth rune','Fire rune','Water rune','Mind rune'])api.onItemOnObject(name,'Old battered door',runeDoor,{noted:false});
   api.onItemOnObject('Ruby key','Bookcase',ruby,{noted:false});
   api.onItemOnObject('Ruby key','Bed chest',ruby,{noted:false});
