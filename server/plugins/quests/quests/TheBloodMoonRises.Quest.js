@@ -478,7 +478,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   function startSiegeDrakanBattle(player) {
     const existing = player.getAttribute(SIEGE_DRAKAN_AREA_ATTRIBUTE);
     if (existing && existing.isDestroyed?.() !== true) return true;
-    if (stage(player) !== STAGE.SIEGE) return false;
+    if (stage(player) !== STAGE.SIEGE || hallDefenceState(player).phase !== "breach") return false;
     const area = new SiegeDrakanArea(player.getUsername?.());
     const boss = api.spawnNpc({ id: NpcIdentifiers.LOWERNIEL_DRAKAN_19, x: 3168, y: 7853, z: 1,
       wanderRadius: 0, owner: player, ownerOnly: true });
@@ -618,7 +618,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   function handleSiegeLogin({ player }) {
     if (!player || stage(player) !== STAGE.SIEGE) return;
     const state = hallDefenceState(player);
-    if (state.phase === "hall") hall.enter(player);
+    hall.enter(player);
     if (state.phase === "hall") player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE,
       { ...state, nextIntegrityLossCycle: World.getProcessCycle() + HALL_INTEGRITY_INTERVAL });
     spawnSiegeInjuredAranei(player);
@@ -651,7 +651,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     const { x, y, z } = event.location ?? {};
     const state = hallDefenceState(player);
     const inventory = player.getInventory();
-    if (state.phase !== "hall") return;
+    if (!["hall", "breach"].includes(state.phase) || event.object?.getPrivateArea?.() !== hall.sessions.get(player)) return;
 
     if (objectId === SIEGE_HALL.hammerCrate || objectId === SIEGE_HALL.potionCrate) {
       event.handled = true;
@@ -661,13 +661,14 @@ module.exports = function registerTheBloodMoonRises(api) {
       return;
     }
 
-    if (objectId === SIEGE_HALL.barricade && x === 3167 && y === 7844 && z === 1 && state.phase === "hall") {
+    if (objectId === SIEGE_HALL.barricade && x === 3167 && y === 7844 && z === 1) {
       event.handled = true;
+      if (state.phase === "breach") { startSiegeDrakanBattle(player); return; }
       player.sendMessage("The reinforced door is still holding. Keep repairing the hall and helping the Aranei until Lowerniel breaks through.");
       return;
     }
 
-    if (z !== 1) return;
+    if (z !== 1 || state.phase !== "hall") return;
     const repairKey = `${x},${y}`;
     const repair = SIEGE_HALL.repairLocations.get(repairKey);
     if (!repair || objectId !== repair[0]) return;
