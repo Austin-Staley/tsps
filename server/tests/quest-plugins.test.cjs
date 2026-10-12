@@ -302,6 +302,54 @@ test('Dragon Slayer II unlocks the northern Ungael exit from Vorkath completion 
   assert.deepEqual(values.at(-1), [6108, 0], 'unfinished players see the blocked cache morph');
 });
 
+test('Dragon Slayer II laboratory copies every cache chunk containing its six notes', () => {
+  const objectHandlers = [];
+  const chunks = [];
+  let dimensions;
+  let spawn;
+  const { api: base } = mockApi();
+  const core = Object.assign({}, base.core, {
+    TemplatedInstanceArea: class {
+      constructor(width, height) { dimensions = [width, height]; }
+      setChunk(plane, chunkX, chunkY, template) {
+        if (plane === 0) chunks.push({ chunkX, chunkY, ...template });
+      }
+      enter() {}
+      getBaseX() { return 8192; }
+      getBaseY() { return 1600; }
+      tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z }; }
+      getName() { return 'Ungael lab test'; }
+    },
+  });
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'onObjectInteraction' ? (...args) => {
+        const handler = args.find((arg) => typeof arg === 'function');
+        if (handler) objectHandlers.push(handler);
+      }
+        : target[prop],
+  });
+  require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  const attrs = new Map([
+    ['quest.dragon_slayer_ii.stage', 6],
+    ['dragon-slayer-ii:vorkath-defeated', true],
+  ]);
+  const player = {
+    getAttribute: (key) => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getUsername: () => 'Lab map test',
+    moveTo: (location) => { spawn = location; },
+    sendMessage() {},
+  };
+  const enter = objectHandlers.find((handler) => handler.toString().includes('current instanceof UngaelLabArea'));
+  assert.equal(typeof enter, 'function');
+  enter({ player, objectId: core.ObjectIdentifiers.CAVE_62, location: { x: 2248, y: 4077, z: 0 } });
+  assert.deepEqual(dimensions, [6, 4]);
+  assert.deepEqual(chunks[0], { chunkX: 0, chunkY: 0, sourceChunkX: 281, sourceChunkY: 1306, sourcePlane: 0, rotation: 0 });
+  assert.deepEqual(chunks.at(-1), { chunkX: 5, chunkY: 3, sourceChunkX: 286, sourceChunkY: 1309, sourcePlane: 0, rotation: 0 });
+  assert.deepEqual(spawn, { x: 8204, y: 1616, z: 0 }, 'the entrance lands at the cache lever and inside the expanded template');
+});
+
 test('Dragon Slayer II Torfinn starts both ordered dragon waves before Galvek', async () => {
   await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
   const { api: base } = mockApi();

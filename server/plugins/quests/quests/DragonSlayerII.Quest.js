@@ -7,6 +7,8 @@ module.exports = function registerDragonSlayerII(api) {
   const KEY_PARTS = [I.DRAGON_KEY_PIECE, I.DRAGON_KEY_PIECE_2, I.DRAGON_KEY_PIECE_3, I.DRAGON_KEY_PIECE_4];
   const RELDO_BOOKCASE_IDS = [O.BOOKCASE_29, O.BOOKCASE_32];
   const UNGAEL_NOTES = [I.OLD_NOTES, I.OLD_NOTES_2, I.OLD_NOTES_3, I.OLD_NOTES_4, I.OLD_NOTES_5, I.OLD_NOTES_6];
+  const UNGAEL_LAB_SOURCE_X = 2248;
+  const UNGAEL_LAB_SOURCE_Y = 10448;
   const UNGAEL_NOTE_OBJECTS = new Map([
     [O.ANCIENT_MACHINERY_2, { x: 2254, y: 10465, item: UNGAEL_NOTES[0] }],
     [O.ANCIENT_MACHINERY_3, { x: 2288, y: 10456, item: UNGAEL_NOTES[1] }],
@@ -150,14 +152,14 @@ module.exports = function registerDragonSlayerII(api) {
     };
     UngaelLabArea = class DragonSlayerIIUngaelLabArea extends TemplatedInstanceArea {
       constructor(owner) {
-        super(5, 4);
+        super(6, 4);
         this.owner = owner;
-        for (let chunkX = 0; chunkX < 5; chunkX++) {
+        for (let chunkX = 0; chunkX < 6; chunkX++) {
           for (let chunkY = 0; chunkY < 4; chunkY++) {
             for (let plane = 0; plane < 4; plane++) {
               this.setChunk(plane, chunkX, chunkY, plane === 0 ? {
-                sourceChunkX: 282 + chunkX,
-                sourceChunkY: 1307 + chunkY,
+                sourceChunkX: 281 + chunkX,
+                sourceChunkY: 1306 + chunkY,
                 sourcePlane: 0,
                 rotation: 0,
               } : null);
@@ -829,15 +831,15 @@ module.exports = function registerDragonSlayerII(api) {
     area.enter(p);
     p.setAttribute(ATTR_AREA, area);
     p.setAttribute(ATTR_UNGAEL_LAB_ACTIVE, true);
-    p.moveTo(area.tile(4, 8, 0));
+    p.moveTo(area.tile(12, 16, 0));
     p.sendMessage("You enter the Ungael laboratory. Search the machinery, then find a way to the locked eastern room.");
     return true;
   }
   function handleUngaelLab({ player: p, objectId, location }) {
     const area = p.getAttribute(ATTR_AREA);
     if (!(area instanceof UngaelLabArea)) return false;
-    const sourceX = 2256 + location.x - area.getBaseX();
-    const sourceY = 10456 + location.y - area.getBaseY();
+    const sourceX = UNGAEL_LAB_SOURCE_X + location.x - area.getBaseX();
+    const sourceY = UNGAEL_LAB_SOURCE_Y + location.y - area.getBaseY();
     const note = UNGAEL_NOTE_OBJECTS.get(objectId);
     if (note && stage(p) >= S.KEYS && sourceX === note.x && sourceY === note.y) {
       if (has(p, note.item)) p.sendMessage("You have already taken this set of Dragonkin notes.");
