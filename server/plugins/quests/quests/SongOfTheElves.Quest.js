@@ -25,8 +25,10 @@ module.exports = function registerSongOfTheElves(api) {
   const LIBRARY_CRYSTALS = "quest.song_of_the_elves.library-crystals";
   const LIBRARY_PILLAR_STATE = "quest.song_of_the_elves.library-pillar-state";
   const RECRUITED_ELDERS = "quest.song_of_the_elves.recruited-elders";
+  const REVELATIONS_MEETING_STARTED = "quest.song_of_the_elves.revelations-meeting-started";
   const MEILYR_CLUE = "quest.song_of_the_elves.meilyr-clue";
   const LLETYA_GUIDE_SPAWNED = "quest.song_of_the_elves.lletya-guide-spawned";
+  const LLETYA_ARIANWYN_NPC = "quest.song_of_the_elves.lletya-arianwyn-npc";
   const FRAGMENT_DEFEATED = "quest.song_of_the_elves.fragment-defeated";
   const CAMP_AREA = "quest.song_of_the_elves.camp-area";
   const CAMP_HOLES = "quest.song_of_the_elves.camp-holes";
@@ -141,14 +143,24 @@ module.exports = function registerSongOfTheElves(api) {
     process(mobile) {
       if (!mobile?.isPlayer?.()) return;
       const player = mobile.getAsPlayer();
-      if (currentChapter(player) !== 12 || quest.isComplete(player)) return;
-      if (player.getAttribute(LLETYA_GUIDE_SPAWNED) === true) return;
-      player.setAttribute(LLETYA_GUIDE_SPAWNED, true);
-      const npc = api.spawnNpc({ id: NpcIdentifiers.LORD_IEUAN_AMLODD_2, x: 2349, y: 3170, z: 0,
-        wanderRadius: 0, owner: player, ownerOnly: true });
-      if (!npc) {
-        player.setAttribute(LLETYA_GUIDE_SPAWNED, false);
-        return;
+      if (quest.isComplete(player)) return;
+      if (currentChapter(player) === 12 && player.getAttribute(LLETYA_GUIDE_SPAWNED) !== true) {
+        player.setAttribute(LLETYA_GUIDE_SPAWNED, true);
+        const guide = api.spawnNpc({ id: NpcIdentifiers.LORD_IEUAN_AMLODD_2, x: 2349, y: 3170, z: 0,
+          wanderRadius: 0, owner: player, ownerOnly: true });
+        if (!guide) player.setAttribute(LLETYA_GUIDE_SPAWNED, false);
+      }
+      // Lletya's map NPC is a cache scenery variant (5292) with no Talk-to
+      // action. Use the cache's actual Talk-to Arianwyn variant for this chapter.
+      if (currentChapter(player) === 13 && !player.getAttribute(LLETYA_ARIANWYN_NPC)) {
+        const arianwyn = api.spawnNpc({ id: NpcIdentifiers.ARIANWYN_6, x: 2354, y: 3172, z: 0,
+          wanderRadius: 0, owner: player, ownerOnly: true });
+        if (arianwyn) player.setAttribute(LLETYA_ARIANWYN_NPC, arianwyn);
+      }
+      if (currentChapter(player) !== 13) {
+        const arianwyn = player.getAttribute(LLETYA_ARIANWYN_NPC);
+        if (arianwyn) api.removeNpc(arianwyn);
+        player.setAttribute(LLETYA_ARIANWYN_NPC, null);
       }
     }
   }
@@ -461,6 +473,7 @@ module.exports = function registerSongOfTheElves(api) {
     if (chapter !== undefined && (event.stepId !== "jtPiC1" || wearingDisguise(player))) {
       setChapter(player, chapter);
     }
+    if (event.stepId === "koxQh3") player.setAttribute(REVELATIONS_MEETING_STARTED, true);
     if (event.stepId === "UeAKgA") {
       player.moveTo(new Location(2440, 6090, 0));
       player.setAttribute(VALLEY_FIGURE, true);
@@ -505,6 +518,9 @@ module.exports = function registerSongOfTheElves(api) {
     const recruited = (Number(player.getAttribute(RECRUITED_ELDERS)) || 0) | bit;
     player.setAttribute(RECRUITED_ELDERS, recruited);
     if ((recruited & 3) === 3 && currentChapter(player) === 13) {
+      const arianwyn = player.getAttribute(LLETYA_ARIANWYN_NPC);
+      if (arianwyn) api.removeNpc(arianwyn);
+      player.setAttribute(LLETYA_ARIANWYN_NPC, null);
       setChapter(player, 14);
       player.sendMessage("Lord Crwys and Lady Hefin are on their way to Lletya. Return to Baxtorian for the next part of the plan.");
     }
@@ -548,6 +564,16 @@ module.exports = function registerSongOfTheElves(api) {
       }
       return startTranscript(api, player, event.npcId, PAGE,
         "sealing-the-underground-pass-attack-of-the-iorwerth-upon-successfully-defending-the-dwarf-camp");
+    }
+    if (currentChapter(player) === 13 && npcName === "arianwyn") {
+      return startTranscript(api, player, event.npcId, PAGE,
+        "reporting-back-after-the-revelations-the-curse-of-seren");
+    }
+    if (currentChapter(player) === 13 && npcName === "baxtorian") {
+      const variant = player.getAttribute(REVELATIONS_MEETING_STARTED) === true
+        ? "reporting-back-after-the-revelations-talking-to-baxtorian-after-the-meeting"
+        : "reporting-back-after-the-revelations-dialogue-with-npcs-post-library-visit-talking-to-baxtorian";
+      return startTranscript(api, player, event.npcId, PAGE, variant);
     }
     if (npcName === "baxtorian" && currentChapter(player) === 17) {
       const wasAtCamp = player.getArea?.() instanceof DwarvenCampArea;

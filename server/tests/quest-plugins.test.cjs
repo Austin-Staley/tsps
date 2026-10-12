@@ -357,6 +357,66 @@ test('Song of the Elves rubs the seed to the Enchanted Valley and returns to Lle
   assert.equal(attributes.get('quest.song_of_the_elves.valley-figure'), false);
 });
 
+test('Song of the Elves exposes the post-library meeting through a talkable Arianwyn variant', () => {
+  const { api } = mockApi();
+  const areas = [];
+  const spawns = [];
+  api.registerArea = (area) => areas.push(area);
+  api.spawnNpc = (definition) => (spawns.push(definition), { isRegistered: () => true });
+  api.removeNpc = () => {};
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map();
+  const player = {
+    getUsername: () => 'PostLibraryMeetingTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    isPlayer: () => true,
+    getAsPlayer: () => player,
+  };
+  quest.setStage(player, 140);
+  const lletya = areas[0];
+  lletya.process(player);
+  lletya.process(player);
+  assert.equal(spawns.length, 1, 'the owner-only meeting NPC is spawned once per chapter visit');
+  assert.equal(spawns[0].id, api.core.NpcIdentifiers.ARIANWYN_6);
+  assert.deepEqual([spawns[0].x, spawns[0].y, spawns[0].z], [2354, 3172, 0]);
+  assert.equal(spawns[0].owner, player);
+  assert.equal(spawns[0].ownerOnly, true);
+});
+
+test('Song of the Elves starts the post-library council and switches Baxtorian after it', () => {
+  const { api, handlers } = mockApi();
+  const hooks = [];
+  const started = [];
+  api.onAnyNpcInteraction = (hook) => hooks.push(hook);
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const original = runtime.startTranscript;
+  runtime.startTranscript = (...args) => (started.push(args.slice(1)), true);
+  try { require('../plugins/quests/quests/SongOfTheElves.Quest')(api); }
+  finally { runtime.startTranscript = original; }
+  const quest = runtime.getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map();
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    getInventory: () => ({ getAmount: () => 0, getFreeSlots: () => 28, deleteNumber: () => {}, adds: () => {} }),
+  };
+  quest.setStage(player, 140);
+  const talk = hooks.at(-1)['Talk-to'];
+  const interact = (name) => talk({ player, npcId: api.core.NpcIdentifiers.ARIANWYN_6, definition: { getName: () => name } });
+  assert.equal(interact('Arianwyn'), true);
+  assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-the-curse-of-seren');
+  assert.equal(interact('Baxtorian'), true);
+  assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-dialogue-with-npcs-post-library-visit-talking-to-baxtorian');
+  handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'koxQh3' });
+  assert.equal(interact('Baxtorian'), true);
+  assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-talking-to-baxtorian-after-the-meeting');
+});
+
 test('Song of the Elves library mirrors must follow the previous beam direction', () => {
   class TestPrivateArea {
     constructor() { this.objects = []; }
