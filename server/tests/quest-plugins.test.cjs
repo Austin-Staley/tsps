@@ -1899,6 +1899,154 @@ test('Regicide dense forest crossing checks Agility and clears the full rotated 
   assert.deepEqual(state.moves, [[2271, 3191, 0]], 'crosses from the east edge to the west edge of the rotated 2×3 obstacle');
 });
 
+test('Regicide routes the Meilyr dense forest from outside its footprint in both directions', () => {
+  const { api: base } = mockApi();
+  const objectHooks = [];
+  const routeHooks = [];
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onObjectInteraction'
+      ? (handler) => objectHooks.push(handler)
+      : prop === 'onObjectRoute'
+        ? (handler) => routeHooks.push(handler)
+        : target[prop],
+  });
+  require('../plugins/quests/quests/Regicide.Quest')(api);
+  const forest = {
+    getLocation: () => ({ getX: () => 2302, getY: () => 3214, getZ: () => 0 }),
+    getFace: () => 0,
+  };
+  const route = (source) => {
+    const event = {
+      object: forest,
+      objectId: api.core.ObjectIdentifiers.DENSE_FOREST,
+      sourceLocation: source,
+      destination: null,
+    };
+    routeHooks.at(-1)(event);
+    return event.destination;
+  };
+  assert.deepEqual(route({ x: 2299, y: 3215, z: 0 }), { x: 2301, y: 3215, z: 0 });
+  assert.deepEqual(route({ x: 2307, y: 3215, z: 0 }), { x: 2305, y: 3213, z: 0 });
+
+  const attributes = new Map([['quest.regicide.stage', 15]]);
+  const cross = (x, y) => {
+    const state = { moves: [] };
+    const player = {
+      getAttribute: (key) => attributes.get(key),
+      setAttribute: (key, value) => attributes.set(key, value),
+      getSkillManager: () => ({ getCurrentLevel: () => 99 }),
+      getLocation: () => ({ getX: () => x, getY: () => y, getZ: () => 0 }),
+      moveTo: (destination) => state.moves.push([destination.getX(), destination.getY(), destination.getZ()]),
+      sendMessage() {},
+    };
+    objectHooks.at(-1)({
+      player,
+      object: forest,
+      objectId: api.core.ObjectIdentifiers.DENSE_FOREST,
+      location: { x: 2302, y: 3214, z: 0 },
+      definition: { getSizeX: () => 3, getSizeY: () => 2 },
+      handled: false,
+    });
+    return state.moves;
+  };
+  assert.deepEqual(cross(2301, 3215), [[2305, 3213, 0]], 'west-to-east lands beyond the full forest footprint');
+  assert.deepEqual(cross(2305, 3213), [[2301, 3215, 0]], 'east-to-west lands west of the footprint');
+});
+
+test('Regicide keeps the approach side clear when routing to the Isafdar leaf trap', () => {
+  const { api: base } = mockApi();
+  const routeHooks = [];
+  const leaves = new Set([
+    '2273,3173', '2274,3173', '2275,3173',
+    '2273,3174', '2274,3174', '2275,3174',
+    '2273,3175', '2274,3175', '2275,3175',
+  ]);
+  const core = { ...base.core };
+  core.ObjectManager = {
+    objectsAt: (location) => leaves.has(`${location.getX()},${location.getY()}`)
+      ? [{ getId: () => core.ObjectIdentifiers.LEAVES }]
+      : [],
+  };
+  core.MapObjects = { mapObjects: new Map(), getHash: () => 0 };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core'
+      ? core
+      : prop === 'onObjectRoute'
+        ? (handler) => routeHooks.push(handler)
+        : target[prop],
+  });
+  require('../plugins/quests/quests/Regicide.Quest')(api);
+  const event = {
+    objectId: core.ObjectIdentifiers.LEAVES,
+    object: { getLocation: () => ({ getX: () => 2273, getY: () => 3175, getZ: () => 0 }) },
+    sourceLocation: { x: 2274, y: 3176, z: 0 },
+    destination: null,
+  };
+  routeHooks.at(-1)(event);
+  assert.deepEqual(event.destination, { x: 2274, y: 3176, z: 0 }, 'north approach remains outside the whole 3×3 trap');
+});
+
+test('Regicide supports both cache Log balance endpoints on the Isafdar bridge', () => {
+  const { api: base } = mockApi();
+  const objectHooks = [];
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onObjectInteraction'
+      ? (handler) => objectHooks.push(handler)
+      : target[prop],
+  });
+  require('../plugins/quests/quests/Regicide.Quest')(api);
+  const interact = objectHooks[0];
+  const run = (objectX, sourceX) => {
+    const state = { moves: [], animations: [] };
+    const player = {
+      getLocation: () => ({ getX: () => sourceX, getY: () => 3250, getZ: () => 0 }),
+      moveTo: (destination) => state.moves.push([destination.getX(), destination.getY(), destination.getZ()]),
+      performAnimation: (animation) => state.animations.push(animation.getId()),
+    };
+    const event = {
+      player, objectId: api.core.ObjectIdentifiers.LOG_BALANCE_10, option: 'Cross',
+      location: { x: objectX, y: 3250, z: 0 }, sourceLocation: { x: sourceX, y: 3250, z: 0 }, handled: false,
+    };
+    interact(event);
+    assert.equal(event.handled, true);
+    assert.deepEqual(state.animations, [762]);
+    return state.moves;
+  };
+  assert.deepEqual(run(2259, 2258), [[2259, 3250, 0]], 'western endpoint steps onto the balance');
+  assert.deepEqual(run(2259, 2260), [[2258, 3250, 0]], 'western endpoint returns to the west bank');
+  assert.deepEqual(run(2263, 2262), [[2264, 3250, 0]], 'eastern endpoint steps onto the east bank');
+  assert.deepEqual(run(2263, 2264), [[2262, 3250, 0]], 'eastern endpoint returns to the balance');
+  const unrelated = { player: {}, objectId: api.core.ObjectIdentifiers.LOG_BALANCE_10,
+    option: 'Cross', location: { x: 2259, y: 3251, z: 0 }, handled: false };
+  interact(unrelated);
+  assert.equal(unrelated.handled, false, 'the handler is limited to the verified bridge placements');
+});
+
+test('Regicide leaves completed Well of Voyage crossings to the shared loc route', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/Regicide.Quest')(api);
+  const attributes = new Map([['quest.regicide.stage', 15]]);
+  const moves = [];
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => ({ getX: () => 2340, getY: () => 9623, getZ: () => 0 }),
+    moveTo: (destination) => moves.push([destination.getX(), destination.getY(), destination.getZ()]),
+    sendMessage() {},
+  };
+  const event = {
+    player,
+    objectId: api.core.ObjectIdentifiers.WELL_9,
+    location: { x: 2341, y: 9622, z: 0 },
+    handled: false,
+  };
+
+  for (const handler of handlers.objects) handler(event);
+
+  assert.equal(event.handled, false, 'the native Well of Voyage route can handle the completed-quest traversal');
+  assert.deepEqual(moves, []);
+});
+
 test('Regicide leaf and stick traps use Agility checks and cross from the approached side', () => {
   const { api: base } = mockApi();
   const objectHooks = [];
