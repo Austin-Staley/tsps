@@ -30,7 +30,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const WYRD_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-area";
   const WYRD_DEFEATED_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-defeated";
   const DRAKAN_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.drakan-area";
-  const DRAKAN_DEFEATED_ATTRIBUTE = "quest.the_blood_moon_rises.drakan-defeated";
+  const DRAKAN_ENCOUNTER_COMPLETE = "quest.the_blood_moon_rises.drakan-defeated";
   const wyrdEncounters = new Map();
   const drakanEncounters = new Map();
   const CHAPTERS = [
@@ -310,7 +310,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     api.removeNpc(fight.boss);
     area.leave(player, false);
     player.setAttribute(DRAKAN_AREA_ATTRIBUTE, null);
-    player.setAttribute(DRAKAN_DEFEATED_ATTRIBUTE, true);
+    player.setAttribute(DRAKAN_ENCOUNTER_COMPLETE, true);
     drakanEncounters.delete(area);
     return true;
   }
@@ -501,7 +501,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function buildJournal(player) {
-    if (quest.isComplete(player)) return ["Lowerniel Drakan has fallen.", "The Myreque's long struggle is over."];
+    if (quest.isComplete(player)) return ["The confrontation at the blood moon is over.", "The Myreque have survived the battle and must regroup."];
     const value = stage(player);
     if (value >= STAGE.FINAL) return ["The Myreque have set out for Castle Drakan.", "I must follow them and stop Lowerniel Drakan."];
     if (value >= STAGE.FENCE_FOUND) return ["Safalaan escaped toward Castle Drakan.", "I should join the Myreque in Burgh de Rott and prepare to pursue him."];
@@ -573,6 +573,6 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction(inspectWyrdFence);
   api.onNpcDeath(handleWyrdDeath);
   api.persistAttribute(WYRD_DEFEATED_ATTRIBUTE);
-  api.persistAttribute(DRAKAN_DEFEATED_ATTRIBUTE);
+  api.persistAttribute(DRAKAN_ENCOUNTER_COMPLETE);
   api.onItemAction("Tome of Experience", { Read: readTome });
 };
