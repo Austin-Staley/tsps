@@ -60,7 +60,6 @@ export class QuestHelperPlugin extends Plugin {
     private readonly config = inject(ConfigManager).getConfig(QuestHelperConfig);
     private readonly listeners = new Set<() => void>();
     private readonly dialogs = new Set<string>();
-    private readonly questStates = new Map<string, { stage: number; status: 0 | 1 | 2 }>();
     private nav?: NavigationButton;
     private state: HelperState = { quests: [], counts: [], showOverlay: true };
     private signature = "";
@@ -88,7 +87,6 @@ export class QuestHelperPlugin extends Plugin {
         if (this.nav) this.toolbar.removeNavigation(this.nav);
         this.nav = undefined;
         this.clearSelection();
-        this.questStates.clear();
         this.state = { ...this.state, quests: [] };
         this.refresh();
     }
@@ -148,7 +146,6 @@ export class QuestHelperPlugin extends Plugin {
         if ([GameState.LOGIN_SCREEN, GameState.CONNECTION_LOST, GameState.HOPPING].includes(event.getGameState())) {
             this.loggedIn = false;
             this.clearSelection();
-            this.questStates.clear();
             this.state = { quests: [], counts: [], showOverlay: this.config.showOverlay() };
             this.refresh();
         } else if (event.getGameState() === GameState.LOGGED_IN) {
@@ -163,16 +160,13 @@ export class QuestHelperPlugin extends Plugin {
     }
 
     private status(quest: QuestCatalogEntry): 0 | 1 | 2 {
+        // Status can depend on several vars, including both Shield of Arrav routes.
         const stage = this.stage(quest);
-        const previous = this.questStates.get(quest.key);
-        if (previous?.stage === stage) return previous.status;
         const vm = this.client.cs2Vm;
         const script = quest.questId === undefined ? undefined : vm.context.loadScript(QUEST_STATUS_GET);
         if (!script) return quest.completeValue !== undefined && stage === quest.completeValue ? 2 : stage === 0 ? 1 : 0;
         vm.run(script, [quest.questId!]);
-        const status = vm.intStack[0] === 2 ? 2 : vm.intStack[0] === 1 ? 1 : 0;
-        this.questStates.set(quest.key, { stage, status });
-        return status;
+        return vm.intStack[0] === 2 ? 2 : vm.intStack[0] === 1 ? 1 : 0;
     }
 
     private getContext(stage: number): QuestContext {

@@ -118,13 +118,13 @@ void (async () => {
     const inventory = new Inventory(), equipment = new Inventory(14), bankInventory = new Inventory(1410);
     const tileHighlightManager = new TileHighlightManager();
     const varps = new Map<number, number>(), varbits = new Map<number, number>();
-    let loggedOut = false, scriptRuns = 0, loads = 0, dialogText = "";
+    let loggedOut = false, scriptRuns = 0, loads = 0, dialogText = "", completedThroughSharedState = false;
     const pending = new Map<string, (guide: ImportedGuide) => void>();
     const vm = { context: { loadScript: () => ({}) }, intStack: [1], run: (_script: unknown, [questId]: number[]) => {
         scriptRuns++;
         const quest = catalog.find((row) => row.questId === questId)!;
         const stage = "varp" in quest ? varps.get(quest.varp!) ?? 0 : "varbit" in quest ? varbits.get(quest.varbit!) ?? 0 : 0;
-        vm.intStack[0] = quest.key === "cooks_assistant" && stage === 2 ? 2 : stage === 0 ? 1 : 0;
+        vm.intStack[0] = quest.key === "cooks_assistant" && (stage === 2 || completedThroughSharedState) ? 2 : stage === 0 ? 1 : 0;
     } };
     const client = { inventory, equipment, bankInventory, tileHighlightManager, cs2Vm: vm,
         varManager: { getVarp: (id: number) => varps.get(id) ?? 0, getVarbit: (id: number) => varbits.get(id) ?? 0 },
@@ -141,8 +141,6 @@ void (async () => {
     plugin.setEnabledState(true);
     await plugin.start();
     assert.equal(plugin.getState().quests.length, 213);
-    const runs = scriptRuns; plugin.onGameTick();
-    assert.equal(scriptRuns, runs, "Unchanged quest vars do not rerun CS2 status checks");
     const cookLoad = plugin.selectQuest("cooks_assistant");
     pending.get("cooks_assistant")!(loadGuide("cooks_assistant")); await cookLoad;
     assert.match(plugin.getState().step!.text, /Purchase a bucket/);
@@ -154,6 +152,9 @@ void (async () => {
     plugin.onGameTick();
     assert.deepEqual(plugin.getState().counts, [1, 1, 1]);
     assert.equal(plugin.getTarget()?.x, 3206);
+    completedThroughSharedState = true; plugin.onGameTick();
+    assert.equal(plugin.getState().step?.text, "Quest complete!", "Cache script status can change through shared state without changing this quest's primary varp");
+    completedThroughSharedState = false; plugin.onGameTick();
     dialogText = "<col=ff0000>Here's a fresh egg.</col>";
     plugin.onClientTick(); plugin.onGameTick();
     assert.equal(plugin.getState().step!.items!.some((item) => item.id === Item.EGG), false, "Observe mounted OSRS dialogue widgets for partial hand-ins");
