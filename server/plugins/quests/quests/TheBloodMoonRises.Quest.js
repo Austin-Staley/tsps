@@ -552,14 +552,24 @@ module.exports = function registerTheBloodMoonRises(api) {
   const HALL_INTEGRITY_INTERVAL = 20;
   const HALL_INTEGRITY_LOSS = 1;
   const HALL_INTEGRITY_THRESHOLD = 50;
+  // shortcut: the Wiki says a player must participate but does not publish a
+  // count; require three distinct repair/heal actions before the breach scene.
+  const HALL_PARTICIPATION_REQUIRED = 3;
 
-  function applyHallIntegrity(player, delta) {
+  function applyHallIntegrity(player, delta, participated = false) {
     const state = hallDefenceState(player);
     if (state.phase !== "hall") return;
     const integrity = Math.max(0, Math.min(100, (state.integrity ?? 100) + delta));
-    const updated = { ...state, integrity };
+    const updated = { ...state, integrity,
+      participation: (state.participation ?? 0) + (participated ? 1 : 0) };
     player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
     if (integrity <= HALL_INTEGRITY_THRESHOLD && state.phase === "hall") {
+      if (updated.participation < HALL_PARTICIPATION_REQUIRED) {
+        updated.integrity = HALL_INTEGRITY_THRESHOLD + 1;
+        player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
+        player.sendMessage("The Aranei need more help before the doors give way. Repair another damaged window or pillar, or heal a fallen Aranei.");
+        return;
+      }
       updated.phase = "breach";
       player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
       startTranscript(api, player, NpcIdentifiers.LOWERNIEL_DRAKAN_19, PAGE,
@@ -660,7 +670,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
     if (!replaceHallObject(event, repair[1])) return;
     player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { ...state, repaired: [...(state.repaired ?? []), repairKey] });
-    applyHallIntegrity(player, 8);
+    applyHallIntegrity(player, 8, true);
     player.sendMessage(repair[0] === SIEGE_HALL.damagedPillar ? "You brace and repair the damaged pillar." : "You repair the damaged window.");
   }
 
@@ -682,7 +692,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     inventory.deleteNumber(SIEGE_HALL.healingPotion, 1);
     npc.setNpcTransformationId?.(NpcIdentifiers.ARANEI_106);
     player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { ...state, healed: [...(state.healed ?? []), key] });
-    applyHallIntegrity(player, 12);
+    applyHallIntegrity(player, 12, true);
     siegeHallInjured.delete(player.getUsername?.() ?? player.getIndex?.());
     player.sendMessage("You give the healing potion to the Aranei and help them back to their feet.");
   }

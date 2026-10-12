@@ -883,12 +883,19 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
   assert.equal(state.integrity, 100, 'repairs and healing support the integrity hold instead of completing it directly');
   assert.equal(replaced.filter(([kind]) => kind === 'add').length, 3, 'each fixed cache loc is replaced with its repaired variant');
   const process = handlers.playerProcess.find((handler) => handler.name === 'processSiegeDefence');
-  attributes.set('quest.the_blood_moon_rises.siege-defence', { ...state, integrity: 51, nextIntegrityLossCycle: 20 });
+  attributes.set('quest.the_blood_moon_rises.siege-defence', { ...state, integrity: 51, participation: 0, nextIntegrityLossCycle: 20 });
   cycle = 20;
   const npcDefinition = api.core.NpcDefinition;
   const originalForId = npcDefinition.forId;
   npcDefinition.forId = (id) => ({ getId: () => id, getName: () => 'Lowerniel Drakan' });
   try {
+    process({ player });
+    assert.equal(attributes.get('quest.the_blood_moon_rises.siege-defence').phase, 'hall',
+      'integrity alone cannot end the defence without the required participation');
+    attributes.set('quest.the_blood_moon_rises.siege-defence', {
+      ...attributes.get('quest.the_blood_moon_rises.siege-defence'), integrity: 51, participation: 3,
+    });
+    cycle = 40;
     process({ player });
   } finally {
     npcDefinition.forId = originalForId;
