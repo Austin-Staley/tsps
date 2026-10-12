@@ -1,3 +1,4 @@
+import { VoiceChatPlugin } from "../../../game/plugins/voice/VoiceChatPlugin";
 import { AnimationSmoothingPlugin } from "../../../game/plugins/animationsmoothing/AnimationSmoothingPlugin";
 import { AttackTimerPlugin } from "../../../game/plugins/attacktimer/AttackTimerPlugin";
 import { FirstPersonPlugin } from "../../../game/plugins/firstperson/FirstPersonPlugin";
@@ -30,6 +31,7 @@ import type { PluginClass } from "./Plugin";
 /** Static core plugin list (RuneLite's `PluginManager.loadCorePlugins`). */
 export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     ConfigPlugin,
+    VoiceChatPlugin,
     HdPlugin,
     FirstPersonPlugin,
     GameFrame317Plugin,

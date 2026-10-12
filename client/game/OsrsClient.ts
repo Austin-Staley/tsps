@@ -1473,6 +1473,7 @@ export class OsrsClient {
             executeScriptListener: (widget, listener, eventContext) =>
                 this.executeScriptListener(widget, listener, eventContext),
             handleWidgetAction: (event) => this.handleWidgetAction(event),
+            handlePluginWidgetAction: (event) => this.clientPlugins.handleWidgetAction(event),
             handleTradeWidgetAction: (widget, event, groupId, childId) =>
                 this.handleTradeWidgetAction(widget, event, groupId, childId),
             handleInventorySlotMove: (from, to) => this.handleInventorySlotMove(from, to),
@@ -3877,6 +3878,7 @@ export class OsrsClient {
     }
 
     handleWidgetAction(event: Parameters<WidgetActionRouter["handleWidgetAction"]>[0]): void {
+        if (this.clientPlugins.handleWidgetAction(event)) return;
         const uid = event.widget?.uid | 0;
         // The logout tab's "World Switcher" button, and the same option on the logout tab's
         // stone (stone10 of each layout), open the server list.
