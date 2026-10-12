@@ -350,6 +350,75 @@ test('Dragon Slayer II laboratory copies every cache chunk containing its six no
   assert.deepEqual(spawn, { x: 8204, y: 1616, z: 0 }, 'the entrance lands at the cache lever and inside the expanded template');
 });
 
+test('Dragon Slayer II Ungael lever limits the key chest to its 30-tick window', () => {
+  const objectHandlers = [];
+  let cycle = 100;
+  const { api: base } = mockApi();
+  const core = Object.assign({}, base.core, {
+    World: Object.assign({}, base.core.World, { getProcessCycle: () => cycle }),
+    TemplatedInstanceArea: class {
+      constructor() { this.x = 8192; this.y = 1600; }
+      setChunk() {}
+      enter() {}
+      getBaseX() { return this.x; }
+      getBaseY() { return this.y; }
+      tile(x, y, z) { return { x: this.x + x, y: this.y + y, z }; }
+      getName() { return 'Ungael lab test'; }
+    },
+  });
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'onObjectInteraction' ? (...args) => {
+        const handler = args.find((arg) => typeof arg === 'function');
+        if (handler) objectHandlers.push(handler);
+      }
+        : target[prop],
+  });
+  require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  const { ItemIdentifiers: I, ObjectIdentifiers: O } = core;
+  const attrs = new Map([
+    ['quest.dragon_slayer_ii.stage', 6],
+    ['dragon-slayer-ii:vorkath-defeated', true],
+  ]);
+  const items = new Map();
+  const messages = [];
+  const inventory = {
+    getAmount: (id) => items.get(id) ?? 0,
+    getFreeSlots: () => 28 - [...items.values()].reduce((sum, amount) => sum + amount, 0),
+    adds: (id, amount) => items.set(id, (items.get(id) ?? 0) + amount),
+    deleteNumber: (id, amount) => items.set(id, Math.max(0, (items.get(id) ?? 0) - amount)),
+  };
+  const player = {
+    getAttribute: (key) => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getUsername: () => 'Ungael lever test',
+    getRunEnergy: () => 20,
+    getInventory: () => inventory,
+    moveTo() {},
+    sendMessage: (message) => messages.push(message),
+  };
+  const generic = objectHandlers.find((handler) => handler.toString().includes('handleUngaelLab'));
+  assert.equal(typeof generic, 'function');
+  generic({ player, objectId: O.CAVE_62, location: { x: 2248, y: 4077, z: 0 } });
+  const lab = attrs.get('dragon-slayer-ii:instance-area');
+  assert.ok(lab, 'the cave creates the player’s laboratory instance');
+  const use = (objectId, x, y, option) => generic({
+    player, objectId, location: { x, y, z: 0 }, clickType: 1,
+    definition: { getInteractions: () => [option] },
+  });
+  use(O.LEVER_55, 8204, 1616, 'Pull');
+  assert.ok(messages.includes('You pull the lever. A door opens somewhere to the east!'));
+  cycle = 131;
+  use(O.STONE_CHEST_3, 8236, 1618, 'Search');
+  assert.equal(inventory.getAmount(I.DRAGON_KEY_PIECE_3), 0, 'an expired door cannot be looted');
+  cycle = 200;
+  use(O.LEVER_55, 8204, 1616, 'Pull');
+  cycle = 203;
+  use(O.STONE_CHEST_3, 8236, 1618, 'Search');
+  assert.equal(inventory.getAmount(I.DRAGON_KEY_PIECE_3), 1);
+  assert.equal(inventory.getAmount(I.ANCIENT_KEY), 1);
+});
+
 test('Dragon Slayer II Torfinn starts both ordered dragon waves before Galvek', async () => {
   await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
   const { api: base } = mockApi();
