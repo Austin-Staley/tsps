@@ -2057,6 +2057,37 @@ test('completed Underground Pass leaves Iban temple doors to normal door handlin
   assert.equal(event.handled, false, 'completed players do not need the unsaved history bit');
 });
 
+test('Underground Pass bridge jumps move to the far bank', () => {
+  const { api, handlers, quest, player, tile } = questScene('UndergroundPass');
+  quest.setStage(player, 3);
+  player.getSkillManager = () => ({ getCurrentLevel: () => 99 });
+  const bridge = (id, x, y, start, face = 0) => {
+    player.moveTo(tile(...start));
+    const event = {
+      player,
+      objectId: id,
+      object: { getFace: () => face },
+      definition: { getSizeX: () => 1, getSizeY: () => 3 },
+      location: { x, y, z: 1 },
+      sourceLocation: { x: start[0], y: start[1], z: start[2] },
+      handled: false,
+    };
+    handlers.objects.forEach((handler) => handler(event));
+    assert.equal(event.handled, true);
+    const landed = player.getLocation();
+    return [landed.getX(), landed.getY(), landed.getZ()];
+  };
+
+  const originalRandom = Math.random;
+  try {
+    Math.random = () => 0;
+    assert.deepEqual(bridge(3255, 2033, 4718, [2033, 4717, 1]), [2033, 4721, 1], 'south bank lands north of the span');
+    assert.deepEqual(bridge(3254, 2033, 4701, [2033, 4704, 1], 2), [2033, 4700, 1], 'north bank lands south of the span');
+  } finally {
+    Math.random = originalRandom;
+  }
+});
+
 test('Regicide leaf and stick traps use Agility checks and cross from the approached side', () => {
   const { api: base } = mockApi();
   const objectHooks = [];
