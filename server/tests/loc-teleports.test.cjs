@@ -183,6 +183,16 @@ test("a staircase used from either end takes the side the player stands on", () 
   assert.deepEqual(destinationFor(entry, new core.Location(3549, 10473, 0)), [3549, 10468, 0]);
 });
 
+test("Araxyte cave reverse tunnels return to the quest nest", () => {
+  const { destinationFor } = LocTeleports._test;
+  const east = data.locs.find(loc => loc.id === 54272 && loc.x === 3693);
+  const south = data.locs.find(loc => loc.id === 54272 && loc.x === 3681);
+  const north = data.locs.find(loc => loc.id === 54273);
+  assert.deepEqual(destinationFor(east, new core.Location(3696, 9839, 0)), [3689, 9837, 0]);
+  assert.deepEqual(destinationFor(south, new core.Location(3684, 9822, 0)), [3677, 9822, 0]);
+  assert.deepEqual(destinationFor(north, new core.Location(3680, 9849, 0)), [3680, 9842, 0]);
+});
+
 test("trapdoor swaps: each loc has its option, and becomes the other state", () => {
   const swaps = require("../plugins/world/data/loc-swaps.json").swaps;
   for (const swap of swaps) {

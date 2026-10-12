@@ -7,6 +7,7 @@
  * (King Roald, Reldo, ...) fall back to it after the other quests' handlers.
  */
 const QUESTS = [
+  "ANightAtTheTheatre",
   // Sins of the Father is the last Myreque chapter, so it registers before the
   // earlier ones (In Search of/In Aid/Darkness of Hallowvale, A Taste of Hope):
   // its stage window wins the shared Myreque NPCs and it defers outside it.
