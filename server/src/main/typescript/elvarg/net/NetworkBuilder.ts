@@ -1049,7 +1049,9 @@ export class ClientConnection {
     if (/^(wield|wear|equip|hold)$/.test(option)) {
       EquipPacketListener.equip(player, packet.itemId, packet.slot, 3214);
     } else if (ItemActionPacketListener.isDropOption(option, optionIndex)) {
-      DropItemPacketListener.drop(player, packet.itemId, 3214, packet.slot);
+      if (!ItemActionPacketListener.handleAction(player, packet.widgetId, packet.itemId, packet.slot, optionIndex ?? 1, packet.option)) {
+        DropItemPacketListener.drop(player, packet.itemId, 3214, packet.slot);
+      }
     } else if (option === "examine") {
       const definition = ItemDefinition.forId(packet.itemId);
       player.sendMessage(definition.getExamine() || definition.getName());
