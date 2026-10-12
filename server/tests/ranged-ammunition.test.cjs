@@ -21,6 +21,21 @@ test('dragon bolts, plain and gem-tipped, are ammunition for the dragon-tier cro
   }
 });
 
+test('dragon hunter crossbow variants resolve to the dragon crossbow ranged profile', () => {
+  const variants = [
+    Items.DRAGON_HUNTER_CROSSBOW, Items.DRAGON_HUNTER_CROSSBOW_2, Items.DRAGON_HUNTER_CROSSBOW_3,
+    Items.DRAGON_HUNTER_CROSSBOW_T_, Items.DRAGON_HUNTER_CROSSBOW_T__2,
+    Items.DRAGON_HUNTER_CROSSBOW_B_, Items.DRAGON_HUNTER_CROSSBOW_B__2,
+  ];
+  for (const id of variants) {
+    const player = { getEquipment: () => ({ getItems: () => Array.from({ length: 14 }, (_, slot) => ({
+      getId: () => slot === 3 ? id : slot === 13 ? Items.DRAGONSTONE_BOLTS_E_ : -1,
+    })) }) };
+    assert.equal(RangedWeapon.getFor(player), RangedWeapon.DRAGON_CROSSBOW, `weapon ${id}`);
+    assert.equal(Ammunition.getFor(player), Ammunition.ENCHANTED_DRAGON_BOLT, `ammo ${id}`);
+  }
+});
+
 test('an enchanted dragon bolt has its gem effect: ruby (e) is Blood Forfeit', () => {
   assert.equal(Ammunition.effectOf(Ammunition.ENCHANTED_RUBY_DRAGON_BOLT), Ammunition.ENCHANTED_RUBY_BOLT);
   assert.equal(Ammunition.effectOf(Ammunition.ENCHANTED_ONYX_DRAGON_BOLT), Ammunition.ENCHANTED_ONYX_BOLT);

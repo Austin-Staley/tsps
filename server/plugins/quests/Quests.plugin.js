@@ -19,7 +19,7 @@ const QUESTS = [
   "CrabQuest", "CreatureOfFenkenstrain", "CurrentAffairs", "CurseOfArrav",
   "DarknessOfHallowvale", "DeathOnTheIsle", "DeathPlateau", "DeathToTheDorgeshuun",
   "DefenderOfVarrock", "DemonSlayer", "DepthsOfDespair", "DesertTreasureI",
-  "DeviousMinds", "DigSite", "DoricsQuest", "DragonSlayer",
+  "DeviousMinds", "DigSite", "DoricsQuest", "DragonSlayer", "DragonSlayerII",
   "DreamMentor", "DruidicRitual", "DwarfCannon", "EadgarsRuse",
   "EaglesPeak", "ElementalWorkshopI", "ElementalWorkshopII", "EnakhrasLament",
   "EnlightenedJourney", "ErnestTheChicken", "EthicallyAcquiredAntiquities", "EyesOfGlouphrie",
