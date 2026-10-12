@@ -109,7 +109,7 @@ module.exports = function registerBridge({ api, stage, attribute, ready, play })
     if (!p || stage(p) < 60 || stage(p) > SIEGE) return false;
     if (id === api.core.ObjectIdentifiers.DOORS_44 && x === 3167 && y === 7860 && z === 1) {
       if (stage(p) === 60 && ready(p)) play(p, N.SAREI_5, 'drakan-s-siege-going-outside');
-      else if (state(p)?.phase === 'bridge') start(p);
+      else if (!state(p) || state(p)?.phase === 'bridge') start(p);
       else p.moveTo(new Location(2975, 7683, 0));
       return true;
     }
