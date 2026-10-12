@@ -164,8 +164,8 @@ module.exports=function registerDarkSquall({api,stage,advance,held,give,val,play
  api.onObjectInteraction('Tile',{Inspect:inspect});
  api.onSpellOnObject(charge);
  api.onObjectInteraction('Trapdoor',{'Climb-down':enter});
- api.onObjectInteraction('Bridge',{Jump:bridge,'Jump-over':bridge});
- api.onObjectInteraction('Wall',{'Climb-up':wall,'Climb-down':wall,Climb:wall});
+ api.onObjectInteraction('Bridge',{'Jump-to':bridge});
+ api.onObjectInteraction('Wall',{'Climb-up':wall,'Jump-down':wall});
  api.onObjectInteraction('Solid door',{Open:door});
  api.onObjectInteraction('Wardrobe',{Open:wardrobe,Close:wardrobe,Search:search});
  for(const name of ['Desk','Key rack','Table'])api.onObjectInteraction(name,{Search:search});

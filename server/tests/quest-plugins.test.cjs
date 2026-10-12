@@ -856,3 +856,14 @@ test('WGS fortress door crosses north when routing places the player on the door
   assert.deepEqual(player.position,[3016,y<=3514?3515:3513,0]);
  }
 });
+
+
+test('WGS catacomb crossings bind the native Jump-to and Jump-down options', () => {
+ const {api,handlers,player}=movarioFixture();
+ require('../plugins/quests/wgs/DarkSquall.WhileGuthixSleeps')({...api.context,stage:()=>490});
+ const bridge=handlers.objects.find(h=>h.name==='Bridge').options['Jump-to'];
+ assert.equal(bridge({player,objectId:53512}),true);assert.deepEqual(player.position,[4112,4703,1]);
+ assert.equal(bridge({player,objectId:53511}),true);assert.deepEqual(player.position,[4112,4696,1]);
+ const wall=handlers.objects.find(h=>h.name==='Wall').options['Jump-down'];
+ assert.equal(wall({player,objectId:53514}),true);assert.deepEqual(player.position,[4133,4724,1]);
+});
