@@ -1661,7 +1661,7 @@ test('Desert Treasure II shadow spells interrupt the private Leviathan encounter
 
 test('Desert Treasure II Duke prep requires the cache supplies and two real poisons before the boss can wake', () => {
   const { api: base } = mockApi();
-  const objects = [], itemItems = [], itemObjects = [], itemNpcs = [], deaths = [];
+  const objects = [], itemItems = [], itemObjects = [], itemNpcs = [], deaths = [], groundPickups = [];
   const queues = { add: [], remove: [] };
   class TestArea {
     constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
@@ -1693,6 +1693,7 @@ test('Desert Treasure II Duke prep requires the cache supplies and two real pois
         : prop === 'onItemOnItem' ? (handler) => itemItems.push(handler)
           : prop === 'onItemOnObject' ? (handler) => itemObjects.push(handler)
             : prop === 'onItemOnNpc' ? (handler) => itemNpcs.push(handler)
+                : prop === 'onGroundItemPickup' ? (handler) => groundPickups.push(handler)
               : prop === 'onNpcDeath' ? (handler) => deaths.push(handler)
                 : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
   });
@@ -1706,6 +1707,7 @@ test('Desert Treasure II Duke prep requires the cache supplies and two real pois
     moveTo(location) { this.location = location; }, sendMessage: (message) => messages.push(message),
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
     getInventory: () => ({ getAmount: (id) => inventory.get(id) ?? 0,
+      getFreeSlots: () => 28,
       adds: (id, amount) => inventory.set(id, (inventory.get(id) ?? 0) + amount),
       deleteNumber: (id, amount) => inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - amount)) }),
   };
@@ -1713,26 +1715,26 @@ test('Desert Treasure II Duke prep requires the cache supplies and two real pois
   const sourceLocation = (x, y, z = 0) => ({ x: 5000 + x - 3008, y: 6000 + y - 6416, z });
   const interactObject = (id, x, y, option = 'Search') => objects.at(-1)({ player, objectId: id, option, location: sourceLocation(x, y) });
   quest.setStage(player, 9);
-  assert.equal(objects.at(-1)({ player, objectId: 1, location: { x: 3039, y: 6433, z: 0 } }), true, 'enter the cache asylum gate');
+  assert.equal(objects.at(-1)({ player, objectId: 49138, location: { x: 3039, y: 6433, z: 0 } }), true, 'enter the cache asylum gate');
   assert.equal(attrs.get('desert-treasure-ii:sucellus-area') instanceof TestArea, true);
   const boss = attrs.get('desert-treasure-ii:boss');
   assert.equal(boss.__dt2SucellusAwake, false);
-  interactObject(O.PESTLE_AND_MORTAR, 3035, 6440);
-  interactObject(O.PICKAXE_2, 3035, 6441);
-  for (let i = 0; i < 3; i++) interactObject(O.MUSCA_MUSHROOMS, 3035, 6442);
-  for (let i = 0; i < 3; i++) interactObject(O.ARDER_MUSHROOMS, 3045, 6442);
-  for (let i = 0; i < 12; i++) interactObject(O.SALT_DEPOSIT, 3039, 6447, 'Mine');
+  interactObject(O.PESTLE_AND_MORTAR_2, 3034, 6434);
+  interactObject(O.PICKAXE_3, 3044, 6434);
+  for (let i = 0; i < 3; i++) interactObject(O.MUSCA_MUSHROOMS_2, 3048, 6453);
+  for (let i = 0; i < 3; i++) interactObject(O.ARDER_MUSHROOMS_2, 3030, 6453);
+  for (let i = 0; i < 12; i++) interactObject(O.SALT_DEPOSIT_2, 3033, 6448, 'Mine');
   for (const id of [I.MUSCA_MUSHROOM, I.MUSCA_MUSHROOM, I.MUSCA_MUSHROOM, I.ARDER_MUSHROOM, I.ARDER_MUSHROOM, I.ARDER_MUSHROOM]) {
     itemItems.at(-1)({ player, usedItemId: I.PESTLE_AND_MORTAR, usedWithItemId: id });
   }
   assert.equal(inventory.get(I.MUSCA_POWDER), 3);
   assert.equal(inventory.get(I.ARDER_POWDER), 3);
-  for (const vat of [47536, 47537]) {
+  for (const [vat, x] of [[47537, 3034], [47537, 3043]]) {
     for (const powder of [I.MUSCA_POWDER, I.ARDER_POWDER]) {
-      itemObjects.at(-1)({ player, itemId: powder, objectId: vat, location: sourceLocation(3038, 6438) });
+      itemObjects.at(-1)({ player, itemId: powder, objectId: vat, location: sourceLocation(x, 6438) });
     }
-    for (let i = 0; i < 6; i++) itemObjects.at(-1)({ player, itemId: I.SALAX_SALT, objectId: vat, location: sourceLocation(3038, 6438) });
-    interactObject(vat, 3038, 6438, 'Empty');
+    for (let i = 0; i < 6; i++) itemObjects.at(-1)({ player, itemId: I.SALAX_SALT, objectId: vat, location: sourceLocation(x, 6438) });
+    interactObject(vat, x, 6438, 'Empty');
   }
   assert.equal(inventory.get(I.ARDER_MUSCA_POISON), 2);
   itemNpcs.at(-1)({ player, npc: boss, itemId: I.ARDER_MUSCA_POISON });
@@ -1741,8 +1743,10 @@ test('Desert Treasure II Duke prep requires the cache supplies and two real pois
   assert.equal(boss.__dt2SucellusAwake, true);
   assert.equal(inventory.get(I.ARDER_MUSCA_POISON), 0);
   deaths.at(-1)({ killer: player, npc: boss });
-  assert.equal(inventory.get(I.ODD_KEY), 1);
-  interactObject(O.GATE_256, 3021, 6420, 'Open');
+  groundPickups.at(-1)({ player, groundItemId: I.ODD_KEY, location: sourceLocation(3039, 6454) });
+  inventory.set(I.ODD_KEY, 1);
+  interactObject(49140, 3023, 6425, 'Open');
+  interactObject(49116, 3021, 6420, 'Open');
   assert.equal(inventory.get(I.SUCELLUS_MEDALLION), 1);
   assert.equal(quest.getStage(player), 10);
 });
