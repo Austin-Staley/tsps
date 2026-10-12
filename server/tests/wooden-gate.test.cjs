@@ -31,8 +31,9 @@ function buildHarness() {
   Sounds.sendSound = (...args) => sounds.push(args);
   CacheDefinitions.getObject = (id) => (id === 2394
     ? { name: 'Gate', actions: ['Open'], models: [[1298]] }
-    : { name: 'Gate' });
-  CacheDefinitions.getCounts = () => ({ npcs: 0, items: 0, objects: 2395 });
+    : id === 2606 ? { name: 'Wall', actions: ['Open'], models: [[633]] }
+      : { name: 'Gate' });
+  CacheDefinitions.getCounts = () => ({ npcs: 0, items: 0, objects: 2607 });
 
   const handlers = new Map();
   const objectManager = {
@@ -91,8 +92,22 @@ function buildHarness() {
     CacheDefinitions.getCounts = originalGetCounts;
   };
 
-  return { place, click, sounds, ops, submitted, restore };
+  return { place, click, sounds, ops, submitted, handlers, restore };
 }
+
+test('Dragon Slayer secret wall opens with the normal door interaction', () => {
+  const h = buildHarness();
+  try {
+    assert.ok(h.handlers.get('Wall')?.Open, 'the cache calls the Dragon Slayer passage a Wall');
+    h.place(2606, 2836, 9600, 3);
+    assert.deepEqual(h.click(2606, 2836, 9600, 3, 'Open', 'Wall'), [
+      ['register', 2606, 2836, 9599, 0],
+      ['deregister', 2606, 2836, 9600, 3],
+    ], 'opening rotates the wall out of the doorway so ordinary pathfinding can cross');
+  } finally {
+    h.restore();
+  }
+});
 
 test('Tree Gnome Stronghold doors use their nameless open variants and restore on auto-close', () => {
   const h = buildHarness();

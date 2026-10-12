@@ -197,6 +197,7 @@ function createContext(core, server) {
     for (const removed of World.getRemovedObjects()) {
       if (removed.getPrivateArea() === viewedArea && sceneObjects.get(keyOf(removed))?.getId() === removed.getId()) sceneObjects.delete(keyOf(removed));
     }
+    const privateObjects = new Set(viewedArea?.getObjects?.() ?? []);
     const objects = [];
     for (const object of sceneObjects.values()) {
       if (object.getId() < 0) continue;

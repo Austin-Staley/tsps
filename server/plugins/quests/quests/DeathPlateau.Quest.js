@@ -63,6 +63,7 @@ module.exports = function registerDeathPlateauQuest(api) {
   const GIVE_IOU_IDS = new Set(["4p9H2-", "MBm6Sz", "mhKulF", "wAz_jn", "23tpMt"]);
   const GIVE_MAP_IDS = new Set(["yDYvE0", "MtULDz"]);
   const GIVE_CLIMBING_BOOTS_IDS = new Set(["aZ5-DY", "FG69_B"]);
+  const GIVE_CLIMBING_BOOTS_FROM_SHOP_ID = "FgkYXO";
   const GIVE_SPIKED_BOOTS_IDS = new Set(["AuWfYt", "MKP0WU", "1TFYaK", "WryBLk"]);
   const GIVE_CERTIFICATE_IDS = new Set(["KZG0PG", "VuuQKK"]);
 
@@ -339,6 +340,13 @@ module.exports = function registerDeathPlateauQuest(api) {
       player.getInventory().deleteNumber(TROUT_ITEM_ID, TENZING_SUPPLY_AMOUNT);
       return;
     }
+    if (stepId === GIVE_CLIMBING_BOOTS_FROM_SHOP_ID) {
+      if (!hasBoots(player) && held(player, COINS_ITEM_ID, 12)) {
+        player.getInventory().deleteNumber(COINS_ITEM_ID, 12);
+        player.getInventory().adds(CLIMBING_BOOTS_ITEM_ID, 1);
+      }
+      return;
+    }
     if (GIVE_IOU_IDS.has(stepId)) {
       giveIou(player);
       return;
@@ -384,7 +392,17 @@ module.exports = function registerDeathPlateauQuest(api) {
 
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
+  // The transcript's post-quest shop accepts this choice before its message
+  // step. Charge here so the purchase always changes inventory with the prose.
+  function handleChoice({ player, npcId, option }) {
+    if (npcId !== TENZING_NPC_ID || option !== "OK, sounds good." || !quest.isComplete(player)) return;
+    if (hasBoots(player) || !held(player, COINS_ITEM_ID, 12)) return;
+    player.getInventory().deleteNumber(COINS_ITEM_ID, 12);
+    player.getInventory().adds(CLIMBING_BOOTS_ITEM_ID, 1);
+  }
+
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onPlayerLogin(handleLogin);
 };

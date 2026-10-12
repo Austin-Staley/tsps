@@ -344,7 +344,7 @@ function sendQuestVarps({ player }) {
     // Bitfield stages must write their varbit: writing the whole parent varp
     // clobbers sibling bits (X Marks/Client of Kourend share veos_quest).
     if (quest.varbitId !== undefined) {
-      sender.sendVarbit(quest.varbitId, quest.getStage(player));
+      sender.sendVarbit(quest.varbitId, quest.varbitValue(quest.getStage(player), player));
       continue;
     }
     if (!Number.isInteger(quest.varpId) || quest.varpId < 0) continue;
@@ -360,7 +360,7 @@ function sendQuestVarps({ player }) {
  * Registers a quest and returns a handle with stage/complete helpers.
  *
  * @param api  the plugin api
- * @param def  { key, name, varpId, startedValue, completionValue, questPoints,
+ * @param def  { key, name, varpId, varbitId, varbitValue, startedValue, completionValue, questPoints,
  *               xpRewards?, rewardItemId?, rewardItemLabel?, otherRewards?,
  *               buildJournal?(player, quest), onReward?(player, quest),
  *               varpValue?(stage) }
@@ -378,6 +378,9 @@ function registerQuest(api, def) {
     varpValue(stage) {
       return def.varpValue ? def.varpValue(stage) | 0 : stage;
     },
+    varbitValue(stage, player) {
+      return def.varbitValue ? def.varbitValue(stage, player) | 0 : stage;
+    },
     getStage(player) {
       const value = Number(player.getAttribute(stageKey));
       return Number.isFinite(value) ? value | 0 : 0;
@@ -387,7 +390,7 @@ function registerQuest(api, def) {
       // Quests whose stage lives in a varbit of a shared varp (most post-2007
       // quests) set the varbit, so sibling bits in the same varp survive.
       if (def.varbitId !== undefined) {
-        player.getPacketSender().sendVarbit(def.varbitId, value | 0);
+        player.getPacketSender().sendVarbit(def.varbitId, quest.varbitValue(value | 0, player));
       } else {
         player.getPacketSender().sendConfig(def.varpId, quest.varpValue(value | 0));
       }

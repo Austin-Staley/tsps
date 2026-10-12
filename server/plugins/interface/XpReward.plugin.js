@@ -11,7 +11,7 @@
  * clear: "This skill is not available."). The server checks the level again.
  *
  *   api.emitCustomEvent("xpreward:open", {
- *     player, minLevel?, title?,
+ *     player, minLevel?, title?, skills?,
  *     onConfirm(skill, statName) -> the message box text, or null when refused,
  *   })
  */
@@ -44,7 +44,14 @@ function statName(skill) {
 
 /** The confirmed slot (0-23, one per child of 240:0) is enum 681's key less one. */
 /** Every skill offered: each stat's bit from enum 81. */
-function availableMask() {
+function availableMask(skills) {
+  if (Array.isArray(skills)) {
+    const bits = CacheDefinitions.getEnumValues(STAT_BIT_ENUM);
+    return skills.reduce((mask, skill) => {
+      const bit = bits.get(skill.getClientId());
+      return bit === undefined ? mask : mask | (1 << Number(bit));
+    }, 0);
+  }
   let mask = 0;
   for (const bit of CacheDefinitions.getEnumValues(STAT_BIT_ENUM).values()) mask |= 1 << Number(bit);
   return mask;
@@ -61,7 +68,7 @@ function open(request) {
   pending.set(player, request);
   const sender = player.getPacketSender();
   sender.sendConfig(MIN_LEVEL_VARP, request.minLevel ?? 0);
-  sender.sendConfig(AVAILABLE_VARP, availableMask());
+  sender.sendConfig(AVAILABLE_VARP, availableMask(request.skills));
   sender.sendVarbit(BUSY_VARBIT, 1);
   sender.sendInterface(XPREWARD);
   sender.sendInterfaceFlagsRange((XPREWARD << 16) | UNIVERSE, 0, SLOTS - 1, PAUSE_BUTTON);

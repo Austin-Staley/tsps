@@ -1455,8 +1455,17 @@ module.exports = function registerLunarDiplomacyQuest(api) {
 
   function handleChoice(event) {
     if (!pageGuard(event)) return;
-    const { player, npcId, option } = event;
+    const { player, npc, npcId, option } = event;
+    const npcLocation = npc?.getLocation?.();
     switch (option) {
+      case "That's fine, I'm just going to Pirates' Cove.":
+        if (!LOKAR_IDS.has(npcId) || stageOf(player) < STAGE_SAILED || !nearTile(npcLocation, RELLEKKA_DOCK, 12)) return;
+        player.moveTo(PIRATES_COVE_DOCKS);
+        return;
+      case "Can you take me back to Rellekka?":
+        if (!LOKAR_IDS.has(npcId) || stageOf(player) < STAGE_SAILED || !inShipBox(npcLocation) || !nearTile(npcLocation, PIRATES_COVE_DOCKS, 40)) return;
+        player.moveTo(RELLEKKA_DOCK);
+        return;
       case "Arrr! Yar! Let's be on our way, yar!":
         if (!LOKAR_IDS.has(npcId)) return;
         sailToPiratesCove(player);
@@ -1534,9 +1543,35 @@ module.exports = function registerLunarDiplomacyQuest(api) {
 
   function handleAction(event) {
     if (!pageGuard(event)) return;
-    const { player, stepId } = event;
+    const { player, npc, npcId, stepId } = event;
+    const npcLocation = npc?.getLocation?.();
     if (event.kind === "message") return;
     switch (stepId) {
+      // The canonical post-quest Lokar transcripts still offer the ordinary
+      // Rellekka <-> Pirates' Cove boat trip. The transcript exports these as
+      // teleport actions, so they need an explicit destination just like the
+      // in-quest sail choice below.
+      case "Zy03Vt":
+      case "1iO5AM":
+        if (!LOKAR_IDS.has(npcId) || stageOf(player) < STAGE_SAILED || !nearTile(npcLocation, RELLEKKA_DOCK, 12)) return;
+        event.handled = true;
+        player.moveTo(PIRATES_COVE_DOCKS);
+        return;
+      case "XRE4z2":
+        if (!LOKAR_IDS.has(npcId) || stageOf(player) < STAGE_SAILED || !inShipBox(npcLocation) || !nearTile(npcLocation, PIRATES_COVE_DOCKS, 40)) return;
+        event.handled = true;
+        player.moveTo(RELLEKKA_DOCK);
+        return;
+      case "szE3tO":
+        if (!BENTLEY_IDS.has(npcId) || stageOf(player) < STAGE_LUNAR_ISLE || !inShipBox(npcLocation) || !nearTile(npcLocation, PIRATES_COVE_DOCKS, 40)) return;
+        event.handled = true;
+        player.moveTo(LUNAR_ISLE_DOCKS);
+        return;
+      case "QIGQSG":
+        if (!BENTLEY_IDS.has(npcId) || stageOf(player) < STAGE_LUNAR_ISLE || !nearTile(npcLocation, LUNAR_ISLE_DOCKS, 32)) return;
+        event.handled = true;
+        player.moveTo(PIRATES_COVE_DOCKS);
+        return;
       case "jJ33Bh":
         event.handled = true;
         giveSeal(player);
