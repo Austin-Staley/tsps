@@ -152,21 +152,34 @@ function createContext(core, server) {
     const near = (loc) => loc.getZ() === here.getZ()
       && Math.abs(loc.getX() - here.getX()) <= radius && Math.abs(loc.getY() - here.getY()) <= radius;
 
-    const objects = [];
+    const privateArea = p.getPrivateArea?.() ?? null;
+    const viewedArea = privateArea?.countsAsMainWorld() ? null : privateArea;
+    const sceneObjects = new Map();
+    const keyOf = object => { const at = object.getLocation(); return `${at.getX()},${at.getY()},${at.getZ()},${object.getType()}`; };
     for (let x = here.getX() - radius; x <= here.getX() + radius; x++) {
       for (let y = here.getY() - radius; y <= here.getY() + radius; y++) {
-        for (const object of MapObjects.mapObjects.get(MapObjects.getHash(x, y, here.getZ())) ?? []) {
-          const loc = object.getLocation();
-          if (loc.getX() !== x || loc.getY() !== y || loc.getZ() !== here.getZ()) continue;
-          const definition = ObjectDefinition.forPlayer(object.getId(), p);
-          const options = definition?.getInteractions()?.filter(Boolean);
-          if (options?.length) objects.push({ id: object.getId(), name: definition.getName(), options, x, y });
+        const tile = new core.Location(x, y, here.getZ());
+        for (const object of [...(MapObjects.mapObjects.get(MapObjects.getHash(x, y, here.getZ())) ?? []), ...(viewedArea?.getTemplateObjects?.(tile) ?? [])]) {
+          const at = object.getLocation();
+          if (at.getX() === x && at.getY() === y && at.getZ() === here.getZ()) sceneObjects.set(keyOf(object), object);
         }
       }
     }
+    for (const object of viewedArea?.getObjects() ?? []) {
+      if (near(object.getLocation())) sceneObjects.set(keyOf(object), object);
+    }
+    for (const removed of World.getRemovedObjects()) {
+      if (removed.getPrivateArea() === viewedArea && sceneObjects.get(keyOf(removed))?.getId() === removed.getId()) sceneObjects.delete(keyOf(removed));
+    }
+    const objects = [];
+    for (const object of sceneObjects.values()) {
+      if (object.getId() < 0) continue;
+      const definition = ObjectDefinition.forPlayer(object.getId(), p);
+      const options = definition?.getInteractions()?.filter(Boolean);
+      const at = object.getLocation();
+      if (options?.length) objects.push({ id: object.getId(), name: definition.getName(), options, x: at.getX(), y: at.getY() });
+    }
 
-    const privateArea = p.getPrivateArea?.() ?? null;
-    const viewedArea = privateArea?.countsAsMainWorld() ? null : privateArea;
     return {
       npcs: World.getNpcsNear(here, radius, viewedArea).filter((npc) => !npc.isOwnerOnly?.() || npc.getOwner?.() === p).map((npc) => {
         const definition = npc.getCurrentDefinition(p);
