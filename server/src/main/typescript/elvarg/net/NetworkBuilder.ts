@@ -38,6 +38,7 @@ import {
   encodeWelcome,
   PlayerAppearance,
   resolveGameframeRoot,
+  encodePluginMessage,
 } from "./protocol/ClientProtocol";
 import {
   WORLD_MAP_CLOSE_WIDGET_ID,
@@ -209,6 +210,8 @@ export class ClientConnection {
   private pending?: PendingLogin;
   private reservedName?: string;
   private player?: Player;
+  private pluginMessageWindow = 0;
+  private pluginMessageCount = 0;
   private closed = false;
   private loginFailure?: string;
   private input = Promise.resolve();
@@ -276,6 +279,19 @@ export class ClientConnection {
         }
       }
       switch (packet.type) {
+        case "plugin_message": {
+          if (!this.player) continue;
+          const now = Date.now();
+          if (now - this.pluginMessageWindow >= 1000) {
+            this.pluginMessageWindow = now;
+            this.pluginMessageCount = 0;
+          }
+          if (++this.pluginMessageCount > 64) continue;
+          const event = { player: this.player, channel: packet.channel, data: packet.data, handled: false };
+          PluginManager.emitCustomEvent("network:plugin-message", event);
+          if (!event.handled) this.player.getSession().sendClientPacket(encodePluginMessage(packet.channel, { type: "unavailable" }));
+          continue;
+        }
         case "movement_input":
           if (this.player && this.player.getStatus() !== PlayerStatus.TRADING) {
             PluginManager.emitCustomEvent("player:movement-input", { player: this.player, packet });
@@ -652,7 +668,15 @@ export class ClientConnection {
             packet.targetItemId,
             packet.targetSlot,
             CacheDefinitions.getSpellName(packet.sourceWidgetId, packet.sourceItemId),
-          ) && !MAGIC_ITEMS.castOnItem(
+          ) && !PluginManager.emitSpellOnItem({
+            player: this.player,
+            spellName: CacheDefinitions.getSpellName(packet.sourceWidgetId, packet.sourceItemId),
+            spellWidget: packet.sourceWidgetId,
+            spellItemId: packet.sourceItemId,
+            itemId: packet.targetItemId,
+            slot: packet.targetSlot,
+            handled: false,
+          }) && !MAGIC_ITEMS.castOnItem(
             this.player,
             this.resolveClientCombatSpellId(
               packet.sourceWidgetId,

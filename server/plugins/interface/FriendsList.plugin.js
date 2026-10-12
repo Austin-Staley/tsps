@@ -1,8 +1,16 @@
 const { FriendsChatManager, CHAT_FILTERS_ATTRIBUTE, CLAN_CHAT_ATTRIBUTE } = require("./FriendsChatManager");
 
+/** "friends:send-private-message" ({ sender, recipient, text, sent }): a message sent for a player, such as a bot's reply. */
+function sendPrivateMessage(event) {
+  const { sender, recipient, text } = event ?? {};
+  if (!sender || !recipient || !FriendsChatManager.allowChat(sender, String(text ?? ""))) return;
+  event.sent = FriendsChatManager.deliverPrivateMessage(sender, recipient, text);
+}
+
 module.exports = {
   name: "FriendsList",
   register(api) {
+    api.onCustomEvent("friends:send-private-message", sendPrivateMessage);
     api.persistAttribute(CHAT_FILTERS_ATTRIBUTE);
     api.onCanAttack((event) => {
       if (event.allow !== null) return;
@@ -27,7 +35,11 @@ module.exports = {
       if (packet.type === "friends_chat_action") {
         FriendsChatManager.handleAction(player, packet.action);
       } else if (packet.type === "private_message") {
-        FriendsChatManager.handlePrivateMessage(player, packet.recipient, packet.text);
+        // Delivered messages are announced, so a plugin can answer for its player (AI bots).
+        const delivered = FriendsChatManager.handlePrivateMessage(player, packet.recipient, packet.text);
+        if (delivered) {
+          api.emitCustomEvent("friends:private-message", { sender: player, recipient: delivered.recipient, text: delivered.text });
+        }
       } else if (packet.type === "chat_filter") {
         FriendsChatManager.setChatFilters(player, packet.publicMode, packet.privateMode, packet.tradeMode);
       } else if (packet.type === "chat" && packet.messageType === "friends_chat") {

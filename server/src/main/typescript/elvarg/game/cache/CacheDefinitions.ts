@@ -141,6 +141,11 @@ export class CacheDefinitions {
         return this.idByName(GamevalKind.VARP).get(name) ?? null;
     }
 
+    /** An interface component's packed id by its gameval name (`bankside:runepouch_top`), or null. */
+    static getComponentId(name: string): number | null {
+        return this.getGamevals().componentId(name);
+    }
+
     private static idsByName = new Map<GamevalKind, Map<string, number>>();
 
     private static idByName(kind: GamevalKind): Map<string, number> {

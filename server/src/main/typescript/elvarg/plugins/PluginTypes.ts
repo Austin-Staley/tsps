@@ -568,6 +568,18 @@ export interface PluginSpellOnObjectEvent {
   handled: boolean;
 }
 
+export interface PluginSpellOnItemEvent {
+  player: any;
+  /** Spellbook name of the cast spell, e.g. "Lvl-1 Enchant"; undefined if the cache has none. */
+  spellName: string | undefined;
+  spellWidget: number;
+  spellItemId: number;
+  /** The inventory item the spell was cast on. */
+  itemId: number;
+  slot: number;
+  handled: boolean;
+}
+
 export interface PluginItemOnGroundItemEvent {
   player: any;
   inventoryItem: any;
@@ -919,6 +931,7 @@ export interface PluginApi {
   onItemOnNpc(handler: (event: PluginItemOnNpcEvent) => void, filter?: PluginItemUseFilter): void;
   onItemOnGroundItem(handler: (event: PluginItemOnGroundItemEvent) => void, filter?: PluginItemUseFilter): void;
   onSpellOnObject(handler: (event: PluginSpellOnObjectEvent) => void): void;
+  onSpellOnItem(handler: (event: PluginSpellOnItemEvent) => void): void;
   onItemAction(handler: (event: PluginItemActionEvent) => void): void;
   /** Exact item name and inventory option matching. Return false to fall through. */
   onItemAction(itemName: string, actions: Record<string, (event: PluginItemActionEvent) => void | boolean>): void;
@@ -1222,6 +1235,7 @@ export interface PluginCoreApi {
   Sounds: any;
   Location: any;
   Mobile: any;
+  encodePluginMessage: typeof import("../net/protocol/ClientProtocol").encodePluginMessage;
   encodeFinePosition: typeof import("../net/protocol/ClientProtocol").encodeFinePosition;
   Boundary: any;
   PolygonalBoundary: any;
@@ -1245,6 +1259,10 @@ export interface PluginCoreApi {
   ItemOnGroundManager: any;
   ItemDefinition: any;
   EquipPacketListener: any;
+  /** The death task; `getItemsToKeep(player)` is what a death would let the player keep. */
+  PlayerDeathTask: any;
+  /** Which items poison, and how strongly. */
+  CombatPoisonData: any;
   CacheDefinitions: any;
   Wilderness: any;
   PathFinder: any;
@@ -1278,6 +1296,9 @@ export interface PluginCoreApi {
   ShopManager: any;
   ShopDefinition: any;
   MultiChatboxPrompt: any;
+  /** Public chat as a client sends it (filter, mute, broadcast): bots speak through it too. */
+  ChatPacketListener: any;
+  TradeState: any;
   dispatchClientMessages: (player: any, messages: any[]) => boolean;
   connectHeadlessClient: (username: string, password: string) => Promise<{ player?: any; error?: string }>;
 }
