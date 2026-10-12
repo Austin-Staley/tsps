@@ -121,6 +121,7 @@ function ensureTargets(session) {
   if (session.area != null && fighter.getPrivateArea?.() !== session.area) return;
   for (const minion of session.minions ?? []) {
     if (!alive(minion)) continue;
+    minion.getCombat?.().getLastAttack?.().reset?.();
     const current = minion.getCombat?.().getTarget?.() ?? null;
     if (current && alive(current)) continue;
     minion.setTarget?.(fighter);
@@ -139,6 +140,9 @@ function pinEggs(session) {
     if (!egg?.isRegistered?.()) continue;
     if (egg.getInteractingMobile?.() != null) egg.setMobileInteraction?.(null);
     egg.getCombat?.().reset?.();
+    // Eggs never attack, so the engine would always see their last attack as
+    // ancient and heal them; keep the stopwatch fresh while the fight runs.
+    egg.getCombat?.().getLastAttack?.().reset?.();
   }
 }
 
