@@ -1094,6 +1094,9 @@ test('Blood Moon siege barrier action starts the second private Lowerniel fight 
   };
   quest.setStage(player, 70);
   handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'Xz7d4O' });
+  assert.equal(spawns.length, 0, 'Lowerniel cannot bypass the bridge and hall defence');
+  attributes.set('quest.the_blood_moon_rises.siege-defence', { phase: 'breach', integrity: 0, qualified: true });
+  handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'Xz7d4O' });
   assert.deepEqual(spawns.map(({ id, x, y, z, ownerOnly }) => ({ id, x, y, z, ownerOnly })), [
     { id: api.core.NpcIdentifiers.LOWERNIEL_DRAKAN_19, x: 3168, y: 7853, z: 1, ownerOnly: true },
   ]);
@@ -1229,6 +1232,11 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
   }
   assert.equal(attributes.get('quest.the_blood_moon_rises.siege-defence').phase, 'breach',
     'the barricade cutscene begins only at zero integrity');
+  const oldHall = player.area; oldHall.postLeave(player, true); replaced.length = 0;
+  loginHook({player});
+  assert.notEqual(player.area, oldHall, 'the saved breach restores a new owned hall');
+  assert(replaced.some(([kind, object]) => kind === 'add' && object.getId() === ids.BARRICADE_60), 'the saved breach has a real barricade to resume the fight');
+  assert.equal(spawns.length, 1, 'healed Aranei do not respawn on the breach checkpoint');
   objectManager.deregister = originalDeregister;
   objectManager.register = originalRegister;
   api.core.World.getProcessCycle = originalGetProcessCycle;

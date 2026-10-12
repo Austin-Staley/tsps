@@ -12,7 +12,7 @@ module.exports = function registerHall({ api, state, process, cleanup, scenery }
     }
   }
   function enter(player) {
-    if (state(player).phase !== 'hall') return false;
+    if (!['hall', 'breach'].includes(state(player).phase)) return false;
     if (sessions.has(player)) return true;
     const area = new SiegeHallArea(player); sessions.set(player, area); area.enter(player);
     for (const [id, x, y, type = 10, face = 0] of scenery(player)) {
