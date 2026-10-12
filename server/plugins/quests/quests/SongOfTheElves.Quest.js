@@ -17,6 +17,7 @@ module.exports = function registerSongOfTheElves(api) {
   const EAST_BATTLE_KILLS = "quest.song_of_the_elves.east-battle-kills";
   const BATTLE_AREA = "quest.song_of_the_elves.battle-area";
   const LATE_CHAPTER = "quest.song_of_the_elves.late-chapter";
+  const VALLEY_FIGURE = "quest.song_of_the_elves.valley-figure";
   const LIBRARY_INSTANCE = "quest.song_of_the_elves.library-instance";
   const PILLAR_ITEMS = [
     [ItemIdentifiers.ADAMANT_CHAINBODY, "Adamant chainbody"],
@@ -203,7 +204,11 @@ module.exports = function registerSongOfTheElves(api) {
           inventory.adds(itemId, 1);
           event.box = { items: [itemId] };
           if (itemId === ItemIdentifiers.ODE_TO_ETERNITY) {
-            const order = PILLAR_ITEMS.map((_, index) => index).sort(() => Math.random() - 0.5);
+            const order = PILLAR_ITEMS.map((_, index) => index);
+            for (let index = order.length - 1; index > 0; index--) {
+              const swap = Math.floor(Math.random() * (index + 1));
+              [order[index], order[swap]] = [order[swap], order[index]];
+            }
             player.setAttribute(FALLS_ORDER, order.join(","));
             player.sendMessage(`Ode to Eternity's riddle: place ${order.map((index) => PILLAR_ITEMS[index][1]).join(", then ")}.`);
           }
@@ -251,7 +256,18 @@ module.exports = function registerSongOfTheElves(api) {
     if (chapter !== undefined && (event.stepId !== "jtPiC1" || wearingDisguise(player))) {
       setChapter(player, chapter);
     }
+    if (event.stepId === "UeAKgA") {
+      player.moveTo(new Location(2440, 6090, 0));
+      player.setAttribute(VALLEY_FIGURE, true);
+      const figure = api.spawnNpc({ id: NpcIdentifiers.MYSTERIOUS_FIGURE, x: 2440, y: 6092, z: 0,
+        wanderRadius: 0, owner: player, ownerOnly: true });
+      if (figure) player.getArea?.()?.add?.(figure);
+    }
     if (event.stepId === "v3r3p_") player.moveTo(new Location(2353, 3172, 0));
+    if (event.stepId === "D1wXY6") {
+      player.setAttribute(VALLEY_FIGURE, false);
+      player.moveTo(new Location(2353, 3172, 0));
+    }
     if (["9yLw8T", "o4CmGU", "eIlh1C"].includes(event.stepId)) setChapter(player, 15);
     if (event.stepId === "6nBDUf") setChapter(player, 16);
     if (event.stepId === "xfnkES") setChapter(player, 19);
@@ -367,6 +383,15 @@ module.exports = function registerSongOfTheElves(api) {
       return startTranscript(api, player, event.npcId, PAGE, finishedPotion
         ? "preparing-to-enter-prifddinas-making-the-inversion-potion-talking-to-baxtorian-after-finishing-the-potion"
         : "preparing-to-enter-prifddinas-making-the-inversion-potion-talking-to-baxtorian");
+    }
+    if (currentChapter(player) === 11 && npcName === "mysterious figure" && player.getAttribute(VALLEY_FIGURE) === true) {
+      return startTranscript(api, player, event.npcId, PAGE, "preparing-to-enter-prifddinas-a-mysterious-figure");
+    }
+    if (currentChapter(player) === 11 && npcName === "lord ieuan amlodd" && player.getAttribute(VALLEY_FIGURE) === true) {
+      player.setAttribute(VALLEY_FIGURE, false);
+      player.moveTo(new Location(2353, 3172, 0));
+      return startTranscript(api, player, event.npcId, PAGE,
+        "preparing-to-enter-prifddinas-a-mysterious-figure-talking-to-lord-amlodd-once-he-is-in-lletya");
     }
     if (npcName === "edmond" && currentChapter(player) === 2) {
       quest.setStage(player, STAGE.STARTED + 30);
@@ -732,6 +757,13 @@ module.exports = function registerSongOfTheElves(api) {
     startTranscript(api, player, event.npcId, PAGE, "preparing-to-enter-prifddinas-finding-lady-trahaearn-repairing-the-exoskeleton");
   }
 
+  function handleCrystalSeedAction(event) {
+    const player = event?.player;
+    if (!player || event.itemId !== ItemIdentifiers.CRYSTAL_SEED_3 || currentChapter(player) !== 11 || quest.isComplete(player)) return;
+    event.handled = true;
+    startTranscript(api, player, 0, PAGE, "preparing-to-enter-prifddinas-a-mysterious-figure");
+  }
+
   function placeFallsPillarItem(event) {
     const player = event?.player;
     if (!player || currentChapter(player) !== 10 || quest.isComplete(player)) return false;
@@ -863,7 +895,7 @@ module.exports = function registerSongOfTheElves(api) {
 
   const ACTION_CHAPTER = {
     "jtPiC1": 2, "LeWWCS": 3,
-    "Rc0W1H": 7, "UeAKgA": 8,
+    "Rc0W1H": 7, "UeAKgA": 11,
     "x04RMY": 10, "D1wXY6": 11, "EMxiFg": 11,
     "ycGZ1J": 12, "eOtNFO": 12, "koxQh3": 13, "FoLVmk": 14,
     "ZYvQiu": 18, "YAPX-R": 19, "FK0kOz": 19,
@@ -901,6 +933,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnNpc(handleItemOnNpc);
+  api.onItemAction(handleCrystalSeedAction);
   api.persistAttribute(CHEMICAL_CHOICE);
   api.persistAttribute(FALLS_PILLARS);
   api.persistAttribute(FALLS_ORDER);
@@ -910,6 +943,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.persistAttribute(WEST_BATTLE_KILLS);
   api.persistAttribute(EAST_BATTLE_KILLS);
   api.persistAttribute(LATE_CHAPTER);
+  api.persistAttribute(VALLEY_FIGURE);
   for (const [, itemName] of PILLAR_ITEMS) {
     api.onItemOnObject(itemName, "Pillar of Light", placeFallsPillarItem, { noted: false });
     api.onItemOnObject(itemName, "Pillar", placeFallsPillarItem, { noted: false });
