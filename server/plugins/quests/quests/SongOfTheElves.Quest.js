@@ -26,6 +26,8 @@ module.exports = function registerSongOfTheElves(api) {
   const LIBRARY_PILLAR_STATE = "quest.song_of_the_elves.library-pillar-state";
   const RECRUITED_ELDERS = "quest.song_of_the_elves.recruited-elders";
   const REVELATIONS_MEETING_STARTED = "quest.song_of_the_elves.revelations-meeting-started";
+  const CRWYS_CLUE_HEARD = "quest.song_of_the_elves.crwys-clue-heard";
+  const HEFIN_CLUE_HEARD = "quest.song_of_the_elves.hefin-clue-heard";
   const MEILYR_CLUE = "quest.song_of_the_elves.meilyr-clue";
   const LLETYA_GUIDE_SPAWNED = "quest.song_of_the_elves.lletya-guide-spawned";
   const LLETYA_ARIANWYN_NPC = "quest.song_of_the_elves.lletya-arianwyn-npc";
@@ -583,6 +585,20 @@ module.exports = function registerSongOfTheElves(api) {
         : "reporting-back-after-the-revelations-dialogue-with-npcs-post-library-visit-talking-to-baxtorian";
       return startTranscript(api, player, event.npcId, PAGE, variant);
     }
+    if (currentChapter(player) === 13 && npcName === "lord piquan crwys" &&
+      player.getAttribute(CRWYS_CLUE_HEARD) === true) {
+      player.sendMessage("Chop the tree at the end of the old trail to reveal Lord Crwys.");
+      return true;
+    }
+    if (currentChapter(player) === 13 && ["elf hermit", "lady carys hefin"].includes(npcName) &&
+      player.getAttribute(HEFIN_CLUE_HEARD) === true &&
+      Math.abs((event.location?.x ?? 0) - 2276) <= 3 && Math.abs((event.location?.y ?? 0) - 3094) <= 3) {
+      return startTranscript(api, player, event.npcId, PAGE,
+        "reporting-back-after-the-revelations-finding-lady-hefin");
+    }
+    if (currentChapter(player) === 14 && npcName === "baxtorian") {
+      return startTranscript(api, player, event.npcId, PAGE, "recovering-the-orb-ysgawyn-returns");
+    }
     if (npcName === "baxtorian" && currentChapter(player) === 17) {
       const wasAtCamp = player.getArea?.() instanceof DwarvenCampArea;
       ensureDwarvenCamp(player);
@@ -754,6 +770,19 @@ module.exports = function registerSongOfTheElves(api) {
     return selected ? startTranscript(api, player, event.npcId, PAGE, selected) : false;
   }
 
+  function onCrwysTreeInteraction(event) {
+    const player = event?.player;
+    const action = event?.definition?.getActions?.()?.[event.clickType - 1];
+    if (!player || currentChapter(player) !== 13 ||
+      player.getAttribute(CRWYS_CLUE_HEARD) !== true ||
+      String(event.definition?.getName?.() ?? "").toLowerCase() !== "lord piquan crwys" ||
+      !/^(chop down|chop)$/i.test(String(action ?? "")) ||
+      event.location?.x !== 2176 || event.location?.y !== 3211) return false;
+    event.handled = true;
+    return startTranscript(api, player, event.npcId, PAGE,
+      "reporting-back-after-the-revelations-finding-lord-crwys");
+  }
+
   function hasItems(player, ids) {
     const inventory = player.getInventory();
     return ids.every((id) => inventory.getAmount(id) > 0);
@@ -851,6 +880,11 @@ module.exports = function registerSongOfTheElves(api) {
       player.moveTo(new Location(2623, 6144, 0));
       player.sendMessage("You enter the Grand Library. Its doors seal behind you; find the Seal of the Forgotten in the central chamber.");
       return;
+    }
+    if (currentChapter(event.player) === 13 &&
+      String(event.definition?.getName?.() ?? "").toLowerCase() === "baxtorian") {
+      if (event.option === "How do I find Lord Crwys?") event.player.setAttribute(CRWYS_CLUE_HEARD, true);
+      if (event.option === "How do I find Lady Hefin?") event.player.setAttribute(HEFIN_CLUE_HEARD, true);
     }
     if (event.option === "I'm ready." && currentChapter(event.player) === 18 &&
       String(event.definition?.getName?.() ?? "").toLowerCase() === "baxtorian") {
@@ -2016,6 +2050,8 @@ module.exports = function registerSongOfTheElves(api) {
   api.onObjectInteraction("Cave", { Ascend: enterTemplePassage });
   api.persistAttribute(CHEMICAL_CHOICE);
   api.persistAttribute(REVELATIONS_MEETING_STARTED);
+  api.persistAttribute(CRWYS_CLUE_HEARD);
+  api.persistAttribute(HEFIN_CLUE_HEARD);
   api.persistAttribute(FALLS_PILLARS);
   api.persistAttribute(FALLS_ORDER);
   api.persistAttribute(INCITEMENTS);
@@ -2061,9 +2097,10 @@ module.exports = function registerSongOfTheElves(api) {
   api.onNpcInteraction("Edmond", { "Talk-to": onTalk });
   api.onNpcInteraction("Elena", { "Talk-to": onTalk });
   api.onNpcInteraction("Knight of Ardougne", { "Talk-to": onTalk });
-  for (const name of ["King Lathas", "King Thoros", "Councillor Halgrive", "Arianwyn", "Baxtorian", "Ysgawyn", "Lord Ieuan Amlodd", "Lord Iorwerth", "General Hining", "Essyllt"]) {
+  for (const name of ["King Lathas", "King Thoros", "Councillor Halgrive", "Arianwyn", "Baxtorian", "Ysgawyn", "Lord Ieuan Amlodd", "Lord Iorwerth", "General Hining", "Essyllt", "Lord Piquan Crwys", "Lady Carys Hefin", "Elf Hermit"]) {
     api.onNpcInteraction(name, { "Talk-to": onTalk });
   }
+  api.onNpcInteraction(onCrwysTreeInteraction);
   api.onNpcsInteraction(Object.keys(CITIZEN_SUPPORT), { "Talk-to": onTalk });
   api.onAnyNpcInteraction({ "Talk-to": onTalk });
   api.onNpcDeath(handleBattleDeath);

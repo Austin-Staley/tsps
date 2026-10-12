@@ -390,10 +390,12 @@ test('Song of the Elves exposes the post-library meeting through a talkable Aria
 test('Song of the Elves starts the post-library council and switches Baxtorian after it', () => {
   const { api, handlers } = mockApi();
   const hooks = [];
+  const npcHooks = [];
   const started = [];
   const persistedAttributes = [];
   api.persistAttribute = (key) => persistedAttributes.push(key);
   api.onAnyNpcInteraction = (hook) => hooks.push(hook);
+  api.onNpcInteraction = (...args) => npcHooks.push(args);
   const runtime = require('../plugins/quests/QuestRuntime');
   const original = runtime.startTranscript;
   runtime.startTranscript = (...args) => (started.push(args.slice(1)), true);
@@ -407,6 +409,7 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
     setAttribute: (key, value) => attributes.set(key, value),
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
     getInventory: () => ({ getAmount: () => 0, getFreeSlots: () => 28, deleteNumber: () => {}, adds: () => {} }),
+    sendMessage() {},
   };
   quest.setStage(player, 140);
   const talk = hooks.at(-1)['Talk-to'];
@@ -423,6 +426,22 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   handlers.custom.get('quest-song-of-the-elves:claim-arianwyn').at(-1)(handoff);
   assert.equal(handoff.handled, true, 'the completed Mourning’s End handler can hand the NPC to SOTE');
   assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-the-curse-of-seren');
+
+  const choice = handlers.custom.get('npc-dialogue:choice').at(-1);
+  choice({ player, option: 'How do I find Lord Crwys?', definition: { getName: () => 'Baxtorian' } });
+  assert.equal(attributes.get('quest.song_of_the_elves.crwys-clue-heard'), true);
+  const treeHook = npcHooks.find(([handler]) => typeof handler === 'function')?.[0];
+  assert.equal(typeof treeHook, 'function');
+  treeHook({ player, npcId: api.core.NpcIdentifiers.LORD_PIQUAN_CRWYS_2, clickType: 1,
+    location: { x: 2176, y: 3211 }, definition: { getName: () => 'Lord Piquan Crwys', getActions: () => ['Chop down'] } });
+  assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-finding-lord-crwys');
+  handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'UNrb5z' });
+  choice({ player, option: 'How do I find Lady Hefin?', definition: { getName: () => 'Baxtorian' } });
+  assert.equal(attributes.get('quest.song_of_the_elves.hefin-clue-heard'), true);
+  handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'K9K0W4' });
+  assert.equal(quest.getStage(player), 150, 'both clan leaders advance the quest to the orb chapter');
+  assert.ok(persistedAttributes.includes('quest.song_of_the_elves.crwys-clue-heard'));
+  assert.ok(persistedAttributes.includes('quest.song_of_the_elves.hefin-clue-heard'));
 });
 
 test('Song of the Elves library mirrors must follow the previous beam direction', () => {
