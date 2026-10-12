@@ -31,8 +31,17 @@ module.exports = function registerSongOfTheElves(api) {
   // Cache transform for the Crwys disguise: hidden tree, chop-able tree, revealed elf.
   const CRWYS_TREE_TRANSFORM_VARBIT = 9022;
   const HEFIN_CLUE_HEARD = "quest.song_of_the_elves.hefin-clue-heard";
+  const HEFIN_CROSSING = "quest.song_of_the_elves.hefin-crossing";
+  const HEFIN_JUMP_ANIMATION = 769; // human_steppingstonejump
+  const HEFIN_STONE_ROUTE = [
+    [2299, 3114], [2299, 3113], [2299, 3110], [2302, 3110], [2302, 3107], [2302, 3104],
+    [2299, 3104], [2299, 3101], [2299, 3098], [2302, 3098], [2302, 3095], [2302, 3092],
+    [2299, 3092], [2299, 3089], [2296, 3089], [2293, 3089], [2293, 3092], [2290, 3092],
+    [2290, 3095], [2287, 3095], [2284, 3095], [2284, 3092], [2280, 3092],
+  ];
   const MEILYR_CLUE = "quest.song_of_the_elves.meilyr-clue";
   const LLETYA_GUIDE_SPAWNED = "quest.song_of_the_elves.lletya-guide-spawned";
+  const HEFIN_GUIDE_SPAWNED = "quest.song_of_the_elves.hefin-guide-spawned";
   const LLETYA_ARIANWYN_NPC = "quest.song_of_the_elves.lletya-arianwyn-npc";
   const FRAGMENT_DEFEATED = "quest.song_of_the_elves.fragment-defeated";
   const ORB_CAVE_AREA = "quest.song_of_the_elves.orb-cave-area";
@@ -169,6 +178,20 @@ module.exports = function registerSongOfTheElves(api) {
         if (arianwyn) api.removeNpc(arianwyn);
         player.setAttribute(LLETYA_ARIANWYN_NPC, null);
       }
+    }
+  }
+
+  class HefinStoryArea extends Area {
+    process(mobile) {
+      if (!mobile?.isPlayer?.()) return;
+      const player = mobile.getAsPlayer();
+      if (quest.isComplete(player) || currentChapter(player) !== 14 ||
+        player.getAttribute(HEFIN_CLUE_HEARD) !== true) return;
+      const existing = player.getAttribute(HEFIN_GUIDE_SPAWNED);
+      if (existing?.isRegistered?.()) return;
+      const hermit = api.spawnNpc({ id: NpcIdentifiers.ELF_HERMIT, x: 2277, y: 3093, z: 0,
+        wanderRadius: 0, owner: player, ownerOnly: true });
+      if (hermit) player.setAttribute(HEFIN_GUIDE_SPAWNED, hermit);
     }
   }
 
@@ -540,6 +563,69 @@ module.exports = function registerSongOfTheElves(api) {
       }
       quest.complete(player);
     }
+  }
+
+  function hefinPathIndex(point, goal = false) {
+    if (point.x <= 2279 && point.y >= 3088 && point.y <= 3100) return HEFIN_STONE_ROUTE.length - 1;
+    let best = -1;
+    let distance = Infinity;
+    for (let index = 0; index < HEFIN_STONE_ROUTE.length; index++) {
+      const [x, y] = HEFIN_STONE_ROUTE[index];
+      const next = Math.max(Math.abs(point.x - x), Math.abs(point.y - y));
+      if (next < distance) {
+        best = index;
+        distance = next;
+      }
+    }
+    return distance <= 1 ? best : -1;
+  }
+
+  function routeToLadyHefin(event) {
+    const { player, destination } = event;
+    if (quest.isComplete(player) || currentChapter(player) !== 14 ||
+      player.getAttribute(HEFIN_CLUE_HEARD) !== true || player.getAttribute(HEFIN_CROSSING) === true) return;
+    const source = player.getLocation();
+    const from = hefinPathIndex({ x: source.getX(), y: source.getY() });
+    const to = hefinPathIndex(destination, true);
+    if (from < 0 || to < 0 || from === to) return;
+
+    const { Animation, CountdownTask, TaskManager } = api.core;
+    if (!CountdownTask || !TaskManager || !Animation) return;
+    event.handled = true;
+    player.setAttribute(HEFIN_CROSSING, true);
+    const movement = player.getMovementQueue();
+    movement.reset();
+    movement.walkToReset();
+    movement.setBlockMovement(true);
+    const direction = Math.sign(to - from);
+    let index = from;
+    const step = () => {
+      if (player.isRegistered?.() === false || player.getHitpoints() <= 0) {
+        player.setAttribute(HEFIN_CROSSING, false);
+        movement.setBlockMovement(false);
+        return;
+      }
+      if (index === to) {
+        player.setAttribute(HEFIN_CROSSING, false);
+        movement.setBlockMovement(false);
+        movement.requestWalk(new Location(destination.x, destination.y, destination.z));
+        return;
+      }
+      const [x, y] = HEFIN_STONE_ROUTE[index + direction];
+      player.setPositionToFace(new Location(x, y, 0));
+      player.performAnimation(new Animation(HEFIN_JUMP_ANIMATION));
+      TaskManager.submit(new CountdownTask(player, 1, () => {
+        if (player.isRegistered?.() === false || player.getHitpoints() <= 0) {
+          player.setAttribute(HEFIN_CROSSING, false);
+          movement.setBlockMovement(false);
+          return;
+        }
+        player.moveTo(new Location(x, y, 0));
+        index += direction;
+        TaskManager.submit(new CountdownTask(player, 1, step));
+      }));
+    };
+    step();
   }
 
   function recordElder(player, bit) {
@@ -2233,9 +2319,11 @@ module.exports = function registerSongOfTheElves(api) {
   api.onObjectInteraction("Trapdoor", { Open: enterResistanceBasement, "Climb-down": enterResistanceBasement });
   api.onObjectInteraction("Staircase", { "Climb-down": enterPrison });
   api.onObjectRoute(routeCastleThroneStairs);
+  api.onWalkRoute(routeToLadyHefin);
   api.onCustomEvent("ladders:climb", claimCastleThroneStairs);
   api.onCustomEvent("quest:song-of-the-elves:claims-light-pillar", claimFallsPillarLocation);
   api.registerArea(new LletyaStoryArea([new Boundary(2320, 2390, 3150, 3210, 0)]));
+  api.registerArea(new HefinStoryArea([new Boundary(2270, 2308, 3087, 3117, 0)]));
   api.registerArea(new DwarvenCampAccessArea([new Boundary(2424, 2472, 6078, 6142, 0)]));
   api.registerArea(new FragmentThresholdArea([new Boundary(3282, 3307, 5906, 5930, 1)]));
   api.onNpcInteraction("Alrena", { "Talk-to": onTalk });

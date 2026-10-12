@@ -25,6 +25,7 @@ function mockApi() {
     itemAction: [],
     routes,
     route: routes,
+    walkRoutes: [],
     playerProcess: [],
     npcHitModify: [],
   };
@@ -36,6 +37,7 @@ function mockApi() {
     onObjectInteraction: (h) => handlers.objects.push(h),
     onNpcInteraction: (target, actions) => handlers.npcInteractions.set(target, actions),
     onObjectRoute: (h) => handlers.routes.push(h),
+    onWalkRoute: (h) => handlers.walkRoutes.push(h),
     onPlayerProcess: (h) => handlers.playerProcess.push(h),
     onNpcHitModify: (h) => handlers.npcHitModify.push(h),
     onItemOnItem: (h) => handlers.itemOnItem.push(h),
@@ -67,6 +69,20 @@ test('Quests.plugin registers every quest through api.core without throwing', ()
   const plugin = require('../plugins/quests/Quests.plugin');
   assert.equal(plugin.name, 'Quests');
   assert.doesNotThrow(() => plugin.register(api));
+});
+
+test('walk route hooks can claim a map-click path before collision pathfinding', () => {
+  const calls = [];
+  PluginManager.createApi('WalkRouteTest').onWalkRoute((event) => {
+    calls.push([event.player, event.destination]);
+    event.handled = true;
+  });
+  const player = {};
+  const destination = { x: 10, y: 20, z: 0 };
+  const event = { player, destination, handled: false };
+  assert.equal(PluginManager.emitWalkRoute(event), true);
+  assert.equal(event.handled, true);
+  assert.deepEqual(calls, [[player, destination]]);
 });
 
 test('quest keys, names and varps are unique', () => {
@@ -1038,6 +1054,61 @@ test('Song of the Elves rubs the seed to the Enchanted Valley and returns to Lle
   custom.get('npc-dialogue:action')({ player, stepId: 'D1wXY6' });
   assert.deepEqual([locations.at(-1).getX(), locations.at(-1).getY()], [2353, 3172]);
   assert.equal(attributes.get('quest.song_of_the_elves.valley-figure'), false);
+});
+
+test('Song of the Elves follows the cached Hefin stepping stones from the Poison Waste shore', () => {
+  const { api: base, handlers } = mockApi();
+  class ImmediateTask {
+    constructor(_key, _ticks, onComplete) { this.onComplete = onComplete; }
+  }
+  const api = new Proxy(base, {
+    get(target, prop) {
+      if (prop === 'core') return {
+        ...target.core,
+        CountdownTask: ImmediateTask,
+        TaskManager: { submit: (task) => task.onComplete() },
+      };
+      return target[prop];
+    },
+  });
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map([['quest.song_of_the_elves.hefin-clue-heard', true]]);
+  const moved = [];
+  const faced = [];
+  const requested = [];
+  const location = { x: 2299, y: 3114, z: 0 };
+  const movement = {
+    reset() {}, walkToReset() {}, setBlockMovement() {},
+    requestWalk: (destination) => requested.push(destination),
+  };
+  const player = {
+    getUsername: () => 'HefinStoneTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => ({ getX: () => location.x, getY: () => location.y, getZ: () => location.z }),
+    getMovementQueue: () => movement,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    isRegistered: () => true,
+    getHitpoints: () => 99,
+    moveTo: (tile) => {
+      location.x = tile.getX(); location.y = tile.getY(); location.z = tile.getZ();
+      moved.push([location.x, location.y, location.z]);
+    },
+    setPositionToFace: (tile) => faced.push([tile.getX(), tile.getY()]),
+    performAnimation() {},
+  };
+  quest.setStage(player, 150);
+  const destination = { x: 2276, y: 3094, z: 0 };
+  const event = { player, destination, handled: false };
+  handlers.walkRoutes.at(-1)(event);
+  assert.equal(event.handled, true);
+  assert.ok(moved.length > 10, 'the crossing follows the intermediate cache stones');
+  assert.deepEqual(moved.at(-1), [2280, 3092, 0]);
+  assert.deepEqual(requested.map((tile) => [tile.getX(), tile.getY(), tile.getZ()]), [[2276, 3094, 0]],
+    'normal pathfinding resumes after reaching the island shore');
+  assert.equal(attributes.get('quest.song_of_the_elves.hefin-crossing'), false);
 });
 
 test('Song of the Elves exposes the post-library meeting through a talkable Arianwyn variant', () => {
