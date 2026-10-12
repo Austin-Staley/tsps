@@ -277,6 +277,13 @@ Recordings 3282 and 3389.
 - Ranged 7193 with projectile 1291 (sound 385) landing 3 ticks later; the acid (projectile 1293) lands 5-6 ticks later as gfx 1294 with sound 1070.
 - Dying 7196, gone 3 ticks later. After the last: the blockers raise their hands (7159, sound 665) at 5 ticks, the tendrils go at 6, the blockers burst (gfx 1295, sound 1021) at 8.
 
+## Tightrope, from rsprox captures
+
+All five recordings.
+
+- Crossing: the walk starts 2 ticks after arriving, a tile a tick, with sound 2495 (2 loops) each tick and the XP the tick after landing; there are no messages.
+- Mages cast 1162 (gfx 129, sound 155, projectile 130, impact gfx 131 / 85 and sound 156); rangers shoot 426 (gfx 24, sound 2693, projectile 15) landing the next tick. They shout one a tick once fighting.
+
 ## Values not on the Wiki, to check against a capture
 
 | Value | Where |

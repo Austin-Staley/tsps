@@ -10,13 +10,20 @@
  *   fighting becomes their target.
  * - Crossing needs an Agility level between 80% and 100% of the party's average, at random.
  * - Using the keystone on the barrier kills any of them still standing.
- * Not on the Wiki (to check against a capture): the tiles; counts by raiders (rangers 2 / 3 at 4+ / 4 at 7+, mages 2 / 3 at 4+
- *   / 4 at 10+); 1-4 of them shout ("Intruder!", "Stop them at all costs!", "Protect the
- *   keystone!"); crossing takes 10 ticks with walk anim 762, sound 2495, 7.5 Agility XP;
- *   attacks: ranger anim 426, arrow 15, sound 2693; mage anim 711, gfx 129, projectile 130,
- *   impact 131 or splash 339; protection prayers let a third through; taking the keystone
- *   anim 832, sound 2582; dispelling anim 832, sound 1657, "Your keystone glows as it is
- *   absorbed into the barrier, which disperses.".
+ * rsprox captures (recordings 820, 843, 3282, 3285, 3389):
+ * - Crossing: the player faces the rope and walks across a tile a tick from 2 ticks later,
+ *   with sound 2495 (2 loops) each tick, and gets the Agility XP the tick after arriving.
+ *   There are no messages.
+ * - Mages: 1162 with gfx 129 (height 92) and sound 155 (range 10); projectile 130 (from 51
+ *   client cycles to 116-136, angle 16, heights 172 to 124); on the target gfx 131 (85
+ *   splashing) and sound 156, sent with the flight's delay. Rangers: 426 with gfx 24 (height
+ *   96) and sound 2693; projectile 15 (from 41 to 56-61, angle 15, progress 11, heights 163 to
+ *   146), landing the tick after. Once they fight, they shout ("Stop them at all costs!",
+ *   "Protect the keystone!") one a tick. Dying: 836.
+ * Not on the Wiki (to check against a capture): the tiles; counts by raiders (rangers 2 / 3 at
+ *   4+ / 4 at 7+, mages 2 / 3 at 4+ / 4 at 10+); walk anim 762; 7.5 Agility XP; protection
+ *   prayers letting a third through; taking the keystone anim 832, sound 2582; dispelling anim
+ *   832, sound 1657, "Your keystone glows as it is absorbed into the barrier, which disperses.".
  */
 
 const Shared = require("./CoxShared");
@@ -26,7 +33,7 @@ const NPC = { RANGER: 7559, MAGE: 7560 };
 const OBJECT = { TIGHTROPE: 29750, KEYSTONE: 29751, BARRIER: 29749 };
 const KEYSTONE = 20884;
 const SHOUTS = ["Intruder!", "Stop them at all costs!", "Protect the keystone!"];
-const CROSS = { WALK: 762, SOUND: 2495, XP: 7.5 };
+const CROSS = { WALK: 762, SOUND: 2495, XP: 7.5, START: 2 };
 
 /** Cache tiles by version. */
 const MAGE_TILES = [[{ x: 3285, y: 5363 }, { x: 3287, y: 5363 }], [{ x: 3317, y: 5363 }, { x: 3319, y: 5363 }], [{ x: 3340, y: 5365 }, { x: 3340, y: 5367 }]];
@@ -94,21 +101,28 @@ class TightropeRoom extends Raid.Room {
     const at = rope.getLocation();
     const { Location } = Shared.core();
     const destination = new Location(end.getX() + Math.sign(end.getX() - at.getX()), end.getY() + Math.sign(end.getY() - at.getY()), end.getZ());
-    let shouts = Shared.random(1, 4);
+    const shouting = [];
     for (const npc of this.guards) {
       if (!npc.isRegistered() || npc.getCombat().getTarget()) continue;
-      if (shouts-- > 0) npc.forceChat(Shared.randomOf(SHOUTS));
+      shouting.push(npc);
       npc.getCombat().attack(player);
     }
-    player.sendMessage("You walk carefully across the tightrope...");
-    Shared.repeat(player, 1, () => {
-      if (!player.__coxBalancing) return false;
-      Shared.sound(player, CROSS.SOUND);
-      return true;
+    Shared.shuffle(shouting).slice(0, Shared.random(1, 4)).forEach((npc, index) => {
+      Shared.later(this.raid, 1 + index, () => npc.isRegistered() && npc.forceChat(Shared.randomOf(SHOUTS)));
     });
-    Shared.balanceWalk(player, destination, CROSS.WALK, () => {
-      player.sendMessage("...You make it safely to the other side.");
-      Shared.addXp(player, "AGILITY", CROSS.XP);
+    player.__coxBalancing = true;
+    player.getMovementQueue().reset();
+    player.setPositionToFace(destination);
+    Shared.later(player, CROSS.START, () => {
+      player.__coxBalancing = false;
+      Shared.repeat(player, 1, () => {
+        if (!player.__coxBalancing) return false;
+        player.getPacketSender().sendSound(CROSS.SOUND, 2, 0);
+        return true;
+      });
+      Shared.balanceWalk(player, destination, CROSS.WALK, () => {
+        Shared.later(player, 1, () => Shared.addXp(player, "AGILITY", CROSS.XP));
+      });
     });
   }
 
@@ -197,18 +211,25 @@ function guardCombat(api) {
       const player = target.getAsPlayer();
       const mage = npc.getId() === NPC.MAGE;
       const maxHit = npc.getDefinition().getMaxHit();
+      const { Projectile } = api.core;
+      const from = npc.getLocation();
+      const distance = from.getDistance(player.getLocation());
+      const viewers = room.raiders();
+      npc.performAnimation(new Animation(mage ? 1162 : 426));
+      npc.performGraphic(Shared.gfx(mage ? 129 : 24, { height: mage ? 92 : 96 }));
+      Shared.areaSound(viewers, mage ? 155 : 2693, from, { range: 10 });
+      const flight = mage
+        ? { id: 130, start: 51, end: 86 + 5 * distance, angle: 16, progress: 64, startHeight: 43, endHeight: 31 }
+        : { id: 15, start: 41, end: 51 + Math.min(10, distance), angle: 15, progress: 11, startHeight: 41, endHeight: 36 };
+      new Projectile(from, player.getLocation(), player, flight.id, flight.start, flight.end, flight.startHeight, flight.endHeight, room.map)
+        .withAngle(flight.angle)
+        .withProgress(flight.progress)
+        .sendProjectile();
+      const lands = Math.max(1, Math.floor(flight.end / 30));
+      const hit = Shared.strike(npc, player, mage ? "magic" : "ranged", maxHit, lands, { prayerMultiplier: 1 / 3 });
       if (mage) {
-        npc.performAnimation(new Animation(711));
-        npc.performGraphic(Shared.gfx(129, { height: 90 }));
-        Shared.sound(player, 155);
-      } else {
-        npc.performAnimation(new Animation(426));
-        Shared.sound(player, 2693);
-      }
-      const delay = Shared.projectile(room.map, npc, player, mage ? 130 : 15, { duration: mage ? 25 : 30, startHeight: 43, endHeight: 31 });
-      const hit = Shared.strike(npc, player, mage ? "magic" : "ranged", maxHit, delay, { prayerMultiplier: 1 / 3 });
-      if (mage) {
-        Shared.later(player, delay, () => player.performGraphic(Shared.gfx(hit.getTotalDamage?.() > 0 ? 131 : 339, { height: 90 })));
+        player.performGraphic(Shared.gfx(hit.isAccurate?.() !== false ? 131 : 85, { delay: flight.end, height: 124 }));
+        Shared.areaSound(viewers, 156, player.getLocation(), { delay: flight.end, range: 10 });
       }
     }
 
