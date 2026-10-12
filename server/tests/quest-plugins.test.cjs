@@ -4459,6 +4459,7 @@ test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle
     getIndex: () => 1,
     getCombat: () => playerCombat,
     getPrayerActive: () => activePrayers,
+    getSkillManager: () => ({ getMaxLevel: () => 99, getCurrentLevel: () => 99 }),
     sendMessage() {},
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
     isPlayer: () => true,
@@ -4466,26 +4467,35 @@ test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle
     getAsPlayer: () => player,
   };
   let boss;
+  let nextNpcIndex = 2;
   api.registerArea = () => {};
-  api.spawnNpc = () => {
-    boss = {
-      getIndex: () => 2,
-      getArea: () => boss.area ?? null,
-      setArea(area) { boss.area = area; },
+  api.spawnNpc = definition => {
+    const npc = {
+      id: definition.id,
+      index: nextNpcIndex++,
+      area: null,
+      hitpoints: 1000,
+      maxHitpoints: 1000,
+      getIndex: () => npc.index,
+      getArea: () => npc.area,
+      setArea(area) { npc.area = area; },
       setMultiCombat() {},
-      setMaxHitpoints() {},
-      setHitpoints(value) { boss.hitpoints = value; },
-      getHitpoints: () => boss.hitpoints,
-      getMaxHitpoints: () => 1000,
-      setScriptedMovement(value) { boss.scriptedMovement = value; },
+      setMaxHitpoints(value) { npc.maxHitpoints = value; },
+      setHitpoints(value) { npc.hitpoints = value; },
+      getHitpoints: () => npc.hitpoints,
+      getMaxHitpoints: () => npc.maxHitpoints,
+      setScriptedMovement(value) { npc.scriptedMovement = value; },
       getCurrentDefinition: () => ({ getAttackSpeed: () => 7 }),
       getCombat: () => ({ getLastAttack: () => ({ reset() {} }) }),
       getLocation: () => ({ getDistance: () => 10 }),
+      sendMessage() {},
+      isRegistered: () => false,
       isPlayer: () => false,
       isNpc: () => true,
-      getAsNpc() { return boss; },
+      getAsNpc() { return npc; },
     };
-    return boss;
+    if (!boss) boss = npc;
+    return npc;
   };
   api.core.World.getProcessCycle = () => cycle;
   runtime.startTranscript = () => true;
@@ -4513,6 +4523,32 @@ test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle
       assert.equal(queued[1].getDamage(), 12, 'without the overhead, the same ranged roll deals 12');
     } finally {
       Math.random = originalRandom;
+    }
+
+    const originalRandomForBlast = Math.random;
+    Math.random = () => 0;
+    try {
+      for (const [bossHp, expectedDamage] of [[1000, 94], [600, 96], [300, 98]]) {
+        player.getArea().leave(player, false);
+        boss = null;
+        cycle += 100;
+        queued.length = 0;
+        handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'xfnkES', handled: false });
+        const area = player.getArea();
+        const startCycle = cycle;
+        activePrayers[api.core.PrayerHandler.PROTECT_FROM_MISSILES] = true;
+        for (const offset of [14, 38, 62, 86, 89]) {
+          cycle = startCycle + offset;
+          if (offset === 62) boss.hitpoints = bossHp;
+          queued.length = 0;
+          area.process(boss);
+        }
+        assert.equal(queued.length, 1);
+        assert.equal(queued[0].getDamage(), expectedDamage,
+          `the unavoidable blast leaves ${expectedDamage} damage at boss HP ${bossHp}`);
+      }
+    } finally {
+      Math.random = originalRandomForBlast;
     }
   } finally {
     api.core.World.getProcessCycle = originalCycle;

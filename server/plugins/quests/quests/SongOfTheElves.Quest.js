@@ -2509,7 +2509,9 @@ module.exports = function registerSongOfTheElves(api) {
     const player = state.player;
     const max = player.getSkillManager().getMaxLevel(Skill.HITPOINTS);
     const hp = player.getSkillManager().getCurrentLevel(Skill.HITPOINTS);
-    const damage = Math.max(1, max - 1);
+    const bossHp = state.boss.getHitpoints();
+    const remainder = bossHp <= 333 ? 1 : bossHp <= 666 ? 3 : 5;
+    const damage = Math.max(1, max - remainder);
     player.getCombat().getHitQueue().addPendingDamage([new HitDamage(damage, HitMask.RED).setSource(state.boss)]);
     player.sendMessage(hp <= damage
       ? "The Fragment's blast leaves you barely standing."
