@@ -299,6 +299,10 @@ Recording 3389.
 - Opening a chest gives its grubs the tick after the animation (sound 52, "Some cavern grubs have hatched; you take them."); it locks again about 12 ticks later. A full stack gets a message box. Depositing (sound 3637) has no message; the trough fills the tick after.
 - The scavenger's hunger is headbar 7; it eats every 3 ticks. Fed, it walks aside, yawns ("Yawwwwwn!") 7 ticks later, sleeps at 14 and snores (gfx 277, sound 869) every 8 ticks from 21.
 
+## Scavengers, from rsprox captures
+
+- Scavenger beasts bite with 255 and die with 258; one is gone 2 ticks after dying and another takes its place 2 ticks later (recording 3389), so the rooms never empty.
+
 ## Values not on the Wiki, to check against a capture
 
 | Value | Where |

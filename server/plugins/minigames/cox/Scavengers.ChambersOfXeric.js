@@ -14,8 +14,10 @@
  *   most 99); each swing has a 1 in max(5, min(20, raiders / 3)) chance to clear it (rubble
  *   29739, stump 29737, crossed with anim 839); 4.5 Mining XP a swing; the boulder needs
  *   Strength and rolls 3 tiles (anim 6131), hurting whoever it lands on for 4-6.
- * Not like Not on the Wiki (to check against a capture): scavengers don't come back (it respawns them 2 ticks later; the Wiki
- *   says nothing of it).
+ * rsprox captures (recordings 820, 843, 3282, 3285, 3389):
+ * - Scavengers bite with 255 and die with 258; one is gone 2 ticks after dying and another
+ *   takes its place 2 ticks after that, so the room never empties.
+ * - Clearing the rocks: the rubble (29739) with sound 360 (range 4).
  */
 
 const Shared = require("./CoxShared");
@@ -29,6 +31,8 @@ const SHORTCUTS = [
   { object: OBJECT.SAPLING, skill: "WOODCUTTING", cleared: OBJECT.STUMP },
   { object: OBJECT.BOULDER, skill: "STRENGTH", cleared: null },
 ];
+
+const RESPAWN_TICKS = 4;
 
 function scavengerCount(raiders) {
   const limits = [[1, 1], [4, 2], [7, 3], [15, 4], [23, 5], [31, 6], [39, 7]];
@@ -49,7 +53,9 @@ class ScavengerRoom extends Raid.Room {
       const tile = new Location(middle.getX() + Shared.random(-5, 5), middle.getY() + Shared.random(-5, 5), middle.getZ());
       if (!this.freeSquare(tile) || this.beasts.some((beast) => beast.getLocation().getDistance(tile) <= 2)) continue;
       const beast = this.spawnNpc(Shared.randomOf(NPC.SCAVENGERS), tile, { wanderRadius: 4 });
-      if (beast) this.beasts.push(beast);
+      if (!beast) continue;
+      beast.__coxHome = tile;
+      this.beasts.push(beast);
     }
     if (this.key === "LARGE_SCAVENGER_BEAST") this.placeShortcut();
   }
@@ -67,6 +73,20 @@ class ScavengerRoom extends Raid.Room {
 
   combatPoints() {
     return Math.floor(5 * this.beasts.reduce((sum, beast) => sum + beast.getMaxHitpoints(), 0) * 1.05);
+  }
+
+  /** rsprox captures: another takes a dead one's place 4 ticks after it dies. */
+  onNpcDeath(npc) {
+    const index = this.beasts.indexOf(npc);
+    if (index < 0) return;
+    const home = npc.__coxHome ?? npc.getLocation().clone();
+    Shared.later(this.raid, RESPAWN_TICKS, () => {
+      if (this.raid.destroyed || this.beasts[index] !== npc) return;
+      const beast = this.spawnNpc(Shared.randomOf(NPC.SCAVENGERS), home, { wanderRadius: 4 });
+      if (!beast) return;
+      beast.__coxHome = home;
+      this.beasts[index] = beast;
+    });
   }
 
   placeShortcut() {
@@ -107,7 +127,7 @@ class ScavengerRoom extends Raid.Room {
     shortcut.workers.clear();
     if (shortcut.cleared) {
       shortcut.object = Shared.replaceObject(this.map, shortcut.object, shortcut.cleared);
-      for (const viewer of this.raiders()) Shared.sound(viewer, shortcut.skill === "MINING" ? 360 : 2734);
+      Shared.areaSound(this.raiders(), shortcut.skill === "MINING" ? 360 : 2734, shortcut.object.getLocation(), { range: 4 });
       crossRemnant(player, shortcut.object);
       return;
     }
