@@ -121,10 +121,11 @@ test('Kourend Crypt cached Large doors keep their real double-leaf geometry and 
   }
 
   const area = new TemplatedInstanceArea(12, 8);
-  area.setChunk(1, 3, 3, { sourceChunkX: 187, sourceChunkY: 1243, sourcePlane: 1, rotation: 0 });
-  area.setChunk(1, 4, 3, { sourceChunkX: 188, sourceChunkY: 1243, sourcePlane: 1, rotation: 0 });
-  area.setChunk(1, 3, 4, { sourceChunkX: 187, sourceChunkY: 1244, sourcePlane: 1, rotation: 0 });
-  area.setChunk(1, 4, 4, { sourceChunkX: 188, sourceChunkY: 1244, sourcePlane: 1, rotation: 0 });
+  for (let chunkX = 0; chunkX < 12; chunkX++) {
+    for (let chunkY = 0; chunkY < 8; chunkY++) {
+      area.setChunk(1, chunkX, chunkY, { sourceChunkX: 184 + chunkX, sourceChunkY: 1240 + chunkY, sourcePlane: 1, rotation: 0 });
+    }
+  }
   const x = area.getBaseX() + 31;
   const y = area.getBaseY() + 36;
   const upperY = area.getBaseY() + 24;
@@ -135,11 +136,23 @@ test('Kourend Crypt cached Large doors keep their real double-leaf geometry and 
     assert.ok(h.handlers.get('Large doors')?.Open, 'the plural cache name must be registered');
     const crossing = () => RegionManager.canMove(x, y, x, y + 1, 1, 1, 1, area);
     assert.equal(closedLowerCrossing, false, 'the closed shape-0 leaves block the real source-map approach edge');
+    assert.equal(RegionManager.canMove(x, y - 2, x, y + 2, 1, 1, 1, area), false,
+      'the closed lower leaves block the complete south-to-north route');
+    assert.equal(RegionManager.canMove(x, y + 2, x, y - 2, 1, 1, 1, area), false,
+      'the closed lower leaves block the complete north-to-south route');
     const westLeaf = area.resolveObject(32406, new Location(x, y, 1));
     assert.ok(westLeaf, 'the west cached leaf is resolved from the template, not MapObjects');
     const player = { getPrivateArea: () => area, getUsername: () => 'tester' };
     h.handlers.get('Large doors').Open({ player, object: westLeaf, objectId: 32406, location: westLeaf.getLocation() });
     assert.equal(crossing(), true, 'opening both cached leaves removes their original clipping and leaves the route walkable');
+    const lowerApproach = y - 2;
+    const lowerExit = y + 2;
+    assert.equal(area.getClip(new Location(x, lowerExit, 1)) & RegionManager.BLOCKED_TILE, 0,
+      'the cache terrain tile beyond the swung row at source y=9958 is not itself blocked');
+    assert.equal(RegionManager.canMove(x, lowerApproach, x, lowerExit, 1, 1, 1, area), true,
+      'the complete four-step south-to-north approach stays open beyond the swung leaves');
+    assert.equal(RegionManager.canMove(x, lowerExit, x, lowerApproach, 1, 1, 1, area), true,
+      'the complete four-step north-to-south return route also stays open');
 
     const movedLeaves = area.getObjects().filter((object) => [32406, 32407].includes(object.getId()));
     assert.deepEqual(movedLeaves.map((object) => [object.getId(), object.getLocation().getX(), object.getLocation().getY(), object.getFace()]).sort(), [
@@ -150,9 +163,17 @@ test('Kourend Crypt cached Large doors keep their real double-leaf geometry and 
 
     const upperCrossing = () => RegionManager.canMove(x + 1, upperY - 1, x + 1, upperY, 1, 1, 1, area);
     assert.equal(closedUpperCrossing, false, 'the rotation-3 upper pair blocks the opposite approach edge');
+    assert.equal(RegionManager.canMove(x + 1, upperY - 2, x + 1, upperY + 2, 1, 1, 1, area), false,
+      'the closed upper leaves block the complete south-to-north route');
+    assert.equal(RegionManager.canMove(x + 1, upperY + 2, x + 1, upperY - 2, 1, 1, 1, area), false,
+      'the closed upper leaves block the complete north-to-south route');
     const upperWestLeaf = area.resolveObject(32405, new Location(x, upperY, 1));
     h.handlers.get('Large doors').Open({ player, object: upperWestLeaf, objectId: 32405, location: upperWestLeaf.getLocation() });
     assert.equal(upperCrossing(), true, 'the rotation-3 pair also opens its template collision gap');
+    assert.equal(RegionManager.canMove(x + 1, upperY - 2, x + 1, upperY + 2, 1, 1, 1, area), true,
+      'the complete four-step south-to-north upper approach stays open beyond the swung leaves');
+    assert.equal(RegionManager.canMove(x + 1, upperY + 2, x + 1, upperY - 2, 1, 1, 1, area), true,
+      'the complete upper north-to-south return route also stays open');
 
     const closeTask = h.submitted.at(-1);
     closeTask.execute();
