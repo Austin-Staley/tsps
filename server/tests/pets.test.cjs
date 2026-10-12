@@ -324,6 +324,58 @@ test("pickup keeps the follower when the backpack is full", () => {
   assert.equal(player.messages.at(-1), "You don't have enough inventory space.");
 });
 
+test("a queued follower cannot be picked up twice before it despawns", () => {
+  const player = createPlayer();
+  const npc = createPetNpc(player, 5591); // Kitten
+  player.setAttribute("pets:current", npc);
+
+  assert.equal(Pets.__internals.pickup(player, npc), true);
+  assert.deepEqual(player.inventory, [ItemIdentifiers.PET_KITTEN]);
+  assert.equal(player.getAttribute("pets:current"), null);
+
+  // World removal is deferred, so the same NPC object can still receive a click.
+  assert.equal(Pets.__internals.pickup(player, npc), false);
+  assert.deepEqual(player.inventory, [ItemIdentifiers.PET_KITTEN]);
+});
+
+test("picking up a kitten cancels its growth task through TaskManager.cancelTasks", () => {
+  const cancelled = [];
+  const submitted = [];
+  const taskManager = {
+    submit: (task) => submitted.push(task),
+    cancelTasks: (key) => cancelled.push(key),
+  };
+  class TaskStub {
+    constructor(_delay, key) { this.key = key; }
+  }
+  Pets.register({
+    core: { ItemIdentifiers, NpcIdentifiers, ItemDefinition, Task: TaskStub, TaskManager: taskManager },
+    getWorld: () => world,
+    getRegionManager: () => ({ blocked: () => true }),
+    getItemOnGroundManager: () => ({ registerNonGlobal() {}, registerLocation() {} }),
+    persistAttribute() {}, onCustomEvent() {}, emitCustomEvent() {}, onItemDropPolicy() {},
+    onItemOnNpc() {}, onAnyNpcInteraction() {}, onNpcClick() {}, onPlayerLogout() {},
+    onPlayerDisconnect() {}, onPlayerLogin() {}, onPlayerDeath() {},
+    sendMultiChatboxPrompt: (player, title, ...pairs) => {
+      prompts.push({ player, title, pairs });
+      return true;
+    },
+    log() {},
+  });
+
+  const player = createPlayer();
+  const npc = createPetNpc(player, 5591);
+  player.setAttribute("pets:current", npc);
+  const pet = Pets.__internals.PET_BY_ID.get(5591);
+  Pets.__internals.trackCatFollower(player, npc, pet);
+  assert.equal(submitted.length, 1);
+
+  assert.equal(Pets.__internals.pickup(player, npc), true);
+  assert.deepEqual(cancelled, [submitted[0].key]);
+  assert.deepEqual(player.inventory, [ItemIdentifiers.PET_KITTEN]);
+  assert.equal(player.getAttribute("pets:current"), null);
+});
+
 test("an item-gated metamorphosis is denied until its item is used", () => {
   const player = createPlayer();
   const npc = createPetNpc(player, 6722); // Heron -> Great blue heron needs spirit flakes

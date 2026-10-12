@@ -818,7 +818,7 @@ function clearCatState(player) {
 function stopCatTask(player) {
   const key = CAT_TASK_KEY.get(player);
   if (key) {
-    TaskManagerRef?.cancelTask?.(key);
+    TaskManagerRef?.cancelTasks?.(key);
     CAT_TASK_KEY.delete(player);
   }
 }
@@ -1408,7 +1408,11 @@ function pickup(player, npc, { auto = false } = {}) {
   if (
     !pet ||
     !npc.isPet?.() ||
-    npc.getOwner?.()?.getIndex?.() !== player.getIndex?.()
+    npc.getOwner?.()?.getIndex?.() !== player.getIndex?.() ||
+    // NPC removal is queued until the world update. A second click on the same
+    // follower can arrive before that removal; only the active follower may
+    // transfer its item, so the queued duplicate cannot mint another copy.
+    player.getAttribute(CURRENT_PET_ATTRIBUTE) !== npc
   ) {
     return false;
   }
