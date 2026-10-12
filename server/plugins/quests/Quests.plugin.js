@@ -7,5 +7,6 @@
  * (King Roald, Reldo, ...) fall back to it after the other quests' handlers.
  */
 const QUESTS = [
+  "RecipeForDisaster",
   "ANightAtTheTheatre",
   "WhileGuthixSleeps",
