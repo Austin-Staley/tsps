@@ -164,6 +164,7 @@ module.exports = function registerWhileGuthixSleeps(api) {
   require('../wgs/Chasm.WhileGuthixSleeps')(context);
   require('../wgs/Temple.WhileGuthixSleeps')(context);
   require('../wgs/Stone.WhileGuthixSleeps')(context);
+  require('../wgs/Rewards.WhileGuthixSleeps')(context);
   for(const key of ATTRIBUTES)api.persistAttribute(key);
   api.onNpcInteraction('Ivy Sophista',{'Talk-to':ivy});
   api.onNpcInteraction('Thaerisk',{'Talk-to':thaerisk});
