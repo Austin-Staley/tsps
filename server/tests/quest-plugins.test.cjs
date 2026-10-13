@@ -5621,7 +5621,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
 
 test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the cathedral and blackstone fragment behind real caches', () => {
   const { api: base, handlers: baseHandlers } = mockApi();
-  const objectHooks = [], objectRouteHooks = [], itemOnObjectHooks = [], itemActionHooks = [], itemOnItemHooks = [], groundPickupHooks = [], actionHooks = [], choiceHooks = [], doorToggleHooks = [], interactions = [], transcripts = [], groundSpawns = [], playerProcesses = [], spawnedNpcs = [], prompts = [];
+  const objectHooks = [], objectRouteHooks = [], itemOnObjectHooks = [], itemActionHooks = [], itemOnItemHooks = [], groundPickupHooks = [], actionHooks = [], choiceHooks = [], doorToggleHooks = [], interactions = [], transcripts = [], groundSpawns = [], playerProcesses = [], spawnedNpcs = [], prompts = [], logoutHooks = [], disconnectHooks = [];
   const counts = new Map();
   const lassarObjectObjects = [];
   class TestGameObject {
@@ -5654,6 +5654,8 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
             : prop === 'onItemOnItem' ? (handler) => itemOnItemHooks.push(handler)
           : prop === 'onGroundItemPickup' ? (handler) => groundPickupHooks.push(handler)
             : prop === 'onPlayerProcess' ? (handler) => playerProcesses.push(handler)
+              : prop === 'onPlayerLogout' ? (handler) => logoutHooks.push(handler)
+                : prop === 'onPlayerDisconnect' ? (handler) => disconnectHooks.push(handler)
           : prop === 'getItemOnGroundManager' ? () => ({ getGroundItem: () => null, registerLocation: (...args) => groundSpawns.push(args) })
             : prop === 'sendMultiChatboxPrompt' ? (_player, title, ...options) => prompts.push({ title, options })
           : prop === 'onCustomEvent' ? (name, handler) => {
@@ -5913,7 +5915,8 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     const idolState = attrs.get('desert-treasure-ii:lassar');
     attrs.set('desert-treasure-ii:lassar', { ...idolState, inShadow: false });
     playerProcesses[0]({ player });
-    assert.equal(lassarObjectObjects.at(-1).action, 'deregister', 'the shadow-only object is removed when leaving the realm');
+    assert.ok(lassarObjectObjects.some(({ action, object }) => action === 'deregister' && object.id === 48216
+      && object.location.x === 2435 && object.location.y === 6415), 'the shadow-only object is removed when leaving the realm');
     attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), inShadow: true });
     assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.BASIC_SHADOW_TORCH,
       objectId: core.ObjectIdentifiers.DOORS_22, location: { x: 2424, y: 6439, z: 0 } }), true,
@@ -5999,7 +6002,7 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     groundPickupHooks[0]({ player, groundItemId: core.ItemIdentifiers.SHADOW_KEY_3, location: { x: 2595, y: 6392, z: 0 } });
     assert.equal(attrs.get('desert-treasure-ii:lassar').whiteKey, true, 'taking the visible white key unlocks the palace devices');
     const deviceState = { ...attrs.get('desert-treasure-ii:lassar'), inShadow: true, whiteKey: true, sanity: 100 };
-    attrs.set('desert-treasure-ii:lassar', deviceState);
+    attrs.set('desert-treasure-ii:lassar', { ...deviceState, superiorTorch: true, braziers: {}, braziersComplete: false });
     counts.set(core.ItemIdentifiers.SHADOW_BLOCKER, 1);
     counts.set(core.ItemIdentifiers.ANIMA_PORTAL, 1);
     counts.set(core.ItemIdentifiers.REVITALISING_IDOL, 1);
@@ -6036,10 +6039,48 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.SHADOW_BLOCKER, objectId: 48228, location: { x: 2574, y: 6449, z: 0 } }), true);
     assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.ANIMA_PORTAL, objectId: 48228, location: { x: 2576, y: 6447, z: 0 } }), true);
     assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.REVITALISING_IDOL, objectId: 48228, location: { x: 2578, y: 6445, z: 0 } }), true);
-    for (const [x, y] of [[2311, 6445], [2317, 6445], [2311, 6451], [2317, 6451]]) {
+    const brazierTiles = [[2318, 6446], [2312, 6444], [2321, 6449], [2323, 6455]];
+    playerProcesses[0]({ player });
+    assert.equal(lassarObjectObjects.filter(({ action, object }) => action === 'register' && object.id === 48253).length, 4,
+      'the four unlit braziers become visible only after all three palace devices are placed');
+    const litBeforeTorch = attrs.get('desert-treasure-ii:lassar').braziers;
+    attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), superiorTorch: false });
+    assert.equal(interact({ player, objectId: 48253, definition: { id: 48253 },
+      location: { x: 2318, y: 6446, z: 0 }, option: 'Light' }), true);
+    assert.deepEqual(attrs.get('desert-treasure-ii:lassar').braziers, litBeforeTorch,
+      'a brazier cannot be lit before the superior torch is earned');
+    attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), superiorTorch: true });
+    counts.set(core.ItemIdentifiers.SUPERIOR_SHADOW_TORCH, 0);
+    assert.equal(interact({ player, objectId: 48253, definition: { id: 48253 },
+      location: { x: 2318, y: 6446, z: 0 }, option: 'Light' }), true);
+    assert.deepEqual(attrs.get('desert-treasure-ii:lassar').braziers, litBeforeTorch,
+      'the saved torch flag alone cannot light a brazier without the real item');
+    counts.set(core.ItemIdentifiers.SUPERIOR_SHADOW_TORCH, 1);
+    assert.equal(interact({ player, objectId: 48232, definition: { id: 48232 },
+      location: { x: 2316, y: 6450, z: 0 }, option: 'Open' }), true);
+    assert.equal(counts.get(core.ItemIdentifiers.PERFECTED_SHADOW_TORCH_SCHEMATIC_2) ?? 0, 0,
+      'the chest remains shut until all four distinct braziers are lit');
+    for (const [x, y] of brazierTiles) {
       assert.equal(interact({ player, objectId: 48253, definition: { id: 48253 }, location: { x, y, z: 0 }, option: 'Light' }), true);
+      playerProcesses[0]({ player });
     }
-    assert.equal(attrs.get('desert-treasure-ii:lassar').braziersComplete, true, 'all four distinct cache braziers must light');
+    const litBrazierState = attrs.get('desert-treasure-ii:lassar');
+    assert.equal(litBrazierState.braziersComplete, true, 'all four distinct cache braziers must light');
+    assert.deepEqual(Object.keys(litBrazierState.braziers).sort(), brazierTiles.map(([x, y]) => `${x},${y}`).sort(),
+      'the northern brazier at x2323 is included in the four canonical positions');
+    assert.ok(brazierTiles.every(([x, y]) => lassarObjectObjects.findLast(({ object }) => object.id === 48253
+      && object.location.x === x && object.location.y === y)?.action === 'deregister'),
+      'each lit counterpart is removed from the owner scene on the next process tick');
+    assert.equal(interact({ player, objectId: 48253, definition: { id: 48253 },
+      location: { x: 2323, y: 6455, z: 0 }, option: 'Light' }), true);
+    assert.equal(Object.keys(attrs.get('desert-treasure-ii:lassar').braziers).length, 4,
+      'repeating Light cannot increment the count or create a fifth brazier');
+    assert.ok(logoutHooks.length > 0, 'the plugin registers logout cleanup');
+    for (const hook of logoutHooks) hook({ player });
+    playerProcesses[0]({ player });
+    assert.ok(brazierTiles.every(([x, y]) => lassarObjectObjects.findLast(({ object }) => object.id === 48253
+      && object.location.x === x && object.location.y === y)?.action === 'deregister'),
+      'reconstructed scene after relog does not restore already-lit braziers');
     assert.equal(interact({ player, objectId: 48232, definition: { id: 48232 }, location: { x: 2316, y: 6450, z: 0 }, option: 'Open' }), true);
     assert.equal(counts.get(core.ItemIdentifiers.PERFECTED_SHADOW_TORCH_SCHEMATIC_2), 1, 'the palace chest yields the marked false schematic only after the device puzzle');
     assert.equal(attrs.get('desert-treasure-ii:lassar').fakeSchematicFound, true);

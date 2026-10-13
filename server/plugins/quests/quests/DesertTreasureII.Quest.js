@@ -156,7 +156,7 @@ module.exports = function registerDesertTreasureII(api) {
   const LASSAR_KETLA_WORKBENCH = 48247; // Cache transform of the placed null loc 49486.
   let lassarPuddlesInstalled = false;
   const LASSAR_TELEPORTER_VARBITS = [15088, 15089, 15091, 15092, 15093, 15090, 15094];
-  const lassarShadowIdols = new WeakMap();
+  const lassarSceneObjects = new WeakMap();
   const lassarShadowBarriers = new WeakMap();
   const LASSAR_SCHEMATIC_VARBITS = [
     ["blockerDesigned", 15082], ["idolSchematic", 15083], ["animaSchematic", 15084],
@@ -3455,32 +3455,54 @@ module.exports = function registerDesertTreasureII(api) {
     if (handled) event.handled = true;
     return handled;
   }
-  function syncLassarShadowIdol(p, state) {
-    const current = lassarShadowIdols.get(p) ?? new Map();
+  function syncLassarSceneObjects(p, state) {
+    const current = lassarSceneObjects.get(p) ?? new Map();
     const desired = new Map();
-    if (state.inShadow && state.idolPlaced) desired.set("eastern-teleporter", [2435, 6415]);
-    if (state.inShadow && state.whiteIdolPlaced) desired.set("palace-chest", [2322, 6445]);
+    const placements = [
+      ["blocker", state.blockerPlaced, [48213, 2606, 6359], [48214, 2350, 6360]],
+      ["pub-blocker", state.pubBlocker, [48213, 2641, 6428], [48214, 2385, 6427]],
+      ["red-blocker", state.redBlockerPlaced, [48213, 2649, 6406], [48214, 2393, 6406]],
+      ["white-blocker", state.whiteBlockerPlaced, [48213, 2574, 6449], [48214, 2318, 6449]],
+      ["white-anima", state.whiteAnimaPlaced, [48218, 2576, 6447], [48219, 2320, 6447]],
+      ["eastern-idol", state.idolPlaced, [48215, 2689, 6415], [48216, 2435, 6415]],
+      ["palace-idol", state.whiteIdolPlaced, [48215, 2578, 6445], [48216, 2322, 6445]],
+    ];
+    for (const [key, placed, material, shadow] of placements) {
+      if (!placed) continue;
+      const [id, x, y] = state.inShadow ? shadow : material;
+      desired.set(key, [id, x, y, 22]);
+    }
+    const allPalaceDevicesPlaced = state.whiteBlockerPlaced && state.whiteAnimaPlaced && state.whiteIdolPlaced;
+    const braziers = [[2318, 6446], [2312, 6444], [2321, 6449], [2323, 6455]];
+    if (state.inShadow && allPalaceDevicesPlaced) {
+      for (const [x, y] of braziers) {
+        if (!state.braziers?.[`${x},${y}`]) desired.set(`brazier:${x},${y}`, [48253, x, y, 10]);
+      }
+    }
     for (const [key, object] of current) {
-      if (desired.has(key)) continue;
+      const target = desired.get(key);
+      if (target && object.id === target[0]
+        && object.location.getX?.() === target[1] && object.location.getY?.() === target[2]) continue;
       api.core.ObjectManager.deregister(object, true);
       current.delete(key);
     }
-    for (const [key, [x, y]] of desired) {
+    for (const [key, [id, x, y, shape]] of desired) {
       if (current.has(key)) continue;
-      // The shadow counterpart is a per-player scene change; register it so the
-      // normal cache Use action resolves to this owner instead of a client-only loc.
-      const idol = new api.core.GameObject(48216, new api.core.Location(x, y, 0), 22, 0, null).setOwner(p);
-      api.core.ObjectManager.register(idol, true);
-      current.set(key, idol);
+      // Cache gamevals define the placed devices and Light option, but their
+      // location variants are absent from the active map. Register only the
+      // earned owner-side placements so the normal client actions resolve.
+      const object = new api.core.GameObject(id, new api.core.Location(x, y, 0), shape, 0, null).setOwner(p);
+      api.core.ObjectManager.register(object, true);
+      current.set(key, object);
     }
-    if (current.size) lassarShadowIdols.set(p, current);
-    else lassarShadowIdols.delete(p);
+    if (current.size) lassarSceneObjects.set(p, current);
+    else lassarSceneObjects.delete(p);
   }
-  function removeLassarShadowIdol({ player: p }) {
-    const current = p && lassarShadowIdols.get(p);
+  function removeLassarSceneObjects({ player: p }) {
+    const current = p && lassarSceneObjects.get(p);
     if (!current) return;
     for (const object of current.values()) api.core.ObjectManager.deregister(object, true);
-    lassarShadowIdols.delete(p);
+    lassarSceneObjects.delete(p);
   }
   function syncLassarAnimaTentacles(p, state) {
     const barriers = [
@@ -3518,7 +3540,7 @@ module.exports = function registerDesertTreasureII(api) {
     ensureLassarPuddleUse();
     const lassarState = p.getAttribute(LASSAR) ?? {};
     ensureLassarIntroItems(p, lassarState);
-    syncLassarShadowIdol(p, lassarState);
+    syncLassarSceneObjects(p, lassarState);
     syncLassarAnimaTentacles(p, lassarState);
     const position = p.getLocation?.();
     if (lassarState.cameTo && position
@@ -6439,14 +6461,24 @@ module.exports = function registerDesertTreasureII(api) {
       p.sendMessage("The superior torch burns through the tentacles south of the Plaza.");
       return true;
     }
-    if (state.inShadow && visibleId === 48253 && x >= 2308 && x <= 2321 && y >= 6440 && y <= 6455
+    const palaceBraziers = new Set(["2318,6446", "2312,6444", "2321,6449", "2323,6455"]);
+    const brazierKey = `${x},${y}`;
+    if (state.inShadow && visibleId === 48253 && palaceBraziers.has(brazierKey)
       && (option === "light" || option === "ignite" || option === "activate")) {
       if (!state.whiteBlockerPlaced || !state.whiteAnimaPlaced || !state.whiteIdolPlaced) {
         p.sendMessage("The lost souls still guard this chest. Place the blocker, anima portal and revitalising idol at the marked tiles first.");
         return true;
       }
+      if (!state.superiorTorch || !has(p, I.SUPERIOR_SHADOW_TORCH)) {
+        p.sendMessage("You need the superior shadow torch to light the palace braziers.");
+        return true;
+      }
+      if (state.braziers?.[brazierKey]) {
+        p.sendMessage("This brazier is already lit.");
+        return true;
+      }
       const braziers = { ...(state.braziers ?? {}) };
-      braziers[`${x},${y}`] = true;
+      braziers[brazierKey] = true;
       setLassar(p, { ...state, braziers });
       const count = Object.keys(braziers).length;
       p.sendMessage(`You light a shadow brazier near the chest (${count}/4).`);
@@ -6942,7 +6974,8 @@ module.exports = function registerDesertTreasureII(api) {
   api.onGroundItemPickup(handleSucellusGroundItemPickup);
   api.onGroundItemPickup(handleVardorvisGroundItemPickup);
   api.onPlayerLogin(handleLogin);
-  api.onPlayerLogout(removeLassarShadowIdol);
+  api.onPlayerLogout(removeLassarSceneObjects);
+  api.onPlayerDisconnect(removeLassarSceneObjects);
   api.onPlayerLogout(removeLassarAnimaTentacles);
   api.onPlayerProcess(handleLassarProcess);
   api.onPlayerLogout(handleLogout);
