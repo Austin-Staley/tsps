@@ -1,7 +1,7 @@
 {
-  "//": "Death's Office. 'instance': the cache map chunks a visit copies, as captured (x 3160-3191, y 5720-5735, planes 0-1). Tiles are the office's own (static) coordinates. 'entrances': each Death's Domain loc (by gameval) and where the exit portal puts a player who came in through it; Lumbridge and Civitas from captures, Ferox Enclave from the Wiki, the rest the tile in front of the loc (UNVERIFIED).",
+  "//": "Death's Office. 'instance': the cache map chunks a visit copies, as captured (x 3160-3191, y 5720-5735, planes 0-1). Tiles are the office's own (static) coordinates. Death spawns facing south (6), as captured; his model faces his desk to the west. 'entrances': each Death's Domain loc (by gameval) and where the exit portal puts a player who came in through it; Lumbridge and Civitas from captures, Ferox Enclave from the Wiki, the rest the tile in front of the loc (UNVERIFIED).",
   "instance": { "sourceChunkX": 395, "sourceChunkY": 715, "widthChunks": 4, "heightChunks": 2, "planes": 2 },
-  "death": { "tile": [3179, 5726, 0], "face": 3 },
+  "death": { "tile": [3179, 5726, 0], "face": 6 },
   "arrival": [3171, 5726, 0],
   "loginArrival": [3173, 5726, 0],
   "desk": [3176, 5726, 0],
