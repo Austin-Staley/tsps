@@ -7,6 +7,8 @@ module.exports = function registerDesertTreasureII(api) {
   const WAR_ROOM_GOLEM_LOC = 49511; // Cache multiloc bases are the actual map objects.
   const WAR_ROOM_ALTAR_LOC = 49512;
   const DIGSITE_CREVICE_LOC = 49510; // Cache dt2_digsite_crevice multiloc has no generated constant.
+  const KORBAL_HERBS_LOC = 49494;
+  const ARGIAN_BUSH_LOC = 49493;
   const S = { STARTED: 1, VAULT: 2, DIG: 3, ROCKS: 4, GUARDIAN: 5, MACHINE: 6, VARDORVIS: 7, LEVIATHAN: 8, SUCELLUS: 9, WHISPERER: 10, FINALE: 11, COMPLETE: 12 };
   // Cache quest dbrow 2343, column 19 completes at 118; QuestHelper records the intervening milestones.
   function nativeProgress(stage, player) {
@@ -3826,14 +3828,22 @@ module.exports = function registerDesertTreasureII(api) {
       return true;
     }
     if (s === S.VARDORVIS && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 11
-      && objectId === O.KORBAL_HERBS && Math.abs(location.x - 1155) <= 2 && Math.abs(location.y - 3447) <= 2) {
+      && (objectId === KORBAL_HERBS_LOC || visibleId === O.KORBAL_HERBS)) {
+      if (!has(p, I.KORBAL_HERB) && p.getInventory().getFreeSlots() < 1) {
+        p.sendMessage("You need inventory space for a Korbal herb.");
+        return true;
+      }
       if (!has(p, I.KORBAL_HERB)) p.getInventory().adds(I.KORBAL_HERB, 1);
       if (Number(p.getAttribute(VARDORVIS_PROGRESS)) === 11 && has(p, I.KORBAL_HERB) && has(p, I.ARGIAN_BERRIES)) p.setAttribute(VARDORVIS_PROGRESS, 12);
       p.sendMessage("You pick a Korbal herb from the north-west of the Stranglewood.");
       return true;
     }
     if (s === S.VARDORVIS && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 11
-      && objectId === O.ARGIAN_BUSH && Math.abs(location.x - 1126) <= 2 && Math.abs(location.y - 3323) <= 2) {
+      && (objectId === ARGIAN_BUSH_LOC || visibleId === O.ARGIAN_BUSH)) {
+      if (!has(p, I.ARGIAN_BERRIES) && p.getInventory().getFreeSlots() < 1) {
+        p.sendMessage("You need inventory space for Argian berries.");
+        return true;
+      }
       if (!has(p, I.ARGIAN_BERRIES)) p.getInventory().adds(I.ARGIAN_BERRIES, 1);
       if (Number(p.getAttribute(VARDORVIS_PROGRESS)) === 11 && has(p, I.KORBAL_HERB) && has(p, I.ARGIAN_BERRIES)) p.setAttribute(VARDORVIS_PROGRESS, 12);
       p.sendMessage("You pick Argian berries from the south-west of the Stranglewood.");
