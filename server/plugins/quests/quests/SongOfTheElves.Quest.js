@@ -430,7 +430,8 @@ module.exports = function registerSongOfTheElves(api) {
       }
       if (state.beams.size > 0 && state.boss.getHitpoints() > 0) {
         if (now >= state.nextBeamHealAt) {
-          const heal = state.beams.size * (4 + Math.floor(Math.random() * 5));
+          const livingBeams = [...state.beams].filter(beam => beam.getHitpoints() > 0).length;
+          const heal = livingBeams * (4 + Math.floor(Math.random() * 5));
           state.boss.setHitpoints(Math.min(state.boss.getMaxHitpoints(), state.boss.getHitpoints() + heal));
           state.nextBeamHealAt = now + FRAGMENT_BEAM_HEAL_SPEED;
         }
