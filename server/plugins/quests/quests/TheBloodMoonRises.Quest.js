@@ -32,6 +32,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const CASTLE_LAST_ROOM_VARBIT = 15499;
   const CASTLE_LAST_FLOOR_VARBIT = 15549;
   const CASTLE_LAST_FACING_VARBIT = 15500;
+  const CASTLE_VENATOR_HEAD_VARBIT = 15523;
   const CASTLE_GROUND_FLOOR = 1;
   const CASTLE_OUTER_LIBRARY_PORTAL_VARBIT = 15531;
   const CASTLE_VANESCULA_EMBLEM_VARBIT = 15504;
@@ -354,7 +355,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.PUZZLE_LIBRARY, x: 2519, y: 7363, z: 0, from: CASTLE_ROOM.VENATOR_PUZZLE, to: CASTLE_ROOM.VENATOR_LIBRARY,
       fromFloor: 2, toFloor: 2, action: "Enter", requiresStory: "gibbousSpearDoorUnlocked", landing: [2551, 7386] },
     { id: CASTLE_DOOR_IDS.DOOR_ALT_M, x: 2551, y: 7387, z: 0, from: CASTLE_ROOM.VENATOR_LIBRARY, to: CASTLE_ROOM.VENATOR_PUZZLE,
-      fromFloor: 2, toFloor: 2, landing: [2518, 7363] },
+      fromFloor: 2, toFloor: 2, landing: [2519, 7364] },
     { id: CASTLE_DOOR_IDS.DISPLAY_STAIRS_DOWN, x: 2503, y: 7369, z: 0, from: CASTLE_ROOM.DISPLAY_ROOM, to: CASTLE_ROOM.LOBBY,
       fromFloor: 2, toFloor: 2, action: "Climb-down", landing: [2307, 7365, 1] },
     { id: CASTLE_DOOR_IDS.STAIRS_UP, x: 2308, y: 7365, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.DISPLAY_ROOM,
@@ -1937,6 +1938,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.getPacketSender().sendVarbit(15464,
         Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70);
       player.getPacketSender().sendVarbit(15543, castleStory(player).gibbous.fireplaceLit ? 1 : 0);
+      syncCastleVenatorHead(player);
     }
     syncCastleActors(player);
     const bookPuzzle = bookPuzzleState(player);
@@ -2135,6 +2137,12 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.getPrivateArea?.() ?? null)) {
       manager.registerLocation(player, new Item(CASTLE_BOOK_ITEMS.gibbousMoonKey, 1), tile);
     }
+  }
+
+  function syncCastleVenatorHead(player) {
+    const gibbous = castleStory(player).gibbous;
+    player.getPacketSender().sendVarbit(CASTLE_VENATOR_HEAD_VARBIT,
+      gibbous.secondGemPlaced ? 3 : gibbous.firstGemPlaced ? 2 : 0);
   }
 
   function syncCastleSyringeBarrel(player) {
@@ -2369,6 +2377,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!player.getInventory().contains(item)) return;
     player.getInventory().deleteNumber(item, 1);
     updateGibbousStory(player, { [gem]: true });
+    syncCastleVenatorHead(player);
     player.sendMessage("You set the fancy gem into the mounted Venator head.");
   }
 

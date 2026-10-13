@@ -1443,7 +1443,11 @@ test('Blood Moon Gibbous lockbox requires its room clues and accepts code 426', 
   attributes.set('quest.the_blood_moon_rises.castle-room', 39);
   const headItems = handlers.itemOnObject.find(handler => handler.name === 'handleCastleGibbousItemOnObject');
   headItems({ player, itemId: 33765, objectId: 61687, location: { x: 2531, y: 7367, z: 0 }, handled: false });
+  assert.deepEqual(sentVarbits.filter(([id]) => id === 15523).at(-1), [15523, 2],
+    'the first gem selects the one-gem mounted-head transform');
   headItems({ player, itemId: 33766, objectId: 61687, location: { x: 2531, y: 7367, z: 0 }, handled: false });
+  assert.deepEqual(sentVarbits.filter(([id]) => id === 15523).at(-1), [15523, 3],
+    'the second gem selects the searchable mounted-head transform');
   const head = handlers.objects.find(handler => handler.name === 'handleCastleGibbousObjects');
   head({ player, objectId: 61687, definition: { id: 61687 }, location: { x: 2531, y: 7367, z: 0 },
     option: 'Search', handled: false });
@@ -2226,7 +2230,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [2332, 7388, 0], [2345, 7395, 0], [2491, 7377, 0], [2471, 7421, 0], [2554, 7364, 0],
     [2506, 7409, 0], [2587, 7380, 0], [2583, 7370, 0], [2451, 7371, 0], [2441, 7361, 0],
     [2515, 7395, 0], [2450, 7371, 0], [2507, 7363, 0], [2520, 7396, 0], [2482, 7395, 0],
-    [2337, 7370, 1], [2516, 7368, 0], [2509, 7370, 0], [2551, 7386, 0], [2518, 7363, 0],
+    [2337, 7370, 1], [2516, 7368, 0], [2509, 7370, 0], [2551, 7386, 0], [2519, 7364, 0],
     [2502, 7368, 0], [2307, 7365, 1], [2444, 7418, 0], [2453, 7421, 0], [2459, 7390, 0],
     [2442, 7417, 0], [2437, 7419, 0], [2456, 7388, 0], [2380, 7392, 0], [2372, 7392, 0],
     [2393, 7363, 0], [2387, 7383, 0], [2441, 7400, 0], [2394, 7370, 0], [2440, 7388, 0],
@@ -2242,6 +2246,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
       (x === 2469 && y === 7418 && z === 0) || (x === 2361 && y === 7394 && z === 0) ||
       (x === 2325 && y === 7397 && z === 0) || (x === 2358 && y === 7381 && z === 0) ||
       (x === 2314 && y === 7361 && z === 0) ||
+      (x === 2519 && y === 7364 && z === 0) ||
       (x === 2588 && y === 7381 && z === 0) || (x === 2575 && y === 7386 && z === 0) ||
       (x === 2579 && y === 7366 && z === 0);
     if (!isCapturedDoorArrival) assert.equal(RegionManager.blocked(new api.core.Location(x, y, z), null), false,
@@ -2261,6 +2266,10 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     destX: 2358, destY: 7386, moveNear: true, maxWaypoints: 80, privateArea: null });
   assert.equal(fireplaceApproach.success, true,
     'the captured parlour landing has a cache path to the fireplace interaction tile');
+  const gemHeadApproach = larderRoute.findRoute({ level: 0, srcX: 2519, srcY: 7364, srcSize: 1,
+    destX: 2525, destY: 7367, moveNear: false, maxWaypoints: 80, privateArea: null });
+  assert.equal(gemHeadApproach.success, true,
+    'the captured library exit landing connects to the mounted-head gem interaction tile');
   const prisonReturnRoute = larderRoute.findRoute({ level: 0, srcX: 2570, srcY: 7368, srcSize: 1,
     destX: 2564, destY: 7369, moveNear: true, maxWaypoints: 80, privateArea: null });
   assert.equal(prisonReturnRoute.success, true,
