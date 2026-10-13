@@ -344,6 +344,8 @@ function createLocGeometryResources(
 }
 
 export class WebGLMapSquare {
+    readonly locDataChangedListeners = new Set<() => void>();
+
     static readonly IDENTITY_MAT4 = mat4.create() as Float32Array;
 
     readonly id: number;
@@ -998,6 +1000,7 @@ export class WebGLMapSquare {
             mapData.tileLocOffsetsByLevel,
             mapData.tileLocIdsByLevel,
             mapData.tileLocTypeRotByLevel,
+            mapData.tilePresenceByLevel,
         );
         // Initialize occupancy counters to match initial flags
         for (const c of occInit) {
@@ -1094,6 +1097,7 @@ export class WebGLMapSquare {
         public tileLocOffsetsByLevel?: Uint32Array[],
         public tileLocIdsByLevel?: Int32Array[],
         public tileLocTypeRotByLevel?: Uint8Array[],
+        public tilePresenceByLevel?: Uint8Array[],
     ) {
         this.id = getMapSquareId(mapX, mapY);
         /** When >= 0, all interaction/height queries on this map use this plane
@@ -1815,6 +1819,7 @@ export class WebGLMapSquare {
             }
         }
 
+        this.tilePresenceByLevel = mapData.tilePresenceByLevel;
         if (this.tileLocOffsetsByLevel && this.tileLocIdsByLevel && this.tileLocTypeRotByLevel) {
             this.tileLocOffsetsByLevel.length = 0;
             this.tileLocIdsByLevel.length = 0;
@@ -1826,6 +1831,7 @@ export class WebGLMapSquare {
             }
             this.locIdsAtLocalBuffer.length = 0;
             this.locTypeRotsAtLocalBuffer.length = 0;
+            for (const listener of this.locDataChangedListeners) listener();
         }
         this.ambientSoundEmitters = undefined;
     }
@@ -2178,6 +2184,7 @@ export class WebGLMapSquare {
             }
         }
 
+        this.tilePresenceByLevel = mapData.tilePresenceByLevel;
         if (this.tileLocOffsetsByLevel && this.tileLocIdsByLevel && this.tileLocTypeRotByLevel) {
             this.tileLocOffsetsByLevel.length = 0;
             this.tileLocIdsByLevel.length = 0;
@@ -2189,6 +2196,7 @@ export class WebGLMapSquare {
             }
             this.locIdsAtLocalBuffer.length = 0;
             this.locTypeRotsAtLocalBuffer.length = 0;
+            for (const listener of this.locDataChangedListeners) listener();
         }
         const loadTime = time ?? this.timeLoaded;
 

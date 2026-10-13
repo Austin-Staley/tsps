@@ -281,6 +281,7 @@ export function updateFollowCamera(
 
     const focusHeightTiles = (osrsClient.camFollowHeight | 0) / 128.0;
     const targetY = playerHeightSample.height - focusHeightTiles;
+        camera.setFocalPoint(targetX, targetY, targetZ);
     const desiredPosY = Math.round((targetY - forward[1] * dist) * 128) / 128;
     camera.snapToPosition(undefined, desiredPosY, undefined);
 }

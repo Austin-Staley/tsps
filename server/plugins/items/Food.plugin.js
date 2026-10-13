@@ -108,7 +108,10 @@ function skill(name) {
   return core.Skill[name.toUpperCase()];
 }
 
-/** Wiki: Anglerfish heal from the eater's Hitpoints level, at most 22. */
+/**
+ * Wiki: Anglerfish heals by the eater's Hitpoints level, at most 22. The level they levelled up
+ * to, not the health left in it: a low-HP 99 still gets the 99 heal.
+ */
 function getAnglerfishHeal(hitpointsLevel) {
   let c = 2;
   if (hitpointsLevel >= 25) c = 4;
@@ -246,7 +249,7 @@ function applyFood(player, food, random = Math.random) {
   }
   let healed;
   if (food.special === "anglerfish") {
-    const amount = getAnglerfishHeal(skills.getMaxLevel(core.Skill.HITPOINTS));
+    const amount = getAnglerfishHeal(maxHp);
     healed = healBy(player, amount, canAnglerfishOverheal(player) ? amount : 0);
   } else {
     healed = healBy(player, healAmount(food.heal, maxHp, random));
