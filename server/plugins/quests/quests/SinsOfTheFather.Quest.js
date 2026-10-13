@@ -347,6 +347,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   const IVAN_BOATHOUSE_TILE = { x: 3530, y: 3169, z: 0 };
   const VELIAF_BOATHOUSE_TILE = { x: 3529, y: 3168, z: 0 };
   const ICYENE_DOCK = { x: 3696, y: 3198, z: 0 };
+  const ICYENE_LANDING = { x: 3696, y: 3199, z: 0 };
   const GRAVEYARD_VELIAF_TILE = { x: 3689, y: 3182, z: 0 };
   const GRAVEYARD_SAFALAAN_TILE = { x: 3707, y: 3186, z: 0 };
   const GRAVEYARD_VANESCULA_TILE = { x: 3705, y: 3189, z: 0 };
@@ -2207,7 +2208,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
       "Slepe.",
       () => teleport(player, SLEPE_DOCK),
       "Icyene Graveyard.",
-      () => teleport(player, ICYENE_DOCK)
+      () => teleport(player, ICYENE_LANDING)
     );
   }
 
@@ -2220,7 +2221,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
       return true;
     }
     if (near(player, BURGH_DOCKS, 4) && stage >= STAGE_ESCORT_DONE) {
-      teleport(player, ICYENE_DOCK);
+      teleport(player, ICYENE_LANDING);
       if (stage < STAGE_GRAVEYARD) advance(player, STAGE_GRAVEYARD);
       return true;
     }
