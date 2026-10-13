@@ -145,6 +145,7 @@ module.exports = function registerSongOfTheElves(api) {
   const ELENA_ESCAPE_PROGRESS = "song-of-the-elves:elena-escape-progress";
   const PRISON_ENTRY = 35791;
   const PRISON_EXIT = 35792;
+  const PRISON_ELENA_BASE = 1150; // Cache multiloc NPC controlled by the quest stage.
   const DISGUISE = {
     STEEL_HELM: ItemIdentifiers.STEEL_FULL_HELM,
     STEEL_BODY: ItemIdentifiers.STEEL_PLATEBODY,
@@ -2818,7 +2819,7 @@ module.exports = function registerSongOfTheElves(api) {
   }
   function finishElenaPrisonLine(event) {
     const player = event?.player;
-    if (!player || currentChapter(player) !== 2 || ![NpcIdentifiers.ELENA_2, NpcIdentifiers.ELENA_4].includes(event.npcId)) return;
+    if (!player || currentChapter(player) !== 2 || ![PRISON_ELENA_BASE, NpcIdentifiers.ELENA_2, NpcIdentifiers.ELENA_4].includes(event.npcId)) return;
     if (event.text === "Okay, I'll be back soon." && Number(player.getAttribute(ELENA_ESCAPE_PROGRESS)) === 20) {
       event.after = () => {
         player.setAttribute(ELENA_ESCAPE_PROGRESS, 22);
