@@ -183,6 +183,10 @@ export class EditModePlugin {
         return this.host?.getOverlaySwatches?.() ?? [];
     }
 
+    getOverlayTexture(textureId: number): string | undefined {
+        return this.host?.getOverlayTexture?.(textureId);
+    }
+
     /** Updates the world spawn from one selected tile; Save persists it to world.json. */
     setSpawnPoint(): void {
         const selection = this.selection;

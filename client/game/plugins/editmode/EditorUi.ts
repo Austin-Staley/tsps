@@ -601,7 +601,7 @@ class EditorChrome {
             gridTemplateColumns: "repeat(5, 1fr)",
             gap: "5px",
         });
-        const appendSwatch = (id: number, colorRgb: number, name?: string): void => {
+        const appendSwatch = (id: number, colorRgb: number, name?: string, textureId?: number): void => {
             const swatch = document.createElement("button");
             swatch.type = "button";
             swatch.textContent = String(id);
@@ -623,10 +623,24 @@ class EditorChrome {
                 this.toggleOverlayPalette();
             });
             swatches.appendChild(swatch);
+            if (textureId !== undefined) {
+                const showTexture = (): void => {
+                    const texture = this.plugin.getOverlayTexture(textureId);
+                    if (texture) {
+                        swatch.style.backgroundImage = `url("${texture}")`;
+                        swatch.style.backgroundSize = "cover";
+                    } else {
+                        window.setTimeout(() => {
+                            if (swatch.isConnected) showTexture();
+                        }, 250);
+                    }
+                };
+                showTexture();
+            }
         };
         appendSwatch(0, 0x27303a, "Clear");
         for (const swatch of this.overlaySwatches) {
-            appendSwatch(swatch.id, swatch.colorRgb, swatch.name);
+            appendSwatch(swatch.id, swatch.colorRgb, swatch.name, swatch.textureId);
         }
         panel.appendChild(swatches);
     }

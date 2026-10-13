@@ -551,6 +551,7 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
         (index, tag) => plugin.setWorldZoneType(index, tag),
         (index) => plugin.deleteWorldZone(index),
     );
+    const overlayTexturePreviews = new Map<number, string>();
     let previewNpc = false;
     let previewNpcType = -1;
     let previewNpcRotation = -1;
@@ -1627,6 +1628,33 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
             const overlay = id > 0 ? client.loaderFactory?.getOverlayTypeLoader?.().load(id - 1) : undefined;
             return !!overlay && overlay.textureId !== 91 && isKnownWaterTextureId(overlay.textureId);
         },
+        getOverlayTexture: (textureId) => {
+            const cached = overlayTexturePreviews.get(textureId);
+            if (cached) return cached;
+            if (!client.textureLoader) return undefined;
+            try {
+                const size = 128;
+                const pixels = client.textureLoader.getPixelsArgb(textureId, size, true, 1);
+                const canvas = document.createElement("canvas");
+                canvas.width = canvas.height = size;
+                const ctx = canvas.getContext("2d");
+                if (!ctx) return undefined;
+                const image = ctx.createImageData(size, size);
+                for (let i = 0; i < pixels.length; i++) {
+                    image.data[i * 4] = (pixels[i] >>> 16) & 255;
+                    image.data[i * 4 + 1] = (pixels[i] >>> 8) & 255;
+                    image.data[i * 4 + 2] = pixels[i] & 255;
+                    image.data[i * 4 + 3] = pixels[i] >>> 24;
+                }
+                ctx.putImageData(image, 0, 0);
+                const url = canvas.toDataURL();
+                overlayTexturePreviews.set(textureId, url);
+                return url;
+            } catch {
+                // Sparse-cache textures may still be downloading; the palette retries them.
+                return undefined;
+            }
+        },
         getOverlaySwatches: () => {
             const loader = client.loaderFactory?.getOverlayTypeLoader?.();
             if (!loader) return [];
@@ -1637,6 +1665,8 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
                     swatches.push({
                         id,
                         colorRgb: overlay.primaryRgb & 0xffffff,
+                        textureId: overlay.textureId >= 0 && client.textureLoader?.isSd(overlay.textureId)
+                            ? overlay.textureId : undefined,
                         name: overlay.name,
                     });
                 } catch {
