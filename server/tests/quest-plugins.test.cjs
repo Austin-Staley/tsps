@@ -8490,11 +8490,15 @@ test('Song of the Elves rescue searches require the east table before Iona and p
     sendMessage() {},
   };
   quest.setStage(player, 150);
+  const mawthTalk = handlers.npcInteractions.get('Mawrth')['Talk-to'];
   handlers.custom.get('npc-dialogue:action').at(-1)({
     player, kind: 'message', stepId: 'XhOxpi', npcId: api.core.NpcIdentifiers.ARIANWYN_6,
   });
   assert.equal(quest.getStage(player), 160);
   assert.equal(started.at(-1)[3], 'attack-on-lletya-a-village-on-fire');
+  mawthTalk({ player, npcId: api.core.NpcIdentifiers.MAWRTH_3, definition: { getName: () => 'Mawrth' } });
+  assert.equal(started.at(-1)[3], 'attack-on-lletya-a-village-on-fire',
+    'talking to Mawrth before finding the children resumes the full rescue instructions');
   const mapObjects = api.core.MapObjects;
   const originalGet = mapObjects.get;
   mapObjects.get = (id) => ({ getId: () => id });
@@ -8519,6 +8523,15 @@ test('Song of the Elves rescue searches require the east table before Iona and p
   assert.equal(started.at(-1)[3], 'attack-on-lletya-a-village-on-fire-finding-iona');
   assert.deepEqual(sentVarbits.filter(([id]) => id === 9016).at(-1), [9016, 146],
     'finding Iona advances the live native progress immediately');
+  for (const [objectName, objectId, location] of [
+    ['Table', api.core.ObjectIdentifiers.TABLE_75, { x: 2340, y: 3158, z: 0 }],
+    ['Cooking Pots', api.core.ObjectIdentifiers.COOKING_POTS_2, { x: 2338, y: 3157, z: 1 }],
+  ]) {
+    const event = { player, objectId, location, option: 'search', handled: false };
+    const handler = handlers.namedObjects.find((entry) => entry.target === objectName).actions.Search;
+    assert.equal(handler(event), true, 'the lowercase packet action is accepted after a child was already found');
+    assert.equal(event.handled, true);
+  }
   mapObjects.get = originalGet;
 });
 
@@ -8607,11 +8620,16 @@ test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clu
   const remoteExamine = { player, objectId: 37306, handled: false };
   examineSymbol(remoteExamine);
   assert.equal(remoteExamine.handled, false, 'an Examine packet cannot claim a different symbol across Lletya');
+  location.x = 2351; location.y = 3172; location.z = 1;
+  const morphedSymbol = { player, objectId: 35878, handled: false };
+  examineSymbol(morphedSymbol);
+  assert.equal(morphedSymbol.handled, true, 'the active child id of the transformed fifth symbol maps back to its source tile');
+  assert.equal(varbits.get(9037), 2, 'examining the transformed child records the fifth clan symbol');
   for (const symbol of [
     { id: 37307, x: 2349, y: 3161, z: 0 }, { id: 37306, x: 2340, y: 3181, z: 0 },
     { id: 37304, x: 2334, y: 3183, z: 1 }, { id: 37303, x: 2351, y: 3172, z: 1 },
   ]) {
-    const event = { player, objectId: symbol.id, location: symbol, option: 'Touch', handled: false };
+    const event = { player, objectId: symbol.id, location: symbol, option: 'touch', handled: false };
     for (const handler of handlers.objects) if (handler(event) === true) break;
     assert.equal(event.handled, true);
   }
@@ -8620,7 +8638,7 @@ test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clu
   inventory.set(base.core.ItemIdentifiers.LIMESTONE_BRICK, 8);
   inventory.set(base.core.ItemIdentifiers.SAW, 1);
   inventory.set(base.core.ItemIdentifiers.HAMMER, 1);
-  const statue = { player, objectId: 37308, location: { x: 2337, y: 3171, z: 0 }, option: 'Build', handled: false };
+  const statue = { player, objectId: 37308, location: { x: 2337, y: 3171, z: 0 }, option: 'build', handled: false };
   for (const handler of handlers.objects) if (handler(statue) === true) break;
   assert.equal(attributes.get('quest.song_of_the_elves.ithell-statue'), true);
   assert.equal(inventory.get(base.core.ItemIdentifiers.LIMESTONE_BRICK), 0);

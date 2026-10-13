@@ -96,7 +96,7 @@ module.exports = function registerSongOfTheElves(api) {
   const ITHELL_WELL_IDS = new Set([37308, 37309, 37310, 35880, 35881, 35882, 35883, 35884]);
   const ITHELL_EXAMINE_MARKERS = [
     new Set([37307, 1189, 10529]), new Set([37305, 8773]), new Set([37306]),
-    new Set([37304, 8744]), new Set([37303]),
+    new Set([37304, 8744]), new Set([37303, 35878, 35879]),
   ];
   const MEILYR_DIG_SPOTS = [
     { x: 2225, y: 3133, message: "The first scroll points to the marsh near Port Tyras." },
@@ -1106,13 +1106,14 @@ module.exports = function registerSongOfTheElves(api) {
 
   function touchIthellSymbol(event) {
     const player = event?.player;
-    if (!player || event.option !== "Touch" || quest.isComplete(player) || currentChapter(player) !== 16 ||
+    if (!player || String(event.option ?? "").toLowerCase() !== "touch" || quest.isComplete(player) || currentChapter(player) !== 16 ||
       (Number(player.getAttribute(ITHELL_CLUE_STAGE)) || 0) < 1) return false;
     const location = event.location ?? event.object?.getLocation?.();
     const x = location?.x ?? location?.getX?.();
     const y = location?.y ?? location?.getY?.();
     const z = location?.z ?? event.sourceLocation?.z ?? location?.getZ?.();
-    const symbol = ITHELL_SYMBOLS_BY_TILE.find((entry) => entry.id === event.objectId && entry.x === x && entry.y === y && entry.z === z);
+    const symbol = ITHELL_SYMBOLS_BY_TILE.find((entry) => entry.x === x && entry.y === y && entry.z === z &&
+      (entry.id === event.objectId || (entry.id === 37303 && [35878, 35879].includes(event.objectId))));
     if (!symbol) return false;
     event.handled = true;
     const index = ITHELL_SYMBOLS_BY_TILE.indexOf(symbol);
@@ -1140,7 +1141,7 @@ module.exports = function registerSongOfTheElves(api) {
     const x = location?.x ?? location?.getX?.();
     const y = location?.y ?? location?.getY?.();
     const z = location?.z ?? location?.getZ?.();
-    if (!player || !["Build", "Construct"].includes(event.option) || currentChapter(player) !== 16 ||
+    if (!player || !["build", "construct"].includes(String(event.option ?? "").toLowerCase()) || currentChapter(player) !== 16 ||
       (Number(player.getAttribute(ITHELL_CLUE_STAGE)) || 0) < 2 || !ITHELL_WELL_IDS.has(event.objectId) ||
       x !== 2337 || ![3170, 3171].includes(y) || z !== 0) return false;
     event.handled = true;
@@ -1249,7 +1250,7 @@ module.exports = function registerSongOfTheElves(api) {
   function searchLletyaChild(event) {
     const player = event?.player;
     const { objectId, location } = event ?? {};
-    if (!player || currentChapter(player) !== 15 || !location || event.option !== "Search") return false;
+    if (!player || currentChapter(player) !== 15 || !location || String(event.option ?? "").toLowerCase() !== "search") return false;
     const children = { ...(player.getAttribute(LLETYA_CHILDREN) ?? {}) };
     if (objectId === ObjectIdentifiers.TABLE_75 && location.x === 2340 && location.y === 3158 && location.z === 0) {
       event.handled = true;
@@ -1329,8 +1330,7 @@ module.exports = function registerSongOfTheElves(api) {
     if (currentChapter(player) === 15 && npcName === "mawrth") {
       const children = player.getAttribute(LLETYA_CHILDREN) ?? {};
       if (!children.eoin || !children.iona) {
-        player.sendMessage("Mawrth begs you to search the burning house for Eoin and Iona.");
-        return true;
+        return startTranscript(api, player, event.npcId, PAGE, "attack-on-lletya-a-village-on-fire");
       }
       if (player.getAttribute(LLETYA_TRAITOR_REVEALED) === true) return false;
       return startTranscript(api, player, NpcIdentifiers.LORD_IORWERTH_2, PAGE,
