@@ -187,7 +187,6 @@ Near-Reality's tables were checked against the Wiki and corrected:
 **Not done:**
 - The Wiki's item-retrieval interface: Collect gives the items straight back.
 - The Western Provinces elite diary's daily resurrection.
-- A gravestone system. That would be its own piece of work.
 
 ## Sounds
 
