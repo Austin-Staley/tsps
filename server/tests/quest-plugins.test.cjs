@@ -8135,13 +8135,16 @@ test('Song of the Elves Iorwerth scroll lands on the walkable camp tile', () => 
 test('Song of the Elves restores the saved private library on relog without resetting its puzzle', () => {
   const { api: base, handlers } = mockApi();
   const spawned = [];
+  const pendingTasks = [];
   class LibraryArea {
     constructor() { this.destroyed = false; }
     isDestroyed() { return this.destroyed; }
     enter(mobile) { mobile.area = this; }
   }
   const api = new Proxy(base, { get(target, prop) {
-    if (prop === 'core') return { ...target.core, PrivateArea: LibraryArea };
+    if (prop === 'core') return { ...target.core, PrivateArea: LibraryArea,
+      CountdownTask: class { constructor(_key, _ticks, callback) { this.execute = callback; } },
+      TaskManager: { submit: task => pendingTasks.push(task) } };
     if (prop === 'spawnNpc') return definition => { const npc = { ...definition }; spawned.push(npc); return npc; };
     if (prop === 'sendMultiChatboxPrompt') return (player, title, ...choices) => { player.prompt = [title, ...choices]; };
     return target[prop];
@@ -8174,6 +8177,9 @@ test('Song of the Elves restores the saved private library on relog without rese
   const teleportMenu = { player, action: 'open_interface', target: 'An', handled: false };
   handlers.custom.get('npc-dialogue:action').find(handler => handler.name === 'onAction')(teleportMenu);
   assert.equal(teleportMenu.handled, true);
+  assert.equal(pendingTasks.length, 1, 'open-interface actions defer the menu until transcript cleanup');
+  player.prompt = ['transcript remainder'];
+  pendingTasks.shift().execute();
   assert.equal(player.prompt[0], 'Where would you like to go?');
   assert.equal(player.prompt[1], 'The Forgotten seal');
   assert.deepEqual(player.prompt.filter((_, index) => index > 0 && index % 2 === 1),
@@ -8189,6 +8195,7 @@ test('Song of the Elves restores the saved private library on relog without rese
   const openTeleportPage = (page) => {
     const action = { player, action: 'open_interface', target: 'An', handled: false };
     handlers.custom.get('npc-dialogue:action').find(handler => handler.name === 'onAction')(action);
+    pendingTasks.shift().execute();
     for (let i = 0; i < page; i++) player.prompt[player.prompt.length - 3]();
     return player.prompt;
   };

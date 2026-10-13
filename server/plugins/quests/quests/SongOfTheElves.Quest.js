@@ -772,7 +772,10 @@ module.exports = function registerSongOfTheElves(api) {
     if (!player || quest.isComplete(player)) return;
     if (inLibrary(player) && event.action === "open_interface" && event.target === "An") {
       event.handled = true;
-      openLibraryTeleportMenu(player);
+      const { CountdownTask, TaskManager } = api.core;
+      TaskManager.submit(new CountdownTask(player, 1, () => {
+        if (player.isRegistered?.() !== false && inLibrary(player)) openLibraryTeleportMenu(player);
+      }));
       return;
     }
     if (inLibrary(player) && event.action === "teleport" &&
