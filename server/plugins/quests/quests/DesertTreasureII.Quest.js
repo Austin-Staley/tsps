@@ -1999,7 +1999,9 @@ module.exports = function registerDesertTreasureII(api) {
 
   function talkCatalyticGuardian({ player: p, npcId }) {
     if (stage(p) !== S.LEVIATHAN || p.getAttribute(ATTR_SCAR_AREA)) return false;
-    talk(p, npcId, "praefectus-classis-perseriya-talking-to-the-catalytic-guardian");
+    talk(p, npcId, p.getAttribute(SCAR_GUARDIAN_ACCEPTED)
+      ? "praefectus-classis-perseriya-talking-to-the-catalytic-guardian-talking-to-the-catalytic-guardian-after-exiting-the-scar-for-the-first-time"
+      : "praefectus-classis-perseriya-talking-to-the-catalytic-guardian");
   }
 
   function spawnScarPersten(p, area) {
@@ -2499,7 +2501,8 @@ module.exports = function registerDesertTreasureII(api) {
     }
     if (stage(event?.player) !== S.LEVIATHAN) return;
     if (![N.CATALYTIC_GUARDIAN, N.CATALYTIC_GUARDIAN_2].includes(event.npcId)) return;
-    if (event.text === "Then may your death come quick, human. Good luck.") {
+    if (event.text === "Then may your death come quick, human. Good luck."
+      || event.text === "Very well. Good luck.") {
       event.after = () => {
         event.player.setAttribute(SCAR_GUARDIAN_ACCEPTED, true);
         enterScar(event.player);
@@ -2772,6 +2775,8 @@ module.exports = function registerDesertTreasureII(api) {
     const current = p.getPrivateArea?.();
     const returnToVaultEntrance = current && [p.getAttribute(ATTR_VAULT_AREA), p.getAttribute(FINAL_ROOM)].includes(current);
     const returnToDigsite = current && current === p.getAttribute(ATTR_WAR_ROOM);
+    const returnToGuardian = current && [ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO,
+      ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA].some((key) => current === p.getAttribute(key));
     const stranglewoodExit = current && (current === p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT) ? [1193, 3405]
       : current === p.getAttribute(ATTR_STRANGLEWOOD_TEMPLE) ? [1174, 3427]
         : current === p.getAttribute(ATTR_VARDORVIS_AREA) ? [1117, 3429] : null);
@@ -2787,6 +2792,7 @@ module.exports = function registerDesertTreasureII(api) {
     }
     if (returnToVaultEntrance) p.moveTo(new api.core.Location(3510, 2971, 0));
     else if (returnToDigsite) p.moveTo(new api.core.Location(3411, 9813, 0));
+    else if (returnToGuardian) p.moveTo(new api.core.Location(3610, 9473, 0));
     else if (stranglewoodExit) p.moveTo(new api.core.Location(...stranglewoodExit, 0));
     p.setAttribute(SCAR_PATH_COMPLETE, false);
     p.setAttribute(SCAR_RIFT_LIVE, false);
