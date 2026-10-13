@@ -191,7 +191,7 @@ function modifyHit(event) {
     crumbleSpawn(npc, hit);
     return;
   }
-  if (npcId !== Shared.AWAKE_ID) return;
+  if (!Shared.isAwakeId(npcId)) return;
   keepPoisonImmune(npc);
   const hits = hit.getHits?.() ?? [];
   if (hits.length === 0) return;
@@ -301,7 +301,7 @@ function combatClass() {
       this.attack = null;
       if (!character || !target) return;
       const npc = character.getAsNpc();
-      if (!npc || npc.getId() !== Shared.AWAKE_ID) return;
+      if (!npc || !Shared.isAwakeNpc(npc)) return;
       // Her first attack comes 6 ticks after she wakes (captured), even if hit sooner.
       if (core.World.getProcessCycle() < (npc.getAttribute(Shared.ATTR_FIRST_ATTACK_AT) ?? 0)) {
         character.getCombat().setAttackDelay(1);
@@ -379,7 +379,7 @@ function attach(pluginApi) {
   CombatFactory = pluginApi.getCombatFactory();
   pluginApi.onNpcHitModify(modifyHit);
   pluginApi.registerNpcCombatMethodProvider(
-    [core.NpcIdentifiers.VORKATH_5],
+    [core.NpcIdentifiers.VORKATH_4, core.NpcIdentifiers.VORKATH_5],
     combatClass(),
     { singleton: false },
   );
