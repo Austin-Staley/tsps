@@ -19,6 +19,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const HUNT_ATTRIBUTE = "quest.the_blood_moon_rises.blood-hunt";
   const HIDEOUT_IVAN_VARBIT = 15467;
   const HIDEOUT_SHRINE_INSPECTED = "quest.the_blood_moon_rises.hideout-shrine-inspected";
+  const HIDEOUT_DEFENSE_COMPLETE = "quest.the_blood_moon_rises.hideout-defense-complete";
   const HIDEOUT_SHRINE_IDS = new Set([61174, ObjectIdentifiers.MAKESHIFT_SHRINE, ObjectIdentifiers.MAKESHIFT_SHRINE_2]);
   const HIDEOUT_SHRINE_TILE = { x: 3601, y: 9614, z: 0 };
   const HIDEOUT_CHEST_ID = ObjectIdentifiers.CLOSED_CHEST_37;
@@ -89,6 +90,9 @@ module.exports = function registerTheBloodMoonRises(api) {
   const drakanEncounters = new Map();
   const siegeDrakanEncounters = new Map();
   const siegeHallInjured = new Map();
+  const hideoutDefense = require("../bmr/HideoutDefense.TheBloodMoonRises")({ api, stage: player => stage(player),
+    hideoutStage: STAGE.HIDEOUT,
+    complete: (player, npcId) => startTranscript(api, player, npcId, PAGE, "starting-out-escaping-the-vampyres") });
   const CHAPTERS = [
     [STAGE.STARTED, "starting-out"],
     [STAGE.HIDEOUT, "starting-out-in-the-myreque-hideout"],
@@ -949,6 +953,10 @@ module.exports = function registerTheBloodMoonRises(api) {
   function onTranscriptAction(event) {
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
+    if (event.stepId === "fiqzZ7" && !player.getAttribute(HIDEOUT_DEFENSE_COMPLETE)) {
+      player.sendMessage("Keep the vyrewatch away from Ivan and let him complete the spell before escaping.");
+      return;
+    }
     const next = ACTION_STAGE[event.stepId];
     if (event.stepId === "vqg4qO") {
       if (stage(player) !== STAGE.SIEGE || !bridge.finish(player)) return;
@@ -1023,6 +1031,35 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
   }
 
+  function startHideoutDeparture(player) {
+    if (stage(player) !== STAGE.HIDEOUT) return false;
+    if (!hideoutOutfitWorn(player)) {
+      player.sendMessage("Wear the vyre noble outfit before leaving for Castle Drakan.");
+      return false;
+    }
+    if (!hideoutDefense.prepare(player)) return false;
+    return startTranscript(api, player, NpcIdentifiers.IVAN_STROM_13, PAGE, "starting-out-lowerniel-s-speech");
+  }
+
+  function onBloodMoonDialogueLine(request) {
+    const player = request?.player;
+    if (!player || stage(player) !== STAGE.HIDEOUT) return;
+    if (request.step?.speaker === "Ivan Strom" && request.text === "Alright... To Darkmeyer then.") {
+      request.after = () => startHideoutDeparture(player);
+      return;
+    }
+    if (request.step?.speaker === "Lowerniel Drakan" &&
+      request.text === "As a starting point, you may wish to deal with the two humans that stand among you, unless of course you've all become so weak that you can't even do that anymore...") {
+      request.after = () => hideoutDefense.start(player);
+    }
+  }
+
+  function resumeHideoutEscape({ player }) {
+    if (!player || stage(player) !== STAGE.HIDEOUT || !player.getAttribute(HIDEOUT_DEFENSE_COMPLETE)) return;
+    if (player.getDialogueManager?.()?.getCurrent?.()) return;
+    startTranscript(api, player, NpcIdentifiers.IVAN_STROM_13, PAGE, "starting-out-escaping-the-vampyres");
+  }
+
   function claimNightLamps(player) {
     const request = { player, handled: false };
     api.emitCustomEvent("night-at-the-theatre:claim-lamps", request);
@@ -1044,6 +1081,13 @@ module.exports = function registerTheBloodMoonRises(api) {
       return true;
     }
     if (quest.isComplete(player)) return false;
+    if (stage(player) === STAGE.HIDEOUT && npcName === "ivan strom") {
+      event.handled = true;
+      api.sendMultiChatboxPrompt(player, "Are you ready to go to Darkmeyer?",
+        "I'm ready.", () => startHideoutDeparture(player),
+        "I need more time to prepare.", () => {});
+      return true;
+    }
     if (stage(player) === STAGE.NOT_STARTED) {
       if (npcName !== "sarius guile") return false;
       if (!meetsRequirements(player)) { explainRequirements(player); return true; }
@@ -1929,9 +1973,13 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("world:object-examine", inspectHideoutShrine);
   api.onNpcDialogueCondition(answerHideoutCondition);
   api.onCustomEvent("npc-dialogue:choice", onChoice);
+  api.onCustomEvent("npc-dialogue:line", onBloodMoonDialogueLine);
   api.onCustomEvent("tob:bmr:completed", onBloodMoonTobCompleted);
   api.onNpcDialogueVariant(selectVariant);
   api.onAnyNpcInteraction({ "Talk-to": talkQuestNpc });
+  // Claim Ivan after Sins of the Father and In Aid of the Myreque decline him,
+  // before their generic completed-quest transcript can answer for this stage.
+  api.onNpcInteraction("Ivan Strom", { "Talk-to": talkQuestNpc });
   api.onObjectInteraction(enterVampyriumCastle);
   api.onObjectInteraction(openHideoutChest);
   api.onObjectInteraction(handleSiegeHallObject);
@@ -1962,8 +2010,11 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerProcess(syncHuntGroundItems);
   api.onPlayerLogin(handleSiegeLogin);
   api.onPlayerLogin(syncHideoutIvan);
+  api.onPlayerLogin(resumeHideoutEscape);
   api.onPlayerLogout(handleSiegeLogout);
+  api.onPlayerLogout(hideoutDefense.onPlayerLogout);
   api.onNpcDeath(handleWyrdDeath);
+  api.persistAttribute(HIDEOUT_DEFENSE_COMPLETE);
   api.onNpcHitModify(handleSiegeDrakanHit);
   api.persistAttribute(WYRD_DEFEATED_ATTRIBUTE);
   api.persistAttribute(DRAKAN_ENCOUNTER_COMPLETE);
