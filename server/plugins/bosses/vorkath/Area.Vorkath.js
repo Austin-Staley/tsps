@@ -7,6 +7,7 @@
 const Shared = require("./Shared.Vorkath");
 const CombatAchievements = require("./CombatAchievements.Vorkath");
 const Hud = require("./Hud.Vorkath");
+const Specials = require("./Specials.Vorkath");
 
 /** Crater interior: the wall line y=4053 stays outside so climbers arrive cleanly. */
 const CRATER = { minX: 2258, maxX: 2286, minY: 4054, maxY: 4078 };
@@ -46,6 +47,7 @@ function defineAreaClass() {
           continue;
         }
         const npc = entity.getAsNpc();
+        Specials.endFight(npc);
         for (let index = addQueue.indexOf(npc); index !== -1; index = addQueue.indexOf(npc)) {
           addQueue.splice(index, 1);
         }
@@ -64,7 +66,7 @@ function defineAreaClass() {
     postLeave(mobile, logout) {
       if (mobile?.isPlayer?.()) {
         CombatAchievements.left(mobile.getAsPlayer());
-        clearArea(mobile.getAsPlayer(), this);
+        destroyArea(mobile.getAsPlayer());
       }
       super.postLeave(mobile, logout);
     }
@@ -163,5 +165,5 @@ module.exports = {
   areaOf,
   ensureSleeper,
   destroyArea,
-  _test: { insideCrater },
+  _test: { insideCrater, getAreaClass: () => VorkathPrivateArea },
 };
