@@ -1976,7 +1976,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   attributes.set('quest.the_blood_moon_rises.castle-floor', 1);
   enter({ player, objectId: 61572, clickType: 1, option: 'Enter',
     definition: { id: 61572, getName: () => 'Door' }, location: { x: 2474, y: 7398, z: 0 }, handled: false });
-  assert.deepEqual(moved.at(-1), [2314, 7359, 1]);
+  assert.deepEqual(moved.at(-1), [2314, 7361, 1]);
   assert.equal(varbits.get(15489), 2, 'the first-floor lobby reports its map floor, not the source plane');
   assert.equal(varbits.get(15499), 1);
   enter({ player, objectId: 61572, clickType: 1, option: 'Enter',
@@ -1986,11 +1986,11 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   assert.equal(varbits.get(15499), 34);
   enter({ player, objectId: 61576, clickType: 1, option: 'Enter',
     definition: { id: 61576, getName: () => 'Door' }, location: { x: 2466, y: 7422, z: 0 }, handled: false });
-  assert.deepEqual(moved.at(-1), [2452, 7404, 0], 'the connected north-lobby approach crosses into the recorded Vanescula Hall arrival');
+  assert.deepEqual(moved.at(-1), [2452, 7404, 0], 'the connected north-lobby approach crosses into the captured Vanescula Hall arrival');
   assert.equal(varbits.get(15499), 35);
   enter({ player, objectId: 61573, clickType: 1, option: 'Enter',
     definition: { id: 61573, getName: () => 'Door' }, location: { x: 2452, y: 7403, z: 0 }, handled: false });
-  assert.deepEqual(moved.at(-1), [2456, 7417, 0], 'returning from Vanescula lands on the connected north-lobby side');
+  assert.deepEqual(moved.at(-1), [2466, 7421, 0], 'returning from Vanescula lands beside the north-lobby door');
   assert.equal(varbits.get(15499), 34);
 });
 

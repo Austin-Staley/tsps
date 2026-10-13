@@ -187,9 +187,9 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.DOOR_ALT_M, x: 2467, y: 7395, z: 0, from: CASTLE_ROOM.EXPLOSIVE_HALL, to: CASTLE_ROOM.EXPLOSIVE_ROOM,
       fromFloor: 1, toFloor: 1, landing: [2443, 7386] },
     { id: CASTLE_DOOR_IDS.DOOR, x: 2474, y: 7398, z: 0, from: CASTLE_ROOM.EXPLOSIVE_HALL, to: CASTLE_ROOM.LOBBY,
-      fromFloor: 1, toFloor: 2, landing: [2314, 7359, 1] },
-    { id: CASTLE_DOOR_IDS.DOOR_M, x: 2314, y: 7360, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.EXPLOSIVE_HALL,
-      fromFloor: 2, toFloor: 1, landing: [2474, 7397] },
+      fromFloor: 1, toFloor: 2, landing: [2314, 7361, 1] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2315, y: 7360, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.EXPLOSIVE_HALL,
+      fromFloor: 2, toFloor: 1, landing: [2475, 7397] },
     { id: CASTLE_DOOR_IDS.DOOR, x: 2314, y: 7382, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.NORTH_LOBBY_HALL,
       fromFloor: 2, toFloor: 2, landing: [2456, 7417, 0] },
     { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2457, y: 7417, z: 0, from: CASTLE_ROOM.NORTH_LOBBY_HALL, to: CASTLE_ROOM.LOBBY,
@@ -201,9 +201,13 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.STAIRS_DOWN_INVISIBLE, x: 2315, y: 7370, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.LOBBY,
       fromFloor: 2, toFloor: 1, action: "Climb-down", landing: [2314, 7369, 0] },
     { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2466, y: 7422, z: 0, from: CASTLE_ROOM.NORTH_LOBBY_HALL, to: CASTLE_ROOM.VANESCULA_HALL,
-      fromFloor: 2, toFloor: 2, landing: [2451, 7403] },
+      fromFloor: 2, toFloor: 2, landing: [2452, 7404] },
     { id: CASTLE_DOOR_IDS.DOOR_M, x: 2452, y: 7403, z: 0, from: CASTLE_ROOM.VANESCULA_HALL, to: CASTLE_ROOM.NORTH_LOBBY_HALL,
-      fromFloor: 2, toFloor: 2, landing: [2456, 7417] },
+      fromFloor: 2, toFloor: 2, landing: [2466, 7421] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2468, y: 7407, z: 0, from: CASTLE_ROOM.VANESCULA_HALL, to: CASTLE_ROOM.VANESCULA_STUDY,
+      fromFloor: 2, toFloor: 2, requiresStory: "vanesculaEmblemPlaced", landing: [2474, 7371] },
+    { id: CASTLE_DOOR_IDS.DOOR_M, x: 2474, y: 7372, z: 0, from: CASTLE_ROOM.VANESCULA_STUDY, to: CASTLE_ROOM.VANESCULA_HALL,
+      fromFloor: 2, toFloor: 2, landing: [2468, 7408] },
     { id: CASTLE_DOOR_IDS.DOOR, x: 2477, y: 7409, z: 0, from: CASTLE_ROOM.VANESCULA_HALL, to: CASTLE_ROOM.RANIS_HALL,
       fromFloor: 2, toFloor: 2, anyKey: CASTLE_EMBLEM_IDS, keyName: "a Drakan emblem", landing: [2481, 7404] },
     { id: CASTLE_DOOR_IDS.DOOR_M, x: 2481, y: 7403, z: 0, from: CASTLE_ROOM.RANIS_HALL, to: CASTLE_ROOM.VANESCULA_HALL,
@@ -1904,6 +1908,27 @@ module.exports = function registerTheBloodMoonRises(api) {
   function repairLegacyCastleLanding(player) {
     if (!player || stage(player) !== STAGE.CASTLE) return;
     const location = player.getLocation?.();
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.VANESCULA_HALL &&
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) === 2 &&
+      location?.getX?.() === 2451 && location.getY() === 7403 && location.getZ() === 0) {
+      // The captured upper-hall door lands on the east side of the room at2452,7404.
+      player.moveTo(new Location(2452, 7404, 0));
+      return;
+    }
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.VANESCULA_STUDY &&
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) === 2 &&
+      location?.getX?.() === 2471 && location.getY() === 7371 && location.getZ() === 0) {
+      // The recorded emblem passage arrives beside the study crate at2474,7371.
+      player.moveTo(new Location(2474, 7371, 0));
+      return;
+    }
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.LOBBY &&
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) === 2 &&
+      location?.getX?.() === 2314 && location.getY() === 7359 && location.getZ() === 1) {
+      // The recording places the upper-lobby arrival two tiles farther north.
+      player.moveTo(new Location(2314, 7361, 1));
+      return;
+    }
     if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.EXPLOSIVE_ROOM &&
       location?.getX?.() === 2434 && location.getY() === 7386 && location.getZ() === 0) {
       // RSProx's current OSRS recording shows the usable explosive-room arrival at 2437,7386.
@@ -2313,6 +2338,28 @@ module.exports = function registerTheBloodMoonRises(api) {
     updateCastleKeyStory(player, { weaponPuzzle: puzzle });
     player.sendMessage(`You place the ${placement.name} on the statue.`);
     if (puzzle.every(Boolean)) player.sendMessage("The armoury statues align and the chest unlocks.");
+  }
+
+  function handleVanesculaEmblemReceptacle(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    const id = event?.definition?.id ?? event?.objectId;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE || id !== 61634 ||
+      x !== 2469 || y !== 7408 || z !== 0 || !CASTLE_EMBLEM_IDS.includes(event?.itemId)) return;
+    event.handled = true;
+    const inventory = player.getInventory();
+    if (!inventory.contains(event.itemId)) return;
+    const story = castleStory(player);
+    if (story.vanesculaEmblemPlaced) {
+      player.sendMessage("An emblem already rests in the receptacle.");
+      return;
+    }
+    inventory.deleteNumber(event.itemId, 1);
+    player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, vanesculaEmblemPlaced: true });
+    player.sendMessage("You place the emblem into the receptacle and hear a click come from the nearby door.");
   }
 
   function handleCastleKeyItemOnItem(event) {
@@ -3154,6 +3201,11 @@ module.exports = function registerTheBloodMoonRises(api) {
       if (transition.anyKey && !transition.anyKey.some(itemId => hasItem(player, itemId))) {
         event.handled = true;
         player.sendMessage(`The door is locked. You need ${transition.keyName}.`);
+        return;
+      }
+      if (transition.requiresStory && !castleStory(player)[transition.requiresStory]) {
+        event.handled = true;
+        player.sendMessage("The nearby passage remains sealed until you place a Drakan emblem in its receptacle.");
         return;
       }
       if (currentRoom !== transition.from || currentFloor !== (transition.fromFloor ?? CASTLE_GROUND_FLOOR)) {
@@ -4254,6 +4306,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction(handleCastleKeyObjects);
   api.onItemOnObject(handleCastleBookOnObject, { noted: false });
   api.onItemOnObject(handleCastleKeyItemOnObject, { noted: false });
+  api.onItemOnObject(handleVanesculaEmblemReceptacle, { noted: false });
   api.onItemOnItem(handleCastleKeyItemOnItem);
   api.onCustomEvent("player:widget-action", handleCastleBookWidgetAction);
   api.onGroundItemPickup(handleCastleBookPickup);
