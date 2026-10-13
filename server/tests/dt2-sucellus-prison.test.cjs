@@ -8,6 +8,9 @@ function setup() {
   const handlers = { custom: {}, npc: [], object: null, itemObject: null, item: [], dialogueAction: null };
   const emitted = [];
   const messages = [];
+  const graphics = [];
+  const freezes = [];
+  const pendingDamage = [];
   let stashRestored = false;
   const prompts = [];
   const createdNpcs = [];
@@ -31,6 +34,7 @@ function setup() {
     getBaseY: () => 20000,
     getObjects() { return []; },
     getTemplateObjects() { return this.templateObjects; },
+    contains() { return true; },
     add(value) { this.entities.push(value); },
     remove(value) { this.entities = this.entities.filter((entry) => entry !== value); },
   };
@@ -50,6 +54,9 @@ function setup() {
     setArea(value) { this.area = value; },
     moveTo(value) { this.location = value; },
     getLocation() { return { getX: () => this.location.x, getY: () => this.location.y, getZ: () => this.location.z }; },
+    getCombat() { return { getHitQueue: () => ({ addPendingDamage(hits) { pendingDamage.push(...hits); } }) }; },
+    getPacketSender() { return { sendGraphic: (graphic, location) => graphics.push({ graphic, location }) }; },
+    getPrayerActive() { return []; },
     getDialogueManager: () => ({ isActive: () => false }),
     sendMessage(message) { messages.push(message); },
   };
@@ -66,7 +73,15 @@ function setup() {
       ObjectManager: { deregister(object) { object.removed = true; openedObjects.push(object); } },
       Location: class Location {
         constructor(x, y, z) { this.x = x; this.y = y; this.z = z; }
+        getX() { return this.x; }
+        getY() { return this.y; }
+        getZ() { return this.z; }
       },
+      Graphic: class Graphic { constructor(id) { this.id = id; } },
+      RegionManager: { blocked: () => false },
+      CombatFactory: { freeze: (target, seconds, message) => freezes.push({ target, seconds, message }) },
+      HitDamage: class HitDamage { constructor(amount, mask) { this.amount = amount; this.mask = mask; } },
+      HitMask: { RED: 1 },
     },
     persistAttribute() {},
     onCustomEvent(name, handler) {
@@ -88,7 +103,7 @@ function setup() {
   register(api);
   const instanceLocation = (x, y, z) => ({ x: x + 10000 - 2872, y: y + 20000 - 6336, z });
   const moveToSource = (x, y, z = 2) => { player.location = { x: x + 10000 - 2872, y: y + 20000 - 6336, z }; };
-  return { api, handlers, emitted, messages, prompts, player, area, inventory, createdNpcs, openedObjects, instanceLocation, moveToSource, setCycle: (v) => { cycle = v; }, setStashRestored: (value) => { stashRestored = value; } };
+  return { api, handlers, emitted, messages, prompts, graphics, freezes, pendingDamage, player, area, inventory, createdNpcs, openedObjects, instanceLocation, moveToSource, setCycle: (v) => { cycle = v; }, setStashRestored: (value) => { stashRestored = value; } };
 }
 
 test("prison start removes the cutscene Assassin until the diamond-key stage", () => {
@@ -235,6 +250,31 @@ test("Jhallan defense lasts three minutes (300 area ticks) and asylum transcript
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 58);
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-complete"), true);
   assert.equal(emitted.filter(({ name }) => name === "dt2:sucellus-prison-complete").length, 1);
+});
+
+test("Jhallan's shadow attack teleports and freezes briefly, then a marked tile can be dodged", () => {
+  const { handlers, prompts, player, area, graphics, freezes, pendingDamage, messages } = setup();
+  player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 52);
+  handlers.custom["dt2:sucellus-prison-start"]({ player, area });
+  handlers.object({ player, objectId: 50000, option: "Search", location: { x: 10000 + 2972 - 2872, y: 20000 + 6367 - 6336, z: 2 }, handled: false });
+  prompts[0].pairs[1]();
+
+  handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 100 });
+  const before = { ...player.location };
+  handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 135 });
+  assert.notDeepEqual(player.location, before, "the magical assault relocates the player beside Jhallan");
+  assert.deepEqual(freezes.map(({ seconds }) => seconds), [1.2], "the relocation briefly freezes movement");
+  assert.equal(graphics.at(-1).graphic.id, 1447, "the convergence tile receives a visible warning graphic");
+  assert.ok(messages.includes("Shadows converge on your position. Move away!"));
+
+  player.moveTo(area.tile(80, 80, 2));
+  handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 139 });
+  assert.equal(pendingDamage.length, 0, "leaving the marked tile avoids the shadow impact");
+
+  handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 180 });
+  handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 184 });
+  assert.equal(pendingDamage.length, 1, "remaining on the marked tile takes a real hit");
+  assert.ok(pendingDamage[0].amount >= 12 && pendingDamage[0].amount <= 24);
 });
 
 test("earned frozen-Jhallan progress restores the Assassin after relog without replaying the defence", () => {

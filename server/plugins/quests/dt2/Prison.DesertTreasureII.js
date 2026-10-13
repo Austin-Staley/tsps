@@ -17,6 +17,10 @@ module.exports = function registerSucellusPrison(api) {
   const KEYS = { sapphire: I.SAPPHIRE_KEY_3, emerald: I.EMERALD_KEY_3, ruby: I.RUBY_KEY_3, diamond: I.DIAMOND_KEY };
   const ANSWERS = { sapphire: "214013", emerald: "LIES", ruby: "URLDRU", diamond: "WRATH" };
   const SHADOWS_AT = 150;
+  const SHADOW_CUE_TICKS = [35, 80, 125, 170, 215, 260];
+  const SHADOW_STRIKE_DELAY = 4;
+  const SHADOW_WARNING_GRAPHIC = 1447;
+  const SHADOW_IMPACT_GRAPHIC = 1103;
   const RUBY_CLUE_CHESTS = [[2959, 6414], [2959, 6419], [2962, 6414], [2962, 6419], [2965, 6414], [2965, 6419], [2968, 6419]];
   const RUBY_NAMES = ["Vedius", "Grazon", "Phalina", "Marcus", "Nithrak", "Baelys", "Atreus"];
   const LIBRARY_SHELVES = [[2931, 6430], [2931, 6432], [2932, 6430]];
@@ -492,7 +496,7 @@ module.exports = function registerSucellusPrison(api) {
     // Its ordinary combat path applies Protect from Magic; 12355 is dialogue-only.
     const jhallan = spawnJhallan(area, player, N.JHALLAN_3, 2975, 6362, 1500);
     jhallan.setHitpointsLocked?.(true);
-    defences.set(player, { clones: [], shadowsSpawned: false });
+    defences.set(player, { clones: [], shadowsSpawned: false, cueIndex: 0, pendingShadow: null });
     player.setAttribute("desert-treasure-ii:sucellus-prison-jhallan", jhallan);
     startTranscript(api, player, N.JHALLAN_5, PAGE, "duke-sucellus-of-the-sixth-legion-getting-ambushed-by-jhallan-after-setting-off-the-fireworks");
   }
@@ -515,8 +519,9 @@ module.exports = function registerSucellusPrison(api) {
       player.getAttribute("desert-treasure-ii:sucellus-prison-jhallan")?.getCombat?.().attack?.(player);
     }
     const jhallan = player.getAttribute("desert-treasure-ii:sucellus-prison-jhallan");
-    const defence = defences.get(player) ?? { clones: [], shadowsSpawned: false };
+    const defence = defences.get(player) ?? { clones: [], shadowsSpawned: false, cueIndex: 0, pendingShadow: null };
     const elapsed = cycle - started;
+    processShadowAttack(player, area, defence, elapsed, cycle, jhallan);
     // The Wiki describes Jhallan's shadow copies as one-hit enemies appearing
     // part-way through the three-minute defence. Cache 12354 is the matching
     // attackable Jhallan copy; its normal attack remains a magic attack.
@@ -540,6 +545,55 @@ module.exports = function registerSucellusPrison(api) {
     player.sendMessage("The Assassin strikes and freezes Jhallan in place.");
     startTranscript(api, player, N.ASSASSIN_7, PAGE, "duke-sucellus-of-the-sixth-legion-talking-to-the-assassin-after-jhallan-is-frozen");
     return true;
+  }
+
+  function processShadowAttack(player, area, defence, elapsed, cycle, jhallan) {
+    if (defence.pendingShadow && cycle >= defence.pendingShadow.impactAt) {
+      const marked = defence.pendingShadow.tile;
+      defence.pendingShadow = null;
+      const location = player.getLocation();
+      if (location.getX() === marked.x && location.getY() === marked.y && (location.getZ?.() ?? location.z ?? 0) === marked.z) {
+        player.getPacketSender().sendGraphic(new api.core.Graphic(SHADOW_IMPACT_GRAPHIC), new api.core.Location(marked.x, marked.y, marked.z));
+        // The marked tile is a dodge. The ordinary Jhallan and copy attacks
+        // still use the cache combat path and Protect from Magic.
+        // The Wiki gives no exact shadow damage value; keep the unavoidable
+        // hit modest and telegraphed while preserving the move-away response.
+        player.getCombat().getHitQueue().addPendingDamage([
+          new api.core.HitDamage(12 + Math.floor(Math.random() * 13), api.core.HitMask.RED),
+        ]);
+      }
+    }
+    if (defence.pendingShadow || elapsed < SHADOW_CUE_TICKS[defence.cueIndex] || elapsed >= 300) return;
+
+    // The Wiki describes these as occasional attacks but gives no exact tick
+    // cadence. The six spaced cues are a readable, bounded approximation.
+    const destination = jhallanShadowTile(area, jhallan);
+    if (destination) {
+      player.moveTo(destination);
+      api.core.CombatFactory.freeze(player, 1.2, "Jhallan's magic freezes you as the shadows gather!");
+    }
+    const location = player.getLocation();
+    const tile = { x: location.getX(), y: location.getY(), z: location.getZ?.() ?? location.z ?? 0 };
+    player.getPacketSender().sendGraphic(new api.core.Graphic(SHADOW_WARNING_GRAPHIC), new api.core.Location(tile.x, tile.y, tile.z));
+    player.sendMessage("Shadows converge on your position. Move away!");
+    defence.pendingShadow = { tile, impactAt: cycle + SHADOW_STRIKE_DELAY };
+    defence.cueIndex++;
+  }
+
+  function jhallanShadowTile(area, jhallan) {
+    const location = jhallan?.getLocation?.();
+    if (!location) return null;
+    const x = location.getX(), y = location.getY(), z = location.getZ?.() ?? 2;
+    const candidates = [
+      [x + 2, y], [x - 1, y], [x, y + 2], [x, y - 1],
+      [x + 2, y + 1], [x - 1, y + 1], [x, y + 2], [x + 1, y - 1],
+    ];
+    for (const [tileX, tileY] of candidates) {
+      const tile = new api.core.Location(tileX, tileY, z);
+      if (!area.contains?.(tile) || api.core.RegionManager.blocked(tile, area)) continue;
+      return tile;
+    }
+    return null;
   }
 
   function handleStart({ player, area }) {
