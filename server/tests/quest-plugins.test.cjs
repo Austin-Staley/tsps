@@ -5619,7 +5619,7 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   const runtime = require('../plugins/quests/QuestRuntime');
   require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
   const quest = runtime.getRegisteredQuests().at(-1);
-  const attrs = new Map(), inventory = new Map(), messages = [];
+  const attrs = new Map(), inventory = new Map(), bankItems = new Map(), messages = [];
   const player = {
     isPlayer: () => true, getAsPlayer() { return this; }, getUsername: () => 'dt2-sucellus-test',
     getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
@@ -5635,9 +5635,11 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
       getItems: () => Array.from({ length: 28 }, (_, slot) => { const [id, amount] = [...inventory].filter(([,n]) => n > 0)[slot] ?? [-1, 0]; return new core.Item(id, amount); }),
       setItems(items) { inventory.clear(); for (const item of items) if (item.getId() >= 0) inventory.set(item.getId(), item.getAmount()); },
       refreshItems() {}, capacity: () => 28,
-      getFreeSlots: () => 28,
+      getFreeSlots: () => 28 - [...inventory.values()].filter(amount => amount > 0).length,
       adds: (id, amount) => inventory.set(id, (inventory.get(id) ?? 0) + amount),
       deleteNumber: (id, amount) => inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - amount)) }),
+    getBank: () => ({ getAmount: id => bankItems.get(id) ?? 0,
+      getItems: () => [...bankItems].map(([id, amount]) => new core.Item(id, amount)) }),
   };
   const I = core.ItemIdentifiers, O = core.ObjectIdentifiers;
   const sourceLocation = (x, y, z = 0) => ({ x: 5000 + x - 2872, y: 6000 + y - 6336, z });
@@ -5743,22 +5745,55 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   assert.equal(pendingHits.length, 1, 'the exposed freezing gaze queues its real hit');
   assert.ok(pendingHits[0].getDamage() > 0 && pendingHits[0].getDamage() <= 99);
   deaths.at(-1)({ killer: player, npc: boss });
-  inventory.set(I.ODD_KEY, 0);
-  interactObject(49140, 3023, 6425, 'Open');
-  assert.match(messages.at(-1), /odd key from Duke Sucellus should fit/,
-    'the west gate stays locked until the real odd-key drop has been picked up');
-  assert.equal(attrs.get('desert-treasure-ii:sucellus-west-room'), undefined);
   groundPickups.at(-1)({ player, groundItemId: I.ODD_KEY, location: sourceLocation(3039, 6454) });
   inventory.set(I.ODD_KEY, 1);
+  inventory.set(I.ODD_KEY, 0); // simulate the real private-instance ground drop being lost on exit
+  bankItems.set(I.ODD_KEY, 1);
+  interactObject(49140, 3023, 6425, 'Open');
+  assert.match(messages.at(-1), /odd key from Duke Sucellus should fit/,
+    'a key already in the bank is not duplicated or reclaimed');
+  assert.equal(attrs.get('desert-treasure-ii:sucellus-west-room'), undefined);
+  bankItems.set(I.ODD_KEY, 0);
+  inventory.clear();
+  for (let slot = 0; slot < 28; slot++) inventory.set(100000 + slot, 1);
+  interactObject(49138, 3039, 6433, 'Open');
+  assert.equal(inventory.get(I.ODD_KEY) ?? 0, 0, 'key recovery waits when the inventory has no free slot');
+  inventory.clear();
+  assert.equal(interactObject(49138, 3039, 6433, 'Open'), false);
+  assert.equal(inventory.get(I.ODD_KEY), 1,
+    'a defeated player who lost the key can recover it by clicking the real Duke gate');
   assert.equal(interactObject(49140, 3023, 6425, 'Open'), false,
     'using the odd key unlocks the gate and yields to the shared door swing');
   assert.equal(attrs.get('desert-treasure-ii:sucellus-west-room'), true);
   assert.equal(inventory.get(I.ODD_KEY), 0);
   assert.equal(interactObject(49140, 3023, 6425, 'Open'), false,
     'the already-unlocked gate can be opened again without consuming another key');
+  const assassin = area.entities.find(npc => npc.id === core.NpcIdentifiers.ASSASSIN_7
+    && npc.location.x === area.tile(145, 91, 0).x && npc.location.y === area.tile(145, 91, 0).y);
+  assert.ok(assassin, 'opening the west gate reveals the player-owned Assassin');
+  interactObject(49116, 3021, 6420, 'Open');
+  assert.equal(inventory.get(I.SUCELLUS_MEDALLION) ?? 0, 0,
+    'the chest cannot skip the Assassin conversation');
+  const talkAssassin = handlers.npcInteractions.get('Assassin')['Talk-to'];
+  assert.equal(talkAssassin({ player, npcId: core.NpcIdentifiers.ASSASSIN_7, npc: assassin }), true);
+  handlers.custom.get('npc-dialogue:action').forEach(handler => handler({ player, stepId: 'iXcugA' }));
+  assert.equal(attrs.get('desert-treasure-ii:sucellus-west-assassin-talked'), true);
   interactObject(49116, 3021, 6420, 'Open');
   assert.equal(inventory.get(I.SUCELLUS_MEDALLION), 1);
-  assert.equal(quest.getStage(player), 10);
+  assert.equal(quest.getStage(player), 9, 'taking the medallion does not skip its actual statue placement');
+
+  const statueAction = itemObjects.find(h => h.name === 'handleItemOnObject');
+  attrs.set('desert-treasure-ii:medallions-placed', 3);
+  quest.setStage(player, 10);
+  attrs.set('desert-treasure-ii:ancient-vault', {
+    getBaseX: () => 5011, getBaseY: () => 6009, isDestroyed: () => false,
+  });
+  const statue = 49503;
+  statueAction({ player, itemId: I.SUCELLUS_MEDALLION, objectId: statue,
+    location: { x: 5022, y: 6018, z: 1 } });
+  assert.equal(inventory.get(I.SUCELLUS_MEDALLION), 0,
+    'an earned legacy medallion can still be placed at the Sucellus statue');
+  assert.equal(quest.getStage(player), 10, 'placing the legacy medal does not rewind or advance the saved quest stage');
 
   // A rebuilt private area has no awake NPC/HP snapshot. Its spent recipe must
   // be replayable from the live cache suppliers instead of locking the quest.

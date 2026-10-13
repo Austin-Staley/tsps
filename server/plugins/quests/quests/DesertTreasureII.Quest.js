@@ -87,6 +87,7 @@ module.exports = function registerDesertTreasureII(api) {
   const SUCELLUS_ENCOUNTER_STARTED = "desert-treasure-ii:sucellus-encounter-started";
   const SUCELLUS_DEFEATED = "desert-treasure-ii:sucellus-defeated";
   const SUCELLUS_WEST_ROOM = "desert-treasure-ii:sucellus-west-room";
+  const SUCELLUS_WEST_ASSASSIN_TALKED = "desert-treasure-ii:sucellus-west-assassin-talked";
   const SUCELLUS_CAPTAIN_ACCEPTED = "desert-treasure-ii:sucellus-captain-accepted";
   const SUCELLUS_PRISON_GEAR = "desert-treasure-ii:sucellus-prison-gear";
   const SUCELLUS_PRISON_PROGRESS = "desert-treasure-ii:sucellus-prison-progress";
@@ -1960,6 +1961,43 @@ module.exports = function registerDesertTreasureII(api) {
     return npc;
   }
 
+  function spawnSucellusWestAssassin(p, area) {
+    let owned = spawned.get(p);
+    if (!owned) spawned.set(p, owned = {});
+    if (owned.sucellusWestAssassin?.isRegistered?.() && area.entities.includes(owned.sucellusWestAssassin)) {
+      return owned.sucellusWestAssassin;
+    }
+    // QuestHelper's post-gate conversation is in the cache west room at
+    // 3017,6427. Keep this copy private to the player who opened the gate.
+    const npc = api.core.NPC.create(N.ASSASSIN_7, area.tile(3017 - 2872, 6427 - 6336, 0));
+    npc.setOwner?.(p);
+    npc.setOwnerOnly?.(true);
+    npc.__skipDefaultRespawn = true;
+    area.add(npc);
+    api.core.World.getAddNPCQueue().push(npc);
+    owned.sucellusWestAssassin = npc;
+    return npc;
+  }
+
+  function hasBankedItem(player, itemId) {
+    const bank = player.getBank?.(0);
+    return (bank?.getAmount?.(itemId) ?? bank?.getItems?.().reduce((amount, item) =>
+      amount + (item?.getId?.() === itemId ? item.getAmount?.() ?? 0 : 0), 0) ?? 0) > 0;
+  }
+
+  function recoverLostSucellusKey(player) {
+    if (!player.getAttribute(SUCELLUS_DEFEATED) || player.getAttribute(SUCELLUS_WEST_ROOM)
+      || has(player, I.ODD_KEY) || hasBankedItem(player, I.ODD_KEY)
+      || has(player, I.SUCELLUS_MEDALLION) || hasBankedItem(player, I.SUCELLUS_MEDALLION)) return false;
+    if (player.getInventory().getFreeSlots() < 1) {
+      player.sendMessage("You need an empty inventory slot to recover the odd key.");
+      return true;
+    }
+    player.getInventory().adds(I.ODD_KEY, 1);
+    player.sendMessage("You recover the odd key from Duke Sucellus's chamber floor.");
+    return true;
+  }
+
   function spawnScarPerstenAtShip(p, area) {
     let owned = spawned.get(p);
     if (!owned) spawned.set(p, owned = {});
@@ -2883,7 +2921,12 @@ module.exports = function registerDesertTreasureII(api) {
           p.moveTo(restoredSucellusPrisonTile(p, area) ?? area.tile(40, 14, 2));
           spawnSucellusCellAssassin(p, area);
           api.emitCustomEvent("dt2:sucellus-prison-resume", { player: p, area });
-        } else p.moveTo(area.tile(167, 97, 0));
+        } else {
+          p.moveTo(area.tile(167, 97, 0));
+          if (p.getAttribute(SUCELLUS_WEST_ROOM) && !p.getAttribute(SUCELLUS_WEST_ASSASSIN_TALKED)) {
+            spawnSucellusWestAssassin(p, area);
+          }
+        }
       }
     }
     if (stage(p) !== S.LEVIATHAN) return;
@@ -3966,7 +4009,8 @@ module.exports = function registerDesertTreasureII(api) {
             p.sendMessage("Work with the Assassin to reach the asylum first.");
             return true;
           }
-          spawnBoss(p, "sucellus");
+          if (p.getAttribute(SUCELLUS_DEFEATED)) recoverLostSucellusKey(p);
+          else spawnBoss(p, "sucellus");
           return false;
         }
         if (visibleId === 49120 && sucellusTile.x === 2945 && sucellusTile.y === 6389 && sucellusTile.z === 2) {
@@ -4058,16 +4102,21 @@ module.exports = function registerDesertTreasureII(api) {
             p.getInventory().deleteNumber(I.ODD_KEY, 1);
             p.setAttribute(SUCELLUS_WEST_ROOM, true);
             p.sendMessage("You use the odd key to unlock the door to the west of the Duke's chamber.");
+            spawnSucellusWestAssassin(p, p.getAttribute(SUCELLUS_AREA));
           }
           // Keep the ordinary door plugin in charge of opening the cache gate.
           return false;
         }
         if (visibleId === SUCELLUS_MEDALLION_CHEST && sucellusTile.x === 3021 && sucellusTile.y === 6420) {
-          if (!p.getAttribute(SUCELLUS_WEST_ROOM)) return p.sendMessage("The chest is in the room beyond the locked western door.");
-          if (!p.getAttribute(SUCELLUS_DEFEATED)) return p.sendMessage("The Duke must be defeated before you can take the medallion.");
+          if (!p.getAttribute(SUCELLUS_WEST_ROOM)) { event.handled = true; return p.sendMessage("The chest is in the room beyond the locked western door."); }
+          if (!p.getAttribute(SUCELLUS_DEFEATED)) { event.handled = true; return p.sendMessage("The Duke must be defeated before you can take the medallion."); }
+          if (!p.getAttribute(SUCELLUS_WEST_ASSASSIN_TALKED)) {
+            event.handled = true;
+            return p.sendMessage("Speak with the Assassin in the western room before opening the chest.");
+          }
+          event.handled = true;
           if (!has(p, I.SUCELLUS_MEDALLION)) p.getInventory().adds(I.SUCELLUS_MEDALLION, 1);
           p.sendMessage("You open the chest and take Sucellus' medallion.");
-          setStage(p, S.WHISPERER);
           return true;
         }
         // OSRS Wiki's DT2 quick guide: gather both mushroom types, grind them,
@@ -4953,8 +5002,10 @@ module.exports = function registerDesertTreasureII(api) {
       const locations = [[3941, 9635], [3931, 9635], [3931, 9625], [3941, 9625]];
       const medal = STATUE_ITEMS[index];
       const expectedStage = [S.VARDORVIS, S.WHISPERER, S.SUCELLUS, S.LEVIATHAN][index];
+      const legacySucellusMedallion = index === 2 && stage(p) === S.WHISPERER
+        && !((Number(p.getAttribute(STATUES_PLACED)) || 0) & (1 << index));
       if (vaultTile.x === locations[index][0] && vaultTile.y === locations[index][1]
-        && stage(p) === expectedStage && itemId === medal && has(p, medal)) {
+        && (stage(p) === expectedStage || legacySucellusMedallion) && itemId === medal && has(p, medal)) {
         event.handled = true;
         p.getInventory().deleteNumber(medal, 1);
         const placed = (Number(p.getAttribute(STATUES_PLACED)) || 0) | (1 << index);
@@ -4966,7 +5017,7 @@ module.exports = function registerDesertTreasureII(api) {
           setScarVarbit(p, 2);
         }
         else if (index === 3) setStage(p, S.SUCELLUS);
-        else if (index === 2) setStage(p, S.WHISPERER);
+        else if (index === 2 && !legacySucellusMedallion) setStage(p, S.WHISPERER);
         return true;
       }
     }
@@ -5381,6 +5432,16 @@ module.exports = function registerDesertTreasureII(api) {
     if (!npc?.__dt2Whisperer || npc.__dt2WhispererSpecial !== "soul-siphon" || !hit) return;
     for (const damage of hit.getHits?.() ?? []) damage.setDamage(0);
     hit.updateTotalDamage?.();
+  }
+  function talkSucellusWestAssassin({ player: p, npcId, npc }) {
+    const owned = spawned.get(p);
+    const area = p.getAttribute(SUCELLUS_AREA);
+    if (stage(p) !== S.SUCELLUS || npcId !== N.ASSASSIN_7 || !p.getAttribute(SUCELLUS_DEFEATED)
+      || !p.getAttribute(SUCELLUS_WEST_ROOM) || p.getAttribute(SUCELLUS_WEST_ASSASSIN_TALKED)
+      || !(area instanceof SucellusArea) || p.getPrivateArea?.() !== area
+      || !owned?.sucellusWestAssassin || (npc && npc !== owned.sucellusWestAssassin)) return false;
+    talk(p, npcId, "duke-sucellus-of-the-sixth-legion-talking-to-the-assassin-after-unlocking-the-asylum-office");
+    return true;
   }
   function handleBossTalk({ player: p, npcId, npc }) {
     const s = stage(p);
@@ -5972,6 +6033,15 @@ module.exports = function registerDesertTreasureII(api) {
 
   function handleDialogueAction(event) {
     const { player: p, stepId } = event;
+    if (stepId === "iXcugA" && stage(p) === S.SUCELLUS
+      && p.getAttribute(SUCELLUS_DEFEATED) && p.getAttribute(SUCELLUS_WEST_ROOM)) {
+      const owned = spawned.get(p);
+      if (owned?.sucellusWestAssassin) {
+        api.removeNpc(owned.sucellusWestAssassin);
+        owned.sucellusWestAssassin = null;
+      }
+      p.setAttribute(SUCELLUS_WEST_ASSASSIN_TALKED, true);
+    }
     if (stage(p) === S.VARDORVIS && Number(p.getAttribute(VARDORVIS_PROGRESS)) === 18 && stepId === "4muMDK") {
       const area = p.getAttribute(ATTR_STRANGLEWOOD_TEMPLE);
       if (!(area instanceof StranglewoodTempleArea) || area.isDestroyed() || !has(p, I.TEMPLE_KEY_3)) {
@@ -6639,6 +6709,7 @@ module.exports = function registerDesertTreasureII(api) {
     FINAL_CELL_CHEST, FINAL_FIGURE_STARTED, FINAL_FIGURE_DEFEATED, "desert-treasure-ii:final-cell-pending",
     "desert-treasure-ii:final-cutscene-started", FINAL_WIGHT_INDEX, FINAL_WIGHTS_STARTED, FINAL_WIGHTS_COMPLETE].forEach((key) => api.persistAttribute(key));
   [SUCELLUS_MUSHROOMS, SUCELLUS_VATS, SUCELLUS_POISONS, SUCELLUS_ENCOUNTER_STARTED, SUCELLUS_DEFEATED, SUCELLUS_WEST_ROOM,
+    SUCELLUS_WEST_ASSASSIN_TALKED,
     SUCELLUS_CELL_PROGRESS, SUCELLUS_CELL_ENTERED, SUCELLUS_CELL_ESCAPED, SUCELLUS_ASSASSIN_GONE, SUCELLUS_CAPTAIN_ACCEPTED,
     SUCELLUS_PRISON_GEAR, SUCELLUS_PRISON_PROGRESS, SUCELLUS_PRISON_CHECKPOINT, SUCELLUS_PRISON_COMPLETE].forEach((key) => api.persistAttribute(key));
   [SCAR_DEMONS_DEFEATED, SCAR_BOAT_TRIED, SCAR_PERSTEN_TALKED, SCAR_PERSTEN_TALKED_BEFORE,
@@ -6714,6 +6785,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("Vardorvis", { "Talk-to": handleBossTalk });
   api.onNpcInteraction("The Leviathan", { "Talk-to": handleBossTalk });
   api.onNpcInteraction("Duke Sucellus", { "Talk-to": handleBossTalk });
+  api.onNpcInteraction("Assassin", { "Talk-to": talkSucellusWestAssassin });
   api.onNpcInteraction("The Whisperer", { "Talk-to": handleBossTalk });
   api.onNpcInteraction("Odd Figure", { Disturb: handleBossTalk, "Talk-to": handleBossTalk });
   api.onNpcDeath(handleDeath);
