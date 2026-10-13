@@ -1102,13 +1102,7 @@ export class InputManager {
     };
 
     private onKeyUp = (event: KeyboardEvent) => {
-        if (this.filterInput("keyReleased", event)) return;
-        event.preventDefault();
-        this.idleTime = 0;
-        this.lastInputTimeMs = this.nowMs();
-
-        for (const handler of this.keyHandlers) if (handler.onKeyUp?.(event)) return;
-
+        // Consuming a release must not leave native camera, modifier or CS2 keys held.
         const keyCode = event.keyCode;
 
         // Clear shift state
@@ -1129,6 +1123,13 @@ export class InputManager {
         }
 
         this.keys.delete(event.code);
+
+        if (this.filterInput("keyReleased", event)) return;
+        event.preventDefault();
+        this.idleTime = 0;
+        this.lastInputTimeMs = this.nowMs();
+
+        for (const handler of this.keyHandlers) if (handler.onKeyUp?.(event)) return;
     };
 
     private onFocusOut = () => {
