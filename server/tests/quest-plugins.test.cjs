@@ -4900,6 +4900,28 @@ test('Song of the Elves Fragment uses Wiki paired ranged hits and ordered phase-
     } finally {
       Math.random = originalRandomForAdds;
     }
+    player.getArea().leave(player, false);
+    boss = null;
+    cycle += 100;
+    queued.length = 0;
+    playerMessages.length = 0;
+    let dialogueActive = true;
+    player.getDialogueManager = () => ({ isActive: () => dialogueActive });
+    handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'xfnkES', handled: false });
+    const introArea = player.getArea();
+    const introStart = cycle;
+    for (let offset = 1; offset <= 30; offset++) {
+      cycle = introStart + offset;
+      introArea.process(boss);
+    }
+    assert.equal(queued.length, 0, 'Seren cannot damage the player while her introduction is open');
+    assert.ok(!playerMessages.some(message => message.includes('teleports you beside')), 'specials wait for the introduction too');
+    dialogueActive = false;
+    for (let offset = 31; offset <= 42; offset++) {
+      cycle = introStart + offset;
+      introArea.process(boss);
+    }
+    assert.ok(playerMessages.some(message => message.includes('teleports you beside')), 'closing the introduction starts the ordinary encounter timer');
   } finally {
     api.core.World.getProcessCycle = originalCycle;
     runtime.startTranscript = originalStartTranscript;
