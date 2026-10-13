@@ -571,6 +571,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     cullBackFace: boolean = true;
 
     msaaEnabled: boolean = false;
+    /** MSAA samples the scene framebuffer was last built for, before the GPU's cap. */
+    msaaSamplesRequested: number = 0;
     fxaaEnabled: boolean = false;
 
     loadNpcs: boolean = true;
@@ -1685,6 +1687,10 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
 
     setMsaa(enabled: boolean): void {
         return render.setMsaa(this, enabled);
+    }
+
+    getRequestedMsaaSamples(): number {
+        return render.getRequestedMsaaSamples(this);
     }
 
     setFxaa(enabled: boolean): void {
