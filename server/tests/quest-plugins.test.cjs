@@ -10760,7 +10760,7 @@ test('Biohazard does not swallow RFD ingredient conditions', () => {
 
 
 test('RFD gives the Evil Chicken lead to the Wise Old Man only after choosing Sir Amik', () => {
-  const { api: base } = mockApi();
+  const { api: base, handlers } = mockApi();
   const interactions = [];
   const api = new Proxy(base, {
     get(target, property) {
@@ -10798,8 +10798,17 @@ test('RFD gives the Evil Chicken lead to the Wise Old Man only after choosing Si
       'Recipe for Disaster/Freeing Sir Amik Varze',
       'finding-the-lair-talking-to-the-wise-old-man',
     ]);
+    assert.deepEqual(handlers.variant.at(-1)({
+      player, npcId: 2109, pages: [{ page: 'Recipe for Disaster/Freeing Sir Amik Varze' }],
+    }), {
+      page: 'Recipe for Disaster/Freeing Sir Amik Varze',
+      variant: 'finding-the-lair-talking-to-the-wise-old-man',
+    }, 'the active rescue can replace the Wise Old Man’s default conversation');
     attributes.set('recipe-for-disaster:rescues', 255);
     assert.equal(wiseOldMan(event), false, 'the rescue dialogue no longer intercepts after Sir Amik is freed');
+    assert.equal(handlers.variant.at(-1)({
+      player, npcId: 2109, pages: [{ page: 'Recipe for Disaster/Freeing Sir Amik Varze' }],
+    }), null, 'the variant falls through after Sir Amik is freed');
   } finally {
     runtime.startTranscript = originalStartTranscript;
   }
@@ -10981,7 +10990,7 @@ test('RFD lets divers leave the mudskipper cave without surfacing', () => {
 
 
 test('RFD Mother cycles six weaknesses and the final room suppresses prayer and regeneration', (t) => {
-  const { api: base } = mockApi();
+  const { api: base, handlers: baseHandlers } = mockApi();
   const loginHandlers = [];
   const prayerHandlers = [];
   const deathHandlers = [];
@@ -11027,6 +11036,10 @@ test('RFD Mother cycles six weaknesses and the final room suppresses prayer and 
   require('../plugins/quests/Quests.plugin').register(api);
   delete require.cache[require.resolve('../plugins/quests/quests/RecipeForDisaster.Quest')];
   require('../plugins/quests/quests/RecipeForDisaster.Quest')(api);
+  const questRuntime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = questRuntime.startTranscript;
+  questRuntime.startTranscript = () => true;
+  t.after(() => { questRuntime.startTranscript = originalStartTranscript; });
   const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
   const quests = getRegisteredQuests();
   const quest = quests.findLast(({ key }) => key === 'recipe_for_disaster');
@@ -11035,6 +11048,7 @@ test('RFD Mother cycles six weaknesses and the final room suppresses prayer and 
     ['recipe-for-disaster:culinaromancer-wave', 5],
     ['quest.points', 175],
   ]);
+  const inventory = new Map();
   const equipment = [];
   const { CombatSpells } = require('../dist/game/content/combat/magic/CombatSpells');
   const { PendingHit } = require('../dist/game/content/combat/hit/PendingHit');
@@ -11057,6 +11071,7 @@ test('RFD Mother cycles six weaknesses and the final room suppresses prayer and 
     getSkillManager: () => ({ getCurrentLevel: () => 1 }),
     getPrayerActive: () => [],
     getEquipment: () => ({ getItems: () => equipment }),
+    getInventory: () => ({ adds: (id, amount = 1) => inventory.set(id, (inventory.get(id) ?? 0) + amount) }),
     getCombat: () => ({ getSelectedSpell: () => selectedSpell }),
     moveTo: (location) => { player.destination = location; },
     getPacketSender: () => new Proxy({}, { get: (_target, key) => key.startsWith('send') ? () => {} : undefined }),
@@ -11201,6 +11216,23 @@ test('RFD Mother cycles six weaknesses and the final room suppresses prayer and 
   assert.equal(attributes.get('recipe-for-disaster:culinaromancer-wave'), 6,
     'a transformed Mother reports its live cache id and still advances to the Culinaromancer');
   assert.equal(spawns.at(-1).definition.id, api.core.NpcIdentifiers.CULINAROMANCER_9);
+  const finishDialogue = baseHandlers.custom.get('npc-dialogue:action')
+    .findLast((handler) => handler.toString().includes('ILo79M'));
+  const finish = () => finishDialogue({ player, stepId: 'ILo79M' });
+  finish();
+  assert.equal(quest.getStage(player), 4, 'all eight rescue flags alone cannot complete RFD');
+  assert.equal(attributes.get('quest.points'), 175, 'the final hand-in awards no QP before the last kill');
+  const culinaromancer = spawns.at(-1);
+  advanceFinale({ killer: player, npc: culinaromancer, npcId: api.core.NpcIdentifiers.CULINAROMANCER_9 });
+  assert.equal(attributes.get('recipe-for-disaster:culinaromancer-defeated'), true,
+    'only the owned sixth-wave Culinaromancer death earns the completion marker');
+  assert.equal(attributes.get('recipe-for-disaster:culinaromancer-wave'), 0);
+  finish();
+  assert.equal(quest.getStage(player), 5);
+  assert.equal(attributes.get('quest.points'), 176);
+  finish();
+  assert.equal(attributes.get('quest.points'), 176, 'replaying the final dialogue cannot award completion twice');
+  assert.equal(inventory.get(api.core.ItemIdentifiers.ANTIQUE_LAMP_3), 1);
 });
 
 test('Dragon Slayer II crypt uses canonical template locs and reachable native-varbit bust puzzle', async (t) => {

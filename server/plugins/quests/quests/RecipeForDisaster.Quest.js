@@ -48,6 +48,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
   const STAGE_COMPLETE = 5;
   const ALL_RESCUES = 255;
   const FINAL_FIGHT_ATTRIBUTE = "recipe-for-disaster:culinaromancer-wave";
+  const FINAL_BOSS_DEFEATED_ATTRIBUTE = "recipe-for-disaster:culinaromancer-defeated";
   const EVIL_CHICKEN_LAIR_ENTRY = { x: 2455, y: 4398, z: 0 };
   const EVIL_CHICKEN_LAIR_BOSS = { x: 2455, y: 4399, z: 0 };
   const ACTIVE_FINAL_NPC_BY_PLAYER = new WeakMap();
@@ -311,6 +312,12 @@ module.exports = function registerRecipeForDisasterQuest(api) {
   function selectVariant({ npcId, player, pages }) {
     if (!player || !pages?.length) return null;
     const page = pages.find((entry) => entry.page === PAGE);
+    const amik = RESCUES.find((entry) => entry.flag === 64);
+    if (amik && WISE_OLD_MAN_IDS.has(npcId) && stage(player) >= STAGE_OPENING_COMPLETE
+      && !hasFlag(player, 64) && Number(player.getAttribute(AMIK_STATE_ATTRIBUTE)) === 1
+      && pages.some((entry) => entry.page === amik.page)) {
+      return { page: amik.page, variant: "finding-the-lair-talking-to-the-wise-old-man" };
+    }
     if (COOK_IDS.has(npcId) && page) {
       if (pirateState(player) & 16) {
         const pirateVariant = pages.find((entry) => entry.page === PIRATE_PAGE);
@@ -842,7 +849,8 @@ module.exports = function registerRecipeForDisasterQuest(api) {
       ensureEntryPortal();
       return;
     }
-    if (stepId === "ILo79M" && canBeginFinale(player)) {
+    if (stepId === "ILo79M" && canBeginFinale(player)
+      && player.getAttribute(FINAL_BOSS_DEFEATED_ATTRIBUTE) === true) {
       quest.complete(player);
       leaveFinalRoom(player);
     }
@@ -1316,6 +1324,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
     const wave = checkpoint === -1 ? 1 : checkpoint;
     if (checkpoint === -1) {
       player.setAttribute(FINAL_FIGHT_ATTRIBUTE, 0);
+      player.setAttribute(FINAL_BOSS_DEFEATED_ATTRIBUTE, false);
       const { startTranscript } = require("../QuestRuntime");
       startTranscript(api, player, NpcIdentifiers.ARIS, "Recipe for Disaster/Defeating the Culinaromancer", "facing-the-culinaromancer-entering-the-portal-for-the-first-time");
     }
@@ -1523,6 +1532,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
     if (!player || !encounter || encounter.player !== player || !FINAL_NPCS.has(event.npcId) || !canBeginFinale(player)) return;
     const wave = Number(player.getAttribute(FINAL_FIGHT_ATTRIBUTE)) || 0;
     if (encounter.wave !== wave) return;
+    if (wave === FINAL_WAVES.length && event.npcId !== FINAL_WAVES[wave - 1]) return;
     ACTIVE_FINAL_NPC_BY_PLAYER.delete(player);
     if (wave < 1) return;
     if (wave < FINAL_WAVES.length) {
@@ -1534,6 +1544,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
       return;
     }
     player.setAttribute(FINAL_FIGHT_ATTRIBUTE, 0);
+    player.setAttribute(FINAL_BOSS_DEFEATED_ATTRIBUTE, true);
     const { startTranscript } = require("../QuestRuntime");
     startTranscript(api, player, NpcIdentifiers.ARIS, "Recipe for Disaster/Defeating the Culinaromancer", "facing-the-culinaromancer-fighting-the-culinaromancer");
   }
@@ -2547,6 +2558,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
   api.persistAttribute(AWOWOGEI_STATE_ATTRIBUTE);
   api.persistAttribute(AMIK_STATE_ATTRIBUTE);
   api.persistAttribute(FINAL_FIGHT_ATTRIBUTE);
+  api.persistAttribute(FINAL_BOSS_DEFEATED_ATTRIBUTE);
   quest = registerQuest(api, {
     key: QUEST,
     name: "Recipe for Disaster",
