@@ -3,9 +3,12 @@ import { VarManager } from "../rs/config/vartype/VarManager";
 import { GroundItemStore } from "../game/data/ground/GroundItemStore";
 import { NpcEcs } from "../game/ecs/NpcEcs";
 import { PlayerEcs } from "../game/ecs/PlayerEcs";
+import { subscribeActorGraphics } from "../game/ActorEventHooks";
+import { GfxManager } from "../render/gfx/GfxManager";
 import { MapManager } from "../game/MapManager";
 import { Cs2Vm } from "../rs/cs2/Cs2Vm";
 import { Script } from "../rs/cs2/Script";
+import { GLRenderer } from "../widgets/gl/renderer";
 import { InputManager } from "../game/InputManager";
 import { ClientState } from "../game/ClientState";
 import { dispatchMenuAction, setMenuEventHooks } from "../ui/menu/menuEvents";
@@ -49,6 +52,77 @@ maps.mapAddedListeners.add(() => { assert.equal(maps.getMap(50, 50), map); mapCh
 maps.mapRemovedListeners.add(() => mapChanges.push("removed"));
 maps.addMap(50, 50, map); maps.removeMap(50, 50);
 assert.deepEqual(mapChanges, ["pre", "added", "removed"]);
+
+const graphics = new GfxManager({} as any);
+const firstGraphic = graphics.spawnAttachedToNpc(42, 7);
+const secondGraphic = graphics.spawnAttachedToNpc(43, 7);
+const playerGraphic = graphics.spawnAttachedToPlayer(44, 7);
+graphics.spawnAtTile(45, { x: 3200, y: 3200 });
+const [firstInstance, secondInstance] = [...graphics.getActorInstances("npc", 7)];
+assert.equal(graphics.getActorGraphic("npc", 7), 42);
+assert.equal(graphics.getActorGraphic("player", 7), 44, "NPC and player IDs use separate indices");
+firstInstance.slot = 1;
+assert.equal(graphics.getActorGraphic("npc", 7), 43, "slot changes retain native first-match lookup");
+secondInstance.spotId = 46;
+assert.equal(graphics.getActorGraphic("npc", 7), 46, "mutable graphic IDs are read from the live instance");
+firstInstance.slot = 0;
+const graphicChanges: number[] = [];
+const removeGraphicListener = subscribeActorGraphics(event => {
+    if (event.type === "npc") graphicChanges.push(event.graphic);
+});
+// Actor lookup must not scan unrelated world or actor instances, even with a subscriber.
+const allInstances = (graphics as any).instances as Map<number, unknown>;
+allInstances.values = () => { throw new Error("Actor graphic lookups must not scan the global map"); };
+graphics.kill(firstGraphic); graphics.kill(secondGraphic); graphics.kill(secondGraphic);
+assert.deepEqual(graphicChanges, [46, -1], "subscribed removals report the remaining default-slot graphic");
+assert.deepEqual([...graphics.getActorInstances("npc", 7)], [], "removed instances leave the actor index");
+assert.equal((graphics as any).actorInstances.npc.size, 0, "empty actor buckets are released");
+removeGraphicListener(); graphics.removeActorInstances("player", 7);
+assert.equal(graphics.getActorGraphic("player", 7), -1);
+assert.equal((graphics as any).actorInstances.player.size, 0);
+graphics.kill(playerGraphic);
+const expiringNpc = graphics.spawnAttachedToNpc(47, 8, "ground", undefined, false, undefined, 2);
+const expiringPlayer = graphics.spawnAttachedToPlayer(48, 9, "ground", undefined, false, undefined, 3);
+for (const kind of ["npc", "player"] as const) {
+    for (const instance of graphics.getActorInstances(kind, kind === "npc" ? 8 : 9)) {
+        instance.startTimeMs = 1; instance.endTimeMs = 0;
+    }
+}
+graphics.update();
+assert.equal((graphics as any).actorInstances.npc.size, 0, "expiration releases NPC buckets");
+assert.equal((graphics as any).actorInstances.player.size, 0, "expiration releases player buckets");
+assert.equal(allInstances.has(expiringNpc), false); assert.equal(allInstances.has(expiringPlayer), false);
+for (const kind of ["npc", "player"] as const) {
+    const spawn = kind === "npc" ? graphics.spawnAttachedToNpc.bind(graphics) : graphics.spawnAttachedToPlayer.bind(graphics);
+    const first = spawn(50, 10, "ground", undefined, false, undefined, 0);
+    const replaced = spawn(51, 10, "ground", undefined, false, undefined, 0);
+    spawn(52, 11, "ground", undefined, false, undefined, 0);
+    assert.equal(allInstances.has(first), false, "slot replacement removes the old global instance");
+    assert.equal([...graphics.getActorInstances(kind, 10)].length, 1);
+    assert.equal(graphics.getActorGraphic(kind, 10), 51);
+    if (kind === "npc") graphics.clearAttachedSlotNpc(10); else graphics.clearAttachedSlotPlayer(10);
+    assert.equal(allInstances.has(replaced), false);
+    assert.equal(graphics.getActorGraphic(kind, 10), -1);
+    assert.equal(graphics.getActorGraphic(kind, 11), 52, "slot clear retains other actors");
+    graphics.removeActorInstances(kind, 11);
+    assert.equal((graphics as any).actorInstances[kind].size, 0);
+}
+
+const visiblePlayers = [6, 2];
+const mapGraphics = new GfxManager({
+    osrsClient: { playerEcs: { getServerIdForIndex: (pid: number) => ({ 6: 41, 2: 84 })[pid] } },
+    playerRenderer: { getRenderPlayersForMap: () => visiblePlayers },
+} as any);
+mapGraphics.spawnAttachedToPlayer(54, 84);
+mapGraphics.spawnAttachedToNpc(55, 41);
+mapGraphics.spawnAttachedToPlayer(56, 41);
+mapGraphics.spawnAttachedToPlayer(57, 41);
+(mapGraphics as any).instances[Symbol.iterator] = () => { throw new Error("Player map query must use actor indices"); };
+assert.equal((mapGraphics as any).findAttachedInstanceKey(54, 84), 1, "attached graphic lookup uses the actor index");
+assert.deepEqual(mapGraphics.getAttachedPlayersForMap({} as any).map(({ inst, pid, slot }) => [inst.spotId, pid, slot]),
+    [[56, 6, 0], [57, 6, 0], [54, 2, 1]], "map queries preserve visible-player and graphic insertion order");
+visiblePlayers.length = 0;
+assert.deepEqual(mapGraphics.getAttachedPlayersForMap({} as any), []);
 
 const scripts = new Map<number, Script>(), root = new Script(), child = new Script();
 root.id = 100; root.instructions = Int32Array.from([40, 21]); root.intOperands = Int32Array.from([101, 0]); root.stringOperands = [null, null];
@@ -100,3 +174,43 @@ assert.equal(clicks, 1); assert.equal(native, 1);
 dispose(); dispatchMenuAction(action, () => native++);
 assert.equal(clicks, 1); assert.equal(native, 2, "unregistered hooks preserve native actions");
 console.log("Engine hooks: packet mirrors, actor/map lifecycle, nested scripts, input and menu cleanup passed");
+
+// Canvas updates retain texture storage and upload only clipped damage on later frames.
+{
+    const uploads: { kind: string; args: unknown[]; unpack: number[] }[] = [];
+    const unpack = new Map<number, number>();
+    let failUpload = false;
+    const gl: any = { TEXTURE0: 1, TEXTURE_2D: 2, RGBA: 3, UNSIGNED_BYTE: 4,
+        UNPACK_PREMULTIPLY_ALPHA_WEBGL: 5, UNPACK_SKIP_PIXELS: 6, UNPACK_SKIP_ROWS: 7,
+        TEXTURE_MIN_FILTER: 8, TEXTURE_MAG_FILTER: 9, LINEAR: 10, TEXTURE_WRAP_S: 11,
+        TEXTURE_WRAP_T: 12, CLAMP_TO_EDGE: 13, activeTexture() {}, bindTexture() {},
+        createTexture: () => ({}), texParameteri() {}, pixelStorei: (key: number, value: number) => unpack.set(key, value),
+        texImage2D(...args: unknown[]) { uploads.push({ kind: "allocate", args, unpack: [] }); },
+        texSubImage2D(...args: unknown[]) {
+            uploads.push({ kind: "update", args, unpack: [unpack.get(6)!, unpack.get(7)!, unpack.get(5)!] });
+            if (failUpload) throw new Error("upload failed");
+        },
+    };
+    const renderer = Object.assign(Object.create(GLRenderer.prototype), { gl, textures: new Map() });
+    const source = { width: 800, height: 600 } as HTMLCanvasElement;
+    const first = renderer.updateTextureFromCanvas("damage", source, { x: 10, y: 20, w: 30, h: 40 });
+    assert.equal(uploads.at(-1)!.kind, "allocate", "first upload initializes the entire transparent canvas");
+    assert.equal(renderer.updateTextureFromCanvas("damage", source, { x: 10, y: 20, w: 30, h: 40 }), first);
+    assert.deepEqual(uploads.at(-1)!.args.slice(2, 6), [10, 20, 30, 40]);
+    assert.deepEqual(uploads.at(-1)!.unpack, [10, 20, 1]);
+    renderer.updateTextureFromCanvas("damage", source, { x: -5.5, y: 599.5, w: 15, h: 10 });
+    assert.deepEqual(uploads.at(-1)!.args.slice(2, 6), [0, 599, 10, 1], "clip and round damage outward at canvas edges");
+    const calls = uploads.length;
+    renderer.updateTextureFromCanvas("damage", source, { x: 900, y: 0, w: 10, h: 10 });
+    assert.equal(uploads.length, calls, "empty damage performs no upload");
+    renderer.updateTextureFromCanvas("damage", source);
+    assert.deepEqual(uploads.at(-1)!.args.slice(2, 6), [0, 0, 800, 600], "callers without damage still upload every pixel");
+    failUpload = true;
+    assert.throws(() => renderer.updateTextureFromCanvas("damage", source, { x: 10, y: 20, w: 30, h: 40 }), /upload failed/);
+    assert.deepEqual([unpack.get(6), unpack.get(7), unpack.get(5)], [0, 0, 0], "failed upload cannot leak pixel-store state");
+    failUpload = false;
+    source.width = 900;
+    renderer.updateTextureFromCanvas("damage", source, { x: 10, y: 20, w: 30, h: 40 });
+    assert.equal(uploads.at(-1)!.kind, "allocate", "resize reallocates every pixel rather than leaving undefined areas");
+    assert.equal(first.w, 900);
+}

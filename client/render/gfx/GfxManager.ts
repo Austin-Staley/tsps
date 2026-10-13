@@ -40,16 +40,40 @@ export interface GfxInstance {
 export class GfxManager {
     private nextId = 1;
     private instances: Map<number, GfxInstance> = new Map();
+    private readonly actorInstances = {
+        player: new Map<number, Set<GfxInstance>>(),
+        npc: new Map<number, Set<GfxInstance>>(),
+    };
     // Reusable buffers (avoid per-call allocation)
     private worldInstancesBuffer: GfxInstance[] = [];
     private worldInstancesWithSlotBuffer: Array<{ inst: GfxInstance; slot: number }> = [];
     constructor(private renderer: WebGLOsrsRenderer) {}
+
+    private addInstance(id: number, instance: GfxInstance): void {
+        this.instances.set(id, instance);
+        for (const kind of ["player", "npc"] as const) {
+            const serverId = kind === "player" ? instance.attachPlayerServerId : instance.attachNpcServerId;
+            if (serverId === undefined) continue;
+            const index = this.actorInstances[kind];
+            let instances = index.get(serverId);
+            if (!instances) index.set(serverId, instances = new Set());
+            instances.add(instance);
+        }
+    }
 
     /** The legacy graphic getter represents the default (slot zero) actor spot animation. */
     private removeInstance(id: number): void {
         const instance = this.instances.get(id);
         if (!instance) return;
         this.instances.delete(id);
+        for (const kind of ["player", "npc"] as const) {
+            const serverId = kind === "player" ? instance.attachPlayerServerId : instance.attachNpcServerId;
+            if (serverId === undefined) continue;
+            const index = this.actorInstances[kind];
+            const instances = index.get(serverId);
+            instances?.delete(instance);
+            if (instances?.size === 0) index.delete(serverId);
+        }
         const player = instance.attachPlayerServerId;
         const npc = instance.attachNpcServerId;
         if (player !== undefined) notifyActorGraphic({ type: "player", serverId: player, graphic: this.getActorGraphic("player", player) });
@@ -57,14 +81,15 @@ export class GfxManager {
     }
 
     getActorGraphic(kind: "player" | "npc", serverId: number): number {
-        for (const instance of this.instances.values()) {
-            const actorId = kind === "player" ? instance.attachPlayerServerId : instance.attachNpcServerId;
-            if (actorId === serverId && (instance.slot ?? 0) === 0) return instance.spotId;
+        const instances = this.actorInstances[kind].get(serverId);
+        if (instances) for (const instance of instances) {
+            if ((instance.slot ?? 0) === 0) return instance.spotId;
         }
         return -1;
     }
     *getActorInstances(kind:"player"|"npc",serverId:number):IterableIterator<GfxInstance> {
-        for(const instance of this.instances.values())if((kind==="player" ? instance.attachPlayerServerId:instance.attachNpcServerId)===serverId)yield instance;
+        const instances = this.actorInstances[kind].get(serverId);
+        if (instances) yield* instances;
     }
     removeActorInstances(kind:"player"|"npc",serverId:number):void { for(const instance of this.getActorInstances(kind,serverId))this.removeInstance(instance.id); }
     getActorFrame(instance:GfxInstance):{frame:number;cycle:number} {
@@ -116,27 +141,23 @@ export class GfxManager {
     }
 
     private findAttachedInstanceKey(spotId: number, serverId: number): number | undefined {
-        for (const [id, inst] of this.instances) {
-            if (inst.spotId === spotId && inst.attachPlayerServerId === serverId) return id;
+        for (const inst of this.getActorInstances("player", serverId)) {
+            if (inst.spotId === spotId) return inst.id;
         }
         return undefined;
     }
 
     clearAttachedSlotPlayer(serverId: number, slotArg?: number): void {
         const slot = typeof slotArg === "number" ? (slotArg | 0) & 0xff : 0;
-        for (const [existingId, inst] of this.instances) {
-            if (inst.attachPlayerServerId === (serverId | 0) && (inst.slot ?? 0) === slot) {
-                this.removeInstance(existingId);
-            }
+        for (const inst of this.getActorInstances("player", serverId | 0)) {
+            if ((inst.slot ?? 0) === slot) this.removeInstance(inst.id);
         }
     }
 
     clearAttachedSlotNpc(serverId: number, slotArg?: number): void {
         const slot = typeof slotArg === "number" ? (slotArg | 0) & 0xff : 0;
-        for (const [existingId, inst] of this.instances) {
-            if (inst.attachNpcServerId === (serverId | 0) && (inst.slot ?? 0) === slot) {
-                this.removeInstance(existingId);
-            }
+        for (const inst of this.getActorInstances("npc", serverId | 0)) {
+            if ((inst.slot ?? 0) === slot) this.removeInstance(inst.id);
         }
     }
 
@@ -151,10 +172,8 @@ export class GfxManager {
     ): number {
         const slot = typeof slotArg === "number" ? (slotArg | 0) & 0xff : undefined;
         if (slot !== undefined) {
-            for (const [existingId, inst] of this.instances) {
-                if (inst.attachPlayerServerId === (serverId | 0) && inst.slot === slot) {
-                    this.removeInstance(existingId);
-                }
+            for (const inst of this.getActorInstances("player", serverId | 0)) {
+                if (inst.slot === slot) this.removeInstance(inst.id);
             }
         }
         const id = this.nextId++;
@@ -171,7 +190,7 @@ export class GfxManager {
             }
         } catch {}
 
-        this.instances.set(id, {
+        this.addInstance(id, {
             id,
             spotId: spotId | 0,
             attachPlayerServerId: serverId | 0,
@@ -200,10 +219,8 @@ export class GfxManager {
     ): number {
         const slot = typeof slotArg === "number" ? (slotArg | 0) & 0xff : undefined;
         if (slot !== undefined) {
-            for (const [existingId, inst] of this.instances) {
-                if (inst.attachNpcServerId === (serverId | 0) && inst.slot === slot) {
-                    this.removeInstance(existingId);
-                }
+            for (const inst of this.getActorInstances("npc", serverId | 0)) {
+                if (inst.slot === slot) this.removeInstance(inst.id);
             }
         }
         const id = this.nextId++;
@@ -219,7 +236,7 @@ export class GfxManager {
             }
         } catch {}
 
-        this.instances.set(id, {
+        this.addInstance(id, {
             id,
             spotId: spotId | 0,
             attachPlayerServerId: undefined,
@@ -255,7 +272,7 @@ export class GfxManager {
             }
         } catch {}
 
-        this.instances.set(id, {
+        this.addInstance(id, {
             id,
             spotId: spotId | 0,
             anchor: opts?.heightTiles ? "offset" : "ground",
@@ -299,8 +316,7 @@ export class GfxManager {
         for (let slot = 0; slot < pidsInMap.length; slot++) {
             const pid = pidsInMap[slot] | 0;
             const sid = pe.getServerIdForIndex?.(pid);
-            for (const inst of this.instances.values()) {
-                if (inst.attachPlayerServerId !== (sid | 0)) continue;
+            for (const inst of this.getActorInstances("player", sid | 0)) {
                 if ((inst.startCycle | 0) > nowCycle) continue; // honor start cycle delay
                 out.push({ inst, pid, slot });
             }
