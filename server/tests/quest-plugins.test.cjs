@@ -4996,18 +4996,59 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     doorToggleHooks[0](unlockDoor);
     assert.equal(unlockDoor.handled, false, 'the shared Doors plugin opens the real cached door after the quest unlocks it');
     assert.equal(counts.get(core.ItemIdentifiers.SHADOW_KEY), 0);
+    assert.equal(interact({ player, objectId: portals[4][2], definition: { id: portals[4][2] },
+      location: { x: portals[4][0], y: portals[4][1], z: 0 }, option: 'Use' }), true,
+    'a previously activated portal remains usable after consuming its purple key');
+    assert.equal(prompts.at(-1).title, 'Choose an active Lassar teleporter');
     assert.equal(groundSpawns.filter(([, item]) => item.getId() === core.ItemIdentifiers.BASIC_SHADOW_TORCH_SCHEMATIC).length, 1,
       'the basic torch schematic appears at its cache tile behind the door');
     groundPickupHooks[0]({ player, groundItemId: core.ItemIdentifiers.BASIC_SHADOW_TORCH_SCHEMATIC, location: { x: 2353, y: 6367, z: 0 } });
     assert.equal(attrs.get('desert-treasure-ii:lassar').torchSchematicFound, true);
-    const state = attrs.get('desert-treasure-ii:lassar');
+    let state = attrs.get('desert-treasure-ii:lassar');
     assert.equal(state.teleporters.filter(Boolean).length, 6);
     assert.equal(state.entered, true);
     assert.equal(state.blackstone, true);
     assert.equal(varbits.get(15126), 20, 'the Lassar progress varbit reflects the recovered basic-torch schematic');
     assert.equal(varbits.get(15088), 1, 'the cache palace teleporter varbit follows the per-player activation');
     assert.equal(varbits.get(15090), 1, 'the cache cathedral teleporter varbit follows the per-player activation');
+    counts.set(core.ItemIdentifiers.BASIC_SHADOW_TORCH_SCHEMATIC, 1);
+    interactions.find((entry) => entry.name === 'Ketla').options['Talk-to']({ player, npcId: core.NpcIdentifiers.KETLA });
+    assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-with-a-schematic');
+    actionHooks[0]({ player, stepId: 'tOep7b' });
+    assert.equal(counts.get(core.ItemIdentifiers.BASIC_SHADOW_TORCH_SCHEMATIC), 0);
+    assert.equal(attrs.get('desert-treasure-ii:lassar').torchSchematic, true);
+    assert.equal(interact({ player, objectId: 48247, location: { x: 2645, y: 6440, z: 0 }, option: 'Search' }), true);
+    assert.equal(counts.get(core.ItemIdentifiers.BASIC_SHADOW_TORCH), 1,
+      'after the blocker is already placed, the workbench supplies the next schematic-built device');
+    counts.set(core.ItemIdentifiers.BASIC_SHADOW_TORCH, 0);
+    state = attrs.get('desert-treasure-ii:lassar');
     attrs.set('desert-treasure-ii:lassar', { ...state, inShadow: true, sanity: 100 });
+    counts.set(core.ItemIdentifiers.BASIC_SHADOW_TORCH, 1);
+    const blockedTentacleDoor = { player, objectId: core.ObjectIdentifiers.DOORS_22,
+      location: { x: 2417, y: 6413, z: 0 }, clickType: 1, handled: false };
+    doorToggleHooks[0](blockedTentacleDoor);
+    assert.equal(blockedTentacleDoor.handled, true,
+      'the shared Doors handler prevents a tentacle barrier from opening as an ordinary door');
+    assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.BASIC_SHADOW_TORCH,
+      objectId: core.ObjectIdentifiers.DOORS_22, location: { x: 2417, y: 6413, z: 0 } }), true,
+    'the basic shadow torch burns the cache-backed west residential barrier');
+    assert.equal(attrs.get('desert-treasure-ii:lassar').tentacles['2417,6413'], true);
+    assert.equal(groundSpawns.at(-1)[1].getId(), core.ItemIdentifiers.REVITALISING_IDOL_SCHEMATIC,
+      'burning the west barrier exposes the revitalising idol schematic');
+    assert.equal(groundSpawns.at(-1)[2].getX(), 2676,
+      'the schematic is placed on the reachable tile beside the blocking cache crate');
+    assert.equal(groundSpawns.at(-1)[2].getY(), 6422);
+    attrs.set('desert-treasure-ii:lassar', {
+      ...attrs.get('desert-treasure-ii:lassar'), teleporters: [true, true, true, true, true, true, true], idolPlaced: true,
+    });
+    assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.BASIC_SHADOW_TORCH,
+      objectId: core.ObjectIdentifiers.DOORS_22, location: { x: 2424, y: 6439, z: 0 } }), true,
+    'the eastern residential barrier accepts the torch only after the idol and final teleporter are ready');
+    assert.equal(attrs.get('desert-treasure-ii:lassar').tentacles['2424,6439'], true);
+    assert.equal(groundSpawns.at(-1)[1].getId(), core.ItemIdentifiers.SHADOW_KEY_2,
+      'burning the eastern barrier reveals the blue shadow key');
+    counts.set(core.ItemIdentifiers.BASIC_SHADOW_TORCH, 0);
+    attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), inShadow: true, sanity: 100 });
     playerProcesses[0]({ player });
     assert.equal(attrs.get('desert-treasure-ii:lassar').sanity, 99, 'sanity drains 1 point per shadow tick');
     assert.equal(varbits.get(15064), 99, 'the cache sanity bar stays in sync with shadow time');

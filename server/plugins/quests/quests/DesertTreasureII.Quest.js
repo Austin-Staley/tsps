@@ -4735,6 +4735,43 @@ module.exports = function registerDesertTreasureII(api) {
   function handleItemOnObject(event) {
     const { player: p, itemId, objectId, location } = event;
     const lassar = p.getAttribute(LASSAR) ?? {};
+    const lassarX = location?.getX?.() ?? location?.x;
+    const lassarY = location?.getY?.() ?? location?.y;
+    const lassarShadowBarrier = (lassarX === 2417 && lassarY === 6413)
+      || (lassarX === 2424 && lassarY === 6439);
+    if (stage(p) === S.WHISPERER && lassar.inShadow && lassarShadowBarrier
+      && [O.DOORS_21, O.DOORS_22, O.TENTACLE_4, O.TENTACLE_5, O.TENTACLE_6, O.TENTACLE_7].includes(objectId)
+      && itemId === I.BASIC_SHADOW_TORCH) {
+      event.handled = true;
+      const key = `${lassarX},${lassarY}`;
+      if (!has(p, I.BASIC_SHADOW_TORCH)) {
+        p.sendMessage("The tentacles only yield to the cleansing flame of the basic shadow torch.");
+        return true;
+      }
+      if (lassarX === 2417 && !lassar.blockerPlaced) {
+        p.sendMessage("Place the shadow blocker beside the furnace-house doors before burning the tentacles.");
+        return true;
+      }
+      if (lassarX === 2424 && (!(lassar.teleporters ?? [])[6] || !lassar.idolPlaced || !lassar.tentacles?.["2417,6413"])) {
+        p.sendMessage("The eastern tentacle path is sealed until the idol is placed beside its teleporter and the western tentacles are burned.");
+        return true;
+      }
+      if (lassar.tentacles?.[key]) {
+        p.sendMessage("The shadow tentacles have already been burned away.");
+        return true;
+      }
+      const tentacles = { ...(lassar.tentacles ?? {}), [key]: true };
+      setLassar(p, { ...lassar, tentacles });
+      if (lassarX === 2417) {
+        // shortcut: the Wiki/QuestHelper marker overlaps a blocking cache crate at 2677,6422.
+        registerLassarGroundItem(p, I.REVITALISING_IDOL_SCHEMATIC, 2676, 6422);
+        p.sendMessage("The shadow tentacles recoil from the torch. The newly accessible residential house contains a revitalising idol schematic.");
+      } else {
+        if (!has(p, I.SHADOW_KEY_2)) registerLassarGroundItem(p, I.SHADOW_KEY_2, 2416, 6443);
+        p.sendMessage("The second tentacle barrier burns away, revealing the blue shadow key beyond it.");
+      }
+      return true;
+    }
     if (stage(p) === S.WHISPERER && lassar.inShadow && itemId === I.SHADOW_BLOCKER
       && location?.x === 2649 && location?.y === 6406) {
       event.handled = true;
@@ -6251,7 +6288,8 @@ module.exports = function registerDesertTreasureII(api) {
     if (teleporter && (option === "activate" || option === "travel" || option === "use" || option === "")) {
       const portalIndex = LASSAR_TELEPORTERS.indexOf(teleporter);
       const active = [...(state.teleporters ?? [])];
-      const available = portalIndex < 3 || (state.blockerSchematic && state.greenKey && state.purpleKey)
+      const available = portalIndex < 3 || active[portalIndex]
+        || (state.blockerSchematic && state.greenKey && (state.purpleKey || state.doorUnlocked))
         || (portalIndex === 6 && state.idolPlaced && state.basicTorch);
       if (!available) { p.sendMessage("This teleporter is still beyond a sealed district. Follow the Lassar devices and shadow keys first."); return true; }
       if (active[portalIndex]) {
@@ -6349,7 +6387,7 @@ module.exports = function registerDesertTreasureII(api) {
     if (x === 2645 && y >= 6438 && y <= 6442 && [LASSAR_KETLA_WORKBENCH, 48163, 49486].includes(visibleId)
       && (option === "search" || option === "make" || option === "operate")) {
       if (!state.ketlaBriefed) { p.sendMessage("Talk to Ketla and give her the appropriate schematic first."); return true; }
-      if (state.blockerDesigned && !has(p, I.SHADOW_BLOCKER)) {
+      if (state.blockerDesigned && !state.blockerPlaced && !has(p, I.SHADOW_BLOCKER)) {
         p.getInventory().adds(I.SHADOW_BLOCKER, 1);
         setLassar(p, { ...state, blocker: true });
         p.sendMessage("You take the shadow blocker Ketla assembled from her workbench.");
@@ -6428,6 +6466,14 @@ module.exports = function registerDesertTreasureII(api) {
     const location = event?.location;
     const x = location?.getX?.() ?? location?.x;
     const y = location?.getY?.() ?? location?.y;
+    const barrier = (x === 2417 && y === 6413) || (x === 2424 && y === 6439);
+    if (stage(p) === S.WHISPERER && state.inShadow && barrier
+      && [O.DOORS_21, O.DOORS_22].includes(event.objectId) && event.clickType === 1
+      && !state.tentacles?.[`${x},${y}`]) {
+      p.sendMessage("Shadow tentacles cover the doors. Use the basic shadow torch on them.");
+      event.handled = true;
+      return;
+    }
     if (stage(p) !== S.WHISPERER || !state.inShadow || !location
       || x !== 2350 || y !== 6360 || event.objectId !== 48289
       || event.clickType !== 1) return;
@@ -6497,6 +6543,10 @@ module.exports = function registerDesertTreasureII(api) {
     if (state.greenKey && !state.purpleKey && !has(p, I.SHADOW_KEY)) {
       registerLassarGroundItem(p, I.SHADOW_KEY, 2592, 6352);
     }
+    // shortcut: place the schematic beside its Wiki marker because the marked tile is occupied by a cache crate.
+    if (state.tentacles?.["2417,6413"] && !state.idolSchematic && !has(p, I.REVITALISING_IDOL_SCHEMATIC)) {
+      registerLassarGroundItem(p, I.REVITALISING_IDOL_SCHEMATIC, 2676, 6422);
+    }
   }
 
   function handleLassarGroundItemPickup(event) {
@@ -6518,7 +6568,7 @@ module.exports = function registerDesertTreasureII(api) {
     const purpleShadowKey = groundItemId === I.SHADOW_KEY;
     const firstThree = state.entered && (state.teleporters ?? []).slice(0, 3).every(Boolean);
     const accessible = basicTorchSchematic ? x === 2353 && y === 6367 && state.doorUnlocked && state.inShadow
-      : idolSchematic ? x === 2677 && y === 6422 && state.tentacles?.["2417,6413"]
+      : idolSchematic ? x === 2676 && y === 6422 && state.tentacles?.["2417,6413"]
         : blueKey ? x === 2416 && y === 6443 && state.tentacles?.["2424,6439"] && state.inShadow
           : redKey ? x === 2638 && y === 6405 && state.redKeyFound
       : blockerSchematic ? x === 2591 && y === 6380 && firstThree
