@@ -2492,7 +2492,7 @@ test('Desert Treasure II descends into the copied Elder Vault, chains all four w
     get: (target, prop) => prop === 'core' ? core
       : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
         : prop === 'onNpcDeath' ? (handler) => deaths.push(handler)
-          : prop === 'onObjectInteraction' ? (handler) => objects.push(handler)
+          : prop === 'onObjectInteraction' ? (handler) => typeof handler === 'function' && objects.push(handler)
           : prop === 'onCustomEvent' ? (name, handler) => actions.set(name, handler)
             : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
   });
@@ -3585,7 +3585,7 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   };
   const api = new Proxy(base, {
     get: (target, prop) => prop === 'core' ? core
-      : prop === 'onObjectInteraction' ? (handler) => objects.push(handler)
+      : prop === 'onObjectInteraction' ? (handler) => typeof handler === 'function' && objects.push(handler)
         : prop === 'onItemOnItem' ? (handler) => itemItems.push(handler)
           : prop === 'onItemOnObject' ? (handler) => itemObjects.push(handler)
             : prop === 'onItemOnNpc' ? (handler) => itemNpcs.push(handler)
