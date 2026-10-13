@@ -8068,7 +8068,9 @@ test('Song of the Elves gives the real stackable explosive potion with one free 
   const runtime = require('../plugins/quests/QuestRuntime');
   const originalStartTranscript = runtime.startTranscript;
   let supplySteps;
+  const playedVariants = [];
   runtime.startTranscript = (_api, _player, _npc, _page, variant, select) => {
+    playedVariants.push(variant);
     if (variant === 'preparations-at-the-dwarf-camp-talking-to-elena-after-talking-to-baxtorian') {
       const raw = require('../data/definitions/npc-dialogues.json')['Song of the Elves'].variants[variant];
       supplySteps = select(raw);
@@ -8141,6 +8143,13 @@ test('Song of the Elves gives the real stackable explosive potion with one free 
   });
   assert.equal(attributes.get('quest.song_of_the_elves.camp-defense'), undefined,
     'the four-minute timer and attackers wait while the meeting plays');
+  assert.equal(playedVariants.includes('sealing-the-underground-pass-meeting-with-lord-iorwerth'), false,
+    'the choice must finish its Baxtorian branch before opening the next conversation');
+  const departure = { player, text: 'Then we will leave at once.' };
+  handlers.custom.get('npc-dialogue:line').find(h => h.name === 'finishCampMeetingLine')(departure);
+  assert.equal(typeof departure.after, 'function');
+  departure.after();
+  assert.ok(playedVariants.includes('sealing-the-underground-pass-meeting-with-lord-iorwerth'));
   const finalLine = { player, text: 'As am I.' };
   handlers.custom.get('npc-dialogue:line').find(h => h.name === 'finishCampMeetingLine')(finalLine);
   assert.equal(attributes.get('quest.song_of_the_elves.camp-defense'), undefined,

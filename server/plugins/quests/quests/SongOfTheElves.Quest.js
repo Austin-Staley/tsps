@@ -1981,14 +1981,13 @@ module.exports = function registerSongOfTheElves(api) {
       const player = event.player;
       const area = ensureDwarvenCamp(player);
       const holes = Number(player.getAttribute(CAMP_HOLES)) || 0;
-      if (holes < 7) {
+      if (holes !== 127) {
         player.sendMessage(`The dwarves are not ready. You have filled ${holes} of the seven explosive holes.`);
         return;
       }
       spawnCampNpc(area, NpcIdentifiers.LORD_IORWERTH_2, 2448, 6110);
       const state = campInstances.get(area);
       if (state) state.meetingPending = true;
-      startTranscript(api, player, NpcIdentifiers.LORD_IORWERTH_2, PAGE, "sealing-the-underground-pass-meeting-with-lord-iorwerth");
       return;
     }
     if (event.option === "Climb through it." && [3, 4, 5, 6].includes(currentChapter(event.player))) {
@@ -2684,7 +2683,16 @@ module.exports = function registerSongOfTheElves(api) {
     const player = event?.player;
     const area = player?.getArea?.();
     const state = area && campInstances.get(area);
-    if (!state?.meetingPending || currentChapter(player) !== 18 || event.text !== "As am I.") return;
+    if (!state?.meetingPending || currentChapter(player) !== 18) return;
+    if (event.text === "Then we will leave at once.") {
+      event.after = () => {
+        if (state.meetingPending && player.getArea?.() === area && currentChapter(player) === 18) {
+          startTranscript(api, player, NpcIdentifiers.LORD_IORWERTH_2, PAGE, "sealing-the-underground-pass-meeting-with-lord-iorwerth");
+        }
+      };
+      return;
+    }
+    if (event.text !== "As am I.") return;
     event.after = () => {
       if (!state.meetingPending || player.getArea?.() !== area || currentChapter(player) !== 18) return;
       state.meetingPending = false;
