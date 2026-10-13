@@ -15527,15 +15527,20 @@ test('Song of the Elves confirms the Iorwerth cave entry before spawning guards 
       ['quest.song_of_the_elves.recruited-elders', 3],
     ]);
     let area = null, location = new api.core.Location(2200, 3262, 0);
+    const inventory = { getAmount: () => 0, getFreeSlots: () => 4 };
     const player = { index: 1, isPlayer: () => true, isNpc: () => false, getAsPlayer() { return this; },
       getIndex() { return this.index; }, getArea: () => area, setArea: next => { area = next; },
       getLocation: () => location, moveTo: next => { location = next; }, getUsername: () => 'SoteOrbCaveTest',
       getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
-      sendMessage() {}, getInventory: () => ({ getAmount: () => 0, getFreeSlots: () => 4 }) };
+      sendMessage() {}, getInventory: () => inventory };
     const enter = handlers.objects.find(handler => handler.name === 'enterOrbSupplyCave');
     assert.ok(enter);
     const entry = { player, objectId: api.core.ObjectIdentifiers.CAVE_69,
       definition: { getName: () => 'Cave' }, location: { x: 2200, y: 3262, z: 0 } };
+    assert.equal(enter(entry), false, 'elders alone do not open the cave before the Ysgawyn meeting ends');
+    const action = handlers.custom.get('npc-dialogue:action').find(handler => handler.name === 'onAction');
+    action({ player, kind: 'message', stepId: 'zc7ehX' });
+    assert.equal(attrs.get('quest.song_of_the_elves.ysgawyn-return-meeting'), true);
     assert.equal(enter(entry), true);
     assert.equal(spawned.length, 0, 'the warning prompt must precede creating the private cave or its guards');
     assert.equal(transcripts.at(-1)[4], 'recovering-the-orb-entering-the-iorwerth-camp-s-supply-cave');
@@ -15566,6 +15571,32 @@ test('Song of the Elves confirms the Iorwerth cave entry before spawning guards 
   } finally {
     runtime.startTranscript = original;
   }
+});
+
+test('Song of the Elves remembers Elena’s earlier answer and fills the cave dialogue name', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const attrs = new Map([['quest.song_of_the_elves.stage', 90]]);
+  const player = { getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getUsername: () => 'SoteTest' };
+  const choice = handlers.custom.get('npc-dialogue:choice').find(handler => handler.name === 'handleDialogueChoice');
+  const definition = { getName: () => 'Elena' };
+  const condition = handlers.condition.at(-1);
+  const pages = [{ page: 'Song of the Elves' }];
+  choice({ player, definition, option: 'Maybe later.' });
+  assert.equal(condition({ player, pages, stepId: 'KmA1ih' }), false);
+  assert.equal(condition({ player, pages, stepId: 'SGwqUW' }), true);
+  attrs.set('quest.song_of_the_elves.stage', 90);
+  choice({ player, definition, option: 'Go ahead.' });
+  choice({ player, definition, option: 'I care about helping people.' });
+  assert.equal(condition({ player, pages, stepId: 'KmA1ih' }), true);
+  assert.equal(condition({ player, pages, stepId: 'SGwqUW' }), false);
+  attrs.set('quest.song_of_the_elves.stage', 150);
+  attrs.set('song-of-the-elves:orb-cave-entry-pending', true);
+  const fillName = handlers.custom.get('npc-dialogue:line').find(handler => handler.name === 'fillOrbCavePlayerName');
+  const line = { player, text: 'Is [Tim/Sue/Sam] here, [Tim/Sue/Sam]?' };
+  fillName(line);
+  assert.equal(line.text, 'Is SoteTest here, SoteTest?');
 });
 
 test('Song of the Elves uses all six real waterfall pillars, reading, clue retries and the awakened Baxtorian',()=>{

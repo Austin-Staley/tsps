@@ -114,6 +114,8 @@ module.exports = function registerSongOfTheElves(api) {
   const FRAGMENT_DEFEATED = "quest.song_of_the_elves.fragment-defeated";
   const ORB_CAVE_AREA = "quest.song_of_the_elves.orb-cave-area";
   const ORB_CAVE_ENTRY_PENDING = "song-of-the-elves:orb-cave-entry-pending";
+  const YSGAWYN_RETURN_MEETING = "quest.song_of_the_elves.ysgawyn-return-meeting";
+  const ELENA_PRE_MEETING_RESPONSE = "quest.song_of_the_elves.elena-pre-meeting-response";
   const CAMP_AREA = "quest.song_of_the_elves.camp-area";
   const CAMP_HOLES = "quest.song_of_the_elves.camp-holes";
   const CAMP_EXPLOSIVES = "quest.song_of_the_elves.camp-explosives";
@@ -775,6 +777,9 @@ module.exports = function registerSongOfTheElves(api) {
     if (handlePreparationAction(event)) return;
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
+    if (event.kind === "message" && event.stepId === "zc7ehX" && currentChapter(player) === 14) {
+      player.setAttribute(YSGAWYN_RETURN_MEETING, true);
+    }
     if (inLibrary(player) && event.action === "open_interface" && event.target === "An") {
       event.handled = true;
       const { CountdownTask, TaskManager } = api.core;
@@ -1829,6 +1834,15 @@ module.exports = function registerSongOfTheElves(api) {
   function handleDialogueChoice(event) {
     if (!event?.player) return;
     const player = event.player;
+    const npcName = String(event.definition?.getName?.() ?? "").toLowerCase();
+    if (currentChapter(player) === 8 && npcName === "elena") {
+      if (event.option === "Go ahead.") player.setAttribute(ELENA_PRE_MEETING_RESPONSE, "asked");
+      else if (event.option === "Maybe later.") player.setAttribute(ELENA_PRE_MEETING_RESPONSE, "later");
+      else if (player.getAttribute(ELENA_PRE_MEETING_RESPONSE) === "asked" && [
+        "I care about helping people.", "People reward me for helping them.",
+        "I need to fix my mistakes.", "It's my duty to help people.", "I don't know.",
+      ].includes(event.option)) player.setAttribute(ELENA_PRE_MEETING_RESPONSE, "full");
+    }
     if (player.getAttribute(ORB_CAVE_ENTRY_PENDING) === true && currentChapter(player) === 14 &&
       event.npcId === NpcIdentifiers.IORWERTH_WARRIOR_9) {
       if (event.option === "No.") {
@@ -2319,6 +2333,7 @@ module.exports = function registerSongOfTheElves(api) {
     const y = event?.location?.y ?? event?.location?.getY?.();
     if (!player || quest.isComplete(player) || currentChapter(player) !== 14 ||
       (Number(player.getAttribute(RECRUITED_ELDERS)) & 3) !== 3 ||
+      !hasYsgawynReturnMeeting(player) ||
       x !== 2200 || y !== 3262 || !(event.objectId === ObjectIdentifiers.CAVE_69 || name === "cave")) return false;
     event.handled = true;
     player.setAttribute(ORB_CAVE_ENTRY_PENDING, true);
@@ -2351,6 +2366,39 @@ module.exports = function registerSongOfTheElves(api) {
     }
     area.enter(player);
     player.moveTo(new Location(2198, 9677, 0));
+  }
+
+  function hasYsgawynReturnMeeting(player) {
+    if (player.getAttribute(YSGAWYN_RETURN_MEETING) === true) return true;
+    // Older legitimate saves do not carry the new checkpoint. An Orb in the
+    // player's inventory or a started trail proves the return meeting passed.
+    const hasOrb = player.getInventory?.()?.getAmount(ItemIdentifiers.ORB_OF_LIGHT_5) > 0;
+    const trailStarted = player.getAttribute(YSGAWYN_TRACK_STEP) != null;
+    if (hasOrb || trailStarted) {
+      player.setAttribute(YSGAWYN_RETURN_MEETING, true);
+      return true;
+    }
+    return false;
+  }
+
+  function fillOrbCavePlayerName(event) {
+    if (!event?.player || typeof event.text !== "string" || !event.text.includes("[Tim/Sue/Sam]") ||
+      currentChapter(event.player) !== 14 ||
+      (event.player.getAttribute(ORB_CAVE_ENTRY_PENDING) !== true && !(event.player.getArea?.() instanceof OrbSupplyArea))) return;
+    event.text = event.text.replaceAll("[Tim/Sue/Sam]", String(event.player.getUsername?.() ?? "adventurer"));
+  }
+
+  function elenaPreMeetingCondition(event) {
+    if (!event?.player || !["KmA1ih", "SGwqUW"].includes(event.stepId) ||
+      !event.pages?.some((page) => page.page === PAGE)) return null;
+    const response = event.player.getAttribute(ELENA_PRE_MEETING_RESPONSE);
+    if (event.stepId === "KmA1ih") return response !== "later";
+    if (event.stepId === "SGwqUW") return response === "later";
+    return null;
+  }
+
+  function syncYsgawynReturnMeeting({ player }) {
+    if (player && currentChapter(player) === 14) hasYsgawynReturnMeeting(player);
   }
 
   function startOrbCaveAmbush(event) {
@@ -3896,6 +3944,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onNpcDialogueCondition(preparationCondition);
   api.onPlayerLogin(syncPreparationLogin);
   api.onPlayerLogin(syncLibraryLogin);
+  api.onPlayerLogin(syncYsgawynReturnMeeting);
   api.onItemOnObject(useTrahaearnCrevice, {noted:false});
   api.onObjectInteraction("Blocked Crevice", {Inspect:useTrahaearnCrevice,Mine:useTrahaearnCrevice});
   api.onObjectInteraction("Crevice", {Enter:useTrahaearnCrevice});
@@ -3927,6 +3976,8 @@ module.exports = function registerSongOfTheElves(api) {
   api.onPlayerLogout(onPlayerLogout);
   api.onNpcDialogueCondition((event) => {
     if (!event?.player) return null;
+    const elenaResponse = elenaPreMeetingCondition(event);
+    if (elenaResponse !== null) return elenaResponse;
     const answer = disguiseCondition(event);
     if (answer !== null) return answer;
     const incitement = recordIncitement(event);
@@ -3948,6 +3999,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onCustomEvent("npc-dialogue:line", finishDisguiseBriefing);
   api.onCustomEvent("npc-dialogue:line", finishWarEndArianwynLine);
   api.onCustomEvent("npc-dialogue:line", startOrbCaveAmbush);
+  api.onCustomEvent("npc-dialogue:line", fillOrbCavePlayerName);
   api.onCustomEvent("npc-dialogue:line", finishEarlyStoryLine);
   api.onCustomEvent("npc-dialogue:line", handleLletyaConfrontationLine);
   api.onCustomEvent("world:object-examine", examineLletyaChild);
@@ -3985,6 +4037,8 @@ module.exports = function registerSongOfTheElves(api) {
   api.persistAttribute(CRWYS_CLUE_HEARD);
   api.persistAttribute(HEFIN_CLUE_HEARD);
   api.persistAttribute(YSGAWYN_TRACK_STEP);
+  api.persistAttribute(YSGAWYN_RETURN_MEETING);
+  api.persistAttribute(ELENA_PRE_MEETING_RESPONSE);
   api.persistAttribute(FALLS_PILLARS);
   api.persistAttribute(FALLS_ORDER);
   api.persistAttribute(INCITEMENTS);
