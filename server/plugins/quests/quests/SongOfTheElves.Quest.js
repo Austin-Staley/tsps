@@ -2554,6 +2554,13 @@ module.exports = function registerSongOfTheElves(api) {
     // shortcut: Wiki route with cache-clear arrivals; animation timing awaits an OSRS capture.
     player.moveTo(new Location(2512,3480,0));player.sendMessage("The log raft breaks up, leaving you on Hudon's island.");return true;
   }
+  function routeFallsDoors(event) {
+    const player=event?.player,loc=event?.object?.getLocation?.();
+    if(!player || ![10,11].includes(currentChapter(player)) || event.objectId!==ObjectIdentifiers.DOOR_48 || loc?.getZ()!==0)return;
+    if(loc.getX()===2568 && loc.getY()===9893)event.destination={x:2568,y:player.getLocation().getY()<=9893?9892:9894,z:0};
+    if(loc.getX()===2566 && loc.getY()===9901)event.destination={x:2566,y:9900,z:0};
+    if(loc.getX()===2604 && loc.getY()===9900)event.destination={x:2604,y:9902,z:0};
+  }
   function routeFallsRope(event) {
     const player=event?.player,loc=event?.object?.getLocation?.(),from=event?.sourceLocation;
     if (!player || currentChapter(player)!==10 || !loc || from?.z!==0)return;
@@ -2587,7 +2594,13 @@ module.exports = function registerSongOfTheElves(api) {
       event.handled=true;player.moveTo(new Location(2604,9902,0));return;
     }
     if(!player || currentChapter(player)!==10 || loc?.z!==0 || ![[2568,9893],[2566,9901]].some(([x,y])=>loc.x===x&&loc.y===y))return;
-    if(player.getInventory().getAmount(FALLS_KEY)>0)return;
+    if(player.getInventory().getAmount(FALLS_KEY)>0) {
+      // These scripted key doors have no Close variant in the cache door catalog.
+      if(loc.x===2568 && loc.y===9893) {
+        event.handled=true;player.moveTo(new Location(2568,player.getLocation().getY()<=9893?9894:9892,0));
+      }
+      return;
+    }
     event.handled=true;player.sendMessage("The waterfall door is locked. Search the eastern chamber's crate for its key.");
   }
 
@@ -3616,6 +3629,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onCustomEvent("door:toggle", guardFallsDoors);
   api.onObjectInteraction("Log raft", { Board: boardFallsRaft });
   api.onObjectRoute(routeFallsRope);
+  api.onObjectRoute(routeFallsDoors);
   api.onItemOnObject("Rope", "Rock", useFallsRope, {noted:false});
   api.onItemOnObject("Rope", "Dead Tree", useFallsRope, {noted:false});
   api.persistAttribute(LATE_CHAPTER);
