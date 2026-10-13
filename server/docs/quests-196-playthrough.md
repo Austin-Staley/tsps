@@ -92,3 +92,16 @@ Meilyr's full nineteen placements, both actual floating-book crossings and compl
 Blood Moon's actual larder/kitchen chain now earns the broken pipe, knife, plunger, tongs, needle, empty/full syringe and Left crest. Its recorded Kitchen→Gallery Hall→lobby links and Veliaf's Gallery Hall spawn are integrated. The castle route beyond this point remains in progress.
 
 Integrated validation at b7c13279 passes all882 checks across26 selected suites, including the new nine-memory replay regression and latest recorded castle routes.
+
+
+### Complete fresh library and Duke statue handoff
+
+The original Soteearlyqa actor has now completed all eight clan-seal puzzles (148 actual placements in total), the Forgotten seal and every full memory. Hefin20, Trahaearn23 and Iorwerth32 were played with normal dispenser supplies, stairs, direction choices and the actual floating-book crossings. Native9016 reaches110; logout saves the completed library without target-stage or quest-item grants. The fresh post-library meeting and middle chapters continue next. A separate disclosed post-library component is checking those chapters in parallel and does not replace the original actor's route.
+
+The integrated MCP vision tool rendered a separate visual clone of the earned save; the successful screenshot was inspected at `exports/quests-196-library/screenshots/t0001483-earned-library-snapshot-credential-matched.png`. The first attempt used a mismatched QA credential and captured the login error only; it is not gameplay evidence. The successful clone preserves the original quest state and is visual coverage only.
+
+The exact earned Duke post-chest snapshot clone now uses one disclosed ordinary Nardah scroll fixture through its actual Teleport action, walks to and enters the Ancient Vault, and uses the earned Sucellus medallion on the real statue. The medallion is consumed and native14862 changes68→76. Logout/relog preserves76 and no medallion; the vault login returns to its public entrance while retaining quest progression. The final WGS/RFD/Night review finds no additional dialogue/item/reward blocker in the checked paths. Existing inferred Theatre scaling/path limits remain marked in source.
+
+Whisperer continuation has picked up the actual blue key, consumed it at the pub gate, reopened the paired gate without another key, recovered/taken the actual superior-torch schematic after relog and handed it to Ketla through her full dialogue. The integrated gate uses the shared door event before normal door swinging. Blood Moon has defeated the next345HP basement Venator, placed all four armoury weapons, earned the right crest and combined the Full crest; its subsequent fireplace route and further castle chapters remain in progress.
+
+Integrated validation at2efb2a67 passes all887 checks across26 selected server suites. Source changes since the prior882 checkpoint include retained camp native progress, Castle actor/storage/armoury fixes, Lassar gate and schematic recovery, and Nardah scroll support.
