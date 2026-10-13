@@ -13,5 +13,6 @@ module.exports = {
     require("./deathsoffice/Death.DeathsOffice").attach(api);
     require("./deathsoffice/Retrieval.DeathsOffice").attach(api);
     require("./deathsoffice/Coffer.DeathsOffice").attach(api);
+    require("./deathsoffice/Tutorial.DeathsOffice").attach(api);
   },
 };

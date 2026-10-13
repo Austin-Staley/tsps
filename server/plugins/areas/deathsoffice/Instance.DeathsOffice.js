@@ -28,6 +28,7 @@ const DROP_QUESTION = "Are you sure you want to put that down here?<br>If you le
 const sessions = new Map();
 let OfficeClass = null;
 let greet = () => {};
+let leaving = () => {};
 
 function officeClass() {
   if (OfficeClass) return OfficeClass;
@@ -110,7 +111,10 @@ class Session {
     if (this.ended) return;
     this.ended = true;
     sessions.delete(this.player);
-    if (left) this.player.setAttribute(INSIDE_ATTRIBUTE, null);
+    if (left) {
+      this.player.setAttribute(INSIDE_ATTRIBUTE, null);
+      leaving(this.player);
+    }
     if (!this.area.isDestroyed()) this.area.destroy();
   }
 }
@@ -238,6 +242,11 @@ function onGreet(handler) {
   greet = handler;
 }
 
+/** Leaving the office by any route but logging out (the tutorial's timer starts then). */
+function onLeave(handler) {
+  leaving = handler;
+}
+
 function attach(api) {
   Common.bind(api);
   api.persistAttribute(INSIDE_ATTRIBUTE);
@@ -245,4 +254,4 @@ function attach(api) {
   api.onItemDropPolicy(dropItem);
 }
 
-module.exports = { attach, enter, leave, approachDesk, throughPortal, inOffice, deathOf, tileOf, onGreet };
+module.exports = { attach, enter, leave, approachDesk, throughPortal, inOffice, deathOf, tileOf, onGreet, onLeave };
