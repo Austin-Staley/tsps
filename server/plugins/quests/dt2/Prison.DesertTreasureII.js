@@ -136,7 +136,7 @@ module.exports = function registerSucellusPrison(api) {
     api.sendMultiChatboxPrompt(player, `Pick the prison lock: tumbler ${index + 1} of 6`, ...pairs);
   }
 
-  function handleItemOnObject(event) {
+  function handlePrisonItemOnObject(event) {
     const { player, itemId, objectId: rawObjectId, location } = event;
     const area = player?.getAttribute(AREA);
     if (!player?.getAttribute(ESCAPED) || !atArea(player, area)) return false;
@@ -264,7 +264,7 @@ module.exports = function registerSucellusPrison(api) {
     return true;
   }
 
-  function handleDialogueAction(event) {
+  function handlePrisonDialogueAction(event) {
     const { player, stepId, npcId } = event;
     const area = player?.getAttribute(AREA);
     if (!player?.getAttribute(ESCAPED) || !atArea(player, area) || ![N.ASSASSIN_7, N.ASSASSIN_8].includes(npcId)) return false;
@@ -285,7 +285,7 @@ module.exports = function registerSucellusPrison(api) {
     return false;
   }
 
-  function handleObject(event) {
+  function handlePrisonObject(event) {
     const { player } = event;
     const area = player?.getAttribute(AREA);
     if (!player?.getAttribute(ESCAPED) || !atArea(player, area)) return false;
@@ -516,21 +516,14 @@ module.exports = function registerSucellusPrison(api) {
     return true;
   }
   api.onNpcInteraction("Jhallan", { "Talk-to": talkJhallan });
-  api.onObjectInteraction(handleObject);
-  api.onItemOnObject(handleItemOnObject, { noted: false });
-  api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
+  api.onObjectInteraction(handlePrisonObject);
+  api.onItemOnObject(handlePrisonItemOnObject, { noted: false });
+  api.onCustomEvent("npc-dialogue:action", handlePrisonDialogueAction);
   function readClue(event, itemId, bit, message) {
     if (!event.player?.getAttribute(ESCAPED) || !has(event.player, itemId)) return false;
     event.handled = true;
     event.player.setAttribute(CLUES_READ, (Number(event.player.getAttribute(CLUES_READ)) || 0) | bit);
     event.player.sendMessage(message);
-    return true;
-  }
-  function readPrisonersLetter(event) {
-    if (!event.player?.getAttribute(ENTERED) || !has(event.player, I.PRISONERS_LETTER)) return false;
-    event.handled = true;
-    event.player.setAttribute("desert-treasure-ii:sucellus-prison-letter-read", true);
-    event.player.sendMessage("The letter warns that a knife and lockpick were hidden in the prison cell.");
     return true;
   }
   function readWarningLetter(event) { return readClue(event, I.WARNING_LETTER, 1, "The warning letter gives the sapphire chest combination: 214013."); }
@@ -551,14 +544,13 @@ module.exports = function registerSucellusPrison(api) {
     event.lines = journal(state(event.player));
     return true;
   }
-  function handleDialogueLine(event) {
+  function handlePrisonDialogueLine(event) {
     const area = event.player?.getAttribute(AREA);
     if (event.npcId !== N.ASSASSIN_7 || event.text !== "Now, once again, let's get this cell open."
       || !event.player?.getAttribute(ESCAPED) || !atArea(event.player, area) || state(event.player) !== 40) return false;
     event.after = () => setState(event.player, 46);
     return true;
   }
-  api.onItemAction("Prisoner's letter", { Read: readPrisonersLetter });
   api.onItemAction("Warning letter", { Read: readWarningLetter });
   api.onItemAction("Requisition note", { Read: readRequisitionNote });
   api.onItemAction("Grid note", { Read: readGridNote });
@@ -566,5 +558,5 @@ module.exports = function registerSucellusPrison(api) {
   api.onItemAction("Library note", { Read: readLibraryNote });
   api.onItemAction("Strange slider", { Inspect: inspectStrangeSlider });
   api.onCustomEvent("dt2:sucellus-prison-journal", handleJournal);
-  api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
+  api.onCustomEvent("npc-dialogue:line", handlePrisonDialogueLine);
 };

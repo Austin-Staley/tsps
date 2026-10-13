@@ -135,7 +135,7 @@ test("Sucellus prison gates require the lockpick and sapphire key is earned thro
   assert.deepEqual(openedObjects, [padlock], "opening the gate removes the blocking private-instance object");
 
   handlers.object({ player, objectId: 50001, option: "Search", location: instanceLocation(2975, 6347, 2), definition: { name: "Altar" }, handled: false });
-  handlers.item[1][1].Read({ player, itemId: 28429, handled: false });
+  handlers.item.find(([name]) => name === "Warning letter")[1].Read({ player, itemId: 28429, handled: false });
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-clues-read"), 1);
 
   handlers.object({ player, objectId: 50000, option: "Open", location: instanceLocation(2980, 6346, 2), handled: false });

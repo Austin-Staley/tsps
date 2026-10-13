@@ -1666,7 +1666,7 @@ test('Desert Treasure II requires and solves the real eight-cell golem grid', ()
     attrs.set('desert-treasure-ii:war-room', {
       getBaseX: () => 8192, getBaseY: () => 1600, isDestroyed: () => false,
     });
-    const crate = () => objectInteractions[0]({player, objectId: O.CRATE_302, location:{x:8212,y:1616,z:0}, option:'Search'});
+    const crate = () => objectInteractions.find(h => h.name === 'handleObjectInteraction')({player, objectId: O.CRATE_302, location:{x:8212,y:1616,z:0}, option:'Search'});
     attrs.set('desert-treasure-ii:totems-charged', false);
     crate();
     assert.equal(counts.get(I.UNCHARGED_CELL_2), undefined, 'a full bag cannot lose the cells permanently');
@@ -1737,12 +1737,12 @@ test('Desert Treasure II requires and solves the real eight-cell golem grid', ()
     assert.ok(player.syntaxAction);
     const previousTranscripts = searches.length;
     for (const term of ['Vardorvis', 'Perseriya', 'Sucellus', 'Whisperer']) {
-      objectInteractions[0]({ player, objectId: O.GOLEM, location: golem, option: 'Operate' });
+      objectInteractions.find(h => h.name === 'handleObjectInteraction')({ player, objectId: O.GOLEM, location: golem, option: 'Operate' });
       player.syntaxAction.execute(term);
     }
     assert.equal(attrs.get('desert-treasure-ii:searched-names'), 15);
     assert.equal(searches.length - previousTranscripts, 4, 'each search must display its canonical NPC dialogue');
-    objectInteractions[0]({ player, objectId: O.GOLEM, location: golem, option: 'Operate' });
+    objectInteractions.find(h => h.name === 'handleObjectInteraction')({ player, objectId: O.GOLEM, location: golem, option: 'Operate' });
     player.syntaxAction.execute('Vardorvis');
     assert.equal(searches.length - previousTranscripts, 5, 'known reports can be read again after relog');
     assert.equal(attrs.get('desert-treasure-ii:searched-names'), 15);
@@ -1805,7 +1805,7 @@ test('Desert Treasure II starts the Vardorvis trail through Elissa, Barus, the b
     handlers.custom.get('npc-dialogue:line').forEach(h => h(barus));
     barus.after();
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 2);
-    const desk = () => objectInteractions[0]({ player, objectId: 49490, location: { x: 1781, y: 3619, z: 0 } });
+    const desk = () => objectInteractions.find(h => h.name === 'handleObjectInteraction')({ player, objectId: 49490, location: { x: 1781, y: 3619, z: 0 } });
     freeSlots = 1;
     assert.equal(desk(), true);
     assert.equal(counts.size, 0, 'a full bag cannot lose either desk item');
@@ -1823,14 +1823,14 @@ test('Desert Treasure II starts the Vardorvis trail through Elissa, Barus, the b
     const spawns = require('../data/definitions/npc-spawns.json');
     assert.ok(spawns.some(n => n.id === api.core.NpcIdentifiers.BARUS && n.x === 1460 && n.y === 3780));
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 3);
-    assert.equal(itemActions[0]({ player, itemId: potionId, option: 'Drink' }), true);
+    assert.equal(itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: potionId, option: 'Drink' }), true);
     assert.equal(counts.get(potionId), 1, 'the potion cannot be used before reading the note');
-    itemActions[0]({ player, itemId: noteId, option: 'Read' });
+    itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: noteId, option: 'Read' });
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 4);
-    itemActions[0]({ player, itemId: potionId, option: 'Drink' });
+    itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: potionId, option: 'Drink' });
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 5);
     assert.equal(counts.get(potionId), 0);
-    const boat = objectInteractions[0]({ player, objectId: 49491, location: { x: 1227, y: 3469, z: 0 } });
+    const boat = objectInteractions.find(h => h.name === 'handleObjectInteraction')({ player, objectId: 49491, location: { x: 1227, y: 3469, z: 0 } });
     assert.equal(boat, true);
     assert.deepEqual([player.location.getX(), player.location.getY(), player.location.getZ()], [1196, 3450, 0]);
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 6);
@@ -1870,7 +1870,7 @@ test('DT2 enters the barricaded house through its ruins scene and restores Kason
     login({player});
     assert.equal(spawned.length,2,'the same earned checkpoint recreates the owned conversation NPC');
     attrs.set('desert-treasure-ii:vardorvis-progress',18);
-    handlers.objects[0]({player,objectId:49491,location:{x:1227,y:3469,z:0}});
+    handlers.objects.find(h => h.name === 'handleObjectInteraction')({player,objectId:49491,location:{x:1227,y:3469,z:0}});
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),18,'returning by boat retains the completed trail');
     attrs.set('desert-treasure-ii:stranglewood-hideout',{defended:true,isDestroyed:()=>false,leave(){},postLeave(){},destroy(){}});
     logout({player});
@@ -2001,7 +2001,7 @@ test('Desert Treasure II makes the Strangler serum with the two real ingredients
   const interactions = [];
   const api = new Proxy(base, {
     get: (target, prop) => prop === 'onItemOnItem' ? (handler) => { combine = handler; }
-      : prop === 'onItemAction' ? (handler) => { itemAction = handler; }
+      : prop === 'onItemAction' ? (handler) => { if (typeof handler === 'function') itemAction = handler; }
         : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
           : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
   });
@@ -2423,11 +2423,11 @@ test('Desert Treasure II enters the cache Ancient Vault and requires the four st
       sendMessage() {},
     };
     const outerDoor = { player, objectId: O.VAULT_DOOR_2, location: { x: 3511, y: 2970, z: 0 } };
-    assert.equal(objectInteractions[0](outerDoor), true);
+    assert.equal(objectInteractions.find(h => h.name === 'handleObjectInteraction')(outerDoor), true);
     assert.equal(quest.getStage(player), 0, 'the normal spellbook cannot open the ancient vault');
     assert.equal(queues.add.length, 0);
     spellbook = core.MagicSpellbook.ANCIENT;
-    assert.equal(objectInteractions[0](outerDoor), true);
+    assert.equal(objectInteractions.find(h => h.name === 'handleObjectInteraction')(outerDoor), true);
     assert.equal(quest.getStage(player), 1);
     const area = attrs.get('desert-treasure-ii:ancient-vault');
     assert.equal(area.width, 4);
@@ -2436,7 +2436,7 @@ test('Desert Treasure II enters the cache Ancient Vault and requires the four st
     assert.equal(player.location.y, 1615);
     assert.equal(queues.add[0].id, 12401, 'the room receives the cache initial Asgarnia Smith variant');
     assert.equal(chunks.filter(([plane, , , chunk]) => plane === 1 && chunk !== null).length, 16);
-    const inspect = (id, x, y) => objectInteractions[0]({
+    const inspect = (id, x, y) => objectInteractions.find(h => h.name === 'handleObjectInteraction')({
       player, objectId: id, location: area.tile(x - 3920, y - 9616, 1),
     });
     assert.equal(inspect(49499, 3941, 9635), true);
@@ -2450,7 +2450,7 @@ test('Desert Treasure II enters the cache Ancient Vault and requires the four st
     assert.equal(quest.getStage(player), 2, 'only the four statues and plaque advance the vault step');
     assert.equal(inspect(O.STEPS_23, 3925, 9630), true, 'the actual entrance steps let the player leave');
     assert.deepEqual([player.location.x, player.location.y, player.location.z], [3510,2971,0]);
-    objectInteractions[0](outerDoor);
+    objectInteractions.find(h => h.name === 'handleObjectInteraction')(outerDoor);
     logoutHooks[0]({ player });
     assert.equal(attrs.get('desert-treasure-ii:ancient-vault'), null);
     assert.deepEqual([player.location.x, player.location.y, player.location.z], [3510,2971,0], 'logout saves a public return point instead of orphaned instance coordinates');
@@ -2708,7 +2708,7 @@ test('Desert Treasure II descends into the copied Elder Vault, chains all four w
       : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
         : prop === 'onNpcDeath' ? (handler) => deaths.push(handler)
           : prop === 'onObjectInteraction' ? (handler) => typeof handler === 'function' && objects.push(handler)
-          : prop === 'onCustomEvent' ? (name, handler) => actions.set(name, handler)
+          : prop === 'onCustomEvent' ? (name, handler) => { const previous = actions.get(name); actions.set(name, event => { previous?.(event); handler(event); }); }
             : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
   });
   const runtime = require('../plugins/quests/QuestRuntime');
@@ -2762,7 +2762,7 @@ test('Desert Treasure II descends into the copied Elder Vault, chains all four w
     assert.equal(inventory.getAmount(core.ItemIdentifiers.RING_OF_VISIBILITY), 0);
     assert.equal(inventory.getAmount(core.ItemIdentifiers.RING_OF_SHADOWS), 1);
     assert.equal(inventory.getAmount(core.ItemIdentifiers.ANCIENT_LAMP), 3);
-    assert.equal(objects[0]({ player: p, objectId: 48890, option: 'Climb', location: area.tile(30, 11, 0) }), true,
+    assert.equal(objects.find(h => h.name === 'handleObjectInteraction')({ player: p, objectId: 48890, option: 'Climb', location: area.tile(30, 11, 0) }), true,
       'the cache staircase returns the player to the upper Ancient Vault');
     assert.equal(attrs.get('desert-treasure-ii:final-room'), null);
     assert.equal(p.location.x, 8202, 'the player is back in the private upper vault');
@@ -3851,7 +3851,7 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   playerProcesses.forEach((handler) => handler({ player }));
   assert.equal(boss.__dt2WhispererSpecial, 'soul-siphon', 'the first special starts at one-third health');
   assert.equal(created.filter((npc) => npc.__dt2WhispererSoul).length, 12);
-  itemActions[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+  itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
   assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, true, 'the fragment reaches the shadow realm for the special');
   const firstChant = created.filter((npc) => npc.__dt2WhispererSoul && npc.__dt2WhispererSoulSet === 0);
   for (const soul of firstChant) {
@@ -3859,32 +3859,32 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
     deathHooks[0]({ npc: soul, killer: player });
   }
   assert.equal(boss.__dt2WhispererSpecial, null, 'killing one full matching chant set interrupts the siphon');
-  itemActions[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+  itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
   username = 'c';
   boss.__dt2WhispererSpecialStarted = false;
   playerProcesses.forEach((handler) => handler({ player }));
   assert.equal(boss.__dt2WhispererSpecial, 'corrupted-seeds');
   assert.equal(boss.__dt2WhispererSeeds.length, 6, 'the seed special creates light and dark seed tiles');
-  itemActions[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+  itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
   for (const seed of boss.__dt2WhispererSeeds.filter((entry) => entry.light)) {
     player.location = { x: seed.x, y: seed.y, z: 0 };
     playerProcesses.forEach((handler) => handler({ player }));
   }
   assert.equal(boss.__dt2WhispererSpecial, null, 'stepping on every light seed interrupts the seed special');
-  itemActions[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+  itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
   username = 'd';
   boss.__dt2WhispererSpecialStarted = false;
   playerProcesses.forEach((handler) => handler({ player }));
   assert.equal(boss.__dt2WhispererSpecial, 'screech');
   assert.equal(boss.__dt2WhispererColumns.length, 3, 'the screech special creates three cover columns');
-  itemActions[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+  itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
   for (const column of boss.__dt2WhispererColumns) {
     player.location = { x: column.x, y: column.y, z: 0 };
     for (let tick = 0; tick < 5; tick++) playerProcesses.forEach((handler) => handler({ player }));
   }
   assert.equal(boss.__dt2WhispererSpecial, null, 'standing by each remaining column survives all three screeches');
 
-  itemActions[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+  itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
   assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, false, 'the fragment returns the player to the material world');
   boss.registered = false;
   deathHooks[0]({ npc: boss, killer: player });
@@ -3897,10 +3897,10 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   enraged.registered = false;
   deathHooks[0]({ npc: enraged, killer: player });
   assert.equal(attrs.get('desert-treasure-ii:lassar').whispererDefeated, true, 'the second defeat opens the remains search');
-  objectInteractions[0]({ player, objectId: 47578, definition: { id: 47578 }, option: 'Search', location: { x: 2400, y: 6370, z: 0 } });
+  objectInteractions.find(h => h.name === 'handleObjectInteraction')({ player, objectId: 47578, definition: { id: 47578 }, option: 'Search', location: { x: 2400, y: 6370, z: 0 } });
   assert.equal(items.get(core.ItemIdentifiers.WHISPERERS_MEDALLION), 1, 'the remains yield the actual medallion');
   assert.equal(attrs.get('desert-treasure-ii:lassar').medallion, true);
-  objectInteractions[0]({ player, objectId: 48310, definition: { id: 48310 }, option: 'Climb', location: { x: 2400, y: 6370, z: 0 } });
+  objectInteractions.find(h => h.name === 'handleObjectInteraction')({ player, objectId: 48310, definition: { id: 48310 }, option: 'Climb', location: { x: 2400, y: 6370, z: 0 } });
   assert.deepEqual([player.location.x, player.location.y], [2587, 6436], 'the cathedral exit returns to Camdozaal');
 });
 
@@ -4183,12 +4183,12 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   };
   const I = core.ItemIdentifiers, O = core.ObjectIdentifiers;
   const sourceLocation = (x, y, z = 0) => ({ x: 5000 + x - 2872, y: 6000 + y - 6336, z });
-  const interactObject = (id, x, y, option = 'Search') => objects.at(-1)({ player, objectId: id, option, location: sourceLocation(x, y) });
+  const interactObject = (id, x, y, option = 'Search') => objects.find(h => h.name === 'handleObjectInteraction')({ player, objectId: id, option, location: sourceLocation(x, y) });
   quest.setStage(player, 9);
-  assert.equal(objects.at(-1)({ player, objectId: 49513, definition: { id: 49091 }, location: { x: 2926, y: 10354, z: 0 } }), true, 'enter through the prison entrance');
+  assert.equal(objects.find(h => h.name === 'handleObjectInteraction')({ player, objectId: 49513, definition: { id: 49091 }, location: { x: 2926, y: 10354, z: 0 } }), true, 'enter through the prison entrance');
   assert.equal(attrs.has('desert-treasure-ii:sucellus-area'), false, 'cancelling Captain Malleta cannot enter the prison');
   const acceptance = { player, npcId: core.NpcIdentifiers.CAPTAIN_MALLETA, text: 'Lovely! Thank you for your time.' };
-  handlers.custom.get('npc-dialogue:line').at(-1)(acceptance);
+  handlers.custom.get('npc-dialogue:line').find(h => h.name === 'handleDialogueLine')(acceptance);
   assert.equal(attrs.has('desert-treasure-ii:sucellus-area'), false, 'the final page must be continued');
   acceptance.after();
   assert.equal(attrs.get('desert-treasure-ii:sucellus-captain-accepted'), true);
@@ -4201,25 +4201,25 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   interactObject(49099, 3040, 6370, 'Inspect');
   interactObject(49094, 3042, 6369);
   assert.equal(inventory.get(I.PRISONERS_LETTER), 1);
-  itemActions.at(-1)({ player, itemId: I.PRISONERS_LETTER, option: 'Read' });
+  itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: I.PRISONERS_LETTER, option: 'Read' });
   interactObject(49095, 3039, 6367);
   assert.equal(inventory.get(I.KNIFE_5), undefined, 'the bucket item waits for the actual player line');
   const bucketLine = { player, npcId: core.NpcIdentifiers.ASSASSIN_7, text: "Eugh! I can't believe I'm doing this." };
-  handlers.custom.get('npc-dialogue:line').at(-1)(bucketLine);
+  handlers.custom.get('npc-dialogue:line').find(h => h.name === 'handleDialogueLine')(bucketLine);
   bucketLine.after();
   assert.equal(inventory.get(I.KNIFE_5), 1);
-  itemObjects.at(-1)({ player, itemId: I.KNIFE_5, objectId: 49099, location: sourceLocation(3040, 6370) });
+  itemObjects.find(h => h.name === 'handleItemOnObject')({ player, itemId: I.KNIFE_5, objectId: 49099, location: sourceLocation(3040, 6370) });
   assert.equal(inventory.get(I.KNIFE_5), 0);
   assert.equal(inventory.get(I.CHISEL_5), 1);
-  objects.at(-1)({ player, objectId: 49514, definition: { id: 49096 }, location: sourceLocation(3041, 6367), option: 'Search' });
+  objects.find(h => h.name === 'handleObjectInteraction')({ player, objectId: 49514, definition: { id: 49096 }, location: sourceLocation(3041, 6367), option: 'Search' });
   assert.equal(inventory.get(I.LOCKPICK_4), 1);
-  itemObjects.at(-1)({ player, itemId: I.LOCKPICK_4, objectId: 49099, location: sourceLocation(3040, 6370) });
+  itemObjects.find(h => h.name === 'handleItemOnObject')({ player, itemId: I.LOCKPICK_4, objectId: 49099, location: sourceLocation(3040, 6370) });
   assert.equal(attrs.get('desert-treasure-ii:sucellus-cell-escaped'), true);
   assert.equal(area.entities.some((npc) => npc.id === core.NpcIdentifiers.ASSASSIN_7), true, 'the cell guard is present after the escape');
-  objects.at(-1)({ player, objectId: 49120, option: 'Pick-lock', location: sourceLocation(2945, 6389, 2) });
+  objects.find(h => h.name === 'handleObjectInteraction')({ player, objectId: 49120, option: 'Pick-lock', location: sourceLocation(2945, 6389, 2) });
   assert.equal(attrs.get('desert-treasure-ii:sucellus-assassin-gone'), undefined, 'a padlock click cannot skip the prison trail');
   attrs.set('desert-treasure-ii:sucellus-prison-complete', true);
-  assert.equal(objects.at(-1)({ player, objectId: 49138, location: sourceLocation(3039, 6433) }), false, 'the asylum gate leads from the real prison into Duke’s chamber');
+  assert.equal(objects.find(h => h.name === 'handleObjectInteraction')({ player, objectId: 49138, location: sourceLocation(3039, 6433) }), false, 'the asylum gate leads from the real prison into Duke’s chamber');
   const boss = attrs.get('desert-treasure-ii:boss');
   assert.equal(boss.__dt2SucellusAwake, false);
   assert.equal(boss.id, core.NpcIdentifiers.DUKE_SUCELLUS_7, 'real combat stats come from the quest awake identity');
@@ -4236,9 +4236,9 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   assert.equal(inventory.get(I.ARDER_POWDER), 3);
   for (const [vat, x] of [[47537, 3034], [47537, 3043]]) {
     for (const powder of [I.MUSCA_POWDER, I.ARDER_POWDER]) {
-      itemObjects.at(-1)({ player, itemId: powder, objectId: vat, location: sourceLocation(x, 6438) });
+      itemObjects.find(h => h.name === 'handleItemOnObject')({ player, itemId: powder, objectId: vat, location: sourceLocation(x, 6438) });
     }
-    for (let i = 0; i < 6; i++) itemObjects.at(-1)({ player, itemId: I.SALAX_SALT, objectId: vat, location: sourceLocation(x, 6438) });
+    for (let i = 0; i < 6; i++) itemObjects.find(h => h.name === 'handleItemOnObject')({ player, itemId: I.SALAX_SALT, objectId: vat, location: sourceLocation(x, 6438) });
     interactObject(vat, x, 6438, 'Empty');
   }
   assert.equal(inventory.get(I.ARDER_MUSCA_POISON), 2);
@@ -9003,7 +9003,7 @@ test('DT2 ancient lamps offer only combat skills, require level 60, and consume 
     getInventory: () => ({ get: slot => items[slot], deleteAtSlot: slot => items.splice(slot,1) }),
     getSkillManager: () => ({ getMaxLevel: () => level, getExperience: () => xp, addExperience: (_skill, amount) => { if (!blocked) xp += amount; } }) };
   const event = { player, itemId: I.ANCIENT_LAMP, item, slot: 0, option: 'Rub' };
-  assert.equal(handlers.itemAction[0](event), true);
+  assert.equal(handlers.itemAction.find(h => typeof h === 'function' && h.name === 'handleItemAction')(event), true);
   assert.equal(reward.minLevel, 60);
   assert.equal(reward.skills.length, 7);
   assert.equal(reward.onConfirm(Skill.ATTACK, 'Attack'), null);
@@ -9035,7 +9035,7 @@ test('DT2 excavation uses the cache winch, pickaxe crate and crevice without let
       getInventory: () => ({ contains: id => (amounts.get(id) ?? 0) > 0, getAmount: id => amounts.get(id) ?? 0,
         getFreeSlots: () => 28 - amounts.size, adds: (id,n) => amounts.set(id,(amounts.get(id) ?? 0)+n) }),
       getEquipment: () => ({ getItems: () => equipment }), moveTo(location) { this.location = location; }, sendMessage: text => messages.push(text) };
-    const click = (objectId,x,y,option,visibleId=objectId) => handlers.objects[0]({ player,objectId,definition:{id:visibleId},location:{x,y,z:0},option });
+    const click = (objectId,x,y,option,visibleId=objectId) => handlers.objects.find(h => h.name === 'handleObjectInteraction')({ player,objectId,definition:{id:visibleId},location:{x,y,z:0},option });
     quest.setStage(player,2);
     assert.equal(click(O.WINCH_14,3384,3418,'Operate'),false);
     quest.setStage(player,3);
@@ -9122,7 +9122,7 @@ test('DT2 Guardian reforms its shield and its warned rocks can be dodged but byp
     getAttribute:key=>attrs.get(key),setAttribute:(key,value)=>attrs.set(key,value),getPacketSender:()=>sender,
     getCombat:()=>({getHitQueue:()=>({addPendingDamage:hits=>damage.push(...hits)})}),moveTo:location=>here=location,sendMessage(){}};
   quest.setStage(player,5);
-  handlers.objects[0]({player,objectId:core.ObjectIdentifiers.CREVICE_45,location:{x:3411,y:9811,z:0},option:'Enter'});
+  handlers.objects.find(h => h.name === 'handleObjectInteraction')({player,objectId:core.ObjectIdentifiers.CREVICE_45,location:{x:3411,y:9811,z:0},option:'Enter'});
   const area=attrs.get('desert-treasure-ii:war-room'),boss=npcs.find(n=>n.__dt2Guardian);
   assert.ok(area&&boss);
   boss.__dt2Guardian.shielded=false;boss.hp=65;boss.max=100;
@@ -9169,7 +9169,7 @@ test('DT2 completes Banikan departure during dialogue and reveals the last searc
     assert.ok(queue.some(step=>step.id==='T24jg_'),'the last report flows into the departure conversation');
     handlers.custom.get('npc-dialogue:action')[0]({player,stepId:'T24jg_'});
     assert.equal(quest.varbitValue(6,player),40);
-    handlers.objects[0]({player,objectId:49511,location:{x:8214,y:1619,z:0},option:'Operate'});
+    handlers.objects.find(h => h.name === 'handleObjectInteraction')({player,objectId:49511,location:{x:8214,y:1619,z:0},option:'Operate'});
     assert.equal(quest.getStage(player),7);
     const report = variants[played.at(-1)];
     assert.ok(report.some(step=>step.player==='Repeat last search.'));
@@ -12119,7 +12119,7 @@ test('DT2 Vardorvis scales melee, heals, exposes avoidable specials and accepts 
     getMovementQueue:()=>({reset(){},setBlockMovement:v=>blocked=v}),getSkillManager:()=>({getCurrentLevel:()=>prayer,setCurrentLevel:(s,v)=>prayer=v}),
     getCombat:()=>({getTarget:()=>attrs.get('desert-treasure-ii:boss'),getHitQueue:()=>({addPendingDamage:h=>received.push(...h)})})};
   quest.setStage(p,7);
-  handlers.objects[0]({player:p,objectId:49495,location:{x:1118,y:3428,z:0}});
+  handlers.objects.find(h => h.name === 'handleObjectInteraction')({player:p,objectId:49495,location:{x:1118,y:3428,z:0}});
   const area=p.getPrivateArea(),boss=area.entities.find(n=>n.id===core.NpcIdentifiers.VARDORVIS_2);
   // The quest stores its active encounter in the canonical shared boss attribute.
   const bossKey=[...attrs].find(([,v])=>v===boss)[0];
@@ -12150,7 +12150,7 @@ test('DT2 Vardorvis scales melee, heals, exposes avoidable specials and accepts 
     const bleed=tasks[0];for(let n=0;n<5;n++)bleed.execute();assert.equal(bleed.stopped,true);assert.equal(received.slice(-5).every(h=>h.getDamage()===3),true);
     handlers.npcDeath[0]({killer:p,npc:boss});assert.equal(ground[0][1].getId(),core.ItemIdentifiers.TEMPLE_KEY_3);assert.equal(ground[0][3],area);
     const pickup=handlers.ground.find(h=>h.toString().includes('VARDORVIS_PROGRESS'));freeSlots=0;const refused={player:p,groundItemId:core.ItemIdentifiers.TEMPLE_KEY_3};pickup(refused);assert.equal(refused.handled,true);assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),17);freeSlots=1;pickup({player:p,groundItemId:core.ItemIdentifiers.TEMPLE_KEY_3});assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),18);
-    handlers.objects[0]({player:p,objectId:core.ObjectIdentifiers.ROCKS_139,option:'Leave',location:{x:8198,y:1628,z:0}});assert.deepEqual([p.location.getX(),p.location.getY()],[1117,3429]);
+    handlers.objects.find(h => h.name === 'handleObjectInteraction')({player:p,objectId:core.ObjectIdentifiers.ROCKS_139,option:'Leave',location:{x:8198,y:1628,z:0}});assert.deepEqual([p.location.getX(),p.location.getY()],[1117,3429]);
   }finally{Math.random=random;area.destroy()}
 });
 
@@ -12176,7 +12176,7 @@ test('DT2 Kasonde uses melee/ranged basics, healing, avoidable potions and pilla
   const p={getUsername:()=> 'kasonde-test',isPlayer:()=>true,getAsPlayer(){return this},getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getInventory:()=>({getAmount:()=>0}),
     moveTo(v){this.location=v},getLocation(){return this.location},sendMessage:t=>messages.push(t),getPacketSender:()=>new Proxy({}, {get:()=>()=>{}}),
     getCombat:()=>({getHitQueue:()=>({addPendingDamage:h=>damage.push(...h)})})};
-  quest.setStage(p,7);handlers.objects[0]({player:p,objectId:core.ObjectIdentifiers.ENTRY_21,location:{x:1174,y:3428,z:0}});
+  quest.setStage(p,7);handlers.objects.find(h => h.name === 'handleObjectInteraction')({player:p,objectId:core.ObjectIdentifiers.ENTRY_21,location:{x:1174,y:3428,z:0}});
   const area=attrs.get('desert-treasure-ii:stranglewood-temple'),boss=area.entities.find(n=>n.id===core.NpcIdentifiers.KASONDE_7);boss.registered=true;
   const method=new Combat();assert.equal(method.attackSpeed(),3);assert.equal(method.hits(boss,p)[0].style,core.CombatType.MELEE);
   p.moveTo(area.tile(7,20,0));assert.deepEqual(method.hits(boss,p),['ranged-hit']);
@@ -12191,7 +12191,7 @@ test('DT2 Kasonde uses melee/ranged basics, healing, avoidable potions and pilla
   lineOpen=true;area.kasondeFight.nextSpecial=80;area.kasondeFight.special=3;cycle=80;area.process(p);cycle=85;area.process(p);assert.ok(damage.at(-1).getDamage()>=35);
   boss.hp=239;cycle=90;area.process(p);assert.equal(boss.hp,240,'healing is capped at max HP');
   handlers.npcDeath[0]({killer:p,npc:boss});assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),20);assert.equal(area.kasondeFight,null);assert.ok(removed.length>=9,'victory removes the potion pools');
-  handlers.objects[0]({player:p,objectId:core.ObjectIdentifiers.STAIRS_254,option:'Climb-up',location:area.tile(7,0,0)});assert.deepEqual([p.location.getX(),p.location.getY()],[1174,3428],'real temple stairs leave the instance');
+  handlers.objects.find(h => h.name === 'handleObjectInteraction')({player:p,objectId:core.ObjectIdentifiers.STAIRS_254,option:'Climb-up',location:area.tile(7,0,0)});assert.deepEqual([p.location.getX(),p.location.getY()],[1174,3428],'real temple stairs leave the instance');
   const crossing={player:p,objectId:49492,option:'Climb-over',location:{x:1193,y:3401},definition:{getName:()=> 'Barricade'}};
   p.moveTo(new core.Location(1193,3399,0));handlers.objects.forEach(h=>h(crossing));assert.equal(p.location.getY(),3399,'the arrival scene must unlock the city');
   attrs.set('desert-treasure-ii:city-entered',true);handlers.objects.forEach(h=>h(crossing));assert.equal(p.location.getY(),3405,'returning reaches the medallion chest side');

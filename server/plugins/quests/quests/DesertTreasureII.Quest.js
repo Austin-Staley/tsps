@@ -2791,7 +2791,7 @@ module.exports = function registerDesertTreasureII(api) {
         const area = enterSucellusArea(p, false);
         if (!escaped && !defeated) p.moveTo(area.tile(168, 33, 0));
         else if (!defeated) {
-          p.moveTo(area.tile(40, 12, 2));
+          p.moveTo(area.tile(40, 14, 2));
           spawnSucellusCellAssassin(p, area);
           api.emitCustomEvent("dt2:sucellus-prison-resume", { player: p, area });
         } else p.moveTo(area.tile(167, 97, 0));
@@ -6309,7 +6309,6 @@ module.exports = function registerDesertTreasureII(api) {
   api.persistAttribute(SCAR_GROWTH_ORDER);
   api.persistAttribute("desert-treasure-ii:scar-growth-repaired");
   [GOLEM_INSPECTED, ALTAR_INSPECTED, TOTEMS_CHARGED, TOTEM_MASK, BANIKAN_BRIEFED].forEach((key) => api.persistAttribute(key));
-  require("../dt2/Prison.DesertTreasureII")(api);
   api.onObjectInteraction(handleObjectInteraction);
   api.onObjectRoute(handleScarStoneRoute);
   api.onItemOnObject(handleItemOnObject, { noted: false });
@@ -6373,4 +6372,5 @@ module.exports = function registerDesertTreasureII(api) {
   api.onPlayerProcess(handleLassarProcess);
   api.onPlayerLogout(handleLogout);
   api.onPlayerDisconnect(handleLogout);
+  require("../dt2/Prison.DesertTreasureII")(api);
 };
