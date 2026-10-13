@@ -397,12 +397,14 @@ module.exports = function registerSongOfTheElves(api) {
     process(mobile) {
       if (!mobile?.isNpc?.()) return;
       const state = fragmentInstances.get(this);
-      if (!state || mobile !== state.boss || state.finished) return;
+      if (!state || state.finished || (mobile !== state.boss &&
+        !state.clones.includes(mobile) && !state.healers.has(mobile))) return;
+      mobile.setScriptedMovement(true);
+      mobile.getCombat().getLastAttack().reset();
+      if (mobile !== state.boss) return;
       const now = World.getProcessCycle();
       if (state.lastCycle === now) return;
       state.lastCycle = now;
-      mobile.setScriptedMovement(true);
-      mobile.getCombat().getLastAttack().reset();
       if (!state.introStarted) {
         state.introStarted = true;
         startTranscript(api, state.player, NpcIdentifiers.FRAGMENT_OF_SEREN, PAGE,
@@ -2439,6 +2441,7 @@ module.exports = function registerSongOfTheElves(api) {
       const npc = api.spawnNpc({ id, x, y, z: 1, wanderRadius: 0, owner: state.player, ownerOnly: true });
       if (!npc) continue;
       npc.setMultiCombat?.(true);
+      npc.setScriptedMovement?.(true);
       npc.setMaxHitpoints(1);
       npc.setHitpoints(1);
       area.enter(npc);
@@ -2481,9 +2484,10 @@ module.exports = function registerSongOfTheElves(api) {
     }
     if (state.healers.has(npc)) {
       const remaining = npc.getHitpoints?.() ?? 1;
-      const damage = hit.getTotalDamage?.() ?? 0;
-      if (damage > 0) {
-        for (const part of hit.getHits?.() ?? []) if (part.getDamage() > 0) part.setDamage(Math.max(remaining, part.getDamage()));
+      const parts = hit.getHits?.() ?? [];
+      if (parts.length) {
+        parts[0].setDamage(Math.max(remaining, parts[0].getDamage?.() ?? 0));
+        for (const part of parts.slice(1)) part.setDamage(0);
         hit.updateTotalDamage?.();
       }
       return;
