@@ -13557,7 +13557,7 @@ test('Song of the Elves carries the earned castle victory through Lathas and the
   assert.deepEqual([location.getX(),location.getY()],[2198,3252]);assert.ok(spawned.some(n=>n.id===api.core.NpcIdentifiers.LORD_IORWERTH));
   action({player,stepId:'v3r3p_'});assert.equal(quest.varbitValue(90,player),56);
   areas.find(a=>a.constructor.name==='LletyaStoryArea').process(player);
-  assert.ok(spawned.some(n=>n.id===api.core.NpcIdentifiers.YSGAWYN));assert.ok(spawned.some(n=>n.id===api.core.NpcIdentifiers.ARIANWYN_6));
+  assert.ok(spawned.some(n=>n.id===api.core.NpcIdentifiers.YSGAWYN));const claim={player,npcId:api.core.NpcIdentifiers.ARIANWYN_6};handlers.custom.get('quest-song-of-the-elves:claim-arianwyn')[0](claim);assert.equal(claim.handled,true,'the completed MEP2 NPC hands the new chapter to SOTE');assert.equal(requests.at(-1)[4],'retreating-to-lletya');
   const line=handlers.custom.get('npc-dialogue:line').find(h=>h.name==='finishEarlyStoryLine');
   let page={player,text:"Okay, I'll be back soon."};line(page);assert.equal(attrs.get('song-of-the-elves:first-meeting-progress'),undefined);page.after();assert.equal(bits.get(9016),58);
   action({player,kind:'message',stepId:'NuOcWI'});assert.equal(attrs.get('quest.song_of_the_elves.stage'),90,'Elena cannot skip fetching Ysgawyn');

@@ -256,12 +256,12 @@ module.exports = function registerSongOfTheElves(api) {
       // Lletya's map NPC is a cache scenery variant (5292) with no Talk-to
       // action. Use the cache's actual Talk-to Arianwyn variant for this chapter.
       const arianwynCurrent = player.getAttribute(LLETYA_ARIANWYN_NPC);
-      if ([8, 9, 11, 13, 15].includes(currentChapter(player)) && !arianwynCurrent?.isRegistered?.()) {
+      if ([11, 13, 15].includes(currentChapter(player)) && !arianwynCurrent?.isRegistered?.()) {
         const arianwyn = api.spawnNpc({ id: NpcIdentifiers.ARIANWYN_6, x: 2353, y: 3173, z: 0,
           wanderRadius: 0, owner: player, ownerOnly: true });
         if (arianwyn) player.setAttribute(LLETYA_ARIANWYN_NPC, arianwyn);
       }
-      if (![8, 9, 11, 13, 15].includes(currentChapter(player))) {
+      if (![11, 13, 15].includes(currentChapter(player))) {
         const arianwyn = player.getAttribute(LLETYA_ARIANWYN_NPC);
         if (arianwyn) api.removeNpc(arianwyn);
         player.setAttribute(LLETYA_ARIANWYN_NPC, null);
@@ -1165,6 +1165,10 @@ module.exports = function registerSongOfTheElves(api) {
     const player = event?.player;
     if (!player) return false;
     const chapter = currentChapter(player);
+    if ([8,9,10,11].includes(chapter)) {
+      event.handled=true;
+      return onTalk({...event,definition:{getName:()=> "Arianwyn"}});
+    }
     if (chapter === 15) {
       event.handled = true;
       if (player.getAttribute(LLETYA_TRAITOR_REVEALED) !== true) {
