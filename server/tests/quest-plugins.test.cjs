@@ -8977,6 +8977,37 @@ test('Regicide tripwires use the Agility success roll and apply the dart hit and
   }
 });
 
+test('Regicide tripwire crossing clears the rotated cache footprint from either outside edge', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/Regicide.Quest')(api);
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const object = MapObjects.get(api.core.ObjectIdentifiers.TRIPWIRE, new api.core.Location(2285, 3188, 0), null);
+  assert.ok(object, 'the actual middle wire exists');
+  const definition = ObjectDefinition.forId(object.getId());
+  assert.equal(object.getFace(), 3);
+  assert.equal(definition.getSizeY(), 2);
+  const originalRandom = Math.random;
+  try {
+    Math.random = () => 0;
+    for (const [from, expected, adjacent] of [[2287, 2284, 2283], [2284, 2287, 2288]]) {
+      let landing;
+      const player = {
+        getLocation: () => new api.core.Location(from, 3188, 0),
+        getSkillManager: () => ({ getCurrentLevel: () => 99 }),
+        moveTo: destination => { landing = destination; },
+      };
+      const event = { player, object, definition, objectId: object.getId(), clickType: 1,
+        location: { x: 2285, y: 3188, z: 0 }, handled: false };
+      handlers.objects[0](event);
+      assert.equal(event.handled, true);
+      assert.deepEqual([landing.getX(), landing.getY()], [expected, 3188]);
+      assert.equal(api.core.RegionManager.canMove(expected, 3188, adjacent, 3188, 0, 1, 1, null), true,
+        'the far-side landing allows normal walking away from the trap');
+    }
+  } finally { Math.random = originalRandom; }
+});
+
 test('Regicide Huge Gate passes the player to the far side from either approach', () => {
   const { api: base } = mockApi();
   const objectHooks = [];

@@ -605,14 +605,15 @@ module.exports = function registerRegicideQuest(api) {
       return;
     }
     const face = object?.getFace?.() ?? 0;
-    // The wire's footprint follows the even faces; cross it on the perpendicular axis.
+    // Cross past the wire's full local-Y footprint, rotated onto the crossing axis.
     const axis = face % 2 === 0 ? "y" : "x";
     const current = axis === "x" ? position.getX() : position.getY();
     const wire = location[axis];
-    const delta = current > wire ? -2 : 2;
+    const span = event.definition?.getSizeY?.() ?? 1;
+    const destination = current > wire ? wire - 1 : wire + span;
     player.moveTo(new Location(
-      position.getX() + (axis === "x" ? delta : 0),
-      position.getY() + (axis === "y" ? delta : 0),
+      axis === "x" ? destination : position.getX(),
+      axis === "y" ? destination : position.getY(),
       position.getZ(),
     ));
   }
