@@ -5973,23 +5973,24 @@ test('Song of the Elves rubs the seed to the Enchanted Valley and returns to Lle
     getUsername: () => 'SoteTest',
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
-    getInventory: () => ({ getAmount: () => 0, getFreeSlots: () => 28 }),
+    getInventory: () => ({ getAmount: (id) => id===api.core.ItemIdentifiers.CRYSTAL_SEED_5?1:0, getFreeSlots: () => 28 }),
     getEquipment: () => ({ get: () => null }),
     getSkillManager: () => ({ getMaxLevel: () => 99 }),
     getArea: () => null,
+    getLocation: () => new api.core.Location(2353,3172,0),
     moveTo: (location) => locations.push(location),
     sendMessage() {},
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
   };
   quest.setStage(player, 120);
 
-  const itemEvent = { player, itemId: api.core.ItemIdentifiers.CRYSTAL_SEED_3, handled: false };
+  const itemEvent = { player, itemId: api.core.ItemIdentifiers.CRYSTAL_SEED_5, option:'Rub', handled: false };
   itemActions.at(-1)(itemEvent);
   assert.equal(itemEvent.handled, true);
   assert.equal(started.at(-1)[3], 'preparing-to-enter-prifddinas-a-mysterious-figure');
 
   custom.get('npc-dialogue:action')({ player, stepId: 'UeAKgA' });
-  assert.deepEqual([locations.at(-1).getX(), locations.at(-1).getY()], [2440, 6090]);
+  assert.deepEqual([locations.at(-1).getX(), locations.at(-1).getY()], [3050, 4485]);
   assert.equal(spawns.at(-1).id, api.core.NpcIdentifiers.MYSTERIOUS_FIGURE);
   assert.equal(spawns.at(-1).owner, player);
 
@@ -14028,5 +14029,24 @@ test('Song of the Elves uses all six real waterfall pillars, reading, clue retri
   assert.equal(attrs.get('quest.song_of_the_elves.falls-pillars'),63);assert.equal(bits.get(9016),70);assert.equal(attrs.get('quest.song_of_the_elves.stage'),110);assert.ok(spawned.some(n=>n.id===api.core.NpcIdentifiers.BAXTORIAN));
   const action=handlers.custom.get('npc-dialogue:action').find(h=>h.name==='onAction');action({player,kind:'message',stepId:'x04RMY'});assert.equal(attrs.get('quest.song_of_the_elves.stage'),120);assert.equal(bits.get(9016),72,'the full Baxtorian farewell enters the preparation chapter');
   for(const n of spawned)assert.equal(api.core.RegionManager.getClipping(n.x,n.y,n.z,null),0);
+ }finally{runtime.startTranscript=original;}
+});
+
+test('Song of the Elves preparation earns its seed, elders and herb before the potion meeting',()=>{
+ const {api,handlers}=mockApi(),runtime=require('../plugins/quests/QuestRuntime'),original=runtime.startTranscript;
+ const requests=[];runtime.startTranscript=(...a)=>(requests.push(a),true);api.spawnNpc=()=>null;
+ try {
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);const quest=runtime.getRegisteredQuests().at(-1),I=api.core.ItemIdentifiers;
+  const attrs=new Map([['quest.song_of_the_elves.stage',120]]),items=new Map([[I.CADANTINE_SEED,1],[I.SEED_DIBBER,1]]),bits=new Map();let at=new api.core.Location(2353,3172,0);
+  const player={getUsername:()=> 'PreparationTest',getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getLocation:()=>at,moveTo:l=>at=l,sendMessage(){},getInventory:()=>({getAmount:i=>items.get(i)||0,getFreeSlots:()=>10,adds:(i,n)=>items.set(i,(items.get(i)||0)+n),deleteNumber:(i,n)=>items.set(i,(items.get(i)||0)-n)}),getPacketSender:()=>new Proxy({sendVarbit:(i,v)=>bits.set(i,v)},{get:(o,k)=>o[k]??(()=>{})})};
+  const action=handlers.custom.get('npc-dialogue:action').find(h=>h.name==='onAction'),plant=handlers.itemOnObject.find(h=>h.name==='plantPreparationSeed');
+  const seed={player,itemId:I.CADANTINE_SEED,location:{x:2321,y:3151,z:0}};plant(seed);assert.equal(items.get(I.CADANTINE_SEED),1,'Elena prepares the patch before consumption');
+  action({player,stepId:'iNVHlg'});assert.equal(bits.get(9016),74);
+  const line=handlers.custom.get('npc-dialogue:line').find(h=>h.name==='finishPreparationLine');const last={player,pages:[{page:'Song of the Elves'}],text:"Indeed. When you're ready, go ahead and plant the seed."};line(last);assert.equal(bits.get(9016),74);last.after();assert.equal(bits.get(9016),76);
+  plant(seed);assert.equal(items.get(I.CADANTINE_SEED),0);assert.equal(items.get(I.SEED_DIBBER),1);assert.equal(bits.get(9016),78);assert.equal(requests.at(-1)[4],'preparing-to-enter-prifddinas-talking-to-elena-planting-the-cadantine-seed');
+  action({player,stepId:'rlWDAM'});assert.equal(items.get(I.CRYSTAL_SEED_3),1);action({player,stepId:'eS601c'});assert.equal(items.get(I.CRYSTAL_SEED_3),0);assert.equal(items.get(I.CRYSTAL_SEED_5),1,'the Rub-enabled cache item is earned from Eluned');
+  action({player,stepId:'ZYvQiu'});assert.equal(quest.getStage(player),120,'harvesting cannot jump to the dwarf-camp chapter');action({player,stepId:'0lNCRc'});assert.equal(items.get(I.ELDER_CADANTINE)||0,0,'both elders must return before harvesting');
+  action({player,stepId:'D1wXY6'});assert.equal(bits.get(9016),82);action({player,stepId:'EMxiFg'});assert.equal(bits.get(9016),84);action({player,stepId:'0lNCRc'});assert.equal(items.get(I.ELDER_CADANTINE),1);assert.equal(bits.get(9016),86);
+  action({player,stepId:'eOtNFO'});assert.equal(quest.getStage(player),120,'the meeting opening does not skip its dialogue');action({player,stepId:'_2-0Qk'});assert.equal(quest.getStage(player),130);assert.equal(quest.varbitValue(130,player),90);
  }finally{runtime.startTranscript=original;}
 });
