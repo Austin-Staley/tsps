@@ -689,6 +689,40 @@ test('Quest transcripts preserve each named speaker instead of borrowing the cli
   assert.ok(lines.some(([id,text])=>id===13540&&text.includes('theology')));
 });
 
+test('Quest transcript options reuse answers from earlier variants on the same page', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const { startTranscript } = require('../plugins/quests/QuestRuntime');
+  let chain, current, menu;
+  const lines = [];
+  const manager = {
+    reset() { current = null; }, getCurrent: () => current,
+    startDialogues(builder) { chain = builder; current = [...builder.getDialogues().values()][0]; },
+  };
+  const player = { getUsername: () => 'Test', getDialogueManager: () => manager,
+    getPacketSender: () => ({ sendInterfaceRemoval() {} }) };
+  const api = { core: { ...PluginManager.getCoreApi(), NpcDefinition: { forId: id => ({ getId: () => id, getName: () => 'Wizard Persten' }) } },
+    emitCustomEvent() {}, sendMultiChatboxPrompt(_player, _title, ...pairs) { menu = pairs; } };
+  const reachMenu = () => {
+    for (let i = 0; i < 30 && !menu; i++) {
+      const entries = [...chain.getDialogues().values()];
+      for (const entry of entries) if (entry.getText) lines.push(entry.getText());
+      current = entries.at(-1);
+      current.send(player);
+    }
+    assert(menu, 'the conversation returns to its options');
+  };
+  assert.equal(startTranscript(api, player, api.core.NpcIdentifiers.WIZARD_PERSTEN_5,
+    'Desert Treasure II - The Fallen Empire', 'praefectus-classis-perseriya-talking-to-wizard-persten-after-completing-the-first-passage'), true);
+  reachMenu();
+  for (const [question, answer] of [['How did you survive in here?', 'turn back time'], ["What's with the demons in this place?", 'demonic connections']]) {
+    const choice = menu.indexOf(question);
+    assert(choice >= 0);
+    const select = menu[choice + 1]; menu = null; lines.length = 0;
+    select(); reachMenu();
+    assert(lines.some(text => text.includes(answer)), `${question} plays its earlier answer before returning to the menu`);
+  }
+});
+
 
 test('Core choice dialogues use native options and validate the resume without losing their chain', () => {
  const {PluginManager}=require('../dist/plugins/PluginManager'),{DialogueManager}=require('../dist/game/model/dialogues/DialogueManager');

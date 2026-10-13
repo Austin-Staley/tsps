@@ -519,7 +519,7 @@ function startTranscript(api, player, npcId, page, variant, select) {
   if (!Array.isArray(raw)) return false;
   const steps = typeof select === "function" ? select(raw) : raw;
   if (!Array.isArray(steps) || steps.length === 0) return false;
-  const { startDialogue: playDialogue, speakerIdIndex } = require("../npcs/NpcDialogues.plugin.js");
+  const { startDialogue: playDialogue, speakerIdIndex, collectPageOptions, collectPageLines, collectMenuBefore } = require("../npcs/NpcDialogues.plugin.js");
   if (!transcriptSpeakers) {
     const fs = require("fs"), path = require("path");
     const index = JSON.parse(fs.readFileSync(path.join(api.core.GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogue-index.json"), "utf8"));
@@ -527,7 +527,9 @@ function startTranscript(api, player, npcId, page, variant, select) {
   }
   const definition = api.core.NpcDefinition.forId(npcId);
   const event = { player, npcId, npc: null, definition };
-  const context = { player, npc: null, npcId, definition, pages: [{ page, variants: [variant] }], speakerIdByName: transcriptSpeakers };
+  const options = collectPageOptions(record);
+  const context = { player, npc: null, npcId, definition, pages: [{ page, variants: [variant] }], speakerIdByName: transcriptSpeakers,
+    pageOptions: options.byText, pageOptionList: options.list, pageLines: collectPageLines(record), pageMenuBefore: collectMenuBefore(record, variant) };
   playDialogue(api, event, steps, record.branches, context);
   return true;
 }

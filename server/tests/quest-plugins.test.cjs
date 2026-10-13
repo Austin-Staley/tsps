@@ -2597,8 +2597,8 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z, getX() { return this.x; }, getY() { return this.y; } }; }
     add(npc) { this.entities.push(npc); }
     remove(npc) { this.entities = this.entities.filter((entity) => entity !== npc); }
-    isDestroyed() { return false; }
-    destroy() {}
+    isDestroyed() { return !!this.destroyed; }
+    destroy() { this.destroyed = true; }
   }
   const core = {
     ...base.core,
@@ -2901,8 +2901,10 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(inventoryCounts.get(core.ItemIdentifiers.ILLUMINATING_LURE), 4,
       'each real light leech can yield a lure');
     for (const [x, y] of [[2219, 6435], [2220, 6423], [2231, 6423], [2232, 6435]]) {
-      assert.equal(itemOnObjectHooks[0]({ player, objectId: 49436, itemId: core.ItemIdentifiers.ILLUMINATING_LURE,
-        location: maze.tile(x - 2160, y - 6400, 0) }), true);
+      const repair = { player, objectId: 49436, itemId: core.ItemIdentifiers.ILLUMINATING_LURE,
+        location: maze.tile(x - 2160, y - 6400, 0), handled: false };
+      assert.equal(itemOnObjectHooks[0](repair), true);
+      assert.equal(repair.handled, true, 'a successful lure repair consumes the item-on-object action');
     }
     assert.equal(varbits.get(15210), 4, 'repairing all four growths reveals the rune sequence');
     const energies = new Map([[1, [49520, 49189, [2227, 6430]]], [2, [49521, 49190, [2224, 6433]]],
@@ -2928,8 +2930,12 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     }
     assert.equal(attrs.get('desert-treasure-ii:scar-growth-complete'), true,
       'the exact six-energy order completes the growth challenge');
+    player.location = maze.tile(59, 3, 0);
     assert.equal(objectHooks[0]({ player, objectId: 49418, location: maze.tile(60, 2, 0) }), true,
       'the southern shipwreck passage opens only after restoring the six-energy sequence');
+    assert.deepEqual([player.location.x, player.location.y], [8254, 1603]);
+    objectHooks[0]({ player, objectId: 49418, location: maze.tile(60, 2, 0) });
+    assert.deepEqual([player.location.x, player.location.y], [8251, 1603], 'the shipwreck passage exits to the western corridor');
     assert.equal(objectHooks[0]({ player, objectId: 49425, location: maze.tile(76, 2, 0) }), true,
       'searching the mapped crate provides the tinderbox');
     assert.equal(inventoryCounts.get(core.ItemIdentifiers.TINDERBOX), 1);
@@ -2943,10 +2949,20 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     const readTablet = { player, itemId: core.ItemIdentifiers.OLD_TABLET, option: 'Read' };
     assert.equal(itemActionHooks[0](readTablet), true);
     assert.equal(readTablet.handled, true);
-    assert.equal(itemOnObjectHooks[0]({ player, objectId: 49423, itemId: core.ItemIdentifiers.TINDERBOX,
-      location: maze.tile(75, 9, 0) }), true, 'the tinderbox lights gunpowder around the wreck after reading the tablet');
+    const burnFirstWreck = { player, objectId: 49423, itemId: core.ItemIdentifiers.TINDERBOX,
+      location: maze.tile(74, 7, 0), handled: false };
+    assert.equal(itemOnObjectHooks[0](burnFirstWreck), true, 'the tinderbox targets the actual shipwreck anchor rather than a marker within its footprint');
+    assert.equal(burnFirstWreck.handled, true);
     assert.equal(attrs.get('desert-treasure-ii:scar-boat-burned'), true);
     assert.equal(varbits.get(15128), 20);
+    const firstCamp = area;
+    firstCamp.destroy();
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_17,
+      location: maze.tile(17, 59, 0) }), true, 'the first exit recreates the parent camp destroyed when entering its child instance');
+    area = attrs.get('desert-treasure-ii:scar-area');
+    assert.notEqual(area, firstCamp);
+    assert.equal(area.isDestroyed(), false);
+    assert.deepEqual([player.location.x, player.location.y], [8243, 1643]);
     interactions.find((entry) => entry.name === 'Wizard Persten').options['Talk-to']({
       player, npcId: core.NpcIdentifiers.WIZARD_PERSTEN_5,
     });
@@ -2954,8 +2970,9 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(attrs.get('desert-treasure-ii:scar-persten-room1-talked'), true);
     assert.equal(varbits.get(15128), 22, 'Persten advances the quest only after the boat room is complete');
     assert.equal(area.scarMazeTwoEntry.id, core.ObjectIdentifiers.PASSAGE_15,
-      'Persten opens the cache passage to the middle level after the first ship is destroyed');
-    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_15, location: area.tile(51, 34, 0) }), true);
+      'Persten opens the south-east cache passage after the first ship is destroyed');
+    assert.deepEqual([area.scarMazeTwoEntry.location.x, area.scarMazeTwoEntry.location.y], [8239, 1627]);
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_15, location: area.tile(47, 27, 0) }), true);
     const middle = attrs.get('desert-treasure-ii:scar-maze-two');
     assert.equal(middle.width, 12);
     assert.equal(middle.height, 8);
@@ -3063,20 +3080,26 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(burnSecondWreck.handled, true);
     assert.equal(attrs.get('desert-treasure-ii:scar-boat2-burned'), true);
     assert.equal(varbits.get(15128), 28);
+    const secondCamp = area;
+    secondCamp.destroy();
     assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_17, location: middle.tile(94, 5, 0) }), true,
       'the real passage exit returns the player to Persten after the second ship');
+    area = attrs.get('desert-treasure-ii:scar-area');
+    assert.notEqual(area, secondCamp);
     interactions.find((entry) => entry.name === 'Wizard Persten').options['Talk-to']({
       player, npcId: core.NpcIdentifiers.WIZARD_PERSTEN_5,
     });
     assert.equal(transcripts.at(-1), 'praefectus-classis-perseriya-talking-to-wizard-persten-after-completing-the-second-passage');
     assert.equal(attrs.get('desert-treasure-ii:scar-persten-room2-talked'), true);
     assert.equal(varbits.get(15128), 30);
-    assert.equal(area.scarMazeTwoEntry.id, 49410, 'Persten reveals the third passage after the second boat is burned');
-    assert.equal(objectHooks[0]({ player, objectId: 49410, location: area.tile(51, 34, 0) }), true);
+    assert.equal(area.scarMazeTwoEntry.id, core.ObjectIdentifiers.PASSAGE_16, 'Persten reveals the middle cache passage after the second boat is burned');
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_16, location: area.tile(51, 34, 0) }), true);
     const finalPassage = attrs.get('desert-treasure-ii:scar-maze-three');
     assert.equal(finalPassage.width, 9);
     assert.equal(finalPassage.height, 9);
     assert.equal(varbits.get(15128), 32);
+    loginHooks.find(handler => handler.name === 'handleLogin')({ player });
+    assert.equal(varbits.get(15210), 0, 'the first passage growth flags cannot overwrite the final passage leech progress on login');
     const pendingAirHits = [];
     attrs.set('desert-treasure-ii:scar-maze-three-air', 2);
     finalPassage.process(player);
@@ -3151,13 +3174,19 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(itemActionHooks[0](readThirdTablet), true);
     assert.equal(readThirdTablet.handled, true);
     const burnThirdWreck = { player, itemId: core.ItemIdentifiers.TINDERBOX, objectId: core.ObjectIdentifiers.SHIPWRECK,
-      location: finalPassage.tile(58, 55, 0) };
+      location: finalPassage.tile(56, 54, 0) };
     assert.equal(itemOnObjectHooks[0](burnThirdWreck), true);
     assert.equal(burnThirdWreck.handled, true);
     assert.equal(attrs.get('desert-treasure-ii:scar-boat3-burned'), true);
     assert.equal(varbits.get(15128), 34);
+    const thirdCamp = area;
+    thirdCamp.destroy();
     assert.equal(objectHooks[0]({ player, objectId: 49410, location: finalPassage.tile(41, 36, 0) }), true,
       'the passage exit returns to camp after the third ship burns');
+    area = attrs.get('desert-treasure-ii:scar-area');
+    assert.notEqual(area, thirdCamp);
+    assert.equal(attrs.get('desert-treasure-ii:scar-maze-three-active'), false,
+      'the completed memory puzzle cannot intercept the final return to camp');
     interactions.find((entry) => entry.name === 'Wizard Persten').options['Talk-to']({ player, npcId: core.NpcIdentifiers.WIZARD_PERSTEN_5 });
     assert.equal(transcripts.at(-1), 'praefectus-classis-perseriya-talking-to-wizard-persten-after-completing-the-third-passage');
     assert.equal(varbits.get(15128), 36);

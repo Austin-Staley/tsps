@@ -755,7 +755,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
 
 module.exports = {
   name: "NpcDialogues",
-  // Exported for tests/npc-dialogues.test.cjs; nothing else reads them.
+  // Shared by quest transcript playback and dialogue regressions.
   pickVariant,
   aliasKeys,
   flatten,
@@ -763,6 +763,7 @@ module.exports = {
   startDialogue,
   collectPageLines,
   collectPageOptions,
+  collectMenuBefore,
   speakerIdIndex,
   register(api) {
     const dialogueFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json");
