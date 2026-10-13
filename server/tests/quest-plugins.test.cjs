@@ -12201,3 +12201,44 @@ test('DT2 Kasonde uses melee/ranged basics, healing, avoidable potions and pilla
   attrs.set('desert-treasure-ii:vardorvis-progress',21);assert.match(quest.buildJournal(p).join(' '),/north-east stone chest/);
   attrs.set('desert-treasure-ii:vardorvis-progress',22);assert.match(quest.buildJournal(p).join(' '),/Ancient Vault/);
 });
+
+
+test('Duke prison recovery retains earned items, kit metadata, overflow and failed retries atomically', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const { Item, ItemIdentifiers: I } = api.core;
+  const container = (capacity, items = []) => ({
+    items: Array.from({ length: capacity }, (_, slot) => items[slot] ?? new Item(-1, 0)),
+    getItems() { return this.items; }, setItems(items) { this.items = items; }, refreshItems() {},
+  });
+  const bag = container(3, [new Item(I.SAPPHIRE_KEY_2), new Item(I.PRISONERS_LETTER)]);
+  const worn = container(14), bank = container(2);
+  const saved = { inventory: [[I.SHARK, 1, null], [I.DEATH_RUNE, 250, null]],
+    equipment: Array.from({ length: 14 }, (_, slot) => slot === 3 ? [I.ABYSSAL_WHIP, 1, { charge: 37 }] : [-1, 0, null]) };
+  const attrs = new Map([['quest.desert_treasure_ii.stage', 9], ['desert-treasure-ii:sucellus-prison-gear', saved]]);
+  const messages = [];
+  const player = { getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getInventory: () => bag, getEquipment: () => worn, getBank: () => bank, sendMessage: text => messages.push(text) };
+  const recover = handlers.custom.get('dt2:sucellus-prison-return-stash')[0];
+  bank.items = [new Item(I.COINS, 1), new Item(I.AIR_RUNE, 1)];
+  const before = JSON.stringify([bag.items, worn.items, bank.items]);
+  let request = { player, restored: false };
+  recover(request);
+  assert.equal(request.restored, false);
+  assert.equal(JSON.stringify([bag.items, worn.items, bank.items]), before, 'bank-full failure cannot partially recover');
+  assert.equal(attrs.get('desert-treasure-ii:sucellus-prison-gear'), saved);
+  bank.items[1] = new Item(-1, 0);
+  request = { player, restored: false }; recover(request);
+  assert.equal(request.restored, true);
+  assert.equal(bag.items[0].getId(), I.SAPPHIRE_KEY_2);
+  assert.equal(bag.items[1].getId(), I.PRISONERS_LETTER);
+  assert.equal(bag.items[2].getId(), I.SHARK);
+  assert.equal(bank.items[1].getId(), I.DEATH_RUNE);
+  assert.equal(bank.items[1].getAmount(), 250);
+  assert.deepEqual(worn.items[3].getMeta(), { charge: 37 });
+  assert.equal(attrs.get('desert-treasure-ii:sucellus-prison-gear'), null);
+  assert.ok(messages.some(text => text.includes('sent to your bank')));
+  const recovered = JSON.stringify([bag.items, worn.items, bank.items]);
+  recover({ player, restored: false });
+  assert.equal(JSON.stringify([bag.items, worn.items, bank.items]), recovered, 'reopening cannot duplicate gear');
+});

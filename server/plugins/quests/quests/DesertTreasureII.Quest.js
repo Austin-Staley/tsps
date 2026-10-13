@@ -5656,9 +5656,64 @@ module.exports = function registerDesertTreasureII(api) {
     gear.inventory = gear.inventory.map(item => cellItems.has(item[0]) ? [-1, 0, null] : item);
     for (const item of kept) p.getInventory().adds(item.getId(), item.getAmount());
   }
-  function returnSucellusPrisonStash({ player }) {
+  function returnSucellusPrisonStash(request) {
+    const { player } = request;
     if (stage(player) !== S.SUCELLUS) return;
-    restoreFinalCellGear(player, SUCELLUS_PRISON_GEAR);
+    const gear = player.getAttribute(SUCELLUS_PRISON_GEAR);
+    if (!gear) { request.restored = true; return; }
+    if (!Array.isArray(gear.inventory) || !Array.isArray(gear.equipment)) return;
+    const inventory = player.getInventory(), equipment = player.getEquipment();
+    const bag = inventory.getItems().map(item => item.clone());
+    const worn = equipment.getItems().map(item => item.clone());
+    const overflow = [];
+    const place = (items, item, stackable) => {
+      if (item.getId() <= 0 || item.getAmount() <= 0) return true;
+      const matching = stackable ? items.find(slot => slot.getId() === item.getId()
+        && JSON.stringify(slot.getMeta() ?? null) === JSON.stringify(item.getMeta() ?? null)) : null;
+      if (matching && Number.isSafeInteger(matching.getAmount() + item.getAmount())) {
+        matching.setAmount(matching.getAmount() + item.getAmount());
+        return true;
+      }
+      const empty = items.findIndex(slot => slot.getId() <= 0 || slot.getAmount() <= 0);
+      if (empty < 0) return false;
+      items[empty] = item.clone();
+      return true;
+    };
+    const recover = item => {
+      if (item.getId() <= 0 || item.getAmount() <= 0) return;
+      if (!place(bag, item, item.getDefinition().isStackable())) overflow.push(item);
+    };
+    for (const [id, amount, meta] of gear.inventory) {
+      if (id > 0 && amount > 0) recover(new Item(id, amount, meta));
+    }
+    for (let slot = 0; slot < gear.equipment.length; slot++) {
+      const [id, amount, meta] = gear.equipment[slot];
+      if (id <= 0 || amount <= 0) continue;
+      if (slot >= worn.length) return;
+      recover(worn[slot]);
+      worn[slot] = new Item(id, amount, meta);
+    }
+    // Keep prison keys and notes in the bag; recover excess confiscated supplies to the bank.
+    if (overflow.some(item => item.getMetaValue(Item.UNBANKABLE_META) === true)) {
+      player.sendMessage("Make room in your inventory for belongings that cannot be banked. Nothing has been moved.");
+      return;
+    }
+    const bank = overflow.length ? player.getBank(0) : null;
+    const bankItems = bank?.getItems().map(item => item.clone());
+    for (const item of overflow) {
+      if (!place(bankItems, item, true)) {
+        player.sendMessage("Make room in your bank before recovering your belongings. Nothing has been moved.");
+        return;
+      }
+    }
+    inventory.setItems(bag);
+    equipment.setItems(worn);
+    if (bank) { bank.setItems(bankItems); bank.refreshItems(); }
+    inventory.refreshItems();
+    equipment.refreshItems();
+    player.setAttribute(SUCELLUS_PRISON_GEAR, null);
+    request.restored = true;
+    if (overflow.length) player.sendMessage("Your belongings have been recovered. Supplies that would not fit were sent to your bank.");
   }
   function completeSucellusPrison({ player }) {
     if (stage(player) !== S.SUCELLUS) return;
