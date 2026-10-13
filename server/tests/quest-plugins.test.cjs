@@ -10319,3 +10319,62 @@ test('Dragon Slayer II crypt uses canonical template locs and reachable native-v
   assert.equal(varbits.get(6105), 36, 'native cache tomb and bust transforms advance after the key is taken');
   assert.ok(messages.some((message) => message.includes('dragon key piece')));
 });
+
+test('DT2 Vardorvis scales melee, heals, exposes avoidable specials and accepts only active native spore buttons', () => {
+  const {api:base,handlers}=mockApi();
+  let cycle=1, Combat, hitRoll, resolved, prayerDisabled, blocked=false, prayer=60, accurate=true;
+  const damage={value:37,getDamage(){return this.value},setDamage(v){this.value=v}};
+  const pending={getHits:()=>[damage],isAccurate:()=>accurate,updateTotalDamage(){},getTotalDamage:()=>damage.value};
+  const attrs=new Map([['desert-treasure-ii:vardorvis-progress',16]]),varbits=new Map([[4118,1]]),received=[],tasks=[],scripts=[],closed=[];
+  class Instance {
+    constructor(){this.entities=[]}setChunk(){}enter(){}leave(){}postLeave(){}destroy(){}isDestroyed(){return false}
+    getBaseX(){return 8192}getBaseY(){return 1600}tile(x,y,z){return new base.core.Location(8192+x,1600+y,z)}add(n){this.entities.push(n)}
+  }
+  const core={...base.core,TemplatedInstanceArea:Instance,MeleeCombatMethod:class{hits(){return[pending]}},
+    NPC:{create:(id,location)=>({id,location,hp:500,scripted:false,setOwner(){},setOwnerOnly(){},getHitpoints(){return this.hp},getMaxHitpoints(){return 500},setHitpoints(v){this.hp=v},setDefenceLevel(v){this.defence=v},setDefenceBonusOverrides(){},getLocation(){return this.location},moveTo(v){this.location=v},performAnimation(){},setScriptedMovement(v){this.scripted=v}})},
+    World:{getProcessCycle:()=>cycle,getAddNPCQueue:()=>[],getRemoveNPCQueue:()=>[]},
+    Projectile:{createProjectile:()=>({sendProjectile(){}})},
+    PrayerHandler:{...base.core.PrayerHandler,deactivatePrayer:(p,id)=>varbits.set(4100+id,0)},
+    Task:class{stop(){this.stopped=true}},TaskManager:{submit:t=>tasks.push(t),cancelTasks(){}},
+  };
+  const api=new Proxy(base,{get:(t,key)=>key==='core'?core:key==='registerNpcCombatMethodProvider'?(id,C)=>{Combat=C}:key==='onCombatHitRoll'?h=>hitRoll=h:key==='onCombatHitResolved'?h=>resolved=h:key==='onPrayerDisabled'?h=>prayerDisabled=h:t[key]});
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const quest=require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
+  const p={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getUsername:()=> 'vard-test',isPlayer:()=>true,getAsPlayer(){return this},isRegistered:()=>true,getHitpoints:()=>99,
+    getPrivateArea:()=>attrs.get('desert-treasure-ii:vardorvis-area'),getLocation(){return this.location},moveTo(v){this.location=v},sendMessage(){},
+    getInventory:()=>({getAmount:()=>0}),getPacketSender:()=>({getVarbit:k=>varbits.get(k)||0,sendVarbit:(k,v)=>varbits.set(k,v),sendConfig(){},sendQuestList(){},sendInterfaceFlagsRange(){},sendGraphic(){},sendSubInterface(){},sendInterfaceScript:(...a)=>scripts.push(a),sendInterfaceDisplayState(){},closeInterface:id=>closed.push(id)}),
+    getMovementQueue:()=>({reset(){},setBlockMovement:v=>blocked=v}),getSkillManager:()=>({getCurrentLevel:()=>prayer,setCurrentLevel:(s,v)=>prayer=v}),
+    getCombat:()=>({getTarget:()=>attrs.get('desert-treasure-ii:boss'),getHitQueue:()=>({addPendingDamage:h=>received.push(...h)})})};
+  quest.setStage(p,7);
+  handlers.objects[0]({player:p,objectId:49495,location:{x:1118,y:3428,z:0}});
+  const area=p.getPrivateArea(),boss=area.entities.find(n=>n.id===core.NpcIdentifiers.VARDORVIS_2);
+  // The quest stores its active encounter in the canonical shared boss attribute.
+  const bossKey=[...attrs].find(([,v])=>v===boss)[0];
+  p.getCombat=()=>({getTarget:()=>boss,getHitQueue:()=>({addPendingDamage:h=>received.push(...h)})});
+  const random=Math.random;Math.random=()=>0.999;
+  try{
+    const method=new Combat();assert.equal(method.attackSpeed(),5);
+    method.hits(boss,p);assert.equal(damage.value,7,'full-health protected melee is reduced by75%');
+    boss.hp=1;method.hits(boss,p);assert.equal(damage.value,9,'the maximum melee hit rises as HP falls');
+    varbits.set(4118,0);method.hits(boss,p);assert.equal(damage.value,37);
+    accurate=false;method.hits(boss,p);assert.equal(damage.value,0,'misses stay misses');accurate=true;
+    const roll={attacker:boss,bypassProtectionPrayer:false};hitRoll(roll);assert.equal(roll.bypassProtectionPrayer,true);
+    boss.hp=490;damage.value=30;resolved({attacker:boss,target:p,hit:pending});assert.equal(boss.hp,500,'healing is capped');
+    boss.hp=100;area.process(p);assert.equal(blocked,true);assert.deepEqual(scripts.at(-1),[1816,[6]]);
+    const widget=handlers.custom.get('player:widget-action')[0];
+    const bad={player:p,packet:{type:'widget_action',groupId:833,childId:5}};widget(bad);assert.notEqual(bad.handled,true);
+    for(const childId of [6,7,8,9,10])widget({player:p,packet:{type:'widget_action',groupId:833,childId}});
+    assert.equal(blocked,true,'all six spores must be destroyed');
+    widget({player:p,packet:{type:'widget_action',groupId:833,childId:11}});assert.equal(blocked,false);assert.equal(boss.scripted,false);assert.equal(closed.at(-1),833);
+    cycle=20;area.nextSpecial=cycle;area.lastSpecial=null;area.process(p);cycle=29;area.process(p);assert.ok(received.some(h=>h.getDamage()===50),'missed spore window hurts');assert.equal(blocked,false);
+    Math.random=()=>0.5;cycle=40;area.nextSpecial=cycle;area.process(p);varbits.set(4117,0);cycle=43;area.process(p);assert.equal(prayer,50);assert.equal(varbits.get(4118),0);
+    const denied={player:p,prayer:{configId:4118}};prayerDisabled(denied);assert.equal(denied.disabled,true);
+    cycle=46;const allowed={player:p,prayer:{configId:4118}};prayerDisabled(allowed);assert.notEqual(allowed.disabled,true);
+    Math.random=()=>0.25;cycle=50;area.nextSpecial=cycle;area.process(p);p.moveTo(p.location.clone().addX(2));const count=received.length;cycle=53;area.process(p);assert.equal(received.length,count,'moving avoids the marked spike');
+    cycle=60;area.nextSpecial=cycle;area.process(p);cycle=63;area.process(p);assert.ok(received.at(-1).getDamage()>=0);
+    Math.random=()=>0;cycle=70;area.nextSpecial=cycle;area.process(p);assert.equal(area.axes.length,3,'low health adds three axes');assert.ok(area.axes.every(a=>a.npc.id===12227));
+    p.moveTo(area.tile(8,8,0));cycle=73;area.process(p);assert.equal(tasks.length,1,'an axe starts a bleed task that can survive area exit');
+    const bleed=tasks[0];for(let n=0;n<5;n++)bleed.execute();assert.equal(bleed.stopped,true);assert.equal(received.slice(-5).every(h=>h.getDamage()===3),true);
+    assert.equal(attrs.get(bossKey),boss);
+  }finally{Math.random=random;area.destroy()}
+});
