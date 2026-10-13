@@ -3556,6 +3556,7 @@ test('Dragon Slayer II Ungael notes require all six real pieces before combining
 test('Dragon Slayer II rowboat build consumes the Wiki supplies and uses the ready dialogue to travel', () => {
   const objects = new Map();
   const objectHandlers = [];
+  const itemOnObjectHandlers = [];
   const playerProcesses = [];
   const custom = new Map();
   const { api: base } = mockApi();
@@ -3570,6 +3571,7 @@ test('Dragon Slayer II rowboat build consumes the Wiki supplies and uses the rea
         if (typeof handler === 'function') objectHandlers.push(handler);
         else if (typeof handler === 'string' && actions) objects.set(handler, actions);
       };
+      if (prop === 'onItemOnObject') return (handler) => itemOnObjectHandlers.push(handler);
       if (prop === 'onPlayerProcess') return (handler) => playerProcesses.push(handler);
       if (prop === 'onCustomEvent') return (name, handler) => custom.set(name, [...(custom.get(name) ?? []), handler]);
       return target[prop];
@@ -3591,7 +3593,11 @@ test('Dragon Slayer II rowboat build consumes the Wiki supplies and uses the rea
   const sentVarbits = [];
   let destination;
   let playerLocation = { x: 3659, y: 3849, z: 0 };
-  const packet = new Proxy({ sendVarbit: (id, value) => sentVarbits.push([id, value]) }, { get: (target, key) => target[key] ?? (() => packet) });
+  const packet = new Proxy({
+    sendVarbit: (id, value) => sentVarbits.push([id, value]),
+    getVarbit: () => 0,
+    getVarp: () => 0,
+  }, { get: (target, key) => target[key] ?? (() => packet) });
   const player = {
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
@@ -3643,6 +3649,14 @@ test('Dragon Slayer II rowboat build consumes the Wiki supplies and uses the rea
   assert.equal(objectHandlers[0]({
     player, objectId: O.ANCIENT_DOORS, location: { x: 3550, y: 10425, z: 0 },
   }), true);
+  assert.equal(amounts.get(I.DRAGON_KEY), 0);
+  assert.equal(attributes.get('quest.dragon_slayer_ii.stage'), 11);
+  attributes.set('quest.dragon_slayer_ii.stage', 10);
+  amounts.set(I.DRAGON_KEY, 1);
+  const itemUnlock = { player, itemId: I.DRAGON_KEY, objectId: 29872,
+    location: { x: 3550, y: 10425, z: 0 }, handled: false };
+  itemOnObjectHandlers[0](itemUnlock);
+  assert.equal(itemUnlock.handled, true, 'the generic item-on-object hook suppresses its fallback after unlocking');
   assert.equal(amounts.get(I.DRAGON_KEY), 0);
   assert.equal(attributes.get('quest.dragon_slayer_ii.stage'), 11);
   assert.ok(messages.includes('You successfully build the boat.'));
@@ -7751,6 +7765,117 @@ test('Dragon Slayer II registers the cache-named roaming Bob through the live si
   assert.ok(names.includes('Bob the Cat'), 'retain support for descriptive cache name variants');
   assert.ok(names.includes('Istoria') && names.includes('Jonathan'));
   assert.ok(names.includes('Sir Amik Varze') && names.includes('King Roald'));
+});
+
+test('Dragon Slayer II routes the Lithkren north staircase click to its reachable cache perimeter', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  const route = handlers.routes.find((handler) => handler.name === 'routeLithkrenNorthStairs');
+  const { Location, ObjectIdentifiers: O } = api.core;
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const definition = ObjectDefinition.forId(O.STAIRCASE_169);
+  const attributes = new Map([
+    ['quest.dragon_slayer_ii.stage', 10],
+    ['dragon-slayer-ii:lithkren-arrived', true],
+  ]);
+  let location = new Location(3549, 10448, 0);
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    getLocation: () => location,
+    getPrivateArea: () => null,
+    moveTo: (next) => { location = next; },
+  };
+  const object = {
+    getLocation: () => new Location(3549, 10469, 0),
+    getFace: () => 1,
+  };
+  const event = { player, object, definition, objectId: O.STAIRCASE_169, clickType: 1, destination: null };
+  route(event);
+  assert.deepEqual(event.destination, { x: 3549, y: 10468, z: 0 },
+    'the route uses the reachable north edge instead of the blocked default south side');
+
+  const climb = handlers.custom.get('ladders:climb').find((handler) => handler.name === 'climbLithkrenNorthStairs');
+  const request = { player, object, objectId: O.STAIRCASE_169, handled: false };
+  climb(request);
+  assert.equal(request.handled, true);
+  assert.deepEqual([location.getX(), location.getY(), location.getZ()], [3549, 10419, 0],
+    'the real staircase action carries the player into the Dallas chamber');
+});
+
+test('Dragon Slayer II enters the cache deep Lithkren vault and starts the automatic scene transcript', () => {
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  const { api: base, handlers } = mockApi();
+  const spawned = [];
+  const transcripts = [];
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'spawnNpc'
+      ? definition => {
+        const npc = {
+          ...definition,
+          setScriptedMovement() {},
+          setArea(area) { this.area = area; },
+          isNpc: () => true,
+          getAsNpc() { return this; },
+          getIndex: () => 5000 + spawned.length,
+          isRegistered: () => false,
+        };
+        spawned.push(npc);
+        return npc;
+      }
+      : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  runtime.startTranscript = (_api, _player, npcId, page, variant) => {
+    transcripts.push({ npcId, page, variant });
+    return true;
+  };
+  try {
+    require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  } finally {
+    runtime.startTranscript = originalStartTranscript;
+  }
+
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const { NpcIdentifiers: N, ObjectIdentifiers: O, Location } = api.core;
+  const attrs = new Map([
+    ['quest.dragon_slayer_ii.stage', 11],
+    ['dragon-slayer-ii:lithkren-arrived', true],
+  ]);
+  let area = null;
+  let location = new Location(3550, 10423, 0);
+  const player = {
+    getAttribute: key => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getArea: () => area,
+    setArea: value => { area = value; },
+    getPrivateArea: () => area,
+    getIndex: () => 4999,
+    getUsername: () => 'VaultSceneTest',
+    isPlayer: () => true,
+    getAsPlayer() { return this; },
+    getLocation: () => location,
+    moveTo: next => { location = next; },
+    sendMessage() {},
+  };
+  const handler = handlers.objects.find(candidate => candidate.name === 'handleObject');
+  const enter = {
+    player, objectId: 29872, clickType: 1,
+    definition: ObjectDefinition.forId(O.ANCIENT_DOORS_3),
+    location: { x: 3547, y: 10424, z: 0 }, handled: false,
+  };
+  assert.equal(handler(enter), true);
+  assert.equal(enter.handled, true);
+  assert.deepEqual([location.getX(), location.getY(), location.getZ()], [1566, 5060, 0]);
+  assert.deepEqual(transcripts, [{ npcId: N.DALLAS_JONES_6, page: 'Dragon Slayer II', variant: 'the-ultimate-weapon-talking-to-either-in-the-vault' }]);
+  assert.deepEqual(spawned.map(npc => npc.id), [N.DALLAS_JONES_6, N.BOB_16, N.JARDRIC_8, N.ZORGOTH_5, N.GALVEK_6]);
+  assert.ok(spawned.every(npc => npc.owner === player && npc.ownerOnly));
+
+  const actionHandlers = handlers.custom.get('npc-dialogue:action');
+  for (const action of actionHandlers) action({ player, stepId: 'MCUN0r' });
+  assert.deepEqual([location.getX(), location.getY(), location.getZ()], [3550, 10423, 0]);
+  assert.equal(attrs.get('dragon-slayer-ii:vault-scene-complete'), true);
+  assert.equal(attrs.get('dragon-slayer-ii:vault-scene-active'), false);
+  assert.equal(area, null, 'the cutscene actors and private scene are cleaned up after Galvek escapes');
 });
 
 

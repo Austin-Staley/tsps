@@ -133,6 +133,8 @@ module.exports = function registerDragonSlayerII(api) {
   const ATTR_LITHKREN_ARRIVED = "dragon-slayer-ii:lithkren-arrived";
   const ATTR_LITHKREN_NATIVE_STAGE = "dragon-slayer-ii:lithkren-native-stage";
   const ATTR_LITHKREN_DALLAS_TALKED = "dragon-slayer-ii:lithkren-dallas-talked";
+  const ATTR_VAULT_SCENE_ACTIVE = "dragon-slayer-ii:vault-scene-active";
+  const ATTR_VAULT_SCENE_COMPLETE = "dragon-slayer-ii:vault-scene-complete";
   const ATTR_AIVAS_DIARY = "dragon-slayer-ii:aivas-diary";
   const ATTR_AIVAS_DIARY_FOUND = "dragon-slayer-ii:aivas-diary-found";
   const ATTR_DREAM_PROGRESS = "dragon-slayer-ii:dream-progress";
@@ -178,6 +180,18 @@ module.exports = function registerDragonSlayerII(api) {
   const ROWBOAT_SPACE_TILE = { x: 3659, y: 3849, z: 0 };
   // QuestHelper's surface route continues at the courtyard stairs on Lithkren.
   const LITHKREN_LANDING = new Location(3559, 4004, 0);
+  // The ancient doors lead into the Deep Lithkren vault, on the north edge of the
+  // Ancient Cavern map. These are the cache/QH room bounds and entry tile.
+  const DEEP_LITHKREN_BOUNDS = new Boundary(1539, 1596, 5059, 5107, 0);
+  const DEEP_LITHKREN_ENTRY = new Location(1566, 5060, 0);
+  const DEEP_LITHKREN_EXIT = new Location(3550, 10423, 0);
+  const DEEP_LITHKREN_ACTORS = [
+    { id: N.DALLAS_JONES_6, x: 1566, y: 5099 },
+    { id: N.BOB_16, x: 1567, y: 5099 },
+    { id: N.JARDRIC_8, x: 1564, y: 5098 },
+    { id: N.ZORGOTH_5, x: 1568, y: 5101 },
+    { id: N.GALVEK_6, x: 1570, y: 5103 },
+  ];
   const KARAMJA_INSTANCE = { sourceChunkX: 352, sourceChunkY: 1150, widthChunks: 8, heightChunks: 13 };
   const KARAMJA_SOURCE = { x: 2816, y: 9200 };
   const KARAMJA_ENTRANCE = { x: 2943, y: 2894, z: 0 };
@@ -789,7 +803,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function climbLithkrenNorthStairs(event) {
     const { player: p, object, objectId } = event;
-    if (stage(p) !== S.TO_LITHKREN || !p.getAttribute(ATTR_LITHKREN_ARRIVED)
+    if (stage(p) < S.TO_LITHKREN || stage(p) >= S.LEADERS || !p.getAttribute(ATTR_LITHKREN_ARRIVED)
       || objectId !== O.STAIRCASE_169) return;
     const loc = object?.getLocation?.();
     if (!loc || (loc.getX?.() ?? loc.x) !== 3549 || (loc.getY?.() ?? loc.y) !== 10469
@@ -799,8 +813,90 @@ module.exports = function registerDragonSlayerII(api) {
     event.handled = true;
     p.moveTo(new Location(3549, 10419, 0));
   }
+  function routeLithkrenNorthStairs(event) {
+    if (event.objectId !== O.STAIRCASE_169 || event.clickType !== 1
+      || stage(event.player) < S.TO_LITHKREN || stage(event.player) >= S.LEADERS
+      || !event.player.getAttribute(ATTR_LITHKREN_ARRIVED)) return;
+    const { x, y, z } = event.object.getLocation();
+    if (x !== 3549 || y !== 10469 || z !== 0) return;
+
+    // This large cache staircase sits inside a tight wall footprint. The default
+    // object route picks the far side of that footprint and stops short. Route
+    // the click to an actually reachable perimeter tile, then let Ladders handle
+    // the normal climb transition above the Dallas chamber.
+    let width = event.definition?.getSizeX?.() ?? 1;
+    let height = event.definition?.getSizeY?.() ?? 1;
+    if ((event.object.getFace?.() ?? 0) & 1) [width, height] = [height, width];
+    const candidates = [];
+    for (let dx = 0; dx < width; dx++) {
+      candidates.push({ x: x + dx, y: y - 1 }, { x: x + dx, y: y + height });
+    }
+    for (let dy = 0; dy < height; dy++) {
+      candidates.push({ x: x - 1, y: y + dy }, { x: x + width, y: y + dy });
+    }
+    const position = event.player.getLocation();
+    const finder = new api.core.RsmodRouteFinding();
+    const reachable = candidates.map((tile) => ({ ...tile, route: finder.findRoute({
+      level: z, srcX: position.getX(), srcY: position.getY(), srcSize: 1,
+      destX: tile.x, destY: tile.y, privateArea: event.player.getPrivateArea?.() ?? null,
+      moveNear: false,
+    }) })).filter((tile) => tile.route.success)
+      .sort((a, b) => Math.abs(a.x - position.getX()) + Math.abs(a.y - position.getY())
+        - Math.abs(b.x - position.getX()) - Math.abs(b.y - position.getY()));
+    if (reachable.length) event.destination = { x: reachable[0].x, y: reachable[0].y, z };
+  }
+  function spawnDeepLithkrenScene(p) {
+    leaveArea(p);
+    const area = new QuestArea(p.getUsername?.(), DEEP_LITHKREN_BOUNDS);
+    area.enter(p);
+    p.setAttribute(ATTR_AREA, area);
+    for (const actor of DEEP_LITHKREN_ACTORS) {
+      const npc = api.spawnNpc({
+        id: actor.id, x: actor.x, y: actor.y, z: 0,
+        owner: p, ownerOnly: true, wanderRadius: 0,
+      });
+      if (!npc) continue;
+      npc.setScriptedMovement?.(true);
+      area.add(npc);
+      World.getAddNPCQueue().push(npc);
+    }
+    return area;
+  }
+  function enterDeepLithkrenVault(p, { resume = false } = {}) {
+    if (stage(p) !== S.LEADERS || !p.getAttribute(ATTR_LITHKREN_ARRIVED)) return false;
+    if (!resume && p.getAttribute(ATTR_VAULT_SCENE_COMPLETE)) {
+      p.sendMessage("The vault is silent now.");
+      return true;
+    }
+    if (!resume && p.getAttribute(ATTR_VAULT_SCENE_ACTIVE)) return true;
+    spawnDeepLithkrenScene(p);
+    p.setAttribute(ATTR_VAULT_SCENE_ACTIVE, true);
+    p.moveTo(DEEP_LITHKREN_ENTRY);
+    // The vault NPCs are cache scene actors without Talk-to actions. OSRS starts
+    // this multi-speaker transcript automatically after the player enters.
+    startTranscript(api, p, N.DALLAS_JONES_6, PAGE, "the-ultimate-weapon-talking-to-either-in-the-vault");
+    return true;
+  }
+  function finishDeepLithkrenCutscene(p, complete) {
+    p.setAttribute(ATTR_VAULT_SCENE_ACTIVE, false);
+    if (complete) p.setAttribute(ATTR_VAULT_SCENE_COMPLETE, true);
+    leaveArea(p);
+    p.moveTo(DEEP_LITHKREN_EXIT);
+  }
   function onQuestDialogueAction(event) {
     const { player: p, stepId } = event;
+    if (stage(p) === S.LEADERS && stepId === "MCUN0r"
+      && p.getAttribute(ATTR_VAULT_SCENE_ACTIVE)) {
+      // This transcript action is the cache cutscene transition back outside
+      // the unlocked Lithkren doors as Galvek escapes.
+      finishDeepLithkrenCutscene(p, true);
+      return;
+    }
+    if (stage(p) === S.LEADERS && stepId === "Zq2IQ9") {
+      p.setAttribute(ATTR_VAULT_SCENE_ACTIVE, false);
+      p.setAttribute(ATTR_VAULT_SCENE_COMPLETE, true);
+      return;
+    }
     // The transcript's Yes choice is the actual point at which Bob and the
     // player enter the dream. A No choice leaves them at the brazier.
     if (stepId === "z9kHar" && stage(p) === S.DREAM
@@ -1847,6 +1943,11 @@ module.exports = function registerDragonSlayerII(api) {
     if (handleUngaelLab({ player: p, objectId, location })) return true;
     if (enterUngaelLaboratory({ player: p, objectId, location })) return true;
     const visibleObjectId = definition?.id ?? objectId;
+    if (s === S.LEADERS && p.getAttribute(ATTR_LITHKREN_ARRIVED)
+      && [O.ANCIENT_DOORS, O.ANCIENT_DOORS_2, O.ANCIENT_DOORS_3, O.ANCIENT_DOORS_4].includes(visibleObjectId)
+      && definition?.getInteractions?.()?.[clickType - 1] === "Enter") {
+      return enterDeepLithkrenVault(p);
+    }
     if (s === S.TUNNEL && CRANDOR_BLOCKAGE_ACTIONS.has(visibleObjectId)
       && [2859, 2860].includes(location.x) && location.y === 9648 && location.z === 0) {
       const progress = Number(p.getAttribute(ATTR_CRANDOR_BLOCKAGE_PROGRESS)) || 15;
@@ -1903,7 +2004,7 @@ module.exports = function registerDragonSlayerII(api) {
       advance(p, S.LITHKREN); return true;
     }
     if (s >= S.KEYS && s < S.LEADERS && p.getAttribute(ATTR_LITHKREN_ARRIVED)
-      && [O.ANCIENT_DOORS, O.ANCIENT_DOORS_2, O.ANCIENT_DOORS_3, O.ANCIENT_DOORS_4].includes(objectId)) {
+      && [O.ANCIENT_DOORS, O.ANCIENT_DOORS_2, O.ANCIENT_DOORS_3, O.ANCIENT_DOORS_4].includes(visibleObjectId)) {
       if (!has(p, I.DRAGON_KEY)) return p.sendMessage("The lock requires a dragon key.");
       remove(p, I.DRAGON_KEY); p.sendMessage("The ancient doors unlock. Dallas and Bob enter the Lithkren laboratory.");
       advance(p, S.LEADERS); return true;
@@ -1935,8 +2036,12 @@ module.exports = function registerDragonSlayerII(api) {
       return true;
     }
     if (stage(p) >= S.KEYS && p.getAttribute(ATTR_LITHKREN_ARRIVED) && itemId === I.DRAGON_KEY
-      && [O.ANCIENT_DOORS, O.ANCIENT_DOORS_2, O.ANCIENT_DOORS_3, O.ANCIENT_DOORS_4].includes(objectId)) {
-      return handleObject({ player: p, objectId, handled });
+      && [O.ANCIENT_DOORS, O.ANCIENT_DOORS_2, O.ANCIENT_DOORS_3, O.ANCIENT_DOORS_4]
+        .includes(api.core.ObjectDefinition.forPlayer(objectId, p)?.id ?? objectId)) {
+      const visibleObjectId = api.core.ObjectDefinition.forPlayer(objectId, p)?.id ?? objectId;
+      const didUnlock = handleObject({ player: p, objectId: visibleObjectId, handled });
+      if (didUnlock) event.handled = true;
+      return didUnlock;
     }
     return false;
   }
@@ -2030,6 +2135,10 @@ module.exports = function registerDragonSlayerII(api) {
     if (p.getAttribute(ATTR_ASSAULT_DEFENSE_ACTIVE)) {
       p.setAttribute(ATTR_ASSAULT_DEFENSE_ACTIVE, false);
       p.moveTo(new Location(2640, 3696, 0));
+    }
+    if (stage(p) === S.LEADERS && p.getAttribute(ATTR_VAULT_SCENE_ACTIVE)
+      && !p.getAttribute(ATTR_VAULT_SCENE_COMPLETE)) {
+      enterDeepLithkrenVault(p, { resume: true });
     }
   }
   function onPlayerDeath({ player: p }) {
@@ -2176,6 +2285,7 @@ module.exports = function registerDragonSlayerII(api) {
   api.persistAttribute(ATTR_ROWBOAT_BUILT); api.persistAttribute(ATTR_LITHKREN_ARRIVED); api.persistAttribute(ATTR_AIVAS_DIARY);
   api.persistAttribute(ATTR_LITHKREN_DALLAS_TALKED);
   api.persistAttribute(ATTR_LITHKREN_NATIVE_STAGE);
+  api.persistAttribute(ATTR_VAULT_SCENE_ACTIVE); api.persistAttribute(ATTR_VAULT_SCENE_COMPLETE);
   api.persistAttribute(ATTR_AIVAS_DIARY_FOUND);
   api.persistAttribute(ATTR_DREAM_PROGRESS);
   api.persistAttribute(ATTR_MAP_FOUND); api.persistAttribute(ATTR_MAP_HANDED_IN); api.persistAttribute(ATTR_MAP_SOLVED); api.persistAttribute(ATTR_MAP_INTRODUCED);
@@ -2216,6 +2326,7 @@ module.exports = function registerDragonSlayerII(api) {
     }
   });
   api.onCustomEvent("ladders:climb", climbLithkrenNorthStairs);
+  api.onObjectRoute(routeLithkrenNorthStairs);
   api.onInterfaceActionClick(handleMapPuzzleClick);
   api.onObjectFirstClick(MAP_SOURCES.map((source) => source.id), searchFossilMapSource);
   api.onObjectFirstClick([30715, 30716], searchAncientDiary);
