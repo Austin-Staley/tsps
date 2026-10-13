@@ -1594,14 +1594,16 @@ module.exports = function registerDesertTreasureII(api) {
     if (current instanceof VardorvisArea && !current.isDestroyed()) {
       current.enter(p);
       p.moveTo(current.tile(13, 18, 0));
-      spawnBoss(p, "vardorvis");
+      if (Number(p.getAttribute(VARDORVIS_PROGRESS)) === 16) spawnBoss(p, "vardorvis");
       return current;
     }
     const area = new VardorvisArea(p.getUsername?.());
     area.enter(p);
     p.setAttribute(ATTR_VARDORVIS_AREA, area);
     p.moveTo(area.tile(13, 18, 0));
-    spawnBoss(p, "vardorvis");
+    const rocks = new api.core.GameObject(O.ROCKS_139, area.tile(6, 28, 0), 10, 0, area);
+    p.getPacketSender().sendObject(rocks);
+    if (Number(p.getAttribute(VARDORVIS_PROGRESS)) === 16) spawnBoss(p, "vardorvis");
     return area;
   }
 
@@ -2356,6 +2358,18 @@ module.exports = function registerDesertTreasureII(api) {
     }
     p.sendMessage("You pick up the odd key from Duke Sucellus.");
   }
+  function handleVardorvisGroundItemPickup(event) {
+    const { player: p, groundItemId } = event;
+    const area = p.getAttribute(ATTR_VARDORVIS_AREA);
+    if (groundItemId !== I.TEMPLE_KEY_3 || stage(p) !== S.VARDORVIS
+      || Number(p.getAttribute(VARDORVIS_PROGRESS)) !== 17 || !area || p.getPrivateArea?.() !== area) return;
+    if (p.getInventory().getFreeSlots() < 1) {
+      event.handled = true;
+      p.sendMessage("You need inventory space for the Temple key.");
+      return;
+    }
+    p.setAttribute(VARDORVIS_PROGRESS, 18);
+  }
 
   function handleDialogueLine(event) {
     if (stage(event.player) === S.VARDORVIS) {
@@ -2641,7 +2655,7 @@ module.exports = function registerDesertTreasureII(api) {
     area.postLeave(p, false);
     area.destroy();
     p.setAttribute(ATTR_VARDORVIS_AREA, null);
-    p.moveTo(new api.core.Location(1147, 3433, 0));
+    p.moveTo(new api.core.Location(1117, 3429, 0));
     return true;
   }
 
@@ -2652,7 +2666,7 @@ module.exports = function registerDesertTreasureII(api) {
     const returnToDigsite = current && current === p.getAttribute(ATTR_WAR_ROOM);
     const stranglewoodExit = current && (current === p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT) ? [1193, 3405]
       : current === p.getAttribute(ATTR_STRANGLEWOOD_TEMPLE) ? [1174, 3427]
-        : current === p.getAttribute(ATTR_VARDORVIS_AREA) ? [1147, 3433] : null);
+        : current === p.getAttribute(ATTR_VARDORVIS_AREA) ? [1117, 3429] : null);
     if (current && current === p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT) && current.defended) p.setAttribute(VARDORVIS_PROGRESS, 9);
     for (const key of [ATTR_VAULT_AREA, FINAL_ROOM, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO, ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA, SUCELLUS_AREA]) {
       const area = p.getAttribute(key);
@@ -3974,6 +3988,7 @@ module.exports = function registerDesertTreasureII(api) {
     const ritualTile = vardorvisSourceTile(p, location);
     if (s === S.VARDORVIS && ritualTile && [VARDORVIS_ENTRY, O.ROCKS_139].includes(objectId)
       && ritualTile.x === 1118 && ritualTile.y === 3428) {
+      if (option === "leave" || option === "climb-over") return leaveVardorvisArena(p);
       const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
       if (progress >= 17) {
         if (!has(p, I.TEMPLE_KEY_3)) p.getInventory().adds(I.TEMPLE_KEY_3, 1);
@@ -3990,6 +4005,13 @@ module.exports = function registerDesertTreasureII(api) {
       && Math.abs(location.x - 1118) <= 2 && Math.abs(location.y - 3428) <= 2) {
       const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
       if (progress < 16) return p.sendMessage("The ritual site is too dangerous until you have prepared the Strangler serum.");
+      if (progress >= 17 && !has(p, I.TEMPLE_KEY_3)) {
+        if (p.getInventory().getFreeSlots() < 1) return p.sendMessage("You need inventory space for the Temple key.");
+        p.getInventory().adds(I.TEMPLE_KEY_3, 1);
+        p.setAttribute(VARDORVIS_PROGRESS, Math.max(18, progress));
+        p.sendMessage("You search the rocks and recover the Temple key.");
+        return true;
+      }
       enterVardorvisArena(p);
       return true;
     }
@@ -4927,7 +4949,10 @@ module.exports = function registerDesertTreasureII(api) {
       owned.vardorvisDead = true;
       killer.setAttribute(VARDORVIS_PROGRESS, 17);
       killer.setAttribute(ATTR, null);
-      killer.sendMessage("Vardorvis collapses. Search the rocks at the ritual site's entrance for the Temple key.");
+      const area = killer.getAttribute(ATTR_VARDORVIS_AREA);
+      const manager = api.getItemOnGroundManager?.();
+      if (area && manager?.registerLocation) manager.registerLocation(killer, new Item(I.TEMPLE_KEY_3, 1), npc.getLocation?.() ?? area.tile(17, 19, 0), area);
+      killer.sendMessage("Vardorvis collapses and drops a Temple key. Take it back to Kasonde.");
       return;
     }
     if (Array.isArray(owned.templeEnemies) && owned.templeEnemies.includes(npc)) {
@@ -5779,6 +5804,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onItemOnNpc(handleNerveOnCatalyst);
   api.onItemOnNpc(handleSucellusItemOnNpc);
   api.onGroundItemPickup(handleSucellusGroundItemPickup);
+  api.onGroundItemPickup(handleVardorvisGroundItemPickup);
   api.onPlayerLogin(handleLogin);
   api.onPlayerProcess(handleLassarProcess);
   api.onPlayerLogout(handleLogout);
