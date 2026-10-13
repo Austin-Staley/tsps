@@ -1898,6 +1898,7 @@ module.exports = function registerDesertTreasureII(api) {
     p.getPacketSender().sendVarbit(15258, p.getAttribute(SCAR_AXON_ROOM_COMPLETE) ? 1 : 0);
     p.getPacketSender().sendVarbit(15259, p.getAttribute(SCAR_NERVE_ROOM_TWO_COMPLETE) ? 1 : 0);
     p.getPacketSender().sendVarbit(15260, p.getAttribute(SCAR_SUMMON_ROOM_COMPLETE) ? 1 : 0);
+    if (p.getAttribute(SCAR_SUMMON_ROOM_COMPLETE)) revealScarBoatPassageTwo(p);
     return area;
   }
 
@@ -2114,6 +2115,15 @@ module.exports = function registerDesertTreasureII(api) {
     if (!(area instanceof ScarMazeOneArea) || area.isDestroyed?.() || area.scarBoatPassage) return;
     // This passage is created by the room's completion state; it has no static map placement.
     const object = new api.core.GameObject(49418, area.tile(60, 2, 0), 10, 0, area);
+    area.add(object);
+    area.scarBoatPassage = object;
+    p.getPacketSender().sendObject(object);
+  }
+
+  function revealScarBoatPassageTwo(p) {
+    const area = p.getAttribute(ATTR_SCAR_MAZE_TWO);
+    if (!(area instanceof ScarMazeTwoArea) || area.isDestroyed?.() || area.scarBoatPassage) return;
+    const object = new api.core.GameObject(O.PASSAGE_22, area.tile(75, 59, 0), 10, 2, area);
     area.add(object);
     area.scarBoatPassage = object;
     p.getPacketSender().sendObject(object);
@@ -3766,6 +3776,21 @@ module.exports = function registerDesertTreasureII(api) {
         p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_TWO).tile(36, 35, 0));
         return true;
       }
+      if (objectId === O.NEURAL_TELEPORTER_3 && scarMazeTwoTile.x === 1741 && scarMazeTwoTile.y === 6402) {
+        p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_TWO).tile(36, 59, 0));
+        return true;
+      }
+      if (objectId === O.NEURAL_TELEPORTER_4 && scarMazeTwoTile.x === 1730 && scarMazeTwoTile.y === 6458) {
+        p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_TWO).tile(46, 3, 0));
+        return true;
+      }
+      if (objectId === O.PASSAGE_19 && scarMazeTwoTile.x === 1783 && scarMazeTwoTile.y === 6441) {
+        const maze = p.getAttribute(ATTR_SCAR_MAZE_TWO);
+        const sourceY = p.getLocation().getY() - maze.getBaseY() + 6400;
+        p.setAttribute(SCAR_NERVE_ROOM_TWO_ACTIVE, false);
+        p.moveTo(maze.tile(88, sourceY <= 6440 ? 44 : 40, 0));
+        return true;
+      }
       if (objectId === O.PASSAGE_19 && scarMazeTwoTile.x === 1782 && scarMazeTwoTile.y === 6420) {
         const maze = p.getAttribute(ATTR_SCAR_MAZE_TWO);
         const sourceY = p.getLocation().getY() - maze.getBaseY() + 6400;
@@ -3796,23 +3821,32 @@ module.exports = function registerDesertTreasureII(api) {
         return true;
       }
       if (objectId === O.PASSAGE_20 && scarMazeTwoTile.x === 1744 && scarMazeTwoTile.y === 6457) {
+        const maze = p.getAttribute(ATTR_SCAR_MAZE_TWO);
+        const sourceY = p.getLocation().getY() - maze.getBaseY() + 6400;
+        if (sourceY <= 6456) {
+          p.moveTo(maze.tile(48, 60, 0));
+          return true;
+        }
         if (!p.getAttribute(SCAR_NERVE_ROOM_TWO_COMPLETE)) {
           p.sendMessage("The four broken nerve endings still need their matching combined nerves.");
           return true;
         }
         p.setAttribute(SCAR_NERVE_ROOM_TWO_ACTIVE, false);
-        p.setAttribute(SCAR_SUMMON_ROOM_STARTED, false);
-        p.setAttribute(SCAR_SUMMON_ROOM_COMPLETE, false);
+        p.moveTo(maze.tile(48, 56, 0));
+        if (p.getAttribute(SCAR_SUMMON_ROOM_COMPLETE)) return true;
         p.getPacketSender().sendVarbit(15260, 0);
-        spawnScarSummoningRoom(p, p.getAttribute(ATTR_SCAR_MAZE_TWO));
+        spawnScarSummoningRoom(p, maze);
         p.sendMessage("Scarred imps shield the lesser demons with their prayers. Defeat the imps first, then the demons.");
         return true;
       }
-      if (objectId === O.PASSAGE_23 && scarMazeTwoTile.x === 1771 && scarMazeTwoTile.y === 6459) {
+      if ([O.PASSAGE_22, O.PASSAGE_23].includes(objectId) && scarMazeTwoTile.x === 1771 && scarMazeTwoTile.y === 6459) {
         if (!p.getAttribute(SCAR_SUMMON_ROOM_COMPLETE)) {
           p.sendMessage("The summoning circle still protects the shipwreck passage.");
           return true;
         }
+        const maze = p.getAttribute(ATTR_SCAR_MAZE_TWO);
+        const sourceX = p.getLocation().getX() - maze.getBaseX() + 1696;
+        p.moveTo(maze.tile(sourceX >= 1773 ? 74 : 77, 59, 0));
         p.setAttribute("desert-treasure-ii:scar-boat-room-two", true);
         p.getPacketSender().sendVarbit(15261, 1);
         p.sendMessage("You enter the northern shipwreck chamber.");
@@ -5162,6 +5196,7 @@ module.exports = function registerDesertTreasureII(api) {
       if (left === 0 && stage(killer) === S.LEVIATHAN) {
         killer.setAttribute(SCAR_SUMMON_ROOM_COMPLETE, true);
         killer.getPacketSender().sendVarbit(15260, 1);
+        revealScarBoatPassageTwo(killer);
         killer.sendMessage("The summoning circle is quiet. The shipwreck passage is now accessible.");
       }
       return;

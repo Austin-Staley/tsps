@@ -3091,7 +3091,18 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     }
     assert.equal(attrs.get('desert-treasure-ii:scar-nerve-room-two-complete'), true);
     assert.equal(varbits.get(15259), 1);
+    player.moveTo(middle.tile(88, 40, 0));
+    objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_19, location: middle.tile(87, 41, 0) });
+    assert.deepEqual([player.location.x, player.location.y], [middle.tile(88, 44, 0).x, middle.tile(88, 44, 0).y]);
+    objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_19, location: middle.tile(87, 41, 0) });
+    assert.deepEqual([player.location.x, player.location.y], [middle.tile(88, 40, 0).x, middle.tile(88, 40, 0).y]);
+    objectHooks[0]({ player, objectId: core.ObjectIdentifiers.NEURAL_TELEPORTER_3, location: middle.tile(45, 2, 0) });
+    assert.deepEqual([player.location.x, player.location.y], [middle.tile(36, 59, 0).x, middle.tile(36, 59, 0).y]);
+    objectHooks[0]({ player, objectId: core.ObjectIdentifiers.NEURAL_TELEPORTER_4, location: middle.tile(34, 58, 0) });
+    assert.deepEqual([player.location.x, player.location.y], [middle.tile(46, 3, 0).x, middle.tile(46, 3, 0).y]);
+    player.moveTo(middle.tile(48, 60, 0));
     assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_20, location: middle.tile(48, 57, 0) }), true);
+    assert.deepEqual([player.location.x, player.location.y], [middle.tile(48, 56, 0).x, middle.tile(48, 56, 0).y]);
     let imps = queues.add.filter((npc) => npc.__dt2SummonImp);
     let demons = queues.add.filter((npc) => npc.__dt2SummonDemon);
     assert.equal(imps.length, 3);
@@ -3105,7 +3116,17 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     for (const demon of demons) deathHooks[0]({ killer: player, npc: demon });
     assert.equal(attrs.get('desert-treasure-ii:scar-summoning-room-complete'), true);
     assert.equal(varbits.get(15260), 1);
-    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_23, location: middle.tile(75, 59, 0) }), true);
+    assert.equal(middle.scarBoatPassage.getId(), core.ObjectIdentifiers.PASSAGE_22, 'completion reveals a passage with a real Enter action');
+    objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_20, location: middle.tile(48, 57, 0) });
+    assert.deepEqual([player.location.x, player.location.y], [middle.tile(48, 60, 0).x, middle.tile(48, 60, 0).y]);
+    objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_20, location: middle.tile(48, 57, 0) });
+    assert.equal(queues.add.filter((npc) => npc.__dt2SummonImp).length, 3, 'completed room re-entry does not repeat its enemies');
+    assert.equal(attrs.get('desert-treasure-ii:scar-summoning-room-complete'), true);
+    player.moveTo(middle.tile(74, 59, 0));
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_22, location: middle.tile(75, 59, 0) }), true);
+    assert.deepEqual([player.location.x, player.location.y], [middle.tile(77, 59, 0).x, middle.tile(77, 59, 0).y]);
+    objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_22, location: middle.tile(75, 59, 0) });
+    assert.deepEqual([player.location.x, player.location.y], [middle.tile(74, 59, 0).x, middle.tile(74, 59, 0).y]);
     for (const [objectId, x, y] of [[49425, 1774, 6448], [49427, 1779, 6448], [49426, 1789, 6449]]) {
       assert.equal(objectHooks[0]({ player, objectId, location: middle.tile(x - 1696, y - 6400, 0) }), true);
     }
