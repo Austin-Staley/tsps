@@ -50,6 +50,11 @@ module.exports = function registerTheBloodMoonRises(api) {
     destination: [2361, 7382, 0] });
   const CASTLE_NATIVE_STAGE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-native-stage";
   const CASTLE_STORY_ATTRIBUTE = "quest.the_blood_moon_rises.castle-story";
+  const KITCHEN_SANGUIDAE = Object.freeze([
+    { key: "kitchen-sanguidae-west", tile: [2312, 7412] },
+    { key: "kitchen-sanguidae-north", tile: [2311, 7408] },
+    { key: "kitchen-sanguidae-south", tile: [2309, 7414] },
+  ]);
   const CASTLE_BOOK_PUZZLE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-book-puzzle";
   const CASTLE_TRANSITION_PENDING_ATTRIBUTE = "quest.the_blood_moon_rises.castle-transition-pending";
   const CASTLE_BOOK_VARBITS = Object.freeze([15550, 15551, 15552, 15553, 15554, 15555, 15556, 15557]);
@@ -2151,7 +2156,12 @@ module.exports = function registerTheBloodMoonRises(api) {
     const y = location?.getY?.() ?? location?.y;
     const z = location?.getZ?.() ?? location?.z;
     const story = castleStory(player);
-    if (x !== 2315 || y !== 7418 || z !== 0 || !story.defeated.includes("kitchen-sanguidae")) return;
+    if (x !== 2315 || y !== 7418 || z !== 0) return;
+    if (!story.defeated.includes("kitchen-sanguidae")) {
+      event.handled = true;
+      player.sendMessage("The other Sanguidae are still defending the syringe barrel.");
+      return;
+    }
     player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, syringeBarrelClaimed: true });
     player.sendMessage("You take the syringe barrel left by the kitchen aranei.");
   }
@@ -2763,7 +2773,16 @@ module.exports = function registerTheBloodMoonRises(api) {
   function syncCastleActors(player) {
     if (!player || stage(player) !== STAGE.CASTLE) return;
     const progress = Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70;
-    const story = castleStory(player);
+    let story = castleStory(player);
+    const defeated = story.defeated ?? [];
+    if (defeated.includes("kitchen-sanguidae") &&
+      !KITCHEN_SANGUIDAE.some(({ key }) => defeated.includes(key))) {
+      // Older builds saved the whole swarm as defeated after killing the one
+      // Sanguidae they spawned. Retain that kill against the nearest recorded
+      // anchor and let the remaining two live enemies finish the chapter.
+      story = { ...story, defeated: [...defeated.filter(key => key !== "kitchen-sanguidae"), "kitchen-sanguidae-south"] };
+      player.setAttribute(CASTLE_STORY_ATTRIBUTE, story);
+    }
     if (progress >= 72 && !story.talkedToVeliaf) {
       spawnCastleActor(player, "veliaf-gallery", CASTLE_NPC.VELIAF_GALLERY, [2379, 7367]);
     }
@@ -2774,8 +2793,11 @@ module.exports = function registerTheBloodMoonRises(api) {
         // QH points at the emblem holder in this room; the adjacent floor tile
         // is the nearest collision-clear combat anchor.
         spawnCastleActor(player, "crescent-venator", CASTLE_NPC.VENATOR, [2486, 7420], true);
-      if (!story.defeated.includes("kitchen-sanguidae"))
-        spawnCastleActor(player, "kitchen-sanguidae", CASTLE_NPC.SANGUIDAE, [2314, 7418], true);
+      if (!story.defeated.includes("kitchen-sanguidae")) {
+        for (const { key, tile } of KITCHEN_SANGUIDAE) {
+          if (!story.defeated.includes(key)) spawnCastleActor(player, key, CASTLE_NPC.SANGUIDAE, tile, true);
+        }
+      }
     }
     if (progress >= 72 && Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.RANIS_HALL &&
       !story.defeated.includes("ranis-sanguidae")) {
@@ -2820,9 +2842,10 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, defeated });
       removeCastleActor(player, owner.key);
       if (owner.key === "library-venator") syncCastleActors(player);
-    } else if (owner.key === "kitchen-sanguidae") {
-      player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story,
-        defeated: [...new Set([...story.defeated, owner.key])] });
+    } else if (owner.key.startsWith("kitchen-sanguidae-")) {
+      const defeated = [...new Set([...story.defeated, owner.key])];
+      if (KITCHEN_SANGUIDAE.every(({ key }) => defeated.includes(key))) defeated.push("kitchen-sanguidae");
+      player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, defeated });
       removeCastleActor(player, owner.key);
       syncCastleSyringeBarrel(player);
     }

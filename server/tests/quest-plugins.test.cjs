@@ -955,8 +955,8 @@ test('Blood Moon shrine returns to the Castle lobby before the Vampyrium portal 
   assert.equal(varbits.get(15489), 1);
   assert.equal(varbits.get(15499), 1, 'the arrival marks the ground-floor lobby');
   const castleSpawnIds = spawned.map(npc => npc.id).filter(id => [15867, 16213, 16217, 16223].includes(id));
-  assert.deepEqual(castleSpawnIds.sort(), [15867, 16213, 16217, 16223],
-    'the owner receives the cache-backed Castle guide and first puzzle-room enemies');
+  assert.deepEqual(castleSpawnIds.sort(), [15867, 16213, 16217, 16223, 16223, 16223],
+    'the owner receives the cache-backed Castle guide and all three recorded kitchen Sanguidae');
   assert.ok(spawned.every(npc => npc.owner === player && npc.ownerOnly));
   for (const npc of spawned.filter(npc => castleSpawnIds.includes(npc.id))) {
     const size = api.core.CacheDefinitions.getNpc(npc.id)?.size ?? 1;
@@ -1211,7 +1211,8 @@ test('Blood Moon Castle story actors use cache-walkable floor anchors', () => {
   const attributes = new Map([
     ['quest.the_blood_moon_rises.castle-native-stage', 78],
     ['quest.the_blood_moon_rises.castle-story', {
-      defeated: ['first-venator', 'crescent-venator', 'kitchen-sanguidae', 'library-venator'],
+      defeated: ['first-venator', 'crescent-venator', 'kitchen-sanguidae-west', 'kitchen-sanguidae-north',
+        'kitchen-sanguidae-south', 'kitchen-sanguidae', 'library-venator'],
       prisonersFound: true, talkedToIvan: false,
     }],
   ]);
@@ -1669,7 +1670,8 @@ test('Blood Moon Castle new-moon key requires the corpse syringe, weapon statues
   };
   quest.setStage(player, 40);
   attrs.set('quest.the_blood_moon_rises.castle-native-stage', 74);
-  attrs.set('quest.the_blood_moon_rises.castle-story', { defeated: ['kitchen-sanguidae', 'first-venator'] });
+  attrs.set('quest.the_blood_moon_rises.castle-story', { defeated: ['kitchen-sanguidae-west',
+    'kitchen-sanguidae-north', 'kitchen-sanguidae-south', 'kitchen-sanguidae', 'first-venator'] });
   const objects = handlers.objects.find(handler => handler.name === 'handleCastleKeyObjects');
   const onObject = handlers.itemOnObject.find(handler => handler.name === 'handleCastleKeyItemOnObject');
   const onItem = handlers.itemOnItem.find(handler => handler.name === 'handleCastleKeyItemOnItem');
@@ -2381,6 +2383,86 @@ test('Blood Moon spawns the recorded Sanguidae in Ranis Hall for its owner', () 
   assert.ok(sanguidae, 'the recorded Sanguidae anchor is used');
   assert.equal(sanguidae.owner, player);
   assert.equal(sanguidae.ownerOnly, true);
+});
+
+test('Blood Moon requires all three recorded kitchen Sanguidae kills before awarding the syringe barrel', () => {
+  const { api, handlers } = mockApi();
+  const spawned = [];
+  const drops = [];
+  api.spawnNpc = spec => {
+    const npc = { ...spec, getHitpoints: () => 10, setMultiCombat() {} };
+    spawned.push(npc);
+    return npc;
+  };
+  api.removeNpc = () => {};
+  api.getItemOnGroundManager = () => ({
+    getGroundItem: () => null,
+    registerLocation: (...args) => drops.push(args),
+  });
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.stage', 40],
+    ['quest.the_blood_moon_rises.castle-native-stage', 74],
+    ['quest.the_blood_moon_rises.castle-room', 11],
+    ['quest.the_blood_moon_rises.castle-floor', 1],
+    ['quest.the_blood_moon_rises.castle-story', { defeated: [] }],
+  ]);
+  const player = {
+    isPlayer: () => true,
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(2314, 7420, 0),
+    getUsername: () => 'castle-kitchen-swarm-fixture',
+    getInventory: () => ({ contains: () => false }),
+    getPacketSender: () => new Proxy({ sendVarbit() {} }, { get: (target, key) => target[key] ?? (() => {}) }),
+    sendMessage() {},
+  };
+  handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
+  const kitchen = spawned.filter(npc => npc.id === 16223);
+  assert.deepEqual(kitchen.map(npc => [npc.x, npc.y]), [[2312, 7412], [2311, 7408], [2309, 7414]]);
+  assert.ok(kitchen.every(npc => npc.owner === player && npc.ownerOnly));
+  const pickup = handlers.ground.find(handler => handler.name === 'handleCastleKeyPickup');
+  const before = { player, groundItemId: 33752, location: { x: 2315, y: 7418, z: 0 }, handled: false };
+  pickup(before);
+  assert.equal(before.handled, true, 'the barrel cannot be claimed while the swarm is still alive');
+  assert.equal(drops.length, 0);
+
+  const death = handlers.npcDeath.find(handler => handler.name === 'handleCastleNpcDeath');
+  for (const npc of kitchen.slice(0, 2)) death({ npc, killer: player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').defeated.includes('kitchen-sanguidae'), false);
+  assert.equal(drops.length, 0, 'two kills do not clear the room');
+  death({ npc: kitchen[2], killer: player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').defeated.includes('kitchen-sanguidae'), true);
+  assert.deepEqual(drops.map(([, item, tile]) => [item.getId(), tile.getX(), tile.getY(), tile.getZ()]), [[33752, 2315, 7418, 0]]);
+  const after = { player, groundItemId: 33752, location: { x: 2315, y: 7418, z: 0 }, handled: false };
+  pickup(after);
+  assert.equal(after.handled, false);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').syringeBarrelClaimed, true);
+});
+
+test('Blood Moon migrates the old one-Sanguidae completion as a partial kitchen clear', () => {
+  const { api, handlers } = mockApi();
+  const spawned = [];
+  api.spawnNpc = spec => { spawned.push(spec); return { getHitpoints: () => 10, setMultiCombat() {} }; };
+  api.removeNpc = () => {};
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.stage', 40],
+    ['quest.the_blood_moon_rises.castle-native-stage', 74],
+    ['quest.the_blood_moon_rises.castle-room', 11],
+    ['quest.the_blood_moon_rises.castle-floor', 1],
+    ['quest.the_blood_moon_rises.castle-story', { defeated: ['kitchen-sanguidae'] }],
+  ]);
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(2314, 7420, 0), getUsername: () => 'castle-kitchen-legacy-fixture',
+    getInventory: () => ({ contains: () => false }),
+    getPacketSender: () => new Proxy({ sendVarbit() {} }, { get: (target, key) => target[key] ?? (() => {}) }),
+  };
+  handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
+  const story = attributes.get('quest.the_blood_moon_rises.castle-story');
+  assert.equal(story.defeated.includes('kitchen-sanguidae'), false);
+  assert.equal(story.defeated.includes('kitchen-sanguidae-south'), true);
+  assert.deepEqual(spawned.filter(npc => npc.id === 16223).map(npc => [npc.x, npc.y]), [[2312, 7412], [2311, 7408]]);
 });
 
 test('Blood Moon outer-library lever opens the captured portal to the throne parlour once', () => {
