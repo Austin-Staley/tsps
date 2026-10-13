@@ -96,6 +96,7 @@ module.exports = function registerDesertTreasureII(api) {
   const SUCELLUS_CELL_ESCAPED = "desert-treasure-ii:sucellus-cell-escaped";
   const SUCELLUS_ASSASSIN_GONE = "desert-treasure-ii:sucellus-assassin-gone";
   const SUCELLUS_BOSS_GATE = 49138;
+  const SUCELLUS_BOSS_GATE_OPEN = O.GATE_281;
   const SUCELLUS_MEDALLION_GATE = 49140;
   const SUCELLUS_MEDALLION_CHEST = 49116;
   const PUZZLE_GROUP = 838;
@@ -1852,6 +1853,7 @@ module.exports = function registerDesertTreasureII(api) {
       if (!Number.isFinite(Number(p.getAttribute(SUCELLUS_POISONS)))) p.setAttribute(SUCELLUS_POISONS, 0);
     } else area.enter(p);
     p.moveTo(atBossGate ? area.tile(167, 97, 0) : area.tile(40, 18, 2));
+    activateSucellusSupplies(area);
     if (atBossGate) {
       const boss = spawnBoss(p, "sucellus");
       if (boss && (Number(p.getAttribute(SUCELLUS_POISONS)) || 0) >= 2) {
@@ -1861,6 +1863,38 @@ module.exports = function registerDesertTreasureII(api) {
       }
     }
     return area;
+  }
+
+  function activateSucellusSupplies(area) {
+    const supplies = [
+      [O.SALT_DEPOSIT, 3033, 6448, 0], [O.SALT_DEPOSIT, 3043, 6448, 0],
+      [O.MUSCA_MUSHROOMS, 3048, 6453, 0], [O.ARDER_MUSHROOMS, 3030, 6453, 0],
+      [O.FERMENTATION_VAT, 3034, 6438, 0], [O.FERMENTATION_VAT, 3043, 6438, 0],
+      [O.PESTLE_AND_MORTAR, 3034, 6434, 0], [O.PICKAXE_2, 3044, 6434, 0],
+    ];
+    for (const [id, sourceX, sourceY, z] of supplies) {
+      const tile = area.tile(sourceX - 2872, sourceY - 6336, z);
+      if (area.getObjects?.().some((object) => object.getId() === id && object.getLocation().equals(tile))) continue;
+      const template = area.getTemplateObjects?.(tile)?.find((object) => object.getLocation().equals(tile));
+      if (!template) continue;
+      const object = new api.core.GameObject(id, tile, template.getType(), template.getFace(), area);
+      api.core.ObjectManager.register(object, true);
+    }
+  }
+
+  function openSucellusGate({ player, object, objectId, definition, location }) {
+    const area = player?.getAttribute(SUCELLUS_AREA);
+    const tile = sucellusSourceTile(player, location);
+    const id = definition?.id ?? objectId;
+    if (stage(player) !== S.SUCELLUS || area !== player.getPrivateArea?.() || !(area instanceof SucellusArea)
+      || !player.getAttribute(SUCELLUS_PRISON_COMPLETE) || id !== SUCELLUS_BOSS_GATE
+      || tile?.x !== 3039 || tile?.y !== 6433 || tile?.z !== 0 || !object) return false;
+    const opened = new api.core.GameObject(
+      SUCELLUS_BOSS_GATE_OPEN, object.getLocation(), object.getType(), object.getFace(), area,
+    );
+    api.core.ObjectManager.register(opened, true);
+    api.core.ObjectManager.deregister(object, true);
+    return true;
   }
 
   function saveSucellusPrisonCheckpoint(player, area) {
@@ -3014,6 +3048,24 @@ module.exports = function registerDesertTreasureII(api) {
     return x >= 2872 && x < 3064 && y >= 6336 && y < 6472 ? { x, y, z } : null;
   }
 
+  function routeSucellusVat(event) {
+    const p = event.player;
+    const area = p?.getAttribute(SUCELLUS_AREA);
+    if (stage(p) !== S.SUCELLUS || !(area instanceof SucellusArea) || area !== p.getPrivateArea?.()
+      || ![O.FERMENTATION_VAT, O.FERMENTATION_VAT_2, O.FERMENTATION_VAT_3, O.FERMENTATION_VAT_4,
+        O.FERMENTATION_VAT_5, O.FERMENTATION_VAT_6, O.FERMENTATION_VAT_7, O.FERMENTATION_VAT_8].includes(event.objectId)) return;
+    const location = event.object?.getLocation?.();
+    const source = sucellusSourceTile(p, location && {
+      x: location.getX(), y: location.getY(), z: location.getZ(),
+    });
+    if (source?.z !== 0 || source.x !== 3034 || source.y !== 6438) return;
+
+    // The west cache vat's rotation puts every vanilla path endpoint behind its solid
+    // footprint. This is the clear, reachable tile immediately east of the vat.
+    const approach = area.tile(164, 103, 0);
+    event.destination = { x: approach.getX(), y: approach.getY(), z: 0 };
+  }
+
   function scarMazeSourceTile(p, location) {
     const area = p.getAttribute(ATTR_SCAR_MAZE_ONE);
     if (!(area instanceof ScarMazeOneArea) || area.isDestroyed?.() || !location) return null;
@@ -3718,9 +3770,11 @@ module.exports = function registerDesertTreasureII(api) {
       if (powder && mushroom) {
         const raw = pair.has(I.MUSCA_MUSHROOM) ? I.MUSCA_MUSHROOM : I.ARDER_MUSHROOM;
         if (!has(p, raw)) return false;
+        const herblore = p.getSkillManager?.().getCurrentLevel?.(Skill.HERBLORE) ?? 62;
+        const quantity = Math.max(1, Math.min(6, Math.floor((herblore - 20) / 10)));
         p.getInventory().deleteNumber(raw, 1);
-        p.getInventory().adds(powder, 1);
-        p.sendMessage(`You grind the ${powder === I.MUSCA_POWDER ? "Musca" : "Arder"} mushroom into powder.`);
+        p.getInventory().adds(powder, quantity);
+        p.sendMessage(`You grind the ${powder === I.MUSCA_POWDER ? "Musca" : "Arder"} mushroom into ${quantity} powder.`);
         return true;
       }
     }
@@ -3907,12 +3961,12 @@ module.exports = function registerDesertTreasureII(api) {
           return true;
         }
         const mushrooms = p.getAttribute(SUCELLUS_MUSHROOMS) ?? { musca: 0, arder: 0 };
-        if (visibleId === O.PESTLE_AND_MORTAR_2) {
+        if ([O.PESTLE_AND_MORTAR, O.PESTLE_AND_MORTAR_2].includes(visibleId)) {
           if (!has(p, I.PESTLE_AND_MORTAR)) p.getInventory().adds(I.PESTLE_AND_MORTAR, 1);
           p.sendMessage("You take a pestle and mortar from the shelf.");
           return true;
         }
-        if (visibleId === O.PICKAXE_3) {
+        if ([O.PICKAXE_2, O.PICKAXE_3].includes(visibleId)) {
           if (!has(p, I.IRON_PICKAXE)) p.getInventory().adds(I.IRON_PICKAXE, 1);
           p.sendMessage("You take a pickaxe from the rack.");
           return true;
@@ -3935,7 +3989,7 @@ module.exports = function registerDesertTreasureII(api) {
           p.sendMessage(`You gather an Arder mushroom (${count}/3).`);
           return true;
         }
-        if (visibleId === O.SALT_DEPOSIT_2) {
+        if ([O.SALT_DEPOSIT, O.SALT_DEPOSIT_2].includes(visibleId)) {
           if (!has(p, I.IRON_PICKAXE) && !has(p, I.BRONZE_PICKAXE) && !has(p, I.STEEL_PICKAXE)
             && !has(p, I.MITHRIL_PICKAXE) && !has(p, I.ADAMANT_PICKAXE) && !has(p, I.RUNE_PICKAXE)) {
             return p.sendMessage("You need a pickaxe to mine the salax salt.");
@@ -4776,10 +4830,13 @@ module.exports = function registerDesertTreasureII(api) {
       const vatKey = `${objectId}:${sucellusTile.x}:${sucellusTile.y}`;
       const vat = { ...(vats[vatKey] ?? { powders: [], salt: 0 }) };
       if (itemId === I.ARDER_POWDER || itemId === I.MUSCA_POWDER) {
-        if (!has(p, itemId)) return true;
+        if (p.getInventory().getAmount(itemId) < 6) {
+          p.sendMessage("You need six portions of this mushroom powder to fill the vat.");
+          return true;
+        }
         if (itemId !== I.ARDER_POWDER && itemId !== I.MUSCA_POWDER) return true;
         if (vat.powders.includes(itemId)) return p.sendMessage("This vat already contains that mushroom powder.");
-        p.getInventory().deleteNumber(itemId, 1);
+        p.getInventory().deleteNumber(itemId, 6);
         vat.powders.push(itemId);
         vats[vatKey] = vat;
         p.setAttribute(SUCELLUS_VATS, vats);
@@ -5034,7 +5091,10 @@ module.exports = function registerDesertTreasureII(api) {
       const area = p.getAttribute(SUCELLUS_AREA);
       if (!(area instanceof SucellusArea) || area.isDestroyed() || p.getAttribute(SUCELLUS_DEFEATED)) return;
       if (npcs[key]?.isRegistered?.() && area.entities.includes(npcs[key])) return npcs[key];
-      const npc = api.core.NPC.create(id, area.tile(167, 118, 0));
+      // QH's (3039, 6454) marker falls inside the 7x7 footprint, not at its
+      // south-west corner. The cache walls leave only x3036..3042 / y6452..6458
+      // clear, so place the footprint there to keep the full NPC reachable.
+      const npc = api.core.NPC.create(id, area.tile(164, 116, 0));
       npc.setOwner?.(p);
       npc.setOwnerOnly?.(true);
       npc.setScriptedMovement?.(true);
@@ -6437,8 +6497,10 @@ module.exports = function registerDesertTreasureII(api) {
   api.persistAttribute("desert-treasure-ii:scar-growth-repaired");
   [GOLEM_INSPECTED, ALTAR_INSPECTED, TOTEMS_CHARGED, TOTEM_MASK, BANIKAN_BRIEFED].forEach((key) => api.persistAttribute(key));
   api.onObjectInteraction(handleObjectInteraction);
+  api.onObjectInteraction("Gate", { Open: openSucellusGate });
   api.onObjectRoute(handleScarStoneRoute);
   api.onObjectRoute(routeLassarSinkhole);
+  api.onObjectRoute(routeSucellusVat);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onGroundItemPickup(handleLassarGroundItemPickup);
   api.onItemOnItem(handleItemOnItem, { noted: false });

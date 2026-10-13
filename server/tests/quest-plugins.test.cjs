@@ -21,6 +21,7 @@ function mockApi() {
     variant: [],
     condition: [],
     custom: new Map(),
+    namedObjects: [],
     npcInteractions,
     npc: npcInteractions,
     area: [],
@@ -50,6 +51,7 @@ function mockApi() {
     onNpcDialogueCondition: (h) => handlers.condition.push(h),
     onObjectInteraction: (target, actions) => {
       if (typeof target === 'function') return handlers.objects.push(target);
+      handlers.namedObjects.push({ target, actions });
       for (const [option, handler] of Object.entries(actions)) handlers.objects.push(event => {
         if (event.definition?.getName?.() === target && event.option === option) return handler(event);
         return false;
@@ -5213,8 +5215,10 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
     postLeave() {}
     getBaseX() { return 5000; }
     getBaseY() { return 6000; }
-    tile(x, y, z) { return { x: 5000 + x, y: 6000 + y, z, getX() { return this.x; }, getY() { return this.y; }, getZ() { return this.z; } }; }
+    tile(x, y, z) { return { x: 5000 + x, y: 6000 + y, z, getX() { return this.x; }, getY() { return this.y; }, getZ() { return this.z; }, equals(other) { return this.x === other.x && this.y === other.y && this.z === other.z; } }; }
     add(npc) { this.entities.push(npc); }
+    getObjects() { return this.entities.filter(entity => typeof entity.getId === 'function'); }
+    getTemplateObjects(location) { return [{ getLocation: () => location, getType: () => 10, getFace: () => 0 }]; }
     isDestroyed() { return false; }
     destroy() {}
   }
@@ -5231,10 +5235,18 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
       isRegistered() { return true; }, isNpc() { return true; }, getAsNpc() { return this; },
     }) },
     World: { getAddNPCQueue: () => queues.add, getRemoveNPCQueue: () => queues.remove, getProcessCycle: () => cycle++ },
+    ObjectManager: { register() {}, deregister() {} },
   };
   const api = new Proxy(base, {
     get: (target, prop) => prop === 'core' ? core
-      : prop === 'onObjectInteraction' ? (handler) => typeof handler === 'function' && objects.push(handler)
+      : prop === 'onObjectInteraction' ? (name, actions) => {
+        if (typeof name === 'function') return objects.push(name);
+        handlers.namedObjects.push({ target: name, actions });
+        for (const [option, handler] of Object.entries(actions)) objects.push(event => {
+          if (event.definition?.getName?.() === name && event.option === option) return handler(event);
+          return false;
+        });
+      }
         : prop === 'onItemOnItem' ? (handler) => itemItems.push(handler)
           : prop === 'onItemOnObject' ? (handler) => itemObjects.push(handler)
             : prop === 'onItemOnNpc' ? (handler) => itemNpcs.push(handler)
@@ -5251,6 +5263,8 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
     isPlayer: () => true, getAsPlayer() { return this; }, getUsername: () => 'dt2-sucellus-test',
     getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
     moveTo(location) { this.location = location; }, getLocation() { return this.location; }, sendMessage: (message) => messages.push(message),
+    getPrivateArea: () => attrs.get('desert-treasure-ii:sucellus-area') ?? null,
+    getSkillManager: () => ({ getCurrentLevel: () => 99 }),
     getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
     getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => pendingHits.push(...hits) }) }),
     getSize: () => 1,
@@ -5277,6 +5291,9 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   assert.equal(attrs.get('desert-treasure-ii:sucellus-captain-accepted'), true);
   assert.equal(attrs.get('desert-treasure-ii:sucellus-area') instanceof TestArea, true);
   const area = attrs.get('desert-treasure-ii:sucellus-area');
+  assert.deepEqual(area.getObjects().map(object => object.getId()).sort((a,b) => a-b),
+    [47522, 47522, 47524, 47528, 47536, 47536, 47560, 47561],
+    'the owner scene replaces depleted cache parents with the real clickable supply variants');
   player.moveTo(area.tile(40, 12, 2));
   area.process(player);
   assert.equal(attrs.get('desert-treasure-ii:sucellus-cell-entered'), true, 'the prison guard knocks the player out at the cell passage');
@@ -5307,17 +5324,41 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   assert.equal(boss.__dt2SucellusAwake, false);
   assert.equal(boss.id, core.NpcIdentifiers.DUKE_SUCELLUS_7, 'real combat stats come from the quest awake identity');
   assert.equal(boss.hp, 330, 'the Wiki quest Duke has 330 hitpoints');
-  interactObject(O.PESTLE_AND_MORTAR_2, 3034, 6434);
-  interactObject(O.PICKAXE_3, 3044, 6434);
-  for (let i = 0; i < 3; i++) interactObject(O.MUSCA_MUSHROOMS_2, 3048, 6453);
-  for (let i = 0; i < 3; i++) interactObject(O.ARDER_MUSHROOMS_2, 3030, 6453);
-  for (let i = 0; i < 12; i++) interactObject(O.SALT_DEPOSIT_2, 3033, 6448, 'Mine');
+  assert.deepEqual([boss.getLocation().x, boss.getLocation().y, boss.getLocation().z],
+    [area.tile(164, 116, 0).x, area.tile(164, 116, 0).y, 0],
+    'the 7x7 cache boss footprint starts in the wall-free arena pocket');
+  const gateLocation = new core.Location(sourceLocation(3039, 6433).x, sourceLocation(3039, 6433).y, 0);
+  const closedGate = new core.GameObject(O.GATE_280, gateLocation, 0, 3, area);
+  const gateHook = handlers.namedObjects.find(({ target }) => target === 'Gate')?.actions.Open;
+  assert.equal(gateHook({ player, object: closedGate, objectId: O.GATE_280, definition: { id: O.GATE_280 }, location: sourceLocation(3039, 6433) }), true,
+    'the asylum gate exposes its cached Leave variant even though it has no Close partner');
+  assert.ok(area.getObjects().some(object => object.getId() === O.GATE_281 && object.getLocation().equals(gateLocation)));
+  const westVat = new core.GameObject(O.FERMENTATION_VAT, new core.Location(sourceLocation(3034, 6438).x,
+    sourceLocation(3034, 6438).y, 0), 10, 3, area);
+  const vatRoute = { player, object: westVat, objectId: O.FERMENTATION_VAT, clickType: 0,
+    sourceLocation: sourceLocation(3039, 6433), destination: null };
+  handlers.routes.find(handler => handler.name === 'routeSucellusVat')(vatRoute);
+  assert.deepEqual(vatRoute.destination, { x: area.tile(164, 103, 0).x, y: area.tile(164, 103, 0).y, z: 0 },
+    'item-on-vat and object actions route to the open tile beside the rotated west cache vat');
+  interactObject(O.PESTLE_AND_MORTAR, 3034, 6434, 'Take');
+  interactObject(O.PICKAXE_2, 3044, 6434, 'Take');
+  for (let i = 0; i < 3; i++) interactObject(O.MUSCA_MUSHROOMS, 3048, 6453, 'Pick');
+  for (let i = 0; i < 3; i++) interactObject(O.ARDER_MUSHROOMS, 3030, 6453, 'Pick');
+  for (let i = 0; i < 12; i++) interactObject(O.SALT_DEPOSIT, 3033, 6448, 'Mine');
   for (const id of [I.MUSCA_MUSHROOM, I.MUSCA_MUSHROOM, I.MUSCA_MUSHROOM, I.ARDER_MUSHROOM, I.ARDER_MUSHROOM, I.ARDER_MUSHROOM]) {
     itemItems.at(-1)({ player, usedItemId: I.PESTLE_AND_MORTAR, usedWithItemId: id });
   }
-  assert.equal(inventory.get(I.MUSCA_POWDER), 3);
-  assert.equal(inventory.get(I.ARDER_POWDER), 3);
-  for (const [vat, x] of [[47537, 3034], [47537, 3043]]) {
+  assert.equal(inventory.get(I.MUSCA_POWDER), 18, 'each mushroom yields six powder at 99 Herblore');
+  assert.equal(inventory.get(I.ARDER_POWDER), 18, 'each mushroom yields six powder at 99 Herblore');
+  for (const powder of [I.MUSCA_POWDER, I.ARDER_POWDER]) {
+    inventory.set(powder, 5);
+    itemObjects.find(h => h.name === 'handleItemOnObject')({
+      player, itemId: powder, objectId: O.FERMENTATION_VAT, location: sourceLocation(3034, 6438),
+    });
+    assert.equal(inventory.get(powder), 5, 'a vat preserves an insufficient powder supply');
+    inventory.set(powder, 18);
+  }
+  for (const [vat, x] of [[O.FERMENTATION_VAT, 3034], [O.FERMENTATION_VAT, 3043]]) {
     for (const powder of [I.MUSCA_POWDER, I.ARDER_POWDER]) {
       itemObjects.find(h => h.name === 'handleItemOnObject')({ player, itemId: powder, objectId: vat, location: sourceLocation(x, 6438) });
     }
