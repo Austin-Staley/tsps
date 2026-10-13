@@ -130,6 +130,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     IVAN_LIBRARY: 15845,
     IVAN_ENTRY_HALL: 15846,
     VELIAF_GALLERY: 15867,
+    VELIAF_FOLLOWER: 15877,
     VELIAF_ENTRY_HALL: 15869,
     SAFALAAN_PRISON: 15888,
     VANESCULA_PRISON: 15903,
@@ -325,7 +326,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.DOOR_M, x: 2553, y: 7364, z: 0, from: CASTLE_ROOM.SOLID_DOOR_STORAGE, to: CASTLE_ROOM.SOLID_DOOR_HALL,
       fromFloor: 2, toFloor: 2, landing: [2506, 7409] },
     { id: CASTLE_DOOR_IDS.DOOR_M, x: 2585, y: 7370, z: 0, from: CASTLE_ROOM.BASEMENT_HALL, to: CASTLE_ROOM.BASEMENT_STORAGE,
-      fromFloor: 1, toFloor: 1, landing: [2587, 7380] },
+      fromFloor: 1, toFloor: 1, landing: [2588, 7381] },
     { id: CASTLE_DOOR_IDS.DOOR, x: 2588, y: 7380, z: 0, from: CASTLE_ROOM.BASEMENT_STORAGE, to: CASTLE_ROOM.BASEMENT_HALL,
       fromFloor: 1, toFloor: 1, landing: [2583, 7370] },
     { id: CASTLE_DOOR_IDS.DOOR, x: 2442, y: 7361, z: 0, from: CASTLE_ROOM.UPPER_SOUTH_HALL, to: CASTLE_ROOM.ORNATE_KNIFE,
@@ -410,8 +411,12 @@ module.exports = function registerTheBloodMoonRises(api) {
       fromFloor: 1, toFloor: 1, action: "Climb-up", landing: [2310, 7366] },
     { id: CASTLE_DOOR_IDS.CRESCENT_M, x: 2570, y: 7365, z: 0, from: CASTLE_ROOM.BASEMENT_HALL, to: CASTLE_ROOM.BASEMENT_VENATOR,
       fromFloor: 1, toFloor: 1, landing: [2566, 7386] },
+    { id: CASTLE_DOOR_IDS.CRESCENT, x: 2579, y: 7365, z: 0, from: CASTLE_ROOM.BASEMENT_HALL, to: CASTLE_ROOM.BASEMENT_VENATOR,
+      fromFloor: 1, toFloor: 1, key: CASTLE_BOOK_ITEMS.crescentMoonKey, keyName: "crescent moon key", landing: [2575, 7386] },
     { id: CASTLE_DOOR_IDS.CRESCENT, x: 2566, y: 7387, z: 0, from: CASTLE_ROOM.BASEMENT_VENATOR, to: CASTLE_ROOM.BASEMENT_HALL,
       fromFloor: 1, toFloor: 1, landing: [2569, 7365] },
+    { id: CASTLE_DOOR_IDS.CRESCENT_M, x: 2575, y: 7387, z: 0, from: CASTLE_ROOM.BASEMENT_VENATOR, to: CASTLE_ROOM.BASEMENT_HALL,
+      fromFloor: 1, toFloor: 1, landing: [2579, 7366] },
     { id: CASTLE_DOOR_IDS.NEW, x: 2570, y: 7369, z: 0, from: CASTLE_ROOM.BASEMENT_HALL, to: CASTLE_ROOM.BASEMENT_PRISON,
       fromFloor: 1, toFloor: 1, landing: [2565, 7394] },
     { id: CASTLE_DOOR_IDS.NEW_M, x: 2566, y: 7394, z: 0, from: CASTLE_ROOM.BASEMENT_PRISON, to: CASTLE_ROOM.BASEMENT_HALL,
@@ -2768,7 +2773,9 @@ module.exports = function registerTheBloodMoonRises(api) {
   function spawnCastleActor(player, key, id, tile, hostile = false) {
     const actors = castleActors(player);
     const existing = actors.get(key);
-    if (existing && existing.getHitpoints?.() > 0) return existing;
+    if (existing && existing.getHitpoints?.() > 0 &&
+      (existing.getId?.() ?? existing.id) === id) return existing;
+    if (existing) removeCastleActor(player, key);
     const npc = api.spawnNpc({ id, x: tile[0], y: tile[1], z: tile[2] ?? 0,
       wanderRadius: 0, owner: player, ownerOnly: true });
     if (!npc) return null;
@@ -2792,6 +2799,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   function syncCastleActors(player) {
     if (!player || stage(player) !== STAGE.CASTLE) return;
     const progress = Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70;
+    const room = Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) || CASTLE_ROOM.LOBBY;
     let story = castleStory(player);
     const defeated = story.defeated ?? [];
     if (defeated.includes("kitchen-sanguidae") &&
@@ -2802,21 +2810,40 @@ module.exports = function registerTheBloodMoonRises(api) {
       story = { ...story, defeated: [...defeated.filter(key => key !== "kitchen-sanguidae"), "kitchen-sanguidae-south"] };
       player.setAttribute(CASTLE_STORY_ATTRIBUTE, story);
     }
-    if (progress >= 72 && !story.talkedToVeliaf) {
-      // The full-quest recording creates Veliaf beside the Gallery Hall arrival.
-      spawnCastleActor(player, "veliaf-gallery", CASTLE_NPC.VELIAF_GALLERY, [2326, 7397]);
+    if (progress >= 72 && progress < 76) {
+      // The captured quest uses the follower variant after the first
+      // conversation. Keep him available through the prison stage so a relog
+      // or an interrupted conversation cannot remove the supplies dialogue.
+      // He remains at the Gallery Hall anchor while the player explores the
+      // cellar; the paired Castle route lets them return and speak to him.
+      spawnCastleActor(player, "veliaf-gallery",
+        story.talkedToVeliaf ? CASTLE_NPC.VELIAF_FOLLOWER : CASTLE_NPC.VELIAF_GALLERY,
+        [2326, 7397]);
+    } else {
+      removeCastleActor(player, "veliaf-gallery");
     }
     if (progress >= 72) {
-      if (!story.defeated.includes("first-venator"))
-        spawnCastleActor(player, "first-venator", CASTLE_NPC.VENATOR_5, [2569, 7384], true);
-      if (!story.defeated.includes("crescent-venator"))
+      if (room === CASTLE_ROOM.BASEMENT_VENATOR && !story.defeated.includes("first-venator"))
+        spawnCastleActor(player, "first-venator", CASTLE_NPC.VENATOR_5, [2568, 7383], true);
+      else removeCastleActor(player, "first-venator");
+      if (room === CASTLE_ROOM.VENATOR_ROOM && !story.defeated.includes("crescent-venator"))
         // QH points at the emblem holder in this room; the adjacent floor tile
         // is the nearest collision-clear combat anchor.
         spawnCastleActor(player, "crescent-venator", CASTLE_NPC.VENATOR, [2486, 7420], true);
-      if (!story.defeated.includes("kitchen-sanguidae")) {
+      else removeCastleActor(player, "crescent-venator");
+      if (room === CASTLE_ROOM.KITCHEN && !story.defeated.includes("kitchen-sanguidae")) {
         for (const { key, tile } of KITCHEN_SANGUIDAE) {
           if (!story.defeated.includes(key)) spawnCastleActor(player, key, CASTLE_NPC.SANGUIDAE, tile, true);
         }
+      } else {
+        for (const { key } of KITCHEN_SANGUIDAE) removeCastleActor(player, key);
+      }
+      if (room === CASTLE_ROOM.BASEMENT_STORAGE) {
+        spawnCastleActor(player, "storage-sanguidae-east", CASTLE_NPC.SANGUIDAE, [2590, 7385], true);
+        spawnCastleActor(player, "storage-sanguidae-north", CASTLE_NPC.SANGUIDAE, [2593, 7382], true);
+      } else {
+        removeCastleActor(player, "storage-sanguidae-east");
+        removeCastleActor(player, "storage-sanguidae-north");
       }
     }
     if (progress >= 72 && Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.RANIS_HALL &&
@@ -2890,11 +2917,6 @@ module.exports = function registerTheBloodMoonRises(api) {
       variant = story.talkedToVeliaf
         ? "escape-from-castle-drakan-talking-to-veliaf-again"
         : "escape-from-castle-drakan-finding-veliaf";
-      if (!story.talkedToVeliaf) transition = () => {
-        player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, talkedToVeliaf: true });
-        setCastleNativeStage(player, 74);
-        syncCastleActors(player);
-      };
     } else if ((npcName === "safalaan hallow" && owner.key === "safalaan-prison") ||
       (npcName === "vanescula drakan" && owner.key === "vanescula-prison")) {
       if (progress < 76 || !story.prisonersFound) return false;
@@ -3188,7 +3210,19 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function onBloodMoonDialogueLine(request) {
     const player = request?.player;
-    if (!player || stage(player) !== STAGE.HIDEOUT) return;
+    if (!player) return;
+    if (stage(player) === STAGE.CASTLE && request.step?.speaker === "Veliaf Hurtz" &&
+      request.text === "Hmm... Best we keep progressing on then." && !castleStory(player).talkedToVeliaf) {
+      request.after = () => {
+        const story = castleStory(player);
+        if (story.talkedToVeliaf || stage(player) !== STAGE.CASTLE) return;
+        player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, talkedToVeliaf: true });
+        setCastleNativeStage(player, 74);
+        syncCastleActors(player);
+      };
+      return;
+    }
+    if (stage(player) !== STAGE.HIDEOUT) return;
     if (request.step?.speaker === "Ivan Strom" && request.text === "Alright... To Darkmeyer then.") {
       request.after = () => startHideoutDeparture(player);
       return;

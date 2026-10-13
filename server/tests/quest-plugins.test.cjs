@@ -955,8 +955,8 @@ test('Blood Moon shrine returns to the Castle lobby before the Vampyrium portal 
   assert.equal(varbits.get(15489), 1);
   assert.equal(varbits.get(15499), 1, 'the arrival marks the ground-floor lobby');
   const castleSpawnIds = spawned.map(npc => npc.id).filter(id => [15867, 16213, 16217, 16223].includes(id));
-  assert.deepEqual(castleSpawnIds.sort(), [15867, 16213, 16217, 16223, 16223, 16223],
-    'the owner receives the cache-backed Castle guide and all three recorded kitchen Sanguidae');
+  assert.deepEqual(castleSpawnIds.sort(), [15867],
+    'the lobby gets the guide; room-specific guards remain in their cache-mapped chambers');
   assert.ok(spawned.every(npc => npc.owner === player && npc.ownerOnly));
   for (const npc of spawned.filter(npc => castleSpawnIds.includes(npc.id))) {
     const size = api.core.CacheDefinitions.getNpc(npc.id)?.size ?? 1;
@@ -976,7 +976,12 @@ test('Blood Moon shrine returns to the Castle lobby before the Vampyrium portal 
   assert.equal(varbits.get(15464), 72, 'the half-moon key alone does not skip the remaining castle puzzles');
   attributes.set('quest.the_blood_moon_rises.gallery-chest', { solved: true, key: true });
   assert.equal(talkToVeliaf(), true);
-  assert.equal(varbits.get(15464), 74, 'Veliaf only advances the Castle chapter after the emblem-gallery key is earned');
+  assert.equal(varbits.get(15464), 72, 'opening the finding transcript does not advance the Castle chapter');
+  const findingLine = { player, step: { speaker: 'Veliaf Hurtz' },
+    text: 'Hmm... Best we keep progressing on then.' };
+  for (const handler of handlers.custom.get('npc-dialogue:line')) handler(findingLine);
+  findingLine.after();
+  assert.equal(varbits.get(15464), 74, 'continuing the completed finding line advances the native chapter');
 
   // Once the portal has started the Castle chapter, the medallion remains a
   // legitimate way back after leaving or reconnecting. Re-entering must not
@@ -1227,10 +1232,7 @@ test('Blood Moon Castle story actors use cache-walkable floor anchors', () => {
   };
   quest.setStage(player, 40);
   handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
-  assert.deepEqual(spawned.map(npc => npc.id).sort(), [15845, 15846, 15867, 15869, 15888, 15903]);
-  const galleryVeliaf = spawned.find(npc => npc.id === 15867);
-  assert.deepEqual([galleryVeliaf?.x, galleryVeliaf?.y], [2326, 7397],
-    'Veliaf spawns beside the recorded Gallery Hall arrival so the player can speak to him');
+  assert.deepEqual(spawned.map(npc => npc.id).sort(), [15845, 15846, 15869, 15888, 15903]);
   for (const npc of spawned) {
     assert.equal(api.core.RegionManager.getClipping(npc.x, npc.y, npc.z ?? 0, null) & api.core.RegionManager.BLOCKED_TILE, 0,
       `Castle actor ${npc.id} does not spawn inside a blocked tile`);
@@ -1238,6 +1240,93 @@ test('Blood Moon Castle story actors use cache-walkable floor anchors', () => {
       api.core.RegionManager.canMove(npc.x, npc.y, npc.x + dx, npc.y + dy, npc.z ?? 0, 1, 1, null)),
     `Castle actor ${npc.id} has an adjacent pathfinding edge`);
   }
+});
+
+test('Blood Moon Veliaf remains available for the repeat supplies talk after relog', () => {
+  const { api, handlers } = mockApi();
+  const spawned = [];
+  const removed = [];
+  api.spawnNpc = spec => {
+    const npc = { ...spec, getId: () => spec.id, getHitpoints: () => 345, setScriptedMovement() {} };
+    spawned.push(npc);
+    return npc;
+  };
+  api.removeNpc = npc => removed.push(npc);
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.castle-native-stage', 72],
+    ['quest.the_blood_moon_rises.castle-room', 12],
+    ['quest.the_blood_moon_rises.castle-story', { defeated: [], talkedToVeliaf: false }],
+  ]);
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(2325, 7397, 0), getUsername: () => 'castle-veliaf-repeat',
+    getInventory: () => ({ contains: () => false, snapshot: () => [] }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+  };
+  const login = handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin');
+  quest.setStage(player, 40);
+  login({ player });
+  assert.deepEqual([spawned.at(-1).id, spawned.at(-1).x, spawned.at(-1).y], [15867, 2326, 7397]);
+  const veliafLine = handlers.custom.get('npc-dialogue:line')
+    .find(handler => handler.name === 'onBloodMoonDialogueLine');
+  const continuation = { player, step: { speaker: 'Veliaf Hurtz' }, text: 'Hmm... Best we keep progressing on then.' };
+  veliafLine(continuation);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 72,
+    'the stage does not advance when the transcript is merely opened');
+  continuation.after();
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 74,
+    'the finding chapter advances only when the player continues past Veliaf’s line');
+  login({ player });
+  assert.deepEqual([spawned.at(-1).id, spawned.at(-1).x, spawned.at(-1).y], [15877, 2326, 7397],
+    'the captured follower variant stays talkable after the first conversation and a relog');
+  assert.ok(removed.some(npc => npc.id === 15867), 'the old variant is replaced rather than duplicated');
+  attributes.set('quest.the_blood_moon_rises.castle-native-stage', 76);
+  login({ player });
+  assert.ok(removed.some(npc => npc.id === 15877), 'the supplies dialogue actor leaves after the prison chapter starts');
+});
+
+test('Blood Moon basement hostiles spawn only in their recorded castle rooms', () => {
+  const { api, handlers } = mockApi();
+  const spawned = [];
+  const removed = [];
+  api.spawnNpc = spec => {
+    const npc = { ...spec, getHitpoints: () => 345, setMultiCombat() {}, setScriptedMovement() {} };
+    spawned.push(npc);
+    return npc;
+  };
+  api.removeNpc = npc => removed.push(npc);
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.stage', 40],
+    ['quest.the_blood_moon_rises.castle-native-stage', 74],
+    ['quest.the_blood_moon_rises.castle-room', 48],
+    ['quest.the_blood_moon_rises.castle-floor', 1],
+    ['quest.the_blood_moon_rises.castle-story', { defeated: [] }],
+  ]);
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(2563, 7369, 0), getUsername: () => 'castle-basement-hostiles',
+    getInventory: () => ({ contains: () => false, snapshot: () => [] }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+  };
+  const login = handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin');
+  login({ player });
+  assert.equal(spawned.some(npc => npc.id === 16217), false,
+    'the Venator remains behind the crescent door while the player is in the basement hall');
+  attributes.set('quest.the_blood_moon_rises.castle-room', 49);
+  login({ player });
+  const venator = spawned.find(npc => npc.id === 16217);
+  assert.deepEqual([venator?.x, venator?.y], [2568, 7383], 'the captured chamber spawn tile is used');
+  attributes.set('quest.the_blood_moon_rises.castle-room', 48);
+  login({ player });
+  assert.ok(removed.includes(venator), 'leaving the room removes the owner-only enemy until the next entry');
+  attributes.set('quest.the_blood_moon_rises.castle-room', 50);
+  login({ player });
+  assert.deepEqual(spawned.filter(npc => npc.id === 16223).map(npc => [npc.x, npc.y]),
+    [[2590, 7385], [2593, 7382]], 'the two captured storage-room Sanguidae anchors are used');
 });
 
 test('Ivan reclaims a lost Drakan medallion only after Sins of the Father is complete', () => {
@@ -1831,7 +1920,8 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [61590, 2541, 7374, 0], [61590, 2510, 7379, 0], [61591, 2499, 7400, 0],
     [61575, 2503, 7400, 0], [61574, 2512, 7382, 0], [61572, 2523, 7389, 0],
     [61572, 2535, 7377, 0], [61606, 2311, 7366, 0], [61600, 2564, 7369, 0],
-    [61593, 2570, 7365, 0], [61592, 2566, 7387, 0], [61584, 2570, 7369, 0],
+    [61593, 2570, 7365, 0], [61592, 2566, 7387, 0], [61592, 2579, 7365, 0],
+    [61593, 2575, 7387, 0], [61584, 2570, 7369, 0],
     [61585, 2566, 7394, 0],
   ];
   for (const [, x, y] of pairedDoors) RegionManager.loadMapFiles(x, y);
@@ -1870,7 +1960,9 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
       (x === 2328 && y === 7361 && z === 0) || (x === 2314 && y === 7371 && z === 1) ||
       (x === 2482 && y === 7403 && z === 0) ||
       (x === 2469 && y === 7418 && z === 0) || (x === 2361 && y === 7394 && z === 0) ||
-      (x === 2325 && y === 7397 && z === 0) || (x === 2314 && y === 7361 && z === 0);
+      (x === 2325 && y === 7397 && z === 0) || (x === 2314 && y === 7361 && z === 0) ||
+      (x === 2588 && y === 7381 && z === 0) || (x === 2575 && y === 7386 && z === 0) ||
+      (x === 2579 && y === 7366 && z === 0);
     if (!isCapturedDoorArrival) assert.equal(RegionManager.blocked(new api.core.Location(x, y, z), null), false,
       `the paired-door landing ${x},${y},${z} is a clear floor tile`);
     assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) =>
@@ -2021,6 +2113,19 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   assert.equal(galleryReturn.handled, true);
   assert.deepEqual(moved.at(-1), [2314, 7361, 0], 'the half-moon door returns from Gallery Hall to the lobby');
   assert.equal(varbits.get(15499), 1);
+
+  inventoryItems.add(api.core.ItemIdentifiers.CRESCENT_MOON_KEY);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 48);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 1);
+  const venatorEntry = enterPairedDoor(61592, 2579, 7365, 0, { x: 2579, y: 7366, z: 0 });
+  assert.equal(venatorEntry.handled, true);
+  assert.deepEqual(moved.at(-1), [2575, 7386, 0], 'the recorded crescent door reaches the Venator chamber');
+  assert.equal(varbits.get(15499), 49);
+  const venatorExit = enterPairedDoor(61593, 2575, 7387, 0, { x: 2575, y: 7386, z: 0 });
+  assert.equal(venatorExit.handled, true);
+  assert.deepEqual(moved.at(-1), [2579, 7366, 0], 'the recorded reverse crescent door returns to the basement hall');
+  assert.equal(varbits.get(15499), 48);
+  inventoryItems.delete(api.core.ItemIdentifiers.CRESCENT_MOON_KEY);
   for (const [id, name, keyId] of [
     [61584, 'New moon door', api.core.ItemIdentifiers.NEW_MOON_KEY],
     [61588, 'Gibbous moon door', api.core.ItemIdentifiers.GIBBOUS_MOON_KEY],
