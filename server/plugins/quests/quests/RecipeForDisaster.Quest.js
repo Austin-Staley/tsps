@@ -990,7 +990,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
       onConfirm: (skill, name) => {
         if (LAMP_PENDING.get(player)?.item !== item || player.getInventory().get(slot) !== item) return null;
         LAMP_PENDING.delete(player);
-        if (player.getSkills().getLevelForSkill(skill) < 50) {
+        if (player.getSkillManager().getMaxLevel(skill) < 50) {
           return `You need level 50 ${name ?? skill.getName()} to use this lamp.`;
         }
         const before = player.getSkillManager().getExperience(skill);

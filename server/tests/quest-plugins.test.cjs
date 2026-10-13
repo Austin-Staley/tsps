@@ -11692,8 +11692,7 @@ test('RFD antique lamp advertises level 50 and consumes only after awarding XP',
   const player = {
     getAttribute: key => key === 'quest.recipe_for_disaster.stage' ? 5 : undefined,
     getInventory: () => ({ get: slot => items[slot], deleteAtSlot: slot => items.splice(slot, 1) }),
-    getSkills: () => ({ getLevelForSkill: () => level }),
-    getSkillManager: () => ({ getExperience: () => xp, addExperience: (_skill, amount) => { xp += amount; } }),
+    getSkillManager: () => ({ getMaxLevel: () => level, getExperience: () => xp, addExperience: (_skill, amount) => { xp += amount; } }),
   };
   const rub = itemActions[0].Rub;
   assert.equal(rub({ player, itemId: I.ANTIQUE_LAMP_3, item, slot: 0 }), true);
