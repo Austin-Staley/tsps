@@ -6239,7 +6239,7 @@ module.exports = function registerDesertTreasureII(api) {
             p.sendMessage(`The teleporter carries you to the ${["Palace", "Plaza", "Northern Science District", "Southern Science District", "Western Residential District", "Cathedral", "Eastern Residential District"][index]}.`);
           }] : null)
           .filter(Boolean);
-        if (destinations.length) api.sendMultiChatboxPrompt(p, "Choose an active Lassar teleporter", ...destinations.flat());
+        if (destinations.length) showLassarTeleporterDestinations(p, destinations);
         return true;
       }
       // The city record routes the first six teleporters in the same order as
@@ -6376,6 +6376,17 @@ module.exports = function registerDesertTreasureII(api) {
       return true;
     }
     return false;
+  }
+
+  // Chatbox prompts support at most five choices. Keep four destinations visible
+  // and use the fifth slot to page through the remaining active portals.
+  function showLassarTeleporterDestinations(p, destinations, offset = 0) {
+    const visible = destinations.slice(offset, offset + 4);
+    const options = visible.flat();
+    if (offset + visible.length < destinations.length) {
+      options.push("More...", () => showLassarTeleporterDestinations(p, destinations, offset + visible.length));
+    }
+    api.sendMultiChatboxPrompt(p, "Choose an active Lassar teleporter", ...options);
   }
 
   function routeLassarSinkhole(event) {

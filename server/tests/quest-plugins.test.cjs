@@ -4673,6 +4673,22 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
       'the activated Lassar teleporter opens a valid native destination menu');
     prompts.at(-1).options[5]();
     assert.deepEqual([player.location.x, player.location.y, player.location.z], [2611, 6379, 0]);
+    const lassarAttribute = 'desert-treasure-ii:lassar';
+    const earnedThreePortals = attrs.get(lassarAttribute);
+    attrs.set(lassarAttribute, { ...earnedThreePortals, teleporters: [true, true, true, true, true, true, false] });
+    assert.equal(interact({ player, objectId: portals[0][2], definition: { id: portals[0][2] }, location: { x: portals[0][0], y: portals[0][1], z: 0 }, option: 'Use' }), true);
+    assert.deepEqual(prompts.at(-1).options.filter((_, index) => index % 2 === 0),
+      ['Palace.', 'Plaza.', 'Northern Science District.', 'Southern Science District.', 'More...'],
+      'six active destinations stay within the five-choice chatbox limit');
+    assert.equal(prompts.at(-1).options.length, 10);
+    prompts.at(-1).options[9]();
+    assert.deepEqual(prompts.at(-1).options.filter((_, index) => index % 2 === 0),
+      ['Western Residential District.', 'Cathedral.'],
+      'More opens the remaining active destinations');
+    prompts.at(-1).options[3]();
+    assert.deepEqual([player.location.x, player.location.y, player.location.z], [2652, 6405, 0],
+      'a destination selected from the second page uses its canonical Lassar tile');
+    attrs.set(lassarAttribute, earnedThreePortals);
     assert.equal(interact({ player, objectId: 49483, definition: { id: 49483 }, location: { x: 2599, y: 6341, z: 0 }, option: 'Activate' }), true);
     assert.match(player.messages.at(-1), /sealed district/);
     player.location = new core.Location(2656, 6386, 0);
