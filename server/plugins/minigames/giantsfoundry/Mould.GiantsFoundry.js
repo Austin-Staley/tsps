@@ -187,6 +187,7 @@ function setMould({ player }) {
   if (selection.some((index, tab) => !canUse(player, tab, part(tab, index)))) return;
   if (Shared.get(player, Shared.VARBIT.MOULD_STATE) === 0) Shared.set(player, Shared.VARBIT.MOULD_STATE, 1);
   player.getPacketSender().sendInterfaceRemoval();
+  Shared.step(player, "mould-set");
 }
 
 module.exports = function attachMould(api) {

@@ -129,6 +129,7 @@ function melt(player, itemId, value, amount) {
     const varbit = Shared.VARBIT.METAL_COUNT_FIRST + value.metal;
     Shared.set(player, varbit, Shared.get(player, varbit) + Math.min(worth, space));
     refreshState(player);
+    Shared.step(player, total(player) >= CAPACITY ? "crucible-full" : "metal-added");
     const metal = DATA.metals[value.metal];
     const name = Shared.itemName(itemId);
     const barId = barItemId(value.metal);
@@ -319,7 +320,7 @@ function pour(event) {
     clear(player);
     Shared.set(player, Shared.VARBIT.MOULD_STATE, JIG.POURED);
     Shared.setField(player, POURED_AT, Shared.tick());
-    Shared.api().emitCustomEvent("giants-foundry:step", { player, step: "poured" });
+    Shared.step(player, "poured");
   });
   return true;
 }

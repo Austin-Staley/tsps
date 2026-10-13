@@ -17,5 +17,7 @@ module.exports = {
     require("./giantsfoundry/Kovac.GiantsFoundry")(api);
     require("./giantsfoundry/Mould.GiantsFoundry")(api);
     require("./giantsfoundry/Crucible.GiantsFoundry")(api);
+    require("./giantsfoundry/Tools.GiantsFoundry")(api);
+    require("./giantsfoundry/Temperature.GiantsFoundry")(api);
   },
 };

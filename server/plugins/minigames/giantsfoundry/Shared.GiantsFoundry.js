@@ -133,6 +133,10 @@ const NPC = {
 
 const ITEM = {
   PREFORM: 27010,
+  SMITHS_TUNIC: 27023,
+  SMITHS_TROUSERS: 27025,
+  SMITHS_BOOTS: 27027,
+  SMITHS_GLOVES: 27029,
   ICE_GLOVES: 1580,
   SMITHS_GLOVES_I: 27031,
   BUCKET_OF_WATER: 1929,
@@ -150,6 +154,18 @@ const AMBIENT = {
   HAMMER_SOUND: { sound: 5603, x: 3367, y: 11497, radius: 15 },
   HAMMER_ANIM: 9446,
 };
+
+/** What the player is doing with the preform right now (a machine, the lava, the waterfall). */
+const work = new WeakMap();
+
+function workOf(player) {
+  return work.get(player) ?? null;
+}
+
+function setWork(player, value) {
+  if (value) work.set(player, value);
+  else work.delete(player);
+}
 
 /** Units that work the preform each tick, and stop when the player leaves or stores it. */
 const tickHandlers = [];
@@ -169,6 +185,7 @@ function runTick(player, now) {
 
 function stopWork(player) {
   for (const handler of stopHandlers) handler(player);
+  work.delete(player);
 }
 
 function range(first, count) {
@@ -238,11 +255,22 @@ function sync(player) {
 // Helpers
 // ============================================================================
 
-/** Sleeping Giants unlocks the minigame. */
+/**
+ * Sleeping Giants unlocks the minigame; during the quest's tutorial sword the quest lets the
+ * player in too (it answers "giants-foundry:access").
+ */
 function questComplete(player) {
   const request = { player, key: QUEST_KEY, complete: false };
   api().emitCustomEvent("quest:is-complete", request);
-  return request.complete === true;
+  if (request.complete === true) return true;
+  const access = { player, allowed: false };
+  api().emitCustomEvent("giants-foundry:access", access);
+  return access.allowed === true;
+}
+
+/** Tells the quest (or anyone) how the sword is coming along. */
+function step(player, name) {
+  api().emitCustomEvent("giants-foundry:step", { player, step: name });
 }
 
 function inRoom(location) {
@@ -340,7 +368,7 @@ module.exports = {
   STATE_ATTRIBUTE, REPUTATION_ATTRIBUTE, QUEST_KEY, ROOM, VARP, VARBIT, SYNCED_VARBITS,
   INTERFACE, OVERLAY_HUD_UID, OBJECT, NPC, ITEM, AMBIENT,
   stateOf, get, set, field, setField, reputation, setReputation, sync,
-  onTick, onStopWork, runTick, stopWork,
-  questComplete, inRoom, tick, level, currentLevel, addXp, animate, sound, areaSound,
+  workOf, setWork, onTick, onStopWork, runTick, stopWork,
+  questComplete, step, inRoom, tick, level, currentLevel, addXp, animate, sound, areaSound,
   statement, playerSays, kovacSays, options, later, itemName, wornPreform,
 };

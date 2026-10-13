@@ -11,6 +11,7 @@
 
 const Shared = require("./Shared.GiantsFoundry");
 const Mould = require("./Mould.GiantsFoundry");
+const Tools = require("./Tools.GiantsFoundry");
 
 const ANIM_STORAGE = 899; // human_furnace
 const HEADER_COMPONENT = 2; // combat_interface:header
@@ -19,7 +20,9 @@ const POURED_AT = "pouredAt";
 const JIG = { EMPTY: 0, POURED: 2, COOLED: 3 };
 /** Molten metal cools about a degree a tick in the jig (rsprox: 980-998 at pickup). */
 const POUR_TEMPERATURE = 1000;
-const STAGE_TOOLS = 3; // 0 hammer, 1 grind, 2 polish
+/** Set by the quest's commission; its sword is worked hammer, grind, polish. */
+const TUTORIAL = "tutorial";
+const TUTORIAL_SEEDS = [1, 2, 0, 0, 0, 0];
 /** Gloves that let the player pick the preform up hot, by item id. */
 const COOLING_GLOVES = [Shared.ITEM.ICE_GLOVES, Shared.ITEM.SMITHS_GLOVES_I];
 
@@ -125,15 +128,6 @@ function rollSeeds(stages) {
   return seeds;
 }
 
-/** Script 6119: the HUD's number of stages for a preform's difficulty. */
-function stageCount(difficulty) {
-  if (difficulty < 20) return 3;
-  if (difficulty < 60) return 4;
-  if (difficulty < 90) return 5;
-  if (difficulty < 120) return 6;
-  return 7;
-}
-
 function coolingGloves(player) {
   const { Equipment } = Shared.core();
   const gloves = player.getEquipment().get(Equipment.HANDS_SLOT);
@@ -165,7 +159,9 @@ function pickUp({ player }) {
   }
   const difficulty = Shared.get(player, Shared.VARBIT.ALLOY_DIFFICULTY);
   const quality = Math.max(0, difficulty + Mould.playerScore(player));
-  const seeds = rollSeeds(stageCount(difficulty));
+  // Kovac's tutorial sword goes trip hammer, grindstone, polishing wheel (Sleeping Giants).
+  const tutorial = Shared.field(player, TUTORIAL, false) === true;
+  const seeds = tutorial ? TUTORIAL_SEEDS : rollSeeds(Tools.stageCount(difficulty));
   const pouredAt = Number(Shared.field(player, POURED_AT, Shared.tick()));
   const temperature = Math.max(0, POUR_TEMPERATURE - Math.max(0, Shared.tick() - pouredAt));
   Shared.set(player, Shared.VARBIT.PREFORM_DIFFICULTY, difficulty);
@@ -178,9 +174,10 @@ function pickUp({ player }) {
   Mould.clearSelection(player);
   Shared.set(player, Shared.VARBIT.MOULD_STATE, JIG.EMPTY);
   Shared.setField(player, POURED_AT, null);
+  Tools.resetPreform(player);
   equip(player);
   Shared.sound(player, SOUND_PICK_UP);
-  Shared.api().emitCustomEvent("giants-foundry:step", { player, step: "preform-taken" });
+  Shared.step(player, "preform-taken");
   return true;
 }
 
@@ -217,5 +214,5 @@ module.exports = function attachPreform(api) {
 };
 
 Object.assign(module.exports, {
-  hasFreeHands, rollSeeds, stageCount, equip, unequip, store, storeOnLeave, noticeStoredPreform, openHud, closeHud, MESSAGE,
+  hasFreeHands, rollSeeds, equip, unequip, store, storeOnLeave, noticeStoredPreform, openHud, closeHud, MESSAGE,
 });

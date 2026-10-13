@@ -21,6 +21,18 @@ const HAMMER_LOCS = [
   { id: 44763, x: 3362, y: 11495 },
 ];
 
+/**
+ * Where players stand to use each station (rsprox captures: the tile every recorded use was
+ * made from). The pathfinder can't reach the waterfall's own side through the belt system.
+ */
+const STATION_TILES = new Map([
+  [44619, { x: 3367, y: 11497 }], // trip hammer
+  [44620, { x: 3364, y: 11492 }], // grindstone
+  [44621, { x: 3365, y: 11485 }], // polishing wheel
+  [44631, { x: 3371, y: 11497 }], // lava pool
+  [44632, { x: 3360, y: 11489 }], // waterfall
+]);
+
 let hammerObjects = null;
 
 function hammerLocs() {
@@ -72,6 +84,13 @@ function createArea() {
   return new GiantsFoundry([new Boundary(room.minX, room.maxX, room.minY, room.maxY, room.z)]);
 }
 
+function routeToStation(event) {
+  const tile = STATION_TILES.get(event.objectId);
+  if (!tile || !Shared.inRoom(event.object.getLocation())) return;
+  event.destination = { x: tile.x, y: tile.y, z: Shared.ROOM.z };
+}
+
 module.exports = function attachArea(api) {
   api.registerArea(createArea());
+  api.onObjectRoute(routeToStation);
 };

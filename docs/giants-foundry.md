@@ -15,12 +15,21 @@ All four recordings with foundry play were made on Leagues V worlds (rev 227): 9
 | `Kovac.GiantsFoundry.js` | Commissions; Talk-to's commission conditions and `[sword style]` blanks. |
 | `Mould.GiantsFoundry.js` | The mould jig and its setup interface (718); the mould score. |
 | `Crucible.GiantsFoundry.js` | Filling (Fill menu, item-on), Check, Empty, Pour; the metal score. |
+| `Tools.GiantsFoundry.js` | Trip hammer, grindstone and polishing wheel: machine ticks, damage, sweet spots, overworking, the Smiths' uniform. |
+| `Temperature.GiantsFoundry.js` | Lava pool, waterfall and passive cooling. |
 | `data/giants-foundry.json` | Crucible metals (tier, smelting level) and what smithed equipment is worth. |
 
 **Changes outside the plugin:**
 - **Kovac** is `kovac_multi` (11560) in `npc-spawns.json`, at the captured tile (3369, 11486) facing north-west. The cache resolves it from varbit 13902: 11470 (Talk-to only) until the quest reads 30, then 11472 with Hand-in, Commission and Shop.
 - **`npc-dialogues.json`**: "Transcript:Kovac"'s plain "I'm not sure what something does." option is now conditioned on having no commission (id `Gf7nCm`). The live menu with a commission shows only the ", can you help me?" form (recording 565).
-- **Sleeping Giants** now completes at stage 30, the live value. Saves completed at the old 13 move to 30 at login. The quest no longer spawns its own foundry Kovac (11468).
+- **Sleeping Giants** makes its tutorial sword on this plugin's crucible, jig, tools and HUD.
+  - It hands out the Flat Broad commission through `giants-foundry:start-commission` (`{ player, words, tutorial }`); a tutorial preform's stages are trip hammer, grindstone, polishing wheel.
+  - It lets the player use the foundry from that point (`giants-foundry:access`), and follows the sword through `giants-foundry:step`: `metal-added`, `crucible-full`, `mould-set`, `poured`, `preform-taken`, `hammered`, `ground`, `polished`, `finished`.
+  - It takes the finished sword with `giants-foundry:discard-preform`.
+  - It no longer places its own tutorial crucible, jig, storage, chest and crate. Those blocked live paths, such as the corridor to the waterfall. It uses the room's own supply crate (multiloc 44779 on tutorial varbit 13903), with the captured contents: 8 bronze bars, 6 iron bars, 2 bronze battleaxes, 2 iron longswords, and a bronze and an iron platebody, which make 28 bars' worth.
+  - It no longer spawns its own foundry Kovac (11468).
+  - Its stages map to live OSRS's varbit values (13902: 15 repairing, 20 repaired, 25 making the sword, 30 complete), as does the tutorial varbit (13903, 10-65).
+- **`QuestRuntime`**: a quest's `varpValue` now also maps the stage it sends in a varbit, so a quest can keep its own stage numbers and show live values.
 
 ## Cache
 
@@ -149,6 +158,52 @@ The client draws everything from varbits; the server keeps them right.
   - the preform is worn in the weapon slot, synth 1051 plays, and the combat tab header becomes "Preform" ("Category: Unarmed");
   - HUD 754 opens in the overlay slot.
 
+**Working the preform** (all four recordings)
+
+| Machine | Every | Completion | Temperature | Sound | Animation |
+| --- | --- | --- | --- | --- | --- |
+| Trip hammer | 5th tick | +20 | −25 | 5601 | `human_preform_lift_start02`, then `_loop02` every tick |
+| Grindstone | 2nd tick | +10 | +15 | 5604 | `human_preform_lift_start`, then `_loop` |
+| Polishing wheel | 2nd tick | +10 | −17 | 5608 | the same |
+
+- The stage is script 6120's: completion × stages / 1000.
+- A machine tick damages the preform when the stage needs another tool, or when the temperature is outside the tool's 6121 zone. A damaging tick:
+  - makes no progress, but its temperature step still applies;
+  - costs 5 quality and plays synth 2724, with no message.
+  - The Wiki's quality section says 10 and its rewards section says 5; every capture shows 5.
+- Sweet spot:
+  - It opens on a machine tick (script 6122 [1]).
+  - Clicking the machine inside it sends [2], then [0]. The machine works at once with 50 extra completion, synth 2192 and "<col=229628>Your quick reactions allow you to find the perfect position to work the preform!".
+  - Unclicked, it clears after 9 ticks.
+  - The Wiki adds that the hit wins back one unit of lost quality and doubles the next tick's XP.
+  - Count per sword (Wiki): three for 6-7 sections, otherwise two. Each goes in its own stage, a little way into it.
+- Clicking the machine again outside a sweet spot: "<col=ff3045>Your attempt to overwork the preform causes you to miss the action altogether."; the next tick does nothing.
+- XP per machine tick (Wiki): 4.5 trip hammer, 3.2 grindstone, 3.3 polishing wheel.
+- Smiths' uniform (Wiki): each piece gives a 20% chance of 5% more progress on the trip hammer and 10% more on the others. That is the 21 and 11 in the recordings where the player wore it.
+- At 1000 the player says "Looks like the sword is finished. I should take it to Kovac.".
+
+**Temperature**
+- Dunk-preform and Quench-preform step every tick. The step grows: 27, 30, 33, 37, 41, 45, 49, 53, 57, 62, 67, 72, 77, 83, 89.
+  - Lava: `human_pickupfloor` with synth 1019.
+  - Waterfall: `human_pickuptable` with synth 1006.
+- A worn preform loses a degree every second tick, also while it is heated or worked.
+
+**Hand-in** (recording 101)
+- Kovac: "Hmm... sword look good. Hand over.". On continuing:
+  - "Kovac deposits 46,020 coins into your bank as payment.";
+  - varp 3436 rises;
+  - the preform and commission varbits clear and the preform leaves the weapon slot;
+  - jingle 293 plays and the HUD closes;
+  - a message box shows "Sword completed in: 52m 10s at quality: 188<br>Best completed in: 5m 8s at quality: 199<br>You're awarded: 23010 Smithing XP and 46,020 coins.<br>Total swords made in the Giants Foundry: 31".
+- Then the game message "Total swords made in the Giants Foundry: 31" and "Receive another commission?" (Yes./No.).
+- Rewards (Wiki):
+  - XP = (⌊q²/73⌋ + ⌊1.5q⌋ + 1) × 30; quality 188 gives 23,010, as captured.
+  - Coins = 2 × XP.
+  - Foundry Reputation = quality. Leagues V multiplied it by 8 in the capture.
+  - Half the run energy comes back.
+  - A ruined sword gives 30 XP and 60 coins.
+- The collection log's "Giants' Foundry" count is the number of swords made.
+
 **Stage seeds** (54 captured preforms)
 - Stage 0 is always the trip hammer.
 - Each later stage is one of the two tools that differ from the stage before it, chosen at random.
@@ -160,6 +215,7 @@ The client draws everything from varbits; the server keeps them right.
 - Pouring while a preform is still to be handed in (the Wiki says it can't be done): a placeholder message.
 - The level check for adding a metal (the Wiki says it needs the smelting level, boostable): a placeholder message.
 - Picking the preform up with a bucket of water (every capture used ice gloves): the bucket is emptied, with a placeholder message.
+- Heat-preform and Cool-preform (every capture went straight to the fast options): steps a third of the fast ones.
 - The temperature at pickup is 1000 minus a degree per tick since the pour (captured: 980-998).
 
 - "Check" on a set-up jig: it reopens the setup.
