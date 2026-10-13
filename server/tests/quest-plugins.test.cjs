@@ -6543,9 +6543,18 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(interact({ player, objectId: 49488, definition: { id: 49488 }, location: { x: 2654, y: 6422, z: 0 }, option: 'Enter' }), true,
       'the real five-by-five drain dispatches from its cached southwest object anchor');
     assert.equal(player.location.x, 2784);
-    assert.equal(interact({ player, objectId: 48301, definition: { id: 48301 }, location: { x: 2784, y: 6287, z: 1 }, option: 'Open' }), true);
-    assert.equal(interact({ player, objectId: 48304, definition: { id: 48304 }, location: { x: 2806, y: 6303, z: 1 }, option: 'Climb-down' }), true);
-    assert.equal(interact({ player, objectId: 47734, definition: { id: 47734 }, location: { x: 2784, y: 6304, z: 0 }, option: 'Inspect' }), true);
+    assert.equal(interact({ player, objectId: 48301, definition: { id: 48301 }, location: { x: 2784, y: 6287, z: 1 }, option: 'Open' }), false,
+      'the quest records icon use but lets the shared Doors plugin open the cache gate');
+    assert.equal(attrs.get('desert-treasure-ii:lassar').drainGateOpen, true,
+      'the cistern gate progression is saved before the generic door action');
+    assert.equal(interact({ player, objectId: 48304, definition: { id: 48304 }, location: { x: 2806, y: 6303, z: 1 }, option: 'Climb-down' }), false,
+      'the cache ClimbLinks action performs the real plane transition outside object hooks');
+    player.location = new core.Location(2804, 6303, 0);
+    playerProcesses[0]({ player });
+    assert.equal(attrs.get('desert-treasure-ii:lassar').drainLower, true,
+      'the lower cistern is recorded only after the player reaches its real lower-floor coordinates');
+    assert.equal(interact({ player, objectId: 48305, definition: { id: 48305 }, location: { x: 2783, y: 6303, z: 0 }, option: 'Inspect' }), true,
+      'the 3x3 cache pillar dispatches its Inspect action from the southwest object anchor');
     assert.equal(transcripts.at(-1), 'the-whisperer-inspecting-the-totem-in-the-cistern');
     actionHooks[0]({ player, stepId: 'dUbk4i' });
     assert.equal(player.location.x, 3232, 'the vision action takes the player into the cistern water');

@@ -69,6 +69,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.DOOR_683, O.DOOR_685],
     // Catacomb outer jail gate: its open cache variant has no Close action.
     [O.GATE_301, O.GATE_302],
+    // The Lassar cistern gate opens into its actionless, same-model cache variant.
+    [O.GATE_268, O.GATE_269],
     // Tree Gnome Stronghold doors: 1967/1968 open into the cache's nameless 1969/1970.
     [O.TREE_DOOR, 1969],
     [O.TREE_DOOR_2, 1970],

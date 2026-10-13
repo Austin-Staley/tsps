@@ -3583,6 +3583,15 @@ module.exports = function registerDesertTreasureII(api) {
     syncLassarSceneObjects(p, lassarState);
     syncLassarAnimaTentacles(p, lassarState);
     const position = p.getLocation?.();
+    // The cache ladder uses a native ClimbLinks transition, so its action does
+    // not pass through object-interaction hooks. Record the lower-floor visit
+    // only after the icon-gated drain and cistern gate have both been entered.
+    if (lassarState.drainEntered && lassarState.drainGateOpen && !lassarState.drainLower
+      && position && position.getZ?.() === 0
+      && position.getX?.() >= 2780 && position.getX?.() <= 2810
+      && position.getY?.() >= 6280 && position.getY?.() <= 6320) {
+      setLassar(p, { ...lassarState, drainLower: true });
+    }
     if (lassarState.cameTo && position
       && Math.abs(position.getX?.() - 2648) <= 16 && Math.abs(position.getY?.() - 6442) <= 16
       && (position.getZ?.() ?? 0) === 0) ensureLassarKetla(p);
@@ -6553,16 +6562,12 @@ module.exports = function registerDesertTreasureII(api) {
       && (visibleId === 48301 || visibleId === 48302) && (option === "open" || option === "pass")) {
       if (!has(p, I.STRANGE_ICON)) { p.sendMessage("The cistern gate is marked with the icon. Carry it to pass."); return true; }
       setLassar(p, { ...state, drainGateOpen: true, iconUsed: true });
-      p.moveTo(new api.core.Location(2790, 6287, 1));
-      return true;
+      // Let the shared Doors plugin swing this real cache gate and clear its collision.
+      // Moving the player past an unchanged closed loc strands them against the wall.
+      return false;
     }
-    if (x === 2806 && y === 6303 && z === 1 && state.drainGateOpen && visibleId === 48304
-      && (option === "climb-down" || option === "climb down" || option === "descend")) {
-      p.moveTo(new api.core.Location(2806, 6303, 0));
-      setLassar(p, { ...state, drainLower: true });
-      return true;
-    }
-    if (x === 2784 && y === 6304 && z === 0 && state.drainLower && [47734, 48305].includes(visibleId)
+    // Event locations use the cache object's southwest anchor; this 3x3 pillar is at 2783,6303.
+    if (x === 2783 && y === 6303 && z === 0 && state.drainLower && [47734, 48305].includes(visibleId)
       && (option === "inspect" || option === "search")) {
       if (!has(p, I.STRANGE_ICON)) { p.sendMessage("The pillar's inscription only responds to the strange icon."); return true; }
       setLassar(p, { ...state, visionStarted: true });

@@ -937,6 +937,21 @@ test('the catacomb outer jail gate uses its actionless open cache variant and au
  }finally{h.restore();}
 });
 
+test('the Lassar cistern gate opens into its actionless cache variant', () => {
+  const h = buildHarness({ cacheObjects: new Map([
+    [48301, { name: 'Gate', actions: ['Open'], models: [[609]] }],
+    [48302, { name: 'Gate', actions: [], models: [[609]] }],
+  ]) });
+  try {
+    assert.deepEqual(h.click(48301, 2784, 6287, 0, 'Open', 'Gate', 0, null, 1), [
+      ['register', 48302, 2783, 6287, 1],
+      ['deregister', 48301, 2784, 6287, 0],
+    ], 'opening uses the actual same-model open loc and clears the closed gate footprint');
+  } finally {
+    h.restore();
+  }
+});
+
 
 
 test('Dragon Slayer secret wall opens with the normal door interaction', () => {
