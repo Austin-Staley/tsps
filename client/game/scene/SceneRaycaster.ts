@@ -133,6 +133,11 @@ export class SceneRaycaster {
         return new Ray(newOrigin, newDir);
     }
 
+    /** The draw distance in tiles, the GPU plugin's while it is on. */
+    private drawDistance(): number {
+        return this.osrsClient.gpuPlugin?.settings()?.drawDistance ?? this.osrsClient.renderDistance;
+    }
+
     private getControlledPlayerWorldViewId(): number {
         try {
             const pe = this.osrsClient.playerEcs;
@@ -247,7 +252,7 @@ export class SceneRaycaster {
         const maxDistance =
             typeof options?.maxDistance === "number"
                 ? options.maxDistance
-                : Math.max(32, this.osrsClient.renderDistance + 32);
+                : Math.max(32, this.drawDistance() + 32);
         if (!Number.isFinite(maxDistance) || maxDistance <= 0) {
             return hits;
         }
@@ -292,7 +297,7 @@ export class SceneRaycaster {
             // Ignore - fog filtering will be disabled
         }
         if (typeof playerWorldX === "number" && typeof playerWorldZ === "number") {
-            const fogEnd = Number(this.osrsClient.renderDistance) || 0;
+            const fogEnd = Number(this.drawDistance()) || 0;
             if (Number.isFinite(fogEnd) && fogEnd >= 0) {
                 fogCutoff = fogEnd;
             }
