@@ -568,6 +568,8 @@ module.exports = function registerDesertTreasureII(api) {
   let LeviathanArea;
   let SucellusArea;
   const totemSpellIds = new Map(TOTEMS.map((totem) => [totem.kind, new Set(totem.spells.map((name) => api.core.CombatSpells[name]?.spellId?.()).filter(Number.isInteger))]));
+  const LEVIATHAN_SHADOW_SPELL_IDS = new Set(["SHADOW_RUSH", "SHADOW_BURST", "SHADOW_BLITZ", "SHADOW_BARRAGE"]
+    .map(name => api.core.CombatSpells[name].spellId()));
 
   AncientVaultArea = class DesertTreasureIIAncientVaultArea extends api.core.TemplatedInstanceArea {
     constructor(owner) {
@@ -1454,7 +1456,8 @@ module.exports = function registerDesertTreasureII(api) {
     const combat = event.attacker.getCombat?.();
     const spell = combat?.getCastSpell?.() ?? combat?.getSelectedSpell?.();
     // Shadow spells always stun this boss, including casts in ranged equipment.
-    if ((!boss.__dt2LeviathanEnraged && /shadow (burst|blitz|barrage|rush)/i.test(spell?.getName?.() ?? ""))
+    if ((!boss.__dt2LeviathanEnraged && event.combatType === api.core.CombatType.MAGIC
+        && LEVIATHAN_SHADOW_SPELL_IDS.has(spell?.spellId?.()))
       || nearLeviathanPathfinder(event.attacker, boss)) event.forceAccurate = true;
   }
 
@@ -1469,8 +1472,7 @@ module.exports = function registerDesertTreasureII(api) {
   function stunLeviathan({ attacker, target, spell }) {
     if (!attacker?.isPlayer?.() || !target?.__dt2Leviathan || attacker !== target.getOwner?.()
       || target.__dt2LeviathanEnraged) return;
-    const name = spell?.getName?.() ?? spell?.name ?? "";
-    if (!/shadow (burst|blitz|barrage|rush)/i.test(name)) return;
+    if (!LEVIATHAN_SHADOW_SPELL_IDS.has(spell?.spellId?.())) return;
     target.__dt2LeviathanStunnedUntil = api.core.World.getProcessCycle() + 15;
     target.__dt2LeviathanPendingAttack = null;
     attacker.sendMessage("The shadow spell stuns the Leviathan, interrupting its attack.");

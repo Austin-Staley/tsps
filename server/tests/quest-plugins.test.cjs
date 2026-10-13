@@ -3853,13 +3853,13 @@ test('Desert Treasure II shadow spells interrupt the private Leviathan encounter
   const messages = [];
   const attacker = { isPlayer: () => true, sendMessage: (message) => messages.push(message) };
   const target = { __dt2Leviathan: true, getOwner: () => attacker };
-  custom.get('magic:hit-effects').at(-1)({ attacker, target, spell: { getName: () => 'Shadow Barrage' } });
+  custom.get('magic:hit-effects').at(-1)({ attacker, target, spell: api.core.CombatSpells.SHADOW_BARRAGE });
   assert.ok(target.__dt2LeviathanStunnedUntil > api.core.World.getProcessCycle());
   assert.match(messages[0], /stuns the Leviathan/);
   target.__dt2LeviathanEnraged = true;
   target.__dt2LeviathanStunnedUntil = 0;
   target.__dt2LeviathanPendingAttack = { style: 'magic', due: 10 };
-  custom.get('magic:hit-effects').at(-1)({ attacker, target, spell: { getName: () => 'Shadow Barrage' } });
+  custom.get('magic:hit-effects').at(-1)({ attacker, target, spell: api.core.CombatSpells.SHADOW_BARRAGE });
   assert.equal(target.__dt2LeviathanStunnedUntil, 0, 'enrage cannot be stunned');
   assert.deepEqual(target.__dt2LeviathanPendingAttack, { style: 'magic', due: 10 });
   assert.equal(messages.length, 1);
@@ -3905,7 +3905,8 @@ test('Desert Treasure II pathfinder grants only its owner perfect accuracy and t
   handlers.combatHitRoll.forEach(h => h(roll));
   assert.equal(roll.forceAccurate, false, 'another player cannot use the owner aura');
   roll.attacker = player; distance = 8; boss.__dt2LeviathanEnraged = false;
-  player.getCombat = () => ({ getCastSpell: () => ({ getName: () => 'Shadow Barrage' }) });
+  player.getCombat = () => ({ getCastSpell: () => api.core.CombatSpells.SHADOW_BARRAGE });
+  roll.combatType = api.core.CombatType.MAGIC;
   handlers.combatHitRoll.forEach(h => h(roll));
   assert.equal(roll.forceAccurate, true, 'a normal shadow cast always stuns before enrage');
   boss.__dt2LeviathanEnraged = true; roll.forceAccurate = false;
