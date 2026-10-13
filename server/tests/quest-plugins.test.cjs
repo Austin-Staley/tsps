@@ -5705,8 +5705,11 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(attrs.get('desert-treasure-ii:lassar').silentChoir, true);
     attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), blueKey: true, pubBlocker: true });
     counts.set(core.ItemIdentifiers.SHADOW_KEY_2, 1);
-    assert.equal(interact({ player, objectId: 48278, definition: { id: 48278 }, location: { x: 2385, y: 6427, z: 0 }, option: 'Open' }), false,
-      'the purple pub doors open only after the blocker and blue key, with the cache opening the real door');
+    assert.equal(interact({ player, objectId: 48290, definition: { id: 48290 }, location: { x: 2385, y: 6428, z: 0 }, option: 'Open' }), false,
+      'the live south leaf runs the blocker and blue-key gate before the cache opens it');
+    assert.equal(attrs.get('desert-treasure-ii:lassar').pubOpened, true,
+      'opening the cache-backed leaf records the pub unlock and reveals its schematic');
+    assert.equal(counts.get(core.ItemIdentifiers.SHADOW_KEY_2), 0, 'the blue key is consumed by the pub gate');
     assert.equal(interact({ player, objectId: 48278, definition: { id: 48278 }, location: { x: 2372, y: 6430, z: 0 }, option: 'Climb-up' }), true);
     assert.equal(player.location.z, 1, 'the pub stairs use their real upper plane');
     assert.equal(interact({ player, objectId: 48245, definition: { id: 48245 }, location: { x: 2380, y: 6430, z: 1 }, option: 'Touch' }), true);
