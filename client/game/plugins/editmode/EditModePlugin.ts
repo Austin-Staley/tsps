@@ -103,6 +103,7 @@ export class EditModePlugin {
     private config: EditModePluginConfig;
     private state: EditModePluginState;
     private selection?: EditModeSelection;
+    private movingSelection?: EditModeSelection;
     private search: EditModePluginState["search"] = {
         kind: "loc",
         query: "",
@@ -335,6 +336,9 @@ export class EditModePlugin {
     setConfig(nextConfig: Partial<EditModePluginConfig>): void {
         const wasActive = this.config.active;
         const previousTool = this.config.tool;
+        if (nextConfig.tool !== undefined || nextConfig.locId !== undefined || nextConfig.placeKind !== undefined) {
+            this.movingSelection = undefined;
+        }
         this.config = this.sanitizeConfig({ ...this.config, ...nextConfig });
         if (nextConfig.heightLevel !== undefined && nextConfig.renderAllHeightLevels === undefined) {
             this.config.renderAllHeightLevels = this.config.heightLevel === 0;
@@ -512,6 +516,7 @@ export class EditModePlugin {
     }
 
     duplicateSelection(): void {
+        this.movingSelection = undefined;
         if (!this.selection || this.selection.kind === "npc" || this.selection.locId < 0) return;
         this.setConfig({
             tool: "place",
@@ -522,7 +527,19 @@ export class EditModePlugin {
         });
     }
 
+    moveSelection(): void {
+        const selection = this.selection;
+        if (!selection || selection.kind !== "loc" || selection.locId < 0) return;
+        this.duplicateSelection();
+        // Keep the source until the destination is confirmed, so cancelling is harmless.
+        this.movingSelection = { ...selection };
+    }
+
     rotateSelection(): void {
+        if (this.movingSelection) {
+            this.rotate();
+            return;
+        }
         const selection = this.selection;
         if (!selection || selection.kind !== "loc" || selection.locId < 0) return;
         const shape = selection.shape ?? this.config.shape;
@@ -554,6 +571,7 @@ export class EditModePlugin {
 
     deleteSelection(): void {
         if (!this.selection || this.selection.kind === "npc" || this.selection.locId < 0) return;
+        if (this.movingSelection) this.setConfig({ tool: "select" });
         this.commitEdits([
             {
                 kind: "delete",
@@ -836,7 +854,21 @@ export class EditModePlugin {
             shape: this.config.shape,
             rotation: this.config.rotation,
         };
-        this.commitEdits([edit]);
+        const moving = this.movingSelection;
+        if (moving && edit.kind === "place") {
+            this.movingSelection = undefined;
+            this.selection = undefined;
+            host.clearSelectionHighlight?.();
+            this.commitEdits([{
+                kind: "delete", locId: 0,
+                tileX: moving.tileX, tileY: moving.tileY, plane: moving.plane,
+                shape: moving.shape ?? this.config.shape,
+                rotation: moving.rotation ?? this.config.rotation,
+            }, edit]);
+            this.setConfig({ tool: "select" });
+        } else {
+            this.commitEdits([edit]);
+        }
     }
 
     /**
@@ -1191,6 +1223,17 @@ export class EditModePlugin {
         // The login form is drawn on the canvas, so its typing would otherwise
         // lose every "r" to the rotate shortcut.
         if (!this.handlesCanvasInput()) return;
+        const key = event.key.toLowerCase();
+        if (this.selection?.kind === "loc" && (key === "c" || key === "m") &&
+            !event.ctrlKey && !event.metaKey && !event.altKey) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!event.repeat) {
+                if (key === "c") this.duplicateSelection();
+                else this.moveSelection();
+            }
+            return;
+        }
         if (EDITOR_CAMERA_KEYS.has(event.code) && !event.ctrlKey && !event.metaKey && !event.altKey) {
             this.cameraKeys.add(event.code);
             this.host?.getCanvas()?.focus({ preventScroll: true });
@@ -1208,14 +1251,19 @@ export class EditModePlugin {
             this.refreshPointerPreview();
             return;
         }
-        if (event.key === "r" || event.key === "R") {
+        if (key === "r" && !event.ctrlKey && !event.metaKey && !event.altKey) {
             event.preventDefault();
+            if (event.repeat) return;
             if (this.config.tool === "select" && this.selection?.kind === "loc") {
                 this.rotateSelection();
             } else {
                 this.rotate();
             }
         } else if (event.key === "Escape") {
+            if (this.movingSelection) {
+                this.setConfig({ tool: "select" });
+                return;
+            }
             if (this.pathStart || this.wallStart) {
                 this.pathStart = undefined;
                 this.wallStart = undefined;
@@ -1293,6 +1341,7 @@ export class EditModePlugin {
             this.host?.setFreeCamera(false);
             this.freeCamera = false;
         }
+        if (!shouldCapture) this.movingSelection = undefined;
         if (!shouldCapture) this.resetCameraInput();
         if (!shouldCapture) this.clearPlacementPreview();
         if (!shouldCapture) this.host?.clearSelectionHighlight?.();

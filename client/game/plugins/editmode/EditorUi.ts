@@ -18,6 +18,7 @@ import {
     type EditorTool,
     createCloseIcon,
     createDuplicateIcon,
+    createMoveIcon,
     createDownloadIcon,
     createLayersIcon,
     createOverlayIcon,
@@ -141,6 +142,7 @@ function createActionButton(
     title: string,
     icon: () => SVGElement,
     action: () => void,
+    shortcut?: string,
 ): HTMLButtonElement {
     const button = document.createElement("button");
     button.type = "button";
@@ -163,6 +165,14 @@ function createActionButton(
         textAlign: "left",
     });
     button.append(" ", title);
+    if (shortcut) {
+        const hint = document.createElement("kbd");
+        hint.textContent = shortcut;
+        Object.assign(hint.style, { marginLeft: "auto", color: "#94a3b8", font: "12px sans-serif" });
+        button.appendChild(hint);
+        button.title = `${title} (${shortcut})`;
+        button.setAttribute("aria-keyshortcuts", shortcut.toLowerCase());
+    }
     button.addEventListener("click", action);
     return button;
 }
@@ -814,10 +824,11 @@ class EditorChrome {
         }
         if (selection.kind === "loc") {
             actions.append(
-                createActionButton("Rotate object", createRotateIcon, () => this.plugin.rotateSelection()),
+                createActionButton("Rotate object", createRotateIcon, () => this.plugin.rotateSelection(), "R"),
                 createActionButton("Duplicate object", createDuplicateIcon, () =>
-                    this.plugin.duplicateSelection(),
+                    this.plugin.duplicateSelection(), "C",
                 ),
+                createActionButton("Move object", createMoveIcon, () => this.plugin.moveSelection(), "M"),
                 createActionButton("Delete object", createTrashIcon, () =>
                     this.plugin.deleteSelection(),
                 ),
