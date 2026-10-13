@@ -552,9 +552,12 @@ module.exports = {
 
     // "npc-drops:roll-table" { player, table, drops }: a table outside an NPC's own (a boss's
     // chest) rolled with the same roller and shared tables; the drops are pushed onto `drops`.
+    // { player, npcId, drops } rolls that NPC's own table instead, for a boss that rewards
+    // several players without dying to each (the Nightmare).
     api.onCustomEvent("npc-drops:roll-table", (request) => {
       ensureDrops();
-      request.drops.push(...rollTable(request.table, request.player, null));
+      const table = request.table ?? tableForNpc(request.npcId);
+      if (table) request.drops.push(...rollTable(table, request.player, null));
     });
 
     api.onNpcDeath(({ killer, npc, npcId, damagers }) => {

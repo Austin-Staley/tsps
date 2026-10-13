@@ -3,6 +3,7 @@ import { AnimationSmoothingPlugin } from "../../../game/plugins/animationsmoothi
 import { AttackTimerPlugin } from "../../../game/plugins/attacktimer/AttackTimerPlugin";
 import { FirstPersonPlugin } from "../../../game/plugins/firstperson/FirstPersonPlugin";
 import { GameFrame317Plugin } from "../../../game/plugins/gameframe317/GameFrame317Plugin";
+import { GpuPlugin } from "../../../game/plugins/gpu/GpuPlugin";
 import { GroundItemsConfig } from "../../../game/plugins/grounditems/GroundItemsConfig";
 import { GroundItemsPlugin } from "../../../game/plugins/grounditems/GroundItemsPlugin";
 import { HdPlugin } from "../../../game/plugins/hd/HdPlugin";
@@ -51,6 +52,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     StatusBarsPlugin,
     OpponentInfoPlugin,
     StretchedModePlugin,
+    GpuPlugin,
 ];
 
 /** Legacy `osrs.plugin.*.v1` localStorage blobs to fold into rl.config. */
