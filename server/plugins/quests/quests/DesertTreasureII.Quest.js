@@ -6644,6 +6644,9 @@ module.exports = function registerDesertTreasureII(api) {
     if (state.greenKey && !state.purpleKey && !has(p, I.SHADOW_KEY)) {
       registerLassarGroundItem(p, I.SHADOW_KEY, 2592, 6352);
     }
+    if (state.tentacles?.["2424,6439"] && !state.blueKey && !has(p, I.SHADOW_KEY_2)) {
+      registerLassarGroundItem(p, I.SHADOW_KEY_2, 2416, 6443);
+    }
     // shortcut: place the schematic beside its Wiki marker because the marked tile is occupied by a cache crate.
     if (state.tentacles?.["2417,6413"] && !state.idolSchematic && !has(p, I.REVITALISING_IDOL_SCHEMATIC)) {
       registerLassarGroundItem(p, I.REVITALISING_IDOL_SCHEMATIC, 2676, 6422);

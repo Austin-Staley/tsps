@@ -5424,6 +5424,13 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(attrs.get('desert-treasure-ii:lassar').tentacles['2424,6439'], true);
     assert.equal(groundSpawns.at(-1)[1].getId(), core.ItemIdentifiers.SHADOW_KEY_2,
       'burning the eastern barrier reveals the blue shadow key');
+    const blueKeyState = attrs.get('desert-treasure-ii:lassar');
+    attrs.set('desert-treasure-ii:lassar', { ...blueKeyState, inShadow: true, blueKey: false });
+    const beforeBlueKeyRecovery = groundSpawns.length;
+    playerProcesses[0]({ player });
+    const recoveredBlueKey = groundSpawns.slice(beforeBlueKeyRecovery).find(([, item]) => item.getId() === core.ItemIdentifiers.SHADOW_KEY_2);
+    assert.ok(recoveredBlueKey, 'a cleared barrier restores its missing key after logout, expiry or death');
+    assert.deepEqual([recoveredBlueKey[2].getX(), recoveredBlueKey[2].getY()], [2416, 6443]);
     counts.set(core.ItemIdentifiers.BASIC_SHADOW_TORCH, 0);
     attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), inShadow: true, sanity: 100 });
     playerProcesses[0]({ player });
