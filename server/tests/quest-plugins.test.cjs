@@ -8058,7 +8058,14 @@ test('Song of the Elves gives the real stackable explosive potion with one free 
   };
   const runtime = require('../plugins/quests/QuestRuntime');
   const originalStartTranscript = runtime.startTranscript;
-  runtime.startTranscript = () => true;
+  let supplySteps;
+  runtime.startTranscript = (_api, _player, _npc, _page, variant, select) => {
+    if (variant === 'preparations-at-the-dwarf-camp-talking-to-elena-after-talking-to-baxtorian') {
+      const raw = require('../data/definitions/npc-dialogues.json')['Song of the Elves'].variants[variant];
+      supplySteps = select(raw);
+    }
+    return true;
+  };
   try { require('../plugins/quests/quests/SongOfTheElves.Quest')(api); }
   finally { runtime.startTranscript = originalStartTranscript; }
   const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
@@ -8069,7 +8076,7 @@ test('Song of the Elves gives the real stackable explosive potion with one free 
   const inventory = {
     getAmount: (id) => items.get(id) ?? 0,
     getFreeSlots: () => freeSlots,
-    adds: (id, amount) => items.set(id, (items.get(id) ?? 0) + amount),
+    adds: (id, amount) => { if (!items.has(id)) freeSlots--; items.set(id, (items.get(id) ?? 0) + amount); },
   };
   const player = {
     getUsername: () => 'DwarfCampStackablePotionTest',
@@ -8095,16 +8102,21 @@ test('Song of the Elves gives the real stackable explosive potion with one free 
   talkElena({ player, npcId: api.core.NpcIdentifiers.ELENA, option: 'Talk-to', definition: elena, target: elena });
   const potion = api.core.ItemIdentifiers.EXPLOSIVE_POTION_3;
   assert.equal(potion, 23818);
-  assert.equal(items.get(potion), 7);
+  assert.equal(items.get(potion), undefined, 'Elena hands over the potions at the offer in her conversation');
+  assert.ok(JSON.stringify(supplySteps).includes('gBRsQm'));
+  assert.equal(JSON.stringify(supplySteps).includes('4Q1iXL'), false, 'the full-bag prose cannot override this supply branch');
   assert.equal(player.messages?.some((message) => message.includes('one inventory space')), false);
 
-  freeSlots = 0;
   const supplyMessage = { player, kind: 'message', stepId: 'gBRsQm' };
   handlers.custom.get('npc-dialogue:action').find(handler => handler.name === 'onAction')(supplyMessage);
+  assert.equal(freeSlots, 0);
   assert.notEqual(supplyMessage.handled, true, 'the dialogue continues after the stack uses the last slot');
   assert.deepEqual(supplyMessage.box, { items: [potion] });
   assert.equal(items.get(potion), 7, 'the transcript does not duplicate the supply already handed over');
   assert.equal(player.messages?.some(message => message.includes('one empty inventory slot')), false);
+  talkElena({ player, npcId: api.core.NpcIdentifiers.ELENA, option: 'Talk-to', definition: elena, target: elena });
+  handlers.custom.get('npc-dialogue:action').find(handler => handler.name === 'onAction')({ player, kind: 'message', stepId: 'gBRsQm' });
+  assert.equal(items.get(potion), 7, 'reopening the conversation with a full bag preserves the existing stack');
 
   items.clear();
   freeSlots = 0;

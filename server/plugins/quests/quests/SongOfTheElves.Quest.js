@@ -1385,6 +1385,21 @@ module.exports = function registerSongOfTheElves(api) {
     if (amount > 0) inventory.deleteNumber(ItemIdentifiers.ORB_OF_LIGHT_5, amount);
   }
 
+  function campElenaSupplySteps(player, steps) {
+    const canTake = player.getInventory().getAmount(CAMP_EXPLOSIVE_ITEM) > 0 || player.getInventory().getFreeSlots() > 0;
+    return steps.flatMap(step => {
+      // Resolve these two branches before another quest's global inventory-prose hook can claim them.
+      if (["P2yzxj", "eU_IkG"].includes(step.id)) {
+        return (step.id === "eU_IkG") === canTake ? campElenaSupplySteps(player, step.steps ?? []) : [];
+      }
+      const copy = { ...step };
+      if (step.steps) copy.steps = campElenaSupplySteps(player, step.steps);
+      if (step.options) copy.options = step.options.map(option => ({ ...option,
+        steps: campElenaSupplySteps(player, option.steps ?? []) }));
+      return [copy];
+    });
+  }
+
   function onTalk(event) {
     const player = event?.player;
     if (!player) return false;
@@ -1504,10 +1519,9 @@ module.exports = function registerSongOfTheElves(api) {
           player.sendMessage("Make one inventory space so Elena can hand you the stackable explosive potions.");
           return true;
         }
-        player.getInventory().adds(CAMP_EXPLOSIVE_ITEM, 7);
-        player.setAttribute(CAMP_EXPLOSIVES, 7);
       }
-      return startTranscript(api, player, event.npcId, PAGE, "preparations-at-the-dwarf-camp-talking-to-elena-after-talking-to-baxtorian");
+      return startTranscript(api, player, event.npcId, PAGE, "preparations-at-the-dwarf-camp-talking-to-elena-after-talking-to-baxtorian",
+        steps => campElenaSupplySteps(player, steps));
     }
     if (npcName === "baxtorian" && currentChapter(player) === 18 && player.getArea?.() instanceof DwarvenCampArea) {
       if ((Number(player.getAttribute(CAMP_HOLES)) || 0) !== 127) {
