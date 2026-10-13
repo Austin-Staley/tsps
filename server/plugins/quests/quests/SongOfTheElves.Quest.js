@@ -106,7 +106,7 @@ module.exports = function registerSongOfTheElves(api) {
   const ITHELL_EXAMINE_MARKERS = [
     new Set([37307, 1189, 10529]), new Set([37305, 8773]), new Set([37306]),
     new Set([37304, 8744]), new Set([37303, 35878, 35879]),
-  ];
+  ].map((markers) => new Set([...markers, 35878, 35879]));
   const MEILYR_DIG_SPOTS = [
     { x: 2225, y: 3133, message: "You dig up a clue scroll pointing to Zul-Andra." },
     { x: 2203, y: 3061, message: "You dig up a clue scroll pointing to Prifddinas's southern gate." },
@@ -1072,7 +1072,7 @@ module.exports = function registerSongOfTheElves(api) {
     sender.sendVarbit(ITHELL_VARBIT, ithell);
     sender.sendVarbit(MEILYR_VARBIT, Number(player.getAttribute(MEILYR_CLUE)) || 0);
     for (let index = 0; index < ITHELL_SYMBOL_VARBITS.length; index++) {
-      sender.sendVarbit(ITHELL_SYMBOL_VARBITS[index], symbols & (1 << index) ? 2 : 0);
+      sender.sendVarbit(ITHELL_SYMBOL_VARBITS[index], symbols & (1 << index) ? 2 : ithell > 0 ? 1 : 0);
     }
   }
 
@@ -1090,8 +1090,8 @@ module.exports = function registerSongOfTheElves(api) {
       ITHELL_EXAMINE_MARKERS[i].has(event.objectId) &&
       Math.max(Math.abs(tile.x - x), Math.abs(tile.y - y)) <= 1);
     if (index < 0) return;
-    // This map export omits some symbols (and all five cache locs lack the
-    // Touch action). Examine at the matching wall is the cache-safe fallback.
+    // Older scenes may still expose the inactive symbol or only its wall marker.
+    // Keep their nearby Examine fallback alongside the native active Touch loc.
     const proxyEvent = { player, objectId: ITHELL_SYMBOLS_BY_TILE[index].id,
       location: ITHELL_SYMBOLS_BY_TILE[index], option: "Touch", handled: false };
     if (touchIthellSymbol(proxyEvent)) {
@@ -1171,7 +1171,7 @@ module.exports = function registerSongOfTheElves(api) {
     const y = location?.y ?? location?.getY?.();
     const z = location?.z ?? event.sourceLocation?.z ?? location?.getZ?.();
     const symbol = ITHELL_SYMBOLS_BY_TILE.find((entry) => entry.x === x && entry.y === y && entry.z === z &&
-      (entry.id === event.objectId || (entry.id === 37303 && [35878, 35879].includes(event.objectId))));
+      (entry.id === event.objectId || [35878, 35879].includes(event.objectId)));
     if (!symbol) return false;
     event.handled = true;
     const index = ITHELL_SYMBOLS_BY_TILE.indexOf(symbol);

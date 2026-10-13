@@ -9114,6 +9114,13 @@ test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clu
   const choices = custom.get('npc-dialogue:choice');
   choices.at(-1)({ player, option: "What's Lady Ithell's clue?", definition: { getName: () => 'Baxtorian' } });
   assert.equal(varbits.get(9035), 1);
+  const cache = require('../dist/game/cache/CacheDefinitions').CacheDefinitions;
+  for (const [id, bit] of [[37307,9041],[37305,9039],[37306,9040],[37304,9038],[37303,9037]]) {
+    assert.equal(cache.getObject(id).transformVarbit, bit);
+    assert.deepEqual(cache.getObject(id).transforms, [35878,35879,-1]);
+    assert.equal(varbits.get(bit), 1, 'every unclaimed symbol exposes its native Touch child');
+  }
+  assert.equal(cache.getObject(35879).actions[0], 'Touch');
   const examineSymbol = custom.get('world:object-examine')[1];
   location.x = 2322; location.y = 3163; location.z = 0;
   const examined = { player, objectId: 37305, handled: false };
@@ -9131,7 +9138,7 @@ test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clu
     { id: 37307, x: 2349, y: 3161, z: 0 }, { id: 37306, x: 2340, y: 3181, z: 0 },
     { id: 37304, x: 2334, y: 3183, z: 1 }, { id: 37303, x: 2351, y: 3172, z: 1 },
   ]) {
-    const event = { player, objectId: symbol.id, location: symbol, option: 'touch', handled: false };
+    const event = { player, objectId: 35879, location: symbol, option: 'touch', handled: false };
     for (const handler of handlers.objects) if (handler(event) === true) break;
     assert.equal(event.handled, true);
   }
