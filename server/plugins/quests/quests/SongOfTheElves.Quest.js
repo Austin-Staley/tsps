@@ -21,6 +21,7 @@ module.exports = function registerSongOfTheElves(api) {
   const RESISTANCE_MEMBERS = "quest.song_of_the_elves.resistance-members";
   const RESISTANCE_BRIEFING = "quest.song_of_the_elves.resistance-briefing";
   const HEADQUARTERS_WARNING_HEARD = "song-of-the-elves:headquarters-warning-heard";
+  const HEADQUARTERS_TRAPDOOR = ObjectIdentifiers.TRAPDOOR_38;
   const BATTLE_TRAPDOOR = ObjectIdentifiers.TRAPDOOR_95; // mourning_hideout_trap_door_battle
   const WEST_BATTLE_KILLS = "quest.song_of_the_elves.west-battle-kills";
   const EAST_BATTLE_KILLS = "quest.song_of_the_elves.east-battle-kills";
@@ -2487,7 +2488,8 @@ module.exports = function registerSongOfTheElves(api) {
   function enterArdougneBattleBasement(event) {
     const player = event?.player, area = player?.getArea?.(), state = area && battleInstances.get(area);
     if (!(area instanceof ArdougneBattleArea) || area.battle !== "west" || state?.player !== player ||
-      (event.objectId !== BATTLE_TRAPDOOR && event.definition?.getId?.() !== BATTLE_TRAPDOOR &&
+      event.location?.x !== 2542 || event.location?.y !== 3327 ||
+      (event.objectId !== HEADQUARTERS_TRAPDOOR && event.objectId !== BATTLE_TRAPDOOR && event.definition?.getId?.() !== BATTLE_TRAPDOOR &&
         !api.core.CacheDefinitions.getObject(event.objectId)?.transforms?.includes(BATTLE_TRAPDOOR))) return false;
     event.handled = true;
     if (Number(player.getAttribute(WEST_BATTLE_KILLS)) < 10) {
@@ -3387,7 +3389,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onObjectInteraction("Cabinet", { Search: searchElenaCabinet });
   api.onObjectInteraction("Bed", { Search: searchRehnisonBed });
   api.onObjectInteraction("Trapdoor", { Open: enterResistanceBasement, "Climb-down": enterResistanceBasement });
-  api.onObjectInteraction("Trapdoor", { "Climb-down": enterArdougneBattleBasement });
+  api.onObjectInteraction("Trapdoor", { Open: enterArdougneBattleBasement, "Climb-down": enterArdougneBattleBasement });
   api.onCustomEvent("ladders:climb", enterArdougneBattleBasement);
   api.onObjectInteraction("Staircase", { "Climb-down": enterPrison });
   api.onObjectRoute(routeCastleThroneStairs);

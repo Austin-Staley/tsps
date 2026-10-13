@@ -13499,8 +13499,9 @@ test('Song of the Elves battles wait for the briefing and use the real headquart
     assert.equal(enemies().length,10,'the basement wave does not spawn before the trapdoor is used');
     assert.equal(attrs.get('quest.song_of_the_elves.west-battle-kills'),10);
     assert.equal(quest.varbitValue(60,player),45);
-    const trap={player,objectId:api.core.ObjectIdentifiers.TRAPDOOR_95,definition:{getName:()=> 'Trapdoor'},
-      option:'Climb-down',location:{x:2542,y:3327,z:0}};
+    const trap={player,objectId:api.core.ObjectIdentifiers.TRAPDOOR_38,definition:{getName:()=> 'Trapdoor'},
+      option:'Open',location:{x:2542,y:3327,z:0}};
+    assert.equal(handlers.objects.some(h=>h(trap)===true),true,'the real closed cache trapdoor has an Open action');
     handlers.custom.get('ladders:climb').find(h=>h.name==='enterArdougneBattleBasement')(trap);
     assert.equal(trap.handled,true,'the headquarters trapdoor claims the actual ladder dispatch');
     assert.equal(enemies().length,10,'the basement warning precedes combat');
