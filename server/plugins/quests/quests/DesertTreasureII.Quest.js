@@ -514,8 +514,8 @@ module.exports = function registerDesertTreasureII(api) {
     [I.COSMIC_NERVE, I.EARTH_NERVE, I.ASTRAL_NERVE],
     [I.SMOKE_NERVE, I.BLOOD_NERVE, I.WRATH_NERVE],
   ];
-  const SCAR_CATALYST_RUNES = [I.SMOKE_NERVE, I.BLOOD_NERVE, I.SOUL_NERVE, I.NATURE_NERVE, I.COSMIC_NERVE, I.ASTRAL_NERVE];
-  const SCAR_CATALYST_RUNE_NAMES = ["smoke", "blood", "soul", "nature", "cosmic", "astral"];
+  const SCAR_CATALYST_RUNES = [I.SMOKE_NERVE, I.BLOOD_NERVE, I.SOUL_NERVE, I.NATURE_NERVE, I.COSMIC_NERVE, I.ASTRAL_NERVE, I.WRATH_NERVE];
+  const SCAR_CATALYST_RUNE_NAMES = ["smoke", "blood", "soul", "nature", "cosmic", "astral", "wrath"];
   const SCAR_CATALYST_BASE_PARTS = new Map([
     [I.SMOKE_NERVE, [I.FIRE_NERVE, I.AIR_NERVE]],
     [I.BLOOD_NERVE, [I.MIND_NERVE, I.WATER_NERVE]],
@@ -523,6 +523,7 @@ module.exports = function registerDesertTreasureII(api) {
     [I.NATURE_NERVE, [I.WATER_NERVE, I.EARTH_NERVE]],
     [I.COSMIC_NERVE, [I.MIND_NERVE, I.MIND_NERVE, I.WATER_NERVE, I.EARTH_NERVE]],
     [I.ASTRAL_NERVE, [I.MIND_NERVE, I.MIND_NERVE, I.WATER_NERVE, I.EARTH_NERVE, I.EARTH_NERVE]],
+    [I.WRATH_NERVE, [I.FIRE_NERVE, I.AIR_NERVE, I.MIND_NERVE, I.WATER_NERVE]],
   ]);
   const SCAR_ENERGY_RUNES = [1, 2, 3, 4, 5, 6];
 
@@ -1883,7 +1884,7 @@ module.exports = function registerDesertTreasureII(api) {
     const current = p.getAttribute(ATTR_SCAR_MAZE_ONE);
     if (current instanceof ScarMazeOneArea && !current.isDestroyed()) {
       current.enter(p);
-      p.moveTo(current.tile(36, 54, 0));
+      p.moveTo(current.tile(18, 57, 0));
       return current;
     }
     const area = new ScarMazeOneArea(p.getUsername?.(), p);
@@ -1895,7 +1896,7 @@ module.exports = function registerDesertTreasureII(api) {
     p.getPacketSender().sendVarbit(15192, 2);
     p.getPacketSender().sendVarbit(15194, 1);
     if (!p.getAttribute(SCAR_PATH_COMPLETE)) p.setAttribute(SCAR_PATH_COMPLETE, false);
-    p.moveTo(area.tile(36, 54, 0));
+    p.moveTo(area.tile(18, 57, 0));
     if (!p.getAttribute(SCAR_PATH_COMPLETE)) spawnScarPathRunner(p, area, 0);
     if (p.getAttribute("desert-treasure-ii:scar-growth-complete")) revealScarBoatPassage(p);
     return area;
@@ -2074,7 +2075,7 @@ module.exports = function registerDesertTreasureII(api) {
     const owned = spawned.get(p) ?? {};
     spawned.set(p, owned);
     if (owned.scarCatalyst?.isRegistered?.()) return owned.scarCatalyst;
-    const npc = api.core.NPC.create(N.DT2_SCAR_MAZE_1_RITUAL_CATALYST, area.tile(40, 12, 0));
+    const npc = api.core.NPC.create(N.COL_00FFFF_CATALYST_COL, area.tile(40, 12, 0));
     npc.setOwner?.(p);
     npc.setOwnerOnly?.(true);
     npc.__skipDefaultRespawn = true;
@@ -2100,7 +2101,7 @@ module.exports = function registerDesertTreasureII(api) {
     if (owned.scarLightLeeches?.some((npc) => npc?.isRegistered?.())) return owned.scarLightLeeches;
     // Four leeches wait beside the cache's four damaged growths.
     owned.scarLightLeeches = [[2220, 6435], [2219, 6424], [2230, 6423], [2231, 6434]].map(([x, y]) => {
-      const npc = api.core.NPC.create(N.DT2_SCAR_MAZE_LIGHT_LEECH, area.tile(x - 2160, y - 6400, 0));
+      const npc = api.core.NPC.create(N.LIGHT_LEECH, area.tile(x - 2160, y - 6400, 0));
       npc.setOwner?.(p);
       npc.setOwnerOnly?.(true);
       npc.__skipDefaultRespawn = true;
@@ -2168,7 +2169,7 @@ module.exports = function registerDesertTreasureII(api) {
     spawned.set(p, owned);
     if (!owned.scarMazeThreeLightLeeches?.some((npc) => npc?.isRegistered?.())) {
       owned.scarMazeThreeLightLeeches = [[1868, 6430], [1864, 6430], [1872, 6430], [1877, 6430]].map(([x, y]) => {
-        const npc = api.core.NPC.create(N.DT2_SCAR_MAZE_LIGHT_LEECH, area.tile(x - 1856, y - 6400, 0));
+        const npc = api.core.NPC.create(N.LIGHT_LEECH, area.tile(x - 1856, y - 6400, 0));
         npc.setOwner?.(p);
         npc.setOwnerOnly?.(true);
         npc.__skipDefaultRespawn = true;
@@ -2316,12 +2317,15 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function takeScarLightLure({ player: p, npc }) {
-    if (stage(p) !== S.LEVIATHAN || (!p.getAttribute(SCAR_GROWTH_LIVE) && !p.getAttribute("desert-treasure-ii:scar-leech-in-room"))) return;
+    if (stage(p) !== S.LEVIATHAN || (!p.getAttribute(SCAR_GROWTH_LIVE) && !p.getAttribute("desert-treasure-ii:scar-leech-in-room"))) return false;
     const owned = spawned.get(p);
     const mazeThree = owned?.scarMazeThreeLightLeeches?.includes(npc);
-    if (!owned?.scarLightLeeches?.includes(npc) && !mazeThree) return;
+    if (!owned?.scarLightLeeches?.includes(npc) && !mazeThree) return false;
     if (Math.random() < 0.5) {
-      p.getInventory().adds(I.ILLUMINATING_LURE, 1);
+      if (p.getInventory().adds(I.ILLUMINATING_LURE, 1) === false) {
+        p.sendMessage("You need inventory space to take the illuminating lure.");
+        return true;
+      }
       const area = mazeThree ? p.getAttribute(ATTR_SCAR_MAZE_THREE) : p.getAttribute(ATTR_SCAR_MAZE_ONE);
       area?.remove?.(npc);
       if (npc.isRegistered?.() && !api.core.World.getRemoveNPCQueue().includes(npc)) api.core.World.getRemoveNPCQueue().push(npc);
@@ -2330,8 +2334,10 @@ module.exports = function registerDesertTreasureII(api) {
       p.sendMessage("You take an illuminating lure from the light leech.");
       return true;
     }
-    const damage = 2 + Math.floor(Math.random() * 5);
-    p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(damage, api.core.HitMask.RED)]);
+    if (!p.getPrayerActive?.()?.[api.core.PrayerHandler.PROTECT_FROM_MELEE]) {
+      const damage = 2 + Math.floor(Math.random() * 5);
+      p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(damage, api.core.HitMask.RED)]);
+    }
     p.sendMessage("The light leech lashes out before you can take its lure.");
     return true;
   }
@@ -2362,6 +2368,9 @@ module.exports = function registerDesertTreasureII(api) {
     const step = Number(p.getAttribute(SCAR_GROWTH_STEP)) || 0;
     const order = p.getAttribute(SCAR_GROWTH_ORDER) ?? [];
     if (order[step] !== energy.rune) {
+      p.setAttribute(SCAR_GROWTH_STEP, 0);
+      p.getPacketSender().sendVarbit(SCAR_GROWTH_STEP_VARBIT, 0);
+      SCAR_ENERGIES.forEach((entry) => p.getPacketSender().sendVarbit(entry.state, 1));
       p.sendMessage("The energy flares, but it isn't next in the sequence.");
       return true;
     }
@@ -2370,32 +2379,58 @@ module.exports = function registerDesertTreasureII(api) {
     p.getPacketSender().sendVarbit(SCAR_GROWTH_STEP_VARBIT, step + 1);
     if (step + 1 === SCAR_ENERGY_RUNES.length) {
       p.setAttribute("desert-treasure-ii:scar-growth-complete", true);
+      p.getPacketSender().sendVarbit(15260, 1);
       revealScarBoatPassage(p);
       p.sendMessage("The damaged growths restore the passage. The shipwreck chamber is now reachable.");
     }
     return true;
   }
 
+  function scarCatalystOrder(p) {
+    let order = p.getAttribute(SCAR_CATALYST_ORDER);
+    if (!Array.isArray(order)) order = shuffled(SCAR_CATALYST_RUNES);
+    else if (order.length === 6 && !order.includes(I.WRATH_NERVE)) order = [...order, I.WRATH_NERVE];
+    p.setAttribute(SCAR_CATALYST_ORDER, order);
+    return order;
+  }
+
   function inspectScarCatalyst({ player: p }) {
-    if (stage(p) !== S.LEVIATHAN || !p.getAttribute(SCAR_RIFT_LIVE)) return;
+    if (stage(p) !== S.LEVIATHAN || !p.getAttribute(SCAR_RIFT_LIVE)) return false;
     const progress = Number(p.getAttribute(SCAR_CATALYST_PROGRESS)) || 0;
-    const order = p.getAttribute(SCAR_CATALYST_ORDER) ?? [];
+    const order = scarCatalystOrder(p);
+    if (progress >= order.length) {
+      p.sendMessage("The Catalyst has been disrupted. Continue to the damaged growth room.");
+      return true;
+    }
     const expected = order[progress] ?? SCAR_CATALYST_RUNES[0];
     const name = SCAR_CATALYST_RUNE_NAMES[SCAR_CATALYST_RUNES.indexOf(expected)] ?? "unknown";
     p.sendMessage(`The Catalyst is currently resonating with ${name} nerve.`);
   }
 
+  function collectScarNerve(p, itemId, attribute, tileKey) {
+    const regrowAt = p.getAttribute(attribute) ?? {};
+    const now = api.core.World.getProcessCycle();
+    if ((Number(regrowAt[tileKey]) || 0) > now) {
+      p.sendMessage("That nerve ending is still regrowing.");
+      return true;
+    }
+    if (p.getInventory().adds(itemId, 1) === false) {
+      p.sendMessage("You need inventory space to take the rune nerve.");
+      return true;
+    }
+    // shortcut: the Wiki says endings regrow shortly; calibrate these four ticks against a live capture.
+    p.setAttribute(attribute, { ...regrowAt, [tileKey]: now + 4 });
+    p.sendMessage("You break the nerve ending and take its rune nerve.");
+    return true;
+  }
+
   function handleNerveOnCatalyst(event) {
     const { player: p, npcId, itemId } = event ?? {};
     if (stage(p) !== S.LEVIATHAN || !p.getAttribute(SCAR_RIFT_LIVE)
-      || npcId !== N.DT2_SCAR_MAZE_1_RITUAL_CATALYST) return false;
+      || npcId !== N.COL_00FFFF_CATALYST_COL) return false;
     event.handled = true;
     const progress = Number(p.getAttribute(SCAR_CATALYST_PROGRESS)) || 0;
-    let order = p.getAttribute(SCAR_CATALYST_ORDER);
-    if (!Array.isArray(order) || order.length !== SCAR_CATALYST_RUNES.length) {
-      order = shuffled(SCAR_CATALYST_RUNES);
-      p.setAttribute(SCAR_CATALYST_ORDER, order);
-    }
+    const order = scarCatalystOrder(p);
     const expected = order[progress];
     if (itemId === expected && has(p, expected)) {
       p.getInventory().deleteNumber(expected, 1);
@@ -2420,6 +2455,7 @@ module.exports = function registerDesertTreasureII(api) {
     const next = progress + 1;
     p.setAttribute(SCAR_CATALYST_PROGRESS, next);
     if (next >= order.length) {
+      p.getPacketSender().sendVarbit(15259, 1);
       p.sendMessage("The matching rune nerves disrupt the Catalyst. The damaged growth room is exposed.");
       return true;
     }
@@ -2540,7 +2576,7 @@ module.exports = function registerDesertTreasureII(api) {
         } else p.moveTo(area.tile(167, 97, 0));
       }
     }
-    if (stage(p) < S.LEVIATHAN) return;
+    if (stage(p) !== S.LEVIATHAN) return;
     const value = p.getAttribute(SCAR_LEVIATHAN_DEBRIS_SEARCHED) ? 48
       : p.getAttribute(SCAR_PERSTEN_LEFT_SHIP) ? 46
         : p.getAttribute(SCAR_LEVIATHAN_KILLED) ? 42
@@ -2562,12 +2598,14 @@ module.exports = function registerDesertTreasureII(api) {
     p.getPacketSender().sendVarbit(SCAR_GROWTH_STEP_VARBIT, Number(p.getAttribute(SCAR_GROWTH_STEP)) || 0);
     p.getPacketSender().sendVarbit(15220, Number(p.getAttribute("desert-treasure-ii:scar-axon-terminals")) || 0);
     p.getPacketSender().sendVarbit(15221, (p.getAttribute(SCAR_NERVE_ROOM_TWO_REPAIRED) ?? []).length);
-    p.getPacketSender().sendVarbit(15258, p.getAttribute(SCAR_MAZE_THREE_ACTIVE)
-      ? (p.getAttribute(SCAR_MEMORY_COMPLETE) ? 1 : 0) : p.getAttribute(SCAR_AXON_ROOM_COMPLETE) ? 1 : 0);
-    p.getPacketSender().sendVarbit(15259, p.getAttribute(SCAR_MAZE_THREE_ACTIVE)
-      ? (p.getAttribute(SCAR_LEECH_COMPLETE) ? 1 : 0) : p.getAttribute(SCAR_NERVE_ROOM_TWO_COMPLETE) ? 1 : 0);
-    p.getPacketSender().sendVarbit(15260, p.getAttribute(SCAR_MAZE_THREE_ACTIVE)
-      ? (p.getAttribute(SCAR_TREE_COMPLETE) ? 1 : 0) : p.getAttribute(SCAR_SUMMON_ROOM_COMPLETE) ? 1 : 0);
+    scarCatalystOrder(p);
+    const challenges = p.getAttribute(SCAR_MAZE_THREE_ACTIVE)
+      ? [p.getAttribute(SCAR_MEMORY_COMPLETE), p.getAttribute(SCAR_LEECH_COMPLETE), p.getAttribute(SCAR_TREE_COMPLETE)]
+      : p.getAttribute(SCAR_MAZE_TWO_ENTERED)
+        ? [p.getAttribute(SCAR_AXON_ROOM_COMPLETE), p.getAttribute(SCAR_NERVE_ROOM_TWO_COMPLETE), p.getAttribute(SCAR_SUMMON_ROOM_COMPLETE)]
+        : [p.getAttribute(SCAR_TETHER_DESTROYED), (Number(p.getAttribute(SCAR_CATALYST_PROGRESS)) || 0) >= SCAR_CATALYST_RUNES.length,
+          p.getAttribute("desert-treasure-ii:scar-growth-complete")];
+    challenges.forEach((done, index) => p.getPacketSender().sendVarbit(15258 + index, done ? 1 : 0));
     p.getPacketSender().sendVarbit(15261, p.getAttribute(SCAR_BOAT3_ROOM)
       ? 1 : p.getAttribute("desert-treasure-ii:scar-boat-room-two") ? 1 : 0);
     if (p.getAttribute(SCAR_MAZE_THREE_ACTIVE)) {
@@ -2578,7 +2616,6 @@ module.exports = function registerDesertTreasureII(api) {
       p.getPacketSender().sendVarbit(15219, Number(p.getAttribute(SCAR_BLOOD_RED_COUNT)) || 0);
       p.getPacketSender().sendVarbit(15218, Number(p.getAttribute(SCAR_BLOOD_WHITE_COUNT)) || 0);
     }
-    if (!p.getAttribute(SCAR_CATALYST_ORDER)) p.setAttribute(SCAR_CATALYST_ORDER, shuffled(SCAR_CATALYST_RUNES));
     const repaired = p.getAttribute("desert-treasure-ii:scar-growth-repaired") ?? [];
     p.getPacketSender().sendVarbit(SCAR_GROWTH_LIT_VARBIT, repaired.length);
     if (repaired.length === SCAR_GROWTHS.length) {
@@ -3737,16 +3774,9 @@ module.exports = function registerDesertTreasureII(api) {
         const nerve = SCAR_NERVE_LOCATIONS_TWO.find(({ object, tiles }) =>
           object === (definition?.id ?? objectId) && tiles.some(([x, y]) => x === scarMazeTwoTile.x && y === scarMazeTwoTile.y));
         if (nerve) {
-          const broken = p.getAttribute(SCAR_NERVE_ROOM_TWO_BROKEN) ?? [];
           const key = `${nerve.object}:${scarMazeTwoTile.x}:${scarMazeTwoTile.y}`;
-          if (broken.includes(key)) {
-            p.sendMessage("That nerve ending has already been broken.");
-            return true;
-          }
-          p.setAttribute(SCAR_NERVE_ROOM_TWO_BROKEN, [...broken, key]);
-          p.getInventory().adds(nerve.item, 1);
-          p.sendMessage(`You break the ${nerve.item === I.EARTH_NERVE ? "earth" : nerve.item === I.AIR_NERVE ? "air" : nerve.item === I.WATER_NERVE ? "water" : "fire"} nerve ending and take its rune nerve.`);
-          return true;
+          event.handled = true;
+          return collectScarNerve(p, nerve.item, SCAR_NERVE_ROOM_TWO_BROKEN, key);
         }
       }
       if (p.getAttribute("desert-treasure-ii:scar-boat-room-two")) {
@@ -3814,15 +3844,21 @@ module.exports = function registerDesertTreasureII(api) {
       return true;
     }
     if (s === S.LEVIATHAN && scarMazeTile?.x === 2237 && scarMazeTile.y === 6443
-      && objectId === O.NEURAL_TELEPORTER && p.getAttribute(SCAR_BOAT_BURNED)) {
+      && objectId === O.NEURAL_TELEPORTER) {
+      p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_ONE).tile(22, 25, 0));
+      p.sendMessage("The blue neural teleporter carries you back to the western corridor.");
+      return true;
+    }
+    if (s === S.LEVIATHAN && scarMazeTile?.x === 2177 && scarMazeTile.y === 6459
+      && objectId === 49408) {
       const passage = p.getAttribute(ATTR_SCAR_AREA);
       const maze = p.getAttribute(ATTR_SCAR_MAZE_ONE);
       if (passage instanceof ScarArea && !passage.isDestroyed() && maze instanceof ScarMazeOneArea && !maze.isDestroyed()) {
         maze.leave(p, false);
         maze.postLeave(p, false);
         p.moveTo(passage.tile(51, 43, 0));
-        setScarVarbit(p, 20);
-        p.sendMessage("The neural teleporter carries you back to Persten's camp.");
+        setScarVarbit(p, p.getAttribute(SCAR_BOAT_BURNED) ? 20 : 14);
+        p.sendMessage("You leave the passage and return to Persten's camp.");
         return true;
       }
     }
@@ -3875,50 +3911,67 @@ module.exports = function registerDesertTreasureII(api) {
         return true;
       }
     }
+    if (s === S.LEVIATHAN && scarMazeTile && objectId === 49410
+      && scarMazeTile.x === 2196 && scarMazeTile.y === 6454) {
+      const maze = p.getAttribute(ATTR_SCAR_MAZE_ONE);
+      const sourceY = p.getLocation().getY() - maze.getBaseY() + 6400;
+      p.moveTo(maze.tile(36, sourceY >= 6456 ? 53 : 56, 0));
+      event.handled = true;
+      return true;
+    }
     if (s === S.LEVIATHAN && scarMazeTile && p.getAttribute(SCAR_TETHER_DESTROYED)) {
       if (objectId === 49415 && scarMazeTile.x === 2233 && scarMazeTile.y === 6461) {
-        p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_ONE).tile(31, 12, 0));
+        p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_ONE).tile(29, 12, 0));
         p.sendMessage("The green neural teleporter carries you toward the catalyst chamber.");
         return true;
       }
       if (objectId === 49411 && scarMazeTile.x === 2190 && scarMazeTile.y === 6412) {
+        const maze = p.getAttribute(ATTR_SCAR_MAZE_ONE);
+        const sourceX = p.getLocation().getX() - maze.getBaseX() + 2160;
+        if (sourceX >= 2192) {
+          p.moveTo(maze.tile(29, 12, 0));
+          return true;
+        }
         p.setAttribute(SCAR_RIFT_LIVE, true);
-        if (!p.getAttribute(SCAR_CATALYST_ORDER)) p.setAttribute(SCAR_CATALYST_ORDER, shuffled(SCAR_CATALYST_RUNES));
-        p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_ONE).tile(39, 12, 0));
-        spawnScarCatalyst(p, p.getAttribute(ATTR_SCAR_MAZE_ONE));
+        scarCatalystOrder(p);
+        p.moveTo(maze.tile(32, 12, 0));
+        spawnScarCatalyst(p, maze);
         p.sendMessage("You enter the catalyst chamber. Break the nerve endings and combine them to match its rune.");
         inspectScarCatalyst({ player: p });
         return true;
       }
       if (objectId === 49414 && scarMazeTile.x === 2181 && scarMazeTile.y === 6424
         && (Number(p.getAttribute(SCAR_CATALYST_PROGRESS)) || 0) >= SCAR_CATALYST_RUNES.length) {
-        p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_ONE).tile(64, 24, 0));
+        p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_ONE).tile(76, 44, 0));
         p.sendMessage("The blue neural teleporter carries you toward the damaged growth room.");
         return true;
       }
       if (objectId === 49412 && scarMazeTile.x === 2225 && scarMazeTile.y === 6421
         && (Number(p.getAttribute(SCAR_CATALYST_PROGRESS)) || 0) >= SCAR_CATALYST_RUNES.length) {
+        const maze = p.getAttribute(ATTR_SCAR_MAZE_ONE);
+        const sourceY = p.getLocation().getY() - maze.getBaseY() + 6400;
+        if (sourceY >= 6423) {
+          p.moveTo(maze.tile(66, 20, 0));
+          return true;
+        }
         p.setAttribute(SCAR_GROWTH_LIVE, true);
-        p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_ONE).tile(66, 22, 0));
-        spawnScarLightLeeches(p, p.getAttribute(ATTR_SCAR_MAZE_ONE));
+        p.moveTo(maze.tile(66, 23, 0));
+        spawnScarLightLeeches(p, maze);
         p.sendMessage("Four damaged growths need illuminating lures. The light leeches carry them.");
         return true;
       }
       const nerve = SCAR_NERVE_LOCATIONS.find(({ object, tiles }) => object === visibleId
         && tiles.some(([x, y]) => x === scarMazeTile.x && y === scarMazeTile.y));
       if (nerve && p.getAttribute(SCAR_RIFT_LIVE)) {
-        const broken = p.getAttribute(SCAR_NERVES_BROKEN) ?? [];
         const tileKey = `${visibleId}:${scarMazeTile.x}:${scarMazeTile.y}`;
-        if (broken.includes(tileKey)) return p.sendMessage("That nerve ending has already been broken.");
-        p.setAttribute(SCAR_NERVES_BROKEN, [...broken, tileKey]);
-        p.getInventory().adds(nerve.item, 1);
-        p.sendMessage("You break the nerve ending and take its elemental rune nerve.");
-        return true;
+        event.handled = true;
+        return collectScarNerve(p, nerve.item, SCAR_NERVES_BROKEN, tileKey);
       }
     }
     if (s === S.LEVIATHAN && scarMazeTile?.x === 2210 && scarMazeTile.y === 6433 && objectId === O.ABYSSAL_TETHER) {
       if (!p.getAttribute(SCAR_PATH_COMPLETE)) return p.sendMessage("Follow each pathfinder through the maze to reach the tether.");
       p.setAttribute(SCAR_TETHER_DESTROYED, true);
+      p.getPacketSender().sendVarbit(15258, 1);
       p.sendMessage("The abyssal tether is severed. The teleporter to the catalyst room is now reachable.");
       return true;
     }
@@ -5936,7 +5989,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("Captain Malleta", { "Talk-to": progressBosses });
   api.onNpcInteraction("Ketla", { "Talk-to": progressBosses });
   api.onNpcInteraction("Catalytic Guardian", { "Talk-to": talkCatalyticGuardian });
-  api.onNpcInteraction("Catalyst", { Observe: inspectScarCatalyst });
+  api.onNpcInteraction("<col=00ffff>Catalyst</col>", { Observe: inspectScarCatalyst });
   api.onNpcInteraction("Light leech", { "Take-lure": takeScarLightLure });
   api.onNpcInteraction("Vardorvis", { "Talk-to": handleBossTalk });
   api.onNpcInteraction("The Leviathan", { "Talk-to": handleBossTalk });
