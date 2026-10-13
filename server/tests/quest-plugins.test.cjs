@@ -4789,6 +4789,15 @@ test('Song of the Elves Fragment uses Wiki paired ranged hits and ordered phase-
         assert.equal(boss.hitpoints, expectedHp,
           `two live beams heal 4 HP each on the four-tick cadence (offset ${offset})`);
       }
+      firstPhaseBeams[0].hitpoints = 0;
+      cycle = startCycle + 72;
+      area.process(boss);
+      assert.equal(boss.hitpoints, 520, 'a defeated beam stops healing before its delayed NPC death event');
+      firstPhaseBeams[1].hitpoints = 0;
+      cycle = startCycle + 76;
+      area.process(boss);
+      assert.equal(boss.hitpoints, 520, 'defeated beams cannot heal while their death animations finish');
+      firstPhaseBeams.forEach(npc => { npc.hitpoints = 1; });
       const missedMagicRoll = {
         attacker: player,
         target: firstPhaseBeams[0],
