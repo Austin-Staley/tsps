@@ -9,6 +9,10 @@ module.exports = function registerSongOfTheElves(api) {
   const PAGE = "Song of the Elves";
   const FRAGMENT_BASIC_ATTACK_MAX = 12;
   const FRAGMENT_BASIC_ATTACK_SPEED = 7;
+  // The cache leaves the Crystal Whirlwind attack speed unset; the server's
+  // default attack interval is four ticks. The Wiki gives heal size, not rate.
+  // shortcut: use that four-tick default for the healing beams' attack cycle.
+  const FRAGMENT_BEAM_HEAL_SPEED = 4;
   const START_HOOK = "quest:song-of-the-elves:start";
   const CHEMICAL_CHOICE = "quest.song_of_the_elves.chemical-choice";
   const FALLS_PILLARS = "quest.song_of_the_elves.falls-pillars";
@@ -417,8 +421,11 @@ module.exports = function registerSongOfTheElves(api) {
           "the-fragment-of-seren-the-fragment-enraged");
       }
       if (state.beams.size > 0 && state.boss.getHitpoints() > 0) {
-        const heal = state.beams.size * (4 + Math.floor(Math.random() * 5));
-        state.boss.setHitpoints(Math.min(state.boss.getMaxHitpoints(), state.boss.getHitpoints() + heal));
+        if (now >= state.nextBeamHealAt) {
+          const heal = state.beams.size * (4 + Math.floor(Math.random() * 5));
+          state.boss.setHitpoints(Math.min(state.boss.getMaxHitpoints(), state.boss.getHitpoints() + heal));
+          state.nextBeamHealAt = now + FRAGMENT_BEAM_HEAL_SPEED;
+        }
       }
       if (now >= state.nextBasicAttackAt) {
         state.nextBasicAttackAt = now + state.basicAttackSpeed;
@@ -2385,6 +2392,7 @@ module.exports = function registerSongOfTheElves(api) {
       player, boss, area, lastCycle: -1, nextSpecialAt: World.getProcessCycle() + 12,
       nextBasicAttackAt: World.getProcessCycle() + FRAGMENT_BASIC_ATTACK_SPEED,
       basicAttackSpeed: boss.getCurrentDefinition?.()?.getAttackSpeed?.() || FRAGMENT_BASIC_ATTACK_SPEED,
+      nextBeamHealAt: 0,
       clones: [], realClone: null, introStarted: false,
       specialIndex: 0, beams: new Set(), specialImpactAt: 0, followupAt: 0,
       meleeHitsRemaining: 0, nextMeleeHitAt: 0, finished: false,
@@ -2489,6 +2497,7 @@ module.exports = function registerSongOfTheElves(api) {
     state.beams = new Set(spawnFragmentAdds(area,
       Array.from({ length: phase.beams }, () => NpcIdentifiers.COL_00FFFF_CRYSTAL_WHIRLWIND_COL),
       points.slice(0, phase.beams)));
+    state.nextBeamHealAt = World.getProcessCycle() + FRAGMENT_BEAM_HEAL_SPEED;
     state.player.sendMessage(`${phase.beams} Crystal Whirlwinds surround the Fragment. Attack them to stop its healing.`);
   }
 

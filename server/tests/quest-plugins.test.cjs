@@ -4602,6 +4602,14 @@ test('Song of the Elves Fragment uses Wiki paired ranged hits and ordered phase-
       assert.ok(firstPhaseBeams.every(npc => npc.scriptedMovement), 'scripted beams cannot run the normal NPC combat AI');
       assert.ok(firstPhaseBeams.every(npc => area.npcAggression(player, npc) === false),
         'beams cannot acquire a second, generic combat target');
+      boss.hitpoints = 500;
+      for (let offset = 61; offset <= 68; offset++) {
+        cycle = startCycle + offset;
+        area.process(boss);
+        const expectedHp = offset < 64 ? 500 : offset < 68 ? 508 : 516;
+        assert.equal(boss.hitpoints, expectedHp,
+          `two live beams heal 4 HP each on the four-tick cadence (offset ${offset})`);
+      }
       const missedMagicRoll = {
         attacker: player,
         target: firstPhaseBeams[0],
