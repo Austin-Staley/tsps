@@ -60,4 +60,16 @@ assert.deepEqual(order, [], "unregister removes every handler");
 assert.equal(bus.hasSubscribers(GameTick), true);
 assert.equal(bus.hasSubscribers(ConfigChanged), false);
 
+const inheritedBus = new EventBus();
+class Parent { onGameTick(): void { order.push("parent"); } }
+class Child extends Parent { override onGameTick(): void { order.push("child"); } }
+const child = new Child();
+inheritedBus.register(child);
+inheritedBus.register(child);
+order.length = 0;
+inheritedBus.post(new GameTick());
+assert.deepEqual(order, ["child"], "overrides and repeated registration must subscribe once");
+inheritedBus.unregister(child);
+assert.equal(inheritedBus.hasSubscribers(GameTick), false);
+
 console.log("runelite event bus tests passed");

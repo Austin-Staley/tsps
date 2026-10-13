@@ -32,6 +32,7 @@ export type ClientPreferences = {
     installPromptDismissed: boolean;
     /** Last selected login server. */
     lastServer?: LastServerPreference;
+    rememberedUsername?: string;
 };
 
 const DEFAULTS: ClientPreferences = {
@@ -77,6 +78,7 @@ function normalize(raw: Partial<ClientPreferences> | undefined): ClientPreferenc
             raw?.installPromptDismissed ?? DEFAULTS.installPromptDismissed,
         ),
         lastServer: normalizeLastServer(raw?.lastServer),
+        rememberedUsername: typeof raw?.rememberedUsername === "string" ? raw.rememberedUsername.slice(0, 320) : undefined,
     };
 }
 

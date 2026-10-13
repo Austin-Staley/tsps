@@ -591,6 +591,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
     }
 
     override render(time: number, deltaTime: number, _resized: boolean): void {
+        this.osrsClient.runeLite?.postBeforeRender();
         const world = this.world;
         if (!this.device || !world || !this.depthView) return;
         const width = this.canvas.width;
@@ -735,6 +736,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         // The HDR target holds linear light, so the display-referred sky clear is linearised;
         // the tonemap pass re-encodes it.
         const toLinear = (value: number) => Math.pow(Math.max(value, 0), 2.2);
+        if (loggedIn) this.osrsClient.runeLite?.drawCallbacks.beforeScene();
         const pass = encoder.beginRenderPass({
             colorAttachments: [
                 {
@@ -790,6 +792,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         }
 
         pass.end();
+        if (loggedIn) this.osrsClient.runeLite?.drawCallbacks.afterScene();
 
         // The extension's post passes read and depth-test against the single-sampled depth.
         if (msaa && hdrTarget) msaa.resolveDepth(encoder, this.depthView);

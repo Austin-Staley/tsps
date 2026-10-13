@@ -49,7 +49,7 @@ let fallbackInjector: PluginInjector | undefined;
 export const CLIENT_TOKEN = "Client";
 
 /** `private client = inject(Client)` — RuneLite's `@Inject` convention. */
-export function inject<T>(token: new (...args: never[]) => T): T;
+export function inject<T>(token: abstract new (...args: never[]) => T): T;
 export function inject<T>(token: string): T;
 export function inject<D extends ConfigGroupDescriptor>(token: D): ConfigOf<D>;
 export function inject(token: unknown): unknown {

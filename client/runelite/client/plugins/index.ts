@@ -27,11 +27,13 @@ import { VengeanceTimerPlugin } from "../../../game/plugins/vengeancetimer/Venge
 import { WeatherPlugin } from "../../../game/plugins/weather/WeatherPlugin";
 import type { LegacyConfigMigration } from "../../impl/LegacyConfigMigration";
 import { ConfigPlugin } from "./config/ConfigPlugin";
+import { FpsPlugin } from "./fps/FpsPlugin";
 import type { PluginClass } from "./Plugin";
 
 /** Static core plugin list (RuneLite's `PluginManager.loadCorePlugins`). */
 export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     ConfigPlugin,
+    FpsPlugin,
     VoiceChatPlugin,
     HdPlugin,
     FirstPersonPlugin,

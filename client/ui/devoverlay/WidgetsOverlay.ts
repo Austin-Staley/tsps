@@ -23,6 +23,7 @@ import type { WidgetNode } from "../../widgets/WidgetNode";
 import type { GameFrameDrawContext, WidgetOverlay } from "../../game/plugins/ClientPluginManager";
 import { Overlay, OverlayInitArgs, OverlayUpdateArgs, RenderPhase } from "./Overlay";
 import { CLIENT_TYPE_ENHANCED, reportedClientType } from "../../rs/cs2/ClientType";
+import { OverlayLayer } from "../../runelite/client/ui/overlay/OverlayLayer";
 
 /**
  * The enhanced client's mouseover text setting, mouseover_text_disabled from rev 241 (it was
@@ -121,6 +122,7 @@ export class WidgetsOverlay implements Overlay {
 
     private lastMenuVisualSignature: string = "";
     private lastWidgetOverlaySignature: string = "";
+    private lastRuneLiteOverlayRects: DirtyRect[] = [];
     private widgetOverlayRects: DirtyRect[] = [];
     private lastMenuVisualRect?: DirtyRect;
     private lastTradeAmountOverlaySignature: string = "";
@@ -284,6 +286,8 @@ export class WidgetsOverlay implements Overlay {
                 game: this.ctx.getGameContext?.(),
                 getCacheSystem: () => this.ctx.getCacheSystem(),
                 widgetManager: this.ctx.getWidgetManager?.(),
+                afterWidgetDrawn: (_uid, widget) => this.ctx.getGameContext?.()?.osrsClient?.runeLite?.afterWidgetDrawn(this.glRenderer!, widget),
+                afterInterfaceDrawn: (group) => this.ctx.getGameContext?.()?.osrsClient?.runeLite?.drawPluginOverlays(this.glRenderer!, OverlayLayer.MANUAL, (group << 16) | 0xffff),
                 requestRepaintAll: () => {
                     // The overlay is redrawn every PostPresent; no extra action needed
                 },
@@ -822,6 +826,9 @@ export class WidgetsOverlay implements Overlay {
             // open, partial dirty-rect redraws can visibly blink as hover/click state changes
             // every frame. Redraw the full overlay for the duration of the menu instead.
             let widgetOverlaySignature = "";
+            const runeLite = this.ctx.getGameContext?.()?.osrsClient?.runeLite;
+            const runeLiteOverlays = runeLite?.preparePluginOverlays(this.glRenderer);
+            const runeLiteDirtyRects = [...this.lastRuneLiteOverlayRects, ...(runeLiteOverlays?.rects ?? [])];
             for (const overlay of widgetOverlays) widgetOverlaySignature += overlay.signature() + "|";
             const forceFullRedraw =
                 !this.hasPresentedFrame ||
@@ -829,12 +836,14 @@ export class WidgetsOverlay implements Overlay {
                 menuOpen ||
                 tradeOverlayDirty ||
                 !!gameFrame ||
+                runeLiteOverlays?.fullRedraw ||
                 widgetOverlaySignature !== this.lastWidgetOverlaySignature;
             const preciseDirtyCount = preciseDirtyWidgets.length | 0;
             const shouldRedraw =
                 anyDirty ||
                 preciseDirtyCount > 0 ||
                 forceFullRedraw ||
+                runeLiteDirtyRects.length > 0 ||
                 menuVisualDirty ||
                 mouseOverTextDirty;
 
@@ -842,7 +851,7 @@ export class WidgetsOverlay implements Overlay {
 
             if (shouldRedraw) {
                 let renderFull = forceFullRedraw || !widgetManager;
-                let dirtyRects: DirtyRect[] = [];
+                let dirtyRects: DirtyRect[] = runeLiteDirtyRects;
 
                 if (!renderFull && widgetManager) {
                     for (const entry of this.widgetEntries) {
@@ -853,9 +862,6 @@ export class WidgetsOverlay implements Overlay {
                         consumedRootIndices.push(rootIndex);
                         const rootRect = this.getRootRect(widgetManager, root);
                         if (rootRect) dirtyRects.push(rootRect);
-                    }
-                    if (dirtyRects.length === 0) {
-                        dirtyRects = [];
                     }
                 }
                 if (!renderFull && preciseDirtyCount > 0) {
@@ -904,6 +910,8 @@ export class WidgetsOverlay implements Overlay {
                     // Full pass: reset transient input targets, rebuild root order, redraw all roots.
                     beginWidgetUiFrame(this.glRenderer);
                     this.glRenderer.clear(0, 0, 0, 0);
+                    runeLite?.drawPluginOverlays(this.glRenderer, OverlayLayer.ABOVE_SCENE);
+                    runeLite?.drawPluginOverlays(this.glRenderer, OverlayLayer.UNDER_WIDGETS);
                     // A custom gameframe draws first (backdrop) so the OSRS content
                     // (tab interfaces, minimap, chat) composites on top of it.
                     if (gameFrame) {
@@ -922,6 +930,9 @@ export class WidgetsOverlay implements Overlay {
                     this.currentWidgetOverlays = widgetOverlays;
                     this.overlayDrawnThisPass = false;
                     for (const entry of this.widgetEntries) {
+                        const last = entry === this.widgetEntries[this.widgetEntries.length - 1];
+                        entry.renderOpts.drawAboveWidgets = last ? () => runeLite?.drawPluginOverlays(this.glRenderer!, OverlayLayer.ABOVE_WIDGETS) : undefined;
+                        entry.renderOpts.afterMenuDrawn = last ? () => runeLite?.drawPluginOverlays(this.glRenderer!, OverlayLayer.ALWAYS_ON_TOP) : undefined;
                         renderWidgetTreeGL(
                             this.glRenderer,
                             entry.root,
@@ -956,20 +967,20 @@ export class WidgetsOverlay implements Overlay {
                             y1: dirtyRect.y + dirtyRect.h,
                         };
 
-                        let renderedAnyRoot = false;
-                        for (const entry of this.widgetEntries) {
+                        runeLite?.drawPluginOverlays(this.glRenderer, OverlayLayer.ABOVE_SCENE, undefined, dirtyRect);
+                        runeLite?.drawPluginOverlays(this.glRenderer, OverlayLayer.UNDER_WIDGETS, undefined, dirtyRect);
+                        const entries = this.widgetEntries.filter(entry => {
                             const rootRect = this.getRootRect(widgetManager, entry.root);
-                            if (!rootRect || !this.rectsIntersect(rootRect, dirtyRect)) continue;
-                            renderedAnyRoot = true;
+                            return rootRect && this.rectsIntersect(rootRect, dirtyRect);
+                        });
+                        if (!entries.length && this.widgetEntries.length) entries.push(this.widgetEntries[0]);
+                        for (const entry of entries) {
+                            const last = entry === entries[entries.length - 1];
                             renderWidgetTreeGL(this.glRenderer, entry.root, {
                                 ...entry.renderOpts,
                                 rootClip,
-                            });
-                        }
-                        if (!renderedAnyRoot && this.widgetEntries.length > 0) {
-                            renderWidgetTreeGL(this.glRenderer, this.widgetEntries[0].root, {
-                                ...this.widgetEntries[0].renderOpts,
-                                rootClip,
+                                drawAboveWidgets: last ? () => runeLite?.drawPluginOverlays(this.glRenderer!, OverlayLayer.ABOVE_WIDGETS, undefined, dirtyRect) : undefined,
+                                afterMenuDrawn: last ? () => runeLite?.drawPluginOverlays(this.glRenderer!, OverlayLayer.ALWAYS_ON_TOP, undefined, dirtyRect) : undefined,
                             });
                         }
                     }
@@ -1001,6 +1012,7 @@ export class WidgetsOverlay implements Overlay {
 
                 this.lastMenuVisualSignature = menuVisualState.signature;
                 this.lastWidgetOverlaySignature = widgetOverlaySignature;
+                this.lastRuneLiteOverlayRects = runeLiteOverlays?.rects ?? [];
                 this.lastMenuVisualRect = menuVisualState.rect;
                 this.lastTradeAmountOverlaySignature = tradeOverlaySignature;
                 this.lastMouseOverTextSignature = mouseOverTextState.signature;

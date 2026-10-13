@@ -1,0 +1,34 @@
+import type { Graphics2D } from "../awt/Graphics2D";
+import type { BufferedImage } from "../awt/image/BufferedImage";
+import type { Polygon } from "../awt/Polygon";
+import type { Point } from "../awt/Point";
+import type { WorldPoint } from "./coords/WorldPoint";
+import type { LocalPoint } from "./coords/LocalPoint";
+import type { WorldArea } from "./coords/WorldArea";
+import type { WorldView } from "./WorldView";
+import type { Model } from "./Model";
+import type { SpritePixels } from "./SpritePixels";
+import type { IterableHashTable } from "./IterableHashTable";
+import type { ActorSpotAnim } from "./ActorSpotAnim";
+export interface Actor {
+    getModel():Model|null; getModelHeight():number; setModelHeight(height:number):void; getConvexHull():Polygon|null;
+    getCanvasSpriteLocation(sprite:SpritePixels,heightOffset:number):Point|null;
+    isInteracting():boolean; getFootprintSize():number;
+    getCameraFocus():LocalPoint; getAnimationHeightOffset():number;
+    getAnimationFrame():number; setAnimationFrame(frame:number):void; setActionFrame(frame:number):void;
+    getPoseAnimationFrame():number; setPoseAnimationFrame(frame:number):void; setPoseAnimation(animation:number):void;
+    getIdlePoseAnimation():number; setIdlePoseAnimation(animation:number):void;
+    getIdleRotateLeft():number; setIdleRotateLeft(animation:number):void; getIdleRotateRight():number; setIdleRotateRight(animation:number):void;
+    getWalkAnimation():number; setWalkAnimation(animation:number):void; getWalkRotateLeft():number; setWalkRotateLeft(animation:number):void;
+    getWalkRotateRight():number; setWalkRotateRight(animation:number):void; getWalkRotate180():number; setWalkRotate180(animation:number):void;
+    getRunAnimation():number; setRunAnimation(animation:number):void;
+    setOverheadText(text:string|null):void; getOverheadCycle():number; setOverheadCycle(cycles:number):void;
+    getSpotAnims():IterableHashTable<ActorSpotAnim>; hasSpotAnim(id:number):boolean; createSpotAnim(slot:number,id:number,height:number,delay:number):void; removeSpotAnim(slot:number):void; clearSpotAnims():void;
+    setGraphic(id:number):void; getGraphicHeight():number; setGraphicHeight(height:number):void; getSpotAnimFrame():number; setSpotAnimFrame(frame:number):void;
+    getCanvasTilePoly():Polygon|null; getCanvasTextLocation(graphics:Graphics2D,text:string,heightOffset:number):Point|null; getCanvasImageLocation(image:BufferedImage,heightOffset:number):Point|null;
+    getName(): string | null; getWorldLocation(): WorldPoint; getLocalLocation(): LocalPoint; getWorldArea(): WorldArea;
+    getWorldView(): WorldView; getAnimation(): number; getPoseAnimation(): number; getGraphic(): number; getOrientation(): number;
+    getCurrentOrientation(): number; getInteracting(): Actor | null; getOverheadText(): string | null; getCombatLevel(): number;
+    getLogicalHeight():number; getMinimapLocation():Point|null;
+    getHealthRatio(): number; getHealthScale(): number; isDead(): boolean; setDead(dead:boolean):void; setAnimation(animation:number):void;
+}

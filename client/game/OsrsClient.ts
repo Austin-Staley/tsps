@@ -1729,7 +1729,10 @@ export class OsrsClient {
                 self.camera.setViewportFovValues(low, high);
             },
             setWindowMode: (mode) => {
+                const resized = mode === 2;
+                const changed = resized !== (this.cs2Vm.context.windowMode === 2);
                 this.cs2Vm.context.windowMode = mode;
+                if (changed) this.runeLite?.postResizeableChanged(resized);
             },
             setViewportClampFov: (fovClampMin, fovClampMax, zoomClampMin, zoomClampMax) => {
                 this.camera.setClampFov(fovClampMin, fovClampMax, zoomClampMin, zoomClampMax);
@@ -6661,6 +6664,7 @@ export class OsrsClient {
                 console.warn("[OsrsClient] Failed to load GraphicsDefaults:", e);
             }
 
+            this.runeLite.onCacheReady(this.clientScripts);
             this.startClientTickLoop();
             this.renderer.initCache();
             this.hitsplatFlush.flushAll();
@@ -8371,6 +8375,7 @@ export class OsrsClient {
      */
     dispose(): void {
         console.log("[OsrsClient] Disposing...");
+        this.runeLite.destroy();
         try {
             this.renderer?.stop();
         } catch {}

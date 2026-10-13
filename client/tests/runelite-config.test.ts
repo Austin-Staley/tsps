@@ -1,6 +1,9 @@
 import { strict as assert } from "node:assert";
 
 import { HdConfig } from "../game/plugins/hd/HdConfig";
+import { Color, Dimension, Point, Rectangle } from "../runelite/awt";
+import { WorldPoint } from "../runelite/api/coords/WorldPoint";
+import { Keybind } from "../runelite/client/config/Keybind";
 import { ConfigChanged } from "@runelite/api/events";
 import { ConfigGroup, ConfigItem } from "@runelite/client/config/ConfigItem";
 import type { ConfigStorage } from "@runelite/client/config/ConfigStorage";
@@ -59,7 +62,8 @@ bus.subscribe(ConfigChanged, (event) => changes.push(event));
 manager.setConfiguration(TestConfig.group, "count", "7");
 assert.equal(config.count(), 7);
 assert.equal(changes.length, 1);
-assert.equal(changes[0].getOldValue(), undefined);
+assert.equal(changes[0].getOldValue(), null);
+assert.equal(changes[0].getProfile(), null, "global config events have no RuneScape profile");
 assert.equal(changes[0].getNewValue(), "7");
 
 manager.setConfigValue(TestConfig, "count", 9);
@@ -120,5 +124,43 @@ for (const key of ["textureFiltering", "antiAliasing", "depthAwareAo"] as const)
     manager.unsetConfiguration(HdConfig.group, key);
     assert.equal(hd[key](), true, `${key} reset restores its default`);
 }
+manager.setConfiguration("test", "value", "global");
+assert.throws(() => manager.setRSProfileConfiguration("test", "value", "unscoped"), /No RuneScape profile/);
+manager.setRSProfileKey("account-a");
+manager.setRSProfileConfiguration("test", "value", "personal");
+assert.equal(manager.getRSProfileConfiguration("test", "value"), "personal");
+assert.equal(manager.getConfiguration("test", "value"), "global");
+assert.equal(changes.at(-1)!.getGroup(), "test");
+assert.equal(changes.at(-1)!.getKey(), "value");
+assert.equal(changes.at(-1)!.getProfile(), "account-a");
+manager.setRSProfileKey("account-b");
+assert.equal(manager.getRSProfileConfiguration("test", "value"), undefined);
+manager.setRSProfileConfiguration("test", "value", "second");
+manager.unsetRSProfileConfiguration("test", "value");
+manager.setRSProfileKey("account-a");
+assert.equal(manager.getRSProfileConfiguration("test", "value"), "personal");
+for (const [value, type, serialized] of [
+    [new Point(12, -3), Point, "12:-3"],
+    [new Dimension(80, 40), Dimension, "80x40"],
+    [new Rectangle(1, 2, 3, 4), Rectangle, "1:2:3:4"],
+    [new WorldPoint(3222, 3218, 1), WorldPoint, "3222:3218:1"],
+    [new Keybind(65, 128), Keybind, "65:128"],
+    [new Color(255, 0, 0, 128), Color, String(new Color(255, 0, 0, 128).getRGB())],
+] as const) {
+    manager.setConfiguration("types", "value", value);
+    assert.equal(manager.getConfiguration("types", "value"), serialized);
+    assert.deepEqual(manager.getConfiguration("types", "value", type as typeof Point), value);
+    manager.setRSProfileConfiguration("types", "value", value);
+    assert.deepEqual(manager.getRSProfileConfiguration("types", "value", type as typeof Point), value);
+}
+manager.setConfiguration("types", "number", "6");
+assert.equal(manager.getConfiguration("types", "number", Number), 6);
+manager.setConfiguration("types", "point", "broken:1");
+assert.equal(manager.getConfiguration("types", "point", Point), undefined);
+manager.setConfiguration("types", "value", null);
+assert.equal(manager.getConfiguration("types", "value"), undefined);
+const ColourConfig = ConfigGroup("typedcolor", { color: ConfigItem({name:"Color",color:true,default:Color.RED}) });
+manager.setConfigValue(ColourConfig, "color", Color.BLUE);
+assert.equal(manager.getConfig(ColourConfig).color().getRGB(), Color.BLUE.getRGB());
 manager.destroy();
 console.log("runelite config tests passed");
