@@ -29,6 +29,91 @@ module.exports = function registerTheBloodMoonRises(api) {
   const CASTLE_WORLD_MAP_FLOOR_VARBIT = 15489;
   const CASTLE_LAST_ROOM_VARBIT = 15499;
   const CASTLE_GROUND_FLOOR = 1;
+  const CASTLE_NATIVE_STAGE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-native-stage";
+  const CASTLE_STORY_ATTRIBUTE = "quest.the_blood_moon_rises.castle-story";
+  const CASTLE_BOOK_PUZZLE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-book-puzzle";
+  const CASTLE_TRANSITION_PENDING_ATTRIBUTE = "quest.the_blood_moon_rises.castle-transition-pending";
+  const CASTLE_BOOK_VARBITS = Object.freeze([15550, 15551, 15552, 15553, 15554, 15555, 15556, 15557]);
+  const CASTLE_GILDED_BOOKCASE_VARBIT = 15525;
+  const CASTLE_BOOKCASE_INTERFACE = 962;
+  const CASTLE_BOOK_ITEMS = Object.freeze({ gilded: 33767, vampyre: 33768, fullMoonKey: 33724,
+    newMoonKey: 33728, gibbousMoonKey: 33727 });
+  const CASTLE_KEY_ITEMS = Object.freeze({
+    plug: ItemIdentifiers.SINK_PLUG,
+    pipe: ItemIdentifiers.BROKEN_PIPE,
+    knife: ItemIdentifiers.SHARP_KNIFE,
+    tongs: ItemIdentifiers.TONGS,
+    needle: ItemIdentifiers.SYRINGE_NEEDLE,
+    barrel: ItemIdentifiers.SYRINGE_BARREL,
+    plunger: ItemIdentifiers.SYRINGE_PLUNGER,
+    emptySyringe: ItemIdentifiers.EMPTY_SYRINGE,
+    fullSyringe: ItemIdentifiers.FULL_SYRINGE,
+    stomach: ItemIdentifiers.VENATOR_STOMACH,
+    leftCrest: ItemIdentifiers.LEFT_CREST_HALF,
+    rightCrest: ItemIdentifiers.RIGHT_CREST_HALF,
+    fullCrest: ItemIdentifiers.FULL_CREST,
+    sword: ItemIdentifiers.SWORD,
+    axe: ItemIdentifiers.BATTLEAXE,
+    mace: ItemIdentifiers.MACE_3,
+  });
+  // Visible Castle Drakan loc ids from the current client cache gamevals.
+  const CASTLE_KEY_LOC_IDS = Object.freeze({
+    searchableCrate: 61751,
+    kitchenSink: [61719, 61720, 61721],
+    larderSink: [61722, 61723, 61724, 61725],
+    larderCabinet: 61726,
+    kitchenCorpse: [61727, 61728, 61729],
+    kitchenChest: [61683, 61684],
+    armouryChest: [61685, 61686],
+    weaponCase: 61741,
+    statue1: 61742,
+    statue2: 61743,
+    statue3: 61744,
+    statue4: 61745,
+    unarmedStatue: 61746,
+    swordStatue: 61747,
+    maceStatue: 61749,
+    axeStatue: 61750,
+    studyFireplace: [61665, 61666, 61667],
+  });
+  const CASTLE_KEY_OBJECTS = Object.freeze({
+    crate: new Set([CASTLE_KEY_LOC_IDS.searchableCrate]),
+    kitchenSink: new Set(CASTLE_KEY_LOC_IDS.kitchenSink),
+    larderSink: new Set(CASTLE_KEY_LOC_IDS.larderSink),
+    larderCabinet: new Set([CASTLE_KEY_LOC_IDS.larderCabinet]),
+    corpse: new Set(CASTLE_KEY_LOC_IDS.kitchenCorpse),
+    kitchenChest: new Set(CASTLE_KEY_LOC_IDS.kitchenChest),
+    weaponCase: new Set([CASTLE_KEY_LOC_IDS.weaponCase]),
+    armouryChest: new Set(CASTLE_KEY_LOC_IDS.armouryChest),
+    statues: new Set([CASTLE_KEY_LOC_IDS.statue1, CASTLE_KEY_LOC_IDS.statue2,
+      CASTLE_KEY_LOC_IDS.statue3, CASTLE_KEY_LOC_IDS.statue4, CASTLE_KEY_LOC_IDS.unarmedStatue,
+      CASTLE_KEY_LOC_IDS.swordStatue, CASTLE_KEY_LOC_IDS.maceStatue, CASTLE_KEY_LOC_IDS.axeStatue]),
+    studyFireplace: new Set(CASTLE_KEY_LOC_IDS.studyFireplace),
+  });
+  const CASTLE_KEY_VARBITS = Object.freeze({ sinkEmptied: 15536, larderSink: 15537,
+    corpseOpened: 15538, kitchenChest: 15518, fireplace: 15535,
+    statue1: 15545, statue2: 15546, statue3: 15547, statue4: 15548 });
+  const CASTLE_GILDED_BOOKCASE_IDS = new Set([61692, 61693, 61694, 61695]);
+  const CASTLE_LIBRARY = Object.freeze({ z: 0, minX: 2448, maxX: 2461, minY: 7384, maxY: 7398,
+    gildedBookcase: [2455, 7395], vampyreBookcase: [2458, 7388],
+    westernBookcase: [2451, 7391], passage: [2455, 7386], secretKey: [2433, 7416] });
+  const CASTLE_ACTORS = new Map();
+  const CASTLE_ACTOR_OWNERS = new Map();
+  // Cache gamevals from client/runelite/api/gameval/NpcID.ts. These Castle
+  // variants have quest actions that are absent from the generic NPC IDs.
+  const CASTLE_NPC = Object.freeze({
+    IVAN_LIBRARY: 15845,
+    IVAN_ENTRY_HALL: 15846,
+    VELIAF_GALLERY: 15867,
+    VELIAF_ENTRY_HALL: 15869,
+    SAFALAAN_PRISON: 15888,
+    VANESCULA_PRISON: 15903,
+    VANESCULA_CASTLE: 15907,
+    LOWERNIEL_CUTSCENE_NO_WING: 15924,
+    SANGUIDAE: 16223,
+    VENATOR: 16213,
+    VENATOR_5: 16217,
+  });
   const CASTLE_ROOM = Object.freeze({ LOBBY: 1, DINING: 2, THRONE: 3 });
   // The Castle's Enter doors link distinct room endpoints. Quest Helper's
   // CastleDrakanRoomNetwork records the paired cache locs; the arrival tiles
@@ -891,6 +976,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (value === STAGE.STARTED) return player?.getAttribute(HIDEOUT_SHRINE_INSPECTED) ? 8 : 4;
     if (value === STAGE.HIDEOUT) return 12;
     if (value === STAGE.SLEPE) return 16;
+    if (value === STAGE.CASTLE) return Number(player?.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70;
+    if (value === STAGE.ESCAPE) return 84;
     if (value === STAGE.PREPARATIONS) {
       const prep = player?.getAttribute(PREP_ATTRIBUTE) ?? {};
       if (prep.flail && prep.stakes) return 114;
@@ -1495,6 +1582,663 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function syncCastleRoomOnLogin({ player }) {
     syncCastleRoom(player);
+    if (stage(player) === STAGE.CASTLE) {
+      player.getPacketSender().sendVarbit(15464,
+        Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70);
+    }
+    syncCastleActors(player);
+    const bookPuzzle = bookPuzzleState(player);
+    if (stage(player) === STAGE.CASTLE && Array.isArray(bookPuzzle.positions)) {
+      player.setAttribute(CASTLE_BOOK_PUZZLE_ATTRIBUTE, { ...bookPuzzle, open: false, selected: null });
+      writeBookPuzzlePositions(player, bookPuzzle.positions);
+    }
+    if (stage(player) === STAGE.CASTLE) {
+      player.getPacketSender().sendVarbit(CASTLE_GILDED_BOOKCASE_VARBIT,
+        castleStory(player).bookPuzzleComplete || bookPuzzle.solved ? 2 : bookPuzzle.prepared ? 1 : 0);
+    }
+    syncCastleKeyVarbits(player);
+    syncCastleBookKey(player);
+    syncCastleGibbousKey(player);
+    syncCastleSyringeBarrel(player);
+  }
+
+  function castleStory(player) {
+    return player.getAttribute(CASTLE_STORY_ATTRIBUTE) ?? { defeated: [], talkedToVeliaf: false,
+      prisonersFound: false, talkedToIvan: false, bookPuzzleComplete: false, stockpileDestroyed: false };
+  }
+
+  function bookPuzzleState(player) {
+    return player?.getAttribute(CASTLE_BOOK_PUZZLE_ATTRIBUTE) ?? { open: false, positions: null, selected: null, solved: false };
+  }
+
+  function writeBookPuzzlePositions(player, positions) {
+    CASTLE_BOOK_VARBITS.forEach((varbit, slot) => player.getPacketSender().sendVarbit(varbit, positions[slot]));
+  }
+
+  function openCastleBookPuzzle(player) {
+    const state = bookPuzzleState(player);
+    if (!state.positions) {
+      const cached = CASTLE_BOOK_VARBITS.map(varbit => player.getPacketSender().getVarbit?.(varbit));
+      const validCacheOrder = cached.length === 8 && cached.every(Number.isInteger) &&
+        [...cached].sort((a, b) => a - b).every((value, index) => value === index + 1) &&
+        !cached.every((value, index) => value === index + 1);
+      // The cache puzzle exposes the active order through these eight varbits.
+      // Its initial permutation is cache/client-generated; the stable fallback
+      // below is only used when this server has no valid initial cache values.
+      state.positions = validCacheOrder ? cached : [4, 1, 7, 2, 8, 3, 5, 6];
+    }
+    player.setAttribute(CASTLE_BOOK_PUZZLE_ATTRIBUTE, { ...state, open: true, selected: null });
+    writeBookPuzzlePositions(player, state.positions);
+    player.getPacketSender().sendInterface(CASTLE_BOOKCASE_INTERFACE);
+  }
+
+  function startCastleBookPuzzlePrompt(player) {
+    api.sendMultiChatboxPrompt(player, "The gilded bookcase asks you to arrange the Vampyric Houses alphabetically.",
+      "Rearrange the books", () => openCastleBookPuzzle(player),
+      "Not yet", () => player.getPacketSender().sendInterfaceRemoval());
+  }
+
+  function handleCastleBookWidgetAction(event) {
+    const player = event?.player;
+    const packet = event?.packet;
+    const state = bookPuzzleState(player);
+    if (!player || !packet || packet.type !== "widget_action" || packet.groupId !== CASTLE_BOOKCASE_INTERFACE ||
+      stage(player) !== STAGE.CASTLE || !state.open || state.solved || !Array.isArray(state.positions)) return;
+    const slot = Number.isInteger(packet.slot) && packet.slot >= 0 && packet.slot < 8
+      ? packet.slot : packet.childId;
+    if (!Number.isInteger(slot) || slot < 0 || slot >= 8) return;
+    event.handled = true;
+    if (state.selected === null) {
+      player.setAttribute(CASTLE_BOOK_PUZZLE_ATTRIBUTE, { ...state, selected: slot });
+      return;
+    }
+    if (state.selected === slot) {
+      player.setAttribute(CASTLE_BOOK_PUZZLE_ATTRIBUTE, { ...state, selected: null });
+      return;
+    }
+    const positions = [...state.positions];
+    [positions[state.selected], positions[slot]] = [positions[slot], positions[state.selected]];
+    const solved = positions.every((value, index) => value === index + 1);
+    player.setAttribute(CASTLE_BOOK_PUZZLE_ATTRIBUTE, { open: !solved, positions, selected: null, solved });
+    writeBookPuzzlePositions(player, positions);
+    if (solved) {
+      const story = castleStory(player);
+      player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, bookPuzzleComplete: true });
+      player.getPacketSender().sendVarbit(CASTLE_GILDED_BOOKCASE_VARBIT, 2);
+      player.getPacketSender().sendInterfaceRemoval();
+      player.sendMessage("You arrange the Vampyric Houses alphabetically. A secret passage opens to the south.");
+      syncCastleBookKey(player);
+    }
+  }
+
+  function syncCastleBookKey(player) {
+    if (!player || stage(player) !== STAGE.CASTLE) return;
+    const story = castleStory(player);
+    if (!story.bookPuzzleComplete || story.fullMoonKeyClaimed) return;
+    const manager = api.getItemOnGroundManager?.();
+    if (!manager?.registerLocation) return;
+    const tile = new Location(...CASTLE_LIBRARY.secretKey, CASTLE_LIBRARY.z);
+    if (!manager.getGroundItem?.(player.getUsername?.(), CASTLE_BOOK_ITEMS.fullMoonKey, tile,
+      player.getPrivateArea?.() ?? null)) {
+      manager.registerLocation(player, new Item(CASTLE_BOOK_ITEMS.fullMoonKey, 1), tile);
+    }
+  }
+
+  function syncCastleGibbousKey(player) {
+    if (!player || stage(player) !== STAGE.CASTLE) return;
+    const story = castleStory(player);
+    if (!story.prisonersFound || story.gibbousKeyClaimed || hasItem(player, CASTLE_BOOK_ITEMS.gibbousMoonKey)) return;
+    const manager = api.getItemOnGroundManager?.();
+    if (!manager?.registerLocation) return;
+    const tile = new Location(2573, 7395, 0);
+    if (!manager.getGroundItem?.(player.getUsername?.(), CASTLE_BOOK_ITEMS.gibbousMoonKey, tile,
+      player.getPrivateArea?.() ?? null)) {
+      manager.registerLocation(player, new Item(CASTLE_BOOK_ITEMS.gibbousMoonKey, 1), tile);
+    }
+  }
+
+  function syncCastleSyringeBarrel(player) {
+    if (!player || stage(player) !== STAGE.CASTLE) return;
+    const story = castleStory(player);
+    if (!story.defeated.includes("kitchen-sanguidae") || story.syringeBarrelClaimed ||
+      hasItem(player, CASTLE_KEY_ITEMS.barrel)) return;
+    const manager = api.getItemOnGroundManager?.();
+    if (!manager?.registerLocation) return;
+    const tile = new Location(2315, 7418, 0);
+    if (!manager.getGroundItem?.(player.getUsername?.(), CASTLE_KEY_ITEMS.barrel, tile,
+      player.getPrivateArea?.() ?? null)) {
+      manager.registerLocation(player, new Item(CASTLE_KEY_ITEMS.barrel, 1), tile);
+    }
+  }
+
+  function syncCastleKeyVarbits(player) {
+    if (!player || stage(player) !== STAGE.CASTLE) return;
+    const story = castleStory(player);
+    const state = story.newMoon ?? {};
+    const vars = player.getPacketSender();
+    vars.sendVarbit(CASTLE_KEY_VARBITS.sinkEmptied, state.sinkPlugClaimed ? 1 : 0);
+    vars.sendVarbit(CASTLE_KEY_VARBITS.larderSink, state.larderSinkCollapsed ? 2 : state.larderSinkPlugged ? 1 : 0);
+    vars.sendVarbit(CASTLE_KEY_VARBITS.corpseOpened, state.corpseOpened ? 1 : 0);
+    vars.sendVarbit(CASTLE_KEY_VARBITS.kitchenChest, state.kitchenChestUnlocked ? 1 : 0);
+    vars.sendVarbit(CASTLE_KEY_VARBITS.fireplace, state.fullCrestInFireplace ? 1 : 0);
+    ["statue1", "statue2", "statue3", "statue4"].forEach((key, index) => {
+      vars.sendVarbit(CASTLE_KEY_VARBITS[key], state.weaponPuzzle?.[index] ? 1 : 0);
+    });
+  }
+
+  function updateCastleKeyStory(player, changes) {
+    const story = castleStory(player);
+    player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, newMoon: { ...(story.newMoon ?? {}), ...changes } });
+    syncCastleKeyVarbits(player);
+  }
+
+  function castleKeyGive(player, itemId, message) {
+    const inventory = player.getInventory();
+    if (inventory.getFreeSlots() <= 0 || !inventory.adds(itemId, 1)) {
+      player.sendMessage("Make room in your inventory before continuing.");
+      return false;
+    }
+    if (message) player.sendMessage(message);
+    return true;
+  }
+
+  function confirmCastleKeyAction(player, prompt, accept) {
+    api.sendMultiChatboxPrompt(player, prompt,
+      "Yes.", () => {
+        if (player.isRegistered?.() === false || quest.isComplete(player) || stage(player) !== STAGE.CASTLE) return;
+        accept();
+      },
+      "No.", () => {});
+  }
+
+  function handleCastleKeyPickup(event) {
+    const player = event?.player;
+    const id = event?.groundItemId;
+    if (!player || stage(player) !== STAGE.CASTLE || id !== CASTLE_KEY_ITEMS.barrel) return;
+    const location = event.location;
+    const x = location?.getX?.() ?? location?.x;
+    const y = location?.getY?.() ?? location?.y;
+    const z = location?.getZ?.() ?? location?.z;
+    const story = castleStory(player);
+    if (x !== 2315 || y !== 7418 || z !== 0 || !story.defeated.includes("kitchen-sanguidae")) return;
+    player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, syringeBarrelClaimed: true });
+    player.sendMessage("You take the syringe barrel left by the kitchen aranei.");
+  }
+
+  function handleCastleKeyObjects(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      (Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70) < 74) return;
+    const tile = event.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    if (z !== 0) return;
+    const id = event.definition?.id ?? event.objectId;
+    const option = String(event.option ?? "");
+    const story = castleStory(player);
+    const key = story.newMoon ?? {};
+
+    if (CASTLE_KEY_OBJECTS.crate.has(id) && x === 2315 && y === 7408 && option === "Search") {
+      event.handled = true;
+      if (!story.syringeBarrelClaimed || !hasItem(player, CASTLE_KEY_ITEMS.barrel)) {
+        player.sendMessage("The kitchen insects are still guarding the tools; take the syringe barrel first.");
+        return;
+      }
+      if (key.stomachClaimed) { player.sendMessage("The venator stomach crate is empty."); return; }
+      if (castleKeyGive(player, CASTLE_KEY_ITEMS.stomach, "You search the south-eastern crate and take the venator stomach.")) {
+        updateCastleKeyStory(player, { stomachClaimed: true });
+      }
+      return;
+    }
+    if (CASTLE_KEY_OBJECTS.kitchenSink.has(id) && x === 2308 && y === 7411 && option === "Inspect") {
+      event.handled = true;
+      if (key.sinkPlugClaimed) { player.sendMessage("You have already removed the sink plug."); return; }
+      confirmCastleKeyAction(player, "Remove the plug from the sink?", () => {
+        if (castleStory(player).newMoon?.sinkPlugClaimed) return;
+        if (castleKeyGive(player, CASTLE_KEY_ITEMS.plug, "You remove the plug from the kitchen sink.")) {
+          updateCastleKeyStory(player, { sinkPlugClaimed: true });
+        }
+      });
+      return;
+    }
+    if (CASTLE_KEY_OBJECTS.larderSink.has(id) && x === 2356 && y === 7400 &&
+      ["Turn on", "Turn-on", "Activate"].includes(option)) {
+      event.handled = true;
+      if (!key.larderSinkPlugged) { player.sendMessage("The sink needs a plug before you turn the tap on."); return; }
+      if (key.larderSinkCollapsed) { player.sendMessage("The sink has already collapsed."); return; }
+      confirmCastleKeyAction(player, "Turn the tap on?", () => {
+        const current = castleStory(player).newMoon ?? {};
+        if (!current.larderSinkPlugged || current.larderSinkCollapsed) return;
+        updateCastleKeyStory(player, { larderSinkCollapsed: true });
+        player.sendMessage("You turn on the tap. The sink gives way, leaving a broken pipe.");
+      });
+      return;
+    }
+    if (CASTLE_KEY_OBJECTS.larderSink.has(id) && x === 2356 && y === 7400 && option === "Take pipe") {
+      event.handled = true;
+      if (!key.larderSinkCollapsed) { player.sendMessage("The sink has not collapsed yet."); return; }
+      if (key.pipeClaimed) { player.sendMessage("You already took the broken pipe."); return; }
+      confirmCastleKeyAction(player, "Take the broken pipe?", () => {
+        if (castleStory(player).newMoon?.pipeClaimed) return;
+        if (castleKeyGive(player, CASTLE_KEY_ITEMS.pipe, "You take the broken pipe.")) updateCastleKeyStory(player, { pipeClaimed: true });
+      });
+      return;
+    }
+    if (CASTLE_KEY_OBJECTS.larderCabinet.has(id) && x === 2360 && y === 7403 && option === "Search") {
+      event.handled = true;
+      if (!key.pipeClaimed || !hasItem(player, CASTLE_KEY_ITEMS.pipe)) {
+        player.sendMessage("You need the broken pipe to reach behind the cabinet.");
+        return;
+      }
+      player.sendMessage("The cabinet is too close to reach behind without using the broken pipe on it.");
+      return;
+    }
+    if (CASTLE_KEY_OBJECTS.crate.has(id) && x === 2358 && y === 7397 && option === "Search") {
+      event.handled = true;
+      if (!key.larderSinkCollapsed) { player.sendMessage("The crate is wedged behind the intact sink."); return; }
+      if (key.plungerClaimed) { player.sendMessage("The crate is empty."); return; }
+      if (castleKeyGive(player, CASTLE_KEY_ITEMS.plunger, "You search the larder crate and take a syringe plunger.")) {
+        updateCastleKeyStory(player, { plungerClaimed: true });
+      }
+      return;
+    }
+    if (CASTLE_KEY_OBJECTS.corpse.has(id) && x === 2311 && y === 7417 &&
+      ["Inspect", "Search"].includes(option)) {
+      event.handled = true;
+      if (!key.corpseOpened) { player.sendMessage("The venator corpse is still closed."); return; }
+      if (key.tongsClaimed) { player.sendMessage("You have already taken the tongs."); return; }
+      if (castleKeyGive(player, CASTLE_KEY_ITEMS.tongs, "You search the opened corpse and take the tongs.")) {
+        updateCastleKeyStory(player, { tongsClaimed: true });
+      }
+      return;
+    }
+    if (CASTLE_KEY_OBJECTS.kitchenChest.has(id) && x === 2308 && y === 7415 && option === "Search") {
+      event.handled = true;
+      if (!key.kitchenChestUnlocked) { player.sendMessage("The kitchen chest is locked."); return; }
+      if (key.leftCrestClaimed) { player.sendMessage("The chest is empty."); return; }
+      confirmCastleKeyAction(player, "Search the unlocked chest?", () => {
+        if (castleStory(player).newMoon?.leftCrestClaimed) return;
+        if (castleKeyGive(player, CASTLE_KEY_ITEMS.leftCrest, "You open the chest and take the left crest half.")) {
+          updateCastleKeyStory(player, { leftCrestClaimed: true });
+        }
+      });
+      return;
+    }
+    if (CASTLE_KEY_OBJECTS.armouryChest.has(id) && x === 2570 && y === 7380 && option === "Search") {
+      event.handled = true;
+      if (!story.defeated.includes("first-venator")) { player.sendMessage("The venator still guards the armoury."); return; }
+      if (!Array.isArray(key.weaponPuzzle) || key.weaponPuzzle.length !== 4 || !key.weaponPuzzle.every(Boolean)) {
+        player.sendMessage("The chest remains locked until the statues mirror their weapons.");
+        return;
+      }
+      if (key.rightCrestClaimed || hasItem(player, CASTLE_KEY_ITEMS.rightCrest)) { player.sendMessage("You already have the right crest half."); return; }
+      if (castleKeyGive(player, CASTLE_KEY_ITEMS.rightCrest, "You search the armoury chest and find the right crest half.")) {
+        updateCastleKeyStory(player, { rightCrestClaimed: true });
+      }
+      return;
+    }
+    if (CASTLE_KEY_OBJECTS.weaponCase.has(id) && x === 2579 && y === 7382 && option === "Search") {
+      event.handled = true;
+      if (!story.defeated.includes("first-venator")) {
+        player.sendMessage("The venator still guards the armoury.");
+        return;
+      }
+      startCastleWeaponChoice(player);
+      return;
+    }
+    if (CASTLE_KEY_OBJECTS.studyFireplace.has(id) && x === 2358 && y === 7386 && option === "Search") {
+      event.handled = true;
+      if (!key.fullCrestInFireplace) { player.sendMessage("The fireplace's hidden lock needs the full crest."); return; }
+      if (key.newMoonKeyClaimed || hasItem(player, CASTLE_BOOK_ITEMS.newMoonKey)) {
+        player.sendMessage("You already have the new moon key.");
+        return;
+      }
+      if (castleKeyGive(player, CASTLE_BOOK_ITEMS.newMoonKey, "You search the study fireplace and find the new moon key.")) {
+        updateCastleKeyStory(player, { newMoonKeyClaimed: true });
+      }
+    }
+  }
+
+  function startCastleWeaponChoice(player) {
+    const choices = [
+      ["Take a battleaxe", CASTLE_KEY_ITEMS.axe, "You take a battleaxe from the armoury rack."],
+      ["Take a mace", CASTLE_KEY_ITEMS.mace, "You take a mace from the armoury rack."],
+      ["Take a sword", CASTLE_KEY_ITEMS.sword, "You take a sword from the armoury rack."],
+    ];
+    api.sendMultiChatboxPrompt(player, "Choose a weapon from the armoury rack.",
+      ...choices.flatMap(([label, id, message]) => [label, () => castleKeyGive(player, id, message)]));
+  }
+
+  function handleCastleKeyItemOnObject(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      (Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70) < 74) return;
+    const tile = event.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    const id = event.definition?.id ?? event.objectId;
+    const item = event.itemId;
+    if (z !== 0) return;
+    const story = castleStory(player);
+    const key = story.newMoon ?? {};
+    const inv = player.getInventory();
+    if (CASTLE_KEY_OBJECTS.larderSink.has(id) && x === 2356 && y === 7400 && item === CASTLE_KEY_ITEMS.plug) {
+      event.handled = true;
+      if (key.larderSinkPlugged || !inv.contains(CASTLE_KEY_ITEMS.plug)) { player.sendMessage("The sink is already plugged."); return; }
+      inv.deleteNumber(CASTLE_KEY_ITEMS.plug, 1);
+      updateCastleKeyStory(player, { larderSinkPlugged: true });
+      player.sendMessage("You plug the larder sink.");
+      return;
+    }
+    if (CASTLE_KEY_OBJECTS.larderCabinet.has(id) && x === 2360 && y === 7403 && item === CASTLE_KEY_ITEMS.pipe) {
+      event.handled = true;
+      if (!key.larderSinkCollapsed || !key.pipeClaimed || !inv.contains(CASTLE_KEY_ITEMS.pipe)) {
+        player.sendMessage("You need the broken pipe from the collapsed larder sink."); return;
+      }
+      if (key.knifeClaimed) { player.sendMessage("You already took the knife from behind the cabinet."); return; }
+      if (castleKeyGive(player, CASTLE_KEY_ITEMS.knife, "You use the broken pipe to reach behind the cabinet and take a sharp knife.")) {
+        inv.deleteNumber(CASTLE_KEY_ITEMS.pipe, 1);
+        updateCastleKeyStory(player, { knifeClaimed: true });
+      }
+      return;
+    }
+    if (CASTLE_KEY_OBJECTS.corpse.has(id) && x === 2311 && y === 7417 && item === CASTLE_KEY_ITEMS.knife) {
+      event.handled = true;
+      if (!key.knifeClaimed || !inv.contains(CASTLE_KEY_ITEMS.knife)) { player.sendMessage("You need the sharp kitchen knife."); return; }
+      if (key.corpseOpened) { player.sendMessage("The venator corpse is already open."); return; }
+      updateCastleKeyStory(player, { corpseOpened: true });
+      player.sendMessage("You cut open the venator corpse with the sharp kitchen knife.");
+      return;
+    }
+    if (CASTLE_KEY_OBJECTS.kitchenSink.has(id) && x === 2308 && y === 7411 && item === CASTLE_KEY_ITEMS.tongs) {
+      event.handled = true;
+      if (!key.corpseOpened || !key.tongsClaimed) { player.sendMessage("Open the venator corpse and take its tongs first."); return; }
+      if (key.needleClaimed) { player.sendMessage("You have already taken the syringe needle."); return; }
+      if (castleKeyGive(player, CASTLE_KEY_ITEMS.needle, "You use the tongs to retrieve a syringe needle from the sink.")) {
+        updateCastleKeyStory(player, { needleClaimed: true });
+      }
+      return;
+    }
+    if (CASTLE_KEY_OBJECTS.kitchenChest.has(id) && x === 2308 && y === 7415 && item === CASTLE_KEY_ITEMS.fullSyringe) {
+      event.handled = true;
+      if (!inv.contains(CASTLE_KEY_ITEMS.fullSyringe)) return;
+      if (key.kitchenChestUnlocked) { player.sendMessage("The kitchen chest is already unlocked."); return; }
+      inv.deleteNumber(CASTLE_KEY_ITEMS.fullSyringe, 1);
+      updateCastleKeyStory(player, { kitchenChestUnlocked: true });
+      player.sendMessage("You use the venator blood to unlock the kitchen chest.");
+      return;
+    }
+    if (CASTLE_KEY_OBJECTS.studyFireplace.has(id) && x === 2358 && y === 7386 && item === CASTLE_KEY_ITEMS.fullCrest) {
+      event.handled = true;
+      if (!inv.contains(CASTLE_KEY_ITEMS.fullCrest) || key.fullCrestInFireplace) return;
+      inv.deleteNumber(CASTLE_KEY_ITEMS.fullCrest, 1);
+      updateCastleKeyStory(player, { fullCrestInFireplace: true });
+      player.sendMessage("You place the full crest in the study fireplace. Something clicks inside.");
+      return;
+    }
+    const statuePlacements = [
+      { id: CASTLE_KEY_LOC_IDS.statue2, x: 2577, y: 7380, item: CASTLE_KEY_ITEMS.axe, slot: 1, name: "battleaxe" },
+      { id: CASTLE_KEY_LOC_IDS.statue3, x: 2569, y: 7386, item: CASTLE_KEY_ITEMS.mace, slot: 2, name: "mace" },
+      { id: CASTLE_KEY_LOC_IDS.statue4, x: 2569, y: 7380, item: CASTLE_KEY_ITEMS.mace, slot: 3, name: "mace" },
+      { id: CASTLE_KEY_LOC_IDS.statue1, x: 2565, y: 7386, item: CASTLE_KEY_ITEMS.sword, slot: 0, name: "sword" },
+    ];
+    const placement = statuePlacements.find(target => id === target.id && x === target.x && y === target.y && item === target.item);
+    if (!placement) return;
+    event.handled = true;
+    const puzzle = [...(key.weaponPuzzle ?? [false, false, false, false])];
+    if (puzzle[placement.slot]) { player.sendMessage("That statue already holds its weapon."); return; }
+    if (!inv.contains(item)) return;
+    inv.deleteNumber(item, 1);
+    puzzle[placement.slot] = true;
+    updateCastleKeyStory(player, { weaponPuzzle: puzzle });
+    player.sendMessage(`You place the ${placement.name} on the statue.`);
+    if (puzzle.every(Boolean)) player.sendMessage("The armoury statues align and the chest unlocks.");
+  }
+
+  function handleCastleKeyItemOnItem(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE) return;
+    const used = event.usedItemId;
+    const withItem = event.usedWithItemId;
+    const pair = [used, withItem];
+    const inv = player.getInventory();
+    const syringeParts = [CASTLE_KEY_ITEMS.barrel, CASTLE_KEY_ITEMS.plunger, CASTLE_KEY_ITEMS.needle];
+    if (pair.some(id => syringeParts.includes(id))) {
+      event.handled = true;
+      for (const id of syringeParts) {
+        if (!inv.contains(id)) { player.sendMessage("You need the syringe barrel, plunger and needle together."); return; }
+      }
+      syringeParts.forEach(id => inv.deleteNumber(id, 1));
+      castleKeyGive(player, CASTLE_KEY_ITEMS.emptySyringe, "You assemble the syringe.");
+      return;
+    }
+    if (pair.includes(CASTLE_KEY_ITEMS.emptySyringe) && pair.includes(CASTLE_KEY_ITEMS.stomach)) {
+      event.handled = true;
+      if (!inv.contains(CASTLE_KEY_ITEMS.emptySyringe) || !inv.contains(CASTLE_KEY_ITEMS.stomach)) return;
+      inv.deleteNumber(CASTLE_KEY_ITEMS.emptySyringe, 1);
+      inv.deleteNumber(CASTLE_KEY_ITEMS.stomach, 1);
+      castleKeyGive(player, CASTLE_KEY_ITEMS.fullSyringe, "You draw blood from the venator stomach into the syringe.");
+      return;
+    }
+    if (pair.includes(CASTLE_KEY_ITEMS.leftCrest) && pair.includes(CASTLE_KEY_ITEMS.rightCrest)) {
+      event.handled = true;
+      if (!inv.contains(CASTLE_KEY_ITEMS.leftCrest) || !inv.contains(CASTLE_KEY_ITEMS.rightCrest)) return;
+      inv.deleteNumber(CASTLE_KEY_ITEMS.leftCrest, 1);
+      inv.deleteNumber(CASTLE_KEY_ITEMS.rightCrest, 1);
+      castleKeyGive(player, CASTLE_KEY_ITEMS.fullCrest, "You join the two halves into a full crest.");
+    }
+  }
+
+  function processCastleDialogueTransition({ player }) {
+    if (!player || stage(player) !== STAGE.CASTLE) return;
+    const pending = player.getAttribute(CASTLE_TRANSITION_PENDING_ATTRIBUTE);
+    if (pending !== "free-prisoners" || player.getDialogueManager?.()?.getCurrent?.()) return;
+    const story = castleStory(player);
+    if (!story.prisonersFound) {
+      player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, prisonersFound: true });
+      setCastleNativeStage(player, 76);
+      syncCastleActors(player);
+      syncCastleGibbousKey(player);
+    }
+    player.setAttribute(CASTLE_TRANSITION_PENDING_ATTRIBUTE, null);
+  }
+
+  function handleCastleCellDoor(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    const id = event?.definition?.id ?? event?.objectId;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) !== 74 ||
+      ![61584, 61585].includes(id) || x !== 2570 || y !== 7369 || z !== 0 || event?.option !== "Enter") return;
+    event.handled = true;
+    if (!hasItem(player, CASTLE_BOOK_ITEMS.newMoonKey)) {
+      player.sendMessage("The north cell door needs the new moon key from the castle fireplace.");
+      return;
+    }
+    if (castleStory(player).prisonersFound) return;
+    if (!startTranscript(api, player, 0, PAGE, "escape-from-castle-drakan-upon-finding-safalaan-and-vanescula")) {
+      event.handled = false;
+      return;
+    }
+    player.setAttribute(CASTLE_TRANSITION_PENDING_ATTRIBUTE, "free-prisoners");
+  }
+
+  function handleCastleBookPickup(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.getX?.() ?? tile?.x;
+    const y = tile?.getY?.() ?? tile?.y;
+    const z = tile?.getZ?.() ?? tile?.z;
+    if (player && event?.groundItemId === CASTLE_BOOK_ITEMS.gibbousMoonKey && stage(player) === STAGE.CASTLE &&
+      x === 2573 && y === 7395 && z === 0 && castleStory(player).prisonersFound) {
+      const story = castleStory(player);
+      player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, gibbousKeyClaimed: true });
+      player.sendMessage("You pick up the gibbous moon key from the bench.");
+      return;
+    }
+    if (!player || event?.groundItemId !== CASTLE_BOOK_ITEMS.fullMoonKey || stage(player) !== STAGE.CASTLE ||
+      x !== CASTLE_LIBRARY.secretKey[0] || y !== CASTLE_LIBRARY.secretKey[1] ||
+      z !== CASTLE_LIBRARY.z || !castleStory(player).bookPuzzleComplete) return;
+    const story = castleStory(player);
+    player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, fullMoonKeyClaimed: true });
+    player.sendMessage("You take the full moon key from the table.");
+  }
+
+  function setCastleNativeStage(player, value) {
+    player.setAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE, value);
+    player.getPacketSender().sendVarbit(15464, value);
+  }
+
+  function castleActors(player) {
+    let actors = CASTLE_ACTORS.get(player);
+    if (!actors) {
+      actors = new Map();
+      CASTLE_ACTORS.set(player, actors);
+    }
+    return actors;
+  }
+
+  function spawnCastleActor(player, key, id, tile, hostile = false) {
+    const actors = castleActors(player);
+    const existing = actors.get(key);
+    if (existing && existing.getHitpoints?.() > 0) return existing;
+    const npc = api.spawnNpc({ id, x: tile[0], y: tile[1], z: tile[2] ?? 0,
+      wanderRadius: 0, owner: player, ownerOnly: true });
+    if (!npc) return null;
+    if (hostile) npc.setMultiCombat?.(true);
+    else npc.setScriptedMovement?.(true);
+    actors.set(key, npc);
+    CASTLE_ACTOR_OWNERS.set(npc, { player, key });
+    return npc;
+  }
+
+  function removeCastleActor(player, key) {
+    const actors = CASTLE_ACTORS.get(player);
+    const npc = actors?.get(key);
+    if (!npc) return;
+    CASTLE_ACTOR_OWNERS.delete(npc);
+    api.removeNpc(npc);
+    actors.delete(key);
+    if (actors.size === 0) CASTLE_ACTORS.delete(player);
+  }
+
+  function syncCastleActors(player) {
+    if (!player || stage(player) !== STAGE.CASTLE) return;
+    const progress = Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70;
+    const story = castleStory(player);
+    if (progress >= 72 && !story.talkedToVeliaf) {
+      spawnCastleActor(player, "veliaf-gallery", CASTLE_NPC.VELIAF_GALLERY, [2379, 7367]);
+    }
+    if (progress >= 72) {
+      if (!story.defeated.includes("first-venator"))
+        spawnCastleActor(player, "first-venator", CASTLE_NPC.VENATOR_5, [2569, 7384], true);
+      if (!story.defeated.includes("crescent-venator"))
+        spawnCastleActor(player, "crescent-venator", CASTLE_NPC.VENATOR, [2486, 7421], true);
+      if (!story.defeated.includes("kitchen-sanguidae"))
+        spawnCastleActor(player, "kitchen-sanguidae", CASTLE_NPC.SANGUIDAE, [2315, 7418], true);
+    }
+    if (progress >= 76 && story.prisonersFound) {
+      spawnCastleActor(player, "safalaan-prison", CASTLE_NPC.SAFALAAN_PRISON, [2573, 7395]);
+      spawnCastleActor(player, "vanescula-prison", CASTLE_NPC.VANESCULA_PRISON, [2571, 7395]);
+    }
+    if (progress >= 76) {
+      if (!story.defeated.includes("library-venator"))
+        spawnCastleActor(player, "library-venator", CASTLE_NPC.VENATOR, [2456, 7392], true);
+      if (story.defeated.includes("library-venator") && !story.talkedToIvan)
+        spawnCastleActor(player, "ivan-library", CASTLE_NPC.IVAN_LIBRARY, [2455, 7388]);
+    }
+    if (progress >= 78) {
+      spawnCastleActor(player, "ivan-entry-hall", CASTLE_NPC.IVAN_ENTRY_HALL, [2315, 7371]);
+      spawnCastleActor(player, "veliaf-entry-hall", CASTLE_NPC.VELIAF_ENTRY_HALL, [2316, 7371]);
+    }
+  }
+
+  function cleanupCastleActors({ player }) {
+    const actors = CASTLE_ACTORS.get(player);
+    if (!actors) return;
+    for (const npc of actors.values()) {
+      CASTLE_ACTOR_OWNERS.delete(npc);
+      api.removeNpc(npc);
+    }
+    CASTLE_ACTORS.delete(player);
+  }
+
+  function handleCastleNpcDeath(event) {
+    const npc = event?.npc;
+    const owner = CASTLE_ACTOR_OWNERS.get(npc);
+    const player = event?.killer?.isPlayer?.() ? event.killer : null;
+    if (!owner || owner.player !== player || stage(player) !== STAGE.CASTLE) return;
+    const story = castleStory(player);
+    if (["first-venator", "crescent-venator", "library-venator"].includes(owner.key)) {
+      const defeated = [...new Set([...story.defeated, owner.key])];
+      player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, defeated });
+      removeCastleActor(player, owner.key);
+      if (owner.key === "library-venator") syncCastleActors(player);
+    } else if (owner.key === "kitchen-sanguidae") {
+      player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story,
+        defeated: [...new Set([...story.defeated, owner.key])] });
+      removeCastleActor(player, owner.key);
+      syncCastleSyringeBarrel(player);
+    }
+  }
+
+  function talkCastleNpc(event, npcName) {
+    const player = event?.player;
+    const npc = event?.npc;
+    if (!player || !npc || stage(player) !== STAGE.CASTLE || !CASTLE_ACTOR_OWNERS.has(npc)) return false;
+    const owner = CASTLE_ACTOR_OWNERS.get(npc);
+    if (owner.player !== player) return false;
+    const progress = Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70;
+    const story = castleStory(player);
+    let variant = null;
+    let transition = null;
+    if (npcName === "veliaf hurtz" && owner.key === "veliaf-gallery") {
+      if (!player.getAttribute(GALLERY_CHEST_ATTRIBUTE)?.key) {
+        player.sendMessage("The emblem-gallery chest is still locked.");
+        event.handled = true;
+        return true;
+      }
+      variant = story.talkedToVeliaf
+        ? "escape-from-castle-drakan-talking-to-veliaf-again"
+        : "escape-from-castle-drakan-finding-veliaf";
+      if (!story.talkedToVeliaf) transition = () => {
+        player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, talkedToVeliaf: true });
+        setCastleNativeStage(player, 74);
+        syncCastleActors(player);
+      };
+    } else if ((npcName === "safalaan hallow" && owner.key === "safalaan-prison") ||
+      (npcName === "vanescula drakan" && owner.key === "vanescula-prison")) {
+      if (progress < 76 || !story.prisonersFound) return false;
+      variant = "escape-from-castle-drakan-upon-finding-safalaan-and-vanescula";
+    } else if (npcName === "ivan strom" && owner.key === "ivan-library") {
+      if (!story.defeated.includes("library-venator")) {
+        player.sendMessage("The venator is still guarding Ivan.");
+        event.handled = true;
+        return true;
+      }
+      variant = story.bookPuzzleComplete
+        ? "escape-from-castle-drakan-talking-to-ivan-again-after-solving-the-bookshelf-puzzle"
+        : story.talkedToIvan
+          ? "escape-from-castle-drakan-talking-to-ivan-again"
+          : "escape-from-castle-drakan-talking-to-ivan-after-defeating-the-venator";
+      if (!story.talkedToIvan) transition = () => {
+        player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, talkedToIvan: true });
+        setCastleNativeStage(player, 78);
+        removeCastleActor(player, "ivan-library");
+        syncCastleActors(player);
+      };
+    }
+    if (!variant) return false;
+    const started = startTranscript(api, player, event.npcId, PAGE, variant);
+    if (!started) return false;
+    event.handled = true;
+    transition?.();
+    return true;
   }
 
   function addCastleMedallionDestination(event) {
@@ -1523,7 +2267,12 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (currentStage === STAGE.SLEPE) {
       advance(player, STAGE.CASTLE);
       player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.LOBBY);
+      player.setAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE, 70);
       syncCastleRoom(player);
+      startTranscript(api, player, 0, PAGE, "escape-from-castle-drakan-entering-the-portal");
+    } else if (currentStage === STAGE.CASTLE &&
+      (Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70) === 70) {
+      startTranscript(api, player, 0, PAGE, "escape-from-castle-drakan-entering-the-portal");
     }
     return true;
   }
@@ -1533,6 +2282,49 @@ module.exports = function registerTheBloodMoonRises(api) {
   function onTranscriptAction(event) {
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
+    if (event.stepId === "ikSyAR" && stage(player) === STAGE.CASTLE) {
+      setCastleNativeStage(player, 72);
+      syncCastleActors(player);
+    }
+    if (event.stepId === "LTAe0k" && stage(player) === STAGE.CASTLE) {
+      const refiner = player.getAttribute(REFINER_ATTRIBUTE) ?? {};
+      if (!refiner.destroyed) {
+        event.handled = true;
+        player.sendMessage("Destroy the blood stockpile before trying to leave Castle Drakan.");
+        return;
+      }
+      const story = castleStory(player);
+      player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, stockpileDestroyed: true });
+      setCastleNativeStage(player, 80);
+    }
+    if (event.stepId === "RkdJSc" && stage(player) === STAGE.CASTLE) {
+      const loc = player.getLocation();
+      spawnCastleActor(player, "stockpile-venator", CASTLE_NPC.VENATOR,
+        [loc.getX() + 1, loc.getY(), loc.getZ()], true);
+    }
+    if (event.stepId === "iutH3M" && stage(player) === STAGE.CASTLE) {
+      removeCastleActor(player, "stockpile-venator");
+      const loc = player.getLocation();
+      spawnCastleActor(player, "vanescula-escape", CASTLE_NPC.VANESCULA_CASTLE,
+        [loc.getX() + 1, loc.getY(), loc.getZ()]);
+    }
+    if (event.stepId === "ERoU4N" && stage(player) === STAGE.CASTLE) {
+      removeCastleActor(player, "ivan-library");
+      removeCastleActor(player, "veliaf-gallery");
+      const loc = player.getLocation();
+      spawnCastleActor(player, "ivan-escape", CASTLE_NPC.IVAN_ENTRY_HALL,
+        [loc.getX() - 1, loc.getY(), loc.getZ()]);
+      spawnCastleActor(player, "veliaf-escape", CASTLE_NPC.VELIAF_ENTRY_HALL,
+        [loc.getX() + 1, loc.getY(), loc.getZ()]);
+    }
+    if (event.stepId === "KaZlum" && stage(player) === STAGE.CASTLE) {
+      const loc = player.getLocation();
+      spawnCastleActor(player, "lowerniel-cutscene", CASTLE_NPC.LOWERNIEL_CUTSCENE_NO_WING,
+        [loc.getX() + 2, loc.getY(), loc.getZ()]);
+    }
+    if (event.stepId === "pvorJI" && stage(player) === STAGE.CASTLE) {
+      setCastleNativeStage(player, 82);
+    }
     if (event.stepId === "UgyYUc" && stage(player) === STAGE.SLEPE &&
       player.getAttribute(SLEPE_STORY_ATTRIBUTE)?.manorComplete) {
       const inventory = player.getInventory();
@@ -1593,7 +2385,15 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.sendMessage("Solve the throne-room bust puzzle and take the half moon key before leaving the castle.");
       return;
     }
+    if (event.stepId === "XqVfhB" && stage(player) === STAGE.CASTLE &&
+      !player.getAttribute(REFINER_ATTRIBUTE)?.destroyed) {
+      player.sendMessage("Destroy the blood stockpile before leaving Castle Drakan.");
+      return;
+    }
     if (next) advance(player, next);
+    if (event.stepId === "XqVfhB" && stage(player) === STAGE.ESCAPE) {
+      cleanupCastleActors({ player });
+    }
     if (event.stepId === "4G5OZg") startWyrdBattle(player);
     if (event.stepId === "t7FMNM") startDrakanBattle(player);
     if (event.stepId === "4ebW6l" || event.stepId === "BzMe5D") finishDrakanEncounter(player);
@@ -1732,6 +2532,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     const player = event?.player;
     if (!player) return false;
     const npcName = String(event.definition?.getName?.() ?? "").toLowerCase();
+    if (stage(player) === STAGE.CASTLE) {
+      const started = talkCastleNpc(event, npcName);
+      if (started) return true;
+    }
     // Night at the Theatre owns this same Stranger until its story is complete.
     // Once Night is done, preserve its lamp reclaim service while Blood Moon is active.
     if (npcName === "mysterious stranger") {
@@ -1925,6 +2729,11 @@ module.exports = function registerTheBloodMoonRises(api) {
       event.option !== "Enter" || event.definition?.getName?.() !== "Door" || z !== 0 ||
       x < 2300 || x > 2600 || y < 7300 || y > 7440) return;
     const visibleId = event.definition?.id ?? event.objectId;
+    if ([61590, 61591].includes(visibleId) && !hasItem(player, CASTLE_BOOK_ITEMS.fullMoonKey)) {
+      event.handled = true;
+      player.sendMessage("The full moon door is locked. Find the full moon key beyond Ivan's secret passage.");
+      return;
+    }
     const transition = CASTLE_DOOR_TRANSITIONS.find(door => door.id === visibleId && door.x === x && door.y === y);
     if (transition) {
       const currentRoom = Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) || CASTLE_ROOM.LOBBY;
@@ -1964,6 +2773,93 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!destination) return;
     event.handled = true;
     player.moveTo(destination);
+  }
+
+  function handleCastleBookObjects(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE) return;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    if (z !== CASTLE_LIBRARY.z) return;
+    const id = event?.definition?.id ?? event?.objectId;
+    const option = String(event?.option ?? "");
+    const name = String(event?.definition?.getName?.() ?? "").toLowerCase();
+    const story = castleStory(player);
+    const progress = Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70;
+    if ([61615, 61616, 61617, 61618].includes(id) && x === CASTLE_LIBRARY.passage[0] &&
+      y === CASTLE_LIBRARY.passage[1] && option === "Enter") {
+      if (!story.bookPuzzleComplete) {
+        event.handled = true;
+        player.sendMessage("The hidden passage remains sealed until you arrange the Vampyric Houses alphabetically.");
+        return;
+      }
+      syncCastleBookKey(player);
+      return;
+    }
+    const puzzle = bookPuzzleState(player);
+    if (CASTLE_GILDED_BOOKCASE_IDS.has(id) && x === CASTLE_LIBRARY.westernBookcase[0] &&
+      y === CASTLE_LIBRARY.westernBookcase[1] && option === "Search" && puzzle.prepared && !puzzle.solved) {
+      event.handled = true;
+      startCastleBookPuzzlePrompt(player);
+      return;
+    }
+    const gildedShelf = id === 61756 && x === CASTLE_LIBRARY.gildedBookcase[0] && y === CASTLE_LIBRARY.gildedBookcase[1];
+    const vampyreShelf = id === 61757 && x === CASTLE_LIBRARY.vampyreBookcase[0] && y === CASTLE_LIBRARY.vampyreBookcase[1];
+    if (option !== "Search" || !/bookcase|bookshelf/.test(name) || (!gildedShelf && !vampyreShelf) ||
+      progress < 78 || !story.talkedToIvan || !story.defeated.includes("library-venator")) return;
+    event.handled = true;
+    const inventory = player.getInventory();
+    if (gildedShelf) {
+      if (inventory.contains(CASTLE_BOOK_ITEMS.gilded)) {
+        player.sendMessage("You already have the gilded book from this shelf.");
+        return;
+      }
+      if (inventory.getFreeSlots() <= 0 || !inventory.adds(CASTLE_BOOK_ITEMS.gilded, 1)) {
+        player.sendMessage("Make room in your inventory before taking the gilded book.");
+        return;
+      }
+      player.sendMessage("You search the northern bookcase and take a gilded book.");
+      return;
+    }
+    if (inventory.contains(CASTLE_BOOK_ITEMS.vampyre)) {
+      player.sendMessage("You have already taken a book about the Vampyric Houses from this shelf.");
+      return;
+    }
+    if (inventory.getFreeSlots() <= 0 || !inventory.adds(CASTLE_BOOK_ITEMS.vampyre, 1)) {
+      player.sendMessage("Make room in your inventory before taking the book.");
+      return;
+    }
+    player.sendMessage("You search the south-eastern bookcase and take a book about the Vampyric Houses.");
+  }
+
+  function handleCastleBookOnObject(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    const objectId = event?.definition?.id ?? event?.objectId;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      (Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70) < 78 || !castleStory(player).talkedToIvan ||
+      event?.itemId !== CASTLE_BOOK_ITEMS.gilded || !CASTLE_GILDED_BOOKCASE_IDS.has(objectId) ||
+      x !== CASTLE_LIBRARY.westernBookcase[0] || y !== CASTLE_LIBRARY.westernBookcase[1] || z !== CASTLE_LIBRARY.z) return;
+    event.handled = true;
+    const inventory = player.getInventory();
+    if (!inventory.contains(CASTLE_BOOK_ITEMS.vampyre)) {
+      player.sendMessage("The book asks for the Vampyric Houses volume from the south-eastern bookcase before it can be arranged.");
+      return;
+    }
+    const state = bookPuzzleState(player);
+    if (state.solved || castleStory(player).bookPuzzleComplete) {
+      player.sendMessage("The books are already arranged in alphabetical order.");
+      return;
+    }
+    inventory.deleteNumber(CASTLE_BOOK_ITEMS.gilded, 1);
+    player.setAttribute(CASTLE_BOOK_PUZZLE_ATTRIBUTE, { ...state, prepared: true });
+    player.getPacketSender().sendVarbit(CASTLE_GILDED_BOOKCASE_VARBIT, 1);
+    startCastleBookPuzzlePrompt(player);
   }
 
   function routeCastleDoorEnter(event) {
@@ -2556,7 +3452,10 @@ module.exports = function registerTheBloodMoonRises(api) {
       return;
     }
     player.setAttribute(REFINER_ATTRIBUTE, { ...state, destroyed: true });
+    const story = castleStory(player);
+    player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, stockpileDestroyed: true });
     player.sendMessage("You destroy the blood stockpile. The refiner's north door is now clear.");
+    startTranscript(api, player, 0, PAGE, "escape-from-castle-drakan-destroying-the-blood-stockpile");
   }
 
   function handleRefinerMixture(event) {
@@ -2828,6 +3727,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onNpcInteraction("Ivan Strom", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Roy", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Veliaf Hurtz", { "Talk-to": talkQuestNpc });
+  api.onNpcInteraction("Safalaan Hallow", { "Talk-to": talkQuestNpc });
+  api.onNpcInteraction("Vanescula Drakan", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Drezel", { "Talk-to": talkQuestNpc });
   api.onObjectInteraction(handlePaterdomusObject);
   api.onItemOnObject(handlePaterdomusItemOnObject, { noted: false });
@@ -2835,7 +3736,16 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction(handleSiegeHallObject);
   api.onObjectInteraction(inspectWyrdFence);
   api.onObjectInteraction(handleCastleThronePuzzle);
+  api.onObjectInteraction(handleCastleCellDoor);
   api.onObjectInteraction(handleCastleDoorEnter);
+  api.onObjectInteraction(handleCastleBookObjects);
+  api.onObjectInteraction(handleCastleKeyObjects);
+  api.onItemOnObject(handleCastleBookOnObject, { noted: false });
+  api.onItemOnObject(handleCastleKeyItemOnObject, { noted: false });
+  api.onItemOnItem(handleCastleKeyItemOnItem);
+  api.onCustomEvent("player:widget-action", handleCastleBookWidgetAction);
+  api.onGroundItemPickup(handleCastleBookPickup);
+  api.onGroundItemPickup(handleCastleKeyPickup);
   api.onObjectRoute(routeCastleDoorEnter);
   api.onObjectInteraction(handleCastleBasinPuzzle);
   api.onObjectInteraction(handleBasinAltar);
@@ -2866,6 +3776,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerProcess(processSlepeIvan);
   api.onPlayerProcess(processSlepeManor);
   api.onPlayerProcess(processSlepeProgress);
+  api.onPlayerProcess(processCastleDialogueTransition);
   api.onPlayerLogin(handleSiegeLogin);
   api.onPlayerLogin(syncHideoutIvan);
   api.onPlayerLogin(syncSlepeIvan);
@@ -2875,6 +3786,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogin(resumeHideoutEscape);
   api.onPlayerLogin(syncCastleShrine);
   api.onPlayerLogin(syncCastleRoomOnLogin);
+  api.onPlayerLogout(cleanupCastleActors);
   api.onPlayerLogout(handleSiegeLogout);
   api.onPlayerLogout(hideoutDefense.onPlayerLogout);
   api.onPlayerLogout(cleanupSlepeIvan);
@@ -2882,6 +3794,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onNpcDeath(handleWyrdDeath);
   api.onNpcDeath(handleSlepeManorDeath);
   api.onNpcDeath(handlePaterdomusMonkDeath);
+  api.onNpcDeath(handleCastleNpcDeath);
   api.persistAttribute(HIDEOUT_DEFENSE_COMPLETE);
   api.onNpcHitModify(handleSiegeDrakanHit);
   api.persistAttribute(WYRD_DEFEATED_ATTRIBUTE);
@@ -2893,6 +3806,10 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.persistAttribute(PREP_COMPLETE);
   api.persistAttribute(THRONE_PUZZLE_ATTRIBUTE);
   api.persistAttribute(CASTLE_ROOM_ATTRIBUTE);
+  api.persistAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE);
+  api.persistAttribute(CASTLE_STORY_ATTRIBUTE);
+  api.persistAttribute(CASTLE_BOOK_PUZZLE_ATTRIBUTE);
+  api.persistAttribute(CASTLE_TRANSITION_PENDING_ATTRIBUTE);
   api.onPlayerLogin(syncThroneBustsOnLogin);
   api.persistAttribute(BASIN_PUZZLE_ATTRIBUTE);
   api.persistAttribute(SOLID_KEY_ATTRIBUTE);

@@ -847,7 +847,20 @@ test('Blood Moon Sarius spawn is reachable from the Sins boat shore landing', ()
 
 test('Blood Moon shrine adds the Castle Drakan medallion destination and the real portal starts its chapter', () => {
   const { api, handlers } = mockApi();
+  const spawned = [];
+  let castleVeliafHook;
+  api.spawnNpc = spec => {
+    const npc = { ...spec, setScriptedMovement() {}, setMultiCombat() {}, getHitpoints: () => 345 };
+    spawned.push(npc);
+    return npc;
+  };
+  api.removeNpc = () => {};
   api.sendMultiChatboxPrompt = (_player, _title, ...options) => { api.lastPrompt = options; };
+  const registerNpcInteraction = api.onNpcInteraction;
+  api.onNpcInteraction = (target, actions) => {
+    registerNpcInteraction(target, actions);
+    if (target === 'Veliaf Hurtz' && actions['Talk-to']?.name === 'talkQuestNpc') castleVeliafHook = actions['Talk-to'];
+  };
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
   require('../plugins/quests/quests/SinsOfTheFather.Quest')(api);
   const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
@@ -855,18 +868,22 @@ test('Blood Moon shrine adds the Castle Drakan medallion destination and the rea
   const quest = quests.filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
   const sins = quests.filter((entry) => entry.key === 'sins_of_the_father').at(-1);
   const attributes = new Map();
+  const varbits = new Map();
   let position;
   const player = {
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
-    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) }, {
+      get: (target, key) => target[key] ?? (() => {}),
+    }),
+    getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
     moveTo: location => { position = location; },
     sendMessage() {},
   };
   quest.setStage(player, 30);
+  sins.setStage(player, 999);
   attributes.set('quest.the_blood_moon_rises.slepe-story', { refineryComplete: true });
   attributes.set('quest.the_blood_moon_rises.castle-shrine-prayed', true);
-  sins.setStage(player, 999);
   const medallion = handlers.namedItemActions.get("Drakan's medallion").Teleport;
   assert.equal(medallion({ player, itemId: 22400 }), true);
   const option = api.lastPrompt.findIndex((entry, index) => index % 2 === 0 && entry === 'Castle Drakan.');
@@ -877,6 +894,22 @@ test('Blood Moon shrine adds the Castle Drakan medallion destination and the rea
   const enter = handlers.objects.find(handler => handler.name === 'enterVampyriumPortal');
   assert.equal(enter({ player, objectId: 61221, definition: { id: 61221 }, location: { x: 2323, y: 7370, z: 0 }, option: 'Enter', handled: false }), true);
   assert.equal(quest.getStage(player), 40);
+  assert.equal(varbits.get(15464), 70, 'the Castle arrival is the native QH chapter 70');
+  for (const handler of handlers.custom.get('npc-dialogue:action')) handler({ player, stepId: 'ikSyAR' });
+  assert.equal(varbits.get(15464), 72, 'the portal arrival advances the native Castle chapter to 72');
+  const castleSpawnIds = spawned.map(npc => npc.id).filter(id => [15867, 16213, 16217, 16223].includes(id));
+  assert.deepEqual(castleSpawnIds.sort(), [15867, 16213, 16217, 16223],
+    'the owner receives the cache-backed Castle guide and first puzzle-room enemies');
+  assert.ok(spawned.every(npc => npc.owner === player && npc.ownerOnly));
+  const veliaf = spawned.find(npc => npc.id === 15867);
+  const talkToVeliaf = () => castleVeliafHook({ player, npc: veliaf, npcId: 15867,
+    definition: { getName: () => 'Veliaf Hurtz' }, handled: false });
+  attributes.set('quest.the_blood_moon_rises.castle-throne-puzzle', { keyClaimed: true });
+  assert.equal(talkToVeliaf(), true);
+  assert.equal(varbits.get(15464), 72, 'the half-moon key alone does not skip the remaining castle puzzles');
+  attributes.set('quest.the_blood_moon_rises.gallery-chest', { solved: true, key: true });
+  assert.equal(talkToVeliaf(), true);
+  assert.equal(varbits.get(15464), 74, 'Veliaf only advances the Castle chapter after the emblem-gallery key is earned');
 
   // Once the portal has started the Castle chapter, the medallion remains a
   // legitimate way back after leaving or reconnecting. Re-entering must not
@@ -1204,7 +1237,206 @@ test('Blood Moon Castle Drakan throne opens only after the ordered bust mechanis
   assert.deepEqual([15539, 15540, 15541, 15542].map((id) => varbits.get(id)), [1, 2, 2, 2],
     'the active lever positions survive the completed puzzle');
   action({ player, stepId: 'XqVfhB' });
-  assert.equal(quest.getStage(player), 45, 'the escape chapter advances only after claiming the key');
+  assert.equal(quest.getStage(player), 40, 'the escape chapter waits until the blood stockpile is destroyed');
+  attributes.set('quest.the_blood_moon_rises.castle-refiner', { destroyed: true });
+  action({ player, stepId: 'XqVfhB' });
+  assert.equal(quest.getStage(player), 45, 'the escape chapter advances after the stockpile is destroyed');
+});
+
+test('Blood Moon Castle gilded bookcase uses the eight House slots and places the full moon key in the secret room', () => {
+  const { api, handlers } = mockApi();
+  const ground = [];
+  let prompt;
+  let openedInterface = 0;
+  let removedInterface = false;
+  const slots = new Map();
+  api.getItemOnGroundManager = () => ({
+    getGroundItem: () => null,
+    registerLocation: (_player, item, location) => ground.push({ item, location }),
+  });
+  api.sendMultiChatboxPrompt = (_player, title, ...options) => { prompt = { title, options }; };
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  const items = new Map();
+  const inventory = {
+    contains: id => (items.get(id) ?? 0) > 0,
+    getFreeSlots: () => 28 - [...items.values()].reduce((sum, count) => sum + count, 0),
+    adds: (id, amount) => { items.set(id, (items.get(id) ?? 0) + amount); return true; },
+    deleteNumber: (id, amount) => { const count = items.get(id) ?? 0; if (count < amount) return false; items.set(id, count - amount); return true; },
+  };
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory, getUsername: () => 'bookpuzzle', sendMessage() {},
+    getPrivateArea: () => null,
+    getPacketSender: () => new Proxy({
+      sendVarbit: (id, value) => slots.set(id, value),
+      sendInterface: id => { openedInterface = id; },
+      sendInterfaceRemoval: () => { removedInterface = true; },
+    }, { get: (target, key) => target[key] ?? (() => {}) }),
+  };
+  quest.setStage(player, 40);
+  attributes.set('quest.the_blood_moon_rises.castle-native-stage', 78);
+  attributes.set('quest.the_blood_moon_rises.castle-story', { talkedToIvan: true,
+    defeated: ['library-venator'], bookPuzzleComplete: false, fullMoonKeyClaimed: false });
+  const northShelf = handlers.objects.find(handler => handler.name === 'handleCastleBookObjects');
+  assert.ok(northShelf, 'the Castle bookcase search handler is registered');
+  northShelf({ player, objectId: 61756, definition: { id: 61756, getName: () => 'Bookcase' },
+    location: { x: 2455, y: 7395, z: 0 }, option: 'Search', handled: false });
+  assert.equal(items.get(33767), 1, 'the north shelf yields the gilded book');
+  northShelf({ player, objectId: 61757, definition: { id: 61757, getName: () => 'Bookcase' },
+    location: { x: 2458, y: 7388, z: 0 }, option: 'Search', handled: false });
+  assert.equal(items.get(33768), 1, 'a searched shelf in the library yields the Vampyric Houses book');
+  const useBook = handlers.itemOnObject.find(handler => handler.name === 'handleCastleBookOnObject');
+  assert.ok(useBook);
+  useBook({ player, itemId: 33767, objectId: 61692, definition: { id: 61692 },
+    location: { x: 2451, y: 7391, z: 0 }, handled: false });
+  assert.equal(items.get(33767), 0, 'placing the gilded book consumes that copy');
+  assert.equal(slots.get(15525), 1, 'the native loc morph shows the case with its books inserted');
+  assert.match(prompt.title, /alphabetically/);
+  prompt.options[1]();
+  assert.equal(openedInterface, 962, 'the actual Castle bookcase widget opens after the player confirms');
+  const blockedPassage = { player, objectId: 61615, definition: { id: 61615 },
+    location: { x: 2455, y: 7386, z: 0 }, option: 'Enter', handled: false };
+  northShelf(blockedPassage);
+  assert.equal(blockedPassage.handled, true, 'the closed passage consumes the premature Enter action');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').bookPuzzleComplete, false,
+    'the passage stays shut until the eight books are ordered');
+  handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-book-puzzle').open, false,
+    'relogin closes the widget without losing its book order');
+  northShelf({ player, objectId: 61692, definition: { id: 61692, getName: () => 'Gilded bookcase' },
+    location: { x: 2451, y: 7391, z: 0 }, option: 'Search', handled: false });
+  prompt.options[1]();
+  const widget = handlers.custom.get('player:widget-action').find(handler => handler.name === 'handleCastleBookWidgetAction');
+  assert.ok(widget);
+  const varbits = [15550, 15551, 15552, 15553, 15554, 15555, 15556, 15557];
+  for (let index = 0; index < 8; index++) {
+    if (slots.get(varbits[index]) === index + 1) continue;
+    const other = varbits.findIndex(id => slots.get(id) === index + 1);
+    for (const slot of [index, other]) widget({ player, packet: { type: 'widget_action', groupId: 962, slot }, handled: false });
+  }
+  assert.deepEqual(varbits.map(id => slots.get(id)), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.equal(slots.get(15525), 2, 'the cache varbit reveals the solved bookcase and passage');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').bookPuzzleComplete, true);
+  assert.equal(removedInterface, true, 'solving closes the widget');
+  assert.equal(ground.length, 1);
+  assert.equal(ground[0].item.getId(), 33724);
+  assert.deepEqual([ground[0].location.getX(), ground[0].location.getY(), ground[0].location.getZ()], [2433, 7416, 0]);
+  handlers.ground.find(handler => handler.name === 'handleCastleBookPickup')({ player, groundItemId: 33724,
+    location: { x: 2433, y: 7416, z: 0 } });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').fullMoonKeyClaimed, true);
+});
+
+test('Blood Moon Castle new-moon key requires the corpse syringe, weapon statues, and crest fireplace', () => {
+  const { api, handlers } = mockApi();
+  const ground = [];
+  let prompt;
+  const varbits = new Map();
+  api.getItemOnGroundManager = () => ({
+    getGroundItem: () => null,
+    registerLocation: (_player, item, location) => ground.push({ item, location }),
+  });
+  api.sendMultiChatboxPrompt = (_player, title, ...options) => { prompt = { title, options }; };
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attrs = new Map();
+  const items = new Map();
+  const inventory = {
+    contains: id => (items.get(id) ?? 0) > 0,
+    getFreeSlots: () => 28 - [...items.values()].reduce((sum, count) => sum + count, 0),
+    adds: (id, amount) => { items.set(id, (items.get(id) ?? 0) + amount); return true; },
+    deleteNumber: (id, amount) => { const count = items.get(id) ?? 0; if (count < amount) return false; items.set(id, count - amount); return true; },
+  };
+  const player = {
+    getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getInventory: () => inventory, getUsername: () => 'newmoon', getPrivateArea: () => null,
+    sendMessage() {}, getPacketSender: () => new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) },
+      { get: (target, key) => target[key] ?? (() => {}) }),
+  };
+  quest.setStage(player, 40);
+  attrs.set('quest.the_blood_moon_rises.castle-native-stage', 74);
+  attrs.set('quest.the_blood_moon_rises.castle-story', { defeated: ['kitchen-sanguidae', 'first-venator'] });
+  const objects = handlers.objects.find(handler => handler.name === 'handleCastleKeyObjects');
+  const onObject = handlers.itemOnObject.find(handler => handler.name === 'handleCastleKeyItemOnObject');
+  const onItem = handlers.itemOnItem.find(handler => handler.name === 'handleCastleKeyItemOnItem');
+  const pickup = handlers.ground.find(handler => handler.name === 'handleCastleKeyPickup');
+  const login = handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin');
+  assert.ok(objects && onObject && onItem && pickup && login);
+  const click = (id, x, y, option = 'Search') => {
+    const event = { player, objectId: id, definition: { id, getName: () => 'Searchable crate' },
+      location: { x, y, z: 0 }, option, handled: false };
+    objects(event);
+    assert.equal(event.handled, true, `Castle key object ${id} at ${x},${y} was handled`);
+    return event;
+  };
+  const confirm = () => {
+    assert.equal(prompt.options[0], 'Yes.');
+    prompt.options[1]();
+  };
+  const useOn = (itemId, id, x, y) => {
+    const event = { player, itemId, objectId: id, definition: { id }, location: { x, y, z: 0 }, handled: false };
+    onObject(event);
+    assert.equal(event.handled, true, `item ${itemId} on Castle object ${id} was handled`);
+  };
+  const useTogether = (usedItemId, usedWithItemId) => onItem({ player, usedItemId, usedWithItemId, handled: false });
+  login({ player });
+  assert.equal(ground[0].item.getId(), 33752, 'the defeated kitchen sanguidae leaves the syringe barrel to pick up');
+  pickup({ player, groundItemId: 33752, location: { x: 2315, y: 7418, z: 0 } });
+  inventory.adds(33752, 1);
+  click(61751, 2315, 7408);
+  assert.equal(items.get(33756), 1, 'the south-east kitchen crate yields the venator stomach');
+  click(61719, 2308, 7411, 'Inspect');
+  assert.equal(items.get(33747), undefined, 'the sink asks before removing its plug');
+  confirm();
+  assert.equal(items.get(33747), 1, 'inspecting the kitchen sink yields its plug');
+  useOn(33747, 61722, 2356, 7400);
+  click(61722, 2356, 7400, 'Turn on');
+  assert.equal(varbits.get(15537), 1, 'turning the tap does not happen before confirmation');
+  confirm();
+  click(61722, 2356, 7400, 'Take pipe');
+  assert.equal(items.get(33748), undefined, 'the broken pipe requires confirmation');
+  confirm();
+  assert.equal(items.get(33748), 1, 'the plugged sink collapses and yields its broken pipe');
+  useOn(33748, 61726, 2360, 7403);
+  assert.equal(items.get(33749), 1, 'the pipe retrieves the sharp knife from behind the cabinet');
+  click(61751, 2358, 7397);
+  assert.equal(items.get(33753), 1, 'the larder crate supplies the syringe plunger');
+  useOn(33749, 61727, 2311, 7417);
+  click(61727, 2311, 7417, 'Inspect');
+  assert.equal(items.get(33750), 1, 'the opened venator corpse yields tongs');
+  useOn(33750, 61719, 2308, 7411);
+  assert.equal(items.get(33751), 1, 'the tongs retrieve the needle from the kitchen sink');
+  useTogether(33752, 33753);
+  assert.equal(items.get(33754), 1, 'the three parts assemble into an empty syringe');
+  useTogether(33754, 33756);
+  assert.equal(items.get(33755), 1, 'the syringe draws blood from the stomach');
+  useOn(33755, 61683, 2308, 7415);
+  click(61683, 2308, 7415);
+  assert.equal(items.get(33734), undefined, 'the unlocked chest waits for the yes choice');
+  confirm();
+  assert.equal(items.get(33734), 1, 'the unlocked kitchen chest yields the left crest half');
+  click(61741, 2579, 7382);
+  assert.equal(prompt.options.length, 6, 'the armoury rack offers the cache weapons through a selection menu');
+  prompt.options[1]();
+  prompt.options[3]();
+  prompt.options[3]();
+  prompt.options[5]();
+  useOn(33759, 61743, 2577, 7380);
+  useOn(33760, 61744, 2569, 7386);
+  useOn(33760, 61745, 2569, 7380);
+  useOn(33757, 61742, 2565, 7386);
+  assert.deepEqual([15545, 15546, 15547, 15548].map(id => varbits.get(id)), [1, 1, 1, 1],
+    'the four cache varbits mark the correct mirrored weapons in place');
+  click(61685, 2570, 7380);
+  assert.equal(items.get(33735), 1, 'the completed statue arrangement unlocks the right crest half');
+  useTogether(33734, 33735);
+  assert.equal(items.get(33736), 1, 'the two crest halves combine');
+  useOn(33736, 61665, 2358, 7386);
+  click(61665, 2358, 7386);
+  assert.equal(items.get(33728), 1, 'the study fireplace releases the new moon key only after the crest is placed');
 });
 
 test('Blood Moon Castle Enter doors cross to the opposite side of their actual wall', () => {
@@ -1215,14 +1447,16 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   const attributes = new Map();
   const moved = [];
   const varbits = new Map();
+  const inventoryItems = new Set();
   const player = {
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
-    getInventory: () => ({ contains: () => false }),
+    getInventory: () => ({ contains: id => inventoryItems.has(id) }),
     getPacketSender: () => new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) }, {
       get: (target, key) => target[key] ?? (() => {}),
     }),
     moveTo: (location) => moved.push([location.getX(), location.getY(), location.getZ()]),
+    sendMessage() {},
   };
   quest.setStage(player, 40);
   const enter = handlers.objects.find((handler) => handler.name === 'handleCastleDoorEnter');
@@ -1260,6 +1494,12 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   assert.deepEqual(moved, [[2314, 7386, 0]], 'a south-side click exits beyond the full clipped wall');
   enter({ ...event, definition: { getName: () => 'Half moon door' }, handled: false });
   assert.equal(moved.length, 1, 'keyed doors are not opened by the generic passage handler');
+  const lockedFullMoonDoor = { player, objectId: 61590, option: 'Enter',
+    definition: { id: 61590, getName: () => 'Door' }, object: { getFace: () => 1 },
+    location: { x: 2388, y: 7383, z: 0 }, sourceLocation: { x: 2388, y: 7382, z: 0 }, handled: false };
+  enter(lockedFullMoonDoor);
+  assert.equal(lockedFullMoonDoor.handled, true, 'the full moon door rejects players without the full moon key');
+  assert.equal(moved.length, 1);
 
   const enterPairedDoor = (id, x, y, face, source) => {
     const paired = {
@@ -1552,6 +1792,7 @@ test('Blood Moon refiner requires the four correct chemical vials totalling 53 b
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => inventory,
+    getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
     sendMessage() {},
   };
