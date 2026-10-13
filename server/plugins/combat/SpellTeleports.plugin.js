@@ -23,6 +23,13 @@ const REDIRECTED_HOUSE_TABLETS = new Map([
   ["rellekka teleport", [2670, 3632, 0]],
   ["brimhaven teleport", [2757, 3179, 0]],
 ]);
+// Clue teleport scrolls use the cache option "Teleport" rather than "Break".
+// The Nardah scroll lands beside the town's carpet merchant (Wiki: Nardah,
+// near the Magic carpet); that is the nearest supported walking arrival for
+// routes which continue north-east to the Ancient Vault.
+const SCROLL_TELEPORTS = new Map([
+  ["nardah teleport", [3401, 2918, 0]],
+]);
 
 /**
  * Teleport tablets share their spell's name ("Varrock teleport") and destination;
@@ -34,7 +41,8 @@ function breakTablet(event) {
   const option = event.option?.toLowerCase() ?? "";
   const name = core.ItemDefinition.forId(event.itemId)?.getName?.()?.toLowerCase() ?? "";
   const house = name === HOUSE_TABLET;
-  if (house ? !HOUSE_TABLET_OPTIONS.has(option) : option !== "break") return;
+  const scroll = SCROLL_TELEPORTS.get(name);
+  if (house ? !HOUSE_TABLET_OPTIONS.has(option) : (scroll ? option !== "teleport" : option !== "break")) return;
   let destination = null;
   let onArrival;
   if (house) {
@@ -44,7 +52,8 @@ function breakTablet(event) {
     onArrival = request.onArrival ?? undefined;
     event.handled = true;
   } else {
-    destination = SpellTeleports.getTeleportDestinations().find((spell) => spell.name === name)?.destination;
+    destination = scroll ? new core.Location(...scroll) :
+      SpellTeleports.getTeleportDestinations().find((spell) => spell.name === name)?.destination;
     if (!destination) {
       const tile = REDIRECTED_HOUSE_TABLETS.get(name);
       if (tile) destination = new core.Location(...tile);

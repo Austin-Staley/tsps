@@ -168,7 +168,8 @@ SpellTeleports.register({
     Location: require("../dist/game/model/Location").Location,
     ItemDefinition: { forId: (id) => ({ getName: () => (
       id === ItemIdentifiers.VARROCK_TELEPORT ? "Varrock teleport" :
-      id === ItemIdentifiers.RELLEKKA_TELEPORT ? "Rellekka teleport" : "Teleport to house"
+      id === ItemIdentifiers.RELLEKKA_TELEPORT ? "Rellekka teleport" :
+      id === ItemIdentifiers.NARDAH_TELEPORT ? "Nardah teleport" : "Teleport to house"
     ) }) },
     TeleportHandler: {
       checkReqs: () => allowTeleport,
@@ -221,6 +222,25 @@ test("a redirected Rellekka house tablet goes to the portal outside the Fremenni
     [2670, 3632, 0]
   );
   assert.equal(teleports[0].type, "TELE_TAB");
+});
+
+test("a Nardah scroll uses its Teleport action and consumes only after teleport starts", () => {
+  teleports.length = 0;
+  allowTeleport = true;
+  const player = tabletHolder(1);
+  player.items[0] = ItemIdentifiers.NARDAH_TELEPORT;
+  const event = { player, itemId: ItemIdentifiers.NARDAH_TELEPORT, option: "Teleport", handled: false };
+  breakTablet(event);
+  assert.equal(event.handled, true);
+  assert.equal(teleports.length, 1);
+  assert.deepEqual(
+    [teleports[0].destination.getX(), teleports[0].destination.getY(), teleports[0].destination.getZ()],
+    [3401, 2918, 0]
+  );
+  assert.equal(teleports[0].type, "TELE_TAB");
+  assert.equal(player.items.length, 1, "scroll is consumed two ticks into the teleport");
+  teleports[0].onMiddle();
+  assert.equal(player.items.length, 0);
 });
 
 test("a refused tablet (teleblock, deep Wilderness, busy) is not used up", () => {
