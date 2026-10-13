@@ -145,6 +145,7 @@ module.exports = function registerDesertTreasureII(api) {
   const LASSAR_KETLA_WORKBENCH = 48247; // Cache transform of the placed null loc 49486.
   let lassarPuddlesInstalled = false;
   const LASSAR_TELEPORTER_VARBITS = [15088, 15089, 15091, 15092, 15093, 15090, 15094];
+  const lassarShadowIdols = new WeakMap();
   const LASSAR_SCHEMATIC_VARBITS = [
     ["blockerDesigned", 15082], ["idolSchematic", 15083], ["animaSchematic", 15084],
     ["torchSchematic", 15085], ["superiorTorchSchematic", 15086], ["perfectTorchSchematic", 15087],
@@ -3341,12 +3342,30 @@ module.exports = function registerDesertTreasureII(api) {
     sender.sendVarbit(15162, state.inShadow ? 1 : 0);
     sender.sendVarbit(15064, Math.max(0, Math.min(100, Number(state.sanity ?? (state.entered ? 100 : 0)) || 0)));
   }
+  function syncLassarShadowIdol(p, state) {
+    const sender = p.getPacketSender?.();
+    if (!sender?.sendObject || !sender?.sendObjectRemoval) return;
+    const current = lassarShadowIdols.get(p);
+    if (state.inShadow && state.idolPlaced) {
+      if (current) return;
+      // The cache only contains the material-world idol placement; its shadow
+      // counterpart is a scene change. Send the cache Use variant to this
+      // player's scene so the normal object menu can restore sanity.
+      const idol = new api.core.GameObject(48216, new api.core.Location(2435, 6415, 0), 22, 0, null);
+      sender.sendObject(idol);
+      lassarShadowIdols.set(p, idol);
+    } else if (current) {
+      sender.sendObjectRemoval(current);
+      lassarShadowIdols.delete(p);
+    }
+  }
   function handleLassarProcess({ player: p }) {
     if (p && stage(p) > 0) syncNativeProgress(p);
     if (!p || p.isPlayerBot?.() === true || stage(p) !== S.WHISPERER) return;
     ensureLassarPuddleUse();
     const lassarState = p.getAttribute(LASSAR) ?? {};
     ensureLassarIntroItems(p, lassarState);
+    syncLassarShadowIdol(p, lassarState);
     const position = p.getLocation?.();
     if (lassarState.cameTo && position
       && Math.abs(position.getX?.() - 2648) <= 16 && Math.abs(position.getY?.() - 6442) <= 16
@@ -6363,7 +6382,7 @@ module.exports = function registerDesertTreasureII(api) {
       return false;
     }
     if (state.inShadow && visibleId === 48216 && option
-      && (option === "restore sanity" || option === "touch" || option === "activate")) {
+      && (option === "use" || option === "restore sanity" || option === "touch" || option === "activate")) {
       if (!state.idolPlaced) { p.sendMessage("The revitalising idol has not been placed in Lassar yet."); return true; }
       const sanity = Math.max(0, Math.min(100, Number(state.sanity ?? 100)));
       setLassar(p, { ...state, sanity: Math.min(100, sanity + 50) });

@@ -4795,6 +4795,7 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
   const { api: base, handlers: baseHandlers } = mockApi();
   const objectHooks = [], objectRouteHooks = [], itemOnObjectHooks = [], itemActionHooks = [], itemOnItemHooks = [], groundPickupHooks = [], actionHooks = [], choiceHooks = [], doorToggleHooks = [], interactions = [], transcripts = [], groundSpawns = [], playerProcesses = [], spawnedNpcs = [], prompts = [];
   const counts = new Map();
+  const lassarObjectPackets = [];
   const varbits = new Map();
   const core = {
     ...base.core,
@@ -4842,6 +4843,7 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
       }),
       getPacketSender: () => new Proxy({}, { get: (_target, key) => key === 'sendVarbit'
         ? (id, value) => varbits.set(id, value)
+        : key === 'sendObject' || key === 'sendObjectRemoval' ? (object) => lassarObjectPackets.push({ key, object })
         : () => {} }),
       getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: () => {} }) }),
       getLocation() { return this.location; },
@@ -5039,8 +5041,26 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
       'the schematic is placed on the reachable tile beside the blocking cache crate');
     assert.equal(groundSpawns.at(-1)[2].getY(), 6422);
     attrs.set('desert-treasure-ii:lassar', {
-      ...attrs.get('desert-treasure-ii:lassar'), teleporters: [true, true, true, true, true, true, true], idolPlaced: true,
+      ...attrs.get('desert-treasure-ii:lassar'), teleporters: [true, true, true, true, true, true, true], idolPlaced: true, sanity: 1,
     });
+    playerProcesses[0]({ player });
+    const shadowIdol = lassarObjectPackets.at(-1);
+    assert.equal(shadowIdol.key, 'sendObject');
+    assert.equal(shadowIdol.object.id, 48216);
+    assert.deepEqual([shadowIdol.object.location.x, shadowIdol.object.location.y, shadowIdol.object.location.z], [2435, 6415, 0],
+      'the placed idol appears at the matching shadow-side teleporter tile');
+    assert.equal(interact({ player, objectId: 48216, definition: { id: 48216 }, location: { x: 2435, y: 6415, z: 0 }, option: 'Use' }), true,
+      'the cache Use action restores sanity from the placed idol');
+    assert.equal(attrs.get('desert-treasure-ii:lassar').sanity, 50,
+      'the active Shadow Realm tick drains one sanity before the idol restores 50');
+    const beforeRepeatedSync = lassarObjectPackets.length;
+    playerProcesses[0]({ player });
+    assert.equal(lassarObjectPackets.length, beforeRepeatedSync, 'the scene object is sent only once per shadow visit');
+    const idolState = attrs.get('desert-treasure-ii:lassar');
+    attrs.set('desert-treasure-ii:lassar', { ...idolState, inShadow: false });
+    playerProcesses[0]({ player });
+    assert.equal(lassarObjectPackets.at(-1).key, 'sendObjectRemoval', 'the shadow-only object is removed when leaving the realm');
+    attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), inShadow: true });
     assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.BASIC_SHADOW_TORCH,
       objectId: core.ObjectIdentifiers.DOORS_22, location: { x: 2424, y: 6439, z: 0 } }), true,
     'the eastern residential barrier accepts the torch only after the idol and final teleporter are ready');
