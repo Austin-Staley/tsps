@@ -3430,7 +3430,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (progress >= 76 && room === CASTLE_ROOM.IVAN_ROOM) {
       if (!story.defeated.includes("library-venator"))
         spawnCastleActor(player, "library-venator", CASTLE_NPC.VENATOR, [2455, 7391], true);
-      if (story.defeated.includes("library-venator") && !story.talkedToIvan)
+      if (story.defeated.includes("library-venator") && !story.bookPuzzleComplete)
         spawnCastleActor(player, "ivan-library", CASTLE_NPC.IVAN_LIBRARY, [2455, 7389]);
       else removeCastleActor(player, "ivan-library");
     } else {
@@ -3482,7 +3482,6 @@ module.exports = function registerTheBloodMoonRises(api) {
     const progress = Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70;
     const story = castleStory(player);
     let variant = null;
-    let transition = null;
     if (npcName === "veliaf hurtz" && owner.key === "veliaf-gallery") {
       if (!player.getAttribute(GALLERY_CHEST_ATTRIBUTE)?.key) {
         player.sendMessage("The emblem-gallery chest is still locked.");
@@ -3507,18 +3506,11 @@ module.exports = function registerTheBloodMoonRises(api) {
         : story.talkedToIvan
           ? "escape-from-castle-drakan-talking-to-ivan-again"
           : "escape-from-castle-drakan-talking-to-ivan-after-defeating-the-venator";
-      if (!story.talkedToIvan) transition = () => {
-        player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, talkedToIvan: true });
-        setCastleNativeStage(player, 78);
-        removeCastleActor(player, "ivan-library");
-        syncCastleActors(player);
-      };
     }
     if (!variant) return false;
     const started = startTranscript(api, player, event.npcId, PAGE, variant);
     if (!started) return false;
     event.handled = true;
-    transition?.();
     return true;
   }
 
@@ -3808,6 +3800,22 @@ module.exports = function registerTheBloodMoonRises(api) {
   function onBloodMoonDialogueLine(request) {
     const player = request?.player;
     if (!player) return;
+    if (stage(player) === STAGE.CASTLE &&
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.IVAN_ROOM &&
+      request.step?.player && request.text === "Let's go." &&
+      !castleStory(player).talkedToIvan && castleStory(player).defeated.includes("library-venator")) {
+      request.after = () => {
+        const story = castleStory(player);
+        if (stage(player) !== STAGE.CASTLE ||
+          Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.IVAN_ROOM ||
+          story.talkedToIvan || !story.defeated.includes("library-venator")) return;
+        player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, talkedToIvan: true });
+        setCastleNativeStage(player, 78);
+        removeCastleActor(player, "ivan-library");
+        syncCastleActors(player);
+      };
+      return;
+    }
     if (stage(player) === STAGE.CASTLE && request.step?.speaker === "Veliaf Hurtz" &&
       request.text === "Hmm... Best we keep progressing on then." && !castleStory(player).talkedToVeliaf) {
       request.after = () => {

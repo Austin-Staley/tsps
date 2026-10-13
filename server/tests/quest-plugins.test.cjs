@@ -1341,6 +1341,57 @@ test('Blood Moon stage 76 separates the optional Gibbous and required library Ve
   assert.deepEqual([required.x, required.y, required.z], [2455, 7391, 0]);
 });
 
+test('Blood Moon keeps Ivan available after relog and advances only after his conversation is continued', () => {
+  const { api, handlers } = mockApi();
+  const spawned = [];
+  const removed = [];
+  api.spawnNpc = spec => {
+    const npc = { ...spec, getHitpoints: () => 345, setScriptedMovement() {}, setMultiCombat() {} };
+    spawned.push(npc);
+    return npc;
+  };
+  api.removeNpc = npc => removed.push(npc);
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.castle-native-stage', 76],
+    ['quest.the_blood_moon_rises.castle-room', 29],
+    ['quest.the_blood_moon_rises.castle-story', { defeated: ['library-venator'], talkedToIvan: false }],
+  ]);
+  const location = new api.core.Location(2455, 7390, 0);
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => location,
+    getUsername: () => 'ivan-transcript-fixture',
+    getDialogueManager: () => ({ startDialogues() {} }),
+    getPacketSender: () => new Proxy({ sendVarbit() {}, sendInterfaceRemoval() {} },
+      { get: (target, key) => target[key] ?? (() => {}) }),
+    sendMessage() {},
+  };
+  quest.setStage(player, 40);
+  handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
+  const ivan = spawned.find(npc => npc.id === 15845);
+  assert.ok(ivan, 'the defeated-library state restores a talkable Ivan after login');
+  const talk = handlers.npcInteractions.get('Ivan Strom')['Talk-to'];
+  assert.equal(talk({ player, npc: ivan, npcId: 15855,
+    definition: { getName: () => 'Ivan Strom' }, handled: false }), true);
+  assert.equal(quest.getStage(player), 40);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 76,
+    'starting the transcript does not advance the chapter before the player finishes it');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').talkedToIvan, false);
+
+  const line = handlers.custom.get('npc-dialogue:line').find(handler => handler.name === 'onBloodMoonDialogueLine');
+  const continued = { player, step: { player: "Let's go." }, text: "Let's go." };
+  line(continued);
+  assert.equal(typeof continued.after, 'function');
+  continued.after();
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').talkedToIvan, true);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 78);
+  assert.ok(removed.includes(ivan), 'Ivan leaves the library only after the final player line');
+});
+
 test('Blood Moon Gibbous lockbox requires its room clues and accepts code 426', () => {
   const { api, handlers } = mockApi();
   let prompt;
