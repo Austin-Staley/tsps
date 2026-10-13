@@ -730,7 +730,7 @@ test('Port Piscarilius spawns the cache-active Veos with both onward boat option
   assert.equal(actions[3], "Land's End");
 });
 
-test('Dragon Slayer II unlocks the northern Ungael exit from Vorkath completion on login', () => {
+test('Dragon Slayer II unlocks the northern Ungael exit when either awake Vorkath form dies', () => {
   const deaths = [];
   const logins = [];
   const { api: base } = mockApi();
@@ -751,10 +751,16 @@ test('Dragon Slayer II unlocks the northern Ungael exit from Vorkath completion 
     getPacketSender: () => ({ sendVarbit: (id, value) => values.push([id, value]) }),
     sendMessage() {},
   };
-  const npc = { getId: () => api.core.NpcIdentifiers.VORKATH_5 };
-  deaths[0]({ killer: player, npc });
-  assert.equal(attrs.get('dragon-slayer-ii:vorkath-defeated'), true);
-  assert.deepEqual(values.at(-1), [6108, 30], 'the cache morph exposes the northern climb-over after Vorkath dies');
+  for (const id of [api.core.NpcIdentifiers.VORKATH_4, api.core.NpcIdentifiers.VORKATH_5]) {
+    attrs.set('dragon-slayer-ii:vorkath-defeated', false);
+    deaths[0]({ killer: player, npc: { getId: () => id } });
+    assert.equal(attrs.get('dragon-slayer-ii:vorkath-defeated'), true, `Vorkath form ${id} records the victory`);
+    assert.deepEqual(values.at(-1), [6108, 30], 'the cache morph exposes the northern climb-over after Vorkath dies');
+  }
+  attrs.set('dragon-slayer-ii:vorkath-defeated', false);
+  deaths[0]({ killer: player, npc: { getId: () => api.core.NpcIdentifiers.VORKATH_4 + 20 } });
+  assert.equal(attrs.get('dragon-slayer-ii:vorkath-defeated'), false, 'an unrelated NPC cannot unlock the cave');
+  attrs.set('dragon-slayer-ii:vorkath-defeated', true);
   values.length = 0;
   logins.forEach((handler) => handler({ player }));
   assert.deepEqual(values, [[6108, 30]], 'the climb-over stays open after relogging');

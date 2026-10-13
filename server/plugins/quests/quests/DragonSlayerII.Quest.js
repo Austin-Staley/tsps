@@ -1751,7 +1751,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function handleNpcDeath({ killer, npc }) {
     if (killer && stage(killer) === S.KEYS && killer.getAttribute(ATTR_UNGAEL_TRIP)
-      && npc?.getId?.() === N.VORKATH_5) {
+      && [N.VORKATH_4, N.VORKATH_5].includes(npc?.getId?.())) {
       killer.setAttribute(ATTR_VORKATH_DEFEATED, true);
       syncUngaelExit(killer);
       killer.sendMessage("Vorkath falls. The cave to the north-west leads to the Dragonkin laboratory.");
