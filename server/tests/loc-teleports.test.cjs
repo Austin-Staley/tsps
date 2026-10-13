@@ -100,6 +100,22 @@ test("every entry is a placed loc with that option in the rev 241 cache, once pe
   assert.ok(!data.locs.some((entry) => /^(sailing_|spirittree|fossil_magic_mushtree)/.test(entry.name)));
 });
 
+test("the SOTE supply cave Exit returns to a walkable tile beside its surface entrance", () => {
+  const entry = data.locs.find(loc => loc.name === 'sote_supply_cave_exit');
+  const object = locAt(35845, 2200, 9671, 0);
+  const visit = explorer([2201, 9673, 0]);
+  const request = { player: visit.player, object, objectId: object.getId(), clickType: 1, handled: false };
+  hooks.object(request);
+  assert.equal(request.handled, true);
+  runTicks(visit, 1);
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], entry.to);
+  assert.ok(locAt(35846, 2200, 3262, 0), 'the cache surface entrance is paired with the exit');
+  const route = new RsmodRouteFinding((x, y, z, area) => core.RegionManager.getClipping(x, y, z, area));
+  const path = route.findRoute({ level: 0, srcX: 2200, srcY: 3261, srcSize: 1,
+    destX: 2194, destY: 3258, privateArea: null, moveNear: true });
+  assert.equal(path.success, true, 'the landing connects to the camp by ordinary walking');
+});
+
 test("the Well of Voyage enters Iban's temple beside its real well and door", () => {
   const entry = data.locs.find((loc) => loc.id === 4005);
   assert.deepEqual([entry.x, entry.y, entry.z, entry.op, entry.to], [2341, 9622, 0, 1, [2138, 4647, 1]]);
