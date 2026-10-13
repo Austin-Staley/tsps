@@ -2525,6 +2525,13 @@ module.exports = function registerSongOfTheElves(api) {
     if(order.join(",")===player.getAttribute(FALLS_ORDER))order.push(order.shift());
     player.setAttribute(FALLS_ORDER,order.join(","));
   }
+  function fallsInventoryCondition(event) {
+    const player=event?.player;
+    if(!player || currentChapter(player)!==10 || !event.pages?.some(entry=>entry.page===PAGE))return null;
+    if(event.stepId==="KjzbLu")return player.getInventory().getFreeSlots()<1;
+    if(event.stepId==="nAc44D")return player.getInventory().getFreeSlots()>0;
+    return null;
+  }
   function readFallsOde(event) {
     const player=event?.player;if(!player || currentChapter(player)!==10 || player.getInventory().getAmount(ItemIdentifiers.ODE_TO_ETERNITY)<1)return false;
     event.handled=true;player.setAttribute(FALLS_BOOK_READ,true);
@@ -2540,8 +2547,38 @@ module.exports = function registerSongOfTheElves(api) {
     else {inv.adds(FALLS_KEY,1);player.sendMessage("You find a small key among the crates.");}
     return true;
   }
+  function boardFallsRaft(event) {
+    const player=event?.player,loc=event?.location;
+    if (!player || currentChapter(player)!==10 || loc?.x!==2509 || loc?.y!==3493 || loc?.z!==0)return false;
+    event.handled=true;
+    // shortcut: Wiki route with cache-clear arrivals; animation timing awaits an OSRS capture.
+    player.moveTo(new Location(2512,3480,0));player.sendMessage("The log raft breaks up, leaving you on Hudon's island.");return true;
+  }
+  function routeFallsRope(event) {
+    const player=event?.player,loc=event?.object?.getLocation?.(),from=event?.sourceLocation;
+    if (!player || currentChapter(player)!==10 || !loc || from?.z!==0)return;
+    if(event.objectId===ObjectIdentifiers.ROCK && loc.getX()===2512 && loc.getY()===3468 && from.y>=3476 && from.y<=3482)
+      event.destination={x:2512,y:3476,z:0};
+    if(event.objectId===ObjectIdentifiers.DEAD_TREE_15 && loc.getX()===2512 && loc.getY()===3465 && from.y>=3465 && from.y<=3475)
+      event.destination={x:2513,y:3466,z:0};
+  }
+  function useFallsRope(event) {
+    const player=event?.player,loc=event?.location,from=player?.getLocation?.();
+    if(!player || currentChapter(player)!==10 || player.getInventory().getAmount(ItemIdentifiers.ROPE)<1 || loc?.z!==0)return false;
+    if(loc.x!==2512)return false;
+    if(event.objectId===ObjectIdentifiers.ROCK && loc.y===3468 && from.getY()>=3476 && from.getY()<=3482) {
+      player.moveTo(new Location(2513,3468,0));player.sendMessage("You use the rope to cross to the rock's island.");return true;
+    }
+    if(event.objectId===ObjectIdentifiers.DEAD_TREE_15 && loc.y===3465 && from.getY()>=3465 && from.getY()<=3475) {
+      player.moveTo(new Location(2511,3463,0));player.sendMessage("You lower yourself from the dead tree to the waterfall ledge.");return true;
+    }
+    return false;
+  }
   function guardFallsDoors(event) {
     const player=event?.player,loc=event?.location;
+    if(player && currentChapter(player)===10 && event.objectId===ObjectIdentifiers.DOOR_6 && loc?.x===2511 && loc?.y===3464 && loc?.z===0) {
+      event.handled=true;player.moveTo(new Location(2574,9864,0));player.sendMessage("You enter the Waterfall Dungeon.");return;
+    }
     if(!player || currentChapter(player)!==10 || loc?.z!==0 || ![[2568,9893],[2566,9901]].some(([x,y])=>loc.x===x&&loc.y===y))return;
     if(player.getInventory().getAmount(FALLS_KEY)>0)return;
     event.handled=true;player.sendMessage("The waterfall door is locked. Search the eastern chamber's crate for its key.");
@@ -3476,6 +3513,7 @@ module.exports = function registerSongOfTheElves(api) {
     },
   });
   api.onNpcDialogueVariant(selectVariant);
+  api.onNpcDialogueCondition(fallsInventoryCondition);
   api.onPlayerLogin(syncResistanceLogin);
   api.onPlayerLogin(resumeEarlyStory);
   api.onPlayerLogin(({ player }) => {
@@ -3569,6 +3607,10 @@ module.exports = function registerSongOfTheElves(api) {
   api.onObjectInteraction("Pillar", { Inspect: searchFallsPillar });
   api.onObjectInteraction("Crate", { Search: searchFallsKey });
   api.onCustomEvent("door:toggle", guardFallsDoors);
+  api.onObjectInteraction("Log raft", { Board: boardFallsRaft });
+  api.onObjectRoute(routeFallsRope);
+  api.onItemOnObject("Rope", "Rock", useFallsRope, {noted:false});
+  api.onItemOnObject("Rope", "Dead Tree", useFallsRope, {noted:false});
   api.persistAttribute(LATE_CHAPTER);
   api.persistAttribute(WAR_END_ARIANWYN_DONE);
   api.persistAttribute(VALLEY_FIGURE);
