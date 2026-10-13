@@ -1680,7 +1680,7 @@ test('Blood Moon Castle new-moon key requires the corpse syringe, weapon statues
   assert.ok(objects && onObject && onItem && pickup && login);
   const click = (id, x, y, option = 'Search') => {
     const event = { player, objectId: id, definition: { id, getName: () => 'Searchable crate' },
-      location: { x, y, z: 0 }, option, handled: false };
+      location: { x, y, z: 0 }, option: option.toLowerCase(), handled: false };
     objects(event);
     assert.equal(event.handled, true, `Castle key object ${id} at ${x},${y} was handled`);
     return event;
@@ -1833,7 +1833,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [2452, 7404, 0], [2466, 7421, 0], [2474, 7371, 0], [2468, 7408, 0],
     [2456, 7417, 0], [2482, 7403, 0], [2476, 7409, 0],
     [2386, 7405, 0], [2490, 7401, 0], [2371, 7395, 0], [2373, 7409, 0], [2387, 7366, 0], [2370, 7384, 0],
-    [2342, 7416, 0], [2371, 7370, 0], [2314, 7420, 0], [2324, 7403, 0], [2360, 7393, 0], [2309, 7420, 0],
+    [2342, 7416, 0], [2371, 7370, 0], [2314, 7420, 0], [2324, 7403, 0], [2361, 7394, 0], [2309, 7420, 0],
     [2327, 7381, 0], [2331, 7407, 0], [2327, 7390, 0], [2310, 7388, 0], [2357, 7380, 0],
     [2310, 7396, 0], [2342, 7372, 1], [2328, 7360, 1], [2305, 7392, 1], [2357, 7366, 1],
     [2434, 7364, 0], [2305, 7386, 1], [2452, 7364, 0], [2437, 7361, 0], [2458, 7362, 0],
@@ -1854,13 +1854,20 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
       (x === 2452 && y === 7404 && z === 0) || (x === 2468 && y === 7408 && z === 0) ||
       (x === 2328 && y === 7361 && z === 0) || (x === 2314 && y === 7371 && z === 1) ||
       (x === 2482 && y === 7403 && z === 0) ||
-      (x === 2469 && y === 7418 && z === 0);
+      (x === 2469 && y === 7418 && z === 0) || (x === 2361 && y === 7394 && z === 0);
     if (!isCapturedDoorArrival) assert.equal(RegionManager.blocked(new api.core.Location(x, y, z), null), false,
       `the paired-door landing ${x},${y},${z} is a clear floor tile`);
     assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) =>
       RegionManager.canMove(x, y, x + dx, y + dy, z, 1, 1, null)),
     `the paired-door landing ${x},${y},${z} has an adjacent movement edge`);
   }
+  const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
+  const larderRoute = new RsmodRouteFinding((x, y, z, area) => RegionManager.getClipping(x, y, z, area));
+  const sinkApproach = larderRoute.findRoute({ level: 0, srcX: 2361, srcY: 7394, srcSize: 1,
+    destX: 2357, destY: 7400, moveNear: true, maxWaypoints: 80, privateArea: null });
+  assert.equal(sinkApproach.success, true, 'the captured larder landing has a cache path to the sink approach');
+  assert.equal(sinkApproach.endX, 2357);
+  assert.equal(sinkApproach.endY, 7400);
   const enter = handlers.objects.find((handler) => handler.name === 'handleCastleDoorEnter');
   const route = handlers.routes.find((handler) => handler.name === 'routeCastleDoorEnter');
   const routeEvent = {
