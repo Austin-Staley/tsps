@@ -6432,24 +6432,11 @@ module.exports = function registerDesertTreasureII(api) {
       && ((x === 2417 && y === 6413) || (x === 2424 && y === 6439))) {
       const tentacles = { ...(state.tentacles ?? {}) };
       const key = `${x},${y}`;
-      if (tentacles[key]) { p.sendMessage("The shadow tentacles have already been burned away."); return true; }
-      if (!has(p, I.BASIC_SHADOW_TORCH)) { p.sendMessage("The tentacles only yield to the cleansing flame of the basic shadow torch."); return true; }
-      if (x === 2417 && !state.blockerPlaced) { p.sendMessage("First place the shadow blocker beside the furnace-house doors, where it can protect you from lost souls."); return true; }
-      if (x === 2424 && (!(state.teleporters ?? [])[6] || !state.idolPlaced || !tentacles["2417,6413"])) {
-        p.sendMessage("The eastern tentacle path is sealed until the idol is placed beside its teleporter and the western tentacles are burned.");
-        return true;
-      }
-      tentacles[key] = true;
-      const next = { ...state, tentacles };
-      if (x === 2417) {
-        const manager = api.getItemOnGroundManager?.();
-        if (manager?.registerLocation) registerLassarGroundItem(p, I.REVITALISING_IDOL_SCHEMATIC, 2677, 6422);
-        p.sendMessage("The shadow tentacles recoil from the torch. The newly accessible residential house contains a revitalising idol schematic.");
-      } else {
-        if (!has(p, I.SHADOW_KEY_2)) registerLassarGroundItem(p, I.SHADOW_KEY_2, 2416, 6443);
-        p.sendMessage("The second tentacle barrier burns away, revealing the blue shadow key beyond it.");
-      }
-      setLassar(p, next);
+      // The actual burn is the canonical torch-on-door item action handled by
+      // handleItemOnObject. Keep the normal Open click blocked until then, but
+      // let the shared Doors plugin open a gate whose burn is already saved.
+      if (tentacles[key]) return false;
+      p.sendMessage("Shadow tentacles cover the doors. Use the basic shadow torch on them.");
       return true;
     }
     if (state.inShadow && x === 2385 && y === 6427 && [48278, 48279, 48289, 48290].includes(visibleId)

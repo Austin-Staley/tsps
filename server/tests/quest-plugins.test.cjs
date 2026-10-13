@@ -5503,10 +5503,18 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     doorToggleHooks[0](blockedTentacleDoor);
     assert.equal(blockedTentacleDoor.handled, true,
       'the shared Doors handler prevents a tentacle barrier from opening as an ordinary door');
+    assert.equal(interact({ player, objectId: core.ObjectIdentifiers.DOORS_22,
+      definition: { id: core.ObjectIdentifiers.DOORS_22 }, location: { x: 2417, y: 6413, z: 0 }, option: 'Open' }), true,
+    'an ordinary Open click cannot substitute for using the torch on the tentacles');
+    assert.equal(attrs.get('desert-treasure-ii:lassar').tentacles?.['2417,6413'], undefined,
+      'opening the covered gate does not record a torch burn');
     assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.BASIC_SHADOW_TORCH,
       objectId: core.ObjectIdentifiers.DOORS_22, location: { x: 2417, y: 6413, z: 0 } }), true,
     'the basic shadow torch burns the cache-backed west residential barrier');
     assert.equal(attrs.get('desert-treasure-ii:lassar').tentacles['2417,6413'], true);
+    assert.equal(interact({ player, objectId: core.ObjectIdentifiers.DOORS_22,
+      definition: { id: core.ObjectIdentifiers.DOORS_22 }, location: { x: 2417, y: 6413, z: 0 }, option: 'Open' }), false,
+    'a burned gate passes its normal Open click to the shared Doors plugin');
     assert.equal(groundSpawns.at(-1)[1].getId(), core.ItemIdentifiers.REVITALISING_IDOL_SCHEMATIC,
       'burning the west barrier exposes the revitalising idol schematic');
     assert.equal(groundSpawns.at(-1)[2].getX(), 2676,

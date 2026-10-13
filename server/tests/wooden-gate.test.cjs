@@ -144,6 +144,28 @@ test('captured door portals can hand off before the ordinary door swing', () => 
   }
 });
 
+test('Lassar blue-key room door uses its cache Close variant after the unused loc id', async () => {
+  await initializeMapCollisionOnce();
+  const closed = CacheDefinitions.getObject(48274);
+  const open = CacheDefinitions.getObject(48276);
+  assert.equal(closed.name, 'Door');
+  assert.equal(closed.actions[0], 'Open');
+  assert.equal(open.name, 'Door');
+  assert.equal(open.actions[0], 'Close');
+
+  const h = buildHarness({ cacheObjects: new Map([[48274, closed], [48276, open]]) });
+  try {
+    h.place(48274, 2422, 6442, 3);
+    const operations = h.click(48274, 2422, 6442, 3, 'Open', 'Door');
+    assert.ok(operations.some(([action, id]) => action === 'deregister' && id === 48274),
+      'opening replaces the closed cache loc');
+    assert.ok(operations.some(([action, id]) => action === 'register' && id === 48276),
+      'opening uses the real Close-action partner, skipping actionless 48275');
+  } finally {
+    h.restore();
+  }
+});
+
 test('Ghorrock Prison’s keyed western gate uses its cache-supported self-opening swing', async () => {
   await initializeMapCollisionOnce();
   const id = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers.GATE_282;
