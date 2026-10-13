@@ -2634,9 +2634,11 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
     const quest = runtime.getRegisteredQuests().at(-1);
     const attrs = new Map();
+    let divingGear;
     const player = {
       getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
       getUsername: () => 'dt2-scar-test',
+      getEquipment: () => divingGear,
       isPlayer: () => true, getAsPlayer() { return this; },
       getLocation() { return { getX: () => this.location.x, getY: () => this.location.y }; },
       getInventory: () => ({
@@ -2648,6 +2650,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
       moveTo(location) { this.location = location; }, sendMessage(message) { (this.messages ??= []).push(message); },
       getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => pendingAirHits.push(...hits) }) }),
     };
+    divingGear = new core.Equipment(player);
     quest.setStage(player, 8);
     const guardian = interactions.find((entry) => entry.name === 'Catalytic Guardian').options['Talk-to'];
     guardian({ player, npcId: core.NpcIdentifiers.CATALYTIC_GUARDIAN });
@@ -3016,10 +3019,38 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     }
     assert.equal(attrs.get('desert-treasure-ii:scar-axon-room-complete'), true);
     assert.equal(varbits.get(15258), 1, 'all four axons must reach their matching terminals');
+    attrs.delete('desert-treasure-ii:scar-axon-terminals');
+    loginHooks.find(handler => handler.name === 'handleLogin')({ player });
+    assert.equal(varbits.get(15220), 4, 'login derives all four terminals from the saved earned room completion');
+    axonActions.Reset({ player, npc: axons[0] });
+    assert.equal(varbits.get(15220), 4, 'reset cannot undo a completed room');
+    objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_18, location: middle.tile(60, 20, 0) });
+    assert.deepEqual([player.location.x, player.location.y], [middle.getBaseX() + 62, middle.getBaseY() + 20],
+      'leaving the axon room crosses its blocked cache footprint');
+    objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_18, location: middle.tile(60, 20, 0) });
+    assert.equal(player.location.x, middle.getBaseX() + 59);
+    assert.equal(queues.add.filter((npc) => npc.__dt2ScarAxon).length, 4, 're-entry does not repeat completed axons');
+    objectHooks[0]({ player, objectId: core.ObjectIdentifiers.NEURAL_TELEPORTER_2, location: middle.tile(34, 34, 0) });
+    assert.deepEqual([player.location.x, player.location.y], [middle.getBaseX() + 92, middle.getBaseY() + 18]);
+    objectHooks[0]({ player, objectId: core.ObjectIdentifiers.NEURAL_TELEPORTER, location: middle.tile(93, 17, 0) });
+    assert.deepEqual([player.location.x, player.location.y], [middle.getBaseX() + 36, middle.getBaseY() + 35]);
+    player.moveTo(middle.tile(86, 19, 0));
+    divingGear.setItem(core.Equipment.WEAPON_SLOT, new core.Item(core.ItemIdentifiers.RUNE_CROSSBOW, 1));
+    objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_19, location: middle.tile(86, 20, 0) });
+    assert.equal(player.location.y, middle.getBaseY() + 19, 'a held weapon refuses underwater entry');
+    assert.notEqual(attrs.get('desert-treasure-ii:scar-nerve-room-two-active'), true);
+    divingGear.setItem(core.Equipment.WEAPON_SLOT, new core.Item(-1, 0));
     assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_19, location: middle.tile(86, 20, 0) }), true,
       'the broken nerve chamber opens after all axon terminals activate');
     assert.equal(attrs.get('desert-treasure-ii:scar-nerve-room-two-active'), true);
     assert.equal(varbits.get(15211), 100, 'the underwater room starts with full oxygen');
+    attrs.set('desert-treasure-ii:scar-nerve-room-two-air', 40);
+    player.moveTo(middle.tile(83, 37, 0));
+    middle.process(player);
+    assert.equal(varbits.get(15211), 100, 'walking into the actionless cache bubble replenishes oxygen');
+    middle.process(player);
+    assert.equal(varbits.get(15211), 100, 'standing inside a bubble keeps oxygen replenished');
+
     assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.AIR_BUBBLE, location: middle.tile(84, 25, 0) }), true);
     assert.equal(varbits.get(15211), 100, 'air bubbles restore oxygen while underwater');
     const roomNerves = [

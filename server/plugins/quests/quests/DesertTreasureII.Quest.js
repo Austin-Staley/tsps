@@ -949,13 +949,19 @@ module.exports = function registerDesertTreasureII(api) {
       const cycle = api.core.World.getProcessCycle();
       if (cycle === this.lastProcessCycle) return;
       this.lastProcessCycle = cycle;
-      const air = Math.max(0, (Number(this.questPlayer.getAttribute(SCAR_NERVE_ROOM_TWO_AIR)) || 0) - 1);
+      const location = this.questPlayer.getLocation();
+      const x = location.getX() - this.getBaseX() + 1696;
+      const y = location.getY() - this.getBaseY() + 6400;
+      const atBubble = SCAR_NERVE_AIR_BUBBLES.some(([bubbleX, bubbleY]) =>
+        x >= bubbleX && x < bubbleX + 2 && y >= bubbleY && y < bubbleY + 2);
+      const air = atBubble ? 100 : Math.max(0, (Number(this.questPlayer.getAttribute(SCAR_NERVE_ROOM_TWO_AIR)) || 0) - 1);
       this.questPlayer.setAttribute(SCAR_NERVE_ROOM_TWO_AIR, air);
       this.questPlayer.getPacketSender().sendVarbit(15211, air);
       if (air > 0) return;
       this.questPlayer.setAttribute(SCAR_NERVE_ROOM_TWO_AIR, 100);
       this.questPlayer.getPacketSender().sendVarbit(15211, 100);
-      this.questPlayer.moveTo(this.tile(60, 20, 0));
+      this.questPlayer.setAttribute(SCAR_NERVE_ROOM_TWO_ACTIVE, false);
+      this.questPlayer.moveTo(this.tile(86, 19, 0));
       this.questPlayer.getCombat().getHitQueue().addPendingDamage([
         new api.core.HitDamage(5 + Math.floor(Math.random() * 6), api.core.HitMask.RED),
       ]);
@@ -1879,7 +1885,7 @@ module.exports = function registerDesertTreasureII(api) {
     const current = p.getAttribute(ATTR_SCAR_MAZE_TWO);
     if (current instanceof ScarMazeTwoArea && !current.isDestroyed()) {
       current.enter(p);
-      p.moveTo(current.tile(60, 20, 0));
+      p.moveTo(current.tile(62, 20, 0));
       setScarVarbit(p, 24);
       return current;
     }
@@ -1887,7 +1893,7 @@ module.exports = function registerDesertTreasureII(api) {
     area.enter(p);
     p.setAttribute(ATTR_SCAR_MAZE_TWO, area);
     p.setAttribute(SCAR_MAZE_TWO_ENTERED, true);
-    p.moveTo(area.tile(60, 20, 0));
+    p.moveTo(area.tile(62, 20, 0));
     setScarVarbit(p, 24);
     p.getPacketSender().sendVarbit(15258, p.getAttribute(SCAR_AXON_ROOM_COMPLETE) ? 1 : 0);
     p.getPacketSender().sendVarbit(15259, p.getAttribute(SCAR_NERVE_ROOM_TWO_COMPLETE) ? 1 : 0);
@@ -2611,6 +2617,7 @@ module.exports = function registerDesertTreasureII(api) {
                       : p.getAttribute(SCAR_GUARDIAN_ACCEPTED) ? 6 : 2;
     setScarVarbit(p, value);
     p.getPacketSender().sendVarbit(SCAR_GROWTH_STEP_VARBIT, Number(p.getAttribute(SCAR_GROWTH_STEP)) || 0);
+    if (p.getAttribute(SCAR_AXON_ROOM_COMPLETE)) p.setAttribute(SCAR_AXON_TERMINALS, SCAR_AXON_PATHS.length);
     p.getPacketSender().sendVarbit(15220, Number(p.getAttribute(SCAR_AXON_TERMINALS)) || 0);
     p.getPacketSender().sendVarbit(15221, (p.getAttribute(SCAR_NERVE_ROOM_TWO_REPAIRED) ?? []).length);
     scarCatalystOrder(p);
@@ -3741,17 +3748,43 @@ module.exports = function registerDesertTreasureII(api) {
         return true;
       }
       if (objectId === O.PASSAGE_18 && scarMazeTwoTile.x === 1756 && scarMazeTwoTile.y === 6420) {
+        const maze = p.getAttribute(ATTR_SCAR_MAZE_TWO);
+        const sourceX = p.getLocation().getX() - maze.getBaseX() + 1696;
+        p.moveTo(maze.tile(sourceX < 1756 ? 62 : 59, 20, 0));
+        if (sourceX < 1756) return true;
         if (!p.getAttribute(SCAR_AXON_ROOM_COMPLETE)) {
-          spawnScarAxons(p, p.getAttribute(ATTR_SCAR_MAZE_TWO));
+          spawnScarAxons(p, maze);
           p.sendMessage("Guide the four abyssal axons into their matching elemental terminals by attacking them.");
         } else p.sendMessage("All four axons have reached their terminals.");
         return true;
       }
+      if (objectId === O.NEURAL_TELEPORTER_2 && scarMazeTwoTile.x === 1730 && scarMazeTwoTile.y === 6434) {
+        p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_TWO).tile(92, 18, 0));
+        return true;
+      }
+      if (objectId === O.NEURAL_TELEPORTER && scarMazeTwoTile.x === 1789 && scarMazeTwoTile.y === 6417) {
+        p.moveTo(p.getAttribute(ATTR_SCAR_MAZE_TWO).tile(36, 35, 0));
+        return true;
+      }
       if (objectId === O.PASSAGE_19 && scarMazeTwoTile.x === 1782 && scarMazeTwoTile.y === 6420) {
+        const maze = p.getAttribute(ATTR_SCAR_MAZE_TWO);
+        const sourceY = p.getLocation().getY() - maze.getBaseY() + 6400;
+        if (sourceY >= 6422) {
+          p.setAttribute(SCAR_NERVE_ROOM_TWO_ACTIVE, false);
+          p.moveTo(maze.tile(86, 19, 0));
+          return true;
+        }
         if (!p.getAttribute(SCAR_AXON_ROOM_COMPLETE)) {
           p.sendMessage("The axon terminals are still inactive.");
           return true;
         }
+        const equipment = p.getEquipment();
+        if (equipment.isSlotOccupied(api.core.Equipment.WEAPON_SLOT) || equipment.isSlotOccupied(api.core.Equipment.SHIELD_SLOT)) {
+          p.sendMessage("Free both hands before diving into the nerve chamber.");
+          return true;
+        }
+        p.moveTo(maze.tile(86, 22, 0));
+        if (p.getAttribute(SCAR_NERVE_ROOM_TWO_COMPLETE)) return true;
         p.setAttribute(SCAR_NERVE_ROOM_TWO_ACTIVE, true);
         p.setAttribute(SCAR_RIFT_LIVE, true);
         p.setAttribute(SCAR_NERVE_ROOM_TWO_AIR, 100);
@@ -5963,7 +5996,7 @@ module.exports = function registerDesertTreasureII(api) {
   [SCAR_DEMONS_DEFEATED, SCAR_BOAT_TRIED, SCAR_PERSTEN_TALKED, SCAR_PERSTEN_TALKED_BEFORE,
     SCAR_PERSTEN_ROOM1_TALKED, SCAR_BOAT_ROOM, SCAR_TINDERBOX_FOUND, SCAR_SLIMY_KEY_FOUND,
     SCAR_GUNPOWDER_FOUND, SCAR_OLD_TABLET_READ, SCAR_BOAT_CHEST_OPEN, SCAR_BOAT_BURNED,
-    SCAR_PERSTEN_ROOM2_TALKED, SCAR_BOAT2_BURNED, SCAR_MAZE_TWO_ENTERED, SCAR_AXON_ROOM_COMPLETE,
+    SCAR_PERSTEN_ROOM2_TALKED, SCAR_BOAT2_BURNED, SCAR_MAZE_TWO_ENTERED, SCAR_AXON_ROOM_COMPLETE, SCAR_AXON_TERMINALS,
     SCAR_NERVE_ROOM_TWO_COMPLETE, SCAR_NERVE_ROOM_TWO_REPAIRED, SCAR_SUMMON_ROOM_COMPLETE,
     "desert-treasure-ii:scar-boat-room-two-chest-open", "desert-treasure-ii:scar-growth-complete",
     SCAR_MAZE_THREE_ACTIVE, SCAR_MEMORY_ORDER, SCAR_MEMORY_STEP, SCAR_MEMORY_COMPLETE,
