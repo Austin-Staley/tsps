@@ -2328,7 +2328,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       chooseGibbousDigit(player, 0);
       return;
     }
-    if (id === ItemIdentifiers.ANCESTRAL_DAGGER && ["check", "read", "examine"].includes(option)) {
+    if (id === ItemIdentifiers.ANCESTRAL_DAGGER && ["inspect", "check", "read"].includes(option)) {
       event.handled = true;
       updateGibbousStory(player, { daggerRead: true });
       player.sendMessage("A word is etched into the dagger: SPEAR.");
@@ -2340,23 +2340,14 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.sendMessage("The grid note's highlighted letters spell SPEAR.");
       return;
     }
-    if (id === ItemIdentifiers.MYSTERIOUS_BOOK && option === "read") {
+    if (id === ItemIdentifiers.MYSTERIOUS_BOOK && option === "open") {
       event.handled = true;
       if (story.gibbous.bookRead || !hasItem(player, ItemIdentifiers.MYSTERIOUS_BOOK)) return;
-      if (castleKeyGive(player, ItemIdentifiers.FANCY_GEM_2, "The book's weight hides a second fancy gem.")) {
+      if (castleKeyGive(player, ItemIdentifiers.FANCY_GEM_2, "You open the book and find a fancy gem hidden inside.")) {
         player.getInventory().deleteNumber(ItemIdentifiers.MYSTERIOUS_BOOK, 1);
         updateGibbousStory(player, { bookRead: true });
       }
     }
-  }
-
-  function handleCastleItemExamine(event) {
-    const player = event?.player;
-    if (!player || event?.itemId !== ItemIdentifiers.ANCESTRAL_DAGGER || quest.isComplete(player) ||
-      stage(player) !== STAGE.CASTLE || Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) < 76) return;
-    event.handled = true;
-    updateGibbousStory(player, { daggerRead: true });
-    player.sendMessage("The dagger's etched letters form the word SPEAR.");
   }
 
   function handleCastleGibbousItemOnObject(event) {
@@ -5050,7 +5041,6 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("player:widget-action", handleCastleBookWidgetAction);
   api.onGroundItemPickup(handleCastleBookPickup);
   api.onItemAction(handleCastleGibbousItemAction);
-  api.onCustomEvent("world:item-examine", handleCastleItemExamine);
   api.onGroundItemPickup(handleCastleKeyPickup);
   api.onGroundItemPickup(handleCastleExplosiveBarrelPickup);
   api.onObjectRoute(routeCastleDoorEnter);

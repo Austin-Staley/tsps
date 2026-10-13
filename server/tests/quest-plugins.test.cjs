@@ -1405,8 +1405,7 @@ test('Blood Moon Gibbous lockbox requires its room clues and accepts code 426', 
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').gibbous.lockboxOpened, true);
 
   items.set(33762, 1); items.set(33763, 1);
-  const examineItem = handlers.custom.get('world:item-examine').at(-1);
-  examineItem({ player, itemId: 33762, handled: false });
+  action({ player, itemId: 33762, option: 'Inspect', handled: false });
   action({ player, itemId: 33763, option: 'Read', handled: false });
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').gibbous.daggerRead, true);
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').gibbous.gridNoteRead, true);
@@ -1438,7 +1437,7 @@ test('Blood Moon Gibbous lockbox requires its room clues and accepts code 426', 
   bookcase({ player, objectId: 61757, definition: { id: 61757, getName: () => 'Searchable bookcase' },
     location: { x: 2549, y: 7381, z: 0 }, option: 'Search', handled: false });
   assert.equal(items.get(33764), 1, 'the recorded bookcase yields the oddly weighted book');
-  action({ player, itemId: 33764, option: 'Read', handled: false });
+  action({ player, itemId: 33764, option: 'Open', handled: false });
   assert.equal(items.get(33764), 0);
   assert.equal(items.get(33766), 1, 'reading the book reveals the second fancy gem');
   attributes.set('quest.the_blood_moon_rises.castle-room', 39);

@@ -288,32 +288,6 @@ test('inventory Drop and Release reach item action hooks before the ground/drop 
   }
 });
 
-test('inventory Examine can be handled by a world:item-examine hook before cache text', () => {
-  const { PluginManager } = require('../dist/plugins/PluginManager');
-  const { ItemDefinition } = require('../dist/game/definition/ItemDefinition');
-  const originalCustom = PluginManager.emitCustomEvent;
-  const originalForId = ItemDefinition.forId;
-  const calls = [];
-  const connection = new net.ClientConnection(stubChannel());
-  connection.player = {
-    getInventory: () => ({ getItems: () => [{ getId: () => 33762 }] }),
-    clearPendingAction() {},
-    sendMessage: message => calls.push(['message', message]),
-  };
-  ItemDefinition.forId = () => ({ getExamine: () => 'A rather nice dagger.', getName: () => 'Ancestral dagger' });
-  PluginManager.emitCustomEvent = (name, event) => {
-    calls.push([name, event.itemId]);
-    event.handled = event.itemId === 33762;
-  };
-  try {
-    connection.inventoryAction({ slot: 0, itemId: 33762, widgetId: 3214, option: 'Examine' });
-    assert.deepEqual(calls, [['world:item-examine', 33762]], 'quest-specific examine text suppresses generic cache text');
-  } finally {
-    PluginManager.emitCustomEvent = originalCustom;
-    ItemDefinition.forId = originalForId;
-  }
-});
-
 
 test('alchemy policy keeps rune and spellbook checks before neutralising a permitted item', () => {
   const {PluginManager}=require('../dist/plugins/PluginManager');

@@ -1067,9 +1067,6 @@ export class ClientConnection {
       }
     } else if (option === "examine") {
       const definition = ItemDefinition.forId(packet.itemId);
-      const examineEvent = { player, itemId: packet.itemId, handled: false };
-      PluginManager.emitCustomEvent("world:item-examine", examineEvent);
-      if (examineEvent.handled) return;
       player.sendMessage(definition.getExamine() || definition.getName());
     } else {
       ItemActionPacketListener.handleAction(player, packet.widgetId, packet.itemId, packet.slot, optionIndex ?? 1, packet.option);
