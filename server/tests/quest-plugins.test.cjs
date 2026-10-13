@@ -8293,6 +8293,47 @@ test('Song of the Elves restores the saved private library on relog without rese
   assert.equal(player.area, null, 'ordinary Lletya login never enters the library');
 });
 
+test('Song of the Elves memory replay contains the original knowledge once instead of a looping jump', () => {
+  const { api: base, handlers } = mockApi();
+  class LibraryArea {
+    isDestroyed() { return false; }
+    enter(player) { player.area = this; }
+  }
+  const api = new Proxy(base, { get(target, prop) {
+    return prop === 'core' ? { ...target.core, PrivateArea: LibraryArea } : target[prop];
+  } });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const original = runtime.startTranscript;
+  const variants = runtime.loadTranscripts(api)['Song of the Elves'].variants;
+  let replay;
+  runtime.startTranscript = (_api, _player, _npcId, _page, variant, select) => {
+    assert.equal(typeof select, 'function');
+    replay = select(variants[variant]);
+    return true;
+  };
+  try {
+    require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+    const attributes = new Map([['quest.song_of_the_elves.stage', 130], ['quest.song_of_the_elves.library-seals', 511]]);
+    const player = { getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+      getUsername: () => 'memory-replay', getArea() { return this.area; },
+      getLocation: () => new api.core.Location(2623, 6144, 0) };
+    handlers.playerLogin.find(handler => handler.name === 'syncLibraryLogin')({ player });
+    const talk = handlers.npcInteractions.get('Memory of Seren')['Talk-to'];
+    const names = ['the-forgotten', 'ithell', 'cadarn', 'crwys', 'amlodd', 'meilyr', 'hefin', 'trahaearn', 'iorwerth'];
+    for (const [index, name] of names.entries()) {
+      assert.equal(talk({ player, npcId: api.core.NpcIdentifiers.MEMORY_OF_SEREN + index }), true);
+      const yes = replay.find(step => step.type === 'choice').options.find(option => option.text === 'Yes please.');
+      const quotes = yes.steps.filter(step => step.text?.startsWith("'"));
+      assert.equal(quotes.length, index === 0 ? 4 : 3, name);
+      assert.deepEqual(quotes, variants[`the-grand-library-of-prifddinas-the-seal-of-${name}`]
+        .filter(step => step.text?.startsWith("'")));
+      assert.equal(yes.steps.some(step => step.type === 'jump'), false, 'the replay cannot jump into its own Yes branch');
+      assert.equal(yes.steps.filter(step => step.text === 'And so ends the knowledge of this seal.').length, 1);
+      assert.equal(yes.steps.some(step => step.type === 'choice'), index > 0, 'the return choice is retained');
+    }
+  } finally { runtime.startTranscript = original; }
+});
+
 test('Song of the Elves library mirrors must follow the previous beam direction', () => {
   class TestPrivateArea {
     constructor() { this.objects = []; }

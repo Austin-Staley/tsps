@@ -1950,15 +1950,22 @@ module.exports = function registerSongOfTheElves(api) {
 
   function talkToLibraryMemory({ player, npcId }) {
     if (!player || !inLibrary(player) || !hasForgottenMemory(player)) return false;
-    if (npcId === NpcIdentifiers.MEMORY_OF_SEREN) {
-      return startTranscript(api, player, npcId, PAGE,
-        "the-grand-library-of-prifddinas-the-seal-of-the-forgotten-talking-to-the-memory-again");
+    let name = "the-forgotten";
+    if (npcId !== NpcIdentifiers.MEMORY_OF_SEREN) {
+      const index = LIBRARY_SEAL_DATA.findIndex((seal) => seal.memory === npcId);
+      if (index < 0 || !(librarySealMask(player) & (1 << (index + 1)))) return false;
+      name = LIBRARY_SEAL_DATA[index].name;
     }
-    const index = LIBRARY_SEAL_DATA.findIndex((seal) => seal.memory === npcId);
-    if (index < 0 || !(librarySealMask(player) & (1 << (index + 1)))) return false;
-    const seal = LIBRARY_SEAL_DATA[index];
+    const variant = `the-grand-library-of-prifddinas-the-seal-of-${name}`;
+    const memory = loadTranscripts(api)[PAGE].variants[variant]
+      .filter(step => step.type === "line" && step.text.startsWith("'"));
+    // The export loses this jump's target; generic "Yes please" matching loops back into itself.
     return startTranscript(api, player, npcId, PAGE,
-      `the-grand-library-of-prifddinas-the-seal-of-${seal.name}-talking-to-the-memory-again`);
+      `${variant}-talking-to-the-memory-again`, steps => steps.map(step => step.type !== "choice" ? step : {
+        ...step, options: step.options.map(option => option.text !== "Yes please." ? option : {
+          ...option, steps: option.steps.flatMap(entry => entry.type === "jump" && entry.reference === "above" ? memory : [entry]),
+        }),
+      }));
   }
 
   function openLibraryTeleportMenu(player, offset = 0) {
