@@ -90,6 +90,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   const wyrdEncounters = new Map();
   const slepeIvans = new Map();
   const slepeRoys = new Map();
+  const paterdomusIvans = new Map();
+  const slepeManors = new Map();
   const drakanEncounters = new Map();
   const siegeDrakanEncounters = new Map();
   const siegeHallInjured = new Map();
@@ -241,6 +243,34 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.sendMessage(phase === 2
         ? "The Wyrd calls down lightning around you. Move away from the marked ground and turn off your protection prayers."
         : "The Wyrd winds back for a ground slam. Move away from your current tile.");
+    }
+  }
+
+  class SlepeManorArea extends PrivateArea {
+    constructor(player) {
+      // The map's Crombwick Manor floor is at z=1, with its cache staircase at
+      // (3725,3353,0). Each quest player gets their own Vyrewatch and kill state.
+      super([new Boundary(3713, 3735, 3352, 3372, 1)]);
+      this.player = player;
+      this.enemies = [];
+      this.storyActors = [];
+      this.finished = false;
+    }
+
+    isMulti() { return true; }
+
+    canAttack(attacker, target) {
+      const attackerHere = attacker?.getArea?.() === this;
+      const targetHere = target?.getArea?.() === this;
+      if (attackerHere || targetHere) return attackerHere && targetHere;
+      return null;
+    }
+
+    postLeave(mobile, logout) {
+      super.postLeave(mobile, logout);
+      if (mobile !== this.player) return;
+      for (const npc of [...this.enemies, ...this.storyActors]) if (npc) api.removeNpc(npc);
+      if (slepeManors.get(mobile) === this) slepeManors.delete(mobile);
     }
   }
 
@@ -843,9 +873,16 @@ module.exports = function registerTheBloodMoonRises(api) {
   function cleanupSlepeIvan({ player }) {
     if (!player) return;
     removeSlepeIvan(player);
+    const paterdomusIvan = paterdomusIvans.get(player);
+    if (paterdomusIvan) api.removeNpc(paterdomusIvan);
+    paterdomusIvans.delete(player);
     const roy = slepeRoys.get(player);
     if (roy) api.removeNpc(roy);
     slepeRoys.delete(player);
+  }
+
+  function cleanupSlepeStory(event) {
+    if (event?.player && stage(event.player) !== STAGE.SLEPE) cleanupSlepeManor(event);
   }
 
   function inSlepe(player) {
@@ -902,6 +939,127 @@ module.exports = function registerTheBloodMoonRises(api) {
     } else if (from.getDistance(to) > 1) {
       api.core.PathFinder.calculateWalkRoute(npc, to.getX(), to.getY());
     }
+  }
+
+  function inCrombwickManor(player) {
+    const location = player?.getLocation?.();
+    if (!location) return false;
+    const x = location.getX(), y = location.getY();
+    return location.getZ() === 1 && x >= 3713 && x <= 3735 && y >= 3352 && y <= 3372;
+  }
+
+  function startSlepeManor(player) {
+    if (slepeManors.has(player)) return slepeManors.get(player);
+    const story = player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {};
+    if (!story.ivanFollowing || !story.royClue || !inCrombwickManor(player)) return null;
+    const area = new SlepeManorArea(player);
+    area.enter(player);
+    slepeManors.set(player, area);
+    if (story.manorEnemiesDefeated) {
+      // Private-area actors are recreated after login; a saved clear must resume
+      // at Veliaf rather than starting the manor wave again.
+      area.finished = true;
+      spawnSlepeManorStoryActors(player, area);
+      return area;
+    }
+    // shortcut: the current Wiki text requires every manor Vyrewatch but gives no roster;
+    // the three cache forms below are the quest-room wave used until an OSRS capture exists.
+    const enemies = [
+      [NpcIdentifiers.VYREWATCH_54, 3721, 3358],
+      [NpcIdentifiers.VYREWATCH_55, 3723, 3359],
+      [NpcIdentifiers.VYREWATCH_56, 3727, 3358],
+    ];
+    for (const [id, x, y] of enemies) {
+      const npc = api.spawnNpc({ id, x, y, z: 1, wanderRadius: 0, owner: player, ownerOnly: true });
+      if (!npc) {
+        for (const spawned of area.enemies) api.removeNpc(spawned);
+        area.leave(player, false);
+        slepeManors.delete(player);
+        player.sendMessage("The Vyrewatch have not gathered in the manor yet. Enter again from the stairs.");
+        return null;
+      }
+      npc.setMultiCombat?.(true);
+      area.enter(npc);
+      area.enemies.push(npc);
+      npc.getCombat?.().attack?.(player);
+    }
+    player.setAttribute(SLEPE_STORY_ATTRIBUTE, { ...story, manorEntered: true });
+    startTranscript(api, player, NpcIdentifiers.VELIAF_HURTZ, PAGE, "the-truth-hurtz-upon-entering-crombwick-manor");
+    return area;
+  }
+
+  function spawnSlepeManorStoryActors(player, area) {
+    if (area.storyActors.length) return;
+    const ivan = api.spawnNpc({ id: NpcIdentifiers.IVAN_STROM_4, x: 3722, y: 3358, z: 1, wanderRadius: 0, owner: player, ownerOnly: true });
+    const veliaf = api.spawnNpc({ id: NpcIdentifiers.VELIAF_HURTZ_2, x: 3720, y: 3359, z: 1, wanderRadius: 0, owner: player, ownerOnly: true });
+    for (const actor of [ivan, veliaf]) {
+      if (!actor) continue;
+      actor.setScriptedMovement?.(true);
+      area.storyActors.push(actor);
+      area.enter(actor);
+    }
+  }
+
+  function processSlepeManor({ player }) {
+    if (!player || stage(player) !== STAGE.SLEPE) return;
+    if (inCrombwickManor(player)) startSlepeManor(player);
+  }
+
+  function cleanupSlepeManor({ player }) {
+    const area = player && slepeManors.get(player);
+    if (!area) return;
+    for (const npc of [...area.enemies, ...area.storyActors]) if (npc) api.removeNpc(npc);
+    area.leave(player, true);
+    slepeManors.delete(player);
+  }
+
+  function handleSlepeManorDeath(event) {
+    const npc = event?.npc;
+    const area = npc?.getArea?.();
+    const encounter = area instanceof SlepeManorArea ? area : null;
+    if (!encounter || encounter.finished || !encounter.enemies.includes(npc) || event?.killer !== encounter.player) return;
+    if (encounter.enemies.some(enemy => enemy !== npc && enemy.getHitpoints?.() > 0)) return;
+    const player = encounter.player;
+    encounter.finished = true;
+    player.setAttribute(SLEPE_STORY_ATTRIBUTE, { ...(player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {}), manorEnemiesDefeated: true });
+    spawnSlepeManorStoryActors(player, encounter);
+    player.sendMessage("The manor is clear. Speak to Veliaf.");
+  }
+
+  function handleSlepeJournalCondition({ player, stepId }) {
+    if (!player || !["eNc25m", "lq2B7i"].includes(stepId)) return null;
+    const hasSpace = player.getInventory().getFreeSlots() > 0;
+    return stepId === "eNc25m" ? hasSpace : !hasSpace;
+  }
+
+  function readSlepeJournal(event) {
+    const player = event?.player;
+    if (!player || event.itemId !== ItemIdentifiers.SQUIRES_JOURNAL || stage(player) !== STAGE.SLEPE ||
+      !(player.getAttribute(SLEPE_STORY_ATTRIBUTE)?.journalGiven)) return;
+    event.handled = true;
+    player.setAttribute(SLEPE_STORY_ATTRIBUTE, { ...player.getAttribute(SLEPE_STORY_ATTRIBUTE), journalRead: true });
+    player.sendMessage("The squire records that Ivandis left a book describing the Seven Priestly Warriors somewhere within Paterdomus.");
+  }
+
+  function spawnPaterdomusIvan(player) {
+    const existing = paterdomusIvans.get(player);
+    if (existing) return existing;
+    const ivan = api.spawnNpc({ id: NpcIdentifiers.IVAN_STROM_4, x: 3416, y: 3489, z: 2,
+      wanderRadius: 0, owner: player, ownerOnly: true });
+    if (ivan) {
+      ivan.setScriptedMovement?.(true);
+      paterdomusIvans.set(player, ivan);
+    }
+    return ivan;
+  }
+
+  function processSlepeProgress({ player }) {
+    if (!player || stage(player) !== STAGE.SLEPE) return;
+    const story = player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {};
+    if (!story.manorComplete) return;
+    const location = player.getLocation();
+    const x = location.getX(), y = location.getY(), z = location.getZ();
+    if (z === 2 && x >= 3405 && x <= 3426 && y >= 3478 && y <= 3504) spawnPaterdomusIvan(player);
   }
 
   function inspectHideoutShrine(event) {
@@ -1026,6 +1184,20 @@ module.exports = function registerTheBloodMoonRises(api) {
   function onTranscriptAction(event) {
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
+    if (event.stepId === "UgyYUc" && stage(player) === STAGE.SLEPE &&
+      player.getAttribute(SLEPE_STORY_ATTRIBUTE)?.manorComplete) {
+      const inventory = player.getInventory();
+      if (inventory.getFreeSlots() <= 0 || !inventory.adds(ItemIdentifiers.SQUIRES_JOURNAL, 1)) {
+        event.handled = true;
+        player.sendMessage("Make room for the squire's journal before taking it.");
+        return;
+      }
+      event.handled = true;
+      event.box = { items: [ItemIdentifiers.SQUIRES_JOURNAL] };
+      player.setAttribute(SLEPE_STORY_ATTRIBUTE,
+        { ...player.getAttribute(SLEPE_STORY_ATTRIBUTE), journalGiven: true });
+      return;
+    }
     if (event.stepId === "fiqzZ7" && !player.getAttribute(HIDEOUT_DEFENSE_COMPLETE)) {
       player.sendMessage("Keep the vyrewatch away from Ivan and let him complete the spell before escaping.");
       return;
@@ -1140,6 +1312,13 @@ module.exports = function registerTheBloodMoonRises(api) {
       request.text === "That, I do not. However, I did hear that there was some commotion up at Crombwick Manor soon afterwards.") {
       request.after = () => player.setAttribute(SLEPE_STORY_ATTRIBUTE,
         { ...(player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {}), royClue: true });
+    } else if (request.text?.includes("Now, I'd better get to Paterdomus.") &&
+      (request.step?.player || request.step?.speaker === "Veliaf Hurtz")) {
+      request.after = () => {
+        player.setAttribute(SLEPE_STORY_ATTRIBUTE,
+          { ...(player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {}), manorComplete: true });
+        cleanupSlepeManor({ player });
+      };
     }
   }
 
@@ -1181,9 +1360,19 @@ module.exports = function registerTheBloodMoonRises(api) {
       const story = player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {};
       let variant = null;
       if (npcName === "ivan strom") {
-        variant = story.ivanFollowing
-          ? "the-truth-hurtz-talking-to-ivan-while-he-is-following-the-player"
-          : "the-truth-hurtz-talking-to-ivan-in-slepe";
+        if (story.manorComplete) {
+          variant = story.journalRead
+            ? "the-truth-hurtz-talking-to-ivan-and-drezel-after-reading-the-journal"
+            : story.journalGiven
+              ? "the-truth-hurtz-talking-to-ivan-or-drezel-again-before-reading-the-journal"
+              : "the-truth-hurtz-talking-to-ivan-and-drezel-in-the-mausoleum";
+        } else if (story.royClue) {
+          variant = "the-truth-hurtz-talking-to-ivan-again";
+        } else {
+          variant = story.ivanFollowing
+            ? "the-truth-hurtz-talking-to-ivan-while-he-is-following-the-player"
+            : "the-truth-hurtz-talking-to-ivan-in-slepe";
+        }
       } else if (npcName === "roy") {
         if (!story.ivanFollowing) {
           player.sendMessage("I should find Ivan by the church and bring him to the pub.");
@@ -1194,9 +1383,20 @@ module.exports = function registerTheBloodMoonRises(api) {
           ? "the-truth-hurtz-talking-to-roy-talking-to-roy-again"
           : "the-truth-hurtz-talking-to-roy";
       } else if (npcName === "veliaf hurtz") {
-        variant = "the-truth-hurtz-talking-to-veliaf-inside-crombwick-manor";
+        if (story.manorEnemiesDefeated) variant = "the-truth-hurtz-talking-to-veliaf-inside-crombwick-manor";
+        else if (story.manorComplete) variant = "the-truth-hurtz-talking-to-veliaf-again";
+        else {
+          player.sendMessage("The Vyrewatch are still fighting in the manor.");
+          event.handled = true;
+          return true;
+        }
       } else if (npcName === "drezel") {
-        variant = "the-truth-hurtz-talking-to-drezel-again";
+        if (!story.manorComplete) return false;
+        variant = story.journalRead
+          ? "the-truth-hurtz-talking-to-ivan-and-drezel-after-reading-the-journal"
+          : story.journalGiven
+            ? "the-truth-hurtz-talking-to-ivan-or-drezel-again-before-reading-the-journal"
+            : "the-truth-hurtz-talking-to-ivan-and-drezel-in-the-mausoleum";
       }
       if (variant) {
         event.handled = true;
@@ -2088,7 +2288,9 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("quest:stage-changed", syncHideoutIvan);
   api.onCustomEvent("quest:stage-changed", syncSlepeIvan);
   api.onCustomEvent("quest:stage-changed", syncSlepeRoy);
+  api.onCustomEvent("quest:stage-changed", cleanupSlepeStory);
   api.onCustomEvent("world:object-examine", inspectHideoutShrine);
+  api.onNpcDialogueCondition(handleSlepeJournalCondition);
   api.onNpcDialogueCondition(answerHideoutCondition);
   api.onCustomEvent("npc-dialogue:choice", onChoice);
   api.onCustomEvent("npc-dialogue:line", onBloodMoonDialogueLine);
@@ -2128,9 +2330,12 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onItemOnItem(handleBloodHuntItemOnItem);
   api.onItemOnNpc(feedSafalaan);
   api.onItemAction("Dusty book", { Read: readDustyBook });
+  api.onItemAction("Squire's journal", { Read: readSlepeJournal });
   api.onNpcInteraction("Aranei", { Heal: healSiegeAranei });
   api.onPlayerProcess(syncHuntGroundItems);
   api.onPlayerProcess(processSlepeIvan);
+  api.onPlayerProcess(processSlepeManor);
+  api.onPlayerProcess(processSlepeProgress);
   api.onPlayerLogin(handleSiegeLogin);
   api.onPlayerLogin(syncHideoutIvan);
   api.onPlayerLogin(syncSlepeIvan);
@@ -2139,7 +2344,9 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogout(handleSiegeLogout);
   api.onPlayerLogout(hideoutDefense.onPlayerLogout);
   api.onPlayerLogout(cleanupSlepeIvan);
+  api.onPlayerLogout(cleanupSlepeManor);
   api.onNpcDeath(handleWyrdDeath);
+  api.onNpcDeath(handleSlepeManorDeath);
   api.persistAttribute(HIDEOUT_DEFENSE_COMPLETE);
   api.onNpcHitModify(handleSiegeDrakanHit);
   api.persistAttribute(WYRD_DEFEATED_ATTRIBUTE);
