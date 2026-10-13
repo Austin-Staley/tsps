@@ -2497,9 +2497,9 @@ module.exports = function registerDesertTreasureII(api) {
     if (!owned) spawned.set(p, owned = {});
     const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
     if (progress >= 21) return null;
-    const key = progress >= 20 ? "kasondeInjured" : progress >= 18 ? "kasondeBoss" : "templeKasonde";
+    const key = progress >= 20 ? "kasondeInjured" : progress >= 19 ? "kasondeBoss" : "templeKasonde";
     if (owned[key]?.isRegistered?.()) return owned[key];
-    const npcId = progress >= 20 ? N.KASONDE_9 : progress >= 18 ? N.KASONDE_7 : N.KASONDE;
+    const npcId = progress >= 20 ? N.KASONDE_9 : progress >= 19 ? N.KASONDE_7 : N.KASONDE;
     const npc = api.core.NPC.create(npcId, area.tile(7, 16, 0));
     npc.setOwner?.(p);
     npc.setOwnerOnly?.(true);
@@ -2507,7 +2507,8 @@ module.exports = function registerDesertTreasureII(api) {
     area.add(npc);
     api.core.World.getAddNPCQueue().push(npc);
     owned[key] = npc;
-    if (progress >= 18 && progress < 20) p.setAttribute(VARDORVIS_PROGRESS, 19);
+    if (progress === 18) talk(p, N.KASONDE, "carnifex-maximus-vardorvis-entering-the-temple-after-defeating-vardorvis");
+    if (progress === 19) npc.getCombat?.()?.attack?.(p);
     return npc;
   }
 
@@ -3086,6 +3087,7 @@ module.exports = function registerDesertTreasureII(api) {
       return;
     }
     if (progress === 16) talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-killing-the-strangled-in-the-temple-talking-to-kasonde-after-drinking-the-potion");
+    if (progress === 18) return talk(p, npcId, "carnifex-maximus-vardorvis-entering-the-temple-after-defeating-vardorvis");
     if (progress === 20) {
       talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-defeating-him");
     }
@@ -3965,7 +3967,7 @@ module.exports = function registerDesertTreasureII(api) {
     if (s === S.VARDORVIS && objectId === O.ENTRY_21
       && Math.abs(location.x - 1174) <= 2 && Math.abs(location.y - 3428) <= 2) {
       const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
-      if ((progress >= 13 && progress <= 16) || (progress >= 18 && has(p, I.TEMPLE_KEY_3))) {
+      if ((progress >= 13 && progress <= 16) || (progress === 18 && has(p, I.TEMPLE_KEY_3)) || progress >= 19) {
         enterStranglewoodTemple(p);
         return true;
       }
@@ -5144,6 +5146,19 @@ module.exports = function registerDesertTreasureII(api) {
 
   function handleDialogueAction(event) {
     const { player: p, stepId } = event;
+    if (stage(p) === S.VARDORVIS && Number(p.getAttribute(VARDORVIS_PROGRESS)) === 18 && stepId === "4muMDK") {
+      const area = p.getAttribute(ATTR_STRANGLEWOOD_TEMPLE);
+      if (!(area instanceof StranglewoodTempleArea) || area.isDestroyed() || !has(p, I.TEMPLE_KEY_3)) {
+        event.handled = true;
+        event.end = true;
+        return;
+      }
+      p.getInventory().deleteNumber(I.TEMPLE_KEY_3, 1);
+      const owned = spawned.get(p);
+      if (owned?.templeKasonde) { api.removeNpc(owned.templeKasonde); owned.templeKasonde = null; }
+      p.setAttribute(VARDORVIS_PROGRESS, 19);
+      spawnTempleKasonde(p, area);
+    }
     if (stage(p) === S.VARDORVIS && Number(p.getAttribute(VARDORVIS_PROGRESS)) === 20 && stepId === "ZEXv_C") {
       p.setAttribute(VARDORVIS_PROGRESS, 21);
       const owned = spawned.get(p);
