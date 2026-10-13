@@ -1858,8 +1858,15 @@ test('Blood Moon Castle new-moon key requires the corpse syringe, weapon statues
   useTogether(33734, 33735);
   assert.equal(items.get(33736), 1, 'the two crest halves combine');
   useOn(33736, 61665, 2358, 7386);
-  click(61665, 2358, 7386);
-  assert.equal(items.get(33728), 1, 'the study fireplace releases the new moon key only after the crest is placed');
+  assert.equal(varbits.get(15535), 1, 'placing the full crest opens the fireplace lock');
+  assert.equal(prompt.title, 'Search the fireplace?');
+  choosePrompt('No.');
+  assert.equal(items.get(33728), undefined, 'declining leaves the new moon key in the fireplace');
+  click(61665, 2358, 7386, 'Inspect');
+  assert.equal(prompt.title, 'Search the fireplace?', 'the cache Inspect action lets the player return and search later');
+  confirm();
+  assert.equal(items.get(33728), 1, 'the fireplace gives the new moon key only after the player confirms the search');
+  assert.equal(attrs.get('quest.the_blood_moon_rises.castle-story').newMoon.newMoonKeyClaimed, true);
 });
 
 test('Blood Moon Castle Enter doors cross to the opposite side of their actual wall', () => {
@@ -1946,7 +1953,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [2456, 7417, 0], [2482, 7403, 0], [2476, 7409, 0],
     [2386, 7405, 0], [2490, 7401, 0], [2371, 7395, 0], [2373, 7409, 0], [2387, 7366, 0], [2370, 7384, 0],
     [2342, 7416, 0], [2371, 7370, 0], [2314, 7420, 0], [2324, 7403, 0], [2361, 7394, 0], [2309, 7420, 0],
-    [2327, 7381, 0], [2331, 7407, 0], [2327, 7390, 0], [2310, 7388, 0], [2357, 7380, 0],
+    [2327, 7381, 0], [2331, 7407, 0], [2327, 7390, 0], [2310, 7388, 0], [2358, 7381, 0],
     [2310, 7396, 0], [2342, 7372, 1], [2328, 7360, 1], [2305, 7392, 1], [2357, 7366, 1],
     [2434, 7364, 0], [2305, 7386, 1], [2452, 7364, 0], [2437, 7361, 0], [2458, 7362, 0],
     [2445, 7364, 0], [2358, 7371, 0], [2363, 7368, 0], [2364, 7362, 0], [2348, 7397, 0],
@@ -1967,7 +1974,8 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
       (x === 2328 && y === 7361 && z === 0) || (x === 2314 && y === 7371 && z === 1) ||
       (x === 2482 && y === 7403 && z === 0) ||
       (x === 2469 && y === 7418 && z === 0) || (x === 2361 && y === 7394 && z === 0) ||
-      (x === 2325 && y === 7397 && z === 0) || (x === 2314 && y === 7361 && z === 0) ||
+      (x === 2325 && y === 7397 && z === 0) || (x === 2358 && y === 7381 && z === 0) ||
+      (x === 2314 && y === 7361 && z === 0) ||
       (x === 2588 && y === 7381 && z === 0) || (x === 2575 && y === 7386 && z === 0) ||
       (x === 2579 && y === 7366 && z === 0);
     if (!isCapturedDoorArrival) assert.equal(RegionManager.blocked(new api.core.Location(x, y, z), null), false,
@@ -1983,6 +1991,10 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   assert.equal(sinkApproach.success, true, 'the captured larder landing has a cache path to the sink approach');
   assert.equal(sinkApproach.endX, 2357);
   assert.equal(sinkApproach.endY, 7400);
+  const fireplaceApproach = larderRoute.findRoute({ level: 0, srcX: 2358, srcY: 7381, srcSize: 1,
+    destX: 2358, destY: 7386, moveNear: true, maxWaypoints: 80, privateArea: null });
+  assert.equal(fireplaceApproach.success, true,
+    'the captured parlour landing has a cache path to the fireplace interaction tile');
   const enter = handlers.objects.find((handler) => handler.name === 'handleCastleDoorEnter');
   const route = handlers.routes.find((handler) => handler.name === 'routeCastleDoorEnter');
   const routeEvent = {
@@ -2072,6 +2084,12 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   assert.equal(toThrone.handled, true);
   assert.deepEqual(moved.at(-1), [2305, 7391, 0], 'the dining-room door lands inside the throne room');
   assert.equal(varbits.get(15499), 3);
+
+  const toParlour = enterPairedDoor(61576, 2309, 7397, 3, { x: 2308, y: 7396, z: 0 });
+  assert.equal(toParlour.handled, true);
+  assert.deepEqual(moved.at(-1), [2358, 7381, 0], 'the recorded throne door lands on the parlour side');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 7);
+  assert.equal(varbits.get(15499), 7);
 
   attributes.set('quest.the_blood_moon_rises.castle-room', 7);
   attributes.set('quest.the_blood_moon_rises.castle-floor', 1);

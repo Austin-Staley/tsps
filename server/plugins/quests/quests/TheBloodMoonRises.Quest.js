@@ -281,7 +281,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.HALF_M, x: 2327, y: 7391, z: 0, from: CASTLE_ROOM.SOUTH_OF_THRONE, to: CASTLE_ROOM.THRONE,
       fromFloor: 1, toFloor: 1, landing: [2310, 7388] },
     { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2309, y: 7397, z: 0, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.STUDY,
-      fromFloor: 1, toFloor: 1, landing: [2357, 7380] },
+      fromFloor: 1, toFloor: 1, landing: [2358, 7381] },
     { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2358, y: 7380, z: 0, from: CASTLE_ROOM.STUDY, to: CASTLE_ROOM.THRONE,
       fromFloor: 1, toFloor: 1, facing: 4, landing: [2310, 7396] },
     { id: CASTLE_DOOR_IDS.GIBBOUS, x: 2327, y: 7360, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.DINING,
@@ -2312,16 +2312,21 @@ module.exports = function registerTheBloodMoonRises(api) {
       startCastleWeaponChoice(player);
       return;
     }
-    if (CASTLE_KEY_OBJECTS.studyFireplace.has(id) && x === 2358 && y === 7386 && option === "search") {
+    if (CASTLE_KEY_OBJECTS.studyFireplace.has(id) && x === 2358 && y === 7386 &&
+      ["inspect", "search"].includes(option)) {
       event.handled = true;
       if (!key.fullCrestInFireplace) { player.sendMessage("The fireplace's hidden lock needs the full crest."); return; }
       if (key.newMoonKeyClaimed || hasItem(player, CASTLE_BOOK_ITEMS.newMoonKey)) {
         player.sendMessage("You already have the new moon key.");
         return;
       }
-      if (castleKeyGive(player, CASTLE_BOOK_ITEMS.newMoonKey, "You search the study fireplace and find the new moon key.")) {
-        updateCastleKeyStory(player, { newMoonKeyClaimed: true });
-      }
+      confirmCastleKeyAction(player, "Search the fireplace?", () => {
+        const current = castleStory(player).newMoon ?? {};
+        if (current.newMoonKeyClaimed || hasItem(player, CASTLE_BOOK_ITEMS.newMoonKey)) return;
+        if (castleKeyGive(player, CASTLE_BOOK_ITEMS.newMoonKey, "You search the fireplace and find a key with the symbol of a new moon on it. You take it.")) {
+          updateCastleKeyStory(player, { newMoonKeyClaimed: true });
+        }
+      });
     }
   }
 
@@ -2404,7 +2409,14 @@ module.exports = function registerTheBloodMoonRises(api) {
       if (!inv.contains(CASTLE_KEY_ITEMS.fullCrest) || key.fullCrestInFireplace) return;
       inv.deleteNumber(CASTLE_KEY_ITEMS.fullCrest, 1);
       updateCastleKeyStory(player, { fullCrestInFireplace: true });
-      player.sendMessage("You place the full crest in the study fireplace. Something clicks inside.");
+      player.sendMessage("You place the crest in the slot above the fireplace and hear a clicking sound come from the fireplace itself.");
+      confirmCastleKeyAction(player, "Search the fireplace?", () => {
+        const current = castleStory(player).newMoon ?? {};
+        if (current.newMoonKeyClaimed || hasItem(player, CASTLE_BOOK_ITEMS.newMoonKey)) return;
+        if (castleKeyGive(player, CASTLE_BOOK_ITEMS.newMoonKey, "You search the fireplace and find a key with the symbol of a new moon on it. You take it.")) {
+          updateCastleKeyStory(player, { newMoonKeyClaimed: true });
+        }
+      });
       return;
     }
     const statuePlacements = [
