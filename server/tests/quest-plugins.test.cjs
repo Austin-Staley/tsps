@@ -1064,7 +1064,12 @@ test('Blood Moon northern-door transcript starts the private Lowerniel encounter
     moveTo: (location) => { player.destination = [location.getX(), location.getY(), location.getZ()]; },
     sendMessage() {},
   };
-  handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 't7FMNM' });
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().filter(q => q.key === 'the_blood_moon_rises').at(-1);
+  const action = handlers.custom.get('npc-dialogue:action').at(-1);
+  action({ player, stepId: 't7FMNM' });
+  assert.equal(spawns.length, 0, 'the final fight cannot start in an earlier chapter');
+  quest.setStage(player, 100);
+  action({ player, stepId: 't7FMNM' });
   assert.deepEqual(spawns.map(({ id, x, y, z, ownerOnly }) => ({ id, x, y, z, ownerOnly })), [
     { id: api.core.NpcIdentifiers.LOWERNIEL_DRAKAN_17, x: 2505, y: 7838, z: 3, ownerOnly: true },
   ]);
@@ -1072,6 +1077,11 @@ test('Blood Moon northern-door transcript starts the private Lowerniel encounter
   assert.equal(player.getArea(), bossArea, 'the player and Lowerniel share an owner-only final arena');
   assert.equal(boss.getArea(), bossArea);
   assert.equal(boss.hitpoints, 1600);
+  let rewards = 0;
+  quest.complete = () => rewards++;
+  action({ player, stepId: 'BzMe5D' });
+  assert.equal(rewards, 0, 'opening the final dialogue cannot end an unfinished fight');
+  assert.notEqual(attributes.get('quest.the_blood_moon_rises.drakan-defeated'), true);
 });
 
 test('Blood Moon siege barrier action starts the second private Lowerniel fight and caps damage at the 58% cutscene', () => {
@@ -1295,6 +1305,30 @@ test('Blood Moon starts the scoped Theatre encounter and advances after Vasilias
   }
   assert.equal(quest.getStage(player), 90, 'the Vasilias clear advances to the Wyrd chapter');
   assert.equal(attributes.get('quest.the_blood_moon_rises.tob-challenge').completed, true);
+});
+
+test('Blood Moon final dialogue requires the earned Drakan completion checkpoint', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().filter(q => q.key === 'the_blood_moon_rises').at(-1);
+  const attrs = new Map();
+  const player = {
+    getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+  };
+  let rewards = 0;
+  quest.complete = () => rewards++;
+  const action = handlers.custom.get('npc-dialogue:action').at(-1);
+  quest.setStage(player, 100);
+  action({ player, stepId: 'BzMe5D' });
+  assert.equal(rewards, 0, 'the final transcript cannot skip the Drakan encounter');
+  attrs.set('quest.the_blood_moon_rises.drakan-defeated', true);
+  quest.setStage(player, 90);
+  action({ player, stepId: 'BzMe5D' });
+  assert.equal(rewards, 0, 'a different story chapter cannot claim the reward');
+  quest.setStage(player, 100);
+  action({ player, stepId: 'BzMe5D' });
+  assert.equal(rewards, 1);
 });
 
 test('Priest in Peril unlocks the mausoleum Holy barrier only after completion', () => {
