@@ -2655,7 +2655,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
   const { api: base } = mockApi();
   const objectHooks = [], objectRouteHooks = [], deathHooks = [], itemOnItemHooks = [], itemOnNpcHooks = [], itemOnObjectHooks = [], itemActionHooks = [], hitModifyHooks = [], lineHooks = [], actionHooks = [], interactions = [];
   const transcripts = [], queues = { add: [], remove: [] }, varbits = new Map(), inventoryCounts = new Map();
-  const routes = [], logoutHooks = [];
+  const routes = [], logoutHooks = [], loginHooks = [];
   let processCycle = 0;
   class TestInstance {
     constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
@@ -2683,6 +2683,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
       : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
         : prop === 'onObjectRoute' ? (handler) => objectRouteHooks.push(handler)
         : prop === 'onPlayerLogout' ? (handler) => logoutHooks.push(handler)
+          : prop === 'onPlayerLogin' ? (handler) => loginHooks.push(handler)
         : prop === 'onItemOnItem' ? (handler) => itemOnItemHooks.push(handler)
         : prop === 'onItemOnNpc' ? (handler) => itemOnNpcHooks.push(handler)
           : prop === 'onItemOnObject' ? (handler) => itemOnObjectHooks.push(handler)
@@ -2845,6 +2846,14 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(attrs.get('desert-treasure-ii:scar-tether-destroyed'), true);
     assert.equal(attrs.get('desert-treasure-ii:scar-tether-destroyed'), true,
       'the tether completion is saved independently from the reused passage challenge varbits');
+    logoutHooks[0]({ player });
+    assert.equal(attrs.get('desert-treasure-ii:scar-pathfinder-complete'), true);
+    attrs.set('desert-treasure-ii:scar-pathfinder-complete', false);
+    loginHooks.find(handler => handler.name === 'handleLogin')({ player });
+    assert.equal(attrs.get('desert-treasure-ii:scar-pathfinder-complete'), true, 'older saves recover the completed path from the severed tether');
+    assert.equal(attrs.get('desert-treasure-ii:scar-maze-one').pathRunner, null, 'restocking after a completed puzzle does not repeat its pathfinders');
+    assert.ok(attrs.get('desert-treasure-ii:scar-area'), 'the camp is restored so the maze teleporter can return to Persten');
+    area = attrs.get('desert-treasure-ii:scar-area');
     assert.equal(objectHooks[0]({ player, objectId: 49415, location: maze.tile(73, 61, 0) }), true,
       'the green neural teleporter is usable only after severing the tether');
     assert.equal(player.location.x, 8223);
@@ -4891,6 +4900,28 @@ test('Song of the Elves Fragment uses Wiki paired ranged hits and ordered phase-
     } finally {
       Math.random = originalRandomForAdds;
     }
+    player.getArea().leave(player, false);
+    boss = null;
+    cycle += 100;
+    queued.length = 0;
+    playerMessages.length = 0;
+    let dialogueActive = true;
+    player.getDialogueManager = () => ({ isActive: () => dialogueActive });
+    handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'xfnkES', handled: false });
+    const introArea = player.getArea();
+    const introStart = cycle;
+    for (let offset = 1; offset <= 30; offset++) {
+      cycle = introStart + offset;
+      introArea.process(boss);
+    }
+    assert.equal(queued.length, 0, 'Seren cannot damage the player while her introduction is open');
+    assert.ok(!playerMessages.some(message => message.includes('teleports you beside')), 'specials wait for the introduction too');
+    dialogueActive = false;
+    for (let offset = 31; offset <= 42; offset++) {
+      cycle = introStart + offset;
+      introArea.process(boss);
+    }
+    assert.ok(playerMessages.some(message => message.includes('teleports you beside')), 'closing the introduction starts the ordinary encounter timer');
   } finally {
     api.core.World.getProcessCycle = originalCycle;
     runtime.startTranscript = originalStartTranscript;
@@ -6660,7 +6691,7 @@ test('Port Piscarilius spawns the cache-active Veos with both onward boat option
 });
 
 
-test('Dragon Slayer II unlocks the northern Ungael exit from Vorkath completion on login', () => {
+test('Dragon Slayer II unlocks the northern Ungael exit when either awake Vorkath form dies', () => {
   const deaths = [];
   const logins = [];
   const { api: base } = mockApi();
@@ -6681,10 +6712,16 @@ test('Dragon Slayer II unlocks the northern Ungael exit from Vorkath completion 
     getPacketSender: () => ({ sendVarbit: (id, value) => values.push([id, value]) }),
     sendMessage() {},
   };
-  const npc = { getId: () => api.core.NpcIdentifiers.VORKATH_5 };
-  deaths[0]({ killer: player, npc });
-  assert.equal(attrs.get('dragon-slayer-ii:vorkath-defeated'), true);
-  assert.deepEqual(values.at(-1), [6108, 30], 'the cache morph exposes the northern climb-over after Vorkath dies');
+  for (const id of [api.core.NpcIdentifiers.VORKATH_4, api.core.NpcIdentifiers.VORKATH_5]) {
+    attrs.set('dragon-slayer-ii:vorkath-defeated', false);
+    deaths[0]({ killer: player, npc: { getId: () => id } });
+    assert.equal(attrs.get('dragon-slayer-ii:vorkath-defeated'), true, `Vorkath form ${id} records the victory`);
+    assert.deepEqual(values.at(-1), [6108, 30], 'the cache morph exposes the northern climb-over after Vorkath dies');
+  }
+  attrs.set('dragon-slayer-ii:vorkath-defeated', false);
+  deaths[0]({ killer: player, npc: { getId: () => api.core.NpcIdentifiers.VORKATH_4 + 20 } });
+  assert.equal(attrs.get('dragon-slayer-ii:vorkath-defeated'), false, 'an unrelated NPC cannot unlock the cave');
+  attrs.set('dragon-slayer-ii:vorkath-defeated', true);
   values.length = 0;
   logins.forEach((handler) => handler({ player }));
   assert.deepEqual(values, [[6108, 30]], 'the climb-over stays open after relogging');

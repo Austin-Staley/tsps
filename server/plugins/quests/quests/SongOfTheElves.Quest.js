@@ -420,6 +420,14 @@ module.exports = function registerSongOfTheElves(api) {
         startTranscript(api, state.player, NpcIdentifiers.FRAGMENT_OF_SEREN, PAGE,
           "the-fragment-of-seren-the-fragment-enraged");
       }
+      if (!state.introFinished) {
+        if (state.player.getDialogueManager?.()?.isActive?.()) {
+          state.nextBasicAttackAt = now + state.basicAttackSpeed;
+          state.nextSpecialAt = now + 12;
+          return;
+        }
+        state.introFinished = true;
+      }
       if (state.beams.size > 0 && state.boss.getHitpoints() > 0) {
         if (now >= state.nextBeamHealAt) {
           const heal = state.beams.size * (4 + Math.floor(Math.random() * 5));
@@ -2393,7 +2401,7 @@ module.exports = function registerSongOfTheElves(api) {
       nextBasicAttackAt: World.getProcessCycle() + FRAGMENT_BASIC_ATTACK_SPEED,
       basicAttackSpeed: boss.getCurrentDefinition?.()?.getAttackSpeed?.() || FRAGMENT_BASIC_ATTACK_SPEED,
       nextBeamHealAt: 0,
-      clones: [], realClone: null, introStarted: false,
+      clones: [], realClone: null, introStarted: false, introFinished: false,
       specialIndex: 0, beams: new Set(), specialImpactAt: 0, followupAt: 0,
       meleeHitsRemaining: 0, nextMeleeHitAt: 0, finished: false,
     });
