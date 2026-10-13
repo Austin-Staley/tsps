@@ -64,6 +64,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const CASTLE_GILDED_BOOKCASE_VARBIT = 15525;
   const CASTLE_BOOKCASE_INTERFACE = 962;
   const CASTLE_BOOK_ITEMS = Object.freeze({ gilded: 33767, vampyre: 33768, fullMoonKey: ItemIdentifiers.FULL_MOON_KEY,
+    mysteryJerky: ItemIdentifiers.MYSTERIOUS_JERKY,
     halfMoonKey: ItemIdentifiers.HALF_MOON_KEY, crescentMoonKey: ItemIdentifiers.CRESCENT_MOON_KEY,
     newMoonKey: ItemIdentifiers.NEW_MOON_KEY, gibbousMoonKey: ItemIdentifiers.GIBBOUS_MOON_KEY });
   const CASTLE_KEY_ITEMS = Object.freeze({
@@ -370,15 +371,17 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.GILDED_M, x: 2452, y: 7420, z: 0, from: CASTLE_ROOM.NORTH_LOBBY_HALL, to: CASTLE_ROOM.SMALL_HALL,
       fromFloor: 2, toFloor: 2, action: "Enter", key: ItemIdentifiers.GILDED_KEY, keyName: "gilded key", landing: [2444, 7418] },
     { id: CASTLE_DOOR_IDS.GILDED, x: 2445, y: 7418, z: 0, from: CASTLE_ROOM.SMALL_HALL, to: CASTLE_ROOM.NORTH_LOBBY_HALL,
-      fromFloor: 2, toFloor: 2, action: "Enter", key: ItemIdentifiers.GILDED_KEY, keyName: "gilded key", landing: [2453, 7421] },
+      fromFloor: 2, toFloor: 2, action: "Enter", key: ItemIdentifiers.GILDED_KEY, keyName: "gilded key", landing: [2453, 7420] },
+    { id: CASTLE_DOOR_IDS.DOOR_M, x: 2441, y: 7413, z: 0, from: CASTLE_ROOM.SMALL_HALL, to: CASTLE_ROOM.SECRET_ROOM,
+      fromFloor: 2, toFloor: 2, landing: [2437, 7419] },
     { id: CASTLE_DOOR_IDS.DOOR_M, x: 2441, y: 7417, z: 0, from: CASTLE_ROOM.SMALL_HALL, to: CASTLE_ROOM.IVAN_ROOM,
       fromFloor: 2, toFloor: 2, landing: [2459, 7390] },
     { id: CASTLE_DOOR_IDS.DOOR, x: 2460, y: 7390, z: 0, from: CASTLE_ROOM.IVAN_ROOM, to: CASTLE_ROOM.SMALL_HALL,
       fromFloor: 2, toFloor: 2, landing: [2442, 7417] },
     { id: CASTLE_DOOR_IDS.IVAN_PASSAGE, x: 2455, y: 7386, z: 0, from: CASTLE_ROOM.IVAN_ROOM, to: CASTLE_ROOM.SECRET_ROOM,
       fromFloor: 2, toFloor: 2, action: "Enter", landing: [2437, 7419] },
-    { id: CASTLE_DOOR_IDS.DOOR, x: 2438, y: 7419, z: 0, from: CASTLE_ROOM.SECRET_ROOM, to: CASTLE_ROOM.IVAN_ROOM,
-      fromFloor: 2, toFloor: 2, landing: [2456, 7388] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2438, y: 7419, z: 0, from: CASTLE_ROOM.SECRET_ROOM, to: CASTLE_ROOM.SMALL_HALL,
+      fromFloor: 2, toFloor: 2, key: ItemIdentifiers.FULL_MOON_KEY, keyName: "full moon key", landing: [2442, 7413] },
     { id: CASTLE_DOOR_IDS.FULL_M, x: 2373, y: 7392, z: 0, from: CASTLE_ROOM.WEST_CHAPEL, to: CASTLE_ROOM.BOTTLE_ROOM,
       fromFloor: 1, toFloor: 1, landing: [2380, 7392] },
     { id: CASTLE_DOOR_IDS.FULL_M, x: 2379, y: 7392, z: 0, from: CASTLE_ROOM.BOTTLE_ROOM, to: CASTLE_ROOM.WEST_CHAPEL,
@@ -2286,13 +2289,21 @@ module.exports = function registerTheBloodMoonRises(api) {
   function syncCastleBookKey(player) {
     if (!player || stage(player) !== STAGE.CASTLE) return;
     const story = castleStory(player);
-    if (!story.bookPuzzleComplete || story.fullMoonKeyClaimed) return;
+    if (!story.bookPuzzleComplete) return;
     const manager = api.getItemOnGroundManager?.();
     if (!manager?.registerLocation) return;
-    const tile = new Location(...CASTLE_LIBRARY.secretKey, CASTLE_LIBRARY.z);
-    if (!manager.getGroundItem?.(player.getUsername?.(), CASTLE_BOOK_ITEMS.fullMoonKey, tile,
-      player.getPrivateArea?.() ?? null)) {
-      manager.registerLocation(player, new Item(CASTLE_BOOK_ITEMS.fullMoonKey, 1), tile);
+    const privateArea = player.getPrivateArea?.() ?? null;
+    if (!story.fullMoonKeyClaimed && !hasItem(player, CASTLE_BOOK_ITEMS.fullMoonKey)) {
+      const keyTile = new Location(...CASTLE_LIBRARY.secretKey, CASTLE_LIBRARY.z);
+      if (!manager.getGroundItem?.(player.getUsername?.(), CASTLE_BOOK_ITEMS.fullMoonKey, keyTile, privateArea)) {
+        manager.registerLocation(player, new Item(CASTLE_BOOK_ITEMS.fullMoonKey, 1), keyTile);
+      }
+    }
+    if (!story.mysteryJerkyClaimed && !hasItem(player, CASTLE_BOOK_ITEMS.mysteryJerky)) {
+      const jerkyTile = new Location(2433, 7415, CASTLE_LIBRARY.z);
+      if (!manager.getGroundItem?.(player.getUsername?.(), CASTLE_BOOK_ITEMS.mysteryJerky, jerkyTile, privateArea)) {
+        manager.registerLocation(player, new Item(CASTLE_BOOK_ITEMS.mysteryJerky, 1), jerkyTile);
+      }
     }
   }
 
@@ -2718,6 +2729,29 @@ module.exports = function registerTheBloodMoonRises(api) {
     const option = String(event.option ?? "").toLowerCase();
     const story = castleStory(player);
     const key = story.newMoon ?? {};
+
+    if (id === CASTLE_KEY_LOC_IDS.searchableCrate && x === 2461 && y === 7421 && option === "search" &&
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.NORTH_LOBBY_HALL &&
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) === 2 &&
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 78) {
+      event.handled = true;
+      if (story.northLobbyJerkyClaimed) {
+        player.sendMessage("The crate is empty.");
+        return;
+      }
+      api.sendMultiChatboxPrompt(player, "You search the crate and find some mysterious jerky.",
+        "Leave it", () => {},
+        "Take it", () => {
+          const current = castleStory(player);
+          if (quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+            Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.NORTH_LOBBY_HALL ||
+            Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== 2 || current.northLobbyJerkyClaimed) return;
+          if (castleKeyGive(player, CASTLE_BOOK_ITEMS.mysteryJerky, "You take some mysterious jerky from the crate.")) {
+            player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...current, northLobbyJerkyClaimed: true });
+          }
+        });
+      return;
+    }
 
     if (CASTLE_KEY_OBJECTS.crate.has(id) && x === 2315 && y === 7408 && option === "search") {
       event.handled = true;
@@ -3295,6 +3329,13 @@ module.exports = function registerTheBloodMoonRises(api) {
       const dagger = event.groundItemId === ItemIdentifiers.ANCESTRAL_DAGGER;
       updateGibbousStory(player, { [dagger ? "daggerClaimed" : "gridNoteClaimed"]: true });
       player.sendMessage(dagger ? "You take the ancestral dagger." : "You take the grid note.");
+      return;
+    }
+    if (player && event?.groundItemId === CASTLE_BOOK_ITEMS.mysteryJerky && stage(player) === STAGE.CASTLE &&
+      x === 2433 && y === 7415 && z === CASTLE_LIBRARY.z && castleStory(player).bookPuzzleComplete) {
+      const story = castleStory(player);
+      player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, mysteryJerkyClaimed: true });
+      player.sendMessage("You take some mysterious jerky from the table.");
       return;
     }
     if (player && event?.groundItemId === CASTLE_BOOK_ITEMS.gibbousMoonKey && stage(player) === STAGE.CASTLE &&
@@ -4195,6 +4236,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       syncCastleRoom(player, transition.facing);
       player.moveTo(new Location(transition.landing[0], transition.landing[1], transition.landing[2] ?? 0));
       syncCastleActors(player);
+      if (transition.to === CASTLE_ROOM.SECRET_ROOM) syncCastleBookKey(player);
       return;
     }
     if (name !== "Door") return false;
@@ -4298,6 +4340,55 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.sendMessage("You search the south-eastern bookcase and take a book about the Vampyric Houses.");
   }
 
+  function handleCastleSecretRoomObjects(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    const id = event?.definition?.id ?? event?.objectId;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) < 78 ||
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.SECRET_ROOM ||
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== 2 || z !== CASTLE_LIBRARY.z ||
+      id !== 61752 || x !== 2433 || y !== 7411 || String(event?.option ?? "").toLowerCase() !== "search") return false;
+    event.handled = true;
+    const story = castleStory(player);
+    const potion = CASTLE_KEY_ITEMS.chunkyPotion1;
+    if (story.secretRoomPotionClaimed || hasItem(player, potion)) {
+      player.sendMessage("You search the shelves, but find nothing else of use.");
+      return true;
+    }
+    api.sendMultiChatboxPrompt(player, "You search the shelves and find a foul chunky potion.",
+      "Leave it", () => {},
+      "Take it", () => {
+        if (quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+          Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.SECRET_ROOM ||
+          castleStory(player).secretRoomPotionClaimed || hasItem(player, potion)) return;
+        if (castleKeyGive(player, potion, "You take a foul chunky potion from the shelves.")) {
+          player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...castleStory(player), secretRoomPotionClaimed: true });
+        }
+      });
+    return true;
+  }
+
+  function handleCastleChunkyPotionCombine(event) {
+    const player = event?.player;
+    const oneDose = CASTLE_KEY_ITEMS.chunkyPotion1;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.SECRET_ROOM ||
+      event.usedItemId !== oneDose || event.usedWithItemId !== oneDose) return false;
+    event.handled = true;
+    const inventory = player.getInventory();
+    if (event.usedItemSlot === event.usedWithItemSlot || inventory.getAmount(oneDose) < 2 ||
+      !inventory.deleteNumber(oneDose, 2) || inventory.adds(CASTLE_KEY_ITEMS.chunkyPotion2, 1) === false) {
+      player.sendMessage("You need two separate one-dose foul chunky potions to combine them.");
+      return true;
+    }
+    player.sendMessage("You combine the potion into two doses.");
+    return true;
+  }
+
   function handleCastleBookOnObject(event) {
     const player = event?.player;
     const tile = event?.location;
@@ -4332,8 +4423,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     const currentStage = player && stage(player);
     const name = event.definition?.getName?.();
     const option = event.definition?.getInteractions?.()?.[event.clickType - 1];
+    const visibleId = event.definition?.id ?? event.objectId;
+    const objectIds = [visibleId, event.objectId];
     if (!player || quest.isComplete(player) || currentStage < STAGE.CASTLE || currentStage > STAGE.ESCAPE ||
-      (!CASTLE_DOOR_NAMES.includes(name) && !CASTLE_DOOR_TRANSITIONS.some(door => door.id === event.definition?.id &&
+      (!CASTLE_DOOR_NAMES.includes(name) && !CASTLE_DOOR_TRANSITIONS.some(door => objectIds.includes(door.id) &&
         door.x === tile?.getX?.() && door.y === tile?.getY?.() && (door.z ?? 0) === tile?.getZ?.())) ||
       !["Enter", "Climb-up", "Climb-down"].includes(option) ||
       !tile || tile.getX() < 2300 || tile.getX() > 2600 ||
@@ -4342,12 +4435,23 @@ module.exports = function registerTheBloodMoonRises(api) {
     const sourceX = source?.x ?? source?.getX?.();
     const sourceY = source?.y ?? source?.getY?.();
     const sourceZ = source?.z ?? source?.getZ?.();
+    // The hidden passage is a scenery loc embedded in a blocked wall tile.
+    // Generic object pathing cannot execute its Enter action from the adjacent
+    // floor tile, so replay the click from that same reachable tile.
+    if (objectIds.includes(CASTLE_DOOR_IDS.IVAN_PASSAGE) && tile.getX() === 2455 &&
+      tile.getY() === 7386 && tile.getZ() === 0 &&
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.IVAN_ROOM &&
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) === 2 && sourceZ === 0 &&
+      Math.max(Math.abs(sourceX - tile.getX()), Math.abs(sourceY - tile.getY())) <= 1) {
+      event.destination = { x: sourceX, y: sourceY, z: sourceZ };
+      return;
+    }
     // The ground-lobby staircase fills a 3x4 cache footprint against a wall.
     // Its only reachable interaction edge is the west side, even though the
     // cache rotation directs generic pathing toward the blocked south edge.
     // Replaying the click from the player's current west-edge tile lets the
     // normal interaction handler perform the paired climb transition.
-    if (event.definition?.id === CASTLE_DOOR_IDS.STAIRS_UP && tile.getX() === 2315 &&
+    if (objectIds.includes(CASTLE_DOOR_IDS.STAIRS_UP) && tile.getX() === 2315 &&
       tile.getY() === 7370 && tile.getZ() === 0 &&
       Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.LOBBY &&
       Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) === CASTLE_GROUND_FLOOR &&
@@ -4360,7 +4464,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     // The north-lobby door is placed in a clipped wall segment disconnected
     // from the player's landing room component. Route to the known connected
     // room arrival point, then let the same Enter packet use the paired door.
-    if (event.definition?.id === 61576 && tile.getX() === 2466 && tile.getY() === 7422 &&
+    if (objectIds.includes(61576) && tile.getX() === 2466 && tile.getY() === 7422 &&
       tile.getZ() === 0 && Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.NORTH_LOBBY_HALL) {
       event.destination = { x: 2456, y: 7417, z: 0 };
       return;
@@ -5307,6 +5411,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction("Solid door", { Enter: handleCastleDoorEnter });
   api.onObjectInteraction("Teleporter", { Enter: handleCastleDoorEnter });
   api.onObjectInteraction(handleCastleBookObjects);
+  api.onObjectInteraction(handleCastleSecretRoomObjects);
   api.onObjectInteraction(handleCastleGibbousObjects);
   api.onObjectInteraction(searchGibbousDisplayCase);
   api.onObjectInteraction(handleCastleKeyObjects);
@@ -5322,6 +5427,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction(handleCastleThirdEmblemReceptacle);
   api.onObjectInteraction(inspectRanisCrackedWall);
   api.onItemOnItem(handleCastleKeyItemOnItem);
+  api.onItemOnItem(handleCastleChunkyPotionCombine, { noted: false });
   api.onCustomEvent("player:widget-action", handleCastleBookWidgetAction);
   api.onGroundItemPickup(handleCastleBookPickup);
   api.onItemAction(handleCastleGibbousItemAction);

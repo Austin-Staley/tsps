@@ -2148,12 +2148,72 @@ test('Blood Moon Castle gilded bookcase uses the eight House slots and places th
   assert.equal(slots.get(15525), 2, 'the cache varbit reveals the solved bookcase and passage');
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').bookPuzzleComplete, true);
   assert.equal(removedInterface, true, 'solving closes the widget');
-  assert.equal(ground.length, 1);
+  assert.equal(ground.length, 2, 'solving the library puzzle exposes the recorded key and jerky supplies');
   assert.equal(ground[0].item.getId(), 33724);
   assert.deepEqual([ground[0].location.getX(), ground[0].location.getY(), ground[0].location.getZ()], [2433, 7416, 0]);
+  assert.equal(ground[1].item.getId(), 33802);
+  assert.deepEqual([ground[1].location.getX(), ground[1].location.getY(), ground[1].location.getZ()], [2433, 7415, 0]);
   handlers.ground.find(handler => handler.name === 'handleCastleBookPickup')({ player, groundItemId: 33724,
     location: { x: 2433, y: 7416, z: 0 } });
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').fullMoonKeyClaimed, true);
+  handlers.ground.find(handler => handler.name === 'handleCastleBookPickup')({ player, groundItemId: 33802,
+    location: { x: 2433, y: 7415, z: 0 } });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').mysteryJerkyClaimed, true);
+});
+
+test('Blood Moon Castle hidden room supplies the chunky potion through Search and combines real doses', () => {
+  const { api, handlers } = mockApi();
+  let prompt;
+  const items = new Map();
+  const inventory = {
+    contains: id => (items.get(id) ?? 0) > 0,
+    getAmount: id => items.get(id) ?? 0,
+    getFreeSlots: () => 28 - [...items.values()].reduce((sum, count) => sum + count, 0),
+    adds: (id, amount) => { items.set(id, (items.get(id) ?? 0) + amount); return true; },
+    deleteNumber: (id, amount) => { const count = items.get(id) ?? 0; if (count < amount) return false; items.set(id, count - amount); return true; },
+  };
+  api.sendMultiChatboxPrompt = (_player, title, ...options) => { prompt = { title, options }; };
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attributes = new Map();
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory, sendMessage() {}, getPacketSender: () => new Proxy({}, {
+      get: (_target, _key) => () => {},
+    }),
+  };
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  quest.setStage(player, 40);
+  attributes.set('quest.the_blood_moon_rises.castle-native-stage', 78);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 32);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 2);
+  attributes.set('quest.the_blood_moon_rises.castle-story', { bookPuzzleComplete: true, talkedToIvan: true,
+    defeated: ['library-venator'] });
+  const shelves = handlers.objects.find(handler => handler.name === 'handleCastleSecretRoomObjects');
+  const search = { player, objectId: 61752, definition: { id: 61752 },
+    location: { x: 2433, y: 7411, z: 0 }, option: 'Search', handled: false };
+  shelves(search);
+  assert.equal(search.handled, true);
+  assert.match(prompt.title, /foul chunky potion/);
+  prompt.options[3]();
+  assert.equal(items.get(33810), 1, 'taking the searched shelf item yields one real potion dose');
+  items.set(33810, 2);
+  const combine = handlers.itemOnItem.find(handler => handler.name === 'handleCastleChunkyPotionCombine');
+  const event = { player, usedItemId: 33810, usedWithItemId: 33810, usedItemSlot: 3, usedWithItemSlot: 4, handled: false };
+  combine(event);
+  assert.equal(event.handled, true);
+  assert.equal(items.get(33810), 0);
+  assert.equal(items.get(33809), 1, 'two one-dose potions combine into the cache two-dose potion');
+  attributes.set('quest.the_blood_moon_rises.castle-room', 34);
+  const northCrate = handlers.objects.find(handler => handler.name === 'handleCastleKeyObjects');
+  const crate = { player, objectId: 61751, definition: { id: 61751 }, location: { x: 2461, y: 7421, z: 0 },
+    option: 'search', handled: false };
+  northCrate(crate);
+  assert.equal(crate.handled, true);
+  assert.match(prompt.title, /mysterious jerky/);
+  prompt.options[3]();
+  assert.equal(items.get(33802), 1, 'the North Lobby Hall crate offers its captured jerky supply');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').northLobbyJerkyClaimed, true);
 });
 
 test('Blood Moon Castle new-moon key requires the corpse syringe, weapon statues, and crest fireplace', () => {
@@ -2320,6 +2380,8 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [61572, 2358, 7366], [61572, 2304, 7391], [61573, 2304, 7392],
     [61586, 2336, 7370, 0], [61587, 2339, 7395, 0],
     [61572, 2323, 7395, 0], [61573, 2348, 7383, 0],
+    [61572, 2438, 7419, 0], [61573, 2441, 7413, 0],
+    [61626, 2445, 7418, 0], [61627, 2452, 7420, 0],
     [61602, 2339, 7383, 0], [61604, 2435, 7386, 0],
     [61573, 2439, 7384, 0], [61572, 2455, 7381, 0],
     [61572, 2444, 7386, 0], [61577, 2467, 7395, 0],
@@ -2379,6 +2441,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [2452, 7404, 0], [2466, 7421, 0], [2474, 7371, 0], [2468, 7408, 0],
     [2456, 7417, 0], [2482, 7403, 0], [2476, 7409, 0],
     [2386, 7405, 0], [2490, 7401, 0], [2371, 7395, 0], [2373, 7409, 0], [2387, 7366, 0], [2370, 7384, 0],
+    [2442, 7413, 0], [2437, 7419, 0], [2453, 7420, 0], [2444, 7418, 0],
     [2342, 7416, 0], [2371, 7370, 0], [2314, 7420, 0], [2324, 7403, 0], [2361, 7394, 0], [2309, 7420, 0],
     [2327, 7381, 0], [2331, 7407, 0], [2327, 7390, 0], [2310, 7388, 0], [2358, 7381, 0],
     [2310, 7396, 0], [2342, 7372, 1], [2328, 7360, 1], [2305, 7392, 1], [2357, 7366, 1],
@@ -2434,6 +2497,17 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     'the captured prison exit landing connects to the basement stairs');
   const enter = handlers.objects.find((handler) => handler.name === 'handleCastleDoorEnter');
   const route = handlers.routes.find((handler) => handler.name === 'routeCastleDoorEnter');
+  attributes.set('quest.the_blood_moon_rises.castle-room', 29);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 2);
+  const hiddenPassageRoute = {
+    player, objectId: 61615, clickType: 1,
+    definition: { id: 61618, getName: () => 'Passage', getInteractions: () => ['Enter'] },
+    object: { getFace: () => 1, getLocation: () => new api.core.Location(2455, 7386, 0) },
+    sourceLocation: { x: 2454, y: 7387, z: 0 }, destination: null,
+  };
+  route(hiddenPassageRoute);
+  assert.deepEqual(hiddenPassageRoute.destination, { x: 2454, y: 7387, z: 0 },
+    'the clipped hidden passage replays Enter from its reachable adjacent floor tile');
   const routeEvent = {
     player, objectId: 61576, clickType: 1,
     definition: { getName: () => 'Door', getInteractions: () => ['Enter'] },
@@ -2524,6 +2598,29 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     enter(paired);
     return paired;
   };
+  inventoryItems.add(api.core.ItemIdentifiers.FULL_MOON_KEY);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 32);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 2);
+  const secretRoomExit = enterPairedDoor(61572, 2438, 7419, 0, { x: 2437, y: 7419, z: 0 });
+  assert.equal(secretRoomExit.handled, true);
+  assert.deepEqual(moved.at(-1), [2442, 7413, 0], 'the full moon key opens the captured secret-room door into the small hall');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 33);
+  const returnToSecretRoom = enterPairedDoor(61573, 2441, 7413, 0, { x: 2441, y: 7414, z: 0 });
+  assert.equal(returnToSecretRoom.handled, true);
+  assert.deepEqual(moved.at(-1), [2437, 7419, 0], 'the captured small-hall door returns to the secret room');
+  inventoryItems.add(api.core.ItemIdentifiers.GILDED_KEY);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 33);
+  const gildedLibraryDoor = enterPairedDoor(61626, 2445, 7418, 1, { x: 2445, y: 7417, z: 0 });
+  assert.equal(gildedLibraryDoor.handled, true);
+  assert.deepEqual(moved.at(-1), [2453, 7420, 0], 'the captured gilded library door lands in the north lobby hall');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 34);
+  const gildedLibraryReturn = enterPairedDoor(61627, 2452, 7420, 1, { x: 2452, y: 7421, z: 0 });
+  assert.equal(gildedLibraryReturn.handled, true);
+  assert.deepEqual(moved.at(-1), [2444, 7418, 0], 'the reverse gilded door returns to the small hall');
+  inventoryItems.delete(api.core.ItemIdentifiers.FULL_MOON_KEY);
+  inventoryItems.delete(api.core.ItemIdentifiers.GILDED_KEY);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 1);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 1);
   const toDining = enterPairedDoor(61577, 2327, 7360, 1, { x: 2327, y: 7362, z: 0 });
   assert.equal(toDining.handled, true);
   assert.deepEqual(moved.at(-1), [2342, 7372, 0], 'the lobby entrance lands beside the paired dining-room door');
