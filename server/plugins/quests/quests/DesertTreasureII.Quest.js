@@ -133,11 +133,17 @@ module.exports = function registerDesertTreasureII(api) {
   const FINAL_WIGHTS_STARTED = "desert-treasure-ii:final-wights-started";
   const FINAL_WIGHTS_COMPLETE = "desert-treasure-ii:final-wights-complete";
   const LASSAR = "desert-treasure-ii:lassar";
+  // Cache 48200 is inert at these six anchors. There is no per-player map morph
+  // for the material-side puddle, so the undercity exposes cache-backed 48199
+  // globally; the handler gives players outside this chapter a clear refusal.
+  const LASSAR_PUDDLE_TILES = [[2342, 6365], [2362, 6404], [2409, 6418], [2598, 6365], [2618, 6404], [2665, 6418]];
   const LASSAR_TELEPORTERS = [
     [2593, 6424, 49479], [2617, 6417, 49480], [2611, 6379, 49482], [2599, 6341, 49483],
     [2643, 6434, 49484], [2652, 6405, 49481], [2691, 6415, 49485],
   ];
   const LASSAR_ACTIONS = { ramarno: "xu7yT_", rope: "em2ULK", ropeAgain: "ws5gAK" };
+  const LASSAR_KETLA_WORKBENCH = 48247; // Cache transform of the placed null loc 49486.
+  let lassarPuddlesInstalled = false;
   const LASSAR_TELEPORTER_VARBITS = [15088, 15089, 15091, 15092, 15093, 15090, 15094];
   const LASSAR_SCHEMATIC_VARBITS = [
     ["blockerDesigned", 15082], ["idolSchematic", 15083], ["animaSchematic", 15084],
@@ -3338,6 +3344,7 @@ module.exports = function registerDesertTreasureII(api) {
   function handleLassarProcess({ player: p }) {
     if (p && stage(p) > 0) syncNativeProgress(p);
     if (!p || p.isPlayerBot?.() === true || stage(p) !== S.WHISPERER) return;
+    ensureLassarPuddleUse();
     const lassarState = p.getAttribute(LASSAR) ?? {};
     ensureLassarIntroItems(p, lassarState);
     const position = p.getLocation?.();
@@ -6070,6 +6077,12 @@ module.exports = function registerDesertTreasureII(api) {
     const { player: p, location } = event;
     const state = p.getAttribute(LASSAR) ?? {};
     const x = location?.x, y = location?.y, z = location?.z ?? 0;
+    if (visibleId === 48199 && option === "use"
+      && LASSAR_PUDDLE_TILES.some(([px, py]) => px === x && py === y)
+      && stage(p) !== S.WHISPERER) {
+      p.sendMessage("This black puddle only answers to the Blackstone fragment during the Whisperer chapter.");
+      return true;
+    }
     if (stage(p) !== S.WHISPERER || !location) return false;
 
     // Prescott's route starts on the real Camdozaal sinkhole. Tying the rope
@@ -6233,21 +6246,6 @@ module.exports = function registerDesertTreasureII(api) {
       return true;
     }
 
-    if (x === 2350 && y === 6360 && state.inShadow && [48254, 48255, 48256, 48257, 48258, 48259, 48260, 48261, 48262, 48263, 48264, 48265, 48266, 48267].includes(visibleId)
-      && (option === "open" || option === "unlock")) {
-      if (!state.blockerPlaced) { p.sendMessage("The lost souls overwhelm you here. Place the shadow blocker beside the locked doors before crossing the furnace building."); return true; }
-      if (!has(p, I.SHADOW_KEY) || !state.purpleKey) { p.sendMessage("The shadow realm door needs its purple shadow key."); return true; }
-      p.getInventory().deleteNumber(I.SHADOW_KEY, 1);
-      setLassar(p, { ...state, doorUnlocked: true, purpleKey: false });
-      const manager = api.getItemOnGroundManager?.();
-      const tile = new api.core.Location(2353, 6367, 0);
-      if (manager?.registerLocation && !manager.getGroundItem?.(p.getUsername(), I.BASIC_SHADOW_TORCH_SCHEMATIC, tile, p.getPrivateArea?.() ?? null)) {
-        manager.registerLocation(p, new Item(I.BASIC_SHADOW_TORCH_SCHEMATIC, 1), tile);
-      }
-      p.sendMessage("You unlock the furnace-house door with the purple key. Beyond it, you see a basic shadow torch schematic.");
-      return false;
-    }
-
     const teleporter = LASSAR_TELEPORTERS.find(([tx, ty, id]) => x === tx && y === ty
       && (visibleId === id || visibleId === 48201 || visibleId === 48202 || visibleId === 48203));
     if (teleporter && (option === "activate" || option === "travel" || option === "use" || option === "")) {
@@ -6348,7 +6346,7 @@ module.exports = function registerDesertTreasureII(api) {
 
     // The Ketla workshop and the real mirrored puddles are the puzzle's
     // intended device and realm transitions; retain their cache locations.
-    if (x === 2645 && y >= 6438 && y <= 6442 && [48163, 49486].includes(visibleId)
+    if (x === 2645 && y >= 6438 && y <= 6442 && [LASSAR_KETLA_WORKBENCH, 48163, 49486].includes(visibleId)
       && (option === "search" || option === "make" || option === "operate")) {
       if (!state.ketlaBriefed) { p.sendMessage("Talk to Ketla and give her the appropriate schematic first."); return true; }
       if (state.blockerDesigned && !has(p, I.SHADOW_BLOCKER)) {
@@ -6390,20 +6388,68 @@ module.exports = function registerDesertTreasureII(api) {
       p.sendMessage("The workbench is clear. Bring Ketla another Lassar schematic to assemble.");
       return true;
     }
-    if (visibleId === 48200 && option && (option === "enter" || option === "touch" || option === "activate")) {
-      const inShadow = Boolean(state.inShadow);
-      if (!has(p, I.BLACKSTONE_FRAGMENT) && !has(p, I.BLACKSTONE_FRAGMENT_2) && !has(p, I.BLACKSTONE_FRAGMENT_3)) {
-        p.sendMessage("The blackstone fragment is needed to cross safely into the shadow realm.");
+    if (visibleId === 48199 && option === "use"
+      && LASSAR_PUDDLE_TILES.some(([px, py]) => px === x && py === y)) {
+      if (state.inShadow || !has(p, I.BLACKSTONE_FRAGMENT) && !has(p, I.BLACKSTONE_FRAGMENT_2) && !has(p, I.BLACKSTONE_FRAGMENT_3)) {
+        p.sendMessage(state.inShadow ? "Use the blackstone fragment to leave the Shadow Realm." : "The blackstone fragment is needed to cross safely into the Shadow Realm.");
         return true;
       }
-      const worldSide = x >= 2560;
-      const nextX = worldSide ? x - 256 : x + 256;
-      setLassar(p, { ...state, inShadow: !inShadow });
-      p.moveTo(new api.core.Location(nextX, y, z));
-      p.sendMessage(inShadow ? "You step back into the material world." : "You pass through the puddle into Lassar's shadow realm.");
+      p.moveTo(new api.core.Location(x - 256, y, z));
+      setLassar(p, { ...state, inShadow: true });
+      p.sendMessage("You use the puddle to enter Lassar's Shadow Realm.");
       return true;
     }
     return false;
+  }
+
+  function ensureLassarPuddleUse() {
+    if (lassarPuddlesInstalled) return;
+    const { GameObject, Location, MapObjects, ObjectManager, RegionManager } = api.core;
+    if (!GameObject || !Location || !MapObjects?.mapObjects || !ObjectManager?.register || !RegionManager?.loadMapFiles) return;
+    let complete = true;
+    for (const [x, y] of LASSAR_PUDDLE_TILES) {
+      RegionManager.loadMapFiles(x, y);
+      const location = new Location(x, y, 0);
+      const objects = MapObjects.mapObjects.get(MapObjects.getHash(x, y, 0)) ?? [];
+      if (objects.some((object) => object.getId() === 48199 && object.getLocation().equals(location))) continue;
+      const original = objects.find((object) => object.getId() === 48200 && object.getLocation().equals(location));
+      if (!original) { complete = false; continue; }
+      ObjectManager.deregister(original, true);
+      ObjectManager.register(new GameObject(48199, location, original.getType(), original.getFace(), null), true);
+    }
+    lassarPuddlesInstalled = complete;
+  }
+
+  // Doors.plugin.js claims the cached Doors/Open action before the quest's
+  // catch-all object hook, so gate this one scene through its existing event.
+  function handleLassarDoorToggle(event) {
+    const p = event?.player;
+    const state = p?.getAttribute?.(LASSAR) ?? {};
+    const location = event?.location;
+    const x = location?.getX?.() ?? location?.x;
+    const y = location?.getY?.() ?? location?.y;
+    if (stage(p) !== S.WHISPERER || !state.inShadow || !location
+      || x !== 2350 || y !== 6360 || event.objectId !== 48289
+      || event.clickType !== 1) return;
+    if (!state.blockerPlaced) {
+      p.sendMessage("The lost souls overwhelm you here. Place the shadow blocker beside the locked doors before crossing the furnace building.");
+      event.handled = true;
+      return;
+    }
+    if (!has(p, I.SHADOW_KEY) || !state.purpleKey) {
+      p.sendMessage("The shadow realm door needs its purple shadow key.");
+      event.handled = true;
+      return;
+    }
+    p.getInventory().deleteNumber(I.SHADOW_KEY, 1);
+    setLassar(p, { ...state, doorUnlocked: true, purpleKey: false });
+    const manager = api.getItemOnGroundManager?.();
+    const tile = new api.core.Location(2353, 6367, 0);
+    if (manager?.registerLocation && !manager.getGroundItem?.(p.getUsername(), I.BASIC_SHADOW_TORCH_SCHEMATIC, tile, p.getPrivateArea?.() ?? null)) {
+      manager.registerLocation(p, new Item(I.BASIC_SHADOW_TORCH_SCHEMATIC, 1), tile);
+    }
+    p.sendMessage("You unlock the furnace-house door with the purple key. Beyond it, you see a basic shadow torch schematic.");
+    // Leave handled false so the shared Doors plugin opens the actual cache door.
   }
 
   // Chatbox prompts support at most five choices. Keep four destinations visible
@@ -6552,6 +6598,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onCustomEvent("dt2:sucellus-prison-complete", completeSucellusPrison);
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);
+  api.onCustomEvent("door:toggle", handleLassarDoorToggle);
   api.onCustomEvent("magic:hit-effects", activateTotem);
   api.onCustomEvent("magic:hit-effects", stunLeviathan);
   api.onCombatHitRoll(forceTotemAccuracy);

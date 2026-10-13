@@ -4660,7 +4660,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
 
 test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the cathedral and blackstone fragment behind real caches', () => {
   const { api: base, handlers: baseHandlers } = mockApi();
-  const objectHooks = [], objectRouteHooks = [], itemOnObjectHooks = [], itemActionHooks = [], itemOnItemHooks = [], groundPickupHooks = [], actionHooks = [], choiceHooks = [], interactions = [], transcripts = [], groundSpawns = [], playerProcesses = [], spawnedNpcs = [], prompts = [];
+  const objectHooks = [], objectRouteHooks = [], itemOnObjectHooks = [], itemActionHooks = [], itemOnItemHooks = [], groundPickupHooks = [], actionHooks = [], choiceHooks = [], doorToggleHooks = [], interactions = [], transcripts = [], groundSpawns = [], playerProcesses = [], spawnedNpcs = [], prompts = [];
   const counts = new Map();
   const varbits = new Map();
   const core = {
@@ -4686,6 +4686,7 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
           : prop === 'onCustomEvent' ? (name, handler) => {
             if (name === 'npc-dialogue:action') actionHooks.push(handler);
             if (name === 'npc-dialogue:choice') choiceHooks.push(handler);
+            if (name === 'door:toggle') doorToggleHooks.push(handler);
           }
             : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
               : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
@@ -4713,6 +4714,9 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
       getLocation() { return this.location; },
       moveTo(location) { this.location = location; }, sendMessage(message) { (this.messages ??= []).push(message); },
     };
+    assert.equal(objectHooks[0]({ player, objectId: 48199, location: { x: 2598, y: 6365, z: 0 }, option: 'Use' }), true,
+      'the globally visible replacement puddle refuses players outside the Whisperer chapter');
+    assert.match(player.messages.at(-1), /only answers/);
     quest.setStage(player, 10);
     const interact = objectHooks[0];
     const ramarno = interactions.find((entry) => entry.name === 'Ramarno').options['Talk-to'];
@@ -4832,19 +4836,31 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-with-a-schematic');
     actionHooks[0]({ player, stepId: 'tOep7b' });
     assert.equal(counts.get(core.ItemIdentifiers.SHADOW_BLOCKER_SCHEMATIC), 0, 'Ketla takes the schematic to build the blocker');
-    assert.equal(interact({ player, objectId: 48163, location: { x: 2645, y: 6440, z: 0 }, option: 'Search' }), true);
+    assert.equal(interact({ player, objectId: 48247, location: { x: 2645, y: 6440, z: 0 }, option: 'Search' }), true,
+      'the live cache workbench transforms to visible loc 48247 before dispatch');
     assert.equal(counts.get(core.ItemIdentifiers.SHADOW_BLOCKER), 1);
-    assert.equal(interact({ player, objectId: 48200, location: { x: 2598, y: 6365, z: 0 }, option: 'Enter' }), true);
+    player.location = new core.Location(2598, 6365, 0);
+    assert.equal(interact({ player, objectId: 48200, location: { x: 2598, y: 6365, z: 0 }, option: '' }), false,
+      'the actionless map puddle is not treated as a clickable menu action');
+    assert.equal(interact({ player, objectId: 48199, location: { x: 2598, y: 6365, z: 0 }, option: 'Use' }), true,
+      'the cache-backed Use puddle variant enters the Shadow Realm');
     assert.equal(player.location.x, 2342, 'the puddle carries the player into the mirrored shadow region');
-    assert.equal(interact({ player, objectId: 48264, location: { x: 2350, y: 6360, z: 0 }, option: 'Open' }), true);
+    const lockedDoor = { player, objectId: 48289, location: new core.Location(2350, 6360, 0), clickType: 1, handled: false };
+    doorToggleHooks[0](lockedDoor);
+    assert.equal(lockedDoor.handled, true,
+      'the purple key is required at the actual cached furnace-house door');
     assert.match(player.messages.at(-1), /lost souls overwhelm/);
-    itemActionHooks[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+    const leaveRealm = { player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate', handled: false };
+    itemActionHooks[0](leaveRealm);
+    assert.equal(leaveRealm.handled, true);
     assert.equal(player.location.x, 2598, 'the fragment returns the player to the material world');
     assert.equal(itemOnObjectHooks[0]({ player, objectId: 48264, itemId: core.ItemIdentifiers.SHADOW_BLOCKER, location: { x: 2606, y: 6359, z: 0 } }), true);
     assert.equal(counts.get(core.ItemIdentifiers.SHADOW_BLOCKER), 0, 'the blocker is placed by the furnace-house door');
-    assert.equal(interact({ player, objectId: 48200, location: { x: 2598, y: 6365, z: 0 }, option: 'Enter' }), true);
-    const unlocked = interact({ player, objectId: 48264, location: { x: 2350, y: 6360, z: 0 }, option: 'Open' });
-    assert.equal(unlocked, false, 'the purple key opens the real locked shadow door after the blocker is placed');
+    player.location = new core.Location(2598, 6365, 0);
+    assert.equal(interact({ player, objectId: 48199, location: { x: 2598, y: 6365, z: 0 }, option: 'Use' }), true);
+    const unlockDoor = { player, objectId: 48289, location: new core.Location(2350, 6360, 0), clickType: 1, handled: false };
+    doorToggleHooks[0](unlockDoor);
+    assert.equal(unlockDoor.handled, false, 'the shared Doors plugin opens the real cached door after the quest unlocks it');
     assert.equal(counts.get(core.ItemIdentifiers.SHADOW_KEY), 0);
     assert.equal(groundSpawns.filter(([, item]) => item.getId() === core.ItemIdentifiers.BASIC_SHADOW_TORCH_SCHEMATIC).length, 1,
       'the basic torch schematic appears at its cache tile behind the door');
@@ -4903,7 +4919,8 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(interact({ player, objectId: 48245, definition: { id: 48245 }, location: { x: 2380, y: 6430, z: 1 }, option: 'Touch' }), true);
     assert.equal(transcripts.at(-1), 'the-whisperer-viewing-the-remnant-in-the-pub');
     itemActionHooks[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
-    assert.equal(interact({ player, objectId: 48200, definition: { id: 48200 }, location: { x: 2665, y: 6418, z: 0 }, option: 'Enter' }), true);
+    player.location = new core.Location(2665, 6418, 0);
+    assert.equal(interact({ player, objectId: 48199, location: { x: 2665, y: 6418, z: 0 }, option: 'Use' }), true);
     for (const [x, y, id] of [[2392, 6411, 48208], [2383, 6408, 48205]]) {
       assert.equal(interact({ player, objectId: id, definition: { id }, location: { x, y, z: 0 }, option: 'Burn' }), true);
     }
