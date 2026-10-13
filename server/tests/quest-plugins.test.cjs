@@ -5433,7 +5433,7 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     const leaveRealm = { player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate', handled: false };
     itemActionHooks[0](leaveRealm);
     assert.equal(leaveRealm.handled, true);
-    assert.equal(player.location.x, 2598, 'the fragment returns the player to the material world');
+    assert.deepEqual([player.location.x, player.location.y], [2597, 6365], 'the fragment returns beside the blocked puddle to a walkable material tile');
     assert.equal(itemOnObjectHooks[0]({ player, objectId: 48264, itemId: core.ItemIdentifiers.SHADOW_BLOCKER, location: { x: 2606, y: 6359, z: 0 } }), true);
     assert.equal(counts.get(core.ItemIdentifiers.SHADOW_BLOCKER), 0, 'the blocker is placed by the furnace-house door');
     attrs.set(lassarAttribute, { ...attrs.get(lassarAttribute), purpleKey: false });
@@ -5712,12 +5712,27 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   }
   assert.equal(boss.__dt2WhispererSpecial, null, 'standing by each remaining column survives all three screeches');
 
-  itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+  const puddleExitTiles = [
+    [2342, 6365, 2341, 6365], [2362, 6404, 2361, 6405], [2409, 6418, 2410, 6417],
+    [2598, 6365, 2597, 6365], [2618, 6404, 2617, 6405], [2665, 6418, 2666, 6417],
+  ];
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const directions = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+  for (const [materialX, y, exitX, exitY] of puddleExitTiles) {
+    attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), inShadow: true });
+    player.location = { x: materialX - 256, y, z: 0 };
+    itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+    assert.deepEqual([player.location.x, player.location.y], [exitX, exitY],
+      `leaving at puddle ${materialX},${y} lands on the adjacent collision-clear tile`);
+    assert.ok(directions.some(([dx, dy]) => RegionManager.canMove(exitX, exitY, exitX + dx, exitY + dy, 0, 1, 1, null)),
+      `the fragment return tile ${exitX},${exitY} has an actual cache-backed movement edge`);
+  }
+
   assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, false, 'the fragment returns the player to the material world');
   boss.registered = false;
   deathHooks[0]({ npc: boss, killer: player });
   assert.equal(attrs.get('desert-treasure-ii:lassar').whispererEnraged, true, 'the first defeat starts her 100-hitpoint enrage');
-  assert.equal(player.location.x, 2404, 'the enrage pulls the player back into the Shadow Realm');
+  assert.deepEqual([player.location.x, player.location.y], [2410, 6417], 'the enrage pulls the player back from their safe material return tile');
   playerProcesses.forEach((handler) => handler({ player }));
   const enraged = created.filter((npc) => npc.__dt2Whisperer).at(-1);
   assert.equal(enraged.maxHp, 100);

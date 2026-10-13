@@ -138,6 +138,13 @@ module.exports = function registerDesertTreasureII(api) {
   // for the material-side puddle, so the undercity exposes cache-backed 48199
   // globally; the handler gives players outside this chapter a clear refusal.
   const LASSAR_PUDDLE_TILES = [[2342, 6365], [2362, 6404], [2409, 6418], [2598, 6365], [2618, 6404], [2665, 6418]];
+  // shortcut: the cached puddle clips its material landing tile. Put a fragment
+  // user on the nearest collision-clear neighbor so they can leave the pool.
+  const LASSAR_PUDDLE_EXIT_TILES = new Map([
+    ["2342,6365", [2341, 6365]], ["2362,6404", [2361, 6405]],
+    ["2409,6418", [2410, 6417]], ["2598,6365", [2597, 6365]],
+    ["2618,6404", [2617, 6405]], ["2665,6418", [2666, 6417]],
+  ]);
   const LASSAR_TELEPORTERS = [
     [2593, 6424, 49479], [2617, 6417, 49480], [2611, 6379, 49482], [2599, 6341, 49483],
     [2643, 6434, 49484], [2652, 6405, 49481], [2691, 6415, 49485],
@@ -3747,7 +3754,9 @@ module.exports = function registerDesertTreasureII(api) {
         return true;
       }
       if (!state.inShadow) { p.sendMessage("The blackstone fragment is quiet in the material world."); event.handled = true; return true; }
-      p.moveTo(new api.core.Location(x + 256, y, z));
+      const materialX = x + 256;
+      const exitTile = LASSAR_PUDDLE_EXIT_TILES.get(`${materialX},${y}`);
+      p.moveTo(new api.core.Location(exitTile?.[0] ?? materialX, exitTile?.[1] ?? y, z));
       setLassar(p, { ...state, inShadow: false });
       p.sendMessage("The blackstone fragment pulls you out of the shadow realm.");
       event.handled = true;
