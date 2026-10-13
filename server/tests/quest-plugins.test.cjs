@@ -5069,6 +5069,14 @@ test('Song of the Elves chains the city-gate farewell into Baxtorian’s final t
     assert.deepEqual([player.location.getX(), player.location.getY(), player.location.getZ()], [2241, 3266, 0]);
     assert.equal(action.handled, true);
     assert.equal(action.steps[1].speaker, 'Arianwyn', 'the Wiki Arianwyn farewell follows the Iorwerth aftermath');
+    const baxtorianTalk = handlers.npcInteractions.get('Baxtorian')['Talk-to'];
+    assert.equal(baxtorianTalk({ player, npcId: api.core.NpcIdentifiers.BAXTORIAN,
+      definition: { getName: () => 'Baxtorian' } }), false,
+    'Baxtorian cannot skip the unfinished Arianwyn farewell');
+    const prematureEnd = { player, stepId: 'W-ainS', handled: false };
+    handlers.custom.get('npc-dialogue:action').at(-1)(prematureEnd);
+    assert.equal(prematureEnd.handled, true);
+    assert.equal(quest.isComplete(player), false, 'the quest cannot complete before the final farewell');
     const farewell = { player, text: 'And I you. Farewell friend.' };
     handlers.custom.get('npc-dialogue:line').at(-2)(farewell);
     assert.equal(typeof farewell.after, 'function');
@@ -5077,10 +5085,13 @@ test('Song of the Elves chains the city-gate farewell into Baxtorian’s final t
     assert.ok(removed.some(npc => npc.id === api.core.NpcIdentifiers.ARIANWYN_6));
     const baxtorian = spawned.find(npc => npc.id === api.core.NpcIdentifiers.BAXTORIAN);
     assert.ok(baxtorian?.ownerOnly, 'Baxtorian is available only to this quest owner at the gate');
-    const talk = handlers.npcInteractions.get('Baxtorian')['Talk-to'];
-    talk({ player, npcId: api.core.NpcIdentifiers.BAXTORIAN,
+    baxtorianTalk({ player, npcId: api.core.NpcIdentifiers.BAXTORIAN,
       definition: { getName: () => 'Baxtorian' }, npc: baxtorian });
     assert.equal(transcripts.at(-1), 'the-war-s-end-prifddinas-reformed');
+    const actorCountAfterFarewell = spawned.length;
+    quest.setStage(player, quest.completionValue);
+    handlers.playerLogin.at(-1)({ player });
+    assert.equal(spawned.length, actorCountAfterFarewell, 'completed quest logins do not spawn duplicate finale actors');
   } finally {
     runtime.startTranscript = originalStartTranscript;
   }
