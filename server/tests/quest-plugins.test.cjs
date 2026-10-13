@@ -5430,6 +5430,7 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   assert.equal(boss.__dt2SucellusAwake, false);
   itemNpcs.at(-1)({ player, npc: boss, itemId: I.ARDER_MUSCA_POISON });
   assert.equal(boss.__dt2SucellusAwake, true);
+  assert.equal(attrs.get('desert-treasure-ii:sucellus-encounter-started'), true);
   assert.equal(inventory.get(I.ARDER_MUSCA_POISON), 0);
   player.moveTo(area.tile(167, 97, 0));
   for (let i = 0; i < 36; i++) area.process(player);
@@ -5447,6 +5448,27 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   interactObject(49116, 3021, 6420, 'Open');
   assert.equal(inventory.get(I.SUCELLUS_MEDALLION), 1);
   assert.equal(quest.getStage(player), 10);
+
+  // A rebuilt private area has no awake NPC/HP snapshot. Its spent recipe must
+  // be replayable from the live cache suppliers instead of locking the quest.
+  quest.setStage(player, 9);
+  attrs.set('desert-treasure-ii:sucellus-defeated', false);
+  attrs.set('desert-treasure-ii:sucellus-encounter-started', true);
+  attrs.set('desert-treasure-ii:sucellus-poisons', 2);
+  attrs.set('desert-treasure-ii:sucellus-mushrooms', { musca: 3, arder: 3 });
+  attrs.set('desert-treasure-ii:sucellus-vats', { filled: { powders: [I.MUSCA_POWDER, I.ARDER_POWDER], salt: 6 } });
+  attrs.delete('desert-treasure-ii:sucellus-area');
+  const login = handlers.playerLogin.find(handler => handler.name === 'handleLogin');
+  assert.ok(login, 'DT2 restores its private prison on player login');
+  login({ player });
+  const recoveredArea = attrs.get('desert-treasure-ii:sucellus-area');
+  assert.notEqual(recoveredArea, area, 'login reconstructs the destroyed private encounter area');
+  assert.equal(attrs.get('desert-treasure-ii:sucellus-encounter-started'), false);
+  assert.equal(attrs.get('desert-treasure-ii:sucellus-poisons'), 0);
+  assert.deepEqual(attrs.get('desert-treasure-ii:sucellus-mushrooms'), { musca: 0, arder: 0 });
+  assert.deepEqual(attrs.get('desert-treasure-ii:sucellus-vats'), {});
+  assert.ok(recoveredArea.getObjects().some(object => object.getId() === O.MUSCA_MUSHROOMS));
+  assert.ok(recoveredArea.getObjects().some(object => object.getId() === O.ARDER_MUSHROOMS));
 });
 
 

@@ -84,6 +84,7 @@ module.exports = function registerDesertTreasureII(api) {
   const SUCELLUS_MUSHROOMS = "desert-treasure-ii:sucellus-mushrooms";
   const SUCELLUS_VATS = "desert-treasure-ii:sucellus-vats";
   const SUCELLUS_POISONS = "desert-treasure-ii:sucellus-poisons";
+  const SUCELLUS_ENCOUNTER_STARTED = "desert-treasure-ii:sucellus-encounter-started";
   const SUCELLUS_DEFEATED = "desert-treasure-ii:sucellus-defeated";
   const SUCELLUS_WEST_ROOM = "desert-treasure-ii:sucellus-west-room";
   const SUCELLUS_CAPTAIN_ACCEPTED = "desert-treasure-ii:sucellus-captain-accepted";
@@ -1851,6 +1852,17 @@ module.exports = function registerDesertTreasureII(api) {
       area.enter(p);
       p.setAttribute(SUCELLUS_AREA, area);
       if (!Number.isFinite(Number(p.getAttribute(SUCELLUS_POISONS)))) p.setAttribute(SUCELLUS_POISONS, 0);
+      if (p.getAttribute(SUCELLUS_ENCOUNTER_STARTED) && !p.getAttribute(SUCELLUS_DEFEATED)) {
+        // The encounter NPC and its HP live only in the private area. If that
+        // area is rebuilt after logout/server restart, refund the consumable
+        // recipe progress so the normal cache suppliers can make two fresh
+        // poisons instead of leaving a spent attempt permanently locked.
+        p.setAttribute(SUCELLUS_POISONS, 0);
+        p.setAttribute(SUCELLUS_MUSHROOMS, { musca: 0, arder: 0 });
+        p.setAttribute(SUCELLUS_VATS, {});
+        p.setAttribute(SUCELLUS_ENCOUNTER_STARTED, false);
+        p.sendMessage("The Duke has returned to his slumber. The mushrooms and vats are ready for another attempt.");
+      }
     } else area.enter(p);
     p.moveTo(atBossGate ? area.tile(167, 97, 0) : area.tile(40, 18, 2));
     activateSucellusSupplies(area);
@@ -2742,6 +2754,7 @@ module.exports = function registerDesertTreasureII(api) {
     p.setAttribute(SUCELLUS_POISONS, poisons);
     p.sendMessage(`The poison seeps into Duke Sucellus (${poisons}/2).`);
     if (poisons === 2) {
+      p.setAttribute(SUCELLUS_ENCOUNTER_STARTED, true);
       npc.__dt2SucellusAwake = true;
       npc.setScriptedMovement?.(false);
       npc.setNpcTransformationId?.(N.DUKE_SUCELLUS_7);
@@ -5478,6 +5491,7 @@ module.exports = function registerDesertTreasureII(api) {
       owned.sucellus = null;
       killer.setAttribute(ATTR, null);
       killer.setAttribute(SUCELLUS_DEFEATED, true);
+      killer.setAttribute(SUCELLUS_ENCOUNTER_STARTED, false);
       if (!has(killer, I.ODD_KEY)) {
         const location = npc.getLocation?.() ?? npc.getSpawnLocation?.();
         const groundItems = api.getItemOnGroundManager?.();
@@ -6496,7 +6510,7 @@ module.exports = function registerDesertTreasureII(api) {
   [FINAL_CELL_ACTIVE, FINAL_CELL_SOLUTION, FINAL_CELL_GUESS, FINAL_CELL_ATTEMPTS, FINAL_CELL_OPEN, FINAL_CELL_GEAR,
     FINAL_CELL_CHEST, FINAL_FIGURE_STARTED, FINAL_FIGURE_DEFEATED, "desert-treasure-ii:final-cell-pending",
     "desert-treasure-ii:final-cutscene-started", FINAL_WIGHT_INDEX, FINAL_WIGHTS_STARTED, FINAL_WIGHTS_COMPLETE].forEach((key) => api.persistAttribute(key));
-  [SUCELLUS_MUSHROOMS, SUCELLUS_VATS, SUCELLUS_POISONS, SUCELLUS_DEFEATED, SUCELLUS_WEST_ROOM,
+  [SUCELLUS_MUSHROOMS, SUCELLUS_VATS, SUCELLUS_POISONS, SUCELLUS_ENCOUNTER_STARTED, SUCELLUS_DEFEATED, SUCELLUS_WEST_ROOM,
     SUCELLUS_CELL_PROGRESS, SUCELLUS_CELL_ENTERED, SUCELLUS_CELL_ESCAPED, SUCELLUS_ASSASSIN_GONE, SUCELLUS_CAPTAIN_ACCEPTED,
     SUCELLUS_PRISON_GEAR, SUCELLUS_PRISON_PROGRESS, SUCELLUS_PRISON_CHECKPOINT, SUCELLUS_PRISON_COMPLETE].forEach((key) => api.persistAttribute(key));
   [SCAR_DEMONS_DEFEATED, SCAR_BOAT_TRIED, SCAR_PERSTEN_TALKED, SCAR_PERSTEN_TALKED_BEFORE,
