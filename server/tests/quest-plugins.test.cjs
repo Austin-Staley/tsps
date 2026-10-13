@@ -1582,7 +1582,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [61573, 2439, 7384, 0], [61572, 2455, 7381, 0],
     [61572, 2444, 7386, 0], [61577, 2467, 7395, 0],
     [61572, 2474, 7398, 0], [61573, 2314, 7360, 1],
-    [61572, 2314, 7382, 1], [61576, 2457, 7417, 0],
+    [61572, 2314, 7382, 1], [61576, 2457, 7417, 0], [61599, 2315, 7370, 0], [61608, 2315, 7370, 1],
     [61576, 2466, 7422, 0], [61573, 2452, 7403, 0],
     [61572, 2477, 7409, 0], [61573, 2481, 7403, 0],
     [61604, 2491, 7402, 0], [61602, 2385, 7403, 0],
@@ -1627,7 +1627,8 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   const pairedDoorLandingTiles = [[2342, 7372, 0], [2327, 7362, 0], [2305, 7391, 0], [2357, 7366, 0],
     [2338, 7395, 0], [2337, 7370, 0], [2347, 7383, 0], [2324, 7395, 0], [2434, 7386, 0], [2341, 7384, 0],
     [2455, 7380, 0], [2439, 7386, 0], [2468, 7395, 0], [2443, 7386, 0], [2314, 7359, 1], [2474, 7397, 0],
-    [2456, 7417, 0], [2313, 7381, 1], [2451, 7403, 0], [2466, 7421, 0], [2481, 7404, 0], [2476, 7409, 0],
+    [2456, 7417, 0], [2313, 7381, 1], [2314, 7370, 1], [2314, 7369, 0],
+    [2451, 7403, 0], [2466, 7421, 0], [2481, 7404, 0], [2476, 7409, 0],
     [2384, 7403, 0], [2490, 7401, 0], [2371, 7395, 0], [2373, 7409, 0], [2387, 7366, 0], [2370, 7384, 0],
     [2342, 7416, 0], [2371, 7370, 0], [2314, 7420, 0], [2324, 7403, 0], [2360, 7393, 0], [2309, 7420, 0],
     [2327, 7381, 0], [2331, 7407, 0], [2327, 7390, 0], [2310, 7388, 0], [2357, 7380, 0],
@@ -1790,6 +1791,18 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     fromFloor: 1, toFloor: 1, keyId: api.core.ItemIdentifiers.FULL_MOON_KEY, landing: [2393, 7363, 0] });
   verifyMoonDoor({ id: 61592, name: 'Crescent moon door', x: 2343, y: 7416, from: 12, to: 13,
     fromFloor: 1, toFloor: 1, keyId: api.core.ItemIdentifiers.CRESCENT_MOON_KEY, landing: [2371, 7370, 0] });
+  attributes.set(castleRoom, 1);
+  attributes.set(castleFloor, 2);
+  const downstairs = { player, objectId: 61608, clickType: 1, option: 'Climb-down',
+    definition: { id: 61608, getName: () => 'Stairs' }, location: { x: 2315, y: 7370, z: 1 }, handled: false };
+  enter(downstairs);
+  assert.deepEqual(moved.at(-1), [2314, 7369, 0], 'the cache-matched first-floor stairs reach the ground lobby');
+  assert.equal(varbits.get(15489), 1);
+  const upstairs = { player, objectId: 61599, clickType: 1, option: 'Climb-up',
+    definition: { id: 61599, getName: () => 'Stairs' }, location: { x: 2315, y: 7370, z: 0 }, handled: false };
+  enter(upstairs);
+  assert.deepEqual(moved.at(-1), [2314, 7370, 1], 'the paired ground-lobby stairs return to the first floor');
+  assert.equal(varbits.get(15489), 2);
   for (const id of [api.core.ItemIdentifiers.NEW_MOON_KEY, api.core.ItemIdentifiers.GIBBOUS_MOON_KEY,
     api.core.ItemIdentifiers.FULL_MOON_KEY, api.core.ItemIdentifiers.CRESCENT_MOON_KEY]) inventoryItems.delete(id);
   attributes.set(castleRoom, 2);

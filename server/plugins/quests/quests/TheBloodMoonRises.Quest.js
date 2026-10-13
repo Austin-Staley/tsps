@@ -135,7 +135,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     NEW: 61584, NEW_M: 61585, HALF: 61586, HALF_M: 61587, GIBBOUS: 61588, GIBBOUS_M: 61589,
     FULL: 61590, FULL_M: 61591, CRESCENT: 61592, CRESCENT_M: 61593,
     SOLID: 61574, SOLID_M: 61575, GILDED: 61626, GILDED_M: 61627,
-    STAIRS_UP: 61599, STAIRS_UP_NORUG: 61600, STAIRS_DOWN: 61606, DISPLAY_STAIRS_DOWN: 61609,
+    STAIRS_UP: 61599, STAIRS_UP_NORUG: 61600, STAIRS_DOWN: 61606, STAIRS_DOWN_INVISIBLE: 61608,
+    DISPLAY_STAIRS_DOWN: 61609,
     SPIRAL_UP: 61602, SPIRAL_DOWN: 61604, GUEST_PORTAL_IN: 61771, GUEST_PORTAL_OUT: 61770,
     CHAPEL_PORTAL_IN: 61773, CHAPEL_PORTAL_OUT: 61772, PUZZLE_LIBRARY: 61625, IVAN_PASSAGE: 61615 });
   const CASTLE_EMBLEM_IDS = Object.freeze([ItemIdentifiers.DRAKAN_EMBLEM, ItemIdentifiers.DRAKAN_EMBLEM_2,
@@ -184,6 +185,12 @@ module.exports = function registerTheBloodMoonRises(api) {
       fromFloor: 2, toFloor: 2, landing: [2456, 7417, 0] },
     { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2457, y: 7417, z: 0, from: CASTLE_ROOM.NORTH_LOBBY_HALL, to: CASTLE_ROOM.LOBBY,
       fromFloor: 2, toFloor: 2, landing: [2313, 7381, 1] },
+    // Cache placements pair the ground lobby stair at2315,7370 with its
+    // first-floor down variant at the same x/y on plane1.
+    { id: CASTLE_DOOR_IDS.STAIRS_UP, x: 2315, y: 7370, z: 0, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.LOBBY,
+      fromFloor: 1, toFloor: 2, action: "Climb-up", landing: [2314, 7370, 1] },
+    { id: CASTLE_DOOR_IDS.STAIRS_DOWN_INVISIBLE, x: 2315, y: 7370, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.LOBBY,
+      fromFloor: 2, toFloor: 1, action: "Climb-down", landing: [2314, 7369, 0] },
     { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2466, y: 7422, z: 0, from: CASTLE_ROOM.NORTH_LOBBY_HALL, to: CASTLE_ROOM.VANESCULA_HALL,
       fromFloor: 2, toFloor: 2, landing: [2451, 7403] },
     { id: CASTLE_DOOR_IDS.DOOR_M, x: 2452, y: 7403, z: 0, from: CASTLE_ROOM.VANESCULA_HALL, to: CASTLE_ROOM.NORTH_LOBBY_HALL,
