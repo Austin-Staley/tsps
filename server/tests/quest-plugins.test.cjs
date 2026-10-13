@@ -1779,7 +1779,7 @@ test('DT2 hideout landing can reach Kasonde and the cache ladder through the rea
 });
 
 test('Desert Treasure II makes the Strangler serum with the two real ingredients and requires Kasonde dialogue', () => {
-  const { api: base } = mockApi();
+  const { api: base, handlers } = mockApi();
   let combine, itemAction;
   const interactions = [];
   const api = new Proxy(base, {
@@ -1814,6 +1814,11 @@ test('Desert Treasure II makes the Strangler serum with the two real ingredients
     assert.equal(itemAction({ player: p, itemId: I.STRANGLER_SERUM, option: 'Drink' }), undefined,
       'Kasonde must explain the completed serum before it can be drunk');
     interactions.find((entry) => entry.name === 'Kasonde').options['Talk-to']({ player: p, npcId: N.KASONDE });
+    assert.equal(attrs.get('desert-treasure-ii:kasonde-serum-discussed'), undefined, 'opening the advice does not complete it');
+    const advice = { player: p, npcId: N.KASONDE, text: "We're running out of time! I'm running out of time! Drink that potion. It should strengthen your immunity against the Strangler. Now go!" };
+    handlers.custom.get('npc-dialogue:line')[0](advice);
+    assert.equal(attrs.get('desert-treasure-ii:kasonde-serum-discussed'), undefined);
+    advice.after();
     assert.equal(attrs.get('desert-treasure-ii:kasonde-serum-discussed'), true);
     assert.equal(itemAction({ player: p, itemId: I.STRANGLER_SERUM, option: 'Drink' }), true);
     assert.equal(counts.get(I.STRANGLER_SERUM), 0);
@@ -1913,6 +1918,12 @@ test('Desert Treasure II requires both Stranglewood ingredients and defeating te
     giveSerum('ixrOLP');
     assert.equal(counts.get(I.UNFINISHED_SERUM), 1);
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 14);
+    attrs.set('desert-treasure-ii:stranglewood-temple', null);
+    interact(O.ENTRY_21, 1174, 3428);
+    const resumed = attrs.get('desert-treasure-ii:stranglewood-temple');
+    assert.equal(resumed.entities.filter(npc => npc.__dt2TempleEnemy).length, 0, 'completed temple combat does not repeat');
+    assert.ok(resumed.entities.some(npc => npc.id === N.KASONDE));
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'), 14);
     counts.delete(I.UNFINISHED_SERUM);
     interactions.find(entry=>entry.name==='Kasonde').options['Talk-to']({player:p,npcId:N.KASONDE});
     giveSerum('e7yS62');
@@ -1920,6 +1931,15 @@ test('Desert Treasure II requires both Stranglewood ingredients and defeating te
     assert.equal(counts.get(I.UNFINISHED_SERUM),1,'a lost serum is recovered once');
     interact(O.KORBAL_HERBS,1155,3447);
     assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),14,'gathering again cannot undo later progress');
+    attrs.set('desert-treasure-ii:vardorvis-progress',20);
+    counts.set(I.TEMPLE_KEY_3,1);
+    attrs.set('desert-treasure-ii:stranglewood-temple',null);
+    interact(O.ENTRY_21,1174,3428);
+    assert.ok(attrs.get('desert-treasure-ii:stranglewood-temple').entities.some(npc=>npc.id===N.KASONDE_9));
+    interactions.find(entry=>entry.name==='Kasonde').options['Talk-to']({player:p,npcId:N.KASONDE_9});
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),20,'opening the death dialogue cannot skip it');
+    giveSerum('ZEXv_C');
+    assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),21);
     attrs.set('desert-treasure-ii:vardorvis-progress',21);
     freeSlots=0;
     interact(49496,1196,3411);
