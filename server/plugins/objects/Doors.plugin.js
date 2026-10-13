@@ -76,6 +76,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     // shortcut: the cabinet house's nameless open leaf swings east to keep its
     // furniture-lined entrance usable; confirm the swing with a live OSRS capture.
     [O.DOOR_55, [[2055, 0, -1, 2]]],
+    // shortcut: swing west past the Rehnison entrance chair; confirm against a live OSRS capture.
+    [O.DOOR_85, [[O.DOOR_86, 0, 1, 0]]],
   ]);
 
   // OSRS wooden gates are two locs that pivot together around the hinge post: a hinge panel

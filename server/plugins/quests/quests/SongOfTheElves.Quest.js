@@ -1508,6 +1508,11 @@ module.exports = function registerSongOfTheElves(api) {
       };
       return startTranscript(api, player, event.npcId, PAGE, variants[npcName]);
     }
+    if (["elena", "councillor halgrive"].includes(npcName) && currentChapter(player) === 3 &&
+      player.getLocation().getY() > 9700) {
+      return startTranscript(api, player, event.npcId, PAGE,
+        "meet-the-ardougne-resistance-planning-a-revolution-entering-the-hidden-basement");
+    }
     const chapterName = CHAPTERS[currentChapter(player)];
     if (npcName === "edmond" && currentChapter(player) === 1) {
       const hasDisguise = wearingDisguise(player);
@@ -1736,9 +1741,13 @@ module.exports = function registerSongOfTheElves(api) {
       beginCampDefense(player, area);
       return;
     }
-    if (event.player.getAttribute(RESISTANCE_BRIEFING) === true && currentChapter(event.player) === 3) {
-      event.player.setAttribute(RESISTANCE_BRIEFING, false);
-      if (event.option === "I am.") quest.setStage(event.player, STAGE.STARTED + 50);
+    if (event.option === "Climb through it." && currentChapter(event.player) === 3) {
+      const loc = event.player.getLocation();
+      if (loc.getX() >= 2522 && loc.getX() <= 2541 && loc.getY() >= 3320 && loc.getY() <= 3344) {
+        event.player.moveTo(new Location(2537, 9745, 0));
+        event.player.setAttribute(RESISTANCE_BRIEFING, true);
+        event.player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(event.player), event.player));
+      }
       return;
     }
     if (event.option === "I'm ready." && currentChapter(event.player) === 4 && resistanceSupport(event.player) >= 80) {
@@ -2794,12 +2803,29 @@ module.exports = function registerSongOfTheElves(api) {
     return startTranscript(api, player, 0, PAGE, "freeing-elena-searching-her-cabinet", chemicalCabinetSteps);
   }
 
+  function resistanceBedSteps(steps) {
+    const briefing = loadTranscripts(api)[PAGE].variants[
+      "meet-the-ardougne-resistance-planning-a-revolution-entering-the-hidden-basement"];
+    return steps.map(step => step.type === "choice" ? { ...step,
+      options: step.options.map(option => option.text === "Climb through it."
+        ? { ...option, steps: briefing } : option),
+    } : step);
+  }
+  function finishResistanceBriefing(event) {
+    const player = event?.player;
+    if (!player || currentChapter(player) !== 3 || player.getAttribute(RESISTANCE_BRIEFING) !== true ||
+      player.getLocation().getY() < 9700 || event.text !== "Good luck.") return;
+    event.after = () => {
+      player.setAttribute(RESISTANCE_BRIEFING, false);
+      setChapter(player, 4);
+    };
+  }
   function searchRehnisonBed(event) {
     const player = event?.player;
     if (!player || currentChapter(player) !== 3 || quest.isComplete(player)) return false;
     const loc = event.location;
     if (loc && (loc.x < 2522 || loc.x > 2541 || loc.y < 3320 || loc.y > 3344)) return false;
-    return startTranscript(api, player, 0, PAGE, "meet-the-ardougne-resistance-planning-a-revolution-searching-the-bed");
+    return startTranscript(api, player, 0, PAGE, "meet-the-ardougne-resistance-planning-a-revolution-searching-the-bed", resistanceBedSteps);
   }
 
   function enterResistanceBasement(event) {
@@ -3149,6 +3175,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.persistAttribute(DISGUISE_BRIEFED);
   api.persistAttribute(ELENA_ESCAPE_PROGRESS);
   api.onCustomEvent("npc-dialogue:line", finishElenaPrisonLine);
+  api.onCustomEvent("npc-dialogue:line", finishResistanceBriefing);
   api.onCustomEvent("npc-dialogue:line", finishDisguiseBriefing);
   api.onCustomEvent("npc-dialogue:line", finishWarEndArianwynLine);
   api.onCustomEvent("npc-dialogue:line", handleLletyaConfrontationLine);

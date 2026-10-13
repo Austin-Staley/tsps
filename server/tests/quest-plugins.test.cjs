@@ -12569,3 +12569,46 @@ test('Song of the Elves prison entry keeps Elena visible and cannot release her 
     assert.equal(quest.getStage(player), 80, 'an old transcript milestone cannot move the story backwards');
   } finally { runtime.startTranscript = original; }
 });
+
+
+test('Song of the Elves bed leads through the full resistance briefing before recruitment', () => {
+  const { api, handlers } = mockApi(), runtime = require('../plugins/quests/QuestRuntime');
+  const original = runtime.startTranscript, played = [];
+  runtime.startTranscript = (...args) => { played.push(args); return true; };
+  try {
+    require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1), attrs = new Map([['quest.song_of_the_elves.stage', 40]]);
+    let location = new api.core.Location(2532, 3331, 0);
+    const player = { getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      getLocation: () => location, moveTo: next => { location = next; },
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }) };
+    for (const handler of handlers.objects) handler({ player, definition: { getName: () => 'Bed' },
+      option: 'Search', location: { x: 2533, y: 3332, z: 0 } });
+    const bed = played.at(-1);
+    assert.equal(bed[4], 'meet-the-ardougne-resistance-planning-a-revolution-searching-the-bed');
+    const selected = bed[5](require('../data/definitions/npc-dialogues.json')['Song of the Elves'].variants[bed[4]]);
+    assert.equal(selected[1].options[0].steps[0].speaker, 'Elena');
+    assert.deepEqual(selected[1].options[1].steps, [], 'leaving the bed alone does not enter the hideout');
+    const choice = handlers.custom.get('npc-dialogue:choice').find(h => h.name === 'handleDialogueChoice');
+    choice({ player, option: 'Climb through it.' });
+    assert.deepEqual([location.getX(), location.getY()], [2537, 9745]);
+    assert.equal(quest.varbitValue(40, player), 32);
+    choice({ player, option: "It's all in a day's work." });
+    choice({ player, option: "It's not good, but it might be our only option." });
+    choice({ player, option: 'I need to think about this.' });
+    assert.equal(quest.getStage(player), 40);
+    assert.equal(attrs.get('quest.song_of_the_elves.resistance-briefing'), true);
+    const talk = handlers.npcInteractions.get('Elena')['Talk-to'];
+    talk({ player, npcId: api.core.NpcIdentifiers.ELENA, definition: { getName: () => 'Elena' } });
+    assert.equal(played.at(-1)[4], 'meet-the-ardougne-resistance-planning-a-revolution-entering-the-hidden-basement');
+    choice({ player, option: 'I am.' });
+    assert.equal(quest.getStage(player), 40, 'accepting does not skip the instructions');
+    const line = { player, text: 'Good luck.' };
+    handlers.custom.get('npc-dialogue:line').find(h => h.name === 'finishResistanceBriefing')(line);
+    assert.equal(quest.getStage(player), 40, 'continue the final instruction page');
+    line.after();
+    assert.equal(quest.getStage(player), 50, 'recruitment is chapter four, not the battle chapter');
+    assert.equal(quest.varbitValue(50, player), 40);
+    assert.equal(attrs.get('quest.song_of_the_elves.resistance-briefing'), false);
+  } finally { runtime.startTranscript = original; }
+});

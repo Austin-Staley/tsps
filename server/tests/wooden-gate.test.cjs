@@ -1016,3 +1016,26 @@ test('Elena house door leaves a real collision path to her chemical cabinet', as
     assert.equal(route.success, true, 'opening must connect the courtyard to the cabinet’s eastern approach');
   } finally { area.destroy(); h.restore(); }
 });
+
+test('Rehnison door opens a real path past the entrance chair to the hidden bed', async () => {
+  await initializeMapCollisionOnce();
+  const definitions = new Map([2537, 2538].map(id => [id, CacheDefinitions.getObject(id)]));
+  const area = new TemplatedInstanceArea(3, 3);
+  for (let x = 0; x < 3; x++) for (let y = 0; y < 3; y++) for (let plane = 0; plane < 4; plane++) {
+    area.setChunk(plane, x, y, { sourceChunkX: 315 + x, sourceChunkY: 415 + y, sourcePlane: plane, rotation: 0 });
+  }
+  const h = buildHarness({ cacheObjects: definitions, objectManager: ObjectManager });
+  try {
+    const location = area.tile(11, 8, 0), door = area.resolveObject(2537, location);
+    assert.ok(door);
+    assert.equal(door.getFace(), 1);
+    const player = { getUsername: () => 'rehnison-door-test', isPlayerBot: () => false,
+      getPrivateArea: () => area, getLocation: () => area.tile(11, 7, 0), getPacketSender: () => ({}),
+      getAttribute: () => null, setAttribute() {}, isNeedsPlacement: () => false, isAllowRegionChangePacket: () => false };
+    h.handlers.get('Door').Open({ player, object: door, objectId: 2537, location });
+    const route = new RsmodRouteFinding().findRoute({ level: 0, srcX: area.getBaseX() + 11,
+      srcY: area.getBaseY() + 7, srcSize: 1, destX: area.getBaseX() + 12, destY: area.getBaseY() + 11,
+      privateArea: area, moveNear: false });
+    assert.equal(route.success, true, 'the entrance must connect to the clear tile south-west of the bed');
+  } finally { area.destroy(); h.restore(); }
+});
