@@ -217,7 +217,7 @@ function createContext(core, server) {
       const at = object.getLocation();
       // Private encounter effects (pools, beams) are visible even without menu actions.
       const name = definition?.getName?.();
-      if (options?.length || privateObjects.has(object) || (name && name !== "null")) objects.push({ id: object.getId(), name, options: options ?? [], x: at.getX(), y: at.getY() });
+      if (options?.length || privateObjects.has(object) || (name && name !== "null")) objects.push({ id: definition?.id ?? object.getId(), name, options: options ?? [], x: at.getX(), y: at.getY() });
     }
 
     return {

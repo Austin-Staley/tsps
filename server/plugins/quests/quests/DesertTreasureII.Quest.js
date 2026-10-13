@@ -9,6 +9,7 @@ module.exports = function registerDesertTreasureII(api) {
   const DIGSITE_CREVICE_LOC = 49510; // Cache dt2_digsite_crevice multiloc has no generated constant.
   const KORBAL_HERBS_LOC = 49494;
   const ARGIAN_BUSH_LOC = 49493;
+  const LASSAR_CISTERN_DRAIN_LOC = 49488;
   const S = { STARTED: 1, VAULT: 2, DIG: 3, ROCKS: 4, GUARDIAN: 5, MACHINE: 6, VARDORVIS: 7, LEVIATHAN: 8, SUCELLUS: 9, WHISPERER: 10, FINALE: 11, COMPLETE: 12 };
   // Cache quest dbrow 2343, column 19 completes at 118; QuestHelper records the intervening milestones.
   function nativeProgress(stage, player) {
@@ -6536,8 +6537,10 @@ module.exports = function registerDesertTreasureII(api) {
       return true;
     }
 
-    if ((x === 2656 && y === 6424 && (option === "enter" || option === "climb-down" || option === "climb down"))
-      && (visibleId === 49488 || visibleId === 48295 || visibleId === 48296)) {
+    const drainIds = [LASSAR_CISTERN_DRAIN_LOC, O.DRAIN_13, O.DRAIN_14];
+    const atCisternDrain = drainIds.includes(visibleId)
+      && ((x === 2654 && y === 6422) || (x === 2656 && y === 6424));
+    if (atCisternDrain && (option === "enter" || option === "climb-down" || option === "climb down")) {
       if (!state.strangeIcon || !has(p, I.STRANGE_ICON)) {
         p.sendMessage("A strange icon matching the mark Prescott described is needed to enter the cistern.");
         return true;

@@ -155,10 +155,12 @@ const core = {
         getHash: (x: number, y: number, z: number) => `${x},${y},${z}`,
     },
     ObjectDefinition: { forPlayer: (id: number) => id === 2284
-        ? ({ getName: () => "Plinth", getInteractions: () => null })
+        ? ({ id, getName: () => "Plinth", getInteractions: () => null })
         : id === 2283
-            ? ({ getName: () => "Acid pool", getInteractions: () => [] })
-            : ({ getName: () => "Tree", getInteractions: () => ["Chop down", null] }) },
+            ? ({ id, getName: () => "Acid pool", getInteractions: () => [] })
+            : id === 49488
+                ? ({ id: 48295, getName: () => "Drain", getInteractions: () => ["Enter"] })
+                : ({ id, getName: () => "Tree", getInteractions: () => ["Chop down", null] }) },
     ItemDefinition: { forId: (id: number) => ({ getName: () => `item ${id}` }) },
     NpcDefinition: { forId: () => ({ getName: () => "Man" }) },
     MultiChatboxPrompt: { OPTIONS_WIDGET_ID: (219 << 16) | 1, getPending: () => prompt },
@@ -281,7 +283,9 @@ else process.env.AGENT_MCP = previousMcpFlag;
         getTemplateObjects: (at: any) => at.getX() === 3224 && at.getY() === 3219
             ? [{ getType: () => 10, getId: () => 2282, getLocation: () => location(3224, 3219) }]
             : at.getX() === 3224 && at.getY() === 3220
-                ? [{ getType: () => 10, getId: () => 2284, getLocation: () => location(3224, 3220) }] : [],
+                ? [{ getType: () => 10, getId: () => 2284, getLocation: () => location(3224, 3220) }]
+                : at.getX() === 3224 && at.getY() === 3221
+                    ? [{ getType: () => 10, getId: () => 49488, getLocation: () => location(3224, 3221) }] : [],
         getObjects: () => [{ getType: () => 10, getId: () => 2280, getLocation: tree.getLocation },
             { getType: () => 22, getId: () => 2283, getLocation: () => location(3223, 3219) }],
     };
@@ -290,9 +294,15 @@ else process.env.AGENT_MCP = previousMcpFlag;
         { id: 2280, name: "Tree", options: ["Chop down"], x: 3220, y: 3216 },
         { id: 2282, name: "Tree", options: ["Chop down"], x: 3224, y: 3219 },
         { id: 2284, name: "Plinth", options: [], x: 3224, y: 3220 },
+        { id: 48295, name: "Drain", options: ["Enter"], x: 3224, y: 3221 },
         { id: 2283, name: "Acid pool", options: [], x: 3223, y: 3219 },
     ], "private replacements and template scenery are actual menu targets");
     assert.deepEqual(instanced.npcs, [], "world NPCs are hidden in the instance");
+    dispatched.length = 0;
+    await call(client, "interact", { player: "agent1", target: "Drain", option: "Enter" });
+    assert.deepEqual(dispatched, [{ type: "object_option", id: 48295, x: 3224, y: 3221, action: "Enter" }],
+        "interactions send the visible cache transform ID rather than the inert parent ID");
+    dispatched.length = 0;
     observedPrivateArea = null;
 
     // The mock player never moves, so a walk elsewhere reports stuck and a walk to its own tile arrives.

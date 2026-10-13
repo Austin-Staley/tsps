@@ -6383,7 +6383,8 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(counts.get(core.ItemIdentifiers.STRANGE_ICON), 1, 'the two halves combine into Prescott’s strange icon');
     interactions.find((entry) => entry.name === 'Ketla').options['Talk-to']({ player, npcId: core.NpcIdentifiers.KETLA });
     assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-with-the-icon');
-    assert.equal(interact({ player, objectId: 49488, definition: { id: 49488 }, location: { x: 2656, y: 6424, z: 0 }, option: 'Enter' }), true);
+    assert.equal(interact({ player, objectId: 49488, definition: { id: 49488 }, location: { x: 2654, y: 6422, z: 0 }, option: 'Enter' }), true,
+      'the real five-by-five drain dispatches from its cached southwest object anchor');
     assert.equal(player.location.x, 2784);
     assert.equal(interact({ player, objectId: 48301, definition: { id: 48301 }, location: { x: 2784, y: 6287, z: 1 }, option: 'Open' }), true);
     assert.equal(interact({ player, objectId: 48304, definition: { id: 48304 }, location: { x: 2806, y: 6303, z: 1 }, option: 'Climb-down' }), true);
