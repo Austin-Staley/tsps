@@ -77,6 +77,15 @@ module.exports = function registerSongOfTheElves(api) {
     [2290, 3095], [2287, 3095], [2284, 3095], [2284, 3092], [2280, 3092],
   ];
   const MEILYR_CLUE = "quest.song_of_the_elves.meilyr-clue";
+  const MEILYR_CLUE_ITEMS_MIGRATED = "song-of-the-elves:meilyr-clue-items-migrated";
+  const MEILYR_CLUE_ITEMS = [ItemIdentifiers.CLUE_SCROLL_2, ItemIdentifiers.CLUE_SCROLL_3,
+    ItemIdentifiers.CLUE_SCROLL_4, ItemIdentifiers.CLUE_SCROLL_5];
+  const MEILYR_CLUE_TEXT = [
+    "Dig south-east of Port Tyras near the yew tree, four tiles south of the triple mushroom cluster.",
+    "Dig on the east side of the northernmost hut in Zul-Andra, two steps north of the hole.",
+    "DEAD ROASTING UPSHIFTS. Dig one square north of the north-eastern elven lamp at Prifddinas's south gates.",
+    "Spin outside the Underground Pass entrance in eastern Isafdar with nothing equipped.",
+  ];
   const ITHELL_SYMBOLS = "quest.song_of_the_elves.ithell-symbols";
   const ITHELL_STATUE = "quest.song_of_the_elves.ithell-statue";
   const ITHELL_CLUE_STAGE = "quest.song_of_the_elves.ithell-clue-stage";
@@ -99,9 +108,9 @@ module.exports = function registerSongOfTheElves(api) {
     new Set([37304, 8744]), new Set([37303, 35878, 35879]),
   ];
   const MEILYR_DIG_SPOTS = [
-    { x: 2225, y: 3133, message: "The first scroll points to the marsh near Port Tyras." },
-    { x: 2203, y: 3061, message: "The next clue leads to Zul-Andra." },
-    { x: 2240, y: 3269, message: "The final clue points outside Prifddinas's southern gate." },
+    { x: 2225, y: 3133, message: "You dig up a clue scroll pointing to Zul-Andra." },
+    { x: 2203, y: 3061, message: "You dig up a clue scroll pointing to Prifddinas's southern gate." },
+    { x: 2240, y: 3269, message: "You dig up the final clue scroll. Read it to learn what to do next." },
   ];
   const LLETYA_GUIDE_NPC = "song-of-the-elves:lletya-guide-npc";
   const LLETYA_BAXTORIAN_NPC = "quest.song_of_the_elves.lletya-baxtorian-npc";
@@ -846,7 +855,6 @@ module.exports = function registerSongOfTheElves(api) {
         "0lNCRc": ItemIdentifiers.ELDER_CADANTINE,
         "edE31_": ItemIdentifiers.CRYSTAL_5,
         "_Q1RaJ": ItemIdentifiers.ORB_OF_LIGHT_5,
-        "vh7Q_s": ItemIdentifiers.CLUE_SCROLL_HARD_,
       };
       const itemId = itemByMessage[event.stepId];
       if (itemId) {
@@ -887,7 +895,7 @@ module.exports = function registerSongOfTheElves(api) {
         sendIthellMeilyrVarbits(player);
       }
       if (event.stepId === "S3ME_F") {
-        inventory.deleteNumber(ItemIdentifiers.CLUE_SCROLL_HARD_, 1);
+        inventory.deleteNumber(meilyrClueItem(player), 1);
         recordElder(player, 8);
         sendIthellMeilyrVarbits(player);
       }
@@ -1102,19 +1110,50 @@ module.exports = function registerSongOfTheElves(api) {
     }
   }
 
+  function meilyrClueItem(player) {
+    const step = Number(player.getAttribute(MEILYR_CLUE)) || 1;
+    return MEILYR_CLUE_ITEMS[Math.max(0, Math.min(3, step - 1))];
+  }
+
+  function restoreLegacyMeilyrClue({ player }) {
+    if (currentChapter(player) !== 16 || !(Number(player.getAttribute(MEILYR_CLUE)) > 0) ||
+      player.getAttribute(MEILYR_CLUE_ITEMS_MIGRATED) === true) return;
+    const inventory = player.getInventory();
+    if (inventory.getAmount(ItemIdentifiers.CLUE_SCROLL_HARD_) > 0 &&
+      !MEILYR_CLUE_ITEMS.some((id) => inventory.getAmount(id) > 0)) {
+      // Earlier saves used a generic hard clue for this earned quest item.
+      inventory.deleteNumber(ItemIdentifiers.CLUE_SCROLL_HARD_, 1);
+      inventory.adds(meilyrClueItem(player), 1);
+    }
+    player.setAttribute(MEILYR_CLUE_ITEMS_MIGRATED, true);
+  }
+
+  function readMeilyrClue(event) {
+    const { player, itemId } = event;
+    if (currentChapter(player) !== 16 || !MEILYR_CLUE_ITEMS.includes(itemId) ||
+      player.getInventory().getAmount(itemId) === 0) return false;
+    event.handled = true;
+    // shortcut: the native paper-clue interface is not mapped; expose the
+    // Wiki's landmark directions through the real cache item's Read action.
+    player.sendMessage(MEILYR_CLUE_TEXT[MEILYR_CLUE_ITEMS.indexOf(itemId)]);
+    return true;
+  }
+
   function giveMeilyrClue(player, event) {
     if (currentChapter(player) !== 16) return;
     const inventory = player.getInventory();
-    if (inventory.getAmount(ItemIdentifiers.CLUE_SCROLL_HARD_) === 0) {
+    const itemId = meilyrClueItem(player);
+    if (inventory.getAmount(itemId) === 0) {
       if (inventory.getFreeSlots() < 1) {
         if (event) event.handled = true;
         player.sendMessage("You need an empty inventory slot before you can take the clue scroll.");
         return false;
       }
-      inventory.adds(ItemIdentifiers.CLUE_SCROLL_HARD_, 1);
-      if (event) event.box = { items: [ItemIdentifiers.CLUE_SCROLL_HARD_] };
+      inventory.adds(itemId, 1);
+      if (event) event.box = { items: [itemId] };
     }
     player.setAttribute(MEILYR_CLUE, Math.max(1, Number(player.getAttribute(MEILYR_CLUE)) || 0));
+    player.setAttribute(MEILYR_CLUE_ITEMS_MIGRATED, true);
     sendIthellMeilyrVarbits(player);
     return true;
   }
@@ -1182,7 +1221,7 @@ module.exports = function registerSongOfTheElves(api) {
   function handleMeilyrDig(event) {
     const player = event?.player;
     if (!player || event.itemId !== ItemIdentifiers.SPADE || quest.isComplete(player) ||
-      currentChapter(player) !== 16 || player.getInventory().getAmount(ItemIdentifiers.CLUE_SCROLL_HARD_) === 0) return false;
+      currentChapter(player) !== 16 || player.getInventory().getAmount(meilyrClueItem(player)) === 0) return false;
     const location = player.getLocation();
     const x = location?.getX?.();
     const y = location?.getY?.();
@@ -1192,7 +1231,9 @@ module.exports = function registerSongOfTheElves(api) {
     event.handled = true;
     player.performAnimation?.(new api.core.Animation(831));
     const next = Math.min(4, step + 1);
+    player.getInventory().deleteNumber(meilyrClueItem(player), 1);
     player.setAttribute(MEILYR_CLUE, next);
+    player.getInventory().adds(meilyrClueItem(player), 1);
     sendIthellMeilyrVarbits(player);
     player.sendMessage(spot.message);
     return true;
@@ -1201,7 +1242,7 @@ module.exports = function registerSongOfTheElves(api) {
   function handleMeilyrSpin(event) {
     const player = event?.player;
     if (!player || event.sequence !== 2107 || currentChapter(player) !== 16 || (Number(player.getAttribute(MEILYR_CLUE)) || 0) < 4 ||
-      player.getInventory().getAmount(ItemIdentifiers.CLUE_SCROLL_HARD_) === 0) return;
+      player.getInventory().getAmount(meilyrClueItem(player)) === 0) return;
     const loc = player.getLocation();
     if (Math.abs(loc.getX() - 2309) > 1 || Math.abs(loc.getY() - 3215) > 1 || loc.getZ() !== 0) return;
     if (player.getEquipment().getItems().some((item) => item && item.getId() > 0 && item.getAmount() > 0)) {
@@ -1556,7 +1597,7 @@ module.exports = function registerSongOfTheElves(api) {
       return startTranscript(api, player, event.npcId, PAGE, "the-war-s-end-prifddinas-reformed");
     }
     if (currentChapter(player) === 16 && npcName === "lady ffion meilyr") {
-      if (!player.getInventory().getAmount(ItemIdentifiers.CLUE_SCROLL_HARD_)) {
+      if (!player.getInventory().getAmount(meilyrClueItem(player))) {
         player.sendMessage("Ask Baxtorian for Lady Meilyr's clue scroll before following it.");
         return true;
       }
@@ -1578,7 +1619,7 @@ module.exports = function registerSongOfTheElves(api) {
       return startTranscript(api, player, event.npcId, PAGE, "after-the-attack-finding-lady-ithell-her-greatest-work");
     }
     if (currentChapter(player) === 16 && npcName === "baxtorian") {
-      const variant = player.getInventory().getAmount(ItemIdentifiers.CLUE_SCROLL_HARD_) > 0
+      const variant = player.getInventory().getAmount(meilyrClueItem(player)) > 0
         ? "after-the-attack-talking-to-baxtorian-talking-to-baxtorian-again"
         : "after-the-attack-talking-to-baxtorian";
       return startTranscript(api, player, event.npcId, PAGE, variant);
@@ -3996,6 +4037,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onPlayerLogin(syncResistanceLogin);
   api.onPlayerLogin(resumeEarlyStory);
   api.onPlayerLogin(cleanupTransferredOrb);
+  api.onPlayerLogin(restoreLegacyMeilyrClue);
   api.onPlayerLogin(({ player }) => {
     syncCrwysTree(player);
     sendIthellMeilyrVarbits(player);
@@ -4052,6 +4094,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onItemOnObject("Explosive potion", "Hole", placeCampExplosive, { noted: false });
   api.onItemAction("Ode to eternity", { Read: readFallsOde });
   api.onItemAction("Spade", { Dig: handleMeilyrDig });
+  api.onItemAction("Clue scroll", { Read: readMeilyrClue });
   api.onItemAction((event) => {
     handleCrystalSeedAction(event);
     useIorwerthCampTeleport(event);
@@ -4108,6 +4151,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.persistAttribute(LIBRARY_PILLAR_STATE);
   api.persistAttribute(RECRUITED_ELDERS);
   api.persistAttribute(MEILYR_CLUE);
+  api.persistAttribute(MEILYR_CLUE_ITEMS_MIGRATED);
   api.persistAttribute(ITHELL_SYMBOLS);
   api.persistAttribute(ITHELL_STATUE);
   api.persistAttribute(ITHELL_CLUE_STAGE);

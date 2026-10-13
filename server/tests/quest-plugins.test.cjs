@@ -8916,6 +8916,7 @@ test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clu
   const varbits = new Map();
   const location = { x: 2352, y: 3170, z: 0 };
   const equipment = [];
+  const messages = [];
   const player = {
     getUsername: () => 'SoteChapter16Test',
     getAttribute: (key) => attributes.get(key),
@@ -8932,7 +8933,7 @@ test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clu
     getArea: () => areas[0],
     isPlayer: () => true,
     getAsPlayer: () => player,
-    moveTo() {}, sendMessage() {}, performAnimation() {},
+    moveTo() {}, sendMessage: message => messages.push(message), performAnimation() {},
   };
   quest.setStage(player, 170);
 
@@ -8975,7 +8976,30 @@ test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clu
   assert.equal(spawned.at(-1).id, base.core.NpcIdentifiers.LADY_KELYN_ITHELL);
 
   choices.at(-1)({ player, option: "What's Lady Meilyr's clue?", definition: { getName: () => 'Baxtorian' } });
-  assert.equal(inventory.get(base.core.ItemIdentifiers.CLUE_SCROLL_HARD_), 1);
+  const clues = [base.core.ItemIdentifiers.CLUE_SCROLL_2, base.core.ItemIdentifiers.CLUE_SCROLL_3,
+    base.core.ItemIdentifiers.CLUE_SCROLL_4, base.core.ItemIdentifiers.CLUE_SCROLL_5];
+  assert.deepEqual(clues, [23814, 23815, 23816, 23817], 'use the four actual quest cache items');
+  assert.equal(inventory.get(clues[0]), 1);
+  const read = handlers.namedItemActions.get('Clue scroll').Read;
+  assert.equal(read({ player, itemId: clues[0] }), true);
+  assert.match(messages.at(-1), /Port Tyras/);
+  assert.equal(read({ player, itemId: base.core.ItemIdentifiers.CLUE_SCROLL_HARD_ }), false);
+  inventory.set(clues[0], 0);
+  inventory.set(base.core.ItemIdentifiers.CLUE_SCROLL_HARD_, 1);
+  attributes.delete('song-of-the-elves:meilyr-clue-items-migrated');
+  const restore = handlers.playerLogin.find(h => h.name === 'restoreLegacyMeilyrClue');
+  restore({ player });
+  assert.equal(inventory.get(clues[0]), 1);
+  assert.equal(inventory.get(base.core.ItemIdentifiers.CLUE_SCROLL_HARD_), 0);
+  assert.equal(varbits.get(9036), 1, 'migration preserves the earned clue checkpoint');
+  inventory.set(clues[0], 0);
+  inventory.set(base.core.ItemIdentifiers.CLUE_SCROLL_HARD_, 1);
+  restore({ player });
+  assert.equal(inventory.get(base.core.ItemIdentifiers.CLUE_SCROLL_HARD_), 1,
+    'later unrelated hard clues are not converted');
+  choices.at(-1)({ player, option: "What's Lady Meilyr's clue?", definition: { getName: () => 'Baxtorian' } });
+  assert.equal(inventory.get(clues[0]), 1);
+  let clueStep = 0;
   const dig = handlers.itemAction.find((actions) => actions?.Dig)?.Dig;
   assert.ok(dig);
   for (const spot of [{ x: 2225, y: 3133 }, { x: 2203, y: 3061 }, { x: 2240, y: 3269 }]) {
@@ -8983,6 +9007,10 @@ test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clu
     const event = { player, itemId: base.core.ItemIdentifiers.SPADE, handled: false };
     assert.equal(dig(event), true);
     assert.equal(event.handled, true);
+    assert.equal(inventory.get(clues[clueStep]), 0, 'the previous scroll is replaced');
+    assert.equal(inventory.get(clues[++clueStep]), 1);
+    assert.equal(read({ player, itemId: clues[clueStep] }), true);
+    assert.match(messages.at(-1), [/Zul-Andra/, /Prifddinas/, /Spin/][clueStep - 1]);
   }
   assert.equal(varbits.get(9036), 4);
   location.x = 2309; location.y = 3215; location.z = 0;
@@ -8998,7 +9026,7 @@ test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clu
     definition: { getName: () => 'Lady Ffion Meilyr' } }), true);
   assert.equal(started.at(-1)[3], 'after-the-attack-finding-lady-meilyr');
   custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'S3ME_F' });
-  assert.equal(inventory.get(base.core.ItemIdentifiers.CLUE_SCROLL_HARD_), 0);
+  assert.equal(inventory.get(clues[3]), 0);
   assert.equal(quest.getStage(player), 180);
 });
 
