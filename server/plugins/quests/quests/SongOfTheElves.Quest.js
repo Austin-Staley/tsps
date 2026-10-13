@@ -51,6 +51,7 @@ module.exports = function registerSongOfTheElves(api) {
   const LIBRARY_MIRRORS = "quest.song_of_the_elves.library-mirrors";
   const LIBRARY_CRYSTALS = "quest.song_of_the_elves.library-crystals";
   const LIBRARY_PILLAR_STATE = "quest.song_of_the_elves.library-pillar-state";
+  const LIBRARY_MEMORY_ACTORS = new WeakMap();
   const RECRUITED_ELDERS = "quest.song_of_the_elves.recruited-elders";
   const REVELATIONS_MEETING_STARTED = "quest.song_of_the_elves.revelations-meeting-started";
   const CRWYS_CLUE_HEARD = "quest.song_of_the_elves.crwys-clue-heard";
@@ -762,6 +763,11 @@ module.exports = function registerSongOfTheElves(api) {
     if (handlePreparationAction(event)) return;
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
+    if (inLibrary(player) && event.action === "open_interface" && event.target === "An") {
+      event.handled = true;
+      openLibraryTeleportMenu(player);
+      return;
+    }
     if (inLibrary(player) && event.action === "teleport" &&
       event.text === "The player is teleported to the central chamber.") {
       event.handled = true;
@@ -1867,7 +1873,10 @@ module.exports = function registerSongOfTheElves(api) {
 
   function ensureLibraryInstance(player) {
     const current = player.getArea?.();
-    if (current instanceof GrandLibraryArea && !current.isDestroyed()) return current;
+    if (current instanceof GrandLibraryArea && !current.isDestroyed()) {
+      ensureLibraryMemories(player, current);
+      return current;
+    }
     const username = player.getUsername?.();
     const area = new GrandLibraryArea(username);
     libraryInstances.set(username, area);
@@ -1876,6 +1885,7 @@ module.exports = function registerSongOfTheElves(api) {
     const guide = api.spawnNpc({ id: NpcIdentifiers.LORD_IEUAN_AMLODD, x: 2625, y: 6144, z: 0,
       wanderRadius: 0, owner: player, ownerOnly: true });
     if (guide) area.enter(guide);
+    ensureLibraryMemories(player, area);
     return area;
   }
 
@@ -1892,8 +1902,73 @@ module.exports = function registerSongOfTheElves(api) {
     return player.getArea?.() instanceof GrandLibraryArea;
   }
 
+  function librarySealMask(player) {
+    return Number(player.getAttribute(LIBRARY_SEALS)) || 0;
+  }
+
+  function hasForgottenMemory(player) {
+    const mask = librarySealMask(player);
+    // Preserve older legitimate saves where another seal bit was already set
+    // before the Forgotten-seal gate was enforced.
+    return (mask & 1) !== 0 || (mask & ~1) !== 0;
+  }
+
+  function ensureLibraryMemories(player, area) {
+    if (!area || !hasForgottenMemory(player)) return;
+    let actors = LIBRARY_MEMORY_ACTORS.get(player);
+    if (!actors) LIBRARY_MEMORY_ACTORS.set(player, actors = new Map());
+    const unlocked = [{ id: NpcIdentifiers.MEMORY_OF_SEREN, tile: [2623, 6135, 1], bit: 0 },
+      ...LIBRARY_SEAL_DATA.map((seal, index) => ({ id: seal.memory, tile: seal.tile, bit: index + 1 }))]
+      .filter(({ bit }) => (librarySealMask(player) & (1 << bit)) !== 0);
+    for (const { id, tile, bit } of unlocked) {
+      const existing = actors.get(id);
+      if (existing?.area === area) continue;
+      const npc = api.spawnNpc({ id, x: tile[0], y: tile[1], z: tile[2],
+        wanderRadius: 0, owner: player, ownerOnly: true });
+      if (!npc) continue;
+      area.enter(npc);
+      actors.set(id, npc);
+    }
+  }
+
+  function talkToLibraryMemory({ player, npcId }) {
+    if (!player || !inLibrary(player) || !hasForgottenMemory(player)) return false;
+    if (npcId === NpcIdentifiers.MEMORY_OF_SEREN) {
+      return startTranscript(api, player, npcId, PAGE,
+        "the-grand-library-of-prifddinas-the-seal-of-the-forgotten-talking-to-the-memory-again");
+    }
+    const index = LIBRARY_SEAL_DATA.findIndex((seal) => seal.memory === npcId);
+    if (index < 0 || !(librarySealMask(player) & (1 << (index + 1)))) return false;
+    const seal = LIBRARY_SEAL_DATA[index];
+    return startTranscript(api, player, npcId, PAGE,
+      `the-grand-library-of-prifddinas-the-seal-of-${seal.name}-talking-to-the-memory-again`);
+  }
+
+  function openLibraryTeleportMenu(player, offset = 0) {
+    const destinations = [{ name: "The Forgotten seal", tile: [2623, 6135, 1], bit: 0 },
+      ...LIBRARY_SEAL_DATA.map((seal, index) => ({
+        name: `The Seal of ${seal.name[0].toUpperCase()}${seal.name.slice(1)}`,
+        tile: seal.tile, bit: index + 1,
+      }))];
+    const visible = destinations.slice(offset, offset + 4);
+    const choices = visible.flatMap((destination) => [destination.name, () => {
+      if (!(librarySealMask(player) & (1 << destination.bit))) {
+        player.sendMessage("I can only take you to a seal which has already been broken.");
+        return;
+      }
+      const area = ensureLibraryInstance(player);
+      area.enter(player);
+      player.moveTo(new Location(...destination.tile));
+      player.sendMessage("The Memory of Seren carries you to the unlocked seal.");
+    }]);
+    if (offset + visible.length < destinations.length) choices.push("More...", () => openLibraryTeleportMenu(player, offset + 4));
+    choices.push("Stay here.", () => {});
+    api.sendMultiChatboxPrompt(player, "Where would you like to go?", ...choices);
+  }
+
   function currentLibrarySeal(player) {
-    const completed = Number(player.getAttribute(LIBRARY_SEALS)) || 0;
+    if (!hasForgottenMemory(player)) return -1;
+    const completed = librarySealMask(player);
     return LIBRARY_SEAL_DATA.findIndex((_, index) => !(completed & (1 << (index + 1))));
   }
 
@@ -1987,6 +2062,11 @@ module.exports = function registerSongOfTheElves(api) {
   function dispenserCollect(event) {
     const player = event?.player;
     if (!player || !inLibrary(player) || quest.isComplete(player)) return false;
+    if (!hasForgottenMemory(player)) {
+      event.handled = true;
+      player.sendMessage("Touch the Seal of the Forgotten and receive its memory before collecting another seal's puzzle tools.");
+      return true;
+    }
     const sealIndex = currentLibrarySeal(player);
     if (sealIndex < 0) return false;
     event.handled = true;
@@ -2073,6 +2153,11 @@ module.exports = function registerSongOfTheElves(api) {
   function useLibraryMirror(event) {
     const player = event?.player;
     if (!player || !inLibrary(player)) return false;
+    if (!hasForgottenMemory(player)) {
+      event.handled = true;
+      player.sendMessage("The Forgotten seal must be touched before you can direct light to the clan seals.");
+      return true;
+    }
     const sealIndex = currentLibrarySeal(player);
     if (sealIndex < 0) return false;
     const seal = LIBRARY_SEAL_DATA[sealIndex];
@@ -2114,6 +2199,11 @@ module.exports = function registerSongOfTheElves(api) {
   function useLibraryCrystal(event) {
     const player = event?.player;
     if (!player || !inLibrary(player)) return false;
+    if (!hasForgottenMemory(player)) {
+      event.handled = true;
+      player.sendMessage("The Forgotten seal must be touched before you can direct light to the clan seals.");
+      return true;
+    }
     const color = Object.keys(LIBRARY_CRYSTAL_ITEMS).find((name) => LIBRARY_CRYSTAL_ITEMS[name] === event.itemId);
     const sealIndex = currentLibrarySeal(player);
     if (!color || sealIndex < 0) return false;
@@ -2139,11 +2229,20 @@ module.exports = function registerSongOfTheElves(api) {
       if (completed & 1) return startTranscript(api, player, NpcIdentifiers.MEMORY_OF_SEREN, PAGE,
         "the-grand-library-of-prifddinas-the-seal-of-the-forgotten-talking-to-the-memory-again");
       player.setAttribute(LIBRARY_SEALS, completed | 1);
+      player.setAttribute(LIBRARY_MIRRORS, null);
+      player.setAttribute(LIBRARY_CRYSTALS, null);
       resetLibraryPuzzle(player, 0);
+      ensureLibraryMemories(player, player.getArea());
+      player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(player), player));
       return startTranscript(api, player, NpcIdentifiers.MEMORY_OF_SEREN, PAGE, "the-grand-library-of-prifddinas-the-seal-of-the-forgotten");
     }
     const index = LIBRARY_SEAL_DATA.findIndex((seal) => seal.id === event.objectId || seal.mapId === event.objectId);
     if (index < 0) return false;
+    if (!hasForgottenMemory(player)) {
+      event.handled = true;
+      player.sendMessage("The Forgotten seal's memory must be received first.");
+      return true;
+    }
     const seal = LIBRARY_SEAL_DATA[index];
     if (completed & (1 << (index + 1))) {
       return startTranscript(api, player, seal.memory, PAGE, `the-grand-library-of-prifddinas-the-seal-of-${seal.name}`);
@@ -2155,9 +2254,13 @@ module.exports = function registerSongOfTheElves(api) {
       return true;
     }
     player.setAttribute(LIBRARY_SEALS, completed | (1 << (index + 1)));
+    player.setAttribute(LIBRARY_MIRRORS, null);
+    player.setAttribute(LIBRARY_CRYSTALS, null);
     resetLibraryPuzzle(player, index + 1);
+    ensureLibraryMemories(player, player.getArea());
     const done = LIBRARY_SEAL_DATA.every((_, sealIndex) => (Number(player.getAttribute(LIBRARY_SEALS)) & (1 << (sealIndex + 1))) !== 0);
     if (done) setChapter(player, 13);
+    else player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(player), player));
     startTranscript(api, player, seal.memory, PAGE, `the-grand-library-of-prifddinas-the-seal-of-${seal.name}`);
     return true;
   }
@@ -3367,8 +3470,52 @@ module.exports = function registerSongOfTheElves(api) {
     if (value === 90) return [56,58,60][Math.min(2,Number(player?.getAttribute(FIRST_MEETING_PROGRESS)) || 0)];
     if (value === 100) return 62;
     if (value === 120) return preparationProgress(player);
-    if (value === 130) return 90;
+    if (value === 130) {
+      const mask = librarySealMask(player);
+      const completed = (((mask >>> 1) & 0xff).toString(2).match(/1/g) || []).length;
+      if (!(mask & 1)) return 92;
+      if (completed >= LIBRARY_SEAL_DATA.length) return 110;
+      // The current seal's puzzle occupies the even stage; touching it moves
+      // to the following odd stage. Supplying its tools marks puzzle entry.
+      const seal = LIBRARY_SEAL_DATA[completed];
+      const mirrors = seal.steps.filter(step => LIBRARY_OPERATIONS[step]).length;
+      const crystals = seal.steps.filter(step => LIBRARY_CRYSTAL_ITEMS[step]).join(",");
+      const puzzle = libraryPuzzleState(player);
+      const supplied = puzzle.seal === completed &&
+        Number(player?.getAttribute(LIBRARY_MIRRORS)) === mirrors &&
+        String(player?.getAttribute(LIBRARY_CRYSTALS) ?? "") === crystals;
+      return 93 + completed * 2 + (supplied ? 1 : 0);
+    }
     if (value === 110) return Number(player?.getAttribute(FALLS_PILLARS))===63 ? 70 : player?.getAttribute(FALLS_INTRODUCTION) === true ? 68 : player?.getAttribute(FALLS_DEPARTURE) === true ? 66 : 64;
+    if (value === 140) return 110;
+    if (value === 150) {
+      const recruited = Number(player?.getAttribute(RECRUITED_ELDERS)) || 0;
+      if (player?.getAttribute(YSGAWYN_TRACK_STEP) != null) {
+        const step = Number(player.getAttribute(YSGAWYN_TRACK_STEP)) || 0;
+        if (step >= YSGAWYN_TRACKS.length + 1) return 140;
+        if (step > 0) return 138;
+        return 134;
+      }
+      if ((recruited & 3) === 3) return 120;
+      if (recruited & 2) return 116;
+      if (recruited & 1) return 118;
+      return 112;
+    }
+    if (value === 160) {
+      const children = player?.getAttribute(LLETYA_CHILDREN) ?? {};
+      if (player?.getAttribute(LLETYA_ARIANWYN_CONFRONTED) === true) return 152;
+      if (player?.getAttribute(LLETYA_TRAITOR_REVEALED) === true) return 150;
+      if (children.eoin && children.iona) return 146;
+      if (children.eoin) return 144;
+      return 142;
+    }
+    if (value === 170) return (Number(player?.getAttribute(RECRUITED_ELDERS)) & 12) === 12 ? 164 : 160;
+    if (value === 180) return 166;
+    if (value === 190) {
+      const late = Number(player?.getAttribute(LATE_CHAPTER)) || 0;
+      if (late === 19) return player?.getAttribute(FRAGMENT_DEFEATED) === true ? 188 : 186;
+      if (late >= 20) return player?.getAttribute(WAR_END_ARIANWYN_DONE) === true ? 192 : 190;
+    }
     return value;
   }
   function elenaEscapeReminder(steps) {
@@ -3835,6 +3982,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.registerArea(new DwarvenCampAccessArea([new Boundary(2424, 2472, 6078, 6142, 0)]));
   api.registerArea(new FragmentThresholdArea([new Boundary(3282, 3307, 5906, 5930, 1)]));
   api.onNpcInteraction("Alrena", { "Talk-to": onTalk });
+  api.onNpcInteraction("Memory of Seren", { "Talk-to": talkToLibraryMemory });
   api.onPlayerProcess(processYsgawynTrail);
   api.onNpcInteraction("Edmond", { "Talk-to": onTalk });
   api.onNpcInteraction("Elena", { "Talk-to": onTalk });

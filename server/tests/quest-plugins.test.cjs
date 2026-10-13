@@ -7708,6 +7708,7 @@ test('Song of the Elves restores the saved private library on relog without rese
   const api = new Proxy(base, { get(target, prop) {
     if (prop === 'core') return { ...target.core, PrivateArea: LibraryArea };
     if (prop === 'spawnNpc') return definition => { const npc = { ...definition }; spawned.push(npc); return npc; };
+    if (prop === 'sendMultiChatboxPrompt') return (player, title, ...choices) => { player.prompt = [title, ...choices]; };
     return target[prop];
   } });
   require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
@@ -7717,19 +7718,35 @@ test('Song of the Elves restores the saved private library on relog without rese
     ['quest.song_of_the_elves.library-puzzle', '1:4'],
   ]);
   let location = new api.core.Location(2623, 6130, 1);
+  const messages = [];
   const player = { getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
     getUsername: () => 'library-relog', getLocation: () => location, getArea() { return this.area; },
-    moveTo: destination => { location = destination; }, sendMessage() {} };
+    moveTo: destination => { location = destination; }, sendMessage: message => messages.push(message),
+    getDialogueManager: () => ({ reset() {}, startDialogues() {} }) };
   const restore = handlers.playerLogin.find(handler => handler.name === 'syncLibraryLogin');
   restore({ player });
   assert.ok(player.area instanceof LibraryArea);
-  assert.equal(spawned.length, 1);
+  assert.equal(spawned.length, 3, 'the guide and both unlocked seal memories return with the library');
   assert.equal(spawned[0].owner, player);
   assert.equal(spawned[0].ownerOnly, true);
   assert.equal(spawned[0].area, player.area, 'the guide joins the restored private library');
+  assert.deepEqual(spawned.slice(1).map(npc => npc.id),
+    [api.core.NpcIdentifiers.MEMORY_OF_SEREN, api.core.NpcIdentifiers.MEMORY_OF_SEREN_2]);
+  assert.deepEqual([location.getX(), location.getY(), location.getZ()], [2623, 6130, 1]);
+  const memoryTalk = handlers.npcInteractions.get('Memory of Seren')['Talk-to'];
+  assert.equal(memoryTalk({ player, npcId: api.core.NpcIdentifiers.MEMORY_OF_SEREN_2 }), true,
+    'an unlocked clan memory opens its replay transcript');
+  const teleportMenu = { player, action: 'open_interface', target: 'An', handled: false };
+  handlers.custom.get('npc-dialogue:action').find(handler => handler.name === 'onAction')(teleportMenu);
+  assert.equal(teleportMenu.handled, true);
+  assert.equal(player.prompt[0], 'Where would you like to go?');
+  assert.equal(player.prompt[1], 'The Forgotten seal');
+  player.prompt[2]();
+  assert.deepEqual([location.getX(), location.getY(), location.getZ()], [2623, 6135, 1],
+    'the menu transports to a seal already present in the saved mask');
+  assert.match(messages.at(-1), /unlocked seal/i);
   assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '1:4');
   assert.equal(attributes.get('quest.song_of_the_elves.library-seals'), 3);
-  assert.deepEqual([location.getX(), location.getY(), location.getZ()], [2623, 6130, 1]);
   for (const handler of handlers.custom.get('npc-dialogue:choice')) handler({ player,
     option: 'Yes please.', definition: { getName: () => 'Memory of Seren' } });
   assert.equal(location.getZ(), 1, 'asking to replay knowledge does not teleport the player');
@@ -7739,11 +7756,11 @@ test('Song of the Elves restores the saved private library on relog without rese
   assert.deepEqual([location.getX(), location.getY(), location.getZ()], [2623, 6144, 0],
     'the actual accepted return action moves the player');
   restore({ player });
-  assert.equal(spawned.length, 1, 'a repeated login hook does not create another instance or guide');
+  assert.equal(spawned.length, 3, 'a repeated login hook does not duplicate the library actors');
   player.area.destroyed = true;
   attributes.set('quest.song_of_the_elves.stage', 140);
   restore({ player });
-  assert.equal(spawned.length, 2, 'completed seals can still be left through the guide after relog');
+  assert.equal(spawned.length, 6, 'completed seals and their memories return in the rebuilt library');
   player.area = null;
   location = new api.core.Location(2353, 3179, 0);
   restore({ player });
@@ -7847,6 +7864,11 @@ test('Song of the Elves library mirrors must follow the previous beam direction'
     player, objectId: api.core.ObjectIdentifiers.SEAL_OF_THE_FORGOTTEN,
   }) === true);
   assert.ok(useObject, 'the central seal interaction is registered');
+  attributes.set('quest.song_of_the_elves.library-seals', 0);
+  const blockedSupplies = { player, objectId: api.core.ObjectIdentifiers.CRYSTAL_DISPENSER_3, handled: false };
+  assert.equal(useObject(blockedSupplies), true);
+  assert.equal(blockedSupplies.handled, true, 'the Forgotten memory must precede clan-seal supplies');
+  assert.equal(amounts.size, 0);
   attributes.set('quest.song_of_the_elves.library-seals', 3);
   useObject({ player, objectId: api.core.ObjectIdentifiers.CRYSTAL_DISPENSER_3, handled: false });
   const useMirror = itemObjects.get('Hand mirror');
@@ -14522,8 +14544,50 @@ test('Song of the Elves preparation earns its seed, elders and herb before the p
   action({player,stepId:'rlWDAM'});assert.equal(items.get(I.CRYSTAL_SEED_3),1);action({player,stepId:'eS601c'});assert.equal(items.get(I.CRYSTAL_SEED_3),0);assert.equal(items.get(I.CRYSTAL_SEED_5),1,'the Rub-enabled cache item is earned from Eluned');
   action({player,stepId:'ZYvQiu'});assert.equal(quest.getStage(player),120,'harvesting cannot jump to the dwarf-camp chapter');action({player,stepId:'0lNCRc'});assert.equal(items.get(I.ELDER_CADANTINE)||0,0,'both elders must return before harvesting');
   action({player,stepId:'D1wXY6'});assert.equal(bits.get(9016),82);items.set(I.HAMMER,1);items.set(I.RUNITE_BAR,1);action({player,kind:'message',stepId:'ITn7ep'});action({player,kind:'message',stepId:'ITn7ep'});assert.equal(items.get(I.HAMMER),1,'repair retains the tool');assert.equal(items.get(I.RUNITE_BAR),0,'the repair is retained across interrupted dialogue and consumes one bar');assert.equal(attrs.get('song-of-the-elves:trahaearn-repaired'),true);const crevice=handlers.namedObjects.find(h=>h.target==='Crevice').actions.Enter;crevice({player,option:'enter',definition:{getInteractions:()=>['Enter']},clickType:1,location:{x:2341,y:9616,z:0}});assert.deepEqual([at.getX(),at.getY()],[2334,9573],'the real object click payload enters the repaired crevice');at=new api.core.Location(2334,9573,0);action({player,stepId:'EMxiFg'});assert.equal(bits.get(9016),84);assert.deepEqual([at.getX(),at.getY()],[2334,9573],'Trahaearn departs without teleporting the player');action({player,stepId:'0lNCRc'});assert.equal(items.get(I.ELDER_CADANTINE),1);assert.equal(bits.get(9016),86);
-  action({player,stepId:'eOtNFO'});assert.equal(bits.get(9016),86,'the potion must exist before handing it over');items.set(I.INVERSION_POTION,1);action({player,stepId:'eOtNFO'});assert.equal(items.get(I.INVERSION_POTION),0);assert.equal(quest.getStage(player),120,'the meeting opening does not skip its dialogue');action({player,stepId:'_2-0Qk'});assert.equal(quest.getStage(player),130);assert.equal(quest.varbitValue(130,player),90);
+  action({player,stepId:'eOtNFO'});assert.equal(bits.get(9016),86,'the potion must exist before handing it over');items.set(I.INVERSION_POTION,1);action({player,stepId:'eOtNFO'});assert.equal(items.get(I.INVERSION_POTION),0);assert.equal(quest.getStage(player),120,'the meeting opening does not skip its dialogue');action({player,stepId:'_2-0Qk'});assert.equal(quest.getStage(player),130);assert.equal(quest.varbitValue(130,player),92);
  }finally{runtime.startTranscript=original;}
+});
+
+test('Song of the Elves native progress follows library seals and later source stages', () => {
+  const { api } = mockApi();
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'song_of_the_elves').at(-1);
+  const attrs = new Map();
+  const player = { getAttribute: key => attrs.get(key) };
+  const progress = (stage, key, value) => {
+    if (value === undefined) attrs.delete(key);
+    else attrs.set(key, value);
+    return quest.varbitValue(stage, player);
+  };
+  const seals = 'quest.song_of_the_elves.library-seals';
+  assert.equal(progress(130, seals, 0), 92);
+  assert.equal(progress(130, seals, 1), 93);
+  assert.equal(progress(130, 'quest.song_of_the_elves.library-mirrors', 13), 94);
+  assert.equal(progress(130, seals, 3), 95);
+  assert.equal(progress(130, 'quest.song_of_the_elves.library-mirrors', undefined), 95);
+  progress(130, 'quest.song_of_the_elves.library-mirrors', 7);
+  progress(130, 'quest.song_of_the_elves.library-crystals', 'red');
+  progress(130, 'quest.song_of_the_elves.library-puzzle', '1:0');
+  assert.equal(quest.varbitValue(130, player), 96);
+  assert.equal(progress(130, seals, 511), 110);
+  assert.equal(quest.varbitValue(140, player), 110);
+  assert.equal(quest.varbitValue(150, player), 112);
+  assert.equal(progress(150, 'quest.song_of_the_elves.recruited-elders', 2), 116);
+  assert.equal(progress(150, 'quest.song_of_the_elves.recruited-elders', 1), 118);
+  assert.equal(progress(150, 'quest.song_of_the_elves.recruited-elders', 3), 120);
+  assert.equal(quest.varbitValue(160, player), 142);
+  assert.equal(progress(160, 'quest.song_of_the_elves.lletya-children', { eoin: true }), 144);
+  assert.equal(progress(160, 'quest.song_of_the_elves.lletya-children', { eoin: true, iona: true }), 146);
+  assert.equal(progress(160, 'quest.song_of_the_elves.lletya-traitor-revealed', true), 150);
+  assert.equal(progress(160, 'quest.song_of_the_elves.lletya-arianwyn-confronted', true), 152);
+  assert.equal(quest.varbitValue(170, player), 160);
+  assert.equal(progress(170, 'quest.song_of_the_elves.recruited-elders', 12), 164);
+  assert.equal(quest.varbitValue(180, player), 166);
+  assert.equal(progress(190, 'quest.song_of_the_elves.late-chapter', 19), 186);
+  assert.equal(progress(190, 'quest.song_of_the_elves.fragment-defeated', true), 188);
+  assert.equal(progress(190, 'quest.song_of_the_elves.late-chapter', 20), 190);
+  assert.equal(progress(190, 'quest.song_of_the_elves.war-end-arianwyn-done', true), 192);
 });
 
 test('Song of the Elves library guide remains available after logout and relog',()=>{
