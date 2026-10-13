@@ -1065,15 +1065,16 @@ module.exports = function registerDesertTreasureII(api) {
 
   LeviathanArea = class DesertTreasureIILeviathanArea extends api.core.TemplatedInstanceArea {
     constructor(owner, questPlayer) {
-      super(6, 8);
+      super(7, 8);
       this.owner = owner;
       this.questPlayer = questPlayer;
       this.lastProcessCycle = -1;
-      for (let x = 0; x < 6; x++) {
+      for (let x = 0; x < 7; x++) {
         for (let y = 0; y < 8; y++) {
           for (let plane = 0; plane < 4; plane++) {
-            this.setChunk(plane, x, y, plane === 0 ? {
-              sourceChunkX: 258 + x, sourceChunkY: 792 + y, sourcePlane: 0, rotation: 0,
+            // Copy the bridge plane too: it lowers the arena floor meshes out of collision.
+            this.setChunk(plane, x, y, plane <= 1 ? {
+              sourceChunkX: 257 + x, sourceChunkY: 792 + y, sourcePlane: plane, rotation: 0,
             } : null);
           }
         }
@@ -1151,7 +1152,7 @@ module.exports = function registerDesertTreasureII(api) {
       }
       if (boss.getHitpoints() <= Math.floor((boss.getMaxHitpoints?.() ?? 593) * 0.2) && !boss.__dt2LeviathanEnraged) {
         boss.__dt2LeviathanEnraged = true;
-        const pathfinder = api.core.NPC.create(N.CEREBRAL_PATHFINDER, this.tile(26, 38, 0));
+        const pathfinder = api.core.NPC.create(N.CEREBRAL_PATHFINDER, this.tile(34, 38, 0));
         pathfinder.setOwner?.(player);
         pathfinder.setOwnerOnly?.(true);
         pathfinder.setScriptedMovement?.(true);
@@ -1807,13 +1808,13 @@ module.exports = function registerDesertTreasureII(api) {
       area.enter(p);
       p.setAttribute(ATTR_LEVIATHAN_AREA, area);
     } else area.enter(p);
-    p.moveTo(area.tile(7, 41, 0));
+    p.moveTo(area.tile(15, 41, 0));
     setScarVarbit(p, p.getAttribute(SCAR_LEVIATHAN_DEBRIS_SEARCHED) ? 48
       : p.getAttribute(SCAR_PERSTEN_LEFT_SHIP) ? 46
         : p.getAttribute(SCAR_LEVIATHAN_KILLED) ? 42 : 40);
     if (!p.getAttribute(SCAR_LEVIATHAN_KILLED)) spawnBoss(p, "leviathan");
     else {
-      p.moveTo(area.tile(32, 46, 0));
+      if (p.getAttribute(SCAR_PERSTEN_AT_SHIP)) p.moveTo(area.tile(42, 46, 0));
       spawnScarPerstenAtShip(p, area);
     }
     return area;
@@ -1857,7 +1858,7 @@ module.exports = function registerDesertTreasureII(api) {
     let owned = spawned.get(p);
     if (!owned) spawned.set(p, owned = {});
     if (owned.scarPerstenShip?.isRegistered?.()) return owned.scarPerstenShip;
-    const npc = api.core.NPC.create(N.WIZARD_PERSTEN_5, area.tile(34, 38, 0));
+    const npc = api.core.NPC.create(N.WIZARD_PERSTEN_5, area.tile(42, 38, 0));
     npc.setOwner?.(p);
     npc.setOwnerOnly?.(true);
     npc.setScriptedMovement?.(true);
@@ -2810,7 +2811,7 @@ module.exports = function registerDesertTreasureII(api) {
       }
     }
     if (p.getAttribute(SCAR_BOAT_TRIED) && !p.getAttribute(ATTR_SCAR_AREA)) enterScar(p);
-    if (p.getAttribute(SCAR_LEVIATHAN_READY)) {
+    if (p.getAttribute(SCAR_LEVIATHAN_KILLED)) {
       enterLeviathanArea(p);
     } else if (p.getAttribute(SCAR_MAZE_THREE_ACTIVE)
       && !(p.getAttribute(ATTR_SCAR_MAZE_THREE) instanceof ScarMazeThreeArea)) enterScarMazeThree(p);
@@ -2923,9 +2924,9 @@ module.exports = function registerDesertTreasureII(api) {
   function leviathanSourceTile(p, location) {
     const area = p.getAttribute(ATTR_LEVIATHAN_AREA);
     if (!(area instanceof LeviathanArea) || area.isDestroyed?.() || !location) return null;
-    const x = location.x - area.getBaseX() + 2064;
+    const x = location.x - area.getBaseX() + 2056;
     const y = location.y - area.getBaseY() + 6336;
-    return x >= 2064 && x < 2112 && y >= 6336 && y < 6400 ? { x, y } : null;
+    return x >= 2056 && x < 2112 && y >= 6336 && y < 6400 ? { x, y } : null;
   }
 
   function sucellusSourceTile(p, location) {
@@ -2962,8 +2963,24 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function handleScarStoneRoute(event) {
-    if (event.clickType !== 1 || event.objectId !== 49209) return;
+    if (event.clickType !== 1) return;
     const p = event.player;
+    const leviathan = p?.getAttribute(ATTR_LEVIATHAN_AREA);
+    const loc = event.object?.getLocation?.();
+    if (leviathan instanceof LeviathanArea && !leviathan.isDestroyed() && loc) {
+      const source = leviathanSourceTile(p, { x: loc.getX(), y: loc.getY() });
+      let approach;
+      if ([47594, 49210].includes(event.objectId) && source?.x === 2091 && source.y === 6380) {
+        approach = leviathan.tile(34, 44, 0);
+      } else if ([49529, 49210].includes(event.objectId) && source?.x === 2096 && source.y === 6382) {
+        approach = leviathan.tile(38, 46, 0);
+      }
+      if (approach) {
+        event.destination = { x: approach.getX(), y: approach.getY(), z: 0 };
+        return;
+      }
+    }
+    if (event.objectId !== 49209) return;
     const area = p?.getAttribute(ATTR_SCAR_AREA);
     const objectLoc = event.object?.getLocation?.();
     if (!(area instanceof ScarArea) || area.isDestroyed?.() || !objectLoc) return;
@@ -3863,14 +3880,14 @@ module.exports = function registerDesertTreasureII(api) {
         if (!p.getAttribute(SCAR_LEVIATHAN_KILLED)) { p.sendMessage("The Leviathan still bars your way."); return true; }
         const area = p.getAttribute(ATTR_LEVIATHAN_AREA);
         p.setAttribute(SCAR_PERSTEN_AT_SHIP, true);
-        p.moveTo(area.tile(27, 44, 0));
+        p.moveTo(area.tile(36, 44, 0));
         p.sendMessage("You climb the handholds onto the northern ledge.");
         setScarVarbit(p, 42);
         return true;
       }
       if ([49529, 49210].includes(visibleId) && leviathanTile.x === 2096 && leviathanTile.y === 6382) {
         if (!p.getAttribute(SCAR_LEVIATHAN_KILLED)) { p.sendMessage("The stepping stone is out of reach while the Leviathan attacks."); return true; }
-        p.moveTo(p.getAttribute(ATTR_LEVIATHAN_AREA).tile(32, 46, 0));
+        p.moveTo(p.getAttribute(ATTR_LEVIATHAN_AREA).tile(42, 46, 0));
         p.sendMessage("You cross the stepping stone to Persten's ship.");
         return true;
       }
@@ -4894,7 +4911,7 @@ module.exports = function registerDesertTreasureII(api) {
       const area = p.getAttribute(ATTR_LEVIATHAN_AREA);
       if (!(area instanceof LeviathanArea) || area.isDestroyed() || p.getAttribute(SCAR_LEVIATHAN_KILLED)) return;
       if (npcs[key]?.isRegistered?.() && area.entities.includes(npcs[key])) return npcs[key];
-      const npc = api.core.NPC.create(id, area.tile(x - 2064, y - 6336, 0));
+      const npc = api.core.NPC.create(id, area.tile(x - 2056, y - 6336, 0));
       npc.setOwner?.(p);
       npc.setOwnerOnly?.(true);
       npc.setScriptedMovement?.(true);
@@ -5279,7 +5296,6 @@ module.exports = function registerDesertTreasureII(api) {
       owned.leviathan = null;
       killer.setAttribute(ATTR, null);
       killer.setAttribute(SCAR_LEVIATHAN_KILLED, true);
-      killer.setAttribute(SCAR_PERSTEN_AT_SHIP, true);
       setScarVarbit(killer, 42);
       const area = killer.getAttribute(ATTR_LEVIATHAN_AREA);
       if (area instanceof LeviathanArea && !area.isDestroyed()) spawnScarPerstenAtShip(killer, area);

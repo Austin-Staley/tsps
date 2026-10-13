@@ -2635,8 +2635,8 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
   const routes = [], logoutHooks = [], loginHooks = [], groundDrops = [];
   let processCycle = 0;
   class TestInstance {
-    constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
-    setChunk() {}
+    constructor(width, height) { this.width = width; this.height = height; this.entities = []; this.chunks = []; }
+    setChunk(plane, x, y, chunk) { this.chunks.push([plane, x, y, chunk]); }
     enter() {}
     leave() {}
     postLeave() {}
@@ -3353,6 +3353,31 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     interactions.find((entry) => entry.name === 'Wizard Persten').options['Talk-to']({ player, npcId: core.NpcIdentifiers.WIZARD_PERSTEN_5 });
     assert.equal(transcripts.at(-1), 'praefectus-classis-perseriya-talking-to-wizard-persten-after-completing-the-third-passage');
     assert.equal(varbits.get(15128), 36);
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.ROWBOAT_19,
+      location: area.tile(65, 35, 0) }), true);
+    const leviathan = attrs.get('desert-treasure-ii:leviathan-area');
+    assert.ok(queues.add.some(n => n.__dt2Leviathan && n.id === core.NpcIdentifiers.THE_LEVIATHAN_2));
+    const liveTemplate = new base.core.TemplatedInstanceArea(leviathan.width, leviathan.height);
+    try {
+      for (const [plane, x, y, chunk] of leviathan.chunks) liveTemplate.setChunk(plane, x, y, chunk);
+      const bx = liveTemplate.getBaseX(), by = liveTemplate.getBaseY();
+      const reached = new Set(['15,41']), queue = [[15,41]];
+      for (let i = 0; i < queue.length; i++) {
+        const [x, y] = queue[i];
+        for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+          const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
+          if (nx < 0 || nx >= 56 || ny < 0 || ny >= 64 || reached.has(key)
+            || !base.core.RegionManager.canMove(bx+x, by+y, bx+nx, by+ny, 0, 1, 1, liveTemplate)) continue;
+          reached.add(key); queue.push([nx,ny]);
+        }
+      }
+      assert.ok(reached.size > 300, 'the bridge plane opens the real arena instead of trapping the arrival');
+      assert.ok(reached.has('34,38'), 'the actual pathfinder tile is accessible');
+      assert.ok(reached.has('34,44'), 'the actual exit handholds have a reachable upper approach');
+      assert.ok(base.core.RegionManager.canMove(bx+36, by+44, bx+36, by+45, 0, 1, 1, liveTemplate), 'handholds land beside their clipped anchor');
+      assert.ok(base.core.RegionManager.canMove(bx+43, by+46, bx+42, by+46, 0, 1, 1, liveTemplate),
+        'the ship crossing lands east of its clipped stepping-stone anchor');
+    } finally { liveTemplate.destroy(); }
     attrs.set('desert-treasure-ii:scar-leviathan-ready', true);
     const laterLocation = player.location;
     const spawnedBeforeLaterLogin = queues.add.length;
