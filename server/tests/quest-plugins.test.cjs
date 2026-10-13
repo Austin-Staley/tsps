@@ -1835,11 +1835,18 @@ test('Blood Moon Castle new-moon key requires the corpse syringe, weapon statues
   confirm();
   assert.equal(items.get(33734), 1, 'the unlocked kitchen chest yields the left crest half');
   click(61741, 2579, 7382);
-  assert.equal(prompt.options.length, 6, 'the armoury rack offers the cache weapons through a selection menu');
-  prompt.options[1]();
-  prompt.options[3]();
-  prompt.options[3]();
-  prompt.options[5]();
+  assert.equal(prompt.options.length, 10, 'the armoury rack offers all four cache weapons and a leave option');
+  prompt.options[1](); // sword
+  assert.equal(items.get(33757), 1);
+  click(61741, 2579, 7382);
+  prompt.options[3](); // spear
+  assert.equal(items.get(33758), 1, 'the recorded spare spear can be taken from the rack');
+  click(61741, 2579, 7382);
+  prompt.options[5](); // mace
+  click(61741, 2579, 7382);
+  prompt.options[7](); // battleaxe
+  click(61741, 2579, 7382);
+  prompt.options[5](); // second mace, as in the captured armoury puzzle
   useOn(33759, 61743, 2577, 7380);
   useOn(33760, 61744, 2569, 7386);
   useOn(33760, 61745, 2569, 7380);

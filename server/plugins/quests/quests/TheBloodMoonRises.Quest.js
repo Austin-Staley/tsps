@@ -78,6 +78,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     rightCrest: ItemIdentifiers.RIGHT_CREST_HALF,
     fullCrest: ItemIdentifiers.FULL_CREST,
     sword: ItemIdentifiers.SWORD,
+    spear: ItemIdentifiers.SPEAR_2,
     axe: ItemIdentifiers.BATTLEAXE,
     mace: ItemIdentifiers.MACE_3,
   });
@@ -2326,12 +2327,16 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function startCastleWeaponChoice(player) {
     const choices = [
-      ["Take a battleaxe", CASTLE_KEY_ITEMS.axe, "You take a battleaxe from the armoury rack."],
-      ["Take a mace", CASTLE_KEY_ITEMS.mace, "You take a mace from the armoury rack."],
       ["Take a sword", CASTLE_KEY_ITEMS.sword, "You take a sword from the armoury rack."],
+      ["Take a spear", CASTLE_KEY_ITEMS.spear, "You take a spear from the armoury rack."],
+      ["Take a mace", CASTLE_KEY_ITEMS.mace, "You take a mace from the armoury rack."],
+      ["Take a battleaxe", CASTLE_KEY_ITEMS.axe, "You take a battleaxe from the armoury rack."],
+      ["Take nothing", null, ""],
     ];
     api.sendMultiChatboxPrompt(player, "Choose a weapon from the armoury rack.",
-      ...choices.flatMap(([label, id, message]) => [label, () => castleKeyGive(player, id, message)]));
+      ...choices.flatMap(([label, id, message]) => [label, () => {
+        if (id) castleKeyGive(player, id, message);
+      }]));
   }
 
   function handleCastleKeyItemOnObject(event) {
