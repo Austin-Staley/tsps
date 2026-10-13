@@ -6325,7 +6325,7 @@ module.exports = function registerDesertTreasureII(api) {
       return true;
     }
     if (x === 2351 && y === 6386 && state.inShadow && visibleId === 48208
-      && (option === "burn" || option === "clear" || option === "open")) {
+      && (option === "destroy" || option === "burn" || option === "clear" || option === "open")) {
       if (!has(p, I.SUPERIOR_SHADOW_TORCH)) { p.sendMessage("The deeper tentacles only yield to the superior shadow torch."); return true; }
       setLassar(p, { ...state, plazaTentacle: true });
       p.sendMessage("The superior torch burns through the tentacles south of the Plaza.");
@@ -6463,7 +6463,7 @@ module.exports = function registerDesertTreasureII(api) {
       return true;
     }
     if (state.inShadow && x === 2324 && y === 6402 && [48205, 48206, 48207, 48208, 48209, 48210, 48211, 48212].includes(visibleId)
-      && (option === "open" || option === "burn" || option === "clear")) {
+      && (option === "destroy" || option === "open" || option === "burn" || option === "clear")) {
       if (!has(p, I.SUPERIOR_SHADOW_TORCH) || !state.superiorTorch) { p.sendMessage("Only the superior shadow torch can clear the deeper tentacles."); return true; }
       if (state.animaSchematicFound) { p.sendMessage("The tentacles have already been burned away here."); return true; }
       const manager = api.getItemOnGroundManager?.();
@@ -6473,7 +6473,7 @@ module.exports = function registerDesertTreasureII(api) {
       return true;
     }
     if (state.inShadow && x === 2400 && y === 6393 && visibleId === 48211
-      && (option === "burn" || option === "clear" || option === "open")) {
+      && (option === "destroy" || option === "burn" || option === "clear" || option === "open")) {
       if (!state.perfectTorch || !has(p, I.PERFECTED_SHADOW_TORCH)) {
         p.sendMessage("The cathedral's tentacles resist every light except the perfected shadow torch.");
         return true;

@@ -5733,6 +5733,16 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     playerProcesses[0]({ player });
     assert.ok(groundSpawns.slice(beforeSchematicRecovery).some(([, item]) => item.getId() === core.ItemIdentifiers.SUPERIOR_SHADOW_TORCH_SCHEMATIC),
       'the pub schematic is restored after its private ground drop expires or the player relogs');
+    attrs.set('desert-treasure-ii:lassar', {
+      ...attrs.get('desert-treasure-ii:lassar'), inShadow: true, superiorTorch: true, animaSchematicFound: false,
+    });
+    counts.set(core.ItemIdentifiers.SUPERIOR_SHADOW_TORCH, 1);
+    const beforeAnimaSchematic = groundSpawns.length;
+    assert.equal(interact({ player, objectId: 48205, definition: { id: 48205 },
+      location: { x: 2324, y: 6402, z: 0 }, option: 'Destroy' }), true,
+    'the cached Tentacle Destroy option accepts the superior shadow torch');
+    assert.equal(attrs.get('desert-treasure-ii:lassar').animaSchematicFound, true);
+    assert.ok(groundSpawns.slice(beforeAnimaSchematic).some(([, item]) => item.getId() === core.ItemIdentifiers.ANIMA_PORTAL_SCHEMATIC));
     assert.equal(interact({ player, objectId: 48278, definition: { id: 48278 }, location: { x: 2372, y: 6430, z: 0 }, option: 'Climb-up' }), true);
     assert.equal(player.location.z, 1, 'the pub stairs use their real upper plane');
     assert.equal(interact({ player, objectId: 48245, definition: { id: 48245 }, location: { x: 2380, y: 6430, z: 1 }, option: 'Touch' }), true);
