@@ -638,7 +638,7 @@ test('each quest varp is sent again on login, so quest-gated locs show after a r
   if (!getRegisteredQuests().some((quest) => quest.name === 'Tree Gnome Village')) require('../plugins/quests/Quests.plugin').register(api);
   const village = getRegisteredQuests().find((quest) => quest.name === 'Tree Gnome Village');
   const attributes = new Map();
-  const varps = new Map();
+  const varps = new Map(), varbits = new Map();
   const sender = new Proxy({}, {
     get: (t, key) => {
       if (key === 'sendConfig') return (id, value) => (varps.set(id, value), sender);
@@ -7223,7 +7223,7 @@ test('Blood Moon prayer at either real Castle Drakan shrine unlocks its cache tr
  const pray=handlers.objects.find(handler=>{const event={player,objectId:61225,definition:{id:61226,getName:()=>'Shrine'},location:{x:3168,y:7707,z:0},option:'Pray-to',handled:false};return handler(event)===true;});
  assert.ok(pray,'the active stage claims the cache Shrine/Pray-to action');
  assert.equal(attrs.get('quest.the_blood_moon_rises.castle-shrine-prayed'),true);assert.equal(bits.get(15470),1);
- bits.clear();handlers.playerLogin.at(-1)({player});assert.equal(bits.get(15470),1,'the prayer unlock is restored after relog');
+ bits.clear();handlers.playerLogin.find(login=>login.name==='syncCastleShrine')({player});assert.equal(bits.get(15470),1,'the prayer unlock is restored after relog');
  const blocked={player,objectId:61225,definition:{id:61226,getName:()=>'Shrine'},location:{x:3168,y:7707,z:0},option:'Pray-to',handled:false};
  attrs.set('quest.the_blood_moon_rises.stage',20);assert.equal(handlers.objects.some(handler=>handler(blocked)===true),false,'the unrelated hideout chapter cannot claim a shrine click');
  delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
@@ -12729,4 +12729,67 @@ test('Song of the Elves bed leads through the full resistance briefing before re
     assert.equal(quest.varbitValue(50, player), 40);
     assert.equal(attrs.get('quest.song_of_the_elves.resistance-briefing'), false);
   } finally { runtime.startTranscript = original; }
+});
+
+test('Song of the Elves recruitment checks full disguises and pays once after the dialogue', () => {
+  const { api, handlers } = mockApi(), runtime = require('../plugins/quests/QuestRuntime');
+  const original = runtime.startTranscript, played = [];
+  runtime.startTranscript = (...args) => { played.push(args); return true; };
+  let talk;
+  api.onAnyNpcInteraction = actions => { talk = actions['Talk-to']; };
+  try {
+    require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+    const I = api.core.ItemIdentifiers, E = api.core.Equipment;
+    const attrs = new Map([['quest.song_of_the_elves.stage', 50]]), bits = new Map(), equipment = [];
+    let location = new api.core.Location(2517, 3274, 0);
+    const player = { getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      getLocation: () => location, moveTo: next => { location = next; }, sendMessage() {},
+      getEquipment: () => ({ get: slot => equipment[slot], getItems: () => equipment }),
+      getInventory: () => ({ getAmount: () => 0, getFreeSlots: () => 28 }),
+      getPacketSender: () => new Proxy({ sendVarbit: (id, value) => bits.set(id, value) }, { get: (o, k) => o[k] ?? (() => {}) }) };
+    const condition = handlers.condition.at(-1);
+    const event = { player, text: "If the player is wearing a mourner's outfit:" };
+    assert.equal(condition(event), false, 'normal clothes cannot enter the successful dialogue branch');
+    for (const [slot, id] of [[E.HEAD_SLOT,I.GAS_MASK],[E.BODY_SLOT,I.MOURNER_TOP],[E.LEG_SLOT,I.MOURNER_TROUSERS],
+      [E.HANDS_SLOT,I.MOURNER_GLOVES],[E.FEET_SLOT,I.MOURNER_BOOTS],[E.CAPE_SLOT,I.MOURNER_CLOAK]]) equipment[slot] = new api.core.Item(id);
+    assert.equal(condition(event), true);
+    assert.equal(condition({player,text:"If the player is not wearing a mourner's outfit:"}),false);
+    assert.equal(attrs.get('quest.song_of_the_elves.resistance-members'), undefined, 'testing a condition does not recruit');
+    const definition = { getName: () => 'Nurse Sarah' };
+    talk({player,definition,npcId:1152});
+    const transcript=played.at(-1), raw=require('../data/definitions/npc-dialogues.json')['Song of the Elves'].variants[transcript[4]];
+    const branch=transcript[5](raw).find(step=>step.type==='condition').steps;
+    assert.equal(branch.at(-2).action,'recruit-resistance');
+    const action=handlers.custom.get('npc-dialogue:action').find(h=>h.name==='onAction');
+    action({player,definition,action:'recruit-resistance'});
+    assert.equal(attrs.get('quest.song_of_the_elves.resistance-members'),6);
+    location=new api.core.Location(2518,3274,0);
+    action({player,definition,action:'recruit-resistance'});
+    assert.equal(attrs.get('quest.song_of_the_elves.resistance-members'),6,'NPC wandering cannot duplicate recruitment');
+    action({player,kind:'message',stepId:'y9pqh3'});
+    assert.equal(attrs.get('quest.song_of_the_elves.resistance-members'),14,'actual food-store message earns eight');
+    assert.equal(bits.get(9059),1,'the cache food store burns');
+    action({player,kind:'message',stepId:'y9pqh3'});
+    assert.equal(attrs.get('quest.song_of_the_elves.resistance-members'),14,'burning the same store cannot recruit twice');
+    for (const handler of handlers.objects) handler({player,definition:{getName:()=> 'Bed'},option:'Search',location:{x:2533,y:3332,z:0}});
+    assert.equal(played.at(-1)[4],'meet-the-ardougne-resistance-planning-a-revolution-searching-the-bed');
+    assert.equal(played.at(-1)[5],undefined,'re-entry does not repeat the introduction');
+    location=new api.core.Location(2532,3331,0);
+    handlers.custom.get('npc-dialogue:choice').find(h=>h.name==='handleDialogueChoice')({player,option:'Climb through it.'});
+    assert.equal(location.getY(),9745,'the bed still works after agreeing to help');
+    assert.equal(attrs.get('quest.song_of_the_elves.stage'),50);
+    equipment[E.HEAD_SLOT]=new api.core.Item(I.ARDOUGNE_KNIGHT_HELM);
+    equipment[E.BODY_SLOT]=new api.core.Item(I.ARDOUGNE_KNIGHT_PLATEBODY);
+    equipment[E.LEG_SLOT]=new api.core.Item(I.STEEL_PLATELEGS);
+    location=new api.core.Location(2654,3311,0);
+    talk({player,definition:{getName:()=> 'Baker'},npcId:api.core.NpcIdentifiers.BAKER_2});
+    assert.ok(played.at(-1)[4].endsWith('taxing-the-western-baker'));
+    action({player,definition:{getName:()=> 'Baker'},npcId:api.core.NpcIdentifiers.BAKER_2,action:'recruit-resistance'});
+    assert.equal(bits.get(9073),1);
+    location=new api.core.Location(2668,3311,0);
+    action({player,definition:{getName:()=> 'Baker'},npcId:api.core.NpcIdentifiers.BAKER_3,action:'recruit-resistance'});
+    assert.equal(bits.get(9081),1,'both cache bakers can be recruited independently');
+    assert.equal(attrs.get('quest.song_of_the_elves.resistance-members'),22);
+
+  } finally { runtime.startTranscript=original; }
 });

@@ -161,7 +161,10 @@ module.exports = function registerSongOfTheElves(api) {
   const MOURNER_OUTFIT = [
     [Equipment.HEAD_SLOT, ItemIdentifiers.GAS_MASK],
     [Equipment.BODY_SLOT, ItemIdentifiers.MOURNER_TOP],
-    [Equipment.LEG_SLOT, ItemIdentifiers.MOURNER_TROUSERS_2],
+    [Equipment.LEG_SLOT, ItemIdentifiers.MOURNER_TROUSERS],
+    [Equipment.HANDS_SLOT, ItemIdentifiers.MOURNER_GLOVES],
+    [Equipment.FEET_SLOT, ItemIdentifiers.MOURNER_BOOTS],
+    [Equipment.CAPE_SLOT, ItemIdentifiers.MOURNER_CLOAK],
   ];
   const CITIZEN_SUPPORT = {
     "Priest": 6, "Nurse Sarah": 6, Chadwell: 4,
@@ -170,6 +173,20 @@ module.exports = function registerSongOfTheElves(api) {
     "Spice seller": 2, "Town Crier": 8, Zenesha: 3, Probita: 2,
     "Estate agent": 2, Aemad: 4, Kortan: 4,
     "Doctor Orbon": 6, Richard: 4, Bartender: 6,
+  };
+  const RESISTANCE_VARBITS = {
+    "fire:AWdFbp": 9058, "fire:y9pqh3": 9059, "fire:Nn3EkA": 9060,
+    "fire:east-farm": 9061, "fire:east-docks": 9062,
+    "npc:west:nurse sarah": 9063, "npc:east:doctor orbon": 9064,
+    "npc:west:chadwell": 9065, "npc:east:general-store": 9066,
+    "npc:east:probita": 9067, "npc:east:zenesha": 9068,
+    "npc:east:silk merchant": 9069, "npc:east:spice seller": 9070,
+    "npc:east:fur trader": 9071, "npc:east:gem merchant": 9072,
+    "npc:east:western baker": 9073, "npc:east:silver merchant": 9074,
+    "npc:east:town crier": 9075, "npc:east:bartender": 9076,
+    "npc:east:richard": 9077, "npc:east:priest": 9078,
+    "npc:west:priest": 9079, "npc:east:estate agent": 9080,
+    "npc:east:eastern baker": 9081,
   };
   const FIRE_SUPPORT = { "y9pqh3": 8, "Nn3EkA": 8, "AWdFbp": 8 };
   const STAGE = { NOT_STARTED: 0, STARTED: 10, COMPLETE: 200 };
@@ -698,6 +715,7 @@ module.exports = function registerSongOfTheElves(api) {
     if (event?.player) clearWarEndActors(event.player);
   }
   function onAction(event) {
+    finishIncitement(event);
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
     const inventory = player.getInventory();
@@ -737,6 +755,9 @@ module.exports = function registerSongOfTheElves(api) {
       inventory.deleteNumber(SULPHURIC_ACID, 1);
       player.setAttribute(ELENA_ESCAPE_PROGRESS, 26);
       player.getPacketSender().sendVarbit(9016, 26);
+    }
+    if (FIRE_SUPPORT[event.stepId] && currentChapter(player) === 4 && wearingMourner(player)) {
+      addResistanceSupport(player, FIRE_SUPPORT[event.stepId], `fire:${event.stepId}`);
     }
     if (event.kind === "message") {
       const itemByMessage = {
@@ -803,9 +824,6 @@ module.exports = function registerSongOfTheElves(api) {
         player.sendMessage("You take seven explosive potions from Elena.");
       }
       return;
-    }
-    if (FIRE_SUPPORT[event.stepId] && currentChapter(player) === 4) {
-      addResistanceSupport(player, FIRE_SUPPORT[event.stepId], `fire:${event.stepId}`);
     }
     const chapter = ACTION_CHAPTER[event.stepId];
     if (chapter !== undefined && (event.stepId !== "jtPiC1" || wearingDisguise(player))) {
@@ -1213,7 +1231,7 @@ module.exports = function registerSongOfTheElves(api) {
   function onTalk(event) {
     const player = event?.player;
     if (!player) return false;
-    const npcName = String(event.definition?.getName?.() ?? "").toLowerCase();
+    const npcName = resistanceCitizenName(event).toLowerCase();
     if (quest.getStage(player) === STAGE.NOT_STARTED) {
       if (npcName !== "edmond") return false;
       if (!requirementsMet(player)) { explainRequirements(player); return true; }
@@ -1349,7 +1367,9 @@ module.exports = function registerSongOfTheElves(api) {
       const enoughSupport = resistanceSupport(player) >= 80;
       return startTranscript(api, player, event.npcId, PAGE, enoughSupport
         ? "vive-la-ardougne-r-volution-talking-to-elena-or-councillor-halgrive"
-        : "meet-the-ardougne-resistance-planning-a-revolution-talking-to-elena-before-recruiting-enough-people");
+        : "meet-the-ardougne-resistance-planning-a-revolution-talking-to-elena-before-recruiting-enough-people",
+        steps => steps.map(step => ({ ...step, text: step.text?.replace("[number]", String(resistanceSupport(player))).replace("[number]", String(80 - resistanceSupport(player))) })));
+
     }
     if ((npcName === "elena" || npcName === "councillor halgrive") && currentChapter(player) === 6 &&
       (Number(player.getAttribute(WEST_BATTLE_KILLS)) || 0) >= 21) {
@@ -1381,7 +1401,8 @@ module.exports = function registerSongOfTheElves(api) {
         ? "taxing-the-estate-agent" : `taxing-${npcName.replace(/[^a-z0-9]+/g, "-")}`);
       const variant = Object.keys(loadTranscripts(api)[PAGE]?.variants ?? {})
         .find((name) => name.startsWith("causing-an-insurrection-") && name.endsWith(match));
-      if (variant) return startTranscript(api, player, event.npcId, PAGE, variant);
+      if (variant) return startTranscript(api, player, event.npcId, PAGE, variant,
+        steps => incitementSteps(steps, variant.includes("-west-ardougne-")));
     }
     if (npcName === "king thoros" && quest.getStage(player) === STAGE.STARTED) {
       // In this world state Thoros occupies the post-quest castle throne room;
@@ -1639,25 +1660,51 @@ module.exports = function registerSongOfTheElves(api) {
     completed.add(key);
     player.setAttribute(INCITEMENTS, [...completed].join(","));
     player.setAttribute(RESISTANCE_MEMBERS, Math.min(80, resistanceSupport(player) + amount));
+    syncResistanceProgress(player);
     if (resistanceSupport(player) >= 80 && currentChapter(player) === 4) {
       player.sendMessage("The resistance has recruited 80 people. Report back to Elena.");
     }
   }
 
+  function resistanceCitizenName(event) {
+    const name = String(event.definition?.getName?.() ?? "");
+    if (name !== "Baker") return name;
+    if (event.npcId === NpcIdentifiers.BAKER_2) return "Western baker";
+    if (event.npcId === NpcIdentifiers.BAKER_3) return "Eastern baker";
+    return name;
+  }
+  function incitementSteps(steps, west) {
+    return steps.map(step => {
+      if (step.type === "choice") return { ...step, options: step.options.map(option => ({ ...option,
+        steps: incitementSteps(option.steps ?? [], west) })) };
+      if (step.type !== "condition") return step;
+      const correctOutfit = step.text.startsWith("If the player is wearing ") && step.text.includes(west ? "wearing a mourner's outfit" : "wearing Knight of Ardougne armour");
+      return { ...step, steps: correctOutfit ? [
+        ...step.steps.filter(entry => entry.type !== "end"),
+        { type: "action", action: "recruit-resistance" }, { type: "end" },
+      ] : step.steps };
+    });
+  }
   function recordIncitement(event) {
     const text = String(event.text ?? "");
-    const wearsKnight = text.includes("wearing Knight of Ardougne armour") && wearingDisguise(event.player);
-    const wearsMourner = text.includes("wearing a mourner's outfit") && wearingMourner(event.player);
-    if (!wearsKnight && !wearsMourner) return null;
-    if (currentChapter(event.player) !== 4) return true;
-    const name = String(event.definition?.getName?.() ?? "");
-    const amount = Object.entries(CITIZEN_SUPPORT).find(([candidate]) => candidate.toLowerCase() === name.toLowerCase())?.[1];
-    if (amount) {
-      const tile = event.npc?.getLocation?.();
-      const key = `npc:${event.npcId}:${tile?.getX?.() ?? 0}:${tile?.getY?.() ?? 0}`;
-      addResistanceSupport(event.player, amount, key);
-    }
-    return true;
+    if (text.includes("not wearing a mourner's outfit")) return !wearingMourner(event.player);
+    if (text.includes("wearing Knight of Ardougne armour")) return wearingDisguise(event.player);
+    if (text.includes("wearing a mourner's outfit")) return wearingMourner(event.player);
+    if (text.includes("not wearing either")) return !wearingDisguise(event.player) && !wearingMourner(event.player);
+    return null;
+  }
+  function finishIncitement(event) {
+    const player = event?.player;
+    if (event.action !== "recruit-resistance" || !player || currentChapter(player) !== 4) return;
+    event.handled = true;
+    const name = resistanceCitizenName(event);
+    const loc = event.npc?.getSpawnPosition?.() ?? event.npc?.getLocation?.() ?? player.getLocation();
+    const x = loc.getX(), y = loc.getY(), west = x < 2570;
+    if (x < 2430 || x > 2700 || y < 3250 || y > 3400 || !(west ? wearingMourner(player) : wearingDisguise(player))) return;
+    const amount = CITIZEN_SUPPORT[name];
+    if (!amount) return;
+    const citizen = ["Aemad", "Kortan"].includes(name) ? "general-store" : name.toLowerCase();
+    addResistanceSupport(player, amount, `npc:${west ? "west" : "east"}:${citizen}`);
   }
 
   function disguiseCondition(event) {
@@ -1741,11 +1788,11 @@ module.exports = function registerSongOfTheElves(api) {
       beginCampDefense(player, area);
       return;
     }
-    if (event.option === "Climb through it." && currentChapter(event.player) === 3) {
+    if (event.option === "Climb through it." && [3, 4, 6].includes(currentChapter(event.player))) {
       const loc = event.player.getLocation();
       if (loc.getX() >= 2522 && loc.getX() <= 2541 && loc.getY() >= 3320 && loc.getY() <= 3344) {
         event.player.moveTo(new Location(2537, 9745, 0));
-        event.player.setAttribute(RESISTANCE_BRIEFING, true);
+        if (currentChapter(event.player) === 3) event.player.setAttribute(RESISTANCE_BRIEFING, true);
         event.player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(event.player), event.player));
       }
       return;
@@ -2822,21 +2869,24 @@ module.exports = function registerSongOfTheElves(api) {
   }
   function searchRehnisonBed(event) {
     const player = event?.player;
-    if (!player || currentChapter(player) !== 3 || quest.isComplete(player)) return false;
+    if (!player || ![3, 4, 6].includes(currentChapter(player)) || quest.isComplete(player)) return false;
     const loc = event.location;
     if (loc && (loc.x < 2522 || loc.x > 2541 || loc.y < 3320 || loc.y > 3344)) return false;
-    return startTranscript(api, player, 0, PAGE, "meet-the-ardougne-resistance-planning-a-revolution-searching-the-bed", resistanceBedSteps);
+    return startTranscript(api, player, 0, PAGE, "meet-the-ardougne-resistance-planning-a-revolution-searching-the-bed",
+      currentChapter(player) === 3 ? resistanceBedSteps : undefined);
   }
 
   function enterResistanceBasement(event) {
     const player = event?.player;
     const loc = event?.location;
-    if (!player || !loc || currentChapter(player) !== 3 || quest.isComplete(player) ||
+    if (!player || !loc || ![3, 4, 6].includes(currentChapter(player)) || quest.isComplete(player) ||
       loc.x < 2522 || loc.x > 2541 || loc.y < 3320 || loc.y > 3344) return;
     event.handled = true;
     player.moveTo(new api.core.Location(2537, 9745, 0));
-    player.setAttribute(RESISTANCE_BRIEFING, true);
-    startTranscript(api, player, 0, PAGE, "meet-the-ardougne-resistance-planning-a-revolution-entering-the-hidden-basement");
+    if (currentChapter(player) === 3) {
+      player.setAttribute(RESISTANCE_BRIEFING, true);
+      startTranscript(api, player, 0, PAGE, "meet-the-ardougne-resistance-planning-a-revolution-entering-the-hidden-basement");
+    }
   }
 
   function enterPrison(event) {
@@ -3052,16 +3102,25 @@ module.exports = function registerSongOfTheElves(api) {
       x === location?.x && y === location?.y && z === location?.z)) event.claimed = true;
   }
 
+  function syncResistanceProgress(player) {
+    const burned = new Set(String(player.getAttribute(INCITEMENTS) ?? "").split(","));
+    for (const [key, varbit] of Object.entries(RESISTANCE_VARBITS)) {
+      player.getPacketSender().sendVarbit(varbit, burned.has(key) ? 1 : 0);
+    }
+  }
+  function syncResistanceLogin({ player }) {
+    if (quest.isStarted(player)) syncResistanceProgress(player);
+  }
   function lightWestArdougneSacks(event) {
     const player = event?.player;
     const loc = event?.location;
     if (!player || !loc || currentChapter(player) !== 4 || quest.isComplete(player)) return false;
     if (loc.x >= 2628 && loc.x <= 2637 && loc.y >= 3384 && loc.y <= 3388) return lightEastFarmSacks(event);
-    const variant = loc.x >= 2540 && loc.x <= 2542 && loc.y >= 3268 && loc.y <= 3278
+    const variant = loc.x >= 2524 && loc.x <= 2526 && loc.y >= 3285 && loc.y <= 3288
       ? "causing-an-insurrection-west-ardougne-setting-the-grain-sacks-inside-the-church-on-fire"
-      : loc.x >= 2488 && loc.x <= 2490 && loc.y >= 3295 && loc.y <= 3297
+      : loc.x >= 2468 && loc.x <= 2470 && loc.y >= 3286 && loc.y <= 3288
         ? "causing-an-insurrection-west-ardougne-setting-the-grain-sacks-outside-the-general-store-on-fire"
-        : loc.x >= 2554 && loc.x <= 2556 && loc.y >= 3304 && loc.y <= 3307
+        : loc.x >= 2516 && loc.x <= 2518 && loc.y >= 3314 && loc.y <= 3316
           ? "causing-an-insurrection-west-ardougne-setting-the-grain-sacks-in-the-central-civic-office-on-fire"
           : null;
     if (!variant) return false;
@@ -3146,6 +3205,7 @@ module.exports = function registerSongOfTheElves(api) {
     },
   });
   api.onNpcDialogueVariant(selectVariant);
+  api.onPlayerLogin(syncResistanceLogin);
   api.onPlayerLogin(({ player }) => {
     syncCrwysTree(player);
     sendIthellMeilyrVarbits(player);
@@ -3250,6 +3310,7 @@ module.exports = function registerSongOfTheElves(api) {
     api.onItemOnObject(itemName, "Pillar", placeFallsPillarItem, { noted: false });
   }
   api.onItemOnObject("Tinderbox", "Sacks", lightWestArdougneSacks, { noted: false });
+  api.onItemOnObject("Tinderbox", "Grain sacks", lightWestArdougneSacks, { noted: false });
   api.onItemOnObject("Tinderbox", "Barrel of fish", lightEastDockBarrels, { noted: false });
   api.onObjectInteraction("Pillar of Light", { Search: searchFallsPillar });
   api.onObjectInteraction("Cabinet", { Search: searchElenaCabinet });
@@ -3278,7 +3339,7 @@ module.exports = function registerSongOfTheElves(api) {
     api.onNpcInteraction(name, { "Talk-to": onTalk });
   }
   api.onNpcInteraction(onCrwysTreeInteraction);
-  api.onNpcsInteraction(Object.keys(CITIZEN_SUPPORT), { "Talk-to": onTalk });
+  api.onNpcsInteraction([...Object.keys(CITIZEN_SUPPORT), "Baker"], { "Talk-to": onTalk });
   api.onAnyNpcInteraction({ "Talk-to": onTalk });
   api.onNpcDeath(handleBattleDeath);
   api.onPlayerDeath(handleQuestPlayerDeath);
