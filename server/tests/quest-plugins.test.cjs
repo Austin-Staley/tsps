@@ -4543,7 +4543,7 @@ test('Song of the Elves spawns the attackable Fragment variant for the final fig
   assert.equal(player.location.getY(), 5918);
 });
 
-test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle', () => {
+test('Song of the Elves Fragment uses Wiki paired ranged hits and ordered phase-scaled specials', () => {
   const { api, handlers } = mockApi();
   const originalCycle = api.core.World.getProcessCycle;
   const runtime = require('../plugins/quests/QuestRuntime');
@@ -4556,6 +4556,7 @@ test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle
     ['quest.song_of_the_elves.fragment-defeated', false],
   ]);
   const activePrayers = [];
+  const playerMessages = [];
   const playerCombat = {
     getLastAttack: () => ({ reset() {} }),
     getHitQueue: () => ({ addPendingDamage: hits => queued.push(...hits) }),
@@ -4573,7 +4574,7 @@ test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle
     getCombat: () => playerCombat,
     getPrayerActive: () => activePrayers,
     getSkillManager: () => ({ getMaxLevel: () => 99, getCurrentLevel: () => 99 }),
-    sendMessage() {},
+    sendMessage(message) { playerMessages.push(message); },
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
     isPlayer: () => true,
     isNpc: () => false,
@@ -4584,6 +4585,7 @@ test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle
   let addAttackResets = 0;
   let nextNpcIndex = 2;
   api.registerArea = () => {};
+  api.removeNpc = npc => { npc.removed = true; };
   api.spawnNpc = definition => {
     const npc = {
       id: definition.id,
@@ -4631,14 +4633,16 @@ test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle
     try {
       cycle = 107;
       area.process(boss);
-      assert.equal(queued.length, 1);
-      assert.equal(queued[0].getDamage(), 3, 'Protect from Missiles reduces a 12-damage ranged attack to 3');
+      assert.equal(queued.length, 2);
+      assert.equal(queued[0].getDamage(), 3, 'Protect from Missiles reduces the first 12-damage projectile to 3');
+      assert.equal(queued[1].getDamage(), 2, 'the second projectile is the same damage or one lower');
 
       activePrayers[api.core.PrayerHandler.PROTECT_FROM_MISSILES] = false;
       cycle = 114;
       area.process(boss);
-      assert.equal(queued.length, 2);
-      assert.equal(queued[1].getDamage(), 12, 'without the overhead, the same ranged roll deals 12');
+      assert.equal(queued.length, 4);
+      assert.equal(queued[2].getDamage(), 12, 'without the overhead, the first projectile deals 12');
+      assert.equal(queued[3].getDamage(), 11, 'the second projectile deals the same or one less');
     } finally {
       Math.random = originalRandom;
     }
@@ -4653,17 +4657,19 @@ test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle
         queued.length = 0;
         handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'xfnkES', handled: false });
         const area = player.getArea();
+        boss.hitpoints = bossHp;
         const startCycle = cycle;
         activePrayers[api.core.PrayerHandler.PROTECT_FROM_MISSILES] = true;
-        for (const offset of [14, 38, 62, 86, 89]) {
+        let blastDamage = [];
+        for (let offset = 1; offset <= 89; offset++) {
           cycle = startCycle + offset;
-          if (offset === 62) boss.hitpoints = bossHp;
+          if (offset === 86) boss.hitpoints = bossHp;
           queued.length = 0;
           area.process(boss);
+          if (offset === 87) blastDamage = queued.map(hit => hit.getDamage());
         }
-        assert.equal(queued.length, 1);
-        assert.equal(queued[0].getDamage(), expectedDamage,
-          `the unavoidable blast leaves ${expectedDamage} damage at boss HP ${bossHp}`);
+        assert.ok(blastDamage.includes(expectedDamage),
+          `the unavoidable blast leaves ${expectedDamage} damage at boss HP ${bossHp}; saw ${blastDamage}`);
       }
     } finally {
       Math.random = originalRandomForBlast;
@@ -4678,9 +4684,11 @@ test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle
       const spawnStart = spawned.length;
       handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'xfnkES', handled: false });
       const area = player.getArea();
-      boss.hitpoints = 666;
-      cycle += 1;
-      area.process(boss);
+      const startCycle = cycle;
+      for (let offset = 1; offset <= 36; offset++) {
+        cycle = startCycle + offset;
+        area.process(boss);
+      }
       const clones = spawned.slice(spawnStart + 1);
       assert.equal(clones.length, 2);
       assert.ok(clones.every(npc => npc.scriptedMovement), 'scripted echoes cannot run the normal NPC combat AI');
@@ -4692,25 +4700,30 @@ test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle
       assert.ok(addAttackResets > resetsBeforeAddTick, 'the area prevents generic NPC regeneration during scripted phases');
 
       handlers.npcDeath.at(-1)({ npc: clones[0], killer: player });
-      const healers = spawned.slice(-2);
-      assert.equal(healers.length, 2);
-      assert.ok(healers.every(npc => npc.scriptedMovement), 'scripted whirlwinds cannot run the normal NPC combat AI');
-      assert.ok(healers.every(npc => area.npcAggression(player, npc) === false),
-        'whirlwinds cannot acquire a second, generic combat target');
+      for (let offset = 37; offset <= 60; offset++) {
+        cycle = startCycle + offset;
+        area.process(boss);
+      }
+      const firstPhaseBeams = spawned.filter(npc => npc.id === api.core.NpcIdentifiers.COL_00FFFF_CRYSTAL_WHIRLWIND_COL &&
+        npc.index > clones.at(-1).index);
+      assert.equal(firstPhaseBeams.length, 2, 'the first phase uses two healing beams');
+      assert.ok(firstPhaseBeams.every(npc => npc.scriptedMovement), 'scripted beams cannot run the normal NPC combat AI');
+      assert.ok(firstPhaseBeams.every(npc => area.npcAggression(player, npc) === false),
+        'beams cannot acquire a second, generic combat target');
       const missedMagicRoll = {
         attacker: player,
-        target: healers[0],
+        target: firstPhaseBeams[0],
         combatType: api.core.CombatType.MAGIC,
         forceAccurate: false,
       };
       for (const hook of handlers.combatHitRoll) hook(missedMagicRoll);
       assert.equal(missedMagicRoll.forceAccurate, true,
-        'a magic splash cannot leave an OSRS one-hit whirlwind alive to heal the boss');
-      for (const healer of healers) area.process(healer);
+        'a magic splash cannot leave an OSRS one-hit beam alive to heal the boss');
+      for (const beam of firstPhaseBeams) area.process(beam);
       const missedPart = { damage: 0, getDamage() { return this.damage; }, setDamage(value) { this.damage = value; } };
       let totalDamage = 0;
       handlers.npcHitModify.at(-1)({
-        npc: healers[0],
+        npc: firstPhaseBeams[0],
         hit: {
           getAttacker: () => player,
           getHits: () => [missedPart],
@@ -4719,6 +4732,58 @@ test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle
       });
       assert.equal(missedPart.damage, 1, 'any attack kills a one-hit whirlwind, even if its hit roll missed');
       assert.equal(totalDamage, 1);
+
+      for (const [bossHp, expectedAdds, expectedBlast] of [[500, 3, 96], [300, 4, 98]]) {
+        player.getArea().leave(player, false);
+        boss = null;
+        cycle += 100;
+        const phaseStart = spawned.length;
+        handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'xfnkES', handled: false });
+        const phaseArea = player.getArea();
+        boss.hitpoints = bossHp;
+        const phaseCycle = cycle;
+        const phaseSpecialTicks = [];
+        for (let offset = 1; offset <= 36; offset++) {
+          cycle = phaseCycle + offset;
+          const beforeMessages = playerMessages.length;
+          phaseArea.process(boss);
+          for (const message of playerMessages.slice(beforeMessages)) {
+            if (message.includes('teleports you beside')) phaseSpecialTicks.push([offset, 'teleport']);
+            else if (message.includes('follow-up strike')) phaseSpecialTicks.push([offset, 'follow-up']);
+            else if (message.includes('divides into')) phaseSpecialTicks.push([offset, 'clones']);
+          }
+        }
+        const phaseClones = spawned.slice(phaseStart + 1);
+        assert.equal(phaseClones.length, expectedAdds, `boss HP ${bossHp} uses ${expectedAdds} total echoes`);
+        assert.ok(playerMessages.includes(`The Fragment divides into ${expectedAdds} echoes. Strike the true echo; the false ones cannot be harmed.`));
+        handlers.npcDeath.at(-1)({ npc: phaseClones[0], killer: player });
+        for (let offset = 37; offset <= 60; offset++) {
+          cycle = phaseCycle + offset;
+          const beforeMessages = playerMessages.length;
+          phaseArea.process(boss);
+          for (const message of playerMessages.slice(beforeMessages)) {
+            if (message.includes('Crystal Whirlwinds surround')) phaseSpecialTicks.push([offset, 'beams']);
+          }
+        }
+        const phaseBeams = spawned.filter(npc => npc.id === api.core.NpcIdentifiers.COL_00FFFF_CRYSTAL_WHIRLWIND_COL &&
+          npc.index > phaseClones.at(-1).index);
+        assert.equal(phaseBeams.length, expectedAdds, `boss HP ${bossHp} uses ${expectedAdds} healing beams`);
+        for (let offset = 61; offset <= 87; offset++) {
+          cycle = phaseCycle + offset;
+          if (offset === 86) boss.hitpoints = bossHp;
+          queued.length = 0;
+          const beforeMessages = playerMessages.length;
+          phaseArea.process(boss);
+          for (const message of playerMessages.slice(beforeMessages)) {
+            if (message.includes('devastating burst')) phaseSpecialTicks.push([offset, 'blast']);
+          }
+        }
+        assert.deepEqual(phaseSpecialTicks, [[12, 'teleport'], [12 + ({ 500: 3, 300: 2 }[bossHp]), 'follow-up'],
+          [36, 'clones'], [60, 'beams'], [84, 'blast']],
+        `boss HP ${bossHp} follows teleport → clones → beams → blast at phase timing`);
+        assert.ok(phaseBeams.every(beam => beam.removed), 'the beams disappear before the blast resolves');
+        assert.ok(queued.some(hit => hit.getDamage() === expectedBlast), `boss HP ${bossHp} blast uses max HP minus its phase remainder`);
+      }
     } finally {
       Math.random = originalRandomForAdds;
     }
