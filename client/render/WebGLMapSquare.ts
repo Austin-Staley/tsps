@@ -1900,6 +1900,7 @@ export class WebGLMapSquare {
                 ),
             );
         }
+        LocAnimated.carryOver(this.locsAnimated, locsAnimated);
         this.locsAnimated = locsAnimated;
     }
 
@@ -2364,6 +2365,7 @@ export class WebGLMapSquare {
                 ),
             );
         }
+        LocAnimated.carryOver(this.locsAnimated, newLocsAnimated);
         this.locsAnimated = newLocsAnimated;
 
         this.refreshLocGeometry(
