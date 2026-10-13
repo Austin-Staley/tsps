@@ -3814,12 +3814,15 @@ test('Dragon Slayer II rowboat build consumes the Wiki supplies and uses the rea
   }), true, 'the deep-lab entrance cannot bypass the diary and dragon-key steps');
   assert.match(messages.at(-1), /completed dragon key/);
   assert.deepEqual(destination, [3559, 4004, 0], 'a premature Enter leaves the player in the key-vault corridor');
-  for (const handler of custom.get('ladders:climb')) {
-    const climb = { player, objectId: O.STAIRCASE_169,
-      object: { getLocation: () => ({ getX: () => 3549, getY: () => 10469, getZ: () => 0 }) }, handled: false };
-    handler(climb);
-    assert.equal(climb.handled, true, 'the unpaired cache staircase is handled by the quest route');
-  }
+  const climb = { player, objectId: O.STAIRCASE_169,
+    object: { getLocation: () => ({ getX: () => 3549, getY: () => 10469, getZ: () => 0 }) }, handled: false };
+  const lithkrenStairs = custom.get('ladders:climb').find((handler) => handler.name === 'climbLithkrenNorthStairs');
+  lithkrenStairs(climb);
+  assert.equal(climb.handled, true, 'the unpaired cache staircase is handled by the quest route');
+  const unrelatedFleetStairs = custom.get('ladders:climb').find((handler) => handler.name === 'claimAssaultLadder');
+  const unrelatedClimb = { ...climb, handled: false };
+  unrelatedFleetStairs(unrelatedClimb);
+  assert.equal(unrelatedClimb.handled, false, 'the ship ladder handler leaves Lithkren stairs alone');
   assert.deepEqual(destination, [3549, 10419, 0], 'the northern stair route reaches Dallas and Aivas’ skeleton');
   attributes.set('quest.dragon_slayer_ii.stage', 8);
   assert.equal(objectHandlers[0]({
@@ -7836,11 +7839,11 @@ test('Dragon Slayer II Torfinn runs the cache quest dragons, checkpoints the wav
     assert.equal(attributes.get('dragon-slayer-ii:assault-defense-active'), false);
     assert.equal(attributes.get('dragon-slayer-ii:assault-ship-defended'), true);
     const wave = [core.NpcIdentifiers.RED_DRAGON_8, core.NpcIdentifiers.IRON_DRAGON_4,
-      core.NpcIdentifiers.BRUTAL_GREEN_DRAGON_2, core.NpcIdentifiers.BLUE_DRAGON_12,
-      core.NpcIdentifiers.GREEN_DRAGON_9, core.NpcIdentifiers.BLUE_DRAGON_13,
-      core.NpcIdentifiers.GREEN_DRAGON_10, core.NpcIdentifiers.BLACK_DRAGON_12,
+      core.NpcIdentifiers.BRUTAL_GREEN_DRAGON_2, core.NpcIdentifiers.BLUE_DRAGON_14,
+      core.NpcIdentifiers.GREEN_DRAGON_11, core.NpcIdentifiers.BLUE_DRAGON_14,
+      core.NpcIdentifiers.GREEN_DRAGON_11, core.NpcIdentifiers.BLACK_DRAGON_13,
       core.NpcIdentifiers.STEEL_DRAGON_5, core.NpcIdentifiers.BRUTAL_RED_DRAGON_2,
-      core.NpcIdentifiers.MITHRIL_DRAGON_2, core.NpcIdentifiers.ADAMANT_DRAGON_2,
+      core.NpcIdentifiers.MITHRIL_DRAGON_3, core.NpcIdentifiers.ADAMANT_DRAGON,
       core.NpcIdentifiers.RUNE_DRAGON_3];
     for (let index = 0; index < 7; index++) {
       const dragon = attributes.get('dragon-slayer-ii:instance-boss');

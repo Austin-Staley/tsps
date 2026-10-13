@@ -2258,11 +2258,12 @@ module.exports = function registerDragonSlayerII(api) {
       p.setAttribute(ATTR_ASSAULT_DEFENSE_ACTIVE, false);
       p.moveTo(TORFINN_FLEET);
     }
-    const savedLocation = p.getLocation();
-    if ((stage(p) === S.FLEET || stage(p) === S.GALVEK)
-      && (!(p.getAttribute(ATTR_AREA) instanceof QuestArea)
-        || !FLEET_BOUNDARIES.some((boundary) => boundary.inside(savedLocation)))) {
-      p.moveTo(TORFINN_FLEET);
+    if (stage(p) === S.FLEET || stage(p) === S.GALVEK) {
+      const savedLocation = p.getLocation();
+      if (!(p.getAttribute(ATTR_AREA) instanceof QuestArea)
+        || !FLEET_BOUNDARIES.some((boundary) => boundary.inside(savedLocation))) {
+        p.moveTo(TORFINN_FLEET);
+      }
     }
     if (stage(p) === S.LEADERS && p.getAttribute(ATTR_VAULT_SCENE_ACTIVE)
       && !p.getAttribute(ATTR_VAULT_SCENE_COMPLETE)) {
