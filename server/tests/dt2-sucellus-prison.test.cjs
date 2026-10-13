@@ -325,10 +325,11 @@ test("paired prison crevices land on adjacent clear tiles, and asylum stairs exi
   assert.equal(handlers.custom["ladders:climb"](asylum), true);
   assert.equal(asylum.handled, true);
   const transfer = emitted.find(({ name }) => name === "ladders:climbDown");
-  assert.deepEqual([transfer.payload.destination.x, transfer.payload.destination.y, transfer.payload.destination.z], [3039, 6431, 0]);
+  assert.deepEqual([transfer.payload.destination.x, transfer.payload.destination.y, transfer.payload.destination.z], [10167, 20095, 0],
+    "the landing is translated into the owner's copied Duke chamber");
   assert.deepEqual([player.location.x, player.location.y, player.location.z], [beforeClimb.x, beforeClimb.y, 2],
     "the canonical Ladders plugin performs the animated transfer after the quest claims its exact anchor");
-  assert.equal(player.getPrivateArea(), area, "the owner instance remains until the climb task moves the player out");
+  assert.equal(player.getPrivateArea(), area, "the Duke chamber is reached inside the same private instance");
 });
 
 test("the Assassin stays gone after the cell escape and returns only for the diamond-key plan", () => {

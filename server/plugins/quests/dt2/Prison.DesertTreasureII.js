@@ -477,11 +477,10 @@ module.exports = function registerSucellusPrison(api) {
         return true;
       }
       event.handled = true;
-      player.setArea(null);
-      player.setAttribute(AREA, null);
-      // Land on the clear south approach; the gate tile itself has collision
-      // and is entered with its normal interaction after the transfer.
-      player.moveTo(new api.core.Location(3039, 6431, 0));
+      // The Duke's chamber is part of this same copied map. Land on its clear
+      // south approach so the cache gate can be entered without leaving the
+      // owner's prison instance.
+      player.moveTo(areaLocation(area, 3039, 6431, 0));
       player.sendMessage("You leave the prison and enter the Duke's asylum.");
       return true;
     }
@@ -498,7 +497,7 @@ module.exports = function registerSucellusPrison(api) {
     request.handled = true;
     api.emitCustomEvent("ladders:climbDown", {
       player,
-      destination: new api.core.Location(3039, 6431, 0),
+      destination: areaLocation(area, 3039, 6431, 0),
     });
     return true;
   }
