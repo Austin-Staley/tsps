@@ -986,9 +986,33 @@ test('Elena’s cabinet house opens into its nameless cache door variant', async
   assert.deepEqual(closed.models, opened.models);
   const h = buildHarness({ cacheObjects: new Map([[2054, closed], [2055, opened]]) });
   try {
-    h.place(2054, 2592, 3339, 1);
-    const ops = h.click(2054, 2592, 3339, 1, 'Open', 'Door');
+    h.place(2054, 2592, 3339, 3);
+    const ops = h.click(2054, 2592, 3339, 3, 'Open', 'Door');
     assert.ok(ops.some(op => op[0] === 'deregister' && op[1] === 2054));
     assert.ok(ops.some(op => op[0] === 'register' && op[1] === 2055));
   } finally { h.restore(); }
+});
+
+
+test('Elena house door leaves a real collision path to her chemical cabinet', async () => {
+  await initializeMapCollisionOnce();
+  const definitions = new Map([2054, 2055].map(id => [id, CacheDefinitions.getObject(id)]));
+  const area = new TemplatedInstanceArea(3, 3);
+  for (let x = 0; x < 3; x++) for (let y = 0; y < 3; y++) for (let plane = 0; plane < 4; plane++) {
+    area.setChunk(plane, x, y, { sourceChunkX: 323 + x, sourceChunkY: 415 + y, sourcePlane: plane, rotation: 0 });
+  }
+  const h = buildHarness({ cacheObjects: definitions, objectManager: ObjectManager });
+  try {
+    const location = area.tile(8, 19, 0), door = area.resolveObject(2054, location);
+    assert.ok(door);
+    assert.equal(door.getFace(), 3);
+    const player = { getUsername: () => 'elena-house-test', isPlayerBot: () => false,
+      getPrivateArea: () => area, getLocation: () => area.tile(8, 20, 0), getPacketSender: () => ({}),
+      getAttribute: () => null, setAttribute() {}, isNeedsPlacement: () => false, isAllowRegionChangePacket: () => false };
+    h.handlers.get('Door').Open({ player, object: door, objectId: 2054, location });
+    const route = new RsmodRouteFinding().findRoute({ level: 0, srcX: area.getBaseX() + 8,
+      srcY: area.getBaseY() + 20, srcSize: 1, destX: area.getBaseX() + 7, destY: area.getBaseY() + 18,
+      privateArea: area, moveNear: false });
+    assert.equal(route.success, true, 'opening must connect the courtyard to the cabinet’s eastern approach');
+  } finally { area.destroy(); h.restore(); }
 });
