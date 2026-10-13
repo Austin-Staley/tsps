@@ -8808,7 +8808,7 @@ test('Dragon Slayer II Torfinn runs the cache quest dragons, checkpoints the wav
   const runtime = require('../plugins/quests/QuestRuntime');
   const startTranscript = runtime.startTranscript;
   const transcriptRequests = [];
-  runtime.startTranscript = (...args) => { transcriptRequests.push(args[4]); return true; };
+  runtime.startTranscript = (...args) => { transcriptRequests.push({ page: args[3], variant: args[4] }); return true; };
   try {
     require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
     const core = api.core;
@@ -8900,6 +8900,10 @@ test('Dragon Slayer II Torfinn runs the cache quest dragons, checkpoints the wav
     assert.equal(attributes.get('dragon-slayer-ii:instance-boss').getId(), core.NpcIdentifiers.GALVEK_2);
     assert.equal(attributes.get('dragon-slayer-ii:instance-boss').getMaxHitpoints(), 1200);
     const battleArea = attributes.get('dragon-slayer-ii:instance-area');
+    battleArea.process(player);
+    assert.equal(attributes.get('dragon-slayer-ii:instance-boss').getNpcTransformationId(), -1,
+      'Galvek does not process arena attacks while the player remains on the remote fleet deck');
+    at = new core.Location(1631, 5735, 2);
     for (let tick = 0; tick < 7; tick++) battleArea.process(player);
     const galvek = attributes.get('dragon-slayer-ii:instance-boss');
     assert.equal(galvek.getNpcTransformationId(), core.NpcIdentifiers.GALVEK_2, 'phase one uses the fire form');
@@ -8934,10 +8938,12 @@ test('Dragon Slayer II Torfinn runs the cache quest dragons, checkpoints the wav
     const ellen = interactions.find(({ name }) => name === 'Ellen').options['Talk-to'];
     const trainingAction = dialogueActions.find((handler) => handler.name === 'handleEllenTrainingAction');
     ellen({ player, npcId: core.NpcIdentifiers.ELLEN });
-    assert.equal(transcriptRequests.at(-1), 'standard-dialogue', 'Ellen offers combat training after completion');
+    assert.deepEqual(transcriptRequests.at(-1), { page: 'Ellen', variant: 'standard-dialogue' },
+      'Ellen uses her own transcript page and offers combat training after completion');
     for (let count = 0; count < 4; count++) {
       const training = { player, npcId: core.NpcIdentifiers.ELLEN, stepId: 'P2tord', handled: false };
       trainingAction(training);
+      await new Promise((resolve) => setImmediate(resolve));
       assert.equal(training.handled, true);
       assert.deepEqual(emittedRewards.at(-1).skills, [
         core.Skill.ATTACK, core.Skill.STRENGTH, core.Skill.DEFENCE, core.Skill.HITPOINTS,
@@ -8950,7 +8956,8 @@ test('Dragon Slayer II Torfinn runs the cache quest dragons, checkpoints the wav
     assert.equal(rewardXp.get(core.Skill.RANGED), 100000,
       'four Ellen training claims award 25,000 XP each');
     ellen({ player, npcId: core.NpcIdentifiers.ELLEN });
-    assert.equal(transcriptRequests.at(-1), 'after-claiming-experience-rewards', 'Ellen retires after four rewards');
+    assert.deepEqual(transcriptRequests.at(-1), { page: 'Ellen', variant: 'after-claiming-experience-rewards' },
+      'Ellen retires on her transcript after four rewards');
     const fifthTraining = { player, npcId: core.NpcIdentifiers.ELLEN, stepId: 'P2tord', handled: false };
     trainingAction(fifthTraining);
     assert.equal(fifthTraining.handled, false, 'a fifth training interface cannot be opened');

@@ -1095,7 +1095,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function talkEllenTraining({ player: p, npcId }) {
     if (!quest.isComplete(p)) return;
-    talk(p, npcId, Number(p.getAttribute(ATTR_TRAINING_REWARDS)) >= 4
+    startTranscript(api, p, npcId, "Ellen", Number(p.getAttribute(ATTR_TRAINING_REWARDS)) >= 4
       ? "after-claiming-experience-rewards" : "standard-dialogue");
   }
   function handleEllenTrainingAction(event) {
@@ -1103,7 +1103,10 @@ module.exports = function registerDragonSlayerII(api) {
     if (npcId !== N.ELLEN || stepId !== "P2tord" || !quest.isComplete(player)
       || Number(player.getAttribute(ATTR_TRAINING_REWARDS)) >= 4) return;
     event.handled = true;
-    api.emitCustomEvent("xpreward:open", {
+    // The transcript tail immediately closes its chatbox after this action. If
+    // the reward modal opens in the same callback, that close removes the modal
+    // and clears XpReward's pending selection before the player can choose.
+    const request = {
       player,
       skills: DS2_COMBAT_LAMP_SKILLS,
       title: "Choose the stat you wish to be advanced!",
@@ -1116,7 +1119,8 @@ module.exports = function registerDragonSlayerII(api) {
         player.setAttribute(ATTR_TRAINING_REWARDS, Math.min(4, claimed + 1));
         return `You have been awarded 25,000 ${name} XP!`;
       },
-    });
+    };
+    setImmediate(() => api.emitCustomEvent("xpreward:open", request));
   }
   function searchAivasSkeleton({ player: p, objectId, definition, location }) {
     const visibleObjectId = definition?.id ?? objectId;
