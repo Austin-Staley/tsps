@@ -6363,7 +6363,7 @@ module.exports = function registerDesertTreasureII(api) {
       && (option === "destroy" || option === "burn" || option === "clear" || option === "open")) {
       if (!has(p, I.SUPERIOR_SHADOW_TORCH)) { p.sendMessage("The deeper tentacles only yield to the superior shadow torch."); return true; }
       setLassar(p, { ...state, plazaTentacle: true });
-      registerLassarGroundItem(p, I.SHADOW_KEY_3, 2597, 6392);
+      registerLassarGroundItem(p, I.SHADOW_KEY_3, 2595, 6392);
       p.sendMessage("The superior torch burns through the tentacles south of the Plaza.");
       return true;
     }
@@ -6710,7 +6710,8 @@ module.exports = function registerDesertTreasureII(api) {
       registerLassarGroundItem(p, I.ANIMA_PORTAL_SCHEMATIC, 2324, 6402);
     }
     if (state.plazaTentacle && !state.whiteKey && !has(p, I.SHADOW_KEY_3)) {
-      registerLassarGroundItem(p, I.SHADOW_KEY_3, 2597, 6392);
+      // shortcut: the QH marker overlaps the 2x2 table; use the nearest cache-clear tile in the west yard.
+      registerLassarGroundItem(p, I.SHADOW_KEY_3, 2595, 6392);
     }
   }
 
@@ -6740,7 +6741,7 @@ module.exports = function registerDesertTreasureII(api) {
       : blockerSchematic ? x === 2591 && y === 6380 && firstThree
             : greenShadowKey ? x === 2581 && y === 6388 && state.blockerSchematic
               : purpleShadowKey ? x === 2592 && y === 6352 && state.greenKey
-                : whiteShadowKey ? x === 2597 && y === 6392 && state.plazaTentacle && !state.inShadow
+                : whiteShadowKey ? x === 2595 && y === 6392 && state.plazaTentacle && !state.inShadow
           : superiorSchematic ? x === 2381 && y === 6423 && state.pubOpened && state.inShadow
             : x === 2324 && y === 6402 && state.animaSchematicFound && state.inShadow;
     if (!accessible) {

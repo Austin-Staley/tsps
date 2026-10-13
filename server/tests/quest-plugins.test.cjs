@@ -5988,8 +5988,15 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     playerProcesses[0]({ player });
     const whiteKeyDrop = groundSpawns.slice(beforeWhiteKey).find(([, item]) => item.getId() === core.ItemIdentifiers.SHADOW_KEY_3);
     assert.ok(whiteKeyDrop, 'clearing the Plaza barrier exposes the white shadow key as a normal ground pickup');
-    assert.deepEqual([whiteKeyDrop[2].getX(), whiteKeyDrop[2].getY()], [2597, 6392], 'the white key uses its QuestHelper ground-item tile');
-    groundPickupHooks[0]({ player, groundItemId: core.ItemIdentifiers.SHADOW_KEY_3, location: { x: 2597, y: 6392, z: 0 } });
+    assert.deepEqual([whiteKeyDrop[2].getX(), whiteKeyDrop[2].getY()], [2595, 6392], 'the white key uses the cache-clear west yard tile beside the QH marker');
+    const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
+    const routeFinder = new RsmodRouteFinding((x, y, z, area) => core.RegionManager.getClipping(x, y, z, area));
+    const plazaRoute = (x, y) => routeFinder.findRoute({ level: 0, srcX: 2617, srcY: 6417, srcSize: 1,
+      destX: x, destY: y, privateArea: null, locShape: -1, moveNear: false });
+    assert.equal(plazaRoute(2597, 6392).success, false, 'the exact QH marker is blocked by the cached table');
+    assert.equal(plazaRoute(2595, 6392).success, true, 'the actual Plaza-to-west-yard route reaches the replacement pickup tile');
+    assert.equal(core.RegionManager.blocked(new core.Location(2595, 6392, 0), null), false);
+    groundPickupHooks[0]({ player, groundItemId: core.ItemIdentifiers.SHADOW_KEY_3, location: { x: 2595, y: 6392, z: 0 } });
     assert.equal(attrs.get('desert-treasure-ii:lassar').whiteKey, true, 'taking the visible white key unlocks the palace devices');
     const deviceState = { ...attrs.get('desert-treasure-ii:lassar'), inShadow: true, whiteKey: true, sanity: 100 };
     attrs.set('desert-treasure-ii:lassar', deviceState);
