@@ -1233,6 +1233,10 @@ test('Blood Moon Castle story actors use cache-walkable floor anchors', () => {
   quest.setStage(player, 40);
   handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
   assert.deepEqual(spawned.map(npc => npc.id).sort(), [15845, 15846, 15869, 15888, 15903]);
+  assert.deepEqual(spawned.filter(npc => [15888, 15903].includes(npc.id))
+    .map(npc => [npc.id, npc.x, npc.y]).sort((a, b) => a[0] - b[0]),
+  [[15888, 2571, 7397], [15903, 2576, 7396]],
+  'the freed actors leave the recorded gibbous-key pickup tile clear');
   for (const npc of spawned) {
     assert.equal(api.core.RegionManager.getClipping(npc.x, npc.y, npc.z ?? 0, null) & api.core.RegionManager.BLOCKED_TILE, 0,
       `Castle actor ${npc.id} does not spawn inside a blocked tile`);
@@ -1240,6 +1244,55 @@ test('Blood Moon Castle story actors use cache-walkable floor anchors', () => {
       api.core.RegionManager.canMove(npc.x, npc.y, npc.x + dx, npc.y + dy, npc.z ?? 0, 1, 1, null)),
     `Castle actor ${npc.id} has an adjacent pathfinding edge`);
   }
+});
+
+test('Blood Moon prisoner scene waits for the transcript, then leaves the player by the bench key', () => {
+  const { api, handlers } = mockApi();
+  api.spawnNpc = spec => ({ ...spec, getHitpoints: () => 10, setScriptedMovement() {} });
+  api.removeNpc = () => {};
+  const ground = [];
+  api.getItemOnGroundManager = () => ({ getGroundItem: () => null,
+    registerLocation: (_player, item, location) => ground.push({ item, location }) });
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.castle-native-stage', 74],
+    ['quest.the_blood_moon_rises.castle-room', 48],
+    ['quest.the_blood_moon_rises.castle-floor', 1],
+    ['quest.the_blood_moon_rises.castle-story', { defeated: [], prisonersFound: false }],
+    ['quest.the_blood_moon_rises.castle-transition-pending', 'free-prisoners'],
+  ]);
+  let location = new api.core.Location(2565, 7394, 0);
+  let dialogue = {};
+  const moved = [];
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => location, moveTo: next => { moved.push([next.getX(), next.getY(), next.getZ()]); location = next; },
+    getInventory: () => ({ contains: () => false }), getUsername: () => 'castle-prison-scene',
+    getDialogueManager: () => ({ getCurrent: () => dialogue }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+  };
+  quest.setStage(player, 40);
+  const process = handlers.playerProcess.find(handler => handler.name === 'processCastleDialogueTransition');
+  process({ player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 74,
+    'the escape chapter does not advance while the cutscene dialogue is open');
+  assert.deepEqual(moved, []);
+  dialogue = null;
+  process({ player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 76);
+  assert.deepEqual(moved, [[2570, 7395, 0]], 'the cutscene relocates to the recorded clear side of the cell wall');
+  assert.equal(ground[0].item.getId(), 33727, 'the gibbous key appears on the bench after the dialogue');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-transition-pending'), null);
+
+  location = new api.core.Location(2573, 7394, 0);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 51);
+  const login = handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin');
+  login({ player });
+  assert.deepEqual(moved.at(-1), [2570, 7395, 0], 'a saved pre-fix prison landing recovers on relog');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 76,
+    'landing recovery preserves earned progress');
 });
 
 test('Blood Moon Veliaf remains available for the repeat supplies talk after relog', () => {

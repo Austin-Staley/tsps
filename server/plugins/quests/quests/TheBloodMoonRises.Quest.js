@@ -1964,6 +1964,15 @@ module.exports = function registerTheBloodMoonRises(api) {
   function repairLegacyCastleLanding(player) {
     if (!player || stage(player) !== STAGE.CASTLE) return;
     const location = player.getLocation?.();
+    const prisonStory = castleStory(player);
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.BASEMENT_PRISON &&
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 76 && prisonStory.prisonersFound &&
+      !prisonStory.gibbousKeyClaimed && !hasItem(player, CASTLE_BOOK_ITEMS.gibbousMoonKey) &&
+      location?.getZ?.() === 0 && location.getY() === 7394 && location.getX() >= 2565 && location.getX() <= 2575) {
+      // The freeing cutscene leaves the player north of the cell wall, beside the bench key.
+      player.moveTo(new Location(2570, 7395, 0));
+      return;
+    }
     if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.RANIS_HALL &&
       Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) === 2 &&
       location?.getX?.() >= 2487 && location.getX() <= 2488 && location.getY() === 7405 && location.getZ() === 0) {
@@ -2722,6 +2731,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!story.prisonersFound) {
       player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, prisonersFound: true });
       setCastleNativeStage(player, 76);
+      player.moveTo(new Location(2570, 7395, 0));
       syncCastleActors(player);
       syncCastleGibbousKey(player);
     }
@@ -2868,10 +2878,10 @@ module.exports = function registerTheBloodMoonRises(api) {
       spawnCastleActor(player, "ranis-sanguidae", CASTLE_NPC.SANGUIDAE, [2488, 7403], true);
     }
     if (progress >= 76 && story.prisonersFound) {
-      // The QH marker is the prison bench; place the freed characters on the
-      // open floor directly south of it rather than inside the bench footprint.
-      spawnCastleActor(player, "safalaan-prison", CASTLE_NPC.SAFALAAN_PRISON, [2573, 7396]);
-      spawnCastleActor(player, "vanescula-prison", CASTLE_NPC.VANESCULA_PRISON, [2571, 7396]);
+      // Keep the captured pickup tile (2573, 7396) clear so the key on the bench
+      // can be reached and picked up normally.
+      spawnCastleActor(player, "safalaan-prison", CASTLE_NPC.SAFALAAN_PRISON, [2571, 7397]);
+      spawnCastleActor(player, "vanescula-prison", CASTLE_NPC.VANESCULA_PRISON, [2576, 7396]);
     }
     if (progress >= 76) {
       if (!story.defeated.includes("library-venator"))
