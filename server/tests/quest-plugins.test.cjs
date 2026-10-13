@@ -1044,10 +1044,12 @@ test('Dragon Slayer II Ungael lever limits the key chest to its 30-tick window',
     ['dragon-slayer-ii:vorkath-defeated', true],
   ]);
   const items = new Map();
+  const freeSlotResults = [];
   const messages = [];
   const inventory = {
     getAmount: (id) => items.get(id) ?? 0,
-    getFreeSlots: () => 28 - [...items.values()].reduce((sum, amount) => sum + amount, 0),
+    getFreeSlots: () => freeSlotResults.length ? freeSlotResults.shift()
+      : 28 - [...items.values()].reduce((sum, amount) => sum + amount, 0),
     adds: (id, amount) => items.set(id, (items.get(id) ?? 0) + amount),
     deleteNumber: (id, amount) => items.set(id, Math.max(0, (items.get(id) ?? 0) - amount)),
   };
@@ -1077,9 +1079,15 @@ test('Dragon Slayer II Ungael lever limits the key chest to its 30-tick window',
   cycle = 200;
   use(O.LEVER_55, 8204, 1616, 'Pull');
   cycle = 203;
+  freeSlotResults.push(2, 0); // the chest's capacity check passes, but the item handout fails
+  use(O.STONE_CHEST_3, 8236, 1618, 'Search');
+  assert.equal(attrs.get('dragon-slayer-ii:key-parts') ?? 0, 0, 'a failed handout cannot set the earned-piece bit');
+  assert.equal(inventory.getAmount(I.DRAGON_KEY_PIECE_3), 0);
+  assert.equal(inventory.getAmount(I.ANCIENT_KEY), 0);
   use(O.STONE_CHEST_3, 8236, 1618, 'Search');
   assert.equal(inventory.getAmount(I.DRAGON_KEY_PIECE_3), 1);
   assert.equal(inventory.getAmount(I.ANCIENT_KEY), 1);
+  assert.equal(attrs.get('dragon-slayer-ii:key-parts'), 4);
 });
 
 test('Dragon Slayer II Torfinn runs the cache quest dragons, checkpoints the waves, and changes Galvek phase', async () => {

@@ -1588,7 +1588,7 @@ module.exports = function registerDragonSlayerII(api) {
         return true;
       }
       if (!has(p, KEY_PARTS[2])) {
-        give(p, KEY_PARTS[2]);
+        if (!give(p, KEY_PARTS[2])) return true;
         const parts = (Number(p.getAttribute(ATTR_PARTS)) || 0) | (1 << 2);
         p.setAttribute(ATTR_PARTS, parts);
         if (parts === 15) advance(p, S.FORGE);
