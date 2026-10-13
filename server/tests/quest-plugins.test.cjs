@@ -3472,6 +3472,12 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
   const { api, handlers } = mockApi();
   const attributes = new Map();
   const spawns = [];
+  const inventoryItems = new Map();
+  const inventory = {
+    contains: (id) => inventoryItems.has(id),
+    getFreeSlots: () => 28 - inventoryItems.size,
+    adds: (id, amount) => (inventoryItems.set(id, (inventoryItems.get(id) ?? 0) + amount), true),
+  };
   let bossArea = null;
   let worldCycle = api.core.World.getProcessCycle();
   let bossLocation = null;
@@ -3513,6 +3519,9 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getDialogueManager: () => ({ reset() {}, startDialogues() { transcriptStarts++; }, getCurrent: () => null }),
+    getInventory: () => inventory,
+    getEquipment: () => ({ contains: () => false }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
     isPlayer: () => true,
     isNpc: () => false,
     getAsPlayer: () => player,
@@ -3618,6 +3627,47 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     api.core.World.getProcessCycle = oldCycle;
     Math.random = originalRandom;
   }
+});
+
+test('Blood Moon stage 90 Veliaf message gives the Hallowed flail once and requires room', () => {
+  const { api, handlers } = mockApi();
+  const attributes = new Map();
+  const items = new Map();
+  const inventory = {
+    contains: (id) => items.has(id),
+    getFreeSlots: () => attributes.get('full') ? 0 : 1,
+    adds: (id, count) => (items.set(id, (items.get(id) ?? 0) + count), true),
+  };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getEquipment: () => ({ contains: () => false }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage: (message) => (player.message = message),
+  };
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  quest.setStage(player, 90);
+  const action = handlers.custom.get('npc-dialogue:action').at(-1);
+  const give = (stepId) => action({ player, stepId, kind: 'message', handled: false });
+
+  attributes.set('full', true);
+  const full = { player, stepId: 'zPvWqR', kind: 'message', handled: false };
+  action(full);
+  assert.equal(full.end, true, 'the handoff stops so the player can make room and talk again');
+  assert.match(player.message, /Make room/);
+  assert.equal(items.size, 0);
+
+  attributes.delete('full');
+  const first = { player, stepId: 'zPvWqR', kind: 'message', handled: false };
+  action(first);
+  const flail = api.core.ItemIdentifiers.HALLOWED_FLAIL;
+  assert.equal(items.get(flail), 1);
+  assert.deepEqual(first.box, { items: [flail] });
+  give('S_PhrW');
+  assert.equal(items.get(flail), 1, 'the repeat-before-entry line does not duplicate the weapon');
 });
 
 test('Blood Moon stage 90 Veliaf dialogue takes precedence over completed Myreque repeats', () => {

@@ -3591,6 +3591,27 @@ module.exports = function registerTheBloodMoonRises(api) {
   function onTranscriptAction(event) {
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
+    // The captured stage-90 Veliaf transcripts hand over the quest flail in a
+    // message step (both the first conversation and its repeat-before-entry
+    // variant). Message steps are dispatched once with kind "message".
+    if (event.kind === "message" && ["zPvWqR", "S_PhrW"].includes(event.stepId) &&
+      stage(player) === STAGE.WYRDS) {
+      event.handled = true;
+      const inventory = player.getInventory();
+      if (hasItem(player, ItemIdentifiers.HALLOWED_FLAIL)) return;
+      if (typeof inventory.getFreeSlots === "function" && inventory.getFreeSlots() < 1) {
+        player.sendMessage("Make room in your inventory before taking the Hallowed flail.");
+        event.end = true;
+        return;
+      }
+      if (inventory.adds(ItemIdentifiers.HALLOWED_FLAIL, 1) === false) {
+        player.sendMessage("Make room in your inventory before taking the Hallowed flail.");
+        event.end = true;
+        return;
+      }
+      event.box = { items: [ItemIdentifiers.HALLOWED_FLAIL] };
+      return;
+    }
     if (event.stepId === "ikSyAR" && stage(player) === STAGE.CASTLE) {
       player.moveTo(new Location(CASTLE_VAMPYRIUM_ARRIVAL.x, CASTLE_VAMPYRIUM_ARRIVAL.y,
         CASTLE_VAMPYRIUM_ARRIVAL.z));
