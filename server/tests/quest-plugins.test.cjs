@@ -9715,7 +9715,7 @@ test('DT2 Vardorvis scales melee, heals, exposes avoidable specials and accepts 
     PrayerHandler:{...base.core.PrayerHandler,deactivatePrayer:(p,id)=>varbits.set(4100+id,0)},
     Task:class{stop(){this.stopped=true}},TaskManager:{submit:t=>tasks.push(t),cancelTasks(){}},
   };
-  const api=new Proxy(base,{get:(t,key)=>key==='core'?core:key==='registerNpcCombatMethodProvider'?(id,C)=>{Combat=C}:key==='onCombatHitRoll'?h=>hitRoll=h:key==='onCombatHitResolved'?h=>resolved=h:key==='onPrayerDisabled'?h=>prayerDisabled=h:key==='getItemOnGroundManager'?()=>({registerLocation:(...args)=>ground.push(args)}):t[key]});
+  const api=new Proxy(base,{get:(t,key)=>key==='core'?core:key==='registerNpcCombatMethodProvider'?(id,C)=>{if(id===core.NpcIdentifiers.VARDORVIS_2)Combat=C}:key==='onCombatHitRoll'?h=>hitRoll=h:key==='onCombatHitResolved'?h=>resolved=h:key==='onPrayerDisabled'?h=>prayerDisabled=h:key==='getItemOnGroundManager'?()=>({registerLocation:(...args)=>ground.push(args)}):t[key]});
   require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
   const quest=require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
   const p={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getUsername:()=> 'vard-test',isPlayer:()=>true,getAsPlayer(){return this},isRegistered:()=>true,getHitpoints:()=>99,
@@ -9757,4 +9757,44 @@ test('DT2 Vardorvis scales melee, heals, exposes avoidable specials and accepts 
     const pickup=handlers.ground.find(h=>h.toString().includes('VARDORVIS_PROGRESS'));freeSlots=0;const refused={player:p,groundItemId:core.ItemIdentifiers.TEMPLE_KEY_3};pickup(refused);assert.equal(refused.handled,true);assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),17);freeSlots=1;pickup({player:p,groundItemId:core.ItemIdentifiers.TEMPLE_KEY_3});assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),18);
     handlers.objects[0]({player:p,objectId:core.ObjectIdentifiers.ROCKS_139,option:'Leave',location:{x:8198,y:1628,z:0}});assert.deepEqual([p.location.getX(),p.location.getY()],[1117,3429]);
   }finally{Math.random=random;area.destroy()}
+});
+
+test('DT2 Kasonde uses melee/ranged basics, healing, avoidable potions and pillar cover', () => {
+  const {api:base,handlers}=mockApi();let cycle=0,lineOpen=false,Combat;const damage=[],removed=[],messages=[],prayers=[],venom=[];
+  class Instance {
+    constructor(){this.entities=[]}setChunk(){}enter(){}leave(){}postLeave(){}destroy(){}isDestroyed(){return false}
+    getBaseX(){return 8192}getBaseY(){return 1600}tile(x,y,z){return new base.core.Location(8192+x,1600+y,z)}add(n){this.entities.push(n)}
+  }
+  class Melee {type(){return base.core.CombatType.MELEE}}
+  class Ranged {type(){return base.core.CombatType.RANGED}hits(){return ['ranged-hit']}}
+  const core={...base.core,TemplatedInstanceArea:Instance,MeleeCombatMethod:Melee,RangedCombatMethod:Ranged,
+    PendingHit:class{constructor(n,p,method){this.style=method.type()}},
+    NPC:{create:(id,location)=>({id,location,hp:240,registered:false,setOwner(){},setOwnerOnly(){},getHitpoints(){return this.hp},getMaxHitpoints(){return 240},setHitpoints(v){this.hp=v},getLocation(){return this.location},moveTo(v){this.location=v},performAnimation(){},setScriptedMovement(v){this.scripted=v},isRegistered(){return this.registered},getCombat(){return {attack(){}}}})},
+    GameObject:class{constructor(id,tile){this.id=id;this.tile=tile}},ObjectManager:{deregister:o=>removed.push(o)},
+    World:{getProcessCycle:()=>cycle,getAddNPCQueue:()=>[],getRemoveNPCQueue:()=>[]},
+    Projectile:class{sendProjectile(){}static createProjectile(){return {sendProjectile(){}}}},
+    CombatFactory:{poisonEntity:(...a)=>venom.push(a)},CombatRange:{canReach:()=>lineOpen},PrayerHandler:{deactivatePrayer:(p,id)=>prayers.push(id)},
+  };
+  const api=new Proxy(base,{get:(t,k)=>k==='core'?core:k==='registerNpcCombatMethodProvider'?(id,C)=>{if(id===core.NpcIdentifiers.KASONDE_7)Combat=C}:t[k]});
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const quest=require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1),attrs=new Map([['desert-treasure-ii:vardorvis-progress',19]]);
+  const p={getUsername:()=> 'kasonde-test',isPlayer:()=>true,getAsPlayer(){return this},getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getInventory:()=>({getAmount:()=>0}),
+    moveTo(v){this.location=v},getLocation(){return this.location},sendMessage:t=>messages.push(t),getPacketSender:()=>new Proxy({}, {get:()=>()=>{}}),
+    getCombat:()=>({getHitQueue:()=>({addPendingDamage:h=>damage.push(...h)})})};
+  quest.setStage(p,7);handlers.objects[0]({player:p,objectId:core.ObjectIdentifiers.ENTRY_21,location:{x:1174,y:3428,z:0}});
+  const area=attrs.get('desert-treasure-ii:stranglewood-temple'),boss=area.entities.find(n=>n.id===core.NpcIdentifiers.KASONDE_7);boss.registered=true;
+  const method=new Combat();assert.equal(method.attackSpeed(),3);assert.equal(method.hits(boss,p)[0].style,core.CombatType.MELEE);
+  p.moveTo(area.tile(7,20,0));assert.deepEqual(method.hits(boss,p),['ranged-hit']);
+  area.process(p);boss.hp=70;cycle=15;area.process(p);assert.equal(boss.hp,86,'healing increases in the last80HP');
+  cycle=18;area.process(p);assert.equal(area.kasondeFight.throws.length,1);
+  p.moveTo(area.tile(7,18,0));cycle=21;area.process(p);assert.equal(damage.length,0,'moving avoids the potion impact');assert.equal(area.kasondeFight.pools[0].object.id,48747);
+  p.moveTo(area.tile(7,20,0));cycle=26;area.process(p);assert.equal(damage.at(-1).getDamage(),6);assert.equal(venom.at(-1)[2],2,'green residue inflicts venom');
+  p.moveTo(area.tile(7,18,0));cycle=36;area.process(p);cycle=39;area.process(p);assert.ok(damage.at(-1).getDamage()>=10&&damage.at(-1).getDamage()<=20);assert.deepEqual(prayers.slice(-3),[16,17,18]);
+  cycle=54;area.process(p);assert.equal(area.kasondeFight.throws.length,8,'barrage includes four green and four orange potions');assert.equal(boss.getLocation().getY(),1604);
+  p.moveTo(area.tile(9,8,0));cycle=57;area.process(p);cycle=72;area.process(p);assert.equal(boss.scripted,true);
+  const before=damage.length;cycle=77;area.process(p);assert.equal(damage.length,before,'a pillar blocks the explosion');assert.equal(boss.scripted,false);
+  lineOpen=true;area.kasondeFight.nextSpecial=80;area.kasondeFight.special=3;cycle=80;area.process(p);cycle=85;area.process(p);assert.ok(damage.at(-1).getDamage()>=35);
+  boss.hp=239;cycle=90;area.process(p);assert.equal(boss.hp,240,'healing is capped at max HP');
+  handlers.npcDeath[0]({killer:p,npc:boss});assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),20);assert.equal(area.kasondeFight,null);assert.ok(removed.length>=9,'victory removes the potion pools');
+  handlers.objects[0]({player:p,objectId:core.ObjectIdentifiers.STAIRS_254,option:'Climb-up',location:area.tile(7,0,0)});assert.deepEqual([p.location.getX(),p.location.getY()],[1174,3428],'real temple stairs leave the instance');
 });
