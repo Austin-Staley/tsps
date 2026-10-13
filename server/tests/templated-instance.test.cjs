@@ -52,6 +52,27 @@ test('Entry treasure trapdoor is adjacent to a cache-reachable tile after Verzik
     'the former interaction location is behind the cache wall');
 });
 
+test('Entry treasure room places its reward chest on reachable cache floor', () => {
+  const { TREASURE_ROOM_ENTRY_TILE, REWARD_CHEST_TILE } = require('../plugins/minigames/tob/Entry.TheatreOfBlood')._test;
+  const [sx, sy, z] = TREASURE_ROOM_ENTRY_TILE;
+  const [cx, cy] = REWARD_CHEST_TILE;
+  RegionManager.loadMapFiles(cx, cy, true);
+  const steps = [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+  const visited = new Set([`${sx},${sy}`]);
+  const pending = [[sx, sy]];
+  while (pending.length) {
+    const [x, y] = pending.pop();
+    for (const [dx, dy] of steps) {
+      const next = [x + dx, y + dy], key = next.join(',');
+      if (visited.has(key) || Math.abs(next[0] - sx) > 24 || Math.abs(next[1] - sy) > 24) continue;
+      if (canStep(x, y, z, [dx, dy], null)) { visited.add(key); pending.push(next); }
+    }
+  }
+  assert.ok(visited.has(`${sx},${sy}`), 'the treasure room arrival tile is reachable');
+  assert.ok(steps.some(([dx, dy]) => visited.has(`${cx + dx},${cy + dy}`)), 'the chest has a reachable adjacent tile');
+  assert.equal(RegionManager.blocked(new Location(3244, 4307, 0), null), true, 'the former chest location is inside blocked cache geometry');
+});
+
 /** Turns a step clockwise with its chunk: north becomes east, as the client turns tiles. */
 function rotateStep([dx, dy], rotation) {
   for (let i = 0; i < (rotation & 3); i++) [dx, dy] = [dy, -dx];

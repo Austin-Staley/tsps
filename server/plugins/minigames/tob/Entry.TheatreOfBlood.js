@@ -19,6 +19,9 @@ const TREASURE_ENTRANCE = 32738;
 // The treasure trapdoor is on the throne tile; the arena's south side is the reachable approach.
 const TREASURE_ENTRANCE_TILE = [3167,4323,0];
 const REWARD_CHEST = 32992;
+// The cache's treasure vault is at 3234,4321; 3234,4307 is a blocked tile outside it.
+const TREASURE_ROOM_ENTRY_TILE = [3234,4320,0];
+const REWARD_CHEST_TILE = [3234,4321,0];
 const TELEPORT_CRYSTAL = 32996;
 const SHADOW_EXIT = 33037;
 const EXHUMED = 32743;
@@ -618,7 +621,7 @@ function passage({player,objectId}) {
 function treasure({player,objectId}) {
   const raid=RAIDS.get(player);if(!raid||objectId!==TREASURE_ENTRANCE)return false;
   if(raid.room!==5||!raid.complete)return true;
-  player.moveTo(new core.Location(3239,4307,0));object(raid,REWARD_CHEST,[3244,4307,0]);
+  player.moveTo(loc(TREASURE_ROOM_ENTRY_TILE));object(raid,REWARD_CHEST,REWARD_CHEST_TILE);
   raid.rewardReady=true;return true;
 }
 function reward({player,objectId}) {
@@ -769,4 +772,4 @@ module.exports=function registerEntryTheatreOfBlood(pluginApi) {
   api.onItemAction(item);
   api.onPlayerLogin(login);
 };
-module.exports._test={ROOMS,NYLO_WAVES,BMR_ENCOUNTERS,BMR_WAVE,TREASURE_ENTRANCE_TILE,readNyloSpec,firstNyloWaveAt,soloNyloPillarHitpoints,activeNylocas,updateNyloExpiry,typeIndex,quadrant,behindBloatPillar,bloatHands,dealtDamage,modifyVerzikHit,verzikBeforeDeath,npcDeath,spawnVerzikAdds,NPC_RAIDS,startMaze,maiden,roomComplete,nextWave,process,createArea,restoreCompletedRaid,RAIDS,xarpus,splitNylocas,approachNylocas,attackNylocas,allowDawnbringer,item,choosePillar,pillarTarget,startBmr,startRoom,passage,ensureEscapeCrystal};
+module.exports._test={ROOMS,NYLO_WAVES,BMR_ENCOUNTERS,BMR_WAVE,TREASURE_ENTRANCE_TILE,TREASURE_ROOM_ENTRY_TILE,REWARD_CHEST_TILE,readNyloSpec,firstNyloWaveAt,soloNyloPillarHitpoints,activeNylocas,updateNyloExpiry,typeIndex,quadrant,behindBloatPillar,bloatHands,dealtDamage,modifyVerzikHit,verzikBeforeDeath,npcDeath,spawnVerzikAdds,NPC_RAIDS,startMaze,maiden,roomComplete,nextWave,process,createArea,restoreCompletedRaid,RAIDS,xarpus,splitNylocas,approachNylocas,attackNylocas,allowDawnbringer,item,choosePillar,pillarTarget,startBmr,startRoom,passage,ensureEscapeCrystal};
