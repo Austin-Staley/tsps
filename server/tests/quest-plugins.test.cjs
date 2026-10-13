@@ -8189,6 +8189,7 @@ test('Dragon Slayer II assault dragons retain ordinary NPC combat while Galvek s
   const added = [];
   const created = [];
   let gapHandler;
+  let wreckageHandler;
   const npcApi = {
     create(id, location) {
       const npc = {
@@ -8211,6 +8212,7 @@ test('Dragon Slayer II assault dragons retain ordinary NPC combat while Galvek s
       : prop === 'onObjectInteraction'
         ? (name, actions) => {
           if (name === 'Gap') gapHandler = actions.Jump;
+          if (name === 'Wreckage') wreckageHandler = actions['Jump-to'];
           return target.onObjectInteraction(name, actions);
         }
         : target[prop],
@@ -8253,6 +8255,82 @@ test('Dragon Slayer II assault dragons retain ordinary NPC combat while Galvek s
     const nextRoute = new api.core.RsmodRouteFinding().findRoute({ level: 1, srcX: 1677, srcY: 5665, srcSize: 1,
       destX: 1662, destY: 5661, privateArea: area, moveNear: false });
     assert.equal(nextRoute.success, true, 'the landing can route to the cache-positioned Blue dragon');
+
+    const lowerGap = { getLocation: () => new api.core.Location(1668, 5704, 1), getFace: () => 2 };
+    const lowerGapEvent = { player, object: lowerGap, objectId: 32313,
+      definition: { id: 32313, getSizeX: () => 1, getSizeY: () => 2 }, clickType: 1, handled: false };
+    routeGap(lowerGapEvent);
+    assert.deepEqual(lowerGapEvent.destination, { x: 1668, y: 5706, z: 1 },
+      'the exact cache gap uses its reachable southern approach');
+    const lowerGapApproach = new api.core.RsmodRouteFinding().findRoute({ level: 1, srcX: 1671, srcY: 5710, srcSize: 1,
+      destX: 1668, destY: 5706, privateArea: area, moveNear: false });
+    assert.equal(lowerGapApproach.success, true, 'the lower gap edge is reachable on the upper deck');
+    playerLocation = new api.core.Location(1668, 5706, 1);
+    assert.equal(gapHandler(lowerGapEvent), true);
+    assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [1668, 5707, 0],
+      'Jump traverses the documented gap to the lower deck');
+
+    const mithrilGap = { getLocation: () => new api.core.Location(1679, 5708, 2), getFace: () => 3 };
+    const mithrilGapEvent = { player, object: mithrilGap, objectId: 32312,
+      definition: { id: 32312, getSizeX: () => 1, getSizeY: () => 2 }, clickType: 1, handled: false };
+    playerLocation = new api.core.Location(1683, 5706, 2);
+    routeGap(mithrilGapEvent);
+    assert.deepEqual(mithrilGapEvent.destination, { x: 1682, y: 5705, z: 2 },
+      'the upper wreck gap uses the QH reachable approach');
+    const routeFinder = new api.core.RsmodRouteFinding();
+    const upperGapApproach = routeFinder.findRoute({ level: 2, srcX: 1683, srcY: 5706, srcSize: 1,
+      destX: 1682, destY: 5705, privateArea: area, moveNear: false });
+    assert.equal(upperGapApproach.success, true, 'the gap approach is reachable from the earned Brutal red position');
+    playerLocation = new api.core.Location(1682, 5705, 2);
+    assert.equal(gapHandler(mithrilGapEvent), true);
+    assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [1690, 5708, 1],
+      'Jump traverses the wreck to the QH lower-deck waypoint');
+    const mithrilRoute = new api.core.RsmodRouteFinding().findRoute({ level: 1, srcX: 1690, srcY: 5708, srcSize: 1,
+      destX: 1698, destY: 5710, privateArea: area, moveNear: false });
+    assert.equal(mithrilRoute.success, true, 'the landing can route to the cache-positioned Mithril dragon');
+
+    const adamantGap = { getLocation: () => new api.core.Location(1698, 5710, 1), getFace: () => 0 };
+    const adamantGapEvent = { player, object: adamantGap, objectId: 32313,
+      definition: { id: 32313, getSizeX: () => 1, getSizeY: () => 2 }, clickType: 1, handled: false };
+    playerLocation = new api.core.Location(1694, 5708, 1);
+    routeGap(adamantGapEvent);
+    assert.deepEqual(adamantGapEvent.destination, { x: 1697, y: 5710, z: 1 },
+      'the Mithril-to-Adamant gap uses its reachable approach');
+    const adamantGapApproach = new api.core.RsmodRouteFinding().findRoute({ level: 1, srcX: 1694, srcY: 5708, srcSize: 1,
+      destX: 1697, destY: 5710, privateArea: area, moveNear: false });
+    assert.equal(adamantGapApproach.success, true, 'the plane-change approach is reachable from the Mithril waypoint');
+    playerLocation = new api.core.Location(1697, 5710, 1);
+    assert.equal(gapHandler(adamantGapEvent), true);
+    assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [1698, 5712, 0],
+      'Jump traverses the exact cache gap to the QH plane-zero waypoint');
+    const routeWreckage = handlers.routes.find(handler => handler.name === 'routeAssaultWreckage');
+    const wreckageEvent = (x, y, source) => ({
+      player,
+      object: { getLocation: () => new api.core.Location(x, y, 0) },
+      objectId: api.core.ObjectIdentifiers.WRECKAGE,
+      definition: { id: api.core.ObjectIdentifiers.WRECKAGE, getName: () => 'Wreckage' },
+      clickType: 1, option: 'Jump-to', handled: false,
+    });
+    const wreckageJumps = [
+      { object: [1698, 5715], from: [1698, 5712], to: [1698, 5715] },
+      { object: [1702, 5722], from: [1698, 5715], to: [1702, 5719] },
+      { object: [1705, 5722], from: [1702, 5719], to: [1705, 5722] },
+    ];
+    for (const jump of wreckageJumps) {
+      playerLocation = new api.core.Location(...jump.from, 0);
+      const event = wreckageEvent(...jump.object);
+      routeWreckage(event);
+      assert.deepEqual(event.destination, { x: jump.from[0], y: jump.from[1], z: 0 },
+        'the cache Wreckage action starts from the previous collision-separated QH waypoint');
+      assert.equal(wreckageHandler(event), true);
+      assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [...jump.to, 0]);
+      assert.equal(event.handled, true);
+    }
+    playerLocation = new api.core.Location(1698, 5712, 0);
+    const unrelatedWreckage = wreckageEvent(1693, 5737);
+    routeWreckage(unrelatedWreckage);
+    assert.equal(unrelatedWreckage.destination, undefined, 'the quest jump does not claim unrelated wreckage');
+    assert.equal(wreckageHandler(unrelatedWreckage), false);
 
     register._test.spawnGalvek(player);
     assert.equal(created.at(-1).scripted, true, 'Galvek keeps scripted control for his special phases');

@@ -84,6 +84,24 @@ module.exports = function registerDragonSlayerII(api) {
   // shortcut: the Wiki documents the red-to-iron deck change but not its tile.
   // This cache-clear tile is reachable on both decks and sits beside the Iron dragon.
   const ASSAULT_LADDER = new Location(1687, 5665, 2);
+  // QH routes through this cached gap to the lower deck; the south edge is the reachable approach.
+  const ASSAULT_DROP_GAP = { id: O.GAP_40, x: 1668, y: 5704, z: 1,
+    approach: { x: 1668, y: 5706, z: 1 }, landing: { x: 1668, y: 5707, z: 0 } };
+  // shortcut: QH's route crosses this wreck gap from the upper deck to the lower deck;
+  // the cache has no paired ladder at this transition, so preserve its documented waypoints.
+  const ASSAULT_MITHRIL_GAP = { id: O.GAP_39, x: 1679, y: 5708, z: 2,
+    approach: { x: 1682, y: 5705, z: 2 }, landing: { x: 1690, y: 5708, z: 1 } };
+  // shortcut: the cache marks the route's deck change with this gap; its QH landing is two tiles south.
+  const ASSAULT_ADAMANT_GAP = { id: O.GAP_40, x: 1698, y: 5710, z: 1,
+    approach: { x: 1697, y: 5710, z: 1 }, landing: { x: 1698, y: 5712, z: 0 } };
+  // The wreckage jump objects are the cache's intended links across the broken deck.
+  // Their landing tiles follow the QH route through the wrecks; plain terrain walking
+  // cannot cross these water gaps.
+  const ASSAULT_WRECKAGE_JUMPS = [
+    { object: [1698, 5715, 0], from: [1698, 5712, 0], landing: [1698, 5715, 0] },
+    { object: [1702, 5722, 0], from: [1698, 5715, 0], landing: [1702, 5719, 0] },
+    { object: [1705, 5722, 0], from: [1702, 5719, 0], landing: [1705, 5722, 0] },
+  ];
   const FLEET_BOSS = new Location(1631, 5735, 2);
   const FLEET_RESUME = new Location(1637, 5706, 0);
   const GALVEK_PHASES = [N.GALVEK_2, N.GALVEK_4, N.GALVEK_3, N.GALVEK_5];
@@ -1315,6 +1333,18 @@ module.exports = function registerDragonSlayerII(api) {
     const location = object?.getLocation?.();
     const position = p.getLocation?.();
     if (!location || !position) return null;
+    if (id === ASSAULT_DROP_GAP.id && location.getX() === ASSAULT_DROP_GAP.x
+      && location.getY() === ASSAULT_DROP_GAP.y && location.getZ() === ASSAULT_DROP_GAP.z) {
+      return ASSAULT_DROP_GAP;
+    }
+    if (id === ASSAULT_MITHRIL_GAP.id && location.getX() === ASSAULT_MITHRIL_GAP.x
+      && location.getY() === ASSAULT_MITHRIL_GAP.y && location.getZ() === ASSAULT_MITHRIL_GAP.z) {
+      return ASSAULT_MITHRIL_GAP;
+    }
+    if (id === ASSAULT_ADAMANT_GAP.id && location.getX() === ASSAULT_ADAMANT_GAP.x
+      && location.getY() === ASSAULT_ADAMANT_GAP.y && location.getZ() === ASSAULT_ADAMANT_GAP.z) {
+      return ASSAULT_ADAMANT_GAP;
+    }
     const face = object.getFace?.() ?? 0;
     const sizeX = definition?.getSizeX?.() ?? object.getDefinition?.()?.sizeX ?? 1;
     const sizeY = definition?.getSizeY?.() ?? object.getDefinition?.()?.sizeY ?? 1;
@@ -1337,6 +1367,30 @@ module.exports = function registerDragonSlayerII(api) {
     if (event.clickType !== 1) return;
     const crossing = assaultGapCrossing(event);
     if (crossing) event.destination = crossing.approach;
+  }
+  function assaultWreckageJump({ player: p, object, objectId, definition }) {
+    const area = p?.getAttribute?.(ATTR_AREA);
+    const id = definition?.id ?? objectId;
+    const location = object?.getLocation?.();
+    const position = p?.getLocation?.();
+    if (!(area instanceof QuestArea) || stage(p) !== S.FLEET || !p.getAttribute(ATTR_ASSAULT_DEFENDED)
+      || id !== O.WRECKAGE || !location || !position) return null;
+    const jump = ASSAULT_WRECKAGE_JUMPS.find((entry) =>
+      entry.object[0] === location.getX() && entry.object[1] === location.getY() && entry.object[2] === location.getZ()
+      && entry.from[0] === position.getX() && entry.from[1] === position.getY() && entry.from[2] === position.getZ());
+    return jump || null;
+  }
+  function routeAssaultWreckage(event) {
+    if (event.clickType !== 1) return;
+    const jump = assaultWreckageJump(event);
+    if (jump) event.destination = { x: jump.from[0], y: jump.from[1], z: jump.from[2] };
+  }
+  function jumpAssaultWreckage(event) {
+    const jump = assaultWreckageJump(event);
+    if (!jump) return false;
+    event.handled = true;
+    event.player.moveTo(new Location(...jump.landing));
+    return true;
   }
   function jumpAssaultGap(event) {
     const crossing = assaultGapCrossing(event);
@@ -2467,7 +2521,9 @@ module.exports = function registerDragonSlayerII(api) {
   api.onCustomEvent("ladders:climb", claimAssaultLadder);
   api.onObjectRoute(routeAssaultLadder);
   api.onObjectRoute(routeAssaultGap);
+  api.onObjectRoute(routeAssaultWreckage);
   api.onObjectInteraction("Gap", { Jump: jumpAssaultGap });
+  api.onObjectInteraction("Wreckage", { "Jump-to": jumpAssaultWreckage });
   api.onObjectRoute(routeLithkrenNorthStairs);
   api.onInterfaceActionClick(handleMapPuzzleClick);
   api.onObjectFirstClick(MAP_SOURCES.map((source) => source.id), searchFossilMapSource);
