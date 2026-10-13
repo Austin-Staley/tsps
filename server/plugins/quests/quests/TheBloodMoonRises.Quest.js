@@ -20,6 +20,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const HIDEOUT_IVAN_VARBIT = 15467;
   const HIDEOUT_SHRINE_INSPECTED = "quest.the_blood_moon_rises.hideout-shrine-inspected";
   const HIDEOUT_DEFENSE_COMPLETE = "quest.the_blood_moon_rises.hideout-defense-complete";
+  const SLEPE_STORY_ATTRIBUTE = "quest.the_blood_moon_rises.slepe-story";
   const HIDEOUT_SHRINE_IDS = new Set([61174, ObjectIdentifiers.MAKESHIFT_SHRINE, ObjectIdentifiers.MAKESHIFT_SHRINE_2]);
   const HIDEOUT_SHRINE_TILE = { x: 3601, y: 9614, z: 0 };
   const HIDEOUT_CHEST_ID = ObjectIdentifiers.CLOSED_CHEST_37;
@@ -87,6 +88,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   const TOB_CHALLENGE_ATTRIBUTE = "quest.the_blood_moon_rises.tob-challenge";
   const PREP_COMPLETE = "quest.the_blood_moon_rises.preparations-complete";
   const wyrdEncounters = new Map();
+  const slepeIvans = new Map();
+  const slepeRoys = new Map();
   const drakanEncounters = new Map();
   const siegeDrakanEncounters = new Map();
   const siegeHallInjured = new Map();
@@ -831,6 +834,76 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.getPacketSender().sendVarbit(HIDEOUT_IVAN_VARBIT, variant);
   }
 
+  function removeSlepeIvan(player) {
+    const npc = slepeIvans.get(player);
+    if (npc) api.removeNpc(npc);
+    slepeIvans.delete(player);
+  }
+
+  function cleanupSlepeIvan({ player }) {
+    if (!player) return;
+    removeSlepeIvan(player);
+    const roy = slepeRoys.get(player);
+    if (roy) api.removeNpc(roy);
+    slepeRoys.delete(player);
+  }
+
+  function inSlepe(player) {
+    const location = player?.getLocation?.();
+    if (!location) return false;
+    const x = location.getX(), y = location.getY(), z = location.getZ();
+    return z === 0 && x >= 3648 && x <= 3791 && y >= 3232 && y <= 3407;
+  }
+
+  function syncSlepeIvan(event) {
+    const player = event?.player;
+    if (!player) return;
+    if (stage(player) !== STAGE.SLEPE || !inSlepe(player)) { removeSlepeIvan(player); return; }
+    if (slepeIvans.get(player)) return;
+    const story = player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {};
+    const location = player.getLocation();
+    const x = story.ivanFollowing ? Math.max(3727, location.getX() - 1) : 3729;
+    const y = story.ivanFollowing ? location.getY() : 3308;
+    const npc = api.spawnNpc({ id: NpcIdentifiers.IVAN_STROM_4, x, y, z: location.getZ(),
+      wanderRadius: 0, owner: player, ownerOnly: true });
+    if (!npc) return;
+    npc.setScriptedMovement?.(true);
+    slepeIvans.set(player, npc);
+  }
+
+  function syncSlepeRoy(event) {
+    const player = event?.player;
+    if (!player) return;
+    if (stage(player) !== STAGE.SLEPE || !inSlepe(player)) {
+      const npc = slepeRoys.get(player);
+      if (npc) api.removeNpc(npc);
+      slepeRoys.delete(player);
+      return;
+    }
+    if (slepeRoys.has(player)) return;
+    const roy = api.spawnNpc({ id: NpcIdentifiers.ROY, x: 3750, y: 3296, z: 0,
+      wanderRadius: 0, owner: player, ownerOnly: true });
+    if (!roy) return;
+    roy.setScriptedMovement?.(true);
+    slepeRoys.set(player, roy);
+  }
+
+  function processSlepeIvan({ player }) {
+    if (!player) return;
+    syncSlepeIvan({ player });
+    syncSlepeRoy({ player });
+    const npc = slepeIvans.get(player);
+    if (!npc || stage(player) !== STAGE.SLEPE) return;
+    const story = player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {};
+    if (!story.ivanFollowing) return;
+    const from = npc.getLocation(), to = player.getLocation();
+    if (from.getZ() !== to.getZ() || from.getDistance(to) > 12) {
+      npc.moveTo(new Location(to.getX() - 1, to.getY(), to.getZ()));
+    } else if (from.getDistance(to) > 1) {
+      api.core.PathFinder.calculateWalkRoute(npc, to.getX(), to.getY());
+    }
+  }
+
   function inspectHideoutShrine(event) {
     const player = event?.player;
     if (!player || !HIDEOUT_SHRINE_IDS.has(event.objectId) || stage(player) !== STAGE.STARTED) return;
@@ -1054,6 +1127,22 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
   }
 
+  function onSlepeDialogueLine(request) {
+    const player = request?.player;
+    if (!player || stage(player) !== STAGE.SLEPE) return;
+    if (request.step?.speaker === "Ivan Strom" &&
+      ["I'm right behind you.", "The truth is that I don't think I'll know until we do, so we may as well get to it."].includes(request.text)) {
+      request.after = () => {
+        player.setAttribute(SLEPE_STORY_ATTRIBUTE, { ...(player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {}), ivanFollowing: true });
+        syncSlepeIvan({ player });
+      };
+    } else if (request.step?.speaker === "Roy" &&
+      request.text === "That, I do not. However, I did hear that there was some commotion up at Crombwick Manor soon afterwards.") {
+      request.after = () => player.setAttribute(SLEPE_STORY_ATTRIBUTE,
+        { ...(player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {}), royClue: true });
+    }
+  }
+
   function resumeHideoutEscape({ player }) {
     if (!player || stage(player) !== STAGE.HIDEOUT || !player.getAttribute(HIDEOUT_DEFENSE_COMPLETE)) return;
     if (player.getDialogueManager?.()?.getCurrent?.()) return;
@@ -1087,6 +1176,32 @@ module.exports = function registerTheBloodMoonRises(api) {
         "I'm ready.", () => startHideoutDeparture(player),
         "I need more time to prepare.", () => {});
       return true;
+    }
+    if (stage(player) === STAGE.SLEPE) {
+      const story = player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {};
+      let variant = null;
+      if (npcName === "ivan strom") {
+        variant = story.ivanFollowing
+          ? "the-truth-hurtz-talking-to-ivan-while-he-is-following-the-player"
+          : "the-truth-hurtz-talking-to-ivan-in-slepe";
+      } else if (npcName === "roy") {
+        if (!story.ivanFollowing) {
+          player.sendMessage("I should find Ivan by the church and bring him to the pub.");
+          event.handled = true;
+          return true;
+        }
+        variant = story.royClue
+          ? "the-truth-hurtz-talking-to-roy-talking-to-roy-again"
+          : "the-truth-hurtz-talking-to-roy";
+      } else if (npcName === "veliaf hurtz") {
+        variant = "the-truth-hurtz-talking-to-veliaf-inside-crombwick-manor";
+      } else if (npcName === "drezel") {
+        variant = "the-truth-hurtz-talking-to-drezel-again";
+      }
+      if (variant) {
+        event.handled = true;
+        return startTranscript(api, player, event.npcId, PAGE, variant);
+      }
     }
     if (stage(player) === STAGE.NOT_STARTED) {
       if (npcName !== "sarius guile") return false;
@@ -1951,6 +2066,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     buildJournal,
   });
   api.persistAttribute(HIDEOUT_SHRINE_INSPECTED);
+  api.persistAttribute(SLEPE_STORY_ATTRIBUTE);
   const hall = require("../bmr/Hall.TheBloodMoonRises")({ api, state: hallDefenceState,
     process: processSiegeDefence, cleanup: handleSiegeLogout, scenery: player => {
       const repaired = hallDefenceState(player).repaired ?? [];
@@ -1970,16 +2086,22 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("npc-dialogue:hook", onStartHook);
   api.onCustomEvent("npc-dialogue:action", onTranscriptAction);
   api.onCustomEvent("quest:stage-changed", syncHideoutIvan);
+  api.onCustomEvent("quest:stage-changed", syncSlepeIvan);
+  api.onCustomEvent("quest:stage-changed", syncSlepeRoy);
   api.onCustomEvent("world:object-examine", inspectHideoutShrine);
   api.onNpcDialogueCondition(answerHideoutCondition);
   api.onCustomEvent("npc-dialogue:choice", onChoice);
   api.onCustomEvent("npc-dialogue:line", onBloodMoonDialogueLine);
+  api.onCustomEvent("npc-dialogue:line", onSlepeDialogueLine);
   api.onCustomEvent("tob:bmr:completed", onBloodMoonTobCompleted);
   api.onNpcDialogueVariant(selectVariant);
   api.onAnyNpcInteraction({ "Talk-to": talkQuestNpc });
   // Claim Ivan after Sins of the Father and In Aid of the Myreque decline him,
   // before their generic completed-quest transcript can answer for this stage.
   api.onNpcInteraction("Ivan Strom", { "Talk-to": talkQuestNpc });
+  api.onNpcInteraction("Roy", { "Talk-to": talkQuestNpc });
+  api.onNpcInteraction("Veliaf Hurtz", { "Talk-to": talkQuestNpc });
+  api.onNpcInteraction("Drezel", { "Talk-to": talkQuestNpc });
   api.onObjectInteraction(enterVampyriumCastle);
   api.onObjectInteraction(openHideoutChest);
   api.onObjectInteraction(handleSiegeHallObject);
@@ -2008,11 +2130,15 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onItemAction("Dusty book", { Read: readDustyBook });
   api.onNpcInteraction("Aranei", { Heal: healSiegeAranei });
   api.onPlayerProcess(syncHuntGroundItems);
+  api.onPlayerProcess(processSlepeIvan);
   api.onPlayerLogin(handleSiegeLogin);
   api.onPlayerLogin(syncHideoutIvan);
+  api.onPlayerLogin(syncSlepeIvan);
+  api.onPlayerLogin(syncSlepeRoy);
   api.onPlayerLogin(resumeHideoutEscape);
   api.onPlayerLogout(handleSiegeLogout);
   api.onPlayerLogout(hideoutDefense.onPlayerLogout);
+  api.onPlayerLogout(cleanupSlepeIvan);
   api.onNpcDeath(handleWyrdDeath);
   api.persistAttribute(HIDEOUT_DEFENSE_COMPLETE);
   api.onNpcHitModify(handleSiegeDrakanHit);
