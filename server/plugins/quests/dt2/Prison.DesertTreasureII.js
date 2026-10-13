@@ -276,15 +276,16 @@ module.exports = function registerSucellusPrison(api) {
   }
 
   function handleDialogueAction(event) {
-    const { player, stepId } = event;
-    if (!player?.getAttribute(ESCAPED)) return false;
-    if (stepId === "FyTltG" && state(player) >= 50) {
+    const { player, stepId, npcId } = event;
+    const area = player?.getAttribute(AREA);
+    if (!player?.getAttribute(ESCAPED) || !atArea(player, area) || ![N.ASSASSIN_7, N.ASSASSIN_8].includes(npcId)) return false;
+    if (stepId === "FyTltG" && state(player) === 50) {
       setState(player, 52);
       removeOwnedNpc(player.getAttribute(AREA), player.getAttribute("desert-treasure-ii:sucellus-prison-assassin"));
       player.setAttribute("desert-treasure-ii:sucellus-prison-assassin", null);
       return true;
     }
-    if (stepId === "IME-83" && state(player) >= 56) {
+    if (stepId === "IME-83" && state(player) === 56) {
       setState(player, 58);
       player.setAttribute(COMPLETE, true);
       api.emitCustomEvent("dt2:sucellus-prison-complete", { player });
@@ -438,6 +439,7 @@ module.exports = function registerSucellusPrison(api) {
       if (progress < 58 || !player.getAttribute(COMPLETE)) {
         event.handled = true;
         player.sendMessage("Jhallan still blocks the way to the asylum.");
+        return true;
       }
       return false;
     }
@@ -463,7 +465,7 @@ module.exports = function registerSucellusPrison(api) {
     if (!player || !atArea(player, area)) return false;
     if (state(player) === 32) {
       const [x, y] = worldTile(player, area);
-      if (x >= 2957 && x <= 2970 && y >= 6413 && y <= 6420) setState(player, 34);
+      if (player.getAttribute(CREVICE_CLEARED) && x >= 2957 && x <= 2970 && y >= 6413 && y <= 6420) setState(player, 34);
       return true;
     }
     if (state(player) !== 54) return false;
@@ -504,13 +506,13 @@ module.exports = function registerSucellusPrison(api) {
   }
 
   function handleStart({ player, area }) {
-    if (!player || !area || !player.getAttribute(ESCAPED)) return false;
+    if (!player || !area || !player.getAttribute(ESCAPED) || !atArea(player, area)) return false;
     if (!Number.isFinite(Number(player.getAttribute(PROGRESS)))) setState(player, 22);
     spawnAssassin(player, area);
     return true;
   }
   function handleResume({ player, area }) {
-    if (!player || !area || !player.getAttribute(ESCAPED)) return false;
+    if (!player || !area || !player.getAttribute(ESCAPED) || !atArea(player, area)) return false;
     if (state(player) === 54) {
       removeOwnedNpc(area, player.getAttribute("desert-treasure-ii:sucellus-prison-jhallan"));
       for (const clone of defences.get(player)?.clones ?? []) removeOwnedNpc(area, clone);
@@ -520,7 +522,7 @@ module.exports = function registerSucellusPrison(api) {
       player.setAttribute(FIREWORKS, false);
       setState(player, 52);
     }
-    if (state(player) >= 22 && state(player) < 58 && !player.getAttribute(FIREWORKS)) spawnAssassin(player, area);
+    if (state(player) >= 22 && state(player) < 58 && (!player.getAttribute(FIREWORKS) || state(player) >= 56)) spawnAssassin(player, area);
     return true;
   }
   api.onCustomEvent("dt2:sucellus-prison-start", handleStart);
@@ -564,12 +566,15 @@ module.exports = function registerSucellusPrison(api) {
     return true;
   }
   function handleJournal(event) {
-    if (!event?.player || !event.player.getAttribute(ESCAPED)) return false;
+    const area = event?.player?.getAttribute(AREA);
+    if (!event?.player?.getAttribute(ESCAPED) || !atArea(event.player, area)) return false;
     event.lines = journal(state(event.player));
     return true;
   }
   function handleDialogueLine(event) {
-    if (event.npcId !== N.ASSASSIN_7 || event.text !== "Now, once again, let's get this cell open.") return false;
+    const area = event.player?.getAttribute(AREA);
+    if (event.npcId !== N.ASSASSIN_7 || event.text !== "Now, once again, let's get this cell open."
+      || !event.player?.getAttribute(ESCAPED) || !atArea(event.player, area) || state(event.player) !== 40) return false;
     event.after = () => setState(event.player, 46);
     return true;
   }

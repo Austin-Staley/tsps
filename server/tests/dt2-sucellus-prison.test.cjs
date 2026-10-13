@@ -184,10 +184,20 @@ test("Jhallan defense lasts three minutes (300 area ticks) and asylum transcript
 
   handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 400 });
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 56);
-  handlers.custom["npc-dialogue:action"]({ player, stepId: "IME-83" });
+  handlers.custom["npc-dialogue:action"]({ player, npcId: 12348, stepId: "IME-83" });
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 58);
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-complete"), true);
   assert.equal(emitted.filter(({ name }) => name === "dt2:sucellus-prison-complete").length, 1);
+});
+
+test("earned frozen-Jhallan progress restores the Assassin after relog without replaying the defence", () => {
+  const { handlers, player, area, createdNpcs } = setup();
+  player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 56);
+  player.setAttribute("desert-treasure-ii:sucellus-prison-fireworks", true);
+  assert.equal(handlers.custom["dt2:sucellus-prison-resume"]({ player, area }), true);
+  assert.ok(createdNpcs.some((value) => value.id === 12348), "the Assassin is recreated at the saved frozen-Jhallan stage");
+  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 56);
+  assert.equal(handlers.custom["dt2:sucellus-prison-resume"]({ player, area: { ...area } }), false, "resume ignores a different instance");
 });
 
 test("private-instance gate coordinates normalize to cache tiles and preserve the earned key", () => {
@@ -237,6 +247,7 @@ test("blocked shortcut crevice only opens when the carried chisel is used on its
 test("Ruby key chain requires the seven chest names, converter clue, and translated bed-room route", () => {
   const { handlers, prompts, player, inventory, instanceLocation, moveToSource } = setup();
   player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 32);
+  player.setAttribute("desert-treasure-ii:sucellus-prison-crevice-cleared", true);
   moveToSource(2960, 6416);
   handlers.custom["dt2:sucellus-prison-process"]({ player, area: player.getPrivateArea(), cycle: 100 });
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 34);
