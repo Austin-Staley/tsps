@@ -720,8 +720,8 @@ module.exports = function registerSongOfTheElves(api) {
     if (!player) return;
     clearWarEndActors(player);
     const area = player.getAttribute(BATTLE_AREA);
-    if (area instanceof ArdougneBattleArea && !area.isDestroyed()) {
-      area.leave(player, true);
+    if (area instanceof ArdougneBattleArea) {
+      if (!area.isDestroyed()) area.leave(player, true);
       player.setAttribute(BATTLE_AREA, null);
       player.moveTo(new Location(2537, 9745, 0));
     }
@@ -1804,7 +1804,7 @@ module.exports = function registerSongOfTheElves(api) {
       beginCampDefense(player, area);
       return;
     }
-    if (event.option === "Climb through it." && [3, 4, 6].includes(currentChapter(event.player))) {
+    if (event.option === "Climb through it." && [3, 4, 5, 6].includes(currentChapter(event.player))) {
       const loc = event.player.getLocation();
       if (loc.getX() >= 2522 && loc.getX() <= 2541 && loc.getY() >= 3320 && loc.getY() <= 3344) {
         event.player.moveTo(new Location(2537, 9745, 0));
@@ -2937,7 +2937,7 @@ module.exports = function registerSongOfTheElves(api) {
   }
   function searchRehnisonBed(event) {
     const player = event?.player;
-    if (!player || ![3, 4, 6].includes(currentChapter(player)) || quest.isComplete(player)) return false;
+    if (!player || ![3, 4, 5, 6].includes(currentChapter(player)) || quest.isComplete(player)) return false;
     const loc = event.location;
     if (loc && (loc.x < 2522 || loc.x > 2541 || loc.y < 3320 || loc.y > 3344)) return false;
     return startTranscript(api, player, 0, PAGE, "meet-the-ardougne-resistance-planning-a-revolution-searching-the-bed",
@@ -2947,7 +2947,7 @@ module.exports = function registerSongOfTheElves(api) {
   function enterResistanceBasement(event) {
     const player = event?.player;
     const loc = event?.location;
-    if (!player || !loc || ![3, 4, 6].includes(currentChapter(player)) || quest.isComplete(player) ||
+    if (!player || !loc || ![3, 4, 5, 6].includes(currentChapter(player)) || quest.isComplete(player) ||
       loc.x < 2522 || loc.x > 2541 || loc.y < 3320 || loc.y > 3344) return;
     event.handled = true;
     player.moveTo(new api.core.Location(2537, 9745, 0));
