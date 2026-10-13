@@ -25,7 +25,7 @@ const DOOR_AUTO_CLOSE_TICKS = 500;
 // the open ids are not closed+1). Same trick works for NPCs/items via C.getNpc / C.getItem.
 const DOOR_NAMES = new Set([
   "Door", "Doors", "Large door", "Large doors", "Castle door", "Cell Door", "Cell door",
-  "Glass door", "Magic door", "Metal door", "Mind Door", "Tent door", "Wall",
+  "Glass door", "Magic door", "Metal door", "Mind Door", "Mithril door", "Tent door", "Wall",
   "Gate", "Metal gate", "Doorway", "Tree Door", "Storeroom Door", "Ardougne Wall Door",
 ]);
 
@@ -889,9 +889,9 @@ function handleDoubleDoor(player, object, objectId, location) {
   return true;
 }
 
-function toggleDoor({ player, object, objectId, location }) {
+function toggleDoor({ player, object, objectId, location, clickType }) {
   if (!player || !object || !location) return false;
-  const request = { player, object, objectId, location, handled: false };
+  const request = { player, object, objectId, location, clickType, handled: false };
   api.emitCustomEvent("door:toggle", request);
   if (request.handled) return true;
   if (handleCompositeDoor(player, object, objectId)) return true;

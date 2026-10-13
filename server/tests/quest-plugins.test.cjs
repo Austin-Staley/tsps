@@ -473,6 +473,71 @@ test("Tree Gnome Village sends King Bolren's orbs (varbit 598): the village's sp
   assert.equal(varbits.get(598), 2, "and on every login");
 });
 
+test('Dragon Slayer II lights the three actual Ancient Cavern dragon head NPCs with Fire Wave or Surge', () => {
+  const { api: base, handlers } = mockApi();
+  let hitModify;
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onNpcHitModify'
+      ? (handler) => { hitModify = handler; }
+      : target[prop],
+  });
+  require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  const attributes = new Map([
+    ['quest.dragon_slayer_ii.stage', 9],
+    ...[api.core.ItemIdentifiers.ANCIENT_KEY, api.core.ItemIdentifiers.DRAGON_KEY_PIECE,
+      api.core.ItemIdentifiers.DRAGON_KEY_PIECE_2, api.core.ItemIdentifiers.DRAGON_KEY_PIECE_3,
+      api.core.ItemIdentifiers.DRAGON_KEY_PIECE_4].map((id) => [`item:${id}`, 1]),
+  ]);
+  const varbits = new Map();
+  const inventory = new Map([...attributes].filter(([key]) => key.startsWith('item:')).map(([key, value]) => [Number(key.slice(5)), value]));
+  const sender = { sendVarbit: (id, value) => varbits.set(id, value) };
+  const messages = [];
+  const player = {
+    isPlayer: () => true,
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ getAmount: (id) => inventory.get(id) ?? 0 }),
+    getPacketSender: () => sender,
+    sendMessage: (message) => messages.push(message),
+  };
+  const canCast = (npcId, spell) => {
+    const event = { player, npc: { getId: () => npcId }, spell, allowed: false };
+    for (const listener of handlers.custom.get('magic:can-cast-on-npc') ?? []) listener(event);
+    return event.allowed;
+  };
+  assert.equal(canCast(7506, api.core.CombatSpells.FIRE_WAVE), true, 'forge heads accept the required spell');
+  assert.equal(canCast(7506, api.core.CombatSpells.WIND_STRIKE), false, 'other spells remain rejected');
+  assert.equal(canCast(12345, api.core.CombatSpells.FIRE_WAVE), false, 'the opt-in is limited to the three heads');
+  attributes.set('quest.dragon_slayer_ii.stage', 8);
+  assert.equal(canCast(7506, api.core.CombatSpells.FIRE_WAVE), false, 'heads are not spell targets before the forge stage');
+  attributes.set('quest.dragon_slayer_ii.stage', 9);
+  const spellHit = (npcId, spell) => {
+    const dealt = { value: 17, setDamage(value) { this.value = value; } };
+    let total = 17;
+    const hit = { getHits: () => [dealt], updateTotalDamage: () => { total = dealt.value; } };
+    hitModify({ npc: { getId: () => npcId }, hit });
+    for (const listener of handlers.custom.get('magic:hit-effects') ?? []) {
+      listener({ attacker: player, target: { getId: () => npcId }, spell });
+    }
+    return { dealt: dealt.value, total };
+  };
+  assert.deepEqual(spellHit(7506, api.core.CombatSpells.FIRE_WAVE), { dealt: 0, total: 0 });
+  assert.equal(attributes.get('dragon-slayer-ii:forge-heads'), 1);
+  assert.equal(varbits.get(6109), 1, 'the real west head transform updates');
+  assert.equal(varbits.get(6110), 0);
+  assert.equal(spellHit(7507, api.core.CombatSpells.FIRE_SURGE).dealt, 0);
+  assert.equal(attributes.get('dragon-slayer-ii:forge-heads'), 3);
+  spellHit(7508, api.core.CombatSpells.FIRE_WAVE);
+  assert.equal(attributes.get('dragon-slayer-ii:forge-heads'), 7);
+  assert.equal(varbits.get(6111), 1);
+  assert.match(messages.at(-1), /three dragon heads blaze/i);
+
+  spellHit(7506, api.core.CombatSpells.WIND_STRIKE);
+  assert.equal(attributes.get('dragon-slayer-ii:forge-heads'), 7, 'other spells do not light heads');
+  spellHit(12345, api.core.CombatSpells.FIRE_WAVE);
+  assert.equal(attributes.get('dragon-slayer-ii:forge-heads'), 7, 'unrelated NPCs do not light heads');
+});
+
 test('Current Affairs and Prying Times start gates require every registered prerequisite', () => {
   const conditions = [];
   const completeQuests = new Set();
@@ -1367,31 +1432,21 @@ test('Priest in Peril unlocks the mausoleum Holy barrier only after completion',
   assert.deepEqual([moves.length, messages.length], before);
 });
 
-test('Dragon Slayer II reforging requires three distinct dragon-head casts and consumes the right runes', () => {
-  const spells = [];
-  const objectInteractions = [];
+test('Dragon Slayer II reforges the key at the anvil only after the real heads are lit', () => {
+  const interactions = [];
   const { api: base } = mockApi();
-  const core = Object.assign({}, base.core, {
-    CacheDefinitions: { getSpellName: () => 'Fire Wave' },
-  });
   const api = new Proxy(base, {
-    get: (target, prop) => {
-      if (prop === 'core') return core;
-      if (prop === 'onSpellOnObject') return (handler) => spells.push(handler);
-      if (prop === 'onObjectInteraction') return (handler) => objectInteractions.push(handler);
-      return target[prop];
-    },
+    get: (target, prop) => prop === 'onObjectInteraction'
+      ? (handler) => interactions.push(handler)
+      : target[prop],
   });
   require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
-  const attrs = new Map([['quest.dragon_slayer_ii.stage', 9]]);
+  const attrs = new Map([['quest.dragon_slayer_ii.stage', 9], ['dragon-slayer-ii:forge-heads', 7]]);
   const counts = new Map([
-    [core.ItemIdentifiers.DRAGON_KEY_PIECE, 1], [core.ItemIdentifiers.DRAGON_KEY_PIECE_2, 1],
-    [core.ItemIdentifiers.DRAGON_KEY_PIECE_3, 1], [core.ItemIdentifiers.DRAGON_KEY_PIECE_4, 1],
-    [core.ItemIdentifiers.ANCIENT_KEY, 1], [core.ItemIdentifiers.HAMMER, 1],
-    [core.ItemIdentifiers.FIRE_RUNE, 21], [core.ItemIdentifiers.AIR_RUNE, 15],
-    [core.ItemIdentifiers.BLOOD_RUNE, 3],
+    [api.core.ItemIdentifiers.DRAGON_KEY_PIECE, 1], [api.core.ItemIdentifiers.DRAGON_KEY_PIECE_2, 1],
+    [api.core.ItemIdentifiers.DRAGON_KEY_PIECE_3, 1], [api.core.ItemIdentifiers.DRAGON_KEY_PIECE_4, 1],
+    [api.core.ItemIdentifiers.ANCIENT_KEY, 1], [api.core.ItemIdentifiers.HAMMER, 1],
   ]);
-  const packet = new Proxy({}, { get: (_target, key) => (..._args) => packet });
   const player = {
     getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
     getInventory: () => ({
@@ -1400,30 +1455,14 @@ test('Dragon Slayer II reforging requires three distinct dragon-head casts and c
       adds: (id, amount) => counts.set(id, (counts.get(id) ?? 0) + amount),
       getFreeSlots: () => 20,
     }),
-    getPacketSender: () => packet,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
     sendMessage: () => {},
   };
-  const cast = (objectId, x, y) => {
-    const event = { player, objectId, location: { x, y, z: 1 }, spellWidget: 1, spellItemId: 0 };
-    spells[0](event);
-    return event;
-  };
-  cast(core.ObjectIdentifiers.DRAGON_HEAD_2, 1616, 5284);
-  cast(core.ObjectIdentifiers.DRAGON_HEAD_3, 1622, 5279);
-  assert.equal(attrs.get('dragon-slayer-ii:forge-heads') ?? 0, 3, 'two distinct heads only set two bits');
-  const wrongHead = cast(core.ObjectIdentifiers.DRAGON_HEAD_3, 1744, 5284);
-  assert.equal(wrongHead.handled, true, 'the spell interaction is consumed');
-  assert.equal(counts.get(core.ItemIdentifiers.FIRE_RUNE), 7, 'wrong room head does not charge runes');
-  cast(core.ObjectIdentifiers.DRAGON_HEAD_3, 1626, 5284);
-  assert.equal(attrs.get('dragon-slayer-ii:forge-heads'), 7, 'the third distinct head lights the forge');
-  assert.equal(counts.get(core.ItemIdentifiers.FIRE_RUNE), 0);
-  assert.equal(counts.get(core.ItemIdentifiers.AIR_RUNE), 0);
-  assert.equal(counts.get(core.ItemIdentifiers.BLOOD_RUNE), 0);
-  objectInteractions[0]({ player, objectId: core.ObjectIdentifiers.ANVIL });
-  assert.equal(attrs.get('quest.dragon_slayer_ii.stage'), 10, 'anvil advances only after the forge is lit');
-  assert.equal(counts.get(core.ItemIdentifiers.DRAGON_KEY), 1);
-  assert.equal(counts.get(core.ItemIdentifiers.ANCIENT_KEY), 0);
-  assert.equal(counts.get(core.ItemIdentifiers.DRAGON_KEY_PIECE_4), 0);
+  interactions[0]({ player, objectId: api.core.ObjectIdentifiers.ANVIL });
+  assert.equal(attrs.get('quest.dragon_slayer_ii.stage'), 10, 'the forge advances after its heads are lit');
+  assert.equal(counts.get(api.core.ItemIdentifiers.DRAGON_KEY), 1);
+  assert.equal(counts.get(api.core.ItemIdentifiers.ANCIENT_KEY), 0);
+  assert.equal(counts.get(api.core.ItemIdentifiers.DRAGON_KEY_PIECE_4), 0);
 });
 
 test('Desert Treasure II requires and solves the real eight-cell golem grid', () => {
@@ -6810,10 +6849,10 @@ test('Dragon Slayer II unlocks the northern Ungael exit when either awake Vorkat
   attrs.set('dragon-slayer-ii:vorkath-defeated', true);
   values.length = 0;
   logins.forEach((handler) => handler({ player }));
-  assert.deepEqual(values, [[6108, 30]], 'the climb-over stays open after relogging');
+  assert.deepEqual(values, [[6108, 30], [6109, 0], [6110, 0], [6111, 0]], 'the climb-over and unlit head transforms stay correct after relogging');
   attrs.set('dragon-slayer-ii:vorkath-defeated', false);
   logins.forEach((handler) => handler({ player }));
-  assert.deepEqual(values.at(-1), [6108, 0], 'unfinished players see the blocked cache morph');
+  assert.deepEqual(values.slice(-4), [[6108, 0], [6109, 0], [6110, 0], [6111, 0]], 'unfinished players see the blocked cache morph and unlit heads');
 });
 
 

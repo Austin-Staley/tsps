@@ -21,6 +21,14 @@ const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRou
 const { crossingFor: shantayCrossingFor } = require('../plugins/objects/ShantayPass.plugin');
 
 const tileKey = (id, x, y, z) => `${id}@${x},${y},${z}`;
+let mapCollisionInitialized = false;
+
+async function initializeMapCollisionOnce() {
+  if (mapCollisionInitialized) return;
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(process.cwd());
+  RegionManager.init();
+  mapCollisionInitialized = true;
+}
 
 function buildHarness({ cacheObjects, objectManager: suppliedObjectManager } = {}) {
   const world = new Map();
@@ -47,6 +55,7 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager } = {
   CacheDefinitions.getCounts = () => ({ npcs: 0, items: 0, objects: cacheObjects ? 62522 : 8740 });
 
   const handlers = new Map();
+  let doorToggleHandler = null;
   const objectManager = suppliedObjectManager ?? {
     register: (o) => ops.push(['register', o.getId(), o.getLocation().getX(), o.getLocation().getY(), o.getFace()]),
     deregister: (o) => ops.push(['deregister', o.getId(), o.getLocation().getX(), o.getLocation().getY(), o.getFace()]),
@@ -65,7 +74,9 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager } = {
     },
     getObjectManager: () => objectManager,
     getTaskManager: () => taskManager,
-    emitCustomEvent: () => {},
+    emitCustomEvent: (name, event) => {
+      if (name === 'door:toggle') doorToggleHandler?.(event);
+    },
     onObjectInteraction: (name, actions) => handlers.set(name, actions),
     onRegionLoaded: () => {},
     onPlayerProcess: () => {},
@@ -93,7 +104,7 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager } = {
       getPacketSender: () => ({}),
     };
     ops.length = 0;
-    handlers.get(name)[action]({ player, object, objectId: id, location: { x, y, z } });
+    handlers.get(name)[action]({ player, object, objectId: id, clickType: action === 'Open' ? 1 : 2, location: { x, y, z } });
     return ops.splice(0);
   };
 
@@ -104,12 +115,37 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager } = {
     CacheDefinitions.getCounts = originalGetCounts;
   };
 
-  return { place, click, sounds, ops, submitted, handlers, restore };
+  return { place, click, sounds, ops, submitted, handlers, setDoorToggleHandler: (handler) => { doorToggleHandler = handler; }, restore };
 }
 
+test('captured door portals can hand off before the ordinary door swing', () => {
+  const h = buildHarness({ cacheObjects: new Map([
+    [25341, { name: 'Mithril door', actions: ['Open'], models: [[26771]] }],
+    [32208, { name: 'Mithril door', actions: ['Open'], models: [[26771]] }],
+  ]) });
+  try {
+    assert.ok(h.handlers.get('Mithril door')?.Open,
+      'the cache-specific door name enters the ordinary toggle path');
+    const claimed = [];
+    h.setDoorToggleHandler((request) => {
+      if (request.objectId === 25341 && request.object.getLocation().getX() === 1759 && request.clickType === 1) {
+        request.handled = true;
+        claimed.push('entry');
+      }
+    });
+    assert.deepEqual(h.click(25341, 1759, 5343, 3, 'Open', 'Mithril door', 0, null, 1), [],
+      'a loc-teleport route claims the portal before local swing behavior');
+    assert.deepEqual(claimed, ['entry']);
+    h.setDoorToggleHandler(null);
+    assert.deepEqual(h.click(25341, 1631, 5343, 3, 'Open', 'Mithril door', 0, null, 1), [],
+      'an unrelated cache placement is not given a speculative DS2 door override');
+  } finally {
+    h.restore();
+  }
+});
+
 test('Kourend Crypt cached Large doors keep their real double-leaf geometry and clear the plane-1 threshold', async () => {
-  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(process.cwd());
-  RegionManager.init();
+  await initializeMapCollisionOnce();
   const cachedDoors = new Map([32404, 32405, 32406, 32407].map((id) => [
     id,
     CacheDefinitions.getObject(id),

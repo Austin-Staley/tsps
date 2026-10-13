@@ -1,6 +1,8 @@
 /** Dragon Slayer II: the transcript supplies the conversations; this plugin owns the quest state and world actions. */
 const NPC_TRANSCRIPTS = require("../../../data/definitions/npc-dialogues.json");
 const ONEIROMANCER_IDS = new Set([3835, 8049]);
+// Static NPC spawns in the Ancient Cavern orb room; their cache variants use varbits 6109–6111.
+const FORGE_HEADS = new Map([[7506, { bit: 1, varbit: 6109 }], [7507, { bit: 2, varbit: 6110 }], [7508, { bit: 4, varbit: 6111 }]]);
 
 function oneiromancerDialogueVariant({ npcId, stage, dreamProgress, hasDreamPotion }) {
   if (!ONEIROMANCER_IDS.has(npcId)) return null;
@@ -1928,32 +1930,36 @@ module.exports = function registerDragonSlayerII(api) {
     }
     return false;
   }
-  function kindleDragonForge(event) {
-    const { player: p, objectId, location } = event;
-    if (stage(p) !== S.FORGE || ![O.DRAGON_HEAD_2, O.DRAGON_HEAD_3].includes(objectId)) return;
-    const spell = String(api.core.CacheDefinitions?.getSpellName?.(event.spellWidget, event.spellItemId) ?? "");
-    if (!/^fire wave$|^fire surge$/i.test(spell)) return;
-    event.handled = true;
+  function syncForgeHeadVarbits(p) {
+    const lit = Number(p.getAttribute(ATTR_FORGE_HEADS)) || 0;
+    for (const { bit, varbit } of FORGE_HEADS.values()) p.getPacketSender().sendVarbit(varbit, lit & bit ? 1 : 0);
+  }
+  function allowForgeHeadSpell(event) {
+    const { player: p, npc, spell } = event;
+    if (!p?.isPlayer?.() || stage(p) !== S.FORGE || !FORGE_HEADS.has(npc?.getId?.())) return;
+    const wave = api.core.CombatSpells.FIRE_WAVE.spellId();
+    const surge = api.core.CombatSpells.FIRE_SURGE.spellId();
+    if ([wave, surge].includes(spell?.spellId?.())) event.allowed = true;
+  }
+  function protectForgeHead({ npc, hit }) {
+    if (!FORGE_HEADS.has(npc.getId())) return;
+    for (const damage of hit.getHits()) damage.setDamage(0);
+    hit.updateTotalDamage();
+  }
+  function kindleDragonForge({ attacker: p, target, spell }) {
+    if (!p?.isPlayer?.() || stage(p) !== S.FORGE) return;
+    const head = FORGE_HEADS.get(target?.getId?.());
+    if (!head) return;
+    const wave = api.core.CombatSpells.FIRE_WAVE.spellId();
+    const surge = api.core.CombatSpells.FIRE_SURGE.spellId();
+    if (![wave, surge].includes(spell?.spellId?.())) return;
     if (!has(p, I.ANCIENT_KEY) || !KEY_PARTS.every((id) => has(p, id))) {
       p.sendMessage("The dragon heads remain dormant until you have the ancient key and all four key pieces.");
       return;
     }
-    const surge = /^fire surge$/i.test(spell);
-    const costs = surge ? [[I.FIRE_RUNE, 10], [I.AIR_RUNE, 7], [I.WRATH_RUNE, 1]]
-      : [[I.FIRE_RUNE, 7], [I.AIR_RUNE, 5], [I.BLOOD_RUNE, 1]];
-    if (costs.some(([id, amount]) => !has(p, id, amount))) {
-      p.sendMessage("You do not have the runes to cast that spell.");
-      return;
-    }
-    const tileKey = `${location.x},${location.y},${location.z}`;
-    const headBit = { "1616,5284,1": 1, "1622,5279,1": 2, "1626,5284,1": 4 }[tileKey];
-    if (!headBit) {
-      p.sendMessage("The spell scorches the stone, but this is not one of the forge's three heads.");
-      return;
-    }
-    costs.forEach(([id, amount]) => remove(p, id, amount));
-    const lit = (Number(p.getAttribute(ATTR_FORGE_HEADS)) || 0) | headBit;
+    const lit = (Number(p.getAttribute(ATTR_FORGE_HEADS)) || 0) | head.bit;
     p.setAttribute(ATTR_FORGE_HEADS, lit);
+    syncForgeHeadVarbits(p);
     p.sendMessage(lit === 7 ? "The three dragon heads blaze to life. The dragon forge is ready." : "The dragon head glows with the heat of the spell.");
   }
   function itemOnItem({ player: p, usedItemId, usedWithItemId }) {
@@ -1983,6 +1989,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function onLogin({ player: p }) {
     syncUngaelExit(p);
+    syncForgeHeadVarbits(p);
     if (stage(p) >= S.KEYS && (p.getAttribute(ATTR_CRYPT_ORDER) || p.getAttribute(ATTR_CRYPT_PLACED)
       || p.getAttribute(ATTR_CRYPT_INSPECTED) || p.getAttribute(ATTR_CRYPT_KEY_COLLECTED))) {
       setCryptPuzzleVarbits(p, p.getAttribute(ATTR_CRYPT_PLACED) || {});
@@ -2240,7 +2247,9 @@ module.exports = function registerDragonSlayerII(api) {
   api.onObjectInteraction("Bookcase", { Search: searchReldoBook });
   api.onItemOnObject(useItemOnObject, { noted: false });
   api.onItemOnObject(placeCryptBust, { noted: false });
-  api.onSpellOnObject(kindleDragonForge);
+  api.onNpcHitModify(protectForgeHead);
+  api.onCustomEvent("magic:can-cast-on-npc", allowForgeHeadSpell);
+  api.onCustomEvent("magic:hit-effects", kindleDragonForge);
   api.onItemOnItem(itemOnItem);
   api.onItemOnItem(makeInertLocatorOrb);
   api.onItemAction("Locator orb", { Feel: feelLocatorOrb });
