@@ -4795,10 +4795,21 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
   const { api: base, handlers: baseHandlers } = mockApi();
   const objectHooks = [], objectRouteHooks = [], itemOnObjectHooks = [], itemActionHooks = [], itemOnItemHooks = [], groundPickupHooks = [], actionHooks = [], choiceHooks = [], doorToggleHooks = [], interactions = [], transcripts = [], groundSpawns = [], playerProcesses = [], spawnedNpcs = [], prompts = [];
   const counts = new Map();
-  const lassarObjectPackets = [];
+  const lassarObjectObjects = [];
+  class TestGameObject {
+    constructor(id, location, type, face, privateArea) { Object.assign(this, { id, location, type, face, privateArea }); }
+    getId() { return this.id; }
+    getLocation() { return this.location; }
+    setOwner(owner) { this.owner = owner; return this; }
+  }
   const varbits = new Map();
   const core = {
     ...base.core,
+    GameObject: TestGameObject,
+    ObjectManager: {
+      register: (object) => lassarObjectObjects.push({ action: 'register', object }),
+      deregister: (object) => lassarObjectObjects.push({ action: 'deregister', object }),
+    },
     NPC: { create: (id, location) => ({ id, location, setOwner() {}, setOwnerOnly() {}, setScriptedMovement() {}, setMaxHitpoints() {}, setHitpoints() {} }) },
     World: { getAddNPCQueue: () => [] },
   };
@@ -4843,7 +4854,6 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
       }),
       getPacketSender: () => new Proxy({}, { get: (_target, key) => key === 'sendVarbit'
         ? (id, value) => varbits.set(id, value)
-        : key === 'sendObject' || key === 'sendObjectRemoval' ? (object) => lassarObjectPackets.push({ key, object })
         : () => {} }),
       getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: () => {} }) }),
       getLocation() { return this.location; },
@@ -5044,22 +5054,23 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
       ...attrs.get('desert-treasure-ii:lassar'), teleporters: [true, true, true, true, true, true, true], idolPlaced: true, sanity: 1,
     });
     playerProcesses[0]({ player });
-    const shadowIdol = lassarObjectPackets.at(-1);
-    assert.equal(shadowIdol.key, 'sendObject');
+    const shadowIdol = lassarObjectObjects.at(-1);
+    assert.equal(shadowIdol.action, 'register');
     assert.equal(shadowIdol.object.id, 48216);
+    assert.equal(shadowIdol.object.owner, player, 'the scene object is scoped to the player who placed the idol');
     assert.deepEqual([shadowIdol.object.location.x, shadowIdol.object.location.y, shadowIdol.object.location.z], [2435, 6415, 0],
       'the placed idol appears at the matching shadow-side teleporter tile');
     assert.equal(interact({ player, objectId: 48216, definition: { id: 48216 }, location: { x: 2435, y: 6415, z: 0 }, option: 'Use' }), true,
       'the cache Use action restores sanity from the placed idol');
     assert.equal(attrs.get('desert-treasure-ii:lassar').sanity, 50,
       'the active Shadow Realm tick drains one sanity before the idol restores 50');
-    const beforeRepeatedSync = lassarObjectPackets.length;
+    const beforeRepeatedSync = lassarObjectObjects.length;
     playerProcesses[0]({ player });
-    assert.equal(lassarObjectPackets.length, beforeRepeatedSync, 'the scene object is sent only once per shadow visit');
+    assert.equal(lassarObjectObjects.length, beforeRepeatedSync, 'the scene object is registered only once per shadow visit');
     const idolState = attrs.get('desert-treasure-ii:lassar');
     attrs.set('desert-treasure-ii:lassar', { ...idolState, inShadow: false });
     playerProcesses[0]({ player });
-    assert.equal(lassarObjectPackets.at(-1).key, 'sendObjectRemoval', 'the shadow-only object is removed when leaving the realm');
+    assert.equal(lassarObjectObjects.at(-1).action, 'deregister', 'the shadow-only object is removed when leaving the realm');
     attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), inShadow: true });
     assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.BASIC_SHADOW_TORCH,
       objectId: core.ObjectIdentifiers.DOORS_22, location: { x: 2424, y: 6439, z: 0 } }), true,

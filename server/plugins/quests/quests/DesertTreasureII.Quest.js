@@ -3386,21 +3386,24 @@ module.exports = function registerDesertTreasureII(api) {
     sender.sendVarbit(15064, Math.max(0, Math.min(100, Number(state.sanity ?? (state.entered ? 100 : 0)) || 0)));
   }
   function syncLassarShadowIdol(p, state) {
-    const sender = p.getPacketSender?.();
-    if (!sender?.sendObject || !sender?.sendObjectRemoval) return;
     const current = lassarShadowIdols.get(p);
     if (state.inShadow && state.idolPlaced) {
       if (current) return;
-      // The cache only contains the material-world idol placement; its shadow
-      // counterpart is a scene change. Send the cache Use variant to this
-      // player's scene so the normal object menu can restore sanity.
-      const idol = new api.core.GameObject(48216, new api.core.Location(2435, 6415, 0), 22, 0, null);
-      sender.sendObject(idol);
+      // The shadow counterpart is a per-player scene change; register it so the
+      // normal object packet resolves to this owner instead of a client-only loc.
+      const idol = new api.core.GameObject(48216, new api.core.Location(2435, 6415, 0), 22, 0, null).setOwner(p);
+      api.core.ObjectManager.register(idol, true);
       lassarShadowIdols.set(p, idol);
     } else if (current) {
-      sender.sendObjectRemoval(current);
+      api.core.ObjectManager.deregister(current, true);
       lassarShadowIdols.delete(p);
     }
+  }
+  function removeLassarShadowIdol({ player: p }) {
+    const current = p && lassarShadowIdols.get(p);
+    if (!current) return;
+    api.core.ObjectManager.deregister(current, true);
+    lassarShadowIdols.delete(p);
   }
   function handleLassarProcess({ player: p }) {
     if (p && stage(p) > 0) syncNativeProgress(p);
@@ -6799,6 +6802,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onGroundItemPickup(handleSucellusGroundItemPickup);
   api.onGroundItemPickup(handleVardorvisGroundItemPickup);
   api.onPlayerLogin(handleLogin);
+  api.onPlayerLogout(removeLassarShadowIdol);
   api.onPlayerProcess(handleLassarProcess);
   api.onPlayerLogout(handleLogout);
   api.onPlayerDisconnect(handleLogout);

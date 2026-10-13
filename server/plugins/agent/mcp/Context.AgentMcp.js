@@ -203,6 +203,9 @@ function createContext(core, server) {
     for (const object of privateObjects) {
       if (near(object.getLocation())) sceneObjects.set(keyOf(object), object);
     }
+    for (const object of MapObjects.ownerObjectsInScene?.(p, here.getX() - radius, here.getY() - radius, radius * 2 + 1) ?? []) {
+      if (near(object.getLocation())) sceneObjects.set(keyOf(object), object);
+    }
     for (const removed of World.getRemovedObjects()) {
       if (removed.getPrivateArea() === viewedArea && sceneObjects.get(keyOf(removed))?.getId() === removed.getId()) sceneObjects.delete(keyOf(removed));
     }
