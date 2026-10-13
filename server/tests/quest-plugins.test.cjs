@@ -3238,12 +3238,31 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     const memory = attrs.get('desert-treasure-ii:scar-memory-order');
     assert.equal(memory.length, 4);
     assert.equal(new Set(memory).size, 4);
+    const growthPackets = [];
+    const originalSender = player.getPacketSender;
+    player.getPacketSender = () => new Proxy(originalSender(), {
+      get(target, prop) { return prop === 'sendObject' ? object => growthPackets.push(object) : target[prop]; },
+    });
+    const beforePlayback = attrs.get('desert-treasure-ii:scar-memory-step');
+    const firstTile = [[1903, 6431], [1900, 6442], [1909, 6441], [1914, 6434]][memory[0]];
+    objectHooks[0]({ player, objectId: 49391, location: finalPassage.tile(firstTile[0] - 1856, firstTile[1] - 6400, 0) });
+    assert.equal(attrs.get('desert-treasure-ii:scar-memory-step'), beforePlayback, 'touches wait for the displayed sequence');
+    for (let i = 0; i < 16; i++) finalPassage.process(player);
+    assert.equal(finalPassage.scarMemoryPlayback, null);
+    assert.deepEqual(growthPackets.map(object => object.getId()), [49393, 49391, 49393, 49391, 49393, 49391, 49393, 49391],
+      'each growth visibly glows and returns to its touchable cache model');
+    const glowing = growthPackets.filter(object => object.getId() === 49393);
+    assert.deepEqual(glowing.map(object => [object.getLocation().getX(), object.getLocation().getY()]),
+      memory.map(index => { const [x, y] = [[1903, 6431], [1900, 6442], [1909, 6441], [1914, 6434]][index];
+        return [finalPassage.tile(x - 1856, y - 6400, 0).x, finalPassage.tile(x - 1856, y - 6400, 0).y]; }));
+    player.getPacketSender = originalSender;
     const wrongStep = memory[0] === 0 ? 1 : 0;
     const [wx, wy] = [[1903, 6431], [1900, 6442], [1909, 6441], [1914, 6434]][wrongStep];
     assert.equal(objectHooks[0]({ player, objectId: 49391, location: finalPassage.tile(wx - 1856, wy - 6400, 0) }), true);
     assert.equal(varbits.get(15212), 0, 'a wrong memory growth resets the sequence');
     assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.ABYSSAL_STEM, location: finalPassage.tile(51, 36, 0) }), true,
       'touching the stem shows the same stored sequence again');
+    for (let i = 0; i < 16; i++) finalPassage.process(player);
     for (const growth of memory) {
       const [x, y] = [[1903, 6431], [1900, 6442], [1909, 6441], [1914, 6434]][growth];
       assert.equal(objectHooks[0]({ player, objectId: 49391, location: finalPassage.tile(x - 1856, y - 6400, 0) }), true);

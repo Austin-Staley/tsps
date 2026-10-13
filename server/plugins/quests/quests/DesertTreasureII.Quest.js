@@ -1010,10 +1010,27 @@ module.exports = function registerDesertTreasureII(api) {
     }
     process(actor) {
       if (!actor?.isPlayer?.() || actor.getAsPlayer?.() !== this.questPlayer
-        || !this.questPlayer.getAttribute(SCAR_MEMORY_UNDERWATER)) return;
+        || !this.questPlayer.getAttribute(SCAR_MAZE_THREE_ACTIVE)) return;
       const cycle = api.core.World.getProcessCycle();
       if (cycle === this.lastProcessCycle) return;
       this.lastProcessCycle = cycle;
+      const playback = this.scarMemoryPlayback;
+      if (playback && cycle >= playback.next) {
+        if (playback.lit !== null) {
+          showScarMemoryGrowth(this.questPlayer, this, playback.lit, false);
+          playback.lit = null;
+          playback.next = cycle + 1;
+          if (playback.index === playback.order.length) this.scarMemoryPlayback = null;
+        } else {
+          const growth = playback.order[playback.index++];
+          showScarMemoryGrowth(this.questPlayer, this, growth, true);
+          playback.lit = growth;
+          // shortcut: two-tick flashes need timing calibration from an OSRS capture.
+          playback.next = cycle + 2;
+          this.questPlayer.sendMessage(`The ${["south-western", "north-western", "north-eastern", "south-eastern"][growth]} growth glows.`);
+        }
+      }
+      if (!this.questPlayer.getAttribute(SCAR_MEMORY_UNDERWATER)) return;
       const location = this.questPlayer.getLocation();
       const x = location.getX() - this.getBaseX() + 1856;
       const y = location.getY() - this.getBaseY() + 6400;
@@ -1026,6 +1043,7 @@ module.exports = function registerDesertTreasureII(api) {
       this.questPlayer.setAttribute(SCAR_MAZE_THREE_AIR, 100);
       this.questPlayer.getPacketSender().sendVarbit(15211, 100);
       this.questPlayer.setAttribute(SCAR_MEMORY_UNDERWATER, false);
+      stopScarMemoryPlayback(this.questPlayer, this);
       this.questPlayer.moveTo(this.tile(40, 36, 0));
       this.questPlayer.getCombat().getHitQueue().addPendingDamage([
         new api.core.HitDamage(5 + Math.floor(Math.random() * 6), api.core.HitMask.RED),
@@ -2267,6 +2285,7 @@ module.exports = function registerDesertTreasureII(api) {
     const id = definition?.id ?? objectId;
     const area = p.getAttribute(ATTR_SCAR_MAZE_THREE);
     if (id === O.FLESHY_STRAND && tile.x === 1879 && tile.y === 6436) {
+      stopScarMemoryPlayback(p, area);
       area.leave(p, false);
       const scar = enterScar(p);
       p.moveTo(scar.tile(51, 43, 0));
@@ -2281,6 +2300,7 @@ module.exports = function registerDesertTreasureII(api) {
       const west = tile.x === 1897;
       const inside = west ? source.x >= 1899 : source.y >= 6429;
       if (inside) {
+        stopScarMemoryPlayback(p, area);
         p.setAttribute(SCAR_MEMORY_UNDERWATER, false);
         p.moveTo(west ? area.tile(40, 36, 0) : area.tile(57, 26, 0));
         return true;
@@ -2309,6 +2329,8 @@ module.exports = function registerDesertTreasureII(api) {
         p.setAttribute(SCAR_MEMORY_ORDER, order);
       }
       p.setAttribute(SCAR_MEMORY_STEP, 0);
+      stopScarMemoryPlayback(p, area);
+      area.scarMemoryPlayback = { order: [...order], index: 0, lit: null, next: api.core.World.getProcessCycle() + 1 };
       p.getPacketSender().sendVarbit(15212, 0);
       p.getPacketSender().sendVarbit(15217, 0);
       order.forEach((value, index) => p.getPacketSender().sendVarbit(15213 + index, value));
@@ -2316,6 +2338,10 @@ module.exports = function registerDesertTreasureII(api) {
       return true;
     }
     if (id === 49391 && SCAR_MEMORY_GROWTHS.some(([x, y]) => x === tile.x && y === tile.y)) {
+      if (area.scarMemoryPlayback) {
+        p.sendMessage("Watch the glowing growths before repeating their sequence.");
+        return true;
+      }
       const index = SCAR_MEMORY_GROWTHS.findIndex(([x, y]) => x === tile.x && y === tile.y);
       const order = p.getAttribute(SCAR_MEMORY_ORDER) ?? [];
       const step = Number(p.getAttribute(SCAR_MEMORY_STEP)) || 0;
@@ -2426,6 +2452,20 @@ module.exports = function registerDesertTreasureII(api) {
       return true;
     }
     return false;
+  }
+
+  function showScarMemoryGrowth(p, area, index, glowing) {
+    const [x, y] = SCAR_MEMORY_GROWTHS[index];
+    p.getPacketSender().sendObject(new api.core.GameObject(
+      glowing ? O.ABYSSAL_GROWTH_3 : O.ABYSSAL_GROWTH,
+      area.tile(x - 1856, y - 6400, 0), 10, 2, area));
+  }
+
+  function stopScarMemoryPlayback(p, area) {
+    if (area.scarMemoryPlayback?.lit !== null && area.scarMemoryPlayback?.lit !== undefined) {
+      showScarMemoryGrowth(p, area, area.scarMemoryPlayback.lit, false);
+    }
+    area.scarMemoryPlayback = null;
   }
 
   function takeScarLightLure({ player: p, npc }) {
