@@ -14,5 +14,7 @@ module.exports = {
     require("./giantsfoundry/State.GiantsFoundry")(api);
     require("./giantsfoundry/Area.GiantsFoundry")(api);
     require("./giantsfoundry/Preform.GiantsFoundry")(api);
+    require("./giantsfoundry/Kovac.GiantsFoundry")(api);
+    require("./giantsfoundry/Mould.GiantsFoundry")(api);
   },
 };

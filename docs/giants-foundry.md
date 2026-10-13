@@ -12,9 +12,12 @@ All four recordings with foundry play were made on Leagues V worlds (rev 227): 9
 | `State.GiantsFoundry.js` | Persistence and the login sync of every foundry varbit. |
 | `Area.GiantsFoundry.js` | The cave as an Area: the room's machinery, per-tick work, storing the preform on leaving. |
 | `Preform.GiantsFoundry.js` | Wearing the preform, the HUD, the preform storage. |
+| `Kovac.GiantsFoundry.js` | Commissions; Talk-to's commission conditions and `[sword style]` blanks. |
+| `Mould.GiantsFoundry.js` | The mould jig and its setup interface (718); the mould score. |
 
 **Changes outside the plugin:**
 - **Kovac** is `kovac_multi` (11560) in `npc-spawns.json`, at the captured tile (3369, 11486) facing north-west. The cache resolves it from varbit 13902: 11470 (Talk-to only) until the quest reads 30, then 11472 with Hand-in, Commission and Shop.
+- **`npc-dialogues.json`**: "Transcript:Kovac"'s plain "I'm not sure what something does." option is now conditioned on having no commission (id `Gf7nCm`). The live menu with a commission shows only the ", can you help me?" form (recording 565).
 - **Sleeping Giants** now completes at stage 30, the live value. Saves completed at the old 13 move to 30 at login. The quest no longer spawns its own foundry Kovac (11468).
 
 ## Cache
@@ -96,6 +99,23 @@ The client draws everything from varbits; the server keeps them right.
   - resets the combat tab header and closes the HUD.
 - Take-preform does the reverse, with "You take the preform from the handy storage area. It will start to get cold now."
 
+**Commissions** (all four recordings)
+- Commission (op4) sets 13907/13908 on the click's tick, then Kovac says "Make <col=ef1020>Light Spiked</col> sword.".
+- The first word is Broad, Narrow, Heavy or Light; the second is Heavy, Light, Flat or Spiked; they never share an axis. That gives twelve pairs, eleven of them seen.
+- With a commission, Commission answers "Kovac give commission already. Go make me … sword." (Wiki transcript).
+
+**Mould setup** (all four recordings)
+- The jig's Setup:
+  - opens 718 in the main modal after `toplevel_mainmodal_open [-1, -3]`;
+  - sets OP1 events on side_menu (0-63) and content (0-544).
+- A side_menu click is tab `sub / 9`; a content click is part `sub / 17 + 1`. Each is answered with its varbit on the same tick.
+- The list is in enum order (script 6096 does not sort it).
+- Picks are checked as script 6100 does: the mould is bought (script 6099's varbit, for the five highest struct ids of each kind) and the player's Smithing level is at least param 1622.
+- Set: mould_state 0→1, and 718 closes. Without a commission, a message box says "You need a commission before you can set up the mould." (recording 96).
+- Score (script 6105):
+  - Each part scores, for each commission word, the size of its stat on that word's end of the axis.
+  - Example (recording 565): Spiker! + Choppa! + Serrated Tip for Light Spiked score 22 + 22 + 16 + 4 = 64. With the alloy's 20, that gives the captured start quality 84.
+
 **Picking up the preform** (recording 565)
 - The jig goes 1→2 on pouring and 2→3 two ticks later.
 - On pickup:
@@ -107,6 +127,8 @@ The client draws everything from varbits; the server keeps them right.
   - HUD 754 opens in the overlay slot.
 
 ## Not captured
+
+- "Check" on a set-up jig: it reopens the setup.
 
 - The refusal when the preform is unequipped anywhere but the storage: it is refused silently.
 - Store-preform with no preform worn, and Take-preform with nothing stored: placeholder messages.
