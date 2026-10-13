@@ -3492,6 +3492,15 @@ module.exports = function registerDesertTreasureII(api) {
     if (state.inShadow && state.pubOpened && !state.pubRemnant) {
       desired.set("pub-remnant", [48245, 2380, 6430, 1, 10]);
     }
+    // These two cache chests exist in the Lassar map without an Open action.
+    // Overlay the matching actionful cache variant only when its real key gate
+    // is satisfied, so the ordinary client can operate each chest.
+    if (state.inShadow && state.choirSouth && state.choirWest && state.redBlockerPlaced && state.redKey) {
+      desired.set("red-key-chest", [48232, 2392, 6405, 0, 11]);
+    }
+    if (state.inShadow && state.green) {
+      desired.set("green-key-chest", [48232, 2354, 6339, 0, 11]);
+    }
     const allPalaceDevicesPlaced = state.whiteBlockerPlaced && state.whiteAnimaPlaced && state.whiteIdolPlaced;
     const braziers = [[2318, 6446], [2312, 6444], [2321, 6449], [2323, 6455]];
     if (state.inShadow && allPalaceDevicesPlaced && state.braziersComplete) {
@@ -3532,6 +3541,12 @@ module.exports = function registerDesertTreasureII(api) {
     const barriers = [
       { key: "anima", id: 48205, x: 2324, y: 6402, active: state.superiorTorch && !state.animaSchematicFound },
       { key: "plaza", id: 48208, x: 2351, y: 6386, active: state.animaPortal && !state.plazaTentacle },
+      { key: "choir-south", id: 48208, x: 2392, y: 6411,
+        active: state.pubRemnant && state.superiorTorch && !state.tentacles?.["2392,6411"] },
+      { key: "choir-west", id: 48205, x: 2383, y: 6408,
+        active: state.pubRemnant && state.superiorTorch && !state.tentacles?.["2383,6408"] },
+      { key: "science-south", id: 48205, x: 2349, y: 6343,
+        active: state.greenKey && state.superiorTorch && !state.tentacles?.["2349,6343"] },
       { key: "cathedral", id: 48211, x: 2400, y: 6393, active: state.perfectTorch && !state.cathedralTentacles },
     ];
     const current = lassarShadowBarriers.get(p) ?? new Map();
@@ -6443,7 +6458,9 @@ module.exports = function registerDesertTreasureII(api) {
         tentacles[key] = true;
         const next = { ...state, tentacles, [barrier]: true };
         if (barrier === "choirWest" && next.choirSouth && !next.redKeyFound) {
-          registerLassarGroundItem(p, I.SHADOW_KEY_4, 2638, 6405);
+          // shortcut: QH marks (2638, 6405), but live house collision blocks it;
+          // drop on the adjacent clear floor so the ordinary Take route works.
+          registerLassarGroundItem(p, I.SHADOW_KEY_4, 2639, 6404);
           next.redKeyFound = true;
         }
         setLassar(p, next);
@@ -6828,6 +6845,13 @@ module.exports = function registerDesertTreasureII(api) {
     if (state.tentacles?.["2424,6439"] && !state.pubOpened && !has(p, I.SHADOW_KEY_2)) {
       registerLassarGroundItem(p, I.SHADOW_KEY_2, 2416, 6443);
     }
+    // The Silent Choir key is awarded when both western house tentacles burn.
+    // Keep that earned drop recoverable if it despawns before the player takes it.
+    if (state.redKeyFound && !state.redKey && !has(p, I.SHADOW_KEY_4)) {
+      // shortcut: QH marks (2638, 6405), but that tile is blocked by the live
+      // material-realm house collision. The nearest clear floor is one tile east.
+      registerLassarGroundItem(p, I.SHADOW_KEY_4, 2639, 6404);
+    }
     // shortcut: place the schematic beside its Wiki marker because the marked tile is occupied by a cache crate.
     if (state.tentacles?.["2417,6413"] && !state.idolSchematic && !has(p, I.REVITALISING_IDOL_SCHEMATIC)) {
       registerLassarGroundItem(p, I.REVITALISING_IDOL_SCHEMATIC, 2676, 6422);
@@ -6866,7 +6890,7 @@ module.exports = function registerDesertTreasureII(api) {
     const accessible = basicTorchSchematic ? x === 2353 && y === 6367 && state.doorUnlocked && state.inShadow
       : idolSchematic ? x === 2676 && y === 6422 && state.tentacles?.["2417,6413"]
         : blueKey ? x === 2416 && y === 6443 && state.tentacles?.["2424,6439"] && state.inShadow
-          : redKey ? x === 2638 && y === 6405 && state.redKeyFound
+          : redKey ? x === 2639 && y === 6404 && state.redKeyFound
       : blockerSchematic ? x === 2591 && y === 6380 && firstThree
             : greenShadowKey ? x === 2581 && y === 6388 && state.blockerSchematic
               : purpleShadowKey ? x === 2592 && y === 6352 && state.greenKey
@@ -7002,7 +7026,6 @@ module.exports = function registerDesertTreasureII(api) {
   api.onPlayerDeath(handleLassarPlayerDeath);
   api.onPlayerLogout(removeLassarSceneObjects);
   api.onPlayerDisconnect(removeLassarSceneObjects);
-  api.onPlayerLogout(removeLassarAnimaTentacles);
   api.onPlayerProcess(handleLassarProcess);
   api.onPlayerLogout(handleLogout);
   api.onPlayerDisconnect(handleLogout);

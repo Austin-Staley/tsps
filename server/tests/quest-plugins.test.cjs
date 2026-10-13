@@ -6124,7 +6124,8 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     });
     counts.set(core.ItemIdentifiers.SUPERIOR_SHADOW_TORCH, 1);
     playerProcesses[0]({ player });
-    const animaTentacle = lassarObjectObjects.findLast(({ action, object }) => action === 'register' && object.id === 48205);
+    const animaTentacle = lassarObjectObjects.findLast(({ action, object }) => action === 'register' && object.id === 48205
+      && object.location.x === 2324 && object.location.y === 6402);
     assert.ok(animaTentacle, 'the unmapped Science District barrier is installed as a player-owned scene object');
     assert.equal(animaTentacle.object.owner, player);
     assert.deepEqual([animaTentacle.object.location.x, animaTentacle.object.location.y, animaTentacle.object.location.z], [2324, 6402, 0]);
@@ -6339,13 +6340,43 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
       assert.equal(interact({ player, objectId: id, definition: { id }, location: { x, y, z: 0 }, option: 'Burn' }), true);
     }
     assert.equal(attrs.get('desert-treasure-ii:lassar').redKeyFound, true, 'both residential barriers expose the red key');
-    groundPickupHooks[0]({ player, groundItemId: core.ItemIdentifiers.SHADOW_KEY_4, location: { x: 2638, y: 6405, z: 0 } });
+    const beforeRedKeyRecovery = groundSpawns.length;
+    counts.set(core.ItemIdentifiers.SHADOW_KEY_4, 0);
+    playerProcesses[0]({ player });
+    const recoveredRedKey = groundSpawns.slice(beforeRedKeyRecovery).find(([, item]) => item.getId() === core.ItemIdentifiers.SHADOW_KEY_4);
+    assert.ok(recoveredRedKey, 'the earned red key is restored if its unclaimed ground drop expires');
+    assert.deepEqual([recoveredRedKey[2].x, recoveredRedKey[2].y, recoveredRedKey[2].z], [2639, 6404, 0],
+      'red-key recovery uses the adjacent clear tile beside the blocked Wiki marker');
+    assert.equal(routeFinder.findRoute({ level: 0, srcX: 2639, srcY: 6405, srcSize: 1,
+      destX: 2639, destY: 6404, privateArea: null, locShape: -1, moveNear: false }).success, true,
+    'the red key drop is reachable from the house approach');
+    assert.equal(routeFinder.reachedAbsolute({ level: 0, srcX: 2639, srcY: 6405, srcSize: 1,
+      destX: 2639, destY: 6404, destWidth: 1, destLength: 1, locShape: -2, privateArea: null }), true,
+    'the same approach can take the key through normal ground-item reach');
+    groundPickupHooks[0]({ player, groundItemId: core.ItemIdentifiers.SHADOW_KEY_4, location: { x: 2639, y: 6404, z: 0 } });
     counts.set(core.ItemIdentifiers.SHADOW_KEY_4, 1);
     counts.set(core.ItemIdentifiers.SHADOW_BLOCKER, 1);
     assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.SHADOW_BLOCKER, objectId: 48228, location: { x: 2649, y: 6406, z: 0 } }), true);
+    attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), inShadow: true,
+      choirSouth: true, choirWest: true, redKey: true, redBlockerPlaced: true });
+    playerProcesses[0]({ player });
+    assert.ok(lassarObjectObjects.some(({ action, object }) => action === 'register' && object.id === 48232
+      && object.location.x === 2392 && object.location.y === 6405 && object.owner === player),
+    'the gated red chest receives a visible owner-only Open variant in the Shadow Realm');
     assert.equal(interact({ player, objectId: 48232, definition: { id: 48232 }, location: { x: 2392, y: 6405, z: 0 }, option: 'Open' }), true);
     assert.equal(counts.get(core.ItemIdentifiers.ICON_SEGMENT), 1, 'the red-key chest gives the first icon half');
+    attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), greenKey: true,
+      superiorTorch: true, tentacles: { ...(attrs.get('desert-treasure-ii:lassar').tentacles ?? {}) } });
+    counts.set(core.ItemIdentifiers.SHADOW_KEY_5, 1);
+    playerProcesses[0]({ player });
+    assert.ok(lassarObjectObjects.some(({ action, object }) => action === 'register' && object.id === 48205
+      && object.location.x === 2349 && object.location.y === 6343 && object.owner === player),
+    'the earned green key exposes the real Science District tentacle action');
     assert.equal(interact({ player, objectId: 48205, definition: { id: 48205 }, location: { x: 2349, y: 6343, z: 0 }, option: 'Burn' }), true);
+    playerProcesses[0]({ player });
+    assert.ok(lassarObjectObjects.some(({ action, object }) => action === 'register' && object.id === 48232
+      && object.location.x === 2354 && object.location.y === 6339 && object.owner === player),
+    'clearing the green-key tentacle exposes the actionful Science District chest');
     assert.equal(interact({ player, objectId: 48232, definition: { id: 48232 }, location: { x: 2354, y: 6339, z: 0 }, option: 'Open' }), true);
     assert.equal(counts.get(core.ItemIdentifiers.ICON_SEGMENT_2), 1, 'the Science District chest gives the second icon half');
     assert.equal(itemOnItemHooks[0]({ player, usedItemId: core.ItemIdentifiers.ICON_SEGMENT, usedWithItemId: core.ItemIdentifiers.ICON_SEGMENT_2 }), true);
