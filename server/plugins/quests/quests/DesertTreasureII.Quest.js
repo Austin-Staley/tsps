@@ -1716,7 +1716,7 @@ module.exports = function registerDesertTreasureII(api) {
     if (current instanceof ScarArea && !current.isDestroyed()) {
       current.enter(p);
       p.moveTo(current.tile(21, 33, 0));
-      setScarVarbit(p, 6);
+      if (!p.getAttribute(SCAR_DEMONS_DEFEATED)) setScarVarbit(p, 6);
       if (p.getAttribute(SCAR_PERSTEN_TALKED)) revealScarMazeEntry(p, current);
       if (p.getAttribute(SCAR_PERSTEN_ROOM1_TALKED)) revealScarMazeTwoEntry(p, current);
       if (p.getAttribute(SCAR_BOAT_TRIED)) spawnScarPersten(p, current);
@@ -1726,7 +1726,7 @@ module.exports = function registerDesertTreasureII(api) {
     const area = new ScarArea(p.getUsername?.());
     area.enter(p);
     p.setAttribute(ATTR_SCAR_AREA, area);
-    setScarVarbit(p, 6);
+    if (!p.getAttribute(SCAR_DEMONS_DEFEATED)) setScarVarbit(p, 6);
     p.moveTo(area.tile(21, 33, 0));
     if (p.getAttribute(SCAR_PERSTEN_TALKED)) revealScarMazeEntry(p, area);
     if (p.getAttribute(SCAR_PERSTEN_ROOM1_TALKED)) revealScarMazeTwoEntry(p, area);

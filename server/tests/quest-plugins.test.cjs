@@ -2714,6 +2714,12 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     for (const npc of [...queues.add]) deathHooks[0]({ killer: player, npc });
     assert.equal(attrs.get('desert-treasure-ii:scar-demons-defeated'), true);
     assert.equal(varbits.get(15128), 8);
+    logoutHooks[0]({ player });
+    lineHooks[0](returnFarewell);
+    returnFarewell.after();
+    area = attrs.get('desert-treasure-ii:scar-area');
+    assert.equal(varbits.get(15128), 8, 're-entry retains the defeated-demon checkpoint');
+    assert.equal(queues.add.length, 0, 'defeated opening demons stay defeated on return');
     const firstStone = area.tile(31, 30, 0);
     player.location = area.tile(29, 30, 0);
     const firstRoute = { player, objectId: 49209, clickType: 1, object: { getLocation: () => firstStone } };
