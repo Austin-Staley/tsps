@@ -22,6 +22,11 @@ module.exports = function registerTheBloodMoonRises(api) {
   const HIDEOUT_SHRINE_INSPECTED = "quest.the_blood_moon_rises.hideout-shrine-inspected";
   const HIDEOUT_DEFENSE_COMPLETE = "quest.the_blood_moon_rises.hideout-defense-complete";
   const SLEPE_STORY_ATTRIBUTE = "quest.the_blood_moon_rises.slepe-story";
+  const CASTLE_SHRINE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-shrine-prayed";
+  const CASTLE_SHRINE_VARBIT = 15470;
+  // The exact landing is not published by the Wiki; this is the walkable tile
+  // beside the cache-backed portal at (2323, 7370).
+  const CASTLE_TELEPORT_TILE = Object.freeze({ x: 2322, y: 7370, z: 0 });
   const REFINERY_COMPLETED_EVENT = "bmr:refinery-completed";
   const SLEPE_PLINTH_VARBITS = [15496, 15492, 15491, 15493, 15495, 15494];
   const SLEPE_BOOKS = [
@@ -1418,20 +1423,56 @@ module.exports = function registerTheBloodMoonRises(api) {
     advance(event.player, STAGE.STARTED);
   }
 
-  function enterVampyriumCastle(event) {
+  function prayAtCastleShrine(event) {
     const player = event?.player;
-    const { x, y, z } = event?.location ?? {};
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
     const name = String(event?.definition?.getName?.() ?? "").toLowerCase();
-    if (!player || quest.isComplete(player) || stage(player) !== STAGE.SLEPE ||
-      x !== 3161 || y !== 7710 || z !== 0 || !name.includes("portal")) return;
-    if (!slepeStory(player).refineryComplete) {
-      player.sendMessage("The tunnel to Castle Drakan is still blocked. Follow Veliaf through Ivandis' tomb first.");
-      event.handled = true;
-      return;
+    const objectId = event?.definition?.id ?? event?.objectId;
+    const atShrine = [[3168, 7707], [3168, 7713]].some(([sx, sy]) => x === sx && y === sy && z === 0);
+    if (!player || stage(player) !== STAGE.SLEPE || !slepeStory(player).refineryComplete ||
+      !atShrine || (objectId !== 61225 && objectId !== 61226 && name !== "shrine") ||
+      String(event?.option ?? "") !== "Pray-to") return false;
+    event.handled = true;
+    if (!player.getAttribute(CASTLE_SHRINE_ATTRIBUTE)) {
+      player.setAttribute(CASTLE_SHRINE_ATTRIBUTE, true);
+      player.getPacketSender().sendVarbit(CASTLE_SHRINE_VARBIT, 1);
+      player.sendMessage("You pray at the vampyric shrine. Drakan's medallion can now return you to Castle Drakan.");
     }
-    // The story's portal interaction has no transcript action. This is the
-    // actual transition into the Vampyrium castle chapter.
+    return true;
+  }
+
+  function syncCastleShrine({ player }) {
+    if (!player || stage(player) < STAGE.SLEPE) return;
+    player.getPacketSender().sendVarbit(CASTLE_SHRINE_VARBIT,
+      player.getAttribute(CASTLE_SHRINE_ATTRIBUTE) ? 1 : 0);
+  }
+
+  function addCastleMedallionDestination(event) {
+    const player = event?.player;
+    if (!player || !Array.isArray(event.destinations) || stage(player) !== STAGE.SLEPE ||
+      !slepeStory(player).refineryComplete || !player.getAttribute(CASTLE_SHRINE_ATTRIBUTE)) return;
+    event.destinations.push({
+      label: "Castle Drakan.",
+      tile: CASTLE_TELEPORT_TILE,
+    });
+  }
+
+  function enterVampyriumPortal(event) {
+    const player = event?.player;
+    const id = event?.definition?.id ?? event?.objectId;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.SLEPE ||
+      !slepeStory(player).refineryComplete || !player.getAttribute(CASTLE_SHRINE_ATTRIBUTE) ||
+      id !== 61221 || x !== 2323 || y !== 7370 || z !== 0 || event.option !== "Enter") return false;
+    event.handled = true;
     advance(player, STAGE.CASTLE);
+    return true;
   }
 
   // Transcript cutscenes mark the major route changes. The separate object,
@@ -2577,6 +2618,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   });
   api.persistAttribute(HIDEOUT_SHRINE_INSPECTED);
   api.persistAttribute(SLEPE_STORY_ATTRIBUTE);
+  api.persistAttribute(CASTLE_SHRINE_ATTRIBUTE);
   const hall = require("../bmr/Hall.TheBloodMoonRises")({ api, state: hallDefenceState,
     process: processSiegeDefence, cleanup: handleSiegeLogout, scenery: player => {
       const repaired = hallDefenceState(player).repaired ?? [];
@@ -2599,6 +2641,9 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("quest:stage-changed", syncSlepeIvan);
   api.onCustomEvent("quest:stage-changed", syncSlepeRoy);
   api.onCustomEvent("quest:stage-changed", cleanupSlepeStory);
+  api.onObjectInteraction(prayAtCastleShrine);
+  api.onObjectInteraction(enterVampyriumPortal);
+  api.onCustomEvent("drakan-medallion:destinations", addCastleMedallionDestination);
   api.onCustomEvent("world:object-examine", inspectHideoutShrine);
   api.onNpcDialogueCondition(handleSlepeJournalCondition);
   api.onNpcDialogueCondition(answerHideoutCondition);
@@ -2615,7 +2660,6 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onNpcInteraction("Roy", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Veliaf Hurtz", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Drezel", { "Talk-to": talkQuestNpc });
-  api.onObjectInteraction(enterVampyriumCastle);
   api.onObjectInteraction(handlePaterdomusObject);
   api.onItemOnObject(handlePaterdomusItemOnObject, { noted: false });
   api.onObjectInteraction(openHideoutChest);
@@ -2658,6 +2702,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogin(syncPaterdomusBookPuzzle);
   api.onCustomEvent("player:bootstrap-complete", syncPaterdomusBookPuzzle);
   api.onPlayerLogin(resumeHideoutEscape);
+  api.onPlayerLogin(syncCastleShrine);
   api.onPlayerLogout(handleSiegeLogout);
   api.onPlayerLogout(hideoutDefense.onPlayerLogout);
   api.onPlayerLogout(cleanupSlepeIvan);

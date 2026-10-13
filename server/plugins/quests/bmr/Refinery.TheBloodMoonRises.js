@@ -22,6 +22,9 @@ module.exports = function registerRefinery(api) {
   });
   const TOMBSTILE = Object.freeze({ x: 3505, y: 9857, z: 0 });
   const TUNNEL_TILE = Object.freeze({ x: 3117, y: 7472, z: 2 });
+  // shortcut: Wiki says to leave north and climb the stairs but gives no landing tile;
+  // this cache-walkable tile is in the same component as those canonical stairs.
+  const CASTLE_LANDING = Object.freeze({ x: 3166, y: 7577, z: 0 });
   // This exact cache room sits over a water overlay in the base map. OSRS
   // copies these chunks into a scene instance; doing so preserves its scenery
   // without applying the base-map water collision.
@@ -332,8 +335,7 @@ module.exports = function registerRefinery(api) {
       event.handled = true;
       setProgress(player, { phase: "escaped" });
       player.getCombat().reset();
-      // This is the reverse of the cache's Enter route at (3170, 7572, 0).
-      player.moveTo(new Location(3170, 7572, 0));
+      player.moveTo(new Location(CASTLE_LANDING.x, CASTLE_LANDING.y, CASTLE_LANDING.z));
       return true;
     }
     return false;
@@ -426,6 +428,12 @@ module.exports = function registerRefinery(api) {
       // Migrate saves made by the old non-templated room, whose water-overlay
       // coordinates are visible but unreachable in the public map.
       player.moveTo(new Location(TUNNEL_TILE.x, TUNNEL_TILE.y, TUNNEL_TILE.z));
+      return;
+    }
+    if (progress(player).phase === "escaped" && x === 3170 && y === 7572 && z === 0) {
+      // Recover the disposable actor saved on the blocked entry tile by the
+      // earlier landing; keep its earned escape state intact.
+      player.moveTo(new Location(CASTLE_LANDING.x, CASTLE_LANDING.y, CASTLE_LANDING.z));
       return;
     }
     if (["fight", "cleared", "freed"].includes(progress(player).phase) && position.getX() >= 8192) enterRoom(player);

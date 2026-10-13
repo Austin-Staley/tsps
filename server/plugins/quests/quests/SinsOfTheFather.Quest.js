@@ -2538,15 +2538,22 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     const { player, itemId } = event;
     if (itemId !== DRAKANS_MEDALLION_ITEM_ID) return false;
     if (!quest.isComplete(player)) return false;
+    const destinations = [
+      { label: "Ver Sinhaza.", tile: VER_SINHAZA },
+      { label: "Slepe.", tile: SLEPE_DOCK },
+      { label: "Darkmeyer.", tile: DARKMEYER },
+    ];
+    // Later Myreque chapters can add a destination unlocked by their own
+    // world interaction without replacing this shared medallion menu.
+    api.emitCustomEvent("drakan-medallion:destinations", { player, destinations });
+    const options = destinations.flatMap(({ label, tile, onTeleport }) => [label, () => {
+      teleport(player, tile);
+      onTeleport?.();
+    }]);
     api.sendMultiChatboxPrompt(
       player,
       "Where would you like to teleport?",
-      "Ver Sinhaza.",
-      () => teleport(player, VER_SINHAZA),
-      "Slepe.",
-      () => teleport(player, SLEPE_DOCK),
-      "Darkmeyer.",
-      () => teleport(player, DARKMEYER)
+      ...options
     );
     return true;
   }

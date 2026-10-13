@@ -230,6 +230,22 @@ test('Blood Moon refinery returns obsolete source-room saves to the real tunnel 
   assert.deepEqual(refinery.progress(player), { started: true, phase: 'fight', killed: [] });
 });
 
+test('Blood Moon refinery recovers a saved escaped player from the blocked old landing', () => {
+  const { api } = mockApi();
+  const attrs = new Map([['the-blood-moon-rises:refinery-progress', { started: true, phase: 'escaped', killed: [0, 1, 2, 3, 4] }]]);
+  const moves = [];
+  const player = {
+    getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getPacketSender: () => ({ sendVarbit() {} }),
+    getLocation: () => new api.core.Location(3170, 7572, 0),
+    moveTo: location => moves.push(location),
+  };
+  const refinery = require('../plugins/quests/bmr/Refinery.TheBloodMoonRises')(api);
+  refinery.syncLogin({ player });
+  assert.deepEqual([moves[0].getX(), moves[0].getY(), moves[0].getZ()], [3166, 7577, 0]);
+  assert.deepEqual(refinery.progress(player), { started: true, phase: 'escaped', killed: [0, 1, 2, 3, 4] });
+});
+
 test('Blood Moon refinery exit opens only after liberation and uses the canonical Castle Drakan landing', () => {
   const { api } = mockApi();
   const attrs = new Map([['the-blood-moon-rises:refinery-progress', { started: true, phase: 'freed', killed: [0, 1, 2, 3, 4] }]]);
@@ -244,7 +260,7 @@ test('Blood Moon refinery exit opens only after liberation and uses the canonica
     location: { x: 3182, y: 7470, z: 0 }, option: 'Enter', handled: false };
   assert.equal(refinery.tombPassage(event), true);
   assert.deepEqual(varbits.at(-1), [15464, 62]);
-  assert.deepEqual([moves[0].getX(), moves[0].getY(), moves[0].getZ()], [3170, 7572, 0]);
+  assert.deepEqual([moves[0].getX(), moves[0].getY(), moves[0].getZ()], [3166, 7577, 0]);
   assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'escaped');
 });
 
@@ -287,7 +303,8 @@ test('Blood Moon rubble dialogue distinguishes a real pickaxe and the refinery w
   assert.deepEqual(vars.at(-1), [15464, 52]);
 
   attrs.set('the-blood-moon-rises:refinery-progress', { started: true, phase: 'fight', killed: [] });
-  const area = { player, cast: new Map(), residents: [], orbs: [] };
+  const area = { player, cast: new Map(), residents: [], orbs: [],
+    tile: (x, y, z) => new api.core.Location(x, y, z) };
   refinery.sessions.set(player, area);
   for (let slot = 0; slot < 4; slot++) {
     const npc = { getOwner: () => player };
@@ -803,24 +820,37 @@ test('Blood Moon Sarius spawn is reachable from the Sins boat shore landing', ()
   assert.equal(reachable, true, 'the real graveyard boat landing has a collision-valid path to Sarius');
 });
 
-test('Blood Moon portal entry starts the Castle Drakan chapter where the physical puzzle handlers become active', () => {
+test('Blood Moon shrine adds the Castle Drakan medallion destination and the real portal starts its chapter', () => {
   const { api, handlers } = mockApi();
+  api.sendMultiChatboxPrompt = (_player, _title, ...options) => { api.lastPrompt = options; };
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  require('../plugins/quests/quests/SinsOfTheFather.Quest')(api);
   const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
-  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const quests = getRegisteredQuests();
+  const quest = quests.filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const sins = quests.filter((entry) => entry.key === 'sins_of_the_father').at(-1);
   const attributes = new Map();
+  let position;
   const player = {
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    moveTo: location => { position = location; },
     sendMessage() {},
   };
   quest.setStage(player, 30);
-  const enter = handlers.objects.find((handler) => handler.name === 'enterVampyriumCastle');
-  enter({ player, definition: { getName: () => 'Ominous red portal' }, location: { x: 3161, y: 7710, z: 0 }, handled: false });
-  assert.equal(quest.getStage(player), 30, 'the portal remains blocked until the tomb and refinery route is clear');
   attributes.set('quest.the_blood_moon_rises.slepe-story', { refineryComplete: true });
-  enter({ player, definition: { getName: () => 'Ominous red portal' }, location: { x: 3161, y: 7710, z: 0 }, handled: false });
+  attributes.set('quest.the_blood_moon_rises.castle-shrine-prayed', true);
+  sins.setStage(player, 999);
+  const medallion = handlers.namedItemActions.get("Drakan's medallion").Teleport;
+  assert.equal(medallion({ player, itemId: 22400 }), true);
+  const option = api.lastPrompt.findIndex((entry, index) => index % 2 === 0 && entry === 'Castle Drakan.');
+  assert.notEqual(option, -1, 'the prayed-at shrine adds Castle Drakan to the actual medallion menu');
+  api.lastPrompt[option + 1]();
+  assert.deepEqual([position.getX(), position.getY(), position.getZ()], [2322, 7370, 0]);
+  assert.equal(quest.getStage(player), 30, 'the medallion lands at the portal without skipping its Enter action');
+  const enter = handlers.objects.find(handler => handler.name === 'enterVampyriumPortal');
+  assert.equal(enter({ player, objectId: 61221, definition: { id: 61221 }, location: { x: 2323, y: 7370, z: 0 }, option: 'Enter', handled: false }), true);
   assert.equal(quest.getStage(player), 40);
 });
 
@@ -6705,6 +6735,22 @@ test('Blood Moon native bitfield mapping restores Slepe refinery phase without c
  attrs.set('quest.the_blood_moon_rises.siege-defence',{phase:'hall'});quest.setStage(player,70);assert.equal(bits.get(15464),120);
  bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),120);assert.equal(quest.getStage(player),70);
  quest.setStage(player,110);assert.equal(bits.get(15464),176);assert.equal(quest.isComplete(player),true);
+});
+
+test('Blood Moon prayer at either real Castle Drakan shrine unlocks its cache transform and saves through relog',()=>{
+ const {api,handlers}=mockApi();delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+ const attrs=new Map([
+  ['quest.the_blood_moon_rises.stage',30],
+  ['quest.the_blood_moon_rises.slepe-story',{refineryComplete:true}],
+  ['the-blood-moon-rises:refinery-progress',{started:true,phase:'escaped',killed:[0,1,2,3,4]}],
+ ]),bits=new Map();const player={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getPacketSender:()=>({sendVarbit:(id,v)=>bits.set(id,v)}),sendMessage(){}};
+ const pray=handlers.objects.find(handler=>{const event={player,objectId:61225,definition:{id:61226,getName:()=>'Shrine'},location:{x:3168,y:7707,z:0},option:'Pray-to',handled:false};return handler(event)===true;});
+ assert.ok(pray,'the active stage claims the cache Shrine/Pray-to action');
+ assert.equal(attrs.get('quest.the_blood_moon_rises.castle-shrine-prayed'),true);assert.equal(bits.get(15470),1);
+ bits.clear();handlers.playerLogin.at(-1)({player});assert.equal(bits.get(15470),1,'the prayer unlock is restored after relog');
+ const blocked={player,objectId:61225,definition:{id:61226,getName:()=>'Shrine'},location:{x:3168,y:7707,z:0},option:'Pray-to',handled:false};
+ attrs.set('quest.the_blood_moon_rises.stage',20);assert.equal(handlers.objects.some(handler=>handler(blocked)===true),false,'the unrelated hideout chapter cannot claim a shrine click');
+ delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
 });
 
 test('Blood Moon shrine examine starts the hideout conversation only at the real shrine',()=>{
