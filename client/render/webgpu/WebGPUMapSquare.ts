@@ -41,6 +41,7 @@ type MapDrawBatch = {
     /** The group's MapUniforms (one entry per range, u_drawId = range index). */
     uniformsBindGroup: GPUBindGroup;
     uniformBase: number;
+    uniformEntries: number;
 };
 
 /**
@@ -60,7 +61,15 @@ type GeometryGroup = {
     /** This group's MapUniforms buffer (one entry per range) and its entry count. */
     uniformBuffer?: GPUBuffer;
     uniformEntries?: number;
+    uniformData?: ArrayBuffer;
 };
+
+/** Fields needed to upload scenery; draw-only editor models have no gameplay metadata. */
+export type RenderMapData = Pick<SdMapData,
+    "mapX" | "mapY" | "borderSize" | "heightMapSize" | "tileRenderFlags" |
+    "vertices" | "indices" | "modelTextureData" | "modelTextureDataAlpha" |
+    "modelTextureDataLod" | "modelTextureDataLodAlpha" | "drawRanges" | "drawRangesAlpha" |
+    "drawRangesLod" | "drawRangesLodAlpha"> & Partial<SdMapData>;
 
 type GeometryInput = {
     vertices: Uint8Array;
@@ -369,6 +378,7 @@ export class WebGPUMapSquare implements MapSquare {
     /** The loc geometry's draw ranges (shared with the loc batches), which animations rewrite. */
     private locRanges?: { opaque: DrawRange[]; alpha: DrawRange[]; opaqueLod: DrawRange[]; alphaLod: DrawRange[] };
     private worldEntity = false;
+    private transformCount = 1;
 
     private locIdsAtLocalBuffer: number[] = [];
     private locTypeRotsAtLocalBuffer: number[] = [];
@@ -420,7 +430,7 @@ export class WebGPUMapSquare implements MapSquare {
     static load(
         device: GPUDevice,
         resources: WorldResources,
-        mapData: SdMapData,
+        mapData: RenderMapData,
         time: number,
         frame: number,
     ): WebGPUMapSquare {
@@ -465,18 +475,18 @@ export class WebGPUMapSquare implements MapSquare {
         square.tileGroundMaterials = mapData.groundMaterials;
         square.tileGroundColors = mapData.groundColors;
         square.bridgeSurfaceFlags = mapData.bridgeSurfaceFlags;
-        square.heightMapData = mapData.heightMapTextureData;
+        square.heightMapData = mapData.heightMapTextureData ?? new Int16Array(0);
         square.tileLocOffsetsByLevel = mapData.tileLocOffsetsByLevel;
         square.tileLocIdsByLevel = mapData.tileLocIdsByLevel;
         square.tileLocTypeRotByLevel = mapData.tileLocTypeRotByLevel;
-        square.terrainPickTileOffsets = mapData.terrainPickTileOffsets;
-        square.terrainPickVertices = mapData.terrainPickVertices;
-        square.terrainPickPlanes = mapData.terrainPickPlanes;
+        square.terrainPickTileOffsets = mapData.terrainPickTileOffsets ?? new Uint32Array(0);
+        square.terrainPickVertices = mapData.terrainPickVertices ?? new Float32Array(0);
+        square.terrainPickPlanes = mapData.terrainPickPlanes ?? new Uint8Array(0);
         return square;
     }
 
     /** SdMapData's buffers for one geometry group. */
-    private static groupInput(kind: GeometryGroupKind, mapData: SdMapData): GeometryInput | undefined {
+    private static groupInput(kind: GeometryGroupKind, mapData: RenderMapData): GeometryInput | undefined {
         if (kind === "scene") {
             return {
                 vertices: mapData.vertices,
@@ -496,20 +506,21 @@ export class WebGPUMapSquare implements MapSquare {
             };
         }
         if (kind === "door") {
+            if (!mapData.doorVertices?.length || !mapData.doorIndices?.length) return undefined;
             return {
                 vertices: mapData.doorVertices,
                 indices: mapData.doorIndices,
-                opaqueModelInfo: mapData.doorModelTextureData,
-                opaqueRanges: mapData.doorDrawRanges,
+                opaqueModelInfo: mapData.doorModelTextureData!,
+                opaqueRanges: mapData.doorDrawRanges!,
                 opaquePlanes: mapData.doorDrawRangesPlanes,
-                alphaModelInfo: mapData.doorModelTextureDataAlpha,
-                alphaRanges: mapData.doorDrawRangesAlpha,
+                alphaModelInfo: mapData.doorModelTextureDataAlpha!,
+                alphaRanges: mapData.doorDrawRangesAlpha!,
                 alphaPlanes: mapData.doorDrawRangesAlphaPlanes,
-                opaqueLodModelInfo: mapData.doorModelTextureDataLod,
-                opaqueLodRanges: mapData.doorDrawRangesLod,
+                opaqueLodModelInfo: mapData.doorModelTextureDataLod!,
+                opaqueLodRanges: mapData.doorDrawRangesLod!,
                 opaqueLodPlanes: mapData.doorDrawRangesLodPlanes,
-                alphaLodModelInfo: mapData.doorModelTextureDataLodAlpha,
-                alphaLodRanges: mapData.doorDrawRangesLodAlpha,
+                alphaLodModelInfo: mapData.doorModelTextureDataLodAlpha!,
+                alphaLodRanges: mapData.doorDrawRangesLodAlpha!,
                 alphaLodPlanes: mapData.doorDrawRangesLodAlphaPlanes,
             };
         }
@@ -534,7 +545,7 @@ export class WebGPUMapSquare implements MapSquare {
     }
 
     /** (Re)builds one geometry group from `mapData`, destroying the group it replaces. */
-    private setGroup(kind: GeometryGroupKind, mapData: SdMapData): void {
+    private setGroup(kind: GeometryGroupKind, mapData: RenderMapData): void {
         this.destroyGroup(kind);
         if (kind === "loc") this.locRanges = undefined;
         const input = WebGPUMapSquare.groupInput(kind, mapData);
@@ -594,6 +605,7 @@ export class WebGPUMapSquare implements MapSquare {
                 group.buffers.push(uniformBuffer);
                 group.uniformBuffer = uniformBuffer;
                 group.uniformEntries = entries;
+                group.uniformData = arrayBuffer;
                 const uniformsBindGroup = this.device.createBindGroup({
                     layout: this.resources.mapUniformsLayout,
                     entries: [{ binding: 0,
@@ -605,7 +617,7 @@ export class WebGPUMapSquare implements MapSquare {
                         group[batch.key] = {
                             vertexBuffer: geometry.vertexBuffer, indexBuffer: geometry.indexBuffer,
                             ranges: batch.ranges, planes: batch.planes, bindGroup: batch.bindGroup,
-                            uniformsBindGroup, uniformBase: entry, lod: batch.lod,
+                            uniformsBindGroup, uniformBase: entry, uniformEntries: entries, lod: batch.lod,
                         };
                     }
                     entry += batch.ranges.length;
@@ -866,6 +878,7 @@ export class WebGPUMapSquare implements MapSquare {
      */
     setWorldEntityTransform(transform: Float32Array | undefined): void {
         if (!transform) return;
+        if (this.transformCount !== 1) { this.setWorldEntityTransforms([transform]); return; }
         this.worldEntity = true;
         for (const group of this.groups.values()) {
             const buffer = group.uniformBuffer;
@@ -887,6 +900,43 @@ export class WebGPUMapSquare implements MapSquare {
                 );
             }
         }
+    }
+
+    /** Draw one cached model at several placements, with a separate uniform slot per copy. */
+    setWorldEntityTransforms(transforms: readonly Float32Array[]): void {
+        this.worldEntity = true;
+        const count = transforms.length;
+        if (count === 0) { this.transformCount = 0; return; }
+        for (const group of this.groups.values()) {
+            const base = group.uniformData;
+            const entries = group.uniformEntries ?? 0;
+            if (!base || !entries) continue;
+            if (count !== this.transformCount) {
+                const old = group.uniformBuffer!;
+                const buffer = this.device.createBuffer({ size: base.byteLength * count,
+                    usage: GPU_BUFFER_USAGE.UNIFORM | GPU_BUFFER_USAGE.COPY_DST });
+                group.buffers[group.buffers.indexOf(old)] = buffer;
+                group.uniformBuffer = buffer;
+                old.destroy();
+                const bindGroup = this.device.createBindGroup({ layout: this.resources.mapUniformsLayout,
+                    entries: [{ binding: 0, resource: { buffer, offset: 0, size: MAP_UNIFORM_USED_BYTES } }] });
+                for (const batch of [group.opaque, group.alpha, group.opaqueLod, group.alphaLod]) {
+                    if (batch) batch.uniformsBindGroup = bindGroup;
+                }
+            }
+            const data = new Uint8Array(base.byteLength * count);
+            const floats = new Float32Array(data.buffer);
+            for (let copy = 0; copy < transforms.length; copy++) {
+                data.set(new Uint8Array(base), copy * base.byteLength);
+                for (let i = 0; i < entries; i++) {
+                    const offset = (copy * entries + i) * MAP_UNIFORM_STRIDE;
+                    floats.set(transforms[copy], offset / 4);
+                    data.set(new Uint8Array(WORLD_ENTITY_ENABLED.buffer), offset + MAP_UNIFORM_TRANSFORM_OFFSET);
+                }
+            }
+            this.device.queue.writeBuffer(group.uniformBuffer!, 0, data);
+        }
+        this.transformCount = count;
     }
 
     drawOpaque(pass: GPURenderPassEncoder, roofPlaneLimit: number, visibility: SceneryDrawContext): void {
@@ -974,16 +1024,18 @@ export class WebGPUMapSquare implements MapSquare {
                         i++;
                     }
                 }
-                pass.setBindGroup(MAP_UNIFORMS_GROUP, batch.uniformsBindGroup, [
-                    (batch.uniformBase + first) * MAP_UNIFORM_STRIDE,
-                ]);
-                pass.drawIndexed(
-                    elements,
-                    instances,
-                    (range[0] / DRAW_RANGE_INDEX_BYTES) | 0,
-                    0,
-                    0,
-                );
+                for (let copy = 0; copy < this.transformCount; copy++) {
+                    pass.setBindGroup(MAP_UNIFORMS_GROUP, batch.uniformsBindGroup, [
+                        (copy * batch.uniformEntries + batch.uniformBase + first) * MAP_UNIFORM_STRIDE,
+                    ]);
+                    pass.drawIndexed(
+                        elements,
+                        instances,
+                        (range[0] / DRAW_RANGE_INDEX_BYTES) | 0,
+                        0,
+                        0,
+                    );
+                }
             }
         }
     }

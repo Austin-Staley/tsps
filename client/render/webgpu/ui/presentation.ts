@@ -1,3 +1,4 @@
+import { drawEditModeLoadingScreen, getEditModeSceneLoadingStatus } from "../../../game/plugins/editmode/editModeLoadingScreen";
 import { isMobileMode } from "../../../common/utils/DeviceUtil";
 import { GameState, LoginIndex } from "../../../game/login";
 import type { LoginRenderer } from "../../../game/login/LoginRenderer";
@@ -78,7 +79,7 @@ export class WebgpuUiPresentation {
             this.updateHudFx(timeMs, deltaMs, bufW, bufH);
         } else {
             // Login-like states own the frame: route input, draw the title, black the world out.
-            this.handleLoginInput();
+            if (!osrsClient.scenePreviewEnabled) this.handleLoginInput();
             this.drawLoginSurface(metrics, bufW, bufH);
             this.drawLoadingMessage(timeMs, deltaMs, this.loginCtx);
         }
@@ -173,7 +174,8 @@ export class WebgpuUiPresentation {
         const loginState = osrsClient.loginState;
         const inputManager = osrsClient.inputManager;
 
-        if (osrsClient.scenePreviewEnabled) {
+        const editorLoading = getEditModeSceneLoadingStatus(osrsClient);
+        if (osrsClient.scenePreviewEnabled && !editorLoading) {
             // Dev preview replaces the title with the world; nothing to cover it with.
             this.hide(this.loginCanvas);
             return;
@@ -186,7 +188,11 @@ export class WebgpuUiPresentation {
         loginRenderer.setMousePosition(inputManager.mouseX | 0, inputManager.mouseY | 0);
         loginState.hoveredServerIndex = loginRenderer.computeHoveredServerIndex(loginState);
 
-        if (osrsClient.gameState === GameState.DOWNLOADING) {
+        if (editorLoading) {
+            loginRenderer.drawInitial(loginState, layoutW, layoutH, layoutW, layoutH);
+            const ctx = loginRenderer.getCanvas(layoutW, layoutH).getContext("2d");
+            if (ctx) drawEditModeLoadingScreen(loginRenderer, ctx, editorLoading);
+        } else if (osrsClient.gameState === GameState.DOWNLOADING) {
             loginRenderer.drawDownload(loginState, layoutW, layoutH, layoutW, layoutH);
         } else if (osrsClient.gameState === GameState.LOADING) {
             loginRenderer.drawInitial(loginState, layoutW, layoutH, layoutW, layoutH);

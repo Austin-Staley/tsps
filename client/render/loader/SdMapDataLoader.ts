@@ -846,7 +846,7 @@ function addSceneModels(
     }
 }
 
-function buildLocGeometryData(sceneBuf: SceneBuffer): LocGeometryData {
+export function buildLocGeometryData(sceneBuf: SceneBuffer): LocGeometryData {
     const drawRanges = (commands: DrawCommand[]): DrawRange[] =>
         commands.map((cmd) => sceneBuf.createDrawRange(cmd));
     const drawRangePlanes = (commands: DrawCommand[]): Uint8Array =>

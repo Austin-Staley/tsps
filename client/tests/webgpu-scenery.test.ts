@@ -110,3 +110,22 @@ test("WebGPU advances both full and far animated ranges to the same baked frame"
     assert.deepEqual(far[0].chunk, [24, 0]);
     f.square.delete();
 });
+
+
+test("WebGPU wall previews give each placement its own uniform slot", () => {
+    const f = fixture([range(0, 6, 0)], []);
+    const first = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 10, 0, 0, 1]);
+    const second = first.slice(); second[12] = 20;
+    f.square.setWorldEntityTransforms([first, second]);
+    f.square.drawOpaque(f.pass, 3, f.context);
+    assert.deepEqual(f.draws.map(draw => draw.uniform), [0, 256], "copies cannot share the last matrix uploaded");
+    f.draws.length = 0;
+    f.square.setWorldEntityTransforms([first]);
+    f.square.drawOpaque(f.pass, 3, f.context);
+    assert.equal(f.draws.length, 1, "shortening a wall removes old preview copies");
+    f.draws.length = 0;
+    f.square.setWorldEntityTransforms([]);
+    f.square.drawOpaque(f.pass, 3, f.context);
+    assert.equal(f.draws.length, 0, "clearing previews leaves no phantom copy");
+    f.square.delete();
+});

@@ -345,7 +345,7 @@ export class WebGPUActors {
             world,
             this.textureIdIndexMap,
             (map) => getRenderPlayersForMap(client, map, this.tileSelection),
-            (map, ecsId) => this.tileSelection.shouldRenderNpc(client, map, ecsId),
+            (map, ecsId) => (this.tileSelection.shouldRenderNpc(client, map, ecsId) && this.renderer.interactionHost.shouldRenderNpcFromMap(map, ecsId)),
         );
 
         this.playerPose = new PlayerPoseGeometry(
@@ -676,7 +676,8 @@ export class WebGPUActors {
         const ids = client.npcEcs.queryByMap(map.mapX, map.mapY);
         for (let i = 0; i < ids.length; i++) {
             const ecsId = ids[i] | 0;
-            if (!this.tileSelection.shouldRenderNpc(client, map, ecsId)) continue;
+            if (!this.tileSelection.shouldRenderNpc(client, map, ecsId) ||
+                !this.renderer.interactionHost.shouldRenderNpcFromMap(map, ecsId)) continue;
             this.packNpc(state, map, ecsId, NPC_MODEL_Y_OFFSET);
         }
     }
@@ -758,6 +759,7 @@ export class WebGPUActors {
         const client = this.renderer.osrsClient;
         let indexInMap = 0;
         for (const pid of pids) {
+            if (!this.renderer.interactionHost.shouldRenderPlayerIndex(pid)) continue;
             const dataIndex = packPlayerActorData(client, this.writer, map, pid, indexInMap++);
             if (dataIndex < 0) continue;
             state.playerByPid.set(pid, dataIndex);

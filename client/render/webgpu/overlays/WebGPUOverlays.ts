@@ -68,7 +68,7 @@ export class WebGPUOverlays {
         const world = getWorldResources(this.renderer);
         if (!device || !format || !world) return;
         try {
-            const host = new OverlayHost(this.renderer);
+            const host = this.renderer.interactionHost;
             const screen = new ScreenLayer(device, format);
             screen.init();
 
@@ -252,7 +252,7 @@ export class WebGPUOverlays {
         this.interactHighlight?.dispose();
         this.groundMeshes?.dispose();
         this.screen?.destroy();
-        this.host?.dispose();
+
         this.host = undefined;
         this.screen = undefined;
         this.groundMeshes = undefined;
