@@ -583,6 +583,50 @@ test('The Blood Moon Rises starts only after Sarius accepts the yes choice and r
   assert.equal(reclaimed, 1, 'the explicit option delegates to Night at the Theatre’s inventory-safe reclaim event');
 });
 
+test('Blood Moon Sarius spawn is reachable from the Sins boat shore landing', () => {
+  const spawns = require('../data/definitions/npc-spawns.json')
+    .filter((spawn) => [15838, 15839].includes(spawn.id) || spawn.name === 'Sarius Guile');
+  assert.deepEqual(spawns, [{ level: 0, name: 'Sarius Guile', x: 3697, y: 3184, id: 15839 }],
+    'the RuneLite Quest Helper start step places Sarius at 3697,3184,0; the old 3575,3331 spawn was outside the graveyard');
+
+  const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
+  assert.equal(NpcDefinition.forId(15839).getName(), 'Sarius Guile');
+  assert.equal(NpcDefinition.forId(15839).getActions()[0], 'Talk-to',
+    'the spawn uses the talkable cache variant; 15838 resolves to a null, actionless variant');
+
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { Location } = require('../dist/game/model/Location');
+  assert.equal(RegionManager.blocked(new Location(3697, 3184, 0), null), false,
+    'the canonical Sarius tile is walkable in the loaded cache collision map');
+
+  const dock = new Location(3696, 3198, 0);
+  const start = new Location(3696, 3199, 0); // The adjacent shore tile; the dock itself is clipped scenery.
+  assert.equal(RegionManager.blocked(dock, null), true,
+    'the cache dock tile is not a walkable arrival point');
+  assert.equal(RegionManager.blocked(start, null), false,
+    'the shared Sins boat must land beside the dock on walkable shore');
+  const startTile = [start.x, start.y];
+  const goal = [3697, 3184];
+  const queue = [startTile];
+  const visited = new Set([startTile.join(',')]);
+  let reachable = false;
+  for (let head = 0; head < queue.length; head++) {
+    const [x, y] = queue[head];
+    if (x === goal[0] && y === goal[1]) { reachable = true; break; }
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      const key = `${nx},${ny}`;
+      if (visited.has(key) || nx < 3680 || nx > 3710 || ny < 3165 || ny > 3205) continue;
+      if (RegionManager.blocked(new Location(nx, ny, 0), null)) continue;
+      if (!RegionManager.canMove(x, y, nx, ny, 0, 1, 1, null)) continue;
+      visited.add(key);
+      queue.push([nx, ny]);
+    }
+  }
+  assert.equal(reachable, true, 'the real graveyard boat landing has a collision-valid path to Sarius');
+});
+
 test('Blood Moon portal entry starts the Castle Drakan chapter where the physical puzzle handlers become active', () => {
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
