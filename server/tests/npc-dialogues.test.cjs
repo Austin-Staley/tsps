@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
-const { pickVariant, aliasKeys, flatten, startDialogue } = require('../plugins/npcs/NpcDialogues.plugin');
+const { pickVariant, aliasKeys, flatten, startDialogue, speakerIdIndex } = require('../plugins/npcs/NpcDialogues.plugin');
 
 const data = JSON.parse(fs.readFileSync(path.join(__dirname, '../data/definitions/npc-dialogues.json'), 'utf8'));
 const aliases = aliasKeys(data);
@@ -30,6 +30,20 @@ test('cache names reach disambiguated wiki keys', () => {
   // A bare key wins when it is usable; "Guard" is overhead-only, so the alias takes over.
   assert.equal(pickVariant(data['Guard']), undefined);
   for (const name of ['Hops', 'Guard', 'Bartender', 'Wizard']) assert.ok(talk(name)?.length, name);
+});
+
+test('canonical speaker names take precedence over earlier transcript aliases', () => {
+  const index = {
+    8906: [{ page: 'Transcript:Lady Carys Hefin' }],
+    8907: [{ page: 'Transcript:Lady Carys Hefin' }],
+    8908: [{ page: 'Transcript:Lady Carys Hefin' }],
+    20: [{ page: 'Transcript:Hops (Biohazard)' }],
+  };
+  const names = { 8906: 'Elf Hermit', 8907: 'Lady Carys Hefin', 8908: 'Lady Carys Hefin', 20: 'Hops' };
+  const speakers = speakerIdIndex(index, { forId: id => ({ getName: () => names[id] }) });
+  assert.equal(speakers.get('Lady Carys Hefin'), 8907);
+  assert.equal(speakers.get('Elf Hermit'), 8906);
+  assert.equal(speakers.get('Hops (Biohazard)'), 20);
 });
 
 test('prose conditions take their first branch and dead jumps fall through', () => {

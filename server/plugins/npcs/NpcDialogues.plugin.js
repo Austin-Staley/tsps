@@ -107,9 +107,11 @@ function pickVariant(npc) {
  * get their own chathead instead of borrowing the NPC being talked to. */
 function speakerIdIndex(index, NpcDefinition) {
   const byName = new Map();
-  for (const [id, pages] of Object.entries(index ?? {})) {
+  for (const id of Object.keys(index ?? {})) {
     const npcName = NpcDefinition?.forId(Number(id))?.getName();
     if (npcName && npcName !== "null" && !byName.has(npcName)) byName.set(npcName, Number(id));
+  }
+  for (const [id, pages] of Object.entries(index ?? {})) {
     for (const entry of pages ?? []) {
       const name = String(entry.page ?? "").replace(/^Transcript:/, "");
       if (name && !byName.has(name)) byName.set(name, Number(id));
