@@ -1879,6 +1879,7 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function enterScarMazeOne(p) {
+    if (p.getAttribute(SCAR_TETHER_DESTROYED)) p.setAttribute(SCAR_PATH_COMPLETE, true);
     const current = p.getAttribute(ATTR_SCAR_MAZE_ONE);
     if (current instanceof ScarMazeOneArea && !current.isDestroyed()) {
       current.enter(p);
@@ -2591,6 +2592,7 @@ module.exports = function registerDesertTreasureII(api) {
         (Number(p.getAttribute(SCAR_GROWTH_STEP)) || 0) > order.indexOf(energy.rune) ? 2 : 1));
       p.getPacketSender().sendVarbit(SCAR_GROWTH_STEP_VARBIT, Number(p.getAttribute(SCAR_GROWTH_STEP)) || 0);
     }
+    if (p.getAttribute(SCAR_BOAT_TRIED) && !p.getAttribute(ATTR_SCAR_AREA)) enterScar(p);
     if (p.getAttribute(SCAR_LEVIATHAN_READY)) {
       enterLeviathanArea(p);
     } else if (p.getAttribute(SCAR_MAZE_THREE_ACTIVE)
@@ -2794,7 +2796,7 @@ module.exports = function registerDesertTreasureII(api) {
     else if (returnToDigsite) p.moveTo(new api.core.Location(3411, 9813, 0));
     else if (returnToGuardian) p.moveTo(new api.core.Location(3610, 9473, 0));
     else if (stranglewoodExit) p.moveTo(new api.core.Location(...stranglewoodExit, 0));
-    p.setAttribute(SCAR_PATH_COMPLETE, false);
+    p.setAttribute(SCAR_PATH_COMPLETE, p.getAttribute(SCAR_TETHER_DESTROYED) === true);
     p.setAttribute(SCAR_RIFT_LIVE, false);
     p.setAttribute(SCAR_GROWTH_LIVE, false);
     p.setAttribute(ATTR, null);

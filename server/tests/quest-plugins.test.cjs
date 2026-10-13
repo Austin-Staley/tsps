@@ -2621,7 +2621,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
   const { api: base } = mockApi();
   const objectHooks = [], objectRouteHooks = [], deathHooks = [], itemOnItemHooks = [], itemOnNpcHooks = [], itemOnObjectHooks = [], itemActionHooks = [], hitModifyHooks = [], lineHooks = [], actionHooks = [], interactions = [];
   const transcripts = [], queues = { add: [], remove: [] }, varbits = new Map(), inventoryCounts = new Map();
-  const routes = [], logoutHooks = [];
+  const routes = [], logoutHooks = [], loginHooks = [];
   let processCycle = 0;
   class TestInstance {
     constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
@@ -2649,6 +2649,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
       : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
         : prop === 'onObjectRoute' ? (handler) => objectRouteHooks.push(handler)
         : prop === 'onPlayerLogout' ? (handler) => logoutHooks.push(handler)
+          : prop === 'onPlayerLogin' ? (handler) => loginHooks.push(handler)
         : prop === 'onItemOnItem' ? (handler) => itemOnItemHooks.push(handler)
         : prop === 'onItemOnNpc' ? (handler) => itemOnNpcHooks.push(handler)
           : prop === 'onItemOnObject' ? (handler) => itemOnObjectHooks.push(handler)
@@ -2811,6 +2812,14 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(attrs.get('desert-treasure-ii:scar-tether-destroyed'), true);
     assert.equal(attrs.get('desert-treasure-ii:scar-tether-destroyed'), true,
       'the tether completion is saved independently from the reused passage challenge varbits');
+    logoutHooks[0]({ player });
+    assert.equal(attrs.get('desert-treasure-ii:scar-pathfinder-complete'), true);
+    attrs.set('desert-treasure-ii:scar-pathfinder-complete', false);
+    loginHooks.find(handler => handler.name === 'handleLogin')({ player });
+    assert.equal(attrs.get('desert-treasure-ii:scar-pathfinder-complete'), true, 'older saves recover the completed path from the severed tether');
+    assert.equal(attrs.get('desert-treasure-ii:scar-maze-one').pathRunner, null, 'restocking after a completed puzzle does not repeat its pathfinders');
+    assert.ok(attrs.get('desert-treasure-ii:scar-area'), 'the camp is restored so the maze teleporter can return to Persten');
+    area = attrs.get('desert-treasure-ii:scar-area');
     assert.equal(objectHooks[0]({ player, objectId: 49415, location: maze.tile(73, 61, 0) }), true,
       'the green neural teleporter is usable only after severing the tether');
     assert.equal(player.location.x, 8223);
