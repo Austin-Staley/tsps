@@ -553,6 +553,7 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
 
     override onFrameEnd(): void {
         super.onFrameEnd();
+        this.osrsClient.runeLite?.postDrawComplete();
 
         // URL/search params syncing removed; no-op when camera updates
 

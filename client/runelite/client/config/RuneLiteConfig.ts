@@ -1,3 +1,4 @@
+import { FontType, FontChoices } from "./FontType";
 import { ConfigGroup, ConfigItem } from "./ConfigItem";
 
 export const SidebarMode = { Docked: "docked", Overlay: "overlay" } as const;
@@ -8,6 +9,10 @@ export type SidebarModeValue = (typeof SidebarMode)[keyof typeof SidebarMode];
  * each plugin's on/off key). The plugin hub opens them from its pinned client row.
  */
 export const RuneLiteConfig = ConfigGroup("runelite", {
+    dynamicOverlayFont:ConfigItem({keyName:"fontType",name:"Overlay font",description:"Font used for overlays such as tile labels.",enum:FontChoices,default:FontType.SMALL,position:1}),
+    tooltipFont:ConfigItem({keyName:"tooltipFontType",name:"Tooltip font",description:"Font used for hover tooltips.",enum:FontChoices,default:FontType.SMALL,position:2}),
+    interfaceFont:ConfigItem({keyName:"interfaceFontType",name:"Interface font",description:"Font used for panel overlays.",enum:FontChoices,default:FontType.REGULAR,position:3}),
+    infoboxFont:ConfigItem({keyName:"infoboxFontType",name:"Infobox font",description:"Font used for infoboxes.",enum:FontChoices,default:FontType.REGULAR,position:4}),
     sidebarMode: ConfigItem<SidebarModeValue>({
         keyName: "sidebarMode",
         name: "Sidebar panels",

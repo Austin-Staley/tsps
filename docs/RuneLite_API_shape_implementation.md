@@ -1,5 +1,7 @@
 # RuneLite-shaped client plugin API: implementation plan
 
+Current implementation status and remaining compatibility boundaries are in [RuneLite browser client API](runelite-client-api.md). The baseline and phases below describe the original plan.
+
 **Goal:** give the browser client a plugin API that matches RuneLite's (`../runelite`) closely enough that porting a RuneLite plugin is a mechanical translation from Java to TypeScript. The class names, method names, event names, event getters and ID constants stay the same. Only the language changes.
 
 **Non-goal:** running Java plugins, or Swing compatibility. Swing panels are the one area where a port means a rewrite (in React), and this plan keeps that area small.

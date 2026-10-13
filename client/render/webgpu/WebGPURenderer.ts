@@ -583,6 +583,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
     }
 
     override render(time: number, deltaTime: number, _resized: boolean): void {
+        this.osrsClient.runeLite?.postBeforeRender();
         const world = this.world;
         if (!this.device || !world || !this.depthView) return;
         const width = this.canvas.width;
@@ -708,6 +709,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         // The HDR target holds linear light, so the display-referred sky clear is linearised;
         // the tonemap pass re-encodes it.
         const toLinear = (value: number) => Math.pow(Math.max(value, 0), 2.2);
+        if (loggedIn) this.osrsClient.runeLite?.drawCallbacks.beforeScene();
         const pass = encoder.beginRenderPass({
             colorAttachments: [
                 {
@@ -754,6 +756,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         }
 
         pass.end();
+        if (loggedIn) this.osrsClient.runeLite?.drawCallbacks.afterScene();
 
         if (hdrTarget) {
             sceneExtension!.afterScene!(this, encoder, {
@@ -861,6 +864,15 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
 
     override registerSpotAnimation(event: PlayerSpotAnimationEvent): void {
         this.actors?.registerSpotAnimation(event);
+    }
+
+    override getCollisionFlagAt(plane: number, tileX: number, tileY: number): number {
+        const view = this.osrsClient.worldViewManager.findWorldViewAt(tileX, tileY);
+        const map = view && !view.isTopLevel()
+            ? this.osrsClient.worldViewManager.getOverlayMapSquare(view.id, this.mapManager)
+            : this.mapManager.getMapForWorldTile(tileX, tileY);
+        if (!map) return 0x100;
+        return map.getCollisionFlag(plane, tileX - map.getRenderBaseTileX(), tileY - map.getRenderBaseTileY());
     }
 
     override registerNpcSpotAnimation(event: NpcSpotAnimationEvent): void {

@@ -1,0 +1,1 @@
+export enum HintArrowType { NONE=0, NPC=1, COORDINATE=2, PLAYER=3, WORLDENTITY=4 }

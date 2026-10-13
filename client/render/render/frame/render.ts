@@ -784,6 +784,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
 
         let passStartIndices = host._frameIndices;
         let passStartBatches = host._frameBatches;
+        host.osrsClient.runeLite?.drawCallbacks.beforeScene();
         host.app.disable(PicoGL.BLEND);
         profiler.startPhase("opaque");
         passStartIndices = host._frameIndices;
@@ -824,6 +825,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         profiler.endPhase();
 
         profiler.startPhase("afterScene");
+        host.osrsClient.runeLite?.drawCallbacks.afterScene();
         host.osrsClient.clientPlugins.afterSceneRender(host);
         profiler.endPhase();
 

@@ -44,7 +44,8 @@ import {
 } from "./actorPacking";
 import { PlayerPoseGeometry } from "./actorPlayers";
 import { DynamicNpcAnimLoader } from "../../npc/DynamicNpcAnimLoader";
-import type { GfxInstance } from "../../gfx/GfxManager";
+import type { GfxInstance, GfxManager } from "../../gfx/GfxManager";
+import type { GfxCache } from "../../gfx/GfxCache";
 
 /**
  * SceneUniforms is 66 f32 = 264 bytes, padded to 272 by the uniform buffer binding in
@@ -538,6 +539,12 @@ export class WebGPUActors {
         state.uniforms.destroy();
         this.mapStates.delete(id);
     }
+
+    getActorGraphic(kind: "player" | "npc", serverId: number): number {
+        return this.gfx?.manager.getActorGraphic(kind, serverId) ?? -1;
+    }
+    getActorGfxManager():GfxManager|undefined { return this.gfx?.manager; }
+    getActorGfxCache():GfxCache|undefined { return this.gfx?.cache; }
 
     registerSpotAnimation(event: PlayerSpotAnimationEvent): void {
         try {

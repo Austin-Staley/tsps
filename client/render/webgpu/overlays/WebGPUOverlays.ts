@@ -40,6 +40,8 @@ export class WebGPUOverlays {
     private groundItemLabels?: GroundItemLabelLayer;
     private hitsplats?: HitsplatLayer;
 
+    getHost(): OverlayHost | undefined { return this.host; }
+
     /** Screen position to a world ray (HelmSteering), through the shared overlay host. */
     screenToRay(mouseX: number, mouseY: number): Ray | null {
         return this.host?.screenToRay(mouseX, mouseY) ?? null;

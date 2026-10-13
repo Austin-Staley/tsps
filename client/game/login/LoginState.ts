@@ -57,6 +57,8 @@ export class LoginState {
         // Load persisted settings from localStorage
         this.loadPersistedSettings();
         this.loadPersistedLoginState();
+        const remembered = getClientPreference("rememberedUsername");
+        if (this.rememberUsername && remembered !== undefined) this.username = remembered;
     }
 
     /** Load settings that should persist between sessions */
@@ -194,7 +196,14 @@ export class LoginState {
     // ========== Credentials ==========
 
     /** Player account name input */
-    username: string = "";
+    private usernameValue = "";
+    readonly usernameChangedListeners = new Set<() => void>();
+    get username(): string { return this.usernameValue; }
+    set username(value: string) {
+        if (this.usernameValue === value) return;
+        this.usernameValue = value;
+        for (const listener of this.usernameChangedListeners) listener();
+    }
 
     /** Password input */
     password: string = "";

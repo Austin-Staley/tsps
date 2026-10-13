@@ -7,6 +7,9 @@ import {
 } from "@runelite/client/config/ConfigItem";
 import { parseConfigValue } from "@runelite/client/config/ConfigManager";
 import type { ConfigManager } from "@runelite/client/config/ConfigManager";
+import { Keybind } from "../../config/Keybind";
+import { KeyEvent } from "../../../awt/event/KeyEvent";
+import { Color } from "../../../awt/Color";
 
 const DEFAULT_SECTION = "";
 
@@ -17,7 +20,7 @@ type OrderedItem = {
 };
 
 function toColorInput(value: unknown): string {
-    const color = Number(value) >>> 0;
+    const color = (value instanceof Color ? value.getRGB() : Number(value)) >>> 0;
     const hex = (color & 0xffffff).toString(16).padStart(6, "0");
     return `#${hex}`;
 }
@@ -87,6 +90,13 @@ function ConfigField({
         </span>
     );
 
+    if (item.default instanceof Keybind) {
+        return <label className="rl-sidebar-field">{label}<input readOnly
+            aria-label={item.name} value={String(value)}
+            onKeyDown={(event) => { event.preventDefault(); event.stopPropagation();
+                update(event.key === "Backspace" || event.key === "Delete" ? Keybind.NOT_SET : new Keybind(new KeyEvent(event.nativeEvent))); }} /></label>;
+    }
+
     if (item.enum) {
         const enumEntries = Object.entries(item.enum);
         const selectedName =
@@ -137,7 +147,7 @@ function ConfigField({
                     value={toColorInput(value)}
                     onChange={(event) => {
                         const color = parseInt(event.target.value.slice(1), 16) || 0;
-                        update(color);
+                        update(item.default instanceof Color ? new Color(color) : color);
                     }}
                 />
             </div>

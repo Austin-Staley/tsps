@@ -297,6 +297,8 @@ import { StretchedModePlugin } from "./plugins/stretchedmode/StretchedModePlugin
 import { MenuSwapperPlugin } from "./plugins/menuswapper/MenuSwapperPlugin";
 import { WeatherPlugin } from "./plugins/weather/WeatherPlugin";
 import { RuneLite } from "../runelite/client/RuneLite";
+import { notifyActorGraphic, notifyActorHitsplat, notifyActorHealth } from "./ActorEventHooks";
+import { dispatchMenuAction } from "../ui/menu/menuEvents";
 import { setMenuTransform } from "../ui/menu/menuTransforms";
 import {
     SPLIT_PRIVATE_CHAT_VARP,
@@ -352,7 +354,8 @@ import {
     fetchInterfaceDefinition,
     fetchContent,
 } from "../network/serverConnection/contentApi";
-import { resolveWidgetIdentifiers } from "./widgets/widgetActionPayload";
+import { resolveWidgetIdentifiers, inferWidgetOpId } from "./widgets/widgetActionPayload";
+import { isPauseButtonWidget } from "../widgets/menu/utils";
 import { RenderDataWorkerPool } from "./worker/RenderDataWorkerPool";
 import { WorldMapController, type WorldMapRenderedIcon } from "./worldMap/WorldMapController";
 import { WorldViewManager } from "./worldview/WorldViewManager";
@@ -822,6 +825,7 @@ export class OsrsClient {
     get dragSourceWidget(): any {
         return this.widgetInteraction?.dragSourceWidget ?? null;
     }
+    getWidgetInteractionState(): WidgetInteractionController | undefined { return this.widgetInteraction; }
 
     set dragSourceWidget(value: any) {
         if (this.widgetInteraction) {
@@ -1722,7 +1726,10 @@ export class OsrsClient {
                 self.camera.setViewportFovValues(low, high);
             },
             setWindowMode: (mode) => {
+                const resized = mode === 2;
+                const changed = resized !== (this.cs2Vm.context.windowMode === 2);
                 this.cs2Vm.context.windowMode = mode;
+                if (changed) this.runeLite?.postResizeableChanged(resized);
             },
             setViewportClampFov: (fovClampMin, fovClampMax, zoomClampMin, zoomClampMax) => {
                 this.camera.setClampFov(fovClampMin, fovClampMax, zoomClampMin, zoomClampMax);
@@ -2359,6 +2366,7 @@ export class OsrsClient {
                         }
                     } catch {}
                     this.renderer?.registerSpotAnimation(event);
+                    notifyActorGraphic({ type: "player", serverId: event.serverId, graphic: event.spotId });
                 } catch (err) {
                     console.warn("[OsrsClient] registerSpotAnimation failed", err);
                 }
@@ -2375,11 +2383,13 @@ export class OsrsClient {
                     } catch {}
                 }
                 this.clientPlugins.onHitsplat(payload as any);
+                notifyActorHitsplat(payload);
                 if (this.renderer) this.renderer.registerHitsplat(payload as any);
                 else this.hitsplatFlush.queueHitsplat(payload as any);
             },
             onHealthBar: (payload) => {
                 this.clientPlugins.onHealthBar({ type: "player", ...payload });
+                notifyActorHealth({ type: "player", ...payload });
                 try {
                     if (this.renderer) {
                         (this.renderer as any).registerPlayerHealthBarUpdate?.(payload);
@@ -2552,13 +2562,13 @@ export class OsrsClient {
                         if (payload.varps) {
                             for (const [id, value] of Object.entries(payload.varps)) {
                                 console.log(`[OsrsClient] Setting varp ${id} = ${value}`);
-                                this.varManager.setVarp(Number(id), Number(value));
+                                this.varManager.setServerVarp(Number(id), Number(value));
                             }
                         }
                         if (payload.varbits) {
                             for (const [id, value] of Object.entries(payload.varbits)) {
                                 console.log(`[OsrsClient] Setting varbit ${id} = ${value}`);
-                                this.varManager.setVarbit(Number(id), Number(value));
+                                this.varManager.setServerVarbit(Number(id), Number(value));
                             }
                         }
                     } finally {
@@ -2877,7 +2887,7 @@ export class OsrsClient {
                                     console.log(
                                         `[OsrsClient] run_script: Setting varp ${id} = ${value}`,
                                     );
-                                    this.varManager.setVarp(Number(id), Number(value));
+                                    this.varManager.setServerVarp(Number(id), Number(value));
                                 }
                             }
                             if (payload.varbits) {
@@ -2885,7 +2895,7 @@ export class OsrsClient {
                                     console.log(
                                         `[OsrsClient] run_script: Setting varbit ${id} = ${value}`,
                                     );
-                                    this.varManager.setVarbit(Number(id), Number(value));
+                                    this.varManager.setServerVarbit(Number(id), Number(value));
                                 }
                             }
                         } finally {
@@ -2943,7 +2953,7 @@ export class OsrsClient {
                             console.log(
                                 `[OsrsClient] set_varbits: Setting varbit ${id} = ${value}`,
                             );
-                            this.varManager.setVarbit(Number(id), Number(value));
+                            this.varManager.setServerVarbit(Number(id), Number(value));
                         }
                     } finally {
                         this._serverVarpSync = false;
@@ -2985,6 +2995,7 @@ export class OsrsClient {
                             height: (payload.height ?? 0) | 0,
                             startCycle,
                         });
+                        notifyActorGraphic({ type: "player", serverId: sid, graphic: payload.spotId | 0 });
                     } else if (typeof payload.npcId === "number") {
                         const npcServerId = payload.npcId | 0;
                         this.renderer?.registerNpcSpotAnimation({
@@ -2993,6 +3004,7 @@ export class OsrsClient {
                             height: (payload.height ?? 0) | 0,
                             startCycle,
                         });
+                        notifyActorGraphic({ type: "npc", serverId: npcServerId, graphic: payload.spotId | 0 });
                     } else if (payload.tile) {
                         this.renderer?.registerWorldSpotAnimation({
                             spotId: payload.spotId | 0,
@@ -3877,7 +3889,27 @@ export class OsrsClient {
         return this.worldMap.getWorldMapMenuEntriesAt(screenX, screenY);
     }
 
+    getPlayerServerTile(serverId: number): { tileX: number; tileY: number } | undefined {
+        return this.playerSyncManager?.getServerTile(serverId);
+    }
+    getNpcModelOverride(serverId: number) { return this.npcInstances.instanceMap.get(`sid:${serverId}`)?.modelOverride; }
+
     handleWidgetAction(event: Parameters<WidgetActionRouter["handleWidgetAction"]>[0]): void {
+        const widget = event.widget;
+        const opIndex = event.opIndex ?? inferWidgetOpId(widget, event.option);
+        const pause = isPauseButtonWidget(widget, w => this.widgetManager.getWidgetFlags(w));
+        const opcode = opIndex === 0 ? 25 : opIndex === undefined && pause ? 30 :
+            (opIndex ?? 1) - 1 > (widget?.targetPriority ?? 4) ? 1007 : 57;
+        const widgetId = resolveWidgetIdentifiers(this.widgetManager, widget)?.widgetId ?? widget?.uid ?? -1;
+        dispatchMenuAction({ param0: event.slot ?? widget?.childIndex ?? -1, param1: widgetId,
+            opcode, identifier: opIndex ?? 0, itemId: event.itemId ?? widget?.itemId ?? -1,
+            option: event.option ?? "", target: event.target ?? "", screenX: event.cursorX ?? 0, screenY: event.cursorY ?? 0 },
+            (action) => this.handleNativeWidgetAction({ ...event, option: action.option, target: action.target,
+                slot: action.param0, itemId: action.itemId, opIndex: action.identifier,
+                widget: this.widgetManager.getWidgetByUid(action.param1) ?? widget }));
+    }
+
+    private handleNativeWidgetAction(event: Parameters<WidgetActionRouter["handleWidgetAction"]>[0]): void {
         if (this.clientPlugins.handleWidgetAction(event)) return;
         const uid = event.widget?.uid | 0;
         // The logout tab's "World Switcher" button, and the same option on the logout tab's
@@ -6621,6 +6653,7 @@ export class OsrsClient {
                 console.warn("[OsrsClient] Failed to load GraphicsDefaults:", e);
             }
 
+            this.runeLite.onCacheReady(this.clientScripts);
             this.startClientTickLoop();
             this.renderer.initCache();
             this.hitsplatFlush.flushAll();
@@ -7615,6 +7648,7 @@ export class OsrsClient {
                     delayCycles: typeof hit.delayCycles === "number" ? hit.delayCycles | 0 : 0,
                     tick: loopCycle | 0,
                 };
+                notifyActorHitsplat(payload);
                 if (this.renderer) this.renderer.registerHitsplat(payload);
                 else this.hitsplatFlush.queueHitsplat(payload);
             }
@@ -7624,6 +7658,7 @@ export class OsrsClient {
             for (const bar of block.healthBars) {
                 const entry = { serverId, bar };
                 this.clientPlugins.onHealthBar({ type: "npc", ...entry });
+                notifyActorHealth({ type: "npc", ...entry });
                 if (this.renderer) {
                     (this.renderer as any).registerNpcHealthBarUpdate?.(entry);
                 } else {
@@ -7665,6 +7700,7 @@ export class OsrsClient {
                     startCycle,
                     slot: spot.slot | 0,
                 });
+                notifyActorGraphic({ type: "npc", serverId, graphic: spot.id | 0 });
             }
         }
     }
@@ -8328,6 +8364,7 @@ export class OsrsClient {
      */
     dispose(): void {
         console.log("[OsrsClient] Disposing...");
+        this.runeLite.destroy();
         try {
             this.renderer?.stop();
         } catch {}
