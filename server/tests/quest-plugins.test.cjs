@@ -6666,6 +6666,39 @@ test('Blood Moon stage-20 Ivan interaction claims his departure prompt before ge
  delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
 });
 
+test('Blood Moon Slepe chapter spawns a talkable Ivan, follows him to Roy, and remembers Roy’s manor clue',()=>{
+ const runtime=require('../plugins/quests/QuestRuntime'),original=runtime.startTranscript,started=[];
+ runtime.startTranscript=(...args)=>{started.push(args.slice(1));return true;};
+ try{
+  delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
+  const {api,handlers}=mockApi();require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attrs=new Map([['quest.the_blood_moon_rises.stage',30]]),messages=[],spawns=[];
+  api.spawnNpc=definition=>{spawns.push(definition);return {setScriptedMovement(){},getLocation(){return {getX:()=>definition.x,getY:()=>definition.y,getZ:()=>definition.z,getDistance:()=>0};}};};
+  const player={getAttribute:key=>attrs.get(key),setAttribute:(key,value)=>attrs.set(key,value),sendMessage:m=>messages.push(m),
+   getLocation:()=>({getX:()=>3729,getY:()=>3308,getZ:()=>0})};
+  handlers.playerProcess.find(handler=>handler.name==='processSlepeIvan')({player});
+  assert.deepEqual(spawns.map(({id,x,y,z,ownerOnly})=>[id,x,y,z,ownerOnly]),[
+   [api.core.NpcIdentifiers.IVAN_STROM_4,3729,3308,0,true],[api.core.NpcIdentifiers.ROY,3750,3296,0,true],
+  ],'the current Slepe stage provides only this player the cache-talkable Ivan and Roy copies');
+  const talk=handlers.npcInteractions.get('Ivan Strom')['Talk-to'];
+  const ivan={player,npcId:api.core.NpcIdentifiers.IVAN_STROM_4,definition:{getName:()=>"Ivan Strom"},option:'Talk-to',handled:false};
+  assert.equal(talk(ivan),true);
+  assert.equal(started.at(-1)[3],'the-truth-hurtz-talking-to-ivan-in-slepe');
+  const line=handlers.custom.get('npc-dialogue:line').at(-1);
+  const follow={player,step:{speaker:'Ivan Strom'},text:"I'm right behind you."};line(follow);follow.after();
+  assert.equal(attrs.get('quest.the_blood_moon_rises.slepe-story').ivanFollowing,true);
+  assert.equal(talk({...ivan,handled:false}),true);
+  assert.equal(started.at(-1)[3],'the-truth-hurtz-talking-to-ivan-while-he-is-following-the-player');
+  const roy={player,npcId:api.core.NpcIdentifiers.ROY,definition:{getName:()=>"Roy"},option:'Talk-to',handled:false};
+  assert.equal(handlers.npcInteractions.get('Roy')['Talk-to'](roy),true);
+  assert.equal(started.at(-1)[3],'the-truth-hurtz-talking-to-roy');
+  const clue={player,step:{speaker:'Roy'},text:'That, I do not. However, I did hear that there was some commotion up at Crombwick Manor soon afterwards.'};line(clue);clue.after();
+  assert.equal(attrs.get('quest.the_blood_moon_rises.slepe-story').royClue,true);
+  assert.equal(handlers.npcInteractions.get('Roy')['Talk-to']({...roy,handled:false}),true);
+  assert.equal(started.at(-1)[3],'the-truth-hurtz-talking-to-roy-talking-to-roy-again');
+ }finally{runtime.startTranscript=original;delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];}
+});
+
 test('Blood Moon resumes the escape transcript after a completed hideout defense is saved',()=>{
  const runtime=require('../plugins/quests/QuestRuntime'),original=runtime.startTranscript;let transcript;
  runtime.startTranscript=(...args)=>{transcript=args.slice(1);return true;};
