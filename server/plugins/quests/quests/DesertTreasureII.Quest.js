@@ -3485,31 +3485,37 @@ module.exports = function registerDesertTreasureII(api) {
     for (const [key, placed, material, shadow] of placements) {
       if (!placed) continue;
       const [id, x, y] = state.inShadow ? shadow : material;
-      desired.set(key, [id, x, y, 22]);
+      desired.set(key, [id, x, y, 0, 22]);
+    }
+    // The cache identifies the pub remnant but has no placement. Mirror the
+    // QuestHelper marker on the upper pub floor only after the pub is earned.
+    if (state.inShadow && state.pubOpened && !state.pubRemnant) {
+      desired.set("pub-remnant", [48245, 2380, 6430, 1, 10]);
     }
     const allPalaceDevicesPlaced = state.whiteBlockerPlaced && state.whiteAnimaPlaced && state.whiteIdolPlaced;
     const braziers = [[2318, 6446], [2312, 6444], [2321, 6449], [2323, 6455]];
     if (state.inShadow && allPalaceDevicesPlaced && state.braziersComplete) {
-      desired.set("palace-chest", [state.fakeSchematicFound ? 48240 : 48232, 2316, 6450, 11]);
+      desired.set("palace-chest", [state.fakeSchematicFound ? 48240 : 48232, 2316, 6450, 0, 11]);
     }
     if (state.inShadow && allPalaceDevicesPlaced) {
       for (const [x, y] of braziers) {
-        if (!state.braziers?.[`${x},${y}`]) desired.set(`brazier:${x},${y}`, [48253, x, y, 10]);
+        if (!state.braziers?.[`${x},${y}`]) desired.set(`brazier:${x},${y}`, [48253, x, y, 0, 10]);
       }
     }
     for (const [key, object] of current) {
       const target = desired.get(key);
       if (target && object.id === target[0]
-        && object.location.getX?.() === target[1] && object.location.getY?.() === target[2]) continue;
+        && object.location.getX?.() === target[1] && object.location.getY?.() === target[2]
+        && (object.location.getZ?.() ?? 0) === target[3]) continue;
       api.core.ObjectManager.deregister(object, true);
       current.delete(key);
     }
-    for (const [key, [id, x, y, shape]] of desired) {
+    for (const [key, [id, x, y, z, shape]] of desired) {
       if (current.has(key)) continue;
       // Cache gamevals define the placed devices and Light option, but their
       // location variants are absent from the active map. Register only the
       // earned owner-side placements so the normal client actions resolve.
-      const object = new api.core.GameObject(id, new api.core.Location(x, y, 0), shape, 0, null).setOwner(p);
+      const object = new api.core.GameObject(id, new api.core.Location(x, y, z), shape, 0, null).setOwner(p);
       api.core.ObjectManager.register(object, true);
       current.set(key, object);
     }
@@ -6411,7 +6417,8 @@ module.exports = function registerDesertTreasureII(api) {
     // The Silent Choir's entry clue is the remnant above the pub. The cache's
     // stairs are one tile below the upper-floor remnant and preserve the real
     // plane transition instead of jumping directly to later puzzle stages.
-    if (x === 2372 && y === 6430 && z === 0 && option.startsWith("climb")) {
+    if (x === 2372 && (y === 6429 || y === 6430) && z === 0
+      && visibleId === 47817 && option.startsWith("climb")) {
       if (!state.pubOpened) { p.sendMessage("The pub is still sealed in the material realm."); return true; }
       p.moveTo(new api.core.Location(2372, 6430, 1));
       return true;

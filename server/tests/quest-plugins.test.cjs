@@ -6204,10 +6204,21 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     'the cached Tentacle Destroy option accepts the superior shadow torch');
     assert.equal(attrs.get('desert-treasure-ii:lassar').animaSchematicFound, true);
     assert.ok(groundSpawns.slice(beforeAnimaSchematic).some(([, item]) => item.getId() === core.ItemIdentifiers.ANIMA_PORTAL_SCHEMATIC));
-    assert.equal(interact({ player, objectId: 48278, definition: { id: 48278 }, location: { x: 2372, y: 6430, z: 0 }, option: 'Climb-up' }), true);
+    player.location = new core.Location(2372, 6428, 0);
+    playerProcesses[0]({ player });
+    const pubRemnant = lassarObjectObjects.findLast(({ action, object }) => action === 'register' && object.id === 48245);
+    assert.ok(pubRemnant, 'the cache-backed upper-floor Remnant is made visible after opening the pub');
+    assert.equal(pubRemnant.object.owner, player, 'the missing static placement is scoped to the player in the pub');
+    assert.deepEqual([pubRemnant.object.location.x, pubRemnant.object.location.y, pubRemnant.object.location.z], [2380, 6430, 1]);
+    assert.equal(interact({ player, objectId: 47817, definition: { id: 47817 }, location: { x: 2372, y: 6429, z: 0 }, option: 'Climb-up' }), true,
+      'the cache staircase at (2372, 6429) is the actual pub entrance to the upper floor');
     assert.equal(player.location.z, 1, 'the pub stairs use their real upper plane');
     assert.equal(interact({ player, objectId: 48245, definition: { id: 48245 }, location: { x: 2380, y: 6430, z: 1 }, option: 'Touch' }), true);
     assert.equal(transcripts.at(-1), 'the-whisperer-viewing-the-remnant-in-the-pub');
+    assert.equal(attrs.get('desert-treasure-ii:lassar').pubRemnant, true, 'touching the actual upstairs Remnant records its clue');
+    playerProcesses[0]({ player });
+    assert.equal(lassarObjectObjects.findLast(({ action, object }) => object.id === 48245)?.action, 'deregister',
+      'the already-used Remnant leaves the scene after recording its clue');
     itemActionHooks[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
     player.location = new core.Location(2665, 6418, 0);
     assert.equal(interact({ player, objectId: 48199, location: { x: 2665, y: 6418, z: 0 }, option: 'Use' }), true);
