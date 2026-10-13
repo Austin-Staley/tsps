@@ -127,6 +127,7 @@ module.exports = function registerDragonSlayerII(api) {
   const ATTR_NOTES_READ = "dragon-slayer-ii:notes-read";
   const ATTR_KARAMJA_JOURNAL = "dragon-slayer-ii:malumac-journal";
   const ATTR_ROWBOAT_BUILT = "dragon-slayer-ii:lithkren-rowboat-built";
+  const ATTR_JARDRIC_TALKED = "dragon-slayer-ii:jardric-talked-about-lithkren";
   const ATTR_LITHKREN_ARRIVED = "dragon-slayer-ii:lithkren-arrived";
   const ATTR_LITHKREN_NATIVE_STAGE = "dragon-slayer-ii:lithkren-native-stage";
   const ATTR_LITHKREN_DALLAS_TALKED = "dragon-slayer-ii:lithkren-dallas-talked";
@@ -169,12 +170,12 @@ module.exports = function registerDragonSlayerII(api) {
   const ACTION_BOB_MEMORIES_COMPLETE = "dragon-slayer-ii:bob-memories-complete";
   const ACTION_BOB_FIRST_TALK_COMPLETE = "dragon-slayer-ii:bob-first-talk-complete";
   const ACTION_SPHINX_DREAM_COMPLETE = "dragon-slayer-ii:sphinx-dream-complete";
-  // No cached loc exists for the quest-built boat; place the space beside the
-  // Lithkren NPC anchors on a shoreline tile confirmed reachable by normal routing.
-  const ROWBOAT_SPACE_TILE = { x: 3661, y: 3847, z: 0 };
+  // Cache loc29916 is a 2x3 multiloc at this anchor; QH's clickable waypoint
+  // (3659,3849) is inside its footprint. Varbit6104 changes it from Build to Travel.
+  const ROWBOAT_OBJECT_TILE = { x: 3658, y: 3848, z: 0 };
+  const ROWBOAT_SPACE_TILE = { x: 3659, y: 3849, z: 0 };
   // QuestHelper's surface route continues at the courtyard stairs on Lithkren.
   const LITHKREN_LANDING = new Location(3559, 4004, 0);
-  let rowboatObject;
   const KARAMJA_INSTANCE = { sourceChunkX: 352, sourceChunkY: 1150, widthChunks: 8, heightChunks: 13 };
   const KARAMJA_SOURCE = { x: 2816, y: 9200 };
   const KARAMJA_ENTRANCE = { x: 2943, y: 2894, z: 0 };
@@ -514,6 +515,11 @@ module.exports = function registerDragonSlayerII(api) {
       : p.getAttribute(ATTR_ROWBOAT_BUILT) ? "to-lithkren-talking-to-jardric-talking-to-jardric-again"
         : "to-lithkren-talking-to-jardric";
     talk(p, npcId, variant);
+    if (!p.getAttribute(ATTR_JARDRIC_TALKED)) {
+      p.setAttribute(ATTR_JARDRIC_TALKED, true);
+      p.setAttribute(ATTR_LITHKREN_NATIVE_STAGE, 60);
+      p.getPacketSender?.().sendVarbit?.(6104, 60);
+    }
   }
   function nearRowboat(p) {
     const loc = p.getLocation();
@@ -710,15 +716,19 @@ module.exports = function registerDragonSlayerII(api) {
     beginMapPuzzle(p);
     return true;
   }
-  function installRowboatObject(id) {
-    if (rowboatObject) ObjectManager.deregister(rowboatObject, true);
-    rowboatObject = new GameObject(id, new Location(ROWBOAT_SPACE_TILE.x, ROWBOAT_SPACE_TILE.y, ROWBOAT_SPACE_TILE.z), 10, 0, null);
-    ObjectManager.register(rowboatObject, true);
-  }
-  function buildLithkrenRowboat({ player: p, objectId, location }) {
-    if (objectId !== O.ROWBOAT_SPACE || location.x !== ROWBOAT_SPACE_TILE.x || location.y !== ROWBOAT_SPACE_TILE.y || location.z !== 0
+  function buildLithkrenRowboat({ player: p, objectId, location, definition }) {
+    const visibleObjectId = definition?.id ?? objectId;
+    if (![29916, O.ROWBOAT_SPACE, O.ROWBOAT_14].includes(objectId)
+      && ![O.ROWBOAT_SPACE, O.ROWBOAT_14].includes(visibleObjectId)) return false;
+    if (location.x !== ROWBOAT_OBJECT_TILE.x || location.y !== ROWBOAT_OBJECT_TILE.y || location.z !== 0
       || stage(p) < S.TO_LITHKREN || stage(p) >= S.COMPLETE) return false;
-    if (p.getAttribute(ATTR_ROWBOAT_BUILT)) return travelRowboat({ player: p, objectId, location });
+    if (visibleObjectId === O.ROWBOAT_14 || definition?.getInteractions?.()?.[0] === "Travel") {
+      return travelRowboat({ player: p, objectId: visibleObjectId, location });
+    }
+    if (p.getAttribute(ATTR_ROWBOAT_BUILT)) {
+      p.sendMessage("The rowboat is built. Speak to Dallas Jones to continue your journey.");
+      return true;
+    }
     if (p.getSkillManager().getMaxLevel(Skill.CONSTRUCTION) < 50) return p.sendMessage("You need at least 50 Construction to build the rowboat.");
     if (!has(p, I.HAMMER) || !has(p, I.SAW)) return p.sendMessage("You need a hammer and a saw to build the rowboat.");
     if (!has(p, I.OAK_PLANK, 8) || !has(p, I.SWAMP_PASTE, 10)) return p.sendMessage("You need 8 oak planks and 10 swamp paste to build the rowboat.");
@@ -733,13 +743,14 @@ module.exports = function registerDragonSlayerII(api) {
       if (remaining === 0) break;
     }
     p.setAttribute(ATTR_ROWBOAT_BUILT, true);
-    p.setAttribute(ATTR_LITHKREN_NATIVE_STAGE, 60);
-    p.getPacketSender?.().sendVarbit?.(6104, 60);
+    p.setAttribute(ATTR_LITHKREN_NATIVE_STAGE, 65);
+    p.getPacketSender?.().sendVarbit?.(6104, 65);
     p.sendMessage("You successfully build the boat.");
     return true;
   }
   function travelRowboat({ player: p, objectId, location }) {
-    if (![O.ROWBOAT_SPACE, O.ROWBOAT_14].includes(objectId) || location.x !== ROWBOAT_SPACE_TILE.x || location.y !== ROWBOAT_SPACE_TILE.y || location.z !== 0
+    if (![O.ROWBOAT_14, O.ROWBOAT_SPACE].includes(objectId)
+      || location.x !== ROWBOAT_OBJECT_TILE.x || location.y !== ROWBOAT_OBJECT_TILE.y || location.z !== 0
       || !p.getAttribute(ATTR_ROWBOAT_BUILT) || stage(p) < S.TO_LITHKREN || stage(p) >= S.COMPLETE) return false;
     p.moveTo(LITHKREN_LANDING);
     p.setAttribute(ATTR_LITHKREN_ARRIVED, true);
@@ -1817,11 +1828,9 @@ module.exports = function registerDragonSlayerII(api) {
     const option = definition?.getInteractions?.()?.[clickType - 1];
     if (takeAssaultSupply({ player: p, objectId })) return true;
     if (repairAssaultShip({ player: p, objectId, location })) return true;
-    if (objectId === O.ROWBOAT_SPACE && option === "Build") {
-      return buildLithkrenRowboat({ player: p, objectId, location });
-    }
-    if (objectId === O.ROWBOAT_14 && option === "Travel") {
-      return travelRowboat({ player: p, objectId, location });
+    if ([29916, O.ROWBOAT_SPACE, O.ROWBOAT_14].includes(objectId)
+      || [O.ROWBOAT_SPACE, O.ROWBOAT_14].includes(definition?.id)) {
+      return buildLithkrenRowboat({ player: p, objectId, location, definition });
     }
     if (handleUngaelLab({ player: p, objectId, location })) return true;
     if (enterUngaelLaboratory({ player: p, objectId, location })) return true;
@@ -2122,7 +2131,8 @@ module.exports = function registerDragonSlayerII(api) {
         const y = location?.getY?.() ?? location?.y;
         return y >= 10000 ? 75 : 70;
       }
-      if (value === S.TO_LITHKREN && player?.getAttribute?.(ATTR_ROWBOAT_BUILT)) return 60;
+      if (value === S.TO_LITHKREN && player?.getAttribute?.(ATTR_ROWBOAT_BUILT)) return 65;
+      if (value === S.TO_LITHKREN && player?.getAttribute?.(ATTR_JARDRIC_TALKED)) return 60;
       return NATIVE_STAGE[value] ?? 0;
     },
     startedValue: S.START, completionValue: S.COMPLETE, questPoints: 5,
@@ -2163,7 +2173,7 @@ module.exports = function registerDragonSlayerII(api) {
   api.persistAttribute(ATTR_ANCIENT_DIARY_READ);
   api.persistAttribute(ATTR_GALVEK_DEFEATED);
   api.persistAttribute(ATTR_TRAINING_REWARDS);
-  installRowboatObject(O.ROWBOAT_SPACE);
+  api.persistAttribute(ATTR_JARDRIC_TALKED);
   api.onNpcInteraction("Alec Kincade", { "Talk-to": talkAlec });
   api.onNpcInteraction("Ellen", { "Talk-to": talkEllenTraining });
   api.onNpcInteraction("Dallas Jones", { "Talk-to": talkDallas });

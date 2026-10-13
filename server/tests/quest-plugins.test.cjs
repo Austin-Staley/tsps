@@ -1741,12 +1741,15 @@ test('Dragon Slayer II rowboat build consumes the Wiki supplies and uses the rea
     objectManager.deregister = deregister;
   }
   const { ItemIdentifiers: I, ObjectIdentifiers: O } = api.core;
-  const attributes = new Map([['quest.dragon_slayer_ii.stage', 6]]);
+  const attributes = new Map([
+    ['quest.dragon_slayer_ii.stage', 6],
+    ['dragon-slayer-ii:jardric-talked-about-lithkren', true],
+  ]);
   const amounts = new Map([[I.HAMMER, 1], [I.SAW, 1], [I.OAK_PLANK, 8], [I.SWAMP_PASTE, 10], [I.STEEL_NAILS, 7], [I.IRON_NAILS, 5], [I.DRAGON_KEY, 1]]);
   const messages = [];
   const sentVarbits = [];
   let destination;
-  let playerLocation = { x: 3661, y: 3847, z: 0 };
+  let playerLocation = { x: 3659, y: 3849, z: 0 };
   const packet = new Proxy({ sendVarbit: (id, value) => sentVarbits.push([id, value]) }, { get: (target, key) => target[key] ?? (() => packet) });
   const player = {
     getAttribute: (key) => attributes.get(key),
@@ -1762,24 +1765,21 @@ test('Dragon Slayer II rowboat build consumes the Wiki supplies and uses the rea
     moveTo: (location) => { destination = [location.getX(), location.getY(), location.getZ()]; playerLocation = { x: destination[0], y: destination[1], z: destination[2] }; },
   };
   const buildEvent = {
-    player, objectId: O.ROWBOAT_SPACE, clickType: 1,
-    definition: { getInteractions: () => ['Build'] },
-    location: { x: 3661, y: 3847, z: 0 },
+    player, objectId: 29916, clickType: 1,
+    definition: { id: O.ROWBOAT_SPACE, getInteractions: () => ['Build'] },
+    location: { x: 3658, y: 3848, z: 0 },
   };
   assert.equal(objectHandlers[0](buildEvent), true);
   assert.equal(attributes.get('dragon-slayer-ii:lithkren-rowboat-built'), true);
-  assert.deepEqual(sentVarbits, [[6104, 60]], 'the cache boat NPC transforms become interactive after building');
+  assert.deepEqual(sentVarbits, [[6104, 65]], 'the cache loc morphs from Build to Travel after construction');
   assert.deepEqual([I.OAK_PLANK, I.SWAMP_PASTE, I.STEEL_NAILS, I.IRON_NAILS].map((id) => amounts.get(id)), [0, 0, 0, 0]);
-  assert.equal(objectHandlers[0]({
-    player, objectId: O.ROWBOAT_SPACE, clickType: 1,
-    definition: { getInteractions: () => ['Build'] },
-    location: { x: 3661, y: 3847, z: 0 },
-  }), true);
-  assert.deepEqual(destination, [3559, 4004, 0]);
+  assert.equal(objectHandlers[0](buildEvent), true);
+  assert.equal(destination, undefined, 'a stale Build action cannot skip Dallas\u2019 departure conversation');
+  assert.match(messages.at(-1), /Speak to Dallas Jones/);
   destination = undefined;
   for (const handler of custom.get('npc-dialogue:action')) handler({ player, stepId: 'wKz-eF' });
   assert.deepEqual(destination, [3559, 4004, 0]);
-  assert.deepEqual(sentVarbits, [[6104, 60], [6104, 70]], 'boarding updates the native Lithkren quest milestone');
+  assert.deepEqual(sentVarbits, [[6104, 65], [6104, 70]], 'Dallas\u2019 departure dialogue updates the native Lithkren quest milestone');
   assert.equal(attributes.get('dragon-slayer-ii:lithkren-arrived'), true);
   playerLocation = { x: 3549, y: 10448, z: 0 };
   for (const handler of playerProcesses) handler({ player });
@@ -1946,7 +1946,7 @@ test('Dragon Slayer II Lithkren diary chapter follows Dallas, the skeleton, and 
   const { ItemIdentifiers: I, NpcIdentifiers: N, ObjectIdentifiers: O, Location } = api.core;
   const attrs = new Map([
     ['quest.dragon_slayer_ii.stage', 6],
-    ['dragon-slayer-ii:lithkren-arrived', true],
+    ['dragon-slayer-ii:lithkren-arrived', false],
   ]);
   const inventory = new Map();
   const varbits = [];
@@ -1965,6 +1965,13 @@ test('Dragon Slayer II Lithkren diary chapter follows Dallas, the skeleton, and 
     }),
     sendMessage() {},
   };
+  npcInteractions.get('Jardric')['Talk-to']({
+    player, npcId: N.JARDRIC, location: new Location(3659, 3849, 0),
+  });
+  assert.equal(attrs.get('dragon-slayer-ii:jardric-talked-about-lithkren'), true);
+  assert.deepEqual(varbits.at(-1), [6104, 60], 'Jardric reveals the canonical rowboat Build transform');
+  attrs.set('dragon-slayer-ii:lithkren-arrived', true);
+  player.getLocation = () => new Location(3549, 10419, 0);
   npcInteractions.get('Dallas Jones')['Talk-to']({ player, npcId: N.DALLAS_JONES_2 });
   assert.equal(transcript.variant, 'to-lithkren-talking-to-dallas-at-the-ancient-doors');
   assert.equal(transcript.steps.at(-1).id, 'dragon-slayer-ii:lithkren-dallas-complete');
