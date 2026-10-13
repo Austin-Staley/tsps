@@ -4450,7 +4450,6 @@ module.exports = function registerDesertTreasureII(api) {
       if (npcs[key]?.isRegistered?.() && area.entities.includes(npcs[key])) return;
       const npc = api.core.NPC.create(id, area.tile(x - 1112, y - 3400, 0));
       npc.__dt2Vardorvis = true;
-      npc.setDefenceBonusOverrides?.([150, 25, 50, 560, 560]);
       npc.setOwner?.(p);
       npc.setOwnerOnly?.(true);
       npc.__skipDefaultRespawn = true;

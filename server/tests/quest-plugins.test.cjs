@@ -9681,6 +9681,8 @@ test('RFD Mother cycles six weaknesses and the final room suppresses prayer and 
 });
 
 test('DT2 Vardorvis scales melee, heals, exposes avoidable specials and accepts only active native spore buttons', () => {
+  const definition=require('../data/definitions/monsters-complete.json')['12224'];
+  assert.deepEqual([definition.hitpoints,definition.combat_level,definition.attack_level,definition.defence_slash],[500,572,260,25],'cache12224 is the quest variant, not Awakened');
   const {api:base,handlers}=mockApi();
   let cycle=1, Combat, hitRoll, resolved, prayerDisabled, blocked=false, prayer=60, accurate=true,freeSlots=1;
   const damage={value:37,getDamage(){return this.value},setDamage(v){this.value=v}};
