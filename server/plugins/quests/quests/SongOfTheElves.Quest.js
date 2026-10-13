@@ -2579,6 +2579,13 @@ module.exports = function registerSongOfTheElves(api) {
     if(player && currentChapter(player)===10 && event.objectId===ObjectIdentifiers.DOOR_6 && loc?.x===2511 && loc?.y===3464 && loc?.z===0) {
       event.handled=true;player.moveTo(new Location(2574,9864,0));player.sendMessage("You enter the Waterfall Dungeon.");return;
     }
+    if(player && [10,11].includes(currentChapter(player)) && loc?.x===2604 && loc?.y===9900 && loc?.z===0) {
+      event.handled=true;player.moveTo(new Location(2566,9900,0));return;
+    }
+    if(player && currentChapter(player)===10 && loc?.x===2566 && loc?.y===9901 && loc?.z===0 && player.getInventory().getAmount(FALLS_KEY)>0) {
+      // The cache holds the SOTE Baxtorian chamber in the adjacent copied room.
+      event.handled=true;player.moveTo(new Location(2604,9902,0));return;
+    }
     if(!player || currentChapter(player)!==10 || loc?.z!==0 || ![[2568,9893],[2566,9901]].some(([x,y])=>loc.x===x&&loc.y===y))return;
     if(player.getInventory().getAmount(FALLS_KEY)>0)return;
     event.handled=true;player.sendMessage("The waterfall door is locked. Search the eastern chamber's crate for its key.");
