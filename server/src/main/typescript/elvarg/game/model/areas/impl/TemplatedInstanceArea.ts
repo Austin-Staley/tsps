@@ -19,13 +19,13 @@ export interface TemplateChunk {
 const PLANES = 4;
 const SCENE_CHUNKS = 13;
 /** The largest instance, in chunks a side, and the spacing between allocations. */
-export const MAX_INSTANCE_CHUNKS = 16;
-const SLOT_STRIDE = 20;
+export const MAX_INSTANCE_CHUNKS = 24;
+const SLOT_STRIDE = MAX_INSTANCE_CHUNKS + 4;
 /** Instances live where the cache has no map (tile 8192+), clear of houses and boat decks. */
 const FIRST_SLOT_CHUNK_X = 1024;
 const FIRST_SLOT_CHUNK_Y = 200;
-const SLOT_COLUMNS = 7;
-const SLOT_ROWS = 60;
+const SLOT_COLUMNS = 6;
+const SLOT_ROWS = 70;
 const usedSlots = new Array<boolean>(SLOT_COLUMNS * SLOT_ROWS).fill(false);
 
 /** Settings bits (cache terrain) and the collision flags they set. */

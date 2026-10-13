@@ -10,7 +10,7 @@ const { RegionManager } = require('../dist/game/collision/RegionManager');
 const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
 const { Location } = require('../dist/game/model/Location');
 const {
-  TemplatedInstanceArea, rotateChunkTile,
+  TemplatedInstanceArea, rotateChunkTile, MAX_INSTANCE_CHUNKS,
 } = require('../dist/game/model/areas/impl/TemplatedInstanceArea');
 
 before(() => {
@@ -176,11 +176,15 @@ test('tiles no chunk was copied to are blocked, and copying one opens it and bum
 });
 
 test('allocations do not overlap and are freed on destroy', () => {
-  const a = new TemplatedInstanceArea(16, 16);
-  const b = new TemplatedInstanceArea(16, 16);
+  const a = new TemplatedInstanceArea(MAX_INSTANCE_CHUNKS, MAX_INSTANCE_CHUNKS);
+  const b = new TemplatedInstanceArea(MAX_INSTANCE_CHUNKS, MAX_INSTANCE_CHUNKS);
   try {
-    assert.ok(a.baseChunkX + 16 <= b.baseChunkX || a.baseChunkY + 16 <= b.baseChunkY);
+    assert.ok(a.baseChunkX + MAX_INSTANCE_CHUNKS <= b.baseChunkX || a.baseChunkY + MAX_INSTANCE_CHUNKS <= b.baseChunkY);
     assert.equal(rotateChunkTile(0, 0, 1)[1], 7);
+    assert.throws(() => new TemplatedInstanceArea(MAX_INSTANCE_CHUNKS + 1, 1), /outside/);
+    const prison = new TemplatedInstanceArea(24, 17);
+    prison.destroy();
+    assert.ok(a.getBaseX() + MAX_INSTANCE_CHUNKS * 8 < 9600, 'template slots remain west of boat decks');
   } finally {
     const slotX = a.baseChunkX;
     a.destroy();
