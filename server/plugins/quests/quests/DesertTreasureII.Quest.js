@@ -4027,11 +4027,20 @@ module.exports = function registerDesertTreasureII(api) {
           return true;
         }
         if (visibleId === SUCELLUS_MEDALLION_GATE && sucellusTile.x === 3023 && sucellusTile.y === 6425) {
-          if (!p.getAttribute(SUCELLUS_DEFEATED)) return p.sendMessage("The Duke still blocks the room beyond the gate.");
-          if (!has(p, I.ODD_KEY)) return p.sendMessage("The gate is locked. The odd key from Duke Sucellus should fit.");
-          p.getInventory().deleteNumber(I.ODD_KEY, 1);
-          p.setAttribute(SUCELLUS_WEST_ROOM, true);
-          p.sendMessage("You use the odd key to unlock the door to the west of the Duke's chamber.");
+          if (!p.getAttribute(SUCELLUS_DEFEATED)) {
+            event.handled = true;
+            return p.sendMessage("The Duke still blocks the room beyond the gate.");
+          }
+          if (!p.getAttribute(SUCELLUS_WEST_ROOM)) {
+            if (!has(p, I.ODD_KEY)) {
+              event.handled = true;
+              return p.sendMessage("The gate is locked. The odd key from Duke Sucellus should fit.");
+            }
+            p.getInventory().deleteNumber(I.ODD_KEY, 1);
+            p.setAttribute(SUCELLUS_WEST_ROOM, true);
+            p.sendMessage("You use the odd key to unlock the door to the west of the Duke's chamber.");
+          }
+          // Keep the ordinary door plugin in charge of opening the cache gate.
           return false;
         }
         if (visibleId === SUCELLUS_MEDALLION_CHEST && sucellusTile.x === 3021 && sucellusTile.y === 6420) {

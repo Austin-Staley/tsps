@@ -5723,9 +5723,19 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   assert.equal(pendingHits.length, 1, 'the exposed freezing gaze queues its real hit');
   assert.ok(pendingHits[0].getDamage() > 0 && pendingHits[0].getDamage() <= 99);
   deaths.at(-1)({ killer: player, npc: boss });
+  inventory.set(I.ODD_KEY, 0);
+  interactObject(49140, 3023, 6425, 'Open');
+  assert.match(messages.at(-1), /odd key from Duke Sucellus should fit/,
+    'the west gate stays locked until the real odd-key drop has been picked up');
+  assert.equal(attrs.get('desert-treasure-ii:sucellus-west-room'), undefined);
   groundPickups.at(-1)({ player, groundItemId: I.ODD_KEY, location: sourceLocation(3039, 6454) });
   inventory.set(I.ODD_KEY, 1);
-  interactObject(49140, 3023, 6425, 'Open');
+  assert.equal(interactObject(49140, 3023, 6425, 'Open'), false,
+    'using the odd key unlocks the gate and yields to the shared door swing');
+  assert.equal(attrs.get('desert-treasure-ii:sucellus-west-room'), true);
+  assert.equal(inventory.get(I.ODD_KEY), 0);
+  assert.equal(interactObject(49140, 3023, 6425, 'Open'), false,
+    'the already-unlocked gate can be opened again without consuming another key');
   interactObject(49116, 3021, 6420, 'Open');
   assert.equal(inventory.get(I.SUCELLUS_MEDALLION), 1);
   assert.equal(quest.getStage(player), 10);

@@ -144,6 +144,30 @@ test('captured door portals can hand off before the ordinary door swing', () => 
   }
 });
 
+test('Ghorrock Prison’s keyed western gate uses its cache-supported self-opening swing', async () => {
+  await initializeMapCollisionOnce();
+  const id = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers.GATE_282;
+  const definition = CacheDefinitions.getObject(id);
+  assert.equal(definition.name, 'Gate');
+  assert.equal(definition.actions[0], 'Open');
+  assert.equal(CacheDefinitions.getObject(id + 1)?.name, 'Crate', 'the gate has no cache open partner');
+  const h = buildHarness({ cacheObjects: new Map([[id, definition]]) });
+  try {
+    const opened = h.click(id, 8343, 1689, 3);
+    assert.deepEqual(opened, [
+      ['register', id, 8343, 1688, 0],
+      ['deregister', id, 8343, 1689, 3],
+    ], 'opening rotates the same loc out of the doorway');
+    const closed = h.click(id, 8343, 1688, 0);
+    assert.deepEqual(closed, [
+      ['register', id, 8343, 1689, 3],
+      ['deregister', id, 8343, 1688, 0],
+    ], 'the open gate can swing shut again through the normal door plugin');
+  } finally {
+    h.restore();
+  }
+});
+
 test('Kourend Crypt cached Large doors keep their real double-leaf geometry and clear the plane-1 threshold', async () => {
   await initializeMapCollisionOnce();
   const cachedDoors = new Map([32404, 32405, 32406, 32407].map((id) => [
