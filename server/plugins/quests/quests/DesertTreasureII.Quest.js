@@ -6442,7 +6442,8 @@ module.exports = function registerDesertTreasureII(api) {
     // The live paired pub gate reports its south leaf at 2385,6428 when the
     // player clicks that cache-backed Open option. Accept both leaves so the
     // requirement and key handoff run before the shared Doors plugin swings it.
-    if (state.inShadow && x === 2385 && (y === 6427 || y === 6428) && [48278, 48279, 48289, 48290].includes(visibleId)
+    if (state.inShadow && (x === 2384 || x === 2385) && (y === 6427 || y === 6428)
+      && [48278, 48279, 48289, 48290].includes(visibleId)
       && (option === "open" || option === "enter")) {
       if (!state.pubBlocker) { p.sendMessage("Place the shadow blocker at the pub entrance in the material world before approaching these doors."); return true; }
       if (!has(p, I.SHADOW_KEY_2) || !state.blueKey) { p.sendMessage("The pub's shadow doors need the blue shadow key."); return true; }
