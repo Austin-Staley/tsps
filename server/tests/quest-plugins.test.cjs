@@ -75,11 +75,13 @@ function mockApi() {
     registerArea: area => handlers.area.push(area),
     onGroundItemPickup: handler => handlers.ground.push(handler),
     onCustomEvent: (name, h) => {
+      assert.match(name, /^[^:]+:[^:]+$/, 'custom event names must have exactly one colon');
       const list = handlers.custom.get(name) ?? [];
       list.push(h);
       handlers.custom.set(name, list);
     },
     emitCustomEvent: (name, event) => {
+      assert.match(name, /^[^:]+:[^:]+$/, 'custom event names must have exactly one colon');
       for (const handler of handlers.custom.get(name) ?? []) handler(event);
     },
     persistAttribute: noop,

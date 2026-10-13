@@ -1233,7 +1233,7 @@ module.exports = function registerDesertTreasureII(api) {
           player.sendMessage("A guard knocks you unconscious. You wake in a locked prison cell.");
         }
       }
-      api.emitCustomEvent("dt2:sucellus-prison:process", { player, area: this, cycle });
+      api.emitCustomEvent("dt2:sucellus-prison-process", { player, area: this, cycle });
       const boss = this.questPlayer.getAttribute(ATTR);
       if (boss?.__dt2Sucellus && boss.getHitpoints?.() > 0 && boss.__dt2SucellusAwake) {
         // Keep the ordinary combat hit queue and regeneration rules; only the
@@ -2724,7 +2724,7 @@ module.exports = function registerDesertTreasureII(api) {
       if (event.text === "sigh*" && event.player.getAttribute(SUCELLUS_CELL_ESCAPED)) event.after = () => {
         event.player.setAttribute(SUCELLUS_ASSASSIN_GONE, true);
         event.player.setAttribute(SUCELLUS_PRISON_PROGRESS, 22);
-        api.emitCustomEvent("dt2:sucellus-prison:start", { player: event.player, area: event.player.getAttribute(SUCELLUS_AREA) });
+        api.emitCustomEvent("dt2:sucellus-prison-start", { player: event.player, area: event.player.getAttribute(SUCELLUS_AREA) });
       };
     }
     if (stage(event.player) === S.SUCELLUS && event.npcId === N.CAPTAIN_MALLETA
@@ -2793,7 +2793,7 @@ module.exports = function registerDesertTreasureII(api) {
         else if (!defeated) {
           p.moveTo(area.tile(40, 12, 2));
           spawnSucellusCellAssassin(p, area);
-          api.emitCustomEvent("dt2:sucellus-prison:resume", { player: p, area });
+          api.emitCustomEvent("dt2:sucellus-prison-resume", { player: p, area });
         } else p.moveTo(area.tile(167, 97, 0));
       }
     }
@@ -3155,7 +3155,7 @@ module.exports = function registerDesertTreasureII(api) {
       }
       if (!player.getAttribute(SUCELLUS_PRISON_COMPLETE)) {
         const journal = { player, lines: [] };
-        api.emitCustomEvent("dt2:sucellus-prison:journal", journal);
+        api.emitCustomEvent("dt2:sucellus-prison-journal", journal);
         return journal.lines.length ? journal.lines : ["Finish the Assassin's conversation, then explore Ghorrock Prison for the keys to your equipment."];
       }
       if (!player.getAttribute(SUCELLUS_AREA)) return ["Return to Ghorrock Prison beneath Weiss."];
@@ -6319,8 +6319,8 @@ module.exports = function registerDesertTreasureII(api) {
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onNpcDialogueCondition(resolveGolemSearchCondition);
   api.onNpcDialogueCondition(resolveSucellusCellCondition);
-  api.onCustomEvent("dt2:sucellus-prison:return-stash", returnSucellusPrisonStash);
-  api.onCustomEvent("dt2:sucellus-prison:complete", completeSucellusPrison);
+  api.onCustomEvent("dt2:sucellus-prison-return-stash", returnSucellusPrisonStash);
+  api.onCustomEvent("dt2:sucellus-prison-complete", completeSucellusPrison);
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("magic:hit-effects", activateTotem);
   api.onCustomEvent("magic:hit-effects", stunLeviathan);
