@@ -390,7 +390,8 @@ export interface PluginPlayerDeathItemDropEvent {
 }
 
 /**
- * Everything a death is about to lose, once, after the per-item `onPlayerDeathItemDrop` hooks.
+ * Everything a death is about to lose, once, after the per-item `onPlayerDeathItemDrop` hooks
+ * (also when that is nothing).
  * A plugin takes items by removing them from `items` (headed for the floor) or `untradeables`
  * (otherwise kept); whatever is left falls to the floor or is kept, as without the hook.
  */

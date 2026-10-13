@@ -135,7 +135,8 @@ export class PlayerDeathTask extends Task {
                             droppedItems.push(item);
                         }
 
-                        if (shouldDropItemsOnDeath && (droppedItems.length > 0 || lostUntradeables.length > 0)) {
+                        // Emitted with nothing lost too: a death still changes an existing grave.
+                        if (shouldDropItemsOnDeath && !PlayerDeathTask.keepsEverything(this.player)) {
                             const before = droppedItems.length + lostUntradeables.length;
                             PluginManager.emitPlayerDeathDrops({
                                 player: this.player,
