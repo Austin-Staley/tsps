@@ -35,6 +35,7 @@ function mockApi() {
     npcBeforeDeath: [],
     npcDeath: [],
     npcHitModify: [],
+    combatHitRoll: [],
   };
   const noop = () => {};
   const base = {
@@ -55,6 +56,7 @@ function mockApi() {
     onNpcBeforeDeath: h => handlers.npcBeforeDeath.push(h),
     onNpcDeath: h => handlers.npcDeath.push(h),
     onNpcHitModify: (h) => handlers.npcHitModify.push(h),
+    onCombatHitRoll: h => handlers.combatHitRoll.push(h),
     onItemOnItem: (h) => handlers.itemOnItem.push(h),
     onItemOnNpc: (h) => handlers.itemOnNpc.push(h),
     onItemOnObject: (...args) => handlers.itemOnObject.push(typeof args[0] === 'function' ? args[0] : args[2]),
@@ -4509,6 +4511,8 @@ test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle
     handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'xfnkES', handled: false });
     assert.equal(boss.scriptedMovement, true, 'the manually driven encounter cannot also use default NPC combat');
     const area = player.getArea();
+    assert.equal(area.npcAggression(player, boss), false,
+      'the prayer-aware area controller owns the boss attack cycle');
 
     activePrayers[api.core.PrayerHandler.PROTECT_FROM_MISSILES] = true;
     const originalRandom = Math.random;
@@ -4569,15 +4573,28 @@ test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle
       const clones = spawned.slice(spawnStart + 1);
       assert.equal(clones.length, 2);
       assert.ok(clones.every(npc => npc.scriptedMovement), 'scripted echoes cannot run the normal NPC combat AI');
+      assert.ok(clones.every(npc => area.npcAggression(player, npc) === false),
+        'echoes cannot acquire a second, generic combat target');
       const resetsBeforeAddTick = addAttackResets;
       cycle += 1;
       area.process(clones[0]);
-      assert.ok(addAttackResets > resetsBeforeAddTick, 'the area keeps scripted adds from starting automatic attacks');
+      assert.ok(addAttackResets > resetsBeforeAddTick, 'the area prevents generic NPC regeneration during scripted phases');
 
       handlers.npcDeath.at(-1)({ npc: clones[0], killer: player });
       const healers = spawned.slice(-2);
       assert.equal(healers.length, 2);
       assert.ok(healers.every(npc => npc.scriptedMovement), 'scripted whirlwinds cannot run the normal NPC combat AI');
+      assert.ok(healers.every(npc => area.npcAggression(player, npc) === false),
+        'whirlwinds cannot acquire a second, generic combat target');
+      const missedMagicRoll = {
+        attacker: player,
+        target: healers[0],
+        combatType: api.core.CombatType.MAGIC,
+        forceAccurate: false,
+      };
+      for (const hook of handlers.combatHitRoll) hook(missedMagicRoll);
+      assert.equal(missedMagicRoll.forceAccurate, true,
+        'a magic splash cannot leave an OSRS one-hit whirlwind alive to heal the boss');
       for (const healer of healers) area.process(healer);
       const missedPart = { damage: 0, getDamage() { return this.damage; }, setDamage(value) { this.damage = value; } };
       let totalDamage = 0;
