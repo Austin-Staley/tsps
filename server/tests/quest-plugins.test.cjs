@@ -1202,6 +1202,35 @@ test('Blood Moon repairs the clipped North Chapel stair landing without advancin
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 1);
 });
 
+test('Blood Moon restores the captured prison return landing for a saved player', () => {
+  const { api, handlers } = mockApi();
+  api.spawnNpc = spec => ({ ...spec, getHitpoints: () => 10, setScriptedMovement() {} });
+  api.removeNpc = () => {};
+  api.getItemOnGroundManager = () => ({ getGroundItem: () => null, registerLocation() {} });
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.castle-room', 48],
+    ['quest.the_blood_moon_rises.castle-floor', 1],
+    ['quest.the_blood_moon_rises.castle-native-stage', 76],
+    ['quest.the_blood_moon_rises.castle-story', { prisonersFound: true }],
+  ]);
+  const moved = [];
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(2567, 7394, 0),
+    moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
+    getInventory: () => ({ contains: () => false }), getUsername: () => 'castle-prison-exit',
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+  };
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  quest.setStage(player, 40);
+  handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
+  assert.deepEqual(moved, [[2570, 7368, 0]], 'the old landing returns to the recorded room48 side of the door');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 48);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 76);
+});
+
 test('Blood Moon Castle story actors use cache-walkable floor anchors', () => {
   const { api, handlers } = mockApi();
   const spawned = [];
@@ -2048,6 +2077,10 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     destX: 2358, destY: 7386, moveNear: true, maxWaypoints: 80, privateArea: null });
   assert.equal(fireplaceApproach.success, true,
     'the captured parlour landing has a cache path to the fireplace interaction tile');
+  const prisonReturnRoute = larderRoute.findRoute({ level: 0, srcX: 2570, srcY: 7368, srcSize: 1,
+    destX: 2564, destY: 7369, moveNear: true, maxWaypoints: 80, privateArea: null });
+  assert.equal(prisonReturnRoute.success, true,
+    'the captured prison exit landing connects to the basement stairs');
   const enter = handlers.objects.find((handler) => handler.name === 'handleCastleDoorEnter');
   const route = handlers.routes.find((handler) => handler.name === 'routeCastleDoorEnter');
   const routeEvent = {
@@ -2203,6 +2236,14 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   assert.equal(venatorExit.handled, true);
   assert.deepEqual(moved.at(-1), [2579, 7366, 0], 'the recorded reverse crescent door returns to the basement hall');
   assert.equal(varbits.get(15499), 48);
+  inventoryItems.add(api.core.ItemIdentifiers.NEW_MOON_KEY);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 51);
+  const prisonExit = enterPairedDoor(61585, 2566, 7394, 1, { x: 2567, y: 7396, z: 0 });
+  assert.equal(prisonExit.handled, true);
+  assert.deepEqual(moved.at(-1), [2570, 7368, 0], 'the recorded prison exit returns to the basement hall');
+  assert.equal(varbits.get(15499), 48);
+  assert.equal(varbits.get(15489), 1);
+  inventoryItems.delete(api.core.ItemIdentifiers.NEW_MOON_KEY);
   inventoryItems.delete(api.core.ItemIdentifiers.CRESCENT_MOON_KEY);
   for (const [id, name, keyId] of [
     [61584, 'New moon door', api.core.ItemIdentifiers.NEW_MOON_KEY],

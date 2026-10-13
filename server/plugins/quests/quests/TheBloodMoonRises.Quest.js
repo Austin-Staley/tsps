@@ -421,7 +421,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.NEW, x: 2570, y: 7369, z: 0, from: CASTLE_ROOM.BASEMENT_HALL, to: CASTLE_ROOM.BASEMENT_PRISON,
       fromFloor: 1, toFloor: 1, landing: [2565, 7394] },
     { id: CASTLE_DOOR_IDS.NEW_M, x: 2566, y: 7394, z: 0, from: CASTLE_ROOM.BASEMENT_PRISON, to: CASTLE_ROOM.BASEMENT_HALL,
-      fromFloor: 1, toFloor: 1, landing: [2567, 7394] },
+      fromFloor: 1, toFloor: 1, landing: [2570, 7368] },
   ]);
   const CASTLE_DOOR_NAMES = Object.freeze(["Door", "Half moon door", "Crescent moon door",
     "New moon door", "Gibbous moon door", "Full moon door", "Stairs", "Spiral staircase",
@@ -1965,6 +1965,13 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!player || stage(player) !== STAGE.CASTLE) return;
     const location = player.getLocation?.();
     const prisonStory = castleStory(player);
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.BASEMENT_HALL &&
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 76 && prisonStory.prisonersFound &&
+      location?.getX?.() === 2567 && location.getY() === 7394 && location.getZ() === 0) {
+      // The old prison exit left saved players in the isolated cell map chunk.
+      player.moveTo(new Location(2570, 7368, 0));
+      return;
+    }
     if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.BASEMENT_PRISON &&
       Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 76 && prisonStory.prisonersFound &&
       !prisonStory.gibbousKeyClaimed && !hasItem(player, CASTLE_BOOK_ITEMS.gibbousMoonKey) &&
