@@ -88,7 +88,15 @@ module.exports = function registerANightAtTheTheatre(api) {
     const loc = npc?.getLocation();
     if (loc && (loc.getX() < 3650 || loc.getX() > 3690 || loc.getY() < 3190 || loc.getY() > 3240)) return false;
     const s = stage(player);
-    if (s >= 80) { claimLamps(player); player.sendMessage("Sugadinti is grateful for your help."); return true; }
+    if (s >= 80) {
+      claimLamps(player);
+      // Keep the post-quest Stranger conversation available: it includes the
+      // canonical crystal shop option. claimLamps is idempotent after all four
+      // lamps have been used or banked.
+      if (startTranscript(api, player, npcId, "Mysterious Stranger", "after-a-night-at-the-theatre")) return true;
+      player.sendMessage("Sugadinti is grateful for your help.");
+      return true;
+    }
     if (!s && !requirement(player)) { player.sendMessage("You must complete A Taste of Hope before helping the Mysterious Stranger."); return true; }
     let variant;
     if (!s) variant = hasRaidCompletion(player) ? "starting-off-if-the-player-has-cleared-the-theatre-at-least-once" : "starting-off-if-the-player-hasn-t-cleared-the-theatre-before";

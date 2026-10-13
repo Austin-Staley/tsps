@@ -8612,12 +8612,13 @@ test('Elite Kinshra protection follows attack style and wears down on unblocked 
 
 test('Night at the Theatre obtains and hands in the head once, and scopes shared dialogue conditions', () => {
   const objects = new Map(), customs = new Map();
-  let conditions, route;
+  let conditions, route, strangerTalk, dialogueStarted = false;
   const { api: base } = mockApi();
   const core = { ...base.core, PrivateArea: class { enter(p) { p.area = this; } add() {} }, ObjectManager: { register() {} }, NpcDefinition: { forId: (id) => ({ getName: () => id === 10875 ? 'Mysterious Stranger' : 'Man' }) } };
   const api = new Proxy(base, { get(target, prop) {
     if (prop === 'core') return core;
     if (prop === 'onObjectInteraction') return (name, actions) => objects.set(name, actions);
+    if (prop === 'onNpcInteraction') return (name, actions) => { if (name === 'Mysterious Stranger') strangerTalk = actions['Talk-to']; };
     if (prop === 'onCustomEvent') return (name, handler) => customs.set(name, handler);
     if (prop === 'onNpcDialogueCondition') return (handler) => { conditions = handler; };
     if (prop === 'onObjectRoute') return (handler) => { route = handler; };
@@ -8639,6 +8640,8 @@ test('Night at the Theatre obtains and hands in the head once, and scopes shared
   const player = {
     getAttribute: (key) => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => inventory, getPacketSender: () => sender, sendMessage: (text) => messages.push(text),
+    getLocation: () => new core.Location(3673, 3223, 0),
+    getDialogueManager: () => ({ reset() {}, startDialogues() { dialogueStarted = true; } }),
   };
   customs.get('npc-dialogue:hook')({ player, hook: 'quest:a-night-at-the-theatre:start' });
   assert.equal(quest.getStage(player), 10);
@@ -8691,6 +8694,13 @@ test('Night at the Theatre obtains and hands in the head once, and scopes shared
   assert.equal(inventory.getAmount(lamp), 1, 'banked lamps count toward the four-lamp reward');
   customs.get('night-at-the-theatre:claim-lamps')(requestLamps);
   assert.equal(inventory.getAmount(lamp), 1, 'repeat claims cannot duplicate unused lamps');
+
+  quest.setStage(player, 80);
+  attributes.set('night-at-the-theatre:lamps-used', 4);
+  items.set(lamp, 0);
+  assert.equal(strangerTalk({ player, npcId: 10875, npc: { getLocation: () => new core.Location(3673, 3223, 0) } }), true);
+  assert.equal(dialogueStarted, true, 'completed Stranger starts the canonical post-quest transcript with the crystal shop branch');
+  assert.equal(inventory.getAmount(lamp), 0, 'a completed Stranger conversation does not duplicate fully used lamps');
 
 });
 
