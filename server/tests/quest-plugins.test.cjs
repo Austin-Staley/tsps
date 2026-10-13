@@ -2600,6 +2600,19 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     enter(paired);
     return paired;
   };
+  attributes.set('quest.the_blood_moon_rises.castle-room', 12);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 1);
+  attributes.set('quest.the_blood_moon_rises.gallery-chest', { solved: true, key: true });
+  const earnedCrescentPassage = enterPairedDoor(61592, 2343, 7416, 0, { x: 2342, y: 7416, z: 0 });
+  assert.equal(earnedCrescentPassage.handled, true);
+  assert.deepEqual(moved.at(-1), [2371, 7370, 0],
+    'the earned Gallery chest keeps its crescent passage unlocked after the key is consumed or lost');
+  attributes.set('quest.the_blood_moon_rises.castle-room', 12);
+  attributes.delete('quest.the_blood_moon_rises.gallery-chest');
+  const unearnedCrescentPassage = enterPairedDoor(61592, 2343, 7416, 0, { x: 2342, y: 7416, z: 0 });
+  assert.equal(unearnedCrescentPassage.handled, true);
+  assert.deepEqual(moved.at(-1), [2371, 7370, 0],
+    'the Gallery passage remains locked unless the player carries the key or has earned it from the chest');
   inventoryItems.add(api.core.ItemIdentifiers.FULL_MOON_KEY);
   attributes.set('quest.the_blood_moon_rises.castle-room', 32);
   attributes.set('quest.the_blood_moon_rises.castle-floor', 2);

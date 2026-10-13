@@ -4264,7 +4264,13 @@ module.exports = function registerTheBloodMoonRises(api) {
     // ID. An exact placed-route match is more specific than that child ID.
     const moonDoorKey = CASTLE_MOON_DOOR_KEYS.get(transition?.id) ??
       (transition ? null : CASTLE_MOON_DOOR_KEYS.get(visibleId) ?? CASTLE_MOON_DOOR_KEYS.get(event?.objectId));
-    if (moonDoorKey && !hasItem(player, moonDoorKey[0])) {
+    // The crescent key is earned from the Gallery chest and consumed to open
+    // the Gallery↔Gallery Hall passage. Keep that passage available after a
+    // reconnect even when the already-earned key is no longer in inventory.
+    const galleryPassageAlreadyUnlocked = transition?.id === CASTLE_DOOR_IDS.CRESCENT &&
+      transition.x === 2343 && transition.y === 7416 && transition.from === CASTLE_ROOM.GALLERY_HALL &&
+      player.getAttribute(GALLERY_CHEST_ATTRIBUTE)?.key === true;
+    if (moonDoorKey && !hasItem(player, moonDoorKey[0]) && !galleryPassageAlreadyUnlocked) {
       event.handled = true;
       player.sendMessage(`The door is locked. You need the ${moonDoorKey[1]}.`);
       return;
