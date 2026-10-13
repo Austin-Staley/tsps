@@ -379,7 +379,7 @@ module.exports = function registerSongOfTheElves(api) {
     npcAggression(player, npc) {
       const state = fragmentInstances.get(this);
       return state && state.player === player && (npc === state.boss ||
-        state.clones.includes(npc) || state.healers.has(npc)) ? false : null;
+        state.clones.includes(npc) || state.beams.has(npc)) ? false : null;
     }
 
     canAttack(attacker, target) {
@@ -404,7 +404,7 @@ module.exports = function registerSongOfTheElves(api) {
       if (!mobile?.isNpc?.()) return;
       const state = fragmentInstances.get(this);
       if (!state || state.finished || (mobile !== state.boss &&
-        !state.clones.includes(mobile) && !state.healers.has(mobile))) return;
+        !state.clones.includes(mobile) && !state.beams.has(mobile))) return;
       mobile.setScriptedMovement(true);
       mobile.getCombat().getLastAttack().reset();
       if (mobile !== state.boss) return;
@@ -416,29 +416,34 @@ module.exports = function registerSongOfTheElves(api) {
         startTranscript(api, state.player, NpcIdentifiers.FRAGMENT_OF_SEREN, PAGE,
           "the-fragment-of-seren-the-fragment-enraged");
       }
-      if (state.healers.size > 0 && state.boss.getHitpoints() > 0) {
-        const heal = state.healers.size * (4 + Math.floor(Math.random() * 5));
+      if (state.beams.size > 0 && state.boss.getHitpoints() > 0) {
+        const heal = state.beams.size * (4 + Math.floor(Math.random() * 5));
         state.boss.setHitpoints(Math.min(state.boss.getMaxHitpoints(), state.boss.getHitpoints() + heal));
       }
       if (now >= state.nextBasicAttackAt) {
         state.nextBasicAttackAt = now + state.basicAttackSpeed;
-        let damage = Math.floor(Math.random() * (FRAGMENT_BASIC_ATTACK_MAX + 1));
+        const firstDamage = Math.floor(Math.random() * (FRAGMENT_BASIC_ATTACK_MAX + 1));
+        const secondDamage = Math.max(0, firstDamage - (Math.random() < 0.5 ? 0 : 1));
         // Wiki: Protect from Missiles reduces Seren's 12-damage auto-attack to
-        // at most 3. This custom ranged hit is separate from the typeless blast,
-        // which intentionally bypasses protection prayers.
+        // at most 3 per projectile. This two-hit ranged attack is separate from
+        // the typeless blast, which intentionally bypasses protection prayers.
         if (api.core.PrayerHandler.isActivated(state.player, api.core.PrayerHandler.PROTECT_FROM_MISSILES)) {
-          damage = Math.floor(damage * 0.25);
-        }
-        if (damage > 0) {
+          const hits = [firstDamage, secondDamage].map(damage => Math.floor(damage * 0.25));
+          if (hits.some(damage => damage > 0)) {
+            state.player.getCombat().getHitQueue().addPendingDamage(hits.map(damage =>
+              new HitDamage(damage, HitMask.RED).setSource(state.boss)));
+          }
+        } else if (firstDamage > 0 || secondDamage > 0) {
           state.player.getCombat().getHitQueue().addPendingDamage([
-            new HitDamage(damage, HitMask.RED).setSource(state.boss),
+            new HitDamage(firstDamage, HitMask.RED).setSource(state.boss),
+            new HitDamage(secondDamage, HitMask.RED).setSource(state.boss),
           ]);
         }
       }
-      const hp = state.boss.getHitpoints();
-      if (state.cloneThresholds.length && state.healers.size === 0 &&
-        hp <= state.cloneThresholds[0]) spawnFragmentClones(this, state);
-      if (now >= state.nextSpecialAt) {
+      if (now >= state.nextSpecialAt ||
+        (state.followupAt && now >= state.followupAt) ||
+        (state.meleeHitsRemaining && now >= state.nextMeleeHitAt) ||
+        (state.specialImpactAt && now >= state.specialImpactAt)) {
         resolveFragmentSpecial(this, state, now);
       }
     }
@@ -2259,8 +2264,8 @@ module.exports = function registerSongOfTheElves(api) {
     if (!state || state.player !== player || state.finished) return;
     event.handled = true;
     state.finished = true;
-    for (const npc of [...state.healers, ...state.clones, state.boss]) api.removeNpc(npc);
-    state.healers.clear();
+    for (const npc of [...state.beams, ...state.clones, state.boss]) api.removeNpc(npc);
+    state.beams.clear();
     state.clones = [];
     fragmentInstances.delete(area);
     area.leave(player, false);
@@ -2380,8 +2385,9 @@ module.exports = function registerSongOfTheElves(api) {
       player, boss, area, lastCycle: -1, nextSpecialAt: World.getProcessCycle() + 12,
       nextBasicAttackAt: World.getProcessCycle() + FRAGMENT_BASIC_ATTACK_SPEED,
       basicAttackSpeed: boss.getCurrentDefinition?.()?.getAttackSpeed?.() || FRAGMENT_BASIC_ATTACK_SPEED,
-      clones: [], realClone: null, cloneThresholds: [666, 333], introStarted: false,
-      healerThresholds: [666, 333], healers: new Set(), specialImpactAt: 0, finished: false,
+      clones: [], realClone: null, introStarted: false,
+      specialIndex: 0, beams: new Set(), specialImpactAt: 0, followupAt: 0,
+      meleeHitsRemaining: 0, nextMeleeHitAt: 0, finished: false,
     });
     player.sendMessage("The Fragment of Seren emerges. Watch for its teleport, true echo, healing whirlwinds, and devastating blast.");
     return true;
@@ -2457,20 +2463,34 @@ module.exports = function registerSongOfTheElves(api) {
   }
 
   function spawnFragmentClones(area, state) {
-    state.cloneThresholds.shift();
-    state.clones = spawnFragmentAdds(area, [
-      NpcIdentifiers.FRAGMENT_OF_SEREN, NpcIdentifiers.FRAGMENT_OF_SEREN_2,
-    ], [[3290, 5918], [3298, 5918]]);
+    const phase = fragmentPhase(state.boss.getHitpoints());
+    const points = [[3290, 5918], [3298, 5918], [3294, 5912], [3294, 5924]];
+    const ids = Array.from({ length: phase.clones }, (_, index) =>
+      index % 2 === 0 ? NpcIdentifiers.FRAGMENT_OF_SEREN : NpcIdentifiers.FRAGMENT_OF_SEREN_2);
+    state.clones = spawnFragmentAdds(area, ids, points.slice(0, phase.clones));
     state.realClone = state.clones[Math.floor(Math.random() * state.clones.length)] ?? null;
-    state.boss.sendMessage?.("The Fragment splits into two echoes. One is real; strike the true one before they fade.");
-    state.player.sendMessage("The Fragment divides. Strike the true echo; the false one cannot be harmed.");
+    state.boss.sendMessage?.(`The Fragment splits into ${phase.clones} echoes. One is real; strike the true one before they fade.`);
+    state.player.sendMessage(`The Fragment divides into ${phase.clones} echoes. Strike the true echo; the false ones cannot be harmed.`);
   }
 
-  function spawnFragmentHealers(area, state) {
-    state.healerThresholds.shift();
-    state.healers = new Set(spawnFragmentAdds(area, [NpcIdentifiers.COL_00FFFF_CRYSTAL_WHIRLWIND_COL, NpcIdentifiers.COL_00FFFF_CRYSTAL_WHIRLWIND_COL],
-      [[3289, 5922], [3299, 5922]]));
-    state.player.sendMessage("Two Crystal Whirlwinds appear. They heal the Fragment while they remain; attack them to stop the healing.");
+  function fragmentPhase(hitpoints) {
+    if (hitpoints > 666) return { clones: 2, beams: 2, teleportDelay: 4, blastRemainder: 5 };
+    if (hitpoints > 333) return { clones: 3, beams: 3, teleportDelay: 3, blastRemainder: 3 };
+    return { clones: 4, beams: 4, teleportDelay: 2, blastRemainder: 1 };
+  }
+
+  function spawnFragmentBeams(area, state) {
+    const phase = fragmentPhase(state.boss.getHitpoints());
+    const points = [[3289, 5922], [3299, 5922], [3294, 5913], [3294, 5923]];
+    state.beams = new Set(spawnFragmentAdds(area,
+      Array.from({ length: phase.beams }, () => NpcIdentifiers.COL_00FFFF_CRYSTAL_WHIRLWIND_COL),
+      points.slice(0, phase.beams)));
+    state.player.sendMessage(`${phase.beams} Crystal Whirlwinds surround the Fragment. Attack them to stop its healing.`);
+  }
+
+  function removeFragmentBeams(state) {
+    for (const beam of state.beams) api.removeNpc(beam);
+    state.beams.clear();
   }
 
   function zeroHit(hit) {
@@ -2482,7 +2502,7 @@ module.exports = function registerSongOfTheElves(api) {
     const target = event?.target;
     const area = target?.getArea?.();
     const state = area && fragmentInstances.get(area);
-    if (state && !state.finished && event.attacker === state.player && state.healers.has(target)) {
+    if (state && !state.finished && event.attacker === state.player && state.beams.has(target)) {
       event.forceAccurate = true;
     }
   }
@@ -2497,7 +2517,7 @@ module.exports = function registerSongOfTheElves(api) {
       zeroHit(hit);
       return;
     }
-    if (state.healers.has(npc)) {
+    if (state.beams.has(npc)) {
       const remaining = npc.getHitpoints?.() ?? 1;
       const parts = hit.getHits?.() ?? [];
       if (parts.length) {
@@ -2538,66 +2558,94 @@ module.exports = function registerSongOfTheElves(api) {
   }
 
   function resolveFragmentSpecial(area, state, now) {
+    if (state.specialImpactAt && now >= state.specialImpactAt) {
+      state.specialImpactAt = 0;
+      queueFragmentBlast(state);
+      state.specialIndex = 0;
+      state.nextSpecialAt = now + 24;
+      return;
+    }
     if (state.followupAt && now >= state.followupAt) {
       state.followupAt = 0;
       if (state.player.getLocation().getDistance(state.boss.getLocation()) <= 1) {
-        const damage = 8 + Math.floor(Math.random() * 13);
-        state.player.getCombat().getHitQueue().addPendingDamage([
+        const damage = Math.floor(Math.random() * 11);
+        if (damage > 0) state.player.getCombat().getHitQueue().addPendingDamage([
           new HitDamage(damage, HitMask.RED).setSource(state.boss),
         ]);
+        state.meleeHitsRemaining = 4;
+        state.nextMeleeHitAt = now + 1;
         state.player.sendMessage("The Fragment's melee strike catches you before you can escape.");
       } else {
         state.player.sendMessage("You dodge the Fragment's follow-up strike.");
       }
-      state.nextSpecialAt = now + 22;
       return;
     }
-    state.nextSpecialAt = now + 24;
-    if (state.specialImpactAt && now >= state.specialImpactAt) {
-      state.specialImpactAt = 0;
-      queueFragmentBlast(state);
+    if (state.meleeHitsRemaining && now >= state.nextMeleeHitAt) {
+      if (state.player.getLocation().getDistance(state.boss.getLocation()) <= 1) {
+        const damage = Math.floor(Math.random() * 11);
+        if (damage > 0) state.player.getCombat().getHitQueue().addPendingDamage([
+          new HitDamage(damage, HitMask.RED).setSource(state.boss),
+        ]);
+        state.meleeHitsRemaining -= 1;
+        state.nextMeleeHitAt = now + 1;
+      } else {
+        state.meleeHitsRemaining = 0;
+      }
       return;
     }
-    if (state.specialImpactAt) return;
-    state.specialCount = (state.specialCount || 0) + 1;
-    if (state.specialCount % 4 === 0) {
-      state.player.sendMessage("The Fragment gathers a devastating burst of magic. Restore your health before it lands!");
-      state.specialImpactAt = now + 3;
-      state.nextSpecialAt = now + 3;
+    if (now < state.nextSpecialAt || state.specialImpactAt) return;
+
+    const phase = fragmentPhase(state.boss.getHitpoints());
+    if (state.specialIndex === 0) {
+      state.player.sendMessage("The Fragment teleports you beside it and winds up a melee strike. Step away before it lands!");
+      state.player.moveTo(new Location(3294, 5918, 1));
+      state.followupAt = now + phase.teleportDelay;
+      state.nextSpecialAt = now + 24;
+      state.specialIndex = 1;
       return;
     }
-    const loc = state.player.getLocation();
-    if (loc.getDistance(state.boss.getLocation()) > 3) {
-      state.player.sendMessage("The Fragment tries to pull you close, but you are out of its reach.");
+    if (state.specialIndex === 1) {
+      if (state.clones.length) {
+        for (const clone of state.clones) api.removeNpc(clone);
+        state.clones = [];
+        state.realClone = null;
+      }
+      spawnFragmentClones(area, state);
+      state.specialIndex = 2;
+      state.nextSpecialAt = now + 24;
       return;
     }
-    state.player.sendMessage("The Fragment teleports you beside it and winds up a melee strike. Step away before it lands!");
-    state.player.moveTo(new Location(3294, 5918, 1));
-    state.followupAt = now + 2;
-    state.nextSpecialAt = now + 2;
+    if (state.specialIndex === 2) {
+      spawnFragmentBeams(area, state);
+      state.specialIndex = 3;
+      state.nextSpecialAt = now + 24;
+      return;
+    }
+
+    removeFragmentBeams(state);
+    state.player.sendMessage("The Fragment gathers a devastating burst of magic. Restore your health before it lands!");
+    state.specialImpactAt = now + 3;
+    state.nextSpecialAt = now + 3;
   }
 
   function handleFragmentDeath(event) {
     const npc = event?.npc;
     const state = npc && fragmentInstances.get(npc.getArea?.());
     if (!state || state.finished) return false;
-    if (state.healers.delete(npc)) return true;
+    if (state.beams.delete(npc)) return true;
     if (state.clones.includes(npc)) {
       if (npc !== state.realClone) return true;
       state.realClone = null;
       for (const clone of state.clones) if (clone !== npc) api.removeNpc(clone);
       state.clones = [];
       state.player.sendMessage("The false echoes vanish. The Fragment is vulnerable again.");
-      if (state.healerThresholds.length && state.boss.getHitpoints() <= state.healerThresholds[0]) {
-        spawnFragmentHealers(state.area, state);
-      }
       return true;
     }
     if (npc !== state.boss) return false;
     state.finished = true;
     state.player.setAttribute(FRAGMENT_DEFEATED, true);
-    for (const add of [...state.healers, ...state.clones]) api.removeNpc(add);
-    state.healers.clear();
+    removeFragmentBeams(state);
+    for (const add of state.clones) api.removeNpc(add);
     state.clones = [];
     const area = npc.getArea?.();
     area?.leave(state.player, false);
