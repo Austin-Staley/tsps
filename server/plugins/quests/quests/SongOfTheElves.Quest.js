@@ -840,6 +840,9 @@ module.exports = function registerSongOfTheElves(api) {
         if (inventory.getFreeSlots() > 0 && inventory.getAmount(itemId) === 0) {
           inventory.adds(itemId, 1);
           event.box = { items: [itemId] };
+          if (itemId === ItemIdentifiers.ORB_OF_LIGHT_5 && currentChapter(player) === 14) {
+            player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(player), player));
+          }
           if (itemId === ItemIdentifiers.ODE_TO_ETERNITY) {
             if (!player.getAttribute(FALLS_ORDER)) randomizeFallsOrder(player);
           }
@@ -1385,6 +1388,7 @@ module.exports = function registerSongOfTheElves(api) {
     if (currentChapter(player) === 14 && npcName === "elena" &&
       player.getInventory().getAmount(ItemIdentifiers.ORB_OF_LIGHT_5) > 0) {
       if (player.getAttribute(YSGAWYN_TRACK_STEP) == null) player.setAttribute(YSGAWYN_TRACK_STEP, 0);
+      player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(player), player));
       return startTranscript(api, player, event.npcId, PAGE, "recovering-the-orb-talking-to-elena");
     }
     if (currentChapter(player) === 14 && npcName === "ysgawyn" &&
@@ -1650,6 +1654,7 @@ module.exports = function registerSongOfTheElves(api) {
     if (location.getZ() !== 0 || Math.max(Math.abs(location.getX() - clue.x), Math.abs(location.getY() - clue.y)) > 5) return;
     event.handled = true;
     player.setAttribute(YSGAWYN_TRACK_STEP, step + 1);
+    player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(player), player));
     player.sendMessage(clue.clue);
     if (step + 1 === YSGAWYN_TRACKS.length) {
       player.sendMessage("The tracks lead through the tripwire into a clearing to the north-west.");
@@ -1663,6 +1668,7 @@ module.exports = function registerSongOfTheElves(api) {
     if (location.getZ() !== 0 || location.getX() < 2253 || location.getX() > 2258 ||
       location.getY() < 3166 || location.getY() > 3170) return;
     player.setAttribute(YSGAWYN_TRACK_STEP, YSGAWYN_TRACKS.length + 1);
+    player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(player), player));
     player.sendMessage("You follow the final tracks through the tripwire and find Ysgawyn in the clearing.");
   }
 
@@ -3500,6 +3506,8 @@ module.exports = function registerSongOfTheElves(api) {
     if (value === 140) return 110;
     if (value === 150) {
       const recruited = Number(player?.getAttribute(RECRUITED_ELDERS)) || 0;
+      if (player?.getInventory?.()?.getAmount?.(ItemIdentifiers.ORB_OF_LIGHT_5) > 0 &&
+        player?.getAttribute(YSGAWYN_TRACK_STEP) == null) return 130;
       if (player?.getAttribute(YSGAWYN_TRACK_STEP) != null) {
         const step = Number(player.getAttribute(YSGAWYN_TRACK_STEP)) || 0;
         if (step >= YSGAWYN_TRACKS.length + 1) return 140;

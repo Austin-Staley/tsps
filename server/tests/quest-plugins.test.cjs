@@ -15039,7 +15039,8 @@ test('Song of the Elves native progress follows library seals and later source s
     .filter(entry => entry.key === 'song_of_the_elves').at(-1);
   const attrs = new Map();
   let location = new api.core.Location(2353, 3172, 0);
-  const player = { getAttribute: key => attrs.get(key), getLocation: () => location };
+  const player = { getAttribute: key => attrs.get(key), getLocation: () => location,
+    getInventory: () => ({ getAmount: id => id === api.core.ItemIdentifiers.ORB_OF_LIGHT_5 && attrs.get('orb-held') ? 1 : 0 }) };
   const progress = (stage, key, value) => {
     if (value === undefined) attrs.delete(key);
     else attrs.set(key, value);
@@ -15064,6 +15065,11 @@ test('Song of the Elves native progress follows library seals and later source s
   assert.equal(progress(150, 'quest.song_of_the_elves.recruited-elders', 2), 116);
   assert.equal(progress(150, 'quest.song_of_the_elves.recruited-elders', 1), 118);
   assert.equal(progress(150, 'quest.song_of_the_elves.recruited-elders', 3), 120);
+  attrs.set('orb-held', true);
+  assert.equal(quest.varbitValue(150, player), 130, 'carrying the recovered Orb before starting Ysgawyn tracking gets native progress130');
+  assert.equal(progress(150, 'quest.song_of_the_elves.ysgawyn-track-step', 0), 134, 'Elena starts the trail after the Orb is returned');
+  assert.equal(progress(150, 'quest.song_of_the_elves.ysgawyn-track-step', 6), 138, 'following clues advances native progress');
+  assert.equal(progress(150, 'quest.song_of_the_elves.ysgawyn-track-step', 7), 140, 'reaching Ysgawyn completes the trail progress');
   assert.equal(quest.varbitValue(160, player), 142);
   assert.equal(progress(160, 'quest.song_of_the_elves.lletya-children', { eoin: true }), 144);
   assert.equal(progress(160, 'quest.song_of_the_elves.lletya-children', { eoin: true, iona: true }), 146);
