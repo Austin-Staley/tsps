@@ -3994,7 +3994,7 @@ test('Desert Treasure II enters the cache Ancient Vault and requires the four st
     assert.equal(inspect(O.STEPS_23, 3925, 9630), true, 'the actual entrance steps let the player leave');
     assert.deepEqual([player.location.x, player.location.y, player.location.z], [3510,2971,0]);
     objectInteractions.find(h => h.name === 'handleObjectInteraction')(outerDoor);
-    logoutHooks[0]({ player });
+    for (const hook of logoutHooks) hook({ player });
     assert.equal(attrs.get('desert-treasure-ii:ancient-vault'), null);
     assert.deepEqual([player.location.x, player.location.y, player.location.z], [3510,2971,0], 'logout saves a public return point instead of orphaned instance coordinates');
   } finally {
@@ -4462,7 +4462,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(queues.add.length, 6);
     assert.ok(queues.add.every((npc) => npc.owner === player));
     player.getPrivateArea = () => attrs.get('desert-treasure-ii:scar-area');
-    logoutHooks[0]({ player });
+    for (const hook of logoutHooks) hook({ player });
     assert.deepEqual([player.location.getX(), player.location.getY()], [3610, 9473], 'logout saves a public Guardian tile rather than a destroyed instance');
     assert.equal(attrs.get('desert-treasure-ii:scar-area'), null);
     guardian({ player, npcId: core.NpcIdentifiers.CATALYTIC_GUARDIAN });
@@ -4475,7 +4475,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     for (const npc of [...queues.add]) deathHooks[0]({ killer: player, npc });
     assert.equal(attrs.get('desert-treasure-ii:scar-demons-defeated'), true);
     assert.equal(varbits.get(15128), 8);
-    logoutHooks[0]({ player });
+    for (const hook of logoutHooks) hook({ player });
     lineHooks[0](returnFarewell);
     returnFarewell.after();
     area = attrs.get('desert-treasure-ii:scar-area');
@@ -4580,7 +4580,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(varbits.get(15258), 1, 'severing the tether updates native room completion');
     assert.equal(attrs.get('desert-treasure-ii:scar-tether-destroyed'), true,
       'the tether completion is saved independently from the reused passage challenge varbits');
-    logoutHooks[0]({ player });
+    for (const hook of logoutHooks) hook({ player });
     assert.equal(attrs.get('desert-treasure-ii:scar-pathfinder-complete'), true);
     attrs.set('desert-treasure-ii:scar-pathfinder-complete', false);
     loginHooks.find(handler => handler.name === 'handleLogin')({ player });
@@ -14927,7 +14927,7 @@ test('Song of the Elves preparation earns its seed, elders and herb before the p
   action({player,stepId:'rlWDAM'});assert.equal(items.get(I.CRYSTAL_SEED_3),1);action({player,stepId:'eS601c'});assert.equal(items.get(I.CRYSTAL_SEED_3),0);assert.equal(items.get(I.CRYSTAL_SEED_5),1,'the Rub-enabled cache item is earned from Eluned');
   action({player,stepId:'ZYvQiu'});assert.equal(quest.getStage(player),120,'harvesting cannot jump to the dwarf-camp chapter');action({player,stepId:'0lNCRc'});assert.equal(items.get(I.ELDER_CADANTINE)||0,0,'both elders must return before harvesting');
   action({player,stepId:'D1wXY6'});assert.equal(bits.get(9016),82);items.set(I.HAMMER,1);items.set(I.RUNITE_BAR,1);action({player,kind:'message',stepId:'ITn7ep'});action({player,kind:'message',stepId:'ITn7ep'});assert.equal(items.get(I.HAMMER),1,'repair retains the tool');assert.equal(items.get(I.RUNITE_BAR),0,'the repair is retained across interrupted dialogue and consumes one bar');assert.equal(attrs.get('song-of-the-elves:trahaearn-repaired'),true);const crevice=handlers.namedObjects.find(h=>h.target==='Crevice').actions.Enter;crevice({player,option:'enter',definition:{getInteractions:()=>['Enter']},clickType:1,location:{x:2341,y:9616,z:0}});assert.deepEqual([at.getX(),at.getY()],[2334,9573],'the real object click payload enters the repaired crevice');at=new api.core.Location(2334,9573,0);action({player,stepId:'EMxiFg'});assert.equal(bits.get(9016),84);assert.deepEqual([at.getX(),at.getY()],[2334,9573],'Trahaearn departs without teleporting the player');action({player,stepId:'0lNCRc'});assert.equal(items.get(I.ELDER_CADANTINE),1);assert.equal(bits.get(9016),86);
-  action({player,stepId:'eOtNFO'});assert.equal(bits.get(9016),86,'the potion must exist before handing it over');items.set(I.INVERSION_POTION,1);action({player,stepId:'eOtNFO'});assert.equal(items.get(I.INVERSION_POTION),0);assert.equal(quest.getStage(player),120,'the meeting opening does not skip its dialogue');action({player,stepId:'_2-0Qk'});assert.equal(quest.getStage(player),130);assert.equal(quest.varbitValue(130,player),92);
+  action({player,stepId:'eOtNFO'});assert.equal(bits.get(9016),86,'the potion must exist before handing it over');items.set(I.INVERSION_POTION,1);action({player,stepId:'eOtNFO'});assert.equal(items.get(I.INVERSION_POTION),0);assert.equal(quest.getStage(player),120,'the meeting opening does not skip its dialogue');action({player,stepId:'_2-0Qk'});assert.equal(quest.getStage(player),130);assert.equal(quest.varbitValue(130,player),90);
  }finally{runtime.startTranscript=original;}
 });
 
