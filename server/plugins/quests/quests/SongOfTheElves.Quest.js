@@ -102,7 +102,7 @@ module.exports = function registerSongOfTheElves(api) {
     { x: 2203, y: 3061, message: "The next clue leads to Zul-Andra." },
     { x: 2240, y: 3269, message: "The final clue points outside Prifddinas's southern gate." },
   ];
-  const LLETYA_GUIDE_SPAWNED = "quest.song_of_the_elves.lletya-guide-spawned";
+  const LLETYA_GUIDE_NPC = "song-of-the-elves:lletya-guide-npc";
   const LLETYA_BAXTORIAN_NPC = "quest.song_of_the_elves.lletya-baxtorian-npc";
   const HEFIN_GUIDE_SPAWNED = "quest.song_of_the_elves.hefin-guide-spawned";
   const LLETYA_ARIANWYN_NPC = "quest.song_of_the_elves.lletya-arianwyn-npc";
@@ -266,11 +266,12 @@ module.exports = function registerSongOfTheElves(api) {
       if (currentChapter(player) === 16 && (Number(player.getAttribute(ITHELL_CLUE_STAGE)) || 0) > 0) {
         ensureIthellSymbolObjects();
       }
-      if (currentChapter(player) === 12 && player.getAttribute(LLETYA_GUIDE_SPAWNED) !== true) {
-        player.setAttribute(LLETYA_GUIDE_SPAWNED, true);
-        const guide = api.spawnNpc({ id: NpcIdentifiers.LORD_IEUAN_AMLODD_2, x: 2349, y: 3170, z: 0,
-          wanderRadius: 0, owner: player, ownerOnly: true });
-        if (!guide) player.setAttribute(LLETYA_GUIDE_SPAWNED, false);
+      const currentGuide=player.getAttribute(LLETYA_GUIDE_NPC);
+      if(currentChapter(player)===12 && !currentGuide?.isRegistered?.()) {
+        const guide=api.spawnNpc({id:NpcIdentifiers.LORD_IEUAN_AMLODD_2,x:2353,y:3179,z:0,wanderRadius:0,owner:player,ownerOnly:true});
+        if(guide)player.setAttribute(LLETYA_GUIDE_NPC,guide);
+      } else if(currentChapter(player)!==12 && currentGuide) {
+        api.removeNpc(currentGuide);player.setAttribute(LLETYA_GUIDE_NPC,null);
       }
       // Lletya's map NPC is a cache scenery variant (5292) with no Talk-to
       // action. Use the cache's actual Talk-to Arianwyn variant for this chapter.
@@ -747,6 +748,7 @@ module.exports = function registerSongOfTheElves(api) {
     clearEarlyStoryActors(player);
     clearFallsActors(player);
     clearPreparationActors(player);
+    const guide=player.getAttribute(LLETYA_GUIDE_NPC);if(guide)api.removeNpc(guide);player.setAttribute(LLETYA_GUIDE_NPC,null);
     const area = player.getAttribute(BATTLE_AREA);
     if (area instanceof ArdougneBattleArea) {
       if (!area.isDestroyed()) area.leave(player, true);
@@ -2571,7 +2573,11 @@ module.exports = function registerSongOfTheElves(api) {
       if((Number(player.getAttribute(PREPARATION_ELDERS))&3)!==3)return true;
     } else if(id==="0lNCRc") {
       if(preparationProgress(player)>=84 && inventory.getFreeSlots()>0 && inventory.getAmount(ItemIdentifiers.ELDER_CADANTINE)<1){inventory.adds(ItemIdentifiers.ELDER_CADANTINE,1);setPreparationProgress(player,86);}
-    } else if(id==="eOtNFO")setPreparationProgress(player,88);
+    } else if(id==="eOtNFO") {
+      if(preparationProgress(player)<88 && inventory.getAmount(ItemIdentifiers.INVERSION_POTION)<1)return true;
+      if(inventory.getAmount(ItemIdentifiers.INVERSION_POTION)>0)inventory.deleteNumber(ItemIdentifiers.INVERSION_POTION,1);
+      setPreparationProgress(player,88);
+    }
     else if(id==="_2-0Qk") {clearPreparationActors(player);setChapter(player,12);}
     else return false;
     event.handled=true;return true;
@@ -2587,7 +2593,7 @@ module.exports = function registerSongOfTheElves(api) {
     if(name==="arianwyn")variant=p===88?"making-the-inversion-potion-talking-to-arianwyn-after-finishing-the-potion":p===72?"the-second-meeting":p<78?"the-second-meeting-talking-to-arianwyn-again":p===78?"talking-to-arianwyn-and-baxtorian":p>=84?"making-the-inversion-potion-talking-to-arianwyn"+(inv.getAmount(ItemIdentifiers.CRYSTAL_5)>0||inv.getAmount(ItemIdentifiers.CRYSTAL_DUST)>0?"-again":""):"talking-to-arianwyn-and-baxtorian-talking-to-arianwyn-again";
     if(name==="baxtorian")variant=p<78?"talking-to-baxtorian":p===78?"talking-to-arianwyn-and-baxtorian":p>=84?"finding-lady-trahaearn-talking-to-baxtorian-once-amlodd-and-trahaearn-are-in-lletya":"talking-to-arianwyn-and-baxtorian-talking-to-baxtorian-again";
     if(name==="eluned" && inv.getAmount(ItemIdentifiers.CRYSTAL_SEED_3)>0)variant="finding-lord-amlodd-talking-to-eluned";
-    if(name==="arianwyn" && inv.getAmount(ItemIdentifiers.INVERSION_POTION)>0) {inv.deleteNumber(ItemIdentifiers.INVERSION_POTION,1);variant="making-the-inversion-potion-talking-to-arianwyn-after-finishing-the-potion";}
+    if(name==="arianwyn" && inv.getAmount(ItemIdentifiers.INVERSION_POTION)>0) {variant="making-the-inversion-potion-talking-to-arianwyn-after-finishing-the-potion";}
     return variant?startTranscript(api,player,event.npcId,PAGE,"preparing-to-enter-prifddinas-"+variant):false;
   }
   function syncPreparationLogin({player}) {
@@ -2600,20 +2606,20 @@ module.exports = function registerSongOfTheElves(api) {
     if(event.objectId===TRAHAEARN_CREVICE_LOC && loc.getX()===2341 && loc.getY()===9616)event.destination={x:2341,y:9618,z:0};
   }
   function useTrahaearnCrevice(event) {
-    const player=event?.player,loc=event?.location;
+    const player=event?.player,loc=event?.location,option=String(event?.option??event?.definition?.getInteractions?.()?.[event.clickType-1]??"").toLowerCase();
     if(!player || currentChapter(player)!==11 || loc?.z!==0)return false;
-    if(loc.x===2334 && loc.y===9580 && event.option==="Enter") {event.handled=true;clearPreparationActors(player);player.moveTo(new Location(2341,9618,0));return true;}
+    if(loc.x===2334 && loc.y===9580 && option==="enter") {event.handled=true;clearPreparationActors(player);player.moveTo(new Location(2341,9618,0));return true;}
     if(loc.x!==2341 || loc.y!==9616)return false;
     if(event.itemId!==undefined && !/pickaxe$/i.test(api.core.CacheDefinitions.getItem(event.itemId)?.name ?? ""))return false;
     event.handled=true;const progress=Number(player.getAttribute(TRAHAEARN_CREVICE))||0;
     if(progress<1){player.sendMessage("Ask Baxtorian about Lady Trahaearn's clue first.");return true;}
-    if(event.option==="Inspect" && progress===1){player.setAttribute(TRAHAEARN_CREVICE,2);player.getPacketSender().sendVarbit(TRAHAEARN_CREVICE_VARBIT,2);player.sendMessage("The crevice has been blocked. A pickaxe could clear it.");return true;}
-    if(event.option==="Mine" || event.itemId!==undefined) {
+    if(option==="inspect" && progress===1){player.setAttribute(TRAHAEARN_CREVICE,2);player.getPacketSender().sendVarbit(TRAHAEARN_CREVICE_VARBIT,2);player.sendMessage("The crevice has been blocked. A pickaxe could clear it.");return true;}
+    if(option==="mine" || event.itemId!==undefined) {
       if(!findBestPickaxe(player)){player.sendMessage("You need a pickaxe to clear the blocked crevice.");return true;}
       if(progress>=3){player.sendMessage("The crevice is already clear.");return true;}
       player.setAttribute(TRAHAEARN_CREVICE,3);player.getPacketSender().sendVarbit(TRAHAEARN_CREVICE_VARBIT,3);player.sendMessage("You clear the blocked crevice with your pickaxe.");return true;
     }
-    if(event.option==="Enter" && progress>=3){clearPreparationActors(player);player.moveTo(new Location(2334,9573,0));ensurePreparationActors(player);return true;}
+    if(option==="enter" && progress>=3){clearPreparationActors(player);player.moveTo(new Location(2334,9573,0));ensurePreparationActors(player);return true;}
     return true;
   }
   function inspectTrahaearn(event) {
