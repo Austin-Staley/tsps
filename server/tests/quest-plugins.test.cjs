@@ -11578,6 +11578,42 @@ test('RFD Mother cycles six weaknesses and the final room suppresses prayer and 
   assert.equal(inventory.get(api.core.ItemIdentifiers.ANTIQUE_LAMP_3), 1);
 });
 
+test('RFD antique lamp advertises level 50 and consumes only after awarding XP', () => {
+  const { api: base } = mockApi();
+  const itemActions = [];
+  let reward;
+  const api = new Proxy(base, {
+    get(target, prop) {
+      if (prop === 'onItemAction') return (_name, actions) => itemActions.push(actions);
+      if (prop === 'emitCustomEvent') return (name, event) => { if (name === 'xpreward:open') reward = event; };
+      return target[prop];
+    },
+  });
+  delete require.cache[require.resolve('../plugins/quests/quests/RecipeForDisaster.Quest')];
+  require('../plugins/quests/quests/RecipeForDisaster.Quest')(api);
+  const { Skill, ItemIdentifiers: I } = api.core;
+  const item = { getId: () => I.ANTIQUE_LAMP_3 }, items = [item];
+  let level = 49, xp = 1000;
+  const player = {
+    getAttribute: key => key === 'quest.recipe_for_disaster.stage' ? 5 : undefined,
+    getInventory: () => ({ get: slot => items[slot], deleteAtSlot: slot => items.splice(slot, 1) }),
+    getSkills: () => ({ getLevelForSkill: () => level }),
+    getSkillManager: () => ({ getExperience: () => xp, addExperience: (_skill, amount) => { xp += amount; } }),
+  };
+  const rub = itemActions[0].Rub;
+  assert.equal(rub({ player, itemId: I.ANTIQUE_LAMP_3, item, slot: 0 }), true);
+  assert.equal(reward.minLevel, 50);
+  assert.match(reward.onConfirm(Skill.ATTACK, 'Attack'), /level 50/);
+  assert.equal(items.length, 1, 'a below-level selection keeps the lamp');
+  level = 50;
+  assert.equal(rub({ player, itemId: I.ANTIQUE_LAMP_3, item, slot: 0 }), true);
+  assert.match(reward.onConfirm(Skill.ATTACK, 'Attack'), /20,000 Attack/);
+  assert.equal(xp, 21_000);
+  assert.equal(items.length, 0);
+  assert.equal(reward.onConfirm(Skill.ATTACK, 'Attack'), null, 'a consumed lamp cannot be claimed twice');
+  assert.equal(xp, 21_000);
+});
+
 test('Dragon Slayer II crypt uses canonical template locs and reachable native-varbit bust puzzle', async (t) => {
   const { RegionManager } = require('../dist/game/collision/RegionManager');
   RegionManager.init();

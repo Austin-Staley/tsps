@@ -986,6 +986,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
     api.emitCustomEvent("xpreward:open", {
       player,
       title: "Choose the stat you wish to be advanced!",
+      minLevel: 50,
       onConfirm: (skill, name) => {
         if (LAMP_PENDING.get(player)?.item !== item || player.getInventory().get(slot) !== item) return null;
         LAMP_PENDING.delete(player);
