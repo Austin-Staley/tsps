@@ -2632,7 +2632,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
   const { api: base } = mockApi();
   const objectHooks = [], objectRouteHooks = [], deathHooks = [], itemOnItemHooks = [], itemOnNpcHooks = [], itemOnObjectHooks = [], itemActionHooks = [], hitModifyHooks = [], lineHooks = [], actionHooks = [], interactions = [];
   const transcripts = [], queues = { add: [], remove: [] }, varbits = new Map(), inventoryCounts = new Map();
-  const routes = [], logoutHooks = [], loginHooks = [];
+  const routes = [], logoutHooks = [], loginHooks = [], groundDrops = [];
   let processCycle = 0;
   class TestInstance {
     constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
@@ -2657,6 +2657,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
   };
   const api = new Proxy(base, {
     get: (target, prop) => prop === 'core' ? core
+      : prop === 'getItemOnGroundManager' ? () => ({ registerLocation: (...args) => groundDrops.push(args) })
       : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
         : prop === 'onObjectRoute' ? (handler) => objectRouteHooks.push(handler)
         : prop === 'onPlayerLogout' ? (handler) => logoutHooks.push(handler)
@@ -3274,6 +3275,10 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     player.moveTo(finalPassage.tile(46, 13, 0));
     assert.equal(objectHooks[0]({ player, objectId: 49412, location: finalPassage.tile(46, 11, 0) }), true,
       'the Brain Pillar room only opens after solving the memory puzzle');
+    const treeEnemy = queues.add.find(npc => npc.__dt2ScarTreeEnemy);
+    const antibody = queues.add.find(npc => npc.__dt2ScarAntibody);
+    assert.equal(finalPassage.canAttack(treeEnemy, player), false, 'a missing antibody flag must deny retaliation, not return no opinion');
+    assert.equal(finalPassage.canAttack(treeEnemy, antibody), true, 'the attackers target the owned antibodies');
     for (let wave = 0; wave < 4; wave++) {
       const enemies = queues.add.filter((npc) => npc.__dt2ScarTreeEnemy === true);
       assert.equal(enemies.length, 2);
@@ -3287,6 +3292,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
       'the north neural teleporter leads to the Unlit Veins');
     assert.equal(objectHooks[0]({ player, objectId: 49411, location: finalPassage.tile(6, 21, 0) }), true,
       'the actual doorway enters the leech room');
+    assert.equal(queues.add.filter(npc => npc.__dt2ScarBloodCell).length, 0, 'blood cells stay hidden until all four growths are lit');
     const takeMazeThreeLure = interactions.find((entry) => entry.name === 'Light leech').options['Take-lure'];
     const oldRandom = Math.random;
     Math.random = () => 0;
@@ -3299,7 +3305,16 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
         location: finalPassage.tile(x - 1856, y - 6400, 0) }), true);
     }
     assert.equal(varbits.get(15210), 4);
-    for (const cell of queues.add.filter((npc) => npc.__dt2ScarBloodCell)) deathHooks[0]({ killer: player, npc: cell });
+    const bloodCells = queues.add.filter(npc => npc.__dt2ScarBloodCell);
+    const fibreInventory = player.getInventory;
+    player.getInventory = () => ({ ...fibreInventory(), adds: () => false });
+    deathHooks[0]({ killer: player, npc: bloodCells[0] });
+    player.getInventory = fibreInventory;
+    assert.equal(groundDrops.length, 1, 'a full bag keeps the required fibre obtainable on the ground');
+    assert.equal(groundDrops[0][0], player, 'the fibre belongs to the quest player');
+    assert.equal(groundDrops[0][1].getId(), core.ItemIdentifiers.CRIMSON_FIBRE);
+    inventoryCounts.set(core.ItemIdentifiers.CRIMSON_FIBRE, 1); // Normal ground pickup, handled by core.
+    for (const cell of bloodCells.slice(1)) deathHooks[0]({ killer: player, npc: cell });
     assert.equal(inventoryCounts.get(core.ItemIdentifiers.CRIMSON_FIBRE), 3);
     assert.equal(inventoryCounts.get(core.ItemIdentifiers.RADIANT_FIBRE), 3);
     for (const [x, y] of [[1865, 6438], [1874, 6429], [1874, 6434]]) {

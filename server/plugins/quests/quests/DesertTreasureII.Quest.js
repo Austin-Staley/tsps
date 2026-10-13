@@ -1003,7 +1003,7 @@ module.exports = function registerDesertTreasureII(api) {
     allowSummonPet() { return false; }
     isMulti() { return true; }
     canAttack(attacker, target) {
-      if (attacker?.__dt2ScarTreeEnemy) return target?.__dt2ScarAntibody && target.getOwner?.() === this.questPlayer;
+      if (attacker?.__dt2ScarTreeEnemy) return !!target?.__dt2ScarAntibody && target.getOwner?.() === this.questPlayer;
       if (attacker?.isPlayer?.() && attacker === this.questPlayer && target?.__dt2ScarTreeEnemy) return true;
       if (target?.__dt2ScarAntibody || target?.__dt2ScarTreeEnemy || target?.__dt2ScarBrainPillar) return false;
       return null;
@@ -2248,8 +2248,9 @@ module.exports = function registerDesertTreasureII(api) {
     if (!p.getAttribute(SCAR_LEECH_GROWTHS_REPAIRED)) p.setAttribute(SCAR_LEECH_GROWTHS_REPAIRED, []);
     const owned = spawned.get(p) ?? {};
     spawned.set(p, owned);
-    if (!owned.scarMazeThreeLightLeeches?.some((npc) => npc?.isRegistered?.())) {
-      owned.scarMazeThreeLightLeeches = [[1868, 6430], [1864, 6430], [1872, 6430], [1877, 6430]].map(([x, y]) => {
+    if ((p.getAttribute(SCAR_LEECH_GROWTHS_REPAIRED) ?? []).length < 4
+      && !owned.scarMazeThreeLightLeeches?.some((npc) => npc?.isRegistered?.())) {
+      owned.scarMazeThreeLightLeeches = [[1868, 6430], [1864, 6430], [1872, 6430], [1875, 6430]].map(([x, y]) => {
         const npc = api.core.NPC.create(N.LIGHT_LEECH, area.tile(x - 1856, y - 6400, 0));
         npc.setOwner?.(p);
         npc.setOwnerOnly?.(true);
@@ -2260,10 +2261,17 @@ module.exports = function registerDesertTreasureII(api) {
         return npc;
       });
     }
+    if ((p.getAttribute(SCAR_LEECH_GROWTHS_REPAIRED) ?? []).length === 4) spawnScarMazeThreeBloodCells(p, area);
+    p.sendMessage("Take four illuminating lures from the light leeches and use them on the damaged growths.");
+  }
+
+  function spawnScarMazeThreeBloodCells(p, area) {
+    const owned = spawned.get(p) ?? {};
+    spawned.set(p, owned);
     if (!owned.scarMazeThreeBloodCells?.some((npc) => npc?.isRegistered?.())) {
       owned.scarMazeThreeBloodCells = [
-        ...Array.from({ length: 3 }, (_, i) => ({ id: 12369, x: 1866 + i * 2, y: 6436, type: "crimson" })),
-        ...Array.from({ length: 3 }, (_, i) => ({ id: 12370, x: 1866 + i * 2, y: 6425, type: "radiant" })),
+        ...Array.from({ length: Math.max(0, 3 - (p.getAttribute(SCAR_BLOOD_RED_REPAIRED) ?? []).length) }, (_, i) => ({ id: N.CRIMSON_SANGUISPHERA, x: 1866 + i * 2, y: 6436, type: "crimson" })),
+        ...Array.from({ length: Math.max(0, 3 - (p.getAttribute(SCAR_BLOOD_WHITE_REPAIRED) ?? []).length) }, (_, i) => ({ id: N.RADIANT_SANGUISPHERA, x: 1866 + i * 2, y: 6425, type: "radiant" })),
       ].map(({ id, x, y, type }) => {
         const npc = api.core.NPC.create(id, area.tile(x - 1856, y - 6400, 0));
         npc.setOwner?.(p);
@@ -2275,7 +2283,6 @@ module.exports = function registerDesertTreasureII(api) {
         return npc;
       });
     }
-    p.sendMessage("Take four illuminating lures from the light leeches and use them on the damaged growths.");
   }
 
   function handleScarMazeThreeObject(event, tile) {
@@ -4687,7 +4694,10 @@ module.exports = function registerDesertTreasureII(api) {
         fixed.push(index);
         p.setAttribute(SCAR_LEECH_GROWTHS_REPAIRED, fixed);
         p.getPacketSender().sendVarbit(15210, fixed.length);
-        if (fixed.length === SCAR_LEECH_GROWTHS.length) p.sendMessage("The damaged growths light the room. Crimson and Radiant Veins appear.");
+        if (fixed.length === SCAR_LEECH_GROWTHS.length) {
+          spawnScarMazeThreeBloodCells(p, p.getAttribute(ATTR_SCAR_MAZE_THREE));
+          p.sendMessage("The damaged growths light the room. Crimson and Radiant Veins appear.");
+        }
         return true;
       }
       const vein = [...SCAR_BLOOD_RED_VEINS.map((tile) => ({ color: "crimson", item: I.CRIMSON_FIBRE, tile })),
@@ -5159,6 +5169,12 @@ module.exports = function registerDesertTreasureII(api) {
       talk(p, npcId, "the-whisperer-talking-to-ketla-after-coming-to");
     }
   }
+  function giveScarFibre(p, npc, itemId) {
+    if (p.getInventory().adds(itemId, 1) !== false) return;
+    api.getItemOnGroundManager().registerLocation(p, new Item(itemId, 1), npc.getLocation());
+    p.sendMessage("Your bag is full. The fibre falls to the ground.");
+  }
+
   function handleDeath({ killer, npc }) {
     if (npc?.__dt2ScarAntibody) {
       const owner = npc.getOwner?.();
@@ -5290,13 +5306,13 @@ module.exports = function registerDesertTreasureII(api) {
         const count = Math.min(3, (Number(killer.getAttribute(SCAR_BLOOD_RED_COUNT)) || 0) + 1);
         killer.setAttribute(SCAR_BLOOD_RED_COUNT, count);
         killer.getPacketSender().sendVarbit(15219, count);
-        killer.getInventory().adds(I.CRIMSON_FIBRE, 1);
+        giveScarFibre(killer, npc, I.CRIMSON_FIBRE);
         killer.sendMessage("The crimson sanguisphera leaves a crimson fibre.");
       } else if (type === "radiant") {
         const count = Math.min(3, (Number(killer.getAttribute(SCAR_BLOOD_WHITE_COUNT)) || 0) + 1);
         killer.setAttribute(SCAR_BLOOD_WHITE_COUNT, count);
         killer.getPacketSender().sendVarbit(15218, count);
-        killer.getInventory().adds(I.RADIANT_FIBRE, 1);
+        giveScarFibre(killer, npc, I.RADIANT_FIBRE);
         killer.sendMessage("The radiant sanguisphera leaves a radiant fibre.");
       }
       return;
