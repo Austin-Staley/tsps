@@ -15474,6 +15474,64 @@ test('Song of the Elves carries the earned castle victory through Lathas and the
  } finally {runtime.startTranscript=original;}
 });
 
+test('Song of the Elves confirms the Iorwerth cave entry before spawning guards and starts the ambush after the transcript', () => {
+  const { api, handlers } = mockApi();
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const original = runtime.startTranscript;
+  const transcripts = [], spawned = [];
+  runtime.startTranscript = (...args) => (transcripts.push(args), true);
+  api.spawnNpc = spec => {
+    const npc = { ...spec, area: null, index: spawned.length + 20, attacks: [],
+      isPlayer: () => false, isNpc: () => true, getAsNpc() { return this; }, getIndex() { return this.index; },
+      getArea() { return this.area; }, setArea(area) { this.area = area; }, isRegistered: () => true,
+      getCombat() { return { attack: player => npc.attacks.push(player) }; } };
+    spawned.push(npc);
+    return npc;
+  };
+  api.removeNpc = () => {};
+  try {
+    require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+    const attrs = new Map([
+      ['quest.song_of_the_elves.stage', 150],
+      ['quest.song_of_the_elves.recruited-elders', 3],
+    ]);
+    let area = null, location = new api.core.Location(2200, 3262, 0);
+    const player = { index: 1, isPlayer: () => true, isNpc: () => false, getAsPlayer() { return this; },
+      getIndex() { return this.index; }, getArea: () => area, setArea: next => { area = next; },
+      getLocation: () => location, moveTo: next => { location = next; }, getUsername: () => 'SoteOrbCaveTest',
+      getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      sendMessage() {}, getInventory: () => ({ getAmount: () => 0, getFreeSlots: () => 4 }) };
+    const enter = handlers.objects.find(handler => handler.name === 'enterOrbSupplyCave');
+    assert.ok(enter);
+    const entry = { player, objectId: api.core.ObjectIdentifiers.CAVE_69,
+      definition: { getName: () => 'Cave' }, location: { x: 2200, y: 3262, z: 0 } };
+    assert.equal(enter(entry), true);
+    assert.equal(spawned.length, 0, 'the warning prompt must precede creating the private cave or its guards');
+    assert.equal(transcripts.at(-1)[4], 'recovering-the-orb-entering-the-iorwerth-camp-s-supply-cave');
+    const choice = handlers.custom.get('npc-dialogue:choice').find(handler => handler.name === 'handleDialogueChoice');
+    choice({ player, option: 'No.' });
+    assert.equal(spawned.length, 0, 'declining keeps the player outside without spawning the ambush');
+    assert.equal(player.getArea(), null);
+
+    enter(entry);
+    choice({ player, option: 'Yes.' });
+    assert.equal(spawned.length, 2);
+    assert.equal(player.getArea().constructor.name, 'OrbSupplyArea');
+    assert.deepEqual([location.getX(), location.getY(), location.getZ()], [2198, 9677, 0]);
+    assert.deepEqual(spawned.map(npc => npc.attacks.length), [0, 0], 'the guards wait for the warning exchange to finish');
+    const line = handlers.custom.get('npc-dialogue:line').find(handler => handler.name === 'startOrbCaveAmbush');
+    const lastLine = { player, text: 'Uh oh...' };
+    line(lastLine);
+    assert.equal(typeof lastLine.after, 'function');
+    lastLine.after();
+    assert.deepEqual(spawned.map(npc => npc.attacks.length), [1, 1]);
+    assert.deepEqual(spawned.map(npc => npc.attacks[0]), [player, player]);
+    player.getArea().leave(player, false);
+  } finally {
+    runtime.startTranscript = original;
+  }
+});
+
 test('Song of the Elves uses all six real waterfall pillars, reading, clue retries and the awakened Baxtorian',()=>{
  const {api,handlers}=mockApi(),runtime=require('../plugins/quests/QuestRuntime'),original=runtime.startTranscript;runtime.startTranscript=()=>true;
  const spawned=[];api.spawnNpc=spec=>{const n={...spec,getId:()=>spec.id,isRegistered:()=>true};spawned.push(n);return n;};api.removeNpc=()=>{};

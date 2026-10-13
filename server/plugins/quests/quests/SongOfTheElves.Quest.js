@@ -113,6 +113,7 @@ module.exports = function registerSongOfTheElves(api) {
   const LLETYA_BOSS = "quest.song_of_the_elves.lletya-boss";
   const FRAGMENT_DEFEATED = "quest.song_of_the_elves.fragment-defeated";
   const ORB_CAVE_AREA = "quest.song_of_the_elves.orb-cave-area";
+  const ORB_CAVE_ENTRY_PENDING = "song-of-the-elves:orb-cave-entry-pending";
   const CAMP_AREA = "quest.song_of_the_elves.camp-area";
   const CAMP_HOLES = "quest.song_of_the_elves.camp-holes";
   const CAMP_EXPLOSIVES = "quest.song_of_the_elves.camp-explosives";
@@ -1823,6 +1824,18 @@ module.exports = function registerSongOfTheElves(api) {
 
   function handleDialogueChoice(event) {
     if (!event?.player) return;
+    const player = event.player;
+    if (player.getAttribute(ORB_CAVE_ENTRY_PENDING) === true && currentChapter(player) === 14) {
+      if (event.option === "No.") {
+        player.setAttribute(ORB_CAVE_ENTRY_PENDING, null);
+        return;
+      }
+      if (event.option === "Yes.") {
+        player.setAttribute(ORB_CAVE_ENTRY_PENDING, null);
+        enterOrbSupplyCaveAfterConfirmation(player);
+        return;
+      }
+    }
     if(currentChapter(event.player)===11 && event.option==="How do I find Lady Trahaearn?") {
       event.player.setAttribute(TRAHAEARN_CREVICE,1);event.player.getPacketSender().sendVarbit(TRAHAEARN_CREVICE_VARBIT,1);
     }
@@ -2303,11 +2316,19 @@ module.exports = function registerSongOfTheElves(api) {
       (Number(player.getAttribute(RECRUITED_ELDERS)) & 3) !== 3 ||
       x !== 2200 || y !== 3262 || !(event.objectId === ObjectIdentifiers.CAVE_69 || name === "cave")) return false;
     event.handled = true;
+    player.setAttribute(ORB_CAVE_ENTRY_PENDING, true);
+    if (startTranscript(api, player, NpcIdentifiers.IORWERTH_WARRIOR_9, PAGE,
+      "recovering-the-orb-entering-the-iorwerth-camp-s-supply-cave")) return true;
+    player.setAttribute(ORB_CAVE_ENTRY_PENDING, null);
+    return false;
+  }
+
+  function enterOrbSupplyCaveAfterConfirmation(player) {
     let area = player.getAttribute(ORB_CAVE_AREA);
     let state = area && orbCaveInstances.get(area);
     if (!state || area.isDestroyed?.()) {
       area = new OrbSupplyArea(player.getUsername?.());
-      state = { area, player, guards: new Set(), defeated: false };
+      state = { area, player, guards: new Set(), defeated: false, ambushStarted: false };
       orbCaveInstances.set(area, state);
       const chest = new GameObject(ObjectIdentifiers.CHEST_122, new Location(2200, 9681, 0), 10, 2, area);
       area.add(chest);
@@ -2319,14 +2340,25 @@ module.exports = function registerSongOfTheElves(api) {
       if (!state.guards.size) {
         orbCaveInstances.delete(area);
         player.sendMessage("The cave guards are missing. Try entering the Iorwerth supply cave again.");
-        return false;
+        return;
       }
       player.setAttribute(ORB_CAVE_AREA, area);
     }
     area.enter(player);
     player.moveTo(new Location(2198, 9677, 0));
-    player.sendMessage("The Iorwerth guards block the supply chest. Defeat both guards to search it.");
-    return true;
+  }
+
+  function startOrbCaveAmbush(event) {
+    const player = event?.player;
+    if (!player || event.text !== "Uh oh..." || currentChapter(player) !== 14) return;
+    const area = player.getArea?.();
+    const state = area && orbCaveInstances.get(area);
+    if (!state || state.player !== player || state.ambushStarted) return;
+    event.after = () => {
+      if (state.ambushStarted || state.guards.size === 0) return;
+      state.ambushStarted = true;
+      for (const guard of state.guards) guard.getCombat?.()?.attack?.(player);
+    };
   }
 
   function searchOrbChest(event) {
@@ -3912,6 +3944,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onCustomEvent("npc-dialogue:line", finishWarEndArianwynLine);
   api.onCustomEvent("npc-dialogue:line", finishEarlyStoryLine);
   api.onCustomEvent("npc-dialogue:line", handleLletyaConfrontationLine);
+  api.onCustomEvent("npc-dialogue:line", startOrbCaveAmbush);
   api.onCustomEvent("world:object-examine", examineLletyaChild);
   api.onCustomEvent("world:object-examine", handleIthellSymbolExamine);
   api.onCustomEvent("world:object-examine", handleYsgawynTrackExamine);
