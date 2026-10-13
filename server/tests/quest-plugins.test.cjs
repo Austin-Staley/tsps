@@ -1173,6 +1173,30 @@ test('Blood Moon repairs obsolete clipped Ranis Hall arrivals without changing c
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 72);
 });
 
+test('Blood Moon repairs the clipped North Chapel stair landing without advancing chapter progress', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.stage', 40],
+    ['quest.the_blood_moon_rises.castle-room', 17],
+    ['quest.the_blood_moon_rises.castle-floor', 1],
+    ['quest.the_blood_moon_rises.castle-native-stage', 72],
+  ]);
+  const moved = [];
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(2384, 7403, 0),
+    moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
+    getInventory: () => ({ contains: () => false }), getUsername: () => 'castle-chapel-legacy-fixture',
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+  };
+  handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
+  assert.deepEqual(moved, [[2386, 7405, 0]]);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.stage'), 40);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 17);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 1);
+});
+
 test('Blood Moon Castle story actors use cache-walkable floor anchors', () => {
   const { api, handlers } = mockApi();
   const spawned = [];
@@ -1806,7 +1830,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [2456, 7417, 0], [2469, 7418, 0], [2313, 7381, 1], [2314, 7371, 1], [2314, 7369, 0],
     [2452, 7404, 0], [2466, 7421, 0], [2474, 7371, 0], [2468, 7408, 0],
     [2456, 7417, 0], [2482, 7403, 0], [2476, 7409, 0],
-    [2384, 7403, 0], [2490, 7401, 0], [2371, 7395, 0], [2373, 7409, 0], [2387, 7366, 0], [2370, 7384, 0],
+    [2386, 7405, 0], [2490, 7401, 0], [2371, 7395, 0], [2373, 7409, 0], [2387, 7366, 0], [2370, 7384, 0],
     [2342, 7416, 0], [2371, 7370, 0], [2314, 7420, 0], [2324, 7403, 0], [2360, 7393, 0], [2309, 7420, 0],
     [2327, 7381, 0], [2331, 7407, 0], [2327, 7390, 0], [2310, 7388, 0], [2357, 7380, 0],
     [2310, 7396, 0], [2342, 7372, 1], [2328, 7360, 1], [2305, 7392, 1], [2357, 7366, 1],
@@ -2040,6 +2064,15 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   enter(stairsDown);
   assert.deepEqual(moved.at(-1), [2341, 7384, 0]);
   assert.equal(varbits.get(15499), 6);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 36);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 2);
+  const northChapelStairs = { player, objectId: 61604, clickType: 1, option: 'Climb-down',
+    definition: { id: 61604, getName: () => 'Spiral staircase' },
+    location: { x: 2491, y: 7402, z: 0 }, handled: false };
+  enter(northChapelStairs);
+  assert.deepEqual(moved.at(-1), [2386, 7405, 0], 'the recorded Ranis stairs land on the real chapel approach');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 17);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 1);
   const emblemGate = { player, objectId: 61572, clickType: 1, option: 'Enter',
     definition: { id: 61572, getName: () => 'Door' }, location: { x: 2477, y: 7409, z: 0 }, handled: false };
   enter(emblemGate);
@@ -2267,6 +2300,61 @@ test('Blood Moon initializes and awards the recorded third emblem in Ranis’s c
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 2);
   assert.equal(varbits.get(15499), 24);
   assert.equal(varbits.get(15500), 6);
+});
+
+test('Blood Moon uses the study emblem receptacle to unlock the captured chamber door', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.stage', 40],
+    ['quest.the_blood_moon_rises.castle-room', 23],
+    ['quest.the_blood_moon_rises.castle-floor', 2],
+    ['quest.the_blood_moon_rises.castle-native-stage', 72],
+  ]);
+  const items = new Map([[api.core.ItemIdentifiers.DRAKAN_EMBLEM_3, 1]]);
+  const varbits = new Map();
+  const moved = [];
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ contains: id => (items.get(id) ?? 0) > 0,
+      getFreeSlots: () => 28 - [...items.values()].reduce((sum, count) => sum + count, 0),
+      adds: (id, amount) => items.set(id, (items.get(id) ?? 0) + amount),
+      deleteNumber: (id, amount) => { const count = items.get(id) ?? 0; if (count < amount) return false; items.set(id, count - amount); return true; } }),
+    getEquipment: () => ({ contains: () => false }),
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) },
+      { get: (target, key) => target[key] ?? (() => {}) }),
+    moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
+    sendMessage() {},
+  };
+  const door = handlers.objects.find(handler => handler.name === 'handleCastleDoorEnter');
+  const enter = (id, x, y) => {
+    const event = { player, objectId: id, option: 'Enter', definition: { id, getName: () => 'Door' },
+      location: { x, y, z: 0 }, handled: false };
+    door(event);
+    return event;
+  };
+  assert.equal(enter(61572, 2477, 7366).handled, true, 'the study door is locked before the emblem is placed');
+  assert.equal(moved.length, 0);
+
+  const placement = { player, objectId: 61633, definition: { id: 61633 }, option: 'place-item',
+    location: { x: 2476, y: 7367, z: 0 }, handled: false };
+  handlers.objects.find(handler => handler.name === 'handleCastleEmblemReceptaclePlacement')(placement);
+  assert.equal(placement.handled, true);
+  assert.equal(items.get(api.core.ItemIdentifiers.DRAKAN_EMBLEM_3), 0);
+  assert.equal(varbits.get(15503), 3);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').vanesculaStudyEmblemPlaced, true);
+
+  const opened = enter(61572, 2477, 7366);
+  assert.equal(opened.handled, true);
+  assert.deepEqual(moved.at(-1), [2483, 7368, 0]);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 24);
+  assert.equal(varbits.get(15499), 24);
+
+  const back = enter(61573, 2483, 7368);
+  assert.equal(back.handled, true);
+  assert.deepEqual(moved.at(-1), [2476, 7366, 0]);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 23);
+  assert.equal(varbits.get(15499), 23);
 });
 
 test('Blood Moon spawns the recorded Sanguidae in Ranis Hall for its owner', () => {
