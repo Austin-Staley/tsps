@@ -918,8 +918,20 @@ module.exports = function registerSongOfTheElves(api) {
       player.setAttribute(VALLEY_FIGURE, false);
       player.moveTo(new Location(2353, 3172, 0));
     }
-    if (["9yLw8T", "o4CmGU", "eIlh1C"].includes(event.stepId)) setChapter(player, 15);
-    if (event.stepId === "eIlh1C") player.setAttribute(LLETYA_TRAITOR_REVEALED, true);
+    if (event.stepId === "o4CmGU") {
+      // Baxtorian hands the Orb over during this narrated action. It is no
+      // longer in the player's possession once Lord Iorwerth takes it.
+      inventory.deleteNumber(ItemIdentifiers.ORB_OF_LIGHT_5, inventory.getAmount(ItemIdentifiers.ORB_OF_LIGHT_5));
+      setChapter(player, 15);
+    }
+    if (event.stepId === "eIlh1C") {
+      // The chapter was already entered earlier in this transcript, so its
+      // stage write can be a no-op. Sync the newly earned native milestone now.
+      player.setAttribute(LLETYA_TRAITOR_REVEALED, true);
+      setChapter(player, 15);
+      player.getPacketSender?.()?.sendVarbit(9016, nativeEarlyProgress(160, player));
+    }
+    if (event.stepId === "9yLw8T") setChapter(player, 15);
     if (event.stepId === "6nBDUf") setChapter(player, 16);
     if (event.stepId === "xfnkES") {
       event.handled = true;
@@ -1309,8 +1321,20 @@ module.exports = function registerSongOfTheElves(api) {
   function handleLletyaConfrontationLine(event) {
     if (!event?.player || currentChapter(event.player) !== 15 || event.text !== "So be it." ||
       String(event.definition?.getName?.() ?? "").toLowerCase() !== "arianwyn") return;
-    event.player.setAttribute(LLETYA_ARIANWYN_CONFRONTED, true);
-    startArianwynBattle(event.player);
+    event.after = () => {
+      const player = event.player;
+      if (currentChapter(player) !== 15 || player.getAttribute(LLETYA_TRAITOR_REVEALED) !== true ||
+        player.getAttribute(LLETYA_ARIANWYN_CONFRONTED) === true) return;
+      player.setAttribute(LLETYA_ARIANWYN_CONFRONTED, true);
+      startArianwynBattle(player);
+    };
+  }
+
+  function cleanupTransferredOrb({ player } = {}) {
+    if (!player || currentChapter(player) < 15 || player.getAttribute(LLETYA_TRAITOR_REVEALED) !== true) return;
+    const inventory = player.getInventory?.();
+    const amount = inventory?.getAmount?.(ItemIdentifiers.ORB_OF_LIGHT_5) ?? 0;
+    if (amount > 0) inventory.deleteNumber(ItemIdentifiers.ORB_OF_LIGHT_5, amount);
   }
 
   function onTalk(event) {
@@ -3958,6 +3982,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onObjectRoute(routeTrahaearnCrevice);
   api.onPlayerLogin(syncResistanceLogin);
   api.onPlayerLogin(resumeEarlyStory);
+  api.onPlayerLogin(cleanupTransferredOrb);
   api.onPlayerLogin(({ player }) => {
     syncCrwysTree(player);
     sendIthellMeilyrVarbits(player);

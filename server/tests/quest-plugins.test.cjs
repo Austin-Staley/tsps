@@ -8423,12 +8423,15 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   handlers.custom.get('quest-song-of-the-elves:claim-arianwyn').at(-1)(lletyaHandoff);
   assert.equal(lletyaHandoff.handled, true, 'ME2 hands Arianwyn to SOTE during the Lletya attack');
   assert.equal(started.at(-1)[3], 'attack-on-lletya-confronting-the-traitor');
-  handlers.custom.get('npc-dialogue:line').at(-1)({
-    player, text: 'So be it.', step: { player: 'So be it.' },
-    definition: { getName: () => 'Arianwyn' },
-  });
+  const confrontationLine = { player, text: 'So be it.', step: { player: 'So be it.' },
+    definition: { getName: () => 'Arianwyn' } };
+  handlers.custom.get('npc-dialogue:line').at(-1)(confrontationLine);
+  assert.equal(attributes.get('quest.song_of_the_elves.lletya-arianwyn-confronted'), undefined,
+    'the encounter cannot begin while the final dialogue line is still being displayed');
+  assert.equal(attributes.has('quest.song_of_the_elves.lletya-boss'), false);
+  confrontationLine.after();
   assert.equal(attributes.get('quest.song_of_the_elves.lletya-arianwyn-confronted'), true,
-    'the final player line starts the encounter even though this wiki step has no NPC speaker field');
+    'continuing the final player line starts the encounter even though this wiki step has no NPC speaker field');
   quest.setStage(player, 140);
   handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'koxQh3' });
   assert.equal(attributes.get('quest.song_of_the_elves.revelations-meeting-started'), true);
@@ -8477,6 +8480,52 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   assert.ok(persistedAttributes.includes('quest.song_of_the_elves.hefin-clue-heard'));
 });
 
+test('Song of the Elves consumes the surrendered Orb and syncs the Lletya traitor milestone immediately', () => {
+  const { api, handlers } = mockApi();
+  const runtime = require('../plugins/quests/QuestRuntime');
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const quest = runtime.getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map();
+  const amounts = new Map([[api.core.ItemIdentifiers.ORB_OF_LIGHT_5, 1]]);
+  const sent = [];
+  const inventory = {
+    getAmount: (id) => amounts.get(id) ?? 0,
+    deleteNumber(id, count) { amounts.set(id, Math.max(0, this.getAmount(id) - count)); },
+    getFreeSlots: () => 27,
+  };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => sent.push([id, value]) }, {
+      get: (target, prop) => prop in target ? target[prop] : () => {},
+    }),
+    sendMessage() {},
+  };
+  quest.setStage(player, 150);
+  const action = handlers.custom.get('npc-dialogue:action').find((handler) => handler.name === 'onAction');
+  action({ player, kind: 'action', stepId: 'o4CmGU' });
+  assert.equal(inventory.getAmount(api.core.ItemIdentifiers.ORB_OF_LIGHT_5), 0,
+    'the Orb leaves the player when Baxtorian surrenders it');
+  assert.equal(quest.getStage(player), 160);
+
+  action({ player, kind: 'action', stepId: 'eIlh1C' });
+  assert.equal(attributes.get('quest.song_of_the_elves.lletya-traitor-revealed'), true);
+  assert.deepEqual(sent.filter(([id]) => id === 9016).at(-1), [9016, 150],
+    'the newly earned traitor flag updates native progress during the transcript');
+
+  amounts.set(api.core.ItemIdentifiers.ORB_OF_LIGHT_5, 1);
+  const loginCleanup = handlers.playerLogin.find((handler) => handler.name === 'cleanupTransferredOrb');
+  loginCleanup({ player });
+  assert.equal(inventory.getAmount(api.core.ItemIdentifiers.ORB_OF_LIGHT_5), 0,
+    'legacy post-theft saves discard a stale Orb on login');
+  attributes.set('quest.song_of_the_elves.lletya-traitor-revealed', false);
+  amounts.set(api.core.ItemIdentifiers.ORB_OF_LIGHT_5, 1);
+  loginCleanup({ player });
+  assert.equal(inventory.getAmount(api.core.ItemIdentifiers.ORB_OF_LIGHT_5), 1,
+    'the legacy cleanup does not remove an Orb before the betrayal is revealed');
+});
+
 test('Song of the Elves keeps Arianwyn engaged so ranged hits are not erased by generic NPC regeneration', () => {
   class TestPrivateArea {
     enter(mobile) { mobile.area = this; }
@@ -8520,10 +8569,13 @@ test('Song of the Elves keeps Arianwyn engaged so ranged hits are not erased by 
     sendMessage() {},
   };
   quest.setStage(player, 160);
-  handlers.custom.get('npc-dialogue:line').at(-1)({
-    player, text: 'So be it.', step: { player: 'So be it.' },
-    definition: { getName: () => 'Arianwyn' },
-  });
+  const confrontation = { player, text: 'So be it.', step: { player: 'So be it.' },
+    definition: { getName: () => 'Arianwyn' } };
+  handlers.custom.get('npc-dialogue:line').at(-1)(confrontation);
+  assert.equal(attributes.has('quest.song_of_the_elves.lletya-boss'), false,
+    'the encounter area is not created before the final line is continued');
+  assert.equal(attributes.get('quest.song_of_the_elves.lletya-arianwyn-confronted'), undefined);
+  confrontation.after();
   assert.equal(attributes.get('quest.song_of_the_elves.lletya-boss') instanceof TestPrivateArea, true);
   assert.equal(started.length, 0, 'the final challenge line enters combat rather than leaving a queued dialogue over it');
   attributes.get('quest.song_of_the_elves.lletya-boss').process(player);
