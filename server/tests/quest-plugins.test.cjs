@@ -6003,6 +6003,35 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     counts.set(core.ItemIdentifiers.SHADOW_BLOCKER, 1);
     counts.set(core.ItemIdentifiers.ANIMA_PORTAL, 1);
     counts.set(core.ItemIdentifiers.REVITALISING_IDOL, 1);
+    const placeFromInventory = (itemId, x, y) => {
+      player.location = new core.Location(x, y, 0);
+      return itemActionHooks[0]({ player, itemId, option: 'Place', handled: false });
+    };
+    assert.equal(placeFromInventory(core.ItemIdentifiers.SHADOW_BLOCKER, 2574, 6449), true,
+      'the cache-defined Place inventory action installs the blocker on its marked palace tile');
+    assert.equal(placeFromInventory(core.ItemIdentifiers.ANIMA_PORTAL, 2576, 6447), true,
+      'the cache-defined Place inventory action installs the portal on its marked palace tile');
+    assert.equal(placeFromInventory(core.ItemIdentifiers.REVITALISING_IDOL, 2578, 6445), true,
+      'the cache-defined Place inventory action installs the idol on its marked palace tile');
+    assert.equal(attrs.get('desert-treasure-ii:lassar').whiteBlockerPlaced, true);
+    assert.equal(attrs.get('desert-treasure-ii:lassar').whiteAnimaPlaced, true);
+    assert.equal(attrs.get('desert-treasure-ii:lassar').whiteIdolPlaced, true);
+    assert.deepEqual([counts.get(core.ItemIdentifiers.SHADOW_BLOCKER), counts.get(core.ItemIdentifiers.ANIMA_PORTAL),
+      counts.get(core.ItemIdentifiers.REVITALISING_IDOL)], [0, 0, 0], 'placing devices consumes exactly one of each real item');
+    attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), sanity: 45 });
+    playerProcesses[0]({ player });
+    const palaceIdol = lassarObjectObjects.findLast(({ action, object }) => action === 'register' && object.id === 48216
+      && object.location.x === 2322 && object.location.y === 6445);
+    assert.ok(palaceIdol, 'the placed palace idol has a real owner-only cache Use counterpart in the Shadow Realm');
+    assert.equal(interact({ player, objectId: 48216, definition: { id: 48216 },
+      location: { x: 2322, y: 6445, z: 0 }, option: 'Use' }), true);
+    assert.equal(attrs.get('desert-treasure-ii:lassar').sanity, 94,
+      'the placed palace idol restores 50 sanity while normal Shadow Realm drain continues');
+
+    attrs.set('desert-treasure-ii:lassar', deviceState);
+    counts.set(core.ItemIdentifiers.SHADOW_BLOCKER, 1);
+    counts.set(core.ItemIdentifiers.ANIMA_PORTAL, 1);
+    counts.set(core.ItemIdentifiers.REVITALISING_IDOL, 1);
     counts.set(core.ItemIdentifiers.SUPERIOR_SHADOW_TORCH, 1);
     assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.SHADOW_BLOCKER, objectId: 48228, location: { x: 2574, y: 6449, z: 0 } }), true);
     assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.ANIMA_PORTAL, objectId: 48228, location: { x: 2576, y: 6447, z: 0 } }), true);

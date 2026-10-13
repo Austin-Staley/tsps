@@ -3396,24 +3396,90 @@ module.exports = function registerDesertTreasureII(api) {
     sender.sendVarbit(15162, state.inShadow ? 1 : 0);
     sender.sendVarbit(15064, Math.max(0, Math.min(100, Number(state.sanity ?? (state.entered ? 100 : 0)) || 0)));
   }
-  function syncLassarShadowIdol(p, state) {
-    const current = lassarShadowIdols.get(p);
-    if (state.inShadow && state.idolPlaced) {
-      if (current) return;
-      // The shadow counterpart is a per-player scene change; register it so the
-      // normal object packet resolves to this owner instead of a client-only loc.
-      const idol = new api.core.GameObject(48216, new api.core.Location(2435, 6415, 0), 22, 0, null).setOwner(p);
-      api.core.ObjectManager.register(idol, true);
-      lassarShadowIdols.set(p, idol);
-    } else if (current) {
-      api.core.ObjectManager.deregister(current, true);
-      lassarShadowIdols.delete(p);
+  function placeLassarDevice(p, itemId, x, y, z = 0) {
+    if (stage(p) !== S.WHISPERER || z !== 0) return false;
+    const state = p.getAttribute(LASSAR) ?? {};
+    const placements = [
+      { item: I.SHADOW_BLOCKER, x: 2606, y: 6359, flag: "blockerPlaced", ready: () => state.blockerDesigned,
+        message: "You place the shadow blocker beside the furnace-house doors." },
+      { item: I.SHADOW_BLOCKER, x: 2350, y: 6360, flag: "blockerPlaced", ready: () => state.blockerDesigned,
+        message: "You place the shadow blocker beside the furnace-house doors." },
+      { item: I.SHADOW_BLOCKER, x: 2641, y: 6428, flag: "pubBlocker", ready: () => state.blueKey,
+        message: "You place the shadow blocker by the pub doors, containing the lost souls that guard the passage." },
+      { item: I.SHADOW_BLOCKER, x: 2385, y: 6427, flag: "pubBlocker", ready: () => state.blueKey,
+        message: "You place the shadow blocker by the pub doors, containing the lost souls that guard the passage." },
+      { item: I.SHADOW_BLOCKER, x: 2649, y: 6406, flag: "redBlockerPlaced",
+        ready: () => state.choirSouth && state.choirWest && state.redKey,
+        message: "You place the shadow blocker beside the red-key chest." },
+      { item: I.SHADOW_BLOCKER, x: 2574, y: 6449, flag: "whiteBlockerPlaced", ready: () => state.whiteKey,
+        message: "You place the shadow blocker in front of the palace chest." },
+      { item: I.ANIMA_PORTAL, x: 2576, y: 6447, flag: "whiteAnimaPlaced", ready: () => state.whiteKey,
+        message: "You place the anima portal between the palace chest's braziers." },
+      { item: I.REVITALISING_IDOL, x: 2689, y: 6415, flag: "idolPlaced",
+        ready: () => state.idol && state.basicTorch && (state.teleporters ?? []).slice(0, 6).every(Boolean),
+        message: "You place the revitalising idol beside the eastern teleporter. Its light steadies your sanity in the Shadow Realm." },
+      { item: I.REVITALISING_IDOL, x: 2691, y: 6415, flag: "idolPlaced",
+        ready: () => state.idol && state.basicTorch && (state.teleporters ?? []).slice(0, 6).every(Boolean),
+        message: "You place the revitalising idol beside the eastern teleporter. Its light steadies your sanity in the Shadow Realm." },
+      { item: I.REVITALISING_IDOL, x: 2578, y: 6445, flag: "whiteIdolPlaced", ready: () => state.whiteKey,
+        message: "You place the revitalising idol south-east of the anima portal." },
+    ];
+    const placement = placements.find((candidate) => candidate.item === itemId && candidate.x === x && candidate.y === y);
+    if (!placement) return false;
+    if (!has(p, itemId)) {
+      p.sendMessage("You do not have that shadow device to place.");
+      return true;
     }
+    if (state[placement.flag]) {
+      p.sendMessage("That shadow device is already placed here.");
+      return true;
+    }
+    if (!placement.ready()) {
+      p.sendMessage("The shadow device is not ready to be placed here yet.");
+      return true;
+    }
+    p.getInventory().deleteNumber(itemId, 1);
+    setLassar(p, { ...state, [placement.flag]: true });
+    p.sendMessage(placement.message);
+    return true;
+  }
+  function handleLassarDevicePlace(event) {
+    const { player: p, itemId, option } = event;
+    if (String(option || "").trim().toLowerCase() !== "place") return false;
+    const location = p?.getLocation?.();
+    if (!location) return false;
+    const x = location.getX?.() ?? location.x;
+    const y = location.getY?.() ?? location.y;
+    const z = location.getZ?.() ?? location.z ?? 0;
+    const handled = placeLassarDevice(p, itemId, x, y, z);
+    if (handled) event.handled = true;
+    return handled;
+  }
+  function syncLassarShadowIdol(p, state) {
+    const current = lassarShadowIdols.get(p) ?? new Map();
+    const desired = new Map();
+    if (state.inShadow && state.idolPlaced) desired.set("eastern-teleporter", [2435, 6415]);
+    if (state.inShadow && state.whiteIdolPlaced) desired.set("palace-chest", [2322, 6445]);
+    for (const [key, object] of current) {
+      if (desired.has(key)) continue;
+      api.core.ObjectManager.deregister(object, true);
+      current.delete(key);
+    }
+    for (const [key, [x, y]] of desired) {
+      if (current.has(key)) continue;
+      // The shadow counterpart is a per-player scene change; register it so the
+      // normal cache Use action resolves to this owner instead of a client-only loc.
+      const idol = new api.core.GameObject(48216, new api.core.Location(x, y, 0), 22, 0, null).setOwner(p);
+      api.core.ObjectManager.register(idol, true);
+      current.set(key, idol);
+    }
+    if (current.size) lassarShadowIdols.set(p, current);
+    else lassarShadowIdols.delete(p);
   }
   function removeLassarShadowIdol({ player: p }) {
     const current = p && lassarShadowIdols.get(p);
     if (!current) return;
-    api.core.ObjectManager.deregister(current, true);
+    for (const object of current.values()) api.core.ObjectManager.deregister(object, true);
     lassarShadowIdols.delete(p);
   }
   function syncLassarAnimaTentacles(p, state) {
@@ -3740,6 +3806,7 @@ module.exports = function registerDesertTreasureII(api) {
   function handleItemAction(event) {
     const { player: p, itemId, option } = event;
     const action = String(option || "").toLowerCase();
+    if (handleLassarDevicePlace(event)) return true;
     if (itemId === I.ANCIENT_LAMP && action === "rub") {
       if (!quest.isComplete(p)) return false;
       const { item, slot } = event;
@@ -4861,6 +4928,11 @@ module.exports = function registerDesertTreasureII(api) {
     const lassar = p.getAttribute(LASSAR) ?? {};
     const lassarX = location?.getX?.() ?? location?.x;
     const lassarY = location?.getY?.() ?? location?.y;
+    if ([I.SHADOW_BLOCKER, I.ANIMA_PORTAL, I.REVITALISING_IDOL].includes(itemId)
+      && placeLassarDevice(p, itemId, lassarX, lassarY, location?.getZ?.() ?? location?.z ?? 0)) {
+      event.handled = true;
+      return true;
+    }
     const lassarShadowBarrier = (lassarX === 2417 && lassarY === 6413)
       || (lassarX === 2424 && lassarY === 6439);
     if (stage(p) === S.WHISPERER && lassar.inShadow && lassarShadowBarrier
@@ -6484,7 +6556,7 @@ module.exports = function registerDesertTreasureII(api) {
     }
     if (state.inShadow && visibleId === 48216 && option
       && (option === "use" || option === "restore sanity" || option === "touch" || option === "activate")) {
-      if (!state.idolPlaced) { p.sendMessage("The revitalising idol has not been placed in Lassar yet."); return true; }
+      if (!state.idolPlaced && !state.whiteIdolPlaced) { p.sendMessage("The revitalising idol has not been placed in Lassar yet."); return true; }
       const sanity = Math.max(0, Math.min(100, Number(state.sanity ?? 100)));
       setLassar(p, { ...state, sanity: Math.min(100, sanity + 50) });
       p.sendMessage("You draw strength from the revitalising idol, restoring 50% sanity.");
