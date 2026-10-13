@@ -6601,6 +6601,38 @@ test('Blood Moon shrine examine starts the hideout conversation only at the real
  }finally{runtime.startTranscript=original;delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];}
 });
 
+test('Blood Moon stage-20 Ivan interaction claims his departure prompt before generic Myreque dialogue',()=>{
+ const {api,handlers}=mockApi();let prompt;
+ api.sendMultiChatboxPrompt=(...args)=>{prompt=args;};
+ delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
+ require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+ const attrs=new Map([['quest.the_blood_moon_rises.stage',20]]),eq=[];
+ eq[api.core.Equipment.BODY_SLOT]=new api.core.Item(api.core.ItemIdentifiers.VYRE_NOBLE_TOP);
+ eq[api.core.Equipment.LEG_SLOT]=new api.core.Item(api.core.ItemIdentifiers.VYRE_NOBLE_LEGS);
+ eq[api.core.Equipment.FEET_SLOT]=new api.core.Item(api.core.ItemIdentifiers.VYRE_NOBLE_SHOES);
+ const player={getAttribute:key=>attrs.get(key),getEquipment:()=>({get:slot=>eq[slot]}),getInventory:()=>({contains:()=>false}),sendMessage(){}};
+ const event={player,npcId:api.core.NpcIdentifiers.IVAN_STROM_13,definition:{getName:()=>"Ivan Strom"},option:"Talk-to",handled:false};
+ const handled=handlers.npcInteractions.get('Ivan Strom')['Talk-to'](event);
+ assert.equal(handled,true);assert.equal(prompt[1],"Are you ready to go to Darkmeyer?");
+ assert.deepEqual(prompt.slice(2,4).map(x=>typeof x==='function'?'callback':x),["I'm ready.",'callback']);
+ delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
+});
+
+test('Blood Moon resumes the escape transcript after a completed hideout defense is saved',()=>{
+ const runtime=require('../plugins/quests/QuestRuntime'),original=runtime.startTranscript;let transcript;
+ runtime.startTranscript=(...args)=>{transcript=args.slice(1);return true;};
+ try{
+  const {api,handlers}=mockApi();delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attrs=new Map([['quest.the_blood_moon_rises.stage',20],['quest.the_blood_moon_rises.hideout-defense-complete',true]]);
+  const player={getAttribute:key=>attrs.get(key),getDialogueManager:()=>({getCurrent:()=>null})};
+  const resume=handlers.playerLogin.find(handler=>handler.name==='resumeHideoutEscape');assert.equal(typeof resume,'function');
+  resume({player});assert.deepEqual(transcript,[player,api.core.NpcIdentifiers.IVAN_STROM_13,'The Blood Moon Rises','starting-out-escaping-the-vampyres']);
+  transcript=null;const speaking={...player,getDialogueManager:()=>({getCurrent:()=>({})})};resume({player:speaking});assert.equal(transcript,null,'do not replace an active dialogue on login');
+  attrs.set('quest.the_blood_moon_rises.hideout-defense-complete',false);resume({player});assert.equal(transcript,null,'do not start the escape before defense is complete');
+ }finally{runtime.startTranscript=original;delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];}
+});
+
 test('Blood Moon hideout chest supplies the disguise and Ivan checks the worn outfit',()=>{
  const {api,handlers}=mockApi();
  delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
@@ -6616,6 +6648,32 @@ test('Blood Moon hideout chest supplies the disguise and Ivan checks the worn ou
  assert.equal(condition({player,stepId:'wAGF9J'}),false);assert.equal(condition({player,stepId:'ysow_0'}),true);
  const distant={...event,handled:false,location:{x:3610,y:9617,z:0}};assert.equal(chest(distant),false);
  delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
+});
+
+test('Blood Moon courtyard escape needs the opening vyrewatch kills and the full defence timer',()=>{
+ const {api,handlers}=mockApi(),spawned=[],removed=[],attrs=new Map(),completion=[];let tick=1000,index=1;
+ const originalCycle=api.core.World.getProcessCycle;api.core.World.getProcessCycle=()=>tick;
+ const location=(x,y,z=0)=>new api.core.Location(x,y,z);
+ const actor=(isPlayer,id,x,y)=>{
+  const entity={id,x,y,z:0,area:null,hp:600,maxHp:600,index:index++,isPlayer:()=>isPlayer,isNpc:()=>!isPlayer,
+   getId(){return this.id},getAsPlayer(){return this},getAsNpc(){return this},getIndex(){return this.index},getArea(){return this.area},setArea(value){this.area=value},isRegistered(){return false},
+   getUsername:()=>isPlayer?'defender':undefined,getLocation(){return location(this.x,this.y,this.z)},moveTo(tile){this.x=tile.getX();this.y=tile.getY();this.z=tile.getZ()},
+   getHitpoints(){return this.hp},setHitpoints(value){this.hp=value;return this},setMaxHitpoints(value){this.maxHp=value;return this},
+   setMultiCombat(){return this},setScriptedMovement(value){this.scriptedMovement=value;return this},sendMessage(){},setAttribute(key,value){attrs.set(key,value)},getAttribute(key){return attrs.get(key)},
+   getCombat(){return this.combat??=( {target:null,attack(target){this.target=target},getTarget(){return this.target},getHitQueue(){return {addPendingDamage(){}}} } )}};
+  return entity;
+ };
+ const player=actor(true,0,0,0);api.spawnNpc=spec=>{const npc=actor(false,spec.id,spec.x,spec.y);npc.spec=spec;spawned.push(npc);return npc};api.removeNpc=npc=>removed.push(npc);
+ try{
+  const defense=require('../plugins/quests/bmr/HideoutDefense.TheBloodMoonRises')({api,stage:()=>20,hideoutStage:20,complete:(p,id)=>completion.push([p,id])});
+  assert.equal(defense.prepare(player),true);const area=player.getAttribute('quest.the_blood_moon_rises.hideout-defense-area');assert.ok(area);assert.deepEqual([player.x,player.y],[3575,3355]);
+  assert.equal(defense.start(player),true);assert.equal(spawned.length,4);const ivan=spawned[0],opening=spawned.slice(1);assert.ok(ivan.scriptedMovement,'Ivan stays on his scripted courtyard tile');assert.ok(opening.every(npc=>npc.getCombat().getTarget()===ivan&&!npc.scriptedMovement),'attacking vyrewatches retain ordinary pathing and combat');
+  tick+=40;area.process(ivan);const bloodveld=spawned.find(npc=>npc.id===api.core.NpcIdentifiers.ACIDIC_BLOODVELD);assert.ok(bloodveld&&!bloodveld.scriptedMovement,'pressure enemies must be able to reach Ivan');
+  for(const npc of opening){npc.hp=0;handlers.npcDeath.at(-1)({npc,killer:player});}
+  tick+=359;area.process(ivan);assert.equal(completion.length,0,'the scene waits for the defence timer');
+  tick++;area.process(ivan);assert.deepEqual(completion,[[player,api.core.NpcIdentifiers.IVAN_STROM_13]]);assert.equal(attrs.get('quest.the_blood_moon_rises.hideout-defense-complete'),true);
+  assert.ok(removed.includes(ivan));assert.equal(player.getAttribute('quest.the_blood_moon_rises.hideout-defense-area'),null);
+ }finally{api.core.World.getProcessCycle=originalCycle;}
 });
 
 test('Blood Moon preparation exit allows gathering leaves before the defence is ready',()=>{
