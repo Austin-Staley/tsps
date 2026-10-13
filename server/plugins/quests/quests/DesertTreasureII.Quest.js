@@ -139,6 +139,7 @@ module.exports = function registerDesertTreasureII(api) {
   const KASONDE_POTION = I.STRANGE_POTION_3;
   const VARDORVIS_ENTRY = 49495;
   const KASONDE_MEDALLION_CHEST = 49496;
+  const STRANGLEWOOD_BARRICADE_LOC = 49492;
   const VARDORVIS_QTE_GROUP = 833;
   const VARDORVIS_QTE_INIT_SCRIPT = 1816;
   const VARDORVIS_MELEE_ANIMATION = 10340;
@@ -1594,6 +1595,17 @@ module.exports = function registerDesertTreasureII(api) {
     postLeave(actor) { if (actor.isPlayer()) ruinsStarted.delete(actor.getAsPlayer()); }
   }
 
+  function crossStranglewoodBarricade({ player: p, objectId, location }) {
+    if (objectId !== STRANGLEWOOD_BARRICADE_LOC || location.x !== 1193 || location.y !== 3401) return false;
+    if (!p.getAttribute(STRANGLEWOOD_CITY_ENTERED)) {
+      p.sendMessage("Follow Kasonde's voice from the ruins before crossing the barricade.");
+      return true;
+    }
+    p.getMovementQueue?.().reset?.();
+    p.moveTo(new api.core.Location(1193, p.getLocation().getY() <= 3401 ? 3405 : 3399, 0));
+    return true;
+  }
+
   function spawnSurfaceKasonde(p) {
     let owned = spawned.get(p);
     if (!owned) spawned.set(p, owned = {});
@@ -2880,7 +2892,17 @@ module.exports = function registerDesertTreasureII(api) {
       if (!player.getAttribute(SCAR_LEVIATHAN_DEBRIS_SEARCHED)) return ["Search the debris by the ship for Perseriya's medallion."];
       return ["Continue through the Scar and defeat the Leviathan."];
     }
-    if (s >= S.VARDORVIS) return ["Follow Kasonde's trail and defeat Vardorvis."];
+    if (s === S.VARDORVIS) {
+      const progress = Number(player.getAttribute(VARDORVIS_PROGRESS)) || 0;
+      if (progress >= 22) return ["Return Vardorvis' medallion to its statue in the Ancient Vault."];
+      if (progress === 21) return ["Cross the barricade into Kasonde's hideout and search the north-east stone chest for Vardorvis' medallion."];
+      if (progress === 20) return ["Speak to the defeated Kasonde in the Stranglewood temple."];
+      if (progress === 19) return ["Defeat Kasonde in the temple. Dodge his potions and hide behind pillars when he charges an explosion."];
+      if (progress === 18) return ["Take the Temple key back to Kasonde in the Stranglewood temple."];
+      if (progress === 17) return ["Take the Temple key dropped by Vardorvis and leave the ritual site through the rocks."];
+      if (progress === 16) return ["Climb over the rocks into Vardorvis' ritual site and defeat him."];
+      return ["Follow Kasonde's trail and defeat Vardorvis."];
+    }
     if (s >= S.MACHINE) return ["Use the golem to learn the forgotten four's names."];
     if (s >= S.GUARDIAN) return ["Search the military installation beneath the Digsite."];
     if (s >= S.ROCKS) return ["Mine through the rocks and defeat the Ancient Guardian."];
@@ -5895,6 +5917,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("Elissa", { "Talk-to": talkElissa });
   api.onNpcInteraction("Barus", { "Talk-to": talkBarus });
   api.onNpcInteraction("Kasonde", { "Talk-to": talkKasonde });
+  api.onObjectInteraction("Barricade", { "Climb-over": crossStranglewoodBarricade });
   api.onNpcInteraction("Ramarno", { "Talk-to": talkRamarno });
   api.onNpcInteraction("Prescott", { "Talk-to": talkPrescott });
   api.onNpcInteraction("Wizard Persten", { "Talk-to": progressBosses });
