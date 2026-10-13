@@ -337,7 +337,7 @@ export class EditModePlugin {
         const wasActive = this.config.active;
         const previousTool = this.config.tool;
         if (nextConfig.tool !== undefined || nextConfig.locId !== undefined || nextConfig.placeKind !== undefined) {
-            this.movingSelection = undefined;
+            this.cancelMove();
         }
         this.config = this.sanitizeConfig({ ...this.config, ...nextConfig });
         if (nextConfig.heightLevel !== undefined && nextConfig.renderAllHeightLevels === undefined) {
@@ -516,7 +516,7 @@ export class EditModePlugin {
     }
 
     duplicateSelection(): void {
-        this.movingSelection = undefined;
+        this.cancelMove();
         if (!this.selection || this.selection.kind === "npc" || this.selection.locId < 0) return;
         this.setConfig({
             tool: "place",
@@ -531,8 +531,21 @@ export class EditModePlugin {
         const selection = this.selection;
         if (!selection || selection.kind !== "loc" || selection.locId < 0) return;
         this.duplicateSelection();
-        // Keep the source until the destination is confirmed, so cancelling is harmless.
-        this.movingSelection = { ...selection };
+        this.movingSelection = { ...selection, shape: this.config.shape, rotation: this.config.rotation };
+        this.host?.onLocDel(
+            { x: selection.tileX, y: selection.tileY }, selection.plane,
+            selection.shape ?? this.config.shape, selection.rotation ?? this.config.rotation,
+        );
+    }
+
+    private cancelMove(): void {
+        const moving = this.movingSelection;
+        if (!moving) return;
+        this.movingSelection = undefined;
+        // Preview removal never enters saved edits; cancellation restores the source.
+        this.host?.onLocAddChange(moving.locId,
+            { x: moving.tileX, y: moving.tileY }, moving.plane,
+            moving.shape ?? this.config.shape, moving.rotation ?? this.config.rotation);
     }
 
     rotateSelection(): void {
@@ -749,6 +762,7 @@ export class EditModePlugin {
      * ponytail: undo skips deletes, wire a real override-clear if that bites.
      */
     undo(): boolean {
+        if (this.movingSelection) this.setConfig({ tool: "select" });
         const edits = this.config.edits;
         let index = -1;
         for (let i = edits.length - 1; i >= 0; i--) {
@@ -768,6 +782,7 @@ export class EditModePlugin {
     }
 
     clearEdits(): void {
+        if (this.movingSelection) this.setConfig({ tool: "select" });
         const edits = this.config.edits;
         for (const edit of edits) {
             if (edit.kind === "npc" || edit.kind === "terrain") this.revert(edit);
@@ -1341,7 +1356,7 @@ export class EditModePlugin {
             this.host?.setFreeCamera(false);
             this.freeCamera = false;
         }
-        if (!shouldCapture) this.movingSelection = undefined;
+        if (!shouldCapture) this.cancelMove();
         if (!shouldCapture) this.resetCameraInput();
         if (!shouldCapture) this.clearPlacementPreview();
         if (!shouldCapture) this.host?.clearSelectionHighlight?.();
