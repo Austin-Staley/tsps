@@ -207,6 +207,19 @@ test("private-instance gate coordinates normalize to cache tiles and preserve th
   assert.equal(handlers.object({ ...event, player: { getAttribute: () => null } }), false, "outside the quest instance, gate handling falls through");
 });
 
+test("the equipment chest returns the saved kit through the valid prison stash event once", () => {
+  const { handlers, emitted, player, inventory, instanceLocation } = setup();
+  player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 46);
+  inventory.adds(28419, 1);
+  const chest = { player, definition: { id: 49130, name: "Chest" }, option: "Open", location: instanceLocation(2899, 6376, 2), handled: false };
+  handlers.object(chest);
+  assert.equal(chest.handled, true);
+  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 50);
+  assert.equal(emitted.filter(({ name }) => name === "dt2:sucellus-prison-return-stash").length, 1);
+  handlers.object({ ...chest, handled: false });
+  assert.equal(emitted.filter(({ name }) => name === "dt2:sucellus-prison-return-stash").length, 1);
+});
+
 test("blocked shortcut crevice only opens when the carried chisel is used on its cache loc", () => {
   const { handlers, player, inventory, openedObjects, area, instanceLocation } = setup();
   player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 30);
