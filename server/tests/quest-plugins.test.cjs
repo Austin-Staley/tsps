@@ -2113,7 +2113,28 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   route(northLobbyVanesculaRoute);
   assert.deepEqual(northLobbyVanesculaRoute.destination, { x: 2456, y: 7417, z: 0 },
     'the Vanescula Hall door uses the connected side tile because its apparent approach is separated by a clipped wall');
+  attributes.set('quest.the_blood_moon_rises.castle-room', 1);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 1);
+  const westLobbyStairRoute = {
+    player, objectId: 61599, clickType: 1,
+    definition: { id: 61599, getName: () => 'Stairs', getInteractions: () => ['Climb-up'] },
+    object: { getFace: () => 3, getLocation: () => new api.core.Location(2315, 7370, 0) },
+    sourceLocation: { x: 2314, y: 7370, z: 0 }, destination: null,
+  };
+  route(westLobbyStairRoute);
+  assert.deepEqual(westLobbyStairRoute.destination, { x: 2314, y: 7370, z: 0 },
+    'the ground-lobby stair replays from its cache-validated reachable west edge');
+  const lobbyStair = {
+    player, objectId: 61599, clickType: 1, option: 'Climb-up',
+    definition: { id: 61599, getName: () => 'Stairs' }, object: { getFace: () => 3 },
+    location: { x: 2315, y: 7370, z: 0 }, sourceLocation: { x: 2314, y: 7370, z: 0 }, handled: false,
+  };
+  enter(lobbyStair);
+  assert.equal(lobbyStair.handled, true);
+  assert.deepEqual(moved.at(-1), [2314, 7371, 1], 'the reachable stair click uses the actual upstairs landing');
+  moved.length = 0;
   attributes.delete('quest.the_blood_moon_rises.castle-room');
+  attributes.delete('quest.the_blood_moon_rises.castle-floor');
   const adjacentDoorRoute = {
     player, objectId: 61573, clickType: 1,
     definition: { getName: () => 'Door', getInteractions: () => ['Enter'] },

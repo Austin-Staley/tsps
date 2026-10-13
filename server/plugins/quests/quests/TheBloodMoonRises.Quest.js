@@ -3740,6 +3740,19 @@ module.exports = function registerTheBloodMoonRises(api) {
     const sourceX = source?.x ?? source?.getX?.();
     const sourceY = source?.y ?? source?.getY?.();
     const sourceZ = source?.z ?? source?.getZ?.();
+    // The ground-lobby staircase fills a 3x4 cache footprint against a wall.
+    // Its only reachable interaction edge is the west side, even though the
+    // cache rotation directs generic pathing toward the blocked south edge.
+    // Replaying the click from the player's current west-edge tile lets the
+    // normal interaction handler perform the paired climb transition.
+    if (event.definition?.id === CASTLE_DOOR_IDS.STAIRS_UP && tile.getX() === 2315 &&
+      tile.getY() === 7370 && tile.getZ() === 0 &&
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.LOBBY &&
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) === CASTLE_GROUND_FLOOR &&
+      sourceZ === 0 && sourceX === 2314 && sourceY >= 7369 && sourceY <= 7374) {
+      event.destination = { x: sourceX, y: sourceY, z: sourceZ };
+      return;
+    }
     if (sourceZ === tile.getZ() &&
       Math.max(Math.abs(sourceX - tile.getX()), Math.abs(sourceY - tile.getY())) <= 1) return;
     // The north-lobby door is placed in a clipped wall segment disconnected
