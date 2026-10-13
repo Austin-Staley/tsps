@@ -433,3 +433,14 @@ test('NPC spell targeting requires explicit area permission for actionless puzzl
     permission=null;assert.equal(NPCOptionPacketListener.castSpell(player,1,1),true,'ordinary combat NPC targeting is unchanged');
   } finally {World.getNpcs=originalNpc;CombatSpells.getCombatSpell=originalSpell;}
 });
+
+
+test('player healing preserves existing overheal and still caps ordinary health restoration', () => {
+  const {Player}=require('../dist/game/entity/impl/player/Player');
+  let hp=121;
+  const player={getSkillManager:()=>({getCurrentLevel:()=>hp,getMaxLevel:()=>99}),setHitpoints:v=>hp=v};
+  Player.prototype.heal.call(player,0);assert.equal(hp,121,'a zero-damage Blood heal cannot remove overheal');
+  Player.prototype.heal.call(player,6);assert.equal(hp,121,'healing neither removes nor extends existing overheal');
+  hp=98;Player.prototype.heal.call(player,6);assert.equal(hp,99);
+  hp=30;Player.prototype.heal.call(player,6);assert.equal(hp,36);
+});
