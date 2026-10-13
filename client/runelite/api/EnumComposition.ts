@@ -1,0 +1,1 @@
+export interface EnumComposition { getId(): number; getIntValue(key:number): number; getStringValue(key:number): string; getKeys(): number[]; getIntVals(): number[] | null; getStringVals(): string[] | null; getDefaultInt(): number; getDefaultString(): string; size(): number; }

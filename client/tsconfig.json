@@ -18,6 +18,7 @@
     "jsx": "react-jsx",
     "paths": {
       "@runelite/api/*": ["./runelite/api/*"],
+      "@runelite/awt": ["./runelite/awt/index.ts"],
       "@runelite/awt/*": ["./runelite/awt/*"],
       "@runelite/client/*": ["./runelite/client/*"],
       "@runelite/impl/*": ["./runelite/impl/*"]

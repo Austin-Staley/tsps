@@ -1,0 +1,72 @@
+/*
+ * Copyright (c) 2017, Seth <Sethtroll3@gmail.com>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice, this
+ *    list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+ * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+ * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR
+ * ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+// Ported to TypeScript.
+export enum ChatMessageType {
+    GAMEMESSAGE = 0,
+    MODCHAT = 1,
+    PUBLICCHAT = 2,
+    PRIVATECHAT = 3,
+    ENGINE = 4,
+    LOGINLOGOUTNOTIFICATION = 5,
+    PRIVATECHATOUT = 6,
+    MODPRIVATECHAT = 7,
+    FRIENDSCHAT = 9,
+    FRIENDSCHATNOTIFICATION = 11,
+    TRADE_SENT = 12,
+    BROADCAST = 14,
+    SNAPSHOTFEEDBACK = 26,
+    ITEM_EXAMINE = 27,
+    NPC_EXAMINE = 28,
+    OBJECT_EXAMINE = 29,
+    FRIENDNOTIFICATION = 30,
+    IGNORENOTIFICATION = 31,
+    CLAN_CHAT = 41,
+    CLAN_MESSAGE = 43,
+    CLAN_GUEST_CHAT = 44,
+    CLAN_GUEST_MESSAGE = 46,
+    AUTOTYPER = 90,
+    MODAUTOTYPER = 91,
+    CONSOLE = 99,
+    TRADEREQ = 101,
+    TRADE = 102,
+    CHALREQ_TRADE = 103,
+    CHALREQ_FRIENDSCHAT = 104,
+    SPAM = 105,
+    PLAYERRELATED = 106,
+    TENSECTIMEOUT = 107,
+    WELCOME = 108,
+    CLAN_CREATION_INVITATION = 109,
+    CHALREQ_CLANCHAT = 110,
+    CLAN_GIM_FORM_GROUP = 111,
+    CLAN_GIM_GROUP_WITH = 112,
+    CLAN_GIM_CHAT = -1,
+    CLAN_GIM_MESSAGE = -1,
+    DIALOG = 114,
+    MESBOX = 115,
+    NPC_SAY = 116,
+    DIDYOUKNOW = 117,
+    LEVELUPMESSAGE = 118,
+    UNKNOWN = -1,
+}

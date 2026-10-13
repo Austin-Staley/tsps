@@ -7,6 +7,10 @@ import {
     isConfigGroupDescriptor,
 } from "./ConfigItem";
 import { type ConfigStorage, defaultConfigStorage } from "./ConfigStorage";
+import { FontType } from "./FontType";
+import { Keybind } from "./Keybind";
+import { Color } from "../../awt/Color";
+import { configObjectToString, configStringToObject, type ConfigValueType } from "./ConfigValue";
 
 export const CONFIG_PREFIX = "rl.config.";
 
@@ -20,6 +24,9 @@ function itemKey(item: ConfigItemDef, property: string): string {
 
 export function serializeConfigValue(item: ConfigItemDef, value: unknown): string {
     if (value === undefined || value === null) return "";
+    if (value instanceof Color) return String(value.getRGB());
+    if (value instanceof FontType) return JSON.stringify({family:value.getFamily(),size:value.getSize(),bold:value.isBold(),italic:value.isItalic()});
+    if (value instanceof Keybind) return `${value.getKeyCode()}:${value.getModifiers()}`;
     if (item.color) {
         const color = Math.max(0, Math.floor(Number(value)) | 0);
         const hasAlpha = item.alpha && (color & 0xff000000) !== 0;
@@ -37,6 +44,21 @@ export function serializeConfigValue(item: ConfigItemDef, value: unknown): strin
 
 export function parseConfigValue(item: ConfigItemDef, raw: string | null | undefined): unknown {
     if (raw === null || raw === undefined || raw === "") return item.default;
+    if (item.default instanceof Color) return configStringToObject(raw, Color) ?? item.default;
+    if(item.default instanceof FontType && raw.startsWith("{")){
+        try{const value=JSON.parse(raw) as Record<string,unknown>;
+            if(typeof value.family!=="string"||typeof value.size!=="number"||!Number.isFinite(value.size)||value.size<=0||value.size>256||typeof value.bold!=="boolean"||typeof value.italic!=="boolean")return item.default;
+            const font=new FontType(value.family,value.size,value.bold,value.italic);
+            for(const preset of [FontType.SMALL,FontType.REGULAR,FontType.BOLD])if(preset.getFamily()===font.getFamily()&&preset.getSize()===font.getSize()&&preset.isBold()===font.isBold()&&preset.isItalic()===font.isItalic())return preset;
+            return font;
+        }catch{return item.default;}
+    }
+    if (item.default instanceof Keybind) {
+        const match = /^(\d+):(\d+)$/.exec(raw);
+        if (!match) return item.default;
+        const Constructor = item.default.constructor as typeof Keybind;
+        return new Constructor(Number(match[1]), Number(match[2]));
+    }
     if (item.color) {
         if (raw.startsWith("#")) {
             const hex = raw.slice(1);
@@ -74,6 +96,28 @@ export class ConfigManager {
     private readonly accessors = new Map<ConfigGroupDescriptor, ConfigOf<ConfigGroupDescriptor>>();
     private readonly listeners = new Set<(event: ConfigChanged) => void>();
     private readonly storageEventHandler?: (event: StorageEvent) => void;
+    private rsProfileKey?: string;
+
+    getRSProfileKey(): string | undefined { return this.rsProfileKey; }
+    setRSProfileKey(key: string | undefined): void { this.rsProfileKey = key; }
+
+    getRSProfileConfiguration(group: string, key: string): string | undefined;
+    getRSProfileConfiguration(group: string, key: string, type: NumberConstructor): number | undefined;
+    getRSProfileConfiguration(group: string, key: string, type: BooleanConstructor): boolean | undefined;
+    getRSProfileConfiguration(group: string, key: string, type: StringConstructor): string | undefined;
+    getRSProfileConfiguration(group: string, key: string, type: BigIntConstructor): bigint | undefined;
+    getRSProfileConfiguration<T>(group: string, key: string, type: ConfigValueType<T>): T | undefined;
+    getRSProfileConfiguration(group: string, key: string, type?: unknown): unknown {
+        const raw = this.rsProfileKey === undefined ? undefined : this.readConfiguration(group, key, this.rsProfileKey);
+        return raw === undefined || type === undefined ? raw : configStringToObject(raw, type);
+    }
+    setRSProfileConfiguration(group: string, key: string, value: unknown): void {
+        if (this.rsProfileKey === undefined) throw new Error("No RuneScape profile is active");
+        this.writeConfiguration(group, key, configObjectToString(value), this.rsProfileKey);
+    }
+    unsetRSProfileConfiguration(group: string, key: string): void {
+        if (this.rsProfileKey !== undefined) this.writeConfiguration(group, key, undefined, this.rsProfileKey);
+    }
 
     constructor(
         private readonly events?: EventBus,
@@ -82,8 +126,10 @@ export class ConfigManager {
         if (typeof window !== "undefined") {
             this.storageEventHandler = (event) => {
                 if (!event.key || !event.key.startsWith(CONFIG_PREFIX)) return;
-                const [group, ...rest] = event.key.slice(CONFIG_PREFIX.length).split(".");
-                this.emit(new ConfigChanged(group, rest.join("."), event.oldValue ?? undefined, event.newValue ?? undefined));
+                const parts = event.key.slice(CONFIG_PREFIX.length).split(".");
+                const profile = parts[0] === "rsprofile" ? (parts.shift(), parts.shift()) : undefined;
+                const group = parts.shift();
+                if (group) this.emit(new ConfigChanged(group, parts.join("."), event.oldValue ?? undefined, event.newValue ?? undefined, profile));
             };
             window.addEventListener("storage", this.storageEventHandler);
         }
@@ -116,18 +162,31 @@ export class ConfigManager {
         return config;
     }
 
-    getConfiguration(group: string, key: string): string | undefined {
-        const raw = this.storage.getItem(keyPath(group, key));
+    getConfiguration(group: string, key: string): string | undefined;
+    getConfiguration(group: string, key: string, type: NumberConstructor): number | undefined;
+    getConfiguration(group: string, key: string, type: BooleanConstructor): boolean | undefined;
+    getConfiguration(group: string, key: string, type: StringConstructor): string | undefined;
+    getConfiguration(group: string, key: string, type: BigIntConstructor): bigint | undefined;
+    getConfiguration<T>(group: string, key: string, type: ConfigValueType<T>): T | undefined;
+    getConfiguration(group: string, key: string, type?: unknown): unknown {
+        const raw = this.readConfiguration(group, key);
+        return raw === undefined || type === undefined ? raw : configStringToObject(raw, type);
+    }
+    private readConfiguration(group: string, key: string, profile?: string): string | undefined {
+        const raw = this.storage.getItem(keyPath(profile === undefined ? group : `rsprofile.${profile}.${group}`, key));
         return raw === null ? undefined : raw;
     }
 
-    setConfiguration(group: string, key: string, value: string | number | boolean): void {
-        const previous = this.getConfiguration(group, key);
-        if (previous === undefined && value === undefined) return;
-        const serialized = String(value);
+    setConfiguration(group: string, key: string, value: unknown): void {
+        this.writeConfiguration(group, key, configObjectToString(value));
+    }
+    private writeConfiguration(group: string, key: string, serialized: string | undefined, profile?: string): void {
+        const previous = this.readConfiguration(group, key, profile);
         if (previous === serialized) return;
-        this.storage.setItem(keyPath(group, key), serialized);
-        this.emit(new ConfigChanged(group, key, previous, serialized));
+        const path = keyPath(profile === undefined ? group : `rsprofile.${profile}.${group}`, key);
+        if (serialized === undefined) this.storage.removeItem(path);
+        else this.storage.setItem(path, serialized);
+        this.emit(new ConfigChanged(group, key, previous, serialized, profile));
     }
 
     /** Writes a typed config value through the descriptor's serialisation. */
@@ -154,10 +213,7 @@ export class ConfigManager {
     }
 
     unsetConfiguration(group: string, key: string): void {
-        const previous = this.getConfiguration(group, key);
-        if (previous === undefined) return;
-        this.storage.removeItem(keyPath(group, key));
-        this.emit(new ConfigChanged(group, key, previous, undefined));
+        this.writeConfiguration(group, key, undefined);
     }
 
     /** Legacy keys were JSON blobs; migration flags keep the shim one-shot. */

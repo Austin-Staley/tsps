@@ -1,0 +1,1 @@
+export enum FriendsChatRank { UNRANKED = -1, FRIEND = 0, RECRUIT = 1, CORPORAL = 2, SERGEANT = 3, LIEUTENANT = 4, CAPTAIN = 5, GENERAL = 6, OWNER = 7, JMOD = 127 }

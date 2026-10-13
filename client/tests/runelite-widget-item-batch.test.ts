@@ -1,0 +1,15 @@
+import assert from "node:assert/strict";
+import { WidgetItem } from "../runelite/api/widgets/WidgetItem";
+import type { Widget } from "../runelite/api/widgets/Widget";
+import { Rectangle } from "../runelite/awt/Rectangle";
+import { widgetItemsForHook } from "../runelite/impl/WidgetItemBatch";
+const group = 12 << 16;
+const container = (id: number, parent: Widget | null): Widget => ({getId:()=>id,getParent:()=>parent}) as Widget;
+const bank = container(group | 13, null), controls = container(group | 7, null);
+const bankItem = new WidgetItem(4151,1,new Rectangle(1,2,32,32),container(group | 13,bank),null);
+const controlItem = new WidgetItem(995,1,new Rectangle(3,4,32,32),container(group | 8,controls),null);
+assert.deepEqual(widgetItemsForHook(group | 13, [bankItem,controlItem]), [bankItem], "bank item layer must exclude unrelated controls");
+assert.deepEqual(widgetItemsForHook(group | 65535, [bankItem,controlItem]), [bankItem,controlItem]);
+const cycle = container(group | 90, null); cycle.getParent = () => cycle;
+assert.deepEqual(widgetItemsForHook(group | 13,[new WidgetItem(1,1,new Rectangle(),cycle,null)]),[],"invalid widget ancestry cannot hang drawing");
+console.log("RuneLite widget item batches: bank subtree isolation and interface hooks passed");

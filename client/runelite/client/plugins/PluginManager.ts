@@ -27,6 +27,9 @@ export class PluginManager {
     private readonly lifecycleVersions = new Map<PluginClass, number>();
     private readonly listeners = new Set<() => void>();
     private readonly injector: PluginInjector;
+    private readonly pendingLifecycle = new Set<Promise<void>>();
+    private shuttingDown = false;
+    private shutdownPromise?: Promise<void>;
 
     constructor(
         private readonly eventBus: EventBus,
@@ -51,6 +54,7 @@ export class PluginManager {
 
     /** Constructs every core plugin; enabled ones are started. */
     loadCorePlugins(classes: ReadonlyArray<PluginClass>): void {
+        if (this.shuttingDown) return;
         for (const pluginClass of classes) {
             if (this.plugins.has(pluginClass)) continue;
             const plugin = this.injector.runWith(() => new pluginClass());
@@ -68,6 +72,7 @@ export class PluginManager {
     }
 
     async setPluginEnabled(pluginOrClass: Plugin | PluginClass, enabled: boolean): Promise<void> {
+        if (this.shuttingDown) return;
         const pluginClass = this.toClass(pluginOrClass);
         if (!pluginClass) return;
         const current = this.enabled.get(pluginClass) ?? false;
@@ -80,7 +85,7 @@ export class PluginManager {
         const operation = enabled ? this.startPlugin(pluginClass) : this.stopPlugin(pluginClass);
         const version = this.lifecycleVersions.get(pluginClass);
         await operation;
-        if (this.lifecycleVersions.get(pluginClass) !== version || this.enabled.get(pluginClass) !== enabled) return;
+        if (this.shuttingDown || this.lifecycleVersions.get(pluginClass) !== version || this.enabled.get(pluginClass) !== enabled) return;
         this.eventBus.post(new PluginChanged(plugin as Plugin, enabled));
         this.notify();
     }
@@ -138,14 +143,50 @@ export class PluginManager {
         return pluginClass.descriptor.configKey ?? slug(pluginClass.descriptor.name);
     }
 
-    private async startPlugin(pluginClass: PluginClass): Promise<void> {
+    private trackLifecycle(operation: () => Promise<void>): Promise<void> {
+        let resolve!: () => void, reject!: (reason: unknown) => void;
+        const result = new Promise<void>((done, fail) => { resolve = done; reject = fail; });
+        this.pendingLifecycle.add(result);
+        // Register before invoking: startup/shutdown may synchronously request runtime teardown.
+        try { void operation().then(resolve, reject); } catch (error) { reject(error); }
+        void result.then(() => this.pendingLifecycle.delete(result), () => this.pendingLifecycle.delete(result));
+        return result;
+    }
+
+    /** Invalidate registration synchronously, then clean resources after any pending startup. */
+    shutdown(): Promise<void> {
+        if (this.shutdownPromise) return this.shutdownPromise;
+        this.shuttingDown = true;
+        for (const [pluginClass, plugin] of this.plugins) {
+            this.lifecycleVersions.set(pluginClass, (this.lifecycleVersions.get(pluginClass) ?? 0) + 1);
+            this.enabled.set(pluginClass, false);
+            plugin.setEnabledState(false);
+            this.eventBus.unregister(plugin);
+        }
+        this.shutdownPromise = (async () => {
+            await Promise.allSettled([...this.pendingLifecycle]);
+            await Promise.all([...this.plugins.values()].map(async plugin => {
+                try { await plugin.stop(); }
+                catch (error) { console.error(`[PluginManager] ${plugin.getName()} failed to stop`, error); }
+            }));
+            this.listeners.clear();
+        })();
+        return this.shutdownPromise;
+    }
+
+    private startPlugin(pluginClass: PluginClass): Promise<void> {
+        if (this.shuttingDown) return Promise.resolve();
+        return this.trackLifecycle(() => this.runStartPlugin(pluginClass));
+    }
+
+    private async runStartPlugin(pluginClass: PluginClass): Promise<void> {
         const plugin = this.plugins.get(pluginClass);
         if (!plugin || plugin.isStarted()) return;
         const version = (this.lifecycleVersions.get(pluginClass) ?? 0) + 1;
         this.lifecycleVersions.set(pluginClass, version);
         try {
             await plugin.start();
-            if (this.lifecycleVersions.get(pluginClass) !== version || !plugin.isStarted() || !this.isEnabled(pluginClass)) return;
+            if (this.shuttingDown || this.lifecycleVersions.get(pluginClass) !== version || !plugin.isStarted() || !this.isEnabled(pluginClass)) return;
             this.eventBus.register(plugin);
             this.failures.delete(pluginClass);
         } catch (error) {
@@ -159,7 +200,11 @@ export class PluginManager {
         this.notify();
     }
 
-    private async stopPlugin(pluginClass: PluginClass): Promise<void> {
+    private stopPlugin(pluginClass: PluginClass): Promise<void> {
+        return this.trackLifecycle(() => this.runStopPlugin(pluginClass));
+    }
+
+    private async runStopPlugin(pluginClass: PluginClass): Promise<void> {
         const plugin = this.plugins.get(pluginClass);
         if (!plugin || !plugin.isStarted()) return;
         this.lifecycleVersions.set(pluginClass, (this.lifecycleVersions.get(pluginClass) ?? 0) + 1);

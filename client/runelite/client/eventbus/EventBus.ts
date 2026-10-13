@@ -22,10 +22,14 @@ export class EventBus {
     private readonly timings = new Map<string, number>();
 
     register(subscriber: object): void {
+        this.unregister(subscriber);
+        const bound = new Set<string>();
         let prototype: object | null = subscriber;
         while (prototype && prototype !== Object.prototype) {
             for (const name of Object.getOwnPropertyNames(prototype)) {
                 if (!name.startsWith("on") || name === "on") continue;
+                if (bound.has(name)) continue;
+                bound.add(name);
                 const eventName = name.slice(2);
                 const EventCtor = EVENT_CLASSES[eventName];
                 if (!EventCtor) continue;
