@@ -2465,10 +2465,14 @@ module.exports = function registerSongOfTheElves(api) {
   function spawnFragmentClones(area, state) {
     const phase = fragmentPhase(state.boss.getHitpoints());
     const points = [[3290, 5918], [3298, 5918], [3294, 5912], [3294, 5924]];
-    const ids = Array.from({ length: phase.clones }, (_, index) =>
-      index % 2 === 0 ? NpcIdentifiers.FRAGMENT_OF_SEREN : NpcIdentifiers.FRAGMENT_OF_SEREN_2);
+    const realIndex = Math.floor(Math.random() * phase.clones);
+    // Cache 8917/8919/8920 use the lighter lighting; 8918 has the darker ambient.
+    // The actual encounter calls out the lighter shadow as the valid target.
+    const ids = Array.from({ length: phase.clones }, (_, index) => index === realIndex
+      ? NpcIdentifiers.FRAGMENT_OF_SEREN
+      : NpcIdentifiers.FRAGMENT_OF_SEREN_2);
     state.clones = spawnFragmentAdds(area, ids, points.slice(0, phase.clones));
-    state.realClone = state.clones[Math.floor(Math.random() * state.clones.length)] ?? null;
+    state.realClone = state.clones[realIndex] ?? null;
     state.boss.sendMessage?.(`The Fragment splits into ${phase.clones} echoes. One is real; strike the true one before they fade.`);
     state.player.sendMessage(`The Fragment divides into ${phase.clones} echoes. Strike the true echo; the false ones cannot be harmed.`);
   }
@@ -2498,11 +2502,12 @@ module.exports = function registerSongOfTheElves(api) {
     hit?.updateTotalDamage?.();
   }
 
-  function forceFragmentWhirlwindHit(event) {
+  function forceFragmentSpecialHit(event) {
     const target = event?.target;
     const area = target?.getArea?.();
     const state = area && fragmentInstances.get(area);
-    if (state && !state.finished && event.attacker === state.player && state.beams.has(target)) {
+    if (state && !state.finished && event.attacker === state.player &&
+        (state.beams.has(target) || target === state.realClone)) {
       event.forceAccurate = true;
     }
   }
@@ -2528,7 +2533,17 @@ module.exports = function registerSongOfTheElves(api) {
       return;
     }
     if (state.clones.includes(npc)) {
-      if (npc !== state.realClone) zeroHit(hit);
+      if (npc !== state.realClone) {
+        zeroHit(hit);
+        return;
+      }
+      const remaining = npc.getHitpoints?.() ?? 1;
+      const parts = hit.getHits?.() ?? [];
+      if (parts.length) {
+        parts[0].setDamage(Math.max(remaining, parts[0].getDamage?.() ?? 0));
+        for (const part of parts.slice(1)) part.setDamage(0);
+        hit.updateTotalDamage?.();
+      }
       return;
     }
     if (npc !== state.boss) return;
@@ -3072,6 +3087,6 @@ module.exports = function registerSongOfTheElves(api) {
   api.onAnyNpcInteraction({ "Talk-to": onTalk });
   api.onNpcDeath(handleBattleDeath);
   api.onPlayerDeath(handleQuestPlayerDeath);
-  api.onCombatHitRoll(forceFragmentWhirlwindHit);
+  api.onCombatHitRoll(forceFragmentSpecialHit);
   api.onNpcHitModify(handleFragmentHit);
 };
