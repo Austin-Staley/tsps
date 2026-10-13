@@ -5507,12 +5507,17 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(groundSpawns.at(-1)[1].getId(), core.ItemIdentifiers.SHADOW_KEY_2,
       'burning the eastern barrier reveals the blue shadow key');
     const blueKeyState = attrs.get('desert-treasure-ii:lassar');
-    attrs.set('desert-treasure-ii:lassar', { ...blueKeyState, inShadow: true, blueKey: false });
+    attrs.set('desert-treasure-ii:lassar', { ...blueKeyState, inShadow: true, blueKey: true });
     const beforeBlueKeyRecovery = groundSpawns.length;
     playerProcesses[0]({ player });
     const recoveredBlueKey = groundSpawns.slice(beforeBlueKeyRecovery).find(([, item]) => item.getId() === core.ItemIdentifiers.SHADOW_KEY_2);
     assert.ok(recoveredBlueKey, 'a cleared barrier restores its missing key after logout, expiry or death');
     assert.deepEqual([recoveredBlueKey[2].getX(), recoveredBlueKey[2].getY()], [2416, 6443]);
+    const beforeOpenedPub = groundSpawns.length;
+    attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), pubOpened: true });
+    playerProcesses[0]({ player });
+    assert.equal(groundSpawns.slice(beforeOpenedPub).some(([, item]) => item.getId() === core.ItemIdentifiers.SHADOW_KEY_2), false,
+      'the lost key is not restored after the pub has consumed it');
     counts.set(core.ItemIdentifiers.BASIC_SHADOW_TORCH, 0);
     attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), inShadow: true, sanity: 100 });
     playerProcesses[0]({ player });

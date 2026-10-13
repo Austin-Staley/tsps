@@ -153,6 +153,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     Object.freeze([O.LARGE_DOOR_21, O.LARGE_DOOR_22, 3491, 3492]),
     // Sophanem's north entrance: closed leaves 44036/44038, nameless open leaves 44037/44039.
     Object.freeze([O.GATE_232, O.GATE_233, 44037, 44039]),
+    // Lassar residential shadow gate: 48278/48279 open into the paired
+    // Close-action leaves 48282/48283 (48280/48281 are unused cache locs).
+    Object.freeze([O.DOORS_21, O.DOORS_22, O.DOORS_25, O.DOORS_26]),
   ]);
   // Both leaves of each pair are partners of the other.
   SPECIAL_DOUBLE_DOOR_PAIRS = Object.freeze([
@@ -174,6 +177,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.GATE_94, O.GATE_95],
     [O.GATE_8, O.GATE_9],
     [O.GATE_232, O.GATE_233],
+    [O.DOORS_21, O.DOORS_22],
+    [O.DOORS_25, O.DOORS_26],
     [44037, 44039],
     [O.LARGE_DOOR_24, O.LARGE_DOOR_25],
     [O.LARGE_DOOR_26, O.LARGE_DOOR_27],
@@ -222,6 +227,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.LARGE_DOOR_22, 3492],
     [O.GATE_232, 44037],
     [O.GATE_233, 44039],
+    [O.DOORS_21, O.DOORS_25],
+    [O.DOORS_22, O.DOORS_26],
     [O.LARGE_DOOR_99, O.LARGE_DOOR_18],
     [O.LARGE_DOOR_7, O.LARGE_DOOR_8],
     [O.LARGE_DOOR_9, O.LARGE_DOOR_10],

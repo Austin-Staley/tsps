@@ -6644,7 +6644,10 @@ module.exports = function registerDesertTreasureII(api) {
     if (state.greenKey && !state.purpleKey && !has(p, I.SHADOW_KEY)) {
       registerLassarGroundItem(p, I.SHADOW_KEY, 2592, 6352);
     }
-    if (state.tentacles?.["2424,6439"] && !state.blueKey && !has(p, I.SHADOW_KEY_2)) {
+    // A player can lose the private ground drop after taking it. The pickup
+    // flag is historical; the unopened pub gate is the durable consumption
+    // boundary, so restore a missing key until that gate has actually opened.
+    if (state.tentacles?.["2424,6439"] && !state.pubOpened && !has(p, I.SHADOW_KEY_2)) {
       registerLassarGroundItem(p, I.SHADOW_KEY_2, 2416, 6443);
     }
     // shortcut: place the schematic beside its Wiki marker because the marked tile is occupied by a cache crate.

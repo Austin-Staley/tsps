@@ -970,6 +970,30 @@ test('Sophanem north gate opens and closes both nameless gate leaves', () => {
   }
 });
 
+test('Lassar residential shadow doors use their canonical open and close locs', () => {
+  const h = buildHarness();
+  try {
+    // Cache locs 48278/48279 are the adjacent Open leaves; their Close variants
+    // are 48282/48283. The two actionless 48280/48281 locs are not used.
+    h.place(48278, 2417, 6414, 2);
+    h.place(48279, 2417, 6413, 2);
+    assert.deepEqual(h.click(48279, 2417, 6413, 2, 'Open', 'Doors'), [
+      ['deregister', 48278, 2417, 6414, 2],
+      ['deregister', 48279, 2417, 6413, 2],
+      ['register', 48282, 2418, 6414, 1],
+      ['register', 48283, 2418, 6413, 3],
+    ]);
+    assert.deepEqual(h.click(48282, 2418, 6414, 1, 'Close', 'Doors'), [
+      ['deregister', 48282, 2418, 6414, 1],
+      ['deregister', 48283, 2418, 6413, 3],
+      ['register', 48278, 2417, 6414, 2],
+      ['register', 48279, 2417, 6413, 2],
+    ]);
+  } finally {
+    h.restore();
+  }
+});
+
 
 test("Harold's bedroom door rotates without needing a separate open cache loc", () => {
   const h = buildHarness();
