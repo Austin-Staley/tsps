@@ -139,6 +139,165 @@ module.exports = function registerDesertTreasureII(api) {
   const KASONDE_POTION = I.STRANGE_POTION_3;
   const VARDORVIS_ENTRY = 49495;
   const KASONDE_MEDALLION_CHEST = 49496;
+  const VARDORVIS_QTE_GROUP = 833;
+  const VARDORVIS_QTE_INIT_SCRIPT = 1816;
+  const VARDORVIS_MELEE_ANIMATION = 10340;
+  const VARDORVIS_STRANGLE_ANIMATION = 10342;
+  const VARDORVIS_SPIKE_WARNING = 2510;
+  const VARDORVIS_HEAD_ANIMATION = 10348;
+  const VARDORVIS_HEAD_PROJECTILE = 2521;
+  const VARDORVIS_AXE_NPC = 12227; // Cache gameval vardorvis_axe has no generated identifier.
+  const vardorvisBleeds = new WeakMap();
+  function startVardorvisBleed(player) {
+    const previous = vardorvisBleeds.get(player);
+    if (previous) api.core.TaskManager.cancelTasks(previous);
+    const key = {};
+    vardorvisBleeds.set(player, key);
+    let left = 5, last = player.getLocation().clone();
+    // The bleed continues after leaving the ritual site.
+    api.core.TaskManager.submit(new (class extends api.core.Task {
+      constructor() { super(2, key); }
+      execute() {
+        if (!player.isRegistered() || player.getHitpoints() <= 0) { vardorvisBleeds.delete(player); this.stop(); return; }
+        player.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(3, api.core.HitMask.RED)]);
+        if (player.getLocation().equals(last)) left--;
+        last = player.getLocation().clone();
+        if (left <= 0) { vardorvisBleeds.delete(player); this.stop(); }
+      }
+    })());
+  }
+
+  class VardorvisCombat extends api.core.MeleeCombatMethod {
+    start(npc) { npc.performAnimation(new api.core.Animation(VARDORVIS_MELEE_ANIMATION)); }
+    attackSpeed() { return 5; }
+    hits(npc, target) {
+      const hits = super.hits(npc, target);
+      const ratio = Math.max(0, npc.getHitpoints() / npc.getMaxHitpoints());
+      const maximum = 30 + Math.round(7 * (1 - ratio));
+      const protection = target.getPacketSender().getVarbit(4118) === 1 ? 0.25 : 1;
+      for (const hit of hits) {
+        for (const damage of hit.getHits()) damage.setDamage(hit.isAccurate()
+          ? Math.min(target.getHitpoints(), Math.floor(Math.random() * (maximum + 1) * protection)) : 0);
+        hit.updateTotalDamage();
+      }
+      return hits;
+    }
+  }
+  function vardorvisHitRoll(event) {
+    if (event.attacker?.__dt2Vardorvis) event.bypassProtectionPrayer = true;
+  }
+  function vardorvisHitResolved({ attacker, target, hit }) {
+    if (!attacker?.__dt2Vardorvis || !target?.isPlayer?.()) return;
+    attacker.setHitpoints(Math.min(attacker.getMaxHitpoints(), attacker.getHitpoints() + Math.floor(hit.getTotalDamage() / 2)));
+  }
+  function vardorvisPrayerDisabled(event) {
+    const area = event.player?.getAttribute(ATTR_VARDORVIS_AREA);
+    if (area && event.player.getPrivateArea?.() === area && api.core.World.getProcessCycle() < (area.prayerLockUntil ?? 0)
+      && [4116, 4117, 4118].includes(event.prayer?.configId)) {
+      event.disabled = true;
+      event.message = "Vardorvis' head has briefly disabled your protection prayers.";
+    }
+  }
+  function endVardorvisStrangle(area, player) {
+    if (!area.spores) return;
+    area.spores = null;
+    player.getMovementQueue().setBlockMovement(false);
+    player.getAttribute(ATTR)?.setScriptedMovement?.(false);
+    player.getPacketSender().closeInterface(VARDORVIS_QTE_GROUP);
+  }
+  function processVardorvis(area, player) {
+    const cycle = api.core.World.getProcessCycle();
+    if (area.lastProcessCycle === cycle) return;
+    area.lastProcessCycle = cycle;
+    const boss = player.getAttribute(ATTR);
+    if (!boss?.__dt2Vardorvis || boss.getHitpoints() <= 0) { endVardorvisStrangle(area, player); return; }
+    if (player.getCombat().getTarget() !== boss && boss.getHitpoints() === boss.getMaxHitpoints()) return;
+    const ratio = boss.getHitpoints() / boss.getMaxHitpoints();
+    boss.setDefenceLevel(130 + Math.floor(50 * ratio));
+    const loc = player.getLocation(), sender = player.getPacketSender();
+    const hit = damage => player.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(damage, api.core.HitMask.RED)]);
+    for (const axe of area.axes ?? []) {
+      if (cycle < axe.starts) continue;
+      const step = cycle - axe.starts;
+      if (step > 17) { api.removeNpc(axe.npc); continue; }
+      const tile = area.tile(axe.x + axe.dx * step, axe.y + axe.dy * step, 0);
+      axe.npc.moveTo(tile);
+      if (!axe.hit && loc.getDistance(tile) <= 1) {
+        axe.hit = true;
+        const damage = 1 + Math.floor(Math.random() * 35);
+        hit(sender.getVarbit(4118) === 1 ? Math.floor(damage / 2) : damage);
+        startVardorvisBleed(player);
+        player.sendMessage("The swinging axe cuts you. Moving will prolong the bleeding.");
+      }
+    }
+    area.axes = (area.axes ?? []).filter(axe => cycle - axe.starts <= 17);
+    if (area.spike && cycle >= area.spike.due) {
+      if (loc.equals(area.spike.location)) {
+        const damage = Math.floor(Math.random() * 26);
+        hit(damage);
+        boss.setHitpoints(Math.min(boss.getMaxHitpoints(), boss.getHitpoints() + Math.floor(damage / 2)));
+      }
+      area.spike = null;
+    }
+    if (area.head && cycle >= area.head.due) {
+      if (sender.getVarbit(4117) !== 1) {
+        for (const prayer of [api.core.PrayerHandler.PROTECT_FROM_MAGIC, api.core.PrayerHandler.PROTECT_FROM_MISSILES, api.core.PrayerHandler.PROTECT_FROM_MELEE])
+          api.core.PrayerHandler.deactivatePrayer(player, prayer);
+        player.getSkillManager().setCurrentLevel(Skill.PRAYER, Math.max(0, player.getSkillManager().getCurrentLevel(Skill.PRAYER) - 10));
+        area.prayerLockUntil = cycle + 3;
+        player.sendMessage("Vardorvis' head disables your protection prayers and drains 10 Prayer points.");
+      } else player.sendMessage("You block Vardorvis' head gaze.");
+      api.removeNpc(area.head.npc);
+      area.head = null;
+    }
+    if (area.spores && cycle >= area.strangleDue) {
+      hit(50);
+      player.sendMessage("The tendrils tighten around you. Destroy every spore before time runs out!");
+      endVardorvisStrangle(area, player);
+    }
+    // shortcut: special selection, axe timing and quest axe/strangle damage need calibration against a live OSRS capture.
+    if (cycle < (area.nextSpecial ?? 0) || area.spores) return;
+    area.nextSpecial = cycle + (ratio < 0.33 ? 10 : 18);
+    const options = ratio < 0.8 ? ["axes", "spike", "head", "strangle"] : ["axes", "spike"];
+    let special = options[Math.floor(Math.random() * options.length)];
+    if (special === "strangle" && area.lastSpecial === "strangle") special = "axes";
+    area.lastSpecial = special;
+    if (special === "spike") {
+      area.spike = { location: loc.clone(), due: cycle + 3 };
+      sender.sendGraphic(new api.core.Graphic(VARDORVIS_SPIKE_WARNING), loc);
+      player.sendMessage("Cracks appear beneath your feet. Move before the spikes erupt!");
+    } else if (special === "head") {
+      const npc = api.core.NPC.create(N.VARDORVIS_HEAD, area.tile(24, 25, 0));
+      npc.setOwner(player); npc.setOwnerOnly(true); npc.setScriptedMovement(true);
+      npc.__skipDefaultRespawn = true;
+      area.add(npc); api.core.World.getAddNPCQueue().push(npc);
+      npc.performAnimation(new api.core.Animation(VARDORVIS_HEAD_ANIMATION));
+      api.core.Projectile.createProjectile(npc, player, VARDORVIS_HEAD_PROJECTILE, 30, 60, 40, 36).sendProjectile();
+      area.head = { npc, due: cycle + 3 };
+      player.sendMessage("Vardorvis' head gazes upon you. Protect from Missiles against the green projectile!");
+    } else if (special === "strangle") {
+      area.spores = new Set([6, 7, 8, 9, 10, 11]);
+      area.strangleDue = cycle + 9;
+      boss.performAnimation(new api.core.Animation(VARDORVIS_STRANGLE_ANIMATION));
+      boss.setScriptedMovement(true);
+      player.getMovementQueue().reset();
+      player.getMovementQueue().setBlockMovement(true);
+      sender.sendSubInterface((161 << 16) | 15, VARDORVIS_QTE_GROUP, 1);
+      sender.sendInterfaceScript(VARDORVIS_QTE_INIT_SCRIPT, [6]);
+      player.sendMessage("Vardorvis entangles you. Destroy the six spores before the tendrils tighten!");
+    } else {
+      const paths = [[8, 8, 1, 1], [25, 8, -1, 1], [8, 25, 1, -1]];
+      area.axes ??= [];
+      for (const [x, y, dx, dy] of paths.slice(0, ratio < 0.5 ? 3 : ratio < 0.8 ? 2 : 1)) {
+        const npc = api.core.NPC.create(VARDORVIS_AXE_NPC, area.tile(x, y, 0));
+        npc.setOwner(player); npc.setOwnerOnly(true); npc.setScriptedMovement(true);
+        npc.__skipDefaultRespawn = true;
+        area.add(npc); api.core.World.getAddNPCQueue().push(npc);
+        area.axes.push({ npc, x, y, dx, dy, starts: cycle + 3, hit: false });
+      }
+      player.sendMessage("Axes rise at the edges of the arena. Avoid their diagonal paths!");
+    }
+  }
   const SCAR_DEMONS_DEFEATED = "desert-treasure-ii:scar-demons-defeated";
   const SCAR_BOAT_TRIED = "desert-treasure-ii:scar-boat-tried";
   const SCAR_BOAT_ROOM = "desert-treasure-ii:scar-boat-room-entered";
@@ -537,6 +696,13 @@ module.exports = function registerDesertTreasureII(api) {
     }
     getName() { return "Vardorvis ritual site (Desert Treasure II)"; }
     allowSummonPet() { return false; }
+    process(actor) {
+      if (actor?.isPlayer?.() && actor.getUsername() === this.owner) processVardorvis(this, actor.getAsPlayer());
+    }
+    postLeave(actor, logout) {
+      if (actor?.isPlayer?.()) endVardorvisStrangle(this, actor.getAsPlayer());
+      super.postLeave(actor, logout);
+    }
     destroy() {
       if (this.isDestroyed()) return;
       for (const entity of [...this.entities]) {
@@ -2790,6 +2956,15 @@ module.exports = function registerDesertTreasureII(api) {
   }
   function onWidgetAction(event) {
     const p = event?.player, packet = event?.packet;
+    const ritual = p?.getAttribute(ATTR_VARDORVIS_AREA);
+    if (packet?.type === "widget_action" && packet.groupId === VARDORVIS_QTE_GROUP && ritual?.spores
+      && p.getPrivateArea?.() === ritual && ritual.spores.has(packet.childId)) {
+      event.handled = true;
+      ritual.spores.delete(packet.childId);
+      p.getPacketSender().sendInterfaceDisplayState((VARDORVIS_QTE_GROUP << 16) | packet.childId, true);
+      if (ritual.spores.size === 0) { endVardorvisStrangle(ritual, p); p.sendMessage("You destroy the spores and break free of the tendrils."); }
+      return;
+    }
     const area = p?.getAttribute(ATTR_WAR_ROOM);
     if (!packet || stage(p) < S.MACHINE || stage(p) >= S.VARDORVIS || !p.getAttribute(CELLS_INSERTED)
       || !p.getAttribute(PUZZLE_OPEN) || !area || area.isDestroyed?.() || p.getPrivateArea?.() !== area) return;
@@ -4252,6 +4427,8 @@ module.exports = function registerDesertTreasureII(api) {
       if (!(area instanceof VardorvisArea) || area.isDestroyed()) return;
       if (npcs[key]?.isRegistered?.() && area.entities.includes(npcs[key])) return;
       const npc = api.core.NPC.create(id, area.tile(x - 1112, y - 3400, 0));
+      npc.__dt2Vardorvis = true;
+      npc.setDefenceBonusOverrides?.([150, 25, 50, 560, 560]);
       npc.setOwner?.(p);
       npc.setOwnerOnly?.(true);
       npc.__skipDefaultRespawn = true;
@@ -5595,6 +5772,10 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("The Whisperer", { "Talk-to": handleBossTalk });
   api.onNpcInteraction("Odd Figure", { Disturb: handleBossTalk, "Talk-to": handleBossTalk });
   api.onNpcDeath(handleDeath);
+  api.registerNpcCombatMethodProvider(N.VARDORVIS_2, VardorvisCombat);
+  api.onCombatHitRoll(vardorvisHitRoll);
+  api.onCombatHitResolved(vardorvisHitResolved);
+  api.onPrayerDisabled(vardorvisPrayerDisabled);
   api.onItemOnNpc(handleNerveOnCatalyst);
   api.onItemOnNpc(handleSucellusItemOnNpc);
   api.onGroundItemPickup(handleSucellusGroundItemPickup);
