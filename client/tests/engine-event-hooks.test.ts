@@ -117,7 +117,7 @@ mapGraphics.spawnAttachedToPlayer(54, 84);
 mapGraphics.spawnAttachedToNpc(55, 41);
 mapGraphics.spawnAttachedToPlayer(56, 41);
 mapGraphics.spawnAttachedToPlayer(57, 41);
-(mapGraphics as any).instances[Symbol.iterator] = () => { throw new Error("Player map query must use actor indices"); };
+(mapGraphics as any).instances.values = (mapGraphics as any).instances[Symbol.iterator] = () => { throw new Error("Player map query must use actor indices"); };
 assert.equal((mapGraphics as any).findAttachedInstanceKey(54, 84), 1, "attached graphic lookup uses the actor index");
 assert.deepEqual(mapGraphics.getAttachedPlayersForMap({} as any).map(({ inst, pid, slot }) => [inst.spotId, pid, slot]),
     [[56, 6, 0], [57, 6, 0], [54, 2, 1]], "map queries preserve visible-player and graphic insertion order");
@@ -173,7 +173,6 @@ dispatchMenuAction(action, data => dispatchMenuAction(data, () => native++));
 assert.equal(clicks, 1); assert.equal(native, 1);
 dispose(); dispatchMenuAction(action, () => native++);
 assert.equal(clicks, 1); assert.equal(native, 2, "unregistered hooks preserve native actions");
-console.log("Engine hooks: packet mirrors, actor/map lifecycle, nested scripts, input and menu cleanup passed");
 
 // Canvas updates retain texture storage and upload only clipped damage on later frames.
 {
@@ -214,3 +213,4 @@ console.log("Engine hooks: packet mirrors, actor/map lifecycle, nested scripts, 
     assert.equal(uploads.at(-1)!.kind, "allocate", "resize reallocates every pixel rather than leaving undefined areas");
     assert.equal(first.w, 900);
 }
+console.log("Engine hooks: packet mirrors, actor/map lifecycle, nested scripts, input and menu cleanup passed");
