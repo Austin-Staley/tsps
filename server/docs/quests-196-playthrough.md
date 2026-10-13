@@ -105,3 +105,16 @@ The exact earned Duke post-chest snapshot clone now uses one disclosed ordinary 
 Whisperer continuation has picked up the actual blue key, consumed it at the pub gate, reopened the paired gate without another key, recovered/taken the actual superior-torch schematic after relog and handed it to Ketla through her full dialogue. The integrated gate uses the shared door event before normal door swinging. Blood Moon has defeated the next345HP basement Venator, placed all four armoury weapons, earned the right crest and combined the Full crest; its subsequent fireplace route and further castle chapters remain in progress.
 
 Integrated validation at2efb2a67 passes all887 checks across26 selected server suites. Source changes since the prior882 checkpoint include retained camp native progress, Castle actor/storage/armoury fixes, Lassar gate and schematic recovery, and Nardah scroll support.
+
+
+### Fresh middle-route and recorded castle continuation
+
+The original Soteearlyqa actor completed the post-library Arianwyn meeting and both Baxtorian clues at native112. An ordinary Iorwerth travel scroll reaches the camp. The cache3931 Log balance pair had no handler; its normal Cross now connects the two walkable banks, with the Wiki Agility45 requirement and an exact-cache collision regression. The original actor crossed it, failed and retried the actual stick trap with normal food, chopped the cyan disguised tree with its ordinary Rune axe, and completed every Crwys speech page. Native9016 immediately reaches118 and the axe remains in inventory. Hefin is continuing via the actual charged teleport crystal, west Tree passage and forest stones.
+
+A merge restart interrupted a QA login before the quest plugin initialized. The original actor was restored through the existing rollback command to its exact earned history244, before repeating the crossing/rescue; this restoration grants no target progress or items. The disclosed parallel middle component completed both elder rescues, the real orb-cave guard fights/chest, all six tracking clues, Ysgawyn's full confrontation, both actual child searches and the traitor reveal. It reached the actual300HP Arianwyn encounter; its combat and late continuation remain in progress. Immediate journal updates after each elder and each child search now have regressions.
+
+Whisperer continuation destroys the owner-scoped Anima barrier with the earned superior torch, takes the actual schematic, retains its availability through relog, completes Ketla's full handoff and searches the real workbench for Anima portal28369. The recorded Plaza puddle landing has an exact-cache regression. Palace/key/Whisperer/finale checks continue.
+
+Blood Moon uses the Full crest on the actual parlour fireplace, completes its confirmation and earns New moon key33728. The correct prison-room arrival and actor anchors permit the actual bench Gibbous key33727 pickup and all24 freed-prisoner speech pages. RSProx4288 supplies the exact prison exit landing2570,7368; both saved-row recovery and a cache route regression cover that return. Subsequent castle stair and boss checks continue.
+
+Integrated checkpoint6a64ae78 passes890/890 checks across26 selected server suites. All new commits retain nharrison93 author and committer identity through rsps-shell.
