@@ -764,3 +764,16 @@ test('continuing a quest line preserves a new conversation started by its after 
  const after=[...chain.getDialogues().values()].at(-1);current=after;after.send(player);
  assert.equal(current,replacement,'the new Surok conversation must survive the guard continuation');
 });
+
+test('a quest message preserves the next conversation started by its action handler', () => {
+ let current,chain;const replacement={newConversation:true};const messages=[];
+ const manager={getCurrent:()=>current,reset:()=>current=null,startDialogues:builder=>{chain=builder;current=[...builder.getDialogues().values()][0];}};
+ const player={getUsername:()=> 'Test',getDialogueManager:()=>manager,sendMessage:text=>messages.push(text),getPacketSender:()=>({sendInterfaceRemoval(){}})};
+ const definition={getName:()=> 'Ysgawyn',getId:()=>8890};
+ const api={emitCustomEvent:(name,e)=>{if(name==='npc-dialogue:action'&&e.stepId==='return-to-lletya')manager.startDialogues({getDialogues:()=>new Map([[0,replacement]])});}};
+ const event={player,npc:null,npcId:8890,definition};
+ startDialogue(api,event,[{npc:'We need to go!'},{type:'message',text:'You return to Lletya.',id:'return-to-lletya'}],{},{...event,pages:[]});
+ const after=[...chain.getDialogues().values()].at(-1);current=after;after.send(player);
+ assert.equal(current,replacement,'Mawrth’s new conversation survives the Ysgawyn message continuation');
+ assert.deepEqual(messages,['You return to Lletya.']);
+});

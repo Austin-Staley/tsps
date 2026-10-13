@@ -667,7 +667,13 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
             player, npc: event.npc, npcId, definition, step,
             text: step.text, target: step.target, stepId: step.id, kind: "message", handled: false,
           };
+          const previous = manager.getCurrent?.();
           api.emitCustomEvent("npc-dialogue:action", message);
+          const replacement = manager.getCurrent?.();
+          if (replacement && replacement !== previous) {
+            if (!message.handled) player.sendMessage(formatPlayerText(String(message.text ?? ""), player));
+            return;
+          }
           if (message.end) return close();
           playedAny = true;
           const [first, second] = Array.isArray(message.box?.items) ? message.box.items : [];
