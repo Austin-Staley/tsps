@@ -148,7 +148,7 @@ module.exports = function registerSongOfTheElves(api) {
     [ItemIdentifiers.BLACK_DAGGER,"Black dagger",[ItemIdentifiers.BLACK_DAGGER_P_,ItemIdentifiers.BLACK_DAGGER_P_PLUS_,
       ItemIdentifiers.BLACK_DAGGER_P_PLUS_PLUS_,ItemIdentifiers.BLACK_KNIFE,ItemIdentifiers.BLACK_KNIFE_P_,
       ItemIdentifiers.BLACK_KNIFE_P_PLUS_,ItemIdentifiers.BLACK_KNIFE_P_PLUS_PLUS_]],
-    [ItemIdentifiers.WINE_OF_ZAMORAK,"Wine of zamorak",[ItemIdentifiers.ZAMORAK_BREW_4_]],
+    [ItemIdentifiers.WINE_OF_ZAMORAK,"Wine of Zamorak",[ItemIdentifiers.ZAMORAK_BREW_4_]],
     [ItemIdentifiers.ADAMANT_CHAINBODY,"Adamant chainbody",[]],
     [ItemIdentifiers.CABBAGE,"Cabbage",[]],
   ];
@@ -3657,10 +3657,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.persistAttribute(LLETYA_CHILDREN);
   api.persistAttribute(LLETYA_TRAITOR_REVEALED);
   api.persistAttribute(LLETYA_ARIANWYN_CONFRONTED);
-  for (const [, itemName] of PILLAR_ITEMS) {
-    api.onItemOnObject(itemName, "Pillar of Light", placeFallsPillarItem, { noted: false });
-    api.onItemOnObject(itemName, "Pillar", placeFallsPillarItem, { noted: false });
-  }
+  api.onItemOnObject(placeFallsPillarItem, { noted: false });
   api.onItemOnObject("Tinderbox", "Sacks", lightWestArdougneSacks, { noted: false });
   api.onItemOnObject("Tinderbox", "Grain sacks", lightWestArdougneSacks, { noted: false });
   api.onItemOnObject("Tinderbox", "Barrel of fish", lightEastDockBarrels, { noted: false });

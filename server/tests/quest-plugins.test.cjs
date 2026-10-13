@@ -4600,7 +4600,7 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(varbits.get(15126), 2);
     assert.deepEqual(spawnedNpcs[0], { id: core.NpcIdentifiers.PRESCOTT, x: 2975, y: 5794, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
     const sinkholeRoute = { player, object: { getLocation: () => ({ getX: () => 2922, getY: () => 5827, getZ: () => 0 }) }, objectId: 49477, definition: { id: 48196 }, clickType: 1, destination: null };
-    objectRouteHooks.at(-1)(sinkholeRoute);
+    objectRouteHooks.find(h=>h.name==='routeLassarSinkhole')(sinkholeRoute);
     assert.deepEqual(sinkholeRoute.destination, { x: 2922, y: 5826, z: 0 },
       'the cached sinkhole rock routes to its reachable adjacent tile');
     const prescottCondition = baseHandlers.condition.find((handler) => handler({ player, npcId: core.NpcIdentifiers.PRESCOTT, stepId: 'yRRbfR' }) === true);
