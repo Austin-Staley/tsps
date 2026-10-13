@@ -8499,6 +8499,8 @@ test('Entry Verzik queued overkill deaths advance phases and only the live 600 H
   const player={
     getEquipment:()=>({get:()=>({getId:()=>api.core.ItemIdentifiers.DAWNBRINGER})}),
     getCombat:()=>({reset(){}}),setHitpoints(){},
+    movementBlocked:true,getMovementQueue(){return {setBlockMovement:value=>{this.movementBlocked=value;}}},
+    attributes:new Map(),getAttribute(key){return this.attributes.get(key);},setAttribute(key,value){this.attributes.set(key,value);},
     getSkillManager:()=>({getMaxLevel:()=>99,setCurrentLevel(){}}),
     getPacketSender:()=>({sendVarbit(){}}),sendMessage(){},
   };
@@ -8540,6 +8542,27 @@ test('Entry Verzik queued overkill deaths advance phases and only the live 600 H
   assert.equal(raid.complete,false,'a stale NPC death cannot complete the current boss encounter');
   handlers.npcDeath[0]({npc});
   assert.equal(raid.complete,true,'the current phase-two form completes only after it reaches zero HP');
+  assert.equal(player.movementBlocked,false,'room completion cancels pending web movement locks');
+  assert.equal(player.getAttribute('tob:entry-treasure-ready'),true,'only the validated phase-two death persists a treasure checkpoint');
+});
+
+test('Entry Theatre restores a persisted completed raid at the final entrance without restarting its bosses',()=>{
+  const {api}=mockApi(),placed=[];
+  class PrivateArea { enter(mobile){mobile.area=this;} }
+  class GameObject { constructor(id,position){this.id=id;this.position=position;placed.push(this);} }
+  api.core={...api.core,PrivateArea,Boundary:class{},GameObject,ObjectManager:{register(){},deregister(){}},CacheDefinitions:{getNpc:()=>({hitpoints:100})}};
+  api.spawnNpc=({id})=>({id,setMaxHitpoints(){return this;},setHitpoints(){return this;},setScriptedMovement(){return this;},getMovementQueue(){return {setBlockMovement(){}}}});
+  const attributes=new Map([['tob:entry-treasure-ready',true]]),sent=[];
+  const player={getAttribute:key=>attributes.get(key),setAttribute:(key,value)=>attributes.set(key,value),
+    getLocation:()=>new api.core.Location(3676,3217,0),moveTo(position){this.position=position;},
+    getMovementQueue:()=>({setBlockMovement(){}}),getPacketSender:()=>({sendVarbit(){return this;}}),sendMessage:message=>sent.push(message)};
+  const entry=require('../plugins/minigames/tob/Entry.TheatreOfBlood');entry(api);
+  assert.equal(entry._test.restoreCompletedRaid(player),true);
+  const raid=entry._test.RAIDS.get(player);
+  assert.equal(raid.complete,true);assert.equal(raid.started,false);assert.equal(raid.boss,undefined);
+  assert.deepEqual([player.position.getX(),player.position.getY(),player.position.getZ()],[3170,4308,0]);
+  assert.equal(placed.some(object=>object.id===32738),true,'the final-room treasure entrance is restored');
+  assert.ok(sent.some(message=>message.includes('completed Entry Mode raid is ready')));
 });
 
 

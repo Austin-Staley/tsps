@@ -7,6 +7,7 @@ const RAIDS = new WeakMap();
 const NPC_RAIDS = new WeakMap();
 const PARTY_ATTRIBUTE = "tob:entry-party";
 const COMPLETIONS_ATTRIBUTE = "tob:entry-completions";
+const TREASURE_READY_ATTRIBUTE = "tob:entry-treasure-ready";
 const RAID_ENTRANCE = 32653;
 const BARRIER = 32755;
 const PASSAGE = 33113;
@@ -216,6 +217,8 @@ function roomComplete(raid) {
     object(raid,SUPPLY_CHEST,ROOMS[raid.room].supplies);
   }
   if(raid.room===5) {
+    raid.player.setAttribute?.(TREASURE_READY_ATTRIBUTE,true);
+    raid.player.getMovementQueue?.().setBlockMovement?.(false);
     object(raid,TREASURE_ENTRANCE,TREASURE_ENTRANCE_TILE);
     raid.player.sendMessage("Verzik flees. Enter the treasure room to finish your raid.");
   }
@@ -572,6 +575,7 @@ function createArea() {
 }
 function enter({player,objectId}) {
   if(objectId!==RAID_ENTRANCE)return false;
+  if(player.getAttribute(TREASURE_READY_ATTRIBUTE)===true){restoreCompletedRaid(player);return true;}
   if(!player.getAttribute(PARTY_ATTRIBUTE))return false;
   if(!ensureEscapeCrystal(player))return true;
   const area=createArea(),raid={player,area,npcs:new Set(),objects:new Set(),effects:[],pools:[],room:0};
@@ -619,7 +623,7 @@ function treasure({player,objectId}) {
 }
 function reward({player,objectId}) {
   const raid=RAIDS.get(player);if(!raid||objectId!==REWARD_CHEST||!raid.rewardReady)return false;
-  if(!raid.rewardClaimed){raid.rewardClaimed=true;player.setAttribute(COMPLETIONS_ATTRIBUTE,(Number(player.getAttribute(COMPLETIONS_ATTRIBUTE))||0)+1);player.getPacketSender().sendVarbit(12972,1);api.emitCustomEvent("tob:completed",{player,mode:"entry"});player.sendMessage("You have completed the Theatre of Blood: Entry Mode.");}
+  if(!raid.rewardClaimed){raid.rewardClaimed=true;player.setAttribute(COMPLETIONS_ATTRIBUTE,(Number(player.getAttribute(COMPLETIONS_ATTRIBUTE))||0)+1);player.setAttribute(TREASURE_READY_ATTRIBUTE,false);player.getPacketSender().sendVarbit(12972,1);api.emitCustomEvent("tob:completed",{player,mode:"entry"});player.sendMessage("You have completed the Theatre of Blood: Entry Mode.");}
   return true;
 }
 function teleport({player,objectId}) {
@@ -715,7 +719,18 @@ function item(event) {
   for(const skill of [core.Skill.ATTACK,core.Skill.STRENGTH,core.Skill.DEFENCE,core.Skill.RANGED,core.Skill.MAGIC])skills.increaseCurrentLevel(skill,Math.floor(skills.getMaxLevel(skill)*0.15)+5,Math.floor(skills.getMaxLevel(skill)*1.15)+5);
   api.emitCustomEvent("potions:apply-stamina",{player,durationMs:60_000});
 }
+function restoreCompletedRaid(player) {
+  if(RAIDS.has(player)||player.getAttribute(TREASURE_READY_ATTRIBUTE)!==true)return false;
+  const area=createArea(),raid={player,area,npcs:new Set(),objects:new Set(),effects:[],pools:[],room:5,mode:"entry",complete:true,started:false,rewardReady:false,rewardClaimed:false};
+  RAIDS.set(player,raid);area.enter(player);player.getMovementQueue?.().setBlockMovement?.(false);player.moveTo(loc(ROOMS[5].entry));
+  raid.stranger=spawn(raid,core.NpcIdentifiers.MYSTERIOUS_STRANGER_4,[ROOMS[5].entry[0]+1,ROOMS[5].entry[1],ROOMS[5].entry[2]]);
+  object(raid,TREASURE_ENTRANCE,TREASURE_ENTRANCE_TILE);
+  player.getPacketSender().sendVarbit(6440,2).sendVarbit(6448,100).sendVarbit(6449,100).sendVarbit(6447,2);
+  player.sendMessage("Your completed Entry Mode raid is ready. Enter the treasure room to claim your reward.");
+  return true;
+}
 function login({player}) {
+  if(restoreCompletedRaid(player))return;
   const p=player.getLocation();if(p.getX()>=3136&&p.getX()<=3391&&p.getY()>=4224&&p.getY()<=4479){player.moveTo(new core.Location(3676,3217,0));player.sendMessage("Your previous Theatre run is no longer available. Start a new party at the notice board.");}
 }
 module.exports=function registerEntryTheatreOfBlood(pluginApi) {
@@ -727,6 +742,7 @@ module.exports=function registerEntryTheatreOfBlood(pluginApi) {
   }
   NYLO_METHODS=[core.CombatType.MELEE,core.CombatType.RANGED,core.CombatType.MAGIC].map(type=>new NylocasCombatMethod(type));
   api.persistAttribute(COMPLETIONS_ATTRIBUTE);
+  api.persistAttribute(TREASURE_READY_ATTRIBUTE);
   api.onObjectInteraction("Theatre of Blood",{Enter:enter});
   api.onObjectInteraction("Notice board",{Read:notice,read:notice});
   api.onObjectInteraction("Barrier",{Pass:barrier});
@@ -753,4 +769,4 @@ module.exports=function registerEntryTheatreOfBlood(pluginApi) {
   api.onItemAction(item);
   api.onPlayerLogin(login);
 };
-module.exports._test={ROOMS,NYLO_WAVES,BMR_ENCOUNTERS,BMR_WAVE,TREASURE_ENTRANCE_TILE,readNyloSpec,firstNyloWaveAt,soloNyloPillarHitpoints,activeNylocas,updateNyloExpiry,typeIndex,quadrant,behindBloatPillar,bloatHands,dealtDamage,modifyVerzikHit,verzikBeforeDeath,npcDeath,spawnVerzikAdds,NPC_RAIDS,startMaze,maiden,roomComplete,nextWave,process,createArea,RAIDS,xarpus,splitNylocas,approachNylocas,attackNylocas,allowDawnbringer,item,choosePillar,pillarTarget,startBmr,startRoom,passage,ensureEscapeCrystal};
+module.exports._test={ROOMS,NYLO_WAVES,BMR_ENCOUNTERS,BMR_WAVE,TREASURE_ENTRANCE_TILE,readNyloSpec,firstNyloWaveAt,soloNyloPillarHitpoints,activeNylocas,updateNyloExpiry,typeIndex,quadrant,behindBloatPillar,bloatHands,dealtDamage,modifyVerzikHit,verzikBeforeDeath,npcDeath,spawnVerzikAdds,NPC_RAIDS,startMaze,maiden,roomComplete,nextWave,process,createArea,restoreCompletedRaid,RAIDS,xarpus,splitNylocas,approachNylocas,attackNylocas,allowDawnbringer,item,choosePillar,pillarTarget,startBmr,startRoom,passage,ensureEscapeCrystal};
