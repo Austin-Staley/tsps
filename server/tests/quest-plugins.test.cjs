@@ -4989,6 +4989,7 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(player.location.x, 2598, 'the fragment returns the player to the material world');
     assert.equal(itemOnObjectHooks[0]({ player, objectId: 48264, itemId: core.ItemIdentifiers.SHADOW_BLOCKER, location: { x: 2606, y: 6359, z: 0 } }), true);
     assert.equal(counts.get(core.ItemIdentifiers.SHADOW_BLOCKER), 0, 'the blocker is placed by the furnace-house door');
+    attrs.set(lassarAttribute, { ...attrs.get(lassarAttribute), purpleKey: false });
     player.location = new core.Location(2598, 6365, 0);
     assert.equal(interact({ player, objectId: 48199, location: { x: 2598, y: 6365, z: 0 }, option: 'Use' }), true);
     const unlockDoor = { player, objectId: 48289, location: new core.Location(2350, 6360, 0), clickType: 1, handled: false };

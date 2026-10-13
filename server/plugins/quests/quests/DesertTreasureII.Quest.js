@@ -6436,7 +6436,9 @@ module.exports = function registerDesertTreasureII(api) {
       event.handled = true;
       return;
     }
-    if (!has(p, I.SHADOW_KEY) || !state.purpleKey) {
+    // The inventory item is the canonical gate. This attribute can be stale
+    // across a previously earned pickup or save, but must never strand a key holder.
+    if (!has(p, I.SHADOW_KEY)) {
       p.sendMessage("The shadow realm door needs its purple shadow key.");
       event.handled = true;
       return;
