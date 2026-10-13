@@ -25,6 +25,7 @@ test("firemaking logs, success chance, pyromancer bonus and campfire timers foll
 
   // OSRS Wiki making-fires table: level and exact XP for every combustible log.
   const expected = [
+    [I.KINDLING_2, 1, 48],
     [I.LOGS, 1, 40],
     [I.ACHEY_TREE_LOGS, 1, 40],
     [I.OAK_LOGS, 15, 60],
