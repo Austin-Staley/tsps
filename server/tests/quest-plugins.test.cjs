@@ -4691,6 +4691,10 @@ test('Song of the Elves Fragment uses Wiki paired ranged hits and ordered phase-
       }
       const clones = spawned.slice(spawnStart + 1);
       assert.equal(clones.length, 2);
+      assert.equal(clones[0].id, api.core.NpcIdentifiers.FRAGMENT_OF_SEREN,
+        'cache 8917 has the lighter ambient used for the true echo');
+      assert.equal(clones[1].id, api.core.NpcIdentifiers.FRAGMENT_OF_SEREN_2,
+        'cache 8918 has the darker ambient used for the false echo');
       assert.ok(clones.every(npc => npc.scriptedMovement), 'scripted echoes cannot run the normal NPC combat AI');
       assert.ok(clones.every(npc => area.npcAggression(player, npc) === false),
         'echoes cannot acquire a second, generic combat target');
@@ -4699,7 +4703,6 @@ test('Song of the Elves Fragment uses Wiki paired ranged hits and ordered phase-
       area.process(clones[0]);
       assert.ok(addAttackResets > resetsBeforeAddTick, 'the area prevents generic NPC regeneration during scripted phases');
 
-      handlers.npcDeath.at(-1)({ npc: clones[0], killer: player });
       for (let offset = 37; offset <= 60; offset++) {
         cycle = startCycle + offset;
         area.process(boss);
@@ -4710,6 +4713,14 @@ test('Song of the Elves Fragment uses Wiki paired ranged hits and ordered phase-
       assert.ok(firstPhaseBeams.every(npc => npc.scriptedMovement), 'scripted beams cannot run the normal NPC combat AI');
       assert.ok(firstPhaseBeams.every(npc => area.npcAggression(player, npc) === false),
         'beams cannot acquire a second, generic combat target');
+      boss.hitpoints = 500;
+      for (let offset = 61; offset <= 68; offset++) {
+        cycle = startCycle + offset;
+        area.process(boss);
+        const expectedHp = offset < 64 ? 500 : offset < 68 ? 508 : 516;
+        assert.equal(boss.hitpoints, expectedHp,
+          `two live beams heal 4 HP each on the four-tick cadence (offset ${offset})`);
+      }
       const missedMagicRoll = {
         attacker: player,
         target: firstPhaseBeams[0],
@@ -4719,6 +4730,17 @@ test('Song of the Elves Fragment uses Wiki paired ranged hits and ordered phase-
       for (const hook of handlers.combatHitRoll) hook(missedMagicRoll);
       assert.equal(missedMagicRoll.forceAccurate, true,
         'a magic splash cannot leave an OSRS one-hit beam alive to heal the boss');
+      const missedTrueEchoRoll = { attacker: player, target: clones[0], combatType: api.core.CombatType.MAGIC,
+        forceAccurate: false };
+      const missedFalseEchoRoll = { attacker: player, target: clones[1], combatType: api.core.CombatType.MAGIC,
+        forceAccurate: false };
+      for (const hook of handlers.combatHitRoll) {
+        hook(missedTrueEchoRoll);
+        hook(missedFalseEchoRoll);
+      }
+      assert.equal(missedTrueEchoRoll.forceAccurate, true,
+        'the randomized lighter echo must be hittable before its brief phase expires');
+      assert.equal(missedFalseEchoRoll.forceAccurate, false, 'false echoes keep their normal invalid-target behavior');
       for (const beam of firstPhaseBeams) area.process(beam);
       const missedPart = { damage: 0, getDamage() { return this.damage; }, setDamage(value) { this.damage = value; } };
       let totalDamage = 0;
@@ -4732,6 +4754,29 @@ test('Song of the Elves Fragment uses Wiki paired ranged hits and ordered phase-
       });
       assert.equal(missedPart.damage, 1, 'any attack kills a one-hit whirlwind, even if its hit roll missed');
       assert.equal(totalDamage, 1);
+      const missedEchoPart = { damage: 0, getDamage() { return this.damage; }, setDamage(value) { this.damage = value; } };
+      let echoDamage = 0;
+      handlers.npcHitModify.at(-1)({
+        npc: clones[0],
+        hit: {
+          getAttacker: () => player,
+          getHits: () => [missedEchoPart],
+          updateTotalDamage() { echoDamage = missedEchoPart.damage; },
+        },
+      });
+      assert.equal(missedEchoPart.damage, 1, 'any attack destroys the true echo, even if its original roll missed');
+      assert.equal(echoDamage, 1);
+      const falseEchoPart = { damage: 12, getDamage() { return this.damage; }, setDamage(value) { this.damage = value; } };
+      handlers.npcHitModify.at(-1)({
+        npc: clones[1],
+        hit: {
+          getAttacker: () => player,
+          getHits: () => [falseEchoPart],
+          updateTotalDamage() {},
+        },
+      });
+      assert.equal(falseEchoPart.damage, 0, 'false echoes remain unhittable');
+      handlers.npcDeath.at(-1)({ npc: clones[0], killer: player });
 
       for (const [bossHp, expectedAdds, expectedBlast] of [[500, 3, 96], [300, 4, 98]]) {
         player.getArea().leave(player, false);

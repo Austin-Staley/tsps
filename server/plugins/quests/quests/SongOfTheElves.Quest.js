@@ -9,6 +9,10 @@ module.exports = function registerSongOfTheElves(api) {
   const PAGE = "Song of the Elves";
   const FRAGMENT_BASIC_ATTACK_MAX = 12;
   const FRAGMENT_BASIC_ATTACK_SPEED = 7;
+  // The cache leaves the Crystal Whirlwind attack speed unset; the server's
+  // default attack interval is four ticks. The Wiki gives heal size, not rate.
+  // shortcut: use that four-tick default for the healing beams' attack cycle.
+  const FRAGMENT_BEAM_HEAL_SPEED = 4;
   const START_HOOK = "quest:song-of-the-elves:start";
   const CHEMICAL_CHOICE = "quest.song_of_the_elves.chemical-choice";
   const FALLS_PILLARS = "quest.song_of_the_elves.falls-pillars";
@@ -417,8 +421,11 @@ module.exports = function registerSongOfTheElves(api) {
           "the-fragment-of-seren-the-fragment-enraged");
       }
       if (state.beams.size > 0 && state.boss.getHitpoints() > 0) {
-        const heal = state.beams.size * (4 + Math.floor(Math.random() * 5));
-        state.boss.setHitpoints(Math.min(state.boss.getMaxHitpoints(), state.boss.getHitpoints() + heal));
+        if (now >= state.nextBeamHealAt) {
+          const heal = state.beams.size * (4 + Math.floor(Math.random() * 5));
+          state.boss.setHitpoints(Math.min(state.boss.getMaxHitpoints(), state.boss.getHitpoints() + heal));
+          state.nextBeamHealAt = now + FRAGMENT_BEAM_HEAL_SPEED;
+        }
       }
       if (now >= state.nextBasicAttackAt) {
         state.nextBasicAttackAt = now + state.basicAttackSpeed;
@@ -2385,6 +2392,7 @@ module.exports = function registerSongOfTheElves(api) {
       player, boss, area, lastCycle: -1, nextSpecialAt: World.getProcessCycle() + 12,
       nextBasicAttackAt: World.getProcessCycle() + FRAGMENT_BASIC_ATTACK_SPEED,
       basicAttackSpeed: boss.getCurrentDefinition?.()?.getAttackSpeed?.() || FRAGMENT_BASIC_ATTACK_SPEED,
+      nextBeamHealAt: 0,
       clones: [], realClone: null, introStarted: false,
       specialIndex: 0, beams: new Set(), specialImpactAt: 0, followupAt: 0,
       meleeHitsRemaining: 0, nextMeleeHitAt: 0, finished: false,
@@ -2465,10 +2473,14 @@ module.exports = function registerSongOfTheElves(api) {
   function spawnFragmentClones(area, state) {
     const phase = fragmentPhase(state.boss.getHitpoints());
     const points = [[3290, 5918], [3298, 5918], [3294, 5912], [3294, 5924]];
-    const ids = Array.from({ length: phase.clones }, (_, index) =>
-      index % 2 === 0 ? NpcIdentifiers.FRAGMENT_OF_SEREN : NpcIdentifiers.FRAGMENT_OF_SEREN_2);
+    const realIndex = Math.floor(Math.random() * phase.clones);
+    // Cache 8917/8919/8920 use the lighter lighting; 8918 has the darker ambient.
+    // The actual encounter calls out the lighter shadow as the valid target.
+    const ids = Array.from({ length: phase.clones }, (_, index) => index === realIndex
+      ? NpcIdentifiers.FRAGMENT_OF_SEREN
+      : NpcIdentifiers.FRAGMENT_OF_SEREN_2);
     state.clones = spawnFragmentAdds(area, ids, points.slice(0, phase.clones));
-    state.realClone = state.clones[Math.floor(Math.random() * state.clones.length)] ?? null;
+    state.realClone = state.clones[realIndex] ?? null;
     state.boss.sendMessage?.(`The Fragment splits into ${phase.clones} echoes. One is real; strike the true one before they fade.`);
     state.player.sendMessage(`The Fragment divides into ${phase.clones} echoes. Strike the true echo; the false ones cannot be harmed.`);
   }
@@ -2485,6 +2497,7 @@ module.exports = function registerSongOfTheElves(api) {
     state.beams = new Set(spawnFragmentAdds(area,
       Array.from({ length: phase.beams }, () => NpcIdentifiers.COL_00FFFF_CRYSTAL_WHIRLWIND_COL),
       points.slice(0, phase.beams)));
+    state.nextBeamHealAt = World.getProcessCycle() + FRAGMENT_BEAM_HEAL_SPEED;
     state.player.sendMessage(`${phase.beams} Crystal Whirlwinds surround the Fragment. Attack them to stop its healing.`);
   }
 
@@ -2498,11 +2511,12 @@ module.exports = function registerSongOfTheElves(api) {
     hit?.updateTotalDamage?.();
   }
 
-  function forceFragmentWhirlwindHit(event) {
+  function forceFragmentSpecialHit(event) {
     const target = event?.target;
     const area = target?.getArea?.();
     const state = area && fragmentInstances.get(area);
-    if (state && !state.finished && event.attacker === state.player && state.beams.has(target)) {
+    if (state && !state.finished && event.attacker === state.player &&
+        (state.beams.has(target) || target === state.realClone)) {
       event.forceAccurate = true;
     }
   }
@@ -2528,7 +2542,17 @@ module.exports = function registerSongOfTheElves(api) {
       return;
     }
     if (state.clones.includes(npc)) {
-      if (npc !== state.realClone) zeroHit(hit);
+      if (npc !== state.realClone) {
+        zeroHit(hit);
+        return;
+      }
+      const remaining = npc.getHitpoints?.() ?? 1;
+      const parts = hit.getHits?.() ?? [];
+      if (parts.length) {
+        parts[0].setDamage(Math.max(remaining, parts[0].getDamage?.() ?? 0));
+        for (const part of parts.slice(1)) part.setDamage(0);
+        hit.updateTotalDamage?.();
+      }
       return;
     }
     if (npc !== state.boss) return;
@@ -3072,6 +3096,6 @@ module.exports = function registerSongOfTheElves(api) {
   api.onAnyNpcInteraction({ "Talk-to": onTalk });
   api.onNpcDeath(handleBattleDeath);
   api.onPlayerDeath(handleQuestPlayerDeath);
-  api.onCombatHitRoll(forceFragmentWhirlwindHit);
+  api.onCombatHitRoll(forceFragmentSpecialHit);
   api.onNpcHitModify(handleFragmentHit);
 };
