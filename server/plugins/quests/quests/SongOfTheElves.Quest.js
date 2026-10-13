@@ -34,6 +34,7 @@ module.exports = function registerSongOfTheElves(api) {
   const FALLS_INTRODUCTION = "song-of-the-elves:falls-introduction";
   const PREPARATION_PROGRESS = "song-of-the-elves:preparation-progress";
   const PREPARATION_ELDERS = "song-of-the-elves:preparation-elders";
+  const TRAHAEARN_REPAIRED = "song-of-the-elves:trahaearn-repaired";
   const TRAHAEARN_CREVICE = "song-of-the-elves:trahaearn-crevice";
   const PREPARATION_ACTORS = new Map();
   const TRAHAEARN_CREVICE_VARBIT = 9018;
@@ -257,7 +258,7 @@ module.exports = function registerSongOfTheElves(api) {
   let ithellSymbolsInstalled = false;
 
   class LletyaStoryArea extends Area {
-    postLeave(mobile) { if(mobile?.isPlayer?.())clearPreparationActors(mobile.getAsPlayer()); }
+    postLeave(mobile) { if(mobile?.isPlayer?.() && mobile.getAsPlayer().getAttribute(VALLEY_FIGURE)!==true)clearPreparationActors(mobile.getAsPlayer()); }
     process(mobile) {
       if (!mobile?.isPlayer?.()) return;
       const player = mobile.getAsPlayer();
@@ -274,12 +275,12 @@ module.exports = function registerSongOfTheElves(api) {
       // Lletya's map NPC is a cache scenery variant (5292) with no Talk-to
       // action. Use the cache's actual Talk-to Arianwyn variant for this chapter.
       const arianwynCurrent = player.getAttribute(LLETYA_ARIANWYN_NPC);
-      if ([11, 13, 15].includes(currentChapter(player)) && !arianwynCurrent?.isRegistered?.()) {
+      if ([13, 15].includes(currentChapter(player)) && !arianwynCurrent?.isRegistered?.()) {
         const arianwyn = api.spawnNpc({ id: NpcIdentifiers.ARIANWYN_6, x: 2353, y: 3173, z: 0,
           wanderRadius: 0, owner: player, ownerOnly: true });
         if (arianwyn) player.setAttribute(LLETYA_ARIANWYN_NPC, arianwyn);
       }
-      if (![11, 13, 15].includes(currentChapter(player))) {
+      if (![13, 15].includes(currentChapter(player))) {
         const arianwyn = player.getAttribute(LLETYA_ARIANWYN_NPC);
         if (arianwyn) api.removeNpc(arianwyn);
         player.setAttribute(LLETYA_ARIANWYN_NPC, null);
@@ -290,11 +291,11 @@ module.exports = function registerSongOfTheElves(api) {
       if (chapter===11)ensurePreparationActors(player);
       const campRetry = chapter === 19 && player.getAttribute(CAMP_DEFENSE_COMPLETE) === true &&
         player.getAttribute(FRAGMENT_DEFEATED) !== true;
-      if (([11, 16, 17].includes(chapter) || campRetry) && !baxtorian?.isRegistered?.()) {
+      if (([16, 17].includes(chapter) || campRetry) && !baxtorian?.isRegistered?.()) {
         const npc = api.spawnNpc({ id: NpcIdentifiers.BAXTORIAN, x: 2352, y: 3170, z: 0,
           wanderRadius: 0, owner: player, ownerOnly: true });
         if (npc) player.setAttribute(LLETYA_BAXTORIAN_NPC, npc);
-      } else if (!([11, 16, 17].includes(chapter) || campRetry) && baxtorian) {
+      } else if (!([16, 17].includes(chapter) || campRetry) && baxtorian) {
         api.removeNpc(baxtorian);
         player.setAttribute(LLETYA_BAXTORIAN_NPC, null);
       }
@@ -824,7 +825,10 @@ module.exports = function registerSongOfTheElves(api) {
       }
       if (event.stepId === "vh7Q_s") giveMeilyrClue(player, event);
       if (event.stepId === "ITn7ep") {
-        inventory.deleteNumber(ItemIdentifiers.RUNITE_BAR, 1);
+        if(currentChapter(player)===11 && player.getAttribute(TRAHAEARN_REPAIRED)!==true){
+          inventory.deleteNumber(ItemIdentifiers.RUNITE_BAR,1);player.setAttribute(TRAHAEARN_REPAIRED,true);
+          player.setAttribute(TRAHAEARN_CREVICE,5);player.getPacketSender().sendVarbit(TRAHAEARN_CREVICE_VARBIT,5);
+        }
       }
       if (event.stepId === "koxQh3") player.setAttribute(REVELATIONS_MEETING_STARTED, true);
       if (event.stepId === "XhOxpi") {
@@ -864,9 +868,10 @@ module.exports = function registerSongOfTheElves(api) {
       setChapter(player, chapter);
     }
     if (event.stepId === "UeAKgA") {
+      clearPreparationActors(player);
       player.moveTo(new Location(3050,4485,0));
       player.setAttribute(VALLEY_FIGURE, true);
-      const figure = api.spawnNpc({ id: NpcIdentifiers.MYSTERIOUS_FIGURE, x: 3050, y: 4486, z: 0,
+      const figure = api.spawnNpc({ id: NpcIdentifiers.MYSTERIOUS_FIGURE, x: 3051, y: 4485, z: 0,
         wanderRadius: 0, owner: player, ownerOnly: true });
       if (figure) PREPARATION_ACTORS.set(player,[figure]);
     }
@@ -1470,6 +1475,7 @@ module.exports = function registerSongOfTheElves(api) {
           : Number(player.getAttribute(ELENA_ESCAPE_PROGRESS)) >= 22
             ? "freeing-elena-talking-to-elena-again" : "freeing-elena-talking-to-elena");
     }
+    if(currentChapter(player)===11 && npcName==="lady tangwen trahaearn" && player.getAttribute(TRAHAEARN_REPAIRED)===true && !(Number(player.getAttribute(PREPARATION_ELDERS))&2))return startTranscript(api,player,event.npcId,PAGE,"preparing-to-enter-prifddinas-finding-lady-trahaearn-repairing-the-exoskeleton",steps=>steps.slice(1));
     if(currentChapter(player)===11 && ["elena","arianwyn","baxtorian","eluned"].includes(npcName))return talkPreparation(event,npcName);
     if (currentChapter(player) === 20 && npcName === "arianwyn" && player.getAttribute(WAR_END_ARIANWYN_DONE) === true) {
       player.sendMessage("Arianwyn has left the elven lands. Baxtorian is waiting by the gates of Prifddinas.");
@@ -2523,13 +2529,11 @@ module.exports = function registerSongOfTheElves(api) {
     if(old.some(n=>n.isRegistered?.()))return;
     const specs=[];
     if(from.getX()>=2320 && from.getX()<=2390 && from.getY()>=3150 && from.getY()<=3210) {
-      specs.push({id:NpcIdentifiers.ELENA_3,x:2324,y:3152});
       const elders=Number(player.getAttribute(PREPARATION_ELDERS))||0;
-      if(elders&1)specs.push({id:NpcIdentifiers.LORD_IEUAN_AMLODD_2,x:2349,y:3170});
-      if(elders&2)specs.push({id:NpcIdentifiers.LADY_TANGWEN_TRAHAEARN,x:2347,y:3171});
-    } else if(from.getX()>=2330 && from.getX()<=2338 && from.getY()>=9570 && from.getY()<=9580 && !(Number(player.getAttribute(PREPARATION_ELDERS))&2)) {
-      specs.push({id:NpcIdentifiers.ELDERLY_ELF,x:2334,y:9574});
+      if(elders&1)specs.push({id:NpcIdentifiers.LORD_IEUAN_AMLODD_2,x:2349,y:3171});
+      if(elders&2)specs.push({id:NpcIdentifiers.LADY_TANGWEN_TRAHAEARN,x:2348,y:3172});
     }
+    if(player.getAttribute(VALLEY_FIGURE)===true && from.getX()>=3040 && from.getX()<=3060 && from.getY()>=4475 && from.getY()<=4495)specs.push({id:NpcIdentifiers.MYSTERIOUS_FIGURE,x:3051,y:4485});
     if(specs.length)PREPARATION_ACTORS.set(player,specs.map(spec=>api.spawnNpc({...spec,z:0,wanderRadius:0,owner:player,ownerOnly:true})).filter(Boolean));
   }
   class PreparationStoryArea extends Area {
@@ -2558,10 +2562,11 @@ module.exports = function registerSongOfTheElves(api) {
       if(inventory.getAmount(ItemIdentifiers.CRYSTAL_SEED_3)>0){inventory.deleteNumber(ItemIdentifiers.CRYSTAL_SEED_3,1);inventory.adds(ItemIdentifiers.CRYSTAL_SEED_5,1);}
     } else if(id==="D1wXY6" || id==="EMxiFg") {
       if(id==="D1wXY6")player.setAttribute(VALLEY_FIGURE,false);
+      else {player.setAttribute(TRAHAEARN_CREVICE,6);player.getPacketSender().sendVarbit(TRAHAEARN_CREVICE_VARBIT,6);}
       player.setAttribute(PREPARATION_ELDERS,(Number(player.getAttribute(PREPARATION_ELDERS))||0)|(id==="D1wXY6"?1:2));
       if((Number(player.getAttribute(PREPARATION_ELDERS))&3)===3)setPreparationProgress(player,84);
       else if(id==="D1wXY6")setPreparationProgress(player,82);
-      clearPreparationActors(player);player.moveTo(new Location(2353,3172,0));ensurePreparationActors(player);
+      clearPreparationActors(player);if(id==="D1wXY6")player.moveTo(new Location(2353,3172,0));ensurePreparationActors(player);
     } else if(id==="ZYvQiu") {
       if((Number(player.getAttribute(PREPARATION_ELDERS))&3)!==3)return true;
     } else if(id==="0lNCRc") {
@@ -2573,9 +2578,8 @@ module.exports = function registerSongOfTheElves(api) {
   }
   function finishPreparationLine(event) {
     const player=event?.player;if(!player || currentChapter(player)!==11)return;
-    if(!event.pages?.some(p=>p.page===PAGE))return;
     if(event.text==="Great. The patch is all prepared so just plant it when you're ready." || event.text==="Indeed. When you're ready, go ahead and plant the seed." || event.text==="Will do, I'll be back soon.")event.after=()=>setPreparationProgress(player,76);
-    if(event.text==="[player name], myself and Baxtorian will continue to work on deciphering these clues. While we do, it would be of great help if you could find Lord Amlodd and Lady Trahaearn for us.")event.after=()=>setPreparationProgress(player,80);
+    if(event.text?.endsWith(", myself and Baxtorian will continue to work on deciphering these clues. While we do, it would be of great help if you could find Lord Amlodd and Lady Trahaearn for us."))event.after=()=>setPreparationProgress(player,80);
   }
   function talkPreparation(event,name) {
     const player=event.player,p=preparationProgress(player),inv=player.getInventory();let variant;
@@ -2588,24 +2592,33 @@ module.exports = function registerSongOfTheElves(api) {
   }
   function syncPreparationLogin({player}) {
     player.getPacketSender().sendVarbit(TRAHAEARN_CREVICE_VARBIT,Number(player.getAttribute(TRAHAEARN_CREVICE))||0);
+    if(player.getAttribute(VALLEY_FIGURE)===true)ensurePreparationActors(player);
+  }
+  function routeTrahaearnCrevice(event) {
+    const player=event?.player,loc=event.object?.getLocation?.();
+    if(!player || currentChapter(player)!==11 || loc?.getZ()!==0)return;
+    if(event.objectId===TRAHAEARN_CREVICE_LOC && loc.getX()===2341 && loc.getY()===9616)event.destination={x:2341,y:9618,z:0};
   }
   function useTrahaearnCrevice(event) {
     const player=event?.player,loc=event?.location;
-    if(!player || currentChapter(player)!==11 || loc?.x!==2341 || loc?.y!==9616 || loc?.z!==0)return false;
+    if(!player || currentChapter(player)!==11 || loc?.z!==0)return false;
+    if(loc.x===2334 && loc.y===9580 && event.option==="Enter") {event.handled=true;clearPreparationActors(player);player.moveTo(new Location(2341,9618,0));return true;}
+    if(loc.x!==2341 || loc.y!==9616)return false;
     if(event.itemId!==undefined && !/pickaxe$/i.test(api.core.CacheDefinitions.getItem(event.itemId)?.name ?? ""))return false;
     event.handled=true;const progress=Number(player.getAttribute(TRAHAEARN_CREVICE))||0;
     if(progress<1){player.sendMessage("Ask Baxtorian about Lady Trahaearn's clue first.");return true;}
     if(event.option==="Inspect" && progress===1){player.setAttribute(TRAHAEARN_CREVICE,2);player.getPacketSender().sendVarbit(TRAHAEARN_CREVICE_VARBIT,2);player.sendMessage("The crevice has been blocked. A pickaxe could clear it.");return true;}
     if(event.option==="Mine" || event.itemId!==undefined) {
       if(!findBestPickaxe(player)){player.sendMessage("You need a pickaxe to clear the blocked crevice.");return true;}
+      if(progress>=3){player.sendMessage("The crevice is already clear.");return true;}
       player.setAttribute(TRAHAEARN_CREVICE,3);player.getPacketSender().sendVarbit(TRAHAEARN_CREVICE_VARBIT,3);player.sendMessage("You clear the blocked crevice with your pickaxe.");return true;
     }
-    if(event.option==="Enter" && progress===3){clearPreparationActors(player);player.moveTo(new Location(2334,9573,0));ensurePreparationActors(player);return true;}
+    if(event.option==="Enter" && progress>=3){clearPreparationActors(player);player.moveTo(new Location(2334,9573,0));ensurePreparationActors(player);return true;}
     return true;
   }
   function inspectTrahaearn(event) {
     const player=event?.player;if(!player || currentChapter(player)!==11)return false;
-    event.handled=true;event.npc?.setNpcTransformationId?.(NpcIdentifiers.ELDERLY_ELF_2);
+    event.handled=true;player.setAttribute(TRAHAEARN_CREVICE,4);player.getPacketSender().sendVarbit(TRAHAEARN_CREVICE_VARBIT,4);
     return startTranscript(api,player,event.npcId,PAGE,"preparing-to-enter-prifddinas-finding-lady-trahaearn-inspecting-the-elderly-elf");
   }
   function fixTrahaearn(event) { return handleItemOnNpc({...event,itemId:ItemIdentifiers.HAMMER,target:event.npc}); }
@@ -2720,7 +2733,6 @@ module.exports = function registerSongOfTheElves(api) {
     // QH marks the upper platform's wall; the adjacent clear tile is reachable.
     const spawned = [
       { id: NpcIdentifiers.YSGAWYN, x:2334,y:3167,z:1 },
-      { id: NpcIdentifiers.ELENA_3, x:2324,y:3152,z:0 },
     ].map(spec=>api.spawnNpc({...spec,wanderRadius:0,owner:player,ownerOnly:true})).filter(Boolean);
     EARLY_STORY_ACTORS.set(player, spawned);
   }
@@ -3647,6 +3659,8 @@ module.exports = function registerSongOfTheElves(api) {
   api.persistAttribute(PREPARATION_PROGRESS);
   api.persistAttribute(PREPARATION_ELDERS);
   api.persistAttribute(TRAHAEARN_CREVICE);
+  api.persistAttribute(TRAHAEARN_REPAIRED);
+  api.onObjectRoute(routeTrahaearnCrevice);
   api.onPlayerLogin(syncResistanceLogin);
   api.onPlayerLogin(resumeEarlyStory);
   api.onPlayerLogin(({ player }) => {

@@ -6129,6 +6129,7 @@ test('Song of the Elves rubs the seed to the Enchanted Valley and returns to Lle
   assert.deepEqual([locations.at(-1).getX(), locations.at(-1).getY()], [3050, 4485]);
   assert.equal(spawns.at(-1).id, api.core.NpcIdentifiers.MYSTERIOUS_FIGURE);
   assert.equal(spawns.at(-1).owner, player);
+  assert.equal(api.core.RegionManager.getClipping(spawns.at(-1).x,spawns.at(-1).y,0,null),0,'the valley figure stands on clear cache floor');
 
   custom.get('npc-dialogue:action')({ player, stepId: 'D1wXY6' });
   assert.deepEqual([locations.at(-1).getX(), locations.at(-1).getY()], [2353, 3172]);
@@ -14177,12 +14178,14 @@ test('Song of the Elves preparation earns its seed, elders and herb before the p
   const player={getUsername:()=> 'PreparationTest',getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getLocation:()=>at,moveTo:l=>at=l,sendMessage(){},getInventory:()=>({getAmount:i=>items.get(i)||0,getFreeSlots:()=>10,adds:(i,n)=>items.set(i,(items.get(i)||0)+n),deleteNumber:(i,n)=>items.set(i,(items.get(i)||0)-n)}),getPacketSender:()=>new Proxy({sendVarbit:(i,v)=>bits.set(i,v)},{get:(o,k)=>o[k]??(()=>{})})};
   const action=handlers.custom.get('npc-dialogue:action').find(h=>h.name==='onAction'),plant=handlers.itemOnObject.find(h=>h.name==='plantPreparationSeed');
   const seed={player,itemId:I.CADANTINE_SEED,location:{x:2321,y:3151,z:0}};plant(seed);assert.equal(items.get(I.CADANTINE_SEED),1,'Elena prepares the patch before consumption');
+  const elenaSpawn=require('../data/definitions/npc-spawns.json').find(n=>n.id===3206 && n.x===2324 && n.y===3152);assert.equal(elenaSpawn?.wanderRadius,0,'the canonical pond NPC does not wander onto the outside wall');
   action({player,stepId:'iNVHlg'});assert.equal(bits.get(9016),74);
-  const line=handlers.custom.get('npc-dialogue:line').find(h=>h.name==='finishPreparationLine');const last={player,pages:[{page:'Song of the Elves'}],text:"Indeed. When you're ready, go ahead and plant the seed."};line(last);assert.equal(bits.get(9016),74);last.after();assert.equal(bits.get(9016),76);
+  const line=handlers.custom.get('npc-dialogue:line').find(h=>h.name==='finishPreparationLine');const last={player,npcId:api.core.NpcIdentifiers.ELENA_3,text:"Indeed. When you're ready, go ahead and plant the seed."};line(last);assert.equal(bits.get(9016),74);last.after();assert.equal(bits.get(9016),76);
   plant(seed);assert.equal(items.get(I.CADANTINE_SEED),0);assert.equal(items.get(I.SEED_DIBBER),1);assert.equal(bits.get(9016),78);assert.equal(requests.at(-1)[4],'preparing-to-enter-prifddinas-talking-to-elena-planting-the-cadantine-seed');
+  const brief={player,text:'PreparationTest, myself and Baxtorian will continue to work on deciphering these clues. While we do, it would be of great help if you could find Lord Amlodd and Lady Trahaearn for us.'};line(brief);brief.after();assert.equal(bits.get(9016),80);
   action({player,stepId:'rlWDAM'});assert.equal(items.get(I.CRYSTAL_SEED_3),1);action({player,stepId:'eS601c'});assert.equal(items.get(I.CRYSTAL_SEED_3),0);assert.equal(items.get(I.CRYSTAL_SEED_5),1,'the Rub-enabled cache item is earned from Eluned');
   action({player,stepId:'ZYvQiu'});assert.equal(quest.getStage(player),120,'harvesting cannot jump to the dwarf-camp chapter');action({player,stepId:'0lNCRc'});assert.equal(items.get(I.ELDER_CADANTINE)||0,0,'both elders must return before harvesting');
-  action({player,stepId:'D1wXY6'});assert.equal(bits.get(9016),82);action({player,stepId:'EMxiFg'});assert.equal(bits.get(9016),84);action({player,stepId:'0lNCRc'});assert.equal(items.get(I.ELDER_CADANTINE),1);assert.equal(bits.get(9016),86);
+  action({player,stepId:'D1wXY6'});assert.equal(bits.get(9016),82);items.set(I.HAMMER,1);items.set(I.RUNITE_BAR,1);action({player,kind:'message',stepId:'ITn7ep'});action({player,kind:'message',stepId:'ITn7ep'});assert.equal(items.get(I.HAMMER),1,'repair retains the tool');assert.equal(items.get(I.RUNITE_BAR),0,'the repair is retained across interrupted dialogue and consumes one bar');assert.equal(attrs.get('song-of-the-elves:trahaearn-repaired'),true);at=new api.core.Location(2334,9573,0);action({player,stepId:'EMxiFg'});assert.equal(bits.get(9016),84);assert.deepEqual([at.getX(),at.getY()],[2334,9573],'Trahaearn departs without teleporting the player');action({player,stepId:'0lNCRc'});assert.equal(items.get(I.ELDER_CADANTINE),1);assert.equal(bits.get(9016),86);
   action({player,stepId:'eOtNFO'});assert.equal(quest.getStage(player),120,'the meeting opening does not skip its dialogue');action({player,stepId:'_2-0Qk'});assert.equal(quest.getStage(player),130);assert.equal(quest.varbitValue(130,player),90);
  }finally{runtime.startTranscript=original;}
 });
