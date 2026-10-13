@@ -141,6 +141,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     VANESCULA_CASTLE: 15907,
     LOWERNIEL_CUTSCENE_NO_WING: 15924,
     SANGUIDAE: 16223,
+    CROW: 16226,
     VENATOR: 16213,
     VENATOR_5: 16217,
     VENATOR_GIBBOUS: 16216,
@@ -236,6 +237,11 @@ module.exports = function registerTheBloodMoonRises(api) {
       fromFloor: 2, toFloor: 2, requiresStory: "ranisHallwayEmblemPlaced", landing: [2476, 7409] },
     { id: CASTLE_DOOR_IDS.DOOR, x: 2488, y: 7401, z: 0, from: CASTLE_ROOM.RANIS_HALL, to: CASTLE_ROOM.VENATOR_ROOM,
       fromFloor: 2, toFloor: 2, facing: 4, requiresStory: "ranisParlourEmblemPlaced", landing: [2487, 7421] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2485, y: 7405, z: 0, from: CASTLE_ROOM.RANIS_HALL,
+      to: CASTLE_ROOM.RANIS_PARLOUR, fromFloor: 2, toFloor: 2,
+      requiresStory: "ranisParlourEmblemPlaced", landing: [2475, 7380] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT_M, x: 2475, y: 7379, z: 0, from: CASTLE_ROOM.RANIS_PARLOUR,
+      to: CASTLE_ROOM.RANIS_HALL, fromFloor: 2, toFloor: 2, landing: [2485, 7404] },
     { id: CASTLE_DOOR_IDS.DOOR_M, x: 2483, y: 7368, z: 0, from: CASTLE_ROOM.VANESCULA_CHAMBER,
       to: CASTLE_ROOM.VANESCULA_STUDY, fromFloor: 2, toFloor: 2, landing: [2476, 7366] },
     { id: CASTLE_DOOR_IDS.DOOR, x: 2477, y: 7366, z: 0, from: CASTLE_ROOM.VANESCULA_STUDY,
@@ -2142,6 +2148,23 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
   }
 
+  function syncCastleRanisParlourSkull(player) {
+    if (!player) return;
+    const gibbous = castleStory(player).gibbous;
+    if (stage(player) !== STAGE.CASTLE ||
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) < 76 ||
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.RANIS_PARLOUR ||
+      !castleStory(player).ranisParlourEmblemPlaced || gibbous.caseItems?.includes("skull") ||
+      hasItem(player, ItemIdentifiers.ORNATE_SKULL)) return;
+    const manager = api.getItemOnGroundManager?.();
+    if (!manager?.registerLocation) return;
+    const tile = new Location(2471, 7384, 0);
+    if (!manager.getGroundItem?.(player.getUsername?.(), ItemIdentifiers.ORNATE_SKULL, tile,
+      player.getPrivateArea?.() ?? null)) {
+      manager.registerLocation(player, new Item(ItemIdentifiers.ORNATE_SKULL, 1), tile);
+    }
+  }
+
   function syncCastleVenatorHead(player) {
     const gibbous = castleStory(player).gibbous;
     player.getPacketSender().sendVarbit(CASTLE_VENATOR_HEAD_VARBIT,
@@ -3095,6 +3118,14 @@ module.exports = function registerTheBloodMoonRises(api) {
     const x = tile?.getX?.() ?? tile?.x;
     const y = tile?.getY?.() ?? tile?.y;
     const z = tile?.getZ?.() ?? tile?.z;
+    if (player && event?.groundItemId === ItemIdentifiers.ORNATE_SKULL && stage(player) === STAGE.CASTLE &&
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.RANIS_PARLOUR &&
+      x === 2471 && y === 7384 && z === 0) {
+      if ((player.getInventory?.()?.getFreeSlots?.() ?? 1) < 1) return;
+      updateGibbousStory(player, { skullClaimed: true });
+      player.sendMessage("You pick up the ornate skull from the floor.");
+      return;
+    }
     if (player && stage(player) === STAGE.CASTLE && z === 0 &&
       ((event?.groundItemId === ItemIdentifiers.ANCESTRAL_DAGGER && x === 2527 && y === 7368) ||
        (event?.groundItemId === ItemIdentifiers.GRID_NOTE_2 && x === 2522 && y === 7366))) {
@@ -3213,6 +3244,14 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (progress >= 72 && Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.RANIS_HALL &&
       !story.defeated.includes("ranis-sanguidae")) {
       spawnCastleActor(player, "ranis-sanguidae", CASTLE_NPC.SANGUIDAE, [2488, 7403], true);
+    }
+    if (progress >= 76 && room === CASTLE_ROOM.RANIS_PARLOUR && story.ranisParlourEmblemPlaced) {
+      spawnCastleActor(player, "ranis-parlour-crow-west", CASTLE_NPC.CROW, [2475, 7385]);
+      spawnCastleActor(player, "ranis-parlour-crow-east", CASTLE_NPC.CROW, [2469, 7382]);
+      syncCastleRanisParlourSkull(player);
+    } else {
+      removeCastleActor(player, "ranis-parlour-crow-west");
+      removeCastleActor(player, "ranis-parlour-crow-east");
     }
     if (progress >= 76 && story.prisonersFound) {
       // Keep the captured pickup tile (2573, 7396) clear so the key on the bench

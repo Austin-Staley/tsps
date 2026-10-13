@@ -1502,6 +1502,69 @@ test('Blood Moon Gibbous lockbox requires its room clues and accepts code 426', 
   assert.equal(items.get(33729), 1, 'the skull, hourglass and ornate knife open the compartment with the gilded key');
 });
 
+test('Blood Moon Ranis parlour door drops a recoverable skull for the display case', () => {
+  const { api, handlers } = mockApi();
+  const spawned = [], drops = [], items = new Map();
+  api.spawnNpc = spec => {
+    const npc = { ...spec, getHitpoints: () => 10, setScriptedMovement() {} };
+    spawned.push(npc);
+    return npc;
+  };
+  api.removeNpc = () => {};
+  api.getItemOnGroundManager = () => ({ getGroundItem: () => null,
+    registerLocation: (owner, item, location) => drops.push({ owner, id: item.getId(), x: location.getX(), y: location.getY(), z: location.getZ() }) });
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.castle-native-stage', 76],
+    ['quest.the_blood_moon_rises.castle-room', 36],
+    ['quest.the_blood_moon_rises.castle-floor', 2],
+    ['quest.the_blood_moon_rises.castle-story', {
+      defeated: ['ranis-sanguidae'], ranisParlourEmblemPlaced: true,
+      gibbous: { caseItems: ['hourglass'] },
+    }],
+  ]);
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(2485, 7404, 0), moveTo: location => { player.location = location; },
+    getUsername: () => 'castle-ranis-parlour-skull', getInventory: () => ({
+      contains: id => (items.get(id) ?? 0) > 0,
+      getFreeSlots: () => 28 - [...items.values()].reduce((sum, count) => sum + count, 0),
+      deleteNumber: (id, amount) => { const count = items.get(id) ?? 0; if (count < amount) return false; items.set(id, count - amount); return true; },
+    }),
+    sendMessage() {}, getPacketSender: () => new Proxy({ sendVarbit() {} }, { get: (target, key) => target[key] ?? (() => {}) }),
+  };
+  quest.setStage(player, 40);
+  const enterDoor = handlers.objects.find(handler => handler.name === 'handleCastleDoorEnter');
+  const enter = (id, x, y) => enterDoor({ player, objectId: id, definition: { id, getName: () => 'Door' },
+    location: { x, y, z: 0 }, option: 'Enter', handled: false });
+  enter(61576, 2485, 7405);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 26);
+  assert.deepEqual([player.location.getX(), player.location.getY(), player.location.getZ()], [2475, 7380, 0],
+    'the opened Ranis door uses the exact RSProx arrival');
+  assert.deepEqual(spawned.filter(npc => npc.id === 16226).map(npc => [npc.x, npc.y]), [[2475, 7385], [2469, 7382]],
+    'both recorded owner-only crows appear in the parlour');
+  assert.deepEqual(drops.map(drop => [drop.id, drop.x, drop.y, drop.z]), [[33741, 2471, 7384, 0]],
+    'the crows leave the ornate skull at the captured tile');
+
+  const pickup = handlers.ground.find(handler => handler.name === 'handleCastleBookPickup');
+  pickup({ player, groundItemId: 33741, location: { x: 2471, y: 7384, z: 0 } });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').gibbous.skullClaimed, true);
+  items.set(33741, 1);
+  enter(61577, 2475, 7379);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 36);
+  assert.deepEqual([player.location.getX(), player.location.getY(), player.location.getZ()], [2485, 7404, 0],
+    'the captured reverse door returns to Ranis Hall');
+  attributes.set('quest.the_blood_moon_rises.castle-room', 38);
+  const placeItem = handlers.itemOnObject.find(handler => handler.name === 'handleCastleDisplayCaseItem');
+  placeItem({ player, itemId: 33741, objectId: 61672, location: { x: 2497, y: 7374, z: 0 }, handled: false });
+  items.set(33740, 1);
+  placeItem({ player, itemId: 33740, objectId: 61672, location: { x: 2497, y: 7374, z: 0 }, handled: false });
+  assert.deepEqual(attributes.get('quest.the_blood_moon_rises.castle-story').gibbous.caseItems.sort(),
+    ['hourglass', 'knife', 'skull']);
+});
+
 test('Blood Moon prisoner scene waits for the transcript, then leaves the player by the bench key', () => {
   const { api, handlers } = mockApi();
   api.spawnNpc = spec => ({ ...spec, getHitpoints: () => 10, setScriptedMovement() {} });
