@@ -4562,6 +4562,8 @@ test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle
     getAsPlayer: () => player,
   };
   let boss;
+  const spawned = [];
+  let addAttackResets = 0;
   let nextNpcIndex = 2;
   api.registerArea = () => {};
   api.spawnNpc = definition => {
@@ -4581,7 +4583,7 @@ test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle
       getMaxHitpoints: () => npc.maxHitpoints,
       setScriptedMovement(value) { npc.scriptedMovement = value; },
       getCurrentDefinition: () => ({ getAttackSpeed: () => 7 }),
-      getCombat: () => ({ getLastAttack: () => ({ reset() {} }) }),
+      getCombat: () => ({ getLastAttack: () => ({ reset() { addAttackResets++; } }) }),
       getLocation: () => ({ getDistance: () => 10 }),
       sendMessage() {},
       isRegistered: () => false,
@@ -4590,6 +4592,7 @@ test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle
       getAsNpc() { return npc; },
     };
     if (!boss) boss = npc;
+    spawned.push(npc);
     return npc;
   };
   api.core.World.getProcessCycle = () => cycle;
@@ -4644,6 +4647,47 @@ test('Song of the Elves Fragment uses one prayer-aware ranged basic attack cycle
       }
     } finally {
       Math.random = originalRandomForBlast;
+    }
+
+    const originalRandomForAdds = Math.random;
+    Math.random = () => 0;
+    try {
+      player.getArea().leave(player, false);
+      boss = null;
+      cycle += 100;
+      const spawnStart = spawned.length;
+      handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: 'xfnkES', handled: false });
+      const area = player.getArea();
+      boss.hitpoints = 666;
+      cycle += 1;
+      area.process(boss);
+      const clones = spawned.slice(spawnStart + 1);
+      assert.equal(clones.length, 2);
+      assert.ok(clones.every(npc => npc.scriptedMovement), 'scripted echoes cannot run the normal NPC combat AI');
+      const resetsBeforeAddTick = addAttackResets;
+      cycle += 1;
+      area.process(clones[0]);
+      assert.ok(addAttackResets > resetsBeforeAddTick, 'the area keeps scripted adds from starting automatic attacks');
+
+      handlers.npcDeath.at(-1)({ npc: clones[0], killer: player });
+      const healers = spawned.slice(-2);
+      assert.equal(healers.length, 2);
+      assert.ok(healers.every(npc => npc.scriptedMovement), 'scripted whirlwinds cannot run the normal NPC combat AI');
+      for (const healer of healers) area.process(healer);
+      const missedPart = { damage: 0, getDamage() { return this.damage; }, setDamage(value) { this.damage = value; } };
+      let totalDamage = 0;
+      handlers.npcHitModify.at(-1)({
+        npc: healers[0],
+        hit: {
+          getAttacker: () => player,
+          getHits: () => [missedPart],
+          updateTotalDamage() { totalDamage = missedPart.damage; },
+        },
+      });
+      assert.equal(missedPart.damage, 1, 'any attack kills a one-hit whirlwind, even if its hit roll missed');
+      assert.equal(totalDamage, 1);
+    } finally {
+      Math.random = originalRandomForAdds;
     }
   } finally {
     api.core.World.getProcessCycle = originalCycle;
