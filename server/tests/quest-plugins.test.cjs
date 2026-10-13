@@ -845,7 +845,7 @@ test('Blood Moon Sarius spawn is reachable from the Sins boat shore landing', ()
   assert.equal(reachable, true, 'the real graveyard boat landing has a collision-valid path to Sarius');
 });
 
-test('Blood Moon shrine adds the Castle Drakan medallion destination and the real portal starts its chapter', () => {
+test('Blood Moon shrine returns to the Castle lobby before the Vampyrium portal starts its chapter', () => {
   const { api, handlers } = mockApi();
   const spawned = [];
   let castleVeliafHook;
@@ -869,6 +869,7 @@ test('Blood Moon shrine adds the Castle Drakan medallion destination and the rea
   const sins = quests.filter((entry) => entry.key === 'sins_of_the_father').at(-1);
   const attributes = new Map();
   const varbits = new Map();
+  const moved = [];
   let position;
   const player = {
     getAttribute: (key) => attributes.get(key),
@@ -877,7 +878,7 @@ test('Blood Moon shrine adds the Castle Drakan medallion destination and the rea
       get: (target, key) => target[key] ?? (() => {}),
     }),
     getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
-    moveTo: location => { position = location; },
+    moveTo: location => { position = location; moved.push([location.getX(), location.getY(), location.getZ()]); },
     sendMessage() {},
   };
   quest.setStage(player, 30);
@@ -889,18 +890,42 @@ test('Blood Moon shrine adds the Castle Drakan medallion destination and the rea
   const option = api.lastPrompt.findIndex((entry, index) => index % 2 === 0 && entry === 'Castle Drakan.');
   assert.notEqual(option, -1, 'the prayed-at shrine adds Castle Drakan to the actual medallion menu');
   api.lastPrompt[option + 1]();
-  assert.deepEqual([position.getX(), position.getY(), position.getZ()], [2322, 7370, 0]);
+  assert.deepEqual([position.getX(), position.getY(), position.getZ()], [3167, 7707, 0]);
   assert.equal(quest.getStage(player), 30, 'the medallion lands at the portal without skipping its Enter action');
+  moved.length = 0;
   const enter = handlers.objects.find(handler => handler.name === 'enterVampyriumPortal');
-  assert.equal(enter({ player, objectId: 61221, definition: { id: 61221 }, location: { x: 2323, y: 7370, z: 0 }, option: 'Enter', handled: false }), true);
+  const { RegionManager } = api.core;
+  assert.equal(RegionManager.blocked(new api.core.Location(3167, 7707, 0), null), false,
+    'the inferred medallion landing beside the cache shrine is walkable');
+  assert.equal(RegionManager.canMove(3167, 7707, 3166, 7707, 0, 1, 1, null), true,
+    'the medallion landing has a real route away from the shrine footprint');
+  assert.equal(RegionManager.blocked(new api.core.Location(2322, 7370, 0), null), false,
+    'the portal arrival beside the return portal is walkable');
+  assert.equal(RegionManager.canMove(2322, 7370, 2321, 7370, 0, 1, 1, null), true,
+    'the Vampyrium arrival has a real route away from the return-portal footprint');
+  assert.equal(enter({ player, objectId: 61221, definition: { id: 61221 }, location: { x: 2323, y: 7370, z: 0 }, option: 'Enter', handled: false }), false,
+    'the Vampyrium return portal cannot start the initial Castle chapter');
+  assert.equal(enter({ player, objectId: 61216, definition: { id: 61216 }, location: { x: 3161, y: 7710, z: 0 }, option: 'Enter', handled: false }), true);
   assert.equal(quest.getStage(player), 40);
+  assert.deepEqual(moved, [], 'the entry portal starts the transcript without teleporting before its Yes action');
   assert.equal(varbits.get(15464), 70, 'the Castle arrival is the native QH chapter 70');
   for (const handler of handlers.custom.get('npc-dialogue:action')) handler({ player, stepId: 'ikSyAR' });
   assert.equal(varbits.get(15464), 72, 'the portal arrival advances the native Castle chapter to 72');
+  assert.deepEqual(moved.at(-1), [2322, 7370, 0], 'the portal action lands beside the real Vampyrium return portal');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 1);
+  assert.equal(varbits.get(15489), 1);
+  assert.equal(varbits.get(15499), 1, 'the arrival marks the ground-floor lobby');
   const castleSpawnIds = spawned.map(npc => npc.id).filter(id => [15867, 16213, 16217, 16223].includes(id));
   assert.deepEqual(castleSpawnIds.sort(), [15867, 16213, 16217, 16223],
     'the owner receives the cache-backed Castle guide and first puzzle-room enemies');
   assert.ok(spawned.every(npc => npc.owner === player && npc.ownerOnly));
+  for (const npc of spawned.filter(npc => castleSpawnIds.includes(npc.id))) {
+    assert.equal(RegionManager.getClipping(npc.x, npc.y, npc.z ?? 0, null) & RegionManager.BLOCKED_TILE, 0,
+      `Castle actor ${npc.id} uses an unclipped cache tile`);
+    assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) =>
+      RegionManager.canMove(npc.x, npc.y, npc.x + dx, npc.y + dy, npc.z ?? 0, 1, 1, null)),
+    `Castle actor ${npc.id} has a real adjacent movement edge`);
+  }
   const veliaf = spawned.find(npc => npc.id === 15867);
   const talkToVeliaf = () => castleVeliafHook({ player, npc: veliaf, npcId: 15867,
     definition: { getName: () => 'Veliaf Hurtz' }, handled: false });
@@ -919,10 +944,90 @@ test('Blood Moon shrine adds the Castle Drakan medallion destination and the rea
   const returnOption = api.lastPrompt.findIndex((entry, index) => index % 2 === 0 && entry === 'Castle Drakan.');
   assert.notEqual(returnOption, -1, 'the shrine destination remains available during the Castle chapter');
   api.lastPrompt[returnOption + 1]();
-  assert.deepEqual([position.getX(), position.getY(), position.getZ()], [2322, 7370, 0]);
+  assert.deepEqual([position.getX(), position.getY(), position.getZ()], [3167, 7707, 0]);
   assert.equal(quest.getStage(player), 40, 'returning by medallion does not bypass the Castle portal chapter');
-  assert.equal(enter({ player, objectId: 61221, definition: { id: 61221 }, location: { x: 2323, y: 7370, z: 0 }, option: 'Enter', handled: false }), true);
+  assert.equal(enter({ player, objectId: 61216, definition: { id: 61216 }, location: { x: 3161, y: 7710, z: 0 }, option: 'Enter', handled: false }), true);
+  assert.deepEqual(moved.at(-1), [2322, 7370, 0], 're-entering from the lobby returns to the Vampyrium foyer');
   assert.equal(quest.getStage(player), 40, 'the portal remains usable without replaying chapter setup');
+  attributes.set('quest.the_blood_moon_rises.castle-native-stage', 80);
+  const returnPortal = handlers.objects.find(handler => handler.name === 'tryCastleReturnPortal');
+  const returnEvent = { player, objectId: 61221, definition: { id: 61221 },
+    location: { x: 2323, y: 7370, z: 0 }, option: 'Enter', handled: false };
+  assert.equal(returnPortal(returnEvent), true, 'the separate return portal handles the native stage-80 retreat attempt');
+  assert.equal(returnEvent.handled, true);
+});
+
+test('Blood Moon repairs only the legacy Castle NPC-marker landing without changing quest progress', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.stage', 40],
+    ['quest.the_blood_moon_rises.castle-room', 3],
+    ['quest.the_blood_moon_rises.castle-native-stage', 70],
+  ]);
+  const varbits = new Map();
+  const moved = [];
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(2310, 7404, 0),
+    moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
+    getInventory: () => ({ contains: () => false }),
+    getUsername: () => 'legacy-castle-fixture',
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) }, {
+      get: (target, key) => target[key] ?? (() => {}),
+    }),
+    sendMessage() {},
+  };
+  handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
+  assert.deepEqual(moved, [[2322, 7370, 0]]);
+  assert.equal(quest.getStage(player), 40, 'repair does not advance quest stage');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 70,
+    'repair does not advance the native chapter');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 1);
+  assert.equal(varbits.get(15489), 1);
+  assert.equal(varbits.get(15499), 1, 'the repaired player is marked in the actual ground-floor lobby');
+});
+
+test('Blood Moon Castle story actors use cache-walkable floor anchors', () => {
+  const { api, handlers } = mockApi();
+  const spawned = [];
+  api.spawnNpc = spec => {
+    spawned.push(spec);
+    return { getHitpoints: () => 345, setScriptedMovement() {}, setMultiCombat() {} };
+  };
+  api.removeNpc = () => {};
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.castle-native-stage', 78],
+    ['quest.the_blood_moon_rises.castle-story', {
+      defeated: ['first-venator', 'crescent-venator', 'kitchen-sanguidae', 'library-venator'],
+      prisonersFound: true, talkedToIvan: false,
+    }],
+  ]);
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(2322, 7370, 0),
+    moveTo() {},
+    getInventory: () => ({ contains: () => false }),
+    getUsername: () => 'castle-anchor-fixture',
+    getPacketSender: () => new Proxy({ sendVarbit() {} }, { get: (target, key) => target[key] ?? (() => {}) }),
+  };
+  quest.setStage(player, 40);
+  handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
+  assert.deepEqual(spawned.map(npc => npc.id).sort(), [15845, 15846, 15867, 15869, 15888, 15903]);
+  for (const npc of spawned) {
+    assert.equal(api.core.RegionManager.getClipping(npc.x, npc.y, npc.z ?? 0, null) & api.core.RegionManager.BLOCKED_TILE, 0,
+      `Castle actor ${npc.id} does not spawn inside a blocked tile`);
+    assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) =>
+      api.core.RegionManager.canMove(npc.x, npc.y, npc.x + dx, npc.y + dy, npc.z ?? 0, 1, 1, null)),
+    `Castle actor ${npc.id} has an adjacent pathfinding edge`);
+  }
 });
 
 test('Ivan reclaims a lost Drakan medallion only after Sins of the Father is complete', () => {

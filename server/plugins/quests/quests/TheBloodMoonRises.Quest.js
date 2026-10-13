@@ -129,9 +129,17 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: 61572, x: 2304, y: 7391, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.DINING, landing: [2357, 7366] },
     { id: 61573, x: 2304, y: 7392, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.DINING, landing: [2357, 7366] },
   ]);
-  // The exact landing is not published by the Wiki; this is the walkable tile
-  // beside the cache-backed portal at (2323, 7370).
-  const CASTLE_TELEPORT_TILE = Object.freeze({ x: 2322, y: 7370, z: 0 });
+  // Quest Helper locates the Castle Drakan shrine at (3168, 7707) and the
+  // Vampyrium entry portal at (3161, 7710). The medallion lands beside the
+  // clipped shrine object; the entry portal then moves the player beside the
+  // return portal in the Vampyrium castle.
+  // shortcut: the Wiki does not publish teleport landing tiles; both adjacent
+  // tiles are cache-verified and connected to their respective portal.
+  const CASTLE_TELEPORT_TILE = Object.freeze({ x: 3167, y: 7707, z: 0 });
+  const CASTLE_VAMPYRIUM_ENTRY = Object.freeze({ id: 61216, x: 3161, y: 7710, z: 0 });
+  const CASTLE_VAMPYRIUM_ARRIVAL = Object.freeze({ x: 2322, y: 7370, z: 0 });
+  const CASTLE_VAMPYRIUM_RETURN = Object.freeze({ id: 61221, x: 2323, y: 7370, z: 0 });
+  const CASTLE_LEGACY_BLOCKED_ARRIVAL = Object.freeze({ x: 2310, y: 7404, z: 0 });
   const REFINERY_COMPLETED_EVENT = "bmr:refinery-completed";
   const SLEPE_PLINTH_VARBITS = [15496, 15492, 15491, 15493, 15495, 15494];
   const SLEPE_BOOKS = [
@@ -1581,6 +1589,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function syncCastleRoomOnLogin({ player }) {
+    repairLegacyCastleLanding(player);
     syncCastleRoom(player);
     if (stage(player) === STAGE.CASTLE) {
       player.getPacketSender().sendVarbit(15464,
@@ -1600,6 +1609,19 @@ module.exports = function registerTheBloodMoonRises(api) {
     syncCastleBookKey(player);
     syncCastleGibbousKey(player);
     syncCastleSyringeBarrel(player);
+  }
+
+  function repairLegacyCastleLanding(player) {
+    if (!player || stage(player) !== STAGE.CASTLE) return;
+    const location = player.getLocation?.();
+    if (!location || location.getX() !== CASTLE_LEGACY_BLOCKED_ARRIVAL.x ||
+      location.getY() !== CASTLE_LEGACY_BLOCKED_ARRIVAL.y || location.getZ() !== CASTLE_LEGACY_BLOCKED_ARRIVAL.z) return;
+    // Older builds used a nearby NPC/cutscene marker as the player's arrival.
+    // Move only that exact stuck save to the actual Vampyrium lobby; quest flags
+    // and inventory are left untouched.
+    player.moveTo(new Location(CASTLE_VAMPYRIUM_ARRIVAL.x, CASTLE_VAMPYRIUM_ARRIVAL.y,
+      CASTLE_VAMPYRIUM_ARRIVAL.z));
+    player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.LOBBY);
   }
 
   function castleStory(player) {
@@ -2138,23 +2160,27 @@ module.exports = function registerTheBloodMoonRises(api) {
       if (!story.defeated.includes("first-venator"))
         spawnCastleActor(player, "first-venator", CASTLE_NPC.VENATOR_5, [2569, 7384], true);
       if (!story.defeated.includes("crescent-venator"))
-        spawnCastleActor(player, "crescent-venator", CASTLE_NPC.VENATOR, [2486, 7421], true);
+        // QH points at the emblem holder in this room; the adjacent floor tile
+        // is the nearest collision-clear combat anchor.
+        spawnCastleActor(player, "crescent-venator", CASTLE_NPC.VENATOR, [2486, 7420], true);
       if (!story.defeated.includes("kitchen-sanguidae"))
-        spawnCastleActor(player, "kitchen-sanguidae", CASTLE_NPC.SANGUIDAE, [2315, 7418], true);
+        spawnCastleActor(player, "kitchen-sanguidae", CASTLE_NPC.SANGUIDAE, [2314, 7418], true);
     }
     if (progress >= 76 && story.prisonersFound) {
-      spawnCastleActor(player, "safalaan-prison", CASTLE_NPC.SAFALAAN_PRISON, [2573, 7395]);
-      spawnCastleActor(player, "vanescula-prison", CASTLE_NPC.VANESCULA_PRISON, [2571, 7395]);
+      // The QH marker is the prison bench; place the freed characters on the
+      // open floor directly south of it rather than inside the bench footprint.
+      spawnCastleActor(player, "safalaan-prison", CASTLE_NPC.SAFALAAN_PRISON, [2573, 7396]);
+      spawnCastleActor(player, "vanescula-prison", CASTLE_NPC.VANESCULA_PRISON, [2571, 7396]);
     }
     if (progress >= 76) {
       if (!story.defeated.includes("library-venator"))
         spawnCastleActor(player, "library-venator", CASTLE_NPC.VENATOR, [2456, 7392], true);
       if (story.defeated.includes("library-venator") && !story.talkedToIvan)
-        spawnCastleActor(player, "ivan-library", CASTLE_NPC.IVAN_LIBRARY, [2455, 7388]);
+        spawnCastleActor(player, "ivan-library", CASTLE_NPC.IVAN_LIBRARY, [2455, 7389]);
     }
     if (progress >= 78) {
-      spawnCastleActor(player, "ivan-entry-hall", CASTLE_NPC.IVAN_ENTRY_HALL, [2315, 7371]);
-      spawnCastleActor(player, "veliaf-entry-hall", CASTLE_NPC.VELIAF_ENTRY_HALL, [2316, 7371]);
+      spawnCastleActor(player, "ivan-entry-hall", CASTLE_NPC.IVAN_ENTRY_HALL, [2313, 7371]);
+      spawnCastleActor(player, "veliaf-entry-hall", CASTLE_NPC.VELIAF_ENTRY_HALL, [2313, 7372]);
     }
   }
 
@@ -2262,18 +2288,44 @@ module.exports = function registerTheBloodMoonRises(api) {
     const currentStage = player && stage(player);
     if (!player || quest.isComplete(player) || currentStage < STAGE.SLEPE || currentStage > STAGE.CASTLE ||
       !slepeStory(player).refineryComplete || !player.getAttribute(CASTLE_SHRINE_ATTRIBUTE) ||
-      id !== 61221 || x !== 2323 || y !== 7370 || z !== 0 || event.option !== "Enter") return false;
+      id !== CASTLE_VAMPYRIUM_ENTRY.id || x !== CASTLE_VAMPYRIUM_ENTRY.x ||
+      y !== CASTLE_VAMPYRIUM_ENTRY.y || z !== CASTLE_VAMPYRIUM_ENTRY.z || event.option !== "Enter") return false;
     event.handled = true;
     if (currentStage === STAGE.SLEPE) {
       advance(player, STAGE.CASTLE);
       player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.LOBBY);
       player.setAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE, 70);
       syncCastleRoom(player);
-      startTranscript(api, player, 0, PAGE, "escape-from-castle-drakan-entering-the-portal");
+      startTranscript(api, player, 0, PAGE, "escape-from-castle-drakan-entering-the-portal",
+        steps => steps.filter(step => step.type !== "unavailable"));
     } else if (currentStage === STAGE.CASTLE &&
       (Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70) === 70) {
-      startTranscript(api, player, 0, PAGE, "escape-from-castle-drakan-entering-the-portal");
+      startTranscript(api, player, 0, PAGE, "escape-from-castle-drakan-entering-the-portal",
+        steps => steps.filter(step => step.type !== "unavailable"));
+    } else if (currentStage === STAGE.CASTLE) {
+      player.moveTo(new Location(CASTLE_VAMPYRIUM_ARRIVAL.x, CASTLE_VAMPYRIUM_ARRIVAL.y,
+        CASTLE_VAMPYRIUM_ARRIVAL.z));
+      player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.LOBBY);
+      syncCastleRoom(player);
     }
+    return true;
+  }
+
+  function tryCastleReturnPortal(event) {
+    const player = event?.player;
+    const id = event?.definition?.id ?? event?.objectId;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      id !== CASTLE_VAMPYRIUM_RETURN.id || x !== CASTLE_VAMPYRIUM_RETURN.x ||
+      y !== CASTLE_VAMPYRIUM_RETURN.y || z !== CASTLE_VAMPYRIUM_RETURN.z || event.option !== "Enter" ||
+      (Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70) !== 80) return false;
+    const started = startTranscript(api, player, 0, PAGE,
+      "escape-from-castle-drakan-attempting-to-head-back-to-the-foyer");
+    if (!started) return false;
+    event.handled = true;
     return true;
   }
 
@@ -2283,6 +2335,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
     if (event.stepId === "ikSyAR" && stage(player) === STAGE.CASTLE) {
+      player.moveTo(new Location(CASTLE_VAMPYRIUM_ARRIVAL.x, CASTLE_VAMPYRIUM_ARRIVAL.y,
+        CASTLE_VAMPYRIUM_ARRIVAL.z));
+      player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.LOBBY);
+      syncCastleRoom(player);
       setCastleNativeStage(player, 72);
       syncCastleActors(player);
     }
@@ -3711,6 +3767,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("quest:stage-changed", cleanupSlepeStory);
   api.onObjectInteraction(prayAtCastleShrine);
   api.onObjectInteraction(enterVampyriumPortal);
+  api.onObjectInteraction(tryCastleReturnPortal);
   api.onCustomEvent("drakan-medallion:destinations", addCastleMedallionDestination);
   api.onCustomEvent("world:object-examine", inspectHideoutShrine);
   api.onNpcDialogueCondition(handleSlepeJournalCondition);
