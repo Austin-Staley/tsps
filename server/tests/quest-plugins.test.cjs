@@ -4009,7 +4009,7 @@ test('Desert Treasure II pathfinder grants only its owner perfect accuracy and t
 });
 
 test('Desert Treasure II prison escape leads to the cache Duke arena and requires two real poisons', async () => {
-  const { api: base } = mockApi();
+  const { api: base, handlers } = mockApi();
   const objects = [], itemItems = [], itemObjects = [], itemNpcs = [], itemActions = [], deaths = [], groundPickups = [];
   const queues = { add: [], remove: [] };
   let cycle = 0, hasPillarCover = true;
@@ -4073,13 +4073,19 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   const sourceLocation = (x, y, z = 0) => ({ x: 5000 + x - 2872, y: 6000 + y - 6336, z });
   const interactObject = (id, x, y, option = 'Search') => objects.at(-1)({ player, objectId: id, option, location: sourceLocation(x, y) });
   quest.setStage(player, 9);
-  assert.equal(objects.at(-1)({ player, objectId: 49513, location: { x: 2926, y: 10354, z: 0 } }), true, 'enter through the prison entrance');
+  assert.equal(objects.at(-1)({ player, objectId: 49513, definition: { id: 49091 }, location: { x: 2926, y: 10354, z: 0 } }), true, 'enter through the prison entrance');
+  assert.equal(attrs.has('desert-treasure-ii:sucellus-area'), false, 'cancelling Captain Malleta cannot enter the prison');
+  const acceptance = { player, npcId: core.NpcIdentifiers.CAPTAIN_MALLETA, text: 'Lovely! Thank you for your time.' };
+  handlers.custom.get('npc-dialogue:line').at(-1)(acceptance);
+  assert.equal(attrs.has('desert-treasure-ii:sucellus-area'), false, 'the final page must be continued');
+  acceptance.after();
+  assert.equal(attrs.get('desert-treasure-ii:sucellus-captain-accepted'), true);
   assert.equal(attrs.get('desert-treasure-ii:sucellus-area') instanceof TestArea, true);
   const area = attrs.get('desert-treasure-ii:sucellus-area');
   player.moveTo(area.tile(40, 12, 2));
   area.process(player);
   assert.equal(attrs.get('desert-treasure-ii:sucellus-cell-entered'), true, 'the prison guard knocks the player out at the cell passage');
-  assert.deepEqual([player.location.x, player.location.y, player.location.z], [sourceLocation(3040, 6370).x, sourceLocation(3040, 6370).y, 0]);
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], [sourceLocation(3040, 6369).x, sourceLocation(3040, 6369).y, 0]);
   interactObject(49099, 3040, 6370, 'Inspect');
   interactObject(49094, 3042, 6369);
   assert.equal(inventory.get(I.PRISONERS_LETTER), 1);
@@ -4089,7 +4095,7 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   itemObjects.at(-1)({ player, itemId: I.KNIFE_5, objectId: 49099, location: sourceLocation(3040, 6370) });
   assert.equal(inventory.get(I.KNIFE_5), 0);
   assert.equal(inventory.get(I.CHISEL_5), 1);
-  interactObject(49514, 3041, 6367);
+  objects.at(-1)({ player, objectId: 49514, definition: { id: 49096 }, location: sourceLocation(3041, 6367), option: 'Search' });
   assert.equal(inventory.get(I.LOCKPICK_4), 1);
   itemObjects.at(-1)({ player, itemId: I.LOCKPICK_4, objectId: 49099, location: sourceLocation(3040, 6370) });
   assert.equal(attrs.get('desert-treasure-ii:sucellus-cell-escaped'), true);
