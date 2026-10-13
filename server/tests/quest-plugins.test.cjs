@@ -1247,6 +1247,10 @@ test('Dragon Slayer II Torfinn runs the cache quest dragons, checkpoints the wav
 });
 
 test('Dragon Slayer II crypt uses canonical template locs and reachable native-varbit bust puzzle', async (t) => {
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  await CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
+  RegionManager.init();
   const { api } = mockApi();
   const register = require('../plugins/quests/quests/DragonSlayerII.Quest');
   register(api);
@@ -1319,26 +1323,55 @@ test('Dragon Slayer II crypt uses canonical template locs and reachable native-v
   }
   assert.deepEqual([...varbits.entries()].sort(([a], [b]) => a - b), [[6105, 25], [6152, 0], [6153, 1], [6154, 0], [6155, 0]]);
 
-  const { RegionManager } = require('../dist/game/collision/RegionManager');
-  const start = [1493, 9977]; // reachable tile immediately beside the lower-floor staircase
-  const targets = new Set();
-  const addApproaches = ({ x, y, width, height }) => {
+  // The tomb room sits beyond the crypt's two cache double-door thresholds.
+  // Open them through the same shared door plugin players use before testing
+  // puzzle-object reachability from the lower stair.
+  const doorActions = new Map();
+  const doorCore = {
+    ...api.core,
+    Sounds: { sendSound: () => {} },
+    TaskManager: { cancelTasks: () => {}, submit: () => {} },
+  };
+  const doorApi = {
+    core: doorCore,
+    emitCustomEvent: () => {},
+    onObjectInteraction: (name, actions) => doorActions.set(name, actions),
+    onRegionLoaded: () => {},
+    onPlayerProcess: () => {},
+  };
+  const doorPluginPath = require.resolve('../plugins/objects/Doors.plugin');
+  delete require.cache[doorPluginPath];
+  require(doorPluginPath).register(doorApi);
+  const doorPlayer = { getPrivateArea: () => area, getUsername: () => 'crypt-puzzle-test' };
+  for (const [id, x, y] of [[32406, 1503, 9956], [32405, 1503, 9944]]) {
+    const door = area.resolveObject(id, sourceLocation(x, y));
+    assert.ok(door, `cache double door ${id} exists at source ${x},${y},1`);
+    doorActions.get('Large doors').Open({ player: doorPlayer, object: door, objectId: id, location: door.getLocation() });
+  }
+
+  // The real lower-floor landing is the west ladder at source (1479, 9950).
+  // Check for at least one reachable approach tile per object; perimeter tiles
+  // behind walls are expected to be unreachable and are not interaction routes.
+  const start = [1479, 9950];
+  const targets = [];
+  const addApproaches = (label, { x, y, width, height }) => {
+    const approaches = new Set();
     for (let px = x - 1; px <= x + width; px++) {
       for (let py = y - 1; py <= y + height; py++) {
         if (px >= x && px < x + width && py >= y && py < y + height) continue;
-        targets.add(`${px},${py}`);
+        approaches.add(`${px},${py}`);
       }
     }
+    targets.push({ label, approaches });
   };
-  addApproaches(cryptPuzzle.tomb);
-  cryptPuzzle.busts.forEach((bust) => addApproaches({ x: bust.location[0], y: bust.location[1], width: 1, height: 1 }));
-  Object.values(cryptPuzzle.plinths).forEach(addApproaches);
+  addApproaches('Camorra tomb', cryptPuzzle.tomb);
+  cryptPuzzle.busts.forEach((bust) => addApproaches(`${bust.label} bust`, { x: bust.location[0], y: bust.location[1], width: 1, height: 1 }));
+  Object.entries(cryptPuzzle.plinths).forEach(([direction, plinth]) => addApproaches(`${direction} plinth`, plinth));
   const queue = [start];
   const seen = new Set([start.join(',')]);
   const directions = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
-  for (let index = 0; index < queue.length && targets.size; index++) {
+  for (let index = 0; index < queue.length; index++) {
     const [x, y] = queue[index];
-    targets.delete(`${x},${y}`);
     const from = sourceLocation(x, y);
     for (const [dx, dy] of directions) {
       const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
@@ -1349,7 +1382,9 @@ test('Dragon Slayer II crypt uses canonical template locs and reachable native-v
       queue.push([nx, ny]);
     }
   }
-  assert.equal(targets.size, 0, `all puzzle objects have a reachable interaction tile; unreachable: ${[...targets].slice(0, 8)}`);
+  const unreachableObjects = targets.filter(({ approaches }) => ![...approaches].some((tile) => seen.has(tile)));
+  assert.deepEqual(unreachableObjects.map(({ label }) => label), [],
+    `each puzzle object has a reachable interaction tile from the real lower stair; reached ${seen.size} tiles`);
 
   // Continue a real item-on-cache-plinth sequence after migration.
   const bustByItem = new Map(cryptPuzzle.busts.map((bust) => [bust.item, bust]));
