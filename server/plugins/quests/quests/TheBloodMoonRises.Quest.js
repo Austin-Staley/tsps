@@ -27,9 +27,16 @@ module.exports = function registerTheBloodMoonRises(api) {
   const CASTLE_SHRINE_VARBIT = 15470;
   const CASTLE_ROOM_ATTRIBUTE = "quest.the_blood_moon_rises.castle-room";
   const CASTLE_FLOOR_ATTRIBUTE = "quest.the_blood_moon_rises.castle-floor";
+  const CASTLE_FACING_ATTRIBUTE = "quest.the_blood_moon_rises.castle-facing";
   const CASTLE_WORLD_MAP_FLOOR_VARBIT = 15489;
   const CASTLE_LAST_ROOM_VARBIT = 15499;
+  const CASTLE_LAST_FLOOR_VARBIT = 15549;
+  const CASTLE_LAST_FACING_VARBIT = 15500;
   const CASTLE_GROUND_FLOOR = 1;
+  const CASTLE_OUTER_LIBRARY_PORTAL_VARBIT = 15531;
+  const CASTLE_OUTER_LIBRARY_LEVER = Object.freeze({ id: 61774, x: 2473, y: 7421, z: 0 });
+  const CASTLE_OUTER_LIBRARY_PORTAL = Object.freeze({ id: 61768, x: 2473, y: 7419, z: 0,
+    destination: [2361, 7382, 0] });
   const CASTLE_NATIVE_STAGE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-native-stage";
   const CASTLE_STORY_ATTRIBUTE = "quest.the_blood_moon_rises.castle-story";
   const CASTLE_BOOK_PUZZLE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-book-puzzle";
@@ -149,11 +156,13 @@ module.exports = function registerTheBloodMoonRises(api) {
   const CASTLE_DOOR_TRANSITIONS = Object.freeze([
     { id: 61577, x: 2327, y: 7360, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.DINING, landing: [2342, 7372] },
     { id: 61576, x: 2328, y: 7360, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.DINING, landing: [2342, 7372] },
-    { id: 61573, x: 2342, y: 7373, from: CASTLE_ROOM.DINING, to: CASTLE_ROOM.LOBBY, landing: [2327, 7362] },
+    { id: 61573, x: 2342, y: 7373, from: CASTLE_ROOM.DINING, to: CASTLE_ROOM.LOBBY,
+      facing: 0, landing: [2328, 7361] },
     { id: 61572, x: 2341, y: 7373, from: CASTLE_ROOM.DINING, to: CASTLE_ROOM.LOBBY, landing: [2327, 7362] },
     { id: 61572, x: 2358, y: 7366, from: CASTLE_ROOM.DINING, to: CASTLE_ROOM.THRONE, landing: [2305, 7391] },
     { id: 61572, x: 2304, y: 7391, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.DINING, landing: [2357, 7366] },
-    { id: 61573, x: 2304, y: 7392, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.DINING, landing: [2357, 7366] },
+    { id: 61573, x: 2304, y: 7392, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.DINING,
+      facing: 6, landing: [2357, 7366] },
     // The half-moon door pair joins the dining room and the western dining hall.
     // shortcut: QH records the paired door tiles, not the OSRS teleport landing; these
     // adjacent destinations are collision-checked and can be refined from a live capture.
@@ -188,7 +197,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     // Cache placements pair the ground lobby stair at2315,7370 with its
     // first-floor down variant at the same x/y on plane1.
     { id: CASTLE_DOOR_IDS.STAIRS_UP, x: 2315, y: 7370, z: 0, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.LOBBY,
-      fromFloor: 1, toFloor: 2, action: "Climb-up", landing: [2314, 7370, 1] },
+      fromFloor: 1, toFloor: 2, action: "Climb-up", facing: 6, landing: [2314, 7371, 1] },
     { id: CASTLE_DOOR_IDS.STAIRS_DOWN_INVISIBLE, x: 2315, y: 7370, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.LOBBY,
       fromFloor: 2, toFloor: 1, action: "Climb-down", landing: [2314, 7369, 0] },
     { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2466, y: 7422, z: 0, from: CASTLE_ROOM.NORTH_LOBBY_HALL, to: CASTLE_ROOM.VANESCULA_HALL,
@@ -234,7 +243,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2309, y: 7397, z: 0, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.STUDY,
       fromFloor: 1, toFloor: 1, landing: [2357, 7380] },
     { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2358, y: 7380, z: 0, from: CASTLE_ROOM.STUDY, to: CASTLE_ROOM.THRONE,
-      fromFloor: 1, toFloor: 1, landing: [2310, 7395] },
+      fromFloor: 1, toFloor: 1, facing: 4, landing: [2310, 7396] },
     { id: CASTLE_DOOR_IDS.GIBBOUS, x: 2327, y: 7360, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.DINING,
       fromFloor: 2, toFloor: 2, landing: [2342, 7372, 1] },
     { id: CASTLE_DOOR_IDS.GIBBOUS, x: 2342, y: 7373, z: 1, from: CASTLE_ROOM.DINING, to: CASTLE_ROOM.LOBBY,
@@ -1840,7 +1849,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.getAttribute(CASTLE_SHRINE_ATTRIBUTE) ? 1 : 0);
   }
 
-  function syncCastleRoom(player) {
+  function syncCastleRoom(player, facing) {
     if (!player || stage(player) < STAGE.CASTLE || stage(player) > STAGE.ESCAPE) return;
     const room = Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) || CASTLE_ROOM.LOBBY;
     const floor = Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) || CASTLE_GROUND_FLOOR;
@@ -1848,6 +1857,12 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.setAttribute(CASTLE_FLOOR_ATTRIBUTE, floor);
     player.getPacketSender().sendVarbit(CASTLE_WORLD_MAP_FLOOR_VARBIT, floor);
     player.getPacketSender().sendVarbit(CASTLE_LAST_ROOM_VARBIT, room);
+    player.getPacketSender().sendVarbit(CASTLE_LAST_FLOOR_VARBIT, floor);
+    if (Number.isInteger(facing)) player.setAttribute(CASTLE_FACING_ATTRIBUTE, facing);
+    const lastFacing = Number(player.getAttribute(CASTLE_FACING_ATTRIBUTE));
+    if (Number.isInteger(lastFacing) && lastFacing >= 0 && lastFacing <= 7) {
+      player.getPacketSender().sendVarbit(CASTLE_LAST_FACING_VARBIT, lastFacing);
+    }
     syncCastleExplosiveBarrel(player);
   }
 
@@ -1855,6 +1870,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     repairLegacyCastleLanding(player);
     reconcileCastleLobbyFloor(player);
     syncCastleRoom(player);
+    player.getPacketSender().sendVarbit(CASTLE_OUTER_LIBRARY_PORTAL_VARBIT,
+      castleStory(player).parlourPortalUnlocked ? 1 : 0);
     if (stage(player) === STAGE.CASTLE) {
       player.getPacketSender().sendVarbit(15464,
         Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70);
@@ -3056,6 +3073,56 @@ module.exports = function registerTheBloodMoonRises(api) {
     syncThroneBustVarbits(player);
   }
 
+  function handleCastleOuterLibraryLever(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    // The oploc packet and the cache varbit are keyed by the placed loc id. Its
+    // resolved definition can be a different lever model, so match either ID.
+    const ids = [event?.objectId, event?.definition?.id];
+    if (!player || !ids.includes(CASTLE_OUTER_LIBRARY_LEVER.id) || x !== CASTLE_OUTER_LIBRARY_LEVER.x ||
+      y !== CASTLE_OUTER_LIBRARY_LEVER.y || z !== CASTLE_OUTER_LIBRARY_LEVER.z || event?.option !== "Pull") return;
+    event.handled = true;
+    const story = castleStory(player);
+    if (quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.NORTH_LOBBY_HALL ||
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== 2) {
+      player.sendMessage("The lever does not respond from this side of the castle.");
+      return;
+    }
+    if (story.parlourPortalUnlocked) {
+      player.sendMessage("The portal is already open.");
+      return;
+    }
+    player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, parlourPortalUnlocked: true });
+    player.getPacketSender().sendVarbit(CASTLE_OUTER_LIBRARY_PORTAL_VARBIT, 1);
+    player.sendMessage("You pull the lever and a portal appears.");
+  }
+
+  function handleCastleOuterLibraryPortal(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    const ids = [event?.objectId, event?.definition?.id];
+    if (!player || !ids.includes(CASTLE_OUTER_LIBRARY_PORTAL.id) || x !== CASTLE_OUTER_LIBRARY_PORTAL.x ||
+      y !== CASTLE_OUTER_LIBRARY_PORTAL.y || z !== CASTLE_OUTER_LIBRARY_PORTAL.z || event?.option !== "Enter") return;
+    event.handled = true;
+    if (quest.isComplete(player) || stage(player) !== STAGE.CASTLE || !castleStory(player).parlourPortalUnlocked ||
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.NORTH_LOBBY_HALL ||
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== 2) {
+      player.sendMessage("The portal is not ready for you to enter.");
+      return;
+    }
+    player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.STUDY);
+    player.setAttribute(CASTLE_FLOOR_ATTRIBUTE, CASTLE_GROUND_FLOOR);
+    syncCastleRoom(player, 2);
+    player.moveTo(new Location(...CASTLE_OUTER_LIBRARY_PORTAL.destination));
+  }
+
   function handleCastleDoorEnter(event) {
     const player = event?.player;
     const { x, y, z } = event?.location ?? {};
@@ -3097,7 +3164,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       event.handled = true;
       player.setAttribute(CASTLE_ROOM_ATTRIBUTE, transition.to);
       player.setAttribute(CASTLE_FLOOR_ATTRIBUTE, transition.toFloor ?? CASTLE_GROUND_FLOOR);
-      syncCastleRoom(player);
+      syncCastleRoom(player, transition.facing);
       player.moveTo(new Location(transition.landing[0], transition.landing[1], transition.landing[2] ?? 0));
       return;
     }
@@ -3453,11 +3520,14 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.sendMessage("The explosive barrel needs a tinderbox before you can take it.");
   }
 
-  function promptClockValue(player, side, hand) {
+  function promptClockValue(player, side, hand, page = 0) {
     const choices = [];
-    for (let value = 0; value < 12; value++) {
-      choices.push(String(value), () => setClockValue(player, side, hand, value));
-    }
+    const first = [0, 4, 7, 10][page];
+    const count = [4, 3, 3, 2][page];
+    for (let value = first; value < first + count; value++) choices.push(String(value),
+      () => setClockValue(player, side, hand, value));
+    if (page > 0) choices.push("Previous", () => promptClockValue(player, side, hand, page - 1));
+    if (page < 3) choices.push("More...", () => promptClockValue(player, side, hand, page + 1));
     api.sendMultiChatboxPrompt(player, `Set the ${side} ${hand} clock hand`, ...choices);
   }
 
@@ -4164,6 +4234,10 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction(inspectWyrdFence);
   api.onObjectInteraction(handleCastleThronePuzzle);
   api.onObjectInteraction(handleCastleCellDoor);
+  api.onObjectInteraction(handleCastleOuterLibraryLever);
+  api.onObjectInteraction("Lever", { Pull: handleCastleOuterLibraryLever });
+  api.onObjectInteraction(handleCastleOuterLibraryPortal);
+  api.onObjectInteraction("Teleporter", { Enter: handleCastleOuterLibraryPortal });
   api.onObjectInteraction(handleCastleDoorEnter);
   api.onObjectInteraction("Door", { Enter: handleCastleDoorEnter });
   api.onObjectInteraction("Half moon door", { Enter: handleCastleDoorEnter });
@@ -4246,6 +4320,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.persistAttribute(THRONE_PUZZLE_ATTRIBUTE);
   api.persistAttribute(CASTLE_ROOM_ATTRIBUTE);
   api.persistAttribute(CASTLE_FLOOR_ATTRIBUTE);
+  api.persistAttribute(CASTLE_FACING_ATTRIBUTE);
   api.persistAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE);
   api.persistAttribute(CASTLE_STORY_ATTRIBUTE);
   api.persistAttribute(CASTLE_BOOK_PUZZLE_ATTRIBUTE);

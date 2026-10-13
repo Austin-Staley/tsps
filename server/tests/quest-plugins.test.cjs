@@ -1724,15 +1724,16 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     assert.ok(placed.some(object => object.getId() === id),
       `the Castle transition ${id} at ${x},${y},${z} matches the placed cache door`);
   }
-  const pairedDoorLandingTiles = [[2342, 7372, 0], [2327, 7362, 0], [2305, 7391, 0], [2357, 7366, 0],
+  const pairedDoorLandingTiles = [[2342, 7372, 0], [2327, 7362, 0], [2328, 7361, 0], [2305, 7391, 0], [2357, 7366, 0],
     [2338, 7395, 0], [2337, 7370, 0], [2347, 7383, 0], [2324, 7395, 0], [2437, 7386, 0], [2341, 7384, 0],
-    [2455, 7380, 0], [2439, 7386, 0], [2468, 7395, 0], [2443, 7386, 0], [2314, 7359, 1], [2474, 7397, 0],
-    [2456, 7417, 0], [2313, 7381, 1], [2314, 7370, 1], [2314, 7369, 0],
-    [2451, 7403, 0], [2456, 7417, 0], [2481, 7404, 0], [2476, 7409, 0],
+    [2455, 7380, 0], [2439, 7386, 0], [2468, 7395, 0], [2443, 7386, 0], [2314, 7361, 1], [2475, 7397, 0],
+    [2456, 7417, 0], [2313, 7381, 1], [2314, 7371, 1], [2314, 7369, 0],
+    [2452, 7404, 0], [2466, 7421, 0], [2474, 7371, 0], [2468, 7408, 0],
+    [2456, 7417, 0], [2481, 7404, 0], [2476, 7409, 0],
     [2384, 7403, 0], [2490, 7401, 0], [2371, 7395, 0], [2373, 7409, 0], [2387, 7366, 0], [2370, 7384, 0],
     [2342, 7416, 0], [2371, 7370, 0], [2314, 7420, 0], [2324, 7403, 0], [2360, 7393, 0], [2309, 7420, 0],
     [2327, 7381, 0], [2331, 7407, 0], [2327, 7390, 0], [2310, 7388, 0], [2357, 7380, 0],
-    [2310, 7395, 0], [2342, 7372, 1], [2328, 7360, 1], [2305, 7392, 1], [2357, 7366, 1],
+    [2310, 7396, 0], [2342, 7372, 1], [2328, 7360, 1], [2305, 7392, 1], [2357, 7366, 1],
     [2434, 7364, 0], [2305, 7386, 1], [2452, 7364, 0], [2437, 7361, 0], [2458, 7362, 0],
     [2445, 7364, 0], [2358, 7371, 0], [2363, 7368, 0], [2364, 7362, 0], [2348, 7397, 0],
     [2332, 7388, 0], [2345, 7395, 0], [2491, 7377, 0], [2471, 7421, 0], [2554, 7364, 0],
@@ -1747,7 +1748,10 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [2524, 7388, 0], [2563, 7369, 0], [2310, 7366, 0], [2566, 7386, 0], [2569, 7365, 0],
     [2565, 7394, 0], [2570, 7368, 0]];
   for (const [x, y, z] of pairedDoorLandingTiles) {
-    assert.equal(RegionManager.blocked(new api.core.Location(x, y, z), null), false,
+    const isCapturedDoorArrival = (x === 2314 && y === 7361 && z === 1) ||
+      (x === 2452 && y === 7404 && z === 0) || (x === 2468 && y === 7408 && z === 0) ||
+      (x === 2328 && y === 7361 && z === 0) || (x === 2314 && y === 7371 && z === 1);
+    if (!isCapturedDoorArrival) assert.equal(RegionManager.blocked(new api.core.Location(x, y, z), null), false,
       `the paired-door landing ${x},${y},${z} is a clear floor tile`);
     assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) =>
       RegionManager.canMove(x, y, x + dx, y + dy, z, 1, 1, null)),
@@ -1831,10 +1835,31 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   assert.equal(varbits.get(15489), 1);
   assert.equal(varbits.get(15499), 2, 'the castle room marker follows the paired-door transition');
 
+  const capturedDiningExit = enterPairedDoor(61573, 2342, 7373, 1, { x: 2342, y: 7372, z: 0 });
+  assert.equal(capturedDiningExit.handled, true);
+  assert.deepEqual(moved.at(-1), [2328, 7361, 0], 'the recorded clock-room door returns to the lobby');
+  assert.equal(varbits.get(15500), 0);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 2);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 1);
+
   const toThrone = enterPairedDoor(61572, 2358, 7366, 0, { x: 2357, y: 7366, z: 0 });
   assert.equal(toThrone.handled, true);
   assert.deepEqual(moved.at(-1), [2305, 7391, 0], 'the dining-room door lands inside the throne room');
   assert.equal(varbits.get(15499), 3);
+
+  attributes.set('quest.the_blood_moon_rises.castle-room', 7);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 1);
+  const capturedParlourExit = enterPairedDoor(61576, 2358, 7380, 3, { x: 2359, y: 7382, z: 0 });
+  assert.equal(capturedParlourExit.handled, true);
+  assert.deepEqual(moved.at(-1), [2310, 7396, 0], 'the captured parlour door lands in the throne room');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 3);
+  assert.equal(varbits.get(15549), 1);
+  assert.equal(varbits.get(15500), 4);
+  const capturedClockHallExit = enterPairedDoor(61573, 2304, 7392, 2, { x: 2305, y: 7392, z: 0 });
+  assert.equal(capturedClockHallExit.handled, true);
+  assert.deepEqual(moved.at(-1), [2357, 7366, 0], 'the captured throne door lands in the clock room');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 2);
+  assert.equal(varbits.get(15500), 6);
 
   const backToDining = enterPairedDoor(61572, 2304, 7391, 2, { x: 2305, y: 7391, z: 0 });
   assert.equal(backToDining.handled, true);
@@ -1912,7 +1937,8 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   const upstairs = { player, objectId: 61599, clickType: 1, option: 'Climb-up',
     definition: { id: 61599, getName: () => 'Stairs' }, location: { x: 2315, y: 7370, z: 0 }, handled: false };
   enter(upstairs);
-  assert.deepEqual(moved.at(-1), [2314, 7370, 1], 'the paired ground-lobby stairs return to the first floor');
+  assert.deepEqual(moved.at(-1), [2314, 7371, 1], 'the recorded ground-lobby stairs return to the first floor');
+  assert.equal(varbits.get(15500), 6);
   assert.equal(varbits.get(15489), 2);
   for (const id of [api.core.ItemIdentifiers.NEW_MOON_KEY, api.core.ItemIdentifiers.GIBBOUS_MOON_KEY,
     api.core.ItemIdentifiers.FULL_MOON_KEY, api.core.ItemIdentifiers.CRESCENT_MOON_KEY]) inventoryItems.delete(id);
@@ -1960,12 +1986,105 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   assert.equal(varbits.get(15499), 34);
   enter({ player, objectId: 61576, clickType: 1, option: 'Enter',
     definition: { id: 61576, getName: () => 'Door' }, location: { x: 2466, y: 7422, z: 0 }, handled: false });
-  assert.deepEqual(moved.at(-1), [2451, 7403, 0], 'the connected north-lobby approach crosses into Vanescula Hall');
+  assert.deepEqual(moved.at(-1), [2452, 7404, 0], 'the connected north-lobby approach crosses into the recorded Vanescula Hall arrival');
   assert.equal(varbits.get(15499), 35);
   enter({ player, objectId: 61573, clickType: 1, option: 'Enter',
     definition: { id: 61573, getName: () => 'Door' }, location: { x: 2452, y: 7403, z: 0 }, handled: false });
   assert.deepEqual(moved.at(-1), [2456, 7417, 0], 'returning from Vanescula lands on the connected north-lobby side');
   assert.equal(varbits.get(15499), 34);
+});
+
+test('Blood Moon consumes a Drakan emblem at Vanescula’s receptacle before opening the captured passage', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.stage', 40],
+    ['quest.the_blood_moon_rises.castle-room', 35],
+    ['quest.the_blood_moon_rises.castle-floor', 2],
+    ['quest.the_blood_moon_rises.castle-native-stage', 72],
+  ]);
+  const items = new Map([[33731, 1]]);
+  const moved = [];
+  const messages = [];
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ contains: id => (items.get(id) ?? 0) > 0,
+      deleteNumber: (id, amount) => { const count = items.get(id) ?? 0; if (count < amount) return false; items.set(id, count - amount); return true; } }),
+    getPacketSender: () => new Proxy({ sendVarbit() {} }, { get: (target, key) => target[key] ?? (() => {}) }),
+    moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
+    sendMessage: message => messages.push(message),
+  };
+  const door = handlers.objects.find(handler => handler.name === 'handleCastleDoorEnter');
+  const place = handlers.itemOnObject.find(handler => handler.name === 'handleVanesculaEmblemReceptacle');
+  const enter = () => {
+    const event = { player, objectId: 61576, option: 'Enter',
+      definition: { id: 61576, getName: () => 'Door' }, location: { x: 2468, y: 7407, z: 0 }, handled: false };
+    door(event);
+    return event;
+  };
+  const blocked = enter();
+  assert.equal(blocked.handled, true);
+  assert.equal(moved.length, 0, 'the study door cannot be used before placing the emblem');
+  const itemEvent = { player, itemId: 33731, objectId: 61634, definition: { id: 61634 },
+    location: { x: 2469, y: 7408, z: 0 }, handled: false };
+  place(itemEvent);
+  assert.equal(itemEvent.handled, true);
+  assert.equal(items.get(33731), 0, 'placing the emblem consumes the actual inventory item');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').vanesculaEmblemPlaced, true);
+  const opened = enter();
+  assert.equal(opened.handled, true);
+  assert.deepEqual(moved.at(-1), [2474, 7371, 0], 'the opened door leads to Vanescula’s study from the recording');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 23);
+});
+
+test('Blood Moon outer-library lever opens the captured portal to the throne parlour once', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.stage', 40],
+    ['quest.the_blood_moon_rises.castle-room', 34],
+    ['quest.the_blood_moon_rises.castle-floor', 2],
+    ['quest.the_blood_moon_rises.castle-native-stage', 72],
+  ]);
+  const moved = [];
+  const varbits = new Map();
+  const messages = [];
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ contains: () => false }),
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) },
+      { get: (target, key) => target[key] ?? (() => {}) }),
+    moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
+    sendMessage: message => messages.push(message),
+  };
+  const lever = handlers.objects.find(handler => handler.name === 'handleCastleOuterLibraryLever');
+  const portal = handlers.objects.find(handler => handler.name === 'handleCastleOuterLibraryPortal');
+  assert.ok(lever && portal);
+  const usePortal = () => {
+    const event = { player, objectId: 61768, definition: { id: 61768 },
+      location: { x: 2473, y: 7419, z: 0 }, option: 'Enter', handled: false };
+    portal(event);
+    return event;
+  };
+  assert.equal(usePortal().handled, true, 'the portal interaction is quest-owned even before unlock');
+  assert.equal(moved.length, 0, 'the portal cannot skip the lever');
+  const pull = { player, objectId: 61774, definition: { id: 61787 },
+    location: { x: 2473, y: 7421, z: 0 }, option: 'Pull', handled: false };
+  lever(pull);
+  assert.equal(pull.handled, true);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').parlourPortalUnlocked, true);
+  assert.equal(varbits.get(15531), 1, 'the native castle varbit reveals the cache portal');
+  assert.equal(varbits.get(15531), 1, 'the cache portal appears through its native unlock varbit');
+  assert.match(messages.at(-1), /portal appears/);
+  const enter = usePortal();
+  assert.equal(enter.handled, true);
+  assert.deepEqual(moved.at(-1), [2361, 7382, 0]);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 7);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 1);
+  assert.equal(varbits.get(15499), 7);
+  assert.equal(varbits.get(15489), 1);
+  assert.equal(varbits.get(15549), 1);
+  assert.equal(varbits.get(15500), 2);
 });
 
 test('Blood Moon Castle basin puzzle requires all four correct potions before revealing the ancient symbol', () => {
@@ -2083,13 +2202,24 @@ test('Blood Moon clocks require the proper hands and both poem times before the 
   hand({ player, objectId: 61656, itemId: api.core.ItemIdentifiers.SMALL_CLOCK_HAND, location: { x: 2344, y: 7372, z: 0 }, handled: false });
   hand({ player, objectId: 61657, itemId: api.core.ItemIdentifiers.LARGE_CLOCK_HAND, location: { x: 2350, y: 7372, z: 0 }, handled: false });
   const adjusted = { west: 0, east: 0 };
+  let largestClockPrompt = 0;
+  const promptedClockValues = new Set();
   api.sendMultiChatboxPrompt = (who, title, ...pairs) => {
+    largestClockPrompt = Math.max(largestClockPrompt, pairs.length / 2);
     if (title.startsWith('Adjust the')) {
       const side = title.includes('west') ? 'west' : 'east';
       pairs[adjusted[side]++ === 0 ? 1 : 3]();
     } else if (title.startsWith('Set the')) {
       const target = title.includes('large') ? (title.includes('west') ? 11 : 0) : (title.includes('west') ? 9 : 4);
-      pairs[target * 2 + 1]();
+      const targetIndex = pairs.findIndex((option, index) => index % 2 === 0 && option === String(target));
+      if (targetIndex >= 0) {
+        promptedClockValues.add(target);
+        pairs[targetIndex + 1]();
+      } else {
+        const moreIndex = pairs.findIndex((option, index) => index % 2 === 0 && option === 'More...');
+        assert.notEqual(moreIndex, -1, `clock value ${target} remains reachable through the paged menu`);
+        pairs[moreIndex + 1]();
+      }
     }
   };
   interact({ player, objectId: 61656, location: { x: 2344, y: 7372, z: 0 }, handled: false });
@@ -2097,6 +2227,9 @@ test('Blood Moon clocks require the proper hands and both poem times before the 
   interact({ player, objectId: 61657, location: { x: 2350, y: 7372, z: 0 }, handled: false });
   interact({ player, objectId: 61657, location: { x: 2350, y: 7372, z: 0 }, handled: false });
   interact({ player, objectId: 61662, location: { x: 2346, y: 7372, z: 0 }, handled: false });
+  assert.ok(largestClockPrompt <= 5, 'clock value menus stay within the prompt interface limit');
+  assert.deepEqual([...promptedClockValues].sort((a, b) => a - b), [0, 4, 9, 11],
+    'the required times remain selectable across the pages');
   assert.equal(inventory.contains(api.core.ItemIdentifiers.DRAKAN_EMBLEM_2), true);
 });
 
