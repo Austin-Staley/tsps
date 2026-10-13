@@ -5840,6 +5840,15 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(attrs.get('desert-treasure-ii:lassar').whispererStarted, true,
       'disturbing the Odd Figure persists the boss start so the encounter can resume after relog');
     assert.equal(attrs.get('desert-treasure-ii:lassar').cathedralEntered, true);
+    attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), inShadow: false, plazaTentacle: true, whiteKey: false });
+    counts.set(core.ItemIdentifiers.SHADOW_KEY_3, 0);
+    const beforeWhiteKey = groundSpawns.length;
+    playerProcesses[0]({ player });
+    const whiteKeyDrop = groundSpawns.slice(beforeWhiteKey).find(([, item]) => item.getId() === core.ItemIdentifiers.SHADOW_KEY_3);
+    assert.ok(whiteKeyDrop, 'clearing the Plaza barrier exposes the white shadow key as a normal ground pickup');
+    assert.deepEqual([whiteKeyDrop[2].getX(), whiteKeyDrop[2].getY()], [2597, 6392], 'the white key uses its QuestHelper ground-item tile');
+    groundPickupHooks[0]({ player, groundItemId: core.ItemIdentifiers.SHADOW_KEY_3, location: { x: 2597, y: 6392, z: 0 } });
+    assert.equal(attrs.get('desert-treasure-ii:lassar').whiteKey, true, 'taking the visible white key unlocks the palace devices');
     const deviceState = { ...attrs.get('desert-treasure-ii:lassar'), inShadow: true, whiteKey: true, sanity: 100 };
     attrs.set('desert-treasure-ii:lassar', deviceState);
     counts.set(core.ItemIdentifiers.SHADOW_BLOCKER, 1);

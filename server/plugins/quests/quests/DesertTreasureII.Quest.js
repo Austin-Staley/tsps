@@ -6363,15 +6363,8 @@ module.exports = function registerDesertTreasureII(api) {
       && (option === "destroy" || option === "burn" || option === "clear" || option === "open")) {
       if (!has(p, I.SUPERIOR_SHADOW_TORCH)) { p.sendMessage("The deeper tentacles only yield to the superior shadow torch."); return true; }
       setLassar(p, { ...state, plazaTentacle: true });
+      registerLassarGroundItem(p, I.SHADOW_KEY_3, 2597, 6392);
       p.sendMessage("The superior torch burns through the tentacles south of the Plaza.");
-      return true;
-    }
-    if (x === 2597 && y === 6392 && !state.inShadow && [48228, 48229, 48230, 48231].includes(visibleId)
-      && (option === "open" || option === "search")) {
-      if (!state.plazaTentacle) { p.sendMessage("The white-key house is still sealed by shadow tentacles."); return true; }
-      if (!has(p, I.SHADOW_KEY_3)) p.getInventory().adds(I.SHADOW_KEY_3, 1);
-      setLassar(p, { ...state, whiteKey: true });
-      p.sendMessage("You search the opened house and take the white shadow key.");
       return true;
     }
     if (state.inShadow && visibleId === 48253 && x >= 2308 && x <= 2321 && y >= 6440 && y <= 6455
@@ -6716,11 +6709,14 @@ module.exports = function registerDesertTreasureII(api) {
     if (state.animaSchematicFound && !state.animaSchematic && !has(p, I.ANIMA_PORTAL_SCHEMATIC)) {
       registerLassarGroundItem(p, I.ANIMA_PORTAL_SCHEMATIC, 2324, 6402);
     }
+    if (state.plazaTentacle && !state.whiteKey && !has(p, I.SHADOW_KEY_3)) {
+      registerLassarGroundItem(p, I.SHADOW_KEY_3, 2597, 6392);
+    }
   }
 
   function handleLassarGroundItemPickup(event) {
     const { player: p, groundItemId, location } = event;
-    if (stage(p) !== S.WHISPERER || ![I.BASIC_SHADOW_TORCH_SCHEMATIC, I.REVITALISING_IDOL_SCHEMATIC, I.SHADOW_KEY_2,
+    if (stage(p) !== S.WHISPERER || ![I.BASIC_SHADOW_TORCH_SCHEMATIC, I.REVITALISING_IDOL_SCHEMATIC, I.SHADOW_KEY_2, I.SHADOW_KEY_3,
       I.SHADOW_KEY_4, I.SHADOW_BLOCKER_SCHEMATIC, I.SHADOW_KEY_5, I.SHADOW_KEY,
       I.SUPERIOR_SHADOW_TORCH_SCHEMATIC, I.ANIMA_PORTAL_SCHEMATIC].includes(groundItemId)) return;
     const state = p.getAttribute(LASSAR) ?? {};
@@ -6735,6 +6731,7 @@ module.exports = function registerDesertTreasureII(api) {
     const blockerSchematic = groundItemId === I.SHADOW_BLOCKER_SCHEMATIC;
     const greenShadowKey = groundItemId === I.SHADOW_KEY_5;
     const purpleShadowKey = groundItemId === I.SHADOW_KEY;
+    const whiteShadowKey = groundItemId === I.SHADOW_KEY_3;
     const firstThree = state.entered && (state.teleporters ?? []).slice(0, 3).every(Boolean);
     const accessible = basicTorchSchematic ? x === 2353 && y === 6367 && state.doorUnlocked && state.inShadow
       : idolSchematic ? x === 2676 && y === 6422 && state.tentacles?.["2417,6413"]
@@ -6743,6 +6740,7 @@ module.exports = function registerDesertTreasureII(api) {
       : blockerSchematic ? x === 2591 && y === 6380 && firstThree
             : greenShadowKey ? x === 2581 && y === 6388 && state.blockerSchematic
               : purpleShadowKey ? x === 2592 && y === 6352 && state.greenKey
+                : whiteShadowKey ? x === 2597 && y === 6392 && state.plazaTentacle && !state.inShadow
           : superiorSchematic ? x === 2381 && y === 6423 && state.pubOpened && state.inShadow
             : x === 2324 && y === 6402 && state.animaSchematicFound && state.inShadow;
     if (!accessible) {
@@ -6760,6 +6758,7 @@ module.exports = function registerDesertTreasureII(api) {
       ...(blockerSchematic ? { blockerSchematic: true } : {}),
       ...(greenShadowKey ? { greenKey: true } : {}),
       ...(purpleShadowKey ? { purpleKey: true } : {}),
+      ...(whiteShadowKey ? { whiteKey: true } : {}),
     });
   }
 
