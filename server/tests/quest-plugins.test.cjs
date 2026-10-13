@@ -7851,6 +7851,26 @@ test('Song of the Elves gives the real stackable explosive potion with one free 
   talkElena({ player, npcId: api.core.NpcIdentifiers.ELENA, option: 'Talk-to', definition: elena, target: elena });
   assert.equal(items.size, 0, 'a full inventory still preserves the supply instead of silently dropping it');
   assert.ok(player.messages?.some((message) => message.includes('one inventory space')));
+
+  attributes.set('quest.song_of_the_elves.camp-holes', 127);
+  attributes.set('quest.song_of_the_elves.late-chapter', 18);
+  quest.setStage(player, 190);
+  handlers.custom.get('npc-dialogue:choice').find(h => h.name === 'handleDialogueChoice')({
+    player, option: "I'm ready.", definition: baxtorian,
+  });
+  assert.equal(attributes.get('quest.song_of_the_elves.camp-defense'), undefined,
+    'the four-minute timer and attackers wait while the meeting plays');
+  const finalLine = { player, text: 'As am I.' };
+  handlers.custom.get('npc-dialogue:line').find(h => h.name === 'finishCampMeetingLine')(finalLine);
+  assert.equal(attributes.get('quest.song_of_the_elves.camp-defense'), undefined,
+    'holding the final speech does not start the attack');
+  assert.equal(typeof finalLine.after, 'function');
+  finalLine.after();
+  const endsAt = attributes.get('quest.song_of_the_elves.camp-defense');
+  assert.equal(endsAt, api.core.World.getProcessCycle() + 400);
+  finalLine.after();
+  assert.equal(attributes.get('quest.song_of_the_elves.camp-defense'), endsAt,
+    'repeated continuation does not restart the timer');
 });
 
 test('Song of the Elves starts Essyllt again when core death cleanup left a stale NPC reference', () => {
@@ -9033,6 +9053,13 @@ test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clu
   areas[0].process(player);
   attributes.set('quest.song_of_the_elves.ithell-clue-stage', 2);
   assert.equal(spawned.at(-1).id, base.core.NpcIdentifiers.LADY_KELYN_ITHELL);
+  custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'U-Vihn' });
+  const spawnCount = spawned.length;
+  areas[0].process(player);
+  assert.equal(attributes.get('quest.song_of_the_elves.ithell-kelyn-npc'), null,
+    'Kelyn leaves as soon as she is recruited');
+  areas[0].process(player);
+  assert.equal(spawned.length, spawnCount, 'the departed elder is not spawned again during the remaining clue route');
 
   choices.at(-1)({ player, option: "What's Lady Meilyr's clue?", definition: { getName: () => 'Baxtorian' } });
   const clues = [base.core.ItemIdentifiers.CLUE_SCROLL_2, base.core.ItemIdentifiers.CLUE_SCROLL_3,
@@ -16155,7 +16182,7 @@ test('Song of the Elves remembers Elena’s earlier answer and fills the cave di
   const fillName = handlers.custom.get('npc-dialogue:line').find(handler => handler.name === 'fillOrbCavePlayerName');
   const line = { player, text: 'Is [Tim/Sue/Sam] here, [Tim/Sue/Sam]?' };
   fillName(line);
-  assert.equal(line.text, 'Is SoteTest here, SoteTest?');
+  assert.equal(line.text, 'Is Sam here, Sam?', 'the player gives the transcript fake identity instead of their actual name');
 });
 
 test('Song of the Elves uses all six real waterfall pillars, reading, clue retries and the awakened Baxtorian',()=>{

@@ -324,11 +324,13 @@ module.exports = function registerSongOfTheElves(api) {
         player.setAttribute(LLETYA_BAXTORIAN_NPC, null);
       }
       const kelyn = player.getAttribute(ITHELL_KELYN_NPC);
-      if (currentChapter(player) === 16 && player.getAttribute(ITHELL_STATUE) === true && !kelyn?.isRegistered?.()) {
+      const awaitingKelyn = currentChapter(player) === 16 && player.getAttribute(ITHELL_STATUE) === true &&
+        player.getAttribute(ITHELL_RECRUITED) !== true;
+      if (awaitingKelyn && !kelyn?.isRegistered?.()) {
         const npc = api.spawnNpc({ id: NpcIdentifiers.LADY_KELYN_ITHELL, x: 2334, y: 3169, z: 0,
           wanderRadius: 0, owner: player, ownerOnly: true });
         if (npc) player.setAttribute(ITHELL_KELYN_NPC, npc);
-      } else if ((currentChapter(player) !== 16 || player.getAttribute(ITHELL_STATUE) !== true) && kelyn) {
+      } else if (!awaitingKelyn && kelyn) {
         api.removeNpc(kelyn);
         player.setAttribute(ITHELL_KELYN_NPC, null);
       }
@@ -1970,8 +1972,9 @@ module.exports = function registerSongOfTheElves(api) {
         return;
       }
       spawnCampNpc(area, NpcIdentifiers.LORD_IORWERTH_2, 2448, 6110);
+      const state = campInstances.get(area);
+      if (state) state.meetingPending = true;
       startTranscript(api, player, NpcIdentifiers.LORD_IORWERTH_2, PAGE, "sealing-the-underground-pass-meeting-with-lord-iorwerth");
-      beginCampDefense(player, area);
       return;
     }
     if (event.option === "Climb through it." && [3, 4, 5, 6].includes(currentChapter(event.player))) {
@@ -2455,7 +2458,7 @@ module.exports = function registerSongOfTheElves(api) {
     if (!event?.player || typeof event.text !== "string" || !event.text.includes("[Tim/Sue/Sam]") ||
       currentChapter(event.player) !== 14 ||
       (event.player.getAttribute(ORB_CAVE_ENTRY_PENDING) !== true && !(event.player.getArea?.() instanceof OrbSupplyArea))) return;
-    event.text = event.text.replaceAll("[Tim/Sue/Sam]", String(event.player.getUsername?.() ?? "adventurer"));
+    event.text = event.text.replaceAll("[Tim/Sue/Sam]", "Sam");
   }
 
   function elenaPreMeetingCondition(event) {
@@ -2661,6 +2664,18 @@ module.exports = function registerSongOfTheElves(api) {
       player.sendMessage("All seven charges are in place. Return to Baxtorian and report that the camp is ready.");
     }
     return true;
+  }
+
+  function finishCampMeetingLine(event) {
+    const player = event?.player;
+    const area = player?.getArea?.();
+    const state = area && campInstances.get(area);
+    if (!state?.meetingPending || currentChapter(player) !== 18 || event.text !== "As am I.") return;
+    event.after = () => {
+      if (!state.meetingPending || player.getArea?.() !== area || currentChapter(player) !== 18) return;
+      state.meetingPending = false;
+      beginCampDefense(player, area);
+    };
   }
 
   function beginCampDefense(player, area) {
@@ -4037,6 +4052,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onObjectInteraction("Blocked Crevice", {Inspect:useTrahaearnCrevice,Mine:useTrahaearnCrevice});
   api.onObjectInteraction("Crevice", {Enter:useTrahaearnCrevice});
   api.onNpcInteraction("Elderly Elf", {Investigate:inspectTrahaearn,"Fix-exoskeleton":fixTrahaearn});
+  api.onCustomEvent("npc-dialogue:line", finishCampMeetingLine);
   api.onCustomEvent("npc-dialogue:line", finishPreparationLine);
   api.onItemOnObject("Cadantine seed", "Farming patch", plantPreparationSeed, {noted:false});
   api.persistAttribute(PREPARATION_PROGRESS);
