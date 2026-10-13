@@ -4682,7 +4682,7 @@ module.exports = function registerDesertTreasureII(api) {
       return true;
     }
     if (stage(p) === S.WHISPERER && location?.x === 2922 && location.y === 5827 && itemId === I.VERY_LONG_ROPE
-      && [48195, 48196, 48197].includes(objectId)) {
+      && [49477, 48195, 48196, 48197].includes(objectId)) {
       event.handled = true;
       if (!lassar.ramarno || !has(p, I.VERY_LONG_ROPE)) {
         p.sendMessage("Ask Ramarno about the Lassar archaeologists before tying a rope to the sinkhole rock.");
@@ -5976,8 +5976,8 @@ module.exports = function registerDesertTreasureII(api) {
 
     // Prescott's route starts on the real Camdozaal sinkhole. Tying the rope
     // consumes his rope, and descending lands at Lassar's cache rope entrance.
-    if (x === 2922 && y === 5827 && z === 0 && [48195, 48196, 48197].includes(visibleId)) {
-      if (option === "use" || option === "tie") {
+    if (x === 2922 && y === 5827 && z === 0 && [49477, 48195, 48196, 48197].includes(visibleId)) {
+      if (option === "use" || option === "tie" || option === "attach-rope") {
         if (!state.ramarno || !has(p, I.VERY_LONG_ROPE)) {
           p.sendMessage("Ask Ramarno about the archaeologists, then get Prescott's very long rope.");
           return true;
@@ -5987,7 +5987,7 @@ module.exports = function registerDesertTreasureII(api) {
         p.sendMessage("You tie Prescott's very long rope securely to the rock.");
         return true;
       }
-      if (option === "climb-down" || option === "climb down" || option === "enter" || option === "climb") {
+      if (option === "climb-down" || option === "climb down" || option === "climb-rope" || option === "enter" || option === "climb") {
         if (!state.ropeTied) { p.sendMessage("The sinkhole is too deep to descend without a rope."); return true; }
         setLassar(p, { ...state, entered: true });
         p.moveTo(new api.core.Location(2587, 6436, 0));
@@ -6348,6 +6348,16 @@ module.exports = function registerDesertTreasureII(api) {
     return false;
   }
 
+  function routeLassarSinkhole(event) {
+    const location = event.object?.getLocation?.();
+    if (stage(event.player) !== S.WHISPERER || event.clickType !== 1 || !location
+      || location.getX() !== 2922 || location.getY() !== 5827 || location.getZ() !== 0
+      || ![49477, 48195, 48196, 48197].includes(event.objectId)) return;
+    // The cache rock occupies the only tile adjacent to the hole. Route the
+    // normal Attach-rope/Climb-rope click to its walkable southern approach.
+    event.destination = { x: 2922, y: 5826, z: 0 };
+  }
+
   function registerLassarGroundItem(p, itemId, x, y, z = 0) {
     const manager = api.getItemOnGroundManager?.();
     if (!manager?.registerLocation) return;
@@ -6432,6 +6442,7 @@ module.exports = function registerDesertTreasureII(api) {
   [GOLEM_INSPECTED, ALTAR_INSPECTED, TOTEMS_CHARGED, TOTEM_MASK, BANIKAN_BRIEFED].forEach((key) => api.persistAttribute(key));
   api.onObjectInteraction(handleObjectInteraction);
   api.onObjectRoute(handleScarStoneRoute);
+  api.onObjectRoute(routeLassarSinkhole);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onGroundItemPickup(handleLassarGroundItemPickup);
   api.onItemOnItem(handleItemOnItem, { noted: false });

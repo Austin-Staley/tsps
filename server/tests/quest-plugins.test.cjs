@@ -4478,7 +4478,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
 
 test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the cathedral and blackstone fragment behind real caches', () => {
   const { api: base, handlers: baseHandlers } = mockApi();
-  const objectHooks = [], itemOnObjectHooks = [], itemActionHooks = [], itemOnItemHooks = [], groundPickupHooks = [], actionHooks = [], choiceHooks = [], interactions = [], transcripts = [], groundSpawns = [], playerProcesses = [], spawnedNpcs = [];
+  const objectHooks = [], objectRouteHooks = [], itemOnObjectHooks = [], itemActionHooks = [], itemOnItemHooks = [], groundPickupHooks = [], actionHooks = [], choiceHooks = [], interactions = [], transcripts = [], groundSpawns = [], playerProcesses = [], spawnedNpcs = [];
   const counts = new Map();
   const varbits = new Map();
   const core = {
@@ -4493,6 +4493,7 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
         return { ...spec, isRegistered: () => true };
       }
       : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
+        : prop === 'onObjectRoute' ? (handler) => objectRouteHooks.push(handler)
         : prop === 'onItemOnObject' ? (handler) => itemOnObjectHooks.push(handler)
           : prop === 'onItemAction' ? (handler) => itemActionHooks.push(handler)
             : prop === 'onItemOnItem' ? (handler) => itemOnItemHooks.push(handler)
@@ -4539,6 +4540,10 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(attrs.get('desert-treasure-ii:lassar').ramarno, true, 'the player’s actual dialogue choice advances the Lassar introduction');
     assert.equal(varbits.get(15126), 2);
     assert.deepEqual(spawnedNpcs[0], { id: core.NpcIdentifiers.PRESCOTT, x: 2975, y: 5794, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
+    const sinkholeRoute = { player, object: { getLocation: () => ({ getX: () => 2922, getY: () => 5827, getZ: () => 0 }) }, objectId: 49477, definition: { id: 48196 }, clickType: 1, destination: null };
+    objectRouteHooks.at(-1)(sinkholeRoute);
+    assert.deepEqual(sinkholeRoute.destination, { x: 2922, y: 5826, z: 0 },
+      'the cached sinkhole rock routes to its reachable adjacent tile');
     const prescottCondition = baseHandlers.condition.find((handler) => handler({ player, npcId: core.NpcIdentifiers.PRESCOTT, stepId: 'yRRbfR' }) === true);
     assert.equal(prescottCondition?.({ player, npcId: core.NpcIdentifiers.PRESCOTT, stepId: 'kMM5yZ' }), false,
       'the canonical transcript condition skips the pre-Ramarno branch after its dialogue handshake');
@@ -4552,10 +4557,14 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-prescott-talking-to-prescott-again',
       'carrying Prescott’s rope selects the reminder, not the after-entry transcript');
     assert.equal(prescottCondition({ player, npcId: core.NpcIdentifiers.PRESCOTT, stepId: 'G_Oyly' }), true);
-    const rock = { player, objectId: 48195, location: { x: 2922, y: 5827, z: 0 }, option: 'Climb-down' };
-    assert.equal(interact(rock), true, 'the sinkhole cannot be descended before the rope is tied');
-    assert.equal(itemOnObjectHooks[0]({ player, objectId: 48195, itemId: core.ItemIdentifiers.VERY_LONG_ROPE, location: rock.location }), true);
-    assert.equal(interact(rock), true);
+    const rock = { player, objectId: 49477, definition: { id: 48196 }, location: { x: 2922, y: 5827, z: 0 }, option: 'Attach-rope' };
+    assert.equal(interact({ ...rock, definition: { id: 48197 }, option: 'Climb-rope' }), true,
+      'the sinkhole cannot be descended before the rope is tied');
+    assert.equal(player.location, undefined, 'blocked descent does not move the player');
+    assert.equal(interact(rock), true, 'the cache loc parent resolves to the attach-rope child action');
+    assert.equal(counts.get(core.ItemIdentifiers.VERY_LONG_ROPE), 0);
+    assert.equal(attrs.get('desert-treasure-ii:lassar').ropeTied, true);
+    assert.equal(interact({ ...rock, objectId: 49477, definition: { id: 48197 }, option: 'Climb-rope' }), true);
     assert.equal(player.location.x, 2587);
     assert.equal(player.location.y, 6436);
     const portals = [[2593, 6424, 49479], [2617, 6417, 49480], [2611, 6379, 49482], [2599, 6341, 49483], [2643, 6434, 49484], [2652, 6405, 49481]];
