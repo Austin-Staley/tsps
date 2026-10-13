@@ -4270,7 +4270,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     const galleryPassageAlreadyUnlocked = transition?.id === CASTLE_DOOR_IDS.CRESCENT &&
       transition.x === 2343 && transition.y === 7416 && transition.from === CASTLE_ROOM.GALLERY_HALL &&
       player.getAttribute(GALLERY_CHEST_ATTRIBUTE)?.key === true;
-    if (moonDoorKey && !hasItem(player, moonDoorKey[0]) && !galleryPassageAlreadyUnlocked) {
+    const throneKeyAlreadyClaimed = player.getAttribute(THRONE_PUZZLE_ATTRIBUTE)?.keyClaimed === true;
+    const thronePassageAlreadyUnlocked = moonDoorKey?.[0] === CASTLE_BOOK_ITEMS.halfMoonKey && throneKeyAlreadyClaimed;
+    if (moonDoorKey && !hasItem(player, moonDoorKey[0]) &&
+      !galleryPassageAlreadyUnlocked && !thronePassageAlreadyUnlocked) {
       event.handled = true;
       player.sendMessage(`The door is locked. You need the ${moonDoorKey[1]}.`);
       return;
@@ -4278,7 +4281,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (transition) {
       const currentRoom = Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) || CASTLE_ROOM.LOBBY;
       const currentFloor = Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) || CASTLE_GROUND_FLOOR;
-      if (transition.key && !hasItem(player, transition.key)) {
+      if (transition.key && !hasItem(player, transition.key) &&
+        !(transition.key === CASTLE_BOOK_ITEMS.halfMoonKey && throneKeyAlreadyClaimed)) {
         event.handled = true;
         player.sendMessage(`The door is locked. You need the ${transition.keyName}.`);
         return;
