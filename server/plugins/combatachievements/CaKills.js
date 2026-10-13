@@ -74,6 +74,7 @@ function npcName(npc) {
 }
 
 function onNpcDeath(event) {
+  if (event?.npc?.getMaxHitpoints?.() === 1) return;
   const player = event?.killer;
   if (!player?.isPlayer?.() && !player?.getPacketSender) return;
   const monster = Data.monsterForNpc(npcName(event.npc) ?? "");

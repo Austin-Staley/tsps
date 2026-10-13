@@ -209,6 +209,30 @@ test("as captured: the account summary row reopens the last screen; the burger m
   assert.deepEqual(player.log.slice(0, 3), ["varbit 12860=23", "varbit 12858=0", "varbit 17940=1"], "the progress bar: Tasks filtered to the boss");
 });
 
+test("one-hit echoes sharing a boss name cannot award its kill or speed achievements", () => {
+  const player = createPlayer();
+  player.getFightType = () => ({ getBonusType: () => 0 });
+  player.getEquipment = () => ({ getItems: () => [] });
+  const monster = Data.monsterNamed("Fragment of Seren");
+  const task = named("Fragment of Seren Speed-Trialist");
+  const npc = max => ({ isNpc: () => true, isPlayer: () => false,
+    getId: () => 8917, getHitpoints: () => 0, getMaxHitpoints: () => max,
+    getCurrentDefinition: () => ({ getName: () => "Fragment of Seren" }) });
+  const hit = { getCombatType: () => "MAGIC", getTotalDamage: () => 1 };
+  const echo = npc(1);
+  Fights.onDealt({ player, target: echo, hit });
+  Kills.onNpcDeath({ killer: player, npc: echo });
+  Fights.onNpcDeath({ killer: player, npc: echo });
+  assert.equal(Kills.killCount(player, monster), 0);
+  assert.equal(Progress.isComplete(player, task.id), false);
+  const boss = npc(1000);
+  Fights.onDealt({ player, target: boss, hit });
+  Kills.onNpcDeath({ killer: player, npc: boss });
+  Fights.onNpcDeath({ killer: player, npc: boss });
+  assert.equal(Kills.killCount(player, monster), 1);
+  assert.equal(Progress.isComplete(player, task.id), true);
+});
+
 test("fights: a rule reads how the monster died", () => {
   const player = createPlayer();
   player.prayers = new Set([18]);
