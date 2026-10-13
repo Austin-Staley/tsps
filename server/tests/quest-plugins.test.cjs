@@ -3904,6 +3904,13 @@ test('Desert Treasure II pathfinder grants only its owner perfect accuracy and t
   distance = 3; roll.attacker = { getLocation: player.getLocation };
   handlers.combatHitRoll.forEach(h => h(roll));
   assert.equal(roll.forceAccurate, false, 'another player cannot use the owner aura');
+  roll.attacker = player; distance = 8; boss.__dt2LeviathanEnraged = false;
+  player.getCombat = () => ({ getCastSpell: () => ({ getName: () => 'Shadow Barrage' }) });
+  handlers.combatHitRoll.forEach(h => h(roll));
+  assert.equal(roll.forceAccurate, true, 'a normal shadow cast always stuns before enrage');
+  boss.__dt2LeviathanEnraged = true; roll.forceAccurate = false;
+  handlers.combatHitRoll.forEach(h => h(roll));
+  assert.equal(roll.forceAccurate, false, 'shadow casting cannot bypass enrage immunity');
 });
 
 test('Desert Treasure II prison escape leads to the cache Duke arena and requires two real poisons', async () => {

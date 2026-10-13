@@ -424,6 +424,7 @@ module.exports = function registerDesertTreasureII(api) {
   const SCAR_LEVIATHAN_READY = "desert-treasure-ii:scar-leviathan-ready";
   const SCAR_LEVIATHAN_KILLED = "desert-treasure-ii:scar-leviathan-killed";
   const SCAR_PERSTEN_AT_SHIP = "desert-treasure-ii:persten-at-ship";
+  const SCAR_SHIP_REACHED = "desert-treasure-ii:scar-ship-reached";
   const SCAR_PERSTEN_LEFT_SHIP = "desert-treasure-ii:persten-left-ship";
   const SCAR_LEVIATHAN_DEBRIS_SEARCHED = "desert-treasure-ii:leviathan-debris-searched";
   const SCAR_AXON_TERMINALS = "desert-treasure-ii:scar-axon-terminals";
@@ -1448,7 +1449,13 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function leviathanHitRoll(event) {
-    if (event.target?.__dt2Leviathan && nearLeviathanPathfinder(event.attacker, event.target)) event.forceAccurate = true;
+    const boss = event.target;
+    if (!boss?.__dt2Leviathan || event.attacker !== boss.getOwner?.()) return;
+    const combat = event.attacker.getCombat?.();
+    const spell = combat?.getCastSpell?.() ?? combat?.getSelectedSpell?.();
+    // Shadow spells always stun this boss, including casts in ranged equipment.
+    if ((!boss.__dt2LeviathanEnraged && /shadow (burst|blitz|barrage|rush)/i.test(spell?.getName?.() ?? ""))
+      || nearLeviathanPathfinder(event.attacker, boss)) event.forceAccurate = true;
   }
 
   function modifyLeviathanHit({ npc, hit }) {
@@ -1464,7 +1471,7 @@ module.exports = function registerDesertTreasureII(api) {
       || target.__dt2LeviathanEnraged) return;
     const name = spell?.getName?.() ?? spell?.name ?? "";
     if (!/shadow (burst|blitz|barrage|rush)/i.test(name)) return;
-    target.__dt2LeviathanStunnedUntil = api.core.World.getProcessCycle() + 6;
+    target.__dt2LeviathanStunnedUntil = api.core.World.getProcessCycle() + 15;
     target.__dt2LeviathanPendingAttack = null;
     attacker.sendMessage("The shadow spell stuns the Leviathan, interrupting its attack.");
   }
@@ -1814,7 +1821,7 @@ module.exports = function registerDesertTreasureII(api) {
         : p.getAttribute(SCAR_LEVIATHAN_KILLED) ? 42 : 40);
     if (!p.getAttribute(SCAR_LEVIATHAN_KILLED)) spawnBoss(p, "leviathan");
     else {
-      if (p.getAttribute(SCAR_PERSTEN_AT_SHIP)) p.moveTo(area.tile(42, 46, 0));
+      if (p.getAttribute(SCAR_SHIP_REACHED) || p.getAttribute(SCAR_PERSTEN_LEFT_SHIP)) p.moveTo(area.tile(42, 46, 0));
       spawnScarPerstenAtShip(p, area);
     }
     return area;
@@ -3887,6 +3894,7 @@ module.exports = function registerDesertTreasureII(api) {
       }
       if ([49529, 49210].includes(visibleId) && leviathanTile.x === 2096 && leviathanTile.y === 6382) {
         if (!p.getAttribute(SCAR_LEVIATHAN_KILLED)) { p.sendMessage("The stepping stone is out of reach while the Leviathan attacks."); return true; }
+        p.setAttribute(SCAR_SHIP_REACHED, true);
         p.moveTo(p.getAttribute(ATTR_LEVIATHAN_AREA).tile(42, 46, 0));
         p.sendMessage("You cross the stepping stone to Persten's ship.");
         return true;
@@ -6208,7 +6216,7 @@ module.exports = function registerDesertTreasureII(api) {
     SCAR_TREE_COMPLETE, SCAR_LEECH_GROWTHS_REPAIRED, SCAR_BLOOD_RED_COUNT, SCAR_BLOOD_WHITE_COUNT,
     SCAR_BLOOD_RED_REPAIRED, SCAR_BLOOD_WHITE_REPAIRED, SCAR_LEECH_COMPLETE, SCAR_BOAT3_BURNED,
     SCAR_BOAT3_ROOM, SCAR_PERSTEN_ROOM3_TALKED, SCAR_LEVIATHAN_READY, SCAR_LEVIATHAN_KILLED,
-    SCAR_PERSTEN_AT_SHIP, SCAR_PERSTEN_LEFT_SHIP, SCAR_LEVIATHAN_DEBRIS_SEARCHED,
+    SCAR_PERSTEN_AT_SHIP, SCAR_SHIP_REACHED, SCAR_PERSTEN_LEFT_SHIP, SCAR_LEVIATHAN_DEBRIS_SEARCHED,
     "desert-treasure-ii:scar-boat3-chest-open", "desert-treasure-ii:scar-boat3-tablet-read"].forEach((key) => api.persistAttribute(key));
   [SCAR_GUARDIAN_ACCEPTED, SCAR_MAZE_ONE_ENTERED, SCAR_TETHER_DESTROYED, SCAR_PATH_COMPLETE].forEach((key) => api.persistAttribute(key));
   api.persistAttribute(SCAR_CATALYST_PROGRESS);
