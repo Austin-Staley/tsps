@@ -40,9 +40,8 @@ function fixture(full: DrawRange[], far: DrawRange[], planes?: Uint8Array) {
     // Scene and loc groups use the same fixture ranges; make scene empty for draw assertions.
     data.drawRanges = [];
     data.drawRangesLod = [];
-    const square = WebGPUMapSquare.load(device as any, {
-        depthPipelines: [{}, {}], depthTextureBindGroup: {},
-    } as any, data as any, 0, 0);
+    const resources = { depthPipelines: [{}, {}], depthTextureBindGroup: {} };
+    const square = WebGPUMapSquare.load(device as any, resources as any, data as any, 0, 0);
     const draws: { count: number; first: number; uniform: number }[] = [];
     let uniform = -1;
     const pass = {
@@ -58,8 +57,20 @@ function fixture(full: DrawRange[], far: DrawRange[], planes?: Uint8Array) {
         tileX: 0, tileZ: 0, distance: 40, lodDistance: 8,
         camera: { intersectsBox: (box: number[][]) => box[0][0] < 40 } as Frustum,
     };
-    return { square, draws, pass, context, data };
+    return { square, draws, pass, context, data, device, resources };
 }
+
+test("WebGPU editor previews load and draw without collision metadata", () => {
+    const f = fixture([range(0, 6, 0)], []);
+    const preview = WebGPUMapSquare.load(f.device as any, f.resources as any,
+        { ...f.data, collisionDatas: undefined } as any, -1, 0);
+    assert.deepEqual(preview.collisionMaps, []);
+    assert.equal(preview.getCollisionFlag(0, 7, 9), 0);
+    preview.drawOpaque(f.pass, 3, f.context);
+    assert.equal(f.draws.length, 1, "draw-only previews still render their model");
+    preview.delete();
+    f.square.delete();
+});
 
 test("WebGPU retains collision flags and refreshes them with scenery metadata", () => {
     const f = fixture([], []);

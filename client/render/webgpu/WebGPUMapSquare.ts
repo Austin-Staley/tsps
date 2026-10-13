@@ -476,7 +476,7 @@ export class WebGPUMapSquare implements MapSquare {
             groundMaterialTexture,
         );
         for (const kind of GROUP_ORDER) square.setGroup(kind, mapData);
-        square.collisionMaps = mapData.collisionDatas.map(CollisionMap.fromData);
+        square.collisionMaps = (mapData.collisionDatas ?? []).map(CollisionMap.fromData);
         square.tilePresenceByLevel = mapData.tilePresenceByLevel;
         square.tileRenderFlags = mapData.tileRenderFlags;
         square.tileGroundMaterials = mapData.groundMaterials;
