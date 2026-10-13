@@ -53,7 +53,7 @@ function acidEnded(player) {
 /** onPlayerDealtDamage: hits on her during the acid phase. */
 function dealt({ player, target }) {
   const walk = states.get(player)?.walk;
-  if (!walk || walk.spoiled || target?.getId?.() !== Shared.AWAKE_ID) return;
+  if (!walk || walk.spoiled || !Shared.isAwakeNpc(target)) return;
   walk.hits++;
   if (walk.hits >= THE_WALK_HITS) {
     walk.spoiled = true;

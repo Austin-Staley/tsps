@@ -15,6 +15,8 @@ const SUPPLY_CHEST = 32758;
 const OPEN_SUPPLY_CHEST = 32759;
 const DAWNBRINGER_SKELETON = 32741;
 const TREASURE_ENTRANCE = 32738;
+// The treasure trapdoor is on the throne tile; the arena's south side is the reachable approach.
+const TREASURE_ENTRANCE_TILE = [3167,4323,0];
 const REWARD_CHEST = 32992;
 const TELEPORT_CRYSTAL = 32996;
 const SHADOW_EXIT = 33037;
@@ -99,6 +101,8 @@ const VERZIK_INITIAL = 10830;
 const VERZIK_PHASES = [10831, 10833, 10835];
 const VERZIK_PURPLE = 10844;
 const VERZIK_RED = 10845;
+// Wiki: the 12-tick red-crab summon converts damage to healing for its first 8 ticks.
+const VERZIK_RED_HEAL_TICKS = 8;
 const VERZIK_WEB = 10837;
 const VERZIK_TORNADO = 10846;
 const ROOMS = [
@@ -212,7 +216,7 @@ function roomComplete(raid) {
     object(raid,SUPPLY_CHEST,ROOMS[raid.room].supplies);
   }
   if(raid.room===5) {
-    object(raid,TREASURE_ENTRANCE,[3170,4327,0]);
+    object(raid,TREASURE_ENTRANCE,TREASURE_ENTRANCE_TILE);
     raid.player.sendMessage("Verzik flees. Enter the treasure room to finish your raid.");
   }
   if(raid.mode==="bmr") {
@@ -471,7 +475,7 @@ function spawnVerzikAdds(raid,red=false) {
   const id=red?VERZIK_RED:VERZIK_PURPLE;
   const adds=[spawn(raid,id,[3162,4316,0],{red,purple:!red})];
   if(red)adds.push(spawn(raid,id,[3177,4316,0],{red:true}));
-  if(red)raid.redShield=raid.tick+12;
+  if(red)raid.redShield=raid.tick+VERZIK_RED_HEAL_TICKS;
   later(raid,12,()=>{for(const n of adds){if(alive(n)){raid.boss.heal(n.getHitpoints());remove(raid,n);}}});
 }
 function verzik(raid) {
@@ -749,4 +753,4 @@ module.exports=function registerEntryTheatreOfBlood(pluginApi) {
   api.onItemAction(item);
   api.onPlayerLogin(login);
 };
-module.exports._test={ROOMS,NYLO_WAVES,BMR_ENCOUNTERS,BMR_WAVE,readNyloSpec,firstNyloWaveAt,soloNyloPillarHitpoints,activeNylocas,updateNyloExpiry,typeIndex,quadrant,behindBloatPillar,bloatHands,dealtDamage,modifyVerzikHit,verzikBeforeDeath,npcDeath,NPC_RAIDS,startMaze,maiden,roomComplete,nextWave,process,createArea,RAIDS,xarpus,splitNylocas,approachNylocas,attackNylocas,allowDawnbringer,item,choosePillar,pillarTarget,startBmr,startRoom,passage,ensureEscapeCrystal};
+module.exports._test={ROOMS,NYLO_WAVES,BMR_ENCOUNTERS,BMR_WAVE,TREASURE_ENTRANCE_TILE,readNyloSpec,firstNyloWaveAt,soloNyloPillarHitpoints,activeNylocas,updateNyloExpiry,typeIndex,quadrant,behindBloatPillar,bloatHands,dealtDamage,modifyVerzikHit,verzikBeforeDeath,npcDeath,spawnVerzikAdds,NPC_RAIDS,startMaze,maiden,roomComplete,nextWave,process,createArea,RAIDS,xarpus,splitNylocas,approachNylocas,attackNylocas,allowDawnbringer,item,choosePillar,pillarTarget,startBmr,startRoom,passage,ensureEscapeCrystal};

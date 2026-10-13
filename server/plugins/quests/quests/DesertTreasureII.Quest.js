@@ -7,6 +7,8 @@ module.exports = function registerDesertTreasureII(api) {
   const WAR_ROOM_GOLEM_LOC = 49511; // Cache multiloc bases are the actual map objects.
   const WAR_ROOM_ALTAR_LOC = 49512;
   const DIGSITE_CREVICE_LOC = 49510; // Cache dt2_digsite_crevice multiloc has no generated constant.
+  const KORBAL_HERBS_LOC = 49494;
+  const ARGIAN_BUSH_LOC = 49493;
   const S = { STARTED: 1, VAULT: 2, DIG: 3, ROCKS: 4, GUARDIAN: 5, MACHINE: 6, VARDORVIS: 7, LEVIATHAN: 8, SUCELLUS: 9, WHISPERER: 10, FINALE: 11, COMPLETE: 12 };
   // Cache quest dbrow 2343, column 19 completes at 118; QuestHelper records the intervening milestones.
   function nativeProgress(stage, player) {
@@ -93,6 +95,7 @@ module.exports = function registerDesertTreasureII(api) {
   const ATTR_WAR_ROOM = "desert-treasure-ii:war-room";
   const ATTR_STRANGLEWOOD_HIDEOUT = "desert-treasure-ii:stranglewood-hideout";
   const ATTR_STRANGLEWOOD_TEMPLE = "desert-treasure-ii:stranglewood-temple";
+  const SERUM_DISCUSSED = "desert-treasure-ii:kasonde-serum-discussed";
   const ATTR_VARDORVIS_AREA = "desert-treasure-ii:vardorvis-area";
   const ATTR_SCAR_AREA = "desert-treasure-ii:scar-area";
   const ATTR_SCAR_MAZE_ONE = "desert-treasure-ii:scar-maze-one";
@@ -136,6 +139,255 @@ module.exports = function registerDesertTreasureII(api) {
   const KASONDE_POTION = I.STRANGE_POTION_3;
   const VARDORVIS_ENTRY = 49495;
   const KASONDE_MEDALLION_CHEST = 49496;
+  const STRANGLEWOOD_BARRICADE_LOC = 49492;
+  const VARDORVIS_QTE_GROUP = 833;
+  const VARDORVIS_QTE_INIT_SCRIPT = 1816;
+  const VARDORVIS_MELEE_ANIMATION = 10340;
+  const VARDORVIS_STRANGLE_ANIMATION = 10342;
+  const VARDORVIS_SPIKE_WARNING = 2510;
+  const VARDORVIS_HEAD_ANIMATION = 10348;
+  const VARDORVIS_HEAD_PROJECTILE = 2521;
+  const VARDORVIS_AXE_NPC = 12227; // Cache gameval vardorvis_axe has no generated identifier.
+  const vardorvisBleeds = new WeakMap();
+  function startVardorvisBleed(player) {
+    const previous = vardorvisBleeds.get(player);
+    if (previous) api.core.TaskManager.cancelTasks(previous);
+    const key = {};
+    vardorvisBleeds.set(player, key);
+    let left = 5, last = player.getLocation().clone();
+    // The bleed continues after leaving the ritual site.
+    api.core.TaskManager.submit(new (class extends api.core.Task {
+      constructor() { super(2, key); }
+      execute() {
+        if (!player.isRegistered() || player.getHitpoints() <= 0) { vardorvisBleeds.delete(player); this.stop(); return; }
+        player.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(3, api.core.HitMask.RED)]);
+        if (player.getLocation().equals(last)) left--;
+        last = player.getLocation().clone();
+        if (left <= 0) { vardorvisBleeds.delete(player); this.stop(); }
+      }
+    })());
+  }
+
+  const KASONDE_THROW_ANIMATION = 385;
+  const KASONDE_EXPLOSION_ANIMATION = 10384;
+  const KASONDE_POISON_PROJECTILE = 2296;
+  const KASONDE_EXPLOSIVE_PROJECTILE = 2526;
+  const KASONDE_ACID_POOL = 48747;
+  const KASONDE_EXPLOSIVE_POOL = 48749;
+  class KasondeCombat extends api.core.RangedCombatMethod {
+    attackSpeed() { return 3; }
+    attackDistance() { return 8; }
+    start(npc, target) {
+      const melee = npc.getLocation().getDistance(target.getLocation()) <= 1;
+      npc.performAnimation(new api.core.Animation(melee ? 422 : KASONDE_THROW_ANIMATION));
+      if (!melee) api.core.Projectile.createProjectile(npc, target, KASONDE_POISON_PROJECTILE, 40, 57, 43, 31).sendProjectile();
+    }
+    hits(npc, target) {
+      return npc.getLocation().getDistance(target.getLocation()) <= 1
+        ? [new api.core.PendingHit(npc, target, new api.core.MeleeCombatMethod(), 1)] : super.hits(npc, target);
+    }
+  }
+  function kasondePoolDamage(p, orange, direct) {
+    const damage = orange ? 10 + Math.floor(Math.random() * 11) : direct ? 35 + Math.floor(Math.random() * 6) : 6;
+    p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(damage, api.core.HitMask.RED)]);
+    if (orange) for (const prayer of [16, 17, 18]) api.core.PrayerHandler.deactivatePrayer(p, prayer);
+    else api.core.CombatFactory.poisonEntity(p, 6, 2);
+  }
+  function processKasonde(area, p) {
+    const boss = spawned.get(p)?.kasondeBoss;
+    if (Number(p.getAttribute(VARDORVIS_PROGRESS)) !== 19 || !boss?.isRegistered?.() || boss.getHitpoints() <= 0) return;
+    const tick = api.core.World.getProcessCycle();
+    if (area.lastKasondeCycle === tick) return;
+    area.lastKasondeCycle = tick;
+    if (!area.kasondeFight) area.kasondeFight = { nextSpecial: tick + 18, nextHeal: tick + 15, special: 0, throws: [], pools: [], nextPoolHit: tick };
+    const fight = area.kasondeFight;
+    // shortcut: special intervals and heal amounts are inferred, calibrate against a live OSRS fight capture.
+    if (tick >= fight.nextHeal) {
+      boss.setHitpoints(Math.min(boss.getMaxHitpoints(), boss.getHitpoints() + (boss.getHitpoints() <= 80 ? 16 : 8)));
+      fight.nextHeal = tick + 15;
+      p.sendMessage("Kasonde drinks a potion and recovers some health.");
+    }
+    for (const thrown of [...fight.throws]) {
+      if (tick < thrown.lands) continue;
+      fight.throws.splice(fight.throws.indexOf(thrown), 1);
+      if (p.getLocation().equals(thrown.tile)) kasondePoolDamage(p, thrown.orange, true);
+      const previous = fight.pools.find(pool => pool.tile.equals(thrown.tile));
+      if (previous) { p.getPacketSender().sendObjectRemoval(previous.object); api.core.ObjectManager.deregister(previous.object, false); fight.pools.splice(fight.pools.indexOf(previous), 1); }
+      const object = new api.core.GameObject(thrown.orange ? KASONDE_EXPLOSIVE_POOL : KASONDE_ACID_POOL, thrown.tile, 10, 0, area);
+      p.getPacketSender().sendObject(object);
+      fight.pools.push({ ...thrown, object });
+    }
+    if (tick >= fight.nextPoolHit) {
+      const pool = fight.pools.find(pool => pool.tile.equals(p.getLocation()));
+      if (pool) kasondePoolDamage(p, pool.orange, false);
+      fight.nextPoolHit = tick + 5;
+    }
+    if (fight.explosion && tick >= fight.explosion) {
+      const rangedLine = { type: () => api.core.CombatType.RANGED, attackDistance: () => 64 };
+      if (p.getLocation().equals(boss.getLocation()) || api.core.CombatRange.canReach(boss, rangedLine, p)) {
+        p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(35 + Math.floor(Math.random() * 6), api.core.HitMask.RED)]);
+        p.sendMessage("Kasonde's explosion hits you. Hide behind a pillar to break his line of sight!");
+      } else p.sendMessage("The pillar shields you from Kasonde's explosion.");
+      fight.explosion = null;
+      boss.setScriptedMovement(false);
+      boss.getCombat().attack(p);
+    }
+    if (tick < fight.nextSpecial) return;
+    const special = fight.special++ % 4;
+    fight.nextSpecial = tick + 18;
+    if (special === 3) {
+      boss.performAnimation(new api.core.Animation(KASONDE_EXPLOSION_ANIMATION));
+      boss.setScriptedMovement(true);
+      fight.explosion = tick + 5;
+      p.sendMessage("Kasonde charges an explosion. Hide behind a pillar!");
+      return;
+    }
+    boss.performAnimation(new api.core.Animation(KASONDE_THROW_ANIMATION));
+    if (special === 2) {
+      const localY = p.getLocation().getY() - area.getBaseY();
+      boss.moveTo(area.tile(7, localY < 16 ? 24 : 4, 0));
+      p.sendMessage("Kasonde dashes away and throws a barrage of green and orange potions. Keep moving!");
+    } else p.sendMessage("Kasonde throws a potion at your feet. Move away before it lands!");
+    const targets = special === 2 ? [[0,0],[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,1],[1,-1]] : [[0,0]];
+    targets.forEach(([dx,dy], index) => {
+      const tile = p.getLocation().clone().addX(dx).addY(dy);
+      const orange = special === 2 ? index % 2 === 1 : special === 1;
+      new api.core.Projectile(boss.getLocation(), tile, null, orange ? KASONDE_EXPLOSIVE_PROJECTILE : KASONDE_POISON_PROJECTILE, 40, 80, 43, 31, area).sendProjectile();
+      fight.throws.push({ tile, orange, lands: tick + 3 });
+    });
+  }
+
+  class VardorvisCombat extends api.core.MeleeCombatMethod {
+    start(npc) { npc.performAnimation(new api.core.Animation(VARDORVIS_MELEE_ANIMATION)); }
+    attackSpeed() { return 5; }
+    hits(npc, target) {
+      const hits = super.hits(npc, target);
+      const ratio = Math.max(0, npc.getHitpoints() / npc.getMaxHitpoints());
+      const maximum = 30 + Math.round(7 * (1 - ratio));
+      const protection = target.getPacketSender().getVarbit(4118) === 1 ? 0.25 : 1;
+      for (const hit of hits) {
+        for (const damage of hit.getHits()) damage.setDamage(hit.isAccurate()
+          ? Math.min(target.getHitpoints(), Math.floor(Math.random() * (maximum + 1) * protection)) : 0);
+        hit.updateTotalDamage();
+      }
+      return hits;
+    }
+  }
+  function vardorvisHitRoll(event) {
+    if (event.attacker?.__dt2Vardorvis) event.bypassProtectionPrayer = true;
+  }
+  function vardorvisHitResolved({ attacker, target, hit }) {
+    if (!attacker?.__dt2Vardorvis || !target?.isPlayer?.()) return;
+    attacker.setHitpoints(Math.min(attacker.getMaxHitpoints(), attacker.getHitpoints() + Math.floor(hit.getTotalDamage() / 2)));
+  }
+  function vardorvisPrayerDisabled(event) {
+    const area = event.player?.getAttribute(ATTR_VARDORVIS_AREA);
+    if (area && event.player.getPrivateArea?.() === area && api.core.World.getProcessCycle() < (area.prayerLockUntil ?? 0)
+      && [4116, 4117, 4118].includes(event.prayer?.configId)) {
+      event.disabled = true;
+      event.message = "Vardorvis' head has briefly disabled your protection prayers.";
+    }
+  }
+  function endVardorvisStrangle(area, player) {
+    if (!area.spores) return;
+    area.spores = null;
+    player.getMovementQueue().setBlockMovement(false);
+    player.getAttribute(ATTR)?.setScriptedMovement?.(false);
+    player.getPacketSender().closeInterface(VARDORVIS_QTE_GROUP);
+  }
+  function processVardorvis(area, player) {
+    const cycle = api.core.World.getProcessCycle();
+    if (area.lastProcessCycle === cycle) return;
+    area.lastProcessCycle = cycle;
+    const boss = player.getAttribute(ATTR);
+    if (!boss?.__dt2Vardorvis || boss.getHitpoints() <= 0) { endVardorvisStrangle(area, player); return; }
+    if (player.getCombat().getTarget() !== boss && boss.getHitpoints() === boss.getMaxHitpoints()) return;
+    const ratio = boss.getHitpoints() / boss.getMaxHitpoints();
+    boss.setDefenceLevel(130 + Math.floor(50 * ratio));
+    const loc = player.getLocation(), sender = player.getPacketSender();
+    const hit = damage => player.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(damage, api.core.HitMask.RED)]);
+    for (const axe of area.axes ?? []) {
+      if (cycle < axe.starts) continue;
+      const step = cycle - axe.starts;
+      if (step > 17) { api.removeNpc(axe.npc); continue; }
+      const tile = area.tile(axe.x + axe.dx * step, axe.y + axe.dy * step, 0);
+      axe.npc.moveTo(tile);
+      if (!axe.hit && loc.getDistance(tile) <= 1) {
+        axe.hit = true;
+        const damage = 1 + Math.floor(Math.random() * 35);
+        hit(sender.getVarbit(4118) === 1 ? Math.floor(damage / 2) : damage);
+        startVardorvisBleed(player);
+        player.sendMessage("The swinging axe cuts you. Moving will prolong the bleeding.");
+      }
+    }
+    area.axes = (area.axes ?? []).filter(axe => cycle - axe.starts <= 17);
+    if (area.spike && cycle >= area.spike.due) {
+      if (loc.equals(area.spike.location)) {
+        const damage = Math.floor(Math.random() * 26);
+        hit(damage);
+        boss.setHitpoints(Math.min(boss.getMaxHitpoints(), boss.getHitpoints() + Math.floor(damage / 2)));
+      }
+      area.spike = null;
+    }
+    if (area.head && cycle >= area.head.due) {
+      if (sender.getVarbit(4117) !== 1) {
+        for (const prayer of [api.core.PrayerHandler.PROTECT_FROM_MAGIC, api.core.PrayerHandler.PROTECT_FROM_MISSILES, api.core.PrayerHandler.PROTECT_FROM_MELEE])
+          api.core.PrayerHandler.deactivatePrayer(player, prayer);
+        player.getSkillManager().setCurrentLevel(Skill.PRAYER, Math.max(0, player.getSkillManager().getCurrentLevel(Skill.PRAYER) - 10));
+        area.prayerLockUntil = cycle + 3;
+        player.sendMessage("Vardorvis' head disables your protection prayers and drains 10 Prayer points.");
+      } else player.sendMessage("You block Vardorvis' head gaze.");
+      api.removeNpc(area.head.npc);
+      area.head = null;
+    }
+    if (area.spores && cycle >= area.strangleDue) {
+      hit(50);
+      player.sendMessage("The tendrils tighten around you. Destroy every spore before time runs out!");
+      endVardorvisStrangle(area, player);
+    }
+    // shortcut: special selection, axe timing and quest axe/strangle damage need calibration against a live OSRS capture.
+    if (cycle < (area.nextSpecial ?? 0) || area.spores) return;
+    area.nextSpecial = cycle + (ratio < 0.33 ? 10 : 18);
+    const options = ratio < 0.8 ? ["axes", "spike", "head", "strangle"] : ["axes", "spike"];
+    let special = options[Math.floor(Math.random() * options.length)];
+    if (special === "strangle" && area.lastSpecial === "strangle") special = "axes";
+    area.lastSpecial = special;
+    if (special === "spike") {
+      area.spike = { location: loc.clone(), due: cycle + 3 };
+      sender.sendGraphic(new api.core.Graphic(VARDORVIS_SPIKE_WARNING), loc);
+      player.sendMessage("Cracks appear beneath your feet. Move before the spikes erupt!");
+    } else if (special === "head") {
+      const npc = api.core.NPC.create(N.VARDORVIS_HEAD, area.tile(24, 25, 0));
+      npc.setOwner(player); npc.setOwnerOnly(true); npc.setScriptedMovement(true);
+      npc.__skipDefaultRespawn = true;
+      area.add(npc); api.core.World.getAddNPCQueue().push(npc);
+      npc.performAnimation(new api.core.Animation(VARDORVIS_HEAD_ANIMATION));
+      api.core.Projectile.createProjectile(npc, player, VARDORVIS_HEAD_PROJECTILE, 30, 60, 40, 36).sendProjectile();
+      area.head = { npc, due: cycle + 3 };
+      player.sendMessage("Vardorvis' head gazes upon you. Protect from Missiles against the green projectile!");
+    } else if (special === "strangle") {
+      area.spores = new Set([6, 7, 8, 9, 10, 11]);
+      area.strangleDue = cycle + 9;
+      boss.performAnimation(new api.core.Animation(VARDORVIS_STRANGLE_ANIMATION));
+      boss.setScriptedMovement(true);
+      player.getMovementQueue().reset();
+      player.getMovementQueue().setBlockMovement(true);
+      sender.sendSubInterface((161 << 16) | 15, VARDORVIS_QTE_GROUP, 1);
+      sender.sendInterfaceScript(VARDORVIS_QTE_INIT_SCRIPT, [6]);
+      player.sendMessage("Vardorvis entangles you. Destroy the six spores before the tendrils tighten!");
+    } else {
+      const paths = [[8, 8, 1, 1], [25, 8, -1, 1], [8, 25, 1, -1]];
+      area.axes ??= [];
+      for (const [x, y, dx, dy] of paths.slice(0, ratio < 0.5 ? 3 : ratio < 0.8 ? 2 : 1)) {
+        const npc = api.core.NPC.create(VARDORVIS_AXE_NPC, area.tile(x, y, 0));
+        npc.setOwner(player); npc.setOwnerOnly(true); npc.setScriptedMovement(true);
+        npc.__skipDefaultRespawn = true;
+        area.add(npc); api.core.World.getAddNPCQueue().push(npc);
+        area.axes.push({ npc, x, y, dx, dy, starts: cycle + 3, hit: false });
+      }
+      player.sendMessage("Axes rise at the edges of the arena. Avoid their diagonal paths!");
+    }
+  }
   const SCAR_DEMONS_DEFEATED = "desert-treasure-ii:scar-demons-defeated";
   const SCAR_BOAT_TRIED = "desert-treasure-ii:scar-boat-tried";
   const SCAR_BOAT_ROOM = "desert-treasure-ii:scar-boat-room-entered";
@@ -418,7 +670,7 @@ module.exports = function registerDesertTreasureII(api) {
       super(7, 5);
       this.owner = owner;
       this.questPlayer = questPlayer;
-      this.remainingTicks = 400;
+      this.remainingTicks = 300;
       this.lastProcessCycle = -1;
       this.nextSpawnTick = 0;
       this.enemies = [];
@@ -442,7 +694,8 @@ module.exports = function registerDesertTreasureII(api) {
       this.lastProcessCycle = cycle;
       if (this.remainingTicks <= 0) return;
       const kasonde = this.kasonde;
-      if (!kasonde?.isRegistered?.() || kasonde.getHitpoints?.() <= 0) {
+      if (!kasonde?.isRegistered?.()) return;
+      if (kasonde.getHitpoints?.() <= 0) {
         this.remainingTicks = 0;
         this.failed = true;
         return;
@@ -450,16 +703,19 @@ module.exports = function registerDesertTreasureII(api) {
       this.remainingTicks--;
       if (this.remainingTicks <= 0) {
         this.defended = true;
+        for (const enemy of this.enemies) if (enemy.isRegistered?.() && !api.core.World.getRemoveNPCQueue().includes(enemy)) api.core.World.getRemoveNPCQueue().push(enemy);
+        this.questPlayer.sendMessage("Kasonde has survived the horde for three minutes. Speak to him, then climb out of the hideout.");
         return;
       }
-      const elapsed = 400 - this.remainingTicks;
+      const elapsed = 300 - this.remainingTicks;
       if (elapsed >= this.nextSpawnTick && this.enemies.filter((npc) => npc?.isRegistered?.() && npc.getHitpoints?.() > 0).length < 4) {
         this.spawnEnemy(elapsed);
         this.nextSpawnTick += 16;
       }
     }
     spawnEnemy(elapsed) {
-      const tiles = [[13, 8], [20, 8], [39, 9], [44, 28], [10, 29], [27, 31]];
+      // shortcut: entrances use walkable cache corridors, calibrate the wave positions from a live capture.
+      const tiles = [[13, 8], [20, 8], [39, 9], [37, 24], [13, 24], [24, 27]];
       const [x, y] = tiles[Math.floor(elapsed / 16) % tiles.length];
       const npc = api.core.NPC.create(N.STRANGLED, this.tile(x, y, 0));
       npc.setOwner?.(this.questPlayer);
@@ -498,6 +754,9 @@ module.exports = function registerDesertTreasureII(api) {
       }
     }
     getName() { return "Stranglewood temple (Desert Treasure II)"; }
+    process(actor) {
+      if (actor?.isPlayer?.() && actor.getUsername() === this.owner) processKasonde(this, actor.getAsPlayer());
+    }
     allowSummonPet() { return false; }
     isMulti() { return true; }
     destroy() {
@@ -530,6 +789,13 @@ module.exports = function registerDesertTreasureII(api) {
     }
     getName() { return "Vardorvis ritual site (Desert Treasure II)"; }
     allowSummonPet() { return false; }
+    process(actor) {
+      if (actor?.isPlayer?.() && actor.getUsername() === this.owner) processVardorvis(this, actor.getAsPlayer());
+    }
+    postLeave(actor, logout) {
+      if (actor?.isPlayer?.()) endVardorvisStrangle(this, actor.getAsPlayer());
+      super.postLeave(actor, logout);
+    }
     destroy() {
       if (this.isDestroyed()) return;
       for (const entity of [...this.entities]) {
@@ -1329,6 +1595,17 @@ module.exports = function registerDesertTreasureII(api) {
     postLeave(actor) { if (actor.isPlayer()) ruinsStarted.delete(actor.getAsPlayer()); }
   }
 
+  function crossStranglewoodBarricade({ player: p, objectId, location }) {
+    if (objectId !== STRANGLEWOOD_BARRICADE_LOC || location.x !== 1193 || location.y !== 3401) return false;
+    if (!p.getAttribute(STRANGLEWOOD_CITY_ENTERED)) {
+      p.sendMessage("Follow Kasonde's voice from the ruins before crossing the barricade.");
+      return true;
+    }
+    p.getMovementQueue?.().reset?.();
+    p.moveTo(new api.core.Location(1193, p.getLocation().getY() <= 3401 ? 3405 : 3399, 0));
+    return true;
+  }
+
   function spawnSurfaceKasonde(p) {
     let owned = spawned.get(p);
     if (!owned) spawned.set(p, owned = {});
@@ -1341,13 +1618,13 @@ module.exports = function registerDesertTreasureII(api) {
     const current = p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT);
     if (current instanceof StranglewoodHideoutArea && !current.isDestroyed()) {
       current.enter(p);
-      p.moveTo(current.tile(31, 20, 0));
+      p.moveTo(current.tile(31, 24, 0));
       return current;
     }
     const area = new StranglewoodHideoutArea(p.getUsername?.(), p);
     area.enter(p);
     p.setAttribute(ATTR_STRANGLEWOOD_HIDEOUT, area);
-    p.moveTo(area.tile(31, 20, 0));
+    p.moveTo(area.tile(31, 24, 0));
     const kasonde = api.core.NPC.create(N.KASONDE, area.tile(24, 20, 0));
     kasonde.setOwner?.(p);
     kasonde.setOwnerOnly?.(true);
@@ -1357,8 +1634,13 @@ module.exports = function registerDesertTreasureII(api) {
     area.kasonde = kasonde;
     area.add(kasonde);
     api.core.World.getAddNPCQueue().push(kasonde);
-    area.spawnEnemy(0);
-    area.nextSpawnTick = 16;
+    if (Number(p.getAttribute(VARDORVIS_PROGRESS)) >= 9) {
+      area.defended = true;
+      area.remainingTicks = 0;
+    } else {
+      area.spawnEnemy(0);
+      area.nextSpawnTick = 16;
+    }
     return area;
   }
 
@@ -1384,14 +1666,14 @@ module.exports = function registerDesertTreasureII(api) {
     if (current instanceof StranglewoodTempleArea && !current.isDestroyed()) {
       current.enter(p);
       p.moveTo(current.tile(6, 16, 0));
-      if ((Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 18 && has(p, I.TEMPLE_KEY_3)) spawnTempleKasonde(p, current);
+      if ((Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 13) spawnTempleKasonde(p, current);
       return current;
     }
     const area = new StranglewoodTempleArea(p.getUsername?.());
     area.enter(p);
     p.setAttribute(ATTR_STRANGLEWOOD_TEMPLE, area);
     p.moveTo(area.tile(6, 16, 0));
-    if ((Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 18 && has(p, I.TEMPLE_KEY_3)) {
+    if ((Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 13) {
       spawnTempleKasonde(p, area);
       return area;
     }
@@ -1416,14 +1698,16 @@ module.exports = function registerDesertTreasureII(api) {
     if (current instanceof VardorvisArea && !current.isDestroyed()) {
       current.enter(p);
       p.moveTo(current.tile(13, 18, 0));
-      spawnBoss(p, "vardorvis");
+      if (Number(p.getAttribute(VARDORVIS_PROGRESS)) === 16) spawnBoss(p, "vardorvis");
       return current;
     }
     const area = new VardorvisArea(p.getUsername?.());
     area.enter(p);
     p.setAttribute(ATTR_VARDORVIS_AREA, area);
     p.moveTo(area.tile(13, 18, 0));
-    spawnBoss(p, "vardorvis");
+    const rocks = new api.core.GameObject(O.ROCKS_139, area.tile(6, 28, 0), 10, 0, area);
+    p.getPacketSender().sendObject(rocks);
+    if (Number(p.getAttribute(VARDORVIS_PROGRESS)) === 16) spawnBoss(p, "vardorvis");
     return area;
   }
 
@@ -1432,7 +1716,7 @@ module.exports = function registerDesertTreasureII(api) {
     if (current instanceof ScarArea && !current.isDestroyed()) {
       current.enter(p);
       p.moveTo(current.tile(21, 33, 0));
-      setScarVarbit(p, 6);
+      if (!p.getAttribute(SCAR_DEMONS_DEFEATED)) setScarVarbit(p, 6);
       if (p.getAttribute(SCAR_PERSTEN_TALKED)) revealScarMazeEntry(p, current);
       if (p.getAttribute(SCAR_PERSTEN_ROOM1_TALKED)) revealScarMazeTwoEntry(p, current);
       if (p.getAttribute(SCAR_BOAT_TRIED)) spawnScarPersten(p, current);
@@ -1442,7 +1726,7 @@ module.exports = function registerDesertTreasureII(api) {
     const area = new ScarArea(p.getUsername?.());
     area.enter(p);
     p.setAttribute(ATTR_SCAR_AREA, area);
-    setScarVarbit(p, 6);
+    if (!p.getAttribute(SCAR_DEMONS_DEFEATED)) setScarVarbit(p, 6);
     p.moveTo(area.tile(21, 33, 0));
     if (p.getAttribute(SCAR_PERSTEN_TALKED)) revealScarMazeEntry(p, area);
     if (p.getAttribute(SCAR_PERSTEN_ROOM1_TALKED)) revealScarMazeTwoEntry(p, area);
@@ -1715,7 +1999,9 @@ module.exports = function registerDesertTreasureII(api) {
 
   function talkCatalyticGuardian({ player: p, npcId }) {
     if (stage(p) !== S.LEVIATHAN || p.getAttribute(ATTR_SCAR_AREA)) return false;
-    talk(p, npcId, "praefectus-classis-perseriya-talking-to-the-catalytic-guardian");
+    talk(p, npcId, p.getAttribute(SCAR_GUARDIAN_ACCEPTED)
+      ? "praefectus-classis-perseriya-talking-to-the-catalytic-guardian-talking-to-the-catalytic-guardian-after-exiting-the-scar-for-the-first-time"
+      : "praefectus-classis-perseriya-talking-to-the-catalytic-guardian");
   }
 
   function spawnScarPersten(p, area) {
@@ -2178,6 +2464,18 @@ module.exports = function registerDesertTreasureII(api) {
     }
     p.sendMessage("You pick up the odd key from Duke Sucellus.");
   }
+  function handleVardorvisGroundItemPickup(event) {
+    const { player: p, groundItemId } = event;
+    const area = p.getAttribute(ATTR_VARDORVIS_AREA);
+    if (groundItemId !== I.TEMPLE_KEY_3 || stage(p) !== S.VARDORVIS
+      || Number(p.getAttribute(VARDORVIS_PROGRESS)) !== 17 || !area || p.getPrivateArea?.() !== area) return;
+    if (p.getInventory().getFreeSlots() < 1) {
+      event.handled = true;
+      p.sendMessage("You need inventory space for the Temple key.");
+      return;
+    }
+    p.setAttribute(VARDORVIS_PROGRESS, 18);
+  }
 
   function handleDialogueLine(event) {
     if (stage(event.player) === S.VARDORVIS) {
@@ -2186,16 +2484,30 @@ module.exports = function registerDesertTreasureII(api) {
         event.after = () => event.player.setAttribute(VARDORVIS_PROGRESS, 1);
       if (event.npcId === N.BARUS && progress === 1 && event.text === "Don't mention it!")
         event.after = () => event.player.setAttribute(VARDORVIS_PROGRESS, 2);
+      if (event.npcId === N.KASONDE && progress === 6 && event.text === "They'll be coming. We've got no chance up here. Head down below! Now!")
+        event.after = () => event.player.setAttribute(VARDORVIS_PROGRESS, 7);
+      if (event.npcId === N.KASONDE && progress === 7 && event.text === "What are you waiting for? They're coming! Quick, head down below!")
+        event.after = () => event.player.setAttribute(VARDORVIS_PROGRESS, 8);
+      if (event.npcId === N.KASONDE && progress === 9 && event.text === "I need to gather some additional ingredients from within the temple. I will meet you back here once I'm done.")
+        event.after = () => event.player.setAttribute(VARDORVIS_PROGRESS, 11);
+      if (event.npcId === N.KASONDE && progress === 10 && event.text === "Okay, I'll see if I can find them.")
+        event.after = () => event.player.setAttribute(VARDORVIS_PROGRESS, 11);
+      if (event.npcId === N.KASONDE && progress === 15 && event.text === "We're running out of time! I'm running out of time! Drink that potion. It should strengthen your immunity against the Strangler. Now go!")
+        event.after = () => event.player.setAttribute(SERUM_DISCUSSED, true);
     }
     if (event?.player?.getAttribute(FINAL_FIGURE_STARTED)
       && event?.npcId === N.MYSTERIOUS_FIGURE_2 && event?.text === "Very well...") {
       event.after = () => spawnFinalFigure(event.player);
     }
-    if (stage(event?.player) !== S.LEVIATHAN || event?.text !== "Yes.") return;
+    if (stage(event?.player) !== S.LEVIATHAN) return;
     if (![N.CATALYTIC_GUARDIAN, N.CATALYTIC_GUARDIAN_2].includes(event.npcId)) return;
-    event.player.setAttribute(SCAR_GUARDIAN_ACCEPTED, true);
-    setScarVarbit(event.player, 4);
-    event.after = () => enterScar(event.player);
+    if (event.text === "Then may your death come quick, human. Good luck."
+      || event.text === "Very well. Good luck.") {
+      event.after = () => {
+        event.player.setAttribute(SCAR_GUARDIAN_ACCEPTED, true);
+        enterScar(event.player);
+      };
+    }
   }
 
   function setScarVarbit(p, value) {
@@ -2293,15 +2605,20 @@ module.exports = function registerDesertTreasureII(api) {
   function spawnTempleKasonde(p, area) {
     let owned = spawned.get(p);
     if (!owned) spawned.set(p, owned = {});
-    if (owned.kasondeBoss?.isRegistered?.()) return owned.kasondeBoss;
-    const npc = api.core.NPC.create(N.KASONDE_7, area.tile(7, 16, 0));
+    const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
+    if (progress >= 21) return null;
+    const key = progress >= 20 ? "kasondeInjured" : progress >= 19 ? "kasondeBoss" : "templeKasonde";
+    if (owned[key]?.isRegistered?.()) return owned[key];
+    const npcId = progress >= 20 ? N.KASONDE_9 : progress >= 19 ? N.KASONDE_7 : N.KASONDE;
+    const npc = api.core.NPC.create(npcId, area.tile(7, 16, 0));
     npc.setOwner?.(p);
     npc.setOwnerOnly?.(true);
     npc.__skipDefaultRespawn = true;
     area.add(npc);
     api.core.World.getAddNPCQueue().push(npc);
-    owned.kasondeBoss = npc;
-    p.setAttribute(VARDORVIS_PROGRESS, 19);
+    owned[key] = npc;
+    if (progress === 18) talk(p, N.KASONDE, "carnifex-maximus-vardorvis-entering-the-temple-after-defeating-vardorvis");
+    if (progress === 19) npc.getCombat?.()?.attack?.(p);
     return npc;
   }
 
@@ -2356,8 +2673,8 @@ module.exports = function registerDesertTreasureII(api) {
     const area = p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT);
     if (!(area instanceof StranglewoodHideoutArea) || area.isDestroyed?.() || !location) return null;
     const x = location.x - area.getBaseX() + 1160;
-    const y = location.y - area.getBaseY() + 9740;
-    return x >= 1160 && x < 1216 && y >= 9740 && y < 9780 ? { x, y } : null;
+    const y = location.y - area.getBaseY() + 9736;
+    return x >= 1160 && x < 1216 && y >= 9736 && y < 9776 ? { x, y } : null;
   }
 
   function templeSourceTile(p, location) {
@@ -2449,7 +2766,7 @@ module.exports = function registerDesertTreasureII(api) {
     area.postLeave(p, false);
     area.destroy();
     p.setAttribute(ATTR_VARDORVIS_AREA, null);
-    p.moveTo(new api.core.Location(1147, 3433, 0));
+    p.moveTo(new api.core.Location(1117, 3429, 0));
     return true;
   }
 
@@ -2458,9 +2775,11 @@ module.exports = function registerDesertTreasureII(api) {
     const current = p.getPrivateArea?.();
     const returnToVaultEntrance = current && [p.getAttribute(ATTR_VAULT_AREA), p.getAttribute(FINAL_ROOM)].includes(current);
     const returnToDigsite = current && current === p.getAttribute(ATTR_WAR_ROOM);
+    const returnToGuardian = current && [ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO,
+      ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA].some((key) => current === p.getAttribute(key));
     const stranglewoodExit = current && (current === p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT) ? [1193, 3405]
       : current === p.getAttribute(ATTR_STRANGLEWOOD_TEMPLE) ? [1174, 3427]
-        : current === p.getAttribute(ATTR_VARDORVIS_AREA) ? [1147, 3433] : null);
+        : current === p.getAttribute(ATTR_VARDORVIS_AREA) ? [1117, 3429] : null);
     if (current && current === p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT) && current.defended) p.setAttribute(VARDORVIS_PROGRESS, 9);
     for (const key of [ATTR_VAULT_AREA, FINAL_ROOM, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO, ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA, SUCELLUS_AREA]) {
       const area = p.getAttribute(key);
@@ -2473,6 +2792,7 @@ module.exports = function registerDesertTreasureII(api) {
     }
     if (returnToVaultEntrance) p.moveTo(new api.core.Location(3510, 2971, 0));
     else if (returnToDigsite) p.moveTo(new api.core.Location(3411, 9813, 0));
+    else if (returnToGuardian) p.moveTo(new api.core.Location(3610, 9473, 0));
     else if (stranglewoodExit) p.moveTo(new api.core.Location(...stranglewoodExit, 0));
     p.setAttribute(SCAR_PATH_COMPLETE, false);
     p.setAttribute(SCAR_RIFT_LIVE, false);
@@ -2581,7 +2901,17 @@ module.exports = function registerDesertTreasureII(api) {
       if (!player.getAttribute(SCAR_LEVIATHAN_DEBRIS_SEARCHED)) return ["Search the debris by the ship for Perseriya's medallion."];
       return ["Continue through the Scar and defeat the Leviathan."];
     }
-    if (s >= S.VARDORVIS) return ["Follow Kasonde's trail and defeat Vardorvis."];
+    if (s === S.VARDORVIS) {
+      const progress = Number(player.getAttribute(VARDORVIS_PROGRESS)) || 0;
+      if (progress >= 22) return ["Return Vardorvis' medallion to its statue in the Ancient Vault."];
+      if (progress === 21) return ["Cross the barricade into Kasonde's hideout and search the north-east stone chest for Vardorvis' medallion."];
+      if (progress === 20) return ["Speak to the defeated Kasonde in the Stranglewood temple."];
+      if (progress === 19) return ["Defeat Kasonde in the temple. Dodge his potions and hide behind pillars when he charges an explosion."];
+      if (progress === 18) return ["Take the Temple key back to Kasonde in the Stranglewood temple."];
+      if (progress === 17) return ["Take the Temple key dropped by Vardorvis and leave the ritual site through the rocks."];
+      if (progress === 16) return ["Climb over the rocks into Vardorvis' ritual site and defeat him."];
+      return ["Follow Kasonde's trail and defeat Vardorvis."];
+    }
     if (s >= S.MACHINE) return ["Use the golem to learn the forgotten four's names."];
     if (s >= S.GUARDIAN) return ["Search the military installation beneath the Digsite."];
     if (s >= S.ROCKS) return ["Mine through the rocks and defeat the Ancient Guardian."];
@@ -2764,6 +3094,15 @@ module.exports = function registerDesertTreasureII(api) {
   }
   function onWidgetAction(event) {
     const p = event?.player, packet = event?.packet;
+    const ritual = p?.getAttribute(ATTR_VARDORVIS_AREA);
+    if (packet?.type === "widget_action" && packet.groupId === VARDORVIS_QTE_GROUP && ritual?.spores
+      && p.getPrivateArea?.() === ritual && ritual.spores.has(packet.childId)) {
+      event.handled = true;
+      ritual.spores.delete(packet.childId);
+      p.getPacketSender().sendInterfaceDisplayState((VARDORVIS_QTE_GROUP << 16) | packet.childId, true);
+      if (ritual.spores.size === 0) { endVardorvisStrangle(ritual, p); p.sendMessage("You destroy the spores and break free of the tendrils."); }
+      return;
+    }
     const area = p?.getAttribute(ATTR_WAR_ROOM);
     if (!packet || stage(p) < S.MACHINE || stage(p) >= S.VARDORVIS || !p.getAttribute(CELLS_INSERTED)
       || !p.getAttribute(PUZZLE_OPEN) || !area || area.isDestroyed?.() || p.getPrivateArea?.() !== area) return;
@@ -2840,41 +3179,40 @@ module.exports = function registerDesertTreasureII(api) {
   function talkKasonde({ player: p, npcId }) {
     if (stage(p) !== S.VARDORVIS) return false;
     const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
+    const hideout = p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT);
+    if (hideout) {
+      if (hideout.defended) return talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-holding-back-the-horde");
+      return p.sendMessage("Keep the Strangled away from Kasonde until the horde is held back.");
+    }
     if (progress === 6) {
       talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde");
-      p.setAttribute(VARDORVIS_PROGRESS, 7);
       return;
     }
-    if (progress === 7) {
-      talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-talking-to-kasonde-again");
-      p.setAttribute(VARDORVIS_PROGRESS, 8);
-      return;
-    }
+    if (progress === 7 || progress === 8) return talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-talking-to-kasonde-again");
     if (progress === 9) {
-      talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-holding-back-the-horde");
-      p.setAttribute(VARDORVIS_PROGRESS, 10);
+      talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-back-on-the-surface");
       return;
     }
-    if (progress === 10) {
+    if (progress === 10 || progress === 11) {
       talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-back-on-the-surface-talking-to-kasonde-again-before-retrieving-the-ingredients");
-      p.setAttribute(VARDORVIS_PROGRESS, 11);
       return;
     }
-    if (progress === 13) {
-      talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-killing-the-strangled-in-the-temple");
-      if (!has(p, I.UNFINISHED_SERUM)) p.getInventory().adds(I.UNFINISHED_SERUM, 1);
-      p.setAttribute(VARDORVIS_PROGRESS, 14);
-      return;
+    if (progress === 13 || progress === 14) {
+      const carried = [I.UNFINISHED_SERUM, I.UNFINISHED_SERUM_2, I.STRANGLER_SERUM].some(id => has(p, id));
+      if (progress === 14 && carried) return p.sendMessage("Mix the Korbal herb into the unfinished serum, then add the Argian berries.");
+      if (!carried && p.getInventory().getFreeSlots() < 1) return p.sendMessage("You need inventory space for Kasonde's unfinished serum.");
+      return talk(p, npcId, progress === 13
+        ? "carnifex-maximus-vardorvis-talking-to-kasonde-after-killing-the-strangled-in-the-temple"
+        : "carnifex-maximus-vardorvis-talking-to-kasonde-after-killing-the-strangled-in-the-temple-reclaiming-the-unfinished-serum");
     }
     if (progress === 15) {
       talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-killing-the-strangled-in-the-temple-talking-to-kasonde-after-making-the-potion");
-      p.setAttribute("desert-treasure-ii:kasonde-serum-discussed", true);
       return;
     }
     if (progress === 16) talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-killing-the-strangled-in-the-temple-talking-to-kasonde-after-drinking-the-potion");
+    if (progress === 18) return talk(p, npcId, "carnifex-maximus-vardorvis-entering-the-temple-after-defeating-vardorvis");
     if (progress === 20) {
       talk(p, npcId, "carnifex-maximus-vardorvis-talking-to-kasonde-after-defeating-him");
-      p.setAttribute(VARDORVIS_PROGRESS, 21);
     }
   }
   function handleItemAction(event) {
@@ -3012,7 +3350,7 @@ module.exports = function registerDesertTreasureII(api) {
     if (itemId === I.STRANGLER_SERUM && action === "drink") {
       event.handled = true;
       if (!has(p, I.STRANGLER_SERUM) || (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) < 15
-        || !p.getAttribute("desert-treasure-ii:kasonde-serum-discussed")) return p.sendMessage("Talk to Kasonde about the completed serum before drinking it.");
+        || !p.getAttribute(SERUM_DISCUSSED)) return p.sendMessage("Talk to Kasonde about the completed serum before drinking it.");
       p.getInventory().deleteNumber(I.STRANGLER_SERUM, 1);
       p.setAttribute(VARDORVIS_PROGRESS, 16);
       p.sendMessage("You drink the Strangler serum. It lets you approach the ritual site.");
@@ -3737,7 +4075,7 @@ module.exports = function registerDesertTreasureII(api) {
     }
     if (s === S.VARDORVIS && [O.ENTRY_20, O.ENTRY_21].includes(objectId)
       && Math.abs(location.x - 1191) <= 2 && Math.abs(location.y - 3411) <= 2) {
-      if ((Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) < 8) {
+      if ((Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) < 7) {
         return p.sendMessage("Talk to Kasonde before entering the hideout.");
       }
       enterHideout(p);
@@ -3752,7 +4090,7 @@ module.exports = function registerDesertTreasureII(api) {
     if (s === S.VARDORVIS && objectId === O.ENTRY_21
       && Math.abs(location.x - 1174) <= 2 && Math.abs(location.y - 3428) <= 2) {
       const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
-      if (progress >= 18 && has(p, I.TEMPLE_KEY_3)) {
+      if ((progress >= 13 && progress <= 16) || (progress === 18 && has(p, I.TEMPLE_KEY_3)) || progress >= 19) {
         enterStranglewoodTemple(p);
         return true;
       }
@@ -3763,7 +4101,8 @@ module.exports = function registerDesertTreasureII(api) {
       return true;
     }
     const templeTile = templeSourceTile(p, location);
-    if (templeTile && [O.ENTRY_20, O.ENTRY_21, O.ENTRY_22, O.ENTRY_23].includes(objectId)) {
+    if (templeTile && ([O.ENTRY_20, O.ENTRY_21, O.ENTRY_22, O.ENTRY_23].includes(objectId)
+      || (objectId === O.STAIRS_254 && option === "climb-up"))) {
       const area = p.getAttribute(ATTR_STRANGLEWOOD_TEMPLE);
       area.leave(p, false);
       area.postLeave(p, false);
@@ -3775,6 +4114,7 @@ module.exports = function registerDesertTreasureII(api) {
     const ritualTile = vardorvisSourceTile(p, location);
     if (s === S.VARDORVIS && ritualTile && [VARDORVIS_ENTRY, O.ROCKS_139].includes(objectId)
       && ritualTile.x === 1118 && ritualTile.y === 3428) {
+      if (option === "leave" || option === "climb-over") return leaveVardorvisArena(p);
       const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
       if (progress >= 17) {
         if (!has(p, I.TEMPLE_KEY_3)) p.getInventory().adds(I.TEMPLE_KEY_3, 1);
@@ -3791,28 +4131,49 @@ module.exports = function registerDesertTreasureII(api) {
       && Math.abs(location.x - 1118) <= 2 && Math.abs(location.y - 3428) <= 2) {
       const progress = Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0;
       if (progress < 16) return p.sendMessage("The ritual site is too dangerous until you have prepared the Strangler serum.");
+      if (progress >= 17 && !has(p, I.TEMPLE_KEY_3)) {
+        if (p.getInventory().getFreeSlots() < 1) return p.sendMessage("You need inventory space for the Temple key.");
+        p.getInventory().adds(I.TEMPLE_KEY_3, 1);
+        p.setAttribute(VARDORVIS_PROGRESS, Math.max(18, progress));
+        p.sendMessage("You search the rocks and recover the Temple key.");
+        return true;
+      }
       enterVardorvisArena(p);
       return true;
     }
     if (s === S.VARDORVIS && objectId === KASONDE_MEDALLION_CHEST
       && Math.abs(location.x - 1196) <= 2 && Math.abs(location.y - 3411) <= 2
       && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 21) {
-      if (!has(p, I.VARDORVIS_MEDALLION)) p.getInventory().adds(I.VARDORVIS_MEDALLION, 1);
+      if (!has(p, I.VARDORVIS_MEDALLION)) {
+        if (p.getInventory().getFreeSlots() < 1) {
+          p.sendMessage("You need inventory space for Vardorvis' medallion.");
+          return true;
+        }
+        p.getInventory().adds(I.VARDORVIS_MEDALLION, 1);
+      }
       p.setAttribute(VARDORVIS_PROGRESS, 22);
       p.sendMessage("You search Kasonde's chest and find Vardorvis' medallion.");
       return true;
     }
     if (s === S.VARDORVIS && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 11
-      && objectId === O.KORBAL_HERBS && Math.abs(location.x - 1155) <= 2 && Math.abs(location.y - 3447) <= 2) {
+      && (objectId === KORBAL_HERBS_LOC || visibleId === O.KORBAL_HERBS)) {
+      if (!has(p, I.KORBAL_HERB) && p.getInventory().getFreeSlots() < 1) {
+        p.sendMessage("You need inventory space for a Korbal herb.");
+        return true;
+      }
       if (!has(p, I.KORBAL_HERB)) p.getInventory().adds(I.KORBAL_HERB, 1);
-      if (has(p, I.KORBAL_HERB) && has(p, I.ARGIAN_BERRIES)) p.setAttribute(VARDORVIS_PROGRESS, 12);
+      if (Number(p.getAttribute(VARDORVIS_PROGRESS)) === 11 && has(p, I.KORBAL_HERB) && has(p, I.ARGIAN_BERRIES)) p.setAttribute(VARDORVIS_PROGRESS, 12);
       p.sendMessage("You pick a Korbal herb from the north-west of the Stranglewood.");
       return true;
     }
     if (s === S.VARDORVIS && (Number(p.getAttribute(VARDORVIS_PROGRESS)) || 0) >= 11
-      && objectId === O.ARGIAN_BUSH && Math.abs(location.x - 1126) <= 2 && Math.abs(location.y - 3323) <= 2) {
+      && (objectId === ARGIAN_BUSH_LOC || visibleId === O.ARGIAN_BUSH)) {
+      if (!has(p, I.ARGIAN_BERRIES) && p.getInventory().getFreeSlots() < 1) {
+        p.sendMessage("You need inventory space for Argian berries.");
+        return true;
+      }
       if (!has(p, I.ARGIAN_BERRIES)) p.getInventory().adds(I.ARGIAN_BERRIES, 1);
-      if (has(p, I.KORBAL_HERB) && has(p, I.ARGIAN_BERRIES)) p.setAttribute(VARDORVIS_PROGRESS, 12);
+      if (Number(p.getAttribute(VARDORVIS_PROGRESS)) === 11 && has(p, I.KORBAL_HERB) && has(p, I.ARGIAN_BERRIES)) p.setAttribute(VARDORVIS_PROGRESS, 12);
       p.sendMessage("You pick Argian berries from the south-west of the Stranglewood.");
       return true;
     }
@@ -4024,6 +4385,7 @@ module.exports = function registerDesertTreasureII(api) {
       const expectedStage = [S.VARDORVIS, S.WHISPERER, S.SUCELLUS, S.LEVIATHAN][index];
       if (vaultTile.x === locations[index][0] && vaultTile.y === locations[index][1]
         && stage(p) === expectedStage && itemId === medal && has(p, medal)) {
+        event.handled = true;
         p.getInventory().deleteNumber(medal, 1);
         const placed = (Number(p.getAttribute(STATUES_PLACED)) || 0) | (1 << index);
         p.setAttribute(STATUES_PLACED, placed);
@@ -4214,6 +4576,7 @@ module.exports = function registerDesertTreasureII(api) {
       if (!(area instanceof VardorvisArea) || area.isDestroyed()) return;
       if (npcs[key]?.isRegistered?.() && area.entities.includes(npcs[key])) return;
       const npc = api.core.NPC.create(id, area.tile(x - 1112, y - 3400, 0));
+      npc.__dt2Vardorvis = true;
       npc.setOwner?.(p);
       npc.setOwnerOnly?.(true);
       npc.__skipDefaultRespawn = true;
@@ -4696,6 +5059,11 @@ module.exports = function registerDesertTreasureII(api) {
       owned.kasondeBoss = null;
       killer.setAttribute(VARDORVIS_PROGRESS, 20);
       const area = killer.getAttribute(ATTR_STRANGLEWOOD_TEMPLE);
+      for (const pool of area?.kasondeFight?.pools ?? []) {
+        killer.getPacketSender().sendObjectRemoval(pool.object);
+        api.core.ObjectManager.deregister(pool.object, false);
+      }
+      if (area) area.kasondeFight = null;
       if (area instanceof StranglewoodTempleArea && !area.isDestroyed()) {
         const injured = api.core.NPC.create(N.KASONDE_9, area.tile(7, 16, 0));
         injured.setOwner?.(killer);
@@ -4712,7 +5080,10 @@ module.exports = function registerDesertTreasureII(api) {
       owned.vardorvisDead = true;
       killer.setAttribute(VARDORVIS_PROGRESS, 17);
       killer.setAttribute(ATTR, null);
-      killer.sendMessage("Vardorvis collapses. Search the rocks at the ritual site's entrance for the Temple key.");
+      const area = killer.getAttribute(ATTR_VARDORVIS_AREA);
+      const manager = api.getItemOnGroundManager?.();
+      if (area && manager?.registerLocation) manager.registerLocation(killer, new Item(I.TEMPLE_KEY_3, 1), npc.getLocation?.() ?? area.tile(17, 19, 0), area);
+      killer.sendMessage("Vardorvis collapses and drops a Temple key. Take it back to Kasonde.");
       return;
     }
     if (Array.isArray(owned.templeEnemies) && owned.templeEnemies.includes(npc)) {
@@ -4903,7 +5274,39 @@ module.exports = function registerDesertTreasureII(api) {
     p.setAttribute(FINAL_CELL_GEAR, null);
   }
 
-  function handleDialogueAction({ player: p, stepId }) {
+  function handleDialogueAction(event) {
+    const { player: p, stepId } = event;
+    if (stage(p) === S.VARDORVIS && Number(p.getAttribute(VARDORVIS_PROGRESS)) === 18 && stepId === "4muMDK") {
+      const area = p.getAttribute(ATTR_STRANGLEWOOD_TEMPLE);
+      if (!(area instanceof StranglewoodTempleArea) || area.isDestroyed() || !has(p, I.TEMPLE_KEY_3)) {
+        event.handled = true;
+        event.end = true;
+        return;
+      }
+      p.getInventory().deleteNumber(I.TEMPLE_KEY_3, 1);
+      const owned = spawned.get(p);
+      if (owned?.templeKasonde) { api.removeNpc(owned.templeKasonde); owned.templeKasonde = null; }
+      p.setAttribute(VARDORVIS_PROGRESS, 19);
+      spawnTempleKasonde(p, area);
+    }
+    if (stage(p) === S.VARDORVIS && Number(p.getAttribute(VARDORVIS_PROGRESS)) === 20 && stepId === "ZEXv_C") {
+      p.setAttribute(VARDORVIS_PROGRESS, 21);
+      const owned = spawned.get(p);
+      if (owned?.kasondeInjured) { api.removeNpc(owned.kasondeInjured); owned.kasondeInjured = null; }
+    }
+    if (stage(p) === S.VARDORVIS && [13, 14].includes(Number(p.getAttribute(VARDORVIS_PROGRESS)))
+      && ["ixrOLP", "e7yS62"].includes(stepId)) {
+      if (![I.UNFINISHED_SERUM, I.UNFINISHED_SERUM_2, I.STRANGLER_SERUM].some(id => has(p, id))) {
+        if (p.getInventory().getFreeSlots() < 1) {
+          event.handled = true;
+          event.end = true;
+          p.sendMessage("You need inventory space for Kasonde's unfinished serum.");
+          return;
+        }
+        p.getInventory().adds(I.UNFINISHED_SERUM, 1);
+      }
+      p.setAttribute(VARDORVIS_PROGRESS, 14);
+    }
     if (stage(p) === S.VARDORVIS && Number(p.getAttribute(VARDORVIS_PROGRESS)) === 6 && stepId === "nJRAbJ") {
       p.setAttribute(STRANGLEWOOD_CITY_ENTERED, true);
       // shortcut: adjacent house landing is inferred from the cache, calibrate against a live cutscene capture.
@@ -5524,6 +5927,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("Elissa", { "Talk-to": talkElissa });
   api.onNpcInteraction("Barus", { "Talk-to": talkBarus });
   api.onNpcInteraction("Kasonde", { "Talk-to": talkKasonde });
+  api.onObjectInteraction("Barricade", { "Climb-over": crossStranglewoodBarricade });
   api.onNpcInteraction("Ramarno", { "Talk-to": talkRamarno });
   api.onNpcInteraction("Prescott", { "Talk-to": talkPrescott });
   api.onNpcInteraction("Wizard Persten", { "Talk-to": progressBosses });
@@ -5538,9 +5942,15 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("The Whisperer", { "Talk-to": handleBossTalk });
   api.onNpcInteraction("Odd Figure", { Disturb: handleBossTalk, "Talk-to": handleBossTalk });
   api.onNpcDeath(handleDeath);
+  api.registerNpcCombatMethodProvider(N.VARDORVIS_2, VardorvisCombat);
+  api.registerNpcCombatMethodProvider(N.KASONDE_7, KasondeCombat);
+  api.onCombatHitRoll(vardorvisHitRoll);
+  api.onCombatHitResolved(vardorvisHitResolved);
+  api.onPrayerDisabled(vardorvisPrayerDisabled);
   api.onItemOnNpc(handleNerveOnCatalyst);
   api.onItemOnNpc(handleSucellusItemOnNpc);
   api.onGroundItemPickup(handleSucellusGroundItemPickup);
+  api.onGroundItemPickup(handleVardorvisGroundItemPickup);
   api.onPlayerLogin(handleLogin);
   api.onPlayerProcess(handleLassarProcess);
   api.onPlayerLogout(handleLogout);

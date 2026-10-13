@@ -44,6 +44,8 @@ const CAMPFIRE_MIN_SPACING_TILES = 5;
 // further log adds. Jatoba, Camphor, Ironwood and Rosewood burn times are unpublished and are
 // interpolated from the tiers around them.
 const LIGHTABLE_LOGS = [
+  // Wiki: Chambers of Xeric kindling, lit for 48 XP; the fire's length follows normal logs.
+  { name: "kindling", itemId: ItemIds.KINDLING_2, requiredLevel: 1, xpReward: 48, campfireDurationTicks: 102, campfireBurnTicks: 3 },
   { name: "logs", itemId: ItemIds.LOGS, requiredLevel: 1, xpReward: 40, campfireDurationTicks: 102, campfireBurnTicks: 3 },
   { name: "achey logs", itemId: ItemIds.ACHEY_TREE_LOGS, requiredLevel: 1, xpReward: 40, campfireDurationTicks: 102, campfireBurnTicks: 3 },
   { name: "oak logs", itemId: ItemIds.OAK_LOGS, requiredLevel: 15, xpReward: 60, campfireDurationTicks: 109, campfireBurnTicks: 10 },

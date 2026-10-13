@@ -27,6 +27,31 @@ function canStep(x, y, z, [dx, dy], area) {
   return RegionManager.canMove(x, y, x + dx, y + dy, z, 1, 1, area);
 }
 
+test('Entry treasure trapdoor is adjacent to a cache-reachable tile after Verzik', () => {
+  const tile = require('../plugins/minigames/tob/Entry.TheatreOfBlood')._test.TREASURE_ENTRANCE_TILE;
+  const [tx, ty, z] = tile;
+  const steps = [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+  const start = [3167, 4313];
+  const visited = new Set([start.join(',')]);
+  const pending = [start];
+  while (pending.length) {
+    const [x, y] = pending.pop();
+    for (const [dx, dy] of steps) {
+      const next = [x + dx, y + dy];
+      const key = next.join(',');
+      if (!visited.has(key) && canStep(x, y, z, [dx, dy], null)) {
+        visited.add(key);
+        pending.push(next);
+      }
+    }
+  }
+  assert.deepEqual(tile, [3167, 4323, 0], 'the interaction sits on the throne in the cache');
+  assert.ok(visited.has(`${tx},${ty - 1}`), 'the south-side approach remains reachable from the final arena');
+  const formerEntrance = [3170, 4327];
+  assert.ok(!steps.some(([dx, dy]) => visited.has(`${formerEntrance[0] + dx},${formerEntrance[1] + dy}`)),
+    'the former interaction location is behind the cache wall');
+});
+
 /** Turns a step clockwise with its chunk: north becomes east, as the client turns tiles. */
 function rotateStep([dx, dy], rotation) {
   for (let i = 0; i < (rotation & 3); i++) [dx, dy] = [dy, -dx];

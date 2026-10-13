@@ -122,9 +122,12 @@ module.exports = function registerDragonSlayerII(api) {
   const ATTR_CRYPT_READY = "dragon-slayer-ii:kourend-crypt-ready";
   const ATTR_CRYPT_ORDER = "dragon-slayer-ii:kourend-crypt-order";
   const ATTR_CRYPT_PLACED = "dragon-slayer-ii:kourend-crypt-placed";
+  const ATTR_CRYPT_INSPECTED = "dragon-slayer-ii:kourend-crypt-inspected";
+  const ATTR_CRYPT_KEY_COLLECTED = "dragon-slayer-ii:kourend-crypt-key-collected";
   const ATTR_NOTES_READ = "dragon-slayer-ii:notes-read";
   const ATTR_KARAMJA_JOURNAL = "dragon-slayer-ii:malumac-journal";
   const ATTR_ROWBOAT_BUILT = "dragon-slayer-ii:lithkren-rowboat-built";
+  const ATTR_JARDRIC_TALKED = "dragon-slayer-ii:jardric-talked-about-lithkren";
   const ATTR_LITHKREN_ARRIVED = "dragon-slayer-ii:lithkren-arrived";
   const ATTR_LITHKREN_NATIVE_STAGE = "dragon-slayer-ii:lithkren-native-stage";
   const ATTR_LITHKREN_DALLAS_TALKED = "dragon-slayer-ii:lithkren-dallas-talked";
@@ -167,12 +170,12 @@ module.exports = function registerDragonSlayerII(api) {
   const ACTION_BOB_MEMORIES_COMPLETE = "dragon-slayer-ii:bob-memories-complete";
   const ACTION_BOB_FIRST_TALK_COMPLETE = "dragon-slayer-ii:bob-first-talk-complete";
   const ACTION_SPHINX_DREAM_COMPLETE = "dragon-slayer-ii:sphinx-dream-complete";
-  // No cached loc exists for the quest-built boat; place the space beside the
-  // Lithkren NPC anchors on a shoreline tile confirmed reachable by normal routing.
-  const ROWBOAT_SPACE_TILE = { x: 3661, y: 3847, z: 0 };
+  // Cache loc29916 is a 2x3 multiloc at this anchor; QH's clickable waypoint
+  // (3659,3849) is inside its footprint. Varbit6104 changes it from Build to Travel.
+  const ROWBOAT_OBJECT_TILE = { x: 3658, y: 3848, z: 0 };
+  const ROWBOAT_SPACE_TILE = { x: 3659, y: 3849, z: 0 };
   // QuestHelper's surface route continues at the courtyard stairs on Lithkren.
   const LITHKREN_LANDING = new Location(3559, 4004, 0);
-  let rowboatObject;
   const KARAMJA_INSTANCE = { sourceChunkX: 352, sourceChunkY: 1150, widthChunks: 8, heightChunks: 13 };
   const KARAMJA_SOURCE = { x: 2816, y: 9200 };
   const KARAMJA_ENTRANCE = { x: 2943, y: 2894, z: 0 };
@@ -512,6 +515,11 @@ module.exports = function registerDragonSlayerII(api) {
       : p.getAttribute(ATTR_ROWBOAT_BUILT) ? "to-lithkren-talking-to-jardric-talking-to-jardric-again"
         : "to-lithkren-talking-to-jardric";
     talk(p, npcId, variant);
+    if (!p.getAttribute(ATTR_JARDRIC_TALKED)) {
+      p.setAttribute(ATTR_JARDRIC_TALKED, true);
+      p.setAttribute(ATTR_LITHKREN_NATIVE_STAGE, 60);
+      p.getPacketSender?.().sendVarbit?.(6104, 60);
+    }
   }
   function nearRowboat(p) {
     const loc = p.getLocation();
@@ -708,15 +716,19 @@ module.exports = function registerDragonSlayerII(api) {
     beginMapPuzzle(p);
     return true;
   }
-  function installRowboatObject(id) {
-    if (rowboatObject) ObjectManager.deregister(rowboatObject, true);
-    rowboatObject = new GameObject(id, new Location(ROWBOAT_SPACE_TILE.x, ROWBOAT_SPACE_TILE.y, ROWBOAT_SPACE_TILE.z), 10, 0, null);
-    ObjectManager.register(rowboatObject, true);
-  }
-  function buildLithkrenRowboat({ player: p, objectId, location }) {
-    if (objectId !== O.ROWBOAT_SPACE || location.x !== ROWBOAT_SPACE_TILE.x || location.y !== ROWBOAT_SPACE_TILE.y || location.z !== 0
+  function buildLithkrenRowboat({ player: p, objectId, location, definition }) {
+    const visibleObjectId = definition?.id ?? objectId;
+    if (![29916, O.ROWBOAT_SPACE, O.ROWBOAT_14].includes(objectId)
+      && ![O.ROWBOAT_SPACE, O.ROWBOAT_14].includes(visibleObjectId)) return false;
+    if (location.x !== ROWBOAT_OBJECT_TILE.x || location.y !== ROWBOAT_OBJECT_TILE.y || location.z !== 0
       || stage(p) < S.TO_LITHKREN || stage(p) >= S.COMPLETE) return false;
-    if (p.getAttribute(ATTR_ROWBOAT_BUILT)) return travelRowboat({ player: p, objectId, location });
+    if (visibleObjectId === O.ROWBOAT_14 || definition?.getInteractions?.()?.[0] === "Travel") {
+      return travelRowboat({ player: p, objectId: visibleObjectId, location });
+    }
+    if (p.getAttribute(ATTR_ROWBOAT_BUILT)) {
+      p.sendMessage("The rowboat is built. Speak to Dallas Jones to continue your journey.");
+      return true;
+    }
     if (p.getSkillManager().getMaxLevel(Skill.CONSTRUCTION) < 50) return p.sendMessage("You need at least 50 Construction to build the rowboat.");
     if (!has(p, I.HAMMER) || !has(p, I.SAW)) return p.sendMessage("You need a hammer and a saw to build the rowboat.");
     if (!has(p, I.OAK_PLANK, 8) || !has(p, I.SWAMP_PASTE, 10)) return p.sendMessage("You need 8 oak planks and 10 swamp paste to build the rowboat.");
@@ -731,13 +743,14 @@ module.exports = function registerDragonSlayerII(api) {
       if (remaining === 0) break;
     }
     p.setAttribute(ATTR_ROWBOAT_BUILT, true);
-    p.setAttribute(ATTR_LITHKREN_NATIVE_STAGE, 60);
-    p.getPacketSender?.().sendVarbit?.(6104, 60);
+    p.setAttribute(ATTR_LITHKREN_NATIVE_STAGE, 65);
+    p.getPacketSender?.().sendVarbit?.(6104, 65);
     p.sendMessage("You successfully build the boat.");
     return true;
   }
   function travelRowboat({ player: p, objectId, location }) {
-    if (![O.ROWBOAT_SPACE, O.ROWBOAT_14].includes(objectId) || location.x !== ROWBOAT_SPACE_TILE.x || location.y !== ROWBOAT_SPACE_TILE.y || location.z !== 0
+    if (![O.ROWBOAT_14, O.ROWBOAT_SPACE].includes(objectId)
+      || location.x !== ROWBOAT_OBJECT_TILE.x || location.y !== ROWBOAT_OBJECT_TILE.y || location.z !== 0
       || !p.getAttribute(ATTR_ROWBOAT_BUILT) || stage(p) < S.TO_LITHKREN || stage(p) >= S.COMPLETE) return false;
     p.moveTo(LITHKREN_LANDING);
     p.setAttribute(ATTR_LITHKREN_ARRIVED, true);
@@ -1013,7 +1026,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function talkAva({ player: p, npcId }) {
     const step = Number(p.getAttribute(ATTR_MORYTANIA)) || 0;
-    if (stage(p) < S.KEYS || stage(p) >= S.FORGE || step < 3) return;
+    if (stage(p) < S.KEYS || stage(p) > S.FORGE || step < 3) return;
     if (step === 3) {
       talk(p, npcId, "tristan-s-key-piece-talking-to-ava");
       p.setAttribute(ATTR_MORYTANIA, 4);
@@ -1297,7 +1310,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function enterKaramjaMaze({ player: p, objectId, location }) {
     if (objectId !== O.CAVE_63 || location.x !== KARAMJA_ENTRANCE.x || location.y !== KARAMJA_ENTRANCE.y || location.z !== KARAMJA_ENTRANCE.z) return false;
-    if (stage(p) < S.KEYS || stage(p) >= S.FORGE) {
+    if (stage(p) < S.KEYS || stage(p) > S.FORGE) {
       p.sendMessage("The cave is too dangerous to explore until you have learned about Robert the Strong's key pieces.");
       return true;
     }
@@ -1321,14 +1334,21 @@ module.exports = function registerDragonSlayerII(api) {
     return true;
   }
   const CRYPT_SOURCE = { x: 1472, y: 9920 };
+  // The cache already contains the canonical puzzle at these locs. 29901 is
+  // Camorra's tomb; 29902-29905 are the corner busts; 29906-29909 are the
+  // four 2x1 plinths. Their transforms use native DS2 varbits 6105, 6152-6155.
+  const CRYPT_TOMB = { id: 29901, x: 1503, y: 9938, width: 2, height: 2 };
   const CRYPT_PLINTHS = {
-    north: [1503, 9964], south: [1503, 9958], west: [1500, 9961], east: [1506, 9961],
+    north: { id: 29906, x: 1503, y: 9941, width: 2, height: 1, click: [1504, 9941], varbit: 6152 },
+    south: { id: 29907, x: 1503, y: 9936, width: 2, height: 1, click: [1504, 9936], varbit: 6153 },
+    east: { id: 29908, x: 1506, y: 9938, width: 1, height: 2, click: [1506, 9939], varbit: 6154 },
+    west: { id: 29909, x: 1501, y: 9938, width: 1, height: 2, click: [1501, 9939], varbit: 6155 },
   };
   const CRYPT_BUSTS = [
-    { item: I.AIVAS_BUST, object: O.BUST_8, placedObject: O.BUST_7, location: [1495, 9967], label: "Aivas", home: "Zartharim", weapon: "crossbow" },
-    { item: I.CAMORRA_BUST, object: O.BUST_10, placedObject: O.BUST_9, location: [1511, 9967], label: "Camorra", home: "Saranthium", weapon: "axe" },
-    { item: I.ROBERT_BUST, object: O.BUST_12, placedObject: O.BUST_11, location: [1495, 9955], label: "Robert", home: "Arkney", weapon: "bow" },
-    { item: I.TRISTAN_BUST, object: O.BUST_14, placedObject: O.BUST_13, location: [1511, 9955], label: "Tristan", home: "Karville", weapon: "sword" },
+    { item: I.AIVAS_BUST, templateObject: 29905, object: O.BUST_8, emptyObject: O.BUST_7, nativeValue: 3, location: [1500, 9941], face: 3, label: "Aivas", home: "Zartharim", weapon: "crossbow" },
+    { item: I.CAMORRA_BUST, templateObject: 29903, object: O.BUST_10, emptyObject: O.BUST_9, nativeValue: 2, location: [1507, 9936], face: 1, label: "Camorra", home: "Saranthium", weapon: "axe" },
+    { item: I.ROBERT_BUST, templateObject: 29902, object: O.BUST_12, emptyObject: O.BUST_11, nativeValue: 4, location: [1500, 9936], face: 2, label: "Robert", home: "Arkney", weapon: "bow" },
+    { item: I.TRISTAN_BUST, templateObject: 29904, object: O.BUST_14, emptyObject: O.BUST_13, nativeValue: 1, location: [1507, 9941], face: 0, label: "Tristan", home: "Karville", weapon: "sword" },
   ];
   const CRYPT_PUZZLE_PLANE = 1;
   const CRYPT_ENTRANCE = { x: 1483, y: 3548, z: 0 };
@@ -1346,21 +1366,36 @@ module.exports = function registerDragonSlayerII(api) {
     area.puzzleObjects ??= [];
     return area.puzzleObjects;
   }
-  function setCryptObject(area, id, sourceX, sourceY, plane = CRYPT_PUZZLE_PLANE) {
-    const target = area.tile(sourceX - CRYPT_SOURCE.x, sourceY - CRYPT_SOURCE.y, plane);
-    const current = cryptObjects(area).filter((object) => {
-      const loc = object.getLocation();
+  function removeCryptObjectAt(area, target) {
+    for (const object of cryptObjects(area).filter((entry) => {
+      const loc = entry.getLocation();
       return loc.getX() === target.getX() && loc.getY() === target.getY() && loc.getZ() === target.getZ();
-    });
-    for (const object of current) {
+    })) {
       ObjectManager.deregister(object, true);
       area.remove(object);
       area.puzzleObjects.splice(area.puzzleObjects.indexOf(object), 1);
     }
-    const object = new GameObject(id, target, 10, 0, area);
+  }
+  function setCryptBustObject(area, bust, id) {
+    const target = area.tile(bust.location[0] - CRYPT_SOURCE.x, bust.location[1] - CRYPT_SOURCE.y, CRYPT_PUZZLE_PLANE);
+    removeCryptObjectAt(area, target);
+    // Overlay the canonical cache bust loc with its quest child. Its 11-shape
+    // and face match the cache loc, so the cache position/collision stays put.
+    const object = new GameObject(id, target, 11, bust.face, area);
     ObjectManager.register(object, true);
     area.add(object);
     cryptObjects(area).push(object);
+  }
+  function setCryptPuzzleVarbits(p, placed) {
+    const sender = p.getPacketSender?.();
+    const bustFor = (direction) => CRYPT_BUSTS.find((bust) => bust.item === placed[direction]);
+    for (const [direction, plinth] of Object.entries(CRYPT_PLINTHS)) {
+      sender?.sendVarbit?.(plinth.varbit, bustFor(direction)?.nativeValue ?? 0);
+    }
+    const nativeStage = (p.getAttribute(ATTR_CRYPT_KEY_COLLECTED) || has(p, KEY_PARTS[3])) ? 36
+      : Object.keys(placed).length === 4 ? 30
+        : p.getAttribute(ATTR_CRYPT_INSPECTED) || Object.keys(placed).length ? 25 : 4;
+    sender?.sendVarbit?.(6105, nativeStage);
   }
   function resetCryptPuzzle(p, area, randomize = true, revealClues = true) {
     if (randomize || !Array.isArray(p.getAttribute(ATTR_CRYPT_ORDER))) {
@@ -1373,14 +1408,13 @@ module.exports = function registerDragonSlayerII(api) {
     }
     const placed = randomize ? {} : (p.getAttribute(ATTR_CRYPT_PLACED) || {});
     p.setAttribute(ATTR_CRYPT_PLACED, placed);
+    if (Object.keys(placed).length) p.setAttribute(ATTR_CRYPT_INSPECTED, true);
     for (const bust of CRYPT_BUSTS) {
-      if (!Object.values(placed).includes(bust.item)) setCryptObject(area, bust.object, bust.location[0], bust.location[1]);
+      const heldOrPlaced = has(p, bust.item) || Object.values(placed).includes(bust.item);
+      const objectId = heldOrPlaced || !p.getAttribute(ATTR_CRYPT_INSPECTED) ? bust.emptyObject : bust.object;
+      setCryptBustObject(area, bust, objectId);
     }
-    for (const [direction, [x, y]] of Object.entries(CRYPT_PLINTHS)) {
-      const item = placed[direction];
-      setCryptObject(area, item ? CRYPT_BUSTS.find((bust) => bust.item === item).placedObject : O.PLINTH_10, x, y);
-    }
-    setCryptObject(area, Object.keys(placed).length === 4 ? O.TOMB_7 : O.TOMB_6, 1503, 9961);
+    setCryptPuzzleVarbits(p, placed);
     if (revealClues) {
       const [north, south, west] = p.getAttribute(ATTR_CRYPT_ORDER);
       const person = (item) => CRYPT_BUSTS.find((bust) => bust.item === item);
@@ -1392,7 +1426,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function enterKourendCrypt({ player: p, objectId, location }) {
     if (objectId !== O.CRYPT_ENTRANCE || location.x !== CRYPT_ENTRANCE.x || location.y !== CRYPT_ENTRANCE.y) return false;
-    if (stage(p) < S.KEYS || stage(p) >= S.FORGE || !p.getAttribute(ATTR_CRYPT_READY)) {
+    if (stage(p) < S.KEYS || stage(p) > S.FORGE || !p.getAttribute(ATTR_CRYPT_READY)) {
       p.sendMessage("You should find out what Camorra's clues say before entering the crypt.");
       return true;
     }
@@ -1419,43 +1453,62 @@ module.exports = function registerDragonSlayerII(api) {
     p.sendMessage("You descend into the Shayzien Crypts. The tomb lies on the lowest floor.");
     return true;
   }
-  function handleCryptObject({ player: p, objectId, location }) {
+  function inCryptFootprint(x, y, footprint) {
+    return x >= footprint.x && y >= footprint.y
+      && x < footprint.x + footprint.width && y < footprint.y + footprint.height;
+  }
+  function isCryptTombObject(id) {
+    return id === CRYPT_TOMB.id || id === O.TOMB_6 || id === O.TOMB_7;
+  }
+  function isCryptPlinthObject(id) {
+    return Object.values(CRYPT_PLINTHS).some((plinth) => plinth.id === id)
+      || [O.PLINTH_10, O.PLINTH_11, O.PLINTH_12, O.PLINTH_13, O.PLINTH_14, O.PLINTH_15].includes(id);
+  }
+  function handleCryptObject(event) {
+    const { player: p, objectId, location } = event;
     const area = p.getAttribute(ATTR_AREA);
-    if (!(area instanceof KourendCryptArea) || stage(p) < S.KEYS || stage(p) >= S.FORGE) return false;
+    if (!(area instanceof KourendCryptArea) || stage(p) < S.KEYS || stage(p) > S.FORGE) return false;
+    const visibleObjectId = event.definition?.id ?? objectId;
     const sourceX = CRYPT_SOURCE.x + location.x - area.getBaseX();
     const sourceY = CRYPT_SOURCE.y + location.y - area.getBaseY();
-    const stair = CRYPT_STAIRS.get(objectId)?.find(({ x, y, z }) => x === sourceX && y === sourceY && z === location.z);
+    const stair = CRYPT_STAIRS.get(visibleObjectId)?.find(({ x, y, z }) => x === sourceX && y === sourceY && z === location.z)
+      ?? CRYPT_STAIRS.get(objectId)?.find(({ x, y, z }) => x === sourceX && y === sourceY && z === location.z);
     if (stair) {
       p.moveTo(area.tile(stair.to[0] - CRYPT_SOURCE.x, stair.to[1] - CRYPT_SOURCE.y, stair.to[2]));
       p.sendMessage(stair.to[2] < location.z ? "You climb down." : "You climb up.");
       return true;
     }
-    if (objectId === O.TOMB_6 && sourceX === 1503 && sourceY === 9961 && location.z === CRYPT_PUZZLE_PLANE) {
-      resetCryptPuzzle(p, area, !p.getAttribute(ATTR_CRYPT_ORDER), true);
+    if (isCryptTombObject(visibleObjectId) && inCryptFootprint(sourceX, sourceY, CRYPT_TOMB) && location.z === CRYPT_PUZZLE_PLANE) {
+      const placed = p.getAttribute(ATTR_CRYPT_PLACED) || {};
+      if (visibleObjectId === O.TOMB_7 || Object.keys(placed).length === 4) {
+        if (has(p, KEY_PARTS[3])) {
+          return p.sendMessage("The tomb has already yielded its dragon key piece.");
+        }
+        if (!give(p, KEY_PARTS[3])) return true;
+        p.setAttribute(ATTR_CRYPT_KEY_COLLECTED, true);
+        const parts = (Number(p.getAttribute(ATTR_PARTS)) || 0) | (1 << 3);
+        p.setAttribute(ATTR_PARTS, parts);
+        setCryptPuzzleVarbits(p, placed);
+        if (parts === 15) advance(p, S.FORGE);
+        p.sendMessage("You search Camorra's tomb and take the dragon key piece.");
+        return true;
+      }
+      p.setAttribute(ATTR_CRYPT_INSPECTED, true);
+      resetCryptPuzzle(p, area, !Array.isArray(p.getAttribute(ATTR_CRYPT_ORDER)), true);
       p.sendMessage("You inspect Camorra's tomb and study the clues around the table.");
       return true;
     }
-    if (objectId === O.TOMB_7 && sourceX === 1503 && sourceY === 9961 && location.z === CRYPT_PUZZLE_PLANE) {
-      if (has(p, KEY_PARTS[3])) return p.sendMessage("The tomb has already yielded its dragon key piece.");
-      if (!give(p, KEY_PARTS[3])) return true;
-      const parts = (Number(p.getAttribute(ATTR_PARTS)) || 0) | (1 << 3);
-      p.setAttribute(ATTR_PARTS, parts);
-      if (parts === 15) advance(p, S.FORGE);
-      p.sendMessage("You search Camorra's tomb and take the dragon key piece.");
-      return true;
-    }
-    const bust = CRYPT_BUSTS.find((entry) => entry.object === objectId && entry.location[0] === sourceX && entry.location[1] === sourceY && location.z === CRYPT_PUZZLE_PLANE);
+    const bust = CRYPT_BUSTS.find((entry) => (entry.templateObject === visibleObjectId || entry.object === visibleObjectId)
+      && entry.location[0] === sourceX && entry.location[1] === sourceY && location.z === CRYPT_PUZZLE_PLANE);
     if (bust) {
+      if (!p.getAttribute(ATTR_CRYPT_INSPECTED)) return false;
+      if (has(p, bust.item) || Object.values(p.getAttribute(ATTR_CRYPT_PLACED) || {}).includes(bust.item)) {
+        p.sendMessage(`You already have the bust of ${bust.label}.`);
+        return true;
+      }
       if (!has(p, bust.item)) {
         if (!give(p, bust.item)) return true;
-        const target = area.tile(sourceX - CRYPT_SOURCE.x, sourceY - CRYPT_SOURCE.y, CRYPT_PUZZLE_PLANE);
-        for (const object of cryptObjects(area).filter((entry) => {
-          const loc = entry.getLocation();
-          return loc.getX() === target.getX() && loc.getY() === target.getY() && loc.getZ() === target.getZ();
-        })) {
-          ObjectManager.deregister(object, true); area.remove(object);
-          area.puzzleObjects.splice(area.puzzleObjects.indexOf(object), 1);
-        }
+        setCryptBustObject(area, bust, bust.emptyObject);
         p.sendMessage(`You pick up the bust of ${bust.label}.`);
       }
       return true;
@@ -1465,16 +1518,19 @@ module.exports = function registerDragonSlayerII(api) {
   function placeCryptBust(event) {
     const { player: p, itemId, objectId, location } = event;
     const area = p.getAttribute(ATTR_AREA);
-    if (!(area instanceof KourendCryptArea) || objectId !== O.PLINTH_10 || !CRYPT_BUSTS.some((bust) => bust.item === itemId)) return false;
+    const visibleObjectId = event.definition?.id ?? objectId;
+    if (!(area instanceof KourendCryptArea) || !isCryptPlinthObject(visibleObjectId) || !CRYPT_BUSTS.some((bust) => bust.item === itemId)) return false;
     const sourceX = CRYPT_SOURCE.x + location.x - area.getBaseX();
     const sourceY = CRYPT_SOURCE.y + location.y - area.getBaseY();
-    const direction = Object.entries(CRYPT_PLINTHS).find(([, [x, y]]) => x === sourceX && y === sourceY)?.[0];
+    const direction = Object.entries(CRYPT_PLINTHS).find(([, plinth]) => inCryptFootprint(sourceX, sourceY, plinth))?.[0];
     if (!direction) return false;
+    if (!p.getAttribute(ATTR_CRYPT_INSPECTED)) return false;
     event.handled = true;
     const order = p.getAttribute(ATTR_CRYPT_ORDER);
     const expected = { north: order?.[0], south: order?.[1], west: order?.[2], east: order?.[3] }[direction];
     if (itemId !== expected) {
       p.sendMessage("The bust does not fit this clue. The puzzle resets and the crypt throws you back upstairs.");
+      for (const placedItem of Object.values(p.getAttribute(ATTR_CRYPT_PLACED) || {})) give(p, placedItem);
       resetCryptPuzzle(p, area, true);
       p.moveTo(area.tile(1483 - CRYPT_SOURCE.x, 9933 - CRYPT_SOURCE.y, 3));
       return true;
@@ -1482,10 +1538,11 @@ module.exports = function registerDragonSlayerII(api) {
     remove(p, itemId);
     const placed = { ...(p.getAttribute(ATTR_CRYPT_PLACED) || {}), [direction]: itemId };
     p.setAttribute(ATTR_CRYPT_PLACED, placed);
-    setCryptObject(area, CRYPT_BUSTS.find((bust) => bust.item === itemId).placedObject, sourceX, sourceY);
+    const bust = CRYPT_BUSTS.find((entry) => entry.item === itemId);
+    setCryptBustObject(area, bust, bust.emptyObject);
+    setCryptPuzzleVarbits(p, placed);
     p.sendMessage(`You place the bust at the ${direction} of the table.`);
     if (Object.keys(placed).length === 4) {
-      setCryptObject(area, O.TOMB_7, 1503, 9961);
       p.sendMessage("The tomb unlocks. Search it for the dragon key piece.");
     }
     return true;
@@ -1542,7 +1599,7 @@ module.exports = function registerDragonSlayerII(api) {
         return true;
       }
       if (!has(p, KEY_PARTS[2])) {
-        give(p, KEY_PARTS[2]);
+        if (!give(p, KEY_PARTS[2])) return true;
         const parts = (Number(p.getAttribute(ATTR_PARTS)) || 0) | (1 << 2);
         p.setAttribute(ATTR_PARTS, parts);
         if (parts === 15) advance(p, S.FORGE);
@@ -1564,7 +1621,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function handleKaramjaPlinth({ player: p, objectId, location }) {
     const area = p.getAttribute(ATTR_AREA);
-    if (!(area instanceof KaramjaArea) || stage(p) < S.KEYS || stage(p) >= S.FORGE) return false;
+    if (!(area instanceof KaramjaArea) || stage(p) < S.KEYS || stage(p) > S.FORGE) return false;
     const sourceX = KARAMJA_SOURCE.x + location.x - area.getBaseX();
     const sourceY = KARAMJA_SOURCE.y + location.y - area.getBaseY();
     if (sourceX !== KARAMJA_PLINTH.x || sourceY !== KARAMJA_PLINTH.y || location.z !== KARAMJA_PLINTH.z) return false;
@@ -1771,11 +1828,9 @@ module.exports = function registerDragonSlayerII(api) {
     const option = definition?.getInteractions?.()?.[clickType - 1];
     if (takeAssaultSupply({ player: p, objectId })) return true;
     if (repairAssaultShip({ player: p, objectId, location })) return true;
-    if (objectId === O.ROWBOAT_SPACE && option === "Build") {
-      return buildLithkrenRowboat({ player: p, objectId, location });
-    }
-    if (objectId === O.ROWBOAT_14 && option === "Travel") {
-      return travelRowboat({ player: p, objectId, location });
+    if ([29916, O.ROWBOAT_SPACE, O.ROWBOAT_14].includes(objectId)
+      || [O.ROWBOAT_SPACE, O.ROWBOAT_14].includes(definition?.id)) {
+      return buildLithkrenRowboat({ player: p, objectId, location, definition });
     }
     if (handleUngaelLab({ player: p, objectId, location })) return true;
     if (enterUngaelLaboratory({ player: p, objectId, location })) return true;
@@ -1928,6 +1983,10 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function onLogin({ player: p }) {
     syncUngaelExit(p);
+    if (stage(p) >= S.KEYS && (p.getAttribute(ATTR_CRYPT_ORDER) || p.getAttribute(ATTR_CRYPT_PLACED)
+      || p.getAttribute(ATTR_CRYPT_INSPECTED) || p.getAttribute(ATTR_CRYPT_KEY_COLLECTED))) {
+      setCryptPuzzleVarbits(p, p.getAttribute(ATTR_CRYPT_PLACED) || {});
+    }
     if (stage(p) === S.TUNNEL || stage(p) === S.MURAL) {
       let progress = Number(p.getAttribute(ATTR_CRANDOR_BLOCKAGE_PROGRESS));
       // Migrate values used by the earlier compact implementation to the real
@@ -1980,7 +2039,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function makeInertLocatorOrb({ player: p, usedItemId, usedWithItemId }) {
     const pair = [usedItemId, usedWithItemId];
-    if (stage(p) < S.KEYS || stage(p) >= S.FORGE || (Number(p.getAttribute(ATTR_MORYTANIA)) || 0) < 4 || !pair.includes(I.GLASSBLOWING_PIPE) || !pair.includes(I.DRAGONSTONE)) return false;
+    if (stage(p) < S.KEYS || stage(p) > S.FORGE || (Number(p.getAttribute(ATTR_MORYTANIA)) || 0) < 4 || !pair.includes(I.GLASSBLOWING_PIPE) || !pair.includes(I.DRAGONSTONE)) return false;
     if (!has(p, I.CHISEL)) return p.sendMessage("You need a chisel to cut the dragonstone.");
     if (!has(p, I.MOLTEN_GLASS, 2)) return p.sendMessage("You need two molten glass to make a locator orb.");
     remove(p, I.DRAGONSTONE); remove(p, I.MOLTEN_GLASS, 2); give(p, I.INERT_LOCATOR_ORB);
@@ -1988,7 +2047,7 @@ module.exports = function registerDragonSlayerII(api) {
     return true;
   }
   function finishLocatorOrb({ player: p, npcId }) {
-    if (stage(p) < S.KEYS || stage(p) >= S.FORGE || !has(p, I.INERT_LOCATOR_ORB)) return;
+    if (stage(p) < S.KEYS || stage(p) > S.FORGE || !has(p, I.INERT_LOCATOR_ORB)) return;
     remove(p, I.INERT_LOCATOR_ORB); give(p, I.LOCATOR_ORB);
     p.setAttribute(ATTR_MORYTANIA, 5);
     const targets = [[3460, 3413], [3477, 3392], [3422, 3364], [3443, 3340], [3493, 3376]];
@@ -1997,7 +2056,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function feelLocatorOrb(event) {
     const { player: p } = event;
-    if (stage(p) < S.KEYS || stage(p) >= S.FORGE || !has(p, I.LOCATOR_ORB) || (Number(p.getAttribute(ATTR_MORYTANIA)) || 0) < 5) return;
+    if (stage(p) < S.KEYS || stage(p) > S.FORGE || !has(p, I.LOCATOR_ORB) || (Number(p.getAttribute(ATTR_MORYTANIA)) || 0) < 5) return;
     const loc = p.getLocation();
     const [x, y] = p.getAttribute(ATTR_ORB_TARGET);
     const dx = x - loc.getX(), dy = y - loc.getY();
@@ -2039,7 +2098,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function digForMorytaniaPiece(event) {
     const { player: p } = event;
-    if (stage(p) < S.KEYS || stage(p) >= S.FORGE || !has(p, I.LOCATOR_ORB) || !has(p, I.SPADE) || (Number(p.getAttribute(ATTR_MORYTANIA)) || 0) < 5) return false;
+    if (stage(p) < S.KEYS || stage(p) > S.FORGE || !has(p, I.LOCATOR_ORB) || !has(p, I.SPADE) || (Number(p.getAttribute(ATTR_MORYTANIA)) || 0) < 5) return false;
     event.handled = true;
     const { x, y } = p.getLocation();
     const target = p.getAttribute(ATTR_ORB_TARGET);
@@ -2072,7 +2131,8 @@ module.exports = function registerDragonSlayerII(api) {
         const y = location?.getY?.() ?? location?.y;
         return y >= 10000 ? 75 : 70;
       }
-      if (value === S.TO_LITHKREN && player?.getAttribute?.(ATTR_ROWBOAT_BUILT)) return 60;
+      if (value === S.TO_LITHKREN && player?.getAttribute?.(ATTR_ROWBOAT_BUILT)) return 65;
+      if (value === S.TO_LITHKREN && player?.getAttribute?.(ATTR_JARDRIC_TALKED)) return 60;
       return NATIVE_STAGE[value] ?? 0;
     },
     startedValue: S.START, completionValue: S.COMPLETE, questPoints: 5,
@@ -2101,6 +2161,7 @@ module.exports = function registerDragonSlayerII(api) {
   api.persistAttribute(ATTR_LAB_TIMER); api.persistAttribute(ATTR_UNGAEL_LAB_ACTIVE);
   api.persistAttribute(ATTR_CRYPT_ACTIVE); api.persistAttribute(ATTR_CRYPT_READY);
   api.persistAttribute(ATTR_CRYPT_ORDER); api.persistAttribute(ATTR_CRYPT_PLACED);
+  api.persistAttribute(ATTR_CRYPT_INSPECTED); api.persistAttribute(ATTR_CRYPT_KEY_COLLECTED);
   api.persistAttribute(ATTR_ROWBOAT_BUILT); api.persistAttribute(ATTR_LITHKREN_ARRIVED); api.persistAttribute(ATTR_AIVAS_DIARY);
   api.persistAttribute(ATTR_LITHKREN_DALLAS_TALKED);
   api.persistAttribute(ATTR_LITHKREN_NATIVE_STAGE);
@@ -2112,7 +2173,7 @@ module.exports = function registerDragonSlayerII(api) {
   api.persistAttribute(ATTR_ANCIENT_DIARY_READ);
   api.persistAttribute(ATTR_GALVEK_DEFEATED);
   api.persistAttribute(ATTR_TRAINING_REWARDS);
-  installRowboatObject(O.ROWBOAT_SPACE);
+  api.persistAttribute(ATTR_JARDRIC_TALKED);
   api.onNpcInteraction("Alec Kincade", { "Talk-to": talkAlec });
   api.onNpcInteraction("Ellen", { "Talk-to": talkEllenTraining });
   api.onNpcInteraction("Dallas Jones", { "Talk-to": talkDallas });
@@ -2163,7 +2224,11 @@ module.exports = function registerDragonSlayerII(api) {
     },
   });
   api.onObjectFirstClick(O.CRYPT_ENTRANCE, enterKourendCrypt);
-  api.onObjectFirstClick([O.TOMB_6, O.TOMB_7, ...CRYPT_BUSTS.map((bust) => bust.object), ...CRYPT_STAIRS.keys()], handleCryptObject);
+  api.onObjectFirstClick([
+    CRYPT_TOMB.id, O.TOMB_6, O.TOMB_7,
+    ...CRYPT_BUSTS.flatMap((bust) => [bust.templateObject, bust.object]),
+    ...CRYPT_STAIRS.keys(),
+  ], handleCryptObject);
   api.onObjectFirstClick([O.PLINTH_16, O.PLINTH_17, O.PLINTH_18], handleKaramjaPlinth);
   api.onObjectFirstClick(O.SKELETON_84, searchKaramjaSkeleton);
   api.onObjectFirstClick([O.SKELETON_82, O.SKELETON_83, 29871], searchAivasSkeleton);
@@ -2185,6 +2250,16 @@ module.exports = function registerDragonSlayerII(api) {
   api.onNpcDeath(handleNpcDeath);
   api.onPlayerLogin(onLogin);
   api.onPlayerDeath(onPlayerDeath);
+  module.exports._test.cryptPuzzle = {
+    createArea: (owner) => new KourendCryptArea(owner),
+    reset: resetCryptPuzzle,
+    takeObject: handleCryptObject,
+    placeBust: placeCryptBust,
+    source: { ...CRYPT_SOURCE },
+    tomb: { ...CRYPT_TOMB, click: [1504, 9939] },
+    plinths: Object.fromEntries(Object.entries(CRYPT_PLINTHS).map(([direction, loc]) => [direction, { ...loc, click: [...loc.click] }])),
+    busts: CRYPT_BUSTS.map((bust) => ({ ...bust, location: [...bust.location] })),
+  };
 };
 
 module.exports._test = { restoreSphinxGeneralTopic, oneiromancerDialogueVariant };
