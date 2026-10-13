@@ -265,7 +265,8 @@ test('Blood Moon rubble dialogue distinguishes a real pickaxe and the refinery w
   assert.deepEqual(vars.at(-1), [15464, 52]);
 
   attrs.set('the-blood-moon-rises:refinery-progress', { started: true, phase: 'fight', killed: [] });
-  const area = { player, cast: new Map(), residents: [], orbs: [] };
+  const area = { player, cast: new Map(), residents: [], orbs: [],
+    tile: (x, y, z) => new api.core.Location(x, y, z) };
   refinery.sessions.set(player, area);
   for (let slot = 0; slot < 4; slot++) {
     const npc = { getOwner: () => player };
@@ -12300,4 +12301,36 @@ test('Duke prison recovery retains earned items, kit metadata, overflow and fail
   const recovered = JSON.stringify([bag.items, worn.items, bank.items]);
   recover({ player, restored: false });
   assert.equal(JSON.stringify([bag.items, worn.items, bank.items]), recovered, 'reopening cannot duplicate gear');
+});
+
+
+test('Song of the Elves disguise uses real message events and continues Edmond’s briefing', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const I = api.core.ItemIdentifiers, attrs = new Map([['quest.song_of_the_elves.stage', 20]]);
+  const counts = new Map([[I.STEEL_FULL_HELM, 1], [I.RED_DYE, 1], [I.SILK, 1], [I.PURPLE_DYE, 1], [I.STEEL_PLATEBODY, 1]]);
+  const player = { getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getInventory: () => ({ getAmount: id => counts.get(id) ?? 0, getFreeSlots: () => 20,
+      deleteNumber: (id, n) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - n)),
+      adds: (id, n) => counts.set(id, (counts.get(id) ?? 0) + n) }) };
+  const action = handlers.custom.get('npc-dialogue:action').find(h => h.name === 'onAction');
+  action({ player, stepId: '_moa2Q', kind: 'message' });
+  assert.equal(counts.get(I.ARDOUGNE_KNIGHT_HELM), 1);
+  assert.equal(counts.get(I.STEEL_FULL_HELM), 0);
+  assert.equal(counts.get(I.RED_DYE), 0);
+  action({ player, stepId: 'tNiXqt', kind: 'message' });
+  action({ player, stepId: 'Y45282', kind: 'message' });
+  assert.equal(counts.get(I.ARDOUGNE_KNIGHT_TABARD), 1);
+  assert.equal(counts.get(I.SILK), 0);
+  assert.equal(counts.get(I.PURPLE_DYE), 0);
+  action({ player, stepId: 'I5Jusz', kind: 'message' });
+  assert.equal(counts.get(I.ARDOUGNE_KNIGHT_PLATEBODY), 1);
+  assert.equal(counts.get(I.ARDOUGNE_KNIGHT_TABARD), 0);
+  const line = handlers.custom.get('npc-dialogue:line').find(h => h.name === 'finishDisguiseBriefing');
+  const event = { player, npcId: api.core.NpcIdentifiers.EDMOND_2,
+    text: 'My wife should be able to help you with the tabard. Come back once you have everything.' };
+  line(event);
+  assert.equal(attrs.get('song-of-the-elves:disguise-briefed'), undefined, 'continue the final page before recording the briefing');
+  event.after();
+  assert.equal(attrs.get('song-of-the-elves:disguise-briefed'), true);
 });

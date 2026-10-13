@@ -141,6 +141,7 @@ module.exports = function registerSongOfTheElves(api) {
   ];
   const CHEMICALS = [ItemIdentifiers.BLUE_LIQUID, ItemIdentifiers.GREEN_POWDER, ItemIdentifiers.CLEAR_LIQUID, ItemIdentifiers.RED_POWDER];
   const SULPHURIC_ACID = ItemIdentifiers.SULPHURIC_ACID;
+  const DISGUISE_BRIEFED = "song-of-the-elves:disguise-briefed";
   const DISGUISE = {
     STEEL_HELM: ItemIdentifiers.STEEL_FULL_HELM,
     STEEL_BODY: ItemIdentifiers.STEEL_PLATEBODY,
@@ -680,6 +681,15 @@ module.exports = function registerSongOfTheElves(api) {
       ensureWarEndActors(player);
     };
   }
+  function finishDisguiseBriefing(event) {
+    const player = event?.player;
+    if (!player || currentChapter(player) !== 1 || ![NpcIdentifiers.EDMOND, NpcIdentifiers.EDMOND_2].includes(event.npcId)) return;
+    if (event.text?.startsWith("My wife should be able to help you with the tabard.")) {
+      event.after = () => player.setAttribute(DISGUISE_BRIEFED, true);
+    } else if (wearingDisguise(player) && event.text?.includes("Now get yourself down to the prison")) {
+      event.after = () => setChapter(player, 2);
+    }
+  }
   function onPlayerLogout(event) {
     if (event?.player) clearWarEndActors(event.player);
   }
@@ -687,6 +697,32 @@ module.exports = function registerSongOfTheElves(api) {
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
     const inventory = player.getInventory();
+    if (event.stepId === "_moa2Q" && hasItems(player, [DISGUISE.STEEL_HELM, DISGUISE.RED_DYE])) {
+      inventory.deleteNumber(DISGUISE.STEEL_HELM, 1);
+      inventory.deleteNumber(DISGUISE.RED_DYE, 1);
+      inventory.adds(DISGUISE.HELM, 1);
+    } else if (event.stepId === "I5Jusz" && hasItems(player, [DISGUISE.STEEL_BODY, DISGUISE.TABARD])) {
+      inventory.deleteNumber(DISGUISE.STEEL_BODY, 1);
+      inventory.deleteNumber(DISGUISE.TABARD, 1);
+      inventory.adds(DISGUISE.BODY, 1);
+    } else if (["tNiXqt", "0nVxB-"].includes(event.stepId) && hasItems(player, [DISGUISE.SILK, DISGUISE.PURPLE_DYE])) {
+      inventory.deleteNumber(DISGUISE.SILK, 1);
+      inventory.deleteNumber(DISGUISE.PURPLE_DYE, 1);
+    } else if (["Y45282", "bGd6H8"].includes(event.stepId) && !hasItems(player, [DISGUISE.TABARD])) {
+      inventory.deleteNumber(DISGUISE.SILK, 1);
+      inventory.deleteNumber(DISGUISE.PURPLE_DYE, 1);
+      inventory.adds(DISGUISE.TABARD, 1);
+    } else if (["QMXa3C", "taCC98"].includes(event.stepId)) {
+      if (event.stepId === "taCC98") {
+        for (const id of CHEMICALS) inventory.deleteNumber(id, inventory.getAmount(id));
+      }
+      const chemical = Number(player.getAttribute(CHEMICAL_CHOICE)) || ItemIdentifiers.CLEAR_LIQUID;
+      if (inventory.getAmount(chemical) === 0) inventory.adds(chemical, 1);
+      player.setAttribute(CHEMICAL_CHOICE, 0);
+    } else if (event.stepId === "PZ3EOG") {
+      inventory.deleteNumber(ItemIdentifiers.CLEAR_LIQUID, 1);
+      inventory.deleteNumber(SULPHURIC_ACID, 1);
+    }
     if (event.kind === "message") {
       const itemByMessage = {
         "5Ndx0y": ItemIdentifiers.ODE_TO_ETERNITY,
@@ -752,32 +788,6 @@ module.exports = function registerSongOfTheElves(api) {
         player.sendMessage("You take seven explosive potions from Elena.");
       }
       return;
-    }
-    if (event.stepId === "_moa2Q" && hasItems(player, [DISGUISE.STEEL_HELM, DISGUISE.RED_DYE])) {
-      inventory.deleteNumber(DISGUISE.STEEL_HELM, 1);
-      inventory.deleteNumber(DISGUISE.RED_DYE, 1);
-      inventory.adds(DISGUISE.HELM, 1);
-    } else if (event.stepId === "I5Jusz" && hasItems(player, [DISGUISE.STEEL_BODY, DISGUISE.TABARD])) {
-      inventory.deleteNumber(DISGUISE.STEEL_BODY, 1);
-      inventory.deleteNumber(DISGUISE.TABARD, 1);
-      inventory.adds(DISGUISE.BODY, 1);
-    } else if (["tNiXqt", "0nVxB-"].includes(event.stepId) && hasItems(player, [DISGUISE.SILK, DISGUISE.PURPLE_DYE])) {
-      inventory.deleteNumber(DISGUISE.SILK, 1);
-      inventory.deleteNumber(DISGUISE.PURPLE_DYE, 1);
-    } else if (["Y45282", "bGd6H8"].includes(event.stepId) && !hasItems(player, [DISGUISE.TABARD])) {
-      inventory.deleteNumber(DISGUISE.SILK, 1);
-      inventory.deleteNumber(DISGUISE.PURPLE_DYE, 1);
-      inventory.adds(DISGUISE.TABARD, 1);
-    } else if (["QMXa3C", "taCC98"].includes(event.stepId)) {
-      if (event.stepId === "taCC98") {
-        for (const id of CHEMICALS) inventory.deleteNumber(id, inventory.getAmount(id));
-      }
-      const chemical = Number(player.getAttribute(CHEMICAL_CHOICE)) || ItemIdentifiers.CLEAR_LIQUID;
-      if (inventory.getAmount(chemical) === 0) inventory.adds(chemical, 1);
-      player.setAttribute(CHEMICAL_CHOICE, 0);
-    } else if (event.stepId === "PZ3EOG") {
-      inventory.deleteNumber(ItemIdentifiers.CLEAR_LIQUID, 1);
-      inventory.deleteNumber(SULPHURIC_ACID, 1);
     }
     if (FIRE_SUPPORT[event.stepId] && currentChapter(player) === 4) {
       addResistanceSupport(player, FIRE_SUPPORT[event.stepId], `fire:${event.stepId}`);
@@ -1472,7 +1482,10 @@ module.exports = function registerSongOfTheElves(api) {
     const chapterName = CHAPTERS[currentChapter(player)];
     if (npcName === "edmond" && currentChapter(player) === 1) {
       const hasDisguise = wearingDisguise(player);
-      if (hasDisguise) quest.setStage(player, STAGE.STARTED + 20);
+      if (player.getAttribute(DISGUISE_BRIEFED) !== true) {
+        return startTranscript(api, player, event.npcId, PAGE,
+          "making-a-knightly-disguise-talking-to-edmond-after-completing-the-disguise");
+      }
       const variant = hasDisguise
         ? "making-a-knightly-disguise-talking-to-edmond-after-completing-the-disguise-2"
         : "making-a-knightly-disguise-talking-to-edmond-after-completing-the-disguise-talking-to-him-again";
@@ -3065,6 +3078,8 @@ module.exports = function registerSongOfTheElves(api) {
     return null;
   });
   api.onCustomEvent("npc-dialogue:hook", onStart);
+  api.persistAttribute(DISGUISE_BRIEFED);
+  api.onCustomEvent("npc-dialogue:line", finishDisguiseBriefing);
   api.onCustomEvent("npc-dialogue:line", finishWarEndArianwynLine);
   api.onCustomEvent("npc-dialogue:line", handleLletyaConfrontationLine);
   api.onCustomEvent("world:object-examine", examineLletyaChild);
