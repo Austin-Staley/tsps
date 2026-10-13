@@ -762,6 +762,13 @@ module.exports = function registerSongOfTheElves(api) {
     if (handlePreparationAction(event)) return;
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
+    if (inLibrary(player) && event.action === "teleport" &&
+      event.text === "The player is teleported to the central chamber.") {
+      event.handled = true;
+      player.moveTo(new Location(2623, 6144, 0));
+      player.sendMessage("Seren's memory returns you to the central chamber of the Grand Library.");
+      return;
+    }
     const inventory = player.getInventory();
     if (event.stepId === "_moa2Q" && hasItems(player, [DISGUISE.STEEL_HELM, DISGUISE.RED_DYE])) {
       inventory.deleteNumber(DISGUISE.STEEL_HELM, 1);
@@ -1794,12 +1801,6 @@ module.exports = function registerSongOfTheElves(api) {
     if(currentChapter(event.player)===11 && event.option==="How do I find Lady Trahaearn?") {
       event.player.setAttribute(TRAHAEARN_CREVICE,1);event.player.getPacketSender().sendVarbit(TRAHAEARN_CREVICE_VARBIT,1);
     }
-    if (event.option === "Yes please." && inLibrary(event.player) &&
-      String(event.definition?.getName?.() ?? "").toLowerCase() === "memory of seren") {
-      event.player.moveTo(new Location(2623, 6144, 0));
-      event.player.sendMessage("Seren's memory returns you to the central chamber of the Grand Library.");
-      return;
-    }
     if (event.option === "Yes" && currentChapter(event.player) === 12 &&
       String(event.definition?.getName?.() ?? "").toLowerCase() === "lord ieuan amlodd") {
       if (event.player.getInventory().getFreeSlots() < 6) {
@@ -1807,14 +1808,7 @@ module.exports = function registerSongOfTheElves(api) {
         return;
       }
       const player = event.player;
-      const username = player.getUsername?.();
-      const area = new GrandLibraryArea(username);
-      libraryInstances.set(username, area);
-      player.setAttribute(LIBRARY_INSTANCE, area);
-      area.enter(player);
-      const guide = api.spawnNpc({ id: NpcIdentifiers.LORD_IEUAN_AMLODD, x: 2625, y: 6144, z: 0,
-        wanderRadius: 0, owner: player, ownerOnly: true });
-      if (guide) area.enter(guide);
+      ensureLibraryInstance(player);
       player.moveTo(new Location(2623, 6144, 0));
       player.sendMessage("You enter the Grand Library. Its doors seal behind you; find the Seal of the Forgotten in the central chamber.");
       return;
@@ -1869,6 +1863,29 @@ module.exports = function registerSongOfTheElves(api) {
     }[event.option];
     if (!chemical || currentChapter(event.player) !== 2) return;
     event.player.setAttribute(CHEMICAL_CHOICE, chemical);
+  }
+
+  function ensureLibraryInstance(player) {
+    const current = player.getArea?.();
+    if (current instanceof GrandLibraryArea && !current.isDestroyed()) return current;
+    const username = player.getUsername?.();
+    const area = new GrandLibraryArea(username);
+    libraryInstances.set(username, area);
+    player.setAttribute(LIBRARY_INSTANCE, area);
+    area.enter(player);
+    const guide = api.spawnNpc({ id: NpcIdentifiers.LORD_IEUAN_AMLODD, x: 2625, y: 6144, z: 0,
+      wanderRadius: 0, owner: player, ownerOnly: true });
+    if (guide) area.enter(guide);
+    return area;
+  }
+
+  function syncLibraryLogin({ player }) {
+    if (!player || quest.isComplete(player) || ![12, 13].includes(currentChapter(player))) return;
+    const location = player.getLocation();
+    if (location.getX() < 2548 || location.getX() > 2690 ||
+      location.getY() < 6078 || location.getY() > 6220 ||
+      location.getZ() < 0 || location.getZ() > 2) return;
+    ensureLibraryInstance(player);
   }
 
   function inLibrary(player) {
@@ -3656,6 +3673,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onNpcDialogueCondition(fallsInventoryCondition);
   api.onNpcDialogueCondition(preparationCondition);
   api.onPlayerLogin(syncPreparationLogin);
+  api.onPlayerLogin(syncLibraryLogin);
   api.onItemOnObject(useTrahaearnCrevice, {noted:false});
   api.onObjectInteraction("Blocked Crevice", {Inspect:useTrahaearnCrevice,Mine:useTrahaearnCrevice});
   api.onObjectInteraction("Crevice", {Enter:useTrahaearnCrevice});

@@ -7621,6 +7621,59 @@ test('Song of the Elves Iorwerth scroll lands on the walkable camp tile', () => 
   assert.deepEqual(destination, [2194, 3258, 0]);
 });
 
+test('Song of the Elves restores the saved private library on relog without resetting its puzzle', () => {
+  const { api: base, handlers } = mockApi();
+  const spawned = [];
+  class LibraryArea {
+    constructor() { this.destroyed = false; }
+    isDestroyed() { return this.destroyed; }
+    enter(mobile) { mobile.area = this; }
+  }
+  const api = new Proxy(base, { get(target, prop) {
+    if (prop === 'core') return { ...target.core, PrivateArea: LibraryArea };
+    if (prop === 'spawnNpc') return definition => { const npc = { ...definition }; spawned.push(npc); return npc; };
+    return target[prop];
+  } });
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const attributes = new Map([
+    ['quest.song_of_the_elves.stage', 130],
+    ['quest.song_of_the_elves.library-seals', 3],
+    ['quest.song_of_the_elves.library-puzzle', '1:4'],
+  ]);
+  let location = new api.core.Location(2623, 6130, 1);
+  const player = { getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getUsername: () => 'library-relog', getLocation: () => location, getArea() { return this.area; },
+    moveTo: destination => { location = destination; }, sendMessage() {} };
+  const restore = handlers.playerLogin.find(handler => handler.name === 'syncLibraryLogin');
+  restore({ player });
+  assert.ok(player.area instanceof LibraryArea);
+  assert.equal(spawned.length, 1);
+  assert.equal(spawned[0].owner, player);
+  assert.equal(spawned[0].ownerOnly, true);
+  assert.equal(spawned[0].area, player.area, 'the guide joins the restored private library');
+  assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '1:4');
+  assert.equal(attributes.get('quest.song_of_the_elves.library-seals'), 3);
+  assert.deepEqual([location.getX(), location.getY(), location.getZ()], [2623, 6130, 1]);
+  for (const handler of handlers.custom.get('npc-dialogue:choice')) handler({ player,
+    option: 'Yes please.', definition: { getName: () => 'Memory of Seren' } });
+  assert.equal(location.getZ(), 1, 'asking to replay knowledge does not teleport the player');
+  const teleport = { player, action: 'teleport', text: 'The player is teleported to the central chamber.', handled: false };
+  for (const handler of handlers.custom.get('npc-dialogue:action')) handler(teleport);
+  assert.equal(teleport.handled, true);
+  assert.deepEqual([location.getX(), location.getY(), location.getZ()], [2623, 6144, 0],
+    'the actual accepted return action moves the player');
+  restore({ player });
+  assert.equal(spawned.length, 1, 'a repeated login hook does not create another instance or guide');
+  player.area.destroyed = true;
+  attributes.set('quest.song_of_the_elves.stage', 140);
+  restore({ player });
+  assert.equal(spawned.length, 2, 'completed seals can still be left through the guide after relog');
+  player.area = null;
+  location = new api.core.Location(2353, 3179, 0);
+  restore({ player });
+  assert.equal(player.area, null, 'ordinary Lletya login never enters the library');
+});
+
 test('Song of the Elves library mirrors must follow the previous beam direction', () => {
   class TestPrivateArea {
     constructor() { this.objects = []; }
