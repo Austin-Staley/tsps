@@ -206,7 +206,7 @@ class EditorLocPreview {
             this.sizeX = preview.rotation & 1 ? type.sizeY : type.sizeX;
             this.sizeY = preview.rotation & 1 ? type.sizeX : type.sizeY;
             const textureIds = client.textureLoader.getTextureIds().filter(id => client.textureLoader.isSd(id)).slice(0, 2047);
-            const scene = new SceneBuffer(client.textureLoader, new Map(textureIds.map((id, index) => [id, index])), model.verticesCount);
+            const scene = new SceneBuffer(client.textureLoader, new Map(textureIds.map((id, index) => [id, index + 1])), model.verticesCount);
             for (const alpha of [false, true]) {
                 const range = scene.addModelAnimFrame(model, alpha);
                 if (!range[1]) continue;

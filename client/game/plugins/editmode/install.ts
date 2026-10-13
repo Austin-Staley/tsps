@@ -1122,6 +1122,11 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
             const config = plugin.getConfig();
             if (!config.renderAllHeightLevels) return config.heightLevel;
             if (config.heightLevel === 0) {
+                const selection = plugin.getState().selection;
+                if (selection?.plane === 0 && (selection.kind === "loc" || selection.kind === "npc") &&
+                    (renderer.getTileRenderFlagAt(0, selection.tileX, selection.tileY) & TILE_FLAG_UNDER_ROOF) !== 0) {
+                    return 0;
+                }
                 if (hoveredRoofFrame !== renderer.currentFrameCount) {
                     hoveredRoofFrame = renderer.currentFrameCount;
                     // Pick the ground heightfield even while a roof covers it, avoiding hover flicker.
