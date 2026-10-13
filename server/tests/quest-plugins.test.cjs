@@ -167,7 +167,7 @@ test('Blood Moon refinery handoff uses valid events, restores the tomb route, an
   assert.deepEqual(completions, [player], 'the transcript action emits the handoff once');
   assert.ok(emitted.every(name => /^[^:\s]+:[^:\s]+$/.test(name)));
   assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'freed');
-  assert.deepEqual(varbits.at(-1), [15464, 60]);
+  assert.deepEqual(varbits.at(-1), [15464, 61]);
 });
 
 test('Blood Moon refinery copies its exact cache room into a walkable four-plane scene', () => {
@@ -203,6 +203,12 @@ test('Blood Moon refinery copies its exact cache room into a walkable four-plane
       assert.ok(reachable.has(`${enemy.getX()},${enemy.getY()}`), `enemy anchor ${x},${y} is reachable from the tunnel`);
     }
     assert.ok(reachable.size > refinery.ENEMIES.length, 'BFS follows the connected source-room floor copied into the private scene');
+    const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+    const { ObjectIdentifiers: O } = api.core;
+    const exit = CacheDefinitions.getObject(61203);
+    assert.equal(exit.transformVarbit, 15464);
+    assert.equal(exit.transforms[61], O.ENTRY_27, 'the freed-slaves native phase reveals the north exit');
+    assert.equal(CacheDefinitions.getObject(O.ENTRY_27).actions[0], 'Enter');
   } finally {
     area.destroy();
   }
@@ -224,6 +230,24 @@ test('Blood Moon refinery returns obsolete source-room saves to the real tunnel 
   assert.equal(moves.length, 1);
   assert.deepEqual([moves[0].getX(), moves[0].getY(), moves[0].getZ()], [3117, 7472, 2]);
   assert.deepEqual(refinery.progress(player), { started: true, phase: 'fight', killed: [] });
+});
+
+test('Blood Moon refinery exit opens only after liberation and uses the canonical Castle Drakan landing', () => {
+  const { api } = mockApi();
+  const attrs = new Map([['the-blood-moon-rises:refinery-progress', { started: true, phase: 'freed', killed: [0, 1, 2, 3, 4] }]]);
+  const varbits = [], moves = [];
+  const player = {
+    getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getPacketSender: () => ({ sendVarbit: (id, value) => varbits.push([id, value]) }),
+    getCombat: () => ({ reset() {} }), moveTo: location => moves.push(location),
+  };
+  const refinery = require('../plugins/quests/bmr/Refinery.TheBloodMoonRises')(api);
+  const event = { player, objectId: 61203, definition: { id: api.core.ObjectIdentifiers.ENTRY_27, getName: () => 'Entry' },
+    location: { x: 3182, y: 7470, z: 0 }, option: 'Enter', handled: false };
+  assert.equal(refinery.tombPassage(event), true);
+  assert.deepEqual(varbits.at(-1), [15464, 62]);
+  assert.deepEqual([moves[0].getX(), moves[0].getY(), moves[0].getZ()], [3170, 7572, 0]);
+  assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'escaped');
 });
 
 test('Blood Moon refinery Ivan hook yields outside its own tomb/refinery phases', () => {
@@ -6939,7 +6963,8 @@ test('Blood Moon native bitfield mapping restores Slepe refinery phase without c
  quest.setStage(player,20);assert.equal(bits.get(15464),12);assert.equal(bits.get(15467),2,'the ready-to-leave stage shows Ivan’s trade/disguise variant');
  quest.setStage(player,30);assert.equal(bits.get(15464),16);assert.equal(bits.get(15467),0,'the hideout Ivan is hidden after the story moves to Slepe');bits.clear();
  attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'fight'});runtime.sendQuestVarps({player});assert.equal(bits.get(15464),58);assert.equal(quest.getStage(player),30,'the refinery morph must not advance the quest journal stage');bits.clear();
- attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'freed'});handlers.playerLogin.at(-1)({player});runtime.sendQuestVarps({player});assert.equal(bits.get(15464),60,'the freed refinery state is restored after relog');bits.clear();
+ attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'cleared'});runtime.sendQuestVarps({player});assert.equal(bits.get(15464),60,'killing the guards alone does not unlock the exit before the slaves escape');bits.clear();
+ attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'freed'});handlers.playerLogin.at(-1)({player});runtime.sendQuestVarps({player});assert.equal(bits.get(15464),61,'the freed refinery exit transform is restored after relog');bits.clear();
  attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'escaped'});quest.setStage(player,30);assert.equal(bits.get(15464),62,'the escape morph survives a chapter stage sync');attrs.delete('the-blood-moon-rises:refinery-progress');bits.clear();
  quest.setStage(player,60);assert.equal(quest.getStage(player),60);assert.equal(bits.get(15464),102);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),102);quest.setStage(player,70);assert.equal(bits.get(15464),116);
  attrs.set('quest.the_blood_moon_rises.preparations',{stewFed:true});quest.setStage(player,60);assert.equal(bits.get(15464),110);
