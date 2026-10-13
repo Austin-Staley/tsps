@@ -129,6 +129,100 @@ test('NPC Contact paginates plugin contacts and dispatches the chosen contact on
   } finally { PluginManager.emitCustomEvent = original; }
 });
 
+test('Blood Moon refinery handoff preserves route stage and waits for the real escape action', () => {
+  const { api, handlers } = mockApi();
+  const moveCalls = [], varbits = [], completions = [];
+  const attrs = new Map();
+  const player = {
+    getAttribute: key => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getPacketSender: () => ({ sendVarbit: (id, value) => varbits.push([id, value]) }),
+    moveTo: location => moveCalls.push(location),
+  };
+  api.onCustomEvent('test:completed', event => completions.push(event.player));
+  const refinery = require('../plugins/quests/bmr/Refinery.TheBloodMoonRises')(api);
+  refinery.start({ player });
+  assert.deepEqual(moveCalls, [], 'the handoff begins the tomb route without teleporting the player');
+  assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'route');
+  assert.deepEqual(varbits.at(-1), [15464, 48]);
+
+  api.emitCustomEvent = (name, event) => {
+    if (name === 'bmr:refinery:completed') completions.push(event.player);
+  };
+  refinery.action({ player, stepId: 'jYDLQy' });
+  assert.deepEqual(completions, [], 'the escape dialogue cannot complete before the owned room is cleared');
+  attrs.set('the-blood-moon-rises:refinery-progress', { started: true, phase: 'cleared', killed: [0, 1, 2, 3, 4] });
+  refinery.action({ player, stepId: 'jYDLQy' });
+  refinery.action({ player, stepId: 'jYDLQy' });
+  assert.deepEqual(completions, [player], 'the transcript action emits the handoff once');
+  assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'freed');
+  assert.deepEqual(varbits.at(-1), [15464, 60]);
+});
+
+test('Blood Moon rubble dialogue distinguishes a real pickaxe and the refinery waits for all five owned kills', () => {
+  const { api } = mockApi();
+  const vars = [], attrs = new Map();
+  const player = {
+    getAttribute: key => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getPacketSender: () => ({ sendVarbit: (id, value) => vars.push([id, value]) }),
+    getSkillManager: () => ({ getCurrentLevel: () => 1 }),
+    getEquipment: () => ({ getItems: () => [] }),
+    getInventory: () => ({ contains: id => id === 1265 }),
+    sendMessage: () => {},
+  };
+  const refinery = require('../plugins/quests/bmr/Refinery.TheBloodMoonRises')(api);
+  attrs.set('the-blood-moon-rises:refinery-progress', { started: true, phase: 'tomb', killed: [] });
+  assert.equal(refinery.answerCondition({ player, stepId: 'e9a7zZ', pages: [{ page: 'The Blood Moon Rises' }] }), false);
+  assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'tomb');
+  player.getInventory = () => ({ contains: () => false });
+  assert.equal(refinery.answerCondition({ player, stepId: 'e9a7zZ', pages: [{ page: 'The Blood Moon Rises' }] }), true);
+  assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'pickaxe');
+  assert.deepEqual(vars.at(-1), [15464, 52]);
+
+  attrs.set('the-blood-moon-rises:refinery-progress', { started: true, phase: 'fight', killed: [] });
+  const area = { player, cast: new Map(), residents: [], orbs: [] };
+  refinery.sessions.set(player, area);
+  for (let slot = 0; slot < 4; slot++) {
+    const npc = { getOwner: () => player };
+    area.cast.set(slot, npc);
+    refinery.npcDeath({ npc });
+    assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'fight');
+  }
+  const last = { getOwner: () => player };
+  area.cast.set(4, last);
+  refinery.npcDeath({ npc: last });
+  assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'cleared');
+  assert.deepEqual(attrs.get('the-blood-moon-rises:refinery-progress').killed, [0, 1, 2, 3, 4]);
+});
+
+test('Blood Moon refinery vampyres require an equipped flail', () => {
+  const { api } = mockApi();
+  const attrs = new Map();
+  let weaponId = 4151;
+  const equipment = [];
+  equipment[PluginManager.getCoreApi().Equipment.WEAPON_SLOT] = { getId: () => weaponId };
+  const player = {
+    getAttribute: key => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getPacketSender: () => ({ sendVarbit() {} }),
+    getEquipment: () => ({ getItems: () => equipment }),
+    sendMessage: () => {},
+  };
+  const enemy = { getOwner: () => player, getId: () => 16125 };
+  const refinery = require('../plugins/quests/bmr/Refinery.TheBloodMoonRises')(api);
+  refinery.sessions.set(player, { cast: new Map([[0, enemy]]) });
+  const hit = { damage: 12, getAttacker: () => player, setTotalDamage(value) { this.damage = value; } };
+
+  refinery.modifyPlayerHit({ npc: enemy, hit });
+  assert.equal(hit.damage, 0, 'ordinary weapons cannot damage a vampyre');
+
+  weaponId = PluginManager.getCoreApi().ItemIdentifiers.IVANDIS_FLAIL;
+  hit.damage = 12;
+  refinery.modifyPlayerHit({ npc: enemy, hit });
+  assert.equal(hit.damage, 12, 'an equipped Ivandis flail uses normal hit resolution');
+});
+
 test('Fellowship recruitment waits for dialogue continuation and all four heroes before herb growth', () => {
   const { api, handlers, player, attributes } = movarioFixture();
   let progress = 280;
