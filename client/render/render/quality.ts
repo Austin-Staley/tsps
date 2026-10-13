@@ -361,7 +361,7 @@ export function getUiRenderMetrics(host: WebGLOsrsRendererHost,
     
 }
 
-export function getCanvasResolutionScale(host: WebGLOsrsRendererHost, cssWidth: number, cssHeight: number): number {
+export function getCanvasResolutionScale(host: Pick<WebGLOsrsRendererHost, "osrsClient">, cssWidth: number, cssHeight: number): number {
 
         if (typeof window === "undefined") {
             return 1;

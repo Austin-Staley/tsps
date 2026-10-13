@@ -44,7 +44,7 @@ import {
     type WorldEntityOverlay,
 } from "./worldEntity";
 import { environmentAt } from "../render/environment";
-import { syncCameraViewportUnitScale } from "../render/quality";
+import { getCanvasResolutionScale, syncCameraViewportUnitScale } from "../render/quality";
 import { GPU_TEXTURE_USAGE, SCENE_DEPTH_FORMAT, SCENE_GROUP, WORLD_TEXTURES_GROUP } from "./bindings";
 import { getControlledPlayerEcsIndex, updateFollowCamera } from "./camera";
 import { resolveWebGPULodDistance, resolveWebGPURenderDistance } from "./frameConfig";
@@ -250,6 +250,10 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         } catch (error) {
             console.error("[webgpu] world resources init failed", error);
         }
+    }
+
+    override getCanvasResolutionScale(cssWidth: number, cssHeight: number): number {
+        return getCanvasResolutionScale(this, cssWidth, cssHeight);
     }
 
     override onResize(width: number, height: number): void {
