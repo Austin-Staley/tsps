@@ -61,6 +61,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.LARGE_DOOR_11, O.LARGE_DOOR_14],
     [O.DOOR_180, O.DOOR_181],
     [O.DOOR_499, O.DOOR_498],
+    // Lassar residential house doors use the next Close-action loc after an
+    // unused actionless variant (48262 Open -> 48264 Close).
+    [O.DOOR_679, O.DOOR_681],
     // Catacomb outer jail gate: its open cache variant has no Close action.
     [O.GATE_301, O.GATE_302],
     // Tree Gnome Stronghold doors: 1967/1968 open into the cache's nameless 1969/1970.

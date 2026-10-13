@@ -994,6 +994,23 @@ test('Lassar residential shadow doors use their canonical open and close locs', 
   }
 });
 
+test('Lassar residential house door opens through its nonconsecutive cache Close loc', () => {
+  const h = buildHarness();
+  try {
+    h.place(48262, 2688, 6429, 2);
+    assert.deepEqual(h.click(48262, 2688, 6429, 2, 'Open', 'Door'), [
+      ['register', 48264, 2689, 6429, 3],
+      ['deregister', 48262, 2688, 6429, 2],
+    ]);
+    assert.deepEqual(h.click(48264, 2689, 6429, 3, 'Close', 'Door'), [
+      ['register', 48262, 2688, 6429, 2],
+      ['deregister', 48264, 2689, 6429, 3],
+    ]);
+  } finally {
+    h.restore();
+  }
+});
+
 
 test("Harold's bedroom door rotates without needing a separate open cache loc", () => {
   const h = buildHarness();
