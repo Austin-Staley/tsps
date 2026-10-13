@@ -253,6 +253,15 @@ module.exports = function registerTheBloodMoonRises(api) {
       fromFloor: 1, toFloor: 1, landing: [2371, 7370] },
     { id: CASTLE_DOOR_IDS.CRESCENT_M, x: 2325, y: 7403, z: 0, from: CASTLE_ROOM.GALLERY_HALL, to: CASTLE_ROOM.KITCHEN,
       fromFloor: 1, toFloor: 1, landing: [2314, 7420] },
+    // Captured full-quest route after the kitchen chest: this reverse door
+    // carries the player from the kitchen into the Gallery Hall beside Veliaf.
+    { id: CASTLE_DOOR_IDS.DOOR_ALT_M, x: 2314, y: 7403, z: 0, from: CASTLE_ROOM.KITCHEN,
+      to: CASTLE_ROOM.GALLERY_HALL, fromFloor: 1, toFloor: 1, landing: [2325, 7397] },
+    // The half-moon door on the Gallery Hall's south side returns to the
+    // ground-floor lobby, where the captured route descends to the basement.
+    { id: CASTLE_DOOR_IDS.HALF_M, x: 2330, y: 7398, z: 0, from: CASTLE_ROOM.GALLERY_HALL,
+      to: CASTLE_ROOM.LOBBY, fromFloor: 1, toFloor: 1, key: CASTLE_BOOK_ITEMS.halfMoonKey,
+      keyName: "half moon key", landing: [2314, 7361] },
     { id: CASTLE_DOOR_IDS.CRESCENT, x: 2314, y: 7421, z: 0, from: CASTLE_ROOM.KITCHEN, to: CASTLE_ROOM.GALLERY_HALL,
       fromFloor: 1, toFloor: 1, landing: [2324, 7403] },
     { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2309, y: 7421, z: 0, from: CASTLE_ROOM.KITCHEN, to: CASTLE_ROOM.LARDER,

@@ -1803,7 +1803,8 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [61572, 2369, 7384, 0], [61572, 2388, 7366, 0],
     [61593, 2370, 7370, 0], [61592, 2343, 7416, 0],
     [61593, 2325, 7403, 0], [61592, 2314, 7421, 0],
-    [61576, 2309, 7421, 0], [61577, 2361, 7393, 0],
+    [61576, 2309, 7421, 0], [61577, 2361, 7393, 0], [61577, 2314, 7403, 0],
+    [61587, 2330, 7398, 0],
     [61577, 2330, 7407, 0], [61572, 2327, 7382, 0],
     [61587, 2310, 7386, 0], [61587, 2327, 7391, 0], [61576, 2309, 7397, 0],
     [61576, 2358, 7380, 0], [61588, 2327, 7360, 1], [61588, 2342, 7373, 1],
@@ -1865,7 +1866,8 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
       (x === 2452 && y === 7404 && z === 0) || (x === 2468 && y === 7408 && z === 0) ||
       (x === 2328 && y === 7361 && z === 0) || (x === 2314 && y === 7371 && z === 1) ||
       (x === 2482 && y === 7403 && z === 0) ||
-      (x === 2469 && y === 7418 && z === 0) || (x === 2361 && y === 7394 && z === 0);
+      (x === 2469 && y === 7418 && z === 0) || (x === 2361 && y === 7394 && z === 0) ||
+      (x === 2325 && y === 7397 && z === 0) || (x === 2314 && y === 7361 && z === 0);
     if (!isCapturedDoorArrival) assert.equal(RegionManager.blocked(new api.core.Location(x, y, z), null), false,
       `the paired-door landing ${x},${y},${z} is a clear floor tile`);
     assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) =>
@@ -2005,6 +2007,17 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     location: { x: 2339, y: 7395, z: 0 }, sourceLocation: { x: 2338, y: 7395, z: 0 }, handled: false });
   assert.deepEqual(moved.at(-1), [2337, 7370, 0], 'the matching half-moon door returns to the dining room');
   assert.equal(varbits.get(15499), 2);
+
+  attributes.set('quest.the_blood_moon_rises.castle-room', 11);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 1);
+  const kitchenExit = enterPairedDoor(61577, 2314, 7403, 0, { x: 2313, y: 7403, z: 0 });
+  assert.equal(kitchenExit.handled, true);
+  assert.deepEqual(moved.at(-1), [2325, 7397, 0], 'the recorded kitchen exit reaches the Gallery Hall beside Veliaf');
+  assert.equal(varbits.get(15499), 12);
+  const galleryReturn = enterPairedDoor(61587, 2330, 7398, 0, { x: 2329, y: 7398, z: 0 });
+  assert.equal(galleryReturn.handled, true);
+  assert.deepEqual(moved.at(-1), [2314, 7361, 0], 'the half-moon door returns from Gallery Hall to the lobby');
+  assert.equal(varbits.get(15499), 1);
   for (const [id, name, keyId] of [
     [61584, 'New moon door', api.core.ItemIdentifiers.NEW_MOON_KEY],
     [61588, 'Gibbous moon door', api.core.ItemIdentifiers.GIBBOUS_MOON_KEY],
