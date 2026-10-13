@@ -285,12 +285,9 @@ export class Player extends Mobile {
         return this;
     }
     public heal(amount: number) {
-        let level = this.getSkillManager().getMaxLevel(Skill.HITPOINTS);
-        if ((this.getSkillManager().getCurrentLevel(Skill.HITPOINTS) + amount) >= level) {
-            this.setHitpoints(level);
-        } else {
-            this.setHitpoints(this.getSkillManager().getCurrentLevel(Skill.HITPOINTS) + amount);
-        }
+        const current = this.getSkillManager().getCurrentLevel(Skill.HITPOINTS);
+        const cap = Math.max(current, this.getSkillManager().getMaxLevel(Skill.HITPOINTS));
+        this.setHitpoints(Math.min(current + amount, cap));
     }
 
     public getBaseAttack(type: CombatType): number {
