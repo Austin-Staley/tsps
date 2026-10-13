@@ -495,7 +495,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
 
         // ========== Game Resource Checks ==========
         host.syncSceneFramebufferSize();
-        if (host.needsFramebufferUpdate) {
+        if (host.needsFramebufferUpdate || host.getRequestedMsaaSamples() !== host.msaaSamplesRequested) {
             host.initFramebuffer();
         }
 
@@ -708,7 +708,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
             .set(8, fogDepth as any)
             .set(9, timeSec as any)
             .set(10, host.brightness as any)
-            .set(11, host.colorBanding as any)
+            .set(11, (host.osrsClient.gpuPlugin?.settings()?.colorBanding ?? host.colorBanding) as any)
             .set(12, host.osrsClient.isNewTextureAnim as any)
             .update();
         profiler.endPhase();
@@ -1461,7 +1461,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
         host.app.clearColor(host.skyColor[0], host.skyColor[1], host.skyColor[2], host.skyColor[3]);
         host.app.defaultDrawFramebuffer().clear();
 
-        if (host.frameFxaaDrawCall && host.fxaaEnabled) {
+        if (host.frameFxaaDrawCall && (host.osrsClient.gpuPlugin?.settings()?.fxaa ?? host.fxaaEnabled)) {
             host.frameFxaaDrawCall.uniform("u_resolution", host.resolutionUni);
             host.frameFxaaDrawCall.texture("u_frame", host.textureFramebuffer.colorAttachments[0]);
             host.frameFxaaDrawCall.draw();

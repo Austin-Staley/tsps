@@ -1179,6 +1179,11 @@ export interface PluginApi {
    * @param methodCtor constructor for the combat method to instantiate
    * @param options optional overrides (default to a singleton instance)
    */
+  /**
+   * Makes an NPC menu option start a fight as "Attack" does, for every NPC that has it (the
+   * Nightmare's totems' "Charge"): clicking it attacks, and spells can be cast on them.
+   */
+  registerNpcCombatOption(option: string): void;
   registerNpcCombatMethodProvider(
     npcIds: number | number[],
     methodCtor: new () => any,

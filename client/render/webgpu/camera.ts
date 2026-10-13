@@ -238,8 +238,7 @@ export function updateFollowCamera(
         camera.setScenePitchOverride(camera.getControlPitchAngle());
     }
 
-    const viewportWidth = renderer.canvas.width || 1;
-    const viewportHeight = renderer.canvas.height || 1;
+    const { width: viewportWidth, height: viewportHeight } = renderer.getSceneViewportWidgetRect();
     const { unitViewportHeight: effectiveViewportHeight } = camera.computeViewportMetricsForSize(
         viewportWidth,
         viewportHeight,

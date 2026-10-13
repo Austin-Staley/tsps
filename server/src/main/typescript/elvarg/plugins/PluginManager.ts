@@ -4076,6 +4076,9 @@ export class PluginManager {
         }
         PluginManager.registerCombatMethodResolverInternal(pluginName, resolver);
       },
+      registerNpcCombatOption: (option) => {
+        require("../game/definition/NpcDefinition").NpcDefinition.addCombatOption(option);
+      },
       registerNpcCombatMethodProvider: (npcIds, methodCtor, options) => {
         const normalized = Array.isArray(npcIds) ? npcIds : [npcIds];
         if (

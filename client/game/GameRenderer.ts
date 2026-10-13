@@ -81,8 +81,10 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
     }
 
     protected override getEffectiveFpsLimit(): number {
-        let limit = super.getEffectiveFpsLimit();
-        let target = Number(this.osrsClient.targetFps) | 0;
+        // The GPU plugin's cap replaces the client's own, mobile battery caps included.
+        const gpu = this.osrsClient.gpuPlugin?.settings();
+        let limit = gpu ? gpu.fpsLimit : super.getEffectiveFpsLimit();
+        let target = gpu ? 0 : Number(this.osrsClient.targetFps) | 0;
         // Never honor CS2 mobile battery caps (~20) on desktop.
         if (!isMobileMode && target > 0 && target < 60) {
             target = 0;
@@ -223,6 +225,7 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
             this.osrsClient.handleUiHover();
         }
         if (!this.uiHidden) {
+            this.osrsClient.runMouseFollowingTimers();
             // Update widget layout (CS2 positioning/sizing)
             this.osrsClient.updateWidgets();
         }
