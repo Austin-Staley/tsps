@@ -5676,6 +5676,13 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(interact({ player, objectId: 48199, location: { x: 2598, y: 6365, z: 0 }, option: 'Use' }), true,
       'the cache-backed Use puddle variant enters the Shadow Realm');
     assert.equal(player.location.x, 2342, 'the puddle carries the player into the mirrored shadow region');
+    attrs.set(lassarAttribute, { ...attrs.get(lassarAttribute), inShadow: false });
+    player.location = new core.Location(2618, 6405, 0);
+    assert.equal(interact({ player, objectId: 48199, location: { x: 2618, y: 6404, z: 0 }, option: 'Use' }), true);
+    assert.deepEqual([player.location.x, player.location.y], [2361, 6405],
+      'the Plaza puddle lands beside its blocked mirrored footprint so the quest route remains walkable');
+    attrs.set(lassarAttribute, { ...attrs.get(lassarAttribute), inShadow: true });
+    player.location = new core.Location(2342, 6365, 0);
     const lockedDoor = { player, objectId: 48289, location: new core.Location(2350, 6360, 0), clickType: 1, handled: false };
     doorToggleHooks[0](lockedDoor);
     assert.equal(lockedDoor.handled, true,

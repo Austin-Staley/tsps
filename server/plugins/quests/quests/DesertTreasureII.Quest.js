@@ -145,6 +145,9 @@ module.exports = function registerDesertTreasureII(api) {
     ["2409,6418", [2410, 6417]], ["2598,6365", [2597, 6365]],
     ["2618,6404", [2617, 6405]], ["2665,6418", [2666, 6417]],
   ]);
+  // shortcut: the Plaza puddle's mirrored 2x2 footprint blocks its exact
+  // shadow-side arrival tile; land beside it so the normal route can continue.
+  const LASSAR_PUDDLE_ENTRY_TILES = new Map([["2618,6404", [2361, 6405]]]);
   const LASSAR_TELEPORTERS = [
     [2593, 6424, 49479], [2617, 6417, 49480], [2611, 6379, 49482], [2599, 6341, 49483],
     [2643, 6434, 49484], [2652, 6405, 49481], [2691, 6415, 49485],
@@ -6565,7 +6568,8 @@ module.exports = function registerDesertTreasureII(api) {
         p.sendMessage(state.inShadow ? "Use the blackstone fragment to leave the Shadow Realm." : "The blackstone fragment is needed to cross safely into the Shadow Realm.");
         return true;
       }
-      p.moveTo(new api.core.Location(x - 256, y, z));
+      const entryTile = LASSAR_PUDDLE_ENTRY_TILES.get(`${x},${y}`);
+      p.moveTo(new api.core.Location(entryTile?.[0] ?? x - 256, entryTile?.[1] ?? y, z));
       setLassar(p, { ...state, inShadow: true });
       p.sendMessage("You use the puddle to enter Lassar's Shadow Realm.");
       return true;
