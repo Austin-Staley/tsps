@@ -5661,7 +5661,7 @@ test('Song of the Elves exposes the post-library meeting through a talkable Aria
   lletya.process(player);
   assert.equal(spawns.length, 1, 'the owner-only meeting NPC is spawned once per chapter visit');
   assert.equal(spawns[0].id, api.core.NpcIdentifiers.ARIANWYN_6);
-  assert.deepEqual([spawns[0].x, spawns[0].y, spawns[0].z], [2354, 3172, 0]);
+  assert.deepEqual([spawns[0].x, spawns[0].y, spawns[0].z], [2353, 3173, 0]);
   assert.equal(spawns[0].owner, player);
   assert.equal(spawns[0].ownerOnly, true);
 });
@@ -6287,7 +6287,7 @@ test('Song of the Elves chains the city-gate farewell into Baxtorian’s final t
     assert.equal(prematureEnd.handled, true);
     assert.equal(quest.isComplete(player), false, 'the quest cannot complete before the final farewell');
     const farewell = { player, text: 'And I you. Farewell friend.' };
-    handlers.custom.get('npc-dialogue:line').at(-2)(farewell);
+    handlers.custom.get('npc-dialogue:line').find(h=>h.name==='finishWarEndArianwynLine')(farewell);
     assert.equal(typeof farewell.after, 'function');
     farewell.after();
     assert.equal(attributes.get('quest.song_of_the_elves.war-end-arianwyn-done'), true);
@@ -13537,4 +13537,34 @@ test('Song of the Elves battles wait for the briefing and use the real headquart
     assert.ok(elena,'Elena accompanies the resistance into the battle');
     assert.equal(player.area.canAttack(player,elena),false,'named companions cannot die to player attacks');
   } finally { runtime.startTranscript=original; }
+});
+
+test('Song of the Elves carries the earned castle victory through Lathas and the first Lletya meeting',()=>{
+ const {api,handlers}=mockApi(),runtime=require('../plugins/quests/QuestRuntime'),original=runtime.startTranscript;
+ const requests=[],spawned=[],areas=[];runtime.startTranscript=(...args)=>(requests.push(args),true);
+ api.spawnNpc=spec=>{const npc={...spec,isRegistered:()=>true};spawned.push(npc);return npc;};api.removeNpc=()=>{};api.registerArea=area=>areas.push(area);
+ try {
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const quest=runtime.getRegisteredQuests().at(-1),attrs=new Map([['quest.song_of_the_elves.stage',80]]),bits=new Map(),items=new Map();let location=new api.core.Location(2583,3287,0);
+  const player={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getLocation:()=>location,moveTo:v=>location=v,getUsername:()=> 'SoteStoryTest',isPlayer:()=>true,getAsPlayer(){return this;},sendMessage(){},getInventory:()=>({getAmount:id=>items.get(id)||0,getFreeSlots:()=>4,adds:(id,n)=>items.set(id,n)}),getPacketSender:()=>new Proxy({sendVarbit:(id,value)=>bits.set(id,value)},{get:(o,k)=>o[k]??(()=>{})})};
+  const action=handlers.custom.get('npc-dialogue:action').find(h=>h.name==='onAction');
+  action({player,action:'take-lathas-away'});assert.equal(attrs.get('song-of-the-elves:king-scene-progress'),undefined,'an unearned castle cannot sentence the king');
+  attrs.set('quest.song_of_the_elves.east-battle-kills',15);
+  handlers.playerLogin.find(h=>h.name==='resumeEarlyStory')({player});assert.deepEqual([location.getX(),location.getY()],[2537,9745]);
+  assert.equal(spawned.at(-1).id,api.core.NpcIdentifiers.KING_LATHAS_2,'the captured king is visible in the hideout');
+  action({player,action:'take-lathas-away'});assert.equal(bits.get(9016),52);
+  const capture={player,stepId:'Rc0W1H'};action(capture);assert.equal(capture.handled,true);assert.equal(bits.get(9016),54);
+  assert.deepEqual([location.getX(),location.getY()],[2198,3252]);assert.ok(spawned.some(n=>n.id===api.core.NpcIdentifiers.LORD_IORWERTH));
+  action({player,stepId:'v3r3p_'});assert.equal(quest.varbitValue(90,player),56);
+  areas.find(a=>a.constructor.name==='LletyaStoryArea').process(player);
+  assert.ok(spawned.some(n=>n.id===api.core.NpcIdentifiers.YSGAWYN));assert.ok(spawned.some(n=>n.id===api.core.NpcIdentifiers.ARIANWYN_6));
+  const line=handlers.custom.get('npc-dialogue:line').find(h=>h.name==='finishEarlyStoryLine');
+  let page={player,text:"Okay, I'll be back soon."};line(page);assert.equal(attrs.get('song-of-the-elves:first-meeting-progress'),undefined);page.after();assert.equal(bits.get(9016),58);
+  action({player,kind:'message',stepId:'NuOcWI'});assert.equal(attrs.get('quest.song_of_the_elves.stage'),90,'Elena cannot skip fetching Ysgawyn');
+  page={player,text:'Well... he was nice.'};line(page);page.after();assert.equal(bits.get(9016),60);
+  action({player,kind:'message',stepId:'NuOcWI'});assert.equal(attrs.get('quest.song_of_the_elves.stage'),100);assert.equal(bits.get(9016),62);
+  page={player,text:"Well in that case, I'll meet you there."};line(page);assert.equal(attrs.get('quest.song_of_the_elves.stage'),100);page.after();assert.equal(bits.get(9016),64);
+  action({player,kind:'message',stepId:'5Ndx0y'});assert.equal(bits.get(9016),68);assert.equal(items.get(api.core.ItemIdentifiers.ODE_TO_ETERNITY),1);
+  for(const npc of spawned)assert.equal(api.core.RegionManager.getClipping(npc.x,npc.y,npc.z,null),0,'scene actors stand on clear cache tiles');
+ } finally {runtime.startTranscript=original;}
 });

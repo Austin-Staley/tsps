@@ -24,6 +24,10 @@ module.exports = function registerSongOfTheElves(api) {
   const HEADQUARTERS_TRAPDOOR = ObjectIdentifiers.TRAPDOOR_38;
   const BATTLE_TRAPDOOR = ObjectIdentifiers.TRAPDOOR_95; // mourning_hideout_trap_door_battle
   const WEST_BATTLE_KILLS = "quest.song_of_the_elves.west-battle-kills";
+  const KING_SCENE_PROGRESS = "song-of-the-elves:king-scene-progress";
+  const FIRST_MEETING_PROGRESS = "song-of-the-elves:first-meeting-progress";
+  const FALLS_INTRODUCTION = "song-of-the-elves:falls-introduction";
+  const EARLY_STORY_ACTORS = new Map();
   const EAST_BATTLE_KILLS = "quest.song_of_the_elves.east-battle-kills";
   const BATTLE_AREA = "quest.song_of_the_elves.battle-area";
   const LATE_CHAPTER = "quest.song_of_the_elves.late-chapter";
@@ -252,18 +256,19 @@ module.exports = function registerSongOfTheElves(api) {
       // Lletya's map NPC is a cache scenery variant (5292) with no Talk-to
       // action. Use the cache's actual Talk-to Arianwyn variant for this chapter.
       const arianwynCurrent = player.getAttribute(LLETYA_ARIANWYN_NPC);
-      if ([13, 15].includes(currentChapter(player)) && !arianwynCurrent?.isRegistered?.()) {
-        const arianwyn = api.spawnNpc({ id: NpcIdentifiers.ARIANWYN_6, x: 2354, y: 3172, z: 0,
+      if ([8, 9, 11, 13, 15].includes(currentChapter(player)) && !arianwynCurrent?.isRegistered?.()) {
+        const arianwyn = api.spawnNpc({ id: NpcIdentifiers.ARIANWYN_6, x: 2353, y: 3173, z: 0,
           wanderRadius: 0, owner: player, ownerOnly: true });
         if (arianwyn) player.setAttribute(LLETYA_ARIANWYN_NPC, arianwyn);
       }
-      if (![13, 15].includes(currentChapter(player))) {
+      if (![8, 9, 11, 13, 15].includes(currentChapter(player))) {
         const arianwyn = player.getAttribute(LLETYA_ARIANWYN_NPC);
         if (arianwyn) api.removeNpc(arianwyn);
         player.setAttribute(LLETYA_ARIANWYN_NPC, null);
       }
       const baxtorian = player.getAttribute(LLETYA_BAXTORIAN_NPC);
       const chapter = currentChapter(player);
+      if ([8,9].includes(chapter)) ensureFirstMeetingActors(player);
       const campRetry = chapter === 19 && player.getAttribute(CAMP_DEFENSE_COMPLETE) === true &&
         player.getAttribute(FRAGMENT_DEFEATED) !== true;
       if (([16, 17].includes(chapter) || campRetry) && !baxtorian?.isRegistered?.()) {
@@ -719,6 +724,7 @@ module.exports = function registerSongOfTheElves(api) {
     const player = event?.player;
     if (!player) return;
     clearWarEndActors(player);
+    clearEarlyStoryActors(player);
     const area = player.getAttribute(BATTLE_AREA);
     if (area instanceof ArdougneBattleArea) {
       if (!area.isDestroyed()) area.leave(player, true);
@@ -728,6 +734,7 @@ module.exports = function registerSongOfTheElves(api) {
   }
   function onAction(event) {
     finishIncitement(event);
+    if (handleEarlyStoryAction(event)) return;
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
     const inventory = player.getInventory();
@@ -1549,6 +1556,35 @@ module.exports = function registerSongOfTheElves(api) {
       player.getLocation().getY() > 9700) {
       return startTranscript(api, player, event.npcId, PAGE,
         "meet-the-ardougne-resistance-planning-a-revolution-entering-the-hidden-basement");
+    }
+    if (currentChapter(player) === 7 && Number(player.getAttribute(EAST_BATTLE_KILLS)) === 15 &&
+      ["elena", "councillor halgrive"].includes(npcName)) {
+      const scene = Number(player.getAttribute(KING_SCENE_PROGRESS)) || 0;
+      if (scene===0) ensureCapturedKing(player);
+      return startTranscript(api, player, event.npcId, PAGE, scene === 2 ? "face-to-face-with-lord-iorwerth"
+        : scene === 1 ? "battle-of-two-ardougnes-killing-of-a-king" : "battle-of-two-ardougnes-it-s-treason-then",
+        scene === 0 ? kingQuestionSteps : undefined);
+    }
+    if (currentChapter(player) === 8 && npcName === "arianwyn") {
+      if (Number(player.getAttribute(FIRST_MEETING_PROGRESS)) > 0) {
+        player.sendMessage("Fetch Ysgawyn from the upper platforms and Elena from the pond for Arianwyn's meeting.");
+        return true;
+      }
+      return startTranscript(api, player, event.npcId, PAGE, "retreating-to-lletya");
+    }
+    if (currentChapter(player) === 8 && npcName === "ysgawyn") {
+      if (Number(player.getAttribute(FIRST_MEETING_PROGRESS)) < 1) return false;
+      return startTranscript(api, player, event.npcId, PAGE, "retreating-to-lletya-fetching-ysgawyn");
+    }
+    if (currentChapter(player) === 8 && npcName === "elena") {
+      if (Number(player.getAttribute(FIRST_MEETING_PROGRESS)) < 2) {
+        player.sendMessage("Fetch Ysgawyn for the meeting first.");
+        return true;
+      }
+      return startTranscript(api, player, event.npcId, PAGE, "retreating-to-lletya-fetching-elena");
+    }
+    if (currentChapter(player) === 9 && npcName === "arianwyn") {
+      return startTranscript(api, player, event.npcId, PAGE, "the-first-meeting-the-first-meeting-begins");
     }
     const chapterName = CHAPTERS[currentChapter(player)];
     if (npcName === "edmond" && currentChapter(player) === 1) {
@@ -2445,6 +2481,90 @@ module.exports = function registerSongOfTheElves(api) {
     player.sendMessage("You can return through the cave by the camp and face the Fragment again.");
   }
 
+  function clearEarlyStoryActors(player) {
+    for (const npc of EARLY_STORY_ACTORS.get(player) ?? []) api.removeNpc(npc);
+    EARLY_STORY_ACTORS.delete(player);
+  }
+  function ensureCapturedKing(player) {
+    if ((EARLY_STORY_ACTORS.get(player) ?? []).some(npc=>npc.isRegistered?.())) return;
+    clearEarlyStoryActors(player);
+    const king=api.spawnNpc({id:NpcIdentifiers.KING_LATHAS_2,x:2541,y:9745,z:0,wanderRadius:0,owner:player,ownerOnly:true});
+    if (king) EARLY_STORY_ACTORS.set(player,[king]);
+  }
+  function ensureFirstMeetingActors(player) {
+    const old = EARLY_STORY_ACTORS.get(player) ?? [];
+    if (old.some(npc=>npc.isRegistered?.())) return;
+    clearEarlyStoryActors(player);
+    // QH marks the upper platform's wall; the adjacent clear tile is reachable.
+    const spawned = [
+      { id: NpcIdentifiers.YSGAWYN, x:2334,y:3167,z:1 },
+      { id: NpcIdentifiers.ELENA_3, x:2324,y:3152,z:0 },
+    ].map(spec=>api.spawnNpc({...spec,wanderRadius:0,owner:player,ownerOnly:true})).filter(Boolean);
+    EARLY_STORY_ACTORS.set(player, spawned);
+  }
+  function resumeEarlyStory({player}) {
+    if (quest.isComplete(player)) return;
+    if (currentChapter(player) === 7 && Number(player.getAttribute(EAST_BATTLE_KILLS)) === 15) {
+      const scene=Number(player.getAttribute(KING_SCENE_PROGRESS)) || 0;
+      if (scene===0) { player.moveTo(new Location(2537,9745,0)); ensureCapturedKing(player); }
+      else startTranscript(api,player,NpcIdentifiers.ELENA_3,PAGE,scene===1
+        ? "battle-of-two-ardougnes-killing-of-a-king" : "face-to-face-with-lord-iorwerth");
+    }
+  }
+  function kingQuestionSteps(steps) {
+    return steps.map(step => step.type !== "choice" ? step : {...step,options:step.options.map(option =>
+      option.text === "We're done here, take him away." ? {...option,steps:[{player:option.text},
+        {type:"action",action:"take-lathas-away"}]} : option)});
+  }
+  function handleEarlyStoryAction(event) {
+    const player=event?.player;
+    if (!player || quest.isComplete(player)) return false;
+    if (event.action==="take-lathas-away" && currentChapter(player)===7 && Number(player.getAttribute(EAST_BATTLE_KILLS))===15) {
+      player.setAttribute(KING_SCENE_PROGRESS,1);
+      player.getPacketSender().sendVarbit(9016,52);
+      event.handled=true;event.steps=loadTranscripts(api)[PAGE].variants["battle-of-two-ardougnes-killing-of-a-king"];
+      return true;
+    }
+    if (event.stepId==="Rc0W1H" && currentChapter(player)===7 && Number(player.getAttribute(KING_SCENE_PROGRESS))===1) {
+      player.setAttribute(KING_SCENE_PROGRESS,2);
+      player.getPacketSender().sendVarbit(9016,54);
+      // shortcut: dialogue and cache-clear arrival represent the narrated capture;
+      // cinematic camera choreography needs a live OSRS packet capture.
+      player.moveTo(new Location(2198,3252,0));
+      clearEarlyStoryActors(player);
+      EARLY_STORY_ACTORS.set(player,[
+        {id:NpcIdentifiers.LORD_IORWERTH,x:2196,y:3252,z:0},
+        {id:NpcIdentifiers.ELENA_3,x:2199,y:3252,z:0},
+        {id:NpcIdentifiers.ESSYLLT_2,x:2200,y:3252,z:0},
+        {id:NpcIdentifiers.ARIANWYN_6,x:2197,y:3251,z:0},
+      ].map(spec=>api.spawnNpc({...spec,wanderRadius:0,owner:player,ownerOnly:true})).filter(Boolean));
+      event.handled=true;event.steps=loadTranscripts(api)[PAGE].variants["face-to-face-with-lord-iorwerth"];
+      return true;
+    }
+    if (event.stepId==="v3r3p_" && currentChapter(player)===7 && Number(player.getAttribute(KING_SCENE_PROGRESS))===2) {
+      clearEarlyStoryActors(player);setChapter(player,8);player.moveTo(new Location(2353,3172,0));ensureFirstMeetingActors(player);
+      return true;
+    }
+    if (event.kind==="message" && ["HhCkbH","NuOcWI","GkCxQQ"].includes(event.stepId) && currentChapter(player)===8 && Number(player.getAttribute(FIRST_MEETING_PROGRESS))===2) {
+      player.setAttribute(FIRST_MEETING_PROGRESS,3);setChapter(player,9);return true;
+    }
+    if (event.stepId==="5Ndx0y" && currentChapter(player)===10 && (player.getInventory().getFreeSlots()>0 || player.getInventory().getAmount(ItemIdentifiers.ODE_TO_ETERNITY)>0)) {
+      player.setAttribute(FALLS_INTRODUCTION,true);
+      player.getPacketSender().sendVarbit(9016,68);
+    }
+    return false;
+  }
+  function finishEarlyStoryLine(event) {
+    const player=event?.player;if (!player || quest.isComplete(player)) return;
+    if (currentChapter(player)===8 && event.text==="Okay, I'll be back soon.") {
+      event.after=()=>{player.setAttribute(FIRST_MEETING_PROGRESS,1);player.getPacketSender().sendVarbit(9016,58);};
+    } else if (currentChapter(player)===8 && Number(player.getAttribute(FIRST_MEETING_PROGRESS))===1 && event.text==="Well... he was nice.") {
+      event.after=()=>{player.setAttribute(FIRST_MEETING_PROGRESS,2);player.getPacketSender().sendVarbit(9016,60);};
+    } else if (currentChapter(player)===9 && event.text==="Well in that case, I'll meet you there.") {
+      event.after=()=>{setChapter(player,10);clearEarlyStoryActors(player);};
+    }
+  }
+
   function finishArdougneBattleBriefing(event) {
     const player = event?.player;
     if (!player) return;
@@ -2584,7 +2704,7 @@ module.exports = function registerSongOfTheElves(api) {
       startTranscript(api, player, 0, PAGE, "battle-of-two-ardougnes-east-ardougne-after-killing-15-paladins-and-knights");
       area.leave(player, false);
       player.setAttribute(BATTLE_AREA, null);
-      player.moveTo(new Location(2583, 3287, 0));
+      player.moveTo(new Location(2537, 9745, 0));
       return;
     }
   }
@@ -2631,7 +2751,7 @@ module.exports = function registerSongOfTheElves(api) {
     if (existing && !existing.isDestroyed?.()) return true;
     if (player.getAttribute(LLETYA_TRAITOR_REVEALED) !== true || currentChapter(player) !== 15) return false;
     const area = new LletyaArianwynArea(player.getUsername?.());
-    const boss = api.spawnNpc({ id: NpcIdentifiers.ARIANWYN_2, x: 2354, y: 3172, z: 0,
+    const boss = api.spawnNpc({ id: NpcIdentifiers.ARIANWYN_2, x: 2353, y: 3173, z: 0,
       wanderRadius: 0, owner: player, ownerOnly: true });
     if (!boss) {
       player.sendMessage("Arianwyn cannot be reached in the chaos. Speak to him again to try.");
@@ -2984,6 +3104,10 @@ module.exports = function registerSongOfTheElves(api) {
     if (value === 50) return 40;
     if (value === 60) return Number(player?.getAttribute(WEST_BATTLE_KILLS)) >= 10 ? 45 : 44;
     if (value === 70) return player?.getAttribute(BATTLE_AREA)?.battle === "east" ? 48 : 46;
+    if (value === 80) return [50,52,54][Number(player?.getAttribute(KING_SCENE_PROGRESS)) || 0];
+    if (value === 90) return [56,58,60][Math.min(2,Number(player?.getAttribute(FIRST_MEETING_PROGRESS)) || 0)];
+    if (value === 100) return 62;
+    if (value === 110) return player?.getAttribute(FALLS_INTRODUCTION) === true ? 68 : 64;
     return value;
   }
   function elenaEscapeReminder(steps) {
@@ -3251,7 +3375,7 @@ module.exports = function registerSongOfTheElves(api) {
   const ACTION_CHAPTER = {
     "jtPiC1": 2, "LeWWCS": 3,
     "Rc0W1H": 7, "UeAKgA": 11,
-    "x04RMY": 10, "D1wXY6": 11, "EMxiFg": 11,
+    "x04RMY": 11, "D1wXY6": 11, "EMxiFg": 11,
     "ycGZ1J": 12, "eOtNFO": 12, "koxQh3": 13, "FoLVmk": 14,
     "ZYvQiu": 18, "XhOxpi": 15, "YAPX-R": 19, "FK0kOz": 19,
   };
@@ -3276,6 +3400,7 @@ module.exports = function registerSongOfTheElves(api) {
   });
   api.onNpcDialogueVariant(selectVariant);
   api.onPlayerLogin(syncResistanceLogin);
+  api.onPlayerLogin(resumeEarlyStory);
   api.onPlayerLogin(({ player }) => {
     syncCrwysTree(player);
     sendIthellMeilyrVarbits(player);
@@ -3310,6 +3435,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onCustomEvent("npc-dialogue:line", finishHeadquartersWarning);
   api.onCustomEvent("npc-dialogue:line", finishDisguiseBriefing);
   api.onCustomEvent("npc-dialogue:line", finishWarEndArianwynLine);
+  api.onCustomEvent("npc-dialogue:line", finishEarlyStoryLine);
   api.onCustomEvent("npc-dialogue:line", handleLletyaConfrontationLine);
   api.onCustomEvent("world:object-examine", examineLletyaChild);
   api.onCustomEvent("world:object-examine", handleIthellSymbolExamine);
@@ -3353,6 +3479,9 @@ module.exports = function registerSongOfTheElves(api) {
   api.persistAttribute(WEST_BATTLE_KILLS);
   api.persistAttribute(HEADQUARTERS_WARNING_HEARD);
   api.persistAttribute(EAST_BATTLE_KILLS);
+  api.persistAttribute(KING_SCENE_PROGRESS);
+  api.persistAttribute(FIRST_MEETING_PROGRESS);
+  api.persistAttribute(FALLS_INTRODUCTION);
   api.persistAttribute(LATE_CHAPTER);
   api.persistAttribute(WAR_END_ARIANWYN_DONE);
   api.persistAttribute(VALLEY_FIGURE);
