@@ -16,6 +16,61 @@ test("crater bounds cover the arena but not the wall line", () => {
   assert.equal(Area.insideCrater(null), false);
 });
 
+test("leaving the crater removes owned spawn and acid state", () => {
+  require("../dist/Server").Server.installProductionPathResolver();
+  const Specials = require("../plugins/bosses/vorkath/Specials.Vorkath");
+  const removeQueue = [];
+  const addQueue = [];
+  let deregistered = 0;
+  class PrivateArea {
+    constructor() { this.entities = []; this.destroyed = false; }
+    destroy() { this.destroyed = true; }
+    isDestroyed() { return this.destroyed; }
+    postLeave() { this.postLeft = true; }
+  }
+  const core = {
+    PrivateArea,
+    Boundary: class {},
+    Task: class {},
+    TaskManager: { submit() {} },
+    TimerKey: { FREEZE: 1, FREEZE_IMMUNITY: 2 },
+    World: { getAddNPCQueue: () => addQueue, getRemoveNPCQueue: () => removeQueue },
+    ObjectManager: { deregister: () => { deregistered++; } },
+  };
+  const hooks = { onPlayerProcess() {}, onPlayerLogout() {}, onPlayerDisconnect() {}, onNpcDeath() {} };
+  const pluginApi = { core, getCombatFactory: () => ({}), ...hooks };
+  Specials.fights.clear();
+  Specials.attach(pluginApi);
+  Area.attach(pluginApi);
+  const area = new (Area._test.getAreaClass())("DS2 test");
+  let areaAttribute = area;
+  const cancelled = [];
+  const player = {
+    isRegistered: () => true,
+    getHitpoints: () => 99,
+    getAttribute: (key) => key === "vorkath:instance-area" ? areaAttribute : undefined,
+    setAttribute: (key, value) => { if (key === "vorkath:instance-area") areaAttribute = value; },
+    getTimers: () => ({ cancel: (key) => cancelled.push(key) }),
+  };
+  const npc = (id, hp) => ({ isRegistered: () => true, getId: () => id, getHitpoints: () => hp });
+  const boss = npc(Shared.QUEST_AWAKE_ID, 460);
+  const spawn = npc(Shared.SPAWN_ID, 38);
+  const entities = [boss, spawn].map((value) => ({ isNpc: () => true, getAsNpc: () => value }));
+  area.entities.push(...entities);
+  const pool = {};
+  Specials.fights.set(boss, { pools: new Map([["2270,4060", pool]]), spawn, fighter: player });
+
+  area.postLeave({ isPlayer: () => true, getAsPlayer: () => player }, false);
+
+  assert.equal(area.isDestroyed(), true);
+  assert.equal(area.postLeft, true);
+  assert.equal(areaAttribute, null);
+  assert.equal(deregistered, 1);
+  assert.deepEqual(removeQueue, [spawn, boss]);
+  assert.deepEqual(cancelled, [core.TimerKey.FREEZE, core.TimerKey.FREEZE_IMMUNITY]);
+  assert.equal(Specials.fights.has(boss), false);
+});
+
 test("Vorkath wakes into the quest form before completion and the stronger form after it", () => {
   const player = (stage) => ({ getAttribute: (key) => key === "quest.dragon_slayer_ii.stage" ? stage : undefined });
   assert.equal(Shared.awakeIdForPlayer(player(8)), 8060);
