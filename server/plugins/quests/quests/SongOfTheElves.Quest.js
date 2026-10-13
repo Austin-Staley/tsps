@@ -26,6 +26,10 @@ module.exports = function registerSongOfTheElves(api) {
   const WEST_BATTLE_KILLS = "quest.song_of_the_elves.west-battle-kills";
   const KING_SCENE_PROGRESS = "song-of-the-elves:king-scene-progress";
   const FIRST_MEETING_PROGRESS = "song-of-the-elves:first-meeting-progress";
+  const FALLS_DEPARTURE = "song-of-the-elves:falls-departure";
+  const FALLS_BOOK_READ = "song-of-the-elves:falls-book-read";
+  const FALLS_ACTORS = new Map();
+  const FALLS_KEY = ItemIdentifiers.KEY_18; // cache waterfall quest key, 298
   const FALLS_INTRODUCTION = "song-of-the-elves:falls-introduction";
   const EARLY_STORY_ACTORS = new Map();
   const EAST_BATTLE_KILLS = "quest.song_of_the_elves.east-battle-kills";
@@ -136,15 +140,21 @@ module.exports = function registerSongOfTheElves(api) {
     .concat(Array.from({ length: 20 }, (_, index) => 36705 + index)));
   const LIBRARY_DIRECTIONS = { east: "E", west: "W", north: "N", south: "S", up: "U", down: "D" };
   const PILLAR_ITEMS = [
-    [ItemIdentifiers.ADAMANT_CHAINBODY, "Adamant chainbody"],
-    [ItemIdentifiers.WINE_OF_ZAMORAK, "Wine of zamorak"],
-    [ItemIdentifiers.NATURE_RUNE, "Nature rune"],
-    [ItemIdentifiers.BLACK_DAGGER, "Black dagger"],
-    [ItemIdentifiers.CABBAGE, "Cabbage"],
+    [ItemIdentifiers.NATURE_RUNE,"Nature rune",[]],
+    [ItemIdentifiers.IRIT_LEAF,"Irit leaf",[ItemIdentifiers.GRIMY_IRIT_LEAF,
+      ItemIdentifiers.ASSORTED_FLOWERS,ItemIdentifiers.BLACK_FLOWERS,ItemIdentifiers.BLUE_FLOWERS,
+      ItemIdentifiers.MIXED_FLOWERS,ItemIdentifiers.ORANGE_FLOWERS,ItemIdentifiers.PURPLE_FLOWERS,
+      ItemIdentifiers.RED_FLOWERS,ItemIdentifiers.WHITE_FLOWERS,ItemIdentifiers.YELLOW_FLOWERS]],
+    [ItemIdentifiers.BLACK_DAGGER,"Black dagger",[ItemIdentifiers.BLACK_DAGGER_P_,ItemIdentifiers.BLACK_DAGGER_P_PLUS_,
+      ItemIdentifiers.BLACK_DAGGER_P_PLUS_PLUS_,ItemIdentifiers.BLACK_KNIFE,ItemIdentifiers.BLACK_KNIFE_P_,
+      ItemIdentifiers.BLACK_KNIFE_P_PLUS_,ItemIdentifiers.BLACK_KNIFE_P_PLUS_PLUS_]],
+    [ItemIdentifiers.WINE_OF_ZAMORAK,"Wine of zamorak",[ItemIdentifiers.ZAMORAK_BREW_4_]],
+    [ItemIdentifiers.ADAMANT_CHAINBODY,"Adamant chainbody",[]],
+    [ItemIdentifiers.CABBAGE,"Cabbage",[]],
   ];
   const FALLS_PILLAR_LOCATIONS = [
-    [1869, 4628, 2], [1869, 4650, 2], [1881, 4639, 2],
-    [1869, 4628, 0], [1869, 4650, 0],
+    [2600,9909,0],[2600,9911,0],[2600,9913,0],
+    [2607,9911,0],[2607,9913,0],[2607,9909,0],
   ];
   const CHEMICALS = [ItemIdentifiers.BLUE_LIQUID, ItemIdentifiers.GREEN_POWDER, ItemIdentifiers.CLEAR_LIQUID, ItemIdentifiers.RED_POWDER];
   const SULPHURIC_ACID = ItemIdentifiers.SULPHURIC_ACID;
@@ -725,6 +735,7 @@ module.exports = function registerSongOfTheElves(api) {
     if (!player) return;
     clearWarEndActors(player);
     clearEarlyStoryActors(player);
+    clearFallsActors(player);
     const area = player.getAttribute(BATTLE_AREA);
     if (area instanceof ArdougneBattleArea) {
       if (!area.isDestroyed()) area.leave(player, true);
@@ -793,13 +804,7 @@ module.exports = function registerSongOfTheElves(api) {
           inventory.adds(itemId, 1);
           event.box = { items: [itemId] };
           if (itemId === ItemIdentifiers.ODE_TO_ETERNITY) {
-            const order = PILLAR_ITEMS.map((_, index) => index);
-            for (let index = order.length - 1; index > 0; index--) {
-              const swap = Math.floor(Math.random() * (index + 1));
-              [order[index], order[swap]] = [order[swap], order[index]];
-            }
-            player.setAttribute(FALLS_ORDER, order.join(","));
-            player.sendMessage(`Ode to Eternity's riddle: place ${order.map((index) => PILLAR_ITEMS[index][1]).join(", then ")}.`);
+            if (!player.getAttribute(FALLS_ORDER)) randomizeFallsOrder(player);
           }
         } else if (inventory.getFreeSlots() === 0) {
           event.handled = true;
@@ -1589,6 +1594,13 @@ module.exports = function registerSongOfTheElves(api) {
     }
     if (currentChapter(player) === 9 && npcName === "arianwyn") {
       return startTranscript(api, player, event.npcId, PAGE, "the-first-meeting-the-first-meeting-begins");
+    }
+    if (currentChapter(player)===10 && npcName==="arianwyn" && player.getLocation().getY()<4000) {
+      return startTranscript(api,player,event.npcId,PAGE,"the-first-meeting-talking-to-arianwyn-after-the-meeting");
+    }
+    if (currentChapter(player)===10 && npcName==="baxtorian") {
+      if (Number(player.getAttribute(FALLS_PILLARS))!==63) return false;
+      return startTranscript(api,player,event.npcId,PAGE,"visiting-baxtorian-falls-baxtorian-lives");
     }
     const chapterName = CHAPTERS[currentChapter(player)];
     if (npcName === "edmond" && currentChapter(player) === 1) {
@@ -2485,6 +2497,56 @@ module.exports = function registerSongOfTheElves(api) {
     player.sendMessage("You can return through the cave by the camp and face the Fragment again.");
   }
 
+  class FallsStoryArea extends Area {
+    process(mobile) {
+      if (!mobile?.isPlayer?.()) return;
+      const player=mobile.getAsPlayer();
+      if (currentChapter(player)===10 && player.getAttribute(FALLS_DEPARTURE)===true) ensureFallsActors(player);
+      else clearFallsActors(player);
+    }
+  }
+  function clearFallsActors(player) {
+    for (const npc of FALLS_ACTORS.get(player) ?? []) api.removeNpc(npc);
+    FALLS_ACTORS.delete(player);
+  }
+  function ensureFallsActors(player) {
+    const actors=FALLS_ACTORS.get(player) ?? [];
+    const specs=[{id:NpcIdentifiers.ARIANWYN_6,x:2603,y:9905,z:0}];
+    if (Number(player.getAttribute(FALLS_PILLARS))===63) specs.push({id:NpcIdentifiers.BAXTORIAN,x:2605,y:9915,z:0});
+    for (const spec of specs) {
+      if (actors.some(npc=>npc.getId?.()===spec.id && npc.isRegistered?.())) continue;
+      const npc=api.spawnNpc({...spec,wanderRadius:0,owner:player,ownerOnly:true});if(npc)actors.push(npc);
+    }
+    FALLS_ACTORS.set(player,actors);
+  }
+  function randomizeFallsOrder(player) {
+    const order=PILLAR_ITEMS.map((_,i)=>i);
+    for(let i=order.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[order[i],order[j]]=[order[j],order[i]];}
+    if(order.join(",")===player.getAttribute(FALLS_ORDER))order.push(order.shift());
+    player.setAttribute(FALLS_ORDER,order.join(","));
+  }
+  function readFallsOde(event) {
+    const player=event?.player;if(!player || currentChapter(player)!==10 || player.getInventory().getAmount(ItemIdentifiers.ODE_TO_ETERNITY)<1)return false;
+    event.handled=true;player.setAttribute(FALLS_BOOK_READ,true);
+    player.sendMessage("Ode to eternity numbers the offerings: 1 Nature rune, 2 Flowers or irit, 3 Black knife or dagger, 4 Wine of Zamorak, 5 Adamant chainbody, 6 Cabbage.");
+    return true;
+  }
+  function searchFallsKey(event) {
+    const player=event?.player,loc=event?.location;
+    if(!player || currentChapter(player)!==10 || loc?.x!==2589 || loc?.y!==9888 || loc?.z!==0)return false;
+    event.handled=true;const inv=player.getInventory();
+    if(inv.getAmount(FALLS_KEY)>0)player.sendMessage("You already have the key to the waterfall doors.");
+    else if(inv.getFreeSlots()<1)player.sendMessage("Make room for the waterfall key.");
+    else {inv.adds(FALLS_KEY,1);player.sendMessage("You find a small key among the crates.");}
+    return true;
+  }
+  function guardFallsDoors(event) {
+    const player=event?.player,loc=event?.location;
+    if(!player || currentChapter(player)!==10 || loc?.z!==0 || ![[2568,9893],[2566,9901]].some(([x,y])=>loc.x===x&&loc.y===y))return;
+    if(player.getInventory().getAmount(FALLS_KEY)>0)return;
+    event.handled=true;player.sendMessage("The waterfall door is locked. Search the eastern chamber's crate for its key.");
+  }
+
   function clearEarlyStoryActors(player) {
     for (const npc of EARLY_STORY_ACTORS.get(player) ?? []) api.removeNpc(npc);
     EARLY_STORY_ACTORS.delete(player);
@@ -2564,6 +2626,8 @@ module.exports = function registerSongOfTheElves(api) {
       event.after=()=>{player.setAttribute(FIRST_MEETING_PROGRESS,1);player.getPacketSender().sendVarbit(9016,58);};
     } else if (currentChapter(player)===8 && Number(player.getAttribute(FIRST_MEETING_PROGRESS))===1 && event.text==="Well... he was nice.") {
       event.after=()=>{player.setAttribute(FIRST_MEETING_PROGRESS,2);player.getPacketSender().sendVarbit(9016,60);};
+    } else if (currentChapter(player)===10 && player.getLocation().getY()<4000 && event.text==="Sounds good, see you there.") {
+      event.after=()=>{player.setAttribute(FALLS_DEPARTURE,true);player.getPacketSender().sendVarbit(9016,66);};
     } else if (currentChapter(player)===9 && event.text==="Well in that case, I'll meet you there.") {
       event.after=()=>{setChapter(player,10);clearEarlyStoryActors(player);};
     }
@@ -3111,7 +3175,8 @@ module.exports = function registerSongOfTheElves(api) {
     if (value === 80) return [50,52,54][Number(player?.getAttribute(KING_SCENE_PROGRESS)) || 0];
     if (value === 90) return [56,58,60][Math.min(2,Number(player?.getAttribute(FIRST_MEETING_PROGRESS)) || 0)];
     if (value === 100) return 62;
-    if (value === 110) return player?.getAttribute(FALLS_INTRODUCTION) === true ? 68 : 64;
+    if (value === 120) return 72;
+    if (value === 110) return Number(player?.getAttribute(FALLS_PILLARS))===63 ? 70 : player?.getAttribute(FALLS_INTRODUCTION) === true ? 68 : player?.getAttribute(FALLS_DEPARTURE) === true ? 66 : 64;
     return value;
   }
   function elenaEscapeReminder(steps) {
@@ -3241,7 +3306,7 @@ module.exports = function registerSongOfTheElves(api) {
   function placeFallsPillarItem(event) {
     const player = event?.player;
     if (!player || currentChapter(player) !== 10 || quest.isComplete(player)) return false;
-    const index = PILLAR_ITEMS.findIndex(([id]) => id === event.itemId);
+    const index = PILLAR_ITEMS.findIndex(([id,,alternatives]) => id === event.itemId || alternatives.filter(Number.isInteger).includes(event.itemId));
     if (index < 0) return false;
     const location = event.location ?? event.object?.getLocation?.();
     const x = location?.x ?? location?.getX?.();
@@ -3251,6 +3316,10 @@ module.exports = function registerSongOfTheElves(api) {
     if (pillarIndex < 0) return false;
     const inventory = player.getInventory();
     if (inventory.getAmount(event.itemId) < 1) return false;
+    event.handled=true;
+    if (player.getAttribute(FALLS_BOOK_READ)!==true) {
+      player.sendMessage("Read Ode to eternity before placing the offerings.");return true;
+    }
     const order = String(player.getAttribute(FALLS_ORDER) ?? "").split(",").map(Number);
     if (order.length !== PILLAR_ITEMS.length || order.some((value) => !Number.isInteger(value))) {
       player.sendMessage("The riddle in Ode to Eternity is incomplete. Speak to Arianwyn for another copy.");
@@ -3264,15 +3333,17 @@ module.exports = function registerSongOfTheElves(api) {
     }
     if (order[pillarIndex] !== index) {
       inventory.deleteNumber(event.itemId, 1);
-      player.sendMessage("The light rejects the item. You will need another one to try that pillar again.");
+      player.setAttribute(FALLS_PILLARS,0);randomizeFallsOrder(player);
+      player.sendMessage("The pillar rejects the offering. Its numbered clues change; inspect the pillars again.");
       return true;
     }
     inventory.deleteNumber(event.itemId, 1);
     player.setAttribute(FALLS_PILLARS, placed | bit);
     player.sendMessage(`The ${PILLAR_ITEMS[index][1]} disappears into the numbered pillar.`);
     if ((placed | bit) === (1 << PILLAR_ITEMS.length) - 1) {
-      quest.setStage(player, STAGE.STARTED + 110);
-      player.sendMessage("A hidden passage opens beneath the waterfall.");
+      player.getPacketSender().sendVarbit(9016,70);
+      ensureFallsActors(player);
+      player.sendMessage("The stone statue becomes Baxtorian. Speak to him beside the plinth.");
     }
     return true;
   }
@@ -3280,9 +3351,9 @@ module.exports = function registerSongOfTheElves(api) {
   function searchFallsPillar(event) {
     const player = event?.player;
     if (!player || currentChapter(player) !== 10 || quest.isComplete(player)) return false;
-    const location = event.object?.getLocation?.();
+    const location = event.location ?? event.object?.getLocation?.();
     const index = FALLS_PILLAR_LOCATIONS.findIndex(([x, y, z]) =>
-      x === location?.getX?.() && y === location?.getY?.() && z === location?.getZ?.());
+      x === (location?.x ?? location?.getX?.()) && y === (location?.y ?? location?.getY?.()) && z === (location?.z ?? location?.getZ?.()));
     if (index < 0) return false;
     event.handled = true;
     const order = String(player.getAttribute(FALLS_ORDER) ?? "").split(",").map(Number);
@@ -3290,7 +3361,9 @@ module.exports = function registerSongOfTheElves(api) {
       player.sendMessage("The markings are too faint to read without Ode to Eternity.");
       return true;
     }
-    player.sendMessage(`This is pillar ${index + 1}. The riddle calls for ${PILLAR_ITEMS[order[index]][1]} here.`);
+    const clueIndices=[0,5,1,3,2,4];
+    const clues=["I am the","I am not opposite the","I am next to the","I am not next to the","I am opposite the","I am not the"];
+    player.sendMessage(`${clues[index]} ${["1st","2nd","3rd","4th","5th","6th"][order[clueIndices[index]]]}.`);
     return true;
   }
 
@@ -3451,6 +3524,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemOnObject("Explosive potion", "Hole", placeCampExplosive, { noted: false });
+  api.onItemAction("Ode to eternity", { Read: readFallsOde });
   api.onItemAction("Spade", { Dig: handleMeilyrDig });
   api.onItemAction((event) => {
     handleCrystalSeedAction(event);
@@ -3486,6 +3560,11 @@ module.exports = function registerSongOfTheElves(api) {
   api.persistAttribute(KING_SCENE_PROGRESS);
   api.persistAttribute(FIRST_MEETING_PROGRESS);
   api.persistAttribute(FALLS_INTRODUCTION);
+  api.persistAttribute(FALLS_DEPARTURE);
+  api.persistAttribute(FALLS_BOOK_READ);
+  api.onObjectInteraction("Pillar", { Inspect: searchFallsPillar });
+  api.onObjectInteraction("Crate", { Search: searchFallsKey });
+  api.onCustomEvent("door:toggle", guardFallsDoors);
   api.persistAttribute(LATE_CHAPTER);
   api.persistAttribute(WAR_END_ARIANWYN_DONE);
   api.persistAttribute(VALLEY_FIGURE);
@@ -3533,6 +3612,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.registerArea(new LletyaStoryArea([
     new Boundary(2320, 2390, 3150, 3210, 0), new Boundary(2320, 2390, 3150, 3210, 1),
   ]));
+  api.registerArea(new FallsStoryArea([new Boundary(2598,2609,9904,9918,0)]));
   api.registerArea(new MeilyrPassArea([new Boundary(2298, 2320, 3202, 3222, 0)]));
   api.registerArea(new YsgawynClearingArea([new Boundary(2248, 2268, 3159, 3180, 0)]));
   api.registerArea(new HefinStoryArea([new Boundary(2270, 2308, 3087, 3117, 0)]));

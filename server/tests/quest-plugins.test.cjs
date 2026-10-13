@@ -13568,3 +13568,25 @@ test('Song of the Elves carries the earned castle victory through Lathas and the
   for(const npc of spawned)assert.equal(api.core.RegionManager.getClipping(npc.x,npc.y,npc.z,null),0,'scene actors stand on clear cache tiles');
  } finally {runtime.startTranscript=original;}
 });
+
+test('Song of the Elves uses all six real waterfall pillars, reading, clue retries and the awakened Baxtorian',()=>{
+ const {api,handlers}=mockApi(),runtime=require('../plugins/quests/QuestRuntime'),original=runtime.startTranscript;runtime.startTranscript=()=>true;
+ const spawned=[];api.spawnNpc=spec=>{const n={...spec,getId:()=>spec.id,isRegistered:()=>true};spawned.push(n);return n;};api.removeNpc=()=>{};
+ try{
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);const quest=runtime.getRegisteredQuests().at(-1),I=api.core.ItemIdentifiers;
+  const attrs=new Map([['quest.song_of_the_elves.stage',110],['quest.song_of_the_elves.falls-order','0,1,2,3,4,5'],['song-of-the-elves:falls-departure',true]]),items=new Map([[I.ODE_TO_ETERNITY,1],[I.NATURE_RUNE,1],[I.IRIT_LEAF,2],[I.BLACK_KNIFE,1],[I.WINE_OF_ZAMORAK,1],[I.ADAMANT_CHAINBODY,1],[I.CABBAGE,1]]),bits=new Map(),messages=[];
+  const player={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getLocation:()=>new api.core.Location(2603,9905,0),getInventory:()=>({getAmount:id=>items.get(id)||0,getFreeSlots:()=>8,adds:(id,n)=>items.set(id,n),deleteNumber:(id,n)=>items.set(id,(items.get(id)||0)-n)}),sendMessage:m=>messages.push(m),getPacketSender:()=>new Proxy({sendVarbit:(id,v)=>bits.set(id,v)},{get:(o,k)=>o[k]??(()=>{})})};
+  const keyDoor={player,location:{x:2568,y:9893,z:0}};handlers.custom.get('door:toggle')[0](keyDoor);assert.equal(keyDoor.handled,true,'the locked door requires the obtainable key');
+  assert.equal(handlers.objects.some(h=>h({player,definition:{getName:()=> 'Crate'},option:'Search',location:{x:2589,y:9888,z:0}})===true),true);assert.equal(items.get(I.KEY_18),1);const unlocked={player,location:{x:2568,y:9893,z:0}};handlers.custom.get('door:toggle')[0](unlocked);assert.equal(unlocked.handled,undefined,'the real door handler can open it');
+  const place=handlers.itemOnObject.find(h=>h.name==='placeFallsPillarItem');const offering=(id,x,y)=>({player,itemId:id,location:{x,y,z:0}});
+  place(offering(I.NATURE_RUNE,2600,9909));assert.equal(items.get(I.NATURE_RUNE),1,'reading the actual book precedes item consumption');
+  handlers.namedItemActions.get('Ode to eternity').Read({player,itemId:I.ODE_TO_ETERNITY});assert.equal(attrs.get('song-of-the-elves:falls-book-read'),true);
+  place(offering(I.IRIT_LEAF,2600,9909));assert.equal(items.get(I.IRIT_LEAF),1);assert.notEqual(attrs.get('quest.song_of_the_elves.falls-order'),'0,1,2,3,4,5');assert.equal(attrs.get('quest.song_of_the_elves.falls-pillars'),0,'wrong offerings reroll the puzzle');
+  attrs.set('quest.song_of_the_elves.falls-order','0,1,2,3,4,5');
+  const points=[[2600,9909],[2600,9911],[2600,9913],[2607,9911],[2607,9913],[2607,9909]],ids=[I.NATURE_RUNE,I.IRIT_LEAF,I.BLACK_KNIFE,I.WINE_OF_ZAMORAK,I.ADAMANT_CHAINBODY,I.CABBAGE];
+  for(let i=0;i<points.length;i++){const[x,y]=points[i];assert.equal(api.core.CacheDefinitions.getObject(2005).transforms[68],34966,'native68 enables Inspect on the actual placed pillar');place(offering(ids[i],x,y));if(i<5)assert.equal(attrs.get('quest.song_of_the_elves.stage'),110,'partial offerings cannot skip Baxtorian');}
+  assert.equal(attrs.get('quest.song_of_the_elves.falls-pillars'),63);assert.equal(bits.get(9016),70);assert.equal(attrs.get('quest.song_of_the_elves.stage'),110);assert.ok(spawned.some(n=>n.id===api.core.NpcIdentifiers.BAXTORIAN));
+  const action=handlers.custom.get('npc-dialogue:action').find(h=>h.name==='onAction');action({player,kind:'message',stepId:'x04RMY'});assert.equal(attrs.get('quest.song_of_the_elves.stage'),120);assert.equal(bits.get(9016),72,'the full Baxtorian farewell enters the preparation chapter');
+  for(const n of spawned)assert.equal(api.core.RegionManager.getClipping(n.x,n.y,n.z,null),0);
+ }finally{runtime.startTranscript=original;}
+});
