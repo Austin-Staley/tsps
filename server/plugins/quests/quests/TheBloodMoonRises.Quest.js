@@ -33,6 +33,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   const CASTLE_LAST_FLOOR_VARBIT = 15549;
   const CASTLE_LAST_FACING_VARBIT = 15500;
   const CASTLE_VENATOR_HEAD_VARBIT = 15523;
+  const CASTLE_GIBBOUS_DISPLAY_CASE_VARBIT = 15563;
+  const CASTLE_GIBBOUS_PORTAL_VARBIT = 15532;
   const CASTLE_GROUND_FLOOR = 1;
   const CASTLE_OUTER_LIBRARY_PORTAL_VARBIT = 15531;
   const CASTLE_VANESCULA_EMBLEM_VARBIT = 15504;
@@ -164,7 +166,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     SOLID: 61574, SOLID_M: 61575, GILDED: 61626, GILDED_M: 61627,
     STAIRS_UP: 61599, STAIRS_UP_NORUG: 61600, STAIRS_DOWN: 61606, STAIRS_DOWN_INVISIBLE: 61608,
     DISPLAY_STAIRS_DOWN: 61609,
-    SPIRAL_UP: 61602, SPIRAL_DOWN: 61604, GUEST_PORTAL_IN: 61771, GUEST_PORTAL_OUT: 61770,
+    SPIRAL_UP: 61602, SPIRAL_DOWN: 61604, GUEST_PORTAL_IN: 61771,
     CHAPEL_PORTAL_IN: 61773, CHAPEL_PORTAL_OUT: 61772, PUZZLE_LIBRARY: 61625, IVAN_PASSAGE: 61615 });
   const CASTLE_EMBLEM_IDS = Object.freeze([ItemIdentifiers.DRAKAN_EMBLEM, ItemIdentifiers.DRAKAN_EMBLEM_2,
     ItemIdentifiers.DRAKAN_EMBLEM_3]);
@@ -337,11 +339,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.DOOR_ALT_M, x: 2452, y: 7373, z: 0, from: CASTLE_ROOM.ORNATE_KNIFE, to: CASTLE_ROOM.UPPER_SOUTH_HALL,
       fromFloor: 2, toFloor: 2, landing: [2441, 7361] },
     { id: CASTLE_DOOR_IDS.GUEST_PORTAL_IN, x: 2450, y: 7372, z: 0, from: CASTLE_ROOM.ORNATE_KNIFE, to: CASTLE_ROOM.GUEST_STORAGE,
-      fromFloor: 2, toFloor: 2, action: "Enter", landing: [2515, 7395] },
-    { id: CASTLE_DOOR_IDS.GUEST_PORTAL_OUT, x: 2515, y: 7396, z: 0, from: CASTLE_ROOM.GUEST_STORAGE, to: CASTLE_ROOM.ORNATE_KNIFE,
-      fromFloor: 2, toFloor: 2, action: "Enter", landing: [2450, 7371] },
+      fromFloor: 2, toFloor: 2, action: "Enter", requiresStory: "gibbousGuestPortalOpened", landing: [2522, 7396] },
+    // The actual return is through the Gibbous door; the cache has no portal at 2515,7396.
     { id: CASTLE_DOOR_IDS.GIBBOUS_M, x: 2522, y: 7397, z: 0, from: CASTLE_ROOM.GUEST_STORAGE, to: CASTLE_ROOM.DISPLAY_ROOM,
-      fromFloor: 2, toFloor: 2, landing: [2507, 7363] },
+      fromFloor: 2, toFloor: 2, landing: [2506, 7364] },
     { id: CASTLE_DOOR_IDS.GIBBOUS, x: 2506, y: 7363, z: 0, from: CASTLE_ROOM.DISPLAY_ROOM, to: CASTLE_ROOM.GUEST_STORAGE,
       fromFloor: 2, toFloor: 2, landing: [2520, 7396] },
     { id: CASTLE_DOOR_IDS.GIBBOUS, x: 2336, y: 7370, z: 1, from: CASTLE_ROOM.DINING, to: CASTLE_ROOM.EXPLOSIVE_HALL,
@@ -357,7 +358,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.DOOR_ALT_M, x: 2551, y: 7387, z: 0, from: CASTLE_ROOM.VENATOR_LIBRARY, to: CASTLE_ROOM.VENATOR_PUZZLE,
       fromFloor: 2, toFloor: 2, landing: [2519, 7364] },
     { id: CASTLE_DOOR_IDS.DISPLAY_STAIRS_DOWN, x: 2503, y: 7369, z: 0, from: CASTLE_ROOM.DISPLAY_ROOM, to: CASTLE_ROOM.LOBBY,
-      fromFloor: 2, toFloor: 2, action: "Climb-down", landing: [2307, 7365, 1] },
+      fromFloor: 2, toFloor: 2, action: "Climb-down", landing: [2309, 7369, 1] },
     { id: CASTLE_DOOR_IDS.STAIRS_UP, x: 2308, y: 7365, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.DISPLAY_ROOM,
       fromFloor: 2, toFloor: 2, action: "Climb-up", landing: [2502, 7368] },
     { id: CASTLE_DOOR_IDS.GILDED_M, x: 2452, y: 7420, z: 0, from: CASTLE_ROOM.NORTH_LOBBY_HALL, to: CASTLE_ROOM.SMALL_HALL,
@@ -1939,6 +1940,8 @@ module.exports = function registerTheBloodMoonRises(api) {
         Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70);
       player.getPacketSender().sendVarbit(15543, castleStory(player).gibbous.fireplaceLit ? 1 : 0);
       syncCastleVenatorHead(player);
+      syncCastleGibbousDisplayCase(player);
+      syncCastleGibbousPortal(player);
     }
     syncCastleActors(player);
     const bookPuzzle = bookPuzzleState(player);
@@ -2145,6 +2148,18 @@ module.exports = function registerTheBloodMoonRises(api) {
       gibbous.secondGemPlaced ? 3 : gibbous.firstGemPlaced ? 2 : 0);
   }
 
+  function syncCastleGibbousDisplayCase(player) {
+    const placed = new Set(castleStory(player).gibbous.caseItems ?? []);
+    const value = (placed.has("skull") ? 1 : 0) | (placed.has("knife") ? 2 : 0) |
+      (placed.has("hourglass") ? 4 : 0);
+    player.getPacketSender().sendVarbit(CASTLE_GIBBOUS_DISPLAY_CASE_VARBIT, value);
+  }
+
+  function syncCastleGibbousPortal(player) {
+    player.getPacketSender().sendVarbit(CASTLE_GIBBOUS_PORTAL_VARBIT,
+      castleStory(player).gibbousGuestPortalOpened ? 1 : 0);
+  }
+
   function syncCastleSyringeBarrel(player) {
     if (!player || stage(player) !== STAGE.CASTLE) return;
     const story = castleStory(player);
@@ -2258,6 +2273,28 @@ module.exports = function registerTheBloodMoonRises(api) {
     const room = Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE));
     const gibbous = castleStory(player).gibbous;
     const clues = new Set(gibbous.clues ?? []);
+    if (room === CASTLE_ROOM.ORNATE_KNIFE && isObject(61776) && x === 2449 && y === 7371 && option === "pull") {
+      event.handled = true;
+      const story = castleStory(player);
+      if (!story.gibbousGuestPortalOpened) {
+        player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, gibbousGuestPortalOpened: true });
+        syncCastleGibbousPortal(player);
+        player.sendMessage("You pull the lever and a portal appears.");
+      }
+      return;
+    }
+    if (room === CASTLE_ROOM.ORNATE_KNIFE && isObject(61751) && x === 2454 && y === 7372 && option === "search") {
+      event.handled = true;
+      if (gibbous.knifeClaimed || hasItem(player, ItemIdentifiers.ORNATE_KNIFE)) {
+        player.sendMessage("You search the crate, but find nothing of interest.");
+        return;
+      }
+      if (castleKeyGive(player, ItemIdentifiers.ORNATE_KNIFE,
+        "You search the crate and take an ornate knife.")) {
+        updateGibbousStory(player, { knifeClaimed: true });
+      }
+      return;
+    }
     if (room === CASTLE_ROOM.VENATOR_PUZZLE && (id === 61730 || event?.objectId === 61730) &&
       x === 2521 && y === 7371 && option === "light") {
       event.handled = true;
@@ -2400,6 +2437,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (placed.has(slot) || !player.getInventory().contains(item)) return;
     player.getInventory().deleteNumber(item, 1);
     placed.add(slot); updateGibbousStory(player, { caseItems: [...placed] });
+    syncCastleGibbousDisplayCase(player);
     player.sendMessage(`You place the ${slot} in the display case.`);
     if (placed.size === 3) player.sendMessage("A hidden compartment opens beneath the display case.");
   }
@@ -3819,7 +3857,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     const ids = [event?.objectId, event?.definition?.id];
     if (!player || !ids.includes(CASTLE_OUTER_LIBRARY_LEVER.id) || x !== CASTLE_OUTER_LIBRARY_LEVER.x ||
       y !== CASTLE_OUTER_LIBRARY_LEVER.y || z !== CASTLE_OUTER_LIBRARY_LEVER.z ||
-      String(event?.option ?? "").toLowerCase() !== "pull") return;
+      String(event?.option ?? "").toLowerCase() !== "pull") return false;
     event.handled = true;
     const story = castleStory(player);
     if (quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
@@ -3846,7 +3884,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     const ids = [event?.objectId, event?.definition?.id];
     if (!player || !ids.includes(CASTLE_OUTER_LIBRARY_PORTAL.id) || x !== CASTLE_OUTER_LIBRARY_PORTAL.x ||
       y !== CASTLE_OUTER_LIBRARY_PORTAL.y || z !== CASTLE_OUTER_LIBRARY_PORTAL.z ||
-      String(event?.option ?? "").toLowerCase() !== "enter") return;
+      String(event?.option ?? "").toLowerCase() !== "enter") return false;
     event.handled = true;
     if (quest.isComplete(player) || stage(player) !== STAGE.CASTLE || !castleStory(player).parlourPortalUnlocked ||
       Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.NORTH_LOBBY_HALL ||
@@ -3872,7 +3910,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       !["enter", "climb-up", "climb-down"].includes(option) ||
       (!CASTLE_DOOR_NAMES.includes(name) && !CASTLE_DOOR_TRANSITIONS.some(door => objectIds.includes(door.id) &&
         door.x === x && door.y === y && (door.z ?? 0) === z)) ||
-      x < 2300 || x > 2600 || y < 7300 || y > 7440) return;
+      x < 2300 || x > 2600 || y < 7300 || y > 7440) return false;
     const transition = CASTLE_DOOR_TRANSITIONS.find(door => objectIds.includes(door.id) && door.x === x && door.y === y &&
       (door.z ?? 0) === z && String(door.action ?? "Enter").toLowerCase() === option);
     // The active transformed definition can reuse an unrelated canonical door
@@ -3924,10 +3962,10 @@ module.exports = function registerTheBloodMoonRises(api) {
       syncCastleActors(player);
       return;
     }
-    if (name !== "Door") return;
+    if (name !== "Door") return false;
     const door = event.object;
     const face = door?.getFace?.();
-    if (!Number.isInteger(face)) return;
+    if (!Number.isInteger(face)) return false;
     const axis = (face & 1) === 0 ? "x" : "y";
     const source = event.sourceLocation ?? {
       x: player.getLocation().getX(), y: player.getLocation().getY(), z: player.getLocation().getZ(),
@@ -3947,7 +3985,7 @@ module.exports = function registerTheBloodMoonRises(api) {
         break;
       }
     }
-    if (!destination) return;
+    if (!destination) return false;
     event.handled = true;
     player.moveTo(destination);
   }

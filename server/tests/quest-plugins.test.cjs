@@ -1360,7 +1360,7 @@ test('Blood Moon Gibbous lockbox requires its room clues and accepts code 426', 
   };
   const player = {
     getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
-    getLocation: () => new api.core.Location(2516, 7368, 0), moveTo() {}, getInventory: () => inventory,
+    getLocation: () => new api.core.Location(2516, 7368, 0), moveTo: location => { player.location = location; }, getInventory: () => inventory,
     getUsername: () => 'gibbous-lockbox', sendMessage() {}, getPacketSender: () => new Proxy({
       sendVarbit: (...args) => sentVarbits.push(args), sendQuestList() {}, sendInterfaceRemoval() {},
     }, { get: (target, key) => target[key] ?? (() => {}) }),
@@ -1452,11 +1452,42 @@ test('Blood Moon Gibbous lockbox requires its room clues and accepts code 426', 
   head({ player, objectId: 61687, definition: { id: 61687 }, location: { x: 2531, y: 7367, z: 0 },
     option: 'Search', handled: false });
   assert.equal(items.get(33742), 1, 'both gems allow the mounted head to yield the ornate hourglass');
+  attributes.set('quest.the_blood_moon_rises.castle-room', 21);
+  object(61751, 2453, 7372, 'Search');
+  assert.equal(items.get(33740), undefined, 'the ornate-knife crate is bound to its captured room and tile');
+  object(61751, 2454, 7372, 'Search');
+  assert.equal(items.get(33740), 1, 'the recorded ornate-knife crate yields the display-case item');
+  const enterCastleDoor = handlers.objects.find(handler => handler.name === 'handleCastleDoorEnter');
+  items.set(33727, 1);
+  const blockedPortal = { player, objectId: 61771, definition: { id: 61771, getName: () => 'Teleporter' },
+    location: { x: 2450, y: 7372, z: 0 }, option: 'Enter', handled: false };
+  enterCastleDoor(blockedPortal);
+  assert.equal(blockedPortal.handled, true);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 21,
+    'the portal remains inactive until its lever is pulled');
+  object(61776, 2449, 7371, 'Pull');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').gibbousGuestPortalOpened, true,
+    'pulling the storeroom lever records its portal unlock');
+  assert.equal(sentVarbits.filter(([id]) => id === 15532).at(-1)?.[1], 1,
+    'the guest-chamber portal uses its native cache varbit');
+  enterCastleDoor({ player, objectId: 61771, definition: { id: 61771, getName: () => 'Teleporter' },
+    location: { x: 2450, y: 7372, z: 0 }, option: 'Enter', handled: false });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 46);
+  assert.deepEqual([player.location.getX(), player.location.getY(), player.location.getZ()], [2522, 7396, 0],
+    'the enabled portal reaches the recorded guest storeroom tile');
+  enterCastleDoor({ player, objectId: 61589, definition: { id: 61589, getName: () => 'Gibbous moon door' },
+    location: { x: 2522, y: 7397, z: 0 }, option: 'Enter', handled: false });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 38);
+  assert.deepEqual([player.location.getX(), player.location.getY(), player.location.getZ()], [2506, 7364, 0],
+    'the guest storeroom returns through the actual Gibbous door landing');
   attributes.set('quest.the_blood_moon_rises.castle-room', 38);
   items.set(33741, 1); items.set(33740, 1);
   const caseItem = handlers.itemOnObject.find(handler => handler.name === 'handleCastleDisplayCaseItem');
-  for (const itemId of [33741, 33742, 33740]) caseItem({ player, itemId, objectId: 61672,
-    location: { x: 2497, y: 7374, z: 0 }, handled: false });
+  for (const [itemId, state] of [[33741, 1], [33742, 5], [33740, 7]]) {
+    caseItem({ player, itemId, objectId: 61672, location: { x: 2497, y: 7374, z: 0 }, handled: false });
+    assert.deepEqual(sentVarbits.filter(([id]) => id === 15563).at(-1), [15563, state],
+      'placing each display item updates the matching cache transform');
+  }
   const searchCase = handlers.objects.find(handler => handler.name === 'searchGibbousDisplayCase');
   searchCase({ player, objectId: 61672, definition: { id: 61672 }, location: { x: 2497, y: 7374, z: 0 },
     option: 'Search', handled: false });
@@ -2191,7 +2222,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [61573, 2344, 7395, 0], [61572, 2333, 7388, 0], [61593, 2471, 7422, 0],
     [61592, 2492, 7377, 0], [61576, 2507, 7409, 0], [61573, 2553, 7364, 0],
     [61573, 2585, 7370, 0], [61572, 2588, 7380, 0], [61572, 2442, 7361, 0],
-    [61577, 2452, 7373, 0], [61771, 2450, 7372, 0], [61770, 2515, 7396, 0],
+    [61577, 2452, 7373, 0], [61776, 2449, 7371, 0], [61771, 2450, 7372, 0],
     [61589, 2522, 7397, 0], [61588, 2506, 7363, 0], [61588, 2336, 7370, 1],
     [61589, 2483, 7395, 0], [61588, 2510, 7370, 0], [61589, 2515, 7367, 0],
     [61625, 2519, 7363, 0], [61577, 2551, 7387, 0], [61609, 2503, 7369, 0],
@@ -2215,6 +2246,10 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     assert.ok(placed.some(object => object.getId() === id),
       `the Castle transition ${id} at ${x},${y},${z} matches the placed cache door`);
   }
+  const castleDoor = handlers.objects.find(handler => handler.name === 'handleCastleDoorEnter');
+  assert.equal(castleDoor({ player, objectId: 42, definition: { id: 42, getName: () => 'Door' },
+    location: { x: 2700, y: 7400, z: 0 }, option: 'Enter', handled: false }), false,
+  'the Castle Door hook leaves unrelated world doors to their own handlers');
   const pairedDoorLandingTiles = [[2342, 7372, 0], [2327, 7362, 0], [2328, 7361, 0], [2305, 7391, 0], [2357, 7366, 0],
     [2338, 7395, 0], [2337, 7370, 0], [2347, 7383, 0], [2324, 7395, 0], [2437, 7386, 0], [2341, 7384, 0],
     [2455, 7380, 0], [2439, 7386, 0], [2468, 7395, 0], [2443, 7386, 0], [2314, 7361, 1], [2475, 7397, 0],
@@ -2229,9 +2264,9 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [2445, 7364, 0], [2358, 7371, 0], [2363, 7368, 0], [2364, 7362, 0], [2348, 7397, 0],
     [2332, 7388, 0], [2345, 7395, 0], [2491, 7377, 0], [2471, 7421, 0], [2554, 7364, 0],
     [2506, 7409, 0], [2587, 7380, 0], [2583, 7370, 0], [2451, 7371, 0], [2441, 7361, 0],
-    [2515, 7395, 0], [2450, 7371, 0], [2507, 7363, 0], [2520, 7396, 0], [2482, 7395, 0],
+    [2522, 7396, 0], [2506, 7364, 0], [2520, 7396, 0], [2482, 7395, 0],
     [2337, 7370, 1], [2516, 7368, 0], [2509, 7370, 0], [2551, 7386, 0], [2519, 7364, 0],
-    [2502, 7368, 0], [2307, 7365, 1], [2444, 7418, 0], [2453, 7421, 0], [2459, 7390, 0],
+    [2502, 7368, 0], [2309, 7369, 1], [2444, 7418, 0], [2453, 7421, 0], [2459, 7390, 0],
     [2442, 7417, 0], [2437, 7419, 0], [2456, 7388, 0], [2380, 7392, 0], [2372, 7392, 0],
     [2393, 7363, 0], [2387, 7383, 0], [2441, 7400, 0], [2394, 7370, 0], [2440, 7388, 0],
     [2439, 7394, 0], [2435, 7372, 0], [2306, 7396, 1], [2541, 7373, 0], [2526, 7363, 0],
@@ -2247,6 +2282,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
       (x === 2325 && y === 7397 && z === 0) || (x === 2358 && y === 7381 && z === 0) ||
       (x === 2314 && y === 7361 && z === 0) ||
       (x === 2519 && y === 7364 && z === 0) ||
+      (x === 2506 && y === 7364 && z === 0) ||
       (x === 2588 && y === 7381 && z === 0) || (x === 2575 && y === 7386 && z === 0) ||
       (x === 2579 && y === 7366 && z === 0);
     if (!isCapturedDoorArrival) assert.equal(RegionManager.blocked(new api.core.Location(x, y, z), null), false,
@@ -2960,6 +2996,12 @@ test('Blood Moon outer-library lever opens the captured portal to the throne par
   const lever = handlers.objects.find(handler => handler.name === 'handleCastleOuterLibraryLever');
   const portal = handlers.objects.find(handler => handler.name === 'handleCastleOuterLibraryPortal');
   assert.ok(lever && portal);
+  assert.equal(portal({ player, objectId: 61771, definition: { id: 61771 },
+    location: { x: 2450, y: 7372, z: 0 }, option: 'Enter', handled: false }), false,
+  'the library Teleporter hook leaves other Castle teleporters to their own handlers');
+  assert.equal(lever({ player, objectId: 61776, definition: { id: 61776 },
+    location: { x: 2449, y: 7371, z: 0 }, option: 'Pull', handled: false }), false,
+  'a different cache Lever falls through so its room-specific quest handler can run');
   const usePortal = () => {
     const event = { player, objectId: 61768, definition: { id: 61768 },
       location: { x: 2473, y: 7419, z: 0 }, option: 'Enter', handled: false };
