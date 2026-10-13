@@ -1659,9 +1659,10 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
             const loader = client.loaderFactory?.getOverlayTypeLoader?.();
             if (!loader) return [];
             const swatches = [];
-            for (let id = 1; id < loader.getCount(); id++) {
+            for (let id = 1; id <= loader.getCount(); id++) {
                 try {
-                    const overlay = loader.load(id);
+                    // Tile overlay IDs are one-based; cache definitions are zero-based.
+                    const overlay = loader.load(id - 1);
                     swatches.push({
                         id,
                         colorRgb: overlay.primaryRgb & 0xffffff,
