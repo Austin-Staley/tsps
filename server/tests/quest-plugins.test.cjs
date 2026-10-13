@@ -15509,16 +15509,20 @@ test('Song of the Elves confirms the Iorwerth cave entry before spawning guards 
     assert.equal(spawned.length, 0, 'the warning prompt must precede creating the private cave or its guards');
     assert.equal(transcripts.at(-1)[4], 'recovering-the-orb-entering-the-iorwerth-camp-s-supply-cave');
     const choice = handlers.custom.get('npc-dialogue:choice').find(handler => handler.name === 'handleDialogueChoice');
-    choice({ player, option: 'No.' });
+    choice({ player, npcId: api.core.NpcIdentifiers.BAXTORIAN, option: 'Yes.' });
+    assert.equal(spawned.length, 0, 'another NPC cannot consume the pending cave confirmation');
+    assert.equal(attrs.get('song-of-the-elves:orb-cave-entry-pending'), true);
+    choice({ player, npcId: api.core.NpcIdentifiers.IORWERTH_WARRIOR_9, option: 'No.' });
     assert.equal(spawned.length, 0, 'declining keeps the player outside without spawning the ambush');
     assert.equal(player.getArea(), null);
 
     enter(entry);
-    choice({ player, option: 'Yes.' });
+    choice({ player, npcId: api.core.NpcIdentifiers.IORWERTH_WARRIOR_9, option: 'Yes.' });
     assert.equal(spawned.length, 2);
     assert.equal(player.getArea().constructor.name, 'OrbSupplyArea');
     assert.deepEqual([location.getX(), location.getY(), location.getZ()], [2198, 9677, 0]);
     assert.deepEqual(spawned.map(npc => npc.attacks.length), [0, 0], 'the guards wait for the warning exchange to finish');
+    assert.equal(player.getArea().canAttack(player, spawned[0]), false, 'the player cannot start combat before the transcript ends');
     const line = handlers.custom.get('npc-dialogue:line').find(handler => handler.name === 'startOrbCaveAmbush');
     const lastLine = { player, text: 'Uh oh...' };
     line(lastLine);
@@ -15526,6 +15530,7 @@ test('Song of the Elves confirms the Iorwerth cave entry before spawning guards 
     lastLine.after();
     assert.deepEqual(spawned.map(npc => npc.attacks.length), [1, 1]);
     assert.deepEqual(spawned.map(npc => npc.attacks[0]), [player, player]);
+    assert.equal(player.getArea().canAttack(player, spawned[0]), true, 'combat is enabled after the ambush begins');
     player.getArea().leave(player, false);
   } finally {
     runtime.startTranscript = original;

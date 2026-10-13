@@ -405,7 +405,11 @@ module.exports = function registerSongOfTheElves(api) {
     canAttack(attacker, target) {
       const attackerHere = attacker?.getArea?.() === this;
       const targetHere = target?.getArea?.() === this;
-      if (attackerHere || targetHere) return attackerHere && targetHere;
+      if (attackerHere || targetHere) {
+        const state = orbCaveInstances.get(this);
+        if (state && !state.ambushStarted) return false;
+        return attackerHere && targetHere;
+      }
       return null;
     }
     postLeave(mobile, logout) {
@@ -1825,7 +1829,8 @@ module.exports = function registerSongOfTheElves(api) {
   function handleDialogueChoice(event) {
     if (!event?.player) return;
     const player = event.player;
-    if (player.getAttribute(ORB_CAVE_ENTRY_PENDING) === true && currentChapter(player) === 14) {
+    if (player.getAttribute(ORB_CAVE_ENTRY_PENDING) === true && currentChapter(player) === 14 &&
+      event.npcId === NpcIdentifiers.IORWERTH_WARRIOR_9) {
       if (event.option === "No.") {
         player.setAttribute(ORB_CAVE_ENTRY_PENDING, null);
         return;
