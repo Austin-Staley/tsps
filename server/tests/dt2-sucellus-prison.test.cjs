@@ -7,12 +7,15 @@ require("../plugins/quests/QuestRuntime").startTranscript = () => true;
 function setup() {
   const handlers = { custom: {}, npc: [], object: null, itemObject: null, item: [], dialogueAction: null };
   const emitted = [];
+  let stashRestored = false;
   const prompts = [];
   const createdNpcs = [];
   const openedObjects = [];
   let cycle = 100;
   const npc = (id, location) => ({
     id, location, maxHitpoints: 1500, hitpoints: 1500,
+    getId() { return this.id; },
+    getLocation() { return { getX: () => this.location.x, getY: () => this.location.y }; },
     isRegistered: () => true,
     setOwner() {}, setOwnerOnly() {}, getCombat() { return { attack: (target) => { this.target = target; this.attacks = (this.attacks ?? 0) + 1; } }; },
     setHitpointsLocked(value) { this.hitpointsLocked = value; },
@@ -63,7 +66,10 @@ function setup() {
       if (/^[^:\s]+:[^:\s]+$/.test(name)) handlers.custom[name] = handler;
     },
     emitCustomEvent(name, payload) {
-      if (/^[^:\s]+:[^:\s]+$/.test(name)) emitted.push({ name, payload });
+      if (/^[^:\s]+:[^:\s]+$/.test(name)) {
+        emitted.push({ name, payload });
+        if (name === "dt2:sucellus-prison-return-stash") payload.restored = stashRestored;
+      }
     },
     onNpcInteraction(...args) { handlers.npc.push(args); },
     onObjectInteraction(handler) { handlers.object = handler; },
@@ -75,8 +81,26 @@ function setup() {
   register(api);
   const instanceLocation = (x, y, z) => ({ x: x + 10000 - 2872, y: y + 20000 - 6336, z });
   const moveToSource = (x, y, z = 2) => { player.location = { x: x + 10000 - 2872, y: y + 20000 - 6336, z }; };
-  return { api, handlers, emitted, prompts, player, area, inventory, createdNpcs, openedObjects, instanceLocation, moveToSource, setCycle: (v) => { cycle = v; } };
+  return { api, handlers, emitted, prompts, player, area, inventory, createdNpcs, openedObjects, instanceLocation, moveToSource, setCycle: (v) => { cycle = v; }, setStashRestored: (value) => { stashRestored = value; } };
 }
+
+test("prison start removes the cutscene Assassin until the diamond-key stage", () => {
+  const { handlers, player, area, createdNpcs } = setup();
+  const existing = {
+    id: 12348,
+    location: area.tile(48, 39, 2),
+    getId() { return this.id; },
+    getLocation() { return { getX: () => this.location.x, getY: () => this.location.y }; },
+    isRegistered: () => true,
+  };
+  area.entities.push(existing);
+
+  assert.equal(handlers.custom["dt2:sucellus-prison-start"]({ player, area }), true);
+  assert.equal(createdNpcs.length, 0, "module start must not create a duplicate cutscene NPC");
+  assert.equal(area.entities.filter((value) => value.getId?.() === 12348).length, 0,
+    "the transcript disappearance action leaves the prison clear");
+  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-assassin") ?? null, null);
+});
 
 function enterAnswer(prompts, answer) {
   for (const character of answer) {
@@ -90,6 +114,22 @@ function enterAnswer(prompts, answer) {
       index = prompt.pairs.findIndex((value, i) => i % 2 === 0 && value === character);
     }
     assert.notEqual(index, -1, `lock prompt provides ${character}`);
+    prompt.pairs[index + 1]();
+  }
+}
+
+function enterPadlock(prompts, heights) {
+  for (const height of heights) {
+    let prompt = prompts.at(-1);
+    let index = prompt.pairs.findIndex((value, i) => i % 2 === 0 && value === `Set to ${height + 1}`);
+    if (index < 0) {
+      const more = prompt.pairs.findIndex((value, i) => i % 2 === 0 && value === "More options");
+      assert.notEqual(more, -1, `padlock prompt must page to height ${height + 1}`);
+      prompt.pairs[more + 1]();
+      prompt = prompts.at(-1);
+      index = prompt.pairs.findIndex((value, i) => i % 2 === 0 && value === `Set to ${height + 1}`);
+    }
+    assert.notEqual(index, -1, `padlock prompt provides height ${height + 1}`);
     prompt.pairs[index + 1]();
   }
 }
@@ -126,20 +166,20 @@ test("Sucellus prison gates require the lockpick and sapphire key is earned thro
   inventory.adds(28415, 1);
   handlers.object({ player, object: padlock, objectId: 49120, option: "Open", location: instanceLocation(2945, 6389, 2), handled: false });
   assert.equal(state(), 22, "the six tumblers must be solved before the gate opens");
-  let tumblers = prompts.at(-1);
-  for (const height of [2, 0, 5, 1, 4, 3]) {
-    tumblers.pairs[height * 2 + 1]();
-    tumblers = prompts.at(-1);
-  }
+  enterPadlock(prompts, [2, 0, 5, 1, 4, 3]);
   assert.equal(state(), 24);
   assert.deepEqual(openedObjects, [padlock], "opening the gate removes the blocking private-instance object");
+  const solvedLockPromptCount = prompts.length;
+  const solvedPadlockOpen = handlers.object({ player, object: padlock, objectId: 49120, option: "Open", location: instanceLocation(2945, 6389, 2), handled: false });
+  assert.equal(solvedPadlockOpen, true, "a solved padlock opens directly after relog");
+  assert.equal(prompts.length, solvedLockPromptCount, "the solved lock does not ask for the six tumblers again");
 
-  handlers.object({ player, objectId: 50001, option: "Search", location: instanceLocation(2975, 6347, 2), definition: { name: "Altar" }, handled: false });
+  handlers.object({ player, objectId: 50001, option: "Search", location: instanceLocation(2974, 6347, 2), definition: { name: "Altar" }, handled: false });
   handlers.item.find(([name]) => name === "Warning letter")[1].Read({ player, itemId: 28429, handled: false });
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-clues-read"), 1);
 
   handlers.object({ player, objectId: 50000, option: "Open", location: instanceLocation(2980, 6346, 2), handled: false });
-  assert.equal(prompts.length, 7, "six lock tumblers are followed by the sapphire code prompt");
+  assert.match(prompts.at(-1).title, /Choose tumbler 1/, "the six lock tumblers are followed by the sapphire code prompt");
   for (const digit of "214013") {
     let prompt = prompts.at(-1);
     let index = prompt.pairs.findIndex((value, i) => i % 2 === 0 && value === digit);
@@ -200,6 +240,17 @@ test("earned frozen-Jhallan progress restores the Assassin after relog without r
   assert.equal(handlers.custom["dt2:sucellus-prison-resume"]({ player, area: { ...area } }), false, "resume ignores a different instance");
 });
 
+test("the Assassin stays gone after the cell escape and returns only for the diamond-key plan", () => {
+  const { handlers, player, area, createdNpcs } = setup();
+  assert.equal(handlers.custom["dt2:sucellus-prison-start"]({ player, area }), true);
+  assert.equal(createdNpcs.length, 0, "the transcript disappearance action leaves the cell area clear");
+  assert.equal(handlers.custom["dt2:sucellus-prison-resume"]({ player, area }), true);
+  assert.equal(createdNpcs.length, 0, "relogging at stage22 must not restore the disappeared Assassin");
+  player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 40);
+  assert.equal(handlers.custom["dt2:sucellus-prison-resume"]({ player, area }), true);
+  assert.equal(createdNpcs.filter((value) => value.id === 12348).length, 1, "the diamond-key stage restores the Assassin");
+});
+
 test("private-instance gate coordinates normalize to cache tiles and preserve the earned key", () => {
   const { handlers, player, area, inventory, openedObjects, instanceLocation } = setup();
   player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 26);
@@ -231,17 +282,41 @@ test("private-instance gate coordinates normalize to cache tiles and preserve th
   assert.equal(handlers.object({ ...event, player: { getAttribute: () => null } }), false, "outside the quest instance, gate handling falls through");
 });
 
-test("the equipment chest returns the saved kit through the valid prison stash event once", () => {
-  const { handlers, emitted, player, inventory, instanceLocation } = setup();
+test("ordinary Ghorrock prison doors open without consuming a quest key", () => {
+  const { handlers, player, area, inventory, openedObjects, instanceLocation } = setup();
+  player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 22);
+  inventory.adds(28416, 1);
+  const door = {
+    getPrivateArea: () => area,
+    getId: () => 49118,
+    getLocation: () => ({ equals: () => true }),
+  };
+  const event = { player, object: door, definition: { id: 49118 }, option: "Open", location: instanceLocation(2935, 6354, 2), handled: false };
+  assert.equal(handlers.object(event), true);
+  assert.equal(event.handled, true);
+  assert.deepEqual(openedObjects, [door]);
+  assert.equal(inventory.getAmount(28416), 1);
+  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 22);
+});
+
+test("the equipment chest advances only after confirmed stash recovery and retries safely", () => {
+  const { handlers, emitted, player, inventory, instanceLocation, setStashRestored } = setup();
   player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 46);
   inventory.adds(28419, 1);
   const chest = { player, definition: { id: 49130, name: "Chest" }, option: "Open", location: instanceLocation(2899, 6376, 2), handled: false };
   handlers.object(chest);
   assert.equal(chest.handled, true);
-  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 50);
+  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 46, "failed recovery keeps the chest retryable");
+  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-gear-returned"), undefined);
   assert.equal(emitted.filter(({ name }) => name === "dt2:sucellus-prison-return-stash").length, 1);
+
+  setStashRestored(true);
   handlers.object({ ...chest, handled: false });
-  assert.equal(emitted.filter(({ name }) => name === "dt2:sucellus-prison-return-stash").length, 1);
+  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 50);
+  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-gear-returned"), true);
+  assert.equal(emitted.filter(({ name }) => name === "dt2:sucellus-prison-return-stash").length, 2);
+  handlers.object({ ...chest, handled: false });
+  assert.equal(emitted.filter(({ name }) => name === "dt2:sucellus-prison-return-stash").length, 2, "reopen does not duplicate stash recovery");
 });
 
 test("the real Enter dialog clears the blocked crevice without the cell's consumed chisel", () => {

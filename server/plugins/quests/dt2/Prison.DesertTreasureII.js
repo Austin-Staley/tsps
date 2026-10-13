@@ -28,7 +28,7 @@ module.exports = function registerSucellusPrison(api) {
     "2890,6375,2": ["diamond", 38],
   };
   const TILES = {
-    padlock: [2945, 6389, 2], altar: [2975, 6347, 2], sapphire: [2980, 6346, 2],
+    padlock: [2945, 6389, 2], altar: [2974, 6347, 2], sapphire: [2980, 6346, 2],
     emerald: [2902, 6445, 2], ruby: [2968, 6414, 2], diamond: [2890, 6375, 2],
     diamondGate: [2903, 6375, 2], crevice: [2965, 6427, 2], gear: [2899, 6376, 2], fireworks: [2972, 6367, 2],
     asylum: [2974, 6440, 2],
@@ -110,7 +110,7 @@ module.exports = function registerSucellusPrison(api) {
     player.sendMessage("You shift the loose stone and clear a way through the crevice.");
   }
 
-  function promptPadlock(player, index = 0, values = [0, 0, 0, 0, 0, 0], fixed = 0) {
+  function promptPadlock(player, index = 0, values = [0, 0, 0, 0, 0, 0], fixed = 0, page = 0) {
     if (index >= 6) {
       const correct = values.reduce((mask, value, i) => value === [2, 0, 5, 1, 4, 3][i] ? mask | (1 << i) : mask, 0);
       if (correct === 63) {
@@ -127,12 +127,15 @@ module.exports = function registerSucellusPrison(api) {
       return promptPadlock(player, 0, values.map((value, i) => correct & (1 << i) ? value : 0), correct);
     }
     const pairs = [];
-    for (let height = 0; height < 6; height++) pairs.push(`Set to ${height + 1}`, () => {
+    const heights = Array.from({ length: 6 }, (_, height) => height).slice(page * 4, page * 4 + 4);
+    for (const height of heights) pairs.push(`Set to ${height + 1}`, () => {
       if (fixed & (1 << index)) return promptPadlock(player, index + 1, values, fixed);
       const next = [...values];
       next[index] = height;
       promptPadlock(player, index + 1, next, fixed);
     });
+    if (page === 0) pairs.push("More options", () => promptPadlock(player, index, values, fixed, 1));
+    else pairs.push("Back", () => promptPadlock(player, index, values, fixed, 0));
     api.sendMultiChatboxPrompt(player, `Pick the prison lock: tumbler ${index + 1} of 6`, ...pairs);
   }
 
@@ -214,6 +217,18 @@ module.exports = function registerSucellusPrison(api) {
   function spawnAssassin(player, area, x = 2920, y = 6375) {
     const current = player.getAttribute("desert-treasure-ii:sucellus-prison-assassin");
     if (current?.isRegistered?.() && area.entities.includes(current)) return current;
+    // The parent quest places the Assassin as the cell escape cutscene ends.
+    // Reuse that owner-visible NPC rather than layering a second identical one
+    // when the prison module receives its start/resume event.
+    const target = areaLocation(area, x, y, 2);
+    const coord = (location, getter, field) => Number(location?.[getter]?.() ?? location?.[field]);
+    const existing = area.entities.find((npc) => npc.getId?.() === N.ASSASSIN_7
+      && coord(npc.getLocation?.(), "getX", "x") === coord(target, "getX", "x")
+      && coord(npc.getLocation?.(), "getY", "y") === coord(target, "getY", "y"));
+    if (existing) {
+      player.setAttribute("desert-treasure-ii:sucellus-prison-assassin", existing);
+      return existing;
+    }
     const npc = api.core.NPC.create(N.ASSASSIN_7, areaLocation(area, x, y, 2));
     npc.setOwner?.(player);
     npc.setOwnerOnly?.(true);
@@ -245,7 +260,7 @@ module.exports = function registerSucellusPrison(api) {
     return npc;
   }
 
-  function talkAssassin(event) {
+  function handlePrisonAssassinInteraction(event) {
     const { player, npcId } = event;
     const progress = state(player);
     if (!player?.getAttribute(ESCAPED) || ![N.ASSASSIN_7, N.ASSASSIN_8].includes(npcId)) return false;
@@ -295,7 +310,21 @@ module.exports = function registerSucellusPrison(api) {
     const option = String(event.option ?? "").toLowerCase();
     const onTile = (key) => isTile(tile, TILES[key]);
 
+    // Most prison gates are ordinary doors. The base server does not provide a
+    // generic Open handler for this cache object, so remove only this exact
+    // private-instance door and let the cache handle its collision elsewhere.
+    if ((id === 49118 || (id === 49120 && !onTile("padlock"))) && option === "open") {
+      event.handled = true;
+      openPrivateGate(event);
+      return true;
+    }
+
     if (id === 49120 && onTile("padlock") && (option === "unlock" || option === "open" || option === "pick")) {
+      if (progress >= 24) {
+        event.handled = true;
+        openPrivateGate(event);
+        return true;
+      }
       event.handled = true;
       if (progress < 22 || !has(player, LOCKPICK)) return player.sendMessage("The Assassin's lockpick should open this gate.");
       promptPadlock(player);
@@ -398,8 +427,10 @@ module.exports = function registerSucellusPrison(api) {
       event.handled = true;
       if (!has(player, KEYS.diamond)) return player.sendMessage("The equipment chest is still locked.");
       if (!player.getAttribute(GEAR_RETURNED)) {
+        const request = { player, restored: false };
+        api.emitCustomEvent("dt2:sucellus-prison-return-stash", request);
+        if (request.restored !== true) return;
         player.setAttribute(GEAR_RETURNED, true);
-        api.emitCustomEvent("dt2:sucellus-prison-return-stash", { player });
       }
       setState(player, 50);
       player.sendMessage("You search the chest and recover your belongings.");
@@ -488,7 +519,8 @@ module.exports = function registerSucellusPrison(api) {
   function handleStart({ player, area }) {
     if (!player || !area || !player.getAttribute(ESCAPED) || !atArea(player, area)) return false;
     if (!Number.isFinite(Number(player.getAttribute(PROGRESS)))) setState(player, 22);
-    spawnAssassin(player, area);
+    const cutsceneAssassin = area.entities.find((npc) => npc.getId?.() === N.ASSASSIN_7);
+    if (cutsceneAssassin) removeOwnedNpc(area, cutsceneAssassin);
     return true;
   }
   function handleResume({ player, area }) {
@@ -502,13 +534,19 @@ module.exports = function registerSucellusPrison(api) {
       player.setAttribute(FIREWORKS, false);
       setState(player, 52);
     }
-    if (state(player) >= 22 && state(player) < 58 && (!player.getAttribute(FIREWORKS) || state(player) >= 56)) spawnAssassin(player, area);
+    const progress = state(player);
+    if ((progress >= 40 && progress <= 50) || progress === 56) spawnAssassin(player, area);
+    else if (progress < 40) {
+      const cutsceneAssassin = area.entities.find((npc) => npc.getId?.() === N.ASSASSIN_7);
+      if (cutsceneAssassin) removeOwnedNpc(area, cutsceneAssassin);
+      player.setAttribute("desert-treasure-ii:sucellus-prison-assassin", null);
+    }
     return true;
   }
   api.onCustomEvent("dt2:sucellus-prison-start", handleStart);
   api.onCustomEvent("dt2:sucellus-prison-resume", handleResume);
   api.onCustomEvent("dt2:sucellus-prison-process", handleProcess);
-  api.onNpcInteraction("Assassin", { "Talk-to": talkAssassin });
+  api.onNpcInteraction("Assassin", { "Talk-to": handlePrisonAssassinInteraction });
   function talkJhallan(event) {
     if (!event.player?.getAttribute(ESCAPED) || state(event.player) !== 54 || !atArea(event.player, event.player.getAttribute(AREA))) return false;
     event.handled = true;
