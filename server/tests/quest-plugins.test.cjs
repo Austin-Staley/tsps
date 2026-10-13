@@ -3828,6 +3828,41 @@ test('Desert Treasure II shadow spells interrupt the private Leviathan encounter
   custom.get('magic:hit-effects').at(-1)({ attacker, target, spell: { getName: () => 'Shadow Barrage' } });
   assert.ok(target.__dt2LeviathanStunnedUntil > api.core.World.getProcessCycle());
   assert.match(messages[0], /stuns the Leviathan/);
+  target.__dt2LeviathanEnraged = true;
+  target.__dt2LeviathanStunnedUntil = 0;
+  target.__dt2LeviathanPendingAttack = { style: 'magic', due: 10 };
+  custom.get('magic:hit-effects').at(-1)({ attacker, target, spell: { getName: () => 'Shadow Barrage' } });
+  assert.equal(target.__dt2LeviathanStunnedUntil, 0, 'enrage cannot be stunned');
+  assert.deepEqual(target.__dt2LeviathanPendingAttack, { style: 'magic', due: 10 });
+  assert.equal(messages.length, 1);
+});
+
+test('Desert Treasure II pathfinder grants only its owner perfect accuracy and the damage floor nearby', () => {
+  const { api: base, handlers } = mockApi();
+  const api = new Proxy(base, { get(target, prop) {
+    if (prop === 'core') return { ...target.core, DamageFormulas: { sourceMaxHit: () => 35 } };
+    return typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop];
+  } });
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  let distance = 3, damage = 0, total = 0;
+  const player = { getLocation: () => ({ getDistance: () => distance }) };
+  const boss = { __dt2Leviathan: true, __dt2LeviathanEnraged: true, getOwner: () => player,
+    __dt2LeviathanPathfinder: { isRegistered: () => true, getLocation: () => ({}) } };
+  const roll = { attacker: player, target: boss, forceAccurate: false };
+  handlers.combatHitRoll.forEach(h => h(roll));
+  assert.equal(roll.forceAccurate, true);
+  const hit = { getAttacker: () => player, getCombatType: () => 0,
+    getHits: () => [{ getDamage: () => damage, setDamage: v => { damage = v; } }],
+    updateTotalDamage: () => { total = damage; } };
+  handlers.npcHitModify.forEach(h => h({ npc: boss, hit }));
+  assert.equal(total, 7);
+  distance = 5; roll.forceAccurate = false; damage = 0;
+  handlers.combatHitRoll.forEach(h => h(roll));
+  handlers.npcHitModify.forEach(h => h({ npc: boss, hit }));
+  assert.equal(roll.forceAccurate, false); assert.equal(damage, 0);
+  distance = 3; roll.attacker = { getLocation: player.getLocation };
+  handlers.combatHitRoll.forEach(h => h(roll));
+  assert.equal(roll.forceAccurate, false, 'another player cannot use the owner aura');
 });
 
 test('Desert Treasure II prison escape leads to the cache Duke arena and requires two real poisons', async () => {

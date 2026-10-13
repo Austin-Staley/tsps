@@ -1103,10 +1103,9 @@ module.exports = function registerDesertTreasureII(api) {
       if (boss.__dt2LeviathanPendingAttack && cycle >= boss.__dt2LeviathanPendingAttack.due) {
         const { style } = boss.__dt2LeviathanPendingAttack;
         const varbit = style === "magic" ? 4116 : style === "ranged" ? 4117 : 4118;
-        if (player.getPacketSender().getVarbit(varbit) !== 1) {
-          const nearPathfinder = boss.__dt2LeviathanEnraged
-            && boss.__dt2LeviathanPathfinder?.isRegistered?.()
-            && player.getLocation().getDistance(boss.__dt2LeviathanPathfinder.getLocation()) <= 4;
+        const nearPathfinder = nearLeviathanPathfinder(player, boss);
+        if (player.getPacketSender().getVarbit(varbit) !== 1
+          || (boss.__dt2LeviathanEnraged && !nearPathfinder)) {
           const damage = nearPathfinder ? 2 + Math.floor(Math.random() * 4) : 8 + Math.floor(Math.random() * 13);
           player.getCombat().getHitQueue().addPendingDamage([
             new api.core.HitDamage(damage, api.core.HitMask.RED),
@@ -1441,8 +1440,27 @@ module.exports = function registerDesertTreasureII(api) {
     }
   }
 
+  function nearLeviathanPathfinder(player, boss) {
+    return boss?.__dt2LeviathanEnraged && player === boss.getOwner?.()
+      && boss.__dt2LeviathanPathfinder?.isRegistered?.()
+      && player.getLocation().getDistance(boss.__dt2LeviathanPathfinder.getLocation()) <= 4;
+  }
+
+  function leviathanHitRoll(event) {
+    if (event.target?.__dt2Leviathan && nearLeviathanPathfinder(event.attacker, event.target)) event.forceAccurate = true;
+  }
+
+  function modifyLeviathanHit({ npc, hit }) {
+    const player = hit?.getAttacker?.();
+    if (!npc?.__dt2Leviathan || !nearLeviathanPathfinder(player, npc)) return;
+    const minimum = Math.floor(api.core.DamageFormulas.sourceMaxHit(player, hit.getCombatType()) * 0.2);
+    for (const damage of hit.getHits()) damage.setDamage(Math.max(minimum, damage.getDamage()));
+    hit.updateTotalDamage();
+  }
+
   function stunLeviathan({ attacker, target, spell }) {
-    if (!attacker?.isPlayer?.() || !target?.__dt2Leviathan || attacker !== target.getOwner?.()) return;
+    if (!attacker?.isPlayer?.() || !target?.__dt2Leviathan || attacker !== target.getOwner?.()
+      || target.__dt2LeviathanEnraged) return;
     const name = spell?.getName?.() ?? spell?.name ?? "";
     if (!/shadow (burst|blitz|barrage|rush)/i.test(name)) return;
     target.__dt2LeviathanStunnedUntil = api.core.World.getProcessCycle() + 6;
@@ -6199,6 +6217,8 @@ module.exports = function registerDesertTreasureII(api) {
   api.onCustomEvent("magic:hit-effects", activateTotem);
   api.onCustomEvent("magic:hit-effects", stunLeviathan);
   api.onCombatHitRoll(forceTotemAccuracy);
+  api.onCombatHitRoll(leviathanHitRoll);
+  api.onNpcHitModify(modifyLeviathanHit);
   api.onNpcHitModify(modifyGuardianHit);
   api.onNpcHitModify(preventTotemDamage);
   api.onNpcInteraction("Abyssal axon", { Hit: hitScarAxon, Reset: resetScarAxon });
