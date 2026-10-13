@@ -4868,7 +4868,7 @@ module.exports = function registerDesertTreasureII(api) {
   function spawnBoss(p, key) {
     const table = {
       vardorvis: [N.VARDORVIS_2, 1129, 3419],
-      leviathan: [N.THE_LEVIATHAN_3, 2078, 6368],
+      leviathan: [N.THE_LEVIATHAN_2, 2078, 6368],
       sucellus: [N.DUKE_SUCELLUS_6, 3036, 6452],
       whisperer: [N.THE_WHISPERER_3, 2656, 6370],
     };
@@ -4898,8 +4898,6 @@ module.exports = function registerDesertTreasureII(api) {
       npc.setOwner?.(p);
       npc.setOwnerOnly?.(true);
       npc.setScriptedMovement?.(true);
-      npc.setMaxHitpoints?.(600);
-      npc.setHitpoints?.(600);
       npc.__dt2Leviathan = true;
       npc.__skipDefaultRespawn = true;
       area.add(npc);

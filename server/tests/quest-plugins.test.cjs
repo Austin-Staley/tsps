@@ -3837,6 +3837,19 @@ test('Desert Treasure II shadow spells interrupt the private Leviathan encounter
   assert.equal(messages.length, 1);
 });
 
+test('Desert Treasure II Leviathan uses the attackable quest cache variant and canonical stats', () => {
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const { NpcIdentifiers: N } = require('../dist/util/NpcIdentifiers');
+  const source = require('node:fs').readFileSync(require.resolve('../plugins/quests/quests/DesertTreasureII.Quest'), 'utf8');
+  assert.match(source, /leviathan: \[N\.THE_LEVIATHAN_2,/);
+  const cache = CacheDefinitions.getNpc(N.THE_LEVIATHAN_2);
+  assert.ok(cache.actions.includes('Attack'));
+  const monster = require('../data/definitions/monsters-complete.json')[N.THE_LEVIATHAN_2];
+  assert.equal(monster.hitpoints, cache.hitpoints);
+  assert.equal(monster.defence_level, cache.defenceLevel);
+  assert.equal(monster.combat_level, cache.combatLevel);
+});
+
 test('Desert Treasure II pathfinder grants only its owner perfect accuracy and the damage floor nearby', () => {
   const { api: base, handlers } = mockApi();
   const api = new Proxy(base, { get(target, prop) {
