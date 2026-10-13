@@ -264,7 +264,7 @@ export const createLayersIcon = (): SVGElement =>
 export const createPaintIcon = (): SVGElement =>
     createActionIcon("M14 4.5 19.5 10l-9.8 9.8a3 3 0 0 1-4.2-4.2L15.3 5.8M4 20h5");
 
-export const createOverlayIcon = (colorRgb = 0x64748b): SVGElement => {
+export const createOverlayIcon = (colorRgb = 0x64748b, texture?: string): SVGElement => {
     const namespace = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(namespace, "svg");
     svg.setAttribute("viewBox", "0 0 24 24");
@@ -280,6 +280,16 @@ export const createOverlayIcon = (colorRgb = 0x64748b): SVGElement => {
     rect.setAttribute("fill", `#${(colorRgb & 0xffffff).toString(16).padStart(6, "0")}`);
     rect.setAttribute("stroke", "currentColor");
     rect.setAttribute("stroke-width", "1.5");
+    if (texture) {
+        const image = document.createElementNS(namespace, "image");
+        image.setAttribute("x", "4");
+        image.setAttribute("y", "4");
+        image.setAttribute("width", "16");
+        image.setAttribute("height", "16");
+        image.setAttribute("href", texture);
+        svg.appendChild(image);
+        rect.setAttribute("fill", "none");
+    }
     svg.appendChild(rect);
     return svg;
 };

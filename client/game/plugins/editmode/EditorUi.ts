@@ -254,7 +254,7 @@ class EditorChrome {
             {
                 id: "overlay",
                 label: "Choose overlay",
-                icon: () => createOverlayIcon(this.overlayColor(plugin.getConfig().overlayId)),
+                icon: () => this.createOverlaySwatchIcon(plugin.getConfig().overlayId),
                 action: () => this.toggleOverlayPalette(),
             },
             { id: "path", label: "Draw path", icon: createPathIcon },
@@ -588,6 +588,23 @@ class EditorChrome {
         return this.overlaySwatches.find((swatch) => swatch.id === id)?.colorRgb ?? 0x64748b;
     }
 
+    private createOverlaySwatchIcon(id: number): SVGElement {
+        const color = this.overlayColor(id);
+        const textureId = this.overlaySwatches.find((swatch) => swatch.id === id)?.textureId;
+        const texture = textureId === undefined ? undefined : this.plugin.getOverlayTexture(textureId);
+        const icon = createOverlayIcon(color, texture);
+        if (textureId !== undefined && !texture) {
+            const retry = (): void => {
+                if (!icon.isConnected) return;
+                const loaded = this.plugin.getOverlayTexture(textureId);
+                if (loaded) icon.replaceChildren(...createOverlayIcon(color, loaded).childNodes);
+                else window.setTimeout(retry, 250);
+            };
+            window.setTimeout(retry, 250);
+        }
+        return icon;
+    }
+
     private toggleOverlayPalette(): void {
         if (this.overlayPalette) {
             this.overlayPalette.remove();
@@ -697,7 +714,7 @@ class EditorChrome {
         this.saveObjectSpawnsInput.checked = state.config.saveObjectSpawns;
         this.pvpZonesInput.checked = state.config.showPvpZones;
         this.multiCombatZonesInput.checked = state.config.showMultiCombatZones;
-        this.toolbar.setIcon("overlay", () => createOverlayIcon(this.overlayColor(state.config.overlayId)));
+        this.toolbar.setIcon("overlay", () => this.createOverlaySwatchIcon(state.config.overlayId));
         this.toolbar.select(
             state.config.tool === "place"
                 ? "cache-search"
@@ -807,7 +824,7 @@ class EditorChrome {
             if (!hasTileRange) {
                 const overlay = this.plugin.getSelectionOverlay();
                 const useOverlay = createActionButton("Use overlay",
-                    () => createOverlayIcon(this.overlayColor(overlay ?? 0)),
+                    () => this.createOverlaySwatchIcon(overlay ?? 0),
                     () => this.plugin.useSelectionOverlay());
                 useOverlay.disabled = overlay === undefined;
                 if (useOverlay.disabled) {
