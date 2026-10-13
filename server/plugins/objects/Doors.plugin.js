@@ -50,7 +50,6 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     O.DOOR_831,
     // The two Ardougne Wall Door loc variants swing open by rotating the same cache loc.
     O.ARDOUGNE_WALL_DOOR, O.ARDOUGNE_WALL_DOOR_2]);
-
   // Single doors the pairing below can't find: the open variant is not closedId + 1 (e.g. Large
   // door 1517 -> 1520, same models), or it has no "Close" (DOOR_181, the open Keldagrim door on
   // the way to the Blast Furnace, shares DOOR_180's model but offers no option). Witch's House's

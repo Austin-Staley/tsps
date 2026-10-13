@@ -107,14 +107,8 @@ export class NPCOptionPacketListener {
       return false;
     }
     const areaPermission = (npc.getPrivateArea?.() ?? npc.getArea?.())?.canCastOnNpc?.(player, npc, spell);
-    const targetPolicy = {
-      player,
-      npc,
-      spell,
-      allowed: areaPermission ?? !!npc.getCurrentDefinition?.(player)?.isAttackable?.(),
-    };
-    PluginManager.emitCustomEvent("magic:can-cast-on-npc", targetPolicy);
-    if (areaPermission === false || !targetPolicy.allowed) {
+    const allowed = areaPermission ?? !!npc.getCurrentDefinition?.(player)?.isAttackable?.();
+    if (!allowed) {
       player.getMovementQueue().reset();
       return false;
     }

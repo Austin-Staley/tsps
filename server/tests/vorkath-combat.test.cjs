@@ -285,3 +285,13 @@ test("her loot lands on the nearest walkable tile one step out from her body (ca
   assert.deepEqual(lootTile(base, at(2272, 4058), (x, y) => !(x === 2272 && y === 4061), () => 0), [2268, 4061]);
   assert.equal(lootTile(base, at(2272, 4058), () => false), null);
 });
+
+
+test("dragon protection recognizes both dragonfire shield states", () => {
+  const { CombatEquipment } = require("../dist/game/content/combat/CombatEquipment");
+  const equipped = (id) => ({ getEquipment: () => ({ get: () => ({ getId: () => id }) }) });
+  assert.equal(CombatEquipment.hasDragonProtectionGear(equipped(11283)), true, "charged dragonfire shield protects");
+  assert.equal(CombatEquipment.hasDragonProtectionGear(equipped(11284)), true, "uncharged dragonfire shield protects");
+  assert.equal(CombatEquipment.hasDragonProtectionGear(equipped(11285)), false, "the bank note is not wearable protection");
+  assert.equal(CombatEquipment.hasDragonProtectionGear(equipped(11282)), false, "unrelated equipment does not count");
+});

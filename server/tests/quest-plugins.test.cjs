@@ -474,14 +474,12 @@ test("Tree Gnome Village sends King Bolren's orbs (varbit 598): the village's sp
 });
 
 test('Dragon Slayer II lights the three actual Ancient Cavern dragon head NPCs with Fire Wave or Surge', () => {
-  const { api: base, handlers } = mockApi();
+  const { api, handlers } = mockApi();
   let hitModify;
-  const api = new Proxy(base, {
-    get: (target, prop) => prop === 'onNpcHitModify'
-      ? (handler) => { hitModify = handler; }
-      : target[prop],
-  });
+  api.onNpcHitModify = (handler) => { hitModify = handler; };
   require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  const area = handlers.area.find((entry) => entry.constructor.name === 'DragonForgeHeadArea');
+  assert.ok(area, 'the forge head casting exception is scoped to the Ancient Cavern room');
   const attributes = new Map([
     ['quest.dragon_slayer_ii.stage', 9],
     ...[api.core.ItemIdentifiers.ANCIENT_KEY, api.core.ItemIdentifiers.DRAGON_KEY_PIECE,
@@ -500,14 +498,10 @@ test('Dragon Slayer II lights the three actual Ancient Cavern dragon head NPCs w
     getPacketSender: () => sender,
     sendMessage: (message) => messages.push(message),
   };
-  const canCast = (npcId, spell) => {
-    const event = { player, npc: { getId: () => npcId }, spell, allowed: false };
-    for (const listener of handlers.custom.get('magic:can-cast-on-npc') ?? []) listener(event);
-    return event.allowed;
-  };
+  const canCast = (npcId, spell) => area.canCastOnNpc(player, { getId: () => npcId }, spell);
   assert.equal(canCast(7506, api.core.CombatSpells.FIRE_WAVE), true, 'forge heads accept the required spell');
   assert.equal(canCast(7506, api.core.CombatSpells.WIND_STRIKE), false, 'other spells remain rejected');
-  assert.equal(canCast(12345, api.core.CombatSpells.FIRE_WAVE), false, 'the opt-in is limited to the three heads');
+  assert.equal(canCast(12345, api.core.CombatSpells.FIRE_WAVE), null, 'other NPCs keep the normal targeting rule');
   attributes.set('quest.dragon_slayer_ii.stage', 8);
   assert.equal(canCast(7506, api.core.CombatSpells.FIRE_WAVE), false, 'heads are not spell targets before the forge stage');
   attributes.set('quest.dragon_slayer_ii.stage', 9);
@@ -536,41 +530,6 @@ test('Dragon Slayer II lights the three actual Ancient Cavern dragon head NPCs w
   assert.equal(attributes.get('dragon-slayer-ii:forge-heads'), 7, 'other spells do not light heads');
   spellHit(12345, api.core.CombatSpells.FIRE_WAVE);
   assert.equal(attributes.get('dragon-slayer-ii:forge-heads'), 7, 'unrelated NPCs do not light heads');
-});
-
-test('Current Affairs and Prying Times start gates require every registered prerequisite', () => {
-  const conditions = [];
-  const completeQuests = new Set();
-  let hasPortTaskSlot = false;
-  const { api: base } = mockApi();
-  const api = new Proxy(base, {
-    get: (target, prop) => {
-      if (prop === 'onNpcDialogueCondition') return (handler) => conditions.push(handler);
-      if (prop === 'emitCustomEvent') return (name, request) => {
-        if (name === 'quest:is-complete') request.complete = completeQuests.has(request.key);
-        if (name === 'sailing:has-port-task-slot') request.available = hasPortTaskSlot;
-      };
-      return target[prop];
-    },
-  });
-  require('../plugins/quests/quests/CurrentAffairs.Quest')(api);
-  require('../plugins/quests/quests/PryingTimes.Quest')(api);
-  const [currentAffairs, pryingTimes] = conditions;
-  const player = { getSkillManager: () => ({ getMaxLevel: () => 99, getCurrentLevel: () => 99 }) };
-  assert.equal(currentAffairs({ npcId: api.core.NpcIdentifiers.ARHEIN, player, stepId: 'mNhEI-' }), true,
-    'missing Pandemonium blocks Current Affairs');
-  assert.equal(pryingTimes({ npcId: api.core.NpcIdentifiers.SQUAWKING_STEVE_BEANIE, player, stepId: 'aifq0J' }), true,
-    'missing quests and an unavailable task slot block Prying Times');
-  completeQuests.add('pandemonium');
-  assert.equal(currentAffairs({ npcId: api.core.NpcIdentifiers.ARHEIN, player, stepId: 'mNhEI-' }), false);
-  completeQuests.add('the_knights_sword');
-  assert.equal(pryingTimes({ npcId: api.core.NpcIdentifiers.SQUAWKING_STEVE_BEANIE, player, stepId: 'aifq0J' }), false,
-    'high skills and both required quests satisfy the quest prerequisites');
-  assert.equal(pryingTimes({ npcId: api.core.NpcIdentifiers.SQUAWKING_STEVE_BEANIE, player, stepId: 'PSw89b' }), true,
-    'a full task ledger blocks starting Prying Times');
-  hasPortTaskSlot = true;
-  assert.equal(pryingTimes({ npcId: api.core.NpcIdentifiers.SQUAWKING_STEVE_BEANIE, player, stepId: 'PSw89b' }), false,
-    'an available task slot clears the full-ledger condition');
 });
 
 test('The Blood Moon Rises starts only after Sarius accepts the yes choice and requirements pass', () => {
@@ -1394,75 +1353,6 @@ test('Blood Moon final dialogue requires the earned Drakan completion checkpoint
   quest.setStage(player, 100);
   action({ player, stepId: 'BzMe5D' });
   assert.equal(rewards, 1);
-});
-
-test('Priest in Peril unlocks the mausoleum Holy barrier only after completion', () => {
-  const { api: base } = mockApi();
-  const objects = new Map();
-  const api = new Proxy(base, {
-    get: (target, prop) => prop === 'onObjectInteraction'
-      ? (name, actions) => objects.set(name, actions)
-      : target[prop],
-  });
-  require('../plugins/quests/quests/PriestInPeril.Quest')(api);
-  const pass = objects.get('Holy barrier')?.['Pass-through'];
-  assert.equal(typeof pass, 'function');
-  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
-  const moves = [];
-  const messages = [];
-  let stage = 0;
-  const player = {
-    getAttribute: () => stage,
-    moveTo: (location) => moves.push([location.getX(), location.getY(), location.getZ()]),
-    sendMessage: (text) => messages.push(text),
-  };
-  for (stage of [0, 10, 50, quest.completionValue - 1]) {
-    assert.equal(pass({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER }), true);
-    assert.deepEqual(moves, [], 'unfinished quests cannot cross');
-    assert.match(messages.at(-1), /complete Priest in Peril/);
-  }
-  for (stage of [quest.completionValue, quest.completionValue + 1]) {
-    assert.equal(pass({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER }), true);
-    assert.deepEqual(moves.at(-1), [3423, 3485, 0]);
-    assert.equal(messages.at(-1), 'You pass through the holy barrier.');
-  }
-  const before = [moves.length, messages.length];
-  assert.equal(pass({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER_2 }), false,
-    'the Hallowed Sepulchre barrier is handled by its own content');
-  assert.deepEqual([moves.length, messages.length], before);
-});
-
-test('Dragon Slayer II reforges the key at the anvil only after the real heads are lit', () => {
-  const interactions = [];
-  const { api: base } = mockApi();
-  const api = new Proxy(base, {
-    get: (target, prop) => prop === 'onObjectInteraction'
-      ? (handler) => interactions.push(handler)
-      : target[prop],
-  });
-  require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
-  const attrs = new Map([['quest.dragon_slayer_ii.stage', 9], ['dragon-slayer-ii:forge-heads', 7]]);
-  const counts = new Map([
-    [api.core.ItemIdentifiers.DRAGON_KEY_PIECE, 1], [api.core.ItemIdentifiers.DRAGON_KEY_PIECE_2, 1],
-    [api.core.ItemIdentifiers.DRAGON_KEY_PIECE_3, 1], [api.core.ItemIdentifiers.DRAGON_KEY_PIECE_4, 1],
-    [api.core.ItemIdentifiers.ANCIENT_KEY, 1], [api.core.ItemIdentifiers.HAMMER, 1],
-  ]);
-  const player = {
-    getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
-    getInventory: () => ({
-      getAmount: (id) => counts.get(id) ?? 0,
-      deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
-      adds: (id, amount) => counts.set(id, (counts.get(id) ?? 0) + amount),
-      getFreeSlots: () => 20,
-    }),
-    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
-    sendMessage: () => {},
-  };
-  interactions[0]({ player, objectId: api.core.ObjectIdentifiers.ANVIL });
-  assert.equal(attrs.get('quest.dragon_slayer_ii.stage'), 10, 'the forge advances after its heads are lit');
-  assert.equal(counts.get(api.core.ItemIdentifiers.DRAGON_KEY), 1);
-  assert.equal(counts.get(api.core.ItemIdentifiers.ANCIENT_KEY), 0);
-  assert.equal(counts.get(api.core.ItemIdentifiers.DRAGON_KEY_PIECE_4), 0);
 });
 
 test('Desert Treasure II requires and solves the real eight-cell golem grid', () => {
@@ -6641,6 +6531,7 @@ test('Dragon Slayer II mirrors compact stages to the cache quest milestones in v
 });
 
 
+
 test('Dragon Slayer II Brundt handler yields before the leader council stage', () => {
   const { api: base } = mockApi();
   let brundtTalk;
@@ -6709,6 +6600,110 @@ test('Dragon Slayer II follows the cache blockage Investigate → Mine → Enter
   assert.equal(messages.length, 3);
 });
 
+test('Current Affairs and Prying Times start gates require every registered prerequisite', () => {
+  const conditions = [];
+  const completeQuests = new Set();
+  let hasPortTaskSlot = false;
+  const { api: base } = mockApi();
+  const api = new Proxy(base, {
+    get: (target, prop) => {
+      if (prop === 'onNpcDialogueCondition') return (handler) => conditions.push(handler);
+      if (prop === 'emitCustomEvent') return (name, request) => {
+        if (name === 'quest:is-complete') request.complete = completeQuests.has(request.key);
+        if (name === 'sailing:has-port-task-slot') request.available = hasPortTaskSlot;
+      };
+      return target[prop];
+    },
+  });
+  require('../plugins/quests/quests/CurrentAffairs.Quest')(api);
+  require('../plugins/quests/quests/PryingTimes.Quest')(api);
+  const [currentAffairs, pryingTimes] = conditions;
+  const player = { getSkillManager: () => ({ getMaxLevel: () => 99, getCurrentLevel: () => 99 }) };
+  assert.equal(currentAffairs({ npcId: api.core.NpcIdentifiers.ARHEIN, player, stepId: 'mNhEI-' }), true,
+    'missing Pandemonium blocks Current Affairs');
+  assert.equal(pryingTimes({ npcId: api.core.NpcIdentifiers.SQUAWKING_STEVE_BEANIE, player, stepId: 'aifq0J' }), true,
+    'missing quests and an unavailable task slot block Prying Times');
+  completeQuests.add('pandemonium');
+  assert.equal(currentAffairs({ npcId: api.core.NpcIdentifiers.ARHEIN, player, stepId: 'mNhEI-' }), false);
+  completeQuests.add('the_knights_sword');
+  assert.equal(pryingTimes({ npcId: api.core.NpcIdentifiers.SQUAWKING_STEVE_BEANIE, player, stepId: 'aifq0J' }), false,
+    'high skills and both required quests satisfy the quest prerequisites');
+  assert.equal(pryingTimes({ npcId: api.core.NpcIdentifiers.SQUAWKING_STEVE_BEANIE, player, stepId: 'PSw89b' }), true,
+    'a full task ledger blocks starting Prying Times');
+  hasPortTaskSlot = true;
+  assert.equal(pryingTimes({ npcId: api.core.NpcIdentifiers.SQUAWKING_STEVE_BEANIE, player, stepId: 'PSw89b' }), false,
+    'an available task slot clears the full-ledger condition');
+});
+
+test('Priest in Peril unlocks the mausoleum Holy barrier only after completion', () => {
+  const { api: base } = mockApi();
+  const objects = new Map();
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onObjectInteraction'
+      ? (name, actions) => objects.set(name, actions)
+      : target[prop],
+  });
+  require('../plugins/quests/quests/PriestInPeril.Quest')(api);
+  const pass = objects.get('Holy barrier')?.['Pass-through'];
+  assert.equal(typeof pass, 'function');
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
+  const moves = [];
+  const messages = [];
+  let stage = 0;
+  const player = {
+    getAttribute: () => stage,
+    moveTo: (location) => moves.push([location.getX(), location.getY(), location.getZ()]),
+    sendMessage: (text) => messages.push(text),
+  };
+  for (stage of [0, 10, 50, quest.completionValue - 1]) {
+    assert.equal(pass({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER }), true);
+    assert.deepEqual(moves, [], 'unfinished quests cannot cross');
+    assert.match(messages.at(-1), /complete Priest in Peril/);
+  }
+  for (stage of [quest.completionValue, quest.completionValue + 1]) {
+    assert.equal(pass({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER }), true);
+    assert.deepEqual(moves.at(-1), [3423, 3485, 0]);
+    assert.equal(messages.at(-1), 'You pass through the holy barrier.');
+  }
+  const before = [moves.length, messages.length];
+  assert.equal(pass({ player, objectId: api.core.ObjectIdentifiers.HOLY_BARRIER_2 }), false,
+    'the Hallowed Sepulchre barrier is handled by its own content');
+  assert.deepEqual([moves.length, messages.length], before);
+});
+
+test('Dragon Slayer II reforges the key at the anvil only after the real heads are lit', () => {
+  const interactions = [];
+  const { api: base } = mockApi();
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'onObjectInteraction'
+      ? (handler) => interactions.push(handler)
+      : target[prop],
+  });
+  require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  const attrs = new Map([['quest.dragon_slayer_ii.stage', 9], ['dragon-slayer-ii:forge-heads', 7]]);
+  const counts = new Map([
+    [api.core.ItemIdentifiers.DRAGON_KEY_PIECE, 1], [api.core.ItemIdentifiers.DRAGON_KEY_PIECE_2, 1],
+    [api.core.ItemIdentifiers.DRAGON_KEY_PIECE_3, 1], [api.core.ItemIdentifiers.DRAGON_KEY_PIECE_4, 1],
+    [api.core.ItemIdentifiers.ANCIENT_KEY, 1], [api.core.ItemIdentifiers.HAMMER, 1],
+  ]);
+  const player = {
+    getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getInventory: () => ({
+      getAmount: (id) => counts.get(id) ?? 0,
+      deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+      adds: (id, amount) => counts.set(id, (counts.get(id) ?? 0) + amount),
+      getFreeSlots: () => 20,
+    }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage: () => {},
+  };
+  // The Ancient Cavern forge's cache object is ANVIL_8 (32215), not the generic workshop anvil.
+  interactions[0]({ player, objectId: api.core.ObjectIdentifiers.ANVIL_8 });
+  assert.equal(attrs.get('quest.dragon_slayer_ii.stage'), 10, 'the forge advances after its heads are lit');
+  assert.equal(counts.get(api.core.ItemIdentifiers.DRAGON_KEY), 1);
+  assert.equal(counts.get(api.core.ItemIdentifiers.ANCIENT_KEY), 0);
+  assert.equal(counts.get(api.core.ItemIdentifiers.DRAGON_KEY_PIECE_4), 0);
+});
 
 test('Dragon Slayer II registers the Ungael Cave Enter action with a cache ID guard', () => {
   const { api: base } = mockApi();

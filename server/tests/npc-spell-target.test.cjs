@@ -9,16 +9,18 @@ const { CombatSpells } = require('../dist/game/content/combat/magic/CombatSpells
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { NPCOptionPacketListener } = require('../dist/net/packet/impl/NPCOptionPacketListener');
 
-test('spell-on-NPC defaults to attackable definitions and permits explicit plugin opt-in', () => {
+test('spell-on-NPC defaults to attackable definitions and honors an area-scoped opt-in', () => {
   const originalNpcs = World.getNpcs;
   const originalSpell = CombatSpells.getCombatSpell;
   const originalCustomEvent = PluginManager.emitCustomEvent;
   const spell = { canCastOnTarget: () => true };
   let cast = null;
+  let areaPermission = null;
   const npc = {
     getLocation: () => ({}),
     getCurrentDefinition: () => ({ isAttackable: () => false }),
     getHitpoints: () => 10,
+    getArea: () => ({ canCastOnNpc: () => areaPermission }),
   };
   const player = {
     getHitpoints: () => 99,
@@ -34,11 +36,9 @@ test('spell-on-NPC defaults to attackable definitions and permits explicit plugi
     assert.equal(NPCOptionPacketListener.castSpell(player, 0, 1), false, 'unattackable NPCs reject ordinary spell targeting');
     assert.equal(cast, null, 'a rejected target never reaches combat or rune consumption');
 
-    PluginManager.emitCustomEvent = (name, event) => {
-      assert.equal(name, 'magic:can-cast-on-npc');
-      event.allowed = true;
-    };
-    assert.equal(NPCOptionPacketListener.castSpell(player, 0, 1), true, 'a quest can opt one NPC into spell targeting');
+    areaPermission = true;
+    PluginManager.emitCustomEvent = () => {};
+    assert.equal(NPCOptionPacketListener.castSpell(player, 0, 1), true, 'the NPC area can opt one target into spell casting');
     assert.deepEqual(cast, [npc, spell]);
   } finally {
     World.getNpcs = originalNpcs;

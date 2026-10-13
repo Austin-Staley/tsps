@@ -189,11 +189,21 @@ module.exports = function registerDragonSlayerII(api) {
   const spawnRows = require("../../../data/definitions/npc-spawns.json");
   let quest;
   let QuestArea;
+  let DragonForgeHeadArea;
   let KaramjaArea;
   let UngaelLabArea;
   let KourendCryptArea;
 
   function defineArea() {
+    DragonForgeHeadArea = class DragonForgeHeadArea extends api.core.Area {
+      constructor() { super([new Boundary(1545, 1567, 4873, 4892, 0)]); }
+      canCastOnNpc(player, npc, spell) {
+        if (!FORGE_HEADS.has(npc?.getId?.())) return null;
+        if (stage(player) !== S.FORGE) return false;
+        return [api.core.CombatSpells.FIRE_WAVE.spellId(), api.core.CombatSpells.FIRE_SURGE.spellId()]
+          .includes(spell?.spellId?.());
+      }
+    };
     QuestArea = class DragonSlayerIIArea extends PrivateArea {
       constructor(ownerName, boundaries) { super(Array.isArray(boundaries) ? boundaries : [boundaries]); this.ownerName = ownerName; }
       process(mobile) {
@@ -1934,13 +1944,6 @@ module.exports = function registerDragonSlayerII(api) {
     const lit = Number(p.getAttribute(ATTR_FORGE_HEADS)) || 0;
     for (const { bit, varbit } of FORGE_HEADS.values()) p.getPacketSender().sendVarbit(varbit, lit & bit ? 1 : 0);
   }
-  function allowForgeHeadSpell(event) {
-    const { player: p, npc, spell } = event;
-    if (!p?.isPlayer?.() || stage(p) !== S.FORGE || !FORGE_HEADS.has(npc?.getId?.())) return;
-    const wave = api.core.CombatSpells.FIRE_WAVE.spellId();
-    const surge = api.core.CombatSpells.FIRE_SURGE.spellId();
-    if ([wave, surge].includes(spell?.spellId?.())) event.allowed = true;
-  }
   function protectForgeHead({ npc, hit }) {
     if (!FORGE_HEADS.has(npc.getId())) return;
     for (const damage of hit.getHits()) damage.setDamage(0);
@@ -2123,6 +2126,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
 
   defineArea();
+  api.registerArea(new DragonForgeHeadArea());
   quest = registerQuest(api, {
     key: "dragon_slayer_ii", name: "Dragon Slayer II", varpId: 1685, varbitId: 6104,
     varbitValue: (value, player) => {
@@ -2248,7 +2252,6 @@ module.exports = function registerDragonSlayerII(api) {
   api.onItemOnObject(useItemOnObject, { noted: false });
   api.onItemOnObject(placeCryptBust, { noted: false });
   api.onNpcHitModify(protectForgeHead);
-  api.onCustomEvent("magic:can-cast-on-npc", allowForgeHeadSpell);
   api.onCustomEvent("magic:hit-effects", kindleDragonForge);
   api.onItemOnItem(itemOnItem);
   api.onItemOnItem(makeInertLocatorOrb);
