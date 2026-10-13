@@ -44,6 +44,7 @@ import {
     type WorldEntityOverlay,
 } from "./worldEntity";
 import { environmentAt } from "../render/environment";
+import { syncCameraViewportUnitScale } from "../render/quality";
 import { GPU_TEXTURE_USAGE, SCENE_DEPTH_FORMAT, SCENE_GROUP, WORLD_TEXTURES_GROUP } from "./bindings";
 import { getControlledPlayerEcsIndex, updateFollowCamera } from "./camera";
 import { computeWebGPURoofPlaneLimit, resolveWebGPULodDistance, resolveWebGPURenderDistance } from "./frameConfig";
@@ -598,8 +599,10 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
 
         const timeSec = time / 1000;
         const loggedIn = this.osrsClient.isLoggedIn();
+        const sceneViewport = this.getSceneViewportWidgetRect();
 
         if (loggedIn) {
+            syncCameraViewportUnitScale(this);
             // 117 HD camera feel: the scene-viewport widget consumes wheel input before the
             // camera could see it, so capture the raw wheel while the pointer is over the 3D
             // viewport (the UI keeps its own scroll everywhere else). updateFollowCamera
@@ -625,7 +628,10 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
             updateWorldEntityMotion(this);
             ensureWorldEntityOverlaysLoaded(this, performance.now());
             updateFollowCamera(this, timeSec, deltaTime);
-            this.osrsClient.camera.update(width, height, 0, 0, width, height);
+            this.osrsClient.camera.update(
+                width, height,
+                sceneViewport.x, sceneViewport.y, sceneViewport.width, sceneViewport.height,
+            );
             // The deck placement matrices are view-space, so they are rebuilt per camera frame.
             this.worldEntityAnimator?.compose(
                 this.osrsClient.camera.viewMatrix as Float32Array,
@@ -761,6 +767,13 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         });
 
         if (loggedIn) {
+            const clipX = Math.max(0, Math.min(width, Math.floor(sceneViewport.x)));
+            const clipY = Math.max(0, Math.min(height, Math.floor(sceneViewport.y)));
+            pass.setScissorRect(
+                clipX, clipY,
+                Math.max(0, Math.min(width, Math.ceil(sceneViewport.x + sceneViewport.width)) - clipX),
+                Math.max(0, Math.min(height, Math.ceil(sceneViewport.y + sceneViewport.height)) - clipY),
+            );
             for (let i = 0; i < visible.length; i++) {
                 if (visible[i].canRender(this.stats.frameCount)) {
                     visible[i].drawOpaque(pass, roofPlaneLimit, this.frameScenery);
