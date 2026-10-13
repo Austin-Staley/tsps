@@ -3473,16 +3473,34 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
   const attributes = new Map();
   const spawns = [];
   let bossArea = null;
+  let worldCycle = api.core.World.getProcessCycle();
+  let bossLocation = null;
+  let playerLocation = null;
+  const animations = [];
+  const pendingDamage = [];
+  const graphics = [];
+  const attackDelays = [];
+  const stepsBack = [];
+  const prayers = [];
+  let canKnockback = true;
   const boss = {
     isNpc: () => true,
     isPlayer: () => false,
     getAsNpc: () => boss,
     getIndex: () => 200,
+    getId: () => api.core.NpcIdentifiers.WYRD_8,
     getArea: () => bossArea,
     setArea: (area) => { bossArea = area; },
+    getLocation: () => bossLocation,
     setMultiCombat() {},
+    setScriptedMovement(value) { this.scriptedMovement = value; },
+    getCombat: () => ({ getLastAttack: () => ({ reset() {} }) }),
+    performAnimation(animation) { animations.push(animation.getId()); },
+    forceChat() {},
     setMaxHitpoints(value) { this.maxHitpoints = value; },
     setHitpoints(value) { this.hitpoints = value; },
+    getMaxHitpoints() { return this.maxHitpoints; },
+    getHitpoints() { return this.hitpoints; },
   };
   api.spawnNpc = (definition) => (spawns.push(definition), boss);
   api.emitCustomEvent = (name, request) => {
@@ -3493,14 +3511,31 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     getUsername: () => 'WyrdFightTest',
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
-    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    getDialogueManager: () => ({ reset() {}, startDialogues() {}, getCurrent: () => null }),
     isPlayer: () => true,
     isNpc: () => false,
     getAsPlayer: () => player,
     getIndex: () => 100,
     getArea: () => player.area,
     setArea: (area) => { player.area = area; },
-    moveTo: (location) => { player.destination = [location.getX(), location.getY(), location.getZ()]; },
+    getLocation: () => playerLocation,
+    getHitpoints: () => 100,
+    getPrayerActive: () => prayers,
+    getEquipment: () => ({ get: () => null }),
+    getMovementQueue: () => ({ canWalk: () => canKnockback, walkStep: (dx, dy) => {
+      stepsBack.push([dx, dy]); playerLocation = new api.core.Location(playerLocation.getX() + dx, playerLocation.getY() + dy, 0);
+    } }),
+    getCombat: () => ({
+      getHitQueue: () => ({ addPendingDamage: (hits) => pendingDamage.push(...hits) }),
+      setAttackDelay: (ticks) => attackDelays.push(ticks),
+    }),
+    getPacketSender: () => new Proxy({
+      sendGraphic: (graphic, location) => graphics.push([graphic.getId(), location.getX(), location.getY()]),
+    }, { get: (target, prop) => prop in target ? target[prop] : () => {} }),
+    moveTo: (location) => {
+      player.destination = [location.getX(), location.getY(), location.getZ()];
+      playerLocation = new api.core.Location(location.getX(), location.getY(), location.getZ());
+    },
     sendMessage() {},
   };
   handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: '4G5OZg' });
@@ -3511,6 +3546,67 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
   assert.equal(player.getArea(), bossArea, 'the player and owner-only Wyrd share a private combat area');
   assert.equal(boss.getArea(), bossArea);
   assert.equal(boss.hitpoints, 1100);
+
+  bossLocation = new api.core.Location(2976, 7456, 0);
+  playerLocation = new api.core.Location(2976, 7452, 0);
+  assert.equal(boss.getHitpoints(), 1100);
+  assert.equal(boss.getMaxHitpoints(), 1100);
+  const oldCycle = api.core.World.getProcessCycle;
+  const originalRandom = Math.random;
+  api.core.World.getProcessCycle = () => worldCycle;
+  Math.random = () => 0.5;
+  try {
+    worldCycle += 4;
+    bossArea.process(boss);
+    assert.equal(animations.at(-1), 14020, 'the initial distance uses the Wyrd’s magic attack');
+    assert.ok(pendingDamage.at(-1).getDamage() <= 25, 'the unprayerable ranged magic hit stays within its max hit');
+    playerLocation = new api.core.Location(2976, 7455, 0);
+    worldCycle += 5;
+    bossArea.process(boss);
+    assert.equal(animations.at(-1), 14018, 'first attack is the right-arm punch');
+    assert.equal(stepsBack.length, 1, 'each punch knocks the player back one walkable tile');
+    worldCycle += 5;
+    canKnockback = false;
+    const beforeBlockedPunch = pendingDamage.length;
+    bossArea.process(boss);
+    assert.equal(animations.at(-1), 14019, 'the next attack uses the other arm');
+    assert.equal(pendingDamage.length, beforeBlockedPunch + 2,
+      'a blocked knockback causes the guide-described light recoil in addition to the punch');
+    canKnockback = true;
+    worldCycle += 5;
+    prayers[api.core.PrayerHandler.PROTECT_FROM_MELEE] = true;
+    bossArea.process(boss);
+    assert.equal(animations.at(-1), 14023, 'two punches lead into a normal screech');
+    worldCycle += 2;
+    bossArea.process(boss);
+    const screechHit = pendingDamage.at(-1).getDamage();
+    assert.ok(screechHit >= 15 && screechHit <= 20, 'an active overhead takes the Wiki screech hit');
+    assert.deepEqual(attackDelays, [3], 'the screech delays the next player attack');
+
+    boss.hitpoints = 600;
+    assert.equal(boss.getHitpoints() / boss.getMaxHitpoints(), 600 / 1100);
+    worldCycle += 3;
+    bossArea.process(boss);
+    worldCycle += 5;
+    bossArea.process(boss);
+    worldCycle += 5;
+    bossArea.process(boss);
+    worldCycle += 5;
+    const oldRandom = Math.random;
+    Math.random = () => 0;
+    try { bossArea.process(boss); } finally { Math.random = oldRandom; }
+    assert.equal(animations.at(-1), 14025, 'the sub-60% screech can become bloody');
+    assert.equal(graphics.filter(([id]) => id === 3856).length, 200,
+      'the bloody screech creates five visible pool layers around the 3x3 boss');
+    worldCycle += 5;
+    bossArea.process(boss);
+    worldCycle++;
+    bossArea.process(boss);
+    assert.ok(graphics.some(([id]) => id === 3861), 'the blast uses lightning to clear an escape lane');
+  } finally {
+    api.core.World.getProcessCycle = oldCycle;
+    Math.random = originalRandom;
+  }
 });
 
 test('Blood Moon northern-door transcript starts the private Lowerniel encounter', () => {

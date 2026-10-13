@@ -4,7 +4,7 @@
  * quest state uses the cache's myq6 varbit (15464 in varp 5618).
  */
 module.exports = function registerTheBloodMoonRises(api) {
-  const { Boundary, Equipment, HitDamage, HitMask, Item, ItemIdentifiers, Location, NpcIdentifiers, ObjectDefinition, ObjectIdentifiers, PrayerHandler, PrivateArea, Skill, World } = api.core;
+  const { Animation, Boundary, Equipment, Graphic, HitDamage, HitMask, Item, ItemIdentifiers, Location, NpcIdentifiers, ObjectDefinition, ObjectIdentifiers, PrayerHandler, PrivateArea, Skill, World } = api.core;
   const { registerQuest, loadTranscripts, startTranscript } = require("../QuestRuntime");
   require("../bmr/Refinery.TheBloodMoonRises")(api);
   const PAGE = "The Blood Moon Rises";
@@ -632,84 +632,228 @@ module.exports = function registerTheBloodMoonRises(api) {
       }
       if (encounter.ending) return;
 
-      const phase = hpPercent <= 0.5 ? 2 : 1;
-      if (phase === 2 && encounter.phase !== 2) {
-        encounter.phase = 2;
-        player.sendMessage("The Wyrd's body crackles with lightning. Leave its blood pools when it calls the storm, and lower every protection prayer during the screech.");
+      const loc = player.getLocation();
+      const px = loc.getX();
+      const py = loc.getY();
+      const bx = mobile.getLocation().getX();
+      const by = mobile.getLocation().getY();
+      const meleeDistance = Math.max(0, bx - px, px - (bx + 2), by - py, py - (by + 2));
+      const protection = player.getPrayerActive?.() ?? [];
+      const overheadActive = [PrayerHandler.PROTECT_FROM_MAGIC, PrayerHandler.PROTECT_FROM_MISSILES,
+        PrayerHandler.PROTECT_FROM_MELEE].some((id) => protection[id] === true);
+      const inPools = encounter.poolTiles?.has(`${px},${py}`) === true;
+
+      // Bloody screech pools remain hazardous until the blast clears them. A player
+      // who stands on one is hit every cycle, matching the fast repeat damage in-game.
+      if (inPools) wyrdDamage(player, mobile, 10 + Math.floor(Math.random() * 11));
+      if (encounter.bloodyBlast) {
+        const separation = Math.max(0, bx - px, px - (bx + 2), by - py, py - (by + 2));
+        if (separation <= encounter.blastRadius) wyrdDamage(player, mobile, 6 + Math.floor(Math.random() * 9));
+        if (now >= encounter.blastEndsAt) {
+          clearWyrdPools(encounter, false);
+          encounter.bloodyBlast = false;
+          player.sendMessage("The lightning subsides. The blood pools evaporate.");
+        } else {
+          encounter.blastRadius = Math.min(7, encounter.blastRadius + 1);
+          clearWyrdLightningLane(encounter, player);
+        }
       }
+
       if (encounter.impactAt && now >= encounter.impactAt) {
         const warning = encounter.warning;
         encounter.impactAt = 0;
         encounter.warning = null;
-        if (warning === "screech") {
-          const prayers = player.getPrayerActive?.() ?? [];
-          const overheadActive = [PrayerHandler.PROTECT_FROM_MAGIC, PrayerHandler.PROTECT_FROM_MISSILES,
-            PrayerHandler.PROTECT_FROM_MELEE].some((id) => prayers[id] === true);
-          const damage = overheadActive ? 30 : 0;
-          if (damage) player.sendMessage("Your protection prayer amplifies the Wyrd's screech.");
-          else player.sendMessage("The screech passes over you as you lower your prayers.");
-          if (damage) player.getCombat().getHitQueue().addPendingDamage([
-            new HitDamage(damage, HitMask.RED).setSource(mobile),
-          ]);
-          encounter.screeches++;
-          return;
-        }
-        if (warning === "storm") {
-          const distance = Math.max(Math.abs(player.getLocation().getX() - encounter.markedX),
-            Math.abs(player.getLocation().getY() - encounter.markedY));
-          const prayers = player.getPrayerActive?.() ?? [];
-          const overheadActive = [PrayerHandler.PROTECT_FROM_MAGIC, PrayerHandler.PROTECT_FROM_MISSILES,
-            PrayerHandler.PROTECT_FROM_MELEE].some((id) => prayers[id] === true);
-          if (distance <= 2) {
-            player.sendMessage("The lightning strikes around you. Move clear of the blood pools and turn off your protection prayers.");
-            player.getCombat().getHitQueue().addPendingDamage([
-              new HitDamage(overheadActive ? 24 : 16, HitMask.RED).setSource(mobile),
-            ]);
-          } else {
-            player.sendMessage("You escape the lightning strike and its blood pools.");
+        if (warning === "screech" || warning === "bloody-screech") {
+          if (overheadActive) {
+            let damage = 15 + Math.floor(Math.random() * 6);
+            if (hasWyrdEarProtection(player)) damage = Math.ceil(damage / 2);
+            wyrdDamage(player, mobile, damage);
+            player.sendMessage("The Wyrd's screech disrupts your concentration!");
+            player.getCombat()?.setAttackDelay?.(3);
+          } else player.sendMessage("You avoid the Wyrd's screech by keeping your protection prayers off.");
+          if (warning === "bloody-screech") {
+            encounter.bloodyBlast = true;
+            encounter.blastRadius = 0;
+            encounter.blastEndsAt = now + 10;
+            player.sendMessage("A blast of energy bursts from the Wyrd. Run clear of the blood pools; the lightning will destroy some of them.");
           }
+          encounter.nextAttackAt = now + 3;
           return;
         }
         if (warning === "slam") {
-          const distance = Math.max(Math.abs(player.getLocation().getX() - encounter.markedX),
-            Math.abs(player.getLocation().getY() - encounter.markedY));
-          if (distance <= 1) player.getCombat().getHitQueue().addPendingDamage([
-            new HitDamage(35, HitMask.RED).setSource(mobile),
-          ]);
-          else player.sendMessage("The Wyrd's ground slam crashes where you stood.");
+          wyrdSlam(encounter, encounter.slamSide);
+          encounter.slamCount++;
+          if (encounter.slamCount < 2) {
+            encounter.impactAt = now + 2;
+            encounter.warning = "slam";
+            mobile.performAnimation(new Animation(14022));
+            return;
+          }
+          encounter.slamCount = 0;
+          encounter.sequenceStep = 0;
+          encounter.meleeMode = null;
+          encounter.nextAttackAt = now + 3;
           return;
         }
       }
-      if (encounter.impactAt) return;
-      if (now < encounter.nextAttackAt) return;
-      encounter.nextAttackAt = now + 4;
-      if (phase === 1 && encounter.punches < 2) {
-        encounter.punches++;
-        const protectedFromMelee = (player.getPrayerActive?.() ?? [])[PrayerHandler.PROTECT_FROM_MELEE] === true;
-        if (!protectedFromMelee) player.getCombat().getHitQueue().addPendingDamage([
-          new HitDamage(5 + Math.floor(Math.random() * 7), HitMask.RED).setSource(mobile),
-        ]);
-        player.sendMessage("The Wyrd swings a heavy fist at you.");
+      // The quick guide notes that keeping outside melee range prevents the
+      // Wyrd's specials; it switches to unprayerable magic attacks (max hit 25).
+      // Use the distance from the full 3x3 footprint, not its south-west anchor.
+      if (!encounter.impactAt && !encounter.bloodyBlast && encounter.meleeMode == null) {
+        encounter.meleeMode = meleeDistance <= 1;
+      }
+      if (!encounter.impactAt && !encounter.bloodyBlast && encounter.meleeMode === false && meleeDistance <= 1) {
+        encounter.meleeMode = true;
+      }
+      if (!encounter.impactAt && !encounter.bloodyBlast && encounter.meleeMode === false) {
+        if (now >= encounter.nextAttackAt) {
+          encounter.nextAttackAt = now + 5;
+          mobile.performAnimation(new Animation(14020));
+          wyrdDamage(player, mobile, Math.floor(Math.random() * 26));
+          player.sendMessage("The Wyrd hurls a magic burst at you. Protection prayers cannot stop it.");
+        }
         return;
       }
-      if (phase === 1 && encounter.screeches < 2) {
-        encounter.punches = 0;
-        encounter.warning = "screech";
-        encounter.impactAt = now + 2;
-        player.sendMessage("The Wyrd draws breath for a screech. Turn off all protection prayers before it lands.");
+      if (encounter.impactAt || encounter.bloodyBlast || now < encounter.nextAttackAt) return;
+
+      const step = encounter.sequenceStep;
+      encounter.sequenceStep++;
+      encounter.nextAttackAt = now + 5;
+      if (step === 0 || step === 1 || step === 3 || step === 4) {
+        const rightArm = step === 0 || step === 3;
+        mobile.performAnimation(new Animation(rightArm ? 14018 : 14019));
+        const rawDamage = Math.floor(Math.random() * 31);
+        const meleeProtected = protection[PrayerHandler.PROTECT_FROM_MELEE] === true;
+        wyrdDamage(player, mobile, meleeProtected ? Math.floor(rawDamage / 3) : rawDamage);
+        const dx = Math.sign(px - (bx + 1));
+        const dy = Math.sign(py - (by + 1));
+        const wasPushed = stepPlayerBack(player, dx, dy);
+        if (!wasPushed) {
+          // The guide describes a small recoil when the knockback tile is blocked,
+          // without publishing an exact amount; keep it below the normal hit range.
+          wyrdDamage(player, mobile, 5 + Math.floor(Math.random() * 6));
+          player.sendMessage("There is nowhere to move back, and the punch's recoil hurts you.");
+        }
+        player.sendMessage("The Wyrd punches you and knocks you back a tile.");
         return;
       }
-      encounter.screeches = 0;
-      encounter.punches = 0;
-      const loc = player.getLocation();
-      encounter.markedX = loc.getX();
-      encounter.markedY = loc.getY();
-      encounter.warning = phase === 2 ? "storm" : "slam";
-      encounter.impactAt = now + 2;
-      player.sendMessage(phase === 2
-        ? "The Wyrd calls down lightning around you. Move away from the marked ground and turn off your protection prayers."
-        : "The Wyrd winds back for a ground slam. Move away from your current tile.");
+      if (step === 2 || step === 5) {
+        const bloody = hpPercent <= 0.6 && Math.random() < 0.5;
+        encounter.warning = bloody ? "bloody-screech" : "screech";
+        encounter.impactAt = now + (bloody ? 5 : 2);
+        if (bloody) spawnWyrdPools(encounter);
+        mobile.performAnimation(new Animation(bloody ? 14025 : 14023));
+        player.sendMessage(bloody
+          ? "The Wyrd gathers blood around itself and begins a bloody screech. Turn off protection prayers and run from the pools."
+          : "The Wyrd draws breath for a screech. Turn off all protection prayers before it lands.");
+        return;
+      }
+
+      encounter.sequenceStep = 0;
+      encounter.slamCount = 0;
+      encounter.slamSide = Math.random() < 0.5 ? "left" : "right";
+      mobile.performAnimation(new Animation(14021));
+      mobile.forceChat?.(encounter.slamSide === "left" ? "Argh!" : "Grah!");
+      encounter.impactAt = now + 3;
+      encounter.warning = "slam";
+      player.sendMessage(`The Wyrd's ${encounter.slamSide} arm signals the double slam. Move to the opposite side.`);
     }
+  }
+
+  function wyrdDamage(player, source, damage) {
+    if (damage <= 0) return;
+    player.getCombat().getHitQueue().addPendingDamage([
+      new HitDamage(damage, HitMask.RED).setSource(source),
+    ]);
+  }
+
+  function hasWyrdEarProtection(player) {
+    const head = player.getEquipment?.()?.get?.(Equipment.HEAD_SLOT)?.getId?.();
+    return Object.entries(ItemIdentifiers).some(([name, id]) =>
+      id === head && (name.includes("EARMUFFS") || name.includes("SLAYER_HELMET")));
+  }
+
+  function stepPlayerBack(player, dx, dy) {
+    if (!dx && !dy) dy = -1;
+    const queue = player.getMovementQueue?.();
+    if (!queue?.canWalk?.(dx, dy)) return false;
+    queue.walkStep(dx, dy);
+    return true;
+  }
+
+  function sendWyrdGraphic(player, id, x, y, z) {
+    player.getPacketSender?.()?.sendGraphic?.(new Graphic(id), new Location(x, y, z));
+  }
+
+  function spawnWyrdPools(encounter) {
+    const { boss, player } = encounter;
+    const bx = boss.getLocation().getX();
+    const by = boss.getLocation().getY();
+    const z = boss.getLocation().getZ();
+    encounter.poolTiles = new Set();
+    // Five visible layers surround the Wyrd; the two-tile gap keeps the
+    // footprint and its immediately adjacent attack tiles clear.
+    for (let radius = 2; radius <= 6; radius++) {
+      const minX = bx - radius;
+      const maxX = bx + 2 + radius;
+      const minY = by - radius;
+      const maxY = by + 2 + radius;
+      for (let x = minX; x <= maxX; x++) {
+        for (let y = minY; y <= maxY; y++) {
+          if (x !== minX && x !== maxX && y !== minY && y !== maxY) continue;
+          const key = `${x},${y}`;
+          encounter.poolTiles.add(key);
+          sendWyrdGraphic(player, 3856, x, y, z);
+        }
+      }
+    }
+  }
+
+  function clearWyrdLightningLane(encounter, player) {
+    const { boss } = encounter;
+    const bx = boss.getLocation().getX();
+    const by = boss.getLocation().getY();
+    const z = boss.getLocation().getZ();
+    const px = player.getLocation().getX();
+    const py = player.getLocation().getY();
+    // The lightning opens a lane away from the player's side of the Wyrd,
+    // which is the escape route shown in the quest guide's bloody-screech clip.
+    const dx = Math.sign(px - (bx + 1));
+    const dy = Math.sign(py - (by + 1));
+    for (let step = 2; step <= 6; step++) {
+      const x = Math.abs(px - (bx + 1)) >= Math.abs(py - (by + 1))
+        ? (dx < 0 ? bx - step : bx + 2 + step) : bx + 1;
+      const y = Math.abs(px - (bx + 1)) >= Math.abs(py - (by + 1))
+        ? by + 1 : (dy < 0 ? by - step : by + 2 + step);
+      const key = `${x},${y}`;
+      if (!encounter.poolTiles.delete(key)) continue;
+      sendWyrdGraphic(player, 3861, x, y, z);
+    }
+  }
+
+  function clearWyrdPools(encounter, animate = true) {
+    if (!encounter.poolTiles) return;
+    const z = encounter.boss.getLocation().getZ();
+    for (const tile of encounter.poolTiles) {
+      const [x, y] = tile.split(",").map(Number);
+      if (animate) sendWyrdGraphic(encounter.player, 3860, x, y, z);
+    }
+    encounter.poolTiles.clear();
+  }
+
+  function wyrdSlam(encounter, side) {
+    const { boss, player } = encounter;
+    const bx = boss.getLocation().getX();
+    const by = boss.getLocation().getY();
+    const loc = player.getLocation();
+    const px = loc.getX();
+    const py = loc.getY();
+    // Each arm sends a short wave down its side of the Wyrd's 3x3 footprint.
+    const caught = side === "left"
+      ? px >= bx - 3 && px <= bx - 1 && py >= by - 2 && py <= by + 4
+      : px >= bx + 3 && px <= bx + 5 && py >= by - 2 && py <= by + 4;
+    if (caught) wyrdDamage(player, boss, 25 + Math.floor(Math.random() * 6));
+    else player.sendMessage("The Wyrd's slam wave tears through the opposite side of the room.");
   }
 
   class SlepeManorArea extends PrivateArea {
@@ -1268,9 +1412,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.setAttribute(WYRD_AREA_ATTRIBUTE, area);
     player.moveTo(new Location(2976, 7452, 0));
     wyrdEncounters.set(area, { area, boss, player, phase: 1, lastCycle: -1, nextAttackAt: World.getProcessCycle() + 4,
-      impactAt: 0, warning: null, punches: 0, screeches: 0, markedX: 2976, markedY: 7452, finished: false,
+      impactAt: 0, warning: null, sequenceStep: 0, slamSide: "left", slamCount: 0,
+      meleeMode: null, poolTiles: new Set(), bloodyBlast: false, blastRadius: 0, blastEndsAt: 0, finished: false,
       ending: false, thresholdsSeen: new Set() });
-    player.sendMessage("The Wyrd breaks free. Protect from its fists, lower all protection prayers for the screech, and move away from the ground slam.");
+    player.sendMessage("The Wyrd breaks free. Its fists knock you back, so leave room behind you. Turn off protection prayers for a screech, and watch its arms before the double slam.");
     return true;
   }
 
@@ -3561,6 +3706,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       const encounter = area && wyrdEncounters.get(area);
       if (encounter) {
         encounter.finished = true;
+        clearWyrdPools(encounter);
         api.removeNpc(encounter.boss);
         area.leave(player, false);
       }
