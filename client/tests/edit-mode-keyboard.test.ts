@@ -41,7 +41,7 @@ for (const tool of ["select", "place", "terrain", "path", "wall", "delete"] as c
     assert.equal(input.isKeyDown("KeyW"), false);
     renderer.handleKeyInput(50);
     const moved = Math.hypot(...camera.pos.map((value: number, i: number) => value - before[i]));
-    assert.ok(moved > 0 && moved < 3.2, `${tool} accelerates smoothly using editor input`);
+    assert.ok(moved > 0 && moved < 2.4, `${tool} accelerates smoothly using editor input`);
     canvas.dispatchEvent(new dom.window.KeyboardEvent("keyup", { key: "w", code: "KeyW", keyCode: 87, bubbles: true }));
     assert.equal(input.isKeyDown("KeyW"), false, "navigation release cannot leave game movement held");
     plugin.setFreeCamera(true);

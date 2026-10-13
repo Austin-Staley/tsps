@@ -53,12 +53,16 @@ async function main() {
     assert.equal(client.cameraSpeed, 2, "editor leaves normal camera speed unchanged");
     assert.equal(client.scenePreviewEnabled, true, "?edit=1 enters the native scene preview");
     assert.equal(plugin.getState().scenePreview, true);
-    plugin.setConfig({ heightLevel: 2, renderAllHeightLevels: false });
+    plugin.setConfig({ heightLevel: 2 });
     assert.equal(renderer.interactionHost.getPlayerRawPlane(), 2);
     assert.equal(renderer.interactionHost.getEffectivePlaneForTile(3090, 3520, 2), 2, "editor highlights use the chosen physical level, including bridge tiles");
     assert.equal(renderer.interactionHost.getRoofPlaneLimit(), 2);
     plugin.setConfig({ renderAllHeightLevels: true });
     assert.equal(renderer.interactionHost.getRoofPlaneLimit(), 3);
+    plugin.setConfig({ heightLevel: 0 });
+    assert.equal(plugin.getConfig().renderAllHeightLevels, true, "returning to ground restores all floors by default");
+    plugin.setConfig({ heightLevel: 2 });
+    assert.equal(plugin.getConfig().renderAllHeightLevels, false, "upper floors default to hiding floors above them");
     const host = (plugin as any).host;
     const tile = { tileX: 3090, tileY: 3520, plane: 2 };
     host.setTerrainOverlay(tile, 5, 0, 1);

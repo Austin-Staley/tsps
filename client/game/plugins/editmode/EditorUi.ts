@@ -362,6 +362,7 @@ class EditorChrome {
         renderAllLabel.append("Render all Height Levels");
         this.renderAllInput = document.createElement("input");
         this.renderAllInput.type = "checkbox";
+        renderAllLabel.title = "Defaults on at HL 0 and off above it. Hover inside a building at HL 0 to reveal its contents.";
         this.renderAllInput.addEventListener("change", () =>
             this.plugin.setConfig({ renderAllHeightLevels: this.renderAllInput.checked }),
         );

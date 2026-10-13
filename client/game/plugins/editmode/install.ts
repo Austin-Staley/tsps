@@ -1,6 +1,7 @@
 import { OBJECT_SPAWNS_MESSAGE, OBJECT_SPAWNS_REQUEST_MESSAGE, parseObjectSpawns, type ObjectSpawn, type ObjectSpawnsMessage } from "./hostProtocol/objectSpawnsMessage";
 import { isKnownWaterTextureId } from "../../../render/water/WaterTextureIds";
 import { getContentApiBase } from "../../../network/serverConnection/contentApi";
+import { TILE_FLAG_UNDER_ROOF } from "../../scene/TileRenderFlags";
 import { ClientState } from "../../ClientState";
 import { GameState } from "../../login/GameState";
 import { setAudioSuspended } from "../../audio/audioContext";
@@ -779,7 +780,7 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
         if (renderer) {
             const entries: MapIconGroundEntry[] = [];
             const targets = new Map<string, LocHighlightTarget>();
-            const maxPlane = state.config.renderAllHeightLevels ? 3 : state.config.heightLevel;
+            const maxPlane = renderer.getRoofPlaneLimit();
             const cullTile = renderer.getRenderCullTile();
             const renderDistance = renderer.getFrameRenderDistanceTiles();
             for (let plane = 0; plane <= maxPlane; plane++) {
@@ -992,6 +993,7 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
         };
     };
     const getEditorPointerTile = (renderer: TerrainHost) => {
+        if (client.inputManager.mouseX < 0 || client.inputManager.mouseY < 0) return undefined;
         const ray = renderer.screenToRay(client.inputManager.mouseX, client.inputManager.mouseY);
         return ray ? pickEditorTile(ray, plugin.getConfig().heightLevel,
             renderer.mapManager.visibleMaps.slice(0, renderer.mapManager.visibleMapCount)) : undefined;
@@ -1105,8 +1107,8 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
         const getBaseRoofPlaneLimit = renderer.getRoofPlaneLimit.bind(renderer);
         const shouldRenderNpc = renderer.shouldRenderNpcFromMap.bind(renderer);
         const shouldRenderPlayer = renderer.shouldRenderPlayerIndex.bind(renderer);
-        const drawBase = renderer.drawWithRoofPlaneFilter?.bind(renderer);
-        const visiblePlaneRanges: PlaneDrawRange[] = [];
+        let hoveredRoofFrame = -1;
+        let hoverHidesUpperFloors = false;
         const isEditing = () => {
             const state = plugin.getState();
             return state.config.enabled && (state.config.active || state.scenePreview);
@@ -1115,35 +1117,30 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
             isEditing() ? plane : getBaseEffectivePlane(x, y, plane);
         renderer.getPlayerRawPlane = () =>
             isEditing() ? plugin.getConfig().heightLevel : getBasePlane();
-        renderer.getRoofPlaneLimit = () =>
-            isEditing()
-                ? plugin.getConfig().renderAllHeightLevels
-                    ? 3
-                    : plugin.getConfig().heightLevel
-                : getBaseRoofPlaneLimit();
+        renderer.getRoofPlaneLimit = () => {
+            if (!isEditing()) return getBaseRoofPlaneLimit();
+            const config = plugin.getConfig();
+            if (!config.renderAllHeightLevels) return config.heightLevel;
+            if (config.heightLevel === 0) {
+                if (hoveredRoofFrame !== renderer.currentFrameCount) {
+                    hoveredRoofFrame = renderer.currentFrameCount;
+                    // Pick the ground heightfield even while a roof covers it, avoiding hover flicker.
+                    const tile = getEditorPointerTile(renderer);
+                    hoverHidesUpperFloors = !!tile &&
+                        (renderer.getTileRenderFlagAt(0, tile.tileX, tile.tileY) & TILE_FLAG_UNDER_ROOF) !== 0;
+                }
+                if (hoverHidesUpperFloors) return 0;
+            }
+            return 3;
+        };
         renderer.shouldRenderNpcFromMap = (map, ecsId) =>
             shouldRenderNpc(map, ecsId) &&
             (!isEditing() ||
                 (client.npcEcs.getLevel(ecsId) | 0) === plugin.getConfig().heightLevel);
         renderer.shouldRenderPlayerIndex = (ecsId) =>
             shouldRenderPlayer(ecsId) &&
-            (plugin.getConfig().renderAllHeightLevels ||
-                !isEditing() ||
-                (client.playerEcs.getLevel(ecsId) | 0) <= plugin.getConfig().heightLevel);
-        if (drawBase) renderer.drawWithRoofPlaneFilter = (drawCall, drawRanges, drawRangePlanes, limit) => {
-            const config = plugin.getConfig();
-            if (!isEditing() || config.renderAllHeightLevels || !drawRangePlanes) {
-                drawBase(drawCall, drawRanges, drawRangePlanes, limit);
-                return;
-            }
-            visiblePlaneRanges.length = 0;
-            for (let i = 0; i < drawRanges.length; i++) {
-                if ((drawRangePlanes[i] | 0) <= config.heightLevel) {
-                    visiblePlaneRanges.push(drawRanges[i]);
-                }
-            }
-            drawBase(drawCall, visiblePlaneRanges, undefined, 3);
-        };
+            (!isEditing() ||
+                (client.playerEcs.getLevel(ecsId) | 0) <= renderer.getRoofPlaneLimit());
     };
     const analyseBuilding = (tile: EditModeTile) => {
         const renderer = terrainHost(client);
@@ -1982,14 +1979,9 @@ type TerrainHost = {
     getMinimapIcons(mapX: number, mapY: number, level?: number): MinimapIcon[] | undefined;
     sampleHeightAtExactPlane(worldX: number, worldY: number, plane: number): number;
     getRoofPlaneLimit(): number;
+    getTileRenderFlagAt(level: number, tileX: number, tileY: number): number;
     shouldRenderNpcFromMap(map: unknown, ecsId: number): boolean;
     shouldRenderPlayerIndex(ecsId: number): boolean;
-    drawWithRoofPlaneFilter?(
-        drawCall: unknown,
-        drawRanges: PlaneDrawRange[],
-        drawRangePlanes: Uint8Array | undefined,
-        roofPlaneLimit: number,
-    ): void;
     getInteractHighlightDrawTargets(): ReadonlyArray<InteractHighlightDrawTarget>;
     buildHighlightTrianglePoints(
         target: InteractHighlightTarget,
@@ -2031,8 +2023,6 @@ type TerrainHost = {
     getMapIdForWorldTile(x: number, y: number): number;
     scheduleLocReload(mapX: number, mapY: number): void;
 };
-
-type PlaneDrawRange = [number, number, number];
 
 function terrainHost(client: OsrsClient): TerrainHost | undefined {
     const backend = client.renderer as unknown as { interactionHost?: TerrainHost };

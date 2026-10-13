@@ -150,6 +150,7 @@ export class EditModePlugin {
             shape: LOC_SHAPE_NORMAL,
             rotation: 0,
             heightLevel: 0,
+            renderAllHeightLevels: true,
         });
         this.state = {
             config: this.config,
@@ -331,6 +332,9 @@ export class EditModePlugin {
         const wasActive = this.config.active;
         const previousTool = this.config.tool;
         this.config = this.sanitizeConfig({ ...this.config, ...nextConfig });
+        if (nextConfig.heightLevel !== undefined && nextConfig.renderAllHeightLevels === undefined) {
+            this.config.renderAllHeightLevels = this.config.heightLevel === 0;
+        }
         if (nextConfig.tool !== undefined && this.config.tool !== previousTool) {
             this.pathStart = undefined;
             this.wallStart = undefined;
@@ -339,7 +343,7 @@ export class EditModePlugin {
         if (nextConfig.heightLevel !== undefined) {
             this.host?.setHeightLevel?.(this.config.heightLevel);
         }
-        if (nextConfig.renderAllHeightLevels !== undefined) {
+        if (nextConfig.heightLevel !== undefined || nextConfig.renderAllHeightLevels !== undefined) {
             this.host?.setRenderAllHeightLevels?.(this.config.renderAllHeightLevels);
         }
         this.syncListeners();
@@ -1229,7 +1233,7 @@ export class EditModePlugin {
         }
         // Ignore long gaps after a stalled or backgrounded frame.
         const dt = Math.max(0, Math.min(deltaTime, 50)) / 1000;
-        const speed = this.cameraKeys.has("ShiftLeft") || this.cameraKeys.has("ShiftRight") ? 256 : 64;
+        const speed = this.cameraKeys.has("ShiftLeft") || this.cameraKeys.has("ShiftRight") ? 192 : 48;
         const x = Number(this.cameraKeys.has("KeyA")) - Number(this.cameraKeys.has("KeyD"));
         const z = Number(this.cameraKeys.has("KeyS")) - Number(this.cameraKeys.has("KeyW"));
         const length = Math.hypot(x, z) || 1;
