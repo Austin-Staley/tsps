@@ -4064,7 +4064,11 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
     getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (hits) => pendingHits.push(...hits) }) }),
     getSize: () => 1,
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    getEquipment: () => ({ getItems: () => [], setItems() {}, refreshItems() {}, capacity: () => 14 }),
     getInventory: () => ({ getAmount: (id) => inventory.get(id) ?? 0,
+      getItems: () => Array.from({ length: 28 }, (_, slot) => { const [id, amount] = [...inventory].filter(([,n]) => n > 0)[slot] ?? [-1, 0]; return new core.Item(id, amount); }),
+      setItems(items) { inventory.clear(); for (const item of items) if (item.getId() >= 0) inventory.set(item.getId(), item.getAmount()); },
+      refreshItems() {}, capacity: () => 28,
       getFreeSlots: () => 28,
       adds: (id, amount) => inventory.set(id, (inventory.get(id) ?? 0) + amount),
       deleteNumber: (id, amount) => inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - amount)) }),
@@ -4091,6 +4095,10 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   assert.equal(inventory.get(I.PRISONERS_LETTER), 1);
   itemActions.at(-1)({ player, itemId: I.PRISONERS_LETTER, option: 'Read' });
   interactObject(49095, 3039, 6367);
+  assert.equal(inventory.get(I.KNIFE_5), undefined, 'the bucket item waits for the actual player line');
+  const bucketLine = { player, npcId: core.NpcIdentifiers.ASSASSIN_7, text: "Eugh! I can't believe I'm doing this." };
+  handlers.custom.get('npc-dialogue:line').at(-1)(bucketLine);
+  bucketLine.after();
   assert.equal(inventory.get(I.KNIFE_5), 1);
   itemObjects.at(-1)({ player, itemId: I.KNIFE_5, objectId: 49099, location: sourceLocation(3040, 6370) });
   assert.equal(inventory.get(I.KNIFE_5), 0);
@@ -4101,11 +4109,13 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   assert.equal(attrs.get('desert-treasure-ii:sucellus-cell-escaped'), true);
   assert.equal(area.entities.some((npc) => npc.id === core.NpcIdentifiers.ASSASSIN_7), true, 'the cell guard is present after the escape');
   objects.at(-1)({ player, objectId: 49120, option: 'Pick-lock', location: sourceLocation(2945, 6389, 2) });
-  assert.equal(attrs.get('desert-treasure-ii:sucellus-assassin-gone'), true);
+  assert.equal(attrs.get('desert-treasure-ii:sucellus-assassin-gone'), undefined, 'a padlock click cannot skip the prison trail');
+  attrs.set('desert-treasure-ii:sucellus-prison-complete', true);
   assert.equal(objects.at(-1)({ player, objectId: 49138, location: sourceLocation(3039, 6433) }), false, 'the asylum gate leads from the real prison into Duke’s chamber');
   const boss = attrs.get('desert-treasure-ii:boss');
   assert.equal(boss.__dt2SucellusAwake, false);
-  assert.equal(boss.hp, 440, 'the quest Duke uses the documented normal 440 hitpoints');
+  assert.equal(boss.id, core.NpcIdentifiers.DUKE_SUCELLUS_7, 'real combat stats come from the quest awake identity');
+  assert.equal(boss.hp, 330, 'the Wiki quest Duke has 330 hitpoints');
   interactObject(O.PESTLE_AND_MORTAR_2, 3034, 6434);
   interactObject(O.PICKAXE_3, 3044, 6434);
   for (let i = 0; i < 3; i++) interactObject(O.MUSCA_MUSHROOMS_2, 3048, 6453);
@@ -4130,14 +4140,14 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   assert.equal(boss.__dt2SucellusAwake, true);
   assert.equal(inventory.get(I.ARDER_MUSCA_POISON), 0);
   player.moveTo(area.tile(167, 97, 0));
-  for (let i = 0; i < 31; i++) area.process(player);
+  for (let i = 0; i < 36; i++) area.process(player);
   assert.ok(messages.some((message) => message.includes('turns his gaze upon you')));
   assert.ok(messages.some((message) => message.includes('avoid Duke Sucellus')));
   assert.equal(pendingHits.length, 0, 'the cached pillar collision protects against the freezing gaze');
   hasPillarCover = false;
   for (let i = 0; i < 30; i++) area.process(player);
   assert.equal(pendingHits.length, 1, 'the exposed freezing gaze queues its real hit');
-  assert.ok(pendingHits[0].getDamage() > 0 && pendingHits[0].getDamage() <= 101);
+  assert.ok(pendingHits[0].getDamage() > 0 && pendingHits[0].getDamage() <= 99);
   deaths.at(-1)({ killer: player, npc: boss });
   groundPickups.at(-1)({ player, groundItemId: I.ODD_KEY, location: sourceLocation(3039, 6454) });
   inventory.set(I.ODD_KEY, 1);

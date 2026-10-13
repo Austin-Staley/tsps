@@ -48,10 +48,10 @@ module.exports = function registerDesertTreasureII(api) {
     // QuestHelper DT2_STRANGLEWOOD milestones drive the cache desk, boat and later scenery.
     const progress = Number(player.getAttribute(VARDORVIS_PROGRESS)) || 0;
     const stranglewood = [0, 4, 6, 6, 8, 10, player.getAttribute(STRANGLEWOOD_CITY_ENTERED) ? 16 : 12, 18, 18, 22, 24, 24, 24, 34, 36, 36, 38, 42, 44, 48, 50, 52, 54][progress] ?? 0;
-    const prison = player.getAttribute(SUCELLUS_ASSASSIN_GONE) ? 22
+    const prison = Number(player.getAttribute(SUCELLUS_PRISON_PROGRESS)) || (player.getAttribute(SUCELLUS_ASSASSIN_GONE) ? 22
       : player.getAttribute(SUCELLUS_CELL_ESCAPED) ? 20
         : player.getAttribute(SUCELLUS_CELL_ENTERED) ? [8, 10, 10, 12, 14, 16, 18, 20][Number(player.getAttribute(SUCELLUS_CELL_PROGRESS)) || 0]
-          : stage(player) >= S.SUCELLUS ? 2 : 0;
+          : stage(player) >= S.SUCELLUS ? 2 : 0);
     const state = `${value}:${stranglewood}:${prison}`;
     if (nativeProgressSent.get(player) === state) return;
     nativeProgressSent.set(player, state);
@@ -87,6 +87,9 @@ module.exports = function registerDesertTreasureII(api) {
   const SUCELLUS_DEFEATED = "desert-treasure-ii:sucellus-defeated";
   const SUCELLUS_WEST_ROOM = "desert-treasure-ii:sucellus-west-room";
   const SUCELLUS_CAPTAIN_ACCEPTED = "desert-treasure-ii:sucellus-captain-accepted";
+  const SUCELLUS_PRISON_GEAR = "desert-treasure-ii:sucellus-prison-gear";
+  const SUCELLUS_PRISON_PROGRESS = "desert-treasure-ii:sucellus-prison-progress";
+  const SUCELLUS_PRISON_COMPLETE = "desert-treasure-ii:sucellus-prison-complete";
   const SUCELLUS_CELL_PROGRESS = "desert-treasure-ii:sucellus-cell-progress";
   const SUCELLUS_CELL_ENTERED = "desert-treasure-ii:sucellus-cell-entered";
   const SUCELLUS_CELL_ESCAPED = "desert-treasure-ii:sucellus-cell-escaped";
@@ -1223,21 +1226,23 @@ module.exports = function registerDesertTreasureII(api) {
         const y = loc.getY() - this.getBaseY() + 6336;
         const z = loc.getZ?.() ?? loc.z ?? 0;
         if (z === 2 && Math.abs(x - 2912) <= 1 && Math.abs(y - 6348) <= 2) {
+          storeSucellusPrisonGear(player);
           player.setAttribute(SUCELLUS_CELL_ENTERED, true);
           player.setAttribute(SUCELLUS_CELL_PROGRESS, 0);
           player.moveTo(this.tile(168, 33, 0));
           player.sendMessage("A guard knocks you unconscious. You wake in a locked prison cell.");
         }
       }
+      api.emitCustomEvent("dt2:sucellus-prison:process", { player, area: this, cycle });
       const boss = this.questPlayer.getAttribute(ATTR);
       if (boss?.__dt2Sucellus && boss.getHitpoints?.() > 0 && boss.__dt2SucellusAwake) {
         // Keep the ordinary combat hit queue and regeneration rules; only the
         // scripted wake-up phase is owned by the quest.
         boss.getCombat?.().getLastAttack?.().reset?.();
-        if (!Number.isFinite(boss.__dt2SucellusNextAttack)) boss.__dt2SucellusNextAttack = cycle + 5;
+        if (!Number.isFinite(boss.__dt2SucellusNextAttack)) boss.__dt2SucellusNextAttack = cycle + 6;
         if (!Number.isFinite(boss.__dt2SucellusAttackCount)) boss.__dt2SucellusAttackCount = 0;
         if (cycle >= boss.__dt2SucellusNextAttack) {
-          boss.__dt2SucellusNextAttack = cycle + 5;
+          boss.__dt2SucellusNextAttack = cycle + 6;
           boss.__dt2SucellusAttackCount++;
           if (boss.__dt2SucellusAttackCount % 5 === 0) {
             boss.__dt2SucellusGaze = { due: cycle + 5 };
@@ -1254,7 +1259,7 @@ module.exports = function registerDesertTreasureII(api) {
           );
           if (clearShot) {
             player.getCombat().getHitQueue().addPendingDamage([
-              new api.core.HitDamage(1 + Math.floor(Math.random() * 101), api.core.HitMask.RED),
+              new api.core.HitDamage(1 + Math.floor(Math.random() * 99), api.core.HitMask.RED),
             ]);
             player.sendMessage("Duke Sucellus' freezing gaze strikes you!");
           } else player.sendMessage("You manage to avoid Duke Sucellus' gaze behind the pillar.");
@@ -2709,6 +2714,19 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function handleDialogueLine(event) {
+    if (stage(event.player) === S.SUCELLUS && event.npcId === N.ASSASSIN_7) {
+      if (event.text === "Eugh! I can't believe I'm doing this.") event.after = () => {
+        const p = event.player;
+        if (Number(p.getAttribute(SUCELLUS_CELL_PROGRESS)) !== 3) return;
+        if (!has(p, I.KNIFE_5)) p.getInventory().adds(I.KNIFE_5, 1);
+        p.setAttribute(SUCELLUS_CELL_PROGRESS, 4);
+      };
+      if (event.text === "sigh*" && event.player.getAttribute(SUCELLUS_CELL_ESCAPED)) event.after = () => {
+        event.player.setAttribute(SUCELLUS_ASSASSIN_GONE, true);
+        event.player.setAttribute(SUCELLUS_PRISON_PROGRESS, 22);
+        api.emitCustomEvent("dt2:sucellus-prison:start", { player: event.player, area: event.player.getAttribute(SUCELLUS_AREA) });
+      };
+    }
     if (stage(event.player) === S.SUCELLUS && event.npcId === N.CAPTAIN_MALLETA
       && event.text === "Lovely! Thank you for your time.") {
       event.after = () => {
@@ -2769,11 +2787,13 @@ module.exports = function registerDesertTreasureII(api) {
       const escaped = p.getAttribute(SUCELLUS_CELL_ESCAPED) === true;
       const defeated = p.getAttribute(SUCELLUS_DEFEATED) === true;
       if (p.getAttribute(SUCELLUS_CELL_ENTERED) || escaped || defeated) {
+        if (!escaped && !defeated && !p.getAttribute(SUCELLUS_PRISON_GEAR)) storeSucellusPrisonGear(p);
         const area = enterSucellusArea(p, false);
         if (!escaped && !defeated) p.moveTo(area.tile(168, 33, 0));
         else if (!defeated) {
           p.moveTo(area.tile(40, 12, 2));
           spawnSucellusCellAssassin(p, area);
+          api.emitCustomEvent("dt2:sucellus-prison:resume", { player: p, area });
         } else p.moveTo(area.tile(167, 97, 0));
       }
     }
@@ -3132,6 +3152,11 @@ module.exports = function registerDesertTreasureII(api) {
         if (!player.getAttribute(SUCELLUS_CELL_ENTERED)) return ["Enter the heavy door beneath Weiss, convince Captain Malleta, then walk deeper into Ghorrock Prison."];
         const cellProgress = Number(player.getAttribute(SUCELLUS_CELL_PROGRESS)) || 0;
         return [["Inspect the wall to speak to the prisoner in the next cell."], ["Search the skeleton for a letter."], ["Read the prisoner's letter."], ["Search the latrine bucket for a knife."], ["Pass the knife through the hole in the wall."], ["Search the bed with the chisel for a lockpick."], ["Pass the lockpick through the hole to escape."]][cellProgress] ?? ["Speak to the Assassin outside the cell."];
+      }
+      if (!player.getAttribute(SUCELLUS_PRISON_COMPLETE)) {
+        const journal = { player, lines: [] };
+        api.emitCustomEvent("dt2:sucellus-prison:journal", journal);
+        return journal.lines.length ? journal.lines : ["Finish the Assassin's conversation, then explore Ghorrock Prison for the keys to your equipment."];
       }
       if (!player.getAttribute(SUCELLUS_AREA)) return ["Return to Ghorrock Prison beneath Weiss."];
       if ((Number(player.getAttribute(SUCELLUS_POISONS)) || 0) >= 2) return ["Use both Arder-musca poisons on Duke Sucellus, then defeat him."];
@@ -3781,6 +3806,10 @@ module.exports = function registerDesertTreasureII(api) {
       // Entering the boss gate copies the real arena template into an owner-only
       // instance so quest supplies and encounter state remain per player.
       if (!sucellusTile && visibleId === SUCELLUS_BOSS_GATE && worldX === 3039 && worldY === 6433 && worldZ === 0) {
+        if (!p.getAttribute(SUCELLUS_PRISON_COMPLETE)) {
+          p.sendMessage("Work with the Assassin to reach the asylum first.");
+          return true;
+        }
         enterSucellusArea(p);
         p.sendMessage("You pass through the asylum gate into Duke Sucellus's chamber.");
         return true;
@@ -3788,14 +3817,14 @@ module.exports = function registerDesertTreasureII(api) {
       if (sucellusTile) {
         const cellProgress = Number(p.getAttribute(SUCELLUS_CELL_PROGRESS)) || 0;
         if (visibleId === SUCELLUS_BOSS_GATE && sucellusTile.x === 3039 && sucellusTile.y === 6433 && sucellusTile.z === 0) {
+          if (!p.getAttribute(SUCELLUS_PRISON_COMPLETE)) {
+            p.sendMessage("Work with the Assassin to reach the asylum first.");
+            return true;
+          }
           spawnBoss(p, "sucellus");
           return false;
         }
         if (visibleId === 49120 && sucellusTile.x === 2945 && sucellusTile.y === 6389 && sucellusTile.z === 2) {
-          if (!p.getAttribute(SUCELLUS_CELL_ESCAPED)) return p.sendMessage("The prison gate is inaccessible from inside the locked cell.");
-          if (!has(p, I.LOCKPICK_4)) return p.sendMessage("The padlocked gate needs the lockpick from your cell.");
-          p.setAttribute(SUCELLUS_ASSASSIN_GONE, true);
-          p.sendMessage("You pick the padlock and open the gate into the prison administrative rooms.");
           return false;
         }
         if (p.getAttribute(SUCELLUS_CELL_ENTERED) && visibleId === 49099
@@ -3815,14 +3844,13 @@ module.exports = function registerDesertTreasureII(api) {
         }
         if (p.getAttribute(SUCELLUS_CELL_ENTERED) && visibleId === 49095
           && sucellusTile.x === 3039 && sucellusTile.y === 6367 && cellProgress >= 3) {
-          if (!has(p, I.KNIFE_5)) p.getInventory().adds(I.KNIFE_5, 1);
-          p.setAttribute(SUCELLUS_CELL_PROGRESS, Math.max(cellProgress, 4));
           talk(p, N.ASSASSIN_7, "duke-sucellus-of-the-sixth-legion-inspecting-the-wall-in-the-prison-cell-searching-the-bucket");
           return true;
         }
         if (p.getAttribute(SUCELLUS_CELL_ENTERED) && objectId === 49514
           && sucellusTile.x === 3041 && sucellusTile.y === 6367 && cellProgress >= 5 && has(p, I.CHISEL_5)) {
           if (!has(p, I.LOCKPICK_4)) p.getInventory().adds(I.LOCKPICK_4, 1);
+          p.getInventory().deleteNumber(I.CHISEL_5, 1);
           p.setAttribute(SUCELLUS_CELL_PROGRESS, 6);
           talk(p, N.ASSASSIN_7, "duke-sucellus-of-the-sixth-legion-searching-the-bed-with-a-chisel");
           return true;
@@ -4668,8 +4696,6 @@ module.exports = function registerDesertTreasureII(api) {
     if (stage(p) === S.SUCELLUS && p.getAttribute(SUCELLUS_CELL_ESCAPED)
       && objectId === 49120 && sucellusTile?.x === 2945 && sucellusTile.y === 6389
       && sucellusTile.z === 2 && itemId === I.LOCKPICK_4 && has(p, I.LOCKPICK_4)) {
-      p.setAttribute(SUCELLUS_ASSASSIN_GONE, true);
-      p.sendMessage("You use the lockpick to open the padlocked gate and continue through the prison.");
       return false;
     }
     if (stage(p) === S.SUCELLUS && p.getAttribute(SUCELLUS_CELL_ENTERED)
@@ -4689,7 +4715,7 @@ module.exports = function registerDesertTreasureII(api) {
         p.setAttribute(SUCELLUS_CELL_ESCAPED, true);
         talk(p, N.ASSASSIN_7, "duke-sucellus-of-the-sixth-legion-escaping-the-prison-cell");
         const area = p.getAttribute(SUCELLUS_AREA);
-        p.moveTo(area.tile(40, 12, 2));
+        p.moveTo(area.tile(40, 14, 2));
         spawnSucellusCellAssassin(p, area);
         return true;
       }
@@ -4921,7 +4947,7 @@ module.exports = function registerDesertTreasureII(api) {
     const table = {
       vardorvis: [N.VARDORVIS_2, 1129, 3419],
       leviathan: [N.THE_LEVIATHAN_2, 2078, 6368],
-      sucellus: [N.DUKE_SUCELLUS_6, 3036, 6452],
+      sucellus: [N.DUKE_SUCELLUS_7, 3036, 6452],
       whisperer: [N.THE_WHISPERER_3, 2656, 6370],
     };
     const [id, x, y] = table[key];
@@ -4966,8 +4992,9 @@ module.exports = function registerDesertTreasureII(api) {
       npc.setOwner?.(p);
       npc.setOwnerOnly?.(true);
       npc.setScriptedMovement?.(true);
-      npc.setMaxHitpoints?.(440);
-      npc.setHitpoints?.(440);
+      npc.setNpcTransformationId?.(N.DUKE_SUCELLUS_6);
+      npc.setMaxHitpoints?.(330);
+      npc.setHitpoints?.(330);
       npc.__dt2Sucellus = true;
       npc.__dt2SucellusAwake = false;
       npc.__skipDefaultRespawn = true;
@@ -5609,9 +5636,9 @@ module.exports = function registerDesertTreasureII(api) {
       attacker.sendMessage?.("The Mysterious Figure prays against your current attack style.");
     }
   }
-  function storeFinalCellGear(p) {
+  function storeFinalCellGear(p, attribute = FINAL_CELL_GEAR) {
     const save = (container) => container.getItems().map((item) => [item.getId(), item.getAmount(), item.meta ?? null]);
-    p.setAttribute(FINAL_CELL_GEAR, { inventory: save(p.getInventory()), equipment: save(p.getEquipment()) });
+    p.setAttribute(attribute, { inventory: save(p.getInventory()), equipment: save(p.getEquipment()) });
     const clear = (container) => {
       container.setItems(container.getItems().map(() => new Item(-1, 0)));
       container.refreshItems();
@@ -5619,8 +5646,36 @@ module.exports = function registerDesertTreasureII(api) {
     clear(p.getInventory());
     clear(p.getEquipment());
   }
-  function restoreFinalCellGear(p) {
-    const gear = p.getAttribute(FINAL_CELL_GEAR);
+  function storeSucellusPrisonGear(p) {
+    if (p.getAttribute(SUCELLUS_PRISON_GEAR)) return;
+    // Preserve earned cell items when upgrading a save captured before confiscation existed.
+    const cellItems = new Set([I.PRISONERS_LETTER, I.KNIFE_5, I.CHISEL_5, I.LOCKPICK_4]);
+    const kept = p.getInventory().getItems().filter(item => cellItems.has(item.getId()));
+    storeFinalCellGear(p, SUCELLUS_PRISON_GEAR);
+    const gear = p.getAttribute(SUCELLUS_PRISON_GEAR);
+    gear.inventory = gear.inventory.map(item => cellItems.has(item[0]) ? [-1, 0, null] : item);
+    for (const item of kept) p.getInventory().adds(item.getId(), item.getAmount());
+  }
+  function returnSucellusPrisonStash({ player }) {
+    if (stage(player) !== S.SUCELLUS) return;
+    restoreFinalCellGear(player, SUCELLUS_PRISON_GEAR);
+  }
+  function completeSucellusPrison({ player }) {
+    if (stage(player) !== S.SUCELLUS) return;
+    player.setAttribute(SUCELLUS_PRISON_COMPLETE, true);
+    player.setAttribute(SUCELLUS_PRISON_PROGRESS, 58);
+    syncNativeProgress(player);
+  }
+  function resolveSucellusCellCondition({ player, npcId, text }) {
+    if (stage(player) !== S.SUCELLUS || npcId !== N.ASSASSIN_7) return null;
+    const progress = Number(player.getAttribute(SUCELLUS_CELL_PROGRESS)) || 0;
+    if (text === "If the player has not read the letter:") return progress < 3;
+    if (text === "If the player has read the letter:") return progress === 3;
+    if (text === "If the player tries to search the bucket again:") return progress >= 4;
+    return null;
+  }
+  function restoreFinalCellGear(p, attribute = FINAL_CELL_GEAR) {
+    const gear = p.getAttribute(attribute);
     if (!gear?.inventory || !gear?.equipment) return;
     if (has(p, I.HAIR_CLIP_3)) p.getInventory().deleteNumber(I.HAIR_CLIP_3, p.getInventory().getAmount(I.HAIR_CLIP_3));
     const restore = (container, saved) => {
@@ -5631,7 +5686,7 @@ module.exports = function registerDesertTreasureII(api) {
     };
     restore(p.getInventory(), gear.inventory);
     restore(p.getEquipment(), gear.equipment);
-    p.setAttribute(FINAL_CELL_GEAR, null);
+    p.setAttribute(attribute, null);
   }
 
   function handleDialogueAction(event) {
@@ -6232,7 +6287,8 @@ module.exports = function registerDesertTreasureII(api) {
     FINAL_CELL_CHEST, FINAL_FIGURE_STARTED, FINAL_FIGURE_DEFEATED, "desert-treasure-ii:final-cell-pending",
     "desert-treasure-ii:final-cutscene-started", FINAL_WIGHT_INDEX, FINAL_WIGHTS_STARTED, FINAL_WIGHTS_COMPLETE].forEach((key) => api.persistAttribute(key));
   [SUCELLUS_MUSHROOMS, SUCELLUS_VATS, SUCELLUS_POISONS, SUCELLUS_DEFEATED, SUCELLUS_WEST_ROOM,
-    SUCELLUS_CELL_PROGRESS, SUCELLUS_CELL_ENTERED, SUCELLUS_CELL_ESCAPED, SUCELLUS_ASSASSIN_GONE, SUCELLUS_CAPTAIN_ACCEPTED].forEach((key) => api.persistAttribute(key));
+    SUCELLUS_CELL_PROGRESS, SUCELLUS_CELL_ENTERED, SUCELLUS_CELL_ESCAPED, SUCELLUS_ASSASSIN_GONE, SUCELLUS_CAPTAIN_ACCEPTED,
+    SUCELLUS_PRISON_GEAR, SUCELLUS_PRISON_PROGRESS, SUCELLUS_PRISON_COMPLETE].forEach((key) => api.persistAttribute(key));
   [SCAR_DEMONS_DEFEATED, SCAR_BOAT_TRIED, SCAR_PERSTEN_TALKED, SCAR_PERSTEN_TALKED_BEFORE,
     SCAR_PERSTEN_ROOM1_TALKED, SCAR_BOAT_ROOM, SCAR_TINDERBOX_FOUND, SCAR_SLIMY_KEY_FOUND,
     SCAR_GUNPOWDER_FOUND, SCAR_OLD_TABLET_READ, SCAR_BOAT_CHEST_OPEN, SCAR_BOAT_BURNED,
@@ -6262,6 +6318,9 @@ module.exports = function registerDesertTreasureII(api) {
   api.onCustomEvent("player:widget-action", onWidgetAction);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onNpcDialogueCondition(resolveGolemSearchCondition);
+  api.onNpcDialogueCondition(resolveSucellusCellCondition);
+  api.onCustomEvent("dt2:sucellus-prison:return-stash", returnSucellusPrisonStash);
+  api.onCustomEvent("dt2:sucellus-prison:complete", completeSucellusPrison);
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("magic:hit-effects", activateTotem);
   api.onCustomEvent("magic:hit-effects", stunLeviathan);
