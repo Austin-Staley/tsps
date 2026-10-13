@@ -1261,7 +1261,7 @@ test('Blood Moon Castle story actors use cache-walkable floor anchors', () => {
   };
   quest.setStage(player, 40);
   handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
-  assert.deepEqual(spawned.map(npc => npc.id).sort(), [15845, 15846, 15869, 15888, 15903]);
+  assert.deepEqual(spawned.map(npc => npc.id).sort(), [15846, 15869, 15888, 15903]);
   assert.deepEqual(spawned.filter(npc => [15888, 15903].includes(npc.id))
     .map(npc => [npc.id, npc.x, npc.y]).sort((a, b) => a[0] - b[0]),
   [[15888, 2571, 7397], [15903, 2576, 7396]],
@@ -1275,7 +1275,7 @@ test('Blood Moon Castle story actors use cache-walkable floor anchors', () => {
   }
 });
 
-test('Blood Moon stage 76 spawns the recorded Venator in the Gibbous puzzle room', () => {
+test('Blood Moon stage 76 separates the optional Gibbous and required library Venators', () => {
   const { api, handlers } = mockApi();
   const spawned = [];
   api.spawnNpc = spec => { spawned.push(spec); return { ...spec, getHitpoints: () => 345, setScriptedMovement() {}, setMultiCombat() {} }; };
@@ -1291,22 +1291,109 @@ test('Blood Moon stage 76 spawns the recorded Venator in the Gibbous puzzle room
   ]);
   const player = {
     getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
-    getLocation: () => new api.core.Location(2516, 7367, 0), moveTo() {},
+    getLocation: () => new api.core.Location(2516, 7368, 0), moveTo() {},
     getInventory: () => ({ contains: () => false }), getUsername: () => 'castle-venator-anchor',
     getPacketSender: () => new Proxy({ sendVarbit() {} }, { get: (target, key) => target[key] ?? (() => {}) }),
   };
   quest.setStage(player, 40);
   handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
   const venator = spawned.find(npc => npc.id === 16216);
-  assert.ok(venator, 'spawn the captured Castle Drakan Venator variant');
+  assert.ok(venator, 'spawn the optional captured Gibbous-room Venator');
   assert.deepEqual([venator.x, venator.y, venator.z], [2521, 7368, 0],
-    'the primary RSProx quest recording places the fight at the Gibbous puzzle room');
+    'the primary RSProx recording places the optional Venator at the Gibbous puzzle room');
   assert.equal(venator.owner, player);
   assert.equal(venator.ownerOnly, true);
   assert.equal(api.core.RegionManager.getClipping(venator.x, venator.y, venator.z) & api.core.RegionManager.BLOCKED_TILE, 0);
   assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) =>
     api.core.RegionManager.canMove(venator.x, venator.y, venator.x + dx, venator.y + dy, venator.z, 1, 1, null)),
   'the recorded encounter tile has a real adjacent movement edge');
+
+  attributes.set('quest.the_blood_moon_rises.castle-room', 44);
+  attributes.set('quest.the_blood_moon_rises.castle-story', { prisonersFound: true, defeated: [], gibbousSpearDoorUnlocked: true });
+  handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
+  const required = spawned.find(npc => npc.id === 16213);
+  assert.ok(required, 'the distinct mandatory library Venator appears only in the library room');
+  assert.deepEqual([required.x, required.y, required.z], [2455, 7391, 0]);
+});
+
+test('Blood Moon Gibbous lockbox requires its room clues and accepts code 426', () => {
+  const { api, handlers } = mockApi();
+  let prompt;
+  api.sendMultiChatboxPrompt = (_player, title, ...options) => { prompt = { title, options }; };
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.castle-native-stage', 76],
+    ['quest.the_blood_moon_rises.castle-room', 39],
+    ['quest.the_blood_moon_rises.castle-floor', 2],
+    ['quest.the_blood_moon_rises.castle-story', { defeated: [], prisonersFound: true }],
+  ]);
+  const items = new Map();
+  const inventory = {
+    contains: id => (items.get(id) ?? 0) > 0,
+    getFreeSlots: () => 28 - [...items.values()].reduce((sum, count) => sum + count, 0),
+    adds: (id, amount) => { items.set(id, (items.get(id) ?? 0) + amount); return true; },
+    deleteNumber: (id, amount) => { const count = items.get(id) ?? 0; if (count < amount) return false; items.set(id, count - amount); return true; },
+  };
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(2516, 7368, 0), moveTo() {}, getInventory: () => inventory,
+    getUsername: () => 'gibbous-lockbox', sendMessage() {}, getPacketSender: () => new Proxy({
+      sendVarbit() {}, sendQuestList() {}, sendInterfaceRemoval() {},
+    }, { get: (target, key) => target[key] ?? (() => {}) }),
+  };
+  quest.setStage(player, 40);
+  const interact = handlers.objects.find(handler => handler.name === 'handleCastleGibbousObjects');
+  const object = (id, x, y, option) => interact({ player, objectId: id, definition: { id },
+    location: { x, y, z: 0 }, option, handled: false });
+  object(61730, 2521, 7371, 'Light');
+  object(61734, 2526, 7371, 'Search');
+  assert.equal(items.get(33761), 1, 'lighting the fireplace allows the chest lockbox to be taken');
+  object(61687, 2531, 7367, 'Inspect');
+  object(61739, 2516, 7365, 'Inspect');
+  object(61736, 2531, 7365, 'Inspect');
+  object(61740, 2520, 7364, 'Inspect');
+  const action = handlers.itemAction.find(handler => handler.name === 'handleCastleGibbousItemAction');
+  action({ player, itemId: 33761, option: 'Open', handled: false });
+  assert.match(prompt.title, /symbol/);
+  prompt.options[7]();
+  assert.match(prompt.title, /2 of 3/);
+  prompt.options[3]();
+  assert.match(prompt.title, /3 of 3/);
+  prompt.options[9]();
+  prompt.options[3]();
+  assert.equal(items.get(33761), 0);
+  assert.equal(items.get(33765), 1, 'the correct 4-2-6 sequence opens the lockbox and yields a fancy gem');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').gibbous.lockboxOpened, true);
+
+  items.set(33762, 1); items.set(33763, 1);
+  action({ player, itemId: 33762, option: 'Check', handled: false });
+  action({ player, itemId: 33763, option: 'Read', handled: false });
+  const enterDoor = handlers.objects.find(handler => handler.name === 'handleCastleDoorEnter');
+  const enter = () => enterDoor({ player, objectId: 61625, definition: { id: 61625, getName: () => 'Door' },
+    location: { x: 2519, y: 7363, z: 0 }, option: 'Enter', handled: false });
+  enter();
+  assert.match(prompt.title, /code/);
+  function chooseLetter(letter) {
+    let offset = 0;
+    while (true) {
+      const end = Math.min(offset + 3, 25);
+      const target = letter.charCodeAt(0) - 65;
+      if (target >= offset && target <= end) {
+        prompt.options[(target - offset) * 2 + 1]();
+        return;
+      }
+      prompt.options[9]();
+      offset = end + 1;
+    }
+  }
+  for (const letter of 'SPEAR') chooseLetter(letter);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').gibbousSpearDoorUnlocked, true,
+    'the actual clue code unlocks the following library door');
+  enter();
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 44,
+    'the library room is reachable only after the lock accepts SPEAR');
 });
 
 test('Blood Moon prisoner scene waits for the transcript, then leaves the player by the bench key', () => {
@@ -2076,7 +2163,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [2332, 7388, 0], [2345, 7395, 0], [2491, 7377, 0], [2471, 7421, 0], [2554, 7364, 0],
     [2506, 7409, 0], [2587, 7380, 0], [2583, 7370, 0], [2451, 7371, 0], [2441, 7361, 0],
     [2515, 7395, 0], [2450, 7371, 0], [2507, 7363, 0], [2520, 7396, 0], [2482, 7395, 0],
-    [2337, 7370, 1], [2516, 7367, 0], [2509, 7370, 0], [2551, 7386, 0], [2518, 7363, 0],
+    [2337, 7370, 1], [2516, 7368, 0], [2509, 7370, 0], [2551, 7386, 0], [2518, 7363, 0],
     [2502, 7368, 0], [2307, 7365, 1], [2444, 7418, 0], [2453, 7421, 0], [2459, 7390, 0],
     [2442, 7417, 0], [2437, 7419, 0], [2456, 7388, 0], [2380, 7392, 0], [2372, 7392, 0],
     [2393, 7363, 0], [2387, 7383, 0], [2441, 7400, 0], [2394, 7370, 0], [2440, 7388, 0],

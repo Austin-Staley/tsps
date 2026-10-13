@@ -140,7 +140,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     SANGUIDAE: 16223,
     VENATOR: 16213,
     VENATOR_5: 16217,
-    VENATOR_LIBRARY: 16216,
+    VENATOR_GIBBOUS: 16216,
   });
   const CASTLE_ROOM = Object.freeze({
     LOBBY: 1, DINING: 2, THRONE: 3, SOUTH_OF_THRONE: 4, EAST_STAIR_GROUND: 5, STORAGE: 6,
@@ -348,11 +348,11 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.GIBBOUS_M, x: 2483, y: 7395, z: 0, from: CASTLE_ROOM.EXPLOSIVE_HALL, to: CASTLE_ROOM.DINING,
       fromFloor: 2, toFloor: 2, landing: [2337, 7370, 1] },
     { id: CASTLE_DOOR_IDS.GIBBOUS, x: 2510, y: 7370, z: 0, from: CASTLE_ROOM.DISPLAY_ROOM, to: CASTLE_ROOM.VENATOR_PUZZLE,
-      fromFloor: 2, toFloor: 2, landing: [2516, 7367] },
+      fromFloor: 2, toFloor: 2, landing: [2516, 7368] },
     { id: CASTLE_DOOR_IDS.GIBBOUS_M, x: 2515, y: 7367, z: 0, from: CASTLE_ROOM.VENATOR_PUZZLE, to: CASTLE_ROOM.DISPLAY_ROOM,
       fromFloor: 2, toFloor: 2, landing: [2509, 7370] },
     { id: CASTLE_DOOR_IDS.PUZZLE_LIBRARY, x: 2519, y: 7363, z: 0, from: CASTLE_ROOM.VENATOR_PUZZLE, to: CASTLE_ROOM.VENATOR_LIBRARY,
-      fromFloor: 2, toFloor: 2, action: "Enter", landing: [2551, 7386] },
+      fromFloor: 2, toFloor: 2, action: "Enter", requiresStory: "gibbousSpearDoorUnlocked", landing: [2551, 7386] },
     { id: CASTLE_DOOR_IDS.DOOR_ALT_M, x: 2551, y: 7387, z: 0, from: CASTLE_ROOM.VENATOR_LIBRARY, to: CASTLE_ROOM.VENATOR_PUZZLE,
       fromFloor: 2, toFloor: 2, landing: [2518, 7363] },
     { id: CASTLE_DOOR_IDS.DISPLAY_STAIRS_DOWN, x: 2503, y: 7369, z: 0, from: CASTLE_ROOM.DISPLAY_ROOM, to: CASTLE_ROOM.LOBBY,
@@ -1966,6 +1966,13 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!player || stage(player) !== STAGE.CASTLE) return;
     const location = player.getLocation?.();
     const prisonStory = castleStory(player);
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.VENATOR_PUZZLE &&
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 76 &&
+      location?.getX?.() === 2516 && location.getY() === 7367 && location.getZ() === 0) {
+      // Earlier builds landed one tile south of the recorded puzzle-room entry.
+      player.moveTo(new Location(2516, 7368, 0));
+      return;
+    }
     if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.BASEMENT_HALL &&
       Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 76 && prisonStory.prisonersFound &&
       location?.getX?.() === 2567 && location.getY() === 7394 && location.getZ() === 0) {
@@ -2036,7 +2043,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     const saved = player.getAttribute(CASTLE_STORY_ATTRIBUTE) ?? {};
     return { defeated: [], talkedToVeliaf: false, prisonersFound: false, talkedToIvan: false,
       bookPuzzleComplete: false, stockpileDestroyed: false, ...saved,
-      defeated: Array.isArray(saved.defeated) ? saved.defeated : [] };
+      defeated: Array.isArray(saved.defeated) ? saved.defeated : [], gibbous: saved.gibbous ?? {} };
   }
 
   function bookPuzzleState(player) {
@@ -2140,6 +2147,256 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!manager.getGroundItem?.(player.getUsername?.(), CASTLE_KEY_ITEMS.barrel, tile,
       player.getPrivateArea?.() ?? null)) {
       manager.registerLocation(player, new Item(CASTLE_KEY_ITEMS.barrel, 1), tile);
+    }
+  }
+
+  function syncGibbousPuzzleClues(player) {
+    if (!player || stage(player) !== STAGE.CASTLE ||
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) < 76 ||
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.VENATOR_PUZZLE) return;
+    const story = castleStory(player).gibbous;
+    const manager = api.getItemOnGroundManager?.();
+    if (!manager?.registerLocation) return;
+    const area = player.getPrivateArea?.() ?? null;
+    for (const [itemId, tile, claimed] of [
+      [ItemIdentifiers.ANCESTRAL_DAGGER, [2527, 7368, 0], story.daggerClaimed],
+      [ItemIdentifiers.GRID_NOTE_2, [2522, 7366, 0], story.gridNoteClaimed],
+    ]) {
+      const location = new Location(...tile);
+      if (!claimed && !hasItem(player, itemId) && !manager.getGroundItem?.(player.getUsername?.(), itemId, location, area)) {
+        manager.registerLocation(player, new Item(itemId, 1), location);
+      }
+    }
+  }
+
+  function updateGibbousStory(player, changes) {
+    const story = castleStory(player);
+    player.setAttribute(CASTLE_STORY_ATTRIBUTE, {
+      ...story, gibbous: { ...story.gibbous, ...changes },
+    });
+  }
+
+  function chooseGibbousDigit(player, position, offset = 1) {
+    const end = Math.min(offset + 3, 8);
+    const options = [];
+    for (let digit = offset; digit <= end; digit++) {
+      options.push(String(digit), () => enterGibbousDigit(player, position, digit));
+    }
+    if (end < 8) options.push("More symbols...", () => chooseGibbousDigit(player, position, end + 1));
+    else if (offset > 1) options.push("Back...", () => chooseGibbousDigit(player, position, 1));
+    api.sendMultiChatboxPrompt(player, `Choose the lockbox symbol (${position + 1} of 3)`, ...options);
+  }
+
+  function enterGibbousDigit(player, position, digit) {
+    const code = [4, 2, 6];
+    if (digit !== code[position]) {
+      player.sendMessage("The lockbox clicks, but the symbols are in the wrong order.");
+      return;
+    }
+    if (position < code.length - 1) {
+      chooseGibbousDigit(player, position + 1);
+      return;
+    }
+    const gibbous = castleStory(player).gibbous;
+    if (!gibbous.lockboxOpened && castleKeyGive(player, ItemIdentifiers.FANCY_GEM,
+      "The lockbox opens. Inside, you find a fancy gem.")) {
+      player.getInventory().deleteNumber(ItemIdentifiers.LOCKBOX, 1);
+      updateGibbousStory(player, { lockboxOpened: true });
+    }
+  }
+
+  function chooseGibbousDoorLetter(player, index = 0, offset = 0) {
+    const solution = "SPEAR";
+    const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    const end = Math.min(offset + 3, letters.length - 1);
+    const options = [];
+    for (let cursor = offset; cursor <= end; cursor++) {
+      const letter = letters[cursor];
+      options.push(letter, () => {
+        const current = castleStory(player).gibbous.doorCode ?? "";
+        if (letter !== solution[index]) {
+          updateGibbousStory(player, { doorCode: "" });
+          player.sendMessage("The mechanism resets. The clue on the dagger and grid note may help.");
+          return;
+        }
+        const next = current + letter;
+        updateGibbousStory(player, { doorCode: next });
+        if (index < solution.length - 1) chooseGibbousDoorLetter(player, index + 1);
+        else {
+          updateGibbousStory(player, { doorCode: "", spearDoorUnlocked: true });
+          player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...castleStory(player), gibbousSpearDoorUnlocked: true });
+          player.sendMessage("The lock accepts SPEAR. The door is now unlocked.");
+        }
+      });
+    }
+    if (end < letters.length - 1) options.push("More letters...", () => chooseGibbousDoorLetter(player, index, end + 1));
+    api.sendMultiChatboxPrompt(player, `Enter the door code (${index + 1} of 5)`, ...options);
+  }
+
+  function handleCastleGibbousObjects(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    const id = event?.definition?.id ?? event?.objectId;
+    const option = String(event?.option ?? "").toLowerCase();
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) < 76 || z !== 0) return;
+    const room = Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE));
+    const gibbous = castleStory(player).gibbous;
+    const clues = new Set(gibbous.clues ?? []);
+    if (room === CASTLE_ROOM.VENATOR_PUZZLE && id === 61730 && x === 2521 && y === 7371 && option === "light") {
+      event.handled = true;
+      if (!gibbous.fireplaceLit) {
+        updateGibbousStory(player, { fireplaceLit: true });
+        player.sendMessage("You light the fireplace.");
+      }
+      return;
+    }
+    if (room === CASTLE_ROOM.VENATOR_PUZZLE && id === 61734 && x === 2526 && y === 7371 && option === "search") {
+      event.handled = true;
+      if (!gibbous.fireplaceLit) { player.sendMessage("The chest is frozen shut. Light the fireplace first."); return; }
+      if (gibbous.lockboxClaimed || hasItem(player, ItemIdentifiers.LOCKBOX)) return;
+      if (castleKeyGive(player, ItemIdentifiers.LOCKBOX, "You open the chest and find a small lockbox. You take it.")) {
+        updateGibbousStory(player, { lockboxClaimed: true });
+      }
+      return;
+    }
+    if (room === CASTLE_ROOM.VENATOR_PUZZLE && id === 61687 && x === 2531 && y === 7367 && option === "inspect") {
+      event.handled = true;
+      clues.add("head"); updateGibbousStory(player, { clues: [...clues] });
+      player.sendMessage("The plaque bears the code 426. The room's banners, shields and braziers represent its digits.");
+      return;
+    }
+    if (room === CASTLE_ROOM.VENATOR_PUZZLE && id === 61687 && x === 2531 && y === 7367 && option === "search") {
+      event.handled = true;
+      if (!gibbous.firstGemPlaced || !gibbous.secondGemPlaced) {
+        player.sendMessage("The mounted head has two empty settings.");
+        return;
+      }
+      if (gibbous.hourglassClaimed || hasItem(player, ItemIdentifiers.ORNATE_HOURGLASS)) return;
+      if (castleKeyGive(player, ItemIdentifiers.ORNATE_HOURGLASS, "You search the mounted head and take an ornate hourglass.")) {
+        updateGibbousStory(player, { hourglassClaimed: true });
+      }
+      return;
+    }
+    const clueObject = room === CASTLE_ROOM.VENATOR_PUZZLE && option === "inspect" && (
+      (id === 61739 && x === 2516 && [7365, 7370].includes(y)) ||
+      (id === 61739 && x === 2528 && [7364, 7371].includes(y)) ||
+      (id === 61736 && x === 2531 && [7365, 7370].includes(y)) ||
+      (id === 61740 && [[2520,7364],[2520,7371],[2524,7364],[2524,7371],[2527,7366],[2527,7369]]
+        .some(([cx, cy]) => x === cx && y === cy)));
+    if (clueObject) {
+      event.handled = true;
+      const category = id === 61739 ? "banners" : id === 61736 ? "shields" : "braziers";
+      clues.add(category); updateGibbousStory(player, { clues: [...clues] });
+      player.sendMessage(category === "banners" ? "There are four banners."
+        : category === "shields" ? "There are two shields." : "Six braziers line the room.");
+      return;
+    }
+  }
+
+  function handleCastleGibbousItemAction(event) {
+    const player = event?.player;
+    const id = event?.itemId;
+    const option = String(event?.option ?? "").toLowerCase();
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) < 76) return;
+    const story = castleStory(player);
+    if (id === ItemIdentifiers.LOCKBOX && option === "open" &&
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.VENATOR_PUZZLE) {
+      event.handled = true;
+      const clues = new Set(story.gibbous.clues ?? []);
+      if (!story.gibbous.fireplaceLit || !story.gibbous.lockboxClaimed ||
+        !["head", "banners", "shields", "braziers"].every(clues.has, clues)) {
+        player.sendMessage("Inspect the mounted head and count its banners, shields and braziers before opening the lockbox.");
+        return;
+      }
+      chooseGibbousDigit(player, 0);
+      return;
+    }
+    if (id === ItemIdentifiers.ANCESTRAL_DAGGER && ["check", "read", "examine"].includes(option)) {
+      event.handled = true;
+      updateGibbousStory(player, { daggerRead: true });
+      player.sendMessage("A word is etched into the dagger: SPEAR.");
+      return;
+    }
+    if (id === ItemIdentifiers.GRID_NOTE_2 && ["read", "check"].includes(option)) {
+      event.handled = true;
+      updateGibbousStory(player, { gridNoteRead: true });
+      player.sendMessage("The grid note's highlighted letters spell SPEAR.");
+      return;
+    }
+    if (id === ItemIdentifiers.MYSTERIOUS_BOOK && option === "read") {
+      event.handled = true;
+      if (story.gibbous.bookRead || !hasItem(player, ItemIdentifiers.MYSTERIOUS_BOOK)) return;
+      if (castleKeyGive(player, ItemIdentifiers.FANCY_GEM_2, "The book's weight hides a second fancy gem.")) {
+        player.getInventory().deleteNumber(ItemIdentifiers.MYSTERIOUS_BOOK, 1);
+        updateGibbousStory(player, { bookRead: true });
+      }
+    }
+  }
+
+  function handleCastleGibbousItemOnObject(event) {
+    const player = event?.player;
+    const id = event?.definition?.id ?? event?.objectId;
+    const item = event?.itemId;
+    const x = event?.location?.x ?? event?.location?.getX?.();
+    const y = event?.location?.y ?? event?.location?.getY?.();
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) < 76 || x !== 2531 || y !== 7367 ||
+      id !== 61687 || Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.VENATOR_PUZZLE) return;
+    event.handled = true;
+    const gibbous = castleStory(player).gibbous;
+    const gem = item === ItemIdentifiers.FANCY_GEM ? "firstGemPlaced"
+      : item === ItemIdentifiers.FANCY_GEM_2 ? "secondGemPlaced" : null;
+    if (!gem) return;
+    if (gibbous[gem]) { player.sendMessage("That gem is already set into the mounted head."); return; }
+    if (!player.getInventory().contains(item)) return;
+    player.getInventory().deleteNumber(item, 1);
+    updateGibbousStory(player, { [gem]: true });
+    player.sendMessage("You set the fancy gem into the mounted Venator head.");
+  }
+
+  function handleCastleDisplayCaseItem(event) {
+    const player = event?.player;
+    const id = event?.definition?.id ?? event?.objectId;
+    const item = event?.itemId;
+    const x = event?.location?.x ?? event?.location?.getX?.();
+    const y = event?.location?.y ?? event?.location?.getY?.();
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) < 76 || id !== 61672 || x !== 2497 || y !== 7374 ||
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.DISPLAY_ROOM) return;
+    const slot = new Map([[ItemIdentifiers.ORNATE_SKULL, "skull"], [ItemIdentifiers.ORNATE_KNIFE, "knife"],
+      [ItemIdentifiers.ORNATE_HOURGLASS, "hourglass"]]).get(item);
+    if (!slot) return;
+    event.handled = true;
+    const state = castleStory(player).gibbous;
+    const placed = new Set(state.caseItems ?? []);
+    if (placed.has(slot) || !player.getInventory().contains(item)) return;
+    player.getInventory().deleteNumber(item, 1);
+    placed.add(slot); updateGibbousStory(player, { caseItems: [...placed] });
+    player.sendMessage(`You place the ${slot} in the display case.`);
+    if (placed.size === 3) player.sendMessage("A hidden compartment opens beneath the display case.");
+  }
+
+  function searchGibbousDisplayCase(event) {
+    const player = event?.player;
+    const x = event?.location?.x ?? event?.location?.getX?.();
+    const y = event?.location?.y ?? event?.location?.getY?.();
+    const id = event?.definition?.id ?? event?.objectId;
+    if (!player || id !== 61672 || x !== 2497 || y !== 7374 || String(event.option).toLowerCase() !== "search" ||
+      stage(player) !== STAGE.CASTLE || Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) < 76 ||
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.DISPLAY_ROOM) return;
+    event.handled = true;
+    if (!new Set(castleStory(player).gibbous.caseItems ?? []).size ||
+      new Set(castleStory(player).gibbous.caseItems ?? []).size < 3) {
+      player.sendMessage("The display case's compartment is still locked."); return;
+    }
+    if (castleStory(player).gibbous.gildedKeyClaimed || hasItem(player, ItemIdentifiers.GILDED_KEY)) return;
+    if (castleKeyGive(player, ItemIdentifiers.GILDED_KEY, "You search the compartment and take the gilded key.")) {
+      updateGibbousStory(player, { gildedKeyClaimed: true });
     }
   }
 
@@ -2776,6 +3033,15 @@ module.exports = function registerTheBloodMoonRises(api) {
     const x = tile?.getX?.() ?? tile?.x;
     const y = tile?.getY?.() ?? tile?.y;
     const z = tile?.getZ?.() ?? tile?.z;
+    if (player && stage(player) === STAGE.CASTLE && z === 0 &&
+      ((event?.groundItemId === ItemIdentifiers.ANCESTRAL_DAGGER && x === 2527 && y === 7368) ||
+       (event?.groundItemId === ItemIdentifiers.GRID_NOTE_2 && x === 2522 && y === 7366))) {
+      const story = castleStory(player);
+      const dagger = event.groundItemId === ItemIdentifiers.ANCESTRAL_DAGGER;
+      updateGibbousStory(player, { [dagger ? "daggerClaimed" : "gridNoteClaimed"]: true });
+      player.sendMessage(dagger ? "You take the ancestral dagger." : "You take the grid note.");
+      return;
+    }
     if (player && event?.groundItemId === CASTLE_BOOK_ITEMS.gibbousMoonKey && stage(player) === STAGE.CASTLE &&
       x === 2573 && y === 7395 && z === 0 && castleStory(player).prisonersFound) {
       const story = castleStory(player);
@@ -2891,14 +3157,22 @@ module.exports = function registerTheBloodMoonRises(api) {
       spawnCastleActor(player, "safalaan-prison", CASTLE_NPC.SAFALAAN_PRISON, [2571, 7397]);
       spawnCastleActor(player, "vanescula-prison", CASTLE_NPC.VANESCULA_PRISON, [2576, 7396]);
     }
-    if (progress >= 76) {
+    if (progress >= 76 && room === CASTLE_ROOM.VENATOR_PUZZLE) {
+      syncGibbousPuzzleClues(player);
+      if (!story.defeated.includes("gibbous-venator"))
+        spawnCastleActor(player, "gibbous-venator", CASTLE_NPC.VENATOR_GIBBOUS, [2521, 7368], true);
+    } else {
+      removeCastleActor(player, "gibbous-venator");
+    }
+    if (progress >= 76 && room === CASTLE_ROOM.VENATOR_LIBRARY) {
       if (!story.defeated.includes("library-venator"))
-        // The captured quest fight is in the Gibbous puzzle room. The NPC
-        // walks at (2521,7368), beside the fireplace and mounted head; the
-        // separate bookshelf room at x2456 is reached only after the fight.
-        spawnCastleActor(player, "library-venator", CASTLE_NPC.VENATOR_LIBRARY, [2521, 7368], true);
+        spawnCastleActor(player, "library-venator", CASTLE_NPC.VENATOR, [2455, 7391], true);
       if (story.defeated.includes("library-venator") && !story.talkedToIvan)
         spawnCastleActor(player, "ivan-library", CASTLE_NPC.IVAN_LIBRARY, [2455, 7389]);
+      else removeCastleActor(player, "ivan-library");
+    } else {
+      removeCastleActor(player, "library-venator");
+      removeCastleActor(player, "ivan-library");
     }
     if (progress >= 78) {
       spawnCastleActor(player, "ivan-entry-hall", CASTLE_NPC.IVAN_ENTRY_HALL, [2313, 7371]);
@@ -2922,7 +3196,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     const player = event?.killer?.isPlayer?.() ? event.killer : null;
     if (!owner || owner.player !== player || stage(player) !== STAGE.CASTLE) return;
     const story = castleStory(player);
-    if (["first-venator", "crescent-venator", "library-venator", "ranis-sanguidae"].includes(owner.key)) {
+    if (["first-venator", "crescent-venator", "gibbous-venator", "library-venator", "ranis-sanguidae"].includes(owner.key)) {
       const defeated = [...new Set([...story.defeated, owner.key])];
       player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, defeated });
       removeCastleActor(player, owner.key);
@@ -3597,7 +3871,16 @@ module.exports = function registerTheBloodMoonRises(api) {
       }
       if (transition.requiresStory && !castleStory(player)[transition.requiresStory]) {
         event.handled = true;
-        player.sendMessage("The nearby passage remains sealed until you place a Drakan emblem in its receptacle.");
+        if (transition.requiresStory === "gibbousSpearDoorUnlocked") {
+          const gibbous = castleStory(player).gibbous;
+          if (!gibbous.daggerRead || !gibbous.gridNoteRead) {
+            player.sendMessage("The lock needs a five-letter code. The dagger and grid note contain clues.");
+          } else {
+            chooseGibbousDoorLetter(player);
+          }
+        } else {
+          player.sendMessage("The nearby passage remains sealed until you place a Drakan emblem in its receptacle.");
+        }
         return;
       }
       if (currentRoom !== transition.from || currentFloor !== (transition.fromFloor ?? CASTLE_GROUND_FLOOR)) {
@@ -3654,6 +3937,17 @@ module.exports = function registerTheBloodMoonRises(api) {
     const name = String(event?.definition?.getName?.() ?? "").toLowerCase();
     const story = castleStory(player);
     const progress = Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70;
+    if (progress >= 76 && Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.VENATOR_LIBRARY &&
+      x === 2550 && y === 7382 && option === "search" && /bookcase|bookshelf/.test(name)) {
+      event.handled = true;
+      if (!story.gibbous.spearDoorUnlocked) { player.sendMessage("The library door is still locked."); return; }
+      if (story.gibbous.mysteriousBookClaimed || hasItem(player, ItemIdentifiers.MYSTERIOUS_BOOK)) return;
+      if (castleKeyGive(player, ItemIdentifiers.MYSTERIOUS_BOOK,
+        "You search the bookcase and find an oddly weighted book. You take it.")) {
+        updateGibbousStory(player, { mysteriousBookClaimed: true });
+      }
+      return;
+    }
     if ([61615, 61616, 61617, 61618].includes(id) && x === CASTLE_LIBRARY.passage[0] &&
       y === CASTLE_LIBRARY.passage[1] && option === "enter") {
       if (!story.bookPuzzleComplete) {
@@ -4709,8 +5003,12 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction("Solid door", { Enter: handleCastleDoorEnter });
   api.onObjectInteraction("Teleporter", { Enter: handleCastleDoorEnter });
   api.onObjectInteraction(handleCastleBookObjects);
+  api.onObjectInteraction(handleCastleGibbousObjects);
+  api.onObjectInteraction(searchGibbousDisplayCase);
   api.onObjectInteraction(handleCastleKeyObjects);
   api.onItemOnObject(handleCastleBookOnObject, { noted: false });
+  api.onItemOnObject(handleCastleGibbousItemOnObject, { noted: false });
+  api.onItemOnObject(handleCastleDisplayCaseItem, { noted: false });
   api.onItemOnObject(handleCastleKeyItemOnObject, { noted: false });
   api.onItemOnObject(handleVanesculaEmblemReceptacle, { noted: false });
   api.onItemOnObject(handleRanisEmblemReceptacle, { noted: false });
@@ -4722,6 +5020,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onItemOnItem(handleCastleKeyItemOnItem);
   api.onCustomEvent("player:widget-action", handleCastleBookWidgetAction);
   api.onGroundItemPickup(handleCastleBookPickup);
+  api.onItemAction(handleCastleGibbousItemAction);
   api.onGroundItemPickup(handleCastleKeyPickup);
   api.onGroundItemPickup(handleCastleExplosiveBarrelPickup);
   api.onObjectRoute(routeCastleDoorEnter);
