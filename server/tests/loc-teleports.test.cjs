@@ -15,6 +15,7 @@ const { PluginManager } = require("../dist/plugins/PluginManager");
 const { Player } = require("../dist/game/entity/impl/player/Player");
 const { MapObjects } = require("../dist/game/entity/impl/object/MapObjects");
 const { RsmodRouteFinding } = require("../dist/game/model/movement/path/RsmodRouteFinding");
+const { ObjectActionPacketListener } = require("../dist/net/packet/impl/ObjectActionPacketListener");
 const npcSpawns = require("../data/definitions/npc-spawns.json");
 
 const { choose, isNetwork, refusals, toEntry, requirementFor } = require("../scripts/loc-teleport-matching.cjs");
@@ -570,4 +571,21 @@ test("Araxyte cave reverse tunnels return to the quest nest", () => {
   assert.deepEqual(destinationFor(east, new core.Location(3696, 9839, 0)), [3689, 9837, 0]);
   assert.deepEqual(destinationFor(south, new core.Location(3684, 9822, 0)), [3677, 9822, 0]);
   assert.deepEqual(destinationFor(north, new core.Location(3680, 9849, 0)), [3680, 9842, 0]);
+});
+
+
+test("an agent object action without a numeric clickType resolves its cached option", () => {
+  const visit = explorer([2510, 3506, 0]);
+  visit.player.getMovementQueue = () => ({ reset() {}, walkToReset() {}, walkToObject(_object, { execute }) { execute(); } });
+  visit.player.setPositionToFace = () => {};
+  const original = PluginManager.emitObjectInteraction;
+  let observed;
+  PluginManager.emitObjectInteraction = (event) => { observed = event; return true; };
+  try {
+    new ObjectActionPacketListener().executeAction(visit.player, 25274, 2510, 3506, undefined, "Dive in");
+  } finally {
+    PluginManager.emitObjectInteraction = original;
+  }
+  assert.equal(observed?.clickType, 1, "the option string resolves against cached action order");
+  assert.equal(observed?.option, "dive in", "the plugin event carries its cache-derived option");
 });

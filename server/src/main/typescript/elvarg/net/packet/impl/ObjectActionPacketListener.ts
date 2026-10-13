@@ -35,7 +35,7 @@ export class ObjectActionPacketListener {
     }
     const definition = ObjectDefinition.forPlayer(object.getId(), player);
     if (!definition) return;
-    if (clickType < 1 || clickType > 5) {
+    if (!Number.isInteger(clickType) || clickType < 1 || clickType > 5) {
       const normalized = action?.trim().toLowerCase();
       clickType = normalized
         ? (definition?.getInteractions()?.findIndex((option) => option?.toLowerCase() === normalized) ?? -1) + 1
@@ -70,6 +70,7 @@ export class ObjectActionPacketListener {
         definition,
         objectId: object.getId(),
         clickType,
+        option,
         location: {
           x: object.getLocation().getX(),
           y: object.getLocation().getY(),
