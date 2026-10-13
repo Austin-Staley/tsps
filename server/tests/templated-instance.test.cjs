@@ -73,6 +73,21 @@ test('Entry treasure room places its reward chest on reachable cache floor', () 
   assert.equal(RegionManager.blocked(new Location(3244, 4307, 0), null), true, 'the former chest location is inside blocked cache geometry');
 });
 
+test('SOTE library teleport arrivals are clear, walkable tiles beside their seal anchors', () => {
+  const anchors = [[2623, 6135, 1], [2676, 6101, 1], [2622, 6097, 0], [2576, 6171, 1],
+    [2614, 6157, 0], [2580, 6163, 2], [2562, 6129, 2], [2646, 6143, 2], [2650, 6167, 1]];
+  const arrivals = [[2623, 6134, 1], [2675, 6102, 1], [2623, 6098, 0], [2577, 6172, 1],
+    [2613, 6158, 0], [2581, 6162, 2], [2563, 6130, 2], [2647, 6144, 2], [2651, 6168, 1]];
+  for (let i = 0; i < arrivals.length; i++) {
+    const [x, y, z] = arrivals[i], [sx, sy] = anchors[i];
+    RegionManager.loadMapFiles(x, y, true);
+    assert.equal(RegionManager.blocked(new Location(x, y, z), null), false, `arrival ${i} is not blocked`);
+    assert.equal(Math.max(Math.abs(x - sx), Math.abs(y - sy)), 1, `arrival ${i} is beside its seal`);
+    const exits = STEPS.filter(([dx, dy]) => canStep(x, y, z, [dx, dy], null));
+    assert.ok(exits.length > 0, `arrival ${i} has a cache-valid outgoing step`);
+  }
+});
+
 /** Turns a step clockwise with its chunk: north becomes east, as the client turns tiles. */
 function rotateStep([dx, dy], rotation) {
   for (let i = 0; i < (rotation & 3); i++) [dx, dy] = [dy, -dx];

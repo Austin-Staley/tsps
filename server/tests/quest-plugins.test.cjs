@@ -7999,12 +7999,40 @@ test('Song of the Elves restores the saved private library on relog without rese
   assert.equal(teleportMenu.handled, true);
   assert.equal(player.prompt[0], 'Where would you like to go?');
   assert.equal(player.prompt[1], 'The Forgotten seal');
+  assert.deepEqual(player.prompt.filter((_, index) => index > 0 && index % 2 === 1),
+    ['The Forgotten seal', 'The Seal of Ithell', 'The Seal of Cadarn', 'More...', 'Stay here.'],
+    'the first page fits the five-option dialogue limit');
   player.prompt[2]();
-  assert.deepEqual([location.getX(), location.getY(), location.getZ()], [2623, 6135, 1],
-    'the menu transports to a seal already present in the saved mask');
+  assert.deepEqual([location.getX(), location.getY(), location.getZ()], [2623, 6134, 1],
+    'the menu transports to clear floor beside a seal already present in the saved mask');
   assert.match(messages.at(-1), /unlocked seal/i);
   assert.equal(attributes.get('quest.song_of_the_elves.library-puzzle'), '1:4');
   assert.equal(attributes.get('quest.song_of_the_elves.library-seals'), 3);
+  attributes.set('quest.song_of_the_elves.library-seals', 511);
+  const openTeleportPage = (page) => {
+    const action = { player, action: 'open_interface', target: 'An', handled: false };
+    handlers.custom.get('npc-dialogue:action').find(handler => handler.name === 'onAction')(action);
+    for (let i = 0; i < page; i++) player.prompt[player.prompt.length - 3]();
+    return player.prompt;
+  };
+  const expectedLandings = [
+    [2623, 6134, 1], [2675, 6102, 1], [2623, 6098, 0],
+    [2577, 6172, 1], [2613, 6158, 0], [2581, 6162, 2],
+    [2563, 6130, 2], [2647, 6144, 2], [2651, 6168, 1],
+  ];
+  for (let destination = 0; destination < expectedLandings.length; destination++) {
+    const prompt = openTeleportPage(Math.floor(destination / 3));
+    const withinPage = destination % 3;
+    assert.equal(prompt[1 + withinPage * 2], [
+      'The Forgotten seal', 'The Seal of Ithell', 'The Seal of Cadarn', 'The Seal of Crwys',
+      'The Seal of Amlodd', 'The Seal of Meilyr', 'The Seal of Hefin', 'The Seal of Trahaearn',
+      'The Seal of Iorwerth',
+    ][destination]);
+    prompt[2 + withinPage * 2]();
+    assert.deepEqual([location.getX(), location.getY(), location.getZ()], expectedLandings[destination],
+      'each memory destination uses its adjacent floor tile');
+  }
+  attributes.set('quest.song_of_the_elves.library-seals', 3);
   for (const handler of handlers.custom.get('npc-dialogue:choice')) handler({ player,
     option: 'Yes please.', definition: { getName: () => 'Memory of Seren' } });
   assert.equal(location.getZ(), 1, 'asking to replay knowledge does not teleport the player');
@@ -8014,11 +8042,13 @@ test('Song of the Elves restores the saved private library on relog without rese
   assert.deepEqual([location.getX(), location.getY(), location.getZ()], [2623, 6144, 0],
     'the actual accepted return action moves the player');
   restore({ player });
-  assert.equal(spawned.length, 3, 'a repeated login hook does not duplicate the library actors');
+  assert.equal(spawned.length, 10, 'all actors unlocked during teleport stay in the same private library');
+  restore({ player });
+  assert.equal(spawned.length, 10, 'a repeated login hook does not duplicate the library actors');
   player.area.destroyed = true;
   attributes.set('quest.song_of_the_elves.stage', 140);
   restore({ player });
-  assert.equal(spawned.length, 6, 'completed seals and their memories return in the rebuilt library');
+  assert.equal(spawned.length, 13, 'unlocked seals and their memories return in the rebuilt library');
   player.area = null;
   location = new api.core.Location(2353, 3179, 0);
   restore({ player });

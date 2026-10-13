@@ -135,6 +135,13 @@ module.exports = function registerSongOfTheElves(api) {
     { name: "trahaearn", id: ObjectIdentifiers.SEAL_OF_TRAHAEARN, mapId: 36732, memory: NpcIdentifiers.MEMORY_OF_SEREN_8, tile: [2646, 6143, 2], tileRotation: 3, source: [2595, 6116, 1], sourceDirection: "south", steps: ["S", "W", "N", "D", "E", "U", "N", "E", "S", "E", "blue", "S", "E", "N", "W", "N", "N", "E", "U", "E", "N", "W", "S"], targets: [[2595, 6102, 1], [2595, 6088, 1], [2567, 6088, 1], [2567, 6116, 1], [2567, 6116, 0], [2581, 6116, 0], [2581, 6116, 2], [2581, 6130, 2], [2609, 6130, 2], [2609, 6102, 2], [2637, 6102, 2], [2651, 6102, 2], [2651, 6094, 2], [2665, 6094, 2], [2665, 6110, 2], [2651, 6110, 2], [2651, 6130, 1], [2651, 6144, 1], [2665, 6144, 1], [2665, 6144, 2], [2679, 6144, 2], [2679, 6158, 2], [2651, 6158, 2]], branches: { 16: { source: [2651, 6116, 1], direction: "north" } } },
     { name: "iorwerth", id: ObjectIdentifiers.SEAL_OF_IORWERTH, mapId: 36729, memory: NpcIdentifiers.MEMORY_OF_SEREN_9, tile: [2650, 6167, 1], tileRotation: 2, source: [2637, 6130, 1], sourceDirection: "north", steps: ["cyan", "blue", "W", "D", "N", "fractured", "E", "U", "S", "E", "yellow", "N", "W", "N", "U", "S", "magenta", "N", "E", "red", "N", "W", "N", "E", "N", "U", "N", "W", "S", "D", "S", "D"], targets: [[2637, 6144, 1], [2637, 6158, 1], [2637, 6172, 1], [2623, 6172, 1], [2623, 6172, 0], [2623, 6186, 0], [2623, 6200, 0], [2637, 6200, 0], [2637, 6186, 0], [2637, 6172, 0], [2651, 6172, 0], [2665, 6172, 0], [2665, 6186, 0], [2651, 6186, 0], [2651, 6200, 0], [2651, 6200, 1], [2637, 6200, 1], [2651, 6130, 1], [2651, 6144, 1], [2665, 6144, 1], [2679, 6144, 1], [2679, 6158, 1], [2665, 6158, 1], [2665, 6172, 1], [2679, 6172, 1], [2679, 6186, 1], [2679, 6186, 2], [2679, 6200, 2], [2665, 6200, 2], [2665, 6186, 2], [2637, 6200, 2], [2637, 6186, 2]], branches: { 8: { fromStep: 5 }, 16: { source: [2637, 6186, 1], direction: "north" }, 17: { source: [2651, 6116, 1], direction: "north" }, 30: { source: [2637, 6186, 2], direction: "north" } } },
   ];
+  // The cache's seal destination anchors are blocked object tiles. Land on
+  // the adjacent clear floor so the player can approach the seal normally.
+  const LIBRARY_MEMORY_ARRIVALS = [
+    [2675, 6102, 1], [2623, 6098, 0], [2577, 6172, 1],
+    [2613, 6158, 0], [2581, 6162, 2], [2563, 6130, 2],
+    [2647, 6144, 2], [2651, 6168, 1],
+  ];
   const LIBRARY_OPERATIONS = { E: "east", W: "west", N: "north", S: "south", U: "up", D: "down" };
   const LIBRARY_CRYSTAL_ITEMS = {
     red: ItemIdentifiers.RED_CRYSTAL_2, yellow: ItemIdentifiers.YELLOW_CRYSTAL_2,
@@ -1946,12 +1953,12 @@ module.exports = function registerSongOfTheElves(api) {
   }
 
   function openLibraryTeleportMenu(player, offset = 0) {
-    const destinations = [{ name: "The Forgotten seal", tile: [2623, 6135, 1], bit: 0 },
+    const destinations = [{ name: "The Forgotten seal", tile: [2623, 6135, 1], arrival: [2623, 6134, 1], bit: 0 },
       ...LIBRARY_SEAL_DATA.map((seal, index) => ({
         name: `The Seal of ${seal.name[0].toUpperCase()}${seal.name.slice(1)}`,
-        tile: seal.tile, bit: index + 1,
+        tile: seal.tile, arrival: LIBRARY_MEMORY_ARRIVALS[index], bit: index + 1,
       }))];
-    const visible = destinations.slice(offset, offset + 4);
+    const visible = destinations.slice(offset, offset + 3);
     const choices = visible.flatMap((destination) => [destination.name, () => {
       if (!(librarySealMask(player) & (1 << destination.bit))) {
         player.sendMessage("I can only take you to a seal which has already been broken.");
@@ -1959,10 +1966,10 @@ module.exports = function registerSongOfTheElves(api) {
       }
       const area = ensureLibraryInstance(player);
       area.enter(player);
-      player.moveTo(new Location(...destination.tile));
+      player.moveTo(new Location(...destination.arrival));
       player.sendMessage("The Memory of Seren carries you to the unlocked seal.");
     }]);
-    if (offset + visible.length < destinations.length) choices.push("More...", () => openLibraryTeleportMenu(player, offset + 4));
+    if (offset + visible.length < destinations.length) choices.push("More...", () => openLibraryTeleportMenu(player, offset + 3));
     choices.push("Stay here.", () => {});
     api.sendMultiChatboxPrompt(player, "Where would you like to go?", ...choices);
   }
