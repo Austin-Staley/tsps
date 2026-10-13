@@ -164,6 +164,7 @@ test("prison lifecycle hooks use PluginManager's valid single-colon custom event
     "dt2:sucellus-prison-process",
     "dt2:sucellus-prison-resume",
     "dt2:sucellus-prison-start",
+    "ladders:climb",
     "npc-dialogue:action",
     "npc-dialogue:line",
   ]);
@@ -292,7 +293,7 @@ test("earned frozen-Jhallan progress restores the Assassin after relog without r
 });
 
 test("paired prison crevices land on adjacent clear tiles, and asylum stairs exit to the Duke", () => {
-  const { handlers, player, area, instanceLocation } = setup();
+  const { handlers, emitted, player, area, instanceLocation } = setup();
   const state = () => player.getAttribute("desert-treasure-ii:sucellus-prison-progress");
   player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 38);
   player.setAttribute("desert-treasure-ii:sucellus-area", area);
@@ -319,12 +320,15 @@ test("paired prison crevices land on adjacent clear tiles, and asylum stairs exi
 
   player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 58);
   player.setAttribute("desert-treasure-ii:sucellus-prison-complete", true);
-  const asylum = { player, objectId: 49100, option: "Climb", location: instanceLocation(2973, 6440, 2), handled: false };
-  assert.equal(handlers.object(asylum), true);
+  const asylum = { player, objectId: 49100, object: { getId: () => 49100, getLocation: () => instanceLocation(2973, 6440, 2) }, handled: false };
+  const beforeClimb = { ...player.location };
+  assert.equal(handlers.custom["ladders:climb"](asylum), true);
   assert.equal(asylum.handled, true);
-  assert.deepEqual([player.location.x, player.location.y, player.location.z], [3039, 6431, 0]);
-  assert.equal(player.getPrivateArea(), null, "the public Duke area cannot retain the prison instance");
-  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-area"), null);
+  const transfer = emitted.find(({ name }) => name === "ladders:climbDown");
+  assert.deepEqual([transfer.payload.destination.x, transfer.payload.destination.y, transfer.payload.destination.z], [3039, 6431, 0]);
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], [beforeClimb.x, beforeClimb.y, 2],
+    "the canonical Ladders plugin performs the animated transfer after the quest claims its exact anchor");
+  assert.equal(player.getPrivateArea(), area, "the owner instance remains until the climb task moves the player out");
 });
 
 test("the Assassin stays gone after the cell escape and returns only for the diamond-key plan", () => {

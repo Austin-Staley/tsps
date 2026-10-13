@@ -487,6 +487,22 @@ module.exports = function registerSucellusPrison(api) {
     }
   }
 
+  function handlePrisonStairs(request) {
+    const { player, object } = request ?? {};
+    const area = player?.getAttribute(AREA);
+    if (!player?.getAttribute(ESCAPED) || !atArea(player, area)
+      || state(player) < 58 || !player.getAttribute(COMPLETE)) return false;
+    const id = request.objectId ?? objectId({ objectId: object?.getId?.(), player });
+    const tile = eventTile({ object }, area);
+    if (id !== 49100 || !isTile(tile, TILES.asylum)) return false;
+    request.handled = true;
+    api.emitCustomEvent("ladders:climbDown", {
+      player,
+      destination: new api.core.Location(3039, 6431, 0),
+    });
+    return true;
+  }
+
   function startDefence(player, area) {
     if (state(player) !== 52 || player.getAttribute(FIREWORKS)) return;
     player.setAttribute(FIREWORKS, true);
@@ -638,6 +654,7 @@ module.exports = function registerSucellusPrison(api) {
   }
   api.onNpcInteraction("Jhallan", { "Talk-to": talkJhallan });
   api.onObjectInteraction(handlePrisonObject);
+  api.onCustomEvent("ladders:climb", handlePrisonStairs);
   api.onItemOnObject(handlePrisonItemOnObject, { noted: false });
   api.onCustomEvent("npc-dialogue:action", handlePrisonDialogueAction);
   function readClue(event, itemId, bit, message) {
