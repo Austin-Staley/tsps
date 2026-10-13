@@ -622,7 +622,7 @@ module.exports = function registerSongOfTheElves(api) {
     }
   }
   function onStart(event) {
-    if (event?.hook !== START_HOOK || !event.player) return;
+    if (event?.hook !== START_HOOK || !event.player || quest.isStarted(event.player)) return;
     if (!requirementsMet(event.player)) { explainRequirements(event.player); return; }
     quest.setStage(event.player, STAGE.STARTED);
   }
@@ -1113,6 +1113,7 @@ module.exports = function registerSongOfTheElves(api) {
   }
 
   function setChapter(player, chapter) {
+    if (chapter < currentChapter(player)) return;
     if (chapter >= 19) {
       // Stage 200 is the cache completion value; retain stage 190 through the
       // final battle and store its late chapters separately.
@@ -1396,10 +1397,15 @@ module.exports = function registerSongOfTheElves(api) {
       return startTranscript(api, player, event.npcId, PAGE, variant);
     }
     if (npcName === "elena" && currentChapter(player) === 2) {
+      if (Number(player.getAttribute(ELENA_ESCAPE_PROGRESS)) === 26) {
+        return startTranscript(api, player, event.npcId, PAGE, "freeing-elena-returning-to-elena", elenaEscapeReminder);
+      }
       const inventory = player.getInventory();
       const hasChemical = CHEMICALS.some((id) => inventory.getAmount(id) > 0) || inventory.getAmount(SULPHURIC_ACID) > 0;
       return startTranscript(api, player, event.npcId, PAGE,
-        hasChemical ? "freeing-elena-returning-to-elena" : "freeing-elena-talking-to-elena");
+        hasChemical ? "freeing-elena-returning-to-elena"
+          : Number(player.getAttribute(ELENA_ESCAPE_PROGRESS)) >= 22
+            ? "freeing-elena-talking-to-elena-again" : "freeing-elena-talking-to-elena");
     }
     if (currentChapter(player) === 11 && npcName === "elena") {
       const finishedPotion = player.getInventory().getAmount(ItemIdentifiers.INVERSION_POTION) > 0;
@@ -1469,6 +1475,10 @@ module.exports = function registerSongOfTheElves(api) {
       player.moveTo(new Location(2353, 3172, 0));
       return startTranscript(api, player, event.npcId, PAGE,
         "preparing-to-enter-prifddinas-a-mysterious-figure-talking-to-lord-amlodd-once-he-is-in-lletya");
+    }
+    if (npcName === "edmond" && currentChapter(player) >= 3) {
+      return startTranscript(api, player, event.npcId, PAGE,
+        "freeing-elena-telling-edmond-the-good-news-talking-to-him-again");
     }
     if (npcName === "edmond" && currentChapter(player) === 2) {
       if (Number(player.getAttribute(ELENA_ESCAPE_PROGRESS)) !== 26) {
@@ -2829,6 +2839,11 @@ module.exports = function registerSongOfTheElves(api) {
     if (value === 40) return player?.getAttribute(RESISTANCE_BRIEFING) === true ? 32 : 28;
     if (value === 50) return 40;
     return value;
+  }
+  function elenaEscapeReminder(steps) {
+    const correctChemical = steps.find(step => step.id === "Ne_wSN");
+    const handover = correctChemical.steps.find(step => step.type === "choice").options.find(option => option.text === "Yes.");
+    return handover.steps.slice(-2);
   }
   function finishElenaPrisonLine(event) {
     const player = event?.player;

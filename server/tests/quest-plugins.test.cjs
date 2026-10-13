@@ -12560,5 +12560,12 @@ test('Song of the Elves prison entry keeps Elena visible and cannot release her 
     talk({ player, npcId: api.core.NpcIdentifiers.EDMOND_2, definition: { getName: () => 'Edmond' } });
     assert.equal(quest.getStage(player), 40);
     assert.equal(quest.varbitValue(40, player), 28);
+    talk({ player, npcId: api.core.NpcIdentifiers.EDMOND_2, definition: { getName: () => 'Edmond' } });
+    assert.equal(transcripts.at(-1), 'freeing-elena-telling-edmond-the-good-news-talking-to-him-again');
+    handlers.custom.get('npc-dialogue:hook').find(h => h.name === 'onStart')({ player, hook: 'quest:song-of-the-elves:start' });
+    assert.equal(quest.getStage(player), 40, 'an earlier quest offer cannot reset earned progress');
+    attrs.set('quest.song_of_the_elves.stage', 80);
+    action({ player, kind: 'message', stepId: 'LeWWCS' });
+    assert.equal(quest.getStage(player), 80, 'an old transcript milestone cannot move the story backwards');
   } finally { runtime.startTranscript = original; }
 });
