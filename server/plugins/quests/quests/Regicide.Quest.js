@@ -147,6 +147,7 @@ module.exports = function registerRegicideQuest(api) {
   const STICKS_IDS = new Set([ObjectIdentifiers.STICKS]);
   const LEAVES_IDS = new Set([ObjectIdentifiers.LEAVES, ObjectIdentifiers.LEAVES_2, ObjectIdentifiers.LEAVES_3]);
   const ISAFDAR_LOG_BALANCE_ID = ObjectIdentifiers.LOG_BALANCE_10;
+  const IORWERTH_LOG_BALANCE_ID = ObjectIdentifiers.LOG_BALANCE_9;
   const SULPHUR_ROCK_IDS = new Set([
     ObjectIdentifiers.SULPHUR,
     ObjectIdentifiers.SULPHUR_2,
@@ -708,9 +709,23 @@ module.exports = function registerRegicideQuest(api) {
     });
   }
 
-  /** The two cache Log balance endpoints bridge the river south of Prifddinas. */
+  /** Cache log endpoints connect the forest banks; land outside their collision. */
   function crossIsafdarLogBalance(event) {
     const { player, location, sourceLocation } = event;
+    if (event.objectId === IORWERTH_LOG_BALANCE_ID) {
+      if (location.z !== 0 || location.y !== 3237 || ![2197, 2201].includes(location.x) ||
+        (event.option && event.option.toLowerCase() !== "cross")) return;
+      event.handled = true;
+      if (agilityLevel(player) < 45) {
+        player.sendMessage("You need an Agility level of 45 to cross this log balance.");
+        return;
+      }
+      player.performAnimation?.(new api.core.Animation(762));
+      player.moveTo(location.x === 2197
+        ? new Location(2201, 3236, 0)
+        : new Location(2197, 3238, 0));
+      return;
+    }
     if (location.z !== 0 || location.y !== 3250 || ![2259, 2263].includes(location.x) ||
       (event.option && event.option !== "Cross")) return;
     event.handled = true;
@@ -802,7 +817,7 @@ module.exports = function registerRegicideQuest(api) {
       jumpLeaves(event);
       return;
     }
-    if (objectId === ISAFDAR_LOG_BALANCE_ID) {
+    if (objectId === ISAFDAR_LOG_BALANCE_ID || objectId === IORWERTH_LOG_BALANCE_ID) {
       crossIsafdarLogBalance(event);
       return;
     }

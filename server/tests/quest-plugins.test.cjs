@@ -9009,6 +9009,41 @@ test('Regicide supports both cache Log balance endpoints on the Isafdar bridge',
   assert.equal(unrelated.handled, false, 'the handler is limited to the verified bridge placements');
 });
 
+test('Regicide crosses both Iorwerth camp log endpoints onto walkable banks and checks Agility', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/Regicide.Quest')(api);
+  const RegionManager = require('../dist/game/collision/RegionManager').RegionManager;
+  const run = (x, level = 45, y = 3237) => {
+    const moves = [];
+    const messages = [];
+    const player = {
+      getSkillManager: () => ({ getCurrentLevel: () => level }),
+      sendMessage: message => messages.push(message),
+      moveTo: destination => moves.push(destination),
+    };
+    const event = { player, objectId: api.core.ObjectIdentifiers.LOG_BALANCE_9,
+      option: 'cross', location: { x, y, z: 0 }, handled: false };
+    handlers.objects[0](event);
+    return { moves, messages, handled: event.handled };
+  };
+  for (const [x, expected, next] of [
+    [2197, [2201, 3236, 0], [2201, 3235]],
+    [2201, [2197, 3238, 0], [2197, 3239]],
+  ]) {
+    const result = run(x);
+    assert.equal(result.handled, true);
+    const landing = result.moves[0];
+    assert.deepEqual([landing.getX(), landing.getY(), landing.getZ()], expected);
+    const adjacent = new api.core.Location(...next, 0);
+    assert.equal(RegionManager.canMove(landing, adjacent, 1, false), true, 'bank landing permits normal walking');
+  }
+  const underLevel = run(2197, 44);
+  assert.equal(underLevel.handled, true);
+  assert.equal(underLevel.moves.length, 0);
+  assert.match(underLevel.messages[0], /45/);
+  assert.equal(run(2197, 99, 3236).handled, false);
+});
+
 test('Regicide leaves completed Well of Voyage crossings to the shared loc route', () => {
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/Regicide.Quest')(api);
