@@ -2621,7 +2621,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
   const { api: base } = mockApi();
   const objectHooks = [], objectRouteHooks = [], deathHooks = [], itemOnItemHooks = [], itemOnNpcHooks = [], itemOnObjectHooks = [], itemActionHooks = [], hitModifyHooks = [], lineHooks = [], actionHooks = [], interactions = [];
   const transcripts = [], queues = { add: [], remove: [] }, varbits = new Map(), inventoryCounts = new Map();
-  const routes = [];
+  const routes = [], logoutHooks = [];
   let processCycle = 0;
   class TestInstance {
     constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
@@ -2648,6 +2648,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     get: (target, prop) => prop === 'core' ? core
       : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
         : prop === 'onObjectRoute' ? (handler) => objectRouteHooks.push(handler)
+        : prop === 'onPlayerLogout' ? (handler) => logoutHooks.push(handler)
         : prop === 'onItemOnItem' ? (handler) => itemOnItemHooks.push(handler)
         : prop === 'onItemOnNpc' ? (handler) => itemOnNpcHooks.push(handler)
           : prop === 'onItemOnObject' ? (handler) => itemOnObjectHooks.push(handler)
@@ -2692,13 +2693,24 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(queues.add.length, 0, 'entry waits until the farewell closes');
     farewell.after();
     assert.equal(varbits.get(15128), 6, 'entering the Scar advances the canonical quest varbit');
-    const area = attrs.get('desert-treasure-ii:scar-area');
+    let area = attrs.get('desert-treasure-ii:scar-area');
     assert.equal(area.width, 9);
     assert.equal(area.height, 8);
     assert.equal(player.location.x, 8213);
     assert.equal(player.location.y, 1633);
     assert.equal(queues.add.length, 6);
     assert.ok(queues.add.every((npc) => npc.owner === player));
+    player.getPrivateArea = () => attrs.get('desert-treasure-ii:scar-area');
+    logoutHooks[0]({ player });
+    assert.deepEqual([player.location.getX(), player.location.getY()], [3610, 9473], 'logout saves a public Guardian tile rather than a destroyed instance');
+    assert.equal(attrs.get('desert-treasure-ii:scar-area'), null);
+    guardian({ player, npcId: core.NpcIdentifiers.CATALYTIC_GUARDIAN });
+    assert.equal(transcripts.at(-1), 'praefectus-classis-perseriya-talking-to-the-catalytic-guardian-talking-to-the-catalytic-guardian-after-exiting-the-scar-for-the-first-time');
+    const returnFarewell = { player, npcId: core.NpcIdentifiers.CATALYTIC_GUARDIAN, text: 'Very well. Good luck.' };
+    lineHooks[0](returnFarewell);
+    returnFarewell.after();
+    area = attrs.get('desert-treasure-ii:scar-area');
+    assert.equal(queues.add.length, 6, 'returning restores only the unfinished six demons');
     for (const npc of [...queues.add]) deathHooks[0]({ killer: player, npc });
     assert.equal(attrs.get('desert-treasure-ii:scar-demons-defeated'), true);
     assert.equal(varbits.get(15128), 8);
