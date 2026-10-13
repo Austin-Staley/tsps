@@ -18,7 +18,7 @@ module.exports = function registerRefinery(api) {
   const STAGE_VARBIT = 15464;
   const STAGE = Object.freeze({
     ROUTE: 48, TOMB: 50, PICKAXE: 52, MINED: 54, TUNNEL: 56,
-    FIGHT: 58, FREED: 60, ESCAPED: 62,
+    FIGHT: 58, CLEARED: 60, FREED: 61, ESCAPED: 62,
   });
   const TOMBSTILE = Object.freeze({ x: 3505, y: 9857, z: 0 });
   const TUNNEL_TILE = Object.freeze({ x: 3117, y: 7472, z: 2 });
@@ -31,7 +31,8 @@ module.exports = function registerRefinery(api) {
   const MINE_THROUGH = O.BLOCKAGE_10;
   const TOMB_ENTRANCE = O.CAVE_ENTRANCE_98;
   const MINE_TUNNEL = O.TUNNEL_71;
-  const CASTLE_EXIT = O.ENTRY_28;
+  // Parent cache loc 61203 transforms to the Enter child at native stage 61.
+  const CASTLE_EXIT = O.ENTRY_27;
   // The QH objective points at a cutscene variant with no Talk-to cache action;
   // use the cache's talkable Ivan model at the same canonical objective tile.
   const IVAN = N.IVAN_STROM_13;
@@ -66,7 +67,7 @@ module.exports = function registerRefinery(api) {
     player.setAttribute(PROGRESS_ATTRIBUTE, next);
     const nativeStage = ({ route: STAGE.ROUTE, tomb: STAGE.TOMB, pickaxe: STAGE.PICKAXE,
       mined: STAGE.MINED, tunnel: STAGE.TUNNEL, fight: STAGE.FIGHT,
-      cleared: STAGE.FREED, freed: STAGE.FREED, escaped: STAGE.ESCAPED })[next.phase];
+      cleared: STAGE.CLEARED, freed: STAGE.FREED, escaped: STAGE.ESCAPED })[next.phase];
     if (nativeStage !== undefined) setStage(player, nativeStage);
     return next;
   }
@@ -113,7 +114,7 @@ module.exports = function registerRefinery(api) {
     const current = progress(player);
     const nativeStage = ({ route: STAGE.ROUTE, tomb: STAGE.TOMB, pickaxe: STAGE.PICKAXE,
       mined: STAGE.MINED, tunnel: STAGE.TUNNEL, fight: STAGE.FIGHT,
-      cleared: STAGE.FREED, freed: STAGE.FREED, escaped: STAGE.ESCAPED })[current.phase];
+      cleared: STAGE.CLEARED, freed: STAGE.FREED, escaped: STAGE.ESCAPED })[current.phase];
     if (nativeStage !== undefined) setStage(player, nativeStage);
   }
 
@@ -331,7 +332,8 @@ module.exports = function registerRefinery(api) {
       event.handled = true;
       setProgress(player, { phase: "escaped" });
       player.getCombat().reset();
-      player.moveTo(new Location(3182, 7571, 0));
+      // This is the reverse of the cache's Enter route at (3170, 7572, 0).
+      player.moveTo(new Location(3170, 7572, 0));
       return true;
     }
     return false;

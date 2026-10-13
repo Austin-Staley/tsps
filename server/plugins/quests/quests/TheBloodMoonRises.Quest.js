@@ -884,7 +884,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (value === STAGE.SLEPE) {
       const phase = player?.getAttribute("the-blood-moon-rises:refinery-progress")?.phase;
       const refineryStage = ({ route: 48, tomb: 50, pickaxe: 52, mined: 54, tunnel: 56,
-        fight: 58, cleared: 60, freed: 60, escaped: 62 })[phase];
+        fight: 58, cleared: 60, freed: 61, escaped: 62 })[phase];
       if (refineryStage !== undefined) return refineryStage;
     }
     return nativeStage(value, player);
