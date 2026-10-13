@@ -142,6 +142,9 @@ module.exports = function registerSongOfTheElves(api) {
   const CHEMICALS = [ItemIdentifiers.BLUE_LIQUID, ItemIdentifiers.GREEN_POWDER, ItemIdentifiers.CLEAR_LIQUID, ItemIdentifiers.RED_POWDER];
   const SULPHURIC_ACID = ItemIdentifiers.SULPHURIC_ACID;
   const DISGUISE_BRIEFED = "song-of-the-elves:disguise-briefed";
+  const ELENA_ESCAPE_PROGRESS = "song-of-the-elves:elena-escape-progress";
+  const PRISON_ENTRY = 35791;
+  const PRISON_EXIT = 35792;
   const DISGUISE = {
     STEEL_HELM: ItemIdentifiers.STEEL_FULL_HELM,
     STEEL_BODY: ItemIdentifiers.STEEL_PLATEBODY,
@@ -719,9 +722,15 @@ module.exports = function registerSongOfTheElves(api) {
       const chemical = Number(player.getAttribute(CHEMICAL_CHOICE)) || ItemIdentifiers.CLEAR_LIQUID;
       if (inventory.getAmount(chemical) === 0) inventory.adds(chemical, 1);
       player.setAttribute(CHEMICAL_CHOICE, 0);
+      if (chemical === ItemIdentifiers.CLEAR_LIQUID && currentChapter(player) === 2) {
+        player.setAttribute(ELENA_ESCAPE_PROGRESS, 24);
+        player.getPacketSender().sendVarbit(9016, 24);
+      }
     } else if (event.stepId === "PZ3EOG") {
       inventory.deleteNumber(ItemIdentifiers.CLEAR_LIQUID, 1);
       inventory.deleteNumber(SULPHURIC_ACID, 1);
+      player.setAttribute(ELENA_ESCAPE_PROGRESS, 26);
+      player.getPacketSender().sendVarbit(9016, 26);
     }
     if (event.kind === "message") {
       const itemByMessage = {
@@ -1456,6 +1465,10 @@ module.exports = function registerSongOfTheElves(api) {
         "preparing-to-enter-prifddinas-a-mysterious-figure-talking-to-lord-amlodd-once-he-is-in-lletya");
     }
     if (npcName === "edmond" && currentChapter(player) === 2) {
+      if (Number(player.getAttribute(ELENA_ESCAPE_PROGRESS)) !== 26) {
+        return startTranscript(api, player, event.npcId, PAGE,
+          "making-a-knightly-disguise-talking-to-edmond-after-completing-the-disguise-talking-to-him-again-2");
+      }
       quest.setStage(player, STAGE.STARTED + 30);
       return startTranscript(api, player, event.npcId, PAGE, "freeing-elena-telling-edmond-the-good-news");
     }
@@ -2781,21 +2794,36 @@ module.exports = function registerSongOfTheElves(api) {
   }
 
   function enterPrison(event) {
-    const player = event?.player;
-    const loc = event?.location;
-    if (!player || !loc || loc.x !== 2569 || loc.y !== 3295 || currentChapter(player) > 2 || currentChapter(player) < 1) return;
-    if (currentChapter(player) === 1 && !wearingDisguise(player)) {
-      event.handled = true;
+    const player = event?.player, loc = event?.location;
+    if (!player || !loc || loc.x !== 2569 || loc.y !== 3295 || currentChapter(player) > 2 || currentChapter(player) < 1) return false;
+    event.handled = true;
+    if (!wearingDisguise(player)) {
       player.sendMessage("Only Knights of Ardougne are allowed in the prison.");
-      return;
+      return true;
     }
-    if (currentChapter(player) === 1) {
-      event.handled = true;
-      quest.setStage(player, STAGE.STARTED + 20);
-      // The castle stairs enter the separate basement map square; place the
-      // player by Elena's northern cell so the next step is an actual NPC talk.
-      player.moveTo(new Location(2541, 9672, 0));
-      startTranscript(api, player, NpcIdentifiers.KNIGHT_OF_ARDOUGNE_3, PAGE, "freeing-elena-upon-entering-the-prison");
+    const firstEntry = (Number(player.getAttribute(ELENA_ESCAPE_PROGRESS)) || 0) < 20;
+    player.setAttribute(ELENA_ESCAPE_PROGRESS, Math.max(20, Number(player.getAttribute(ELENA_ESCAPE_PROGRESS)) || 0));
+    setChapter(player, 2);
+    api.emitCustomEvent("ladders:climbDown", { player, destination: new Location(2565, 9709, 0) });
+    if (firstEntry) startTranscript(api, player, NpcIdentifiers.KNIGHT_OF_ARDOUGNE_3, PAGE, "freeing-elena-upon-entering-the-prison");
+    return true;
+  }
+  function nativeEarlyProgress(value, player) {
+    if (value === 10) return 2;
+    if (value === 20) return player?.getAttribute(DISGUISE_BRIEFED) === true ? 10 : 4;
+    if (value === 30) return Number(player?.getAttribute(ELENA_ESCAPE_PROGRESS)) || 18;
+    if (value === 40) return player?.getAttribute(RESISTANCE_BRIEFING) === true ? 32 : 28;
+    if (value === 50) return 40;
+    return value;
+  }
+  function finishElenaPrisonLine(event) {
+    const player = event?.player;
+    if (!player || currentChapter(player) !== 2 || ![NpcIdentifiers.ELENA_2, NpcIdentifiers.ELENA_4].includes(event.npcId)) return;
+    if (event.text === "Okay, I'll be back soon." && Number(player.getAttribute(ELENA_ESCAPE_PROGRESS)) === 20) {
+      event.after = () => {
+        player.setAttribute(ELENA_ESCAPE_PROGRESS, 22);
+        player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(player), player));
+      };
     }
   }
 
@@ -2810,7 +2838,8 @@ module.exports = function registerSongOfTheElves(api) {
     const z = event?.sourceLocation?.z;
     const up = event?.objectId === 15645 && x === 2571 && y === 3295 && z === 0;
     const down = event?.objectId === 15648 && x === 2571 && y === 3295 && z === 1;
-    if (!up && !down) return;
+    const prison = event.objectId === PRISON_ENTRY && x === 2569 && y === 3295 && z === 0;
+    if (!up && !down && !prison) return;
     // There is no walkable interaction tile beside the colliding staircase.
     // Keep the click at the player's current tile; `ladders:climb` performs the
     // same paired-floor transition as the cache staircase action.
@@ -2822,6 +2851,15 @@ module.exports = function registerSongOfTheElves(api) {
     const x = tile?.getX?.();
     const y = tile?.getY?.();
     const z = event?.player?.getLocation?.()?.getZ?.();
+    if (event.objectId === PRISON_ENTRY && x === 2569 && y === 3295 && z === 0) {
+      if (enterPrison({ ...event, location: { x, y, z } })) event.handled = true;
+      return;
+    }
+    if (event.objectId === PRISON_EXIT && x === 2564 && y === 9710 && z === 0) {
+      api.emitCustomEvent("ladders:climbUp", { player: event.player, destination: new Location(2570, 3294, 0) });
+      event.handled = true;
+      return;
+    }
     if (x !== 2571 || y !== 3295) return;
     if (event.objectId === 15645 && z === 0) {
       api.emitCustomEvent("ladders:climbUp", { player: event.player, destination: new Location(2575, 3293, 1) });
@@ -3038,6 +3076,7 @@ module.exports = function registerSongOfTheElves(api) {
     name: PAGE,
     varpId: 2305,
     varbitId: 9016,
+    varbitValue: nativeEarlyProgress,
     startedValue: STAGE.STARTED,
     completionValue: STAGE.COMPLETE,
     questPoints: 4,
@@ -3079,6 +3118,8 @@ module.exports = function registerSongOfTheElves(api) {
   });
   api.onCustomEvent("npc-dialogue:hook", onStart);
   api.persistAttribute(DISGUISE_BRIEFED);
+  api.persistAttribute(ELENA_ESCAPE_PROGRESS);
+  api.onCustomEvent("npc-dialogue:line", finishElenaPrisonLine);
   api.onCustomEvent("npc-dialogue:line", finishDisguiseBriefing);
   api.onCustomEvent("npc-dialogue:line", finishWarEndArianwynLine);
   api.onCustomEvent("npc-dialogue:line", handleLletyaConfrontationLine);

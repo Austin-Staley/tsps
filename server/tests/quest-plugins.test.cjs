@@ -12359,3 +12359,45 @@ test('Song of the Elves disguise uses real message events and continues Edmondâ€
   event.after();
   assert.equal(attrs.get('song-of-the-elves:disguise-briefed'), true);
 });
+
+
+test('Song of the Elves prison entry keeps Elena visible and cannot release her without acid', () => {
+  const { api: base, handlers } = mockApi(), runtime = require('../plugins/quests/QuestRuntime');
+  const original = runtime.startTranscript, transcripts = [], climbs = [];
+  runtime.startTranscript = (...args) => { transcripts.push(args[4]); return true; };
+  const api = new Proxy(base, { get(target, prop) {
+    if (prop === 'emitCustomEvent') return (name, event) => {
+      if (name.startsWith('ladders:')) climbs.push([name, event.destination]);
+      else target.emitCustomEvent(name, event);
+    };
+    return typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop];
+  } });
+  try {
+    require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1), I = api.core.ItemIdentifiers;
+    const attrs = new Map([['quest.song_of_the_elves.stage', 30]]), equipment = [];
+    for (const [slot, id] of [[0, I.ARDOUGNE_KNIGHT_HELM], [4, I.ARDOUGNE_KNIGHT_PLATEBODY], [7, I.STEEL_PLATELEGS]]) equipment[slot] = new api.core.Item(id);
+    const player = { getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      getEquipment: () => ({ getItems: () => equipment, get: slot => equipment[slot] }), getInventory: () => ({ getAmount: () => 0 }),
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }) };
+    const cachedElena = api.core.CacheDefinitions.getNpc(1150);
+    assert.equal(quest.varbitValue(30, player), 18);
+    assert.equal(cachedElena.transforms[quest.varbitValue(30, player)], api.core.NpcIdentifiers.ELENA_4);
+    const claim = handlers.custom.get('ladders:climb').find(h => h.name === 'claimCastleThroneStairs');
+    player.getLocation = () => new api.core.Location(2570, 3294, 0);
+    claim({ player, objectId: 35791, object: { getLocation: () => new api.core.Location(2569, 3295, 0) } });
+    assert.equal(quest.varbitValue(30, player), 20);
+    assert.deepEqual([climbs[0][1].getX(), climbs[0][1].getY()], [2565, 9709]);
+    assert.equal(api.core.RegionManager.getClipping(2565, 9709, 0, null), 0);
+    assert.equal(transcripts.at(-1), 'freeing-elena-upon-entering-the-prison');
+    const talk = handlers.npcInteractions.get('Edmond')['Talk-to'];
+    talk({ player, npcId: api.core.NpcIdentifiers.EDMOND_2, definition: { getName: () => 'Edmond' } });
+    assert.equal(quest.getStage(player), 30, 'Edmond cannot skip Elenaâ€™s chemical handoff');
+    assert.equal(transcripts.at(-1), 'making-a-knightly-disguise-talking-to-edmond-after-completing-the-disguise-talking-to-him-again-2');
+    attrs.set('song-of-the-elves:elena-escape-progress', 26);
+    assert.equal(quest.varbitValue(30, player), 26);
+    talk({ player, npcId: api.core.NpcIdentifiers.EDMOND_2, definition: { getName: () => 'Edmond' } });
+    assert.equal(quest.getStage(player), 40);
+    assert.equal(quest.varbitValue(40, player), 28);
+  } finally { runtime.startTranscript = original; }
+});
