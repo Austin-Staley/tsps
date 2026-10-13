@@ -4491,7 +4491,7 @@ test('DT2 prison relog resumes only the saved clear tile at the matching earned 
   const logout = handlers.playerLogout.find(handler => handler.name === 'handleLogout');
   login({ player });
   let area = attributes.get('desert-treasure-ii:sucellus-area');
-  assert.deepEqual([player.location.x, player.location.y, player.location.z], [5040, 6012, 2],
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], [5040, 6014, 2],
     'an account without a checkpoint uses the ordinary prison entrance');
   assert.ok(persisted.includes('desert-treasure-ii:sucellus-prison-checkpoint'));
 
@@ -4508,7 +4508,7 @@ test('DT2 prison relog resumes only the saved clear tile at the matching earned 
   logout({ player });
   attributes.set('desert-treasure-ii:sucellus-prison-progress', 40);
   login({ player });
-  assert.deepEqual([player.location.x, player.location.y, player.location.z], [5040, 6012, 2],
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], [5040, 6014, 2],
     'a checkpoint tied to older progress cannot skip a newly locked gate');
 });
 
@@ -12867,5 +12867,80 @@ test('Song of the Elves recruitment checks full disguises and pays once after th
     assert.equal(bits.get(9081),1,'both cache bakers can be recruited independently');
     assert.equal(attrs.get('quest.song_of_the_elves.resistance-members'),22);
 
+  } finally { runtime.startTranscript=original; }
+});
+
+test('Song of the Elves battles wait for the briefing and use the real headquarters basement', () => {
+  const { api, handlers } = mockApi(), runtime = require('../plugins/quests/QuestRuntime');
+  const original = runtime.startTranscript;
+  runtime.startTranscript = () => true;
+  class BattleArea {
+    constructor(bounds) { this.bounds = bounds; this.members = []; }
+    enter(mobile) { mobile.area = this; this.members.push(mobile); }
+    leave(mobile) { mobile.area = null; this.members = this.members.filter(m => m !== mobile); }
+    isDestroyed() { return false; }
+    postLeave() {}
+  }
+  api.core = { ...api.core, PrivateArea: BattleArea };
+  const spawned = [];
+  api.spawnNpc = spec => { const npc = { ...spec, setMultiCombat() {}, getArea() { return this.area; }, getId(){return this.id;}, moveTo(loc){this.x=loc.getX();this.y=loc.getY();this.z=loc.getZ();} }; spawned.push(npc); return npc; };
+  try {
+    require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1), attrs = new Map([
+      ['quest.song_of_the_elves.stage', 50], ['quest.song_of_the_elves.resistance-members', 80],
+    ]);
+    let location = new api.core.Location(2537,9745,0);
+    const player = { getUsername:()=> 'SoteBattleTest', getLocation:()=> location, moveTo:loc=> {location=loc;},
+      getAttribute:key=>attrs.get(key), setAttribute:(key,value)=>attrs.set(key,value), getArea(){return this.area;},
+      getInventory:()=>({getAmount:()=>0}), sendMessage(){}, getPacketSender:()=>new Proxy({}, {get:()=>()=>{}}) };
+    const choice=handlers.custom.get('npc-dialogue:choice').find(h=>h.name==='handleDialogueChoice');
+    choice({player,option:"I'm ready."});
+    assert.equal(spawned.length,0,'the mobs wait for the final briefing page');
+    const line={player,text:"This is it! The plague of West Ardougne has gone on for long enough, today is the day of plague's end!"};
+    handlers.custom.get('npc-dialogue:line').find(h=>h.name==='finishArdougneBattleBriefing')(line);
+    assert.equal(spawned.length,0);line.after();
+    const N=api.core.NpcIdentifiers;
+    const enemies=()=>spawned.filter(n=>[N.MOURNER_2,N.MOURNER_3,N.MOURNER_4,N.KNIGHT_OF_ARDOUGNE_6,N.KNIGHT_OF_ARDOUGNE_7,N.PALADIN_5,N.PALADIN_6].includes(n.id));
+    assert.equal(enemies().length,10);
+    assert.equal(quest.varbitValue(60,player),44);
+    const ids=enemies().map(n=>n.id);
+    assert.equal(ids.filter(id=>id===N.MOURNER_2).length,3);
+    assert.equal(ids.filter(id=>id===N.MOURNER_3).length,5);
+    assert.equal(ids.filter(id=>id===N.MOURNER_4).length,2);
+    for(const n of enemies())assert.equal(api.core.RegionManager.getClipping(n.x,n.y,n.z,null),0,'spawn on a real clear headquarters tile');
+    const death=handlers.npcDeath.find(h=>h.name==='handleBattleDeath');
+    for(const npc of enemies())death({npc,killer:player});
+    assert.equal(enemies().length,10,'the basement wave does not spawn before the trapdoor is used');
+    assert.equal(attrs.get('quest.song_of_the_elves.west-battle-kills'),10);
+    assert.equal(quest.varbitValue(60,player),45);
+    const trap={player,objectId:api.core.ObjectIdentifiers.TRAPDOOR_95,definition:{getName:()=> 'Trapdoor'},
+      option:'Climb-down',location:{x:2542,y:3327,z:0}};
+    handlers.custom.get('ladders:climb').find(h=>h.name==='enterArdougneBattleBasement')(trap);
+    assert.equal(trap.handled,true,'the headquarters trapdoor claims the actual ladder dispatch');
+    assert.equal(enemies().length,10,'the basement warning precedes combat');
+    const warning={player,npcId:N.ESSYLLT_2,text:"You! I knew you were trouble! Well don't worry, Lord Iorwerth will learn of your betrayal!"};
+    handlers.custom.get('npc-dialogue:line').find(h=>h.name==='finishHeadquartersWarning')(warning);
+    assert.equal(enemies().length,10);warning.after();
+    assert.equal(enemies().length,21);
+    const basement=enemies().slice(10);
+    assert.equal(basement.filter(n=>n.id===N.MOURNER_2).length,3);
+    assert.equal(basement.filter(n=>n.id===N.MOURNER_3).length,4);
+    assert.equal(basement.filter(n=>n.id===N.MOURNER_4).length,4);
+    for(const n of basement){assert.ok(n.y>4600);assert.equal(api.core.RegionManager.getClipping(n.x,n.y,n.z,null),0);}
+    for(const npc of basement)death({npc,killer:player});
+    assert.equal(attrs.get('quest.song_of_the_elves.west-battle-kills'),21);
+    assert.equal(quest.varbitValue(70,player),46);
+    assert.equal(location.getY(),9745,'the resistance returns to the real hideout');
+    const eastLine={player,text:"Let's show him what it means to cross the people of Ardougne!"};
+    handlers.custom.get('npc-dialogue:line').find(h=>h.name==='finishArdougneBattleBriefing')(eastLine);
+    eastLine.after();
+    const east=enemies().slice(21);
+    assert.equal(east.length,15);
+    assert.equal(east.filter(n=>n.z===1).length,4,'the knights and paladins upstairs are on their real plane');
+    for(const n of east)assert.equal(api.core.RegionManager.getClipping(n.x,n.y,n.z,null),0,'castle mobs stand on cache floor');
+    assert.equal(quest.varbitValue(70,player),48);
+    const elena=spawned.find(n=>n.id===N.ELENA_3&&n.area===player.area);
+    assert.ok(elena,'Elena accompanies the resistance into the battle');
+    assert.equal(player.area.canAttack(player,elena),false,'named companions cannot die to player attacks');
   } finally { runtime.startTranscript=original; }
 });

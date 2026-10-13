@@ -20,6 +20,8 @@ module.exports = function registerSongOfTheElves(api) {
   const INCITEMENTS = "quest.song_of_the_elves.incitements";
   const RESISTANCE_MEMBERS = "quest.song_of_the_elves.resistance-members";
   const RESISTANCE_BRIEFING = "quest.song_of_the_elves.resistance-briefing";
+  const HEADQUARTERS_WARNING_HEARD = "song-of-the-elves:headquarters-warning-heard";
+  const BATTLE_TRAPDOOR = ObjectIdentifiers.TRAPDOOR_95; // mourning_hideout_trap_door_battle
   const WEST_BATTLE_KILLS = "quest.song_of_the_elves.west-battle-kills";
   const EAST_BATTLE_KILLS = "quest.song_of_the_elves.east-battle-kills";
   const BATTLE_AREA = "quest.song_of_the_elves.battle-area";
@@ -333,9 +335,9 @@ module.exports = function registerSongOfTheElves(api) {
   class ArdougneBattleArea extends PrivateArea {
     constructor(battle, owner) {
       const bounds = battle === "west"
-        ? new Boundary(2519, 2569, 3270, 3339, 0)
-        : new Boundary(2568, 2615, 3268, 3340, 0);
-      super([bounds]);
+        ? [new Boundary(2504, 2568, 3256, 3336, 0), new Boundary(2024, 2056, 4616, 4664, 0)]
+        : [new Boundary(2568, 2615, 3268, 3340, 0), new Boundary(2568, 2615, 3268, 3340, 1)];
+      super(bounds);
       this.battle = battle;
       this.owner = owner;
     }
@@ -343,6 +345,7 @@ module.exports = function registerSongOfTheElves(api) {
     canAttack(attacker, target) {
       const attackerInBattle = attacker?.getArea?.() === this;
       const targetInBattle = target?.getArea?.() === this;
+      if ([NpcIdentifiers.ELENA_3, NpcIdentifiers.COUNCILLOR_HALGRIVE_3, NpcIdentifiers.ESSYLLT_2].includes(target?.getId?.())) return false;
       if (attackerInBattle || targetInBattle) return attackerInBattle && targetInBattle;
       return null;
     }
@@ -712,7 +715,15 @@ module.exports = function registerSongOfTheElves(api) {
     }
   }
   function onPlayerLogout(event) {
-    if (event?.player) clearWarEndActors(event.player);
+    const player = event?.player;
+    if (!player) return;
+    clearWarEndActors(player);
+    const area = player.getAttribute(BATTLE_AREA);
+    if (area instanceof ArdougneBattleArea && !area.isDestroyed()) {
+      area.leave(player, true);
+      player.setAttribute(BATTLE_AREA, null);
+      player.moveTo(new Location(2537, 9745, 0));
+    }
   }
   function onAction(event) {
     finishIncitement(event);
@@ -1238,6 +1249,10 @@ module.exports = function registerSongOfTheElves(api) {
       return startTranscript(api, player, event.npcId, PAGE, "starting-out-talking-to-edmond");
     }
     if (quest.isComplete(player)) return false;
+    if (player.getArea?.() instanceof ArdougneBattleArea && ["elena", "councillor halgrive"].includes(npcName)) {
+      player.sendMessage("Defeat the enemy soldiers before continuing with the resistance.");
+      return true;
+    }
     if (currentChapter(player) === 15 && npcName === "mawrth") {
       const children = player.getAttribute(LLETYA_CHILDREN) ?? {};
       if (!children.eoin || !children.iona) {
@@ -1363,7 +1378,7 @@ module.exports = function registerSongOfTheElves(api) {
       player.sendMessage("Lord Ieuan guides you back to Lletya. You can return to the library when you are ready.");
       return true;
     }
-    if (npcName === "elena" && currentChapter(player) === 4) {
+    if (["elena", "councillor halgrive"].includes(npcName) && [4, 5].includes(currentChapter(player))) {
       const enoughSupport = resistanceSupport(player) >= 80;
       return startTranscript(api, player, event.npcId, PAGE, enoughSupport
         ? "vive-la-ardougne-r-volution-talking-to-elena-or-councillor-halgrive"
@@ -1796,15 +1811,6 @@ module.exports = function registerSongOfTheElves(api) {
         event.player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(event.player), event.player));
       }
       return;
-    }
-    if (event.option === "I'm ready." && currentChapter(event.player) === 4 && resistanceSupport(event.player) >= 80) {
-      quest.setStage(event.player, STAGE.STARTED + 50);
-      event.player.setAttribute(WEST_BATTLE_KILLS, 0);
-      startBattle(event.player, "west");
-    } else if (event.option === "I'm ready." && currentChapter(event.player) === 6 &&
-      (Number(event.player.getAttribute(WEST_BATTLE_KILLS)) || 0) >= 21) {
-      event.player.setAttribute(EAST_BATTLE_KILLS, 0);
-      startBattle(event.player, "east");
     }
     const chemical = {
       "The thin blue liquid.": ItemIdentifiers.BLUE_LIQUID,
@@ -2438,46 +2444,105 @@ module.exports = function registerSongOfTheElves(api) {
     player.sendMessage("You can return through the cave by the camp and face the Fragment again.");
   }
 
-  function spawnBattleWave(player, area, wave) {
-    const westWaveOne = Array.from({ length: 10 }, (_, i) => ({
-      id: NpcIdentifiers.MOURNER_2,
-      x: 2531 + (i % 5) * 2,
-      y: 3297 + Math.floor(i / 5) * 3,
-    }));
-    const westWaveTwo = Array.from({ length: 11 }, (_, i) => ({
-      id: i < 6 ? NpcIdentifiers.MOURNER_3 : NpcIdentifiers.MOURNER_4,
-      x: 2530 + (i % 4) * 2,
-      y: 3311 + Math.floor(i / 4) * 2,
-    }));
-    const eastWave = Array.from({ length: 15 }, (_, i) => ({
-      id: i < 8 ? NpcIdentifiers.PALADIN_5 : (i < 12 ? NpcIdentifiers.PALADIN_6 : NpcIdentifiers.KNIGHT_OF_ARDOUGNE),
-      x: 2581 + (i % 5) * 2,
-      y: 3290 + Math.floor(i / 5) * 3,
-    }));
-    const waveNpcs = area.battle === "west" ? (wave === 0 ? westWaveOne : westWaveTwo) : eastWave;
-    let target = 0;
-    for (const spawn of waveNpcs) {
-      const npc = api.spawnNpc({ ...spawn, z: 0, wanderRadius: 2, owner: player, ownerOnly: true });
-      if (npc) {
-        npc.setMultiCombat?.(true);
-        area.enter(npc);
-        target++;
-      }
+  function finishArdougneBattleBriefing(event) {
+    const player = event?.player;
+    if (!player) return;
+    const chapter = currentChapter(player);
+    if ([4, 5].includes(chapter) && resistanceSupport(player) >= 80 &&
+      event.text?.startsWith("This is it! The plague of West Ardougne")) {
+      event.after = () => {
+        setChapter(player, 5);
+        startBattle(player, "west");
+      };
+    } else if (chapter === 6 && Number(player.getAttribute(WEST_BATTLE_KILLS)) >= 21 &&
+      event.text === "Let's show him what it means to cross the people of Ardougne!") {
+      event.after = () => startBattle(player, "east");
     }
-    battleInstances.set(area, { player, battle: area.battle, wave, kills: 0, target });
   }
-
+  function spawnBattleWave(player, area, wave) {
+    const ground = [[2544,3314],[2546,3314],[2548,3314],[2550,3314],
+      [2544,3316],[2546,3316],[2548,3316],[2550,3316],[2543,3318],[2545,3318]];
+    const basement = [[2035,4635],[2037,4635],[2039,4635],[2041,4635],[2043,4635],
+      [2035,4636],[2037,4636],[2039,4636],[2041,4636],[2043,4636],[2040,4637]];
+    const west = (wave === 0 ? ground : basement).map(([x,y], i) => ({ x, y, z: 0,
+      id: i < 3 ? NpcIdentifiers.MOURNER_2 : i < (wave === 0 ? 8 : 7) ? NpcIdentifiers.MOURNER_3 : NpcIdentifiers.MOURNER_4 }));
+    const east = [
+      ...[[2581,3286],[2582,3286],[2583,3286],[2582,3287],[2584,3288]].map(([x,y])=>({id:NpcIdentifiers.KNIGHT_OF_ARDOUGNE_6,x,y,z:0})),
+      ...[[2585,3289],[2586,3290],[2587,3290],[2586,3291],[2587,3291],[2588,3291]].map(([x,y])=>({id:NpcIdentifiers.PALADIN_5,x,y,z:0})),
+      ...[[2576,3293],[2577,3293]].map(([x,y])=>({id:NpcIdentifiers.KNIGHT_OF_ARDOUGNE_7,x,y,z:1})),
+      ...[[2578,3293],[2578,3294]].map(([x,y])=>({id:NpcIdentifiers.PALADIN_6,x,y,z:1})),
+    ];
+    const waveNpcs = area.battle === "west" ? west : east;
+    const enemies = new Set();
+    for (const spawn of waveNpcs) {
+      const npc = api.spawnNpc({ ...spawn, wanderRadius: 0, owner: player, ownerOnly: true });
+      if (!npc) continue;
+      npc.setMultiCombat?.(true);
+      area.enter(npc);
+      enemies.add(npc);
+    }
+    const companions = battleInstances.get(area)?.companions ?? [];
+    battleInstances.set(area, { player, battle: area.battle, wave, kills: 0, target: waveNpcs.length, enemies, companions });
+  }
+  function enterArdougneBattleBasement(event) {
+    const player = event?.player, area = player?.getArea?.(), state = area && battleInstances.get(area);
+    if (!(area instanceof ArdougneBattleArea) || area.battle !== "west" || state?.player !== player ||
+      (event.objectId !== BATTLE_TRAPDOOR && event.definition?.getId?.() !== BATTLE_TRAPDOOR &&
+        !api.core.CacheDefinitions.getObject(event.objectId)?.transforms?.includes(BATTLE_TRAPDOOR))) return false;
+    event.handled = true;
+    if (Number(player.getAttribute(WEST_BATTLE_KILLS)) < 10) {
+      player.sendMessage("Defeat the mourners on the ground floor before heading downstairs.");
+      return true;
+    }
+    api.emitCustomEvent("ladders:climbDown", { player, destination: new Location(2039, 4637, 0) });
+    if (state.wave === 0 && !state.awaitingBasement) beginHeadquartersBasement(player, area);
+    return true;
+  }
+  function beginHeadquartersBasement(player, area) {
+    let state = battleInstances.get(area);
+    if (!state) {
+      state = { player, battle: "west", wave: 0, kills: 10, target: 10, enemies: new Set(), companions: [] };
+      battleInstances.set(area, state);
+    }
+    for (const [i, npc] of state.companions.entries()) npc.moveTo(new Location(2044, 4636 - i, 0));
+    if (player.getAttribute(HEADQUARTERS_WARNING_HEARD) === true) return spawnBattleWave(player, area, 1);
+    state.awaitingBasement = true;
+    const warning = api.spawnNpc({ id: NpcIdentifiers.ESSYLLT_2, x: 2043, y: 4637, z: 0,
+      wanderRadius: 0, owner: player, ownerOnly: true });
+    if (warning) area.enter(warning);
+    state.warning = warning;
+    startTranscript(api, player, NpcIdentifiers.ESSYLLT_2, PAGE, "battle-of-two-ardougnes-west-ardougne-upon-entering-the-basement");
+  }
+  function finishHeadquartersWarning(event) {
+    const player = event?.player, area = player?.getArea?.(), state = area && battleInstances.get(area);
+    if (!state?.awaitingBasement || event.npcId !== NpcIdentifiers.ESSYLLT_2 ||
+      !event.text?.includes("Lord Iorwerth will learn of your betrayal!")) return;
+    event.after = () => {
+      player.setAttribute(HEADQUARTERS_WARNING_HEARD, true);
+      if (state.warning) api.removeNpc(state.warning);
+      spawnBattleWave(player, area, 1);
+    };
+  }
   function startBattle(player, battle) {
     const existing = player.getAttribute(BATTLE_AREA);
     if (existing && existing.isDestroyed?.() !== true) return;
     const area = new ArdougneBattleArea(battle, player.getUsername?.());
     player.setAttribute(BATTLE_AREA, area);
     area.enter(player);
-    const start = battle === "west" ? new Location(2529, 3293, 0) : new Location(2579, 3286, 0);
+    const wave = battle === "west" && Number(player.getAttribute(WEST_BATTLE_KILLS)) >= 10 ? 1 : 0;
+    const start = battle === "west" ? (wave === 0 ? new Location(2547,3314,0) : new Location(2039,4637,0)) : new Location(2583,3287,0);
     player.moveTo(start);
-    spawnBattleWave(player, area, 0);
+    if (wave === 1) beginHeadquartersBasement(player, area);
+    else spawnBattleWave(player, area, wave);
+    const state = battleInstances.get(area);
+    const spots = battle === "east" ? [[2587,3292],[2588,3292]] : wave === 1 ? [[2044,4636],[2044,4635]] : [[2546,3313],[2548,3313]];
+    for (const [i, id] of [NpcIdentifiers.ELENA_3, NpcIdentifiers.COUNCILLOR_HALGRIVE_3].entries()) {
+      const npc = api.spawnNpc({ id, x: spots[i][0], y: spots[i][1], z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
+      if (npc) { area.enter(npc); state.companions.push(npc); }
+    }
+    player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(player), player));
     player.sendMessage(battle === "west"
-      ? "The resistance storms the Mourner headquarters. Defeat the mourners on the ground floor."
+      ? (wave === 0 ? "The resistance storms the Mourner headquarters. Defeat the mourners on the ground floor." : "The resistance returns to the headquarters basement. Defeat the remaining mourners.")
       : "The resistance storms East Ardougne. Defeat the paladins and knights protecting the castle.");
   }
 
@@ -2491,13 +2556,14 @@ module.exports = function registerSongOfTheElves(api) {
     if (!player || !npc || quest.isComplete(player)) return;
     const area = npc.getArea?.();
     const instance = area && battleInstances.get(area);
-    if (instance && instance.player === player) {
+    if (instance && instance.player === player && instance.enemies.delete(npc)) {
       instance.kills++;
       if (instance.kills < instance.target) return;
       if (instance.battle === "west" && instance.wave === 0) {
         player.sendMessage("The mourners on the ground floor have fallen. Continue into the basement.");
+        player.setAttribute(WEST_BATTLE_KILLS, 10);
+        player.getPacketSender().sendVarbit(9016, 45);
         startTranscript(api, player, 0, PAGE, "battle-of-two-ardougnes-west-ardougne-after-killing-10-mourners-on-the-ground-level");
-        spawnBattleWave(player, area, 1);
         return;
       }
       if (instance.battle === "west") {
@@ -2507,7 +2573,7 @@ module.exports = function registerSongOfTheElves(api) {
         startTranscript(api, player, 0, PAGE, "battle-of-two-ardougnes-west-ardougne-after-killing-11-mourners-in-the-basement");
         area.leave(player, false);
         player.setAttribute(BATTLE_AREA, null);
-        player.moveTo(new Location(2535, 3304, 0));
+        player.moveTo(new Location(2537, 9745, 0));
         return;
       }
       player.setAttribute(EAST_BATTLE_KILLS, 15);
@@ -2516,7 +2582,7 @@ module.exports = function registerSongOfTheElves(api) {
       startTranscript(api, player, 0, PAGE, "battle-of-two-ardougnes-east-ardougne-after-killing-15-paladins-and-knights");
       area.leave(player, false);
       player.setAttribute(BATTLE_AREA, null);
-      player.moveTo(new Location(2585, 3295, 0));
+      player.moveTo(new Location(2583, 3287, 0));
       return;
     }
   }
@@ -2914,6 +2980,8 @@ module.exports = function registerSongOfTheElves(api) {
     }
     if (value === 40) return player?.getAttribute(RESISTANCE_BRIEFING) === true ? 32 : 28;
     if (value === 50) return 40;
+    if (value === 60) return Number(player?.getAttribute(WEST_BATTLE_KILLS)) >= 10 ? 45 : 44;
+    if (value === 70) return player?.getAttribute(BATTLE_AREA)?.battle === "east" ? 48 : 46;
     return value;
   }
   function elenaEscapeReminder(steps) {
@@ -3236,6 +3304,8 @@ module.exports = function registerSongOfTheElves(api) {
   api.persistAttribute(ELENA_ESCAPE_PROGRESS);
   api.onCustomEvent("npc-dialogue:line", finishElenaPrisonLine);
   api.onCustomEvent("npc-dialogue:line", finishResistanceBriefing);
+  api.onCustomEvent("npc-dialogue:line", finishArdougneBattleBriefing);
+  api.onCustomEvent("npc-dialogue:line", finishHeadquartersWarning);
   api.onCustomEvent("npc-dialogue:line", finishDisguiseBriefing);
   api.onCustomEvent("npc-dialogue:line", finishWarEndArianwynLine);
   api.onCustomEvent("npc-dialogue:line", handleLletyaConfrontationLine);
@@ -3279,6 +3349,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.persistAttribute(RESISTANCE_MEMBERS);
   api.persistAttribute(RESISTANCE_BRIEFING);
   api.persistAttribute(WEST_BATTLE_KILLS);
+  api.persistAttribute(HEADQUARTERS_WARNING_HEARD);
   api.persistAttribute(EAST_BATTLE_KILLS);
   api.persistAttribute(LATE_CHAPTER);
   api.persistAttribute(WAR_END_ARIANWYN_DONE);
@@ -3316,6 +3387,8 @@ module.exports = function registerSongOfTheElves(api) {
   api.onObjectInteraction("Cabinet", { Search: searchElenaCabinet });
   api.onObjectInteraction("Bed", { Search: searchRehnisonBed });
   api.onObjectInteraction("Trapdoor", { Open: enterResistanceBasement, "Climb-down": enterResistanceBasement });
+  api.onObjectInteraction("Trapdoor", { "Climb-down": enterArdougneBattleBasement });
+  api.onCustomEvent("ladders:climb", enterArdougneBattleBasement);
   api.onObjectInteraction("Staircase", { "Climb-down": enterPrison });
   api.onObjectRoute(routeCastleThroneStairs);
   api.onWalkRoute(routeToLadyHefin);
