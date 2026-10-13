@@ -79,7 +79,7 @@ export class WebgpuUiPresentation {
             this.updateHudFx(timeMs, deltaMs, bufW, bufH);
         } else {
             // Login-like states own the frame: route input, draw the title, black the world out.
-            if (!osrsClient.scenePreviewEnabled) this.handleLoginInput();
+            if (!osrsClient.scenePreviewEnabled && !osrsClient.editorLaunching) this.handleLoginInput();
             this.drawLoginSurface(metrics, bufW, bufH);
             this.drawLoadingMessage(timeMs, deltaMs, this.loginCtx);
         }
@@ -174,7 +174,10 @@ export class WebgpuUiPresentation {
         const loginState = osrsClient.loginState;
         const inputManager = osrsClient.inputManager;
 
-        const editorLoading = getEditModeSceneLoadingStatus(osrsClient);
+        const editorLoading = getEditModeSceneLoadingStatus(osrsClient) ??
+            (osrsClient.editorLaunching && osrsClient.gameState === GameState.LOGIN_SCREEN
+                ? "Loading world settings"
+                : undefined);
         if (osrsClient.scenePreviewEnabled && !editorLoading) {
             // Dev preview replaces the title with the world; nothing to cover it with.
             this.hide(this.loginCanvas);

@@ -23,6 +23,7 @@ async function main() {
     let reloaded: number[] = [];
     const canvas = document.querySelector("canvas")!;
     const client: any = {
+        cameraSpeed: 2,
         camera: new Camera(3090, -10, 3520, 210, 0),
         tileHighlightManager: new TileHighlightManager(),
         gameState: GameState.LOGIN_SCREEN,
@@ -43,15 +44,18 @@ async function main() {
     };
     renderer.interactionHost = new OverlayHost(renderer);
     renderer.editorOverlays = new EditorOverlays(renderer);
+    renderer.interactionHost.getEffectivePlaneForTile = (_x: number, _y: number, plane: number) => plane + 1;
     client.renderer = renderer;
     const plugin = installEditMode(client);
     assert.equal(plugin.getConfig().enabled, true, "native host installs without WebGL draw hooks or pending-loc state");
     await new Promise(resolve => setTimeout(resolve, 0));
     intervals[0]();
+    assert.equal(client.cameraSpeed, 2, "editor leaves normal camera speed unchanged");
     assert.equal(client.scenePreviewEnabled, true, "?edit=1 enters the native scene preview");
     assert.equal(plugin.getState().scenePreview, true);
     plugin.setConfig({ heightLevel: 2, renderAllHeightLevels: false });
     assert.equal(renderer.interactionHost.getPlayerRawPlane(), 2);
+    assert.equal(renderer.interactionHost.getEffectivePlaneForTile(3090, 3520, 2), 2, "editor highlights use the chosen physical level, including bridge tiles");
     assert.equal(renderer.interactionHost.getRoofPlaneLimit(), 2);
     plugin.setConfig({ renderAllHeightLevels: true });
     assert.equal(renderer.interactionHost.getRoofPlaneLimit(), 3);
@@ -65,6 +69,8 @@ async function main() {
     plugin.setConfig({ active: false });
     assert.equal(client.scenePreviewEnabled, false, "leaving editor restores normal rendering");
     assert.equal(renderer.interactionHost.getPlayerRawPlane(), 0);
+    assert.equal(renderer.interactionHost.getEffectivePlaneForTile(3090, 3520, 2), 3, "leaving editor restores game plane resolution");
+    assert.equal(client.cameraSpeed, 2, "leaving editor restores the previous camera speed");
     renderer.editorOverlays.dispose();
     renderer.interactionHost.dispose();
     globalThis.fetch = originalFetch;

@@ -57,6 +57,7 @@ import {
 import type { OsrsClient } from "../../OsrsClient";
 import { createBrowserEditModePluginPersistence } from "./BrowserEditModePluginPersistence";
 import { detectRectangularBuilding, type DetectedBuilding } from "./BuildingDetector";
+import { pickEditorTile, type EditorPickMap } from "./EditorTilePicking";
 import { EditModePlugin } from "./EditModePlugin";
 import { mountEditorUi } from "./EditorUi";
 import { EditorWorldMap } from "./EditorWorldMap";
@@ -534,6 +535,7 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
     const plugin = new EditModePlugin(
         createBrowserEditModePluginPersistence("osrs.plugin.edit_mode.v1"),
     );
+    client.editorCameraInput = (deltaTime) => plugin.handleCameraInput(client.camera, deltaTime);
     const editorWorldMap = new EditorWorldMap(
         client,
         (tile) => frameCameraOnTile(client, tile, false),
@@ -561,6 +563,7 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
         | {
               renderer: TerrainHost;
               frame: number;
+              plane: number;
               x: number;
               y: number;
               pick: { tile: EditModeTile; target?: InteractHighlightTarget } | undefined;
@@ -988,12 +991,18 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
             tileEndY: endY,
         };
     };
+    const getEditorPointerTile = (renderer: TerrainHost) => {
+        const ray = renderer.screenToRay(client.inputManager.mouseX, client.inputManager.mouseY);
+        return ray ? pickEditorTile(ray, plugin.getConfig().heightLevel,
+            renderer.mapManager.visibleMaps.slice(0, renderer.mapManager.visibleMapCount)) : undefined;
+    };
     const resolveEditScenePick = (renderer: TerrainHost) => {
         const x = client.inputManager.mouseX;
         const y = client.inputManager.mouseY;
         if (
             editorPickCache?.renderer === renderer &&
             editorPickCache.frame === renderer.currentFrameCount &&
+            editorPickCache.plane === plugin.getConfig().heightLevel &&
             editorPickCache.x === x &&
             editorPickCache.y === y
         ) {
@@ -1047,7 +1056,7 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
             }
         }
         if (!pick && plugin.getConfig().showMapIcons) {
-            const tile = renderer.computeTileAt(x, y);
+            const tile = getEditorPointerTile(renderer);
             const plane = plugin.getConfig().heightLevel;
             const iconTarget = tile && mapIconTargets.get(`${tile.tileX}:${tile.tileY}:${plane}`);
             if (iconTarget) {
@@ -1057,7 +1066,7 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
                 };
             }
         }
-        editorPickCache = { renderer, frame: renderer.currentFrameCount, x, y, pick };
+        editorPickCache = { renderer, frame: renderer.currentFrameCount, plane: plugin.getConfig().heightLevel, x, y, pick };
         return pick;
     };
     const resolvePointerTarget = () => {
@@ -1092,6 +1101,7 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
         if (heightLevelRenderer === renderer) return;
         heightLevelRenderer = renderer;
         const getBasePlane = renderer.getPlayerRawPlane.bind(renderer);
+        const getBaseEffectivePlane = renderer.getEffectivePlaneForTile.bind(renderer);
         const getBaseRoofPlaneLimit = renderer.getRoofPlaneLimit.bind(renderer);
         const shouldRenderNpc = renderer.shouldRenderNpcFromMap.bind(renderer);
         const shouldRenderPlayer = renderer.shouldRenderPlayerIndex.bind(renderer);
@@ -1101,6 +1111,8 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
             const state = plugin.getState();
             return state.config.enabled && (state.config.active || state.scenePreview);
         };
+        renderer.getEffectivePlaneForTile = (x, y, plane) =>
+            isEditing() ? plane : getBaseEffectivePlane(x, y, plane);
         renderer.getPlayerRawPlane = () =>
             isEditing() ? plugin.getConfig().heightLevel : getBasePlane();
         renderer.getRoofPlaneLimit = () =>
@@ -1324,17 +1336,8 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
         getPointerTile: () => {
             const renderer = terrainHost(client);
             if (renderer) ensureHeightLevelRenderer(renderer);
-            // Fresh terrain fallback: hoveredTile can lag a frame after camera movement.
-            const tile =
-                renderer?.computeTileAt?.(client.inputManager.mouseX, client.inputManager.mouseY) ??
-                client.hoveredTile;
-            if (tile) {
-                return {
-                    tileX: tile.tileX | 0,
-                    tileY: tile.tileY | 0,
-                    plane: plugin.getConfig().heightLevel,
-                };
-            }
+            const tile = renderer && getEditorPointerTile(renderer);
+            if (tile) return tile;
             // Terrain picking has gaps where a loc is the only clickable surface.
             return renderer ? resolveEditScenePick(renderer)?.tile : undefined;
         },
@@ -1643,16 +1646,22 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
         loadWorldDefinition,
         spawnNpc: (npcTypeId, tile, rotation) => spawnEditorNpc(client, npcTypeId, tile, rotation),
         setFreeCamera: (enabled) => {
-            // The client already flies the camera with WASD/QE whenever it is
-            // not following the player (GameRenderer.handleKeyInput).
-            // ponytail: map streaming still centres on the player, so flying
-            // past the loaded radius shows empty space.
+            if (enabled) {
+                for (const code of ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]) {
+                    client.inputManager.keys?.delete(code);
+                }
+                client.stopKeyboardMovement?.(true);
+            }
             client.followPlayerCamera = !enabled;
         },
         setScenePreview: (enabled, spawn) => {
             client.scenePreviewEnabled = enabled;
             client.scenePreviewLoadingStartedAt = enabled ? performance.now() : undefined;
-            if (!enabled) return;
+            if (!enabled) {
+                client.editorLaunching = false;
+                document.body.classList.remove("map-editor-launching");
+                return;
+            }
             // Logged out the camera still holds the title-screen angles and sits
             // 26 tiles up with nothing framed, which reads as a skewed world.
             frameCameraOnTile(
@@ -1912,8 +1921,11 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
             }, 100);
         }
         const active = !loading && state.config.enabled && (state.scenePreview || state.config.active);
-        if (active && !teardownEditorUi) teardownEditorUi = mountEditorUi(plugin);
-        else if (!active && teardownEditorUi) {
+        if (active && !teardownEditorUi) {
+            teardownEditorUi = mountEditorUi(plugin);
+            client.editorLaunching = false;
+            document.body.classList.remove("map-editor-launching");
+        } else if (!active && teardownEditorUi) {
             teardownEditorUi();
             teardownEditorUi = undefined;
         }
@@ -1949,20 +1961,15 @@ type TerrainHost = {
     overlayManager?: { add(overlay: Overlay): unknown };
     mapManager: {
         visibleMapCount: number;
-        visibleMaps: Array<{
+        visibleMaps: Array<EditorPickMap & {
             mapX: number;
             mapY: number;
-            getRenderBaseWorldX?(): number;
-            getRenderBaseWorldY?(): number;
         }>;
     };
     screenToRay(mouseX: number, mouseY: number): Ray | null;
-    computeTileAt(
-        mouseX: number,
-        mouseY: number,
-    ): { tileX: number; tileY: number; plane: number } | undefined;
     sceneRaycaster: Pick<SceneRaycaster, "raycast"> | null;
     getPlayerRawPlane(): number;
+    getEffectivePlaneForTile(x: number, y: number, plane: number): number;
     getRenderCullTile(): { x: number; y: number };
     getFrameRenderDistanceTiles(): number;
     isMapWithinRenderDistance(
