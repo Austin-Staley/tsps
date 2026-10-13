@@ -7,6 +7,7 @@ import { MapManager } from "../game/MapManager";
 import { Cs2Vm } from "../rs/cs2/Cs2Vm";
 import { Script } from "../rs/cs2/Script";
 import { InputManager } from "../game/InputManager";
+import { ClientState } from "../game/ClientState";
 import { dispatchMenuAction, setMenuEventHooks } from "../ui/menu/menuEvents";
 
 const vars = new VarManager({ load: () => ({ baseVar: 12, startBit: 0, endBit: 1 }) } as any);
@@ -63,6 +64,32 @@ const removeFilter = input.addInputFilter(() => true);
 const key = { code: "KeyW", key: "w", preventDefault() {} } as KeyboardEvent;
 input.onKeyDown(key); assert.equal(input.isKeyDown("KeyW"), false);
 removeFilter(); input.onKeyDown(key); assert.equal(input.isKeyDown("KeyW"), true);
+
+for (const consumer of ["none", "filter", "handler"] as const) {
+    for (const [code, key, keyCode, osrsCode] of [
+        ["ShiftLeft", "Shift", 16, 81], ["ControlLeft", "Control", 17, 82],
+        ["KeyW", "w", 87, 33], ["ArrowLeft", "ArrowLeft", 37, 96],
+    ] as const) {
+        const releaseInput = new InputManager();
+        const press = { code, key, keyCode, shiftKey: keyCode === 16, preventDefault() {} } as KeyboardEvent;
+        releaseInput.onKeyDown(press);
+        assert.equal(releaseInput.isKeyDown(code), true);
+        assert.equal(releaseInput.isKeyHeld(osrsCode), true);
+        let consumed = 0;
+        if (consumer === "filter") releaseInput.addInputFilter(type => {
+            if (type !== "keyReleased") return false;
+            consumed++; return true;
+        });
+        if (consumer === "handler") releaseInput.addKeyHandler({ onKeyUp: () => { consumed++; return true; } });
+        (releaseInput as any).onKeyUp({ ...press, shiftKey: false });
+        assert.equal(consumed, consumer === "none" ? 0 : 1);
+        assert.equal(releaseInput.isKeyDown(code), false, `${consumer}: camera key released`);
+        assert.equal(releaseInput.isKeyHeld(osrsCode), false, `${consumer}: CS2 key released`);
+        assert.equal(releaseInput.keyArray[osrsCode], 0);
+        assert.equal(releaseInput.shiftDown, false);
+        if (keyCode === 16 || keyCode === 17) assert.equal(ClientState.isKeybindPressed(osrsCode), false);
+    }
+}
 
 const action = { param0: 0, param1: 0, opcode: 57, identifier: 1, itemId: -1, option: "Click", target: "", screenX: 0, screenY: 0 };
 let clicks = 0, native = 0;
