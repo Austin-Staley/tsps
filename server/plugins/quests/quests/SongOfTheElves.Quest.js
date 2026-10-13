@@ -2489,6 +2489,7 @@ module.exports = function registerSongOfTheElves(api) {
     }
     inventory.deleteNumber(ItemIdentifiers.EXPLOSIVE_POTION, 1);
     player.setAttribute(CAMP_HOLES, placed | (1 << index));
+    player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(player), player));
     const object = event.object;
     const location = object?.getLocation?.() ?? new Location(x, y, 0);
     if (object) ObjectManager.deregister(object, true);
@@ -2513,6 +2514,7 @@ module.exports = function registerSongOfTheElves(api) {
     state.nextWaveAt = World.getProcessCycle();
     state.lastCycle = -1;
     player.setAttribute(CAMP_DEFENSE, state.endsAt);
+    player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(player), player));
     player.sendMessage("Iorwerth's forces attack the barricade. Hold the camp for four minutes; draw their warriors and archers away from the barrier.");
     spawnCampAttacker(area, state);
   }
@@ -2542,6 +2544,7 @@ module.exports = function registerSongOfTheElves(api) {
     for (const npc of state.attackers) api.removeNpc(npc);
     state.attackers.clear();
     state.player.setAttribute(CAMP_DEFENSE, 0);
+    state.player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(state.player), state.player));
     state.player.sendMessage("The dwarves finish sealing the tunnel. The camp has held for four minutes.");
     state.rebel = spawnCampNpc(area, NpcIdentifiers.REBEL_WARRIOR_8, 2444, 6096);
     state.player.sendMessage("Elena has an urgent message after the siege. Speak to her.");
@@ -3535,11 +3538,18 @@ module.exports = function registerSongOfTheElves(api) {
       return 142;
     }
     if (value === 170) return (Number(player?.getAttribute(RECRUITED_ELDERS)) & 12) === 12 ? 164 : 160;
-    if (value === 180) return 166;
+    if (value === 180) {
+      const holes = Number(player?.getAttribute(CAMP_HOLES)) || 0;
+      const placed = (holes & 127).toString(2).replace(/0/g, "").length;
+      return 166 + placed * 2;
+    }
     if (value === 190) {
       const late = Number(player?.getAttribute(LATE_CHAPTER)) || 0;
       if (late === 19) return player?.getAttribute(FRAGMENT_DEFEATED) === true ? 188 : 186;
       if (late >= 20) return player?.getAttribute(WAR_END_ARIANWYN_DONE) === true ? 192 : 190;
+      if (player?.getAttribute(CAMP_DEFENSE_COMPLETE) === true) return 184;
+      if ((Number(player?.getAttribute(CAMP_DEFENSE)) || 0) > 0) return 182;
+      return 180;
     }
     return value;
   }

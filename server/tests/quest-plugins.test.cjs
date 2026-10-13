@@ -15273,7 +15273,25 @@ test('Song of the Elves native progress follows library seals and later source s
   assert.equal(progress(160, 'quest.song_of_the_elves.lletya-arianwyn-confronted', true), 152);
   assert.equal(quest.varbitValue(170, player), 160);
   assert.equal(progress(170, 'quest.song_of_the_elves.recruited-elders', 12), 164);
-  assert.equal(quest.varbitValue(180, player), 166);
+  const holes = 'quest.song_of_the_elves.camp-holes';
+  for (let count = 0; count <= 7; count++) {
+    const mask = (1 << count) - 1;
+    assert.equal(progress(180, holes, mask), 166 + count * 2,
+      `the camp native progress tracks ${count} of seven filled holes`);
+  }
+  assert.equal(progress(190, holes, 127), 180, 'the ready camp waits at the native siege step');
+  assert.equal(progress(190, 'quest.song_of_the_elves.camp-defense', 400), 182,
+    'the active four-minute defense uses its own native step');
+  progress(190, 'quest.song_of_the_elves.late-chapter', 18);
+  assert.equal(quest.varbitValue(190, player), 182,
+    'legacy saves that retain late chapter 18 still show the active siege');
+  assert.equal(progress(190, 'quest.song_of_the_elves.camp-defense-complete', true), 184,
+    'the completed defense advances before the fragment chapter');
+  assert.equal(quest.varbitValue(190, player), 184,
+    'late chapter 18 keeps the completed camp step');
+  progress(190, 'quest.song_of_the_elves.camp-defense', undefined);
+  progress(190, 'quest.song_of_the_elves.camp-defense-complete', undefined);
+  progress(190, holes, undefined);
   assert.equal(progress(190, 'quest.song_of_the_elves.late-chapter', 19), 186);
   assert.equal(progress(190, 'quest.song_of_the_elves.fragment-defeated', true), 188);
   assert.equal(progress(190, 'quest.song_of_the_elves.late-chapter', 20), 190);
