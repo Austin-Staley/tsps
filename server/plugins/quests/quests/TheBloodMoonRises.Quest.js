@@ -431,6 +431,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function startDrakanBattle(player) {
+    if (stage(player) !== STAGE.FINAL) return false;
     const existing = player.getAttribute(DRAKAN_AREA_ATTRIBUTE);
     if (existing && existing.isDestroyed?.() !== true) return true;
     const area = new DrakanEncounterArea(player.getUsername?.());
@@ -454,7 +455,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   function finishDrakanEncounter(player) {
     const area = player.getAttribute(DRAKAN_AREA_ATTRIBUTE);
     const fight = area && drakanEncounters.get(area);
-    if (!fight) return false;
+    if (!fight || !fight.ending) return false;
     fight.finished = true;
     api.removeNpc(fight.boss);
     area.leave(player, false);
@@ -920,7 +921,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
     if (event.stepId === "xt3dPV") advance(player, STAGE.FENCE_FOUND);
     if (event.stepId === "2QgFZA" && player.getAttribute(WYRD_DEFEATED_ATTRIBUTE)) advance(player, STAGE.FINAL);
-    if (event.stepId === "BzMe5D") quest.complete(player);
+    if (event.stepId === "BzMe5D" && stage(player) === STAGE.FINAL
+      && player.getAttribute(DRAKAN_ENCOUNTER_COMPLETE)) quest.complete(player);
   }
 
   function onBloodMoonTobCompleted(event) {
