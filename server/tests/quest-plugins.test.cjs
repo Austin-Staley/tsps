@@ -7820,6 +7820,7 @@ test('Song of the Elves starts Essyllt again when core death cleanup left a stal
       getArea() { return this.area ?? null; },
       getIndex() { return 100 + spawns.length; },
       setMultiCombat() {},
+      setScriptedMovement(value) { this.scriptedMovement = value; },
       getCombat() { return { attack() {} }; },
     };
     spawns.push(npc);
@@ -7864,6 +7865,14 @@ test('Song of the Elves starts Essyllt again when core death cleanup left a stal
   assert.equal(spawns.filter((npc) => npc.definition.id === api.core.NpcIdentifiers.ESSYLLT_5).length, 2,
     'the natural ambush action can recreate an NPC whose old reference is already gone');
   assert.equal(spawns.filter((npc) => npc.definition.id === api.core.NpcIdentifiers.IORWERTH_WARRIOR_12).length, 4);
+  action({ player, stepId: 'vdBzNa', kind: 'action' });
+  const camp = player.getArea();
+  const arrivalActors = spawns.slice(-6);
+  assert.equal(arrivalActors.length, 6);
+  assert.ok(arrivalActors.every((npc) => npc.scriptedMovement === true),
+    'the arrival tableau is passive while the cutscene dialogue plays');
+  assert.ok(arrivalActors.every((npc) => camp.canAttack(player, npc) === false && camp.canAttack(npc, player) === false),
+    'neither side can start a fight with the cutscene actors: ' + JSON.stringify(arrivalActors.map(npc => [npc.getArea() === camp, camp.canAttack(player, npc), camp.canAttack(npc, player)])));
 });
 
 test('Song of the Elves retries the Temple cutscene after a disconnect but not during the Fragment fight', () => {

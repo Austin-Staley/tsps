@@ -628,6 +628,8 @@ module.exports = function registerSongOfTheElves(api) {
     canAttack(attacker, target) {
       const a = attacker?.getArea?.() === this;
       const t = target?.getArea?.() === this;
+      const state = campInstances.get(this);
+      if (state?.arrivalActors?.has(attacker) || state?.arrivalActors?.has(target)) return false;
       if (a || t) return a && t;
       return null;
     }
@@ -2750,7 +2752,15 @@ module.exports = function registerSongOfTheElves(api) {
     for (const [id, x, y] of [[NpcIdentifiers.LORD_IORWERTH_2, 2448, 6110],
       [NpcIdentifiers.ARIANWYN_2, 2447, 6112], [NpcIdentifiers.IORWERTH_WARRIOR_12, 2446, 6112],
       [NpcIdentifiers.IORWERTH_WARRIOR_12, 2449, 6112], [NpcIdentifiers.IORWERTH_ARCHER_10, 2445, 6113],
-      [NpcIdentifiers.IORWERTH_ARCHER_10, 2450, 6113]]) spawnCampNpc(area, id, x, y);
+      [NpcIdentifiers.IORWERTH_ARCHER_10, 2450, 6113]]) {
+      const npc = spawnCampNpc(area, id, x, y);
+      if (!npc) continue;
+      // These nearby NPCs are the post-fight story tableau, not another wave.
+      // Keep their cache combat options from turning the dialogue into an
+      // accidental aggro encounter or letting the player attack a cutscene actor.
+      npc.setScriptedMovement?.(true);
+      (state.arrivalActors ??= new Set()).add(npc);
+    }
   }
 
   function handleCampDeath(event) {
