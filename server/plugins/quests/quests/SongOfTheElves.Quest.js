@@ -3942,9 +3942,9 @@ module.exports = function registerSongOfTheElves(api) {
   api.onCustomEvent("npc-dialogue:line", finishHeadquartersWarning);
   api.onCustomEvent("npc-dialogue:line", finishDisguiseBriefing);
   api.onCustomEvent("npc-dialogue:line", finishWarEndArianwynLine);
+  api.onCustomEvent("npc-dialogue:line", startOrbCaveAmbush);
   api.onCustomEvent("npc-dialogue:line", finishEarlyStoryLine);
   api.onCustomEvent("npc-dialogue:line", handleLletyaConfrontationLine);
-  api.onCustomEvent("npc-dialogue:line", startOrbCaveAmbush);
   api.onCustomEvent("world:object-examine", examineLletyaChild);
   api.onCustomEvent("world:object-examine", handleIthellSymbolExamine);
   api.onCustomEvent("world:object-examine", handleYsgawynTrackExamine);
