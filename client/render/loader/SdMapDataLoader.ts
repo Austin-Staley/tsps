@@ -1711,6 +1711,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
         const interiorMaxX = usedBorderSize + TILE_SIZE - 1;
         const interiorMaxY = usedBorderSize + TILE_SIZE - 1;
 
+        const tilePresenceByLevel: Uint8Array[] = Array.from({ length: Scene.MAX_LEVELS }, () => new Uint8Array(TILE_SIZE * TILE_SIZE));
         const tileLocOffsetsByLevel: Uint32Array[] = new Array(Scene.MAX_LEVELS);
         const tileLocIdsByLevel: Int32Array[] = new Array(Scene.MAX_LEVELS);
         const tileLocTypeRotByLevel: Uint8Array[] = new Array(Scene.MAX_LEVELS);
@@ -1726,6 +1727,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
                     const sceneX = interiorMin + tx;
                     const sceneY = interiorMin + ty;
                     const tile = scene.tiles[lvl][sceneX]?.[sceneY];
+                    tilePresenceByLevel[lvl][ty * TILE_SIZE + tx] = tile ? 1 : 0;
                     const ids: number[] = [];
                     const typeRots: number[] = [];
                     const pushLoc = (id: number, flags: number): void => {
@@ -2188,6 +2190,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             doorDrawRangesInteractLodPlanes.buffer,
             doorDrawRangesInteractLodAlphaPlanes.buffer,
             ...bridgeSurfaceFlags.flat().map((column) => column.buffer),
+            ...tilePresenceByLevel.map((a) => a.buffer),
             ...tileLocOffsetsByLevel.map((a) => a.buffer),
             ...tileLocIdsByLevel.map((a) => a.buffer),
             ...tileLocTypeRotByLevel.map((a) => a.buffer),
@@ -2313,6 +2316,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
 
                 bridgeSurfaceFlags,
 
+                tilePresenceByLevel,
                 tileLocOffsetsByLevel,
                 tileLocIdsByLevel,
                 tileLocTypeRotByLevel,
