@@ -376,6 +376,12 @@ module.exports = function registerSongOfTheElves(api) {
 
     isMulti() { return true; }
 
+    npcAggression(player, npc) {
+      const state = fragmentInstances.get(this);
+      return state && state.player === player && (npc === state.boss ||
+        state.clones.includes(npc) || state.healers.has(npc)) ? false : null;
+    }
+
     canAttack(attacker, target) {
       const attackerHere = attacker?.getArea?.() === this;
       const targetHere = target?.getArea?.() === this;
@@ -2472,6 +2478,15 @@ module.exports = function registerSongOfTheElves(api) {
     hit?.updateTotalDamage?.();
   }
 
+  function forceFragmentWhirlwindHit(event) {
+    const target = event?.target;
+    const area = target?.getArea?.();
+    const state = area && fragmentInstances.get(area);
+    if (state && !state.finished && event.attacker === state.player && state.healers.has(target)) {
+      event.forceAccurate = true;
+    }
+  }
+
   function handleFragmentHit(event) {
     const npc = event?.npc;
     const hit = event?.hit;
@@ -3009,5 +3024,6 @@ module.exports = function registerSongOfTheElves(api) {
   api.onAnyNpcInteraction({ "Talk-to": onTalk });
   api.onNpcDeath(handleBattleDeath);
   api.onPlayerDeath(handleQuestPlayerDeath);
+  api.onCombatHitRoll(forceFragmentWhirlwindHit);
   api.onNpcHitModify(handleFragmentHit);
 };
