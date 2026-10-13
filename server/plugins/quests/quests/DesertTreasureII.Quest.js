@@ -154,6 +154,7 @@ module.exports = function registerDesertTreasureII(api) {
   let lassarPuddlesInstalled = false;
   const LASSAR_TELEPORTER_VARBITS = [15088, 15089, 15091, 15092, 15093, 15090, 15094];
   const lassarShadowIdols = new WeakMap();
+  const lassarShadowBarriers = new WeakMap();
   const LASSAR_SCHEMATIC_VARBITS = [
     ["blockerDesigned", 15082], ["idolSchematic", 15083], ["animaSchematic", 15084],
     ["torchSchematic", 15085], ["superiorTorchSchematic", 15086], ["perfectTorchSchematic", 15087],
@@ -3412,6 +3413,36 @@ module.exports = function registerDesertTreasureII(api) {
     api.core.ObjectManager.deregister(current, true);
     lassarShadowIdols.delete(p);
   }
+  function syncLassarAnimaTentacles(p, state) {
+    const barriers = [
+      { key: "anima", id: 48205, x: 2324, y: 6402, active: state.superiorTorch && !state.animaSchematicFound },
+      { key: "plaza", id: 48208, x: 2351, y: 6386, active: state.animaPortal && !state.plazaTentacle },
+      { key: "cathedral", id: 48211, x: 2400, y: 6393, active: state.perfectTorch && !state.cathedralTentacles },
+    ];
+    const current = lassarShadowBarriers.get(p) ?? new Map();
+    for (const barrier of barriers) {
+      const object = current.get(barrier.key);
+      const shouldExist = state.inShadow && barrier.active;
+      if (shouldExist && !object) {
+        // The Wiki/QH markers have no placed cache locs. Install their matching
+        // cache-backed Destroy variants in the owner's Shadow Realm scene.
+        const tentacle = new api.core.GameObject(barrier.id, new api.core.Location(barrier.x, barrier.y, 0), 10, 0, null).setOwner(p);
+        api.core.ObjectManager.register(tentacle, true);
+        current.set(barrier.key, tentacle);
+      } else if (!shouldExist && object) {
+        api.core.ObjectManager.deregister(object, true);
+        current.delete(barrier.key);
+      }
+    }
+    if (current.size) lassarShadowBarriers.set(p, current);
+    else lassarShadowBarriers.delete(p);
+  }
+  function removeLassarAnimaTentacles({ player: p }) {
+    const current = p && lassarShadowBarriers.get(p);
+    if (!current) return;
+    for (const object of current.values()) api.core.ObjectManager.deregister(object, true);
+    lassarShadowBarriers.delete(p);
+  }
   function handleLassarProcess({ player: p }) {
     if (p && stage(p) > 0) syncNativeProgress(p);
     if (!p || p.isPlayerBot?.() === true || stage(p) !== S.WHISPERER) return;
@@ -3419,6 +3450,7 @@ module.exports = function registerDesertTreasureII(api) {
     const lassarState = p.getAttribute(LASSAR) ?? {};
     ensureLassarIntroItems(p, lassarState);
     syncLassarShadowIdol(p, lassarState);
+    syncLassarAnimaTentacles(p, lassarState);
     const position = p.getLocation?.();
     if (lassarState.cameTo && position
       && Math.abs(position.getX?.() - 2648) <= 16 && Math.abs(position.getY?.() - 6442) <= 16
@@ -6677,6 +6709,9 @@ module.exports = function registerDesertTreasureII(api) {
     if (state.pubOpened && !state.superiorSchematicFound && !has(p, I.SUPERIOR_SHADOW_TORCH_SCHEMATIC)) {
       registerLassarGroundItem(p, I.SUPERIOR_SHADOW_TORCH_SCHEMATIC, 2381, 6423);
     }
+    if (state.animaSchematicFound && !state.animaSchematic && !has(p, I.ANIMA_PORTAL_SCHEMATIC)) {
+      registerLassarGroundItem(p, I.ANIMA_PORTAL_SCHEMATIC, 2324, 6402);
+    }
   }
 
   function handleLassarGroundItemPickup(event) {
@@ -6832,8 +6867,10 @@ module.exports = function registerDesertTreasureII(api) {
   api.onGroundItemPickup(handleVardorvisGroundItemPickup);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(removeLassarShadowIdol);
+  api.onPlayerLogout(removeLassarAnimaTentacles);
   api.onPlayerProcess(handleLassarProcess);
   api.onPlayerLogout(handleLogout);
   api.onPlayerDisconnect(handleLogout);
   require("../dt2/Prison.DesertTreasureII")(api);
+  api.onPlayerDisconnect(removeLassarAnimaTentacles);
 };

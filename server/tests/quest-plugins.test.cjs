@@ -5738,6 +5738,38 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     const recoveredBlueKey = groundSpawns.slice(beforeBlueKeyRecovery).find(([, item]) => item.getId() === core.ItemIdentifiers.SHADOW_KEY_2);
     assert.ok(recoveredBlueKey, 'a cleared barrier restores its missing key after logout, expiry or death');
     assert.deepEqual([recoveredBlueKey[2].getX(), recoveredBlueKey[2].getY()], [2416, 6443]);
+    attrs.set('desert-treasure-ii:lassar', {
+      ...attrs.get('desert-treasure-ii:lassar'), inShadow: true, superiorTorch: true,
+      animaSchematicFound: false,
+    });
+    counts.set(core.ItemIdentifiers.SUPERIOR_SHADOW_TORCH, 1);
+    playerProcesses[0]({ player });
+    const animaTentacle = lassarObjectObjects.findLast(({ action, object }) => action === 'register' && object.id === 48205);
+    assert.ok(animaTentacle, 'the unmapped Science District barrier is installed as a player-owned scene object');
+    assert.equal(animaTentacle.object.owner, player);
+    assert.deepEqual([animaTentacle.object.location.x, animaTentacle.object.location.y, animaTentacle.object.location.z], [2324, 6402, 0]);
+    assert.equal(interact({ player, objectId: 48205, definition: { id: 48205 },
+      location: { x: 2324, y: 6402, z: 0 }, option: 'Destroy' }), true,
+    'the cache-backed Destroy option clears the Anima schematic barrier');
+    assert.equal(attrs.get('desert-treasure-ii:lassar').animaSchematicFound, true);
+    assert.equal(groundSpawns.at(-1)[1].getId(), core.ItemIdentifiers.ANIMA_PORTAL_SCHEMATIC);
+    playerProcesses[0]({ player });
+    assert.equal(lassarObjectObjects.findLast(({ action, object }) => action === 'deregister' && object.id === 48205)?.action,
+      'deregister', 'cleared tentacles are removed from the owner scene');
+    assert.equal(groundSpawns.at(-1)[1].getId(), core.ItemIdentifiers.ANIMA_PORTAL_SCHEMATIC,
+      'a burned but unclaimed schematic is restored as an owner ground item after a relog');
+    assert.deepEqual([groundSpawns.at(-1)[2].getX(), groundSpawns.at(-1)[2].getY()], [2324, 6402]);
+    attrs.set('desert-treasure-ii:lassar', {
+      ...attrs.get('desert-treasure-ii:lassar'), inShadow: true, animaPortal: true,
+      plazaTentacle: false,
+    });
+    playerProcesses[0]({ player });
+    const plazaBarrier = lassarObjectObjects.findLast(({ action, object }) => action === 'register' && object.id === 48208);
+    assert.ok(plazaBarrier, 'the cache-backed plaza tentacle appears only after the anima portal is assembled');
+    assert.equal(interact({ player, objectId: 48208, definition: { id: 48208 },
+      location: { x: 2351, y: 6386, z: 0 }, option: 'Destroy' }), true);
+    assert.equal(attrs.get('desert-treasure-ii:lassar').plazaTentacle, true,
+      'Destroying the plaza barrier advances its own earned flag');
     const beforeOpenedPub = groundSpawns.length;
     attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), pubOpened: true });
     playerProcesses[0]({ player });
