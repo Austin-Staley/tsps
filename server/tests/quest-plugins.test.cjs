@@ -2640,7 +2640,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
       getUsername: () => 'dt2-scar-test',
       getEquipment: () => divingGear,
       isPlayer: () => true, getAsPlayer() { return this; },
-      getLocation() { return { getX: () => this.location.x, getY: () => this.location.y }; },
+      getLocation() { return { x: this.location.x, y: this.location.y, getX: () => this.location.x, getY: () => this.location.y }; },
       getInventory: () => ({
         getAmount: (id) => inventoryCounts.get(id) ?? 0,
         adds: (id, amount) => inventoryCounts.set(id, (inventoryCounts.get(id) ?? 0) + amount),
@@ -3167,14 +3167,29 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     const pendingAirHits = [];
     attrs.set('desert-treasure-ii:scar-maze-three-air', 2);
     finalPassage.process(player);
+    assert.notEqual(varbits.get(15211), 1, 'oxygen does not drain outside the diving room');
+    divingGear.setItem(core.Equipment.WEAPON_SLOT, new core.Item(core.ItemIdentifiers.RUNE_CROSSBOW, 1));
+    objectHooks[0]({ player, objectId: 49410, location: finalPassage.tile(41, 36, 0) });
+    assert.equal(player.location.x, finalPassage.tile(40, 36, 0).x, 'a held weapon blocks the memory dive');
+    divingGear.setItem(core.Equipment.WEAPON_SLOT, new core.Item(-1, 0));
+    objectHooks[0]({ player, objectId: 49410, location: finalPassage.tile(41, 36, 0) });
+    assert.deepEqual([player.location.x, player.location.y], [finalPassage.tile(43, 36, 0).x, finalPassage.tile(43, 36, 0).y]);
+    attrs.set('desert-treasure-ii:scar-maze-three-air', 2);
+    finalPassage.process(player);
     assert.equal(varbits.get(15211), 1, 'the third passage drains oxygen once per world cycle');
     assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.AIR_BUBBLE,
       location: finalPassage.tile(1900 - 1856, 6430 - 6400, 0) }), true);
     assert.equal(varbits.get(15211), 100, 'the correct cache air bubble restores oxygen');
+    player.moveTo(finalPassage.tile(44, 30, 0));
+    attrs.set('desert-treasure-ii:scar-maze-three-air', 2);
+    finalPassage.process(player);
+    assert.equal(varbits.get(15211), 100, 'walking into the actionless memory bubble restores air');
+    player.moveTo(finalPassage.tile(43, 36, 0));
     attrs.set('desert-treasure-ii:scar-maze-three-air', 0);
     finalPassage.process(player);
     assert.equal(pendingAirHits.length, 1, 'running out of air forces the player back and causes damage');
-    assert.equal(objectHooks[0]({ player, objectId: 49410, location: finalPassage.tile(41, 36, 0) }), true,
+    objectHooks[0]({ player, objectId: 49410, location: finalPassage.tile(41, 36, 0) });
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.ABYSSAL_STEM, location: finalPassage.tile(51, 36, 0) }), true,
       'the Abyssal Stem starts the final passage memory puzzle');
     const memory = attrs.get('desert-treasure-ii:scar-memory-order');
     assert.equal(memory.length, 4);
@@ -3183,7 +3198,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     const [wx, wy] = [[1903, 6431], [1900, 6442], [1909, 6441], [1914, 6434]][wrongStep];
     assert.equal(objectHooks[0]({ player, objectId: 49391, location: finalPassage.tile(wx - 1856, wy - 6400, 0) }), true);
     assert.equal(varbits.get(15212), 0, 'a wrong memory growth resets the sequence');
-    assert.equal(objectHooks[0]({ player, objectId: 49410, location: finalPassage.tile(41, 36, 0) }), true,
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.ABYSSAL_STEM, location: finalPassage.tile(51, 36, 0) }), true,
       'touching the stem shows the same stored sequence again');
     for (const growth of memory) {
       const [x, y] = [[1903, 6431], [1900, 6442], [1909, 6441], [1914, 6434]][growth];
@@ -3191,6 +3206,9 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     }
     assert.equal(attrs.get('desert-treasure-ii:scar-memory-complete'), true);
     assert.equal(varbits.get(15258), 1);
+    assert.equal(varbits.get(15217), 4, 'the native sequence-step varbit records all four touches');
+    objectHooks[0]({ player, objectId: 49410, location: finalPassage.tile(41, 36, 0) });
+    player.moveTo(finalPassage.tile(46, 13, 0));
     assert.equal(objectHooks[0]({ player, objectId: 49412, location: finalPassage.tile(46, 11, 0) }), true,
       'the Brain Pillar room only opens after solving the memory puzzle');
     for (let wave = 0; wave < 4; wave++) {
@@ -3201,8 +3219,11 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(attrs.get('desert-treasure-ii:scar-tree-complete'), true,
       'the Brain Pillar heals after the player clears four actual enemy waves');
     assert.equal(varbits.get(15260), 1);
+    assert.equal(queues.add.filter(npc => npc.__dt2ScarAntibody).every(npc => npc.id === core.NpcIdentifiers.ABYSSAL_ANTIBODY), true);
     assert.equal(objectHooks[0]({ player, objectId: 49416, location: finalPassage.tile(35, 57, 0) }), true,
       'the north neural teleporter leads to the Unlit Veins');
+    assert.equal(objectHooks[0]({ player, objectId: 49411, location: finalPassage.tile(6, 21, 0) }), true,
+      'the actual doorway enters the leech room');
     const takeMazeThreeLure = interactions.find((entry) => entry.name === 'Light leech').options['Take-lure'];
     const oldRandom = Math.random;
     Math.random = () => 0;
@@ -3245,7 +3266,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(varbits.get(15128), 34);
     const thirdCamp = area;
     thirdCamp.destroy();
-    assert.equal(objectHooks[0]({ player, objectId: 49410, location: finalPassage.tile(41, 36, 0) }), true,
+    assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.FLESHY_STRAND, location: finalPassage.tile(23, 36, 0) }), true,
       'the passage exit returns to camp after the third ship burns');
     area = attrs.get('desert-treasure-ii:scar-area');
     assert.notEqual(area, thirdCamp);

@@ -408,6 +408,7 @@ module.exports = function registerDesertTreasureII(api) {
   const SCAR_MAZE_THREE_AIR = "desert-treasure-ii:scar-maze-three-air";
   const SCAR_MEMORY_ORDER = "desert-treasure-ii:scar-memory-order";
   const SCAR_MEMORY_STEP = "desert-treasure-ii:scar-memory-step";
+  const SCAR_MEMORY_UNDERWATER = "desert-treasure-ii:scar-memory-underwater";
   const SCAR_MEMORY_COMPLETE = "desert-treasure-ii:scar-memory-complete";
   const SCAR_TREE_STARTED = "desert-treasure-ii:scar-tree-started";
   const SCAR_TREE_COMPLETE = "desert-treasure-ii:scar-tree-complete";
@@ -1004,22 +1005,28 @@ module.exports = function registerDesertTreasureII(api) {
     canAttack(attacker, target) {
       if (attacker?.__dt2ScarTreeEnemy) return target?.__dt2ScarAntibody && target.getOwner?.() === this.questPlayer;
       if (attacker?.isPlayer?.() && attacker === this.questPlayer && target?.__dt2ScarTreeEnemy) return true;
-      if (target?.__dt2ScarAntibody || target?.__dt2ScarTreeEnemy) return false;
+      if (target?.__dt2ScarAntibody || target?.__dt2ScarTreeEnemy || target?.__dt2ScarBrainPillar) return false;
       return null;
     }
     process(actor) {
       if (!actor?.isPlayer?.() || actor.getAsPlayer?.() !== this.questPlayer
-        || !this.questPlayer.getAttribute(SCAR_MAZE_THREE_ACTIVE)) return;
+        || !this.questPlayer.getAttribute(SCAR_MEMORY_UNDERWATER)) return;
       const cycle = api.core.World.getProcessCycle();
       if (cycle === this.lastProcessCycle) return;
       this.lastProcessCycle = cycle;
-      const air = Math.max(0, (Number(this.questPlayer.getAttribute(SCAR_MAZE_THREE_AIR)) || 0) - 1);
+      const location = this.questPlayer.getLocation();
+      const x = location.getX() - this.getBaseX() + 1856;
+      const y = location.getY() - this.getBaseY() + 6400;
+      const atBubble = SCAR_MAZE_THREE_AIR_BUBBLES.some(([bubbleX, bubbleY]) =>
+        x >= bubbleX && x < bubbleX + 2 && y >= bubbleY && y < bubbleY + 2);
+      const air = atBubble ? 100 : Math.max(0, (Number(this.questPlayer.getAttribute(SCAR_MAZE_THREE_AIR)) || 0) - 1);
       this.questPlayer.setAttribute(SCAR_MAZE_THREE_AIR, air);
       this.questPlayer.getPacketSender().sendVarbit(15211, air);
       if (air > 0) return;
       this.questPlayer.setAttribute(SCAR_MAZE_THREE_AIR, 100);
       this.questPlayer.getPacketSender().sendVarbit(15211, 100);
-      this.questPlayer.moveTo(this.tile(41, 36, 0));
+      this.questPlayer.setAttribute(SCAR_MEMORY_UNDERWATER, false);
+      this.questPlayer.moveTo(this.tile(40, 36, 0));
       this.questPlayer.getCombat().getHitQueue().addPendingDamage([
         new api.core.HitDamage(5 + Math.floor(Math.random() * 6), api.core.HitMask.RED),
       ]);
@@ -1855,7 +1862,7 @@ module.exports = function registerDesertTreasureII(api) {
       current.enter(p);
       current.scarMazeThreeActive = true;
       p.setAttribute(SCAR_MAZE_THREE_ACTIVE, true);
-      p.moveTo(current.tile(41, 36, 0));
+      p.moveTo(current.tile(40, 36, 0));
       setScarVarbit(p, 32);
       return current;
     }
@@ -1869,15 +1876,17 @@ module.exports = function registerDesertTreasureII(api) {
     }
     if (!Number.isFinite(Number(p.getAttribute(SCAR_MEMORY_STEP)))) p.setAttribute(SCAR_MEMORY_STEP, 0);
     area.scarMazeThreeActive = true;
-    p.moveTo(area.tile(41, 36, 0));
+    p.moveTo(area.tile(40, 36, 0));
     setScarVarbit(p, 32);
     p.getPacketSender().sendVarbit(15211, Number(p.getAttribute(SCAR_MAZE_THREE_AIR)) || 100);
     p.getPacketSender().sendVarbit(15212, Number(p.getAttribute(SCAR_MEMORY_STEP)) || 0);
+    p.getPacketSender().sendVarbit(15217, Number(p.getAttribute(SCAR_MEMORY_STEP)) || 0);
     const order = p.getAttribute(SCAR_MEMORY_ORDER);
     order.forEach((growth, index) => p.getPacketSender().sendVarbit(15213 + index, growth));
     p.getPacketSender().sendVarbit(15258, p.getAttribute(SCAR_MEMORY_COMPLETE) ? 1 : 0);
     p.getPacketSender().sendVarbit(15259, p.getAttribute(SCAR_LEECH_COMPLETE) ? 1 : 0);
     p.getPacketSender().sendVarbit(15260, p.getAttribute(SCAR_TREE_COMPLETE) ? 1 : 0);
+    if (p.getAttribute(SCAR_LEECH_COMPLETE) && p.getAttribute(SCAR_TREE_COMPLETE)) revealScarBoatPassageThree(p);
     return area;
   }
 
@@ -2129,6 +2138,15 @@ module.exports = function registerDesertTreasureII(api) {
     p.getPacketSender().sendObject(object);
   }
 
+  function revealScarBoatPassageThree(p) {
+    const area = p.getAttribute(ATTR_SCAR_MAZE_THREE);
+    if (!(area instanceof ScarMazeThreeArea) || area.isDestroyed?.() || area.scarBoatPassage) return;
+    const object = new api.core.GameObject(O.PASSAGE_22, area.tile(43, 56, 0), 10, 0, area);
+    area.add(object);
+    area.scarBoatPassage = object;
+    p.getPacketSender().sendObject(object);
+  }
+
   function spawnScarLightLeeches(p, area) {
     const owned = spawned.get(p) ?? {};
     spawned.set(p, owned);
@@ -2150,10 +2168,21 @@ module.exports = function registerDesertTreasureII(api) {
     const owned = spawned.get(p) ?? {};
     spawned.set(p, owned);
     if (owned.scarTreeAntibodies?.some((npc) => npc?.isRegistered?.())) return;
+    if (!owned.scarBrainPillar?.isRegistered?.()) {
+      const pillar = api.core.NPC.create(N.COL_00FFFF_BRAIN_PILLAR_COL, area.tile(33, 5, 0));
+      pillar.setOwner?.(p);
+      pillar.setOwnerOnly?.(true);
+      pillar.__skipDefaultRespawn = true;
+      pillar.__dt2ScarBrainPillar = true;
+      area.add(pillar);
+      api.core.World.getAddNPCQueue().push(pillar);
+      owned.scarBrainPillar = pillar;
+    }
     p.setAttribute(SCAR_TREE_STARTED, true);
     p.setAttribute("desert-treasure-ii:scar-tree-wave", 0);
-    owned.scarTreeAntibodies = [[1902, 6412], [1905, 6412], [1908, 6412]].map(([x, y]) => {
-      const npc = api.core.NPC.create(12377, area.tile(x - 1856, y - 6400, 0));
+    // shortcut: four fixed waves approximate pillar healing; calibrate against a live capture.
+    owned.scarTreeAntibodies = [[1894, 6406], [1894, 6408], [1894, 6410]].map(([x, y]) => {
+      const npc = api.core.NPC.create(N.ABYSSAL_ANTIBODY, area.tile(x - 1856, y - 6400, 0));
       npc.setOwner?.(p);
       npc.setOwnerOnly?.(true);
       npc.__skipDefaultRespawn = true;
@@ -2186,7 +2215,7 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function enterScarTreeRoom(p, area) {
-    const tile = area.tile(46, 11, 0);
+    const tile = area.tile(46, 10, 0);
     p.moveTo(tile);
     p.setAttribute("desert-treasure-ii:scar-tree-in-room", true);
     if (!p.getAttribute(SCAR_TREE_COMPLETE)) {
@@ -2237,16 +2266,39 @@ module.exports = function registerDesertTreasureII(api) {
     const { objectId, definition } = event;
     const id = definition?.id ?? objectId;
     const area = p.getAttribute(ATTR_SCAR_MAZE_THREE);
-    if (id === 49410 && tile.x === 1897 && tile.y === 6436) {
-      if (p.getAttribute(SCAR_BOAT3_BURNED)) {
-        area.leave(p, false);
-        const scar = enterScar(p);
-        p.moveTo(scar.tile(51, 43, 0));
-        p.setAttribute(SCAR_MAZE_THREE_ACTIVE, false);
-        setScarVarbit(p, 34);
-        p.sendMessage("You leave the final passage and return to Persten's camp.");
+    if (id === O.FLESHY_STRAND && tile.x === 1879 && tile.y === 6436) {
+      area.leave(p, false);
+      const scar = enterScar(p);
+      p.moveTo(scar.tile(51, 43, 0));
+      p.setAttribute(SCAR_MAZE_THREE_ACTIVE, false);
+      p.setAttribute(SCAR_MEMORY_UNDERWATER, false);
+      setScarVarbit(p, p.getAttribute(SCAR_BOAT3_BURNED) ? 34 : 32);
+      p.sendMessage("You leave the final passage and return to Persten's camp.");
+      return true;
+    }
+    if (id === O.PASSAGE_18 && ((tile.x === 1897 && tile.y === 6436) || (tile.x === 1912 && tile.y === 6427))) {
+      const source = scarMazeThreeSourceTile(p, p.getLocation());
+      const west = tile.x === 1897;
+      const inside = west ? source.x >= 1899 : source.y >= 6429;
+      if (inside) {
+        p.setAttribute(SCAR_MEMORY_UNDERWATER, false);
+        p.moveTo(west ? area.tile(40, 36, 0) : area.tile(57, 26, 0));
         return true;
       }
+      const equipment = p.getEquipment();
+      if (equipment.isSlotOccupied(api.core.Equipment.WEAPON_SLOT) || equipment.isSlotOccupied(api.core.Equipment.SHIELD_SLOT)) {
+        p.sendMessage("Free both hands before diving into the memory chamber.");
+        return true;
+      }
+      p.moveTo(west ? area.tile(43, 36, 0) : area.tile(57, 29, 0));
+      if (!p.getAttribute(SCAR_MEMORY_COMPLETE)) {
+        p.setAttribute(SCAR_MEMORY_UNDERWATER, true);
+        p.setAttribute(SCAR_MAZE_THREE_AIR, 100);
+        p.getPacketSender().sendVarbit(15211, 100);
+      }
+      return true;
+    }
+    if (id === O.ABYSSAL_STEM && tile.x === 1907 && tile.y === 6436) {
       if (p.getAttribute(SCAR_MEMORY_COMPLETE)) {
         p.sendMessage("The Abyssal Stem's sequence is already restored.");
         return true;
@@ -2258,6 +2310,7 @@ module.exports = function registerDesertTreasureII(api) {
       }
       p.setAttribute(SCAR_MEMORY_STEP, 0);
       p.getPacketSender().sendVarbit(15212, 0);
+      p.getPacketSender().sendVarbit(15217, 0);
       order.forEach((value, index) => p.getPacketSender().sendVarbit(15213 + index, value));
       p.sendMessage("The Abyssal Stem reveals a sequence. Touch the four growths in that order, surfacing at air bubbles as needed.");
       return true;
@@ -2270,44 +2323,72 @@ module.exports = function registerDesertTreasureII(api) {
       if (order[step] !== index) {
         p.setAttribute(SCAR_MEMORY_STEP, 0);
         p.getPacketSender().sendVarbit(15212, 0);
+        p.getPacketSender().sendVarbit(15217, 0);
         p.sendMessage("The growths dim and the sequence resets. Touch the Abyssal Stem to observe it again.");
         return true;
       }
       const next = step + 1;
       p.setAttribute(SCAR_MEMORY_STEP, next);
       p.getPacketSender().sendVarbit(15212, next);
+      p.getPacketSender().sendVarbit(15217, next);
       if (next === 4) {
         p.setAttribute(SCAR_MEMORY_COMPLETE, true);
+        p.setAttribute(SCAR_MEMORY_UNDERWATER, false);
         p.getPacketSender().sendVarbit(15258, 1);
         p.sendMessage("The Abyssal Stem glows steadily. The memory puzzle is complete.");
       }
       return true;
     }
     if (id === 49412 && tile.x === 1902 && tile.y === 6411) {
+      const source = scarMazeThreeSourceTile(p, p.getLocation());
+      if (source.y <= 6410) {
+        p.moveTo(area.tile(46, 13, 0));
+        return true;
+      }
       if (!p.getAttribute(SCAR_MEMORY_COMPLETE)) { p.sendMessage("The Brain Pillar room remains sealed until the Abyssal Stem is restored."); return true; }
       enterScarTreeRoom(p, area);
       return true;
     }
+    if (id === O.PASSAGE_20 && tile.x === 1907 && tile.y === 6406) {
+      const source = scarMazeThreeSourceTile(p, p.getLocation());
+      p.moveTo(area.tile(source.x <= 1906 ? 53 : 50, 6, 0));
+      return true;
+    }
+    if (id === O.NEURAL_TELEPORTER && tile.x === 1917 && tile.y === 6404) {
+      p.moveTo(area.tile(17, 59, 0));
+      return true;
+    }
+    if (id === O.NEURAL_TELEPORTER_2 && tile.x === 1871 && tile.y === 6460) {
+      p.moveTo(area.tile(60, 4, 0));
+      return true;
+    }
     if (id === 49416 && tile.x === 1891 && tile.y === 6457) {
       if (!p.getAttribute(SCAR_TREE_COMPLETE)) { p.sendMessage("Defend the Brain Pillar before entering the Unlit Veins."); return true; }
-      enterScarLeechRoom(p, area);
+      p.moveTo(area.tile(6, 9, 0));
       return true;
     }
     if (id === 49411 && tile.x === 1862 && tile.y === 6421) {
+      const source = scarMazeThreeSourceTile(p, p.getLocation());
+      if (source.y >= 6423) {
+        p.moveTo(area.tile(6, 20, 0));
+        return true;
+      }
       if (!p.getAttribute(SCAR_TREE_COMPLETE)) { p.sendMessage("Defend the Brain Pillar before entering the Unlit Veins."); return true; }
       enterScarLeechRoom(p, area);
       return true;
     }
     if (id === 49415 && tile.x === 1861 && tile.y === 6410) {
-      if (!p.getAttribute(SCAR_LEECH_COMPLETE)) { p.sendMessage("The Unlit Veins remain incomplete."); return true; }
+      p.moveTo(area.tile(35, 56, 0));
       p.sendMessage("You return through the green neural portal.");
       return true;
     }
-    if (id === 49419 && tile.x === 1899 && tile.y === 6456) {
+    if ([O.PASSAGE_22, O.PASSAGE_23].includes(id) && tile.x === 1899 && tile.y === 6456) {
       if (!p.getAttribute(SCAR_MEMORY_COMPLETE) || !p.getAttribute(SCAR_TREE_COMPLETE) || !p.getAttribute(SCAR_LEECH_COMPLETE)) {
         p.sendMessage("The shipwreck passage remains sealed until the three rooms are complete.");
         return true;
       }
+      const source = scarMazeThreeSourceTile(p, p.getLocation());
+      p.moveTo(area.tile(source.x >= 1901 ? 42 : 45, 56, 0));
       p.setAttribute(SCAR_BOAT3_ROOM, true);
       p.getPacketSender().sendVarbit(15261, 1);
       p.sendMessage("You enter the eastern shipwreck chamber.");
@@ -4589,6 +4670,7 @@ module.exports = function registerDesertTreasureII(api) {
           && (p.getAttribute(SCAR_BLOOD_WHITE_REPAIRED) ?? []).length === 3) {
           p.setAttribute(SCAR_LEECH_COMPLETE, true);
           p.getPacketSender().sendVarbit(15259, 1);
+          revealScarBoatPassageThree(p);
           p.sendMessage("The Unlit Veins are restored. The shipwreck passage is now accessible.");
         }
         return true;
@@ -5052,7 +5134,7 @@ module.exports = function registerDesertTreasureII(api) {
           owned.scarTreeEnemies = [];
           owner.setAttribute(SCAR_TREE_STARTED, false);
           owner.setAttribute("desert-treasure-ii:scar-tree-wave", 0);
-          if (area instanceof ScarMazeThreeArea && !area.isDestroyed()) owner.moveTo(area.tile(41, 36, 0));
+          if (area instanceof ScarMazeThreeArea && !area.isDestroyed()) owner.moveTo(area.tile(46, 13, 0));
           owner.getCombat().getHitQueue().addPendingDamage([
             new api.core.HitDamage(20, api.core.HitMask.RED),
           ]);
