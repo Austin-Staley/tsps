@@ -1246,6 +1246,137 @@ test('Dragon Slayer II Torfinn runs the cache quest dragons, checkpoints the wav
   }
 });
 
+test('Dragon Slayer II crypt uses canonical template locs and reachable native-varbit bust puzzle', async (t) => {
+  const { api } = mockApi();
+  const register = require('../plugins/quests/quests/DragonSlayerII.Quest');
+  register(api);
+  const { cryptPuzzle } = register._test;
+  const area = cryptPuzzle.createArea('crypt-puzzle-test');
+  t.after(() => area.destroy());
+  const { ItemIdentifiers: I, ObjectIdentifiers: O } = api.core;
+  const attributes = new Map([
+    ['quest.dragon_slayer_ii.stage', 8],
+    ['dragon-slayer-ii:instance-area', area],
+    ['dragon-slayer-ii:kourend-crypt-order', [I.AIVAS_BUST, I.TRISTAN_BUST, I.CAMORRA_BUST, I.ROBERT_BUST]],
+    ['dragon-slayer-ii:kourend-crypt-placed', { south: I.TRISTAN_BUST }],
+    ['dragon-slayer-ii:kourend-crypt-inspected', true],
+    ['dragon-slayer-ii:key-parts', 7],
+  ]);
+  const inventoryItems = new Map();
+  const varbits = new Map();
+  const messages = [];
+  const inventory = {
+    getAmount: (id) => inventoryItems.get(id) ?? 0,
+    getFreeSlots: () => 28 - [...inventoryItems.values()].reduce((sum, amount) => sum + amount, 0),
+    adds: (id, amount = 1) => inventoryItems.set(id, (inventoryItems.get(id) ?? 0) + amount),
+    deleteNumber: (id, amount = 1) => inventoryItems.set(id, Math.max(0, (inventoryItems.get(id) ?? 0) - amount)),
+  };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getPacketSender: () => ({
+      sendVarbit: (id, value) => { varbits.set(id, value); },
+      sendConfig: () => {},
+      sendQuestList: () => {},
+      sendInterfaceFlagsRange: () => {},
+    }),
+    sendMessage: (message) => messages.push(message),
+    moveTo: (location) => { player.location = location; },
+    location: null,
+  };
+  const sourceLocation = (x, y, z = 1) => area.tile(x - cryptPuzzle.source.x, y - cryptPuzzle.source.y, z);
+  const eventLocation = (x, y, z = 1) => {
+    const location = sourceLocation(x, y, z);
+    return { x: location.getX(), y: location.getY(), z: location.getZ() };
+  };
+  const cacheObjects = [
+    [cryptPuzzle.tomb.id, cryptPuzzle.tomb.x, cryptPuzzle.tomb.y],
+    ...cryptPuzzle.busts.map((bust) => [bust.templateObject, bust.location[0], bust.location[1]]),
+    ...Object.values(cryptPuzzle.plinths).map((plinth) => [plinth.id, plinth.x, plinth.y]),
+  ];
+  for (const [id, x, y] of cacheObjects) {
+    const tile = sourceLocation(x, y);
+    assert.ok(area.getTemplateObjects(tile).some((object) => object.getId() === id),
+      `template object ${id} exists at source ${x},${y},1`);
+  }
+
+  // The crypt creates only overlays at the real bust locs. Plinths and tomb
+  // stay on their cache locs and use their native DS2 child transforms.
+  inventory.adds(I.AIVAS_BUST);
+  cryptPuzzle.reset(player, area, false, false);
+  assert.equal(area.puzzleObjects.length, 4);
+  for (const bust of cryptPuzzle.busts) {
+    const object = area.puzzleObjects.find((entry) => {
+      const location = entry.getLocation();
+      return location.equals(sourceLocation(bust.location[0], bust.location[1]));
+    });
+    assert.ok(object, `dynamic bust overlay ${bust.label} stays on its real cache tile`);
+    assert.equal(object.getType(), 11, `${bust.label} overlay retains the cache shape`);
+    assert.equal(object.getFace(), bust.face, `${bust.label} overlay retains the cache rotation`);
+    assert.equal(object.getId(), bust.item === I.AIVAS_BUST || bust.item === I.TRISTAN_BUST
+      ? bust.emptyObject : bust.object, `${bust.label} overlay follows held/placed state`);
+  }
+  assert.deepEqual([...varbits.entries()].sort(([a], [b]) => a - b), [[6105, 25], [6152, 0], [6153, 1], [6154, 0], [6155, 0]]);
+
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const start = [1493, 9977]; // reachable tile immediately beside the lower-floor staircase
+  const targets = new Set();
+  const addApproaches = ({ x, y, width, height }) => {
+    for (let px = x - 1; px <= x + width; px++) {
+      for (let py = y - 1; py <= y + height; py++) {
+        if (px >= x && px < x + width && py >= y && py < y + height) continue;
+        targets.add(`${px},${py}`);
+      }
+    }
+  };
+  addApproaches(cryptPuzzle.tomb);
+  cryptPuzzle.busts.forEach((bust) => addApproaches({ x: bust.location[0], y: bust.location[1], width: 1, height: 1 }));
+  Object.values(cryptPuzzle.plinths).forEach(addApproaches);
+  const queue = [start];
+  const seen = new Set([start.join(',')]);
+  const directions = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
+  for (let index = 0; index < queue.length && targets.size; index++) {
+    const [x, y] = queue[index];
+    targets.delete(`${x},${y}`);
+    const from = sourceLocation(x, y);
+    for (const [dx, dy] of directions) {
+      const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
+      if (nx < 1472 || nx >= 1568 || ny < 9920 || ny >= 9984 || seen.has(key)) continue;
+      const to = sourceLocation(nx, ny);
+      if (!RegionManager.canMove(from.getX(), from.getY(), to.getX(), to.getY(), 1, 1, 1, area)) continue;
+      seen.add(key);
+      queue.push([nx, ny]);
+    }
+  }
+  assert.equal(targets.size, 0, `all puzzle objects have a reachable interaction tile; unreachable: ${[...targets].slice(0, 8)}`);
+
+  // Continue a real item-on-cache-plinth sequence after migration.
+  const bustByItem = new Map(cryptPuzzle.busts.map((bust) => [bust.item, bust]));
+  for (const item of [I.CAMORRA_BUST, I.ROBERT_BUST]) {
+    const bust = bustByItem.get(item);
+    assert.equal(cryptPuzzle.takeObject({ player, objectId: bust.object, location: eventLocation(...bust.location) }), true);
+  }
+  for (const [direction, item] of [['north', I.AIVAS_BUST], ['west', I.CAMORRA_BUST], ['east', I.ROBERT_BUST]]) {
+    const plinth = cryptPuzzle.plinths[direction];
+    const [x, y] = plinth.click;
+    const event = { player, itemId: item, objectId: plinth.id, location: eventLocation(x, y), handled: false };
+    assert.equal(cryptPuzzle.placeBust(event), true);
+    assert.equal(event.handled, true);
+  }
+  assert.deepEqual(attributes.get('dragon-slayer-ii:kourend-crypt-placed'), {
+    south: I.TRISTAN_BUST, north: I.AIVAS_BUST, west: I.CAMORRA_BUST, east: I.ROBERT_BUST,
+  });
+  assert.deepEqual([6105, 6152, 6153, 6154, 6155].map((id) => varbits.get(id)), [30, 3, 1, 4, 2]);
+  const tomb = eventLocation(...cryptPuzzle.tomb.click);
+  assert.equal(cryptPuzzle.takeObject({ player, objectId: O.TOMB_7, location: tomb }), true);
+  assert.equal(inventory.getAmount(I.DRAGON_KEY_PIECE_4), 1);
+  assert.equal(attributes.get('dragon-slayer-ii:kourend-crypt-key-collected'), true);
+  assert.equal(attributes.get('quest.dragon_slayer_ii.stage'), 9);
+  assert.equal(varbits.get(6105), 36, 'native cache tomb and bust transforms advance after the key is taken');
+  assert.ok(messages.some((message) => message.includes('dragon key piece')));
+});
+
 test('Dragon Slayer II Ungael notes require all six real pieces before combining', () => {
   const handlers = [];
   const { api: base } = mockApi();

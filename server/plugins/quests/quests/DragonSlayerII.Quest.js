@@ -122,6 +122,8 @@ module.exports = function registerDragonSlayerII(api) {
   const ATTR_CRYPT_READY = "dragon-slayer-ii:kourend-crypt-ready";
   const ATTR_CRYPT_ORDER = "dragon-slayer-ii:kourend-crypt-order";
   const ATTR_CRYPT_PLACED = "dragon-slayer-ii:kourend-crypt-placed";
+  const ATTR_CRYPT_INSPECTED = "dragon-slayer-ii:kourend-crypt-inspected";
+  const ATTR_CRYPT_KEY_COLLECTED = "dragon-slayer-ii:kourend-crypt-key-collected";
   const ATTR_NOTES_READ = "dragon-slayer-ii:notes-read";
   const ATTR_KARAMJA_JOURNAL = "dragon-slayer-ii:malumac-journal";
   const ATTR_ROWBOAT_BUILT = "dragon-slayer-ii:lithkren-rowboat-built";
@@ -1321,14 +1323,21 @@ module.exports = function registerDragonSlayerII(api) {
     return true;
   }
   const CRYPT_SOURCE = { x: 1472, y: 9920 };
+  // The cache already contains the canonical puzzle at these locs. 29901 is
+  // Camorra's tomb; 29902-29905 are the corner busts; 29906-29909 are the
+  // four 2x1 plinths. Their transforms use native DS2 varbits 6105, 6152-6155.
+  const CRYPT_TOMB = { id: 29901, x: 1503, y: 9938, width: 2, height: 2 };
   const CRYPT_PLINTHS = {
-    north: [1503, 9964], south: [1503, 9958], west: [1500, 9961], east: [1506, 9961],
+    north: { id: 29906, x: 1503, y: 9941, width: 2, height: 1, click: [1504, 9941], varbit: 6152 },
+    south: { id: 29907, x: 1503, y: 9936, width: 2, height: 1, click: [1504, 9936], varbit: 6153 },
+    east: { id: 29908, x: 1506, y: 9938, width: 1, height: 2, click: [1506, 9939], varbit: 6154 },
+    west: { id: 29909, x: 1501, y: 9938, width: 1, height: 2, click: [1501, 9939], varbit: 6155 },
   };
   const CRYPT_BUSTS = [
-    { item: I.AIVAS_BUST, object: O.BUST_8, placedObject: O.BUST_7, location: [1495, 9967], label: "Aivas", home: "Zartharim", weapon: "crossbow" },
-    { item: I.CAMORRA_BUST, object: O.BUST_10, placedObject: O.BUST_9, location: [1511, 9967], label: "Camorra", home: "Saranthium", weapon: "axe" },
-    { item: I.ROBERT_BUST, object: O.BUST_12, placedObject: O.BUST_11, location: [1495, 9955], label: "Robert", home: "Arkney", weapon: "bow" },
-    { item: I.TRISTAN_BUST, object: O.BUST_14, placedObject: O.BUST_13, location: [1511, 9955], label: "Tristan", home: "Karville", weapon: "sword" },
+    { item: I.AIVAS_BUST, templateObject: 29905, object: O.BUST_8, emptyObject: O.BUST_7, nativeValue: 3, location: [1500, 9941], face: 3, label: "Aivas", home: "Zartharim", weapon: "crossbow" },
+    { item: I.CAMORRA_BUST, templateObject: 29903, object: O.BUST_10, emptyObject: O.BUST_9, nativeValue: 2, location: [1507, 9936], face: 1, label: "Camorra", home: "Saranthium", weapon: "axe" },
+    { item: I.ROBERT_BUST, templateObject: 29902, object: O.BUST_12, emptyObject: O.BUST_11, nativeValue: 4, location: [1500, 9936], face: 2, label: "Robert", home: "Arkney", weapon: "bow" },
+    { item: I.TRISTAN_BUST, templateObject: 29904, object: O.BUST_14, emptyObject: O.BUST_13, nativeValue: 1, location: [1507, 9941], face: 0, label: "Tristan", home: "Karville", weapon: "sword" },
   ];
   const CRYPT_PUZZLE_PLANE = 1;
   const CRYPT_ENTRANCE = { x: 1483, y: 3548, z: 0 };
@@ -1346,21 +1355,36 @@ module.exports = function registerDragonSlayerII(api) {
     area.puzzleObjects ??= [];
     return area.puzzleObjects;
   }
-  function setCryptObject(area, id, sourceX, sourceY, plane = CRYPT_PUZZLE_PLANE) {
-    const target = area.tile(sourceX - CRYPT_SOURCE.x, sourceY - CRYPT_SOURCE.y, plane);
-    const current = cryptObjects(area).filter((object) => {
-      const loc = object.getLocation();
+  function removeCryptObjectAt(area, target) {
+    for (const object of cryptObjects(area).filter((entry) => {
+      const loc = entry.getLocation();
       return loc.getX() === target.getX() && loc.getY() === target.getY() && loc.getZ() === target.getZ();
-    });
-    for (const object of current) {
+    })) {
       ObjectManager.deregister(object, true);
       area.remove(object);
       area.puzzleObjects.splice(area.puzzleObjects.indexOf(object), 1);
     }
-    const object = new GameObject(id, target, 10, 0, area);
+  }
+  function setCryptBustObject(area, bust, id) {
+    const target = area.tile(bust.location[0] - CRYPT_SOURCE.x, bust.location[1] - CRYPT_SOURCE.y, CRYPT_PUZZLE_PLANE);
+    removeCryptObjectAt(area, target);
+    // Overlay the canonical cache bust loc with its quest child. Its 11-shape
+    // and face match the cache loc, so the cache position/collision stays put.
+    const object = new GameObject(id, target, 11, bust.face, area);
     ObjectManager.register(object, true);
     area.add(object);
     cryptObjects(area).push(object);
+  }
+  function setCryptPuzzleVarbits(p, placed) {
+    const sender = p.getPacketSender?.();
+    const bustFor = (direction) => CRYPT_BUSTS.find((bust) => bust.item === placed[direction]);
+    for (const [direction, plinth] of Object.entries(CRYPT_PLINTHS)) {
+      sender?.sendVarbit?.(plinth.varbit, bustFor(direction)?.nativeValue ?? 0);
+    }
+    const nativeStage = (p.getAttribute(ATTR_CRYPT_KEY_COLLECTED) || has(p, KEY_PARTS[3])) ? 36
+      : Object.keys(placed).length === 4 ? 30
+        : p.getAttribute(ATTR_CRYPT_INSPECTED) || Object.keys(placed).length ? 25 : 4;
+    sender?.sendVarbit?.(6105, nativeStage);
   }
   function resetCryptPuzzle(p, area, randomize = true, revealClues = true) {
     if (randomize || !Array.isArray(p.getAttribute(ATTR_CRYPT_ORDER))) {
@@ -1373,14 +1397,13 @@ module.exports = function registerDragonSlayerII(api) {
     }
     const placed = randomize ? {} : (p.getAttribute(ATTR_CRYPT_PLACED) || {});
     p.setAttribute(ATTR_CRYPT_PLACED, placed);
+    if (Object.keys(placed).length) p.setAttribute(ATTR_CRYPT_INSPECTED, true);
     for (const bust of CRYPT_BUSTS) {
-      if (!Object.values(placed).includes(bust.item)) setCryptObject(area, bust.object, bust.location[0], bust.location[1]);
+      const heldOrPlaced = has(p, bust.item) || Object.values(placed).includes(bust.item);
+      const objectId = heldOrPlaced || !p.getAttribute(ATTR_CRYPT_INSPECTED) ? bust.emptyObject : bust.object;
+      setCryptBustObject(area, bust, objectId);
     }
-    for (const [direction, [x, y]] of Object.entries(CRYPT_PLINTHS)) {
-      const item = placed[direction];
-      setCryptObject(area, item ? CRYPT_BUSTS.find((bust) => bust.item === item).placedObject : O.PLINTH_10, x, y);
-    }
-    setCryptObject(area, Object.keys(placed).length === 4 ? O.TOMB_7 : O.TOMB_6, 1503, 9961);
+    setCryptPuzzleVarbits(p, placed);
     if (revealClues) {
       const [north, south, west] = p.getAttribute(ATTR_CRYPT_ORDER);
       const person = (item) => CRYPT_BUSTS.find((bust) => bust.item === item);
@@ -1419,43 +1442,62 @@ module.exports = function registerDragonSlayerII(api) {
     p.sendMessage("You descend into the Shayzien Crypts. The tomb lies on the lowest floor.");
     return true;
   }
-  function handleCryptObject({ player: p, objectId, location }) {
+  function inCryptFootprint(x, y, footprint) {
+    return x >= footprint.x && y >= footprint.y
+      && x < footprint.x + footprint.width && y < footprint.y + footprint.height;
+  }
+  function isCryptTombObject(id) {
+    return id === CRYPT_TOMB.id || id === O.TOMB_6 || id === O.TOMB_7;
+  }
+  function isCryptPlinthObject(id) {
+    return Object.values(CRYPT_PLINTHS).some((plinth) => plinth.id === id)
+      || [O.PLINTH_10, O.PLINTH_11, O.PLINTH_12, O.PLINTH_13, O.PLINTH_14, O.PLINTH_15].includes(id);
+  }
+  function handleCryptObject(event) {
+    const { player: p, objectId, location } = event;
     const area = p.getAttribute(ATTR_AREA);
     if (!(area instanceof KourendCryptArea) || stage(p) < S.KEYS || stage(p) >= S.FORGE) return false;
+    const visibleObjectId = event.definition?.id ?? objectId;
     const sourceX = CRYPT_SOURCE.x + location.x - area.getBaseX();
     const sourceY = CRYPT_SOURCE.y + location.y - area.getBaseY();
-    const stair = CRYPT_STAIRS.get(objectId)?.find(({ x, y, z }) => x === sourceX && y === sourceY && z === location.z);
+    const stair = CRYPT_STAIRS.get(visibleObjectId)?.find(({ x, y, z }) => x === sourceX && y === sourceY && z === location.z)
+      ?? CRYPT_STAIRS.get(objectId)?.find(({ x, y, z }) => x === sourceX && y === sourceY && z === location.z);
     if (stair) {
       p.moveTo(area.tile(stair.to[0] - CRYPT_SOURCE.x, stair.to[1] - CRYPT_SOURCE.y, stair.to[2]));
       p.sendMessage(stair.to[2] < location.z ? "You climb down." : "You climb up.");
       return true;
     }
-    if (objectId === O.TOMB_6 && sourceX === 1503 && sourceY === 9961 && location.z === CRYPT_PUZZLE_PLANE) {
-      resetCryptPuzzle(p, area, !p.getAttribute(ATTR_CRYPT_ORDER), true);
+    if (isCryptTombObject(visibleObjectId) && inCryptFootprint(sourceX, sourceY, CRYPT_TOMB) && location.z === CRYPT_PUZZLE_PLANE) {
+      const placed = p.getAttribute(ATTR_CRYPT_PLACED) || {};
+      if (visibleObjectId === O.TOMB_7 || Object.keys(placed).length === 4) {
+        if (has(p, KEY_PARTS[3]) || p.getAttribute(ATTR_CRYPT_KEY_COLLECTED)) {
+          return p.sendMessage("The tomb has already yielded its dragon key piece.");
+        }
+        if (!give(p, KEY_PARTS[3])) return true;
+        p.setAttribute(ATTR_CRYPT_KEY_COLLECTED, true);
+        const parts = (Number(p.getAttribute(ATTR_PARTS)) || 0) | (1 << 3);
+        p.setAttribute(ATTR_PARTS, parts);
+        setCryptPuzzleVarbits(p, placed);
+        if (parts === 15) advance(p, S.FORGE);
+        p.sendMessage("You search Camorra's tomb and take the dragon key piece.");
+        return true;
+      }
+      p.setAttribute(ATTR_CRYPT_INSPECTED, true);
+      resetCryptPuzzle(p, area, !Array.isArray(p.getAttribute(ATTR_CRYPT_ORDER)), true);
       p.sendMessage("You inspect Camorra's tomb and study the clues around the table.");
       return true;
     }
-    if (objectId === O.TOMB_7 && sourceX === 1503 && sourceY === 9961 && location.z === CRYPT_PUZZLE_PLANE) {
-      if (has(p, KEY_PARTS[3])) return p.sendMessage("The tomb has already yielded its dragon key piece.");
-      if (!give(p, KEY_PARTS[3])) return true;
-      const parts = (Number(p.getAttribute(ATTR_PARTS)) || 0) | (1 << 3);
-      p.setAttribute(ATTR_PARTS, parts);
-      if (parts === 15) advance(p, S.FORGE);
-      p.sendMessage("You search Camorra's tomb and take the dragon key piece.");
-      return true;
-    }
-    const bust = CRYPT_BUSTS.find((entry) => entry.object === objectId && entry.location[0] === sourceX && entry.location[1] === sourceY && location.z === CRYPT_PUZZLE_PLANE);
+    const bust = CRYPT_BUSTS.find((entry) => (entry.templateObject === visibleObjectId || entry.object === visibleObjectId)
+      && entry.location[0] === sourceX && entry.location[1] === sourceY && location.z === CRYPT_PUZZLE_PLANE);
     if (bust) {
+      if (!p.getAttribute(ATTR_CRYPT_INSPECTED)) return false;
+      if (has(p, bust.item) || Object.values(p.getAttribute(ATTR_CRYPT_PLACED) || {}).includes(bust.item)) {
+        p.sendMessage(`You already have the bust of ${bust.label}.`);
+        return true;
+      }
       if (!has(p, bust.item)) {
         if (!give(p, bust.item)) return true;
-        const target = area.tile(sourceX - CRYPT_SOURCE.x, sourceY - CRYPT_SOURCE.y, CRYPT_PUZZLE_PLANE);
-        for (const object of cryptObjects(area).filter((entry) => {
-          const loc = entry.getLocation();
-          return loc.getX() === target.getX() && loc.getY() === target.getY() && loc.getZ() === target.getZ();
-        })) {
-          ObjectManager.deregister(object, true); area.remove(object);
-          area.puzzleObjects.splice(area.puzzleObjects.indexOf(object), 1);
-        }
+        setCryptBustObject(area, bust, bust.emptyObject);
         p.sendMessage(`You pick up the bust of ${bust.label}.`);
       }
       return true;
@@ -1465,16 +1507,19 @@ module.exports = function registerDragonSlayerII(api) {
   function placeCryptBust(event) {
     const { player: p, itemId, objectId, location } = event;
     const area = p.getAttribute(ATTR_AREA);
-    if (!(area instanceof KourendCryptArea) || objectId !== O.PLINTH_10 || !CRYPT_BUSTS.some((bust) => bust.item === itemId)) return false;
+    const visibleObjectId = event.definition?.id ?? objectId;
+    if (!(area instanceof KourendCryptArea) || !isCryptPlinthObject(visibleObjectId) || !CRYPT_BUSTS.some((bust) => bust.item === itemId)) return false;
     const sourceX = CRYPT_SOURCE.x + location.x - area.getBaseX();
     const sourceY = CRYPT_SOURCE.y + location.y - area.getBaseY();
-    const direction = Object.entries(CRYPT_PLINTHS).find(([, [x, y]]) => x === sourceX && y === sourceY)?.[0];
+    const direction = Object.entries(CRYPT_PLINTHS).find(([, plinth]) => inCryptFootprint(sourceX, sourceY, plinth))?.[0];
     if (!direction) return false;
+    if (!p.getAttribute(ATTR_CRYPT_INSPECTED)) return false;
     event.handled = true;
     const order = p.getAttribute(ATTR_CRYPT_ORDER);
     const expected = { north: order?.[0], south: order?.[1], west: order?.[2], east: order?.[3] }[direction];
     if (itemId !== expected) {
       p.sendMessage("The bust does not fit this clue. The puzzle resets and the crypt throws you back upstairs.");
+      for (const placedItem of Object.values(p.getAttribute(ATTR_CRYPT_PLACED) || {})) give(p, placedItem);
       resetCryptPuzzle(p, area, true);
       p.moveTo(area.tile(1483 - CRYPT_SOURCE.x, 9933 - CRYPT_SOURCE.y, 3));
       return true;
@@ -1482,10 +1527,11 @@ module.exports = function registerDragonSlayerII(api) {
     remove(p, itemId);
     const placed = { ...(p.getAttribute(ATTR_CRYPT_PLACED) || {}), [direction]: itemId };
     p.setAttribute(ATTR_CRYPT_PLACED, placed);
-    setCryptObject(area, CRYPT_BUSTS.find((bust) => bust.item === itemId).placedObject, sourceX, sourceY);
+    const bust = CRYPT_BUSTS.find((entry) => entry.item === itemId);
+    setCryptBustObject(area, bust, bust.emptyObject);
+    setCryptPuzzleVarbits(p, placed);
     p.sendMessage(`You place the bust at the ${direction} of the table.`);
     if (Object.keys(placed).length === 4) {
-      setCryptObject(area, O.TOMB_7, 1503, 9961);
       p.sendMessage("The tomb unlocks. Search it for the dragon key piece.");
     }
     return true;
@@ -2101,6 +2147,7 @@ module.exports = function registerDragonSlayerII(api) {
   api.persistAttribute(ATTR_LAB_TIMER); api.persistAttribute(ATTR_UNGAEL_LAB_ACTIVE);
   api.persistAttribute(ATTR_CRYPT_ACTIVE); api.persistAttribute(ATTR_CRYPT_READY);
   api.persistAttribute(ATTR_CRYPT_ORDER); api.persistAttribute(ATTR_CRYPT_PLACED);
+  api.persistAttribute(ATTR_CRYPT_INSPECTED); api.persistAttribute(ATTR_CRYPT_KEY_COLLECTED);
   api.persistAttribute(ATTR_ROWBOAT_BUILT); api.persistAttribute(ATTR_LITHKREN_ARRIVED); api.persistAttribute(ATTR_AIVAS_DIARY);
   api.persistAttribute(ATTR_LITHKREN_DALLAS_TALKED);
   api.persistAttribute(ATTR_LITHKREN_NATIVE_STAGE);
@@ -2163,7 +2210,11 @@ module.exports = function registerDragonSlayerII(api) {
     },
   });
   api.onObjectFirstClick(O.CRYPT_ENTRANCE, enterKourendCrypt);
-  api.onObjectFirstClick([O.TOMB_6, O.TOMB_7, ...CRYPT_BUSTS.map((bust) => bust.object), ...CRYPT_STAIRS.keys()], handleCryptObject);
+  api.onObjectFirstClick([
+    CRYPT_TOMB.id, O.TOMB_6, O.TOMB_7,
+    ...CRYPT_BUSTS.flatMap((bust) => [bust.templateObject, bust.object]),
+    ...CRYPT_STAIRS.keys(),
+  ], handleCryptObject);
   api.onObjectFirstClick([O.PLINTH_16, O.PLINTH_17, O.PLINTH_18], handleKaramjaPlinth);
   api.onObjectFirstClick(O.SKELETON_84, searchKaramjaSkeleton);
   api.onObjectFirstClick([O.SKELETON_82, O.SKELETON_83, 29871], searchAivasSkeleton);
@@ -2185,6 +2236,16 @@ module.exports = function registerDragonSlayerII(api) {
   api.onNpcDeath(handleNpcDeath);
   api.onPlayerLogin(onLogin);
   api.onPlayerDeath(onPlayerDeath);
+  module.exports._test.cryptPuzzle = {
+    createArea: (owner) => new KourendCryptArea(owner),
+    reset: resetCryptPuzzle,
+    takeObject: handleCryptObject,
+    placeBust: placeCryptBust,
+    source: { ...CRYPT_SOURCE },
+    tomb: { ...CRYPT_TOMB, click: [1504, 9939] },
+    plinths: Object.fromEntries(Object.entries(CRYPT_PLINTHS).map(([direction, loc]) => [direction, { ...loc, click: [...loc.click] }])),
+    busts: CRYPT_BUSTS.map((bust) => ({ ...bust, location: [...bust.location] })),
+  };
 };
 
 module.exports._test = { restoreSphinxGeneralTopic, oneiromancerDialogueVariant };
