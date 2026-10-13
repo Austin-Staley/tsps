@@ -167,6 +167,95 @@ module.exports = function registerDesertTreasureII(api) {
     })());
   }
 
+  const KASONDE_THROW_ANIMATION = 385;
+  const KASONDE_EXPLOSION_ANIMATION = 10384;
+  const KASONDE_POISON_PROJECTILE = 2296;
+  const KASONDE_EXPLOSIVE_PROJECTILE = 2526;
+  const KASONDE_ACID_POOL = 48747;
+  const KASONDE_EXPLOSIVE_POOL = 48749;
+  class KasondeCombat extends api.core.RangedCombatMethod {
+    attackSpeed() { return 3; }
+    attackDistance() { return 8; }
+    start(npc, target) {
+      const melee = npc.getLocation().getDistance(target.getLocation()) <= 1;
+      npc.performAnimation(new api.core.Animation(melee ? 422 : KASONDE_THROW_ANIMATION));
+      if (!melee) api.core.Projectile.createProjectile(npc, target, KASONDE_POISON_PROJECTILE, 40, 57, 43, 31).sendProjectile();
+    }
+    hits(npc, target) {
+      return npc.getLocation().getDistance(target.getLocation()) <= 1
+        ? [new api.core.PendingHit(npc, target, new api.core.MeleeCombatMethod(), 1)] : super.hits(npc, target);
+    }
+  }
+  function kasondePoolDamage(p, orange, direct) {
+    const damage = orange ? 10 + Math.floor(Math.random() * 11) : direct ? 35 + Math.floor(Math.random() * 6) : 6;
+    p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(damage, api.core.HitMask.RED)]);
+    if (orange) for (const prayer of [16, 17, 18]) api.core.PrayerHandler.deactivatePrayer(p, prayer);
+    else api.core.CombatFactory.poisonEntity(p, 6, 2);
+  }
+  function processKasonde(area, p) {
+    const boss = spawned.get(p)?.kasondeBoss;
+    if (Number(p.getAttribute(VARDORVIS_PROGRESS)) !== 19 || !boss?.isRegistered?.() || boss.getHitpoints() <= 0) return;
+    const tick = api.core.World.getProcessCycle();
+    if (area.lastKasondeCycle === tick) return;
+    area.lastKasondeCycle = tick;
+    if (!area.kasondeFight) area.kasondeFight = { nextSpecial: tick + 18, nextHeal: tick + 15, special: 0, throws: [], pools: [], nextPoolHit: tick };
+    const fight = area.kasondeFight;
+    // shortcut: special intervals and heal amounts are inferred, calibrate against a live OSRS fight capture.
+    if (tick >= fight.nextHeal) {
+      boss.setHitpoints(Math.min(boss.getMaxHitpoints(), boss.getHitpoints() + (boss.getHitpoints() <= 80 ? 16 : 8)));
+      fight.nextHeal = tick + 15;
+      p.sendMessage("Kasonde drinks a potion and recovers some health.");
+    }
+    for (const thrown of [...fight.throws]) {
+      if (tick < thrown.lands) continue;
+      fight.throws.splice(fight.throws.indexOf(thrown), 1);
+      if (p.getLocation().equals(thrown.tile)) kasondePoolDamage(p, thrown.orange, true);
+      const previous = fight.pools.find(pool => pool.tile.equals(thrown.tile));
+      if (previous) { p.getPacketSender().sendObjectRemoval(previous.object); api.core.ObjectManager.deregister(previous.object, false); fight.pools.splice(fight.pools.indexOf(previous), 1); }
+      const object = new api.core.GameObject(thrown.orange ? KASONDE_EXPLOSIVE_POOL : KASONDE_ACID_POOL, thrown.tile, 10, 0, area);
+      p.getPacketSender().sendObject(object);
+      fight.pools.push({ ...thrown, object });
+    }
+    if (tick >= fight.nextPoolHit) {
+      const pool = fight.pools.find(pool => pool.tile.equals(p.getLocation()));
+      if (pool) kasondePoolDamage(p, pool.orange, false);
+      fight.nextPoolHit = tick + 5;
+    }
+    if (fight.explosion && tick >= fight.explosion) {
+      const rangedLine = { type: () => api.core.CombatType.RANGED, attackDistance: () => 64 };
+      if (p.getLocation().equals(boss.getLocation()) || api.core.CombatRange.canReach(boss, rangedLine, p)) {
+        p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(35 + Math.floor(Math.random() * 6), api.core.HitMask.RED)]);
+        p.sendMessage("Kasonde's explosion hits you. Hide behind a pillar to break his line of sight!");
+      } else p.sendMessage("The pillar shields you from Kasonde's explosion.");
+      fight.explosion = null;
+      boss.setScriptedMovement(false);
+      boss.getCombat().attack(p);
+    }
+    if (tick < fight.nextSpecial) return;
+    const special = fight.special++ % 4;
+    fight.nextSpecial = tick + 18;
+    if (special === 3) {
+      boss.performAnimation(new api.core.Animation(KASONDE_EXPLOSION_ANIMATION));
+      boss.setScriptedMovement(true);
+      fight.explosion = tick + 5;
+      p.sendMessage("Kasonde charges an explosion. Hide behind a pillar!");
+      return;
+    }
+    boss.performAnimation(new api.core.Animation(KASONDE_THROW_ANIMATION));
+    if (special === 2) {
+      const localY = p.getLocation().getY() - area.getBaseY();
+      boss.moveTo(area.tile(7, localY < 16 ? 24 : 4, 0));
+      p.sendMessage("Kasonde dashes away and throws a barrage of green and orange potions. Keep moving!");
+    } else p.sendMessage("Kasonde throws a potion at your feet. Move away before it lands!");
+    const targets = special === 2 ? [[0,0],[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[1,1],[1,-1]] : [[0,0]];
+    targets.forEach(([dx,dy], index) => {
+      const tile = p.getLocation().clone().addX(dx).addY(dy);
+      const orange = special === 2 ? index % 2 === 1 : special === 1;
+      new api.core.Projectile(boss.getLocation(), tile, null, orange ? KASONDE_EXPLOSIVE_PROJECTILE : KASONDE_POISON_PROJECTILE, 40, 80, 43, 31, area).sendProjectile();
+      fight.throws.push({ tile, orange, lands: tick + 3 });
+    });
+  }
+
   class VardorvisCombat extends api.core.MeleeCombatMethod {
     start(npc) { npc.performAnimation(new api.core.Animation(VARDORVIS_MELEE_ANIMATION)); }
     attackSpeed() { return 5; }
@@ -664,6 +753,9 @@ module.exports = function registerDesertTreasureII(api) {
       }
     }
     getName() { return "Stranglewood temple (Desert Treasure II)"; }
+    process(actor) {
+      if (actor?.isPlayer?.() && actor.getUsername() === this.owner) processKasonde(this, actor.getAsPlayer());
+    }
     allowSummonPet() { return false; }
     isMulti() { return true; }
     destroy() {
@@ -3978,7 +4070,8 @@ module.exports = function registerDesertTreasureII(api) {
       return true;
     }
     const templeTile = templeSourceTile(p, location);
-    if (templeTile && [O.ENTRY_20, O.ENTRY_21, O.ENTRY_22, O.ENTRY_23].includes(objectId)) {
+    if (templeTile && ([O.ENTRY_20, O.ENTRY_21, O.ENTRY_22, O.ENTRY_23].includes(objectId)
+      || (objectId === O.STAIRS_254 && option === "climb-up"))) {
       const area = p.getAttribute(ATTR_STRANGLEWOOD_TEMPLE);
       area.leave(p, false);
       area.postLeave(p, false);
@@ -4934,6 +5027,11 @@ module.exports = function registerDesertTreasureII(api) {
       owned.kasondeBoss = null;
       killer.setAttribute(VARDORVIS_PROGRESS, 20);
       const area = killer.getAttribute(ATTR_STRANGLEWOOD_TEMPLE);
+      for (const pool of area?.kasondeFight?.pools ?? []) {
+        killer.getPacketSender().sendObjectRemoval(pool.object);
+        api.core.ObjectManager.deregister(pool.object, false);
+      }
+      if (area) area.kasondeFight = null;
       if (area instanceof StranglewoodTempleArea && !area.isDestroyed()) {
         const injured = api.core.NPC.create(N.KASONDE_9, area.tile(7, 16, 0));
         injured.setOwner?.(killer);
@@ -5812,6 +5910,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("Odd Figure", { Disturb: handleBossTalk, "Talk-to": handleBossTalk });
   api.onNpcDeath(handleDeath);
   api.registerNpcCombatMethodProvider(N.VARDORVIS_2, VardorvisCombat);
+  api.registerNpcCombatMethodProvider(N.KASONDE_7, KasondeCombat);
   api.onCombatHitRoll(vardorvisHitRoll);
   api.onCombatHitResolved(vardorvisHitResolved);
   api.onPrayerDisabled(vardorvisPrayerDisabled);
