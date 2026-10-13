@@ -717,6 +717,11 @@ module.exports = function registerSongOfTheElves(api) {
       inventory.deleteNumber(DISGUISE.PURPLE_DYE, 1);
       inventory.adds(DISGUISE.TABARD, 1);
     } else if (["QMXa3C", "taCC98"].includes(event.stepId)) {
+      if (!CHEMICALS.some(id => inventory.getAmount(id) > 0) && inventory.getFreeSlots() < 1) {
+        event.handled = true;
+        player.sendMessage("Make room in your inventory before taking a chemical.");
+        return;
+      }
       if (event.stepId === "taCC98") {
         for (const id of CHEMICALS) inventory.deleteNumber(id, inventory.getAmount(id));
       }
@@ -1742,9 +1747,6 @@ module.exports = function registerSongOfTheElves(api) {
       "The dark red powder.": ItemIdentifiers.RED_POWDER,
     }[event.option];
     if (!chemical || currentChapter(event.player) !== 2) return;
-    const inventory = event.player.getInventory();
-    for (const id of CHEMICALS) inventory.deleteNumber(id, inventory.getAmount(id));
-    inventory.adds(chemical, 1);
     event.player.setAttribute(CHEMICAL_CHOICE, chemical);
   }
 
@@ -2767,12 +2769,19 @@ module.exports = function registerSongOfTheElves(api) {
     return true;
   }
 
+  function chemicalCabinetSteps(steps) {
+    // The Wiki's other chemical options say "above"; all four share the first option's handout.
+    return steps.map(step => step.type === "choice" ? { ...step,
+      options: step.options.map((option, index) => index < CHEMICALS.length
+        ? { ...option, steps: step.options[0].steps } : option),
+    } : step);
+  }
   function searchElenaCabinet(event) {
     const player = event?.player;
     const loc = event?.location;
     if (!player || currentChapter(player) !== 2 || quest.isComplete(player)) return false;
     if (loc && (loc.x < 2588 || loc.x > 2597 || loc.y < 3328 || loc.y > 3342)) return false;
-    return startTranscript(api, player, 0, PAGE, "freeing-elena-searching-her-cabinet");
+    return startTranscript(api, player, 0, PAGE, "freeing-elena-searching-her-cabinet", chemicalCabinetSteps);
   }
 
   function searchRehnisonBed(event) {
@@ -2812,7 +2821,11 @@ module.exports = function registerSongOfTheElves(api) {
   function nativeEarlyProgress(value, player) {
     if (value === 10) return 2;
     if (value === 20) return player?.getAttribute(DISGUISE_BRIEFED) === true ? 10 : 4;
-    if (value === 30) return Number(player?.getAttribute(ELENA_ESCAPE_PROGRESS)) || 18;
+    if (value === 30) {
+      const progress = Number(player?.getAttribute(ELENA_ESCAPE_PROGRESS)) || 18;
+      // Existing saves may have taken the clear liquid before its menu updated the native stage.
+      return progress === 22 && player?.getInventory?.()?.getAmount?.(ItemIdentifiers.CLEAR_LIQUID) > 0 ? 24 : progress;
+    }
     if (value === 40) return player?.getAttribute(RESISTANCE_BRIEFING) === true ? 32 : 28;
     if (value === 50) return 40;
     return value;

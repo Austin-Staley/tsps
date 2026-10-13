@@ -12443,6 +12443,26 @@ test('Song of the Elves prison entry keeps Elena visible and cannot release her 
     talk({ player, npcId: api.core.NpcIdentifiers.EDMOND_2, definition: { getName: () => 'Edmond' } });
     assert.equal(quest.getStage(player), 30, 'Edmond cannot skip Elena’s chemical handoff');
     assert.equal(transcripts.at(-1), 'making-a-knightly-disguise-talking-to-edmond-after-completing-the-disguise-talking-to-him-again-2');
+    attrs.set('song-of-the-elves:elena-escape-progress', 22);
+    let freeSlots = 0;
+    const chemicals = new Map();
+    player.sendMessage = () => {};
+    player.getInventory = () => ({ getAmount: id => chemicals.get(id) ?? 0, getFreeSlots: () => freeSlots,
+      deleteNumber: (id, n) => chemicals.set(id, Math.max(0, (chemicals.get(id) ?? 0) - n)),
+      adds: (id, n) => chemicals.set(id, (chemicals.get(id) ?? 0) + n) });
+    const choice = handlers.custom.get('npc-dialogue:choice').find(h => h.name === 'handleDialogueChoice');
+    const action = handlers.custom.get('npc-dialogue:action').find(h => h.name === 'onAction');
+    choice({ player, option: 'The thick clear liquid.' });
+    action({ player, kind: 'message', stepId: 'QMXa3C' });
+    assert.equal(quest.varbitValue(30, player), 22, 'a full bag cannot advance the handout');
+    freeSlots = 1;
+    choice({ player, option: 'The thick clear liquid.' });
+    assert.equal(chemicals.get(I.CLEAR_LIQUID), undefined, 'the chosen chemical waits for its actual handout message');
+    action({ player, kind: 'message', stepId: 'QMXa3C' });
+    assert.equal(chemicals.get(I.CLEAR_LIQUID), 1);
+    assert.equal(quest.varbitValue(30, player), 24);
+    attrs.set('song-of-the-elves:elena-escape-progress', 22);
+    assert.equal(quest.varbitValue(30, player), 24, 'an already-earned clear liquid upgrades the native display safely');
     attrs.set('song-of-the-elves:elena-escape-progress', 26);
     assert.equal(quest.varbitValue(30, player), 26);
     talk({ player, npcId: api.core.NpcIdentifiers.EDMOND_2, definition: { getName: () => 'Edmond' } });
