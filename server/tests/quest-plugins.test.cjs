@@ -9682,10 +9682,10 @@ test('RFD Mother cycles six weaknesses and the final room suppresses prayer and 
 
 test('DT2 Vardorvis scales melee, heals, exposes avoidable specials and accepts only active native spore buttons', () => {
   const {api:base,handlers}=mockApi();
-  let cycle=1, Combat, hitRoll, resolved, prayerDisabled, blocked=false, prayer=60, accurate=true;
+  let cycle=1, Combat, hitRoll, resolved, prayerDisabled, blocked=false, prayer=60, accurate=true,freeSlots=1;
   const damage={value:37,getDamage(){return this.value},setDamage(v){this.value=v}};
   const pending={getHits:()=>[damage],isAccurate:()=>accurate,updateTotalDamage(){},getTotalDamage:()=>damage.value};
-  const attrs=new Map([['desert-treasure-ii:vardorvis-progress',16]]),varbits=new Map([[4118,1]]),received=[],tasks=[],scripts=[],closed=[];
+  const attrs=new Map([['desert-treasure-ii:vardorvis-progress',16]]),varbits=new Map([[4118,1]]),received=[],tasks=[],scripts=[],closed=[],ground=[];
   class Instance {
     constructor(){this.entities=[]}setChunk(){}enter(){}leave(){}postLeave(){}destroy(){}isDestroyed(){return false}
     getBaseX(){return 8192}getBaseY(){return 1600}tile(x,y,z){return new base.core.Location(8192+x,1600+y,z)}add(n){this.entities.push(n)}
@@ -9697,12 +9697,12 @@ test('DT2 Vardorvis scales melee, heals, exposes avoidable specials and accepts 
     PrayerHandler:{...base.core.PrayerHandler,deactivatePrayer:(p,id)=>varbits.set(4100+id,0)},
     Task:class{stop(){this.stopped=true}},TaskManager:{submit:t=>tasks.push(t),cancelTasks(){}},
   };
-  const api=new Proxy(base,{get:(t,key)=>key==='core'?core:key==='registerNpcCombatMethodProvider'?(id,C)=>{Combat=C}:key==='onCombatHitRoll'?h=>hitRoll=h:key==='onCombatHitResolved'?h=>resolved=h:key==='onPrayerDisabled'?h=>prayerDisabled=h:t[key]});
+  const api=new Proxy(base,{get:(t,key)=>key==='core'?core:key==='registerNpcCombatMethodProvider'?(id,C)=>{Combat=C}:key==='onCombatHitRoll'?h=>hitRoll=h:key==='onCombatHitResolved'?h=>resolved=h:key==='onPrayerDisabled'?h=>prayerDisabled=h:key==='getItemOnGroundManager'?()=>({registerLocation:(...args)=>ground.push(args)}):t[key]});
   require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
   const quest=require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
   const p={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getUsername:()=> 'vard-test',isPlayer:()=>true,getAsPlayer(){return this},isRegistered:()=>true,getHitpoints:()=>99,
     getPrivateArea:()=>attrs.get('desert-treasure-ii:vardorvis-area'),getLocation(){return this.location},moveTo(v){this.location=v},sendMessage(){},
-    getInventory:()=>({getAmount:()=>0}),getPacketSender:()=>({getVarbit:k=>varbits.get(k)||0,sendVarbit:(k,v)=>varbits.set(k,v),sendConfig(){},sendQuestList(){},sendInterfaceFlagsRange(){},sendGraphic(){},sendSubInterface(){},sendInterfaceScript:(...a)=>scripts.push(a),sendInterfaceDisplayState(){},closeInterface:id=>closed.push(id)}),
+    getInventory:()=>({getAmount:()=>0,getFreeSlots:()=>freeSlots}),getPacketSender:()=>({getVarbit:k=>varbits.get(k)||0,sendVarbit:(k,v)=>varbits.set(k,v),sendConfig(){},sendQuestList(){},sendInterfaceFlagsRange(){},sendGraphic(){},sendSubInterface(){},sendObject(){},sendInterfaceScript:(...a)=>scripts.push(a),sendInterfaceDisplayState(){},closeInterface:id=>closed.push(id)}),
     getMovementQueue:()=>({reset(){},setBlockMovement:v=>blocked=v}),getSkillManager:()=>({getCurrentLevel:()=>prayer,setCurrentLevel:(s,v)=>prayer=v}),
     getCombat:()=>({getTarget:()=>attrs.get('desert-treasure-ii:boss'),getHitQueue:()=>({addPendingDamage:h=>received.push(...h)})})};
   quest.setStage(p,7);
@@ -9735,6 +9735,8 @@ test('DT2 Vardorvis scales melee, heals, exposes avoidable specials and accepts 
     Math.random=()=>0;cycle=70;area.nextSpecial=cycle;area.process(p);assert.equal(area.axes.length,3,'low health adds three axes');assert.ok(area.axes.every(a=>a.npc.id===12227));
     p.moveTo(area.tile(8,8,0));cycle=73;area.process(p);assert.equal(tasks.length,1,'an axe starts a bleed task that can survive area exit');
     const bleed=tasks[0];for(let n=0;n<5;n++)bleed.execute();assert.equal(bleed.stopped,true);assert.equal(received.slice(-5).every(h=>h.getDamage()===3),true);
-    assert.equal(attrs.get(bossKey),boss);
+    handlers.npcDeath[0]({killer:p,npc:boss});assert.equal(ground[0][1].getId(),core.ItemIdentifiers.TEMPLE_KEY_3);assert.equal(ground[0][3],area);
+    const pickup=handlers.ground.find(h=>h.toString().includes('VARDORVIS_PROGRESS'));freeSlots=0;const refused={player:p,groundItemId:core.ItemIdentifiers.TEMPLE_KEY_3};pickup(refused);assert.equal(refused.handled,true);assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),17);freeSlots=1;pickup({player:p,groundItemId:core.ItemIdentifiers.TEMPLE_KEY_3});assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),18);
+    handlers.objects[0]({player:p,objectId:core.ObjectIdentifiers.ROCKS_139,option:'Leave',location:{x:8198,y:1628,z:0}});assert.deepEqual([p.location.getX(),p.location.getY()],[1117,3429]);
   }finally{Math.random=random;area.destroy()}
 });
