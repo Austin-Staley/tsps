@@ -377,11 +377,10 @@ test("combat achievements: the fight decides Araxxor's tasks", () => {
 });
 
 test("Araxxor cleanup leaves incoming hits alone for players without a lair", () => {
-  let processPlayer, cleared = 0;
+  let cleared = 0;
   Area.attach({
-    core: { PrivateArea: class {} },
-    onPlayerProcess: handler => { processPlayer = handler; },
-    onCanAttack() {}, onPlayerLogout() {}, onPlayerDisconnect() {},
+    core: { Area: class {}, Boundary: class {}, PrivateArea: class {} },
+    registerArea() {},
   });
   const attrs = new Map();
   const player = {
@@ -389,13 +388,12 @@ test("Araxxor cleanup leaves incoming hits alone for players without a lair", ()
     getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
     getCombat: () => ({ getHitQueue: () => ({ clear: () => { cleared++; } }) }),
   };
-  processPlayer({ player });
   Area.destroyArea(player);
   assert.equal(cleared, 0, "other quest and raid damage must reach the player");
   attrs.set("araxxor:instance-area", {});
   Area.destroyArea(player);
   assert.equal(cleared, 1, "the departing Araxxor player's pending shots are cleared");
-  processPlayer({ player });
+  Area.destroyArea(player);
   assert.equal(cleared, 1, "cleanup ends with the actual instance");
 });
 
