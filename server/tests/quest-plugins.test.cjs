@@ -6487,6 +6487,52 @@ test('Blood Moon Slepe chapter spawns a talkable Ivan, follows him to Roy, and r
  }finally{runtime.startTranscript=original;delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];}
 });
 
+test('Blood Moon Manor starts only after the pub clue and lets Veliaf speak after every Vyrewatch dies',()=>{
+ const runtime=require('../plugins/quests/QuestRuntime'),original=runtime.startTranscript,started=[];
+ runtime.startTranscript=(...args)=>{started.push(args.slice(1));return true;};
+ try{
+  const {api,handlers}=mockApi();
+  delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attrs=new Map([['quest.the_blood_moon_rises.stage',30],['quest.the_blood_moon_rises.slepe-story',{ivanFollowing:true}]]);
+  const loc={getX:()=>3725,getY:()=>3356,getZ:()=>1},spawns=[];
+  const player={area:null,getAttribute:key=>attrs.get(key),setAttribute:(key,value)=>attrs.set(key,value),getLocation:()=>loc,sendMessage(){},
+   getArea(){return this.area;},setArea(value){this.area=value;},isPlayer(){return true;},isNpc(){return false;},getIndex(){return 10;},getAsPlayer(){return this;}};
+  let npcIndex=100;
+  api.spawnNpc=definition=>{const npc={...definition,index:npcIndex++,area:null,hp:90,getArea(){return this.area;},getHitpoints(){return this.hp;},isRegistered(){return true;},
+   setArea(value){this.area=value;},isPlayer(){return false;},isNpc(){return true;},getIndex(){return this.index;},getAsNpc(){return this;},setMultiCombat(){},setScriptedMovement(){},getCombat(){return{attack(){}};}};spawns.push(npc);return npc;};
+  api.removeNpc=()=>{};
+  const process=handlers.playerProcess.find(handler=>handler.name==='processSlepeManor');
+  process({player});assert.equal(spawns.length,0,'the manor route is not active before Roy gives his clue');
+  attrs.set('quest.the_blood_moon_rises.slepe-story',{ivanFollowing:true,royClue:true});process({player});
+  assert.deepEqual(spawns.slice(0,3).map(n=>[n.id,n.x,n.y,n.z,n.ownerOnly]),[
+   [api.core.NpcIdentifiers.VYREWATCH_54,3721,3358,1,true],[api.core.NpcIdentifiers.VYREWATCH_55,3723,3359,1,true],[api.core.NpcIdentifiers.VYREWATCH_56,3727,3358,1,true],
+  ]);
+  assert.equal(started.at(-1)[3],'the-truth-hurtz-upon-entering-crombwick-manor');
+  const death=handlers.npcDeath.find(handler=>handler.name==='handleSlepeManorDeath');
+  for(const enemy of spawns.slice(0,3)){
+   enemy.hp=0;death({npc:enemy,killer:player});
+   if(enemy!==spawns[2])assert.equal(spawns.length,3,'Veliaf stays unavailable until the last Vyrewatch dies');
+  }
+  assert.equal(attrs.get('quest.the_blood_moon_rises.slepe-story').manorEnemiesDefeated,true);
+  assert.equal(spawns.length,5,'the clear makes owner-only Ivan and talkable Veliaf available');
+  const talk=handlers.npcInteractions.get('Veliaf Hurtz')['Talk-to'];
+  assert.equal(spawns[4].id,api.core.NpcIdentifiers.VELIAF_HURTZ_2,'the post-fight NPC uses the canonical Talk-to cache form');
+  assert.equal(talk({player,npcId:api.core.NpcIdentifiers.VELIAF_HURTZ_2,definition:{getName:()=>"Veliaf Hurtz"},option:'Talk-to',handled:false}),true);
+  assert.equal(started.at(-1)[3],'the-truth-hurtz-talking-to-veliaf-inside-crombwick-manor');
+  const cleanup=handlers.playerLogout.find(handler=>handler.name==='cleanupSlepeManor');cleanup({player});
+  const transcriptCount=started.length;process({player});
+  assert.equal(spawns.length,7,'a saved manor clear restores story actors without respawning enemies');
+  assert.deepEqual(spawns.slice(5).map(n=>n.id),[api.core.NpcIdentifiers.IVAN_STROM_4,api.core.NpcIdentifiers.VELIAF_HURTZ_2]);
+  assert.equal(started.length,transcriptCount,'resuming the cleared manor does not replay its entry transcript');
+  const line=handlers.custom.get('npc-dialogue:line')[1];
+  const farewellText='Not really. Ivan put it better than I ever could. Now, I\'d better get to Paterdomus.';
+  const farewell={player,step:{player:farewellText},text:farewellText};
+  line(farewell);assert.equal(typeof farewell.after,'function','the player-spoken transcript line advances the manor chapter');farewell.after();
+  assert.equal(attrs.get('quest.the_blood_moon_rises.slepe-story').manorComplete,true);
+ }finally{runtime.startTranscript=original;delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];}
+});
+
 test('Blood Moon resumes the escape transcript after a completed hideout defense is saved',()=>{
  const runtime=require('../plugins/quests/QuestRuntime'),original=runtime.startTranscript;let transcript;
  runtime.startTranscript=(...args)=>{transcript=args.slice(1);return true;};
