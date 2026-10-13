@@ -360,6 +360,7 @@ export class WebGPUMapSquare implements MapSquare {
 
     /** CPU-side height/flag data other systems sample (bridge camera, route finding). */
     tileRenderFlags!: Uint8Array[][];
+    tileOverlays?: Int16Array[][];
     /** HD ground recipe grid copied from SdMapData, [level][x][y], full heightmap grid incl. border. */
     tileGroundMaterials?: Uint8Array[][];
     tileGroundColors?: Uint32Array[][];
@@ -479,6 +480,7 @@ export class WebGPUMapSquare implements MapSquare {
         square.collisionMaps = (mapData.collisionDatas ?? []).map(CollisionMap.fromData);
         square.tilePresenceByLevel = mapData.tilePresenceByLevel;
         square.tileRenderFlags = mapData.tileRenderFlags;
+        square.tileOverlays = mapData.tileOverlays;
         square.tileGroundMaterials = mapData.groundMaterials;
         square.tileGroundColors = mapData.groundColors;
         square.bridgeSurfaceFlags = mapData.bridgeSurfaceFlags;

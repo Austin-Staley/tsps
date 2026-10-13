@@ -1795,6 +1795,17 @@ export function installEditMode(client: OsrsClient): EditModePlugin {
             reloadTile(renderer, tile);
             zoneGroundOverlay?.invalidate();
         },
+        getTerrainOverlay: (tile) => {
+            const renderer = terrainHost(client);
+            if (!renderer) return undefined;
+            const override = renderer.terrainOverrides.get(`${tile.tileX},${tile.tileY},${tile.plane}`)?.overlay;
+            if (override !== undefined) return override;
+            const map = renderer.getPreferredMapForWorldTile(tile.tileX, tile.tileY);
+            if (!map?.tileOverlays) return undefined;
+            const x = Math.floor(tile.tileX - map.getRenderBaseWorldX()) + map.borderSize;
+            const y = Math.floor(tile.tileY - map.getRenderBaseWorldY()) + map.borderSize;
+            return (map.tileOverlays[tile.plane]?.[x]?.[y] ?? 0) & 0x7fff;
+        },
         getTerrainHeight: (tile) => {
             const renderer = terrainHost(client);
             if (!renderer?.getPreferredMapForWorldTile(tile.tileX, tile.tileY)) return undefined;
@@ -2052,7 +2063,7 @@ type TerrainHost = {
         number,
         { terrainData: Int8Array; objectData?: Int8Array }
     >;
-    getPreferredMapForWorldTile(tileX: number, tileY: number): unknown;
+    getPreferredMapForWorldTile(tileX: number, tileY: number): (EditorPickMap & { tileOverlays?: Int16Array[][] }) | undefined;
     getTileHeightAtPlane(tileX: number, tileY: number, plane: number): number;
     pendingLocUpdates?: Set<number>;
     getMapIdForWorldTile(x: number, y: number): number;

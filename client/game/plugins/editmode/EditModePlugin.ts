@@ -570,6 +570,20 @@ export class EditModePlugin {
         this.commit();
     }
 
+    getSelectionOverlay(): number | undefined {
+        const selection = this.selection;
+        if (!selection || selection.kind === "building" || selection.kind === "loc" || selection.kind === "npc" ||
+            (selection.tileEndX ?? selection.tileX) !== selection.tileX ||
+            (selection.tileEndY ?? selection.tileY) !== selection.tileY) return undefined;
+        const overlay = this.host?.getTerrainOverlay?.(selection);
+        return overlay !== undefined && overlay > 0 ? overlay : undefined;
+    }
+
+    useSelectionOverlay(): void {
+        const overlayId = this.getSelectionOverlay();
+        if (overlayId !== undefined) this.setConfig({ overlayId });
+    }
+
     paintSelection(): void {
         if (!this.selection || this.selection.kind === "building" || this.selection.kind === "loc" || this.selection.kind === "npc") return;
         const range = this.getSelectionRange();

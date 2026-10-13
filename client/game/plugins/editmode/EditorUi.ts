@@ -794,6 +794,18 @@ class EditorChrome {
         const actions = document.createElement("div");
         Object.assign(actions.style, { display: "grid", gap: "5px" });
         if (isGroundSelection) {
+            if (!hasTileRange) {
+                const overlay = this.plugin.getSelectionOverlay();
+                const useOverlay = createActionButton("Use overlay",
+                    () => createOverlayIcon(this.overlayColor(overlay ?? 0)),
+                    () => this.plugin.useSelectionOverlay());
+                useOverlay.disabled = overlay === undefined;
+                if (useOverlay.disabled) {
+                    useOverlay.style.opacity = "0.45";
+                    useOverlay.style.cursor = "not-allowed";
+                }
+                actions.appendChild(useOverlay);
+            }
             actions.append(
                 createActionButton("Paint overlay", createPaintIcon, () =>
                     this.plugin.paintSelection(),

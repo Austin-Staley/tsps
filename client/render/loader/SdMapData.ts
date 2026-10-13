@@ -91,6 +91,7 @@ export type SdMapData = {
     renderPosY?: number;
 
     tileRenderFlags: Uint8Array[][];
+    tileOverlays?: Int16Array[][];
     /** Per-level, per-tile HD ground recipe grid, same [level][x][y] indexing as tileRenderFlags. */
     groundMaterials?: Uint8Array[][];
     /** Per-level, per-tile ground colour (0xRRGGBB, 0 = none), same indexing as groundMaterials. */

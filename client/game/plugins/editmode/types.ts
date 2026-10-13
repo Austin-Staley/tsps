@@ -279,6 +279,7 @@ export interface EditModeHost {
     setTerrainPreview?(edits: readonly EditModeEdit[]): void;
     clearTerrainPreview?(): void;
     /** Samples terrain at an exact tile vertex; undefined when its map is unavailable. */
+    getTerrainOverlay?(tile: EditModeTile): number | undefined;
     getTerrainHeight?(tile: EditModeTile): number | undefined;
     /** Rebuilds edited map squares from their persisted base data. */
     refreshEditedRegions?(regionIds: readonly number[], edits: readonly EditModeEdit[]): void;
