@@ -457,6 +457,11 @@ module.exports = function registerBelowIceMountainQuest(api) {
    */
   function handleRamarnoTalk(event) {
     if (!RAMARNO_WORLD_NPC_IDS.has(event.npcId) || event.clickType !== 1) return;
+    // Ramarno is also the Whisperer chapter's guide in Desert Treasure II.
+    // Let that quest's named handler own the interaction while it is active;
+    // otherwise this generic post-quest transcript consumes the click first.
+    const dt2Stage = Number(event.player.getAttribute("quest.desert_treasure_ii.stage")) || 0;
+    if (dt2Stage > 0 && dt2Stage < 12) return;
     const variant = selectRamarnoVariant(event.player);
     if (!variant) return;
     event.handled = true;

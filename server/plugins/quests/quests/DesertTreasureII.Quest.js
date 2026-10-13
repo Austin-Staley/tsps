@@ -2805,7 +2805,10 @@ module.exports = function registerDesertTreasureII(api) {
     p.getPacketSender().sendVarbit(15116, Number(p.getAttribute(TOTEM_MASK)) || (p.getAttribute(TOTEMS_CHARGED) ? 15 : 0));
     if (stage(p) === S.VARDORVIS && p.getAttribute(STRANGLEWOOD_CITY_ENTERED)
       && Number(p.getAttribute(VARDORVIS_PROGRESS)) >= 6 && Number(p.getAttribute(VARDORVIS_PROGRESS)) <= 16) spawnSurfaceKasonde(p);
-    if (stage(p) === S.WHISPERER) setLassar(p, p.getAttribute(LASSAR) ?? {});
+    if (stage(p) === S.WHISPERER) {
+      setLassar(p, p.getAttribute(LASSAR) ?? {});
+      ensurePrescott(p);
+    }
     if (stage(p) === S.FINALE && p.getAttribute("desert-treasure-ii:final-cutscene-started")
       && !p.getAttribute(FINAL_WIGHTS_COMPLETE)) {
       enterFinalRoom(p);
@@ -3092,6 +3095,8 @@ module.exports = function registerDesertTreasureII(api) {
       : current === p.getAttribute(ATTR_STRANGLEWOOD_TEMPLE) ? [1174, 3427]
         : current === p.getAttribute(ATTR_VARDORVIS_AREA) ? [1117, 3429] : null);
     if (current && current === p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT) && current.defended) p.setAttribute(VARDORVIS_PROGRESS, 9);
+    const owned = spawned.get(p);
+    if (owned?.prescott) api.removeNpc(owned.prescott);
     for (const key of [ATTR_VAULT_AREA, FINAL_ROOM, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO, ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA, SUCELLUS_AREA]) {
       const area = p.getAttribute(key);
       if (area && !area.isDestroyed?.()) {
@@ -5583,9 +5588,29 @@ module.exports = function registerDesertTreasureII(api) {
     if (stage(p) !== S.WHISPERER) return false;
     const state = p.getAttribute(LASSAR) ?? {};
     if (!state.ramarno) return p.sendMessage("Prescott points you toward Ramarno by the Sacred Forge.");
-    talk(p, npcId, has(p, I.VERY_LONG_ROPE)
+    const variant = state.entered
       ? "the-whisperer-talking-to-prescott-talking-to-prescott-after-entering-the-undercity"
-      : state.rope ? "the-whisperer-talking-to-prescott-talking-to-prescott-again" : "the-whisperer-talking-to-prescott");
+      : state.rope ? "the-whisperer-talking-to-prescott-talking-to-prescott-again" : "the-whisperer-talking-to-prescott";
+    talk(p, npcId, variant);
+  }
+
+  function answerPrescottCondition({ player: p, npcId, stepId }) {
+    if (npcId !== N.PRESCOTT || stage(p) !== S.WHISPERER) return null;
+    const state = p.getAttribute(LASSAR) ?? {};
+    if (stepId === "kMM5yZ") return !state.ramarno;
+    if (stepId === "yRRbfR") return Boolean(state.ramarno);
+    if (stepId === "1os4H_") return !has(p, I.VERY_LONG_ROPE);
+    if (stepId === "G_Oyly") return has(p, I.VERY_LONG_ROPE);
+    return null;
+  }
+
+  function ensurePrescott(p) {
+    if (stage(p) !== S.WHISPERER || !(p.getAttribute(LASSAR) ?? {}).ramarno) return null;
+    let owned = spawned.get(p);
+    if (!owned) spawned.set(p, owned = {});
+    if (owned.prescott?.isRegistered?.()) return owned.prescott;
+    owned.prescott = api.spawnNpc({ id: N.PRESCOTT, x: 2975, y: 5794, z: 0, wanderRadius: 0, owner: p, ownerOnly: true });
+    return owned.prescott;
   }
 
   function startFinalCellLock(p) {
@@ -5931,6 +5956,16 @@ module.exports = function registerDesertTreasureII(api) {
       const area = p.getAttribute(ATTR_SCAR_AREA);
       if (area instanceof ScarArea && !area.isDestroyed()) p.moveTo(area.tile(51, 43, 0));
     }
+  }
+
+  function handleDialogueChoice({ player: p, option }) {
+    // The wiki transcript encodes this branch's continuation as a jump marker,
+    // so it never emits the action id handled above. Record the conversation
+    // when the player actually chooses the archaeologist question.
+    if (stage(p) !== S.WHISPERER || option !== "Have you seen any archeologists around here?") return;
+    const state = p.getAttribute(LASSAR) ?? {};
+    if (!state.ramarno) setLassar(p, { ...state, ramarno: true });
+    ensurePrescott(p);
   }
 
   function handleLassarObject(event, visibleId, option) {
@@ -6408,6 +6443,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onCustomEvent("dt2:sucellus-prison-return-stash", returnSucellusPrisonStash);
   api.onCustomEvent("dt2:sucellus-prison-complete", completeSucellusPrison);
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
+  api.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);
   api.onCustomEvent("magic:hit-effects", activateTotem);
   api.onCustomEvent("magic:hit-effects", stunLeviathan);
   api.onCombatHitRoll(forceTotemAccuracy);
@@ -6433,6 +6469,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onObjectInteraction("Barricade", { "Climb-over": crossStranglewoodBarricade });
   api.onNpcInteraction("Ramarno", { "Talk-to": talkRamarno });
   api.onNpcInteraction("Prescott", { "Talk-to": talkPrescott });
+  api.onNpcDialogueCondition(answerPrescottCondition);
   api.onNpcInteraction("Wizard Persten", { "Talk-to": progressBosses });
   api.onNpcInteraction("Captain Malleta", { "Talk-to": progressBosses });
   api.onNpcInteraction("Ketla", { "Talk-to": progressBosses });

@@ -3500,7 +3500,11 @@ module.exports = function registerSongOfTheElves(api) {
     if (answer !== null) return answer;
     const incitement = recordIncitement(event);
     if (incitement !== null) return incitement;
-    if (event.text?.startsWith("If the player") && !requirementsMet(event.player)) return false;
+    // Prose conditions are shared across every transcript. This fallback is only
+    // meaningful on Song of the Elves pages; otherwise an unqualified quest
+    // prerequisite check can suppress a different quest's dialogue branches.
+    if (event.pages?.some((page) => page.page === PAGE)
+      && event.text?.startsWith("If the player") && !requirementsMet(event.player)) return false;
     return null;
   });
   api.onCustomEvent("npc-dialogue:hook", onStart);

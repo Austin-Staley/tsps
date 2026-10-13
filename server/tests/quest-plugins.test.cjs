@@ -4261,8 +4261,8 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
 });
 
 test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the cathedral and blackstone fragment behind real caches', () => {
-  const { api: base } = mockApi();
-  const objectHooks = [], itemOnObjectHooks = [], itemActionHooks = [], itemOnItemHooks = [], groundPickupHooks = [], actionHooks = [], interactions = [], transcripts = [], groundSpawns = [], playerProcesses = [];
+  const { api: base, handlers: baseHandlers } = mockApi();
+  const objectHooks = [], itemOnObjectHooks = [], itemActionHooks = [], itemOnItemHooks = [], groundPickupHooks = [], actionHooks = [], choiceHooks = [], interactions = [], transcripts = [], groundSpawns = [], playerProcesses = [], spawnedNpcs = [];
   const counts = new Map();
   const varbits = new Map();
   const core = {
@@ -4272,6 +4272,10 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
   };
   const api = new Proxy(base, {
     get: (target, prop) => prop === 'core' ? core
+      : prop === 'spawnNpc' ? (spec) => {
+        spawnedNpcs.push(spec);
+        return { ...spec, isRegistered: () => true };
+      }
       : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
         : prop === 'onItemOnObject' ? (handler) => itemOnObjectHooks.push(handler)
           : prop === 'onItemAction' ? (handler) => itemActionHooks.push(handler)
@@ -4279,7 +4283,10 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
           : prop === 'onGroundItemPickup' ? (handler) => groundPickupHooks.push(handler)
             : prop === 'onPlayerProcess' ? (handler) => playerProcesses.push(handler)
             : prop === 'getItemOnGroundManager' ? () => ({ getGroundItem: () => null, registerLocation: (...args) => groundSpawns.push(args) })
-          : prop === 'onCustomEvent' ? (name, handler) => name === 'npc-dialogue:action' && actionHooks.push(handler)
+          : prop === 'onCustomEvent' ? (name, handler) => {
+            if (name === 'npc-dialogue:action') actionHooks.push(handler);
+            if (name === 'npc-dialogue:choice') choiceHooks.push(handler);
+          }
             : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
               : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
   });
@@ -4312,11 +4319,23 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     const prescott = interactions.find((entry) => entry.name === 'Prescott').options['Talk-to'];
     ramarno({ player, npcId: core.NpcIdentifiers.RAMARNO });
     assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ramarno');
-    actionHooks[0]({ player, stepId: 'xu7yT_' });
+    choiceHooks[0]({ player, option: 'Have you seen any archeologists around here?' });
+    assert.equal(attrs.get('desert-treasure-ii:lassar').ramarno, true, 'the player’s actual dialogue choice advances the Lassar introduction');
+    assert.equal(varbits.get(15126), 2);
+    assert.deepEqual(spawnedNpcs[0], { id: core.NpcIdentifiers.PRESCOTT, x: 2975, y: 5794, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
+    const prescottCondition = baseHandlers.condition.find((handler) => handler({ player, npcId: core.NpcIdentifiers.PRESCOTT, stepId: 'yRRbfR' }) === true);
+    assert.equal(prescottCondition?.({ player, npcId: core.NpcIdentifiers.PRESCOTT, stepId: 'kMM5yZ' }), false,
+      'the canonical transcript condition skips the pre-Ramarno branch after its dialogue handshake');
+    assert.equal(prescottCondition?.({ player, npcId: core.NpcIdentifiers.PRESCOTT, stepId: '1os4H_' }), true,
+      'Prescott offers replacement rope only after it is lost');
     prescott({ player, npcId: core.NpcIdentifiers.PRESCOTT });
     assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-prescott');
     actionHooks[0]({ player, stepId: 'em2ULK' });
     assert.equal(counts.get(core.ItemIdentifiers.VERY_LONG_ROPE), 1);
+    prescott({ player, npcId: core.NpcIdentifiers.PRESCOTT });
+    assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-prescott-talking-to-prescott-again',
+      'carrying Prescott’s rope selects the reminder, not the after-entry transcript');
+    assert.equal(prescottCondition({ player, npcId: core.NpcIdentifiers.PRESCOTT, stepId: 'G_Oyly' }), true);
     const rock = { player, objectId: 48195, location: { x: 2922, y: 5827, z: 0 }, option: 'Climb-down' };
     assert.equal(interact(rock), true, 'the sinkhole cannot be descended before the rope is tied');
     assert.equal(itemOnObjectHooks[0]({ player, objectId: 48195, itemId: core.ItemIdentifiers.VERY_LONG_ROPE, location: rock.location }), true);
@@ -4458,6 +4477,21 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
   } finally {
     runtime.startTranscript = startTranscript;
   }
+});
+
+test('Below Ice Mountain leaves Ramarno interactions to an active Desert Treasure II chapter', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/BelowIceMountain.Quest')(api);
+  const handleRamarno = [...handlers.npcInteractions.keys()].find(handler => typeof handler === 'function');
+  assert.equal(typeof handleRamarno, 'function');
+  const attributes = new Map([
+    ['quest.below_ice_mountain.stage', 5],
+    ['quest.desert_treasure_ii.stage', 10],
+  ]);
+  const player = { getAttribute: key => attributes.get(key) };
+  const activeDt2 = { player, npcId: 10685, clickType: 1 };
+  handleRamarno(activeDt2);
+  assert.notEqual(activeDt2.handled, true, 'DT2 must get the chance to start its Ramarno transcript');
 });
 
 test('Desert Treasure II runs the Whisperer specials, enrage and medallion recovery', () => {
@@ -5664,6 +5698,21 @@ test('Song of the Elves exposes the post-library meeting through a talkable Aria
   assert.deepEqual([spawns[0].x, spawns[0].y, spawns[0].z], [2353, 3173, 0]);
   assert.equal(spawns[0].owner, player);
   assert.equal(spawns[0].ownerOnly, true);
+});
+
+test('Song of the Elves prerequisite prose conditions do not suppress other quest pages', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const answer = handlers.condition.at(-1);
+  const player = { getSkillManager: () => ({ getMaxLevel: () => 1 }) };
+  const event = {
+    player,
+    text: 'If the player has completed the required quests:',
+    pages: [{ page: 'Desert Treasure II - The Fallen Empire', variants: ['the-whisperer-talking-to-prescott'] }],
+  };
+  assert.equal(answer(event), null, 'an unrelated quest keeps ownership of its transcript condition');
+  event.pages = [{ page: 'Song of the Elves', variants: ['starting-out-talking-to-edmond'] }];
+  assert.equal(answer(event), false, 'the prerequisite fallback remains active on its own transcript page');
 });
 
 test('Song of the Elves makes Baxtorian available in Lletya for the dwarf-camp chapter', () => {
