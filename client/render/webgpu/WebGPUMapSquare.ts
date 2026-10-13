@@ -1,3 +1,4 @@
+import { CollisionMap } from "../../rs/scene/CollisionMap";
 import type { MapSquare } from "../../game/MapManager";
 import type { Frustum } from "../../game/Frustum";
 import { getMapSquareId } from "../../rs/map/MapFileIndex";
@@ -345,6 +346,8 @@ function writeMapUniform(
 }
 
 export class WebGPUMapSquare implements MapSquare {
+    readonly locDataChangedListeners = new Set<() => void>();
+
     mapX: number;
     mapY: number;
     timeLoaded: number;
@@ -364,6 +367,8 @@ export class WebGPUMapSquare implements MapSquare {
     heightMapData!: Int16Array;
 
     /** Loc CSR arrays for interaction queries (SceneRaycaster, hover highlights). */
+    collisionMaps: CollisionMap[] = [];
+    tilePresenceByLevel?: Uint8Array[];
     tileLocOffsetsByLevel?: Uint32Array[];
     tileLocIdsByLevel?: Int32Array[];
     tileLocTypeRotByLevel?: Uint8Array[];
@@ -471,6 +476,8 @@ export class WebGPUMapSquare implements MapSquare {
             groundMaterialTexture,
         );
         for (const kind of GROUP_ORDER) square.setGroup(kind, mapData);
+        square.collisionMaps = mapData.collisionDatas.map(CollisionMap.fromData);
+        square.tilePresenceByLevel = mapData.tilePresenceByLevel;
         square.tileRenderFlags = mapData.tileRenderFlags;
         square.tileGroundMaterials = mapData.groundMaterials;
         square.tileGroundColors = mapData.groundColors;
@@ -656,9 +663,12 @@ export class WebGPUMapSquare implements MapSquare {
      * Callers must do this before the frame's visible list is built (see WebGPURenderer.render).
      */
     refreshPartial(mapData: SdMapData, seqTypeLoader: SeqTypeLoader, cycle: number): void {
+        if (mapData.collisionDatas) this.collisionMaps = mapData.collisionDatas.map(CollisionMap.fromData);
+        this.tilePresenceByLevel = mapData.tilePresenceByLevel;
         this.tileLocOffsetsByLevel = mapData.tileLocOffsetsByLevel;
         this.tileLocIdsByLevel = mapData.tileLocIdsByLevel;
         this.tileLocTypeRotByLevel = mapData.tileLocTypeRotByLevel;
+        for (const listener of this.locDataChangedListeners) listener();
         if (mapData.doorOnly) {
             this.setGroup("door", mapData);
         } else {
@@ -737,6 +747,12 @@ export class WebGPUMapSquare implements MapSquare {
     }
 
     /** Tile colour (0xRRGGBB) at local tile coords (border applied internally); 0 = none. */
+    getCollisionFlag(level: number, tileX: number, tileY: number): number {
+        const map = this.collisionMaps[level];
+        const x = tileX + this.borderSize, y = tileY + this.borderSize;
+        return map?.isWithinBounds(x, y) ? map.getFlag(x, y) : 0;
+    }
+
     getGroundColor(level: number, tileX: number, tileY: number): number {
         const row = this.tileGroundColors?.[level]?.[tileX + this.borderSize];
         return row ? row[tileY + this.borderSize] >>> 0 : 0;

@@ -918,6 +918,15 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
         this.actors?.registerSpotAnimation(event);
     }
 
+    override getCollisionFlagAt(plane: number, tileX: number, tileY: number): number {
+        const view = this.osrsClient.worldViewManager.findWorldViewAt(tileX, tileY);
+        const map = view && !view.isTopLevel()
+            ? this.osrsClient.worldViewManager.getOverlayMapSquare(view.id, this.mapManager)
+            : this.mapManager.getMapForWorldTile(tileX, tileY);
+        if (!map) return 0x100;
+        return map.getCollisionFlag(plane, tileX - map.getRenderBaseTileX(), tileY - map.getRenderBaseTileY());
+    }
+
     override registerNpcSpotAnimation(event: NpcSpotAnimationEvent): void {
         this.actors?.registerNpcSpotAnimation(event);
     }

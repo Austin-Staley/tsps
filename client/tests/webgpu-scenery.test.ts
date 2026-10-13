@@ -32,6 +32,9 @@ function fixture(full: DrawRange[], far: DrawRange[], planes?: Uint8Array) {
         heightMapTextureData: new Int16Array(4), waterMaskTextureData: new Uint8Array(4),
         doorVertices: new Uint8Array(), doorIndices: new Int32Array(),
         doorDrawRanges: [], doorDrawRangesAlpha: [],
+        collisionDatas: Array.from({ length: 4 }, () => ({
+            sizeX: 64, sizeY: 64, flags: new Int32Array(64 * 64),
+        })),
         tileRenderFlags: [], locsAnimated: [], loc: geometry,
     };
     // Scene and loc groups use the same fixture ranges; make scene empty for draw assertions.
@@ -55,8 +58,20 @@ function fixture(full: DrawRange[], far: DrawRange[], planes?: Uint8Array) {
         tileX: 0, tileZ: 0, distance: 40, lodDistance: 8,
         camera: { intersectsBox: (box: number[][]) => box[0][0] < 40 } as Frustum,
     };
-    return { square, draws, pass, context };
+    return { square, draws, pass, context, data };
 }
+
+test("WebGPU retains collision flags and refreshes them with scenery metadata", () => {
+    const f = fixture([], []);
+    f.data.collisionDatas[2].flags[7 + 9 * 64] = 0x20100;
+    assert.equal(f.square.getCollisionFlag(2, 7, 9), 0x20100);
+    assert.equal(f.square.getCollisionFlag(1, 7, 9), 0);
+    const collisionDatas = f.data.collisionDatas.map(data => ({ ...data, flags: data.flags.slice() }));
+    collisionDatas[2].flags[7 + 9 * 64] = 0;
+    f.square.refreshPartial({ ...f.data, collisionDatas, locOnly: true } as any, {} as any, 1);
+    assert.equal(f.square.getCollisionFlag(2, 7, 9), 0);
+    f.square.delete();
+});
 
 test("WebGPU selects one scenery tier per chunk, culls fog/frustum and keeps unchunked items", () => {
     const f = fixture([range(0, 6, 0), range(24, 12, 24), range(72, 18, 64), range(144, 3, 24, false)],
