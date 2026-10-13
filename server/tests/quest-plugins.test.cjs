@@ -6873,6 +6873,19 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
     sendMessage() {},
   };
   quest.setStage(player, 10);
+  attrs.set('desert-treasure-ii:lassar', {
+    entered: true, cathedralTentacles: true, perfectTorch: true, sanity: 100,
+    whispererStarted: true, inShadow: false,
+  });
+  player.location = { x: 3185, y: 3438, z: 0 };
+  playerProcesses.forEach((handler) => handler({ player }));
+  assert.equal(created.some((npc) => npc.id === core.NpcIdentifiers.THE_WHISPERER_3), false,
+    'a saved fight does not pull the player from a public bank into the private cathedral');
+  assert.equal(player.getPrivateArea(), null, 'a public-bank login stays in the public scene');
+  attrs.set('desert-treasure-ii:lassar', {
+    entered: true, cathedralTentacles: true, perfectTorch: true, sanity: 100, inShadow: false,
+  });
+  player.location = { x: 2656, y: 6370, z: 0 };
   interactions.find((entry) => entry.name === 'Odd Figure').opts.Disturb({ player, npcId: core.NpcIdentifiers.ODD_FIGURE });
   const boss = created.find((npc) => npc.id === core.NpcIdentifiers.THE_WHISPERER_3);
   assert.ok(boss, 'disturbing the figure creates the quest Whisperer');

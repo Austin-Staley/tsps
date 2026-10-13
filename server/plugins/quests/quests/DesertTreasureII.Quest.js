@@ -3821,7 +3821,13 @@ module.exports = function registerDesertTreasureII(api) {
       talk(p, N.KETLA, "the-whisperer-talking-to-ketla-after-coming-to");
       return;
     }
-    if (!spawned.get(p)?.whisperer && lassarState.whispererStarted && !lassarState.whispererDefeated) {
+    const hereX = position?.getX?.() ?? position?.x;
+    const hereY = position?.getY?.() ?? position?.y;
+    const atWhispererCathedral = (position?.getZ?.() ?? position?.z ?? 0) === 0
+      && ((hereX >= 2624 && hereX <= 2688 && hereY >= 6320 && hereY <= 6448)
+        || (hereX >= 2336 && hereX <= 2432 && hereY >= 6320 && hereY <= 6448));
+    if (!spawned.get(p)?.whisperer && lassarState.whispererStarted && !lassarState.whispererDefeated
+      && atWhispererCathedral) {
       if (spawnBoss(p, "whisperer")) p.sendMessage("The Whisperer returns to the cathedral.");
     }
     const boss = spawned.get(p)?.whisperer;
