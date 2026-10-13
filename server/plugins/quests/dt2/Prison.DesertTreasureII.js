@@ -265,6 +265,7 @@ module.exports = function registerSucellusPrison(api) {
     }
     npc.setOwner?.(player);
     npc.setOwnerOnly?.(true);
+    npc.setScriptedMovement?.(false);
     area.add(npc);
     api.core.World.getAddNPCQueue().push(npc);
     return npc;
@@ -527,10 +528,12 @@ module.exports = function registerSucellusPrison(api) {
     // attackable Jhallan copy; its normal attack remains a magic attack.
     if (elapsed >= SHADOWS_AT && !defence.shadowsSpawned) {
       defence.shadowsSpawned = true;
-      defence.clones.push(
+      const clones = [
         spawnJhallan(area, player, N.JHALLAN_4, 2973, 6363, 1),
         spawnJhallan(area, player, N.JHALLAN_4, 2977, 6363, 1),
-      );
+      ];
+      for (const clone of clones) clone.getCombat?.().attack?.(player);
+      defence.clones.push(...clones);
       defences.set(player, defence);
       player.sendMessage("Shadow copies of Jhallan converge on the camp.");
     }

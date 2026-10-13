@@ -22,6 +22,7 @@ function setup() {
     getLocation() { return { getX: () => this.location.x, getY: () => this.location.y }; },
     isRegistered: () => true,
     setOwner() {}, setOwnerOnly() {}, getCombat() { return { attack: (target) => { this.target = target; this.attacks = (this.attacks ?? 0) + 1; } }; },
+    setScriptedMovement(value) { this.scriptedMovement = value; },
     setHitpointsLocked(value) { this.hitpointsLocked = value; },
     setMaxHitpoints(value) { this.maxHitpoints = value; return this; },
     setHitpoints(value) { this.hitpoints = value; return this; },
@@ -228,6 +229,7 @@ test("Jhallan defense lasts three minutes (300 area ticks) and asylum transcript
   const liveJhallan = createdNpcs.find((value) => value.id === 12353);
   assert.ok(liveJhallan, "the cache-backed combat variant must attack the player");
   assert.equal(liveJhallan.hitpointsLocked, true, "players cannot shorten the scripted three-minute survival encounter by killing Jhallan");
+  assert.equal(liveJhallan.scriptedMovement, false, "Jhallan uses ordinary NPC combat while the area only owns encounter timing");
   assert.equal(liveJhallan.target, undefined, "the scripted introduction must finish before combat starts");
 
   handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 100 });
@@ -238,6 +240,8 @@ test("Jhallan defense lasts three minutes (300 area ticks) and asylum transcript
   handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 250 });
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 54);
   assert.deepEqual(createdNpcs.filter((value) => value.id === 12354).map((value) => [value.id, value.hitpoints]), [[12354, 1], [12354, 1]]);
+  assert.ok(createdNpcs.filter((value) => value.id === 12354).every((value) => value.target === player && value.scriptedMovement === false),
+    "both one-hit copies actively use ordinary combat against their owner");
 
   setCycle(399);
   handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 399 });
