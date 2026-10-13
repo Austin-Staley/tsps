@@ -120,7 +120,7 @@ custom events (listed in `gravestones/Events.Gravestones.js`). Core gives them t
   - "I think I'm done here." and the exit portal wait until all four are heard ("I haven't finished talking to you yet, …").
   - Afterwards the portal leads to the respawn point.
 - **Ending it:** leaving the office by the portal or a teleport starts the timer.
-- **Resuming:** talking to Death again or relogging resumes the tutorial ("I believe I was explaining gravestones to you."). Afterwards he offers a reminder.
+- **Resuming:** talking to Death again or relogging resumes the tutorial ("I believe I was explaining gravestones to you."). Once all four topics are heard, he greets as usual, so the grave can be collected early. The Wiki has him offer a reminder ("Would you like me to remind you about gravestones?") until the player leaves; we skip that so Collect and early collection work straight away.
 
 ## Not like live
 - **Prices:** fees and Coffer credit use the cache's item value (as kept-on-death ranks items); live uses Grand Exchange prices.

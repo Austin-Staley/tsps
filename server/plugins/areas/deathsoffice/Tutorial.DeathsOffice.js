@@ -8,7 +8,9 @@
  * - the topics already heard are struck through, and "I think I'm done here." and the portal
  *   wait until all four are;
  * - talking to Death again resumes the tutorial ("I believe I was explaining gravestones to
- *   you."), or after it offers a reminder; a relog inside resumes it too.
+ *   you."); a relog inside resumes it too. Once every topic is heard he greets as usual, so the
+ *   grave can be collected early (ours: the Wiki has him offer a reminder until the player
+ *   leaves).
  * UNVERIFIED (no capture): the chathead moods, and the item shown beside the explanations (the
  * gravestone).
  */
@@ -161,17 +163,14 @@ function done(player) {
 
 // ---------------------------------------------------------------- talking again, leaving
 
-/** Talk-to (and the greeting on reaching the desk) during the tutorial. */
+/** Talk-to (and the greeting on reaching the desk) during the tutorial, until every topic is heard. */
 function talk(player) {
-  if (!inTutorial(player)) return false;
+  if (!inTutorial(player) || heardAll(player)) return false;
   if ((heard(player) & INTRODUCED) === 0) {
     introduction(player);
     return true;
   }
-  const line = heardAll(player)
-    ? { npc: "Would you like me to remind you about gravestones?", mood: "quiz" }
-    : { npc: "I believe I was explaining gravestones to you. We still have some more topics to cover.", mood: "angry" };
-  Common.talk(player, [line], () => menu(player));
+  Common.talk(player, [{ npc: "I believe I was explaining gravestones to you. We still have some more topics to cover.", mood: "angry" }], () => menu(player));
   return true;
 }
 
@@ -180,7 +179,6 @@ function talk(player) {
  * item retrieval as usual. UNVERIFIED (the Wiki is silent).
  */
 function collect(player) {
-  if (heardAll(player)) return false;
   return talk(player);
 }
 
