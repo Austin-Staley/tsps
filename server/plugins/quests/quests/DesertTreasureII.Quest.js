@@ -82,6 +82,7 @@ module.exports = function registerDesertTreasureII(api) {
   const VARDORVIS_PROGRESS = "desert-treasure-ii:vardorvis-progress";
   const STRANGLEWOOD_CITY_ENTERED = "desert-treasure-ii:city-entered";
   const SUCELLUS_AREA = "desert-treasure-ii:sucellus-area";
+  const WHISPERER_AREA = "desert-treasure-ii:whisperer-area";
   const SUCELLUS_MUSHROOMS = "desert-treasure-ii:sucellus-mushrooms";
   const SUCELLUS_VATS = "desert-treasure-ii:sucellus-vats";
   const SUCELLUS_POISONS = "desert-treasure-ii:sucellus-poisons";
@@ -600,9 +601,30 @@ module.exports = function registerDesertTreasureII(api) {
   let ScarMazeThreeArea;
   let LeviathanArea;
   let SucellusArea;
+  let WhispererArea;
   const totemSpellIds = new Map(TOTEMS.map((totem) => [totem.kind, new Set(totem.spells.map((name) => api.core.CombatSpells[name]?.spellId?.()).filter(Number.isInteger))]));
   const LEVIATHAN_SHADOW_SPELL_IDS = new Set(["SHADOW_RUSH", "SHADOW_BURST", "SHADOW_BLITZ", "SHADOW_BARRAGE"]
     .map(name => api.core.CombatSpells[name].spellId()));
+
+  WhispererArea = class DesertTreasureIIWhispererArea extends api.core.PrivateArea {
+    constructor(owner) {
+      // The fight alternates between the cathedral at 2656,6370 and its
+      // Shadow Realm mirror at 2400,6370. Isolate both map regions so the
+      // public post-quest Whisperer cannot overlap the quest apparition.
+      super([
+        new api.core.Boundary(2624, 2688, 6320, 6448, 0),
+        new api.core.Boundary(2336, 2432, 6320, 6448, 0),
+      ]);
+      this.owner = owner;
+    }
+    canAttack(attacker, target) {
+      const attackerHere = attacker?.getArea?.() === this;
+      const targetHere = target?.getArea?.() === this;
+      if (!attackerHere && !targetHere) return null;
+      return attacker === this.owner && targetHere && target?.getOwner?.() === this.owner;
+    }
+    isMulti() { return false; }
+  };
 
   AncientVaultArea = class DesertTreasureIIAncientVaultArea extends api.core.TemplatedInstanceArea {
     constructor(owner) {
@@ -3221,6 +3243,198 @@ module.exports = function registerDesertTreasureII(api) {
     return true;
   }
 
+  function enterWhispererScene(p) {
+    let area = p.getAttribute(WHISPERER_AREA);
+    if (!(area instanceof WhispererArea) || area.isDestroyed?.()) {
+      area = new WhispererArea(p);
+      p.setAttribute(WHISPERER_AREA, area);
+    }
+    if (p.getPrivateArea?.() !== area) area.enter(p);
+    return area;
+  }
+
+  function leaveWhispererScene(p) {
+    const area = p?.getAttribute?.(WHISPERER_AREA);
+    if (!(area instanceof WhispererArea) || area.isDestroyed?.()) return false;
+    if (area.hasMember?.(p)) area.leave(p, false);
+    if (!area.isDestroyed?.()) area.destroy?.();
+    p.setAttribute(WHISPERER_AREA, null);
+    return true;
+  }
+
+  // https://oldschool.runescape.wiki/w/The_Whisperer and
+  // https://oldschool.runescape.wiki/w/Tentacle_(The_Whisperer): three style-matched
+  // shots form a standard volley; its tentacles converge on the tile where the
+  // player was standing. Use PendingHit so accuracy, overhead protection and the
+  // NPC max hit are resolved by the ordinary combat pipeline.
+  class WhispererVolleyMethod extends api.core.CombatMethod {
+    constructor(style) { super(); this.style = style; }
+    type() { return this.style; }
+    hits(npc, player) { return [new api.core.PendingHit(npc, player, this, 0)]; }
+    attackDistance() { return 10; }
+  }
+  const whispererMethods = new Map([
+    [api.core.CombatType.MAGIC, new WhispererVolleyMethod(api.core.CombatType.MAGIC)],
+    [api.core.CombatType.RANGED, new WhispererVolleyMethod(api.core.CombatType.RANGED)],
+  ]);
+  const WHISPERER_PROJECTILES = new Map([
+    [api.core.CombatType.RANGED, 2444], // PROJ_WHISPERER_01_RANGED_01
+    [api.core.CombatType.MAGIC, 2445], // PROJ_WHISPERER_01_MAGIC_01
+  ]);
+
+  function whispererAttackPattern(boss, hitpoints) {
+    if (boss.__dt2WhispererEnraged) {
+      const style = Math.floor((boss.__dt2WhispererAttackCount ?? 0) / 2) % 2 === 0
+        ? api.core.CombatType.RANGED : api.core.CombatType.MAGIC;
+      return [style];
+    }
+    const base = (boss.__dt2WhispererAttackCount ?? 0) % 2 === 0
+      ? api.core.CombatType.MAGIC : api.core.CombatType.RANGED;
+    const opposite = base === api.core.CombatType.MAGIC ? api.core.CombatType.RANGED : api.core.CombatType.MAGIC;
+    if (hitpoints > 440) return [base, base, base];
+    if (hitpoints > 220) return [base, base, opposite];
+    return [base, opposite, base];
+  }
+
+  function spawnWhispererTentacles(p, boss, area, target) {
+    const plus = Number(boss.__dt2WhispererSpecialsCompleted ?? 0) >= 2;
+    const enraged = Boolean(boss.__dt2WhispererEnraged);
+    const offsets = enraged
+      ? [[0, target.y > 6370 ? -5 : 5]]
+      : plus ? [[0, -5], [5, 0], [0, 5], [-5, 0]]
+        : [[-4, -4], [4, -4], [4, 4], [-4, 4]];
+    const tentacles = [];
+    const reserved = new Set();
+    for (const [dx, dy] of offsets) {
+      let x = target.x + dx;
+      let y = target.y + dy;
+      const key = `${x},${y}`;
+      if (reserved.has(key) || !area.getBoundaries().some(boundary => boundary.inside(new api.core.Location(x, y, 0)))) continue;
+      reserved.add(key);
+      const tentacle = api.core.NPC.create(N.COL_00FFFF_TENTACLE_COL, new api.core.Location(x, y, 0));
+      tentacle.setOwner?.(p);
+      tentacle.setOwnerOnly?.(true);
+      tentacle.setScriptedMovement?.(true);
+      tentacle.__dt2WhispererTarget = { ...target };
+      tentacle.__dt2WhispererArea = area;
+      tentacle.__dt2WhispererExpires = api.core.World.getProcessCycle() + 5;
+      tentacle.__skipDefaultRespawn = true;
+      area.enter(tentacle);
+      tentacle.performAnimation?.(new api.core.Animation(2452)); // WHISPERER_TENTACLE_SPAWN
+      api.core.World.getAddNPCQueue().push(tentacle);
+      tentacles.push(tentacle);
+    }
+    boss.__dt2WhispererTentacles = tentacles;
+  }
+
+  function removeWhispererTentacles(boss) {
+    for (const tentacle of boss.__dt2WhispererTentacles ?? []) {
+      if (!tentacle?.isRegistered?.()) continue;
+      const add = api.core.World.getAddNPCQueue();
+      for (let i = add.indexOf(tentacle); i >= 0; i = add.indexOf(tentacle)) add.splice(i, 1);
+      const remove = api.core.World.getRemoveNPCQueue();
+      if (!remove.includes(tentacle)) remove.push(tentacle);
+    }
+    boss.__dt2WhispererTentacles = [];
+  }
+
+  function processWhispererTentacles(p, boss, area, cycle) {
+    const tentacles = boss.__dt2WhispererTentacles ?? [];
+    if (!tentacles.length) return;
+    const target = tentacles[0].__dt2WhispererTarget;
+    let converged = true;
+    for (const tentacle of tentacles) {
+      const here = tentacle.getLocation?.();
+      const x = here?.getX?.() ?? here?.x;
+      const y = here?.getY?.() ?? here?.y;
+      const nextX = x + Math.sign(target.x - x);
+      const nextY = y + Math.sign(target.y - y);
+      if (nextX !== x || nextY !== y) {
+        tentacle.moveTo(new api.core.Location(nextX, nextY, 0));
+        converged = false;
+      }
+    }
+    if (!converged && cycle < (tentacles[0].__dt2WhispererExpires ?? cycle)) return;
+    if (converged) {
+      for (const tentacle of tentacles) tentacle.performAnimation?.(new api.core.Animation(2454)); // WHISPERER_TENTACLE_ATTACK
+    }
+    const here = p.getLocation?.();
+    const px = here?.getX?.() ?? here?.x;
+    const py = here?.getY?.() ?? here?.y;
+    if (px === target.x && py === target.y) {
+      p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(10, api.core.HitMask.RED)]);
+      const state = p.getAttribute(LASSAR) ?? {};
+      setLassar(p, { ...state, sanity: Math.max(0, Number(state.sanity ?? 100) - 10) });
+      p.sendMessage("The Whisperer's tentacles converge on your tile, striking you and draining 10% sanity.");
+    } else {
+      p.sendMessage("You dodge the converging shadow tentacles.");
+    }
+    removeWhispererTentacles(boss);
+  }
+
+  function processWhispererCombat(p, boss, state) {
+    if (!boss?.isRegistered?.() || boss.getHitpoints?.() <= 0
+      || (state.inShadow && !boss.__dt2WhispererEnraged)) return;
+    const area = p.getAttribute(WHISPERER_AREA);
+    if (!(area instanceof WhispererArea) || area.isDestroyed() || boss.getArea?.() !== area) return;
+    const cycle = api.core.World.getProcessCycle();
+    processWhispererTentacles(p, boss, area, cycle);
+    const pendingTentacles = boss.__dt2WhispererPendingTentacles;
+    if (pendingTentacles && cycle >= pendingTentacles.due) {
+      boss.__dt2WhispererPendingTentacles = null;
+      pendingTentacles.fire();
+    }
+    const pending = boss.__dt2WhispererPendingVolleys ?? [];
+    for (let index = pending.length - 1; index >= 0; index--) {
+      const shot = pending[index];
+      if (!shot.launched && cycle >= shot.launch) {
+        shot.launched = true;
+        const projectileId = WHISPERER_PROJECTILES.get(shot.style);
+        const from = boss.getLocation?.();
+        const to = p.getLocation?.();
+        const distance = from?.getDistance?.(to) ?? 5;
+        boss.forceChat?.(shot.style === api.core.CombatType.MAGIC ? "Magic!" : "Ranged!");
+        const speed = 46 + Math.max(1, Math.trunc(distance)) * 10;
+        api.core.Projectile.createProjectile(boss, p, projectileId, 51, speed, 43, 31).sendProjectile();
+      }
+      if (cycle < shot.impact) continue;
+      pending.splice(index, 1);
+      const method = whispererMethods.get(shot.style);
+      if (method) api.core.CombatFactory.addPendingHit(new api.core.PendingHit(boss, p, method, { delay: 0 }));
+      if (shot.style === api.core.CombatType.MAGIC) p.performGraphic?.(new api.core.Graphic(2446)); // PROJ_WHISPERER_01_MAGIC_IMPACT
+    }
+    boss.__dt2WhispererPendingVolleys = pending;
+    if (pending.length || (boss.__dt2WhispererNextAttack ?? cycle) > cycle || boss.__dt2WhispererTentacles?.length) return;
+
+    const patterns = whispererAttackPattern(boss, boss.getHitpoints());
+    const location = p.getLocation?.();
+    const target = { x: location?.getX?.() ?? location?.x, y: location?.getY?.() ?? location?.y };
+    if (!Number.isInteger(target.x) || !Number.isInteger(target.y)) return;
+    boss.__dt2WhispererAttackCount = (boss.__dt2WhispererAttackCount ?? 0) + 1;
+    boss.__dt2WhispererNextAttack = cycle + (boss.__dt2WhispererEnraged ? 5 : 10);
+    boss.performAnimation?.(new api.core.Animation(boss.getAttackAnim?.() ?? -1));
+    const firstStyle = patterns[0];
+    boss.forceChat?.(firstStyle === api.core.CombatType.MAGIC ? "A volley of magic!" : "A volley of ranged attacks!");
+    p.sendMessage(firstStyle === api.core.CombatType.MAGIC
+      ? "The Whisperer begins a magic volley. Protect from Magic until its projectiles land."
+      : "The Whisperer begins a ranged volley. Protect from Missiles until its projectiles land.");
+    const projectileTravelTicks = api.core.Projectile.arrivalTicks(boss, p, 51);
+    boss.__dt2WhispererPendingVolleys = patterns.map((style, shot) => ({
+      style,
+      launch: cycle + shot + 1,
+      impact: cycle + shot + 1 + Math.max(1, projectileTravelTicks),
+      launched: false,
+    }));
+    const targetCycle = Math.max(...boss.__dt2WhispererPendingVolleys.map(shot => shot.impact)) + 1;
+    // The tentacle wave starts after the final projectile has crossed. In the
+    // enrage phase the Wiki specifies one tentacle per single-projectile attack.
+    const fireTentacles = () => {
+      if (!boss.isRegistered?.() || p.getPrivateArea?.() !== area) return;
+      if (Number.isInteger(target.x) && Number.isInteger(target.y)) spawnWhispererTentacles(p, boss, area, target);
+    };
+    boss.__dt2WhispererPendingTentacles = { due: targetCycle, fire: fireTentacles };
+  }
+
   function handleLassarPlayerDeath({ player: p }) {
     if (!p || stage(p) !== S.WHISPERER) return;
     const state = p.getAttribute(LASSAR) ?? {};
@@ -3235,6 +3449,7 @@ module.exports = function registerDesertTreasureII(api) {
     if (returnToPrison) saveSucellusPrisonCheckpoint(p, current);
     const returnToGuardian = current && [ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO,
       ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA].some((key) => current === p.getAttribute(key));
+    const returnToWhisperer = current && current === p.getAttribute(WHISPERER_AREA);
     const stranglewoodExit = current && (current === p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT) ? [1193, 3405]
       : current === p.getAttribute(ATTR_STRANGLEWOOD_TEMPLE) ? [1174, 3427]
         : current === p.getAttribute(ATTR_VARDORVIS_AREA) ? [1117, 3429] : null);
@@ -3242,7 +3457,8 @@ module.exports = function registerDesertTreasureII(api) {
     const owned = spawned.get(p);
     if (owned?.prescott) api.removeNpc(owned.prescott);
     if (owned?.lassarKetla) api.removeNpc(owned.lassarKetla);
-    for (const key of [ATTR_VAULT_AREA, FINAL_ROOM, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO, ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA, SUCELLUS_AREA]) {
+    if (owned?.lassarOddFigure) api.removeNpc(owned.lassarOddFigure);
+    for (const key of [ATTR_VAULT_AREA, FINAL_ROOM, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO, ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA, SUCELLUS_AREA, WHISPERER_AREA]) {
       const area = p.getAttribute(key);
       if (area && !area.isDestroyed?.()) {
         area.leave?.(p, false);
@@ -3255,6 +3471,7 @@ module.exports = function registerDesertTreasureII(api) {
     else if (returnToDigsite) p.moveTo(new api.core.Location(3411, 9813, 0));
     else if (returnToPrison) p.moveTo(new api.core.Location(2927, 10353, 0));
     else if (returnToGuardian) p.moveTo(new api.core.Location(3610, 9473, 0));
+    else if (returnToWhisperer) p.moveTo(new api.core.Location(2656, 6386, 0));
     else if (stranglewoodExit) p.moveTo(new api.core.Location(...stranglewoodExit, 0));
     p.setAttribute(SCAR_PATH_COMPLETE, p.getAttribute(SCAR_TETHER_DESTROYED) === true);
     p.setAttribute(SCAR_RIFT_LIVE, false);
@@ -3592,6 +3809,7 @@ module.exports = function registerDesertTreasureII(api) {
       && position.getY?.() >= 6280 && position.getY?.() <= 6320) {
       setLassar(p, { ...lassarState, drainLower: true });
     }
+    ensureLassarOddFigure(p);
     if (lassarState.cameTo && position
       && Math.abs(position.getX?.() - 2648) <= 16 && Math.abs(position.getY?.() - 6442) <= 16
       && (position.getZ?.() ?? 0) === 0) ensureLassarKetla(p);
@@ -3625,6 +3843,7 @@ module.exports = function registerDesertTreasureII(api) {
         boss.__dt2WhispererSpecialTicks--;
         if (boss.__dt2WhispererSpecialTicks <= 0) {
           boss.__dt2WhispererSpecial = null;
+          boss.__dt2WhispererSpecialsCompleted = (boss.__dt2WhispererSpecialsCompleted ?? 0) + 1;
           boss.__dt2WhispererBindingTicks = 5;
           removeWhispererSouls(p);
           boss.setHitpoints?.(Math.min(boss.getMaxHitpoints?.() ?? 660, boss.getHitpoints() + 75));
@@ -3652,6 +3871,7 @@ module.exports = function registerDesertTreasureII(api) {
           boss.__dt2WhispererBindingTicks = -1;
         }
       }
+      processWhispererCombat(p, boss, lassarState);
     }
     const state = p.getAttribute(LASSAR);
     if (!state?.entered) return;
@@ -5446,6 +5666,7 @@ module.exports = function registerDesertTreasureII(api) {
       const state = p.getAttribute(LASSAR) ?? {};
       if (!state.cathedralTentacles || state.whispererDefeated) return;
       if (npcs[key]?.isRegistered?.() && npcs[key].getHitpoints?.() > 0) return npcs[key];
+      const area = enterWhispererScene(p);
       const npc = api.core.NPC.create(N.THE_WHISPERER_3,
         new api.core.Location(state.whispererEnraged ? 2400 : x, y, 0));
       npc.setOwner?.(p);
@@ -5457,6 +5678,7 @@ module.exports = function registerDesertTreasureII(api) {
       npc.__dt2WhispererEnraged = Boolean(state.whispererEnraged);
       npc.__dt2WhispererSpecial = 0;
       npc.__skipDefaultRespawn = true;
+      area.enter(npc);
       api.core.World.getAddNPCQueue().push(npc);
       npcs[key] = npc;
       p.setAttribute(ATTR, npc);
@@ -5489,6 +5711,8 @@ module.exports = function registerDesertTreasureII(api) {
         soul.__dt2WhispererSoul = true;
         soul.__dt2WhispererSoulSet = group;
         soul.__skipDefaultRespawn = true;
+        const area = p.getAttribute(WHISPERER_AREA);
+        if (area instanceof WhispererArea && !area.isDestroyed()) area.enter(soul);
         souls.push(soul);
         api.core.World.getAddNPCQueue().push(soul);
       }
@@ -5536,6 +5760,7 @@ module.exports = function registerDesertTreasureII(api) {
     clearWhispererObjects(p, boss.__dt2WhispererSeeds?.map((seed) => seed.object));
     boss.__dt2WhispererSeeds = [];
     boss.__dt2WhispererSpecial = null;
+    boss.__dt2WhispererSpecialsCompleted = (boss.__dt2WhispererSpecialsCompleted ?? 0) + 1;
     boss.__dt2WhispererBindingTicks = 5;
     if (success) {
       const state = p.getAttribute(LASSAR) ?? {};
@@ -5599,6 +5824,7 @@ module.exports = function registerDesertTreasureII(api) {
       clearWhispererObjects(p, columns.filter((column) => column.active).map((column) => column.object));
       boss.__dt2WhispererColumns = [];
       boss.__dt2WhispererSpecial = null;
+      boss.__dt2WhispererSpecialsCompleted = (boss.__dt2WhispererSpecialsCompleted ?? 0) + 1;
       boss.__dt2WhispererBindingTicks = 5;
       p.sendMessage("The Whisperer finishes her screeching sequence and prepares a binding blow.");
     } else {
@@ -5682,6 +5908,8 @@ module.exports = function registerDesertTreasureII(api) {
         }
         if (state.whispererDefeated) return p.sendMessage("Search the Whisperer's remains for her medallion.");
         spawnBoss(p, "whisperer");
+        const owned = spawned.get(p);
+        if (owned?.lassarOddFigure) { api.removeNpc(owned.lassarOddFigure); delete owned.lassarOddFigure; }
         setLassar(p, { ...state, cathedralEntered: true, whispererStarted: true });
         return;
       }
@@ -5718,6 +5946,17 @@ module.exports = function registerDesertTreasureII(api) {
     p.sendMessage("Your bag is full. The fibre falls to the ground.");
   }
 
+
+  function preventLassarPostQuestWhisperer(event) {
+    const { attacker, target } = event;
+    if (!attacker || stage(attacker) !== S.WHISPERER || target?.getId?.() !== N.THE_WHISPERER) return;
+    const state = attacker.getAttribute(LASSAR) ?? {};
+    if (state.whispererDefeated) return;
+    event.allow = false;
+    attacker.sendMessage(state.whispererStarted
+      ? "This is the post-quest Whisperer. Fight the 660-hitpoint quest apparition in the cathedral instead."
+      : "This is the post-quest Whisperer. Clear the cathedral tentacles, then Disturb the Odd Figure to begin the quest fight.");
+  }
   function handleDeath({ killer, npc }) {
     if (npc?.__dt2ScarAntibody) {
       const owner = npc.getOwner?.();
@@ -5786,6 +6025,10 @@ module.exports = function registerDesertTreasureII(api) {
       return;
     }
     if (owned.whisperer === npc && stage(killer) === S.WHISPERER) {
+      removeWhispererTentacles(npc);
+      removeWhispererSouls(killer);
+      npc.__dt2WhispererPendingVolleys = [];
+      npc.__dt2WhispererPendingTentacles = null;
       owned.whisperer = null;
       const state = killer.getAttribute(LASSAR) ?? {};
       if (!state.whispererEnraged) {
@@ -5798,6 +6041,12 @@ module.exports = function registerDesertTreasureII(api) {
         killer.sendMessage("The Whisperer surges back with 100 hitpoints and drags you into the Shadow Realm. Finish her enrage phase.");
       } else {
         setLassar(killer, { ...state, whispererDefeated: true, inShadow: false });
+        const here = killer.getLocation?.();
+        const x = here?.getX?.() ?? here?.x;
+        const y = here?.getY?.() ?? here?.y;
+        const z = here?.getZ?.() ?? here?.z ?? 0;
+        leaveWhispererScene(killer);
+        if (Number.isFinite(x) && Number.isFinite(y)) killer.moveTo(new api.core.Location(x + 256, y, z));
         killer.sendMessage("The Whisperer is defeated. Search her remains for the medallion before returning to the Ancient Vault.");
       }
       return;
@@ -6032,6 +6281,16 @@ module.exports = function registerDesertTreasureII(api) {
     if (owned.lassarKetla?.isRegistered?.()) return owned.lassarKetla;
     owned.lassarKetla = api.spawnNpc({ id: N.KETLA, x: 2648, y: 6442, z: 0, wanderRadius: 0, owner: p, ownerOnly: true });
     return owned.lassarKetla;
+  }
+  function ensureLassarOddFigure(p) {
+    const state = p.getAttribute(LASSAR) ?? {};
+    if (stage(p) !== S.WHISPERER || !state.cathedralTentacles || !state.perfectTorch
+      || state.whispererStarted || state.whispererDefeated) return null;
+    let owned = spawned.get(p);
+    if (!owned) spawned.set(p, owned = {});
+    if (owned.lassarOddFigure?.isRegistered?.()) return owned.lassarOddFigure;
+    owned.lassarOddFigure = api.spawnNpc({ id: N.ODD_FIGURE, x: 2656, y: 6370, z: 0, wanderRadius: 0, owner: p, ownerOnly: true });
+    return owned.lassarOddFigure;
   }
 
   function startFinalCellLock(p) {
@@ -7021,6 +7280,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("The Whisperer", { "Talk-to": handleBossTalk });
   api.onNpcInteraction("Odd Figure", { Disturb: handleBossTalk, "Talk-to": handleBossTalk });
   api.onNpcDeath(handleDeath);
+  api.onCanAttack(preventLassarPostQuestWhisperer);
   api.registerNpcCombatMethodProvider(N.VARDORVIS_2, VardorvisCombat);
   api.registerNpcCombatMethodProvider(N.KASONDE_7, KasondeCombat);
   api.onCombatHitRoll(vardorvisHitRoll);

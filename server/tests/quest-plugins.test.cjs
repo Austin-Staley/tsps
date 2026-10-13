@@ -6178,7 +6178,10 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
       register: (object) => lassarObjectObjects.push({ action: 'register', object }),
       deregister: (object) => lassarObjectObjects.push({ action: 'deregister', object }),
     },
-    NPC: { create: (id, location) => ({ id, location, setOwner() {}, setOwnerOnly() {}, setScriptedMovement() {}, setMaxHitpoints() {}, setHitpoints() {} }) },
+    NPC: { create: (id, location) => ({ id, location, area: null, isPlayer: () => false, isNpc: () => true,
+      isRegistered: () => false, getAsNpc() { return this; },
+      getIndex: () => 77, getArea() { return this.area; }, setArea(area) { this.area = area; },
+      setOwner() {}, setOwnerOnly() {}, setScriptedMovement() {}, setMaxHitpoints() {}, setHitpoints() {} }) },
     World: { getAddNPCQueue: () => [] },
   };
   const api = new Proxy(base, {
@@ -6216,6 +6219,8 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     const quest = runtime.getRegisteredQuests().at(-1);
     const attrs = new Map();
     const player = {
+      area: null, isPlayer: () => true, getAsPlayer() { return this; }, getIndex: () => 99,
+      getArea() { return this.area; }, getPrivateArea() { return this.area; }, setArea(area) { this.area = area; },
       getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
       getUsername: () => 'dt2-lassar-test',
       getSkillManager: () => ({ getMaxLevel: () => 99 }),
@@ -6522,8 +6527,12 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     attrs.set('desert-treasure-ii:lassar', {
       ...attrs.get('desert-treasure-ii:lassar'), cathedralTentacles: true, perfectTorch: true,
     });
-    interactions.find((entry) => entry.name === 'The Whisperer').options['Talk-to']({
-      player, npcId: core.NpcIdentifiers.THE_WHISPERER_3,
+    playerProcesses[0]({ player });
+    assert.ok(spawnedNpcs.some((npc) => npc.id === core.NpcIdentifiers.ODD_FIGURE
+      && npc.x === 2656 && npc.y === 6370 && npc.owner === player && npc.ownerOnly),
+    'clearing the Cathedral tentacles reveals the cache-backed, owner-only Odd Figure at the QH scene marker');
+    interactions.find((entry) => entry.name === 'Odd Figure').options.Disturb({
+      player, npcId: core.NpcIdentifiers.ODD_FIGURE,
     });
     assert.equal(attrs.get('desert-treasure-ii:lassar').whispererStarted, true,
       'disturbing the Odd Figure persists the boss start so the encounter can resume after relog');
@@ -6797,29 +6806,47 @@ test('Below Ice Mountain leaves Ramarno interactions to an active Desert Treasur
 
 test('Desert Treasure II runs the Whisperer specials, enrage and medallion recovery', () => {
   const { api: base } = mockApi();
-  const interactions = [], playerProcesses = [], itemActions = [], deathHooks = [], objectInteractions = [];
+  const interactions = [], playerProcesses = [], itemActions = [], deathHooks = [], objectInteractions = [], canAttackHooks = [];
   const addQueue = [], removeQueue = [], created = [];
+  const incomingAttacks = [];
+  const sentProjectiles = [];
+  let combatCycle = 1;
+  class RecordedPendingHit {
+    constructor(attacker, target, method, config) {
+      this.attacker = attacker; this.target = target; this.style = method.type(); this.config = config;
+    }
+  }
+  const combatFactory = { ...base.core.CombatFactory, addPendingHit: hit => incomingAttacks.push(hit) };
+  let nextNpcIndex = 1;
   const core = {
     ...base.core,
+    PendingHit: RecordedPendingHit,
+    CombatFactory: combatFactory,
+    World: { ...base.core.World, getProcessCycle: () => combatCycle, getAddNPCQueue: () => addQueue, getRemoveNPCQueue: () => removeQueue },
+    Projectile: { arrivalTicks: () => 1, createProjectile: (_from, _to, id) => ({ sendProjectile() { sentProjectiles.push(id); } }) },
     NPC: { create: (id, location) => {
       const npc = {
-        id, location, hp: 660, maxHp: 660, registered: true,
+        id, location, hp: 660, maxHp: 660, registered: true, index: nextNpcIndex++,
         getId() { return this.id; }, getOwner() { return this.owner; }, setOwner(owner) { this.owner = owner; }, setOwnerOnly() {},
+        isPlayer() { return false; }, isNpc() { return true; }, getAsNpc() { return this; }, getIndex() { return this.index; },
+        getArea() { return this.area; }, setArea(area) { this.area = area; },
         setScriptedMovement() {}, setMaxHitpoints(hp) { this.maxHp = hp; }, setHitpoints(hp) { this.hp = hp; },
         getHitpoints() { return this.hp; }, getMaxHitpoints() { return this.maxHp; },
+        getLocation() { return this.location; }, moveTo(location) { this.location = location; },
+        getAttackAnim() { return 1; }, performAnimation(animation) { this.animation = animation; (this.animations ??= []).push(animation.id); },
         isRegistered() { return this.registered; }, forceChat(text) { this.chat = text; },
         getCombat() { return { getLastAttack: () => ({ reset() {} }) }; },
       };
       created.push(npc);
       return npc;
     } },
-    World: { getAddNPCQueue: () => addQueue, getRemoveNPCQueue: () => removeQueue },
   };
   const api = new Proxy(base, { get: (target, prop) => prop === 'core' ? core
     : prop === 'onNpcInteraction' ? (name, opts) => interactions.push({ name, opts })
       : prop === 'onPlayerProcess' ? (handler) => playerProcesses.push(handler)
         : prop === 'onItemAction' ? (handler) => itemActions.push(handler)
           : prop === 'onNpcDeath' ? (handler) => deathHooks.push(handler)
+            : prop === 'onCanAttack' ? (handler) => canAttackHooks.push(handler)
           : prop === 'onObjectInteraction' ? (handler) => typeof handler === 'function' && objectInteractions.push(handler)
             : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop] });
   const runtime = require('../plugins/quests/QuestRuntime');
@@ -6831,6 +6858,8 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   const items = new Map([[core.ItemIdentifiers.BLACKSTONE_FRAGMENT, 1]]);
   let username = 'whisperer-regression';
   const player = {
+    area: null, isPlayer: () => true, getAsPlayer() { return this; }, getIndex: () => 99,
+    getArea() { return this.area; }, setArea(area) { this.area = area; }, getPrivateArea() { return this.area; },
     getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
     getUsername: () => username, getSkillManager: () => ({ getMaxLevel: () => 99 }),
     getPacketSender: () => new Proxy({}, { get: (_target, key) => key === 'sendVarbit' ? () => {} : () => {} }),
@@ -6847,7 +6876,63 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   interactions.find((entry) => entry.name === 'Odd Figure').opts.Disturb({ player, npcId: core.NpcIdentifiers.ODD_FIGURE });
   const boss = created.find((npc) => npc.id === core.NpcIdentifiers.THE_WHISPERER_3);
   assert.ok(boss, 'disturbing the figure creates the quest Whisperer');
+  const whispererArea = attrs.get('desert-treasure-ii:whisperer-area');
+  assert.equal(player.getPrivateArea(), whispererArea, 'the active fight uses a private scene at the real cathedral coordinates');
+  assert.equal(boss.getArea(), whispererArea, 'the 660 HP apparition is isolated with its owner');
+  assert.ok(whispererArea.getBoundaries().some((boundary) => boundary.inside(new core.Location(2656, 6370, 0)))
+    && whispererArea.getBoundaries().some((boundary) => boundary.inside(new core.Location(2400, 6370, 0))),
+  'one private scene includes both material and Shadow Realm mirrors');
   assert.equal(attrs.get('desert-treasure-ii:lassar').whispererStarted, true, 'the fight start survives logout');
+  playerProcesses.forEach((handler) => handler({ player }));
+  assert.equal(boss.__dt2WhispererPendingVolleys.length, 3, 'the first standard attack is a three-shot volley');
+  assert.deepEqual(boss.__dt2WhispererPendingVolleys.map(shot => shot.style), [
+    core.CombatType.MAGIC, core.CombatType.MAGIC, core.CombatType.MAGIC,
+  ], 'the first phase opens with three attacks of one style');
+  combatCycle++;
+  playerProcesses.forEach((handler) => handler({ player }));
+  assert.equal(incomingAttacks.length, 0, 'the visual magic projectile travels before the hit resolves');
+  assert.deepEqual(sentProjectiles, [2445], 'the first attack uses the cache Whisperer magic projectile');
+  combatCycle++;
+  playerProcesses.forEach((handler) => handler({ player }));
+  assert.equal(incomingAttacks.length, 1, 'the first volley hit enters the ordinary PendingHit pipeline at projectile impact');
+  assert.equal(incomingAttacks[0].style, core.CombatType.MAGIC, 'its hit type lets core Protect from Magic block it');
+  assert.equal(core.PrayerHandler.getProtectingPrayer(incomingAttacks[0].style), core.PrayerHandler.PROTECT_FROM_MAGIC);
+  combatCycle = 5;
+  player.location = { x: 2657, y: 6370, z: 0 };
+  playerProcesses.forEach((handler) => handler({ player }));
+  assert.deepEqual(incomingAttacks.map(hit => hit.style), [
+    core.CombatType.MAGIC, core.CombatType.MAGIC, core.CombatType.MAGIC,
+  ], 'each projectile uses the native hit and protection path');
+  assert.equal(created.filter(npc => npc.id === core.NpcIdentifiers.COL_00FFFF_TENTACLE_COL).length, 0,
+    'the tentacles appear after the final projectile reaches the player');
+  combatCycle = 6;
+  playerProcesses.forEach((handler) => handler({ player }));
+  const tentacles = created.filter(npc => npc.id === core.NpcIdentifiers.COL_00FFFF_TENTACLE_COL);
+  assert.equal(tentacles.length, 4, 'the standard attack spawns the four converging quest tentacles');
+  assert.deepEqual(tentacles.map(npc => [npc.location.getX(), npc.location.getY()]), [
+    [2652, 6366], [2660, 6366], [2660, 6374], [2652, 6374],
+  ], 'the first tentacle wave uses the Wiki X pattern around the attacked tile');
+  combatCycle = 7;
+  playerProcesses.forEach((handler) => handler({ player }));
+  assert.ok(tentacles.some(npc => npc.location.getX() === 2653), 'the tentacles advance toward their target tile');
+  assert.ok(tentacles.every(npc => !npc.animations?.includes(2454)), 'tentacle attacks do not play before the group converges');
+  for (combatCycle = 8; combatCycle <= 11; combatCycle++) playerProcesses.forEach((handler) => handler({ player }));
+  assert.ok(tentacles.every(npc => npc.animations?.includes(2454)), 'the tentacle attack animation plays once the wave reaches its target');
+  assert.equal(player.getPrivateArea(), whispererArea, 'the attack and all hazards stay in the owner scene');
+  const postQuestWhisperer = { getId: () => core.NpcIdentifiers.THE_WHISPERER };
+  const guardAttack = canAttackHooks[0];
+  assert.ok(guardAttack, 'the public post-quest Whisperer has an explicit quest-stage attack guard');
+  const wrongTarget = { attacker: player, target: postQuestWhisperer, allow: null };
+  guardAttack(wrongTarget);
+  assert.equal(wrongTarget.allow, false, 'active Lassar quest players cannot attack the overlapping 900-hitpoint public spawn');
+  const questTarget = { attacker: player, target: boss, allow: null };
+  guardAttack(questTarget);
+  assert.equal(questTarget.allow, null, 'the owner quest apparition remains attackable');
+  attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), whispererDefeated: true });
+  const postQuestAfterVictory = { attacker: player, target: postQuestWhisperer, allow: null };
+  guardAttack(postQuestAfterVictory);
+  assert.equal(postQuestAfterVictory.allow, null, 'the post-quest spawn is no longer blocked after the quest boss is defeated');
+  attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), whispererDefeated: false });
   boss.hp = 440;
   playerProcesses.forEach((handler) => handler({ player }));
   assert.equal(boss.__dt2WhispererSpecial, 'soul-siphon', 'the first special starts at one-third health');
@@ -6910,6 +6995,19 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   const enraged = created.filter((npc) => npc.__dt2Whisperer).at(-1);
   assert.equal(enraged.maxHp, 100);
   assert.equal(enraged.__dt2WhispererEnraged, true);
+  assert.equal(enraged.__dt2WhispererPendingVolleys.length, 1, 'enrage uses one projectile per attack');
+  assert.equal(enraged.__dt2WhispererPendingVolleys[0].style, core.CombatType.RANGED,
+    'enrage opens with a ranged attack');
+  combatCycle = 14;
+  playerProcesses.forEach((handler) => handler({ player }));
+  assert.deepEqual(incomingAttacks.slice(-3).map(hit => hit.style), [
+    core.CombatType.MAGIC, core.CombatType.MAGIC, core.CombatType.RANGED,
+  ], 'the three-phase attack queue is followed by the enrage projectile impact');
+  assert.equal(sentProjectiles.at(-1), 2444, 'the enrage uses the cache Whisperer ranged projectile');
+  combatCycle = 15;
+  playerProcesses.forEach((handler) => handler({ player }));
+  assert.equal(enraged.__dt2WhispererTentacles.length, 1,
+    'enrage has one converging tentacle after its single attack');
   enraged.registered = false;
   deathHooks[0]({ npc: enraged, killer: player });
   assert.equal(attrs.get('desert-treasure-ii:lassar').whispererDefeated, true, 'the second defeat opens the remains search');
