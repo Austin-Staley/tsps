@@ -34,6 +34,15 @@ module.exports = function registerTheBloodMoonRises(api) {
   const CASTLE_LAST_FACING_VARBIT = 15500;
   const CASTLE_GROUND_FLOOR = 1;
   const CASTLE_OUTER_LIBRARY_PORTAL_VARBIT = 15531;
+  const CASTLE_VANESCULA_EMBLEM_VARBIT = 15504;
+  const CASTLE_RANIS_PARLOUR_EMBLEM_VARBIT = 15505;
+  const CASTLE_RANIS_EMBLEM_VARBIT = 15506;
+  const CASTLE_THIRD_EMBLEM_RECEPTACLE_VARBIT = 15507;
+  const CASTLE_THIRD_EMBLEM_FOUND_VARBIT = 15567;
+  const CASTLE_THIRD_EMBLEM_RECEPTACLE = Object.freeze({ id: 61637, x: 2486, y: 7421, z: 0 });
+  const CASTLE_VANESCULA_EMBLEM_RECEPTACLE = Object.freeze({ id: 61634, x: 2469, y: 7408, z: 0 });
+  const CASTLE_RANIS_EMBLEM_RECEPTACLE = Object.freeze({ id: 61636, x: 2476, y: 7410, z: 0 });
+  const CASTLE_RANIS_PARLOUR_EMBLEM_RECEPTACLE = Object.freeze({ id: 61635, x: 2486, y: 7404, z: 0 });
   const CASTLE_OUTER_LIBRARY_LEVER = Object.freeze({ id: 61774, x: 2473, y: 7421, z: 0 });
   const CASTLE_OUTER_LIBRARY_PORTAL = Object.freeze({ id: 61768, x: 2473, y: 7419, z: 0,
     destination: [2361, 7382, 0] });
@@ -190,8 +199,8 @@ module.exports = function registerTheBloodMoonRises(api) {
       fromFloor: 1, toFloor: 2, landing: [2314, 7361, 1] },
     { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2315, y: 7360, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.EXPLOSIVE_HALL,
       fromFloor: 2, toFloor: 1, landing: [2475, 7397] },
-    { id: CASTLE_DOOR_IDS.DOOR, x: 2314, y: 7382, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.NORTH_LOBBY_HALL,
-      fromFloor: 2, toFloor: 2, landing: [2456, 7417, 0] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2327, y: 7382, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.NORTH_LOBBY_HALL,
+      fromFloor: 2, toFloor: 2, landing: [2469, 7418, 0] },
     { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2457, y: 7417, z: 0, from: CASTLE_ROOM.NORTH_LOBBY_HALL, to: CASTLE_ROOM.LOBBY,
       fromFloor: 2, toFloor: 2, landing: [2313, 7381, 1] },
     // Cache placements pair the ground lobby stair at2315,7370 with its
@@ -209,9 +218,11 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.DOOR_M, x: 2474, y: 7372, z: 0, from: CASTLE_ROOM.VANESCULA_STUDY, to: CASTLE_ROOM.VANESCULA_HALL,
       fromFloor: 2, toFloor: 2, landing: [2468, 7408] },
     { id: CASTLE_DOOR_IDS.DOOR, x: 2477, y: 7409, z: 0, from: CASTLE_ROOM.VANESCULA_HALL, to: CASTLE_ROOM.RANIS_HALL,
-      fromFloor: 2, toFloor: 2, anyKey: CASTLE_EMBLEM_IDS, keyName: "a Drakan emblem", landing: [2481, 7404] },
+      fromFloor: 2, toFloor: 2, requiresStory: "ranisHallwayEmblemPlaced", landing: [2482, 7403] },
     { id: CASTLE_DOOR_IDS.DOOR_M, x: 2481, y: 7403, z: 0, from: CASTLE_ROOM.RANIS_HALL, to: CASTLE_ROOM.VANESCULA_HALL,
-      fromFloor: 2, toFloor: 2, anyKey: CASTLE_EMBLEM_IDS, keyName: "a Drakan emblem", landing: [2476, 7409] },
+      fromFloor: 2, toFloor: 2, requiresStory: "ranisHallwayEmblemPlaced", landing: [2476, 7409] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2488, y: 7401, z: 0, from: CASTLE_ROOM.RANIS_HALL, to: CASTLE_ROOM.VENATOR_ROOM,
+      fromFloor: 2, toFloor: 2, facing: 4, requiresStory: "ranisParlourEmblemPlaced", landing: [2487, 7421] },
     { id: CASTLE_DOOR_IDS.SPIRAL_DOWN, x: 2491, y: 7402, z: 0, from: CASTLE_ROOM.RANIS_HALL, to: CASTLE_ROOM.NORTH_CHAPEL,
       fromFloor: 2, toFloor: 1, action: "Climb-down", landing: [2384, 7403] },
     { id: CASTLE_DOOR_IDS.SPIRAL_UP, x: 2385, y: 7403, z: 0, from: CASTLE_ROOM.NORTH_CHAPEL, to: CASTLE_ROOM.RANIS_HALL,
@@ -1862,6 +1873,18 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.getPacketSender().sendVarbit(CASTLE_WORLD_MAP_FLOOR_VARBIT, floor);
     player.getPacketSender().sendVarbit(CASTLE_LAST_ROOM_VARBIT, room);
     player.getPacketSender().sendVarbit(CASTLE_LAST_FLOOR_VARBIT, floor);
+    const story = castleStory(player);
+    player.getPacketSender().sendVarbit(CASTLE_VANESCULA_EMBLEM_VARBIT, story.vanesculaEmblemPlaced
+      ? castleEmblemVarbitValue(story.vanesculaEmblemId ?? ItemIdentifiers.DRAKAN_EMBLEM) : 0);
+    player.getPacketSender().sendVarbit(CASTLE_RANIS_PARLOUR_EMBLEM_VARBIT, story.ranisParlourEmblemPlaced
+      ? castleEmblemVarbitValue(story.ranisParlourEmblemId ?? ItemIdentifiers.DRAKAN_EMBLEM_2) : 0);
+    player.getPacketSender().sendVarbit(CASTLE_RANIS_EMBLEM_VARBIT, story.ranisHallwayEmblemPlaced
+      ? castleEmblemVarbitValue(story.ranisHallwayEmblemId ?? ItemIdentifiers.DRAKAN_EMBLEM_2) : 0);
+    if (Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 72) {
+      player.getPacketSender().sendVarbit(CASTLE_THIRD_EMBLEM_RECEPTACLE_VARBIT,
+        story.thirdEmblemClaimed ? 0 : 3);
+      player.getPacketSender().sendVarbit(CASTLE_THIRD_EMBLEM_FOUND_VARBIT, story.thirdEmblemClaimed ? 1 : 0);
+    }
     if (Number.isInteger(facing)) player.setAttribute(CASTLE_FACING_ATTRIBUTE, facing);
     const lastFacing = Number(player.getAttribute(CASTLE_FACING_ATTRIBUTE));
     if (Number.isInteger(lastFacing) && lastFacing >= 0 && lastFacing <= 7) {
@@ -1908,6 +1931,13 @@ module.exports = function registerTheBloodMoonRises(api) {
   function repairLegacyCastleLanding(player) {
     if (!player || stage(player) !== STAGE.CASTLE) return;
     const location = player.getLocation?.();
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.RANIS_HALL &&
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) === 2 &&
+      location?.getX?.() >= 2487 && location.getX() <= 2488 && location.getY() === 7405 && location.getZ() === 0) {
+      // The earlier hallway landing put saved players behind a clipped wall.
+      player.moveTo(new Location(2482, 7403, 0));
+      return;
+    }
     if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.VANESCULA_HALL &&
       Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) === 2 &&
       location?.getX?.() === 2451 && location.getY() === 7403 && location.getZ() === 0) {
@@ -1946,8 +1976,10 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function castleStory(player) {
-    return player.getAttribute(CASTLE_STORY_ATTRIBUTE) ?? { defeated: [], talkedToVeliaf: false,
-      prisonersFound: false, talkedToIvan: false, bookPuzzleComplete: false, stockpileDestroyed: false };
+    const saved = player.getAttribute(CASTLE_STORY_ATTRIBUTE) ?? {};
+    return { defeated: [], talkedToVeliaf: false, prisonersFound: false, talkedToIvan: false,
+      bookPuzzleComplete: false, stockpileDestroyed: false, ...saved,
+      defeated: Array.isArray(saved.defeated) ? saved.defeated : [] };
   }
 
   function bookPuzzleState(player) {
@@ -2346,8 +2378,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     const x = tile?.x ?? tile?.getX?.();
     const y = tile?.y ?? tile?.getY?.();
     const z = tile?.z ?? tile?.getZ?.();
-    const id = event?.definition?.id ?? event?.objectId;
-    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE || id !== 61634 ||
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE || !castleEventHasObjectId(event, 61634) ||
       x !== 2469 || y !== 7408 || z !== 0 || !CASTLE_EMBLEM_IDS.includes(event?.itemId)) return;
     event.handled = true;
     const inventory = player.getInventory();
@@ -2358,8 +2389,194 @@ module.exports = function registerTheBloodMoonRises(api) {
       return;
     }
     inventory.deleteNumber(event.itemId, 1);
-    player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, vanesculaEmblemPlaced: true });
+    player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, vanesculaEmblemPlaced: true,
+      vanesculaEmblemId: event.itemId });
+    player.getPacketSender().sendVarbit(CASTLE_VANESCULA_EMBLEM_VARBIT, castleEmblemVarbitValue(event.itemId));
     player.sendMessage("You place the emblem into the receptacle and hear a click come from the nearby door.");
+  }
+
+  function handleRanisEmblemReceptacle(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      !castleEventHasObjectId(event, CASTLE_RANIS_EMBLEM_RECEPTACLE.id) ||
+      x !== CASTLE_RANIS_EMBLEM_RECEPTACLE.x || y !== CASTLE_RANIS_EMBLEM_RECEPTACLE.y ||
+      z !== CASTLE_RANIS_EMBLEM_RECEPTACLE.z || !CASTLE_EMBLEM_IDS.includes(event?.itemId)) return;
+    event.handled = true;
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.VANESCULA_HALL ||
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== 2) {
+      player.sendMessage("This receptacle belongs to another part of the castle.");
+      return;
+    }
+    const inventory = player.getInventory();
+    if (!inventory.contains(event.itemId)) return;
+    const story = castleStory(player);
+    if (story.ranisHallwayEmblemPlaced) {
+      player.sendMessage("An emblem already rests in the receptacle.");
+      return;
+    }
+    inventory.deleteNumber(event.itemId, 1);
+    player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, ranisHallwayEmblemPlaced: true,
+      ranisHallwayEmblemId: event.itemId });
+    player.getPacketSender().sendVarbit(CASTLE_RANIS_EMBLEM_VARBIT, castleEmblemVarbitValue(event.itemId));
+    player.sendMessage("You place the emblem into the receptacle and hear a click come from the nearby door.");
+  }
+
+  function handleRanisParlourEmblemReceptacle(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      !castleEventHasObjectId(event, CASTLE_RANIS_PARLOUR_EMBLEM_RECEPTACLE.id) ||
+      x !== CASTLE_RANIS_PARLOUR_EMBLEM_RECEPTACLE.x ||
+      y !== CASTLE_RANIS_PARLOUR_EMBLEM_RECEPTACLE.y || z !== CASTLE_RANIS_PARLOUR_EMBLEM_RECEPTACLE.z ||
+      !CASTLE_EMBLEM_IDS.includes(event?.itemId)) return;
+    event.handled = true;
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.RANIS_HALL ||
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== 2) {
+      player.sendMessage("This receptacle belongs to another part of the castle.");
+      return;
+    }
+    const inventory = player.getInventory();
+    if (!inventory.contains(event.itemId)) return;
+    const story = castleStory(player);
+    if (story.ranisParlourEmblemPlaced) {
+      player.sendMessage("An emblem already rests in the receptacle.");
+      return;
+    }
+    inventory.deleteNumber(event.itemId, 1);
+    player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, ranisParlourEmblemPlaced: true,
+      ranisParlourEmblemId: event.itemId });
+    player.getPacketSender().sendVarbit(CASTLE_RANIS_PARLOUR_EMBLEM_VARBIT, castleEmblemVarbitValue(event.itemId));
+    player.sendMessage("You place the emblem into the receptacle and hear a click come from the nearby door.");
+  }
+
+  function castleEmblemVarbitValue(itemId) {
+    const index = CASTLE_EMBLEM_IDS.indexOf(itemId);
+    return index < 0 ? 0 : index + 1;
+  }
+
+  function castleEventHasObjectId(event, id) {
+    return event?.objectId === id || event?.definition?.id === id;
+  }
+
+  function handleCastleEmblemReceptaclePlacement(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      String(event?.option ?? "").toLowerCase() !== "place-item") return;
+    const placements = [
+      [CASTLE_VANESCULA_EMBLEM_RECEPTACLE, handleVanesculaEmblemReceptacle],
+      [CASTLE_RANIS_EMBLEM_RECEPTACLE, handleRanisEmblemReceptacle],
+      [CASTLE_RANIS_PARLOUR_EMBLEM_RECEPTACLE, handleRanisParlourEmblemReceptacle],
+    ];
+    const placement = placements.find(([receptacle]) => castleEventHasObjectId(event, receptacle.id) && receptacle.x === x &&
+      receptacle.y === y && receptacle.z === z);
+    if (!placement) return;
+    event.handled = true;
+    const itemId = CASTLE_EMBLEM_IDS.find(candidate => player.getInventory().contains(candidate));
+    if (!itemId) {
+      player.sendMessage("It looks like something could be placed into this receptacle, but you aren't carrying anything that would fit into it.");
+      return;
+    }
+    placement[1]({ ...event, itemId, handled: false });
+  }
+
+  function handleCastleEmblemReceptacleRemoval(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      String(event?.option ?? "").toLowerCase() !== "remove-emblem") return;
+    const receptacle = [
+      { ...CASTLE_VANESCULA_EMBLEM_RECEPTACLE, storyFlag: "vanesculaEmblemPlaced", itemKey: "vanesculaEmblemId",
+        room: CASTLE_ROOM.VANESCULA_HALL, varbit: CASTLE_VANESCULA_EMBLEM_VARBIT,
+        fallbackItem: ItemIdentifiers.DRAKAN_EMBLEM },
+      { ...CASTLE_RANIS_EMBLEM_RECEPTACLE, storyFlag: "ranisHallwayEmblemPlaced", itemKey: "ranisHallwayEmblemId",
+        room: CASTLE_ROOM.VANESCULA_HALL, varbit: CASTLE_RANIS_EMBLEM_VARBIT,
+        fallbackItem: ItemIdentifiers.DRAKAN_EMBLEM_2 },
+      { ...CASTLE_RANIS_PARLOUR_EMBLEM_RECEPTACLE, storyFlag: "ranisParlourEmblemPlaced",
+        itemKey: "ranisParlourEmblemId", room: CASTLE_ROOM.RANIS_HALL,
+        varbit: CASTLE_RANIS_PARLOUR_EMBLEM_VARBIT, fallbackItem: ItemIdentifiers.DRAKAN_EMBLEM_2 },
+    ].find(value => castleEventHasObjectId(event, value.id) && value.x === x && value.y === y && value.z === z);
+    if (!receptacle) return;
+    event.handled = true;
+    const story = castleStory(player);
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== receptacle.room ||
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== 2 || !story[receptacle.storyFlag]) {
+      player.sendMessage("There is no emblem here to take.");
+      return;
+    }
+    const itemId = story[receptacle.itemKey] ?? receptacle.fallbackItem;
+    if (hasItem(player, itemId)) {
+      player.sendMessage("You are already carrying that emblem.");
+      return;
+    }
+    if (!giveInventoryItem(player, itemId, "Make room in your inventory before taking the emblem.")) return;
+    const nextStory = { ...story, [receptacle.storyFlag]: false };
+    delete nextStory[receptacle.itemKey];
+    player.setAttribute(CASTLE_STORY_ATTRIBUTE, nextStory);
+    player.getPacketSender().sendVarbit(receptacle.varbit, 0);
+    player.sendMessage("You take the emblem from the receptacle.");
+  }
+
+  function handleCastleThirdEmblemReceptacle(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      (Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70) < 72 ||
+      String(event?.option ?? "").toLowerCase() !== "remove-emblem" ||
+      !castleEventHasObjectId(event, CASTLE_THIRD_EMBLEM_RECEPTACLE.id) ||
+      x !== CASTLE_THIRD_EMBLEM_RECEPTACLE.x || y !== CASTLE_THIRD_EMBLEM_RECEPTACLE.y ||
+      z !== CASTLE_THIRD_EMBLEM_RECEPTACLE.z) return;
+    event.handled = true;
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.VENATOR_ROOM ||
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== 2) {
+      player.sendMessage("There is no emblem here to take.");
+      return;
+    }
+    const story = castleStory(player);
+    if (story.thirdEmblemClaimed || hasItem(player, ItemIdentifiers.DRAKAN_EMBLEM_3)) {
+      player.sendMessage("You have already taken this emblem.");
+      return;
+    }
+    if (!giveInventoryItem(player, ItemIdentifiers.DRAKAN_EMBLEM_3,
+      "Make room in your inventory before taking the emblem.")) return;
+    player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, thirdEmblemClaimed: true });
+    player.getPacketSender().sendVarbit(CASTLE_THIRD_EMBLEM_RECEPTACLE_VARBIT, 0);
+    player.getPacketSender().sendVarbit(CASTLE_THIRD_EMBLEM_FOUND_VARBIT, 1);
+    player.sendMessage("You take the emblem from the receptacle.");
+  }
+
+  function inspectRanisCrackedWall(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      String(event?.option ?? "").toLowerCase() !== "inspect" ||
+      !castleEventHasObjectId(event, 61612) || x !== 2482 || y !== 7412 || z !== 0 ||
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.VENATOR_ROOM ||
+      !castleStory(player).thirdEmblemClaimed) return;
+    event.handled = true;
+    player.moveTo(new Location(2491, 7364, 0));
+    player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.VANESCULA_CHAMBER);
+    player.setAttribute(CASTLE_FLOOR_ATTRIBUTE, 2);
+    syncCastleRoom(player, 6);
   }
 
   function handleCastleKeyItemOnItem(event) {
@@ -2509,6 +2726,10 @@ module.exports = function registerTheBloodMoonRises(api) {
       if (!story.defeated.includes("kitchen-sanguidae"))
         spawnCastleActor(player, "kitchen-sanguidae", CASTLE_NPC.SANGUIDAE, [2314, 7418], true);
     }
+    if (progress >= 72 && Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.RANIS_HALL &&
+      !story.defeated.includes("ranis-sanguidae")) {
+      spawnCastleActor(player, "ranis-sanguidae", CASTLE_NPC.SANGUIDAE, [2488, 7403], true);
+    }
     if (progress >= 76 && story.prisonersFound) {
       // The QH marker is the prison bench; place the freed characters on the
       // open floor directly south of it rather than inside the bench footprint.
@@ -2543,7 +2764,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     const player = event?.killer?.isPlayer?.() ? event.killer : null;
     if (!owner || owner.player !== player || stage(player) !== STAGE.CASTLE) return;
     const story = castleStory(player);
-    if (["first-venator", "crescent-venator", "library-venator"].includes(owner.key)) {
+    if (["first-venator", "crescent-venator", "library-venator", "ranis-sanguidae"].includes(owner.key)) {
       const defeated = [...new Set([...story.defeated, owner.key])];
       player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, defeated });
       removeCastleActor(player, owner.key);
@@ -3218,6 +3439,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.setAttribute(CASTLE_FLOOR_ATTRIBUTE, transition.toFloor ?? CASTLE_GROUND_FLOOR);
       syncCastleRoom(player, transition.facing);
       player.moveTo(new Location(transition.landing[0], transition.landing[1], transition.landing[2] ?? 0));
+      syncCastleActors(player);
       return;
     }
     if (name !== "Door") return;
@@ -4307,6 +4529,12 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onItemOnObject(handleCastleBookOnObject, { noted: false });
   api.onItemOnObject(handleCastleKeyItemOnObject, { noted: false });
   api.onItemOnObject(handleVanesculaEmblemReceptacle, { noted: false });
+  api.onItemOnObject(handleRanisEmblemReceptacle, { noted: false });
+  api.onItemOnObject(handleRanisParlourEmblemReceptacle, { noted: false });
+  api.onObjectInteraction(handleCastleEmblemReceptaclePlacement);
+  api.onObjectInteraction(handleCastleEmblemReceptacleRemoval);
+  api.onObjectInteraction(handleCastleThirdEmblemReceptacle);
+  api.onObjectInteraction(inspectRanisCrackedWall);
   api.onItemOnItem(handleCastleKeyItemOnItem);
   api.onCustomEvent("player:widget-action", handleCastleBookWidgetAction);
   api.onGroundItemPickup(handleCastleBookPickup);
