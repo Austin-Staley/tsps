@@ -2911,7 +2911,17 @@ module.exports = function registerDesertTreasureII(api) {
     if (stage(p) === S.VARDORVIS && p.getAttribute(STRANGLEWOOD_CITY_ENTERED)
       && Number(p.getAttribute(VARDORVIS_PROGRESS)) >= 6 && Number(p.getAttribute(VARDORVIS_PROGRESS)) <= 16) spawnSurfaceKasonde(p);
     if (stage(p) === S.WHISPERER) {
-      setLassar(p, p.getAttribute(LASSAR) ?? {});
+      let state = p.getAttribute(LASSAR) ?? {};
+      const location = p.getLocation?.();
+      const x = location?.getX?.() ?? location?.x;
+      const y = location?.getY?.() ?? location?.y;
+      // Death can respawn a player outside Lassar while the per-player realm
+      // flag is persisted. Treat that world spawn as a material-realm recovery
+      // without discarding the earned device/brazier puzzle state.
+      const inShadowMap = Number.isFinite(x) && Number.isFinite(y)
+        && x >= 2290 && x <= 2450 && y >= 6280 && y <= 6480;
+      if (state.inShadow && !inShadowMap) state = { ...state, inShadow: false };
+      setLassar(p, state);
       ensurePrescott(p);
     }
     if (stage(p) === S.FINALE && p.getAttribute("desert-treasure-ii:final-cutscene-started")
@@ -3210,6 +3220,11 @@ module.exports = function registerDesertTreasureII(api) {
     return true;
   }
 
+  function handleLassarPlayerDeath({ player: p }) {
+    if (!p || stage(p) !== S.WHISPERER) return;
+    const state = p.getAttribute(LASSAR) ?? {};
+    if (state.entered && state.inShadow) setLassar(p, { ...state, inShadow: false });
+  }
   function handleLogout({ player: p }) {
     if (!p) return;
     const current = p.getPrivateArea?.();
@@ -6977,6 +6992,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onGroundItemPickup(handleSucellusGroundItemPickup);
   api.onGroundItemPickup(handleVardorvisGroundItemPickup);
   api.onPlayerLogin(handleLogin);
+  api.onPlayerDeath(handleLassarPlayerDeath);
   api.onPlayerLogout(removeLassarSceneObjects);
   api.onPlayerDisconnect(removeLassarSceneObjects);
   api.onPlayerLogout(removeLassarAnimaTentacles);

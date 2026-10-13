@@ -5685,7 +5685,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
 
 test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the cathedral and blackstone fragment behind real caches', () => {
   const { api: base, handlers: baseHandlers } = mockApi();
-  const objectHooks = [], objectRouteHooks = [], itemOnObjectHooks = [], itemActionHooks = [], itemOnItemHooks = [], groundPickupHooks = [], actionHooks = [], choiceHooks = [], doorToggleHooks = [], interactions = [], transcripts = [], groundSpawns = [], playerProcesses = [], spawnedNpcs = [], prompts = [], logoutHooks = [], disconnectHooks = [];
+  const objectHooks = [], objectRouteHooks = [], itemOnObjectHooks = [], itemActionHooks = [], itemOnItemHooks = [], groundPickupHooks = [], actionHooks = [], choiceHooks = [], doorToggleHooks = [], interactions = [], transcripts = [], groundSpawns = [], playerProcesses = [], spawnedNpcs = [], prompts = [], logoutHooks = [], disconnectHooks = [], loginHooks = [], deathHooks = [];
   const counts = new Map();
   const lassarObjectObjects = [];
   class TestGameObject {
@@ -5718,7 +5718,9 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
             : prop === 'onItemOnItem' ? (handler) => itemOnItemHooks.push(handler)
           : prop === 'onGroundItemPickup' ? (handler) => groundPickupHooks.push(handler)
             : prop === 'onPlayerProcess' ? (handler) => playerProcesses.push(handler)
-              : prop === 'onPlayerLogout' ? (handler) => logoutHooks.push(handler)
+              : prop === 'onPlayerLogin' ? (handler) => loginHooks.push(handler)
+                : prop === 'onPlayerDeath' ? (handler) => deathHooks.push(handler)
+                  : prop === 'onPlayerLogout' ? (handler) => logoutHooks.push(handler)
                 : prop === 'onPlayerDisconnect' ? (handler) => disconnectHooks.push(handler)
           : prop === 'getItemOnGroundManager' ? () => ({ getGroundItem: () => null, registerLocation: (...args) => groundSpawns.push(args) })
             : prop === 'sendMultiChatboxPrompt' ? (_player, title, ...options) => prompts.push({ title, options })
@@ -6229,6 +6231,22 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     actionHooks[0]({ player, stepId: '8nNqFG' });
     assert.equal(attrs.get('desert-treasure-ii:lassar').escapedVision, true);
     assert.equal(attrs.get('desert-treasure-ii:lassar').perfectTorchSchematic, true, 'Ketla supplies the real torch after the vision');
+    const earnedPuzzle = attrs.get('desert-treasure-ii:lassar');
+    attrs.set('desert-treasure-ii:lassar', { ...earnedPuzzle, inShadow: true });
+    assert.ok(deathHooks.length > 0, 'the quest registers recovery for a death in the Shadow Realm');
+    deathHooks[0]({ player });
+    assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, false,
+      'death returns the player to the material realm without erasing Lassar progress');
+    assert.deepEqual(attrs.get('desert-treasure-ii:lassar').braziers, earnedPuzzle.braziers,
+      'death preserves all earned brazier lights');
+    attrs.set('desert-treasure-ii:lassar', { ...earnedPuzzle, inShadow: true });
+    player.location = new core.Location(3089, 3524, 0);
+    for (const hook of loginHooks) hook({ player });
+    assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, false,
+      'relogging at a world respawn clears only the stale realm flag');
+    assert.equal(varbits.get(15162), 0, 'the realm interface follows material-realm recovery');
+    assert.deepEqual(attrs.get('desert-treasure-ii:lassar').braziers, earnedPuzzle.braziers,
+      'relog recovery preserves the four persistent lights');
   } finally {
     runtime.startTranscript = startTranscript;
   }
