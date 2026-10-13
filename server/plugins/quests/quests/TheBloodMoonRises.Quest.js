@@ -2207,27 +2207,32 @@ module.exports = function registerTheBloodMoonRises(api) {
       });
       return;
     }
-    if (CASTLE_KEY_OBJECTS.larderSink.has(id) && x === 2356 && y === 7400 &&
-      ["turn on", "turn-on", "activate"].includes(option)) {
+    if (CASTLE_KEY_OBJECTS.larderSink.has(id) && x === 2356 && y === 7400 && option === "inspect") {
       event.handled = true;
-      if (!key.larderSinkPlugged) { player.sendMessage("The sink needs a plug before you turn the tap on."); return; }
-      if (key.larderSinkCollapsed) { player.sendMessage("The sink has already collapsed."); return; }
-      confirmCastleKeyAction(player, "Turn the tap on?", () => {
-        const current = castleStory(player).newMoon ?? {};
-        if (!current.larderSinkPlugged || current.larderSinkCollapsed) return;
-        updateCastleKeyStory(player, { larderSinkCollapsed: true });
-        player.sendMessage("You turn on the tap. The sink gives way, leaving a broken pipe.");
-      });
-      return;
-    }
-    if (CASTLE_KEY_OBJECTS.larderSink.has(id) && x === 2356 && y === 7400 && option === "take pipe") {
-      event.handled = true;
-      if (!key.larderSinkCollapsed) { player.sendMessage("The sink has not collapsed yet."); return; }
-      if (key.pipeClaimed) { player.sendMessage("You already took the broken pipe."); return; }
-      confirmCastleKeyAction(player, "Take the broken pipe?", () => {
-        if (castleStory(player).newMoon?.pipeClaimed) return;
-        if (castleKeyGive(player, CASTLE_KEY_ITEMS.pipe, "You take the broken pipe.")) updateCastleKeyStory(player, { pipeClaimed: true });
-      });
+      if (key.larderSinkCollapsed) {
+        if (key.pipeClaimed) { player.sendMessage("You already took the broken pipe."); return; }
+        confirmCastleKeyAction(player, "Take the pipe?", () => {
+          if (castleStory(player).newMoon?.pipeClaimed) return;
+          if (castleKeyGive(player, CASTLE_KEY_ITEMS.pipe,
+            "You take a long broken pipe from behind the damaged sink.")) {
+            updateCastleKeyStory(player, { pipeClaimed: true });
+          }
+        });
+        return;
+      }
+      api.sendMultiChatboxPrompt(player,
+        key.larderSinkPlugged ? "The sink is empty and the drain is plugged." : "The sink is empty.",
+        "Turn the tap on", () => {
+          const current = castleStory(player).newMoon ?? {};
+          if (current.larderSinkCollapsed) return;
+          if (!current.larderSinkPlugged) {
+            player.sendMessage("You turn the tap on, but the water just goes straight down the drain. You turn it off again.");
+            return;
+          }
+          updateCastleKeyStory(player, { larderSinkCollapsed: true });
+          player.sendMessage("You turn the tap on and the sink fills up, but the weight of the water causes it to collapse. A long pipe also breaks away from behind it.");
+        },
+        "Leave it", () => {});
       return;
     }
     if (CASTLE_KEY_OBJECTS.larderCabinet.has(id) && x === 2360 && y === 7403 && option === "search") {

@@ -1689,6 +1689,11 @@ test('Blood Moon Castle new-moon key requires the corpse syringe, weapon statues
     assert.equal(prompt.options[0], 'Yes.');
     prompt.options[1]();
   };
+  const choosePrompt = option => {
+    const index = prompt.options.findIndex((value, i) => i % 2 === 0 && value === option);
+    assert.ok(index >= 0, `the prompt offers ${option}`);
+    prompt.options[index + 1]();
+  };
   const useOn = (itemId, id, x, y) => {
     const event = { player, itemId, objectId: id, definition: { id }, location: { x, y, z: 0 }, handled: false };
     onObject(event);
@@ -1705,11 +1710,17 @@ test('Blood Moon Castle new-moon key requires the corpse syringe, weapon statues
   assert.equal(items.get(33747), undefined, 'the sink asks before removing its plug');
   confirm();
   assert.equal(items.get(33747), 1, 'inspecting the kitchen sink yields its plug');
+  click(61722, 2356, 7400, 'Inspect');
+  assert.equal(prompt.title, 'The sink is empty.', 'the larder sink opens its native tap menu');
+  choosePrompt('Turn the tap on');
+  assert.equal(varbits.get(15537), 0, 'the tap drains away without a plug');
   useOn(33747, 61722, 2356, 7400);
-  click(61722, 2356, 7400, 'Turn on');
-  assert.equal(varbits.get(15537), 1, 'turning the tap does not happen before confirmation');
-  confirm();
-  click(61722, 2356, 7400, 'Take pipe');
+  click(61722, 2356, 7400, 'Inspect');
+  assert.equal(prompt.title, 'The sink is empty and the drain is plugged.');
+  choosePrompt('Turn the tap on');
+  assert.equal(varbits.get(15537), 2, 'the plugged sink collapses when the tap is turned on');
+  click(61722, 2356, 7400, 'Inspect');
+  assert.equal(prompt.title, 'Take the pipe?');
   assert.equal(items.get(33748), undefined, 'the broken pipe requires confirmation');
   confirm();
   assert.equal(items.get(33748), 1, 'the plugged sink collapses and yields its broken pipe');
