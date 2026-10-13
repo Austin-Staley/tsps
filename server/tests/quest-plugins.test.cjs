@@ -6188,7 +6188,9 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     get: (target, prop) => prop === 'core' ? core
       : prop === 'spawnNpc' ? (spec) => {
         spawnedNpcs.push(spec);
-        return { ...spec, isRegistered: () => true };
+        return { ...spec, area: null, getId() { return this.id; }, getArea() { return this.area; },
+          setArea(area) { this.area = area; }, isPlayer: () => false, isNpc: () => true,
+          getAsNpc() { return this; }, getIndex: () => 78, isRegistered: () => true };
       }
       : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
         : prop === 'onObjectRoute' ? (handler) => objectRouteHooks.push(handler)
@@ -6806,7 +6808,7 @@ test('Below Ice Mountain leaves Ramarno interactions to an active Desert Treasur
 
 test('Desert Treasure II runs the Whisperer specials, enrage and medallion recovery', () => {
   const { api: base } = mockApi();
-  const interactions = [], playerProcesses = [], itemActions = [], deathHooks = [], objectInteractions = [], canAttackHooks = [];
+  const interactions = [], playerProcesses = [], itemActions = [], deathHooks = [], playerDeathHooks = [], objectInteractions = [];
   const addQueue = [], removeQueue = [], created = [];
   const incomingAttacks = [];
   const sentProjectiles = [];
@@ -6842,11 +6844,16 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
     } },
   };
   const api = new Proxy(base, { get: (target, prop) => prop === 'core' ? core
+    : prop === 'spawnNpc' ? (definition) => {
+      const npc = core.NPC.create(definition.id, new core.Location(definition.x, definition.y, definition.z ?? 0));
+      npc.setOwner(definition.owner);
+      return npc;
+    }
     : prop === 'onNpcInteraction' ? (name, opts) => interactions.push({ name, opts })
       : prop === 'onPlayerProcess' ? (handler) => playerProcesses.push(handler)
         : prop === 'onItemAction' ? (handler) => itemActions.push(handler)
           : prop === 'onNpcDeath' ? (handler) => deathHooks.push(handler)
-            : prop === 'onCanAttack' ? (handler) => canAttackHooks.push(handler)
+            : prop === 'onPlayerDeath' ? (handler) => playerDeathHooks.push(handler)
           : prop === 'onObjectInteraction' ? (handler) => typeof handler === 'function' && objectInteractions.push(handler)
             : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop] });
   const runtime = require('../plugins/quests/QuestRuntime');
@@ -6886,6 +6893,13 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
     entered: true, cathedralTentacles: true, perfectTorch: true, sanity: 100, inShadow: false,
   });
   player.location = { x: 2656, y: 6370, z: 0 };
+  playerProcesses.forEach((handler) => handler({ player }));
+  const preFightArea = player.getPrivateArea();
+  assert.ok(preFightArea, 'the owner enters the private cathedral before disturbing the Odd Figure');
+  assert.equal(preFightArea.canAttack(player, { getId: () => core.NpcIdentifiers.THE_WHISPERER }), false,
+    'the private cathedral masks the overlapping public Whisperer before the quest fight begins');
+  const oddFigure = preFightArea.getNpcs().find((npc) => npc.getId?.() === core.NpcIdentifiers.ODD_FIGURE);
+  assert.ok(oddFigure, 'the quest Odd Figure is spawned inside the owner scene before Disturb');
   interactions.find((entry) => entry.name === 'Odd Figure').opts.Disturb({ player, npcId: core.NpcIdentifiers.ODD_FIGURE });
   const boss = created.find((npc) => npc.id === core.NpcIdentifiers.THE_WHISPERER_3);
   assert.ok(boss, 'disturbing the figure creates the quest Whisperer');
@@ -6895,6 +6909,11 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   assert.ok(whispererArea.getBoundaries().some((boundary) => boundary.inside(new core.Location(2656, 6370, 0)))
     && whispererArea.getBoundaries().some((boundary) => boundary.inside(new core.Location(2400, 6370, 0))),
   'one private scene includes both material and Shadow Realm mirrors');
+  assert.equal(whispererArea.canAttack(player, boss), true, 'the owner can attack the private quest boss');
+  assert.equal(whispererArea.canAttack(boss, player), true, 'the private quest boss can attack its owner');
+  const foreignPlayer = { getArea: () => null };
+  assert.equal(whispererArea.canAttack(foreignPlayer, boss), false, 'foreign players cannot attack the owner’s quest NPC');
+  assert.equal(whispererArea.canAttack(boss, foreignPlayer), false, 'the owner’s quest NPC cannot attack a foreign player');
   assert.equal(attrs.get('desert-treasure-ii:lassar').whispererStarted, true, 'the fight start survives logout');
   playerProcesses.forEach((handler) => handler({ player }));
   assert.equal(boss.__dt2WhispererPendingVolleys.length, 3, 'the first standard attack is a three-shot volley');
@@ -6932,20 +6951,6 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   for (combatCycle = 8; combatCycle <= 11; combatCycle++) playerProcesses.forEach((handler) => handler({ player }));
   assert.ok(tentacles.every(npc => npc.animations?.includes(2454)), 'the tentacle attack animation plays once the wave reaches its target');
   assert.equal(player.getPrivateArea(), whispererArea, 'the attack and all hazards stay in the owner scene');
-  const postQuestWhisperer = { getId: () => core.NpcIdentifiers.THE_WHISPERER };
-  const guardAttack = canAttackHooks[0];
-  assert.ok(guardAttack, 'the public post-quest Whisperer has an explicit quest-stage attack guard');
-  const wrongTarget = { attacker: player, target: postQuestWhisperer, allow: null };
-  guardAttack(wrongTarget);
-  assert.equal(wrongTarget.allow, false, 'active Lassar quest players cannot attack the overlapping 900-hitpoint public spawn');
-  const questTarget = { attacker: player, target: boss, allow: null };
-  guardAttack(questTarget);
-  assert.equal(questTarget.allow, null, 'the owner quest apparition remains attackable');
-  attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), whispererDefeated: true });
-  const postQuestAfterVictory = { attacker: player, target: postQuestWhisperer, allow: null };
-  guardAttack(postQuestAfterVictory);
-  assert.equal(postQuestAfterVictory.allow, null, 'the post-quest spawn is no longer blocked after the quest boss is defeated');
-  attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), whispererDefeated: false });
   boss.hp = 440;
   playerProcesses.forEach((handler) => handler({ player }));
   assert.equal(boss.__dt2WhispererSpecial, 'soul-siphon', 'the first special starts at one-third health');
@@ -7029,6 +7034,17 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   assert.equal(attrs.get('desert-treasure-ii:lassar').medallion, true);
   objectInteractions.find(h => h.name === 'handleObjectInteraction')({ player, objectId: 48310, definition: { id: 48310 }, option: 'Climb', location: { x: 2400, y: 6370, z: 0 } });
   assert.deepEqual([player.location.x, player.location.y], [2587, 6436], 'the cathedral exit returns to Camdozaal');
+  const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
+  assert.ok(NpcDefinition.forId(core.NpcIdentifiers.LOST_SOUL_2).getActions().includes('Attack'),
+    'the spawned Lost Soul variant exposes the cache-backed Attack option');
+  assert.equal(created.filter((npc) => npc.__dt2WhispererSoul).every((npc) => npc.id === core.NpcIdentifiers.LOST_SOUL_2), true,
+    'all chant souls use the attackable cache variant');
+  const deathRecovery = attrs.get('desert-treasure-ii:lassar');
+  attrs.set('desert-treasure-ii:lassar', { ...deathRecovery, inShadow: true, sanity: 0 });
+  playerDeathHooks[0]({ player });
+  assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, false, 'death returns the quest state to the material realm');
+  assert.equal(attrs.get('desert-treasure-ii:lassar').sanity, 100, 'death restores sanity for the next attempt');
+  assert.equal(player.getPrivateArea(), null, 'death tears down the owner-only cathedral encounter');
 });
 
 test('Dragon Slayer II Ungael notes require all six real pieces before combining', () => {

@@ -621,7 +621,8 @@ module.exports = function registerDesertTreasureII(api) {
       const attackerHere = attacker?.getArea?.() === this;
       const targetHere = target?.getArea?.() === this;
       if (!attackerHere && !targetHere) return null;
-      return attacker === this.owner && targetHere && target?.getOwner?.() === this.owner;
+      return (attacker === this.owner && targetHere && target?.getOwner?.() === this.owner)
+        || (target === this.owner && attackerHere && attacker?.getOwner?.() === this.owner);
     }
     isMulti() { return false; }
   };
@@ -3438,7 +3439,16 @@ module.exports = function registerDesertTreasureII(api) {
   function handleLassarPlayerDeath({ player: p }) {
     if (!p || stage(p) !== S.WHISPERER) return;
     const state = p.getAttribute(LASSAR) ?? {};
-    if (state.entered && state.inShadow) setLassar(p, { ...state, inShadow: false });
+    if (!state.entered) return;
+    const owned = spawned.get(p);
+    if (owned?.whisperer) {
+      removeWhispererTentacles(owned.whisperer);
+      api.removeNpc(owned.whisperer);
+      owned.whisperer = null;
+    }
+    removeWhispererSouls(p);
+    if (state.inShadow || Number(state.sanity) < 100) setLassar(p, { ...state, inShadow: false, sanity: 100 });
+    leaveWhispererScene(p);
   }
   function handleLogout({ player: p }) {
     if (!p) return;
@@ -3800,6 +3810,14 @@ module.exports = function registerDesertTreasureII(api) {
     syncLassarSceneObjects(p, lassarState);
     syncLassarAnimaTentacles(p, lassarState);
     const position = p.getLocation?.();
+    const hereX = position?.getX?.() ?? position?.x;
+    const hereY = position?.getY?.() ?? position?.y;
+    const atWhispererCathedral = (position?.getZ?.() ?? position?.z ?? 0) === 0
+      && ((hereX >= 2624 && hereX <= 2688 && hereY >= 6320 && hereY <= 6448)
+        || (hereX >= 2336 && hereX <= 2432 && hereY >= 6320 && hereY <= 6448));
+    const whispererArea = p.getAttribute(WHISPERER_AREA);
+    if (atWhispererCathedral) enterWhispererScene(p);
+    else if (whispererArea instanceof WhispererArea && p.getPrivateArea?.() === whispererArea) leaveWhispererScene(p);
     // The cache ladder uses a native ClimbLinks transition, so its action does
     // not pass through object-interaction hooks. Record the lower-floor visit
     // only after the icon-gated drain and cistern gate have both been entered.
@@ -3821,11 +3839,6 @@ module.exports = function registerDesertTreasureII(api) {
       talk(p, N.KETLA, "the-whisperer-talking-to-ketla-after-coming-to");
       return;
     }
-    const hereX = position?.getX?.() ?? position?.x;
-    const hereY = position?.getY?.() ?? position?.y;
-    const atWhispererCathedral = (position?.getZ?.() ?? position?.z ?? 0) === 0
-      && ((hereX >= 2624 && hereX <= 2688 && hereY >= 6320 && hereY <= 6448)
-        || (hereX >= 2336 && hereX <= 2432 && hereY >= 6320 && hereY <= 6448));
     if (!spawned.get(p)?.whisperer && lassarState.whispererStarted && !lassarState.whispererDefeated
       && atWhispererCathedral) {
       if (spawnBoss(p, "whisperer")) p.sendMessage("The Whisperer returns to the cathedral.");
@@ -5707,7 +5720,7 @@ module.exports = function registerDesertTreasureII(api) {
       for (let member = 0; member < 3; member++) {
         const x = 2411 + group * 3 + (member % 2);
         const y = 6365 + member * 3 + Math.floor(group / 2) * 2;
-        const soul = api.core.NPC.create(N.LOST_SOUL, new api.core.Location(x, y, 0));
+        const soul = api.core.NPC.create(N.LOST_SOUL_2, new api.core.Location(x, y, 0));
         soul.setOwner?.(p);
         soul.setOwnerOnly?.(true);
         soul.setScriptedMovement?.(true);
@@ -5953,16 +5966,6 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
 
-  function preventLassarPostQuestWhisperer(event) {
-    const { attacker, target } = event;
-    if (!attacker || stage(attacker) !== S.WHISPERER || target?.getId?.() !== N.THE_WHISPERER) return;
-    const state = attacker.getAttribute(LASSAR) ?? {};
-    if (state.whispererDefeated) return;
-    event.allow = false;
-    attacker.sendMessage(state.whispererStarted
-      ? "This is the post-quest Whisperer. Fight the 660-hitpoint quest apparition in the cathedral instead."
-      : "This is the post-quest Whisperer. Clear the cathedral tentacles, then Disturb the Odd Figure to begin the quest fight.");
-  }
   function handleDeath({ killer, npc }) {
     if (npc?.__dt2ScarAntibody) {
       const owner = npc.getOwner?.();
@@ -6296,6 +6299,8 @@ module.exports = function registerDesertTreasureII(api) {
     if (!owned) spawned.set(p, owned = {});
     if (owned.lassarOddFigure?.isRegistered?.()) return owned.lassarOddFigure;
     owned.lassarOddFigure = api.spawnNpc({ id: N.ODD_FIGURE, x: 2656, y: 6370, z: 0, wanderRadius: 0, owner: p, ownerOnly: true });
+    const area = p.getAttribute(WHISPERER_AREA);
+    if (area instanceof WhispererArea && !area.isDestroyed()) area.enter(owned.lassarOddFigure);
     return owned.lassarOddFigure;
   }
 
@@ -7286,7 +7291,6 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("The Whisperer", { "Talk-to": handleBossTalk });
   api.onNpcInteraction("Odd Figure", { Disturb: handleBossTalk, "Talk-to": handleBossTalk });
   api.onNpcDeath(handleDeath);
-  api.onCanAttack(preventLassarPostQuestWhisperer);
   api.registerNpcCombatMethodProvider(N.VARDORVIS_2, VardorvisCombat);
   api.registerNpcCombatMethodProvider(N.KASONDE_7, KasondeCombat);
   api.onCombatHitRoll(vardorvisHitRoll);
