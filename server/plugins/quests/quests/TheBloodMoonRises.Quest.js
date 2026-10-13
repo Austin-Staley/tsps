@@ -880,6 +880,16 @@ module.exports = function registerTheBloodMoonRises(api) {
     return value;
   }
 
+  function nativeQuestVarbit(value, player) {
+    if (value === STAGE.SLEPE) {
+      const phase = player?.getAttribute("the-blood-moon-rises:refinery-progress")?.phase;
+      const refineryStage = ({ route: 48, tomb: 50, pickaxe: 52, mined: 54, tunnel: 56,
+        fight: 58, cleared: 60, freed: 60, escaped: 62 })[phase];
+      if (refineryStage !== undefined) return refineryStage;
+    }
+    return nativeStage(value, player);
+  }
+
   function syncHideoutIvan(event) {
     const player = event?.player;
     if (!player || (event.key && event.key !== "the_blood_moon_rises")) return;
@@ -2556,6 +2566,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     varbitId: 15464,
     // shortcut: other chapter native stages need their cache morphs validated before mapping.
     varpValue: nativeStage,
+    varbitValue: nativeQuestVarbit,
     startedValue: STAGE.STARTED,
     completionValue: STAGE.COMPLETE,
     questPoints: 4,

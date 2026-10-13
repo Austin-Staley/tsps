@@ -5,7 +5,7 @@
 module.exports = function registerRefinery(api) {
   const {
     Area, Boundary, Equipment, GameObject, HitDamage, HitMask, ItemIdentifiers: I,
-    Location, NpcIdentifiers: N, ObjectIdentifiers: O, ObjectManager, PrivateArea,
+    Location, NpcIdentifiers: N, ObjectIdentifiers: O, TemplatedInstanceArea, ObjectManager,
   } = api.core;
   const { startTranscript } = require("../QuestRuntime");
   const mining = require("../../skills/Mining.plugin");
@@ -22,7 +22,10 @@ module.exports = function registerRefinery(api) {
   });
   const TOMBSTILE = Object.freeze({ x: 3505, y: 9857, z: 0 });
   const TUNNEL_TILE = Object.freeze({ x: 3117, y: 7472, z: 2 });
-  const ROOM_BOUNDS = [new Boundary(3164, 3196, 7447, 7469, 0)];
+  // This exact cache room sits over a water overlay in the base map. OSRS
+  // copies these chunks into a scene instance; doing so preserves its scenery
+  // without applying the base-map water collision.
+  const ROOM_SOURCE = Object.freeze({ x: 3136, y: 7424, chunks: 8 });
   const TOMB_BOUNDS = [new Boundary(3485, 3516, 9853, 9879, 0)];
   const INVESTIGATE = O.BLOCKAGE_9;
   const MINE_THROUGH = O.BLOCKAGE_10;
@@ -37,8 +40,10 @@ module.exports = function registerRefinery(api) {
   const PICKAXE_ITEM = I.BRONZE_PICKAXE;
   const VYREWEAPONS = new Set([I.IVANDIS_FLAIL, I.IVANDIS_FLAIL_2, I.BLISTERWOOD_FLAIL, I.BLISTERWOOD_FLAIL_2]);
   const ENEMIES = Object.freeze([
-    [N.VYREWATCH_82, 3171, 7464],
-    [N.VYREWATCH_83, 3175, 7467],
+    // QH supplies the five NPC ids, not scene-local tiles. These two anchors
+    // are inferred from the nearest cache-validated walkable floor tiles.
+    [N.VYREWATCH_82, 3172, 7460],
+    [N.VYREWATCH_83, 3177, 7465],
     [N.VYREWATCH_82, 3182, 7464],
     [N.VYREWATCH_SENTINEL_17, 3177, 7460],
     [N.VYREWATCH_SENTINEL_18, 3184, 7461],
@@ -65,9 +70,30 @@ module.exports = function registerRefinery(api) {
     if (nativeStage !== undefined) setStage(player, nativeStage);
     return next;
   }
-  function isInRoom(player) {
-    const p = player.getLocation();
-    return p.getZ() === 0 && p.getX() >= 3164 && p.getX() <= 3196 && p.getY() >= 7447 && p.getY() <= 7469;
+  function roomTile(area, x, y, z = 0) {
+    return area.tile(x - ROOM_SOURCE.x, y - ROOM_SOURCE.y, z);
+  }
+  function sourceTile(area, tile) {
+    const location = tile && typeof tile.getX === "function"
+      ? tile
+      : tile && Number.isFinite(tile.x) && Number.isFinite(tile.y) && Number.isFinite(tile.z)
+        ? new Location(tile.x, tile.y, tile.z)
+        : null;
+    if (area && location && area.contains(location)) {
+      return {
+        x: location.getX() - area.getBaseX() + ROOM_SOURCE.x,
+        y: location.getY() - area.getBaseY() + ROOM_SOURCE.y,
+        z: location.getZ(),
+      };
+    }
+    return {
+      x: location?.getX() ?? tile?.x,
+      y: location?.getY() ?? tile?.y,
+      z: location?.getZ() ?? tile?.z,
+    };
+  }
+  function matchesObject(event, id, name) {
+    return event?.objectId === id || event?.definition?.id === id || event?.definition?.getName?.() === name;
   }
   function cleanTombIvan(player) {
     const npc = tombIvans.get(player);
@@ -109,7 +135,7 @@ module.exports = function registerRefinery(api) {
   }
 
   function clearArea(area) {
-    for (const npc of area.cast) api.removeNpc(npc);
+    for (const npc of new Set([...area.cast.values(), ...area.residents])) api.removeNpc(npc);
     area.cast.clear();
     for (const orb of area.orbs) {
       ObjectManager.deregister(orb.object, true);
@@ -130,7 +156,8 @@ module.exports = function registerRefinery(api) {
     for (let slot = 0; slot < ENEMIES.length; slot++) {
       if (killed.has(slot)) continue;
       const [id, x, y] = ENEMIES[slot];
-      const npc = api.spawnNpc({ id, x, y, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
+      const at = roomTile(area, x, y);
+      const npc = api.spawnNpc({ id, x: at.getX(), y: at.getY(), z: at.getZ(), wanderRadius: 0, owner: player, ownerOnly: true });
       if (!npc) {
         player.sendMessage("The refinery guards could not be restored. Leave and re-enter the tunnel to try again.");
         continue;
@@ -141,7 +168,8 @@ module.exports = function registerRefinery(api) {
     area.nextOrbTick = area.ticks + ORB_INTERVAL;
   }
   function spawnResident(area, id, x, y) {
-    const npc = api.spawnNpc({ id, x, y, z: 0, wanderRadius: 0, owner: area.player, ownerOnly: true });
+    const at = roomTile(area, x, y);
+    const npc = api.spawnNpc({ id, x: at.getX(), y: at.getY(), z: at.getZ(), wanderRadius: 0, owner: area.player, ownerOnly: true });
     if (!npc) return null;
     npc.setScriptedMovement(true);
     npc.getMovementQueue().setBlockMovement(true);
@@ -158,7 +186,7 @@ module.exports = function registerRefinery(api) {
   }
   function spawnOrb(area) {
     const [x, y] = ORB_TILES[area.orbIndex++ % ORB_TILES.length];
-    const object = new GameObject(BLOOD_ORB, new Location(x, y, 0), 10, 0, area);
+    const object = new GameObject(BLOOD_ORB, roomTile(area, x, y), 10, 0, area);
     ObjectManager.register(object, true);
     area.orbs.push({ object, expires: area.ticks + ORB_LIFETIME, pulse: area.ticks });
     orbOwners.set(object, area);
@@ -185,9 +213,23 @@ module.exports = function registerRefinery(api) {
     }
   }
 
-  class RefineryArea extends PrivateArea {
+  class RefineryArea extends TemplatedInstanceArea {
     constructor(player) {
-      super(ROOM_BOUNDS);
+      super(ROOM_SOURCE.chunks, ROOM_SOURCE.chunks);
+      const sourceChunkX = ROOM_SOURCE.x >> 3;
+      const sourceChunkY = ROOM_SOURCE.y >> 3;
+      for (let plane = 0; plane < 4; plane++) {
+        for (let chunkX = 0; chunkX < ROOM_SOURCE.chunks; chunkX++) {
+          for (let chunkY = 0; chunkY < ROOM_SOURCE.chunks; chunkY++) {
+            this.setChunk(plane, chunkX, chunkY, {
+              sourceChunkX: sourceChunkX + chunkX,
+              sourceChunkY: sourceChunkY + chunkY,
+              sourcePlane: plane,
+              rotation: 0,
+            });
+          }
+        }
+      }
       this.player = player; this.cast = new Map(); this.residents = []; this.orbs = [];
       this.ticks = 0; this.nextOrbTick = 0; this.orbIndex = 0;
     }
@@ -217,6 +259,9 @@ module.exports = function registerRefinery(api) {
     }
     postLeave(member, logout) {
       if (member === this.player) {
+        // A template allocation is transient. Save at the real cave tunnel so
+        // logout/relogin never points into a destroyed scene allocation.
+        if (logout) member.setLocation(new Location(TUNNEL_TILE.x, TUNNEL_TILE.y, TUNNEL_TILE.z));
         clearArea(this);
         sessions.delete(member);
       }
@@ -231,7 +276,7 @@ module.exports = function registerRefinery(api) {
     const area = new RefineryArea(player);
     sessions.set(player, area);
     area.enter(player);
-    if (moveInside) player.moveTo(new Location(3173, 7464, 0));
+    if (moveInside) player.moveTo(roomTile(area, 3169, 7456));
     if (current.phase === "tunnel") setProgress(player, { phase: "fight", killed: [] });
     spawnRoomActors(area);
     return area;
@@ -244,22 +289,21 @@ module.exports = function registerRefinery(api) {
   function tombPassage(event) {
     const player = event?.player;
     if (!player) return false;
-    const id = event.definition?.id ?? event.objectId;
     const option = event.option;
     const tile = event.location ?? event.object?.getLocation?.();
-    const x = tile?.getX?.() ?? tile?.x, y = tile?.getY?.() ?? tile?.y, z = tile?.getZ?.() ?? tile?.z;
-    if (id === INVESTIGATE && option === "Investigate" && x === TOMBSTILE.x && y === TOMBSTILE.y && z === TOMBSTILE.z) {
+    const { x, y, z } = sourceTile(sessions.get(player), tile);
+    if (matchesObject(event, INVESTIGATE, "Blockage") && option === "Investigate" && x === TOMBSTILE.x && y === TOMBSTILE.y && z === TOMBSTILE.z) {
       if (!progress(player).started || ["mined", "tunnel", "fight", "cleared", "freed", "escaped"].includes(progress(player).phase)) return false;
       event.handled = true;
       return startTranscript(api, player, IVAN, PAGE, "the-truth-hurtz-investigating-the-blockage");
     }
-    if (id === MINE_THROUGH && option === "Mine-through" && x === TOMBSTILE.x && y === TOMBSTILE.y && z === TOMBSTILE.z) {
+    if (matchesObject(event, MINE_THROUGH, "Blockage") && option === "Mine-through" && x === TOMBSTILE.x && y === TOMBSTILE.y && z === TOMBSTILE.z) {
       if (!progress(player).started || progress(player).phase !== "pickaxe") return false;
       event.handled = true;
       if (!mining.findBestPickaxe(player)) { player.sendMessage("You need a pickaxe. Ivan said he has a spare one."); return true; }
       return startTranscript(api, player, IVAN, PAGE, "the-truth-hurtz-mining-the-blockage");
     }
-    if (id === TOMB_ENTRANCE && option === "Enter" && x === TOMBSTILE.x && y === TOMBSTILE.y && z === TOMBSTILE.z) {
+    if (matchesObject(event, TOMB_ENTRANCE, "Cave entrance") && option === "Enter" && x === TOMBSTILE.x && y === TOMBSTILE.y && z === TOMBSTILE.z) {
       if (progress(player).phase !== "mined") return false;
       event.handled = true;
       setProgress(player, { phase: "tunnel" });
@@ -267,13 +311,22 @@ module.exports = function registerRefinery(api) {
       player.moveTo(new Location(TUNNEL_TILE.x, TUNNEL_TILE.y, TUNNEL_TILE.z));
       return true;
     }
-    if (id === MINE_TUNNEL && option === "Enter" && x === TUNNEL_TILE.x && y === TUNNEL_TILE.y && z === TUNNEL_TILE.z) {
+    // Older saved component accounts could be left on the source-map room
+    // after the former plain PrivateArea implementation was destroyed. Let
+    // them take the same visible tunnel back into the current exact template.
+    if (matchesObject(event, MINE_TUNNEL, "Tunnel") && option === "Enter" && x === 3168 && y === 7456 && z === 0
+      && !sessions.has(player) && ["fight", "cleared", "freed"].includes(progress(player).phase)) {
+      event.handled = true;
+      enterRoom(player);
+      return true;
+    }
+    if (matchesObject(event, MINE_TUNNEL, "Tunnel") && option === "Enter" && x === TUNNEL_TILE.x && y === TUNNEL_TILE.y && z === TUNNEL_TILE.z) {
       if (!["tunnel", "fight", "cleared", "freed"].includes(progress(player).phase)) return false;
       event.handled = true;
       enterRoom(player);
       return true;
     }
-    if (id === CASTLE_EXIT && option === "Enter" && x === 3182 && y === 7470 && z === 0) {
+    if (matchesObject(event, CASTLE_EXIT, "Entry") && option === "Enter" && x === 3182 && y === 7470 && z === 0) {
       if (progress(player).phase !== "freed") return false;
       event.handled = true;
       setProgress(player, { phase: "escaped" });
@@ -363,7 +416,17 @@ module.exports = function registerRefinery(api) {
     if (!player) return;
     if (player.getAttribute(STORY_ATTRIBUTE)?.tombRouteStarted && !progress(player).started) start({ player });
     sync(player);
-    if (isInRoom(player)) enterRoom(player, false);
+    const position = player.getLocation();
+    const x = position.getX(), y = position.getY(), z = position.getZ();
+    if (!sessions.has(player) && ["fight", "cleared", "freed"].includes(progress(player).phase)
+      && z === 0 && x >= ROOM_SOURCE.x && x < ROOM_SOURCE.x + ROOM_SOURCE.chunks * 8
+      && y >= ROOM_SOURCE.y && y < ROOM_SOURCE.y + ROOM_SOURCE.chunks * 8) {
+      // Migrate saves made by the old non-templated room, whose water-overlay
+      // coordinates are visible but unreachable in the public map.
+      player.moveTo(new Location(TUNNEL_TILE.x, TUNNEL_TILE.y, TUNNEL_TILE.z));
+      return;
+    }
+    if (["fight", "cleared", "freed"].includes(progress(player).phase) && position.getX() >= 8192) enterRoom(player);
   }
   function stageChanged(event) {
     if (event?.key !== "the_blood_moon_rises" || !event.player) return;
@@ -383,5 +446,5 @@ module.exports = function registerRefinery(api) {
   api.onNpcHitModify(modifyPlayerHit);
   api.onPlayerLogin(syncLogin);
   return { start, sync, tombPassage, answerCondition, talkIvan, talkRefinery, action, npcDeath,
-    modifyPlayerHit, enterRoom, sessions, progress, RefineryArea, TombArea, ENEMIES, STAGE };
+    modifyPlayerHit, enterRoom, syncLogin, sessions, progress, sourceTile, RefineryArea, TombArea, ENEMIES, STAGE };
 };

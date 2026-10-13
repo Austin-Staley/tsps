@@ -168,6 +168,62 @@ test('Blood Moon refinery handoff uses valid events, restores the tomb route, an
   assert.deepEqual(varbits.at(-1), [15464, 60]);
 });
 
+test('Blood Moon refinery copies its exact cache room into a walkable four-plane scene', () => {
+  const { api } = mockApi();
+  const refinery = require('../plugins/quests/bmr/Refinery.TheBloodMoonRises')(api);
+  const area = new refinery.RefineryArea({});
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  try {
+    for (let plane = 0; plane < 4; plane++) {
+      assert.deepEqual(area.getChunk(plane, 4, 5), {
+        sourceChunkX: 396, sourceChunkY: 933, sourcePlane: plane, rotation: 0,
+      });
+    }
+    const entry = area.tile(3169 - 3136, 7456 - 7424, 0);
+    assert.equal(RegionManager.getClipping(entry.getX(), entry.getY(), 0, area) & RegionManager.BLOCKED_TILE, 0);
+    assert.deepEqual(refinery.sourceTile(area, { x: entry.getX(), y: entry.getY(), z: 0 }),
+      { x: 3169, y: 7456, z: 0 }, 'plugin object packets use plain coordinates in the allocated scene');
+    const reachable = new Set([`${entry.getX()},${entry.getY()}`]);
+    const queue = [entry];
+    for (let index = 0; index < queue.length; index++) {
+      const tile = queue[index];
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const x = tile.getX() + dx, y = tile.getY() + dy, key = `${x},${y}`;
+        if (reachable.has(key) || !RegionManager.canMove(tile.getX(), tile.getY(), x, y, 0, 1, 1, area)) continue;
+        reachable.add(key);
+        queue.push(area.tile(x - area.getBaseX(), y - area.getBaseY(), 0));
+      }
+    }
+    for (const [, x, y] of refinery.ENEMIES) {
+      const enemy = area.tile(x - 3136, y - 7424, 0);
+      assert.equal(RegionManager.getClipping(enemy.getX(), enemy.getY(), 0, area) & RegionManager.BLOCKED_TILE, 0,
+        `enemy anchor ${x},${y} uses walkable template floor`);
+      assert.ok(reachable.has(`${enemy.getX()},${enemy.getY()}`), `enemy anchor ${x},${y} is reachable from the tunnel`);
+    }
+    assert.ok(reachable.size > refinery.ENEMIES.length, 'BFS follows the connected source-room floor copied into the private scene');
+  } finally {
+    area.destroy();
+  }
+});
+
+test('Blood Moon refinery returns obsolete source-room saves to the real tunnel without advancing progress', () => {
+  const { api } = mockApi();
+  const attrs = new Map([['the-blood-moon-rises:refinery-progress', { started: true, phase: 'fight', killed: [] }]]);
+  const moves = [];
+  const player = {
+    getAttribute: key => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getPacketSender: () => ({ sendVarbit() {} }),
+    getLocation: () => new api.core.Location(3173, 7464, 0),
+    moveTo: location => moves.push(location),
+  };
+  const refinery = require('../plugins/quests/bmr/Refinery.TheBloodMoonRises')(api);
+  refinery.syncLogin({ player });
+  assert.equal(moves.length, 1);
+  assert.deepEqual([moves[0].getX(), moves[0].getY(), moves[0].getZ()], [3117, 7472, 2]);
+  assert.deepEqual(refinery.progress(player), { started: true, phase: 'fight', killed: [] });
+});
+
 test('Blood Moon refinery Ivan hook yields outside its own tomb/refinery phases', () => {
   const { api } = mockApi();
   const attributes = new Map();
@@ -6608,13 +6664,16 @@ test('bridge uses the actual cache palace exit and lets a full-inventory handoff
  const t=bloodBridgeFixture();t.setFree(0);assert.equal(t.f.start(t.player),false);t.setFree(2);assert.equal(t.f.doors({player:t.player,objectId:t.api.core.ObjectIdentifiers.DOORS_46,location:{x:3167,y:7860,z:1}}),true);assert.ok(t.f.sessions.has(t.player));
 });
 
-test('Blood Moon native bitfield mapping reveals preparations and survives relog without changing quest stage',()=>{
+test('Blood Moon native bitfield mapping restores Slepe refinery phase without changing quest stage',()=>{
  const {api,handlers}=mockApi();require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);const runtime=require('../plugins/quests/QuestRuntime'),quest=runtime.getRegisteredQuests().filter(q=>q.key==='the_blood_moon_rises').at(-1),attrs=new Map(),bits=new Map();const sender=new Proxy({}, {get:(_,key)=>key==='sendVarbit'?(id,n)=>bits.set(id,n):()=>sender});const player={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getPacketSender:()=>sender};
  quest.setStage(player,10);assert.equal(bits.get(15464),4);assert.equal(bits.get(15467),1,'the stage-10 hideout NPC transform makes Ivan visible');
  handlers.playerLogin.at(-1)({player});assert.equal(bits.get(15464),4);assert.equal(bits.get(15467),1,'the hideout NPC transform is restored after relog');
  attrs.set('quest.the_blood_moon_rises.hideout-shrine-inspected',true);quest.setStage(player,10);assert.equal(bits.get(15464),8,'the shrine cutscene advances the native varbit');
  quest.setStage(player,20);assert.equal(bits.get(15464),12);assert.equal(bits.get(15467),2,'the ready-to-leave stage shows Ivan’s trade/disguise variant');
  quest.setStage(player,30);assert.equal(bits.get(15464),16);assert.equal(bits.get(15467),0,'the hideout Ivan is hidden after the story moves to Slepe');bits.clear();
+ attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'fight'});runtime.sendQuestVarps({player});assert.equal(bits.get(15464),58);assert.equal(quest.getStage(player),30,'the refinery morph must not advance the quest journal stage');bits.clear();
+ attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'freed'});handlers.playerLogin.at(-1)({player});runtime.sendQuestVarps({player});assert.equal(bits.get(15464),60,'the freed refinery state is restored after relog');bits.clear();
+ attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'escaped'});quest.setStage(player,30);assert.equal(bits.get(15464),62,'the escape morph survives a chapter stage sync');attrs.delete('the-blood-moon-rises:refinery-progress');bits.clear();
  quest.setStage(player,60);assert.equal(quest.getStage(player),60);assert.equal(bits.get(15464),102);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),102);quest.setStage(player,70);assert.equal(bits.get(15464),116);
  attrs.set('quest.the_blood_moon_rises.preparations',{stewFed:true});quest.setStage(player,60);assert.equal(bits.get(15464),110);
  attrs.set('quest.the_blood_moon_rises.preparations',{flail:true,stakes:true});quest.setStage(player,60);assert.equal(bits.get(15464),114);
