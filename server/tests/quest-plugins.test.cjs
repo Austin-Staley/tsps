@@ -8711,15 +8711,23 @@ test('Dragon Slayer II adds a traversable ladder for the cache-backed red-to-iro
 
 
 test('Dragon Slayer II assault dragons retain ordinary NPC combat while Galvek stays scripted', () => {
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
   const { api: base, handlers } = mockApi();
   const added = [];
   const created = [];
   let gapHandler;
   let wreckageHandler;
+  let shipHandler;
+  let ropeLadderHandler;
+  let debrisHandler;
   const npcApi = {
     create(id, location) {
       const npc = {
         id, location, scripted: false, hp: 100,
+        getId() { return this.id; },
+        getRealId() { return this.id; },
+        getLocation() { return this.location; },
+        getHitpoints() { return this.hp; },
         setArea() {},
         setOwner() {}, setOwnerOnly() {},
         setScriptedMovement(value) { this.scripted = value; },
@@ -8739,6 +8747,9 @@ test('Dragon Slayer II assault dragons retain ordinary NPC combat while Galvek s
         ? (name, actions) => {
           if (name === 'Gap') gapHandler = actions.Jump;
           if (name === 'Wreckage') wreckageHandler = actions['Jump-to'];
+          if (name === 'Ship') shipHandler = actions.Jump;
+          if (name === 'Rope ladder') ropeLadderHandler = actions['Climb-up'];
+          if (name === 'Debris') debrisHandler = actions.Cross;
           return target.onObjectInteraction(name, actions);
         }
         : target[prop],
@@ -8750,6 +8761,7 @@ test('Dragon Slayer II assault dragons retain ordinary NPC combat while Galvek s
     ['quest.dragon_slayer_ii.stage', 12],
     ['dragon-slayer-ii:instance-area', area],
     ['dragon-slayer-ii:assault-ship-defended', true],
+    ['dragon-slayer-ii:assault-index', 12],
   ]);
   let playerLocation = new api.core.Location(1687, 5665, 1);
   const player = {
@@ -8786,34 +8798,159 @@ test('Dragon Slayer II assault dragons retain ordinary NPC combat while Galvek s
     const lowerGapEvent = { player, object: lowerGap, objectId: 32313,
       definition: { id: 32313, getSizeX: () => 1, getSizeY: () => 2 }, clickType: 1, handled: false };
     routeGap(lowerGapEvent);
-    assert.deepEqual(lowerGapEvent.destination, { x: 1668, y: 5706, z: 1 },
-      'the exact cache gap uses its reachable southern approach');
-    const lowerGapApproach = new api.core.RsmodRouteFinding().findRoute({ level: 1, srcX: 1671, srcY: 5710, srcSize: 1,
-      destX: 1668, destY: 5706, privateArea: area, moveNear: false });
-    assert.equal(lowerGapApproach.success, true, 'the lower gap edge is reachable on the upper deck');
-    playerLocation = new api.core.Location(1668, 5706, 1);
+    assert.deepEqual(lowerGapEvent.destination, { x: 1668, y: 5704, z: 1 },
+      'the exact cache gap uses its QH tile because the approach side is blocked');
+    const lowerGapApproach = new api.core.RsmodRouteFinding().findRoute({ level: 1, srcX: 1668, srcY: 5697, srcSize: 1,
+      destX: 1668, destY: 5704, privateArea: area, moveNear: false });
+    assert.equal(lowerGapApproach.success, true, 'the gap tile is reachable on the upper deck');
+    playerLocation = new api.core.Location(1668, 5704, 1);
     assert.equal(gapHandler(lowerGapEvent), true);
     assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [1668, 5707, 0],
       'Jump traverses the documented gap to the lower deck');
 
+    const mainShipGap = { getLocation: () => new api.core.Location(1662, 5689, 1), getFace: () => 0 };
+    const mainShipGapEvent = { player, object: mainShipGap, objectId: api.core.ObjectIdentifiers.GAP_39,
+      definition: { id: api.core.ObjectIdentifiers.GAP_39, getSizeX: () => 1, getSizeY: () => 2 },
+      clickType: 1, handled: false };
+    playerLocation = new api.core.Location(1658, 5688, 1);
+    routeGap(mainShipGapEvent);
+    assert.deepEqual(mainShipGapEvent.destination, { x: 1658, y: 5688, z: 1 },
+      'the broken main-ship deck routes from its isolated ladder landing');
+    assert.equal(new api.core.RsmodRouteFinding().findRoute({ level: 1, srcX: 1658, srcY: 5688, srcSize: 1,
+      destX: 1658, destY: 5688, privateArea: area, moveNear: false }).success, true,
+    'the gap interaction starts on the real reachable ladder landing');
+    assert.equal(gapHandler(mainShipGapEvent), true);
+    assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [1665, 5689, 0],
+      'Jump crosses to the QH lower-deck waypoint');
+
     const mithrilGap = { getLocation: () => new api.core.Location(1679, 5708, 2), getFace: () => 3 };
     const mithrilGapEvent = { player, object: mithrilGap, objectId: 32312,
       definition: { id: 32312, getSizeX: () => 1, getSizeY: () => 2 }, clickType: 1, handled: false };
-    playerLocation = new api.core.Location(1683, 5706, 2);
+    playerLocation = new api.core.Location(1673, 5710, 2);
     routeGap(mithrilGapEvent);
-    assert.deepEqual(mithrilGapEvent.destination, { x: 1682, y: 5705, z: 2 },
-      'the upper wreck gap uses the QH reachable approach');
+    assert.deepEqual(mithrilGapEvent.destination, { x: 1679, y: 5708, z: 2 },
+      'the upper wreck gap uses QH’s exact clickable waypoint');
     const routeFinder = new api.core.RsmodRouteFinding();
-    const upperGapApproach = routeFinder.findRoute({ level: 2, srcX: 1683, srcY: 5706, srcSize: 1,
-      destX: 1682, destY: 5705, privateArea: area, moveNear: false });
-    assert.equal(upperGapApproach.success, true, 'the gap approach is reachable from the earned Brutal red position');
-    playerLocation = new api.core.Location(1682, 5705, 2);
+    const upperGapApproach = routeFinder.findRoute({ level: 2, srcX: 1673, srcY: 5710, srcSize: 1,
+      destX: 1679, destY: 5708, privateArea: area, moveNear: false });
+    assert.equal(upperGapApproach.success, true, 'the gap waypoint is reachable from the earned rope-ladder landing');
+    playerLocation = new api.core.Location(1679, 5708, 2);
     assert.equal(gapHandler(mithrilGapEvent), true);
     assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [1690, 5708, 1],
       'Jump traverses the wreck to the QH lower-deck waypoint');
     const mithrilRoute = new api.core.RsmodRouteFinding().findRoute({ level: 1, srcX: 1690, srcY: 5708, srcSize: 1,
       destX: 1698, destY: 5710, privateArea: area, moveNear: false });
     assert.equal(mithrilRoute.success, true, 'the landing can route to the cache-positioned Mithril dragon');
+
+    const runeGap = { getLocation: () => new api.core.Location(1706, 5722, 0), getFace: () => 2 };
+    const runeGapEvent = { player, object: runeGap, objectId: 32313,
+      definition: { id: 32313, getSizeX: () => 1, getSizeY: () => 2 }, clickType: 1, handled: false };
+    playerLocation = new api.core.Location(1705, 5722, 0);
+    routeGap(runeGapEvent);
+    assert.deepEqual(runeGapEvent.destination, { x: 1705, y: 5722, z: 0 },
+      'the QH post-Adamant route uses its reachable wreckage tile beside the cache gap');
+    assert.equal(routeFinder.findRoute({ level: 0, srcX: 1705, srcY: 5722, srcSize: 1,
+      destX: 1705, destY: 5722, privateArea: area, moveNear: false }).success, true,
+    'the post-Adamant gap approach is the actual cache wreckage landing');
+    assert.equal(gapHandler(runeGapEvent), true);
+    assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [1708, 5723, 1],
+      'Jump follows the QH post-Adamant route to the upper plank');
+    assert.equal(api.core.RegionManager.getClipping(1708, 5723, 1, area) & 0x200000, 0,
+      'the QH landing is a clear tile on the upper plank');
+
+    const routeShip = handlers.routes.find(handler => handler.name === 'routeAssaultRuneShip');
+    const ship = { getLocation: () => new api.core.Location(1708, 5726, 1) };
+    const shipEvent = { player, object: ship, objectId: api.core.ObjectIdentifiers.SHIP,
+      definition: { id: api.core.ObjectIdentifiers.SHIP }, clickType: 1, option: 'Jump', handled: false };
+    attrs.set('dragon-slayer-ii:assault-index', 12);
+    playerLocation = new api.core.Location(1708, 5723, 1);
+    routeShip(shipEvent);
+    assert.deepEqual(shipEvent.destination, { x: 1708, y: 5725, z: 1 },
+      'the cache Ship jump routes to the reachable south approach');
+    assert.equal(routeFinder.findRoute({ level: 1, srcX: 1708, srcY: 5723, srcSize: 1,
+      destX: 1708, destY: 5725, privateArea: area, moveNear: false }).success, true,
+    'the upper-plank landing can reach the Ship jump approach');
+    playerLocation = new api.core.Location(1708, 5725, 1);
+    assert.equal(shipHandler(shipEvent), true);
+    assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [1708, 5729, 0],
+      'Jump crosses the cached ship obstacle to the QH lower-deck waypoint');
+    assert.equal(shipEvent.handled, true);
+    const unrelatedShip = { ...shipEvent, object: { getLocation: () => new api.core.Location(1708, 5726, 0) } };
+    assert.equal(shipHandler(unrelatedShip), false, 'the quest handler leaves ships elsewhere untouched');
+    attrs.set('dragon-slayer-ii:assault-index', 11);
+    assert.equal(shipHandler(shipEvent), false, 'the ship jump is only active for the final Rune route');
+    attrs.set('dragon-slayer-ii:assault-index', 12);
+
+    const debrisEvent = (x, y) => ({ player, object: { getLocation: () => new api.core.Location(x, y, 0) },
+      objectId: api.core.ObjectIdentifiers.DEBRIS_2,
+      definition: { id: api.core.ObjectIdentifiers.DEBRIS_2 }, clickType: 1, option: 'Cross', handled: false });
+    const routeDebris = handlers.routes.find(handler => handler.name === 'routeAssaultRuneDebris');
+    const firstDebris = debrisEvent(1709, 5730);
+    playerLocation = new api.core.Location(1708, 5729, 0);
+    routeDebris(firstDebris);
+    assert.deepEqual(firstDebris.destination, { x: 1708, y: 5729, z: 0 },
+      'the first lower-deck debris cross begins at the QH waypoint');
+    assert.equal(debrisHandler(firstDebris), true);
+    assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [1710, 5731, 0]);
+    assert.equal(debrisHandler(debrisEvent(1709, 5730)), false,
+      'the debris handler does not claim unrelated fleet crossings');
+    const mainShipDebris = debrisEvent(1668, 5690);
+    mainShipDebris.objectId = api.core.ObjectIdentifiers.DEBRIS;
+    mainShipDebris.definition = { id: api.core.ObjectIdentifiers.DEBRIS };
+    playerLocation = new api.core.Location(1668, 5689, 0);
+    routeDebris(mainShipDebris);
+    assert.deepEqual(mainShipDebris.destination, { x: 1668, y: 5689, z: 0 },
+      'the lower-deck debris is clicked from QH’s last reachable waypoint');
+    assert.equal(debrisHandler(mainShipDebris), true);
+    assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [1668, 5695, 0]);
+    assert.equal(routeFinder.findRoute({ level: 0, srcX: 1668, srcY: 5695, srcSize: 1,
+      destX: 1668, destY: 5697, privateArea: area, moveNear: false }).success, true,
+    'the debris landing reaches the cached lower-deck ladder');
+    attrs.set('quest.dragon_slayer_ii.stage', 13);
+    attrs.set('dragon-slayer-ii:assault-index', 13);
+    playerLocation = new api.core.Location(1668, 5689, 0);
+    routeDebris(mainShipDebris);
+    assert.equal(debrisHandler(mainShipDebris), true,
+      'the lower-deck route remains usable after Torfinn resumes the Galvek stage');
+    assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [1668, 5695, 0]);
+    attrs.set('quest.dragon_slayer_ii.stage', 12);
+    attrs.set('dragon-slayer-ii:assault-index', 12);
+
+    const finalGap = { getLocation: () => new api.core.Location(1697, 5737, 2), getFace: () => 1 };
+    const finalGapEvent = { player, object: finalGap, objectId: api.core.ObjectIdentifiers.GAP_39,
+      definition: { id: api.core.ObjectIdentifiers.GAP_39, getSizeX: () => 1, getSizeY: () => 2 },
+      clickType: 1, handled: false };
+    playerLocation = new api.core.Location(1698, 5737, 2);
+    routeGap(finalGapEvent);
+    assert.deepEqual(finalGapEvent.destination, { x: 1698, y: 5737, z: 2 },
+      'the final metal-dragon gap uses its QH approach');
+    assert.equal(gapHandler(finalGapEvent), true);
+    assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [1696, 5737, 0],
+      'the final gap reaches the lower deck before the Rune dragon');
+
+    const runeWestGap = { getLocation: () => new api.core.Location(1688, 5737, 0), getFace: () => 0 };
+    const runeWestGapEvent = { player, object: runeWestGap, objectId: api.core.ObjectIdentifiers.GAP_40,
+      definition: { id: api.core.ObjectIdentifiers.GAP_40, getSizeX: () => 1, getSizeY: () => 2 },
+      clickType: 1, handled: false };
+    playerLocation = new api.core.Location(1689, 5737, 0);
+    routeGap(runeWestGapEvent);
+    assert.deepEqual(runeWestGapEvent.destination, { x: 1689, y: 5737, z: 0 },
+      'the western gap routes from its clear eastern edge');
+    assert.equal(gapHandler(runeWestGapEvent), true);
+    assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [1687, 5738, 0],
+      'the western gap reaches the approach to the Rune wreckage');
+
+    playerLocation = new api.core.Location(1704, 5739, 0);
+    const ropeLadder = { getLocation: () => new api.core.Location(1704, 5739, 0) };
+    const ropeLadderEvent = { player, object: ropeLadder, objectId: api.core.ObjectIdentifiers.ROPE_LADDER_6,
+      definition: { id: api.core.ObjectIdentifiers.ROPE_LADDER_6 }, handled: false };
+    assert.equal(ropeLadderHandler(ropeLadderEvent), true);
+    assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [1704, 5739, 2],
+      'the cached rope ladder connects the QH lower and upper ship decks');
+    const unrelatedRopeLadder = { ...ropeLadderEvent,
+      object: { getLocation: () => new api.core.Location(1704, 5739, 1) } };
+    assert.equal(ropeLadderHandler(unrelatedRopeLadder), false,
+      'the quest ladder handler leaves the upper-deck reciprocal action alone');
 
     const adamantGap = { getLocation: () => new api.core.Location(1698, 5710, 1), getFace: () => 0 };
     const adamantGapEvent = { player, object: adamantGap, objectId: 32313,
@@ -8838,19 +8975,56 @@ test('Dragon Slayer II assault dragons retain ordinary NPC combat while Galvek s
       clickType: 1, option: 'Jump-to', handled: false,
     });
     const wreckageJumps = [
+      { object: [1638, 5706], from: [1637, 5706], to: [1640, 5706] },
+      { object: [1645, 5701], from: [1640, 5706], to: [1645, 5701] },
+      { object: [1648, 5701], from: [1645, 5701], to: [1647, 5681, 1] },
+      { object: [1655, 5687], from: [1655, 5684], to: [1655, 5688] },
+      { object: [1668, 5689], from: [1665, 5689], to: [1668, 5689] },
       { object: [1698, 5715], from: [1698, 5712], to: [1698, 5715] },
+      { object: [1668, 5710], from: [1668, 5707], to: [1673, 5710] },
       { object: [1702, 5722], from: [1698, 5715], to: [1702, 5719] },
       { object: [1705, 5722], from: [1702, 5719], to: [1705, 5722] },
+      { object: [1710, 5734], from: [1710, 5731], to: [1705, 5739] },
+      { object: [1693, 5737], from: [1696, 5737], to: [1688, 5737] },
+      { object: [1679, 5738], from: [1687, 5738], to: [1676, 5738] },
     ];
     for (const jump of wreckageJumps) {
-      playerLocation = new api.core.Location(...jump.from, 0);
+      playerLocation = new api.core.Location(jump.from[0], jump.from[1], jump.from[2] ?? 0);
       const event = wreckageEvent(...jump.object);
       routeWreckage(event);
-      assert.deepEqual(event.destination, { x: jump.from[0], y: jump.from[1], z: 0 },
+      assert.deepEqual(event.destination, { x: jump.from[0], y: jump.from[1], z: jump.from[2] ?? 0 },
         'the cache Wreckage action starts from the previous collision-separated QH waypoint');
       assert.equal(wreckageHandler(event), true);
-      assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [...jump.to, 0]);
+      assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()],
+        [jump.to[0], jump.to[1], jump.to[2] ?? 0]);
       assert.equal(event.handled, true);
+    }
+    const rune = register._test.assaultDragons.find(dragon => dragon.id === api.core.NpcIdentifiers.RUNE_DRAGON_3);
+    assert.deepEqual(rune && [rune.x, rune.y, rune.z], [1666, 5734, 0]);
+    assert.equal(playerLocation.getX() >= rune.x + 5 || playerLocation.getX() < rune.x
+      || playerLocation.getY() >= rune.y + 5 || playerLocation.getY() < rune.y, true,
+    'the final wreckage jump lands outside the Rune dragon 5x5 footprint');
+    assert.equal(RegionManager.canMove(playerLocation.getX(), playerLocation.getY(),
+      playerLocation.getX(), playerLocation.getY(), 0, 1, 1, area), true,
+    'the Rune approach is a collision-walkable deck tile');
+    assert.equal(RegionManager.canProjectileAttackBounds(playerLocation,
+      new api.core.Location(rune.x, rune.y, rune.z), 1, 1, 5, 5, area), true,
+    'the Rune approach has a projectile line to the full dragon footprint');
+    const westWreckage = [
+      { object: [1670, 5738], from: [1676, 5738], to: [1670, 5738] },
+      { object: [1663, 5734], from: [1670, 5738], to: [1666, 5734] },
+      { object: [1660, 5734], from: [1666, 5734], to: [1660, 5734] },
+      { object: [1645, 5701], from: [1651, 5701], to: [1640, 5706] },
+      { object: [1638, 5706], from: [1640, 5706], to: [1637, 5706] },
+    ];
+    for (const jump of westWreckage) {
+      playerLocation = new api.core.Location(...jump.from);
+      const event = wreckageEvent(...jump.object);
+      routeWreckage(event);
+      assert.deepEqual(event.destination, { x: jump.from[0], y: jump.from[1], z: jump.from[2] ?? 0 });
+      assert.equal(wreckageHandler(event), true);
+      assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()],
+        [jump.to[0], jump.to[1], jump.to[2] ?? 0]);
     }
     playerLocation = new api.core.Location(1698, 5712, 0);
     const unrelatedWreckage = wreckageEvent(1693, 5737);
@@ -8858,8 +9032,74 @@ test('Dragon Slayer II assault dragons retain ordinary NPC combat while Galvek s
     assert.equal(unrelatedWreckage.destination, undefined, 'the quest jump does not claim unrelated wreckage');
     assert.equal(wreckageHandler(unrelatedWreckage), false);
 
+    const westGaps = [
+      { id: 32313, object: [1659, 5733, 0], from: [1660, 5734, 0], to: [1657, 5733, 1] },
+      { id: 32313, object: [1657, 5725, 1], from: [1657, 5726, 1], to: [1657, 5724, 0] },
+      { id: 32312, object: [1657, 5714, 0], from: [1657, 5717, 0], to: [1657, 5713, 1] },
+      { id: 32312, object: [1655, 5704, 1], from: [1656, 5704, 1], to: [1654, 5704, 0] },
+    ];
+    const westGapStarts = [[1660, 5734, 0], [1657, 5733, 1], [1657, 5717, 0], [1657, 5713, 1]];
+    for (const [index, crossing] of westGaps.entries()) {
+      const event = { player, object: { getLocation: () => new api.core.Location(...crossing.object) },
+        objectId: crossing.id, definition: { id: crossing.id, getSizeX: () => 1, getSizeY: () => 2 },
+        clickType: 1, handled: false };
+      const [sx, sy, sz] = westGapStarts[index];
+      assert.equal(routeFinder.findRoute({ level: sz, srcX: sx, srcY: sy, srcSize: 1,
+        destX: crossing.from[0], destY: crossing.from[1], privateArea: area, moveNear: false }).success, true,
+      'the preceding QH return waypoint reaches this cached gap approach');
+      playerLocation = new api.core.Location(...crossing.from);
+      routeGap(event);
+      assert.deepEqual(event.destination, { x: crossing.from[0], y: crossing.from[1], z: crossing.from[2] },
+        'the cache gap uses the return waypoint on its correct deck');
+      assert.equal(gapHandler(event), true);
+      assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], crossing.to);
+    }
+    const westDebris = [
+      { object: [1657, 5723, 0], from: [1657, 5724, 0], to: [1657, 5717, 0] },
+      { object: [1653, 5703, 0], from: [1654, 5704, 0], to: [1651, 5701, 0] },
+    ];
+    for (const crossing of westDebris) {
+      const event = debrisEvent(...crossing.object.slice(0, 2));
+      playerLocation = new api.core.Location(...crossing.from);
+      routeDebris(event);
+      assert.deepEqual(event.destination, { x: crossing.from[0], y: crossing.from[1], z: crossing.from[2] });
+      assert.equal(debrisHandler(event), true);
+      assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], crossing.to);
+    }
+
+    attrs.set('quest.dragon_slayer_ii.stage', 13);
+    playerLocation = new api.core.Location(1655, 5681, 1);
+    const galvekGap = { getLocation: () => new api.core.Location(1655, 5682, 1), getFace: () => 2 };
+    const galvekGapEvent = { player, object: galvekGap, objectId: 32313,
+      definition: { id: 32313, getSizeX: () => 1, getSizeY: () => 2 }, clickType: 1, handled: false };
+    routeGap(galvekGapEvent);
+    assert.deepEqual(galvekGapEvent.destination, { x: 1655, y: 5681, z: 1 });
+    assert.equal(gapHandler(galvekGapEvent), true, 'the cache Gap remains usable during the Galvek stage');
+    assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [1655, 5684, 0],
+      'the Galvek route follows the QH landing onto the lower deck');
+
+    playerLocation = new api.core.Location(1638, 5706, 0);
+    const returnToGalvek = wreckageEvent(1638, 5706);
+    routeWreckage(returnToGalvek);
+    assert.deepEqual(returnToGalvek.destination, { x: 1637, y: 5706, z: 0 },
+      'the cache plank remains routed during the earned Galvek stage');
+    assert.equal(wreckageHandler(returnToGalvek), true,
+      'the real Wreckage action can recover a player who stepped onto its blocked tile');
+    assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [1640, 5706, 0]);
+
+    attrs.set('quest.dragon_slayer_ii.stage', 13);
     register._test.spawnGalvek(player);
-    assert.equal(created.at(-1).scripted, true, 'Galvek keeps scripted control for his special phases');
+    const galvek = created.at(-1);
+    assert.equal(galvek.scripted, true, 'Galvek keeps scripted control for his special phases');
+    playerLocation = new api.core.Location(1676, 5738, 0);
+    area.process(player);
+    assert.equal(area.galvekTick, undefined,
+      'Galvek does not process attacks against a player still on the distant Rune-dragon deck');
+    assert.equal(area.galvekPhase, undefined, 'his arena phase does not start before the player boards his deck');
+    playerLocation = new api.core.Location(1633, 5735, 2);
+    area.process(player);
+    assert.equal(area.galvekTick, 1, 'Galvek begins processing after the player reaches his deck');
+    assert.equal(area.galvekPhase, 0, 'the fire phase starts only inside the arena');
   } finally {
     area.destroy();
   }

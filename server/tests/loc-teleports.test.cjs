@@ -209,6 +209,105 @@ test("the Ancient Cavern whirlpool requires Barbarian firemaking and pyre-ship t
   assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], entry.to);
 });
 
+test("the DS2 fleet rope ladder reaches the cache-backed upper wreckage route", () => {
+  const entry = data.locs.find((loc) => loc.name === "ds2_fleet_rope_ladder_upper");
+  assert.deepEqual([entry.id, entry.x, entry.y, entry.z, entry.option, entry.to],
+    [32322, 1673, 5710, 0, "Climb-up", [1673, 5710, 2]]);
+  assert.equal(CacheDefinitions.getObject(entry.id).actions[entry.op - 1], entry.option);
+  core.RegionManager.loadMapFiles(entry.x, entry.y);
+  assert.equal(core.RegionManager.getClipping(...entry.to, null) & 0x200000, 0,
+    "the QH landing is a clear tile on the upper deck");
+
+  const visit = explorer([1672, 5710, 0]);
+  const object = locAt(entry.id, entry.x, entry.y, entry.z);
+  const event = { player: visit.player, object, objectId: entry.id, clickType: 1, handled: false };
+  hooks.object(event);
+  assert.equal(event.handled, true);
+  runTicks(visit, 2);
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], entry.to);
+});
+
+test("the DS2 cache lift boards the upper deck beside Galvek", () => {
+  const entry = data.locs.find((loc) => loc.name === "ds2_fleet_lift_to_galvek");
+  assert.deepEqual([entry.id, entry.x, entry.y, entry.z, entry.option, entry.to],
+    [4942, 1631, 5735, 0, "Go-up", [1630, 5735, 2]]);
+  assert.equal(CacheDefinitions.getObject(entry.id).actions[entry.op - 1], entry.option);
+  const galvek = CacheDefinitions.getNpc(8095);
+  assert.equal(galvek.size, 7, "the arrival must sit outside Galvek's 7x7 footprint");
+  core.RegionManager.loadMapFiles(entry.x, entry.y);
+  assert.equal(core.RegionManager.canMove(entry.to[0], entry.to[1], entry.to[0], entry.to[1], entry.to[2], 1, 1, null), true,
+    "the inferred upper landing is a clear cache tile");
+  assert.equal(core.RegionManager.canProjectileAttackBounds(new core.Location(...entry.to),
+    new core.Location(1631, 5735, 2), 1, 1, galvek.size, galvek.size, null), true,
+  "the landing can reach Galvek's real cache footprint");
+
+  const visit = explorer([1631, 5735, 0]);
+  const object = locAt(entry.id, entry.x, entry.y, entry.z);
+  const event = { player: visit.player, object, objectId: entry.id, clickType: 1, handled: false };
+  hooks.object(event);
+  assert.equal(event.handled, true);
+  runTicks(visit, entry.tick);
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], entry.to);
+});
+
+test("the DS2 main-ship ladder reaches the cache-backed upper deck", () => {
+  const entry = data.locs.find((loc) => loc.name === "ds2_fleet_main_ship_ladder");
+  assert.deepEqual([entry.id, entry.x, entry.y, entry.z, entry.option, entry.to],
+    [32325, 1655, 5688, 0, "Climb-up", [1655, 5688, 2]]);
+  assert.equal(CacheDefinitions.getObject(entry.id).actions[entry.op - 1], entry.option);
+  core.RegionManager.loadMapFiles(entry.x, entry.y);
+  assert.equal(core.RegionManager.canMove(entry.to[0], entry.to[1], entry.to[0], entry.to[1], entry.to[2], 1, 1, null), true,
+    "the QH upper-deck landing is clear in cache collision");
+  const visit = explorer([1655, 5688, 0]);
+  const object = locAt(entry.id, entry.x, entry.y, entry.z);
+  const event = { player: visit.player, object, objectId: entry.id, clickType: 1, handled: false };
+  hooks.object(event);
+  assert.equal(event.handled, true);
+  runTicks(visit, entry.tick);
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], entry.to);
+});
+
+test("the west-return cache rope climbs onto Galvek's main deck", () => {
+  const entry = data.locs.find((loc) => loc.name === "ds2_fleet_main_deck_rope");
+  assert.deepEqual([entry.id, entry.x, entry.y, entry.z, entry.option, entry.to],
+    [32324, 1637, 5706, 0, "Climb-up", [1630, 5735, 2]]);
+  assert.equal(CacheDefinitions.getObject(entry.id).actions[entry.op - 1], entry.option);
+  core.RegionManager.loadMapFiles(entry.x, entry.y);
+  assert.equal(core.RegionManager.canMove(entry.to[0], entry.to[1], entry.to[0], entry.to[1], entry.to[2], 1, 1, null), true,
+    "the rope landing is a walkable main-deck tile");
+  const galvek = CacheDefinitions.getNpc(8095);
+  const approach = new core.Location(...entry.to);
+  assert.equal(core.RegionManager.canProjectileAttackBounds(approach,
+    new core.Location(1631, 5735, 2), 1, 1, galvek.size, galvek.size, null), true,
+  "the main-deck route reaches Galvek's real footprint");
+
+  const visit = explorer([entry.x, entry.y, entry.z]);
+  const object = locAt(entry.id, entry.x, entry.y, entry.z);
+  const event = { player: visit.player, object, objectId: entry.id, clickType: 1, handled: false };
+  hooks.object(event);
+  assert.equal(event.handled, true);
+  runTicks(visit, entry.tick);
+  assert.deepEqual([visit.player.getLocation().getX(), visit.player.getLocation().getY(), visit.player.getLocation().getZ()], entry.to);
+});
+
+test("an agent object action without a numeric clickType resolves its cached option", () => {
+  const entry = data.locs.find((loc) => loc.name === "ds2_fleet_main_ship_ladder");
+  core.RegionManager.loadMapFiles(entry.x, entry.y);
+  const visit = explorer([entry.x, entry.y, entry.z]);
+  visit.player.getMovementQueue = () => ({ reset() {}, walkToReset() {}, walkToObject(_object, { execute }) { execute(); } });
+  visit.player.setPositionToFace = () => {};
+  const original = PluginManager.emitObjectInteraction;
+  let observed;
+  PluginManager.emitObjectInteraction = (event) => { observed = event; return true; };
+  try {
+    new ObjectActionPacketListener().executeAction(visit.player, entry.id, entry.x, entry.y, undefined, entry.option);
+  } finally {
+    PluginManager.emitObjectInteraction = original;
+  }
+  assert.equal(observed?.clickType, entry.op, "the option string resolves against cached action order");
+  assert.equal(observed?.option, entry.option.toLowerCase(), "the plugin event carries its cache-derived option");
+});
+
 test("the Ancient Cavern's cache stairs link the arrival room, mithril floor and forge", () => {
   const expected = [
     [25338, 1769, 5365, 1, "Climb-down", [1772, 5366, 0]],
@@ -571,21 +670,4 @@ test("Araxyte cave reverse tunnels return to the quest nest", () => {
   assert.deepEqual(destinationFor(east, new core.Location(3696, 9839, 0)), [3689, 9837, 0]);
   assert.deepEqual(destinationFor(south, new core.Location(3684, 9822, 0)), [3677, 9822, 0]);
   assert.deepEqual(destinationFor(north, new core.Location(3680, 9849, 0)), [3680, 9842, 0]);
-});
-
-
-test("an agent object action without a numeric clickType resolves its cached option", () => {
-  const visit = explorer([2510, 3506, 0]);
-  visit.player.getMovementQueue = () => ({ reset() {}, walkToReset() {}, walkToObject(_object, { execute }) { execute(); } });
-  visit.player.setPositionToFace = () => {};
-  const original = PluginManager.emitObjectInteraction;
-  let observed;
-  PluginManager.emitObjectInteraction = (event) => { observed = event; return true; };
-  try {
-    new ObjectActionPacketListener().executeAction(visit.player, 25274, 2510, 3506, undefined, "Dive in");
-  } finally {
-    PluginManager.emitObjectInteraction = original;
-  }
-  assert.equal(observed?.clickType, 1, "the option string resolves against cached action order");
-  assert.equal(observed?.option, "dive in", "the plugin event carries its cache-derived option");
 });

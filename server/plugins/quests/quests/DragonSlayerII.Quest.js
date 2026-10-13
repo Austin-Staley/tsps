@@ -85,25 +85,99 @@ module.exports = function registerDragonSlayerII(api) {
   // This cache-clear tile is reachable on both decks and sits beside the Iron dragon.
   const ASSAULT_LADDER = new Location(1687, 5665, 2);
   // QH routes through this cached gap to the lower deck; the south edge is the reachable approach.
+  // The upper-deck path reaches the cache Gap tile itself; its south-side tiles
+  // are blocked, so the click must execute from this QH waypoint.
   const ASSAULT_DROP_GAP = { id: O.GAP_40, x: 1668, y: 5704, z: 1,
-    approach: { x: 1668, y: 5706, z: 1 }, landing: { x: 1668, y: 5707, z: 0 } };
+    approach: { x: 1668, y: 5704, z: 1 }, landing: { x: 1668, y: 5707, z: 0 } };
+  // shortcut: the cache Gap and QH's paired waypoints establish this return-deck edge.
+  const ASSAULT_GALVEK_DECK_GAP = { id: O.GAP_40, x: 1655, y: 5682, z: 1,
+    approach: { x: 1655, y: 5681, z: 1 }, landing: { x: 1655, y: 5684, z: 0 } };
+  // shortcut: QH's route crosses the cached gap at1662,5689 from the isolated
+  // ladder landing and reaches the lower deck at1665,5689; the cache has no
+  // walkable intermediate tiles or paired ladder for this plane change.
+  const ASSAULT_MAIN_SHIP_GAP = { id: O.GAP_39, x: 1662, y: 5689, z: 1,
+    approach: { x: 1658, y: 5688, z: 1 }, landing: { x: 1665, y: 5689, z: 0 } };
   // shortcut: QH's route crosses this wreck gap from the upper deck to the lower deck;
   // the cache has no paired ladder at this transition, so preserve its documented waypoints.
   const ASSAULT_MITHRIL_GAP = { id: O.GAP_39, x: 1679, y: 5708, z: 2,
-    approach: { x: 1682, y: 5705, z: 2 }, landing: { x: 1690, y: 5708, z: 1 } };
+    approach: { x: 1679, y: 5708, z: 2 }, landing: { x: 1690, y: 5708, z: 1 } };
   // shortcut: the cache marks the route's deck change with this gap; its QH landing is two tiles south.
   const ASSAULT_ADAMANT_GAP = { id: O.GAP_40, x: 1698, y: 5710, z: 1,
     approach: { x: 1697, y: 5710, z: 1 }, landing: { x: 1698, y: 5712, z: 0 } };
+  // RuneLite QuestHelper's post-Adamant route clicks this cache gap from the wreckage tile
+  // and lands on the upper plank, then continues north across the ship.
+  const ASSAULT_RUNE_GAP = { id: O.GAP_40, x: 1706, y: 5722, z: 0,
+    approach: { x: 1705, y: 5722, z: 0 }, landing: { x: 1708, y: 5723, z: 1 } };
+  // shortcut: QH follows the upper deck at 1708,5728,1 and the lower deck at
+  // 1708,5729,0; the reachable south approach is inferred from the cache footprint.
+  const ASSAULT_RUNE_SHIP = { id: O.SHIP, x: 1708, y: 5726, z: 1,
+    approach: { x: 1708, y: 5725, z: 1 }, landing: { x: 1708, y: 5729, z: 0 } };
+  // shortcut: QH confirms the plane change but does not document the jump landing tile.
+  const ASSAULT_RUNE_FINAL_GAP = { id: O.GAP_39, x: 1697, y: 5737, z: 2,
+    approach: { x: 1698, y: 5737, z: 2 }, landing: { x: 1696, y: 5737, z: 0 } };
+  // shortcut: this cache rope ladder is the QH plane-0 to plane-2 transition at 1704,5739.
+  const ASSAULT_RUNE_ROPE_LADDER = { id: O.ROPE_LADDER_6, x: 1704, y: 5739, z: 0,
+    landing: { x: 1704, y: 5739, z: 2 } };
+  const ASSAULT_RUNE_WEST_GAP = { id: O.GAP_40, x: 1688, y: 5737, z: 0,
+    approach: { x: 1689, y: 5737, z: 0 }, landing: { x: 1687, y: 5738, z: 0 } };
+  // shortcut: these west-return links follow QH's ordered waypoints across the
+  // cache wreckage and gaps; the map has no continuous walkable deck between them.
+  const ASSAULT_RUNE_RETURN_GAP = { id: O.GAP_40, x: 1659, y: 5733, z: 0,
+    approach: { x: 1660, y: 5734, z: 0 }, landing: { x: 1657, y: 5733, z: 1 } };
+  const ASSAULT_RUNE_WEST_DROP_GAP = { id: O.GAP_40, x: 1657, y: 5725, z: 1,
+    approach: { x: 1657, y: 5726, z: 1 }, landing: { x: 1657, y: 5724, z: 0 } };
+  const ASSAULT_RUNE_WEST_RISE_GAP = { id: O.GAP_39, x: 1657, y: 5714, z: 0,
+    approach: { x: 1657, y: 5717, z: 0 }, landing: { x: 1657, y: 5713, z: 1 } };
+  const ASSAULT_RUNE_RETURN_DROP_GAP = { id: O.GAP_39, x: 1655, y: 5704, z: 1,
+    approach: { x: 1656, y: 5704, z: 1 }, landing: { x: 1654, y: 5704, z: 0 } };
+  const ASSAULT_RUNE_DEBRIS_CROSSES = [
+    // shortcut: QH sends the player from the isolated lower-deck waypoint to
+    // the real ladder at1668,5698; the cache debris is the only intervening crossing.
+    { object: [1668, 5690, 0], from: [1668, 5689, 0], landing: [1668, 5695, 0] },
+    // shortcut: the cache debris action is the only crossing between these QH deck waypoints.
+    { object: [1709, 5730, 0], from: [1708, 5729, 0], landing: [1710, 5731, 0] },
+    // shortcut: QH's west return crosses the real debris and wreckage between its waypoints.
+    { object: [1657, 5723, 0], from: [1657, 5724, 0], landing: [1657, 5717, 0] },
+    { object: [1653, 5703, 0], from: [1654, 5704, 0], landing: [1651, 5701, 0] },
+  ];
   // The wreckage jump objects are the cache's intended links across the broken deck.
   // Their landing tiles follow the QH route through the wrecks; plain terrain walking
   // cannot cross these water gaps.
   const ASSAULT_WRECKAGE_JUMPS = [
+    // shortcut: QH's board route crosses the cached broken plank immediately
+    // north of Torfinn's lower-deck landing; both waypoints are from its route.
+    { object: [1638, 5706, 0], from: [1637, 5706, 0], landing: [1640, 5706, 0] },
+    // shortcut: QH's next lower-deck waypoint is the far side of this cached wreckage.
+    { object: [1645, 5701, 0], from: [1640, 5706, 0], landing: [1645, 5701, 0] },
+    // shortcut: QH's next waypoint after this cache wreckage is the upper-deck tile.
+    { object: [1648, 5701, 0], from: [1645, 5701, 0], landing: [1647, 5681, 1] },
+    // shortcut: QH's lower-deck waypoint lies across the cached wreckage at1655,5687.
+    { object: [1655, 5687, 0], from: [1655, 5684, 0], landing: [1655, 5688, 0] },
+    // shortcut: QH's next lower-deck waypoint is the far side of this cached wreckage.
+    { object: [1668, 5689, 0], from: [1665, 5689, 0], landing: [1668, 5689, 0] },
     { object: [1698, 5715, 0], from: [1698, 5712, 0], landing: [1698, 5715, 0] },
+    { object: [1668, 5710, 0], from: [1668, 5707, 0], landing: [1673, 5710, 0] },
     { object: [1702, 5722, 0], from: [1698, 5715, 0], landing: [1702, 5719, 0] },
     { object: [1705, 5722, 0], from: [1702, 5719, 0], landing: [1705, 5722, 0] },
+    // shortcut: cache wreckage separates these QH waypoints across missing deck planks.
+    { object: [1710, 5734, 0], from: [1710, 5731, 0], landing: [1705, 5739, 0] },
+    { object: [1693, 5737, 0], from: [1696, 5737, 0], landing: [1688, 5737, 0] },
+    // The QH world point is the Rune dragon's southwest footprint corner. Land
+    // east of its 5x5 body so the player can actually select and attack it.
+    { object: [1679, 5738, 0], from: [1687, 5738, 0], landing: [1676, 5738, 0] },
+    // shortcut: the west return follows QH back across these cached wreckage links.
+    { object: [1670, 5738, 0], from: [1676, 5738, 0], landing: [1670, 5738, 0] },
+    { object: [1663, 5734, 0], from: [1670, 5738, 0], landing: [1666, 5734, 0] },
+    { object: [1660, 5734, 0], from: [1666, 5734, 0], landing: [1660, 5734, 0] },
+    // shortcut: these are the return direction across the board wreckage back to Torfinn.
+    { object: [1645, 5701, 0], from: [1651, 5701, 0], landing: [1640, 5706, 0] },
+    { object: [1638, 5706, 0], from: [1640, 5706, 0], landing: [1637, 5706, 0] },
   ];
   const FLEET_BOSS = new Location(1631, 5735, 2);
   const FLEET_RESUME = new Location(1637, 5706, 0);
+  function isAssaultShipStage(player) {
+    return stage(player) === S.FLEET || stage(player) === S.GALVEK;
+  }
   const GALVEK_PHASES = [N.GALVEK_2, N.GALVEK_4, N.GALVEK_3, N.GALVEK_5];
   const ATTR_LEADERS = "dragon-slayer-ii:leaders";
   const ATTR_PARTS = "dragon-slayer-ii:key-parts";
@@ -253,8 +327,20 @@ module.exports = function registerDragonSlayerII(api) {
         }
         const boss = player.getAttribute(ATTR_BOSS);
         if (!boss) return;
-        boss.getCombat().getLastAttack().reset();
         if ((boss.getRealId?.() ?? boss.getId?.()) === N.GALVEK_2 && stage(player) === S.GALVEK) {
+          const playerLocation = player.getLocation?.();
+          const bossLocation = boss.getLocation?.();
+          // Galvek is created when the final dragon falls, but the player may
+          // still be on a distant wreckage deck (or may have logged back in at
+          // Torfinn). His arena attacks must only advance once the player has
+          // actually reached the same deck.
+          if (!playerLocation || !bossLocation || playerLocation.getZ() !== bossLocation.getZ()
+            || Math.abs(playerLocation.getX() - bossLocation.getX()) > 12
+            || Math.abs(playerLocation.getY() - bossLocation.getY()) > 12) {
+            this.galvekHazard = null;
+            return;
+          }
+          boss.getCombat().getLastAttack().reset();
           boss.setScriptedMovement(true);
           processGalvek(this, player, boss);
         }
@@ -1294,7 +1380,7 @@ module.exports = function registerDragonSlayerII(api) {
     const { player: p, object, objectId } = event;
     const area = p.getAttribute(ATTR_AREA);
     const location = object?.getLocation?.();
-    if (!(area instanceof QuestArea) || stage(p) !== S.FLEET || !p.getAttribute(ATTR_ASSAULT_DEFENDED)
+    if (!(area instanceof QuestArea) || !isAssaultShipStage(p) || !p.getAttribute(ATTR_ASSAULT_DEFENDED)
       || !area.assaultTraversal || !location
       || location.getX() !== ASSAULT_LADDER.getX() || location.getY() !== ASSAULT_LADDER.getY()) return;
     const down = objectId === O.SHIPS_LADDER_2 && location.getZ() === ASSAULT_LADDER.getZ();
@@ -1312,7 +1398,7 @@ module.exports = function registerDragonSlayerII(api) {
     const { player: p, object, objectId } = event;
     const area = p?.getAttribute?.(ATTR_AREA);
     const location = object?.getLocation?.();
-    if (!(area instanceof QuestArea) || stage(p) !== S.FLEET || !p.getAttribute(ATTR_ASSAULT_DEFENDED)
+    if (!(area instanceof QuestArea) || !isAssaultShipStage(p) || !p.getAttribute(ATTR_ASSAULT_DEFENDED)
       || !area.assaultTraversal || !location
       || location.getX() !== ASSAULT_LADDER.getX() || location.getY() !== ASSAULT_LADDER.getY()) return;
     const lower = objectId === O.SHIPS_LADDER && location.getZ() === ASSAULT_LADDER.getZ() - 1;
@@ -1328,11 +1414,19 @@ module.exports = function registerDragonSlayerII(api) {
   function assaultGapCrossing({ player: p, object, objectId, definition }) {
     const area = p.getAttribute(ATTR_AREA);
     const id = definition?.id ?? objectId;
-    if (!(area instanceof QuestArea) || stage(p) !== S.FLEET || !p.getAttribute(ATTR_ASSAULT_DEFENDED)
+    if (!(area instanceof QuestArea) || !isAssaultShipStage(p) || !p.getAttribute(ATTR_ASSAULT_DEFENDED)
       || ![O.GAP_39, O.GAP_40].includes(id)) return null;
     const location = object?.getLocation?.();
     const position = p.getLocation?.();
     if (!location || !position) return null;
+    if (id === ASSAULT_GALVEK_DECK_GAP.id && location.getX() === ASSAULT_GALVEK_DECK_GAP.x
+      && location.getY() === ASSAULT_GALVEK_DECK_GAP.y && location.getZ() === ASSAULT_GALVEK_DECK_GAP.z) {
+      return ASSAULT_GALVEK_DECK_GAP;
+    }
+    if (id === ASSAULT_MAIN_SHIP_GAP.id && location.getX() === ASSAULT_MAIN_SHIP_GAP.x
+      && location.getY() === ASSAULT_MAIN_SHIP_GAP.y && location.getZ() === ASSAULT_MAIN_SHIP_GAP.z) {
+      return ASSAULT_MAIN_SHIP_GAP;
+    }
     if (id === ASSAULT_DROP_GAP.id && location.getX() === ASSAULT_DROP_GAP.x
       && location.getY() === ASSAULT_DROP_GAP.y && location.getZ() === ASSAULT_DROP_GAP.z) {
       return ASSAULT_DROP_GAP;
@@ -1344,6 +1438,23 @@ module.exports = function registerDragonSlayerII(api) {
     if (id === ASSAULT_ADAMANT_GAP.id && location.getX() === ASSAULT_ADAMANT_GAP.x
       && location.getY() === ASSAULT_ADAMANT_GAP.y && location.getZ() === ASSAULT_ADAMANT_GAP.z) {
       return ASSAULT_ADAMANT_GAP;
+    }
+    if (id === ASSAULT_RUNE_GAP.id && location.getX() === ASSAULT_RUNE_GAP.x
+      && location.getY() === ASSAULT_RUNE_GAP.y && location.getZ() === ASSAULT_RUNE_GAP.z) {
+      return ASSAULT_RUNE_GAP;
+    }
+    if (id === ASSAULT_RUNE_FINAL_GAP.id && location.getX() === ASSAULT_RUNE_FINAL_GAP.x
+      && location.getY() === ASSAULT_RUNE_FINAL_GAP.y && location.getZ() === ASSAULT_RUNE_FINAL_GAP.z) {
+      return ASSAULT_RUNE_FINAL_GAP;
+    }
+    if (id === ASSAULT_RUNE_WEST_GAP.id && location.getX() === ASSAULT_RUNE_WEST_GAP.x
+      && location.getY() === ASSAULT_RUNE_WEST_GAP.y && location.getZ() === ASSAULT_RUNE_WEST_GAP.z) {
+      return ASSAULT_RUNE_WEST_GAP;
+    }
+    for (const crossing of [ASSAULT_RUNE_RETURN_GAP, ASSAULT_RUNE_WEST_DROP_GAP,
+      ASSAULT_RUNE_WEST_RISE_GAP, ASSAULT_RUNE_RETURN_DROP_GAP]) {
+      if (id === crossing.id && location.getX() === crossing.x
+        && location.getY() === crossing.y && location.getZ() === crossing.z) return crossing;
     }
     const face = object.getFace?.() ?? 0;
     const sizeX = definition?.getSizeX?.() ?? object.getDefinition?.()?.sizeX ?? 1;
@@ -1373,11 +1484,12 @@ module.exports = function registerDragonSlayerII(api) {
     const id = definition?.id ?? objectId;
     const location = object?.getLocation?.();
     const position = p?.getLocation?.();
-    if (!(area instanceof QuestArea) || stage(p) !== S.FLEET || !p.getAttribute(ATTR_ASSAULT_DEFENDED)
+    if (!(area instanceof QuestArea) || !isAssaultShipStage(p) || !p.getAttribute(ATTR_ASSAULT_DEFENDED)
       || id !== O.WRECKAGE || !location || !position) return null;
     const jump = ASSAULT_WRECKAGE_JUMPS.find((entry) =>
       entry.object[0] === location.getX() && entry.object[1] === location.getY() && entry.object[2] === location.getZ()
-      && entry.from[0] === position.getX() && entry.from[1] === position.getY() && entry.from[2] === position.getZ());
+      && ((entry.from[0] === position.getX() && entry.from[1] === position.getY() && entry.from[2] === position.getZ())
+        || (entry.object[0] === position.getX() && entry.object[1] === position.getY() && entry.object[2] === position.getZ())));
     return jump || null;
   }
   function routeAssaultWreckage(event) {
@@ -1400,6 +1512,77 @@ module.exports = function registerDragonSlayerII(api) {
       || position.getZ() !== crossing.approach.z) return false;
     event.handled = true;
     event.player.moveTo(new Location(crossing.landing.x, crossing.landing.y, crossing.landing.z));
+    return true;
+  }
+  function assaultRuneShip(event) {
+    const { player: p, object, objectId, definition } = event;
+    const area = p?.getAttribute?.(ATTR_AREA);
+    const id = definition?.id ?? objectId;
+    const location = object?.getLocation?.();
+    if (!(area instanceof QuestArea) || !isAssaultShipStage(p) || !p.getAttribute(ATTR_ASSAULT_DEFENDED)
+      || ![12, ASSAULT_DRAGONS.length].includes(Number(p.getAttribute(ATTR_ASSAULT_INDEX)))
+      || id !== ASSAULT_RUNE_SHIP.id || !location
+      || location.getX() !== ASSAULT_RUNE_SHIP.x || location.getY() !== ASSAULT_RUNE_SHIP.y
+      || location.getZ() !== ASSAULT_RUNE_SHIP.z) return null;
+    return ASSAULT_RUNE_SHIP;
+  }
+  function routeAssaultRuneShip(event) {
+    if (event.clickType !== 1) return;
+    const crossing = assaultRuneShip(event);
+    if (crossing) event.destination = crossing.approach;
+  }
+  function jumpAssaultRuneShip(event) {
+    const crossing = assaultRuneShip(event);
+    if (!crossing) return false;
+    const position = event.player.getLocation();
+    if (position.getX() !== crossing.approach.x || position.getY() !== crossing.approach.y
+      || position.getZ() !== crossing.approach.z) return false;
+    event.handled = true;
+    event.player.moveTo(new Location(crossing.landing.x, crossing.landing.y, crossing.landing.z));
+    return true;
+  }
+  function climbAssaultRuneLadder(event) {
+    const { player: p, object, objectId, definition } = event;
+    const area = p?.getAttribute?.(ATTR_AREA);
+    const id = definition?.id ?? objectId;
+    const location = object?.getLocation?.();
+    const position = p?.getLocation?.();
+    if (!(area instanceof QuestArea) || !isAssaultShipStage(p) || !p.getAttribute(ATTR_ASSAULT_DEFENDED)
+      || ![12, ASSAULT_DRAGONS.length].includes(Number(p.getAttribute(ATTR_ASSAULT_INDEX)))
+      || id !== ASSAULT_RUNE_ROPE_LADDER.id
+      || !location || location.getX() !== ASSAULT_RUNE_ROPE_LADDER.x
+      || location.getY() !== ASSAULT_RUNE_ROPE_LADDER.y || location.getZ() !== ASSAULT_RUNE_ROPE_LADDER.z
+      || !position || position.getZ() !== ASSAULT_RUNE_ROPE_LADDER.z
+      || Math.max(Math.abs(position.getX() - location.getX()), Math.abs(position.getY() - location.getY())) > 2) return false;
+    event.handled = true;
+    p.moveTo(new Location(ASSAULT_RUNE_ROPE_LADDER.landing.x,
+      ASSAULT_RUNE_ROPE_LADDER.landing.y, ASSAULT_RUNE_ROPE_LADDER.landing.z));
+    return true;
+  }
+  function assaultRuneDebrisCrossing({ player: p, object, objectId, definition }) {
+    const area = p?.getAttribute?.(ATTR_AREA);
+    const id = definition?.id ?? objectId;
+    const location = object?.getLocation?.();
+    const position = p?.getLocation?.();
+    if (!(area instanceof QuestArea) || !isAssaultShipStage(p) || !p.getAttribute(ATTR_ASSAULT_DEFENDED)
+      || ![12, ASSAULT_DRAGONS.length].includes(Number(p.getAttribute(ATTR_ASSAULT_INDEX)))
+      || ![O.DEBRIS, O.DEBRIS_2].includes(id)
+      || !location || !position) return null;
+    return ASSAULT_RUNE_DEBRIS_CROSSES.find((crossing) =>
+      crossing.object[0] === location.getX() && crossing.object[1] === location.getY()
+      && crossing.object[2] === location.getZ() && crossing.from[0] === position.getX()
+      && crossing.from[1] === position.getY() && crossing.from[2] === position.getZ()) || null;
+  }
+  function routeAssaultRuneDebris(event) {
+    if (event.clickType !== 1) return;
+    const crossing = assaultRuneDebrisCrossing(event);
+    if (crossing) event.destination = { x: crossing.from[0], y: crossing.from[1], z: crossing.from[2] };
+  }
+  function crossAssaultRuneDebris(event) {
+    const crossing = assaultRuneDebrisCrossing(event);
+    if (!crossing) return false;
+    event.handled = true;
+    event.player.moveTo(new Location(crossing.landing[0], crossing.landing[1], crossing.landing[2]));
     return true;
   }
   function removeAssaultObject(area, object) {
@@ -2522,6 +2705,11 @@ module.exports = function registerDragonSlayerII(api) {
   api.onObjectRoute(routeAssaultLadder);
   api.onObjectRoute(routeAssaultGap);
   api.onObjectRoute(routeAssaultWreckage);
+  api.onObjectRoute(routeAssaultRuneShip);
+  api.onObjectRoute(routeAssaultRuneDebris);
+  api.onObjectInteraction("Ship", { Jump: jumpAssaultRuneShip });
+  api.onObjectInteraction("Rope ladder", { "Climb-up": climbAssaultRuneLadder });
+  api.onObjectInteraction("Debris", { Cross: crossAssaultRuneDebris });
   api.onObjectInteraction("Gap", { Jump: jumpAssaultGap });
   api.onObjectInteraction("Wreckage", { "Jump-to": jumpAssaultWreckage });
   api.onObjectRoute(routeLithkrenNorthStairs);
