@@ -2757,8 +2757,15 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     const maze = attrs.get('desert-treasure-ii:scar-maze-one');
     assert.equal(maze.width, 11);
     assert.equal(maze.height, 9);
-    assert.equal(player.location.x, 8228, 'the maze entry lands at the real pathfinder-room entrance tile');
-    assert.equal(player.location.y, 1654);
+    assert.equal(player.location.x, 8210, 'the maze entry lands in the hall outside the pathfinder room');
+    assert.equal(player.location.y, 1657);
+    player.location = maze.tile(36, 56, 0);
+    const pathfinderDoor = { player, objectId: 49410, location: maze.tile(36, 54, 0), handled: false };
+    assert.equal(objectHooks[0](pathfinderDoor), true);
+    assert.equal(pathfinderDoor.handled, true);
+    assert.equal(player.location.y, 1653, 'the real passage crosses into the pathfinder room');
+    objectHooks[0](pathfinderDoor);
+    assert.equal(player.location.y, 1656, 'the passage crosses back into the hall leading to the green teleporter');
     assert.equal(varbits.get(15128), 16);
     let runner = queues.add.at(-1);
     assert.equal(runner.id, core.NpcIdentifiers.CEREBRAL_PATHFINDER,
@@ -2810,6 +2817,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(attrs.get('desert-treasure-ii:scar-pathfinder-complete'), true);
     assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.ABYSSAL_TETHER, location: maze.tile(50, 33, 0) }), true);
     assert.equal(attrs.get('desert-treasure-ii:scar-tether-destroyed'), true);
+    assert.equal(varbits.get(15258), 1, 'severing the tether updates native room completion');
     assert.equal(attrs.get('desert-treasure-ii:scar-tether-destroyed'), true,
       'the tether completion is saved independently from the reused passage challenge varbits');
     logoutHooks[0]({ player });
@@ -2822,13 +2830,33 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     area = attrs.get('desert-treasure-ii:scar-area');
     assert.equal(objectHooks[0]({ player, objectId: 49415, location: maze.tile(73, 61, 0) }), true,
       'the green neural teleporter is usable only after severing the tether');
-    assert.equal(player.location.x, 8223);
+    assert.equal(player.location.x, 8221);
     assert.equal(objectHooks[0]({ player, objectId: 49411, location: maze.tile(30, 12, 0) }), true,
       'the catalyst room is entered through its real cache passage');
     assert.equal(attrs.get('desert-treasure-ii:scar-rift-live-nerves'), true);
+    assert.equal(player.location.x, 8224, 'the passage lands on the accessible inner tile');
+    objectHooks[0]({ player, objectId: 49411, location: maze.tile(30, 12, 0) });
+    assert.equal(player.location.x, 8221, 'the same passage exits to the blue teleporter hall');
     assert.equal(objectHooks[0]({ player, objectId: 49183, location: maze.tile(35, 18, 0) }), true,
       'breaking the mapped air nerve ending awards a nerve item');
     assert.equal(inventoryCounts.get(core.ItemIdentifiers.AIR_NERVE), 1);
+    const airEnding = { player, objectId: 49183, location: maze.tile(35, 18, 0), handled: false };
+    assert.equal(objectHooks[0](airEnding), true);
+    assert.equal(airEnding.handled, true);
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.AIR_NERVE), 1, 'an ending cannot be collected twice before it regrows');
+    processCycle += 4;
+    objectHooks[0](airEnding);
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.AIR_NERVE), 2, 'the same ending supplies the additional nerves needed by the Catalyst recipes');
+    inventoryCounts.set(core.ItemIdentifiers.AIR_NERVE, 1);
+    processCycle += 4;
+    const inventory = player.getInventory;
+    player.getInventory = () => ({ ...inventory(), adds: () => false });
+    objectHooks[0](airEnding);
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.AIR_NERVE), 1);
+    player.getInventory = inventory;
+    objectHooks[0](airEnding);
+    assert.equal(inventoryCounts.get(core.ItemIdentifiers.AIR_NERVE), 2, 'a failed handout does not lock the ending');
+    inventoryCounts.set(core.ItemIdentifiers.AIR_NERVE, 1);
     assert.equal(objectHooks[0]({ player, objectId: 49182, location: maze.tile(38, 11, 0) }), true);
     assert.equal(inventoryCounts.get(core.ItemIdentifiers.EARTH_NERVE), 1);
     assert.equal(itemOnItemHooks[0]({ player, usedItemId: core.ItemIdentifiers.AIR_NERVE,
@@ -2838,12 +2866,17 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(inventoryCounts.get(core.ItemIdentifiers.DUST_NERVE), 1,
       'the documented air + earth recipe makes dust nerve');
     for (const id of attrs.get('desert-treasure-ii:scar-catalyst-order')) inventoryCounts.set(id, 1);
-    const catalystId = core.NpcIdentifiers.DT2_SCAR_MAZE_1_RITUAL_CATALYST;
+    const catalystId = core.NpcIdentifiers.COL_00FFFF_CATALYST_COL;
+    assert.equal(catalystId, 12359, 'the Catalyst uses an existing current-cache NPC identifier');
+    assert.ok(interactions.some(entry => entry.name === require('../dist/game/cache/CacheDefinitions').CacheDefinitions.getNpc(catalystId).name && entry.options.Observe), 'Observe is registered under the real coloured cache name');
+    assert.equal(core.NpcIdentifiers.LIGHT_LEECH, 12367, 'light leeches use their current-cache identifier');
     inventoryCounts.delete(core.ItemIdentifiers.DUST_NERVE);
     assert.equal(itemOnNpcHooks[0]({ player, npcId: catalystId, itemId: core.ItemIdentifiers.DUST_NERVE }), true,
       'a mismatched nerve is handled without advancing or consuming it');
     assert.equal(inventoryCounts.get(core.ItemIdentifiers.DUST_NERVE), undefined);
     const catalystOrder = attrs.get('desert-treasure-ii:scar-catalyst-order');
+    assert.equal(catalystOrder.length, 7);
+    assert.ok(catalystOrder.includes(core.ItemIdentifiers.WRATH_NERVE));
     const catalystParts = new Map([
       [core.ItemIdentifiers.SMOKE_NERVE, [core.ItemIdentifiers.FIRE_NERVE, core.ItemIdentifiers.AIR_NERVE]],
       [core.ItemIdentifiers.BLOOD_NERVE, [core.ItemIdentifiers.MIND_NERVE, core.ItemIdentifiers.WATER_NERVE]],
@@ -2851,6 +2884,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
       [core.ItemIdentifiers.NATURE_NERVE, [core.ItemIdentifiers.WATER_NERVE, core.ItemIdentifiers.EARTH_NERVE]],
       [core.ItemIdentifiers.COSMIC_NERVE, [core.ItemIdentifiers.MIND_NERVE, core.ItemIdentifiers.MIND_NERVE, core.ItemIdentifiers.WATER_NERVE, core.ItemIdentifiers.EARTH_NERVE]],
       [core.ItemIdentifiers.ASTRAL_NERVE, [core.ItemIdentifiers.MIND_NERVE, core.ItemIdentifiers.MIND_NERVE, core.ItemIdentifiers.WATER_NERVE, core.ItemIdentifiers.EARTH_NERVE, core.ItemIdentifiers.EARTH_NERVE]],
+      [core.ItemIdentifiers.WRATH_NERVE, [core.ItemIdentifiers.FIRE_NERVE, core.ItemIdentifiers.AIR_NERVE, core.ItemIdentifiers.MIND_NERVE, core.ItemIdentifiers.WATER_NERVE]],
     ]);
     const firstCatalystPart = catalystParts.get(catalystOrder[0])[0];
     inventoryCounts.set(firstCatalystPart, 1);
@@ -2861,17 +2895,43 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     for (const nerve of catalystOrder) {
       assert.equal(itemOnNpcHooks[0]({ player, npcId: catalystId, itemId: nerve }), true);
     }
-    assert.equal(Number(attrs.get('desert-treasure-ii:scar-catalyst-progress')), 6,
+    assert.equal(Number(attrs.get('desert-treasure-ii:scar-catalyst-progress')), 7,
       'the Catalyst only completes after all matching nerves are used');
+    assert.equal(varbits.get(15259), 1, 'the native Catalyst completion is sent');
+    interactions.find(entry => entry.name === '<col=00ffff>Catalyst</col>').options.Observe({ player });
+    assert.match(player.messages.at(-1), /has been disrupted/);
     assert.equal(objectHooks[0]({ player, objectId: 49414, location: maze.tile(21, 24, 0) }), true,
       'the blue teleporter becomes reachable after the Catalyst is disrupted');
+    assert.deepEqual([player.location.x, player.location.y], [8268, 1644], 'the blue teleporter lands in the corridor outside the growth room');
+    player.location = maze.tile(66, 20, 0);
     assert.equal(objectHooks[0]({ player, objectId: 49412, location: maze.tile(65, 21, 0) }), true,
       'the damaged growth room has its own cache entrance');
+    assert.equal(player.location.y, 1623);
+    objectHooks[0]({ player, objectId: 49412, location: maze.tile(65, 21, 0) });
+    assert.equal(player.location.y, 1620, 'the growth passage exits into its southern corridor');
     const takeLure = interactions.find((entry) => entry.name === 'Light leech').options['Take-lure'];
     const random = Math.random;
     Math.random = () => 0;
     try {
-      for (const leech of queues.add.filter((npc) => npc.id === core.NpcIdentifiers.DT2_SCAR_MAZE_LIGHT_LEECH)) takeLure({ player, npc: leech });
+      const leeches = queues.add.filter((npc) => npc.id === core.NpcIdentifiers.LIGHT_LEECH);
+      const getInventory = player.getInventory;
+      player.getInventory = () => ({ ...getInventory(), adds: () => false });
+      takeLure({ player, npc: leeches[0] });
+      assert.ok(!queues.remove.includes(leeches[0]), 'a full bag keeps the leech and its obtainable lure');
+      player.getInventory = getInventory;
+      const getCombat = player.getCombat;
+      const hits = [];
+      player.getCombat = () => ({ getHitQueue: () => ({ addPendingDamage: value => hits.push(...value) }) });
+      Math.random = () => 1;
+      takeLure({ player, npc: leeches[0] });
+      assert.equal(hits.length, 1, 'an unprotected failed lure attempt deals damage');
+      player.getPrayerActive = () => ({ [core.PrayerHandler.PROTECT_FROM_MELEE]: true });
+      takeLure({ player, npc: leeches[0] });
+      assert.equal(hits.length, 1, 'Protect from Melee blocks a failed lure attempt');
+      delete player.getPrayerActive;
+      player.getCombat = getCombat;
+      Math.random = () => 0;
+      for (const leech of leeches) takeLure({ player, npc: leech });
     } finally {
       Math.random = random;
     }
@@ -2889,7 +2949,15 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     const wrong = energies.get(order[0] === 1 ? 2 : 1);
     assert.equal(objectHooks[0]({ player, objectId: wrong[0], definition: { id: wrong[1] },
       location: maze.tile(wrong[2][0] - 2160, wrong[2][1] - 6400, 0) }), true);
-    assert.equal(varbits.get(15209), 0, 'touching the wrong energy preserves the current puzzle step');
+    assert.equal(varbits.get(15209), 0, 'touching the wrong energy starts the sequence again');
+    const firstEnergy = energies.get(order[0]);
+    objectHooks[0]({ player, objectId: firstEnergy[0], definition: { id: firstEnergy[1] },
+      location: maze.tile(firstEnergy[2][0] - 2160, firstEnergy[2][1] - 6400, 0) });
+    assert.equal(varbits.get(15209), 1);
+    const wrongSecond = energies.get(order[0]);
+    objectHooks[0]({ player, objectId: wrongSecond[0], definition: { id: wrongSecond[1] },
+      location: maze.tile(wrongSecond[2][0] - 2160, wrongSecond[2][1] - 6400, 0) });
+    assert.equal(varbits.get(15209), 0, 'a mistake after a correct energy resets the full sequence');
     for (const rune of order) {
       const [baseId, visibleId, [x, y]] = energies.get(rune);
       assert.equal(objectHooks[0]({ player, objectId: baseId, definition: { id: visibleId },
@@ -3130,6 +3198,15 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     interactions.find((entry) => entry.name === 'Wizard Persten').options['Talk-to']({ player, npcId: core.NpcIdentifiers.WIZARD_PERSTEN_5 });
     assert.equal(transcripts.at(-1), 'praefectus-classis-perseriya-talking-to-wizard-persten-after-completing-the-third-passage');
     assert.equal(varbits.get(15128), 36);
+    attrs.set('desert-treasure-ii:scar-leviathan-ready', true);
+    const laterLocation = player.location;
+    const spawnedBeforeLaterLogin = queues.add.length;
+    for (const laterStage of [9, 10, 11, 12]) {
+      quest.setStage(player, laterStage);
+      loginHooks.find(handler => handler.name === 'handleLogin')({ player });
+      assert.equal(player.location, laterLocation, 'later quest chapters do not recreate the previous Scar instance');
+      assert.equal(queues.add.length, spawnedBeforeLaterLogin, 'later logins do not spawn another Leviathan');
+    }
   } finally {
     runtime.startTranscript = startTranscript;
   }
