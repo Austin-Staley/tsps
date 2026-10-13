@@ -8148,10 +8148,14 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   assert.equal(started.at(-1)[3], 'reporting-back-after-the-revelations-finding-lord-crwys');
   assert.deepEqual(sentVarbits.at(-1), [9022, 2], 'chopping reveals Lord Crwys');
   handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'UNrb5z' });
+  assert.deepEqual(sentVarbits.filter(([id]) => id === 9016).at(-1), [9016, 118],
+    'the first Crwys rescue updates native progress before Hefin returns');
   choice({ player, option: 'How do I find Lady Hefin?', definition: { getName: () => 'Baxtorian' } });
   assert.equal(attributes.get('quest.song_of_the_elves.hefin-clue-heard'), true);
   handlers.custom.get('npc-dialogue:action').at(-1)({ player, kind: 'message', stepId: 'K9K0W4' });
   assert.equal(quest.getStage(player), 150, 'both clan leaders keep the quest in the orb chapter');
+  assert.deepEqual(sentVarbits.filter(([id]) => id === 9016).at(-1), [9016, 120],
+    'the second rescue updates native progress to both elders');
   assert.ok(persistedAttributes.includes('quest.song_of_the_elves.crwys-clue-heard'));
   assert.ok(persistedAttributes.includes('quest.song_of_the_elves.hefin-clue-heard'));
 });
@@ -8284,6 +8288,7 @@ test('Song of the Elves rescue searches require the east table before Iona and p
   finally { runtime.startTranscript = original; }
   const quest = runtime.getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
   const attributes = new Map();
+  const sentVarbits = [];
   let playerLocation = { x: 2340, y: 3158, z: 0 };
   const player = {
     getAttribute: (key) => attributes.get(key),
@@ -8292,7 +8297,9 @@ test('Song of the Elves rescue searches require the east table before Iona and p
     moveTo() {},
     getLocation: () => ({ getX: () => playerLocation.x, getY: () => playerLocation.y, getZ: () => playerLocation.z }),
     getPrivateArea: () => null,
-    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => sentVarbits.push([id, value]) }, {
+      get: (target, prop) => prop in target ? target[prop] : () => {},
+    }),
     sendMessage() {},
   };
   quest.setStage(player, 150);
@@ -8317,10 +8324,14 @@ test('Song of the Elves rescue searches require the east table before Iona and p
   assert.equal(examine(api.core.ObjectIdentifiers.TABLE_75), true);
   assert.equal(attributes.get('quest.song_of_the_elves.lletya-children').eoin, true);
   assert.equal(started.at(-1)[3], 'attack-on-lletya-a-village-on-fire-finding-eoin');
+  assert.deepEqual(sentVarbits.filter(([id]) => id === 9016).at(-1), [9016, 144],
+    'finding Eoin advances the live native progress immediately');
   playerLocation = { x: 2338, y: 3157, z: 1 };
   assert.equal(examine(api.core.ObjectIdentifiers.COOKING_POTS_2), true);
   assert.equal(attributes.get('quest.song_of_the_elves.lletya-children').iona, true);
   assert.equal(started.at(-1)[3], 'attack-on-lletya-a-village-on-fire-finding-iona');
+  assert.deepEqual(sentVarbits.filter(([id]) => id === 9016).at(-1), [9016, 146],
+    'finding Iona advances the live native progress immediately');
   mapObjects.get = originalGet;
 });
 

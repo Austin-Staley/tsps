@@ -1010,6 +1010,7 @@ module.exports = function registerSongOfTheElves(api) {
   function recordElder(player, bit) {
     const recruited = (Number(player.getAttribute(RECRUITED_ELDERS)) || 0) | bit;
     player.setAttribute(RECRUITED_ELDERS, recruited);
+    player.getPacketSender?.()?.sendVarbit(9016, nativeEarlyProgress(quest.getStage(player), player));
     syncCrwysTree(player);
     if ((recruited & 3) === 3 && currentChapter(player) === 14) {
       const arianwyn = player.getAttribute(LLETYA_ARIANWYN_NPC);
@@ -1249,6 +1250,7 @@ module.exports = function registerSongOfTheElves(api) {
       if (startTranscript(api, player, NpcIdentifiers.EOIN_2, PAGE, "attack-on-lletya-a-village-on-fire-finding-eoin")) {
         children.eoin = true;
         player.setAttribute(LLETYA_CHILDREN, children);
+        player.getPacketSender?.()?.sendVarbit(9016, nativeEarlyProgress(quest.getStage(player), player));
       }
       return true;
     }
@@ -1267,6 +1269,7 @@ module.exports = function registerSongOfTheElves(api) {
     if (startTranscript(api, player, NpcIdentifiers.IONA_2, PAGE, "attack-on-lletya-a-village-on-fire-finding-iona")) {
       children.iona = true;
       player.setAttribute(LLETYA_CHILDREN, children);
+      player.getPacketSender?.()?.sendVarbit(9016, nativeEarlyProgress(quest.getStage(player), player));
       player.sendMessage("Take the children back to Mawrth in the village square.");
     }
     return true;
