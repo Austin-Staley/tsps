@@ -15,8 +15,10 @@
  * 3 Kovac gave the flat broad sword commission, 4 crate looted, 5 crucible
  * full, 6 mould set, 7 metal poured, 8 metal cooled, 9 preform taken,
  * 10 hammered enough (trip hammer), 11 ground enough (grindstone),
- * 12 polished (sword finished), 13 handed in (complete). No cache script reads
- * the value, so this 1..13 progression only has to fit the 6-bit varbit.
+ * 12 polished (sword finished), 30 handed in (complete). Live OSRS completes
+ * at 30 (rsprox captures), and the foundry's Kovac (cache NPC 11560, spawned
+ * by the Giants' Foundry plugin) shows his Hand-in, Commission and Shop
+ * options only at 30; saves completed at the old 13 move to 30 at login.
  *
  * Source: https://oldschool.runescape.wiki/w/Sleeping_Giants and
  * https://oldschool.runescape.wiki/w/Transcript:Sleeping_Giants
@@ -48,9 +50,9 @@
  *   - "Obor kill count" is read from the GiantLairs plugin's persisted
  *     "giant-lairs:obor-chests-opened" attribute (no kill-count attribute
  *     exists); no Obor chests means the 0-kill branch.
- *   - 11467 (surface Kovac) and 11468 (foundry Kovac) are missing from
- *     npc-spawns.json, so the plugin spawns both once; after completion the
- *     foundry Kovac falls through to the post-quest "Kovac" transcript page.
+ *   - 11467 (surface Kovac) is missing from npc-spawns.json, so the plugin
+ *     spawns it once. The foundry Kovac is npc-spawns.json's 11560, which shows
+ *     11470 during the quest and 11472 (the Giants' Foundry's Kovac) after it.
  */
 module.exports = function registerSleepingGiantsQuest(api) {
   const {
@@ -151,7 +153,10 @@ module.exports = function registerSleepingGiantsQuest(api) {
   const STAGE_HAMMERED = 10;
   const STAGE_GROUND = 11;
   const STAGE_POLISHED = 12;
-  const STAGE_COMPLETE = 13;
+  /** Live OSRS completes the quest at 30: cache NPC 11560 only shows the full Kovac then. */
+  const STAGE_COMPLETE = 30;
+  /** Saves from before the stage moved to the live value. */
+  const LEGACY_STAGE_COMPLETE = 13;
 
   const BIT_TRIP_REPAIRED = 1;
   const BIT_GRIND_REPAIRED = 2;
@@ -191,7 +196,6 @@ module.exports = function registerSleepingGiantsQuest(api) {
 
   /** The free tiles next to Kovac's spawn in the static foundry room. */
   const HILL_GIANT_SPAWN_TILE = { x: 3362, y: 3146 };
-  const KOVAC_SPAWN_TILE = { x: 3366, y: 11484 };
   const CRUCIBLE_TILE = { x: 3366, y: 11492 };
   const MOULD_JIG_TILE = { x: 3366, y: 11487 };
   const PREFORM_STORAGE_TILE = { x: 3368, y: 11494 };
@@ -362,15 +366,6 @@ module.exports = function registerSleepingGiantsQuest(api) {
         id: HILL_GIANT_NPC_ID,
         x: HILL_GIANT_SPAWN_TILE.x,
         y: HILL_GIANT_SPAWN_TILE.y,
-        z: 0,
-        wanderRadius: 0,
-      });
-    }
-    if (!ids.has(KOVAC_NPC_ID)) {
-      api.spawnNpc({
-        id: KOVAC_NPC_ID,
-        x: KOVAC_SPAWN_TILE.x,
-        y: KOVAC_SPAWN_TILE.y,
         z: 0,
         wanderRadius: 0,
       });
@@ -985,6 +980,7 @@ module.exports = function registerSleepingGiantsQuest(api) {
   }
 
   function handleLogin({ player }) {
+    if (quest.getStage(player) === LEGACY_STAGE_COMPLETE) quest.setStage(player, STAGE_COMPLETE);
     refreshQuestList(player);
     installWorld();
   }
