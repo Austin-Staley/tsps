@@ -6309,6 +6309,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.persistAttribute(SCAR_GROWTH_ORDER);
   api.persistAttribute("desert-treasure-ii:scar-growth-repaired");
   [GOLEM_INSPECTED, ALTAR_INSPECTED, TOTEMS_CHARGED, TOTEM_MASK, BANIKAN_BRIEFED].forEach((key) => api.persistAttribute(key));
+  require("../dt2/Prison.DesertTreasureII")(api);
   api.onObjectInteraction(handleObjectInteraction);
   api.onObjectRoute(handleScarStoneRoute);
   api.onItemOnObject(handleItemOnObject, { noted: false });
