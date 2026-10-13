@@ -425,6 +425,7 @@ module.exports = function registerDesertTreasureII(api) {
   const SCAR_PERSTEN_AT_SHIP = "desert-treasure-ii:persten-at-ship";
   const SCAR_PERSTEN_LEFT_SHIP = "desert-treasure-ii:persten-left-ship";
   const SCAR_LEVIATHAN_DEBRIS_SEARCHED = "desert-treasure-ii:leviathan-debris-searched";
+  const SCAR_AXON_TERMINALS = "desert-treasure-ii:scar-axon-terminals";
   const SCAR_AXON_ROOM_COMPLETE = "desert-treasure-ii:scar-axon-room-complete";
   const SCAR_SUMMON_ROOM_STARTED = "desert-treasure-ii:scar-summoning-room-started";
   const SCAR_SUMMON_IMPS = "desert-treasure-ii:scar-summoning-imps";
@@ -1438,18 +1439,14 @@ module.exports = function registerDesertTreasureII(api) {
     hit.updateTotalDamage?.();
   }
 
-  function handleScarAxonHit({ npc, hit }) {
-    if (!npc?.__dt2ScarAxon || !hit?.isAccurate?.()) return;
-    const attacker = hit.getAttacker?.();
-    const p = npc.getOwner?.();
+  function hitScarAxon({ player: p, npc }) {
+    if (!npc?.__dt2ScarAxon || npc.getOwner?.() !== p) return false;
     const area = p?.getAttribute?.(ATTR_SCAR_MAZE_TWO);
-    if (!p || attacker !== p || !(area instanceof ScarMazeTwoArea) || area.isDestroyed?.()
-      || !area.entities?.includes(npc)) return;
+    if (!(area instanceof ScarMazeTwoArea) || area.isDestroyed?.() || !area.entities?.includes(npc)) return false;
+    if (npc.__dt2AxonComplete || (npc.getMovementQueue?.().size?.() ?? 0) > 0) return;
     const path = npc.__dt2AxonPath;
     const index = Number(npc.__dt2AxonIndex) || 0;
     const next = Math.min(index + 1, path.points.length - 1);
-    for (const damage of hit.getHits?.() ?? []) damage.setDamage(0);
-    hit.updateTotalDamage?.();
     const [x, y] = path.points[index];
     const [nextX, nextY] = path.points[next];
     const directionX = Math.sign(nextX - x), directionY = Math.sign(nextY - y);
@@ -1467,14 +1464,32 @@ module.exports = function registerDesertTreasureII(api) {
     npc.getMovementQueue?.().addSteps(area.tile(nextX - 1696, nextY - 6400, 0));
     if (next !== path.points.length - 1 || npc.__dt2AxonComplete) return;
     npc.__dt2AxonComplete = true;
-    const done = (Number(p.getAttribute("desert-treasure-ii:scar-axon-terminals")) || 0) + 1;
-    p.setAttribute("desert-treasure-ii:scar-axon-terminals", done);
+    const done = (Number(p.getAttribute(SCAR_AXON_TERMINALS)) || 0) + 1;
+    p.setAttribute(SCAR_AXON_TERMINALS, done);
     p.getPacketSender().sendVarbit(15220, done);
     p.sendMessage(`The ${npc.__dt2AxonElement} axon reaches its terminal.`);
     if (done < SCAR_AXON_PATHS.length) return;
     p.setAttribute(SCAR_AXON_ROOM_COMPLETE, true);
     p.getPacketSender().sendVarbit(15258, 1);
     p.sendMessage("All four axons have reached their terminals. The passage to the nerve chamber opens.");
+  }
+
+  function resetScarAxon({ player: p, npc }) {
+    const area = p?.getAttribute?.(ATTR_SCAR_MAZE_TWO);
+    if (!npc?.__dt2ScarAxon || npc.getOwner?.() !== p || !(area instanceof ScarMazeTwoArea)
+      || area.isDestroyed?.() || !area.entities?.includes(npc)) return false;
+    if (p.getAttribute(SCAR_AXON_ROOM_COMPLETE)) return;
+    if (npc.__dt2AxonComplete) {
+      const done = Math.max(0, (Number(p.getAttribute(SCAR_AXON_TERMINALS)) || 0) - 1);
+      p.setAttribute(SCAR_AXON_TERMINALS, done);
+      p.getPacketSender().sendVarbit(15220, done);
+    }
+    npc.__dt2AxonComplete = false;
+    npc.__dt2AxonIndex = 0;
+    npc.getMovementQueue?.().reset?.();
+    const [x, y] = npc.__dt2AxonPath.points[0];
+    npc.moveTo(area.tile(x - 1696, y - 6400, 0));
+    p.sendMessage(`The ${npc.__dt2AxonElement} axon returns to its starting point.`);
   }
 
   function preventScarSummonProtection({ npc, hit }) {
@@ -2025,6 +2040,8 @@ module.exports = function registerDesertTreasureII(api) {
     const owned = spawned.get(p) ?? {};
     spawned.set(p, owned);
     if (owned.scarAxons?.some((npc) => npc?.isRegistered?.())) return owned.scarAxons;
+    p.setAttribute(SCAR_AXON_TERMINALS, 0);
+    p.getPacketSender().sendVarbit(15220, 0);
     owned.scarAxons = SCAR_AXON_PATHS.map((path, index) => {
       const [x, y] = path.points[0];
       const npc = api.core.NPC.create(N.ABYSSAL_AXON, area.tile(x - 1696, y - 6400, 0));
@@ -2594,7 +2611,7 @@ module.exports = function registerDesertTreasureII(api) {
                       : p.getAttribute(SCAR_GUARDIAN_ACCEPTED) ? 6 : 2;
     setScarVarbit(p, value);
     p.getPacketSender().sendVarbit(SCAR_GROWTH_STEP_VARBIT, Number(p.getAttribute(SCAR_GROWTH_STEP)) || 0);
-    p.getPacketSender().sendVarbit(15220, Number(p.getAttribute("desert-treasure-ii:scar-axon-terminals")) || 0);
+    p.getPacketSender().sendVarbit(15220, Number(p.getAttribute(SCAR_AXON_TERMINALS)) || 0);
     p.getPacketSender().sendVarbit(15221, (p.getAttribute(SCAR_NERVE_ROOM_TWO_REPAIRED) ?? []).length);
     scarCatalystOrder(p);
     const challenges = p.getAttribute(SCAR_MAZE_THREE_ACTIVE)
@@ -5978,7 +5995,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onCombatHitRoll(forceTotemAccuracy);
   api.onNpcHitModify(modifyGuardianHit);
   api.onNpcHitModify(preventTotemDamage);
-  api.onNpcHitModify(handleScarAxonHit);
+  api.onNpcInteraction("Abyssal axon", { Hit: hitScarAxon, Reset: resetScarAxon });
   api.onNpcHitModify(preventScarSummonProtection);
   api.onNpcHitModify(handleWhispererHit);
   api.onNpcHitModify(handleFinalFigureHit);

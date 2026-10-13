@@ -2603,7 +2603,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
   const core = {
     ...base.core,
     TemplatedInstanceArea: TestInstance,
-    NPC: { create: (id, location) => ({ id, location, owner: null, setOwner(value) { this.owner = value; }, getOwner() { return this.owner; }, setOwnerOnly() {}, setScriptedMovement() {}, getMovementQueue() { return this.movement ??= { steps: [], addSteps(tile) { this.steps.push(tile); }, setBlockMovement(blocked) { this.blocked = blocked; } }; }, getLocation() { return { getX: () => this.location.x, getY: () => this.location.y }; }, isNpc() { return true; }, getAsNpc() { return this; }, isRegistered() { return true; }, getHitpoints() { return 100; } }) },
+    NPC: { create: (id, location) => ({ id, location, owner: null, setOwner(value) { this.owner = value; }, getOwner() { return this.owner; }, moveTo(tile) { this.location = tile; }, setOwnerOnly() {}, setScriptedMovement() {}, getMovementQueue() { return this.movement ??= { steps: [], addSteps(tile) { this.steps.push(tile); }, setBlockMovement(blocked) { this.blocked = blocked; } }; }, getLocation() { return { getX: () => this.location.x, getY: () => this.location.y }; }, isNpc() { return true; }, getAsNpc() { return this; }, isRegistered() { return true; }, getHitpoints() { return 100; } }) },
     PathFinder: { calculateWalkRoute: (npc, x, y) => { routes.push([x, y]); npc.getMovementQueue().addSteps({ x, y }); } },
     World: { getAddNPCQueue: () => queues.add, getRemoveNPCQueue: () => queues.remove, getProcessCycle: () => processCycle++ },
   };
@@ -2977,27 +2977,35 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(middle.width, 12);
     assert.equal(middle.height, 8);
     assert.equal(varbits.get(15128), 24);
+    attrs.set('desert-treasure-ii:scar-axon-terminals', 2);
     assert.equal(objectHooks[0]({ player, objectId: core.ObjectIdentifiers.PASSAGE_18, location: middle.tile(60, 20, 0) }), true,
       'the cache doorway starts the four-axon terminal puzzle');
+    assert.equal(varbits.get(15220), 0, 'recreating an unfinished puzzle clears its previous-instance terminal count');
     let axons = queues.add.filter((npc) => npc.__dt2ScarAxon);
     assert.equal(axons.length, 4);
     const firstMove = axons[0].__dt2AxonPath.points[1];
     const firstStart = axons[0].__dt2AxonPath.points[0];
     const firstDx = Math.sign(firstMove[0] - firstStart[0]), firstDy = Math.sign(firstMove[1] - firstStart[1]);
     player.moveTo(middle.tile(firstStart[0] - 1696 + firstDx, firstStart[1] - 6400 + firstDy, 0));
-    const wrongSideHit = { getAttacker: () => player, isAccurate: () => true,
-      getHits: () => [{ setDamage(value) { this.damage = value; } }], updateTotalDamage() {} };
-    hitModifyHooks.find((handler) => handler.name === 'handleScarAxonHit')({ npc: axons[0], hit: wrongSideHit });
+    const axonActions = interactions.find((entry) => entry.name === 'Abyssal axon').options;
+    axonActions.Hit({ player, npc: axons[0] });
     assert.equal(axons[0].__dt2AxonIndex, 0, 'hitting an axon from the wrong side does not push it away from its terminal');
+    assert.equal(axonActions.Hit({ player: {}, npc: axons[0] }), false, 'another player cannot move the owned axon');
+    player.moveTo(middle.tile(firstStart[0] - 1696 - firstDx, firstStart[1] - 6400 - firstDy, 0));
+    axonActions.Hit({ player, npc: axons[0] });
+    axons[0].location = middle.tile(firstMove[0] - 1696, firstMove[1] - 6400, 0);
+    assert.equal(axons[0].__dt2AxonIndex, 1);
+    axonActions.Reset({ player, npc: axons[0] });
+    assert.equal(axons[0].__dt2AxonIndex, 0, 'the actual Reset menu restores the start');
+    assert.deepEqual([axons[0].location.x, axons[0].location.y],
+      [middle.getBaseX() + firstStart[0] - 1696, middle.getBaseY() + firstStart[1] - 6400]);
     for (const axon of axons) {
       while (axon.__dt2AxonIndex < axon.__dt2AxonPath.points.length - 1) {
         const current = axon.__dt2AxonPath.points[axon.__dt2AxonIndex];
         const next = axon.__dt2AxonPath.points[axon.__dt2AxonIndex + 1];
         const dx = Math.sign(next[0] - current[0]), dy = Math.sign(next[1] - current[1]);
         player.moveTo(middle.tile(current[0] - 1696 - dx, current[1] - 6400 - dy, 0));
-        const hit = { getAttacker: () => player, isAccurate: () => true,
-          getHits: () => [{ setDamage(value) { this.damage = value; } }], updateTotalDamage() {} };
-        hitModifyHooks.find((handler) => handler.name === 'handleScarAxonHit')({ npc: axon, hit });
+        axonActions.Hit({ player, npc: axon });
         axon.location = middle.tile(next[0] - 1696, next[1] - 6400, 0);
       }
       assert.equal(axon.__dt2AxonComplete, true);
