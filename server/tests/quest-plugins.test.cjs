@@ -1628,7 +1628,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [2338, 7395, 0], [2337, 7370, 0], [2347, 7383, 0], [2324, 7395, 0], [2434, 7386, 0], [2341, 7384, 0],
     [2455, 7380, 0], [2439, 7386, 0], [2468, 7395, 0], [2443, 7386, 0], [2314, 7359, 1], [2474, 7397, 0],
     [2456, 7417, 0], [2313, 7381, 1], [2314, 7370, 1], [2314, 7369, 0],
-    [2451, 7403, 0], [2466, 7421, 0], [2481, 7404, 0], [2476, 7409, 0],
+    [2451, 7403, 0], [2456, 7417, 0], [2481, 7404, 0], [2476, 7409, 0],
     [2384, 7403, 0], [2490, 7401, 0], [2371, 7395, 0], [2373, 7409, 0], [2387, 7366, 0], [2370, 7384, 0],
     [2342, 7416, 0], [2371, 7370, 0], [2314, 7420, 0], [2324, 7403, 0], [2360, 7393, 0], [2309, 7420, 0],
     [2327, 7381, 0], [2331, 7407, 0], [2327, 7390, 0], [2310, 7388, 0], [2357, 7380, 0],
@@ -1675,6 +1675,17 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   route(lobbyRoute);
   assert.deepEqual(lobbyRoute.destination, { x: 2327, y: 7362, z: 0 },
     'the lobby door routes around its clipped approach tile while staying on the source side');
+  attributes.set('quest.the_blood_moon_rises.castle-room', 34);
+  const northLobbyVanesculaRoute = {
+    player, objectId: 61576, clickType: 1,
+    definition: { id: 61576, getName: () => 'Door', getInteractions: () => ['Enter'] },
+    object: { getFace: () => 3, getLocation: () => new api.core.Location(2466, 7422, 0) },
+    sourceLocation: { x: 2466, y: 7417, z: 0 }, destination: null,
+  };
+  route(northLobbyVanesculaRoute);
+  assert.deepEqual(northLobbyVanesculaRoute.destination, { x: 2456, y: 7417, z: 0 },
+    'the Vanescula Hall door uses the connected side tile because its apparent approach is separated by a clipped wall');
+  attributes.delete('quest.the_blood_moon_rises.castle-room');
   const adjacentDoorRoute = {
     player, objectId: 61573, clickType: 1,
     definition: { getName: () => 'Door', getInteractions: () => ['Enter'] },
@@ -1846,6 +1857,14 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     definition: { id: 61572, getName: () => 'Door' }, location: { x: 2314, y: 7382, z: 1 }, handled: false });
   assert.deepEqual(moved.at(-1), [2456, 7417, 0]);
   assert.equal(varbits.get(15489), 2);
+  assert.equal(varbits.get(15499), 34);
+  enter({ player, objectId: 61576, clickType: 1, option: 'Enter',
+    definition: { id: 61576, getName: () => 'Door' }, location: { x: 2466, y: 7422, z: 0 }, handled: false });
+  assert.deepEqual(moved.at(-1), [2451, 7403, 0], 'the connected north-lobby approach crosses into Vanescula Hall');
+  assert.equal(varbits.get(15499), 35);
+  enter({ player, objectId: 61573, clickType: 1, option: 'Enter',
+    definition: { id: 61573, getName: () => 'Door' }, location: { x: 2452, y: 7403, z: 0 }, handled: false });
+  assert.deepEqual(moved.at(-1), [2456, 7417, 0], 'returning from Vanescula lands on the connected north-lobby side');
   assert.equal(varbits.get(15499), 34);
 });
 

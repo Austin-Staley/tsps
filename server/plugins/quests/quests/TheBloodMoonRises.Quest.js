@@ -194,7 +194,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2466, y: 7422, z: 0, from: CASTLE_ROOM.NORTH_LOBBY_HALL, to: CASTLE_ROOM.VANESCULA_HALL,
       fromFloor: 2, toFloor: 2, landing: [2451, 7403] },
     { id: CASTLE_DOOR_IDS.DOOR_M, x: 2452, y: 7403, z: 0, from: CASTLE_ROOM.VANESCULA_HALL, to: CASTLE_ROOM.NORTH_LOBBY_HALL,
-      fromFloor: 2, toFloor: 2, landing: [2466, 7421] },
+      fromFloor: 2, toFloor: 2, landing: [2456, 7417] },
     { id: CASTLE_DOOR_IDS.DOOR, x: 2477, y: 7409, z: 0, from: CASTLE_ROOM.VANESCULA_HALL, to: CASTLE_ROOM.RANIS_HALL,
       fromFloor: 2, toFloor: 2, anyKey: CASTLE_EMBLEM_IDS, keyName: "a Drakan emblem", landing: [2481, 7404] },
     { id: CASTLE_DOOR_IDS.DOOR_M, x: 2481, y: 7403, z: 0, from: CASTLE_ROOM.RANIS_HALL, to: CASTLE_ROOM.VANESCULA_HALL,
@@ -3217,6 +3217,14 @@ module.exports = function registerTheBloodMoonRises(api) {
     const sourceZ = source?.z ?? source?.getZ?.();
     if (sourceZ === tile.getZ() &&
       Math.max(Math.abs(sourceX - tile.getX()), Math.abs(sourceY - tile.getY())) <= 1) return;
+    // The north-lobby door is placed in a clipped wall segment disconnected
+    // from the player's landing room component. Route to the known connected
+    // room arrival point, then let the same Enter packet use the paired door.
+    if (event.definition?.id === 61576 && tile.getX() === 2466 && tile.getY() === 7422 &&
+      tile.getZ() === 0 && Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.NORTH_LOBBY_HALL) {
+      event.destination = { x: 2456, y: 7417, z: 0 };
+      return;
+    }
     const face = event.object.getFace();
     const axis = (face & 1) === 0 ? "x" : "y";
     const side = Math.sign(source?.[axis] - (axis === "x" ? tile.getX() : tile.getY())) ||
