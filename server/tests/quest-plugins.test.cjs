@@ -4497,7 +4497,7 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
 
 test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the cathedral and blackstone fragment behind real caches', () => {
   const { api: base, handlers: baseHandlers } = mockApi();
-  const objectHooks = [], objectRouteHooks = [], itemOnObjectHooks = [], itemActionHooks = [], itemOnItemHooks = [], groundPickupHooks = [], actionHooks = [], choiceHooks = [], interactions = [], transcripts = [], groundSpawns = [], playerProcesses = [], spawnedNpcs = [];
+  const objectHooks = [], objectRouteHooks = [], itemOnObjectHooks = [], itemActionHooks = [], itemOnItemHooks = [], groundPickupHooks = [], actionHooks = [], choiceHooks = [], interactions = [], transcripts = [], groundSpawns = [], playerProcesses = [], spawnedNpcs = [], prompts = [];
   const counts = new Map();
   const varbits = new Map();
   const core = {
@@ -4518,7 +4518,8 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
             : prop === 'onItemOnItem' ? (handler) => itemOnItemHooks.push(handler)
           : prop === 'onGroundItemPickup' ? (handler) => groundPickupHooks.push(handler)
             : prop === 'onPlayerProcess' ? (handler) => playerProcesses.push(handler)
-            : prop === 'getItemOnGroundManager' ? () => ({ getGroundItem: () => null, registerLocation: (...args) => groundSpawns.push(args) })
+          : prop === 'getItemOnGroundManager' ? () => ({ getGroundItem: () => null, registerLocation: (...args) => groundSpawns.push(args) })
+            : prop === 'sendMultiChatboxPrompt' ? (_player, title, ...options) => prompts.push({ title, options })
           : prop === 'onCustomEvent' ? (name, handler) => {
             if (name === 'npc-dialogue:action') actionHooks.push(handler);
             if (name === 'npc-dialogue:choice') choiceHooks.push(handler);
@@ -4592,20 +4593,44 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     for (const [x, y, id] of portals.slice(0, 3)) {
       assert.equal(interact({ player, objectId: id, definition: { id }, location: { x, y, z: 0 }, option: 'Activate' }), true);
     }
+    assert.equal(interact({ player, objectId: 49482, definition: { id: 49482 }, location: { x: 2611, y: 6379, z: 0 }, option: 'Use' }), true);
+    assert.equal(prompts.at(-1).title, 'Choose an active Lassar teleporter');
+    assert.deepEqual(prompts.at(-1).options.filter((_, index) => index % 2 === 0), ['Palace.', 'Plaza.', 'Northern Science District.'],
+      'the activated Lassar teleporter opens a valid native destination menu');
+    prompts.at(-1).options[5]();
+    assert.deepEqual([player.location.x, player.location.y, player.location.z], [2611, 6379, 0]);
     assert.equal(interact({ player, objectId: 49483, definition: { id: 49483 }, location: { x: 2599, y: 6341, z: 0 }, option: 'Activate' }), true);
     assert.match(player.messages.at(-1), /sealed district/);
-    const findProp = (id, x, y, option = 'Search') => interact({ player, objectId: id, definition: { id }, location: { x, y, z: 0 }, option });
-    findProp(48186, 2589, 6380, 'Search');
-    findProp(48159, 2581, 6387, 'Search');
-    findProp(48168, 2594, 6352, 'Search');
+    player.location = new core.Location(2656, 6386, 0);
+    playerProcesses[0]({ player });
+    assert.equal(player.location.getX(), 2656, 'the cathedral approach stays gated until all six teleporters are active');
+    assert.equal(attrs.get('desert-treasure-ii:lassar').cameTo, undefined);
+    const pickup = (itemId, x, y) => groundPickupHooks[0]({ player, groundItemId: itemId, location: { x, y, z: 0 } });
+    playerProcesses[0]({ player });
+    assert.equal(groundSpawns.at(-1)[1].getId(), core.ItemIdentifiers.SHADOW_BLOCKER_SCHEMATIC,
+      'the first-three milestone creates the canonical blocker schematic ground item');
+    pickup(core.ItemIdentifiers.SHADOW_BLOCKER_SCHEMATIC, 2591, 6380);
+    counts.set(core.ItemIdentifiers.SHADOW_BLOCKER_SCHEMATIC, 1);
+    playerProcesses[0]({ player });
+    assert.equal(groundSpawns.at(-1)[1].getId(), core.ItemIdentifiers.SHADOW_KEY_5,
+      'the green key is made available after the schematic is picked up');
+    pickup(core.ItemIdentifiers.SHADOW_KEY_5, 2581, 6388);
+    counts.set(core.ItemIdentifiers.SHADOW_KEY_5, 1);
+    playerProcesses[0]({ player });
+    assert.equal(groundSpawns.at(-1)[1].getId(), core.ItemIdentifiers.SHADOW_KEY,
+      'the purple key follows the green key pickup');
+    pickup(core.ItemIdentifiers.SHADOW_KEY, 2592, 6352);
+    counts.set(core.ItemIdentifiers.SHADOW_KEY, 1);
     assert.equal(counts.get(core.ItemIdentifiers.SHADOW_BLOCKER_SCHEMATIC), 1);
     assert.equal(counts.get(core.ItemIdentifiers.SHADOW_KEY_5), 1);
     assert.equal(counts.get(core.ItemIdentifiers.SHADOW_KEY), 1);
     for (const [x, y, id] of portals.slice(3)) {
       assert.equal(interact({ player, objectId: id, definition: { id }, location: { x, y, z: 0 }, option: 'Activate' }), true);
     }
-    assert.equal(interact({ player, objectId: 48254, location: { x: 2656, y: 6424, z: 0 }, option: 'Open' }), true);
-    assert.equal(player.location.x, 2648, 'the cathedral blackout moves the player to Ketla’s house');
+    player.location = new core.Location(2656, 6386, 0);
+    playerProcesses[0]({ player });
+    assert.equal(player.location.getX(), 2648, 'the real QH cathedral approach triggers the blackout to Ketla’s house');
+    assert.equal(player.location.getY(), 6442);
     assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-after-coming-to');
     counts.set(core.ItemIdentifiers.RING_OF_VISIBILITY, 1);
     interactions.find((entry) => entry.name === 'Ketla').options['Talk-to']({ player, npcId: core.NpcIdentifiers.KETLA });
@@ -4633,7 +4658,8 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     const unlocked = interact({ player, objectId: 48264, location: { x: 2350, y: 6360, z: 0 }, option: 'Open' });
     assert.equal(unlocked, false, 'the purple key opens the real locked shadow door after the blocker is placed');
     assert.equal(counts.get(core.ItemIdentifiers.SHADOW_KEY), 0);
-    assert.equal(groundSpawns.length, 1, 'the basic torch schematic appears at its cache tile behind the door');
+    assert.equal(groundSpawns.filter(([, item]) => item.getId() === core.ItemIdentifiers.BASIC_SHADOW_TORCH_SCHEMATIC).length, 1,
+      'the basic torch schematic appears at its cache tile behind the door');
     groundPickupHooks[0]({ player, groundItemId: core.ItemIdentifiers.BASIC_SHADOW_TORCH_SCHEMATIC, location: { x: 2353, y: 6367, z: 0 } });
     assert.equal(attrs.get('desert-treasure-ii:lassar').torchSchematicFound, true);
     const state = attrs.get('desert-treasure-ii:lassar');

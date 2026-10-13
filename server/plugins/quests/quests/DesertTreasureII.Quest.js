@@ -3271,6 +3271,16 @@ module.exports = function registerDesertTreasureII(api) {
     if (p && stage(p) > 0) syncNativeProgress(p);
     if (!p || p.isPlayerBot?.() === true || stage(p) !== S.WHISPERER) return;
     const lassarState = p.getAttribute(LASSAR) ?? {};
+    ensureLassarIntroItems(p, lassarState);
+    const position = p.getLocation?.();
+    if (!lassarState.cameTo && (lassarState.teleporters ?? []).slice(0, 6).length === 6
+      && lassarState.teleporters.slice(0, 6).every(Boolean)
+      && position?.getX?.() === 2656 && position?.getY?.() === 6386 && position?.getZ?.() === 0) {
+      setLassar(p, { ...lassarState, cameTo: true });
+      p.moveTo(new api.core.Location(2648, 6442, 0));
+      talk(p, N.KETLA, "the-whisperer-talking-to-ketla-after-coming-to");
+      return;
+    }
     if (!spawned.get(p)?.whisperer && lassarState.whispererStarted && !lassarState.whispererDefeated) {
       if (spawnBoss(p, "whisperer")) p.sendMessage("The Whisperer returns to the cathedral.");
     }
@@ -6135,21 +6145,6 @@ module.exports = function registerDesertTreasureII(api) {
       return true;
     }
 
-    // The cathedral is sealed until the first six city links are active. Trying
-    // its actual entrance causes the scripted blackout that introduces Ketla.
-    if (x === 2656 && y === 6424 && z === 0) {
-      if (!(state.teleporters ?? []).slice(0, 6).every(Boolean)) {
-        p.sendMessage("The Sunken Cathedral is sealed. Activate the six teleporters throughout the palace, plaza, science and residential districts first.");
-        return true;
-      }
-      if (!state.cameTo) {
-        setLassar(p, { ...state, cameTo: true });
-        p.moveTo(new api.core.Location(2648, 6442, 0));
-        talk(p, N.KETLA, "the-whisperer-talking-to-ketla-after-coming-to");
-      }
-      return true;
-    }
-
     if (x === 2350 && y === 6360 && state.inShadow && [48254, 48255, 48256, 48257, 48258, 48259, 48260, 48261, 48262, 48263, 48264, 48265, 48266, 48267].includes(visibleId)
       && (option === "open" || option === "unlock")) {
       if (!state.blockerPlaced) { p.sendMessage("The lost souls overwhelm you here. Place the shadow blocker beside the locked doors before crossing the furnace building."); return true; }
@@ -6184,7 +6179,7 @@ module.exports = function registerDesertTreasureII(api) {
             p.sendMessage(`The teleporter carries you to the ${["Palace", "Plaza", "Northern Science District", "Southern Science District", "Western Residential District", "Cathedral", "Eastern Residential District"][index]}.`);
           }] : null)
           .filter(Boolean);
-        if (destinations.length) api.sendMultiChatboxPrompt(p, "Choose an active Lassar teleporter", ...destinations);
+        if (destinations.length) api.sendMultiChatboxPrompt(p, "Choose an active Lassar teleporter", ...destinations.flat());
         return true;
       }
       // The city record routes the first six teleporters in the same order as
@@ -6260,31 +6255,6 @@ module.exports = function registerDesertTreasureII(api) {
       }
       setLassar(p, { ...state, cathedralTentacles: true });
       p.sendMessage("The perfected torch burns away the tentacles sealing the Sunken Cathedral.");
-      return true;
-    }
-
-    // Searchable cache scenery at the two Science District rooms holds the
-    // blocker schematic and the first pair of shadow keys.
-    const hasFirstThree = (state.teleporters ?? []).slice(0, 3).every(Boolean);
-    if (hasFirstThree && x >= 2588 && x <= 2591 && y >= 6378 && y <= 6381
-      && [48186, 48163, 48174].includes(visibleId) && (option === "search" || option === "read")) {
-      if (!has(p, I.SHADOW_BLOCKER_SCHEMATIC)) p.getInventory().adds(I.SHADOW_BLOCKER_SCHEMATIC, 1);
-      p.sendMessage("You find a shadow blocker schematic among the Science District records.");
-      setLassar(p, { ...state, blockerSchematic: true });
-      return true;
-    }
-    if (hasFirstThree && x >= 2580 && x <= 2583 && y >= 6385 && y <= 6389
-      && [48159, 48177].includes(visibleId) && (option === "search" || option === "open")) {
-      if (!has(p, I.SHADOW_KEY_5)) p.getInventory().adds(I.SHADOW_KEY_5, 1);
-      p.sendMessage("You find a green shadow key in the northern Science District.");
-      setLassar(p, { ...state, greenKey: true });
-      return true;
-    }
-    if (hasFirstThree && x >= 2592 && x <= 2595 && y >= 6350 && y <= 6353
-      && [48168, 48159, 48164].includes(visibleId) && (option === "search" || option === "open")) {
-      if (!has(p, I.SHADOW_KEY)) p.getInventory().adds(I.SHADOW_KEY, 1);
-      p.sendMessage("You find a purple shadow key in the southern Science District.");
-      setLassar(p, { ...state, purpleKey: true });
       return true;
     }
 
@@ -6367,10 +6337,26 @@ module.exports = function registerDesertTreasureII(api) {
     }
   }
 
+  function ensureLassarIntroItems(p, state) {
+    if (!state.entered || !(state.teleporters ?? []).slice(0, 3).every(Boolean)) return;
+    // shortcut: QuestHelper's item markers overlap blocking cache barrels/crates/tables,
+    // so these real ground drops use the nearest collision-walkable floor tiles.
+    if (!state.blockerSchematic && !has(p, I.SHADOW_BLOCKER_SCHEMATIC)) {
+      registerLassarGroundItem(p, I.SHADOW_BLOCKER_SCHEMATIC, 2591, 6380);
+    }
+    if (state.blockerSchematic && !state.greenKey && !has(p, I.SHADOW_KEY_5)) {
+      registerLassarGroundItem(p, I.SHADOW_KEY_5, 2581, 6388);
+    }
+    if (state.greenKey && !state.purpleKey && !has(p, I.SHADOW_KEY)) {
+      registerLassarGroundItem(p, I.SHADOW_KEY, 2592, 6352);
+    }
+  }
+
   function handleLassarGroundItemPickup(event) {
     const { player: p, groundItemId, location } = event;
     if (stage(p) !== S.WHISPERER || ![I.BASIC_SHADOW_TORCH_SCHEMATIC, I.REVITALISING_IDOL_SCHEMATIC, I.SHADOW_KEY_2,
-      I.SHADOW_KEY_4, I.SUPERIOR_SHADOW_TORCH_SCHEMATIC, I.ANIMA_PORTAL_SCHEMATIC].includes(groundItemId)) return;
+      I.SHADOW_KEY_4, I.SHADOW_BLOCKER_SCHEMATIC, I.SHADOW_KEY_5, I.SHADOW_KEY,
+      I.SUPERIOR_SHADOW_TORCH_SCHEMATIC, I.ANIMA_PORTAL_SCHEMATIC].includes(groundItemId)) return;
     const state = p.getAttribute(LASSAR) ?? {};
     const x = location?.getX?.() ?? location?.x;
     const y = location?.getY?.() ?? location?.y;
@@ -6380,10 +6366,17 @@ module.exports = function registerDesertTreasureII(api) {
     const redKey = groundItemId === I.SHADOW_KEY_4;
     const superiorSchematic = groundItemId === I.SUPERIOR_SHADOW_TORCH_SCHEMATIC;
     const animaSchematic = groundItemId === I.ANIMA_PORTAL_SCHEMATIC;
+    const blockerSchematic = groundItemId === I.SHADOW_BLOCKER_SCHEMATIC;
+    const greenShadowKey = groundItemId === I.SHADOW_KEY_5;
+    const purpleShadowKey = groundItemId === I.SHADOW_KEY;
+    const firstThree = state.entered && (state.teleporters ?? []).slice(0, 3).every(Boolean);
     const accessible = basicTorchSchematic ? x === 2353 && y === 6367 && state.doorUnlocked && state.inShadow
       : idolSchematic ? x === 2677 && y === 6422 && state.tentacles?.["2417,6413"]
         : blueKey ? x === 2416 && y === 6443 && state.tentacles?.["2424,6439"] && state.inShadow
           : redKey ? x === 2638 && y === 6405 && state.redKeyFound
+      : blockerSchematic ? x === 2591 && y === 6380 && firstThree
+            : greenShadowKey ? x === 2581 && y === 6388 && state.blockerSchematic
+              : purpleShadowKey ? x === 2592 && y === 6352 && state.greenKey
           : superiorSchematic ? x === 2381 && y === 6423 && state.pubOpened && state.inShadow
             : x === 2324 && y === 6402 && state.animaSchematicFound && state.inShadow;
     if (!accessible) {
@@ -6398,6 +6391,9 @@ module.exports = function registerDesertTreasureII(api) {
       ...(redKey ? { redKey: true } : {}),
       ...(superiorSchematic ? { superiorSchematicFound: true } : {}),
       ...(animaSchematic ? { animaSchematicFound: true } : {}),
+      ...(blockerSchematic ? { blockerSchematic: true } : {}),
+      ...(greenShadowKey ? { greenKey: true } : {}),
+      ...(purpleShadowKey ? { purpleKey: true } : {}),
     });
   }
 
