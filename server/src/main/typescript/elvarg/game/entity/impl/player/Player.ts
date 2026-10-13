@@ -113,6 +113,8 @@ export class Player extends Mobile {
     private session: PlayerSession;
     public status: PlayerStatus = PlayerStatus.NONE;
     public interfaceId: number = -1
+    /** The process cycle of the player's last click or key press (0 before any since login). */
+    public lastInputCycle = 0;
     private multiIcon: number;
     private isRunning = true;
     private playerBot = false;

@@ -389,6 +389,21 @@ export interface PluginPlayerDeathItemDropEvent {
   handled: boolean;
 }
 
+/**
+ * Everything a death is about to lose, once, after the per-item `onPlayerDeathItemDrop` hooks.
+ * A plugin takes items by removing them from `items` (headed for the floor) or `untradeables`
+ * (otherwise kept); whatever is left falls to the floor or is kept, as without the hook.
+ */
+export interface PluginPlayerDeathDropsEvent {
+  player: any;
+  killer: any;
+  location: any;
+  items: any[];
+  untradeables: any[];
+  /** Item ids per slot before the death emptied them (-1 for an empty slot). */
+  layout: { inventory: number[]; equipment: number[] };
+}
+
 export interface PluginCanEquipEvent {
   player: any;
   slot: number;
@@ -861,6 +876,7 @@ export interface PluginApi {
   onPlayerDeathItemDrop(
     handler: (event: PluginPlayerDeathItemDropEvent) => void
   ): void;
+  onPlayerDeathDrops(handler: (event: PluginPlayerDeathDropsEvent) => void): void;
   onCanEquip(handler: (event: PluginCanEquipEvent) => void): void;
   onCanUseItem(handler: (event: PluginCanUseItemEvent) => void): void;
   onCanGainExperience(handler: (event: PluginCanGainExperienceEvent) => void): void;

@@ -127,6 +127,19 @@ const WORLD_INTERACTIONS = new Set([
   "spell_on_ground",
 ]);
 
+/** Packets the client sends on its own, which don't count as the player's input. */
+const NON_INPUT_PACKETS = new Set([
+  "hello",
+  "ping",
+  "login",
+  "handshake",
+  "logout",
+  "raw",
+  "varp_transmit",
+  "plugin_message",
+  "local_trigger",
+]);
+
 type PendingLogin = {
   username: string;
   passwordHash: string;
@@ -266,6 +279,7 @@ export class ClientConnection {
     if (this.closed) return;
     for (const packet of packets) {
       if (this.player) LunarSpells.expireSpellbookSwap(this.player);
+      if (this.player && !NON_INPUT_PACKETS.has(packet.type)) this.player.lastInputCycle = World.getProcessCycle();
       if (this.player && WORLD_INTERACTIONS.has(packet.type)) {
         if (this.player.getStatus() === PlayerStatus.TRADING) continue;
         const input = { player: this.player, packet, handled: false };
