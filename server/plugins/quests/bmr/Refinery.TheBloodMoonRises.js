@@ -11,7 +11,10 @@ module.exports = function registerRefinery(api) {
   const mining = require("../../skills/Mining.plugin");
 
   const PAGE = "The Blood Moon Rises";
+  const START_EVENT = "bmr:refinery-start";
+  const COMPLETED_EVENT = "bmr:refinery-completed";
   const PROGRESS_ATTRIBUTE = "the-blood-moon-rises:refinery-progress";
+  const STORY_ATTRIBUTE = "quest.the_blood_moon_rises.slepe-story";
   const STAGE_VARBIT = 15464;
   const STAGE = Object.freeze({
     ROUTE: 48, TOMB: 50, PICKAXE: 52, MINED: 54, TUNNEL: 56,
@@ -288,12 +291,12 @@ module.exports = function registerRefinery(api) {
   }
   function talkIvan(event) {
     const player = event?.player;
-    if (!player || !["Ivan Strom", "Veliaf Hurtz"].includes(event.definition?.getName?.())) return;
+    if (!player || !["Ivan Strom", "Veliaf Hurtz"].includes(event.definition?.getName?.())) return false;
     const current = progress(player);
     if (current.phase === "cleared") return talkRefinery(event);
-    if (!current.started || current.phase !== "pickaxe") return;
+    if (!current.started || current.phase !== "pickaxe") return false;
     const location = event.npc?.getLocation?.();
-    if (!location || location.getZ() !== 0 || location.getX() < 3485 || location.getX() > 3516 || location.getY() < 9853 || location.getY() > 9879) return;
+    if (!location || location.getZ() !== 0 || location.getX() < 3485 || location.getX() > 3516 || location.getY() < 9853 || location.getY() > 9879) return false;
     event.handled = true;
     if (player.getInventory().isFull() && !player.getInventory().contains(PICKAXE_ITEM)) {
       player.sendMessage("Make room in your inventory before asking Ivan for his spare pickaxe."); return true;
@@ -306,8 +309,8 @@ module.exports = function registerRefinery(api) {
     const npc = event?.npc;
     const name = event?.definition?.getName?.();
     const current = player && progress(player);
-    if (!player || !npc || !["Ivan Strom", "Veliaf Hurtz"].includes(name) || current?.phase !== "cleared") return;
-    if (!sessions.get(player)?.residents.includes(npc)) return;
+    if (!player || !npc || !["Ivan Strom", "Veliaf Hurtz"].includes(name) || current?.phase !== "cleared") return false;
+    if (!sessions.get(player)?.residents.includes(npc)) return false;
     event.handled = true;
     return startTranscript(api, player, npc.getId(), PAGE,
       "the-truth-hurtz-talking-to-ivan-and-veliaf-in-the-daeyalt-refinery");
@@ -324,7 +327,7 @@ module.exports = function registerRefinery(api) {
       setProgress(player, { phase: "mined" });
     } else if (event.stepId === "jYDLQy" && progress(player).phase === "cleared") {
       setProgress(player, { phase: "freed", slavesEscaped: true });
-      api.emitCustomEvent("bmr:refinery:completed", { player });
+      api.emitCustomEvent(COMPLETED_EVENT, { player });
     }
   }
   function npcDeath({ npc }) {
@@ -358,6 +361,7 @@ module.exports = function registerRefinery(api) {
   }
   function syncLogin({ player }) {
     if (!player) return;
+    if (player.getAttribute(STORY_ATTRIBUTE)?.tombRouteStarted && !progress(player).started) start({ player });
     sync(player);
     if (isInRoom(player)) enterRoom(player, false);
   }
@@ -368,7 +372,7 @@ module.exports = function registerRefinery(api) {
 
   api.persistAttribute(PROGRESS_ATTRIBUTE);
   api.registerArea(new TombArea());
-  api.onCustomEvent("bmr:refinery:start", start);
+  api.onCustomEvent(START_EVENT, start);
   api.onCustomEvent("quest:stage-changed", stageChanged);
   api.onCustomEvent("npc-dialogue:action", action);
   api.onNpcDialogueCondition(answerCondition);

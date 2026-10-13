@@ -4,8 +4,9 @@
  * quest state uses the cache's myq6 varbit (15464 in varp 5618).
  */
 module.exports = function registerTheBloodMoonRises(api) {
-  const { Boundary, Equipment, HitDamage, HitMask, Item, ItemIdentifiers, Location, NpcIdentifiers, ObjectIdentifiers, PrayerHandler, PrivateArea, Skill, World } = api.core;
+  const { Boundary, Equipment, HitDamage, HitMask, Item, ItemIdentifiers, Location, NpcIdentifiers, ObjectDefinition, ObjectIdentifiers, PrayerHandler, PrivateArea, Skill, World } = api.core;
   const { registerQuest, loadTranscripts, startTranscript } = require("../QuestRuntime");
+  require("../bmr/Refinery.TheBloodMoonRises")(api);
   const PAGE = "The Blood Moon Rises";
   const START_HOOK = "quest:the-blood-moon-rises:start";
   const TOME_ID = ItemIdentifiers.TOME_OF_EXPERIENCE_3;
@@ -21,6 +22,31 @@ module.exports = function registerTheBloodMoonRises(api) {
   const HIDEOUT_SHRINE_INSPECTED = "quest.the_blood_moon_rises.hideout-shrine-inspected";
   const HIDEOUT_DEFENSE_COMPLETE = "quest.the_blood_moon_rises.hideout-defense-complete";
   const SLEPE_STORY_ATTRIBUTE = "quest.the_blood_moon_rises.slepe-story";
+  const REFINERY_COMPLETED_EVENT = "bmr:refinery-completed";
+  const SLEPE_PLINTH_VARBITS = [15496, 15492, 15491, 15493, 15495, 15494];
+  const SLEPE_BOOKS = [
+    { id: ItemIdentifiers.ESSIANDARS_NOTES, name: "Essiandar's notes", varbitValue: 6, shelf: [3409, 3488] },
+    { id: ItemIdentifiers.SARLS_JOURNAL, name: "Sarl's journal", varbitValue: 2, shelf: [3414, 3491] },
+    { id: ItemIdentifiers.FROM_MISTHALIN_TO_MORYTANIA, name: "From Misthalin to Morytania", varbitValue: 1, shelf: [3411, 3492] },
+    { id: ItemIdentifiers.SCRUFFY_NOTEBOOK, name: "Scruffy notebook", varbitValue: 3, shelf: [3409, 3488] },
+    { id: ItemIdentifiers.THE_LIFE_OF_FRIAR, name: "The Life of Friar", varbitValue: 5, shelf: [3414, 3491] },
+    { id: ItemIdentifiers.PIOUS_PROCEEDINGS, name: "Pious proceedings", varbitValue: 4, shelf: [3411, 3491] },
+  ];
+  const SLEPE_PLINTHS = [
+    { x: 3409, y: 3483, window: "Essiandar", itemId: ItemIdentifiers.ESSIANDARS_NOTES },
+    { x: 3408, y: 3485, window: "Sarl", itemId: ItemIdentifiers.SARLS_JOURNAL },
+    { x: 3409, y: 3487, window: "Iriandul", itemId: ItemIdentifiers.FROM_MISTHALIN_TO_MORYTANIA },
+    { x: 3409, y: 3490, window: "Derygull", itemId: ItemIdentifiers.SCRUFFY_NOTEBOOK },
+    { x: 3408, y: 3492, window: "Friar", itemId: ItemIdentifiers.THE_LIFE_OF_FRIAR },
+    { x: 3409, y: 3494, window: "Erysail", itemId: ItemIdentifiers.PIOUS_PROCEEDINGS },
+  ];
+  const SLEPE_MONK_TILES = [
+    [3410, 3484], [3410, 3493], [3411, 3489], [3415, 3485], [3415, 3489],
+  ];
+  const SLEPE_MONK_IDS = new Set([
+    NpcIdentifiers.MONK_OF_ZAMORAK_4, NpcIdentifiers.MONK_OF_ZAMORAK_5, NpcIdentifiers.MONK_OF_ZAMORAK_6,
+    16154, 16155, 16156, 16271, 16272, 16273,
+  ]);
   const HIDEOUT_SHRINE_IDS = new Set([61174, ObjectIdentifiers.MAKESHIFT_SHRINE, ObjectIdentifiers.MAKESHIFT_SHRINE_2]);
   const HIDEOUT_SHRINE_TILE = { x: 3601, y: 9614, z: 0 };
   const HIDEOUT_CHEST_ID = ObjectIdentifiers.CLOSED_CHEST_37;
@@ -874,7 +900,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!player) return;
     removeSlepeIvan(player);
     const paterdomusIvan = paterdomusIvans.get(player);
-    if (paterdomusIvan) api.removeNpc(paterdomusIvan);
+    if (paterdomusIvan?.npc) api.removeNpc(paterdomusIvan.npc);
     paterdomusIvans.delete(player);
     const roy = slepeRoys.get(player);
     if (roy) api.removeNpc(roy);
@@ -1041,25 +1067,239 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.sendMessage("The squire records that Ivandis left a book describing the Seven Priestly Warriors somewhere within Paterdomus.");
   }
 
-  function spawnPaterdomusIvan(player) {
+  function slepeStory(player) { return player?.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {}; }
+
+  function paterdomusLocation(player) {
+    const loc = player?.getLocation?.();
+    if (!loc) return null;
+    return { x: loc.getX(), y: loc.getY(), z: loc.getZ() };
+  }
+
+  function inPaterdomusCellar(player) {
+    const { x, y, z } = paterdomusLocation(player) ?? {};
+    return z === 0 && x >= 3434 && x <= 3450 && y >= 9880 && y <= 9910;
+  }
+
+  function inPaterdomusTemple(player, plane) {
+    const { x, y, z } = paterdomusLocation(player) ?? {};
+    return z === plane && x >= 3408 && x <= 3419 && y >= 3483 && y <= 3494;
+  }
+
+  function spawnPaterdomusIvan(player, tile) {
+    const key = `${tile.x},${tile.y},${tile.z}`;
     const existing = paterdomusIvans.get(player);
-    if (existing) return existing;
-    const ivan = api.spawnNpc({ id: NpcIdentifiers.IVAN_STROM_4, x: 3416, y: 3489, z: 2,
+    if (existing?.key === key && existing.npc?.isRegistered?.() !== false) return existing.npc;
+    if (existing?.npc) api.removeNpc(existing.npc);
+    const ivan = api.spawnNpc({ id: NpcIdentifiers.IVAN_STROM_4, ...tile,
       wanderRadius: 0, owner: player, ownerOnly: true });
     if (ivan) {
       ivan.setScriptedMovement?.(true);
-      paterdomusIvans.set(player, ivan);
+      paterdomusIvans.set(player, { npc: ivan, key });
     }
     return ivan;
   }
 
   function processSlepeProgress({ player }) {
     if (!player || stage(player) !== STAGE.SLEPE) return;
-    const story = player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {};
+    const story = slepeStory(player);
     if (!story.manorComplete) return;
-    const location = player.getLocation();
-    const x = location.getX(), y = location.getY(), z = location.getZ();
-    if (z === 2 && x >= 3405 && x <= 3426 && y >= 3478 && y <= 3504) spawnPaterdomusIvan(player);
+    if (story.monksCleared && inPaterdomusTemple(player, 1)) {
+      spawnPaterdomusIvan(player, { x: 3417, y: 3487, z: 1 });
+      return;
+    }
+    if (!story.monksRequested && inPaterdomusCellar(player)) {
+      spawnPaterdomusIvan(player, { x: 3441, y: 9897, z: 0 });
+      return;
+    }
+    const current = paterdomusIvans.get(player);
+    if (current?.npc) api.removeNpc(current.npc);
+    paterdomusIvans.delete(player);
+  }
+
+  function syncPaterdomusBookPuzzle({ player }) {
+    if (!player || stage(player) !== STAGE.SLEPE) return;
+    const story = slepeStory(player);
+    const placements = story.booksPlaced ? {} : (story.bookPlacements ?? {});
+    SLEPE_PLINTHS.forEach((plinth, index) => {
+      const book = SLEPE_BOOKS.find(({ id }) => id === placements[`${plinth.x},${plinth.y}`]);
+      player.getPacketSender?.().sendVarbit(SLEPE_PLINTH_VARBITS[index], book?.varbitValue ?? 0);
+    });
+  }
+
+  function resolveObjectInteraction(event) {
+    const definition = event?.definition ?? ObjectDefinition?.forPlayer?.(event?.objectId, event?.player);
+    const option = event?.option ?? definition?.getInteractions?.()?.[(event?.clickType ?? 1) - 1] ?? "";
+    return { definition, option: String(option) };
+  }
+
+  function eventTile(event) {
+    const loc = event?.location;
+    if (!loc) return null;
+    return { x: typeof loc.getX === "function" ? loc.getX() : loc.x,
+      y: typeof loc.getY === "function" ? loc.getY() : loc.y,
+      z: typeof loc.getZ === "function" ? loc.getZ() : loc.z ?? 0 };
+  }
+
+  function bookOnShelf(player, book, shelf) {
+    const story = slepeStory(player);
+    if (story.bookPlacements && Object.values(story.bookPlacements).includes(book.id)) return false;
+    return book.shelf[0] === shelf.x && book.shelf[1] === shelf.y &&
+      player.getInventory().getAmount(book.id) === 0;
+  }
+
+  function offerBooksFromShelf(player, shelf) {
+    const books = SLEPE_BOOKS.filter((book) => bookOnShelf(player, book, shelf));
+    if (!books.length) {
+      player.sendMessage("You have already taken the books from this shelf.");
+      return;
+    }
+    const inventory = player.getInventory();
+    const chooseBooks = (selected) => {
+      const chosen = selected === "Both." ? books : books.filter((book) => book.name === selected);
+      if (chosen.length > inventory.getFreeSlots()) {
+        player.sendMessage("Make room in your inventory before taking those books.");
+        return;
+      }
+      for (const book of chosen) {
+        if (!inventory.adds(book.id, 1)) return;
+        player.sendMessage(`You find ${book.name}.`);
+      }
+    };
+    const options = [];
+    if (books.length > 1) options.push("Both.", () => chooseBooks("Both."));
+    for (const book of books) options.push(book.name, () => chooseBooks(book.name));
+    api.sendMultiChatboxPrompt(player, "You find several books. Which would you like to take?", ...options);
+  }
+
+  function handlePaterdomusObject(event) {
+    const player = event?.player;
+    if (!player || stage(player) !== STAGE.SLEPE) return;
+    const story = slepeStory(player);
+    if (!story.monksCleared || !story.journalRead || !story.upstairsTalked) return;
+    const tile = eventTile(event);
+    if (!tile || tile.z !== 1) return;
+    const { definition, option } = resolveObjectInteraction(event);
+    const objectName = String(definition?.getName?.() ?? "");
+    if (option === "Search" && /bookcase|bookshelf/i.test(objectName)) {
+      const shelf = SLEPE_BOOKS.find(({ shelf: [x, y] }) => x === tile.x && y === tile.y)?.shelf;
+      if (!shelf) return;
+      event.handled = true;
+      offerBooksFromShelf(player, { x: shelf[0], y: shelf[1] });
+      return;
+    }
+    const plinth = SLEPE_PLINTHS.find(({ x, y }) => x === tile.x && y === tile.y);
+    if (option === "Inspect" && /window|glass/i.test(objectName)) {
+      const portrait = SLEPE_PLINTHS.find(({ x, y }) => x === tile.x && y === tile.y);
+      if (!portrait) return;
+      event.handled = true;
+      startTranscript(api, player, 0, PAGE,
+        `the-truth-hurtz-inspecting-the-stained-glass-windows-${portrait.window.toLowerCase()}`);
+      return;
+    }
+    if (!plinth || objectName !== "Plinth") return;
+    if (option === "Inspect") {
+      event.handled = true;
+      startTranscript(api, player, 0, PAGE, "the-truth-hurtz-inspecting-the-plinths");
+      return;
+    }
+    if (option === "Take") {
+      const placements = { ...(story.bookPlacements ?? {}) };
+      const key = `${plinth.x},${plinth.y}`;
+      const bookId = placements[key];
+      if (!bookId) return;
+      event.handled = true;
+      if (player.getInventory().getFreeSlots() <= 0 || !player.getInventory().adds(bookId, 1)) {
+        player.sendMessage("Make room in your inventory before taking the book.");
+        return;
+      }
+      delete placements[key];
+      player.setAttribute(SLEPE_STORY_ATTRIBUTE, { ...story, bookPlacements: placements });
+      player.getPacketSender().sendVarbit(SLEPE_PLINTH_VARBITS[SLEPE_PLINTHS.indexOf(plinth)], 0);
+    }
+  }
+
+  function handlePaterdomusItemOnObject(event) {
+    const player = event?.player;
+    if (!player || stage(player) !== STAGE.SLEPE) return;
+    const story = slepeStory(player);
+    if (!story.monksCleared || !story.journalRead || !story.upstairsTalked || story.booksPlaced) return;
+    const tile = eventTile(event);
+    if (!tile || tile.z !== 1) return;
+    const plinth = SLEPE_PLINTHS.find(({ x, y }) => x === tile.x && y === tile.y);
+    const book = SLEPE_BOOKS.find(({ id }) => id === event.itemId);
+    if (!plinth || !book) return;
+    event.handled = true;
+    if (!player.getInventory().contains(event.itemId)) return;
+    const placements = { ...(story.bookPlacements ?? {}) };
+    const key = `${plinth.x},${plinth.y}`;
+    if (placements[key]) {
+      if (placements[key] === book.id) {
+        player.sendMessage("That book is already on this plinth.");
+        return;
+      }
+      if (!player.getInventory().adds(placements[key], 1)) {
+        player.sendMessage("Make room in your inventory before changing the book on this plinth.");
+        return;
+      }
+      player.sendMessage(`You take ${SLEPE_BOOKS.find(({ id }) => id === placements[key])?.name ?? "the misplaced book"} from the plinth.`);
+    }
+    player.getInventory().deleteNumber(event.itemId, 1);
+    placements[key] = book.id;
+    const complete = SLEPE_PLINTHS.every((spot) =>
+      placements[`${spot.x},${spot.y}`] === spot.itemId);
+    player.setAttribute(SLEPE_STORY_ATTRIBUTE, { ...story, bookPlacements: placements, ...(complete ? { booksPlaced: true } : {}) });
+    player.getPacketSender().sendVarbit(SLEPE_PLINTH_VARBITS[SLEPE_PLINTHS.indexOf(plinth)], book.varbitValue);
+    player.sendMessage(`You place ${book.name} on the plinth.`);
+    if (!complete) return;
+    for (const varbit of SLEPE_PLINTH_VARBITS) player.getPacketSender().sendVarbit(varbit, 0);
+    player.setAttribute(SLEPE_STORY_ATTRIBUTE, { ...story, booksPlaced: true, bookPlacements: {} });
+    startTranscript(api, player, NpcIdentifiers.IVAN_STROM_4, PAGE, "the-truth-hurtz-upon-completing-the-book-puzzle");
+  }
+
+  function handlePaterdomusMonkDeath(event) {
+    const player = event?.killer;
+    const npc = event?.npc;
+    if (!player?.isPlayer?.() || !npc || stage(player) !== STAGE.SLEPE) return;
+    const story = slepeStory(player);
+    if (!story.monksRequested || story.monksCleared) return;
+    const spawn = npc.getSpawnPosition?.() ?? npc.getLocation?.();
+    if (!SLEPE_MONK_IDS.has(npc.getId?.() ?? event.npcId) || !spawn || spawn.getZ() !== 0) return;
+    const x = spawn.getX(), y = spawn.getY();
+    if (!SLEPE_MONK_TILES.some(([tx, ty]) => tx === x && ty === y)) return;
+    const kills = new Set(story.monkKills ?? []);
+    kills.add(`${x},${y}`);
+    const allDefeated = kills.size >= SLEPE_MONK_TILES.length;
+    player.setAttribute(SLEPE_STORY_ATTRIBUTE, { ...story, monkKills: [...kills], ...(allDefeated ? { monksCleared: true } : {}) });
+    if (allDefeated) {
+      player.sendMessage("The Zamorakian monks are defeated. Ivan is waiting upstairs in the temple.");
+      startTranscript(api, player, NpcIdentifiers.IVAN_STROM_4, PAGE, "the-truth-hurtz-upon-killing-the-monks-of-zamorak");
+    }
+  }
+
+  function readPaterdomusBook(event) {
+    const player = event?.player;
+    const book = SLEPE_BOOKS.find(({ id }) => id === event?.itemId);
+    if (!player || !book || stage(player) !== STAGE.SLEPE || !slepeStory(player).upstairsTalked ||
+      !player.getInventory().contains(book.id)) return;
+    event.handled = true;
+    const identities = {
+      [ItemIdentifiers.ESSIANDARS_NOTES]: "Essiandar Gar",
+      [ItemIdentifiers.SARLS_JOURNAL]: "Sarl Dunegun",
+      [ItemIdentifiers.FROM_MISTHALIN_TO_MORYTANIA]: "Iriandul Caistlyn",
+      [ItemIdentifiers.SCRUFFY_NOTEBOOK]: "Derygull Templeton",
+      [ItemIdentifiers.THE_LIFE_OF_FRIAR]: "Friar Twiblick",
+      [ItemIdentifiers.PIOUS_PROCEEDINGS]: "Erysail the Pious",
+    };
+    player.sendMessage(`The book identifies ${identities[book.id]} as one of the Seven Priestly Warriors.`);
+  }
+
+  function readIvandisWritings(event) {
+    const player = event?.player;
+    if (!player || event?.itemId !== ItemIdentifiers.IVANDIS_WRITINGS || stage(player) !== STAGE.SLEPE ||
+      !slepeStory(player).writingsGiven || !player.getInventory().contains(ItemIdentifiers.IVANDIS_WRITINGS)) return;
+    event.handled = true;
+    player.setAttribute(SLEPE_STORY_ATTRIBUTE, { ...slepeStory(player), writingsRead: true });
+    player.sendMessage("Ivandis describes his final attempt to reach Castle Drakan through a tunnel near his tomb.");
   }
 
   function inspectHideoutShrine(event) {
@@ -1174,6 +1414,11 @@ module.exports = function registerTheBloodMoonRises(api) {
     const name = String(event?.definition?.getName?.() ?? "").toLowerCase();
     if (!player || quest.isComplete(player) || stage(player) !== STAGE.SLEPE ||
       x !== 3161 || y !== 7710 || z !== 0 || !name.includes("portal")) return;
+    if (!slepeStory(player).refineryComplete) {
+      player.sendMessage("The tunnel to Castle Drakan is still blocked. Follow Veliaf through Ivandis' tomb first.");
+      event.handled = true;
+      return;
+    }
     // The story's portal interaction has no transcript action. This is the
     // actual transition into the Vampyrium castle chapter.
     advance(player, STAGE.CASTLE);
@@ -1196,6 +1441,26 @@ module.exports = function registerTheBloodMoonRises(api) {
       event.box = { items: [ItemIdentifiers.SQUIRES_JOURNAL] };
       player.setAttribute(SLEPE_STORY_ATTRIBUTE,
         { ...player.getAttribute(SLEPE_STORY_ATTRIBUTE), journalGiven: true });
+      return;
+    }
+    if (event.stepId === "OW0EIY" && stage(player) === STAGE.SLEPE &&
+      player.getAttribute(SLEPE_STORY_ATTRIBUTE)?.booksPlaced) {
+      const inventory = player.getInventory();
+      if (inventory.getFreeSlots() <= 0 || !inventory.adds(ItemIdentifiers.IVANDIS_WRITINGS, 1)) {
+        event.handled = true;
+        player.sendMessage("Make room in your inventory for Ivandis' writings.");
+        return;
+      }
+      event.handled = true;
+      event.box = { items: [ItemIdentifiers.IVANDIS_WRITINGS] };
+      player.setAttribute(SLEPE_STORY_ATTRIBUTE,
+        { ...player.getAttribute(SLEPE_STORY_ATTRIBUTE), writingsGiven: true });
+      return;
+    }
+    if (event.stepId === "y37Yph" && stage(player) === STAGE.SLEPE &&
+      player.getAttribute(SLEPE_STORY_ATTRIBUTE)?.tombRouteStarted) {
+      // The Wiki gives no exact landing tile; this walkable tile is beside the cache blockage.
+      player.moveTo(new Location(3507, 9860, 0));
       return;
     }
     if (event.stepId === "fiqzZ7" && !player.getAttribute(HIDEOUT_DEFENSE_COMPLETE)) {
@@ -1233,7 +1498,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (event.stepId === "1Z5SGt" && stage(player) === STAGE.THEATRE &&
       !player.getAttribute(TOB_CHALLENGE_ATTRIBUTE)?.started) {
       player.setAttribute(TOB_CHALLENGE_ATTRIBUTE, { started: true, completed: false });
-      api.emitCustomEvent("tob:bmr:start", { player });
+      api.emitCustomEvent("tob:bmr-start", { player });
     }
     if (event.stepId === "dJZbqF") {
       const area = player.getAttribute(WYRD_AREA_ATTRIBUTE);
@@ -1264,9 +1529,24 @@ module.exports = function registerTheBloodMoonRises(api) {
       "another-night-at-the-theatre-after-killing-the-nylocas-vasilias");
   }
 
+  function onRefineryCompleted(event) {
+    const player = event?.player;
+    const story = slepeStory(player);
+    if (!player || stage(player) !== STAGE.SLEPE || !story.tombRouteStarted || story.refineryComplete) return;
+    player.setAttribute(SLEPE_STORY_ATTRIBUTE, { ...story, refineryComplete: true });
+    player.sendMessage("The tunnel through the refinery is clear. Return to the passage into Castle Drakan.");
+  }
+
   function onChoice(event) {
     if (!event?.player) return;
     const player = event.player;
+    if (event.option === "Lead the way." && stage(player) === STAGE.SLEPE &&
+      player.getAttribute(SLEPE_STORY_ATTRIBUTE)?.writingsRead) {
+      const story = player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {};
+      player.setAttribute(SLEPE_STORY_ATTRIBUTE, { ...story, tombRouteStarted: true });
+      api.emitCustomEvent("bmr:refinery-start", { player });
+      return;
+    }
     if (event.option === "Yes." && stage(player) === STAGE.NOT_STARTED &&
       event.definition?.getName?.() === "Sarius Guile" && meetsRequirements(player)) {
       advance(player, STAGE.STARTED);
@@ -1302,6 +1582,16 @@ module.exports = function registerTheBloodMoonRises(api) {
   function onSlepeDialogueLine(request) {
     const player = request?.player;
     if (!player || stage(player) !== STAGE.SLEPE) return;
+    if (request.step?.player && request.text === "Sounds like a plan! Let's do it!") {
+      request.after = () => player.setAttribute(SLEPE_STORY_ATTRIBUTE,
+        { ...slepeStory(player), monksRequested: true });
+      return;
+    }
+    if (request.step?.speaker === "Ivan Strom" && request.text === "Sounds good.") {
+      request.after = () => player.setAttribute(SLEPE_STORY_ATTRIBUTE,
+        { ...slepeStory(player), upstairsTalked: true });
+      return;
+    }
     if (request.step?.speaker === "Ivan Strom" &&
       ["I'm right behind you.", "The truth is that I don't think I'll know until we do, so we may as well get to it."].includes(request.text)) {
       request.after = () => {
@@ -1360,7 +1650,15 @@ module.exports = function registerTheBloodMoonRises(api) {
       const story = player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {};
       let variant = null;
       if (npcName === "ivan strom") {
-        if (story.manorComplete) {
+        if (story.monksCleared) {
+          variant = !story.upstairsTalked
+            ? "the-truth-hurtz-talking-to-ivan-upstairs"
+            : story.booksPlaced
+              ? story.writingsRead
+                ? "the-truth-hurtz-talking-to-ivan-after-reading-ivandis-writings"
+                : "the-truth-hurtz-talking-to-ivan-after-solving-the-book-puzzle"
+              : "the-truth-hurtz-talking-to-ivan-again-3";
+        } else if (story.manorComplete) {
           variant = story.journalRead
             ? "the-truth-hurtz-talking-to-ivan-and-drezel-after-reading-the-journal"
             : story.journalGiven
@@ -1400,7 +1698,8 @@ module.exports = function registerTheBloodMoonRises(api) {
       }
       if (variant) {
         event.handled = true;
-        return startTranscript(api, player, event.npcId, PAGE, variant);
+        const started = startTranscript(api, player, event.npcId, PAGE, variant);
+        return started;
       }
     }
     if (stage(player) === STAGE.NOT_STARTED) {
@@ -2295,7 +2594,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("npc-dialogue:choice", onChoice);
   api.onCustomEvent("npc-dialogue:line", onBloodMoonDialogueLine);
   api.onCustomEvent("npc-dialogue:line", onSlepeDialogueLine);
-  api.onCustomEvent("tob:bmr:completed", onBloodMoonTobCompleted);
+  api.onCustomEvent("tob:bmr-completed", onBloodMoonTobCompleted);
+  api.onCustomEvent(REFINERY_COMPLETED_EVENT, onRefineryCompleted);
   api.onNpcDialogueVariant(selectVariant);
   api.onAnyNpcInteraction({ "Talk-to": talkQuestNpc });
   // Claim Ivan after Sins of the Father and In Aid of the Myreque decline him,
@@ -2305,6 +2605,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onNpcInteraction("Veliaf Hurtz", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Drezel", { "Talk-to": talkQuestNpc });
   api.onObjectInteraction(enterVampyriumCastle);
+  api.onObjectInteraction(handlePaterdomusObject);
+  api.onItemOnObject(handlePaterdomusItemOnObject, { noted: false });
   api.onObjectInteraction(openHideoutChest);
   api.onObjectInteraction(handleSiegeHallObject);
   api.onObjectInteraction(inspectWyrdFence);
@@ -2331,6 +2633,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onItemOnNpc(feedSafalaan);
   api.onItemAction("Dusty book", { Read: readDustyBook });
   api.onItemAction("Squire's journal", { Read: readSlepeJournal });
+  for (const book of SLEPE_BOOKS) api.onItemAction(book.name, { Read: readPaterdomusBook });
+  api.onItemAction("Ivandis' writings", { Read: readIvandisWritings });
   api.onNpcInteraction("Aranei", { Heal: healSiegeAranei });
   api.onPlayerProcess(syncHuntGroundItems);
   api.onPlayerProcess(processSlepeIvan);
@@ -2340,6 +2644,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogin(syncHideoutIvan);
   api.onPlayerLogin(syncSlepeIvan);
   api.onPlayerLogin(syncSlepeRoy);
+  api.onPlayerLogin(syncPaterdomusBookPuzzle);
+  api.onCustomEvent("player:bootstrap-complete", syncPaterdomusBookPuzzle);
   api.onPlayerLogin(resumeHideoutEscape);
   api.onPlayerLogout(handleSiegeLogout);
   api.onPlayerLogout(hideoutDefense.onPlayerLogout);
@@ -2347,6 +2653,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogout(cleanupSlepeManor);
   api.onNpcDeath(handleWyrdDeath);
   api.onNpcDeath(handleSlepeManorDeath);
+  api.onNpcDeath(handlePaterdomusMonkDeath);
   api.persistAttribute(HIDEOUT_DEFENSE_COMPLETE);
   api.onNpcHitModify(handleSiegeDrakanHit);
   api.persistAttribute(WYRD_DEFEATED_ATTRIBUTE);

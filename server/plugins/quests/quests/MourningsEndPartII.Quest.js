@@ -704,7 +704,7 @@ module.exports = function registerMourningsEndPartIIQuest(api) {
     }
     if (objectId === PILLAR_OF_LIGHT) {
       const claim = { location, claimed: false };
-      api.emitCustomEvent("quest:song-of-the-elves:claims-light-pillar", claim);
+      api.emitCustomEvent("song-of-the-elves:claims-light-pillar", claim);
       if (claim.claimed) return;
       event.handled = true;
       searchPillar(player);
