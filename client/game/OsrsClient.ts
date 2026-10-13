@@ -466,11 +466,17 @@ export class OsrsClient {
 
     /** Load the editor only for its opt-in URL. */
     private loadEditModePlugin(): void {
+        this.editorLaunching = true;
+        document.body.classList.add("map-editor-launching");
         void import("./plugins/editmode/install")
             .then(({ installEditMode }) => {
                 installEditMode(this);
             })
-            .catch((err) => console.log("[edit-mode-plugin] failed to load", err));
+            .catch((err) => {
+                this.editorLaunching = false;
+                document.body.classList.remove("map-editor-launching");
+                console.log("[edit-mode-plugin] failed to load", err);
+            });
     }
 
     inputManager: InputManager = new InputManager();
@@ -720,6 +726,9 @@ export class OsrsClient {
 
     // Feature toggles
     hoverOverlayEnabled: boolean = false;
+
+    editorLaunching = false;
+    editorCameraInput?: (deltaTime: number) => boolean;
 
     /**
      * Renders the world instead of the login screen while logged out, streaming
@@ -8370,6 +8379,7 @@ export class OsrsClient {
      * Call this on HMR/fast refresh to prevent audio leaks.
      */
     dispose(): void {
+        document.body.classList.remove("map-editor-launching");
         console.log("[OsrsClient] Disposing...");
         try {
             this.renderer?.stop();

@@ -45,11 +45,13 @@ Object.assign(renderer, {
         lodDistance: 0,
     },
     mapManager: {
-        visibleMaps: [], update: noop, getGridTileBounds: () => undefined,
+        visibleMaps: [], worldEntityMapIds: new Set(), update: noop, getGridTileBounds: () => undefined,
         getMap: () => undefined, getMapForWorldTile: () => undefined,
     },
     stats: { frameCount: 1 },
     playerPosUni: new Float32Array(2),
+    interactionHost: { getRoofPlaneLimit: () => 3 },
+    editorOverlays: { draw: noop, encodeCapture: noop },
     worldEntityOverlays: new Map(),
     getSceneViewportWidgetRect: () => viewport,
     computeUiRenderMetrics: () => ({ renderScaleX: scale, renderScaleY: scale }),
@@ -128,4 +130,25 @@ assert.equal(renderer.osrsClient.camera.computeViewportMetricsForSize(400, 200).
 loggedIn = false;
 render();
 assert.deepEqual(scissors, [], "Login has no world scissor");
-console.log("WebGPU scene viewport tests passed");
+// The editor streams and renders scenery without a logged-in player.
+let streamed = 0, worldDraws = 0, overlayDraws = 0, inputs = 0;
+renderer.osrsClient.loadedCache = {};
+renderer.osrsClient.scenePreviewEnabled = true;
+renderer.osrsClient.camera.snapToPosition(3090, -10, 3520);
+renderer.mapManager.update = () => streamed++;
+renderer.handleInput = () => inputs++;
+renderer.mapManager.visibleMaps = [{ canRender: () => true, updateAnimatedLocs: noop,
+    drawOpaque: (_pass: unknown, plane: number) => { assert.equal(plane, 1); worldDraws++; }, drawAlpha: noop }];
+renderer.interactionHost.getRoofPlaneLimit = () => 1;
+renderer.overlays = { update: noop, drawWorld: () => overlayDraws++, drawScreen: () => overlayDraws++ };
+render();
+assert.equal(streamed, 1, "editor streams map squares while logged out");
+assert.equal(inputs, 1, "free-camera input runs during the editor preview");
+assert.equal(worldDraws, 1, "WebGPU draws editor scenery at the editor's height limit");
+assert.equal(overlayDraws, 2, "editor highlights draw in both overlay passes");
+assert.deepEqual(Array.from(renderer.playerPosUni), [3090, 3520], "fog centres on the editor camera");
+renderer.osrsClient.scenePreviewEnabled = false;
+render();
+assert.equal(streamed, 1, "leaving the editor stops logged-out map streaming");
+assert.equal(worldDraws, 1, "leaving the editor restores the login surface");
+console.log("WebGPU scene viewport and editor preview tests passed");
