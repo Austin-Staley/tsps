@@ -85,6 +85,11 @@ module.exports = function registerTheBloodMoonRises(api) {
     spear: ItemIdentifiers.SPEAR_2,
     axe: ItemIdentifiers.BATTLEAXE,
     mace: ItemIdentifiers.MACE_3,
+    congealedBlood: ItemIdentifiers.JAR_OF_CONGEALED_BLOOD,
+    chunkyPotion1: ItemIdentifiers.FOUL_CHUNKY_POTION_1_,
+    chunkyPotion2: ItemIdentifiers.FOUL_CHUNKY_POTION_2_,
+    chunkyPotion3: ItemIdentifiers.FOUL_CHUNKY_POTION_3_,
+    chunkyPotion4: ItemIdentifiers.FOUL_CHUNKY_POTION_4_,
   });
   // Visible Castle Drakan loc ids from the current client cache gamevals.
   const CASTLE_KEY_LOC_IDS = Object.freeze({
