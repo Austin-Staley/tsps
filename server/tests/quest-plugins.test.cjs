@@ -10319,4 +10319,3 @@ test('Dragon Slayer II crypt uses canonical template locs and reachable native-v
   assert.equal(varbits.get(6105), 36, 'native cache tomb and bust transforms advance after the key is taken');
   assert.ok(messages.some((message) => message.includes('dragon key piece')));
 });
-
