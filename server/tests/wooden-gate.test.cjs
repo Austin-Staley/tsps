@@ -419,6 +419,29 @@ test('Castle Wars large doors swing both leaves to the open ids and back', () =>
   }
 });
 
+test('Paterdomus chapel entrance swings both cached leaves into its nameless open locs', () => {
+  const ids = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers;
+  const cacheObjects = new Map([
+    [ids.LARGE_DOOR_21, { name: 'Large door', actions: ['Open'], models: [[3544]] }],
+    [ids.LARGE_DOOR_22, { name: 'Large door', actions: ['Open'], models: [[3544]] }],
+    [3491, { name: null, actions: [null], models: [[3544]] }],
+    [3492, { name: null, actions: [null], models: [[3544]] }],
+  ]);
+  const h = buildHarness({ cacheObjects });
+  try {
+    h.place(3490, 3408, 3488, 2);
+    h.place(3489, 3408, 3489, 2);
+    assert.deepEqual(h.click(3490, 3408, 3488, 2, 'Open', 'Large door'), [
+      ['deregister', 3489, 3408, 3489, 2],
+      ['deregister', 3490, 3408, 3488, 2],
+      ['register', 3491, 3409, 3489, 1],
+      ['register', 3492, 3409, 3488, 3],
+    ], 'the north and south leaves swing east into their real cache open variants');
+  } finally {
+    h.restore();
+  }
+});
+
 test('1727/1728 metal gates open from either leaf order (west leaf is left)', () => {
   // Both open into the shared 1571/1572 leaves.
   const h = buildHarness();

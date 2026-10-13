@@ -142,6 +142,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     Object.freeze([O.GATE_8, O.GATE_9, 28853, 28854]),
     // Large doors sharing model 639 with 1521/1524; they open into that family's 1522/1525.
     Object.freeze([O.LARGE_DOOR_98, O.LARGE_DOOR_99, O.LARGE_DOOR_16, O.LARGE_DOOR_18]),
+    // Paterdomus' two-leaf chapel entrance. Closed leaves 3489/3490 swing into
+    // the nameless cache locs 3491/3492; all four use model 3544.
+    Object.freeze([O.LARGE_DOOR_21, O.LARGE_DOOR_22, 3491, 3492]),
     // Sophanem's north entrance: closed leaves 44036/44038, nameless open leaves 44037/44039.
     Object.freeze([O.GATE_232, O.GATE_233, 44037, 44039]),
   ]);
@@ -171,6 +174,7 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.LARGE_DOOR_29, O.LARGE_DOOR_28],
     [O.LARGE_DOOR_31, O.LARGE_DOOR_30],
     [O.LARGE_DOOR_98, O.LARGE_DOOR_99],
+    [O.LARGE_DOOR_21, O.LARGE_DOOR_22],
     [O.GATE_232, O.GATE_233],
     [O.LARGE_DOOR_16, O.LARGE_DOOR_18],
     [O.LARGE_DOOR_7, O.LARGE_DOOR_9],
@@ -208,6 +212,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.LARGE_DOOR_29, O.LARGE_DOOR_31],
     [O.LARGE_DOOR_28, O.LARGE_DOOR_30],
     [O.LARGE_DOOR_98, O.LARGE_DOOR_16],
+    [O.LARGE_DOOR_21, 3491],
+    [O.LARGE_DOOR_22, 3492],
     [O.GATE_232, 44037],
     [O.GATE_233, 44039],
     [O.LARGE_DOOR_99, O.LARGE_DOOR_18],

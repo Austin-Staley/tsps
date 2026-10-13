@@ -129,6 +129,126 @@ test('NPC Contact paginates plugin contacts and dispatches the chosen contact on
   } finally { PluginManager.emitCustomEvent = original; }
 });
 
+test('Blood Moon refinery handoff uses valid events, restores the tomb route, and waits for escape', () => {
+  const { api, handlers } = mockApi();
+  const moveCalls = [], varbits = [], completions = [];
+  const attrs = new Map();
+  const player = {
+    getAttribute: key => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getPacketSender: () => ({ sendVarbit: (id, value) => varbits.push([id, value]) }),
+    getLocation: () => new api.core.Location(3417, 3487, 1),
+    moveTo: location => moveCalls.push(location),
+  };
+  api.onCustomEvent('test:completed', event => completions.push(event.player));
+  const refinery = require('../plugins/quests/bmr/Refinery.TheBloodMoonRises')(api);
+  const eventNames = [...handlers.custom.keys()].filter(name => name.startsWith('bmr:'));
+  assert.deepEqual(eventNames, ['bmr:refinery-start']);
+  assert.ok(eventNames.every(name => /^[^:\s]+:[^:\s]+$/.test(name)), 'the server dispatches only one-colon event names');
+  attrs.set('quest.the_blood_moon_rises.slepe-story', { tombRouteStarted: true });
+  handlers.playerLogin.at(-1)({ player });
+  assert.deepEqual(moveCalls, [], 'the handoff begins the tomb route without teleporting the player');
+  assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'route');
+  assert.deepEqual(varbits.at(-1), [15464, 48]);
+  assert.ok([...handlers.custom.keys()].includes('bmr:refinery-start'));
+
+  const emitted = [];
+  api.emitCustomEvent = (name, event) => {
+    emitted.push(name);
+    if (name === 'bmr:refinery-completed') completions.push(event.player);
+  };
+  refinery.action({ player, stepId: 'jYDLQy' });
+  assert.deepEqual(completions, [], 'the escape dialogue cannot complete before the owned room is cleared');
+  attrs.set('the-blood-moon-rises:refinery-progress', { started: true, phase: 'cleared', killed: [0, 1, 2, 3, 4] });
+  refinery.action({ player, stepId: 'jYDLQy' });
+  refinery.action({ player, stepId: 'jYDLQy' });
+  assert.deepEqual(completions, [player], 'the transcript action emits the handoff once');
+  assert.ok(emitted.every(name => /^[^:\s]+:[^:\s]+$/.test(name)));
+  assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'freed');
+  assert.deepEqual(varbits.at(-1), [15464, 60]);
+});
+
+test('Blood Moon refinery Ivan hook yields outside its own tomb/refinery phases', () => {
+  const { api } = mockApi();
+  const attributes = new Map();
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+  };
+  const npc = { getLocation: () => ({ getX: () => 3417, getY: () => 3487, getZ: () => 1 }) };
+  const refinery = require('../plugins/quests/bmr/Refinery.TheBloodMoonRises')(api);
+  const event = { player, npc, definition: { getName: () => 'Ivan Strom' } };
+  assert.equal(refinery.talkIvan(event), false, 'the unstarted refinery hook must defer to the active quest chapter');
+  attributes.set('the-blood-moon-rises:refinery-progress', { started: true, phase: 'pickaxe' });
+  assert.equal(refinery.talkIvan(event), false, 'the tomb-only pickaxe conversation must defer upstairs in Paterdomus');
+  attributes.set('the-blood-moon-rises:refinery-progress', { started: true, phase: 'cleared' });
+  assert.equal(refinery.talkIvan(event), false, 'the refinery reunion requires this module’s owned residents');
+});
+
+test('Blood Moon rubble dialogue distinguishes a real pickaxe and the refinery waits for all five owned kills', () => {
+  const { api } = mockApi();
+  const vars = [], attrs = new Map();
+  const player = {
+    getAttribute: key => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getPacketSender: () => ({ sendVarbit: (id, value) => vars.push([id, value]) }),
+    getSkillManager: () => ({ getCurrentLevel: () => 1 }),
+    getEquipment: () => ({ getItems: () => [] }),
+    getInventory: () => ({ contains: id => id === 1265 }),
+    sendMessage: () => {},
+  };
+  const refinery = require('../plugins/quests/bmr/Refinery.TheBloodMoonRises')(api);
+  attrs.set('the-blood-moon-rises:refinery-progress', { started: true, phase: 'tomb', killed: [] });
+  assert.equal(refinery.answerCondition({ player, stepId: 'e9a7zZ', pages: [{ page: 'The Blood Moon Rises' }] }), false);
+  assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'tomb');
+  player.getInventory = () => ({ contains: () => false });
+  assert.equal(refinery.answerCondition({ player, stepId: 'e9a7zZ', pages: [{ page: 'The Blood Moon Rises' }] }), true);
+  assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'pickaxe');
+  assert.deepEqual(vars.at(-1), [15464, 52]);
+
+  attrs.set('the-blood-moon-rises:refinery-progress', { started: true, phase: 'fight', killed: [] });
+  const area = { player, cast: new Map(), residents: [], orbs: [] };
+  refinery.sessions.set(player, area);
+  for (let slot = 0; slot < 4; slot++) {
+    const npc = { getOwner: () => player };
+    area.cast.set(slot, npc);
+    refinery.npcDeath({ npc });
+    assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'fight');
+  }
+  const last = { getOwner: () => player };
+  area.cast.set(4, last);
+  refinery.npcDeath({ npc: last });
+  assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'cleared');
+  assert.deepEqual(attrs.get('the-blood-moon-rises:refinery-progress').killed, [0, 1, 2, 3, 4]);
+});
+
+test('Blood Moon refinery vampyres require an equipped flail', () => {
+  const { api } = mockApi();
+  const attrs = new Map();
+  let weaponId = 4151;
+  const equipment = [];
+  equipment[PluginManager.getCoreApi().Equipment.WEAPON_SLOT] = { getId: () => weaponId };
+  const player = {
+    getAttribute: key => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getPacketSender: () => ({ sendVarbit() {} }),
+    getEquipment: () => ({ getItems: () => equipment }),
+    sendMessage: () => {},
+  };
+  const enemy = { getOwner: () => player, getId: () => 16125 };
+  const refinery = require('../plugins/quests/bmr/Refinery.TheBloodMoonRises')(api);
+  refinery.sessions.set(player, { cast: new Map([[0, enemy]]) });
+  const hit = { damage: 12, getAttacker: () => player, setTotalDamage(value) { this.damage = value; } };
+
+  refinery.modifyPlayerHit({ npc: enemy, hit });
+  assert.equal(hit.damage, 0, 'ordinary weapons cannot damage a vampyre');
+
+  weaponId = PluginManager.getCoreApi().ItemIdentifiers.IVANDIS_FLAIL;
+  hit.damage = 12;
+  refinery.modifyPlayerHit({ npc: enemy, hit });
+  assert.equal(hit.damage, 12, 'an equipped Ivandis flail uses normal hit resolution');
+});
+
 test('Fellowship recruitment waits for dialogue continuation and all four heroes before herb growth', () => {
   const { api, handlers, player, attributes } = movarioFixture();
   let progress = 280;
@@ -613,11 +733,91 @@ test('Blood Moon portal entry starts the Castle Drakan chapter where the physica
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
   };
   quest.setStage(player, 30);
   const enter = handlers.objects.find((handler) => handler.name === 'enterVampyriumCastle');
   enter({ player, definition: { getName: () => 'Ominous red portal' }, location: { x: 3161, y: 7710, z: 0 }, handled: false });
+  assert.equal(quest.getStage(player), 30, 'the portal remains blocked until the tomb and refinery route is clear');
+  attributes.set('quest.the_blood_moon_rises.slepe-story', { refineryComplete: true });
+  enter({ player, definition: { getName: () => 'Ominous red portal' }, location: { x: 3161, y: 7710, z: 0 }, handled: false });
   assert.equal(quest.getStage(player), 40);
+});
+
+test('Blood Moon Paterdomus books must be placed on all six matching plinths before Ivandis leads to the tomb', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  const counts = new Map();
+  const bits = new Map();
+  const moveCalls = [];
+  const inventory = {
+    contains: id => (counts.get(id) ?? 0) > 0,
+    getAmount: id => counts.get(id) ?? 0,
+    getFreeSlots: () => 28 - [...counts.values()].filter(value => value > 0).length,
+    adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
+    deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+  };
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => bits.set(id, value) }, { get: (target, key) => target[key] ?? (() => {}) }),
+    moveTo: location => moveCalls.push(location),
+    sendMessage() {},
+  };
+  quest.setStage(player, 30);
+  attributes.set('quest.the_blood_moon_rises.slepe-story', { manorComplete: true, journalRead: true, monksCleared: true, upstairsTalked: true });
+  const syncBooks = handlers.playerLogin.find(handler => handler.name === 'syncPaterdomusBookPuzzle');
+  assert.equal(typeof syncBooks, 'function');
+  syncBooks({ player });
+  handlers.custom.get('player:bootstrap-complete').at(-1)({ player });
+  for (const varbit of [15496, 15492, 15491, 15493, 15495, 15494]) {
+    assert.equal(bits.get(varbit), 0, 'login and bootstrap restore book transforms without treating the event as the player');
+  }
+  const ids = api.core.ItemIdentifiers;
+  const placements = [
+    [ids.ESSIANDARS_NOTES, 3409, 3483], [ids.SARLS_JOURNAL, 3408, 3485],
+    [ids.FROM_MISTHALIN_TO_MORYTANIA, 3409, 3487], [ids.SCRUFFY_NOTEBOOK, 3409, 3490],
+    [ids.THE_LIFE_OF_FRIAR, 3408, 3492], [ids.PIOUS_PROCEEDINGS, 3409, 3494],
+  ];
+  const useBook = handlers.itemOnObject.find(handler => handler.name === 'handlePaterdomusItemOnObject');
+  for (const [itemId, x, y] of placements) inventory.adds(itemId, 1);
+  const wrong = { player, itemId: ids.PIOUS_PROCEEDINGS, location: { x: 3409, y: 3483, z: 1 }, handled: false };
+  useBook(wrong);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.slepe-story').booksPlaced, undefined,
+    'a wrong portrait cannot satisfy the ordered matching puzzle');
+  useBook({ player, itemId: ids.ESSIANDARS_NOTES, location: { x: 3409, y: 3483, z: 1 }, handled: false });
+  assert.equal(inventory.contains(ids.PIOUS_PROCEEDINGS), true,
+    'placing the intended book returns a book that was put on the wrong plinth');
+  for (const [itemId, x, y] of placements.slice(1)) useBook({ player, itemId, location: { x, y, z: 1 }, handled: false });
+  const story = attributes.get('quest.the_blood_moon_rises.slepe-story');
+  assert.equal(story.booksPlaced, true);
+  assert.deepEqual(story.bookPlacements, {});
+  for (const varbit of [15496, 15492, 15491, 15493, 15495, 15494]) assert.equal(bits.get(varbit), 0);
+
+  const action = handlers.custom.get('npc-dialogue:action').find(handler => handler.name === 'onTranscriptAction');
+  const reward = { player, stepId: 'OW0EIY', handled: false };
+  action(reward);
+  assert.equal(reward.handled, true);
+  assert.equal(inventory.contains(ids.IVANDIS_WRITINGS), true);
+  handlers.namedItemActions.get("Ivandis' writings").Read({ player, itemId: ids.IVANDIS_WRITINGS, handled: false });
+  handlers.custom.get('npc-dialogue:choice').find(handler => handler.name === 'onChoice')({ player, option: 'Lead the way.' });
+  const tombStart = attributes.get('quest.the_blood_moon_rises.slepe-story');
+  assert.equal(tombStart.tombRouteStarted, true);
+  assert.equal(quest.getStage(player), 30, 'the tomb handoff does not skip the owned encounter chapter');
+  assert.deepEqual(moveCalls, [], 'arrival waits for the transcript departure cue');
+  action({ player, stepId: 'y37Yph' });
+  assert.equal(moveCalls.length, 1);
+  assert.deepEqual([moveCalls[0].getX(), moveCalls[0].getY(), moveCalls[0].getZ()], [3507, 9860, 0],
+    'the departure cue places the party beside the cache-backed blockage in the tomb');
+  assert.match('tob:bmr-start', /^[^:\s]+:[^:\s]+$/);
+  assert.match('tob:bmr-completed', /^[^:\s]+:[^:\s]+$/);
+  handlers.custom.get('bmr:refinery-completed').at(-1)({ player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.slepe-story').refineryComplete, true);
 });
 
 test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes before the siege stage', () => {
@@ -1335,7 +1535,7 @@ test('Blood Moon starts the scoped Theatre encounter and advances after Vasilias
   };
   quest.setStage(player, 80);
   let started = 0;
-  api.onCustomEvent('tob:bmr:start', ({ player: eventPlayer }) => {
+  api.onCustomEvent('tob:bmr-start', ({ player: eventPlayer }) => {
     assert.equal(eventPlayer, player);
     started++;
   });
@@ -1347,7 +1547,7 @@ test('Blood Moon starts the scoped Theatre encounter and advances after Vasilias
   const originalForId = npcDefinition.forId;
   npcDefinition.forId = (id) => ({ getId: () => id, getName: () => 'Sugadinti Vitur' });
   try {
-    api.emitCustomEvent('tob:bmr:completed', { player });
+    api.emitCustomEvent('tob:bmr-completed', { player });
   } finally {
     npcDefinition.forId = originalForId;
   }
@@ -5224,6 +5424,8 @@ test('Song of the Elves starts the post-library council and switches Baxtorian a
   runtime.startTranscript = (...args) => (started.push(args.slice(1)), true);
   try { require('../plugins/quests/quests/SongOfTheElves.Quest')(api); }
   finally { runtime.startTranscript = original; }
+  assert.ok(handlers.custom.has('song-of-the-elves:claims-light-pillar'));
+  assert.match('song-of-the-elves:claims-light-pillar', /^[^:\s]+:[^:\s]+$/);
   const quest = runtime.getRegisteredQuests().filter((entry) => entry.key === 'song_of_the_elves').at(-1);
   assert.ok(persistedAttributes.includes('quest.song_of_the_elves.revelations-meeting-started'));
   const attributes = new Map();
@@ -9066,7 +9268,7 @@ test('Blood Moon ToB entry waits at the Nylocas barrier and exposes four quest e
     setHitpoints() {}, getHitpoints: () => 99,
   };
   entry(api);
-  handlers.custom.get('tob:bmr:start')[0]({ player });
+  handlers.custom.get('tob:bmr-start')[0]({ player });
   const raid = entry._test.RAIDS.get(player);
   assert.deepEqual(inventory,[api.core.ItemIdentifiers.ESCAPE_CRYSTAL_2], 'the scoped run supplies its normal escape crystal');
   assert.equal(raid.mode, 'bmr');
@@ -9096,7 +9298,7 @@ test('Blood Moon ToB entry waits at the Nylocas barrier and exposes four quest e
 
   raid.bmrIndex = entry._test.BMR_ENCOUNTERS.length - 1;
   entry._test.roomComplete(raid);
-  assert.equal(emitted.filter(([name]) => name === 'tob:bmr:completed').length, 1);
+  assert.equal(emitted.filter(([name]) => name === 'tob:bmr-completed').length, 1);
 });
 
 

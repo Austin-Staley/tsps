@@ -3148,7 +3148,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onWalkRoute(routeToLadyHefin);
   api.onObjectRoute(routeYsgawynLeafTrap);
   api.onCustomEvent("ladders:climb", claimCastleThroneStairs);
-  api.onCustomEvent("quest:song-of-the-elves:claims-light-pillar", claimFallsPillarLocation);
+  api.onCustomEvent("song-of-the-elves:claims-light-pillar", claimFallsPillarLocation);
   api.registerArea(new LletyaStoryArea([
     new Boundary(2320, 2390, 3150, 3210, 0), new Boundary(2320, 2390, 3150, 3210, 1),
   ]));

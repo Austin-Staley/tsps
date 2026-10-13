@@ -221,7 +221,7 @@ function roomComplete(raid) {
   }
   if(raid.mode==="bmr") {
     raid.player.sendMessage("The encounter is complete. Use the passage to continue.");
-    if(raid.bmrIndex===BMR_ENCOUNTERS.length-1)api.emitCustomEvent("tob:bmr:completed",{player:raid.player});
+    if(raid.bmrIndex===BMR_ENCOUNTERS.length-1)api.emitCustomEvent("tob:bmr-completed",{player:raid.player});
   }
 }
 function leave(raid, teleport=true) {
@@ -745,7 +745,7 @@ module.exports=function registerEntryTheatreOfBlood(pluginApi) {
   api.onNpcBeforeDeath(verzikBeforeDeath);
   api.onNpcDeath(npcDeath);
   api.onCustomEvent("npc-drops:generated",drops);
-  api.onCustomEvent("tob:bmr:start",startBmr);
+  api.onCustomEvent("tob:bmr-start",startBmr);
   api.onCustomEvent("tob:has-completion",hasCompletion);
   api.onCustomEvent("combat-special:can-use",allowDawnbringer);
   api.onShouldDropItemsOnDeath(keepItems);
