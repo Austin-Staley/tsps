@@ -1435,6 +1435,22 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
   }
 
+  function handleWyrdBeforeDeath(event) {
+    const npc = event?.npc;
+    const area = npc?.getArea?.();
+    const encounter = area && wyrdEncounters.get(area);
+    if (!encounter || npc !== encounter.boss || encounter.finished || event.preventDeath) return;
+    // The story cutscene happens at 10% health, not after the NPC's death task.
+    // Preserve the boss at that threshold when one large hit would otherwise kill it.
+    event.preventDeath = true;
+    npc.setHitpoints(110);
+    if (!encounter.ending) {
+      encounter.ending = true;
+      encounter.thresholdsSeen.add(10);
+      startTranscript(api, encounter.player, npc.getId(), PAGE, "fighting-wyrds-upon-reaching-10-hp");
+    }
+  }
+
   function inspectWyrdFence(event) {
     const player = event?.player;
     const name = String(event?.definition?.getName?.() ?? "").toLowerCase();
@@ -5323,6 +5339,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogout(cleanupSlepeIvan);
   api.onPlayerLogout(cleanupSlepeManor);
   api.onNpcDeath(handleWyrdDeath);
+  api.onNpcBeforeDeath(handleWyrdBeforeDeath);
   api.onNpcDeath(handleSlepeManorDeath);
   api.onNpcDeath(handlePaterdomusMonkDeath);
   api.onNpcDeath(handleCastleNpcDeath);

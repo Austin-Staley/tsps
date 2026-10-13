@@ -3482,6 +3482,7 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
   const attackDelays = [];
   const stepsBack = [];
   const prayers = [];
+  let transcriptStarts = 0;
   let canKnockback = true;
   const boss = {
     isNpc: () => true,
@@ -3511,7 +3512,7 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     getUsername: () => 'WyrdFightTest',
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
-    getDialogueManager: () => ({ reset() {}, startDialogues() {}, getCurrent: () => null }),
+    getDialogueManager: () => ({ reset() {}, startDialogues() { transcriptStarts++; }, getCurrent: () => null }),
     isPlayer: () => true,
     isNpc: () => false,
     getAsPlayer: () => player,
@@ -3603,6 +3604,16 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     worldCycle++;
     bossArea.process(boss);
     assert.ok(graphics.some(([id]) => id === 3861), 'the blast uses lightning to clear an escape lane');
+
+    boss.hitpoints = 0;
+    const beforeDeath = handlers.npcBeforeDeath.find((handler) => handler.name === 'handleWyrdBeforeDeath');
+    assert.equal(typeof beforeDeath, 'function', 'the Wyrd guards the narrative threshold before NPCDeathTask');
+    const lethalHit = { npc: boss, preventDeath: false };
+    const dialoguesBeforeLethalHit = transcriptStarts;
+    beforeDeath(lethalHit);
+    assert.equal(lethalHit.preventDeath, true);
+    assert.equal(boss.getHitpoints(), 110, 'an overkill hit preserves the Wyrd at the documented 10% cutscene threshold');
+    assert.ok(transcriptStarts > dialoguesBeforeLethalHit, 'the 10% transcript starts before the NPC enters its death task');
   } finally {
     api.core.World.getProcessCycle = oldCycle;
     Math.random = originalRandom;
