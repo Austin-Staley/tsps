@@ -2844,7 +2844,7 @@ module.exports = function registerSongOfTheElves(api) {
     // There is no walkable interaction tile beside the colliding staircase.
     // Keep the click at the player's current tile; `ladders:climb` performs the
     // same paired-floor transition as the cache staircase action.
-    event.destination = { ...event.sourceLocation };
+    event.destination = prison ? { x: 2571, y: 3293, z: 0 } : { ...event.sourceLocation };
   }
 
   function claimCastleThroneStairs(event) {
@@ -2857,7 +2857,7 @@ module.exports = function registerSongOfTheElves(api) {
       return;
     }
     if (event.objectId === PRISON_EXIT && x === 2564 && y === 9710 && z === 0) {
-      api.emitCustomEvent("ladders:climbUp", { player: event.player, destination: new Location(2570, 3294, 0) });
+      api.emitCustomEvent("ladders:climbUp", { player: event.player, destination: new Location(2571, 3293, 0) });
       event.handled = true;
       return;
     }

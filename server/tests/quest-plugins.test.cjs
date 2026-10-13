@@ -12390,6 +12390,10 @@ test('Song of the Elves prison entry keeps Elena visible and cannot release her 
     assert.deepEqual([climbs[0][1].getX(), climbs[0][1].getY()], [2565, 9709]);
     assert.equal(api.core.RegionManager.getClipping(2565, 9709, 0, null), 0);
     assert.equal(transcripts.at(-1), 'freeing-elena-upon-entering-the-prison');
+    claim({ player, objectId: 35792, object: { getLocation: () => new api.core.Location(2564, 9710, 0) } });
+    assert.deepEqual([climbs[1][1].getX(), climbs[1][1].getY()], [2571, 3293]);
+    assert.equal(api.core.RegionManager.getClipping(2571, 3293, 0, null), 0, 'exit lands on clear castle floor');
+    assert.equal(api.core.RegionManager.canMove(2571, 3293, 2572, 3293, 0, 1, 1, null), true);
     const talk = handlers.npcInteractions.get('Edmond')['Talk-to'];
     talk({ player, npcId: api.core.NpcIdentifiers.EDMOND_2, definition: { getName: () => 'Edmond' } });
     assert.equal(quest.getStage(player), 30, 'Edmond cannot skip Elena’s chemical handoff');
