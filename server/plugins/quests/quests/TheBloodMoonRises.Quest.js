@@ -140,6 +140,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     SANGUIDAE: 16223,
     VENATOR: 16213,
     VENATOR_5: 16217,
+    VENATOR_LIBRARY: 16216,
   });
   const CASTLE_ROOM = Object.freeze({
     LOBBY: 1, DINING: 2, THRONE: 3, SOUTH_OF_THRONE: 4, EAST_STAIR_GROUND: 5, STORAGE: 6,
@@ -2892,7 +2893,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
     if (progress >= 76) {
       if (!story.defeated.includes("library-venator"))
-        spawnCastleActor(player, "library-venator", CASTLE_NPC.VENATOR, [2456, 7392], true);
+        // The captured quest fight is in the Gibbous puzzle room. The NPC
+        // walks at (2521,7368), beside the fireplace and mounted head; the
+        // separate bookshelf room at x2456 is reached only after the fight.
+        spawnCastleActor(player, "library-venator", CASTLE_NPC.VENATOR_LIBRARY, [2521, 7368], true);
       if (story.defeated.includes("library-venator") && !story.talkedToIvan)
         spawnCastleActor(player, "ivan-library", CASTLE_NPC.IVAN_LIBRARY, [2455, 7389]);
     }

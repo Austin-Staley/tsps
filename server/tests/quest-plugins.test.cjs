@@ -1275,6 +1275,40 @@ test('Blood Moon Castle story actors use cache-walkable floor anchors', () => {
   }
 });
 
+test('Blood Moon stage 76 spawns the recorded Venator in the Gibbous puzzle room', () => {
+  const { api, handlers } = mockApi();
+  const spawned = [];
+  api.spawnNpc = spec => { spawned.push(spec); return { ...spec, getHitpoints: () => 345, setScriptedMovement() {}, setMultiCombat() {} }; };
+  api.removeNpc = () => {};
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.castle-native-stage', 76],
+    ['quest.the_blood_moon_rises.castle-room', 39],
+    ['quest.the_blood_moon_rises.castle-floor', 2],
+    ['quest.the_blood_moon_rises.castle-story', { prisonersFound: true, defeated: [] }],
+  ]);
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(2516, 7367, 0), moveTo() {},
+    getInventory: () => ({ contains: () => false }), getUsername: () => 'castle-venator-anchor',
+    getPacketSender: () => new Proxy({ sendVarbit() {} }, { get: (target, key) => target[key] ?? (() => {}) }),
+  };
+  quest.setStage(player, 40);
+  handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
+  const venator = spawned.find(npc => npc.id === 16216);
+  assert.ok(venator, 'spawn the captured Castle Drakan Venator variant');
+  assert.deepEqual([venator.x, venator.y, venator.z], [2521, 7368, 0],
+    'the primary RSProx quest recording places the fight at the Gibbous puzzle room');
+  assert.equal(venator.owner, player);
+  assert.equal(venator.ownerOnly, true);
+  assert.equal(api.core.RegionManager.getClipping(venator.x, venator.y, venator.z) & api.core.RegionManager.BLOCKED_TILE, 0);
+  assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) =>
+    api.core.RegionManager.canMove(venator.x, venator.y, venator.x + dx, venator.y + dy, venator.z, 1, 1, null)),
+  'the recorded encounter tile has a real adjacent movement edge');
+});
+
 test('Blood Moon prisoner scene waits for the transcript, then leaves the player by the bench key', () => {
   const { api, handlers } = mockApi();
   api.spawnNpc = spec => ({ ...spec, getHitpoints: () => 10, setScriptedMovement() {} });
