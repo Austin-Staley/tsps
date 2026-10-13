@@ -162,10 +162,16 @@ function hesporiProcess({ player }) {
     const fight = FIGHTS.get(player);
     if (!fight) return;
     if (player.getArea() !== fight.area) { hesporiLogout({ player }); return; }
+    if (fight.quest) keepQuestHesporiEngaged(fight);
     if (fight.vinesUntil && core.World.getProcessCycle() >= fight.vinesUntil) {
         releaseVines(fight);
         player.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(40 + Math.floor(Math.random() * 11), core.HitMask.RED)]);
     }
+}
+function keepQuestHesporiEngaged(fight) {
+    if (!fight?.quest || !fight.boss || fight.boss.getHitpoints() <= 0) return false;
+    fight.boss.getCombat().getLastAttack().reset();
+    return true;
 }
 function hesporiLoot(event) {
     const fight = NPC_FIGHTS.get(event.npc);
@@ -260,4 +266,4 @@ function hesporiCave(event) {
     }
 }
 
-Object.assign(module.exports, { questHesporiDeath, challengeHespori, harvestHespori, HesporiCombat, hesporiHitRoll, hesporiCanAttack, hesporiHit, hesporiDamage, hesporiInput, hesporiProcess, hesporiLoot, hesporiLogout, hesporiDeathDrop, hesporiPlayerDeath, hesporiNpc, hesporiCave });
+Object.assign(module.exports, { questHesporiDeath, challengeHespori, harvestHespori, HesporiCombat, hesporiHitRoll, hesporiCanAttack, hesporiHit, hesporiDamage, hesporiInput, hesporiProcess, keepQuestHesporiEngaged, hesporiLoot, hesporiLogout, hesporiDeathDrop, hesporiPlayerDeath, hesporiNpc, hesporiCave });
