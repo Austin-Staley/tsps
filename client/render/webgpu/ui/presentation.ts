@@ -68,7 +68,8 @@ export class WebgpuUiPresentation {
 
         if (renderer.uiHidden) {
             this.hide(this.loginCanvas);
-            this.hide(this.hudFxCanvas);
+            if (osrsClient.isLoggedIn()) this.updateHudFx(timeMs, deltaMs, bufW, bufH);
+            else this.hide(this.hudFxCanvas);
             return;
         }
 
@@ -304,6 +305,21 @@ export class WebgpuUiPresentation {
         this.hudFxCtx = ctx;
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, bufW, bufH);
+        // Sky clears and HD/FXAA cover the full target; mask them without clipping canvas input.
+        const viewport = this.renderer.getSceneViewportWidgetRect();
+        const hasGutters =
+            viewport.x > 0 || viewport.y > 0 ||
+            viewport.x + viewport.width < bufW || viewport.y + viewport.height < bufH;
+        if (hasGutters) {
+            ctx.fillStyle = "#000000";
+            ctx.fillRect(0, 0, bufW, bufH);
+            ctx.clearRect(viewport.x, viewport.y, viewport.width, viewport.height);
+        }
+        if (this.renderer.uiHidden) {
+            if (hasGutters) this.show(canvas);
+            else this.hide(canvas);
+            return;
+        }
 
         const rootInterface = osrsClient.widgetManager?.rootInterface ?? -1;
         if (rootInterface === WELCOME_SCREEN_GROUP_ID) {
@@ -318,7 +334,7 @@ export class WebgpuUiPresentation {
         const args = makeOverlayArgs(timeMs, deltaMs, bufW, bufH);
         this.loadingMessageOverlay.update(args);
         this.systemUpdateOverlay.update(args);
-        let hasContent = false;
+        let hasContent = hasGutters;
         if (this.loadingMessageOverlay.isVisible()) {
             this.loadingMessageOverlay.drawTo2D(ctx);
             hasContent = true;
