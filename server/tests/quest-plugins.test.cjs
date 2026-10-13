@@ -5558,6 +5558,18 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   assert.deepEqual(attrs.get('desert-treasure-ii:sucellus-vats'), {});
   assert.ok(recoveredArea.getObjects().some(object => object.getId() === O.MUSCA_MUSHROOMS));
   assert.ok(recoveredArea.getObjects().some(object => object.getId() === O.ARDER_MUSHROOMS));
+
+  // Older saves have no attempt marker. A consumed persisted poison counter
+  // with no poison item is enough evidence to restore the normal recipe too.
+  attrs.set('desert-treasure-ii:sucellus-encounter-started', false);
+  attrs.set('desert-treasure-ii:sucellus-poisons', 2);
+  attrs.set('desert-treasure-ii:sucellus-mushrooms', { musca: 3, arder: 3 });
+  attrs.set('desert-treasure-ii:sucellus-vats', { filled: { powders: [I.MUSCA_POWDER, I.ARDER_POWDER], salt: 6 } });
+  attrs.delete('desert-treasure-ii:sucellus-area');
+  login({ player });
+  assert.equal(attrs.get('desert-treasure-ii:sucellus-poisons'), 0);
+  assert.deepEqual(attrs.get('desert-treasure-ii:sucellus-mushrooms'), { musca: 0, arder: 0 });
+  assert.deepEqual(attrs.get('desert-treasure-ii:sucellus-vats'), {});
 });
 
 

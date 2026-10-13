@@ -1852,7 +1852,9 @@ module.exports = function registerDesertTreasureII(api) {
       area.enter(p);
       p.setAttribute(SUCELLUS_AREA, area);
       if (!Number.isFinite(Number(p.getAttribute(SUCELLUS_POISONS)))) p.setAttribute(SUCELLUS_POISONS, 0);
-      if (p.getAttribute(SUCELLUS_ENCOUNTER_STARTED) && !p.getAttribute(SUCELLUS_DEFEATED)) {
+      const interruptedAttempt = p.getAttribute(SUCELLUS_ENCOUNTER_STARTED)
+        || ((Number(p.getAttribute(SUCELLUS_POISONS)) || 0) > 0 && !has(p, I.ARDER_MUSCA_POISON));
+      if (interruptedAttempt && !p.getAttribute(SUCELLUS_DEFEATED)) {
         // The encounter NPC and its HP live only in the private area. If that
         // area is rebuilt after logout/server restart, refund the consumable
         // recipe progress so the normal cache suppliers can make two fresh
