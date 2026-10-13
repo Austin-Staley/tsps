@@ -166,7 +166,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.DOOR_M, x: 2348, y: 7383, z: 0, from: CASTLE_ROOM.STORAGE, to: CASTLE_ROOM.WEST_DINING,
       fromFloor: 1, toFloor: 1, landing: [2324, 7395] },
     { id: CASTLE_DOOR_IDS.SPIRAL_UP, x: 2339, y: 7383, z: 0, from: CASTLE_ROOM.STORAGE, to: CASTLE_ROOM.EXPLOSIVE_ROOM,
-      fromFloor: 1, toFloor: 1, action: "Climb-up", landing: [2434, 7386] },
+      fromFloor: 1, toFloor: 1, action: "Climb-up", landing: [2437, 7386] },
     { id: CASTLE_DOOR_IDS.SPIRAL_DOWN, x: 2435, y: 7386, z: 0, from: CASTLE_ROOM.EXPLOSIVE_ROOM, to: CASTLE_ROOM.STORAGE,
       fromFloor: 1, toFloor: 1, action: "Climb-down", landing: [2341, 7384] },
     { id: CASTLE_DOOR_IDS.DOOR_M, x: 2439, y: 7384, z: 0, from: CASTLE_ROOM.EXPLOSIVE_ROOM, to: CASTLE_ROOM.EMBLEM_ROOM,
@@ -1848,6 +1848,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.setAttribute(CASTLE_FLOOR_ATTRIBUTE, floor);
     player.getPacketSender().sendVarbit(CASTLE_WORLD_MAP_FLOOR_VARBIT, floor);
     player.getPacketSender().sendVarbit(CASTLE_LAST_ROOM_VARBIT, room);
+    syncCastleExplosiveBarrel(player);
   }
 
   function syncCastleRoomOnLogin({ player }) {
@@ -1886,6 +1887,12 @@ module.exports = function registerTheBloodMoonRises(api) {
   function repairLegacyCastleLanding(player) {
     if (!player || stage(player) !== STAGE.CASTLE) return;
     const location = player.getLocation?.();
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.EXPLOSIVE_ROOM &&
+      location?.getX?.() === 2434 && location.getY() === 7386 && location.getZ() === 0) {
+      // RSProx's current OSRS recording shows the usable explosive-room arrival at 2437,7386.
+      player.moveTo(new Location(2437, 7386, 0));
+      return;
+    }
     if (!location || location.getX() !== CASTLE_LEGACY_BLOCKED_ARRIVAL.x ||
       location.getY() !== CASTLE_LEGACY_BLOCKED_ARRIVAL.y || location.getZ() !== CASTLE_LEGACY_BLOCKED_ARRIVAL.z) return;
     // Older builds used a nearby NPC/cutscene marker as the player's arrival.
@@ -3418,6 +3425,34 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.sendMessage(`You set the ${hand === "large" ? "large" : "small"} clock hand to ${value}.`);
   }
 
+  function syncCastleExplosiveBarrel(player) {
+    if (!player || stage(player) !== STAGE.CASTLE ||
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.EXPLOSIVE_ROOM ||
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== CASTLE_GROUND_FLOOR ||
+      !hasItem(player, ItemIdentifiers.TINDERBOX) || hasItem(player, ItemIdentifiers.EXPLOSIVE_BARREL)) return;
+    const manager = api.getItemOnGroundManager?.();
+    if (!manager?.registerLocation) return;
+    const tile = new Location(2439, 7388, 0);
+    if (!manager.getGroundItem?.(player.getUsername?.(), ItemIdentifiers.EXPLOSIVE_BARREL, tile,
+      player.getPrivateArea?.() ?? null)) {
+      manager.registerLocation(player, new Item(ItemIdentifiers.EXPLOSIVE_BARREL, 1), tile);
+    }
+  }
+
+  function handleCastleExplosiveBarrelPickup(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.getX?.() ?? tile?.x;
+    const y = tile?.getY?.() ?? tile?.y;
+    const z = tile?.getZ?.() ?? tile?.z;
+    if (!player || event?.groundItemId !== ItemIdentifiers.EXPLOSIVE_BARREL || stage(player) !== STAGE.CASTLE ||
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.EXPLOSIVE_ROOM ||
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== CASTLE_GROUND_FLOOR ||
+      x !== 2439 || y !== 7388 || z !== 0 || hasItem(player, ItemIdentifiers.TINDERBOX)) return;
+    event.handled = true;
+    player.sendMessage("The explosive barrel needs a tinderbox before you can take it.");
+  }
+
   function promptClockValue(player, side, hand) {
     const choices = [];
     for (let value = 0; value < 12; value++) {
@@ -3432,6 +3467,34 @@ module.exports = function registerTheBloodMoonRises(api) {
     const { x, y, z } = event.location ?? {};
     if (z !== 0) return;
     const state = player.getAttribute(CLOCK_ATTRIBUTE) ?? { west: {}, east: {}, emblem: false };
+    const room = Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) || CASTLE_ROOM.LOBBY;
+    const floor = Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) || CASTLE_GROUND_FLOOR;
+    const visibleId = event.definition?.id ?? event.objectId;
+    if (visibleId === 61691 && x === 2344 && y === 7387) {
+      event.handled = true;
+      if (room !== CASTLE_ROOM.STORAGE || floor !== CASTLE_GROUND_FLOOR) {
+        player.sendMessage("The sparkling crate belongs to the storage room below the explosive-barrel chamber.");
+        return;
+      }
+      if (!giveInventoryItem(player, ItemIdentifiers.TINDERBOX,
+        "Make room in your inventory before taking the tinderbox.")) return;
+      player.setAttribute(CLOCK_ATTRIBUTE, { ...state, tinderboxClaimed: true });
+      player.sendMessage("You search the sparkling crate and take a tinderbox.");
+      return;
+    }
+    if (visibleId === 61751 && x === 2454 && y === 7378) {
+      event.handled = true;
+      if (room !== CASTLE_ROOM.EMBLEM_ROOM || floor !== CASTLE_GROUND_FLOOR ||
+        !hasItem(player, ItemIdentifiers.TINDERBOX) || !hasItem(player, ItemIdentifiers.EXPLOSIVE_BARREL)) {
+        player.sendMessage("The crate is in the room south of the explosive-barrel chamber. First take the tinderbox and barrel.");
+        return;
+      }
+      if (!giveInventoryItem(player, ItemIdentifiers.DRAKAN_EMBLEM,
+        "Make room in your inventory before taking the Drakan emblem.")) return;
+      player.setAttribute(CLOCK_ATTRIBUTE, { ...state, firstEmblemClaimed: true });
+      player.sendMessage("You search the crate and take a Drakan emblem.");
+      return;
+    }
     if (event.objectId === 61752 && x === 2323 && y === 7386) {
       event.handled = true;
       if (!giveInventoryItem(player, ItemIdentifiers.SMALL_CLOCK_HAND, "Make room in your inventory before taking the small clock hand.")) return;
@@ -4121,6 +4184,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("player:widget-action", handleCastleBookWidgetAction);
   api.onGroundItemPickup(handleCastleBookPickup);
   api.onGroundItemPickup(handleCastleKeyPickup);
+  api.onGroundItemPickup(handleCastleExplosiveBarrelPickup);
   api.onObjectRoute(routeCastleDoorEnter);
   api.onObjectInteraction(handleCastleBasinPuzzle);
   api.onObjectInteraction(handleBasinAltar);

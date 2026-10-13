@@ -1071,6 +1071,32 @@ test('Blood Moon reconciles the Castle lobby floor varbit from the saved lobby p
   assert.equal(varbits.get(15489), 2);
 });
 
+test('Blood Moon repairs the saved explosive-room stair landing to the recorded reachable side', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.stage', 40],
+    ['quest.the_blood_moon_rises.castle-room', 28],
+    ['quest.the_blood_moon_rises.castle-floor', 1],
+    ['quest.the_blood_moon_rises.castle-native-stage', 72],
+  ]);
+  const moved = [];
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(2434, 7386, 0),
+    moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
+    getInventory: () => ({ contains: () => false }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+  };
+  handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
+  assert.deepEqual(moved, [[2437, 7386, 0]], 'the recorded landing is on the connected side of the stair wall');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.stage'), 40);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 28);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 72);
+});
+
 test('Blood Moon Castle story actors use cache-walkable floor anchors', () => {
   const { api, handlers } = mockApi();
   const spawned = [];
@@ -1699,7 +1725,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
       `the Castle transition ${id} at ${x},${y},${z} matches the placed cache door`);
   }
   const pairedDoorLandingTiles = [[2342, 7372, 0], [2327, 7362, 0], [2305, 7391, 0], [2357, 7366, 0],
-    [2338, 7395, 0], [2337, 7370, 0], [2347, 7383, 0], [2324, 7395, 0], [2434, 7386, 0], [2341, 7384, 0],
+    [2338, 7395, 0], [2337, 7370, 0], [2347, 7383, 0], [2324, 7395, 0], [2437, 7386, 0], [2341, 7384, 0],
     [2455, 7380, 0], [2439, 7386, 0], [2468, 7395, 0], [2443, 7386, 0], [2314, 7359, 1], [2474, 7397, 0],
     [2456, 7417, 0], [2313, 7381, 1], [2314, 7370, 1], [2314, 7369, 0],
     [2451, 7403, 0], [2456, 7417, 0], [2481, 7404, 0], [2476, 7409, 0],
@@ -1903,7 +1929,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   const stairsUp = { player, objectId: 61602, clickType: 1, option: 'Climb-up',
     definition: { id: 61602, getName: () => 'Stairs' }, location: { x: 2339, y: 7383, z: 0 }, handled: false };
   enter(stairsUp);
-  assert.deepEqual(moved.at(-1), [2434, 7386, 0], 'the storage spiral stairs lead to the actual explosive room');
+  assert.deepEqual(moved.at(-1), [2437, 7386, 0], 'the storage spiral stairs lead to the recorded walkable side of the explosive room');
   assert.equal(varbits.get(15499), 28);
   const stairsDown = { player, objectId: 61604, clickType: 1, option: 'Climb-down',
     definition: { id: 61604, getName: () => 'Stairs' }, location: { x: 2435, y: 7386, z: 0 }, handled: false };
@@ -2072,6 +2098,69 @@ test('Blood Moon clocks require the proper hands and both poem times before the 
   interact({ player, objectId: 61657, location: { x: 2350, y: 7372, z: 0 }, handled: false });
   interact({ player, objectId: 61662, location: { x: 2346, y: 7372, z: 0 }, handled: false });
   assert.equal(inventory.contains(api.core.ItemIdentifiers.DRAKAN_EMBLEM_2), true);
+});
+
+test('Blood Moon Castle supplies the tinderbox, gated explosive barrel, and first emblem in their rooms', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  const counts = new Map();
+  const inventory = {
+    contains: (id) => (counts.get(id) ?? 0) > 0,
+    adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
+    deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+  };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    getUsername: () => 'bmr-supply-test',
+    getPrivateArea: () => null,
+    sendMessage() {},
+  };
+  quest.setStage(player, 40);
+  const I = api.core.ItemIdentifiers;
+  attributes.set('quest.the_blood_moon_rises.castle-room', 6);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 1);
+  const interact = handlers.objects.find((handler) => handler.name === 'handleCastleClocks');
+  const tinderboxCrate = (x = 2344, y = 7387) => interact({
+    player, definition: { id: 61691 }, objectId: 61691, location: { x, y, z: 0 }, handled: false,
+  });
+  tinderboxCrate(2343, 7387);
+  assert.equal(inventory.contains(I.TINDERBOX), false, 'the source is tied to the actual cache crate tile');
+  tinderboxCrate();
+  assert.equal(inventory.contains(I.TINDERBOX), true);
+
+  let spawned;
+  api.getItemOnGroundManager = () => ({
+    getGroundItem: () => null,
+    registerLocation: (owner, item, location) => { spawned = { owner, item, location }; },
+  });
+  attributes.set('quest.the_blood_moon_rises.castle-room', 28);
+  handlers.playerLogin.find((handler) => handler.name === 'syncCastleRoomOnLogin')({ player });
+  assert.equal(spawned.item.getId(), I.EXPLOSIVE_BARREL);
+  assert.deepEqual([spawned.location.getX(), spawned.location.getY(), spawned.location.getZ()], [2439, 7388, 0]);
+
+  const pickup = handlers.ground.find((handler) => handler.name === 'handleCastleExplosiveBarrelPickup');
+  const rejected = { player, groundItemId: I.EXPLOSIVE_BARREL, location: { x: 2439, y: 7388, z: 0 }, handled: false };
+  inventory.deleteNumber(I.TINDERBOX, 1);
+  pickup(rejected);
+  assert.equal(rejected.handled, true, 'the barrel cannot be taken without its tinderbox');
+  inventory.adds(I.TINDERBOX, 1);
+  const accepted = { ...rejected, handled: false };
+  pickup(accepted);
+  assert.equal(accepted.handled, false, 'the ordinary ground-item pickup handles the correctly prepared barrel');
+
+  attributes.set('quest.the_blood_moon_rises.castle-room', 25);
+  inventory.adds(I.EXPLOSIVE_BARREL, 1);
+  const emblemCrate = () => interact({
+    player, definition: { id: 61751 }, objectId: 61751, location: { x: 2454, y: 7378, z: 0 }, handled: false,
+  });
+  emblemCrate();
+  assert.equal(inventory.contains(I.DRAKAN_EMBLEM), true, 'the room crate yields the first Drakan emblem after the barrel setup');
 });
 
 test('Blood Moon gallery chest arrow puzzle resets mistakes and gives the crescent key after the right sequence', () => {
