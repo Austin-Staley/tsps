@@ -4722,6 +4722,9 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(player.location.getX(), 2648, 'the real QH cathedral approach triggers the blackout to Ketla’s house');
     assert.equal(player.location.getY(), 6442);
     assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-after-coming-to');
+    playerProcesses[0]({ player });
+    assert.ok(spawnedNpcs.some((npc) => npc.id === core.NpcIdentifiers.KETLA && npc.x === 2648 && npc.y === 6442
+      && npc.owner === player && npc.ownerOnly), 'Ketla is present at her canonical Western Residential District tile after the scene');
     counts.set(core.ItemIdentifiers.RING_OF_VISIBILITY, 1);
     interactions.find((entry) => entry.name === 'Ketla').options['Talk-to']({ player, npcId: core.NpcIdentifiers.KETLA });
     assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-with-the-ring-of-visibility');
@@ -4730,6 +4733,12 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-with-the-ring-of-visibility-reclaiming-the-blackstone-fragment');
     actionHooks[0]({ player, stepId: '5mQjA2' });
     assert.equal(counts.get(core.ItemIdentifiers.BLACKSTONE_FRAGMENT), 1);
+    const ringShownState = attrs.get('desert-treasure-ii:lassar');
+    counts.set(core.ItemIdentifiers.BLACKSTONE_FRAGMENT, 0);
+    attrs.set('desert-treasure-ii:lassar', { ...ringShownState, blackstone: false });
+    actionHooks[0]({ player, stepId: 'FLyW0o' });
+    assert.equal(counts.get(core.ItemIdentifiers.BLACKSTONE_FRAGMENT), 1,
+      'the initial Ring of Visibility transcript action grants the blackstone fragment too');
     interactions.find((entry) => entry.name === 'Ketla').options['Talk-to']({ player, npcId: core.NpcIdentifiers.KETLA });
     assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-with-a-schematic');
     actionHooks[0]({ player, stepId: 'tOep7b' });

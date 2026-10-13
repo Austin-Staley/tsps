@@ -3149,6 +3149,7 @@ module.exports = function registerDesertTreasureII(api) {
     if (current && current === p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT) && current.defended) p.setAttribute(VARDORVIS_PROGRESS, 9);
     const owned = spawned.get(p);
     if (owned?.prescott) api.removeNpc(owned.prescott);
+    if (owned?.lassarKetla) api.removeNpc(owned.lassarKetla);
     for (const key of [ATTR_VAULT_AREA, FINAL_ROOM, ATTR_WAR_ROOM, ATTR_STRANGLEWOOD_HIDEOUT, ATTR_STRANGLEWOOD_TEMPLE, ATTR_VARDORVIS_AREA, ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO, ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA, SUCELLUS_AREA]) {
       const area = p.getAttribute(key);
       if (area && !area.isDestroyed?.()) {
@@ -3325,6 +3326,9 @@ module.exports = function registerDesertTreasureII(api) {
     const lassarState = p.getAttribute(LASSAR) ?? {};
     ensureLassarIntroItems(p, lassarState);
     const position = p.getLocation?.();
+    if (lassarState.cameTo && position
+      && Math.abs(position.getX?.() - 2648) <= 16 && Math.abs(position.getY?.() - 6442) <= 16
+      && (position.getZ?.() ?? 0) === 0) ensureLassarKetla(p);
     if (!lassarState.cameTo && (lassarState.teleporters ?? []).slice(0, 6).length === 6
       && lassarState.teleporters.slice(0, 6).every(Boolean)
       && position?.getX?.() === 2656 && position?.getY?.() === 6386 && position?.getZ?.() === 0) {
@@ -5683,6 +5687,14 @@ module.exports = function registerDesertTreasureII(api) {
     return owned.prescott;
   }
 
+  function ensureLassarKetla(p) {
+    let owned = spawned.get(p);
+    if (!owned) spawned.set(p, owned = {});
+    if (owned.lassarKetla?.isRegistered?.()) return owned.lassarKetla;
+    owned.lassarKetla = api.spawnNpc({ id: N.KETLA, x: 2648, y: 6442, z: 0, wanderRadius: 0, owner: p, ownerOnly: true });
+    return owned.lassarKetla;
+  }
+
   function startFinalCellLock(p) {
     if (!p.getAttribute(FINAL_CELL_SOLUTION)) {
       p.setAttribute(FINAL_CELL_SOLUTION, Array.from({ length: 4 }, () => Math.floor(Math.random() * 10)).join(","));
@@ -5943,7 +5955,7 @@ module.exports = function registerDesertTreasureII(api) {
       const current = p.getAttribute(LASSAR) ?? {};
       setLassar(p, { ...current, ringShown: true });
     }
-    if (stepId === "5mQjA2" && stage(p) === S.WHISPERER) {
+    if ((stepId === "5mQjA2" || stepId === "FLyW0o") && stage(p) === S.WHISPERER) {
       const current = p.getAttribute(LASSAR) ?? {};
       if (!has(p, I.BLACKSTONE_FRAGMENT) && !has(p, I.BLACKSTONE_FRAGMENT_2) && !has(p, I.BLACKSTONE_FRAGMENT_3)) p.getInventory().adds(I.BLACKSTONE_FRAGMENT, 1);
       setLassar(p, { ...current, blackstone: true });
