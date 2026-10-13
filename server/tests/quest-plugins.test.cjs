@@ -10598,4 +10598,12 @@ test('DT2 Kasonde uses melee/ranged basics, healing, avoidable potions and pilla
   boss.hp=239;cycle=90;area.process(p);assert.equal(boss.hp,240,'healing is capped at max HP');
   handlers.npcDeath[0]({killer:p,npc:boss});assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),20);assert.equal(area.kasondeFight,null);assert.ok(removed.length>=9,'victory removes the potion pools');
   handlers.objects[0]({player:p,objectId:core.ObjectIdentifiers.STAIRS_254,option:'Climb-up',location:area.tile(7,0,0)});assert.deepEqual([p.location.getX(),p.location.getY()],[1174,3428],'real temple stairs leave the instance');
+  const crossing={player:p,objectId:49492,option:'Climb-over',location:{x:1193,y:3401},definition:{getName:()=> 'Barricade'}};
+  p.moveTo(new core.Location(1193,3399,0));handlers.objects.forEach(h=>h(crossing));assert.equal(p.location.getY(),3399,'the arrival scene must unlock the city');
+  attrs.set('desert-treasure-ii:city-entered',true);handlers.objects.forEach(h=>h(crossing));assert.equal(p.location.getY(),3405,'returning reaches the medallion chest side');
+  handlers.objects.forEach(h=>h(crossing));assert.equal(p.location.getY(),3399,'players can leave the city without replaying its arrival');
+  assert.equal(attrs.get('desert-treasure-ii:vardorvis-progress'),20,'crossing never resets quest progress');
+  assert.match(quest.buildJournal(p).join(' '),/Speak to the defeated Kasonde/);
+  attrs.set('desert-treasure-ii:vardorvis-progress',21);assert.match(quest.buildJournal(p).join(' '),/north-east stone chest/);
+  attrs.set('desert-treasure-ii:vardorvis-progress',22);assert.match(quest.buildJournal(p).join(' '),/Ancient Vault/);
 });
