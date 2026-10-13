@@ -904,7 +904,7 @@ module.exports = function registerSongOfTheElves(api) {
         sendIthellMeilyrVarbits(player);
       }
       if (event.stepId === "gBRsQm") {
-        if (inventory.getFreeSlots() < 1) {
+        if (inventory.getAmount(CAMP_EXPLOSIVE_ITEM) === 0 && inventory.getFreeSlots() < 1) {
           event.handled = true;
           player.sendMessage("You need one empty inventory slot for Elena's stackable explosive potions.");
           return;

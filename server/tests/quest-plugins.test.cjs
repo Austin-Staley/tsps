@@ -8037,6 +8037,14 @@ test('Song of the Elves gives the real stackable explosive potion with one free 
   assert.equal(items.get(potion), 7);
   assert.equal(player.messages?.some((message) => message.includes('one inventory space')), false);
 
+  freeSlots = 0;
+  const supplyMessage = { player, kind: 'message', stepId: 'gBRsQm' };
+  handlers.custom.get('npc-dialogue:action').find(handler => handler.name === 'onAction')(supplyMessage);
+  assert.notEqual(supplyMessage.handled, true, 'the dialogue continues after the stack uses the last slot');
+  assert.deepEqual(supplyMessage.box, { items: [potion] });
+  assert.equal(items.get(potion), 7, 'the transcript does not duplicate the supply already handed over');
+  assert.equal(player.messages?.some(message => message.includes('one empty inventory slot')), false);
+
   items.clear();
   freeSlots = 0;
   talkElena({ player, npcId: api.core.NpcIdentifiers.ELENA, option: 'Talk-to', definition: elena, target: elena });
