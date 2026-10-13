@@ -118,6 +118,9 @@ module.exports = function registerSongOfTheElves(api) {
   const ELENA_PRE_MEETING_RESPONSE = "quest.song_of_the_elves.elena-pre-meeting-response";
   const CAMP_AREA = "quest.song_of_the_elves.camp-area";
   const CAMP_HOLES = "quest.song_of_the_elves.camp-holes";
+  // This is the stackable Song of the Elves item. EXPLOSIVE_POTION (4045) is
+  // the older, non-stackable Castle Wars barricade potion.
+  const CAMP_EXPLOSIVE_ITEM = ItemIdentifiers.EXPLOSIVE_POTION_3;
   const CAMP_EXPLOSIVES = "quest.song_of_the_elves.camp-explosives";
   const CAMP_DEFENSE = "quest.song_of_the_elves.camp-defense";
   const CAMP_DEFENSE_COMPLETE = "quest.song_of_the_elves.camp-defense-complete";
@@ -889,13 +892,13 @@ module.exports = function registerSongOfTheElves(api) {
         sendIthellMeilyrVarbits(player);
       }
       if (event.stepId === "gBRsQm") {
-        if (inventory.getFreeSlots() < 7) {
+        if (inventory.getFreeSlots() < 1) {
           event.handled = true;
-          player.sendMessage("You need seven empty inventory slots for the explosives.");
+          player.sendMessage("You need one empty inventory slot for Elena's stackable explosive potions.");
           return;
         }
-        if (inventory.getAmount(ItemIdentifiers.EXPLOSIVE_POTION) === 0) inventory.adds(ItemIdentifiers.EXPLOSIVE_POTION, 7);
-        event.box = { items: [ItemIdentifiers.EXPLOSIVE_POTION] };
+        if (inventory.getAmount(CAMP_EXPLOSIVE_ITEM) === 0) inventory.adds(CAMP_EXPLOSIVE_ITEM, 7);
+        event.box = { items: [CAMP_EXPLOSIVE_ITEM] };
         player.setAttribute(CAMP_EXPLOSIVES, 7);
         player.sendMessage("You take seven explosive potions from Elena.");
       }
@@ -1451,12 +1454,12 @@ module.exports = function registerSongOfTheElves(api) {
       return true;
     }
     if (npcName === "elena" && currentChapter(player) === 17 && player.getArea?.() instanceof DwarvenCampArea) {
-      if (!player.getInventory().getAmount(ItemIdentifiers.EXPLOSIVE_POTION)) {
-        if (player.getInventory().getFreeSlots() < 7) {
-          player.sendMessage("Make seven inventory spaces so Elena can hand you the explosive potions.");
+      if (!player.getInventory().getAmount(CAMP_EXPLOSIVE_ITEM)) {
+        if (player.getInventory().getFreeSlots() < 1) {
+          player.sendMessage("Make one inventory space so Elena can hand you the stackable explosive potions.");
           return true;
         }
-        player.getInventory().adds(ItemIdentifiers.EXPLOSIVE_POTION, 7);
+        player.getInventory().adds(CAMP_EXPLOSIVE_ITEM, 7);
         player.setAttribute(CAMP_EXPLOSIVES, 7);
       }
       return startTranscript(api, player, event.npcId, PAGE, "preparations-at-the-dwarf-camp-talking-to-elena-after-talking-to-baxtorian");
@@ -2580,7 +2583,7 @@ module.exports = function registerSongOfTheElves(api) {
 
   function placeCampExplosive(event) {
     const player = event?.player;
-    if (!player || currentChapter(player) !== 17 || event.itemId !== ItemIdentifiers.EXPLOSIVE_POTION) return false;
+    if (!player || currentChapter(player) !== 17 || event.itemId !== CAMP_EXPLOSIVE_ITEM) return false;
     const area = player.getArea?.();
     if (!(area instanceof DwarvenCampArea) || area.owner !== player.getUsername?.()) return false;
     const targetLocation = event.location ?? event.object?.getLocation?.();
@@ -2595,11 +2598,11 @@ module.exports = function registerSongOfTheElves(api) {
       return true;
     }
     const inventory = player.getInventory();
-    if (inventory.getAmount(ItemIdentifiers.EXPLOSIVE_POTION) < 1) {
+    if (inventory.getAmount(CAMP_EXPLOSIVE_ITEM) < 1) {
       player.sendMessage("You need one of Elena's explosive potions to fill this hole.");
       return true;
     }
-    inventory.deleteNumber(ItemIdentifiers.EXPLOSIVE_POTION, 1);
+    inventory.deleteNumber(CAMP_EXPLOSIVE_ITEM, 1);
     player.setAttribute(CAMP_HOLES, placed | (1 << index));
     player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(player), player));
     const object = event.object;
@@ -2665,7 +2668,17 @@ module.exports = function registerSongOfTheElves(api) {
   function beginEssylltEncounter(player) {
     const area = player.getAttribute(CAMP_AREA);
     const state = area && campInstances.get(area);
-    if (!state || !state.finished || state.essyllt) return;
+    if (!state || !state.finished) return;
+    // The core can remove the boss on player death before our area state sees
+    // that death. Clear a dead/unregistered reference so the retry transcript
+    // can start the encounter again.
+    if (state.essyllt && state.essyllt.isRegistered?.() !== false && state.essyllt.getHitpoints?.() > 0) return;
+    if (state.essyllt) {
+      api.removeNpc(state.essyllt);
+      state.essyllt = null;
+      for (const npc of state.essylltAdds ?? []) api.removeNpc(npc);
+      state.essylltAdds?.clear();
+    }
     const boss = api.spawnNpc({ id: NpcIdentifiers.ESSYLLT_5, x: 2448, y: 6118, z: 0, wanderRadius: 0,
       owner: player, ownerOnly: true });
     if (!boss) {

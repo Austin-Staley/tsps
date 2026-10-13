@@ -7734,6 +7734,127 @@ test('Song of the Elves can re-enter the defended dwarf camp to retry Essyllt af
     'the fight begins through the saved post-defense transcript after re-entry');
 });
 
+test('Song of the Elves gives the real stackable explosive potion with one free slot', () => {
+  const { api, handlers } = mockApi();
+  const areas = [];
+  const items = new Map();
+  let freeSlots = 1;
+  api.registerArea = (area) => {
+    areas.push(area);
+    area.enter = (character) => { character.setArea(area); };
+  };
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  runtime.startTranscript = () => true;
+  try { require('../plugins/quests/quests/SongOfTheElves.Quest')(api); }
+  finally { runtime.startTranscript = originalStartTranscript; }
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const talkBaxtorian = handlers.npcInteractions.get('Baxtorian')['Talk-to'];
+  const talkElena = handlers.npcInteractions.get('Elena')['Talk-to'];
+  const attributes = new Map();
+  const inventory = {
+    getAmount: (id) => items.get(id) ?? 0,
+    getFreeSlots: () => freeSlots,
+    adds: (id, amount) => items.set(id, (items.get(id) ?? 0) + amount),
+  };
+  const player = {
+    getUsername: () => 'DwarfCampStackablePotionTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getArea: () => player.area ?? null,
+    setArea(area) { player.area = area; },
+    moveTo(location) { player.location = location; },
+    getLocation: () => player.location,
+    getIndex: () => 1,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage: (message) => (player.messages ??= []).push(message),
+    isPlayer: () => true,
+    isNpc: () => false,
+    getAsPlayer: () => player,
+  };
+  quest.setStage(player, 180);
+  const baxtorian = { getName: () => 'Baxtorian' };
+  const elena = { getName: () => 'Elena' };
+  talkBaxtorian({ player, npcId: api.core.NpcIdentifiers.BAXTORIAN, option: 'Talk-to', definition: baxtorian, target: baxtorian });
+  assert.ok(player.getArea(), 'the normal Baxtorian interaction brings the player to the camp');
+  talkElena({ player, npcId: api.core.NpcIdentifiers.ELENA, option: 'Talk-to', definition: elena, target: elena });
+  const potion = api.core.ItemIdentifiers.EXPLOSIVE_POTION_3;
+  assert.equal(potion, 23818);
+  assert.equal(items.get(potion), 7);
+  assert.equal(player.messages?.some((message) => message.includes('one inventory space')), false);
+
+  items.clear();
+  freeSlots = 0;
+  talkElena({ player, npcId: api.core.NpcIdentifiers.ELENA, option: 'Talk-to', definition: elena, target: elena });
+  assert.equal(items.size, 0, 'a full inventory still preserves the supply instead of silently dropping it');
+  assert.ok(player.messages?.some((message) => message.includes('one inventory space')));
+});
+
+test('Song of the Elves starts Essyllt again when core death cleanup left a stale NPC reference', () => {
+  const { api, handlers } = mockApi();
+  const spawns = [];
+  api.spawnNpc = (definition) => {
+    const npc = {
+      definition,
+      registered: true,
+      hitpoints: 320,
+      isRegistered() { return this.registered; },
+      getHitpoints() { return this.hitpoints; },
+      isPlayer: () => false,
+      isNpc: () => true,
+      getAsNpc() { return this; },
+      setArea(area) { this.area = area; },
+      getArea() { return this.area ?? null; },
+      getIndex() { return 100 + spawns.length; },
+      setMultiCombat() {},
+      getCombat() { return { attack() {} }; },
+    };
+    spawns.push(npc);
+    return npc;
+  };
+  api.removeNpc = (npc) => { npc.registered = false; };
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter((entry) => entry.key === 'song_of_the_elves').at(-1);
+  const attributes = new Map([
+    ['quest.song_of_the_elves.camp-defense-complete', true],
+    ['quest.song_of_the_elves.fragment-defeated', false],
+    ['quest.song_of_the_elves.late-chapter', 19],
+  ]);
+  const player = {
+    getUsername: () => 'DwarfCampStaleEssylltTest',
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ getFreeSlots: () => 10, getAmount: () => 0, adds() {} }),
+    getArea: () => player.area ?? null,
+    setArea(area) { player.area = area; },
+    moveTo(location) { player.location = location; },
+    getLocation: () => player.location,
+    getIndex: () => 1,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+    isPlayer: () => true,
+    isNpc: () => false,
+    getAsPlayer: () => player,
+  };
+  quest.setStage(player, 190);
+  const baxtorian = { getName: () => 'Baxtorian' };
+  handlers.npcInteractions.get('Baxtorian')['Talk-to']({ player, npcId: api.core.NpcIdentifiers.BAXTORIAN, option: 'Talk-to', definition: baxtorian, target: baxtorian });
+  const action = handlers.custom.get('npc-dialogue:action').at(-1);
+  action({ player, stepId: 'YAPX-R', kind: 'action' });
+  const firstBoss = spawns.find((npc) => npc.definition.id === api.core.NpcIdentifiers.ESSYLLT_5);
+  assert.ok(firstBoss);
+  firstBoss.hitpoints = 0;
+  firstBoss.registered = false; // core NPC cleanup happened before quest's death callback
+
+  action({ player, stepId: 'YAPX-R', kind: 'action' });
+  assert.equal(spawns.filter((npc) => npc.definition.id === api.core.NpcIdentifiers.ESSYLLT_5).length, 2,
+    'the natural ambush action can recreate an NPC whose old reference is already gone');
+  assert.equal(spawns.filter((npc) => npc.definition.id === api.core.NpcIdentifiers.IORWERTH_WARRIOR_12).length, 4);
+});
+
 test('Song of the Elves retries the Temple cutscene after a disconnect but not during the Fragment fight', () => {
   const { api } = mockApi();
   const areas = [];
@@ -7781,7 +7902,10 @@ test('Song of the Elves spawns the attackable Fragment variant for the final fig
   const { api, handlers } = mockApi();
   const areas = [];
   const spawned = [];
-  api.registerArea = (area) => areas.push(area);
+  api.registerArea = (area) => {
+    areas.push(area);
+    area.enter = (character) => { character.setArea(area); };
+  };
   api.spawnNpc = (definition) => {
     spawned.push(definition);
     return {
