@@ -7,6 +7,7 @@ require("../plugins/quests/QuestRuntime").startTranscript = () => true;
 function setup() {
   const handlers = { custom: {}, npc: [], object: null, itemObject: null, item: [], dialogueAction: null };
   const emitted = [];
+  const messages = [];
   let stashRestored = false;
   const prompts = [];
   const createdNpcs = [];
@@ -45,11 +46,14 @@ function setup() {
     getAttribute(key) { return this.attrs.get(key); },
     setAttribute(key, value) { this.attrs.set(key, value); },
     getInventory: () => inventory,
-    getPrivateArea: () => area,
+    getPrivateArea() { return this.area; },
+    setArea(value) { this.area = value; },
+    moveTo(value) { this.location = value; },
     getLocation() { return { getX: () => this.location.x, getY: () => this.location.y, getZ: () => this.location.z }; },
     getDialogueManager: () => ({ isActive: () => false }),
-    sendMessage() {},
+    sendMessage(message) { messages.push(message); },
   };
+  player.area = area;
   const api = {
     core: {
       ItemIdentifiers: { PRISONERS_LETTER: 28412, KNIFE_5: 28413, CHISEL_5: 28414, LOCKPICK_4: 28415,
@@ -60,6 +64,9 @@ function setup() {
       NPC: { create(id, location) { const value = npc(id, location); createdNpcs.push(value); return value; } },
       World: { getAddNPCQueue: () => [], getRemoveNPCQueue: () => [], getProcessCycle: () => cycle },
       ObjectManager: { deregister(object) { object.removed = true; openedObjects.push(object); } },
+      Location: class Location {
+        constructor(x, y, z) { this.x = x; this.y = y; this.z = z; }
+      },
     },
     persistAttribute() {},
     onCustomEvent(name, handler) {
@@ -81,7 +88,7 @@ function setup() {
   register(api);
   const instanceLocation = (x, y, z) => ({ x: x + 10000 - 2872, y: y + 20000 - 6336, z });
   const moveToSource = (x, y, z = 2) => { player.location = { x: x + 10000 - 2872, y: y + 20000 - 6336, z }; };
-  return { api, handlers, emitted, prompts, player, area, inventory, createdNpcs, openedObjects, instanceLocation, moveToSource, setCycle: (v) => { cycle = v; }, setStashRestored: (value) => { stashRestored = value; } };
+  return { api, handlers, emitted, messages, prompts, player, area, inventory, createdNpcs, openedObjects, instanceLocation, moveToSource, setCycle: (v) => { cycle = v; }, setStashRestored: (value) => { stashRestored = value; } };
 }
 
 test("prison start removes the cutscene Assassin until the diamond-key stage", () => {
@@ -240,6 +247,39 @@ test("earned frozen-Jhallan progress restores the Assassin after relog without r
   assert.equal(handlers.custom["dt2:sucellus-prison-resume"]({ player, area: { ...area } }), false, "resume ignores a different instance");
 });
 
+test("paired prison crevices land on adjacent clear tiles, and asylum stairs exit to the Duke", () => {
+  const { handlers, player, area, instanceLocation } = setup();
+  const state = () => player.getAttribute("desert-treasure-ii:sucellus-prison-progress");
+  player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 38);
+  player.setAttribute("desert-treasure-ii:sucellus-area", area);
+
+  const exit = { player, objectId: 49108, option: "Enter", location: instanceLocation(2983, 6399, 2), handled: false };
+  assert.equal(handlers.object(exit), true);
+  assert.equal(exit.handled, true);
+  assert.deepEqual(player.location, { x: 10000 + 27, y: 20000 + 25, z: 2 },
+    "the real crevice action lands on clear floor beside the paired 1x3 cache object");
+  assert.equal(state(), 38, "using a shortcut cannot grant the diamond key or advance progress");
+  assert.equal(player.getPrivateArea(), area);
+  const reverse = { player, objectId: 49107, option: "Enter", location: instanceLocation(2898, 6360, 2), handled: false };
+  assert.equal(handlers.object(reverse), true);
+  assert.deepEqual(player.location, { x: 10000 + 112, y: 20000 + 64, z: 2 },
+    "returning through the paired crevice lands beside the 1x3 cache footprint");
+
+  player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 56);
+  const blocked = { player, objectId: 49100, option: "Climb-down", location: instanceLocation(2973, 6440, 2), handled: false };
+  assert.equal(handlers.object(blocked), true);
+  assert.equal(player.location.z, 2, "the asylum stays closed before the Assassin's final dialogue");
+
+  player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 58);
+  player.setAttribute("desert-treasure-ii:sucellus-prison-complete", true);
+  const asylum = { player, objectId: 49100, option: "Climb-down", location: instanceLocation(2973, 6440, 2), handled: false };
+  assert.equal(handlers.object(asylum), true);
+  assert.equal(asylum.handled, true);
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], [3039, 6431, 0]);
+  assert.equal(player.getPrivateArea(), null, "the public Duke area cannot retain the prison instance");
+  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-area"), null);
+});
+
 test("the Assassin stays gone after the cell escape and returns only for the diamond-key plan", () => {
   const { handlers, player, area, createdNpcs } = setup();
   assert.equal(handlers.custom["dt2:sucellus-prison-start"]({ player, area }), true);
@@ -292,11 +332,24 @@ test("ordinary Ghorrock prison doors open without consuming a quest key", () => 
     getLocation: () => ({ equals: () => true }),
   };
   const event = { player, object: door, definition: { id: 49118 }, option: "Open", location: instanceLocation(2935, 6354, 2), handled: false };
-  assert.equal(handlers.object(event), true);
+  handlers.object(event);
   assert.equal(event.handled, true);
   assert.deepEqual(openedObjects, [door]);
   assert.equal(inventory.getAmount(28416), 1);
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 22);
+});
+
+test("an earned key reopens its restored cache gate after the quest has advanced", () => {
+  const { handlers, player, area, inventory, openedObjects, instanceLocation } = setup();
+  player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 30);
+  inventory.adds(28416, 1);
+  const gate = { getPrivateArea: () => area };
+  const event = { player, object: gate, definition: { id: 49122 }, option: "Open", location: instanceLocation(2954, 6406, 2), handled: false };
+  handlers.object(event);
+  assert.equal(event.handled, true);
+  assert.deepEqual(openedObjects, [gate]);
+  assert.equal(inventory.getAmount(28416), 1, "reopening a restored gate preserves the earned key");
+  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 30);
 });
 
 test("the equipment chest advances only after confirmed stash recovery and retries safely", () => {
@@ -369,7 +422,7 @@ test("Ruby key chain requires the seven chest names, converter clue, and transla
 });
 
 test("Emerald and Diamond clues gate their real cache chests", () => {
-  const { handlers, prompts, player, inventory, instanceLocation } = setup();
+  const { handlers, messages, prompts, player, inventory, instanceLocation } = setup();
   player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 28);
   handlers.object({ player, definition: { id: 49151, name: "Crate" }, option: "Search", location: instanceLocation(2912, 6450, 2), handled: false });
   assert.equal(inventory.getAmount(28423), 1);
@@ -393,7 +446,10 @@ test("Emerald and Diamond clues gate their real cache chests", () => {
   assert.equal(inventory.getAmount(28428), 1);
   assert.equal(inventory.getAmount(28427), 1);
   handlers.item.find(([registered]) => registered === "Library note")[1].Read({ player, itemId: 28428, handled: false });
+  assert.match(messages.at(-1), /Various people emerged near us/);
+  assert.doesNotMatch(messages.at(-1), /WRATH/);
   handlers.item.find(([registered]) => registered === "Strange slider")[1].Inspect({ player, itemId: 28427, handled: false });
+  assert.match(messages.at(-1), /I below, evenly between H and L/);
   for (const [x, y] of [[2931, 6430], [2931, 6432], [2932, 6430]]) {
     handlers.object({ player, definition: { id: 49161, name: "Bookcase" }, option: "Search", location: instanceLocation(x, y, 2), handled: false });
   }

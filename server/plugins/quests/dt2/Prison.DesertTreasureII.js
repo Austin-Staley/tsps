@@ -152,7 +152,9 @@ module.exports = function registerSucellusPrison(api) {
       return true;
     }
     const gateProgress = KEY_GATES[id];
-    const validGateProgress = gateProgress && state(player) >= gateProgress.from && state(player) < gateProgress.until;
+    // Reopened prison instances restore native gates after login. A key already
+    // earned at its minimum stage remains valid for that same gate thereafter.
+    const validGateProgress = gateProgress && state(player) >= gateProgress.from;
     if (gateProgress && gateProgress.tiles.some(([x, y]) => x === tile?.[0] && y === tile?.[1] && tile?.[2] === 2)
       && itemId === KEYS[gateProgress.key] && validGateProgress) {
       event.handled = true;
@@ -334,7 +336,7 @@ module.exports = function registerSucellusPrison(api) {
     const gate = KEY_GATES[id];
     if (gate && (option === "open" || option === "unlock" || option === "pass")) {
       if (!gate.tiles.some(([x, y]) => x === tile?.[0] && y === tile?.[1] && tile?.[2] === 2)) return false;
-      const validProgress = progress >= gate.from && progress < gate.until;
+      const validProgress = progress >= gate.from;
       if (!validProgress || !has(player, KEYS[gate.key])) {
         event.handled = true;
         player.sendMessage(`This gate requires the ${gate.key} key.`);
@@ -446,13 +448,33 @@ module.exports = function registerSucellusPrison(api) {
       return;
     }
 
-    if (onTile("asylum") && (option === "enter" || option === "open" || option === "climb")) {
+    // These two cache crevices are opposite ends of the beds-wing shortcut.
+    // Land beside each 1x3 loc, not on its blocked footprint.
+    if (((id === 49108 && isTile(tile, [2983, 6399, 2]))
+        || (id === 49107 && isTile(tile, [2898, 6360, 2])))
+      && option === "enter" && progress >= 30 && progress < 40) {
+      event.handled = true;
+      const destination = id === 49108 ? [2899, 6361, 2] : [2984, 6400, 2];
+      player.moveTo(areaLocation(area, ...destination));
+      player.sendMessage("You squeeze through the crevice to the other side of the prison.");
+      return true;
+    }
+
+    if ((id === 49100 && tile?.[0] >= 2973 && tile?.[0] <= 2974 && tile?.[1] === 6440 && tile?.[2] === 2)
+      && (option === "enter" || option === "open" || option === "climb" || option === "climb-down")) {
       if (progress < 58 || !player.getAttribute(COMPLETE)) {
         event.handled = true;
         player.sendMessage("Jhallan still blocks the way to the asylum.");
         return true;
       }
-      return false;
+      event.handled = true;
+      player.setArea(null);
+      player.setAttribute(AREA, null);
+      // Land on the clear south approach; the gate tile itself has collision
+      // and is entered with its normal interaction after the transfer.
+      player.moveTo(new api.core.Location(3039, 6431, 0));
+      player.sendMessage("You leave the prison and enter the Duke's asylum.");
+      return true;
     }
   }
 
@@ -564,11 +586,11 @@ module.exports = function registerSucellusPrison(api) {
     event.player.sendMessage(message);
     return true;
   }
-  function readWarningLetter(event) { return readClue(event, I.WARNING_LETTER, 1, "The warning letter gives the sapphire chest combination: 214013."); }
-  function readRequisitionNote(event) { return readClue(event, I.REQUISITION_NOTE, 2, "The requisition note reveals the word LIES."); }
+  function readWarningLetter(event) { return readClue(event, I.WARNING_LETTER, 1, "The warning letter compares the candle holders with the strokes on the banners above them. Use those counts to work out the chest code."); }
+  function readRequisitionNote(event) { return readClue(event, I.REQUISITION_NOTE, 2, "The request names point to the word VIAL. The identifier column and grid note locate its chest and reveal the letters to enter."); }
   function readGridNote(event) { return readClue(event, I.GRID_NOTE, 16, "The grid note locates the vial chest in the administration room."); }
-  function readCodeConverter(event) { return readClue(event, I.CODE_CONVERTER, 4, "The converter maps the bed-chest arrows to UP, RIGHT, LEFT, DOWN, RIGHT, UP."); }
-  function readLibraryNote(event) { return readClue(event, I.LIBRARY_NOTE, 8, "The library note and slider reveal the word WRATH."); }
+  function readCodeConverter(event) { return readClue(event, I.CODE_CONVERTER, 4, "The converter deciphers the coded letters along the purple arrow route. Follow the arrows between the beds and use the seven chest names to work out the final sequence."); }
+  function readLibraryNote(event) { return readClue(event, I.LIBRARY_NOTE, 8, "The note asks you to find books written by Duke Quirinius and quotes: 'Various people emerged near us.' The first letter of each word may be useful."); }
   function inspectStrangeSlider(event) {
     if (!event.player?.getAttribute(ESCAPED) || !has(event.player, I.STRANGE_SLIDER)) return false;
     event.handled = true;
