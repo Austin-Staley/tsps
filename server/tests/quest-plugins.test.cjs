@@ -920,10 +920,13 @@ test('Blood Moon shrine returns to the Castle lobby before the Vampyrium portal 
     'the owner receives the cache-backed Castle guide and first puzzle-room enemies');
   assert.ok(spawned.every(npc => npc.owner === player && npc.ownerOnly));
   for (const npc of spawned.filter(npc => castleSpawnIds.includes(npc.id))) {
-    assert.equal(RegionManager.getClipping(npc.x, npc.y, npc.z ?? 0, null) & RegionManager.BLOCKED_TILE, 0,
-      `Castle actor ${npc.id} uses an unclipped cache tile`);
+    const size = api.core.CacheDefinitions.getNpc(npc.id)?.size ?? 1;
+    for (let dx = 0; dx < size; dx++) for (let dy = 0; dy < size; dy++) {
+      assert.equal(RegionManager.getClipping(npc.x + dx, npc.y + dy, npc.z ?? 0, null) & RegionManager.BLOCKED_TILE, 0,
+        `Castle actor ${npc.id} has an unclipped ${size}x${size} footprint`);
+    }
     assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) =>
-      RegionManager.canMove(npc.x, npc.y, npc.x + dx, npc.y + dy, npc.z ?? 0, 1, 1, null)),
+      RegionManager.canMove(npc.x, npc.y, npc.x + dx, npc.y + dy, npc.z ?? 0, size, size, null)),
     `Castle actor ${npc.id} has a real adjacent movement edge`);
   }
   const veliaf = spawned.find(npc => npc.id === 15867);
@@ -967,6 +970,8 @@ test('Blood Moon repairs only the legacy Castle NPC-marker landing without chang
     ['quest.the_blood_moon_rises.castle-room', 3],
     ['quest.the_blood_moon_rises.castle-native-stage', 70],
   ]);
+  const carriedItems = [[22400, 1], [26227, 1]];
+  const inventory = { snapshot: () => carriedItems.map(item => [...item]) };
   const varbits = new Map();
   const moved = [];
   const player = {
@@ -974,7 +979,7 @@ test('Blood Moon repairs only the legacy Castle NPC-marker landing without chang
     setAttribute: (key, value) => attributes.set(key, value),
     getLocation: () => new api.core.Location(2310, 7404, 0),
     moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
-    getInventory: () => ({ contains: () => false }),
+    getInventory: () => inventory,
     getUsername: () => 'legacy-castle-fixture',
     getPacketSender: () => new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) }, {
       get: (target, key) => target[key] ?? (() => {}),
@@ -989,6 +994,7 @@ test('Blood Moon repairs only the legacy Castle NPC-marker landing without chang
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 1);
   assert.equal(varbits.get(15489), 1);
   assert.equal(varbits.get(15499), 1, 'the repaired player is marked in the actual ground-floor lobby');
+  assert.deepEqual(inventory.snapshot(), [[22400, 1], [26227, 1]], 'repair leaves carried quest items untouched');
 });
 
 test('Blood Moon Castle story actors use cache-walkable floor anchors', () => {
@@ -1564,6 +1570,88 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     sendMessage() {},
   };
   quest.setStage(player, 40);
+  const { RegionManager } = api.core;
+  const { MapObjects } = api.core;
+  const pairedDoors = [
+    [61577, 2327, 7360], [61576, 2328, 7360],
+    [61573, 2342, 7373], [61572, 2341, 7373],
+    [61572, 2358, 7366], [61572, 2304, 7391], [61573, 2304, 7392],
+    [61586, 2336, 7370, 0], [61587, 2339, 7395, 0],
+    [61572, 2323, 7395, 0], [61573, 2348, 7383, 0],
+    [61602, 2339, 7383, 0], [61604, 2435, 7386, 0],
+    [61573, 2439, 7384, 0], [61572, 2455, 7381, 0],
+    [61572, 2444, 7386, 0], [61577, 2467, 7395, 0],
+    [61572, 2474, 7398, 0], [61573, 2314, 7360, 1],
+    [61572, 2314, 7382, 1], [61576, 2457, 7417, 0],
+    [61576, 2466, 7422, 0], [61573, 2452, 7403, 0],
+    [61572, 2477, 7409, 0], [61573, 2481, 7403, 0],
+    [61604, 2491, 7402, 0], [61602, 2385, 7403, 0],
+    [61572, 2372, 7409, 0], [61577, 2371, 7396, 0],
+    [61572, 2369, 7384, 0], [61572, 2388, 7366, 0],
+    [61593, 2370, 7370, 0], [61592, 2343, 7416, 0],
+    [61593, 2325, 7403, 0], [61592, 2314, 7421, 0],
+    [61576, 2309, 7421, 0], [61577, 2361, 7393, 0],
+    [61577, 2330, 7407, 0], [61572, 2327, 7382, 0],
+    [61587, 2310, 7386, 0], [61587, 2327, 7391, 0], [61576, 2309, 7397, 0],
+    [61576, 2358, 7380, 0], [61588, 2327, 7360, 1], [61588, 2342, 7373, 1],
+    [61572, 2358, 7366, 1], [61577, 2304, 7392, 1], [61572, 2306, 7386, 1],
+    [61573, 2434, 7365, 0], [61590, 2436, 7361, 0], [61591, 2452, 7365, 0],
+    [61577, 2446, 7364, 0], [61572, 2457, 7362, 0], [61604, 2459, 7371, 0],
+    [61602, 2363, 7369, 0], [61573, 2363, 7362, 0], [61572, 2349, 7399, 0],
+    [61573, 2344, 7395, 0], [61572, 2333, 7388, 0], [61593, 2471, 7422, 0],
+    [61592, 2492, 7377, 0], [61576, 2507, 7409, 0], [61573, 2553, 7364, 0],
+    [61573, 2585, 7370, 0], [61572, 2588, 7380, 0], [61572, 2442, 7361, 0],
+    [61577, 2452, 7373, 0], [61771, 2450, 7372, 0], [61770, 2515, 7396, 0],
+    [61589, 2522, 7397, 0], [61588, 2506, 7363, 0], [61588, 2336, 7370, 1],
+    [61589, 2483, 7395, 0], [61588, 2510, 7370, 0], [61589, 2515, 7367, 0],
+    [61625, 2519, 7363, 0], [61577, 2551, 7387, 0], [61609, 2503, 7369, 0],
+    [61599, 2308, 7365, 1], [61627, 2452, 7420, 0], [61626, 2445, 7418, 0],
+    [61573, 2441, 7417, 0], [61572, 2460, 7390, 0], [61615, 2455, 7386, 0],
+    [61572, 2438, 7419, 0], [61591, 2373, 7392, 0], [61591, 2379, 7392, 0],
+    [61590, 2388, 7383, 0], [61591, 2392, 7363, 0], [61773, 2393, 7370, 0],
+    [61772, 2440, 7400, 0], [61585, 2438, 7394, 0], [61584, 2441, 7389, 0],
+    [61590, 2306, 7397, 1], [61591, 2434, 7372, 0], [61590, 2525, 7363, 0],
+    [61590, 2541, 7374, 0], [61590, 2510, 7379, 0], [61591, 2499, 7400, 0],
+    [61575, 2503, 7400, 0], [61574, 2512, 7382, 0], [61572, 2523, 7389, 0],
+    [61572, 2535, 7377, 0], [61606, 2311, 7366, 0], [61600, 2564, 7369, 0],
+    [61593, 2570, 7365, 0], [61592, 2566, 7387, 0], [61584, 2570, 7369, 0],
+    [61585, 2566, 7394, 0],
+  ];
+  for (const [, x, y] of pairedDoors) RegionManager.loadMapFiles(x, y);
+  for (const [id, x, y, z = 0] of pairedDoors) {
+    RegionManager.loadMapFiles(x, y);
+    const placed = MapObjects.mapObjects.get(MapObjects.getHash(x, y, z)) ?? [];
+    assert.ok(placed.some(object => object.getId() === id),
+      `the Castle transition ${id} at ${x},${y},${z} matches the placed cache door`);
+  }
+  const pairedDoorLandingTiles = [[2342, 7372, 0], [2327, 7362, 0], [2305, 7391, 0], [2357, 7366, 0],
+    [2338, 7395, 0], [2337, 7370, 0], [2347, 7383, 0], [2324, 7395, 0], [2434, 7386, 0], [2341, 7384, 0],
+    [2455, 7380, 0], [2439, 7386, 0], [2468, 7395, 0], [2443, 7386, 0], [2314, 7359, 1], [2474, 7397, 0],
+    [2456, 7417, 0], [2313, 7381, 1], [2451, 7403, 0], [2466, 7421, 0], [2481, 7404, 0], [2476, 7409, 0],
+    [2384, 7403, 0], [2490, 7401, 0], [2371, 7395, 0], [2373, 7409, 0], [2387, 7366, 0], [2370, 7384, 0],
+    [2342, 7416, 0], [2371, 7370, 0], [2314, 7420, 0], [2324, 7403, 0], [2360, 7393, 0], [2309, 7420, 0],
+    [2327, 7381, 0], [2331, 7407, 0], [2327, 7390, 0], [2310, 7388, 0], [2357, 7380, 0],
+    [2310, 7395, 0], [2342, 7372, 1], [2328, 7360, 1], [2305, 7392, 1], [2357, 7366, 1],
+    [2434, 7364, 0], [2305, 7386, 1], [2452, 7364, 0], [2437, 7361, 0], [2458, 7362, 0],
+    [2445, 7364, 0], [2358, 7371, 0], [2363, 7368, 0], [2364, 7362, 0], [2348, 7397, 0],
+    [2332, 7388, 0], [2345, 7395, 0], [2491, 7377, 0], [2471, 7421, 0], [2554, 7364, 0],
+    [2506, 7409, 0], [2587, 7380, 0], [2583, 7370, 0], [2451, 7371, 0], [2441, 7361, 0],
+    [2515, 7395, 0], [2450, 7371, 0], [2507, 7363, 0], [2520, 7396, 0], [2482, 7395, 0],
+    [2337, 7370, 1], [2516, 7367, 0], [2509, 7370, 0], [2551, 7386, 0], [2518, 7363, 0],
+    [2502, 7368, 0], [2307, 7365, 1], [2444, 7418, 0], [2453, 7421, 0], [2459, 7390, 0],
+    [2442, 7417, 0], [2437, 7419, 0], [2456, 7388, 0], [2380, 7392, 0], [2372, 7392, 0],
+    [2393, 7363, 0], [2387, 7383, 0], [2441, 7400, 0], [2394, 7370, 0], [2440, 7388, 0],
+    [2439, 7394, 0], [2435, 7372, 0], [2306, 7396, 1], [2541, 7373, 0], [2526, 7363, 0],
+    [2499, 7400, 0], [2510, 7380, 0], [2510, 7382, 0], [2502, 7400, 0], [2534, 7377, 0],
+    [2524, 7388, 0], [2563, 7369, 0], [2310, 7366, 0], [2566, 7386, 0], [2569, 7365, 0],
+    [2565, 7394, 0], [2570, 7368, 0]];
+  for (const [x, y, z] of pairedDoorLandingTiles) {
+    assert.equal(RegionManager.blocked(new api.core.Location(x, y, z), null), false,
+      `the paired-door landing ${x},${y},${z} is a clear floor tile`);
+    assert.ok([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) =>
+      RegionManager.canMove(x, y, x + dx, y + dy, z, 1, 1, null)),
+    `the paired-door landing ${x},${y},${z} has an adjacent movement edge`);
+  }
   const enter = handlers.objects.find((handler) => handler.name === 'handleCastleDoorEnter');
   const route = handlers.routes.find((handler) => handler.name === 'routeCastleDoorEnter');
   const routeEvent = {
@@ -1586,6 +1674,15 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   route(lobbyRoute);
   assert.deepEqual(lobbyRoute.destination, { x: 2327, y: 7362, z: 0 },
     'the lobby door routes around its clipped approach tile while staying on the source side');
+  const adjacentDoorRoute = {
+    player, objectId: 61573, clickType: 1,
+    definition: { getName: () => 'Door', getInteractions: () => ['Enter'] },
+    object: { getFace: () => 1, getLocation: () => new api.core.Location(2439, 7384, 0) },
+    sourceLocation: { x: 2438, y: 7384, z: 0 }, destination: null,
+  };
+  route(adjacentDoorRoute);
+  assert.equal(adjacentDoorRoute.destination, null,
+    'an adjacent click keeps its reachable approach instead of being routed into the wall');
   const event = {
     player, objectId: 61576, clickType: 1, option: 'Enter',
     definition: { getName: () => 'Door' },
@@ -1631,6 +1728,112 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   assert.equal(backToDining.handled, true);
   assert.deepEqual(moved.at(-1), [2357, 7366, 0]);
   assert.equal(varbits.get(15499), 2);
+
+  const halfMoon = { player, objectId: 61586, clickType: 1, option: 'Enter',
+    definition: { id: 61586, getName: () => 'Half moon door' }, object: { getFace: () => 0 },
+    location: { x: 2336, y: 7370, z: 0 }, sourceLocation: { x: 2335, y: 7370, z: 0 }, handled: false };
+  enter(halfMoon);
+  assert.equal(halfMoon.handled, true, 'the named half-moon door is handled when locked');
+  assert.deepEqual(moved.at(-1), [2357, 7366, 0], 'the half-moon door cannot be passed without its key');
+  inventoryItems.add(api.core.ItemIdentifiers.HALF_MOON_KEY);
+  enter({ ...halfMoon, handled: false });
+  assert.deepEqual(moved.at(-1), [2338, 7395, 0], 'the real half-moon pair crosses into the west dining hall');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 8);
+  assert.equal(varbits.get(15499), 8);
+  assert.equal(varbits.get(15489), 1);
+  enter({ player, objectId: 61587, clickType: 1, option: 'Enter',
+    definition: { id: 61587, getName: () => 'Half moon door' }, object: { getFace: () => 0 },
+    location: { x: 2339, y: 7395, z: 0 }, sourceLocation: { x: 2338, y: 7395, z: 0 }, handled: false });
+  assert.deepEqual(moved.at(-1), [2337, 7370, 0], 'the matching half-moon door returns to the dining room');
+  assert.equal(varbits.get(15499), 2);
+  for (const [id, name, keyId] of [
+    [61584, 'New moon door', api.core.ItemIdentifiers.NEW_MOON_KEY],
+    [61588, 'Gibbous moon door', api.core.ItemIdentifiers.GIBBOUS_MOON_KEY],
+    [61590, 'Full moon door', api.core.ItemIdentifiers.FULL_MOON_KEY],
+    [61592, 'Crescent moon door', api.core.ItemIdentifiers.CRESCENT_MOON_KEY],
+  ]) {
+    const locked = { player, objectId: id, clickType: 1, option: 'Enter',
+      definition: { id, getName: () => name }, location: { x: 2388, y: 7383, z: 0 }, handled: false };
+    enter(locked);
+    assert.equal(locked.handled, true, `${name} enforces its cache key`);
+    assert.equal(inventoryItems.has(keyId), false);
+  }
+
+  const castleRoom = 'quest.the_blood_moon_rises.castle-room';
+  const castleFloor = 'quest.the_blood_moon_rises.castle-floor';
+  const enterNamedMoonDoor = (id, name, x, y, z, room, floor, keyId) => {
+    attributes.set(castleRoom, room);
+    attributes.set(castleFloor, floor);
+    const door = { player, objectId: id, clickType: 1, option: 'Enter',
+      definition: { id, getName: () => name }, location: { x, y, z }, handled: false };
+    enter(door);
+    assert.equal(door.handled, true, `${name} resolves through the registered named door handler`);
+    return door;
+  };
+  const verifyMoonDoor = ({ id, name, x, y, z = 0, from, to, fromFloor, toFloor, keyId, landing }) => {
+    const before = moved.length;
+    enterNamedMoonDoor(id, name, x, y, z, from, fromFloor, keyId);
+    assert.equal(moved.length, before, `${name} remains locked without its corresponding key`);
+    inventoryItems.add(keyId);
+    enterNamedMoonDoor(id, name, x, y, z, from, fromFloor, keyId);
+    assert.deepEqual(moved.at(-1), landing, `${name} crosses to its cache-paired room`);
+    assert.equal(attributes.get(castleRoom), to);
+    assert.equal(attributes.get(castleFloor), toFloor);
+    assert.equal(varbits.get(15499), to, 'the last-room varbit follows named moon doors');
+    assert.equal(varbits.get(15489), toFloor, 'the floor varbit follows named moon doors');
+  };
+  verifyMoonDoor({ id: 61584, name: 'New moon door', x: 2441, y: 7389, from: 28, to: 30,
+    fromFloor: 1, toFloor: 1, keyId: api.core.ItemIdentifiers.NEW_MOON_KEY, landing: [2439, 7394, 0] });
+  verifyMoonDoor({ id: 61588, name: 'Gibbous moon door', x: 2327, y: 7360, z: 1, from: 1, to: 2,
+    fromFloor: 2, toFloor: 2, keyId: api.core.ItemIdentifiers.GIBBOUS_MOON_KEY, landing: [2342, 7372, 1] });
+  verifyMoonDoor({ id: 61590, name: 'Full moon door', x: 2388, y: 7383, from: 16, to: 14,
+    fromFloor: 1, toFloor: 1, keyId: api.core.ItemIdentifiers.FULL_MOON_KEY, landing: [2393, 7363, 0] });
+  verifyMoonDoor({ id: 61592, name: 'Crescent moon door', x: 2343, y: 7416, from: 12, to: 13,
+    fromFloor: 1, toFloor: 1, keyId: api.core.ItemIdentifiers.CRESCENT_MOON_KEY, landing: [2371, 7370, 0] });
+  for (const id of [api.core.ItemIdentifiers.NEW_MOON_KEY, api.core.ItemIdentifiers.GIBBOUS_MOON_KEY,
+    api.core.ItemIdentifiers.FULL_MOON_KEY, api.core.ItemIdentifiers.CRESCENT_MOON_KEY]) inventoryItems.delete(id);
+  attributes.set(castleRoom, 2);
+  attributes.set(castleFloor, 1);
+  enter({ ...halfMoon, handled: false });
+  enter(enterPairedDoor(61572, 2323, 7395, 2, { x: 2324, y: 7395, z: 0 }));
+  assert.deepEqual(moved.at(-1), [2347, 7383, 0], 'the west dining hall door enters the cache-backed storage room');
+  assert.equal(varbits.get(15499), 6);
+  enter(enterPairedDoor(61573, 2348, 7383, 0, { x: 2347, y: 7383, z: 0 }));
+  assert.deepEqual(moved.at(-1), [2324, 7395, 0], 'the storage door returns to the west dining hall');
+  assert.equal(varbits.get(15499), 8);
+  enter(enterPairedDoor(61572, 2323, 7395, 2, { x: 2324, y: 7395, z: 0 }));
+  const stairsUp = { player, objectId: 61602, clickType: 1, option: 'Climb-up',
+    definition: { id: 61602, getName: () => 'Stairs' }, location: { x: 2339, y: 7383, z: 0 }, handled: false };
+  enter(stairsUp);
+  assert.deepEqual(moved.at(-1), [2434, 7386, 0], 'the storage spiral stairs lead to the actual explosive room');
+  assert.equal(varbits.get(15499), 28);
+  const stairsDown = { player, objectId: 61604, clickType: 1, option: 'Climb-down',
+    definition: { id: 61604, getName: () => 'Stairs' }, location: { x: 2435, y: 7386, z: 0 }, handled: false };
+  enter(stairsDown);
+  assert.deepEqual(moved.at(-1), [2341, 7384, 0]);
+  assert.equal(varbits.get(15499), 6);
+  const emblemGate = { player, objectId: 61572, clickType: 1, option: 'Enter',
+    definition: { id: 61572, getName: () => 'Door' }, location: { x: 2477, y: 7409, z: 0 }, handled: false };
+  enter(emblemGate);
+  assert.equal(emblemGate.handled, true, 'the hallway east door requires a real Drakan emblem');
+  inventoryItems.add(api.core.ItemIdentifiers.DRAKAN_EMBLEM);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 35);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 2);
+  enter({ ...emblemGate, handled: false });
+  assert.deepEqual(moved.at(-1), [2481, 7404, 0]);
+  assert.equal(varbits.get(15499), 36);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 31);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 1);
+  enter({ player, objectId: 61572, clickType: 1, option: 'Enter',
+    definition: { id: 61572, getName: () => 'Door' }, location: { x: 2474, y: 7398, z: 0 }, handled: false });
+  assert.deepEqual(moved.at(-1), [2314, 7359, 1]);
+  assert.equal(varbits.get(15489), 2, 'the first-floor lobby reports its map floor, not the source plane');
+  assert.equal(varbits.get(15499), 1);
+  enter({ player, objectId: 61572, clickType: 1, option: 'Enter',
+    definition: { id: 61572, getName: () => 'Door' }, location: { x: 2314, y: 7382, z: 1 }, handled: false });
+  assert.deepEqual(moved.at(-1), [2456, 7417, 0]);
+  assert.equal(varbits.get(15489), 2);
+  assert.equal(varbits.get(15499), 34);
 });
 
 test('Blood Moon Castle basin puzzle requires all four correct potions before revealing the ancient symbol', () => {

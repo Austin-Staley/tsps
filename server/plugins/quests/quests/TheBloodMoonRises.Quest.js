@@ -26,6 +26,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const CASTLE_SHRINE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-shrine-prayed";
   const CASTLE_SHRINE_VARBIT = 15470;
   const CASTLE_ROOM_ATTRIBUTE = "quest.the_blood_moon_rises.castle-room";
+  const CASTLE_FLOOR_ATTRIBUTE = "quest.the_blood_moon_rises.castle-floor";
   const CASTLE_WORLD_MAP_FLOOR_VARBIT = 15489;
   const CASTLE_LAST_ROOM_VARBIT = 15499;
   const CASTLE_GROUND_FLOOR = 1;
@@ -36,8 +37,9 @@ module.exports = function registerTheBloodMoonRises(api) {
   const CASTLE_BOOK_VARBITS = Object.freeze([15550, 15551, 15552, 15553, 15554, 15555, 15556, 15557]);
   const CASTLE_GILDED_BOOKCASE_VARBIT = 15525;
   const CASTLE_BOOKCASE_INTERFACE = 962;
-  const CASTLE_BOOK_ITEMS = Object.freeze({ gilded: 33767, vampyre: 33768, fullMoonKey: 33724,
-    newMoonKey: 33728, gibbousMoonKey: 33727 });
+  const CASTLE_BOOK_ITEMS = Object.freeze({ gilded: 33767, vampyre: 33768, fullMoonKey: ItemIdentifiers.FULL_MOON_KEY,
+    halfMoonKey: ItemIdentifiers.HALF_MOON_KEY, crescentMoonKey: ItemIdentifiers.CRESCENT_MOON_KEY,
+    newMoonKey: ItemIdentifiers.NEW_MOON_KEY, gibbousMoonKey: ItemIdentifiers.GIBBOUS_MOON_KEY });
   const CASTLE_KEY_ITEMS = Object.freeze({
     plug: ItemIdentifiers.SINK_PLUG,
     pipe: ItemIdentifiers.BROKEN_PIPE,
@@ -114,7 +116,30 @@ module.exports = function registerTheBloodMoonRises(api) {
     VENATOR: 16213,
     VENATOR_5: 16217,
   });
-  const CASTLE_ROOM = Object.freeze({ LOBBY: 1, DINING: 2, THRONE: 3 });
+  const CASTLE_ROOM = Object.freeze({
+    LOBBY: 1, DINING: 2, THRONE: 3, SOUTH_OF_THRONE: 4, EAST_STAIR_GROUND: 5, STORAGE: 6,
+    STUDY: 7, WEST_DINING: 8, THRONE_STORAGE: 9, LARDER: 10, KITCHEN: 11, GALLERY_HALL: 12,
+    GALLERY: 13, CHAPEL_LIBRARY: 14, WEST_CHAPEL: 15, BOTTLE_ROOM: 16, NORTH_CHAPEL: 17,
+    UPPER_SOUTH_HALL: 18, ABOVE_STUDY: 19, BEDROOM: 20, ORNATE_KNIFE: 21,
+    EAST_STAIR_FIRST: 22, VANESCULA_STUDY: 23, VANESCULA_CHAMBER: 24, EMBLEM_ROOM: 25,
+    RANIS_PARLOUR: 26, CRESCENT_ROOM: 27, EXPLOSIVE_ROOM: 28, IVAN_ROOM: 29,
+    SERVANTS_QUARTERS: 30, EXPLOSIVE_HALL: 31, SECRET_ROOM: 32, SMALL_HALL: 33,
+    NORTH_LOBBY_HALL: 34, VANESCULA_HALL: 35, RANIS_HALL: 36, VENATOR_ROOM: 37,
+    DISPLAY_ROOM: 38, VENATOR_PUZZLE: 39, SOLID_KEY_ROOM: 40, SOLID_DOOR_STORAGE: 41,
+    LABORATORY: 42, STOCKPILE_STORAGE: 43, VENATOR_LIBRARY: 44, SOLID_DOOR_HALL: 45,
+    GUEST_STORAGE: 46, BASEMENT_HALL: 48, BASEMENT_VENATOR: 49, BASEMENT_STORAGE: 50,
+    BASEMENT_PRISON: 51,
+  });
+  // Cache gameval loc ids from client/runelite/api/gameval/ObjectID.ts.
+  const CASTLE_DOOR_IDS = Object.freeze({ DOOR: 61572, DOOR_M: 61573, DOOR_ALT: 61576, DOOR_ALT_M: 61577,
+    NEW: 61584, NEW_M: 61585, HALF: 61586, HALF_M: 61587, GIBBOUS: 61588, GIBBOUS_M: 61589,
+    FULL: 61590, FULL_M: 61591, CRESCENT: 61592, CRESCENT_M: 61593,
+    SOLID: 61574, SOLID_M: 61575, GILDED: 61626, GILDED_M: 61627,
+    STAIRS_UP: 61599, STAIRS_UP_NORUG: 61600, STAIRS_DOWN: 61606, DISPLAY_STAIRS_DOWN: 61609,
+    SPIRAL_UP: 61602, SPIRAL_DOWN: 61604, GUEST_PORTAL_IN: 61771, GUEST_PORTAL_OUT: 61770,
+    CHAPEL_PORTAL_IN: 61773, CHAPEL_PORTAL_OUT: 61772, PUZZLE_LIBRARY: 61625, IVAN_PASSAGE: 61615 });
+  const CASTLE_EMBLEM_IDS = Object.freeze([ItemIdentifiers.DRAKAN_EMBLEM, ItemIdentifiers.DRAKAN_EMBLEM_2,
+    ItemIdentifiers.DRAKAN_EMBLEM_3]);
   // The Castle's Enter doors link distinct room endpoints. Quest Helper's
   // CastleDrakanRoomNetwork records the paired cache locs; the arrival tiles
   // below are adjacent, collision-clear tiles on the destination side.
@@ -128,6 +153,234 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: 61572, x: 2358, y: 7366, from: CASTLE_ROOM.DINING, to: CASTLE_ROOM.THRONE, landing: [2305, 7391] },
     { id: 61572, x: 2304, y: 7391, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.DINING, landing: [2357, 7366] },
     { id: 61573, x: 2304, y: 7392, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.DINING, landing: [2357, 7366] },
+    // The half-moon door pair joins the dining room and the western dining hall.
+    // shortcut: QH records the paired door tiles, not the OSRS teleport landing; these
+    // adjacent destinations are collision-checked and can be refined from a live capture.
+    { id: CASTLE_DOOR_IDS.HALF, x: 2336, y: 7370, z: 0, from: CASTLE_ROOM.DINING, to: CASTLE_ROOM.WEST_DINING,
+      fromFloor: 1, toFloor: 1, key: CASTLE_BOOK_ITEMS.halfMoonKey, keyName: "half moon key", landing: [2338, 7395] },
+    { id: CASTLE_DOOR_IDS.HALF_M, x: 2339, y: 7395, z: 0, from: CASTLE_ROOM.WEST_DINING, to: CASTLE_ROOM.DINING,
+      fromFloor: 1, toFloor: 1, key: CASTLE_BOOK_ITEMS.halfMoonKey, keyName: "half moon key", landing: [2337, 7370] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2323, y: 7395, z: 0, from: CASTLE_ROOM.WEST_DINING, to: CASTLE_ROOM.STORAGE,
+      fromFloor: 1, toFloor: 1, landing: [2347, 7383] },
+    { id: CASTLE_DOOR_IDS.DOOR_M, x: 2348, y: 7383, z: 0, from: CASTLE_ROOM.STORAGE, to: CASTLE_ROOM.WEST_DINING,
+      fromFloor: 1, toFloor: 1, landing: [2324, 7395] },
+    { id: CASTLE_DOOR_IDS.SPIRAL_UP, x: 2339, y: 7383, z: 0, from: CASTLE_ROOM.STORAGE, to: CASTLE_ROOM.EXPLOSIVE_ROOM,
+      fromFloor: 1, toFloor: 1, action: "Climb-up", landing: [2434, 7386] },
+    { id: CASTLE_DOOR_IDS.SPIRAL_DOWN, x: 2435, y: 7386, z: 0, from: CASTLE_ROOM.EXPLOSIVE_ROOM, to: CASTLE_ROOM.STORAGE,
+      fromFloor: 1, toFloor: 1, action: "Climb-down", landing: [2341, 7384] },
+    { id: CASTLE_DOOR_IDS.DOOR_M, x: 2439, y: 7384, z: 0, from: CASTLE_ROOM.EXPLOSIVE_ROOM, to: CASTLE_ROOM.EMBLEM_ROOM,
+      fromFloor: 1, toFloor: 1, landing: [2455, 7380] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2455, y: 7381, z: 0, from: CASTLE_ROOM.EMBLEM_ROOM, to: CASTLE_ROOM.EXPLOSIVE_ROOM,
+      fromFloor: 1, toFloor: 1, landing: [2439, 7386] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2444, y: 7386, z: 0, from: CASTLE_ROOM.EXPLOSIVE_ROOM, to: CASTLE_ROOM.EXPLOSIVE_HALL,
+      fromFloor: 1, toFloor: 1, landing: [2468, 7395] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT_M, x: 2467, y: 7395, z: 0, from: CASTLE_ROOM.EXPLOSIVE_HALL, to: CASTLE_ROOM.EXPLOSIVE_ROOM,
+      fromFloor: 1, toFloor: 1, landing: [2443, 7386] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2474, y: 7398, z: 0, from: CASTLE_ROOM.EXPLOSIVE_HALL, to: CASTLE_ROOM.LOBBY,
+      fromFloor: 1, toFloor: 2, landing: [2314, 7359, 1] },
+    { id: CASTLE_DOOR_IDS.DOOR_M, x: 2314, y: 7360, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.EXPLOSIVE_HALL,
+      fromFloor: 2, toFloor: 1, landing: [2474, 7397] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2314, y: 7382, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.NORTH_LOBBY_HALL,
+      fromFloor: 2, toFloor: 2, landing: [2456, 7417, 0] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2457, y: 7417, z: 0, from: CASTLE_ROOM.NORTH_LOBBY_HALL, to: CASTLE_ROOM.LOBBY,
+      fromFloor: 2, toFloor: 2, landing: [2313, 7381, 1] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2466, y: 7422, z: 0, from: CASTLE_ROOM.NORTH_LOBBY_HALL, to: CASTLE_ROOM.VANESCULA_HALL,
+      fromFloor: 2, toFloor: 2, landing: [2451, 7403] },
+    { id: CASTLE_DOOR_IDS.DOOR_M, x: 2452, y: 7403, z: 0, from: CASTLE_ROOM.VANESCULA_HALL, to: CASTLE_ROOM.NORTH_LOBBY_HALL,
+      fromFloor: 2, toFloor: 2, landing: [2466, 7421] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2477, y: 7409, z: 0, from: CASTLE_ROOM.VANESCULA_HALL, to: CASTLE_ROOM.RANIS_HALL,
+      fromFloor: 2, toFloor: 2, anyKey: CASTLE_EMBLEM_IDS, keyName: "a Drakan emblem", landing: [2481, 7404] },
+    { id: CASTLE_DOOR_IDS.DOOR_M, x: 2481, y: 7403, z: 0, from: CASTLE_ROOM.RANIS_HALL, to: CASTLE_ROOM.VANESCULA_HALL,
+      fromFloor: 2, toFloor: 2, anyKey: CASTLE_EMBLEM_IDS, keyName: "a Drakan emblem", landing: [2476, 7409] },
+    { id: CASTLE_DOOR_IDS.SPIRAL_DOWN, x: 2491, y: 7402, z: 0, from: CASTLE_ROOM.RANIS_HALL, to: CASTLE_ROOM.NORTH_CHAPEL,
+      fromFloor: 2, toFloor: 1, action: "Climb-down", landing: [2384, 7403] },
+    { id: CASTLE_DOOR_IDS.SPIRAL_UP, x: 2385, y: 7403, z: 0, from: CASTLE_ROOM.NORTH_CHAPEL, to: CASTLE_ROOM.RANIS_HALL,
+      fromFloor: 1, toFloor: 2, action: "Climb-up", landing: [2490, 7401] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2372, y: 7409, z: 0, from: CASTLE_ROOM.NORTH_CHAPEL, to: CASTLE_ROOM.WEST_CHAPEL,
+      fromFloor: 1, toFloor: 1, anyKey: CASTLE_EMBLEM_IDS, keyName: "a Drakan emblem", landing: [2371, 7395] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT_M, x: 2371, y: 7396, z: 0, from: CASTLE_ROOM.WEST_CHAPEL, to: CASTLE_ROOM.NORTH_CHAPEL,
+      fromFloor: 1, toFloor: 1, anyKey: CASTLE_EMBLEM_IDS, keyName: "a Drakan emblem", landing: [2373, 7409] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2369, y: 7384, z: 0, from: CASTLE_ROOM.WEST_CHAPEL, to: CASTLE_ROOM.GALLERY,
+      fromFloor: 1, toFloor: 1, anyKey: CASTLE_EMBLEM_IDS, keyName: "a Drakan emblem", landing: [2387, 7366] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2388, y: 7366, z: 0, from: CASTLE_ROOM.GALLERY, to: CASTLE_ROOM.WEST_CHAPEL,
+      fromFloor: 1, toFloor: 1, anyKey: CASTLE_EMBLEM_IDS, keyName: "a Drakan emblem", landing: [2370, 7384] },
+    { id: CASTLE_DOOR_IDS.CRESCENT_M, x: 2370, y: 7370, z: 0, from: CASTLE_ROOM.GALLERY, to: CASTLE_ROOM.GALLERY_HALL,
+      fromFloor: 1, toFloor: 1, landing: [2342, 7416] },
+    { id: CASTLE_DOOR_IDS.CRESCENT, x: 2343, y: 7416, z: 0, from: CASTLE_ROOM.GALLERY_HALL, to: CASTLE_ROOM.GALLERY,
+      fromFloor: 1, toFloor: 1, landing: [2371, 7370] },
+    { id: CASTLE_DOOR_IDS.CRESCENT_M, x: 2325, y: 7403, z: 0, from: CASTLE_ROOM.GALLERY_HALL, to: CASTLE_ROOM.KITCHEN,
+      fromFloor: 1, toFloor: 1, landing: [2314, 7420] },
+    { id: CASTLE_DOOR_IDS.CRESCENT, x: 2314, y: 7421, z: 0, from: CASTLE_ROOM.KITCHEN, to: CASTLE_ROOM.GALLERY_HALL,
+      fromFloor: 1, toFloor: 1, landing: [2324, 7403] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2309, y: 7421, z: 0, from: CASTLE_ROOM.KITCHEN, to: CASTLE_ROOM.LARDER,
+      fromFloor: 1, toFloor: 1, landing: [2360, 7393] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT_M, x: 2361, y: 7393, z: 0, from: CASTLE_ROOM.LARDER, to: CASTLE_ROOM.KITCHEN,
+      fromFloor: 1, toFloor: 1, landing: [2309, 7420] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT_M, x: 2330, y: 7407, z: 0, from: CASTLE_ROOM.GALLERY_HALL, to: CASTLE_ROOM.LOBBY,
+      fromFloor: 1, toFloor: 1, landing: [2327, 7381] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2327, y: 7382, z: 0, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.GALLERY_HALL,
+      fromFloor: 1, toFloor: 1, landing: [2331, 7407] },
+    { id: CASTLE_DOOR_IDS.HALF_M, x: 2310, y: 7386, z: 0, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.SOUTH_OF_THRONE,
+      fromFloor: 1, toFloor: 1, landing: [2327, 7390] },
+    { id: CASTLE_DOOR_IDS.HALF_M, x: 2327, y: 7391, z: 0, from: CASTLE_ROOM.SOUTH_OF_THRONE, to: CASTLE_ROOM.THRONE,
+      fromFloor: 1, toFloor: 1, landing: [2310, 7388] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2309, y: 7397, z: 0, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.STUDY,
+      fromFloor: 1, toFloor: 1, landing: [2357, 7380] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2358, y: 7380, z: 0, from: CASTLE_ROOM.STUDY, to: CASTLE_ROOM.THRONE,
+      fromFloor: 1, toFloor: 1, landing: [2310, 7395] },
+    { id: CASTLE_DOOR_IDS.GIBBOUS, x: 2327, y: 7360, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.DINING,
+      fromFloor: 2, toFloor: 2, landing: [2342, 7372, 1] },
+    { id: CASTLE_DOOR_IDS.GIBBOUS, x: 2342, y: 7373, z: 1, from: CASTLE_ROOM.DINING, to: CASTLE_ROOM.LOBBY,
+      fromFloor: 2, toFloor: 2, landing: [2328, 7360, 1] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2358, y: 7366, z: 1, from: CASTLE_ROOM.DINING, to: CASTLE_ROOM.THRONE,
+      fromFloor: 2, toFloor: 2, landing: [2305, 7392, 1] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT_M, x: 2304, y: 7392, z: 1, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.DINING,
+      fromFloor: 2, toFloor: 2, landing: [2357, 7366, 1] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2306, y: 7386, z: 1, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.UPPER_SOUTH_HALL,
+      fromFloor: 2, toFloor: 2, landing: [2434, 7364] },
+    { id: CASTLE_DOOR_IDS.DOOR_M, x: 2434, y: 7365, z: 0, from: CASTLE_ROOM.UPPER_SOUTH_HALL, to: CASTLE_ROOM.THRONE,
+      fromFloor: 2, toFloor: 2, landing: [2305, 7386, 1] },
+    { id: CASTLE_DOOR_IDS.FULL, x: 2436, y: 7361, z: 0, from: CASTLE_ROOM.UPPER_SOUTH_HALL, to: CASTLE_ROOM.BEDROOM,
+      fromFloor: 2, toFloor: 2, landing: [2452, 7364] },
+    { id: CASTLE_DOOR_IDS.FULL_M, x: 2452, y: 7365, z: 0, from: CASTLE_ROOM.BEDROOM, to: CASTLE_ROOM.UPPER_SOUTH_HALL,
+      fromFloor: 2, toFloor: 2, landing: [2437, 7361] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT_M, x: 2446, y: 7364, z: 0, from: CASTLE_ROOM.UPPER_SOUTH_HALL, to: CASTLE_ROOM.EAST_STAIR_FIRST,
+      fromFloor: 2, toFloor: 2, landing: [2458, 7362] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2457, y: 7362, z: 0, from: CASTLE_ROOM.EAST_STAIR_FIRST, to: CASTLE_ROOM.UPPER_SOUTH_HALL,
+      fromFloor: 2, toFloor: 2, landing: [2445, 7364] },
+    // The current cache places the matching descent at 2459,7371; the QH
+    // endpoint at 2359,7371 is an obsolete/incorrectly transcribed location.
+    { id: CASTLE_DOOR_IDS.SPIRAL_DOWN, x: 2459, y: 7371, z: 0, from: CASTLE_ROOM.EAST_STAIR_FIRST, to: CASTLE_ROOM.EAST_STAIR_GROUND,
+      fromFloor: 2, toFloor: 1, action: "Climb-down", landing: [2363, 7368] },
+    { id: CASTLE_DOOR_IDS.SPIRAL_UP, x: 2363, y: 7369, z: 0, from: CASTLE_ROOM.EAST_STAIR_GROUND, to: CASTLE_ROOM.EAST_STAIR_FIRST,
+      fromFloor: 1, toFloor: 2, action: "Climb-up", landing: [2358, 7371] },
+    { id: CASTLE_DOOR_IDS.DOOR_M, x: 2363, y: 7362, z: 0, from: CASTLE_ROOM.EAST_STAIR_GROUND, to: CASTLE_ROOM.THRONE_STORAGE,
+      fromFloor: 1, toFloor: 1, landing: [2348, 7397] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2349, y: 7399, z: 0, from: CASTLE_ROOM.THRONE_STORAGE, to: CASTLE_ROOM.EAST_STAIR_GROUND,
+      fromFloor: 1, toFloor: 1, landing: [2364, 7362] },
+    { id: CASTLE_DOOR_IDS.DOOR_M, x: 2344, y: 7395, z: 0, from: CASTLE_ROOM.THRONE_STORAGE, to: CASTLE_ROOM.SOUTH_OF_THRONE,
+      fromFloor: 1, toFloor: 1, landing: [2332, 7388] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2333, y: 7388, z: 0, from: CASTLE_ROOM.SOUTH_OF_THRONE, to: CASTLE_ROOM.THRONE_STORAGE,
+      fromFloor: 1, toFloor: 1, landing: [2345, 7395] },
+    { id: CASTLE_DOOR_IDS.CRESCENT_M, x: 2471, y: 7422, z: 0, from: CASTLE_ROOM.NORTH_LOBBY_HALL, to: CASTLE_ROOM.CRESCENT_ROOM,
+      fromFloor: 2, toFloor: 2, landing: [2491, 7377] },
+    { id: CASTLE_DOOR_IDS.CRESCENT, x: 2492, y: 7377, z: 0, from: CASTLE_ROOM.CRESCENT_ROOM, to: CASTLE_ROOM.NORTH_LOBBY_HALL,
+      fromFloor: 2, toFloor: 2, landing: [2471, 7421] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT, x: 2507, y: 7409, z: 0, from: CASTLE_ROOM.SOLID_DOOR_HALL, to: CASTLE_ROOM.SOLID_DOOR_STORAGE,
+      fromFloor: 2, toFloor: 2, landing: [2554, 7364] },
+    { id: CASTLE_DOOR_IDS.DOOR_M, x: 2553, y: 7364, z: 0, from: CASTLE_ROOM.SOLID_DOOR_STORAGE, to: CASTLE_ROOM.SOLID_DOOR_HALL,
+      fromFloor: 2, toFloor: 2, landing: [2506, 7409] },
+    { id: CASTLE_DOOR_IDS.DOOR_M, x: 2585, y: 7370, z: 0, from: CASTLE_ROOM.BASEMENT_HALL, to: CASTLE_ROOM.BASEMENT_STORAGE,
+      fromFloor: 1, toFloor: 1, landing: [2587, 7380] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2588, y: 7380, z: 0, from: CASTLE_ROOM.BASEMENT_STORAGE, to: CASTLE_ROOM.BASEMENT_HALL,
+      fromFloor: 1, toFloor: 1, landing: [2583, 7370] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2442, y: 7361, z: 0, from: CASTLE_ROOM.UPPER_SOUTH_HALL, to: CASTLE_ROOM.ORNATE_KNIFE,
+      fromFloor: 2, toFloor: 2, landing: [2451, 7371] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT_M, x: 2452, y: 7373, z: 0, from: CASTLE_ROOM.ORNATE_KNIFE, to: CASTLE_ROOM.UPPER_SOUTH_HALL,
+      fromFloor: 2, toFloor: 2, landing: [2441, 7361] },
+    { id: CASTLE_DOOR_IDS.GUEST_PORTAL_IN, x: 2450, y: 7372, z: 0, from: CASTLE_ROOM.ORNATE_KNIFE, to: CASTLE_ROOM.GUEST_STORAGE,
+      fromFloor: 2, toFloor: 2, action: "Enter", landing: [2515, 7395] },
+    { id: CASTLE_DOOR_IDS.GUEST_PORTAL_OUT, x: 2515, y: 7396, z: 0, from: CASTLE_ROOM.GUEST_STORAGE, to: CASTLE_ROOM.ORNATE_KNIFE,
+      fromFloor: 2, toFloor: 2, action: "Enter", landing: [2450, 7371] },
+    { id: CASTLE_DOOR_IDS.GIBBOUS_M, x: 2522, y: 7397, z: 0, from: CASTLE_ROOM.GUEST_STORAGE, to: CASTLE_ROOM.DISPLAY_ROOM,
+      fromFloor: 2, toFloor: 2, landing: [2507, 7363] },
+    { id: CASTLE_DOOR_IDS.GIBBOUS, x: 2506, y: 7363, z: 0, from: CASTLE_ROOM.DISPLAY_ROOM, to: CASTLE_ROOM.GUEST_STORAGE,
+      fromFloor: 2, toFloor: 2, landing: [2520, 7396] },
+    { id: CASTLE_DOOR_IDS.GIBBOUS, x: 2336, y: 7370, z: 1, from: CASTLE_ROOM.DINING, to: CASTLE_ROOM.EXPLOSIVE_HALL,
+      fromFloor: 2, toFloor: 2, landing: [2482, 7395] },
+    { id: CASTLE_DOOR_IDS.GIBBOUS_M, x: 2483, y: 7395, z: 0, from: CASTLE_ROOM.EXPLOSIVE_HALL, to: CASTLE_ROOM.DINING,
+      fromFloor: 2, toFloor: 2, landing: [2337, 7370, 1] },
+    { id: CASTLE_DOOR_IDS.GIBBOUS, x: 2510, y: 7370, z: 0, from: CASTLE_ROOM.DISPLAY_ROOM, to: CASTLE_ROOM.VENATOR_PUZZLE,
+      fromFloor: 2, toFloor: 2, landing: [2516, 7367] },
+    { id: CASTLE_DOOR_IDS.GIBBOUS_M, x: 2515, y: 7367, z: 0, from: CASTLE_ROOM.VENATOR_PUZZLE, to: CASTLE_ROOM.DISPLAY_ROOM,
+      fromFloor: 2, toFloor: 2, landing: [2509, 7370] },
+    { id: CASTLE_DOOR_IDS.PUZZLE_LIBRARY, x: 2519, y: 7363, z: 0, from: CASTLE_ROOM.VENATOR_PUZZLE, to: CASTLE_ROOM.VENATOR_LIBRARY,
+      fromFloor: 2, toFloor: 2, action: "Enter", landing: [2551, 7386] },
+    { id: CASTLE_DOOR_IDS.DOOR_ALT_M, x: 2551, y: 7387, z: 0, from: CASTLE_ROOM.VENATOR_LIBRARY, to: CASTLE_ROOM.VENATOR_PUZZLE,
+      fromFloor: 2, toFloor: 2, landing: [2518, 7363] },
+    { id: CASTLE_DOOR_IDS.DISPLAY_STAIRS_DOWN, x: 2503, y: 7369, z: 0, from: CASTLE_ROOM.DISPLAY_ROOM, to: CASTLE_ROOM.LOBBY,
+      fromFloor: 2, toFloor: 2, action: "Climb-down", landing: [2307, 7365, 1] },
+    { id: CASTLE_DOOR_IDS.STAIRS_UP, x: 2308, y: 7365, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.DISPLAY_ROOM,
+      fromFloor: 2, toFloor: 2, action: "Climb-up", landing: [2502, 7368] },
+    { id: CASTLE_DOOR_IDS.GILDED_M, x: 2452, y: 7420, z: 0, from: CASTLE_ROOM.NORTH_LOBBY_HALL, to: CASTLE_ROOM.SMALL_HALL,
+      fromFloor: 2, toFloor: 2, action: "Enter", key: ItemIdentifiers.GILDED_KEY, keyName: "gilded key", landing: [2444, 7418] },
+    { id: CASTLE_DOOR_IDS.GILDED, x: 2445, y: 7418, z: 0, from: CASTLE_ROOM.SMALL_HALL, to: CASTLE_ROOM.NORTH_LOBBY_HALL,
+      fromFloor: 2, toFloor: 2, action: "Enter", key: ItemIdentifiers.GILDED_KEY, keyName: "gilded key", landing: [2453, 7421] },
+    { id: CASTLE_DOOR_IDS.DOOR_M, x: 2441, y: 7417, z: 0, from: CASTLE_ROOM.SMALL_HALL, to: CASTLE_ROOM.IVAN_ROOM,
+      fromFloor: 2, toFloor: 2, landing: [2459, 7390] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2460, y: 7390, z: 0, from: CASTLE_ROOM.IVAN_ROOM, to: CASTLE_ROOM.SMALL_HALL,
+      fromFloor: 2, toFloor: 2, landing: [2442, 7417] },
+    { id: CASTLE_DOOR_IDS.IVAN_PASSAGE, x: 2455, y: 7386, z: 0, from: CASTLE_ROOM.IVAN_ROOM, to: CASTLE_ROOM.SECRET_ROOM,
+      fromFloor: 2, toFloor: 2, action: "Enter", landing: [2437, 7419] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2438, y: 7419, z: 0, from: CASTLE_ROOM.SECRET_ROOM, to: CASTLE_ROOM.IVAN_ROOM,
+      fromFloor: 2, toFloor: 2, landing: [2456, 7388] },
+    { id: CASTLE_DOOR_IDS.FULL_M, x: 2373, y: 7392, z: 0, from: CASTLE_ROOM.WEST_CHAPEL, to: CASTLE_ROOM.BOTTLE_ROOM,
+      fromFloor: 1, toFloor: 1, landing: [2380, 7392] },
+    { id: CASTLE_DOOR_IDS.FULL_M, x: 2379, y: 7392, z: 0, from: CASTLE_ROOM.BOTTLE_ROOM, to: CASTLE_ROOM.WEST_CHAPEL,
+      fromFloor: 1, toFloor: 1, landing: [2372, 7392] },
+    { id: CASTLE_DOOR_IDS.FULL, x: 2388, y: 7383, z: 0, from: CASTLE_ROOM.BOTTLE_ROOM, to: CASTLE_ROOM.CHAPEL_LIBRARY,
+      fromFloor: 1, toFloor: 1, landing: [2393, 7363] },
+    { id: CASTLE_DOOR_IDS.FULL_M, x: 2392, y: 7363, z: 0, from: CASTLE_ROOM.CHAPEL_LIBRARY, to: CASTLE_ROOM.BOTTLE_ROOM,
+      fromFloor: 1, toFloor: 1, landing: [2387, 7383] },
+    { id: CASTLE_DOOR_IDS.CHAPEL_PORTAL_IN, x: 2393, y: 7370, z: 0, from: CASTLE_ROOM.CHAPEL_LIBRARY, to: CASTLE_ROOM.SERVANTS_QUARTERS,
+      fromFloor: 1, toFloor: 1, action: "Enter", landing: [2441, 7400] },
+    { id: CASTLE_DOOR_IDS.CHAPEL_PORTAL_OUT, x: 2440, y: 7400, z: 0, from: CASTLE_ROOM.SERVANTS_QUARTERS, to: CASTLE_ROOM.CHAPEL_LIBRARY,
+      fromFloor: 1, toFloor: 1, action: "Enter", landing: [2394, 7370] },
+    { id: CASTLE_DOOR_IDS.NEW_M, x: 2438, y: 7394, z: 0, from: CASTLE_ROOM.SERVANTS_QUARTERS, to: CASTLE_ROOM.EXPLOSIVE_ROOM,
+      fromFloor: 1, toFloor: 1, landing: [2440, 7388] },
+    { id: CASTLE_DOOR_IDS.NEW, x: 2441, y: 7389, z: 0, from: CASTLE_ROOM.EXPLOSIVE_ROOM, to: CASTLE_ROOM.SERVANTS_QUARTERS,
+      fromFloor: 1, toFloor: 1, landing: [2439, 7394] },
+    { id: CASTLE_DOOR_IDS.FULL, x: 2306, y: 7397, z: 1, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.ABOVE_STUDY,
+      fromFloor: 2, toFloor: 2, landing: [2435, 7372] },
+    { id: CASTLE_DOOR_IDS.FULL_M, x: 2434, y: 7372, z: 0, from: CASTLE_ROOM.ABOVE_STUDY, to: CASTLE_ROOM.THRONE,
+      fromFloor: 2, toFloor: 2, landing: [2306, 7396, 1] },
+    { id: CASTLE_DOOR_IDS.FULL, x: 2525, y: 7363, z: 0, from: CASTLE_ROOM.VENATOR_PUZZLE, to: CASTLE_ROOM.SOLID_KEY_ROOM,
+      fromFloor: 2, toFloor: 2, landing: [2540, 7373] },
+    { id: CASTLE_DOOR_IDS.FULL, x: 2541, y: 7374, z: 0, from: CASTLE_ROOM.SOLID_KEY_ROOM, to: CASTLE_ROOM.VENATOR_PUZZLE,
+      fromFloor: 2, toFloor: 2, landing: [2526, 7363] },
+    { id: CASTLE_DOOR_IDS.FULL, x: 2510, y: 7379, z: 0, from: CASTLE_ROOM.DISPLAY_ROOM, to: CASTLE_ROOM.SOLID_DOOR_HALL,
+      fromFloor: 2, toFloor: 2, landing: [2499, 7400] },
+    { id: CASTLE_DOOR_IDS.FULL_M, x: 2499, y: 7400, z: 0, from: CASTLE_ROOM.SOLID_DOOR_HALL, to: CASTLE_ROOM.DISPLAY_ROOM,
+      fromFloor: 2, toFloor: 2, landing: [2510, 7380] },
+    { id: 61575, x: 2503, y: 7400, z: 0, from: CASTLE_ROOM.SOLID_DOOR_HALL, to: CASTLE_ROOM.LABORATORY,
+      fromFloor: 2, toFloor: 2, action: "Enter", key: ItemIdentifiers.SOLID_KEY, keyName: "solid key", landing: [2510, 7382] },
+    { id: 61574, x: 2512, y: 7382, z: 0, from: CASTLE_ROOM.LABORATORY, to: CASTLE_ROOM.SOLID_DOOR_HALL,
+      fromFloor: 2, toFloor: 2, action: "Enter", key: ItemIdentifiers.SOLID_KEY, keyName: "solid key", landing: [2502, 7400] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2523, y: 7389, z: 0, from: CASTLE_ROOM.LABORATORY, to: CASTLE_ROOM.STOCKPILE_STORAGE,
+      fromFloor: 2, toFloor: 2, landing: [2534, 7377] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2535, y: 7377, z: 0, from: CASTLE_ROOM.STOCKPILE_STORAGE, to: CASTLE_ROOM.LABORATORY,
+      fromFloor: 2, toFloor: 2, landing: [2524, 7388] },
+    { id: 61606, x: 2311, y: 7366, z: 0, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.BASEMENT_HALL,
+      fromFloor: 1, toFloor: 1, action: "Climb-down", landing: [2563, 7369] },
+    { id: 61600, x: 2564, y: 7369, z: 0, from: CASTLE_ROOM.BASEMENT_HALL, to: CASTLE_ROOM.LOBBY,
+      fromFloor: 1, toFloor: 1, action: "Climb-up", landing: [2310, 7366] },
+    { id: CASTLE_DOOR_IDS.CRESCENT_M, x: 2570, y: 7365, z: 0, from: CASTLE_ROOM.BASEMENT_HALL, to: CASTLE_ROOM.BASEMENT_VENATOR,
+      fromFloor: 1, toFloor: 1, landing: [2566, 7386] },
+    { id: CASTLE_DOOR_IDS.CRESCENT, x: 2566, y: 7387, z: 0, from: CASTLE_ROOM.BASEMENT_VENATOR, to: CASTLE_ROOM.BASEMENT_HALL,
+      fromFloor: 1, toFloor: 1, landing: [2569, 7365] },
+    { id: CASTLE_DOOR_IDS.NEW, x: 2570, y: 7369, z: 0, from: CASTLE_ROOM.BASEMENT_HALL, to: CASTLE_ROOM.BASEMENT_PRISON,
+      fromFloor: 1, toFloor: 1, landing: [2565, 7394] },
+    { id: CASTLE_DOOR_IDS.NEW_M, x: 2566, y: 7394, z: 0, from: CASTLE_ROOM.BASEMENT_PRISON, to: CASTLE_ROOM.BASEMENT_HALL,
+      fromFloor: 1, toFloor: 1, landing: [2567, 7394] },
+  ]);
+  const CASTLE_DOOR_NAMES = Object.freeze(["Door", "Half moon door", "Crescent moon door",
+    "New moon door", "Gibbous moon door", "Full moon door", "Stairs", "Spiral staircase",
+    "Gilded door", "Solid door", "Teleporter"]);
+  const CASTLE_MOON_DOOR_KEYS = new Map([
+    [CASTLE_DOOR_IDS.NEW, [CASTLE_BOOK_ITEMS.newMoonKey, "new moon key"]],
+    [CASTLE_DOOR_IDS.NEW_M, [CASTLE_BOOK_ITEMS.newMoonKey, "new moon key"]],
+    [CASTLE_DOOR_IDS.HALF, [CASTLE_BOOK_ITEMS.halfMoonKey, "half moon key"]],
+    [CASTLE_DOOR_IDS.HALF_M, [CASTLE_BOOK_ITEMS.halfMoonKey, "half moon key"]],
+    [CASTLE_DOOR_IDS.GIBBOUS, [CASTLE_BOOK_ITEMS.gibbousMoonKey, "gibbous moon key"]],
+    [CASTLE_DOOR_IDS.GIBBOUS_M, [CASTLE_BOOK_ITEMS.gibbousMoonKey, "gibbous moon key"]],
+    [CASTLE_DOOR_IDS.FULL, [CASTLE_BOOK_ITEMS.fullMoonKey, "full moon key"]],
+    [CASTLE_DOOR_IDS.FULL_M, [CASTLE_BOOK_ITEMS.fullMoonKey, "full moon key"]],
+    [CASTLE_DOOR_IDS.CRESCENT, [CASTLE_BOOK_ITEMS.crescentMoonKey, "crescent moon key"]],
+    [CASTLE_DOOR_IDS.CRESCENT_M, [CASTLE_BOOK_ITEMS.crescentMoonKey, "crescent moon key"]],
+    [CASTLE_DOOR_IDS.GILDED, [ItemIdentifiers.GILDED_KEY, "gilded key"]],
+    [CASTLE_DOOR_IDS.GILDED_M, [ItemIdentifiers.GILDED_KEY, "gilded key"]],
+    [CASTLE_DOOR_IDS.SOLID, [ItemIdentifiers.SOLID_KEY, "solid key"]],
+    [CASTLE_DOOR_IDS.SOLID_M, [ItemIdentifiers.SOLID_KEY, "solid key"]],
   ]);
   // Quest Helper locates the Castle Drakan shrine at (3168, 7707) and the
   // Vampyrium entry portal at (3161, 7710). The medallion lands beside the
@@ -1583,8 +1836,10 @@ module.exports = function registerTheBloodMoonRises(api) {
   function syncCastleRoom(player) {
     if (!player || stage(player) < STAGE.CASTLE || stage(player) > STAGE.ESCAPE) return;
     const room = Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) || CASTLE_ROOM.LOBBY;
+    const floor = Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) || CASTLE_GROUND_FLOOR;
     player.setAttribute(CASTLE_ROOM_ATTRIBUTE, room);
-    player.getPacketSender().sendVarbit(CASTLE_WORLD_MAP_FLOOR_VARBIT, CASTLE_GROUND_FLOOR);
+    player.setAttribute(CASTLE_FLOOR_ATTRIBUTE, floor);
+    player.getPacketSender().sendVarbit(CASTLE_WORLD_MAP_FLOOR_VARBIT, floor);
     player.getPacketSender().sendVarbit(CASTLE_LAST_ROOM_VARBIT, room);
   }
 
@@ -2781,29 +3036,48 @@ module.exports = function registerTheBloodMoonRises(api) {
     const player = event?.player;
     const { x, y, z } = event?.location ?? {};
     const currentStage = player && stage(player);
+    const name = event?.definition?.getName?.();
+    const visibleId = event?.definition?.id ?? event?.objectId;
     if (!player || quest.isComplete(player) || currentStage < STAGE.CASTLE || currentStage > STAGE.ESCAPE ||
-      event.option !== "Enter" || event.definition?.getName?.() !== "Door" || z !== 0 ||
+      !["Enter", "Climb-up", "Climb-down"].includes(event.option) ||
+      (!CASTLE_DOOR_NAMES.includes(name) && !CASTLE_DOOR_TRANSITIONS.some(door => door.id === visibleId &&
+        door.x === x && door.y === y && (door.z ?? 0) === z)) ||
       x < 2300 || x > 2600 || y < 7300 || y > 7440) return;
-    const visibleId = event.definition?.id ?? event.objectId;
-    if ([61590, 61591].includes(visibleId) && !hasItem(player, CASTLE_BOOK_ITEMS.fullMoonKey)) {
+    const moonDoorKey = CASTLE_MOON_DOOR_KEYS.get(visibleId);
+    if (moonDoorKey && !hasItem(player, moonDoorKey[0])) {
       event.handled = true;
-      player.sendMessage("The full moon door is locked. Find the full moon key beyond Ivan's secret passage.");
+      player.sendMessage(`The door is locked. You need the ${moonDoorKey[1]}.`);
       return;
     }
-    const transition = CASTLE_DOOR_TRANSITIONS.find(door => door.id === visibleId && door.x === x && door.y === y);
+    const transition = CASTLE_DOOR_TRANSITIONS.find(door => door.id === visibleId && door.x === x && door.y === y &&
+      (door.z ?? 0) === z &&
+      (door.action ?? "Enter") === event.option);
     if (transition) {
       const currentRoom = Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) || CASTLE_ROOM.LOBBY;
-      if (currentRoom !== transition.from) {
+      const currentFloor = Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) || CASTLE_GROUND_FLOOR;
+      if (transition.key && !hasItem(player, transition.key)) {
+        event.handled = true;
+        player.sendMessage(`The door is locked. You need the ${transition.keyName}.`);
+        return;
+      }
+      if (transition.anyKey && !transition.anyKey.some(itemId => hasItem(player, itemId))) {
+        event.handled = true;
+        player.sendMessage(`The door is locked. You need ${transition.keyName}.`);
+        return;
+      }
+      if (currentRoom !== transition.from || currentFloor !== (transition.fromFloor ?? CASTLE_GROUND_FLOOR)) {
         player.sendMessage("That doorway does not lead onward from this part of the castle.");
         event.handled = true;
         return;
       }
       event.handled = true;
       player.setAttribute(CASTLE_ROOM_ATTRIBUTE, transition.to);
+      player.setAttribute(CASTLE_FLOOR_ATTRIBUTE, transition.toFloor ?? CASTLE_GROUND_FLOOR);
       syncCastleRoom(player);
-      player.moveTo(new Location(transition.landing[0], transition.landing[1], 0));
+      player.moveTo(new Location(transition.landing[0], transition.landing[1], transition.landing[2] ?? 0));
       return;
     }
+    if (name !== "Door") return;
     const door = event.object;
     const face = door?.getFace?.();
     if (!Number.isInteger(face)) return;
@@ -2922,14 +3196,22 @@ module.exports = function registerTheBloodMoonRises(api) {
     const player = event?.player;
     const tile = event?.object?.getLocation?.();
     const currentStage = player && stage(player);
+    const name = event.definition?.getName?.();
+    const option = event.definition?.getInteractions?.()?.[event.clickType - 1];
     if (!player || quest.isComplete(player) || currentStage < STAGE.CASTLE || currentStage > STAGE.ESCAPE ||
-      event.definition?.getName?.() !== "Door" ||
-      event.definition?.getInteractions?.()?.[event.clickType - 1] !== "Enter" ||
-      !tile || tile.getZ() !== 0 || tile.getX() < 2300 || tile.getX() > 2600 ||
+      (!CASTLE_DOOR_NAMES.includes(name) && !CASTLE_DOOR_TRANSITIONS.some(door => door.id === event.definition?.id &&
+        door.x === tile?.getX?.() && door.y === tile?.getY?.() && (door.z ?? 0) === tile?.getZ?.())) ||
+      !["Enter", "Climb-up", "Climb-down"].includes(option) ||
+      !tile || tile.getX() < 2300 || tile.getX() > 2600 ||
       tile.getY() < 7300 || tile.getY() > 7440) return;
+    const source = event.sourceLocation;
+    const sourceX = source?.x ?? source?.getX?.();
+    const sourceY = source?.y ?? source?.getY?.();
+    const sourceZ = source?.z ?? source?.getZ?.();
+    if (sourceZ === tile.getZ() &&
+      Math.max(Math.abs(sourceX - tile.getX()), Math.abs(sourceY - tile.getY())) <= 1) return;
     const face = event.object.getFace();
     const axis = (face & 1) === 0 ? "x" : "y";
-    const source = event.sourceLocation;
     const side = Math.sign(source?.[axis] - (axis === "x" ? tile.getX() : tile.getY())) ||
       (face === 0 || face === 3 ? 1 : -1);
     const privateArea = player.getPrivateArea?.() ?? null;
@@ -3795,6 +4077,17 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction(handleCastleThronePuzzle);
   api.onObjectInteraction(handleCastleCellDoor);
   api.onObjectInteraction(handleCastleDoorEnter);
+  api.onObjectInteraction("Door", { Enter: handleCastleDoorEnter });
+  api.onObjectInteraction("Half moon door", { Enter: handleCastleDoorEnter });
+  api.onObjectInteraction("Crescent moon door", { Enter: handleCastleDoorEnter });
+  api.onObjectInteraction("New moon door", { Enter: handleCastleDoorEnter });
+  api.onObjectInteraction("Gibbous moon door", { Enter: handleCastleDoorEnter });
+  api.onObjectInteraction("Full moon door", { Enter: handleCastleDoorEnter });
+  api.onObjectInteraction("Stairs", { "Climb-up": handleCastleDoorEnter, "Climb-down": handleCastleDoorEnter });
+  api.onObjectInteraction("Spiral staircase", { "Climb-up": handleCastleDoorEnter, "Climb-down": handleCastleDoorEnter });
+  api.onObjectInteraction("Gilded door", { Enter: handleCastleDoorEnter });
+  api.onObjectInteraction("Solid door", { Enter: handleCastleDoorEnter });
+  api.onObjectInteraction("Teleporter", { Enter: handleCastleDoorEnter });
   api.onObjectInteraction(handleCastleBookObjects);
   api.onObjectInteraction(handleCastleKeyObjects);
   api.onItemOnObject(handleCastleBookOnObject, { noted: false });
@@ -3863,6 +4156,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.persistAttribute(PREP_COMPLETE);
   api.persistAttribute(THRONE_PUZZLE_ATTRIBUTE);
   api.persistAttribute(CASTLE_ROOM_ATTRIBUTE);
+  api.persistAttribute(CASTLE_FLOOR_ATTRIBUTE);
   api.persistAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE);
   api.persistAttribute(CASTLE_STORY_ATTRIBUTE);
   api.persistAttribute(CASTLE_BOOK_PUZZLE_ATTRIBUTE);
