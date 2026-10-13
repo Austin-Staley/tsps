@@ -1189,7 +1189,7 @@ module.exports = function registerSongOfTheElves(api) {
       player.getInventory().getAmount(ItemIdentifiers.CLUE_SCROLL_HARD_) === 0) return;
     const loc = player.getLocation();
     if (Math.abs(loc.getX() - 2309) > 1 || Math.abs(loc.getY() - 3215) > 1 || loc.getZ() !== 0) return;
-    if (player.getEquipment().getItems().some(Boolean)) {
+    if (player.getEquipment().getItems().some((item) => item && item.getId() > 0 && item.getAmount() > 0)) {
       player.sendMessage("You need to remove all your equipment before following the final clue.");
       return;
     }

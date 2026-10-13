@@ -8589,6 +8589,7 @@ test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clu
   const inventory = new Map();
   const varbits = new Map();
   const location = { x: 2352, y: 3170, z: 0 };
+  const equipment = [];
   const player = {
     getUsername: () => 'SoteChapter16Test',
     getAttribute: (key) => attributes.get(key),
@@ -8601,7 +8602,7 @@ test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clu
     }),
     getPacketSender: () => new Proxy({}, { get: (_, key) => key === 'sendVarbit' ? (id, value) => varbits.set(id, value) : () => {} }),
     getLocation: () => ({ getX: () => location.x, getY: () => location.y, getZ: () => location.z }),
-    getEquipment: () => ({ getItems: () => [] }),
+    getEquipment: () => ({ getItems: () => equipment }),
     getArea: () => areas[0],
     isPlayer: () => true,
     getAsPlayer: () => player,
@@ -8659,8 +8660,12 @@ test('Song of the Elves chapter 16 requires the real Ithell symbols, statue, clu
   }
   assert.equal(varbits.get(9036), 4);
   location.x = 2309; location.y = 3215; location.z = 0;
+  equipment.push({ getId: () => 123, getAmount: () => 1 });
   custom.get('player:emote').at(-1)({ player, sequence: 2107 });
-  assert.equal(varbits.get(9036), 5);
+  assert.equal(varbits.get(9036), 4, 'actual equipped items still block the spin');
+  equipment[0] = { getId: () => -1, getAmount: () => 0 };
+  custom.get('player:emote').at(-1)({ player, sequence: 2107 });
+  assert.equal(varbits.get(9036), 5, 'the core equipment container uses truthy empty-slot sentinels');
   assert.equal(spawned.at(-1).id, base.core.NpcIdentifiers.LADY_FFION_MEILYR);
   const talk = npcHooks.at(-1)['Talk-to'];
   assert.equal(talk({ player, npcId: base.core.NpcIdentifiers.LADY_FFION_MEILYR,
