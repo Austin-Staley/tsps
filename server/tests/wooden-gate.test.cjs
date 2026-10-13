@@ -975,3 +975,20 @@ test('Death Plateau equipment door swings open after the quest unlocks it', () =
     ]);
   } finally { h.restore(); }
 });
+
+
+test('Elena’s cabinet house opens into its nameless cache door variant', async () => {
+  await initializeMapCollisionOnce();
+  const closed = CacheDefinitions.getObject(2054), opened = CacheDefinitions.getObject(2055);
+  assert.equal(closed.name, 'Door');
+  assert.deepEqual(closed.actions.filter(Boolean), ['Open']);
+  assert.ok(opened.name === null || opened.name === 'null');
+  assert.deepEqual(closed.models, opened.models);
+  const h = buildHarness({ cacheObjects: new Map([[2054, closed], [2055, opened]]) });
+  try {
+    h.place(2054, 2592, 3339, 1);
+    const ops = h.click(2054, 2592, 3339, 1, 'Open', 'Door');
+    assert.ok(ops.some(op => op[0] === 'deregister' && op[1] === 2054));
+    assert.ok(ops.some(op => op[0] === 'register' && op[1] === 2055));
+  } finally { h.restore(); }
+});
