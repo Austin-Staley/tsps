@@ -1852,6 +1852,7 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function syncCastleRoomOnLogin({ player }) {
     repairLegacyCastleLanding(player);
+    reconcileCastleLobbyFloor(player);
     syncCastleRoom(player);
     if (stage(player) === STAGE.CASTLE) {
       player.getPacketSender().sendVarbit(15464,
@@ -1871,6 +1872,15 @@ module.exports = function registerTheBloodMoonRises(api) {
     syncCastleBookKey(player);
     syncCastleGibbousKey(player);
     syncCastleSyringeBarrel(player);
+  }
+
+  function reconcileCastleLobbyFloor(player) {
+    if (!player || Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.LOBBY) return;
+    const z = player.getLocation?.()?.getZ?.();
+    const expectedFloor = z === 1 ? 2 : z === 0 ? CASTLE_GROUND_FLOOR : null;
+    if (expectedFloor !== null && Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== expectedFloor) {
+      player.setAttribute(CASTLE_FLOOR_ATTRIBUTE, expectedFloor);
+    }
   }
 
   function repairLegacyCastleLanding(player) {

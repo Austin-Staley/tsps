@@ -1036,6 +1036,41 @@ test('Blood Moon repairs only the legacy Castle NPC-marker landing without chang
   assert.deepEqual(inventory.snapshot(), [[22400, 1], [26227, 1]], 'repair leaves carried quest items untouched');
 });
 
+test('Blood Moon reconciles the Castle lobby floor varbit from the saved lobby plane', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.stage', 40],
+    ['quest.the_blood_moon_rises.castle-room', 1],
+    ['quest.the_blood_moon_rises.castle-floor', 2],
+    ['quest.the_blood_moon_rises.castle-native-stage', 72],
+  ]);
+  const varbits = new Map();
+  let plane = 0;
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(2327, 7361, plane),
+    getInventory: () => ({ contains: () => false, snapshot: () => [] }),
+    getUsername: () => 'castle-lobby-floor-fixture',
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) }, {
+      get: (target, key) => target[key] ?? (() => {}),
+    }),
+  };
+  const login = handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin');
+  login({ player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 1,
+    'the ground-plane lobby resumes with the ground-floor room route');
+  assert.equal(varbits.get(15489), 1);
+
+  plane = 1;
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 1);
+  login({ player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 2,
+    'the upper-plane lobby keeps its first-floor room route');
+  assert.equal(varbits.get(15489), 2);
+});
+
 test('Blood Moon Castle story actors use cache-walkable floor anchors', () => {
   const { api, handlers } = mockApi();
   const spawned = [];
