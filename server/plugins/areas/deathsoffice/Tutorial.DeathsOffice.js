@@ -175,8 +175,12 @@ function talk(player) {
   return true;
 }
 
-/** Collect during the tutorial: Death keeps talking. UNVERIFIED (the Wiki is silent). */
+/**
+ * Collect during the tutorial: Death keeps talking until every topic is heard, then opens his
+ * item retrieval as usual. UNVERIFIED (the Wiki is silent).
+ */
 function collect(player) {
+  if (heardAll(player)) return false;
   return talk(player);
 }
 
