@@ -1974,6 +1974,10 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function onLogin({ player: p }) {
     syncUngaelExit(p);
+    if (stage(p) >= S.KEYS && (p.getAttribute(ATTR_CRYPT_ORDER) || p.getAttribute(ATTR_CRYPT_PLACED)
+      || p.getAttribute(ATTR_CRYPT_INSPECTED) || p.getAttribute(ATTR_CRYPT_KEY_COLLECTED))) {
+      setCryptPuzzleVarbits(p, p.getAttribute(ATTR_CRYPT_PLACED) || {});
+    }
     if (stage(p) === S.TUNNEL || stage(p) === S.MURAL) {
       let progress = Number(p.getAttribute(ATTR_CRANDOR_BLOCKAGE_PROGRESS));
       // Migrate values used by the earlier compact implementation to the real

@@ -1251,7 +1251,11 @@ test('Dragon Slayer II crypt uses canonical template locs and reachable native-v
   const { RegionManager } = require('../dist/game/collision/RegionManager');
   await CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
   RegionManager.init();
-  const { api } = mockApi();
+  const { api: baseApi } = mockApi();
+  let login;
+  const api = new Proxy(baseApi, {
+    get: (target, prop) => prop === 'onPlayerLogin' ? (handler) => { login = handler; } : target[prop],
+  });
   const register = require('../plugins/quests/quests/DragonSlayerII.Quest');
   register(api);
   const { cryptPuzzle } = register._test;
@@ -1409,6 +1413,12 @@ test('Dragon Slayer II crypt uses canonical template locs and reachable native-v
   assert.equal(attributes.get('dragon-slayer-ii:kourend-crypt-key-collected'), true);
   assert.equal(attributes.get('quest.dragon_slayer_ii.stage'), 9);
   assert.equal(varbits.get(6105), 36, 'native cache tomb and bust transforms advance after the key is taken');
+  attributes.set('dragon-slayer-ii:instance-area', null);
+  varbits.clear();
+  login({ player });
+  assert.deepEqual([...varbits.entries()].filter(([id]) => [6105, 6152, 6153, 6154, 6155].includes(id)).sort(([a], [b]) => a - b),
+    [[6105, 36], [6152, 3], [6153, 1], [6154, 4], [6155, 2]],
+    'native crypt transforms are restored from earned placements and key on login');
   assert.ok(messages.some((message) => message.includes('dragon key piece')));
 });
 
