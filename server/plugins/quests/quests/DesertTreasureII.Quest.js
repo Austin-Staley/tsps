@@ -6451,7 +6451,7 @@ module.exports = function registerDesertTreasureII(api) {
       const manager = api.getItemOnGroundManager?.();
       if (manager?.registerLocation) registerLassarGroundItem(p, I.SUPERIOR_SHADOW_TORCH_SCHEMATIC, 2381, 6423);
       setLassar(p, { ...state, pubOpened: true, blueKey: false });
-      p.sendMessage("The blue key opens the shadow pub. You find a superior shadow torch schematic upstairs.");
+      p.sendMessage("The blue key opens the shadow pub. A superior shadow torch schematic lies inside.");
       return false;
     }
     if (state.inShadow && visibleId === 48216 && option
@@ -6584,7 +6584,7 @@ module.exports = function registerDesertTreasureII(api) {
       p.getInventory().deleteNumber(I.SHADOW_KEY_2, 1);
       registerLassarGroundItem(p, I.SUPERIOR_SHADOW_TORCH_SCHEMATIC, 2381, 6423);
       setLassar(p, { ...state, pubOpened: true, blueKey: false });
-      p.sendMessage("The blue key opens the shadow pub. You find a superior shadow torch schematic upstairs.");
+      p.sendMessage("The blue key opens the shadow pub. A superior shadow torch schematic lies inside.");
       // Let the shared Doors plugin swing the real cache leaves after this gate.
     }
     const barrier = (x === 2417 && y === 6413) || (x === 2424 && y === 6439);
@@ -6673,6 +6673,9 @@ module.exports = function registerDesertTreasureII(api) {
     // shortcut: place the schematic beside its Wiki marker because the marked tile is occupied by a cache crate.
     if (state.tentacles?.["2417,6413"] && !state.idolSchematic && !has(p, I.REVITALISING_IDOL_SCHEMATIC)) {
       registerLassarGroundItem(p, I.REVITALISING_IDOL_SCHEMATIC, 2676, 6422);
+    }
+    if (state.pubOpened && !state.superiorSchematicFound && !has(p, I.SUPERIOR_SHADOW_TORCH_SCHEMATIC)) {
+      registerLassarGroundItem(p, I.SUPERIOR_SHADOW_TORCH_SCHEMATIC, 2381, 6423);
     }
   }
 

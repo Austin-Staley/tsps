@@ -1016,6 +1016,38 @@ test('Lassar residential shadow doors use their canonical open and close locs', 
   }
 });
 
+test('Lassar pub gate opens into its cache Close leaves and can be closed again', async () => {
+  await initializeMapCollisionOnce();
+  const closedWest = CacheDefinitions.getObject(48289);
+  const closedEast = CacheDefinitions.getObject(48290);
+  const openWest = CacheDefinitions.getObject(48291);
+  const openEast = CacheDefinitions.getObject(48292);
+  assert.deepEqual([closedWest.actions[0], closedEast.actions[0], openWest.actions[0], openEast.actions[0]],
+    ['Open', 'Open', 'Close', 'Close']);
+  assert.deepEqual([closedWest.models, closedEast.models], [openWest.models, openEast.models]);
+
+  const h = buildHarness({ cacheObjects: new Map([
+    [48289, closedWest], [48290, closedEast], [48291, openWest], [48292, openEast],
+  ]) });
+  try {
+    h.place(48289, 2385, 6427, 0);
+    h.place(48290, 2385, 6428, 0);
+    const opened = h.click(48289, 2385, 6427, 0, 'Open', 'Doors');
+    assert.ok(opened.some(([action, id]) => action === 'deregister' && id === 48289));
+    assert.ok(opened.some(([action, id]) => action === 'deregister' && id === 48290));
+    assert.ok(opened.some(([action, id]) => action === 'register' && id === 48291));
+    assert.ok(opened.some(([action, id]) => action === 'register' && id === 48292));
+
+    for (const [, id, x, y, face] of opened.filter(([action]) => action === 'register')) h.place(id, x, y, face);
+    const [, firstOpenId, firstOpenX, firstOpenY, firstOpenFace] = opened.find(([action, id]) => action === 'register' && id === 48291);
+    const closed = h.click(firstOpenId, firstOpenX, firstOpenY, firstOpenFace, 'Close', 'Doors');
+    assert.ok(closed.some(([action, id]) => action === 'register' && id === 48289), JSON.stringify(closed));
+    assert.ok(closed.some(([action, id]) => action === 'register' && id === 48290), JSON.stringify(closed));
+  } finally {
+    h.restore();
+  }
+});
+
 test('Lassar residential house door opens through its nonconsecutive cache Close loc', () => {
   const h = buildHarness();
   try {

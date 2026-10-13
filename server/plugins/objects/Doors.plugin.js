@@ -162,6 +162,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     // Lassar residential shadow gate: 48278/48279 open into the paired
     // Close-action leaves 48282/48283 (48280/48281 are unused cache locs).
     Object.freeze([O.DOORS_21, O.DOORS_22, O.DOORS_25, O.DOORS_26]),
+    // Lassar pub gate: 48289/48290 swing into the actual Close-action leaves
+    // 48291/48292. The two intervening ids are not variants of this gate.
+    Object.freeze([O.DOORS_29, O.DOORS_30, O.DOORS_31, O.DOORS_32]),
   ]);
   // Both leaves of each pair are partners of the other.
   SPECIAL_DOUBLE_DOOR_PAIRS = Object.freeze([
@@ -185,6 +188,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.GATE_232, O.GATE_233],
     [O.DOORS_21, O.DOORS_22],
     [O.DOORS_25, O.DOORS_26],
+    [O.DOORS_29, O.DOORS_30],
+    [O.DOORS_31, O.DOORS_32],
     [44037, 44039],
     [O.LARGE_DOOR_24, O.LARGE_DOOR_25],
     [O.LARGE_DOOR_26, O.LARGE_DOOR_27],
@@ -235,6 +240,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.GATE_233, 44039],
     [O.DOORS_21, O.DOORS_25],
     [O.DOORS_22, O.DOORS_26],
+    [O.DOORS_29, O.DOORS_31],
+    [O.DOORS_30, O.DOORS_32],
     [O.LARGE_DOOR_99, O.LARGE_DOOR_18],
     [O.LARGE_DOOR_7, O.LARGE_DOOR_8],
     [O.LARGE_DOOR_9, O.LARGE_DOOR_10],

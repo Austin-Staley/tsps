@@ -5714,6 +5714,18 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(counts.get(core.ItemIdentifiers.SHADOW_KEY_2), 0, 'the blue key is consumed by the pub gate');
     assert.equal(groundSpawns.at(-1)[1].getId(), core.ItemIdentifiers.SUPERIOR_SHADOW_TORCH_SCHEMATIC,
       'the real pub entrance reveals the superior torch schematic');
+    const pubOpenState = attrs.get('desert-treasure-ii:lassar');
+    const keylessReentry = { player, objectId: core.ObjectIdentifiers.DOORS_30,
+      location: new core.Location(2385, 6428, 0), clickType: 1, handled: false };
+    doorToggleHooks[0](keylessReentry);
+    assert.equal(keylessReentry.handled, false, 'the open pub can be re-entered normally after consuming its key');
+    assert.equal(counts.get(core.ItemIdentifiers.SHADOW_KEY_2), 0, 're-entry never consumes a second key');
+    attrs.set('desert-treasure-ii:lassar', { ...pubOpenState, superiorSchematicFound: false });
+    const beforeSchematicRecovery = groundSpawns.length;
+    counts.set(core.ItemIdentifiers.SUPERIOR_SHADOW_TORCH_SCHEMATIC, 0);
+    playerProcesses[0]({ player });
+    assert.ok(groundSpawns.slice(beforeSchematicRecovery).some(([, item]) => item.getId() === core.ItemIdentifiers.SUPERIOR_SHADOW_TORCH_SCHEMATIC),
+      'the pub schematic is restored after its private ground drop expires or the player relogs');
     assert.equal(interact({ player, objectId: 48278, definition: { id: 48278 }, location: { x: 2372, y: 6430, z: 0 }, option: 'Climb-up' }), true);
     assert.equal(player.location.z, 1, 'the pub stairs use their real upper plane');
     assert.equal(interact({ player, objectId: 48245, definition: { id: 48245 }, location: { x: 2380, y: 6430, z: 1 }, option: 'Touch' }), true);
