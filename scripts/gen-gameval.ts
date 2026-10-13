@@ -27,7 +27,23 @@ const FILES: Array<[output: string, sources: string[]]> = [
     ["InventoryID", ["InventoryID"]],
 ];
 
-const constantPattern = /public static final int ([A-Z0-9_]+)\s*=\s*(-?\d+);/g;
+function extractConstants(source: string): Map<string, Map<string, string>> {
+    const groups = new Map<string, Map<string, string>>();
+    const scopes: Array<string | undefined> = [];
+    const clean = source.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, "");
+    const tokens = /\bclass\s+(\w+)[^{]*\{|public static final int ([A-Z0-9_]+)\s*=\s*(-?(?:0x[\da-fA-F_]+|[\d_]+));|[{}]/g;
+    for (const match of clean.matchAll(tokens)) {
+        if (match[1]) scopes.push(match[1]);
+        else if (match[2]) {
+            const path = scopes.filter((name): name is string => name !== undefined).slice(1).join(".");
+            let constants = groups.get(path);
+            if (!constants) groups.set(path, constants = new Map());
+            constants.set(match[2], String(Number(match[3].replace(/_/g, ""))));
+        } else if (match[0] === "{") scopes.push(undefined);
+        else scopes.pop();
+    }
+    return groups;
+}
 
 function rueliteCommit(): string {
     try {
@@ -41,12 +57,14 @@ function rueliteCommit(): string {
 }
 
 function generate(name: string, sources: string[], commit: string): string {
-    const constants = new Map<string, string>();
+    const groups = new Map<string, Map<string, string>>();
     for (const source of sources) {
         const path = join(sourceDir, `${source}.java`);
         const text = readFileSync(path, "utf8");
-        for (const match of text.matchAll(constantPattern)) {
-            if (!constants.has(match[1])) constants.set(match[1], match[2]);
+        for (const [path, constants] of extractConstants(text)) {
+            let group = groups.get(path);
+            if (!group) groups.set(path, group = new Map());
+            for (const [name, value] of constants) if (!group.has(name)) group.set(name, value);
         }
     }
     const lines = [
@@ -54,8 +72,12 @@ function generate(name: string, sources: string[], commit: string): string {
         `// Regenerate with: client/node_modules/.bin/tsx scripts/gen-gameval.ts`,
         "",
     ];
-    for (const [constant, value] of constants) {
-        lines.push(`export const ${constant} = ${value};`);
+    for (const [path, constants] of groups) {
+        const names = path ? path.split(".") : [];
+        if (names.length > 1) throw new Error(`Unsupported nested gameval class depth: ${path}`);
+        if (names.length) lines.push(`export const ${names[0]} = {`);
+        for (const [constant, value] of constants) lines.push(names.length ? `    ${constant}: ${value},` : `export const ${constant} = ${value};`);
+        if (names.length) lines.push("} as const;");
     }
     lines.push("");
     return lines.join("\n");
