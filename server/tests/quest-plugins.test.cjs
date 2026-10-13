@@ -8376,6 +8376,16 @@ test('Entry Mode notice board starts its party prompt from the live cache object
   assert.equal(interactions.find(([name])=>name==='Theatre of Blood')[1].Enter({player,objectId:32653}),false,'normal parties retain the main entrance handler');
 });
 
+test('Entry Mode leaves the entrance available to normal Theatre parties', () => {
+  const { api } = mockApi();
+  const interactions=[];let sent=[];
+  api.onObjectInteraction=(name,options)=>interactions.push([name,options]);
+  const entry=require('../plugins/minigames/tob/Entry.TheatreOfBlood');entry(api);
+  const player={getAttribute:()=>undefined,sendMessage:message=>sent.push(message)};
+  const enter=interactions.find(([name])=>name==='Theatre of Blood')[1].Enter;
+  assert.equal(enter({player,objectId:32653}),false,'Entry declines players without its party flag');
+  assert.deepEqual(sent,[],'the normal party flow receives the interaction without an Entry-only message');
+});
 
 test('Entry Mode Nylocas requires the correct style and Verzik transitions preserve one HP', () => {
   const { api } = mockApi();
