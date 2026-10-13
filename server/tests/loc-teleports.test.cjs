@@ -213,8 +213,8 @@ test("the Ancient Cavern's cache stairs link the arrival room, mithril floor and
     [25338, 1769, 5365, 1, "Climb-down", [1772, 5366, 0]],
     [25339, 1778, 5344, 0, "Climb-up", [1779, 5345, 1]],
     [25340, 1778, 5344, 1, "Climb-down", [1778, 5346, 0]],
-    [32212, 1744, 5323, 0, "Climb-up", [1745, 5324, 1]],
-    [32211, 1744, 5322, 1, "Climb-down", [1745, 5324, 0]],
+    [32212, 1744, 5323, 0, "Climb-up", [1744, 5321, 1]],
+    [32211, 1744, 5322, 1, "Climb-down", [1746, 5324, 0]],
   ];
   for (const [id, x, y, z, option, to] of expected) {
     const entry = data.locs.find((loc) => loc.id === id && loc.x === x && loc.y === y && loc.z === z);
@@ -233,6 +233,26 @@ test("the Ancient Cavern's cache stairs link the arrival room, mithril floor and
   });
   assert.equal(toMithrilStairs.success, true,
     "the live landing has a collision-valid route to the cache Mithril stairs");
+
+  const forgeUpLanding = [1744, 5321];
+  assert.equal(core.RegionManager.getClipping(...forgeUpLanding, 1, null) & 0x200000, 0,
+    "the forge upstairs arrival is outside the blocked 2x2 stair footprint");
+  const toCachedAnvil = route.findRoute({
+    level: 1, srcX: forgeUpLanding[0], srcY: forgeUpLanding[1], srcSize: 1,
+    destX: 1748, destY: 5288, privateArea: null, moveNear: true,
+  });
+  assert.equal(toCachedAnvil.success, true,
+    "the forge upstairs arrival has a collision-valid route to a cache anvil");
+
+  const forgeDownLanding = [1746, 5324];
+  assert.equal(core.RegionManager.getClipping(...forgeDownLanding, 0, null) & 0x200000, 0,
+    "the forge downstairs arrival is outside the blocked 2x2 stair footprint");
+  const backToMithrilFloor = route.findRoute({
+    level: 0, srcX: forgeDownLanding[0], srcY: forgeDownLanding[1], srcSize: 1,
+    destX: 1778, destY: 5344, privateArea: null, moveNear: true,
+  });
+  assert.equal(backToMithrilFloor.success, true,
+    "the forge downstairs arrival connects back to the upper cavern's cache stairs");
 });
 
 test("the DS2 Mithril door enters the orb room and its return door reaches the upper cavern", () => {
