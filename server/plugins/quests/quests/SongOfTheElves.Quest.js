@@ -680,6 +680,9 @@ module.exports = function registerSongOfTheElves(api) {
       ensureWarEndActors(player);
     };
   }
+  function onPlayerLogout(event) {
+    if (event?.player) clearWarEndActors(event.player);
+  }
   function onAction(event) {
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
@@ -821,9 +824,10 @@ module.exports = function registerSongOfTheElves(api) {
     }
     if (event.stepId === "eOtNFO") setChapter(player, 12);
     if (event.stepId === "W-ainS") {
-      if (player.getAttribute(FRAGMENT_DEFEATED) !== true || currentChapter(player) !== 20) {
+      if (player.getAttribute(FRAGMENT_DEFEATED) !== true || currentChapter(player) !== 20 ||
+        player.getAttribute(WAR_END_ARIANWYN_DONE) !== true) {
         event.handled = true;
-        player.sendMessage("The Fragment must be defeated before the quest can end.");
+        player.sendMessage("Finish Arianwyn's farewell before speaking with Baxtorian to end the quest.");
         return;
       }
       quest.complete(player);
@@ -1383,7 +1387,8 @@ module.exports = function registerSongOfTheElves(api) {
       return true;
     }
     if (currentChapter(player) === 20 && npcName === "baxtorian" &&
-      player.getAttribute(FRAGMENT_DEFEATED) === true) {
+      player.getAttribute(FRAGMENT_DEFEATED) === true &&
+      player.getAttribute(WAR_END_ARIANWYN_DONE) === true) {
       return startTranscript(api, player, event.npcId, PAGE, "the-war-s-end-prifddinas-reformed");
     }
     if (currentChapter(player) === 11 && npcName === "arianwyn") {
@@ -3040,7 +3045,8 @@ module.exports = function registerSongOfTheElves(api) {
     if (currentChapter(player) === 19 && player.getAttribute(FRAGMENT_DEFEATED) === true &&
       !player.getDialogueManager?.()?.isActive?.()) {
       startTranscript(api, player, NpcIdentifiers.LORD_IORWERTH, PAGE, "the-fragment-of-seren-the-fragment-defeated");
-    } else if (currentChapter(player) === 20 && player.getAttribute(FRAGMENT_DEFEATED) === true) {
+    } else if (currentChapter(player) === 20 && player.getAttribute(FRAGMENT_DEFEATED) === true &&
+      !quest.isComplete(player)) {
       ensureWarEndActors(player);
       if (player.getAttribute(WAR_END_ARIANWYN_DONE) !== true && !player.getDialogueManager?.()?.isActive?.()) {
         player.moveTo(new Location(2241, 3266, 0));
@@ -3048,7 +3054,7 @@ module.exports = function registerSongOfTheElves(api) {
       }
     }
   });
-  api.onPlayerLogout(({ player }) => clearWarEndActors(player));
+  api.onPlayerLogout(onPlayerLogout);
   api.onNpcDialogueCondition((event) => {
     if (!event?.player) return null;
     const answer = disguiseCondition(event);
