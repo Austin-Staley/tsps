@@ -934,23 +934,35 @@ test('Dragon Slayer II restores the Karamja plinth when its key piece was lost',
           : target[prop],
   });
   require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
+  const items = new Map();
   const attrs = new Map([
-    ['quest.dragon_slayer_ii.stage', 8],
-    ['dragon-slayer-ii:key-parts', 1],
+    ['quest.dragon_slayer_ii.stage', 9],
+    ['dragon-slayer-ii:key-parts', 15],
   ]);
   const player = {
     getAttribute: (key) => attrs.get(key),
     setAttribute: (key, value) => attrs.set(key, value),
     getUsername: () => 'Karamja recovery test',
-    getInventory: () => ({ getAmount: () => 0 }),
+    getInventory: () => ({
+      getAmount: (id) => items.get(id) ?? 0,
+      getFreeSlots: () => 28 - [...items.values()].reduce((sum, amount) => sum + amount, 0),
+      adds: (id) => items.set(id, (items.get(id) ?? 0) + 1),
+    }),
     moveTo() {},
     sendMessage() {},
   };
   const enter = objectHandlers.find((handler) => handler.toString().includes('KARAMJA_START'));
   assert.equal(typeof enter, 'function');
   enter({ player, objectId: core.ObjectIdentifiers.CAVE_63, location: { x: 2943, y: 2894, z: 0 } });
-  assert.equal(attrs.get('dragon-slayer-ii:key-parts'), 0, 'a stale possession bit cannot strand the player');
+  assert.equal(attrs.get('dragon-slayer-ii:key-parts'), 14, 'a stale possession bit cannot strand the player after reaching the forge');
   assert.equal(objects.at(-1).getId(), core.ObjectIdentifiers.PLINTH_17, 'the piece becomes available again');
+  const recover = objectHandlers.find((handler) => handler.name === 'handleKaramjaPlinth');
+  assert.equal(recover({
+    player,
+    objectId: core.ObjectIdentifiers.PLINTH_17,
+    location: { x: 8224, y: 1648, z: 0 },
+  }), true);
+  assert.equal(items.get(core.ItemIdentifiers.DRAGON_KEY_PIECE), 1, 'the piece can be reclaimed before forging');
 });
 
 test('Dragon Slayer II laboratory copies every cache chunk containing its six notes', () => {
@@ -1419,6 +1431,11 @@ test('Dragon Slayer II crypt uses canonical template locs and reachable native-v
   assert.deepEqual([...varbits.entries()].filter(([id]) => [6105, 6152, 6153, 6154, 6155].includes(id)).sort(([a], [b]) => a - b),
     [[6105, 36], [6152, 3], [6153, 1], [6154, 4], [6155, 2]],
     'native crypt transforms are restored from earned placements and key on login');
+  inventory.deleteNumber(I.DRAGON_KEY_PIECE_4);
+  attributes.set('dragon-slayer-ii:instance-area', area);
+  assert.equal(cryptPuzzle.takeObject({ player, objectId: O.TOMB_7, location: tomb }), true,
+    'the completed tomb can replace a lost piece while the player is preparing the forge');
+  assert.equal(inventory.getAmount(I.DRAGON_KEY_PIECE_4), 1);
   assert.ok(messages.some((message) => message.includes('dragon key piece')));
 });
 

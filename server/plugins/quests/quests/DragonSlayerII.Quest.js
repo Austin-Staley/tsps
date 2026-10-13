@@ -1015,7 +1015,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function talkAva({ player: p, npcId }) {
     const step = Number(p.getAttribute(ATTR_MORYTANIA)) || 0;
-    if (stage(p) < S.KEYS || stage(p) >= S.FORGE || step < 3) return;
+    if (stage(p) < S.KEYS || stage(p) > S.FORGE || step < 3) return;
     if (step === 3) {
       talk(p, npcId, "tristan-s-key-piece-talking-to-ava");
       p.setAttribute(ATTR_MORYTANIA, 4);
@@ -1299,7 +1299,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function enterKaramjaMaze({ player: p, objectId, location }) {
     if (objectId !== O.CAVE_63 || location.x !== KARAMJA_ENTRANCE.x || location.y !== KARAMJA_ENTRANCE.y || location.z !== KARAMJA_ENTRANCE.z) return false;
-    if (stage(p) < S.KEYS || stage(p) >= S.FORGE) {
+    if (stage(p) < S.KEYS || stage(p) > S.FORGE) {
       p.sendMessage("The cave is too dangerous to explore until you have learned about Robert the Strong's key pieces.");
       return true;
     }
@@ -1415,7 +1415,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function enterKourendCrypt({ player: p, objectId, location }) {
     if (objectId !== O.CRYPT_ENTRANCE || location.x !== CRYPT_ENTRANCE.x || location.y !== CRYPT_ENTRANCE.y) return false;
-    if (stage(p) < S.KEYS || stage(p) >= S.FORGE || !p.getAttribute(ATTR_CRYPT_READY)) {
+    if (stage(p) < S.KEYS || stage(p) > S.FORGE || !p.getAttribute(ATTR_CRYPT_READY)) {
       p.sendMessage("You should find out what Camorra's clues say before entering the crypt.");
       return true;
     }
@@ -1456,7 +1456,7 @@ module.exports = function registerDragonSlayerII(api) {
   function handleCryptObject(event) {
     const { player: p, objectId, location } = event;
     const area = p.getAttribute(ATTR_AREA);
-    if (!(area instanceof KourendCryptArea) || stage(p) < S.KEYS || stage(p) >= S.FORGE) return false;
+    if (!(area instanceof KourendCryptArea) || stage(p) < S.KEYS || stage(p) > S.FORGE) return false;
     const visibleObjectId = event.definition?.id ?? objectId;
     const sourceX = CRYPT_SOURCE.x + location.x - area.getBaseX();
     const sourceY = CRYPT_SOURCE.y + location.y - area.getBaseY();
@@ -1470,7 +1470,7 @@ module.exports = function registerDragonSlayerII(api) {
     if (isCryptTombObject(visibleObjectId) && inCryptFootprint(sourceX, sourceY, CRYPT_TOMB) && location.z === CRYPT_PUZZLE_PLANE) {
       const placed = p.getAttribute(ATTR_CRYPT_PLACED) || {};
       if (visibleObjectId === O.TOMB_7 || Object.keys(placed).length === 4) {
-        if (has(p, KEY_PARTS[3]) || p.getAttribute(ATTR_CRYPT_KEY_COLLECTED)) {
+        if (has(p, KEY_PARTS[3])) {
           return p.sendMessage("The tomb has already yielded its dragon key piece.");
         }
         if (!give(p, KEY_PARTS[3])) return true;
@@ -1610,7 +1610,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function handleKaramjaPlinth({ player: p, objectId, location }) {
     const area = p.getAttribute(ATTR_AREA);
-    if (!(area instanceof KaramjaArea) || stage(p) < S.KEYS || stage(p) >= S.FORGE) return false;
+    if (!(area instanceof KaramjaArea) || stage(p) < S.KEYS || stage(p) > S.FORGE) return false;
     const sourceX = KARAMJA_SOURCE.x + location.x - area.getBaseX();
     const sourceY = KARAMJA_SOURCE.y + location.y - area.getBaseY();
     if (sourceX !== KARAMJA_PLINTH.x || sourceY !== KARAMJA_PLINTH.y || location.z !== KARAMJA_PLINTH.z) return false;
@@ -2030,7 +2030,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function makeInertLocatorOrb({ player: p, usedItemId, usedWithItemId }) {
     const pair = [usedItemId, usedWithItemId];
-    if (stage(p) < S.KEYS || stage(p) >= S.FORGE || (Number(p.getAttribute(ATTR_MORYTANIA)) || 0) < 4 || !pair.includes(I.GLASSBLOWING_PIPE) || !pair.includes(I.DRAGONSTONE)) return false;
+    if (stage(p) < S.KEYS || stage(p) > S.FORGE || (Number(p.getAttribute(ATTR_MORYTANIA)) || 0) < 4 || !pair.includes(I.GLASSBLOWING_PIPE) || !pair.includes(I.DRAGONSTONE)) return false;
     if (!has(p, I.CHISEL)) return p.sendMessage("You need a chisel to cut the dragonstone.");
     if (!has(p, I.MOLTEN_GLASS, 2)) return p.sendMessage("You need two molten glass to make a locator orb.");
     remove(p, I.DRAGONSTONE); remove(p, I.MOLTEN_GLASS, 2); give(p, I.INERT_LOCATOR_ORB);
@@ -2038,7 +2038,7 @@ module.exports = function registerDragonSlayerII(api) {
     return true;
   }
   function finishLocatorOrb({ player: p, npcId }) {
-    if (stage(p) < S.KEYS || stage(p) >= S.FORGE || !has(p, I.INERT_LOCATOR_ORB)) return;
+    if (stage(p) < S.KEYS || stage(p) > S.FORGE || !has(p, I.INERT_LOCATOR_ORB)) return;
     remove(p, I.INERT_LOCATOR_ORB); give(p, I.LOCATOR_ORB);
     p.setAttribute(ATTR_MORYTANIA, 5);
     const targets = [[3460, 3413], [3477, 3392], [3422, 3364], [3443, 3340], [3493, 3376]];
@@ -2047,7 +2047,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function feelLocatorOrb(event) {
     const { player: p } = event;
-    if (stage(p) < S.KEYS || stage(p) >= S.FORGE || !has(p, I.LOCATOR_ORB) || (Number(p.getAttribute(ATTR_MORYTANIA)) || 0) < 5) return;
+    if (stage(p) < S.KEYS || stage(p) > S.FORGE || !has(p, I.LOCATOR_ORB) || (Number(p.getAttribute(ATTR_MORYTANIA)) || 0) < 5) return;
     const loc = p.getLocation();
     const [x, y] = p.getAttribute(ATTR_ORB_TARGET);
     const dx = x - loc.getX(), dy = y - loc.getY();
@@ -2089,7 +2089,7 @@ module.exports = function registerDragonSlayerII(api) {
   }
   function digForMorytaniaPiece(event) {
     const { player: p } = event;
-    if (stage(p) < S.KEYS || stage(p) >= S.FORGE || !has(p, I.LOCATOR_ORB) || !has(p, I.SPADE) || (Number(p.getAttribute(ATTR_MORYTANIA)) || 0) < 5) return false;
+    if (stage(p) < S.KEYS || stage(p) > S.FORGE || !has(p, I.LOCATOR_ORB) || !has(p, I.SPADE) || (Number(p.getAttribute(ATTR_MORYTANIA)) || 0) < 5) return false;
     event.handled = true;
     const { x, y } = p.getLocation();
     const target = p.getAttribute(ATTR_ORB_TARGET);
