@@ -12,6 +12,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const TOME_ID = ItemIdentifiers.TOME_OF_EXPERIENCE_3;
   const PREP_ATTRIBUTE = "quest.the_blood_moon_rises.preparations";
   const THRONE_PUZZLE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-throne-puzzle";
+  const THRONE_BUST_VARBITS = Object.freeze([15539, 15540, 15541, 15542]);
   const BASIN_PUZZLE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-basin-puzzle";
   const SOLID_KEY_ATTRIBUTE = "quest.the_blood_moon_rises.castle-solid-key-puzzle";
   const CLOCK_ATTRIBUTE = "quest.the_blood_moon_rises.castle-clocks";
@@ -24,6 +25,25 @@ module.exports = function registerTheBloodMoonRises(api) {
   const SLEPE_STORY_ATTRIBUTE = "quest.the_blood_moon_rises.slepe-story";
   const CASTLE_SHRINE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-shrine-prayed";
   const CASTLE_SHRINE_VARBIT = 15470;
+  const CASTLE_ROOM_ATTRIBUTE = "quest.the_blood_moon_rises.castle-room";
+  const CASTLE_WORLD_MAP_FLOOR_VARBIT = 15489;
+  const CASTLE_LAST_ROOM_VARBIT = 15499;
+  const CASTLE_GROUND_FLOOR = 1;
+  const CASTLE_ROOM = Object.freeze({ LOBBY: 1, DINING: 2, THRONE: 3 });
+  // The Castle's Enter doors link distinct room endpoints. Quest Helper's
+  // CastleDrakanRoomNetwork records the paired cache locs; the arrival tiles
+  // below are adjacent, collision-clear tiles on the destination side.
+  // shortcut: exact OSRS arrival tiles are not published, so use the verified
+  // paired door endpoints and cache-walkable adjacent tiles until captured.
+  const CASTLE_DOOR_TRANSITIONS = Object.freeze([
+    { id: 61577, x: 2327, y: 7360, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.DINING, landing: [2342, 7372] },
+    { id: 61576, x: 2328, y: 7360, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.DINING, landing: [2342, 7372] },
+    { id: 61573, x: 2342, y: 7373, from: CASTLE_ROOM.DINING, to: CASTLE_ROOM.LOBBY, landing: [2327, 7362] },
+    { id: 61572, x: 2341, y: 7373, from: CASTLE_ROOM.DINING, to: CASTLE_ROOM.LOBBY, landing: [2327, 7362] },
+    { id: 61572, x: 2358, y: 7366, from: CASTLE_ROOM.DINING, to: CASTLE_ROOM.THRONE, landing: [2305, 7391] },
+    { id: 61572, x: 2304, y: 7391, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.DINING, landing: [2357, 7366] },
+    { id: 61573, x: 2304, y: 7392, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.DINING, landing: [2357, 7366] },
+  ]);
   // The exact landing is not published by the Wiki; this is the walkable tile
   // beside the cache-backed portal at (2323, 7370).
   const CASTLE_TELEPORT_TILE = Object.freeze({ x: 2322, y: 7370, z: 0 });
@@ -1465,9 +1485,22 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.getAttribute(CASTLE_SHRINE_ATTRIBUTE) ? 1 : 0);
   }
 
+  function syncCastleRoom(player) {
+    if (!player || stage(player) < STAGE.CASTLE || stage(player) > STAGE.ESCAPE) return;
+    const room = Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) || CASTLE_ROOM.LOBBY;
+    player.setAttribute(CASTLE_ROOM_ATTRIBUTE, room);
+    player.getPacketSender().sendVarbit(CASTLE_WORLD_MAP_FLOOR_VARBIT, CASTLE_GROUND_FLOOR);
+    player.getPacketSender().sendVarbit(CASTLE_LAST_ROOM_VARBIT, room);
+  }
+
+  function syncCastleRoomOnLogin({ player }) {
+    syncCastleRoom(player);
+  }
+
   function addCastleMedallionDestination(event) {
     const player = event?.player;
-    if (!player || !Array.isArray(event.destinations) || stage(player) !== STAGE.SLEPE ||
+    if (!player || !Array.isArray(event.destinations) ||
+      stage(player) < STAGE.SLEPE || stage(player) > STAGE.CASTLE ||
       !slepeStory(player).refineryComplete || !player.getAttribute(CASTLE_SHRINE_ATTRIBUTE)) return;
     event.destinations.push({
       label: "Castle Drakan.",
@@ -1482,11 +1515,16 @@ module.exports = function registerTheBloodMoonRises(api) {
     const x = tile?.x ?? tile?.getX?.();
     const y = tile?.y ?? tile?.getY?.();
     const z = tile?.z ?? tile?.getZ?.();
-    if (!player || quest.isComplete(player) || stage(player) !== STAGE.SLEPE ||
+    const currentStage = player && stage(player);
+    if (!player || quest.isComplete(player) || currentStage < STAGE.SLEPE || currentStage > STAGE.CASTLE ||
       !slepeStory(player).refineryComplete || !player.getAttribute(CASTLE_SHRINE_ATTRIBUTE) ||
       id !== 61221 || x !== 2323 || y !== 7370 || z !== 0 || event.option !== "Enter") return false;
     event.handled = true;
-    advance(player, STAGE.CASTLE);
+    if (currentStage === STAGE.SLEPE) {
+      advance(player, STAGE.CASTLE);
+      player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.LOBBY);
+      syncCastleRoom(player);
+    }
     return true;
   }
 
@@ -1829,6 +1867,13 @@ module.exports = function registerTheBloodMoonRises(api) {
     return player.getInventory().contains(itemId) || player.getEquipment?.().contains?.(itemId) === true;
   }
 
+  function hasBankedItem(player, itemId) {
+    for (let tab = 0; tab < 11; tab++) {
+      if (player.getBank?.(tab)?.contains?.(itemId)) return true;
+    }
+    return false;
+  }
+
   function replaceItems(player, required, removed, added) {
     const inventory = player.getInventory();
     if (!required.every((itemId) => inventory.contains(itemId))) return false;
@@ -1846,6 +1891,99 @@ module.exports = function registerTheBloodMoonRises(api) {
     return tile?.x === x && tile?.y === y && tile?.z === z;
   }
 
+  function syncThroneBustVarbits(player) {
+    if (!player || stage(player) < STAGE.CASTLE || stage(player) > STAGE.ESCAPE) return;
+    const state = player.getAttribute(THRONE_PUZZLE_ATTRIBUTE) ?? {};
+    THRONE_BUST_VARBITS.forEach((varbit, index) => {
+      // The cache keeps each bust inert until the throne reveals the levers. The
+      // first/second transformed children are the two lever positions.
+      const value = state.started ? (state.pulled?.[index] ? 2 : 1) : 0;
+      player.getPacketSender().sendVarbit(varbit, value);
+    });
+  }
+
+  function syncThroneBustsOnLogin({ player }) {
+    syncThroneBustVarbits(player);
+  }
+
+  function handleCastleDoorEnter(event) {
+    const player = event?.player;
+    const { x, y, z } = event?.location ?? {};
+    const currentStage = player && stage(player);
+    if (!player || quest.isComplete(player) || currentStage < STAGE.CASTLE || currentStage > STAGE.ESCAPE ||
+      event.option !== "Enter" || event.definition?.getName?.() !== "Door" || z !== 0 ||
+      x < 2300 || x > 2600 || y < 7300 || y > 7440) return;
+    const visibleId = event.definition?.id ?? event.objectId;
+    const transition = CASTLE_DOOR_TRANSITIONS.find(door => door.id === visibleId && door.x === x && door.y === y);
+    if (transition) {
+      const currentRoom = Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) || CASTLE_ROOM.LOBBY;
+      if (currentRoom !== transition.from) {
+        player.sendMessage("That doorway does not lead onward from this part of the castle.");
+        event.handled = true;
+        return;
+      }
+      event.handled = true;
+      player.setAttribute(CASTLE_ROOM_ATTRIBUTE, transition.to);
+      syncCastleRoom(player);
+      player.moveTo(new Location(transition.landing[0], transition.landing[1], 0));
+      return;
+    }
+    const door = event.object;
+    const face = door?.getFace?.();
+    if (!Number.isInteger(face)) return;
+    const axis = (face & 1) === 0 ? "x" : "y";
+    const source = event.sourceLocation ?? {
+      x: player.getLocation().getX(), y: player.getLocation().getY(), z: player.getLocation().getZ(),
+    };
+    const side = Math.sign(source[axis] - event.location[axis]) || (face === 0 || face === 3 ? 1 : -1);
+    const privateArea = player.getPrivateArea?.() ?? null;
+    let destination = null;
+    // Castle doors sit in thick walls; the first tile beyond the clickable loc
+    // can still be clipped by the wall. Walk the same line until clear floor.
+    for (let distance = 1; distance <= 8; distance++) {
+      const across = event.location[axis] - side * distance;
+      const candidate = axis === "x"
+        ? new Location(across, source.y, z)
+        : new Location(source.x, across, z);
+      if (!api.core.RegionManager.blocked(candidate, privateArea)) {
+        destination = candidate;
+        break;
+      }
+    }
+    if (!destination) return;
+    event.handled = true;
+    player.moveTo(destination);
+  }
+
+  function routeCastleDoorEnter(event) {
+    const player = event?.player;
+    const tile = event?.object?.getLocation?.();
+    const currentStage = player && stage(player);
+    if (!player || quest.isComplete(player) || currentStage < STAGE.CASTLE || currentStage > STAGE.ESCAPE ||
+      event.definition?.getName?.() !== "Door" ||
+      event.definition?.getInteractions?.()?.[event.clickType - 1] !== "Enter" ||
+      !tile || tile.getZ() !== 0 || tile.getX() < 2300 || tile.getX() > 2600 ||
+      tile.getY() < 7300 || tile.getY() > 7440) return;
+    const face = event.object.getFace();
+    const axis = (face & 1) === 0 ? "x" : "y";
+    const source = event.sourceLocation;
+    const side = Math.sign(source?.[axis] - (axis === "x" ? tile.getX() : tile.getY())) ||
+      (face === 0 || face === 3 ? 1 : -1);
+    const privateArea = player.getPrivateArea?.() ?? null;
+    // Castle doors can sit in a multi-tile clipped wall. Route to the first
+    // clear tile on the player's current side instead of falling through to a
+    // clear tile on the far side, which leaves pathfinding trying to cross the
+    // wall without executing the Enter action.
+    for (let distance = 1; distance <= 8; distance++) {
+      const candidate = axis === "x"
+        ? new Location(tile.getX() + side * distance, tile.getY(), tile.getZ())
+        : new Location(tile.getX(), tile.getY() + side * distance, tile.getZ());
+      if (api.core.RegionManager.blocked(candidate, privateArea)) continue;
+      event.destination = { x: candidate.getX(), y: candidate.getY(), z: candidate.getZ() };
+      return;
+    }
+  }
+
   function handleCastleThronePuzzle(event) {
     const player = event?.player;
     const value = player && stage(player);
@@ -1855,20 +1993,30 @@ module.exports = function registerTheBloodMoonRises(api) {
     const y = tile?.y ?? tile?.getY?.();
     const z = tile?.z ?? tile?.getZ?.();
     const name = String(event.definition?.getName?.() ?? "").toLowerCase();
-    const state = player.getAttribute(THRONE_PUZZLE_ATTRIBUTE) ?? { step: 0, solved: false, keyClaimed: false };
-    if (name.includes("throne") && x === 2313 && y === 7392 && z === 0) {
+    const state = player.getAttribute(THRONE_PUZZLE_ATTRIBUTE) ?? { step: 0, solved: false, keyClaimed: false, pulled: [] };
+    // The loc is placed at y=7391 and covers y=7391–7392. The Quest Helper
+    // highlights the southern footprint tile (7392), while normal object
+    // packets resolve to the cache anchor (7391).
+    if (name.includes("throne") && x === 2313 && [7391, 7392].includes(y) && z === 0) {
       event.handled = true;
       const throneOption = String(event.option ?? "").toLowerCase();
       if (["investigate", "search"].includes(throneOption) && !state.started && !state.solved) {
-        player.setAttribute(THRONE_PUZZLE_ATTRIBUTE, { ...state, started: true });
+        const next = { ...state, started: true, pulled: [false, false, false, false] };
+        player.setAttribute(THRONE_PUZZLE_ATTRIBUTE, next);
+        syncThroneBustVarbits(player);
         player.sendMessage("The four busts conceal a mechanism. Their levers must be pulled in the right order.");
         return;
       }
-      if (state.solved && !state.keyClaimed && ["search", "take", "investigate"].includes(throneOption)) {
-        if (player.getInventory().adds(ItemIdentifiers.HALF_MOON_KEY, 1)) {
-          player.setAttribute(THRONE_PUZZLE_ATTRIBUTE, { ...state, keyClaimed: true });
-          player.sendMessage("You find a half moon key inside the throne.");
+      const hasKey = hasItem(player, ItemIdentifiers.HALF_MOON_KEY) || hasBankedItem(player, ItemIdentifiers.HALF_MOON_KEY);
+      if (state.solved && !hasKey && ["search", "take", "investigate"].includes(throneOption)) {
+        const inventory = player.getInventory();
+        if (typeof inventory.getFreeSlots === "function" && inventory.getFreeSlots() <= 0) {
+          player.sendMessage("You couldn't hold the half moon key.");
+          return;
         }
+        inventory.adds(ItemIdentifiers.HALF_MOON_KEY, 1);
+        player.setAttribute(THRONE_PUZZLE_ATTRIBUTE, { ...state, keyClaimed: true });
+        player.sendMessage("You find a half moon key inside the throne.");
         return;
       }
       player.sendMessage(state.solved ? "The throne's hidden compartment is empty." : "There is nothing more to learn from the throne yet.");
@@ -1887,14 +2035,18 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
     // The OSRS puzzle order is the third bust, fourth, first, then second.
     const order = [2, 3, 0, 1];
+    const pulled = [...(state.pulled ?? [false, false, false, false])];
+    pulled[leverRow] = !pulled[leverRow];
     if (leverRow !== order[state.step]) {
-      player.setAttribute(THRONE_PUZZLE_ATTRIBUTE, { ...state, step: 0 });
+      player.setAttribute(THRONE_PUZZLE_ATTRIBUTE, { ...state, step: 0, pulled });
+      syncThroneBustVarbits(player);
       player.sendMessage("The mechanism clicks back into place. The bust sequence has reset.");
       return;
     }
     const step = state.step + 1;
     const solved = step === order.length;
-    player.setAttribute(THRONE_PUZZLE_ATTRIBUTE, { ...state, step, solved });
+    player.setAttribute(THRONE_PUZZLE_ATTRIBUTE, { ...state, step, solved, pulled });
+    syncThroneBustVarbits(player);
     player.sendMessage(solved ? "The busts turn into alignment, and a compartment opens beneath the throne." : "The bust lever locks into place.");
   }
 
@@ -2688,6 +2840,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction(handleSiegeHallObject);
   api.onObjectInteraction(inspectWyrdFence);
   api.onObjectInteraction(handleCastleThronePuzzle);
+  api.onObjectInteraction(handleCastleDoorEnter);
+  api.onObjectRoute(routeCastleDoorEnter);
   api.onObjectInteraction(handleCastleBasinPuzzle);
   api.onObjectInteraction(handleBasinAltar);
   api.onObjectInteraction(handleSolidKeyObjects);
@@ -2725,6 +2879,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("player:bootstrap-complete", syncPaterdomusBookPuzzle);
   api.onPlayerLogin(resumeHideoutEscape);
   api.onPlayerLogin(syncCastleShrine);
+  api.onPlayerLogin(syncCastleRoomOnLogin);
   api.onPlayerLogout(handleSiegeLogout);
   api.onPlayerLogout(hideoutDefense.onPlayerLogout);
   api.onPlayerLogout(cleanupSlepeIvan);
@@ -2742,6 +2897,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.persistAttribute(PREP_ATTRIBUTE);
   api.persistAttribute(PREP_COMPLETE);
   api.persistAttribute(THRONE_PUZZLE_ATTRIBUTE);
+  api.persistAttribute(CASTLE_ROOM_ATTRIBUTE);
+  api.onPlayerLogin(syncThroneBustsOnLogin);
   api.persistAttribute(BASIN_PUZZLE_ATTRIBUTE);
   api.persistAttribute(SOLID_KEY_ATTRIBUTE);
   api.persistAttribute(CLOCK_ATTRIBUTE);

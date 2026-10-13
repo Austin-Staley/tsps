@@ -639,7 +639,6 @@ test('each quest varp is sent again on login, so quest-gated locs show after a r
   const village = getRegisteredQuests().find((quest) => quest.name === 'Tree Gnome Village');
   const attributes = new Map();
   const varps = new Map();
-  const varbits = new Map();
   const sender = new Proxy({}, {
     get: (t, key) => {
       if (key === 'sendConfig') return (id, value) => (varps.set(id, value), sender);
@@ -878,6 +877,19 @@ test('Blood Moon shrine adds the Castle Drakan medallion destination and the rea
   const enter = handlers.objects.find(handler => handler.name === 'enterVampyriumPortal');
   assert.equal(enter({ player, objectId: 61221, definition: { id: 61221 }, location: { x: 2323, y: 7370, z: 0 }, option: 'Enter', handled: false }), true);
   assert.equal(quest.getStage(player), 40);
+
+  // Once the portal has started the Castle chapter, the medallion remains a
+  // legitimate way back after leaving or reconnecting. Re-entering must not
+  // reset the puzzle chapter or advance it a second time.
+  api.lastPrompt = [];
+  assert.equal(medallion({ player, itemId: 22400 }), true);
+  const returnOption = api.lastPrompt.findIndex((entry, index) => index % 2 === 0 && entry === 'Castle Drakan.');
+  assert.notEqual(returnOption, -1, 'the shrine destination remains available during the Castle chapter');
+  api.lastPrompt[returnOption + 1]();
+  assert.deepEqual([position.getX(), position.getY(), position.getZ()], [2322, 7370, 0]);
+  assert.equal(quest.getStage(player), 40, 'returning by medallion does not bypass the Castle portal chapter');
+  assert.equal(enter({ player, objectId: 61221, definition: { id: 61221 }, location: { x: 2323, y: 7370, z: 0 }, option: 'Enter', handled: false }), true);
+  assert.equal(quest.getStage(player), 40, 'the portal remains usable without replaying chapter setup');
 });
 
 test('Ivan reclaims a lost Drakan medallion only after Sins of the Father is complete', () => {
@@ -1053,6 +1065,7 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
   const originalForId = api.core.NpcDefinition.forId;
   api.core.NpcDefinition.forId = () => ({ getName: () => 'Safalaan Hallow' });
   const messages = [];
+  const varbits = new Map();
   let menu;
   api.sendMultiChatboxPrompt = (player, title, ...options) => { menu = options; };
   const choose = option => menu[option*2-1]();
@@ -1078,7 +1091,9 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
     getEquipment: () => ({ contains: () => false }),
     getSkillManager: () => ({ getMaxLevel: () => 99 }),
     getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
-    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) }, {
+      get: (target, key) => target[key] ?? (() => {}),
+    }),
     sendMessage: (text) => messages.push(text),
   };
   quest.setStage(player, 60);
@@ -1133,6 +1148,7 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
 test('Blood Moon Castle Drakan throne opens only after the ordered bust mechanism and awards its key', () => {
   const { api, handlers } = mockApi();
   const messages = [];
+  const varbits = new Map();
   api.emitCustomEvent = (name, event) => {
     for (const handler of handlers.custom.get(name) ?? []) handler(event);
   };
@@ -1141,8 +1157,10 @@ test('Blood Moon Castle Drakan throne opens only after the ordered bust mechanis
   const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
   const attributes = new Map();
   const counts = new Map();
+  let freeSlots = 0;
   const inventory = {
     contains: (id) => (counts.get(id) ?? 0) > 0,
+    getFreeSlots: () => freeSlots,
     adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
     deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
   };
@@ -1152,7 +1170,9 @@ test('Blood Moon Castle Drakan throne opens only after the ordered bust mechanis
     getInventory: () => inventory,
     getSkillManager: () => ({ getMaxLevel: () => 99 }),
     getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
-    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) }, {
+      get: (target, key) => target[key] ?? (() => {}),
+    }),
     sendMessage: (text) => messages.push(text),
   };
   quest.setStage(player, 40);
@@ -1167,14 +1187,105 @@ test('Blood Moon Castle Drakan throne opens only after the ordered bust mechanis
   const action = handlers.custom.get('npc-dialogue:action').at(-1);
   action({ player, stepId: 'XqVfhB' });
   assert.equal(quest.getStage(player), 40, 'the escape transcript cannot bypass the throne puzzle');
-  interact('Throne', 2313, 7392, 'Search');
+  interact('Throne', 2313, 7391, 'Search');
+  assert.deepEqual([15539, 15540, 15541, 15542].map((id) => varbits.get(id)), [1, 1, 1, 1],
+    'searching the throne transforms the four cache busts into clickable levers');
   interact('Bust with lever', 2317, 7393, 'Pull');
   assert.ok(messages.some((message) => message.includes('reset')), 'the wrong first lever resets the mechanism');
+  assert.equal(varbits.get(15539), 2, 'pulling a bust changes its cache-backed lever position');
   for (const y of [7391, 7390, 7393, 7392]) interact('Bust with lever', 2317, y, 'Pull');
   interact('Throne', 2313, 7392, 'Search');
+  assert.equal(inventory.contains(api.core.ItemIdentifiers.HALF_MOON_KEY), false,
+    'a full inventory leaves the key available to claim later');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-throne-puzzle').keyClaimed, false);
+  freeSlots = 1;
+  interact('Throne', 2313, 7392, 'Search');
   assert.equal(inventory.contains(api.core.ItemIdentifiers.HALF_MOON_KEY), true);
+  assert.deepEqual([15539, 15540, 15541, 15542].map((id) => varbits.get(id)), [1, 2, 2, 2],
+    'the active lever positions survive the completed puzzle');
   action({ player, stepId: 'XqVfhB' });
   assert.equal(quest.getStage(player), 45, 'the escape chapter advances only after claiming the key');
+});
+
+test('Blood Moon Castle Enter doors cross to the opposite side of their actual wall', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  const moved = [];
+  const varbits = new Map();
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ contains: () => false }),
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) }, {
+      get: (target, key) => target[key] ?? (() => {}),
+    }),
+    moveTo: (location) => moved.push([location.getX(), location.getY(), location.getZ()]),
+  };
+  quest.setStage(player, 40);
+  const enter = handlers.objects.find((handler) => handler.name === 'handleCastleDoorEnter');
+  const route = handlers.routes.find((handler) => handler.name === 'routeCastleDoorEnter');
+  const routeEvent = {
+    player, objectId: 61576, clickType: 1,
+    definition: { getName: () => 'Door', getInteractions: () => ['Enter'] },
+    object: { getFace: () => 3, getLocation: () => new api.core.Location(2314, 7382, 0) },
+    sourceLocation: { x: 2310, y: 7370, z: 0 },
+    destination: null,
+  };
+  route(routeEvent);
+  assert.deepEqual(routeEvent.destination, { x: 2314, y: 7381, z: 0 },
+    'the click is routed to a reachable tile on its original side of the wall');
+  const lobbyRoute = {
+    player, objectId: 61577, clickType: 1,
+    definition: { getName: () => 'Door', getInteractions: () => ['Enter'] },
+    object: { getFace: () => 1, getLocation: () => new api.core.Location(2327, 7360, 0) },
+    sourceLocation: { x: 2322, y: 7370, z: 0 },
+    destination: null,
+  };
+  route(lobbyRoute);
+  assert.deepEqual(lobbyRoute.destination, { x: 2327, y: 7362, z: 0 },
+    'the lobby door routes around its clipped approach tile while staying on the source side');
+  const event = {
+    player, objectId: 61576, clickType: 1, option: 'Enter',
+    definition: { getName: () => 'Door' },
+    object: { getFace: () => 1 },
+    location: { x: 2314, y: 7382, z: 0 },
+    sourceLocation: { x: 2314, y: 7381, z: 0 },
+    handled: false,
+  };
+  enter(event);
+  assert.equal(event.handled, true);
+  assert.deepEqual(moved, [[2314, 7386, 0]], 'a south-side click exits beyond the full clipped wall');
+  enter({ ...event, definition: { getName: () => 'Half moon door' }, handled: false });
+  assert.equal(moved.length, 1, 'keyed doors are not opened by the generic passage handler');
+
+  const enterPairedDoor = (id, x, y, face, source) => {
+    const paired = {
+      player, objectId: id, clickType: 1, option: 'Enter',
+      definition: { id, getName: () => 'Door' },
+      object: { getFace: () => face }, location: { x, y, z: 0 }, sourceLocation: source, handled: false,
+    };
+    enter(paired);
+    return paired;
+  };
+  const toDining = enterPairedDoor(61577, 2327, 7360, 1, { x: 2327, y: 7362, z: 0 });
+  assert.equal(toDining.handled, true);
+  assert.deepEqual(moved.at(-1), [2342, 7372, 0], 'the lobby entrance lands beside the paired dining-room door');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 2);
+  assert.equal(varbits.get(15489), 1);
+  assert.equal(varbits.get(15499), 2, 'the castle room marker follows the paired-door transition');
+
+  const toThrone = enterPairedDoor(61572, 2358, 7366, 0, { x: 2357, y: 7366, z: 0 });
+  assert.equal(toThrone.handled, true);
+  assert.deepEqual(moved.at(-1), [2305, 7391, 0], 'the dining-room door lands inside the throne room');
+  assert.equal(varbits.get(15499), 3);
+
+  const backToDining = enterPairedDoor(61572, 2304, 7391, 2, { x: 2305, y: 7391, z: 0 });
+  assert.equal(backToDining.handled, true);
+  assert.deepEqual(moved.at(-1), [2357, 7366, 0]);
+  assert.equal(varbits.get(15499), 2);
 });
 
 test('Blood Moon Castle basin puzzle requires all four correct potions before revealing the ancient symbol', () => {
