@@ -469,7 +469,8 @@ class FriendsChatManager {
         const channel = this.channels.get(ownerKey);
         if (!channel)
             return;
-        channel.members.get(playerId)?.setAttribute(CLAN_CHAT_ATTRIBUTE, null);
+        const member = channel.members.get(playerId);
+        member?.setAttribute(CLAN_CHAT_ATTRIBUTE, null);
         channel.members.delete(playerId);
         this.membershipByPlayer.delete(playerId);
         if (channel.members.size === 0) {
@@ -479,6 +480,29 @@ class FriendsChatManager {
         else {
             this.broadcastChannel(ownerKey);
         }
+        if (member)
+            this.memberRemoved?.(member, ownerKey);
+    }
+    /**
+     * A plugin-facing view of the chat-channel a player is in, or null: its key (the owner's
+     * name), display name, members, and each member's rank in it.
+     */
+    static channelOf(player) {
+        return this.channelByKey(this.membershipByPlayer.get(player.getIndex()));
+    }
+    /** The same view of a chat-channel by its key, or null if no one is in it. */
+    static channelByKey(ownerKey) {
+        const channel = ownerKey ? this.channels.get(ownerKey) : undefined;
+        if (!channel)
+            return null;
+        return {
+            key: ownerKey,
+            ownerName: channel.profile.ownerName,
+            name: channel.profile.channelName,
+            members: Array.from(channel.members.values()),
+            kickRank: Math.max(FriendsChatRank.Corporal, channel.profile.kickRank),
+            rankOf: (member) => this.memberRank(channel.profile, member),
+        };
     }
     static setOwnChannelName(player, rawName) {
         const name = channelName(rawName);
@@ -669,4 +693,4 @@ class FriendsChatManager {
     }
 }
 
-module.exports = { FriendsChatManager, CHAT_FILTERS_ATTRIBUTE, CLAN_CHAT_ATTRIBUTE };
+module.exports = { FriendsChatManager, FriendsChatRank, CHAT_FILTERS_ATTRIBUTE, CLAN_CHAT_ATTRIBUTE };

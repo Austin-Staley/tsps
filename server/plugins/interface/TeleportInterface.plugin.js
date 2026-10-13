@@ -93,6 +93,7 @@ const DESTINATIONS = {
     teleport("Barrows", location(3565, 3315), TeleportType.NORMAL),
     teleport("Blast Furnace", location(1939, 4958), TeleportType.NORMAL),
     teleport("Castle Wars", location(2440, 3089), TeleportType.NORMAL),
+    teleport("Chambers of Xeric", location(1234, 3566), TeleportType.NORMAL),
     teleport("Duel Arena", location(3366, 3266), TeleportType.NORMAL),
     teleport("Fortis Colosseum", location(1799, 9506), TeleportType.NORMAL),
     teleport("Pest Control", location(2657, 2639), TeleportType.NORMAL),
