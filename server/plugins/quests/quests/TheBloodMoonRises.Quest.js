@@ -3227,7 +3227,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     } else {
       removeCastleActor(player, "gibbous-venator");
     }
-    if (progress >= 76 && room === CASTLE_ROOM.VENATOR_LIBRARY) {
+    if (progress >= 76 && room === CASTLE_ROOM.IVAN_ROOM) {
       if (!story.defeated.includes("library-venator"))
         spawnCastleActor(player, "library-venator", CASTLE_NPC.VENATOR, [2455, 7391], true);
       if (story.defeated.includes("library-venator") && !story.talkedToIvan)
@@ -4007,7 +4007,9 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (progress >= 76 && Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.VENATOR_LIBRARY &&
       (id === 61757 || rawId === 61757) && x === 2549 && y === 7381 && option === "search") {
       event.handled = true;
-      if (!story.gibbous.spearDoorUnlocked) { player.sendMessage("The library door is still locked."); return; }
+      if (!story.gibbous.spearDoorUnlocked && !story.gibbousSpearDoorUnlocked) {
+        player.sendMessage("The library door is still locked."); return;
+      }
       if (story.gibbous.mysteriousBookClaimed || hasItem(player, ItemIdentifiers.MYSTERIOUS_BOOK)) return;
       if (castleKeyGive(player, ItemIdentifiers.MYSTERIOUS_BOOK,
         "You search the bookcase and find an oddly weighted book. You take it.")) {

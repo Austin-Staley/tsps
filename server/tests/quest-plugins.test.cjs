@@ -1332,8 +1332,12 @@ test('Blood Moon stage 76 separates the optional Gibbous and required library Ve
   attributes.set('quest.the_blood_moon_rises.castle-room', 44);
   attributes.set('quest.the_blood_moon_rises.castle-story', { prisonersFound: true, defeated: [], gibbousSpearDoorUnlocked: true });
   handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
+  assert.equal(spawned.some(npc => npc.id === 16213), false,
+    'the required library Venator does not spawn in the separate Gibbous book room');
+  attributes.set('quest.the_blood_moon_rises.castle-room', 29);
+  handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
   const required = spawned.find(npc => npc.id === 16213);
-  assert.ok(required, 'the distinct mandatory library Venator appears only in the library room');
+  assert.ok(required, 'the distinct mandatory library Venator appears in Ivan’s recorded room');
   assert.deepEqual([required.x, required.y, required.z], [2455, 7391, 0]);
 });
 
@@ -1434,9 +1438,13 @@ test('Blood Moon Gibbous lockbox requires its room clues and accepts code 426', 
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 44,
     'the library room is reachable only after the lock accepts SPEAR');
   const bookcase = handlers.objects.find(handler => handler.name === 'handleCastleBookObjects');
+  const unlocked = attributes.get('quest.the_blood_moon_rises.castle-story');
+  attributes.set('quest.the_blood_moon_rises.castle-story', {
+    ...unlocked, gibbous: { ...unlocked.gibbous, spearDoorUnlocked: undefined },
+  });
   bookcase({ player, objectId: 61757, definition: { id: 61757, getName: () => 'Searchable bookcase' },
     location: { x: 2549, y: 7381, z: 0 }, option: 'Search', handled: false });
-  assert.equal(items.get(33764), 1, 'the recorded bookcase yields the oddly weighted book');
+  assert.equal(items.get(33764), 1, 'the recorded bookcase honors the persisted top-level SPEAR unlock and yields the oddly weighted book');
   action({ player, itemId: 33764, option: 'Open', handled: false });
   assert.equal(items.get(33764), 0);
   assert.equal(items.get(33766), 1, 'reading the book reveals the second fancy gem');
