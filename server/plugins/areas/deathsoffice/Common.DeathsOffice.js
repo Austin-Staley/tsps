@@ -32,8 +32,9 @@ const COMPONENT_NAMES = {
 };
 const COMPONENT = {};
 
-/** The varps the office and Coffer interfaces' scripts draw from (if1-if4). */
-const VARP = { if1: 261, if2: 262, if3: 263, if4: 264 };
+/** The varps the office and Coffer interfaces' scripts draw from, by gameval name. */
+const VARP_NAMES = ["if1", "if2", "if3", "if4"];
+const VARP = {};
 
 /** overlay_portal (2893) and overlay_portal_remove (2894): the portal's swirl over the screen. */
 const SCRIPT = { overlayPortal: 2893, overlayPortalRemove: 2894, mainModalOpen: 2524, mainModalBackground: 917, invInit: 149 };
@@ -53,6 +54,7 @@ const LINE_WIDTH = 53;
 function bind(api) {
   pluginApi = api;
   const { CacheDefinitions } = api.core;
+  for (const name of VARP_NAMES) VARP[name] = CacheDefinitions.getVarpId(name);
   ID.death = CacheDefinitions.getNpcId("death_office_death");
   ID.exitPortal = CacheDefinitions.getLocId("death_office_exitportal");
   ID.cofferLoc = CacheDefinitions.getLocId("death_coffer_access");
