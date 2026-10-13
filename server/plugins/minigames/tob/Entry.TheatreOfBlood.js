@@ -15,6 +15,8 @@ const SUPPLY_CHEST = 32758;
 const OPEN_SUPPLY_CHEST = 32759;
 const DAWNBRINGER_SKELETON = 32741;
 const TREASURE_ENTRANCE = 32738;
+// The treasure trapdoor is on the throne tile; the arena's south side is the reachable approach.
+const TREASURE_ENTRANCE_TILE = [3167,4323,0];
 const REWARD_CHEST = 32992;
 const TELEPORT_CRYSTAL = 32996;
 const SHADOW_EXIT = 33037;
@@ -214,7 +216,7 @@ function roomComplete(raid) {
     object(raid,SUPPLY_CHEST,ROOMS[raid.room].supplies);
   }
   if(raid.room===5) {
-    object(raid,TREASURE_ENTRANCE,[3170,4327,0]);
+    object(raid,TREASURE_ENTRANCE,TREASURE_ENTRANCE_TILE);
     raid.player.sendMessage("Verzik flees. Enter the treasure room to finish your raid.");
   }
   if(raid.mode==="bmr") {
@@ -751,4 +753,4 @@ module.exports=function registerEntryTheatreOfBlood(pluginApi) {
   api.onItemAction(item);
   api.onPlayerLogin(login);
 };
-module.exports._test={ROOMS,NYLO_WAVES,BMR_ENCOUNTERS,BMR_WAVE,readNyloSpec,firstNyloWaveAt,soloNyloPillarHitpoints,activeNylocas,updateNyloExpiry,typeIndex,quadrant,behindBloatPillar,bloatHands,dealtDamage,modifyVerzikHit,verzikBeforeDeath,npcDeath,spawnVerzikAdds,NPC_RAIDS,startMaze,maiden,roomComplete,nextWave,process,createArea,RAIDS,xarpus,splitNylocas,approachNylocas,attackNylocas,allowDawnbringer,item,choosePillar,pillarTarget,startBmr,startRoom,passage,ensureEscapeCrystal};
+module.exports._test={ROOMS,NYLO_WAVES,BMR_ENCOUNTERS,BMR_WAVE,TREASURE_ENTRANCE_TILE,readNyloSpec,firstNyloWaveAt,soloNyloPillarHitpoints,activeNylocas,updateNyloExpiry,typeIndex,quadrant,behindBloatPillar,bloatHands,dealtDamage,modifyVerzikHit,verzikBeforeDeath,npcDeath,spawnVerzikAdds,NPC_RAIDS,startMaze,maiden,roomComplete,nextWave,process,createArea,RAIDS,xarpus,splitNylocas,approachNylocas,attackNylocas,allowDawnbringer,item,choosePillar,pillarTarget,startBmr,startRoom,passage,ensureEscapeCrystal};
