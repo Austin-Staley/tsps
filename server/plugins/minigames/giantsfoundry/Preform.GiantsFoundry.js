@@ -10,9 +10,18 @@
  */
 
 const Shared = require("./Shared.GiantsFoundry");
+const Mould = require("./Mould.GiantsFoundry");
 
 const ANIM_STORAGE = 899; // human_furnace
 const HEADER_COMPONENT = 2; // combat_interface:header
+const SOUND_PICK_UP = 1051;
+const POURED_AT = "pouredAt";
+const JIG = { EMPTY: 0, POURED: 2, COOLED: 3 };
+/** Molten metal cools about a degree a tick in the jig (rsprox: 980-998 at pickup). */
+const POUR_TEMPERATURE = 1000;
+const STAGE_TOOLS = 3; // 0 hammer, 1 grind, 2 polish
+/** Gloves that let the player pick the preform up hot, by item id. */
+const COOLING_GLOVES = [Shared.ITEM.ICE_GLOVES, Shared.ITEM.SMITHS_GLOVES_I];
 
 const MESSAGE = {
   STORED: "<col=229628>You place the preform in the handy storage area. It should stay nice and warm there.",
@@ -21,6 +30,10 @@ const MESSAGE = {
   FREE_HANDS: "You must free your hands so you can hold the preform.",
   NOTHING_STORED: "There is no preform in the storage.",
   NOTHING_TO_STORE: "You have no preform to store.",
+  GLOVES_COOL: (gloves) => `Your ${gloves} cool the preform as you reach for it.`,
+  /** Not captured: every recorded pickup was made in ice gloves. */
+  BUCKET_COOLS: "You cool the preform with your bucket of water as you take it from the mould.",
+  TOO_HOT: "The preform is too hot to pick up. You need ice gloves or a bucket of water.",
 };
 
 function hasFreeHands(player) {
@@ -97,6 +110,80 @@ function takePreform({ player }) {
   player.sendMessage(MESSAGE.TAKEN);
 }
 
+/**
+ * Stage 0 is always the trip hammer; each later stage needs one of the two tools the stage
+ * before it didn't (every captured preform follows this). Returns seeds 1-6, 0 when unused.
+ */
+function rollSeeds(stages) {
+  const seeds = [0, 0, 0, 0, 0, 0];
+  let previous = 0;
+  for (let stage = 1; stage < stages; stage++) {
+    const choices = [0, 1, 2].filter((tool) => tool !== previous);
+    previous = choices[Math.floor(Math.random() * choices.length)];
+    seeds[stage - 1] = previous;
+  }
+  return seeds;
+}
+
+/** Script 6119: the HUD's number of stages for a preform's difficulty. */
+function stageCount(difficulty) {
+  if (difficulty < 20) return 3;
+  if (difficulty < 60) return 4;
+  if (difficulty < 90) return 5;
+  if (difficulty < 120) return 6;
+  return 7;
+}
+
+function coolingGloves(player) {
+  const { Equipment } = Shared.core();
+  const gloves = player.getEquipment().get(Equipment.HANDS_SLOT);
+  const id = gloves?.getId?.();
+  return COOLING_GLOVES.includes(id) ? id : null;
+}
+
+/** Takes the poured preform from the jig, working out its difficulty, quality and stages. */
+function pickUp({ player }) {
+  if (!Shared.questComplete(player)) return false;
+  if (!hasFreeHands(player)) {
+    Shared.statement(player, MESSAGE.FREE_HANDS);
+    return true;
+  }
+  const gloves = coolingGloves(player);
+  const bucket = player.getInventory().contains(Shared.ITEM.BUCKET_OF_WATER);
+  if (gloves === null && !bucket) {
+    Shared.statement(player, MESSAGE.TOO_HOT);
+    return true;
+  }
+  Shared.set(player, Shared.VARBIT.MOULD_STATE, JIG.COOLED);
+  if (gloves !== null) {
+    player.sendMessage(MESSAGE.GLOVES_COOL(Shared.itemName(gloves)));
+  } else {
+    player.getInventory().delete(Shared.ITEM.BUCKET_OF_WATER, 1);
+    player.getInventory().adds(Shared.ITEM.BUCKET, 1);
+    player.getInventory().refreshItems();
+    player.sendMessage(MESSAGE.BUCKET_COOLS);
+  }
+  const difficulty = Shared.get(player, Shared.VARBIT.ALLOY_DIFFICULTY);
+  const quality = Math.max(0, difficulty + Mould.playerScore(player));
+  const seeds = rollSeeds(stageCount(difficulty));
+  const pouredAt = Number(Shared.field(player, POURED_AT, Shared.tick()));
+  const temperature = Math.max(0, POUR_TEMPERATURE - Math.max(0, Shared.tick() - pouredAt));
+  Shared.set(player, Shared.VARBIT.PREFORM_DIFFICULTY, difficulty);
+  Shared.set(player, Shared.VARBIT.PREFORM_QUALITY, quality);
+  Shared.set(player, Shared.VARBIT.PREFORM_START_QUALITY, quality);
+  seeds.forEach((seed, index) => Shared.set(player, Shared.VARBIT.SEED_FIRST + index, seed));
+  Shared.set(player, Shared.VARBIT.TEMPERATURE, temperature);
+  Shared.set(player, Shared.VARBIT.COMPLETION, 0);
+  Shared.set(player, Shared.VARBIT.ALLOY_DIFFICULTY, 0);
+  Mould.clearSelection(player);
+  Shared.set(player, Shared.VARBIT.MOULD_STATE, JIG.EMPTY);
+  Shared.setField(player, POURED_AT, null);
+  equip(player);
+  Shared.sound(player, SOUND_PICK_UP);
+  Shared.api().emitCustomEvent("giants-foundry:step", { player, step: "preform-taken" });
+  return true;
+}
+
 /** The preform never leaves the foundry: walking out, teleporting or logging out stores it. */
 function storeOnLeave(player) {
   if (Shared.wornPreform(player)) store(player);
@@ -123,10 +210,12 @@ function checkLogin({ player }) {
 
 module.exports = function attachPreform(api) {
   api.onObjectInteraction(Shared.OBJECT.PREFORM_STORAGE, { "Store-preform": storePreform, "Take-preform": takePreform });
+  api.onObjectInteraction("Mould jig (Poured metal)", { "Pick-up": pickUp });
+  api.onObjectInteraction("Mould jig (Cooled metal)", { "Pick-up": pickUp });
   api.onCanUnequip(keepPreformWorn);
   api.onPlayerLogin(checkLogin);
 };
 
 Object.assign(module.exports, {
-  hasFreeHands, equip, unequip, store, storeOnLeave, noticeStoredPreform, openHud, closeHud, MESSAGE,
+  hasFreeHands, rollSeeds, stageCount, equip, unequip, store, storeOnLeave, noticeStoredPreform, openHud, closeHud, MESSAGE,
 });

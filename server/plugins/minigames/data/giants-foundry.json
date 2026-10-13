@@ -1,0 +1,28 @@
+{
+  "_source": "OSRS Wiki, Giants' Foundry (crucible metals, item values) and Smelting (furnace levels); metal order is the crucible's varbits 13931-13936",
+  "crucibleCapacity": 28,
+  "metals": [
+    { "prefix": "Bronze", "bar": "Bronze bar", "tier": 1, "level": 1 },
+    { "prefix": "Iron", "bar": "Iron bar", "tier": 2, "level": 15 },
+    { "prefix": "Steel", "bar": "Steel bar", "tier": 3, "level": 30 },
+    { "prefix": "Mithril", "bar": "Mithril bar", "tier": 4, "level": 50 },
+    { "prefix": "Adamant", "bar": "Adamantite bar", "tier": 5, "level": 70 },
+    { "prefix": "Rune", "bar": "Runite bar", "tier": 6, "level": 85 }
+  ],
+  "_items": "Smithed equipment is worth its smithing cost minus one bar",
+  "items": {
+    "scimitar": 1,
+    "longsword": 1,
+    "full helm": 1,
+    "sq shield": 1,
+    "claws": 1,
+    "warhammer": 2,
+    "battleaxe": 2,
+    "chainbody": 2,
+    "kiteshield": 2,
+    "2h sword": 2,
+    "platelegs": 2,
+    "plateskirt": 2,
+    "platebody": 4
+  }
+}

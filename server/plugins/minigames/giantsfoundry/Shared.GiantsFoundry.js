@@ -136,6 +136,7 @@ const ITEM = {
   ICE_GLOVES: 1580,
   SMITHS_GLOVES_I: 27031,
   BUCKET_OF_WATER: 1929,
+  BUCKET: 1925,
 };
 
 /** The room's machinery, heard and seen by everyone inside (rsprox captures). */
@@ -297,7 +298,7 @@ function playerSays(player, text) {
 function kovacSays(player, text, then = null) {
   const { DialogueChainBuilder, NpcDialogue, EndDialogue, ActionDialogue } = core();
   const chain = new DialogueChainBuilder().add(new NpcDialogue(0, NPC.KOVAC, text));
-  if (then) chain.add(new ActionDialogue(1, () => then()));
+  if (then) chain.add(new ActionDialogue(1, { execute: then }));
   else chain.add(new EndDialogue(1));
   player.getDialogueManager().startDialogues(chain);
 }
@@ -307,6 +308,26 @@ function options(player, title, ...pairs) {
   const args = [];
   for (let i = 0; i < pairs.length; i += 2) args.push(pairs[i], pairs[i + 1] ?? (() => {}));
   api().sendMultiChatboxPrompt(player, title, ...args);
+}
+
+/** Runs `action` after `ticks` game ticks. */
+function later(ticks, action) {
+  const { Task, TaskManager } = core();
+  const task = new (class extends Task {
+    constructor() {
+      super(Math.max(1, ticks), "giants-foundry", false);
+    }
+    execute() {
+      this.stop();
+      action();
+    }
+  })();
+  TaskManager.submit(task);
+  return task;
+}
+
+function itemName(itemId) {
+  return core().ItemDefinition.forId(itemId)?.getName?.() ?? "";
 }
 
 function wornPreform(player) {
@@ -321,5 +342,5 @@ module.exports = {
   stateOf, get, set, field, setField, reputation, setReputation, sync,
   onTick, onStopWork, runTick, stopWork,
   questComplete, inRoom, tick, level, currentLevel, addXp, animate, sound, areaSound,
-  statement, playerSays, kovacSays, options, wornPreform,
+  statement, playerSays, kovacSays, options, later, itemName, wornPreform,
 };

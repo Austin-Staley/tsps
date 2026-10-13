@@ -14,6 +14,8 @@ All four recordings with foundry play were made on Leagues V worlds (rev 227): 9
 | `Preform.GiantsFoundry.js` | Wearing the preform, the HUD, the preform storage. |
 | `Kovac.GiantsFoundry.js` | Commissions; Talk-to's commission conditions and `[sword style]` blanks. |
 | `Mould.GiantsFoundry.js` | The mould jig and its setup interface (718); the mould score. |
+| `Crucible.GiantsFoundry.js` | Filling (Fill menu, item-on), Check, Empty, Pour; the metal score. |
+| `data/giants-foundry.json` | Crucible metals (tier, smelting level) and what smithed equipment is worth. |
 
 **Changes outside the plugin:**
 - **Kovac** is `kovac_multi` (11560) in `npc-spawns.json`, at the captured tile (3369, 11486) facing north-west. The cache resolves it from varbit 13902: 11470 (Talk-to only) until the quest reads 30, then 11472 with Hand-in, Commission and Shop.
@@ -116,6 +118,27 @@ The client draws everything from varbits; the server keeps them right.
   - Each part scores, for each commission word, the size of its stat on that word's end of the axis.
   - Example (recording 565): Spiker! + Choppa! + Serrated Tip for Light Spiked score 22 + 22 + 16 + 4 = 64. With the alloy's 20, that gives the captured start quality 84.
 
+**The crucible** (recordings 96 and 565)
+- Fill opens the make-x menu "What metal would you like to add?" with the six bars; its quantity cap is the space left.
+- A bar the player doesn't hold gets an item box: "You have no Bronze bars to add to the crucible.".
+- Item-on asks "How many would you like to add?" with 1, 5, X and All (one item: no question).
+- Then the player pulls the lever (4909, synth 2725). Three ticks later:
+  - the metal count and crucible state change;
+  - an item box says "You add 6 Iron bars to the crucible." or, for equipment, "You add 7 Bronze platelegss to the crucible,<br>worth 14 Bronze bars.". Live adds an "s" to the item name even when it already ends in one.
+- When the metal would overflow, it asks first ("No./Yes."): "Adding this item will overflow the crucible. You will lose 12 bars worth of Steel. Are you sure you want to add it?".
+- After the box:
+  - if the crucible is full, a message box says "The crucible is now full of molten metal, it is ready to be poured into the mould jig.";
+  - otherwise the game message "You need to add 10 more metal bars worth of material to pour the crucible into the mould jig.".
+- Pour:
+  - The player pushes (810, synth 5605) and the crucible plays 9447.
+  - The next tick sets alloy difficulty (13913) to the metal score.
+  - Six ticks after the push, the jig goes 1→2, the counts clear and the crucible empties.
+  - Without a set-up jig, the player says "I'll need to set the mould up before pouring metal into it."
+- Metal score (Wiki):
+  - Vₙ = 10·tier·amount/28 for the two most common metals, ties going to the better metal.
+  - Score = ⌊(⌊10V₁⌋ + ⌊10V₂⌋ + ⌊V₁V₂⌋)/10⌋.
+  - 14 bronze + 14 iron score 20, as captured.
+
 **Picking up the preform** (recording 565)
 - The jig goes 1→2 on pouring and 2→3 two ticks later.
 - On pickup:
@@ -126,7 +149,18 @@ The client draws everything from varbits; the server keeps them right.
   - the preform is worn in the weapon slot, synth 1051 plays, and the combat tab header becomes "Preform" ("Category: Unarmed");
   - HUD 754 opens in the overlay slot.
 
+**Stage seeds** (54 captured preforms)
+- Stage 0 is always the trip hammer.
+- Each later stage is one of the two tools that differ from the stage before it, chosen at random.
+- Unused seeds are 0.
+
 ## Not captured
+
+- The crucible's Check and Empty: Check reports its contents, and Empty asks before destroying them (Wiki: emptying loses the metal).
+- Pouring while a preform is still to be handed in (the Wiki says it can't be done): a placeholder message.
+- The level check for adding a metal (the Wiki says it needs the smelting level, boostable): a placeholder message.
+- Picking the preform up with a bucket of water (every capture used ice gloves): the bucket is emptied, with a placeholder message.
+- The temperature at pickup is 1000 minus a degree per tick since the pour (captured: 980-998).
 
 - "Check" on a set-up jig: it reopens the setup.
 

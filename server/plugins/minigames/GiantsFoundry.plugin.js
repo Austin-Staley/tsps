@@ -16,5 +16,6 @@ module.exports = {
     require("./giantsfoundry/Preform.GiantsFoundry")(api);
     require("./giantsfoundry/Kovac.GiantsFoundry")(api);
     require("./giantsfoundry/Mould.GiantsFoundry")(api);
+    require("./giantsfoundry/Crucible.GiantsFoundry")(api);
   },
 };
