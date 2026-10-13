@@ -1867,6 +1867,17 @@ module.exports = function registerTheBloodMoonRises(api) {
     return player.getInventory().contains(itemId) || player.getEquipment?.().contains?.(itemId) === true;
   }
 
+  function giveInventoryItem(player, itemId, fullMessage = "Make room in your inventory before taking that item.") {
+    const inventory = player.getInventory();
+    if (inventory.contains(itemId)) return true;
+    if (typeof inventory.getFreeSlots === "function" && inventory.getFreeSlots() <= 0) {
+      player.sendMessage(fullMessage);
+      return false;
+    }
+    inventory.adds(itemId, 1);
+    return true;
+  }
+
   function hasBankedItem(player, itemId) {
     for (let tab = 0; tab < 11; tab++) {
       if (player.getBank?.(tab)?.contains?.(itemId)) return true;
@@ -2108,13 +2119,9 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.sendMessage("The altar remains still. The four inscriptions must each receive the correct potion.");
       return;
     }
-    if (!player.getInventory().contains(ItemIdentifiers.ANCIENT_SYMBOL)) {
-      player.getInventory().adds(ItemIdentifiers.ANCIENT_SYMBOL, 1);
+      if (!giveInventoryItem(player, ItemIdentifiers.ANCIENT_SYMBOL, "Make room in your inventory before taking the ancient symbol.")) return;
       player.setAttribute(BASIN_PUZZLE_ATTRIBUTE, { ...state, symbol: true });
       player.sendMessage("You search the altar and take an ancient symbol.");
-    } else {
-      player.sendMessage("The altar's ancient symbol is already in your inventory.");
-    }
   }
 
   function handleSolidKeyObjects(event) {
@@ -2131,7 +2138,7 @@ module.exports = function registerTheBloodMoonRises(api) {
         player.sendMessage("The ancient shield's room lies beyond the chapel. Find the ancient symbol first.");
         return;
       }
-      if (!player.getInventory().contains(ItemIdentifiers.ANCIENT_SHIELD)) player.getInventory().adds(ItemIdentifiers.ANCIENT_SHIELD, 1);
+      if (!giveInventoryItem(player, ItemIdentifiers.ANCIENT_SHIELD, "Make room in your inventory before taking the ancient shield.")) return;
       player.setAttribute(SOLID_KEY_ATTRIBUTE, { ...state, shield: true });
       player.sendMessage("You search the crate and take an ancient shield.");
       return;
@@ -2139,10 +2146,9 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (x !== 2543 || y !== 7361) return;
     if (state.mounted) {
       event.handled = true;
-      if (!state.key && player.getInventory().adds(ItemIdentifiers.SOLID_KEY, 1)) {
-        player.setAttribute(SOLID_KEY_ATTRIBUTE, { ...state, key: true });
-        player.sendMessage("You search the mounted shield and take the solid key.");
-      }
+      if (!giveInventoryItem(player, ItemIdentifiers.SOLID_KEY, "Make room in your inventory before taking the solid key.")) return;
+      player.setAttribute(SOLID_KEY_ATTRIBUTE, { ...state, key: true });
+      player.sendMessage("You search the mounted shield and take the solid key.");
     }
   }
 
@@ -2169,17 +2175,13 @@ module.exports = function registerTheBloodMoonRises(api) {
     const state = player.getAttribute(CLOCK_ATTRIBUTE) ?? { west: {}, east: {}, emblem: false };
     if (event.objectId === 61752 && x === 2323 && y === 7386) {
       event.handled = true;
-      if (!player.getInventory().contains(ItemIdentifiers.SMALL_CLOCK_HAND)) {
-        player.getInventory().adds(ItemIdentifiers.SMALL_CLOCK_HAND, 1);
-      }
+      if (!giveInventoryItem(player, ItemIdentifiers.SMALL_CLOCK_HAND, "Make room in your inventory before taking the small clock hand.")) return;
       player.sendMessage("You search the shelves and take a small clock hand.");
       return;
     }
     if (event.objectId === 61751 && x === 2466 && y === 7370) {
       event.handled = true;
-      if (!player.getInventory().contains(ItemIdentifiers.LARGE_CLOCK_HAND)) {
-        player.getInventory().adds(ItemIdentifiers.LARGE_CLOCK_HAND, 1);
-      }
+      if (!giveInventoryItem(player, ItemIdentifiers.LARGE_CLOCK_HAND, "Make room in your inventory before taking the large clock hand.")) return;
       player.sendMessage("You search the crate and take a large clock hand.");
       return;
     }
@@ -2205,11 +2207,9 @@ module.exports = function registerTheBloodMoonRises(api) {
         player.sendMessage("The fireplace mechanism remains locked. The western clock must show 11:45 and the eastern clock 12:20.");
         return;
       }
-      if (!player.getInventory().contains(ItemIdentifiers.DRAKAN_EMBLEM_2)) {
-        player.getInventory().adds(ItemIdentifiers.DRAKAN_EMBLEM_2, 1);
-        player.setAttribute(CLOCK_ATTRIBUTE, { ...state, emblem: true });
-        player.sendMessage("You search the fireplace and take a second Drakan emblem.");
-      }
+      if (!giveInventoryItem(player, ItemIdentifiers.DRAKAN_EMBLEM_2, "Make room in your inventory before taking the Drakan emblem.")) return;
+      player.setAttribute(CLOCK_ATTRIBUTE, { ...state, emblem: true });
+      player.sendMessage("You search the fireplace and take a second Drakan emblem.");
     }
   }
 
@@ -2276,14 +2276,9 @@ module.exports = function registerTheBloodMoonRises(api) {
       promptGalleryChest(player);
       return;
     }
-    if (state.key) {
-      player.sendMessage("The chest is empty now.");
-      return;
-    }
-    if (player.getInventory().adds(ItemIdentifiers.CRESCENT_MOON_KEY, 1)) {
-      player.setAttribute(GALLERY_CHEST_ATTRIBUTE, { ...state, key: true });
-      player.sendMessage("You search the chest and take the crescent moon key.");
-    }
+    if (!giveInventoryItem(player, ItemIdentifiers.CRESCENT_MOON_KEY, "Make room in your inventory before taking the crescent moon key.")) return;
+    player.setAttribute(GALLERY_CHEST_ATTRIBUTE, { ...state, key: true });
+    player.sendMessage("You search the chest and take the crescent moon key.");
   }
 
   function syncHuntGroundItems(event) {

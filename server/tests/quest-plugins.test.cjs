@@ -1295,9 +1295,11 @@ test('Blood Moon Castle basin puzzle requires all four correct potions before re
   const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
   const attributes = new Map();
   const counts = new Map();
+  let freeSlots = 4;
   const inventory = {
     contains: (id) => (counts.get(id) ?? 0) > 0,
-    adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
+    getFreeSlots: () => freeSlots,
+    adds(id, amount) { counts.set(id, (counts.get(id) ?? 0) + amount); return this; },
     deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
   };
   const player = {
@@ -1329,6 +1331,11 @@ test('Blood Moon Castle basin puzzle requires all four correct potions before re
   pour(I.WEIGHTLESS_BLACK_POTION, 61703, 2387, 7389);
   pour(I.CLOUDY_GREY_POTION, 61702, 2380, 7384);
   pour(I.COLD_BLUISH_WHITE_POTION, 61705, 2387, 7384);
+  freeSlots = 0;
+  altar({ player, definition: { getName: () => 'Altar' }, location: { x: 2382, y: 7393, z: 0 }, handled: false });
+  assert.equal(inventory.contains(I.ANCIENT_SYMBOL), false, 'a full inventory leaves the symbol in the altar');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-basin-puzzle').symbol, false);
+  freeSlots = 1;
   altar({ player, definition: { getName: () => 'Altar' }, location: { x: 2382, y: 7393, z: 0 }, handled: false });
   assert.equal(inventory.contains(I.ANCIENT_SYMBOL), true, 'all four correctly poured potions reveal the symbol');
 });
