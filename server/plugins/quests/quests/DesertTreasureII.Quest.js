@@ -3474,6 +3474,9 @@ module.exports = function registerDesertTreasureII(api) {
     }
     const allPalaceDevicesPlaced = state.whiteBlockerPlaced && state.whiteAnimaPlaced && state.whiteIdolPlaced;
     const braziers = [[2318, 6446], [2312, 6444], [2321, 6449], [2323, 6455]];
+    if (state.inShadow && allPalaceDevicesPlaced && state.braziersComplete) {
+      desired.set("palace-chest", [state.fakeSchematicFound ? 48240 : 48232, 2316, 6450, 11]);
+    }
     if (state.inShadow && allPalaceDevicesPlaced) {
       for (const [x, y] of braziers) {
         if (!state.braziers?.[`${x},${y}`]) desired.set(`brazier:${x},${y}`, [48253, x, y, 10]);

@@ -6132,6 +6132,10 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(litBrazierState.braziersComplete, true, 'all four distinct cache braziers must light');
     assert.deepEqual(Object.keys(litBrazierState.braziers).sort(), brazierTiles.map(([x, y]) => `${x},${y}`).sort(),
       'the northern brazier at x2323 is included in the four canonical positions');
+    playerProcesses[0]({ player });
+    assert.ok(lassarObjectObjects.some(({ action, object }) => action === 'register' && object.id === 48232
+      && object.location.x === 2316 && object.location.y === 6450 && object.type === 11),
+      'the opened chest counterpart appears only after all four braziers are lit');
     assert.ok(brazierTiles.every(([x, y]) => lassarObjectObjects.findLast(({ object }) => object.id === 48253
       && object.location.x === x && object.location.y === y)?.action === 'deregister'),
       'each lit counterpart is removed from the owner scene on the next process tick');
@@ -6148,6 +6152,10 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(interact({ player, objectId: 48232, definition: { id: 48232 }, location: { x: 2316, y: 6450, z: 0 }, option: 'Open' }), true);
     assert.equal(counts.get(core.ItemIdentifiers.PERFECTED_SHADOW_TORCH_SCHEMATIC_2), 1, 'the palace chest yields the marked false schematic only after the device puzzle');
     assert.equal(attrs.get('desert-treasure-ii:lassar').fakeSchematicFound, true);
+    playerProcesses[0]({ player });
+    assert.ok(lassarObjectObjects.some(({ action, object }) => action === 'register' && object.id === 48240
+      && object.location.x === 2316 && object.location.y === 6450),
+      'the opened chest gets its cache-backed visual counterpart after the schematic is claimed');
     interactions.find((entry) => entry.name === 'Ketla').options['Talk-to']({ player, npcId: core.NpcIdentifiers.KETLA });
     assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-with-a-schematic-2');
     actionHooks[0]({ player, stepId: 'AYDmc1' });
