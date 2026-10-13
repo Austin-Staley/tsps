@@ -2803,7 +2803,8 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.setAttribute(CASTLE_STORY_ATTRIBUTE, story);
     }
     if (progress >= 72 && !story.talkedToVeliaf) {
-      spawnCastleActor(player, "veliaf-gallery", CASTLE_NPC.VELIAF_GALLERY, [2379, 7367]);
+      // The full-quest recording creates Veliaf beside the Gallery Hall arrival.
+      spawnCastleActor(player, "veliaf-gallery", CASTLE_NPC.VELIAF_GALLERY, [2326, 7397]);
     }
     if (progress >= 72) {
       if (!story.defeated.includes("first-venator"))

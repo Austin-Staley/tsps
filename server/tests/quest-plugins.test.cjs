@@ -1228,6 +1228,9 @@ test('Blood Moon Castle story actors use cache-walkable floor anchors', () => {
   quest.setStage(player, 40);
   handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
   assert.deepEqual(spawned.map(npc => npc.id).sort(), [15845, 15846, 15867, 15869, 15888, 15903]);
+  const galleryVeliaf = spawned.find(npc => npc.id === 15867);
+  assert.deepEqual([galleryVeliaf?.x, galleryVeliaf?.y], [2326, 7397],
+    'Veliaf spawns beside the recorded Gallery Hall arrival so the player can speak to him');
   for (const npc of spawned) {
     assert.equal(api.core.RegionManager.getClipping(npc.x, npc.y, npc.z ?? 0, null) & api.core.RegionManager.BLOCKED_TILE, 0,
       `Castle actor ${npc.id} does not spawn inside a blocked tile`);
