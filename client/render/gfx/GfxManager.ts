@@ -1,3 +1,4 @@
+import { notifyActorGraphic } from "../../game/ActorEventHooks";
 import { getClientCycle } from "../../network/ServerConnection";
 import type { WebGLMapSquare } from "../WebGLMapSquare";
 import type { WebGLOsrsRenderer } from "../WebGLOsrsRenderer";
@@ -44,6 +45,45 @@ export class GfxManager {
     private worldInstancesWithSlotBuffer: Array<{ inst: GfxInstance; slot: number }> = [];
     constructor(private renderer: WebGLOsrsRenderer) {}
 
+    /** The legacy graphic getter represents the default (slot zero) actor spot animation. */
+    private removeInstance(id: number): void {
+        const instance = this.instances.get(id);
+        if (!instance) return;
+        this.instances.delete(id);
+        const player = instance.attachPlayerServerId;
+        const npc = instance.attachNpcServerId;
+        if (player !== undefined) notifyActorGraphic({ type: "player", serverId: player, graphic: this.getActorGraphic("player", player) });
+        if (npc !== undefined) notifyActorGraphic({ type: "npc", serverId: npc, graphic: this.getActorGraphic("npc", npc) });
+    }
+
+    getActorGraphic(kind: "player" | "npc", serverId: number): number {
+        for (const instance of this.instances.values()) {
+            const actorId = kind === "player" ? instance.attachPlayerServerId : instance.attachNpcServerId;
+            if (actorId === serverId && (instance.slot ?? 0) === 0) return instance.spotId;
+        }
+        return -1;
+    }
+    *getActorInstances(kind:"player"|"npc",serverId:number):IterableIterator<GfxInstance> {
+        for(const instance of this.instances.values())if((kind==="player" ? instance.attachPlayerServerId:instance.attachNpcServerId)===serverId)yield instance;
+    }
+    removeActorInstances(kind:"player"|"npc",serverId:number):void { for(const instance of this.getActorInstances(kind,serverId))this.removeInstance(instance.id); }
+    getActorFrame(instance:GfxInstance):{frame:number;cycle:number} {
+        if(instance.startTimeMs===undefined)return {frame:-1,cycle:0};
+        const cache=this.renderer.gfxRenderer?.getCache(),lengths=cache?.getFrameLengths(instance.spotId);
+        const cycles=Math.max(0,Math.floor((performance.now()-instance.startTimeMs)/20));
+        const total=lengths?.reduce((sum,value)=>sum+Math.max(1,value),0) ?? Math.max(1,cache?.getFrameCount(instance.spotId) ?? 1);
+        let remaining=cycles%total;
+        if(lengths){for(let frame=0;frame<lengths.length;frame++){const length=Math.max(1,lengths[frame]);if(remaining<length)return {frame,cycle:remaining};remaining-=length;}}
+        return {frame:remaining,cycle:0};
+    }
+    setActorFrame(instance:GfxInstance,frame:number,cycle=0):void {
+        if(frame<0){instance.startTimeMs=undefined;instance.endTimeMs=undefined;return;}
+        const lengths=this.renderer.gfxRenderer?.getCache()?.getFrameLengths(instance.spotId);
+        const elapsed=(lengths ? lengths.slice(0,Math.max(0,frame)).reduce((sum,value)=>sum+Math.max(1,value),0):Math.max(0,frame))+Math.max(0,cycle);
+        instance.startTimeMs=performance.now()-elapsed*20;
+        if(instance.durationMs!==undefined)instance.endTimeMs=instance.startTimeMs+instance.durationMs;
+    }
+
     update(): void {
         const nowCycle = getClientCycle() | 0;
         const nowMs = (performance?.now?.() as number) || Date.now();
@@ -56,7 +96,7 @@ export class GfxManager {
                 }
             }
             if (!inst.loop && typeof inst.endTimeMs === "number" && nowMs >= (inst.endTimeMs | 0)) {
-                this.instances.delete(id);
+                this.removeInstance(id);
             }
         }
     }
@@ -85,8 +125,8 @@ export class GfxManager {
     clearAttachedSlotPlayer(serverId: number, slotArg?: number): void {
         const slot = typeof slotArg === "number" ? (slotArg | 0) & 0xff : 0;
         for (const [existingId, inst] of this.instances) {
-            if (inst.attachPlayerServerId === (serverId | 0) && inst.slot === slot) {
-                this.instances.delete(existingId);
+            if (inst.attachPlayerServerId === (serverId | 0) && (inst.slot ?? 0) === slot) {
+                this.removeInstance(existingId);
             }
         }
     }
@@ -94,8 +134,8 @@ export class GfxManager {
     clearAttachedSlotNpc(serverId: number, slotArg?: number): void {
         const slot = typeof slotArg === "number" ? (slotArg | 0) & 0xff : 0;
         for (const [existingId, inst] of this.instances) {
-            if (inst.attachNpcServerId === (serverId | 0) && inst.slot === slot) {
-                this.instances.delete(existingId);
+            if (inst.attachNpcServerId === (serverId | 0) && (inst.slot ?? 0) === slot) {
+                this.removeInstance(existingId);
             }
         }
     }
@@ -113,7 +153,7 @@ export class GfxManager {
         if (slot !== undefined) {
             for (const [existingId, inst] of this.instances) {
                 if (inst.attachPlayerServerId === (serverId | 0) && inst.slot === slot) {
-                    this.instances.delete(existingId);
+                    this.removeInstance(existingId);
                 }
             }
         }
@@ -162,7 +202,7 @@ export class GfxManager {
         if (slot !== undefined) {
             for (const [existingId, inst] of this.instances) {
                 if (inst.attachNpcServerId === (serverId | 0) && inst.slot === slot) {
-                    this.instances.delete(existingId);
+                    this.removeInstance(existingId);
                 }
             }
         }
@@ -237,7 +277,7 @@ export class GfxManager {
     }
 
     kill(id: number): void {
-        this.instances.delete(id);
+        this.removeInstance(id);
     }
 
     /**
