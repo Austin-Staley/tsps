@@ -360,6 +360,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   const MAUSOLEUM_INSIDE = { x: 3704, y: 3192, z: 0 };
   const SAFALAAN_WALK_TILE = { x: 3696, y: 3204, z: 0 };
   const HIDEOUT_VERTIDA_TILE = { x: 3629, y: 9643, z: 0 };
+  const HIDEOUT_IVAN_TILE = { x: 3598, y: 9613, z: 0 };
   const HIDEOUT_POLMAFI_TILE = { x: 3601, y: 9612, z: 0 };
   const LAB_SAFALAAN_TILE = { x: 3611, y: 9737, z: 0 };
   const LAB_BLOODVELD_TILE = { x: 3600, y: 9740, z: 0 };
@@ -602,7 +603,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   // ---------------------------------------------------------------------------
 
   function spawnKey(player, key, npcId, tile) {
-    if (!player || player.isPlayerBot?.() === true) return;
+    if (!player) return;
     let map = spawnedByPlayer.get(player);
     if (!map) {
       map = new Map();
@@ -675,7 +676,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
 
   /** Keeps exactly the quest NPCs the current stage needs present. */
   function applyStageSpawns(player) {
-    if (!player || player.isPlayerBot?.() === true) return;
+    if (!player) return;
     const stage = quest.getStage(player);
     spawnAt(player, "veliaf_slepe_start", VELIAF_ID, VELIAF_SLEPE_TILE, STAGE_UNSTARTED, STAGE_VELIAF_REPORTED);
     spawnAt(player, "veliaf_pater", VELIAF_ID, VELIAF_PATERDOMUS_TILE, STAGE_VELIAF_REPORTED, STAGE_PATERDOMUS);
@@ -694,7 +695,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     spawnAt(player, "ivan_escape", IVAN_ID, BURGH_HIDEOUT, STAGE_VANSTROM_DEAD, STAGE_COMPLETE);
     // The wiki item page: lost tomes are reclaimed from Ivan in Old Man Ral's
     // house in Meiyerditch once the quest is done.
-    if (quest.isComplete(player)) spawnKey(player, "ivan_post", IVAN_ID, HIDEOUT_VERTIDA_TILE);
+    if (quest.isComplete(player)) spawnKey(player, "ivan_post", IVAN_ID, HIDEOUT_IVAN_TILE);
     else despawnKey(player, "ivan_post");
     spawnAt(player, "hameln", HAMELN_ID, HAMELN_CHURCH_TILE, STAGE_STARTED, STAGE_FOLLOWING);
     spawnAt(player, "carl", CARL_ID, CARL_PUB_TILE, STAGE_HAMELN, STAGE_LAB_DESTROYED);
@@ -1316,6 +1317,19 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
         return;
       case "UPl9kU": // recovering a lost tome from Ivan
         if (!held(player, TOME_ITEM_ID)) give(player, TOME_ITEM_ID, 1);
+        return;
+      case "ZoWCuH": // Ivan's post-Sins Drakan's medallion reclaim interface
+      case "R8U1L0":
+        if (!IVAN_IDS.has(event.npcId) || !quest.isComplete(player)) return;
+        if (held(player, DRAKANS_MEDALLION_ITEM_ID)) {
+          player.sendMessage("You already have a Drakan's medallion.");
+          return;
+        }
+        if (freeSlots(player) < 1) {
+          player.sendMessage("You need an empty inventory slot to reclaim a Drakan's medallion.");
+          return;
+        }
+        give(player, DRAKANS_MEDALLION_ITEM_ID, 1);
         return;
       default:
         return;
