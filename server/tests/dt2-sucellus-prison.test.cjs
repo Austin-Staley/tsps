@@ -214,6 +214,20 @@ test("private-instance gate coordinates normalize to cache tiles and preserve th
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 28);
   assert.equal(inventory.getAmount(28416), 1);
   assert.deepEqual(openedObjects, [gate]);
+
+  const secondSapphireGate = { getPrivateArea: () => area, getId: () => 49122, getLocation: () => ({ equals: () => true }) };
+  area.templateObjects = [secondSapphireGate];
+  handlers.object({ player, object: secondSapphireGate, definition: { id: 49122 }, option: "Open", location: instanceLocation(2954, 6406, 2), handled: false });
+  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 28, "the earned sapphire key opens later gates too");
+  assert.deepEqual(openedObjects, [gate, secondSapphireGate]);
+
+  player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 46);
+  inventory.adds(28419, 1);
+  const diamondGate = { getPrivateArea: () => area, getId: () => 49128, getLocation: () => ({ equals: () => true }) };
+  area.templateObjects = [diamondGate];
+  handlers.object({ player, object: diamondGate, definition: { id: 49128 }, option: "Open", location: instanceLocation(2903, 6375, 2), handled: false });
+  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 48, "the diamond key opens the equipment-cell gate after the Assassin's answers");
+  assert.equal(inventory.getAmount(28419), 1);
   assert.equal(handlers.object({ ...event, player: { getAttribute: () => null } }), false, "outside the quest instance, gate handling falls through");
 });
 
@@ -230,17 +244,18 @@ test("the equipment chest returns the saved kit through the valid prison stash e
   assert.equal(emitted.filter(({ name }) => name === "dt2:sucellus-prison-return-stash").length, 1);
 });
 
-test("blocked shortcut crevice only opens when the carried chisel is used on its cache loc", () => {
-  const { handlers, player, inventory, openedObjects, area, instanceLocation } = setup();
+test("the real Enter dialog clears the blocked crevice without the cell's consumed chisel", () => {
+  const { handlers, prompts, player, openedObjects, area, instanceLocation } = setup();
   player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 30);
   const crevice = { getPrivateArea: () => area };
-  inventory.adds(28414, 1);
-  const event = { player, object: crevice, objectId: 49106, itemId: 28414, location: instanceLocation(2965, 6427, 2), handled: false };
-  handlers.itemObject(event);
+  area.templateObjects = [crevice];
+  const event = { player, object: crevice, definition: { id: 49106 }, option: "Enter", location: instanceLocation(2965, 6427, 2), handled: false };
+  handlers.object(event);
   assert.equal(event.handled, true);
+  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 30, "the player confirms the rubble before it clears");
+  prompts[0].pairs[1]();
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-crevice-cleared"), true);
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 32);
-  assert.equal(inventory.getAmount(28414), 1, "the chisel is reusable");
   assert.deepEqual(openedObjects, [crevice], "the actual private blocked loc is removed so the passage is traversable");
 });
 

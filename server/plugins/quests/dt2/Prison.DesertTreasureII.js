@@ -13,7 +13,6 @@ module.exports = function registerSucellusPrison(api) {
   const GEAR_RETURNED = "desert-treasure-ii:sucellus-prison-gear-returned";
   const FIREWORKS = "desert-treasure-ii:sucellus-prison-fireworks";
   const DEFENCE_START = "desert-treasure-ii:sucellus-prison-defence-start";
-  const CHISEL = I.CHISEL_5;
   const LOCKPICK = I.LOCKPICK_4;
   const KEYS = { sapphire: I.SAPPHIRE_KEY_3, emerald: I.EMERALD_KEY_3, ruby: I.RUBY_KEY_3, diamond: I.DIAMOND_KEY };
   const ANSWERS = { sapphire: "214013", emerald: "LIES", ruby: "URLDRU", diamond: "WRATH" };
@@ -35,10 +34,10 @@ module.exports = function registerSucellusPrison(api) {
     asylum: [2974, 6440, 2],
   };
   const KEY_GATES = {
-    49122: { key: "sapphire", from: 26, to: 28, tiles: [[2912, 6418], [2954, 6406], [2975, 6373]] },
-    49124: { key: "emerald", from: 30, to: 30, tiles: [[2903, 6361], [2940, 6367], [2972, 6418]] },
-    49126: { key: "ruby", from: 36, to: 38, tiles: [[2900, 6354], [2897, 6395], [2926, 6433], [2968, 6384]] },
-    49128: { key: "ruby", from: 36, to: 38, tiles: [[2903, 6375]] },
+    49122: { key: "sapphire", from: 26, until: 30, to: 28, tiles: [[2912, 6418], [2954, 6406], [2975, 6373]] },
+    49124: { key: "emerald", from: 30, until: 36, to: 30, tiles: [[2903, 6361], [2940, 6367], [2972, 6418]] },
+    49126: { key: "ruby", from: 36, until: 40, to: 38, tiles: [[2900, 6354], [2897, 6395], [2926, 6433], [2968, 6384]] },
+    49128: { key: "diamond", from: 46, until: 50, to: 48, tiles: [[2903, 6375]] },
   };
   const activePrompts = new WeakMap();
   const defences = new WeakMap();
@@ -103,6 +102,14 @@ module.exports = function registerSucellusPrison(api) {
     return true;
   }
 
+  function clearCrevice(player, area, event) {
+    if (state(player) !== 30 || !atArea(player, area) || player.getAttribute(CREVICE_CLEARED)) return;
+    if (!openPrivateGate(event)) return;
+    player.setAttribute(CREVICE_CLEARED, true);
+    setState(player, 32);
+    player.sendMessage("You shift the loose stone and clear a way through the crevice.");
+  }
+
   function promptPadlock(player, index = 0, values = [0, 0, 0, 0, 0, 0], fixed = 0) {
     if (index >= 6) {
       const correct = values.reduce((mask, value, i) => value === [2, 0, 5, 1, 4, 3][i] ? mask | (1 << i) : mask, 0);
@@ -141,26 +148,8 @@ module.exports = function registerSucellusPrison(api) {
       promptPadlock(player);
       return true;
     }
-    if (id === 49106 && isTile(tile, TILES.crevice) && itemId === CHISEL && state(player) === 30) {
-      event.handled = true;
-      if (player.getAttribute(CREVICE_CLEARED)) return true;
-      player.setAttribute(CREVICE_CLEARED, true);
-      openPrivateGate(event);
-      setState(player, 32);
-      player.sendMessage("You chip away the blockage and clear the crevice.");
-      return true;
-    }
-    if (id === 49128 && isTile(tile, TILES.diamondGate) && itemId === KEYS.ruby && state(player) >= 36 && state(player) < 40) {
-      event.handled = true;
-      openPrivateGate(event);
-      setState(player, 38);
-      player.sendMessage("The ruby key turns in the western gate.");
-      return true;
-    }
     const gateProgress = KEY_GATES[id];
-    const validGateProgress = gateProgress && (gateProgress.key === "ruby"
-      ? state(player) >= 36 && state(player) < 40
-      : state(player) === gateProgress.from);
+    const validGateProgress = gateProgress && state(player) >= gateProgress.from && state(player) < gateProgress.until;
     if (gateProgress && gateProgress.tiles.some(([x, y]) => x === tile?.[0] && y === tile?.[1] && tile?.[2] === 2)
       && itemId === KEYS[gateProgress.key] && validGateProgress) {
       event.handled = true;
@@ -316,7 +305,7 @@ module.exports = function registerSucellusPrison(api) {
     const gate = KEY_GATES[id];
     if (gate && (option === "open" || option === "unlock" || option === "pass")) {
       if (!gate.tiles.some(([x, y]) => x === tile?.[0] && y === tile?.[1] && tile?.[2] === 2)) return false;
-      const validProgress = gate.key === "ruby" ? progress >= 36 && progress < 40 : progress === gate.from;
+      const validProgress = progress >= gate.from && progress < gate.until;
       if (!validProgress || !has(player, KEYS[gate.key])) {
         event.handled = true;
         player.sendMessage(`This gate requires the ${gate.key} key.`);
@@ -399,19 +388,10 @@ module.exports = function registerSucellusPrison(api) {
       }
     }
 
-    if (onTile("diamondGate") && (option === "open" || option === "unlock") && progress >= 36 && progress < 40) {
+    if (id === 49106 && onTile("crevice") && option === "enter" && progress === 30 && !player.getAttribute(CREVICE_CLEARED)) {
       event.handled = true;
-      if (!has(player, KEYS.ruby)) return player.sendMessage("The western gate needs the ruby key.");
-      openPrivateGate(event);
-      setState(player, 38);
-      player.sendMessage("The ruby key turns. The western cell opens.");
-      return;
-    }
-
-    if (id === 49106 && onTile("crevice") && option === "enter" && !player.getAttribute(CREVICE_CLEARED)) {
-      event.handled = true;
-      player.sendMessage("A heavy blockage prevents you from entering the crevice. Use the chisel to clear it.");
-      return;
+      api.sendMultiChatboxPrompt(player, "The blockage is loose enough to shift. Clear the crevice?", "Yes", () => clearCrevice(player, area, event), "No", () => {});
+      return true;
     }
 
     if (onTile("gear") && (option === "search" || option === "open") && progress >= 46 && progress < 50) {
