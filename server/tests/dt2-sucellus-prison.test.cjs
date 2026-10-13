@@ -266,13 +266,16 @@ test("paired prison crevices land on adjacent clear tiles, and asylum stairs exi
     "returning through the paired crevice lands beside the 1x3 cache footprint");
 
   player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 56);
-  const blocked = { player, objectId: 49100, option: "Climb-down", location: instanceLocation(2973, 6440, 2), handled: false };
+  const neighbor = { player, objectId: 49100, option: "Climb", location: instanceLocation(2973, 6439, 2), handled: false };
+  assert.notEqual(handlers.object(neighbor), true, "adjacent tiles do not impersonate the cache loc anchor");
+
+  const blocked = { player, objectId: 49100, option: "Climb", location: instanceLocation(2973, 6440, 2), handled: false };
   assert.equal(handlers.object(blocked), true);
   assert.equal(player.location.z, 2, "the asylum stays closed before the Assassin's final dialogue");
 
   player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 58);
   player.setAttribute("desert-treasure-ii:sucellus-prison-complete", true);
-  const asylum = { player, objectId: 49100, option: "Climb-down", location: instanceLocation(2973, 6440, 2), handled: false };
+  const asylum = { player, objectId: 49100, option: "Climb", location: instanceLocation(2973, 6440, 2), handled: false };
   assert.equal(handlers.object(asylum), true);
   assert.equal(asylum.handled, true);
   assert.deepEqual([player.location.x, player.location.y, player.location.z], [3039, 6431, 0]);
@@ -337,6 +340,18 @@ test("ordinary Ghorrock prison doors open without consuming a quest key", () => 
   assert.deepEqual(openedObjects, [door]);
   assert.equal(inventory.getAmount(28416), 1);
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 22);
+});
+
+test("the asylum Dragonstone Gate opens before the final stair climb", () => {
+  const { handlers, player, area, openedObjects, instanceLocation } = setup();
+  player.setAttribute("desert-treasure-ii:sucellus-cell-escaped", true);
+  player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 58);
+  player.setAttribute("desert-treasure-ii:sucellus-area", area);
+  const gate = { getPrivateArea: () => null };
+  const event = { player, object: gate, definition: { id: 49130 }, option: "Open", location: instanceLocation(2974, 6435, 2), handled: false };
+  assert.equal(handlers.object(event), true);
+  assert.equal(event.handled, true);
+  assert.deepEqual(openedObjects, [gate]);
 });
 
 test("an earned key reopens its restored cache gate after the quest has advanced", () => {

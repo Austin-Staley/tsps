@@ -89,6 +89,7 @@ module.exports = function registerDesertTreasureII(api) {
   const SUCELLUS_CAPTAIN_ACCEPTED = "desert-treasure-ii:sucellus-captain-accepted";
   const SUCELLUS_PRISON_GEAR = "desert-treasure-ii:sucellus-prison-gear";
   const SUCELLUS_PRISON_PROGRESS = "desert-treasure-ii:sucellus-prison-progress";
+  const SUCELLUS_PRISON_CHECKPOINT = "desert-treasure-ii:sucellus-prison-checkpoint";
   const SUCELLUS_PRISON_COMPLETE = "desert-treasure-ii:sucellus-prison-complete";
   const SUCELLUS_CELL_PROGRESS = "desert-treasure-ii:sucellus-cell-progress";
   const SUCELLUS_CELL_ENTERED = "desert-treasure-ii:sucellus-cell-entered";
@@ -1220,6 +1221,7 @@ module.exports = function registerDesertTreasureII(api) {
       if (cycle === this.lastProcessCycle) return;
       this.lastProcessCycle = cycle;
       const player = this.questPlayer;
+      saveSucellusPrisonCheckpoint(player, this);
       if (!player.getAttribute(SUCELLUS_CELL_ENTERED)) {
         const loc = player.getLocation();
         const x = loc.getX() - this.getBaseX() + 2872;
@@ -1859,6 +1861,34 @@ module.exports = function registerDesertTreasureII(api) {
       }
     }
     return area;
+  }
+
+  function saveSucellusPrisonCheckpoint(player, area) {
+    if (stage(player) !== S.SUCELLUS || player.getAttribute(SUCELLUS_DEFEATED)
+      || !player.getAttribute(SUCELLUS_CELL_ESCAPED) || player.getAttribute(SUCELLUS_AREA) !== area
+      || player.getPrivateArea?.() !== area) return;
+    const location = player.getLocation();
+    const z = location.getZ?.() ?? location.z ?? 0;
+    if (z !== 2) return;
+    const checkpoint = {
+      x: location.getX() - area.getBaseX() + 2872,
+      y: location.getY() - area.getBaseY() + 6336,
+      z,
+      progress: Number(player.getAttribute(SUCELLUS_PRISON_PROGRESS)) || 22,
+    };
+    if (checkpoint.x < 2872 || checkpoint.x >= 3064 || checkpoint.y < 6336 || checkpoint.y >= 6472) return;
+    const previous = player.getAttribute(SUCELLUS_PRISON_CHECKPOINT);
+    if (previous?.x === checkpoint.x && previous?.y === checkpoint.y && previous?.z === checkpoint.z
+      && previous?.progress === checkpoint.progress) return;
+    player.setAttribute(SUCELLUS_PRISON_CHECKPOINT, checkpoint);
+  }
+
+  function restoredSucellusPrisonTile(player, area) {
+    const checkpoint = player.getAttribute(SUCELLUS_PRISON_CHECKPOINT);
+    const progress = Number(player.getAttribute(SUCELLUS_PRISON_PROGRESS)) || 22;
+    if (!checkpoint || checkpoint.progress !== progress || progress === 54 || checkpoint.z !== 2
+      || checkpoint.x < 2872 || checkpoint.x >= 3064 || checkpoint.y < 6336 || checkpoint.y >= 6472) return null;
+    return area.tile(checkpoint.x - 2872, checkpoint.y - 6336, checkpoint.z);
   }
 
   function spawnSucellusCellAssassin(p, area) {
@@ -2791,7 +2821,7 @@ module.exports = function registerDesertTreasureII(api) {
         const area = enterSucellusArea(p, false);
         if (!escaped && !defeated) p.moveTo(area.tile(168, 33, 0));
         else if (!defeated) {
-          p.moveTo(area.tile(40, 14, 2));
+          p.moveTo(restoredSucellusPrisonTile(p, area) ?? area.tile(40, 14, 2));
           spawnSucellusCellAssassin(p, area);
           api.emitCustomEvent("dt2:sucellus-prison-resume", { player: p, area });
         } else p.moveTo(area.tile(167, 97, 0));
@@ -3055,6 +3085,7 @@ module.exports = function registerDesertTreasureII(api) {
     const returnToVaultEntrance = current && [p.getAttribute(ATTR_VAULT_AREA), p.getAttribute(FINAL_ROOM)].includes(current);
     const returnToDigsite = current && current === p.getAttribute(ATTR_WAR_ROOM);
     const returnToPrison = current && current === p.getAttribute(SUCELLUS_AREA);
+    if (returnToPrison) saveSucellusPrisonCheckpoint(p, current);
     const returnToGuardian = current && [ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO,
       ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA].some((key) => current === p.getAttribute(key));
     const stranglewoodExit = current && (current === p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT) ? [1193, 3405]
@@ -6343,7 +6374,7 @@ module.exports = function registerDesertTreasureII(api) {
     "desert-treasure-ii:final-cutscene-started", FINAL_WIGHT_INDEX, FINAL_WIGHTS_STARTED, FINAL_WIGHTS_COMPLETE].forEach((key) => api.persistAttribute(key));
   [SUCELLUS_MUSHROOMS, SUCELLUS_VATS, SUCELLUS_POISONS, SUCELLUS_DEFEATED, SUCELLUS_WEST_ROOM,
     SUCELLUS_CELL_PROGRESS, SUCELLUS_CELL_ENTERED, SUCELLUS_CELL_ESCAPED, SUCELLUS_ASSASSIN_GONE, SUCELLUS_CAPTAIN_ACCEPTED,
-    SUCELLUS_PRISON_GEAR, SUCELLUS_PRISON_PROGRESS, SUCELLUS_PRISON_COMPLETE].forEach((key) => api.persistAttribute(key));
+    SUCELLUS_PRISON_GEAR, SUCELLUS_PRISON_PROGRESS, SUCELLUS_PRISON_CHECKPOINT, SUCELLUS_PRISON_COMPLETE].forEach((key) => api.persistAttribute(key));
   [SCAR_DEMONS_DEFEATED, SCAR_BOAT_TRIED, SCAR_PERSTEN_TALKED, SCAR_PERSTEN_TALKED_BEFORE,
     SCAR_PERSTEN_ROOM1_TALKED, SCAR_BOAT_ROOM, SCAR_TINDERBOX_FOUND, SCAR_SLIMY_KEY_FOUND,
     SCAR_GUNPOWDER_FOUND, SCAR_OLD_TABLET_READ, SCAR_BOAT_CHEST_OPEN, SCAR_BOAT_BURNED,

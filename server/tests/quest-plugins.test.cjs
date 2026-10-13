@@ -4436,6 +4436,82 @@ test('Desert Treasure II pathfinder grants only its owner perfect accuracy and t
   assert.equal(roll.forceAccurate, false, 'shadow casting cannot bypass enrage immunity');
 });
 
+test('DT2 prison relog resumes only the saved clear tile at the matching earned progress', () => {
+  const { api: base, handlers } = mockApi();
+  const attributes = new Map(), persisted = [];
+  let cycle = 1;
+  class TestPrisonArea {
+    constructor() { this.entities = []; this.destroyed = false; }
+    setChunk() {}
+    enter(player) { player.area = this; }
+    leave(player) { if (player.area === this) player.area = null; }
+    postLeave() {}
+    destroy() { this.destroyed = true; }
+    isDestroyed() { return this.destroyed; }
+    getBaseX() { return 5000; }
+    getBaseY() { return 6000; }
+    tile(x, y, z) { return new api.core.Location(5000 + x, 6000 + y, z); }
+    add(npc) { this.entities.push(npc); }
+  }
+  const core = {
+    ...base.core,
+    TemplatedInstanceArea: TestPrisonArea,
+    NPC: { create(id, location) { return { id, location, setOwner() {}, setOwnerOnly() {}, isRegistered: () => true, getId() { return this.id; } }; } },
+    World: { ...base.core.World, getProcessCycle: () => cycle++, getAddNPCQueue: () => [], getRemoveNPCQueue: () => [] },
+  };
+  base.persistAttribute = key => persisted.push(key);
+  const api = new Proxy(base, { get: (target, prop) => prop === 'core' ? core
+    : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop] });
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const quest = runtime.getRegisteredQuests().at(-1);
+  const player = {
+    area: null,
+    isPlayer: () => true,
+    getAsPlayer() { return this; },
+    getUsername: () => 'dt2-prison-checkpoint-test',
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPrivateArea() { return this.area; },
+    moveTo(location) { this.location = location; },
+    getLocation() { return this.location; },
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    getInventory: () => ({ getItems: () => [], getAmount: () => 0 }),
+    getEquipment: () => ({ getItems: () => [] }),
+    sendMessage() {},
+  };
+  quest.setStage(player, 9);
+  for (const [key, value] of [
+    ['desert-treasure-ii:sucellus-cell-entered', true],
+    ['desert-treasure-ii:sucellus-cell-escaped', true],
+    ['desert-treasure-ii:sucellus-prison-progress', 38],
+    ['desert-treasure-ii:sucellus-assassin-gone', true],
+  ]) attributes.set(key, value);
+  const login = handlers.playerLogin.find(handler => handler.name === 'handleLogin');
+  const logout = handlers.playerLogout.find(handler => handler.name === 'handleLogout');
+  login({ player });
+  let area = attributes.get('desert-treasure-ii:sucellus-area');
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], [5040, 6012, 2],
+    'an account without a checkpoint uses the ordinary prison entrance');
+  assert.ok(persisted.includes('desert-treasure-ii:sucellus-prison-checkpoint'));
+
+  player.moveTo(area.tile(71, 63, 2));
+  area.process(player);
+  assert.deepEqual(attributes.get('desert-treasure-ii:sucellus-prison-checkpoint'),
+    { x: 2943, y: 6399, z: 2, progress: 38 });
+  logout({ player });
+  login({ player });
+  area = attributes.get('desert-treasure-ii:sucellus-area');
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], [5071, 6063, 2],
+    'the rebuilt private area restores the last reachable tile after an ordinary relog');
+
+  logout({ player });
+  attributes.set('desert-treasure-ii:sucellus-prison-progress', 40);
+  login({ player });
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], [5040, 6012, 2],
+    'a checkpoint tied to older progress cannot skip a newly locked gate');
+});
+
 test('Desert Treasure II prison escape leads to the cache Duke arena and requires two real poisons', async () => {
   const { api: base, handlers } = mockApi();
   const objects = [], itemItems = [], itemObjects = [], itemNpcs = [], itemActions = [], deaths = [], groundPickups = [];

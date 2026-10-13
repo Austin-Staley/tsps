@@ -31,7 +31,7 @@ module.exports = function registerSucellusPrison(api) {
     padlock: [2945, 6389, 2], altar: [2974, 6347, 2], sapphire: [2980, 6346, 2],
     emerald: [2902, 6445, 2], ruby: [2968, 6414, 2], diamond: [2890, 6375, 2],
     diamondGate: [2903, 6375, 2], crevice: [2965, 6427, 2], gear: [2899, 6376, 2], fireworks: [2972, 6367, 2],
-    asylum: [2974, 6440, 2],
+    asylum: [2973, 6440, 2],
   };
   const KEY_GATES = {
     49122: { key: "sapphire", from: 26, until: 30, to: 28, tiles: [[2912, 6418], [2954, 6406], [2975, 6373]] },
@@ -96,8 +96,12 @@ module.exports = function registerSucellusPrison(api) {
 
   function openPrivateGate(event) {
     const object = event.object;
-    const area = event.player?.getAttribute(AREA);
-    if (!object || object.getPrivateArea?.() !== area) return false;
+    const player = event.player;
+    const area = player?.getAttribute(AREA);
+    const objectArea = object?.getPrivateArea?.();
+    // A copied cache loc in a TemplatedInstanceArea can have no owner field;
+    // the interaction itself is already scoped to the player's private area.
+    if (!object || !atArea(player, area) || (objectArea && objectArea !== area)) return false;
     api.core.ObjectManager?.deregister?.(object, true);
     return true;
   }
@@ -315,7 +319,8 @@ module.exports = function registerSucellusPrison(api) {
     // Most prison gates are ordinary doors. The base server does not provide a
     // generic Open handler for this cache object, so remove only this exact
     // private-instance door and let the cache handle its collision elsewhere.
-    if ((id === 49118 || (id === 49120 && !onTile("padlock"))) && option === "open") {
+    const asylumGate = id === 49130 && isTile(tile, [2974, 6435, 2]);
+    if ((id === 49118 || asylumGate || (id === 49120 && !onTile("padlock"))) && option === "open") {
       event.handled = true;
       openPrivateGate(event);
       return true;
@@ -460,8 +465,7 @@ module.exports = function registerSucellusPrison(api) {
       return true;
     }
 
-    if ((id === 49100 && tile?.[0] >= 2973 && tile?.[0] <= 2974 && tile?.[1] === 6440 && tile?.[2] === 2)
-      && (option === "enter" || option === "open" || option === "climb" || option === "climb-down")) {
+    if (id === 49100 && isTile(tile, TILES.asylum) && option === "climb") {
       if (progress < 58 || !player.getAttribute(COMPLETE)) {
         event.handled = true;
         player.sendMessage("Jhallan still blocks the way to the asylum.");
