@@ -1374,6 +1374,13 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function stage(player) { return quest.getStage(player); }
+  function isAtSinsMedallionHideout(event) {
+    const location = event?.location ?? event?.npc?.getLocation?.();
+    const x = location?.getX?.() ?? location?.x;
+    const y = location?.getY?.() ?? location?.y;
+    const z = location?.getZ?.() ?? location?.z;
+    return z === 0 && Math.abs(x - 3598) <= 12 && Math.abs(y - 9613) <= 12;
+  }
   function advance(player, value) {
     if (stage(player) < value) quest.setStage(player, value);
   }
@@ -1406,6 +1413,14 @@ module.exports = function registerTheBloodMoonRises(api) {
     const page = event.pages?.find((entry) => entry.page === PAGE);
     if (!page) return null;
     const value = stage(player);
+    if (value === STAGE.SLEPE && event.definition?.getName?.() === "Ivan Strom" && isAtSinsMedallionHideout(event)) {
+      const sinsPage = event.pages.find((entry) => entry.page === "Ivan Strom");
+      const sinsVariant = "standard-dialogue-after-completing-sins-of-the-father";
+      if (hasQuest(player, "sins_of_the_father") && sinsPage?.variants.includes(sinsVariant)) {
+        return { page: sinsPage.page, variant: sinsVariant };
+      }
+      return null;
+    }
     if (value === STAGE.NOT_STARTED) {
       if (event.definition?.getName?.() !== "Sarius Guile" || !meetsRequirements(player)) return null;
       return page.variants.includes("starting-out") ? { page: PAGE, variant: "starting-out" } : null;
@@ -1696,6 +1711,13 @@ module.exports = function registerTheBloodMoonRises(api) {
         "I'm ready.", () => startHideoutDeparture(player),
         "I need more time to prepare.", () => {});
       return true;
+    }
+    // The Sins of the Father reclaim dialogue also belongs to Ivan in this
+    // hideout. SLEPE's later story variant is only relevant at its own scene;
+    // let the completed Sins transcript win here instead of hijacking Talk-to.
+    if (stage(player) === STAGE.SLEPE && npcName === "ivan strom" &&
+      isAtSinsMedallionHideout(event)) {
+      return false;
     }
     if (stage(player) === STAGE.SLEPE) {
       const story = player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {};

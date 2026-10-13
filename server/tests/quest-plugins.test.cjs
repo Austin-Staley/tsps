@@ -219,7 +219,7 @@ test('Blood Moon refinery returns obsolete source-room saves to the real tunnel 
   const player = {
     getAttribute: key => attrs.get(key),
     setAttribute: (key, value) => attrs.set(key, value),
-    getPacketSender: () => ({ sendVarbit() {} }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
     getLocation: () => new api.core.Location(3173, 7464, 0),
     moveTo: location => moves.push(location),
   };
@@ -852,6 +852,98 @@ test('Blood Moon shrine adds the Castle Drakan medallion destination and the rea
   const enter = handlers.objects.find(handler => handler.name === 'enterVampyriumPortal');
   assert.equal(enter({ player, objectId: 61221, definition: { id: 61221 }, location: { x: 2323, y: 7370, z: 0 }, option: 'Enter', handled: false }), true);
   assert.equal(quest.getStage(player), 40);
+});
+
+test('Ivan reclaims a lost Drakan medallion only after Sins of the Father is complete', () => {
+  const { api, handlers } = mockApi();
+  const spawned = [];
+  api.spawnNpc = spec => {
+    spawned.push(spec);
+    return {
+      getId: () => spec.id,
+      getLocation: () => new api.core.Location(spec.x, spec.y, spec.z),
+    };
+  };
+  api.removeNpc = () => {};
+  delete require.cache[require.resolve('../plugins/quests/quests/SinsOfTheFather.Quest')];
+  require('../plugins/quests/quests/SinsOfTheFather.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'sins_of_the_father').at(-1);
+  const attributes = new Map();
+  const items = new Map();
+  const player = {
+    isPlayerBot: () => true,
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    getInventory: () => ({
+      getAmount: id => items.get(id) ?? 0,
+      contains: id => (items.get(id) ?? 0) > 0,
+      adds: (id, amount) => { items.set(id, (items.get(id) ?? 0) + amount); return true; },
+      getFreeSlots: () => 28 - [...items.values()].reduce((sum, amount) => sum + amount, 0),
+    }),
+    sendMessage() {},
+  };
+  const actions = handlers.custom.get('npc-dialogue:action');
+  const reclaim = stepId => actions.forEach(handler => handler({ player, npcId: 4440, stepId }));
+  quest.setStage(player, 299);
+  reclaim('ZoWCuH');
+  assert.equal(items.get(22400) ?? 0, 0, 'the post-quest NPC action does not bypass Sins completion');
+  quest.setStage(player, 300);
+  const postQuestIvan = spawned.find(npc => npc.id === 4440 && npc.x === 3598 && npc.y === 9613);
+  assert.deepEqual(
+    [postQuestIvan?.x, postQuestIvan?.y, postQuestIvan?.z],
+    [3598, 9613, 0],
+    'the actionable post-quest Ivan is placed at his canonical Meiyerditch hideout tile',
+  );
+  reclaim('ZoWCuH');
+  assert.equal(items.get(22400), 1, 'Ivan restores the actual quest reward after the transcript reclaim action');
+  reclaim('R8U1L0');
+  assert.equal(items.get(22400), 1, 'repeating the other transcript variant cannot duplicate the medallion');
+  delete require.cache[require.resolve('../plugins/quests/quests/SinsOfTheFather.Quest')];
+});
+
+test('Blood Moon lets the completed Sins medallion dialogue own Ivan at the Meiyerditch hideout', () => {
+  const { api, handlers } = mockApi();
+  api.emitCustomEvent = (name, request) => {
+    if (name === 'quest:is-complete' && request.key === 'sins_of_the_father') request.complete = true;
+  };
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ contains: () => true }),
+  };
+  attributes.set('quest.the_blood_moon_rises.stage', 30);
+  const talkIvan = handlers.npcInteractions.get('Ivan Strom')['Talk-to'];
+  assert.equal(talkIvan({
+    player,
+    npcId: 4440,
+    definition: { getName: () => 'Ivan Strom' },
+    location: { x: 3598, y: 9613, z: 0 },
+    option: 'Talk-to',
+    handled: false,
+  }), false, 'the unrelated Slepe stage falls through at Ivan’s completed-Sins hideout location');
+  const chooseVariant = handlers.variant.at(-1);
+  assert.deepEqual(chooseVariant({
+    player,
+    npc: { getLocation: () => ({ getX: () => 3598, getY: () => 9613, getZ: () => 0 }) },
+    definition: { getName: () => 'Ivan Strom' },
+    pages: [{ page: 'The Blood Moon Rises', variants: ['the-truth-hurtz-talking-to-ivan-in-slepe'] }],
+  }), null, 'the transcript selector does not take over when no Sins transcript page is available');
+  assert.deepEqual(chooseVariant({
+    player,
+    npc: { getLocation: () => ({ getX: () => 3598, getY: () => 9613, getZ: () => 0 }) },
+    definition: { getName: () => 'Ivan Strom' },
+    pages: [
+      { page: 'The Blood Moon Rises', variants: ['the-truth-hurtz-talking-to-ivan-in-slepe'] },
+      { page: 'Ivan Strom', variants: ['standard-dialogue-after-completing-sins-of-the-father'] },
+    ],
+  }), { page: 'Ivan Strom', variant: 'standard-dialogue-after-completing-sins-of-the-father' });
+  delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
 });
 
 test('Blood Moon Paterdomus books must be placed on all six matching plinths before Ivandis leads to the tomb', () => {
