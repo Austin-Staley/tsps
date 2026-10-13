@@ -104,6 +104,43 @@ test('Quests.plugin registers every quest through api.core without throwing', ()
   assert.doesNotThrow(() => plugin.register(api));
 });
 
+test('completed Desert Treasure I players can ask Rasolo for a replacement Ring of Visibility', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/DesertTreasureI.Quest')(api);
+  const ring = api.core.ItemIdentifiers.RING_OF_VISIBILITY;
+  const items = new Map();
+  let full = false;
+  let banks = [];
+  const player = {
+    getAttribute: key => key === 'quest.desert_treasure_i.stage' ? 15 : undefined,
+    getInventory: () => ({
+      getAmount: id => items.get(id) ?? 0,
+      adds: (id, amount) => items.set(id, (items.get(id) ?? 0) + amount),
+      isFull: () => full,
+    }),
+    getEquipment: () => ({ get: () => null }),
+    getBanks: () => banks,
+    sendMessage() {},
+  };
+
+  assert.equal(handlers.variant.at(-1)({ player, npcId: api.core.NpcIdentifiers.RASOLO }), 'standard-dialogue-after-desert-treasure-i');
+  const dialogue = require('../data/definitions/npc-dialogues.json').Rasolo.variants['standard-dialogue-after-desert-treasure-i'];
+  assert.ok(dialogue[1].options.some(option => option.text === 'I lost that ring you gave me...'));
+
+  const condition = handlers.condition.at(-1);
+  assert.equal(condition({ player, npcId: api.core.NpcIdentifiers.RASOLO, text: 'If the player has a Ring of visibility in their inventory or bank:' }), false);
+  assert.equal(condition({ player, npcId: api.core.NpcIdentifiers.RASOLO, text: 'If the player does not have a Ring of visibility in their inventory or bank, and their inventory is full:' }), false);
+  assert.equal(condition({ player, npcId: api.core.NpcIdentifiers.RASOLO, text: 'If the player does not have a Ring of visibility in their inventory or bank, and has inventory space:' }), true);
+  const reward = { player, npcId: api.core.NpcIdentifiers.RASOLO, stepId: 'RdQo2r', handled: false };
+  api.emitCustomEvent('npc-dialogue:action', reward);
+  assert.equal(reward.handled, true);
+  assert.equal(items.get(ring), 1);
+
+  banks = [{ contains: id => id === ring }];
+  assert.equal(condition({ player, npcId: api.core.NpcIdentifiers.RASOLO, text: 'If the player has a Ring of visibility in their inventory or bank:' }), true);
+  assert.equal(condition({ player, npcId: api.core.NpcIdentifiers.RASOLO, text: 'If the player does not have a Ring of visibility in their inventory or bank, and has inventory space:' }), false);
+});
+
 test('NPC Contact paginates plugin contacts and dispatches the chosen contact once', () => {
   const { LunarSpells } = require('../dist/game/content/combat/magic/LunarSpells');
   const original = PluginManager.emitCustomEvent;
