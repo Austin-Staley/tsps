@@ -4,7 +4,7 @@
  * quest state uses the cache's myq6 varbit (15464 in varp 5618).
  */
 module.exports = function registerTheBloodMoonRises(api) {
-  const { Boundary, HitDamage, HitMask, Item, ItemIdentifiers, Location, NpcIdentifiers, ObjectIdentifiers, PrayerHandler, PrivateArea, Skill, World } = api.core;
+  const { Boundary, Equipment, HitDamage, HitMask, Item, ItemIdentifiers, Location, NpcIdentifiers, ObjectIdentifiers, PrayerHandler, PrivateArea, Skill, World } = api.core;
   const { registerQuest, loadTranscripts, startTranscript } = require("../QuestRuntime");
   const PAGE = "The Blood Moon Rises";
   const START_HOOK = "quest:the-blood-moon-rises:start";
@@ -17,6 +17,13 @@ module.exports = function registerTheBloodMoonRises(api) {
   const GALLERY_CHEST_ATTRIBUTE = "quest.the_blood_moon_rises.gallery-chest";
   const REFINER_ATTRIBUTE = "quest.the_blood_moon_rises.castle-refiner";
   const HUNT_ATTRIBUTE = "quest.the_blood_moon_rises.blood-hunt";
+  const HIDEOUT_IVAN_VARBIT = 15467;
+  const HIDEOUT_SHRINE_INSPECTED = "quest.the_blood_moon_rises.hideout-shrine-inspected";
+  const HIDEOUT_SHRINE_IDS = new Set([61174, ObjectIdentifiers.MAKESHIFT_SHRINE, ObjectIdentifiers.MAKESHIFT_SHRINE_2]);
+  const HIDEOUT_SHRINE_TILE = { x: 3601, y: 9614, z: 0 };
+  const HIDEOUT_CHEST_ID = ObjectIdentifiers.CLOSED_CHEST_37;
+  const HIDEOUT_CHEST_TILE = { x: 3600, y: 9617, z: 0 };
+  const VYRE_NOBLE_OUTFIT = [ItemIdentifiers.VYRE_NOBLE_TOP, ItemIdentifiers.VYRE_NOBLE_LEGS, ItemIdentifiers.VYRE_NOBLE_SHOES];
   const HUNT_ITEMS = {
     crank: ItemIdentifiers.CRANK_WHEEL, dustyBook: ItemIdentifiers.DUSTY_BOOK, viturKey: ItemIdentifiers.VITUR_KEY,
     boltCutters: ItemIdentifiers.BOLT_CUTTERS, toothHalf: ItemIdentifiers.TOOTH_HALF_OF_KEY_6,
@@ -793,6 +800,9 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function nativeStage(value, player) {
     if (value === STAGE.COMPLETE) return 176;
+    if (value === STAGE.STARTED) return player?.getAttribute(HIDEOUT_SHRINE_INSPECTED) ? 8 : 4;
+    if (value === STAGE.HIDEOUT) return 12;
+    if (value === STAGE.SLEPE) return 16;
     if (value === STAGE.PREPARATIONS) {
       const prep = player?.getAttribute(PREP_ATTRIBUTE) ?? {};
       if (prep.flail && prep.stakes) return 114;
@@ -805,6 +815,72 @@ module.exports = function registerTheBloodMoonRises(api) {
       return ({ 'fall-back': 118, hall: 120, breach: 122 })[phase] ?? 116;
     }
     return value;
+  }
+
+  function syncHideoutIvan(event) {
+    const player = event?.player;
+    if (!player || (event.key && event.key !== "the_blood_moon_rises")) return;
+    const value = stage(player);
+    // Cache NPC 5049 is invisible at 0, becomes the ordinary blisterwood Ivan
+    // at 1, and the trade/disguise variant at 2.
+    const variant = value === STAGE.STARTED ? 1 : value === STAGE.HIDEOUT ? 2 : 0;
+    player.getPacketSender().sendVarbit(HIDEOUT_IVAN_VARBIT, variant);
+  }
+
+  function inspectHideoutShrine(event) {
+    const player = event?.player;
+    if (!player || !HIDEOUT_SHRINE_IDS.has(event.objectId) || stage(player) !== STAGE.STARTED) return;
+    const at = player.getLocation?.();
+    const x = typeof at?.getX === "function" ? at.getX() : at?.x;
+    const y = typeof at?.getY === "function" ? at.getY() : at?.y;
+    const z = typeof at?.getZ === "function" ? at.getZ() : at?.z;
+    if (z !== HIDEOUT_SHRINE_TILE.z || Math.abs(x - HIDEOUT_SHRINE_TILE.x) > 2 || Math.abs(y - HIDEOUT_SHRINE_TILE.y) > 2) return;
+    event.handled = true;
+    player.setAttribute(HIDEOUT_SHRINE_INSPECTED, true);
+    player.getPacketSender().sendVarbit(15464, nativeStage(STAGE.STARTED, player));
+    startTranscript(api, player, 9531, PAGE, "starting-out-inspecting-the-shrine");
+  }
+
+  function hideoutOutfitWorn(player) {
+    const equipment = player.getEquipment();
+    return equipment.get(Equipment.BODY_SLOT)?.getId?.() === VYRE_NOBLE_OUTFIT[0] &&
+      equipment.get(Equipment.LEG_SLOT)?.getId?.() === VYRE_NOBLE_OUTFIT[1] &&
+      equipment.get(Equipment.FEET_SLOT)?.getId?.() === VYRE_NOBLE_OUTFIT[2];
+  }
+
+  function answerHideoutCondition({ player, stepId }) {
+    if (!player || !["nMuybV", "wAGF9J", "ysow_0"].includes(stepId)) return null;
+    const outfitWorn = hideoutOutfitWorn(player);
+    const hasOutfit = outfitWorn || VYRE_NOBLE_OUTFIT.every((id) => player.getInventory().contains(id));
+    if (stepId === "nMuybV") return !hasOutfit;
+    if (stepId === "wAGF9J") return hasOutfit && !outfitWorn;
+    return outfitWorn;
+  }
+
+  function openHideoutChest(event) {
+    const player = event?.player;
+    const visibleId = event?.definition?.id ?? event?.objectId;
+    if (!player || visibleId !== HIDEOUT_CHEST_ID || ![STAGE.STARTED, STAGE.HIDEOUT].includes(stage(player))) return false;
+    const location = event.location ?? event.object?.getLocation?.();
+    const x = typeof location?.getX === "function" ? location.getX() : location?.x;
+    const y = typeof location?.getY === "function" ? location.getY() : location?.y;
+    const z = typeof location?.getZ === "function" ? location.getZ() : location?.z;
+    if (x !== HIDEOUT_CHEST_TILE.x || y !== HIDEOUT_CHEST_TILE.y || z !== HIDEOUT_CHEST_TILE.z || event.option !== "Open") return false;
+    event.handled = true;
+    if (VYRE_NOBLE_OUTFIT.every((id) => player.getInventory().contains(id))) {
+      player.sendMessage("The chest contains no more of the disguise.");
+      return true;
+    }
+    const inventory = player.getInventory();
+    const freeSlots = typeof inventory.getFreeSlots === "function" ? inventory.getFreeSlots() : inventory.isFull() ? 0 : 28;
+    const missing = VYRE_NOBLE_OUTFIT.filter((id) => !inventory.contains(id));
+    if (freeSlots < missing.length) {
+      player.sendMessage("You need more inventory space to take the vyre noble disguise.");
+      return true;
+    }
+    for (const id of missing) inventory.adds(id, 1);
+    player.sendMessage("You open the chest and take a vyre noble disguise.");
+    return true;
   }
 
   function stage(player) { return quest.getStage(player); }
@@ -941,7 +1017,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (event.option === "Yes." && stage(player) === STAGE.NOT_STARTED &&
       event.definition?.getName?.() === "Sarius Guile" && meetsRequirements(player)) {
       advance(player, STAGE.STARTED);
-    } else if (event.option === "I'm ready." && stage(player) === STAGE.STARTED) {
+    } else if (event.option === "I'm ready." && stage(player) === STAGE.STARTED &&
+      player.getAttribute(HIDEOUT_SHRINE_INSPECTED) && hideoutOutfitWorn(player)) {
       advance(player, STAGE.HIDEOUT);
     }
   }
@@ -1829,6 +1906,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     otherRewards: ["Access to Vampyrium", "A Hallowed flail", "Sunspear", "The vampyres of Morytania are tolerant of you"],
     buildJournal,
   });
+  api.persistAttribute(HIDEOUT_SHRINE_INSPECTED);
   const hall = require("../bmr/Hall.TheBloodMoonRises")({ api, state: hallDefenceState,
     process: processSiegeDefence, cleanup: handleSiegeLogout, scenery: player => {
       const repaired = hallDefenceState(player).repaired ?? [];
@@ -1847,11 +1925,15 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.persistAttribute(ATTRIBUTE);
   api.onCustomEvent("npc-dialogue:hook", onStartHook);
   api.onCustomEvent("npc-dialogue:action", onTranscriptAction);
+  api.onCustomEvent("quest:stage-changed", syncHideoutIvan);
+  api.onCustomEvent("world:object-examine", inspectHideoutShrine);
+  api.onNpcDialogueCondition(answerHideoutCondition);
   api.onCustomEvent("npc-dialogue:choice", onChoice);
   api.onCustomEvent("tob:bmr:completed", onBloodMoonTobCompleted);
   api.onNpcDialogueVariant(selectVariant);
   api.onAnyNpcInteraction({ "Talk-to": talkQuestNpc });
   api.onObjectInteraction(enterVampyriumCastle);
+  api.onObjectInteraction(openHideoutChest);
   api.onObjectInteraction(handleSiegeHallObject);
   api.onObjectInteraction(inspectWyrdFence);
   api.onObjectInteraction(handleCastleThronePuzzle);
@@ -1879,6 +1961,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onNpcInteraction("Aranei", { Heal: healSiegeAranei });
   api.onPlayerProcess(syncHuntGroundItems);
   api.onPlayerLogin(handleSiegeLogin);
+  api.onPlayerLogin(syncHideoutIvan);
   api.onPlayerLogout(handleSiegeLogout);
   api.onNpcDeath(handleWyrdDeath);
   api.onNpcHitModify(handleSiegeDrakanHit);

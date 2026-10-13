@@ -6407,13 +6407,51 @@ test('bridge uses the actual cache palace exit and lets a full-inventory handoff
 });
 
 test('Blood Moon native bitfield mapping reveals preparations and survives relog without changing quest stage',()=>{
- const {api}=mockApi();require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);const runtime=require('../plugins/quests/QuestRuntime'),quest=runtime.getRegisteredQuests().filter(q=>q.key==='the_blood_moon_rises').at(-1),attrs=new Map(),bits=new Map();const sender=new Proxy({}, {get:(_,key)=>key==='sendVarbit'?(id,n)=>bits.set(id,n):()=>sender});const player={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getPacketSender:()=>sender};
+ const {api,handlers}=mockApi();require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);const runtime=require('../plugins/quests/QuestRuntime'),quest=runtime.getRegisteredQuests().filter(q=>q.key==='the_blood_moon_rises').at(-1),attrs=new Map(),bits=new Map();const sender=new Proxy({}, {get:(_,key)=>key==='sendVarbit'?(id,n)=>bits.set(id,n):()=>sender});const player={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getPacketSender:()=>sender};
+ quest.setStage(player,10);assert.equal(bits.get(15464),4);assert.equal(bits.get(15467),1,'the stage-10 hideout NPC transform makes Ivan visible');
+ handlers.playerLogin.at(-1)({player});assert.equal(bits.get(15464),4);assert.equal(bits.get(15467),1,'the hideout NPC transform is restored after relog');
+ attrs.set('quest.the_blood_moon_rises.hideout-shrine-inspected',true);quest.setStage(player,10);assert.equal(bits.get(15464),8,'the shrine cutscene advances the native varbit');
+ quest.setStage(player,20);assert.equal(bits.get(15464),12);assert.equal(bits.get(15467),2,'the ready-to-leave stage shows Ivan’s trade/disguise variant');
+ quest.setStage(player,30);assert.equal(bits.get(15464),16);assert.equal(bits.get(15467),0,'the hideout Ivan is hidden after the story moves to Slepe');bits.clear();
  quest.setStage(player,60);assert.equal(quest.getStage(player),60);assert.equal(bits.get(15464),102);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),102);quest.setStage(player,70);assert.equal(bits.get(15464),116);
  attrs.set('quest.the_blood_moon_rises.preparations',{stewFed:true});quest.setStage(player,60);assert.equal(bits.get(15464),110);
  attrs.set('quest.the_blood_moon_rises.preparations',{flail:true,stakes:true});quest.setStage(player,60);assert.equal(bits.get(15464),114);
  attrs.set('quest.the_blood_moon_rises.siege-defence',{phase:'hall'});quest.setStage(player,70);assert.equal(bits.get(15464),120);
  bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),120);assert.equal(quest.getStage(player),70);
  quest.setStage(player,110);assert.equal(bits.get(15464),176);assert.equal(quest.isComplete(player),true);
+});
+
+test('Blood Moon shrine examine starts the hideout conversation only at the real shrine',()=>{
+ const runtime=require('../plugins/quests/QuestRuntime'),original=runtime.startTranscript;let started;
+ runtime.startTranscript=(...args)=>{started=args.slice(1);return true;};
+ try{
+  delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
+  const {api,handlers}=mockApi();require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attrs=new Map([['quest.the_blood_moon_rises.stage',10]]),bits=new Map();
+  const sender={sendVarbit:(id,value)=>bits.set(id,value)};
+  const player={getAttribute:key=>attrs.get(key),setAttribute:(key,value)=>attrs.set(key,value),getPacketSender:()=>sender,
+   getLocation:()=>({getX:()=>3601,getY:()=>9614,getZ:()=>0})};
+  const inspect=handlers.custom.get('world:object-examine').at(-1),event={player,objectId:61174,handled:false};
+  inspect(event);assert.equal(event.handled,true);assert.equal(started[1],9531);assert.equal(started[2],'The Blood Moon Rises');assert.equal(started[3],'starting-out-inspecting-the-shrine');assert.equal(bits.get(15464),8);
+  started=null;const distant={...event,handled:false,player:{...player,getLocation:()=>({getX:3610,getY:9614,getZ:0})}};inspect(distant);assert.equal(distant.handled,false);assert.equal(started,null);
+ }finally{runtime.startTranscript=original;delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];}
+});
+
+test('Blood Moon hideout chest supplies the disguise and Ivan checks the worn outfit',()=>{
+ const {api,handlers}=mockApi();
+ delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
+ require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+ const I=api.core.ItemIdentifiers,O=api.core.ObjectIdentifiers,E=api.core.Equipment,items=new Set(),equipment=[];
+ const inventory={contains:id=>items.has(id),getFreeSlots:()=>28-items.size,adds:id=>{items.add(id);return true;}};
+ const attrs=new Map([['quest.the_blood_moon_rises.stage',10]]),messages=[];
+ const player={getAttribute:key=>attrs.get(key),getInventory:()=>inventory,getEquipment:()=>({get:slot=>equipment[slot]}),sendMessage:m=>messages.push(m)};
+ const chest=handlers.objects.find(handler=>handler.name==='openHideoutChest'),event={player,objectId:O.CLOSED_CHEST_37,definition:{id:O.CLOSED_CHEST_37},option:'Open',location:{x:3600,y:9617,z:0}};
+ assert.equal(chest(event),true);assert.deepEqual([...items],[I.VYRE_NOBLE_TOP,I.VYRE_NOBLE_LEGS,I.VYRE_NOBLE_SHOES]);
+ const condition=handlers.condition.at(-1);assert.equal(condition({player,stepId:'nMuybV'}),false);assert.equal(condition({player,stepId:'wAGF9J'}),true);assert.equal(condition({player,stepId:'ysow_0'}),false);
+ equipment[E.BODY_SLOT]=new api.core.Item(I.VYRE_NOBLE_TOP);equipment[E.LEG_SLOT]=new api.core.Item(I.VYRE_NOBLE_LEGS);equipment[E.FEET_SLOT]=new api.core.Item(I.VYRE_NOBLE_SHOES);
+ assert.equal(condition({player,stepId:'wAGF9J'}),false);assert.equal(condition({player,stepId:'ysow_0'}),true);
+ const distant={...event,handled:false,location:{x:3610,y:9617,z:0}};assert.equal(chest(distant),false);
+ delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
 });
 
 test('Blood Moon preparation exit allows gathering leaves before the defence is ready',()=>{
