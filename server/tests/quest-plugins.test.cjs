@@ -8216,6 +8216,7 @@ test('Song of the Elves gives the real stackable explosive potion with one free 
 test('Song of the Elves starts Essyllt again when core death cleanup left a stale NPC reference', () => {
   const { api, handlers } = mockApi();
   const spawns = [];
+  const attacks = [];
   api.spawnNpc = (definition) => {
     const npc = {
       definition,
@@ -8231,7 +8232,7 @@ test('Song of the Elves starts Essyllt again when core death cleanup left a stal
       getIndex() { return 100 + spawns.length; },
       setMultiCombat() {},
       setScriptedMovement(value) { this.scriptedMovement = value; },
-      getCombat() { return { attack() {} }; },
+      getCombat() { return { attack(target) { attacks.push([npc, target]); } }; },
     };
     spawns.push(npc);
     return npc;
@@ -8268,6 +8269,19 @@ test('Song of the Elves starts Essyllt again when core death cleanup left a stal
   action({ player, stepId: 'YAPX-R', kind: 'action' });
   const firstBoss = spawns.find((npc) => npc.definition.id === api.core.NpcIdentifiers.ESSYLLT_5);
   assert.ok(firstBoss);
+  const firstGuards = spawns.filter(npc => npc.definition.id === api.core.NpcIdentifiers.IORWERTH_WARRIOR_12);
+  assert.equal(attacks.length, 0, 'the speech actors do not attack while the challenge is being read');
+  assert.ok([firstBoss, ...firstGuards].every(npc => npc.scriptedMovement === true));
+  assert.equal(player.getArea().canAttack(player, firstBoss), false);
+  const challenge = { player, text: "Oh I'm going to enjoy this..." };
+  handlers.custom.get('npc-dialogue:line').find(h => h.name === 'finishEssylltChallengeLine')(challenge);
+  assert.equal(attacks.length, 0, 'holding the final challenge keeps the encounter peaceful');
+  assert.equal(typeof challenge.after, 'function');
+  challenge.after();
+  assert.equal(attacks.length, 3);
+  assert.ok([firstBoss, ...firstGuards].every(npc => npc.scriptedMovement === false));
+  challenge.after();
+  assert.equal(attacks.length, 3, 'repeated continuation cannot restart the encounter');
   firstBoss.hitpoints = 0;
   firstBoss.registered = false; // core NPC cleanup happened before quest's death callback
 

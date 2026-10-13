@@ -631,6 +631,7 @@ module.exports = function registerSongOfTheElves(api) {
       const a = attacker?.getArea?.() === this;
       const t = target?.getArea?.() === this;
       const state = campInstances.get(this);
+      if (state?.essylltPending && (a || t)) return false;
       if (state?.arrivalActors?.has(attacker) || state?.arrivalActors?.has(target)) return false;
       if (a || t) return a && t;
       return null;
@@ -2766,19 +2767,35 @@ module.exports = function registerSongOfTheElves(api) {
       return;
     }
     boss.setMultiCombat?.(true);
+    boss.setScriptedMovement?.(true);
     area.enter(boss);
     state.essyllt = boss;
+    state.essylltPending = true;
     setChapter(player, 19);
     for (const [id, x, y] of [[NpcIdentifiers.IORWERTH_WARRIOR_12, 2446, 6117],
       [NpcIdentifiers.IORWERTH_WARRIOR_12, 2449, 6117]]) {
       const guard = api.spawnNpc({ id, x, y, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
       if (!guard) continue;
       guard.setMultiCombat?.(true);
+      guard.setScriptedMovement?.(true);
       area.enter(guard);
       (state.essylltAdds ??= new Set()).add(guard);
-      guard.getCombat().attack(player);
     }
-    boss.getCombat().attack(player);
+  }
+
+  function finishEssylltChallengeLine(event) {
+    const player = event?.player;
+    const area = player?.getArea?.();
+    const state = area && campInstances.get(area);
+    if (!state?.essylltPending || currentChapter(player) !== 19 || event.text !== "Oh I'm going to enjoy this...") return;
+    event.after = () => {
+      if (!state.essylltPending || player.getArea?.() !== area || !state.essyllt?.isRegistered?.()) return;
+      state.essylltPending = false;
+      for (const npc of [state.essyllt, ...(state.essylltAdds ?? [])]) {
+        npc.setScriptedMovement?.(false);
+        npc.getCombat().attack(player);
+      }
+    };
   }
 
   function spawnPostEssylltArrival(player) {
@@ -4075,6 +4092,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.onObjectInteraction("Crevice", {Enter:useTrahaearnCrevice});
   api.onNpcInteraction("Elderly Elf", {Investigate:inspectTrahaearn,"Fix-exoskeleton":fixTrahaearn});
   api.onCustomEvent("npc-dialogue:line", finishCampMeetingLine);
+  api.onCustomEvent("npc-dialogue:line", finishEssylltChallengeLine);
   api.onCustomEvent("npc-dialogue:line", finishPreparationLine);
   api.onItemOnObject("Cadantine seed", "Farming patch", plantPreparationSeed, {noted:false});
   api.persistAttribute(PREPARATION_PROGRESS);
