@@ -312,14 +312,18 @@ test('alchemy policy keeps rune and spellbook checks before neutralising a permi
   } finally {PluginManager.emitCustomEvent=original;}
 });
 
-test('a target may suppress a spell hit effect without changing its damage', () => {
+test('blood ancient spells heal one quarter of damage unless the target suppresses spell effects', () => {
   const {PluginManager}=require('../dist/plugins/PluginManager'),{CombatSpells}=require('../dist/game/content/combat/magic/CombatSpells');
-  const original=PluginManager.emitCustomEvent;let healed=0;
-  const hit={isAccurate:()=>true,getAttacker:()=>({heal:n=>healed+=n}),getTarget:()=>({}),getTotalDamage:()=>40};
+  const original=PluginManager.emitCustomEvent;let healed=0,currentHp=10;
+  const attacker={heal:n=>{healed+=Math.min(n,12-currentHp);currentHp=Math.min(12,currentHp+n);}};
+  const hit={isAccurate:()=>true,getAttacker:()=>attacker,getTarget:()=>({}),getTotalDamage:()=>39};
+  const bloodSpells=[CombatSpells.BLOOD_RUSH,CombatSpells.BLOOD_BURST,CombatSpells.BLOOD_BLITZ,CombatSpells.BLOOD_BARRAGE];
   try {
     PluginManager.emitCustomEvent=(name,e)=>{if(name==='magic:hit-effects')e.allowed=false;};
-    CombatSpells.BLOOD_RUSH.onHitCalc(hit);assert.equal(healed,0);assert.equal(hit.getTotalDamage(),40);
-    PluginManager.emitCustomEvent=()=>{};CombatSpells.BLOOD_RUSH.onHitCalc(hit);assert.equal(healed,4);
+    for(const spell of bloodSpells){spell.onHitCalc(hit);assert.equal(healed,0);assert.equal(hit.getTotalDamage(),39);}
+    PluginManager.emitCustomEvent=()=>{};
+    for(const spell of bloodSpells){spell.onHitCalc({...hit,isAccurate:()=>false});assert.equal(healed,0,`${spell.spellId()} does not heal on a miss`);}
+    for(const spell of bloodSpells){spell.onHitCalc(hit);assert.equal(healed,2,`${spell.spellId()} heals floor(39 × 25%), capped at max HP`);healed=0;currentHp=10;}
   } finally {PluginManager.emitCustomEvent=original;}
 });
 
