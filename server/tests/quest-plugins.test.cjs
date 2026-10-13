@@ -1278,8 +1278,12 @@ test('Blood Moon Castle story actors use cache-walkable floor anchors', () => {
 test('Blood Moon stage 76 separates the optional Gibbous and required library Venators', () => {
   const { api, handlers } = mockApi();
   const spawned = [];
+  const recoveredClues = [];
+  const loginVarbits = [];
   api.spawnNpc = spec => { spawned.push(spec); return { ...spec, getHitpoints: () => 345, setScriptedMovement() {}, setMultiCombat() {} }; };
   api.removeNpc = () => {};
+  api.getItemOnGroundManager = () => ({ getGroundItem: () => null,
+    registerLocation: (_player, item, location) => recoveredClues.push({ id: item.getId(), x: location.getX(), y: location.getY(), z: location.getZ() }) });
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
   const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
     .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
@@ -1287,16 +1291,33 @@ test('Blood Moon stage 76 separates the optional Gibbous and required library Ve
     ['quest.the_blood_moon_rises.castle-native-stage', 76],
     ['quest.the_blood_moon_rises.castle-room', 39],
     ['quest.the_blood_moon_rises.castle-floor', 2],
-    ['quest.the_blood_moon_rises.castle-story', { prisonersFound: true, defeated: [] }],
+    ['quest.the_blood_moon_rises.castle-story', { prisonersFound: true, defeated: [], gibbous: { daggerClaimed: true, fireplaceLit: true } }],
   ]);
+  let location = new api.core.Location(2516, 7363, 0);
+  let freeSlots = 0;
   const player = {
     getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
-    getLocation: () => new api.core.Location(2516, 7368, 0), moveTo() {},
-    getInventory: () => ({ contains: () => false }), getUsername: () => 'castle-venator-anchor',
-    getPacketSender: () => new Proxy({ sendVarbit() {} }, { get: (target, key) => target[key] ?? (() => {}) }),
+    getLocation: () => location, moveTo: next => { location = next; },
+    getInventory: () => ({ contains: () => false, getFreeSlots: () => freeSlots }), getUsername: () => 'castle-venator-anchor', sendMessage() {},
+    getPacketSender: () => new Proxy({ sendVarbit: (...args) => loginVarbits.push(args) }, { get: (target, key) => target[key] ?? (() => {}) }),
   };
   quest.setStage(player, 40);
   handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
+  assert.deepEqual([location.getX(), location.getY(), location.getZ()], [2516, 7368, 0],
+    'the exact old failed-approach save is moved to the recorded puzzle entry without stage changes');
+  assert.ok(recoveredClues.some(item => item.id === 33762 && item.x === 2527 && item.y === 7368),
+    'a clue pickup previously claimed before a full-inventory rejection is recoverable from its original tile');
+  assert.deepEqual(loginVarbits.find(([id]) => id === 15543), [15543, 1],
+    'the Castle login sync restores the saved lit fireplace native varbit');
+  const pickup = handlers.ground.find(handler => handler.name === 'handleCastleBookPickup');
+  attributes.set('quest.the_blood_moon_rises.castle-story', { prisonersFound: true, defeated: [], gibbous: {} });
+  pickup({ player, groundItemId: 33762, location: { x: 2527, y: 7368, z: 0 } });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').gibbous?.daggerClaimed, undefined,
+    'a full-inventory click cannot mark a clue as claimed before the core pickup check');
+  freeSlots = 1;
+  pickup({ player, groundItemId: 33762, location: { x: 2527, y: 7368, z: 0 } });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').gibbous?.daggerClaimed, true,
+    'a clue pickup with inventory capacity records the claim normally');
   const venator = spawned.find(npc => npc.id === 16216);
   assert.ok(venator, 'spawn the optional captured Gibbous-room Venator');
   assert.deepEqual([venator.x, venator.y, venator.z], [2521, 7368, 0],
@@ -1329,6 +1350,7 @@ test('Blood Moon Gibbous lockbox requires its room clues and accepts code 426', 
     ['quest.the_blood_moon_rises.castle-floor', 2],
     ['quest.the_blood_moon_rises.castle-story', { defeated: [], prisonersFound: true }],
   ]);
+  const sentVarbits = [];
   const items = new Map();
   const inventory = {
     contains: id => (items.get(id) ?? 0) > 0,
@@ -1340,20 +1362,35 @@ test('Blood Moon Gibbous lockbox requires its room clues and accepts code 426', 
     getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
     getLocation: () => new api.core.Location(2516, 7368, 0), moveTo() {}, getInventory: () => inventory,
     getUsername: () => 'gibbous-lockbox', sendMessage() {}, getPacketSender: () => new Proxy({
-      sendVarbit() {}, sendQuestList() {}, sendInterfaceRemoval() {},
+      sendVarbit: (...args) => sentVarbits.push(args), sendQuestList() {}, sendInterfaceRemoval() {},
     }, { get: (target, key) => target[key] ?? (() => {}) }),
   };
   quest.setStage(player, 40);
   const interact = handlers.objects.find(handler => handler.name === 'handleCastleGibbousObjects');
   const object = (id, x, y, option) => interact({ player, objectId: id, definition: { id },
     location: { x, y, z: 0 }, option, handled: false });
-  object(61730, 2521, 7371, 'Light');
+  interact({ player, objectId: 61730, definition: { id: 61732 }, location: { x: 2521, y: 7371, z: 0 },
+    option: 'light', handled: false });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').gibbous.fireplaceLit, true,
+    'the visible transformed fireplace still matches its cache parent action');
+  assert.deepEqual(sentVarbits.find(([id]) => id === 15543), [15543, 1],
+    'lighting the cache fireplace updates its real lit-state varbit');
   object(61734, 2526, 7371, 'Search');
   assert.equal(items.get(33761), 1, 'lighting the fireplace allows the chest lockbox to be taken');
-  object(61687, 2531, 7367, 'Inspect');
+  interact({ player, objectId: 61687, definition: { id: 61689 }, location: { x: 2531, y: 7367, z: 0 },
+    option: 'Inspect', handled: false });
   object(61739, 2516, 7365, 'Inspect');
+  object(61739, 2516, 7370, 'Inspect');
+  object(61738, 2528, 7364, 'Inspect');
+  object(61737, 2528, 7371, 'Inspect');
   object(61736, 2531, 7365, 'Inspect');
+  object(61736, 2531, 7370, 'Inspect');
   object(61740, 2520, 7364, 'Inspect');
+  object(61740, 2520, 7371, 'Inspect');
+  object(61740, 2524, 7364, 'Inspect');
+  object(61740, 2524, 7371, 'Inspect');
+  object(61740, 2527, 7366, 'Inspect');
+  object(61740, 2527, 7369, 'Inspect');
   const action = handlers.itemAction.find(handler => handler.name === 'handleCastleGibbousItemAction');
   action({ player, itemId: 33761, option: 'Open', handled: false });
   assert.match(prompt.title, /symbol/);
@@ -1368,10 +1405,13 @@ test('Blood Moon Gibbous lockbox requires its room clues and accepts code 426', 
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').gibbous.lockboxOpened, true);
 
   items.set(33762, 1); items.set(33763, 1);
-  action({ player, itemId: 33762, option: 'Check', handled: false });
+  const examineItem = handlers.custom.get('world:item-examine').at(-1);
+  examineItem({ player, itemId: 33762, handled: false });
   action({ player, itemId: 33763, option: 'Read', handled: false });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').gibbous.daggerRead, true);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').gibbous.gridNoteRead, true);
   const enterDoor = handlers.objects.find(handler => handler.name === 'handleCastleDoorEnter');
-  const enter = () => enterDoor({ player, objectId: 61625, definition: { id: 61625, getName: () => 'Door' },
+  const enter = () => enterDoor({ player, objectId: 61625, definition: { id: 61627, getName: () => 'Door' },
     location: { x: 2519, y: 7363, z: 0 }, option: 'Enter', handled: false });
   enter();
   assert.match(prompt.title, /code/);
@@ -1394,6 +1434,30 @@ test('Blood Moon Gibbous lockbox requires its room clues and accepts code 426', 
   enter();
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 44,
     'the library room is reachable only after the lock accepts SPEAR');
+  const bookcase = handlers.objects.find(handler => handler.name === 'handleCastleBookObjects');
+  bookcase({ player, objectId: 61757, definition: { id: 61757, getName: () => 'Searchable bookcase' },
+    location: { x: 2549, y: 7381, z: 0 }, option: 'Search', handled: false });
+  assert.equal(items.get(33764), 1, 'the recorded bookcase yields the oddly weighted book');
+  action({ player, itemId: 33764, option: 'Read', handled: false });
+  assert.equal(items.get(33764), 0);
+  assert.equal(items.get(33766), 1, 'reading the book reveals the second fancy gem');
+  attributes.set('quest.the_blood_moon_rises.castle-room', 39);
+  const headItems = handlers.itemOnObject.find(handler => handler.name === 'handleCastleGibbousItemOnObject');
+  headItems({ player, itemId: 33765, objectId: 61687, location: { x: 2531, y: 7367, z: 0 }, handled: false });
+  headItems({ player, itemId: 33766, objectId: 61687, location: { x: 2531, y: 7367, z: 0 }, handled: false });
+  const head = handlers.objects.find(handler => handler.name === 'handleCastleGibbousObjects');
+  head({ player, objectId: 61687, definition: { id: 61687 }, location: { x: 2531, y: 7367, z: 0 },
+    option: 'Search', handled: false });
+  assert.equal(items.get(33742), 1, 'both gems allow the mounted head to yield the ornate hourglass');
+  attributes.set('quest.the_blood_moon_rises.castle-room', 38);
+  items.set(33741, 1); items.set(33740, 1);
+  const caseItem = handlers.itemOnObject.find(handler => handler.name === 'handleCastleDisplayCaseItem');
+  for (const itemId of [33741, 33742, 33740]) caseItem({ player, itemId, objectId: 61672,
+    location: { x: 2497, y: 7374, z: 0 }, handled: false });
+  const searchCase = handlers.objects.find(handler => handler.name === 'searchGibbousDisplayCase');
+  searchCase({ player, objectId: 61672, definition: { id: 61672 }, location: { x: 2497, y: 7374, z: 0 },
+    option: 'Search', handled: false });
+  assert.equal(items.get(33729), 1, 'the skull, hourglass and ornate knife open the compartment with the gilded key');
 });
 
 test('Blood Moon prisoner scene waits for the transcript, then leaves the player by the bench key', () => {
