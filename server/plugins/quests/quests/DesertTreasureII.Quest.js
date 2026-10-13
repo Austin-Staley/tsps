@@ -6567,6 +6567,26 @@ module.exports = function registerDesertTreasureII(api) {
     const location = event?.location;
     const x = location?.getX?.() ?? location?.x;
     const y = location?.getY?.() ?? location?.y;
+    if (stage(p) === S.WHISPERER && state.inShadow && !state.pubOpened
+      && (x === 2384 || x === 2385) && (y === 6427 || y === 6428)
+      && [O.DOORS_21, O.DOORS_22, O.DOORS_29, O.DOORS_30, O.DOORS_31, O.DOORS_32].includes(event.objectId)
+      && event.clickType === 1) {
+      if (!state.pubBlocker) {
+        p.sendMessage("Place the shadow blocker at the pub entrance in the material world before approaching these doors.");
+        event.handled = true;
+        return;
+      }
+      if (!has(p, I.SHADOW_KEY_2) || !state.blueKey) {
+        p.sendMessage("The pub's shadow doors need the blue shadow key.");
+        event.handled = true;
+        return;
+      }
+      p.getInventory().deleteNumber(I.SHADOW_KEY_2, 1);
+      registerLassarGroundItem(p, I.SUPERIOR_SHADOW_TORCH_SCHEMATIC, 2381, 6423);
+      setLassar(p, { ...state, pubOpened: true, blueKey: false });
+      p.sendMessage("The blue key opens the shadow pub. You find a superior shadow torch schematic upstairs.");
+      // Let the shared Doors plugin swing the real cache leaves after this gate.
+    }
     const barrier = (x === 2417 && y === 6413) || (x === 2424 && y === 6439);
     if (stage(p) === S.WHISPERER && state.inShadow && barrier
       && [O.DOORS_21, O.DOORS_22].includes(event.objectId) && event.clickType === 1

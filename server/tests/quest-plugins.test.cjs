@@ -5703,13 +5703,17 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     actionHooks[0]({ player, stepId: 'AYDmc1' });
     assert.equal(counts.get(core.ItemIdentifiers.PERFECTED_SHADOW_TORCH_SCHEMATIC_2), 0);
     assert.equal(attrs.get('desert-treasure-ii:lassar').silentChoir, true);
-    attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), blueKey: true, pubBlocker: true });
+    attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), blueKey: true, pubBlocker: true, pubOpened: false });
     counts.set(core.ItemIdentifiers.SHADOW_KEY_2, 1);
-    assert.equal(interact({ player, objectId: 48291, definition: { id: 48291 }, location: { x: 2384, y: 6427, z: 0 }, option: 'Open' }), false,
-      'the live swung south leaf runs the blocker and blue-key gate before the cache opens it');
+    const pubDoor = { player, objectId: core.ObjectIdentifiers.DOORS_30,
+      location: new core.Location(2385, 6428, 0), clickType: 1, handled: false };
+    doorToggleHooks[0](pubDoor);
+    assert.equal(pubDoor.handled, false, 'the shared door toggle is allowed after the blocker and blue key are checked');
     assert.equal(attrs.get('desert-treasure-ii:lassar').pubOpened, true,
       'opening the cache-backed leaf records the pub unlock and reveals its schematic');
     assert.equal(counts.get(core.ItemIdentifiers.SHADOW_KEY_2), 0, 'the blue key is consumed by the pub gate');
+    assert.equal(groundSpawns.at(-1)[1].getId(), core.ItemIdentifiers.SUPERIOR_SHADOW_TORCH_SCHEMATIC,
+      'the real pub entrance reveals the superior torch schematic');
     assert.equal(interact({ player, objectId: 48278, definition: { id: 48278 }, location: { x: 2372, y: 6430, z: 0 }, option: 'Climb-up' }), true);
     assert.equal(player.location.z, 1, 'the pub stairs use their real upper plane');
     assert.equal(interact({ player, objectId: 48245, definition: { id: 48245 }, location: { x: 2380, y: 6430, z: 1 }, option: 'Touch' }), true);
