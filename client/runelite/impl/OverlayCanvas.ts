@@ -21,7 +21,7 @@ export function getOverlayFrame(engine: OsrsClient, client: Client) {
 /** Composites Java2D-style plugins at the native widget renderer's layer boundaries. */
 export class OverlayCanvas {
     private canvas?: HTMLCanvasElement;
-    private readonly layers = new Map<OverlayLayer, { canvas: HTMLCanvasElement; active: boolean }>();
+    private readonly layers = new Map<OverlayLayer, { canvas: HTMLCanvasElement; active: boolean; bounds?: Rectangle }>();
     private readonly renderer: OverlayRenderer;
     constructor(private readonly engine: OsrsClient, readonly manager: OverlayManager) { this.renderer = new OverlayRenderer(manager); }
     beginFrame() {
@@ -59,19 +59,28 @@ export class OverlayCanvas {
                 painted = false;
             }); }
             finally { graphics.dispose(); }
+            let currentBounds: Rectangle | undefined;
             for (const overlay of overlays) {
                 const bounds = overlay.getBounds();
                 if (bounds.width <= 0 || bounds.height <= 0) continue;
                 cached.active = true;
-                rects.push({ x: Math.floor(bounds.x) - 1, y: Math.floor(bounds.y) - 1,
-                    w: Math.ceil(bounds.width) + 2, h: Math.ceil(bounds.height) + 2 });
+                const rect = new Rectangle(Math.floor(bounds.x) - 1, Math.floor(bounds.y) - 1,
+                    Math.ceil(bounds.width) + 2, Math.ceil(bounds.height) + 2);
+                currentBounds = currentBounds ? currentBounds.union(rect) : rect;
+                rects.push({ x: rect.x, y: rect.y, w: rect.width, h: rect.height });
             }
             // shortcut: overlays that paint without reporting bounds redraw their layer's canvas; upgrade to measured damage if common.
             if (unbounded) {
                 cached.active = true;
+                currentBounds = new Rectangle(0, 0, gl.width, gl.height);
                 rects.push({ x: 0, y: 0, w: gl.width, h: gl.height });
             }
-            if (cached.active) gl.updateTextureFromCanvas(`runelite:layer:${layer}`, canvas);
+            if (cached.active && currentBounds) {
+                // Include old pixels so moved or removed overlays are erased from the retained texture.
+                const damage = cached.bounds ? cached.bounds.union(currentBounds) : currentBounds;
+                gl.updateTextureFromCanvas(`runelite:layer:${layer}`, canvas, { x: damage.x, y: damage.y, w: damage.width, h: damage.height });
+                cached.bounds = currentBounds;
+            }
         }
         return rects;
     }

@@ -184,8 +184,9 @@ assert.equal(tips.getTooltips().length, 0, "tooltips last one rendered frame");
     const engine: any = { isLoggedIn: () => true, renderer: {}, runeLite: { clientApi: { getCanvasWidth: () => 800, getCanvasHeight: () => 600 } } };
     const canvas = new OverlayCanvas(engine, overlayManager);
     let scissorEnabled = false, scissor = [0, 0, 800, 600], blits = 0;
+    const uploads: { x: number; y: number; w: number; h: number }[] = [];
     const gl: any = { width: 800, height: 600, textures: new Map(), flush() {}, drawTexture() { blits++; },
-        updateTextureFromCanvas(key: string) { const texture = {}; this.textures.set(key, texture); return texture; },
+        updateTextureFromCanvas(key: string, _canvas: HTMLCanvasElement, damage: { x: number; y: number; w: number; h: number }) { uploads.push(damage); const texture = {}; this.textures.set(key, texture); return texture; },
         gl: { SCISSOR_BOX: 1, SCISSOR_TEST: 2, getParameter: () => scissor.slice(), isEnabled: () => scissorEnabled,
             enable() { scissorEnabled = true; }, disable() { scissorEnabled = false; }, scissor(...values: number[]) { scissor = values; } } };
     (globalThis as any).document = { createElement: () => ({ width: 800, height: 600, getContext: () => recordingContext().context }) };
@@ -203,14 +204,32 @@ assert.equal(tips.getTooltips().length, 0, "tooltips last one rendered frame");
         assert.equal(blits, 2);
         assert.equal(scissorEnabled, false);
         assert.deepEqual(scissor, [0, 0, 800, 600], "composition restores native GL clipping");
-        overlayManager.remove(counter); canvas.beginFrame();
+        canvas.beginFrame();
+        canvas.prepare(gl);
+        assert.deepEqual(uploads.at(-1), { x: 99, y: 119, w: 42, h: 22 }, "an inactive tooltip layer does not expand the remaining overlay upload");
+        counter.setPreferredLocation(new Point(200, 220));
+        canvas.beginFrame(); canvas.prepare(gl);
+        assert.deepEqual(uploads.at(-1), { x: 99, y: 119, w: 142, h: 122 }, "moving an overlay uploads both old and new pixels");
+        canvas.beginFrame(); canvas.prepare(gl);
+        assert.deepEqual(uploads.at(-1), { x: 199, y: 219, w: 42, h: 22 }, "stable overlay damage shrinks back to current bounds");
+        const remaining = new CounterOverlay(); remaining.setLayer(OverlayLayer.ABOVE_WIDGETS); remaining.setPreferredLocation(new Point(300, 320));
+        overlayManager.add(remaining); canvas.beginFrame(); canvas.prepare(gl);
+        overlayManager.remove(counter); canvas.beginFrame(); canvas.prepare(gl);
+        assert.deepEqual(uploads.at(-1), { x: 199, y: 219, w: 142, h: 122 }, "removing one overlay clears its old pixels while keeping its layer visible");
+        overlayManager.remove(remaining); canvas.beginFrame();
+        const uploadCount = uploads.length;
         assert.deepEqual(canvas.prepare(gl), []);
+        assert.equal(uploads.length, uploadCount, "empty layers stay inactive without texture uploads");
+        counter.setPreferredLocation(new Point(400, 420)); overlayManager.add(counter); canvas.beginFrame(); canvas.prepare(gl);
+        assert.deepEqual(uploads.at(-1), { x: 299, y: 319, w: 142, h: 122 }, "reactivated layers erase old pixels retained while inactive");
+        overlayManager.remove(counter); canvas.beginFrame(); canvas.prepare(gl);
         canvas.draw(gl, OverlayLayer.ABOVE_WIDGETS);
         assert.equal(blits, 2, "removed overlays cannot leave cached pixels active");
         class UnboundedOverlay extends Overlay { render(g: Graphics2D) { g.fillRect(50, 50, 10, 10); return null; } }
         const unbounded = new UnboundedOverlay(); unbounded.setLayer(OverlayLayer.ABOVE_WIDGETS); overlayManager.add(unbounded);
         canvas.beginFrame();
         assert.deepEqual(canvas.prepare(gl), [{ x: 0, y: 0, w: 800, h: 600 }], "unbounded draws remain visible instead of being silently dropped");
+        assert.deepEqual(uploads.at(-1), { x: 0, y: 0, w: 800, h: 600 }, "unbounded paint still uploads the full canvas");
     } finally { canvas.dispose(); (globalThis as any).document = oldDocument; }
 }
 let now = 1000;
