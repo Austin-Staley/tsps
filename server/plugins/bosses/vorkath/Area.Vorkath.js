@@ -115,7 +115,7 @@ function ensureSleeper(area) {
   const awake = (area.entities ?? []).some((entity) => {
     if (!entity?.isNpc?.() || !entity?.getAsNpc) return false;
     const id = entity.getAsNpc().getId?.();
-    return id === Shared.SLEEPING_ID || id === Shared.WAKING_ID || id === Shared.AWAKE_ID;
+    return id === Shared.SLEEPING_ID || id === Shared.WAKING_ID || Shared.isAwakeId(id);
   });
   if (awake) return;
   const location = new core.Location(Shared.SPAWN_TILE[0], Shared.SPAWN_TILE[1], Shared.SPAWN_TILE[2]);
