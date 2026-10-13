@@ -24,6 +24,7 @@ module.exports = function registerSongOfTheElves(api) {
   const EAST_BATTLE_KILLS = "quest.song_of_the_elves.east-battle-kills";
   const BATTLE_AREA = "quest.song_of_the_elves.battle-area";
   const LATE_CHAPTER = "quest.song_of_the_elves.late-chapter";
+  const WAR_END_ARIANWYN_DONE = "quest.song_of_the_elves.war-end-arianwyn-done";
   const VALLEY_FIGURE = "quest.song_of_the_elves.valley-figure";
   const LIBRARY_INSTANCE = "quest.song_of_the_elves.library-instance";
   const LIBRARY_SEALS = "quest.song_of_the_elves.library-seals";
@@ -204,6 +205,7 @@ module.exports = function registerSongOfTheElves(api) {
   const arianwynInstances = new Map();
   const libraryInstances = new Map();
   const fragmentInstances = new Map();
+  const warEndActors = new Map();
   const campInstances = new Map();
   const orbCaveInstances = new Map();
   let ithellSymbolsInstalled = false;
@@ -409,6 +411,7 @@ module.exports = function registerSongOfTheElves(api) {
       const state = fragmentInstances.get(this);
       if (!state || state.finished || (mobile !== state.boss &&
         !state.clones.includes(mobile) && !state.beams.has(mobile))) return;
+      if (mobile === state.boss && mobile.getHitpoints() <= 0) return;
       mobile.setScriptedMovement(true);
       mobile.getCombat().getLastAttack().reset();
       if (mobile !== state.boss) return;
@@ -648,6 +651,35 @@ module.exports = function registerSongOfTheElves(api) {
     // Stage is advanced by the transcript milestones below; cap it to the final chapter.
     return Math.min(CHAPTERS.length - 1, Math.max(0, Math.floor((value - STAGE.STARTED) / 10)));
   }
+  function clearWarEndActors(player) {
+    for (const npc of warEndActors.get(player) ?? []) api.removeNpc(npc);
+    warEndActors.delete(player);
+  }
+  function ensureWarEndActors(player) {
+    const done = player.getAttribute(WAR_END_ARIANWYN_DONE) === true;
+    const actors = warEndActors.get(player) ?? [];
+    if (actors.some(npc => npc.isRegistered?.())) return;
+    clearWarEndActors(player);
+    const definitions = done
+      ? [
+        { id: NpcIdentifiers.BAXTORIAN, x: 2240, y: 3265, z: 0 },
+        { id: NpcIdentifiers.ELENA, x: 2242, y: 3265, z: 0 },
+      ]
+      : [{ id: NpcIdentifiers.ARIANWYN_6, x: 2242, y: 3265, z: 0 }];
+    const spawned = definitions.map(definition => api.spawnNpc({ ...definition, wanderRadius: 0,
+      owner: player, ownerOnly: true })).filter(Boolean);
+    warEndActors.set(player, spawned);
+  }
+  function finishWarEndArianwynLine(event) {
+    const player = event?.player;
+    if (!player || currentChapter(player) !== 20 || player.getAttribute(WAR_END_ARIANWYN_DONE) === true ||
+      event.text !== "And I you. Farewell friend.") return;
+    event.after = () => {
+      player.setAttribute(WAR_END_ARIANWYN_DONE, true);
+      clearWarEndActors(player);
+      ensureWarEndActors(player);
+    };
+  }
   function onAction(event) {
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
@@ -780,7 +812,13 @@ module.exports = function registerSongOfTheElves(api) {
       setChapter(player, 19);
       player.sendMessage("Lord Iorwerth and Arianwyn have entered the Temple of Light. Follow them through the Underground Pass.");
     }
-    if (event.stepId === "yR9ETJ" && player.getAttribute(FRAGMENT_DEFEATED) === true) setChapter(player, 20);
+    if (event.stepId === "yR9ETJ" && player.getAttribute(FRAGMENT_DEFEATED) === true) {
+      setChapter(player, 20);
+      player.moveTo(new Location(2241, 3266, 0));
+      ensureWarEndActors(player);
+      event.handled = true;
+      event.steps = loadTranscripts(api)[PAGE]?.variants?.["the-war-s-end-arianwyn-atones"] ?? [];
+    }
     if (event.stepId === "eOtNFO") setChapter(player, 12);
     if (event.stepId === "W-ainS") {
       if (player.getAttribute(FRAGMENT_DEFEATED) !== true || currentChapter(player) !== 20) {
@@ -1339,6 +1377,14 @@ module.exports = function registerSongOfTheElves(api) {
       return startTranscript(api, player, event.npcId, PAGE, finishedPotion
         ? "preparing-to-enter-prifddinas-making-the-inversion-potion-talking-to-elena-after-finishing-the-potion"
         : "preparing-to-enter-prifddinas-making-the-inversion-potion-talking-to-elena-again");
+    }
+    if (currentChapter(player) === 20 && npcName === "arianwyn" && player.getAttribute(WAR_END_ARIANWYN_DONE) === true) {
+      player.sendMessage("Arianwyn has left the elven lands. Baxtorian is waiting by the gates of Prifddinas.");
+      return true;
+    }
+    if (currentChapter(player) === 20 && npcName === "baxtorian" &&
+      player.getAttribute(FRAGMENT_DEFEATED) === true) {
+      return startTranscript(api, player, event.npcId, PAGE, "the-war-s-end-prifddinas-reformed");
     }
     if (currentChapter(player) === 11 && npcName === "arianwyn") {
       const inventory = player.getInventory();
@@ -2991,7 +3037,18 @@ module.exports = function registerSongOfTheElves(api) {
   api.onPlayerLogin(({ player }) => {
     syncCrwysTree(player);
     sendIthellMeilyrVarbits(player);
+    if (currentChapter(player) === 19 && player.getAttribute(FRAGMENT_DEFEATED) === true &&
+      !player.getDialogueManager?.()?.isActive?.()) {
+      startTranscript(api, player, NpcIdentifiers.LORD_IORWERTH, PAGE, "the-fragment-of-seren-the-fragment-defeated");
+    } else if (currentChapter(player) === 20 && player.getAttribute(FRAGMENT_DEFEATED) === true) {
+      ensureWarEndActors(player);
+      if (player.getAttribute(WAR_END_ARIANWYN_DONE) !== true && !player.getDialogueManager?.()?.isActive?.()) {
+        player.moveTo(new Location(2241, 3266, 0));
+        startTranscript(api, player, NpcIdentifiers.ARIANWYN_6, PAGE, "the-war-s-end-arianwyn-atones");
+      }
+    }
   });
+  api.onPlayerLogout(({ player }) => clearWarEndActors(player));
   api.onNpcDialogueCondition((event) => {
     if (!event?.player) return null;
     const answer = disguiseCondition(event);
@@ -3002,6 +3059,7 @@ module.exports = function registerSongOfTheElves(api) {
     return null;
   });
   api.onCustomEvent("npc-dialogue:hook", onStart);
+  api.onCustomEvent("npc-dialogue:line", finishWarEndArianwynLine);
   api.onCustomEvent("npc-dialogue:line", handleLletyaConfrontationLine);
   api.onCustomEvent("world:object-examine", examineLletyaChild);
   api.onCustomEvent("world:object-examine", handleIthellSymbolExamine);
@@ -3045,6 +3103,7 @@ module.exports = function registerSongOfTheElves(api) {
   api.persistAttribute(WEST_BATTLE_KILLS);
   api.persistAttribute(EAST_BATTLE_KILLS);
   api.persistAttribute(LATE_CHAPTER);
+  api.persistAttribute(WAR_END_ARIANWYN_DONE);
   api.persistAttribute(VALLEY_FIGURE);
   api.persistAttribute(LIBRARY_SEALS);
   api.persistAttribute(LIBRARY_PUZZLE);

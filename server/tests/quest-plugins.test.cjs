@@ -36,6 +36,8 @@ function mockApi() {
     route: routes,
     walkRoutes: [],
     playerProcess: [],
+    playerLogin: [],
+    playerLogout: [],
     npcBeforeDeath: [],
     npcDeath: [],
     npcHitModify: [],
@@ -57,6 +59,8 @@ function mockApi() {
     onObjectRoute: (h) => handlers.routes.push(h),
     onWalkRoute: (h) => handlers.walkRoutes.push(h),
     onPlayerProcess: (h) => handlers.playerProcess.push(h),
+    onPlayerLogin: (h) => handlers.playerLogin.push(h),
+    onPlayerLogout: (h) => handlers.playerLogout.push(h),
     onNpcBeforeDeath: h => handlers.npcBeforeDeath.push(h),
     onNpcDeath: h => handlers.npcDeath.push(h),
     onNpcHitModify: (h) => handlers.npcHitModify.push(h),
@@ -4974,8 +4978,110 @@ test('Song of the Elves Fragment uses Wiki paired ranged hits and ordered phase-
       introArea.process(boss);
     }
     assert.ok(playerMessages.some(message => message.includes('teleports you beside')), 'closing the introduction starts the ordinary encounter timer');
+    queued.length = 0;
+    const messagesBeforeDeathTick = playerMessages.length;
+    const npcsBeforeDeathTick = spawned.length;
+    boss.hitpoints = 0;
+    cycle = introStart + 45;
+    introArea.process(boss);
+    assert.equal(queued.length, 0, 'the defeated Fragment cannot land its queued melee special');
+    assert.equal(playerMessages.length, messagesBeforeDeathTick, 'the defeated Fragment cannot start another special');
+    assert.equal(spawned.length, npcsBeforeDeathTick, 'the defeated Fragment cannot spawn new echoes or beams');
   } finally {
     api.core.World.getProcessCycle = originalCycle;
+    runtime.startTranscript = originalStartTranscript;
+  }
+});
+
+test('Song of the Elves resumes the earned Fragment outro after reconnect', () => {
+  const { api, handlers } = mockApi();
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  const transcripts = [];
+  runtime.startTranscript = (...args) => { transcripts.push(args.slice(1)); return true; };
+  try {
+    require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+    const quest = runtime.getRegisteredQuests().filter(entry => entry.key === 'song_of_the_elves').at(-1);
+    const attributes = new Map([
+      ['quest.song_of_the_elves.late-chapter', 19],
+      ['quest.song_of_the_elves.fragment-defeated', true],
+    ]);
+    let dialogueActive = false;
+    const player = {
+      getAttribute: key => attributes.get(key),
+      setAttribute: (key, value) => attributes.set(key, value),
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+      getDialogueManager: () => ({ isActive: () => dialogueActive }),
+      moveTo() {},
+    };
+    quest.setStage(player, 190);
+    handlers.playerLogin.at(-1)({ player });
+    assert.equal(transcripts.length, 1);
+    assert.equal(transcripts[0][3], 'the-fragment-of-seren-the-fragment-defeated');
+    dialogueActive = true;
+    handlers.playerLogin.at(-1)({ player });
+    assert.equal(transcripts.length, 1, 'an active dialogue is not duplicated on a repeated login hook');
+    dialogueActive = false;
+    attributes.set('quest.song_of_the_elves.late-chapter', 20);
+    handlers.playerLogin.at(-1)({ player });
+    assert.equal(transcripts.length, 2, 'the gate farewell resumes when the saved chapter advances past the Iorwerth outro');
+    assert.equal(transcripts[1][3], 'the-war-s-end-arianwyn-atones');
+  } finally {
+    runtime.startTranscript = originalStartTranscript;
+  }
+});
+
+test('Song of the Elves chains the city-gate farewell into Baxtorian’s final talk', () => {
+  const { api, handlers } = mockApi();
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  const transcripts = [];
+  const spawned = [];
+  const removed = [];
+  api.spawnNpc = definition => {
+    const npc = { ...definition, isRegistered: () => !npc.removed };
+    spawned.push(npc);
+    return npc;
+  };
+  api.removeNpc = npc => { npc.removed = true; removed.push(npc); };
+  runtime.startTranscript = (...args) => { transcripts.push(args.at(-1)); return true; };
+  try {
+    require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+    const quest = runtime.getRegisteredQuests().filter(entry => entry.key === 'song_of_the_elves').at(-1);
+    const attributes = new Map([
+      ['quest.song_of_the_elves.late-chapter', 19],
+      ['quest.song_of_the_elves.fragment-defeated', true],
+    ]);
+    const player = {
+      getAttribute: key => attributes.get(key),
+      setAttribute: (key, value) => attributes.set(key, value),
+      getInventory: () => ({ getFreeSlots: () => 10, getAmount: () => 0, adds() {} }),
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+      getDialogueManager: () => ({ isActive: () => false }),
+      moveTo(location) { this.location = location; },
+      sendMessage() {},
+    };
+    quest.setStage(player, 190);
+    const action = { player, stepId: 'yR9ETJ', handled: false };
+    handlers.custom.get('npc-dialogue:action').at(-1)(action);
+    assert.equal(quest.getStage(player), 190, 'the cache quest stage stays at its pre-completion value during the finale');
+    assert.equal(attributes.get('quest.song_of_the_elves.late-chapter'), 20);
+    assert.deepEqual([player.location.getX(), player.location.getY(), player.location.getZ()], [2241, 3266, 0]);
+    assert.equal(action.handled, true);
+    assert.equal(action.steps[1].speaker, 'Arianwyn', 'the Wiki Arianwyn farewell follows the Iorwerth aftermath');
+    const farewell = { player, text: 'And I you. Farewell friend.' };
+    handlers.custom.get('npc-dialogue:line').at(-2)(farewell);
+    assert.equal(typeof farewell.after, 'function');
+    farewell.after();
+    assert.equal(attributes.get('quest.song_of_the_elves.war-end-arianwyn-done'), true);
+    assert.ok(removed.some(npc => npc.id === api.core.NpcIdentifiers.ARIANWYN_6));
+    const baxtorian = spawned.find(npc => npc.id === api.core.NpcIdentifiers.BAXTORIAN);
+    assert.ok(baxtorian?.ownerOnly, 'Baxtorian is available only to this quest owner at the gate');
+    const talk = handlers.npcInteractions.get('Baxtorian')['Talk-to'];
+    talk({ player, npcId: api.core.NpcIdentifiers.BAXTORIAN,
+      definition: { getName: () => 'Baxtorian' }, npc: baxtorian });
+    assert.equal(transcripts.at(-1), 'the-war-s-end-prifddinas-reformed');
+  } finally {
     runtime.startTranscript = originalStartTranscript;
   }
 });
