@@ -2497,11 +2497,14 @@ module.exports = function registerDesertTreasureII(api) {
       && event?.npcId === N.MYSTERIOUS_FIGURE_2 && event?.text === "Very well...") {
       event.after = () => spawnFinalFigure(event.player);
     }
-    if (stage(event?.player) !== S.LEVIATHAN || event?.text !== "Yes.") return;
+    if (stage(event?.player) !== S.LEVIATHAN) return;
     if (![N.CATALYTIC_GUARDIAN, N.CATALYTIC_GUARDIAN_2].includes(event.npcId)) return;
-    event.player.setAttribute(SCAR_GUARDIAN_ACCEPTED, true);
-    setScarVarbit(event.player, 4);
-    event.after = () => enterScar(event.player);
+    if (event.text === "Then may your death come quick, human. Good luck.") {
+      event.after = () => {
+        event.player.setAttribute(SCAR_GUARDIAN_ACCEPTED, true);
+        enterScar(event.player);
+      };
+    }
   }
 
   function setScarVarbit(p, value) {
@@ -4376,6 +4379,7 @@ module.exports = function registerDesertTreasureII(api) {
       const expectedStage = [S.VARDORVIS, S.WHISPERER, S.SUCELLUS, S.LEVIATHAN][index];
       if (vaultTile.x === locations[index][0] && vaultTile.y === locations[index][1]
         && stage(p) === expectedStage && itemId === medal && has(p, medal)) {
+        event.handled = true;
         p.getInventory().deleteNumber(medal, 1);
         const placed = (Number(p.getAttribute(STATUES_PLACED)) || 0) | (1 << index);
         p.setAttribute(STATUES_PLACED, placed);

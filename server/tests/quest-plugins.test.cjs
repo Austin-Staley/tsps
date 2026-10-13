@@ -2299,7 +2299,9 @@ test('Desert Treasure II requires each medallion on its matching Vault statue an
   assert.equal(itemHooks[0]({ player: p, itemId: I.VARDORVIS_MEDALLION, objectId: 49501, location }), undefined,
     'a medallion cannot be placed on another general’s statue');
   assert.equal(counts.get(I.VARDORVIS_MEDALLION), 1);
-  assert.equal(itemHooks[0]({ player: p, itemId: I.VARDORVIS_MEDALLION, objectId: 49499, location }), true);
+  const placement = { player: p, itemId: I.VARDORVIS_MEDALLION, objectId: 49499, location, handled: false };
+  assert.equal(itemHooks[0](placement), true);
+  assert.equal(placement.handled, true, 'the packet handler does not send the unhandled-item fallback');
   assert.equal(counts.get(I.VARDORVIS_MEDALLION), 0);
   assert.equal(quest.getStage(p), 8);
   assert.equal(attrs.get('desert-treasure-ii:medallions-placed'), 1);
@@ -2683,7 +2685,12 @@ test('Desert Treasure II enters the Scar through the Catalytic Guardian and requ
     assert.equal(transcripts.at(-1), 'praefectus-classis-perseriya-talking-to-the-catalytic-guardian');
     const afterYes = { player, npcId: core.NpcIdentifiers.CATALYTIC_GUARDIAN, text: 'Yes.' };
     lineHooks[0](afterYes);
-    afterYes.after();
+    assert.equal(afterYes.after, undefined);
+    assert.equal(queues.add.length, 0, 'the Guardian can finish speaking before demons spawn');
+    const farewell = { player, npcId: core.NpcIdentifiers.CATALYTIC_GUARDIAN, text: 'Then may your death come quick, human. Good luck.' };
+    lineHooks[0](farewell);
+    assert.equal(queues.add.length, 0, 'entry waits until the farewell closes');
+    farewell.after();
     assert.equal(varbits.get(15128), 6, 'entering the Scar advances the canonical quest varbit');
     const area = attrs.get('desert-treasure-ii:scar-area');
     assert.equal(area.width, 9);
