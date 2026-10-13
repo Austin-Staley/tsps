@@ -3949,7 +3949,12 @@ module.exports = function registerTheBloodMoonRises(api) {
       return startTranscript(api, player, event.npcId, PAGE, "starting-out");
     }
     const chapter = currentChapter(stage(player));
-    const alias = ({ "king roald": "king-roald", "the nylocas queen": "nylocas-queen" })[npcName] ?? npcName.replace(/[^a-z0-9]+/g, "-");
+    const alias = ({
+      "king roald": "king-roald",
+      "the nylocas queen": "nylocas-queen",
+      // The transcript uses Veliaf's given name in chapter variant IDs.
+      "veliaf hurtz": "veliaf",
+    })[npcName] ?? npcName.replace(/[^a-z0-9]+/g, "-");
     const variants = Object.keys(loadTranscripts(api)[PAGE]?.variants ?? {});
     const candidates = variants.filter((variant) => variant.startsWith(`${chapter}-`) && variant.includes(alias));
     const selected = candidates.find((variant) => variant.includes("talking-to") && !variant.includes("again")) ??

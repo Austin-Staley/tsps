@@ -3620,6 +3620,56 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
   }
 });
 
+test('Blood Moon stage 90 Veliaf dialogue takes precedence over completed Myreque repeats', () => {
+  const { api } = mockApi();
+  const registered = [];
+  const registerNpcInteraction = api.onNpcInteraction;
+  api.onNpcInteraction = (target, actions) => {
+    registerNpcInteraction(target, actions);
+    if (target === 'Veliaf Hurtz') registered.push(actions['Talk-to']);
+  };
+  require('../plugins/quests/quests/SinsOfTheFather.Quest')(api);
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  require('../plugins/quests/quests/InAidOfTheMyreque.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quests = getRegisteredQuests();
+  const bloodMoon = quests.filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const inAid = quests.filter(entry => entry.key === 'in_aid_of_the_myreque').at(-1);
+  const attributes = new Map();
+  const started = [];
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(3506, 9838, 0),
+    getUsername: () => 'bmr-veliaf-precedence',
+    getDialogueManager: () => ({ startDialogues: builder => started.push(builder) }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+  };
+  bloodMoon.setStage(player, 90);
+  inAid.setStage(player, 999);
+  assert.equal(bloodMoon.getStage(player), 90);
+  assert.ok(Array.isArray(require('../plugins/quests/QuestRuntime').loadTranscripts(api)
+    ['The Blood Moon Rises'].variants['fighting-wyrds-talking-to-veliaf-outside-the-ruins']));
+  const event = {
+    player,
+    npcId: api.core.NpcIdentifiers.VELIAF_HURTZ_2,
+    definition: { getName: () => 'Veliaf Hurtz' },
+    npc: { getLocation: () => new api.core.Location(3506, 9838, 0) },
+    handled: false,
+  };
+  const results = [];
+  for (const handler of registered) {
+    const result = handler(event);
+    results.push(result);
+    if (result !== false) break;
+  }
+  assert.deepEqual(results, [false, false, true],
+    'Sins and the inactive refinery defer, then Blood Moon claims Veliaf before completed In Aid');
+  assert.equal(registered.at(-1)(event), true, 'the completed In Aid handler would otherwise take the same talk');
+  assert.ok(started.length > 0);
+});
+
 test('Blood Moon northern-door transcript starts the private Lowerniel encounter', () => {
   const { api, handlers } = mockApi();
   const attributes = new Map();
