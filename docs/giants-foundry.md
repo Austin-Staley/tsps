@@ -17,6 +17,9 @@ All four recordings with foundry play were made on Leagues V worlds (rev 227): 9
 | `Crucible.GiantsFoundry.js` | Filling (Fill menu, item-on), Check, Empty, Pour; the metal score. |
 | `Tools.GiantsFoundry.js` | Trip hammer, grindstone and polishing wheel: machine ticks, damage, sweet spots, overworking, the Smiths' uniform. |
 | `Temperature.GiantsFoundry.js` | Lava pool, waterfall and passive cooling. |
+| `RewardShop.GiantsFoundry.js` | Kovac's reward shop (753) from cache enum 4379: buying items and moulds. |
+| `Rewards.GiantsFoundry.js` | The ore pack, Kovac's grog, and selling items back to Kovac. |
+| `Commands.GiantsFoundry.js` | `::foundryrep <amount>` (developer): sets Foundry Reputation. |
 | `data/giants-foundry.json` | Crucible metals (tier, smelting level) and what smithed equipment is worth. |
 
 **Changes outside the plugin:**
@@ -29,6 +32,7 @@ All four recordings with foundry play were made on Leagues V worlds (rev 227): 9
   - It no longer places its own tutorial crucible, jig, storage, chest and crate. Those blocked live paths, such as the corridor to the waterfall. It uses the room's own supply crate (multiloc 44779 on tutorial varbit 13903), with the captured contents: 8 bronze bars, 6 iron bars, 2 bronze battleaxes, 2 iron longswords, and a bronze and an iron platebody, which make 28 bars' worth.
   - It no longer spawns its own foundry Kovac (11468).
   - Its stages map to live OSRS's varbit values (13902: 15 repairing, 20 repaired, 25 making the sword, 30 complete), as does the tutorial varbit (13903, 10-65).
+- **The generic stand-in shop is gone.** Shop 1443 in `shops.json` and its "Foundry Reputation" point currency in `Shopkeepers` (with its `reward-shops.json` entry) are removed; interface 753 replaces them. Reputation saved under `shop-currency:Foundry Reputation` moves to the foundry's own at login.
 - **`QuestRuntime`**: a quest's `varpValue` now also maps the stage it sends in a varbit, so a quest can keep its own stage numbers and show live values.
 
 ## Cache
@@ -204,12 +208,44 @@ The client draws everything from varbits; the server keeps them right.
   - A ruined sword gives 30 XP and 60 coins.
 - The collection log's "Giants' Foundry" count is the number of swords made.
 
+**Reward shop** (recording 96)
+- Shop (op5), and Talk-to's "I'd like to buy something.":
+  - opens 753 after `toplevel_mainmodal_open`;
+  - sets OP1-OP4 on the list (0-312) and OP1 on the filter dropdown (0-12);
+  - runs `reward_shop_init` (6082).
+- A list entry is 13 components.
+  - Op1 on sub `s` selects entry `s / 13 + 1` (varp 3435).
+  - On items, op2-op4 buy 1, 5 or 10.
+  - The stock is enum 4379's structs: param 1636 item, 1637 mould, 1638 cost.
+- Buy buys the selected entry.
+  - An item: varp 3436 drops, "Kovac hands you your reward." and synth 2114. Purchases log in the collection log.
+  - A mould: its unlock varbit is set and the selection clears, then varp 3436 drops, "Kovac hands you a mould, which you add to the library of moulds you already have stored here." and synth 2114.
+  - Short of reputation: "You do not have enough Foundry Reputation to buy that.".
+- A filter option is dropdown component 1 + 2i. It sets 13915 to i and clears the selection (script 6085).
+
+**Rewards**
+- Ore pack (Open):
+  - "You open the pack and find 30 ores.";
+  - 30 noted ores, each rolled with the Wiki's rates: coal 81.64%, iron 10.11%, mithril 6.45%, adamantite 1.52%, runite 0.28%;
+  - "You will need another free inventory space to open the pack." when there is no room (recording 96).
+- Kovac's grog (Wiki):
+  - heals 1, Smithing +4, Attack, Ranged and Magic −2;
+  - "You drink Kovac's grog. It tastes like giants' feet.";
+  - leaves a beer glass.
+- Using items on Kovac (Wiki transcript):
+  - He buys back the uniform, the double ammo mould, the catalyst and the ore pack for 80%: "Ore pack: Kovac will give you 160 Foundry Reputation for this." then Accept/Decline.
+  - He refuses the colossal blade and the grog with their lines.
+  - Anything else gets "You keep that.".
+
 **Stage seeds** (54 captured preforms)
 - Stage 0 is always the trip hammer.
 - Each later stage is one of the two tools that differ from the stage before it, chosen at random.
 - Unused seeds are 0.
 
 ## Not captured
+
+- The reward shop when the inventory is full, and the double ammo mould without Dwarf Cannon (the Wiki says it needs the quest): placeholder messages.
+- The grog's Ironman line when used on Kovac is not played.
 
 - The crucible's Check and Empty: Check reports its contents, and Empty asks before destroying them (Wiki: emptying loses the metal).
 - Pouring while a preform is still to be handed in (the Wiki says it can't be done): a placeholder message.
@@ -222,3 +258,9 @@ The client draws everything from varbits; the server keeps them right.
 
 - The refusal when the preform is unequipped anywhere but the storage: it is refused silently.
 - Store-preform with no preform worn, and Take-preform with nothing stored: placeholder messages.
+
+## Follow-ups
+
+- The smithing catalyst (half coal and double XP at a furnace), the double ammo mould (8 cannonballs from 2 bars) and the colossal blade's size-based max hit bonus.
+- The Smiths' uniform's 4-tick anvil chance in Smithing.
+- Combat achievements, diaries and the minigame's league tasks.

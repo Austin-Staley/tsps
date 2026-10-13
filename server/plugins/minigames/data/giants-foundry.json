@@ -24,5 +24,13 @@
     "platelegs": 2,
     "plateskirt": 2,
     "platebody": 4
-  }
+  },
+  "_orePack": "Ore pack (Giants' Foundry): each of its 30 ores, by the Wiki's rates from 1,913 opened packs",
+  "orePack": [
+    { "name": "Coal", "weight": 81.64 },
+    { "name": "Iron ore", "weight": 10.11 },
+    { "name": "Mithril ore", "weight": 6.45 },
+    { "name": "Adamantite ore", "weight": 1.52 },
+    { "name": "Runite ore", "weight": 0.28 }
+  ]
 }

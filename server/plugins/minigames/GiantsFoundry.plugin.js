@@ -19,5 +19,8 @@ module.exports = {
     require("./giantsfoundry/Crucible.GiantsFoundry")(api);
     require("./giantsfoundry/Tools.GiantsFoundry")(api);
     require("./giantsfoundry/Temperature.GiantsFoundry")(api);
+    require("./giantsfoundry/RewardShop.GiantsFoundry")(api);
+    require("./giantsfoundry/Rewards.GiantsFoundry")(api);
+    require("./giantsfoundry/Commands.GiantsFoundry")(api);
   },
 };
