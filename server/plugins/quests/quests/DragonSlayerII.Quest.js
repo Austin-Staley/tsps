@@ -46,6 +46,8 @@ module.exports = function registerDragonSlayerII(api) {
   // transforms and the client journal. Keep the plugin's compact stage enum private.
   const NATIVE_STAGE = { 0: 0, 1: 5, 2: 10, 3: 15, 4: 30, 5: 40, 6: 55, 7: 90,
     8: 125, 9: 130, 10: 135, 11: 140, 12: 170, 13: 200, 14: 210 };
+  // QuestHelper maps the repair phase and each earned wave to these cache-visible milestones.
+  const ASSAULT_NATIVE_STAGE = [180, 181, 182, 183, 184, 185, 186, 190, 191, 191, 195, 196, 196];
   const KEY_PARTS = [I.DRAGON_KEY_PIECE, I.DRAGON_KEY_PIECE_2, I.DRAGON_KEY_PIECE_3, I.DRAGON_KEY_PIECE_4];
   // RuneLite QH's DS2_VARROCK_BOOKCASE: the marked red census-book shelf.
   const RELDO_BOOKCASE_ID = 32462;
@@ -64,20 +66,24 @@ module.exports = function registerDragonSlayerII(api) {
     { id: N.RED_DRAGON_8, x: 1695, y: 5665, z: 2 },
     { id: N.IRON_DRAGON_4, x: 1688, y: 5665, z: 1 },
     { id: N.BRUTAL_GREEN_DRAGON_2, x: 1679, y: 5665, z: 1 },
-    { id: N.BLUE_DRAGON_12, x: 1662, y: 5661, z: 1 },
-    { id: N.GREEN_DRAGON_9, x: 1649, y: 5662, z: 1 },
-    { id: N.BLUE_DRAGON_13, x: 1642, y: 5660, z: 1 },
-    { id: N.GREEN_DRAGON_10, x: 1635, y: 5666, z: 2 },
-    { id: N.BLACK_DRAGON_12, x: 1655, y: 5688, z: 2 },
+    { id: N.BLUE_DRAGON_14, x: 1662, y: 5661, z: 1 },
+    { id: N.GREEN_DRAGON_11, x: 1649, y: 5662, z: 1 },
+    { id: N.BLUE_DRAGON_14, x: 1642, y: 5660, z: 1 },
+    { id: N.GREEN_DRAGON_11, x: 1635, y: 5666, z: 2 },
+    { id: N.BLACK_DRAGON_13, x: 1655, y: 5688, z: 2 },
     { id: N.STEEL_DRAGON_5, x: 1668, y: 5698, z: 1 },
     { id: N.BRUTAL_RED_DRAGON_2, x: 1679, y: 5708, z: 2 },
-    { id: N.MITHRIL_DRAGON_2, x: 1698, y: 5710, z: 1 },
-    { id: N.ADAMANT_DRAGON_2, x: 1705, y: 5722, z: 0 },
+    { id: N.MITHRIL_DRAGON_3, x: 1698, y: 5710, z: 1 },
+    { id: N.ADAMANT_DRAGON, x: 1705, y: 5722, z: 0 },
     { id: N.RUNE_DRAGON_3, x: 1666, y: 5734, z: 0 },
   ];
   const FLEET_BOUNDARIES = [0, 1, 2, 3].map((plane) => new Boundary(1600, 1726, 5520, 5758, plane));
   const FLEET_BOAT_START = new Location(1702, 5543, 1);
   const FLEET_START = new Location(1696, 5665, 2);
+  const TORFINN_FLEET = new Location(2640, 3697, 0);
+  // shortcut: the Wiki documents the red-to-iron deck change but not its tile.
+  // This cache-clear tile is reachable on both decks and sits beside the Iron dragon.
+  const ASSAULT_LADDER = new Location(1687, 5665, 2);
   const FLEET_BOSS = new Location(1631, 5735, 2);
   const FLEET_RESUME = new Location(1637, 5706, 0);
   const GALVEK_PHASES = [N.GALVEK_2, N.GALVEK_4, N.GALVEK_3, N.GALVEK_5];
@@ -229,9 +235,11 @@ module.exports = function registerDragonSlayerII(api) {
         }
         const boss = player.getAttribute(ATTR_BOSS);
         if (!boss) return;
-        boss.setScriptedMovement(true);
         boss.getCombat().getLastAttack().reset();
-        if ((boss.getRealId?.() ?? boss.getId?.()) === N.GALVEK_2 && stage(player) === S.GALVEK) processGalvek(this, player, boss);
+        if ((boss.getRealId?.() ?? boss.getId?.()) === N.GALVEK_2 && stage(player) === S.GALVEK) {
+          boss.setScriptedMovement(true);
+          processGalvek(this, player, boss);
+        }
       }
       destroy() {
         if (this.isDestroyed?.()) return;
@@ -260,12 +268,12 @@ module.exports = function registerDragonSlayerII(api) {
         for (let chunkX = 0; chunkX < KARAMJA_INSTANCE.widthChunks; chunkX++) {
           for (let chunkY = 0; chunkY < KARAMJA_INSTANCE.heightChunks; chunkY++) {
             for (let plane = 0; plane < 4; plane++) {
-              this.setChunk(plane, chunkX, chunkY, plane === 0 ? {
+              this.setChunk(plane, chunkX, chunkY, {
                 sourceChunkX: KARAMJA_INSTANCE.sourceChunkX + chunkX,
                 sourceChunkY: KARAMJA_INSTANCE.sourceChunkY + chunkY,
-                sourcePlane: 0,
+                sourcePlane: plane,
                 rotation: 0,
-              } : null);
+              });
             }
           }
         }
@@ -315,12 +323,12 @@ module.exports = function registerDragonSlayerII(api) {
         for (let chunkX = 0; chunkX < 6; chunkX++) {
           for (let chunkY = 0; chunkY < 4; chunkY++) {
             for (let plane = 0; plane < 4; plane++) {
-              this.setChunk(plane, chunkX, chunkY, plane === 0 ? {
+              this.setChunk(plane, chunkX, chunkY, {
                 sourceChunkX: 281 + chunkX,
                 sourceChunkY: 1306 + chunkY,
-                sourcePlane: 0,
+                sourcePlane: plane,
                 rotation: 0,
-              } : null);
+              });
             }
           }
         }
@@ -801,6 +809,25 @@ module.exports = function registerDragonSlayerII(api) {
     p.setAttribute(ATTR_LITHKREN_NATIVE_STAGE, nativeStage);
     p.getPacketSender?.().sendVarbit?.(6104, nativeStage);
   }
+  function nativeStage(value, player) {
+    if (value === S.FLEET) {
+      if (player?.getAttribute?.(ATTR_ASSAULT_DEFENSE_ACTIVE)) return 175;
+      if (player?.getAttribute?.(ATTR_ASSAULT_DEFENDED)) {
+        const index = Math.max(0, Math.min(ASSAULT_NATIVE_STAGE.length - 1,
+          Number(player.getAttribute(ATTR_ASSAULT_INDEX)) || 0));
+        return ASSAULT_NATIVE_STAGE[index];
+      }
+    }
+    if (value === S.GALVEK && player?.getAttribute?.(ATTR_GALVEK_DEFEATED)) return 205;
+    return NATIVE_STAGE[value] ?? 0;
+  }
+  function syncFleetNativeStage({ player: p }) {
+    const value = stage(p);
+    if (value !== S.FLEET && value !== S.GALVEK) return;
+    const sender = p.getPacketSender?.();
+    const desired = nativeStage(value, p);
+    if (sender?.getVarbit?.(6104) !== desired) sender?.sendVarbit?.(6104, desired);
+  }
   function climbLithkrenNorthStairs(event) {
     const { player: p, object, objectId } = event;
     if (stage(p) < S.TO_LITHKREN || stage(p) >= S.LEADERS || !p.getAttribute(ATTR_LITHKREN_ARRIVED)
@@ -1176,13 +1203,13 @@ module.exports = function registerDragonSlayerII(api) {
     if (Math.max(Math.abs(at.getX() - x), Math.abs(at.getY() - y)) > 8) p.moveTo(new Location(x - 1, y, 0));
     const boss = NPC.create(bossId, new Location(x, y, 0));
     boss.setOwner?.(p); boss.setOwnerOnly?.(true); boss.__skipDefaultRespawn = true;
-    boss.setScriptedMovement(true);
     area.add(boss); World.getAddNPCQueue().push(boss);
     p.setAttribute(ATTR_BOSS, boss);
     return area;
   }
   function startAssault(p) {
-    const index = Math.min(ASSAULT_DRAGONS.length - 1, Number(p.getAttribute(ATTR_ASSAULT_CHECKPOINT)) || 0);
+    const index = Math.min(ASSAULT_DRAGONS.length - 1, Number(p.getAttribute(ATTR_ASSAULT_DEFENDED)
+      ? p.getAttribute(ATTR_ASSAULT_INDEX) : p.getAttribute(ATTR_ASSAULT_CHECKPOINT)) || 0);
     if (!p.getAttribute(ATTR_ASSAULT_DEFENDED) && index === 0) {
       if (p.getInventory().getFreeSlots() < 4) return p.sendMessage("You need four free inventory spaces for the ship supplies.");
       const area = enterFleetArea(p, FLEET_BOAT_START);
@@ -1201,7 +1228,8 @@ module.exports = function registerDragonSlayerII(api) {
       p.sendMessage("Defend Brundt's ship for four minutes. Take the hammer, water container, swamp paste and revitalisation potion from the crates; repair the damage as it appears.");
       return;
     }
-    enterFleetArea(p, index ? FLEET_START : FLEET_BOAT_START);
+    const area = enterFleetArea(p, p.getAttribute(ATTR_ASSAULT_DEFENDED) || index > 0 ? FLEET_START : FLEET_BOAT_START);
+    if (index > 0) addAssaultTraversal(area);
     p.setAttribute(ATTR_ASSAULT_INDEX, index);
     p.sendMessage(index >= 10
       ? "The final wave attacks: defeat the mithril, adamant and rune dragons."
@@ -1216,9 +1244,12 @@ module.exports = function registerDragonSlayerII(api) {
     { id: O.COL_FFFF00_FREMENNIK_WARRIOR_COL_2, item: I.REVITALISATION_POTION, action: "Heal", verb: "heal the rower" },
     { id: O.DAMAGED_MAST, item: I.HAMMER, action: "Repair", verb: "repair the mast" },
   ];
+  // shortcut: Wiki/cached ship art shows the damage types, but does not publish
+  // their per-tick tiles. Keep the inferred anchors on the reachable east deck;
+  // the west-side cache railing isolates the original fire/rower positions.
   const ASSAULT_DAMAGE_TILES = [
-    new Location(1697, 5532, 1), new Location(1705, 5534, 1),
-    new Location(1698, 5542, 1), new Location(1706, 5546, 1),
+    new Location(1702, 5532, 1), new Location(1705, 5534, 1),
+    new Location(1702, 5542, 1), new Location(1705, 5547, 1),
   ];
   function addAssaultObject(area, id, location) {
     const object = new GameObject(id, location, 10, 0, area);
@@ -1226,6 +1257,96 @@ module.exports = function registerDragonSlayerII(api) {
     area.add(object);
     area.assaultObjects.push(object);
     return object;
+  }
+  function addAssaultTraversal(area) {
+    if (!area || area.assaultTraversal) return;
+    const lower = new Location(ASSAULT_LADDER.getX(), ASSAULT_LADDER.getY(), ASSAULT_LADDER.getZ() - 1);
+    const objects = [
+      new GameObject(O.SHIPS_LADDER_2, ASSAULT_LADDER.clone(), 10, 0, area),
+      new GameObject(O.SHIPS_LADDER, lower, 10, 2, area),
+    ];
+    for (const object of objects) {
+      ObjectManager.register(object, true);
+      area.add(object);
+      area.assaultObjects.push(object);
+    }
+    area.assaultTraversal = true;
+  }
+  function claimAssaultLadder(event) {
+    const { player: p, object, objectId } = event;
+    const area = p.getAttribute(ATTR_AREA);
+    const location = object?.getLocation?.();
+    if (!(area instanceof QuestArea) || stage(p) !== S.FLEET || !p.getAttribute(ATTR_ASSAULT_DEFENDED)
+      || !area.assaultTraversal || !location
+      || location.getX() !== ASSAULT_LADDER.getX() || location.getY() !== ASSAULT_LADDER.getY()) return;
+    const down = objectId === O.SHIPS_LADDER_2 && location.getZ() === ASSAULT_LADDER.getZ();
+    const up = objectId === O.SHIPS_LADDER && location.getZ() === ASSAULT_LADDER.getZ() - 1;
+    if (!down && !up) return;
+    const destination = down
+      ? new Location(1687, 5662, ASSAULT_LADDER.getZ() - 1)
+      : new Location(1687, 5664, ASSAULT_LADDER.getZ());
+    api.emitCustomEvent(down ? "ladders:climbDown" : "ladders:climbUp", { player: p, destination });
+    event.handled = true;
+    return true;
+  }
+  function routeAssaultLadder(event) {
+    if (event.clickType !== 1) return;
+    const { player: p, object, objectId } = event;
+    const area = p?.getAttribute?.(ATTR_AREA);
+    const location = object?.getLocation?.();
+    if (!(area instanceof QuestArea) || stage(p) !== S.FLEET || !p.getAttribute(ATTR_ASSAULT_DEFENDED)
+      || !area.assaultTraversal || !location
+      || location.getX() !== ASSAULT_LADDER.getX() || location.getY() !== ASSAULT_LADDER.getY()) return;
+    const lower = objectId === O.SHIPS_LADDER && location.getZ() === ASSAULT_LADDER.getZ() - 1;
+    const upper = objectId === O.SHIPS_LADDER_2 && location.getZ() === ASSAULT_LADDER.getZ();
+    if (!lower && !upper) return;
+    // shortcut: the cache ladder sits behind blocked railing tiles on the lower deck.
+    // Route its earned climb from the adjacent walkable ship corridor; the ladder action
+    // still performs the normal paired-floor climb at this canonical anchor.
+    event.destination = lower
+      ? { x: 1687, y: 5662, z: ASSAULT_LADDER.getZ() - 1 }
+      : { x: 1687, y: 5664, z: ASSAULT_LADDER.getZ() };
+  }
+  function assaultGapCrossing({ player: p, object, objectId, definition }) {
+    const area = p.getAttribute(ATTR_AREA);
+    const id = definition?.id ?? objectId;
+    if (!(area instanceof QuestArea) || stage(p) !== S.FLEET || !p.getAttribute(ATTR_ASSAULT_DEFENDED)
+      || ![O.GAP_39, O.GAP_40].includes(id)) return null;
+    const location = object?.getLocation?.();
+    const position = p.getLocation?.();
+    if (!location || !position) return null;
+    const face = object.getFace?.() ?? 0;
+    const sizeX = definition?.getSizeX?.() ?? object.getDefinition?.()?.sizeX ?? 1;
+    const sizeY = definition?.getSizeY?.() ?? object.getDefinition?.()?.sizeY ?? 1;
+    const width = face % 2 === 1 ? sizeY : sizeX;
+    const height = face % 2 === 1 ? sizeX : sizeY;
+    const x = location.getX(), y = location.getY(), z = location.getZ();
+    const px = position.getX(), py = position.getY();
+    if (width >= height && py >= y - 1 && py <= y + height) {
+      const row = Math.max(y, Math.min(y + height - 1, py));
+      if (px < x) return { approach: { x: x - 1, y: row, z }, landing: { x: x + width, y: row, z } };
+      if (px >= x + width) return { approach: { x: x + width, y: row, z }, landing: { x: x - 1, y: row, z } };
+    } else if (height > width && px >= x - 1 && px <= x + width) {
+      const column = Math.max(x, Math.min(x + width - 1, px));
+      if (py < y) return { approach: { x: column, y: y - 1, z }, landing: { x: column, y: y + height, z } };
+      if (py >= y + height) return { approach: { x: column, y: y + height, z }, landing: { x: column, y: y - 1, z } };
+    }
+    return null;
+  }
+  function routeAssaultGap(event) {
+    if (event.clickType !== 1) return;
+    const crossing = assaultGapCrossing(event);
+    if (crossing) event.destination = crossing.approach;
+  }
+  function jumpAssaultGap(event) {
+    const crossing = assaultGapCrossing(event);
+    if (!crossing) return false;
+    const position = event.player.getLocation();
+    if (position.getX() !== crossing.approach.x || position.getY() !== crossing.approach.y
+      || position.getZ() !== crossing.approach.z) return false;
+    event.handled = true;
+    event.player.moveTo(new Location(crossing.landing.x, crossing.landing.y, crossing.landing.z));
+    return true;
   }
   function removeAssaultObject(area, object) {
     if (!object) return;
@@ -1302,6 +1423,7 @@ module.exports = function registerDragonSlayerII(api) {
   function enterFleetArea(p, arrival) {
     leaveArea(p);
     const area = new QuestArea(p.getUsername?.(), FLEET_BOUNDARIES);
+    area.assaultObjects = [];
     area.enter(p);
     p.setAttribute(ATTR_AREA, area);
     p.moveTo(arrival);
@@ -1312,7 +1434,6 @@ module.exports = function registerDragonSlayerII(api) {
     const encounter = ASSAULT_DRAGONS[index];
     const dragon = NPC.create(encounter.id, new Location(encounter.x, encounter.y, encounter.z));
     dragon.setOwner?.(p); dragon.setOwnerOnly?.(true); dragon.__skipDefaultRespawn = true;
-    dragon.setScriptedMovement(true);
     area.add(dragon); World.getAddNPCQueue().push(dragon);
     p.setAttribute(ATTR_BOSS, dragon);
     p.setAttribute(ATTR_ASSAULT_INDEX, index);
@@ -1882,6 +2003,7 @@ module.exports = function registerDragonSlayerII(api) {
         return;
       }
       if (next < ASSAULT_DRAGONS.length) {
+        if (next === 1) addAssaultTraversal(killer.getAttribute(ATTR_AREA));
         spawnAssaultDragon(killer, next);
       } else {
         killer.setAttribute(ATTR_ASSAULT_INDEX, ASSAULT_DRAGONS.length);
@@ -2134,7 +2256,13 @@ module.exports = function registerDragonSlayerII(api) {
     }
     if (p.getAttribute(ATTR_ASSAULT_DEFENSE_ACTIVE)) {
       p.setAttribute(ATTR_ASSAULT_DEFENSE_ACTIVE, false);
-      p.moveTo(new Location(2640, 3696, 0));
+      p.moveTo(TORFINN_FLEET);
+    }
+    const savedLocation = p.getLocation();
+    if ((stage(p) === S.FLEET || stage(p) === S.GALVEK)
+      && (!(p.getAttribute(ATTR_AREA) instanceof QuestArea)
+        || !FLEET_BOUNDARIES.some((boundary) => boundary.inside(savedLocation)))) {
+      p.moveTo(TORFINN_FLEET);
     }
     if (stage(p) === S.LEADERS && p.getAttribute(ATTR_VAULT_SCENE_ACTIVE)
       && !p.getAttribute(ATTR_VAULT_SCENE_COMPLETE)) {
@@ -2148,6 +2276,13 @@ module.exports = function registerDragonSlayerII(api) {
     p.setAttribute(ATTR_UNGAEL_LAB_ACTIVE, false);
     p.setAttribute(ATTR_CRYPT_ACTIVE, false);
     p.setAttribute(ATTR_ASSAULT_DEFENSE_ACTIVE, false);
+  }
+  function onPlayerLogout({ player: p }) {
+    if (p.getAttribute(ATTR_AREA) instanceof QuestArea) {
+      leaveArea(p);
+      p.setAttribute(ATTR_ASSAULT_DEFENSE_ACTIVE, false);
+      if (stage(p) === S.FLEET || stage(p) === S.GALVEK) p.moveTo(TORFINN_FLEET);
+    }
   }
   function grantDragonSlayerIIRewards(player) {
     const skills = player.getSkillManager();
@@ -2253,7 +2388,7 @@ module.exports = function registerDragonSlayerII(api) {
       }
       if (value === S.TO_LITHKREN && player?.getAttribute?.(ATTR_ROWBOAT_BUILT)) return 65;
       if (value === S.TO_LITHKREN && player?.getAttribute?.(ATTR_JARDRIC_TALKED)) return 60;
-      return NATIVE_STAGE[value] ?? 0;
+      return nativeStage(value, player);
     },
     startedValue: S.START, completionValue: S.COMPLETE, questPoints: 5,
     xpRewards: [
@@ -2319,6 +2454,8 @@ module.exports = function registerDragonSlayerII(api) {
   onNpcInteractions(["Sir Amik Varze", "King Lathas", "Brundt the Chieftain", "King Roald"], { "Talk-to": talkLeader });
   api.onObjectInteraction(handleObject);
   api.onPlayerProcess(syncLithkrenNativeStage);
+  api.onPlayerProcess(syncFleetNativeStage);
+  api.onPlayerLogin(syncFleetNativeStage);
   api.onPlayerLogin(({ player }) => {
     if (Number(player.getAttribute(ATTR_DREAM_PROGRESS)) >= 2) {
       player.getPacketSender?.().sendVarbit?.(6144, 1);
@@ -2326,6 +2463,10 @@ module.exports = function registerDragonSlayerII(api) {
     }
   });
   api.onCustomEvent("ladders:climb", climbLithkrenNorthStairs);
+  api.onCustomEvent("ladders:climb", claimAssaultLadder);
+  api.onObjectRoute(routeAssaultLadder);
+  api.onObjectRoute(routeAssaultGap);
+  api.onObjectInteraction("Gap", { Jump: jumpAssaultGap });
   api.onObjectRoute(routeLithkrenNorthStairs);
   api.onInterfaceActionClick(handleMapPuzzleClick);
   api.onObjectFirstClick(MAP_SOURCES.map((source) => source.id), searchFossilMapSource);
@@ -2372,6 +2513,7 @@ module.exports = function registerDragonSlayerII(api) {
   api.onItemAction("Spade", { Dig: digForMorytaniaPiece });
   api.onNpcDeath(handleNpcDeath);
   api.onPlayerLogin(onLogin);
+  api.onPlayerLogout(onPlayerLogout);
   api.onPlayerDeath(onPlayerDeath);
   module.exports._test.cryptPuzzle = {
     createArea: (owner) => new KourendCryptArea(owner),
@@ -2383,6 +2525,19 @@ module.exports = function registerDragonSlayerII(api) {
     plinths: Object.fromEntries(Object.entries(CRYPT_PLINTHS).map(([direction, loc]) => [direction, { ...loc, click: [...loc.click] }])),
     busts: CRYPT_BUSTS.map((bust) => ({ ...bust, location: [...bust.location] })),
   };
+  module.exports._test.assaultDamageTiles = ASSAULT_DAMAGE_TILES.map((tile) => [tile.getX(), tile.getY(), tile.getZ()]);
+  module.exports._test.assaultLadder = {
+    location: [ASSAULT_LADDER.getX(), ASSAULT_LADDER.getY(), ASSAULT_LADDER.getZ()],
+    createArea: () => {
+      const area = new QuestArea("test", FLEET_BOUNDARIES);
+      area.assaultObjects = [];
+      addAssaultTraversal(area);
+      return area;
+    },
+  };
+  module.exports._test.spawnAssaultDragon = spawnAssaultDragon;
+  module.exports._test.spawnGalvek = spawnGalvek;
+  module.exports._test.assaultDragons = ASSAULT_DRAGONS.map((dragon) => ({ ...dragon }));
 };
 
 module.exports._test = { restoreSphinxGeneralTopic, oneiromancerDialogueVariant };

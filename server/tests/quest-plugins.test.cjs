@@ -7006,7 +7006,7 @@ test('Dragon Slayer II selects the Oneiromancer’s Robert-memory transcript onl
 
 
 test('Dragon Slayer II mirrors compact stages to the cache quest milestones in varbit 6104', () => {
-  const { api } = mockApi();
+  const { api, handlers } = mockApi();
   require('../plugins/quests/quests/DragonSlayerII.Quest')(api);
   const { getRegisteredQuests, sendQuestVarps } = require('../plugins/quests/QuestRuntime');
   const quest = getRegisteredQuests().filter((row) => row.key === 'dragon_slayer_ii').at(-1);
@@ -7022,6 +7022,41 @@ test('Dragon Slayer II mirrors compact stages to the cache quest milestones in v
   varbits.clear();
   sendQuestVarps({ player });
   assert.equal(varbits.get(6104), 5, 'the same native value is restored at login');
+  quest.setStage(player, 12);
+  attributes.set('dragon-slayer-ii:assault-defense-active', true);
+  sendQuestVarps({ player });
+  assert.equal(varbits.get(6104), 175, 'the native client scene changes to the ship-repair phase');
+  const syncFleet = handlers.playerProcess.find(handler => handler.name === 'syncFleetNativeStage');
+  assert.equal(typeof syncFleet, 'function', 'active fleet players receive native stage sync');
+  attributes.set('dragon-slayer-ii:assault-ship-defended', true);
+  attributes.set('dragon-slayer-ii:assault-defense-active', false);
+  syncFleet({ player });
+  assert.equal(varbits.get(6104), 180, 'the live scene advances to the first dragon after ship defense');
+  attributes.set('dragon-slayer-ii:assault-index', 0);
+  sendQuestVarps({ player });
+  assert.equal(varbits.get(6104), 180, 'the first earned dragon wave receives its cache milestone');
+  attributes.set('dragon-slayer-ii:assault-index', 7);
+  sendQuestVarps({ player });
+  assert.equal(varbits.get(6104), 190, 'the checkpointed black-dragon wave restores its cache milestone');
+  attributes.set('dragon-slayer-ii:assault-index', 10);
+  sendQuestVarps({ player });
+  assert.equal(varbits.get(6104), 195, 'the metal-dragon wave restores its cache milestone');
+  const recoverAttrs = new Map([['quest.dragon_slayer_ii.stage', 12]]);
+  let recoveredLocation = new api.core.Location(1687, 5665, 1);
+  const recovered = {
+    getAttribute: key => recoverAttrs.get(key),
+    setAttribute: (key, value) => recoverAttrs.set(key, value),
+    getLocation: () => recoveredLocation,
+    moveTo: location => { recoveredLocation = location; },
+    getPacketSender: () => sender,
+  };
+  handlers.playerLogin.find(handler => handler.name === 'onLogin')({ player: recovered });
+  assert.deepEqual([recoveredLocation.getX(), recoveredLocation.getY(), recoveredLocation.getZ()], [2640, 3697, 0],
+    'a logged-out ship instance resumes from Torfinn instead of a stale private coordinate');
+  quest.setStage(player, 13);
+  attributes.set('dragon-slayer-ii:galvek-defeated', true);
+  sendQuestVarps({ player });
+  assert.equal(varbits.get(6104), 205, 'the slain Galvek scene precedes the final Alec hand-in');
   quest.setStage(player, quest.completionValue);
   assert.equal(varbits.get(6104), 210, 'completion follows the native QuestHelper terminal stage');
 });
@@ -7494,13 +7529,14 @@ test('Dragon Slayer II Fossil Island map caches yield all 24 distinct, reclaimab
 test('Dragon Slayer II restores the Karamja plinth when its key piece was lost', () => {
   const objectHandlers = [];
   const objects = [];
+  const chunks = [];
   const { api: base } = mockApi();
   const objectManager = { register() {}, deregister() {} };
   const core = Object.assign({}, base.core, {
     ObjectManager: objectManager,
     TemplatedInstanceArea: class {
       constructor(width, height) { this.width = width; this.height = height; this.objects = []; }
-      setChunk() {}
+      setChunk(plane, chunkX, chunkY, template) { chunks.push({ plane, chunkX, chunkY, ...template }); }
       enter() {}
       tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z }; }
       getBaseX() { return 8192; }
@@ -7540,6 +7576,9 @@ test('Dragon Slayer II restores the Karamja plinth when its key piece was lost',
   const enter = objectHandlers.find((handler) => handler.toString().includes('KARAMJA_START'));
   assert.equal(typeof enter, 'function');
   enter({ player, objectId: core.ObjectIdentifiers.CAVE_63, location: { x: 2943, y: 2894, z: 0 } });
+  assert.equal(chunks.length, 8 * 13 * 4, 'all source planes are copied for bridge-aware collision and multi-level temple geometry');
+  assert.deepEqual(chunks.find((chunk) => chunk.plane === 1 && chunk.chunkX === 0 && chunk.chunkY === 0),
+    { plane: 1, chunkX: 0, chunkY: 0, sourceChunkX: 352, sourceChunkY: 1150, sourcePlane: 1, rotation: 0 });
   assert.equal(attrs.get('dragon-slayer-ii:key-parts'), 14, 'a stale possession bit cannot strand the player after reaching the forge');
   assert.equal(objects.at(-1).getId(), core.ObjectIdentifiers.PLINTH_17, 'the piece becomes available again');
   const recover = objectHandlers.find((handler) => handler.name === 'handleKaramjaPlinth');
@@ -7562,7 +7601,7 @@ test('Dragon Slayer II laboratory copies every cache chunk containing its six no
     TemplatedInstanceArea: class {
       constructor(width, height) { dimensions = [width, height]; }
       setChunk(plane, chunkX, chunkY, template) {
-        if (plane === 0) chunks.push({ chunkX, chunkY, ...template });
+        chunks.push({ plane, chunkX, chunkY, ...template });
       }
       enter() {}
       getBaseX() { return 8192; }
@@ -7595,8 +7634,10 @@ test('Dragon Slayer II laboratory copies every cache chunk containing its six no
   assert.equal(typeof enter, 'function');
   enter({ player, objectId: core.ObjectIdentifiers.CAVE_62, location: { x: 2248, y: 4077, z: 0 } });
   assert.deepEqual(dimensions, [6, 4]);
-  assert.deepEqual(chunks[0], { chunkX: 0, chunkY: 0, sourceChunkX: 281, sourceChunkY: 1306, sourcePlane: 0, rotation: 0 });
-  assert.deepEqual(chunks.at(-1), { chunkX: 5, chunkY: 3, sourceChunkX: 286, sourceChunkY: 1309, sourcePlane: 0, rotation: 0 });
+  assert.equal(chunks.length, 6 * 4 * 4, 'all source planes are copied so bridge flags above each floor reach instance collision');
+  assert.deepEqual(chunks[0], { plane: 0, chunkX: 0, chunkY: 0, sourceChunkX: 281, sourceChunkY: 1306, sourcePlane: 0, rotation: 0 });
+  assert.deepEqual(chunks[1], { plane: 1, chunkX: 0, chunkY: 0, sourceChunkX: 281, sourceChunkY: 1306, sourcePlane: 1, rotation: 0 });
+  assert.deepEqual(chunks.at(-1), { plane: 3, chunkX: 5, chunkY: 3, sourceChunkX: 286, sourceChunkY: 1309, sourcePlane: 3, rotation: 0 });
   assert.deepEqual(spawn, { x: 8204, y: 1616, z: 0 }, 'the entrance lands at the cache lever and inside the expanded template');
 });
 
@@ -7851,6 +7892,194 @@ test('Dragon Slayer II Torfinn runs the cache quest dragons, checkpoints the wav
     assert.equal(fifthTraining.handled, false, 'a fifth training interface cannot be opened');
   } finally {
     runtime.startTranscript = startTranscript;
+  }
+});
+
+test('Dragon Slayer II ship damage targets have reachable cache deck approaches', () => {
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  RegionManager.init();
+  const { api } = mockApi();
+  const register = require('../plugins/quests/quests/DragonSlayerII.Quest');
+  register(api);
+  const tiles = register._test.assaultDamageTiles;
+  assert.equal(tiles.length, 4);
+  assert.equal(new Set(tiles.map(([x, y, z]) => `${x},${y},${z}`)).size, 4,
+    'fire, leak, rower and mast damage use separate tiles');
+
+  const start = [1702, 5543, 1];
+  const queue = [start];
+  const seen = new Set([`${start[0]},${start[1]}`]);
+  const directions = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
+  for (let index = 0; index < queue.length; index++) {
+    const [x, y] = queue[index];
+    const from = new api.core.Location(x, y, 1);
+    for (const [dx, dy] of directions) {
+      const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
+      if (nx < 1690 || nx > 1712 || ny < 5525 || ny > 5555 || seen.has(key)) continue;
+      const to = new api.core.Location(nx, ny, 1);
+      if (!RegionManager.canMove(from.getX(), from.getY(), to.getX(), to.getY(), 1, 1, 1, null)) continue;
+      seen.add(key);
+      queue.push([nx, ny]);
+    }
+  }
+
+  const unreachable = tiles.filter(([x, y]) => !directions.some(([dx, dy]) => seen.has(`${x + dx},${y + dy}`)));
+  assert.deepEqual(unreachable, [],
+    `each inferred repair tile has a reachable interaction approach from the real ship start; reached ${seen.size} tiles`);
+});
+
+test('Dragon Slayer II adds a traversable ladder for the cache-backed red-to-iron deck change', () => {
+  const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { api: base, handlers } = mockApi();
+  const destinations = [];
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'emitCustomEvent'
+      ? (name, event) => { destinations.push({ name, destination: event.destination }); target.emitCustomEvent(name, event); }
+      : target[prop],
+  });
+  const register = require('../plugins/quests/quests/DragonSlayerII.Quest');
+  register(api);
+  const ladder = register._test.assaultLadder;
+  const area = ladder.createArea();
+  try {
+    const [x, y, upperZ] = ladder.location;
+    const route = new RsmodRouteFinding();
+    const top = route.findRoute({ level: upperZ, srcX: 1696, srcY: 5665, srcSize: 1,
+      destX: x, destY: y, destWidth: 1, destLength: 1, locShape: 10, locAngle: 0,
+      privateArea: area, moveNear: true });
+    assert.equal(top.success, true, 'the real upper-deck start can reach the ladder interaction edge');
+    const lower = route.findRoute({ level: upperZ - 1, srcX: x, srcY: y, srcSize: 1,
+      destX: 1679, destY: 5665, privateArea: area, moveNear: false });
+    assert.equal(lower.success, true, 'the lower landing can walk west toward the next cache-positioned dragon');
+
+    const attrs = new Map([
+      ['quest.dragon_slayer_ii.stage', 12],
+      ['dragon-slayer-ii:instance-area', area],
+      ['dragon-slayer-ii:assault-ship-defended', true],
+    ]);
+    const claim = handlers.custom.get('ladders:climb').find(handler => handler.name === 'claimAssaultLadder');
+    const player = { getAttribute: key => attrs.get(key) };
+    const routeLadder = handlers.routes.find(handler => handler.name === 'routeAssaultLadder');
+    const upperRoute = { player, objectId: api.core.ObjectIdentifiers.SHIPS_LADDER_2,
+      object: { getLocation: () => new api.core.Location(x, y, upperZ) }, clickType: 1 };
+    routeLadder(upperRoute);
+    assert.deepEqual(upperRoute.destination, { x, y: 5664, z: upperZ });
+    const upperApproach = route.findRoute({ level: upperZ, srcX: 1696, srcY: 5665, srcSize: 1,
+      destX: upperRoute.destination.x, destY: upperRoute.destination.y, privateArea: area, moveNear: false });
+    assert.equal(upperApproach.success, true, 'the upper approach remains reachable from the ship start');
+    const lowerRoute = { player, objectId: api.core.ObjectIdentifiers.SHIPS_LADDER,
+      object: { getLocation: () => new api.core.Location(x, y, upperZ - 1) }, clickType: 1 };
+    routeLadder(lowerRoute);
+    assert.deepEqual(lowerRoute.destination, { x, y: 5662, z: upperZ - 1 });
+    const lowerApproach = route.findRoute({ level: upperZ - 1, srcX: x, srcY: y - 3, srcSize: 1,
+      destX: lowerRoute.destination.x, destY: lowerRoute.destination.y, privateArea: area, moveNear: false });
+    assert.equal(lowerApproach.success, true, 'the lower approach uses the proven walkable corridor');
+    const upperEvent = { player, objectId: api.core.ObjectIdentifiers.SHIPS_LADDER_2,
+      object: { getLocation: () => new api.core.Location(x, y, upperZ) }, handled: false };
+    assert.equal(claim(upperEvent), true);
+    assert.equal(upperEvent.handled, true);
+    assert.equal(destinations.at(-1).name, 'ladders:climbDown');
+    assert.deepEqual([destinations.at(-1).destination.getX(), destinations.at(-1).destination.getY(), destinations.at(-1).destination.getZ()], [x, 5662, upperZ - 1]);
+    const lowerEvent = { player, objectId: api.core.ObjectIdentifiers.SHIPS_LADDER,
+      object: { getLocation: () => new api.core.Location(x, y, upperZ - 1) }, handled: false };
+    assert.equal(claim(lowerEvent), true);
+    assert.equal(destinations.at(-1).name, 'ladders:climbUp');
+    assert.deepEqual([destinations.at(-1).destination.getX(), destinations.at(-1).destination.getY(), destinations.at(-1).destination.getZ()], [x, 5664, upperZ]);
+  } finally {
+    area.destroy();
+  }
+});
+
+
+test('Dragon Slayer II assault dragons retain ordinary NPC combat while Galvek stays scripted', () => {
+  const { api: base, handlers } = mockApi();
+  const added = [];
+  const created = [];
+  let gapHandler;
+  const npcApi = {
+    create(id, location) {
+      const npc = {
+        id, location, scripted: false, hp: 100,
+        setArea() {},
+        setOwner() {}, setOwnerOnly() {},
+        setScriptedMovement(value) { this.scripted = value; },
+        setMaxHitpoints(value) { this.maxHitpoints = value; },
+        setHitpoints(value) { this.hp = value; },
+        getCombat: () => ({ getLastAttack: () => ({ reset() {} }) }),
+      };
+      created.push(npc);
+      return npc;
+    },
+  };
+  const worldApi = { ...base.core.World, getAddNPCQueue: () => added, getRemoveNPCQueue: () => [] };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core'
+      ? { ...base.core, NPC: npcApi, World: worldApi }
+      : prop === 'onObjectInteraction'
+        ? (name, actions) => {
+          if (name === 'Gap') gapHandler = actions.Jump;
+          return target.onObjectInteraction(name, actions);
+        }
+        : target[prop],
+  });
+  const register = require('../plugins/quests/quests/DragonSlayerII.Quest');
+  register(api);
+  const area = register._test.assaultLadder.createArea();
+  const attrs = new Map([
+    ['quest.dragon_slayer_ii.stage', 12],
+    ['dragon-slayer-ii:instance-area', area],
+    ['dragon-slayer-ii:assault-ship-defended', true],
+  ]);
+  let playerLocation = new api.core.Location(1687, 5665, 1);
+  const player = {
+    getAttribute: key => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getLocation: () => playerLocation,
+    moveTo: location => { playerLocation = location; },
+    isPlayer: () => true,
+    getAsPlayer() { return this; },
+    sendMessage() {},
+  };
+  try {
+    register._test.spawnAssaultDragon(player, 1);
+    const dragon = created.at(-1);
+    assert.equal(dragon.scripted, false, 'assault dragons need normal OSRS NPC combat');
+    area.process(player);
+    assert.equal(dragon.scripted, false, 'the ship tick must not disable their attack AI');
+
+    const routeGap = handlers.routes.find(handler => handler.name === 'routeAssaultGap');
+    const gap = { getLocation: () => new api.core.Location(1678, 5665, 1), getFace: () => 1 };
+    const definition = { id: 32312, getName: () => 'Gap', getSizeX: () => 1, getSizeY: () => 2 };
+    const gapEvent = { player, object: gap, objectId: 32312, definition, location: { x: 1678, y: 5665, z: 1 }, clickType: 1, option: 'Jump', handled: false };
+    routeGap(gapEvent);
+    assert.deepEqual(gapEvent.destination, { x: 1680, y: 5665, z: 1 }, 'cache rotation guides the east-side approach');
+    playerLocation = new api.core.Location(1680, 5665, 1);
+    assert.equal(gapHandler(gapEvent), true);
+    assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [1677, 5665, 1]);
+    assert.equal(gapEvent.handled, true);
+    const nextRoute = new api.core.RsmodRouteFinding().findRoute({ level: 1, srcX: 1677, srcY: 5665, srcSize: 1,
+      destX: 1662, destY: 5661, privateArea: area, moveNear: false });
+    assert.equal(nextRoute.success, true, 'the landing can route to the cache-positioned Blue dragon');
+
+    register._test.spawnGalvek(player);
+    assert.equal(created.at(-1).scripted, true, 'Galvek keeps scripted control for his special phases');
+  } finally {
+    area.destroy();
+  }
+});
+
+
+test('Dragon Slayer II ship wave NPC variants expose the cache Attack option', () => {
+  const { api } = mockApi();
+  const register = require('../plugins/quests/quests/DragonSlayerII.Quest');
+  register(api);
+  const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
+  const dragons = register._test.assaultDragons;
+  assert.deepEqual(dragons.slice(3).map(({ id }) => id), [8083, 8082, 8083, 8082, 8085, 8086, 8087, 8089, 8030, 8091]);
+  for (const { id } of dragons) {
+    assert.ok(NpcDefinition.forId(id).getActions().some(action => action?.toLowerCase() === 'attack'),
+      `ship dragon ${id} must be a combat variant, not a cutscene-only NPC`);
   }
 });
 
