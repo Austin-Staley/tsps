@@ -28,22 +28,36 @@ function setGrave(player, held) {
   player.setAttribute(GRAVE_ATTRIBUTE, held ?? null);
 }
 
+/** Death's Office's 120 slots; a slot taken from stays empty (null), as live. */
 function office(player) {
   const held = player.getAttribute(OFFICE_ATTRIBUTE);
   return Array.isArray(held) ? held : [];
 }
 
 function setOffice(player, records) {
+  while (records.length > 0 && !records[records.length - 1]) records.pop();
   player.setAttribute(OFFICE_ATTRIBUTE, records.length > 0 ? records : null);
 }
 
 /**
- * Sends `records` to Death's Office. It holds 120 stacks; "items from an expired gravestone [are]
- * deleted when the limit is reached" (Wiki: Death's Office), the least valuable first here.
+ * Sends `records` to Death's Office: onto a stack of the same item, else into the first empty
+ * slot. It holds 120 stacks; "items from an expired gravestone [are] deleted when the limit is
+ * reached" (Wiki: Death's Office).
  */
 function sendToOffice(player, records) {
   if (records.length === 0) return;
-  setOffice(player, Common.stack(office(player), records, Common.OFFICE_SLOTS).held);
+  const held = office(player).slice();
+  for (const entry of records) {
+    const same = held.find((stack) => stack && Common.sameStack(stack, entry));
+    if (same) {
+      same.amount = Math.min(Common.MAX_STACK, same.amount + entry.amount);
+      continue;
+    }
+    const empty = held.findIndex((stack) => !stack);
+    if (empty >= 0) held[empty] = { ...entry };
+    else if (held.length < Common.OFFICE_SLOTS) held.push({ ...entry });
+  }
+  setOffice(player, held);
 }
 
 function coffer(player) {

@@ -5,7 +5,7 @@
  * answer back from the payload.
  *
  * - `gravestones:state` { player } -> grave ({ items, fee, officeFee } or null), office
- *   ([{ id, amount, fee }]), coffer, style, metDeath, inTutorial, ironman.
+ *   (120 slots of { id, amount, fee } or null), coffer, style, metDeath, inTutorial, ironman.
  * - `gravestones:expire` { player }: the grave collapses now (Death collecting it early).
  * - `gravestones:pay-fee` { player, amount, office } -> source ("coffer", "inventory", "bank" or
  *   null), message: the death-fee payment, Coffer first.
@@ -38,7 +38,7 @@ function state(query) {
       officeFee: held.items.reduce((sum, { id, amount }) => sum + Fees.officeFee(id, iron) * amount, 0),
     }
     : null;
-  query.office = Storage.office(player).map((entry) => ({ ...entry, fee: Fees.officeFee(entry.id, iron) }));
+  query.office = Storage.office(player).map((entry) => (entry ? { ...entry, fee: Fees.officeFee(entry.id, iron) } : null));
   query.coffer = Storage.coffer(player);
   query.style = Storage.style(player);
   query.metDeath = Storage.metDeath(player);
@@ -71,7 +71,7 @@ function officeTake(request) {
   if (taken <= 0) return;
   inventory.add(Common.toItem(entry, taken), true);
   entry.amount -= taken;
-  if (entry.amount <= 0) records.splice(slot, 1);
+  if (entry.amount <= 0) records[slot] = null;
   Storage.setOffice(player, records);
   request.taken = taken;
 }
