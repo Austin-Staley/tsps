@@ -728,7 +728,7 @@ module.exports = function registerRegicideQuest(api) {
       return;
     }
     if (location.z !== 0 || location.y !== 3250 || ![2259, 2263].includes(location.x) ||
-      (event.option && event.option !== "Cross")) return;
+      (event.option && event.option.toLowerCase() !== "cross")) return;
     event.handled = true;
     const sourceX = sourceLocation?.x ?? player.getLocation().getX();
     const destinationX = location.x === 2259

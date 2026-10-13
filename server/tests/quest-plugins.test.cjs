@@ -9271,7 +9271,7 @@ test('Regicide supports both cache Log balance endpoints on the Isafdar bridge',
       performAnimation: (animation) => state.animations.push(animation.getId()),
     };
     const event = {
-      player, objectId: api.core.ObjectIdentifiers.LOG_BALANCE_10, option: 'Cross',
+      player, objectId: api.core.ObjectIdentifiers.LOG_BALANCE_10, option: 'cross',
       location: { x: objectX, y: 3250, z: 0 }, sourceLocation: { x: sourceX, y: 3250, z: 0 }, handled: false,
     };
     interact(event);
