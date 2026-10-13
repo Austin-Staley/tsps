@@ -1816,6 +1816,7 @@ module.exports = function registerSongOfTheElves(api) {
       const player = event.player;
       ensureLibraryInstance(player);
       player.moveTo(new Location(2623, 6144, 0));
+      player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(player), player));
       player.sendMessage("You enter the Grand Library. Its doors seal behind you; find the Seal of the Forgotten in the central chamber.");
       return;
     }
@@ -1899,11 +1900,11 @@ module.exports = function registerSongOfTheElves(api) {
   }
 
   function inLibrary(player) {
-    return player.getArea?.() instanceof GrandLibraryArea;
+    return player?.getArea?.() instanceof GrandLibraryArea;
   }
 
   function librarySealMask(player) {
-    return Number(player.getAttribute(LIBRARY_SEALS)) || 0;
+    return Number(player?.getAttribute(LIBRARY_SEALS)) || 0;
   }
 
   function hasForgottenMemory(player) {
@@ -2089,6 +2090,7 @@ module.exports = function registerSongOfTheElves(api) {
     player.setAttribute(LIBRARY_CRYSTALS, colors.join(","));
     player.setAttribute(LIBRARY_PUZZLE, `${sealIndex}:0`);
     player.setAttribute(LIBRARY_PILLAR_STATE, "{}");
+    player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(player), player));
     player.sendMessage(`You collect ${mirrors} hand mirrors and the crystals needed to direct light to the Seal of ${seal.name[0].toUpperCase()}${seal.name.slice(1)}.`);
     return true;
   }
@@ -2145,6 +2147,7 @@ module.exports = function registerSongOfTheElves(api) {
       player.setAttribute(LIBRARY_PILLAR_STATE, JSON.stringify(placements));
     }
     player.setAttribute(LIBRARY_PUZZLE, `${sealIndex}:${next}`);
+    player.getPacketSender().sendVarbit(9016, nativeEarlyProgress(quest.getStage(player), player));
     player.sendMessage(next === seal.steps.length
       ? `The beam reaches the Seal of ${seal.name[0].toUpperCase()}${seal.name.slice(1)}. Touch it to receive the memory.`
       : "The light bends along the passage. Follow its new direction to the next pillar.");
@@ -3471,20 +3474,17 @@ module.exports = function registerSongOfTheElves(api) {
     if (value === 100) return 62;
     if (value === 120) return preparationProgress(player);
     if (value === 130) {
-      const mask = librarySealMask(player);
-      const completed = (((mask >>> 1) & 0xff).toString(2).match(/1/g) || []).length;
-      if (!(mask & 1)) return 92;
-      if (completed >= LIBRARY_SEAL_DATA.length) return 110;
-      // The current seal's puzzle occupies the even stage; touching it moves
-      // to the following odd stage. Supplying its tools marks puzzle entry.
-      const seal = LIBRARY_SEAL_DATA[completed];
-      const mirrors = seal.steps.filter(step => LIBRARY_OPERATIONS[step]).length;
-      const crystals = seal.steps.filter(step => LIBRARY_CRYSTAL_ITEMS[step]).join(",");
+      if (!hasForgottenMemory(player)) {
+        const location = player?.getLocation?.();
+        const inside = inLibrary(player) || location && location.getX() >= 2548 && location.getX() <= 2690 &&
+          location.getY() >= 6078 && location.getY() <= 6220 && location.getZ() <= 2;
+        return inside ? 92 : 90;
+      }
+      const index = currentLibrarySeal(player);
+      if (index < 0) return 110;
       const puzzle = libraryPuzzleState(player);
-      const supplied = puzzle.seal === completed &&
-        Number(player?.getAttribute(LIBRARY_MIRRORS)) === mirrors &&
-        String(player?.getAttribute(LIBRARY_CRYSTALS) ?? "") === crystals;
-      return 93 + completed * 2 + (supplied ? 1 : 0);
+      const solved = puzzle.seal === index && puzzle.step >= LIBRARY_SEAL_DATA[index].steps.length;
+      return 94 + index * 2 + (solved ? 1 : 0);
     }
     if (value === 110) return Number(player?.getAttribute(FALLS_PILLARS))===63 ? 70 : player?.getAttribute(FALLS_INTRODUCTION) === true ? 68 : player?.getAttribute(FALLS_DEPARTURE) === true ? 66 : 64;
     if (value === 140) return 110;

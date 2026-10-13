@@ -14812,22 +14812,26 @@ test('Song of the Elves native progress follows library seals and later source s
   const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
     .filter(entry => entry.key === 'song_of_the_elves').at(-1);
   const attrs = new Map();
-  const player = { getAttribute: key => attrs.get(key) };
+  let location = new api.core.Location(2353, 3172, 0);
+  const player = { getAttribute: key => attrs.get(key), getLocation: () => location };
   const progress = (stage, key, value) => {
     if (value === undefined) attrs.delete(key);
     else attrs.set(key, value);
     return quest.varbitValue(stage, player);
   };
   const seals = 'quest.song_of_the_elves.library-seals';
-  assert.equal(progress(130, seals, 0), 92);
-  assert.equal(progress(130, seals, 1), 93);
+  assert.equal(progress(130, seals, 0), 90, 'the guide is offered before entering');
+  location = new api.core.Location(2623, 6144, 0);
+  assert.equal(quest.varbitValue(130, player), 92, 'entry precedes the Forgotten memory');
+  assert.equal(progress(130, seals, 1), 94, 'the Forgotten memory starts Ithell');
   assert.equal(progress(130, 'quest.song_of_the_elves.library-mirrors', 13), 94);
-  assert.equal(progress(130, seals, 3), 95);
-  assert.equal(progress(130, 'quest.song_of_the_elves.library-mirrors', undefined), 95);
-  progress(130, 'quest.song_of_the_elves.library-mirrors', 7);
-  progress(130, 'quest.song_of_the_elves.library-crystals', 'red');
+  assert.equal(progress(130, 'quest.song_of_the_elves.library-puzzle', '0:13'), 95,
+    'the completed beam precedes touching the seal');
+  assert.equal(progress(130, seals, 3), 96, 'touching Ithell starts Cadarn');
+  assert.equal(progress(130, 'quest.song_of_the_elves.library-mirrors', undefined), 96);
   progress(130, 'quest.song_of_the_elves.library-puzzle', '1:0');
   assert.equal(quest.varbitValue(130, player), 96);
+  assert.equal(progress(130, 'quest.song_of_the_elves.library-puzzle', '1:8'), 97);
   assert.equal(progress(130, seals, 511), 110);
   assert.equal(quest.varbitValue(140, player), 110);
   assert.equal(quest.varbitValue(150, player), 112);
