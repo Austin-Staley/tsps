@@ -4089,6 +4089,13 @@ export class OsrsClient {
         this.widgetTransmitProcessor.processWidgetTransmits();
     }
 
+    /** Per frame: moves the cursor mouseover box to where the mouse is now (see WidgetTransmitProcessor). */
+    runMouseFollowingTimers(): void {
+        const input = this.inputManager;
+        if (!this.widgetTransmitProcessor || !input) return;
+        this.widgetTransmitProcessor.runMouseFollowingTimers(input.mouseX, input.mouseY);
+    }
+
     private applyMasterVolume(): void {
         this.audioVarp.applyMasterVolume();
     }

@@ -223,6 +223,7 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
             this.osrsClient.handleUiHover();
         }
         if (!this.uiHidden) {
+            this.osrsClient.runMouseFollowingTimers();
             // Update widget layout (CS2 positioning/sizing)
             this.osrsClient.updateWidgets();
         }
