@@ -4101,10 +4101,52 @@ test('Blood Moon hunt requires the crank, bookcase key and TOOLS shed code befor
   assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').foodShopDoorUnlocked, true);
   assert.deepEqual(sentVarbits.at(-1), [15583, 1], 'the recorded food-shop door unlock varbit is set');
   handlers.playerLogin.find((handler) => handler.name === 'syncBloodHuntDoorOnLogin')({ player });
-  assert.deepEqual(sentVarbits.at(-1), [15583, 1], 'the unlocked door state is restored on login');
+  assert.ok(sentVarbits.some(([id, value]) => id === 15583 && value === 1), 'the unlocked food-shop door state is restored on login');
+  const ids = api.core.ItemIdentifiers;
+  const toggle = (objectId, x, y) => {
+    const event = { player, objectId, location: { x, y, z: 0 }, handled: false };
+    toggleDoor(event);
+    return event;
+  };
+  const gatedDoors = [
+    { id: api.core.ObjectIdentifiers.VITUR_DOOR, x: 2612, y: 7853, item: ids.VITUR_KEY, flag: 'viturManorDoor', varbit: 15580 },
+    { id: api.core.ObjectIdentifiers.VITUR_DOOR_2, x: 2612, y: 7852, item: ids.VITUR_KEY, flag: 'viturManorDoor', varbit: 15580 },
+    { id: 61840, x: 2590, y: 7818, item: ids.BOLT_CUTTERS, flag: 'chainCut', varbit: 15586, consumes: true },
+    { id: api.core.ObjectIdentifiers.MYRMEL_DOOR, x: 2599, y: 7826, item: ids.MYRMEL_KEY, flag: 'pubDoorUnlocked', varbit: 15571 },
+    { id: api.core.ObjectIdentifiers.SHADUM_DOOR_3, x: 2614, y: 7814, item: ids.SHADUM_KEY, flag: 'shadumDoorUnlocked', varbit: 15578 },
+    { id: api.core.ObjectIdentifiers.JOVKAI_DOOR, x: 2580, y: 7812, item: ids.JOVKAI_KEY, flag: 'jovkaiDoorUnlocked', varbit: 15569 },
+    { id: api.core.ObjectIdentifiers.MYRMEL_DOOR_3, x: 2580, y: 7835, item: ids.MYRMEL_KEY, flag: 'bankDoorUnlocked', varbit: 15575, extra: [ids.TRAPDOOR_KEY, ids.CRANK_WHEEL] },
+    { id: 61848, x: 2579, y: 7830, item: ids.TRAPDOOR_KEY, flag: 'trapdoorUnlocked', varbit: 15585, consumes: true, crank: true },
+  ];
+  for (const entry of gatedDoors) {
+    inventory.deleteNumber(entry.item, 100);
+    if (entry.extra) entry.extra.forEach((item) => inventory.adds(item, 1));
+    if (entry.crank) {
+      inventory.adds(ids.CRANK_WHEEL, 1);
+      attributes.set('quest.the_blood_moon_rises.blood-hunt', { ...(attributes.get('quest.the_blood_moon_rises.blood-hunt') ?? {}), bankCrank: true });
+    }
+    attributes.set('quest.the_blood_moon_rises.blood-hunt', { ...(attributes.get('quest.the_blood_moon_rises.blood-hunt') ?? {}), [entry.flag]: false });
+    const denied = toggle(entry.id, entry.x, entry.y);
+    assert.equal(denied.handled, true, `locked ${entry.flag} door refuses generic Open without its item`);
+    assert.equal(inventory.contains(entry.item), false, `a denied ${entry.flag} interaction does not grant its required item`);
+    inventory.adds(entry.item, 1);
+    const before = counts.get(entry.item) ?? 0;
+    const unlocked = toggle(entry.id, entry.x, entry.y);
+    assert.equal(unlocked.handled, false, `a valid ${entry.flag} interaction continues to generic door handling`);
+    assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt')[entry.flag], true, `${entry.flag} is saved`);
+    assert.deepEqual(sentVarbits.at(-1), [entry.varbit, 1], `${entry.flag} sets the captured unlock varbit`);
+    assert.equal(counts.get(entry.item) ?? 0, before - (entry.consumes ? 1 : 0), `${entry.flag} consumes only a captured single-use tool`);
+    const repeatedCount = counts.get(entry.item) ?? 0;
+    assert.equal(toggle(entry.id, entry.x, entry.y).handled, false, `opened ${entry.flag} can use the normal close/open path`);
+    assert.equal(counts.get(entry.item) ?? 0, repeatedCount, `repeating ${entry.flag} never consumes a second item`);
+  }
+  attributes.set('quest.the_blood_moon_rises.blood-hunt', { ...(attributes.get('quest.the_blood_moon_rises.blood-hunt') ?? {}), chainCut: true });
+  inventory.adds(ids.BOLT_CUTTERS, 1);
+  handlers.playerLogin.find((handler) => handler.name === 'syncBloodHuntDoorOnLogin')({ player });
+  assert.equal(inventory.contains(ids.BOLT_CUTTERS), false, 'a saved cut chain reconciles the legacy unconsumed cutters on login');
+  assert.ok(sentVarbits.some(([id, value]) => id === 15586 && value === 1), 'the cut-chain transform is restored on login');
   const hunt = handlers.objects.find((handler) => handler.name === 'handleBloodHuntObjects');
   const interact = (x, y) => hunt({ player, location: { x, y, z: 0 }, handled: false });
-  const ids = api.core.ItemIdentifiers;
   inventory.adds(ids.CRANK_WHEEL, 1);
   interact(2588, 7855);
   interact(2585, 7861);

@@ -22,6 +22,16 @@ module.exports = function registerTheBloodMoonRises(api) {
   const CASTLE_LAB_NOTES = ItemIdentifiers.LAB_NOTES;
   const HUNT_ATTRIBUTE = "quest.the_blood_moon_rises.blood-hunt";
   const HUNT_FOOD_SHOP_DOOR_VARBIT = 15583;
+  const HUNT_DOOR_VARBITS = Object.freeze({
+    viturManorDoor: 15580,
+    foodShopDoorUnlocked: HUNT_FOOD_SHOP_DOOR_VARBIT,
+    chainCut: 15586,
+    pubDoorUnlocked: 15571,
+    shadumDoorUnlocked: 15578,
+    bankDoorUnlocked: 15575,
+    trapdoorUnlocked: 15585,
+    jovkaiDoorUnlocked: 15569,
+  });
   const BLOOD_HUNT_SCENE_ARRIVAL = Object.freeze({ x: 2576, y: 7838, z: 0 });
   const BLOOD_HUNT_PARTY_ARRIVAL = Object.freeze({ x: 2633, y: 7827, z: 0 });
   const BLOOD_HUNT_PARTY = Object.freeze([
@@ -5891,22 +5901,50 @@ module.exports = function registerTheBloodMoonRises(api) {
     const player = event?.player;
     const { x, y, z } = event?.location ?? {};
     if (!player || quest.isComplete(player) || ![STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(player)) ||
-      event.objectId !== ObjectIdentifiers.VITUR_DOOR_4 || x !== 2598 || y !== 7843 || z !== 0) return;
+      z !== 0) return;
     const state = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
-    if (!state.foodShopDoorUnlocked && !hasItem(player, HUNT_ITEMS.viturKey)) {
+    const inventory = player.getInventory();
+    const id = event.objectId;
+    const doors = [
+      { x: 2612, y: 7853, ids: [ObjectIdentifiers.VITUR_DOOR], item: HUNT_ITEMS.viturKey, flag: "viturManorDoor", varbit: HUNT_DOOR_VARBITS.viturManorDoor, name: "The Vitur manor is locked. Find the key in the bookcase north-west of the crank." },
+      { x: 2612, y: 7852, ids: [ObjectIdentifiers.VITUR_DOOR_2], item: HUNT_ITEMS.viturKey, flag: "viturManorDoor", varbit: HUNT_DOOR_VARBITS.viturManorDoor, name: "The door is locked. You need the Vitur key." },
+      { x: 2598, y: 7843, ids: [ObjectIdentifiers.VITUR_DOOR_4], item: HUNT_ITEMS.viturKey, flag: "foodShopDoorUnlocked", varbit: HUNT_DOOR_VARBITS.foodShopDoorUnlocked, name: "The door is locked. You need the Vitur key." },
+      { x: 2590, y: 7818, ids: [61840, ObjectIdentifiers.CHAINED_DOOR], item: HUNT_ITEMS.boltCutters, flag: "chainCut", varbit: HUNT_DOOR_VARBITS.chainCut, consume: true, name: "The clothes-shop door is chained shut. You need bolt cutters.", success: "You cut the chain on the door using the bolt cutters. Seeing no further use for them, you discard the bolt cutters." },
+      { x: 2599, y: 7826, ids: [ObjectIdentifiers.MYRMEL_DOOR], item: HUNT_ITEMS.myrmelKey, flag: "pubDoorUnlocked", varbit: HUNT_DOOR_VARBITS.pubDoorUnlocked, name: "The pub door is locked. Join the two halves of the key to make a Myrmel key." },
+      { x: 2614, y: 7814, ids: [ObjectIdentifiers.SHADUM_DOOR_3], item: HUNT_ITEMS.shadumKey, flag: "shadumDoorUnlocked", varbit: HUNT_DOOR_VARBITS.shadumDoorUnlocked, name: "The house is locked. The barrel in the Myrmel pub may hold a key." },
+      { x: 2580, y: 7812, ids: [ObjectIdentifiers.JOVKAI_DOOR], item: HUNT_ITEMS.jovkaiKey, flag: "jovkaiDoorUnlocked", varbit: HUNT_DOOR_VARBITS.jovkaiDoorUnlocked, name: "The smithy is locked. Search the altar chest for its key." },
+      { x: 2580, y: 7835, ids: [ObjectIdentifiers.MYRMEL_DOOR_3], item: HUNT_ITEMS.myrmelKey, flag: "bankDoorUnlocked", varbit: HUNT_DOOR_VARBITS.bankDoorUnlocked, name: "The bank requires the Myrmel key, trapdoor key, and crank wheel.", extra: () => inventory.contains(HUNT_ITEMS.trapdoorKey) && inventory.contains(HUNT_ITEMS.crank) },
+      { x: 2579, y: 7830, ids: [61848], item: HUNT_ITEMS.trapdoorKey, flag: "trapdoorUnlocked", varbit: HUNT_DOOR_VARBITS.trapdoorUnlocked, consume: true, name: "The trapdoor is locked. Find its key and operate the bank crank.", extra: () => Boolean(state.bankCrank) },
+    ];
+    const door = doors.find((entry) => entry.x === x && entry.y === y && entry.ids.includes(id));
+    if (!door) return;
+    if (state[door.flag]) return;
+    if (!inventory.contains(door.item) || (door.extra && !door.extra())) {
       event.handled = true;
-      player.sendMessage("The door is locked. You need the Vitur key.");
+      player.sendMessage(door.name);
       return;
     }
-    if (!state.foodShopDoorUnlocked) player.setAttribute(HUNT_ATTRIBUTE, { ...state, foodShopDoorUnlocked: true });
-    player.getPacketSender().sendVarbit(HUNT_FOOD_SHOP_DOOR_VARBIT, 1);
+    if (door.consume) inventory.deleteNumber(door.item, 1);
+    player.setAttribute(HUNT_ATTRIBUTE, { ...state, [door.flag]: true, ...(door.flag === "trapdoorUnlocked" ? { enteredTrapdoor: true } : {}) });
+    player.getPacketSender().sendVarbit(door.varbit, 1);
+    if (door.success) player.sendMessage(door.success);
+    else player.sendMessage(`You unlock the door using the ${door.flag === "viturManorDoor" || door.flag === "foodShopDoorUnlocked" ? "Vitur" : door.flag === "pubDoorUnlocked" || door.flag === "bankDoorUnlocked" ? "Myrmel" : door.flag === "shadumDoorUnlocked" ? "Shadum" : door.flag === "jovkaiDoorUnlocked" ? "Jovkai" : "trapdoor"} key.`);
   }
 
   function syncBloodHuntDoorOnLogin(event) {
     const player = event?.player ?? event;
     if (!player) return;
     const state = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
-    player.getPacketSender().sendVarbit(HUNT_FOOD_SHOP_DOOR_VARBIT, state.foodShopDoorUnlocked ? 1 : 0);
+    // Early versions recorded the chain as cut before the scene varbit was updated and
+    // left the single-use cutters in the backpack. Reconcile that saved state to the
+    // captured result (the chain is gone and the cutters are discarded).
+    if (state.chainCut) {
+      const inventory = player.getInventory?.();
+      if (inventory?.contains?.(HUNT_ITEMS.boltCutters)) inventory.deleteNumber(HUNT_ITEMS.boltCutters, 1);
+    }
+    for (const [flag, varbit] of Object.entries(HUNT_DOOR_VARBITS)) {
+      player.getPacketSender().sendVarbit(varbit, state[flag] ? 1 : 0);
+    }
   }
 
   function promptHuntCode(player, kind) {
@@ -5948,12 +5986,6 @@ module.exports = function registerTheBloodMoonRises(api) {
     const locked = (message) => { event.handled = true; player.sendMessage(message); };
     if (x === 2612 && y === 7853 && !has(HUNT_ITEMS.viturKey)) return locked("The Vitur manor is locked. Find the key in the bookcase north-west of the crank.");
     if ((x === 2612 && y === 7852 || x === 2598 && y === 7843) && !has(HUNT_ITEMS.viturKey)) return locked("The door is locked. You need the Vitur key.");
-    if (x === 2590 && y === 7818) {
-      if (!has(HUNT_ITEMS.boltCutters)) return locked("The clothes-shop door is chained shut. You need bolt cutters.");
-      player.setAttribute(HUNT_ATTRIBUTE, { ...state, chainCut: true });
-      player.sendMessage("You cut through the chain on the clothes-shop door.");
-      return;
-    }
     if (x === 2599 && y === 7826 && !has(HUNT_ITEMS.myrmelKey)) return locked("The pub door is locked. Join the two halves of the key to make a Myrmel key.");
     if (x === 2614 && y === 7814 && !has(HUNT_ITEMS.shadumKey)) return locked("The house is locked. The barrel in the Myrmel pub may hold a key.");
     if (x === 2580 && y === 7812 && !has(HUNT_ITEMS.jovkaiKey)) return locked("The smithy is locked. Search the altar chest for its key.");
@@ -5968,7 +6000,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       return;
     }
     if (x === 2579 && y === 7830) {
-      if (!has(HUNT_ITEMS.trapdoorKey) || !state.bankCrank) return locked("The trapdoor is locked. Find its key and operate the bank crank.");
+      if (!state.trapdoorUnlocked) return locked("The trapdoor is locked. Find its key and operate the bank crank.");
       player.setAttribute(HUNT_ATTRIBUTE, { ...state, enteredTrapdoor: true });
       return;
     }
