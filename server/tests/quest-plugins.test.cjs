@@ -6360,6 +6360,10 @@ test('Desert Treasure II final trial spawns on reachable cache floor beside the 
   };
   quest.setStage(player, 11);
   player.setAttribute('desert-treasure-ii:final-cutscene-started', true);
+  handlers.playerLogin.at(-1)({ player });
+  assert.equal(player.getAttribute('desert-treasure-ii:final-room'), undefined,
+    'a completed reveal marker alone leaves the player outside until the real vault interaction');
+  assert.equal(added.length, 0, 'login does not begin an unprepared trial automatically');
   const smith = handlers.npcInteractions.get('Asgarnia Smith')['Talk-to'];
   smith({ player, npcId: api.core.NpcIdentifiers.ASGARNIA_SMITH });
 

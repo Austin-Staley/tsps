@@ -3373,6 +3373,7 @@ module.exports = function registerDesertTreasureII(api) {
       ensurePrescott(p);
     }
     if (stage(p) === S.FINALE && p.getAttribute("desert-treasure-ii:final-cutscene-started")
+      && p.getAttribute(FINAL_WIGHTS_STARTED) === true
       && !p.getAttribute(FINAL_WIGHTS_COMPLETE)) {
       enterFinalRoom(p);
       // The official sequence resets if the player leaves the chamber.
