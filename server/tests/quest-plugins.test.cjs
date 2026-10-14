@@ -844,6 +844,30 @@ test('The Blood Moon Rises starts only after Sarius accepts the yes choice and r
   assert.equal(reclaimed, 1, 'the explicit option delegates to Night at the Theatre’s inventory-safe reclaim event');
 });
 
+test('Blood Moon unique supplies are consumable only during the Vampyrium chapters', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+  };
+  const checkArea = handlers.custom.get('potions:area').at(-1);
+
+  for (const [stage, expected] of [[0, false], [45, true], [100, true], [110, false]]) {
+    quest.setStage(player, stage);
+    const request = { player, area: 'vampyrium', inside: false };
+    checkArea(request);
+    assert.equal(request.inside, expected, `quest stage ${stage}`);
+  }
+  const unrelated = { player, area: 'chambers-of-xeric', inside: false };
+  checkArea(unrelated);
+  assert.equal(unrelated.inside, false, 'the BMR hook leaves other area-limited potions alone');
+});
+
 test('Blood Moon Sarius spawn is reachable from the Sins boat shore landing', () => {
   const spawns = require('../data/definitions/npc-spawns.json')
     .filter((spawn) => [15838, 15839].includes(spawn.id) || spawn.name === 'Sarius Guile');

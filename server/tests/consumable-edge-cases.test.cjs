@@ -80,6 +80,7 @@ test("combining never mixes potion variants, notes or the same slot", () => {
 function createPlayer({ base = 99, current = 1, inventory = [], equipment = [] } = {}) {
   const levels = new Map(Skill.values().map((skill) => [skill, current]));
   const attributes = new Map();
+  let runEnergy = 0;
   const poisonImmunity = {
     seconds: 0,
     startedAt: 0,
@@ -98,11 +99,13 @@ function createPlayer({ base = 99, current = 1, inventory = [], equipment = [] }
     setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => ({ contains: (id) => inventory.includes(id) }),
     getEquipment: () => ({ contains: (id) => equipment.includes(id) }),
-    getPacketSender: () => ({ sendSound() { return this; }, sendPoisonType() {} }),
+    getPacketSender: () => ({ sendSound() { return this; }, sendPoisonType() {}, sendRunEnergy() {} }),
     getSession: () => ({ sendClientPacket() {} }),
     setHitpoints(value) { levels.set(Skill.HITPOINTS, value); },
     setPoisonDamage(value) { player.poisonDamage = value; },
     setVenomed(value) { player.venomed = value; },
+    getRunEnergy: () => runEnergy,
+    setRunEnergy(value) { runEnergy = value; },
     sendMessage() {},
     getCombat: () => ({ getPoisonImmunityTimer: () => poisonImmunity }),
     getSkillManager: () => ({
@@ -357,6 +360,54 @@ test("alcohol registrations load and apply their Wiki boosts", () => {
   Potions._test.findPotionEntry(ItemIdentifiers.DWARVEN_STOUT).potion.effect(stout);
   assert.equal(stout.levels.get(Skill.MINING), 100);
   assert.equal(stout.levels.get(Skill.SMITHING), 100);
+});
+
+test("Vampyrium supplies use the shared potion registry and their documented effects", () => {
+  const I = ItemIdentifiers;
+  const rank = Potions._test.findPotionEntry(I.RANK_FROTHY_POTION_4_);
+  const foul = Potions._test.findPotionEntry(I.FOUL_CHUNKY_POTION_4_);
+  const rancid = Potions._test.findPotionEntry(I.RANCID_SLIMY_POTION_4_);
+  const jar = Potions._test.findPotionEntry(I.JAR_OF_CONGEALED_BLOOD);
+  for (const entry of [rank, foul, rancid, jar]) {
+    assert.ok(entry, "each cache item is a registered consumable");
+    assert.equal(entry.potion.area, "vampyrium", "the supplies are limited to Vampyrium");
+  }
+  assert.equal(rank.replacementId, I.RANK_FROTHY_POTION_3_);
+  assert.equal(foul.replacementId, I.FOUL_CHUNKY_POTION_3_);
+  assert.equal(rancid.replacementId, I.RANCID_SLIMY_POTION_3_);
+  assert.equal(jar.replacementId, -1, "the one-use jar leaves no vial");
+
+  const boosted = createPlayer({ base: 99, current: 99 });
+  rank.potion.effect(boosted);
+  assert.deepEqual([Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE].map((skill) => boosted.levels.get(skill)), [118, 118, 118]);
+
+  const restored = createPlayer({ base: 99, current: 50 });
+  restored.levels.set(Skill.ATTACK, 80);
+  restored.levels.set(Skill.PRAYER, 1);
+  const hpBefore = restored.levels.get(Skill.HITPOINTS);
+  foul.potion.effect(restored);
+  assert.equal(restored.levels.get(Skill.ATTACK), 99, "foul chunky restores lowered stats");
+  assert.equal(restored.levels.get(Skill.PRAYER), 33, "it restores prayer like a super restore");
+  assert.equal(restored.levels.get(Skill.HITPOINTS), hpBefore, "it does not heal Hitpoints");
+  assert.ok(restored.getAttribute("potions:prayer-regen:state"), "it starts prayer regeneration");
+
+  const brew = createPlayer({ base: 99, current: 99 });
+  rancid.potion.effect(brew);
+  assert.equal(brew.levels.get(Skill.HITPOINTS), 115, "rancid slimy overheals by 15% + 2");
+  assert.equal(brew.levels.get(Skill.DEFENCE), 120, "it boosts Defence by 20% + 2");
+  for (const skill of [Skill.ATTACK, Skill.STRENGTH, Skill.MAGIC, Skill.RANGED]) {
+    assert.equal(brew.levels.get(skill), 98, "it drains each offensive stat by only one level");
+  }
+
+  const wounded = createPlayer({ base: 99, current: 59 });
+  rancid.potion.effect(wounded);
+  assert.equal(wounded.levels.get(Skill.HITPOINTS), 75, "a wounded player heals by 15% + 2 instead of jumping to the boosted cap");
+
+  const healed = createPlayer({ base: 99, current: 1 });
+  jar.potion.effect(healed);
+  assert.equal(healed.levels.get(Skill.HITPOINTS), 99);
+  assert.equal(healed.levels.get(Skill.PRAYER), 99);
+  assert.equal(healed.getRunEnergy(), 100, "the edible jar also restores run energy");
 });
 
 test("curing poison also clears the sticky venom flag", () => {

@@ -2613,6 +2613,11 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function stage(player) { return quest.getStage(player); }
+
+  function handleVampyriumPotionArea(request) {
+    if (request?.area !== "vampyrium" || !request.player) return;
+    request.inside = stage(request.player) >= STAGE.CASTLE && stage(request.player) <= STAGE.FINAL;
+  }
   function isAtSinsMedallionHideout(event) {
     const location = event?.location ?? event?.npc?.getLocation?.();
     const x = location?.getX?.() ?? location?.x;
@@ -6219,6 +6224,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     play: (player, npc, variant) => startTranscript(api, player, npc, PAGE, variant) });
   api.persistAttribute(ATTRIBUTE);
   api.onCustomEvent("npc-dialogue:hook", onStartHook);
+  api.onCustomEvent("potions:area", handleVampyriumPotionArea);
   api.onCustomEvent("npc-dialogue:action", onTranscriptAction);
   api.onCustomEvent("quest:stage-changed", syncHideoutIvan);
   api.onCustomEvent("quest:stage-changed", syncSlepeIvan);
