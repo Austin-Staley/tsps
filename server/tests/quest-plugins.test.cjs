@@ -1205,6 +1205,27 @@ test('Blood Moon shrine returns to the Castle lobby before the Vampyrium portal 
     location: { x: 2323, y: 7370, z: 0 }, option: 'Enter', handled: false };
   assert.equal(returnPortal(returnEvent), true, 'the separate return portal handles the native stage-80 retreat attempt');
   assert.equal(returnEvent.handled, true);
+
+  // The same legitimately unlocked medallion remains the ordinary route back
+  // to the siege after a death outside the private Vampyrium area.
+  quest.setStage(player, 70);
+  attributes.set('quest.the_blood_moon_rises.castle-native-stage', 122);
+  attributes.set('quest.the_blood_moon_rises.siege-defence', { phase: 'breach', integrity: 0 });
+  api.lastPrompt = [];
+  assert.equal(medallion({ player, itemId: 22400 }), true);
+  const siegeOption = api.lastPrompt.findIndex((entry, index) => index % 2 === 0 && entry === 'Castle Drakan.');
+  assert.notEqual(siegeOption, -1, 'the prayed-at shrine remains available during the siege chapter');
+  api.lastPrompt[siegeOption + 1]();
+  assert.deepEqual([position.getX(), position.getY(), position.getZ()], [3167, 7707, 0]);
+  assert.equal(quest.getStage(player), 70, 'the medallion does not alter the earned siege stage');
+  const siegePortalEvent = { player, objectId: 61216, definition: { id: 61216 },
+    location: { x: 3161, y: 7710, z: 0 }, option: 'Enter', handled: false };
+  assert.equal(enter(siegePortalEvent), true, 'the cache portal is usable to return from the public bank');
+  assert.equal(siegePortalEvent.handled, true);
+  assert.deepEqual(moved.at(-1), [2322, 7370, 0]);
+  assert.equal(quest.getStage(player), 70, 'returning to the Vampyrium lobby does not change quest progress');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 1);
+  assert.equal(varbits.get(15464), 122);
 });
 
 test('Blood Moon repairs only the legacy Castle NPC-marker landing without changing quest progress', () => {

@@ -3038,8 +3038,8 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.getAttribute(CASTLE_SHRINE_ATTRIBUTE) ? 1 : 0);
   }
 
-  function syncCastleRoom(player, facing) {
-    if (!player || stage(player) !== STAGE.CASTLE) return;
+  function syncCastleRoom(player, facing, duringSiege = false) {
+    if (!player || (stage(player) !== STAGE.CASTLE && !(duringSiege && stage(player) === STAGE.SIEGE))) return;
     const room = Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) || CASTLE_ROOM.LOBBY;
     const floor = Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) || CASTLE_GROUND_FLOOR;
     player.setAttribute(CASTLE_ROOM_ATTRIBUTE, room);
@@ -4624,7 +4624,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   function addCastleMedallionDestination(event) {
     const player = event?.player;
     if (!player || !Array.isArray(event.destinations) ||
-      stage(player) < STAGE.SLEPE || stage(player) > STAGE.CASTLE ||
+      stage(player) < STAGE.SLEPE || stage(player) > STAGE.SIEGE ||
       !slepeStory(player).refineryComplete || !player.getAttribute(CASTLE_SHRINE_ATTRIBUTE)) return;
     event.destinations.push({
       label: "Castle Drakan.",
@@ -4640,7 +4640,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     const y = tile?.y ?? tile?.getY?.();
     const z = tile?.z ?? tile?.getZ?.();
     const currentStage = player && stage(player);
-    if (!player || quest.isComplete(player) || currentStage < STAGE.SLEPE || currentStage > STAGE.CASTLE ||
+    if (!player || quest.isComplete(player) || currentStage < STAGE.SLEPE || currentStage > STAGE.SIEGE ||
       !slepeStory(player).refineryComplete || !player.getAttribute(CASTLE_SHRINE_ATTRIBUTE) ||
       id !== CASTLE_VAMPYRIUM_ENTRY.id || x !== CASTLE_VAMPYRIUM_ENTRY.x ||
       y !== CASTLE_VAMPYRIUM_ENTRY.y || z !== CASTLE_VAMPYRIUM_ENTRY.z ||
@@ -4662,6 +4662,12 @@ module.exports = function registerTheBloodMoonRises(api) {
         CASTLE_VAMPYRIUM_ARRIVAL.z));
       player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.LOBBY);
       syncCastleRoom(player);
+    } else if (currentStage === STAGE.SIEGE) {
+      player.moveTo(new Location(CASTLE_VAMPYRIUM_ARRIVAL.x, CASTLE_VAMPYRIUM_ARRIVAL.y,
+        CASTLE_VAMPYRIUM_ARRIVAL.z));
+      player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.LOBBY);
+      syncCastleRoom(player, undefined, true);
+      player.getPacketSender().sendVarbit(15464, nativeStage(STAGE.SIEGE, player));
     }
     return true;
   }
