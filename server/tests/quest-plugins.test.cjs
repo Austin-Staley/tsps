@@ -2199,6 +2199,9 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
   const player = {
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
+    isPlayer: () => true,
+    getAsPlayer() { return this; },
+    getLocation: () => new api.core.Location(2588, 7854, 0),
     getInventory: () => inventory,
     getEquipment: () => ({ contains: () => false }),
     getSkillManager: () => ({ getMaxLevel: () => 99 }),
@@ -4038,6 +4041,24 @@ test('Blood Moon gallery chest arrow puzzle resets mistakes and gives the cresce
 
 test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house and chapel puzzles', () => {
   const { api, handlers } = mockApi();
+  const spawnedNpcDefinitions = [];
+  const spawnedNpcActors = [];
+  api.spawnNpc = definition => {
+    spawnedNpcDefinitions.push(definition);
+    const npc = {
+      id: definition.id, definition, removed: false,
+      getId() { return this.id; }, getIndex() { return spawnedNpcActors.indexOf(this) + 9000; },
+      getOwner() { return definition.owner; }, getHitpoints() { return this.hitpoints ?? 100; },
+      getArea() { return null; },
+      setMaxHitpoints(value) { this.maxHitpoints = value; }, setHitpoints(value) { this.hitpoints = value; },
+      setMultiCombat(value) { this.multi = value; }, setScriptedMovement(value) { this.scripted = value; },
+      isDestroyed() { return this.removed; }, isPlayer() { return false; }, isNpc() { return true; }, getAsNpc() { return this; },
+      getLocation() { return player.getLocation(); },
+    };
+    spawnedNpcActors.push(npc);
+    return npc;
+  };
+  api.removeNpc = npc => { npc.removed = true; };
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
   const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
   const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
@@ -4050,9 +4071,13 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
   };
   const sentVarbits = [];
   const messages = [];
+  let pursuitArea, pursuer, crankHeadbar;
   const player = {
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
+    isPlayer: () => true,
+    getAsPlayer() { return this; },
+    getLocation: () => new api.core.Location(2588, 7854, 0),
     getInventory: () => inventory,
     getPacketSender: () => new Proxy({ sendVarbit: (id, value) => sentVarbits.push([id, value]) }, {
       get: (target, key) => target[key] ?? (() => {}),
@@ -4157,6 +4182,17 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
     assert.equal(sentVarbits.filter(([id]) => id === 15595).at(-1)?.[1], turn, `fancy-house crank updates its cached progress at turn ${turn}`);
     assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').fancyHouseDoorUnlocked, undefined,
       `turn ${turn} does not release the door early`);
+    if (turn === 1) {
+      assert.deepEqual(spawnedNpcDefinitions.slice(-2).map(({ id }) => id), [16227, 16228],
+        'the first turn creates captured Lowerniel and crank-progress owner NPCs');
+      pursuitArea = handlers.area.find(area => area.getName?.() === 'Blood Moon Sangvesti Pursuit');
+      assert.ok(pursuitArea, 'the pursuit runs only while a player is in the bounded Sangvesti area');
+      pursuer = spawnedNpcActors.at(-2);
+      crankHeadbar = spawnedNpcActors.at(-1);
+      assert.equal(pursuitArea.canAttack(player, pursuer), true, 'the quest owner can fight the pursuer');
+      assert.equal(pursuitArea.canAttack({ getAsPlayer: () => ({}) }, pursuer), false,
+        'other players cannot attack the owner-only pursuer');
+    }
   }
   assert.equal(toggle(61844, 2587, 7857).handled, true, 'nine turns are not enough to enter the fancy house');
   interact(2588, 7855, api.core.ObjectIdentifiers.CRANK_BASE, 'operate');
@@ -4201,12 +4237,22 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
     ...(attributes.get('quest.the_blood_moon_rises.blood-hunt') ?? {}),
     bankCrank: false, bankCrankStarted: false, bankCrankTurns: 0, innerBankDoorUnlocked: false,
   });
+  inventory.deleteNumber(ids.CRANK_WHEEL, 100);
+  inventory.adds(ids.CRANK_WHEEL, 1);
   const innerGate = toggle(61854, 2580, 7832);
   assert.equal(innerGate.handled, true, 'the inner bank gate is still locked before operating its crank');
+  inventory.deleteNumber(ids.TRAPDOOR_KEY, 100);
+  interact(2582, 7834, api.core.ObjectIdentifiers.CRANK_BASE_2, 'operate');
+  assert.equal(inventory.contains(ids.CRANK_WHEEL), true, 'a rejected attempt preserves the crank wheel');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').bankCrankStarted, false,
+    'a rejected attempt does not record a crank turn');
+  inventory.adds(ids.TRAPDOOR_KEY, 1);
   for (let turn = 1; turn <= 10; turn++) {
     interact(2582, 7834, api.core.ObjectIdentifiers.CRANK_BASE_2, 'operate');
     assert.equal(sentVarbits.filter(([id]) => id === 15594).at(-1)?.[1], turn, `bank crank reports progress at turn ${turn}`);
     assert.equal(sentVarbits.filter(([id]) => id === 15595).at(-1)?.[1], turn, `bank crank reports cached progress at turn ${turn}`);
+    assert.equal(inventory.contains(ids.CRANK_WHEEL), turn < 10,
+      `the wheel remains available until the tenth bank-crank turn (${turn})`);
   }
   assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').bankCrank, true, 'the bank crank opens the inner gate after ten turns');
   assert.equal(toggle(61854, 2580, 7832).handled, false, 'the completed bank crank allows the interior gate to open');
@@ -4221,6 +4267,9 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
   assert.deepEqual(sentVarbits.slice(-1), [[15596, 1]], 'solving the chest sets its native puzzle varbit');
   assert.equal(toggle(61847, 2581, 7842).handled, false, 'solving the chest unlocks the chapel back door');
   assert.deepEqual(sentVarbits.slice(-1), [[15591, 1]], 'opening the chapel back door sets its captured varbit');
+  pursuitArea.postLeave({ isPlayer: () => true, getAsPlayer: () => player });
+  assert.equal(pursuer.removed, true, 'leaving the Sangvesti area cleans up the private pursuer');
+  assert.equal(crankHeadbar.removed, true, 'leaving also cleans up the crank progress actor');
   interact(2582, 7817);
   assert.equal(inventory.contains(ids.OLD_COG), true, 'the smithy provides the old cog after the key');
   quest.setStage(player, 45);
