@@ -7978,8 +7978,8 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.match(player.messages.at(-1), /sealed district/);
     player.location = new core.Location(2656, 6386, 0);
     playerProcesses[0]({ player });
-    assert.equal(player.location.getX(), 2656, 'the cathedral approach stays gated until all six teleporters are active');
-    assert.equal(attrs.get('desert-treasure-ii:lassar').cameTo, undefined);
+    assert.equal(player.location.getX(), 2648, 'the first cathedral approach reaches Ketla before all teleporters are active');
+    assert.equal(attrs.get('desert-treasure-ii:lassar').cameTo, true);
     const pickup = (itemId, x, y) => groundPickupHooks[0]({ player, groundItemId: itemId, location: { x, y, z: 0 } });
     playerProcesses[0]({ player });
     assert.equal(groundSpawns.at(-1)[1].getId(), core.ItemIdentifiers.SHADOW_BLOCKER_SCHEMATIC,
@@ -8004,8 +8004,8 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     }
     player.location = new core.Location(2656, 6386, 0);
     playerProcesses[0]({ player });
-    assert.equal(player.location.getX(), 2648, 'the real QH cathedral approach triggers the blackout to Ketla’s house');
-    assert.equal(player.location.getY(), 6442);
+    assert.equal(player.location.getX(), 2656, 'returning to the cathedral does not repeat the introductory blackout');
+    assert.equal(player.location.getY(), 6386);
     assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-after-coming-to');
     playerProcesses[0]({ player });
     assert.ok(spawnedNpcs.some((npc) => npc.id === core.NpcIdentifiers.KETLA && npc.x === 2648 && npc.y === 6442

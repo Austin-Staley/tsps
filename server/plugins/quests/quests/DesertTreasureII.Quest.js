@@ -4346,8 +4346,7 @@ module.exports = function registerDesertTreasureII(api) {
     if (lassarState.cameTo && position
       && Math.abs(position.getX?.() - 2648) <= 16 && Math.abs(position.getY?.() - 6442) <= 16
       && (position.getZ?.() ?? 0) === 0) ensureLassarKetla(p);
-    if (!lassarState.cameTo && (lassarState.teleporters ?? []).slice(0, 6).length === 6
-      && lassarState.teleporters.slice(0, 6).every(Boolean)
+    if (lassarState.entered && !lassarState.cameTo
       && position?.getX?.() === 2656 && position?.getY?.() === 6386 && position?.getZ?.() === 0) {
       setLassar(p, { ...lassarState, cameTo: true });
       p.moveTo(new api.core.Location(2648, 6442, 0));
