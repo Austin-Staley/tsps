@@ -6623,10 +6623,21 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     while (current.__dt2FinalWightTicks < 7) area.process(p);
     assert.match(messages.join(' '), /throws a poison vial/, 'the Assassin visibly warns before the vial attack');
     assert.equal(pendingHits.some(hit => hit.damage === 30), false, 'the vial does not hit on its warning tick');
+    const firstVial = current.__dt2FinalWightPending.find(shot => shot.type === 'assassin-vial');
+    p.location = area.tile(firstVial.x + 1, firstVial.y, firstVial.z);
     area.process(p);
-    assert.equal(pendingHits.some(hit => hit.damage === 30), false, 'the vial does not hit one tick after its warning');
+    assert.equal(pendingHits.some(hit => hit.damage === 30), false, 'moving off the marked tile prevents damage one tick after warning');
     area.process(p);
-    assert.ok(pendingHits.some(hit => hit.damage === 30), 'the vial impacts two ticks after its warning if the player stays');
+    assert.equal(pendingHits.some(hit => hit.damage === 30), false, 'the escaped player remains safe when the vial impacts two ticks after warning');
+    pendingHits.length = 0;
+    messages.length = 0;
+    while (current.__dt2FinalWightTicks < 14) area.process(p);
+    assert.match(messages.join(' '), /throws a poison vial/, 'the Assassin repeats the warned volley');
+    assert.equal(pendingHits.some(hit => hit.damage === 30), false, 'the second vial also waits through its warning tick');
+    area.process(p);
+    assert.equal(pendingHits.some(hit => hit.damage === 30), false, 'the second vial gives one full movement tick');
+    area.process(p);
+    assert.ok(pendingHits.some(hit => hit.damage === 30), 'the vial hits on its second full tick when the player stays on the mark');
     deaths[0]({ killer: p, npc: current });
 
     current = boss(wightIds[1]);
