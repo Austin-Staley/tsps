@@ -7895,6 +7895,19 @@ module.exports = function registerDesertTreasureII(api) {
     const location = event?.location;
     const x = location?.getX?.() ?? location?.x;
     const y = location?.getY?.() ?? location?.y;
+    // Gate/Open is owned by Doors before the quest object hook runs.
+    if (stage(p) === S.WHISPERER && state.drainEntered
+      && x === 2784 && y === 6287 && (location?.getZ?.() ?? location?.z) === 1
+      && event.objectId === 48301 && event.clickType === 1) {
+      if (!has(p, I.STRANGE_ICON)) {
+        p.sendMessage("The cistern gate is marked with the icon. Carry it to pass.");
+        event.handled = true;
+        return;
+      }
+      setLassar(p, { ...state, drainGateOpen: true, iconUsed: true });
+      // Leave the cache door's movement and collision to the shared handler.
+      return;
+    }
     if (stage(p) === S.WHISPERER && state.inShadow && !state.pubOpened
       && (x === 2384 || x === 2385) && (y === 6427 || y === 6428)
       && [O.DOORS_21, O.DOORS_22, O.DOORS_29, O.DOORS_30, O.DOORS_31, O.DOORS_32].includes(event.objectId)

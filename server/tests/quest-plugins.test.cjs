@@ -9457,6 +9457,19 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(interact({ player, objectId: 49488, definition: { id: 49488 }, location: { x: 2654, y: 6422, z: 0 }, option: 'Enter' }), true,
       'the real five-by-five drain dispatches from its cached southwest object anchor');
     assert.equal(player.location.x, 2784);
+    const cisternGate = { player, objectId: 48301, location: new core.Location(2784, 6287, 1),
+      clickType: 1, handled: false };
+    counts.set(core.ItemIdentifiers.STRANGE_ICON, 0);
+    doorToggleHooks[0](cisternGate);
+    assert.equal(cisternGate.handled, true, 'the first shared gate handler enforces the carried icon');
+    assert.notEqual(attrs.get('desert-treasure-ii:lassar').drainGateOpen, true);
+    counts.set(core.ItemIdentifiers.STRANGE_ICON, 1);
+    cisternGate.handled = false;
+    doorToggleHooks[0](cisternGate);
+    assert.equal(cisternGate.handled, false, 'the earned icon lets Doors open the actual gate');
+    assert.equal(attrs.get('desert-treasure-ii:lassar').drainGateOpen, true);
+    assert.equal(attrs.get('desert-treasure-ii:lassar').iconUsed, true, 'icon use is saved before the shared gate opens');
+    assert.ok(varbits.get(15126) >= 36, 'gate progress does not regress a later Lassar checkpoint');
     assert.equal(interact({ player, objectId: 48301, definition: { id: 48301 }, location: { x: 2784, y: 6287, z: 1 }, option: 'Open' }), false,
       'the quest records icon use but lets the shared Doors plugin open the cache gate');
     assert.equal(attrs.get('desert-treasure-ii:lassar').drainGateOpen, true,
