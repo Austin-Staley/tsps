@@ -3741,10 +3741,13 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     assert.ok(screechHit >= 15 && screechHit <= 20, 'an active overhead takes the Wiki screech hit');
     assert.deepEqual(attackDelays, [3], 'the screech delays the next player attack');
 
+    const beforeEightyPercent = transcriptStarts;
     boss.hitpoints = 600;
     assert.equal(boss.getHitpoints() / boss.getMaxHitpoints(), 600 / 1100);
     worldCycle += 3;
     bossArea.process(boss);
+    assert.equal(transcriptStarts, beforeEightyPercent + 1,
+      'a hit that crosses 80% starts the Wyrd cutscene before the next attack');
     worldCycle += 5;
     bossArea.process(boss);
     worldCycle += 5;
@@ -3762,6 +3765,13 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     bossArea.process(boss);
     assert.ok(graphics.some(([id]) => id === 3861), 'the blast uses lightning to clear an escape lane');
 
+    const beforeFiftyPercent = transcriptStarts;
+    boss.hitpoints = 549;
+    worldCycle++;
+    bossArea.process(boss);
+    assert.equal(transcriptStarts, beforeFiftyPercent + 1,
+      'crossing 50% starts the Wyrd cutscene before the next attack');
+
     boss.hitpoints = 0;
     const beforeDeath = handlers.npcBeforeDeath.find((handler) => handler.name === 'handleWyrdBeforeDeath');
     assert.equal(typeof beforeDeath, 'function', 'the Wyrd guards the narrative threshold before NPCDeathTask');
@@ -3775,6 +3785,41 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     api.core.World.getProcessCycle = oldCycle;
     Math.random = originalRandom;
   }
+});
+
+test('Blood Moon recovers an unfinished Wyrd room after relog to the real ruins entrance', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.stage', 90],
+  ]);
+  let location = new api.core.Location(2965, 7457, 0);
+  const messages = [];
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => location,
+    moveTo: destination => { location = destination; },
+    sendMessage: message => messages.push(message),
+  };
+  const recover = handlers.playerLogin.find(handler => handler.name === 'recoverWyrdEncounterOnLogin');
+  assert.equal(typeof recover, 'function');
+
+  recover({ player });
+  assert.deepEqual([location.getX(), location.getY(), location.getZ()], [3506, 9838, 0]);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.wyrd-area'), null);
+  assert.match(messages[0], /Veliaf waits outside the ruins/);
+
+  location = new api.core.Location(2965, 7457, 0);
+  attributes.set('quest.the_blood_moon_rises.stage', 95);
+  recover({ player });
+  assert.deepEqual([location.getX(), location.getY(), location.getZ()], [2965, 7457, 0],
+    'completed Wyrd progress must not be moved back to the encounter entrance');
+  attributes.set('quest.the_blood_moon_rises.stage', 90);
+  location = new api.core.Location(3505, 9838, 0);
+  recover({ player });
+  assert.deepEqual([location.getX(), location.getY(), location.getZ()], [3505, 9838, 0],
+    'ordinary positions outside the lost instance are left alone');
 });
 
 test('Blood Moon stage 90 Veliaf message gives the Hallowed flail once and requires room', () => {

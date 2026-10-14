@@ -1459,6 +1459,37 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
   }
 
+  function cleanupWyrdEncounter({ player } = {}) {
+    if (!player) return;
+    const area = player.getAttribute(WYRD_AREA_ATTRIBUTE);
+    const encounter = area && wyrdEncounters.get(area);
+    if (encounter) {
+      encounter.finished = true;
+      clearWyrdPools(encounter, false);
+      api.removeNpc(encounter.boss);
+      area.leave(player, false);
+      wyrdEncounters.delete(area);
+    }
+    player.setAttribute(WYRD_AREA_ATTRIBUTE, null);
+  }
+
+  function recoverWyrdEncounterOnLogin({ player } = {}) {
+    if (!player || stage(player) !== STAGE.WYRDS) return;
+    const location = player.getLocation?.();
+    const x = location?.getX?.() ?? location?.x;
+    const y = location?.getY?.() ?? location?.y;
+    const z = location?.getZ?.() ?? location?.z;
+    // The Wyrd's combat room is process-local. A restart can restore the saved
+    // instance tile without its NPC/area, so return only that unfinished stage
+    // to Veliaf's real ruins entrance and let the normal transcript restart it.
+    if (z !== 0 || x < 2944 || x > 3007 || y < 7424 || y > 7487) return;
+    const area = player.getAttribute(WYRD_AREA_ATTRIBUTE);
+    if (area && area.isDestroyed?.() !== true) return;
+    player.setAttribute(WYRD_AREA_ATTRIBUTE, null);
+    player.moveTo(new Location(3506, 9838, 0));
+    player.sendMessage("The Wyrd is no longer here. Veliaf waits outside the ruins so you can try again.");
+  }
+
   function inspectWyrdFence(event) {
     const player = event?.player;
     const name = String(event?.definition?.getName?.() ?? "").toLowerCase();
@@ -5470,6 +5501,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerProcess(processSlepeProgress);
   api.onPlayerProcess(processCastleDialogueTransition);
   api.onPlayerLogin(handleSiegeLogin);
+  api.onPlayerLogin(recoverWyrdEncounterOnLogin);
   api.onPlayerLogin(syncHideoutIvan);
   api.onPlayerLogin(syncSlepeIvan);
   api.onPlayerLogin(syncSlepeRoy);
@@ -5480,6 +5512,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogin(syncCastleRoomOnLogin);
   api.onPlayerLogout(cleanupCastleActors);
   api.onPlayerLogout(handleSiegeLogout);
+  api.onPlayerLogout(cleanupWyrdEncounter);
   api.onPlayerLogout(hideoutDefense.onPlayerLogout);
   api.onPlayerLogout(cleanupSlepeIvan);
   api.onPlayerLogout(cleanupSlepeManor);
