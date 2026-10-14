@@ -45,6 +45,7 @@ function mockApi() {
     npcDeath: [],
     npcHitModify: [],
     combatHitRoll: [],
+    canBankItem: [],
   };
   const noop = () => {};
   const base = {
@@ -71,6 +72,7 @@ function mockApi() {
     onNpcDeath: h => handlers.npcDeath.push(h),
     onNpcHitModify: (h) => handlers.npcHitModify.push(h),
     onCombatHitRoll: h => handlers.combatHitRoll.push(h),
+    onCanBankItem: h => handlers.canBankItem.push(h),
     onItemOnItem: (h) => handlers.itemOnItem.push(h),
     onItemOnNpc: (h) => handlers.itemOnNpc.push(h),
     onItemOnObject: (...args) => handlers.itemOnObject.push(typeof args[0] === 'function' ? args[0] : args[2]),
@@ -108,6 +110,23 @@ test('Quests.plugin registers every quest through api.core without throwing', ()
   const plugin = require('../plugins/quests/Quests.plugin');
   assert.equal(plugin.name, 'Quests');
   assert.doesNotThrow(() => plugin.register(api));
+});
+
+test('DT2 medallions cannot be banked while ordinary items remain bankable', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  assert.equal(handlers.canBankItem.length, 1);
+  const ids = api.core.ItemIdentifiers;
+  const player = { messages: [], sendMessage(message) { this.messages.push(message); } };
+  for (const id of [ids.VARDORVIS_MEDALLION, ids.PERSERIYAS_MEDALLION, ids.SUCELLUS_MEDALLION, ids.WHISPERERS_MEDALLION]) {
+    const event = { player, item: new api.core.Item(id), allow: null };
+    handlers.canBankItem[0](event);
+    assert.equal(event.allow, false, `medallion ${id} should remain outside the bank`);
+  }
+  const rune = { player, item: new api.core.Item(ids.AIR_RUNE), allow: null };
+  handlers.canBankItem[0](rune);
+  assert.equal(rune.allow, null, 'ordinary items keep the normal bank policy');
+  assert.equal(player.messages.length, 4);
 });
 
 test('completed Desert Treasure I players can ask Rasolo for a replacement Ring of Visibility', () => {

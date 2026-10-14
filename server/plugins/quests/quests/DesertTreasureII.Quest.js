@@ -94,6 +94,11 @@ module.exports = function registerDesertTreasureII(api) {
   const IDS = [I.VARDORVIS_MEDALLION, I.PERSERIYAS_MEDALLION, I.SUCELLUS_MEDALLION, I.WHISPERERS_MEDALLION];
   const STATUE_ITEMS = [I.VARDORVIS_MEDALLION, I.WHISPERERS_MEDALLION, I.SUCELLUS_MEDALLION, I.PERSERIYAS_MEDALLION];
   const STATUES_PLACED = "desert-treasure-ii:medallions-placed";
+  function preventBankingMedallions(event) {
+    if (!IDS.includes(event.item?.getId?.())) return;
+    event.allow = false;
+    event.player.sendMessage("The medallion cannot be placed in the bank.");
+  }
   // Cache morphs in the Ancient Vault have no operation text, but the server
   // still dispatches their underlying object ids. The plaque is a separate
   // interaction and must also be read before the names are known.
@@ -8270,6 +8275,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onGroundItemPickup(handleLassarGroundItemPickup);
   api.onItemOnItem(handleItemOnItem, { noted: false });
   api.onItemAction(handleItemAction);
+  api.onCanBankItem(preventBankingMedallions);
   api.onCustomEvent("player:widget-action", onWidgetAction);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onNpcDialogueCondition(resolveGolemSearchCondition);
