@@ -4048,12 +4048,16 @@ test('Blood Moon hunt requires the crank, bookcase key and TOOLS shed code befor
     adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
     deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
   };
+  const sentVarbits = [];
+  const messages = [];
   const player = {
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => inventory,
-    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
-    sendMessage() {},
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => sentVarbits.push([id, value]) }, {
+      get: (target, key) => target[key] ?? (() => {}),
+    }),
+    sendMessage: (message) => messages.push(message),
   };
   quest.setStage(player, 50);
   const route = handlers.routes.find((handler) => handler.name === 'routeBloodHuntObjects');
@@ -4061,17 +4065,36 @@ test('Blood Moon hunt requires the crank, bookcase key and TOOLS shed code befor
   bookcaseRoute.object.getLocation = () => ({ getX: () => 2585, getY: () => 7861, getZ: () => 0 });
   route(bookcaseRoute);
   assert.deepEqual(bookcaseRoute.destination, { x: 2584, y: 7862, z: 0 }, 'the bookcase is approached from its reachable southern side');
-  let spawned = null;
+  const spawned = [];
   api.getItemOnGroundManager = () => ({
     getGroundItem: () => null,
-    registerLocation: (_who, item, tile) => { spawned = { item, tile }; },
+    registerLocation: (_who, item, tile) => { spawned.push({ item, tile }); },
   });
   player.getUsername = () => 'BloodHuntFixture';
   player.isPlayerBot = () => false;
   player.getPrivateArea = () => null;
   handlers.playerProcess.find((handler) => handler.name === 'syncHuntGroundItems')({ player });
-  assert.equal(spawned.item.id, api.core.ItemIdentifiers.CRANK_WHEEL, 'the crank wheel spawns at the mapped hunt tile');
-  assert.deepEqual([spawned.tile.getX(), spawned.tile.getY(), spawned.tile.getZ()], [2603, 7847, 0]);
+  assert.deepEqual(spawned.map(({ item, tile }) => [item.id, tile.getX(), tile.getY(), tile.getZ()]), [
+    [api.core.ItemIdentifiers.CRANK_WHEEL, 2603, 7847, 0],
+    [api.core.ItemIdentifiers.TOOTH_HALF_OF_KEY_6, 2600, 7845, 0],
+  ], 'both captured hunt items spawn at their real pickup tiles');
+  inventory.adds(api.core.ItemIdentifiers.TOOTH_HALF_OF_KEY_6, 1);
+  handlers.playerProcess.find((handler) => handler.name === 'syncHuntGroundItems')({ player });
+  assert.equal(spawned.filter(({ item }) => item.id === api.core.ItemIdentifiers.TOOTH_HALF_OF_KEY_6).length, 1,
+    'the tooth half is not duplicated after pickup');
+  inventory.deleteNumber(api.core.ItemIdentifiers.TOOTH_HALF_OF_KEY_6, 1);
+  const toggleDoor = handlers.custom.get('door:toggle').at(-1);
+  const foodShopDoor = { player, objectId: api.core.ObjectIdentifiers.VITUR_DOOR_4, location: { x: 2598, y: 7843, z: 0 }, handled: false };
+  toggleDoor(foodShopDoor);
+  assert.equal(foodShopDoor.handled, true, 'the Vitur door stays locked without the key');
+  inventory.adds(api.core.ItemIdentifiers.VITUR_KEY, 1);
+  foodShopDoor.handled = false;
+  toggleDoor(foodShopDoor);
+  assert.equal(foodShopDoor.handled, false, 'the keyed door continues into normal door handling');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').foodShopDoorUnlocked, true);
+  assert.deepEqual(sentVarbits.at(-1), [15583, 1], 'the recorded food-shop door unlock varbit is set');
+  handlers.playerLogin.find((handler) => handler.name === 'syncBloodHuntDoorOnLogin')({ player });
+  assert.deepEqual(sentVarbits.at(-1), [15583, 1], 'the unlocked door state is restored on login');
   const hunt = handlers.objects.find((handler) => handler.name === 'handleBloodHuntObjects');
   const interact = (x, y) => hunt({ player, location: { x, y, z: 0 }, handled: false });
   const ids = api.core.ItemIdentifiers;
@@ -4089,7 +4112,10 @@ test('Blood Moon hunt requires the crank, bookcase key and TOOLS shed code befor
   assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').shedOpen, true);
   interact(2616, 7855);
   assert.equal(inventory.contains(ids.BOLT_CUTTERS), true, 'the opened shed provides the bolt cutters');
-  interact(2600, 7845);
+  const table = { player, location: { x: 2600, y: 7845, z: 0 }, handled: false };
+  hunt(table);
+  assert.equal(table.handled, false, 'the actionless table cannot award the captured ground item by itself');
+  inventory.adds(ids.TOOTH_HALF_OF_KEY_6, 1); // The real ground-item pickup is covered by object-reach.test.cjs.
   interact(2590, 7818);
   interact(2588, 7816);
   assert.equal(inventory.contains(ids.TOOTH_HALF_OF_KEY_6), true);

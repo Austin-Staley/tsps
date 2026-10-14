@@ -925,6 +925,22 @@ test('the Gnome Ball pitch gate 2394 rotates in place and closes back onto its w
   }
 });
 
+test('the Blood Moon Vitur food-shop door opens through the normal door handler', () => {
+  const id = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers.VITUR_DOOR_4;
+  const h = buildHarness({ cacheObjects: new Map([[id, {
+    name: 'Vitur door', actions: ['Open'], models: [[60959]],
+  }]]) });
+  try {
+    assert.ok(h.handlers.get('Vitur door')?.Open, 'the cache name is registered by the shared Doors plugin');
+    assert.deepEqual(h.click(id, 2598, 7843, 3, 'Open', 'Vitur door'), [
+      ['register', id, 2598, 7842, 0],
+      ['deregister', id, 2598, 7843, 3],
+    ], 'the self-opening door rotates away from the door tile just as recorded');
+  } finally {
+    h.restore();
+  }
+});
+
 
 test('the catacomb outer jail gate uses its actionless open cache variant and auto-closes', () => {
  const h=buildHarness();try{

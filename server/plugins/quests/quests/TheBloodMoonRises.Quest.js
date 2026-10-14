@@ -21,6 +21,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const REFINER_ATTRIBUTE = "quest.the_blood_moon_rises.castle-refiner";
   const CASTLE_LAB_NOTES = ItemIdentifiers.LAB_NOTES;
   const HUNT_ATTRIBUTE = "quest.the_blood_moon_rises.blood-hunt";
+  const HUNT_FOOD_SHOP_DOOR_VARBIT = 15583;
   const BLOOD_HUNT_SCENE_ARRIVAL = Object.freeze({ x: 2576, y: 7838, z: 0 });
   const BLOOD_HUNT_PARTY_ARRIVAL = Object.freeze({ x: 2633, y: 7827, z: 0 });
   const BLOOD_HUNT_PARTY = Object.freeze([
@@ -5865,11 +5866,39 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!player || player.isPlayerBot?.() === true ||
       ![STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(player))) return;
     const hunt = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
-    if (hunt.crankStarted || hasItem(player, HUNT_ITEMS.crank)) return;
     const manager = api.getItemOnGroundManager();
-    const tile = new Location(2603, 7847, 0);
-    if (!manager?.registerLocation || manager.getGroundItem(player.getUsername(), HUNT_ITEMS.crank, tile, player.getPrivateArea?.() ?? null)) return;
-    manager.registerLocation(player, new Item(HUNT_ITEMS.crank, 1), tile);
+    if (!manager?.registerLocation) return;
+    const area = player.getPrivateArea?.() ?? null;
+    const drops = [
+      { id: HUNT_ITEMS.crank, tile: new Location(2603, 7847, 0), claimed: hunt.crankStarted },
+      { id: HUNT_ITEMS.toothHalf, tile: new Location(2600, 7845, 0), claimed: hasItem(player, HUNT_ITEMS.myrmelKey) },
+    ];
+    for (const { id, tile, claimed } of drops) {
+      if (claimed || hasItem(player, id) || manager.getGroundItem(player.getUsername(), id, tile, area)) continue;
+      manager.registerLocation(player, new Item(id, 1), tile);
+    }
+  }
+
+  function handleBloodHuntDoorToggle(event) {
+    const player = event?.player;
+    const { x, y, z } = event?.location ?? {};
+    if (!player || quest.isComplete(player) || ![STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(player)) ||
+      event.objectId !== ObjectIdentifiers.VITUR_DOOR_4 || x !== 2598 || y !== 7843 || z !== 0) return;
+    const state = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
+    if (!state.foodShopDoorUnlocked && !hasItem(player, HUNT_ITEMS.viturKey)) {
+      event.handled = true;
+      player.sendMessage("The door is locked. You need the Vitur key.");
+      return;
+    }
+    if (!state.foodShopDoorUnlocked) player.setAttribute(HUNT_ATTRIBUTE, { ...state, foodShopDoorUnlocked: true });
+    player.getPacketSender().sendVarbit(HUNT_FOOD_SHOP_DOOR_VARBIT, 1);
+  }
+
+  function syncBloodHuntDoorOnLogin(event) {
+    const player = event?.player ?? event;
+    if (!player) return;
+    const state = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
+    player.getPacketSender().sendVarbit(HUNT_FOOD_SHOP_DOOR_VARBIT, state.foodShopDoorUnlocked ? 1 : 0);
   }
 
   function promptHuntCode(player, kind) {
@@ -5954,13 +5983,6 @@ module.exports = function registerTheBloodMoonRises(api) {
       if (!inventory.contains(HUNT_ITEMS.viturKey)) { player.sendMessage("The shed lock needs the Vitur key."); return; }
       if (!state.shedOpen) promptHuntCode(player, "shed");
       else if (!inventory.contains(HUNT_ITEMS.boltCutters)) inventory.adds(HUNT_ITEMS.boltCutters, 1);
-      return;
-    }
-    if (x === 2600 && y === 7845) {
-      event.handled = true;
-      if (!inventory.contains(HUNT_ITEMS.viturKey)) { player.sendMessage("The manor's doors are locked. Find the Vitur key in the bookcase north-west of here."); return; }
-      if (!inventory.contains(HUNT_ITEMS.toothHalf)) inventory.adds(HUNT_ITEMS.toothHalf, 1);
-      player.sendMessage("You take the tooth half of a key from the table.");
       return;
     }
     if (x === 2588 && y === 7816) {
@@ -6536,6 +6558,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onItemAction("Ivandis' writings", { Read: readIvandisWritings });
   api.onNpcInteraction("Aranei", { Heal: healSiegeAranei });
   api.onPlayerProcess(syncHuntGroundItems);
+  api.onCustomEvent("door:toggle", handleBloodHuntDoorToggle);
   api.onPlayerProcess(processSlepeIvan);
   api.onPlayerProcess(processSlepeManor);
   api.onPlayerProcess(processSlepeProgress);
@@ -6551,6 +6574,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogin(resumeHideoutEscape);
   api.onPlayerLogin(syncCastleShrine);
   api.onPlayerLogin(recoverBloodHuntLanding);
+  api.onPlayerLogin(syncBloodHuntDoorOnLogin);
   api.onPlayerLogin(syncBloodHuntPartyOnLogin);
   api.onPlayerLogin(syncCastleRoomOnLogin);
   api.onPlayerLogin(syncCastleChapelPortalOnLogin);

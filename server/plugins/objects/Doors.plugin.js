@@ -27,6 +27,7 @@ const DOOR_NAMES = new Set([
   "Door", "Doors", "Large door", "Large doors", "Castle door", "Cell Door", "Cell door",
   "Glass door", "Magic door", "Metal door", "Mind Door", "Mithril door", "Tent door", "Wall",
   "Gate", "Metal gate", "Doorway", "Tree Door", "Storeroom Door", "Ardougne Wall Door",
+  "Vitur door",
 ]);
 
 // Always name locs by their core.ObjectIdentifiers property (O.DOOR_358), never a raw id: the
@@ -48,6 +49,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
   SELF_OPENING_DOOR_IDS = new Set([O.DOOR_223, O.DOOR_225, O.DOOR_226, O.DOOR_227, O.DOOR_228, O.DOOR_229, O.DOOR_230, O.DOOR_231, O.DOOR_358, O.GATE_52, O.WALL_9, O.DOOR_115, O.LARGE_DOOR_23,
     // The Blood Moon Rises crank-wheel house exit (61824) has no cache Close partner.
     O.DOOR_831,
+    // The Vitur food-shop door (61838) also has no cache Close partner.
+    O.VITUR_DOOR_4,
     // The two Ardougne Wall Door loc variants swing open by rotating the same cache loc.
     O.ARDOUGNE_WALL_DOOR, O.ARDOUGNE_WALL_DOOR_2,
     // Ghorrock Prison's western gate has no separate open loc in the cache.
