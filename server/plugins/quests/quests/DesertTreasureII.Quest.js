@@ -2083,7 +2083,8 @@ module.exports = function registerDesertTreasureII(api) {
     boss.__dt2PerstenPortals = portals.filter(portal => portal.isRegistered?.() && portal.getHitpoints?.() > 0);
     if (boss.__dt2PerstenPortals.length >= 2) return;
     const x = 3296 + (boss.__dt2PerstenPortals.length ? 3 : -3);
-    const portal = spawnFinalWightActor(player, area, FINAL_WIGHT_PORTAL, x, 6414, 30);
+    // Keep portals inside the arena: entrance 48892 clips the separate foyer.
+    const portal = spawnFinalWightActor(player, area, FINAL_WIGHT_PORTAL, x, 6431, 30);
     if (!portal) return;
     portal.__dt2PerstenPortal = true;
     boss.__dt2FinalWightActors.push(portal);

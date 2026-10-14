@@ -8084,7 +8084,7 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     for (let tick = 0; tick < 60; tick++) area.process(p);
     assert.equal(current.lastAttackResetCount, 60, 'Persten cannot regain generic idle HP during the private trial');
     assert.ok(pendingHits.some(hit => hit.damage === 30), 'Persten lightning hits the warned tile if the player stays');
-    assert.equal(current.__dt2PerstenPortals.length, 1, 'Persten skips the second portal anchor when cache collision marks that tile blocked');
+    assert.equal(current.__dt2PerstenPortals.length, 2, 'Persten can spawn both portals on reachable cache-backed entrance tiles');
     const leech = queue.find(npc => npc.id === 12335 && npc.owner === p);
     assert.ok(leech, 'the portal spawns a wighted leech');
     assert.equal(leech.__dt2WightLeech, true, 'the spawned actor is tagged for its special attack rules');
@@ -8129,10 +8129,13 @@ test('Desert Treasure II final trial spawns on reachable cache floor beside the 
     ...api.core,
     NPC: { create(id, location) {
       return {
-        id, location, setOwner(owner) { this.owner = owner; }, setOwnerOnly() {},
+        id, location, hp: 200, maxHp: 200,
+        setOwner(owner) { this.owner = owner; }, setOwnerOnly() {},
         setArea(area) { this.area = area; }, getArea() { return this.area; }, getLocation() { return this.location; },
-        getOwner() { return this.owner; }, isRegistered() { return false; }, isNpc() { return true; }, getAsNpc() { return this; },
-        getCombat() { return { attack: target => combatTargets.push({ npc: this, target }) }; },
+        getOwner() { return this.owner; }, isRegistered() { return true; }, isNpc() { return true; }, getAsNpc() { return this; },
+        setMaxHitpoints(value) { this.maxHp = value; }, setHitpoints(value) { this.hp = value; },
+        getHitpoints() { return this.hp; }, getMaxHitpoints() { return this.maxHp; },
+        getCombat() { return { attack: target => combatTargets.push({ npc: this, target }), getLastAttack: () => ({ reset() {} }) }; },
       };
     } },
     World: { getAddNPCQueue: () => added, getRemoveNPCQueue: () => [] },
@@ -8186,9 +8189,49 @@ test('Desert Treasure II final trial spawns on reachable cache floor beside the 
     assert.ok(RegionManager.canMove(playerTile.getX(), playerTile.getY(), bossTile.getX(), bossTile.getY(), 0, 1, 1, area),
       'the cache collision allows the player to route to the wight');
 
+    // Advance the owned wight sequence through the same death hook the live fight uses.
+    for (let index = 0; index < 3; index++) {
+      const current = added.findLast(npc => npc.__dt2FinalWight === index);
+      assert.ok(current, `wight ${index} is spawned in the owner’s final vault`);
+      handlers.npcDeath.at(-1)({ killer: player, npc: current });
+    }
+    const persten = added.findLast(npc => npc.__dt2FinalWight === 3);
+    assert.ok(persten, 'the normal third death starts Persten in the same private vault');
+    for (let tick = 0; tick < 60; tick++) area.process(player);
+    assert.equal(persten.__dt2PerstenPortals.length, 2, 'Persten creates both portal adds during its normal process cycle');
+    const portals = persten.__dt2PerstenPortals.map(portal => portal.getLocation());
+    assert.deepEqual(portals.map(location => [location.getX() - area.getBaseX(), location.getY() - area.getBaseY()])
+      .sort((left, right) => left[0] - right[0]), [[29, 31], [35, 31]],
+    'the portal anchors are on the cache-backed entrance edge of the copied vault');
+    const leech = added.find(npc => npc.id === 12335 && npc.getOwner?.() === player);
+    assert.ok(leech, 'a portal spawns its ordinary leech during the encounter');
+    const canReach = (start, destination) => {
+      const key = (x, y) => `${x},${y}`;
+      const startX = start.getX?.() ?? start.x, startY = start.getY?.() ?? start.y;
+      const goalX = destination.getX?.() ?? destination.x, goalY = destination.getY?.() ?? destination.y;
+      const queue = [[startX, startY]], seen = new Set([key(startX, startY)]);
+      for (let index = 0; index < queue.length; index++) {
+        const [x, y] = queue[index];
+        if (x === goalX && y === goalY) return true;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy, next = key(nx, ny);
+          if (seen.has(next) || nx < area.getBaseX() || nx >= area.getBaseX() + 56
+            || ny < area.getBaseY() || ny >= area.getBaseY() + 64) continue;
+          if (!RegionManager.canMove(x, y, nx, ny, 0, 1, 1, area)) continue;
+          seen.add(next);
+          queue.push([nx, ny]);
+        }
+      }
+      return false;
+    };
+    assert.ok(portals.every(portal => canReach(persten.getLocation(), portal)),
+      'both portals are reachable from Persten’s real final-room spawn through copied cache collision');
+    assert.ok(canReach(persten.getLocation(), leech.getLocation()),
+      'the actual leech spawn is reachable from Persten’s real final-room spawn through copied cache collision');
+
     handlers.playerLogin.at(-1)({ player });
-    assert.equal(sentVarbits.filter(([id]) => id === 14862).at(-1)?.[1], 102,
-      'the active Assassin attempt is reflected in native quest progress');
+    assert.equal(sentVarbits.filter(([id]) => id === 14862).at(-1)?.[1], 108,
+      'the active Persten attempt is reflected in native quest progress');
     area.leave(player, false); // A normal teleport/retreat leaves the private area.
     assert.equal(player.getAttribute('desert-treasure-ii:final-cutscene-started'), true,
       'retreat preserves the earned reveal');

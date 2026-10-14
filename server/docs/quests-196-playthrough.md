@@ -1,6 +1,6 @@
 # Issue 196 play-through checkpoint
 
-This draft includes all seven remaining quests from [issue 196](https://github.com/RSPSApp/tsps/issues/196). While Guthix Sleeps, A Night at the Theatre, Dragon Slayer II, Recipe for Disaster and Song of the Elves have completed the documented MCP route and reward checks. Desert Treasure II and The Blood Moon Rises remain under connected play-through verification. Historical checkpoints below record the evidence and limitations at each step; the latest checkpoint is at the end.
+This draft includes all seven remaining quests from [issue 196](https://github.com/RSPSApp/tsps/issues/196). While Guthix Sleeps, A Night at the Theatre, Dragon Slayer II, Recipe for Disaster, Song of the Elves and The Blood Moon Rises have completed the documented MCP route and reward checks. Desert Treasure II remains under connected finale verification. Blood Moon coverage uses disclosed component/checkpoint continuations rather than one fresh-account end-to-end run. Historical checkpoints below record the evidence and limitations at each step; the latest checkpoint is at the end.
 
 ## While Guthix Sleeps
 
@@ -486,3 +486,10 @@ The Assassin's third-vial marker was never consumed by the encounter. Its compos
 ### DT2 final-trial retreat and login recovery
 
 The normal Glory retreat exposed a stale unfinished-trial flag: leaving destroyed the private room, but public login recreated the Assassin without asking Smith. The owner-scoped final-vault leave callback now resets only an unfinished attempt and synchronizes native102→100, preserving the earned reveal, medallions and quest stage. Login repairs legacy public saves without spawning a wight; the real Smith interaction starts the retry. Repeated leave callbacks and logout/death cleanup preserve the earned reveal, while leaving a completed trial preserves its aftermath state. Three focused final-trial checks and all **1,059/1,059 selected server checks across37 suites pass** (`/tmp/quests-196-dt2-retreat-focused.log`, `/tmp/quests-196-dt2-retreat-full-tests.log`). The original connected four-wight victory and rewards remain pending.
+
+
+### Original DT2 first three wights and reachable Persten portals
+
+The original earned actor's connected trial now defeats the Assassin, Ketla and Kasonde through real attacks, prayers, food and potions. Retry17 reaches Persten at native108, with96HP; it grants no quest state, target items or combat HP. Ketla's clones provide both charged-shot shelters and despawn on her actual defeat. Retry15 also records the actual third-vial ranged follow-up: cue214, Protect from Missiles enabled216, captured animation7617 at217 and unchangedHP101 through219. Evidence: `/tmp/dt2-earned-final-wights-controller-ketla-tank-safeescape-retry15.jsonl` and `...retry17.jsonl`.
+
+Persten's current portals were placed at source3293/3299,6414 in a disconnected foyer behind clipped entrance48892, so the actor could not approach them from the arena. The normal Glory retreat returns108→100 and logs out successfully (`/tmp/dt2-earned-persten-portal-retreat17.log`). Both portal anchors now use source6431, on the arena side of the entrance. The real cached-instance regression advances the three death hooks to Persten, spawns both portals and a leech through encounter processing, then proves their tiles are reachable from the fight spawn with RegionManager movement checks. Three focused checks and **1,059/1,059 selected server checks across37 suites pass** (`/tmp/quests-196-dt2-portals-focused.log`, `/tmp/quests-196-dt2-portals-full-tests.log`). Exact entrance offsets remain cache-backed placements pending a matching OSRS capture. The original four-wight victory/rewards remain pending.
