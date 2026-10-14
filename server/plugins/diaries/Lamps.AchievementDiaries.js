@@ -3,14 +3,10 @@
  * rub, choose a skill on the xpreward interface (plugins/interface/XpReward.plugin.js) - which
  * offers only skills at the lamp's level - and gain the lamp's experience.
  */
-const { LAMPS } = require("./DiaryData");
+const { LAMPS } = require("./Data.AchievementDiaries");
 
 const pending = new WeakMap();
 let pluginApi;
-
-function bind(api) {
-  pluginApi = api;
-}
 
 function rub({ player, item, itemId, slot }) {
   const lamp = LAMPS.get(itemId);
@@ -42,4 +38,9 @@ function grant(player, request, skill, name = skill.getName()) {
   return `You have been awarded ${request.lamp.xp.toLocaleString("en-GB")} ${name} XP!`;
 }
 
-module.exports = { bind, rub, grant };
+module.exports = function attachLamps(api) {
+  pluginApi = api;
+  api.onItemAction("Antique lamp", { Rub: rub });
+};
+
+Object.assign(module.exports, { rub, grant });

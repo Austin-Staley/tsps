@@ -18,6 +18,10 @@ api.emitCustomEvent("diary:task", { player, diary: "ardougne", task: "steal-a-ca
 // For effects: is a tier finished?
 const request = { player, diary: "ardougne", tier: "hard" };
 api.emitCustomEvent("diary:is-complete", request); // request.complete
+
+// For capes that need them all: is every tier of every diary finished?
+const all = { player };
+api.emitCustomEvent("diary:all-complete", all); // all.complete
 ```
 
 - **Diary keys:** `karamja`, `ardougne`, `falador`, `fremennik`, `kandarin`, `desert`, `lumbridge`, `morytania`, `varrock`, `wilderness`, `western`, `kourend`.

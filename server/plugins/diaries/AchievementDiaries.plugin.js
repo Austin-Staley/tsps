@@ -8,17 +8,18 @@
  *     -> sets `completed` true when the task was newly done
  *   api.emitCustomEvent("diary:is-complete", { player, diary: "ardougne", tier: "hard" })
  *     -> sets `complete`
+ *   api.emitCustomEvent("diary:all-complete", { player })
+ *     -> sets `complete` when every tier of every diary is done
  *
  *   ::diary <name>                          each tier's progress
  *   ::diary <name> <tier|all> complete      complete the tier(s) task by task
  *   ::diary <name> <tier|all> reset         clear the tier(s), rewards included
  */
-const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
-const { TIERS, DIARIES, BY_KEY, BY_NPC } = require("./DiaryData");
-const Progress = require("./DiaryProgress");
-const Journal = require("./DiaryJournal");
-const Rewards = require("./DiaryRewards");
-const Lamps = require("./DiaryLamps");
+const { TIERS, DIARIES, BY_KEY } = require("./Data.AchievementDiaries");
+const Progress = require("./Progress.AchievementDiaries");
+const Journal = require("./Journal.AchievementDiaries");
+const Rewards = require("./Rewards.AchievementDiaries");
+const Lamps = require("./Lamps.AchievementDiaries");
 
 const USAGE = "Usage: ::diary <name> [easy|medium|hard|elite|all] [complete|reset]";
 
@@ -42,6 +43,12 @@ function onIsComplete(request) {
   const diary = BY_KEY.get(request.diary);
   if (diary && request.player && TIERS.includes(request.tier)) {
     request.complete = Progress.isTierComplete(request.player, diary, request.tier);
+  }
+}
+
+function onAllComplete(request) {
+  if (request.player) {
+    request.complete = DIARIES.every((diary) => TIERS.every((tier) => Progress.isTierComplete(request.player, diary, tier)));
   }
 }
 
@@ -79,23 +86,16 @@ function diaryCommand({ player, parts }) {
 
 module.exports = {
   name: "AchievementDiaries",
+  members: true,
   register(api) {
-    Progress.bind(api);
-    Rewards.bind(api);
-    Lamps.bind(api);
-    for (const diary of DIARIES) {
-      api.persistAttribute(Progress.tasksAttribute(diary));
-      api.persistAttribute(Progress.rewardsAttribute(diary));
-    }
+    Progress(api);
+    Journal(api);
+    Rewards(api);
+    Lamps(api);
     api.onCustomEvent("diary:task", onTask);
     api.onCustomEvent("diary:is-complete", onIsComplete);
-    api.onPlayerLogin(Progress.restore);
-    api.onInterfaceActionClick(Journal.click);
-    api.onCustomEvent("interface:closed", Journal.closed);
-    for (const npc of BY_NPC.keys()) api.onNpcInteraction(npc, { "Talk-to": Rewards.talkTo });
-    api.onCustomEvent("npc-dialogue:action", Rewards.reclaim);
-    api.onItemAction("Antique lamp", { Rub: Lamps.rub });
-    api.registerCommand("diary", diaryCommand, PlayerRights.ADMINISTRATOR, "Show or set achievement diary progress: ::diary <name> [tier|all] [complete|reset]");
+    api.onCustomEvent("diary:all-complete", onAllComplete);
+    api.registerCommand("diary", diaryCommand, api.core.PlayerRights.ADMINISTRATOR, "Show or set achievement diary progress: ::diary <name> [tier|all] [complete|reset]");
   },
-  _test: { diaryCommand, findDiaries, onTask, onIsComplete },
+  _test: { diaryCommand, findDiaries, onTask, onIsComplete, onAllComplete },
 };

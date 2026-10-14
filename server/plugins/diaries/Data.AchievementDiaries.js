@@ -4,7 +4,6 @@
  */
 const fs = require("fs");
 const path = require("path");
-const { GameConstants } = require("../../src/main/typescript/elvarg/game/GameConstants");
 
 const TIERS = ["easy", "medium", "hard", "elite"];
 

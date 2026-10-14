@@ -1,4 +1,3 @@
-const { DIARIES, TIERS } = require("../../diaries/DiaryData");
 const QuestRuntime = require("../QuestRuntime");
 
 // Cache DB table 0 is `quest`; its columns identify the title, main quest type, point reward,
@@ -74,11 +73,9 @@ function answerCapeRequirement(request) {
 }
 
 function allDiariesComplete(player) {
-  return DIARIES.every((diary) => TIERS.every((tier) => {
-    const request = { player, diary: diary.key, tier, complete: false };
-    pluginApi.emitCustomEvent("diary:is-complete", request);
-    return request.complete === true;
-  }));
+  const request = { player, complete: false };
+  pluginApi.emitCustomEvent("diary:all-complete", request);
+  return request.complete === true;
 }
 
 function showCapePurchase({ player }) {

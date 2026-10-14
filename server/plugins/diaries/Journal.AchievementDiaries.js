@@ -5,8 +5,8 @@
  * count, opens the scroll as the main modal and hands script 6845 the line count. The rows'
  * second option ("Wiki") is the client's own.
  */
-const { TIERS, BY_INDEX } = require("./DiaryData");
-const Progress = require("./DiaryProgress");
+const { TIERS, BY_INDEX } = require("./Data.AchievementDiaries");
+const Progress = require("./Progress.AchievementDiaries");
 
 const AREA_TASK = 259;
 const TASKBOX = 2;
@@ -98,4 +98,9 @@ function closed({ player, interfaceId }) {
   if (interfaceId === JOURNAL_SCROLL) player.getPacketSender().sendVarbit(BUSY_VARBIT, 0);
 }
 
-module.exports = { journalLines, open, click, closed, wrap };
+module.exports = function attachJournal(api) {
+  api.onInterfaceActionClick(click);
+  api.onCustomEvent("interface:closed", closed);
+};
+
+Object.assign(module.exports, { journalLines, open, click, closed, wrap });

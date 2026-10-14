@@ -6,15 +6,12 @@
  * whose "<NPC> gives you another ..." line hands back a lost reward item.
  */
 const QuestRuntime = require("../quests/QuestRuntime");
-const { Bank } = require("../../src/main/typescript/elvarg/game/model/container/impl/Bank");
-const { TIERS, BY_NPC } = require("./DiaryData");
-const Progress = require("./DiaryProgress");
+const { TIERS, BY_NPC } = require("./Data.AchievementDiaries");
+const Progress = require("./Progress.AchievementDiaries");
+
+const REWARD_NPCS = [...BY_NPC.keys()];
 
 let pluginApi;
-
-function bind(api) {
-  pluginApi = api;
-}
 
 /** The tier to claim: the lowest finished, unclaimed one whose lower tiers are all finished. */
 function claimableTier(player, diary) {
@@ -68,7 +65,7 @@ function talkTo(event) {
 
 function owns(player, itemId) {
   return player.getInventory().contains(itemId) || player.getEquipment().contains(itemId) ||
-    player.getBanks().some((bank, tab) => tab !== Bank.BANK_SEARCH_TAB_INDEX && bank?.contains?.(itemId));
+    player.getBanks().some((bank, tab) => tab !== pluginApi.core.Bank.BANK_SEARCH_TAB_INDEX && bank?.contains?.(itemId));
 }
 
 /** "<NPC> gives you another ...": the highest claimed tier's item, when none is owned. */
@@ -92,4 +89,10 @@ function reclaim(action) {
   player.sendMessage(String(action.text));
 }
 
-module.exports = { bind, claimableTier, talkTo, reclaim, owns };
+module.exports = function attachRewards(api) {
+  pluginApi = api;
+  api.onNpcsInteraction(REWARD_NPCS, { "Talk-to": talkTo });
+  api.onCustomEvent("npc-dialogue:action", reclaim);
+};
+
+Object.assign(module.exports, { claimableTier, talkTo, reclaim, owns });
