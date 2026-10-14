@@ -311,7 +311,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       fromFloor: 2, toFloor: 2, landing: [2305, 7392, 1] },
     { id: CASTLE_DOOR_IDS.DOOR_ALT_M, x: 2304, y: 7392, z: 1, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.DINING,
       fromFloor: 2, toFloor: 2, landing: [2357, 7366, 1] },
-    { id: CASTLE_DOOR_IDS.DOOR, x: 2306, y: 7386, z: 1, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.UPPER_SOUTH_HALL,
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2306, y: 7386, z: 1, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.ABOVE_STUDY,
       fromFloor: 2, toFloor: 2, landing: [2434, 7373] },
     { id: CASTLE_DOOR_IDS.DOOR_M, x: 2434, y: 7365, z: 0, from: CASTLE_ROOM.UPPER_SOUTH_HALL, to: CASTLE_ROOM.THRONE,
       fromFloor: 2, toFloor: 2, landing: [2305, 7386, 1] },
@@ -2797,6 +2797,13 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!player || stage(player) !== STAGE.CASTLE) return;
     const location = player.getLocation?.();
     const prisonStory = castleStory(player);
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.UPPER_SOUTH_HALL &&
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 78 &&
+      location?.getZ?.() === 0 && location.getX() >= 2434 && location.getX() <= 2443 &&
+      location.getY() >= 7372 && location.getY() <= 7382) {
+      // The captured Throne door arrives in Above Study (room 19), not Upper South Hall (room 18).
+      player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.ABOVE_STUDY);
+    }
     if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.VENATOR_PUZZLE &&
       Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 76 &&
       location?.getX?.() === 2516 && [7363, 7367].includes(location.getY()) && location.getZ() === 0) {

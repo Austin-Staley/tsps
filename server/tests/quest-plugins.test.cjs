@@ -1151,6 +1151,35 @@ test('Blood Moon repairs the saved upper-lobby landing to its recorded side of t
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 2);
 });
 
+test('Blood Moon corrects saved Castle room 18 entries that the recording places in Above Study 19', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.stage', 40],
+    ['quest.the_blood_moon_rises.castle-room', 18],
+    ['quest.the_blood_moon_rises.castle-floor', 2],
+    ['quest.the_blood_moon_rises.castle-native-stage', 78],
+  ]);
+  const varbits = new Map();
+  const moved = [];
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(2439, 7377, 0),
+    moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
+    getInventory: () => ({ contains: () => false }),
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) }, {
+      get: (target, key) => target[key] ?? (() => {}),
+    }),
+    sendMessage() {},
+  };
+  handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 19);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 2);
+  assert.equal(varbits.get(15499), 19, 'relogin restores the captured Above Study room varbit');
+  assert.deepEqual(moved, [], 'the room correction preserves the player’s captured tile and earned items');
+});
+
 test('Blood Moon repairs a saved Vanescula-hall door landing without changing quest state', () => {
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
@@ -2631,15 +2660,27 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   assert.equal(lockedFullMoonDoor.handled, true, 'the full moon door rejects players without the full moon key');
   assert.equal(moved.length, 1);
 
-  const enterPairedDoor = (id, x, y, face, source) => {
+  const enterPairedDoor = (id, x, y, face, source, z = 0) => {
     const paired = {
       player, objectId: id, clickType: 1, option: 'Enter',
       definition: { id, getName: () => 'Door' },
-      object: { getFace: () => face }, location: { x, y, z: 0 }, sourceLocation: source, handled: false,
+      object: { getFace: () => face }, location: { x, y, z }, sourceLocation: source, handled: false,
     };
     enter(paired);
     return paired;
   };
+  attributes.set('quest.the_blood_moon_rises.castle-room', 3);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 2);
+  const capturedAboveStudyDoor = enterPairedDoor(61572, 2306, 7386, 0, { x: 2305, y: 7387, z: 1 }, 1);
+  assert.equal(capturedAboveStudyDoor.handled, true);
+  assert.deepEqual(moved.at(-1), [2434, 7373, 0], 'the Throne door reaches the captured Above Study landing');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 19,
+    'the captured landing is room 19 (Above Study), not room 18 (Upper South Hall)');
+  inventoryItems.add(api.core.ItemIdentifiers.FULL_MOON_KEY);
+  const capturedAboveStudyReturn = enterPairedDoor(61591, 2434, 7372, 0, { x: 2434, y: 7373, z: 0 });
+  assert.equal(capturedAboveStudyReturn.handled, true);
+  assert.deepEqual(moved.at(-1), [2306, 7396, 1], 'the captured Full Moon door returns from Above Study to Throne');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 3);
   attributes.set('quest.the_blood_moon_rises.castle-room', 12);
   attributes.set('quest.the_blood_moon_rises.castle-floor', 1);
   attributes.set('quest.the_blood_moon_rises.gallery-chest', { solved: true, key: true });
