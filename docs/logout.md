@@ -9,7 +9,8 @@ How the logout button and a lost connection end a session, and the live OSRS fac
 - Plugins refuse first through `onCanLogout` (Fight Caves mid-wave). Then the combat check: a
   player hit in the last **16 ticks** is refused with
   "You can't log out until 10 seconds after the end of combat." (an `engine` message). Nothing
-  else is sent with a refusal.
+  else is sent with a refusal. Only hits taken count: a player who hits an NPC can still log out
+  before it hits back, as on live (checked in game).
 - An accepted logout sends the logout response, closes the socket and leaves the world on the
   same tick.
 
