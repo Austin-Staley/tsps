@@ -20539,3 +20539,96 @@ test('Blood Moon Gibbous passage reconciles the plane before the basement exit',
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 2);
   assert.equal(varbits.get(15489), 2);
 });
+
+test('Blood Moon repairs only the earned west-side laboratory landing on login', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const login = handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin');
+
+  function playerAt({ x = 2508, y = 7385, z = 0, room = 42, floor = 2, native = 78, stage = 40 } = {}) {
+    const attributes = new Map([
+      ['quest.the_blood_moon_rises.stage', stage],
+      ['quest.the_blood_moon_rises.castle-room', room],
+      ['quest.the_blood_moon_rises.castle-floor', floor],
+      ['quest.the_blood_moon_rises.castle-native-stage', native],
+      ['quest.the_blood_moon_rises.castle-story', { solidKeyClaimed: true, labShelvesSearched: false }],
+    ]);
+    const items = [[22400, 1], [61579, 1]];
+    const moved = [];
+    const inventory = {
+      contains: id => items.some(([item]) => item === id),
+      snapshot: () => items.map(item => [...item]),
+    };
+    let location = new api.core.Location(x, y, z);
+    return {
+      attributes, items, moved, inventory,
+      player: {
+        getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+        getLocation: () => location,
+        moveTo: next => { moved.push([next.getX(), next.getY(), next.getZ()]); location = next; },
+        getInventory: () => inventory, getUsername: () => 'legacy-castle-laboratory',
+        getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+      },
+    };
+  }
+
+  const stale = playerAt();
+  login({ player: stale.player });
+  assert.deepEqual(stale.moved, [[2514, 7382, 0]], 'the old west-side room component recovers to the reachable lab side');
+  assert.deepEqual([
+    stale.attributes.get('quest.the_blood_moon_rises.stage'),
+    stale.attributes.get('quest.the_blood_moon_rises.castle-room'),
+    stale.attributes.get('quest.the_blood_moon_rises.castle-floor'),
+    stale.attributes.get('quest.the_blood_moon_rises.castle-native-stage'),
+  ], [40, 42, 2, 78], 'recovery preserves earned stage, room, floor and native progress');
+  assert.deepEqual(stale.attributes.get('quest.the_blood_moon_rises.castle-story'),
+    { solidKeyClaimed: true, labShelvesSearched: false });
+  assert.deepEqual(stale.inventory.snapshot(), [[22400, 1], [61579, 1]], 'recovery preserves held quest items');
+
+  for (const outside of [
+    playerAt({ native: 77 }),
+    playerAt({ floor: 1 }),
+    playerAt({ x: 2514, y: 7382 }),
+    playerAt({ room: 45 }),
+    playerAt({ z: 1 }),
+    playerAt({ stage: 100 }),
+  ]) {
+    login({ player: outside.player });
+    assert.deepEqual(outside.moved, [], 'unearned, already-correct, or unrelated saved locations remain in place');
+  }
+});
+
+
+test('Blood Moon Solid-key door enters the reachable laboratory side', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.castle-room', 45],
+    ['quest.the_blood_moon_rises.castle-floor', 2],
+  ]);
+  const inventoryItems = new Set([api.core.ItemIdentifiers.SOLID_KEY]);
+  const moved = [];
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ contains: id => inventoryItems.has(id), deleteNumber: id => inventoryItems.delete(id) }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
+    sendMessage() {},
+  };
+  quest.setStage(player, 40);
+  for (const [x, y] of [[2503, 7400], [2513, 7382], [2513, 7387]]) api.core.RegionManager.loadMapFiles(x, y);
+  const enter = handlers.objects.find(handler => handler.name === 'handleCastleDoorEnter');
+  enter({ player, objectId: 61575, definition: { id: 61575, getName: () => 'Solid door' },
+    location: { x: 2503, y: 7400, z: 0 }, option: 'Enter', handled: false });
+  assert.deepEqual(moved.at(-1), [2513, 7382, 0]);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 42);
+  assert.equal(inventoryItems.has(api.core.ItemIdentifiers.SOLID_KEY), false, 'the captured door consumes the solid key');
+  assert.equal(api.core.RegionManager.blocked(new api.core.Location(2513, 7382, 0), null), false);
+  const route = new api.core.RsmodRouteFinding((x, y, z, area) => api.core.RegionManager.getClipping(x, y, z, area));
+  assert.equal(route.findRoute({ level: 0, srcX: 2513, srcY: 7382, srcSize: 1,
+    destX: 2513, destY: 7387, moveNear: true, maxWaypoints: 80, privateArea: null }).success, true,
+  'the landing has a cache path to the shelves needed for the refiner');
+});
+

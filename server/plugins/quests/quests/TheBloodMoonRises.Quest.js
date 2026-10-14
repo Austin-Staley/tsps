@@ -3232,6 +3232,15 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!player || stage(player) !== STAGE.CASTLE) return;
     const location = player.getLocation?.();
     const prisonStory = castleStory(player);
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.LABORATORY &&
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 78 && location?.getZ?.() === 0 &&
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) === 2 &&
+      location.getX() >= 2488 && location.getX() <= 2510 &&
+      location.getY() >= 7363 && location.getY() <= 7387) {
+      // The first Solid-key landing placed players west of an uncrossable cache wall.
+      player.moveTo(new Location(2514, 7382, 0));
+      return;
+    }
     if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.BASEMENT_HALL &&
       Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 76 && prisonStory.prisonersFound &&
       location?.getX?.() >= 2565 && location.getX() <= 2575 &&
