@@ -52,10 +52,14 @@ type CombatAnimationRole = "attack" | "block" | "death";
 const DEATH_WORDS = new Set(["death", "die", "dies", "dying", "dead"]);
 const BLOCK_WORDS = new Set(["block", "blocking", "defend", "defending", "defence", "defense", "def", "parry"]);
 const ATTACK_WORDS = new Set([
-    "attack", "att", "melee", "ranged", "range", "magic", "mage", "slash", "stab", "crush", "lunge",
-    "pound", "swipe", "smash", "slam", "bite", "claw", "sting", "peck", "scratch", "whip", "headbutt",
-    "shoot", "throw", "spit", "spell",
+    "attack", "att", "slash", "stab", "crush", "lunge", "pound", "swipe", "smash", "slam", "bite",
+    "claw", "sting", "peck", "scratch", "whip", "headbutt", "shoot", "throw", "spit", "spell",
 ]);
+/** Combat style words: an attack, unless the name also stands or moves (`top_spider_ranged_idle`). */
+const STYLE_WORDS = new Set(["melee", "ranged", "range", "magic", "mage"]);
+const MOTION_WORDS = new Set(["idle", "ready", "walk", "run", "stand", "standing"]);
+
+const animationWords = (name: string) => name.split("_").map((word) => word.replace(/\d+$/, "")).filter(Boolean);
 
 /**
  * The combat role an animation's gameval name gives it (`snake_death`, `specter_parry`,
@@ -64,13 +68,58 @@ const ATTACK_WORDS = new Set([
  */
 function animationRoleByName(name: string | null): CombatAnimationRole | null {
     if (!name) return null;
-    const words = name.split("_").map((word) => word.replace(/\d+$/, ""));
+    const words = animationWords(name);
     if (words.some((word) => DEATH_WORDS.has(word) || word.startsWith("death") || word.endsWith("death"))) return "death";
     if (words.some((word) => BLOCK_WORDS.has(word) || /(block|parry|defend)$/.test(word))) return "block";
     if (words.some((word) => ATTACK_WORDS.has(word) || /attack|punch|kick|strike/.test(word) || word.startsWith("cast"))) {
         return "attack";
     }
+    if (words.some((word) => STYLE_WORDS.has(word)) && !words.some((word) => MOTION_WORDS.has(word))) return "attack";
     return null;
+}
+
+/** Words that make an animation a poor default for its role (`dragon_attack_special`). */
+const VARIANT_WORDS = new Set(["special", "spec", "cutscene", "loop", "reverse", "fake", "quick", "fast", "transition"]);
+/** Family names too broad to pick from: every human NPC shares `human_ready`, and the defaults are human. */
+const BROAD_FAMILIES = new Set(["human"]);
+
+let animationFamilies: Map<string, { id: number; words: string[]; role: CombatAnimationRole }[]> | null = null;
+
+/**
+ * Each role's animation for an NPC that nothing else covers, from the family its stand animation
+ * names: `npc_kraken01_idle01` gives `npc_kraken01_melee01` and `npc_kraken01_death01`,
+ * `zombie_update_ready_weapon` gives `zombie_update_attack_weapon`. A role takes the family
+ * animation with the fewest extra words, so a weapon or phase variant may differ from live; an
+ * animation of the right creature still beats the human default.
+ */
+function familyRoles(standAnimation: number): NonNullable<CombatAnimation["anims"]> {
+    const standName = standAnimation >= 0 ? CacheDefinitions.getSeqName(standAnimation) : null;
+    if (!standName) return {};
+    const family = animationWords(standName).filter((word) => !MOTION_WORDS.has(word) && !/^(ready|idle)/.test(word));
+    if (family.length === 0 || (family.length === 1 && BROAD_FAMILIES.has(family[0]))) return {};
+    if (!animationFamilies) {
+        animationFamilies = new Map();
+        for (const [id, name] of CacheDefinitions.getSeqNames()) {
+            const role = animationRoleByName(name);
+            if (!role) continue;
+            const words = animationWords(name);
+            const members = animationFamilies.get(words[0]) ?? [];
+            members.push({ id, words, role });
+            animationFamilies.set(words[0], members);
+        }
+    }
+    const best: Partial<Record<CombatAnimationRole, { id: number; extra: number }>> = {};
+    for (const { id, words, role } of animationFamilies.get(family[0]) ?? []) {
+        if (!family.every((word) => words.includes(word))) continue;
+        const extra = words.length - family.length + (words.some((word) => VARIANT_WORDS.has(word)) ? 3 : 0);
+        const current = best[role];
+        if (!current || extra < current.extra || (extra === current.extra && id < current.id)) best[role] = { id, extra };
+    }
+    const roles: NonNullable<CombatAnimation["anims"]> = {};
+    for (const role of ["attack", "block", "death"] as const) {
+        if (best[role] && best[role]!.extra <= 2) roles[role] = best[role]!.id;
+    }
+    return roles;
 }
 
 /**
@@ -278,6 +327,22 @@ export class NpcDefinitionLoader extends DefinitionLoader {
             if (Object.keys(resolved).length > 0) animations[npcId] = { ...animations[npcId], anims: resolved };
         }
 
+        // Last, an attackable NPC's roles that nothing above covers come from its stand animation's family.
+        let familyAnimations = 0;
+        const npcCount = CacheDefinitions.getCounts().npcs;
+        for (let id = 0; id < npcCount; id++) {
+            const cached = CacheDefinitions.getNpc(id);
+            if (!cached?.actions?.some((action) => action === "Attack")) continue;
+            const current = animations[id]?.anims ?? {};
+            if (current.attack !== undefined && current.block !== undefined && current.death !== undefined) continue;
+            const family = familyRoles(cached.idleSeqId);
+            const filled = { ...family, ...current };
+            familyAnimations += Object.keys(filled).length - Object.keys(current).length;
+            if (Object.keys(filled).length > Object.keys(current).length) {
+                animations[id] = { ...animations[id], anims: filled };
+            }
+        }
+
         const ids = new Set([
             ...Object.keys(monsters),
             ...Object.keys(animations), ...Object.keys(observedAnimations),
@@ -348,7 +413,7 @@ export class NpcDefinitionLoader extends DefinitionLoader {
         }
         (mismatched > 0 ? console.warn : console.debug)(
             `[npc-definitions] cache-backed; configured stats applied=${applied}, mismatched=${mismatched}, ` +
-            `service animations captured=${capturedAnimations}, inferred=${inferredAnimations} (by name=${namedAnimations}), guessed=${guessedAnimations}`
+            `service animations captured=${capturedAnimations}, inferred=${inferredAnimations} (by name=${namedAnimations}), guessed=${guessedAnimations}, by family=${familyAnimations}`
         );
         return true;
     }
