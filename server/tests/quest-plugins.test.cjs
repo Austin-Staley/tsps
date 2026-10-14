@@ -4047,13 +4047,19 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
     spawnedNpcDefinitions.push(definition);
     const npc = {
       id: definition.id, definition, removed: false,
+      movementQueue: {
+        reset() {}, setRoute() {}, syncDestinationFlagToRoute() {},
+        setPathX() { return this; }, setPathY() { return this; }, addCheckpoint() {},
+      },
       getId() { return this.id; }, getIndex() { return spawnedNpcActors.indexOf(this) + 9000; },
       getOwner() { return definition.owner; }, getHitpoints() { return this.hitpoints ?? 100; },
       getArea() { return null; },
       setMaxHitpoints(value) { this.maxHitpoints = value; }, setHitpoints(value) { this.hitpoints = value; },
+      setMovementSteps(value) { this.movementSteps = value; },
       setMultiCombat(value) { this.multi = value; }, setScriptedMovement(value) { this.scripted = value; },
       isDestroyed() { return this.removed; }, isPlayer() { return false; }, isNpc() { return true; }, getAsNpc() { return this; },
-      getLocation() { return player.getLocation(); },
+      getMovementQueue() { return this.movementQueue; }, getPrivateArea() { return null; }, getSize() { return 2; },
+      getLocation() { return new api.core.Location(definition.x, definition.y, definition.z); },
     };
     spawnedNpcActors.push(npc);
     return npc;
@@ -4072,12 +4078,13 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
   const sentVarbits = [];
   const messages = [];
   let pursuitArea, pursuer, crankHeadbar;
+  let playerLocation = new api.core.Location(2588, 7854, 0);
   const player = {
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     isPlayer: () => true,
     getAsPlayer() { return this; },
-    getLocation: () => new api.core.Location(2588, 7854, 0),
+    getLocation: () => playerLocation,
     getInventory: () => inventory,
     getPacketSender: () => new Proxy({ sendVarbit: (id, value) => sentVarbits.push([id, value]) }, {
       get: (target, key) => target[key] ?? (() => {}),
@@ -4189,6 +4196,8 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
       assert.ok(pursuitArea, 'the pursuit runs only while a player is in the bounded Sangvesti area');
       pursuer = spawnedNpcActors.at(-2);
       crankHeadbar = spawnedNpcActors.at(-1);
+      assert.deepEqual([pursuer.definition.x, pursuer.definition.y, pursuer.movementSteps], [2599, 7853, 2],
+        'the crank chase starts at its captured tile and runs at two tiles per tick');
       assert.equal(pursuitArea.canAttack(player, pursuer), true, 'the quest owner can fight the pursuer');
       assert.equal(pursuitArea.canAttack({ getAsPlayer: () => ({}) }, pursuer), false,
         'other players cannot attack the owner-only pursuer');
@@ -4199,6 +4208,12 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
   assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').crankTurns, 10);
   assert.deepEqual(sentVarbits.slice(-3), [[15594, 10], [15595, 10], [15588, 1]], 'the tenth turn unlocks the fancy-house door');
   assert.equal(toggle(61844, 2587, 7857).handled, false, 'the ten-turn crank lets the real door open');
+  route({ player, objectId: 61844, definition: { id: 61844 },
+    object: { getLocation: () => new api.core.Location(2587, 7857, 0) },
+    sourceLocation: { x: 2587, y: 7855, z: 0 }, destination: null });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').pursuitStarted, false,
+    'entering the crank house ends the first pursuit');
+  assert.equal(pursuer.removed, true, 'the pursuing Drakan stops at the opened house');
   interact(2585, 7861);
   assert.equal(inventory.contains(ids.DUSTY_BOOK), true, 'the crank chase unlocks the bookcase');
   const read = handlers.itemAction.find((actions) => actions.Read)?.Read;
@@ -4277,6 +4292,20 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
   assert.ok(cogDrop, 'solving the chapel puzzle creates the captured old-cog ground pickup');
   assert.deepEqual([cogDrop.tile.getX(), cogDrop.tile.getY(), cogDrop.tile.getZ()], [2582, 7817, 0]);
   inventory.adds(ids.OLD_COG, 1); // GroundItemManager's normal pickup path is exercised in object-reach.test.cjs.
+  playerLocation = new api.core.Location(2580, 7811, 0);
+  route({ player, objectId: api.core.ObjectIdentifiers.JOVKAI_DOOR,
+    definition: { id: api.core.ObjectIdentifiers.JOVKAI_DOOR },
+    object: { getLocation: () => new api.core.Location(2580, 7812, 0) },
+    sourceLocation: { x: 2580, y: 7811, z: 0 }, destination: null });
+  pursuer = spawnedNpcActors.at(-1);
+  assert.deepEqual([pursuer.id, pursuer.definition.x, pursuer.definition.y, pursuer.movementSteps], [16227, 2594, 7808, 2],
+    'leaving the cog house begins the captured second running pursuit');
+  playerLocation = new api.core.Location(2633, 7827, 0);
+  pursuitArea.process({ isPlayer: () => true, getAsPlayer: () => player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').pursuitStarted, false,
+    'the party is a safe zone where the pursuit ends');
+  assert.equal(sentVarbits.at(-1)[1], 0, 'the safe party clears the pursuit varbit');
+  assert.equal(pursuer.removed, true, 'Drakan stops following inside the party safe zone');
   quest.setStage(player, 45);
   const transcriptAction = handlers.custom.get('npc-dialogue:action').find((handler) => handler.name === 'onTranscriptAction');
   const crossWithoutCog = { player, stepId: 'lKvIyH', handled: false, end: false };
