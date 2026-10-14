@@ -2025,7 +2025,12 @@ module.exports = function registerDesertTreasureII(api) {
             clone.setHitpoints?.(0);
             area.detach?.(clone);
             boss.__dt2FinalWightActors = boss.__dt2FinalWightActors.filter(actor => actor !== clone);
-          } else finalWightDamage(player, 40);
+          } else {
+            const damage = Math.min(40, Math.max(0, player.getHitpoints?.() ?? 40));
+            finalWightDamage(player, 40);
+            // The OSRS Wiki notes that an unblocked charged shot heals Ketla by damage dealt.
+            boss.setHitpoints?.(Math.min(boss.getMaxHitpoints?.() ?? 200, boss.getHitpoints() + damage));
+          }
           boss.__dt2KetlaCharge = null;
           const batch = boss.__dt2KetlaBatch;
           if (batch && ++batch.shots < 2) boss.__dt2KetlaCharge = { due: 4 };

@@ -6899,7 +6899,7 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     let prayer = 99;
     const p = {
       getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
-      getUsername: () => 'dt2-final-wight-mechanics', isPlayer: () => true, getAsPlayer() { return this; },
+      getUsername: () => 'dt2-final-wight-mechanics', hitpoints: 99, getHitpoints() { return this.hitpoints; }, isPlayer: () => true, getAsPlayer() { return this; },
       getPrivateArea: () => attrs.get('desert-treasure-ii:final-room'), getLocation() { return this.location; },
       getInventory: () => ({ getAmount: () => 0, adds() {}, deleteNumber() {}, getFreeSlots: () => 28 }),
       getEquipment: () => ({ getAmount: () => 0 }),
@@ -7021,6 +7021,15 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     assert.ok(removed.includes(oldClone), 'an older surviving clone can absorb a later charged shot');
     assert.equal(pendingHits.some(hit => hit.damage === 40), false, 'a later batch still recognizes the older clone as cover');
     const allClones = current.__dt2FinalWightActors.slice();
+    for (const clone of allClones) clone.setHitpoints(0);
+    current.__dt2KetlaBatch = { shots: 0 };
+    current.__dt2KetlaCharge = { due: 1 };
+    current.setHitpoints(170);
+    p.hitpoints = 25;
+    pendingHits.length = 0;
+    area.process(p);
+    assert.ok(pendingHits.some(hit => hit.damage === 40), 'an uncovered Ketla shot deals its documented typeless damage');
+    assert.equal(current.getHitpoints(), 195, 'Ketla heals the 25 hitpoints actually removed from a low-HP player');
     deaths[0]({ killer: p, npc: current });
     assert.ok(allClones.every(clone => removed.includes(clone)), 'Ketla death cleanup removes old and new clone batches');
 
