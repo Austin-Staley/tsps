@@ -234,6 +234,18 @@ module.exports = function registerDesertTreasureII(api) {
         ? [new api.core.PendingHit(npc, target, new api.core.MeleeCombatMethod(), 1)] : super.hits(npc, target);
     }
   }
+  class KetlaShadowCloneCombat extends api.core.RangedCombatMethod {
+    hits(npc, target) {
+      const hits = super.hits(npc, target);
+      if (!target?.isPlayer?.() || !api.core.PrayerHandler.isActivated(target, api.core.PrayerHandler.PROTECT_FROM_MISSILES)) return hits;
+      // Wiki: clone attacks still hit up to 7 through Protect from Missiles (from 18 normally).
+      for (const hit of hits) {
+        for (const damage of hit.getHits()) damage.multiplyDamage(0.4);
+        hit.updateTotalDamage();
+      }
+      return hits;
+    }
+  }
   function kasondePoolDamage(p, orange, direct) {
     const damage = orange ? 10 + Math.floor(Math.random() * 11) : direct ? 35 + Math.floor(Math.random() * 6) : 6;
     p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(damage, api.core.HitMask.RED)]);
@@ -1827,6 +1839,7 @@ module.exports = function registerDesertTreasureII(api) {
   }
   function allowWightedLeechThroughProtection(event) {
     if (event.attacker?.__dt2WightLeech) event.bypassProtectionPrayer = true;
+    if (event.attacker?.__dt2KetlaClone) event.bypassProtectionPrayer = true;
   }
   function clearFinalWightActors(boss, player, area) {
     for (const object of boss.__dt2FinalWightObjects ?? []) removeFinalWightObject(object);
@@ -1934,7 +1947,7 @@ module.exports = function registerDesertTreasureII(api) {
       api.core.World.getAddNPCQueue().push(clone);
       return clone;
     }).filter(Boolean);
-    clones.forEach(clone => { clone.__dt2FinalWightClone = true; });
+    clones.forEach(clone => { clone.__dt2FinalWightClone = true; clone.__dt2KetlaClone = true; });
     const previousClones = (boss.__dt2FinalWightActors ?? []).filter(actor => actor.isRegistered?.() && actor.getHitpoints?.() > 0);
     boss.__dt2FinalWightActors = [...previousClones, ...clones];
     const owned = spawned.get(player) ?? {};
@@ -8029,6 +8042,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcDeath(handleDeath);
   api.registerNpcCombatMethodProvider(N.VARDORVIS_2, VardorvisCombat);
   api.registerNpcCombatMethodProvider(N.KASONDE_7, KasondeCombat);
+  api.registerNpcCombatMethodProvider(N.KETLA_THE_UNWORTHY_2, KetlaShadowCloneCombat);
   api.onCombatHitRoll(vardorvisHitRoll);
   api.onCombatHitResolved(vardorvisHitResolved);
   api.onPrayerDisabled(vardorvisPrayerDisabled);

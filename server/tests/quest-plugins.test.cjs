@@ -7042,6 +7042,7 @@ test('Desert Treasure II vault cache has blocked Ketla clone lanes and nearby cl
 test('Desert Treasure II final wights expose their distinct smoke, clone, vial and portal mechanics', () => {
   const { api: base } = mockApi();
   const interactions = [], deaths = [], playerDeaths = [], hitHooks = [], hitRollHooks = [], actions = new Map(), queue = [], removed = [], registeredObjects = [], clipChecks = [];
+  const combatProviders = [];
   class TestInstance {
     constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
     setChunk() {}
@@ -7060,9 +7061,23 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     constructor(id, location, type, face, area) { Object.assign(this, { id, location, type, face }); area.add(this); }
     setOwner(owner) { this.owner = owner; return this; }
   }
+  class TestHitDamage {
+    constructor(damage) { this.damage = damage; }
+    getDamage() { return this.damage; }
+    setDamage(damage) { this.damage = damage; }
+    multiplyDamage(modifier) { this.damage = Math.floor(this.damage * modifier); }
+  }
+  class TestPendingHit {
+    constructor(damage) { this.damage = new TestHitDamage(damage); }
+    getHits() { return [this.damage]; }
+    updateTotalDamage() { this.total = this.damage.getDamage(); }
+  }
+  class TestRangedCombatMethod {
+    hits(npc) { return [new TestPendingHit(npc.testDamage ?? 18)]; }
+  }
   const core = {
     ...base.core,
-    TemplatedInstanceArea: TestInstance, GameObject: TestObject,
+    TemplatedInstanceArea: TestInstance, GameObject: TestObject, RangedCombatMethod: TestRangedCombatMethod,
     RegionManager: { getClipping(x, y, z, area) {
       clipChecks.push({ x, y, z, area });
       return (x === 8227 && y === 1614) || (x === 8227 && y === 1646) || (x === 8224 && y === 1646) ? 0x20100 : 0;
@@ -7085,6 +7100,7 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
   };
   const api = new Proxy(base, {
     get: (target, prop) => prop === 'core' ? core
+      : prop === 'registerNpcCombatMethodProvider' ? (ids, method) => combatProviders.push({ ids, method })
       : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
         : prop === 'onNpcDeath' ? handler => deaths.push(handler)
         : prop === 'onPlayerDeath' ? handler => playerDeaths.push(handler)
@@ -7106,6 +7122,7 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
     const quest = runtime.getRegisteredQuests().at(-1), attrs = new Map(), pendingHits = [], messages = [];
     let prayer = 99;
+    const activePrayers = [];
     const p = {
       getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
       getUsername: () => 'dt2-final-wight-mechanics', hitpoints: 99, getHitpoints() { return this.hitpoints; }, isPlayer: () => true, getAsPlayer() { return this; },
@@ -7113,6 +7130,7 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
       getInventory: () => ({ getAmount: () => 0, adds() {}, deleteNumber() {}, getFreeSlots: () => 28 }),
       getEquipment: () => ({ getAmount: () => 0 }),
       getSkillManager: () => ({ getCurrentLevel: () => prayer, setCurrentLevel(_skill, value) { prayer = value; }, getMaxLevel: () => 99 }),
+      getPrayerActive: () => activePrayers,
       getCombat: () => ({ getHitQueue: () => ({ addPendingDamage(hits) { pendingHits.push(...hits); } }) }),
       getPacketSender: () => new Proxy({ sendGraphic() {}, sendVarbit() {} }, { get: (target, key) => target[key] ?? (() => {}) }),
       moveTo(location) { this.location = location; }, sendMessage(text) { messages.push(text); },
@@ -7212,6 +7230,24 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     for (let tick = 0; tick < 18; tick++) area.process(p);
     const clones = queue.filter(npc => npc.id === 12330 && npc.owner === p);
     assert.ok(clones.length === 4 || clones.length === 5, 'Ketla summons four or five one-hit shadow clones');
+    const cloneProvider = combatProviders.find(provider => provider.ids === 12330)?.method;
+    assert.ok(cloneProvider && cloneProvider.prototype instanceof TestRangedCombatMethod,
+      'Ketla clones keep the ordinary ranged combat method and projectile timing');
+    const clone = clones[0];
+    const cloneRoll = { attacker: clone, target: p, bypassProtectionPrayer: false };
+    for (const hook of hitRollHooks) hook(cloneRoll);
+    assert.equal(cloneRoll.bypassProtectionPrayer, true, 'only the tagged clone bypasses full NPC protection before its own reduction');
+    const cloneHit = () => new cloneProvider().hits(clone, p)[0].getHits()[0].getDamage();
+    activePrayers[core.PrayerHandler.PROTECT_FROM_MISSILES] = false;
+    clone.testDamage = 18;
+    assert.equal(cloneHit(), 18, 'a normal accurate clone hit keeps its full max hit without protection');
+    activePrayers[core.PrayerHandler.PROTECT_FROM_MISSILES] = true;
+    assert.equal(cloneHit(), 7, 'Protect from Missiles reduces the clone max hit to the Wiki value');
+    clone.testDamage = 0;
+    assert.equal(cloneHit(), 0, 'an inaccurate clone hit remains a miss through protection');
+    const ordinaryNpcRoll = { attacker: { __dt2KetlaClone: false }, target: p, bypassProtectionPrayer: false };
+    for (const hook of hitRollHooks) hook(ordinaryNpcRoll);
+    assert.equal(ordinaryNpcRoll.bypassProtectionPrayer, false, 'other NPCs do not inherit the clone prayer rule');
     assert.ok(clones.every(clone => !((clone.location.x === 8227 && clone.location.y === 1646)
       || (clone.location.x === 8224 && clone.location.y === 1646))), 'clones avoid floor-blocked or projectile-blocked cache cover points');
     assert.ok(clones.every(clone => (core.RegionManager.getClipping(clone.location.x, clone.location.y, 0, area) & 0x1280100) === 0
