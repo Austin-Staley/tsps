@@ -8226,7 +8226,7 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     const staminaRequests = [];
     base.onCustomEvent('potions:apply-stamina', (request) => staminaRequests.push(request));
     const drinkPool = baseHandlers.namedObjects.find(({ target }) => target === 'Strange Pool').actions['Drink-from'];
-    assert.equal(drinkPool({ player, objectId: core.ObjectIdentifiers.STRANGE_POOL_2 }), true);
+    assert.equal(drinkPool({ player, objectId: 49551, definition: { id: core.ObjectIdentifiers.STRANGE_POOL_2 } }), true);
     assert.deepEqual(staminaRequests, [{ player, energy: 100, durationMs: 120000 }],
       'the actual pool delegates full energy and two-minute stamina to the potion effect, including Ring of endurance');
     attrs.set('desert-treasure-ii:lassar', { ...enteredCity, cathedralEntered: true });

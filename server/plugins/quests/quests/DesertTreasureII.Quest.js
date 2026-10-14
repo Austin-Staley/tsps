@@ -6925,8 +6925,8 @@ module.exports = function registerDesertTreasureII(api) {
     return null;
   }
 
-  function drinkLassarPool({ player: p, objectId }) {
-    if (!LASSAR_STRANGE_POOLS.has(objectId)) return false;
+  function drinkLassarPool({ player: p, objectId, definition }) {
+    if (!LASSAR_STRANGE_POOLS.has(definition?.id ?? objectId)) return false;
     const state = p.getAttribute(LASSAR) ?? {};
     // Wiki: a full energy restore and two-minute stamina effect, including
     // Ring of endurance, available only before the first Whisperer encounter.
