@@ -8010,8 +8010,21 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     for (let tick = 0; tick < 18; tick++) area.process(p);
     assert.equal(current.lastAttackResetCount, 18,
       'the active Ketla trial stays engaged while the player clears clone batches, preventing generic idle regeneration');
+    assert.equal(queue.filter(npc => npc.id === 12330 && npc.owner === p).length, 0,
+      'elapsed room ticks alone do not spawn Ketla clones outside her attack rotation');
+    const ketlaProvider = combatProviders.find(({ ids }) => ids === core.NpcIdentifiers.KETLA_THE_UNWORTHY)?.method;
+    assert.ok(ketlaProvider && ketlaProvider.prototype instanceof TestRangedCombatMethod,
+      'Ketla uses a provider that observes her ordinary ranged attack starts');
+    const ketlaCombat = new ketlaProvider();
+    ketlaCombat.start(current, p);
+    assert.equal(ketlaCombat.hits(current, p).length, 1, 'Ketla keeps her first normal ranged auto');
+    assert.equal(queue.filter(npc => npc.id === 12330 && npc.owner === p).length, 0);
+    ketlaCombat.start(current, p);
+    assert.equal(ketlaCombat.hits(current, p).length, 1, 'Ketla keeps her second normal ranged auto');
     const clones = queue.filter(npc => npc.id === 12330 && npc.owner === p);
     assert.ok(clones.length === 4 || clones.length === 5, 'Ketla summons four or five one-hit shadow clones');
+    assert.equal(current.__dt2KetlaBatch.postCloneAutos, 0);
+    assert.equal(current.__dt2KetlaCharge, undefined, 'the charge does not begin immediately when clones spawn');
     const cloneProvider = combatProviders.find(provider => provider.ids === 12330)?.method;
     assert.ok(cloneProvider && cloneProvider.prototype instanceof TestRangedCombatMethod,
       'Ketla clones keep the ordinary ranged combat method and projectile timing');
@@ -8035,12 +8048,45 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     assert.ok(clones.every(clone => (core.RegionManager.getClipping(clone.location.x, clone.location.y, 0, area) & 0x1280100) === 0
       && core.RegionManager.canProjectileAttackBounds(current.getLocation(), clone.location, 1, 1, 1, 1, area)),
     'each placed clone occupies clear floor with a projectile path from Ketla');
-    for (let tick = 0; tick < 4; tick++) area.process(p);
+    ketlaCombat.start(current, p);
+    assert.equal(ketlaCombat.hits(current, p).length, 1, 'Ketla performs the first ordinary auto after summoning clones');
+    assert.equal(current.__dt2KetlaCharge, undefined);
+    ketlaCombat.start(current, p);
+    assert.equal(ketlaCombat.hits(current, p).length, 1, 'Ketla performs the second ordinary auto after summoning clones');
+    assert.equal(current.__dt2KetlaCharge.due, 5, 'the first charged-shot warning starts after the two post-summon autos');
+    assert.equal(current.graphic?.id, 2531, 'the skull warning appears when the charged-shot countdown begins');
+    for (let tick = 0; tick < 4; tick++) {
+      ketlaCombat.start(current, p);
+      assert.equal(ketlaCombat.hits(current, p).length, 0, 'ordinary autos are suppressed during the charged-shot window');
+      area.process(p);
+      assert.equal(current.attackDelayCalls?.at(-1), 1, 'the active charged-shot window defers Ketla’s ordinary attack timer');
+    }
+    assert.equal(current.__dt2KetlaCharge.due, 1);
+    ketlaCombat.start(current, p);
+    assert.equal(ketlaCombat.hits(current, p).length, 0);
+    area.process(p);
     assert.equal(pendingHits.length, 0, 'the clone between Ketla and the player absorbs the charged shot');
     assert.ok(removed.includes(clones.find(clone => clone.hp === 0)));
-    for (let tick = 0; tick < 4; tick++) area.process(p);
+    assert.equal(current.__dt2KetlaCharge.due, 4, 'the second captured charge remains part of the same clone batch');
+    for (let tick = 0; tick < 3; tick++) {
+      ketlaCombat.start(current, p);
+      assert.equal(ketlaCombat.hits(current, p).length, 0);
+      area.process(p);
+    }
+    ketlaCombat.start(current, p);
+    assert.equal(ketlaCombat.hits(current, p).length, 0);
+    area.process(p);
     assert.equal(current.__dt2KetlaBatch, null, 'Ketla fires no more than two charged shots per clone batch');
-    while (current.__dt2FinalWightTicks < 36) area.process(p);
+    assert.equal(current.__dt2KetlaAutosBeforeClones, 0, 'the next rotation begins with two fresh autos before clones');
+    const previousCloneCount = queue.filter(npc => npc.id === 12330 && npc.owner === p).length;
+    ketlaCombat.start(current, p);
+    ketlaCombat.hits(current, p);
+    assert.equal(queue.filter(npc => npc.id === 12330 && npc.owner === p).length, previousCloneCount);
+    ketlaCombat.start(current, p);
+    ketlaCombat.hits(current, p);
+    const nextCloneCount = queue.filter(npc => npc.id === 12330 && npc.owner === p).length;
+    assert.ok([4, 5].includes(nextCloneCount - previousCloneCount),
+      'the next clone batch waits for Ketla to complete two new ordinary autos');
     const oldClone = clones.find(clone => clone.hp > 0);
     assert.ok(oldClone, 'unhit clones remain in the chamber between batches');
     assert.ok(current.__dt2FinalWightActors.includes(oldClone), 'the boss retains the previous live clone actors');
@@ -8049,7 +8095,11 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     const dx = oldCloneLocation.x - bossLocation.x, dy = oldCloneLocation.y - bossLocation.y;
     p.location = { x: bossLocation.x + dx * 2, y: bossLocation.y + dy * 2, z: bossLocation.z };
     pendingHits.length = 0;
-    for (let tick = 0; tick < 4; tick++) area.process(p);
+    ketlaCombat.start(current, p);
+    ketlaCombat.hits(current, p);
+    ketlaCombat.start(current, p);
+    ketlaCombat.hits(current, p);
+    for (let tick = 0; tick < 5; tick++) area.process(p);
     assert.ok(removed.includes(oldClone), 'an older surviving clone can absorb a later charged shot');
     assert.equal(pendingHits.some(hit => hit.damage === 40), false, 'a later batch still recognizes the older clone as cover');
     const allClones = current.__dt2FinalWightActors.slice();

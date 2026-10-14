@@ -296,6 +296,49 @@ module.exports = function registerDesertTreasureII(api) {
       return hits;
     }
   }
+  function recordKetlaAutoAttack(npc, target) {
+    const player = npc?.getOwner?.();
+    const area = npc?.getArea?.();
+    if (npc?.__dt2FinalWight !== 1 || target !== player || !player
+      || spawned.get(player)?.finalWight !== npc || !(area instanceof FinalVaultArea)
+      || player.getAttribute(FINAL_ROOM) !== area || stage(player) !== S.FINALE
+      || player.getAttribute(FINAL_WIGHTS_STARTED) !== true) return;
+
+    if (npc.__dt2KetlaBatch) {
+      npc.__dt2KetlaBatch.postCloneAutos = (npc.__dt2KetlaBatch.postCloneAutos ?? 0) + 1;
+      if (npc.__dt2KetlaBatch.postCloneAutos === 2) beginKetlaChargedShot(player, npc, 5);
+      return;
+    }
+
+    npc.__dt2KetlaAutosBeforeClones = (npc.__dt2KetlaAutosBeforeClones ?? 0) + 1;
+    if (npc.__dt2KetlaAutosBeforeClones >= 2) {
+      npc.__dt2KetlaAutosBeforeClones = 0;
+      spawnKetlaClones(player, npc, area);
+    }
+  }
+  function beginKetlaChargedShot(player, boss, due) {
+    boss.__dt2KetlaCharge = { due };
+    boss.forceChat?.("You cannot hide from me!");
+    boss.performGraphic?.(new api.core.Graphic(2531)); // DT2_WIGHT_SKULL_SPOTANIM
+    player.sendMessage("A skull appears above Ketla: hide behind a shadow clone before the charged shot.");
+  }
+  class KetlaCombat extends api.core.RangedCombatMethod {
+    start(npc, target) {
+      if (npc.__dt2KetlaCharge) {
+        npc.__dt2KetlaSuppressAutoHit = true;
+        return;
+      }
+      super.start(npc, target);
+      recordKetlaAutoAttack(npc, target);
+    }
+    hits(npc, target) {
+      if (npc.__dt2KetlaSuppressAutoHit) {
+        npc.__dt2KetlaSuppressAutoHit = false;
+        return [];
+      }
+      return super.hits(npc, target);
+    }
+  }
   function kasondePoolDamage(p, orange, direct) {
     const damage = orange ? 10 + Math.floor(Math.random() * 11) : direct ? 35 + Math.floor(Math.random() * 6) : 6;
     p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(damage, api.core.HitMask.RED)]);
@@ -1812,6 +1855,7 @@ module.exports = function registerDesertTreasureII(api) {
     npc.__dt2FinalWightTicks = 0;
     npc.__dt2FinalWightObjects = [];
     npc.__dt2FinalWightActors = [];
+    if (index === 1) npc.__dt2KetlaAutosBeforeClones = 0;
     // Quest wights do not inherit an aggressive cache spawn in the private
     // room. Give the active trial actor its real combat target so its ordinary
     // pathing can bring it through the Assassin's white smoke.
@@ -2021,12 +2065,8 @@ module.exports = function registerDesertTreasureII(api) {
     const owned = spawned.get(player) ?? {};
     spawned.set(player, owned);
     owned.finalWightClones = [...(owned.finalWightClones ?? []).filter(actor => actor.isRegistered?.() && actor.getHitpoints?.() > 0), ...clones];
-    boss.__dt2KetlaBatch = { shots: 0 };
-    // The first charge is decremented on the clone-spawn tick below.
-    boss.__dt2KetlaCharge = { due: 5 };
-    boss.forceChat?.("You cannot hide from me!");
-    boss.performGraphic?.(new api.core.Graphic(2531)); // DT2_WIGHT_SKULL_SPOTANIM
-    player.sendMessage("Ketla summons shadow clones. A skull above her warns of a charged shot; hide behind a clone.");
+    boss.__dt2KetlaBatch = { shots: 0, postCloneAutos: 0 };
+    player.sendMessage("Ketla summons shadow clones.");
   }
   function cloneBetween(boss, player, clone) {
     const b = finalWightLocation(boss), p = finalWightLocation(player), c = finalWightLocation(clone);
@@ -2147,9 +2187,11 @@ module.exports = function registerDesertTreasureII(api) {
       const b = finalWightLocation(boss);
       if (pink?.until > 0 && b?.x === pink.x && b.y === pink.y) boss.setHitpoints?.(Math.min(boss.getMaxHitpoints?.() ?? 200, boss.getHitpoints() + 25));
     } else if (boss.__dt2FinalWight === 1) {
-      if (boss.__dt2FinalWightTicks % 18 === 0 && !boss.__dt2KetlaBatch) spawnKetlaClones(player, boss, area);
       const charge = boss.__dt2KetlaCharge;
       if (charge) {
+        // Keep the ordinary target and attack interaction, but defer its next
+        // ranged start until this scripted charged-shot window has resolved.
+        boss.getCombat?.().setAttackDelay?.(1);
         charge.due--;
         if (charge.due <= 0) {
           const clone = (boss.__dt2FinalWightActors ?? []).find(actor => actor.isRegistered?.() && actor.getHitpoints?.() > 0 && cloneBetween(boss, player, actor));
@@ -2169,10 +2211,11 @@ module.exports = function registerDesertTreasureII(api) {
           }
           boss.__dt2KetlaCharge = null;
           const batch = boss.__dt2KetlaBatch;
-          if (batch && ++batch.shots < 2) boss.__dt2KetlaCharge = { due: 4 };
-          else boss.__dt2KetlaBatch = null;
-        } else {
-          if (charge.due === 2) boss.performGraphic?.(new api.core.Graphic(2531)); // DT2_WIGHT_SKULL_SPOTANIM
+          if (batch && ++batch.shots < 2) beginKetlaChargedShot(player, boss, 4);
+          else {
+            boss.__dt2KetlaBatch = null;
+            boss.__dt2KetlaAutosBeforeClones = 0;
+          }
         }
       }
     } else if (boss.__dt2FinalWight === 2) {
@@ -8387,6 +8430,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.registerNpcCombatMethodProvider(N.THE_FORSAKEN_ASSASSIN, FinalAssassinCombat);
   api.registerNpcCombatMethodProvider(N.KASONDE_7, KasondeCombat);
   api.registerNpcCombatMethodProvider(N.KETLA_THE_UNWORTHY_2, KetlaShadowCloneCombat);
+  api.registerNpcCombatMethodProvider(N.KETLA_THE_UNWORTHY, KetlaCombat);
   api.onCombatHitRoll(vardorvisHitRoll);
   api.onCombatHitResolved(vardorvisHitResolved);
   api.onCombatHitResolved(trackFinalFigureAttack);
