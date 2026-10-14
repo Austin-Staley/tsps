@@ -7060,6 +7060,7 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   const interactions = [], playerProcesses = [], itemActions = [], deathHooks = [], playerDeathHooks = [], objectInteractions = [];
   const addQueue = [], removeQueue = [], created = [];
   const incomingAttacks = [];
+  const npcPendingDamage = [];
   const sentProjectiles = [];
   let combatCycle = 1;
   class RecordedPendingHit {
@@ -7086,7 +7087,10 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
         getLocation() { return this.location; }, moveTo(location) { this.location = location; },
         getAttackAnim() { return 1; }, performAnimation(animation) { this.animation = animation; (this.animations ??= []).push(animation.id); },
         isRegistered() { return this.registered; }, forceChat(text) { this.chat = text; },
-        getCombat() { return { getLastAttack: () => ({ reset() {} }) }; },
+        getCombat() { return {
+          getLastAttack: () => ({ reset() {} }),
+          getHitQueue: () => ({ addPendingDamage: hits => npcPendingDamage.push(...hits) }),
+        }; },
       };
       created.push(npc);
       return npc;
@@ -7112,12 +7116,19 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
     entered: true, cathedralTentacles: true, perfectTorch: true, sanity: 100, inShadow: false,
   }]]);
   const items = new Map([[core.ItemIdentifiers.BLACKSTONE_FRAGMENT, 1]]);
+  let prayerLevel = 50;
   let username = 'whisperer-regression';
   const player = {
     area: null, isPlayer: () => true, getAsPlayer() { return this; }, getIndex: () => 99,
     getArea() { return this.area; }, setArea(area) { this.area = area; }, getPrivateArea() { return this.area; },
     getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
-    getUsername: () => username, getSkillManager: () => ({ getMaxLevel: () => 99 }),
+    hitpoints: 50,
+    heal(amount) { this.hitpoints = Math.min(99, this.hitpoints + amount); },
+    getUsername: () => username, getSkillManager: () => ({
+      getMaxLevel: () => 99,
+      getCurrentLevel: () => prayerLevel,
+      setCurrentLevel(_skill, level) { prayerLevel = level; },
+    }),
     getPacketSender: () => new Proxy({}, { get: (_target, key) => key === 'sendVarbit' ? () => {} : () => {} }),
     getInventory: () => ({
       getAmount: (id) => items.get(id) ?? 0,
@@ -7208,20 +7219,65 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, true, 'the fragment reaches the shadow realm for the special');
   combatCycle = 10;
   playerProcesses.forEach((handler) => handler({ player }));
-  const chantPhrases = new Map([[0, 'Vita!'], [1, 'Mors!'], [2, 'Umbra!'], [3, 'Aeternus!']]);
-  for (const [group, phrase] of chantPhrases) {
+  const chantPhrases = new Map([[0, ['Vita!', 2]], [1, ['Oratio!', 3]], [2, ['Sanitas!', 3]], [3, ['Mors!', 4]]]);
+  for (const [group, [phrase, size]] of chantPhrases) {
     const visibleChantGroup = created.filter((npc) => npc.__dt2WhispererSoul
       && npc.__dt2WhispererSoulSet === group && npc.isRegistered());
-    assert.equal(visibleChantGroup.length, 3, `the living ${phrase} souls are present after shadow entry`);
+    assert.equal(visibleChantGroup.length, size, `the living ${phrase} set has its canonical ${size} souls after shadow entry`);
     assert.ok(visibleChantGroup.every((npc) => npc.chat === phrase),
-      `all three living souls repeat ${phrase} while the player is in the Shadow Realm`);
+      `all living souls repeat ${phrase} while the player is in the Shadow Realm`);
   }
   const firstChant = created.filter((npc) => npc.__dt2WhispererSoul && npc.__dt2WhispererSoulSet === 0);
+  assert.equal(firstChant.length, 2, 'Vita is the fastest two-soul set');
   for (const soul of firstChant) {
     soul.registered = false;
     deathHooks[0]({ npc: soul, killer: player });
   }
+  playerProcesses.forEach((handler) => handler({ player }));
   assert.equal(boss.__dt2WhispererSpecial, null, 'killing one full matching chant set interrupts the siphon');
+  assert.equal(player.hitpoints, 69, 'completing Vita restores 20% of maximum hitpoints');
+  for (const soul of created.filter((npc) => npc.__dt2WhispererSoul)) soul.registered = false;
+  itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+  const completeSet = (group, phrase, count) => {
+    boss.__dt2WhispererSpecialStarted = false;
+    playerProcesses.forEach((handler) => handler({ player }));
+    assert.equal(boss.__dt2WhispererSpecial, 'soul-siphon');
+    itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+    const sanityBefore = attrs.get('desert-treasure-ii:lassar').sanity;
+    const members = created.filter((npc) => npc.__dt2WhispererSoul && npc.__dt2WhispererSoulSet === group
+      && npc.isRegistered());
+    assert.equal(members.length, count);
+    assert.ok(members.every((npc) => npc.chat === phrase));
+    for (const soul of members) {
+      soul.registered = false;
+      deathHooks[0]({ npc: soul, killer: player });
+    }
+    playerProcesses.forEach((handler) => handler({ player }));
+    for (const soul of created.filter((npc) => npc.__dt2WhispererSoul)) soul.registered = false;
+    itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+    return sanityBefore;
+  };
+  completeSet(1, 'Oratio!', 3);
+  assert.equal(prayerLevel, 69, 'completing Oratio restores 20% of maximum Prayer');
+  attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), sanity: 60 });
+  const sanityBefore = completeSet(2, 'Sanitas!', 3);
+  assert.equal(attrs.get('desert-treasure-ii:lassar').sanity, sanityBefore + 14,
+    'Sanitas restores 15 sanity before the ordinary one-point shadow drain that tick');
+  const priorMorsHits = npcPendingDamage.length;
+  completeSet(3, 'Mors!', 4);
+  assert.equal(npcPendingDamage.length, priorMorsHits + 1, 'completing Mors damages the Whisperer');
+  assert.equal(npcPendingDamage.at(-1).getDamage(), 50, 'Mors deals its canonical 50 damage');
+  boss.__dt2WhispererSpecialStarted = false;
+  playerProcesses.forEach((handler) => handler({ player }));
+  itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+  const allSouls = created.filter((npc) => npc.__dt2WhispererSoul && npc.isRegistered());
+  assert.equal(allSouls.length, 12, 'the bonus route still presents all twelve souls');
+  for (const soul of allSouls) {
+    soul.registered = false;
+    deathHooks[0]({ npc: soul, killer: player });
+  }
+  playerProcesses.forEach((handler) => handler({ player }));
+  assert.equal(npcPendingDamage.at(-1).getDamage(), 75, 'killing all twelve souls increases the damage to 75');
   itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
   username = 'c';
   boss.__dt2WhispererSpecialStarted = false;

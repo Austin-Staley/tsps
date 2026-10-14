@@ -3853,6 +3853,7 @@ module.exports = function registerDesertTreasureII(api) {
     const boss = spawned.get(p)?.whisperer;
     if (boss?.isRegistered?.() && boss.getHitpoints?.() > 0) {
       boss.getCombat?.()?.getLastAttack?.()?.reset?.();
+      resolveWhispererSoulSet(p, boss);
       if (!boss.__dt2WhispererEnraged && boss.getHitpoints() <= 440 && !boss.__dt2WhispererSpecialStarted) {
         boss.__dt2WhispererSpecialStarted = true;
         // The quest encounter selects one of its three shadow-realm specials.
@@ -4155,11 +4156,11 @@ module.exports = function registerDesertTreasureII(api) {
       const whisperer = spawned.get(p)?.whisperer;
       if (whisperer?.__dt2WhispererSpecial === "soul-siphon") {
         if (state.inShadow) {
-          p.sendMessage("The Whisperer still siphons souls. Kill all three Lost Souls chanting the same phrase before leaving the Shadow Realm.");
+          p.sendMessage("The Whisperer still siphons souls. Kill one complete set chanting the same phrase before leaving the Shadow Realm.");
         } else {
           p.moveTo(new api.core.Location(x - 256, y, z));
           setLassar(p, { ...state, inShadow: true });
-          p.sendMessage("The blackstone fragment draws you into the cathedral's Shadow Realm. Kill a complete set of chanting souls.");
+          p.sendMessage("The blackstone fragment draws you into the cathedral's Shadow Realm. Kill one complete set of chanting souls.");
         }
         event.handled = true;
         return true;
@@ -5718,12 +5719,15 @@ module.exports = function registerDesertTreasureII(api) {
     if (boss.__dt2WhispererSpecial) return;
     boss.__dt2WhispererSpecial = "soul-siphon";
     boss.__dt2WhispererSpecialTicks = 25;
+    boss.__dt2WhispererSoulsKilled = 0;
+    boss.__dt2WhispererCompletedSoulSet = null;
     boss.forceChat?.("The souls will feed me!");
-    p.sendMessage("The blackstone fragment glows yellow. Activate it, enter the Shadow Realm and kill all three souls chanting the same phrase before the siphon completes.");
+    p.sendMessage("The blackstone fragment glows yellow. Activate it, enter the Shadow Realm and kill one complete set of Lost Souls chanting the same phrase before the siphon completes.");
     const owned = spawned.get(p) ?? {};
     const souls = [];
-    for (let group = 0; group < WHISPERER_SOUL_CHANTS.length; group++) {
-      for (let member = 0; member < 3; member++) {
+    for (let group = 0; group < WHISPERER_SOUL_SETS.length; group++) {
+      const set = WHISPERER_SOUL_SETS[group];
+      for (let member = 0; member < set.size; member++) {
         const x = 2411 + group * 3 + (member % 2);
         const y = 6365 + member * 3 + Math.floor(group / 2) * 2;
         const soul = api.core.NPC.create(N.LOST_SOUL_2, new api.core.Location(x, y, 0));
@@ -5732,7 +5736,7 @@ module.exports = function registerDesertTreasureII(api) {
         soul.setScriptedMovement?.(true);
         soul.setMaxHitpoints?.(20);
         soul.setHitpoints?.(20);
-        soul.forceChat?.(WHISPERER_SOUL_CHANTS[group]);
+        soul.forceChat?.(set.phrase);
         soul.__dt2WhispererSoul = true;
         soul.__dt2WhispererSoulSet = group;
         soul.__skipDefaultRespawn = true;
@@ -5745,15 +5749,66 @@ module.exports = function registerDesertTreasureII(api) {
     owned.whispererSouls = souls;
     spawned.set(p, owned);
   }
-  const WHISPERER_SOUL_CHANTS = ["Vita!", "Mors!", "Umbra!", "Aeternus!"];
+  // The Whisperer summons twelve souls in the four Wiki sets. Their different
+  // sizes are part of the puzzle: Vita (2), Oratio (3), Sanitas (3), Mors (4).
+  // https://oldschool.runescape.wiki/w/Lost_Soul_(The_Whisperer)
+  const WHISPERER_SOUL_SETS = [
+    { phrase: "Vita!", size: 2 },
+    { phrase: "Oratio!", size: 3 },
+    { phrase: "Sanitas!", size: 3 },
+    { phrase: "Mors!", size: 4 },
+  ];
   function repeatWhispererSoulChants(p, state) {
     const cycle = api.core.World.getProcessCycle?.() ?? 0;
     if (!state.inShadow || cycle % 5 !== 0) return;
     for (const soul of spawned.get(p)?.whispererSouls ?? []) {
       if (soul?.isRegistered?.() && soul.__dt2WhispererSoul) {
-        soul.forceChat?.(WHISPERER_SOUL_CHANTS[soul.__dt2WhispererSoulSet]);
+        soul.forceChat?.(WHISPERER_SOUL_SETS[soul.__dt2WhispererSoulSet]?.phrase);
       }
     }
+  }
+  function completeWhispererSoulSet(p, boss, setIndex) {
+    const set = WHISPERER_SOUL_SETS[setIndex];
+    if (!set) return;
+    const skills = p.getSkillManager?.();
+    if (set.phrase === "Vita!") {
+      const healing = Math.floor((skills?.getMaxLevel?.(Skill.HITPOINTS) ?? 99) * 0.2);
+      p.heal?.(healing);
+      p.sendMessage("The Vita souls restore some of your hitpoints.");
+    } else if (set.phrase === "Oratio!") {
+      const maximum = skills?.getMaxLevel?.(Skill.PRAYER) ?? 99;
+      const current = skills?.getCurrentLevel?.(Skill.PRAYER) ?? 0;
+      skills?.setCurrentLevel?.(Skill.PRAYER, Math.min(maximum, current + Math.floor(maximum * 0.2)), true);
+      p.sendMessage("The Oratio souls restore some of your Prayer points.");
+    } else if (set.phrase === "Sanitas!") {
+      const state = p.getAttribute(LASSAR) ?? {};
+      setLassar(p, { ...state, sanity: Math.min(100, Number(state.sanity ?? 100) + 15) });
+      p.sendMessage("The Sanitas souls restore your sanity.");
+    } else if (set.phrase === "Mors!") {
+      const hit = new api.core.HitDamage(50, api.core.HitMask.RED);
+      hit.setSource?.(p);
+      boss?.getCombat?.()?.getHitQueue?.()?.addPendingDamage?.([hit]);
+      p.sendMessage("The Mors souls wound the Whisperer.");
+    }
+  }
+  function resolveWhispererSoulSet(p, boss) {
+    const setIndex = boss.__dt2WhispererCompletedSoulSet;
+    if (boss.__dt2WhispererSpecial !== "soul-siphon" || setIndex == null) return;
+    boss.__dt2WhispererCompletedSoulSet = null;
+    removeWhispererSouls(p);
+    boss.__dt2WhispererSpecial = null;
+    boss.__dt2WhispererSpecialsCompleted = (boss.__dt2WhispererSpecialsCompleted ?? 0) + 1;
+    boss.__dt2WhispererBindingTicks = 5;
+    if (boss.__dt2WhispererSoulsKilled >= 12) {
+      const hit = new api.core.HitDamage(75, api.core.HitMask.RED);
+      hit.setSource?.(p);
+      boss.getCombat?.()?.getHitQueue?.()?.addPendingDamage?.([hit]);
+      p.sendMessage("You silence every soul. Their combined voices deal 75 damage to the Whisperer.");
+    } else {
+      completeWhispererSoulSet(p, boss, setIndex);
+    }
+    boss.forceChat?.("The souls are silenced!");
+    p.sendMessage("The Whisperer's siphon fails; leave the Shadow Realm with the blackstone fragment.");
   }
   function whispererEffectObject(p, id, x, y, type = 22) {
     const object = new api.core.GameObject(id, new api.core.Location(x, y, 0), type, 0, null);
@@ -6013,15 +6068,15 @@ module.exports = function registerDesertTreasureII(api) {
       const group = npc.__dt2WhispererSoulSet;
       actors.whispererSouls = (actors.whispererSouls ?? []).filter((soul) => soul !== npc);
       const remaining = actors.whispererSouls.filter((soul) => soul?.isRegistered?.() && soul.__dt2WhispererSoulSet === group);
-      if (!remaining.length) {
-        removeWhispererSouls(owner);
-        const boss = actors.whisperer;
-        if (boss?.isRegistered?.()) {
-          boss.__dt2WhispererSpecial = null;
-          boss.__dt2WhispererBindingTicks = 5;
-          boss.forceChat?.("The souls are silenced!");
+      const boss = actors.whisperer;
+      if (boss?.isRegistered?.() && boss.__dt2WhispererSpecial === "soul-siphon") {
+        boss.__dt2WhispererSoulsKilled = (boss.__dt2WhispererSoulsKilled ?? 0) + 1;
+        if (!remaining.length && boss.__dt2WhispererCompletedSoulSet == null) {
+          // Defer resolution to the next tick so a same-tick multi-target hit
+          // can kill all twelve souls for the Wiki's stronger 75-damage result.
+          boss.__dt2WhispererCompletedSoulSet = group;
+          owner.sendMessage("You silence one complete set of souls. Finish the remaining souls quickly for a stronger effect.");
         }
-        owner.sendMessage("You silence one complete set of souls. The Whisperer's siphon fails; leave the Shadow Realm with the blackstone fragment.");
       }
       return;
     }
