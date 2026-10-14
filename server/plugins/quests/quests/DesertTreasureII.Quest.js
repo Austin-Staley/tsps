@@ -1888,10 +1888,11 @@ module.exports = function registerDesertTreasureII(api) {
       return clone;
     }).filter(Boolean);
     clones.forEach(clone => { clone.__dt2FinalWightClone = true; });
-    boss.__dt2FinalWightActors = clones;
+    const previousClones = (boss.__dt2FinalWightActors ?? []).filter(actor => actor.isRegistered?.() && actor.getHitpoints?.() > 0);
+    boss.__dt2FinalWightActors = [...previousClones, ...clones];
     const owned = spawned.get(player) ?? {};
     spawned.set(player, owned);
-    owned.finalWightClones = clones;
+    owned.finalWightClones = [...(owned.finalWightClones ?? []).filter(actor => actor.isRegistered?.() && actor.getHitpoints?.() > 0), ...clones];
     boss.__dt2KetlaBatch = { shots: 0 };
     // The first charge is decremented on the clone-spawn tick below.
     boss.__dt2KetlaCharge = { due: 5 };

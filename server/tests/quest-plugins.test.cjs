@@ -6926,7 +6926,23 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     for (let tick = 0; tick < 4; tick++) area.process(p);
     assert.equal(pendingHits.length, 0, 'the clone between Ketla and the player absorbs the charged shot');
     assert.ok(removed.includes(clones.find(clone => clone.hp === 0)));
+    for (let tick = 0; tick < 4; tick++) area.process(p);
+    assert.equal(current.__dt2KetlaBatch, null, 'Ketla fires no more than two charged shots per clone batch');
+    while (current.__dt2FinalWightTicks < 36) area.process(p);
+    const oldClone = clones.find(clone => clone.hp > 0);
+    assert.ok(oldClone, 'unhit clones remain in the chamber between batches');
+    assert.ok(current.__dt2FinalWightActors.includes(oldClone), 'the boss retains the previous live clone actors');
+    const bossLocation = current.getLocation();
+    const oldCloneLocation = oldClone.getLocation();
+    const dx = oldCloneLocation.x - bossLocation.x, dy = oldCloneLocation.y - bossLocation.y;
+    p.location = { x: bossLocation.x + dx * 2, y: bossLocation.y + dy * 2, z: bossLocation.z };
+    pendingHits.length = 0;
+    for (let tick = 0; tick < 4; tick++) area.process(p);
+    assert.ok(removed.includes(oldClone), 'an older surviving clone can absorb a later charged shot');
+    assert.equal(pendingHits.some(hit => hit.damage === 40), false, 'a later batch still recognizes the older clone as cover');
+    const allClones = current.__dt2FinalWightActors.slice();
     deaths[0]({ killer: p, npc: current });
+    assert.ok(allClones.every(clone => removed.includes(clone)), 'Ketla death cleanup removes old and new clone batches');
 
     current = boss(wightIds[2]);
     p.location = area.tile(32, 50, 0);
