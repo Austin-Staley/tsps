@@ -4514,11 +4514,23 @@ module.exports = function registerDesertTreasureII(api) {
   const setStage = (p, v) => { if (stage(p) < v) quest.setStage(p, v); };
   const has = (p, id) => p.getInventory().getAmount(id) > 0;
   function talk(p, npcId, variant, next) {
-    startTranscript(api, p, npcId, PAGE, variant);
+    const select = variant === "the-desert-treasure-aftermath" ? (steps) => {
+      const selected = steps.slice();
+      const end = selected.findIndex(step => step.type === "end");
+      const completion = selected.findIndex(step => step.id === "xGIiPZ");
+      // The Wiki export puts the completion marker after `end`, where the dialogue runner cannot reach it.
+      if (end >= 0 && completion > end) selected.splice(end, 0, selected.splice(completion, 1)[0]);
+      return selected;
+    } : undefined;
+    startTranscript(api, p, npcId, PAGE, variant, select);
     if (next) setStage(p, next);
   }
   function talkSmith({ player: p, npcId }) {
     if (![S.STARTED, S.VAULT, S.FINALE].includes(stage(p))) return false;
+    if (stage(p) === S.FINALE && p.getAttribute(FINAL_WIGHTS_COMPLETE)) {
+      talk(p, npcId, "the-desert-treasure-aftermath");
+      return;
+    }
     if (stage(p) === S.STARTED && !p.getAttribute(ATTR_SMITH_INTRO)) {
       p.setAttribute(ATTR_SMITH_INTRO, true);
       talk(p, npcId, "familiar-faces-talking-to-asgarnia-smith");
@@ -4722,6 +4734,7 @@ module.exports = function registerDesertTreasureII(api) {
       const { item, slot } = event;
       const inventory = p.getInventory();
       if (!item || inventory.get(slot) !== item) return true;
+      event.handled = true;
       const skills = [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE, Skill.HITPOINTS, Skill.RANGED, Skill.MAGIC, Skill.PRAYER];
       api.emitCustomEvent("xpreward:open", {
         player: p, minLevel: 60, skills,

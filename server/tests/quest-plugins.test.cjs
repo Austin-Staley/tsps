@@ -7398,8 +7398,8 @@ test('Desert Treasure II logout from the final trial returns to the vault and cl
 });
 
 test('Desert Treasure II handoff creates the four owned wight stages and grants rewards after reported kills', () => {
-  const { api: base } = mockApi();
-  const interactions = [], deaths = [], objects = [], actions = new Map(), queue = [];
+  const { api: base, handlers: registeredHandlers } = mockApi();
+  const interactions = [], deaths = [], objects = [], actions = new Map(), rewardRequests = [], queue = [];
   class TestInstance {
     constructor(width, height) { this.width = width; this.height = height; this.entities = []; this.chunks = []; this.destroyed = false; }
     setChunk(plane, x, y, chunk) { this.chunks.push([plane, x, y, chunk]); }
@@ -7429,12 +7429,16 @@ test('Desert Treasure II handoff creates the four owned wight stages and grants 
             handlers.push(handler);
             actions.set(name, handlers);
           }
+          : prop === 'emitCustomEvent' ? (name, event) => {
+            if (name === 'xpreward:open') rewardRequests.push(event);
+            for (const handler of actions.get(name) ?? []) handler(event);
+          }
             : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
   });
   const runtime = require('../plugins/quests/QuestRuntime');
   const startTranscript = runtime.startTranscript;
   const transcripts = [];
-  runtime.startTranscript = (_api, player, npcId, page, variant) => (transcripts.push({ npcId, page, variant }), true);
+  runtime.startTranscript = (_api, player, npcId, page, variant, select) => (transcripts.push({ npcId, page, variant, select }), true);
   try {
     require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
     const quest = runtime.getRegisteredQuests().at(-1);
@@ -7480,11 +7484,34 @@ test('Desert Treasure II handoff creates the four owned wight stages and grants 
     }
     assert.equal(attrs.get('desert-treasure-ii:final-wights-complete'), true);
     assert.equal(transcripts.at(-1).variant, 'the-desert-treasure-aftermath');
+    const aftermathSteps = require('../data/definitions/npc-dialogues.json')['Desert Treasure II - The Fallen Empire']
+      .variants['the-desert-treasure-aftermath'];
+    const selectedAftermath = transcripts.at(-1).select(aftermathSteps);
+    assert.ok(selectedAftermath.findIndex(step => step.id === 'xGIiPZ') < selectedAftermath.findIndex(step => step.type === 'end'),
+      'the quest-complete action remains reachable at the end of the exported outro');
+    transcripts.length = 0; // A logout clears the active conversation, not the earned wight checkpoint.
+    talkSmith({ player: p, npcId: core.NpcIdentifiers.ASGARNIA_SMITH });
+    assert.equal(transcripts.at(-1).variant, 'the-desert-treasure-aftermath',
+      'Smith resumes the Azzanadra outro after relogging at the completed-wights checkpoint');
     dialogueAction({ player: p, stepId: 'xGIiPZ' });
     assert.equal(quest.isComplete(p), true);
     assert.equal(inventory.getAmount(core.ItemIdentifiers.RING_OF_VISIBILITY), 0);
     assert.equal(inventory.getAmount(core.ItemIdentifiers.RING_OF_SHADOWS), 1);
     assert.equal(inventory.getAmount(core.ItemIdentifiers.ANCIENT_LAMP), 3);
+    const lamp = { id: core.ItemIdentifiers.ANCIENT_LAMP };
+    inventory.get = slot => slot === 0 && inventory.getAmount(core.ItemIdentifiers.ANCIENT_LAMP) > 0 ? lamp : null;
+    inventory.deleteAtSlot = (slot, amount) => { assert.equal(slot, 0); inventory.deleteNumber(core.ItemIdentifiers.ANCIENT_LAMP, amount); };
+    const xp = new Map();
+    p.getSkillManager = () => ({ getMaxLevel: () => 99, getExperience: skill => xp.get(skill) ?? 0,
+      addExperience(skill, amount) { xp.set(skill, (xp.get(skill) ?? 0) + amount); } });
+    const lampAction = { player: p, itemId: core.ItemIdentifiers.ANCIENT_LAMP, item: lamp, slot: 0, option: 'Rub', handled: false };
+    registeredHandlers.itemAction.at(-1)(lampAction);
+    assert.equal(lampAction.handled, true, 'the plugin owns the completed lamp action instead of falling through to the generic item handler');
+    assert.equal(rewardRequests.at(-1).minLevel, 60);
+    assert.ok(rewardRequests.at(-1).skills.includes(core.Skill.ATTACK));
+    assert.match(rewardRequests.at(-1).onConfirm(core.Skill.ATTACK, 'Attack'), /100,000 Attack XP/);
+    assert.equal(xp.get(core.Skill.ATTACK), 100000);
+    assert.equal(inventory.getAmount(core.ItemIdentifiers.ANCIENT_LAMP), 2, 'confirm consumes exactly the selected lamp');
     assert.equal(objects.find(h => h.name === 'handleObjectInteraction')({ player: p, objectId: 48890, option: 'Climb', location: area.tile(30, 11, 0) }), true,
       'the cache staircase returns the player to the upper Ancient Vault');
     assert.equal(attrs.get('desert-treasure-ii:final-room'), null);
