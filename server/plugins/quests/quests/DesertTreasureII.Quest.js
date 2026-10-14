@@ -1837,7 +1837,9 @@ module.exports = function registerDesertTreasureII(api) {
     player.sendMessage(`The Forsaken Assassin throws a poison vial (${index}/3). Move off the marked tile.`);
     if (index >= 3) boss.__dt2AssassinBottles = 0;
     boss.__dt2FinalWightPending.push({
-      type: "assassin-vial", x: loc.x, y: loc.y, z: loc.z, due: 2,
+      // processFinalWight decrements pending attacks later in this same tick.
+      // Start at 3 so the player gets two full ticks after the warning.
+      type: "assassin-vial", x: loc.x, y: loc.y, z: loc.z, due: 3,
       last: index >= 3,
     });
   }
@@ -1867,7 +1869,8 @@ module.exports = function registerDesertTreasureII(api) {
     spawned.set(player, owned);
     owned.finalWightClones = clones;
     boss.__dt2KetlaBatch = { shots: 0 };
-    boss.__dt2KetlaCharge = { due: 4 };
+    // The first charge is decremented on the clone-spawn tick below.
+    boss.__dt2KetlaCharge = { due: 5 };
     boss.forceChat?.("You cannot hide from me!");
     boss.performGraphic?.(new api.core.Graphic(2531)); // DT2_WIGHT_SKULL_SPOTANIM
     player.sendMessage("Ketla summons shadow clones. A skull above her warns of a charged shot; hide behind a clone.");
@@ -1888,7 +1891,8 @@ module.exports = function registerDesertTreasureII(api) {
     if (!b) return;
     const waves = 1 + ((boss.__dt2KasondeShockwaveCount ?? 0) % 3);
     boss.__dt2KasondeShockwaveCount = (boss.__dt2KasondeShockwaveCount ?? 0) + 1;
-    boss.__dt2KasondeShockwaves = { waves, due: 3, x: b.x, y: b.y };
+    // The warning tick also reaches the countdown below.
+    boss.__dt2KasondeShockwaves = { waves, due: 4, x: b.x, y: b.y };
     boss.forceChat?.("You cannot outrun this!");
     player.sendMessage(`Kasonde begins a shockwave (${waves} wave${waves === 1 ? "" : "s"}). Stay in the close safe ring or move out of the marked area.`);
     finalWightGraphic(player, 2315, finalWightTile(area, b.x, b.y)); // DT2_WIGHT_SLAM_IMPACT
@@ -1903,7 +1907,8 @@ module.exports = function registerDesertTreasureII(api) {
     const pool = addFinalWightObject(player, area, poolId, tile);
     boss.__dt2FinalWightObjects.push(pool);
     (boss.__dt2KasondePools ??= []).push({ x: p.x, y: p.y, z: p.z, object: pool, createdAt: boss.__dt2FinalWightTicks });
-    boss.__dt2KasondeVial = { x: p.x, y: p.y, z: p.z, due: 2 };
+    // The warning tick also reaches the countdown below.
+    boss.__dt2KasondeVial = { x: p.x, y: p.y, z: p.z, due: 3 };
     player.sendMessage("Kasonde hurls a corrupted vial at the marked tile. Move away.");
   }
   function startPerstenLightning(player, boss, area) {
@@ -1916,7 +1921,8 @@ module.exports = function registerDesertTreasureII(api) {
       finalWightGraphic(player, 2545, tile); // DT2_WIGHT_LIGHTNING
       tiles.push({ x: tile.getX?.() ?? tile.x, y: tile.getY?.() ?? tile.y, z: tile.getZ?.() ?? tile.z ?? 0 });
     }
-    boss.__dt2PerstenLightning = { tiles, due: 3 };
+    // The warning tick also reaches the countdown below.
+    boss.__dt2PerstenLightning = { tiles, due: 4 };
     player.sendMessage(`Persten calls down ${hitCount === 1 ? "a lightning strike" : `${hitCount} lightning strikes`}. Move from the shadows.`);
   }
   function spawnPerstenPortal(player, boss, area) {

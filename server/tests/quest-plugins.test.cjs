@@ -6561,6 +6561,16 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     assert.equal(hitDamage(current), 0, 'a boss two tiles away remains protected immediately');
     current.location = { x: current.__dt2AssassinWhiteSmoke.x, y: current.__dt2AssassinWhiteSmoke.y, z: 0 };
     assert.equal(hitDamage(current), 20, 'white smoke permits normal damage');
+    // A vial warning is followed by two complete ticks to move away before impact.
+    pendingHits.length = 0;
+    messages.length = 0;
+    while (current.__dt2FinalWightTicks < 7) area.process(p);
+    assert.match(messages.join(' '), /throws a poison vial/, 'the Assassin visibly warns before the vial attack');
+    assert.equal(pendingHits.some(hit => hit.damage === 30), false, 'the vial does not hit on its warning tick');
+    area.process(p);
+    assert.equal(pendingHits.some(hit => hit.damage === 30), false, 'the vial does not hit one tick after its warning');
+    area.process(p);
+    assert.ok(pendingHits.some(hit => hit.damage === 30), 'the vial impacts two ticks after its warning if the player stays');
     deaths[0]({ killer: p, npc: current });
 
     current = boss(wightIds[1]);
