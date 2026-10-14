@@ -18,6 +18,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const CLOCK_ATTRIBUTE = "quest.the_blood_moon_rises.castle-clocks";
   const GALLERY_CHEST_ATTRIBUTE = "quest.the_blood_moon_rises.gallery-chest";
   const REFINER_ATTRIBUTE = "quest.the_blood_moon_rises.castle-refiner";
+  const CASTLE_LAB_NOTES = ItemIdentifiers.LAB_NOTES;
   const HUNT_ATTRIBUTE = "quest.the_blood_moon_rises.blood-hunt";
   const HIDEOUT_IVAN_VARBIT = 15467;
   const HIDEOUT_SHRINE_INSPECTED = "quest.the_blood_moon_rises.hideout-shrine-inspected";
@@ -423,7 +424,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       fromFloor: 2, toFloor: 2, landing: [2509, 7379] },
     { id: 61575, x: 2503, y: 7400, z: 0, from: CASTLE_ROOM.SOLID_DOOR_HALL, to: CASTLE_ROOM.LABORATORY,
       fromFloor: 2, toFloor: 2, action: "Enter", key: ItemIdentifiers.SOLID_KEY, consumesKey: true,
-      keyName: "solid key", landing: [2510, 7382] },
+      keyName: "solid key", landing: [2513, 7382] },
     { id: 61574, x: 2512, y: 7382, z: 0, from: CASTLE_ROOM.LABORATORY, to: CASTLE_ROOM.SOLID_DOOR_HALL,
       fromFloor: 2, toFloor: 2, action: "Enter", key: ItemIdentifiers.SOLID_KEY, keyName: "solid key", landing: [2502, 7400] },
     { id: CASTLE_DOOR_IDS.DOOR, x: 2523, y: 7389, z: 0, from: CASTLE_ROOM.LABORATORY, to: CASTLE_ROOM.STOCKPILE_STORAGE,
@@ -2761,6 +2762,20 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.getPacketSender().sendVarbit(CASTLE_LAST_FACING_VARBIT, lastFacing);
     }
     syncCastleExplosiveBarrel(player);
+    syncCastleLabNotes(player);
+  }
+
+  function syncCastleLabNotes(player) {
+    if (!player || stage(player) !== STAGE.CASTLE ||
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.LABORATORY ||
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) < 78 || hasItem(player, CASTLE_LAB_NOTES)) return;
+    const manager = api.getItemOnGroundManager?.();
+    if (!manager?.registerLocation) return;
+    const tile = new Location(2524, 7378, 0);
+    const privateArea = player.getPrivateArea?.() ?? null;
+    if (!manager.getGroundItem?.(player.getUsername?.(), CASTLE_LAB_NOTES, tile, privateArea)) {
+      manager.registerLocation(player, new Item(CASTLE_LAB_NOTES, 1), tile);
+    }
   }
 
   function syncCastleRoomOnLogin({ player }) {
@@ -5950,6 +5965,23 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.sendMessage("A key falls from the dusty book. It is marked with the Vitur crest.");
   }
 
+  function readCastleLabNotes(event) {
+    const player = event?.player;
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      event.itemId !== CASTLE_LAB_NOTES || !hasItem(player, CASTLE_LAB_NOTES)) return;
+    event.handled = true;
+    const packet = player.getPacketSender();
+    const lines = [
+      "", "", "", "New development: Appears pretty much all substances",
+      "have some level of haemalchemic potential. Will refer to",
+      "this as HP. Value is negligible for most substances, but",
+      "small number of magical materials offer potential.",
+      "Further tests needed. Will prepare suitable devices.", "", "", "", "",
+    ];
+    packet.sendInterface(291);
+    lines.forEach((line, index) => packet.sendString(line, (291 << 16) | (5 + index)));
+  }
+
   function handleAncientShieldAssembly(event) {
     const player = event?.player;
     if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE) return;
@@ -6366,6 +6398,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onItemOnItem(handleBloodHuntItemOnItem);
   api.onItemOnNpc(feedSafalaan);
   api.onItemAction("Dusty book", { Read: readDustyBook });
+  api.onItemAction("Lab notes", { Read: readCastleLabNotes });
   api.onItemAction("Squire's journal", { Read: readSlepeJournal });
   for (const book of SLEPE_BOOKS) api.onItemAction(book.name, { Read: readPaterdomusBook });
   api.onItemAction("Ivandis' writings", { Read: readIvandisWritings });

@@ -2693,7 +2693,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [2442, 7417, 0], [2437, 7419, 0], [2456, 7388, 0], [2380, 7392, 0], [2372, 7392, 0],
     [2393, 7363, 0], [2387, 7383, 0], [2441, 7400, 0], [2394, 7370, 0], [2440, 7388, 0],
     [2439, 7394, 0], [2435, 7372, 0], [2306, 7396, 1], [2541, 7373, 0], [2526, 7363, 0],
-    [2499, 7400, 0], [2509, 7379, 0], [2510, 7382, 0], [2502, 7400, 0], [2534, 7377, 0],
+    [2499, 7400, 0], [2509, 7379, 0], [2513, 7382, 0], [2502, 7400, 0], [2534, 7377, 0],
     [2524, 7388, 0], [2563, 7369, 0], [2310, 7366, 0], [2566, 7386, 0], [2569, 7365, 0],
     [2565, 7394, 0], [2570, 7368, 0]];
   for (const [x, y, z] of pairedDoorLandingTiles) {
@@ -2909,13 +2909,17 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   assert.equal(unlockedLab.handled, true);
   assert.equal(inventoryItems.has(api.core.ItemIdentifiers.SOLID_KEY), false,
     'the solid key breaks in the lock when the player enters the laboratory');
-  assert.deepEqual(moved.at(-1), [2510, 7382, 0]);
+  assert.deepEqual(moved.at(-1), [2513, 7382, 0], 'the recorded entrance arrival connects to the lab notes and refiner');
   attributes.set('quest.the_blood_moon_rises.castle-room', 42);
   const returnFromLab = enterPairedDoor(61574, 2512, 7382, 0, { x: 2511, y: 7382, z: 0 });
   assert.equal(returnFromLab.handled, true);
   assert.deepEqual(moved.at(-1), [2502, 7400, 0],
     'the paired laboratory door stays unlocked after the one-use key breaks');
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 45);
+  const labNotesApproach = larderRoute.findRoute({ level: 0, srcX: 2513, srcY: 7382, srcSize: 1,
+    destX: 2524, destY: 7378, moveNear: true, maxWaypoints: 80, privateArea: null });
+  assert.equal(labNotesApproach.success, true, 'the real lab landing reaches an adjacent tile of its ground notes');
+  assert.deepEqual([labNotesApproach.endX, labNotesApproach.endY], [2524, 7379]);
   inventoryItems.add(api.core.ItemIdentifiers.GILDED_KEY);
   attributes.set('quest.the_blood_moon_rises.castle-room', 33);
   const gildedLibraryDoor = enterPairedDoor(61626, 2445, 7418, 1, { x: 2445, y: 7417, z: 0 });
@@ -4020,6 +4024,63 @@ test('Blood Moon refiner requires the four correct chemical vials totalling 53 b
   const stockpile = { player, definition: { getName: () => 'Blood stockpile' }, location: { x: 2535, y: 7385, z: 0 }, handled: false };
   interact(stockpile);
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-refiner').destroyed, true);
+});
+
+test('Blood Moon laboratory places the recorded notes on entry and opens their captured note text when read', () => {
+  const { api, handlers } = mockApi();
+  const ground = [];
+  api.getItemOnGroundManager = () => ({
+    getGroundItem: (_username, itemId, location) => ground.find(entry => entry.item.getId() === itemId &&
+      entry.location.getX() === location.getX() && entry.location.getY() === location.getY()),
+    registerLocation: (player, item, location) => ground.push({ player, item, location }),
+  });
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.stage', 40],
+    ['quest.the_blood_moon_rises.castle-room', 45],
+    ['quest.the_blood_moon_rises.castle-floor', 2],
+    ['quest.the_blood_moon_rises.castle-native-stage', 78],
+  ]);
+  const counts = new Map([[api.core.ItemIdentifiers.SOLID_KEY, 1]]);
+  const inventory = {
+    contains: id => (counts.get(id) ?? 0) > 0,
+    getAmount: id => counts.get(id) ?? 0,
+    deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+    adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
+  };
+  const sent = [];
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getUsername: () => 'lab-notes-test',
+    getPrivateArea: () => null,
+    getLocation: () => ({ getX: () => 2502, getY: () => 7400, getZ: () => 0 }),
+    moveTo() {},
+    getPacketSender: () => ({ sendVarbit() {}, sendInterface: id => sent.push(['interface', id]),
+      sendString: (value, uid) => sent.push(['string', value, uid]) }),
+    sendMessage() {},
+  };
+  const enter = handlers.objects.find(handler => handler.name === 'handleCastleDoorEnter');
+  enter({ player, objectId: 61575, definition: { id: 61575, getName: () => 'Solid door' },
+    location: { x: 2503, y: 7400, z: 0 }, option: 'enter', handled: false });
+  assert.equal(quest.getStage(player), 40);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 42);
+  assert.equal(counts.get(api.core.ItemIdentifiers.SOLID_KEY), 0, 'the solid key breaks in the door');
+  assert.equal(ground.length, 1);
+  assert.equal(ground[0].item.getId(), api.core.ItemIdentifiers.LAB_NOTES);
+  assert.deepEqual([ground[0].location.getX(), ground[0].location.getY(), ground[0].location.getZ()], [2524, 7378, 0]);
+
+  inventory.adds(api.core.ItemIdentifiers.LAB_NOTES, 1);
+  const read = handlers.namedItemActions.get('Lab notes').Read;
+  const event = { player, itemId: api.core.ItemIdentifiers.LAB_NOTES, handled: false };
+  read(event);
+  assert.equal(event.handled, true);
+  assert.deepEqual(sent[0], ['interface', 291]);
+  assert.ok(sent.some(([type, text]) => type === 'string' && text.includes('haemalchemic potential')));
+  assert.ok(sent.some(([type, text]) => type === 'string' && text.includes('magical materials')));
 });
 
 test('The Wyrd transcript action starts a private encounter with the cache-mapped boss', () => {
