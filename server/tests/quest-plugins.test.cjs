@@ -4054,6 +4054,8 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
       getId() { return this.id; }, getIndex() { return spawnedNpcActors.indexOf(this) + 9000; },
       getOwner() { return definition.owner; }, getHitpoints() { return this.hitpoints ?? 100; },
       getArea() { return null; },
+      combat: { target: null, attack(target) { this.target = target; }, getTarget() { return this.target; } },
+      getCombat() { return this.combat; },
       setMaxHitpoints(value) { this.maxHitpoints = value; }, setHitpoints(value) { this.hitpoints = value; },
       setMovementSteps(value) { this.movementSteps = value; },
       setMultiCombat(value) { this.multi = value; }, setScriptedMovement(value) { this.scripted = value; },
@@ -4196,11 +4198,24 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
       assert.ok(pursuitArea, 'the pursuit runs only while a player is in the bounded Sangvesti area');
       pursuer = spawnedNpcActors.at(-2);
       crankHeadbar = spawnedNpcActors.at(-1);
-      assert.deepEqual([pursuer.definition.x, pursuer.definition.y, pursuer.movementSteps], [2599, 7853, 2],
-        'the crank chase starts at its captured tile and runs at two tiles per tick');
+      assert.deepEqual([pursuer.definition.x, pursuer.definition.y, pursuer.movementSteps], [2599, 7853, 1],
+        'the crank chase starts at its captured tile and walks before the cog-house exit');
       assert.equal(pursuitArea.canAttack(player, pursuer), true, 'the quest owner can fight the pursuer');
       assert.equal(pursuitArea.canAttack({ getAsPlayer: () => ({}) }, pursuer), false,
         'other players cannot attack the owner-only pursuer');
+      pursuitArea.process({ isPlayer: () => true, getAsPlayer: () => player });
+      assert.equal(pursuer.combat.getTarget(), null, 'Drakan follows the player before he catches up');
+      playerLocation = new api.core.Location(2598, 7853, 0);
+      pursuitArea.process({ isPlayer: () => true, getAsPlayer: () => player });
+      assert.equal(pursuer.combat.getTarget(), player, 'Drakan starts a normal combat attack when he reaches the player');
+      assert.equal(pursuer.scripted, false, 'native combat controls movement after contact');
+      pursuer.removed = true;
+      handlers.npcDeath.find((handler) => handler.name === 'handleBloodHuntPursuerDeath')({ npc: pursuer });
+      pursuitArea.process({ isPlayer: () => true, getAsPlayer: () => player });
+      pursuer = spawnedNpcActors.at(-2);
+      crankHeadbar = spawnedNpcActors.at(-1);
+      assert.equal(pursuer.id, 16227, 'killing one chase actor does not permanently suppress the ongoing pursuit');
+      assert.equal(pursuer.movementSteps, 1, 'the initial chase remains walking-speed after its replacement');
     }
   }
   assert.equal(toggle(61844, 2587, 7857).handled, true, 'nine turns are not enough to enter the fancy house');
@@ -4301,6 +4316,8 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
   assert.deepEqual([pursuer.id, pursuer.definition.x, pursuer.definition.y, pursuer.movementSteps], [16227, 2594, 7808, 2],
     'leaving the cog house begins the captured second running pursuit');
   playerLocation = new api.core.Location(2633, 7827, 0);
+  assert.equal(pursuitArea.canAttack(pursuer, player), false, 'Drakan cannot attack the player inside the party safe zone');
+  assert.equal(pursuitArea.canAttack(player, pursuer), false, 'the pursuit cannot be fought inside the party safe zone');
   pursuitArea.process({ isPlayer: () => true, getAsPlayer: () => player });
   assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').pursuitStarted, false,
     'the party is a safe zone where the pursuit ends');

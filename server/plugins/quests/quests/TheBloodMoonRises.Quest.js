@@ -50,7 +50,6 @@ module.exports = function registerTheBloodMoonRises(api) {
   const BLOOD_HUNT_ACTORS = new Map();
   const BLOOD_HUNT_PURSUER_ACTORS = new WeakMap();
   const BLOOD_HUNT_PURSUER_OWNERS = new WeakMap();
-  const BLOOD_HUNT_PURSUER_DEFEATED = new WeakSet();
   let bloodHuntPursuitArea;
   const BLOOD_HUNT_PURSUER_ID = NpcIdentifiers.LOWERNIEL_DRAKAN_21;
   const BLOOD_HUNT_CRANK_HEADBAR_ID = 16228;
@@ -4816,11 +4815,10 @@ module.exports = function registerTheBloodMoonRises(api) {
         player.setAttribute(HUNT_ATTRIBUTE, hunt);
         player.getPacketSender?.().sendVarbit(15603, 0);
       }
-      BLOOD_HUNT_PURSUER_DEFEATED.delete(player);
       cleanupBloodHuntPursuer(player);
       return;
     }
-    if (!hunt.pursuitStarted || BLOOD_HUNT_PURSUER_DEFEATED.has(player)) {
+    if (!hunt.pursuitStarted) {
       cleanupBloodHuntPursuer(player);
       return;
     }
@@ -4832,7 +4830,7 @@ module.exports = function registerTheBloodMoonRises(api) {
         x: fromBlacksmith ? 2594 : 2599, y: fromBlacksmith ? 7808 : 7853, z: 0,
         wanderRadius: 0, owner: player, ownerOnly: true });
       if (pursuer) {
-        pursuer.setMovementSteps?.(2);
+        pursuer.setMovementSteps?.(fromBlacksmith ? 2 : 1);
         pursuer.setScriptedMovement?.(true);
         BLOOD_HUNT_PURSUER_OWNERS.set(pursuer, player);
         bloodHuntPursuitArea?.enter(pursuer);
@@ -4855,10 +4853,20 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (headbar && !headbar.isDestroyed?.()) {
       headbar.setHitpoints?.(Math.max(6, Math.min(60, (Number(progress) || 1) * 6)));
     }
-    if (pursuer && !pursuer.isDestroyed?.() && !hunt.pursuerDefeated) {
+    if (pursuer && !pursuer.isDestroyed?.()) {
       const from = pursuer.getLocation?.(), to = player.getLocation?.();
-      if (from && to && from.getZ() === to.getZ() && from.getDistance(to) > 1) {
+      const combat = pursuer.getCombat?.();
+      const target = combat?.getTarget?.();
+      if (target === player) {
+        pursuer.setScriptedMovement?.(false);
+      } else if (from && to && from.getZ() === to.getZ() && from.getDistance(to) > 1) {
+        pursuer.setScriptedMovement?.(true);
         api.core.PathFinder.calculateWalkRoute(pursuer, to.getX(), to.getY());
+      } else if (from && to && from.getZ() === to.getZ()) {
+        // The captured chase becomes a normal attack when Drakan catches the player.
+        // Scripted movement disables NPC combat, so hand movement back to Combat here.
+        pursuer.setScriptedMovement?.(false);
+        if (target !== player) combat?.attack?.(player);
       }
     }
   }
@@ -4876,7 +4884,6 @@ module.exports = function registerTheBloodMoonRises(api) {
       api.removeNpc(actor);
     }
     BLOOD_HUNT_PURSUER_ACTORS.delete(owner);
-    BLOOD_HUNT_PURSUER_DEFEATED.add(owner);
   }
 
   class BloodHuntPursuitArea extends api.core.Area {
@@ -4894,8 +4901,11 @@ module.exports = function registerTheBloodMoonRises(api) {
       if (!targetOwner && !attackerOwner) return null;
       const player = attacker.getAsPlayer?.() ?? attacker;
       const victim = target.getAsPlayer?.() ?? target;
-      if (targetOwner) return player === targetOwner && [STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(targetOwner));
-      return victim === attackerOwner && [STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(attackerOwner));
+      const ownerIsSafe = (owner) => inBloodHuntPartySafeZone(owner);
+      if (targetOwner) return player === targetOwner && !ownerIsSafe(targetOwner) &&
+        [STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(targetOwner));
+      return victim === attackerOwner && !ownerIsSafe(attackerOwner) &&
+        [STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(attackerOwner));
     }
   }
 
@@ -6223,7 +6233,6 @@ module.exports = function registerTheBloodMoonRises(api) {
         player.setAttribute(HUNT_ATTRIBUTE, { ...player.getAttribute(HUNT_ATTRIBUTE), pursuitStarted: true,
           pursuitSpawn: "crank" });
         player.getPacketSender().sendVarbit(15603, 1);
-        BLOOD_HUNT_PURSUER_DEFEATED.delete(player);
         player.sendMessage("You insert the crank wheel and start turning it... Better keep cranking! A presence stirs behind you.");
       }
       syncBloodHuntPursuer(player);
@@ -6302,14 +6311,12 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.setAttribute(HUNT_ATTRIBUTE, { ...hunt, pursuitStarted: false, pursuitSpawn: null });
       player.getPacketSender?.().sendVarbit(15603, 0);
       cleanupBloodHuntPursuer(player);
-      BLOOD_HUNT_PURSUER_DEFEATED.delete(player);
       return;
     }
     if (ids.includes(ObjectIdentifiers.JOVKAI_DOOR) && x === 2580 && y === 7812 &&
       sourceY < y && hasItem(player, HUNT_ITEMS.oldCog)) {
       player.setAttribute(HUNT_ATTRIBUTE, { ...hunt, pursuitStarted: true, pursuitSpawn: "blacksmith" });
       player.getPacketSender?.().sendVarbit(15603, 1);
-      BLOOD_HUNT_PURSUER_DEFEATED.delete(player);
       syncBloodHuntPursuer(player);
       return;
     }
