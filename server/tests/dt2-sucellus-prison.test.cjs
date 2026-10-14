@@ -612,7 +612,7 @@ test("Ruby key chain requires the seven chest names, converter clue, and transla
 });
 
 test("Emerald and Diamond clues gate their real cache chests", () => {
-  const { handlers, messages, prompts, player, inventory, instanceLocation } = setup();
+  const { handlers, messages, prompts, player, inventory, instanceLocation, createdNpcs } = setup();
   player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 28);
   handlers.object({ player, definition: { id: 49151, name: "Crate" }, option: "Search", location: instanceLocation(2912, 6450, 2), handled: false });
   assert.equal(inventory.getAmount(28423), 1);
@@ -648,4 +648,8 @@ test("Emerald and Diamond clues gate their real cache chests", () => {
   enterAnswer(prompts, "WRATH");
   assert.equal(inventory.getAmount(28419), 1);
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 40);
+  const assassin = createdNpcs.find(npc => npc.id === 12348);
+  assert.ok(assassin, "earning the Diamond key returns the Assassin immediately without a relog");
+  const expected = instanceLocation(2920, 6375, 2);
+  assert.deepEqual([assassin.getLocation().getX(), assassin.getLocation().getY()], [expected.x, expected.y]);
 });

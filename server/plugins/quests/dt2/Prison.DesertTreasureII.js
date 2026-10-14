@@ -236,6 +236,7 @@ module.exports = function registerSucellusPrison(api) {
     }
     const next = key === "sapphire" ? 26 : key === "emerald" ? 30 : key === "ruby" ? 36 : 40;
     setState(player, next);
+    if (key === "diamond") spawnAssassin(player, player.getAttribute(AREA));
     player.sendMessage(`The lock opens. You take the ${key} key.`);
   }
 
