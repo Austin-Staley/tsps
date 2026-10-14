@@ -7443,9 +7443,18 @@ test('Desert Treasure II last medallion route traps the player, requires solving
     process();
     assert.equal(spawnedFigures.length, 4, 'login can resume the active fight in the cell Area');
 
+    p.location = new core.Location(3104, 9265, 0);
+    assert.equal(objectHooks[0]({ player: p, objectId: 48767, definition: { id: 48767 }, option: 'Use', location: { x: 3104, y: 9266, z: 0 } }), true,
+      'the real Portal action is claimed while the Figure still holds the player in the cell');
+    assert.deepEqual([p.location.x, p.location.y, p.location.z], [3104, 9265, 0],
+      'the cell portal cannot bypass the unfinished Figure trial');
     deathHooks[0]({ killer: p, npc: spawnedFigure });
     assert.equal(attrs.get('desert-treasure-ii:final-figure-defeated'), true);
     assert.equal(inventory.getAmount(core.ItemIdentifiers.WHISPERERS_MEDALLION), 1);
+    assert.equal(objectHooks[0]({ player: p, objectId: 48767, definition: { id: 48767 }, option: 'Use', location: { x: 3104, y: 9266, z: 0 } }), true,
+      'after the Figure yields her medallion, the native cell Portal leads back outside');
+    assert.deepEqual([p.location.x, p.location.y, p.location.z], [3175, 2887, 0],
+      'the cell exit lands beside the real desert hideout entrance');
   } finally {
     runtime.startTranscript = startTranscript;
   }

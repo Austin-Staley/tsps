@@ -22,6 +22,7 @@ module.exports = function registerDesertTreasureII(api) {
   // capture/unique spotanim was found, so this visual mapping is inferred.
   const FINAL_FIGURE_ORB_PROJECTILE = 536;
   const FINAL_FIGURE_RETURN_PORTAL = 48770; // cache transform of loc 49497 at 3175,2887
+  const FINAL_CELL_EXIT_PORTAL = 48767; // cache Portal inside the hideout cell at 3104,9266
   // Wiki: approximately every ten attacks, she stuns/shoves the player, then
   // throws an orb. The 3-tick freeze + 2-tick dodge window is inferred from
   // the Wiki's instruction that the stun ends two ticks before impact.
@@ -5061,6 +5062,17 @@ module.exports = function registerDesertTreasureII(api) {
     const sucellusTile = sucellusSourceTile(p, location);
     const visibleId = definition?.id ?? objectId;
     const option = String(event.option ?? "").toLowerCase();
+    if (visibleId === FINAL_CELL_EXIT_PORTAL && location?.x === 3104 && location?.y === 9266
+      && location?.z === 0 && option === "use") {
+      if (stage(p) !== S.WHISPERER || !p.getAttribute(FINAL_FIGURE_DEFEATED)
+        || !has(p, I.WHISPERERS_MEDALLION)) {
+        p.sendMessage("The portal remains sealed until the Mysterious Figure is defeated and her medallion recovered.");
+        return true;
+      }
+      p.moveTo(new api.core.Location(3175, 2887, 0));
+      p.sendMessage("You pass through the portal and leave the hideout with the Whisperer's medallion.");
+      return true;
+    }
     if (visibleId === FINAL_FIGURE_RETURN_PORTAL && location?.x === 3175 && location?.y === 2887
       && location?.z === 0 && option === "use") {
       if (stage(p) !== S.WHISPERER || !p.getAttribute(FINAL_CELL_ACTIVE)
