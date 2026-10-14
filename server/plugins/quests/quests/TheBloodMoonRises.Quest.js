@@ -5879,6 +5879,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     const drops = [
       { id: HUNT_ITEMS.crank, tile: new Location(2603, 7847, 0), claimed: hunt.crankStarted },
       { id: HUNT_ITEMS.toothHalf, tile: new Location(2600, 7845, 0), claimed: hasItem(player, HUNT_ITEMS.myrmelKey) },
+      { id: HUNT_ITEMS.loopHalf, tile: new Location(2588, 7816, 0), claimed: hasItem(player, HUNT_ITEMS.myrmelKey) },
     ];
     for (const { id, tile, claimed } of drops) {
       if (claimed || hasItem(player, id) || manager.getGroundItem(player.getUsername(), id, tile, area)) continue;
@@ -5990,13 +5991,6 @@ module.exports = function registerTheBloodMoonRises(api) {
       if (!inventory.contains(HUNT_ITEMS.viturKey)) { player.sendMessage("The shed lock needs the Vitur key."); return; }
       if (!state.shedOpen) promptHuntCode(player, "shed");
       else if (!inventory.contains(HUNT_ITEMS.boltCutters)) inventory.adds(HUNT_ITEMS.boltCutters, 1);
-      return;
-    }
-    if (x === 2588 && y === 7816) {
-      event.handled = true;
-      if (!state.chainCut || !inventory.contains(HUNT_ITEMS.boltCutters)) { player.sendMessage("The door is chained shut. Cut the chain with bolt cutters first."); return; }
-      if (!inventory.contains(HUNT_ITEMS.loopHalf)) inventory.adds(HUNT_ITEMS.loopHalf, 1);
-      player.sendMessage("You cut the chain and take the loop half of a key.");
       return;
     }
     if (x === 2596 && y === 7833) {

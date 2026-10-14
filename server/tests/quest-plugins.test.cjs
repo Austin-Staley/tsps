@@ -4067,7 +4067,8 @@ test('Blood Moon hunt requires the crank, bookcase key and TOOLS shed code befor
   assert.deepEqual(bookcaseRoute.destination, { x: 2584, y: 7862, z: 0 }, 'the bookcase is approached from its reachable southern side');
   const spawned = [];
   api.getItemOnGroundManager = () => ({
-    getGroundItem: () => null,
+    getGroundItem: (_username, id, tile) => spawned.find(({ item, tile: placed }) => item.id === id &&
+      placed.getX() === tile.getX() && placed.getY() === tile.getY() && placed.getZ() === tile.getZ()) ?? null,
     registerLocation: (_who, item, tile) => { spawned.push({ item, tile }); },
   });
   player.getUsername = () => 'BloodHuntFixture';
@@ -4077,11 +4078,17 @@ test('Blood Moon hunt requires the crank, bookcase key and TOOLS shed code befor
   assert.deepEqual(spawned.map(({ item, tile }) => [item.id, tile.getX(), tile.getY(), tile.getZ()]), [
     [api.core.ItemIdentifiers.CRANK_WHEEL, 2603, 7847, 0],
     [api.core.ItemIdentifiers.TOOTH_HALF_OF_KEY_6, 2600, 7845, 0],
-  ], 'both captured hunt items spawn at their real pickup tiles');
+    [api.core.ItemIdentifiers.LOOP_HALF_OF_KEY_6, 2588, 7816, 0],
+  ], 'the captured crank and both key halves spawn at their real pickup tiles');
   inventory.adds(api.core.ItemIdentifiers.TOOTH_HALF_OF_KEY_6, 1);
   handlers.playerProcess.find((handler) => handler.name === 'syncHuntGroundItems')({ player });
   assert.equal(spawned.filter(({ item }) => item.id === api.core.ItemIdentifiers.TOOTH_HALF_OF_KEY_6).length, 1,
     'the tooth half is not duplicated after pickup');
+  inventory.adds(api.core.ItemIdentifiers.MYRMEL_KEY, 1);
+  handlers.playerProcess.find((handler) => handler.name === 'syncHuntGroundItems')({ player });
+  assert.equal(spawned.filter(({ item }) => item.id === api.core.ItemIdentifiers.LOOP_HALF_OF_KEY_6).length, 1,
+    'the loop half is not duplicated after the combined key is made');
+  inventory.deleteNumber(api.core.ItemIdentifiers.MYRMEL_KEY, 1);
   inventory.deleteNumber(api.core.ItemIdentifiers.TOOTH_HALF_OF_KEY_6, 1);
   const toggleDoor = handlers.custom.get('door:toggle').at(-1);
   const foodShopDoor = { player, objectId: api.core.ObjectIdentifiers.VITUR_DOOR_4, location: { x: 2598, y: 7843, z: 0 }, handled: false };
@@ -4117,7 +4124,10 @@ test('Blood Moon hunt requires the crank, bookcase key and TOOLS shed code befor
   assert.equal(table.handled, false, 'the actionless table cannot award the captured ground item by itself');
   inventory.adds(ids.TOOTH_HALF_OF_KEY_6, 1); // The real ground-item pickup is covered by object-reach.test.cjs.
   interact(2590, 7818);
-  interact(2588, 7816);
+  const loopTable = { player, location: { x: 2588, y: 7816, z: 0 }, handled: false };
+  hunt(loopTable);
+  assert.equal(loopTable.handled, false, 'the actionless table does not replace the loop-half ground pickup');
+  inventory.adds(ids.LOOP_HALF_OF_KEY_6, 1); // The real ground-item pickup is covered by object-reach.test.cjs.
   assert.equal(inventory.contains(ids.TOOTH_HALF_OF_KEY_6), true);
   assert.equal(inventory.contains(ids.LOOP_HALF_OF_KEY_6), true);
   const combine = handlers.itemOnItem.find((handler) => handler.name === 'handleBloodHuntItemOnItem');
