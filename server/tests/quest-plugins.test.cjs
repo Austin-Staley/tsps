@@ -7314,8 +7314,8 @@ test('DT2 prison relog resumes only the saved clear tile at the matching earned 
   const logout = handlers.playerLogout.find(handler => handler.name === 'handleLogout');
   login({ player });
   let area = attributes.get('desert-treasure-ii:sucellus-area');
-  assert.deepEqual([player.location.x, player.location.y, player.location.z], [5040, 6014, 2],
-    'an account without a checkpoint uses the ordinary prison entrance');
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], [5047, 6039, 2],
+    'an escaped account without a checkpoint resumes beside the Assassin');
   assert.ok(persisted.includes('desert-treasure-ii:sucellus-prison-checkpoint'));
 
   player.moveTo(area.tile(71, 63, 2));
@@ -7331,8 +7331,17 @@ test('DT2 prison relog resumes only the saved clear tile at the matching earned 
   logout({ player });
   attributes.set('desert-treasure-ii:sucellus-prison-progress', 40);
   login({ player });
-  assert.deepEqual([player.location.x, player.location.y, player.location.z], [5040, 6014, 2],
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], [5047, 6039, 2],
     'a checkpoint tied to older progress cannot skip a newly locked gate');
+
+  logout({ player });
+  attributes.set('desert-treasure-ii:sucellus-prison-progress', 22);
+  attributes.set('desert-treasure-ii:sucellus-prison-checkpoint',
+    { x: 2917, y: 6375, z: 2, progress: 22 });
+  login({ player });
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], [5047, 6039, 2],
+    'old earned saves inside the disconnected corridor recover without granting puzzle progress');
+  assert.equal(attributes.get('desert-treasure-ii:sucellus-prison-progress'), 22);
 });
 
 test('Desert Treasure II prison escape leads to the cache Duke arena and requires two real poisons', async () => {
@@ -7451,6 +7460,9 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   assert.equal(inventory.get(I.LOCKPICK_4), 1);
   itemObjects.find(h => h.name === 'handleItemOnObject')({ player, itemId: I.LOCKPICK_4, objectId: 49099, location: sourceLocation(3040, 6370) });
   assert.equal(attrs.get('desert-treasure-ii:sucellus-cell-escaped'), true);
+  assert.deepEqual([player.location.x, player.location.y, player.location.z],
+    [sourceLocation(2919, 6375, 2).x, sourceLocation(2919, 6375, 2).y, 2],
+    'the escape lands on the clear route beside the Assassin, outside the western cell wall');
   assert.equal(area.entities.some((npc) => npc.id === core.NpcIdentifiers.ASSASSIN_7), true, 'the cell guard is present after the escape');
   objects.find(h => h.name === 'handleObjectInteraction')({ player, objectId: 49120, option: 'Pick-lock', location: sourceLocation(2945, 6389, 2) });
   assert.equal(attrs.get('desert-treasure-ii:sucellus-assassin-gone'), undefined, 'a padlock click cannot skip the prison trail');

@@ -94,6 +94,7 @@ module.exports = function registerDesertTreasureII(api) {
   const SUCELLUS_PRISON_GEAR = "desert-treasure-ii:sucellus-prison-gear";
   const SUCELLUS_PRISON_PROGRESS = "desert-treasure-ii:sucellus-prison-progress";
   const SUCELLUS_PRISON_CHECKPOINT = "desert-treasure-ii:sucellus-prison-checkpoint";
+  const SUCELLUS_ESCAPE_TILE = [47, 39, 2];
   const SUCELLUS_PRISON_COMPLETE = "desert-treasure-ii:sucellus-prison-complete";
   const SUCELLUS_CELL_PROGRESS = "desert-treasure-ii:sucellus-cell-progress";
   const SUCELLUS_CELL_ENTERED = "desert-treasure-ii:sucellus-cell-entered";
@@ -1979,6 +1980,10 @@ module.exports = function registerDesertTreasureII(api) {
     const progress = Number(player.getAttribute(SUCELLUS_PRISON_PROGRESS)) || 22;
     if (!checkpoint || checkpoint.progress !== progress || progress === 54 || checkpoint.z !== 2
       || checkpoint.x < 2872 || checkpoint.x >= 3064 || checkpoint.y < 6336 || checkpoint.y >= 6472) return null;
+    // Earlier escape landings put players behind the solid western cell wall.
+    // Recover those earned saves beside the Assassin on the actual route.
+    if (progress === 22 && checkpoint.x >= 2907 && checkpoint.x <= 2917
+      && checkpoint.y >= 6350 && checkpoint.y <= 6386) return null;
     return area.tile(checkpoint.x - 2872, checkpoint.y - 6336, checkpoint.z);
   }
 
@@ -2963,7 +2968,7 @@ module.exports = function registerDesertTreasureII(api) {
         const area = enterSucellusArea(p, false);
         if (!escaped && !defeated) p.moveTo(area.tile(168, 33, 0));
         else if (!defeated) {
-          p.moveTo(restoredSucellusPrisonTile(p, area) ?? area.tile(40, 14, 2));
+          p.moveTo(restoredSucellusPrisonTile(p, area) ?? area.tile(...SUCELLUS_ESCAPE_TILE));
           spawnSucellusCellAssassin(p, area);
           api.emitCustomEvent("dt2:sucellus-prison-resume", { player: p, area });
         } else {
@@ -5384,7 +5389,7 @@ module.exports = function registerDesertTreasureII(api) {
         p.setAttribute(SUCELLUS_CELL_ESCAPED, true);
         talk(p, N.ASSASSIN_7, "duke-sucellus-of-the-sixth-legion-escaping-the-prison-cell");
         const area = p.getAttribute(SUCELLUS_AREA);
-        p.moveTo(area.tile(40, 14, 2));
+        p.moveTo(area.tile(...SUCELLUS_ESCAPE_TILE));
         spawnSucellusCellAssassin(p, area);
         return true;
       }
