@@ -7211,6 +7211,10 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   attrs.set('desert-treasure-ii:lassar', {
     entered: true, cathedralTentacles: true, perfectTorch: true, sanity: 100, inShadow: false,
   });
+  playerProcesses.forEach((handler) => handler({ player }));
+  const bankOddFigure = created.find((npc) => npc.id === core.NpcIdentifiers.ODD_FIGURE);
+  assert.ok(bankOddFigure, 'the normal post-logout encounter trigger may be registered while the player is outside the cathedral');
+  assert.equal(bankOddFigure.getArea(), undefined, 'the trigger begins outside the private scene on a public-bank login');
   player.location = { x: 2656, y: 6370, z: 0 };
   playerProcesses.forEach((handler) => handler({ player }));
   const preFightArea = player.getPrivateArea();
@@ -7219,6 +7223,7 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
     'the private cathedral masks the overlapping public Whisperer before the quest fight begins');
   const oddFigure = preFightArea.getNpcs().find((npc) => npc.getId?.() === core.NpcIdentifiers.ODD_FIGURE);
   assert.ok(oddFigure, 'the quest Odd Figure is spawned inside the owner scene before Disturb');
+  assert.equal(oddFigure, bankOddFigure, 'the existing public-registered trigger is rehomed into the private scene on cathedral entry');
   interactions.find((entry) => entry.name === 'Odd Figure').opts.Disturb({ player, npcId: core.NpcIdentifiers.ODD_FIGURE });
   const boss = created.find((npc) => npc.id === core.NpcIdentifiers.THE_WHISPERER_3);
   assert.ok(boss, 'disturbing the figure creates the quest Whisperer');

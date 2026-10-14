@@ -6422,10 +6422,16 @@ module.exports = function registerDesertTreasureII(api) {
       || state.whispererStarted || state.whispererDefeated) return null;
     let owned = spawned.get(p);
     if (!owned) spawned.set(p, owned = {});
-    if (owned.lassarOddFigure?.isRegistered?.()) return owned.lassarOddFigure;
-    owned.lassarOddFigure = api.spawnNpc({ id: N.ODD_FIGURE, x: 2656, y: 6370, z: 0, wanderRadius: 0, owner: p, ownerOnly: true });
     const area = p.getAttribute(WHISPERER_AREA);
-    if (area instanceof WhispererArea && !area.isDestroyed()) area.enter(owned.lassarOddFigure);
+    if (!owned.lassarOddFigure?.isRegistered?.()) {
+      owned.lassarOddFigure = api.spawnNpc({ id: N.ODD_FIGURE, x: 2656, y: 6370, z: 0, wanderRadius: 0, owner: p, ownerOnly: true });
+    }
+    // The normal login recovery can register this NPC while the player is at
+    // a public bank. When they later enter the cathedral, add that existing
+    // actor to the owner scene as well as newly spawned figures.
+    if (area instanceof WhispererArea && !area.isDestroyed() && owned.lassarOddFigure.getArea?.() !== area) {
+      area.enter(owned.lassarOddFigure);
+    }
     return owned.lassarOddFigure;
   }
 
