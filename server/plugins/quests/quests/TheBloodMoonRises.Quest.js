@@ -2866,6 +2866,13 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!player || stage(player) !== STAGE.CASTLE) return;
     const location = player.getLocation?.();
     const prisonStory = castleStory(player);
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.STOCKPILE_STORAGE &&
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 78 &&
+      location?.getX?.() === 2531 && location.getY() === 7385 && location.getZ() === 0) {
+      // Earlier builds left the stockpile click route in a disconnected corner of the room.
+      player.moveTo(new Location(2534, 7378, 0));
+      return;
+    }
     if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.UPPER_SOUTH_HALL &&
       Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 78 &&
       location?.getZ?.() === 0 && location.getX() >= 2434 && location.getX() <= 2443 &&
