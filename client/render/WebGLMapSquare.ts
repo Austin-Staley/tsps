@@ -345,6 +345,7 @@ function createLocGeometryResources(
 
 export class WebGLMapSquare {
     readonly locDataChangedListeners = new Set<() => void>();
+    tileOverlays?: Int16Array[][];
 
     static readonly IDENTITY_MAT4 = mat4.create() as Float32Array;
 
@@ -1002,6 +1003,7 @@ export class WebGLMapSquare {
             mapData.tileLocTypeRotByLevel,
             mapData.tilePresenceByLevel,
         );
+        mapSquare.tileOverlays = mapData.tileOverlays;
         // Initialize occupancy counters to match initial flags
         for (const c of occInit) {
             mapSquare.incNpcOcc(c.plane, c.x, c.y);

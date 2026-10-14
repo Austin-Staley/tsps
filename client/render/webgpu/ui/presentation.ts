@@ -1,3 +1,4 @@
+import { drawEditModeLoadingScreen, getEditModeSceneLoadingStatus } from "../../../game/plugins/editmode/editModeLoadingScreen";
 import { isMobileMode } from "../../../common/utils/DeviceUtil";
 import { GameState, LoginIndex } from "../../../game/login";
 import type { LoginRenderer } from "../../../game/login/LoginRenderer";
@@ -78,7 +79,9 @@ export class WebgpuUiPresentation {
             this.updateHudFx(timeMs, deltaMs, bufW, bufH);
         } else {
             // Login-like states own the frame: route input, draw the title, black the world out.
-            this.handleLoginInput();
+            osrsClient.loginRenderer.syncMobileViewportState(osrsClient.loginState, this.mobileLoginInput.isKeyboardOpen());
+            osrsClient.loginRenderer.updateLayout(metrics.layoutW, metrics.layoutH, metrics.layoutW, metrics.layoutH);
+            if (!osrsClient.scenePreviewEnabled && !osrsClient.editorLaunching) this.handleLoginInput(metrics);
             this.drawLoginSurface(metrics, bufW, bufH);
             this.drawLoadingMessage(timeMs, deltaMs, this.loginCtx);
         }
@@ -95,7 +98,7 @@ export class WebgpuUiPresentation {
     // ------------------------------------------------------------------ login
 
     /** Mirrors the WebGL frame loop's login early-out (client/render/render/frame/render.ts). */
-    private handleLoginInput(): void {
+    private handleLoginInput(metrics: UiRenderMetrics): void {
         const osrsClient = this.renderer.osrsClient;
         const inputManager = osrsClient.inputManager;
         const onLoginScreen = osrsClient.isOnLoginScreen();
@@ -137,8 +140,8 @@ export class WebgpuUiPresentation {
                 inputManager.saveClickY !== -1
             ) {
                 const action = osrsClient.handleLoginMouseClick(
-                    inputManager.saveClickX,
-                    inputManager.saveClickY,
+                    (inputManager.saveClickX - metrics.renderOffsetX) / metrics.renderScaleX,
+                    (inputManager.saveClickY - metrics.renderOffsetY) / metrics.renderScaleY,
                     inputManager.clickMode3,
                 );
                 const { loginState } = osrsClient;
@@ -173,7 +176,11 @@ export class WebgpuUiPresentation {
         const loginState = osrsClient.loginState;
         const inputManager = osrsClient.inputManager;
 
-        if (osrsClient.scenePreviewEnabled) {
+        const editorLoading = getEditModeSceneLoadingStatus(osrsClient) ??
+            (osrsClient.editorLaunching && osrsClient.gameState === GameState.LOGIN_SCREEN
+                ? "Loading world settings"
+                : undefined);
+        if (osrsClient.scenePreviewEnabled && !editorLoading) {
             // Dev preview replaces the title with the world; nothing to cover it with.
             this.hide(this.loginCanvas);
             return;
@@ -182,11 +189,17 @@ export class WebgpuUiPresentation {
         const layoutW = metrics.layoutW;
         const layoutH = metrics.layoutH;
 
-        loginRenderer.syncMobileViewportState(loginState, this.mobileLoginInput.isKeyboardOpen());
-        loginRenderer.setMousePosition(inputManager.mouseX | 0, inputManager.mouseY | 0);
+        loginRenderer.setMousePosition(
+            (inputManager.mouseX - metrics.renderOffsetX) / metrics.renderScaleX,
+            (inputManager.mouseY - metrics.renderOffsetY) / metrics.renderScaleY,
+        );
         loginState.hoveredServerIndex = loginRenderer.computeHoveredServerIndex(loginState);
 
-        if (osrsClient.gameState === GameState.DOWNLOADING) {
+        if (editorLoading) {
+            loginRenderer.drawInitial(loginState, layoutW, layoutH, layoutW, layoutH);
+            const ctx = loginRenderer.getCanvas(layoutW, layoutH).getContext("2d");
+            if (ctx) drawEditModeLoadingScreen(loginRenderer, ctx, editorLoading);
+        } else if (osrsClient.gameState === GameState.DOWNLOADING) {
             loginRenderer.drawDownload(loginState, layoutW, layoutH, layoutW, layoutH);
         } else if (osrsClient.gameState === GameState.LOADING) {
             loginRenderer.drawInitial(loginState, layoutW, layoutH, layoutW, layoutH);

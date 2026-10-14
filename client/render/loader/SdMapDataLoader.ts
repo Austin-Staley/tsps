@@ -846,7 +846,7 @@ function addSceneModels(
     }
 }
 
-function buildLocGeometryData(sceneBuf: SceneBuffer): LocGeometryData {
+export function buildLocGeometryData(sceneBuf: SceneBuffer): LocGeometryData {
     const drawRanges = (commands: DrawCommand[]): DrawRange[] =>
         commands.map((cmd) => sceneBuf.createDrawRange(cmd));
     const drawRangePlanes = (commands: DrawCommand[]): Uint8Array =>
@@ -2114,6 +2114,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
 
         const transferables = [
             ...scene.tileRenderFlags.flat().map((buf) => buf.buffer),
+            ...scene.tileOverlays.flat().map((buf) => buf.buffer),
             ...(sceneBuf.groundMaterials?.flat().map((column) => column.buffer) ?? []),
             ...(sceneBuf.groundColors?.flat().map((column) => column.buffer) ?? []),
             ...scene.collisionMaps.map((map) => map.flags.buffer),
@@ -2223,6 +2224,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
                 renderPosX,
                 renderPosY,
                 tileRenderFlags: scene.tileRenderFlags,
+                tileOverlays: scene.tileOverlays,
                 groundMaterials: sceneBuf.groundMaterials,
                 groundColors: sceneBuf.groundColors,
                 collisionDatas: scene.collisionMaps,
