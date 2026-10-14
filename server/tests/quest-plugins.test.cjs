@@ -2693,7 +2693,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [2442, 7417, 0], [2437, 7419, 0], [2456, 7388, 0], [2380, 7392, 0], [2372, 7392, 0],
     [2393, 7363, 0], [2387, 7383, 0], [2441, 7400, 0], [2394, 7370, 0], [2440, 7388, 0],
     [2439, 7394, 0], [2435, 7372, 0], [2306, 7396, 1], [2541, 7373, 0], [2526, 7363, 0],
-    [2499, 7400, 0], [2509, 7379, 0], [2513, 7382, 0], [2502, 7400, 0], [2534, 7377, 0],
+    [2499, 7400, 0], [2509, 7379, 0], [2513, 7382, 0], [2502, 7400, 0],
     [2524, 7388, 0], [2563, 7369, 0], [2310, 7366, 0], [2566, 7386, 0], [2569, 7365, 0],
     [2565, 7394, 0], [2570, 7368, 0]];
   for (const [x, y, z] of pairedDoorLandingTiles) {
@@ -2920,6 +2920,13 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     destX: 2524, destY: 7378, moveNear: true, maxWaypoints: 80, privateArea: null });
   assert.equal(labNotesApproach.success, true, 'the real lab landing reaches an adjacent tile of its ground notes');
   assert.deepEqual([labNotesApproach.endX, labNotesApproach.endY], [2524, 7379]);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 42);
+  const stockpileEntry = enterPairedDoor(61572, 2523, 7389, 0, { x: 2523, y: 7388, z: 0 });
+  assert.equal(stockpileEntry.handled, true);
+  assert.deepEqual(moved.at(-1), [2534, 7378, 0], 'the recorded north-door arrival reaches the stockpile chamber');
+  const stockpileApproach = larderRoute.findRoute({ level: 0, srcX: 2534, srcY: 7378, srcSize: 1,
+    destX: 2535, destY: 7385, moveNear: true, maxWaypoints: 80, privateArea: null });
+  assert.equal(stockpileApproach.success, true, 'the recorded stockpile-room landing connects to the stockpile');
   inventoryItems.add(api.core.ItemIdentifiers.GILDED_KEY);
   attributes.set('quest.the_blood_moon_rises.castle-room', 33);
   const gildedLibraryDoor = enterPairedDoor(61626, 2445, 7418, 1, { x: 2445, y: 7417, z: 0 });

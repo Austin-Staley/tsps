@@ -428,7 +428,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: 61574, x: 2512, y: 7382, z: 0, from: CASTLE_ROOM.LABORATORY, to: CASTLE_ROOM.SOLID_DOOR_HALL,
       fromFloor: 2, toFloor: 2, action: "Enter", key: ItemIdentifiers.SOLID_KEY, keyName: "solid key", landing: [2502, 7400] },
     { id: CASTLE_DOOR_IDS.DOOR, x: 2523, y: 7389, z: 0, from: CASTLE_ROOM.LABORATORY, to: CASTLE_ROOM.STOCKPILE_STORAGE,
-      fromFloor: 2, toFloor: 2, landing: [2534, 7377] },
+      fromFloor: 2, toFloor: 2, landing: [2534, 7378] },
     { id: CASTLE_DOOR_IDS.DOOR, x: 2535, y: 7377, z: 0, from: CASTLE_ROOM.STOCKPILE_STORAGE, to: CASTLE_ROOM.LABORATORY,
       fromFloor: 2, toFloor: 2, landing: [2524, 7388] },
     { id: 61606, x: 2311, y: 7366, z: 0, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.BASEMENT_HALL,
