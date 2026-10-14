@@ -56,6 +56,7 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager } = {
 
   const handlers = new Map();
   let doorToggleHandler = null;
+  const visibleObjectIds = new Map();
   const objectManager = suppliedObjectManager ?? {
     register: (o) => ops.push(['register', o.getId(), o.getLocation().getX(), o.getLocation().getY(), o.getFace()]),
     deregister: (o) => ops.push(['deregister', o.getId(), o.getLocation().getX(), o.getLocation().getY(), o.getFace()]),
@@ -67,6 +68,7 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager } = {
     core: {
       CacheDefinitions, GameObject, Location, MapObjects, Sounds,
       ObjectIdentifiers: require('../dist/util/ObjectIdentifiers').ObjectIdentifiers,
+      ObjectDefinition: { forPlayer: (id) => ({ id: visibleObjectIds.get(id) ?? id }) },
       Sound: require('../dist/game/Sound').Sound,
       Task: require('../dist/game/task/Task').Task,
       ObjectManager: objectManager,
@@ -115,7 +117,7 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager } = {
     CacheDefinitions.getCounts = originalGetCounts;
   };
 
-  return { place, click, sounds, ops, submitted, handlers, setDoorToggleHandler: (handler) => { doorToggleHandler = handler; }, restore };
+  return { place, click, sounds, ops, submitted, handlers, visibleObjectIds, setDoorToggleHandler: (handler) => { doorToggleHandler = handler; }, restore };
 }
 
 test('captured door portals can hand off before the ordinary door swing', () => {
@@ -936,6 +938,34 @@ test('the Blood Moon Vitur food-shop door opens through the normal door handler'
       ['register', id, 2598, 7842, 0],
       ['deregister', id, 2598, 7843, 3],
     ], 'the self-opening door rotates away from the door tile just as recorded');
+  } finally {
+    h.restore();
+  }
+});
+
+test('a transformed Blood Moon door opens its visible child instead of treating the parent as a closed loc', () => {
+  const O = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers;
+  const h = buildHarness({ cacheObjects: new Map([
+    [O.DOOR_837, { name: 'Door', actions: ['Open'], models: [[60956]] }],
+    [O.DOOR_838, { name: 'Door', actions: ['Close'], models: [[60957]] }],
+  ]) });
+  try {
+    const rawParent = 61840;
+    const player = {
+      getUsername: () => 'tester',
+      getPrivateArea: () => null,
+      getPacketSender: () => ({ getVarbit: () => 1, getVarp: () => 0 }),
+    };
+    const object = new GameObject(rawParent, new Location(2590, 7818, 0), 0, 1, null);
+    h.visibleObjectIds.set(rawParent, O.DOOR_837);
+    h.handlers.get('Door').Open({
+      player, object, objectId: rawParent, definition: { id: O.DOOR_837 },
+      location: object.getLocation(),
+    });
+    assert.deepEqual(h.ops, [
+      ['register', O.DOOR_838, 2590, 7819, 2],
+      ['deregister', rawParent, 2590, 7818, 1],
+    ], 'the transformed closed parent is replaced with the cache-backed open child');
   } finally {
     h.restore();
   }

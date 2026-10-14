@@ -70,6 +70,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     // The door beside the residential blue-key room has the same skipped id:
     // cache 48274 is Open, 48275 is actionless, and 48276 is its Close variant.
     [O.DOOR_683, O.DOOR_685],
+    // Vitur clothing-shop door is a transformed 61840 parent whose visible closed/open
+    // children are 61842/61843. The unnamed parent cannot be catalogued by its cache name.
+    [O.DOOR_837, O.DOOR_838],
     // Catacomb outer jail gate: its open cache variant has no Close action.
     [O.GATE_301, O.GATE_302],
     // The Lassar cistern gate opens into its actionless, same-model cache variant.
@@ -676,7 +679,9 @@ function handleMappedDoor(player, object, objectId, location) {
     return false;
   }
 
-  const closedId = resolveClosedId(objectId);
+  const visibleObjectId = core.ObjectDefinition?.forPlayer?.(object.getId?.() ?? objectId, player)?.id
+    ?? objectId;
+  const closedId = resolveClosedId(visibleObjectId);
   if (closedId == null) {
     return false;
   }
@@ -688,9 +693,11 @@ function handleMappedDoor(player, object, objectId, location) {
   const activeLocation = activeObject.getLocation?.() ?? location;
   const openId = getDoorCatalog().closedToOpen.get(closedId);
   // A self-opening door keeps its id, so only the tracked state says it is open.
+  const activeVisibleId = core.ObjectDefinition?.forPlayer?.(activeObject.getId?.() ?? visibleObjectId, player)?.id
+    ?? visibleObjectId;
   const open = openId === closedId
     ? existingState != null
-    : (activeObject.getId?.() ?? objectId) !== closedId;
+    : activeVisibleId !== closedId;
   const nextId = open ? closedId : openId;
   const type = Number(activeObject.getType?.() ?? activeObject.type ?? 0);
   const rotation = Number(activeObject.getFace?.() ?? activeObject.face ?? 0) & 0x3;
@@ -926,15 +933,15 @@ function handleDoubleDoor(player, object, objectId, location) {
   return true;
 }
 
-function toggleDoor({ player, object, objectId, location, clickType }) {
+function toggleDoor({ player, object, objectId, definition, location, clickType }) {
   if (!player || !object || !location) return false;
-  const request = { player, object, objectId, location, clickType, handled: false };
+  const request = { player, object, objectId, definition, location, clickType, handled: false };
   api.emitCustomEvent("door:toggle", request);
   if (request.handled) return true;
   if (handleCompositeDoor(player, object, objectId)) return true;
   if (handleWoodenGate(player, object, objectId, location)) return true;
   if (handleDoubleDoor(player, object, objectId, location)) return true;
-  return handleMappedDoor(player, object, objectId, location);
+  return handleMappedDoor(player, object, definition?.id ?? objectId, location);
 }
 
 module.exports = {
