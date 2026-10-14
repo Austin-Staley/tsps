@@ -6323,6 +6323,17 @@ module.exports = function registerTheBloodMoonRises(api) {
       event.destination = { x: 2310, y: 7366, z: 0 };
       return;
     }
+    // The paired basement stair is clickable from the west, but its footprint
+    // never reaches the interaction threshold used by generic object pathing.
+    // Replay the valid climb from the same cache-clear hall-side tile.
+    if (objectIds.includes(CASTLE_DOOR_IDS.STAIRS_UP_NORUG) && tile.getX() === 2564 &&
+      tile.getY() === 7369 && tile.getZ() === 0 &&
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.BASEMENT_HALL &&
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) === CASTLE_GROUND_FLOOR &&
+      sourceZ === 0 && sourceX === 2563 && sourceY >= 7367 && sourceY <= 7372) {
+      event.destination = { x: sourceX, y: sourceY, z: sourceZ };
+      return;
+    }
     // This basement crescent door faces a clipped row on its southern edge.
     // Its hall-side approach is west; the normal face-based route picks the
     // blocked south tile, so replay Enter from the cache-clear west approach.

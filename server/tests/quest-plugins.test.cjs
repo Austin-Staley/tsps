@@ -3255,7 +3255,34 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   assert.deepEqual(stairEvents.map(({ name, event }) => [name, event.destination.getX(), event.destination.getY(), event.destination.getZ()]),
     [['ladders:climbDown', 2563, 7369, 0]],
     'the actual one-slot Climb-down action transfers the lobby player to the basement hall');
+  const basementExitStairs = api.core.CacheDefinitions.getObject(61600);
+  assert.equal(basementExitStairs.name, 'Stairs');
+  assert.equal(basementExitStairs.actions[0], 'Climb-up');
+  const basementExitStairRoute = {
+    player, objectId: 61600, clickType: 1,
+    definition: { id: 61600, getName: () => 'Stairs', getInteractions: () => ['Climb-up'] },
+    object: { getFace: () => 3, getLocation: () => new api.core.Location(2564, 7369, 0) },
+    sourceLocation: { x: 2563, y: 7369, z: 0 }, destination: null,
+  };
+  route(basementExitStairRoute);
+  assert.deepEqual(basementExitStairRoute.destination, { x: 2563, y: 7369, z: 0 },
+    'the embedded basement exit stair replays Climb-up from its reachable west edge');
+  attributes.set('quest.the_blood_moon_rises.castle-room', 48);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 1);
+  const basementExitStair = {
+    player, objectId: 61600, clickType: 1, option: 'Climb-up',
+    definition: { id: 61600, getName: () => 'Stairs' },
+    object: { getLocation: () => new api.core.Location(2564, 7369, 0) },
+    sourceLocation: { x: 2563, y: 7369, z: 0 }, handled: false,
+  };
+  assert.equal(handlers.custom.get('ladders:climb').find(handler => handler.name === 'handleCastleLobbyStairs')(basementExitStair), true);
+  assert.equal(basementExitStair.handled, true);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 1);
+  assert.deepEqual(stairEvents.map(({ name, event }) => [name, event.destination.getX(), event.destination.getY(), event.destination.getZ()]),
+    [['ladders:climbDown', 2563, 7369, 0], ['ladders:climbUp', 2310, 7366, 0]],
+    'the actual one-slot Climb-up action returns the player from the basement to the lobby');
   api.emitCustomEvent = originalEmitCustomEvent;
+  attributes.set('quest.the_blood_moon_rises.castle-room', 48);
   const basementCrescentRoute = {
     player, objectId: 61593, clickType: 1,
     definition: { id: 61593, getName: () => 'Crescent moon door', getInteractions: () => ['Enter'] },
