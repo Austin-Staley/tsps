@@ -239,3 +239,37 @@ prison, food, copied instances, collision routes, combat achievements, lunge rol
 The generic ground-pickup server build passes. Later Blood Hunt door integration is being validated.
 All task commits use nharrison93 as author and committer through rsps-shell. The draft PR remains
 incomplete; these component checks do not claim a fresh whole-quest Blood Moon playthrough.
+
+
+The original prison continuation subsequently survives the full real300-area-tick defense, using
+recovered sharks and two doses of its original Prayer potion. Early shadow dodges were attempted
+before the freeze ended and were tanked; later two-tick freeze waits allowed actual westward dodges.
+It completes the entire frozen-Jhallan/asylum conversation at85HP/prison58, then walks through its
+earned gates and uses the actual Stairs **Climb** operation to reach the asylum foyer on plane0.
+No prison progression, quest items, health or supplies were granted during this continuation.
+
+The separate `Bmrwyrdqa` final component now **wins** Lowerniel's live fight (3,000→2,100→900→0),
+finishing79HP and entering native174 automatically. Its real Efaritay/Wyrd outro reaches completed
+native178. Saved quest points rise9→13 (**+4QP**). It obtains one Sunspear33722 and a tome33715;
+fixing the tome's exact cache-name registration (`Tome of experience`) lets all six actual native
+XP confirmations award6×30,000Attack XP,13,034,431→13,214,431. Logout/relog retains completion,
+one Sunspear, no tome after its sixth use and exactly13,214,431Attack XP, without duplicate rewards.
+Evidence: `/tmp/bmr-drakan-live-v19.log`; this is disclosed stage100 component coverage, not a fresh
+whole-quest Blood Moon run. An independent fresh-start actor is now checking the early connected
+route while the Castle actor continues Blood Hunt and its later chapters.
+
+The final wight warning audit finds newly created countdowns were decremented immediately in the
+same area tick. Assassin vials, Ketla's first charged shot, Kasonde vials/shockwaves and Persten
+lightning now retain their intended warning window. The vial regression specifically establishes
+warning tick and+1 safety, impact at+2 for a stationary player, and safety after moving away. Final
+encounter retries preserve the already-completed reveal while returning the player outside and
+requiring an explicit Smith interaction; they do not automatically restart combat on login.
+
+The subsequent integrated revision `c8240cc0` passes **981/981 tests across33 selected server
+suites**. This includes the new final staging deposit-box/persistence coverage and the unrelated
+Trapdoor handler yielding correctly. The transformed Vitur shop door now resolves its real visible
+cache child and clears its passage; the Castle/Hunt actor naturally obtains and combines both key
+halves and enters Myrmel's pub. The fresh early actor uses the actual Meiyerditch trapdoor, shrine
+examine packet, noble-clothing chest and equipment actions to reach the initial defense. Its public
+Burgh travel previously landed on water, so that overland connection remains a recorded blocker
+until the shore landing is repaired and verified.
