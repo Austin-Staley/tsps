@@ -147,6 +147,7 @@ module.exports = function registerDesertTreasureII(api) {
   const FINAL_WIGHTS_STARTED = "desert-treasure-ii:final-wights-started";
   const FINAL_WIGHTS_COMPLETE = "desert-treasure-ii:final-wights-complete";
   const LASSAR = "desert-treasure-ii:lassar";
+  const LASSAR_STRANGE_POOLS = new Set([O.STRANGE_POOL_2, O.STRANGE_POOL_3, O.STRANGE_POOL_4, O.STRANGE_POOL_5]);
   // Cache 48200 is inert at these six anchors. There is no per-player map morph
   // for the material-side puddle, so the undercity exposes cache-backed 48199
   // globally; the handler gives players outside this chapter a clear refusal.
@@ -6919,6 +6920,20 @@ module.exports = function registerDesertTreasureII(api) {
     return null;
   }
 
+  function drinkLassarPool({ player: p, objectId }) {
+    if (!LASSAR_STRANGE_POOLS.has(objectId)) return false;
+    const state = p.getAttribute(LASSAR) ?? {};
+    // Wiki: a full energy restore and two-minute stamina effect, including
+    // Ring of endurance, available only before the first Whisperer encounter.
+    if (stage(p) !== S.WHISPERER || !state.entered || state.cathedralEntered || state.whispererStarted || state.whispererDefeated) {
+      p.sendMessage("The pool no longer offers its strange restorative power.");
+      return true;
+    }
+    api.emitCustomEvent("potions:apply-stamina", { player: p, energy: 100, durationMs: 120000 });
+    p.sendMessage("You drink from the strange pool, restoring your run energy and stamina.");
+    return true;
+  }
+
   function ensurePrescott(p) {
     if (stage(p) !== S.WHISPERER || !(p.getAttribute(LASSAR) ?? {}).ramarno) return null;
     let owned = spawned.get(p);
@@ -7898,6 +7913,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onObjectRoute(handleScarStoneRoute);
   api.onObjectRoute(routeLassarSinkhole);
   api.onObjectRoute(routeSucellusVat);
+  api.onObjectInteraction("Strange Pool", { "Drink-from": drinkLassarPool });
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onGroundItemPickup(handleLassarGroundItemPickup);
   api.onItemOnItem(handleItemOnItem, { noted: false });

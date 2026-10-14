@@ -8047,7 +8047,7 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
           setArea(area) { this.area = area; }, isPlayer: () => false, isNpc: () => true,
           getAsNpc() { return this; }, getIndex: () => 78, isRegistered: () => true };
       }
-      : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
+      : prop === 'onObjectInteraction' ? (handler, actions) => typeof handler === 'function' ? objectHooks.push(handler) : base.onObjectInteraction(handler, actions)
         : prop === 'onObjectRoute' ? (handler) => objectRouteHooks.push(handler)
         : prop === 'onItemOnObject' ? (handler) => itemOnObjectHooks.push(handler)
           : prop === 'onItemAction' ? (handler) => itemActionHooks.push(handler)
@@ -8134,6 +8134,18 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(player.location.x, 2587);
     assert.equal(player.location.y, 6436);
     const enteredCity = attrs.get('desert-treasure-ii:lassar');
+    const staminaRequests = [];
+    base.onCustomEvent('potions:apply-stamina', (request) => staminaRequests.push(request));
+    const drinkPool = baseHandlers.namedObjects.find(({ target }) => target === 'Strange Pool').actions['Drink-from'];
+    assert.equal(drinkPool({ player, objectId: core.ObjectIdentifiers.STRANGE_POOL_2 }), true);
+    assert.deepEqual(staminaRequests, [{ player, energy: 100, durationMs: 120000 }],
+      'the actual pool delegates full energy and two-minute stamina to the potion effect, including Ring of endurance');
+    attrs.set('desert-treasure-ii:lassar', { ...enteredCity, cathedralEntered: true });
+    drinkPool({ player, objectId: core.ObjectIdentifiers.STRANGE_POOL_4 });
+    assert.equal(staminaRequests.length, 1, 'the pools remain unavailable after the first Whisperer encounter');
+    assert.equal(drinkPool({ player, objectId: core.ObjectIdentifiers.STRANGE_POOL }), false,
+      'the separate Sins of the Father pool is not handled by Lassar');
+    attrs.set('desert-treasure-ii:lassar', enteredCity);
     playerProcesses[0]({ player });
     for (const id of [core.ItemIdentifiers.SHADOW_BLOCKER_SCHEMATIC, core.ItemIdentifiers.SHADOW_KEY_5, core.ItemIdentifiers.SHADOW_KEY]) {
       assert.ok(groundSpawns.some(([, item]) => item.getId() === id), 'the Science District items exist before any optional teleporter activation');
