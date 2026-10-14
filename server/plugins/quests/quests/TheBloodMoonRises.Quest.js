@@ -7198,8 +7198,6 @@ module.exports = function registerTheBloodMoonRises(api) {
   // before their generic completed-quest transcript can answer for this stage.
   api.onNpcInteraction("Ivan Strom", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Sarei", { "Talk-to": talkQuestNpc });
-  api.onNpcInteraction("Veliaf Hurtz", { "Talk-to": talkQuestNpc });
-  api.onNpcInteraction("Vanescula Drakan", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Sugadinti Vitur", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Roy", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Veliaf Hurtz", { "Talk-to": talkQuestNpc });

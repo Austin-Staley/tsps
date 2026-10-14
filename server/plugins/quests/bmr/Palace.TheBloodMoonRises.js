@@ -1,4 +1,6 @@
 /** Quest Helper palace positions, with the cache's playable NPC variants. */
+const PREPARATION_VELIAF_PARENT = 15871;
+const PREPARATION_VANESCULA_PARENT = 15906;
 module.exports = function registerPalace({ api, stage, preparationAttribute, processHall }) {
   const { Area, Boundary, NpcIdentifiers: N } = api.core;
   const residents = new WeakMap();
@@ -41,7 +43,7 @@ module.exports = function registerPalace({ api, stage, preparationAttribute, pro
     if (prep.flail && prep.stakes) {
       let talkers = preparationTalkers.get(player);
       if (!talkers) { talkers = []; preparationTalkers.set(player, talkers); }
-      for (const [id, x, y] of [[15871, 3168, 7842], [15906, 3168, 7844]]) {
+      for (const [id, x, y] of [[PREPARATION_VELIAF_PARENT, 3168, 7842], [PREPARATION_VANESCULA_PARENT, 3168, 7844]]) {
         if (talkers.some(npc => npc.getId?.() === id && !npc.isDestroyed?.())) continue;
         const npc = api.spawnNpc({ id, x, y, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
         if (npc) { npc.setScriptedMovement(true); npc.getMovementQueue().setBlockMovement(true); addNpcToArea(npc); talkers.push(npc); }

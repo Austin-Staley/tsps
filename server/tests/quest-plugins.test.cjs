@@ -211,7 +211,7 @@ test('Blood Moon refinery handoff uses valid events, restores the tomb route, an
   assert.deepEqual(completions, [player], 'the transcript action emits the handoff once');
   assert.ok(emitted.every(name => /^[^:\s]+:[^:\s]+$/.test(name)));
   assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'freed');
-  assert.deepEqual(varbits.at(-1), [15464, 61]);
+  assert.deepEqual(varbits.at(-1), [15464, 62]);
 });
 
 test('Blood Moon refinery phase varbit stops overriding the Castle Escape stage', () => {
@@ -229,11 +229,11 @@ test('Blood Moon refinery phase varbit stops overriding the Castle Escape stage'
   refinery.syncLogin({ player });
   const stageChanged = handlers.custom.get('quest:stage-changed').at(-1);
   stageChanged({ key: 'the_blood_moon_rises', stage: 45, player });
-  assert.deepEqual(vars, [], 'saved refinery stage 62 cannot overwrite the later Castle stage 45');
+  assert.deepEqual(vars, [], 'saved refinery stage 64 cannot overwrite the later Castle stage 45');
 
   questStage = 30;
   stageChanged({ key: 'the_blood_moon_rises', stage: 30, player });
-  assert.deepEqual(vars, [[15464, 62]], 'the refinery phase still restores while the quest is in Slepe');
+  assert.deepEqual(vars, [[15464, 64]], 'the refinery phase still restores while the quest is in Slepe');
 });
 
 test('Blood Moon refinery copies its exact cache room into a walkable four-plane scene', () => {
@@ -327,7 +327,7 @@ test('Blood Moon refinery exit opens only after liberation and uses the canonica
   const event = { player, objectId: 61203, definition: { id: api.core.ObjectIdentifiers.ENTRY_27, getName: () => 'Entry' },
     location: { x: 3182, y: 7470, z: 0 }, option: 'Enter', handled: false };
   assert.equal(refinery.tombPassage(event), true);
-  assert.deepEqual(varbits.at(-1), [15464, 62]);
+  assert.deepEqual(varbits.at(-1), [15464, 64]);
   assert.deepEqual([moves[0].getX(), moves[0].getY(), moves[0].getZ()], [3166, 7577, 0]);
   assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'escaped');
 });
