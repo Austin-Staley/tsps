@@ -289,6 +289,7 @@ import { NotesPlugin } from "./plugins/notes/NotesPlugin";
 import { RememberLoginPlugin } from "./plugins/rememberlogin/RememberLoginPlugin";
 import { TileMarkersPlugin } from "./plugins/tilemarkers/TileMarkersPlugin";
 import { createHelmSteeringDeps, handleTileClick } from "./sailing/HelmSteering";
+import { headingIndicator } from "./sailing/HeadingIndicator";
 import { interactionModes } from "./InteractionModes";
 import { VengeanceTimerPlugin } from "./plugins/vengeancetimer/VengeanceTimerPlugin";
 import { FreezeTimerPlugin, PoisonTimerPlugin } from "./plugins/statustimer/StatusTimerPlugin";
@@ -1125,7 +1126,10 @@ export class OsrsClient {
             ),
         );
         setNpcExamineIdResolver((serverId) => this.resolveNpcExamineTypeId(serverId));
-        const helmSteering = createHelmSteeringDeps(this, sendSetHeading);
+        const helmSteering = createHelmSteeringDeps(this, (heading) => {
+            sendSetHeading(heading);
+            headingIndicator.onHeadingSet(heading, performance.now());
+        });
         setHelmSteeringHandler((worldX, worldY) => handleTileClick(helmSteering, worldX, worldY));
         const globalState = globalThis as typeof globalThis & {
             DEBUG_PROJECTILES?: boolean;
@@ -6667,6 +6671,7 @@ export class OsrsClient {
                 if (graphicsDefaults?.scrollBars >= 0) {
                     this.widgetManager.scrollbarSpriteArchiveId = graphicsDefaults.scrollBars;
                 }
+                if (graphicsDefaults) headingIndicator.setModels(graphicsDefaults.headingIndicatorModels);
             } catch (e) {
                 console.warn("[OsrsClient] Failed to load GraphicsDefaults:", e);
             }

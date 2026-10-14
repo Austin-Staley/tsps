@@ -84,6 +84,23 @@ hops send the same `set`. Logging out from the helm sends the helm's reset first
   live.
 - The agent MCP reports the packets under `client.interactionModes`.
 
+## The heading indicator
+
+The client draws two arrows around the boat while clicks steer; the server sends nothing for
+them. The models are the cache's graphics defaults `headingindicator` pair: 57378 (white) and
+57379 (yellow), the same flat chevron in two colours with a black outline. No capture can show
+them, so this follows the Wiki ("a white arrow will appear around the player's boat in the
+direction of their cursor") and the user's own play:
+
+- **White** follows the mouse while the tile mode under it is heading (the sea, not the
+  boat), pointing at the heading a click there would set (one of the 16).
+- **Yellow** appears at the heading a click set, for `HEADING_FLASH_MS` (1.2 s, "a few
+  ticks"), and fades. The white arrow keeps following the mouse meanwhile.
+
+`client/game/sailing/HeadingIndicator.ts` builds both as world triangles; the tile-marker
+overlays of both renderers draw them, depth-tested, just above the water. The distance from
+the boat's centre (half its larger footprint side) is a guess.
+
 ## Not done
 
 - Entity modes are stored but not applied to menus: nothing in tsps sends disabled or examine
