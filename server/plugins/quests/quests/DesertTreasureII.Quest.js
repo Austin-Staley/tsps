@@ -4547,7 +4547,10 @@ module.exports = function registerDesertTreasureII(api) {
         boss.__dt2WhispererBindingTicks--;
         if (boss.__dt2WhispererBindingTicks === 0) {
           const location = p.getLocation?.();
-          const px = (location?.getX?.() ?? location?.x) - (lassarState.inShadow ? 256 : 0);
+          // Shadow coordinates are materialX - 256 when entering via the
+          // fragment, so translate them back with +256 before comparing the
+          // binding's material-world target distance.
+          const px = (location?.getX?.() ?? location?.x) + (lassarState.inShadow ? 256 : 0);
           const py = location?.getY?.() ?? location?.y;
           const distance = Math.max(Math.abs(px - 2656), Math.abs(py - 6370));
           if (Number.isFinite(distance) && distance <= 10) {
@@ -6611,8 +6614,19 @@ module.exports = function registerDesertTreasureII(api) {
     } else {
       p.sendMessage("A floating column absorbs the Whisperer's screech.");
     }
-    cover && clearWhispererObjects(p, [cover.object]);
-    if (cover) cover.active = false;
+    // Each screech weakens every remaining column by 20 hitpoints, then
+    // destroys the column that absorbed the blast. Use the weak 20-HP column
+    // first so the 60-HP column remains available for the final blast.
+    const fallen = [];
+    for (const column of columns) {
+      if (!column.active) continue;
+      column.hp = Math.max(0, Number(column.hp ?? 0) - 20);
+      if (column === cover || column.hp <= 0) {
+        column.active = false;
+        fallen.push(column.object);
+      }
+    }
+    clearWhispererObjects(p, fallen);
     boss.__dt2WhispererScreeches--;
     if (boss.__dt2WhispererScreeches <= 0) {
       clearWhispererObjects(p, columns.filter((column) => column.active).map((column) => column.object));

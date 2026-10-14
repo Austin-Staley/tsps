@@ -9591,6 +9591,7 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   const incomingAttacks = [];
   const npcPendingDamage = [];
   const sentProjectiles = [];
+  const playerMessages = [];
   let combatCycle = 1;
   class RecordedPendingHit {
     constructor(attacker, target, method, config) {
@@ -9672,7 +9673,7 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
     }),
     getCombat: () => ({ getHitQueue: () => ({ addPendingDamage() {} }) }),
     location: { x: 2656, y: 6370, z: 0 }, getLocation() { return this.location; }, moveTo(location) { this.location = location; },
-    sendMessage() {},
+    sendMessage(message) { playerMessages.push(String(message)); },
   };
   quest.setStage(player, 10);
   attrs.set('desert-treasure-ii:lassar', {
@@ -9721,6 +9722,35 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   const foreignPlayer = { getArea: () => null };
   assert.equal(whispererArea.canAttack(foreignPlayer, boss), false, 'foreign players cannot attack the owner’s quest NPC');
   assert.equal(whispererArea.canAttack(boss, foreignPlayer), false, 'the owner’s quest NPC cannot attack a foreign player');
+  // The fragment maps material x to shadow x-256. Binding distance therefore
+  // converts Shadow coordinates back with +256 before comparing to the boss.
+  attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), inShadow: true });
+  player.location = { x: 2400, y: 6370, z: 0 };
+  boss.__dt2WhispererBindingTicks = 1;
+  playerProcesses.forEach((handler) => handler({ player }));
+  assert.ok(playerMessages.some(message => message.includes('binding blow catches')),
+    'a player beside the boss in Shadow is within binding range after inverse coordinate mapping');
+  playerMessages.length = 0;
+  player.location = { x: 2380, y: 6370, z: 0 };
+  boss.__dt2WhispererBindingTicks = 1;
+  playerProcesses.forEach((handler) => handler({ player }));
+  assert.ok(playerMessages.some(message => message.includes('outrun the Whisperer')),
+    'a Shadow player more than ten material tiles away outruns the binding blow');
+  playerMessages.length = 0;
+  attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), inShadow: false });
+  player.location = { x: 2656, y: 6370, z: 0 };
+  boss.__dt2WhispererBindingTicks = 1;
+  playerProcesses.forEach((handler) => handler({ player }));
+  assert.ok(playerMessages.some(message => message.includes('binding blow catches')),
+    'the material-world binding distance remains measured in its native coordinates');
+  playerMessages.length = 0;
+  player.location = { x: 2676, y: 6370, z: 0 };
+  boss.__dt2WhispererBindingTicks = 1;
+  playerProcesses.forEach((handler) => handler({ player }));
+  assert.ok(playerMessages.some(message => message.includes('outrun the Whisperer')),
+    'a distant material-world player also outruns the binding blow');
+  playerMessages.length = 0;
+  player.location = { x: 2656, y: 6370, z: 0 };
   assert.equal(attrs.get('desert-treasure-ii:lassar').whispererStarted, true, 'the fight start survives logout');
   playerProcesses.forEach((handler) => handler({ player }));
   assert.equal(boss.__dt2WhispererPendingVolleys.length, 3, 'the first standard attack is a three-shot volley');
@@ -9862,9 +9892,19 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   assert.equal(boss.__dt2WhispererSpecial, 'screech');
   assert.equal(boss.__dt2WhispererColumns.length, 3, 'the screech special creates three cover columns');
   itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
-  for (const column of boss.__dt2WhispererColumns) {
+  const [weakColumn, middleColumn, strongColumn] = boss.__dt2WhispererColumns;
+  for (const column of [weakColumn, middleColumn, strongColumn]) {
     player.location = { x: column.x, y: column.y, z: 0 };
     for (let tick = 0; tick < 5; tick++) playerProcesses.forEach((handler) => handler({ player }));
+    if (column === weakColumn) {
+      assert.deepEqual([weakColumn.active, middleColumn.hp, strongColumn.hp], [false, 20, 40],
+        'the first screech destroys the 20-HP column and weakens every other column by 20');
+    } else if (column === middleColumn) {
+      assert.deepEqual([middleColumn.active, strongColumn.hp], [false, 20],
+        'the second screech consumes the weakened middle column while preserving the 60-HP column');
+    } else {
+      assert.equal(strongColumn.active, false, 'the final screech can consume the last 20-HP column');
+    }
   }
   assert.equal(boss.__dt2WhispererSpecial, null, 'standing by each remaining column survives all three screeches');
 
