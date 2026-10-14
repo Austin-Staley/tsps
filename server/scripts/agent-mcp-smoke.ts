@@ -20,7 +20,7 @@ const packetSender = {
     sendVarbit: (id: number, value: number) => { varbits.set(id, value); return packetSender; },
     getVarbit: (id: number) => varbits.get(id) ?? 0,
     getVarp: () => 0,
-    sendInterfaceDisplayState: () => packetSender,
+    sendInterfaceDisplayState: (_interfaceId: number, _hide: boolean) => packetSender,
 };
 class NpcDialogue {
     constructor(private npcId: number, private text: string) {}
@@ -152,6 +152,9 @@ const core = {
     Bank: {
         MAIN_INTERFACE_ID: 12,
         SIDE_INTERFACE_ID: 15,
+        ITEMS_CHILD: 12,
+        SIDE_ITEMS_CHILD: 3,
+        DEPOSIT_INVENTORY_CHILD: 47,
         isOpen: () => bankOpen,
         layout: () => [{ tab: 0, slot: 0, item: item(995, 23) }],
         displayItemId: (bankItem: any) => bankItem.getId(),

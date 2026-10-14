@@ -297,6 +297,7 @@ assert.equal(
         getAsNpc: () => npc,
         getRollFactor: () => 1,
         getDefenceLevel: () => 10,
+        getDefenceBonus: () => 0,
         getCurrentDefinition: () => ({ getStats: () => [0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }),
     };
     const attacks = fakePlayer({ attack: 99, style: FightStyle.AGGRESSIVE, bonusType: 0, attackBonus: [100, 0, 0, 0, 0] });

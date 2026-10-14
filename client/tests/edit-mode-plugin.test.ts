@@ -157,7 +157,7 @@ assert.throws(() => parseBrowserHostWorldSpawn("3089,3524"));
 assert.throws(() =>
     parseEditModeWorldDefinition({
         spawn: { x: 0, y: 0, z: 0 },
-        zones: [{ minX: 0, maxX: 1, minY: 0, maxY: 1, z: 0, tags: ["safe"] }],
+        zones: [{ minX: 0, maxX: 1, minY: 0, maxY: 1, z: 0, tags: [1] }],
     }),
 );
 const zoneGeometry = buildZoneGroundGeometry(
@@ -928,7 +928,7 @@ const restored = new EditModePlugin({
     save: () => {},
 });
 assert.equal(restored.getConfig().tool, "select");
-assert.equal(restored.getConfig().rotation, 3);
+assert.equal(restored.getConfig().rotation, 0, "placement rotation is session state and starts fresh");
 assert.equal(restored.getConfig().heightLevel, 0, "a new editor session always opens on ground level");
 assert.deepEqual(restored.getConfig().edits[0], {
     kind: "place",
@@ -949,7 +949,7 @@ const windowListeners: Array<[string, (...args: any[]) => void, unknown]> = [];
         windowListeners.push([type, listener, options]),
     removeEventListener: () => {},
 };
-const fakeCanvas = {} as HTMLCanvasElement;
+const fakeCanvas = { focus: () => {} } as unknown as HTMLCanvasElement;
 let previewPointer = { tileX: 3200, tileY: 3201, plane: 0 };
 let sceneFrameCallback: (() => void) | undefined;
 const previewPlugin = new EditModePlugin();
@@ -1031,11 +1031,12 @@ let stoppedFreeCameraKey = false;
     stopPropagation: () => (stoppedFreeCameraKey = true),
 });
 assert.ok(preventedFreeCameraKey && stoppedFreeCameraKey, "editor blocks vertical camera keys");
-assert.equal(previewCalls[0][0], "preview");
+assert.equal(previewCalls.at(-1)?.[0], "preview", "arming the place tool shows its preview");
+previewCalls.length = 0;
 previewPlugin.rotate();
 assert.deepEqual(
     previewCalls.map((call) => call[0]),
-    ["preview", "preview"],
+    ["preview"],
 );
 previewPlugin.applyAtPointer();
 assert.deepEqual(

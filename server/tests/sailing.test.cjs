@@ -1410,6 +1410,7 @@ function shipyardHarness() {
   const chatboxes = [];
   const sender = new Proxy({}, {
     get: (_t, key) => (...args) => {
+      if (key === "getVarbit") return varbits.get(args[0]) ?? 0;
       if (key === "sendVarbit") varbits.set(args[0], args[1]);
       if (key === "sendChatboxInterface") chatboxes.push(args[0]);
       return sender;

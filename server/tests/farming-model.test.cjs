@@ -128,7 +128,8 @@ const realNow = Date.now, realGetObject = core.MapObjects.get, realAdvance = Mod
 let clock = now, growthCalls = 0;
 Date.now = () => clock;
 core.MapObjects.get = () => null;
-Model.advanceFarm = (...args) => { growthCalls++; return realAdvance(...args); };
+// A fixed roll: no disease, so the timing checks below never meet a dead patch.
+Model.advanceFarm = (farm, at) => { growthCalls++; return realAdvance(farm, at, () => 1); };
 try {
     const player = testPlayer();
     login({ player });
