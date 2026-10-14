@@ -4507,6 +4507,8 @@ module.exports = function registerDesertTreasureII(api) {
     }
     const state = p.getAttribute(LASSAR);
     if (!state?.entered) return;
+    // Wiki: remnant conversations pause sanity loss while their dialogue is shown.
+    if (state.inShadow && !state.whispererStarted && p.getDialogueManager?.().getCurrent?.()) return;
     const sanity = Math.max(0, Math.min(100, Number(state.sanity ?? 100)));
     const here = p.getLocation?.();
     const px = here?.getX?.() ?? here?.x;

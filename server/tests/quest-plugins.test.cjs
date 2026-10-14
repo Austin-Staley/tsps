@@ -8861,6 +8861,15 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     playerProcesses[0]({ player });
     assert.equal(attrs.get('desert-treasure-ii:lassar').sanity, 99, 'sanity drains 1 point per shadow tick');
     assert.equal(varbits.get(15064), 99, 'the cache sanity bar stays in sync with shadow time');
+    const previousManager = player.getDialogueManager;
+    let conversationOpen = true;
+    player.getDialogueManager = () => ({ getCurrent: () => conversationOpen ? {} : undefined });
+    playerProcesses[0]({ player });
+    assert.equal(attrs.get('desert-treasure-ii:lassar').sanity, 99, 'reading a shadow remnant pauses sanity loss');
+    conversationOpen = false;
+    playerProcesses[0]({ player });
+    assert.equal(attrs.get('desert-treasure-ii:lassar').sanity, 98, 'sanity loss resumes when the conversation ends');
+    player.getDialogueManager = previousManager;
     attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), inShadow: false });
     playerProcesses[0]({ player });
     assert.equal(attrs.get('desert-treasure-ii:lassar').sanity, 100, 'sanity recovers 10 points per material-realm tick');
