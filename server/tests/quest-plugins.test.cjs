@@ -6326,6 +6326,62 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
   }
 });
 
+test('Desert Treasure II final trial spawns on reachable cache floor beside the wall marker', () => {
+  const { api, handlers } = mockApi();
+  const { TemplatedInstanceArea } = require('../dist/game/model/areas/impl/TemplatedInstanceArea');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const added = [];
+  api.core = {
+    ...api.core,
+    NPC: { create(id, location) {
+      return {
+        id, location, setOwner(owner) { this.owner = owner; }, setOwnerOnly() {},
+        setArea(area) { this.area = area; }, getArea() { return this.area; }, getLocation() { return this.location; },
+        getOwner() { return this.owner; }, isRegistered() { return false; }, isNpc() { return true; }, getAsNpc() { return this; },
+      };
+    } },
+    World: { getAddNPCQueue: () => added, getRemoveNPCQueue: () => [] },
+  };
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
+  const attrs = new Map();
+  const player = {
+    getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getIndex: () => 1, isPlayer: () => true, getAsPlayer() { return this; },
+    getArea() { return this.area ?? null; }, setArea(area) { this.area = area; },
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    moveTo(location) { this.location = location; },
+    sendMessage() {},
+  };
+  quest.setStage(player, 11);
+  player.setAttribute('desert-treasure-ii:final-cutscene-started', true);
+  const smith = handlers.npcInteractions.get('Asgarnia Smith')['Talk-to'];
+  smith({ player, npcId: api.core.NpcIdentifiers.ASGARNIA_SMITH });
+
+  const area = player.getAttribute('desert-treasure-ii:final-room');
+  try {
+    const playerTile = player.location;
+    const boss = added.find(npc => npc.__dt2FinalWight === 0);
+    assert.ok(boss);
+    const bossTile = boss.getLocation();
+    const clippedGuideMarker = area.tile(32, 44, 0);
+    assert.ok(area.getTemplateObjects(clippedGuideMarker).some(object => object.getId() === 48862),
+      'the scene includes the real cache wall at the guide marker');
+    assert.ok((RegionManager.getClipping(clippedGuideMarker.getX(), clippedGuideMarker.getY(), 0, area) & 0x100) !== 0,
+      'Quest Helper marker is occupied by a clipped cache wall tile');
+    assert.equal(RegionManager.getClipping(playerTile.getX(), playerTile.getY(), 0, area) & 0x100, 0,
+      'the player starts on a walkable tile');
+    assert.equal(RegionManager.getClipping(bossTile.getX(), bossTile.getY(), 0, area) & 0x100, 0,
+      'the wight starts on a walkable tile');
+    assert.equal(Math.abs(playerTile.getX() - bossTile.getX()) + Math.abs(playerTile.getY() - bossTile.getY()), 1,
+      'player and wight have separate adjacent starting tiles');
+    assert.ok(RegionManager.canMove(playerTile.getX(), playerTile.getY(), bossTile.getX(), bossTile.getY(), 0, 1, 1, area),
+      'the cache collision allows the player to route to the wight');
+  } finally {
+    area?.destroy();
+  }
+});
+
 test('Desert Treasure II logout from the final trial returns to the vault and clears only the unfinished attempt', () => {
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/DesertTreasureII.Quest')(api);

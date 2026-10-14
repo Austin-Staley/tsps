@@ -16,6 +16,9 @@ module.exports = function registerDesertTreasureII(api) {
   const FINAL_WIGHT_PORTAL_LEECH = 12335;
   const FINAL_WIGHT_KASONDE_POOL_ONE = 48752;
   const FINAL_WIGHT_KASONDE_POOL_TWO = 48751;
+  // Quest Helper's marker is on a cache wall tile. These adjacent southern tiles are clear.
+  const FINAL_PLAYER_SPAWN = [32, 42];
+  const FINAL_WIGHT_SPAWN = [3296, 6443];
   const S = { STARTED: 1, VAULT: 2, DIG: 3, ROCKS: 4, GUARDIAN: 5, MACHINE: 6, VARDORVIS: 7, LEVIATHAN: 8, SUCELLUS: 9, WHISPERER: 10, FINALE: 11, COMPLETE: 12 };
   // Cache quest dbrow 2343, column 19 completes at 118; QuestHelper records the intervening milestones.
   function nativeProgress(stage, player) {
@@ -1693,8 +1696,8 @@ module.exports = function registerDesertTreasureII(api) {
       p.setAttribute(FINAL_ROOM, area);
     }
     area.enter(p);
-    // The cutscene places the player just south of Sliske and the Elder Horn.
-    p.moveTo(area.tile(32, 44, 0));
+    // The cutscene puts the player beside Sliske, clear of the wall-clipped guide marker.
+    p.moveTo(area.tile(...FINAL_PLAYER_SPAWN, 0));
     return area;
   }
 
@@ -1716,7 +1719,9 @@ module.exports = function registerDesertTreasureII(api) {
     const ids = [N.THE_FORSAKEN_ASSASSIN, N.KETLA_THE_UNWORTHY, N.KASONDE_THE_CRAVEN, N.PERSTEN_THE_DECEITFUL];
     const id = ids[index];
     if (!Number.isInteger(id)) return null;
-    const npc = spawnFinalActor(p, id, 3296, 6444);
+    // shortcut: the guide marker (3296, 6444) is clipped by cache wall 48862; use the adjacent
+    // walkable tile until an OSRS capture confirms the intended exact offset.
+    const npc = spawnFinalActor(p, id, ...FINAL_WIGHT_SPAWN);
     if (!npc) return null;
     const owned = spawned.get(p) ?? {};
     spawned.set(p, owned);
