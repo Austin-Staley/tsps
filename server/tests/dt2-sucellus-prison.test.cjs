@@ -9,6 +9,7 @@ function setup() {
   const emitted = [];
   const messages = [];
   const graphics = [];
+  const varbits = new Map();
   const freezes = [];
   const pendingDamage = [];
   let stashRestored = false;
@@ -57,7 +58,7 @@ function setup() {
     moveTo(value) { this.location = value; },
     getLocation() { return { getX: () => this.location.x, getY: () => this.location.y, getZ: () => this.location.z }; },
     getCombat() { return { getHitQueue: () => ({ addPendingDamage(hits) { pendingDamage.push(...hits); } }) }; },
-    getPacketSender() { return { sendGraphic: (graphic, location) => graphics.push({ graphic, location }) }; },
+    getPacketSender() { return { sendGraphic: (graphic, location) => graphics.push({ graphic, location }), sendVarbit: (id, value) => varbits.set(id, value) }; },
     getPrayerActive() { return []; },
     getSkillManager() { return { getMaxLevel: () => 99 }; },
     setHitpoints(value) { this.hitpoints = value; },
@@ -109,7 +110,7 @@ function setup() {
   register(api);
   const instanceLocation = (x, y, z) => ({ x: x + 10000 - 2872, y: y + 20000 - 6336, z });
   const moveToSource = (x, y, z = 2) => { player.location = { x: x + 10000 - 2872, y: y + 20000 - 6336, z }; };
-  return { api, handlers, emitted, messages, prompts, graphics, freezes, pendingDamage, player, area, inventory, createdNpcs, openedObjects, instanceLocation, moveToSource, setCycle: (v) => { cycle = v; }, setStashRestored: (value) => { stashRestored = value; } };
+  return { api, handlers, emitted, messages, prompts, graphics, varbits, freezes, pendingDamage, player, area, inventory, createdNpcs, openedObjects, instanceLocation, moveToSource, setCycle: (v) => { cycle = v; }, setStashRestored: (value) => { stashRestored = value; } };
 }
 
 test("prison start removes the cutscene Assassin until the diamond-key stage", () => {
@@ -525,7 +526,7 @@ test("the equipment chest advances only after confirmed stash recovery and retri
 });
 
 test("the visible Unblock action clears the blocked crevice without the cell's consumed chisel", () => {
-  const { handlers, prompts, player, openedObjects, area, instanceLocation } = setup();
+  const { handlers, prompts, player, openedObjects, area, instanceLocation, varbits } = setup();
   player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 30);
   const crevice = { getPrivateArea: () => area };
   area.templateObjects = [crevice];
@@ -536,12 +537,17 @@ test("the visible Unblock action clears the blocked crevice without the cell's c
   prompts[0].pairs[1]();
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-crevice-cleared"), true);
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 32);
-  assert.deepEqual(openedObjects, [crevice], "the actual private blocked loc is removed so the passage is traversable");
+  assert.deepEqual(openedObjects, [], "the loc remains present for its new Enter action");
+  assert.equal(varbits.get(15178), 1, "the cache morph changes Unblock into Enter");
   const restored = { getId: () => 49110, getPrivateArea: () => area,
     getLocation: () => ({ equals: (location) => location.x === 10000 + 2960 - 2872 && location.y === 20000 + 6427 - 6336 }) };
   area.templateObjects = [restored];
   handlers.custom["dt2:sucellus-prison-resume"]({ player, area });
-  assert.equal(restored.removed, true, "an earned unblock survives rebuilding the copied map on login");
+  assert.equal(varbits.get(15178), 1, "an earned unblock survives rebuilding the copied map on login");
+  handlers.object({ player, definition: { id: 49109 }, option: "Enter", location: instanceLocation(2960, 6427, 2), handled: false });
+  assert.deepEqual(player.location, area.tile(2966 - 2872, 6428 - 6336, 2));
+  handlers.object({ player, definition: { id: 49106 }, option: "Enter", location: instanceLocation(2965, 6427, 2), handled: false });
+  assert.deepEqual(player.location, area.tile(2959 - 2872, 6428 - 6336, 2));
 });
 
 test("Jhallan death returns the owner to the emerald room and preserves the earned prison inventory", () => {
@@ -575,6 +581,9 @@ test("Ruby key chain requires the seven chest names, converter clue, and transla
   handlers.custom["dt2:sucellus-prison-process"]({ player, area: player.getPrivateArea(), cycle: 100 });
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 34);
 
+  handlers.object({ player, definition: { id: 49153, name: "Crate" }, option: "Search", location: instanceLocation(2969, 6415, 2), handled: false });
+  assert.equal(inventory.getAmount(28425), 1, "the converter is obtainable before searching the named chests");
+  assert.equal(inventory.getAmount(28426), 1, "the lantern is obtainable in the Wiki's normal crate-first order");
   const locations = [[2959, 6414], [2959, 6419], [2962, 6414], [2962, 6419], [2965, 6414], [2965, 6419], [2968, 6419]];
   for (const [index, [x, y]] of locations.entries()) {
     const event = { player, definition: { id: 49152, name: "Chest" }, option: "Open", location: instanceLocation(x, y, 2), handled: false };

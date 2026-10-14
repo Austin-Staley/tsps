@@ -10,6 +10,8 @@ module.exports = function registerSucellusPrison(api) {
   const COMPLETE = "desert-treasure-ii:sucellus-prison-complete";
   const CREVICE_CLEARED = "desert-treasure-ii:sucellus-prison-crevice-cleared";
   const BLOCKED_CREVICE_ID = 49110;
+  const CLEARED_CREVICE_ID = 49109;
+  const BLOCKAGE_VARBIT = 15178;
   const SLIDER_INSPECTED = "desert-treasure-ii:sucellus-prison-slider-inspected";
   const GEAR_RETURNED = "desert-treasure-ii:sucellus-prison-gear-returned";
   const FIREWORKS = "desert-treasure-ii:sucellus-prison-fireworks";
@@ -124,8 +126,8 @@ module.exports = function registerSucellusPrison(api) {
 
   function clearCrevice(player, area, event) {
     if (state(player) !== 30 || !atArea(player, area) || player.getAttribute(CREVICE_CLEARED)) return;
-    if (!openPrivateGate(event)) return;
     player.setAttribute(CREVICE_CLEARED, true);
+    player.getPacketSender().sendVarbit(BLOCKAGE_VARBIT, 1);
     setState(player, 32);
     player.sendMessage("You shift the loose stone and clear a way through the crevice.");
   }
@@ -476,10 +478,6 @@ module.exports = function registerSucellusPrison(api) {
 
     if (progress === 34 && objectName.includes("crate") && tile?.[0] >= 2967 && tile?.[0] <= 2971 && tile?.[1] >= 6414 && tile?.[1] <= 6418) {
       event.handled = true;
-      if ((Number(player.getAttribute("desert-treasure-ii:sucellus-prison-ruby-chests")) || 0) !== 127) {
-        player.sendMessage("The crate is wedged shut. First inspect all seven marked chests beside the beds.");
-        return;
-      }
       if (!has(player, I.CODE_CONVERTER)) player.getInventory().adds(I.CODE_CONVERTER, 1);
       if (!has(player, I.MAGIC_LANTERN)) player.getInventory().adds(I.MAGIC_LANTERN, 1);
       player.sendMessage("You take the code converter and magic lantern from the crate.");
@@ -508,6 +506,15 @@ module.exports = function registerSucellusPrison(api) {
     if (id === BLOCKED_CREVICE_ID && onTile("blockage") && option === "unblock" && progress === 30 && !player.getAttribute(CREVICE_CLEARED)) {
       event.handled = true;
       api.sendMultiChatboxPrompt(player, "The blockage is loose enough to shift. Clear the crevice?", "Yes", () => clearCrevice(player, area, event), "No", () => {});
+      return true;
+    }
+
+    if (((id === CLEARED_CREVICE_ID && onTile("blockage")) || (id === 49106 && onTile("crevice")))
+      && option === "enter" && progress >= 32 && progress < 40 && player.getAttribute(CREVICE_CLEARED)) {
+      event.handled = true;
+      // Adjacent landing floors are cache-checked; the exact crossing cutscene is inferred.
+      player.moveTo(areaLocation(area, ...(id === CLEARED_CREVICE_ID ? [2966, 6428, 2] : [2959, 6428, 2])));
+      player.sendMessage("You squeeze through the cleared crevice.");
       return true;
     }
 
@@ -706,9 +713,7 @@ module.exports = function registerSucellusPrison(api) {
     clearPursuer(player, area);
     player.setAttribute(PURSUER_DISMISSED, false);
     if (player.getAttribute(CREVICE_CLEARED)) {
-      const location = areaLocation(area, ...TILES.blockage);
-      const blockage = area.getTemplateObjects?.(location)?.find((object) => object.getId() === BLOCKED_CREVICE_ID && object.getLocation().equals(location));
-      if (blockage) openPrivateGate({ player, object: blockage });
+      player.getPacketSender().sendVarbit(BLOCKAGE_VARBIT, 1);
     }
     if (state(player) === 54) {
       removeOwnedNpc(area, player.getAttribute("desert-treasure-ii:sucellus-prison-jhallan"));
