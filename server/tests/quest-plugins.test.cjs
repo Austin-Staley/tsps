@@ -7042,10 +7042,10 @@ test('Desert Treasure II plays the first-medallion ambush before re-entering the
 });
 
 test('Desert Treasure II last medallion route traps the player, requires solving the cell lock, then makes the Figure fight reclaimable', () => {
-  const { api: base } = mockApi();
+  const { api: base, handlers } = mockApi();
   const objectHooks = [], customEvents = [], deathHooks = [], npcHitHooks = [], prompts = [];
-  const processHooks = [], resolvedHitHooks = [], playerDeathHooks = [], logoutHooks = [];
-  const pendingPlayerHits = [], projectiles = [], spawnedFigures = [];
+  const resolvedHitHooks = [], playerDeathHooks = [], logoutHooks = [];
+  const pendingPlayerHits = [], projectiles = [], spawnedFigures = [], removedFigures = [];
   let cycle = 0, spawnedFigure;
   const core = { ...base.core,
     NPC: { create: (id, location) => ({ id, location }), },
@@ -7062,14 +7062,14 @@ test('Desert Treasure II last medallion route traps the player, requires solving
           : prop === 'onNpcDeath' ? (handler) => deathHooks.push(handler)
             : prop === 'onNpcHitModify' ? (handler) => npcHitHooks.push(handler)
               : prop === 'onCombatHitResolved' ? (handler) => resolvedHitHooks.push(handler)
-                : prop === 'onPlayerProcess' ? (handler) => processHooks.push(handler)
-                  : prop === 'onPlayerDeath' ? (handler) => playerDeathHooks.push(handler)
+                : prop === 'onPlayerDeath' ? (handler) => playerDeathHooks.push(handler)
                     : prop === 'onPlayerLogout' ? (handler) => logoutHooks.push(handler)
             : prop === 'sendMultiChatboxPrompt' ? (player, prompt, ...options) => {
               assert.ok(options.length <= 10, 'native prompts support at most five label/callback pairs');
               prompts.push({ player, prompt, options });
             }
-              : prop === 'spawnNpc' ? (args) => {
+              : prop === 'removeNpc' ? (npc) => removedFigures.push(npc)
+                : prop === 'spawnNpc' ? (args) => {
                 spawnedFigure = { id: args.id, args, location: new core.Location(args.x, args.y, args.z), owner: args.owner,
                   setMaxHitpoints(value) { this.maxHitpoints = value; }, setHitpoints(value) { this.hitpoints = value; },
                   getHitpoints() { return this.hitpoints; }, isRegistered() { return true; }, getOwner() { return this.owner; },
@@ -7087,6 +7087,8 @@ test('Desert Treasure II last medallion route traps the player, requires solving
   runtime.startTranscript = (_api, _player, npcId, page, variant) => { transcripts.push({ npcId, page, variant }); };
   try {
     require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const cellArea = handlers.area.find((area) => area.getName?.() === "Mysterious Figure's Cell (Desert Treasure II)");
+    assert.ok(cellArea, 'the Figure encounter is registered as a cell Area');
     const quest = runtime.getRegisteredQuests().at(-1);
     const attrs = new Map();
     const inventoryItems = Array.from({ length: 28 }, (_, index) => index === 0
@@ -7173,7 +7175,7 @@ test('Desert Treasure II last medallion route traps the player, requires solving
     figureAttack();
     assert.equal(p.movementBlocked, true, 'the tenth incoming attack starts the freeze');
     assert.equal(spawnedFigure.scriptedMovement, true, 'normal Figure attacks pause during the special');
-    const process = () => processHooks.forEach(hook => hook({ player: p }));
+    const process = () => cellArea.process(p);
     cycle++;
     process();
     assert.equal(projectiles.length, 0, 'the player remains frozen during the warning window');
@@ -7222,13 +7224,23 @@ test('Desert Treasure II last medallion route traps the player, requires solving
 
     for (let i = 0; i < 10; i++) figureAttack();
     assert.equal(p.movementBlocked, true);
-    logoutHooks.at(-1)({ player: p });
-    assert.equal(p.movementBlocked, false, 'logout clears an in-progress movement lock');
-    assert.equal(spawnedFigures[1].scriptedMovement, false, 'logout releases the Figure combat pause');
+    cellArea.postLeave(p, false);
+    assert.equal(p.movementBlocked, false, 'leaving the cell clears an in-progress movement lock');
+    assert.equal(spawnedFigures[1].scriptedMovement, false, 'leaving releases the Figure combat pause');
+    assert.ok(removedFigures.includes(spawnedFigures[1]), 'leaving despawns the owner-only Figure');
+    cellArea.postLeave(p, true);
     process();
     assert.equal(spawnedFigures.length, 3, 'the active fight resumes with a fresh Figure after re-entry');
     assert.equal(spawnedFigures[2].maxHitpoints, 450);
     assert.equal(p.movementBlocked, false);
+
+    for (let i = 0; i < 10; i++) figureAttack();
+    assert.equal(p.movementBlocked, true);
+    logoutHooks.at(-1)({ player: p });
+    assert.equal(p.movementBlocked, false, 'logout also clears an in-progress movement lock');
+    assert.equal(spawnedFigures[2].scriptedMovement, false, 'logout releases the Figure combat pause');
+    process();
+    assert.equal(spawnedFigures.length, 4, 'login can resume the active fight in the cell Area');
 
     deathHooks[0]({ killer: p, npc: spawnedFigure });
     assert.equal(attrs.get('desert-treasure-ii:final-figure-defeated'), true);

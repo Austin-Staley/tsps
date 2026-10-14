@@ -27,6 +27,7 @@ module.exports = function registerDesertTreasureII(api) {
   const FINAL_FIGURE_SPECIAL_ATTACKS = 10;
   const FINAL_FIGURE_STUN_TICKS = 3;
   const FINAL_FIGURE_ORB_DODGE_TICKS = 2;
+  const FINAL_FIGURE_CELL_BOUNDS = new api.core.Boundary(3082, 3122, 9243, 9271, 0);
   // Quest Helper's marker is on a cache wall tile. These adjacent southern tiles are clear.
   const FINAL_PLAYER_SPAWN = [32, 42];
   const FINAL_WIGHT_SPAWN = [3296, 6443];
@@ -2257,6 +2258,29 @@ module.exports = function registerDesertTreasureII(api) {
     postLeave(actor) { if (actor.isPlayer()) ruinsStarted.delete(actor.getAsPlayer()); }
   }
 
+  class FinalFigureCellArea extends api.core.Area {
+    getName() { return "Mysterious Figure's Cell (Desert Treasure II)"; }
+    process(actor) {
+      if (!actor?.isPlayer?.()) return;
+      const player = actor.getAsPlayer?.() ?? actor;
+      if (stage(player) === S.WHISPERER && player.getHitpoints?.() > 0
+        && player.getAttribute(FINAL_CELL_ACTIVE) && player.getAttribute(FINAL_CELL_CHEST)
+        && player.getAttribute(FINAL_FIGURE_STARTED) && !player.getAttribute(FINAL_FIGURE_DEFEATED)) {
+        spawnFinalFigure(player);
+      }
+      processFinalFigureSpecial(player, spawned.get(player)?.finalFigure);
+    }
+    postLeave(actor) {
+      if (!actor?.isPlayer?.()) return;
+      const player = actor.getAsPlayer?.() ?? actor;
+      const figure = spawned.get(player)?.finalFigure;
+      if (!figure) return;
+      clearFinalFigureSpecial(player, figure);
+      api.removeNpc(figure);
+      spawned.get(player).finalFigure = null;
+    }
+  }
+
   function crossStranglewoodBarricade({ player: p, objectId, location }) {
     if (objectId !== STRANGLEWOOD_BARRICADE_LOC || location.x !== 1193 || location.y !== 3401) return false;
     if (!p.getAttribute(STRANGLEWOOD_CITY_ENTERED)) {
@@ -4438,12 +4462,6 @@ module.exports = function registerDesertTreasureII(api) {
     const position = p.getLocation?.();
     const hereX = position?.getX?.() ?? position?.x;
     const hereY = position?.getY?.() ?? position?.y;
-    const hereZ = position?.getZ?.() ?? position?.z ?? 0;
-    const inFinalCell = hereZ === 0 && hereX >= 3082 && hereX <= 3122 && hereY >= 9243 && hereY <= 9271;
-    if (inFinalCell && p.getHitpoints?.() > 0 && p.getAttribute(FINAL_CELL_ACTIVE)
-      && p.getAttribute(FINAL_CELL_CHEST) && p.getAttribute(FINAL_FIGURE_STARTED)
-      && !p.getAttribute(FINAL_FIGURE_DEFEATED)) spawnFinalFigure(p);
-    processFinalFigureSpecial(p, spawned.get(p)?.finalFigure);
     const atWhispererCathedral = (position?.getZ?.() ?? position?.z ?? 0) === 0
       && ((hereX >= 2624 && hereX <= 2688 && hereY >= 6320 && hereY <= 6448)
         || (hereX >= 2336 && hereX <= 2432 && hereY >= 6320 && hereY <= 6448));
@@ -8133,6 +8151,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("Dr Banikan", { "Talk-to": talkBanikan });
   // QuestHelper marks the ruins approach at 1194,3394.
   api.registerArea(new StranglewoodRuinsArea([new api.core.Boundary(1189, 1200, 3392, 3398, 0)]));
+  api.registerArea(new FinalFigureCellArea([FINAL_FIGURE_CELL_BOUNDS]));
   api.onNpcInteraction("Elissa", { "Talk-to": talkElissa });
   api.onNpcInteraction("Barus", { "Talk-to": talkBarus });
   api.onNpcInteraction("Kasonde", { "Talk-to": talkKasonde });
