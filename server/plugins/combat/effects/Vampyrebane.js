@@ -2,7 +2,6 @@
  * Vampyrebane weapons against NPCs tagged with the Wiki's `vampyre` attribute.
  * Source: OSRS Wiki, Vampyre (attribute), and the linked weapon pages.
  */
-const { Equipment } = require("../../../src/main/typescript/elvarg/game/model/container/impl/Equipment");
 const { asPlayer, weaponName, targetHasAttribute, scale } = require("./GearChecks");
 
 const MELEE = new Map([
