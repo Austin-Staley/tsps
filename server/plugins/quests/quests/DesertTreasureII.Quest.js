@@ -798,7 +798,6 @@ module.exports = function registerDesertTreasureII(api) {
       const ownerIsAttacking = attacker === this.owner && target?.getOwner?.() === this.owner && target?.getArea?.() === this;
       const isTrialActor = Number.isInteger(attacker?.__dt2FinalWight)
         || attacker?.__dt2FinalWightClone === true
-        || attacker?.__dt2PerstenPortal === true
         || attacker?.__dt2WightLeech === true;
       const ownedNpcIsAttacking = this.owner?.getAttribute?.(FINAL_WIGHTS_STARTED) === true
         && isTrialActor && target === this.owner && attacker?.getOwner?.() === this.owner && attacker?.getArea?.() === this;
@@ -2127,6 +2126,8 @@ module.exports = function registerDesertTreasureII(api) {
     const portal = spawnFinalWightActor(player, area, FINAL_WIGHT_PORTAL, x, 6431, 30);
     if (!portal) return;
     portal.__dt2PerstenPortal = true;
+    // The portal is an attackable objective, but it must not retaliate or chase its attacker.
+    portal.setFlag?.("combat:no-retaliate", true);
     boss.__dt2FinalWightActors.push(portal);
     boss.__dt2PerstenPortals.push(portal);
     player.sendMessage("Persten conjures a portal by the entrance. Destroy it before it releases more wighted leeches.");
@@ -2331,13 +2332,15 @@ module.exports = function registerDesertTreasureII(api) {
     p.setAttribute(FINAL_WIGHTS_COMPLETE, true);
     const inventory = p.getInventory();
     const equipment = p.getEquipment();
-    const wornVisibility = equipment.getAmount(I.RING_OF_VISIBILITY) > 0;
+    const ringSlot = api.core.Equipment.RING_SLOT;
+    const wornVisibility = equipment.get(ringSlot)?.getId?.() === I.RING_OF_VISIBILITY;
     for (const container of [inventory, equipment]) {
       for (const id of [I.RING_OF_VISIBILITY, I.RING_OF_SHADOWS]) {
         if (container.getAmount(id) > 0) container.deleteNumber(id, container.getAmount(id));
       }
     }
-    (wornVisibility ? equipment : inventory).adds(I.RING_OF_SHADOWS, 1);
+    if (wornVisibility) equipment.set(ringSlot, new api.core.Item(I.RING_OF_SHADOWS, 1)).refreshItems();
+    else inventory.adds(I.RING_OF_SHADOWS, 1);
     for (let i = 0; i < 3; i++) {
       if ((inventory.getFreeSlots?.() ?? 0) > 0) inventory.adds(I.ANCIENT_LAMP, 1);
       else {

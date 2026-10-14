@@ -8181,6 +8181,8 @@ test('Desert Treasure II final trial spawns on reachable cache floor beside the 
       return {
         id, location, hp: 200, maxHp: 200,
         setOwner(owner) { this.owner = owner; }, setOwnerOnly() {},
+        setFlag(name, value) { this.flags ??= new Set(); value ? this.flags.add(name) : this.flags.delete(name); },
+        hasFlag(name) { return this.flags?.has(name) ?? false; },
         setArea(area) { this.area = area; }, getArea() { return this.area; }, getLocation() { return this.location; },
         getOwner() { return this.owner; }, isRegistered() { return true; }, isNpc() { return true; }, getAsNpc() { return this; },
         setMaxHitpoints(value) { this.maxHp = value; }, setHitpoints(value) { this.hp = value; },
@@ -8253,6 +8255,11 @@ test('Desert Treasure II final trial spawns on reachable cache floor beside the 
     assert.deepEqual(portals.map(location => [location.getX() - area.getBaseX(), location.getY() - area.getBaseY()])
       .sort((left, right) => left[0] - right[0]), [[29, 31], [35, 31]],
     'the portal anchors are on the cache-backed entrance edge of the copied vault');
+    for (const portal of persten.__dt2PerstenPortals) {
+      assert.equal(portal.hasFlag('combat:no-retaliate'), true, 'portals do not retaliate when attacked');
+      assert.equal(area.canAttack(portal, player), false, 'the portal is not allowed to initiate combat against its owner');
+      assert.equal(area.canAttack(player, portal), true, 'the owner can still attack the portal objective');
+    }
     const leech = added.find(npc => npc.id === 12335 && npc.getOwner?.() === player);
     assert.ok(leech, 'a portal spawns its ordinary leech during the encounter');
     const canReach = (start, destination) => {
@@ -8429,14 +8436,17 @@ test('Desert Treasure II handoff creates the four owned wight stages and grants 
       adds(id, amount) { this.counts.set(id, this.getAmount(id) + amount); }
       deleteNumber(id, amount) { this.counts.set(id, Math.max(0, this.getAmount(id) - amount)); }
     }
-    const inventory = new Container(), equipment = new Container();
-    inventory.adds(core.ItemIdentifiers.RING_OF_VISIBILITY, 1);
+    const inventory = new Container();
+    let equipment;
     const p = {
       getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
       getUsername: () => 'dt2-final-room-test', getInventory: () => inventory, getEquipment: () => equipment,
       getPacketSender: () => new Proxy({}, { get: () => () => {} }),
       moveTo(location) { this.location = location; }, sendMessage() {}, isRegistered: () => false,
     };
+    equipment = new core.Equipment(p);
+    equipment.set(core.Equipment.RING_SLOT, new core.Item(core.ItemIdentifiers.RING_OF_VISIBILITY, 1));
+    equipment.set(core.Equipment.SHIELD_SLOT, new core.Item(core.ItemIdentifiers.RUNE_KITESHIELD, 1));
     quest.setStage(p, 11);
     const talkSmith = interactions.find(({ name }) => name === 'Asgarnia Smith').options['Talk-to'];
     talkSmith({ player: p, npcId: core.NpcIdentifiers.ASGARNIA_SMITH });
@@ -8476,7 +8486,12 @@ test('Desert Treasure II handoff creates the four owned wight stages and grants 
     dialogueAction({ player: p, stepId: 'xGIiPZ' });
     assert.equal(quest.isComplete(p), true);
     assert.equal(inventory.getAmount(core.ItemIdentifiers.RING_OF_VISIBILITY), 0);
-    assert.equal(inventory.getAmount(core.ItemIdentifiers.RING_OF_SHADOWS), 1);
+    assert.equal(equipment.get(core.Equipment.RING_SLOT).getId(), core.ItemIdentifiers.RING_OF_SHADOWS,
+      'the earned Ring of Shadows replaces the visibility ring in its actual equipment slot');
+    assert.equal(equipment.get(core.Equipment.SHIELD_SLOT).getId(), core.ItemIdentifiers.RUNE_KITESHIELD,
+      'rewarding the ring preserves the shield slot');
+    assert.equal(inventory.getAmount(core.ItemIdentifiers.RING_OF_SHADOWS), 0,
+      'an equipped visibility ring yields an equipped reward rather than an inventory duplicate');
     assert.equal(inventory.getAmount(core.ItemIdentifiers.ANCIENT_LAMP), 3);
     const lamp = { id: core.ItemIdentifiers.ANCIENT_LAMP };
     inventory.get = slot => slot === 0 && inventory.getAmount(core.ItemIdentifiers.ANCIENT_LAMP) > 0 ? lamp : null;
