@@ -2008,7 +2008,7 @@ test('Blood Moon prisoner scene waits for the transcript, then leaves the player
   dialogue = null;
   process({ player });
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 76);
-  assert.deepEqual(moved, [[2570, 7395, 0]], 'the cutscene relocates to the recorded clear side of the cell wall');
+  assert.deepEqual(moved, [[2570, 7394, 0]], 'the cutscene relocates to the cache-clear side of the cell wall');
   assert.equal(ground[0].item.getId(), 33727, 'the gibbous key appears on the bench after the dialogue');
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-transition-pending'), null);
 
@@ -2016,7 +2016,7 @@ test('Blood Moon prisoner scene waits for the transcript, then leaves the player
   attributes.set('quest.the_blood_moon_rises.castle-room', 51);
   const login = handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin');
   login({ player });
-  assert.deepEqual(moved.at(-1), [2570, 7395, 0], 'a saved pre-fix prison landing recovers on relog');
+  assert.deepEqual(moved.at(-1), [2570, 7394, 0], 'a saved pre-fix prison landing recovers on relog');
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 76,
     'landing recovery preserves earned progress');
 });
