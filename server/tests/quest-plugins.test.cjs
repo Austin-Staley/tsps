@@ -857,12 +857,24 @@ test('Blood Moon unique supplies are consumable only during the Vampyrium chapte
   };
   const checkArea = handlers.custom.get('potions:area').at(-1);
 
-  for (const [stage, expected] of [[0, false], [45, true], [100, true], [110, false]]) {
+  player.getArea = () => null;
+  for (const stage of [0, 45, 100, 110]) {
     quest.setStage(player, stage);
     const request = { player, area: 'vampyrium', inside: false };
     checkArea(request);
-    assert.equal(request.inside, expected, `quest stage ${stage}`);
+    assert.equal(request.inside, false, `quest stage ${stage} outside an owned Vampyrium area`);
   }
+  const ownedArea = {};
+  player.getArea = () => ownedArea;
+  player.setAttribute('quest.the_blood_moon_rises.drakan-area', ownedArea);
+  quest.setStage(player, 100);
+  const inside = { player, area: 'vampyrium', inside: false };
+  checkArea(inside);
+  assert.equal(inside.inside, true, 'the final quest stage permits supplies inside its owned encounter');
+  player.getArea = () => ({});
+  const outside = { player, area: 'vampyrium', inside: false };
+  checkArea(outside);
+  assert.equal(outside.inside, false, 'the same player cannot use them after leaving that instance');
   const unrelated = { player, area: 'chambers-of-xeric', inside: false };
   checkArea(unrelated);
   assert.equal(unrelated.inside, false, 'the BMR hook leaves other area-limited potions alone');

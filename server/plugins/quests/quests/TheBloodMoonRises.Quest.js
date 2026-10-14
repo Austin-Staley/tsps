@@ -2616,7 +2616,9 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function handleVampyriumPotionArea(request) {
     if (request?.area !== "vampyrium" || !request.player) return;
-    request.inside = stage(request.player) >= STAGE.CASTLE && stage(request.player) <= STAGE.FINAL;
+    const player = request.player;
+    const area = player.getAttribute(DRAKAN_AREA_ATTRIBUTE);
+    request.inside = stage(player) === STAGE.FINAL && area != null && player.getArea?.() === area;
   }
   function isAtSinsMedallionHideout(event) {
     const location = event?.location ?? event?.npc?.getLocation?.();
