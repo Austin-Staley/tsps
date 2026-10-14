@@ -18820,5 +18820,31 @@ test('Sins boat lands on Burgh shore with a collision-valid route inland', () =>
     }
   }
   assert.equal(reachable, true, 'the shore landing connects to Burgh de Rott through real cache collision');
+
+  // The boat remains water-anchored; boarding from the six-tile shore landing
+  // must still route back to Icyene during the unfinished quest.
+  const returnBoarding = { player, objectId: 38089, location: { x: 3523, y: 3169, z: 0 }, option: 'Board', handled: false };
+  boat(returnBoarding);
+  assert.equal(returnBoarding.handled, true);
+  assert.deepEqual(moved.at(-1), [3696, 3199, 0], 'shore boarding reaches the real Icyene landing');
+});
+
+test('Sins escort transcript returns the player to the Burgh shore, not the clipped boat anchor', () => {
+  const { api, handlers } = mockApi();
+  const attributes = new Map();
+  const moved = [];
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+  };
+  require('../plugins/quests/quests/SinsOfTheFather.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'sins_of_the_father').at(-1);
+  quest.setStage(player, 100);
+  handlers.custom.get('npc-dialogue:action').forEach(handler => handler({ player, stepId: 'uD7Qcw' }));
+  assert.deepEqual(moved, [[3529, 3169, 0]]);
 });
 

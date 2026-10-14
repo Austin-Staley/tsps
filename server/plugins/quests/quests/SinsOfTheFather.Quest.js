@@ -1242,7 +1242,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
         teleport(player, TREK_START);
         return;
       case "uD7Qcw": // Ivan departs towards the boathouse.
-        teleport(player, BURGH_DOCKS);
+        teleport(player, BURGH_LANDING);
         if (quest.getStage(player) < STAGE_ESCORT_DONE) advance(player, STAGE_ESCORT_DONE);
         else applyStageSpawns(player);
         return;
@@ -2245,7 +2245,8 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
       openBoatMenu(player);
       return true;
     }
-    if (near(player, BURGH_DOCKS, 4) && stage >= STAGE_ESCORT_DONE) {
+    // The player stands on the shore beside the water-anchored boat object.
+    if (near(player, BURGH_LANDING, 8) && stage >= STAGE_ESCORT_DONE) {
       teleport(player, ICYENE_LANDING);
       if (stage < STAGE_GRAVEYARD) advance(player, STAGE_GRAVEYARD);
       return true;
