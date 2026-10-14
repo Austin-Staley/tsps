@@ -626,7 +626,10 @@ module.exports = function registerDesertTreasureII(api) {
       return (attacker === this.owner && targetHere && target?.getOwner?.() === this.owner)
         || (target === this.owner && attackerHere && attacker?.getOwner?.() === this.owner);
     }
-    isMulti() { return false; }
+    // The soul-siphon can be completed with a multi-target weapon (notably
+    // the Venator bow), while the summoned souls must remain attackable as a
+    // group inside this owner-only scene.
+    isMulti() { return true; }
   };
 
   AncientVaultArea = class DesertTreasureIIAncientVaultArea extends api.core.TemplatedInstanceArea {
@@ -3866,18 +3869,25 @@ module.exports = function registerDesertTreasureII(api) {
         else if (special === "corrupted-seeds") startWhispererSeeds(p, boss);
         else startWhispererScreech(p, boss);
       }
-      if (boss.__dt2WhispererSpecial === "soul-siphon" && lassarState.inShadow) {
+      if (boss.__dt2WhispererSoulWindowActive && lassarState.inShadow) {
+        // One deadline starts when the siphon begins. Interrupting it with a
+        // matching set does not grant a second window for the other souls.
         boss.__dt2WhispererSpecialTicks--;
         if (boss.__dt2WhispererSpecialTicks <= 0) {
-          boss.__dt2WhispererSpecial = null;
-          boss.__dt2WhispererSpecialsCompleted = (boss.__dt2WhispererSpecialsCompleted ?? 0) + 1;
-          boss.__dt2WhispererBindingTicks = 5;
-          removeWhispererSouls(p);
-          boss.setHitpoints?.(Math.min(boss.getMaxHitpoints?.() ?? 660, boss.getHitpoints() + 75));
-          p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(30, api.core.HitMask.RED)]);
-          const current = p.getAttribute(LASSAR) ?? {};
-          setLassar(p, { ...current, sanity: Math.max(0, Number(current.sanity ?? 100) - 30) });
-          p.sendMessage("The Whisperer siphons the remaining souls, heals 75 hitpoints and blasts you for 30 damage, draining 30% sanity.");
+          boss.__dt2WhispererSoulWindowActive = false;
+          if (boss.__dt2WhispererSoulSetEffectApplied) {
+            removeWhispererSouls(p);
+          } else {
+            boss.__dt2WhispererSpecial = null;
+            boss.__dt2WhispererSpecialsCompleted = (boss.__dt2WhispererSpecialsCompleted ?? 0) + 1;
+            boss.__dt2WhispererBindingTicks = 5;
+            removeWhispererSouls(p);
+            boss.setHitpoints?.(Math.min(boss.getMaxHitpoints?.() ?? 660, boss.getHitpoints() + 75));
+            p.getCombat().getHitQueue().addPendingDamage([new api.core.HitDamage(30, api.core.HitMask.RED)]);
+            const current = p.getAttribute(LASSAR) ?? {};
+            setLassar(p, { ...current, sanity: Math.max(0, Number(current.sanity ?? 100) - 30) });
+            p.sendMessage("The Whisperer siphons the remaining souls, heals 75 hitpoints and blasts you for 30 damage, draining 30% sanity.");
+          }
         }
       } else if (boss.__dt2WhispererSpecial === "corrupted-seeds") {
         processWhispererSeeds(p, boss);
@@ -4179,7 +4189,7 @@ module.exports = function registerDesertTreasureII(api) {
       }
       if (whisperer?.__dt2WhispererSoulSetEffectApplied) {
         resolveWhispererSoulSet(p, whisperer);
-        whisperer.__dt2WhispererSoulBonusTicks = 0;
+        whisperer.__dt2WhispererSoulWindowActive = false;
         removeWhispererSouls(p);
       }
       const materialX = x + 256;
@@ -5726,12 +5736,15 @@ module.exports = function registerDesertTreasureII(api) {
   function startWhispererSoulSiphon(p, boss) {
     if (boss.__dt2WhispererSpecial) return;
     boss.__dt2WhispererSpecial = "soul-siphon";
+    // shortcut: the exact live duration is not exposed by the available Wiki
+    // source, so approximate it as 25 ticks. This remains one deadline for
+    // the whole siphon, including after the first matching set is killed.
     boss.__dt2WhispererSpecialTicks = 25;
+    boss.__dt2WhispererSoulWindowActive = true;
     boss.__dt2WhispererSoulsKilled = 0;
     boss.__dt2WhispererCompletedSoulSet = null;
     boss.__dt2WhispererSoulSetEffectApplied = false;
     boss.__dt2WhispererAllSoulsRewarded = false;
-    boss.__dt2WhispererSoulBonusTicks = 0;
     boss.forceChat?.("The souls will feed me!");
     p.sendMessage("The blackstone fragment glows yellow. Activate it, enter the Shadow Realm and kill one complete set of Lost Souls chanting the same phrase before the siphon completes.");
     const owned = spawned.get(p) ?? {};
@@ -5810,24 +5823,20 @@ module.exports = function registerDesertTreasureII(api) {
       boss.__dt2WhispererSpecialsCompleted = (boss.__dt2WhispererSpecialsCompleted ?? 0) + 1;
       boss.__dt2WhispererBindingTicks = 5;
       boss.__dt2WhispererSoulSetEffectApplied = true;
-      boss.__dt2WhispererSoulBonusTicks = 25;
       completeWhispererSoulSet(p, boss, setIndex);
       boss.forceChat?.("The souls are silenced!");
-      p.sendMessage("The Whisperer's siphon fails. You can still kill the remaining souls for the stronger effect.");
+      p.sendMessage("The Whisperer's siphon fails. Kill the remaining souls before the original siphon deadline for the stronger effect.");
     }
-    if (boss.__dt2WhispererSoulSetEffectApplied && boss.__dt2WhispererSoulBonusTicks > 0) {
+    if (boss.__dt2WhispererSoulSetEffectApplied && boss.__dt2WhispererSoulWindowActive) {
       if (boss.__dt2WhispererSoulsKilled >= 12 && !boss.__dt2WhispererAllSoulsRewarded) {
         const bonus = WHISPERER_SOUL_SETS[setIndex]?.phrase === "Mors!" ? 25 : 75;
         const hit = new api.core.HitDamage(bonus, api.core.HitMask.RED);
         hit.setSource?.(p);
         boss.getCombat?.()?.getHitQueue?.()?.addPendingDamage?.([hit]);
         boss.__dt2WhispererAllSoulsRewarded = true;
-        boss.__dt2WhispererSoulBonusTicks = 0;
+        boss.__dt2WhispererSoulWindowActive = false;
         removeWhispererSouls(p);
         p.sendMessage("You silence every soul. Their combined voices bring the Whisperer's total damage from this special to 75.");
-      } else if (boss.__dt2WhispererSpecial == null && setIndex != null) {
-        boss.__dt2WhispererSoulBonusTicks--;
-        if (boss.__dt2WhispererSoulBonusTicks <= 0) removeWhispererSouls(p);
       }
     }
   }
@@ -6091,7 +6100,7 @@ module.exports = function registerDesertTreasureII(api) {
       const remaining = actors.whispererSouls.filter((soul) => soul?.isRegistered?.() && soul.__dt2WhispererSoulSet === group);
       const boss = actors.whisperer;
       if (boss?.isRegistered?.() && (boss.__dt2WhispererSpecial === "soul-siphon"
-        || (boss.__dt2WhispererSoulSetEffectApplied && boss.__dt2WhispererSoulBonusTicks > 0))) {
+        || (boss.__dt2WhispererSoulSetEffectApplied && boss.__dt2WhispererSoulWindowActive))) {
         boss.__dt2WhispererSoulsKilled = (boss.__dt2WhispererSoulsKilled ?? 0) + 1;
         if (boss.__dt2WhispererSpecial === "soul-siphon" && !remaining.length && boss.__dt2WhispererCompletedSoulSet == null) {
           // Resolve the chosen set next tick, then leave the other souls

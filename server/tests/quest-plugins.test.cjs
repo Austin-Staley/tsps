@@ -7171,6 +7171,7 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   'one private scene includes both material and Shadow Realm mirrors');
   assert.equal(whispererArea.canAttack(player, boss), true, 'the owner can attack the private quest boss');
   assert.equal(whispererArea.canAttack(boss, player), true, 'the private quest boss can attack its owner');
+  assert.equal(whispererArea.isMulti(), true, 'the owner scene permits multi-target weapons against the summoned souls');
   const foreignPlayer = { getArea: () => null };
   assert.equal(whispererArea.canAttack(foreignPlayer, boss), false, 'foreign players cannot attack the owner’s quest NPC');
   assert.equal(whispererArea.canAttack(boss, foreignPlayer), false, 'the owner’s quest NPC cannot attack a foreign player');
@@ -7229,12 +7230,17 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   }
   const firstChant = created.filter((npc) => npc.__dt2WhispererSoul && npc.__dt2WhispererSoulSet === 0);
   assert.equal(firstChant.length, 2, 'Vita is the fastest two-soul set');
+  const originalSoulDeadline = boss.__dt2WhispererSpecialTicks;
   for (const soul of firstChant) {
     soul.registered = false;
     deathHooks[0]({ npc: soul, killer: player });
   }
   playerProcesses.forEach((handler) => handler({ player }));
   assert.equal(boss.__dt2WhispererSpecial, null, 'killing one full matching chant set interrupts the siphon');
+  assert.ok(boss.__dt2WhispererSpecialTicks < originalSoulDeadline,
+    'interrupting with Vita preserves the original countdown instead of starting a new bonus window');
+  assert.equal(boss.__dt2WhispererSoulWindowActive, true,
+    'the remaining souls stay attackable only while the original window remains active');
   assert.equal(player.hitpoints, 69, 'completing Vita restores 20% of maximum hitpoints');
   for (const soul of created.filter((npc) => npc.__dt2WhispererSoul)) soul.registered = false;
   itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
@@ -7278,7 +7284,7 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
     playerProcesses.forEach((handler) => handler({ player }));
   }
   assert.equal(npcPendingDamage.at(-1).getDamage(), 75,
-    `killing all twelve souls over successive ticks increases the damage to 75 (${JSON.stringify({ killed: boss.__dt2WhispererSoulsKilled, set: boss.__dt2WhispererCompletedSoulSet, applied: boss.__dt2WhispererSoulSetEffectApplied, bonusTicks: boss.__dt2WhispererSoulBonusTicks })})`);
+    `killing all twelve souls over successive ticks inside the original deadline increases the damage to 75 (${JSON.stringify({ killed: boss.__dt2WhispererSoulsKilled, set: boss.__dt2WhispererCompletedSoulSet, applied: boss.__dt2WhispererSoulSetEffectApplied, ticks: boss.__dt2WhispererSpecialTicks })})`);
   itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
   username = 'c';
   boss.__dt2WhispererSpecialStarted = false;
