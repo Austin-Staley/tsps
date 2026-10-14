@@ -793,6 +793,6 @@ module.exports = function registerTombsLobby(api) {
   api.onInterfaceActionButton(MANAGEMENT_BUTTONS_UID, clickManagementButton);
   api.onInterfaceActionButton(MANAGEMENT_REWARD_INFO_UID, showRewardPotential);
   api.onInterfaceActionButton(MANAGEMENT_PRESETS_UID, clickPreset);
-  api.persistAttribute("toa:invocation-presets");
+  api.persistAttribute("toa:invocation-presets", Array.from({ length: 5 }, () => [0, 0, 0]));
   api.persistAttribute("toa:completions");
 };

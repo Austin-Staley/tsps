@@ -347,8 +347,8 @@ module.exports = {
     core = pluginApi.core;
     require("./tzhaar/TzhaarMonsters")(pluginApi);
     CombatAchievements(pluginApi);
-    pluginApi.persistAttribute(ATTR_WAVE);
-    pluginApi.persistAttribute(ATTR_ROTATION);
+    pluginApi.persistAttribute(ATTR_WAVE, null);
+    pluginApi.persistAttribute(ATTR_ROTATION, null);
     pluginApi.persistAttribute(ATTR_LEFT_AT);
     pluginApi.onObjectFirstClick(core.ObjectIdentifiers.CAVE_ENTRANCE_44, enterCave);
     pluginApi.onObjectFirstClick(core.ObjectIdentifiers.CAVE_ENTRANCE_45, leaveCave);

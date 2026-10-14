@@ -45,11 +45,17 @@ export class PlayerSave {
         CREATION_MENU_LAST_ITEM_ATTRIBUTE,
     ]);
 
-    public static persistAttribute(key: string): void {
+    /** JSON of each attribute's default: a value equal to it isn't saved, and a save without the key loads it. */
+    private static readonly attributeDefaults = new Map<string, string>([["ring-of-recoil:damage", "0"]]);
+
+    public static persistAttribute(key: string, defaultValue?: unknown): void {
         if (typeof key !== "string" || !key.trim() || key !== key.trim()) {
             throw new Error("Persistent attribute keys must be non-empty strings without surrounding whitespace");
         }
         PlayerSave.persistentAttributeKeys.add(key);
+        if (defaultValue !== undefined) {
+            PlayerSave.attributeDefaults.set(key, JSON.stringify(PlayerSave.cloneAttribute(key, defaultValue)));
+        }
     }
 
     private static readonly CAMEL_CASE_ATTRIBUTE_KEY = /([a-z0-9])([A-Z])/g;
@@ -592,6 +598,8 @@ export class PlayerSave {
         for (const key of PlayerSave.persistentAttributeKeys) {
             if (Object.prototype.hasOwnProperty.call(this.attributes ?? {}, key)) {
                 player.setAttribute(key, PlayerSave.cloneAttribute(key, this.attributes[key]));
+            } else if (PlayerSave.attributeDefaults.has(key) && player.getAttribute(key) === undefined) {
+                player.setAttribute(key, JSON.parse(PlayerSave.attributeDefaults.get(key)!));
             }
         }
 
@@ -682,6 +690,7 @@ export class PlayerSave {
             [...PlayerSave.persistentAttributeKeys]
                 .filter((key) => player.getAttribute(key) !== undefined)
                 .map((key) => [key, PlayerSave.cloneAttribute(key, player.getAttribute(key))])
+                .filter(([key, value]) => JSON.stringify(value) !== PlayerSave.attributeDefaults.get(key as string))
         );
 
         playerSave.friends = PlayerSave.normalizeRelationListToStrings(

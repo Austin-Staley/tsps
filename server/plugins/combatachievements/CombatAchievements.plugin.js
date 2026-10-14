@@ -85,9 +85,10 @@ module.exports = {
   name: "CombatAchievements",
   register(api) {
     for (const module of [Data, Progress, Kills, Interface, Rewards, Fights]) module.bind(api);
-    for (const key of [Progress.COMPLETED_ATTRIBUTE, Progress.CLAIMED_ATTRIBUTE, Kills.KILLS_ATTRIBUTE, Interface.VIEW_ATTRIBUTE]) {
+    for (const key of [Progress.COMPLETED_ATTRIBUTE, Progress.CLAIMED_ATTRIBUTE, Interface.VIEW_ATTRIBUTE]) {
       api.persistAttribute(key);
     }
+    api.persistAttribute(Kills.KILLS_ATTRIBUTE, {});
     api.onPlayerLogin(restore);
     api.onNpcDeath(Kills.onNpcDeath);
     api.onNpcDeath(Fights.onNpcDeath);

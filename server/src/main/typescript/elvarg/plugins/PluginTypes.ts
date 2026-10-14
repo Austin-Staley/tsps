@@ -1063,8 +1063,11 @@ export interface PluginApi {
     itemId: number,
     options?: { name?: string; aliases?: string[] }
   ): void;
-  /** Save and restore this player attribute; values must be JSON-compatible. */
-  persistAttribute(key: string): void;
+  /**
+   * Save and restore this player attribute; values must be JSON-compatible.
+   * With a default, a value equal to it isn't saved, and a save without the key loads it.
+   */
+  persistAttribute(key: string, defaultValue?: unknown): void;
   setPlayerPersistence(persistence: PlayerPersistence): void;
   setExperienceRate(rate: number): void;
   getActiveRegionSnapshot(): PluginActiveRegionsEvent;
