@@ -3232,6 +3232,15 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!player || stage(player) !== STAGE.CASTLE) return;
     const location = player.getLocation?.();
     const prisonStory = castleStory(player);
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.BASEMENT_HALL &&
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 76 && prisonStory.prisonersFound &&
+      location?.getX?.() >= 2565 && location.getX() <= 2575 &&
+      location.getY() >= 7395 && location.getY() <= 7398 && location.getZ() === 0) {
+      // The freeing cutscene leaves the player physically inside the cell map chunk.
+      player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.BASEMENT_PRISON);
+      player.moveTo(new Location(2570, 7394, 0));
+      return;
+    }
     if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.STOCKPILE_STORAGE &&
       Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 78 &&
       location?.getX?.() === 2531 && location.getY() === 7385 && location.getZ() === 0) {
@@ -3258,6 +3267,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       location?.getX?.() === 2567 && location.getY() === 7394 && location.getZ() === 0) {
       // The old prison exit left saved players in the isolated cell map chunk.
       player.moveTo(new Location(2570, 7368, 0));
+
       return;
     }
     if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.BASEMENT_PRISON &&
@@ -3265,7 +3275,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       !prisonStory.gibbousKeyClaimed && !hasItem(player, CASTLE_BOOK_ITEMS.gibbousMoonKey) &&
       location?.getZ?.() === 0 && location.getY() === 7394 && location.getX() >= 2565 && location.getX() <= 2575) {
       // The freeing cutscene leaves the player north of the cell wall, beside the bench key.
-      player.moveTo(new Location(2570, 7395, 0));
+      player.moveTo(new Location(2570, 7394, 0));
       return;
     }
     if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.RANIS_HALL &&
@@ -3301,6 +3311,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       location?.getX?.() === 2314 && location.getY() === 7359 && location.getZ() === 1) {
       // The recording places the upper-lobby arrival two tiles farther north.
       player.moveTo(new Location(2314, 7361, 1));
+
       return;
     }
     if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.EXPLOSIVE_ROOM &&
@@ -3417,7 +3428,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!story.prisonersFound || hasItem(player, CASTLE_BOOK_ITEMS.gibbousMoonKey)) return;
     const manager = api.getItemOnGroundManager?.();
     if (!manager?.registerLocation) return;
-    const tile = new Location(2573, 7395, 0);
+    const tile = new Location(2573, 7394, 0);
     if (!manager.getGroundItem?.(player.getUsername?.(), CASTLE_BOOK_ITEMS.gibbousMoonKey, tile,
       player.getPrivateArea?.() ?? null)) {
       manager.registerLocation(player, new Item(CASTLE_BOOK_ITEMS.gibbousMoonKey, 1), tile);
@@ -4476,7 +4487,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!story.prisonersFound) {
       player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, prisonersFound: true });
       setCastleNativeStage(player, 76);
-      player.moveTo(new Location(2570, 7395, 0));
+      player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.BASEMENT_PRISON);
+      player.moveTo(new Location(2570, 7394, 0));
       syncCastleActors(player);
       syncCastleGibbousKey(player);
     }

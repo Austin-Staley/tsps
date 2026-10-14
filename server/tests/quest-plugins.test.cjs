@@ -20228,3 +20228,62 @@ test('DT2 Lassar journal follows consumed keys and recalled devices to the next 
   assert.match(quest.buildJournal(player).join(' '), /Show Ketla the strange icon/,
     'a consumed green key remains earned when its chest is opened');
 });
+
+test('Blood Moon prisoner scene waits for the transcript, then leaves the player by the bench key', () => {
+  const { api, handlers } = mockApi();
+  api.spawnNpc = spec => ({ ...spec, getHitpoints: () => 10, setScriptedMovement() {} });
+  api.removeNpc = () => {};
+  const ground = [];
+  api.getItemOnGroundManager = () => ({ getGroundItem: () => null,
+    registerLocation: (_player, item, location) => ground.push({ item, location }) });
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.castle-native-stage', 74],
+    ['quest.the_blood_moon_rises.castle-room', 48],
+    ['quest.the_blood_moon_rises.castle-floor', 1],
+    ['quest.the_blood_moon_rises.castle-story', { defeated: [], prisonersFound: false }],
+    ['quest.the_blood_moon_rises.castle-transition-pending', 'free-prisoners'],
+  ]);
+  let location = new api.core.Location(2565, 7394, 0);
+  let dialogue = {};
+  const moved = [];
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => location, moveTo: next => { moved.push([next.getX(), next.getY(), next.getZ()]); location = next; },
+    getInventory: () => ({ contains: () => false }), getUsername: () => 'castle-prison-scene',
+    getDialogueManager: () => ({ getCurrent: () => dialogue }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+  };
+  quest.setStage(player, 40);
+  const process = handlers.playerProcess.find(handler => handler.name === 'processCastleDialogueTransition');
+  process({ player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 74,
+    'the escape chapter does not advance while the cutscene dialogue is open');
+  assert.deepEqual(moved, []);
+  dialogue = null;
+  process({ player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 76);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 51,
+    'the completed cutscene records the actual cell room for its paired exit door');
+  assert.deepEqual(moved, [[2570, 7394, 0]], 'the cutscene relocates to the cache-clear side of the cell wall');
+  assert.equal(ground[0].item.getId(), 33727, 'the gibbous key appears on the bench after the dialogue');
+  assert.deepEqual([ground[0].location.getX(), ground[0].location.getY(), ground[0].location.getZ()], [2573, 7394, 0],
+    'the key uses a reachable tile adjacent to the blocked bench row');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-transition-pending'), null);
+
+  location = new api.core.Location(2573, 7394, 0);
+  const login = handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin');
+  login({ player });
+  assert.deepEqual(moved.at(-1), [2570, 7394, 0], 'a saved pre-fix prison landing recovers on relog');
+  attributes.set('quest.the_blood_moon_rises.castle-room', 48);
+  location = new api.core.Location(2566, 7396, 0);
+  login({ player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 51,
+    'a saved cell landing with the stale hall tag recovers its actual room on relog');
+  assert.deepEqual(moved.at(-1), [2570, 7394, 0],
+    'legacy cell landings recover onto the reachable side of the bench row');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 76,
+    'landing recovery preserves earned progress');
+});
