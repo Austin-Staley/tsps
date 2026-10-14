@@ -6910,5 +6910,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.persistAttribute(GALLERY_CHEST_ATTRIBUTE);
   api.persistAttribute(REFINER_ATTRIBUTE);
   api.persistAttribute(HUNT_ATTRIBUTE);
-  api.onItemAction("Tome of Experience", { Read: readTome });
+  // Cache item 33715 is named exactly "Tome of experience". Named item-action
+  // hooks compare that cache name case-sensitively.
+  api.onItemAction("Tome of experience", { Read: readTome });
 };

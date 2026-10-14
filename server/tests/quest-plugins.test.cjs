@@ -18644,3 +18644,11 @@ test('Song of the Elves library guide remains available after logout and relog',
  const area=handlers.area.find(a=>a.constructor.name==='LletyaStoryArea');area.process(player);area.process(player);assert.equal(spawned.length,1);assert.equal(spawned[0].id,api.core.NpcIdentifiers.LORD_IEUAN_AMLODD_2);assert.equal(api.core.RegionManager.getClipping(spawned[0].x,spawned[0].y,0,null),0);
  handlers.playerLogout.find(h=>h.name==='onPlayerLogout')({player});assert.equal(spawned[0].isRegistered(),false);area.process(player);assert.equal(spawned.length,2,'a stale boolean from an old save cannot hide the new guide');
 });
+test('Blood Moon experience tome Read hook uses the exact cache item name', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+
+  // PluginManager matches named item actions against CacheDefinitions.getItem().name
+  // exactly; item 33715 is "Tome of experience" (lowercase e).
+  assert.deepEqual(Object.keys(handlers.namedItemActions.get('Tome of experience')), ['Read']);
+});
