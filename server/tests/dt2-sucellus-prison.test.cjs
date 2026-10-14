@@ -20,6 +20,7 @@ function setup() {
   const npc = (id, location) => ({
     id, location, maxHitpoints: 1500, hitpoints: 1500,
     getId() { return this.id; },
+    moveTo(value) { this.location = value; },
     getLocation() { return { getX: () => this.location.x, getY: () => this.location.y }; },
     isRegistered: () => true,
     setOwner(value) { this.owner = value; }, setOwnerOnly(value) { this.ownerOnly = value; }, getCombat() { return { attack: (target) => { this.target = target; this.attacks = (this.attacks ?? 0) + 1; } }; },
@@ -379,6 +380,8 @@ test("earned frozen-Jhallan progress restores the Assassin after relog without r
   player.setAttribute("desert-treasure-ii:sucellus-prison-fireworks", true);
   assert.equal(handlers.custom["dt2:sucellus-prison-resume"]({ player, area }), true);
   assert.ok(createdNpcs.some((value) => value.id === 12348), "the Assassin is recreated at the saved frozen-Jhallan stage");
+  const assassin = createdNpcs.find(value => value.id === 12348);
+  assert.deepEqual(assassin.location, area.tile(2978 - 2872, 6371 - 6336, 2), 'relog restores the camp speaker beside the frozen Jhallan');
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 56);
   assert.equal(handlers.custom["dt2:sucellus-prison-resume"]({ player, area: { ...area } }), false, "resume ignores a different instance");
 });
@@ -681,4 +684,16 @@ test('ration crates replenish for their owner, respect the twelve-item limit and
   assert.equal(area.inside, false, 'ration eating ends when the equipment chest is recovered');
   handlers.object({ ...event, handled: false });
   assert.equal(inventory.getAmount(28422), 12, 'the equipment stage cannot obtain new prison-only rations');
+});
+
+
+test('recovering equipment reuses and moves the existing Assassin to the next dialogue location', () => {
+  const { handlers, player, area, createdNpcs } = setup();
+  player.setAttribute('desert-treasure-ii:sucellus-prison-progress', 40);
+  handlers.custom['dt2:sucellus-prison-resume']({ player, area });
+  const assassin = createdNpcs.find(value => value.id === 12348);
+  player.setAttribute('desert-treasure-ii:sucellus-prison-progress', 50);
+  handlers.custom['dt2:sucellus-prison-resume']({ player, area });
+  assert.equal(createdNpcs.filter(value => value.id === 12348).length, 1, 'no duplicate queued or registered speaker');
+  assert.deepEqual(assassin.location, area.tile(2903 - 2872, 6383 - 6336, 2));
 });

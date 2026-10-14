@@ -244,9 +244,16 @@ module.exports = function registerSucellusPrison(api) {
     player.sendMessage(`The lock opens. You take the ${key} key.`);
   }
 
-  function spawnAssassin(player, area, x = 2920, y = 6375) {
+  function spawnAssassin(player, area, x, y) {
+    const progress = state(player);
+    const destination = progress === 56 ? [2978, 6371] : progress >= 50 ? [2903, 6383] : [2920, 6375];
+    x ??= destination[0];
+    y ??= destination[1];
     const current = player.getAttribute("desert-treasure-ii:sucellus-prison-assassin");
-    if (current?.isRegistered?.() && area.entities.includes(current)) return current;
+    if (current && area.entities.includes(current)) {
+      current.moveTo(areaLocation(area, x, y, 2));
+      return current;
+    }
     // The parent quest places the Assassin as the cell escape cutscene ends.
     // Reuse that owner-visible NPC rather than layering a second identical one
     // when the prison module receives its start/resume event.
