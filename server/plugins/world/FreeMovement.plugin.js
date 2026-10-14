@@ -1,6 +1,6 @@
 "use strict";
 
-const { moveContinuous, WALK_SPEED, MAX_PREDICTION_MS } = require("./ContinuousMotion");
+const { moveContinuous, WALK_SPEED, MAX_PREDICTION_MS } = require("./ContinuousMotion.FreeMovement");
 const states = new WeakMap();
 const WORLD_INPUTS = new Set(["move", "teleport", "world_map_click", "npc_option", "object_option",
   "player_option", "ground_item_action", "inventory_use_on", "item_on_player", "item_on_npc",

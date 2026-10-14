@@ -7,9 +7,9 @@
  * The completion counts and best times are the run stats the Gauntlet already keeps.
  */
 
-const Shared = require("./GauntletShared");
-const Run = require("./GauntletRun");
-const { armourTier } = require("./GauntletHunllef");
+const Shared = require("./Shared.Gauntlet");
+const Run = require("./RunState.Gauntlet");
+const { armourTier } = require("./Hunllef.Gauntlet");
 
 const PERFECTED_ARMOUR_TIER = 3;
 const MONSTER = { regular: "Crystalline Hunllef", corrupted: "Corrupted Hunllef" };

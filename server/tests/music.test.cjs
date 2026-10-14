@@ -7,7 +7,7 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { PlayerSession } = require('../dist/net/PlayerSession');
 const { PacketSender } = require('../dist/net/packet/PacketSender');
 const { Location } = require('../dist/game/model/Location');
-const Progress = require('../plugins/world/Music.Progress');
+const Progress = require('../plugins/world/Progress.Music');
 const MusicPlugin = require('../plugins/world/Music.plugin');
 
 const handlers = new Map();

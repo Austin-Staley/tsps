@@ -6,7 +6,7 @@
  * modifiers he was beaten with, and wave 11 cleared with a modifier the task names.
  */
 
-const Shared = require("./ColosseumShared");
+const Shared = require("./Shared.Colosseum");
 const Sol = require("./SolHeredit.Colosseum");
 
 const SPEED = [["Colosseum Speed-Chaser", 28 * 60], ["Colosseum Speed-Runner", 24 * 60]];

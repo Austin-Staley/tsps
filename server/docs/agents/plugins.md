@@ -239,7 +239,7 @@ update from main by fast-forward:
 ```
 
 The bot population follows the same layering: `pluginConfig` `"PlayerBots:sites"` overrides
-bot-sites.json sites by id, property by property, and adds new ones (`plugins/bots/brain/BotSites.js`; docs/bot-combat-training.md).
+bot-sites.json sites by id, property by property, and adds new ones (`plugins/bots/brain/Sites.PlayerBots.js`; docs/bot-combat-training.md).
 
 ## Conventions
 

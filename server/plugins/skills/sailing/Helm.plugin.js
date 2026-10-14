@@ -25,8 +25,8 @@ const {
   isHelm,
   boatAnim,
   boatType,
-} = require("./sailingContent");
-const { windFor, canTrim, trimSails, isTrimmed } = require("./trim");
+} = require("./SailingContent.Sailing");
+const { windFor, canTrim, trimSails, isTrimmed } = require("./Trim.Helm");
 const { Task } = require("../../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../../src/main/typescript/elvarg/game/task/TaskManager");
 
@@ -325,7 +325,7 @@ function keepFacingBow(player, boat) {
   if (boat.helmPlayerId === player.getIndex()) faceBow(player);
 }
 
-/** The sail cloth's Trim: catches a gust for whoever is at the helm (trim.js). */
+/** The sail cloth's Trim: catches a gust for whoever is at the helm (Trim.Helm.js). */
 function trim({ player }) {
   const boat = Sailing.instanceAboard(player);
   if (!boat) return;

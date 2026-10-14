@@ -8,11 +8,11 @@
  * initialised by 6729 with the invocation bitmaps) follows the cache interfaces.
  */
 
-const Shared = require("./ToaShared");
-const Parties = require("./ToaParties");
-const Invocations = require("./ToaInvocations");
-const Raid = require("./ToaRaid");
-const Rewards = require("./ToaRewards");
+const Shared = require("./Shared.TombsOfAmascut");
+const Parties = require("./Parties.TombsOfAmascut");
+const Invocations = require("./Invocations.TombsOfAmascut");
+const Raid = require("./RaidState.TombsOfAmascut");
+const Rewards = require("./Loot.TombsOfAmascut");
 
 const { INTERFACE, SCRIPT, VARBIT, VARP, EVENT } = Shared;
 

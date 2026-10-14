@@ -283,7 +283,7 @@ test("Dagannoth Kings: all three within 9 seconds, Rex with another on one tick"
 });
 
 test("the Gauntlet: a completed run's count, time and the Hunllef fight decide its tasks", () => {
-  const GauntletShared = require("../plugins/minigames/gauntlet/GauntletShared");
+  const GauntletShared = require("../plugins/minigames/gauntlet/Shared.Gauntlet");
   const Unit = require("../plugins/minigames/gauntlet/CombatAchievements.Gauntlet");
   GauntletShared.bind(fakeApi);
   const player = createPlayer();

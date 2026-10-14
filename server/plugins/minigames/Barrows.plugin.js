@@ -19,7 +19,7 @@ const { ForceMovementTask } = require("../../src/main/typescript/elvarg/game/tas
 const { MagicCombatMethod } = require("../../src/main/typescript/elvarg/game/content/combat/method/impl/MagicCombatMethod");
 const { CombatSpells } = require("../../src/main/typescript/elvarg/game/content/combat/magic/CombatSpells");
 const { MOBILE_CLIENT_ATTRIBUTE } = require("../../src/main/typescript/elvarg/net/protocol/ClientProtocol");
-const { decodeRegionObjects, initRegionBuildingAnalysisCoreAccess } = require("../world/procedural/RegionBuildingAnalysisUtil");
+const { decodeRegionObjects, initRegionBuildingAnalysisCoreAccess } = require("../world/procedural/RegionBuildingAnalysisUtil.ProceduralRegionStream");
 
 const REGION_ID = 14231;
 const ATTRIBUTE = "barrows";

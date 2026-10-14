@@ -9,7 +9,7 @@
  * logout is not watched from its start, so only its completion counts.
  */
 
-const { JAD_WAVE, TRIPLE_JAD_WAVE, ZUK_WAVE } = require("./InfernoWaves");
+const { JAD_WAVE, TRIPLE_JAD_WAVE, ZUK_WAVE } = require("./Waves.Inferno");
 
 const WASNT_EVEN_CLOSE_HITPOINTS = 50;
 const SPEED_RUNNER_SECONDS = 65 * 60;
@@ -102,7 +102,7 @@ function finish(player, won, completions) {
 /** At login: the completion count, so earlier runs finish their kill-count tasks. */
 function answerKillCount({ player, counts }) {
   // Required here: the run requires this unit.
-  const completions = require("./InfernoRun").completions(player);
+  const completions = require("./Run.Inferno").completions(player);
   if (completions > 0) counts["TzKal-Zuk"] = completions;
 }
 

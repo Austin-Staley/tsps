@@ -23,7 +23,7 @@ A shutdown save stores players where they stand, without the logout steps, so no
 
 ## The writer thread
 
-The SQLite backend writes on its own thread (`plugins/persistence/SqliteSaveWorker.js`), so the game tick never waits on the disk. A WAL checkpoint's disk flush can take milliseconds on fast disks and much longer on a slow VPS, and it lands in whichever commit triggers it.
+The SQLite backend writes on its own thread (`plugins/persistence/SaveWorker.SqlitePlayerPersistence.js`), so the game tick never waits on the disk. A WAL checkpoint's disk flush can take milliseconds on fast disks and much longer on a slow VPS, and it lands in whichever commit triggers it.
 
 - **On the tick,** `save()` only builds the save as compact JSON (about 0.05 ms) and posts it to the writer.
 - **On the writer thread:** validation, the hash, gzip, the transaction with the history copy, and pruning. It has the only connection that writes. Rollbacks go through it too, so the game thread never waits for a lock.
@@ -55,7 +55,7 @@ The SQLite backend (`plugins/persistence/SqlitePlayerPersistence.plugin.js`, the
 | `save_gz` | The save JSON, gzipped (about 1.5 KB against 5–6 KB) |
 
 - **Not every save adds a copy:** a save identical to the player's newest copy adds none, and bots' saves add none.
-- **Retention**, thinned after each new copy (`SqliteSaveHistory.js`):
+- **Retention**, thinned after each new copy (`SaveHistory.SqlitePlayerPersistence.js`):
   - every copy from the last 24 hours;
   - from 24 hours to 7 days, the newest of each hour;
   - from 7 to 30 days, the newest of each day;

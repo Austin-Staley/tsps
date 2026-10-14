@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const Progress = require("./Music.Progress");
+const Progress = require("./Progress.Music");
 
 const COINS = 995;
 const CAPE_PRICE = 99000;

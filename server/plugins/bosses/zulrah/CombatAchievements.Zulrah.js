@@ -8,7 +8,7 @@
  * task of its own.
  */
 
-const Shared = require("./ZulrahShared");
+const Shared = require("./Shared.Zulrah");
 
 const SPEED = [["Zulrah Speed-Trialist", 80], ["Zulrah Speed-Chaser", 60], ["Zulrah Speed-Runner", 54]];
 const SNAKELINGS_AT_ONCE = 3;
