@@ -6400,8 +6400,22 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     area.process(p);
     assert.equal(current.__dt2FinalWightTicks, 1);
     assert.ok(current.__dt2AssassinWhiteSmoke, 'the Assassin creates a white-smoke vulnerability window');
+    assert.notDeepEqual([current.__dt2AssassinWhiteSmoke.x, current.__dt2AssassinWhiteSmoke.y],
+      [current.__dt2AssassinPinkSmoke.x, current.__dt2AssassinPinkSmoke.y], 'pink and white smoke use distinct cache tiles');
     assert.deepEqual(registeredObjects.slice(0, 2).map(object => object.id), [core.ObjectIdentifiers.SMOKE_CLOUD, core.ObjectIdentifiers.SMOKE_CLOUD_2]);
     assert.equal(hitDamage(current), 0, 'ordinary attacks are blocked outside white smoke');
+    const pink = current.__dt2AssassinPinkSmoke;
+    const pinkTile = { x: pink.x, y: pink.y };
+    pink.x = current.__dt2AssassinWhiteSmoke.x + 1;
+    pink.y = current.__dt2AssassinWhiteSmoke.y;
+    current.location = { x: pink.x, y: pink.y, z: 0 };
+    assert.equal(hitDamage(current), 0, 'the separate pink cloud never counts as white-smoke vulnerability');
+    pink.x = pinkTile.x;
+    pink.y = pinkTile.y;
+    current.location = { x: current.__dt2AssassinWhiteSmoke.x + 1, y: current.__dt2AssassinWhiteSmoke.y, z: 0 };
+    assert.equal(hitDamage(current), 20, 'the cloud edge catches diagonal movement across its one-tile cache footprint');
+    current.location = { x: current.__dt2AssassinWhiteSmoke.x + 2, y: current.__dt2AssassinWhiteSmoke.y, z: 0 };
+    assert.equal(hitDamage(current), 0, 'a boss two tiles away remains protected immediately');
     current.location = { x: current.__dt2AssassinWhiteSmoke.x, y: current.__dt2AssassinWhiteSmoke.y, z: 0 };
     assert.equal(hitDamage(current), 20, 'white smoke permits normal damage');
     deaths[0]({ killer: p, npc: current });

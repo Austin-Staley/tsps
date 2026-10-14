@@ -1954,6 +1954,9 @@ module.exports = function registerDesertTreasureII(api) {
         const object = (boss.__dt2FinalWightObjects ?? []).shift();
         removeFinalWightObject(object);
       }
+      // shortcut: the Wiki describes luring the Assassin through white smoke but does not
+      // specify its exact effective radius. Keep the cache-backed cloud 1×1 and
+      // treat its immediate edge as smoke so diagonal pathing does not skip it.
       if (boss.__dt2FinalWightTicks % 16 === 1) startAssassinSmoke(player, boss, area);
       if (boss.__dt2FinalWightTicks % 7 === 0) assassinBottleVolley(player, boss, area);
       for (const shot of boss.__dt2FinalWightPending) {
@@ -2087,8 +2090,12 @@ module.exports = function registerDesertTreasureII(api) {
     const player = npc.getOwner?.();
     if (attacker === player && index === 0) {
       const smoke = npc.__dt2AssassinWhiteSmoke;
+      const pink = npc.__dt2AssassinPinkSmoke;
       const loc = finalWightLocation(npc);
-      if (!smoke || !loc || loc.x !== smoke.x || loc.y !== smoke.y) {
+      const inSmoke = smoke?.until > 0 && loc
+        && Math.max(Math.abs(loc.x - smoke.x), Math.abs(loc.y - smoke.y)) <= 1;
+      const inPinkSmoke = pink?.until > 0 && loc && loc.x === pink.x && loc.y === pink.y;
+      if (!inSmoke || inPinkSmoke) {
         for (const damage of hit.getHits?.() ?? []) damage.setDamage(0);
         hit.updateTotalDamage?.();
         player.sendMessage?.("The Assassin is protected from your attacks until you lure him into white smoke.");
