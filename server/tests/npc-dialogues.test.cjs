@@ -703,6 +703,19 @@ test('Quest transcripts preserve each named speaker instead of borrowing the cli
   assert.ok(lines.some(([id,text])=>id===13540&&text.includes('theology')));
 });
 
+test('The BMR preparation transcript indexes its distinct Mysterious Vampyre speaker', () => {
+  const { speakerIdIndex } = require('../plugins/npcs/NpcDialogues.plugin');
+  const dialogueIndex = JSON.parse(fs.readFileSync(path.join(__dirname, '../data/definitions/npc-dialogue-index.json'), 'utf8'));
+  const speakers = speakerIdIndex(dialogueIndex, { forId: id => ({
+    getName: () => ({ 15953: 'Mysterious Woman', 15964: 'Mysterious Vampyre' })[id] || 'null',
+  }) });
+  const page = 'The Blood Moon Rises';
+  const variant = 'hallowed-preparations-talking-to-the-mysterious-woman';
+  assert.equal(speakers.get('Mysterious Vampyre'), 15964);
+  assert.ok(dialogueIndex['15964'].some(entry => entry.page === `Transcript:${page}` && entry.variants.includes(variant)));
+  assert.ok(data[page].variants[variant].some(step => step.type === 'line' && step.speaker === 'Mysterious Vampyre'));
+});
+
 test('Quest transcript options reuse answers from earlier variants on the same page', () => {
   const { PluginManager } = require('../dist/plugins/PluginManager');
   const { startTranscript } = require('../plugins/quests/QuestRuntime');
