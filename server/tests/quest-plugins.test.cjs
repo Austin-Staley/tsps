@@ -4116,9 +4116,10 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
     [api.core.ItemIdentifiers.BUCKET, 2596, 7833, 0],
   ], 'the captured crank, key halves and pub bucket spawn at their real pickup tiles');
   inventory.adds(api.core.ItemIdentifiers.BUCKET, 1);
+  spawned.splice(spawned.findIndex(({ item }) => item.id === api.core.ItemIdentifiers.BUCKET), 1);
   handlers.playerProcess.find((handler) => handler.name === 'syncHuntGroundItems')({ player });
-  assert.equal(spawned.filter(({ item }) => item.id === api.core.ItemIdentifiers.BUCKET).length, 1,
-    'the bucket is not duplicated after its ground pickup');
+  assert.equal(spawned.filter(({ item }) => item.id === api.core.ItemIdentifiers.BUCKET).length, 0,
+    'the bucket does not respawn after its ground pickup');
   const useItemOnObject = handlers.itemOnObject.find((handler) => handler.name === 'handleBloodHuntItemOnObject');
   const fillBucket = { player, itemId: api.core.ItemIdentifiers.BUCKET, objectId: 60892,
     location: { x: 2591, y: 7825, z: 0 }, handled: false };

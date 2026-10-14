@@ -6069,7 +6069,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       { id: HUNT_ITEMS.crank, tile: new Location(2603, 7847, 0), claimed: hunt.crankStarted },
       { id: HUNT_ITEMS.toothHalf, tile: new Location(2600, 7845, 0), claimed: hasItem(player, HUNT_ITEMS.myrmelKey) },
       { id: HUNT_ITEMS.loopHalf, tile: new Location(2588, 7816, 0), claimed: hasItem(player, HUNT_ITEMS.myrmelKey) },
-      { id: HUNT_ITEMS.bucket, tile: new Location(2596, 7833, 0), claimed: hasItem(player, HUNT_ITEMS.bucketWater) },
+      { id: HUNT_ITEMS.bucket, tile: new Location(2596, 7833, 0), claimed: hasItem(player, HUNT_ITEMS.bucket) || hasItem(player, HUNT_ITEMS.bucketWater) },
       { id: HUNT_ITEMS.oldCog, tile: new Location(2582, 7817, 0), claimed: hunt.drawbridgeRepaired || hasItem(player, HUNT_ITEMS.oldCog), enabled: hunt.chapelPuzzleSolved === true },
     ];
     for (const { id, tile, claimed, enabled = true } of drops) {
