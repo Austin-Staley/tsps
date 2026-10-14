@@ -9509,6 +9509,39 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
   }
 });
 
+test('Desert Treasure II lets the earned Whisperer medallion holder use the cache rope Climb-up action to leave Lassar', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const quest = runtime.getRegisteredQuests().at(-1);
+  const attrs = new Map([['desert-treasure-ii:lassar', { entered: true, medallion: true }]]);
+  const player = {
+    location: null,
+    getAttribute: key => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    moveTo(location) { this.location = location; },
+    sendMessage() {},
+  };
+  quest.setStage(player, 10);
+
+  const event = {
+    player,
+    objectId: api.core.ObjectIdentifiers.ROPE_50,
+    definition: { id: api.core.ObjectIdentifiers.ROPE_50 },
+    option: 'Climb-up',
+    location: { x: 2587, y: 6436, z: 0 },
+  };
+  let handled = false;
+  for (const handler of handlers.objects) {
+    if (handler(event) === true) { handled = true; break; }
+  }
+
+  assert.equal(handled, true, 'the cache-visible rope action is consumed by the quest route');
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], [2922, 5827, 0]);
+  assert.equal(attrs.get('desert-treasure-ii:lassar').exited, true);
+});
+
 test('Below Ice Mountain leaves Ramarno interactions to an active Desert Treasure II chapter', () => {
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/BelowIceMountain.Quest')(api);

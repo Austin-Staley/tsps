@@ -7585,7 +7585,7 @@ module.exports = function registerDesertTreasureII(api) {
       }
     }
     if (!state.entered) return false;
-    if (visibleId === 48198 && state.medallion && (option === "climb" || option === "exit" || option === "leave")) {
+    if (visibleId === 48198 && state.medallion && (option === "climb-up" || option === "climb" || option === "exit" || option === "leave")) {
       setLassar(p, { ...state, exited: true });
       p.moveTo(new api.core.Location(2922, 5827, 0));
       p.sendMessage("You climb out of Lassar through the sinkhole and return to Camdozaal with the Whisperer's medallion.");
