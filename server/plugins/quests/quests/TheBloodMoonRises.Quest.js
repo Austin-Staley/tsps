@@ -5395,6 +5395,15 @@ module.exports = function registerTheBloodMoonRises(api) {
       isAtSinsMedallionHideout(event)) {
       return false;
     }
+    if (stage(player) === STAGE.PREPARATIONS && npcName === "efaritay hallow" &&
+      (player.getAttribute(PREP_ATTRIBUTE) ?? {}).preparationsDiscussed &&
+      !hasItem(player, PREP.blisterwoodFlail) && !hasItem(player, PREP.flail) &&
+      !player.getEquipment?.()?.contains?.(PREP.blisterwoodFlail) &&
+      !player.getEquipment?.()?.contains?.(PREP.flail)) {
+      const started = startTranscript(api, player, event.npcId, "Efaritay Hallow", "standard-dialogue");
+      if (started) event.handled = true;
+      return started;
+    }
     if (stage(player) === STAGE.SLEPE) {
       const story = player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {};
       let variant = null;

@@ -2342,6 +2342,52 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
   api.core.NpcDefinition.forId = originalForId;
 });
 
+test('Blood Moon preparation opens Efaritay’s existing supplies dialogue if the player lacks a Blisterwood flail', () => {
+  const { api, handlers } = mockApi();
+  const npcDialogues = require('../plugins/npcs/NpcDialogues.plugin');
+  const originalStartDialogue = npcDialogues.startDialogue;
+  let started;
+  npcDialogues.startDialogue = (_api, _event, steps, _branches, context) => {
+    started = { steps, page: context.pages[0].page, variant: context.pages[0].variants[0] };
+  };
+  try {
+    require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+    const attributes = new Map();
+    const inventoryIds = new Set();
+    const player = {
+      getAttribute: key => attributes.get(key),
+      setAttribute: (key, value) => attributes.set(key, value),
+      isPlayer: () => true,
+      getAsPlayer() { return this; },
+      getInventory: () => ({ contains: id => inventoryIds.has(id) }),
+      getEquipment: () => ({ contains: () => false }),
+      getPacketSender: () => ({ sendVarbit() {}, sendQuestList() {} }),
+      sendMessage() {},
+    };
+    attributes.set('quest.the_blood_moon_rises.stage', 60);
+    attributes.set('quest.the_blood_moon_rises.preparations', {
+      introComplete: true, gatherStarted: true, preparationsDiscussed: true,
+    });
+    const talkToEfaritay = handlers.npcInteractions.get('Efaritay Hallow')['Talk-to'];
+    assert.equal(talkToEfaritay({
+      player,
+      npcId: api.core.NpcIdentifiers.EFARITAY_HALLOW,
+      definition: { getName: () => 'Efaritay Hallow' },
+      handled: false,
+    }), true);
+    assert.equal(started.page, 'Efaritay Hallow');
+    assert.equal(started.variant, 'standard-dialogue');
+    const purchase = started.steps.find(step => step.type === 'choice')?.options
+      .find(option => option.text === 'I could use a new weapon.');
+    assert.ok(purchase?.steps.some(step => step.type === 'action' && step.action === 'open_shop' &&
+      step.target === "Efaritay's Supplies"), 'the existing dialogue opens the cache-defined shop');
+    assert.equal(require('../data/definitions/shops.json').find(shop => shop.name === "Efaritay's Supplies")
+      .originalStock.some(item => item.id === api.core.ItemIdentifiers.BLISTERWOOD_FLAIL), true);
+  } finally {
+    npcDialogues.startDialogue = originalStartDialogue;
+  }
+});
+
 test('Blood Moon Castle Drakan throne opens only after the ordered bust mechanism and awards its key', () => {
   const { api, handlers } = mockApi();
   const messages = [];
