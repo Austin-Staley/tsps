@@ -4036,7 +4036,7 @@ test('Blood Moon gallery chest arrow puzzle resets mistakes and gives the cresce
   assert.equal(inventory.contains(api.core.ItemIdentifiers.CRESCENT_MOON_KEY), true);
 });
 
-test('Blood Moon hunt requires the crank, bookcase key and TOOLS shed code before yielding bolt cutters', () => {
+test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house and chapel puzzles', () => {
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
   const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
@@ -4115,7 +4115,7 @@ test('Blood Moon hunt requires the crank, bookcase key and TOOLS shed code befor
     { id: api.core.ObjectIdentifiers.MYRMEL_DOOR, x: 2599, y: 7826, item: ids.MYRMEL_KEY, flag: 'pubDoorUnlocked', varbit: 15571 },
     { id: api.core.ObjectIdentifiers.SHADUM_DOOR_3, x: 2614, y: 7814, item: ids.SHADUM_KEY, flag: 'shadumDoorUnlocked', varbit: 15578 },
     { id: api.core.ObjectIdentifiers.JOVKAI_DOOR, x: 2580, y: 7812, item: ids.JOVKAI_KEY, flag: 'jovkaiDoorUnlocked', varbit: 15569 },
-    { id: api.core.ObjectIdentifiers.MYRMEL_DOOR_3, x: 2580, y: 7835, item: ids.MYRMEL_KEY, flag: 'bankDoorUnlocked', varbit: 15575, extra: [ids.TRAPDOOR_KEY, ids.CRANK_WHEEL] },
+    { id: api.core.ObjectIdentifiers.MYRMEL_DOOR_3, x: 2580, y: 7835, item: ids.MYRMEL_KEY, flag: 'bankDoorUnlocked', varbit: 15575 },
     { id: 61848, x: 2579, y: 7830, item: ids.TRAPDOOR_KEY, flag: 'trapdoorUnlocked', varbit: 15585, consumes: true, crank: true },
   ];
   for (const entry of gatedDoors) {
@@ -4146,9 +4146,23 @@ test('Blood Moon hunt requires the crank, bookcase key and TOOLS shed code befor
   assert.equal(inventory.contains(ids.BOLT_CUTTERS), false, 'a saved cut chain reconciles the legacy unconsumed cutters on login');
   assert.ok(sentVarbits.some(([id, value]) => id === 15586 && value === 1), 'the cut-chain transform is restored on login');
   const hunt = handlers.objects.find((handler) => handler.name === 'handleBloodHuntObjects');
-  const interact = (x, y) => hunt({ player, location: { x, y, z: 0 }, handled: false });
+  const interact = (x, y, objectId, option) => hunt({ player, objectId, definition: { id: objectId }, option,
+    location: { x, y, z: 0 }, handled: false });
   inventory.adds(ids.CRANK_WHEEL, 1);
-  interact(2588, 7855);
+  const fancyDoor = toggle(61844, 2587, 7857);
+  assert.equal(fancyDoor.handled, true, 'the fancy-house door stays locked before the crank fills');
+  for (let turn = 1; turn <= 9; turn++) {
+    interact(2588, 7855, api.core.ObjectIdentifiers.CRANK_BASE, 'operate');
+    assert.equal(sentVarbits.filter(([id]) => id === 15594).at(-1)?.[1], turn, `fancy-house crank updates progress at turn ${turn}`);
+    assert.equal(sentVarbits.filter(([id]) => id === 15595).at(-1)?.[1], turn, `fancy-house crank updates its cached progress at turn ${turn}`);
+    assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').fancyHouseDoorUnlocked, undefined,
+      `turn ${turn} does not release the door early`);
+  }
+  assert.equal(toggle(61844, 2587, 7857).handled, true, 'nine turns are not enough to enter the fancy house');
+  interact(2588, 7855, api.core.ObjectIdentifiers.CRANK_BASE, 'operate');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').crankTurns, 10);
+  assert.deepEqual(sentVarbits.slice(-3), [[15594, 10], [15595, 10], [15588, 1]], 'the tenth turn unlocks the fancy-house door');
+  assert.equal(toggle(61844, 2587, 7857).handled, false, 'the ten-turn crank lets the real door open');
   interact(2585, 7861);
   assert.equal(inventory.contains(ids.DUSTY_BOOK), true, 'the crank chase unlocks the bookcase');
   const read = handlers.itemAction.find((actions) => actions.Read)?.Read;
@@ -4183,16 +4197,54 @@ test('Blood Moon hunt requires the crank, bookcase key and TOOLS shed code befor
   interact(2619, 7812);
   assert.equal(inventory.contains(ids.TRAPDOOR_KEY), true, 'the Shadum house contains the trapdoor key');
   interact(2580, 7835);
-  interact(2582, 7834);
-  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').bankCrank, true);
+  attributes.set('quest.the_blood_moon_rises.blood-hunt', {
+    ...(attributes.get('quest.the_blood_moon_rises.blood-hunt') ?? {}),
+    bankCrank: false, bankCrankStarted: false, bankCrankTurns: 0, innerBankDoorUnlocked: false,
+  });
+  const innerGate = toggle(61854, 2580, 7832);
+  assert.equal(innerGate.handled, true, 'the inner bank gate is still locked before operating its crank');
+  for (let turn = 1; turn <= 10; turn++) {
+    interact(2582, 7834, api.core.ObjectIdentifiers.CRANK_BASE_2, 'operate');
+    assert.equal(sentVarbits.filter(([id]) => id === 15594).at(-1)?.[1], turn, `bank crank reports progress at turn ${turn}`);
+    assert.equal(sentVarbits.filter(([id]) => id === 15595).at(-1)?.[1], turn, `bank crank reports cached progress at turn ${turn}`);
+  }
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').bankCrank, true, 'the bank crank opens the inner gate after ten turns');
+  assert.equal(toggle(61854, 2580, 7832).handled, false, 'the completed bank crank allows the interior gate to open');
   interact(2579, 7830);
   let chestDigit = 0;
   const chestCode = [2, 4, 0, 4, 7];
   api.sendMultiChatboxPrompt = (who, title, ...pairs) => pairs[chestCode[chestDigit++] * 2 + 1]();
   interact(2576, 7846);
   assert.equal(inventory.contains(ids.JOVKAI_KEY), true, 'the altar chest code yields the Jovkai key');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').chapelPuzzleSolved, true,
+    'the captured chest combination saves the chapel puzzle state');
+  assert.deepEqual(sentVarbits.slice(-1), [[15596, 1]], 'solving the chest sets its native puzzle varbit');
+  assert.equal(toggle(61847, 2581, 7842).handled, false, 'solving the chest unlocks the chapel back door');
+  assert.deepEqual(sentVarbits.slice(-1), [[15591, 1]], 'opening the chapel back door sets its captured varbit');
   interact(2582, 7817);
   assert.equal(inventory.contains(ids.OLD_COG), true, 'the smithy provides the old cog after the key');
+  quest.setStage(player, 45);
+  const transcriptAction = handlers.custom.get('npc-dialogue:action').find((handler) => handler.name === 'onTranscriptAction');
+  const crossWithoutCog = { player, stepId: 'lKvIyH', handled: false, end: false };
+  transcriptAction(crossWithoutCog);
+  assert.equal(crossWithoutCog.handled, true, 'the crossing cutscene cannot run until the old cog was handed in');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.stage'), 45, 'a missing cog does not advance to the crossing chapter');
+  const cogLine = handlers.custom.get('npc-dialogue:line').find((handler) => handler.name === 'onBloodMoonDialogueLine');
+  const repairLine = { player, step: { player: true },
+    text: "We don't have time for this. Whatever we do next, we can't stay here. Let's get across that bridge." };
+  cogLine(repairLine);
+  assert.equal(typeof repairLine.after, 'function', 'the player hand-in line waits for its post-line cog check');
+  repairLine.after();
+  assert.equal(inventory.contains(ids.OLD_COG), false, 'the bridge handoff consumes the real cog');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').drawbridgeRepaired, true);
+  assert.deepEqual(sentVarbits.at(-1), [15485, 1], 'the captured drawbridge-found-cog varbit is saved');
+  const crossing = { player, stepId: 'lKvIyH', handled: false, end: false };
+  transcriptAction(crossing);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.stage'), 50, 'the repaired drawbridge permits the captured crossing transition');
+  handlers.playerLogin.find((handler) => handler.name === 'syncBloodHuntDoorOnLogin')({ player });
+  assert.ok(sentVarbits.some(([id, value]) => id === 15485 && value === 1), 'drawbridge repair survives a relog');
+  assert.ok(sentVarbits.some(([id, value]) => id === 15596 && value === 1), 'chapel puzzle state survives a relog');
+  assert.ok(sentVarbits.some(([id, value]) => id === 15603 && value === 1), 'the pursuit varbit survives a relog');
 });
 
 test('Blood Moon refiner requires the four correct chemical vials totalling 53 before destroying the stockpile', () => {

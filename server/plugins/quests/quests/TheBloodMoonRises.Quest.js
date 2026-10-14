@@ -29,9 +29,15 @@ module.exports = function registerTheBloodMoonRises(api) {
     pubDoorUnlocked: 15571,
     shadumDoorUnlocked: 15578,
     bankDoorUnlocked: 15575,
+    innerBankDoorUnlocked: 15576,
     trapdoorUnlocked: 15585,
     jovkaiDoorUnlocked: 15569,
+    fancyHouseDoorUnlocked: 15588,
+    chapelBackDoorUnlocked: 15591,
+    chapelPuzzleSolved: 15596,
   });
+  const HUNT_CRANK_PROGRESS_VARBIT = 15594;
+  const HUNT_CRANK_PROGRESS_CACHED_VARBIT = 15595;
   const BLOOD_HUNT_SCENE_ARRIVAL = Object.freeze({ x: 2576, y: 7838, z: 0 });
   const BLOOD_HUNT_PARTY_ARRIVAL = Object.freeze({ x: 2633, y: 7827, z: 0 });
   const BLOOD_HUNT_PARTY = Object.freeze([
@@ -4441,6 +4447,13 @@ module.exports = function registerTheBloodMoonRises(api) {
       event.box = { items: [ItemIdentifiers.HALLOWED_FLAIL] };
       return;
     }
+    if (event.stepId === "lKvIyH" && stage(player) === STAGE.ESCAPE &&
+      !player.getAttribute(HUNT_ATTRIBUTE)?.drawbridgeRepaired) {
+      event.handled = true;
+      event.end = true;
+      player.sendMessage("The group cannot cross until you fit the old cog to the Sangvesti drawbridge.");
+      return;
+    }
     if (event.stepId === "ikSyAR" && stage(player) === STAGE.CASTLE) {
       player.moveTo(new Location(CASTLE_VAMPYRIUM_ARRIVAL.x, CASTLE_VAMPYRIUM_ARRIVAL.y,
         CASTLE_VAMPYRIUM_ARRIVAL.z));
@@ -4800,6 +4813,23 @@ module.exports = function registerTheBloodMoonRises(api) {
   function onBloodMoonDialogueLine(request) {
     const player = request?.player;
     if (!player) return;
+    if ([STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(player)) && request.step?.player &&
+      request.text === "We don't have time for this. Whatever we do next, we can't stay here. Let's get across that bridge." &&
+      !player.getAttribute(HUNT_ATTRIBUTE)?.drawbridgeRepaired) {
+      request.after = () => {
+        const state = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
+        if (state.drawbridgeRepaired) return;
+        const inventory = player.getInventory();
+        if (!inventory.contains(HUNT_ITEMS.oldCog)) {
+          player.sendMessage("The drawbridge still needs the old cog from the Jovkai smithy.");
+          return;
+        }
+        inventory.deleteNumber(HUNT_ITEMS.oldCog, 1);
+        player.setAttribute(HUNT_ATTRIBUTE, { ...state, drawbridgeRepaired: true, cogHandedIn: true });
+        player.getPacketSender().sendVarbit(15485, 1);
+      };
+      return;
+    }
     if (stage(player) === STAGE.ESCAPE && request.step?.player &&
       request.text === "Then I'll just have to avoid him." && castleStory(player).stockpileDestroyed) {
       request.after = () => {
@@ -4992,6 +5022,16 @@ module.exports = function registerTheBloodMoonRises(api) {
         const started = startTranscript(api, player, event.npcId, PAGE, variant);
         return started;
       }
+    }
+    if ([STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(player)) && npcName === "vanescula drakan") {
+      const hunt = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
+      const variant = hunt.drawbridgeRepaired
+        ? "blood-hunt-crossing-the-bridge"
+        : hasItem(player, HUNT_ITEMS.oldCog)
+          ? "blood-hunt-after-finding-the-cog"
+          : "blood-hunt-talking-to-vanescula-in-the-town";
+      event.handled = true;
+      return startTranscript(api, player, event.npcId, PAGE, variant);
     }
     if (stage(player) === STAGE.NOT_STARTED) {
       if (npcName !== "sarius guile") return false;
@@ -5913,22 +5953,25 @@ module.exports = function registerTheBloodMoonRises(api) {
       { x: 2599, y: 7826, ids: [ObjectIdentifiers.MYRMEL_DOOR], item: HUNT_ITEMS.myrmelKey, flag: "pubDoorUnlocked", varbit: HUNT_DOOR_VARBITS.pubDoorUnlocked, name: "The pub door is locked. Join the two halves of the key to make a Myrmel key." },
       { x: 2614, y: 7814, ids: [ObjectIdentifiers.SHADUM_DOOR_3], item: HUNT_ITEMS.shadumKey, flag: "shadumDoorUnlocked", varbit: HUNT_DOOR_VARBITS.shadumDoorUnlocked, name: "The house is locked. The barrel in the Myrmel pub may hold a key." },
       { x: 2580, y: 7812, ids: [ObjectIdentifiers.JOVKAI_DOOR], item: HUNT_ITEMS.jovkaiKey, flag: "jovkaiDoorUnlocked", varbit: HUNT_DOOR_VARBITS.jovkaiDoorUnlocked, name: "The smithy is locked. Search the altar chest for its key." },
-      { x: 2580, y: 7835, ids: [ObjectIdentifiers.MYRMEL_DOOR_3], item: HUNT_ITEMS.myrmelKey, flag: "bankDoorUnlocked", varbit: HUNT_DOOR_VARBITS.bankDoorUnlocked, name: "The bank requires the Myrmel key, trapdoor key, and crank wheel.", extra: () => inventory.contains(HUNT_ITEMS.trapdoorKey) && inventory.contains(HUNT_ITEMS.crank) },
+      { x: 2580, y: 7835, ids: [ObjectIdentifiers.MYRMEL_DOOR_3], item: HUNT_ITEMS.myrmelKey, flag: "bankDoorUnlocked", varbit: HUNT_DOOR_VARBITS.bankDoorUnlocked, name: "The bank door needs the Myrmel key." },
+      { x: 2580, y: 7832, ids: [61854, 61855], flag: "innerBankDoorUnlocked", varbit: HUNT_DOOR_VARBITS.innerBankDoorUnlocked, name: "The bank gate is securely locked. Operate the crank base inside first.", extra: () => Boolean(state.bankCrank) },
       { x: 2579, y: 7830, ids: [61848], item: HUNT_ITEMS.trapdoorKey, flag: "trapdoorUnlocked", varbit: HUNT_DOOR_VARBITS.trapdoorUnlocked, consume: true, name: "The trapdoor is locked. Find its key and operate the bank crank.", extra: () => Boolean(state.bankCrank) },
+      { x: 2587, y: 7857, ids: [ObjectIdentifiers.DOOR_839], flag: "fancyHouseDoorUnlocked", varbit: HUNT_DOOR_VARBITS.fancyHouseDoorUnlocked, name: "The crank mechanism has not released this door.", extra: () => Number(state.crankTurns) >= 10 },
+      { x: 2581, y: 7842, ids: [ObjectIdentifiers.DOOR_842], flag: "chapelBackDoorUnlocked", varbit: HUNT_DOOR_VARBITS.chapelBackDoorUnlocked, name: "The chapel door is locked. Solve the chest puzzle first.", extra: () => Boolean(state.chapelPuzzleSolved) },
     ];
     const door = doors.find((entry) => entry.x === x && entry.y === y && entry.ids.includes(id));
     if (!door) return;
     if (state[door.flag]) return;
-    if (!inventory.contains(door.item) || (door.extra && !door.extra())) {
+    if ((door.item !== undefined && !inventory.contains(door.item)) || (door.extra && !door.extra())) {
       event.handled = true;
       player.sendMessage(door.name);
       return;
     }
-    if (door.consume) inventory.deleteNumber(door.item, 1);
+    if (door.consume && door.item !== undefined) inventory.deleteNumber(door.item, 1);
     player.setAttribute(HUNT_ATTRIBUTE, { ...state, [door.flag]: true, ...(door.flag === "trapdoorUnlocked" ? { enteredTrapdoor: true } : {}) });
     player.getPacketSender().sendVarbit(door.varbit, 1);
     if (door.success) player.sendMessage(door.success);
-    else player.sendMessage(`You unlock the door using the ${door.flag === "viturManorDoor" || door.flag === "foodShopDoorUnlocked" ? "Vitur" : door.flag === "pubDoorUnlocked" || door.flag === "bankDoorUnlocked" ? "Myrmel" : door.flag === "shadumDoorUnlocked" ? "Shadum" : door.flag === "jovkaiDoorUnlocked" ? "Jovkai" : "trapdoor"} key.`);
+    else if (door.item !== undefined) player.sendMessage(`You unlock the door using the ${door.flag === "viturManorDoor" || door.flag === "foodShopDoorUnlocked" ? "Vitur" : door.flag === "pubDoorUnlocked" || door.flag === "bankDoorUnlocked" ? "Myrmel" : door.flag === "shadumDoorUnlocked" ? "Shadum" : door.flag === "jovkaiDoorUnlocked" ? "Jovkai" : "trapdoor"} key.`);
   }
 
   function syncBloodHuntDoorOnLogin(event) {
@@ -5945,6 +5988,12 @@ module.exports = function registerTheBloodMoonRises(api) {
     for (const [flag, varbit] of Object.entries(HUNT_DOOR_VARBITS)) {
       player.getPacketSender().sendVarbit(varbit, state[flag] ? 1 : 0);
     }
+    const savedCrankTurns = state.bankCrankStarted ? state.bankCrankTurns : state.crankTurns;
+    player.getPacketSender().sendVarbit(HUNT_CRANK_PROGRESS_VARBIT, Math.min(10, Number(savedCrankTurns) || 0));
+    player.getPacketSender().sendVarbit(HUNT_CRANK_PROGRESS_CACHED_VARBIT, Math.min(10, Number(savedCrankTurns) || 0));
+    player.getPacketSender().sendVarbit(HUNT_DOOR_VARBITS.innerBankDoorUnlocked, state.bankCrank ? 1 : 0);
+    player.getPacketSender().sendVarbit(15485, state.drawbridgeRepaired ? 1 : 0);
+    player.getPacketSender().sendVarbit(15603, state.pursuitStarted ? 1 : 0);
   }
 
   function promptHuntCode(player, kind) {
@@ -5964,7 +6013,9 @@ module.exports = function registerTheBloodMoonRises(api) {
       }
       player.setAttribute(HUNT_ATTRIBUTE, { ...current, [key]: value });
       if (value === code) {
-        player.setAttribute(HUNT_ATTRIBUTE, { ...current, [key]: value, [`${kind}Open`]: true });
+        player.setAttribute(HUNT_ATTRIBUTE, { ...current, [key]: value, [`${kind}Open`]: true,
+          ...(kind === "chest" ? { chapelPuzzleSolved: true } : {}) });
+        if (kind === "chest") player.getPacketSender().sendVarbit(HUNT_DOOR_VARBITS.chapelPuzzleSolved, 1);
         if (kind === "shed" && !player.getInventory().contains(HUNT_ITEMS.boltCutters)) player.getInventory().adds(HUNT_ITEMS.boltCutters, 1);
         if (kind === "chest" && !player.getInventory().contains(HUNT_ITEMS.jovkaiKey)) player.getInventory().adds(HUNT_ITEMS.jovkaiKey, 1);
         player.sendMessage(kind === "shed" ? "The shed lock opens. You take a pair of bolt cutters." : "The altar chest opens. You take the Jovkai key.");
@@ -5989,31 +6040,64 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (x === 2599 && y === 7826 && !has(HUNT_ITEMS.myrmelKey)) return locked("The pub door is locked. Join the two halves of the key to make a Myrmel key.");
     if (x === 2614 && y === 7814 && !has(HUNT_ITEMS.shadumKey)) return locked("The house is locked. The barrel in the Myrmel pub may hold a key.");
     if (x === 2580 && y === 7812 && !has(HUNT_ITEMS.jovkaiKey)) return locked("The smithy is locked. Search the altar chest for its key.");
-    if (x === 2580 && y === 7835 && (!has(HUNT_ITEMS.myrmelKey) || !has(HUNT_ITEMS.trapdoorKey) || !has(HUNT_ITEMS.crank))) {
-      return locked("The bank requires the Myrmel key, trapdoor key, and crank wheel.");
-    }
+    if (x === 2580 && y === 7835 && !has(HUNT_ITEMS.myrmelKey)) return locked("The bank door needs the Myrmel key.");
     if (x === 2582 && y === 7834) {
-      if (!has(HUNT_ITEMS.trapdoorKey) || !has(HUNT_ITEMS.crank)) return locked("The bank crank needs the trapdoor key and crank wheel.");
-      inventory.deleteNumber(HUNT_ITEMS.crank, 1);
-      player.setAttribute(HUNT_ATTRIBUTE, { ...state, bankCrank: true });
-      player.sendMessage("You fit the wheel and turn the bank crank; the trapdoor latch releases.");
+      const ids = [event.objectId, event.definition?.id];
+      if (!ids.includes(ObjectIdentifiers.CRANK_BASE_2) ||
+        (event.option !== undefined && String(event.option).toLowerCase() !== "operate")) return;
+      event.handled = true;
+      if (state.bankCrank) { player.sendMessage("The bank crank has already released the inner gate."); return; }
+      if (!has(HUNT_ITEMS.trapdoorKey)) { player.sendMessage("The bank crank needs the trapdoor key from the Shadum house."); return; }
+      let turns = Number(state.bankCrankTurns) || 0;
+      if (!state.bankCrankStarted) {
+        if (!has(HUNT_ITEMS.crank)) { player.sendMessage("The bank crank needs its wheel."); return; }
+        inventory.deleteNumber(HUNT_ITEMS.crank, 1);
+        turns = 0;
+      }
+      turns = Math.min(10, turns + 1);
+      const complete = turns === 10;
+      player.setAttribute(HUNT_ATTRIBUTE, { ...state, bankCrankStarted: true,
+        bankCrankTurns: turns, bankCrank: complete,
+        ...(complete ? { innerBankDoorUnlocked: true } : {}) });
+      player.getPacketSender().sendVarbit(HUNT_CRANK_PROGRESS_VARBIT, turns);
+      player.getPacketSender().sendVarbit(HUNT_CRANK_PROGRESS_CACHED_VARBIT, turns);
+      if (complete) {
+        inventory.deleteNumber(HUNT_ITEMS.crank, 1);
+        player.getPacketSender().sendVarbit(HUNT_DOOR_VARBITS.innerBankDoorUnlocked, 1);
+        player.sendMessage("The crank wheel won't budge any further and you hear a click as the inner gate unlocks. Seeing no further use for the crank wheel, you discard it.");
+      } else if (turns === 1) player.sendMessage("You insert the crank wheel and start turning it... Better keep cranking!");
       return;
     }
     if (x === 2579 && y === 7830) {
-      if (!state.trapdoorUnlocked) return locked("The trapdoor is locked. Find its key and operate the bank crank.");
+      if (!state.bankCrank || !state.trapdoorUnlocked) return locked("The trapdoor is locked. Find its key and finish operating the bank crank.");
       player.setAttribute(HUNT_ATTRIBUTE, { ...state, enteredTrapdoor: true });
       return;
     }
     if (x === 2588 && y === 7855) {
+      const ids = [event.objectId, event.definition?.id];
+      if (!ids.includes(ObjectIdentifiers.CRANK_BASE) ||
+        (event.option !== undefined && String(event.option).toLowerCase() !== "operate")) return;
       event.handled = true;
       if (!inventory.contains(HUNT_ITEMS.crank)) { player.sendMessage("The crank base needs its wheel."); return; }
-      player.setAttribute(HUNT_ATTRIBUTE, { ...state, crankStarted: true });
-      player.sendMessage("You fit the wheel and turn the crank. A presence stirs behind you. Run!");
+      const turns = Math.min(10, (Number(state.crankTurns) || 0) + 1);
+      const unlocked = turns === 10;
+      player.setAttribute(HUNT_ATTRIBUTE, { ...state, crankStarted: true, crankTurns: turns,
+        ...(unlocked ? { fancyHouseDoorUnlocked: true } : {}) });
+      player.getPacketSender().sendVarbit(HUNT_CRANK_PROGRESS_VARBIT, turns);
+      player.getPacketSender().sendVarbit(HUNT_CRANK_PROGRESS_CACHED_VARBIT, turns);
+      if (unlocked) {
+        player.getPacketSender().sendVarbit(HUNT_DOOR_VARBITS.fancyHouseDoorUnlocked, 1);
+        player.sendMessage("The crank wheel won't budge any further and you hear a click as something nearby unlocks.");
+      } else if (turns === 1) {
+        player.setAttribute(HUNT_ATTRIBUTE, { ...player.getAttribute(HUNT_ATTRIBUTE), pursuitStarted: true });
+        player.getPacketSender().sendVarbit(15603, 1);
+        player.sendMessage("You insert the crank wheel and start turning it... Better keep cranking! A presence stirs behind you.");
+      }
       return;
     }
     if (x === 2585 && y === 7861) {
       event.handled = true;
-      if (!state.crankStarted) { player.sendMessage("You should get the nearby crank working first."); return; }
+      if (Number(state.crankTurns) < 10) { player.sendMessage("You should finish operating the nearby crank first."); return; }
       if (!inventory.contains(HUNT_ITEMS.dustyBook)) inventory.adds(HUNT_ITEMS.dustyBook, 1);
       player.sendMessage("You search the bookcase and find a dusty book. Read it to discover the Vitur key.");
       return;
@@ -6094,13 +6178,6 @@ module.exports = function registerTheBloodMoonRises(api) {
       handleBloodHuntObjects({ ...event, player, itemId });
     } else if (x === 2592 && y === 7833 && itemId === HUNT_ITEMS.bucketWater) {
       handleBloodHuntObjects({ ...event, player, itemId });
-    } else if (x === 2582 && y === 7834 && itemId === HUNT_ITEMS.crank) {
-      event.handled = true;
-      if (inventory.contains(HUNT_ITEMS.trapdoorKey)) {
-        inventory.deleteNumber(HUNT_ITEMS.crank, 1);
-        player.setAttribute(HUNT_ATTRIBUTE, { ...(player.getAttribute(HUNT_ATTRIBUTE) ?? {}), bankCrank: true });
-        player.sendMessage("You fit the wheel to the bank's crank. The mechanism lifts the trapdoor latch.");
-      }
     }
   }
 
