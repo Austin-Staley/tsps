@@ -5351,6 +5351,7 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
   const nativeVarbits = [];
   const nativeStagesAtTranscript = [];
   let transcriptStarts = 0;
+  let dialogueActive = false;
   let canKnockback = true;
   let nextMeleeDamage = 18;
   let nextMagicDamage = 28;
@@ -5398,10 +5399,11 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     getUsername: () => 'WyrdFightTest',
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
-    getDialogueManager: () => ({ reset() {}, startDialogues() {
+    getDialogueManager: () => ({ reset() { dialogueActive = false; }, startDialogues() {
       transcriptStarts++;
+      dialogueActive = true;
       nativeStagesAtTranscript.push(nativeVarbits.filter(([id]) => id === 15464).at(-1));
-    }, getCurrent: () => null }),
+    }, getCurrent: () => null, isActive: () => dialogueActive }),
     getInventory: () => inventory,
     getEquipment: () => ({ contains: () => false }),
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
@@ -5469,6 +5471,7 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     worldCycle += 20;
     bossArea.process(boss);
     assert.equal(animations.length, 0, 'the Wyrd remains harmless while the opening transcript is still displayed');
+    dialogueActive = false;
     introEnd.after();
     worldCycle += 3;
     bossArea.process(boss);
@@ -5513,6 +5516,15 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     bossArea.process(boss);
     assert.equal(transcriptStarts, beforeEightyPercent + 1,
       'a hit that crosses 80% starts the Wyrd cutscene before the next attack');
+    const attacksAtThreshold = animations.length;
+    const hitsAtThreshold = combatHits.length;
+    worldCycle += 5;
+    bossArea.process(boss);
+    assert.equal(animations.length, attacksAtThreshold,
+      'the Wyrd pauses attacks while its 80% threshold conversation is open');
+    assert.equal(combatHits.length, hitsAtThreshold,
+      'the Wyrd queues no combat hits during the threshold conversation');
+    dialogueActive = false;
     worldCycle += 5;
     bossArea.process(boss);
     worldCycle += 5;
@@ -5536,6 +5548,7 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     bossArea.process(boss);
     assert.equal(transcriptStarts, beforeFiftyPercent + 1,
       'crossing 50% starts the Wyrd cutscene before the next attack');
+    dialogueActive = false;
 
     boss.hitpoints = 0;
     const beforeDeath = handlers.npcBeforeDeath.find((handler) => handler.name === 'handleWyrdBeforeDeath');

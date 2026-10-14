@@ -754,6 +754,7 @@ module.exports = function registerTheBloodMoonRises(api) {
         startTranscript(api, player, mobile.getId(), PAGE, `fighting-wyrds-upon-reaching-${threshold}-hp`);
         return;
       }
+      if (player.getDialogueManager?.()?.isActive?.()) return;
       if (encounter.ending) return;
 
       const loc = player.getLocation();
