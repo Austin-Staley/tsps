@@ -1179,6 +1179,66 @@ test('Blood Moon repairs only the legacy Castle NPC-marker landing without chang
   assert.deepEqual(inventory.snapshot(), [[22400, 1], [26227, 1]], 'repair leaves carried quest items untouched');
 });
 
+test('Blood Moon restores the recorded stockpile landing for the old disconnected room save', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.stage', 40],
+    ['quest.the_blood_moon_rises.castle-room', 43],
+    ['quest.the_blood_moon_rises.castle-floor', 2],
+    ['quest.the_blood_moon_rises.castle-native-stage', 78],
+    ['quest.the_blood_moon_rises.castle-story', { stockpileDestroyed: false }],
+  ]);
+  const moved = [];
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(2531, 7385, 0),
+    moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
+    getInventory: () => ({ contains: () => false, snapshot: () => [[33773, 1]] }),
+    getUsername: () => 'castle-stockpile-legacy',
+    getPacketSender: () => new Proxy({ sendVarbit() {} }, { get: (target, key) => target[key] ?? (() => {}) }),
+    sendMessage() {},
+  };
+  handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
+  assert.deepEqual(moved, [[2534, 7378, 0]]);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.stage'), 40);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 78);
+  assert.deepEqual(attributes.get('quest.the_blood_moon_rises.castle-story'), { stockpileDestroyed: false });
+});
+
+test('Blood Moon resumes the completed Castle escape from its stranded stockpile save', () => {
+  const { api, handlers } = mockApi();
+  const spawned = [];
+  api.spawnNpc = spec => { const npc = { ...spec, setScriptedMovement() {}, isDestroyed: () => false }; spawned.push(npc); return npc; };
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.stage', 45],
+    ['quest.the_blood_moon_rises.castle-room', 43],
+    ['quest.the_blood_moon_rises.castle-native-stage', 82],
+    ['quest.the_blood_moon_rises.castle-story', { stockpileDestroyed: true }],
+  ]);
+  const items = [[33773, 1], [33729, 1]];
+  let position = new api.core.Location(2535, 7384, 0);
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => position, moveTo: location => { position = location; },
+    getInventory: () => ({ snapshot: () => items.map(item => [...item]) }),
+    getUsername: () => 'blood-hunt-escape-recovery',
+    getPacketSender: () => new Proxy({ sendVarbit() {} }, { get: (target, key) => target[key] ?? (() => {}) }),
+    sendMessage() {},
+  };
+  for (const handler of handlers.playerLogin) handler({ player });
+  assert.deepEqual([position.getX(), position.getY(), position.getZ()], [2633, 7827, 0]);
+  assert.equal(quest.getStage(player), 45, 'the recovery preserves the saved Escape checkpoint');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), null,
+    'the stale Castle room is cleared after the captured transition');
+  assert.deepEqual(items, [[33773, 1], [33729, 1]], 'the recovery does not alter carried progress items');
+  assert.deepEqual(spawned.map(npc => npc.id).sort((a, b) => a - b), [15855, 15878, 15893, 15909]);
+  assert.ok(spawned.every(npc => npc.owner === player && npc.ownerOnly));
+});
+
 test('Blood Moon reconciles the Castle lobby floor varbit from the saved lobby plane', () => {
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
@@ -2201,6 +2261,9 @@ test('Blood Moon Castle Drakan throne opens only after the ordered bust mechanis
   const { api, handlers } = mockApi();
   const messages = [];
   const varbits = new Map();
+  const spawned = [];
+  let position = new api.core.Location(2535, 7384, 0);
+  api.spawnNpc = spec => { const npc = { ...spec, setScriptedMovement() {}, isDestroyed: () => false }; spawned.push(npc); return npc; };
   api.emitCustomEvent = (name, event) => {
     for (const handler of handlers.custom.get(name) ?? []) handler(event);
   };
@@ -2221,6 +2284,8 @@ test('Blood Moon Castle Drakan throne opens only after the ordered bust mechanis
     setAttribute: (key, value) => attributes.set(key, value),
     getInventory: () => inventory,
     getSkillManager: () => ({ getMaxLevel: () => 99 }),
+    getLocation: () => position,
+    moveTo: location => { position = location; },
     getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
     getPacketSender: () => new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) }, {
       get: (target, key) => target[key] ?? (() => {}),
@@ -2262,8 +2327,35 @@ test('Blood Moon Castle Drakan throne opens only after the ordered bust mechanis
   action({ player, stepId: 'XqVfhB' });
   assert.equal(quest.getStage(player), 40, 'the escape chapter waits until the blood stockpile is destroyed');
   attributes.set('quest.the_blood_moon_rises.castle-refiner', { destroyed: true });
+  action({ player, stepId: 'LTAe0k' });
   action({ player, stepId: 'XqVfhB' });
-  assert.equal(quest.getStage(player), 45, 'the escape chapter advances after the stockpile is destroyed');
+  assert.equal(quest.getStage(player), 45, 'the recorded escape action starts the Escape chapter');
+  assert.equal(varbits.get(15464), 82, 'the Escape chapter matches the captured native stage');
+  assert.deepEqual([position.getX(), position.getY(), position.getZ()], [2576, 7838, 0],
+    'the recorded cutscene action enters Sangvesti before its final dialogue lines');
+  const farewell = { player, step: { player: true }, text: "Then I'll just have to avoid him." };
+  handlers.custom.get('npc-dialogue:line').find(handler => handler.name === 'onBloodMoonDialogueLine')(farewell);
+  farewell.after();
+  assert.equal(quest.getStage(player), 45, 'the final line remains in the Escape quest stage');
+  assert.equal(varbits.get(15464), 84, 'the final line advances the captured native stage from 82 to 84');
+  assert.deepEqual([position.getX(), position.getY(), position.getZ()], [2633, 7827, 0],
+    'the player arrives beside the captured Sangvesti party');
+  assert.deepEqual(spawned.map(npc => npc.id).sort((a, b) => a - b), [15855, 15878, 15893, 15909],
+    'the four talkable Sangvesti companions spawn at their captured anchors');
+  assert.ok(spawned.every(npc => npc.owner === player && npc.ownerOnly), 'the quest party belongs only to this player');
+  const talkVanescula = handlers.npcInteractions.get('Vanescula Drakan')['Talk-to'];
+  assert.equal(talkVanescula({ player, npcId: api.core.NpcIdentifiers.VANESCULA_DRAKAN_10,
+    definition: { getName: () => 'Vanescula Drakan' }, handled: false }), true,
+    'the stage-based chapter hook resolves Vanescula Drakan to the recorded vanescula variant');
+  const variant = handlers.variant.map(handler => handler({ player,
+    definition: { getName: () => 'Vanescula Drakan' },
+    pages: [{ page: 'The Blood Moon Rises', variants: ['blood-hunt-talking-to-vanescula-in-the-town'] }],
+  })).find(Boolean);
+  assert.deepEqual(variant, { page: 'The Blood Moon Rises', variant: 'blood-hunt-talking-to-vanescula-in-the-town' },
+    'the dialogue resolver selects the Blood Hunt cog-check instead of the generic post-quest conversation');
+  handlers.custom.get('npc-dialogue:choice').find(handler => handler.name === 'onChoice')({ player, option: "I'll get back to it." });
+  assert.equal(quest.getStage(player), 45, 'the cog conversation does not skip later Blood Hunt objectives');
+  assert.equal(varbits.get(15464), 84, 'Blood Hunt retains the recorded native stage 84');
 });
 
 test('Blood Moon Castle gilded bookcase uses the eight House slots and places the full moon key in the secret room', () => {

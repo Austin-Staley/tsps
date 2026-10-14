@@ -21,6 +21,15 @@ module.exports = function registerTheBloodMoonRises(api) {
   const REFINER_ATTRIBUTE = "quest.the_blood_moon_rises.castle-refiner";
   const CASTLE_LAB_NOTES = ItemIdentifiers.LAB_NOTES;
   const HUNT_ATTRIBUTE = "quest.the_blood_moon_rises.blood-hunt";
+  const BLOOD_HUNT_SCENE_ARRIVAL = Object.freeze({ x: 2576, y: 7838, z: 0 });
+  const BLOOD_HUNT_PARTY_ARRIVAL = Object.freeze({ x: 2633, y: 7827, z: 0 });
+  const BLOOD_HUNT_PARTY = Object.freeze([
+    ["ivan", NpcIdentifiers.IVAN_STROM_13, 2635, 7825],
+    ["veliaf", NpcIdentifiers.VELIAF_HURTZ_15, 2633, 7828],
+    ["vanescula", NpcIdentifiers.VANESCULA_DRAKAN_10, 2633, 7830],
+    ["safalaan", NpcIdentifiers.SAFALAAN_HALLOW_12, 2635, 7828],
+  ]);
+  const BLOOD_HUNT_ACTORS = new Map();
   const HIDEOUT_IVAN_VARBIT = 15467;
   const HIDEOUT_SHRINE_INSPECTED = "quest.the_blood_moon_rises.hideout-shrine-inspected";
   const HIDEOUT_DEFENSE_COMPLETE = "quest.the_blood_moon_rises.hideout-defense-complete";
@@ -2118,7 +2127,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (value === STAGE.HIDEOUT) return 12;
     if (value === STAGE.SLEPE) return 16;
     if (value === STAGE.CASTLE) return Number(player?.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70;
-    if (value === STAGE.ESCAPE) return 84;
+    if (value === STAGE.ESCAPE) {
+      return player?.getAttribute(HUNT_ATTRIBUTE)?.finalDialogueComplete ? 84 : 82;
+    }
+    if (value === STAGE.BLOOD_HUNT) return 84;
     if (value === STAGE.PREPARATIONS) {
       const prep = player?.getAttribute(PREP_ATTRIBUTE) ?? {};
       if (prep.flail && prep.stakes) return 114;
@@ -2746,7 +2758,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function syncCastleRoom(player, facing) {
-    if (!player || stage(player) < STAGE.CASTLE || stage(player) > STAGE.ESCAPE) return;
+    if (!player || stage(player) !== STAGE.CASTLE) return;
     const room = Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) || CASTLE_ROOM.LOBBY;
     const floor = Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) || CASTLE_GROUND_FLOOR;
     player.setAttribute(CASTLE_ROOM_ATTRIBUTE, room);
@@ -2791,6 +2803,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function syncCastleRoomOnLogin({ player }) {
+    if (!player || stage(player) !== STAGE.CASTLE) return;
     repairLegacyCastleLanding(player);
     reconcileCastleLobbyFloor(player);
     syncCastleRoom(player);
@@ -4560,10 +4573,13 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.sendMessage("Destroy the blood stockpile before leaving Castle Drakan.");
       return;
     }
-    if (next) advance(player, next);
-    if (event.stepId === "XqVfhB" && stage(player) === STAGE.ESCAPE) {
+    if (event.stepId === "XqVfhB" && stage(player) === STAGE.CASTLE) {
       cleanupCastleActors({ player });
+      player.moveTo(new Location(BLOOD_HUNT_SCENE_ARRIVAL.x, BLOOD_HUNT_SCENE_ARRIVAL.y,
+        BLOOD_HUNT_SCENE_ARRIVAL.z));
+      player.setAttribute(CASTLE_ROOM_ATTRIBUTE, null);
     }
+    if (next) advance(player, next);
     if (event.stepId === "4G5OZg") startWyrdBattle(player);
     if (event.stepId === "t7FMNM" && stage(player) === STAGE.FINAL) {
       event.handled = true;
@@ -4684,7 +4700,73 @@ module.exports = function registerTheBloodMoonRises(api) {
     } else if (event.option === "I'm ready." && stage(player) === STAGE.STARTED &&
       player.getAttribute(HIDEOUT_SHRINE_INSPECTED) && hideoutOutfitWorn(player)) {
       advance(player, STAGE.HIDEOUT);
+    } else if (event.option === "I'll get back to it." && stage(player) === STAGE.ESCAPE &&
+      atBloodHuntParty(player)) {
+      player.setAttribute(HUNT_ATTRIBUTE, { ...(player.getAttribute(HUNT_ATTRIBUTE) ?? {}),
+        finalDialogueComplete: true, talkedToVanescula: true });
+      quest.setStage(player, STAGE.ESCAPE);
     }
+  }
+
+  function atBloodHuntParty(player) {
+    const location = player?.getLocation?.();
+    const x = location?.getX?.();
+    const y = location?.getY?.();
+    const z = location?.getZ?.();
+    return z === BLOOD_HUNT_PARTY_ARRIVAL.z && Math.abs(x - BLOOD_HUNT_PARTY_ARRIVAL.x) <= 12 &&
+      Math.abs(y - BLOOD_HUNT_PARTY_ARRIVAL.y) <= 12;
+  }
+
+  function bloodHuntActors(player) {
+    let actors = BLOOD_HUNT_ACTORS.get(player);
+    if (!actors) {
+      actors = new Map();
+      BLOOD_HUNT_ACTORS.set(player, actors);
+    }
+    return actors;
+  }
+
+  function syncBloodHuntActors(player) {
+    if (!player || ![STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(player)) || !atBloodHuntParty(player)) return;
+    const actors = bloodHuntActors(player);
+    for (const [key, id, x, y] of BLOOD_HUNT_PARTY) {
+      const existing = actors.get(key);
+      if (existing && existing.isDestroyed?.() !== true) continue;
+      const npc = api.spawnNpc({ id, x, y, z: BLOOD_HUNT_PARTY_ARRIVAL.z,
+        wanderRadius: 0, owner: player, ownerOnly: true });
+      if (!npc) continue;
+      npc.setScriptedMovement?.(true);
+      actors.set(key, npc);
+    }
+  }
+
+  function cleanupBloodHuntActors({ player }) {
+    const actors = player && BLOOD_HUNT_ACTORS.get(player);
+    for (const npc of actors?.values?.() ?? []) api.removeNpc(npc);
+    if (player) BLOOD_HUNT_ACTORS.delete(player);
+  }
+
+  function recoverBloodHuntLanding({ player }) {
+    if (!player || stage(player) !== STAGE.ESCAPE ||
+      !castleStory(player).stockpileDestroyed ||
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.STOCKPILE_STORAGE) return;
+    const location = player.getLocation?.();
+    if (!location || location.getX() < 2528 || location.getX() > 2542 ||
+      location.getY() < 7376 || location.getY() > 7394 || location.getZ() !== 0) return;
+    // Earlier builds saved after the cutscene advanced the chapter but before its
+    // captured teleport reached the Sangvesti party. Repair only that stale room save.
+    player.moveTo(new Location(BLOOD_HUNT_PARTY_ARRIVAL.x, BLOOD_HUNT_PARTY_ARRIVAL.y,
+      BLOOD_HUNT_PARTY_ARRIVAL.z));
+    player.setAttribute(CASTLE_ROOM_ATTRIBUTE, null);
+    syncBloodHuntActors(player);
+  }
+
+  function syncBloodHuntPartyOnLogin({ player }) {
+    if (player) syncBloodHuntActors(player);
+  }
+
+  function syncBloodHuntPartyOnStageChange(event) {
+    if (event?.key === "the_blood_moon_rises" && event.player) syncBloodHuntActors(event.player);
   }
 
   function startHideoutDeparture(player) {
@@ -4700,6 +4782,20 @@ module.exports = function registerTheBloodMoonRises(api) {
   function onBloodMoonDialogueLine(request) {
     const player = request?.player;
     if (!player) return;
+    if (stage(player) === STAGE.ESCAPE && request.step?.player &&
+      request.text === "Then I'll just have to avoid him." && castleStory(player).stockpileDestroyed) {
+      request.after = () => {
+        if (stage(player) !== STAGE.ESCAPE || !castleStory(player).stockpileDestroyed) return;
+        player.setAttribute(HUNT_ATTRIBUTE, { ...(player.getAttribute(HUNT_ATTRIBUTE) ?? {}),
+          finalDialogueComplete: true });
+        quest.setStage(player, STAGE.ESCAPE);
+        player.moveTo(new Location(BLOOD_HUNT_PARTY_ARRIVAL.x, BLOOD_HUNT_PARTY_ARRIVAL.y,
+          BLOOD_HUNT_PARTY_ARRIVAL.z));
+        player.setAttribute(CASTLE_ROOM_ATTRIBUTE, null);
+        syncBloodHuntActors(player);
+      };
+      return;
+    }
     if (stage(player) === STAGE.CASTLE &&
       Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.IVAN_ROOM &&
       request.step?.player && request.text === "Let's go." &&
@@ -4888,6 +4984,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     const alias = ({
       "king roald": "king-roald",
       "the nylocas queen": "nylocas-queen",
+      "vanescula drakan": "vanescula",
       // The transcript uses Veliaf's given name in chapter variant IDs.
       "veliaf hurtz": "veliaf",
     })[npcName] ?? npcName.replace(/[^a-z0-9]+/g, "-");
@@ -5765,7 +5862,8 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function syncHuntGroundItems(event) {
     const player = event?.player ?? event;
-    if (!player || player.isPlayerBot?.() === true || stage(player) !== STAGE.BLOOD_HUNT) return;
+    if (!player || player.isPlayerBot?.() === true ||
+      ![STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(player))) return;
     const hunt = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
     if (hunt.crankStarted || hasItem(player, HUNT_ITEMS.crank)) return;
     const manager = api.getItemOnGroundManager();
@@ -5804,7 +5902,7 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function handleBloodHuntObjects(event) {
     const player = event?.player;
-    if (!player || quest.isComplete(player) || stage(player) !== STAGE.BLOOD_HUNT) return;
+    if (!player || quest.isComplete(player) || ![STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(player))) return;
     const { x, y, z } = event.location ?? {};
     if (z !== 0) return;
     const state = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
@@ -5922,7 +6020,7 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function routeBloodHuntObjects(event) {
     const player = event?.player;
-    if (!player || stage(player) !== STAGE.BLOOD_HUNT || event.objectId !== 61818) return;
+    if (!player || ![STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(player)) || event.objectId !== 61818) return;
     const location = event.object?.getLocation?.() ?? event.object?.location ?? {};
     const x = location.getX?.() ?? location.x;
     const y = location.getY?.() ?? location.y;
@@ -5932,7 +6030,7 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function handleBloodHuntItemOnObject(event) {
     const player = event?.player;
-    if (!player || quest.isComplete(player) || stage(player) !== STAGE.BLOOD_HUNT) return;
+    if (!player || quest.isComplete(player) || ![STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(player))) return;
     const { x, y, z } = event.location ?? {};
     if (z !== 0) return;
     const itemId = event.itemId;
@@ -5953,7 +6051,7 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function handleBloodHuntItemOnItem(event) {
     const player = event?.player;
-    if (!player || quest.isComplete(player) || stage(player) !== STAGE.BLOOD_HUNT) return;
+    if (!player || quest.isComplete(player) || ![STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(player))) return;
     const pair = new Set([event.usedItemId, event.usedWithItemId]);
     const inventory = player.getInventory();
     if (pair.has(HUNT_ITEMS.toothHalf) && pair.has(HUNT_ITEMS.loopHalf)) {
@@ -5968,7 +6066,8 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function readDustyBook(event) {
     const player = event?.player;
-    if (!player || quest.isComplete(player) || stage(player) !== STAGE.BLOOD_HUNT || event.itemId !== HUNT_ITEMS.dustyBook) return;
+    if (!player || quest.isComplete(player) || ![STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(player)) ||
+      event.itemId !== HUNT_ITEMS.dustyBook) return;
     event.handled = true;
     if (!player.getInventory().contains(HUNT_ITEMS.dustyBook)) return;
     player.getInventory().deleteNumber(HUNT_ITEMS.dustyBook, 1);
@@ -6334,6 +6433,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("quest:stage-changed", syncSlepeIvan);
   api.onCustomEvent("quest:stage-changed", syncSlepeRoy);
   api.onCustomEvent("quest:stage-changed", cleanupSlepeStory);
+  api.onCustomEvent("quest:stage-changed", syncBloodHuntPartyOnStageChange);
   api.onObjectInteraction(prayAtCastleShrine);
   api.onObjectInteraction(enterVampyriumPortal);
   api.onObjectInteraction(tryCastleReturnPortal);
@@ -6450,12 +6550,15 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("player:bootstrap-complete", syncPaterdomusBookPuzzle);
   api.onPlayerLogin(resumeHideoutEscape);
   api.onPlayerLogin(syncCastleShrine);
+  api.onPlayerLogin(recoverBloodHuntLanding);
+  api.onPlayerLogin(syncBloodHuntPartyOnLogin);
   api.onPlayerLogin(syncCastleRoomOnLogin);
   api.onPlayerLogin(syncCastleChapelPortalOnLogin);
   api.onPlayerLogin(recoverFinalDrakanLanding);
   api.onPlayerLogin(syncFinalEfaritayOnLogin);
   api.onPlayerLogin(resumeFinalDrakanVictory);
   api.onPlayerLogout(cleanupCastleActors);
+  api.onPlayerLogout(cleanupBloodHuntActors);
   api.onPlayerLogout(cleanupFinalEfaritay);
   api.onPlayerLogout(cleanupFinalCutsceneActors);
   api.onPlayerLogout(handleFinalDrakanLogout);
