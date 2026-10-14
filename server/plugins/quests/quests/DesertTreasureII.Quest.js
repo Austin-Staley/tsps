@@ -3914,6 +3914,14 @@ module.exports = function registerDesertTreasureII(api) {
     if (!p) return;
     const current = p.getPrivateArea?.();
     const returnToVaultEntrance = current && [p.getAttribute(ATTR_VAULT_AREA), p.getAttribute(FINAL_ROOM)].includes(current);
+    if (current && current === p.getAttribute(FINAL_ROOM) && stage(p) === S.FINALE
+      && !p.getAttribute(FINAL_WIGHTS_COMPLETE)) {
+      // Logging out leaves the chamber, so a later login must not auto-start
+      // the trial before the player has had a chance to prepare again.
+      p.setAttribute("desert-treasure-ii:final-cutscene-started", false);
+      p.setAttribute(FINAL_WIGHTS_STARTED, false);
+      p.setAttribute(FINAL_WIGHT_INDEX, 0);
+    }
     const returnToDigsite = current && current === p.getAttribute(ATTR_WAR_ROOM);
     const returnToPrison = current && current === p.getAttribute(SUCELLUS_AREA);
     if (returnToPrison) saveSucellusPrisonCheckpoint(p, current);

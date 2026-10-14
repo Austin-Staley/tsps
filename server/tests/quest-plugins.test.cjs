@@ -6315,6 +6315,34 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
   }
 });
 
+test('Desert Treasure II logout from the final trial returns to the vault and clears only the unfinished attempt', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
+  const attrs = new Map();
+  const area = { leave() {}, postLeave() {}, isDestroyed: () => false, destroy() { this.destroyed = true; } };
+  const p = {
+    getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getPrivateArea: () => area, moveTo(location) { this.location = location; },
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+  };
+  quest.setStage(p, 11);
+  attrs.set('desert-treasure-ii:final-room', area);
+  attrs.set('desert-treasure-ii:final-cutscene-started', true);
+  attrs.set('desert-treasure-ii:final-wights-started', true);
+  attrs.set('desert-treasure-ii:final-wight-index', 2);
+
+  handlers.playerLogout.at(-1)({ player: p });
+
+  assert.equal(area.destroyed, true);
+  assert.equal(attrs.get('desert-treasure-ii:final-room'), null);
+  assert.equal(attrs.get('desert-treasure-ii:final-cutscene-started'), false);
+  assert.equal(attrs.get('desert-treasure-ii:final-wights-started'), false);
+  assert.equal(attrs.get('desert-treasure-ii:final-wight-index'), 0);
+  assert.equal(quest.getStage(p), 11, 'logging out does not change earned quest stage');
+  assert.deepEqual([p.location.getX(), p.location.getY(), p.location.getZ()], [3510, 2971, 0]);
+});
+
 test('Desert Treasure II handoff creates the four owned wight stages and grants rewards after reported kills', () => {
   const { api: base } = mockApi();
   const interactions = [], deaths = [], objects = [], actions = new Map(), queue = [];
