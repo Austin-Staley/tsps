@@ -7316,6 +7316,7 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   const { api: base } = mockApi();
   const interactions = [], playerProcesses = [], itemActions = [], deathHooks = [], playerDeathHooks = [], objectInteractions = [], loginHooks = [];
   const addQueue = [], removeQueue = [], created = [];
+  const registeredObjects = [], deregisteredObjects = [];
   const incomingAttacks = [];
   const npcPendingDamage = [];
   const sentProjectiles = [];
@@ -7329,6 +7330,11 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   let nextNpcIndex = 1;
   const core = {
     ...base.core,
+    ObjectManager: {
+      ...base.core.ObjectManager,
+      register: (object, ...args) => { registeredObjects.push(object); return base.core.ObjectManager.register(object, ...args); },
+      deregister: (object, ...args) => { deregisteredObjects.push(object); return base.core.ObjectManager.deregister(object, ...args); },
+    },
     PendingHit: RecordedPendingHit,
     CombatFactory: combatFactory,
     World: { ...base.core.World, getProcessCycle: () => combatCycle, getAddNPCQueue: () => addQueue, getRemoveNPCQueue: () => removeQueue },
@@ -7626,10 +7632,17 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   enraged.registered = false;
   deathHooks[0]({ npc: enraged, killer: player });
   assert.equal(attrs.get('desert-treasure-ii:lassar').whispererDefeated, true, 'the second defeat opens the remains search');
+  const remains = registeredObjects.find(object => object.getId?.() === 47578);
+  assert.ok(remains, 'the earned kill creates the cache-backed Whisperer entrails loc');
+  assert.deepEqual([remains.getLocation().getX(), remains.getLocation().getY(), remains.getLocation().getZ()], [2656, 6370, 0],
+    'the entrails appear at the Wiki/QH cathedral return tile');
+  assert.equal(remains.getOwner?.(), player, 'the remains are private to the player who earned the kill');
   objectInteractions.find(h => h.name === 'handleObjectInteraction')({ player, objectId: 47578, definition: { id: 47578 }, option: 'Search', location: { x: 2400, y: 6370, z: 0 } });
   assert.equal(items.get(core.ItemIdentifiers.WHISPERERS_MEDALLION), 1, 'the remains yield the actual medallion');
   assert.equal(attrs.get('desert-treasure-ii:lassar').medallion, true);
+  assert.ok(deregisteredObjects.includes(remains), 'searching the remains removes the one-time loot object');
   objectInteractions.find(h => h.name === 'handleObjectInteraction')({ player, objectId: 48310, definition: { id: 48310 }, option: 'Climb', location: { x: 2400, y: 6370, z: 0 } });
+
   assert.deepEqual([player.location.x, player.location.y], [2587, 6436], 'the cathedral exit returns to Camdozaal');
   const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
   assert.ok(NpcDefinition.forId(core.NpcIdentifiers.LOST_SOUL_2).getActions().includes('Attack'),

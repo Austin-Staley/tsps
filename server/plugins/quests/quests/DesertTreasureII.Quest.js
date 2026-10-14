@@ -161,6 +161,7 @@ module.exports = function registerDesertTreasureII(api) {
   let lassarPuddlesInstalled = false;
   const LASSAR_TELEPORTER_VARBITS = [15088, 15089, 15091, 15092, 15093, 15090, 15094];
   const lassarSceneObjects = new WeakMap();
+  const whispererRemains = new WeakMap();
   const lassarShadowBarriers = new WeakMap();
   const LASSAR_SCHEMATIC_VARBITS = [
     ["blockerDesigned", 15082], ["idolSchematic", 15083], ["animaSchematic", 15084],
@@ -3278,6 +3279,29 @@ module.exports = function registerDesertTreasureII(api) {
     return true;
   }
 
+  function syncWhispererRemains(p, state = p?.getAttribute?.(LASSAR) ?? {}) {
+    const existing = whispererRemains.get(p);
+    const shouldExist = state.whispererDefeated === true && state.medallion !== true
+      && !has(p, I.WHISPERERS_MEDALLION);
+    if (shouldExist && !existing) {
+      // Wiki/QH place the entrails at the fight's material return tile. The
+      // cache has the correct searchable loc but no map placement; register
+      // that cache-backed object only for the player who earned the kill.
+      const object = new api.core.GameObject(47578, new api.core.Location(2656, 6370, 0), 10, 0, null).setOwner(p);
+      api.core.ObjectManager.register(object, true);
+      whispererRemains.set(p, object);
+    } else if (!shouldExist && existing) {
+      api.core.ObjectManager.deregister(existing, true);
+      whispererRemains.delete(p);
+    }
+  }
+
+  function removeWhispererRemains({ player: p }) {
+    const object = p && whispererRemains.get(p);
+    if (object) api.core.ObjectManager.deregister(object, true);
+    if (p) whispererRemains.delete(p);
+  }
+
   // https://oldschool.runescape.wiki/w/The_Whisperer and
   // https://oldschool.runescape.wiki/w/Tentacle_(The_Whisperer): three style-matched
   // shots form a standard volley; its tentacles converge on the tile where the
@@ -3832,6 +3856,7 @@ module.exports = function registerDesertTreasureII(api) {
     if (!p || p.isPlayerBot?.() === true || stage(p) !== S.WHISPERER) return;
     ensureLassarPuddleUse();
     const lassarState = p.getAttribute(LASSAR) ?? {};
+    syncWhispererRemains(p, lassarState);
     ensureLassarIntroItems(p, lassarState);
     syncLassarSceneObjects(p, lassarState);
     syncLassarAnimaTentacles(p, lassarState);
@@ -4395,6 +4420,7 @@ module.exports = function registerDesertTreasureII(api) {
       const state = p.getAttribute(LASSAR) ?? {};
       if (!state.medallion && !has(p, I.WHISPERERS_MEDALLION)) p.getInventory().adds(I.WHISPERERS_MEDALLION, 1);
       setLassar(p, { ...state, medallion: true });
+      syncWhispererRemains(p, { ...state, medallion: true });
       p.sendMessage("You search the Whisperer's remains and recover her medallion.");
       return true;
     }
@@ -6181,6 +6207,7 @@ module.exports = function registerDesertTreasureII(api) {
         const z = here?.getZ?.() ?? here?.z ?? 0;
         leaveWhispererScene(killer);
         if (Number.isFinite(x) && Number.isFinite(y)) killer.moveTo(new api.core.Location(x + 256, y, z));
+        syncWhispererRemains(killer, { ...state, whispererDefeated: true, inShadow: false });
         killer.sendMessage("The Whisperer is defeated. Search her remains for the medallion before returning to the Ancient Vault.");
       }
       return;
@@ -7435,6 +7462,9 @@ module.exports = function registerDesertTreasureII(api) {
   api.onPlayerDeath(handleLassarPlayerDeath);
   api.onPlayerLogout(removeLassarSceneObjects);
   api.onPlayerDisconnect(removeLassarSceneObjects);
+  api.onPlayerLogout(removeWhispererRemains);
+  api.onPlayerDisconnect(removeWhispererRemains);
+  api.onPlayerLogout(removeLassarAnimaTentacles);
   api.onPlayerProcess(handleLassarProcess);
   api.onPlayerLogout(handleLogout);
   api.onPlayerDisconnect(handleLogout);
