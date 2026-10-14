@@ -6144,7 +6144,11 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
           : prop === 'onNpcHitModify' ? handler => hitHooks.push(handler)
             : prop === 'onCombatHitRoll' ? handler => hitRollHooks.push(handler)
             : prop === 'onObjectInteraction' ? handler => typeof handler === 'function' && []
-              : prop === 'onCustomEvent' ? (name, handler) => actions.set(name, handler)
+                : prop === 'onCustomEvent' ? (name, handler) => {
+                  const registered = actions.get(name) ?? [];
+                  registered.push(handler);
+                  actions.set(name, registered);
+                }
                 : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
   });
   const runtime = require('../plugins/quests/QuestRuntime');
@@ -6167,7 +6171,9 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     };
     quest.setStage(p, 11);
     interactions.find(({ name }) => name === 'Asgarnia Smith').options['Talk-to']({ player: p, npcId: core.NpcIdentifiers.ASGARNIA_SMITH });
-    const action = actions.get('npc-dialogue:action');
+    const action = event => {
+      for (const handler of actions.get('npc-dialogue:action') ?? []) handler(event);
+    };
     for (const stepId of ['lnBBaf', '2ucP4K', 's3g1xZ', 'CQXcy8', 'F2TgOo', 't8wSqb', 'fknd65', '2at3Ae']) action({ player: p, stepId });
     const area = p.getPrivateArea(), wightIds = [12328, 12329, 12331, 12333];
     const boss = id => queue.findLast(npc => npc.id === id);
