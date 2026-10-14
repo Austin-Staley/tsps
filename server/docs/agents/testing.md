@@ -5,7 +5,7 @@ run the in-game checklist a PR asks for, without a client.
 
 | Step | Tool |
 | --- | --- |
-| Get players | `login` (any number of accounts), `logout` |
+| Get players | `login` (any number of accounts), `logout`, `disconnect` (drops the connection without logging out, like a closed tab) |
 | Set the scene | `command { player, text }` runs a `::command` as a developer for that call: `tele x y z`, `item id amount`, `master`, `cwar`, `toa` ... |
 | Ask a rule | `can_attack { attacker, target: { player } or { npc } }`, `can_teleport { player, x?, y?, z? }` run the real checks and return the verdict and message, with no fight or teleport |
 | Act | `walk_to`, `interact`, `npc_option`, `object_option`, `inventory_option` (Wear/Wield to equip), `use_item`, `player_option` (Attack/Trade/Follow), `cast_spell { spell, target? }` |
