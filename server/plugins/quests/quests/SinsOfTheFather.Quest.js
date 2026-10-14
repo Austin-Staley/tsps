@@ -345,6 +345,10 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     { x: 3424, y: 3388, z: 0 },
   ];
   const BURGH_DOCKS = { x: 3523, y: 3169, z: 0 };
+  // The boat is anchored in the water, so its map anchor cannot be used as a
+  // player landing tile.  The first clear shore tile east of the dock connects
+  // to Burgh de Rott's normal paths.
+  const BURGH_LANDING = { x: 3529, y: 3169, z: 0 };
   const IVAN_BOATHOUSE_TILE = { x: 3530, y: 3169, z: 0 };
   const VELIAF_BOATHOUSE_TILE = { x: 3529, y: 3168, z: 0 };
   const ICYENE_DOCK = { x: 3696, y: 3198, z: 0 };
@@ -2219,7 +2223,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
       player,
       "Where would you like to sail?",
       "Burgh de Rott.",
-      () => teleport(player, BURGH_DOCKS),
+      () => teleport(player, BURGH_LANDING),
       "Slepe.",
       () => teleport(player, SLEPE_DOCK),
       "Icyene Graveyard.",
@@ -2247,7 +2251,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
       return true;
     }
     if (near(player, ICYENE_DOCK, 4) && stage >= STAGE_GRAVEYARD) {
-      teleport(player, BURGH_DOCKS);
+      teleport(player, BURGH_LANDING);
       return true;
     }
     return true;

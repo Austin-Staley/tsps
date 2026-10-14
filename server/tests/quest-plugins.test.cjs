@@ -18729,3 +18729,96 @@ test('Blood Moon experience tome Read hook uses the exact cache item name', () =
   // exactly; item 33715 is "Tome of experience" (lowercase e).
   assert.deepEqual(Object.keys(handlers.namedItemActions.get('Tome of experience')), ['Read']);
 });
+test('Blood Moon registers its final Castle deposit chest handler', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  assert.ok(handlers.namedObjects.some(({ target, actions }) => target === 'Chest' && typeof actions.Deposit === 'function'));
+});
+test('Sins of the Father opens its boat route from the Slepe rowboat after completion', () => {
+  const { api, handlers } = mockApi();
+  let prompt;
+  api.sendMultiChatboxPrompt = (_player, title, ...options) => { prompt = { title, options }; };
+  const moved = [];
+  const attributes = new Map();
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(3661, 3278, 0),
+    moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+  };
+  require('../plugins/quests/quests/SinsOfTheFather.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'sins_of_the_father').at(-1);
+  quest.setStage(player, 999);
+  const boat = handlers.objects.find(handler => handler.name === 'handleObjectInteraction');
+
+  const wrongLocation = { player, objectId: 32602, location: { x: 3662, y: 3279, z: 0 }, handled: false };
+  boat(wrongLocation);
+  assert.equal(wrongLocation.handled, false, 'the Slepe route is scoped to its cache boat anchor');
+  assert.equal(prompt, undefined);
+
+  const travel = { player, objectId: 32602, location: { x: 3661, y: 3279, z: 0 }, option: 'Travel', handled: false };
+  boat(travel);
+  assert.equal(travel.handled, true);
+  assert.equal(prompt.title, 'Where would you like to sail?');
+  const graveyard = prompt.options.findIndex((value, index) => index % 2 === 0 && value === 'Icyene Graveyard.');
+  assert.notEqual(graveyard, -1);
+  prompt.options[graveyard + 1]();
+  assert.deepEqual(moved, [[3696, 3199, 0]], 'the destination uses the existing clear graveyard landing');
+});
+
+test('Sins boat lands on Burgh shore with a collision-valid route inland', () => {
+  const { api, handlers } = mockApi();
+  const attributes = new Map();
+  const position = new api.core.Location(3696, 3198, 0);
+  const moved = [];
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => position,
+    moveTo: location => {
+      moved.push([location.getX(), location.getY(), location.getZ()]);
+      position.setX(location.getX());
+      position.setY(location.getY());
+      position.setZ(location.getZ());
+    },
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+  };
+  require('../plugins/quests/quests/SinsOfTheFather.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'sins_of_the_father').at(-1);
+  quest.setStage(player, 120);
+  const boat = handlers.objects.find(handler => handler.name === 'handleObjectInteraction');
+  boat({ player, objectId: 38089, location: { x: 3696, y: 3198, z: 0 }, option: 'Board', handled: false });
+
+  assert.deepEqual(moved, [[3529, 3169, 0]], 'the water dock remains the interaction anchor, not the landing tile');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { Location } = require('../dist/game/model/Location');
+  assert.equal(RegionManager.blocked(new Location(3523, 3169, 0), null), true);
+  assert.equal(RegionManager.blocked(new Location(3529, 3169, 0), null), false);
+
+  const start = [3529, 3169];
+  const goal = [3508, 3208];
+  const queue = [start];
+  const visited = new Set([start.join(',')]);
+  let reachable = false;
+  for (let head = 0; head < queue.length; head++) {
+    const [x, y] = queue[head];
+    if (x === goal[0] && y === goal[1]) { reachable = true; break; }
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx;
+      const ny = y + dy;
+      const key = `${nx},${ny}`;
+      if (visited.has(key) || nx < 3480 || nx > 3540 || ny < 3150 || ny > 3240) continue;
+      if (RegionManager.blocked(new Location(nx, ny, 0), null)) continue;
+      if (!RegionManager.canMove(x, y, nx, ny, 0, 1, 1, null)) continue;
+      visited.add(key);
+      queue.push([nx, ny]);
+    }
+  }
+  assert.equal(reachable, true, 'the shore landing connects to Burgh de Rott through real cache collision');
+});
+
