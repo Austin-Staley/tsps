@@ -13263,6 +13263,38 @@ test('Blood Moon Castle stairs advance the earned refinery route to the live por
  delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
 });
 
+test('Blood Moon lobby staircase updates its floor before the ground-floor dining door is used',()=>{
+ const {api,handlers}=mockApi();delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
+ require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+ const attrs=new Map([
+  ['quest.the_blood_moon_rises.stage',40],
+  ['quest.the_blood_moon_rises.castle-room',1],
+  ['quest.the_blood_moon_rises.castle-floor',2],
+  ['quest.the_blood_moon_rises.castle-native-stage',72],
+  ['quest.the_blood_moon_rises.castle-story',{}],
+ ]),bits=new Map(),emitted=[];
+ let location=new api.core.Location(2327,7362,1);
+ const player={getAttribute:key=>attrs.get(key),setAttribute:(key,value)=>attrs.set(key,value),
+  getLocation:()=>location,moveTo:next=>{location=next;},getInventory:()=>({contains:()=>false}),
+  getPacketSender:()=>({sendVarbit:(id,value)=>bits.set(id,value)}),sendMessage(){}};
+ api.emitCustomEvent=(name,event)=>{emitted.push({name,event});if(name==='ladders:climbDown')location=event.destination;};
+ const stairs=handlers.custom.get('ladders:climb').find(handler=>handler.name==='handleCastleLobbyStairs');
+ const down={player,object:{getLocation:()=>new api.core.Location(2315,7370,1)},objectId:61608,clickType:1,handled:false};
+ assert.equal(stairs(down),true);assert.equal(down.handled,true);
+ assert.equal(attrs.get('quest.the_blood_moon_rises.castle-floor'),1);
+ assert.equal(bits.get(15489),1,'the same-session staircase action synchronizes the Castle floor varbit');
+ assert.equal(emitted[0].name,'ladders:climbDown');
+ assert.deepEqual([location.getX(),location.getY(),location.getZ()],[2314,7369,0]);
+ const door=handlers.objects.find(handler=>handler.name==='handleCastleDoorEnter');
+ const dining={player,objectId:61577,definition:{id:61577,getName:()=>'Door'},option:'Enter',
+  location:{x:2327,y:7360,z:0},handled:false};
+ door(dining);
+ assert.equal(dining.handled,true,'the ground lobby door accepts the immediately updated floor');
+ assert.equal(attrs.get('quest.the_blood_moon_rises.castle-room'),2);
+ assert.deepEqual([location.getX(),location.getY(),location.getZ()],[2342,7372,0]);
+ delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
+});
+
 test('Blood Moon shrine examine starts the hideout conversation only at the real shrine',()=>{
  const runtime=require('../plugins/quests/QuestRuntime'),original=runtime.startTranscript;let started;
  runtime.startTranscript=(...args)=>{started=args.slice(1);return true;};

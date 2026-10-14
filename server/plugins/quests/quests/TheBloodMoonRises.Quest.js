@@ -2960,20 +2960,51 @@ module.exports = function registerTheBloodMoonRises(api) {
   function handleCastleLobbyStairs(request) {
     const player = request?.player;
     const location = request?.object?.getLocation?.();
-    if (!player || request?.handled || request.clickType !== 1 || stage(player) !== STAGE.SLEPE ||
-      !slepeStory(player).refineryComplete ||
-      player.getAttribute("the-blood-moon-rises:refinery-progress")?.phase !== "escaped" ||
-      request.objectId !== CASTLE_DUNGEON_STAIRS.id ||
-      location?.getX?.() !== CASTLE_DUNGEON_STAIRS.x ||
-      location?.getY?.() !== CASTLE_DUNGEON_STAIRS.y ||
-      location?.getZ?.() !== CASTLE_DUNGEON_STAIRS.z) return false;
+    if (!player || request?.handled || request.clickType !== 1) return false;
+    if (stage(player) === STAGE.SLEPE) {
+      if (!slepeStory(player).refineryComplete ||
+        player.getAttribute("the-blood-moon-rises:refinery-progress")?.phase !== "escaped" ||
+        request.objectId !== CASTLE_DUNGEON_STAIRS.id ||
+        location?.getX?.() !== CASTLE_DUNGEON_STAIRS.x ||
+        location?.getY?.() !== CASTLE_DUNGEON_STAIRS.y ||
+        location?.getZ?.() !== CASTLE_DUNGEON_STAIRS.z) return false;
+      request.handled = true;
+      setCastleNativeStage(player, 66);
+      api.emitCustomEvent("ladders:climbUp", {
+        player,
+        destination: new Location(CASTLE_LOBBY_LANDING.x, CASTLE_LOBBY_LANDING.y, CASTLE_LOBBY_LANDING.z),
+      });
+      return true;
+    }
+
+    if (stage(player) < STAGE.CASTLE || stage(player) > STAGE.ESCAPE) return false;
+    const x = location?.getX?.(), y = location?.getY?.(), z = location?.getZ?.();
+    const transition = CASTLE_DOOR_TRANSITIONS.find((entry) =>
+      entry.id === request.objectId && entry.x === x && entry.y === y && (entry.z ?? 0) === z &&
+      (entry.action === "Climb-up" || entry.action === "Climb-down"));
+    if (!transition || Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== transition.from) return false;
+    const currentFloor = Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) || CASTLE_GROUND_FLOOR;
+    // A prior generic climb can leave a saved ground-lobby player marked as
+    // floor 2. The exact ground stair plus room and physical plane identify
+    // this recoverable mismatch; the normal paired climb restores floor 2.
+    const recoveredGroundFloor = transition.id === CASTLE_DOOR_IDS.STAIRS_UP && z === 0 &&
+      player.getLocation?.()?.getZ?.() === 0 && currentFloor === 2;
+    if (currentFloor !== transition.fromFloor && !recoveredGroundFloor) return false;
     request.handled = true;
-    setCastleNativeStage(player, 66);
-    api.emitCustomEvent("ladders:climbUp", {
+    if (recoveredGroundFloor) {
+      player.setAttribute(CASTLE_FLOOR_ATTRIBUTE, CASTLE_GROUND_FLOOR);
+      syncCastleRoom(player);
+    }
+    player.setAttribute(CASTLE_ROOM_ATTRIBUTE, transition.to);
+    player.setAttribute(CASTLE_FLOOR_ATTRIBUTE, transition.toFloor ?? CASTLE_GROUND_FLOOR);
+    syncCastleRoom(player, transition.facing);
+    api.emitCustomEvent(transition.action === "Climb-up" ? "ladders:climbUp" : "ladders:climbDown", {
       player,
-      destination: new Location(CASTLE_LOBBY_LANDING.x, CASTLE_LOBBY_LANDING.y, CASTLE_LOBBY_LANDING.z),
+      destination: new Location(transition.landing[0], transition.landing[1], transition.landing[2] ?? 0),
     });
+    syncCastleActors(player);
     return true;
+
   }
 
   function syncCastleLobbyOnLogin({ player }) {
