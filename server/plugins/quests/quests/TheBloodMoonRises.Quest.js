@@ -59,6 +59,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   const SLEPE_STORY_ATTRIBUTE = "quest.the_blood_moon_rises.slepe-story";
   const CASTLE_SHRINE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-shrine-prayed";
   const CASTLE_SHRINE_VARBIT = 15470;
+  const CASTLE_DUNGEON_STAIRS = Object.freeze({ id: 61208, x: 3147, y: 7585, z: 0 });
+  const CASTLE_LOBBY_LANDING = Object.freeze({ x: 3150, y: 7717, z: 0 });
   const CASTLE_ROOM_ATTRIBUTE = "quest.the_blood_moon_rises.castle-room";
   const CASTLE_FLOOR_ATTRIBUTE = "quest.the_blood_moon_rises.castle-floor";
   const CASTLE_FACING_ATTRIBUTE = "quest.the_blood_moon_rises.castle-facing";
@@ -2332,7 +2334,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (value === STAGE.SLEPE) {
       const phase = player?.getAttribute("the-blood-moon-rises:refinery-progress")?.phase;
       const refineryStage = ({ route: 48, tomb: 50, pickaxe: 52, mined: 54, tunnel: 56,
-        fight: 58, cleared: 60, freed: 61, escaped: 62 })[phase];
+        fight: 58, cleared: 60, freed: 62, escaped: 64 })[phase];
+      if (phase === "escaped" && Number(player?.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 66) {
+        return Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE));
+      }
       if (refineryStage !== undefined) return refineryStage;
     }
     return nativeStage(value, player);
@@ -2934,6 +2939,33 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.sendMessage("You pray at the vampyric shrine. Drakan's medallion can now return you to Castle Drakan.");
     }
     return true;
+  }
+
+  function handleCastleLobbyStairs(request) {
+    const player = request?.player;
+    const location = request?.object?.getLocation?.();
+    if (!player || request?.handled || request.clickType !== 1 || stage(player) !== STAGE.SLEPE ||
+      !slepeStory(player).refineryComplete ||
+      player.getAttribute("the-blood-moon-rises:refinery-progress")?.phase !== "escaped" ||
+      request.objectId !== CASTLE_DUNGEON_STAIRS.id ||
+      location?.getX?.() !== CASTLE_DUNGEON_STAIRS.x ||
+      location?.getY?.() !== CASTLE_DUNGEON_STAIRS.y ||
+      location?.getZ?.() !== CASTLE_DUNGEON_STAIRS.z) return false;
+    request.handled = true;
+    setCastleNativeStage(player, 66);
+    api.emitCustomEvent("ladders:climbUp", {
+      player,
+      destination: new Location(CASTLE_LOBBY_LANDING.x, CASTLE_LOBBY_LANDING.y, CASTLE_LOBBY_LANDING.z),
+    });
+    return true;
+  }
+
+  function syncCastleLobbyOnLogin({ player }) {
+    if (!player || stage(player) !== STAGE.SLEPE ||
+      player.getAttribute("the-blood-moon-rises:refinery-progress")?.phase !== "escaped") return;
+    const nativeStage = Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 66 ?
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) : 64;
+    player.getPacketSender().sendVarbit(15464, nativeStage);
   }
 
   function syncCastleShrine({ player }) {
@@ -7048,6 +7080,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("quest:stage-changed", syncSlepeRoy);
   api.onCustomEvent("quest:stage-changed", cleanupSlepeStory);
   api.onCustomEvent("quest:stage-changed", syncBloodHuntPartyOnStageChange);
+  api.onCustomEvent("ladders:climb", handleCastleLobbyStairs);
   api.onObjectInteraction(prayAtCastleShrine);
   api.onObjectInteraction(enterVampyriumPortal);
   api.onObjectInteraction(tryCastleReturnPortal);
@@ -7173,6 +7206,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogin(syncBloodHuntPartyOnLogin);
   api.onPlayerLogin(recoverFirstBloodEncounter);
   api.onPlayerLogin(resumePreparationIntro);
+  api.onPlayerLogin(syncCastleLobbyOnLogin);
   api.onPlayerLogin(syncCastleRoomOnLogin);
   api.onPlayerLogin(syncCastleChapelPortalOnLogin);
   api.onPlayerLogin(recoverFinalDrakanLanding);

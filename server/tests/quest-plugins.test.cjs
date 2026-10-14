@@ -13013,8 +13013,8 @@ test('Blood Moon native bitfield mapping restores Slepe refinery phase without c
  quest.setStage(player,30);assert.equal(bits.get(15464),16);assert.equal(bits.get(15467),0,'the hideout Ivan is hidden after the story moves to Slepe');bits.clear();
  attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'fight'});runtime.sendQuestVarps({player});assert.equal(bits.get(15464),58);assert.equal(quest.getStage(player),30,'the refinery morph must not advance the quest journal stage');bits.clear();
  attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'cleared'});runtime.sendQuestVarps({player});assert.equal(bits.get(15464),60,'killing the guards alone does not unlock the exit before the slaves escape');bits.clear();
- attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'freed'});handlers.playerLogin.at(-1)({player});runtime.sendQuestVarps({player});assert.equal(bits.get(15464),61,'the freed refinery exit transform is restored after relog');bits.clear();
- attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'escaped'});quest.setStage(player,30);assert.equal(bits.get(15464),62,'the escape morph survives a chapter stage sync');attrs.delete('the-blood-moon-rises:refinery-progress');bits.clear();
+ attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'freed'});handlers.playerLogin.at(-1)({player});runtime.sendQuestVarps({player});assert.equal(bits.get(15464),62,'the escaped slaves advance the native chapter before the Castle cellar exit');bits.clear();
+ attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'escaped'});quest.setStage(player,30);assert.equal(bits.get(15464),64,'leaving the refinery returns the player to the Castle cellar lobby');attrs.delete('the-blood-moon-rises:refinery-progress');bits.clear();
  quest.setStage(player,60);assert.equal(quest.getStage(player),60);assert.equal(bits.get(15464),102);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),102);quest.setStage(player,70);assert.equal(bits.get(15464),116);
  attrs.set('quest.the_blood_moon_rises.preparations',{stewFed:true});quest.setStage(player,60);assert.equal(bits.get(15464),106,'the real handoff advances to the captured Safalaan recovery conversation');
  attrs.set('quest.the_blood_moon_rises.preparations',{flail:true,stakes:true});quest.setStage(player,60);assert.equal(bits.get(15464),114);
@@ -13045,6 +13045,26 @@ test('Blood Moon prayer at either real Castle Drakan shrine unlocks its cache tr
  bits.clear();handlers.playerLogin.find(login=>login.name==='syncCastleShrine')({player});assert.equal(bits.get(15470),1,'the prayer unlock is restored after relog');
  const blocked={player,objectId:61225,definition:{id:61226,getName:()=>'Shrine'},location:{x:3168,y:7707,z:0},option:'Pray-to',handled:false};
  attrs.set('quest.the_blood_moon_rises.stage',20);assert.equal(handlers.objects.some(handler=>handler(blocked)===true),false,'the unrelated hideout chapter cannot claim a shrine click');
+ delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
+});
+
+test('Blood Moon Castle stairs advance the earned refinery route to the live portal stage',()=>{
+ const {api,handlers}=mockApi();delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+ const attrs=new Map([
+  ['quest.the_blood_moon_rises.stage',30],
+  ['quest.the_blood_moon_rises.slepe-story',{refineryComplete:true}],
+  ['the-blood-moon-rises:refinery-progress',{started:true,phase:'escaped',killed:[0,1,2,3,4]}],
+ ]),bits=new Map(),moves=[];
+ api.emitCustomEvent=(name,event)=>{assert.equal(name,'ladders:climbUp');moves.push(event.destination);};
+ const player={getAttribute:key=>attrs.get(key),setAttribute:(key,value)=>attrs.set(key,value),getPacketSender:()=>({sendVarbit:(id,value)=>bits.set(id,value)})};
+ const stairs=handlers.custom.get('ladders:climb').find(handler=>handler.name==='handleCastleLobbyStairs');
+ const object={getLocation:()=>({getX:()=>3147,getY:()=>7585,getZ:()=>0})};
+ const click={player,object,objectId:61208,clickType:1,handled:false};
+ assert.equal(stairs(click),true);assert.equal(click.handled,true);assert.equal(attrs.get('quest.the_blood_moon_rises.castle-native-stage'),66);assert.equal(bits.get(15464),66);
+ assert.deepEqual([moves[0].getX(),moves[0].getY(),moves[0].getZ()],[3150,7717,0],'the captured staircase reaches the Castle lobby');
+ bits.clear();handlers.playerLogin.find(login=>login.name==='syncCastleLobbyOnLogin')({player});assert.equal(bits.get(15464),66,'the lobby portal morph restores after relog');
+ const unrelated={...click,handled:false,objectId:61209};assert.equal(stairs(unrelated),false,'a nearby unrelated staircase remains with the generic ladder plugin');
+ attrs.delete('quest.the_blood_moon_rises.castle-native-stage');bits.clear();handlers.playerLogin.find(login=>login.name==='syncCastleLobbyOnLogin')({player});assert.equal(bits.get(15464),64,'an earned cellar exit resumes before the lobby staircase');
  delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];
 });
 

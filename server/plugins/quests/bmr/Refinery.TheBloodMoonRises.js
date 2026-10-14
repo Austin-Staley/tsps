@@ -19,7 +19,7 @@ module.exports = function registerRefinery(api, getQuestStage) {
   const SLEPE_QUEST_STAGE = 30;
   const STAGE = Object.freeze({
     ROUTE: 48, TOMB: 50, PICKAXE: 52, MINED: 54, TUNNEL: 56,
-    FIGHT: 58, CLEARED: 60, FREED: 61, ESCAPED: 62,
+    FIGHT: 58, CLEARED: 60, FREED: 62, ESCAPED: 64,
   });
   const TOMBSTILE = Object.freeze({ x: 3505, y: 9857, z: 0 });
   const TUNNEL_TILE = Object.freeze({ x: 3117, y: 7472, z: 2 });
