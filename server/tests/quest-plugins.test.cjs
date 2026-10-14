@@ -17374,6 +17374,38 @@ test('Blood Moon Nylocas target the player without Entry Mode pillars', () => {
     'the regular Entry Mode wave still sends non-aggressive spiders to a surviving pillar');
 });
 
+test('Theatre area processes a Blood Moon spider with no pillar collection', () => {
+  const { api } = mockApi();
+  const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
+  entry(api);
+  const playerTile = new api.core.Location(3295, 4253, 0);
+  const player = {
+    isPlayer: () => true, getAsPlayer() { return this; },
+    getLocation: () => playerTile, getSize: () => 1, getHitpoints: () => 99,
+    getPacketSender: () => ({ sendVarbit() {} }),
+  };
+  let npcTile = new api.core.Location(3288, 4249, 0);
+  const npc = {
+    getHitpoints: () => 2, isDyingFunction: () => false,
+    getLocation: () => npcTile, getSize: () => 1,
+    getCombat: () => ({ getLastAttack: () => ({ reset() {} }) }),
+    getTimers: () => ({ has: () => false }),
+    moveTo: tile => { npcTile = tile; },
+  };
+  const area = entry._test.createArea();
+  const raid = {
+    player, area, started: true, dead: false, room: 2, mode: 'bmr', bmrEncounter: 'wave',
+    tick: 0, npcs: new Set([npc]), effects: [], pools: [], objects: new Set(),
+  };
+  entry._test.NPC_RAIDS.set(npc, { raid, nylo: true, aggressive: false, style: 0, expires: 100 });
+  entry._test.RAIDS.set(player, raid);
+
+  assert.doesNotThrow(() => area.process(player),
+    'the registered TheatreArea process reaches the actual BMR wave logic without raid.pillars');
+  assert.notDeepEqual([npcTile.getX(), npcTile.getY()], [3288, 4249],
+    'the no-pillar spider begins approaching the player');
+});
+
 
 test('Maiden crabs pause their approach while frozen', () => {
   const { api } = mockApi();
