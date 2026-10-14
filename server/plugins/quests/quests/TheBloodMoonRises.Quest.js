@@ -509,7 +509,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   // shortcut: the Wiki does not publish teleport landing tiles; both adjacent
   // tiles are cache-verified and connected to their respective portal.
   const CASTLE_TELEPORT_TILE = Object.freeze({ x: 3167, y: 7707, z: 0 });
-  const CASTLE_VAMPYRIUM_ENTRY = Object.freeze({ id: 61216, x: 3161, y: 7710, z: 0 });
+  const CASTLE_VAMPYRIUM_ENTRY = Object.freeze({ id: 61216, visibleId: 61214, x: 3161, y: 7710, z: 0 });
   const CASTLE_VAMPYRIUM_ARRIVAL = Object.freeze({ x: 2322, y: 7370, z: 0 });
   const CASTLE_VAMPYRIUM_RETURN = Object.freeze({ id: 61221, x: 2323, y: 7370, z: 0 });
   const CASTLE_LEGACY_BLOCKED_ARRIVAL = Object.freeze({ x: 2310, y: 7404, z: 0 });
@@ -4634,7 +4634,8 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function enterVampyriumPortal(event) {
     const player = event?.player;
-    const id = event?.definition?.id ?? event?.objectId;
+    const idMatches = [event?.objectId, event?.definition?.id].some(id =>
+      id === CASTLE_VAMPYRIUM_ENTRY.id || id === CASTLE_VAMPYRIUM_ENTRY.visibleId);
     const tile = event?.location;
     const x = tile?.x ?? tile?.getX?.();
     const y = tile?.y ?? tile?.getY?.();
@@ -4642,7 +4643,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     const currentStage = player && stage(player);
     if (!player || quest.isComplete(player) || currentStage < STAGE.SLEPE || currentStage > STAGE.SIEGE ||
       !slepeStory(player).refineryComplete || !player.getAttribute(CASTLE_SHRINE_ATTRIBUTE) ||
-      id !== CASTLE_VAMPYRIUM_ENTRY.id || x !== CASTLE_VAMPYRIUM_ENTRY.x ||
+      !idMatches || x !== CASTLE_VAMPYRIUM_ENTRY.x ||
       y !== CASTLE_VAMPYRIUM_ENTRY.y || z !== CASTLE_VAMPYRIUM_ENTRY.z ||
       String(event.option ?? "").toLowerCase() !== "enter") return false;
     event.handled = true;
@@ -4666,6 +4667,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.moveTo(new Location(CASTLE_VAMPYRIUM_ARRIVAL.x, CASTLE_VAMPYRIUM_ARRIVAL.y,
         CASTLE_VAMPYRIUM_ARRIVAL.z));
       player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.LOBBY);
+      player.setAttribute(CASTLE_FLOOR_ATTRIBUTE, CASTLE_GROUND_FLOOR);
       syncCastleRoom(player, undefined, true);
       player.getPacketSender().sendVarbit(15464, nativeStage(STAGE.SIEGE, player));
     }

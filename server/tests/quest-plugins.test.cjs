@@ -1147,7 +1147,8 @@ test('Blood Moon shrine returns to the Castle lobby before the Vampyrium portal 
     'the Vampyrium arrival has a real route away from the return-portal footprint');
   assert.equal(enter({ player, objectId: 61221, definition: { id: 61221 }, location: { x: 2323, y: 7370, z: 0 }, option: 'Enter', handled: false }), false,
     'the Vampyrium return portal cannot start the initial Castle chapter');
-  assert.equal(enter({ player, objectId: 61216, definition: { id: 61216 }, location: { x: 3161, y: 7710, z: 0 }, option: 'Enter', handled: false }), true);
+  assert.equal(enter({ player, objectId: 61216, definition: { id: 61214 }, location: { x: 3161, y: 7710, z: 0 }, option: 'Enter', handled: false }), true,
+    'the stage-transformed visible portal is accepted with its raw cache parent');
   assert.equal(quest.getStage(player), 40);
   assert.deepEqual(moved, [], 'the entry portal starts the transcript without teleporting before its Yes action');
   assert.equal(varbits.get(15464), 70, 'the Castle arrival is the native QH chapter 70');
@@ -1218,13 +1219,14 @@ test('Blood Moon shrine returns to the Castle lobby before the Vampyrium portal 
   api.lastPrompt[siegeOption + 1]();
   assert.deepEqual([position.getX(), position.getY(), position.getZ()], [3167, 7707, 0]);
   assert.equal(quest.getStage(player), 70, 'the medallion does not alter the earned siege stage');
-  const siegePortalEvent = { player, objectId: 61216, definition: { id: 61216 },
+  const siegePortalEvent = { player, objectId: 61216, definition: { id: 61214 },
     location: { x: 3161, y: 7710, z: 0 }, option: 'Enter', handled: false };
   assert.equal(enter(siegePortalEvent), true, 'the cache portal is usable to return from the public bank');
   assert.equal(siegePortalEvent.handled, true);
   assert.deepEqual(moved.at(-1), [2322, 7370, 0]);
   assert.equal(quest.getStage(player), 70, 'returning to the Vampyrium lobby does not change quest progress');
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 1);
+  assert.equal(varbits.get(15489), 1, 'the siege return uses the Castle lobby ground floor');
   assert.equal(varbits.get(15464), 122);
 });
 
