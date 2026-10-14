@@ -5716,6 +5716,27 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     assert.deepEqual(player.destination, [3490, 9631, 0],
       'an already-advanced save is migrated from the old blocked swamp landing');
 
+    for (const chapter of [96, 100]) for (const y of [3322, 3323]) {
+      attributes.set('quest.the_blood_moon_rises.stage', chapter);
+      playerLocation = new api.core.Location(3562, y, 0);
+      recoverBurgh({ player });
+      assert.deepEqual(player.destination, [3490, 9631, 0],
+        'the earned return also recovers a mid-transcript save and the earlier adjacent-tile repair');
+    }
+    playerLocation = new api.core.Location(3563, 3323, 0);
+    player.destination = null;
+    recoverBurgh({ player });
+    assert.equal(player.destination, null, 'nearby legitimate saves are not relocated');
+    playerLocation = new api.core.Location(3562, 3323, 0);
+    attributes.delete('quest.the_blood_moon_rises.wyrd-defeated');
+    recoverBurgh({ player });
+    assert.equal(player.destination, null, 'an unearned final-stage fixture is not relocated');
+    attributes.set('quest.the_blood_moon_rises.wyrd-defeated', true);
+    attributes.set('quest.the_blood_moon_rises.final-portal-used', true);
+    recoverBurgh({ player });
+    assert.equal(player.destination, null, 'final-portal progress is not relocated');
+    attributes.delete('quest.the_blood_moon_rises.final-portal-used');
+
     playerLocation = new api.core.Location(3400, 9600, 0);
     player.destination = null;
     recoverBurgh({ player });

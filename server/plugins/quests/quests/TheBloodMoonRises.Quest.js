@@ -2460,14 +2460,15 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function recoverWyrdBurghLandingOnLogin({ player } = {}) {
-    if (!player || stage(player) !== STAGE.FINAL) return;
+    if (!player || ![STAGE.FENCE_FOUND, STAGE.FINAL].includes(stage(player)) ||
+      !player.getAttribute(WYRD_DEFEATED_ATTRIBUTE) || player.getAttribute(FINAL_PORTAL_USED_ATTRIBUTE)) return;
     const location = player.getLocation?.();
     const x = location?.getX?.() ?? location?.x;
     const y = location?.getY?.() ?? location?.y;
     const z = location?.getZ?.() ?? location?.z;
     // Migrate saves made by the earlier broken-fence handler, which advanced
     // through the Burgh return but left the player at the swamp fence.
-    if (z === 0 && x >= 3550 && x <= 3575 && y >= 3305 && y <= 3345) {
+    if (z === 0 && x === 3562 && [3322, 3323].includes(y)) {
       player.moveTo(new Location(WYRD_BURGH_RETURN.x, WYRD_BURGH_RETURN.y, WYRD_BURGH_RETURN.z));
     }
   }
