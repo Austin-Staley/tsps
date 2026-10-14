@@ -59,12 +59,15 @@ function setup() {
     getCombat() { return { getHitQueue: () => ({ addPendingDamage(hits) { pendingDamage.push(...hits); } }) }; },
     getPacketSender() { return { sendGraphic: (graphic, location) => graphics.push({ graphic, location }) }; },
     getPrayerActive() { return []; },
+    getSkillManager() { return { getMaxLevel: () => 99 }; },
+    setHitpoints(value) { this.hitpoints = value; },
     getDialogueManager: () => ({ isActive: () => false }),
     sendMessage(message) { messages.push(message); },
   };
   player.area = area;
   const api = {
     core: {
+      Skill: { HITPOINTS: 3 },
       ItemIdentifiers: { PRISONERS_LETTER: 28412, KNIFE_5: 28413, CHISEL_5: 28414, LOCKPICK_4: 28415,
         SAPPHIRE_KEY_3: 28416, EMERALD_KEY_3: 28417, RUBY_KEY_3: 28418, DIAMOND_KEY: 28419, WARNING_LETTER: 28429,
         REQUISITION_NOTE: 28423, GRID_NOTE: 28424, CODE_CONVERTER: 28425, MAGIC_LANTERN: 28426, STRANGE_SLIDER: 28427, LIBRARY_NOTE: 28428 },
@@ -96,6 +99,7 @@ function setup() {
       }
     },
     onNpcInteraction(...args) { handlers.npc.push(args); },
+    onPlayerBeforeDeath(handler) { handlers.beforeDeath = handler; },
     onObjectInteraction(handler) { handlers.object = handler; },
     onItemOnObject(handler) { handlers.itemObject = handler; },
     onItemAction(...args) { handlers.item.push(args); },
@@ -305,12 +309,15 @@ test("Jhallan pursues through prison corridors, leaves the safe rooms clear, and
   assert.equal(area.entities.includes(pursuer), false);
 });
 
-test("Jhallan only loses sight of the player inside the four enclosed prison rooms", () => {
+test("Jhallan loses sight of the player inside enclosed prison rooms, including the crevice and library", () => {
   const rooms = [
     [2902, 6445], // Emerald chest room
     [2968, 6417], // seven-bed room
     [2890, 6375], // western cells / Diamond chest room
     [2972, 6367], // refugee camp
+    [2959, 6428], // blocked-crevice room
+    [2968, 6428], // room beyond the crevice
+    [2931, 6430], // library
   ];
   const corridors = [
     [2912, 6423], // west corridor north of the Emerald room
@@ -517,12 +524,12 @@ test("the equipment chest advances only after confirmed stash recovery and retri
   assert.equal(emitted.filter(({ name }) => name === "dt2:sucellus-prison-return-stash").length, 2, "reopen does not duplicate stash recovery");
 });
 
-test("the real Enter dialog clears the blocked crevice without the cell's consumed chisel", () => {
+test("the visible Unblock action clears the blocked crevice without the cell's consumed chisel", () => {
   const { handlers, prompts, player, openedObjects, area, instanceLocation } = setup();
   player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 30);
   const crevice = { getPrivateArea: () => area };
   area.templateObjects = [crevice];
-  const event = { player, object: crevice, definition: { id: 49106 }, option: "Enter", location: instanceLocation(2965, 6427, 2), handled: false };
+  const event = { player, object: crevice, definition: { id: 49110 }, option: "Unblock", location: instanceLocation(2960, 6427, 2), handled: false };
   handlers.object(event);
   assert.equal(event.handled, true);
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 30, "the player confirms the rubble before it clears");
@@ -530,6 +537,34 @@ test("the real Enter dialog clears the blocked crevice without the cell's consum
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-crevice-cleared"), true);
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 32);
   assert.deepEqual(openedObjects, [crevice], "the actual private blocked loc is removed so the passage is traversable");
+  const restored = { getId: () => 49110, getPrivateArea: () => area,
+    getLocation: () => ({ equals: (location) => location.x === 10000 + 2960 - 2872 && location.y === 20000 + 6427 - 6336 }) };
+  area.templateObjects = [restored];
+  handlers.custom["dt2:sucellus-prison-resume"]({ player, area });
+  assert.equal(restored.removed, true, "an earned unblock survives rebuilding the copied map on login");
+});
+
+test("Jhallan death returns the owner to the emerald room and preserves the earned prison inventory", () => {
+  const { handlers, player, area, inventory, moveToSource, createdNpcs } = setup();
+  player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 34);
+  inventory.adds(28417, 1);
+  inventory.adds(28425, 1);
+  moveToSource(2923, 6442);
+  handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 100 });
+  assert.equal(createdNpcs.length, 1);
+  const event = { player, preventDeath: false };
+  handlers.beforeDeath(event);
+  assert.equal(event.preventDeath, true);
+  assert.equal(player.hitpoints, 99);
+  assert.deepEqual(player.location, area.tile(2907 - 2872, 6444 - 6336, 2));
+  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 34);
+  assert.equal(inventory.getAmount(28417), 1);
+  assert.equal(inventory.getAmount(28425), 1);
+  assert.equal(area.entities.length, 0);
+  player.area = null;
+  const unrelated = { player, preventDeath: false };
+  handlers.beforeDeath(unrelated);
+  assert.equal(unrelated.preventDeath, false, "deaths outside the owned prison follow their normal rules");
 });
 
 test("Ruby key chain requires the seven chest names, converter clue, and translated bed-room route", () => {

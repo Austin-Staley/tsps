@@ -9,6 +9,7 @@ module.exports = function registerSucellusPrison(api) {
   const ESCAPED = "desert-treasure-ii:sucellus-cell-escaped";
   const COMPLETE = "desert-treasure-ii:sucellus-prison-complete";
   const CREVICE_CLEARED = "desert-treasure-ii:sucellus-prison-crevice-cleared";
+  const BLOCKED_CREVICE_ID = 49110;
   const SLIDER_INSPECTED = "desert-treasure-ii:sucellus-prison-slider-inspected";
   const GEAR_RETURNED = "desert-treasure-ii:sucellus-prison-gear-returned";
   const FIREWORKS = "desert-treasure-ii:sucellus-prison-fireworks";
@@ -30,6 +31,9 @@ module.exports = function registerSucellusPrison(api) {
     [2957, 2971, 6413, 6421], // the seven-bed room, west of its eastern gate
     [2887, 2898, 6372, 6382], // the western cells around the Diamond chest
     [2962, 2985, 6366, 6383], // enclosed refugee camp between its north and south gates
+    [2956, 2964, 6424, 6432], // small room containing the blocked crevice
+    [2965, 2970, 6423, 6436], // chamber west of its gate at 2971,6428
+    [2927, 2936, 6427, 6438], // library
   ];
   const LIBRARY_SHELVES = [[2931, 6430], [2931, 6432], [2932, 6430]];
   const LIBRARY_BOOKS = ["Innocence", "Longing", "Harmonious"];
@@ -42,7 +46,7 @@ module.exports = function registerSucellusPrison(api) {
   const TILES = {
     padlock: [2945, 6389, 2], altar: [2974, 6347, 2], sapphire: [2980, 6346, 2],
     emerald: [2902, 6445, 2], ruby: [2968, 6414, 2], diamond: [2890, 6375, 2],
-    diamondGate: [2903, 6375, 2], crevice: [2965, 6427, 2], gear: [2899, 6376, 2], fireworks: [2972, 6367, 2],
+    diamondGate: [2903, 6375, 2], crevice: [2965, 6427, 2], blockage: [2960, 6427, 2], gear: [2899, 6376, 2], fireworks: [2972, 6367, 2],
     asylum: [2973, 6440, 2],
   };
   const KEY_GATES = {
@@ -316,6 +320,33 @@ module.exports = function registerSucellusPrison(api) {
     npc.getCombat?.().attack?.(player);
   }
 
+  function handlePrisonBeforeDeath(event) {
+    const player = event?.player;
+    const area = player?.getAttribute(AREA);
+    const progress = player && state(player);
+    if (!player?.getAttribute(ESCAPED) || !atArea(player, area) || progress < 30 || progress >= 58) return;
+    // Wiki: Jhallan's victim wakes in the emerald-key room, retaining prison progress.
+    event.preventDeath = true;
+    clearPursuer(player, area);
+    const defence = defences.get(player);
+    removeOwnedNpc(area, player.getAttribute("desert-treasure-ii:sucellus-prison-jhallan"));
+    for (const clone of defence?.clones ?? []) removeOwnedNpc(area, clone);
+    defences.delete(player);
+    player.setAttribute("desert-treasure-ii:sucellus-prison-jhallan", null);
+    player.setAttribute(PURSUER_DISMISSED, false);
+    if (progress === 54) {
+      player.setAttribute(DEFENCE_START, null);
+      player.setAttribute(FIREWORKS, false);
+      setState(player, 52);
+    }
+    player.getCombat()?.getHitQueue?.().clear?.();
+    player.getCombat()?.reset?.();
+    player.getMovementQueue?.().reset?.();
+    player.setHitpoints(player.getSkillManager().getMaxLevel(api.core.Skill.HITPOINTS));
+    player.moveTo(areaLocation(area, 2907, 6444, 2));
+    player.sendMessage("Jhallan overpowers you. You wake in the room where you found the emerald key, with your belongings intact.");
+  }
+
   function handlePrisonAssassinInteraction(event) {
     const { player, npcId } = event;
     const progress = state(player);
@@ -474,7 +505,7 @@ module.exports = function registerSucellusPrison(api) {
       }
     }
 
-    if (id === 49106 && onTile("crevice") && option === "enter" && progress === 30 && !player.getAttribute(CREVICE_CLEARED)) {
+    if (id === BLOCKED_CREVICE_ID && onTile("blockage") && option === "unblock" && progress === 30 && !player.getAttribute(CREVICE_CLEARED)) {
       event.handled = true;
       api.sendMultiChatboxPrompt(player, "The blockage is loose enough to shift. Clear the crevice?", "Yes", () => clearCrevice(player, area, event), "No", () => {});
       return true;
@@ -674,6 +705,11 @@ module.exports = function registerSucellusPrison(api) {
     if (!player || !area || !player.getAttribute(ESCAPED) || !atArea(player, area)) return false;
     clearPursuer(player, area);
     player.setAttribute(PURSUER_DISMISSED, false);
+    if (player.getAttribute(CREVICE_CLEARED)) {
+      const location = areaLocation(area, ...TILES.blockage);
+      const blockage = area.getTemplateObjects?.(location)?.find((object) => object.getId() === BLOCKED_CREVICE_ID && object.getLocation().equals(location));
+      if (blockage) openPrivateGate({ player, object: blockage });
+    }
     if (state(player) === 54) {
       removeOwnedNpc(area, player.getAttribute("desert-treasure-ii:sucellus-prison-jhallan"));
       for (const clone of defences.get(player)?.clones ?? []) removeOwnedNpc(area, clone);
@@ -695,6 +731,7 @@ module.exports = function registerSucellusPrison(api) {
   api.onCustomEvent("dt2:sucellus-prison-start", handleStart);
   api.onCustomEvent("dt2:sucellus-prison-resume", handleResume);
   api.onCustomEvent("dt2:sucellus-prison-process", handleProcess);
+  api.onPlayerBeforeDeath(handlePrisonBeforeDeath);
   api.onNpcInteraction("Assassin", { "Talk-to": handlePrisonAssassinInteraction });
   function talkJhallan(event) {
     if (!event.player?.getAttribute(ESCAPED) || state(event.player) !== 54 || !atArea(event.player, event.player.getAttribute(AREA))) return false;
