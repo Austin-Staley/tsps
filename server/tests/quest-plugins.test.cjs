@@ -1113,7 +1113,15 @@ test('Blood Moon shrine returns to the Castle lobby before the Vampyrium portal 
   const varbits = new Map();
   const moved = [];
   let position;
+  let playerArea = null;
   const player = {
+    isPlayer: () => true,
+    isNpc: () => false,
+    getAsPlayer: () => player,
+    getIndex: () => 104,
+    getArea: () => playerArea,
+    getPrivateArea: () => playerArea,
+    setArea: area => { playerArea = area; },
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     getPacketSender: () => new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) }, {
@@ -1211,7 +1219,9 @@ test('Blood Moon shrine returns to the Castle lobby before the Vampyrium portal 
   // to the siege after a death outside the private Vampyrium area.
   quest.setStage(player, 70);
   attributes.set('quest.the_blood_moon_rises.castle-native-stage', 122);
-  attributes.set('quest.the_blood_moon_rises.siege-defence', { phase: 'breach', integrity: 0 });
+  const siegeState = { phase: 'breach', integrity: 0, qualified: true, participation: 3,
+    repaired: ['3174,7855'], healed: ['aranei:3173,7855,1'] };
+  attributes.set('quest.the_blood_moon_rises.siege-defence', siegeState);
   api.lastPrompt = [];
   assert.equal(medallion({ player, itemId: 22400 }), true);
   const siegeOption = api.lastPrompt.findIndex((entry, index) => index % 2 === 0 && entry === 'Castle Drakan.');
@@ -1223,11 +1233,17 @@ test('Blood Moon shrine returns to the Castle lobby before the Vampyrium portal 
     location: { x: 3161, y: 7710, z: 0 }, option: 'Enter', handled: false };
   assert.equal(enter(siegePortalEvent), true, 'the cache portal is usable to return from the public bank');
   assert.equal(siegePortalEvent.handled, true);
-  assert.deepEqual(moved.at(-1), [2322, 7370, 0]);
-  assert.equal(quest.getStage(player), 70, 'returning to the Vampyrium lobby does not change quest progress');
-  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 1);
-  assert.equal(varbits.get(15489), 1, 'the siege return uses the Castle lobby ground floor');
+  assert.deepEqual(moved.at(-1), [3168, 7857, 1], 'stage 70 returns to the recorded siege hall, not the early Castle lobby');
+  assert.equal(quest.getStage(player), 70, 'returning to the siege hall does not change quest progress');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 1,
+    'the siege return does not overwrite the earlier Castle room state');
+  assert.equal(varbits.get(15489), 1, 'the siege return does not overwrite Castle floor state');
   assert.equal(varbits.get(15464), 122);
+  assert.equal(player.getArea(), player.getPrivateArea(), 'the return portal enters the owner’s private hall');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.siege-defence'), siegeState,
+    'integrity, qualification, repairs and healing persist unchanged');
+  assert.equal(spawned.some(npc => npc.id === api.core.NpcIdentifiers.LOWERNIEL_DRAKAN_19), false,
+    'the portal does not start the fight before the player is ready');
 });
 
 test('Blood Moon repairs only the legacy Castle NPC-marker landing without changing quest progress', () => {

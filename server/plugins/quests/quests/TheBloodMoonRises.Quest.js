@@ -511,6 +511,10 @@ module.exports = function registerTheBloodMoonRises(api) {
   const CASTLE_TELEPORT_TILE = Object.freeze({ x: 3167, y: 7707, z: 0 });
   const CASTLE_VAMPYRIUM_ENTRY = Object.freeze({ id: 61216, visibleId: 61214, x: 3161, y: 7710, z: 0 });
   const CASTLE_VAMPYRIUM_ARRIVAL = Object.freeze({ x: 2322, y: 7370, z: 0 });
+  // Captured RSProx landing for returning from the public Castle shrine once
+  // the siege hall has been earned. This is an explicit portal transition;
+  // login/death recovery never moves a player here automatically.
+  const CASTLE_SIEGE_HALL_ARRIVAL = Object.freeze({ x: 3168, y: 7857, z: 1 });
   const CASTLE_VAMPYRIUM_RETURN = Object.freeze({ id: 61221, x: 2323, y: 7370, z: 0 });
   const CASTLE_LEGACY_BLOCKED_ARRIVAL = Object.freeze({ x: 2310, y: 7404, z: 0 });
   const REFINERY_COMPLETED_EVENT = "bmr:refinery-completed";
@@ -4646,6 +4650,8 @@ module.exports = function registerTheBloodMoonRises(api) {
       !idMatches || x !== CASTLE_VAMPYRIUM_ENTRY.x ||
       y !== CASTLE_VAMPYRIUM_ENTRY.y || z !== CASTLE_VAMPYRIUM_ENTRY.z ||
       String(event.option ?? "").toLowerCase() !== "enter") return false;
+    const siegeDefence = currentStage === STAGE.SIEGE ? hallDefenceState(player) : null;
+    if (siegeDefence && !["hall", "breach"].includes(siegeDefence.phase)) return false;
     event.handled = true;
     if (currentStage === STAGE.SLEPE) {
       advance(player, STAGE.CASTLE);
@@ -4664,11 +4670,19 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.LOBBY);
       syncCastleRoom(player);
     } else if (currentStage === STAGE.SIEGE) {
-      player.moveTo(new Location(CASTLE_VAMPYRIUM_ARRIVAL.x, CASTLE_VAMPYRIUM_ARRIVAL.y,
-        CASTLE_VAMPYRIUM_ARRIVAL.z));
-      player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.LOBBY);
-      player.setAttribute(CASTLE_FLOOR_ATTRIBUTE, CASTLE_GROUND_FLOOR);
-      syncCastleRoom(player, undefined, true);
+      const existing = player.getAttribute(SIEGE_DRAKAN_AREA_ATTRIBUTE);
+      if (existing && existing.isDestroyed?.() !== true) {
+        player.sendMessage("Lowerniel is still attacking inside. Finish or escape the fight before using the portal.");
+        return true;
+      }
+      // A destroyed encounter can be left behind as a session-only reference
+      // after death. Clear that actor handle, but retain all earned defence
+      // flags, integrity and qualification state for the normal retry.
+      if (existing) player.setAttribute(SIEGE_DRAKAN_AREA_ATTRIBUTE, null);
+      player.moveTo(new Location(CASTLE_SIEGE_HALL_ARRIVAL.x, CASTLE_SIEGE_HALL_ARRIVAL.y,
+        CASTLE_SIEGE_HALL_ARRIVAL.z));
+      if (!hall.enter(player)) return false;
+      spawnSiegeInjuredAranei(player);
       player.getPacketSender().sendVarbit(15464, nativeStage(STAGE.SIEGE, player));
     }
     return true;
