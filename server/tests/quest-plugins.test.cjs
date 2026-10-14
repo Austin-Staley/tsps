@@ -2339,7 +2339,11 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
   const itemOnItem = handlers.itemOnItem.find((handler) => handler.name === 'handlePrepItemOnItem');
   const itemOnNpc = handlers.itemOnNpc.at(-1);
   const ids = api.core.ItemIdentifiers;
-  const use = (a, b) => itemOnItem({ player, usedItemId: a, usedWithItemId: b, handled: false });
+  const use = (a, b) => {
+    const event = { player, usedItemId: a, usedWithItemId: b, handled: false };
+    itemOnItem(event);
+    return event;
+  };
   const interact = (name, x = 0, y = 0, z = 1) => object({ player, definition: { getName: () => name }, option: 'Search', location: { x, y, z }, handled: false });
 
   interact('Amitire plant', 2982, 7679, 0);
@@ -2404,6 +2408,28 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
   action({ player, stepId: 'Sut83Q' });
   assert.equal(quest.getStage(player), 70, 'the siege starts after the actual recipes and ordered preparation talks');
   assert.ok(messages.length > 0, 'interactions give feedback while ingredients and equipment are prepared');
+
+  quest.setStage(player, 90);
+  inventory.adds(ids.BLISTERWOOD_LOGS, 1);
+  inventory.adds(ids.KNIFE, 1);
+  const stakeCountBeforeRestock = inventory.getAmount(ids.BLISTERWOOD_STAKE);
+  const replacementStakes = use(ids.BLISTERWOOD_LOGS, ids.KNIFE);
+  assert.equal(replacementStakes.handled, true, 'a completed stakes recipe can be repeated at a later active quest stage');
+  assert.equal(inventory.getAmount(ids.BLISTERWOOD_STAKE), stakeCountBeforeRestock + 5);
+  assert.equal(quest.getStage(player), 90, 'restocking stakes does not rewind the Wyrd chapter');
+  inventory.adds(ids.BOWL_OF_WATER, 1);
+  inventory.adds(ids.POTATO, 1);
+  const unrelatedLateRecipe = use(ids.BOWL_OF_WATER, ids.POTATO);
+  assert.equal(unrelatedLateRecipe.handled, false, 'other preparation recipes remain locked after preparations');
+  assert.equal(inventory.contains(ids.BOWL_OF_WATER), true, 'the stage guard preserves unrelated ingredients');
+  attributes.set('quest.the_blood_moon_rises.preparations', {
+    ...(attributes.get('quest.the_blood_moon_rises.preparations') ?? {}), stakes: false,
+  });
+  inventory.adds(ids.BLISTERWOOD_LOGS, 1);
+  inventory.adds(ids.KNIFE, 1);
+  const unearnedRestock = use(ids.BLISTERWOOD_LOGS, ids.KNIFE);
+  assert.equal(unearnedRestock.handled, false, 'the late recipe requires the earned stakes preparation flag');
+  assert.equal(inventory.contains(ids.BLISTERWOOD_LOGS), true, 'rejected late recipes preserve ingredients');
   api.core.NpcDefinition.forId = originalForId;
 });
 

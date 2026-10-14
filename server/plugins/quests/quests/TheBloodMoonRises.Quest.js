@@ -7384,8 +7384,16 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function handlePrepItemOnItem(event) {
     const player = event?.player;
-    if (!player || quest.isComplete(player) || stage(player) < STAGE.PREPARATIONS || stage(player) >= STAGE.SIEGE) return;
+    if (!player || quest.isComplete(player) || stage(player) < STAGE.PREPARATIONS) return;
     const pair = new Set([event.usedItemId, event.usedWithItemId]);
+    const stakesRecipe = pair.has(PREP.logs) && pair.has(PREP.knife);
+    const currentStage = stage(player);
+    const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {};
+    // Stakes are consumed during the later Wyrd encounter. Once the player has
+    // completed the original recipe, allow them to make replacement batches
+    // from real logs and a knife without reopening the preparation chapter.
+    if (currentStage !== STAGE.PREPARATIONS && !(stakesRecipe && prep.stakes)) return;
+    if (currentStage >= STAGE.SIEGE && !stakesRecipe) return;
     const inventory = player.getInventory();
     let recipe = null;
     if (pair.has(PREP.bowlWater) && pair.has(PREP.potato)) {
@@ -7418,8 +7426,12 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function craftPrepRecipe(player, recipe, pair) {
-    if (stage(player) !== STAGE.PREPARATIONS || !replaceItems(player, ...recipe)) return;
-    if (pair.has(PREP.logs) && pair.has(PREP.knife)) {
+    const currentStage = stage(player);
+    const stakesRecipe = pair.has(PREP.logs) && pair.has(PREP.knife);
+    const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {};
+    if (currentStage !== STAGE.PREPARATIONS && !(stakesRecipe && prep.stakes)) return;
+    if (!replaceItems(player, ...recipe)) return;
+    if (stakesRecipe) {
       player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), stakes: true });
       player.sendMessage("You cut the blisterwood logs into five stakes.");
     } else if (pair.has(PREP.blessedSickle)) {
@@ -7432,7 +7444,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     } else if (pair.has(PREP.cookedStew)) {
       prepAction(player, "hallowed-preparations-making-the-amitire-stew");
     } else player.sendMessage("You combine the ingredients.");
-    quest.setStage(player, STAGE.PREPARATIONS);
+    if (currentStage === STAGE.PREPARATIONS) quest.setStage(player, STAGE.PREPARATIONS);
   }
 
   function feedSafalaan(event) {
