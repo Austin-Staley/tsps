@@ -1107,7 +1107,7 @@ module.exports = function registerTheBloodMoonRises(api) {
         this.animate(fight, FINAL_DRAKAN_ANIM.sweepTelegraph);
         player.sendMessage("Blood gathers in front of and behind Lowerniel. Move to either side before it bursts.");
       } else if (fight.attackIndex % 5 === 4) {
-        fight.warning = "semicircle"; fight.markedX = loc.getX(); fight.markedY = loc.getY(); fight.impactAt = now + 2;
+        fight.warning = "semicircle"; fight.markedX = loc.getX(); fight.markedY = loc.getY(); fight.impactAt = now + 5;
         this.animate(fight, FINAL_DRAKAN_ANIM.sweepTelegraph);
         player.sendMessage("Lowerniel sweeps his spear in an arc. Move around him to the opposite side.");
       } else {
@@ -1446,6 +1446,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     let free = inventory.getFreeSlots?.() ?? 0;
     let added = 0;
     for (const [id, amount] of planned) {
+      if (id === ItemIdentifiers.JAR_OF_CONGEALED_BLOOD && hasItem(player, id)) continue;
       for (let count = 0; count < amount && free > 0; count++) {
         if (!inventory.adds(id, 1)) break;
         free--;

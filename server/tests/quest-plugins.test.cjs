@@ -4533,6 +4533,7 @@ test('Blood Moon northern-door transcript starts the private Lowerniel encounter
   const items = new Map([[api.core.ItemIdentifiers.HALLOWED_FLAIL, 1]]);
   const messages = [];
   const bossAnimations = [];
+  const pendingBossHits = [];
   const inventory = {
     contains: id => (items.get(id) ?? 0) > 0,
     adds: (id, count = 1) => (items.set(id, (items.get(id) ?? 0) + count), true),
@@ -4579,7 +4580,7 @@ test('Blood Moon northern-door transcript starts the private Lowerniel encounter
     getLocation: () => new api.core.Location(player.x ?? 2502, player.y ?? 7838, 3),
     getHitpoints: () => 99,
     getPrayerActive: () => [],
-    getCombat: () => ({ getHitQueue: () => ({ addPendingDamage() {} }) }),
+    getCombat: () => ({ getHitQueue: () => ({ addPendingDamage(hits) { pendingBossHits.push(...hits); } }) }),
     getDialogueManager: () => ({ startDialogues() {} }),
     getSkillManager: () => ({ getMaxLevel: skill => skill === api.core.Skill.HITPOINTS ? 99 : 99,
       setCurrentLevel(skill, value) { if (skill === api.core.Skill.PRAYER) player.prayer = value; } }),
@@ -4613,6 +4614,13 @@ test('Blood Moon northern-door transcript starts the private Lowerniel encounter
   action({ player, stepId: 'huhOGU', kind: 'action' });
   assert.equal(attributes.get('quest.the_blood_moon_rises.final-drakan-supplies'), true,
     'supplies are obtained through the actual castle chest action');
+  const congealedBlood = api.core.ItemIdentifiers.JAR_OF_CONGEALED_BLOOD;
+  assert.equal(items.get(congealedBlood), 1, 'the final chest gives one congealed-blood jar');
+  action({ player, stepId: 'huhOGU', kind: 'action' });
+  assert.equal(items.get(congealedBlood), 1, 'reopening the chest cannot give a second jar while one is held');
+  items.delete(congealedBlood);
+  action({ player, stepId: 'huhOGU', kind: 'action' });
+  assert.equal(items.get(congealedBlood), 1, 'the chest can replace the jar after it has been consumed or dropped');
   const door = handlers.objects.find(handler => handler.name === 'handleFinalDrakanRoofDoor');
   const doorAction = { player, objectId: 61628, definition: { id: 61628 },
     location: new api.core.Location(2506, 7387, 0), option: 'enter', handled: false };
@@ -4655,9 +4663,31 @@ test('Blood Moon northern-door transcript starts the private Lowerniel encounter
   const originalWorldCycle = api.core.World.getProcessCycle;
   api.core.World.getProcessCycle = () => worldCycle;
   try {
+    let arcWarningIndex = messages.length;
+    for (let tick = 0; tick < 60 && !messages.slice(arcWarningIndex).some(message => /sweeps his spear in an arc/i.test(message)); tick++) {
+      worldCycle++;
+      arena.process(boss);
+    }
+    assert.ok(messages.slice(arcWarningIndex).some(message => /sweeps his spear in an arc/i.test(message)),
+      'phase one reaches the distinct semicircle warning');
+    const hitsAtArcWarning = pendingBossHits.length;
+    for (let tick = 0; tick < 2; tick++) {
+      worldCycle++;
+      arena.process(boss);
+    }
+    assert.equal(pendingBossHits.length, hitsAtArcWarning,
+      'the semicircle does not impact during the two-tick front/back window');
+    for (let tick = 0; tick < 3; tick++) {
+      worldCycle++;
+      arena.process(boss);
+    }
+    assert.equal(pendingBossHits.length, hitsAtArcWarning + 1,
+      'the longer five-tick semicircle charge resolves at its captured cadence');
+
     player.x = 2502;
     player.y = 7838;
     boss.hitpoints = 2100;
+    worldCycle++;
     arena.process(boss);
     assert.match(messages.at(-1) ?? '', /wall of blood surges from the left/i,
       'the first phase-two wave starts from the left');
