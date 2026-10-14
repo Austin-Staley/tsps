@@ -5678,6 +5678,77 @@ test('Desert Treasure II requires each medallion on its matching Vault statue an
   assert.equal(attrs.get('desert-treasure-ii:medallions-placed'), 1);
 });
 
+test('Desert Treasure II consumes the four earned medallions in route order before the final vault', () => {
+  const { api: base } = mockApi();
+  const objectHooks = [], itemHooks = [];
+  class TestInstance {
+    constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
+    setChunk() {}
+    enter() {}
+    leave() {}
+    postLeave() {}
+    getBaseX() { return 8192; }
+    getBaseY() { return 1600; }
+    tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z }; }
+    add(npc) { this.entities.push(npc); }
+    isDestroyed() { return false; }
+    destroy() {}
+  }
+  const core = {
+    ...base.core,
+    TemplatedInstanceArea: TestInstance,
+    NPC: { create: (id, location) => ({ id, location, setOwner() {}, setOwnerOnly() {}, isNpc() { return true; }, getAsNpc() { return this; } }) },
+    World: { getAddNPCQueue: () => [], getRemoveNPCQueue: () => [] },
+  };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'onObjectInteraction' ? (handler) => objectHooks.push(handler)
+        : prop === 'onItemOnObject' ? (handler) => itemHooks.push(handler)
+          : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
+  const { ItemIdentifiers: I, ObjectIdentifiers: O } = core;
+  const attrs = new Map();
+  const counts = new Map();
+  const player = {
+    getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getUsername: () => 'dt2-four-medallions-test', getSkillManager: () => ({ getMaxLevel: () => 99 }),
+    getInventory: () => ({
+      getAmount: id => counts.get(id) ?? 0,
+      deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+      adds: (id, amount) => counts.set(id, (counts.get(id) ?? 0) + amount),
+    }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    moveTo(location) { this.location = location; }, sendMessage() {},
+  };
+  quest.setStage(player, 7);
+  const outerDoor = { player, objectId: O.VAULT_DOOR_2, location: { x: 3511, y: 2970, z: 0 } };
+  assert.equal(objectHooks[0](outerDoor), true);
+  const area = attrs.get('desert-treasure-ii:ancient-vault');
+  const placement = (id, index, medal) => {
+    counts.set(medal, 1);
+    const [x, y] = [[3941, 9635], [3931, 9635], [3931, 9625], [3941, 9625]][index];
+    const event = { player, itemId: medal, objectId: id, location: area.tile(x - 3920, y - 9616, 1), handled: false };
+    itemHooks[0](event);
+    return event;
+  };
+  assert.equal(placement(49499, 0, I.VARDORVIS_MEDALLION).handled, true);
+  assert.equal(quest.getStage(player), 8);
+  assert.equal(placement(49505, 3, I.PERSERIYAS_MEDALLION).handled, true);
+  assert.equal(quest.getStage(player), 9);
+  assert.equal(placement(49503, 2, I.SUCELLUS_MEDALLION).handled, true);
+  assert.equal(quest.getStage(player), 10);
+  assert.equal(placement(49501, 1, I.WHISPERERS_MEDALLION).handled, true);
+  assert.equal(quest.getStage(player), 11);
+  assert.equal(attrs.get('desert-treasure-ii:medallions-placed'), 15);
+  assert.equal(quest.varbitValue(quest.getStage(player), player), 100,
+    'the fourth earned medal opens the final quest milestone before the cutscene starts');
+  for (const medal of [I.VARDORVIS_MEDALLION, I.PERSERIYAS_MEDALLION, I.SUCELLUS_MEDALLION, I.WHISPERERS_MEDALLION]) {
+    assert.equal(counts.get(medal), 0, `the ${medal} is consumed by its matching statue`);
+  }
+});
+
 test('Desert Treasure II plays the first-medallion ambush before re-entering the Ancient Vault', () => {
   const { api: base } = mockApi();
   const objectHooks = [], customEvents = [];
@@ -5839,7 +5910,7 @@ test('Desert Treasure II last medallion route traps the player, requires solving
   }
 });
 
-test('Desert Treasure II descends into the copied Elder Vault, chains all four wights, and grants the ending rewards', () => {
+test('Desert Treasure II handoff creates the four owned wight stages and grants rewards after reported kills', () => {
   const { api: base } = mockApi();
   const interactions = [], deaths = [], objects = [], actions = new Map(), queue = [];
   class TestInstance {
@@ -5911,6 +5982,7 @@ test('Desert Treasure II descends into the copied Elder Vault, chains all four w
       const wight = queue.findLast((npc) => npc.id === id);
       assert.ok(wight, `quest spawns wight ${id}`);
       assert.equal(wight.owner, p, 'the fight belongs to this player');
+      assert.equal(wight.__dt2FinalWight, attrs.get('desert-treasure-ii:final-wight-index'), 'each stage is identified for its encounter controller');
       deaths[0]({ killer: p, npc: wight });
     }
     assert.equal(attrs.get('desert-treasure-ii:final-wights-complete'), true);
