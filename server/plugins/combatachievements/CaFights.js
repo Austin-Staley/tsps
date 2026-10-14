@@ -225,6 +225,7 @@ function onNpcDeath(event) {
   ensureRules();
   const byPlayer = npc ? fights.get(npc) : null;
   fights.delete(npc);
+  if (npc?.getMaxHitpoints?.() === 1) return;
   const list = rules.get(npcName(npc).toLowerCase());
   if (!byPlayer || !list?.length) return;
   for (const [player, record] of byPlayer) {

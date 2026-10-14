@@ -438,6 +438,7 @@ module.exports = function registerTheatreLobby(api) {
   api.onZoneExit(Shared.VER_SINHAZA, leaveVerSinhaza);
   api.onPlayerLogout(logoutFromLobby);
   Shared.onObject(api, Shared.OBJECT.NOTICE_BOARD, readNoticeBoard);
+  api.onCustomEvent("tob:normal-party", readNoticeBoard);
   Shared.onObject(api, Shared.OBJECT.ENTRANCE, useEntrance);
   api.onInterfaceActionClick(resumeButton);
   api.onInterfaceActionButton(LIST_ROW_UIDS, selectRow);

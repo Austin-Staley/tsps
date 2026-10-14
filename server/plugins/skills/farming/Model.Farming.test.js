@@ -108,8 +108,18 @@ for (const xp of [6, 14, 23]) {
 }
 
 const core = require("./Core.Farming");
+const Hespori = require("./Hespori.Farming");
 const Patches = require("./Patches.Farming");
 const Services = require("./Services.Farming");
+let engagedResets = 0;
+const activeQuestBoss = { quest: true, boss: {
+    getHitpoints: () => 79,
+    getCombat: () => ({ getLastAttack: () => ({ reset: () => engagedResets++ }) }),
+} };
+assert.equal(Hespori.keepQuestHesporiEngaged(activeQuestBoss), true);
+assert.equal(engagedResets, 1, "the active quest boss cannot regenerate between custom combat hits");
+assert.equal(Hespori.keepQuestHesporiEngaged({ ...activeQuestBoss, quest: false }), false, "ordinary farming Hespori keeps its normal regen");
+assert.equal(Hespori.keepQuestHesporiEngaged({ ...activeQuestBoss, boss: { getHitpoints: () => 0 } }), false, "a defeated boss is not kept in combat");
 const hooks = {};
 Patches.attach(new Proxy({}, { get: (_, name) => (...args) => (hooks[name] ??= []).push(args[0]) }));
 const login = hooks.onPlayerLogin[0], logout = hooks.onPlayerLogout[0], mapSquareChanged = hooks.onPlayerMapSquareChange[0];

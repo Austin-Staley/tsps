@@ -185,7 +185,7 @@ export class PlayerDeathTask extends Task {
                                     id = brokenItem.getBrokenItem();
                                     this.player.sendMessage(`Your ${ItemDefinition.forId(it.getId()).getName()} has been broken. You can fix it by talking to Perdu.`);
                                 }
-                                this.player.getInventory().adds(id, it.getAmount());
+                                this.player.getInventory().addItem(it.clone().setId(id));
                             }
                             this.itemsToKeep.length = 0;
                         }
