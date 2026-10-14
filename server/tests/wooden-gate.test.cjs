@@ -192,6 +192,27 @@ test('Ghorrock Prison’s keyed western gate uses its cache-supported self-openi
   }
 });
 
+test('the DT2 final-cell Gate swings to its actionless same-model loc after the lock opens', async () => {
+  await initializeMapCollisionOnce();
+  const O = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers;
+  const closed = CacheDefinitions.getObject(O.GATE_270);
+  const open = CacheDefinitions.getObject(O.GATE_271);
+  assert.equal(closed.name, 'Gate');
+  assert.equal(closed.actions[0], 'Open');
+  assert.ok(open.actions.every(action => !action), 'the open cache variant has no Close action');
+  assert.deepEqual(open.models, closed.models, 'both locs use the cache model for this swinging Gate');
+
+  const h = buildHarness({ cacheObjects: new Map([[O.GATE_270, closed], [O.GATE_271, open]]) });
+  try {
+    assert.deepEqual(h.click(O.GATE_270, 3107, 9248, 1), [
+      ['register', O.GATE_270, 3107, 9249, 2],
+      ['deregister', O.GATE_270, 3107, 9248, 1],
+    ], 'the normal door handler rotates the same Gate out of the doorway');
+  } finally {
+    h.restore();
+  }
+});
+
 test('Slepe church crypt gate opens through its actionless cache partner', async () => {
   await initializeMapCollisionOnce();
   const { GATE_210: closedId, GATE_211: openId } = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers;

@@ -7315,6 +7315,8 @@ test('Desert Treasure II last medallion route traps the player, requires solving
       prompt.options[optionIndex + 1]();
     }
     assert.equal(attrs.get('desert-treasure-ii:final-cell-open'), true);
+    assert.equal(objectHooks[0]({ player: p, objectId: 48774, option: 'Open', location: { x: 3107, y: 9248, z: 0 } }), false,
+      'after the solved lock, the quest lets the shared Doors plugin swing the cache Gate');
     assert.equal(objectHooks[0]({ player: p, objectId: 48771, option: 'Search', location: { x: 3115, y: 9263, z: 0 } }), true);
     assert.equal(attrs.get('desert-treasure-ii:final-cell-chest'), true);
     assert.equal(inventory.getAmount(995), 200, 'the chest restores the stored inventory');

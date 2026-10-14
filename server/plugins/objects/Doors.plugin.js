@@ -58,6 +58,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     O.MYRMEL_DOOR_3,
     O.SHADUM_DOOR_3,
     O.VITUR_DOOR, O.VITUR_DOOR_2,
+    // The DT2 final-cell gate (48774) is an Open-only loc; its same-model
+    // actionless variant has no Close option, so it swings in place.
+    O.GATE_270,
     O.GATE_327,
     // The two Ardougne Wall Door loc variants swing open by rotating the same cache loc.
     O.ARDOUGNE_WALL_DOOR, O.ARDOUGNE_WALL_DOOR_2,
