@@ -346,7 +346,10 @@ function choosePillar(raid,position,loads=new Map()) {
   return candidates.filter(pillar=>distanceTo(pillar)<=nearest+1).sort((a,b)=>(loads.get(a)||0)-(loads.get(b)||0)||distanceTo(a)-distanceTo(b))[0];
 }
 function pillarTarget(raid,npc,d) {
-  if(d.aggressive)return raid.player;
+  // Blood Moon uses a scoped Nylocas wave without the Entry Mode pillar phase.
+  // Every spider in that encounter targets the player instead of looking up
+  // the absent raid.pillars collection.
+  if(d.aggressive||raid.mode==="bmr")return raid.player;
   if(!alive(d.pillarTarget)) {
     const loads=new Map(raid.pillars.filter(alive).map(pillar=>[pillar,0]));
     for(const other of raid.npcs) {

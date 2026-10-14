@@ -17355,6 +17355,25 @@ test('Entry and Blood Moon Vasilias keep one HP pool across their visible forms'
   }
 });
 
+test('Blood Moon Nylocas target the player without Entry Mode pillars', () => {
+  const { api } = mockApi();
+  const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
+  entry(api);
+  const player = {};
+  const bmrRaid = { player, mode: 'bmr' };
+
+  assert.equal(entry._test.pillarTarget(bmrRaid, {}, { aggressive: false }), player,
+    'the scoped Blood Moon wave has no pillars, so every spider targets its player');
+
+  const pillar = {
+    getLocation: () => new api.core.Location(3290, 4245, 0),
+    getHitpoints: () => 100,
+  };
+  const entryRaid = { player, mode: 'entry', pillars: [pillar], npcs: new Set() };
+  assert.equal(entry._test.pillarTarget(entryRaid, { getLocation: () => new api.core.Location(3291, 4245, 0) }, { aggressive: false }), pillar,
+    'the regular Entry Mode wave still sends non-aggressive spiders to a surviving pillar');
+});
+
 
 test('Maiden crabs pause their approach while frozen', () => {
   const { api } = mockApi();
