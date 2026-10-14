@@ -3036,6 +3036,50 @@ test('Blood Moon Castle new-moon key requires the corpse syringe, weapon statues
   assert.equal(attrs.get('quest.the_blood_moon_rises.castle-story').newMoon.newMoonKeyClaimed, true);
 });
 
+test('Blood Moon throne door reaches and leaves the clipped ancient-shield crate pocket', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.castle-room', 3],
+    ['quest.the_blood_moon_rises.castle-floor', 2],
+  ]);
+  const moved = [];
+  const items = new Set([api.core.ItemIdentifiers.FULL_MOON_KEY]);
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ contains: id => items.has(id) }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
+    sendMessage() {},
+  };
+  quest.setStage(player, 40);
+  const { RegionManager } = api.core;
+  RegionManager.loadMapFiles(2306, 7397);
+  RegionManager.loadMapFiles(2439, 7378);
+  RegionManager.loadMapFiles(2434, 7372);
+  const enter = handlers.objects.find(handler => handler.name === 'handleCastleDoorEnter');
+  const route = handlers.routes.find(handler => handler.name === 'routeCastleDoorEnter');
+  enter({ player, objectId: 61590, option: 'Enter',
+    definition: { id: 61590, getName: () => 'Full moon door' },
+    location: { x: 2306, y: 7397, z: 1 }, handled: false });
+  assert.deepEqual(moved.at(-1), [2439, 7377, 0]);
+  assert.equal(RegionManager.blocked(new api.core.Location(2439, 7377, 0), null), false);
+  assert.ok(RegionManager.canMove(2439, 7377, 2439, 7376, 0, 1, 1, null));
+  const returnRoute = { player, objectId: 61591, clickType: 1,
+    definition: { id: 61591, getName: () => 'Full moon door', getInteractions: () => ['Enter'] },
+    object: { getFace: () => 1, getLocation: () => new api.core.Location(2434, 7372, 0) },
+    sourceLocation: { x: 2439, y: 7377, z: 0 }, destination: null };
+  route(returnRoute);
+  assert.deepEqual(returnRoute.destination, { x: 2439, y: 7377, z: 0 });
+  enter({ player, objectId: 61591, option: 'Enter',
+    definition: { id: 61591, getName: () => 'Full moon door' },
+    location: { x: 2434, y: 7372, z: 0 }, handled: false });
+  assert.deepEqual(moved.at(-1), [2306, 7396, 1]);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 3);
+});
+
 test('Blood Moon Castle Enter doors cross to the opposite side of their actual wall', () => {
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);

@@ -450,7 +450,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.NEW, x: 2441, y: 7389, z: 0, from: CASTLE_ROOM.EXPLOSIVE_ROOM, to: CASTLE_ROOM.SERVANTS_QUARTERS,
       fromFloor: 1, toFloor: 1, landing: [2439, 7394] },
     { id: CASTLE_DOOR_IDS.FULL, x: 2306, y: 7397, z: 1, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.ABOVE_STUDY,
-      fromFloor: 2, toFloor: 2, landing: [2434, 7373] },
+      fromFloor: 2, toFloor: 2, landing: [2439, 7377] },
     { id: CASTLE_DOOR_IDS.FULL_M, x: 2434, y: 7372, z: 0, from: CASTLE_ROOM.ABOVE_STUDY, to: CASTLE_ROOM.THRONE,
       fromFloor: 2, toFloor: 2, landing: [2306, 7396, 1] },
     { id: CASTLE_DOOR_IDS.FULL, x: 2525, y: 7363, z: 0, from: CASTLE_ROOM.VENATOR_PUZZLE, to: CASTLE_ROOM.SOLID_KEY_ROOM,
@@ -6382,6 +6382,17 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (objectIds.includes(61576) && tile.getX() === 2466 && tile.getY() === 7422 &&
       tile.getZ() === 0 && Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.NORTH_LOBBY_HALL) {
       event.destination = { x: 2456, y: 7417, z: 0 };
+      return;
+    }
+    // The shield crate sits in a clipped pocket on the far side of the return door.
+    // Replay Enter from a reachable tile in that pocket instead of pathing through
+    // the wall to the door footprint.
+    if (objectIds.includes(CASTLE_DOOR_IDS.FULL_M) && tile.getX() === 2434 &&
+      tile.getY() === 7372 && tile.getZ() === 0 &&
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.ABOVE_STUDY &&
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) === 2 && sourceZ === 0 &&
+      [[2438, 7377], [2439, 7377], [2440, 7377], [2440, 7378]].some(([x, y]) => sourceX === x && sourceY === y)) {
+      event.destination = { x: sourceX, y: sourceY, z: sourceZ };
       return;
     }
     const face = event.object.getFace();
