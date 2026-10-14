@@ -20327,6 +20327,14 @@ test('Blood Moon Gibbous passage reconciles the plane before the basement exit',
     'the plane-0 landing is recorded on the ground-floor route');
   assert.equal(varbits.get(15489), 1);
 
+  enter(passage(61589, 'Gibbous moon door', 2483, 7395, 0));
+  assert.deepEqual(moved.at(-1), [2337, 7370, 1],
+    'the paired Gibbous return accepts the corrected floor and returns to Dining');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 2);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 2);
+  enter(passage(61588, 'Gibbous moon door', 2336, 7370, 1));
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 1);
+
   enter(passage(61572, 'Door', 2474, 7398, 0));
   assert.deepEqual(moved.at(-1), [2314, 7361, 1],
     'the real hall exit now accepts the reconciled floor and returns to the upper lobby');
