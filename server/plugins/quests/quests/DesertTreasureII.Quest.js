@@ -1777,6 +1777,27 @@ module.exports = function registerDesertTreasureII(api) {
     // Match the walkable-tile test used by the existing boss hazard plugins.
     return (regionManager.getClipping(x, y, z, area) & 0x1280100) === 0;
   }
+  function assassinPinkSmokeTile(player, boss, area, whiteTile) {
+    const p = finalWightLocation(player), b = finalWightLocation(boss);
+    if (!p || !b) return null;
+    const dx = Math.sign(b.x - p.x), dy = Math.sign(b.y - p.y);
+    const candidates = [
+      [b.x + dx * 2, b.y + dy * 2], [b.x + dx * 2, b.y], [b.x, b.y + dy * 2],
+      [b.x - dx * 2, b.y - dy * 2], [b.x - dx * 2, b.y], [b.x, b.y - dy * 2],
+      [b.x + 2, b.y], [b.x - 2, b.y], [b.x, b.y + 2], [b.x, b.y - 2],
+    ];
+    const seen = new Set();
+    for (const [x, y] of candidates) {
+      const key = `${x},${y}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if ((x === b.x && y === b.y) || (x === p.x && y === p.y)
+        || (x === whiteTile.getX() && y === whiteTile.getY())) continue;
+      const tile = finalWightTile(area, x, y);
+      if (finalWightTileIsClear(area, tile)) return tile;
+    }
+    return null;
+  }
   function spawnFinalWightActorAtTile(player, area, id, tile, hp) {
     if (!tile || !finalWightTileIsClear(area, tile)) return null;
     const npc = api.core.NPC.create(id, tile);
@@ -1815,16 +1836,19 @@ module.exports = function registerDesertTreasureII(api) {
     if (boss.__dt2AssassinWhiteSmoke) return;
     const p = finalWightLocation(player), b = finalWightLocation(boss);
     if (!p || !b) return;
-    // Sliske's wight reuses the cache's smoke locs from the Secrets of the North
-    // assassin encounter. The smoke is placed at the player's old tile so the
-    // player can lure the assassin through it instead of standing still.
+    // The white cloud marks the player's tile so they can lure the Assassin through it.
     const whiteTile = finalWightTile(area, p.x, p.y);
-    const pinkTile = finalWightTile(area, b.x, b.y);
+    // shortcut: Wiki says pink smoke heals the Assassin by about 25 HP only while it stands
+    // in the cloud, but gives no placement/cadence capture; place it two clear tiles behind
+    // the boss so a player can react before it heals, then calibrate from an OSRS capture.
+    const pinkTile = assassinPinkSmokeTile(player, boss, area, whiteTile);
+    if (!pinkTile) return;
+    const pinkLocation = { x: pinkTile.getX(), y: pinkTile.getY() };
     const white = addFinalWightObject(player, area, FINAL_WIGHT_SMOKE_WHITE, whiteTile);
     const pink = addFinalWightObject(player, area, FINAL_WIGHT_SMOKE_PINK, pinkTile);
     boss.__dt2FinalWightObjects.push(white, pink);
     boss.__dt2AssassinWhiteSmoke = { x: p.x, y: p.y, until: 14 };
-    boss.__dt2AssassinPinkSmoke = { x: b.x, y: b.y, until: 14 };
+    boss.__dt2AssassinPinkSmoke = { ...pinkLocation, until: 14 };
     player.sendMessage("The Assassin scatters white and pink smoke. Lure him through the white cloud; avoid standing in either cloud.");
   }
   function assassinBottleVolley(player, boss, area) {

@@ -6702,11 +6702,23 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
       'tagged trial adds can attack their owner');
     assert.equal(area.canAttack({ getOwner: () => null, getArea: () => area }, p), false, 'unowned NPCs cannot join the private fight');
     assert.equal(area.isMulti(), true, 'the owner can be attacked by the wight and its adds together');
+    current.setHitpoints(100);
     area.process(p);
     assert.equal(current.__dt2FinalWightTicks, 1);
     assert.ok(current.__dt2AssassinWhiteSmoke, 'the Assassin creates a white-smoke vulnerability window');
     assert.notDeepEqual([current.__dt2AssassinWhiteSmoke.x, current.__dt2AssassinWhiteSmoke.y],
       [current.__dt2AssassinPinkSmoke.x, current.__dt2AssassinPinkSmoke.y], 'pink and white smoke use distinct cache tiles');
+    assert.notDeepEqual([current.getLocation().x, current.getLocation().y],
+      [current.__dt2AssassinPinkSmoke.x, current.__dt2AssassinPinkSmoke.y], 'pink smoke does not spawn under the Assassin');
+    assert.notDeepEqual([p.location.x, p.location.y],
+      [current.__dt2AssassinPinkSmoke.x, current.__dt2AssassinPinkSmoke.y], 'pink smoke does not spawn under the player');
+    assert.ok(clipChecks.some(({ x, y, area: checkedArea }) => x === current.__dt2AssassinPinkSmoke.x
+      && y === current.__dt2AssassinPinkSmoke.y && checkedArea === area), 'pink smoke uses a clear floor tile in the private room');
+    assert.equal(current.getHitpoints(), 100, 'creating the pink cloud does not heal the Assassin');
+    current.location = { x: current.__dt2AssassinPinkSmoke.x, y: current.__dt2AssassinPinkSmoke.y, z: 0 };
+    area.process(p);
+    assert.equal(current.getHitpoints(), 125, 'the pink cloud heals 25 only after the Assassin enters it');
+    current.setHitpoints(200);
     assert.deepEqual(registeredObjects.slice(0, 2).map(object => object.id), [core.ObjectIdentifiers.SMOKE_CLOUD, core.ObjectIdentifiers.SMOKE_CLOUD_2]);
     assert.equal(hitDamage(current), 0, 'ordinary attacks are blocked outside white smoke');
     const pink = current.__dt2AssassinPinkSmoke;
