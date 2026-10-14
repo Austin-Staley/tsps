@@ -3420,10 +3420,10 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   inventoryItems.add(api.core.ItemIdentifiers.FULL_MOON_KEY);
   const capturedAboveStudyDoor = enterPairedDoor(61590, 2306, 7397, 0, { x: 2306, y: 7396, z: 1 }, 1);
   assert.equal(capturedAboveStudyDoor.handled, true);
-  assert.deepEqual(moved.at(-1), [2434, 7373, 0], 'the Full Moon door reaches the captured Above Study landing');
+  assert.deepEqual(moved.at(-1), [2439, 7377, 0], 'the Full Moon door reaches the cache-clear Above Study shield pocket');
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 19,
     'the captured landing is room 19 (Above Study), not room 18 (Upper South Hall)');
-  const capturedAboveStudyReturn = enterPairedDoor(61591, 2434, 7372, 0, { x: 2434, y: 7373, z: 0 });
+  const capturedAboveStudyReturn = enterPairedDoor(61591, 2434, 7372, 0, { x: 2439, y: 7377, z: 0 });
   assert.equal(capturedAboveStudyReturn.handled, true);
   assert.deepEqual(moved.at(-1), [2306, 7396, 1], 'the captured Full Moon door returns from Above Study to Throne');
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 3);
