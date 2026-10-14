@@ -1808,7 +1808,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.setAttribute(PREP_ATTRIBUTE, { ...prep, introStarted: true });
     player.getPacketSender()?.sendVarbit?.(15464, 98);
     player.moveTo(new Location(2987, 7699, 0));
-    return startTranscript(api, player, 0, PAGE, "hallowed-preparations-talking-to-the-mysterious-woman");
+    return startTranscript(api, player, NpcIdentifiers.MYSTERIOUS_WOMAN, PAGE, "hallowed-preparations-talking-to-the-mysterious-woman");
   }
 
   function resumePreparationIntro({ player }) {

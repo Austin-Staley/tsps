@@ -4643,8 +4643,8 @@ test('Blood Moon crossing preserves the captured native stages and starts the sh
       setMaxHitpoints(value) { this.maxHitpoints = value; }, setHitpoints(value) { this.hitpoints = value; },
       setMultiCombat() {}, setFlag(name, value = true) { this.flags ??= {}; this.flags[name] = value; },
       setScriptedMovement(value) { this.scriptedMovement = value; },
-    getLocation: () => new api.core.Location(definition.x, definition.y, definition.z),
-    getCombat: () => ({ attack(target) { npc.target = target; }, getLastAttack: () => ({ reset() {} }) }),
+      getLocation: () => new api.core.Location(definition.x, definition.y, definition.z),
+      getCombat: () => ({ attack(target) { npc.target = target; }, getLastAttack: () => ({ reset() {} }) }),
     };
     spawns.push(npc);
     return npc;
@@ -4825,6 +4825,12 @@ test('Blood Moon post-breach chapter restores actors and follows the captured na
 
 test('Blood Moon resumes the saved native-96 fleeing scene after logout', () => {
   const { api, handlers } = mockApi();
+  const lines = [];
+  const emit = api.emitCustomEvent;
+  api.emitCustomEvent = (name, event) => {
+    if (name === 'npc-dialogue:line') lines.push(event);
+    return emit(name, event);
+  };
   const attributes = new Map();
   const varbits = [];
   let dialogueStarted = false;
@@ -4855,6 +4861,8 @@ test('Blood Moon resumes the saved native-96 fleeing scene after logout', () => 
   assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').nativeStage, 98);
   assert.equal(quest.getStage(player), 60, 'the woodland handoff starts Hallowed preparations');
   assert.equal(attributes.get('quest.the_blood_moon_rises.preparations').introStarted, true);
+  assert.equal(lines.findLast(event => event.step.speaker === 'Mysterious Woman').npcId, api.core.NpcIdentifiers.MYSTERIOUS_WOMAN,
+    'the preparation intro uses its actual speaker instead of NPC zero');
   assert.deepEqual(varbits.at(-1), [15464, 98]);
   assert.deepEqual([player.location.getX(), player.location.getY(), player.location.getZ()], [2987, 7699, 0]);
   action({ player, stepId: 'P8i6Tl' });
