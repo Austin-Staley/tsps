@@ -4271,7 +4271,12 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
   assert.equal(pursuer.removed, true, 'leaving the Sangvesti area cleans up the private pursuer');
   assert.equal(crankHeadbar.removed, true, 'leaving also cleans up the crank progress actor');
   interact(2582, 7817);
-  assert.equal(inventory.contains(ids.OLD_COG), true, 'the smithy provides the old cog after the key');
+  assert.equal(inventory.contains(ids.OLD_COG), false, 'the smithy table cannot grant the cog through an unrelated object click');
+  handlers.playerProcess.find(handler => handler.name === 'syncHuntGroundItems')({ player });
+  const cogDrop = spawned.find(({ item }) => item.id === ids.OLD_COG);
+  assert.ok(cogDrop, 'solving the chapel puzzle creates the captured old-cog ground pickup');
+  assert.deepEqual([cogDrop.tile.getX(), cogDrop.tile.getY(), cogDrop.tile.getZ()], [2582, 7817, 0]);
+  inventory.adds(ids.OLD_COG, 1); // GroundItemManager's normal pickup path is exercised in object-reach.test.cjs.
   quest.setStage(player, 45);
   const transcriptAction = handlers.custom.get('npc-dialogue:action').find((handler) => handler.name === 'onTranscriptAction');
   const crossWithoutCog = { player, stepId: 'lKvIyH', handled: false, end: false };

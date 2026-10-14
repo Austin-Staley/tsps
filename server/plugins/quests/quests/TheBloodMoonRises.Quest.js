@@ -6037,8 +6037,10 @@ module.exports = function registerTheBloodMoonRises(api) {
       { id: HUNT_ITEMS.crank, tile: new Location(2603, 7847, 0), claimed: hunt.crankStarted },
       { id: HUNT_ITEMS.toothHalf, tile: new Location(2600, 7845, 0), claimed: hasItem(player, HUNT_ITEMS.myrmelKey) },
       { id: HUNT_ITEMS.loopHalf, tile: new Location(2588, 7816, 0), claimed: hasItem(player, HUNT_ITEMS.myrmelKey) },
+      { id: HUNT_ITEMS.oldCog, tile: new Location(2582, 7817, 0), claimed: hunt.drawbridgeRepaired || hasItem(player, HUNT_ITEMS.oldCog), enabled: hunt.chapelPuzzleSolved === true },
     ];
-    for (const { id, tile, claimed } of drops) {
+    for (const { id, tile, claimed, enabled = true } of drops) {
+      if (!enabled) continue;
       if (claimed || hasItem(player, id) || manager.getGroundItem(player.getUsername(), id, tile, area)) continue;
       manager.registerLocation(player, new Item(id, 1), tile);
     }
@@ -6256,12 +6258,6 @@ module.exports = function registerTheBloodMoonRises(api) {
       if (!state.chestOpen) promptHuntCode(player, "chest");
       else if (!inventory.contains(HUNT_ITEMS.jovkaiKey)) inventory.adds(HUNT_ITEMS.jovkaiKey, 1);
       return;
-    }
-    if (x === 2582 && y === 7817) {
-      event.handled = true;
-      if (!inventory.contains(HUNT_ITEMS.jovkaiKey)) { player.sendMessage("The smithy lock needs the Jovkai key."); return; }
-      if (!inventory.contains(HUNT_ITEMS.oldCog)) inventory.adds(HUNT_ITEMS.oldCog, 1);
-      player.sendMessage("You take the old cog from the table.");
     }
   }
 
