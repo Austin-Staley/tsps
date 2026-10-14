@@ -417,7 +417,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.FULL, x: 2510, y: 7379, z: 0, from: CASTLE_ROOM.DISPLAY_ROOM, to: CASTLE_ROOM.SOLID_DOOR_HALL,
       fromFloor: 2, toFloor: 2, landing: [2499, 7400] },
     { id: CASTLE_DOOR_IDS.FULL_M, x: 2499, y: 7400, z: 0, from: CASTLE_ROOM.SOLID_DOOR_HALL, to: CASTLE_ROOM.DISPLAY_ROOM,
-      fromFloor: 2, toFloor: 2, landing: [2510, 7380] },
+      fromFloor: 2, toFloor: 2, landing: [2509, 7379] },
     { id: 61575, x: 2503, y: 7400, z: 0, from: CASTLE_ROOM.SOLID_DOOR_HALL, to: CASTLE_ROOM.LABORATORY,
       fromFloor: 2, toFloor: 2, action: "Enter", key: ItemIdentifiers.SOLID_KEY, keyName: "solid key", landing: [2510, 7382] },
     { id: 61574, x: 2512, y: 7382, z: 0, from: CASTLE_ROOM.LABORATORY, to: CASTLE_ROOM.SOLID_DOOR_HALL,
@@ -3151,7 +3151,9 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (room === CASTLE_ROOM.VENATOR_PUZZLE && isObject(61687) && x === 2531 && y === 7367 && option === "search") {
       event.handled = true;
       if (!gibbous.firstGemPlaced || !gibbous.secondGemPlaced) {
-        player.sendMessage("The mounted head has two empty settings.");
+        clues.add("head");
+        updateGibbousStory(player, { clues: [...clues] });
+        player.sendMessage("You inspect the mounted venator head and find the number 426 engraved beneath it.");
         return;
       }
       if (gibbous.hourglassClaimed || hasItem(player, ItemIdentifiers.ORNATE_HOURGLASS)) return;

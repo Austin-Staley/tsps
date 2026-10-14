@@ -1435,7 +1435,9 @@ test('Blood Moon Gibbous lockbox requires its room clues and accepts code 426', 
   object(61734, 2526, 7371, 'Search');
   assert.equal(items.get(33761), 1, 'lighting the fireplace allows the chest lockbox to be taken');
   interact({ player, objectId: 61687, definition: { id: 61689 }, location: { x: 2531, y: 7367, z: 0 },
-    option: 'Inspect', handled: false });
+    option: 'Search', handled: false });
+  assert.ok(attributes.get('quest.the_blood_moon_rises.castle-story').gibbous.clues.includes('head'),
+    'the mounted head’s actual Search option records the 426 lockbox clue');
   object(61739, 2516, 7365, 'Inspect');
   object(61739, 2516, 7370, 'Inspect');
   object(61738, 2528, 7364, 'Inspect');
@@ -2469,7 +2471,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [2442, 7417, 0], [2437, 7419, 0], [2456, 7388, 0], [2380, 7392, 0], [2372, 7392, 0],
     [2393, 7363, 0], [2387, 7383, 0], [2441, 7400, 0], [2394, 7370, 0], [2440, 7388, 0],
     [2439, 7394, 0], [2435, 7372, 0], [2306, 7396, 1], [2541, 7373, 0], [2526, 7363, 0],
-    [2499, 7400, 0], [2510, 7380, 0], [2510, 7382, 0], [2502, 7400, 0], [2534, 7377, 0],
+    [2499, 7400, 0], [2509, 7379, 0], [2510, 7382, 0], [2502, 7400, 0], [2534, 7377, 0],
     [2524, 7388, 0], [2563, 7369, 0], [2310, 7366, 0], [2566, 7386, 0], [2569, 7365, 0],
     [2565, 7394, 0], [2570, 7368, 0]];
   for (const [x, y, z] of pairedDoorLandingTiles) {
@@ -2847,6 +2849,12 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   assert.deepEqual(moved.at(-1), [2309, 7373, 1], 'the captured southern Display Room stairs reach the upper lobby landing');
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 1);
   assert.equal(varbits.get(15499), 1);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 45);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 2);
+  const fullMoonReturn = enterPairedDoor(61591, 2499, 7400, 6, { x: 2500, y: 7400, z: 0 });
+  assert.equal(fullMoonReturn.handled, true);
+  assert.deepEqual(moved.at(-1), [2509, 7379, 0], 'the captured Solid Door Hall return lands on the connected Display Room tile');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 38);
   for (const id of [api.core.ItemIdentifiers.NEW_MOON_KEY, api.core.ItemIdentifiers.GIBBOUS_MOON_KEY,
     api.core.ItemIdentifiers.FULL_MOON_KEY, api.core.ItemIdentifiers.CRESCENT_MOON_KEY]) inventoryItems.delete(id);
   attributes.set(castleRoom, 2);
