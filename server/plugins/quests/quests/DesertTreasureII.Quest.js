@@ -21,6 +21,7 @@ module.exports = function registerDesertTreasureII(api) {
   // shadow projectile available in this cache. No Mysterious Figure orb
   // capture/unique spotanim was found, so this visual mapping is inferred.
   const FINAL_FIGURE_ORB_PROJECTILE = 536;
+  const FINAL_FIGURE_RETURN_PORTAL = 48770; // cache transform of loc 49497 at 3175,2887
   // Wiki: approximately every ten attacks, she stuns/shoves the player, then
   // throws an orb. The 3-tick freeze + 2-tick dodge window is inferred from
   // the Wiki's instruction that the stun ends two ticks before impact.
@@ -67,6 +68,8 @@ module.exports = function registerDesertTreasureII(api) {
   const nativeProgressSent = new WeakMap();
   function syncNativeProgress(player) {
     const value = nativeProgress(stage(player), player);
+    const figurePortal = player?.getAttribute(FINAL_FIGURE_STARTED) === true
+      && player?.getAttribute(FINAL_FIGURE_DEFEATED) !== true ? 1 : 0;
     // QuestHelper DT2_STRANGLEWOOD milestones drive the cache desk, boat and later scenery.
     const progress = Number(player.getAttribute(VARDORVIS_PROGRESS)) || 0;
     const stranglewood = [0, 4, 6, 6, 8, 10, player.getAttribute(STRANGLEWOOD_CITY_ENTERED) ? 16 : 12, 18, 18, 22, 24, 24, 24, 34, 36, 36, 38, 42, 44, 48, 50, 52, 54][progress] ?? 0;
@@ -74,12 +77,16 @@ module.exports = function registerDesertTreasureII(api) {
       : player.getAttribute(SUCELLUS_CELL_ESCAPED) ? 20
         : player.getAttribute(SUCELLUS_CELL_ENTERED) ? [8, 10, 10, 12, 14, 16, 18, 20][Number(player.getAttribute(SUCELLUS_CELL_PROGRESS)) || 0]
           : stage(player) >= S.SUCELLUS ? 2 : 0);
-    const state = `${value}:${stranglewood}:${prison}`;
+    const state = `${value}:${stranglewood}:${prison}:${figurePortal}`;
     if (nativeProgressSent.get(player) === state) return;
     nativeProgressSent.set(player, state);
     player.getPacketSender().sendVarbit(15125, stranglewood);
     player.getPacketSender().sendVarbit(15127, prison);
     player.getPacketSender().sendVarbit(14862, value);
+    // Cache loc 49497 transforms to the clickable return portal 48770 while
+    // the Figure trial is active. QH records varbit 15159 returning 1→0 when
+    // the Whisperer chapter finishes.
+    player.getPacketSender().sendVarbit(15159, figurePortal);
   }
   const IDS = [I.VARDORVIS_MEDALLION, I.PERSERIYAS_MEDALLION, I.SUCELLUS_MEDALLION, I.WHISPERERS_MEDALLION];
   const STATUE_ITEMS = [I.VARDORVIS_MEDALLION, I.WHISPERERS_MEDALLION, I.SUCELLUS_MEDALLION, I.PERSERIYAS_MEDALLION];
@@ -5028,6 +5035,17 @@ module.exports = function registerDesertTreasureII(api) {
     const sucellusTile = sucellusSourceTile(p, location);
     const visibleId = definition?.id ?? objectId;
     const option = String(event.option ?? "").toLowerCase();
+    if (visibleId === FINAL_FIGURE_RETURN_PORTAL && location?.x === 3175 && location?.y === 2887
+      && location?.z === 0 && option === "use") {
+      if (stage(p) !== S.WHISPERER || !p.getAttribute(FINAL_CELL_ACTIVE)
+        || !p.getAttribute(FINAL_FIGURE_STARTED) || p.getAttribute(FINAL_FIGURE_DEFEATED)) {
+        p.sendMessage("The portal is sealed until the Mysterious Figure's cell trial is active.");
+        return true;
+      }
+      p.moveTo(new api.core.Location(3103, 9246, 0));
+      p.sendMessage("You return through the portal to the temple cell and face the Mysterious Figure again.");
+      return true;
+    }
     if (handleLassarObject(event, visibleId, option)) return true;
     if (s === S.WHISPERER && [47578, 47579, 49555, 49556].includes(visibleId)
       && p.getAttribute(LASSAR)?.whispererDefeated
@@ -7895,6 +7913,18 @@ module.exports = function registerDesertTreasureII(api) {
     const location = event?.location;
     const x = location?.getX?.() ?? location?.x;
     const y = location?.getY?.() ?? location?.y;
+    const z = location?.getZ?.() ?? location?.z;
+    if (p?.getAttribute?.(FINAL_CELL_ACTIVE) && x === 3107 && y === 9248 && z === 0
+      && event.objectId === 48774 && event.clickType === 1
+      && !p.getAttribute(FINAL_CELL_OPEN)) {
+      if (!has(p, I.HAIR_CLIP_3)) {
+        p.sendMessage("The cell door is locked. Search the bed for something thin enough to pick it.");
+      } else {
+        startFinalCellLock(p);
+      }
+      event.handled = true;
+      return;
+    }
     // Gate/Open is owned by Doors before the quest object hook runs.
     if (stage(p) === S.WHISPERER && state.drainEntered
       && x === 2784 && y === 6287 && (location?.getZ?.() ?? location?.z) === 1

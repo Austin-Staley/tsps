@@ -7218,6 +7218,10 @@ test('Desert Treasure II plays the first-medallion ambush before re-entering the
 
 test('Desert Treasure II last medallion route traps the player, requires solving the cell lock, then makes the Figure fight reclaimable', () => {
   const { api: base, handlers } = mockApi();
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const returnPortal = CacheDefinitions.getObject(49497);
+  assert.equal(returnPortal.transformVarbit, 15159, 'the hidden desert portal uses the cache DT2 entry varbit');
+  assert.deepEqual(returnPortal.transforms, [48769, 48770, 48769], 'the quest-visible transform is the real Use portal');
   const objectHooks = [], customEvents = [], deathHooks = [], npcHitHooks = [], prompts = [];
   const resolvedHitHooks = [], playerDeathHooks = [], logoutHooks = [];
   const pendingPlayerHits = [], projectiles = [], spawnedFigures = [], removedFigures = [];
@@ -7270,6 +7274,7 @@ test('Desert Treasure II last medallion route traps the player, requires solving
       ? new core.Item(core.ItemIdentifiers.WHISPERERS_MEDALLION, 1) : index === 1
         ? new core.Item(995, 200) : new core.Item(-1, 0));
     const equipmentItems = Array.from({ length: 14 }, (_, index) => index === 0 ? new core.Item(1275, 1) : new core.Item(-1, 0));
+    const sentVarbits = [];
     const container = (items) => ({ getItems: () => items, setItems(value) { items.splice(0, items.length, ...value); },
       capacity: () => items.length, refreshItems() {},
       getAmount(id) { return items.reduce((sum, item) => sum + (item.getId() === id ? item.getAmount() : 0), 0); },
@@ -7287,7 +7292,9 @@ test('Desert Treasure II last medallion route traps the player, requires solving
       getCombat() { return { getHitQueue: () => ({ addPendingDamage: hits => pendingPlayerHits.push(...hits) }) }; },
       getSkillManager: () => ({ getMaxLevel: () => 99 }),
       getInventory: () => inventory, getEquipment: () => equipment,
-      getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+      getPacketSender: () => new Proxy({}, { get: (_target, method) => (...args) => {
+        if (method === 'sendVarbit') sentVarbits.push(args);
+      } }),
       moveTo(location) { this.location = location; }, sendMessage() {},
     };
     quest.setStage(p, 10);
@@ -7297,10 +7304,17 @@ test('Desert Treasure II last medallion route traps the player, requires solving
     assert.equal(p.location.x, 3103);
     assert.equal(inventory.getAmount(995), 0, 'equipment is secured outside the prison cell');
     assert.equal(equipment.getAmount(1275), 0, 'worn equipment is secured outside the prison cell');
+    const toggleCellGate = () => {
+      const event = { player: p, objectId: 48774, clickType: 1, location: { x: 3107, y: 9248, z: 0 } };
+      customEvents.filter(({ name }) => name === 'door:toggle').forEach(({ handler }) => handler(event));
+      return event;
+    };
+    assert.equal(toggleCellGate().handled, true, 'Doors/Open cannot bypass the lock before the hair clip is found');
+    assert.equal(attrs.get('desert-treasure-ii:final-cell-guess'), undefined, 'a locked-door click without a hair clip does not start the code prompt');
     assert.equal(objectHooks[0]({ player: p, objectId: 48777, option: 'Search', location: { x: 3103, y: 9246, z: 0 } }), true);
     assert.equal(inventory.getAmount(core.ItemIdentifiers.HAIR_CLIP_3), 1);
     attrs.set('desert-treasure-ii:final-cell-solution', '0,5,8,9');
-    assert.equal(objectHooks[0]({ player: p, objectId: 48774, option: 'Open', location: { x: 3107, y: 9248, z: 0 } }), true);
+    assert.equal(toggleCellGate().handled, true, 'the shared Open action starts lock-picking when the hair clip is carried');
     for (const digit of [0, 5, 8, 9]) {
       let prompt = prompts.at(-1);
       let optionIndex = prompt.options.findIndex((entry, index) => index % 2 === 0 && entry === String(digit));
@@ -7315,7 +7329,7 @@ test('Desert Treasure II last medallion route traps the player, requires solving
       prompt.options[optionIndex + 1]();
     }
     assert.equal(attrs.get('desert-treasure-ii:final-cell-open'), true);
-    assert.equal(objectHooks[0]({ player: p, objectId: 48774, option: 'Open', location: { x: 3107, y: 9248, z: 0 } }), false,
+    assert.equal(toggleCellGate().handled, undefined,
       'after the solved lock, the quest lets the shared Doors plugin swing the cache Gate');
     assert.equal(objectHooks[0]({ player: p, objectId: 48771, option: 'Search', location: { x: 3115, y: 9263, z: 0 } }), true);
     assert.equal(attrs.get('desert-treasure-ii:final-cell-chest'), true);
@@ -7331,6 +7345,9 @@ test('Desert Treasure II last medallion route traps the player, requires solving
     assert.equal(spawnedFigure.id, core.NpcIdentifiers.MYSTERIOUS_FIGURE_4);
     assert.equal(spawnedFigure.maxHitpoints, 450);
     assert.equal(spawnedFigure.target, p, 'the Figure starts attacking only after the altar transcript ends');
+    handlers.playerProcess.at(-1)({ player: p });
+    assert.equal(sentVarbits.filter(([id]) => id === 15159).at(-1)?.[1], 1,
+      'the cache-morphed desert return portal appears while the Figure trial is active');
     let attackStyle = 1;
     p.isPlayer = () => true; p.getAsPlayer = () => p;
     p.getFightType = () => ({ getBonusType: () => attackStyle });
@@ -7393,8 +7410,14 @@ test('Desert Treasure II last medallion route traps the player, requires solving
     assert.equal(p.movementBlocked, false, 'death clears any active Figure movement lock');
     assert.equal(spawnedFigure.scriptedMovement, false, 'death clears the Figure scripted-movement pause');
     assert.equal(attrs.get('desert-treasure-ii:final-figure-started'), true, 'the altar fight remains resumable after death');
-    p.location = new core.Location(3086, 9260, 0);
+    handlers.playerProcess.at(-1)({ player: p });
+    assert.equal(sentVarbits.filter(([id]) => id === 15159).at(-1)?.[1], 1,
+      'the return portal remains visible after death');
+    p.location = new core.Location(3175, 2887, 0);
     p.hitpoints = 120;
+    assert.equal(objectHooks[0]({ player: p, objectId: 49497, definition: { id: 48770 }, option: 'Use', location: { x: 3175, y: 2887, z: 0 } }), true,
+      'the cache-visible portal returns the player to the Figure cell');
+    assert.deepEqual([p.location.x, p.location.y, p.location.z], [3103, 9246, 0]);
     process();
     assert.equal(spawnedFigures.length, 2, 'returning to the cell respawns a fresh Figure after death');
     assert.equal(spawnedFigures[1].maxHitpoints, 450, 're-entry restores the canonical Figure hitpoints');
