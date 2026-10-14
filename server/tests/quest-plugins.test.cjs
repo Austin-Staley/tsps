@@ -4053,6 +4053,7 @@ test('Blood Moon northern-door transcript starts the private Lowerniel encounter
   const attributes = new Map();
   const items = new Map([[api.core.ItemIdentifiers.HALLOWED_FLAIL, 1]]);
   const messages = [];
+  const bossAnimations = [];
   const inventory = {
     contains: id => (items.get(id) ?? 0) > 0,
     adds: (id, count = 1) => (items.set(id, (items.get(id) ?? 0) + count), true),
@@ -4075,6 +4076,7 @@ test('Blood Moon northern-door transcript starts the private Lowerniel encounter
     setHitpoints(value) { this.hitpoints = value; },
     getHitpoints() { return this.hitpoints; },
     getMaxHitpoints() { return this.maxHitpoints; },
+    performAnimation(animation) { bossAnimations.push(animation.id); },
     getCombat: () => ({ getLastAttack: () => ({ reset() {} }) }),
   };
   api.spawnNpc = (definition) => (spawns.push(definition), boss);
@@ -4100,6 +4102,9 @@ test('Blood Moon northern-door transcript starts the private Lowerniel encounter
     getPrayerActive: () => [],
     getCombat: () => ({ getHitQueue: () => ({ addPendingDamage() {} }) }),
     getDialogueManager: () => ({ startDialogues() {} }),
+    getSkillManager: () => ({ getMaxLevel: skill => skill === api.core.Skill.HITPOINTS ? 99 : 99,
+      setCurrentLevel(skill, value) { if (skill === api.core.Skill.PRAYER) player.prayer = value; } }),
+    setHitpoints(value) { player.hitpoints = value; },
     moveTo: (location) => { player.destination = [location.getX(), location.getY(), location.getZ()]; },
     sendMessage: message => messages.push(message),
   };
@@ -4143,7 +4148,30 @@ test('Blood Moon northern-door transcript starts the private Lowerniel encounter
   assert.equal(boss.getArea(), bossArea);
   assert.equal(boss.maxHitpoints, 3000);
   assert.equal(boss.hitpoints, 3000);
-  const arena = player.getArea();
+  let arena = player.getArea();
+  const beforeDeath = handlers.playerBeforeDeath.at(-1);
+  const deathAttempt = { player, preventDeath: false };
+  beforeDeath(deathAttempt);
+  assert.equal(deathAttempt.preventDeath, true, 'the northern-door duel uses the captured safe retry');
+  assert.equal(player.hitpoints, 99, 'a failed attempt restores hitpoints');
+  assert.equal(player.prayer, 99, 'a failed attempt restores Prayer');
+  assert.deepEqual(player.destination, [2507, 7383, 0], 'the retry returns beside the roof door');
+  assert.equal(player.getArea(), null, 'the private duel ends cleanly before retry');
+  action({ player, stepId: 't7FMNM' });
+  assert.equal(player.getArea(), bossArea, 'the player can re-enter after a safe failure');
+  assert.equal(boss.hitpoints, 3000, 'a retry starts a fresh full-health Lowerniel');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.final-native-stage'), 170);
+  const logout = handlers.playerLogout.findLast(handler => handler.name === 'handleFinalDrakanLogout');
+  logout({ player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.drakan-area'), null,
+    'logout removes the cyclic private area from saved player attributes');
+  assert.deepEqual(player.destination, [2507, 7383, 0], 'logout saves a recoverable public Castle tile');
+  const recover = handlers.playerLogin.find(handler => handler.name === 'recoverFinalDrakanLanding');
+  recover({ player });
+  assert.deepEqual(player.destination, [2507, 7383, 0], 'stale arena coordinates recover beside the fight door');
+  action({ player, stepId: 't7FMNM' });
+  assert.equal(boss.hitpoints, 3000, 'a recovered player can start the duel normally');
+  arena = player.getArea();
   boss.hitpoints = 2100;
   arena.process(boss);
   assert.match(messages.at(-1) ?? '', /wall of blood|blood portals/i,
@@ -4153,6 +4181,8 @@ test('Blood Moon northern-door transcript starts the private Lowerniel encounter
   arena.process(boss);
   assert.match(messages.at(-1) ?? '', /appears briefly to your .* turning/i,
     'the 900 HP transition begins the three-cycle spear-lunge phase');
+  assert.ok(bossAnimations.includes(14315), 'phase changes use the captured phase-out animation');
+  assert.ok(bossAnimations.includes(14316), 'the final lunge phase uses the captured phase-in animation');
 
   const hitModify = handlers.npcHitModify.findLast(handler => handler.name === 'handleFinalDrakanHit');
   const parts = [{ damage: 40, getDamage() { return this.damage; }, setDamage(value) { this.damage = value; } }];
@@ -4170,15 +4200,24 @@ test('Blood Moon northern-door transcript starts the private Lowerniel encounter
   boss.hitpoints = 0;
   const death = handlers.npcDeath.findLast(handler => handler.name === 'handleWyrdDeath');
   death({ npc: boss, killer: player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.drakan-death-confirmed'), true,
+    'the actual zero-HP kill is saved before the cutscene can be interrupted');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.final-native-stage'), 172);
   assert.equal(attributes.get('quest.the_blood_moon_rises.drakan-defeated'), undefined,
-    'the completion marker is withheld until the final dialogue action');
+    'the completed encounter marker is withheld until the final dialogue action');
+  handlers.playerLogin.find(handler => handler.name === 'resumeFinalDrakanVictory')({ player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.final-native-stage'), 172,
+    'the saved zero-HP win resumes at its exact native chapter after relog');
   action({ player, stepId: 'YweyKw' });
   assert.equal(inventory.contains(api.core.ItemIdentifiers.SUNSPEAR), true,
     'the Sunspear is recovered only after the actual zero-HP death callback');
   action({ player, stepId: 'HNA3XS' });
   assert.equal(attributes.get('quest.the_blood_moon_rises.drakan-defeated'), true,
     'the final death transcript settles the encounter before the return scene');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.final-native-stage'), 174);
   assert.deepEqual(player.destination, [3731, 3220, 0]);
+  action({ player, stepId: 'I_SfUV' });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.final-native-stage'), 176);
   action({ player, stepId: 'BzMe5D' });
   assert.equal(rewards, 1, 'the final reward only follows the real kill and transcript');
 });
@@ -11147,7 +11186,15 @@ test('Blood Moon native bitfield mapping restores Slepe refinery phase without c
  attrs.set('quest.the_blood_moon_rises.preparations',{flail:true,stakes:true});quest.setStage(player,60);assert.equal(bits.get(15464),114);
  attrs.set('quest.the_blood_moon_rises.siege-defence',{phase:'hall'});quest.setStage(player,70);assert.equal(bits.get(15464),120);
  bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),120);assert.equal(quest.getStage(player),70);
- quest.setStage(player,100);assert.equal(bits.get(15464),170,'the captured final northern-door chapter uses native value 170');
+ quest.setStage(player,100);assert.equal(bits.get(15464),164,'the rescued Wyrd chapter begins before Efaritay opens the portal');
+ attrs.set('quest.the_blood_moon_rises.final-portal-open',true);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),166,'opening Efaritay’s portal moves the native chapter to 166');
+ attrs.set('quest.the_blood_moon_rises.final-native-stage',166);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),166,'the opened portal phase survives native varbit resync');
+ attrs.set('quest.the_blood_moon_rises.final-native-stage',168);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),168,'the castle arrival phase survives native varbit resync');
+ attrs.set('quest.the_blood_moon_rises.final-native-stage',170);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),170,'the northern-door fight starts at captured native value 170');
+ attrs.set('quest.the_blood_moon_rises.final-native-stage',172);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),172,'the actual kill phase survives native varbit resync');
+ attrs.set('quest.the_blood_moon_rises.drakan-defeated',true);attrs.set('quest.the_blood_moon_rises.final-native-stage',174);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),174,'the return scene phase survives native varbit resync');
+ attrs.set('quest.the_blood_moon_rises.final-native-stage',176);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),176,'the coast scene phase survives native varbit resync');
+ attrs.delete('quest.the_blood_moon_rises.final-native-stage');attrs.delete('quest.the_blood_moon_rises.final-portal-open');attrs.delete('quest.the_blood_moon_rises.final-portal-used');attrs.delete('quest.the_blood_moon_rises.drakan-defeated');attrs.delete('quest.the_blood_moon_rises.drakan-death-confirmed');
  quest.setStage(player,110);assert.equal(bits.get(15464),178,'the captured post-Sunspear completion uses native value 178');assert.equal(quest.isComplete(player),true);
 });
 

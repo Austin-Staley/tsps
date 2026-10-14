@@ -559,6 +559,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   const WYRD_DEFEATED_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-defeated";
   const DRAKAN_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.drakan-area";
   const DRAKAN_ENCOUNTER_COMPLETE = "quest.the_blood_moon_rises.drakan-defeated";
+  const DRAKAN_DEATH_CONFIRMED = "quest.the_blood_moon_rises.drakan-death-confirmed";
+  const FINAL_NATIVE_STAGE_ATTRIBUTE = "quest.the_blood_moon_rises.final-native-stage";
   const DRAKAN_SUPPLY_ATTRIBUTE = "quest.the_blood_moon_rises.final-drakan-supplies";
   const FINAL_PORTAL_OPEN_ATTRIBUTE = "quest.the_blood_moon_rises.final-portal-open";
   const FINAL_PORTAL_USED_ATTRIBUTE = "quest.the_blood_moon_rises.final-portal-used";
@@ -579,6 +581,11 @@ module.exports = function registerTheBloodMoonRises(api) {
     "left", "right", "north", "left", "right", "left", "north", "pincer",
     "left", "north", "right",
   ]);
+  // Animation ids and sequence names are from the captured final Lowerniel encounter.
+  const FINAL_DRAKAN_ANIM = Object.freeze({
+    melee: 14309, magic: 14311, phaseOut: 14315, phaseIn: 14316,
+    thrustTelegraph: 14327, sweepTelegraph: 14333,
+  });
   const SIEGE_DRAKAN_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.siege-drakan-area";
   const SIEGE_DRAKAN_COMPLETE = "quest.the_blood_moon_rises.siege-drakan-defeated";
   const SIEGE_DEFENCE_ATTRIBUTE = "quest.the_blood_moon_rises.siege-defence";
@@ -968,6 +975,9 @@ module.exports = function registerTheBloodMoonRises(api) {
       super.postLeave(mobile, logout);
       if (this.isDestroyed()) drakanEncounters.delete(this);
     }
+    animate(fight, animation) {
+      fight.boss.performAnimation?.(new api.core.Animation(animation));
+    }
     process(mobile) {
       if (!mobile?.isNpc?.()) return;
       const fight = drakanEncounters.get(this);
@@ -1080,18 +1090,23 @@ module.exports = function registerTheBloodMoonRises(api) {
         }
       } else if (fight.attackIndex % 5 === 1) {
         fight.warning = "thrust"; fight.markedX = loc.getX(); fight.markedY = loc.getY(); fight.impactAt = now + 2;
+        this.animate(fight, FINAL_DRAKAN_ANIM.thrustTelegraph);
         player.sendMessage("Lowerniel draws his spear back and lines up a thrust. Step at least one tile aside.");
       } else if (fight.attackIndex % 5 === 2) {
         fight.warning = "blood-spear"; fight.impactAt = now + 2;
+        this.animate(fight, FINAL_DRAKAN_ANIM.magic);
         player.sendMessage("Lowerniel fires a blood spear. Protect from Magic before it lands.");
       } else if (fight.attackIndex % 5 === 3) {
         fight.warning = "front-back"; fight.markedX = loc.getX(); fight.markedY = loc.getY(); fight.impactAt = now + 2;
+        this.animate(fight, FINAL_DRAKAN_ANIM.sweepTelegraph);
         player.sendMessage("Blood gathers in front of and behind Lowerniel. Move to either side before it bursts.");
       } else if (fight.attackIndex % 5 === 4) {
         fight.warning = "semicircle"; fight.markedX = loc.getX(); fight.markedY = loc.getY(); fight.impactAt = now + 2;
+        this.animate(fight, FINAL_DRAKAN_ANIM.sweepTelegraph);
         player.sendMessage("Lowerniel sweeps his spear in an arc. Move around him to the opposite side.");
       } else {
         fight.warning = "melee"; fight.impactAt = now + 1;
+        this.animate(fight, FINAL_DRAKAN_ANIM.melee);
         player.sendMessage("Lowerniel closes in with a melee strike. Protect from Melee.");
       }
     }
@@ -1103,6 +1118,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       fight.markedX = loc.getX();
       fight.markedY = loc.getY();
       fight.impactAt = now + 3;
+      this.animate(fight, FINAL_DRAKAN_ANIM.phaseOut);
       player.sendMessage(direction === "pincer"
         ? "Blood portals open on both sides. Run straight north or south through the walls of blood."
         : `A wall of blood surges from the ${direction}. Run straight toward it and cross its path by four tiles.`);
@@ -1128,6 +1144,7 @@ module.exports = function registerTheBloodMoonRises(api) {
           fight.special = "blood-strikes";
           fight.warning = "blood-strikes";
           fight.impactAt = now + 3;
+          this.animate(fight, FINAL_DRAKAN_ANIM.phaseIn);
           player.sendMessage("Lowerniel reappears and hurls four blood strikes. Protect from Magic before they land.");
         } else fight.nextAttackAt = now + 1;
         return;
@@ -1175,6 +1192,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       fight.markedX = loc.getX();
       fight.markedY = loc.getY();
       fight.impactAt = now + 1;
+      this.animate(fight, FINAL_DRAKAN_ANIM.phaseIn);
       player.sendMessage(`Lowerniel appears briefly to your ${direction}, turning as he lines up a lunge.`);
     }
     processLunges(fight, player, boss, now) {
@@ -1190,6 +1208,7 @@ module.exports = function registerTheBloodMoonRises(api) {
         }
         fight.warning = "lunge";
         fight.impactAt = now + 1;
+        this.animate(fight, FINAL_DRAKAN_ANIM.thrustTelegraph);
         player.sendMessage(`Lowerniel settles to your ${fight.lungeDirection}. Dodge two to five tiles perpendicular to that final direction.`);
         return;
       }
@@ -1361,7 +1380,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function startDrakanBattle(player) {
-    if (stage(player) !== STAGE.FINAL) return false;
+    if (stage(player) !== STAGE.FINAL || player.getAttribute(DRAKAN_DEATH_CONFIRMED) ||
+      player.getAttribute(DRAKAN_ENCOUNTER_COMPLETE)) return false;
     const existing = player.getAttribute(DRAKAN_AREA_ATTRIBUTE);
     if (existing && existing.isDestroyed?.() !== true) return true;
     const area = new DrakanEncounterArea(player.getUsername?.());
@@ -1479,14 +1499,81 @@ module.exports = function registerTheBloodMoonRises(api) {
   function finishDrakanEncounter(player) {
     const area = player.getAttribute(DRAKAN_AREA_ATTRIBUTE);
     const fight = area && drakanEncounters.get(area);
-    if (!fight || !fight.deathConfirmed || fight.boss.getHitpoints() > 0) return false;
+    if (!player.getAttribute(DRAKAN_DEATH_CONFIRMED) &&
+      (!fight || !fight.deathConfirmed || fight.boss.getHitpoints() > 0)) return false;
+    if (fight) {
+      fight.finished = true;
+      api.removeNpc(fight.boss);
+      area.leave(player, false);
+      drakanEncounters.delete(area);
+    }
+    player.setAttribute(DRAKAN_AREA_ATTRIBUTE, null);
+    player.setAttribute(DRAKAN_ENCOUNTER_COMPLETE, true);
+    return true;
+  }
+
+  function setFinalNativeStage(player, value) {
+    player.setAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE, value);
+    player.getPacketSender().sendVarbit(15464, value);
+  }
+
+  function resumeFinalDrakanVictory({ player }) {
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.FINAL ||
+      !player.getAttribute(DRAKAN_DEATH_CONFIRMED) || player.getAttribute(DRAKAN_ENCOUNTER_COMPLETE)) return;
+    setFinalNativeStage(player, Math.max(172, Number(player.getAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE)) || 0));
+    startTranscript(api, player, FINAL_DRAKAN_ID, PAGE, "night-of-the-blood-moon-upon-killing-lowerniel-drakan");
+  }
+
+  function cleanupFinalDrakanFight(player) {
+    const area = player?.getAttribute(DRAKAN_AREA_ATTRIBUTE);
+    const fight = area && drakanEncounters.get(area);
+    if (!fight) {
+      if (player) player.setAttribute(DRAKAN_AREA_ATTRIBUTE, null);
+      return;
+    }
     fight.finished = true;
     api.removeNpc(fight.boss);
     area.leave(player, false);
-    player.setAttribute(DRAKAN_AREA_ATTRIBUTE, null);
-    player.setAttribute(DRAKAN_ENCOUNTER_COMPLETE, true);
     drakanEncounters.delete(area);
-    return true;
+    player.setAttribute(DRAKAN_AREA_ATTRIBUTE, null);
+  }
+
+  function handleFinalDrakanLogout({ player }) {
+    const area = player?.getAttribute(DRAKAN_AREA_ATTRIBUTE);
+    if (!area) return;
+    cleanupFinalDrakanFight(player);
+    if (stage(player) === STAGE.FINAL && !player.getAttribute(DRAKAN_DEATH_CONFIRMED)) {
+      player.moveTo(new Location(FINAL_CASTLE_ARRIVAL.x, FINAL_CASTLE_ARRIVAL.y, FINAL_CASTLE_ARRIVAL.z));
+    }
+  }
+
+  function recoverFinalDrakanLanding({ player }) {
+    if (!player || stage(player) !== STAGE.FINAL || player.getAttribute(DRAKAN_DEATH_CONFIRMED)) return;
+    const location = player.getLocation?.();
+    if (location?.getZ?.() === 3 && location.getX() >= 2495 && location.getX() <= 2514 &&
+      location.getY() >= 7823 && location.getY() <= 7853) {
+      cleanupFinalDrakanFight(player);
+      player.moveTo(new Location(FINAL_CASTLE_ARRIVAL.x, FINAL_CASTLE_ARRIVAL.y, FINAL_CASTLE_ARRIVAL.z));
+    }
+  }
+
+  function handleFinalDrakanBeforeDeath(event) {
+    const player = event?.player;
+    const area = player?.getAttribute(DRAKAN_AREA_ATTRIBUTE);
+    const fight = area && drakanEncounters.get(area);
+    if (!player || !fight || fight.player !== player || fight.deathConfirmed || fight.finished) return;
+    event.preventDeath = true;
+    player.setHitpoints(player.getSkillManager().getMaxLevel(Skill.HITPOINTS));
+    player.getSkillManager().setCurrentLevel(Skill.PRAYER,
+      player.getSkillManager().getMaxLevel(Skill.PRAYER), true);
+    fight.finished = true;
+    api.removeNpc(fight.boss);
+    area.leave(player, false);
+    drakanEncounters.delete(area);
+    player.setAttribute(DRAKAN_AREA_ATTRIBUTE, null);
+    setFinalNativeStage(player, 170);
+    player.moveTo(new Location(FINAL_CASTLE_ARRIVAL.x, FINAL_CASTLE_ARRIVAL.y, FINAL_CASTLE_ARRIVAL.z));
+    player.sendMessage("You awaken beside the northern door with your remaining supplies. Lowerniel still waits inside.");
   }
 
   function syncFinalEfaritay(player) {
@@ -1560,12 +1647,16 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function syncFinalEfaritayOnLogin({ player }) {
+    if (player && stage(player) === STAGE.FINAL) {
+      player.getPacketSender().sendVarbit(15464, nativeStage(STAGE.FINAL, player));
+    }
     syncFinalEfaritay(player);
   }
 
   function openFinalPortal(player) {
     if (!player || stage(player) !== STAGE.FINAL) return false;
     player.setAttribute(FINAL_PORTAL_OPEN_ATTRIBUTE, true);
+    setFinalNativeStage(player, 166);
     syncFinalEfaritay(player);
     return true;
   }
@@ -1608,6 +1699,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       return true;
     }
     player.setAttribute(FINAL_PORTAL_USED_ATTRIBUTE, false);
+    setFinalNativeStage(player, 168);
     player.moveTo(new Location(FINAL_PORTAL.x, FINAL_PORTAL.y, FINAL_PORTAL.z));
     syncFinalEfaritay(player);
     return true;
@@ -1621,6 +1713,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (npc.getHitpoints() > 0) return false;
     fight.ending = true;
     fight.deathConfirmed = true;
+    fight.player.setAttribute(DRAKAN_DEATH_CONFIRMED, true);
+    setFinalNativeStage(fight.player, 172);
     startTranscript(api, fight.player, npc.getId(), PAGE, "night-of-the-blood-moon-upon-killing-lowerniel-drakan");
     return true;
   }
@@ -2013,7 +2107,15 @@ module.exports = function registerTheBloodMoonRises(api) {
       const phase = player?.getAttribute(SIEGE_DEFENCE_ATTRIBUTE)?.phase;
       return ({ 'fall-back': 118, hall: 120, breach: 122 })[phase] ?? 116;
     }
-    if (value === STAGE.FINAL) return 170;
+    if (value === STAGE.FINAL) {
+      const saved = Number(player?.getAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE));
+      if (Number.isInteger(saved) && saved >= 164 && saved <= 176) return saved;
+      if (player?.getAttribute(DRAKAN_ENCOUNTER_COMPLETE)) return 174;
+      if (player?.getAttribute(DRAKAN_DEATH_CONFIRMED)) return 172;
+      if (player?.getAttribute(FINAL_PORTAL_USED_ATTRIBUTE)) return 168;
+      if (player?.getAttribute(FINAL_PORTAL_OPEN_ATTRIBUTE)) return 166;
+      return 164;
+    }
     return value;
   }
 
@@ -4210,6 +4312,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.getAttribute(FINAL_PORTAL_OPEN_ATTRIBUTE)) {
       event.handled = true;
       player.setAttribute(FINAL_PORTAL_USED_ATTRIBUTE, true);
+      setFinalNativeStage(player, 168);
       cleanupFinalEfaritay({ player });
       player.moveTo(new Location(FINAL_CASTLE_ARRIVAL.x, FINAL_CASTLE_ARRIVAL.y, FINAL_CASTLE_ARRIVAL.z));
       spawnFinalArrivalActors(player);
@@ -4337,13 +4440,15 @@ module.exports = function registerTheBloodMoonRises(api) {
         event.end = true;
         return;
       }
+      setFinalNativeStage(player, 170);
       startDrakanBattle(player);
     }
     if (event.stepId === "BzMe5D") finishDrakanEncounter(player);
     const finalDrakanArea = player.getAttribute(DRAKAN_AREA_ATTRIBUTE);
     const finalDrakanFight = finalDrakanArea && drakanEncounters.get(finalDrakanArea);
     if (event.stepId === "YweyKw" &&
-      (player.getAttribute(DRAKAN_ENCOUNTER_COMPLETE) || finalDrakanFight?.deathConfirmed)) {
+      (player.getAttribute(DRAKAN_ENCOUNTER_COMPLETE) || player.getAttribute(DRAKAN_DEATH_CONFIRMED) ||
+        finalDrakanFight?.deathConfirmed)) {
       const inventory = player.getInventory();
       if (!hasItem(player, ItemIdentifiers.SUNSPEAR) && !inventory.adds(ItemIdentifiers.SUNSPEAR, 1)) {
         event.handled = true;
@@ -4354,13 +4459,15 @@ module.exports = function registerTheBloodMoonRises(api) {
       event.handled = true;
       event.box = { items: [ItemIdentifiers.SUNSPEAR] };
     }
-    if (event.stepId === "HNA3XS" && finalDrakanFight?.deathConfirmed) {
+    if (event.stepId === "HNA3XS" &&
+      (player.getAttribute(DRAKAN_DEATH_CONFIRMED) || finalDrakanFight?.deathConfirmed)) {
       if (!finishDrakanEncounter(player)) {
         event.handled = true;
         player.sendMessage("The return portal cannot open until Lowerniel's defeat has settled.");
         event.end = true;
         return;
       }
+      setFinalNativeStage(player, 174);
       player.moveTo(new Location(FINAL_GRAVEYARD_AFTER_FIGHT.x,
         FINAL_GRAVEYARD_AFTER_FIGHT.y, FINAL_GRAVEYARD_AFTER_FIGHT.z));
       spawnFinalCutsceneActors(player);
@@ -4369,6 +4476,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       transformFinalWyrdForCutscene(player);
     }
     if (event.stepId === "I_SfUV" && stage(player) === STAGE.FINAL) {
+      setFinalNativeStage(player, 176);
       player.moveTo(new Location(FINAL_GRAVEYARD_AFTER_FIGHT.x,
         FINAL_GRAVEYARD_AFTER_FIGHT.y, FINAL_GRAVEYARD_AFTER_FIGHT.z));
       cleanupFinalCutsceneActors({ player });
@@ -4396,6 +4504,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
     if (event.stepId === "xt3dPV") advance(player, STAGE.FENCE_FOUND);
     if (event.stepId === "2QgFZA" && player.getAttribute(WYRD_DEFEATED_ATTRIBUTE)) {
+      player.setAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE, 164);
       advance(player, STAGE.FINAL);
       syncFinalEfaritay(player);
     }
@@ -6112,10 +6221,13 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogin(resumeHideoutEscape);
   api.onPlayerLogin(syncCastleShrine);
   api.onPlayerLogin(syncCastleRoomOnLogin);
+  api.onPlayerLogin(recoverFinalDrakanLanding);
   api.onPlayerLogin(syncFinalEfaritayOnLogin);
+  api.onPlayerLogin(resumeFinalDrakanVictory);
   api.onPlayerLogout(cleanupCastleActors);
   api.onPlayerLogout(cleanupFinalEfaritay);
   api.onPlayerLogout(cleanupFinalCutsceneActors);
+  api.onPlayerLogout(handleFinalDrakanLogout);
   api.onPlayerLogout(handleSiegeLogout);
   api.onPlayerLogout(cleanupWyrdEncounter);
   api.onPlayerLogout(hideoutDefense.onPlayerLogout);
@@ -6129,11 +6241,14 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onNpcDeath(handleSlepeManorDeath);
   api.onNpcDeath(handlePaterdomusMonkDeath);
   api.onNpcDeath(handleCastleNpcDeath);
+  api.onPlayerBeforeDeath(handleFinalDrakanBeforeDeath);
   api.persistAttribute(HIDEOUT_DEFENSE_COMPLETE);
   api.onNpcHitModify(handleSiegeDrakanHit);
   api.onNpcHitModify(handleFinalDrakanHit);
   api.persistAttribute(WYRD_DEFEATED_ATTRIBUTE);
   api.persistAttribute(DRAKAN_ENCOUNTER_COMPLETE);
+  api.persistAttribute(DRAKAN_DEATH_CONFIRMED);
+  api.persistAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE);
   api.persistAttribute(FINAL_PORTAL_OPEN_ATTRIBUTE);
   api.persistAttribute(FINAL_PORTAL_USED_ATTRIBUTE);
   api.persistAttribute(DRAKAN_SUPPLY_ATTRIBUTE);
