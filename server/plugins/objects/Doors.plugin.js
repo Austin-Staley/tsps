@@ -91,6 +91,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     // Troll Stronghold's cache has an action-less open loc 3811 with the same
     // model as closed 3810, so it cannot be paired by the normal action scan.
     [O.STOREROOM_DOOR, O.STOREROOM_DOOR + 1],
+    // Slepe church crypt gate: its open form 39513 has the same model but no action.
+    [O.GATE_210, O.GATE_211],
   ]);
 
   // Tree Gnome Stronghold main gate: one 5x2 loc (190, face 2) opens into two

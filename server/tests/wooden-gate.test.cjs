@@ -192,6 +192,29 @@ test('Ghorrock Prison’s keyed western gate uses its cache-supported self-openi
   }
 });
 
+test('Slepe church crypt gate opens through its actionless cache partner', async () => {
+  await initializeMapCollisionOnce();
+  const { GATE_210: closedId, GATE_211: openId } = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers;
+  const closed = CacheDefinitions.getObject(closedId);
+  const opened = CacheDefinitions.getObject(openId);
+  assert.equal(closed.name, 'Gate');
+  assert.deepEqual(closed.actions.slice(0, 1), ['Open']);
+  assert.equal(opened.name, 'Gate');
+  assert.ok(opened.actions.every(action => !action), 'the open cache loc has no action for auto-pair discovery');
+  assert.deepEqual(opened.models, closed.models);
+
+  const h = buildHarness({ cacheObjects: new Map([[closedId, closed], [openId, opened]]) });
+  try {
+    // The placed loc's cache rotation is 1; opening swings its replacement north.
+    assert.deepEqual(h.click(closedId, 3728, 9752, 1), [
+      ['register', openId, 3728, 9753, 2],
+      ['deregister', closedId, 3728, 9752, 1],
+    ]);
+  } finally {
+    h.restore();
+  }
+});
+
 test('Kourend Crypt cached Large doors keep their real double-leaf geometry and clear the plane-1 threshold', async () => {
   await initializeMapCollisionOnce();
   const cachedDoors = new Map([32404, 32405, 32406, 32407].map((id) => [
