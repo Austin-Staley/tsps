@@ -9933,6 +9933,39 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   const enraged = created.filter((npc) => npc.__dt2Whisperer).at(-1);
   assert.equal(enraged.maxHp, 100);
   assert.equal(enraged.__dt2WhispererEnraged, true);
+  const activateWhispererFragment = () => itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({
+    player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate',
+  });
+  const enragePosition = [player.location.x, player.location.y, player.location.z];
+  activateWhispererFragment();
+  assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, true,
+    'the fragment cannot leave while the unfinished enrage is alive');
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], enragePosition,
+    'an unfinished enrage cannot be escaped through the Shadow Realm boundary');
+  attrs.set('desert-treasure-ii:lassar', {
+    ...attrs.get('desert-treasure-ii:lassar'), inShadow: false, whispererStarted: false,
+  });
+  player.location = { x: 2656, y: 6370, z: 0 };
+  activateWhispererFragment();
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], [2400, 6370, 0],
+    'activating the fragment from the saved material position re-enters the unfinished enrage');
+  assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, true);
+  assert.equal(attrs.get('desert-treasure-ii:lassar').whispererStarted, true,
+    're-entering restores the active encounter so its owner-scoped second form resumes');
+  activateWhispererFragment();
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], [2400, 6370, 0],
+    'the resumed enrage still cannot be escaped before its second defeat');
+  attrs.set('desert-treasure-ii:lassar', {
+    ...attrs.get('desert-treasure-ii:lassar'), inShadow: false,
+  });
+  player.location = { x: 2500, y: 6000, z: 0 };
+  activateWhispererFragment();
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], [2500, 6000, 0],
+    'an unfinished enrage cannot use the fragment as a boundary-crossing teleport outside its cathedral');
+  attrs.set('desert-treasure-ii:lassar', {
+    ...attrs.get('desert-treasure-ii:lassar'), inShadow: true,
+  });
+  player.location = { x: 2400, y: 6370, z: 0 };
   assert.equal(enraged.__dt2WhispererPendingVolleys.length, 1, 'enrage uses one projectile per attack');
   assert.equal(enraged.__dt2WhispererPendingVolleys[0].style, core.CombatType.RANGED,
     'enrage opens with a ranged attack');
@@ -9949,6 +9982,14 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   enraged.registered = false;
   deathHooks[0]({ npc: enraged, killer: player });
   assert.equal(attrs.get('desert-treasure-ii:lassar').whispererDefeated, true, 'the second defeat opens the remains search');
+  attrs.set('desert-treasure-ii:lassar', {
+    ...attrs.get('desert-treasure-ii:lassar'), inShadow: true,
+  });
+  player.location = { x: 2400, y: 6370, z: 0 };
+  activateWhispererFragment();
+  assert.deepEqual([player.location.x, player.location.y, player.location.z], [2656, 6370, 0],
+    'the defeated enrage releases the player from the Shadow Realm');
+  assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, false);
   const remains = registeredObjects.find(object => object.getId?.() === 47578);
   assert.ok(remains, 'the earned kill creates the cache-backed Whisperer entrails loc');
   assert.deepEqual([remains.getLocation().getX(), remains.getLocation().getY(), remains.getLocation().getZ()], [2656, 6370, 0],

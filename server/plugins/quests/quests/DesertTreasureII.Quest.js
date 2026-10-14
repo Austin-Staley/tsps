@@ -4831,6 +4831,29 @@ module.exports = function registerDesertTreasureII(api) {
       const y = location?.getY?.() ?? location?.y;
       const z = location?.getZ?.() ?? location?.z ?? 0;
       const whisperer = spawned.get(p)?.whisperer;
+      if (state.whispererEnraged && !state.whispererDefeated) {
+        // The second form must be defeated in the Shadow Realm. Logging out
+        // clears the transient encounter and resets inShadow, so the fragment
+        // also serves as the ordinary way to re-enter the saved enrage.
+        const atCathedral = z === 0
+          && ((x >= 2624 && x <= 2688 && y >= 6320 && y <= 6448)
+            || (x >= 2336 && x <= 2432 && y >= 6320 && y <= 6448));
+        if (!atCathedral) {
+          p.sendMessage("The blackstone fragment only answers near the Whisperer's cathedral.");
+          event.handled = true;
+          return true;
+        }
+        if (state.inShadow) {
+          p.sendMessage("The Whisperer's final form is still in the Shadow Realm. Defeat her before leaving.");
+          event.handled = true;
+          return true;
+        }
+        p.moveTo(new api.core.Location(x - 256, y, z));
+        setLassar(p, { ...state, inShadow: true, whispererStarted: true });
+        p.sendMessage("The blackstone fragment draws you back into the Shadow Realm to face the Whisperer's final form.");
+        event.handled = true;
+        return true;
+      }
       if (whisperer?.__dt2WhispererSpecial === "soul-siphon") {
         if (state.inShadow && whisperer.__dt2WhispererCompletedSoulSet == null) {
           p.sendMessage("The Whisperer still siphons souls. Kill one complete set chanting the same phrase before leaving the Shadow Realm.");
