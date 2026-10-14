@@ -21,11 +21,12 @@ function setup() {
     getId() { return this.id; },
     getLocation() { return { getX: () => this.location.x, getY: () => this.location.y }; },
     isRegistered: () => true,
-    setOwner() {}, setOwnerOnly() {}, getCombat() { return { attack: (target) => { this.target = target; this.attacks = (this.attacks ?? 0) + 1; } }; },
+    setOwner(value) { this.owner = value; }, setOwnerOnly(value) { this.ownerOnly = value; }, getCombat() { return { attack: (target) => { this.target = target; this.attacks = (this.attacks ?? 0) + 1; } }; },
     setScriptedMovement(value) { this.scriptedMovement = value; },
     setHitpointsLocked(value) { this.hitpointsLocked = value; },
     setMaxHitpoints(value) { this.maxHitpoints = value; return this; },
     setHitpoints(value) { this.hitpoints = value; return this; },
+    getHitpoints() { return this.hitpoints; },
   });
   const area = {
     entities: [],
@@ -255,6 +256,53 @@ test("Jhallan defense lasts three minutes (300 area ticks) and asylum transcript
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-progress"), 58);
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-complete"), true);
   assert.equal(emitted.filter(({ name }) => name === "dt2:sucellus-prison-complete").length, 1);
+});
+
+test("Jhallan pursues through prison corridors, leaves the safe rooms clear, and stops before the refugee defense", () => {
+  const { handlers, player, area, createdNpcs, moveToSource } = setup();
+  player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 30);
+
+  moveToSource(2902, 6445); // inside the north-west chest room
+  handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 100 });
+  assert.equal(createdNpcs.filter((value) => value.id === 12353).length, 0,
+    "Jhallan does not enter the room where the Emerald key was found");
+
+  moveToSource(2920, 6445); // the corridor just beyond its west door
+  handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 101 });
+  let pursuer = player.getAttribute("desert-treasure-ii:sucellus-prison-jhallan-pursuer");
+  assert.equal(pursuer.id, 12353, "the attacking cache variant is used, not the conversation-only 12355");
+  assert.equal(pursuer.maxHitpoints, 1500, "the Wiki combat profile is retained");
+  assert.equal(pursuer.owner, player);
+  assert.equal(pursuer.ownerOnly, true, "the pursuer belongs only to this prison instance's player");
+  assert.equal(pursuer.scriptedMovement, false, "ordinary NPC pathing and magic combat remain active");
+  assert.equal(pursuer.target, player, "Jhallan actively follows and attacks the player");
+
+  moveToSource(2968, 6417); // inside the seven-bed room
+  handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 102 });
+  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-jhallan-pursuer"), null);
+  assert.equal(area.entities.includes(pursuer), false, "entering a room breaks the pursuit");
+
+  moveToSource(2978, 6427); // back into the corridor, after the beds room
+  handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 103 });
+  pursuer = player.getAttribute("desert-treasure-ii:sucellus-prison-jhallan-pursuer");
+  assert.equal(pursuer.id, 12353, "leaving the safe room lets Jhallan reappear");
+  pursuer.hitpoints = 0;
+  handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 104 });
+  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-jhallan-pursuer"), null);
+  assert.equal(createdNpcs.filter((value) => value.id === 12353).length, 2,
+    "defeating the pursuer does not respawn him in the same corridor every tick");
+  moveToSource(2902, 6445);
+  handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 105 });
+  moveToSource(2920, 6445);
+  handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 106 });
+  pursuer = player.getAttribute("desert-treasure-ii:sucellus-prison-jhallan-pursuer");
+  assert.equal(createdNpcs.filter((value) => value.id === 12353).length, 3,
+    "leaving the safe room lets the pursuit restart");
+  player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 52);
+  handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 107 });
+  assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-jhallan-pursuer"), null,
+    "the corridor pursuit ends before the firecracker survival encounter");
+  assert.equal(area.entities.includes(pursuer), false);
 });
 
 test("Jhallan's shadow attack teleports and freezes briefly, then a marked tile can be dodged", () => {

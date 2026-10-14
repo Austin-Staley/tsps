@@ -13,6 +13,8 @@ module.exports = function registerSucellusPrison(api) {
   const GEAR_RETURNED = "desert-treasure-ii:sucellus-prison-gear-returned";
   const FIREWORKS = "desert-treasure-ii:sucellus-prison-fireworks";
   const DEFENCE_START = "desert-treasure-ii:sucellus-prison-defence-start";
+  const PURSUER = "desert-treasure-ii:sucellus-prison-jhallan-pursuer";
+  const PURSUER_DISMISSED = "desert-treasure-ii:sucellus-prison-jhallan-pursuer-dismissed";
   const LOCKPICK = I.LOCKPICK_4;
   const KEYS = { sapphire: I.SAPPHIRE_KEY_3, emerald: I.EMERALD_KEY_3, ruby: I.RUBY_KEY_3, diamond: I.DIAMOND_KEY };
   const ANSWERS = { sapphire: "214013", emerald: "LIES", ruby: "URLDRU", diamond: "WRATH" };
@@ -23,6 +25,12 @@ module.exports = function registerSucellusPrison(api) {
   const SHADOW_IMPACT_GRAPHIC = 1103;
   const RUBY_CLUE_CHESTS = [[2959, 6414], [2959, 6419], [2962, 6414], [2962, 6419], [2965, 6414], [2965, 6419], [2968, 6419]];
   const RUBY_NAMES = ["Vedius", "Grazon", "Phalina", "Marcus", "Nithrak", "Baelys", "Atreus"];
+  const SAFE_ROOMS = [
+    [2889, 2916, 6398, 6457], // the western room of chests where Jhallan first loses sight of you
+    [2965, 2974, 6413, 6420], // the seven-bed room
+    [2889, 2898, 6370, 6382], // the western cells
+    [2964, 2983, 6358, 6377], // the refugee camp
+  ];
   const LIBRARY_SHELVES = [[2931, 6430], [2931, 6432], [2932, 6430]];
   const LIBRARY_BOOKS = ["Innocence", "Longing", "Harmonious"];
   const CODE_CHEST = {
@@ -266,9 +274,46 @@ module.exports = function registerSucellusPrison(api) {
     npc.setOwner?.(player);
     npc.setOwnerOnly?.(true);
     npc.setScriptedMovement?.(false);
+    npc.__skipDefaultRespawn = true;
     area.add(npc);
     api.core.World.getAddNPCQueue().push(npc);
     return npc;
+  }
+
+  function isPrisonSafeRoom(x, y, z) {
+    return z === 2 && SAFE_ROOMS.some(([minX, maxX, minY, maxY]) =>
+      x >= minX && x <= maxX && y >= minY && y <= maxY);
+  }
+
+  function clearPursuer(player, area) {
+    removeOwnedNpc(area, player.getAttribute(PURSUER));
+    player.setAttribute(PURSUER, null);
+  }
+
+  function processJhallanPursuit(player, area, progress, x, y, z) {
+    const current = player.getAttribute(PURSUER);
+    if (progress < 30 || progress >= 52) {
+      if (current) clearPursuer(player, area);
+      player.setAttribute(PURSUER_DISMISSED, false);
+      return;
+    }
+    if (isPrisonSafeRoom(x, y, z)) {
+      if (current) clearPursuer(player, area);
+      player.setAttribute(PURSUER_DISMISSED, false);
+      return;
+    }
+    if (current && area.entities.includes(current) && (current.getHitpoints?.() ?? 1) > 0) return;
+    if (current) {
+      clearPursuer(player, area);
+      player.setAttribute(PURSUER_DISMISSED, true);
+    }
+    if (player.getAttribute(PURSUER_DISMISSED)) return;
+
+    // Wiki's 1,500-HP Jhallan uses the cache-backed four-tick magic attack.
+    // Keep it in the owner's copied prison; entering a room breaks pursuit.
+    const npc = spawnJhallan(area, player, N.JHALLAN_3, x, y, 1500);
+    player.setAttribute(PURSUER, npc);
+    npc.getCombat?.().attack?.(player);
   }
 
   function handlePrisonAssassinInteraction(event) {
@@ -504,6 +549,8 @@ module.exports = function registerSucellusPrison(api) {
 
   function startDefence(player, area) {
     if (state(player) !== 52 || player.getAttribute(FIREWORKS)) return;
+    clearPursuer(player, area);
+    player.setAttribute(PURSUER_DISMISSED, false);
     player.setAttribute(FIREWORKS, true);
     player.setAttribute(DEFENCE_START, null);
     setState(player, 54);
@@ -520,8 +567,10 @@ module.exports = function registerSucellusPrison(api) {
   function handleProcess(event) {
     const { player, area, cycle } = event ?? {};
     if (!player || !atArea(player, area)) return false;
+    const progress = state(player);
+    const [x, y, z] = worldTile(player, area);
+    processJhallanPursuit(player, area, progress, x, y, z);
     if (state(player) === 32) {
-      const [x, y] = worldTile(player, area);
       if (player.getAttribute(CREVICE_CLEARED) && x >= 2957 && x <= 2970 && y >= 6413 && y <= 6420) setState(player, 34);
       return true;
     }
@@ -623,6 +672,8 @@ module.exports = function registerSucellusPrison(api) {
   }
   function handleResume({ player, area }) {
     if (!player || !area || !player.getAttribute(ESCAPED) || !atArea(player, area)) return false;
+    clearPursuer(player, area);
+    player.setAttribute(PURSUER_DISMISSED, false);
     if (state(player) === 54) {
       removeOwnedNpc(area, player.getAttribute("desert-treasure-ii:sucellus-prison-jhallan"));
       for (const clone of defences.get(player)?.clones ?? []) removeOwnedNpc(area, clone);
