@@ -193,3 +193,49 @@ The final Lowerniel encounter now starts at 3,000 HP and includes the 2,100-HP b
 Integrated checkpoint `3ffba776` passes 930/930 checks across 28 selected server suites and the server build. Its focused quest, prison and combat-achievement suites pass 372/372. Subsequent prison corrections have focused checks; broader coverage at this checkpoint does not claim those later changes or complete DT2/Blood Moon live routes. All task commits retain nharrison93 author and committer identity through rsps-shell.
 
 The original DT2 actor now confirms the actual Unblock prompt, sees its cache variant become Enter through native varbit 15178, crosses to the clear adjacent room, opens its ordinary gate, and uses the carried Emerald key on the actual beds-room gate. It reaches earned prison progress 34 at 59 HP. Resolving the client-visible child of a copied scene object required a generic instance lookup correction: the underlying crevice loc is 49517, while its Unblock/Enter variants are 49110/49109. The scene loc remains present for the subsequent crossing and the earned morph restores on login. Cache-backed regression coverage rejects an invisible sibling variant and accepts the new variant after its varbit changes. All 383 selected quest, prison, copied-instance and combat-achievement checks pass with the correction, and the server build passes. The following crate-first item handoff follows the Wiki order; the Ruby/Diamond puzzles and original Duke route remain pending.
+
+
+### Original prison recovery and final encounter integration (14 October)
+
+The original `dt2earnedqa` earned continuation solves the Ruby chain, reads the three library books,
+uses its real note/slider and solves WRATH to obtain the Diamond key at prison progress40. Two
+natural Jhallan deaths retain its earned keys and return it to the Emerald room. It later searches
+the actual records-office ration crate and eats its ration: HP49→64, Prayer8→32, with shared stamina
+and run-energy restoration. Rations are limited to twelve, replenish per crate, remain prison-scoped
+and are cleared atomically when recovering equipment. The 15HP/25%Prayer amount follows the Wiki's
+comparison to Scarred scraps; the replenishment cadence is explicitly inferred pending a capture.
+
+The same original actor completes the Assassin's full Diamond-key plan, reopens the actual Diamond
+Gate and uses the cache Chest's **Open** action to recover its original inventory/equipment (overflow
+goes to its bank). It consumes carried sharks and completes the entire post-recovery dialogue,
+reaching prison52 with96HP. The parent quest and prison module now reuse one stage-positioned
+Assassin, including after relog; the frozen-Jhallan speaker restores in the camp. The original
+three-minute defense, Duke, Lassar, Whisperer and final reward chain still require connected proof.
+
+The separate Whisperer component defeats660HP plus100HP enrage continuously and later searches
+the owned cache Entrails to obtain the medallion. Its component flags have not been copied into the
+original actor. The four final wights now have distinct mechanics, owned combat targeting and clear
+cache staging coordinates; one Asgarnia Smith spawn used an actionless/nonexistent cache ID and is
+corrected to talkable12291. Their live continuous victory remains pending. The Assassin's cloud
+edge radius is inferred; leaving the cloud immediately restores invulnerability (no grace window).
+
+Blood Moon's disclosed Castle component completes the recorded lab notes/four chemical values,
+stockpile destruction and native78→80→82→84 escape dialogue. Actual Talk-to party cache variants
+spawn at the recorded Sangvesti landing. It obtains the crank wheel and tooth half through their
+real ground-item actions and Vitur-door crossing; the loop half is also a recorded ground spawn.
+Shared ground-item routing can approach a blocked item tile while retaining collision, plane and
+distance checks. Keyed Blood Hunt door guards run before generic opening and restore their earned
+native varbits. Remaining connected hunt puzzles and onward quest stages are under verification.
+
+Final Lowerniel has been fought through phase three (3,000HP down to~765HP) using ordinary attacks,
+prayers and real Vampyrium consumables. That attempt ended in a natural safe death; **no final boss
+victory or Blood Moon quest completion is claimed**. His captured semicircle delay is five ticks;
+wave directions, one-Jar chest limit and scoped collision-bypassing lunge roll are covered. Jerky22HP
+and fast kebab18HP use the canonical Food plugin; food/potions require physical Vampyrium scenes,
+including earned final Castle staging for preparing before the rooftop encounter.
+
+At `ebae5322`, **965/965 tests pass across31 selected server suites**, including quest dialogue,
+prison, food, copied instances, collision routes, combat achievements, lunge rolls and vampyrebane.
+The generic ground-pickup server build passes. Later Blood Hunt door integration is being validated.
+All task commits use nharrison93 as author and committer through rsps-shell. The draft PR remains
+incomplete; these component checks do not claim a fresh whole-quest Blood Moon playthrough.
