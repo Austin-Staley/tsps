@@ -7804,16 +7804,25 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     multiplyDamage(modifier) { this.damage = Math.floor(this.damage * modifier); }
   }
   class TestPendingHit {
-    constructor(damage) { this.damage = new TestHitDamage(damage); }
+    constructor(_attacker, _target, method, damage = 18) { this.method = method; this.style = method.type(); this.damage = new TestHitDamage(damage); }
     getHits() { return [this.damage]; }
     updateTotalDamage() { this.total = this.damage.getDamage(); }
   }
   class TestRangedCombatMethod {
-    hits(npc) { return [new TestPendingHit(npc.testDamage ?? 18)]; }
+    start(npc) { npc.rangedBaseStarted = true; }
+    type() { return base.core.CombatType.RANGED; }
+    attackDistance() { return 6; }
+    hits(npc, target) { return [new TestPendingHit(npc, target, this, npc.testDamage ?? 18)]; }
+  }
+  class TestMeleeCombatMethod {
+    start(npc) { npc.meleeBaseStarted = true; }
+    type() { return base.core.CombatType.MELEE; }
   }
   const core = {
     ...base.core,
     TemplatedInstanceArea: TestInstance, GameObject: TestObject, RangedCombatMethod: TestRangedCombatMethod,
+    MeleeCombatMethod: TestMeleeCombatMethod, PendingHit: TestPendingHit,
+    Animation: class { constructor(id) { this.id = id; } },
     RegionManager: { getClipping(x, y, z, area) {
       clipChecks.push({ x, y, z, area });
       return (x === 8227 && y === 1614) || (x === 8227 && y === 1646) || (x === 8224 && y === 1646) ? 0x20100 : 0;
@@ -7830,10 +7839,13 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
         getOwner() { return this.owner; }, getArea() { return this.area; }, getLocation() { return this.location; },
         setScriptedMovement(value) { this.scriptedMovement = value; }, getCombat() { return {
           attack: target => { this.combatTarget = target; },
+          getTarget: () => this.combatTarget ?? null,
+          setAttackDelay: ticks => { this.attackDelay = ticks; (this.attackDelayCalls ??= []).push(ticks); },
           getLastAttack: () => ({ reset: () => { this.lastAttackResetCount++; } }),
         }; },
         isRegistered() { return true; }, isNpc() { return true; }, getAsNpc() { return this; },
-        forceChat(text) { this.chat = text; }, performGraphic(graphic) { this.graphic = graphic; } };
+        forceChat(text) { this.chat = text; }, performGraphic(graphic) { this.graphic = graphic; },
+        performAnimation(animation) { this.animation = animation; } };
     } },
     World: { getAddNPCQueue: () => queue, getRemoveNPCQueue: () => removed },
   };
@@ -7941,6 +7953,11 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     assert.equal(hitDamage(current), 0, 'a boss two tiles away remains protected immediately');
     current.location = { x: current.__dt2AssassinWhiteSmoke.x, y: current.__dt2AssassinWhiteSmoke.y, z: 0 };
     assert.equal(hitDamage(current), 20, 'white smoke permits normal damage');
+    const assassinProvider = combatProviders.find(({ ids }) => ids === core.NpcIdentifiers.THE_FORSAKEN_ASSASSIN)?.method;
+    assert.ok(assassinProvider && assassinProvider.prototype instanceof TestRangedCombatMethod,
+      'the Forsaken Assassin uses a combat provider that can make an ordinary ranged hit');
+    const assassinCombat = new assassinProvider();
+    assert.equal(assassinCombat.attackDistance(current), 1, 'ordinary Assassin attacks keep melee reach so it can follow the player through smoke');
     // A vial warning is followed by two complete ticks to move away before impact.
     pendingHits.length = 0;
     messages.length = 0;
@@ -7962,6 +7979,29 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     assert.equal(pendingHits.some(hit => hit.damage === 30), false, 'the second vial gives one full movement tick');
     area.process(p);
     assert.ok(pendingHits.some(hit => hit.damage === 30), 'the vial hits on its second full tick when the player stays on the mark');
+    assert.equal(current.__dt2FinalWightNextRanged, undefined, 'the first two vials do not arm the ranged follow-up');
+    while (current.__dt2FinalWightTicks < 21) area.process(p);
+    const thirdVial = current.__dt2FinalWightPending.find(shot => shot.type === 'assassin-vial' && shot.last);
+    assert.ok(thirdVial, 'the third vial retains its final-volley marker until impact');
+    area.process(p);
+    assert.equal(current.__dt2FinalWightNextRanged, undefined, 'the third vial gives its full warning interval');
+    area.process(p);
+    assert.equal(current.__dt2FinalWightNextRanged, true, 'resolving the third vial schedules one ranged follow-up');
+    assert.equal(current.attackDelayCalls?.at(-1), 0, 'the follow-up is made ready on the ordinary NPC attack timer');
+    assert.equal(assassinCombat.attackDistance(current), 6, 'the armed follow-up can attack from the normal NPC ranged distance');
+    assassinCombat.start(current, p);
+    assert.equal(assassinCombat.attackDistance(current), 6, 'the launched ranged hit retains reach until its PendingHit is built');
+    const rangedFollowup = assassinCombat.hits(current, p)[0];
+    assert.equal(assassinCombat.attackDistance(current), 1, 'reach returns to melee after the one ranged hit is queued');
+    assert.equal(rangedFollowup.style, core.CombatType.RANGED, 'the follow-up uses standard ranged accuracy, damage and projectile timing');
+    assert.equal(core.PrayerHandler.getProtectingPrayer(rangedFollowup.style), core.PrayerHandler.PROTECT_FROM_MISSILES,
+      'Protect from Missiles applies through the ordinary ranged hit pipeline');
+    assert.equal(current.__dt2FinalWightNextRanged, false, 'starting the follow-up consumes its one-shot marker');
+    assert.equal(current.animation?.id, 7617, 'the ranged follow-up uses the animation captured for NPC 12328');
+    assassinCombat.start(current, p);
+    const nextAssassinHit = assassinCombat.hits(current, p)[0];
+    assert.equal(nextAssassinHit.style, core.CombatType.MELEE, 'later Assassin attacks return to ordinary melee');
+    assert.equal(current.__dt2FinalWightNextRanged, false, 'the ranged marker cannot fire twice');
     deaths[0]({ killer: p, npc: current });
 
     current = boss(wightIds[1]);

@@ -248,6 +248,29 @@ module.exports = function registerDesertTreasureII(api) {
   const KASONDE_EXPLOSIVE_PROJECTILE = 2526;
   const KASONDE_ACID_POOL = 48747;
   const KASONDE_EXPLOSIVE_POOL = 48749;
+  const ASSASSIN_RANGED_ATTACK_ANIMATION = 7617; // Recorded for NPC 12328 in npc-captured-animations.json.
+  class FinalAssassinCombat extends api.core.RangedCombatMethod {
+    attackDistance(npc) {
+      return npc.__dt2FinalWightNextRanged === true || npc.__dt2FinalWightRangedInFlight === true
+        ? super.attackDistance(npc) : 1;
+    }
+    start(npc, target) {
+      const ranged = npc.__dt2FinalWightNextRanged === true;
+      npc.__dt2FinalWightNextRanged = false;
+      npc.__dt2FinalWightRangedInFlight = ranged;
+      if (!ranged) return new api.core.MeleeCombatMethod().start(npc, target);
+      // shortcut: the Assassin's projectile is unmapped; retain the core NPC fallback until a capture identifies it.
+      super.start(npc, target);
+      npc.performAnimation(new api.core.Animation(ASSASSIN_RANGED_ATTACK_ANIMATION));
+    }
+    hits(npc, target) {
+      if (npc.__dt2FinalWightRangedInFlight) {
+        npc.__dt2FinalWightRangedInFlight = false;
+        return super.hits(npc, target);
+      }
+      return [new api.core.PendingHit(npc, target, new api.core.MeleeCombatMethod())];
+    }
+  }
   class KasondeCombat extends api.core.RangedCombatMethod {
     attackSpeed() { return 3; }
     attackDistance() { return 8; }
@@ -2088,6 +2111,12 @@ module.exports = function registerDesertTreasureII(api) {
           finalWightDamage(player, 30);
           if (!player.isPoisoned?.()) player.setPoisonDamage?.(4);
           player.sendMessage("The poison vial bursts beneath you, dealing heavy damage and poisoning you.");
+        }
+        if (shot.last) {
+          boss.__dt2FinalWightNextRanged = true;
+          const combat = boss.getCombat?.();
+          combat?.setAttackDelay?.(0);
+          if (combat && combat.getTarget?.() !== player) combat.attack(player);
         }
       }
       boss.__dt2FinalWightPending = boss.__dt2FinalWightPending.filter(shot => shot.due > 0);
@@ -8333,6 +8362,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("Odd Figure", { Disturb: handleBossTalk, "Talk-to": handleBossTalk });
   api.onNpcDeath(handleDeath);
   api.registerNpcCombatMethodProvider(N.VARDORVIS_2, VardorvisCombat);
+  api.registerNpcCombatMethodProvider(N.THE_FORSAKEN_ASSASSIN, FinalAssassinCombat);
   api.registerNpcCombatMethodProvider(N.KASONDE_7, KasondeCombat);
   api.registerNpcCombatMethodProvider(N.KETLA_THE_UNWORTHY_2, KetlaShadowCloneCombat);
   api.onCombatHitRoll(vardorvisHitRoll);
