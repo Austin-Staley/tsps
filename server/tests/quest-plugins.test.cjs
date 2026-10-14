@@ -5285,6 +5285,8 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
   const attackDelays = [];
   const stepsBack = [];
   const prayers = [];
+  const nativeVarbits = [];
+  const nativeStagesAtTranscript = [];
   let transcriptStarts = 0;
   let canKnockback = true;
   let nextMeleeDamage = 18;
@@ -5333,7 +5335,10 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     getUsername: () => 'WyrdFightTest',
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
-    getDialogueManager: () => ({ reset() {}, startDialogues() { transcriptStarts++; }, getCurrent: () => null }),
+    getDialogueManager: () => ({ reset() {}, startDialogues() {
+      transcriptStarts++;
+      nativeStagesAtTranscript.push(nativeVarbits.filter(([id]) => id === 15464).at(-1));
+    }, getCurrent: () => null }),
     getInventory: () => inventory,
     getEquipment: () => ({ contains: () => false }),
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
@@ -5357,6 +5362,7 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
       setAttackDelay: (ticks) => attackDelays.push(ticks),
     }),
     getPacketSender: () => new Proxy({
+      sendVarbit: (id, value) => nativeVarbits.push([id, value]),
       sendGraphic: (graphic, location) => graphics.push([graphic.getId(), location.getX(), location.getY()]),
     }, { get: (target, prop) => prop in target ? target[prop] : () => {} }),
     moveTo: (location) => {
@@ -5464,6 +5470,10 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     beforeDeath(lethalHit);
     assert.equal(lethalHit.preventDeath, true);
     assert.equal(boss.getHitpoints(), 110, 'an overkill hit preserves the Wyrd at the documented 10% cutscene threshold');
+    assert.equal(player.getAttribute('quest.the_blood_moon_rises.wyrd-cutscene-active'), true,
+      'the overkill fallback marks the native 10% cutscene before opening its transcript');
+    assert.deepEqual(nativeStagesAtTranscript.at(-1), [15464, 146],
+      'the overkill fallback sends native stage 146 before the 10% transcript starts');
     assert.ok(transcriptStarts > dialoguesBeforeLethalHit, 'the 10% transcript starts before the NPC enters its death task');
 
     const playerDeath = handlers.playerBeforeDeath.find(handler => handler.name === 'handleWyrdPlayerBeforeDeath');

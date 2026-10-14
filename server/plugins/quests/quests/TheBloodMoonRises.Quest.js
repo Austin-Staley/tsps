@@ -2287,6 +2287,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!encounter.ending) {
       encounter.ending = true;
       encounter.thresholdsSeen.add(10);
+      encounter.player.setAttribute(WYRD_CUTSCENE_ATTRIBUTE, true);
+      quest.setStage(encounter.player, STAGE.WYRDS);
       startTranscript(api, encounter.player, npc.getId(), PAGE, "fighting-wyrds-upon-reaching-10-hp");
     }
   }
