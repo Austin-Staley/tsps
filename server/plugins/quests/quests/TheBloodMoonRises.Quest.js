@@ -654,6 +654,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const SIEGE_DRAKAN_COMPLETE = "quest.the_blood_moon_rises.siege-drakan-defeated";
   const SIEGE_DEFENCE_ATTRIBUTE = "quest.the_blood_moon_rises.siege-defence";
   const TOB_CHALLENGE_ATTRIBUTE = "quest.the_blood_moon_rises.tob-challenge";
+  const THEATRE_NATIVE_STAGE_ATTRIBUTE = "quest.the_blood_moon_rises.theatre-native-stage";
   const PREP_COMPLETE = "quest.the_blood_moon_rises.preparations-complete";
   const wyrdEncounters = new Map();
   const slepeIvans = new Map();
@@ -665,6 +666,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const finalCutsceneActors = new Map();
   const siegeDrakanEncounters = new Map();
   const siegeHallInjured = new Map();
+  const theatreActors = new Map();
   function preparationStoryReady(player) {
     const prep = player?.getAttribute(PREP_ATTRIBUTE) ?? {};
     return prep.introComplete && prep.stewFed && prep.safalaanAnswered && prep.preparationsDiscussed &&
@@ -1972,12 +1974,13 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.setAttribute(SIEGE_DRAKAN_AREA_ATTRIBUTE, null);
     player.setAttribute(SIEGE_DRAKAN_COMPLETE, true);
     siegeDrakanEncounters.delete(area);
+    setTheatreNativeStage(player, 124);
     advance(player, STAGE.THEATRE);
     // The cutscene sends the party to the Haunted Woods; this is its canonical
     // post-scene checkpoint from the Quest Helper route.
-    api.spawnNpc({ id: NpcIdentifiers.IVAN_STROM_13, x: 3606, y: 3416, z: 0,
-      wanderRadius: 0, owner: player, ownerOnly: true });
     player.moveTo(new Location(3605, 3416, 0));
+    syncTheatreActors(player);
+    player.getPacketSender()?.sendVarbit?.(15464, nativeStage(STAGE.THEATRE, player));
     return true;
   }
 
@@ -2353,6 +2356,13 @@ module.exports = function registerTheBloodMoonRises(api) {
       const phase = player?.getAttribute(SIEGE_DEFENCE_ATTRIBUTE)?.phase;
       return ({ 'fall-back': 118, hall: 120, breach: 122 })[phase] ?? 116;
     }
+    if (value === STAGE.THEATRE) {
+      const saved = Number(player?.getAttribute(THEATRE_NATIVE_STAGE_ATTRIBUTE));
+      return Number.isInteger(saved) && saved >= 124 && saved <= 162 ? saved : 124;
+    }
+    if (value === STAGE.WYRDS) return 138;
+    if (value === STAGE.WYRD_DEFEATED) return 160;
+    if (value === STAGE.FENCE_FOUND) return 162;
     if (value === STAGE.FINAL) {
       const saved = Number(player?.getAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE));
       if (Number.isInteger(saved) && saved >= 164 && saved <= 176) return saved;
@@ -2363,6 +2373,54 @@ module.exports = function registerTheBloodMoonRises(api) {
       return 164;
     }
     return value;
+  }
+
+  function setTheatreNativeStage(player, value) {
+    if (!player || !Number.isInteger(value) || value < 124 || value > 162) return;
+    player.setAttribute(THEATRE_NATIVE_STAGE_ATTRIBUTE, value);
+    player.getPacketSender?.().sendVarbit?.(15464, value);
+    syncTheatreActors(player);
+  }
+
+  function cleanupTheatreActors(player) {
+    const actors = theatreActors.get(player);
+    if (!actors) return;
+    for (const npc of actors) api.removeNpc(npc);
+    theatreActors.delete(player);
+  }
+
+  function syncTheatreActors(player) {
+    if (!player) return;
+    if (stage(player) !== STAGE.THEATRE) {
+      cleanupTheatreActors(player);
+      return;
+    }
+    let native = Number(player.getAttribute(THEATRE_NATIVE_STAGE_ATTRIBUTE)) || 124;
+    const location = player.getLocation?.();
+    if (native === 130 && location?.getZ?.() === 0 &&
+      location.getX() >= 3640 && location.getX() <= 3690 &&
+      location.getY() >= 3200 && location.getY() <= 3245) {
+      // A saved stage-130 player who already travelled by the medallion is at
+      // the recorded destination; finish the missed native travel update.
+      player.setAttribute(THEATRE_NATIVE_STAGE_ATTRIBUTE, 132);
+      player.getPacketSender?.().sendVarbit?.(15464, 132);
+      native = 132;
+    }
+    const actors = theatreActors.get(player) ?? [];
+    const desired = native < 128
+      ? [[NpcIdentifiers.IVAN_STROM_13, 3606, 3416, 0]]
+      : native < 132
+        ? [[15855, 3492, 9626, 0], [15872, 3493, 9628, 0], [15955, 3494, 9627, 0]]
+        // The native recording places Sugadinti just west of the Theatre entrance.
+        : native >= 132 && native <= 136
+          ? [[15956, 3670, 3219, 0]]
+          : [];
+    if (actors.length === desired.length && actors.every((npc, index) =>
+      !npc.isDestroyed?.() && npc.getId?.() === desired[index][0])) return;
+    cleanupTheatreActors(player);
+    const spawned = desired.map(([id, x, y, z]) => api.spawnNpc({ id, x, y, z,
+      wanderRadius: 0, owner: player, ownerOnly: true })).filter(Boolean);
+    if (spawned.length) theatreActors.set(player, spawned);
   }
 
   function nativeQuestVarbit(value, player) {
@@ -4768,6 +4826,12 @@ module.exports = function registerTheBloodMoonRises(api) {
   function onTranscriptAction(event) {
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
+    if (event.stepId === "1JPVz5" && stage(player) === STAGE.THEATRE) {
+      setTheatreNativeStage(player, 126);
+    }
+    if (event.kind === "message" && event.stepId === "gEkhma" && stage(player) === STAGE.THEATRE) {
+      setTheatreNativeStage(player, 130);
+    }
     // The captured Ivan handout is four inventory slots: two individual jerky,
     // one chunky potion (3), and one sticky potion (2). Keep the availability
     // varbit set until all four items fit and are actually awarded.
@@ -5090,10 +5154,12 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
     if (event.stepId === "Xz7d4O") startSiegeDrakanBattle(player);
     if (event.stepId === "zPiZ9c") finishSiegeDrakanBattle(player);
-    if (event.stepId === "1Z5SGt" && stage(player) === STAGE.THEATRE &&
-      !player.getAttribute(TOB_CHALLENGE_ATTRIBUTE)?.started) {
-      player.setAttribute(TOB_CHALLENGE_ATTRIBUTE, { started: true, completed: false });
-      api.emitCustomEvent("tob:bmr-start", { player });
+    if (event.stepId === "1Z5SGt" && stage(player) === STAGE.THEATRE) {
+      const challenge = player.getAttribute(TOB_CHALLENGE_ATTRIBUTE);
+      if (!challenge?.started && !challenge?.completed) {
+        player.setAttribute(TOB_CHALLENGE_ATTRIBUTE, { started: true, completed: false });
+        api.emitCustomEvent("tob:bmr-start", { player });
+      }
     }
     if (event.stepId === "dJZbqF") {
       const area = player.getAttribute(WYRD_AREA_ATTRIBUTE);
@@ -5144,6 +5210,14 @@ module.exports = function registerTheBloodMoonRises(api) {
   function onChoice(event) {
     if (!event?.player) return;
     const player = event.player;
+    if (event.option === "I'm ready." && stage(player) === STAGE.THEATRE &&
+      Number(player.getAttribute(THEATRE_NATIVE_STAGE_ATTRIBUTE)) >= 136) {
+      const challenge = player.getAttribute(TOB_CHALLENGE_ATTRIBUTE);
+      if (challenge?.started && !challenge.completed) {
+        api.emitCustomEvent("tob:bmr-start", { player });
+        return;
+      }
+    }
     if (event.option === "Lead the way." && stage(player) === STAGE.SLEPE &&
       player.getAttribute(SLEPE_STORY_ATTRIBUTE)?.writingsRead) {
       const story = player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {};
@@ -5376,6 +5450,26 @@ module.exports = function registerTheBloodMoonRises(api) {
   function onBloodMoonDialogueLine(request) {
     const player = request?.player;
     if (!player) return;
+    if (stage(player) === STAGE.THEATRE && request.text === "We'd better get over there then." &&
+      request.step?.speaker === "Ivan Strom") {
+      request.after = () => {
+        if (stage(player) !== STAGE.THEATRE ||
+          (Number(player.getAttribute(THEATRE_NATIVE_STAGE_ATTRIBUTE)) || 0) < 126) return;
+        player.moveTo(new Location(3491, 9628, 0));
+        setTheatreNativeStage(player, 128);
+      };
+      return;
+    }
+    const theatreMilestone = stage(player) === STAGE.THEATRE && ({
+      "The situation here in Hallowvale is... delicate, my child. To avoid attention, I would suggest we travel to Ver Sinhaza separately.": 132,
+      "Alright. I can do that.": 134,
+      "Then let us begin, my child.": 136,
+    })[request.text];
+    if (theatreMilestone) {
+      request.after = () => {
+        if (stage(player) === STAGE.THEATRE) setTheatreNativeStage(player, theatreMilestone);
+      };
+    }
     if (stage(player) === STAGE.PREPARATIONS) {
       const prepProgress = [
         ["I hope so too. We're going to need all the", "stakesConversationComplete"],
@@ -5587,6 +5681,31 @@ module.exports = function registerTheBloodMoonRises(api) {
         ? "night-of-the-blood-moon-entering-the-portal-talking-to-efaritay-again"
         : "night-of-the-blood-moon-talking-to-efaritay";
       return startTranscript(api, player, event.npcId, PAGE, variant);
+    }
+    if (stage(player) === STAGE.THEATRE) {
+      const native = Number(player.getAttribute(THEATRE_NATIVE_STAGE_ATTRIBUTE)) || 124;
+      if (native < 128 && npcName === "ivan strom") {
+        event.handled = true;
+        return startTranscript(api, player, event.npcId, PAGE, "another-night-at-the-theatre");
+      }
+      if (native >= 128 && native < 132 && ["veliaf hurtz", "sugadinti vitur"].includes(npcName)) {
+        event.handled = true;
+        return startTranscript(api, player, event.npcId, PAGE,
+          "another-night-at-the-theatre-talking-to-veliaf-and-sugadinti-in-burgh-de-rott");
+      }
+      if (native >= 130 && native < 136 && npcName === "sugadinti vitur" &&
+        !player.getAttribute(TOB_CHALLENGE_ATTRIBUTE)?.started) {
+        event.handled = true;
+        return startTranscript(api, player, event.npcId, PAGE,
+          "another-night-at-the-theatre-talking-to-sugadinti-outside-the-theatre");
+      }
+      if (native >= 136 && native <= 138 && npcName === "sugadinti vitur" &&
+        player.getAttribute(TOB_CHALLENGE_ATTRIBUTE)?.started &&
+        !player.getAttribute(TOB_CHALLENGE_ATTRIBUTE)?.completed) {
+        event.handled = true;
+        return startTranscript(api, player, event.npcId, PAGE,
+          "another-night-at-the-theatre-talking-to-sugadinti-outside-the-theatre-talking-to-sugadinti-outside-the-theatre-after-leaving");
+      }
     }
     // The Sins of the Father reclaim dialogue also belongs to Ivan in this
     // hideout. SLEPE's later story variant is only relevant at its own scene;
@@ -7281,6 +7400,12 @@ module.exports = function registerTheBloodMoonRises(api) {
   function syncPalaceActorsAfterBootstrap({ player }) {
     if (player) palace.sync(player);
   }
+  function syncTheatreActorsOnStageChange({ player }) {
+    if (player) syncTheatreActors(player);
+  }
+  function syncTheatreActorsAfterBootstrap({ player }) {
+    if (player) syncTheatreActors(player);
+  }
   function cleanupPalaceActors({ player }) {
     if (player) palace.cleanup(player);
   }
@@ -7289,6 +7414,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     ready: preparationReady,
     play: (player, npc, variant) => startTranscript(api, player, npc, PAGE, variant) });
   api.persistAttribute(ATTRIBUTE);
+  api.persistAttribute(THEATRE_NATIVE_STAGE_ATTRIBUTE);
   api.onCustomEvent("npc-dialogue:hook", onStartHook);
   api.onCustomEvent("potions:area", handleVampyriumPotionArea);
   api.onCustomEvent("food:area", handleVampyriumPotionArea);
@@ -7298,9 +7424,11 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("quest:stage-changed", syncSlepeIvan);
   api.onCustomEvent("quest:stage-changed", syncSlepeRoy);
   api.onCustomEvent("quest:stage-changed", cleanupSlepeStory);
+  api.onCustomEvent("quest:stage-changed", syncTheatreActorsOnStageChange);
   api.onCustomEvent("quest:stage-changed", syncBloodHuntPartyOnStageChange);
   api.onCustomEvent("ladders:climb", handleCastleLobbyStairs);
   api.onCustomEvent("player:bootstrap-complete", syncPalaceActorsAfterBootstrap);
+  api.onCustomEvent("player:bootstrap-complete", syncTheatreActorsAfterBootstrap);
   api.onObjectInteraction(prayAtCastleShrine);
   api.onObjectInteraction(enterVampyriumPortal);
   api.onObjectInteraction(tryCastleReturnPortal);

@@ -4511,6 +4511,91 @@ test('Blood Moon crossing preserves the captured native stages and starts the sh
     'First Blood leaves Lowerniel on the normal NPC combat path instead of pausing scripted movement each tick');
 });
 
+test('Blood Moon post-breach chapter restores actors and follows the captured native 124–136 handoff', () => {
+  const { api, handlers } = mockApi();
+  const emittedEvents = [];
+  const emitCustomEvent = api.emitCustomEvent;
+  api.emitCustomEvent = (name, payload) => {
+    emittedEvents.push(name);
+    emitCustomEvent(name, payload);
+  };
+  const npcTalkHooks = [];
+  api.onAnyNpcInteraction = hook => npcTalkHooks.push(hook);
+  const attributes = new Map();
+  const sentVarbits = [];
+  const spawned = [];
+  api.spawnNpc = spec => {
+    const npc = { ...spec, getId: () => spec.id, isDestroyed: () => false };
+    spawned.push(npc);
+    return npc;
+  };
+  api.removeNpc = npc => { npc.removed = true; };
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => sentVarbits.push([id, value]) },
+      { get: (target, key) => target[key] ?? (() => {}) }),
+    moveTo: location => { player.location = location; }, getInventory: () => ({ contains: () => false }),
+    getDialogueManager: () => ({ reset() {}, startDialogues() {}, getCurrent() { return undefined; } }),
+    sendMessage() {},
+  };
+  quest.setStage(player, 80);
+  assert.equal(quest.varbitValue(80, player), 124,
+    'the internal Theatre stage begins at the captured post-breach native value');
+  handlers.custom.get('player:bootstrap-complete')
+    .find(handler => handler.name === 'syncTheatreActorsAfterBootstrap')({ player });
+  assert.deepEqual(spawned.map(npc => [npc.id, npc.x, npc.y]), [[15855, 3606, 3416]],
+    'the owner-only Ivan actor is restored after relog at the captured Haunted Woods tile');
+
+  const action = handlers.custom.get('npc-dialogue:action')
+    .find(handler => handler.name === 'onTranscriptAction');
+  action({ player, stepId: '1JPVz5' });
+  assert.equal(quest.varbitValue(80, player), 126);
+  const line = handlers.custom.get('npc-dialogue:line')
+    .find(handler => handler.name === 'onBloodMoonDialogueLine');
+  const finalIvanLine = { player, text: "We'd better get over there then.", step: { speaker: 'Ivan Strom' } };
+  line(finalIvanLine);
+  finalIvanLine.after();
+  assert.deepEqual([player.location.getX(), player.location.getY(), player.location.getZ()], [3491, 9628, 0]);
+  assert.equal(quest.varbitValue(80, player), 128);
+  assert.deepEqual(spawned.slice(1).map(npc => [npc.id, npc.x, npc.y]), [
+    [15855, 3492, 9626], [15872, 3493, 9628], [15955, 3494, 9627],
+  ]);
+  action({ player, kind: 'message', stepId: 'gEkhma' });
+  assert.equal(quest.varbitValue(80, player), 130,
+    'the recorded Veliaf/Ivan departure advances the substage without changing internal chapter 80');
+  const chapterLine = text => {
+    const event = { player, text };
+    line(event);
+    event.after?.();
+  };
+  chapterLine('The situation here in Hallowvale is... delicate, my child. To avoid attention, I would suggest we travel to Ver Sinhaza separately.');
+  assert.equal(quest.varbitValue(80, player), 132);
+  assert.deepEqual(spawned.at(-1) && [spawned.at(-1).id, spawned.at(-1).x, spawned.at(-1).y],
+    [15956, 3670, 3219],
+    'the saved Ver Sinhaza substage restores its owner-only Sugadinti actor at the captured tile');
+  chapterLine('Alright. I can do that.');
+  assert.equal(quest.varbitValue(80, player), 134);
+  chapterLine('Then let us begin, my child.');
+  assert.equal(quest.varbitValue(80, player), 136);
+  assert.deepEqual([spawned.at(-1).id, spawned.at(-1).x, spawned.at(-1).y], [15956, 3670, 3219],
+    'Sugadinti remains available outside the Theatre if the player escapes before finishing the raid');
+  attributes.set('quest.the_blood_moon_rises.tob-challenge', { started: true, completed: false });
+  const retryTalk = { player, npcId: 15956, definition: { getName: () => 'Sugadinti Vitur' }, option: 'Talk-to' };
+  assert.equal(npcTalkHooks.at(-1)['Talk-to'](retryTalk), true,
+    'talking to Sugadinti after leaving selects the captured retry conversation');
+  assert.equal(retryTalk.handled, true);
+  handlers.custom.get('npc-dialogue:choice').find(handler => handler.name === 'onChoice')({
+    player, option: "I'm ready.",
+  });
+  assert.ok(emittedEvents.includes('tob:bmr-start'), 'the retry choice re-enters the same BMR encounter');
+  assert.deepEqual(sentVarbits.slice(-6), [
+    [15464, 126], [15464, 128], [15464, 130], [15464, 132], [15464, 134], [15464, 136],
+  ]);
+});
+
 test('Blood Moon resumes the saved native-96 fleeing scene after logout', () => {
   const { api, handlers } = mockApi();
   const attributes = new Map();
