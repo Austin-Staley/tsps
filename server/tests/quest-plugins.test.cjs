@@ -3984,6 +3984,8 @@ test('Blood Moon hunt requires the crank, bookcase key and TOOLS shed code befor
 
 test('Blood Moon refiner requires the four correct chemical vials totalling 53 before destroying the stockpile', () => {
   const { api, handlers } = mockApi();
+  let prompt;
+  api.sendMultiChatboxPrompt = (_player, title, ...options) => { prompt = { title, options }; };
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
   const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
   const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
@@ -4005,9 +4007,26 @@ test('Blood Moon refiner requires the four correct chemical vials totalling 53 b
   };
   quest.setStage(player, 40);
   const interact = handlers.objects.find((handler) => handler.name === 'handleRefiner');
-  const shelves = { player, definition: { getName: () => 'Shelves' }, location: { x: 2513, y: 7387, z: 0 }, handled: false };
-  interact(shelves);
+  const shelves = { player, definition: { getName: () => 'Shelves' }, location: { x: 2513, y: 7387, z: 0 }, option: 'search', handled: false };
   const I = api.core.ItemIdentifiers;
+  const take = (choice) => {
+    interact(shelves);
+    assert.equal(prompt.title, 'There are various items on the shelves.');
+    const optionIndex = prompt.options.findIndex((value, index) => index % 2 === 0 && value === choice);
+    assert.notEqual(optionIndex, -1, `the shelf menu offers ${choice}`);
+    prompt.options[optionIndex + 1]();
+  };
+  take('Take a vial of water.');
+  take('Take a vial of water.');
+  take('Take a vial of blood.');
+  take('Take a vial of blood.');
+  take('Take a vial of blood.');
+  take('Take a piece of pure essence.');
+  take('Take a piece of pure essence.');
+  take('Take a piece of pure essence.');
+  assert.equal(counts.get(I.VIAL_OF_WATER_6), 2);
+  assert.equal(counts.get(I.VIAL_OF_BLOOD_5), 3);
+  assert.equal(counts.get(I.PURE_ESSENCE_4), 3);
   const makeVial = (itemId) => handlers.itemOnObject.find((handler) => handler.name === 'handleRefinerMixture')({
     player, itemId, objectId: 61709, location: { x: 2520, y: 7385, z: 0 }, handled: false,
   });

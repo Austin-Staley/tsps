@@ -6026,13 +6026,17 @@ module.exports = function registerTheBloodMoonRises(api) {
     const name = String(event.definition?.getName?.() ?? "").toLowerCase();
     if (name === "shelves" && x === 2513 && y === 7387 && z === 0) {
       event.handled = true;
-      const inventory = player.getInventory();
-      for (const [id, amount] of [[ItemIdentifiers.VIAL_OF_WATER_6, 2],
-        [ItemIdentifiers.VIAL_OF_BLOOD_5, 3], [ItemIdentifiers.PURE_ESSENCE_4, 3]]) {
-        const missing = amount - (inventory.getAmount?.(id) ?? (inventory.contains(id) ? 1 : 0));
-        if (missing > 0) inventory.adds(id, missing);
-      }
-      player.sendMessage("You search the north-west shelves and take two vials of water, three vials of blood, and three pure essences.");
+      if (String(event.option ?? "").toLowerCase() !== "search") return;
+      api.sendMultiChatboxPrompt(player, "There are various items on the shelves.",
+        "Take a vial of water.", () => takeCastleLabSupply(player, ItemIdentifiers.VIAL_OF_WATER_6, 2,
+          "You take a vial of water from the shelves."),
+        "Take a vial of blood.", () => takeCastleLabSupply(player, ItemIdentifiers.VIAL_OF_BLOOD_5, 3,
+          "You take a vial of blood from the shelves."),
+        "Take a piece of pure essence.", () => takeCastleLabSupply(player, ItemIdentifiers.PURE_ESSENCE_4, 3,
+          "You take a piece of pure essence from the shelves."),
+        "Take a chunk of daeyalt ore.", () => takeCastleLabSupply(player, ItemIdentifiers.DAEYALT_ORE_3, 1,
+          "You take a chunk of daeyalt ore from the shelves."),
+        "Take nothing.", () => {});
       return;
     }
     if (name !== "blood stockpile" || x !== 2535 || y !== 7385 || z !== 0) return;
@@ -6047,6 +6051,20 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, stockpileDestroyed: true });
     player.sendMessage("You destroy the blood stockpile. The refiner's north door is now clear.");
     startTranscript(api, player, 0, PAGE, "escape-from-castle-drakan-destroying-the-blood-stockpile");
+  }
+
+  function takeCastleLabSupply(player, itemId, maximum, message) {
+    const inventory = player.getInventory();
+    const amount = inventory.getAmount?.(itemId) ?? (inventory.contains(itemId) ? 1 : 0);
+    if (amount >= maximum) {
+      player.sendMessage("You already have all you need from these shelves.");
+      return;
+    }
+    if (!inventory.adds(itemId, 1)) {
+      player.sendMessage("Make room in your inventory before taking anything from the shelves.");
+      return;
+    }
+    player.sendMessage(message);
   }
 
   function handleRefinerMixture(event) {
