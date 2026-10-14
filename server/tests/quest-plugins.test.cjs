@@ -17299,6 +17299,36 @@ test('Blood Moon ToB entry waits at the Nylocas barrier and exposes four quest e
   assert.equal(emitted.filter(([name]) => name === 'tob:bmr-completed').length, 1);
 });
 
+test('Entry and Blood Moon Vasilias keep one HP pool across their visible forms', () => {
+  const { api } = mockApi();
+  const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
+  entry(api);
+  for (const mode of ['entry','bmr']) {
+    const boss = {
+      id: 10787, hitpoints: 200, maxHitpoints: 360,
+      getHitpoints() { return this.hitpoints; },
+      getMaxHitpoints() { return this.maxHitpoints; },
+      setNpcTransformationId(id) { this.id=id; this.hitpoints=this.maxHitpoints; return this; },
+      setHitpoints(value) { this.hitpoints=value; return this; },
+      getCombat: () => ({ getLastAttack: () => ({ reset() {} }) }),
+    };
+    const player = {
+      getHitpoints: () => 99,
+      getCombat: () => ({ reset() {} }),
+      getPacketSender: () => ({ sendVarbit() {} }),
+    };
+    entry._test.NPC_RAIDS.set(boss,{style:0});
+    const raid = { started:true, player, boss, npcs:new Set([boss]), effects:[], pools:[], room:2, mode, tick:11, nextStyle:12 };
+
+    entry._test.process(raid);
+
+    assert.ok([10787,10788,10789].includes(boss.id),`${mode} mode uses a cache-backed Vasilias form`);
+    assert.notEqual(boss.id,10787,'the Vasilias form changes after its ten-tick cycle');
+    assert.equal(boss.getMaxHitpoints(),360);
+    assert.equal(boss.getHitpoints(),200,'form changes preserve damage already dealt');
+  }
+});
+
 
 test('Maiden crabs pause their approach while frozen', () => {
   const { api } = mockApi();

@@ -360,8 +360,12 @@ function pillarTarget(raid,npc,d) {
 function nylocas(raid) {
   if(raid.boss) {
     if(raid.tick>=raid.nextStyle) {
-      const d=NPC_RAIDS.get(raid.boss);d.style=(d.style+1+roll(1))%3;
-      raid.boss.setNpcTransformationId(NYLO_BOSS[d.style]);raid.player.getCombat().reset();raid.nextStyle=raid.tick+10;
+      const d=NPC_RAIDS.get(raid.boss), hitpoints=raid.boss.getHitpoints();d.style=(d.style+1+roll(1))%3;
+      raid.boss.setNpcTransformationId(NYLO_BOSS[d.style]);
+      // Changing the visible Vasilias form resets cache NPC HP; the encounter's
+      // one health pool must carry across its melee/ranged/magic transformations.
+      raid.boss.setHitpoints(Math.min(hitpoints,raid.boss.getMaxHitpoints()));
+      raid.player.getCombat().reset();raid.nextStyle=raid.tick+10;
     }
     if(raid.tick%5===0){const s=NPC_RAIDS.get(raid.boss).style;damage(raid.player,protection(raid.player,s)?0:roll(15));}
     return;
