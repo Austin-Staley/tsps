@@ -1134,8 +1134,8 @@ module.exports = function registerTheBloodMoonRises(api) {
         const dy = player.getLocation().getY() - fight.markedY;
         const crossed = direction === "pincer" ? Math.abs(dy) >= 4 && Math.abs(dx) <= 1
           : direction === "north" ? dy >= 4 && Math.abs(dx) <= 1
-            : direction === "left" ? dx >= 4 && Math.abs(dy) <= 1
-              : dx <= -4 && Math.abs(dy) <= 1;
+            : direction === "left" ? dx <= -4 && Math.abs(dy) <= 1
+              : dx >= 4 && Math.abs(dy) <= 1;
         fight.impactAt = 0;
         fight.warning = null;
         if (!crossed) {
@@ -1651,6 +1651,14 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function syncFinalEfaritayOnLogin({ player }) {
+    const location = player?.getLocation?.();
+    // Older earned saves used the fence's clipped scene marker as their landing.
+    if (player && [STAGE.WYRD_DEFEATED, STAGE.FENCE_FOUND, STAGE.FINAL].includes(stage(player)) &&
+      player.getAttribute(WYRD_DEFEATED_ATTRIBUTE) && !player.getAttribute(FINAL_PORTAL_USED_ATTRIBUTE) &&
+      location?.getX?.() === 3562 && location?.getY?.() === 3323 && location?.getZ?.() === 0) {
+      player.moveTo(new Location(3562, 3322, 0));
+      player.sendMessage("You step clear of the broken fence and can continue toward the graveyard.");
+    }
     if (player && stage(player) === STAGE.FINAL) {
       player.getPacketSender().sendVarbit(15464, nativeStage(STAGE.FINAL, player));
     }
@@ -4599,7 +4607,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.setAttribute(WYRD_AREA_ATTRIBUTE, null);
       player.setAttribute(WYRD_DEFEATED_ATTRIBUTE, true);
       advance(player, STAGE.WYRD_DEFEATED);
-      player.moveTo(new Location(3562, 3323, 0));
+      player.moveTo(new Location(3562, 3322, 0));
     }
     if (event.stepId === "xt3dPV") advance(player, STAGE.FENCE_FOUND);
     if (event.stepId === "2QgFZA" && player.getAttribute(WYRD_DEFEATED_ATTRIBUTE)) {

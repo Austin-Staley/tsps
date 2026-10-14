@@ -954,6 +954,42 @@ test('Blood Moon Sarius spawn is reachable from the Sins boat shore landing', ()
   assert.equal(reachable, true, 'the real graveyard boat landing has a collision-valid path to Sarius');
 });
 
+test('Sins of the Father opens its boat route from the Slepe rowboat after completion', () => {
+  const { api, handlers } = mockApi();
+  let prompt;
+  api.sendMultiChatboxPrompt = (_player, title, ...options) => { prompt = { title, options }; };
+  const moved = [];
+  const attributes = new Map();
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => new api.core.Location(3661, 3278, 0),
+    moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+  };
+  require('../plugins/quests/quests/SinsOfTheFather.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'sins_of_the_father').at(-1);
+  quest.setStage(player, 999);
+  const boat = handlers.objects.find(handler => handler.name === 'handleObjectInteraction');
+
+  const wrongLocation = { player, objectId: 32602, location: { x: 3662, y: 3279, z: 0 }, handled: false };
+  boat(wrongLocation);
+  assert.equal(wrongLocation.handled, false, 'the Slepe route is scoped to its cache boat anchor');
+  assert.equal(prompt, undefined);
+
+  const travel = { player, objectId: 32602, location: { x: 3661, y: 3279, z: 0 }, option: 'Travel', handled: false };
+  boat(travel);
+  assert.equal(travel.handled, true);
+  assert.equal(prompt.title, 'Where would you like to sail?');
+  const graveyard = prompt.options.findIndex((value, index) => index % 2 === 0 && value === 'Icyene Graveyard.');
+  assert.notEqual(graveyard, -1);
+  prompt.options[graveyard + 1]();
+  assert.deepEqual(moved, [[3696, 3199, 0]], 'the destination uses the existing clear graveyard landing');
+});
+
+
 test('Blood Moon shrine returns to the Castle lobby before the Vampyrium portal starts its chapter', () => {
   const { api, handlers } = mockApi();
   const spawned = [];
@@ -4216,6 +4252,46 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
   }
 });
 
+test('Blood Moon restores only earned saves on the clipped broken-fence tile', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attributes = new Map();
+  const moves = [];
+  let point = new api.core.Location(3562, 3323, 0);
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => point,
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    moveTo: location => moves.push([location.getX(), location.getY(), location.getZ()]),
+    sendMessage() {},
+  };
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(q => q.key === 'the_blood_moon_rises').at(-1);
+  const login = handlers.playerLogin.find(h => h.name === 'syncFinalEfaritayOnLogin');
+  quest.setStage(player, 100);
+  login({ player });
+  assert.equal(moves.length, 0, 'a final-stage fixture without the earned Wyrd flag is not migrated');
+  attributes.set('quest.the_blood_moon_rises.wyrd-defeated', true);
+  for (const stage of [95, 96, 100]) {
+    quest.setStage(player, stage);
+    login({ player });
+    assert.deepEqual(moves.at(-1), [3562, 3322, 0]);
+    assert.equal(quest.getStage(player), stage, 'recovery retains the earned stage');
+  }
+  const count = moves.length;
+  attributes.set('quest.the_blood_moon_rises.final-portal-used', true);
+  login({ player });
+  assert.equal(moves.length, count, 'a player who used the final portal is not moved');
+  attributes.delete('quest.the_blood_moon_rises.final-portal-used');
+  point = new api.core.Location(3563, 3323, 0);
+  login({ player });
+  assert.equal(moves.length, count, 'the recovery does not move an adjacent save');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  assert.equal(RegionManager.blocked(new api.core.Location(3562, 3322, 0), null), false,
+    'the adjacent replacement tile is clear in the real cache');
+});
+
 test('Blood Moon recovers an unfinished Wyrd room after relog to the real ruins entrance', () => {
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
@@ -4466,10 +4542,33 @@ test('Blood Moon northern-door transcript starts the private Lowerniel encounter
   action({ player, stepId: 't7FMNM' });
   assert.equal(boss.hitpoints, 3000, 'a recovered player can start the duel normally');
   arena = player.getArea();
-  boss.hitpoints = 2100;
-  arena.process(boss);
-  assert.match(messages.at(-1) ?? '', /wall of blood|blood portals/i,
-    'the 2,100 HP transition starts the recorded phase-two wave sequence');
+  let worldCycle = api.core.World.getProcessCycle() + 1;
+  const originalWorldCycle = api.core.World.getProcessCycle;
+  api.core.World.getProcessCycle = () => worldCycle;
+  try {
+    player.x = 2502;
+    player.y = 7838;
+    boss.hitpoints = 2100;
+    arena.process(boss);
+    assert.match(messages.at(-1) ?? '', /wall of blood surges from the left/i,
+      'the first phase-two wave starts from the left');
+    worldCycle += 3;
+    player.x = 2498;
+    arena.process(boss);
+    assert.match(messages.at(-1) ?? '', /run through the blood wave/i,
+      'crossing four tiles left, toward the incoming left-side wave, succeeds');
+    worldCycle += 1;
+    arena.process(boss);
+    assert.match(messages.at(-1) ?? '', /wall of blood surges from the right/i,
+      'the second wave comes from the right');
+    worldCycle += 3;
+    player.x = 2502;
+    arena.process(boss);
+    assert.match(messages.at(-1) ?? '', /run through the blood wave/i,
+      'crossing four tiles right, toward the incoming right-side wave, succeeds');
+  } finally {
+    api.core.World.getProcessCycle = originalWorldCycle;
+  }
   api.core.World.processCycle = api.core.World.getProcessCycle() + 1;
   boss.hitpoints = 900;
   arena.process(boss);
