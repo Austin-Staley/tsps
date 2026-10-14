@@ -8062,9 +8062,19 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(interact({ ...rock, objectId: 49477, definition: { id: 48197 }, option: 'Climb-rope' }), true);
     assert.equal(player.location.x, 2587);
     assert.equal(player.location.y, 6436);
+    const enteredCity = attrs.get('desert-treasure-ii:lassar');
+    playerProcesses[0]({ player });
+    for (const id of [core.ItemIdentifiers.SHADOW_BLOCKER_SCHEMATIC, core.ItemIdentifiers.SHADOW_KEY_5, core.ItemIdentifiers.SHADOW_KEY]) {
+      assert.ok(groundSpawns.some(([, item]) => item.getId() === id), 'the Science District items exist before any optional teleporter activation');
+    }
+    const purpleFirst = { player, groundItemId: core.ItemIdentifiers.SHADOW_KEY, location: { x: 2592, y: 6352, z: 0 } };
+    groundPickupHooks[0](purpleFirst);
+    assert.notEqual(purpleFirst.handled, true, 'the southern key can be picked up before the northern items');
+    assert.equal(attrs.get('desert-treasure-ii:lassar').purpleKey, true);
+    attrs.set('desert-treasure-ii:lassar', enteredCity);
     const portals = [[2593, 6424, 49479], [2617, 6417, 49480], [2611, 6379, 49482], [2599, 6341, 49483], [2643, 6434, 49484], [2652, 6405, 49481]];
     assert.equal(interact({ player, objectId: portals[1][2], definition: { id: portals[1][2] }, location: { x: portals[1][0], y: portals[1][1], z: 0 }, option: 'Activate' }), true);
-    assert.match(player.messages.at(-1), /earlier Lassar teleporters/);
+    assert.equal(attrs.get('desert-treasure-ii:lassar').teleporters[1], true, 'a visited teleporter activates independently of earlier cache indices');
     for (const [x, y, id] of portals.slice(0, 3)) {
       assert.equal(interact({ player, objectId: id, definition: { id }, location: { x, y, z: 0 }, option: 'Activate' }), true);
     }
@@ -8091,7 +8101,7 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
       'a destination selected from the second page uses its canonical Lassar tile');
     attrs.set(lassarAttribute, earnedThreePortals);
     assert.equal(interact({ player, objectId: 49483, definition: { id: 49483 }, location: { x: 2599, y: 6341, z: 0 }, option: 'Activate' }), true);
-    assert.match(player.messages.at(-1), /sealed district/);
+    assert.equal(attrs.get(lassarAttribute).teleporters[3], true, 'a reachable southern teleporter needs no unrelated schematic');
     player.location = new core.Location(2656, 6386, 0);
     playerProcesses[0]({ player });
     assert.equal(player.location.getX(), 2648, 'the first cathedral approach reaches Ketla before all teleporters are active');
@@ -8099,13 +8109,13 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(player.getPrivateArea(), null, 'the introductory blackout keeps Ketla and the city NPCs visible in the public streets');
     const pickup = (itemId, x, y) => groundPickupHooks[0]({ player, groundItemId: itemId, location: { x, y, z: 0 } });
     playerProcesses[0]({ player });
-    assert.equal(groundSpawns.at(-1)[1].getId(), core.ItemIdentifiers.SHADOW_BLOCKER_SCHEMATIC,
-      'the first-three milestone creates the canonical blocker schematic ground item');
+    assert.ok(groundSpawns.some(([, item]) => item.getId() === core.ItemIdentifiers.SHADOW_BLOCKER_SCHEMATIC),
+      'the canonical blocker schematic remains obtainable in the Science District');
     pickup(core.ItemIdentifiers.SHADOW_BLOCKER_SCHEMATIC, 2591, 6380);
     counts.set(core.ItemIdentifiers.SHADOW_BLOCKER_SCHEMATIC, 1);
     playerProcesses[0]({ player });
-    assert.equal(groundSpawns.at(-1)[1].getId(), core.ItemIdentifiers.SHADOW_KEY_5,
-      'the green key is made available after the schematic is picked up');
+    assert.ok(groundSpawns.some(([, item]) => item.getId() === core.ItemIdentifiers.SHADOW_KEY_5),
+      'the green key remains obtainable beside the schematic');
     pickup(core.ItemIdentifiers.SHADOW_KEY_5, 2581, 6388);
     counts.set(core.ItemIdentifiers.SHADOW_KEY_5, 1);
     playerProcesses[0]({ player });
@@ -8129,6 +8139,14 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
       && npc.owner === player && npc.ownerOnly), 'Ketla is present at her canonical Western Residential District tile after the scene');
     assert.equal(player.getPrivateArea(), null, 'returning to the cathedral during the puzzles does not enter the boss scene');
     counts.set(core.ItemIdentifiers.RING_OF_VISIBILITY, 1);
+    const ketlaCondition = baseHandlers.condition.find((handler) => handler({ player, npcId: core.NpcIdentifiers.KETLA, stepId: 'DTumBz' }) === true);
+    assert.ok(ketlaCondition, 'the opening dialogue recognizes a carried Ring of visibility');
+    assert.equal(ketlaCondition({ player, npcId: core.NpcIdentifiers.KETLA, stepId: 'ZZryZO' }), false,
+      'a player carrying the ring is not sent to fetch another one');
+    counts.set(core.ItemIdentifiers.RING_OF_VISIBILITY, 0);
+    assert.equal(ketlaCondition({ player, npcId: core.NpcIdentifiers.KETLA, stepId: 'DTumBz' }), false);
+    assert.equal(ketlaCondition({ player, npcId: core.NpcIdentifiers.KETLA, stepId: 'ZZryZO' }), true);
+    counts.set(core.ItemIdentifiers.RING_OF_VISIBILITY, 1);
     interactions.find((entry) => entry.name === 'Ketla').options['Talk-to']({ player, npcId: core.NpcIdentifiers.KETLA });
     assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-with-the-ring-of-visibility');
     actionHooks[0]({ player, stepId: 'JQeeJF' });
@@ -8136,6 +8154,17 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-with-the-ring-of-visibility-reclaiming-the-blackstone-fragment');
     actionHooks[0]({ player, stepId: '5mQjA2' });
     assert.equal(counts.get(core.ItemIdentifiers.BLACKSTONE_FRAGMENT), 1);
+    counts.set(core.ItemIdentifiers.SHADOW_BLOCKER_SCHEMATIC, 0);
+    interactions.find((entry) => entry.name === 'Ketla').options['Talk-to']({ player, npcId: core.NpcIdentifiers.KETLA });
+    assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-about-a-device', 'later workshop visits do not replay the blackout introduction');
+    counts.set(core.ItemIdentifiers.BLACKSTONE_FRAGMENT, 0);
+    interactions.find((entry) => entry.name === 'Ketla').options['Talk-to']({ player, npcId: core.NpcIdentifiers.KETLA });
+    assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-with-the-ring-of-visibility-reclaiming-the-blackstone-fragment');
+    actionHooks[0]({ player, stepId: 'WWa1TU' });
+    assert.equal(counts.get(core.ItemIdentifiers.BLACKSTONE_FRAGMENT), 1, 'the real reclaim transcript restores a lost earned fragment');
+    actionHooks[0]({ player, stepId: 'WWa1TU' });
+    assert.equal(counts.get(core.ItemIdentifiers.BLACKSTONE_FRAGMENT), 1, 'fragment recovery cannot duplicate a carried fragment');
+    counts.set(core.ItemIdentifiers.SHADOW_BLOCKER_SCHEMATIC, 1);
     const ringShownState = attrs.get('desert-treasure-ii:lassar');
     counts.set(core.ItemIdentifiers.BLACKSTONE_FRAGMENT, 0);
     attrs.set('desert-treasure-ii:lassar', { ...ringShownState, blackstone: false });

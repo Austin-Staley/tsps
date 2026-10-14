@@ -4054,11 +4054,9 @@ module.exports = function registerDesertTreasureII(api) {
       if (!has(player, I.VERY_LONG_ROPE) && !lassar.ropeTied && !lassar.entered) return ["Speak to Prescott in Camdozaal about the Lassar sinkhole and take his very long rope."];
       if (!lassar.ropeTied) return ["Tie Prescott's very long rope to the rock beside the sinkhole in Camdozaal."];
       if (!lassar.entered) return ["Descend into the Lassar Undercity through the sinkhole."];
-      const portals = lassar.teleporters ?? [];
-      if (portals.filter(Boolean).length < 3) return [`Activate the first three Lassar teleporters (${portals.filter(Boolean).length}/3).`];
       if (!lassar.blockerSchematic) return ["Search the Science District for the shadow blocker schematic."];
       if (!lassar.greenKey || !lassar.purpleKey) return ["Search the northern and southern Science District rooms for the green and purple shadow keys."];
-      if (portals.filter(Boolean).length < 6) return [`Activate the remaining Science and Residential teleporters (${portals.filter(Boolean).length}/6).`];
+      if (!lassar.cameTo) return ["Approach the Sunken Cathedral south of the Residential District."];
       if (!lassar.blackstone) return ["Show Ketla the Ring of visibility so she can make the blackstone fragment safe to use."];
       if (!lassar.blockerDesigned) return ["Give Ketla the shadow blocker schematic, then take the finished device from her workbench."];
       if (!lassar.blockerPlaced) return ["Place the shadow blocker beside the locked doors in the Science District furnace house."];
@@ -6571,30 +6569,7 @@ module.exports = function registerDesertTreasureII(api) {
         setLassar(p, { ...state, cathedralEntered: true, whispererStarted: true });
         return;
       }
-      if (npcId === N.KETLA || npcId === N.KETLA_2) {
-        if (state.fakeSchematicFound && !state.perfectSchematicGiven && has(p, I.PERFECTED_SHADOW_TORCH_SCHEMATIC_2))
-          return talk(p, npcId, "the-whisperer-talking-to-ketla-with-a-schematic-2");
-        if (state.strangeIcon && !state.iconPresented) {
-          setLassar(p, { ...state, iconPresented: true });
-          return talk(p, npcId, "the-whisperer-talking-to-ketla-with-the-icon");
-        }
-        if (state.escapedVision && state.perfectTorchSchematic)
-          return talk(p, npcId, "the-whisperer-inspecting-the-totem-in-the-cistern-talking-to-ketla-again");
-        if (state.cameTo && !state.blackstone && state.ringShown) {
-          return talk(p, npcId, "the-whisperer-talking-to-ketla-with-the-ring-of-visibility-reclaiming-the-blackstone-fragment");
-        }
-        if (state.cameTo && !state.blackstone && has(p, I.RING_OF_VISIBILITY)) {
-          return talk(p, npcId, "the-whisperer-talking-to-ketla-with-the-ring-of-visibility");
-        }
-        if (state.blockerSchematic && !state.ketlaBriefed) {
-          setLassar(p, { ...state, ketlaBriefed: true });
-          talk(p, npcId, "the-whisperer-talking-to-ketla-with-a-schematic");
-          return;
-        }
-        if (state.entered && !state.blockerSchematic) { talk(p, npcId, "the-whisperer-while-in-the-shadow-realm"); return; }
-        talk(p, npcId, "the-whisperer-talking-to-ketla-after-coming-to");
-        return;
-      }
+      if (npcId === N.KETLA || npcId === N.KETLA_2) return progressBosses({ player: p, npcId });
       talk(p, npcId, "the-whisperer-talking-to-ketla-after-coming-to");
     }
   }
@@ -6893,7 +6868,7 @@ module.exports = function registerDesertTreasureII(api) {
         }
         if (state.escapedVision && state.perfectTorchSchematic)
           return talk(p, npcId, "the-whisperer-inspecting-the-totem-in-the-cistern-talking-to-ketla-again");
-        if (state.cameTo && !state.blackstone && state.ringShown) {
+        if (state.cameTo && (state.ringShown || state.blackstone) && ![I.BLACKSTONE_FRAGMENT, I.BLACKSTONE_FRAGMENT_2, I.BLACKSTONE_FRAGMENT_3].some(id => has(p, id))) {
           return talk(p, npcId, "the-whisperer-talking-to-ketla-with-the-ring-of-visibility-reclaiming-the-blackstone-fragment");
         }
         if (state.cameTo && !state.blackstone && has(p, I.RING_OF_VISIBILITY)) {
@@ -6904,7 +6879,7 @@ module.exports = function registerDesertTreasureII(api) {
           setLassar(p, { ...state, ketlaBriefed: true });
           return talk(p, npcId, "the-whisperer-talking-to-ketla-with-a-schematic");
         }
-        return talk(p, npcId, "the-whisperer-talking-to-ketla-after-coming-to");
+        return talk(p, npcId, state.blackstone ? "the-whisperer-talking-to-ketla-about-a-device" : "the-whisperer-talking-to-ketla-after-coming-to");
       }
     }
     return false;
@@ -6933,6 +6908,13 @@ module.exports = function registerDesertTreasureII(api) {
     if (stepId === "yRRbfR") return Boolean(state.ramarno);
     if (stepId === "1os4H_") return !has(p, I.VERY_LONG_ROPE);
     if (stepId === "G_Oyly") return has(p, I.VERY_LONG_ROPE);
+    return null;
+  }
+
+  function answerKetlaCondition({ player: p, npcId, stepId }) {
+    if (stage(p) !== S.WHISPERER || ![N.KETLA, N.KETLA_2].includes(npcId)) return null;
+    if (stepId === "ZZryZO") return !has(p, I.RING_OF_VISIBILITY);
+    if (stepId === "DTumBz") return has(p, I.RING_OF_VISIBILITY);
     return null;
   }
 
@@ -7253,12 +7235,13 @@ module.exports = function registerDesertTreasureII(api) {
         setLassar(p, { ...lassar, ramarno: true, rope: true });
       }
     }
-    if (stepId === "JQeeJF") {
+    if (["JQeeJF", "foYwmu", "sBouA5"].includes(stepId) && stage(p) === S.WHISPERER && has(p, I.RING_OF_VISIBILITY)) {
       const current = p.getAttribute(LASSAR) ?? {};
       setLassar(p, { ...current, ringShown: true });
     }
-    if ((stepId === "5mQjA2" || stepId === "FLyW0o") && stage(p) === S.WHISPERER) {
+    if (["5mQjA2", "FLyW0o", "WWa1TU"].includes(stepId) && stage(p) === S.WHISPERER) {
       const current = p.getAttribute(LASSAR) ?? {};
+      if (!current.cameTo || !current.ringShown && !current.blackstone) return;
       if (!has(p, I.BLACKSTONE_FRAGMENT) && !has(p, I.BLACKSTONE_FRAGMENT_2) && !has(p, I.BLACKSTONE_FRAGMENT_3)) p.getInventory().adds(I.BLACKSTONE_FRAGMENT, 1);
       setLassar(p, { ...current, blackstone: true });
     }
@@ -7534,10 +7517,6 @@ module.exports = function registerDesertTreasureII(api) {
     if (teleporter && (option === "activate" || option === "travel" || option === "use" || option === "")) {
       const portalIndex = LASSAR_TELEPORTERS.indexOf(teleporter);
       const active = [...(state.teleporters ?? [])];
-      const available = portalIndex < 3 || active[portalIndex]
-        || (state.blockerSchematic && state.greenKey && (state.purpleKey || state.doorUnlocked))
-        || (portalIndex === 6 && state.idolPlaced && state.basicTorch);
-      if (!available) { p.sendMessage("This teleporter is still beyond a sealed district. Follow the Lassar devices and shadow keys first."); return true; }
       if (active[portalIndex]) {
         if (option === "activate") {
           p.sendMessage(`This Lassar teleporter is already active (${active.filter(Boolean).length}/7).`);
@@ -7552,12 +7531,8 @@ module.exports = function registerDesertTreasureII(api) {
         if (destinations.length) showLassarTeleporterDestinations(p, destinations);
         return true;
       }
-      // The city record routes the first six teleporters in the same order as
-      // the cache quest varbits; the final eastern device is unlocked by the idol.
-      if (active.slice(0, portalIndex).length !== portalIndex || !active.slice(0, portalIndex).every(Boolean)) {
-        p.sendMessage("Activate the earlier Lassar teleporters before this one.");
-        return true;
-      }
+      // Wiki: activate teleporters as they are passed. Cache varbit order is
+      // an index for saved destinations, not an activation prerequisite.
       active[portalIndex] = true;
       setLassar(p, { ...state, teleporters: active });
       p.sendMessage(`You activate the Lassar teleporter (${active.filter(Boolean).length}/7). Its routes now answer to the shadow network.`);
@@ -7789,16 +7764,16 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function ensureLassarIntroItems(p, state) {
-    if (!state.entered || !(state.teleporters ?? []).slice(0, 3).every(Boolean)) return;
+    if (!state.entered) return;
     // shortcut: QuestHelper's item markers overlap blocking cache barrels/crates/tables,
     // so these real ground drops use the nearest collision-walkable floor tiles.
     if (!state.blockerSchematic && !has(p, I.SHADOW_BLOCKER_SCHEMATIC)) {
       registerLassarGroundItem(p, I.SHADOW_BLOCKER_SCHEMATIC, 2591, 6380);
     }
-    if (state.blockerSchematic && !state.greenKey && !has(p, I.SHADOW_KEY_5)) {
+    if (!state.greenKey && !has(p, I.SHADOW_KEY_5)) {
       registerLassarGroundItem(p, I.SHADOW_KEY_5, 2581, 6388);
     }
-    if (state.greenKey && !state.purpleKey && !has(p, I.SHADOW_KEY)) {
+    if (!state.purpleKey && !has(p, I.SHADOW_KEY)) {
       registerLassarGroundItem(p, I.SHADOW_KEY, 2592, 6352);
     }
     // A player can lose the private ground drop after taking it. The pickup
@@ -7848,14 +7823,13 @@ module.exports = function registerDesertTreasureII(api) {
     const greenShadowKey = groundItemId === I.SHADOW_KEY_5;
     const purpleShadowKey = groundItemId === I.SHADOW_KEY;
     const whiteShadowKey = groundItemId === I.SHADOW_KEY_3;
-    const firstThree = state.entered && (state.teleporters ?? []).slice(0, 3).every(Boolean);
     const accessible = basicTorchSchematic ? x === 2353 && y === 6367 && state.doorUnlocked && state.inShadow
       : idolSchematic ? x === 2676 && y === 6422 && state.tentacles?.["2417,6413"]
         : blueKey ? x === 2416 && y === 6443 && state.tentacles?.["2424,6439"] && state.inShadow
           : redKey ? x === 2639 && y === 6404 && state.redKeyFound
-      : blockerSchematic ? x === 2591 && y === 6380 && firstThree
-            : greenShadowKey ? x === 2581 && y === 6388 && state.blockerSchematic
-              : purpleShadowKey ? x === 2592 && y === 6352 && state.greenKey
+      : blockerSchematic ? x === 2591 && y === 6380 && state.entered
+            : greenShadowKey ? x === 2581 && y === 6388 && state.entered
+              : purpleShadowKey ? x === 2592 && y === 6352 && state.entered
                 : whiteShadowKey ? x === 2595 && y === 6392 && state.plazaTentacle && !state.inShadow
           : superiorSchematic ? x === 2381 && y === 6423 && state.pubOpened && state.inShadow
             : x === 2324 && y === 6402 && state.animaSchematicFound && state.inShadow;
@@ -7966,6 +7940,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcInteraction("Ramarno", { "Talk-to": talkRamarno });
   api.onNpcInteraction("Prescott", { "Talk-to": talkPrescott });
   api.onNpcDialogueCondition(answerPrescottCondition);
+  api.onNpcDialogueCondition(answerKetlaCondition);
   api.onNpcInteraction("Wizard Persten", { "Talk-to": progressBosses });
   api.onNpcInteraction("Captain Malleta", { "Talk-to": progressBosses });
   api.onNpcInteraction("Ketla", { "Talk-to": progressBosses });
