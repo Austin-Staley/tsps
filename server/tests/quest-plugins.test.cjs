@@ -8405,6 +8405,9 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(interact({ player, objectId: 48247, location: { x: 2645, y: 6440, z: 0 }, option: 'Search' }), true);
     assert.equal(counts.get(core.ItemIdentifiers.BASIC_SHADOW_TORCH), 1,
       'after the blocker is already placed, the workbench supplies the next schematic-built device');
+    itemActionHooks[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Recall' });
+    assert.equal(attrs.get('desert-treasure-ii:lassar').blockerPlaced, false,
+      'the normal Wiki route recalls the furnace blocker before carrying the torch into the residential district');
     counts.set(core.ItemIdentifiers.BASIC_SHADOW_TORCH, 0);
     state = attrs.get('desert-treasure-ii:lassar');
     attrs.set('desert-treasure-ii:lassar', { ...state, inShadow: true, sanity: 100 });
@@ -8421,7 +8424,7 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
       'opening the covered gate does not record a torch burn');
     assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.BASIC_SHADOW_TORCH,
       objectId: core.ObjectIdentifiers.DOORS_22, location: { x: 2417, y: 6413, z: 0 } }), true,
-    'the basic shadow torch burns the cache-backed west residential barrier');
+    'the basic shadow torch burns the cache-backed west residential barrier after recalling the furnace blocker');
     assert.equal(attrs.get('desert-treasure-ii:lassar').tentacles['2417,6413'], true);
     assert.equal(interact({ player, objectId: core.ObjectIdentifiers.DOORS_22,
       definition: { id: core.ObjectIdentifiers.DOORS_22 }, location: { x: 2417, y: 6413, z: 0 }, option: 'Open' }), false,
@@ -8431,8 +8434,15 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     assert.equal(groundSpawns.at(-1)[2].getX(), 2676,
       'the schematic is placed on the reachable tile beside the blocking cache crate');
     assert.equal(groundSpawns.at(-1)[2].getY(), 6422);
+    const beforeIdolPlacement = attrs.get('desert-treasure-ii:lassar');
+    counts.set(core.ItemIdentifiers.REVITALISING_IDOL, 1);
+    attrs.set('desert-treasure-ii:lassar', { ...beforeIdolPlacement, idol: true, inShadow: false, teleporters: [] });
+    assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.REVITALISING_IDOL,
+      objectId: 49485, location: { x: 2691, y: 6415, z: 0 } }), true);
+    assert.equal(attrs.get('desert-treasure-ii:lassar').idolPlaced, true,
+      'the earned idol can be placed beside the eastern device without activating unrelated teleporters');
     attrs.set('desert-treasure-ii:lassar', {
-      ...attrs.get('desert-treasure-ii:lassar'), teleporters: [true, true, true, true, true, true, true], idolPlaced: true, sanity: 1,
+      ...attrs.get('desert-treasure-ii:lassar'), inShadow: true, teleporters: [true, true, true, true, true, true, true], idolPlaced: true, sanity: 1,
     });
     playerProcesses[0]({ player });
     const shadowIdol = lassarObjectObjects.at(-1);
@@ -8456,7 +8466,7 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), inShadow: true });
     assert.equal(itemOnObjectHooks[0]({ player, itemId: core.ItemIdentifiers.BASIC_SHADOW_TORCH,
       objectId: core.ObjectIdentifiers.DOORS_22, location: { x: 2424, y: 6439, z: 0 } }), true,
-    'the eastern residential barrier accepts the torch only after the idol and final teleporter are ready');
+    'the eastern residential barrier accepts the basic torch');
     assert.equal(attrs.get('desert-treasure-ii:lassar').tentacles['2424,6439'], true);
     assert.equal(groundSpawns.at(-1)[1].getId(), core.ItemIdentifiers.SHADOW_KEY_2,
       'burning the eastern barrier reveals the blue shadow key');

@@ -4201,10 +4201,10 @@ module.exports = function registerDesertTreasureII(api) {
       { item: I.ANIMA_PORTAL, x: 2576, y: 6447, flag: "whiteAnimaPlaced", ready: () => state.whiteKey,
         message: "You place the anima portal between the palace chest's braziers." },
       { item: I.REVITALISING_IDOL, x: 2689, y: 6415, flag: "idolPlaced",
-        ready: () => state.idol && state.basicTorch && (state.teleporters ?? []).slice(0, 6).every(Boolean),
+        ready: () => state.idol && state.basicTorch,
         message: "You place the revitalising idol beside the eastern teleporter. Its light steadies your sanity in the Shadow Realm." },
       { item: I.REVITALISING_IDOL, x: 2691, y: 6415, flag: "idolPlaced",
-        ready: () => state.idol && state.basicTorch && (state.teleporters ?? []).slice(0, 6).every(Boolean),
+        ready: () => state.idol && state.basicTorch,
         message: "You place the revitalising idol beside the eastern teleporter. Its light steadies your sanity in the Shadow Realm." },
       { item: I.REVITALISING_IDOL, x: 2578, y: 6445, flag: "whiteIdolPlaced", ready: () => state.whiteKey,
         message: "You place the revitalising idol south-east of the anima portal." },
@@ -5823,14 +5823,6 @@ module.exports = function registerDesertTreasureII(api) {
         p.sendMessage("The tentacles only yield to the cleansing flame of the basic shadow torch.");
         return true;
       }
-      if (lassarX === 2417 && !lassar.blockerPlaced) {
-        p.sendMessage("Place the shadow blocker beside the furnace-house doors before burning the tentacles.");
-        return true;
-      }
-      if (lassarX === 2424 && (!(lassar.teleporters ?? [])[6] || !lassar.idolPlaced || !lassar.tentacles?.["2417,6413"])) {
-        p.sendMessage("The eastern tentacle path is sealed until the idol is placed beside its teleporter and the western tentacles are burned.");
-        return true;
-      }
       if (lassar.tentacles?.[key]) {
         p.sendMessage("The shadow tentacles have already been burned away.");
         return true;
@@ -5921,7 +5913,7 @@ module.exports = function registerDesertTreasureII(api) {
       && (location?.x === 2689 || location?.x === 2691) && location?.y === 6415
       && [49485, 48201, 48202, 48203].includes(objectId)) {
       event.handled = true;
-      if (!lassar.idol || !lassar.basicTorch || !(lassar.teleporters ?? []).slice(0, 6).every(Boolean)) {
+      if (!lassar.idol || !lassar.basicTorch) {
         p.sendMessage("The idol belongs by the eastern teleporter, after Ketla has made it and you have cleared the residential path.");
         return true;
       }
