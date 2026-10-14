@@ -16159,13 +16159,13 @@ test('DT2 keeps internal stages separate from native progress and the cache comp
   attrs.set('quest.desert_treasure_ii.stage', 1);
   attrs.set('desert-treasure-ii:smith-intro', true);
   handlers.playerProcess[0]({ player });
-  assert.deepEqual(sent.at(-1), [14862,6]);
+  assert.deepEqual(sent.findLast(([id]) => id === 14862), [14862,6]);
   const count = sent.length;
   handlers.playerProcess[0]({ player });
   assert.equal(sent.length, count, 'unchanged progress is not sent every tick');
   attrs.set('desert-treasure-ii:statues', 31);
   handlers.playerProcess[0]({ player });
-  assert.deepEqual(sent.at(-1), [14862,8]);
+  assert.deepEqual(sent.findLast(([id]) => id === 14862), [14862,8]);
   attrs.set('desert-treasure-ii:golem-solved', true);
   assert.equal(quest.varbitValue(6,player),36);
   attrs.set('desert-treasure-ii:searched-names',15);
