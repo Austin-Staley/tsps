@@ -22,10 +22,12 @@ jobs:
             - uses: actions/setup-node@v4
               with:
                   node-version: 22
+            - uses: actions/configure-pages@v5
+              id: pages
             - run: corepack enable
             - run: corepack yarn install --frozen-lockfile
               working-directory: docs
-            - run: corepack yarn build
+            - run: corepack yarn build --base "${{ steps.pages.outputs.base_path }}/"
               working-directory: docs
             - uses: actions/upload-pages-artifact@v3
               with:
