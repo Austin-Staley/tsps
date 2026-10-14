@@ -18661,6 +18661,18 @@ test('Song of the Elves library guide remains available after logout and relog',
  const area=handlers.area.find(a=>a.constructor.name==='LletyaStoryArea');area.process(player);area.process(player);assert.equal(spawned.length,1);assert.equal(spawned[0].id,api.core.NpcIdentifiers.LORD_IEUAN_AMLODD_2);assert.equal(api.core.RegionManager.getClipping(spawned[0].x,spawned[0].y,0,null),0);
  handlers.playerLogout.find(h=>h.name==='onPlayerLogout')({player});assert.equal(spawned[0].isRegistered(),false);area.process(player);assert.equal(spawned.length,2,'a stale boolean from an old save cannot hide the new guide');
 });
+test('Song of the Elves trapdoor hook yields to other trapdoors outside the Ardougne basement', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/SongOfTheElves.Quest')(api);
+  const hook = handlers.namedObjects.find(entry => entry.target === 'Trapdoor' &&
+    entry.actions.Open?.name === 'enterResistanceBasement');
+  assert.ok(hook);
+  const player = { getAttribute: () => undefined };
+  const event = { player, objectId: 32577, option: 'Open', location: { x: 3605, y: 3215, z: 0 } };
+  assert.equal(hook.actions.Open(event), false);
+  assert.equal(event.handled, undefined);
+});
+
 test('Blood Moon experience tome Read hook uses the exact cache item name', () => {
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);

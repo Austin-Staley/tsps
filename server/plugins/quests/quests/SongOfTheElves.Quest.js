@@ -3689,7 +3689,7 @@ module.exports = function registerSongOfTheElves(api) {
     const player = event?.player;
     const loc = event?.location;
     if (!player || !loc || ![3, 4, 5, 6].includes(currentChapter(player)) || quest.isComplete(player) ||
-      loc.x < 2522 || loc.x > 2541 || loc.y < 3320 || loc.y > 3344) return;
+      loc.x < 2522 || loc.x > 2541 || loc.y < 3320 || loc.y > 3344) return false;
     event.handled = true;
     player.moveTo(new api.core.Location(2537, 9745, 0));
     if (currentChapter(player) === 3) {
