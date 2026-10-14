@@ -312,6 +312,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   const SWAMP_TREE_OBJECT_ID = 38005; // "Swamp tree branch" Swing-from
   const HIDEOUT_CRATE_OBJECT_ID = 17987; // "Crate" Search (silver sickle (b))
   const LAB_ESCAPE_GATE_ID = 37992; // "Gate" Escape (Kroy's lab)
+  const SLEPE_ROWBOAT_OBJECT_ID = 32602; // cache "Row boat" Travel at Slepe
 
   // ---------------------------------------------------------------------------
   // Tiles
@@ -2227,7 +2228,13 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   }
 
   function handleBoat(event) {
-    const { player } = event;
+    const { player, objectId } = event;
+    const location = event.location ?? event.object?.getLocation?.();
+    const x = location?.getX?.() ?? location?.x;
+    const y = location?.getY?.() ?? location?.y;
+    const z = location?.getZ?.() ?? location?.z;
+    if (objectId === SLEPE_ROWBOAT_OBJECT_ID && (x !== SLEPE_DOCK.x - 4 || y !== SLEPE_DOCK.y || z !== SLEPE_DOCK.z)) return false;
+    if (objectId !== BOAT_OBJECT_ID && objectId !== SLEPE_ROWBOAT_OBJECT_ID) return false;
     event.handled = true;
     const stage = quest.getStage(player);
     if (quest.isComplete(player)) {
@@ -2257,7 +2264,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
       handleCrackedWall(event);
       return;
     }
-    if (objectId === BOAT_OBJECT_ID) {
+    if (objectId === BOAT_OBJECT_ID || objectId === SLEPE_ROWBOAT_OBJECT_ID) {
       handleBoat(event);
       return;
     }
