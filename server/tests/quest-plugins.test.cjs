@@ -6072,7 +6072,7 @@ test('Desert Treasure II last medallion route traps the player, requires solving
 
 test('Desert Treasure II final wights expose their distinct smoke, clone, vial and portal mechanics', () => {
   const { api: base } = mockApi();
-  const interactions = [], deaths = [], playerDeaths = [], hitHooks = [], actions = new Map(), queue = [], removed = [], registeredObjects = [];
+  const interactions = [], deaths = [], playerDeaths = [], hitHooks = [], hitRollHooks = [], actions = new Map(), queue = [], removed = [], registeredObjects = [], clipChecks = [];
   class TestInstance {
     constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
     setChunk() {}
@@ -6094,6 +6094,10 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
   const core = {
     ...base.core,
     TemplatedInstanceArea: TestInstance, GameObject: TestObject,
+    RegionManager: { getClipping(x, y, z, area) {
+      clipChecks.push({ x, y, z, area });
+      return x === 8227 && y === 1614 ? 0x100 : 0;
+    } },
     ObjectManager: { register(object) { registeredObjects.push(object); }, deregister(object) { object.deregistered = true; } },
     NPC: { create(id, location) {
       const hp = id === 12330 ? 1 : id === 12334 ? 30 : id === 12335 ? 5 : 200;
@@ -6112,6 +6116,7 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
         : prop === 'onNpcDeath' ? handler => deaths.push(handler)
         : prop === 'onPlayerDeath' ? handler => playerDeaths.push(handler)
           : prop === 'onNpcHitModify' ? handler => hitHooks.push(handler)
+            : prop === 'onCombatHitRoll' ? handler => hitRollHooks.push(handler)
             : prop === 'onObjectInteraction' ? handler => typeof handler === 'function' && []
               : prop === 'onCustomEvent' ? (name, handler) => actions.set(name, handler)
                 : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
@@ -6193,8 +6198,19 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     p.location = area.tile(32, 47, 0);
     for (let tick = 0; tick < 60; tick++) area.process(p);
     assert.ok(pendingHits.some(hit => hit.damage === 30), 'Persten lightning hits the warned tile if the player stays');
-    assert.ok(current.__dt2PerstenPortals.length > 0, 'Persten creates an attackable 30 HP portal');
-    assert.ok(queue.some(npc => npc.id === 12335 && npc.owner === p), 'the portal spawns a wighted leech');
+    assert.equal(current.__dt2PerstenPortals.length, 1, 'Persten skips the second portal anchor when cache collision marks that tile blocked');
+    const leech = queue.find(npc => npc.id === 12335 && npc.owner === p);
+    assert.ok(leech, 'the portal spawns a wighted leech');
+    assert.equal(leech.__dt2WightLeech, true, 'the spawned actor is tagged for its special attack rules');
+    const portalLocation = current.__dt2PerstenPortals[0].getLocation();
+    assert.deepEqual([leech.location.x, leech.location.y, leech.location.z],
+      [portalLocation.x, portalLocation.y + 1, portalLocation.z],
+      'the leech is placed one clear tile from the translated portal inside the actual instance');
+    assert.ok(clipChecks.some(({ x, y, area: checkedArea }) => x === leech.location.x && y === leech.location.y && checkedArea === area),
+      'spawn placement checks walkability in the translated private area');
+    const leechAttack = { attacker: leech, target: p, combatType: core.CombatType?.MELEE, bypassProtectionPrayer: false };
+    for (const hook of hitRollHooks) hook(leechAttack);
+    assert.equal(leechAttack.bypassProtectionPrayer, true, 'wighted leech attacks ignore protection prayers');
     const lastBoss = current, finalArea = area;
     playerDeaths.at(-1)({ player: p });
     assert.equal(attrs.get('desert-treasure-ii:final-wight-index'), 0, 'dying restarts the four-wight trial');

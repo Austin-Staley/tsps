@@ -1752,8 +1752,19 @@ module.exports = function registerDesertTreasureII(api) {
     api.core.ObjectManager.register(object, true);
     return object;
   }
-  function spawnFinalWightActor(player, area, id, x, y, hp) {
-    const npc = api.core.NPC.create(id, area.tile(x - 3264, y - 6400, 0));
+  function finalWightTileIsClear(area, tile) {
+    const x = tile?.getX?.() ?? tile?.x;
+    const y = tile?.getY?.() ?? tile?.y;
+    const z = tile?.getZ?.() ?? tile?.z ?? 0;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+    const regionManager = api.core.RegionManager;
+    if (typeof regionManager?.getClipping !== "function") return true;
+    // Match the walkable-tile test used by the existing boss hazard plugins.
+    return (regionManager.getClipping(x, y, z, area) & 0x1280100) === 0;
+  }
+  function spawnFinalWightActorAtTile(player, area, id, tile, hp) {
+    if (!tile || !finalWightTileIsClear(area, tile)) return null;
+    const npc = api.core.NPC.create(id, tile);
     if (!npc) return null;
     npc.setOwner?.(player);
     npc.setOwnerOnly?.(true);
@@ -1765,6 +1776,12 @@ module.exports = function registerDesertTreasureII(api) {
     area.add(npc);
     api.core.World.getAddNPCQueue().push(npc);
     return npc;
+  }
+  function spawnFinalWightActor(player, area, id, x, y, hp) {
+    return spawnFinalWightActorAtTile(player, area, id, area.tile(x - 3264, y - 6400, 0), hp);
+  }
+  function allowWightedLeechThroughProtection(event) {
+    if (event.attacker?.__dt2WightLeech) event.bypassProtectionPrayer = true;
   }
   function clearFinalWightActors(boss, player, area) {
     for (const object of boss.__dt2FinalWightObjects ?? []) removeFinalWightObject(object);
@@ -2026,7 +2043,9 @@ module.exports = function registerDesertTreasureII(api) {
           if (portal.__dt2LeechClock >= 8) {
             portal.__dt2LeechClock = 0;
             const loc = finalWightLocation(portal);
-            const leech = loc && spawnFinalWightActor(player, area, FINAL_WIGHT_PORTAL_LEECH, loc.x, loc.y + 1, 5);
+            // `loc` is already in the owner's translated instance coordinate space.
+            const leechTile = loc && area.tile(loc.x - (area.getBaseX?.() ?? 0), loc.y + 1 - (area.getBaseY?.() ?? 0), 0);
+            const leech = leechTile && spawnFinalWightActorAtTile(player, area, FINAL_WIGHT_PORTAL_LEECH, leechTile, 5);
             if (leech) {
               leech.__dt2WightLeech = true;
               boss.__dt2FinalWightActors.push(leech);
@@ -7832,6 +7851,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcHitModify(handleWhispererHit);
   api.onNpcHitModify(handleFinalFigureHit);
   api.onNpcHitModify(handleFinalWightHit);
+  api.onCombatHitRoll(allowWightedLeechThroughProtection);
   api.onNpcInteraction("Asgarnia Smith", { "Talk-to": talkSmith });
   api.onNpcInteraction("Cerebral pathfinder", { Move: pushScarPathRunner });
   api.onNpcInteraction("Cerebral pathbreaker", { Move: pushScarPathRunner });
