@@ -8,6 +8,7 @@ const registerJusticiarEffects = require("./effects/JusticiarArmour");
 const registerSalveAmuletEffects = require("./effects/SalveAmulet");
 const registerDragonHunterEffects = require("./effects/DragonHunter");
 const registerDemonbaneEffects = require("./effects/Demonbane");
+const registerVampyrebaneEffects = require("./effects/Vampyrebane");
 
 module.exports = {
   name: "EquipmentEffects",
@@ -23,5 +24,6 @@ module.exports = {
     registerSalveAmuletEffects(api);
     registerDragonHunterEffects(api);
     registerDemonbaneEffects(api);
+    registerVampyrebaneEffects(api);
   },
 };
