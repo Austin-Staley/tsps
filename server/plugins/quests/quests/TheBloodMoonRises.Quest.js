@@ -5453,7 +5453,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       if (started) event.handled = true;
       return started;
     }
-    if (stage(player) === STAGE.PREPARATIONS && npcName === "ivan strom") {
+    if (stage(player) === STAGE.PREPARATIONS && ["ivan strom", "sarei"].includes(npcName)) {
       event.handled = true;
       const variant = (player.getAttribute(PREP_ATTRIBUTE) ?? {}).ivanSareiIntroComplete
         ? "hallowed-preparations-talking-to-ivan-and-sarei-talking-to-them-again"
@@ -7127,6 +7127,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   // Claim Ivan after Sins of the Father and In Aid of the Myreque decline him,
   // before their generic completed-quest transcript can answer for this stage.
   api.onNpcInteraction("Ivan Strom", { "Talk-to": talkQuestNpc });
+  api.onNpcInteraction("Sarei", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Roy", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Veliaf Hurtz", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Safalaan Hallow", { "Talk-to": talkQuestNpc });

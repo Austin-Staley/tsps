@@ -2427,6 +2427,16 @@ test('Blood Moon Ivan and Sarei preparation dialogue advances to the stake follo
     assert.equal(talk(event()), true);
     assert.equal(started.variant, 'hallowed-preparations-talking-to-ivan-and-sarei-talking-to-them-again');
 
+    const talkToSarei = handlers.npcInteractions.get('Sarei')['Talk-to'];
+    assert.equal(talkToSarei({
+      player,
+      npcId: api.core.NpcIdentifiers.SAREI,
+      definition: { getName: () => 'Sarei' },
+      handled: false,
+    }), true);
+    assert.equal(started.variant, 'hallowed-preparations-talking-to-ivan-and-sarei-talking-to-them-again',
+      'Sarei uses the same earned follow-up instead of replaying the introduction');
+
     const condition = handlers.condition.find(handler => handler.name === 'answerPreparationStakesCondition');
     assert.equal(condition({ player, stepId: 'sqIM75' }), false, 'the unmade-stakes branch is skipped when stakes are carried');
     assert.equal(condition({ player, stepId: 'cv4yCk' }), true, 'the made-stakes branch is selected');
