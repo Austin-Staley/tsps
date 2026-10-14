@@ -16,6 +16,17 @@ module.exports = function registerDesertTreasureII(api) {
   const FINAL_WIGHT_PORTAL_LEECH = 12335;
   const FINAL_WIGHT_KASONDE_POOL_ONE = 48752;
   const FINAL_WIGHT_KASONDE_POOL_TWO = 48751;
+  // https://oldschool.runescape.wiki/w/Desert_Treasure_II_-_The_Fallen_Empire#Recidivism
+  // RuneLite SpotanimID.ENAKH_SHADOW_BLITZ_TRAVEL is the closest purple
+  // shadow projectile available in this cache. No Mysterious Figure orb
+  // capture/unique spotanim was found, so this visual mapping is inferred.
+  const FINAL_FIGURE_ORB_PROJECTILE = 536;
+  // Wiki: approximately every ten attacks, she stuns/shoves the player, then
+  // throws an orb. The 3-tick freeze + 2-tick dodge window is inferred from
+  // the Wiki's instruction that the stun ends two ticks before impact.
+  const FINAL_FIGURE_SPECIAL_ATTACKS = 10;
+  const FINAL_FIGURE_STUN_TICKS = 3;
+  const FINAL_FIGURE_ORB_DODGE_TICKS = 2;
   // Quest Helper's marker is on a cache wall tile. These adjacent southern tiles are clear.
   const FINAL_PLAYER_SPAWN = [32, 42];
   const FINAL_WIGHT_SPAWN = [3296, 6443];
@@ -4020,6 +4031,12 @@ module.exports = function registerDesertTreasureII(api) {
       return;
     }
     if (stage(p) !== S.WHISPERER) return;
+    const finalFigure = spawned.get(p)?.finalFigure;
+    if (finalFigure) {
+      clearFinalFigureSpecial(p, finalFigure);
+      api.removeNpc(finalFigure);
+      spawned.get(p).finalFigure = null;
+    }
     const state = p.getAttribute(LASSAR) ?? {};
     if (!state.entered) return;
     const owned = spawned.get(p);
@@ -4041,6 +4058,12 @@ module.exports = function registerDesertTreasureII(api) {
   }
   function handleLogout({ player: p }) {
     if (!p) return;
+    const ownedActors = spawned.get(p);
+    if (ownedActors?.finalFigure) {
+      clearFinalFigureSpecial(p, ownedActors.finalFigure);
+      api.removeNpc(ownedActors.finalFigure);
+      ownedActors.finalFigure = null;
+    }
     const current = p.getPrivateArea?.();
     const returnToVaultEntrance = current && [p.getAttribute(ATTR_VAULT_AREA), p.getAttribute(FINAL_ROOM)].includes(current);
     if (current && current === p.getAttribute(FINAL_ROOM) && stage(p) === S.FINALE
@@ -4415,6 +4438,12 @@ module.exports = function registerDesertTreasureII(api) {
     const position = p.getLocation?.();
     const hereX = position?.getX?.() ?? position?.x;
     const hereY = position?.getY?.() ?? position?.y;
+    const hereZ = position?.getZ?.() ?? position?.z ?? 0;
+    const inFinalCell = hereZ === 0 && hereX >= 3082 && hereX <= 3122 && hereY >= 9243 && hereY <= 9271;
+    if (inFinalCell && p.getHitpoints?.() > 0 && p.getAttribute(FINAL_CELL_ACTIVE)
+      && p.getAttribute(FINAL_CELL_CHEST) && p.getAttribute(FINAL_FIGURE_STARTED)
+      && !p.getAttribute(FINAL_FIGURE_DEFEATED)) spawnFinalFigure(p);
+    processFinalFigureSpecial(p, spawned.get(p)?.finalFigure);
     const atWhispererCathedral = (position?.getZ?.() ?? position?.z ?? 0) === 0
       && ((hereX >= 2624 && hereX <= 2688 && hereY >= 6320 && hereY <= 6448)
         || (hereX >= 2336 && hereX <= 2432 && hereY >= 6320 && hereY <= 6448));
@@ -6733,6 +6762,7 @@ module.exports = function registerDesertTreasureII(api) {
       return;
     }
     if (owned.finalFigure === npc && stage(killer) === S.WHISPERER) {
+      clearFinalFigureSpecial(killer, npc);
       owned.finalFigure = null;
       killer.setAttribute(FINAL_FIGURE_STARTED, false);
       killer.setAttribute(FINAL_FIGURE_DEFEATED, true);
@@ -7101,6 +7131,8 @@ module.exports = function registerDesertTreasureII(api) {
       owned.finalFigure.setMaxHitpoints?.(450);
       owned.finalFigure.setHitpoints?.(450);
       owned.finalFigure.__dt2FinalFigure = true;
+      owned.finalFigure.setScriptedMovement?.(false);
+      owned.finalFigure.getCombat?.()?.attack?.(p);
       owned.finalFigure.__skipDefaultRespawn = true;
       p.sendMessage("The Mysterious Figure attacks. Protect from Magic and change combat styles when she prays against yours.");
     }
@@ -7123,6 +7155,85 @@ module.exports = function registerDesertTreasureII(api) {
       npc.forceChat?.("You will not break my defences so easily!");
       attacker.sendMessage?.("The Mysterious Figure prays against your current attack style.");
     }
+  }
+  function finalFigureLocation(player) {
+    const location = player?.getLocation?.();
+    const x = location?.getX?.() ?? location?.x;
+    const y = location?.getY?.() ?? location?.y;
+    const z = location?.getZ?.() ?? location?.z ?? 0;
+    return Number.isInteger(x) && Number.isInteger(y) ? new api.core.Location(x, y, z) : null;
+  }
+  function clearFinalFigureSpecial(player, npc = spawned.get(player)?.finalFigure) {
+    const special = npc?.__dt2FinalFigureSpecial;
+    if (special?.movementBlocked) {
+      player?.getMovementQueue?.()?.setBlockMovement?.(false)?.reset?.();
+      special.movementBlocked = false;
+    }
+    if (npc) {
+      npc.__dt2FinalFigureSpecial = null;
+      npc.__dt2FinalFigureAttacks = 0;
+      npc.setScriptedMovement?.(false);
+    }
+  }
+  function startFinalFigureSpecial(player, npc) {
+    const target = finalFigureLocation(player);
+    if (!target) return;
+    const cycle = api.core.World.getProcessCycle();
+    npc.__dt2FinalFigureAttacks = 0;
+    npc.setScriptedMovement?.(true);
+    player.getMovementQueue?.()?.setBlockMovement?.(true)?.reset?.();
+    npc.__dt2FinalFigureSpecial = {
+      target,
+      release: cycle + FINAL_FIGURE_STUN_TICKS,
+      impact: cycle + FINAL_FIGURE_STUN_TICKS + FINAL_FIGURE_ORB_DODGE_TICKS,
+      movementBlocked: true,
+      launched: false,
+    };
+    npc.forceChat?.("Feel the bite of winter!");
+    player.sendMessage("The Mysterious Figure freezes you in place. Move as soon as the ice breaks to evade the orb.");
+  }
+  function processFinalFigureSpecial(player, npc) {
+    const special = npc?.__dt2FinalFigureSpecial;
+    if (!special) return;
+    if (!player?.isRegistered?.() || player.getHitpoints?.() <= 0 || !npc.isRegistered?.() || npc.getHitpoints?.() <= 0) {
+      clearFinalFigureSpecial(player, npc);
+      return;
+    }
+    const cycle = api.core.World.getProcessCycle();
+    if (special.movementBlocked && cycle >= special.release) {
+      player.getMovementQueue?.()?.setBlockMovement?.(false)?.reset?.();
+      special.movementBlocked = false;
+      npc.setScriptedMovement?.(false);
+    }
+    if (!special.launched && cycle >= special.release) {
+      new api.core.Projectile(npc.getLocation(), special.target, null, FINAL_FIGURE_ORB_PROJECTILE,
+        40, 60, 80, 0, npc.getPrivateArea?.() ?? null).sendProjectile();
+      special.launched = true;
+      npc.forceChat?.("You cannot escape!");
+      player.sendMessage("The Mysterious Figure launches a purple orb toward the tile where you were frozen!");
+    }
+    if (cycle < special.impact) return;
+    const here = finalFigureLocation(player);
+    if (here?.equals?.(special.target)) {
+      const damage = Math.floor(Math.random() * 36);
+      // Direct queued damage intentionally bypasses protection prayers: the Wiki
+      // describes this as typeless damage, avoidable by leaving the marked tile.
+      player.getCombat()?.getHitQueue?.()?.addPendingDamage?.([
+        new api.core.HitDamage(damage, api.core.HitMask.RED),
+      ]);
+      player.sendMessage(`The purple orb strikes you for ${damage} typeless damage.`);
+    } else {
+      player.sendMessage("You dodge the purple orb by leaving its marked tile.");
+    }
+    clearFinalFigureSpecial(player, npc);
+  }
+  function trackFinalFigureAttack({ attacker, target }) {
+    if (!attacker?.__dt2FinalFigure || !target?.isPlayer?.()) return;
+    const owner = attacker.getOwner?.();
+    if (!owner || target !== owner || spawned.get(owner)?.finalFigure !== attacker
+      || stage(owner) !== S.WHISPERER || attacker.__dt2FinalFigureSpecial) return;
+    attacker.__dt2FinalFigureAttacks = (attacker.__dt2FinalFigureAttacks ?? 0) + 1;
+    if (attacker.__dt2FinalFigureAttacks >= FINAL_FIGURE_SPECIAL_ATTACKS) startFinalFigureSpecial(owner, attacker);
   }
   function storeFinalCellGear(p, attribute = FINAL_CELL_GEAR) {
     const save = (container) => container.getItems().map((item) => [item.getId(), item.getAmount(), item.meta ?? null]);
@@ -8048,6 +8159,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.registerNpcCombatMethodProvider(N.KETLA_THE_UNWORTHY_2, KetlaShadowCloneCombat);
   api.onCombatHitRoll(vardorvisHitRoll);
   api.onCombatHitResolved(vardorvisHitResolved);
+  api.onCombatHitResolved(trackFinalFigureAttack);
   api.onPrayerDisabled(vardorvisPrayerDisabled);
   api.onItemOnNpc(handleNerveOnCatalyst);
   api.onItemOnNpc(handleSucellusItemOnNpc);

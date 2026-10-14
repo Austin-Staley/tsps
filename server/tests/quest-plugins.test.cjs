@@ -7044,10 +7044,16 @@ test('Desert Treasure II plays the first-medallion ambush before re-entering the
 test('Desert Treasure II last medallion route traps the player, requires solving the cell lock, then makes the Figure fight reclaimable', () => {
   const { api: base } = mockApi();
   const objectHooks = [], customEvents = [], deathHooks = [], npcHitHooks = [], prompts = [];
-  let spawnedFigure;
+  const processHooks = [], resolvedHitHooks = [], playerDeathHooks = [], logoutHooks = [];
+  const pendingPlayerHits = [], projectiles = [], spawnedFigures = [];
+  let cycle = 0, spawnedFigure;
   const core = { ...base.core,
     NPC: { create: (id, location) => ({ id, location }), },
-    World: { getAddNPCQueue: () => [], getRemoveNPCQueue: () => [] },
+    World: { getAddNPCQueue: () => [], getRemoveNPCQueue: () => [], getProcessCycle: () => cycle },
+    Projectile: class {
+      constructor(...args) { this.args = args; }
+      sendProjectile() { projectiles.push(this); }
+    },
   };
   const api = new Proxy(base, {
     get: (target, prop) => prop === 'core' ? core
@@ -7055,11 +7061,24 @@ test('Desert Treasure II last medallion route traps the player, requires solving
         : prop === 'onCustomEvent' ? (name, handler) => customEvents.push({ name, handler })
           : prop === 'onNpcDeath' ? (handler) => deathHooks.push(handler)
             : prop === 'onNpcHitModify' ? (handler) => npcHitHooks.push(handler)
+              : prop === 'onCombatHitResolved' ? (handler) => resolvedHitHooks.push(handler)
+                : prop === 'onPlayerProcess' ? (handler) => processHooks.push(handler)
+                  : prop === 'onPlayerDeath' ? (handler) => playerDeathHooks.push(handler)
+                    : prop === 'onPlayerLogout' ? (handler) => logoutHooks.push(handler)
             : prop === 'sendMultiChatboxPrompt' ? (player, prompt, ...options) => {
               assert.ok(options.length <= 10, 'native prompts support at most five label/callback pairs');
               prompts.push({ player, prompt, options });
             }
-              : prop === 'spawnNpc' ? (args) => (spawnedFigure = { id: args.id, args, setMaxHitpoints(value) { this.maxHitpoints = value; }, setHitpoints(value) { this.hitpoints = value; } })
+              : prop === 'spawnNpc' ? (args) => {
+                spawnedFigure = { id: args.id, args, location: new core.Location(args.x, args.y, args.z), owner: args.owner,
+                  setMaxHitpoints(value) { this.maxHitpoints = value; }, setHitpoints(value) { this.hitpoints = value; },
+                  getHitpoints() { return this.hitpoints; }, isRegistered() { return true; }, getOwner() { return this.owner; },
+                  getLocation() { return this.location; }, getPrivateArea() { return null; },
+                  setScriptedMovement(value) { this.scriptedMovement = value; }, forceChat(text) { this.chat = text; },
+                  getCombat() { return { attack: player => { this.target = player; } }; } };
+                spawnedFigures.push(spawnedFigure);
+                return spawnedFigure;
+              }
                 : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
   });
   const runtime = require('../plugins/quests/QuestRuntime');
@@ -7084,6 +7103,11 @@ test('Desert Treasure II last medallion route traps the player, requires solving
     const p = {
       getAttribute: (key) => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
       getUsername: () => 'dt2-final-cell-test',
+      location: new core.Location(3086, 9260, 0), hitpoints: 120, registered: true, movementBlocked: false,
+      isRegistered() { return this.registered; }, getHitpoints() { return this.hitpoints; }, getLocation() { return this.location; },
+      isPlayer: () => true,
+      getMovementQueue() { return { setBlockMovement: value => { this.movementBlocked = value; return this.getMovementQueue(); }, reset() { return this; } }; },
+      getCombat() { return { getHitQueue: () => ({ addPendingDamage: hits => pendingPlayerHits.push(...hits) }) }; },
       getSkillManager: () => ({ getMaxLevel: () => 99 }),
       getInventory: () => inventory, getEquipment: () => equipment,
       getPacketSender: () => new Proxy({}, { get: () => () => {} }),
@@ -7120,11 +7144,13 @@ test('Desert Treasure II last medallion route traps the player, requires solving
     assert.equal(equipment.getAmount(1275), 1, 'the chest restores worn equipment');
     assert.equal(objectHooks[0]({ player: p, objectId: 37633, option: 'Inspect', location: { x: 3086, y: 9260, z: 0 } }), true);
     assert.equal(transcripts.at(-1).variant, 'the-desert-treasure-inspecting-the-altar-in-the-temple');
+    p.location = new core.Location(3086, 9260, 0);
     const line = { player: p, npcId: core.NpcIdentifiers.MYSTERIOUS_FIGURE_2, text: 'Very well...' };
     customEvents.find(({ name }) => name === 'npc-dialogue:line').handler(line);
     line.after();
     assert.equal(spawnedFigure.id, core.NpcIdentifiers.MYSTERIOUS_FIGURE_4);
     assert.equal(spawnedFigure.maxHitpoints, 450);
+    assert.equal(spawnedFigure.target, p, 'the Figure starts attacking only after the altar transcript ends');
     let attackStyle = 1;
     p.isPlayer = () => true; p.getAsPlayer = () => p;
     p.getFightType = () => ({ getBonusType: () => attackStyle });
@@ -7140,6 +7166,70 @@ test('Desert Treasure II last medallion route traps the player, requires solving
     assert.equal(hitFor(1), 10, 'the third attack lands before the Figure changes her prayer');
     assert.equal(hitFor(1), 0, 'the Figure blocks the attack style she prayed against');
     assert.equal(hitFor(4), 10, 'switching from melee to ranged bypasses her current protection');
+
+    const figureAttack = () => resolvedHitHooks.forEach(hook => hook({ attacker: spawnedFigure, target: p, hit: { getTotalDamage: () => 20 } }));
+    for (let i = 0; i < 9; i++) figureAttack();
+    assert.equal(p.movementBlocked, false, 'the special cadence counts ten incoming attacks');
+    figureAttack();
+    assert.equal(p.movementBlocked, true, 'the tenth incoming attack starts the freeze');
+    assert.equal(spawnedFigure.scriptedMovement, true, 'normal Figure attacks pause during the special');
+    const process = () => processHooks.forEach(hook => hook({ player: p }));
+    cycle++;
+    process();
+    assert.equal(projectiles.length, 0, 'the player remains frozen during the warning window');
+    cycle++;
+    process();
+    cycle++;
+    process();
+    assert.equal(p.movementBlocked, false, 'the freeze ends before the orb lands');
+    assert.equal(projectiles.length, 1, 'the cache purple projectile is sent after the freeze');
+    assert.deepEqual([projectiles[0].args[3], projectiles[0].args[1].getX(), projectiles[0].args[1].getY()], [536, 3086, 9260]);
+    p.location = new core.Location(3087, 9260, 0);
+    cycle++;
+    process();
+    cycle++;
+    process();
+    assert.equal(pendingPlayerHits.length, 0, 'moving off the marked tile dodges the typeless orb');
+    assert.equal(spawnedFigure.scriptedMovement, false, 'the Figure resumes normal attacks after the dodge');
+
+    for (let i = 0; i < 9; i++) figureAttack();
+    assert.equal(spawnedFigure.__dt2FinalFigureAttacks, 9);
+    assert.equal(p.movementBlocked, false, 'a second special requires another ten Figure attacks');
+    figureAttack();
+    assert.equal(p.movementBlocked, true);
+    for (let i = 0; i < 3; i++) { cycle++; process(); }
+    assert.equal(p.movementBlocked, false);
+    cycle += 2;
+    const originalRandom = Math.random;
+    Math.random = () => 0.5;
+    try { process(); } finally { Math.random = originalRandom; }
+    assert.equal(pendingPlayerHits.length, 1, 'standing on the marked tile receives direct damage despite protection prayers');
+    assert.equal(pendingPlayerHits[0].getDamage(), 18, 'typeless damage ignores protection and stays below the Wiki max hit of 35');
+    assert.equal(spawnedFigure.scriptedMovement, false);
+
+    for (let i = 0; i < 10; i++) figureAttack();
+    assert.equal(p.movementBlocked, true);
+    playerDeathHooks.at(-1)({ player: p });
+    assert.equal(p.movementBlocked, false, 'death clears any active Figure movement lock');
+    assert.equal(spawnedFigure.scriptedMovement, false, 'death clears the Figure scripted-movement pause');
+    assert.equal(attrs.get('desert-treasure-ii:final-figure-started'), true, 'the altar fight remains resumable after death');
+    p.location = new core.Location(3086, 9260, 0);
+    p.hitpoints = 120;
+    process();
+    assert.equal(spawnedFigures.length, 2, 'returning to the cell respawns a fresh Figure after death');
+    assert.equal(spawnedFigures[1].maxHitpoints, 450, 're-entry restores the canonical Figure hitpoints');
+    assert.equal(p.movementBlocked, false, 're-entry does not inherit the old freeze');
+
+    for (let i = 0; i < 10; i++) figureAttack();
+    assert.equal(p.movementBlocked, true);
+    logoutHooks.at(-1)({ player: p });
+    assert.equal(p.movementBlocked, false, 'logout clears an in-progress movement lock');
+    assert.equal(spawnedFigures[1].scriptedMovement, false, 'logout releases the Figure combat pause');
+    process();
+    assert.equal(spawnedFigures.length, 3, 'the active fight resumes with a fresh Figure after re-entry');
+    assert.equal(spawnedFigures[2].maxHitpoints, 450);
+    assert.equal(p.movementBlocked, false);
+
     deathHooks[0]({ killer: p, npc: spawnedFigure });
     assert.equal(attrs.get('desert-treasure-ii:final-figure-defeated'), true);
     assert.equal(inventory.getAmount(core.ItemIdentifiers.WHISPERERS_MEDALLION), 1);
@@ -18933,7 +19023,8 @@ test('DT2 Vardorvis scales melee, heals, exposes avoidable specials and accepts 
   const definition=require('../data/definitions/monsters-complete.json')['12224'];
   assert.deepEqual([definition.hitpoints,definition.combat_level,definition.attack_level,definition.defence_slash],[500,572,260,25],'cache12224 is the quest variant, not Awakened');
   const {api:base,handlers}=mockApi();
-  let cycle=1, Combat, hitRoll, resolved, prayerDisabled, blocked=false, prayer=60, accurate=true,freeSlots=1;
+  let cycle=1, Combat, hitRoll, prayerDisabled, blocked=false, prayer=60, accurate=true,freeSlots=1;
+  const resolvedHooks=[];
   const damage={value:37,getDamage(){return this.value},setDamage(v){this.value=v}};
   const pending={getHits:()=>[damage],isAccurate:()=>accurate,updateTotalDamage(){},getTotalDamage:()=>damage.value};
   const attrs=new Map([['desert-treasure-ii:vardorvis-progress',16]]),varbits=new Map([[4118,1]]),received=[],tasks=[],scripts=[],closed=[],ground=[];
@@ -18948,7 +19039,7 @@ test('DT2 Vardorvis scales melee, heals, exposes avoidable specials and accepts 
     PrayerHandler:{...base.core.PrayerHandler,deactivatePrayer:(p,id)=>varbits.set(4100+id,0)},
     Task:class{stop(){this.stopped=true}},TaskManager:{submit:t=>tasks.push(t),cancelTasks(){}},
   };
-  const api=new Proxy(base,{get:(t,key)=>key==='core'?core:key==='registerNpcCombatMethodProvider'?(id,C)=>{if(id===core.NpcIdentifiers.VARDORVIS_2)Combat=C}:key==='onCombatHitRoll'?h=>hitRoll=h:key==='onCombatHitResolved'?h=>resolved=h:key==='onPrayerDisabled'?h=>prayerDisabled=h:key==='getItemOnGroundManager'?()=>({registerLocation:(...args)=>ground.push(args)}):t[key]});
+  const api=new Proxy(base,{get:(t,key)=>key==='core'?core:key==='registerNpcCombatMethodProvider'?(id,C)=>{if(id===core.NpcIdentifiers.VARDORVIS_2)Combat=C}:key==='onCombatHitRoll'?h=>hitRoll=h:key==='onCombatHitResolved'?h=>resolvedHooks.push(h):key==='onPrayerDisabled'?h=>prayerDisabled=h:key==='getItemOnGroundManager'?()=>({registerLocation:(...args)=>ground.push(args)}):t[key]});
   require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
   const quest=require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
   const p={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getUsername:()=> 'vard-test',isPlayer:()=>true,getAsPlayer(){return this},isRegistered:()=>true,getHitpoints:()=>99,
@@ -18970,7 +19061,7 @@ test('DT2 Vardorvis scales melee, heals, exposes avoidable specials and accepts 
     varbits.set(4118,0);method.hits(boss,p);assert.equal(damage.value,37);
     accurate=false;method.hits(boss,p);assert.equal(damage.value,0,'misses stay misses');accurate=true;
     const roll={attacker:boss,bypassProtectionPrayer:false};hitRoll(roll);assert.equal(roll.bypassProtectionPrayer,true);
-    boss.hp=490;damage.value=30;resolved({attacker:boss,target:p,hit:pending});assert.equal(boss.hp,500,'healing is capped');
+    boss.hp=490;damage.value=30;for(const hook of resolvedHooks)hook({attacker:boss,target:p,hit:pending});assert.equal(boss.hp,500,'healing is capped');
     boss.hp=100;area.process(p);assert.equal(blocked,true);assert.deepEqual(scripts.at(-1),[1816,[6]]);
     const widget=handlers.custom.get('player:widget-action')[0];
     const bad={player:p,packet:{type:'widget_action',groupId:833,childId:5}};widget(bad);assert.notEqual(bad.handled,true);
