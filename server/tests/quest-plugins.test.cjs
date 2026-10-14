@@ -2559,7 +2559,14 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   const player = {
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
-    getInventory: () => ({ contains: id => inventoryItems.has(id) }),
+    getInventory: () => ({
+      contains: id => inventoryItems.has(id),
+      deleteNumber: (id, amount) => {
+        if (!inventoryItems.has(id) || amount !== 1) return false;
+        inventoryItems.delete(id);
+        return true;
+      },
+    }),
     getPacketSender: () => new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) }, {
       get: (target, key) => target[key] ?? (() => {}),
     }),
@@ -2859,6 +2866,20 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   const returnToSecretRoom = enterPairedDoor(61573, 2441, 7413, 0, { x: 2441, y: 7414, z: 0 });
   assert.equal(returnToSecretRoom.handled, true);
   assert.deepEqual(moved.at(-1), [2437, 7419, 0], 'the captured small-hall door returns to the secret room');
+  attributes.set('quest.the_blood_moon_rises.castle-room', 45);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 2);
+  inventoryItems.add(api.core.ItemIdentifiers.SOLID_KEY);
+  const unlockedLab = enterPairedDoor(61575, 2503, 7400, 0, { x: 2502, y: 7400, z: 0 });
+  assert.equal(unlockedLab.handled, true);
+  assert.equal(inventoryItems.has(api.core.ItemIdentifiers.SOLID_KEY), false,
+    'the solid key breaks in the lock when the player enters the laboratory');
+  assert.deepEqual(moved.at(-1), [2510, 7382, 0]);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 42);
+  const returnFromLab = enterPairedDoor(61574, 2512, 7382, 0, { x: 2511, y: 7382, z: 0 });
+  assert.equal(returnFromLab.handled, true);
+  assert.deepEqual(moved.at(-1), [2502, 7400, 0],
+    'the paired laboratory door stays unlocked after the one-use key breaks');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 45);
   inventoryItems.add(api.core.ItemIdentifiers.GILDED_KEY);
   attributes.set('quest.the_blood_moon_rises.castle-room', 33);
   const gildedLibraryDoor = enterPairedDoor(61626, 2445, 7418, 1, { x: 2445, y: 7417, z: 0 });

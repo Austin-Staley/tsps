@@ -422,7 +422,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.FULL_M, x: 2499, y: 7400, z: 0, from: CASTLE_ROOM.SOLID_DOOR_HALL, to: CASTLE_ROOM.DISPLAY_ROOM,
       fromFloor: 2, toFloor: 2, landing: [2509, 7379] },
     { id: 61575, x: 2503, y: 7400, z: 0, from: CASTLE_ROOM.SOLID_DOOR_HALL, to: CASTLE_ROOM.LABORATORY,
-      fromFloor: 2, toFloor: 2, action: "Enter", key: ItemIdentifiers.SOLID_KEY, keyName: "solid key", landing: [2510, 7382] },
+      fromFloor: 2, toFloor: 2, action: "Enter", key: ItemIdentifiers.SOLID_KEY, consumesKey: true,
+      keyName: "solid key", landing: [2510, 7382] },
     { id: 61574, x: 2512, y: 7382, z: 0, from: CASTLE_ROOM.LABORATORY, to: CASTLE_ROOM.SOLID_DOOR_HALL,
       fromFloor: 2, toFloor: 2, action: "Enter", key: ItemIdentifiers.SOLID_KEY, keyName: "solid key", landing: [2502, 7400] },
     { id: CASTLE_DOOR_IDS.DOOR, x: 2523, y: 7389, z: 0, from: CASTLE_ROOM.LABORATORY, to: CASTLE_ROOM.STOCKPILE_STORAGE,
@@ -5069,9 +5070,26 @@ module.exports = function registerTheBloodMoonRises(api) {
       // Remember only this exact placed passage, after its normal key check and
       // room-side validation. A solved puzzle or a key claimed long ago does
       // not unlock every door that shares the same visible cache definition.
-      if (passageKey && (moonDoorKey || transition.key) && !passageAlreadyUnlocked &&
-        hasItem(player, moonDoorKey?.[0] ?? transition.key)) {
-        player.setAttribute(CASTLE_UNLOCKED_PASSAGES_ATTRIBUTE, [...unlockedPassages, passageKey]);
+      const keyId = moonDoorKey?.[0] ?? transition.key;
+      const hasUnlockItem = keyId && hasItem(player, keyId);
+      const unlockReturn = transition.consumesKey && transition.key && hasUnlockItem
+        ? CASTLE_DOOR_TRANSITIONS.find(door => door.from === transition.to && door.to === transition.from && door.key === transition.key)
+        : null;
+      const returnPassageKey = unlockReturn &&
+        `${unlockReturn.id}:${unlockReturn.x},${unlockReturn.y},${unlockReturn.z ?? 0}:${unlockReturn.from}->${unlockReturn.to}`;
+      const unlocked = new Set(unlockedPassages);
+      if (passageKey && (moonDoorKey || transition.key) && !passageAlreadyUnlocked && hasUnlockItem) {
+        unlocked.add(passageKey);
+      }
+      // The solid key breaks in this lock. Remember both sides of that one
+      // paired doorway so the consumed key does not strand the player inside.
+      if (transition.consumesKey && returnPassageKey && hasUnlockItem) {
+        player.getInventory().deleteNumber(transition.key, 1);
+        unlocked.add(passageKey);
+        unlocked.add(returnPassageKey);
+      }
+      if (unlocked.size !== unlockedPassages.length) {
+        player.setAttribute(CASTLE_UNLOCKED_PASSAGES_ATTRIBUTE, [...unlocked]);
       }
       player.setAttribute(CASTLE_ROOM_ATTRIBUTE, transition.to);
       player.setAttribute(CASTLE_FLOOR_ATTRIBUTE, transition.toFloor ?? CASTLE_GROUND_FLOOR);
