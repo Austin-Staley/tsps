@@ -8461,6 +8461,11 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     const portals = [[2593, 6424, 49479], [2617, 6417, 49480], [2611, 6379, 49482], [2599, 6341, 49483], [2643, 6434, 49484], [2652, 6405, 49481]];
     assert.equal(interact({ player, objectId: portals[1][2], definition: { id: portals[1][2] }, location: { x: portals[1][0], y: portals[1][1], z: 0 }, option: 'Activate' }), true);
     assert.equal(attrs.get('desert-treasure-ii:lassar').teleporters[1], true, 'a visited teleporter activates independently of earlier cache indices');
+    const outOfOrder = attrs.get('desert-treasure-ii:lassar');
+    assert.deepEqual(outOfOrder.teleporters, [false, true, false, false, false, false, false]);
+    const { PlayerSave } = require('../dist/game/entity/impl/player/persistence/PlayerSave');
+    assert.deepEqual(PlayerSave.cloneAttribute('desert-treasure-ii:lassar', outOfOrder), outOfOrder,
+      'optional teleporter order must survive the real persistent-attribute serializer without undefined array slots');
     for (const [x, y, id] of portals.slice(0, 3)) {
       assert.equal(interact({ player, objectId: id, definition: { id }, location: { x, y, z: 0 }, option: 'Activate' }), true);
     }

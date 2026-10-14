@@ -7575,7 +7575,7 @@ module.exports = function registerDesertTreasureII(api) {
       && (visibleId === id || visibleId === 48201 || visibleId === 48202 || visibleId === 48203));
     if (teleporter && (option === "activate" || option === "travel" || option === "use" || option === "")) {
       const portalIndex = LASSAR_TELEPORTERS.indexOf(teleporter);
-      const active = [...(state.teleporters ?? [])];
+      const active = LASSAR_TELEPORTERS.map((_, index) => Boolean(state.teleporters?.[index]));
       if (active[portalIndex]) {
         if (option === "activate") {
           p.sendMessage(`This Lassar teleporter is already active (${active.filter(Boolean).length}/7).`);
