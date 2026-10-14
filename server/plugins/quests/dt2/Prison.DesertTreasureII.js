@@ -224,7 +224,8 @@ module.exports = function registerSucellusPrison(api) {
     const libraryBooks = Number(player.getAttribute("desert-treasure-ii:sucellus-prison-library-books")) || 0;
     if (!(clueRead & clueBit)
       || (key === "emerald" && (clueRead & 18) !== 18)
-      || (key === "ruby" && (!has(player, I.MAGIC_LANTERN) || rubyChests !== 127))
+      || (key === "ruby" && ((!has(player, I.MAGIC_LANTERN)
+        && !(player.getEquipment?.()?.getAmount?.(I.MAGIC_LANTERN) > 0)) || rubyChests !== 127))
       || (key === "diamond" && (!has(player, I.STRANGE_SLIDER) || !player.getAttribute(SLIDER_INSPECTED) || libraryBooks !== 7))) {
       player.sendMessage("You need to find and read the clue for this lock first.");
       return;

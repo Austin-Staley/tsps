@@ -592,12 +592,13 @@ test("Ruby key chain requires the seven chest names, converter clue, and transla
   }
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-ruby-chests"), 127);
 
-  handlers.object({ player, definition: { id: 46688, name: "Crate" }, option: "Search", location: instanceLocation(2967, 6415, 2), handled: false });
   assert.equal(inventory.getAmount(28425), 1);
   assert.equal(inventory.getAmount(28426), 1);
   const converterAction = handlers.item.find(([name]) => name === "Code converter")[1].Read;
   converterAction({ player, itemId: 28425, handled: false });
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-clues-read") & 4, 4);
+  inventory.deleteNumber(28426, 1);
+  player.getEquipment = () => ({ getAmount: (id) => id === 28426 ? 1 : 0 });
 
   handlers.object({ player, definition: { id: 49113, name: "Chest" }, option: "Open", location: instanceLocation(2968, 6414, 2), handled: false });
   for (const letter of "URLDRU") {
