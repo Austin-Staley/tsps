@@ -149,6 +149,15 @@ test("the Well of Voyage enters Iban's temple beside its real well and door", ()
     "the reachable route ends at the cache-placed Iban temple doors");
 });
 
+test("Blood Hunt's keyed bank trapdoor enters the recorded altar room", () => {
+  const entry = data.locs.find((loc) => loc.name === "bmr_bank_trapdoor");
+  assert.deepEqual([entry.id, entry.x, entry.y, entry.z, entry.option, entry.to],
+    [61848, 2579, 7830, 0, "Climb-through", [2581, 7844, 0]]);
+  const parent = CacheDefinitions.getObject(entry.id);
+  assert.equal(parent.transformVarbit, 15585);
+  assert.deepEqual(parent.transforms.slice(0, 2).map((id) => CacheDefinitions.getObject(id).actions[0]), ["Open", "Climb-through"]);
+});
+
 test("the Underground Pass south-wall cave links to the dwarf camp and back", () => {
   const down = data.locs.find((loc) => loc.name === "underground_pass_dwarf_camp_down");
   const up = data.locs.find((loc) => loc.name === "underground_pass_dwarf_camp_up");

@@ -4302,6 +4302,12 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
   inventory.adds(ids.CRANK_WHEEL, 1);
   const innerGate = toggle(61854, 2580, 7832);
   assert.equal(innerGate.handled, true, 'the inner bank gate is still locked before operating its crank');
+  const lockedTrapdoor = { player, objectId: 61848, definition: { id: 61848 }, option: 'Climb-through',
+    location: { x: 2579, y: 7830, z: 0 }, handled: false };
+  hunt(lockedTrapdoor);
+  assert.equal(lockedTrapdoor.handled, true, 'the trapdoor cannot be entered until the inner bank crank is complete');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').enteredTrapdoor, undefined,
+    'a refused climb does not save a false cellar arrival');
   inventory.deleteNumber(ids.TRAPDOOR_KEY, 100);
   interact(2582, 7834, api.core.ObjectIdentifiers.CRANK_BASE_2, 'operate');
   assert.equal(inventory.contains(ids.CRANK_WHEEL), true, 'a rejected attempt preserves the crank wheel');
@@ -4316,8 +4322,15 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
       `the wheel remains available until the tenth bank-crank turn (${turn})`);
   }
   assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').bankCrank, true, 'the bank crank opens the inner gate after ten turns');
-  assert.equal(toggle(61854, 2580, 7832).handled, false, 'the completed bank crank allows the interior gate to open');
-  interact(2579, 7830);
+  assert.equal(toggle(api.core.ObjectIdentifiers.GATE_327, 2580, 7832).handled, false, 'the completed bank crank allows the interior gate to open');
+  const enterTrapdoor = { player, objectId: 61848, definition: { id: 61848 }, option: 'Climb-through',
+    location: { x: 2579, y: 7830, z: 0 }, handled: false };
+  hunt(enterTrapdoor);
+  assert.equal(enterTrapdoor.handled, false, 'the opened trapdoor lets the generic captured teleport run');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').enteredTrapdoor, true,
+    'the cellar-arrival checkpoint is saved only after the real Climb-through action');
+  inventory.deleteNumber(ids.TRAPDOOR_KEY, 100);
+  assert.equal(inventory.contains(ids.TRAPDOOR_KEY), false, 'the trapdoor key was consumed when its lock opened');
   let chestDigit = 0;
   const chestCode = [2, 4, 0, 4, 7];
   api.sendMultiChatboxPrompt = (who, title, ...pairs) => pairs[chestCode[chestDigit++] * 2 + 1]();

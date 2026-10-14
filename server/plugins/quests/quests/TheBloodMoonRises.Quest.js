@@ -6111,7 +6111,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       return;
     }
     if (door.consume && door.item !== undefined) inventory.deleteNumber(door.item, 1);
-    player.setAttribute(HUNT_ATTRIBUTE, { ...state, [door.flag]: true, ...(door.flag === "trapdoorUnlocked" ? { enteredTrapdoor: true } : {}) });
+    player.setAttribute(HUNT_ATTRIBUTE, { ...state, [door.flag]: true });
     player.getPacketSender().sendVarbit(door.varbit, 1);
     if (door.success) player.sendMessage(door.success);
     else if (door.item !== undefined) player.sendMessage(`You unlock the door using the ${door.flag === "viturManorDoor" || door.flag === "foodShopDoorUnlocked" ? "Vitur" : door.flag === "pubDoorUnlocked" || door.flag === "bankDoorUnlocked" ? "Myrmel" : door.flag === "shadumDoorUnlocked" ? "Shadum" : door.flag === "jovkaiDoorUnlocked" ? "Jovkai" : "trapdoor"} key.`);
@@ -6171,9 +6171,19 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function handleBloodHuntObjects(event) {
     const player = event?.player;
-    if (!player || quest.isComplete(player) || ![STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(player))) return;
+    if (!player || quest.isComplete(player)) return;
     const { x, y, z } = event.location ?? {};
     if (z !== 0) return;
+    const ids = [event.objectId, event.definition?.id];
+    const isTrapdoor = x === 2579 && y === 7830 && ids.includes(61848);
+    const huntActive = [STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(player));
+    if (!huntActive) {
+      if (isTrapdoor) {
+        event.handled = true;
+        player.sendMessage("The tunnel is sealed. The Blood Hunt is not underway.");
+      }
+      return;
+    }
     const state = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
     const inventory = player.getInventory();
     const has = (itemId) => inventory.contains(itemId);
@@ -6212,8 +6222,10 @@ module.exports = function registerTheBloodMoonRises(api) {
       return;
     }
     if (x === 2579 && y === 7830) {
+      if (!isTrapdoor || String(event.option ?? "").toLowerCase() !== "climb-through") return;
       if (!state.bankCrank || !state.trapdoorUnlocked) return locked("The trapdoor is locked. Find its key and finish operating the bank crank.");
       player.setAttribute(HUNT_ATTRIBUTE, { ...state, enteredTrapdoor: true });
+      player.sendMessage("You climb through the long, dark tunnel.");
       return;
     }
     if (x === 2588 && y === 7855) {
@@ -6279,7 +6291,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
     if (x === 2576 && y === 7846) {
       event.handled = true;
-      if (!state.enteredTrapdoor || !inventory.contains(HUNT_ITEMS.trapdoorKey)) { player.sendMessage("The chest is below the bank. Operate the crank and enter with the trapdoor key first."); return; }
+      if (!state.enteredTrapdoor || !state.trapdoorUnlocked || !state.bankCrank) { player.sendMessage("The chest is below the bank. Operate the crank and enter through the unlocked trapdoor first."); return; }
       if (!state.chestOpen) promptHuntCode(player, "chest");
       else if (!inventory.contains(HUNT_ITEMS.jovkaiKey)) inventory.adds(HUNT_ITEMS.jovkaiKey, 1);
       return;
