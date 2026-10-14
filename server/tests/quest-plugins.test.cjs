@@ -7275,9 +7275,10 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   for (const soul of allSouls) {
     soul.registered = false;
     deathHooks[0]({ npc: soul, killer: player });
+    playerProcesses.forEach((handler) => handler({ player }));
   }
-  playerProcesses.forEach((handler) => handler({ player }));
-  assert.equal(npcPendingDamage.at(-1).getDamage(), 75, 'killing all twelve souls increases the damage to 75');
+  assert.equal(npcPendingDamage.at(-1).getDamage(), 75,
+    `killing all twelve souls over successive ticks increases the damage to 75 (${JSON.stringify({ killed: boss.__dt2WhispererSoulsKilled, set: boss.__dt2WhispererCompletedSoulSet, applied: boss.__dt2WhispererSoulSetEffectApplied, bonusTicks: boss.__dt2WhispererSoulBonusTicks })})`);
   itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
   username = 'c';
   boss.__dt2WhispererSpecialStarted = false;

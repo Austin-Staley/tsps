@@ -4174,6 +4174,14 @@ module.exports = function registerDesertTreasureII(api) {
         return true;
       }
       if (!state.inShadow) { p.sendMessage("The blackstone fragment is quiet in the material world."); event.handled = true; return true; }
+      if (whisperer?.__dt2WhispererSpecial === "soul-siphon" && whisperer.__dt2WhispererCompletedSoulSet != null) {
+        resolveWhispererSoulSet(p, whisperer);
+      }
+      if (whisperer?.__dt2WhispererSoulSetEffectApplied) {
+        resolveWhispererSoulSet(p, whisperer);
+        whisperer.__dt2WhispererSoulBonusTicks = 0;
+        removeWhispererSouls(p);
+      }
       const materialX = x + 256;
       const exitTile = LASSAR_PUDDLE_EXIT_TILES.get(`${materialX},${y}`);
       p.moveTo(new api.core.Location(exitTile?.[0] ?? materialX, exitTile?.[1] ?? y, z));
@@ -5721,6 +5729,9 @@ module.exports = function registerDesertTreasureII(api) {
     boss.__dt2WhispererSpecialTicks = 25;
     boss.__dt2WhispererSoulsKilled = 0;
     boss.__dt2WhispererCompletedSoulSet = null;
+    boss.__dt2WhispererSoulSetEffectApplied = false;
+    boss.__dt2WhispererAllSoulsRewarded = false;
+    boss.__dt2WhispererSoulBonusTicks = 0;
     boss.forceChat?.("The souls will feed me!");
     p.sendMessage("The blackstone fragment glows yellow. Activate it, enter the Shadow Realm and kill one complete set of Lost Souls chanting the same phrase before the siphon completes.");
     const owned = spawned.get(p) ?? {};
@@ -5793,22 +5804,32 @@ module.exports = function registerDesertTreasureII(api) {
   }
   function resolveWhispererSoulSet(p, boss) {
     const setIndex = boss.__dt2WhispererCompletedSoulSet;
-    if (boss.__dt2WhispererSpecial !== "soul-siphon" || setIndex == null) return;
-    boss.__dt2WhispererCompletedSoulSet = null;
-    removeWhispererSouls(p);
-    boss.__dt2WhispererSpecial = null;
-    boss.__dt2WhispererSpecialsCompleted = (boss.__dt2WhispererSpecialsCompleted ?? 0) + 1;
-    boss.__dt2WhispererBindingTicks = 5;
-    if (boss.__dt2WhispererSoulsKilled >= 12) {
-      const hit = new api.core.HitDamage(75, api.core.HitMask.RED);
-      hit.setSource?.(p);
-      boss.getCombat?.()?.getHitQueue?.()?.addPendingDamage?.([hit]);
-      p.sendMessage("You silence every soul. Their combined voices deal 75 damage to the Whisperer.");
-    } else {
+    if (boss.__dt2WhispererSpecial === "soul-siphon" && setIndex != null
+      && !boss.__dt2WhispererSoulSetEffectApplied) {
+      boss.__dt2WhispererSpecial = null;
+      boss.__dt2WhispererSpecialsCompleted = (boss.__dt2WhispererSpecialsCompleted ?? 0) + 1;
+      boss.__dt2WhispererBindingTicks = 5;
+      boss.__dt2WhispererSoulSetEffectApplied = true;
+      boss.__dt2WhispererSoulBonusTicks = 25;
       completeWhispererSoulSet(p, boss, setIndex);
+      boss.forceChat?.("The souls are silenced!");
+      p.sendMessage("The Whisperer's siphon fails. You can still kill the remaining souls for the stronger effect.");
     }
-    boss.forceChat?.("The souls are silenced!");
-    p.sendMessage("The Whisperer's siphon fails; leave the Shadow Realm with the blackstone fragment.");
+    if (boss.__dt2WhispererSoulSetEffectApplied && boss.__dt2WhispererSoulBonusTicks > 0) {
+      if (boss.__dt2WhispererSoulsKilled >= 12 && !boss.__dt2WhispererAllSoulsRewarded) {
+        const bonus = WHISPERER_SOUL_SETS[setIndex]?.phrase === "Mors!" ? 25 : 75;
+        const hit = new api.core.HitDamage(bonus, api.core.HitMask.RED);
+        hit.setSource?.(p);
+        boss.getCombat?.()?.getHitQueue?.()?.addPendingDamage?.([hit]);
+        boss.__dt2WhispererAllSoulsRewarded = true;
+        boss.__dt2WhispererSoulBonusTicks = 0;
+        removeWhispererSouls(p);
+        p.sendMessage("You silence every soul. Their combined voices bring the Whisperer's total damage from this special to 75.");
+      } else if (boss.__dt2WhispererSpecial == null && setIndex != null) {
+        boss.__dt2WhispererSoulBonusTicks--;
+        if (boss.__dt2WhispererSoulBonusTicks <= 0) removeWhispererSouls(p);
+      }
+    }
   }
   function whispererEffectObject(p, id, x, y, type = 22) {
     const object = new api.core.GameObject(id, new api.core.Location(x, y, 0), type, 0, null);
@@ -6069,13 +6090,14 @@ module.exports = function registerDesertTreasureII(api) {
       actors.whispererSouls = (actors.whispererSouls ?? []).filter((soul) => soul !== npc);
       const remaining = actors.whispererSouls.filter((soul) => soul?.isRegistered?.() && soul.__dt2WhispererSoulSet === group);
       const boss = actors.whisperer;
-      if (boss?.isRegistered?.() && boss.__dt2WhispererSpecial === "soul-siphon") {
+      if (boss?.isRegistered?.() && (boss.__dt2WhispererSpecial === "soul-siphon"
+        || (boss.__dt2WhispererSoulSetEffectApplied && boss.__dt2WhispererSoulBonusTicks > 0))) {
         boss.__dt2WhispererSoulsKilled = (boss.__dt2WhispererSoulsKilled ?? 0) + 1;
-        if (!remaining.length && boss.__dt2WhispererCompletedSoulSet == null) {
-          // Defer resolution to the next tick so a same-tick multi-target hit
-          // can kill all twelve souls for the Wiki's stronger 75-damage result.
+        if (boss.__dt2WhispererSpecial === "soul-siphon" && !remaining.length && boss.__dt2WhispererCompletedSoulSet == null) {
+          // Resolve the chosen set next tick, then leave the other souls
+          // attackable during the short window for the 75-damage bonus.
           boss.__dt2WhispererCompletedSoulSet = group;
-          owner.sendMessage("You silence one complete set of souls. Finish the remaining souls quickly for a stronger effect.");
+          owner.sendMessage("You silence one complete set. Finish the remaining souls within 25 ticks for the stronger effect.");
         }
       }
       return;
