@@ -34,7 +34,6 @@ import {
   encodeGameframeBootstrap,
   encodeHandshake,
   encodeLoginResponse,
-  encodeLogoutResponse,
   encodeWelcome,
   PlayerAppearance,
   resolveGameframeRoot,
@@ -833,18 +832,10 @@ export class ClientConnection {
         case "handshake":
           this.enterWorld(packet.clientType);
           continue;
-        case "logout": {
-          const refusal = this.player ? PluginManager.emitCanLogout(this.player) : null;
-          if (refusal) {
-            this.send(encodeLogoutResponse(refusal, false));
-            continue;
-          }
-          this.send(encodeLogoutResponse());
-          this.player?.getSession().flushPackets();
-          this.cleanup("logout");
-          this.channel.close(1000, "logout");
-          return;
-        }
+        case "logout":
+          // Answered on the next tick (World.answerLogoutRequest), which closes the socket.
+          if (this.player) World.queueLogoutRequest(this.player);
+          continue;
       }
     }
   }
@@ -1168,13 +1159,11 @@ export class ClientConnection {
     this.closed = true;
     this.releasePendingName();
     if (!this.player) return;
+    // The disconnect hooks fire when the player leaves the world, which a player in
+    // combat does only when it ends (World's removal queue).
+    this.player.setDisconnectSource(source);
     if (!World.getRemovePlayerQueue().includes(this.player)) {
       World.getRemovePlayerQueue().push(this.player);
     }
-    PluginManager.emitPlayerDisconnect({
-      player: this.player,
-      username: this.player.getUsername(),
-      source,
-    });
   }
 }

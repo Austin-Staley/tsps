@@ -26,4 +26,16 @@ module.exports = function registerSessionTools(ctx) {
       return p ? { loggedOut: false, ...status(p) } : { loggedOut: true };
     }
   );
+
+  tool(
+    "disconnect",
+    "Drop a player's connection without logging out, as a closed tab or lost connection does. A player hit in the last 10 seconds stays in the world (and can still be attacked) until combat ends or 60 seconds pass.",
+    { player },
+    async ({ player: username }) => {
+      find(username).getSession().getChannel().close();
+      await sleepTicks(2);
+      const p = World.getPlayerByName(username);
+      return p ? { inWorld: true, ...status(p) } : { inWorld: false };
+    }
+  );
 };
