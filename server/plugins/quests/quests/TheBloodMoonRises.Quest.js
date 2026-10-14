@@ -53,6 +53,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     destination: [2361, 7382, 0] });
   const CASTLE_NATIVE_STAGE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-native-stage";
   const CASTLE_STORY_ATTRIBUTE = "quest.the_blood_moon_rises.castle-story";
+  const CASTLE_UNLOCKED_PASSAGES_ATTRIBUTE = "quest.the_blood_moon_rises.castle-unlocked-passages";
   const KITCHEN_SANGUIDAE = Object.freeze([
     { key: "kitchen-sanguidae-west", tile: [2312, 7412] },
     { key: "kitchen-sanguidae-north", tile: [2311, 7408] },
@@ -371,6 +372,8 @@ module.exports = function registerTheBloodMoonRises(api) {
       fromFloor: 2, toFloor: 2, landing: [2519, 7364] },
     { id: CASTLE_DOOR_IDS.DISPLAY_STAIRS_DOWN, x: 2503, y: 7369, z: 0, from: CASTLE_ROOM.DISPLAY_ROOM, to: CASTLE_ROOM.LOBBY,
       fromFloor: 2, toFloor: 2, action: "Climb-down", landing: [2309, 7369, 1] },
+    { id: CASTLE_DOOR_IDS.DISPLAY_STAIRS_DOWN, x: 2503, y: 7379, z: 0, from: CASTLE_ROOM.DISPLAY_ROOM, to: CASTLE_ROOM.LOBBY,
+      fromFloor: 2, toFloor: 2, action: "Climb-down", landing: [2309, 7373, 1] },
     { id: CASTLE_DOOR_IDS.STAIRS_UP, x: 2308, y: 7365, z: 1, from: CASTLE_ROOM.LOBBY, to: CASTLE_ROOM.DISPLAY_ROOM,
       fromFloor: 2, toFloor: 2, action: "Climb-up", landing: [2502, 7368] },
     { id: CASTLE_DOOR_IDS.GILDED_M, x: 2452, y: 7420, z: 0, from: CASTLE_ROOM.NORTH_LOBBY_HALL, to: CASTLE_ROOM.SMALL_HALL,
@@ -556,6 +559,26 @@ module.exports = function registerTheBloodMoonRises(api) {
   const WYRD_DEFEATED_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-defeated";
   const DRAKAN_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.drakan-area";
   const DRAKAN_ENCOUNTER_COMPLETE = "quest.the_blood_moon_rises.drakan-defeated";
+  const DRAKAN_SUPPLY_ATTRIBUTE = "quest.the_blood_moon_rises.final-drakan-supplies";
+  const FINAL_PORTAL_OPEN_ATTRIBUTE = "quest.the_blood_moon_rises.final-portal-open";
+  const FINAL_PORTAL_USED_ATTRIBUTE = "quest.the_blood_moon_rises.final-portal-used";
+  const FINAL_DRAKAN_ID = NpcIdentifiers.LOWERNIEL_DRAKAN_17;
+  const FINAL_EFARITAY_ID = NpcIdentifiers.EFARITAY_HALLOW_3;
+  const FINAL_EFARITAY_CUTSCENE_ID = NpcIdentifiers.EFARITAY_HALLOW_5;
+  const FINAL_WYRD_ID = NpcIdentifiers.WYRD_4;
+  // Cache loc 61215 becomes Enterable child 61217 at native stage 166–171.
+  const FINAL_PORTAL = Object.freeze({ id: 61215, visibleId: 61217, x: 3703, y: 3185, z: 0 });
+  const FINAL_CASTLE_ARRIVAL = Object.freeze({ x: 2507, y: 7383, z: 0 });
+  const FINAL_GRAVEYARD_AFTER_FIGHT = Object.freeze({ x: 3731, y: 3220, z: 0 });
+  const FINAL_EFARITAY_TILE = Object.freeze({ x: 3706, y: 3211, z: 0 });
+  // Cache loc 61764 becomes child 61765 (Take-supplies) during native stages 168–170.
+  const FINAL_DRAKAN_SUPPLY_CHEST = Object.freeze({ id: 61764, x: 2503, y: 7386, z: 0 });
+  const FINAL_DRAKAN_ROOF_DOOR = Object.freeze({ id: 61628, x: 2506, y: 7387, z: 0 });
+  const FINAL_DRAKAN_WAVES = Object.freeze([
+    "left", "right", "north", "left", "right", "left", "north", "pincer",
+    "left", "right", "north", "left", "right", "left", "north", "pincer",
+    "left", "north", "right",
+  ]);
   const SIEGE_DRAKAN_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.siege-drakan-area";
   const SIEGE_DRAKAN_COMPLETE = "quest.the_blood_moon_rises.siege-drakan-defeated";
   const SIEGE_DEFENCE_ATTRIBUTE = "quest.the_blood_moon_rises.siege-defence";
@@ -567,6 +590,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   const paterdomusIvans = new Map();
   const slepeManors = new Map();
   const drakanEncounters = new Map();
+  const finalEfaritays = new Map();
+  const finalCutsceneActors = new Map();
   const siegeDrakanEncounters = new Map();
   const siegeHallInjured = new Map();
   const hideoutDefense = require("../bmr/HideoutDefense.TheBloodMoonRises")({ api, stage: player => stage(player),
@@ -954,11 +979,37 @@ module.exports = function registerTheBloodMoonRises(api) {
       mobile.getCombat().getLastAttack().reset();
       const player = fight.player;
       if (player.getArea?.() !== this || player.getHitpoints() <= 0 || fight.ending) return;
-      const hpPercent = mobile.getHitpoints() / mobile.getMaxHitpoints();
-      if (hpPercent <= 0.3 && !fight.thresholdSeen) {
-        fight.thresholdSeen = true;
-        fight.ending = true;
-        startTranscript(api, player, mobile.getId(), PAGE, "night-of-the-blood-moon-upon-lowerniel-reaching-30-hp");
+      const hp = mobile.getHitpoints();
+      const phase = hp <= 900 ? 3 : hp <= 2100 ? 2 : 1;
+      if (phase > fight.phase) {
+        fight.phase = phase;
+        fight.attackIndex = 0;
+        fight.warning = null;
+        fight.impactAt = 0;
+        if (phase === 2) {
+          fight.special = "waves";
+          fight.waveIndex = 0;
+          fight.waveCycles = 1;
+          this.warnForBloodWave(fight, player, now);
+        } else {
+          fight.special = "lunges";
+          fight.lungeIndex = 0;
+          fight.lungeCycles = 0;
+          this.warnForLunge(fight, player, now);
+        }
+        return;
+      }
+      if (fight.special === "waves") {
+        this.processBloodWaves(fight, player, mobile, now);
+        return;
+      }
+      if (fight.special === "blood-strikes" || fight.special === "wave-followup") {
+        if (fight.phase === 2) this.processBloodWaves(fight, player, mobile, now);
+        else this.processLunges(fight, player, mobile, now);
+        return;
+      }
+      if (fight.special === "lunges") {
+        this.processLunges(fight, player, mobile, now);
         return;
       }
       if (fight.impactAt && now >= fight.impactAt) {
@@ -982,45 +1033,227 @@ module.exports = function registerTheBloodMoonRises(api) {
           else player.sendMessage("Your Protect from Magic prayer turns aside the blood spear.");
           return;
         }
-        if (warning === "wave") {
-          if (y === fight.markedY) this.hit(player, mobile, 36, "The blood wave crashes through your lane. Move to another row when it gathers.");
-          else player.sendMessage("You dodge sideways out of the blood wave's path.");
+        if (warning === "front-back") {
+          if (x === fight.markedX) this.hit(player, mobile, 36, "The blood burst catches you in front or behind Lowerniel. Move to his side.");
+          else player.sendMessage("You move to the side and avoid the blood burst.");
           return;
         }
-        if (warning === "shadow") {
+        if (warning === "semicircle") {
           const distance = Math.max(Math.abs(x - fight.markedX), Math.abs(y - fight.markedY));
-          if (distance <= 1) this.hit(player, mobile, 28, "The shadow pool erupts beneath you. Move clear of the marked ground.");
-          else player.sendMessage("You move clear before the shadow pool erupts.");
+          if (distance <= 2) this.hit(player, mobile, 28, "The spear's semicircular sweep catches you. Move beyond its arc.");
+          else player.sendMessage("You move clear of Lowerniel's spear sweep.");
           return;
         }
         if (warning === "melee") {
           if (!melee) this.hit(player, mobile, 7 + Math.floor(Math.random() * 10), "Lowerniel's melee strike lands.");
           return;
         }
+        if (warning === "pool" || warning === "lightning") {
+          const distance = Math.max(Math.abs(x - fight.markedX), Math.abs(y - fight.markedY));
+          if (distance <= 1) {
+            player.sendMessage(warning === "pool"
+              ? "The blood pool bursts beneath you and disables your overhead prayers."
+              : "Lightning strikes beside you and disables your overhead prayers.");
+            this.hit(player, mobile, warning === "pool" ? 24 : 18, "");
+            PrayerHandler.deactivatePrayers(player);
+          } else player.sendMessage("You move clear of the blood and lightning hazard.");
+          return;
+        }
       }
       if (fight.impactAt || now < fight.nextAttackAt) return;
-      fight.nextAttackAt = now + 4;
+      fight.nextAttackAt = now + (fight.phase === 1 ? 5 : 4);
       fight.attackIndex++;
       const loc = player.getLocation();
-      if (fight.attackIndex % 5 === 1) {
+      if (fight.phase === 3 && fight.attackIndex % 3 === 0) {
+        fight.warning = fight.attackIndex % 2 === 0 ? "pool" : "lightning";
+        fight.markedX = loc.getX();
+        fight.markedY = loc.getY();
+        fight.impactAt = now + 2;
+        if (fight.warning === "pool") {
+          player.getPacketSender?.()?.sendGraphic?.(new api.core.Graphic(3856),
+            new Location(fight.markedX, fight.markedY, 3));
+          player.sendMessage("A blood pool opens beneath you. Move clear before it erupts.");
+        } else {
+          player.getPacketSender?.()?.sendGraphic?.(new api.core.Graphic(3881),
+            new Location(fight.markedX, fight.markedY, 3));
+          player.sendMessage("A dark shadow marks a lightning strike. Move clear and watch your overhead prayer.");
+        }
+      } else if (fight.attackIndex % 5 === 1) {
         fight.warning = "thrust"; fight.markedX = loc.getX(); fight.markedY = loc.getY(); fight.impactAt = now + 2;
         player.sendMessage("Lowerniel draws his spear back and lines up a thrust. Step at least one tile aside.");
       } else if (fight.attackIndex % 5 === 2) {
         fight.warning = "blood-spear"; fight.impactAt = now + 2;
         player.sendMessage("Lowerniel fires a blood spear. Protect from Magic before it lands.");
       } else if (fight.attackIndex % 5 === 3) {
-        fight.warning = "wave"; fight.markedY = loc.getY(); fight.impactAt = now + 2;
-        player.sendMessage("A blood wave gathers across your row. Move to another row before it sweeps through.");
+        fight.warning = "front-back"; fight.markedX = loc.getX(); fight.markedY = loc.getY(); fight.impactAt = now + 2;
+        player.sendMessage("Blood gathers in front of and behind Lowerniel. Move to either side before it bursts.");
       } else if (fight.attackIndex % 5 === 4) {
-        fight.warning = "shadow"; fight.markedX = loc.getX(); fight.markedY = loc.getY(); fight.impactAt = now + 2;
-        player.sendMessage("A shadow pool forms beneath you. Move more than one tile away.");
+        fight.warning = "semicircle"; fight.markedX = loc.getX(); fight.markedY = loc.getY(); fight.impactAt = now + 2;
+        player.sendMessage("Lowerniel sweeps his spear in an arc. Move around him to the opposite side.");
       } else {
         fight.warning = "melee"; fight.impactAt = now + 1;
         player.sendMessage("Lowerniel closes in with a melee strike. Protect from Melee.");
       }
     }
+    warnForBloodWave(fight, player, now) {
+      const direction = FINAL_DRAKAN_WAVES[fight.waveIndex];
+      const loc = player.getLocation();
+      fight.warning = "blood-wave";
+      fight.waveDirection = direction;
+      fight.markedX = loc.getX();
+      fight.markedY = loc.getY();
+      fight.impactAt = now + 3;
+      player.sendMessage(direction === "pincer"
+        ? "Blood portals open on both sides. Run straight north or south through the walls of blood."
+        : `A wall of blood surges from the ${direction}. Run straight toward it and cross its path by four tiles.`);
+    }
+    processBloodWaves(fight, player, boss, now) {
+      if (fight.special === "waves" && fight.impactAt && now >= fight.impactAt) {
+        const direction = fight.waveDirection;
+        const dx = player.getLocation().getX() - fight.markedX;
+        const dy = player.getLocation().getY() - fight.markedY;
+        const crossed = direction === "pincer" ? Math.abs(dy) >= 4 && Math.abs(dx) <= 1
+          : direction === "north" ? dy >= 4 && Math.abs(dx) <= 1
+            : direction === "left" ? dx >= 4 && Math.abs(dy) <= 1
+              : dx <= -4 && Math.abs(dy) <= 1;
+        fight.impactAt = 0;
+        fight.warning = null;
+        if (!crossed) {
+          player.sendMessage("The blood wave crashes into you and disables your overhead prayers.");
+          this.hit(player, boss, 24, "");
+          PrayerHandler.deactivatePrayers(player);
+        } else player.sendMessage("You run through the blood wave and escape its force.");
+        fight.waveIndex++;
+        if (fight.waveIndex >= FINAL_DRAKAN_WAVES.length) {
+          fight.special = "blood-strikes";
+          fight.warning = "blood-strikes";
+          fight.impactAt = now + 3;
+          player.sendMessage("Lowerniel reappears and hurls four blood strikes. Protect from Magic before they land.");
+        } else fight.nextAttackAt = now + 1;
+        return;
+      }
+      if (fight.special === "blood-strikes" && fight.impactAt && now >= fight.impactAt) {
+        const magic = (player.getPrayerActive?.() ?? [])[PrayerHandler.PROTECT_FROM_MAGIC] === true;
+        if (!magic) this.hit(player, boss, 96, "The four blood strikes crash into you.");
+        else player.sendMessage("Protect from Magic blocks Lowerniel's blood strikes.");
+        fight.special = "wave-followup";
+        fight.warning = null;
+        const loc = player.getLocation();
+        fight.markedX = loc.getX();
+        fight.markedY = loc.getY();
+        fight.impactAt = now + 3;
+        player.sendMessage("Lowerniel rushes in with a spear combo. Dodge to his side to break the wave sequence.");
+        return;
+      }
+      if (fight.special === "wave-followup" && fight.impactAt && now >= fight.impactAt) {
+        const dx = player.getLocation().getX() - fight.markedX;
+        const dy = player.getLocation().getY() - fight.markedY;
+        const dodged = Math.max(Math.abs(dx), Math.abs(dy)) >= 2;
+        fight.impactAt = 0;
+        if (dodged || fight.waveCycles >= 3) {
+          if (dodged) player.sendMessage("You dodge the combo and stop the blood waves.");
+          fight.special = null;
+          fight.nextAttackAt = now + 3;
+        } else {
+          fight.waveCycles++;
+          fight.waveIndex = 0;
+          fight.special = "waves";
+          this.warnForBloodWave(fight, player, now);
+        }
+        return;
+      }
+      if (fight.impactAt || now < fight.nextAttackAt) return;
+      this.warnForBloodWave(fight, player, now);
+    }
+    warnForLunge(fight, player, now) {
+      const directions = ["north", "east", "south", "west"];
+      const direction = directions[(fight.lungeIndex + fight.lungeCycles) % directions.length];
+      const loc = player.getLocation();
+      fight.warning = "lunge-appearances";
+      fight.lungeDirection = direction;
+      fight.lungeCueIndex = 0;
+      fight.markedX = loc.getX();
+      fight.markedY = loc.getY();
+      fight.impactAt = now + 1;
+      player.sendMessage(`Lowerniel appears briefly to your ${direction}, turning as he lines up a lunge.`);
+    }
+    processLunges(fight, player, boss, now) {
+      if (fight.special === "lunges" && fight.warning === "lunge-appearances" &&
+        fight.impactAt && now >= fight.impactAt) {
+        const directions = ["north", "east", "south", "west"];
+        fight.lungeCueIndex++;
+        if (fight.lungeCueIndex < 3) {
+          fight.lungeDirection = directions[(fight.lungeIndex + fight.lungeCycles + fight.lungeCueIndex) % directions.length];
+          fight.impactAt = now + 1;
+          player.sendMessage(`Lowerniel flickers to your ${fight.lungeDirection} as the lunge turns.`);
+          return;
+        }
+        fight.warning = "lunge";
+        fight.impactAt = now + 1;
+        player.sendMessage(`Lowerniel settles to your ${fight.lungeDirection}. Dodge two to five tiles perpendicular to that final direction.`);
+        return;
+      }
+      if (fight.special === "lunges" && fight.warning === "lunge" && fight.impactAt && now >= fight.impactAt) {
+        const dx = player.getLocation().getX() - fight.markedX;
+        const dy = player.getLocation().getY() - fight.markedY;
+        const verticalAttack = fight.lungeDirection === "north" || fight.lungeDirection === "south";
+        const perpendicular = verticalAttack ? Math.abs(dx) : Math.abs(dy);
+        const dodged = perpendicular >= 2 && perpendicular <= 5;
+        if (!dodged) this.hit(player, boss, 28, "Lowerniel's spear lunge catches you.");
+        else player.sendMessage("You roll clear of the spear lunge.");
+        fight.impactAt = 0;
+        fight.warning = null;
+        fight.lungeIndex++;
+        if (fight.lungeIndex < 4) {
+          this.warnForLunge(fight, player, now + 1);
+        } else {
+          fight.lungeCycles++;
+          fight.special = "blood-strikes";
+          fight.warning = "blood-strikes";
+          fight.impactAt = now + 3;
+          boss.setHitpoints(Math.max(1, boss.getHitpoints() - 90));
+          player.sendMessage("Lowerniel sacrifices his blood and releases four enhanced strikes. Protect from Magic.");
+        }
+        return;
+      }
+      if (fight.special === "blood-strikes" && fight.impactAt && now >= fight.impactAt) {
+        if (fight.warning === "lunge-followup") {
+          const dx = player.getLocation().getX() - fight.markedX;
+          const dy = player.getLocation().getY() - fight.markedY;
+          const dodged = Math.max(Math.abs(dx), Math.abs(dy)) >= 2;
+          const melee = (player.getPrayerActive?.() ?? [])[PrayerHandler.PROTECT_FROM_MELEE] === true;
+          if (!dodged) this.hit(player, boss, 30, "Lowerniel's follow-up spear combo catches you.");
+          else player.sendMessage("You roll clear of Lowerniel's follow-up spear combo.");
+          if (!melee) this.hit(player, boss, 12, "The unprotected melee strike lands after the combo.");
+          fight.impactAt = 0;
+          fight.warning = null;
+          if (fight.lungeCycles >= 3) {
+            fight.special = null;
+            fight.nextAttackAt = now + 2;
+            player.sendMessage("Lowerniel's three lunge sequences are over. He resumes close combat; avoid blood pools and lightning.");
+          } else {
+            fight.special = "lunges";
+            fight.lungeIndex = 0;
+            this.warnForLunge(fight, player, now + 2);
+          }
+          return;
+        }
+        const magic = (player.getPrayerActive?.() ?? [])[PrayerHandler.PROTECT_FROM_MAGIC] === true;
+        if (!magic) this.hit(player, boss, 96, "The four enhanced blood strikes crash into you.");
+        else player.sendMessage("Protect from Magic blocks the enhanced blood strikes.");
+        fight.warning = "lunge-followup";
+        fight.impactAt = now + 3;
+        const loc = player.getLocation();
+        fight.markedX = loc.getX();
+        fight.markedY = loc.getY();
+        player.sendMessage("Lowerniel rushes in with a spear combo. Switch to Protect from Melee and dodge to his side.");
+        return;
+      }
+      if (fight.special !== "lunges" || fight.impactAt || now < fight.nextAttackAt) return;
+      this.warnForLunge(fight, player, now);
+    }
     hit(player, source, damage, message) {
-      player.sendMessage(message);
+      if (message) player.sendMessage(message);
       player.getCombat().getHitQueue().addPendingDamage([
         new HitDamage(damage, HitMask.RED).setSource(source),
       ]);
@@ -1120,7 +1353,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       }
     }
     hit(player, source, damage, message) {
-      player.sendMessage(message);
+      if (message) player.sendMessage(message);
       player.getCombat().getHitQueue().addPendingDamage([
         new HitDamage(damage, HitMask.RED).setSource(source),
       ]);
@@ -1132,27 +1365,121 @@ module.exports = function registerTheBloodMoonRises(api) {
     const existing = player.getAttribute(DRAKAN_AREA_ATTRIBUTE);
     if (existing && existing.isDestroyed?.() !== true) return true;
     const area = new DrakanEncounterArea(player.getUsername?.());
-    const boss = api.spawnNpc({ id: NpcIdentifiers.LOWERNIEL_DRAKAN_17, x: 2505, y: 7838, z: 3,
+    const boss = api.spawnNpc({ id: FINAL_DRAKAN_ID, x: 2511, y: 7838, z: 3,
       wanderRadius: 0, owner: player, ownerOnly: true });
     if (!boss) { player.sendMessage("Lowerniel could not be reached. Return to the northern chamber door."); return false; }
     boss.setMultiCombat?.(true);
-    boss.setMaxHitpoints(1600);
-    boss.setHitpoints(1600);
+    boss.setMaxHitpoints(3000);
+    boss.setHitpoints(3000);
     area.enter(player);
     area.enter(boss);
     player.setAttribute(DRAKAN_AREA_ATTRIBUTE, area);
     player.moveTo(new Location(2502, 7838, 3));
-    drakanEncounters.set(area, { area, boss, player, lastCycle: -1,
-      nextAttackAt: World.getProcessCycle() + 4, attackIndex: 0, impactAt: 0, warning: null,
-      markedX: 2502, markedY: 7838, thresholdSeen: false, ending: false, finished: false });
-    player.sendMessage("Lowerniel attacks. Dodge his spear thrust and blood wave, protect from Magic against blood spears, and leave the shadow pools.");
+    drakanEncounters.set(area, { area, boss, player, phase: 1, special: null, lastCycle: -1,
+      nextAttackAt: World.getProcessCycle() + 5, attackIndex: 0, impactAt: 0, warning: null,
+      markedX: 2502, markedY: 7838, waveIndex: 0, lungeIndex: 0, lungeCycles: 0,
+      deathConfirmed: false, ending: false, finished: false });
+    player.sendMessage("Lowerniel attacks at full strength. His spear combos require you to dodge; use Protect from Magic against his blood strikes.");
     return true;
+  }
+
+  function handleFinalDrakanSupplyChest(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    const ids = [event?.objectId, event?.definition?.id];
+    if (!player || !ids.some(id => id === FINAL_DRAKAN_SUPPLY_CHEST.id || id === 61765) ||
+      x !== FINAL_DRAKAN_SUPPLY_CHEST.x || y !== FINAL_DRAKAN_SUPPLY_CHEST.y || z !== FINAL_DRAKAN_SUPPLY_CHEST.z ||
+      String(event?.option ?? "").toLowerCase() !== "take-supplies") return false;
+    event.handled = true;
+    if (quest.isComplete(player) || stage(player) !== STAGE.FINAL) {
+      player.sendMessage("The chest's Vampyrium supplies are only for the final pursuit of Lowerniel.");
+      return true;
+    }
+    startTranscript(api, player, 0, PAGE, "night-of-the-blood-moon-searching-the-supply-chest");
+    return true;
+  }
+
+  function giveFinalDrakanSupplies(player) {
+    const inventory = player.getInventory();
+    const planned = [
+      [ItemIdentifiers.JAR_OF_CONGEALED_BLOOD, 1],
+      [ItemIdentifiers.RANK_FROTHY_POTION_4_, 2],
+      [ItemIdentifiers.FOUL_CHUNKY_POTION_4_, 4],
+    ];
+    let free = inventory.getFreeSlots?.() ?? 0;
+    let added = 0;
+    for (const [id, amount] of planned) {
+      for (let count = 0; count < amount && free > 0; count++) {
+        if (!inventory.adds(id, 1)) break;
+        free--;
+        added++;
+      }
+    }
+    if (free > 0 && !hasItem(player, ItemIdentifiers.DRAKANS_MEDALLION) &&
+      inventory.adds(ItemIdentifiers.DRAKANS_MEDALLION, 1)) {
+      free--;
+      added++;
+    }
+    while (free > 0) {
+      if (!inventory.adds(ItemIdentifiers.RANCID_SLIMY_POTION_4_, 1)) break;
+      free--;
+      added++;
+    }
+    if (!added) {
+      player.sendMessage("Make room in your inventory before taking supplies from the chest.");
+      return false;
+    }
+    player.setAttribute(DRAKAN_SUPPLY_ATTRIBUTE, true);
+    player.sendMessage("You take Vampyrium potions and emergency blood from the supply chest.");
+    return true;
+  }
+
+  function handleFinalDrakanRoofDoor(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    const ids = [event?.objectId, event?.definition?.id];
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.FINAL ||
+      !ids.includes(FINAL_DRAKAN_ROOF_DOOR.id) || x !== FINAL_DRAKAN_ROOF_DOOR.x ||
+      y !== FINAL_DRAKAN_ROOF_DOOR.y || z !== FINAL_DRAKAN_ROOF_DOOR.z ||
+      String(event?.option ?? "").toLowerCase() !== "enter") return false;
+    event.handled = true;
+    if (!player.getAttribute(DRAKAN_SUPPLY_ATTRIBUTE)) {
+      startTranscript(api, player, 0, PAGE,
+        "night-of-the-blood-moon-attempting-to-enter-the-northern-door-without-searching-the-supply-chest");
+      return true;
+    }
+    if (!hasItem(player, ItemIdentifiers.HALLOWED_FLAIL) &&
+      !player.getEquipment?.()?.contains?.(ItemIdentifiers.HALLOWED_FLAIL)) {
+      player.sendMessage("The Hallowed flail Efaritay gave you is needed to fight Lowerniel in Vampyrium.");
+      return true;
+    }
+    startTranscript(api, player, 0, PAGE, "night-of-the-blood-moon-entering-the-northern-door");
+    return true;
+  }
+
+  function handleFinalDrakanHit(event) {
+    const npc = event?.npc;
+    const fight = npc && drakanEncounters.get(npc.getArea?.());
+    const hit = event?.hit;
+    if (!fight || npc !== fight.boss || fight.ending || !hit) return;
+    // The Wiki records a 26–28 damage ceiling per hit in the final duel.
+    for (const part of hit.getHits?.() ?? []) {
+      const damage = part.getDamage?.() ?? 0;
+      if (damage > 28) part.setDamage(28);
+    }
+    hit.updateTotalDamage?.();
   }
 
   function finishDrakanEncounter(player) {
     const area = player.getAttribute(DRAKAN_AREA_ATTRIBUTE);
     const fight = area && drakanEncounters.get(area);
-    if (!fight || !fight.ending) return false;
+    if (!fight || !fight.deathConfirmed || fight.boss.getHitpoints() > 0) return false;
     fight.finished = true;
     api.removeNpc(fight.boss);
     area.leave(player, false);
@@ -1162,13 +1489,138 @@ module.exports = function registerTheBloodMoonRises(api) {
     return true;
   }
 
+  function syncFinalEfaritay(player) {
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.FINAL ||
+      player.getAttribute(DRAKAN_ENCOUNTER_COMPLETE) || player.getAttribute(FINAL_PORTAL_USED_ATTRIBUTE)) return;
+    const existing = finalEfaritays.get(player);
+    if (existing && existing.getHitpoints?.() > 0) return existing;
+    const npc = api.spawnNpc({ id: FINAL_EFARITAY_ID, x: FINAL_EFARITAY_TILE.x,
+      y: FINAL_EFARITAY_TILE.y, z: FINAL_EFARITAY_TILE.z,
+      wanderRadius: 0, owner: player, ownerOnly: true });
+    if (!npc) return null;
+    npc.setScriptedMovement?.(true);
+    finalEfaritays.set(player, npc);
+    return npc;
+  }
+
+  function cleanupFinalEfaritay({ player }) {
+    const npc = player && finalEfaritays.get(player);
+    if (!npc) return;
+    api.removeNpc(npc);
+    finalEfaritays.delete(player);
+  }
+
+  function spawnFinalCutsceneActors(player) {
+    cleanupFinalEfaritay({ player });
+    const actors = [];
+    for (const [id, tile] of [[FINAL_EFARITAY_CUTSCENE_ID, [3706, 3211, 0]],
+      [FINAL_WYRD_ID, [3708, 3211, 0]]]) {
+      const npc = api.spawnNpc({ id, x: tile[0], y: tile[1], z: tile[2],
+        wanderRadius: 0, owner: player, ownerOnly: true });
+      if (npc) {
+        npc.setScriptedMovement?.(true);
+        actors.push(npc);
+      }
+    }
+    finalCutsceneActors.set(player, actors);
+  }
+
+  function transformFinalWyrdForCutscene(player) {
+    const actors = finalCutsceneActors.get(player) ?? [];
+    for (const npc of actors) {
+      if ((npc.getId?.() ?? npc.id) === FINAL_WYRD_ID) api.removeNpc(npc);
+    }
+    const wyrd = api.spawnNpc({ id: NpcIdentifiers.WYRD_7, x: 3708, y: 3211, z: 0,
+      wanderRadius: 0, owner: player, ownerOnly: true });
+    if (wyrd) {
+      wyrd.setScriptedMovement?.(true);
+      actors.push(wyrd);
+    }
+    finalCutsceneActors.set(player, actors.filter(npc => (npc.getId?.() ?? npc.id) !== FINAL_WYRD_ID));
+  }
+
+  function spawnFinalArrivalActors(player) {
+    cleanupFinalCutsceneActors({ player });
+    const actors = [];
+    for (const [id, x, y] of [[FINAL_EFARITAY_CUTSCENE_ID, 2505, 7383], [FINAL_WYRD_ID, 2509, 7383]]) {
+      const npc = api.spawnNpc({ id, x, y, z: FINAL_CASTLE_ARRIVAL.z,
+        wanderRadius: 0, owner: player, ownerOnly: true });
+      if (npc) {
+        npc.setScriptedMovement?.(true);
+        actors.push(npc);
+      }
+    }
+    finalCutsceneActors.set(player, actors);
+  }
+
+  function cleanupFinalCutsceneActors({ player }) {
+    const actors = player && finalCutsceneActors.get(player);
+    for (const npc of actors ?? []) api.removeNpc(npc);
+    if (player) finalCutsceneActors.delete(player);
+  }
+
+  function syncFinalEfaritayOnLogin({ player }) {
+    syncFinalEfaritay(player);
+  }
+
+  function openFinalPortal(player) {
+    if (!player || stage(player) !== STAGE.FINAL) return false;
+    player.setAttribute(FINAL_PORTAL_OPEN_ATTRIBUTE, true);
+    syncFinalEfaritay(player);
+    return true;
+  }
+
+  function handleFinalPortal(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.FINAL ||
+      ![event?.objectId, event?.definition?.id].some(id => id === FINAL_PORTAL.id || id === FINAL_PORTAL.visibleId) ||
+      x !== FINAL_PORTAL.x || y !== FINAL_PORTAL.y || z !== FINAL_PORTAL.z ||
+      String(event?.option ?? "").toLowerCase() !== "enter") return false;
+    if (!player.getAttribute(FINAL_PORTAL_OPEN_ATTRIBUTE)) {
+      event.handled = true;
+      player.sendMessage("Efaritay must open a portal with her blood first.");
+      return true;
+    }
+    const started = startTranscript(api, player, FINAL_EFARITAY_ID, PAGE,
+      "night-of-the-blood-moon-entering-the-portal");
+    if (started) event.handled = true;
+    return started;
+  }
+
+  function handleFinalCastleReturnPortal(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const id = event?.definition?.id ?? event?.objectId;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.FINAL ||
+      id !== CASTLE_VAMPYRIUM_RETURN.id || x !== CASTLE_VAMPYRIUM_RETURN.x ||
+      y !== CASTLE_VAMPYRIUM_RETURN.y || z !== CASTLE_VAMPYRIUM_RETURN.z ||
+      String(event?.option ?? "").toLowerCase() !== "enter") return false;
+    event.handled = true;
+    if (player.getAttribute(DRAKAN_AREA_ATTRIBUTE)) {
+      player.sendMessage("You cannot abandon the duel while Lowerniel is attacking.");
+      return true;
+    }
+    player.setAttribute(FINAL_PORTAL_USED_ATTRIBUTE, false);
+    player.moveTo(new Location(FINAL_PORTAL.x, FINAL_PORTAL.y, FINAL_PORTAL.z));
+    syncFinalEfaritay(player);
+    return true;
+  }
+
   function handleDrakanDeath(event) {
     const npc = event?.npc;
     const area = npc?.getArea?.();
     const fight = area && drakanEncounters.get(area);
-    if (!fight || npc !== fight.boss || fight.finished) return false;
+    if (!fight || npc !== fight.boss || fight.finished || fight.deathConfirmed) return false;
+    if (npc.getHitpoints() > 0) return false;
     fight.ending = true;
-    fight.thresholdSeen = true;
+    fight.deathConfirmed = true;
     startTranscript(api, fight.player, npc.getId(), PAGE, "night-of-the-blood-moon-upon-killing-lowerniel-drakan");
     return true;
   }
@@ -1537,7 +1989,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function nativeStage(value, player) {
-    if (value === STAGE.COMPLETE) return 176;
+    if (value === STAGE.COMPLETE) return 178;
     if (value === STAGE.STARTED) return player?.getAttribute(HIDEOUT_SHRINE_INSPECTED) ? 8 : 4;
     if (value === STAGE.HIDEOUT) return 12;
     if (value === STAGE.SLEPE) return 16;
@@ -1554,6 +2006,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       const phase = player?.getAttribute(SIEGE_DEFENCE_ATTRIBUTE)?.phase;
       return ({ 'fall-back': 118, hall: 120, breach: 122 })[phase] ?? 116;
     }
+    if (value === STAGE.FINAL) return 170;
     return value;
   }
 
@@ -2364,7 +2817,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     const manager = api.getItemOnGroundManager?.();
     if (!manager?.registerLocation) return;
     const privateArea = player.getPrivateArea?.() ?? null;
-    if (!story.fullMoonKeyClaimed && !hasItem(player, CASTLE_BOOK_ITEMS.fullMoonKey)) {
+    if (!hasItem(player, CASTLE_BOOK_ITEMS.fullMoonKey)) {
       const keyTile = new Location(...CASTLE_LIBRARY.secretKey, CASTLE_LIBRARY.z);
       if (!manager.getGroundItem?.(player.getUsername?.(), CASTLE_BOOK_ITEMS.fullMoonKey, keyTile, privateArea)) {
         manager.registerLocation(player, new Item(CASTLE_BOOK_ITEMS.fullMoonKey, 1), keyTile);
@@ -2381,7 +2834,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   function syncCastleGibbousKey(player) {
     if (!player || stage(player) !== STAGE.CASTLE) return;
     const story = castleStory(player);
-    if (!story.prisonersFound || story.gibbousKeyClaimed || hasItem(player, CASTLE_BOOK_ITEMS.gibbousMoonKey)) return;
+    if (!story.prisonersFound || hasItem(player, CASTLE_BOOK_ITEMS.gibbousMoonKey)) return;
     const manager = api.getItemOnGroundManager?.();
     if (!manager?.registerLocation) return;
     const tile = new Location(2573, 7395, 0);
@@ -2722,7 +3175,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       new Set(castleStory(player).gibbous.caseItems ?? []).size < 3) {
       player.sendMessage("The display case's compartment is still locked."); return;
     }
-    if (castleStory(player).gibbous.gildedKeyClaimed || hasItem(player, ItemIdentifiers.GILDED_KEY)) return;
+    if (hasItem(player, ItemIdentifiers.GILDED_KEY)) return;
     if (castleKeyGive(player, ItemIdentifiers.GILDED_KEY, "You search the compartment and take the gilded key.")) {
       updateGibbousStory(player, { gildedKeyClaimed: true });
     }
@@ -2941,13 +3394,12 @@ module.exports = function registerTheBloodMoonRises(api) {
       ["inspect", "search"].includes(option)) {
       event.handled = true;
       if (!key.fullCrestInFireplace) { player.sendMessage("The fireplace's hidden lock needs the full crest."); return; }
-      if (key.newMoonKeyClaimed || hasItem(player, CASTLE_BOOK_ITEMS.newMoonKey)) {
+      if (hasItem(player, CASTLE_BOOK_ITEMS.newMoonKey)) {
         player.sendMessage("You already have the new moon key.");
         return;
       }
       confirmCastleKeyAction(player, "Search the fireplace?", () => {
-        const current = castleStory(player).newMoon ?? {};
-        if (current.newMoonKeyClaimed || hasItem(player, CASTLE_BOOK_ITEMS.newMoonKey)) return;
+        if (hasItem(player, CASTLE_BOOK_ITEMS.newMoonKey)) return;
         if (castleKeyGive(player, CASTLE_BOOK_ITEMS.newMoonKey, "You search the fireplace and find a key with the symbol of a new moon on it. You take it.")) {
           updateCastleKeyStory(player, { newMoonKeyClaimed: true });
         }
@@ -3036,8 +3488,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       updateCastleKeyStory(player, { fullCrestInFireplace: true });
       player.sendMessage("You place the crest in the slot above the fireplace and hear a clicking sound come from the fireplace itself.");
       confirmCastleKeyAction(player, "Search the fireplace?", () => {
-        const current = castleStory(player).newMoon ?? {};
-        if (current.newMoonKeyClaimed || hasItem(player, CASTLE_BOOK_ITEMS.newMoonKey)) return;
+        if (hasItem(player, CASTLE_BOOK_ITEMS.newMoonKey)) return;
         if (castleKeyGive(player, CASTLE_BOOK_ITEMS.newMoonKey, "You search the fireplace and find a key with the symbol of a new moon on it. You take it.")) {
           updateCastleKeyStory(player, { newMoonKeyClaimed: true });
         }
@@ -3735,6 +4186,43 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, stockpileDestroyed: true });
       setCastleNativeStage(player, 80);
     }
+    if (event.stepId === "huhOGU" && stage(player) === STAGE.FINAL) {
+      event.handled = true;
+      giveFinalDrakanSupplies(player);
+      return;
+    }
+    if (event.stepId === "W2h12S" && stage(player) === STAGE.FINAL) {
+      event.handled = true;
+      if (!openFinalPortal(player)) {
+        player.sendMessage("The portal is open, but the passage has not appeared. Speak to Efaritay again.");
+        event.end = true;
+      }
+      return;
+    }
+    if (event.stepId === "R8kt3U" && stage(player) === STAGE.FINAL &&
+      player.getAttribute(FINAL_PORTAL_OPEN_ATTRIBUTE)) {
+      event.handled = true;
+      player.setAttribute(FINAL_PORTAL_USED_ATTRIBUTE, true);
+      cleanupFinalEfaritay({ player });
+      player.moveTo(new Location(FINAL_CASTLE_ARRIVAL.x, FINAL_CASTLE_ARRIVAL.y, FINAL_CASTLE_ARRIVAL.z));
+      spawnFinalArrivalActors(player);
+      return;
+    }
+    if (event.stepId === "t7FMNM" && stage(player) === STAGE.FINAL) {
+      cleanupFinalCutsceneActors({ player });
+    }
+    if (event.kind === "message" && event.stepId === "RldbTP" && stage(player) === STAGE.FINAL) {
+      event.handled = true;
+      const inventory = player.getInventory();
+      if (hasItem(player, ItemIdentifiers.HALLOWED_FLAIL)) return;
+      if (inventory.getFreeSlots() < 1 || !inventory.adds(ItemIdentifiers.HALLOWED_FLAIL, 1)) {
+        player.sendMessage("Make room in your inventory before taking the Hallowed flail from Efaritay.");
+        event.end = true;
+        return;
+      }
+      event.box = { items: [ItemIdentifiers.HALLOWED_FLAIL] };
+      return;
+    }
     if (event.stepId === "RkdJSc" && stage(player) === STAGE.CASTLE) {
       const loc = player.getLocation();
       spawnCastleActor(player, "stockpile-venator", CASTLE_NPC.VENATOR,
@@ -3833,8 +4321,51 @@ module.exports = function registerTheBloodMoonRises(api) {
       cleanupCastleActors({ player });
     }
     if (event.stepId === "4G5OZg") startWyrdBattle(player);
-    if (event.stepId === "t7FMNM") startDrakanBattle(player);
-    if (event.stepId === "4ebW6l" || event.stepId === "BzMe5D") finishDrakanEncounter(player);
+    if (event.stepId === "t7FMNM" && stage(player) === STAGE.FINAL) {
+      event.handled = true;
+      if (!player.getAttribute(DRAKAN_SUPPLY_ATTRIBUTE) ||
+        (!hasItem(player, ItemIdentifiers.HALLOWED_FLAIL) &&
+          !player.getEquipment?.()?.contains?.(ItemIdentifiers.HALLOWED_FLAIL))) {
+        player.sendMessage("Prepare at the Vampyrium supply chest and bring the Hallowed flail before fighting Lowerniel.");
+        event.end = true;
+        return;
+      }
+      startDrakanBattle(player);
+    }
+    if (event.stepId === "BzMe5D") finishDrakanEncounter(player);
+    const finalDrakanArea = player.getAttribute(DRAKAN_AREA_ATTRIBUTE);
+    const finalDrakanFight = finalDrakanArea && drakanEncounters.get(finalDrakanArea);
+    if (event.stepId === "YweyKw" &&
+      (player.getAttribute(DRAKAN_ENCOUNTER_COMPLETE) || finalDrakanFight?.deathConfirmed)) {
+      const inventory = player.getInventory();
+      if (!hasItem(player, ItemIdentifiers.SUNSPEAR) && !inventory.adds(ItemIdentifiers.SUNSPEAR, 1)) {
+        event.handled = true;
+        player.sendMessage("Make room in your inventory to take the Sunspear from Lowerniel's body.");
+        event.end = true;
+        return;
+      }
+      event.handled = true;
+      event.box = { items: [ItemIdentifiers.SUNSPEAR] };
+    }
+    if (event.stepId === "HNA3XS" && finalDrakanFight?.deathConfirmed) {
+      if (!finishDrakanEncounter(player)) {
+        event.handled = true;
+        player.sendMessage("The return portal cannot open until Lowerniel's defeat has settled.");
+        event.end = true;
+        return;
+      }
+      player.moveTo(new Location(FINAL_GRAVEYARD_AFTER_FIGHT.x,
+        FINAL_GRAVEYARD_AFTER_FIGHT.y, FINAL_GRAVEYARD_AFTER_FIGHT.z));
+      spawnFinalCutsceneActors(player);
+    }
+    if (event.stepId === "NrSBWo" && stage(player) === STAGE.FINAL) {
+      transformFinalWyrdForCutscene(player);
+    }
+    if (event.stepId === "I_SfUV" && stage(player) === STAGE.FINAL) {
+      player.moveTo(new Location(FINAL_GRAVEYARD_AFTER_FIGHT.x,
+        FINAL_GRAVEYARD_AFTER_FIGHT.y, FINAL_GRAVEYARD_AFTER_FIGHT.z));
+      cleanupFinalCutsceneActors({ player });
+    }
     if (event.stepId === "Xz7d4O") startSiegeDrakanBattle(player);
     if (event.stepId === "zPiZ9c") finishSiegeDrakanBattle(player);
     if (event.stepId === "1Z5SGt" && stage(player) === STAGE.THEATRE &&
@@ -3857,9 +4388,16 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.moveTo(new Location(3562, 3323, 0));
     }
     if (event.stepId === "xt3dPV") advance(player, STAGE.FENCE_FOUND);
-    if (event.stepId === "2QgFZA" && player.getAttribute(WYRD_DEFEATED_ATTRIBUTE)) advance(player, STAGE.FINAL);
+    if (event.stepId === "2QgFZA" && player.getAttribute(WYRD_DEFEATED_ATTRIBUTE)) {
+      advance(player, STAGE.FINAL);
+      syncFinalEfaritay(player);
+    }
     if (event.stepId === "BzMe5D" && stage(player) === STAGE.FINAL
-      && player.getAttribute(DRAKAN_ENCOUNTER_COMPLETE)) quest.complete(player);
+      && player.getAttribute(DRAKAN_ENCOUNTER_COMPLETE)) {
+      cleanupFinalCutsceneActors({ player });
+      cleanupFinalEfaritay({ player });
+      quest.complete(player);
+    }
   }
 
   function onBloodMoonTobCompleted(event) {
@@ -4020,6 +4558,13 @@ module.exports = function registerTheBloodMoonRises(api) {
         "I'm ready.", () => startHideoutDeparture(player),
         "I need more time to prepare.", () => {});
       return true;
+    }
+    if (stage(player) === STAGE.FINAL && npcName === "efaritay hallow") {
+      event.handled = true;
+      const variant = player.getAttribute(FINAL_PORTAL_USED_ATTRIBUTE)
+        ? "night-of-the-blood-moon-entering-the-portal-talking-to-efaritay-again"
+        : "night-of-the-blood-moon-talking-to-efaritay";
+      return startTranscript(api, player, event.npcId, PAGE, variant);
     }
     // The Sins of the Father reclaim dialogue also belongs to Ivan in this
     // hideout. SLEPE's later story variant is only relevant at its own scene;
@@ -4264,16 +4809,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     // ID. An exact placed-route match is more specific than that child ID.
     const moonDoorKey = CASTLE_MOON_DOOR_KEYS.get(transition?.id) ??
       (transition ? null : CASTLE_MOON_DOOR_KEYS.get(visibleId) ?? CASTLE_MOON_DOOR_KEYS.get(event?.objectId));
-    // The crescent key is earned from the Gallery chest and consumed to open
-    // the Gallery↔Gallery Hall passage. Keep that passage available after a
-    // reconnect even when the already-earned key is no longer in inventory.
-    const galleryPassageAlreadyUnlocked = transition?.id === CASTLE_DOOR_IDS.CRESCENT &&
-      transition.x === 2343 && transition.y === 7416 && transition.from === CASTLE_ROOM.GALLERY_HALL &&
-      player.getAttribute(GALLERY_CHEST_ATTRIBUTE)?.key === true;
-    const throneKeyAlreadyClaimed = player.getAttribute(THRONE_PUZZLE_ATTRIBUTE)?.keyClaimed === true;
-    const thronePassageAlreadyUnlocked = moonDoorKey?.[0] === CASTLE_BOOK_ITEMS.halfMoonKey && throneKeyAlreadyClaimed;
-    if (moonDoorKey && !hasItem(player, moonDoorKey[0]) &&
-      !galleryPassageAlreadyUnlocked && !thronePassageAlreadyUnlocked) {
+    const passageKey = transition && `${transition.id}:${transition.x},${transition.y},${transition.z ?? 0}:${transition.from}->${transition.to}`;
+    const unlockedPassages = player.getAttribute(CASTLE_UNLOCKED_PASSAGES_ATTRIBUTE) ?? [];
+    const passageAlreadyUnlocked = passageKey && unlockedPassages.includes(passageKey);
+    if (moonDoorKey && !hasItem(player, moonDoorKey[0]) && !passageAlreadyUnlocked) {
       event.handled = true;
       player.sendMessage(`The door is locked. You need the ${moonDoorKey[1]}.`);
       return;
@@ -4281,8 +4820,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (transition) {
       const currentRoom = Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) || CASTLE_ROOM.LOBBY;
       const currentFloor = Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) || CASTLE_GROUND_FLOOR;
-      if (transition.key && !hasItem(player, transition.key) &&
-        !(transition.key === CASTLE_BOOK_ITEMS.halfMoonKey && throneKeyAlreadyClaimed)) {
+      if (transition.key && !hasItem(player, transition.key) && !passageAlreadyUnlocked) {
         event.handled = true;
         player.sendMessage(`The door is locked. You need the ${transition.keyName}.`);
         return;
@@ -4312,6 +4850,13 @@ module.exports = function registerTheBloodMoonRises(api) {
         return;
       }
       event.handled = true;
+      // Remember only this exact placed passage, after its normal key check and
+      // room-side validation. A solved puzzle or a key claimed long ago does
+      // not unlock every door that shares the same visible cache definition.
+      if (passageKey && (moonDoorKey || transition.key) && !passageAlreadyUnlocked &&
+        hasItem(player, moonDoorKey?.[0] ?? transition.key)) {
+        player.setAttribute(CASTLE_UNLOCKED_PASSAGES_ATTRIBUTE, [...unlockedPassages, passageKey]);
+      }
       player.setAttribute(CASTLE_ROOM_ATTRIBUTE, transition.to);
       player.setAttribute(CASTLE_FLOOR_ATTRIBUTE, transition.toFloor ?? CASTLE_GROUND_FLOOR);
       syncCastleRoom(player, transition.facing);
@@ -4592,14 +5137,9 @@ module.exports = function registerTheBloodMoonRises(api) {
         player.sendMessage("The four busts conceal a mechanism. Their levers must be pulled in the right order.");
         return;
       }
-      const hasKey = hasItem(player, ItemIdentifiers.HALF_MOON_KEY) || hasBankedItem(player, ItemIdentifiers.HALF_MOON_KEY);
+      const hasKey = hasItem(player, ItemIdentifiers.HALF_MOON_KEY);
       if (state.solved && !hasKey && ["search", "take", "investigate"].includes(throneOption)) {
-        const inventory = player.getInventory();
-        if (typeof inventory.getFreeSlots === "function" && inventory.getFreeSlots() <= 0) {
-          player.sendMessage("You couldn't hold the half moon key.");
-          return;
-        }
-        inventory.adds(ItemIdentifiers.HALF_MOON_KEY, 1);
+        if (!giveInventoryItem(player, ItemIdentifiers.HALF_MOON_KEY, "Make room before taking the half moon key.")) return;
         player.setAttribute(THRONE_PUZZLE_ATTRIBUTE, { ...state, keyClaimed: true });
         player.sendMessage("You find a half moon key inside the throne.");
         return;
@@ -4907,6 +5447,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     const state = player.getAttribute(GALLERY_CHEST_ATTRIBUTE) ?? { step: 0, solved: false, key: false };
     if (!state.solved) {
       promptGalleryChest(player);
+      return;
+    }
+    if (hasItem(player, ItemIdentifiers.CRESCENT_MOON_KEY)) {
+      player.sendMessage("You already have the crescent moon key.");
       return;
     }
     if (!giveInventoryItem(player, ItemIdentifiers.CRESCENT_MOON_KEY, "Make room in your inventory before taking the crescent moon key.")) return;
@@ -5424,6 +5968,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.persistAttribute(HIDEOUT_SHRINE_INSPECTED);
   api.persistAttribute(SLEPE_STORY_ATTRIBUTE);
   api.persistAttribute(CASTLE_SHRINE_ATTRIBUTE);
+  api.persistAttribute(CASTLE_UNLOCKED_PASSAGES_ATTRIBUTE);
   const hall = require("../bmr/Hall.TheBloodMoonRises")({ api, state: hallDefenceState,
     process: processSiegeDefence, cleanup: handleSiegeLogout, scenery: player => {
       const repaired = hallDefenceState(player).repaired ?? [];
@@ -5449,6 +5994,10 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction(prayAtCastleShrine);
   api.onObjectInteraction(enterVampyriumPortal);
   api.onObjectInteraction(tryCastleReturnPortal);
+  api.onObjectInteraction(handleFinalPortal);
+  api.onObjectInteraction(handleFinalCastleReturnPortal);
+  api.onObjectInteraction(handleFinalDrakanSupplyChest);
+  api.onObjectInteraction(handleFinalDrakanRoofDoor);
   api.onCustomEvent("drakan-medallion:destinations", addCastleMedallionDestination);
   api.onCustomEvent("world:object-examine", inspectHideoutShrine);
   api.onNpcDialogueCondition(handleSlepeJournalCondition);
@@ -5468,6 +6017,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onNpcInteraction("Safalaan Hallow", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Vanescula Drakan", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Drezel", { "Talk-to": talkQuestNpc });
+  api.onNpcInteraction("Efaritay Hallow", { "Talk-to": talkQuestNpc });
   api.onObjectInteraction(handlePaterdomusObject);
   api.onItemOnObject(handlePaterdomusItemOnObject, { noted: false });
   api.onObjectInteraction(openHideoutChest);
@@ -5555,7 +6105,10 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogin(resumeHideoutEscape);
   api.onPlayerLogin(syncCastleShrine);
   api.onPlayerLogin(syncCastleRoomOnLogin);
+  api.onPlayerLogin(syncFinalEfaritayOnLogin);
   api.onPlayerLogout(cleanupCastleActors);
+  api.onPlayerLogout(cleanupFinalEfaritay);
+  api.onPlayerLogout(cleanupFinalCutsceneActors);
   api.onPlayerLogout(handleSiegeLogout);
   api.onPlayerLogout(cleanupWyrdEncounter);
   api.onPlayerLogout(hideoutDefense.onPlayerLogout);
@@ -5570,8 +6123,12 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onNpcDeath(handleCastleNpcDeath);
   api.persistAttribute(HIDEOUT_DEFENSE_COMPLETE);
   api.onNpcHitModify(handleSiegeDrakanHit);
+  api.onNpcHitModify(handleFinalDrakanHit);
   api.persistAttribute(WYRD_DEFEATED_ATTRIBUTE);
   api.persistAttribute(DRAKAN_ENCOUNTER_COMPLETE);
+  api.persistAttribute(FINAL_PORTAL_OPEN_ATTRIBUTE);
+  api.persistAttribute(FINAL_PORTAL_USED_ATTRIBUTE);
+  api.persistAttribute(DRAKAN_SUPPLY_ATTRIBUTE);
   api.persistAttribute(SIEGE_DRAKAN_COMPLETE);
   api.persistAttribute(SIEGE_DEFENCE_ATTRIBUTE);
   api.persistAttribute(TOB_CHALLENGE_ATTRIBUTE);

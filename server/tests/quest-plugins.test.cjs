@@ -1553,6 +1553,10 @@ test('Blood Moon Gibbous lockbox requires its room clues and accepts code 426', 
   searchCase({ player, objectId: 61672, definition: { id: 61672 }, location: { x: 2497, y: 7374, z: 0 },
     option: 'Search', handled: false });
   assert.equal(items.get(33729), 1, 'the skull, hourglass and ornate knife open the compartment with the gilded key');
+  items.set(33729, 0);
+  searchCase({ player, objectId: 61672, definition: { id: 61672 }, location: { x: 2497, y: 7374, z: 0 },
+    option: 'Search', handled: false });
+  assert.equal(items.get(33729), 1, 'the solved display case lets the player reclaim a lost gilded key');
 });
 
 test('Blood Moon Ranis parlour door drops a recoverable skull for the display case', () => {
@@ -2063,6 +2067,10 @@ test('Blood Moon Castle Drakan throne opens only after the ordered bust mechanis
   freeSlots = 1;
   interact('Throne', 2313, 7392, 'Search');
   assert.equal(inventory.contains(api.core.ItemIdentifiers.HALF_MOON_KEY), true);
+  counts.set(api.core.ItemIdentifiers.HALF_MOON_KEY, 0);
+  interact('Throne', 2313, 7392, 'Search');
+  assert.equal(inventory.contains(api.core.ItemIdentifiers.HALF_MOON_KEY), true,
+    'a solved throne lets the player reclaim a half-moon key that is no longer carried');
   assert.deepEqual([15539, 15540, 15541, 15542].map((id) => varbits.get(id)), [1, 2, 2, 2],
     'the active lever positions survive the completed puzzle');
   action({ player, stepId: 'XqVfhB' });
@@ -2161,6 +2169,10 @@ test('Blood Moon Castle gilded bookcase uses the eight House slots and places th
   handlers.ground.find(handler => handler.name === 'handleCastleBookPickup')({ player, groundItemId: 33802,
     location: { x: 2433, y: 7415, z: 0 } });
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').mysteryJerkyClaimed, true);
+  ground.length = 0;
+  handlers.playerLogin.find(handler => handler.name === 'syncCastleRoomOnLogin')({ player });
+  assert.ok(ground.some(entry => entry.item.getId() === 33724),
+    'a lost full-moon key can be reclaimed from the solved library when it is not in inventory or bank');
 });
 
 test('Blood Moon Castle hidden room supplies the chunky potion through Search and combines real doses', () => {
@@ -2411,7 +2423,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [61577, 2452, 7373, 0], [61776, 2449, 7371, 0], [61771, 2450, 7372, 0],
     [61589, 2522, 7397, 0], [61588, 2506, 7363, 0], [61588, 2336, 7370, 1],
     [61589, 2483, 7395, 0], [61588, 2510, 7370, 0], [61589, 2515, 7367, 0],
-    [61625, 2519, 7363, 0], [61577, 2551, 7387, 0], [61609, 2503, 7369, 0],
+    [61625, 2519, 7363, 0], [61577, 2551, 7387, 0], [61609, 2503, 7369, 0], [61609, 2503, 7379, 0],
     [61599, 2308, 7365, 1], [61627, 2452, 7420, 0], [61626, 2445, 7418, 0],
     [61573, 2441, 7417, 0], [61572, 2460, 7390, 0], [61615, 2455, 7386, 0],
     [61572, 2438, 7419, 0], [61591, 2373, 7392, 0], [61591, 2379, 7392, 0],
@@ -2453,7 +2465,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [2506, 7409, 0], [2587, 7380, 0], [2583, 7370, 0], [2451, 7371, 0], [2441, 7361, 0],
     [2522, 7396, 0], [2506, 7364, 0], [2520, 7396, 0], [2482, 7395, 0],
     [2337, 7370, 1], [2516, 7368, 0], [2509, 7370, 0], [2551, 7386, 0], [2519, 7364, 0],
-    [2502, 7368, 0], [2309, 7369, 1], [2444, 7418, 0], [2453, 7421, 0], [2459, 7390, 0],
+    [2502, 7368, 0], [2309, 7369, 1], [2309, 7373, 1], [2444, 7418, 0], [2453, 7421, 0], [2459, 7390, 0],
     [2442, 7417, 0], [2437, 7419, 0], [2456, 7388, 0], [2380, 7392, 0], [2372, 7392, 0],
     [2393, 7363, 0], [2387, 7383, 0], [2441, 7400, 0], [2394, 7370, 0], [2440, 7388, 0],
     [2439, 7394, 0], [2435, 7372, 0], [2306, 7396, 1], [2541, 7373, 0], [2526, 7363, 0],
@@ -2603,29 +2615,38 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   attributes.set('quest.the_blood_moon_rises.castle-room', 12);
   attributes.set('quest.the_blood_moon_rises.castle-floor', 1);
   attributes.set('quest.the_blood_moon_rises.gallery-chest', { solved: true, key: true });
+  inventoryItems.delete(api.core.ItemIdentifiers.CRESCENT_MOON_KEY);
+  const beforeUnopenedCrescent = moved.length;
   const earnedCrescentPassage = enterPairedDoor(61592, 2343, 7416, 0, { x: 2342, y: 7416, z: 0 });
   assert.equal(earnedCrescentPassage.handled, true);
-  assert.deepEqual(moved.at(-1), [2371, 7370, 0],
-    'the earned Gallery chest keeps its crescent passage unlocked after the key is consumed or lost');
+  assert.equal(moved.length, beforeUnopenedCrescent, 'claiming the chest key does not pre-unlock its door');
+  inventoryItems.add(api.core.ItemIdentifiers.CRESCENT_MOON_KEY);
+  enterPairedDoor(61592, 2343, 7416, 0, { x: 2342, y: 7416, z: 0 });
+  assert.deepEqual(moved.at(-1), [2371, 7370, 0], 'the carried crescent key opens the Gallery passage');
+  inventoryItems.delete(api.core.ItemIdentifiers.CRESCENT_MOON_KEY);
   attributes.set('quest.the_blood_moon_rises.castle-room', 12);
-  attributes.delete('quest.the_blood_moon_rises.gallery-chest');
-  const unearnedCrescentPassage = enterPairedDoor(61592, 2343, 7416, 0, { x: 2342, y: 7416, z: 0 });
-  assert.equal(unearnedCrescentPassage.handled, true);
+  const reopenedCrescentPassage = enterPairedDoor(61592, 2343, 7416, 0, { x: 2342, y: 7416, z: 0 });
+  assert.equal(reopenedCrescentPassage.handled, true);
   assert.deepEqual(moved.at(-1), [2371, 7370, 0],
-    'the Gallery passage remains locked unless the player carries the key or has earned it from the chest');
+    'the exact Gallery passage remains open after the key is lost');
   attributes.set('quest.the_blood_moon_rises.castle-room', 2);
   attributes.set('quest.the_blood_moon_rises.castle-floor', 1);
   attributes.set('quest.the_blood_moon_rises.castle-throne-puzzle', { solved: true, keyClaimed: true });
+  inventoryItems.delete(api.core.ItemIdentifiers.HALF_MOON_KEY);
+  const beforeUnopenedHalf = moved.length;
   const earnedHalfMoonPassage = enterPairedDoor(61586, 2336, 7370, 0, { x: 2337, y: 7370, z: 0 });
   assert.equal(earnedHalfMoonPassage.handled, true);
-  assert.deepEqual(moved.at(-1), [2338, 7395, 0],
-    'the solved throne keeps its half-moon passage unlocked after the key is consumed or lost');
+  assert.equal(moved.length, beforeUnopenedHalf, 'claiming the throne key does not pre-unlock its door');
+  inventoryItems.add(api.core.ItemIdentifiers.HALF_MOON_KEY);
+  enterPairedDoor(61586, 2336, 7370, 0, { x: 2337, y: 7370, z: 0 });
+  assert.deepEqual(moved.at(-1), [2338, 7395, 0], 'the carried half-moon key opens the western dining passage');
+  inventoryItems.delete(api.core.ItemIdentifiers.HALF_MOON_KEY);
   attributes.set('quest.the_blood_moon_rises.castle-room', 2);
   attributes.delete('quest.the_blood_moon_rises.castle-throne-puzzle');
-  const unearnedHalfMoonPassage = enterPairedDoor(61586, 2336, 7370, 0, { x: 2337, y: 7370, z: 0 });
-  assert.equal(unearnedHalfMoonPassage.handled, true);
+  const reopenedHalfMoonPassage = enterPairedDoor(61586, 2336, 7370, 0, { x: 2337, y: 7370, z: 0 });
+  assert.equal(reopenedHalfMoonPassage.handled, true);
   assert.deepEqual(moved.at(-1), [2338, 7395, 0],
-    'the western dining passage stays locked before the throne yields its half moon key');
+    'the exact western dining passage remains open after the key is lost');
   inventoryItems.add(api.core.ItemIdentifiers.FULL_MOON_KEY);
   attributes.set('quest.the_blood_moon_rises.castle-room', 32);
   attributes.set('quest.the_blood_moon_rises.castle-floor', 2);
@@ -2696,12 +2717,31 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   const halfMoon = { player, objectId: 61586, clickType: 1, option: 'Enter',
     definition: { id: 61586, getName: () => 'Half moon door' }, object: { getFace: () => 0 },
     location: { x: 2336, y: 7370, z: 0 }, sourceLocation: { x: 2335, y: 7370, z: 0 }, handled: false };
+  attributes.set('quest.the_blood_moon_rises.castle-throne-puzzle', { keyClaimed: true });
+  attributes.set('quest.the_blood_moon_rises.gallery-chest', { key: true });
+  inventoryItems.delete(api.core.ItemIdentifiers.HALF_MOON_KEY);
+  attributes.delete('quest.the_blood_moon_rises.castle-unlocked-passages');
   enter(halfMoon);
   assert.equal(halfMoon.handled, true, 'the named half-moon door is handled when locked');
   assert.deepEqual(moved.at(-1), [2357, 7366, 0], 'the half-moon door cannot be passed without its key');
   inventoryItems.add(api.core.ItemIdentifiers.HALF_MOON_KEY);
   enter({ ...halfMoon, handled: false });
   assert.deepEqual(moved.at(-1), [2338, 7395, 0], 'the real half-moon pair crosses into the west dining hall');
+  const unlockedPassage = attributes.get('quest.the_blood_moon_rises.castle-unlocked-passages');
+  assert.deepEqual(unlockedPassage, ['61586:2336,7370,0:2->8'], 'crossing with the key records only this placed passage');
+  inventoryItems.delete(api.core.ItemIdentifiers.HALF_MOON_KEY);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 2);
+  enter({ ...halfMoon, handled: false });
+  assert.deepEqual(moved.at(-1), [2338, 7395, 0], 'a lost key does not relock a passage the player actually opened');
+  attributes.set('quest.the_blood_moon_rises.castle-room', 12);
+  const otherHalfMoonPassage = { player, objectId: 61587, clickType: 1, option: 'Enter',
+    definition: { id: 61587, getName: () => 'Half moon door' }, object: { getFace: () => 0 },
+    location: { x: 2330, y: 7398, z: 0 }, sourceLocation: { x: 2329, y: 7398, z: 0 }, handled: false };
+  enter(otherHalfMoonPassage);
+  assert.equal(otherHalfMoonPassage.handled, true, 'claimed-key flags do not open another half-moon passage');
+  assert.equal(moved.at(-1)[0], 2338, 'the unrelated locked passage does not move the player');
+  inventoryItems.add(api.core.ItemIdentifiers.HALF_MOON_KEY);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 8);
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 8);
   assert.equal(varbits.get(15499), 8);
   assert.equal(varbits.get(15489), 1);
@@ -2799,6 +2839,14 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
   assert.deepEqual(moved.at(-1), [2314, 7371, 1], 'the recorded ground-lobby stairs return to the first floor');
   assert.equal(varbits.get(15500), 6);
   assert.equal(varbits.get(15489), 2);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 38);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 2);
+  const southDisplayStairs = { player, objectId: 61609, clickType: 1, option: 'Climb-down',
+    definition: { id: 61609, getName: () => 'Stairs' }, location: { x: 2503, y: 7379, z: 0 }, handled: false };
+  enter(southDisplayStairs);
+  assert.deepEqual(moved.at(-1), [2309, 7373, 1], 'the captured southern Display Room stairs reach the upper lobby landing');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 1);
+  assert.equal(varbits.get(15499), 1);
   for (const id of [api.core.ItemIdentifiers.NEW_MOON_KEY, api.core.ItemIdentifiers.GIBBOUS_MOON_KEY,
     api.core.ItemIdentifiers.FULL_MOON_KEY, api.core.ItemIdentifiers.CRESCENT_MOON_KEY]) inventoryItems.delete(id);
   attributes.set(castleRoom, 2);
@@ -3992,6 +4040,13 @@ test('Blood Moon stage 90 Veliaf dialogue takes precedence over completed Myrequ
 test('Blood Moon northern-door transcript starts the private Lowerniel encounter', () => {
   const { api, handlers } = mockApi();
   const attributes = new Map();
+  const items = new Map([[api.core.ItemIdentifiers.HALLOWED_FLAIL, 1]]);
+  const messages = [];
+  const inventory = {
+    contains: id => (items.get(id) ?? 0) > 0,
+    adds: (id, count = 1) => (items.set(id, (items.get(id) ?? 0) + count), true),
+    getFreeSlots: () => 28 - items.size,
+  };
   const spawns = [];
   let bossArea = null;
   const boss = {
@@ -3999,11 +4054,17 @@ test('Blood Moon northern-door transcript starts the private Lowerniel encounter
     isPlayer: () => false,
     getAsNpc: () => boss,
     getIndex: () => 201,
+    getId: () => api.core.NpcIdentifiers.LOWERNIEL_DRAKAN_17,
+    isRegistered: () => false,
     getArea: () => bossArea,
     setArea: (area) => { bossArea = area; },
     setMultiCombat() {},
+    setScriptedMovement() {},
     setMaxHitpoints(value) { this.maxHitpoints = value; },
     setHitpoints(value) { this.hitpoints = value; },
+    getHitpoints() { return this.hitpoints; },
+    getMaxHitpoints() { return this.maxHitpoints; },
+    getCombat: () => ({ getLastAttack: () => ({ reset() {} }) }),
   };
   api.spawnNpc = (definition) => (spawns.push(definition), boss);
   api.emitCustomEvent = (name, request) => {
@@ -4021,27 +4082,94 @@ test('Blood Moon northern-door transcript starts the private Lowerniel encounter
     getIndex: () => 101,
     getArea: () => player.area,
     setArea: (area) => { player.area = area; },
+    getInventory: () => inventory,
+    getEquipment: () => ({ contains: () => false }),
+    getLocation: () => new api.core.Location(player.x ?? 2502, player.y ?? 7838, 3),
+    getHitpoints: () => 99,
+    getPrayerActive: () => [],
+    getCombat: () => ({ getHitQueue: () => ({ addPendingDamage() {} }) }),
+    getDialogueManager: () => ({ startDialogues() {} }),
     moveTo: (location) => { player.destination = [location.getX(), location.getY(), location.getZ()]; },
-    sendMessage() {},
+    sendMessage: message => messages.push(message),
   };
   const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().filter(q => q.key === 'the_blood_moon_rises').at(-1);
   const action = handlers.custom.get('npc-dialogue:action').at(-1);
   action({ player, stepId: 't7FMNM' });
   assert.equal(spawns.length, 0, 'the final fight cannot start in an earlier chapter');
   quest.setStage(player, 100);
+  const portal = handlers.objects.find(handler => handler.name === 'handleFinalPortal');
+  assert.ok(portal, 'the graveyard portal has a stage-gated Enter hook');
+  const portalAction = { player, objectId: 61215, definition: { id: 61217 },
+    location: new api.core.Location(3703, 3185, 0), option: 'enter', handled: false };
+  assert.equal(portal(portalAction), true);
+  assert.match(messages.at(-1) ?? '', /Efaritay must open/i,
+    'the portal cannot be used before Efaritay opens it');
+  attributes.set('quest.the_blood_moon_rises.final-portal-open', true);
+  assert.equal(portal(portalAction), true);
+  assert.equal(portalAction.handled, true, 'the open portal starts the recorded arrival scene');
+  action({ player, stepId: 'R8kt3U' });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.final-portal-used'), true);
+  assert.deepEqual(player.destination, [2507, 7383, 0], 'the portal uses its captured Castle arrival');
+  const chest = handlers.objects.find(handler => handler.name === 'handleFinalDrakanSupplyChest');
+  const chestAction = { player, objectId: 61764, definition: { id: 61765 },
+    location: new api.core.Location(2503, 7386, 0), option: 'take-supplies', handled: false };
+  assert.equal(chest(chestAction), true);
+  assert.equal(chestAction.handled, true);
+  action({ player, stepId: 'huhOGU', kind: 'action' });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.final-drakan-supplies'), true,
+    'supplies are obtained through the actual castle chest action');
+  const door = handlers.objects.find(handler => handler.name === 'handleFinalDrakanRoofDoor');
+  const doorAction = { player, objectId: 61628, definition: { id: 61628 },
+    location: new api.core.Location(2506, 7387, 0), option: 'enter', handled: false };
+  assert.equal(door(doorAction), true);
+  assert.equal(doorAction.handled, true, 'the roof door starts the northern-door introduction');
   action({ player, stepId: 't7FMNM' });
-  assert.deepEqual(spawns.map(({ id, x, y, z, ownerOnly }) => ({ id, x, y, z, ownerOnly })), [
-    { id: api.core.NpcIdentifiers.LOWERNIEL_DRAKAN_17, x: 2505, y: 7838, z: 3, ownerOnly: true },
+  assert.deepEqual(spawns.slice(-1).map(({ id, x, y, z, ownerOnly }) => ({ id, x, y, z, ownerOnly })), [
+    { id: api.core.NpcIdentifiers.LOWERNIEL_DRAKAN_17, x: 2511, y: 7838, z: 3, ownerOnly: true },
   ]);
   assert.deepEqual(player.destination, [2502, 7838, 3]);
   assert.equal(player.getArea(), bossArea, 'the player and Lowerniel share an owner-only final arena');
   assert.equal(boss.getArea(), bossArea);
-  assert.equal(boss.hitpoints, 1600);
+  assert.equal(boss.maxHitpoints, 3000);
+  assert.equal(boss.hitpoints, 3000);
+  const arena = player.getArea();
+  boss.hitpoints = 2100;
+  arena.process(boss);
+  assert.match(messages.at(-1) ?? '', /wall of blood|blood portals/i,
+    'the 2,100 HP transition starts the recorded phase-two wave sequence');
+  api.core.World.processCycle = api.core.World.getProcessCycle() + 1;
+  boss.hitpoints = 900;
+  arena.process(boss);
+  assert.match(messages.at(-1) ?? '', /appears briefly to your .* turning/i,
+    'the 900 HP transition begins the three-cycle spear-lunge phase');
+
+  const hitModify = handlers.npcHitModify.findLast(handler => handler.name === 'handleFinalDrakanHit');
+  const parts = [{ damage: 40, getDamage() { return this.damage; }, setDamage(value) { this.damage = value; } }];
+  hitModify({ npc: boss, hit: { getHits: () => parts, updateTotalDamage() {} } });
+  assert.equal(parts[0].damage, 28, 'the final duel observes the Wiki damage cap');
+
   let rewards = 0;
   quest.complete = () => rewards++;
+  action({ player, stepId: '4ebW6l' });
+  assert.notEqual(attributes.get('quest.the_blood_moon_rises.drakan-defeated'), true,
+    'the 30% wing-tear cutscene is not a final victory');
   action({ player, stepId: 'BzMe5D' });
   assert.equal(rewards, 0, 'opening the final dialogue cannot end an unfinished fight');
   assert.notEqual(attributes.get('quest.the_blood_moon_rises.drakan-defeated'), true);
+  boss.hitpoints = 0;
+  const death = handlers.npcDeath.findLast(handler => handler.name === 'handleWyrdDeath');
+  death({ npc: boss, killer: player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.drakan-defeated'), undefined,
+    'the completion marker is withheld until the final dialogue action');
+  action({ player, stepId: 'YweyKw' });
+  assert.equal(inventory.contains(api.core.ItemIdentifiers.SUNSPEAR), true,
+    'the Sunspear is recovered only after the actual zero-HP death callback');
+  action({ player, stepId: 'HNA3XS' });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.drakan-defeated'), true,
+    'the final death transcript settles the encounter before the return scene');
+  assert.deepEqual(player.destination, [3731, 3220, 0]);
+  action({ player, stepId: 'BzMe5D' });
+  assert.equal(rewards, 1, 'the final reward only follows the real kill and transcript');
 });
 
 test('Blood Moon siege barrier action starts the second private Lowerniel fight and caps damage at the 58% cutscene', () => {
@@ -4097,7 +4225,7 @@ test('Blood Moon siege barrier action starts the second private Lowerniel fight 
   let total = 900;
   const parts = [{ damage: 400, getDamage() { return this.damage; }, setDamage(value) { this.damage = value; } },
     { damage: 500, getDamage() { return this.damage; }, setDamage(value) { this.damage = value; } }];
-  handlers.npcHitModify.at(-1)({ npc: boss, hit: { getHits: () => parts, updateTotalDamage() { total = parts.reduce((sum, part) => sum + part.damage, 0); } } });
+  handlers.npcHitModify.find(handler => handler.name === 'handleSiegeDrakanHit')({ npc: boss, hit: { getHits: () => parts, updateTotalDamage() { total = parts.reduce((sum, part) => sum + part.damage, 0); } } });
   assert.equal(total, 810, 'the lethal multi-hit is capped at 58% so the escape cutscene cannot be skipped');
 });
 
@@ -10933,7 +11061,8 @@ test('Blood Moon native bitfield mapping restores Slepe refinery phase without c
  attrs.set('quest.the_blood_moon_rises.preparations',{flail:true,stakes:true});quest.setStage(player,60);assert.equal(bits.get(15464),114);
  attrs.set('quest.the_blood_moon_rises.siege-defence',{phase:'hall'});quest.setStage(player,70);assert.equal(bits.get(15464),120);
  bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),120);assert.equal(quest.getStage(player),70);
- quest.setStage(player,110);assert.equal(bits.get(15464),176);assert.equal(quest.isComplete(player),true);
+ quest.setStage(player,100);assert.equal(bits.get(15464),170,'the captured final northern-door chapter uses native value 170');
+ quest.setStage(player,110);assert.equal(bits.get(15464),178,'the captured post-Sunspear completion uses native value 178');assert.equal(quest.isComplete(player),true);
 });
 
 test('Blood Moon prayer at either real Castle Drakan shrine unlocks its cache transform and saves through relog',()=>{
