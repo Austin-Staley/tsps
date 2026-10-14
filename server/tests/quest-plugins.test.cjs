@@ -9020,6 +9020,12 @@ test('DT2 prison relog resumes only the saved clear tile at the matching earned 
     'a checkpoint tied to older progress cannot skip a newly locked gate');
 
   logout({ player });
+  attributes.set('desert-treasure-ii:sucellus-prison-progress', 52);
+  login({ player });
+  area = attributes.get('desert-treasure-ii:sucellus-area');
+  assert.equal(area.entities.filter(npc => npc.getId?.() === api.core.NpcIdentifiers.ASSASSIN_7).length, 0,
+    'the completed equipment dialogue keeps the departed Assassin gone after relog');
+  logout({ player });
   attributes.set('desert-treasure-ii:sucellus-prison-progress', 22);
   attributes.set('desert-treasure-ii:sucellus-prison-checkpoint',
     { x: 2917, y: 6375, z: 2, progress: 22 });

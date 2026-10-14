@@ -3402,7 +3402,6 @@ module.exports = function registerDesertTreasureII(api) {
         if (!escaped && !defeated) p.moveTo(area.tile(168, 33, 0));
         else if (!defeated) {
           p.moveTo(restoredSucellusPrisonTile(p, area) ?? area.tile(...SUCELLUS_ESCAPE_TILE));
-          spawnSucellusCellAssassin(p, area);
           api.emitCustomEvent("dt2:sucellus-prison-resume", { player: p, area });
         } else {
           p.moveTo(area.tile(167, 97, 0));
