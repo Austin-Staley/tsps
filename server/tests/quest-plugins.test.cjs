@@ -4865,7 +4865,7 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
     setAttribute: (key, value) => attributes.set(key, value),
     isPlayer: () => true,
     getAsPlayer() { return this; },
-    getLocation: () => playerLocation,
+    getLocation: () => playerLocation, moveTo: location => { playerLocation = location; },
     getInventory: () => inventory,
     getPacketSender: () => new Proxy({ sendVarbit: (id, value) => sentVarbits.push([id, value]) }, {
       get: (target, key) => target[key] ?? (() => {}),
@@ -5102,12 +5102,37 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
   }
   assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').bankCrank, true, 'the bank crank opens the inner gate after ten turns');
   assert.equal(toggle(api.core.ObjectIdentifiers.GATE_327, 2580, 7832).handled, false, 'the completed bank crank allows the interior gate to open');
+  const trapdoorRoute = { player, objectId: 61848, definition: { id: 61848 },
+    object: { getLocation: () => new api.core.Location(2579, 7830, 0) },
+    sourceLocation: { x: 2580, y: 7831, z: 0 }, destination: null };
+  const unlockedBankState = attributes.get('quest.the_blood_moon_rises.blood-hunt');
+  attributes.set('quest.the_blood_moon_rises.blood-hunt', { ...unlockedBankState, trapdoorUnlocked: false });
+  const lockedTrapdoorRoute = { ...trapdoorRoute, destination: null };
+  route(lockedTrapdoorRoute);
+  assert.equal(lockedTrapdoorRoute.destination, null, 'the route does not bypass the trapdoor key lock');
+  attributes.set('quest.the_blood_moon_rises.blood-hunt', unlockedBankState);
+  route(trapdoorRoute);
+  assert.deepEqual(trapdoorRoute.destination, { x: 2580, y: 7831, z: 0 },
+    'the blocked trapdoor is routed from its reachable adjacent tile before the gated climb');
+  const distantTrapdoorRoute = { ...trapdoorRoute, sourceLocation: { x: 2583, y: 7831, z: 0 }, destination: null };
+  route(distantTrapdoorRoute);
+  assert.equal(distantTrapdoorRoute.destination, null, 'the trapdoor route does not teleport from a distant tile');
+  const beforeWrongTrapdoor = playerLocation;
+  const wrongTrapdoorOption = { player, objectId: 61848, definition: { id: 61848 }, option: 'Search',
+    location: { x: 2579, y: 7830, z: 0 }, handled: false };
+  hunt(wrongTrapdoorOption);
+  assert.equal(wrongTrapdoorOption.handled, false, 'a non-Climb-through option does not enter the tunnel');
+  assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()],
+    [beforeWrongTrapdoor.getX(), beforeWrongTrapdoor.getY(), beforeWrongTrapdoor.getZ()],
+    'a wrong trapdoor option leaves the player in place');
   const enterTrapdoor = { player, objectId: 61848, definition: { id: 61848 }, option: 'Climb-through',
     location: { x: 2579, y: 7830, z: 0 }, handled: false };
   hunt(enterTrapdoor);
-  assert.equal(enterTrapdoor.handled, false, 'the opened trapdoor lets the generic captured teleport run');
+  assert.equal(enterTrapdoor.handled, true, 'the quest owns the valid Climb-through and its landing');
   assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').enteredTrapdoor, true,
     'the cellar-arrival checkpoint is saved only after the real Climb-through action');
+  assert.deepEqual([playerLocation.getX(), playerLocation.getY(), playerLocation.getZ()], [2581, 7844, 0],
+    'the real trapdoor action lands at the captured tunnel exit');
   inventory.deleteNumber(ids.TRAPDOOR_KEY, 100);
   assert.equal(inventory.contains(ids.TRAPDOOR_KEY), false, 'the trapdoor key was consumed when its lock opened');
   let chestDigit = 0;

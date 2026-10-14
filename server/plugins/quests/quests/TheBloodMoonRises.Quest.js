@@ -565,6 +565,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const HIDEOUT_CHEST_ID = ObjectIdentifiers.CLOSED_CHEST_37;
   const HIDEOUT_CHEST_TILE = { x: 3600, y: 9617, z: 0 };
   const VYRE_NOBLE_OUTFIT = [ItemIdentifiers.VYRE_NOBLE_TOP, ItemIdentifiers.VYRE_NOBLE_LEGS, ItemIdentifiers.VYRE_NOBLE_SHOES];
+  const HUNT_TRAPDOOR_ID = 61848;
   const HUNT_ITEMS = {
     crank: ItemIdentifiers.CRANK_WHEEL, dustyBook: ItemIdentifiers.DUSTY_BOOK, viturKey: ItemIdentifiers.VITUR_KEY,
     boltCutters: ItemIdentifiers.BOLT_CUTTERS, toothHalf: ItemIdentifiers.TOOTH_HALF_OF_KEY_6,
@@ -6859,7 +6860,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       { x: 2580, y: 7812, ids: [ObjectIdentifiers.JOVKAI_DOOR], item: HUNT_ITEMS.jovkaiKey, flag: "jovkaiDoorUnlocked", varbit: HUNT_DOOR_VARBITS.jovkaiDoorUnlocked, name: "The smithy is locked. Search the altar chest for its key." },
       { x: 2580, y: 7835, ids: [ObjectIdentifiers.MYRMEL_DOOR_3], item: HUNT_ITEMS.myrmelKey, flag: "bankDoorUnlocked", varbit: HUNT_DOOR_VARBITS.bankDoorUnlocked, name: "The bank door needs the Myrmel key." },
       { x: 2580, y: 7832, ids: [61854, 61855], flag: "innerBankDoorUnlocked", varbit: HUNT_DOOR_VARBITS.innerBankDoorUnlocked, name: "The bank gate is securely locked. Operate the crank base inside first.", extra: () => Boolean(state.bankCrank) },
-      { x: 2579, y: 7830, ids: [61848], item: HUNT_ITEMS.trapdoorKey, flag: "trapdoorUnlocked", varbit: HUNT_DOOR_VARBITS.trapdoorUnlocked, consume: true, name: "The trapdoor is locked. Find its key and operate the bank crank.", extra: () => Boolean(state.bankCrank) },
+      { x: 2579, y: 7830, ids: [HUNT_TRAPDOOR_ID], item: HUNT_ITEMS.trapdoorKey, flag: "trapdoorUnlocked", varbit: HUNT_DOOR_VARBITS.trapdoorUnlocked, consume: true, name: "The trapdoor is locked. Find its key and operate the bank crank.", extra: () => Boolean(state.bankCrank) },
       { x: 2587, y: 7857, ids: [ObjectIdentifiers.DOOR_839], flag: "fancyHouseDoorUnlocked", varbit: HUNT_DOOR_VARBITS.fancyHouseDoorUnlocked, name: "The crank mechanism has not released this door.", extra: () => Number(state.crankTurns) >= 10 },
       { x: 2581, y: 7842, ids: [ObjectIdentifiers.DOOR_842], flag: "chapelBackDoorUnlocked", varbit: HUNT_DOOR_VARBITS.chapelBackDoorUnlocked, name: "The chapel door is locked. Solve the chest puzzle first.", extra: () => Boolean(state.chapelPuzzleSolved) },
     ];
@@ -6951,7 +6952,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     const { x, y, z } = event.location ?? {};
     if (z !== 0) return;
     const ids = [event.objectId, event.definition?.id];
-    const isTrapdoor = x === 2579 && y === 7830 && ids.includes(61848);
+    const isTrapdoor = x === 2579 && y === 7830 && ids.includes(HUNT_TRAPDOOR_ID);
     const huntActive = [STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(player));
     if (!huntActive) {
       if (isTrapdoor) {
@@ -7001,7 +7002,9 @@ module.exports = function registerTheBloodMoonRises(api) {
       if (!isTrapdoor || String(event.option ?? "").toLowerCase() !== "climb-through") return;
       if (!state.bankCrank || !state.trapdoorUnlocked) return locked("The trapdoor is locked. Find its key and finish operating the bank crank.");
       player.setAttribute(HUNT_ATTRIBUTE, { ...state, enteredTrapdoor: true });
+      event.handled = true;
       player.sendMessage("You climb through the long, dark tunnel.");
+      player.moveTo(new Location(2581, 7844, 0));
       return;
     }
     if (x === 2588 && y === 7855) {
@@ -7083,9 +7086,18 @@ module.exports = function registerTheBloodMoonRises(api) {
     const z = location.getZ?.() ?? location.z;
     if (z !== 0) return;
     const source = event.sourceLocation ?? player.getLocation?.();
+    const sourceX = source?.getX?.() ?? source?.x;
     const sourceY = source?.getY?.() ?? source?.y;
     const ids = [event.objectId, event.definition?.id];
     const hunt = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
+    if (ids.includes(HUNT_TRAPDOOR_ID) && x === 2579 && y === 7830 &&
+      hunt.trapdoorUnlocked && hunt.bankCrank &&
+      Number.isFinite(sourceX) && Number.isFinite(sourceY) &&
+      Math.max(Math.abs(sourceX - x), Math.abs(sourceY - y)) <= 1) {
+      // The tunnel destination is blocked; resolve the gated climb from an adjacent tile.
+      event.destination = { x: sourceX, y: sourceY, z: 0 };
+      return;
+    }
     if (ids.includes(ObjectIdentifiers.DOOR_839) && x === 2587 && y === 7857 &&
       sourceY < y && Number(hunt.crankTurns) >= 10 && hunt.pursuitStarted) {
       player.setAttribute(HUNT_ATTRIBUTE, { ...hunt, pursuitStarted: false, pursuitSpawn: null });
@@ -7094,7 +7106,9 @@ module.exports = function registerTheBloodMoonRises(api) {
       return;
     }
     if (ids.includes(ObjectIdentifiers.JOVKAI_DOOR) && x === 2580 && [7811, 7812].includes(y) &&
-      sourceY <= y && hasItem(player, HUNT_ITEMS.oldCog)) {
+      Number.isFinite(sourceX) && Number.isFinite(sourceY) &&
+      Math.max(Math.abs(sourceX - x), Math.abs(sourceY - y)) <= 1 &&
+      hasItem(player, HUNT_ITEMS.oldCog)) {
       player.setAttribute(HUNT_ATTRIBUTE, { ...hunt, pursuitStarted: true, pursuitSpawn: "blacksmith" });
       player.getPacketSender?.().sendVarbit(15603, 1);
       syncBloodHuntPursuer(player);
