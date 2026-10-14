@@ -36,7 +36,7 @@ function lastNpcAnimation(npc, World) {
 }
 
 // Records game messages, animation timing and what the client was told (varbits, varps,
-// interfaces) for players an agent has touched; the client still receives everything.
+// interfaces, interaction modes) for players an agent has touched; the client still receives everything.
 function track(player, World) {
   let state = tracked.get(player);
   if (state) return state;
@@ -60,10 +60,10 @@ function track(player, World) {
   return state;
 }
 
-const emptyClientLog = () => ({ varbits: {}, varps: {}, interfaces: [], graphics: [] });
+const emptyClientLog = () => ({ varbits: {}, varps: {}, interfaces: [], graphics: [], interactionModes: [] });
 
 // Wraps the PacketSender calls a test asserts on. Varbits and varps keep their latest value;
-// interface events keep their order.
+// interface and interaction mode events keep their order.
 function recordClient(sender, state) {
   const wrap = (name, record) => {
     const original = sender[name]?.bind(sender);
@@ -71,6 +71,7 @@ function recordClient(sender, state) {
     sender[name] = (...args) => {
       record(...args);
       if (state.client.interfaces.length > MAX_MESSAGES) state.client.interfaces.shift();
+      if (state.client.interactionModes.length > MAX_MESSAGES) state.client.interactionModes.shift();
       return original(...args);
     };
   };
@@ -85,6 +86,8 @@ function recordClient(sender, state) {
   wrap("closeSubInterface", (target) => state.client.interfaces.push(`close ${target >>> 16}:${target & 0xffff}`));
   wrap("sendInterfaceRemoval", () => state.client.interfaces.push("close main"));
   wrap("sendInterfaceDisplayState", (uid, hide) => state.client.interfaces.push(`${hide ? "hide" : "show"} ${uid >>> 16}:${uid & 0xffff}`));
+  wrap("sendInteractionMode", (world, tile, entity) => state.client.interactionModes.push(`set ${world} tile=${tile} entity=${entity}`));
+  wrap("sendResetInteractionMode", (world) => state.client.interactionModes.push(`reset ${world}`));
 }
 
 const tile = (location) => ({ x: location.getX(), y: location.getY(), z: location.getZ() });

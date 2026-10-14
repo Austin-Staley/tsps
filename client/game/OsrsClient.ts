@@ -288,7 +288,8 @@ import { InteractHighlightPlugin } from "./plugins/interacthighlight/InteractHig
 import { NotesPlugin } from "./plugins/notes/NotesPlugin";
 import { RememberLoginPlugin } from "./plugins/rememberlogin/RememberLoginPlugin";
 import { TileMarkersPlugin } from "./plugins/tilemarkers/TileMarkersPlugin";
-import { createHelmSteeringDeps, steerFromHelm } from "./sailing/HelmSteering";
+import { createHelmSteeringDeps, handleTileClick } from "./sailing/HelmSteering";
+import { interactionModes } from "./InteractionModes";
 import { VengeanceTimerPlugin } from "./plugins/vengeancetimer/VengeanceTimerPlugin";
 import { FreezeTimerPlugin, PoisonTimerPlugin } from "./plugins/statustimer/StatusTimerPlugin";
 import { AttackTimerPlugin } from "./plugins/attacktimer/AttackTimerPlugin";
@@ -1125,7 +1126,7 @@ export class OsrsClient {
         );
         setNpcExamineIdResolver((serverId) => this.resolveNpcExamineTypeId(serverId));
         const helmSteering = createHelmSteeringDeps(this, sendSetHeading);
-        setHelmSteeringHandler((worldX, worldY) => steerFromHelm(helmSteering, worldX, worldY));
+        setHelmSteeringHandler((worldX, worldY) => handleTileClick(helmSteering, worldX, worldY));
         const globalState = globalThis as typeof globalThis & {
             DEBUG_PROJECTILES?: boolean;
             DEBUG_PROJECTILES_VERBOSE?: boolean;
@@ -8350,6 +8351,8 @@ export class OsrsClient {
                 console.warn("[OsrsClient] ChatHistory clear error:", err);
             }
             this.splitPrivateChatPlugin.clear();
+            // Live sets walk again before every logout; a dropped connection doesn't get that far.
+            interactionModes.clear();
 
             // Clear the last account's varps and transient varcs, keeping persistent client
             // preferences loaded: the next login only sends its non-zero varps, so anything

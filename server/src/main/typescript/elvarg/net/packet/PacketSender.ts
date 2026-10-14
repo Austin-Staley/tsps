@@ -36,6 +36,8 @@ import {
   encodeCameraShake,
   encodeWidgetSetColour, encodeAttackTimer,
   encodeCameraReset,
+  encodeSetInteractionMode,
+  encodeResetInteractionMode,
   encodeChatFilterSettings,
   encodeRunEnergy,
   encodeSkillsDelta,
@@ -858,6 +860,21 @@ export class PacketSender {
 
   sendCameraShake(slot: number, randomAmplitude: number, sineAmplitude = 0, sineFrequency = 0): this {
     this.player.getSession().sendClientPacket(encodeCameraShake(slot, randomAmplitude, sineAmplitude, sineFrequency));
+    return this;
+  }
+
+  /**
+   * Sets what tile and entity clicks do in a world: a world entity index, -1 for the root world
+   * or -2 for the default of every world (net/protocol/InteractionMode.ts).
+   */
+  sendInteractionMode(worldId: number, tileMode: number, entityMode: number): this {
+    this.player.getSession().sendClientPacket(encodeSetInteractionMode(worldId, tileMode, entityMode));
+    return this;
+  }
+
+  /** Drops a world's own interaction mode, so it follows the default again. */
+  sendResetInteractionMode(worldId: number): this {
+    this.player.getSession().sendClientPacket(encodeResetInteractionMode(worldId));
     return this;
   }
 
