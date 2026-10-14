@@ -5693,7 +5693,7 @@ module.exports = function registerTheBloodMoonRises(api) {
         return startTranscript(api, player, event.npcId, PAGE,
           "another-night-at-the-theatre-talking-to-veliaf-and-sugadinti-in-burgh-de-rott");
       }
-      if (native >= 130 && native < 136 && npcName === "sugadinti vitur" &&
+      if (native >= 130 && native <= 136 && npcName === "sugadinti vitur" &&
         !player.getAttribute(TOB_CHALLENGE_ATTRIBUTE)?.started) {
         event.handled = true;
         return startTranscript(api, player, event.npcId, PAGE,

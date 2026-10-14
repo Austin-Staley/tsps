@@ -4582,8 +4582,11 @@ test('Blood Moon post-breach chapter restores actors and follows the captured na
   assert.equal(quest.varbitValue(80, player), 136);
   assert.deepEqual([spawned.at(-1).id, spawned.at(-1).x, spawned.at(-1).y], [15956, 3670, 3219],
     'Sugadinti remains available outside the Theatre if the player escapes before finishing the raid');
-  attributes.set('quest.the_blood_moon_rises.tob-challenge', { started: true, completed: false });
   const retryTalk = { player, npcId: 15956, definition: { getName: () => 'Sugadinti Vitur' }, option: 'Talk-to' };
+  assert.equal(npcTalkHooks.at(-1)['Talk-to'](retryTalk), true,
+    'at native136, an unstarted encounter still opens the first outside-Theatre conversation');
+  attributes.set('quest.the_blood_moon_rises.tob-challenge', { started: true, completed: false });
+  retryTalk.handled = false;
   assert.equal(npcTalkHooks.at(-1)['Talk-to'](retryTalk), true,
     'talking to Sugadinti after leaving selects the captured retry conversation');
   assert.equal(retryTalk.handled, true);
