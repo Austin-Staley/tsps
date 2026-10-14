@@ -10,6 +10,12 @@ module.exports = function registerDesertTreasureII(api) {
   const KORBAL_HERBS_LOC = 49494;
   const ARGIAN_BUSH_LOC = 49493;
   const LASSAR_CISTERN_DRAIN_LOC = 49488;
+  const FINAL_WIGHT_SMOKE_WHITE = 46622;
+  const FINAL_WIGHT_SMOKE_PINK = 47505;
+  const FINAL_WIGHT_PORTAL = 12334;
+  const FINAL_WIGHT_PORTAL_LEECH = 12335;
+  const FINAL_WIGHT_KASONDE_POOL_ONE = 48752;
+  const FINAL_WIGHT_KASONDE_POOL_TWO = 48751;
   const S = { STARTED: 1, VAULT: 2, DIG: 3, ROCKS: 4, GUARDIAN: 5, MACHINE: 6, VARDORVIS: 7, LEVIATHAN: 8, SUCELLUS: 9, WHISPERER: 10, FINALE: 11, COMPLETE: 12 };
   // Cache quest dbrow 2343, column 19 completes at 118; QuestHelper records the intervening milestones.
   function nativeProgress(stage, player) {
@@ -679,6 +685,34 @@ module.exports = function registerDesertTreasureII(api) {
       }
     }
     getName() { return "Elder Vault (Desert Treasure II)"; }
+    canAttack(attacker, target) {
+      const ownerIsAttacking = attacker === this.owner && target?.getOwner?.() === this.owner && target?.getArea?.() === this;
+      const ownedNpcIsAttacking = target === this.owner && attacker?.getOwner?.() === this.owner && attacker?.getArea?.() === this;
+      if (!ownerIsAttacking && !ownedNpcIsAttacking) return false;
+      return true;
+    }
+    isMulti() { return true; }
+    process(actor) {
+      if (actor?.isPlayer?.() && actor === this.owner) {
+        processFinalWight(actor.getAsPlayer?.() ?? actor, this);
+      }
+    }
+    destroy() {
+      if (this.isDestroyed()) return;
+      for (const entity of [...this.entities]) {
+        if (entity?.isNpc?.() && entity.getAsNpc) {
+          const npc = entity.getAsNpc();
+          const add = api.core.World.getAddNPCQueue();
+          for (let index = add.indexOf(npc); index >= 0; index = add.indexOf(npc)) add.splice(index, 1);
+          if (npc.isRegistered?.() && !api.core.World.getRemoveNPCQueue().includes(npc)) {
+            api.core.World.getRemoveNPCQueue().push(npc);
+          }
+        } else if (entity instanceof api.core.GameObject) {
+          api.core.ObjectManager.deregister(entity, true);
+        }
+      }
+      super.destroy();
+    }
     allowSummonPet() { return false; }
   };
 
@@ -1650,7 +1684,7 @@ module.exports = function registerDesertTreasureII(api) {
   function enterFinalRoom(p) {
     let area = p.getAttribute(FINAL_ROOM);
     if (!(area instanceof FinalVaultArea) || area.isDestroyed()) {
-      area = new FinalVaultArea(p.getUsername?.());
+      area = new FinalVaultArea(p);
       p.setAttribute(FINAL_ROOM, area);
     }
     area.enter(p);
@@ -1684,8 +1718,348 @@ module.exports = function registerDesertTreasureII(api) {
     owned.finalWight = npc;
     p.setAttribute(FINAL_WIGHT_INDEX, index);
     npc.__dt2FinalWight = index;
+    npc.__dt2FinalWightTicks = 0;
+    npc.__dt2FinalWightObjects = [];
+    npc.__dt2FinalWightActors = [];
     p.sendMessage(["The Forsaken Assassin steps forward.", "Ketla the Unworthy steps forward.", "Kasonde the Craven steps forward.", "Persten the Deceitful steps forward."][index]);
     return npc;
+  }
+
+  function finalWightLocation(entity) {
+    const location = entity?.getLocation?.();
+    return location ? {
+      x: location.getX?.() ?? location.x,
+      y: location.getY?.() ?? location.y,
+      z: location.getZ?.() ?? location.z ?? 0,
+    } : null;
+  }
+  function finalWightTile(area, x, y) {
+    return new api.core.Location(x, y, 0);
+  }
+  function finalWightGraphic(player, id, tile) {
+    player.getPacketSender?.().sendGraphic?.(new api.core.Graphic(id), tile);
+  }
+  function finalWightDamage(player, amount, mask = api.core.HitMask.RED) {
+    player.getCombat?.().getHitQueue?.().addPendingDamage?.([new api.core.HitDamage(amount, mask)]);
+  }
+  function removeFinalWightObject(object) {
+    if (!object) return;
+    api.core.ObjectManager.deregister(object, true);
+    object.__dt2Removed = true;
+  }
+  function addFinalWightObject(player, area, id, tile) {
+    const object = new api.core.GameObject(id, tile, 10, 0, area).setOwner(player);
+    api.core.ObjectManager.register(object, true);
+    return object;
+  }
+  function spawnFinalWightActor(player, area, id, x, y, hp) {
+    const npc = api.core.NPC.create(id, area.tile(x - 3264, y - 6400, 0));
+    if (!npc) return null;
+    npc.setOwner?.(player);
+    npc.setOwnerOnly?.(true);
+    npc.__skipDefaultRespawn = true;
+    if (Number.isFinite(hp)) {
+      npc.setMaxHitpoints?.(hp);
+      npc.setHitpoints?.(hp);
+    }
+    area.add(npc);
+    api.core.World.getAddNPCQueue().push(npc);
+    return npc;
+  }
+  function clearFinalWightActors(boss, player, area) {
+    for (const object of boss.__dt2FinalWightObjects ?? []) removeFinalWightObject(object);
+    boss.__dt2FinalWightObjects = [];
+    for (const actor of boss.__dt2FinalWightActors ?? []) {
+      const add = api.core.World.getAddNPCQueue();
+      for (let index = add.indexOf(actor); index >= 0; index = add.indexOf(actor)) add.splice(index, 1);
+      if (actor.isRegistered?.() && !api.core.World.getRemoveNPCQueue().includes(actor)) api.core.World.getRemoveNPCQueue().push(actor);
+      area.detach?.(actor);
+    }
+    boss.__dt2FinalWightActors = [];
+    const owned = spawned.get(player);
+    if (owned) owned.finalWightClones = [];
+  }
+  function startAssassinSmoke(player, boss, area) {
+    if (boss.__dt2AssassinWhiteSmoke) return;
+    const p = finalWightLocation(player), b = finalWightLocation(boss);
+    if (!p || !b) return;
+    // Sliske's wight reuses the cache's smoke locs from the Secrets of the North
+    // assassin encounter. The smoke is placed at the player's old tile so the
+    // player can lure the assassin through it instead of standing still.
+    const whiteTile = finalWightTile(area, p.x, p.y);
+    const pinkTile = finalWightTile(area, b.x, b.y);
+    const white = addFinalWightObject(player, area, FINAL_WIGHT_SMOKE_WHITE, whiteTile);
+    const pink = addFinalWightObject(player, area, FINAL_WIGHT_SMOKE_PINK, pinkTile);
+    boss.__dt2FinalWightObjects.push(white, pink);
+    boss.__dt2AssassinWhiteSmoke = { x: p.x, y: p.y, until: 14 };
+    boss.__dt2AssassinPinkSmoke = { x: b.x, y: b.y, until: 14 };
+    player.sendMessage("The Assassin scatters white and pink smoke. Lure him through the white cloud; avoid standing in either cloud.");
+  }
+  function assassinBottleVolley(player, boss, area) {
+    const index = (boss.__dt2AssassinBottles ?? 0) + 1;
+    boss.__dt2AssassinBottles = index;
+    const loc = finalWightLocation(player);
+    if (!loc) return;
+    const tile = finalWightTile(area, loc.x, loc.y);
+    finalWightGraphic(player, 2384, tile); // POISON_VIAL_LAUNCH_WIGHT
+    player.sendMessage(`The Forsaken Assassin throws a poison vial (${index}/3). Move off the marked tile.`);
+    if (index >= 3) boss.__dt2AssassinBottles = 0;
+    boss.__dt2FinalWightPending.push({
+      type: "assassin-vial", x: loc.x, y: loc.y, z: loc.z, due: 2,
+      last: index >= 3,
+    });
+  }
+  function spawnKetlaClones(player, boss, area) {
+    if (boss.__dt2KetlaBatch) return;
+    const b = finalWightLocation(boss);
+    if (!b) return;
+    // The Wiki documents four or five clones, so vary the final diagonal one
+    // while keeping the four cardinal cover positions available.
+    const points = [[b.x - 3, b.y], [b.x + 3, b.y], [b.x, b.y - 3], [b.x, b.y + 3]];
+    if (Math.random() < 0.5) points.push([b.x + 3, b.y + 3]);
+    const clones = points.map(([x, y]) => {
+      const clone = api.core.NPC.create(N.KETLA_THE_UNWORTHY_2, finalWightTile(area, x, y));
+      if (!clone) return null;
+      clone.setOwner?.(player);
+      clone.setOwnerOnly?.(true);
+      clone.__skipDefaultRespawn = true;
+      clone.setMaxHitpoints?.(1);
+      clone.setHitpoints?.(1);
+      area.add(clone);
+      api.core.World.getAddNPCQueue().push(clone);
+      return clone;
+    }).filter(Boolean);
+    clones.forEach(clone => { clone.__dt2FinalWightClone = true; });
+    boss.__dt2FinalWightActors = clones;
+    const owned = spawned.get(player) ?? {};
+    spawned.set(player, owned);
+    owned.finalWightClones = clones;
+    boss.__dt2KetlaBatch = { shots: 0 };
+    boss.__dt2KetlaCharge = { due: 4 };
+    boss.forceChat?.("You cannot hide from me!");
+    boss.performGraphic?.(new api.core.Graphic(2531)); // DT2_WIGHT_SKULL_SPOTANIM
+    player.sendMessage("Ketla summons shadow clones. A skull above her warns of a charged shot; hide behind a clone.");
+  }
+  function cloneBetween(boss, player, clone) {
+    const b = finalWightLocation(boss), p = finalWightLocation(player), c = finalWightLocation(clone);
+    if (!b || !p || !c) return false;
+    const dx = p.x - b.x, dy = p.y - b.y;
+    const length2 = dx * dx + dy * dy;
+    if (length2 < 9) return false;
+    const t = ((c.x - b.x) * dx + (c.y - b.y) * dy) / length2;
+    if (t <= 0 || t >= 1) return false;
+    const nearestX = b.x + t * dx, nearestY = b.y + t * dy;
+    return Math.max(Math.abs(c.x - nearestX), Math.abs(c.y - nearestY)) <= 0.75;
+  }
+  function startKasondeShockwaves(player, boss, area) {
+    const b = finalWightLocation(boss);
+    if (!b) return;
+    const waves = 1 + ((boss.__dt2KasondeShockwaveCount ?? 0) % 3);
+    boss.__dt2KasondeShockwaveCount = (boss.__dt2KasondeShockwaveCount ?? 0) + 1;
+    boss.__dt2KasondeShockwaves = { waves, due: 3, x: b.x, y: b.y };
+    boss.forceChat?.("You cannot outrun this!");
+    player.sendMessage(`Kasonde begins a shockwave (${waves} wave${waves === 1 ? "" : "s"}). Stay in the close safe ring or move out of the marked area.`);
+    finalWightGraphic(player, 2315, finalWightTile(area, b.x, b.y)); // DT2_WIGHT_SLAM_IMPACT
+  }
+  function startKasondeVial(player, boss, area) {
+    const p = finalWightLocation(player);
+    if (!p) return;
+    const tile = finalWightTile(area, p.x, p.y);
+    finalWightGraphic(player, 2384, tile);
+    const poolId = (boss.__dt2KasondePoolCount = (boss.__dt2KasondePoolCount ?? 0) + 1) % 2
+      ? FINAL_WIGHT_KASONDE_POOL_ONE : FINAL_WIGHT_KASONDE_POOL_TWO;
+    const pool = addFinalWightObject(player, area, poolId, tile);
+    boss.__dt2FinalWightObjects.push(pool);
+    (boss.__dt2KasondePools ??= []).push({ x: p.x, y: p.y, z: p.z, object: pool, createdAt: boss.__dt2FinalWightTicks });
+    boss.__dt2KasondeVial = { x: p.x, y: p.y, z: p.z, due: 2 };
+    player.sendMessage("Kasonde hurls a corrupted vial at the marked tile. Move away.");
+  }
+  function startPerstenLightning(player, boss, area) {
+    const p = finalWightLocation(player);
+    if (!p) return;
+    const hitCount = boss.getHitpoints?.() <= 50 ? 3 : boss.getHitpoints?.() <= 100 ? 2 : 1;
+    const tiles = [];
+    for (let index = 0; index < hitCount; index++) {
+      const tile = finalWightTile(area, p.x + index - Math.floor(hitCount / 2), p.y);
+      finalWightGraphic(player, 2545, tile); // DT2_WIGHT_LIGHTNING
+      tiles.push({ x: tile.getX?.() ?? tile.x, y: tile.getY?.() ?? tile.y, z: tile.getZ?.() ?? tile.z ?? 0 });
+    }
+    boss.__dt2PerstenLightning = { tiles, due: 3 };
+    player.sendMessage(`Persten calls down ${hitCount === 1 ? "a lightning strike" : `${hitCount} lightning strikes`}. Move from the shadows.`);
+  }
+  function spawnPerstenPortal(player, boss, area) {
+    const portals = boss.__dt2PerstenPortals ?? [];
+    boss.__dt2PerstenPortals = portals.filter(portal => portal.isRegistered?.() && portal.getHitpoints?.() > 0);
+    if (boss.__dt2PerstenPortals.length >= 2) return;
+    const x = 3296 + (boss.__dt2PerstenPortals.length ? 3 : -3);
+    const portal = spawnFinalWightActor(player, area, FINAL_WIGHT_PORTAL, x, 6414, 30);
+    if (!portal) return;
+    portal.__dt2PerstenPortal = true;
+    boss.__dt2FinalWightActors.push(portal);
+    boss.__dt2PerstenPortals.push(portal);
+    player.sendMessage("Persten conjures a portal by the entrance. Destroy it before it releases more wighted leeches.");
+  }
+  function processFinalWight(player, area) {
+    // shortcut: the OSRS Wiki documents each wight's attack sequence and effects,
+    // but not the private timing constants. These combat-cycle intervals are an
+    // inferred playable cadence and should be calibrated against a live capture.
+    const boss = spawned.get(player)?.finalWight;
+    if (!boss?.isRegistered?.() || boss.getHitpoints?.() <= 0 || boss.getOwner?.() !== player || boss.getArea?.() !== area) return;
+    boss.__dt2FinalWightTicks = (boss.__dt2FinalWightTicks ?? 0) + 1;
+    boss.__dt2FinalWightPending ??= [];
+    if (boss.__dt2FinalWight === 0) {
+      const smoke = boss.__dt2AssassinWhiteSmoke;
+      const pink = boss.__dt2AssassinPinkSmoke;
+      if (smoke) smoke.until--;
+      if (pink) pink.until--;
+      if (smoke && smoke.until <= 0) {
+        boss.__dt2AssassinWhiteSmoke = null;
+        const object = (boss.__dt2FinalWightObjects ?? []).shift();
+        removeFinalWightObject(object);
+      }
+      if (pink && pink.until <= 0) {
+        boss.__dt2AssassinPinkSmoke = null;
+        const object = (boss.__dt2FinalWightObjects ?? []).shift();
+        removeFinalWightObject(object);
+      }
+      if (boss.__dt2FinalWightTicks % 16 === 1) startAssassinSmoke(player, boss, area);
+      if (boss.__dt2FinalWightTicks % 7 === 0) assassinBottleVolley(player, boss, area);
+      for (const shot of boss.__dt2FinalWightPending) {
+        shot.due--;
+        if (shot.due > 0) continue;
+        const p = finalWightLocation(player);
+        if (p?.x === shot.x && p.y === shot.y && p.z === shot.z) {
+          finalWightGraphic(player, 2539, finalWightTile(area, shot.x, shot.y));
+          finalWightDamage(player, 30);
+          if (!player.isPoisoned?.()) player.setPoisonDamage?.(4);
+          player.sendMessage("The poison vial bursts beneath you, dealing heavy damage and poisoning you.");
+        }
+      }
+      boss.__dt2FinalWightPending = boss.__dt2FinalWightPending.filter(shot => shot.due > 0);
+      const p = finalWightLocation(player);
+      if (p && ((smoke?.until > 0 && p.x === smoke.x && p.y === smoke.y)
+        || (pink?.until > 0 && p.x === pink.x && p.y === pink.y))) {
+        finalWightDamage(player, 10);
+      }
+      const b = finalWightLocation(boss);
+      if (pink?.until > 0 && b?.x === pink.x && b.y === pink.y) boss.setHitpoints?.(Math.min(boss.getMaxHitpoints?.() ?? 200, boss.getHitpoints() + 25));
+    } else if (boss.__dt2FinalWight === 1) {
+      if (boss.__dt2FinalWightTicks % 18 === 0 && !boss.__dt2KetlaBatch) spawnKetlaClones(player, boss, area);
+      const charge = boss.__dt2KetlaCharge;
+      if (charge) {
+        charge.due--;
+        if (charge.due <= 0) {
+          const clone = (boss.__dt2FinalWightActors ?? []).find(actor => actor.isRegistered?.() && actor.getHitpoints?.() > 0 && cloneBetween(boss, player, actor));
+          if (clone) {
+            finalWightGraphic(player, 2546, clone.getLocation());
+            const add = api.core.World.getAddNPCQueue();
+            for (let index = add.indexOf(clone); index >= 0; index = add.indexOf(clone)) add.splice(index, 1);
+            api.core.World.getRemoveNPCQueue().push(clone);
+            clone.setHitpoints?.(0);
+            area.detach?.(clone);
+            boss.__dt2FinalWightActors = boss.__dt2FinalWightActors.filter(actor => actor !== clone);
+          } else finalWightDamage(player, 40);
+          boss.__dt2KetlaCharge = null;
+          const batch = boss.__dt2KetlaBatch;
+          if (batch && ++batch.shots < 2) boss.__dt2KetlaCharge = { due: 4 };
+          else boss.__dt2KetlaBatch = null;
+        } else {
+          if (charge.due === 2) boss.performGraphic?.(new api.core.Graphic(2531)); // DT2_WIGHT_SKULL_SPOTANIM
+        }
+      }
+    } else if (boss.__dt2FinalWight === 2) {
+      if (!boss.__dt2KasondeShockwaves && !boss.__dt2KasondeVial && boss.__dt2FinalWightTicks % 12 === 0) {
+        if (boss.__dt2FinalWightTicks % 24 === 0) startKasondeShockwaves(player, boss, area);
+        else startKasondeVial(player, boss, area);
+      }
+      if (boss.__dt2KasondeVial && --boss.__dt2KasondeVial.due <= 0) {
+        const vial = boss.__dt2KasondeVial, p = finalWightLocation(player);
+        finalWightGraphic(player, 2539, finalWightTile(area, vial.x, vial.y));
+        if (p?.x === vial.x && p.y === vial.y && p.z === vial.z) {
+          finalWightDamage(player, 32);
+          boss.__dt2KasondePrayerDrain = { ticks: 20, firstDrain: false };
+          boss.__dt2KasondePlayerPool = boss.__dt2KasondePools?.at(-1) ?? null;
+          player.sendMessage("Kasonde's corrupted vial hits. Your Prayer begins draining.");
+        }
+        boss.__dt2KasondeVial = null;
+      }
+      if (boss.__dt2KasondeShockwaves) {
+        const attack = boss.__dt2KasondeShockwaves;
+        if (--attack.due <= 0) {
+          const p = finalWightLocation(player);
+          const distance = p ? Math.max(Math.abs(p.x - attack.x), Math.abs(p.y - attack.y)) : 99;
+          if (distance > 2 && distance <= 7) finalWightDamage(player, 32);
+          attack.waves--;
+          if (attack.waves > 0) attack.due = 3;
+          else boss.__dt2KasondeShockwaves = null;
+        }
+      }
+      if (boss.__dt2KasondePrayerDrain?.ticks > 0) {
+        const corruption = boss.__dt2KasondePrayerDrain;
+        corruption.ticks--;
+        if (!corruption.firstDrain && corruption.ticks <= 10) {
+          corruption.firstDrain = true;
+          const skills = player.getSkillManager?.();
+          const prayer = skills?.getCurrentLevel?.(Skill.PRAYER) ?? 0;
+          if (prayer > 0) skills.setCurrentLevel(Skill.PRAYER, Math.max(0, prayer - 2), true);
+        } else if (corruption.ticks === 0) {
+          const skills = player.getSkillManager?.();
+          const prayer = skills?.getCurrentLevel?.(Skill.PRAYER) ?? 0;
+          if (prayer > 0) skills.setCurrentLevel(Skill.PRAYER, Math.max(0, prayer - 4), true);
+          boss.__dt2KasondePrayerDrain = null;
+        }
+      }
+      const playerTile = finalWightLocation(player);
+      const currentPool = playerTile && (boss.__dt2KasondePools ?? []).find(pool => boss.__dt2FinalWightTicks > pool.createdAt
+        && playerTile.x === pool.x && playerTile.y === pool.y && playerTile.z === pool.z);
+      if (currentPool && boss.__dt2KasondePlayerPool !== currentPool) {
+        finalWightDamage(player, 32);
+        boss.__dt2KasondePlayerPool = currentPool;
+        player.sendMessage("You run through a corrupted potion pool and take damage.");
+      }
+      if (!currentPool) boss.__dt2KasondePlayerPool = null;
+    } else if (boss.__dt2FinalWight === 3) {
+      if (boss.__dt2FinalWightTicks % 3 === 0) {
+        for (const portal of boss.__dt2PerstenPortals ?? []) {
+          if (!portal.isRegistered?.() || portal.getHitpoints?.() <= 0) continue;
+          portal.__dt2LeechClock = (portal.__dt2LeechClock ?? 0) + 1;
+          if (portal.__dt2LeechClock >= 8) {
+            portal.__dt2LeechClock = 0;
+            const loc = finalWightLocation(portal);
+            const leech = loc && spawnFinalWightActor(player, area, FINAL_WIGHT_PORTAL_LEECH, loc.x, loc.y + 1, 5);
+            if (leech) {
+              leech.__dt2WightLeech = true;
+              boss.__dt2FinalWightActors.push(leech);
+            }
+          }
+        }
+      }
+      if (boss.__dt2FinalWightTicks % 10 === 0) {
+        startPerstenLightning(player, boss, area);
+        if (boss.getHitpoints() <= 100 || boss.__dt2FinalWightTicks % 30 === 0) spawnPerstenPortal(player, boss, area);
+      }
+      const lightning = boss.__dt2PerstenLightning;
+      if (lightning && --lightning.due <= 0) {
+        const p = finalWightLocation(player);
+        if (lightning.tiles.some(tile => p?.x === tile.x && p.y === tile.y && p.z === tile.z)) finalWightDamage(player, 30);
+        boss.__dt2PerstenLightning = null;
+      }
+    }
+  }
+  function handleFinalWightHit({ npc, hit }) {
+    const index = npc?.__dt2FinalWight;
+    if (!Number.isInteger(index) || !hit) return;
+    const attacker = hit.getAttacker?.();
+    const player = npc.getOwner?.();
+    if (attacker === player && index === 0) {
+      const smoke = npc.__dt2AssassinWhiteSmoke;
+      const loc = finalWightLocation(npc);
+      if (!smoke || !loc || loc.x !== smoke.x || loc.y !== smoke.y) {
+        for (const damage of hit.getHits?.() ?? []) damage.setDamage(0);
+        hit.updateTotalDamage?.();
+        player.sendMessage?.("The Assassin is protected from your attacks until you lure him into white smoke.");
+      }
+    }
   }
 
   function startFinalWights(p) {
@@ -3476,7 +3850,23 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function handleLassarPlayerDeath({ player: p }) {
-    if (!p || stage(p) !== S.WHISPERER) return;
+    if (!p) return;
+    if (stage(p) === S.FINALE && !p.getAttribute(FINAL_WIGHTS_COMPLETE)) {
+      const area = p.getAttribute(FINAL_ROOM);
+      if (area instanceof FinalVaultArea) {
+        area.leave?.(p, false);
+        area.postLeave?.(p, false);
+        area.destroy?.();
+        p.setAttribute(FINAL_ROOM, null);
+      }
+      const owned = spawned.get(p);
+      if (owned) owned.finalWight = null;
+      p.setAttribute(FINAL_WIGHT_INDEX, 0);
+      p.setAttribute(FINAL_WIGHTS_STARTED, false);
+      p.sendMessage("You are returned to the Ancient Vault. Sliske's wight trial will restart when you enter again.");
+      return;
+    }
+    if (stage(p) !== S.WHISPERER) return;
     const state = p.getAttribute(LASSAR) ?? {};
     if (!state.entered) return;
     const owned = spawned.get(p);
@@ -6160,10 +6550,30 @@ module.exports = function registerDesertTreasureII(api) {
       }
       return;
     }
+    if (npc?.__dt2FinalWightClone) {
+      const owner = npc.getOwner?.();
+      const boss = owner && spawned.get(owner)?.finalWight;
+      if (boss) {
+        boss.__dt2FinalWightActors = (boss.__dt2FinalWightActors ?? []).filter(actor => actor !== npc);
+        const owned = spawned.get(owner);
+        if (owned) owned.finalWightClones = (owned.finalWightClones ?? []).filter(actor => actor !== npc);
+      }
+      return;
+    }
+    if (npc?.__dt2PerstenPortal) {
+      const owner = npc.getOwner?.();
+      const boss = owner && spawned.get(owner)?.finalWight;
+      if (boss) {
+        boss.__dt2PerstenPortals = (boss.__dt2PerstenPortals ?? []).filter(portal => portal !== npc);
+        boss.__dt2FinalWightActors = (boss.__dt2FinalWightActors ?? []).filter(actor => actor !== npc);
+      }
+      return;
+    }
     if (!killer) return;
     const owned = spawned.get(killer);
     if (!owned) return;
     if (owned.finalWight === npc && stage(killer) === S.FINALE) {
+      clearFinalWightActors(npc, killer, npc.getArea?.());
       owned.finalWight = null;
       const next = (Number(killer.getAttribute(FINAL_WIGHT_INDEX)) || 0) + 1;
       if (next < 4) {
@@ -7421,6 +7831,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onNpcHitModify(preventScarSummonProtection);
   api.onNpcHitModify(handleWhispererHit);
   api.onNpcHitModify(handleFinalFigureHit);
+  api.onNpcHitModify(handleFinalWightHit);
   api.onNpcInteraction("Asgarnia Smith", { "Talk-to": talkSmith });
   api.onNpcInteraction("Cerebral pathfinder", { Move: pushScarPathRunner });
   api.onNpcInteraction("Cerebral pathbreaker", { Move: pushScarPathRunner });

@@ -6054,7 +6054,7 @@ test('Desert Treasure II last medallion route traps the player, requires solving
       attackStyle = style;
       const part = { damage: 10, setDamage(value) { this.damage = value; } };
       const hit = { getAttacker: () => p, getHits: () => [part], getTotalDamage: () => part.damage, updateTotalDamage() {} };
-      npcHitHooks.at(-1)({ npc: spawnedFigure, hit });
+      for (const hook of npcHitHooks) hook({ npc: spawnedFigure, hit });
       return part.damage;
     };
     assert.equal(hitFor(1), 10);
@@ -6065,6 +6065,144 @@ test('Desert Treasure II last medallion route traps the player, requires solving
     deathHooks[0]({ killer: p, npc: spawnedFigure });
     assert.equal(attrs.get('desert-treasure-ii:final-figure-defeated'), true);
     assert.equal(inventory.getAmount(core.ItemIdentifiers.WHISPERERS_MEDALLION), 1);
+  } finally {
+    runtime.startTranscript = startTranscript;
+  }
+});
+
+test('Desert Treasure II final wights expose their distinct smoke, clone, vial and portal mechanics', () => {
+  const { api: base } = mockApi();
+  const interactions = [], deaths = [], playerDeaths = [], hitHooks = [], actions = new Map(), queue = [], removed = [], registeredObjects = [];
+  class TestInstance {
+    constructor(width, height) { this.width = width; this.height = height; this.entities = []; }
+    setChunk() {}
+    enter() {}
+    leave() {}
+    postLeave() {}
+    getBaseX() { return 8192; }
+    getBaseY() { return 1600; }
+    tile(x, y, z) { return { x: 8192 + x, y: 1600 + y, z }; }
+    add(entity) { if (!this.entities.includes(entity)) this.entities.push(entity); entity.area = this; }
+    detach(entity) { this.entities = this.entities.filter(value => value !== entity); }
+    isDestroyed() { return false; }
+    destroy() { this.destroyed = true; }
+  }
+  class TestObject {
+    constructor(id, location, type, face, area) { Object.assign(this, { id, location, type, face }); area.add(this); }
+    setOwner(owner) { this.owner = owner; return this; }
+  }
+  const core = {
+    ...base.core,
+    TemplatedInstanceArea: TestInstance, GameObject: TestObject,
+    ObjectManager: { register(object) { registeredObjects.push(object); }, deregister(object) { object.deregistered = true; } },
+    NPC: { create(id, location) {
+      const hp = id === 12330 ? 1 : id === 12334 ? 30 : id === 12335 ? 5 : 200;
+      return { id, location, hp, maxHp: hp, setOwner(owner) { this.owner = owner; }, setOwnerOnly() {},
+        setNpcTransformationId(value) { this.transformedTo = value; }, setMaxHitpoints(value) { this.maxHp = value; },
+        setHitpoints(value) { this.hp = value; }, getHitpoints() { return this.hp; }, getMaxHitpoints() { return this.maxHp; },
+        getOwner() { return this.owner; }, getArea() { return this.area; }, getLocation() { return this.location; },
+        isRegistered() { return true; }, isNpc() { return true; }, getAsNpc() { return this; },
+        forceChat(text) { this.chat = text; }, performGraphic(graphic) { this.graphic = graphic; } };
+    } },
+    World: { getAddNPCQueue: () => queue, getRemoveNPCQueue: () => removed },
+  };
+  const api = new Proxy(base, {
+    get: (target, prop) => prop === 'core' ? core
+      : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
+        : prop === 'onNpcDeath' ? handler => deaths.push(handler)
+        : prop === 'onPlayerDeath' ? handler => playerDeaths.push(handler)
+          : prop === 'onNpcHitModify' ? handler => hitHooks.push(handler)
+            : prop === 'onObjectInteraction' ? handler => typeof handler === 'function' && []
+              : prop === 'onCustomEvent' ? (name, handler) => actions.set(name, handler)
+                : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
+  });
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const startTranscript = runtime.startTranscript;
+  runtime.startTranscript = () => true;
+  try {
+    require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+    const quest = runtime.getRegisteredQuests().at(-1), attrs = new Map(), pendingHits = [], messages = [];
+    let prayer = 99;
+    const p = {
+      getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+      getUsername: () => 'dt2-final-wight-mechanics', isPlayer: () => true, getAsPlayer() { return this; },
+      getPrivateArea: () => attrs.get('desert-treasure-ii:final-room'), getLocation() { return this.location; },
+      getInventory: () => ({ getAmount: () => 0, adds() {}, deleteNumber() {}, getFreeSlots: () => 28 }),
+      getEquipment: () => ({ getAmount: () => 0 }),
+      getSkillManager: () => ({ getCurrentLevel: () => prayer, setCurrentLevel(_skill, value) { prayer = value; }, getMaxLevel: () => 99 }),
+      getCombat: () => ({ getHitQueue: () => ({ addPendingDamage(hits) { pendingHits.push(...hits); } }) }),
+      getPacketSender: () => new Proxy({ sendGraphic() {}, sendVarbit() {} }, { get: (target, key) => target[key] ?? (() => {}) }),
+      moveTo(location) { this.location = location; }, sendMessage(text) { messages.push(text); },
+    };
+    quest.setStage(p, 11);
+    interactions.find(({ name }) => name === 'Asgarnia Smith').options['Talk-to']({ player: p, npcId: core.NpcIdentifiers.ASGARNIA_SMITH });
+    const action = actions.get('npc-dialogue:action');
+    for (const stepId of ['lnBBaf', '2ucP4K', 's3g1xZ', 'CQXcy8', 'F2TgOo', 't8wSqb', 'fknd65', '2at3Ae']) action({ player: p, stepId });
+    const area = p.getPrivateArea(), wightIds = [12328, 12329, 12331, 12333];
+    const boss = id => queue.findLast(npc => npc.id === id);
+    const hitDamage = (npc) => {
+      const damage = { value: 20, setDamage(value) { this.value = value; } };
+      hitHooks.at(-1)({ npc, hit: { getAttacker: () => p, getHits: () => [damage], updateTotalDamage() {} } });
+      return damage.value;
+    };
+    p.location = area.tile(32, 47, 0);
+    let current = boss(wightIds[0]);
+    assert.equal(typeof area.process, 'function');
+    assert.ok(current);
+    assert.equal(current.getOwner(), p);
+    assert.equal(current.getArea(), area);
+    assert.equal(area.canAttack(p, current), true, 'the owner can fight their private wight');
+    assert.equal(area.canAttack(current, p), true, 'the owned wight can attack its owner');
+    assert.equal(area.canAttack({ getOwner: () => p, getArea: () => area }, p), true, 'owned adds can attack their owner');
+    assert.equal(area.canAttack({ getOwner: () => null, getArea: () => area }, p), false, 'unowned NPCs cannot join the private fight');
+    assert.equal(area.isMulti(), true, 'the owner can be attacked by the wight and its adds together');
+    area.process(p);
+    assert.equal(current.__dt2FinalWightTicks, 1);
+    assert.ok(current.__dt2AssassinWhiteSmoke, 'the Assassin creates a white-smoke vulnerability window');
+    assert.deepEqual(registeredObjects.slice(0, 2).map(object => object.id), [core.ObjectIdentifiers.SMOKE_CLOUD, core.ObjectIdentifiers.SMOKE_CLOUD_2]);
+    assert.equal(hitDamage(current), 0, 'ordinary attacks are blocked outside white smoke');
+    current.location = { x: current.__dt2AssassinWhiteSmoke.x, y: current.__dt2AssassinWhiteSmoke.y, z: 0 };
+    assert.equal(hitDamage(current), 20, 'white smoke permits normal damage');
+    deaths[0]({ killer: p, npc: current });
+
+    current = boss(wightIds[1]);
+    pendingHits.length = 0;
+    p.location = area.tile(32, 50, 0);
+    for (let tick = 0; tick < 18; tick++) area.process(p);
+    const clones = queue.filter(npc => npc.id === 12330 && npc.owner === p);
+    assert.ok(clones.length === 4 || clones.length === 5, 'Ketla summons four or five one-hit shadow clones');
+    for (let tick = 0; tick < 4; tick++) area.process(p);
+    assert.equal(pendingHits.length, 0, 'the clone between Ketla and the player absorbs the charged shot');
+    assert.ok(removed.includes(clones.find(clone => clone.hp === 0)));
+    deaths[0]({ killer: p, npc: current });
+
+    current = boss(wightIds[2]);
+    p.location = area.tile(32, 50, 0);
+    for (let tick = 0; tick < 15; tick++) area.process(p);
+    assert.ok(pendingHits.some(hit => hit.damage === 32), 'an unavoided Kasonde vial deals typeless damage');
+    assert.ok(current.__dt2KasondePools.length > 0, 'vial impacts leave persistent cache-backed floor pools');
+    current.__dt2KasondePrayerDrain = { ticks: 11, firstDrain: false };
+    area.process(p);
+    assert.equal(prayer, 97, 'Kasonde corruption drains two Prayer points at the first half of its 20-tick effect');
+    current.__dt2KasondePrayerDrain = { ticks: 1, firstDrain: true };
+    area.process(p);
+    assert.equal(prayer, 93, 'Kasonde corruption drains the remaining four Prayer points at expiry');
+    deaths[0]({ killer: p, npc: current });
+
+    current = boss(wightIds[3]);
+    p.location = area.tile(32, 47, 0);
+    for (let tick = 0; tick < 60; tick++) area.process(p);
+    assert.ok(pendingHits.some(hit => hit.damage === 30), 'Persten lightning hits the warned tile if the player stays');
+    assert.ok(current.__dt2PerstenPortals.length > 0, 'Persten creates an attackable 30 HP portal');
+    assert.ok(queue.some(npc => npc.id === 12335 && npc.owner === p), 'the portal spawns a wighted leech');
+    const lastBoss = current, finalArea = area;
+    playerDeaths.at(-1)({ player: p });
+    assert.equal(attrs.get('desert-treasure-ii:final-wight-index'), 0, 'dying restarts the four-wight trial');
+    assert.equal(attrs.get('desert-treasure-ii:final-wights-started'), false);
+    assert.equal(attrs.get('desert-treasure-ii:final-room'), null, 'the failed private room is discarded');
+    assert.equal(finalArea.destroyed, true);
+    assert.ok(removed.includes(lastBoss), 'the active Persten is removed with its private room');
+    assert.ok(registeredObjects.every(object => object.deregistered), 'smoke and potion pools are removed with the private room');
   } finally {
     runtime.startTranscript = startTranscript;
   }
