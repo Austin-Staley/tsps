@@ -49,10 +49,29 @@ type CombatAnimation = {
 
 type CombatAnimationRole = "attack" | "block" | "death";
 
-const ANIMATION_FALLBACKS: Record<number, CombatAnimation> = {
-    7: { anims: { attack: 6184, block: 6188, death: 6182 } },
-    15: { anims: { attack: 390, block: 391, death: 392 } },
-};
+const DEATH_WORDS = new Set(["death", "die", "dies", "dying", "dead"]);
+const BLOCK_WORDS = new Set(["block", "blocking", "defend", "defending", "defence", "defense", "def", "parry"]);
+const ATTACK_WORDS = new Set([
+    "attack", "att", "melee", "ranged", "range", "magic", "mage", "slash", "stab", "crush", "lunge",
+    "pound", "swipe", "smash", "slam", "bite", "claw", "sting", "peck", "scratch", "whip", "headbutt",
+    "shoot", "throw", "spit", "spell",
+]);
+
+/**
+ * The combat role an animation's gameval name gives it (`snake_death`, `specter_parry`,
+ * `human_unarmedpunch`), or null when the name does not say. Death and block words win over
+ * attack words, so `npc_x_melee_death` is a death.
+ */
+function animationRoleByName(name: string | null): CombatAnimationRole | null {
+    if (!name) return null;
+    const words = name.split("_").map((word) => word.replace(/\d+$/, ""));
+    if (words.some((word) => DEATH_WORDS.has(word) || word.startsWith("death") || word.endsWith("death"))) return "death";
+    if (words.some((word) => BLOCK_WORDS.has(word) || /(block|parry|defend)$/.test(word))) return "block";
+    if (words.some((word) => ATTACK_WORDS.has(word) || /attack|punch|kick|strike/.test(word) || word.startsWith("cast"))) {
+        return "attack";
+    }
+    return null;
+}
 
 const normalizeName = (value?: string) => (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
 
@@ -148,9 +167,6 @@ export class NpcDefinitionLoader extends DefinitionLoader {
             if (entry?.anims) animations[id] = entry;
             if (Number.isInteger(entry?.projectile)) projectiles[id] = entry.projectile as number;
         }
-        for (const [id, fallback] of Object.entries(ANIMATION_FALLBACKS)) {
-            if (!animations[id]) animations[id] = fallback;
-        }
         const configuredAnimationIds = new Set(Object.keys(animations));
 
         const roleByAnimation = new Map<number, CombatAnimationRole>();
@@ -161,19 +177,35 @@ export class NpcDefinitionLoader extends DefinitionLoader {
             }
         }
         let inferredAnimations = 0;
+        let namedAnimations = 0;
         let guessedAnimations = 0;
         for (const [npcId, observed] of Object.entries(observedAnimations)) {
             if (!Array.isArray(observed) || observed.length === 0) continue;
+            // An observed list has no order to trust: a role comes from the same animation's role
+            // in a configured entry, then from the animation's cache name, and only then by guess.
             const inferred: NonNullable<CombatAnimation["anims"]> = {};
             for (const animationId of observed) {
                 const role = roleByAnimation.get(animationId);
                 if (role && inferred[role] === undefined) inferred[role] = animationId;
             }
+            const namedRoles = new Map<number, CombatAnimationRole>();
+            for (const animationId of observed) {
+                const role = animationRoleByName(CacheDefinitions.getSeqName(animationId));
+                if (role) namedRoles.set(animationId, role);
+            }
+            const inferredUsed = new Set(Object.values(inferred));
+            for (const [animationId, role] of namedRoles) {
+                if (inferred[role] !== undefined || inferredUsed.has(animationId)) continue;
+                inferred[role] = animationId;
+                inferredUsed.add(animationId);
+                namedAnimations++;
+            }
             const explicit = animations[npcId]?.anims ?? {};
             const resolved = { ...inferred, ...explicit };
             inferredAnimations += Object.keys(inferred).length;
             if (!configuredAnimationIds.has(npcId)) {
-                const ids = Array.from(new Set(observed.filter((id) => Number.isInteger(id) && id >= 0)));
+                // A named animation never fills another role: a death is not guessed as an attack.
+                const ids = Array.from(new Set(observed.filter((id) => Number.isInteger(id) && id >= 0 && !namedRoles.has(id))));
                 const indexes = ids.map((_, index) => index);
                 const preferences: Record<CombatAnimationRole, number[]> = {
                     attack: ids.length <= 2 ? indexes : [1, ...indexes.filter((index) => index !== 1)],
@@ -263,7 +295,7 @@ export class NpcDefinitionLoader extends DefinitionLoader {
         }
         (mismatched > 0 ? console.warn : console.debug)(
             `[npc-definitions] cache-backed; configured stats applied=${applied}, mismatched=${mismatched}, ` +
-            `service animations inferred=${inferredAnimations}, guessed=${guessedAnimations}`
+            `service animations inferred=${inferredAnimations} (by name=${namedAnimations}), guessed=${guessedAnimations}`
         );
         return true;
     }
