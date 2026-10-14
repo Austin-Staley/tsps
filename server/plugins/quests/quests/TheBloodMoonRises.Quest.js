@@ -2807,6 +2807,12 @@ module.exports = function registerTheBloodMoonRises(api) {
     return outfitWorn;
   }
 
+  function answerPreparationStakesCondition({ player, stepId }) {
+    if (!player || !["sqIM75", "cv4yCk"].includes(stepId) || stage(player) !== STAGE.PREPARATIONS) return null;
+    const hasStakes = Boolean((player.getAttribute(PREP_ATTRIBUTE) ?? {}).stakes && hasItem(player, PREP.stakes));
+    return stepId === "sqIM75" ? !hasStakes : hasStakes;
+  }
+
   function openHideoutChest(event) {
     const player = event?.player;
     const visibleId = event?.definition?.id ?? event?.objectId;
@@ -5235,6 +5241,17 @@ module.exports = function registerTheBloodMoonRises(api) {
   function onBloodMoonDialogueLine(request) {
     const player = request?.player;
     if (!player) return;
+    if (stage(player) === STAGE.PREPARATIONS && !(player.getAttribute(PREP_ATTRIBUTE) ?? {}).ivanSareiIntroComplete &&
+      ((request.step?.player && request.text === "I'll get to it.") ||
+        (request.step?.speaker === "Sarei" &&
+          request.text?.startsWith("As for what those plans are, as I say, you'll need to ask Father Sugadinti")))) {
+      request.after = () => {
+        if (stage(player) === STAGE.PREPARATIONS) {
+          player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), ivanSareiIntroComplete: true });
+        }
+      };
+      return;
+    }
     if (stage(player) === STAGE.PREPARATIONS && request.step?.speaker === "Efaritay Hallow" &&
       request.text?.endsWith("Now, let us get to work.")) {
       request.after = () => {
@@ -5435,6 +5452,13 @@ module.exports = function registerTheBloodMoonRises(api) {
       const started = startTranscript(api, player, event.npcId, "Efaritay Hallow", "standard-dialogue");
       if (started) event.handled = true;
       return started;
+    }
+    if (stage(player) === STAGE.PREPARATIONS && npcName === "ivan strom") {
+      event.handled = true;
+      const variant = (player.getAttribute(PREP_ATTRIBUTE) ?? {}).ivanSareiIntroComplete
+        ? "hallowed-preparations-talking-to-ivan-and-sarei-talking-to-them-again"
+        : "hallowed-preparations-talking-to-ivan-and-sarei";
+      return startTranscript(api, player, event.npcId, PAGE, variant);
     }
     if (stage(player) === STAGE.SLEPE) {
       const story = player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {};
@@ -7092,6 +7116,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("world:object-examine", inspectHideoutShrine);
   api.onNpcDialogueCondition(handleSlepeJournalCondition);
   api.onNpcDialogueCondition(answerHideoutCondition);
+  api.onNpcDialogueCondition(answerPreparationStakesCondition);
   api.onCustomEvent("npc-dialogue:choice", onChoice);
   api.onCustomEvent("npc-dialogue:line", onBloodMoonDialogueLine);
   api.onCustomEvent("npc-dialogue:line", onSlepeDialogueLine);

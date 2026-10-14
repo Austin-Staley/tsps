@@ -2388,6 +2388,56 @@ test('Blood Moon preparation opens Efaritay’s existing supplies dialogue if th
   }
 });
 
+test('Blood Moon Ivan and Sarei preparation dialogue advances to the stake follow-up', () => {
+  const { api, handlers } = mockApi();
+  const npcDialogues = require('../plugins/npcs/NpcDialogues.plugin');
+  const originalStartDialogue = npcDialogues.startDialogue;
+  let started;
+  npcDialogues.startDialogue = (_api, _event, _steps, _branches, context) => {
+    started = { page: context.pages[0].page, variant: context.pages[0].variants[0] };
+  };
+  try {
+    require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+    const attributes = new Map([
+      ['quest.the_blood_moon_rises.stage', 60],
+      ['quest.the_blood_moon_rises.preparations', { introComplete: true, stakes: true }],
+    ]);
+    const inventoryIds = new Set([api.core.ItemIdentifiers.BLISTERWOOD_STAKE]);
+    const player = {
+      getAttribute: key => attributes.get(key),
+      setAttribute: (key, value) => attributes.set(key, value),
+      isPlayer: () => true,
+      getAsPlayer() { return this; },
+      getInventory: () => ({ contains: id => inventoryIds.has(id) }),
+      getEquipment: () => ({ contains: () => false }),
+      getPacketSender: () => ({ sendVarbit() {}, sendQuestList() {} }),
+      sendMessage() {},
+    };
+    const talk = handlers.npcInteractions.get('Ivan Strom')['Talk-to'];
+    const event = () => ({ player, npcId: api.core.NpcIdentifiers.IVAN_STROM_13,
+      definition: { getName: () => 'Ivan Strom' }, handled: false });
+    assert.equal(talk(event()), true);
+    assert.equal(started.variant, 'hallowed-preparations-talking-to-ivan-and-sarei');
+
+    const line = handlers.custom.get('npc-dialogue:line').find(handler => handler.name === 'onBloodMoonDialogueLine');
+    const doneIntro = { player, step: { player: "I'll get to it." }, text: "I'll get to it." };
+    line(doneIntro);
+    doneIntro.after();
+    assert.equal(attributes.get('quest.the_blood_moon_rises.preparations').ivanSareiIntroComplete, true);
+    assert.equal(talk(event()), true);
+    assert.equal(started.variant, 'hallowed-preparations-talking-to-ivan-and-sarei-talking-to-them-again');
+
+    const condition = handlers.condition.find(handler => handler.name === 'answerPreparationStakesCondition');
+    assert.equal(condition({ player, stepId: 'sqIM75' }), false, 'the unmade-stakes branch is skipped when stakes are carried');
+    assert.equal(condition({ player, stepId: 'cv4yCk' }), true, 'the made-stakes branch is selected');
+    inventoryIds.delete(api.core.ItemIdentifiers.BLISTERWOOD_STAKE);
+    assert.equal(condition({ player, stepId: 'sqIM75' }), true, 'the player must keep the stakes to claim completion');
+    assert.equal(condition({ player, stepId: 'cv4yCk' }), false);
+  } finally {
+    npcDialogues.startDialogue = originalStartDialogue;
+  }
+});
+
 test('Blood Moon Castle Drakan throne opens only after the ordered bust mechanism and awards its key', () => {
   const { api, handlers } = mockApi();
   const messages = [];
@@ -13205,7 +13255,7 @@ test('Blood Moon hideout chest supplies the disguise and Ivan checks the worn ou
  const player={getAttribute:key=>attrs.get(key),getInventory:()=>inventory,getEquipment:()=>({get:slot=>equipment[slot]}),sendMessage:m=>messages.push(m)};
  const chest=handlers.objects.find(handler=>handler.name==='openHideoutChest'),event={player,objectId:O.CLOSED_CHEST_37,definition:{id:O.CLOSED_CHEST_37},option:'Open',location:{x:3600,y:9617,z:0}};
  assert.equal(chest(event),true);assert.deepEqual([...items],[I.VYRE_NOBLE_TOP,I.VYRE_NOBLE_LEGS,I.VYRE_NOBLE_SHOES]);
- const condition=handlers.condition.at(-1);assert.equal(condition({player,stepId:'nMuybV'}),false);assert.equal(condition({player,stepId:'wAGF9J'}),true);assert.equal(condition({player,stepId:'ysow_0'}),false);
+ const condition=handlers.condition.find(handler=>handler.name==='answerHideoutCondition');assert.equal(condition({player,stepId:'nMuybV'}),false);assert.equal(condition({player,stepId:'wAGF9J'}),true);assert.equal(condition({player,stepId:'ysow_0'}),false);
  equipment[E.BODY_SLOT]=new api.core.Item(I.VYRE_NOBLE_TOP);equipment[E.LEG_SLOT]=new api.core.Item(I.VYRE_NOBLE_LEGS);equipment[E.FEET_SLOT]=new api.core.Item(I.VYRE_NOBLE_SHOES);
  assert.equal(condition({player,stepId:'wAGF9J'}),false);assert.equal(condition({player,stepId:'ysow_0'}),true);
  const distant={...event,handled:false,location:{x:3610,y:9617,z:0}};assert.equal(chest(distant),false);
