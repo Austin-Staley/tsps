@@ -687,7 +687,12 @@ module.exports = function registerDesertTreasureII(api) {
     getName() { return "Elder Vault (Desert Treasure II)"; }
     canAttack(attacker, target) {
       const ownerIsAttacking = attacker === this.owner && target?.getOwner?.() === this.owner && target?.getArea?.() === this;
-      const ownedNpcIsAttacking = target === this.owner && attacker?.getOwner?.() === this.owner && attacker?.getArea?.() === this;
+      const isTrialActor = Number.isInteger(attacker?.__dt2FinalWight)
+        || attacker?.__dt2FinalWightClone === true
+        || attacker?.__dt2PerstenPortal === true
+        || attacker?.__dt2WightLeech === true;
+      const ownedNpcIsAttacking = this.owner?.getAttribute?.(FINAL_WIGHTS_STARTED) === true
+        && isTrialActor && target === this.owner && attacker?.getOwner?.() === this.owner && attacker?.getArea?.() === this;
       if (!ownerIsAttacking && !ownedNpcIsAttacking) return false;
       return true;
     }

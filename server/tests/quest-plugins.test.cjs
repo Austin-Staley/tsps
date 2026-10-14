@@ -6166,11 +6166,11 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
           : prop === 'onNpcHitModify' ? handler => hitHooks.push(handler)
             : prop === 'onCombatHitRoll' ? handler => hitRollHooks.push(handler)
             : prop === 'onObjectInteraction' ? handler => typeof handler === 'function' && []
-                : prop === 'onCustomEvent' ? (name, handler) => {
-                  const registered = actions.get(name) ?? [];
-                  registered.push(handler);
-                  actions.set(name, registered);
-                }
+              : prop === 'onCustomEvent' ? (name, handler) => {
+                const handlers = actions.get(name) ?? [];
+                handlers.push(handler);
+                actions.set(name, handlers);
+              }
                 : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
   });
   const runtime = require('../plugins/quests/QuestRuntime');
@@ -6196,7 +6196,7 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     const action = event => {
       for (const handler of actions.get('npc-dialogue:action') ?? []) handler(event);
     };
-    for (const stepId of ['lnBBaf', '2ucP4K', 's3g1xZ', 'CQXcy8', 'F2TgOo', 't8wSqb', 'fknd65', '2at3Ae']) action({ player: p, stepId });
+    for (const stepId of ['lnBBaf', '2ucP4K', 's3g1xZ', 'CQXcy8', 'F2TgOo', 't8wSqb', 'fknd65']) action({ player: p, stepId });
     const area = p.getPrivateArea(), wightIds = [12328, 12329, 12331, 12333];
     const boss = id => queue.findLast(npc => npc.id === id);
     const hitDamage = (npc) => {
@@ -6205,6 +6205,10 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
       return damage.value;
     };
     p.location = area.tile(32, 47, 0);
+    assert.equal(area.canAttack(queue.find(npc => npc.id === 12309), p), false,
+      'hostile Mahjarrat in the reveal cannot attack while the final dialogue is open');
+    action({ player: p, stepId: '2at3Ae' });
+    const sliske = queue.find(npc => npc.id === 12309);
     let current = boss(wightIds[0]);
     assert.equal(typeof area.process, 'function');
     assert.ok(current);
@@ -6212,7 +6216,10 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     assert.equal(current.getArea(), area);
     assert.equal(area.canAttack(p, current), true, 'the owner can fight their private wight');
     assert.equal(area.canAttack(current, p), true, 'the owned wight can attack its owner');
-    assert.equal(area.canAttack({ getOwner: () => p, getArea: () => area }, p), true, 'owned adds can attack their owner');
+    assert.equal(area.canAttack(sliske, p), false, 'cutscene Mahjarrat remain inert after the trial starts');
+    assert.equal(area.canAttack({ getOwner: () => p, getArea: () => area }, p), false, 'untagged owned NPCs cannot join the private fight');
+    assert.equal(area.canAttack({ __dt2WightLeech: true, getOwner: () => p, getArea: () => area }, p), true,
+      'tagged trial adds can attack their owner');
     assert.equal(area.canAttack({ getOwner: () => null, getArea: () => area }, p), false, 'unowned NPCs cannot join the private fight');
     assert.equal(area.isMulti(), true, 'the owner can be attacked by the wight and its adds together');
     area.process(p);
@@ -6305,7 +6312,11 @@ test('Desert Treasure II handoff creates the four owned wight stages and grants 
       : prop === 'onNpcInteraction' ? (name, options) => interactions.push({ name, options })
         : prop === 'onNpcDeath' ? (handler) => deaths.push(handler)
           : prop === 'onObjectInteraction' ? (handler) => typeof handler === 'function' && objects.push(handler)
-          : prop === 'onCustomEvent' ? (name, handler) => { const previous = actions.get(name); actions.set(name, event => { previous?.(event); handler(event); }); }
+          : prop === 'onCustomEvent' ? (name, handler) => {
+            const handlers = actions.get(name) ?? [];
+            handlers.push(handler);
+            actions.set(name, handlers);
+          }
             : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
   });
   const runtime = require('../plugins/quests/QuestRuntime');
@@ -6334,7 +6345,9 @@ test('Desert Treasure II handoff creates the four owned wight stages and grants 
     const talkSmith = interactions.find(({ name }) => name === 'Asgarnia Smith').options['Talk-to'];
     talkSmith({ player: p, npcId: core.NpcIdentifiers.ASGARNIA_SMITH });
     assert.equal(transcripts.at(-1).variant, 'the-desert-treasure-disputes-of-the-mahjarrat');
-    const dialogueAction = actions.get('npc-dialogue:action');
+    const dialogueAction = event => {
+      for (const handler of actions.get('npc-dialogue:action') ?? []) handler(event);
+    };
     dialogueAction({ player: p, stepId: 'lnBBaf' });
     const area = attrs.get('desert-treasure-ii:final-room');
     assert.equal(area.width, 7);
