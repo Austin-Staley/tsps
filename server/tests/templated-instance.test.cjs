@@ -23,6 +23,22 @@ const ROOM = { chunkX: 232, chunkY: 704, plane: 1 };
 // Steps a 1x1 walker can take: [dx, dy].
 const STEPS = [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 
+test('copied multi-locs resolve the visible child id and keep the original scene loc', () => {
+  const area = new TemplatedInstanceArea(1, 1);
+  area.setChunk(2, 0, 0, { sourceChunkX: 370, sourceChunkY: 803, sourcePlane: 2, rotation: 0 });
+  const location = area.tile(0, 3, 2); // Ghorrock crevice parent 49517 at 2960,6427.
+  let unlocked = 0;
+  const player = { getPacketSender: () => ({ getVarbit: () => unlocked, getVarp: () => 0 }) };
+  try {
+    const blocked = area.resolveObject(49110, location, player);
+    assert.equal(blocked?.getId(), 49517);
+    assert.equal(area.resolveObject(49109, location, player), null, 'an unseen child is not interactable');
+    unlocked = 1;
+    assert.equal(area.resolveObject(49109, location, player)?.getId(), 49517);
+    assert.equal(area.resolveObject(49110, location, player), null, 'the old child stops resolving after the morph');
+  } finally { area.destroy(); }
+});
+
 function canStep(x, y, z, [dx, dy], area) {
   return RegionManager.canMove(x, y, x + dx, y + dy, z, 1, 1, area);
 }

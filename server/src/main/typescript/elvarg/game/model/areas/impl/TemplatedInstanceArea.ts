@@ -7,6 +7,7 @@ import { RegionManager } from '../../../collision/RegionManager';
 import { getTemplateRegion, templateChunkKey } from '../../../collision/TemplateRegionData';
 import { CachePipeline } from '../../../cache/CachePipeline';
 import { encodeRebuildRegion } from '../../../../net/protocol/ClientProtocol';
+import type { Player } from '../../../entity/impl/player/Player';
 
 /** An 8x8 chunk of the cache map that an instance copies, turned clockwise `rotation` times. */
 export interface TemplateChunk {
@@ -236,8 +237,9 @@ export class TemplatedInstanceArea extends PrivateArea {
         return this.locsAt(location).map((loc) => this.objectFor(loc));
     }
 
-    public override resolveObject(id: number, location: Location): GameObject | null {
-        const loc = this.locsAt(location).find((entry) => entry.id === id);
+    public override resolveObject(id: number, location: Location, player?: Player): GameObject | null {
+        const loc = this.locsAt(location).find((entry) => entry.id === id
+            || (player && ObjectDefinition.forPlayer(entry.id, player)?.id === id));
         return loc ? this.objectFor(loc) : null;
     }
 
