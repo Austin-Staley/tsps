@@ -3806,7 +3806,7 @@ test('Blood Moon initializes and awards the recorded third emblem in Ranis’s c
   assert.equal(varbits.get(15507), 0, 'relogin does not recreate the claimed emblem');
   assert.equal(items.get(api.core.ItemIdentifiers.DRAKAN_EMBLEM_3), 1, 'relogin does not duplicate the item');
 
-  const wall = { player, objectId: 61612, definition: { id: 61612 }, option: 'inspect',
+  const wall = { player, objectId: 61612, definition: { id: 61612 }, option: 'enter',
     location: { x: 2482, y: 7412, z: 0 }, handled: false };
   handlers.objects.find(handler => handler.name === 'inspectRanisCrackedWall')(wall);
   assert.equal(wall.handled, true);
@@ -3815,6 +3815,71 @@ test('Blood Moon initializes and awards the recorded third emblem in Ranis’s c
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 2);
   assert.equal(varbits.get(15499), 24);
   assert.equal(varbits.get(15500), 6);
+});
+
+test('Blood Moon requires placing lower-floor emblems to open the chapel and gallery passages', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.castle-native-stage', 72],
+    ['quest.the_blood_moon_rises.castle-room', 15],
+    ['quest.the_blood_moon_rises.castle-floor', 1],
+    ['quest.the_blood_moon_rises.castle-story', {}],
+  ]);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const items = new Map([[api.core.ItemIdentifiers.DRAKAN_EMBLEM_2, 1]]);
+  const varbits = new Map();
+  const moved = [];
+  const inventory = {
+    contains: id => (items.get(id) ?? 0) > 0,
+    deleteNumber: (id, amount) => { const count = items.get(id) ?? 0; if (count < amount) return false; items.set(id, count - amount); return true; },
+    adds: (id, amount) => { items.set(id, (items.get(id) ?? 0) + amount); return true; },
+    getFreeSlots: () => 28,
+  };
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory, moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
+    sendMessage() {}, getPacketSender: () => new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) },
+      { get: (target, key) => target[key] ?? (() => {}) }),
+  };
+  quest.setStage(player, 40);
+  const place = handlers.objects.find(handler => handler.name === 'handleCastleEmblemReceptaclePlacement');
+  const door = handlers.objects.find(handler => handler.name === 'handleCastleDoorEnter');
+  const interactDoor = (id, x, y) => {
+    const event = { player, objectId: id, definition: { id, getName: () => 'Door' },
+      location: { x, y, z: 0 }, option: 'Enter', handled: false };
+    door(event);
+    return event;
+  };
+  const placeEmblem = (id, x, y) => {
+    const event = { player, objectId: id, definition: { id }, location: { x, y, z: 0 },
+      option: 'Place-item', handled: false };
+    place(event);
+    return event;
+  };
+
+  assert.equal(interactDoor(61572, 2369, 7384).handled, true);
+  assert.equal(moved.length, 0, 'a carried emblem alone does not open the Gallery passage');
+  placeEmblem(61631, 2370, 7383);
+  assert.equal(items.get(api.core.ItemIdentifiers.DRAKAN_EMBLEM_2), 0);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').galleryHallwayEmblemPlaced, true);
+  assert.equal(varbits.get(15501), 2);
+  interactDoor(61572, 2369, 7384);
+  assert.deepEqual(moved.at(-1), [2387, 7366, 0]);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 13);
+
+  attributes.set('quest.the_blood_moon_rises.castle-room', 17);
+  items.set(api.core.ItemIdentifiers.DRAKAN_EMBLEM, 1);
+  assert.equal(interactDoor(61572, 2372, 7409).handled, true);
+  assert.equal(moved.length, 1, 'the North Chapel passage stays closed before its emblem is placed');
+  placeEmblem(61632, 2371, 7410);
+  assert.equal(items.get(api.core.ItemIdentifiers.DRAKAN_EMBLEM), 0);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').northChapelHallwayEmblemPlaced, true);
+  assert.equal(varbits.get(15502), 1);
+  interactDoor(61572, 2372, 7409);
+  assert.deepEqual(moved.at(-1), [2371, 7395, 0]);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 15);
 });
 
 test('Blood Moon uses the study emblem receptacle to unlock the captured chamber door', () => {
