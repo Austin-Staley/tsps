@@ -694,7 +694,11 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           player, npc: event.npc, npcId, definition, step,
           text: step.text, action: step.action, target: step.target, stepId: step.id, handled: false,
         };
+        const current = manager.getCurrent?.();
         api.emitCustomEvent("npc-dialogue:action", action);
+        // Quest actions may start a different conversation (for example, after
+        // a cutscene action). Do not let this transcript's remaining tail replace it.
+        if (current && manager.getCurrent() !== current) return;
         // A handler can also hand back `steps` to play first (a story picked from another page).
         if (action.handled) return action.end ? close() : run([...(action.steps ?? []), ...rest], currentRecord);
         if (step.type === "end") return close();

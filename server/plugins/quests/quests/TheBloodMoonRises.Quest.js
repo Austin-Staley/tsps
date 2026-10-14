@@ -596,10 +596,12 @@ module.exports = function registerTheBloodMoonRises(api) {
   const WYRD_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-area";
   const WYRD_DEFEATED_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-defeated";
   const DRAKAN_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.drakan-area";
+  const FIRST_BLOOD_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.first-blood-area";
   const DRAKAN_ENCOUNTER_COMPLETE = "quest.the_blood_moon_rises.drakan-defeated";
   const DRAKAN_DEATH_CONFIRMED = "quest.the_blood_moon_rises.drakan-death-confirmed";
   const FINAL_NATIVE_STAGE_ATTRIBUTE = "quest.the_blood_moon_rises.final-native-stage";
   const DRAKAN_SUPPLY_ATTRIBUTE = "quest.the_blood_moon_rises.final-drakan-supplies";
+  const FIRST_BLOOD_DEFEATED_ATTRIBUTE = "quest.the_blood_moon_rises.first-blood-defeated";
   const FINAL_PORTAL_OPEN_ATTRIBUTE = "quest.the_blood_moon_rises.final-portal-open";
   const FINAL_PORTAL_USED_ATTRIBUTE = "quest.the_blood_moon_rises.final-portal-used";
   const FINAL_DRAKAN_ID = NpcIdentifiers.LOWERNIEL_DRAKAN_17;
@@ -998,9 +1000,12 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   class DrakanEncounterArea extends PrivateArea {
-    constructor(owner) {
-      super([new Boundary(2495, 2514, 7823, 7853, 3)]);
+    constructor(owner, mode = "final") {
+      super([mode === "first-blood"
+        ? new Boundary(2688, 2735, 7810, 7880, 0)
+        : new Boundary(2495, 2514, 7823, 7853, 3)]);
       this.owner = owner;
+      this.mode = mode;
     }
     isMulti() { return true; }
     canAttack(attacker, target) {
@@ -1023,10 +1028,22 @@ module.exports = function registerTheBloodMoonRises(api) {
       const now = World.getProcessCycle();
       if (fight.lastCycle === now) return;
       fight.lastCycle = now;
-      mobile.setScriptedMovement(true);
+      if (fight.mode !== "first-blood") mobile.setScriptedMovement(true);
       mobile.getCombat().getLastAttack().reset();
       const player = fight.player;
       if (player.getArea?.() !== this || player.getHitpoints() <= 0 || fight.ending) return;
+      if (fight.mode === "first-blood") {
+        if (mobile.getHitpoints() <= fight.thresholdHp && !fight.thresholdStarted) {
+          fight.thresholdStarted = true;
+          fight.ending = true;
+          const hunt = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
+          player.setAttribute(HUNT_ATTRIBUTE, { ...hunt, firstBloodThresholdReached: true, nativeStage: 92 });
+          player.getPacketSender()?.sendVarbit?.(15464, 92);
+          startTranscript(api, player, mobile.getId(), PAGE,
+            "blood-hunt-after-dealing-enough-damage-to-lowerniel");
+        }
+        return;
+      }
       const hp = mobile.getHitpoints();
       const phase = hp <= 900 ? 3 : hp <= 2100 ? 2 : 1;
       if (phase > fight.phase) {
@@ -1534,13 +1551,102 @@ module.exports = function registerTheBloodMoonRises(api) {
     const npc = event?.npc;
     const fight = npc && drakanEncounters.get(npc.getArea?.());
     const hit = event?.hit;
-    if (!fight || npc !== fight.boss || fight.ending || !hit) return;
+    if (!fight || fight.mode === "first-blood" || npc !== fight.boss || fight.ending || !hit) return;
     // The Wiki records a 26–28 damage ceiling per hit in the final duel.
     for (const part of hit.getHits?.() ?? []) {
       const damage = part.getDamage?.() ?? 0;
       if (damage > 28) part.setDamage(28);
     }
     hit.updateTotalDamage?.();
+  }
+
+  function handleFirstBloodHit(event) {
+    const npc = event?.npc;
+    const hit = event?.hit;
+    const fight = npc && drakanEncounters.get(npc.getArea?.());
+    if (!fight || fight.mode !== "first-blood" || npc !== fight.boss || fight.ending || !hit) return;
+    // The recorded First Blood escape begins at 2,550 HP after 450 damage.
+    // Clamp the final hit so a high-damage roll cannot skip that cutscene.
+    let remaining = Math.max(0, npc.getHitpoints() - fight.thresholdHp);
+    for (const part of hit.getHits?.() ?? []) {
+      const damage = part.getDamage?.() ?? 0;
+      if (damage <= 0) continue;
+      const allowed = Math.min(remaining, damage);
+      if (allowed < damage) part.setDamage(allowed);
+      remaining -= allowed;
+    }
+    hit.updateTotalDamage?.();
+  }
+
+  function setBloodHuntNativeStage(player, value) {
+    const hunt = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
+    player.setAttribute(HUNT_ATTRIBUTE, { ...hunt, nativeStage: value });
+    player.getPacketSender()?.sendVarbit?.(15464, value);
+  }
+
+  function startFirstBloodEncounter(player) {
+    if (!player || stage(player) !== STAGE.BLOOD_HUNT ||
+      !player.getAttribute(HUNT_ATTRIBUTE)?.drawbridgeRepaired ||
+      player.getAttribute(FIRST_BLOOD_DEFEATED_ATTRIBUTE)) return false;
+    const existing = player.getAttribute(FIRST_BLOOD_AREA_ATTRIBUTE);
+    if (existing && existing.isDestroyed?.() !== true) return true;
+    const area = new DrakanEncounterArea(player.getUsername?.(), "first-blood");
+    const boss = api.spawnNpc({ id: NpcIdentifiers.LOWERNIEL_DRAKAN_20,
+      x: 2710, y: 7840, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
+    if (!boss) {
+      player.sendMessage("Lowerniel could not be reached. Speak to Vanescula to begin the crossing again.");
+      return false;
+    }
+    boss.setMultiCombat?.(true);
+    boss.setMaxHitpoints(3000);
+    boss.setHitpoints(3000);
+    const vanescula = api.spawnNpc({ id: NpcIdentifiers.VANESCULA_DRAKAN_20,
+      x: 2709, y: 7840, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
+    const veliaf = api.spawnNpc({ id: NpcIdentifiers.VELIAF_HURTZ_25,
+      x: 2709, y: 7841, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
+    area.enter(player);
+    area.enter(boss);
+    if (vanescula) area.enter(vanescula);
+    if (veliaf) area.enter(veliaf);
+    player.setAttribute(FIRST_BLOOD_AREA_ATTRIBUTE, area);
+    player.moveTo(new Location(2712, 7840, 0));
+    const fight = { mode: "first-blood", area, boss, player, allies: [vanescula, veliaf].filter(Boolean),
+      thresholdHp: 2550, thresholdStarted: false, lastCycle: -1, ending: false, finished: false };
+    drakanEncounters.set(area, fight);
+    boss.getCombat?.()?.attack?.(player);
+    for (const ally of fight.allies) ally.getCombat?.()?.attack?.(boss);
+    setBloodHuntNativeStage(player, 90);
+    return true;
+  }
+
+  function cleanupFirstBloodEncounter({ player }) {
+    const area = player?.getAttribute(FIRST_BLOOD_AREA_ATTRIBUTE);
+    const fight = area && drakanEncounters.get(area);
+    if (!fight || fight.mode !== "first-blood") {
+      if (player) player.setAttribute(FIRST_BLOOD_AREA_ATTRIBUTE, null);
+      return;
+    }
+    fight.finished = true;
+    for (const actor of [fight.boss, ...(fight.allies ?? [])]) if (actor) api.removeNpc(actor);
+    area.leave(player, false);
+    drakanEncounters.delete(area);
+    player.setAttribute(FIRST_BLOOD_AREA_ATTRIBUTE, null);
+  }
+
+  function recoverFirstBloodEncounter({ player }) {
+    if (!player || stage(player) !== STAGE.BLOOD_HUNT) return;
+    const hunt = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
+    if (hunt.firstBloodThresholdReached) {
+      if (!hunt.firstBloodDefeated) startTranscript(api, player, NpcIdentifiers.LOWERNIEL_DRAKAN_2,
+        PAGE, "blood-hunt-after-dealing-enough-damage-to-lowerniel");
+      return;
+    }
+    if (Number(hunt.nativeStage) === 90) {
+      setBloodHuntNativeStage(player, 86);
+      player.moveTo(new Location(BLOOD_HUNT_PARTY_ARRIVAL.x, BLOOD_HUNT_PARTY_ARRIVAL.y,
+        BLOOD_HUNT_PARTY_ARRIVAL.z));
+      syncBloodHuntActors(player);
+    }
   }
 
   function finishDrakanEncounter(player) {
@@ -2153,7 +2259,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (value === STAGE.ESCAPE) {
       return player?.getAttribute(HUNT_ATTRIBUTE)?.finalDialogueComplete ? 84 : 82;
     }
-    if (value === STAGE.BLOOD_HUNT) return 84;
+    if (value === STAGE.BLOOD_HUNT) {
+      const huntStage = Number(player?.getAttribute(HUNT_ATTRIBUTE)?.nativeStage);
+      return Number.isInteger(huntStage) && huntStage >= 84 && huntStage <= 100 ? huntStage : 84;
+    }
     if (value === STAGE.PREPARATIONS) {
       const prep = player?.getAttribute(PREP_ATTRIBUTE) ?? {};
       if (prep.flail && prep.stakes) return 114;
@@ -4432,6 +4541,40 @@ module.exports = function registerTheBloodMoonRises(api) {
   function onTranscriptAction(event) {
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
+    // The captured Ivan handout is four inventory slots: two individual jerky,
+    // one chunky potion (3), and one sticky potion (2). Keep the availability
+    // varbit set until all four items fit and are actually awarded.
+    if (event.kind === "message" && event.stepId === "lvEeSL" && stage(player) === STAGE.BLOOD_HUNT) {
+      event.handled = true;
+      const hunt = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
+      if (hunt.suppliesClaimed) {
+        event.end = true;
+        player.sendMessage("Ivan has already given you the supplies he found.");
+        return;
+      }
+      const inventory = player.getInventory();
+      if (typeof inventory.getFreeSlots === "function" && inventory.getFreeSlots() < 4) {
+        event.end = true;
+        player.sendMessage("Make room for Ivan's four supplies before asking him to hand them over.");
+        return;
+      }
+      const supplies = [ItemIdentifiers.MYSTERIOUS_JERKY, ItemIdentifiers.MYSTERIOUS_JERKY,
+        ItemIdentifiers.FOUL_CHUNKY_POTION_3_, ItemIdentifiers.PUTRID_STICKY_POTION_2_];
+      const given = [];
+      for (const id of supplies) {
+        if (inventory.adds(id, 1) === false) {
+          for (const added of given) inventory.deleteNumber(added, 1);
+          event.end = true;
+          player.sendMessage("Make room for Ivan's four supplies before asking him to hand them over.");
+          return;
+        }
+        given.push(id);
+      }
+      player.setAttribute(HUNT_ATTRIBUTE, { ...hunt, suppliesClaimed: true });
+      player.getPacketSender()?.sendVarbit?.(15565, 0);
+      event.box = { items: [ItemIdentifiers.MYSTERIOUS_JERKY, ItemIdentifiers.FOUL_CHUNKY_POTION_3_] };
+      return;
+    }
     // The captured stage-90 Veliaf transcripts hand over the quest flail in a
     // message step (both the first conversation and its repeat-before-entry
     // variant). Message steps are dispatched once with kind "message".
@@ -4459,6 +4602,41 @@ module.exports = function registerTheBloodMoonRises(api) {
       event.end = true;
       player.sendMessage("The group cannot cross until you fit the old cog to the Sangvesti drawbridge.");
       return;
+    }
+    if (event.stepId === "lKvIyH" && stage(player) === STAGE.BLOOD_HUNT) {
+      setBloodHuntNativeStage(player, 86);
+    }
+    if (event.stepId === "D5qF0g" && stage(player) === STAGE.BLOOD_HUNT) {
+      setBloodHuntNativeStage(player, 88);
+    }
+    if (event.stepId === "sw9z49" && stage(player) === STAGE.BLOOD_HUNT) {
+      setBloodHuntNativeStage(player, 90);
+      startFirstBloodEncounter(player);
+    }
+    if (event.stepId === "Ysx_tX" && stage(player) === STAGE.BLOOD_HUNT &&
+      !player.getAttribute(HUNT_ATTRIBUTE)?.firstBloodThresholdReached) {
+      event.handled = true;
+      event.end = true;
+      player.sendMessage("Lowerniel is still fighting. Drive him back before the group can escape.");
+      return;
+    }
+    if (event.stepId === "OD8Uux" && stage(player) === STAGE.BLOOD_HUNT) {
+      cleanupFirstBloodEncounter({ player });
+      setBloodHuntNativeStage(player, 94);
+      player.setAttribute(FIRST_BLOOD_DEFEATED_ATTRIBUTE, true);
+      player.setAttribute(HUNT_ATTRIBUTE, { ...(player.getAttribute(HUNT_ATTRIBUTE) ?? {}),
+        firstBloodDefeated: true, nativeStage: 94 });
+      // RSProx records this post-fight teleport at the ruined camp.
+      player.moveTo(new Location(2730, 7852, 0));
+      startTranscript(api, player, NpcIdentifiers.LOWERNIEL_DRAKAN_2, PAGE,
+        "blood-hunt-fleeing-through-the-woods");
+      event.handled = true;
+      event.end = true;
+      return;
+    }
+    if (event.stepId === "iPqujl" && stage(player) === STAGE.BLOOD_HUNT) {
+      setBloodHuntNativeStage(player, 96);
+      player.moveTo(new Location(2730, 7852, 0));
     }
     if (event.stepId === "ikSyAR" && stage(player) === STAGE.CASTLE) {
       player.moveTo(new Location(CASTLE_VAMPYRIUM_ARRIVAL.x, CASTLE_VAMPYRIUM_ARRIVAL.y,
@@ -6144,6 +6322,12 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.getPacketSender().sendVarbit(HUNT_DOOR_VARBITS.innerBankDoorUnlocked, state.bankCrank ? 1 : 0);
     player.getPacketSender().sendVarbit(15485, state.drawbridgeRepaired ? 1 : 0);
     player.getPacketSender().sendVarbit(15603, state.pursuitStarted ? 1 : 0);
+    if ([STAGE.BLOOD_HUNT, STAGE.PREPARATIONS].includes(stage(player))) {
+      player.getPacketSender().sendVarbit(15565, state.suppliesClaimed ? 0 : 1);
+    }
+    if (stage(player) === STAGE.BLOOD_HUNT) {
+      player.getPacketSender().sendVarbit(15464, nativeStage(STAGE.BLOOD_HUNT, player));
+    }
   }
 
   function promptHuntCode(player, kind, offset = 0) {
@@ -6871,6 +7055,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogin(recoverBloodHuntLanding);
   api.onPlayerLogin(syncBloodHuntDoorOnLogin);
   api.onPlayerLogin(syncBloodHuntPartyOnLogin);
+  api.onPlayerLogin(recoverFirstBloodEncounter);
   api.onPlayerLogin(syncCastleRoomOnLogin);
   api.onPlayerLogin(syncCastleChapelPortalOnLogin);
   api.onPlayerLogin(recoverFinalDrakanLanding);
@@ -6878,6 +7063,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogin(resumeFinalDrakanVictory);
   api.onPlayerLogout(cleanupCastleActors);
   api.onPlayerLogout(cleanupBloodHuntActors);
+  api.onPlayerLogout(cleanupFirstBloodEncounter);
   api.onPlayerLogout(cleanupFinalEfaritay);
   api.onPlayerLogout(cleanupFinalCutsceneActors);
   api.onPlayerLogout(handleFinalDrakanLogout);
@@ -6898,6 +7084,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerBeforeDeath(handleFinalDrakanBeforeDeath);
   api.persistAttribute(HIDEOUT_DEFENSE_COMPLETE);
   api.onNpcHitModify(handleSiegeDrakanHit);
+  api.onNpcHitModify(handleFirstBloodHit);
   api.onNpcHitModify(handleFinalDrakanHit);
   api.persistAttribute(WYRD_DEFEATED_ATTRIBUTE);
   api.persistAttribute(DRAKAN_ENCOUNTER_COMPLETE);
@@ -6906,6 +7093,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.persistAttribute(FINAL_PORTAL_OPEN_ATTRIBUTE);
   api.persistAttribute(FINAL_PORTAL_USED_ATTRIBUTE);
   api.persistAttribute(DRAKAN_SUPPLY_ATTRIBUTE);
+  api.persistAttribute(FIRST_BLOOD_DEFEATED_ATTRIBUTE);
   api.persistAttribute(SIEGE_DRAKAN_COMPLETE);
   api.persistAttribute(SIEGE_DEFENCE_ATTRIBUTE);
   api.persistAttribute(TOB_CHALLENGE_ATTRIBUTE);

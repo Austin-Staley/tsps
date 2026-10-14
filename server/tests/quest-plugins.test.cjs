@@ -4039,6 +4039,110 @@ test('Blood Moon gallery chest arrow puzzle resets mistakes and gives the cresce
   assert.equal(inventory.contains(api.core.ItemIdentifiers.CRESCENT_MOON_KEY), true);
 });
 
+test('Blood Moon Ivan preserves the four-slot supply handout until it fits', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map();
+  const counts = new Map();
+  const sentVarbits = [];
+  let freeSlots = 3;
+  const inventory = {
+    getFreeSlots: () => freeSlots,
+    contains: (id) => (counts.get(id) ?? 0) > 0,
+    adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
+    deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+  };
+  const player = {
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => sentVarbits.push([id, value]) },
+      { get: (target, key) => target[key] ?? (() => {}) }),
+    sendMessage() {},
+  };
+  quest.setStage(player, 50);
+  const action = handlers.custom.get('npc-dialogue:action').find((handler) => handler.name === 'onTranscriptAction');
+  const claim = () => ({ player, kind: 'message', stepId: 'lvEeSL', handled: false, end: false });
+  const blocked = claim();
+  action(blocked);
+  assert.equal(blocked.handled, true);
+  assert.equal(blocked.end, true);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt')?.suppliesClaimed, undefined,
+    'a full backpack does not consume Ivan’s availability flag');
+  assert.equal(counts.size, 0);
+  freeSlots = 4;
+  const accepted = claim();
+  action(accepted);
+  assert.deepEqual([...counts.entries()].sort((a, b) => a[0] - b[0]), [
+    [api.core.ItemIdentifiers.MYSTERIOUS_JERKY, 2],
+    [api.core.ItemIdentifiers.PUTRID_STICKY_POTION_2_, 1],
+    [api.core.ItemIdentifiers.FOUL_CHUNKY_POTION_3_, 1],
+  ].sort((a, b) => a[0] - b[0]));
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').suppliesClaimed, true);
+  assert.deepEqual(sentVarbits.at(-1), [15565, 0]);
+  const duplicate = claim();
+  action(duplicate);
+  assert.equal(duplicate.end, true);
+  assert.equal([...counts.values()].reduce((sum, count) => sum + count, 0), 4,
+    'replaying the captured message cannot duplicate the supplies');
+});
+
+test('Blood Moon crossing preserves the captured native stages and starts the shared First Blood encounter', () => {
+  const { api, handlers } = mockApi();
+  const attributes = new Map();
+  const sentVarbits = [];
+  const spawns = [];
+  let playerArea = null;
+  const makeNpc = definition => {
+    const npc = {
+      definition, id: definition.id, hitpoints: 3000, maxHitpoints: 3000, area: null,
+      isPlayer: () => false, isNpc: () => true, getAsNpc() { return this; },
+      getIndex: () => 200 + spawns.length, setArea(area) { this.area = area; }, getArea() { return this.area; },
+      getId() { return this.id; }, getHitpoints() { return this.hitpoints; },
+      setMaxHitpoints(value) { this.maxHitpoints = value; }, setHitpoints(value) { this.hitpoints = value; },
+      setMultiCombat() {}, setScriptedMovement(value) { this.scriptedMovement = value; },
+      getCombat: () => ({ attack(target) { npc.target = target; }, getLastAttack: () => ({ reset() {} }) }),
+    };
+    spawns.push(npc);
+    return npc;
+  };
+  api.spawnNpc = makeNpc;
+  api.removeNpc = npc => { npc.removed = true; };
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    isPlayer: () => true, isNpc: () => false, getAsPlayer() { return this; }, getIndex: () => 100,
+    getArea: () => playerArea, setArea: area => { playerArea = area; }, getUsername: () => 'first-blood-fixture',
+    getInventory: () => ({ contains: () => false }), getHitpoints: () => 99,
+    moveTo: location => { player.location = location; },
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => sentVarbits.push([id, value]) },
+      { get: (target, key) => target[key] ?? (() => {}) }),
+    sendMessage() {},
+  };
+  quest.setStage(player, 50);
+  attributes.set('quest.the_blood_moon_rises.blood-hunt', { drawbridgeRepaired: true });
+  const action = handlers.custom.get('npc-dialogue:action').find(handler => handler.name === 'onTranscriptAction');
+  action({ player, stepId: 'lKvIyH' });
+  assert.deepEqual(sentVarbits.at(-1), [15464, 86]);
+  action({ player, stepId: 'D5qF0g' });
+  assert.deepEqual(sentVarbits.at(-1), [15464, 88]);
+  action({ player, stepId: 'sw9z49' });
+  assert.deepEqual(sentVarbits.at(-1), [15464, 90]);
+  const boss = spawns.find(npc => npc.id === api.core.NpcIdentifiers.LOWERNIEL_DRAKAN_20);
+  assert.ok(boss, 'the captured first-form Lowerniel is spawned at the recorded battle action');
+  assert.equal(boss.maxHitpoints, 3000);
+  assert.equal(boss.hitpoints, 3000);
+  assert.equal(playerArea, attributes.get('quest.the_blood_moon_rises.first-blood-area'));
+  assert.deepEqual([player.location.getX(), player.location.getY(), player.location.getZ()], [2712, 7840, 0]);
+  attributes.get('quest.the_blood_moon_rises.first-blood-area').process(boss);
+  assert.equal(boss.scriptedMovement, undefined,
+    'First Blood leaves Lowerniel on the normal NPC combat path instead of pausing scripted movement each tick');
+});
+
 test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house and chapel puzzles', () => {
   const { api, handlers } = mockApi();
   const spawnedNpcDefinitions = [];

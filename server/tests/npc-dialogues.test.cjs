@@ -777,3 +777,18 @@ test('a quest message preserves the next conversation started by its action hand
  assert.equal(current,replacement,'Mawrth’s new conversation survives the Ysgawyn message continuation');
  assert.deepEqual(messages,['You return to Lletya.']);
 });
+
+test('an action that starts a new conversation does not resume the old transcript tail', () => {
+ let current,chain;const replacement={newConversation:true};
+ const manager={getCurrent:()=>current,reset:()=>current=null,startDialogues:builder=>{chain=builder;current=[...builder.getDialogues().values()][0];}};
+ const player={getUsername:()=> 'Test',getDialogueManager:()=>manager,getPacketSender:()=>({sendInterfaceRemoval(){}})};
+ const definition={getName:()=> 'Vanescula',getId:()=>16176};
+ const api={emitCustomEvent:(name,e)=>{
+   if(name==='npc-dialogue:action'&&e.stepId==='start-next-scene')
+     manager.startDialogues({getDialogues:()=>new Map([[0,replacement]])});
+ }};
+ const event={player,npc:null,npcId:16176,definition};
+ startDialogue(api,event,[{type:'action',id:'start-next-scene'},{npc:'Old conversation tail'}],{}, {...event,pages:[]});
+ const action=[...chain.getDialogues().values()][0];current=action;action.send(player);
+ assert.equal(current,replacement,'the action-started scene must survive the old transcript tail');
+});
