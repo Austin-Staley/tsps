@@ -6955,10 +6955,10 @@ module.exports = function registerDesertTreasureII(api) {
   }
   function chooseFinalLockDigit(p, slot, offset) {
     const options = [];
-    for (const digit of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].slice(offset, offset + 4)) {
+    for (const digit of [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].slice(offset, offset + 3)) {
       options.push(String(digit), () => setFinalLockDigit(p, slot, digit));
     }
-    if (offset + 4 < 10) options.push("More...", () => chooseFinalLockDigit(p, slot, offset + 4));
+    if (offset + 3 < 10) options.push("More...", () => chooseFinalLockDigit(p, slot, offset + 3));
     else if (offset) options.push("Back...", () => chooseFinalLockDigit(p, slot, 0));
     options.push("Cancel", () => {});
     api.sendMultiChatboxPrompt(p, `Cell lock - number ${slot + 1} of 4`, ...options);

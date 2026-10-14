@@ -6438,7 +6438,10 @@ test('Desert Treasure II last medallion route traps the player, requires solving
         : prop === 'onCustomEvent' ? (name, handler) => customEvents.push({ name, handler })
           : prop === 'onNpcDeath' ? (handler) => deathHooks.push(handler)
             : prop === 'onNpcHitModify' ? (handler) => npcHitHooks.push(handler)
-            : prop === 'sendMultiChatboxPrompt' ? (player, prompt, ...options) => prompts.push({ player, prompt, options })
+            : prop === 'sendMultiChatboxPrompt' ? (player, prompt, ...options) => {
+              assert.ok(options.length <= 10, 'native prompts support at most five label/callback pairs');
+              prompts.push({ player, prompt, options });
+            }
               : prop === 'spawnNpc' ? (args) => (spawnedFigure = { id: args.id, args, setMaxHitpoints(value) { this.maxHitpoints = value; }, setHitpoints(value) { this.hitpoints = value; } })
                 : typeof target[prop] === 'function' ? target[prop].bind(target) : target[prop],
   });
@@ -6478,12 +6481,12 @@ test('Desert Treasure II last medallion route traps the player, requires solving
     assert.equal(equipment.getAmount(1275), 0, 'worn equipment is secured outside the prison cell');
     assert.equal(objectHooks[0]({ player: p, objectId: 48777, option: 'Search', location: { x: 3103, y: 9246, z: 0 } }), true);
     assert.equal(inventory.getAmount(core.ItemIdentifiers.HAIR_CLIP_3), 1);
-    attrs.set('desert-treasure-ii:final-cell-solution', '1,2,3,4');
+    attrs.set('desert-treasure-ii:final-cell-solution', '0,5,8,9');
     assert.equal(objectHooks[0]({ player: p, objectId: 48774, option: 'Open', location: { x: 3107, y: 9248, z: 0 } }), true);
-    for (const digit of [1, 2, 3, 4]) {
+    for (const digit of [0, 5, 8, 9]) {
       let prompt = prompts.at(-1);
       let optionIndex = prompt.options.findIndex((entry, index) => index % 2 === 0 && entry === String(digit));
-      if (optionIndex === -1) {
+      while (optionIndex === -1) {
         const moreIndex = prompt.options.findIndex((entry, index) => index % 2 === 0 && entry === 'More...');
         assert.notEqual(moreIndex, -1, `lock offers another digit page for ${digit}`);
         prompt.options[moreIndex + 1]();
