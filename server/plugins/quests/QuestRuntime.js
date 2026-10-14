@@ -368,8 +368,8 @@ function sendQuestVarps({ player }) {
 function registerQuest(api, def) {
   if (!def || !def.key || !def.name) throw new Error("registerQuest requires a key and name");
   registerQuestWidgets(api);
-  api.persistAttribute(stageAttribute(def.key));
-  api.persistAttribute(QUEST_POINTS_ATTRIBUTE);
+  api.persistAttribute(stageAttribute(def.key), 0);
+  api.persistAttribute(QUEST_POINTS_ATTRIBUTE, 0);
 
   const stageKey = stageAttribute(def.key);
   const quest = {
