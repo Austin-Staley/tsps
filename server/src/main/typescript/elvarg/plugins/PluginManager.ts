@@ -3805,7 +3805,7 @@ export class PluginManager {
       registerItemShopCurrency: (itemId, options) => {
         ShopManager.registerItemCurrency(itemId, options);
       },
-      persistAttribute: (key) => PlayerSave.persistAttribute(key),
+      persistAttribute: (key, defaultValue) => PlayerSave.persistAttribute(key, defaultValue),
       setPlayerPersistence: (persistence) => {
         if (
           !persistence ||

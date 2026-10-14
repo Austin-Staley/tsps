@@ -51,3 +51,19 @@ test("camelCase attribute keys from older saves migrate to kebab-case", () => {
   const resaved = PlayerSave.fromPlayer(player);
   assert.deepEqual(resaved.attributes, { "warriors-guild:defender": true });
 });
+
+test("an attribute equal to its default isn't saved, and loads as the default when missing", () => {
+  PlayerSave.persistAttribute("test:keybind", 1);
+  const player = new Player(null);
+  player.setAttribute("test:keybind", 1);
+  const save = PlayerSave.fromPlayer(player);
+  assert.equal("test:keybind" in save.attributes, false);
+
+  const loaded = new Player(null);
+  save.applyToPlayer(loaded);
+  assert.equal(loaded.getAttribute("test:keybind"), 1);
+
+  loaded.setAttribute("test:keybind", 0);
+  const resaved = PlayerSave.fromPlayer(loaded);
+  assert.equal(resaved.attributes["test:keybind"], 0, "an empty value that isn't the default is kept");
+});

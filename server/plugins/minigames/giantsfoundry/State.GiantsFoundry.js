@@ -24,7 +24,7 @@ function syncOnLogin({ player }) {
 }
 
 module.exports = function attachState(api) {
-  api.persistAttribute(Shared.STATE_ATTRIBUTE);
+  api.persistAttribute(Shared.STATE_ATTRIBUTE, { vars: {} });
   api.persistAttribute(Shared.REPUTATION_ATTRIBUTE);
   api.persistAttribute(LEGACY_REPUTATION_ATTRIBUTE);
   api.onPlayerLogin(syncOnLogin);
