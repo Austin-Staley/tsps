@@ -6957,6 +6957,16 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   assert.equal(created.filter((npc) => npc.__dt2WhispererSoul).length, 12);
   itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
   assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, true, 'the fragment reaches the shadow realm for the special');
+  combatCycle = 10;
+  playerProcesses.forEach((handler) => handler({ player }));
+  const chantPhrases = new Map([[0, 'Vita!'], [1, 'Mors!'], [2, 'Umbra!'], [3, 'Aeternus!']]);
+  for (const [group, phrase] of chantPhrases) {
+    const visibleChantGroup = created.filter((npc) => npc.__dt2WhispererSoul
+      && npc.__dt2WhispererSoulSet === group && npc.isRegistered());
+    assert.equal(visibleChantGroup.length, 3, `the living ${phrase} souls are present after shadow entry`);
+    assert.ok(visibleChantGroup.every((npc) => npc.chat === phrase),
+      `all three living souls repeat ${phrase} while the player is in the Shadow Realm`);
+  }
   const firstChant = created.filter((npc) => npc.__dt2WhispererSoul && npc.__dt2WhispererSoulSet === 0);
   for (const soul of firstChant) {
     soul.registered = false;

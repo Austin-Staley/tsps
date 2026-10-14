@@ -3814,6 +3814,7 @@ module.exports = function registerDesertTreasureII(api) {
     ensureLassarIntroItems(p, lassarState);
     syncLassarSceneObjects(p, lassarState);
     syncLassarAnimaTentacles(p, lassarState);
+    repeatWhispererSoulChants(p, lassarState);
     const position = p.getLocation?.();
     const hereX = position?.getX?.() ?? position?.x;
     const hereY = position?.getY?.() ?? position?.y;
@@ -5720,8 +5721,7 @@ module.exports = function registerDesertTreasureII(api) {
     p.sendMessage("The blackstone fragment glows yellow. Activate it, enter the Shadow Realm and kill all three souls chanting the same phrase before the siphon completes.");
     const owned = spawned.get(p) ?? {};
     const souls = [];
-    const chants = ["Vita!", "Mors!", "Umbra!", "Aeternus!"];
-    for (let group = 0; group < chants.length; group++) {
+    for (let group = 0; group < WHISPERER_SOUL_CHANTS.length; group++) {
       for (let member = 0; member < 3; member++) {
         const x = 2411 + group * 3 + (member % 2);
         const y = 6365 + member * 3 + Math.floor(group / 2) * 2;
@@ -5731,7 +5731,7 @@ module.exports = function registerDesertTreasureII(api) {
         soul.setScriptedMovement?.(true);
         soul.setMaxHitpoints?.(20);
         soul.setHitpoints?.(20);
-        soul.forceChat?.(chants[group]);
+        soul.forceChat?.(WHISPERER_SOUL_CHANTS[group]);
         soul.__dt2WhispererSoul = true;
         soul.__dt2WhispererSoulSet = group;
         soul.__skipDefaultRespawn = true;
@@ -5743,6 +5743,16 @@ module.exports = function registerDesertTreasureII(api) {
     }
     owned.whispererSouls = souls;
     spawned.set(p, owned);
+  }
+  const WHISPERER_SOUL_CHANTS = ["Vita!", "Mors!", "Umbra!", "Aeternus!"];
+  function repeatWhispererSoulChants(p, state) {
+    const cycle = api.core.World.getProcessCycle?.() ?? 0;
+    if (!state.inShadow || cycle % 5 !== 0) return;
+    for (const soul of spawned.get(p)?.whispererSouls ?? []) {
+      if (soul?.isRegistered?.() && soul.__dt2WhispererSoul) {
+        soul.forceChat?.(WHISPERER_SOUL_CHANTS[soul.__dt2WhispererSoulSet]);
+      }
+    }
   }
   function whispererEffectObject(p, id, x, y, type = 22) {
     const object = new api.core.GameObject(id, new api.core.Location(x, y, 0), type, 0, null);
