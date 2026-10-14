@@ -1207,6 +1207,11 @@ export class PacketSender {
     return this.subInterfaceTargets.has(WORLD_MAP_GROUP_ID);
   }
 
+  /** Whether `groupId` is mounted as a sub-interface (modal or overlay) right now. */
+  isSubInterfaceOpen(groupId: number): boolean {
+    return this.subInterfaceTargets.has(groupId);
+  }
+
   /** The last position sendWorldMapPosition sent, packed; -1 before any. */
   private worldMapPosition = -1;
 

@@ -83,6 +83,7 @@ import {
   PluginShouldDropItemsOnDeathEvent,
   PluginShouldKeepItemOnDeathEvent,
   PluginPlayerDeathItemDropEvent,
+  PluginPlayerDeathDropsEvent,
   PluginPlayerDeathEvent,
   PluginPlayerBeforeDeathEvent,
   PluginPlayerOptionEvent,
@@ -237,6 +238,7 @@ export class PluginManager {
   private static shouldDropItemsOnDeathHooks: PluginHook<PluginShouldDropItemsOnDeathEvent>[] = [];
   private static shouldKeepItemOnDeathHooks: PluginHook<PluginShouldKeepItemOnDeathEvent>[] = [];
   private static playerDeathItemDropHooks: PluginHook<PluginPlayerDeathItemDropEvent>[] = [];
+  private static playerDeathDropsHooks: PluginHook<PluginPlayerDeathDropsEvent>[] = [];
   private static canEquipHooks: PluginHook<PluginCanEquipEvent>[] = [];
   private static canUseItemHooks: PluginHook<PluginCanUseItemEvent>[] = [];
   private static canGainExperienceHooks: PluginHook<PluginCanGainExperienceEvent>[] = [];
@@ -1284,6 +1286,16 @@ export class PluginManager {
       );
     }
     return event.handled === true;
+  }
+
+  /** Every hook sees the death's lost items in turn; each takes what it holds from the lists. */
+  public static emitPlayerDeathDrops(event: PluginPlayerDeathDropsEvent): void {
+    if (!event || !event.player) {
+      return;
+    }
+    for (const hook of PluginManager.playerDeathDropsHooks) {
+      PluginManager.executeHook(hook, event, "player_death_drops", "player_death_drops");
+    }
   }
 
   public static emitCanEquip(player: any, slot: number, item: any): boolean | null {
@@ -3050,6 +3062,12 @@ export class PluginManager {
             handler(event);
           },
         });
+      },
+      onPlayerDeathDrops: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.playerDeathDropsHooks.push({ pluginName, handler });
       },
       onPlayerDeathItemDrop: (handler) => {
         if (typeof handler !== "function") {
