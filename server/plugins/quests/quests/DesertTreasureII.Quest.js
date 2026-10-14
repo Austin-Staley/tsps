@@ -1731,6 +1731,11 @@ module.exports = function registerDesertTreasureII(api) {
     npc.__dt2FinalWightTicks = 0;
     npc.__dt2FinalWightObjects = [];
     npc.__dt2FinalWightActors = [];
+    // Quest wights do not inherit an aggressive cache spawn in the private
+    // room. Give the active trial actor its real combat target so its ordinary
+    // pathing can bring it through the Assassin's white smoke.
+    npc.setScriptedMovement?.(false);
+    npc.getCombat?.()?.attack?.(p);
     p.sendMessage(["The Forsaken Assassin steps forward.", "Ketla the Unworthy steps forward.", "Kasonde the Craven steps forward.", "Persten the Deceitful steps forward."][index]);
     return npc;
   }

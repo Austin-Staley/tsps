@@ -6193,6 +6193,7 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
         setNpcTransformationId(value) { this.transformedTo = value; }, setMaxHitpoints(value) { this.maxHp = value; },
         setHitpoints(value) { this.hp = value; }, getHitpoints() { return this.hp; }, getMaxHitpoints() { return this.maxHp; },
         getOwner() { return this.owner; }, getArea() { return this.area; }, getLocation() { return this.location; },
+        setScriptedMovement(value) { this.scriptedMovement = value; }, getCombat() { return { attack: target => { this.combatTarget = target; } }; },
         isRegistered() { return true; }, isNpc() { return true; }, getAsNpc() { return this; },
         forceChat(text) { this.chat = text; }, performGraphic(graphic) { this.graphic = graphic; } };
     } },
@@ -6254,6 +6255,8 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     assert.ok(current);
     assert.equal(current.getOwner(), p);
     assert.equal(current.getArea(), area);
+    assert.equal(current.combatTarget, p, 'the spawned wight follows its actual trial owner');
+    assert.equal(current.scriptedMovement, false, 'the wight remains free to use ordinary combat pathing');
     assert.equal(area.canAttack(p, current), true, 'the owner can fight their private wight');
     assert.equal(area.canAttack(current, p), true, 'the owned wight can attack its owner');
     assert.equal(area.canAttack(sliske, p), false, 'cutscene Mahjarrat remain inert after the trial starts');
@@ -6330,7 +6333,8 @@ test('Desert Treasure II final trial spawns on reachable cache floor beside the 
   const { api, handlers } = mockApi();
   const { TemplatedInstanceArea } = require('../dist/game/model/areas/impl/TemplatedInstanceArea');
   const { RegionManager } = require('../dist/game/collision/RegionManager');
-  const added = [];
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const added = [], combatTargets = [];
   api.core = {
     ...api.core,
     NPC: { create(id, location) {
@@ -6338,6 +6342,7 @@ test('Desert Treasure II final trial spawns on reachable cache floor beside the 
         id, location, setOwner(owner) { this.owner = owner; }, setOwnerOnly() {},
         setArea(area) { this.area = area; }, getArea() { return this.area; }, getLocation() { return this.location; },
         getOwner() { return this.owner; }, isRegistered() { return false; }, isNpc() { return true; }, getAsNpc() { return this; },
+        getCombat() { return { attack: target => combatTargets.push({ npc: this, target }) }; },
       };
     } },
     World: { getAddNPCQueue: () => added, getRemoveNPCQueue: () => [] },
@@ -6363,12 +6368,16 @@ test('Desert Treasure II final trial spawns on reachable cache floor beside the 
     const playerTile = player.location;
     const boss = added.find(npc => npc.__dt2FinalWight === 0);
     assert.ok(boss);
+    assert.deepEqual(combatTargets, [{ npc: boss, target: player }],
+      'the active private wight starts combat so its normal movement can follow the player through smoke');
     const bossTile = boss.getLocation();
     const clippedGuideMarker = area.tile(32, 44, 0);
     assert.ok(area.getTemplateObjects(clippedGuideMarker).some(object => object.getId() === 48862),
       'the scene includes the real cache wall at the guide marker');
     assert.ok((RegionManager.getClipping(clippedGuideMarker.getX(), clippedGuideMarker.getY(), 0, area) & 0x100) !== 0,
       'Quest Helper marker is occupied by a clipped cache wall tile');
+    assert.equal(ObjectDefinition.forId(46622).getSizeX(), 1, 'white smoke occupies its cache-backed single tile');
+    assert.equal(ObjectDefinition.forId(47505).getSizeX(), 1, 'pink smoke occupies its cache-backed single tile');
     assert.equal(RegionManager.getClipping(playerTile.getX(), playerTile.getY(), 0, area) & 0x100, 0,
       'the player starts on a walkable tile');
     assert.equal(RegionManager.getClipping(bossTile.getX(), bossTile.getY(), 0, area) & 0x100, 0,
