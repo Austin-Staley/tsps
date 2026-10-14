@@ -2141,6 +2141,23 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.sendMessage(repair[0] === SIEGE_HALL.damagedPillar ? "You brace and repair the damaged pillar." : "You repair the damaged window.");
   }
 
+  function routeSiegeHallWindowRepair(event) {
+    const player = event?.player;
+    const object = event?.object;
+    const tile = object?.getLocation?.();
+    if (!player || stage(player) !== STAGE.SIEGE || hallDefenceState(player).phase !== "hall" ||
+      !tile || tile.getZ() !== 1 || object.getPrivateArea?.() !== hall.sessions.get(player)) return;
+    const visibleId = event.definition?.id ?? event.objectId;
+    const repair = SIEGE_HALL.repairLocations.get(`${tile.getX()},${tile.getY()}`);
+    const option = event.definition?.getInteractions?.()?.[event.clickType - 1]?.toLowerCase();
+    if (repair?.[0] !== SIEGE_HALL.damagedWindow ||
+      (visibleId !== SIEGE_HALL.damagedWindow && event.objectId !== SIEGE_HALL.damagedWindow) || option !== "repair") return;
+
+    // The north-wall windows are clipped from the outside; cache collision keeps
+    // the interior tile directly south of each window reachable for its action.
+    event.destination = { x: tile.getX(), y: tile.getY() - 1, z: tile.getZ() };
+  }
+
   function healSiegeAranei(event) {
     const player = event?.player;
     const npc = event?.npc ?? event?.target;
@@ -7241,6 +7258,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onItemOnObject(handlePaterdomusItemOnObject, { noted: false });
   api.onObjectInteraction(openHideoutChest);
   api.onObjectInteraction(handleSiegeHallObject);
+  api.onObjectRoute(routeSiegeHallWindowRepair);
   api.onObjectInteraction(inspectWyrdFence);
   api.onObjectInteraction(handleCastleThronePuzzle);
   api.onObjectInteraction(handleCastleCellDoor);

@@ -5736,6 +5736,35 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
   ]);
   assert.equal(replaced.filter(([kind])=>kind==='add').length,9,'the actual hall scenery is spawned inside its private instance');
   assert.ok(replaced.every(([,object])=>object.getPrivateArea()===player.area));
+  const routeWindow = handlers.routes.find(handler => handler.name === 'routeSiegeHallWindowRepair');
+  assert.ok(routeWindow, 'north-wall window clicks have a hall-scoped reachable approach');
+  const approach = { x: 3176, y: 7857, z: 1 };
+  const { RegionManager } = api.core;
+  assert.equal(RegionManager.blocked(new api.core.Location(approach.x, approach.y, approach.z), null), false,
+    'the interior-side window approach is a cache-walkable tile');
+  const reachable = new Set(['3168,7855']), queue = [[3168, 7855]];
+  for (let index = 0; index < queue.length; index++) {
+    const [x, y] = queue[index];
+    for (const [dx, dy] of [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
+      if (nx < 3154 || nx > 3183 || ny < 7823 || ny > 7861 || reachable.has(key) ||
+        !RegionManager.canMove(x, y, nx, ny, 1, 1, 1, null)) continue;
+      reachable.add(key);
+      queue.push([nx, ny]);
+    }
+  }
+  assert.equal(reachable.has(`${approach.x},${approach.y}`), true,
+    'the window approach connects to the cache-walkable hall entrance');
+  const windowLocation = new api.core.Location(3176, 7858, 1);
+  const windowObject = { getLocation: () => windowLocation, getPrivateArea: () => player.area };
+  const windowRoute = { player, object: windowObject, objectId: api.core.ObjectIdentifiers.DAMAGED_WINDOW,
+    definition: { id: api.core.ObjectIdentifiers.DAMAGED_WINDOW, getInteractions: () => ['Repair'] },
+    clickType: 1, sourceLocation: { x: 3168, y: 7855, z: 1 }, destination: null };
+  routeWindow(windowRoute);
+  assert.deepEqual(windowRoute.destination, approach);
+  const outsideRoute = { ...windowRoute, object: { ...windowObject, getPrivateArea: () => null }, destination: null };
+  routeWindow(outsideRoute);
+  assert.equal(outsideRoute.destination, null, 'the route cannot affect public or another player’s hall');
   replaced.length=0;
   const interact = handlers.objects.find((handler) => handler.name === 'handleSiegeHallObject');
   const objectEvent = (id, x, y, option = 'Repair') => {
