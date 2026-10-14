@@ -35,6 +35,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const CASTLE_VENATOR_HEAD_VARBIT = 15523;
   const CASTLE_GIBBOUS_DISPLAY_CASE_VARBIT = 15563;
   const CASTLE_GIBBOUS_PORTAL_VARBIT = 15532;
+  const CASTLE_CHAPEL_PORTAL_VARBIT = 15533;
   const CASTLE_GROUND_FLOOR = 1;
   const CASTLE_OUTER_LIBRARY_PORTAL_VARBIT = 15531;
   const CASTLE_VANESCULA_EMBLEM_VARBIT = 15504;
@@ -51,6 +52,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const CASTLE_OUTER_LIBRARY_LEVER = Object.freeze({ id: 61774, x: 2473, y: 7421, z: 0 });
   const CASTLE_OUTER_LIBRARY_PORTAL = Object.freeze({ id: 61768, x: 2473, y: 7419, z: 0,
     destination: [2361, 7382, 0] });
+  const CASTLE_CHAPEL_LEVER = Object.freeze({ id: 61778, x: 2393, y: 7372, z: 0 });
   const CASTLE_NATIVE_STAGE_ATTRIBUTE = "quest.the_blood_moon_rises.castle-native-stage";
   const CASTLE_STORY_ATTRIBUTE = "quest.the_blood_moon_rises.castle-story";
   const CASTLE_UNLOCKED_PASSAGES_ATTRIBUTE = "quest.the_blood_moon_rises.castle-unlocked-passages";
@@ -399,6 +401,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.FULL_M, x: 2392, y: 7363, z: 0, from: CASTLE_ROOM.CHAPEL_LIBRARY, to: CASTLE_ROOM.BOTTLE_ROOM,
       fromFloor: 1, toFloor: 1, landing: [2387, 7383] },
     { id: CASTLE_DOOR_IDS.CHAPEL_PORTAL_IN, x: 2393, y: 7370, z: 0, from: CASTLE_ROOM.CHAPEL_LIBRARY, to: CASTLE_ROOM.SERVANTS_QUARTERS,
+      requiresStory: "chapelPortalOpened",
       fromFloor: 1, toFloor: 1, action: "Enter", landing: [2441, 7400] },
     { id: CASTLE_DOOR_IDS.CHAPEL_PORTAL_OUT, x: 2440, y: 7400, z: 0, from: CASTLE_ROOM.SERVANTS_QUARTERS, to: CASTLE_ROOM.CHAPEL_LIBRARY,
       fromFloor: 1, toFloor: 1, action: "Enter", landing: [2394, 7370] },
@@ -2739,6 +2742,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.getPacketSender().sendVarbit(CASTLE_OUTER_LIBRARY_PORTAL_VARBIT,
       castleStory(player).parlourPortalUnlocked ? 1 : 0);
     if (stage(player) === STAGE.CASTLE) {
+      syncCastleChapelPortal(player);
       player.getPacketSender().sendVarbit(15464,
         Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) || 70);
       player.getPacketSender().sendVarbit(15543, castleStory(player).gibbous.fireplaceLit ? 1 : 0);
@@ -2762,6 +2766,16 @@ module.exports = function registerTheBloodMoonRises(api) {
     syncCastleSyringeBarrel(player);
   }
 
+  function syncCastleChapelPortal(player) {
+    if (!player || stage(player) !== STAGE.CASTLE) return;
+    player.getPacketSender().sendVarbit(CASTLE_CHAPEL_PORTAL_VARBIT,
+      castleStory(player).chapelPortalOpened ? 1 : 0);
+  }
+
+  function syncCastleChapelPortalOnLogin({ player }) {
+    syncCastleChapelPortal(player);
+  }
+
   function reconcileCastleLobbyFloor(player) {
     if (!player || Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.LOBBY) return;
     const z = player.getLocation?.()?.getZ?.();
@@ -2769,6 +2783,14 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (expectedFloor !== null && Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== expectedFloor) {
       player.setAttribute(CASTLE_FLOOR_ATTRIBUTE, expectedFloor);
     }
+  }
+
+  function syncCastleLobbyFloorOnMapSquareChange({ player }) {
+    if (!player || stage(player) !== STAGE.CASTLE ||
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.LOBBY) return;
+    const floor = Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE));
+    reconcileCastleLobbyFloor(player);
+    if (Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== floor) syncCastleRoom(player);
   }
 
   function repairLegacyCastleLanding(player) {
@@ -4957,6 +4979,8 @@ module.exports = function registerTheBloodMoonRises(api) {
           } else {
             chooseGibbousDoorLetter(player);
           }
+        } else if (transition.requiresStory === "chapelPortalOpened") {
+          player.sendMessage("The chapel lever must be pulled before the portal appears.");
         } else {
           player.sendMessage("The nearby passage remains sealed until you place a Drakan emblem in its receptacle.");
         }
@@ -5354,6 +5378,39 @@ module.exports = function registerTheBloodMoonRises(api) {
       if (!giveInventoryItem(player, ItemIdentifiers.ANCIENT_SYMBOL, "Make room in your inventory before taking the ancient symbol.")) return;
       player.setAttribute(BASIN_PUZZLE_ATTRIBUTE, { ...state, symbol: true });
       player.sendMessage("You search the altar and take an ancient symbol.");
+  }
+
+  function handleCastleChapelLever(event) {
+    const player = event?.player;
+    const location = event?.location;
+    const x = location?.x ?? location?.getX?.();
+    const y = location?.y ?? location?.getY?.();
+    const z = location?.z ?? location?.getZ?.();
+    const ids = [event?.objectId, event?.definition?.id];
+    if (!player || !ids.includes(CASTLE_CHAPEL_LEVER.id) || x !== CASTLE_CHAPEL_LEVER.x ||
+      y !== CASTLE_CHAPEL_LEVER.y || z !== CASTLE_CHAPEL_LEVER.z ||
+      String(event?.option ?? "").toLowerCase() !== "pull") return false;
+    event.handled = true;
+    if (quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.CHAPEL_LIBRARY ||
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== CASTLE_GROUND_FLOOR) {
+      player.sendMessage("The lever does not respond from this side of the castle.");
+      return true;
+    }
+    const basin = player.getAttribute(BASIN_PUZZLE_ATTRIBUTE) ?? { basins: {}, symbol: false };
+    if (!basin.symbol || !hasItem(player, ItemIdentifiers.ANCIENT_SYMBOL)) {
+      player.sendMessage("The lever remains still. The ancient symbol from the four basins is needed first.");
+      return true;
+    }
+    const story = castleStory(player);
+    if (story.chapelPortalOpened) {
+      player.sendMessage("The portal is already open.");
+      return true;
+    }
+    player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, chapelPortalOpened: true });
+    syncCastleChapelPortal(player);
+    player.sendMessage("You pull the lever and a portal appears.");
+    return true;
   }
 
   function handleSolidKeyObjects(event) {
@@ -6185,6 +6242,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectRoute(routeCastleDoorEnter);
   api.onObjectInteraction(handleCastleBasinPuzzle);
   api.onObjectInteraction(handleBasinAltar);
+  api.onObjectInteraction(handleCastleChapelLever);
   api.onObjectInteraction(handleSolidKeyObjects);
   api.onObjectInteraction(handleCastleClocks);
   api.onObjectInteraction(handleGalleryChest);
@@ -6213,6 +6271,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerProcess(processSlepeManor);
   api.onPlayerProcess(processSlepeProgress);
   api.onPlayerProcess(processCastleDialogueTransition);
+  api.onPlayerMapSquareChange(syncCastleLobbyFloorOnMapSquareChange);
   api.onPlayerLogin(handleSiegeLogin);
   api.onPlayerLogin(recoverWyrdEncounterOnLogin);
   api.onPlayerLogin(syncHideoutIvan);
@@ -6223,6 +6282,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogin(resumeHideoutEscape);
   api.onPlayerLogin(syncCastleShrine);
   api.onPlayerLogin(syncCastleRoomOnLogin);
+  api.onPlayerLogin(syncCastleChapelPortalOnLogin);
   api.onPlayerLogin(recoverFinalDrakanLanding);
   api.onPlayerLogin(syncFinalEfaritayOnLogin);
   api.onPlayerLogin(resumeFinalDrakanVictory);

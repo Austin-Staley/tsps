@@ -37,6 +37,7 @@ function mockApi() {
     route: routes,
     walkRoutes: [],
     playerProcess: [],
+    playerMapSquareChange: [],
     playerLogin: [],
     playerLogout: [],
     playerBeforeDeath: [],
@@ -62,6 +63,7 @@ function mockApi() {
     onObjectRoute: (h) => handlers.routes.push(h),
     onWalkRoute: (h) => handlers.walkRoutes.push(h),
     onPlayerProcess: (h) => handlers.playerProcess.push(h),
+    onPlayerMapSquareChange: (h) => handlers.playerMapSquareChange.push(h),
     onPlayerLogin: (h) => handlers.playerLogin.push(h),
     onPlayerLogout: (h) => handlers.playerLogout.push(h),
     onPlayerBeforeDeath: h => handlers.playerBeforeDeath.push(h),
@@ -1076,6 +1078,25 @@ test('Blood Moon reconciles the Castle lobby floor varbit from the saved lobby p
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 2,
     'the upper-plane lobby keeps its first-floor room route');
   assert.equal(varbits.get(15489), 2);
+
+  plane = 0;
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 2);
+  const moved = [];
+  player.moveTo = location => moved.push([location.getX(), location.getY(), location.getZ()]);
+  const mapSquareChange = handlers.playerMapSquareChange.find(handler => handler.name === 'syncCastleLobbyFloorOnMapSquareChange');
+  mapSquareChange({ player });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 1,
+    'the native stair movement is reconciled on the first player process tick');
+  assert.equal(varbits.get(15489), 1);
+
+  const galleryDoor = handlers.objects.find(handler => handler.name === 'handleCastleDoorEnter');
+  const doorEvent = { player, objectId: 61572, definition: { id: 61572, getName: () => 'Door' },
+    location: { x: 2327, y: 7382, z: 0 }, option: 'Enter', handled: false };
+  galleryDoor(doorEvent);
+  assert.equal(doorEvent.handled, true);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 12,
+    'the normal ground-gallery door works immediately after the native climb-down');
+  assert.deepEqual(moved, [[2331, 7407, 0]]);
 });
 
 test('Blood Moon repairs the saved explosive-room stair landing to the recorded reachable side', () => {
@@ -3382,6 +3403,66 @@ test('Blood Moon Castle basin puzzle requires all four correct potions before re
   freeSlots = 1;
   altar({ player, definition: { getName: () => 'Altar' }, location: { x: 2382, y: 7393, z: 0 }, handled: false });
   assert.equal(inventory.contains(I.ANCIENT_SYMBOL), true, 'all four correctly poured potions reveal the symbol');
+});
+
+test('Blood Moon Chapel Library lever opens the Servants Quarters portal after the ancient symbol', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const I = api.core.ItemIdentifiers;
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.stage', 40],
+    ['quest.the_blood_moon_rises.castle-room', 14],
+    ['quest.the_blood_moon_rises.castle-floor', 1],
+    ['quest.the_blood_moon_rises.castle-native-stage', 78],
+    ['quest.the_blood_moon_rises.castle-basin-puzzle', { basins: {}, symbol: false }],
+  ]);
+  const counts = new Map();
+  const varbits = new Map();
+  const moved = [];
+  const messages = [];
+  const inventory = {
+    contains: id => (counts.get(id) ?? 0) > 0,
+    adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
+    deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+  };
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getPacketSender: () => ({ sendVarbit: (id, value) => varbits.set(id, value) }),
+    moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
+    sendMessage: message => messages.push(message),
+  };
+  const lever = handlers.objects.find(handler => handler.name === 'handleCastleChapelLever');
+  const enter = handlers.objects.find(handler => handler.name === 'handleCastleDoorEnter');
+  const login = handlers.playerLogin.find(handler => handler.name === 'syncCastleChapelPortalOnLogin');
+  assert.ok(lever && enter && login);
+  const pull = () => {
+    const event = { player, objectId: 61778, definition: { id: 61778 },
+      location: { x: 2393, y: 7372, z: 0 }, option: 'Pull', handled: false };
+    lever(event);
+    return event;
+  };
+  assert.equal(pull().handled, true);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story')?.chapelPortalOpened, undefined);
+  assert.equal(varbits.get(15533), undefined, 'the lever does not open without the symbol');
+  attributes.set('quest.the_blood_moon_rises.castle-basin-puzzle', { basins: { sw: true, se: true, nw: true, ne: true }, symbol: true });
+  inventory.adds(I.ANCIENT_SYMBOL, 1);
+  assert.equal(pull().handled, true);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-story').chapelPortalOpened, true);
+  assert.equal(varbits.get(15533), 1);
+
+  const portal = { player, objectId: 61773, definition: { id: 61782 },
+    location: { x: 2393, y: 7370, z: 0 }, option: 'Enter', handled: false };
+  enter(portal);
+  assert.equal(portal.handled, true);
+  assert.deepEqual(moved.at(-1), [2441, 7400, 0]);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 30);
+
+  varbits.clear();
+  login({ player });
+  assert.equal(varbits.get(15533), 1, 'the native chapel portal transform is restored after relog');
 });
 
 test('Blood Moon solid key requires the symbol, shield assembly, and southern wall mount', () => {
