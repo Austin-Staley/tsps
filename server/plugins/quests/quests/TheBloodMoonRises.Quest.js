@@ -619,6 +619,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   };
   const WYRD_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-area";
   const WYRD_DEFEATED_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-defeated";
+  const WYRD_CUTSCENE_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-cutscene-active";
   const DRAKAN_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.drakan-area";
   const FIRST_BLOOD_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.first-blood-area";
   const DRAKAN_ENCOUNTER_COMPLETE = "quest.the_blood_moon_rises.drakan-defeated";
@@ -742,7 +743,11 @@ module.exports = function registerTheBloodMoonRises(api) {
       const threshold = hpPercent <= 0.1 ? 10 : hpPercent <= 0.5 ? 50 : hpPercent <= 0.8 ? 80 : 0;
       if (threshold && !encounter.thresholdsSeen.has(threshold)) {
         encounter.thresholdsSeen.add(threshold);
-        if (threshold === 10) encounter.ending = true;
+        if (threshold === 10) {
+          encounter.ending = true;
+          player.setAttribute(WYRD_CUTSCENE_ATTRIBUTE, true);
+          quest.setStage(player, STAGE.WYRDS);
+        }
         startTranscript(api, player, mobile.getId(), PAGE, `fighting-wyrds-upon-reaching-${threshold}-hp`);
         return;
       }
@@ -2224,6 +2229,12 @@ module.exports = function registerTheBloodMoonRises(api) {
   function startWyrdBattle(player) {
     const existing = player.getAttribute(WYRD_AREA_ATTRIBUTE);
     if (existing && existing.isDestroyed?.() !== true) return true;
+    // The cutscene is not resumed from its middle after a relog or failed
+    // instance. Re-entering the fight returns native progress to its 144 step.
+    if (player.getAttribute(WYRD_CUTSCENE_ATTRIBUTE)) {
+      player.setAttribute(WYRD_CUTSCENE_ATTRIBUTE, false);
+      quest.setStage(player, STAGE.WYRDS);
+    }
     const area = new WyrdEncounterArea(player.getUsername?.());
     const boss = api.spawnNpc({ id: NpcIdentifiers.WYRD_8, x: 2976, y: 7456, z: 0,
       wanderRadius: 0, owner: player, ownerOnly: true });
@@ -2258,6 +2269,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!encounter.ending) {
       encounter.ending = true;
       encounter.thresholdsSeen.add(10);
+      encounter.player.setAttribute(WYRD_CUTSCENE_ATTRIBUTE, true);
+      quest.setStage(encounter.player, STAGE.WYRDS);
       startTranscript(api, encounter.player, npc.getId(), PAGE, "fighting-wyrds-upon-reaching-10-hp");
     }
   }
@@ -2328,6 +2341,9 @@ module.exports = function registerTheBloodMoonRises(api) {
   }
 
   function nativeStage(value, player) {
+    if (value === STAGE.WYRDS) return player?.getAttribute(WYRD_CUTSCENE_ATTRIBUTE) ? 146 : 144;
+    if (value === STAGE.WYRD_DEFEATED) return 148;
+    if (value === STAGE.FENCE_FOUND) return 150;
     if (value === STAGE.COMPLETE) return 178;
     if (value === STAGE.STARTED) return player?.getAttribute(HIDEOUT_SHRINE_INSPECTED) ? 8 : 4;
     if (value === STAGE.HIDEOUT) return 12;
@@ -2340,6 +2356,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       const huntStage = Number(player?.getAttribute(HUNT_ATTRIBUTE)?.nativeStage);
       return Number.isInteger(huntStage) && huntStage >= 84 && huntStage <= 100 ? huntStage : 84;
     }
+
     if (value === STAGE.PREPARATIONS) {
       const prep = player?.getAttribute(PREP_ATTRIBUTE) ?? {};
       if (prep.introStarted && !prep.introComplete) return 98;
@@ -2360,9 +2377,6 @@ module.exports = function registerTheBloodMoonRises(api) {
       const saved = Number(player?.getAttribute(THEATRE_NATIVE_STAGE_ATTRIBUTE));
       return Number.isInteger(saved) && saved >= 124 && saved <= 162 ? saved : 124;
     }
-    if (value === STAGE.WYRDS) return 138;
-    if (value === STAGE.WYRD_DEFEATED) return 160;
-    if (value === STAGE.FENCE_FOUND) return 162;
     if (value === STAGE.FINAL) {
       const saved = Number(player?.getAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE));
       if (Number.isInteger(saved) && saved >= 164 && saved <= 176) return saved;
@@ -5171,6 +5185,7 @@ module.exports = function registerTheBloodMoonRises(api) {
         area.leave(player, false);
       }
       player.setAttribute(WYRD_AREA_ATTRIBUTE, null);
+      player.setAttribute(WYRD_CUTSCENE_ATTRIBUTE, false);
       player.setAttribute(WYRD_DEFEATED_ATTRIBUTE, true);
       advance(player, STAGE.WYRD_DEFEATED);
       player.moveTo(new Location(3562, 3322, 0));
@@ -7625,6 +7640,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onNpcHitModify(handleFirstBloodHit);
   api.onNpcHitModify(handleFinalDrakanHit);
   api.persistAttribute(WYRD_DEFEATED_ATTRIBUTE);
+  api.persistAttribute(WYRD_CUTSCENE_ATTRIBUTE);
   api.persistAttribute(DRAKAN_ENCOUNTER_COMPLETE);
   api.persistAttribute(DRAKAN_DEATH_CONFIRMED);
   api.persistAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE);

@@ -13667,6 +13667,10 @@ test('Blood Moon native bitfield mapping restores Slepe refinery phase without c
  attrs.set('quest.the_blood_moon_rises.preparations',{flail:true,stakes:true});quest.setStage(player,60);assert.equal(bits.get(15464),114);
  attrs.set('quest.the_blood_moon_rises.siege-defence',{phase:'hall'});quest.setStage(player,70);assert.equal(bits.get(15464),120);
  bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),120);assert.equal(quest.getStage(player),70);
+ quest.setStage(player,90);assert.equal(bits.get(15464),144,'the Wyrd fight uses native stage 144');
+ attrs.set('quest.the_blood_moon_rises.wyrd-cutscene-active',true);quest.setStage(player,90);assert.equal(bits.get(15464),146,'the 10% knockout cutscene uses native stage 146');
+ quest.setStage(player,95);assert.equal(bits.get(15464),148,'the completed Wyrd cutscene advances to the fence step');
+ quest.setStage(player,96);assert.equal(bits.get(15464),150,'the fence scene advances to the hideout step');
  quest.setStage(player,100);assert.equal(bits.get(15464),164,'the rescued Wyrd chapter begins before Efaritay opens the portal');
  attrs.set('quest.the_blood_moon_rises.final-portal-open',true);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),166,'opening Efaritay’s portal moves the native chapter to 166');
  attrs.set('quest.the_blood_moon_rises.final-native-stage',166);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),166,'the opened portal phase survives native varbit resync');
@@ -13915,6 +13919,7 @@ test('Blood Moon courtyard escape needs the opening vyrewatch kills and the full
   tick++;area.process(ivan);assert.deepEqual(completion,[[player,api.core.NpcIdentifiers.IVAN_STROM_13]]);assert.equal(attrs.get('quest.the_blood_moon_rises.hideout-defense-complete'),true);
   assert.ok(removed.includes(ivan));assert.equal(player.getAttribute('quest.the_blood_moon_rises.hideout-defense-area'),null);
  }finally{api.core.World.getProcessCycle=originalCycle;}
+
 });
 
 test('Blood Moon preparation exit allows gathering leaves before the defence is ready',()=>{
