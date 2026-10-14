@@ -8722,7 +8722,7 @@ test('DT2 prison relog resumes only the saved clear tile at the matching earned 
   const core = {
     ...base.core,
     TemplatedInstanceArea: TestPrisonArea,
-    NPC: { create(id, location) { return { id, location, setOwner() {}, setOwnerOnly() {}, isRegistered: () => true, getId() { return this.id; } }; } },
+    NPC: { create(id, location) { return { id, location, moveTo(value) { this.location = value; }, setOwner() {}, setOwnerOnly() {}, isRegistered: () => true, getId() { return this.id; } }; } },
     World: { ...base.core.World, getProcessCycle: () => cycle++, getAddNPCQueue: () => [], getRemoveNPCQueue: () => [] },
   };
   base.persistAttribute = key => persisted.push(key);

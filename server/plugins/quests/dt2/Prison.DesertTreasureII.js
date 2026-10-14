@@ -258,11 +258,9 @@ module.exports = function registerSucellusPrison(api) {
     // Reuse that owner-visible NPC rather than layering a second identical one
     // when the prison module receives its start/resume event.
     const target = areaLocation(area, x, y, 2);
-    const coord = (location, getter, field) => Number(location?.[getter]?.() ?? location?.[field]);
-    const existing = area.entities.find((npc) => npc.getId?.() === N.ASSASSIN_7
-      && coord(npc.getLocation?.(), "getX", "x") === coord(target, "getX", "x")
-      && coord(npc.getLocation?.(), "getY", "y") === coord(target, "getY", "y"));
+    const existing = area.entities.find(npc => npc.getId?.() === N.ASSASSIN_7);
     if (existing) {
+      existing.moveTo(target);
       player.setAttribute("desert-treasure-ii:sucellus-prison-assassin", existing);
       return existing;
     }

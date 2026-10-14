@@ -697,3 +697,15 @@ test('recovering equipment reuses and moves the existing Assassin to the next di
   assert.equal(createdNpcs.filter(value => value.id === 12348).length, 1, 'no duplicate queued or registered speaker');
   assert.deepEqual(assassin.location, area.tile(2903 - 2872, 6383 - 6336, 2));
 });
+
+
+test('prison resume reuses the parent quest speaker even when his earlier spawn is at another stage location', () => {
+  const { handlers, player, area, api, createdNpcs } = setup();
+  const parentSpeaker = api.core.NPC.create(12348, area.tile(48, 39, 2));
+  area.add(parentSpeaker);
+  player.setAttribute('desert-treasure-ii:sucellus-prison-progress', 50);
+  handlers.custom['dt2:sucellus-prison-resume']({ player, area });
+  assert.equal(createdNpcs.length, 1, 'the parent and prison modules share one NPC');
+  assert.equal(player.getAttribute('desert-treasure-ii:sucellus-prison-assassin'), parentSpeaker);
+  assert.deepEqual(parentSpeaker.location, area.tile(2903 - 2872, 6383 - 6336, 2));
+});
