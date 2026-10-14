@@ -8124,7 +8124,7 @@ test('Desert Treasure II final trial spawns on reachable cache floor beside the 
   const { RegionManager } = require('../dist/game/collision/RegionManager');
   const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
   const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
-  const added = [], combatTargets = [];
+  const added = [], combatTargets = [], sentVarbits = [];
   api.core = {
     ...api.core,
     NPC: { create(id, location) {
@@ -8143,8 +8143,10 @@ test('Desert Treasure II final trial spawns on reachable cache floor beside the 
   const player = {
     getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
     getIndex: () => 1, isPlayer: () => true, getAsPlayer() { return this; },
-    getArea() { return this.area ?? null; }, setArea(area) { this.area = area; },
-    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    getArea() { return this.area ?? null; }, getPrivateArea() { return this.area ?? null; }, setArea(area) { this.area = area; },
+    getPacketSender: () => new Proxy({ sendVarbit(id, value) { sentVarbits.push([id, value]); } }, {
+      get(target, key) { return target[key] ?? (() => {}); },
+    }),
     moveTo(location) { this.location = location; },
     sendMessage() {},
   };
@@ -8183,6 +8185,52 @@ test('Desert Treasure II final trial spawns on reachable cache floor beside the 
       'player and wight have separate adjacent starting tiles');
     assert.ok(RegionManager.canMove(playerTile.getX(), playerTile.getY(), bossTile.getX(), bossTile.getY(), 0, 1, 1, area),
       'the cache collision allows the player to route to the wight');
+
+    handlers.playerLogin.at(-1)({ player });
+    assert.equal(sentVarbits.filter(([id]) => id === 14862).at(-1)?.[1], 102,
+      'the active Assassin attempt is reflected in native quest progress');
+    area.leave(player, false); // A normal teleport/retreat leaves the private area.
+    assert.equal(player.getAttribute('desert-treasure-ii:final-cutscene-started'), true,
+      'retreat preserves the earned reveal');
+    assert.equal(player.getAttribute('desert-treasure-ii:final-wights-started'), false,
+      'retreat clears only the unfinished trial');
+    assert.equal(player.getAttribute('desert-treasure-ii:final-wight-index'), 0);
+    assert.equal(quest.getStage(player), 11, 'retreat does not change quest stage');
+    assert.equal(player.getPrivateArea(), null, 'the retreat has actually left the private room');
+    assert.equal(sentVarbits.filter(([id]) => id === 14862).at(-1)?.[1], 100,
+      'the reset sends the preserved vault milestone back to the client');
+    area.postLeave(player, false); // Death/logout paths can deliver the callback twice.
+    assert.equal(player.getAttribute('desert-treasure-ii:final-cutscene-started'), true,
+      'a repeated leave callback cannot erase the earned reveal');
+    assert.equal(player.getAttribute('desert-treasure-ii:final-wights-started'), false);
+    assert.equal(sentVarbits.filter(([id]) => id === 14862).at(-1)?.[1], 100,
+      'native progress stays at the vault milestone after the repeated callback');
+
+    // A legacy save can still contain the old started flag after a public teleport.
+    // Login must repair that stale state rather than materializing an attacking NPC.
+    player.setAttribute('desert-treasure-ii:final-room', null);
+    player.setAttribute('desert-treasure-ii:final-wights-started', true);
+    player.setAttribute('desert-treasure-ii:final-wight-index', 3);
+    const countBeforeLogin = added.length;
+    handlers.playerLogin.at(-1)({ player });
+    assert.equal(added.length, countBeforeLogin, 'a public login never auto-spawns the unfinished wight trial');
+    assert.equal(player.getAttribute('desert-treasure-ii:final-wights-started'), false);
+    assert.equal(player.getAttribute('desert-treasure-ii:final-wight-index'), 0);
+    assert.equal(sentVarbits.filter(([id]) => id === 14862).at(-1)?.[1], 100,
+      'native progress returns to the earned vault milestone after the retry reset');
+
+    smith({ player, npcId: api.core.NpcIdentifiers.ASGARNIA_SMITH });
+    const retryArea = player.getPrivateArea();
+    assert.ok(retryArea && retryArea !== area, 'the normal Smith interaction starts a fresh retry');
+    assert.ok(added.slice(countBeforeLogin).some(npc => npc.__dt2FinalWight === 0),
+      'the retry begins with the Assassin only after the player talks to Smith');
+    player.setAttribute('desert-treasure-ii:final-wights-complete', true);
+    player.setAttribute('desert-treasure-ii:final-wight-index', 4);
+    retryArea.postLeave(player, false);
+    assert.equal(player.getAttribute('desert-treasure-ii:final-wights-complete'), true,
+      'leaving a completed trial preserves its earned completion');
+    assert.equal(player.getAttribute('desert-treasure-ii:final-wight-index'), 4,
+      'completed-trial aftermath state is not reset by leaving');
   } finally {
     area?.destroy();
   }
@@ -8215,6 +8263,25 @@ test('Desert Treasure II logout from the final trial returns to the vault and cl
   assert.equal(attrs.get('desert-treasure-ii:final-wight-index'), 0);
   assert.equal(quest.getStage(p), 11, 'logging out does not change earned quest stage');
   assert.deepEqual([p.location.getX(), p.location.getY(), p.location.getZ()], [3510, 2971, 0]);
+
+  const postLeaveArea = { leave() {}, postLeave() {}, isDestroyed: () => false, destroy() { this.destroyed = true; } };
+  const postLeaveAttrs = new Map([
+    ['desert-treasure-ii:final-room', postLeaveArea],
+    ['desert-treasure-ii:final-cutscene-started', true],
+    ['desert-treasure-ii:final-wights-started', false],
+    ['desert-treasure-ii:final-wight-index', 0],
+  ]);
+  const postLeavePlayer = {
+    getAttribute: key => postLeaveAttrs.get(key), setAttribute: (key, value) => postLeaveAttrs.set(key, value),
+    getPrivateArea: () => postLeaveArea, moveTo(location) { this.location = location; },
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+  };
+  quest.setStage(postLeavePlayer, 11);
+  handlers.playerLogout.at(-1)({ player: postLeavePlayer });
+  assert.equal(postLeaveAttrs.get('desert-treasure-ii:final-cutscene-started'), true,
+    'logout after leave cleanup preserves the already-earned reveal');
+  assert.equal(postLeaveAttrs.get('desert-treasure-ii:final-wights-started'), false);
+  assert.equal(postLeaveAttrs.get('desert-treasure-ii:final-wight-index'), 0);
 });
 
 test('Desert Treasure II handoff creates the four owned wight stages and grants rewards after reported kills', () => {

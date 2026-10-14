@@ -768,6 +768,15 @@ module.exports = function registerDesertTreasureII(api) {
         processFinalWight(actor.getAsPlayer?.() ?? actor, this);
       }
     }
+    postLeave(actor, logout) {
+      const player = actor?.isPlayer?.() ? (actor.getAsPlayer?.() ?? actor) : null;
+      if (player === this.owner && player.getAttribute(FINAL_ROOM) === this
+        && stage(player) === S.FINALE && player.getAttribute(FINAL_WIGHTS_STARTED) === true
+        && !player.getAttribute(FINAL_WIGHTS_COMPLETE)) {
+        resetUnfinishedFinalWights(player);
+      }
+      super.postLeave(actor, logout);
+    }
     destroy() {
       if (this.isDestroyed()) return;
       for (const entity of [...this.entities]) {
@@ -1762,6 +1771,15 @@ module.exports = function registerDesertTreasureII(api) {
     // The cutscene puts the player beside Sliske, clear of the wall-clipped guide marker.
     p.moveTo(area.tile(...FINAL_PLAYER_SPAWN, 0));
     return area;
+  }
+
+  function resetUnfinishedFinalWights(p) {
+    const revealComplete = p.getAttribute(FINAL_WIGHTS_STARTED) === true
+      || p.getAttribute("desert-treasure-ii:final-cutscene-started") === true;
+    p.setAttribute("desert-treasure-ii:final-cutscene-started", revealComplete);
+    p.setAttribute(FINAL_WIGHT_INDEX, 0);
+    p.setAttribute(FINAL_WIGHTS_STARTED, false);
+    syncNativeProgress(p);
   }
 
   function spawnFinalActor(p, id, sourceX, sourceY) {
@@ -3551,6 +3569,15 @@ module.exports = function registerDesertTreasureII(api) {
   }
 
   function handleLogin({ player: p }) {
+    if (stage(p) === S.FINALE && p.getAttribute(FINAL_WIGHTS_STARTED) === true
+      && !p.getAttribute(FINAL_WIGHTS_COMPLETE)) {
+      const activeArea = p.getPrivateArea?.();
+      if (!(activeArea instanceof FinalVaultArea) || activeArea !== p.getAttribute(FINAL_ROOM)) {
+        // The private room is session-scoped. A saved unfinished flag at a
+        // public location must not recreate the fight or attack the player on login.
+        resetUnfinishedFinalWights(p);
+      }
+    }
     syncNativeProgress(p);
     p.getPacketSender().sendVarbit(15116, Number(p.getAttribute(TOTEM_MASK)) || (p.getAttribute(TOTEMS_CHARGED) ? 15 : 0));
     if (stage(p) === S.VARDORVIS && p.getAttribute(STRANGLEWOOD_CITY_ENTERED)
@@ -3574,14 +3601,6 @@ module.exports = function registerDesertTreasureII(api) {
       }
       setLassar(p, state);
       ensurePrescott(p);
-    }
-    if (stage(p) === S.FINALE && p.getAttribute("desert-treasure-ii:final-cutscene-started")
-      && p.getAttribute(FINAL_WIGHTS_STARTED) === true
-      && !p.getAttribute(FINAL_WIGHTS_COMPLETE)) {
-      enterFinalRoom(p);
-      // The official sequence resets if the player leaves the chamber.
-      p.setAttribute(FINAL_WIGHT_INDEX, 0);
-      startFinalWights(p);
     }
     if (stage(p) === S.SUCELLUS) {
       const escaped = p.getAttribute(SUCELLUS_CELL_ESCAPED) === true;
@@ -4091,7 +4110,8 @@ module.exports = function registerDesertTreasureII(api) {
     if (stage(p) === S.FINALE && !p.getAttribute(FINAL_WIGHTS_COMPLETE)) {
       // Once the reveal's final dialogue action started the trial, deaths can
       // reset the fight without forcing the completed story scene to replay.
-      const revealComplete = p.getAttribute(FINAL_WIGHTS_STARTED) === true;
+      const revealComplete = p.getAttribute(FINAL_WIGHTS_STARTED) === true
+        || p.getAttribute("desert-treasure-ii:final-cutscene-started") === true;
       const area = p.getAttribute(FINAL_ROOM);
       if (area instanceof FinalVaultArea) {
         area.leave?.(p, false);
@@ -4148,7 +4168,8 @@ module.exports = function registerDesertTreasureII(api) {
       // Logging out leaves the chamber, so a later login must not auto-start
       // the trial before the player has had a chance to prepare again. Keep a
       // completed reveal so returning to Smith restarts only the wight trial.
-      const revealComplete = p.getAttribute(FINAL_WIGHTS_STARTED) === true;
+      const revealComplete = p.getAttribute(FINAL_WIGHTS_STARTED) === true
+        || p.getAttribute("desert-treasure-ii:final-cutscene-started") === true;
       p.setAttribute("desert-treasure-ii:final-cutscene-started", revealComplete);
       p.setAttribute(FINAL_WIGHTS_STARTED, false);
       p.setAttribute(FINAL_WIGHT_INDEX, 0);
