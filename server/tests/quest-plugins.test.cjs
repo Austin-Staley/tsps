@@ -16969,9 +16969,10 @@ test('Entry Verzik queued overkill deaths advance phases and only the live 600 H
   };
   const player={
     getEquipment:()=>({get:()=>({getId:()=>api.core.ItemIdentifiers.DAWNBRINGER})}),
-    getCombat:()=>({reset(){}}),setHitpoints(){},
+    getCombat:()=>({reset(){},getHitQueue:()=>({clear(){}})}),setHitpoints(){},
     movementBlocked:true,getMovementQueue(){return {setBlockMovement:value=>{this.movementBlocked=value;}}},
     attributes:new Map(),getAttribute(key){return this.attributes.get(key);},setAttribute(key,value){this.attributes.set(key,value);},
+
     getSkillManager:()=>({getMaxLevel:()=>99,setCurrentLevel(){}}),
     getPacketSender:()=>({sendVarbit(){}}),sendMessage(){},
   };
@@ -17236,7 +17237,7 @@ test('Entry Theatre completes a boss whose death hook did not arrive before the 
   const player = {
     getHitpoints: () => hp,
     setHitpoints: value => { hp = value; },
-    getCombat: () => ({ reset() {} }),
+    getCombat: () => ({ reset() {}, getHitQueue: () => ({ clear() {} }) }),
     getSkillManager: () => ({ getMaxLevel: () => 99, setCurrentLevel() {} }),
     getPacketSender: () => ({ sendVarbit: (...args) => varbits.push(args) }),
     sendMessage: message => messages.push(message),
@@ -17278,6 +17279,7 @@ test('Blood Moon ToB entry waits at the Nylocas barrier and exposes four quest e
   const emitted = [];
   api.emitCustomEvent = (name, event) => emitted.push([name,event]);
   const inventory = [];
+  let clearedHits = 0;
   const playerInventory = {
     contains: id => inventory.includes(id),
     getFreeSlots: () => 28 - inventory.length,
@@ -17287,7 +17289,7 @@ test('Blood Moon ToB entry waits at the Nylocas barrier and exposes four quest e
     moveTo() {}, getLocation: () => new api.core.Location(3295,4257,0),
     getInventory: () => playerInventory,
     getPacketSender: () => ({ sendVarbit() { return this; } }),
-    sendMessage() {}, getCombat: () => ({ reset() {} }),
+    sendMessage() {}, getCombat: () => ({ reset() {}, getHitQueue: () => ({ clear() { clearedHits++; } }) }),
     getSkillManager: () => ({ getMaxLevel: () => 99, setCurrentLevel() {} }),
     setHitpoints() {}, getHitpoints: () => 99,
   };
@@ -17323,6 +17325,7 @@ test('Blood Moon ToB entry waits at the Nylocas barrier and exposes four quest e
   raid.bmrIndex = entry._test.BMR_ENCOUNTERS.length - 1;
   entry._test.roomComplete(raid);
   assert.equal(emitted.filter(([name]) => name === 'tob:bmr-completed').length, 1);
+  assert.equal(clearedHits, 1, 'room completion clears delayed damage from expired Nylocas before restoring the player');
 });
 
 test('Entry and Blood Moon Vasilias keep one HP pool across their visible forms', () => {
@@ -17435,8 +17438,9 @@ test('Maiden victory opens its cache walkway inside only that raid instance', ()
   const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
   entry(api);
   const opened = [];
+  let clearedHits = 0;
   const player = {
-    getCombat: () => ({ reset() {} }),
+    getCombat: () => ({ reset() {}, getHitQueue: () => ({ clear() { clearedHits++; } }) }),
     setHitpoints() {},
     getSkillManager: () => ({ getMaxLevel: () => 99, setCurrentLevel() {} }),
     getPacketSender: () => ({ sendVarbit() {} }),
@@ -17445,6 +17449,7 @@ test('Maiden victory opens its cache walkway inside only that raid instance', ()
   const raid = { player, room: 0, npcs: new Set(), objects: new Set(), area: { setClip: (position, mask) => opened.push([position.getX(), position.getY(), mask]) } };
   entry._test.roomComplete(raid);
   assert.equal(raid.complete, true);
+  assert.equal(clearedHits, 1, 'queued hits cannot kill the player after the room clears');
   assert.equal(opened.length, 12);
   assert.ok(opened.every(([x, y, mask]) => x >= 3176 && x <= 3177 && y >= 4431 && y <= 4436 && mask === 0));
 });
@@ -17610,7 +17615,7 @@ test('Theatre supply chests use reachable floor tiles regardless of the killing 
   api.core = { ...api.core, ObjectManager: { register: object => placed.push(object.getLocation()), deregister() {} } };
   const entry = require('../plugins/minigames/tob/Entry.TheatreOfBlood');
   entry(api);
-  const player = { getCombat: () => ({ reset() {} }), setHitpoints() {},
+  const player = { getCombat: () => ({ reset() {}, getHitQueue: () => ({ clear() {} }) }), setHitpoints() {},
     getSkillManager: () => ({ getMaxLevel: () => 99, setCurrentLevel() {} }),
     getPacketSender: () => ({ sendVarbit() {} }), sendMessage() {},
     getLocation: () => new api.core.Location(3292,4447,0) };

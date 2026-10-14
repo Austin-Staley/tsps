@@ -207,7 +207,9 @@ function startRoom(raid) {
 function roomComplete(raid) {
   if(raid.room===5&&(raid.phase!==2||alive(raid.boss)))return;
   if(raid.complete)return;
-  raid.complete=true; raid.started=false; raid.player.getCombat().reset(); restore(raid.player);
+  raid.complete=true; raid.started=false;
+  const combat=raid.player.getCombat();combat.reset();combat.getHitQueue().clear();
+  restore(raid.player);
   for(const npc of [...raid.npcs])if(npc!==raid.stranger)remove(raid,npc);
   for(const o of [...raid.objects])removeObject(raid,o);
   raid.effects=[]; raid.pools=[];
