@@ -1086,7 +1086,7 @@ test('Blood Moon reconciles the Castle lobby floor varbit from the saved lobby p
   const mapSquareChange = handlers.playerMapSquareChange.find(handler => handler.name === 'syncCastleLobbyFloorOnMapSquareChange');
   mapSquareChange({ player });
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 1,
-    'the native stair movement is reconciled on the first player process tick');
+    'the native stair movement is reconciled by the map-square change event');
   assert.equal(varbits.get(15489), 1);
 
   const galleryDoor = handlers.objects.find(handler => handler.name === 'handleCastleDoorEnter');
@@ -2482,7 +2482,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     [2342, 7416, 0], [2371, 7370, 0], [2314, 7420, 0], [2324, 7403, 0], [2361, 7394, 0], [2309, 7420, 0],
     [2327, 7381, 0], [2331, 7407, 0], [2327, 7390, 0], [2310, 7388, 0], [2358, 7381, 0],
     [2310, 7396, 0], [2342, 7372, 1], [2328, 7360, 1], [2305, 7392, 1], [2357, 7366, 1],
-    [2434, 7364, 0], [2305, 7386, 1], [2452, 7364, 0], [2437, 7361, 0], [2458, 7362, 0],
+    [2434, 7373, 0], [2305, 7386, 1], [2452, 7364, 0], [2437, 7361, 0], [2458, 7362, 0],
     [2445, 7364, 0], [2358, 7371, 0], [2363, 7368, 0], [2364, 7362, 0], [2348, 7397, 0],
     [2332, 7388, 0], [2345, 7395, 0], [2491, 7377, 0], [2471, 7421, 0], [2554, 7364, 0],
     [2506, 7409, 0], [2587, 7380, 0], [2583, 7370, 0], [2451, 7371, 0], [2441, 7361, 0],
@@ -2500,6 +2500,7 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
       (x === 2452 && y === 7404 && z === 0) || (x === 2468 && y === 7408 && z === 0) ||
       (x === 2328 && y === 7361 && z === 0) || (x === 2314 && y === 7371 && z === 1) ||
       (x === 2482 && y === 7403 && z === 0) ||
+      (x === 2434 && y === 7373 && z === 0) ||
       (x === 2469 && y === 7418 && z === 0) || (x === 2361 && y === 7394 && z === 0) ||
       (x === 2325 && y === 7397 && z === 0) || (x === 2358 && y === 7381 && z === 0) ||
       (x === 2314 && y === 7361 && z === 0) ||
@@ -2532,6 +2533,10 @@ test('Blood Moon Castle Enter doors cross to the opposite side of their actual w
     destX: 2564, destY: 7369, moveNear: true, maxWaypoints: 80, privateArea: null });
   assert.equal(prisonReturnRoute.success, true,
     'the captured prison exit landing connects to the basement stairs');
+  const ancientShieldCrateRoute = larderRoute.findRoute({ level: 0, srcX: 2435, srcY: 7373, srcSize: 1,
+    destX: 2439, destY: 7375, moveNear: false, maxWaypoints: 80, privateArea: null });
+  assert.equal(ancientShieldCrateRoute.success, true,
+    'the captured upper-hall door landing connects to the ancient shield crate approach');
   const enter = handlers.objects.find((handler) => handler.name === 'handleCastleDoorEnter');
   const route = handlers.routes.find((handler) => handler.name === 'routeCastleDoorEnter');
   attributes.set('quest.the_blood_moon_rises.castle-room', 29);
@@ -3489,8 +3494,13 @@ test('Blood Moon solid key requires the symbol, shield assembly, and southern wa
   quest.setStage(player, 40);
   const I = api.core.ItemIdentifiers;
   const object = handlers.objects.find((handler) => handler.name === 'handleSolidKeyObjects');
+  const otherCrate = { player, definition: { getName: () => 'Crate' },
+    location: { x: 2450, y: 7362, z: 0 }, handled: false };
+  object(otherCrate);
+  assert.equal(otherCrate.handled, false, 'other crates in the hall do not substitute for the captured window crate');
+  assert.equal(inventory.contains(I.ANCIENT_SHIELD), false);
   object({ player, definition: { getName: () => 'Crate' }, location: { x: 2439, y: 7378, z: 0 }, handled: false });
-  assert.equal(inventory.contains(I.ANCIENT_SHIELD), true, 'the room crate supplies the ancient shield after the symbol is found');
+  assert.equal(inventory.contains(I.ANCIENT_SHIELD), true, 'the captured crate supplies the ancient shield after the symbol is found');
   handlers.itemOnItem.find((handler) => handler.name === 'handleAncientShieldAssembly')({
     player, usedItemId: I.ANCIENT_SYMBOL, usedWithItemId: I.ANCIENT_SHIELD, handled: false,
   });
