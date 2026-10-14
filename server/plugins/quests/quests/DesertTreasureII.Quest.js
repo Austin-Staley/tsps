@@ -1778,6 +1778,14 @@ module.exports = function registerDesertTreasureII(api) {
     // Match the walkable-tile test used by the existing boss hazard plugins.
     return (regionManager.getClipping(x, y, z, area) & 0x1280100) === 0;
   }
+  function finalWightHasProjectileLine(area, source, destination) {
+    const regionManager = api.core.RegionManager;
+    if (typeof regionManager?.canProjectileAttackBounds !== "function") return true;
+    const sourceLocation = source?.getLocation?.();
+    if (!sourceLocation || !destination) return false;
+    const size = source.getSize?.() ?? 1;
+    return regionManager.canProjectileAttackBounds(sourceLocation, destination, size, size, 1, 1, area);
+  }
   function assassinPinkSmokeTile(player, boss, area, whiteTile) {
     const p = finalWightLocation(player), b = finalWightLocation(boss);
     if (!p || !b) return null;
@@ -1872,12 +1880,50 @@ module.exports = function registerDesertTreasureII(api) {
     if (boss.__dt2KetlaBatch) return;
     const b = finalWightLocation(boss);
     if (!b) return;
-    // The Wiki documents four or five clones, so vary the final diagonal one
-    // while keeping the four cardinal cover positions available.
-    const points = [[b.x - 3, b.y], [b.x + 3, b.y], [b.x, b.y - 3], [b.x, b.y + 3]];
-    if (Math.random() < 0.5) points.push([b.x + 3, b.y + 3]);
-    const clones = points.map(([x, y]) => {
-      const clone = api.core.NPC.create(N.KETLA_THE_UNWORTHY_2, finalWightTile(area, x, y));
+    // The Wiki documents four or five clones. Keep those positions where the
+    // copied vault floor permits movement and a projectile line from Ketla;
+    // shift a blocked point to the nearest clear tile in the same cover lane.
+    // Exact offsets have not been confirmed against an OSRS capture.
+    const preferred = [[b.x - 3, b.y], [b.x + 3, b.y], [b.x, b.y - 3], [b.x, b.y + 3]];
+    if (Math.random() < 0.5) preferred.push([b.x + 3, b.y + 3]);
+    const points = [], occupied = new Set();
+    const addCandidate = (x, y) => {
+      const key = `${x},${y}`;
+      if (occupied.has(key)) return false;
+      const tile = finalWightTile(area, x, y);
+      if (!finalWightTileIsClear(area, tile) || !finalWightHasProjectileLine(area, boss, tile)) return false;
+      occupied.add(key);
+      points.push(tile);
+      return true;
+    };
+    const nearby = (x, y, radius) => {
+      const candidates = [];
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dy = -radius; dy <= radius; dy++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+          candidates.push([x + dx, y + dy]);
+        }
+      }
+      return candidates;
+    };
+    for (const [x, y] of preferred) {
+      let placed = false;
+      for (let radius = 0; radius <= 2 && !placed; radius++) {
+        for (const [candidateX, candidateY] of nearby(x, y, radius)) {
+          if (addCandidate(candidateX, candidateY)) { placed = true; break; }
+        }
+      }
+    }
+    // Preserve the documented four/five actors if one preferred lane is
+    // obstructed; use the nearest remaining clear tiles around the boss.
+    for (let radius = 1; points.length < preferred.length && radius <= 5; radius++) {
+      for (const [x, y] of nearby(b.x, b.y, radius)) {
+        if (points.length >= preferred.length) break;
+        addCandidate(x, y);
+      }
+    }
+    const clones = points.map((tile) => {
+      const clone = api.core.NPC.create(N.KETLA_THE_UNWORTHY_2, tile);
       if (!clone) return null;
       clone.setOwner?.(player);
       clone.setOwnerOnly?.(true);

@@ -6879,6 +6879,30 @@ test('Desert Treasure II last medallion route traps the player, requires solving
   }
 });
 
+test('Desert Treasure II vault cache has blocked Ketla clone lanes and nearby clear projectile cover', () => {
+  const { TemplatedInstanceArea } = require('../dist/game/model/areas/impl/TemplatedInstanceArea');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const area = new TemplatedInstanceArea(7, 8);
+  for (let x = 0; x < 7; x++) {
+    for (let y = 0; y < 8; y++) {
+      area.setChunk(0, x, y, { sourceChunkX: 408 + x, sourceChunkY: 800 + y, sourcePlane: 0, rotation: 0 });
+    }
+  }
+  const ketla = area.tile(32, 43, 0);
+  const blockedTile = area.tile(32, 46, 0);
+  const clearButOccluded = area.tile(35, 46, 0);
+  const replacement = area.tile(35, 44, 0);
+  assert.notEqual(RegionManager.getClipping(blockedTile.getX(), blockedTile.getY(), 0, area) & 0x1280100, 0,
+    'the original southern cardinal clone tile is blocked by the copied vault floor');
+  assert.equal(RegionManager.getClipping(clearButOccluded.getX(), clearButOccluded.getY(), 0, area) & 0x1280100, 0,
+    'the original diagonal clone tile is walkable');
+  assert.equal(RegionManager.canProjectileAttackBounds(ketla, clearButOccluded, 1, 1, 1, 1, area), false,
+    'the original diagonal clone tile is hidden from Ketla by the copied vault geometry');
+  assert.equal(RegionManager.getClipping(replacement.getX(), replacement.getY(), 0, area) & 0x1280100, 0);
+  assert.equal(RegionManager.canProjectileAttackBounds(ketla, replacement, 1, 1, 1, 1, area), true,
+    'the nearby replacement tile is clear and has a projectile line');
+});
+
 test('Desert Treasure II final wights expose their distinct smoke, clone, vial and portal mechanics', () => {
   const { api: base } = mockApi();
   const interactions = [], deaths = [], playerDeaths = [], hitHooks = [], hitRollHooks = [], actions = new Map(), queue = [], removed = [], registeredObjects = [], clipChecks = [];
@@ -6905,7 +6929,10 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     TemplatedInstanceArea: TestInstance, GameObject: TestObject,
     RegionManager: { getClipping(x, y, z, area) {
       clipChecks.push({ x, y, z, area });
-      return x === 8227 && y === 1614 ? 0x100 : 0;
+      return (x === 8227 && y === 1614) || (x === 8227 && y === 1646) || (x === 8224 && y === 1646) ? 0x20100 : 0;
+    }, canProjectileAttackBounds(_source, destination) {
+      const x = destination.getX?.() ?? destination.x, y = destination.getY?.() ?? destination.y;
+      return !(x === 8227 && y === 1646) && !(x === 8224 && y === 1646);
     } },
     ObjectManager: { register(object) { registeredObjects.push(object); }, deregister(object) { object.deregistered = true; } },
     NPC: { create(id, location) {
@@ -7045,10 +7072,15 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
 
     current = boss(wightIds[1]);
     pendingHits.length = 0;
-    p.location = area.tile(32, 50, 0);
+    p.location = area.tile(32, 36, 0);
     for (let tick = 0; tick < 18; tick++) area.process(p);
     const clones = queue.filter(npc => npc.id === 12330 && npc.owner === p);
     assert.ok(clones.length === 4 || clones.length === 5, 'Ketla summons four or five one-hit shadow clones');
+    assert.ok(clones.every(clone => !((clone.location.x === 8227 && clone.location.y === 1646)
+      || (clone.location.x === 8224 && clone.location.y === 1646))), 'clones avoid floor-blocked or projectile-blocked cache cover points');
+    assert.ok(clones.every(clone => (core.RegionManager.getClipping(clone.location.x, clone.location.y, 0, area) & 0x1280100) === 0
+      && core.RegionManager.canProjectileAttackBounds(current.getLocation(), clone.location, 1, 1, 1, 1, area)),
+    'each placed clone occupies clear floor with a projectile path from Ketla');
     for (let tick = 0; tick < 4; tick++) area.process(p);
     assert.equal(pendingHits.length, 0, 'the clone between Ketla and the player absorbs the charged shot');
     assert.ok(removed.includes(clones.find(clone => clone.hp === 0)));
