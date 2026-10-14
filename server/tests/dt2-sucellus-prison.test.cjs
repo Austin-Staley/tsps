@@ -267,7 +267,7 @@ test("Jhallan pursues through prison corridors, leaves the safe rooms clear, and
   assert.equal(createdNpcs.filter((value) => value.id === 12353).length, 0,
     "Jhallan does not enter the room where the Emerald key was found");
 
-  moveToSource(2920, 6445); // the corridor just beyond its west door
+  moveToSource(2912, 6423); // corridor along the west wall, north of the chest room
   handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 101 });
   let pursuer = player.getAttribute("desert-treasure-ii:sucellus-prison-jhallan-pursuer");
   assert.equal(pursuer.id, 12353, "the attacking cache variant is used, not the conversation-only 12355");
@@ -303,6 +303,39 @@ test("Jhallan pursues through prison corridors, leaves the safe rooms clear, and
   assert.equal(player.getAttribute("desert-treasure-ii:sucellus-prison-jhallan-pursuer"), null,
     "the corridor pursuit ends before the firecracker survival encounter");
   assert.equal(area.entities.includes(pursuer), false);
+});
+
+test("Jhallan only loses sight of the player inside the four enclosed prison rooms", () => {
+  const rooms = [
+    [2902, 6445], // Emerald chest room
+    [2968, 6417], // seven-bed room
+    [2890, 6375], // western cells / Diamond chest room
+    [2972, 6367], // refugee camp
+  ];
+  const corridors = [
+    [2912, 6423], // west corridor north of the Emerald room
+    [2978, 6427], // corridor east of the seven-bed room
+    [2920, 6375], // western passage outside the Diamond room
+    [2972, 6358], // south passage outside the refugee camp
+  ];
+
+  for (const [x, y] of rooms) {
+    const { handlers, player, area, createdNpcs, moveToSource } = setup();
+    player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 30);
+    moveToSource(x, y);
+    handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 100 });
+    assert.equal(createdNpcs.filter((npc) => npc.id === 12353).length, 0,
+      `Jhallan should teleport away inside the room at ${x},${y}`);
+  }
+
+  for (const [x, y] of corridors) {
+    const { handlers, player, area, createdNpcs, moveToSource } = setup();
+    player.setAttribute("desert-treasure-ii:sucellus-prison-progress", 30);
+    moveToSource(x, y);
+    handlers.custom["dt2:sucellus-prison-process"]({ player, area, cycle: 100 });
+    assert.equal(createdNpcs.filter((npc) => npc.id === 12353).length, 1,
+      `Jhallan should pursue through the corridor at ${x},${y}`);
+  }
 });
 
 test("Jhallan's shadow attack teleports and freezes briefly, then a marked tile can be dodged", () => {

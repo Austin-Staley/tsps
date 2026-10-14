@@ -26,10 +26,10 @@ module.exports = function registerSucellusPrison(api) {
   const RUBY_CLUE_CHESTS = [[2959, 6414], [2959, 6419], [2962, 6414], [2962, 6419], [2965, 6414], [2965, 6419], [2968, 6419]];
   const RUBY_NAMES = ["Vedius", "Grazon", "Phalina", "Marcus", "Nithrak", "Baelys", "Atreus"];
   const SAFE_ROOMS = [
-    [2889, 2916, 6398, 6457], // the western room of chests where Jhallan first loses sight of you
-    [2965, 2974, 6413, 6420], // the seven-bed room
-    [2889, 2898, 6370, 6382], // the western cells
-    [2964, 2983, 6358, 6377], // the refugee camp
+    [2900, 2912, 6439, 6450], // enclosed north-west room containing the Emerald chests
+    [2957, 2971, 6413, 6421], // the seven-bed room, west of its eastern gate
+    [2887, 2898, 6372, 6382], // the western cells around the Diamond chest
+    [2962, 2985, 6366, 6383], // enclosed refugee camp between its north and south gates
   ];
   const LIBRARY_SHELVES = [[2931, 6430], [2931, 6432], [2932, 6430]];
   const LIBRARY_BOOKS = ["Innocence", "Longing", "Harmonious"];
