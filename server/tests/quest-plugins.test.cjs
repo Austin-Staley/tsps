@@ -4113,7 +4113,26 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
     [api.core.ItemIdentifiers.CRANK_WHEEL, 2603, 7847, 0],
     [api.core.ItemIdentifiers.TOOTH_HALF_OF_KEY_6, 2600, 7845, 0],
     [api.core.ItemIdentifiers.LOOP_HALF_OF_KEY_6, 2588, 7816, 0],
-  ], 'the captured crank and both key halves spawn at their real pickup tiles');
+    [api.core.ItemIdentifiers.BUCKET, 2596, 7833, 0],
+  ], 'the captured crank, key halves and pub bucket spawn at their real pickup tiles');
+  inventory.adds(api.core.ItemIdentifiers.BUCKET, 1);
+  handlers.playerProcess.find((handler) => handler.name === 'syncHuntGroundItems')({ player });
+  assert.equal(spawned.filter(({ item }) => item.id === api.core.ItemIdentifiers.BUCKET).length, 1,
+    'the bucket is not duplicated after its ground pickup');
+  const useItemOnObject = handlers.itemOnObject.find((handler) => handler.name === 'handleBloodHuntItemOnObject');
+  const fillBucket = { player, itemId: api.core.ItemIdentifiers.BUCKET, objectId: 60892,
+    location: { x: 2591, y: 7825, z: 0 }, handled: false };
+  useItemOnObject(fillBucket);
+  assert.equal(inventory.contains(api.core.ItemIdentifiers.BUCKET), false,
+    'the canonical Well tile consumes the empty bucket');
+  assert.equal(inventory.contains(api.core.ItemIdentifiers.BUCKET_OF_WATER), true,
+    'using the bucket on the captured Well produces a bucket of water');
+  const washBarrel = { player, itemId: api.core.ItemIdentifiers.BUCKET_OF_WATER, objectId: 61113,
+    location: { x: 2592, y: 7833, z: 0 }, handled: false };
+  useItemOnObject(washBarrel);
+  assert.equal(inventory.contains(api.core.ItemIdentifiers.BUCKET_OF_WATER), false);
+  assert.equal(inventory.contains(api.core.ItemIdentifiers.SHADUM_KEY), true,
+    'using the bucket of water on the northernmost pub barrel reveals its key');
   inventory.adds(api.core.ItemIdentifiers.TOOTH_HALF_OF_KEY_6, 1);
   handlers.playerProcess.find((handler) => handler.name === 'syncHuntGroundItems')({ player });
   assert.equal(spawned.filter(({ item }) => item.id === api.core.ItemIdentifiers.TOOTH_HALF_OF_KEY_6).length, 1,

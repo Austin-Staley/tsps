@@ -971,6 +971,22 @@ test('a transformed Blood Moon door opens its visible child instead of treating 
   }
 });
 
+test('the Blood Hunt Myrmel pub door swings from its cache Open-only definition', () => {
+  const O = require('../dist/util/ObjectIdentifiers').ObjectIdentifiers;
+  const h = buildHarness({ cacheObjects: new Map([[O.MYRMEL_DOOR, {
+    name: 'Myrmel door', actions: ['Open'], models: [[60962]],
+  }]]) });
+  try {
+    assert.ok(h.handlers.get('Myrmel door')?.Open);
+    assert.deepEqual(h.click(O.MYRMEL_DOOR, 2599, 7826, 3, 'Open', 'Myrmel door'), [
+      ['register', O.MYRMEL_DOOR, 2599, 7825, 0],
+      ['deregister', O.MYRMEL_DOOR, 2599, 7826, 3],
+    ], 'the unlocked pub doorway clears its recorded south approach');
+  } finally {
+    h.restore();
+  }
+});
+
 
 test('the catacomb outer jail gate uses its actionless open cache variant and auto-closes', () => {
  const h=buildHarness();try{

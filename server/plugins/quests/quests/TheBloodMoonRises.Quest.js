@@ -6069,6 +6069,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       { id: HUNT_ITEMS.crank, tile: new Location(2603, 7847, 0), claimed: hunt.crankStarted },
       { id: HUNT_ITEMS.toothHalf, tile: new Location(2600, 7845, 0), claimed: hasItem(player, HUNT_ITEMS.myrmelKey) },
       { id: HUNT_ITEMS.loopHalf, tile: new Location(2588, 7816, 0), claimed: hasItem(player, HUNT_ITEMS.myrmelKey) },
+      { id: HUNT_ITEMS.bucket, tile: new Location(2596, 7833, 0), claimed: hasItem(player, HUNT_ITEMS.bucketWater) },
       { id: HUNT_ITEMS.oldCog, tile: new Location(2582, 7817, 0), claimed: hunt.drawbridgeRepaired || hasItem(player, HUNT_ITEMS.oldCog), enabled: hunt.chapelPuzzleSolved === true },
     ];
     for (const { id, tile, claimed, enabled = true } of drops) {
@@ -6256,14 +6257,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       else if (!inventory.contains(HUNT_ITEMS.boltCutters)) inventory.adds(HUNT_ITEMS.boltCutters, 1);
       return;
     }
-    if (x === 2596 && y === 7833) {
-      event.handled = true;
-      if (!inventory.contains(HUNT_ITEMS.myrmelKey)) { player.sendMessage("The pub door's lock needs the Myrmel key."); return; }
-      if (!inventory.contains(HUNT_ITEMS.bucket) && !inventory.contains(HUNT_ITEMS.bucketWater)) inventory.adds(HUNT_ITEMS.bucket, 1);
-      player.sendMessage("You take a bucket from the house.");
-      return;
-    }
-    if (x === 2592 && y === 7825) {
+    if (x === 2591 && y === 7825) {
       if (!event.itemId && !event.usedItemId) return;
       const itemId = event.itemId ?? event.usedItemId;
       if (itemId !== HUNT_ITEMS.bucket) return;
@@ -6336,7 +6330,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (z !== 0) return;
     const itemId = event.itemId;
     const inventory = player.getInventory();
-    if (x === 2592 && y === 7825 && itemId === HUNT_ITEMS.bucket) {
+    if (x === 2591 && y === 7825 && itemId === HUNT_ITEMS.bucket) {
       handleBloodHuntObjects({ ...event, player, itemId });
     } else if (x === 2592 && y === 7833 && itemId === HUNT_ITEMS.bucketWater) {
       handleBloodHuntObjects({ ...event, player, itemId });

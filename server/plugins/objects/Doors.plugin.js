@@ -51,6 +51,14 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     O.DOOR_831,
     // The Vitur food-shop door (61838) also has no cache Close partner.
     O.VITUR_DOOR_4,
+    // Blood Hunt doors are cache Open-only locs; the recording shows the selected loc id
+    // retained while its panel swings into the adjoining tile.
+    O.JOVKAI_DOOR,
+    O.MYRMEL_DOOR,
+    O.MYRMEL_DOOR_3,
+    O.SHADUM_DOOR_3,
+    O.VITUR_DOOR, O.VITUR_DOOR_2,
+    61854,
     // The two Ardougne Wall Door loc variants swing open by rotating the same cache loc.
     O.ARDOUGNE_WALL_DOOR, O.ARDOUGNE_WALL_DOOR_2,
     // Ghorrock Prison's western gate has no separate open loc in the cache.
