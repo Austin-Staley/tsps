@@ -36,6 +36,26 @@ test('dragon hunter crossbow variants resolve to the dragon crossbow ranged prof
   }
 });
 
+test('Blisterwood stakes resolve as stackable self-ammunition with their captured range and projectile', () => {
+  const { WeaponProfiles } = require('../dist/game/content/combat/WeaponProfile');
+  const { WeaponInterfaces } = require('../dist/game/content/combat/WeaponInterfaces');
+  const { FightType } = require('../dist/game/content/combat/FightType');
+  const items = Array.from({ length: 14 }, () => ({ getId: () => -1 }));
+  items[3] = { getId: () => Items.BLISTERWOOD_STAKE };
+  const player = {
+    getEquipment: () => ({ getItems: () => items }),
+    getWeapon: () => WeaponInterfaces.DART,
+    getFightType: () => FightType.DART_LONGRANGE,
+  };
+  assert.equal(RangedWeapon.getFor(player), RangedWeapon.BLISTERWOOD_STAKE);
+  assert.equal(Ammunition.getFor(player), Ammunition.BLISTERWOOD_STAKE);
+  assert.equal(RangedWeapon.getSelfAmmo(Items.BLISTERWOOD_STAKE), Ammunition.BLISTERWOOD_STAKE);
+  assert.equal(Ammunition.BLISTERWOOD_STAKE.getStrength(), 14);
+  assert.equal(Ammunition.BLISTERWOOD_STAKE.getProjectileId(), 3987);
+  assert.equal(WeaponProfiles.attackDistance(player, 6), 8, 'longrange extends the stake to 8 tiles');
+  assert.equal(WeaponProfiles.get(player).npcAttackAnimation, 7617);
+});
+
 test('an enchanted dragon bolt has its gem effect: ruby (e) is Blood Forfeit', () => {
   assert.equal(Ammunition.effectOf(Ammunition.ENCHANTED_RUBY_DRAGON_BOLT), Ammunition.ENCHANTED_RUBY_BOLT);
   assert.equal(Ammunition.effectOf(Ammunition.ENCHANTED_ONYX_DRAGON_BOLT), Ammunition.ENCHANTED_ONYX_BOLT);

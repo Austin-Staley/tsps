@@ -250,6 +250,9 @@ export class Ammunition {
     public static readonly BLACK_DART = new Ammunition(ItemIdentifiers.BLACK_DART, new Graphic(237, 0, GraphicHeight.HIGH), 231, 6)
     public static readonly AMETHYST_DART = new Ammunition(ItemIdentifiers.AMETHYST_DART, new Graphic(1123, 0, GraphicHeight.HIGH), 226, 28)
     public static readonly DRAGON_DART = new Ammunition(11230, new Graphic(1123, 0, GraphicHeight.HIGH), 226, 24)
+    // RSProx capture of The Blood Moon Rises records the stake's cache launch and
+    // travel graphics (3989/3987). The stake is its own stackable ammunition.
+    public static readonly BLISTERWOOD_STAKE = new Ammunition(ItemIdentifiers.BLISTERWOOD_STAKE, new Graphic(3989, 0, GraphicHeight.HIGH), 3987, 14)
 
     public static readonly BRONZE_KNIFE = new Ammunition(864, new Graphic(219, 0, GraphicHeight.HIGH), 212, 3)
     public static readonly BRONZE_KNIFE_P1 = new Ammunition(870, new Graphic(219, 0, GraphicHeight.HIGH), 212, 3)
@@ -530,6 +533,7 @@ export class RangedWeapon {
     public static readonly ADAMANT_DART = new RangedWeapon([810], [Ammunition.ADAMANT_DART], RangedWeaponType.DART)
     public static readonly RUNE_DART = new RangedWeapon([811], [Ammunition.RUNE_DART], RangedWeaponType.DART)
     public static readonly DRAGON_DART = new RangedWeapon([11230], [(Ammunition.DRAGON_DART)], RangedWeaponType.DART)
+    public static readonly BLISTERWOOD_STAKE = new RangedWeapon([ItemIdentifiers.BLISTERWOOD_STAKE], [Ammunition.BLISTERWOOD_STAKE], RangedWeaponType.DART)
 
 
     public static readonly BRONZE_KNIFE = new RangedWeapon([864, ItemIdentifiers.BRONZE_KNIFE_P_, ItemIdentifiers.BRONZE_KNIFE_P_PLUS_, ItemIdentifiers.BRONZE_KNIFE_P_PLUS_PLUS_], [Ammunition.BRONZE_KNIFE], RangedWeaponType.KNIFE)
