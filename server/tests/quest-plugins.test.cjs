@@ -2254,6 +2254,14 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
   assert.equal(inventory.contains(ids.HALLOWED_FLAIL), true, 'the anvil consumes the sickle/marks/flail and makes a hallowed flail');
   interact('Crate', 3177, 7843);
   use(ids.BLISTERWOOD_LOGS, ids.KNIFE);
+  attributes.set('quest.the_blood_moon_rises.preparations', {
+    introComplete: true,
+    flail: true,
+    stakes: true,
+  });
+  quest.setStage(player, 60);
+  assert.equal(varbits.get(15464), 114,
+    'finishing the intro does not mask the captured flail-and-stakes preparation stage');
   const action = handlers.custom.get('npc-dialogue:action').at(-1);
   action({ player, stepId: 'Sut83Q' });
   assert.equal(quest.getStage(player), 70, 'the siege starts after the player crafts both required defence items');

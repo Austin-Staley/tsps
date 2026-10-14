@@ -2289,11 +2289,11 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (value === STAGE.PREPARATIONS) {
       const prep = player?.getAttribute(PREP_ATTRIBUTE) ?? {};
       if (prep.introStarted && !prep.introComplete) return 98;
-      if (prep.introComplete) return 100;
       if (prep.flail && prep.stakes) return 114;
       if (prep.flail) return 112;
       if (prep.stewFed) return 110;
-      return player?.getInventory?.().contains(PREP.stew) ? 104 : 102;
+      if (player?.getInventory?.().contains(PREP.stew)) return 104;
+      return prep.introComplete ? 100 : 102;
     }
     if (value === STAGE.SIEGE) {
       const phase = player?.getAttribute(SIEGE_DEFENCE_ATTRIBUTE)?.phase;
@@ -4678,13 +4678,6 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
     if (event.stepId === "P8i6Tl" && stage(player) === STAGE.PREPARATIONS) {
       player.moveTo(new Location(3168, 7830, 1));
-    }
-    if (event.stepId === "0I1l4O" && stage(player) === STAGE.BLOOD_HUNT) {
-      const hunt = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
-      player.setAttribute(HUNT_ATTRIBUTE, { ...hunt, nativeStage: 98, firstBloodFleeDialogueComplete: true });
-      player.getPacketSender()?.sendVarbit?.(15464, 98);
-      // This is the captured woodland scene's return to the Efaritay route.
-      player.moveTo(new Location(2987, 7699, 0));
     }
     if (event.stepId === "ikSyAR" && stage(player) === STAGE.CASTLE) {
       player.moveTo(new Location(CASTLE_VAMPYRIUM_ARRIVAL.x, CASTLE_VAMPYRIUM_ARRIVAL.y,
