@@ -2650,7 +2650,9 @@ module.exports = function registerTheBloodMoonRises(api) {
       x >= 2565 && x <= 2630 && y >= 7790 && y <= 7880;
     const drakanArea = player.getAttribute(DRAKAN_AREA_ATTRIBUTE);
     const inFinalEncounter = currentStage === STAGE.FINAL && drakanArea != null && player.getArea?.() === drakanArea;
-    request.inside = Boolean(inCastle || inBloodHunt || inFinalEncounter);
+    const inFinalStaging = currentStage === STAGE.FINAL && player.getAttribute(FINAL_PORTAL_USED_ATTRIBUTE) === true &&
+      z === 0 && x >= 2500 && x <= 2516 && y >= 7378 && y <= 7390;
+    request.inside = Boolean(inCastle || inBloodHunt || inFinalStaging || inFinalEncounter);
   }
   function isAtSinsMedallionHideout(event) {
     const location = event?.location ?? event?.npc?.getLocation?.();
@@ -6325,6 +6327,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.persistAttribute(ATTRIBUTE);
   api.onCustomEvent("npc-dialogue:hook", onStartHook);
   api.onCustomEvent("potions:area", handleVampyriumPotionArea);
+  api.onCustomEvent("food:area", handleVampyriumPotionArea);
   api.onWalkRoute(handleFinalDrakanDodgeRoute);
   api.onCustomEvent("npc-dialogue:action", onTranscriptAction);
   api.onCustomEvent("quest:stage-changed", syncHideoutIvan);

@@ -13,6 +13,8 @@ module.exports = function registerSucellusPrison(api) {
   const CLEARED_CREVICE_ID = 49109;
   const BLOCKAGE_VARBIT = 15178;
   const SLIDER_INSPECTED = "desert-treasure-ii:sucellus-prison-slider-inspected";
+  const RATION_CRATE_ID = 49141; // dt2_ghorrock_ration_crate_op
+  const RATION_LIMIT = 12;
   const GEAR_RETURNED = "desert-treasure-ii:sucellus-prison-gear-returned";
   const FIREWORKS = "desert-treasure-ii:sucellus-prison-fireworks";
   const DEFENCE_START = "desert-treasure-ii:sucellus-prison-defence-start";
@@ -36,6 +38,7 @@ module.exports = function registerSucellusPrison(api) {
     [2956, 2964, 6424, 6432], // small room containing the blocked crevice
     [2965, 2970, 6423, 6436], // chamber west of its gate at 2971,6428
     [2927, 2936, 6427, 6438], // library
+    [2914, 2919, 6425, 6434], // enclosed records office containing a ration crate
   ];
   const LIBRARY_SHELVES = [[2931, 6430], [2931, 6432], [2932, 6430]];
   const LIBRARY_BOOKS = ["Innocence", "Longing", "Harmonious"];
@@ -59,6 +62,7 @@ module.exports = function registerSucellusPrison(api) {
   };
   const activePrompts = new WeakMap();
   const defences = new WeakMap();
+  const rationCrates = new WeakMap();
   const CLUES_READ = "desert-treasure-ii:sucellus-prison-clues-read";
 
   api.persistAttribute?.(PROGRESS);
@@ -401,6 +405,22 @@ module.exports = function registerSucellusPrison(api) {
     const option = String(event.option ?? "").toLowerCase();
     const onTile = (key) => isTile(tile, TILES[key]);
 
+    if (id === RATION_CRATE_ID && option === "search" && progress >= 22 && progress < 50 && tile?.[2] === 2) {
+      event.handled = true;
+      const inventory = player.getInventory();
+      if (inventory.getAmount(I.RATIONS) >= RATION_LIMIT) return player.sendMessage("You cannot carry more than twelve rations.");
+      const key = tile.join(",");
+      const crates = rationCrates.get(player) ?? new Map();
+      const now = api.core.World.getProcessCycle();
+      if ((crates.get(key) ?? -1) > now) return player.sendMessage("The crate is empty for now.");
+      if (inventory.getFreeSlots?.() === 0 || !inventory.adds(I.RATIONS, 1)) return player.sendMessage("You need space for the rations.");
+      // shortcut: Wiki confirms replenishing crates but not their cadence; calibrate against a capture.
+      crates.set(key, now + 100);
+      rationCrates.set(player, crates);
+      player.sendMessage("You take some rations from the crate.");
+      return true;
+    }
+
     // Most prison gates are ordinary doors. The base server does not provide a
     // generic Open handler for this cache object, so remove only this exact
     // private-instance door and let the cache handle its collision elsewhere.
@@ -738,6 +758,12 @@ module.exports = function registerSucellusPrison(api) {
   api.onCustomEvent("dt2:sucellus-prison-start", handleStart);
   api.onCustomEvent("dt2:sucellus-prison-resume", handleResume);
   api.onCustomEvent("dt2:sucellus-prison-process", handleProcess);
+  function allowPrisonFood(request) {
+    if (request?.area !== "ghorrock-prison") return;
+    const player = request.player;
+    request.inside = Boolean(player && atArea(player, player.getAttribute(AREA)) && state(player) >= 22 && state(player) < 50);
+  }
+  api.onCustomEvent("food:area", allowPrisonFood);
   api.onPlayerBeforeDeath(handlePrisonBeforeDeath);
   api.onNpcInteraction("Assassin", { "Talk-to": handlePrisonAssassinInteraction });
   function talkJhallan(event) {

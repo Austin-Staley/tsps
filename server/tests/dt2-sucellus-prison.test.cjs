@@ -71,7 +71,7 @@ function setup() {
       Skill: { HITPOINTS: 3 },
       ItemIdentifiers: { PRISONERS_LETTER: 28412, KNIFE_5: 28413, CHISEL_5: 28414, LOCKPICK_4: 28415,
         SAPPHIRE_KEY_3: 28416, EMERALD_KEY_3: 28417, RUBY_KEY_3: 28418, DIAMOND_KEY: 28419, WARNING_LETTER: 28429,
-        REQUISITION_NOTE: 28423, GRID_NOTE: 28424, CODE_CONVERTER: 28425, MAGIC_LANTERN: 28426, STRANGE_SLIDER: 28427, LIBRARY_NOTE: 28428 },
+        REQUISITION_NOTE: 28423, GRID_NOTE: 28424, CODE_CONVERTER: 28425, MAGIC_LANTERN: 28426, STRANGE_SLIDER: 28427, LIBRARY_NOTE: 28428, RATIONS: 28422 },
       NpcIdentifiers: { ASSASSIN_7: 12348, ASSASSIN_8: 12349, JHALLAN_3: 12353, JHALLAN_4: 12354, JHALLAN_5: 12355 },
       ObjectDefinition: { forPlayer: (id) => ({ id }) },
       NPC: { create(id, location) { const value = npc(id, location); createdNpcs.push(value); return value; } },
@@ -170,6 +170,7 @@ test("prison lifecycle hooks use PluginManager's valid single-colon custom event
     "dt2:sucellus-prison-process",
     "dt2:sucellus-prison-resume",
     "dt2:sucellus-prison-start",
+    "food:area",
     "ladders:climb",
     "npc-dialogue:action",
     "npc-dialogue:line",
@@ -319,6 +320,7 @@ test("Jhallan loses sight of the player inside enclosed prison rooms, including 
     [2959, 6428], // blocked-crevice room
     [2968, 6428], // room beyond the crevice
     [2931, 6430], // library
+    [2918, 6427], // records office and its ration crate
   ];
   const corridors = [
     [2912, 6423], // west corridor north of the Emerald room
@@ -652,4 +654,31 @@ test("Emerald and Diamond clues gate their real cache chests", () => {
   assert.ok(assassin, "earning the Diamond key returns the Assassin immediately without a relog");
   const expected = instanceLocation(2920, 6375, 2);
   assert.deepEqual([assassin.getLocation().getX(), assassin.getLocation().getY()], [expected.x, expected.y]);
+});
+
+test('ration crates replenish for their owner, respect the twelve-item limit and stay prison-scoped', () => {
+  const { handlers, player, inventory, instanceLocation, messages, setCycle } = setup();
+  player.setAttribute('desert-treasure-ii:sucellus-prison-progress', 40);
+  const event = { player, definition: { id: 49141, name: 'Crate' }, option: 'Search', location: instanceLocation(2918, 6427, 2), handled: false };
+  handlers.object(event);
+  assert.equal(inventory.getAmount(28422), 1);
+  handlers.object(event);
+  assert.equal(inventory.getAmount(28422), 1, 'a crate cannot be emptied repeatedly in one tick');
+  setCycle(200);
+  handlers.object(event);
+  assert.equal(inventory.getAmount(28422), 2, 'the Wiki replenishing crate becomes usable again');
+  inventory.contents.set(28422, 12);
+  setCycle(300);
+  handlers.object(event);
+  assert.equal(inventory.getAmount(28422), 12);
+  assert.match(messages.at(-1), /twelve/);
+  const area = { player, area: 'ghorrock-prison', inside: false };
+  handlers.custom['food:area'](area);
+  assert.equal(area.inside, true);
+  player.setAttribute('desert-treasure-ii:sucellus-prison-progress', 50);
+  area.inside = false;
+  handlers.custom['food:area'](area);
+  assert.equal(area.inside, false, 'ration eating ends when the equipment chest is recovered');
+  handlers.object({ ...event, handled: false });
+  assert.equal(inventory.getAmount(28422), 12, 'the equipment stage cannot obtain new prison-only rations');
 });

@@ -927,6 +927,16 @@ test('Blood Moon unique supplies are restricted to Vampyrium scenes', () => {
   area = {};
   assert.equal(isInside(), false, 'another area does not satisfy the owned arena check');
 
+  point = { x: 2507, y: 7383, z: 0 };
+  assert.equal(isInside(), false, 'the final staging Castle requires the earned portal');
+  attributes.set('quest.the_blood_moon_rises.final-portal-used', true);
+  assert.equal(isInside(), true, 'earned final staging permits preparing before the rooftop fight');
+  const foodRequest = { player, area: 'vampyrium', inside: false };
+  handlers.custom.get('food:area').at(-1)(foodRequest);
+  assert.equal(foodRequest.inside, true, 'food and potions share the same physical scene restrictions');
+  point = { x: 3500, y: 3200, z: 0 };
+  assert.equal(isInside(), false, 'an earned portal does not permit mainland supplies');
+
   const unrelated = { player, area: 'chambers-of-xeric', inside: false };
   checkArea(unrelated);
   assert.equal(unrelated.inside, false, 'the BMR hook leaves other area-limited potions alone');
@@ -17626,7 +17636,7 @@ test('Duke prison recovery retains earned items, kit metadata, overflow and fail
     items: Array.from({ length: capacity }, (_, slot) => items[slot] ?? new Item(-1, 0)),
     getItems() { return this.items; }, setItems(items) { this.items = items; }, refreshItems() {},
   });
-  const bag = container(3, [new Item(I.SAPPHIRE_KEY_2), new Item(I.PRISONERS_LETTER)]);
+  const bag = container(3, [new Item(I.SAPPHIRE_KEY_2), new Item(I.PRISONERS_LETTER), new Item(I.RATIONS)]);
   const worn = container(14), bank = container(2);
   const saved = { inventory: [[I.SHARK, 1, null], [I.DEATH_RUNE, 250, null]],
     equipment: Array.from({ length: 14 }, (_, slot) => slot === 3 ? [I.ABYSSAL_WHIP, 1, { charge: 37 }] : [-1, 0, null]) };
@@ -17647,7 +17657,7 @@ test('Duke prison recovery retains earned items, kit metadata, overflow and fail
   assert.equal(request.restored, true);
   assert.equal(bag.items[0].getId(), I.SAPPHIRE_KEY_2);
   assert.equal(bag.items[1].getId(), I.PRISONERS_LETTER);
-  assert.equal(bag.items[2].getId(), I.SHARK);
+  assert.equal(bag.items[2].getId(), I.SHARK, 'successful retrieval removes prison rations before restoring supplies');
   assert.equal(bank.items[1].getId(), I.DEATH_RUNE);
   assert.equal(bank.items[1].getAmount(), 250);
   assert.deepEqual(worn.items[3].getMeta(), { charge: 37 });

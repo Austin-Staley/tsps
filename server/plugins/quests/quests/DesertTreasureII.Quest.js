@@ -7003,14 +7003,26 @@ module.exports = function registerDesertTreasureII(api) {
     gear.inventory = gear.inventory.map(item => cellItems.has(item[0]) ? [-1, 0, null] : item);
     for (const item of kept) p.getInventory().adds(item.getId(), item.getAmount());
   }
+  function allowScarFood(request) {
+    if (request?.area !== "the-scar" || !request.player) return;
+    const area = request.player.getArea?.();
+    request.inside = [ScarArea, ScarMazeOneArea, ScarMazeTwoArea, ScarMazeThreeArea]
+      .some(Scar => area instanceof Scar && !area.isDestroyed());
+  }
   function returnSucellusPrisonStash(request) {
     const { player } = request;
     if (stage(player) !== S.SUCELLUS) return;
     const gear = player.getAttribute(SUCELLUS_PRISON_GEAR);
-    if (!gear) { request.restored = true; return; }
+    if (!gear) {
+      const inventory = player.getInventory();
+      inventory.setItems(inventory.getItems().map(item => item.getId() === I.RATIONS ? new Item(-1, 0) : item));
+      inventory.refreshItems();
+      request.restored = true;
+      return;
+    }
     if (!Array.isArray(gear.inventory) || !Array.isArray(gear.equipment)) return;
     const inventory = player.getInventory(), equipment = player.getEquipment();
-    const bag = inventory.getItems().map(item => item.clone());
+    const bag = inventory.getItems().map(item => item.getId() === I.RATIONS ? new Item(-1, 0) : item.clone());
     const worn = equipment.getItems().map(item => item.clone());
     const overflow = [];
     const place = (items, item, stackable) => {
@@ -7847,6 +7859,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onNpcDialogueCondition(resolveGolemSearchCondition);
   api.onNpcDialogueCondition(resolveSucellusCellCondition);
+  api.onCustomEvent("food:area", allowScarFood);
   api.onCustomEvent("dt2:sucellus-prison-return-stash", returnSucellusPrisonStash);
   api.onCustomEvent("dt2:sucellus-prison-complete", completeSucellusPrison);
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
