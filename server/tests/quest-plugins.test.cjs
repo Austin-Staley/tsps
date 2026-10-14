@@ -6316,6 +6316,7 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     playerDeaths.at(-1)({ player: p });
     assert.equal(attrs.get('desert-treasure-ii:final-wight-index'), 0, 'dying restarts the four-wight trial');
     assert.equal(attrs.get('desert-treasure-ii:final-wights-started'), false);
+    assert.equal(attrs.get('desert-treasure-ii:final-cutscene-started'), false, 'retry replays the reveal instead of directly respawning an unsupplied wight');
     assert.equal(attrs.get('desert-treasure-ii:final-room'), null, 'the failed private room is discarded');
     assert.equal(finalArea.destroyed, true);
     assert.ok(removed.includes(lastBoss), 'the active Persten is removed with its private room');

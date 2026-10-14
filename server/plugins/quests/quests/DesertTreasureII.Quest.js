@@ -3885,6 +3885,7 @@ module.exports = function registerDesertTreasureII(api) {
       }
       const owned = spawned.get(p);
       if (owned) owned.finalWight = null;
+      p.setAttribute("desert-treasure-ii:final-cutscene-started", false);
       p.setAttribute(FINAL_WIGHT_INDEX, 0);
       p.setAttribute(FINAL_WIGHTS_STARTED, false);
       p.sendMessage("You are returned to the Ancient Vault. Sliske's wight trial will restart when you enter again.");
