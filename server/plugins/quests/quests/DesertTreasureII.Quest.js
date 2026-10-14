@@ -4355,7 +4355,10 @@ module.exports = function registerDesertTreasureII(api) {
       && ((hereX >= 2624 && hereX <= 2688 && hereY >= 6320 && hereY <= 6448)
         || (hereX >= 2336 && hereX <= 2432 && hereY >= 6320 && hereY <= 6448));
     const whispererArea = p.getAttribute(WHISPERER_AREA);
-    if (atWhispererCathedral) enterWhispererScene(p);
+    // Keep the residential streets public while solving Lassar. The encounter
+    // boundary also covers Ketla's workshop, so entering it during the opening
+    // blackout would hide her and the ordinary city NPCs from the player.
+    if (atWhispererCathedral && lassarState.cathedralTentacles) enterWhispererScene(p);
     else if (whispererArea instanceof WhispererArea && p.getPrivateArea?.() === whispererArea) leaveWhispererScene(p);
     // The cache ladder uses a native ClimbLinks transition, so its action does
     // not pass through object-interaction hooks. Record the lower-floor visit
@@ -6945,8 +6948,13 @@ module.exports = function registerDesertTreasureII(api) {
   function ensureLassarKetla(p) {
     let owned = spawned.get(p);
     if (!owned) spawned.set(p, owned = {});
-    if (owned.lassarKetla?.isRegistered?.()) return owned.lassarKetla;
-    owned.lassarKetla = api.spawnNpc({ id: N.KETLA, x: 2648, y: 6442, z: 0, wanderRadius: 0, owner: p, ownerOnly: true });
+    if (!owned.lassarKetla?.isRegistered?.()) {
+      owned.lassarKetla = api.spawnNpc({ id: N.KETLA, x: 2648, y: 6442, z: 0, wanderRadius: 0, owner: p, ownerOnly: true });
+    }
+    const area = p.getAttribute(WHISPERER_AREA);
+    if (area instanceof WhispererArea && !area.isDestroyed() && owned.lassarKetla.getArea?.() !== area) {
+      area.enter(owned.lassarKetla);
+    }
     return owned.lassarKetla;
   }
   function ensureLassarOddFigure(p) {

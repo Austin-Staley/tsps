@@ -7992,6 +7992,7 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     playerProcesses[0]({ player });
     assert.equal(player.location.getX(), 2648, 'the first cathedral approach reaches Ketla before all teleporters are active');
     assert.equal(attrs.get('desert-treasure-ii:lassar').cameTo, true);
+    assert.equal(player.getPrivateArea(), null, 'the introductory blackout keeps Ketla and the city NPCs visible in the public streets');
     const pickup = (itemId, x, y) => groundPickupHooks[0]({ player, groundItemId: itemId, location: { x, y, z: 0 } });
     playerProcesses[0]({ player });
     assert.equal(groundSpawns.at(-1)[1].getId(), core.ItemIdentifiers.SHADOW_BLOCKER_SCHEMATIC,
@@ -8022,6 +8023,7 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     playerProcesses[0]({ player });
     assert.ok(spawnedNpcs.some((npc) => npc.id === core.NpcIdentifiers.KETLA && npc.x === 2648 && npc.y === 6442
       && npc.owner === player && npc.ownerOnly), 'Ketla is present at her canonical Western Residential District tile after the scene');
+    assert.equal(player.getPrivateArea(), null, 'returning to the cathedral during the puzzles does not enter the boss scene');
     counts.set(core.ItemIdentifiers.RING_OF_VISIBILITY, 1);
     interactions.find((entry) => entry.name === 'Ketla').options['Talk-to']({ player, npcId: core.NpcIdentifiers.KETLA });
     assert.equal(transcripts.at(-1), 'the-whisperer-talking-to-ketla-with-the-ring-of-visibility');
@@ -8603,6 +8605,12 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   const oddFigure = preFightArea.getNpcs().find((npc) => npc.getId?.() === core.NpcIdentifiers.ODD_FIGURE);
   assert.ok(oddFigure, 'the quest Odd Figure is spawned inside the owner scene before Disturb');
   assert.equal(oddFigure, bankOddFigure, 'the existing public-registered trigger is rehomed into the private scene on cathedral entry');
+  attrs.set('desert-treasure-ii:lassar', { ...attrs.get('desert-treasure-ii:lassar'), cameTo: true });
+  player.location = new core.Location(2648, 6442, 0);
+  playerProcesses.forEach((handler) => handler({ player }));
+  assert.equal(created.find((npc) => npc.id === core.NpcIdentifiers.KETLA)?.getArea(), preFightArea,
+    'Ketla remains visible when the completed puzzle unlocks the private encounter');
+  player.location = { x: 2656, y: 6370, z: 0 };
   interactions.find((entry) => entry.name === 'Odd Figure').opts.Disturb({ player, npcId: core.NpcIdentifiers.ODD_FIGURE });
   const boss = created.find((npc) => npc.id === core.NpcIdentifiers.THE_WHISPERER_3);
   assert.ok(boss, 'disturbing the figure creates the quest Whisperer');
