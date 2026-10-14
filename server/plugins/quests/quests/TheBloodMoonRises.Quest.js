@@ -6312,6 +6312,28 @@ module.exports = function registerTheBloodMoonRises(api) {
       event.destination = { x: sourceX, y: sourceY, z: sourceZ };
       return;
     }
+    // The basement stair is also embedded in the lobby's clipped west wall.
+    // The cache footprint has a clear approach on its west edge; replaying
+    // from that edge lets the normal Climb-down action reach the paired hall.
+    if (objectIds.includes(CASTLE_DOOR_IDS.STAIRS_DOWN) && tile.getX() === 2311 &&
+      tile.getY() === 7366 && tile.getZ() === 0 &&
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.LOBBY &&
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) === CASTLE_GROUND_FLOOR &&
+      sourceZ === 0 && sourceX === 2310 && sourceY >= 7366 && sourceY <= 7374) {
+      event.destination = { x: 2310, y: 7366, z: 0 };
+      return;
+    }
+    // This basement crescent door faces a clipped row on its southern edge.
+    // Its hall-side approach is west; the normal face-based route picks the
+    // blocked south tile, so replay Enter from the cache-clear west approach.
+    if (objectIds.includes(CASTLE_DOOR_IDS.CRESCENT_M) && tile.getX() === 2570 &&
+      tile.getY() === 7365 && tile.getZ() === 0 &&
+      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.BASEMENT_HALL &&
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) === CASTLE_GROUND_FLOOR &&
+      sourceZ === 0 && sourceX >= 2563 && sourceX <= 2569 && sourceY >= 7365 && sourceY <= 7369) {
+      event.destination = { x: 2568, y: 7365, z: 0 };
+      return;
+    }
     if (sourceZ === tile.getZ() &&
       Math.max(Math.abs(sourceX - tile.getX()), Math.abs(sourceY - tile.getY())) <= 1) return;
     // The north-lobby door is placed in a clipped wall segment disconnected
