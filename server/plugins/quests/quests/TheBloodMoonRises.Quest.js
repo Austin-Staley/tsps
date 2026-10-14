@@ -401,7 +401,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.GIBBOUS, x: 2506, y: 7363, z: 0, from: CASTLE_ROOM.DISPLAY_ROOM, to: CASTLE_ROOM.GUEST_STORAGE,
       fromFloor: 2, toFloor: 2, landing: [2520, 7396] },
     { id: CASTLE_DOOR_IDS.GIBBOUS, x: 2336, y: 7370, z: 1, from: CASTLE_ROOM.DINING, to: CASTLE_ROOM.EXPLOSIVE_HALL,
-      fromFloor: 2, toFloor: 2, landing: [2482, 7395] },
+      fromFloor: 2, toFloor: 1, landing: [2482, 7395] },
     { id: CASTLE_DOOR_IDS.GIBBOUS_M, x: 2483, y: 7395, z: 0, from: CASTLE_ROOM.EXPLOSIVE_HALL, to: CASTLE_ROOM.DINING,
       fromFloor: 2, toFloor: 2, landing: [2337, 7370, 1] },
     { id: CASTLE_DOOR_IDS.GIBBOUS, x: 2510, y: 7370, z: 0, from: CASTLE_ROOM.DISPLAY_ROOM, to: CASTLE_ROOM.VENATOR_PUZZLE,

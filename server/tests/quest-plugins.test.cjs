@@ -20287,3 +20287,50 @@ test('Blood Moon prisoner scene waits for the transcript, then leaves the player
   assert.equal(attributes.get('quest.the_blood_moon_rises.castle-native-stage'), 76,
     'landing recovery preserves earned progress');
 });
+
+test('Blood Moon Gibbous passage reconciles the plane before the basement exit', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.castle-room', 2],
+    ['quest.the_blood_moon_rises.castle-floor', 2],
+    ['quest.the_blood_moon_rises.castle-native-stage', 76],
+    ['quest.the_blood_moon_rises.castle-story', { prisonersFound: true }],
+  ]);
+  const moved = [];
+  const varbits = new Map();
+  let location = new api.core.Location(2336, 7370, 1);
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => location,
+    moveTo: next => { moved.push([next.getX(), next.getY(), next.getZ()]); location = next; },
+    getInventory: () => ({ contains: id => id === 33727, snapshot: () => [[33727, 1]] }),
+    getUsername: () => 'castle-cross-plane',
+    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => varbits.set(id, value) }, {
+      get: (target, key) => target[key] ?? (() => {}),
+    }),
+    sendMessage() {},
+  };
+  quest.setStage(player, 40);
+  const enter = handlers.objects.find(handler => handler.name === 'handleCastleDoorEnter');
+  const passage = (id, name, x, y, z) => ({
+    player, objectId: id, definition: { id, getName: () => name },
+    location: { x, y, z }, option: 'Enter', handled: false,
+  });
+  enter(passage(61588, 'Gibbous moon door', 2336, 7370, 1));
+  assert.deepEqual(moved.at(-1), [2482, 7395, 0]);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 31);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 1,
+    'the plane-0 landing is recorded on the ground-floor route');
+  assert.equal(varbits.get(15489), 1);
+
+  enter(passage(61572, 'Door', 2474, 7398, 0));
+  assert.deepEqual(moved.at(-1), [2314, 7361, 1],
+    'the real hall exit now accepts the reconciled floor and returns to the upper lobby');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-room'), 1);
+  assert.equal(attributes.get('quest.the_blood_moon_rises.castle-floor'), 2);
+  assert.equal(varbits.get(15489), 2);
+});
