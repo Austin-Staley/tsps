@@ -138,11 +138,11 @@ const parsedWorld = parseEditModeWorldDefinition({
     zones: [
         { minX: 1, maxX: 2, minY: 3, maxY: 3, z: 0, tags: ["pvp"] },
     ],
-    disabledPlugins: ["NpcSpawns"],
+    plugins: { NpcSpawns: false },
     experienceMultiplier: 1,
 });
 assert.equal(parsedWorld.zones[0].tags[0], "pvp");
-assert.deepEqual(parsedWorld.disabledPlugins, ["NpcSpawns"]);
+assert.deepEqual(parsedWorld.plugins, { NpcSpawns: false }, "plugins passes through for saving");
 assert.deepEqual(parseBrowserHostWorldSpawn("3089,3524,0").spawn, parsedWorld.spawn);
 assert.deepEqual(parseBrowserHostWorldDefinition(JSON.stringify({
     spawn: { x: 3089, y: 3524, z: 0 },
@@ -151,7 +151,6 @@ assert.deepEqual(parseBrowserHostWorldDefinition(JSON.stringify({
 })), {
     spawn: { x: 3089, y: 3524, z: 0 },
     zones: [{ minX: 1, maxX: 2, minY: 3, maxY: 3, z: 0, tags: ["multi-combat"] }],
-    disabledPlugins: [],
     experienceMultiplier: 1,
 });
 assert.throws(() => parseBrowserHostWorldSpawn("3089,3524"));
