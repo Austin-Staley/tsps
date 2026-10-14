@@ -204,6 +204,21 @@ test('training arrows fire the aide arrow visuals, not bronze', () => {
   assert.deepEqual(RangedWeapon.TRAINING_BOW.getAmmunitionData(), [Ammunition.TRAINING_ARROWS]);
 });
 
+test('amethyst arrows resolve with their cache visuals and only fit magic-tier bows or better', () => {
+  const ammo = Ammunition.getForItem(Items.AMETHYST_ARROW);
+  assert.equal(ammo, Ammunition.AMETHYST_ARROW);
+  assert.equal(ammo.getStrength(), 55, 'amethyst arrows give +55 Ranged strength (Wiki)');
+  assert.equal(ammo.getStartGraphic().getId(), 1385, 'AMETHYST_ARROW_LAUNCH');
+  assert.equal(ammo.getProjectileId(), 1384, 'AMETHYST_ARROW_TRAVEL');
+
+  for (const bow of [
+    RangedWeapon.MAGIC_LONGBOW, RangedWeapon.MAGIC_SHORTBOW, RangedWeapon.MAGIC_COMP_BOW,
+    RangedWeapon.SEERCULL, RangedWeapon.THIRD_AGE_BOW, RangedWeapon.ZARYTE_BOW,
+    RangedWeapon.GODBOW, RangedWeapon.TWISTED_BOW, RangedWeapon.SCORCHING_BOW, RangedWeapon.DARK_BOW,
+  ]) assert.ok(bow.getAmmunitionData().includes(ammo), 'magic-tier or higher bow can fire amethyst arrows');
+  assert.ok(!RangedWeapon.YEW_SHORTBOW.getAmmunitionData().includes(ammo), 'yew bows cannot fire amethyst arrows');
+});
+
 test('projectiles use the OSRS projanim flight times', () => {
   const { RangedCombatMethod } = require('../dist/game/content/combat/method/impl/RangedCombatMethod');
   // Client cycles: arrow/bolt end at 46 + 5d, thrown at 32 + 5d, the dark bow's
