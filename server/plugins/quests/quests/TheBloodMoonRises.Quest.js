@@ -623,6 +623,9 @@ module.exports = function registerTheBloodMoonRises(api) {
   const WYRD_CUTSCENE_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-cutscene-active";
   const DRAKAN_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.drakan-area";
   const FIRST_BLOOD_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.first-blood-area";
+  const FIRST_BLOOD_ARENA = Object.freeze({ minX: 2688, maxX: 2735, minY: 7810, maxY: 7880, z: 0 });
+  // Cache gamevals: vfx_lowerniel_drakan_spotanim_test_left/right, verified in spotanim index 24.
+  const FIRST_BLOOD_SAFE_TILE_GRAPHIC = Object.freeze({ left: 3896, right: 3897 });
   const DRAKAN_ENCOUNTER_COMPLETE = "quest.the_blood_moon_rises.drakan-defeated";
   const DRAKAN_DEATH_CONFIRMED = "quest.the_blood_moon_rises.drakan-death-confirmed";
   const FINAL_NATIVE_STAGE_ATTRIBUTE = "quest.the_blood_moon_rises.final-native-stage";
@@ -1048,7 +1051,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   class DrakanEncounterArea extends PrivateArea {
     constructor(owner, mode = "final") {
       super([mode === "first-blood"
-        ? new Boundary(2688, 2735, 7810, 7880, 0)
+        ? new Boundary(FIRST_BLOOD_ARENA.minX, FIRST_BLOOD_ARENA.maxX,
+          FIRST_BLOOD_ARENA.minY, FIRST_BLOOD_ARENA.maxY, FIRST_BLOOD_ARENA.z)
         : new Boundary(2495, 2514, 7823, 7853, 3)]);
       this.owner = owner;
       this.mode = mode;
@@ -1087,7 +1091,9 @@ module.exports = function registerTheBloodMoonRises(api) {
           player.getPacketSender()?.sendVarbit?.(15464, 92);
           startTranscript(api, player, mobile.getId(), PAGE,
             "blood-hunt-after-dealing-enough-damage-to-lowerniel");
+          return;
         }
+        this.processFirstBloodLunges(fight, player, mobile, now);
         return;
       }
       const hp = mobile.getHitpoints();
@@ -1223,6 +1229,83 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.sendMessage(direction === "pincer"
         ? "Blood portals open on both sides. Run straight north or south through the walls of blood."
         : `A wall of blood surges from the ${direction}. Run straight toward it and cross its path by four tiles.`);
+    }
+    // Wiki: the player must dodge 3–5 lunges by stepping back onto the sparkling side.
+    // shortcut: use three lunges and a two-tick response window until a First Blood capture calibrates timing.
+    processFirstBloodLunges(fight, player, boss, now) {
+      if (fight.warning === "first-blood-lunge" && fight.impactAt && now >= fight.impactAt) {
+        const loc = player.getLocation();
+        const dodged = loc.getX() === fight.safeX && loc.getY() === fight.safeY;
+        fight.impactAt = 0;
+        fight.warning = null;
+        if (dodged) {
+          fight.lungesDodged++;
+          player.sendMessage(`You roll onto the marked safe tile. ${fight.lungesDodged} spear lunges dodged.`);
+        } else {
+          const protectedFromMelee = (player.getPrayerActive?.() ?? [])[PrayerHandler.PROTECT_FROM_MELEE] === true;
+          this.hit(player, boss, protectedFromMelee ? 9 : 28,
+            "The spear lunge catches you. Protect from Melee and move to the marked safe tile.");
+        }
+        fight.lungeIndex++;
+        if (!fight.damageUnlocked && fight.lungesDodged >= 3) {
+          fight.damageUnlocked = true;
+          boss.setFlag?.("combat:no-retaliate", false);
+          boss.getCombat?.()?.attack?.(player);
+          player.sendMessage("After three clean lunges, Lowerniel turns his attention to you. You can now strike him.");
+        } else fight.nextAttackAt = now + 2;
+        return;
+      }
+      if (fight.impactAt || now < fight.nextAttackAt) return;
+      const playerLoc = player.getLocation();
+      const bossLoc = boss.getLocation();
+      let awayX = Math.sign(playerLoc.getX() - (bossLoc.getX() + 1));
+      let awayY = Math.sign(playerLoc.getY() - (bossLoc.getY() + 1));
+      if (!awayX && !awayY) awayX = 1;
+      const side = fight.lungeIndex % 2 === 0 ? 1 : -1;
+      const perpendicular = [-awayY * side, awayX * side];
+      const preferred = [
+        [awayX + perpendicular[0], awayY + perpendicular[1]],
+        [awayX, awayY],
+        [awayX - perpendicular[0], awayY - perpendicular[1]],
+      ];
+      const candidates = [...preferred, ...[
+        [-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1],
+      ]].map(([dx, dy]) => [Math.sign(dx), Math.sign(dy)])
+        .filter(([dx, dy], index, all) => (dx || dy) && all.findIndex(([x, y]) => x === dx && y === dy) === index)
+        .filter(([dx, dy]) => dx * awayX + dy * awayY > 0);
+      const region = api.core.RegionManager;
+      const safe = candidates.find(([dx, dy]) => {
+        const x = playerLoc.getX() + dx;
+        const y = playerLoc.getY() + dy;
+        if (x < FIRST_BLOOD_ARENA.minX || x > FIRST_BLOOD_ARENA.maxX ||
+            y < FIRST_BLOOD_ARENA.minY || y > FIRST_BLOOD_ARENA.maxY) return false;
+        const tile = new Location(x, y, FIRST_BLOOD_ARENA.z);
+        return !region.blocked(tile, fight.area) && region.canMove(
+          playerLoc.getX(), playerLoc.getY(), x, y, FIRST_BLOOD_ARENA.z, 1, 1, fight.area);
+      });
+      if (!safe) {
+        fight.nextAttackAt = now + 1;
+        return;
+      }
+      const [dx, dy] = safe;
+      fight.safeX = playerLoc.getX() + dx;
+      fight.safeY = playerLoc.getY() + dy;
+      fight.markedX = playerLoc.getX();
+      fight.markedY = playerLoc.getY();
+      fight.warning = "first-blood-lunge";
+      fight.impactAt = now + 2;
+      this.animate(fight, FINAL_DRAKAN_ANIM.thrustTelegraph);
+      const direction = `${dy < 0 ? "south" : dy > 0 ? "north" : ""}${dx && dy ? "-" : ""}${dx < 0 ? "west" : dx > 0 ? "east" : ""}`;
+      if (boss.getHitpoints() > 2900) {
+        const cross = awayX * dy - awayY * dx;
+        const graphicId = cross >= 0 ? FIRST_BLOOD_SAFE_TILE_GRAPHIC.left : FIRST_BLOOD_SAFE_TILE_GRAPHIC.right;
+        player.getPacketSender?.()?.sendGraphic?.(new api.core.Graphic(graphicId),
+          new Location(fight.safeX, fight.safeY, FIRST_BLOOD_ARENA.z));
+        player.sendMessage(`Lowerniel marks the spear strike. A sparkling safe tile appears to the ${direction}; step onto its mark before the lunge lands.`);
+      } else {
+        // Wiki: the sparkles disappear once the encounter passes 2,900 HP; the boss thrust animation remains the cue.
+        player.sendMessage(`Lowerniel's spear telegraph points ${direction}. Roll to that side before the lunge lands.`);
+      }
     }
     processBloodWaves(fight, player, boss, now) {
       if (fight.special === "waves" && fight.impactAt && now >= fight.impactAt) {
@@ -1609,8 +1692,21 @@ module.exports = function registerTheBloodMoonRises(api) {
   function handleFirstBloodHit(event) {
     const npc = event?.npc;
     const hit = event?.hit;
+    const attacker = event?.attacker;
     const fight = npc && drakanEncounters.get(npc.getArea?.());
-    if (!fight || fight.mode !== "first-blood" || npc !== fight.boss || fight.ending || !hit) return;
+    if (!fight || fight.mode !== "first-blood" || fight.ending || !hit) return;
+    if (npc !== fight.boss) {
+      if (!fight.damageUnlocked && fight.allies?.includes(npc) && attacker === fight.boss) {
+        for (const part of hit.getHits?.() ?? []) part.setDamage(0);
+        hit.updateTotalDamage?.();
+      }
+      return;
+    }
+    if (!fight.damageUnlocked && attacker?.isPlayer?.()) {
+      for (const part of hit.getHits?.() ?? []) if ((part.getDamage?.() ?? 0) > 0) part.setDamage(0);
+      hit.updateTotalDamage?.();
+      return;
+    }
     // The recorded First Blood escape begins at 2,550 HP after 450 damage.
     // Clamp the final hit so a high-damage roll cannot skip that cutscene.
     let remaining = Math.max(0, npc.getHitpoints() - fight.thresholdHp);
@@ -1644,6 +1740,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       return false;
     }
     boss.setMultiCombat?.(true);
+    boss.setFlag?.("combat:no-retaliate", true);
     boss.setMaxHitpoints(3000);
     boss.setHitpoints(3000);
     const vanescula = api.spawnNpc({ id: NpcIdentifiers.VANESCULA_DRAKAN_20,
@@ -1657,9 +1754,11 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.setAttribute(FIRST_BLOOD_AREA_ATTRIBUTE, area);
     player.moveTo(new Location(2712, 7840, 0));
     const fight = { mode: "first-blood", area, boss, player, allies: [vanescula, veliaf].filter(Boolean),
-      thresholdHp: 2550, thresholdStarted: false, lastCycle: -1, ending: false, finished: false };
+      thresholdHp: 2550, thresholdStarted: false, damageUnlocked: false, lungesDodged: 0,
+      lungeIndex: 0, nextAttackAt: World.getProcessCycle() + 2,
+      lastCycle: -1, ending: false, finished: false };
     drakanEncounters.set(area, fight);
-    boss.getCombat?.()?.attack?.(player);
+    boss.getCombat?.()?.attack?.(vanescula ?? player);
     for (const ally of fight.allies) ally.getCombat?.()?.attack?.(boss);
     setBloodHuntNativeStage(player, 90);
     return true;

@@ -4627,6 +4627,11 @@ test('Blood Moon crossing preserves the captured native stages and starts the sh
   const { api, handlers } = mockApi();
   const attributes = new Map();
   const sentVarbits = [];
+  const graphics = [];
+  const messages = [];
+  let worldCycle = 100;
+  const originalCycle = api.core.World.getProcessCycle;
+  api.core.World.getProcessCycle = () => worldCycle;
   const spawns = [];
   let playerArea = null;
   const makeNpc = definition => {
@@ -4636,8 +4641,10 @@ test('Blood Moon crossing preserves the captured native stages and starts the sh
       getIndex: () => 200 + spawns.length, setArea(area) { this.area = area; }, getArea() { return this.area; },
       getId() { return this.id; }, getHitpoints() { return this.hitpoints; },
       setMaxHitpoints(value) { this.maxHitpoints = value; }, setHitpoints(value) { this.hitpoints = value; },
-      setMultiCombat() {}, setScriptedMovement(value) { this.scriptedMovement = value; },
-      getCombat: () => ({ attack(target) { npc.target = target; }, getLastAttack: () => ({ reset() {} }) }),
+      setMultiCombat() {}, setFlag(name, value = true) { this.flags ??= {}; this.flags[name] = value; },
+      setScriptedMovement(value) { this.scriptedMovement = value; },
+    getLocation: () => new api.core.Location(definition.x, definition.y, definition.z),
+    getCombat: () => ({ attack(target) { npc.target = target; }, getLastAttack: () => ({ reset() {} }) }),
     };
     spawns.push(npc);
     return npc;
@@ -4652,10 +4659,14 @@ test('Blood Moon crossing preserves the captured native stages and starts the sh
     isPlayer: () => true, isNpc: () => false, getAsPlayer() { return this; }, getIndex: () => 100,
     getArea: () => playerArea, setArea: area => { playerArea = area; }, getUsername: () => 'first-blood-fixture',
     getInventory: () => ({ contains: () => false }), getHitpoints: () => 99,
+    getLocation: () => player.location, getPrayerActive: () => [],
     moveTo: location => { player.location = location; },
-    getPacketSender: () => new Proxy({ sendVarbit: (id, value) => sentVarbits.push([id, value]) },
+    getPacketSender: () => new Proxy({
+      sendVarbit: (id, value) => sentVarbits.push([id, value]),
+      sendGraphic: (graphic, location) => graphics.push([graphic.getId(), location.getX(), location.getY(), location.getZ()]),
+    },
       { get: (target, key) => target[key] ?? (() => {}) }),
-    sendMessage() {},
+    sendMessage: message => messages.push(message),
   };
   quest.setStage(player, 50);
   attributes.set('quest.the_blood_moon_rises.blood-hunt', { drawbridgeRepaired: true });
@@ -4672,9 +4683,56 @@ test('Blood Moon crossing preserves the captured native stages and starts the sh
   assert.equal(boss.hitpoints, 3000);
   assert.equal(playerArea, attributes.get('quest.the_blood_moon_rises.first-blood-area'));
   assert.deepEqual([player.location.getX(), player.location.getY(), player.location.getZ()], [2712, 7840, 0]);
-  attributes.get('quest.the_blood_moon_rises.first-blood-area').process(boss);
+  const area = attributes.get('quest.the_blood_moon_rises.first-blood-area');
+  const vanescula = spawns.find(npc => npc.id === api.core.NpcIdentifiers.VANESCULA_DRAKAN_20);
+  assert.equal(boss.target, vanescula, 'Lowerniel initially focuses Vanescula during the first spear-lunge sequence');
+  assert.equal(boss.flags['combat:no-retaliate'], true, 'early player hits cannot retarget Lowerniel from Vanescula');
   assert.equal(boss.scriptedMovement, undefined,
     'First Blood leaves Lowerniel on the normal NPC combat path instead of pausing scripted movement each tick');
+  try {
+    worldCycle = 102;
+    area.process(boss);
+    const hitModifier = handlers.npcHitModify.find(handler => handler.name === 'handleFirstBloodHit');
+    let damage = 20;
+    const hit = { getHits: () => [{ getDamage: () => damage, setDamage: value => { damage = value; } }], updateTotalDamage() {} };
+    hitModifier({ npc: boss, attacker: player, hit });
+    assert.equal(damage, 0, 'player hits cannot bypass the initial lunge-dodge mechanic');
+    damage = 69;
+    const allyHit = { getHits: () => [{ getDamage: () => damage, setDamage: value => { damage = value; } }], updateTotalDamage() {} };
+    hitModifier({ npc: vanescula, attacker: boss, hit: allyHit });
+    assert.equal(damage, 0, 'Lowerniel cannot remove the ally before the opening dodge sequence ends');
+    for (let dodge = 0; dodge < 3; dodge++) {
+      if (dodge > 0) { worldCycle += 2; area.process(boss); }
+      assert.ok(messages.at(-1)?.includes('sparkling safe tile'),
+        'each lunge tells the player to follow the visible safe-tile mark');
+      assert.equal(graphics.length, dodge + 1, 'one safe-tile mark is sent for each lunge');
+      const [graphicId, x, y, z] = graphics.at(-1);
+      assert.ok([3896, 3897].includes(graphicId), 'a cache-verified Lowerniel safe-tile graphic is sent');
+      assert.ok(x >= 2688 && x <= 2735 && y >= 7810 && y <= 7880,
+        'the marked tile stays inside the fight arena');
+      const marked = new api.core.Location(x, y, z);
+      assert.equal(Math.max(Math.abs(x - player.location.getX()), Math.abs(y - player.location.getY())), 1,
+        'a safe mark is one reachable step away');
+      assert.equal(api.core.RegionManager.blocked(marked, area), false, 'the marked tile is collision-clear');
+      assert.equal(api.core.RegionManager.canMove(player.location.getX(), player.location.getY(), x, y, z, 1, 1, area),
+        true, 'the safe-tile mark is reachable from the player');
+      player.location = marked;
+      worldCycle += 2;
+      area.process(boss);
+    }
+    assert.equal(boss.target, player, 'three successful spear-lunge dodges make Lowerniel focus the player');
+    assert.equal(boss.flags['combat:no-retaliate'], false, 'Lowerniel can retaliate after the opening sequence');
+    damage = 20;
+    hitModifier({ npc: boss, attacker: player, hit });
+    assert.equal(damage, 20, 'player damage becomes available after the lunge sequence');
+    boss.hitpoints = 2899;
+    player.location = new api.core.Location(2712, 7840, 0);
+    worldCycle += 2;
+    area.process(boss);
+    assert.equal(graphics.length, 3, 'safe sparkles disappear once Lowerniel passes 2,900 HP');
+    assert.match(messages.at(-1), /telegraph points (north|east|south|west)/,
+      'the boss thrust animation and direction message remain as the cue without sparkles');
+  } finally { api.core.World.getProcessCycle = originalCycle; }
 });
 
 test('Blood Moon post-breach chapter restores actors and follows the captured native 124–136 handoff', () => {
