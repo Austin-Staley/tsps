@@ -415,6 +415,7 @@ test("deposit booth slot actions reach Bank.deposit", () => {
   let onInterfaceActionClick;
   booth.register({
     onObjectInteraction() {},
+    onCustomEvent() {},
     onInterfaceActionClick(handler) { onInterfaceActionClick = handler; },
     onInterfaceActionButton() {},
     onItemOnObject() {},
