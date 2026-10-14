@@ -2292,7 +2292,9 @@ test('Blood Moon Castle Drakan throne opens only after the ordered bust mechanis
     }),
     sendMessage: (text) => messages.push(text),
   };
+  attributes.set('quest.the_blood_moon_rises.castle-native-stage', 78);
   quest.setStage(player, 40);
+  assert.equal(varbits.get(15464), 78, 'the captured stockpile approach begins at native value 78');
   const interact = (name, x, y, option) => {
     const event = { player, definition: { getName: () => name }, location: { x, y, z: 0 }, option, handled: false };
     for (const handler of handlers.objects) {
@@ -2328,6 +2330,8 @@ test('Blood Moon Castle Drakan throne opens only after the ordered bust mechanis
   assert.equal(quest.getStage(player), 40, 'the escape chapter waits until the blood stockpile is destroyed');
   attributes.set('quest.the_blood_moon_rises.castle-refiner', { destroyed: true });
   action({ player, stepId: 'LTAe0k' });
+  assert.equal(varbits.get(15464), 80, 'destroying the stockpile advances to captured native value 80, not the Slepe refinery value 62');
+  assert.equal(quest.getStage(player), 40, 'destroying the stockpile stays in the Castle chapter until the escape action');
   action({ player, stepId: 'XqVfhB' });
   assert.equal(quest.getStage(player), 45, 'the recorded escape action starts the Escape chapter');
   assert.equal(varbits.get(15464), 82, 'the Escape chapter matches the captured native stage');
