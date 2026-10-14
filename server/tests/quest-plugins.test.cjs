@@ -2443,6 +2443,12 @@ test('Blood Moon Ivan and Sarei preparation dialogue advances to the stake follo
     }), true);
     assert.equal(started.variant, 'hallowed-preparations-talking-to-ivan-and-sarei-talking-to-them-again',
       'Sarei uses the same earned follow-up instead of replaying the introduction');
+    const finishedStakesTalk = { player, step: { player: true },
+      text: "I hope so too. We're going to need all the  advantages we can find." };
+    line(finishedStakesTalk);
+    finishedStakesTalk.after();
+    assert.equal(attributes.get('quest.the_blood_moon_rises.preparations').stakesConversationComplete, true,
+      'the actual client text spacing still records the completed follow-up');
 
     const condition = handlers.condition.find(handler => handler.name === 'answerPreparationStakesCondition');
     assert.equal(condition({ player, stepId: 'sqIM75' }), false, 'the unmade-stakes branch is skipped when stakes are carried');

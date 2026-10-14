@@ -5252,7 +5252,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!player) return;
     if (stage(player) === STAGE.PREPARATIONS) {
       const prepProgress = [
-        ["I hope so too. We're going to need all the advantages we can find.", "stakesConversationComplete"],
+        ["I hope so too. We're going to need all the", "stakesConversationComplete"],
         ["Well, if you want to try getting something out of her, be my guest.", "veliafFirstTalkComplete"],
         ["Now, as fun as all this has been, my brother will almost certainly be upon you and your new friends soon.", "vanesculaTalkComplete"],
         ["Best you go and get ready, [player name]. Won't be long until Drakan is here.", "veliafFollowupComplete"],
