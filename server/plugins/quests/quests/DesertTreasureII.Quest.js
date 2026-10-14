@@ -2055,6 +2055,14 @@ module.exports = function registerDesertTreasureII(api) {
     // inferred playable cadence and should be calibrated against a live capture.
     const boss = spawned.get(player)?.finalWight;
     if (!boss?.isRegistered?.() || boss.getHitpoints?.() <= 0 || boss.getOwner?.() !== player || boss.getArea?.() !== area) return;
+    if (boss.__dt2FinalWight === 1) {
+      // Ketla's documented recovery comes from unblocked charged shots. Generic
+      // out-of-combat NPC regeneration would otherwise refill her while the
+      // player clears her one-hit clones, so keep the ordinary regen timer fresh
+      // for this active, owner-only trial. Charged-shot healing remains explicit
+      // below and still applies when the player fails to hide behind a clone.
+      boss.getCombat?.().getLastAttack?.().reset?.();
+    }
     boss.__dt2FinalWightTicks = (boss.__dt2FinalWightTicks ?? 0) + 1;
     boss.__dt2FinalWightPending ??= [];
     if (boss.__dt2FinalWight === 0) {

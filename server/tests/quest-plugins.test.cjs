@@ -7640,11 +7640,14 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     ObjectManager: { register(object) { registeredObjects.push(object); }, deregister(object) { object.deregistered = true; } },
     NPC: { create(id, location) {
       const hp = id === 12330 ? 1 : id === 12334 ? 30 : id === 12335 ? 5 : 200;
-      return { id, location, hp, maxHp: hp, setOwner(owner) { this.owner = owner; }, setOwnerOnly() {},
+      return { id, location, hp, maxHp: hp, lastAttackResetCount: 0, setOwner(owner) { this.owner = owner; }, setOwnerOnly() {},
         setNpcTransformationId(value) { this.transformedTo = value; }, setMaxHitpoints(value) { this.maxHp = value; },
         setHitpoints(value) { this.hp = value; }, getHitpoints() { return this.hp; }, getMaxHitpoints() { return this.maxHp; },
         getOwner() { return this.owner; }, getArea() { return this.area; }, getLocation() { return this.location; },
-        setScriptedMovement(value) { this.scriptedMovement = value; }, getCombat() { return { attack: target => { this.combatTarget = target; } }; },
+        setScriptedMovement(value) { this.scriptedMovement = value; }, getCombat() { return {
+          attack: target => { this.combatTarget = target; },
+          getLastAttack: () => ({ reset: () => { this.lastAttackResetCount++; } }),
+        }; },
         isRegistered() { return true; }, isNpc() { return true; }, getAsNpc() { return this; },
         forceChat(text) { this.chat = text; }, performGraphic(graphic) { this.graphic = graphic; } };
     } },
@@ -7780,6 +7783,8 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     pendingHits.length = 0;
     p.location = area.tile(32, 36, 0);
     for (let tick = 0; tick < 18; tick++) area.process(p);
+    assert.equal(current.lastAttackResetCount, 18,
+      'the active Ketla trial stays engaged while the player clears clone batches, preventing generic idle regeneration');
     const clones = queue.filter(npc => npc.id === 12330 && npc.owner === p);
     assert.ok(clones.length === 4 || clones.length === 5, 'Ketla summons four or five one-hit shadow clones');
     const cloneProvider = combatProviders.find(provider => provider.ids === 12330)?.method;
