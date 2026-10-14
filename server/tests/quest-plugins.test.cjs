@@ -4114,6 +4114,7 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
     [api.core.ItemIdentifiers.TOOTH_HALF_OF_KEY_6, 2600, 7845, 0],
     [api.core.ItemIdentifiers.LOOP_HALF_OF_KEY_6, 2588, 7816, 0],
     [api.core.ItemIdentifiers.BUCKET, 2596, 7833, 0],
+    [api.core.ItemIdentifiers.TRAPDOOR_KEY, 2619, 7812, 0],
   ], 'the captured crank, key halves and pub bucket spawn at their real pickup tiles');
   inventory.adds(api.core.ItemIdentifiers.BUCKET, 1);
   spawned.splice(spawned.findIndex(({ item }) => item.id === api.core.ItemIdentifiers.BUCKET), 1);
@@ -4284,8 +4285,14 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
   useOnObject({ player, itemId: ids.BUCKET, objectId: 1, location: { x: 2592, y: 7825, z: 0 }, handled: false });
   useOnObject({ player, itemId: ids.BUCKET_OF_WATER, objectId: 1, location: { x: 2592, y: 7833, z: 0 }, handled: false });
   assert.equal(inventory.contains(ids.SHADUM_KEY), true, 'water on the northern barrel reveals the Shadum key');
-  interact(2619, 7812);
-  assert.equal(inventory.contains(ids.TRAPDOOR_KEY), true, 'the Shadum house contains the trapdoor key');
+  handlers.playerProcess.find((handler) => handler.name === 'syncHuntGroundItems')({ player });
+  assert.ok(spawned.some(({ item, tile }) => item.id === ids.TRAPDOOR_KEY && tile.getX() === 2619 && tile.getY() === 7812),
+    'the Shadum house trapdoor key is a ground pickup on the captured crate tile');
+  inventory.adds(ids.TRAPDOOR_KEY, 1);
+  spawned.splice(spawned.findIndex(({ item }) => item.id === ids.TRAPDOOR_KEY), 1);
+  handlers.playerProcess.find((handler) => handler.name === 'syncHuntGroundItems')({ player });
+  assert.equal(spawned.filter(({ item }) => item.id === ids.TRAPDOOR_KEY).length, 0,
+    'the trapdoor key does not respawn after pickup');
   interact(2580, 7835);
   attributes.set('quest.the_blood_moon_rises.blood-hunt', {
     ...(attributes.get('quest.the_blood_moon_rises.blood-hunt') ?? {}),

@@ -6070,6 +6070,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       { id: HUNT_ITEMS.toothHalf, tile: new Location(2600, 7845, 0), claimed: hasItem(player, HUNT_ITEMS.myrmelKey) },
       { id: HUNT_ITEMS.loopHalf, tile: new Location(2588, 7816, 0), claimed: hasItem(player, HUNT_ITEMS.myrmelKey) },
       { id: HUNT_ITEMS.bucket, tile: new Location(2596, 7833, 0), claimed: hasItem(player, HUNT_ITEMS.bucket) || hasItem(player, HUNT_ITEMS.bucketWater) },
+      { id: HUNT_ITEMS.trapdoorKey, tile: new Location(2619, 7812, 0), claimed: hunt.trapdoorUnlocked || hasItem(player, HUNT_ITEMS.trapdoorKey) },
       { id: HUNT_ITEMS.oldCog, tile: new Location(2582, 7817, 0), claimed: hunt.drawbridgeRepaired || hasItem(player, HUNT_ITEMS.oldCog), enabled: hunt.chapelPuzzleSolved === true },
     ];
     for (const { id, tile, claimed, enabled = true } of drops) {
@@ -6274,13 +6275,6 @@ module.exports = function registerTheBloodMoonRises(api) {
       inventory.deleteNumber(HUNT_ITEMS.bucketWater, 1);
       inventory.adds(HUNT_ITEMS.shadumKey, 1);
       player.sendMessage("The water washes away the grime on the barrel and reveals a Shadum key.");
-      return;
-    }
-    if (x === 2619 && y === 7812) {
-      event.handled = true;
-      if (!inventory.contains(HUNT_ITEMS.shadumKey)) { player.sendMessage("The locked house needs its Shadum key."); return; }
-      if (!inventory.contains(HUNT_ITEMS.trapdoorKey)) inventory.adds(HUNT_ITEMS.trapdoorKey, 1);
-      player.sendMessage("You find the trapdoor key inside the house.");
       return;
     }
     if (x === 2576 && y === 7846) {
