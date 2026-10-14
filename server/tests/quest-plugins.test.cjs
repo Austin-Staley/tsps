@@ -7424,11 +7424,23 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   assert.equal(created.filter((npc) => npc.__dt2WhispererSoul).every((npc) => npc.id === core.NpcIdentifiers.LOST_SOUL_2), true,
     'all chant souls use the attackable cache variant');
   const deathRecovery = attrs.get('desert-treasure-ii:lassar');
-  attrs.set('desert-treasure-ii:lassar', { ...deathRecovery, inShadow: true, sanity: 0 });
+  attrs.set('desert-treasure-ii:lassar', {
+    ...deathRecovery, inShadow: true, sanity: 0, whispererStarted: true, whispererDefeated: false,
+  });
+  player.location = { x: 2400, y: 6370, z: 0 };
   playerDeathHooks[0]({ player });
   assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, false, 'death returns the quest state to the material realm');
   assert.equal(attrs.get('desert-treasure-ii:lassar').sanity, 100, 'death restores sanity for the next attempt');
+  assert.equal(attrs.get('desert-treasure-ii:lassar').whispererStarted, false,
+    'death resets the active attempt instead of auto-starting combat on the next login');
   assert.equal(player.getPrivateArea(), null, 'death tears down the owner-only cathedral encounter');
+  player.location = { x: 2656, y: 6370, z: 0 };
+  playerProcesses.forEach((handler) => handler({ player }));
+  const recoveryArea = player.getPrivateArea();
+  assert.ok(recoveryArea?.getNpcs().some((npc) => npc.getId?.() === core.NpcIdentifiers.ODD_FIGURE),
+    'the player must Disturb the Odd Figure again after a failed attempt');
+  assert.equal(created.filter((npc) => npc.id === core.NpcIdentifiers.THE_WHISPERER_3 && npc.isRegistered()).length, 0,
+    're-entering the cathedral after death does not immediately spawn an attacking boss');
 });
 
 test('Dragon Slayer II Ungael notes require all six real pieces before combining', () => {

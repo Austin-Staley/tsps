@@ -3456,7 +3456,14 @@ module.exports = function registerDesertTreasureII(api) {
       owned.whisperer = null;
     }
     removeWhispererSouls(p);
-    if (state.inShadow || Number(state.sanity) < 100) setLassar(p, { ...state, inShadow: false, sanity: 100 });
+    if (state.inShadow || Number(state.sanity) < 100 || state.whispererStarted) {
+      setLassar(p, {
+        ...state,
+        inShadow: false,
+        sanity: 100,
+        whispererStarted: state.whispererDefeated ? state.whispererStarted : false,
+      });
+    }
     leaveWhispererScene(p);
   }
   function handleLogout({ player: p }) {
@@ -3469,6 +3476,10 @@ module.exports = function registerDesertTreasureII(api) {
     const returnToGuardian = current && [ATTR_SCAR_AREA, ATTR_SCAR_MAZE_ONE, ATTR_SCAR_MAZE_TWO,
       ATTR_SCAR_MAZE_THREE, ATTR_LEVIATHAN_AREA].some((key) => current === p.getAttribute(key));
     const returnToWhisperer = current && current === p.getAttribute(WHISPERER_AREA);
+    if (returnToWhisperer) {
+      const state = p.getAttribute(LASSAR) ?? {};
+      if (!state.whispererDefeated) setLassar(p, { ...state, inShadow: false, whispererStarted: false });
+    }
     const stranglewoodExit = current && (current === p.getAttribute(ATTR_STRANGLEWOOD_HIDEOUT) ? [1193, 3405]
       : current === p.getAttribute(ATTR_STRANGLEWOOD_TEMPLE) ? [1174, 3427]
         : current === p.getAttribute(ATTR_VARDORVIS_AREA) ? [1117, 3429] : null);
