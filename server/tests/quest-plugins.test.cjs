@@ -181,7 +181,8 @@ test('Blood Moon refinery handoff uses valid events, restores the tomb route, an
   const player = {
     getAttribute: key => attrs.get(key),
     setAttribute: (key, value) => attrs.set(key, value),
-    getPacketSender: () => ({ sendVarbit: (id, value) => varbits.push([id, value]) }),
+    getPacketSender: () => ({ sendVarbit: (id, value) => varbits.push([id, value]), sendQuestList() {},
+      sendInterfaceFlagsRange() {}, sendConfig() {} }),
     getLocation: () => new api.core.Location(3417, 3487, 1),
     moveTo: location => moveCalls.push(location),
   };
@@ -4141,6 +4142,52 @@ test('Blood Moon crossing preserves the captured native stages and starts the sh
   attributes.get('quest.the_blood_moon_rises.first-blood-area').process(boss);
   assert.equal(boss.scriptedMovement, undefined,
     'First Blood leaves Lowerniel on the normal NPC combat path instead of pausing scripted movement each tick');
+});
+
+test('Blood Moon resumes the saved native-96 fleeing scene after logout', () => {
+  const { api, handlers } = mockApi();
+  const attributes = new Map();
+  const varbits = [];
+  let dialogueStarted = false;
+  const player = {
+    getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ contains: () => false }),
+    getPacketSender: () => ({ sendVarbit: (id, value) => varbits.push([id, value]), sendQuestList() {},
+      sendInterfaceFlagsRange() {}, sendConfig() {} }),
+    getDialogueManager: () => ({ reset() {}, startDialogues() { dialogueStarted = true; } }),
+    getLocation: () => new api.core.Location(2730, 7852, 0),
+    moveTo(location) { this.location = location; },
+  };
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
+    .filter(entry => entry.key === 'the_blood_moon_rises').at(-1);
+  quest.setStage(player, 50);
+  attributes.set('quest.the_blood_moon_rises.blood-hunt', {
+    firstBloodThresholdReached: true, firstBloodDefeated: true, nativeStage: 96,
+  });
+  handlers.playerLogin.find(handler => handler.name === 'recoverFirstBloodEncounter')({ player });
+  assert.equal(dialogueStarted, true, 'the missing post-fight transcript resumes on login');
+
+  const action = handlers.custom.get('npc-dialogue:action').find(handler => handler.name === 'onTranscriptAction');
+  action({ player, stepId: 'kfvYPl' });
+  assert.equal(quest.getStage(player), 50, 'the Sunspear ambush is still part of the woodland chapter');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').nativeStage, 98);
+  action({ player, stepId: '0I1l4O' });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').nativeStage, 98);
+  assert.equal(quest.getStage(player), 60, 'the woodland handoff starts Hallowed preparations');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.preparations').introStarted, true);
+  assert.deepEqual(varbits.at(-1), [15464, 98]);
+  assert.deepEqual([player.location.getX(), player.location.getY(), player.location.getZ()], [2987, 7699, 0]);
+  action({ player, stepId: 'P8i6Tl' });
+  assert.deepEqual([player.location.getX(), player.location.getY(), player.location.getZ()], [3168, 7830, 1]);
+  const line = handlers.custom.get('npc-dialogue:line').find(handler => handler.name === 'onBloodMoonDialogueLine');
+  const endIntro = { player, step: { speaker: 'Efaritay Hallow' },
+    text: 'Now, let us get to work.' };
+  line(endIntro);
+  assert.equal(typeof endIntro.after, 'function');
+  endIntro.after();
+  assert.equal(attributes.get('quest.the_blood_moon_rises.preparations').introComplete, true);
+  assert.deepEqual(varbits.at(-1), [15464, 100]);
 });
 
 test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house and chapel puzzles', () => {

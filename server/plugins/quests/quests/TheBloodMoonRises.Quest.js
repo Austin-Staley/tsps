@@ -1637,8 +1637,15 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!player || stage(player) !== STAGE.BLOOD_HUNT) return;
     const hunt = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
     if (hunt.firstBloodThresholdReached) {
-      if (!hunt.firstBloodDefeated) startTranscript(api, player, NpcIdentifiers.LOWERNIEL_DRAKAN_2,
-        PAGE, "blood-hunt-after-dealing-enough-damage-to-lowerniel");
+      if (!hunt.firstBloodDefeated) {
+        startTranscript(api, player, NpcIdentifiers.LOWERNIEL_DRAKAN_2,
+          PAGE, "blood-hunt-after-dealing-enough-damage-to-lowerniel");
+      } else if (!hunt.firstBloodFleeDialogueComplete && Number(hunt.nativeStage) < 98) {
+        // The threshold transcript ends in a second, separately-started scene.
+        // Resume it if logout happened after cleanup but before the scene opened.
+        startTranscript(api, player, NpcIdentifiers.LOWERNIEL_DRAKAN_2,
+          PAGE, "blood-hunt-fleeing-through-the-woods");
+      }
       return;
     }
     if (Number(hunt.nativeStage) === 90) {
@@ -1647,6 +1654,22 @@ module.exports = function registerTheBloodMoonRises(api) {
         BLOOD_HUNT_PARTY_ARRIVAL.z));
       syncBloodHuntActors(player);
     }
+  }
+
+  function beginPreparationIntro(player) {
+    if (!player || stage(player) !== STAGE.PREPARATIONS) return false;
+    const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {};
+    if (prep.introComplete) return false;
+    player.setAttribute(PREP_ATTRIBUTE, { ...prep, introStarted: true });
+    player.getPacketSender()?.sendVarbit?.(15464, 98);
+    player.moveTo(new Location(2987, 7699, 0));
+    return startTranscript(api, player, 0, PAGE, "hallowed-preparations-talking-to-the-mysterious-woman");
+  }
+
+  function resumePreparationIntro({ player }) {
+    if (!player || stage(player) !== STAGE.PREPARATIONS) return;
+    const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {};
+    if (!prep.introComplete && !player.getDialogueManager?.()?.getCurrent?.()) beginPreparationIntro(player);
   }
 
   function finishDrakanEncounter(player) {
@@ -2265,6 +2288,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
     if (value === STAGE.PREPARATIONS) {
       const prep = player?.getAttribute(PREP_ATTRIBUTE) ?? {};
+      if (prep.introStarted && !prep.introComplete) return 98;
+      if (prep.introComplete) return 100;
       if (prep.flail && prep.stakes) return 114;
       if (prep.flail) return 112;
       if (prep.stewFed) return 110;
@@ -4638,6 +4663,29 @@ module.exports = function registerTheBloodMoonRises(api) {
       setBloodHuntNativeStage(player, 96);
       player.moveTo(new Location(2730, 7852, 0));
     }
+    if (event.stepId === "kfvYPl" && stage(player) === STAGE.BLOOD_HUNT) {
+      setBloodHuntNativeStage(player, 98);
+    }
+    if (event.stepId === "0I1l4O" && stage(player) === STAGE.BLOOD_HUNT) {
+      player.setAttribute(HUNT_ATTRIBUTE, { ...(player.getAttribute(HUNT_ATTRIBUTE) ?? {}),
+        firstBloodFleeDialogueComplete: true, nativeStage: 98 });
+      player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), introStarted: true });
+      advance(player, STAGE.PREPARATIONS);
+      beginPreparationIntro(player);
+      event.handled = true;
+      event.end = true;
+      return;
+    }
+    if (event.stepId === "P8i6Tl" && stage(player) === STAGE.PREPARATIONS) {
+      player.moveTo(new Location(3168, 7830, 1));
+    }
+    if (event.stepId === "0I1l4O" && stage(player) === STAGE.BLOOD_HUNT) {
+      const hunt = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
+      player.setAttribute(HUNT_ATTRIBUTE, { ...hunt, nativeStage: 98, firstBloodFleeDialogueComplete: true });
+      player.getPacketSender()?.sendVarbit?.(15464, 98);
+      // This is the captured woodland scene's return to the Efaritay route.
+      player.moveTo(new Location(2987, 7699, 0));
+    }
     if (event.stepId === "ikSyAR" && stage(player) === STAGE.CASTLE) {
       player.moveTo(new Location(CASTLE_VAMPYRIUM_ARRIVAL.x, CASTLE_VAMPYRIUM_ARRIVAL.y,
         CASTLE_VAMPYRIUM_ARRIVAL.z));
@@ -5134,6 +5182,15 @@ module.exports = function registerTheBloodMoonRises(api) {
   function onBloodMoonDialogueLine(request) {
     const player = request?.player;
     if (!player) return;
+    if (stage(player) === STAGE.PREPARATIONS && request.step?.speaker === "Efaritay Hallow" &&
+      request.text?.endsWith("Now, let us get to work.")) {
+      request.after = () => {
+        if (stage(player) !== STAGE.PREPARATIONS) return;
+        player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), introComplete: true });
+        player.getPacketSender()?.sendVarbit?.(15464, 100);
+      };
+      return;
+    }
     if ([STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(player)) && request.step?.player &&
       request.text === "We don't have time for this. Whatever we do next, we can't stay here. Let's get across that bridge." &&
       !player.getAttribute(HUNT_ATTRIBUTE)?.drawbridgeRepaired) {
@@ -6879,7 +6936,6 @@ module.exports = function registerTheBloodMoonRises(api) {
     "D5qF0g": STAGE.BLOOD_HUNT,
     "sw9z49": STAGE.BLOOD_HUNT,
     "lKvIyH": STAGE.BLOOD_HUNT,
-    "kfvYPl": STAGE.PREPARATIONS,
     "Sut83Q": STAGE.SIEGE,
     "vqg4qO": STAGE.SIEGE,
     "1JPVz5": STAGE.THEATRE,
@@ -7056,6 +7112,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogin(syncBloodHuntDoorOnLogin);
   api.onPlayerLogin(syncBloodHuntPartyOnLogin);
   api.onPlayerLogin(recoverFirstBloodEncounter);
+  api.onPlayerLogin(resumePreparationIntro);
   api.onPlayerLogin(syncCastleRoomOnLogin);
   api.onPlayerLogin(syncCastleChapelPortalOnLogin);
   api.onPlayerLogin(recoverFinalDrakanLanding);
