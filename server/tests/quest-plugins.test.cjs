@@ -332,6 +332,68 @@ test('Blood Moon refinery exit opens only after liberation and uses the canonica
   assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'escaped');
 });
 
+test('Blood Moon tomb blockage dispatch accepts the lowercase Investigate packet option', () => {
+  const { api } = mockApi();
+  const attrs = new Map([['the-blood-moon-rises:refinery-progress', { started: true, phase: 'tomb' }]]);
+  const player = {
+    getAttribute: key => attrs.get(key),
+    setAttribute: (key, value) => attrs.set(key, value),
+    getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    sendMessage() {},
+  };
+  const refinery = require('../plugins/quests/bmr/Refinery.TheBloodMoonRises')(api);
+  const event = {
+    player,
+    objectId: 61191,
+    definition: { id: 61191, getName: () => 'Blockage' },
+    location: { x: 3505, y: 9857, z: 0 },
+    option: 'investigate',
+    handled: false,
+  };
+  assert.equal(refinery.tombPassage(event), true);
+  assert.equal(event.handled, true);
+});
+
+test('Blood Moon Paterdomus routes stained-glass clicks onto reachable upstairs tiles', () => {
+  const { api, handlers } = mockApi();
+  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+  const attributes = new Map([
+    ['quest.the_blood_moon_rises.slepe-story', { monksCleared: true, journalRead: true, upstairsTalked: true }],
+  ]);
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => ({ getX: () => 3410, getY: () => 3487, getZ: () => 1 }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+  };
+  quest.setStage(player, 30);
+  const route = handlers.routes.find(handler => handler.name === 'routePaterdomusWindows');
+  assert.equal(typeof route, 'function');
+  const event = (objectId, x, y, z = 1) => ({
+    player,
+    objectId,
+    definition: { id: objectId },
+    object: { getLocation: () => ({ getX: () => x, getY: () => y, getZ: () => z }) },
+    sourceLocation: { x: 3410, y: 3487, z: 1 },
+  });
+  const stainedGlass = event(61280, 3408, 3485);
+  route(stainedGlass);
+  assert.deepEqual(stainedGlass.destination, { x: 3409, y: 3485, z: 1 });
+  const plinth = event(61282, 3408, 3485);
+  route(plinth);
+  assert.deepEqual(plinth.destination, { x: 3409, y: 3485, z: 1 }, 'item-on-plinth uses the same reachable approach');
+  const wrongTile = event(61280, 3407, 3485);
+  route(wrongTile);
+  assert.equal(wrongTile.destination, undefined, 'an unrelated tile is not rerouted');
+  attributes.set('quest.the_blood_moon_rises.slepe-story', { monksCleared: true, journalRead: true });
+  const beforeUpstairsTalk = event(61280, 3408, 3485);
+  route(beforeUpstairsTalk);
+  assert.equal(beforeUpstairsTalk.destination, undefined, 'the route is unavailable before the upstairs conversation');
+});
+
 test('Blood Moon refinery Ivan hook yields outside its own tomb/refinery phases', () => {
   const { api } = mockApi();
   const attributes = new Map();
@@ -363,10 +425,12 @@ test('Blood Moon rubble dialogue distinguishes a real pickaxe and the refinery w
   };
   const refinery = require('../plugins/quests/bmr/Refinery.TheBloodMoonRises')(api);
   attrs.set('the-blood-moon-rises:refinery-progress', { started: true, phase: 'tomb', killed: [] });
-  assert.equal(refinery.answerCondition({ player, stepId: 'e9a7zZ', pages: [{ page: 'The Blood Moon Rises' }] }), false);
+  assert.equal(refinery.answerCondition({ player, stepId: 'e9a7zZ', pages: [{ page: 'The Blood Moon Rises' }] }), true,
+    'the “has a pickaxe” branch applies when the inventory really contains one');
   assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'tomb');
   player.getInventory = () => ({ contains: () => false });
-  assert.equal(refinery.answerCondition({ player, stepId: 'e9a7zZ', pages: [{ page: 'The Blood Moon Rises' }] }), true);
+  assert.equal(refinery.answerCondition({ player, stepId: 'e9a7zZ', pages: [{ page: 'The Blood Moon Rises' }] }), false,
+    'the prompt must branch into Ivan offering his spare pickaxe');
   assert.equal(attrs.get('the-blood-moon-rises:refinery-progress').phase, 'pickaxe');
   assert.deepEqual(vars.at(-1), [15464, 52]);
 

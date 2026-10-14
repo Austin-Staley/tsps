@@ -536,6 +536,20 @@ module.exports = function registerTheBloodMoonRises(api) {
     NpcIdentifiers.MONK_OF_ZAMORAK_4, NpcIdentifiers.MONK_OF_ZAMORAK_5, NpcIdentifiers.MONK_OF_ZAMORAK_6,
     16154, 16155, 16156, 16271, 16272, 16273,
   ]);
+  const SLEPE_WINDOW_ROUTES = new Map([
+    [61280, { x: 3408, y: 3485, destination: { x: 3409, y: 3485, z: 1 } }],
+    [61282, { x: 3408, y: 3485, destination: { x: 3409, y: 3485, z: 1 } }],
+    [61289, { x: 3408, y: 3492, destination: { x: 3409, y: 3491, z: 1 } }],
+    [61291, { x: 3408, y: 3492, destination: { x: 3409, y: 3491, z: 1 } }],
+    [61292, { x: 3409, y: 3483, destination: { x: 3409, y: 3484, z: 1 } }],
+    [61294, { x: 3409, y: 3483, destination: { x: 3409, y: 3484, z: 1 } }],
+    [61277, { x: 3409, y: 3487, destination: { x: 3409, y: 3486, z: 1 } }],
+    [61279, { x: 3409, y: 3487, destination: { x: 3409, y: 3486, z: 1 } }],
+    [61283, { x: 3409, y: 3490, destination: { x: 3410, y: 3489, z: 1 } }],
+    [61285, { x: 3409, y: 3490, destination: { x: 3410, y: 3489, z: 1 } }],
+    [61286, { x: 3409, y: 3494, destination: { x: 3409, y: 3493, z: 1 } }],
+    [61288, { x: 3409, y: 3494, destination: { x: 3409, y: 3493, z: 1 } }],
+  ]);
   const HIDEOUT_SHRINE_IDS = new Set([61174, ObjectIdentifiers.MAKESHIFT_SHRINE, ObjectIdentifiers.MAKESHIFT_SHRINE_2]);
   const HIDEOUT_SHRINE_TILE = { x: 3601, y: 9614, z: 0 };
   const HIDEOUT_CHEST_ID = ObjectIdentifiers.CLOSED_CHEST_37;
@@ -2611,6 +2625,17 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (books.length > 1) options.push("Both.", () => chooseBooks("Both."));
     for (const book of books) options.push(book.name, () => chooseBooks(book.name));
     api.sendMultiChatboxPrompt(player, "You find several books. Which would you like to take?", ...options);
+  }
+
+  function routePaterdomusWindows(event) {
+    const player = event?.player;
+    const route = SLEPE_WINDOW_ROUTES.get(event?.definition?.id ?? event?.objectId);
+    const loc = event?.object?.getLocation?.();
+    const tile = loc && { x: loc.getX(), y: loc.getY(), z: loc.getZ() };
+    const story = player && slepeStory(player);
+    if (!player || stage(player) !== STAGE.SLEPE || !story.monksCleared || !story.journalRead ||
+      !story.upstairsTalked || !route || tile?.x !== route.x || tile?.y !== route.y || tile?.z !== 1) return;
+    event.destination = route.destination;
   }
 
   function handlePaterdomusObject(event) {
@@ -7021,6 +7046,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onNpcInteraction("Drezel", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Efaritay Hallow", { "Talk-to": talkQuestNpc });
   api.onObjectInteraction(handlePaterdomusObject);
+  api.onObjectRoute(routePaterdomusWindows);
   api.onItemOnObject(handlePaterdomusItemOnObject, { noted: false });
   api.onObjectInteraction(openHideoutChest);
   api.onObjectInteraction(handleSiegeHallObject);

@@ -294,21 +294,21 @@ module.exports = function registerRefinery(api, getQuestStage) {
   function tombPassage(event) {
     const player = event?.player;
     if (!player) return false;
-    const option = event.option;
+    const option = String(event.option ?? "").toLowerCase();
     const tile = event.location ?? event.object?.getLocation?.();
     const { x, y, z } = sourceTile(sessions.get(player), tile);
-    if (matchesObject(event, INVESTIGATE, "Blockage") && option === "Investigate" && x === TOMBSTILE.x && y === TOMBSTILE.y && z === TOMBSTILE.z) {
+    if (matchesObject(event, INVESTIGATE, "Blockage") && option === "investigate" && x === TOMBSTILE.x && y === TOMBSTILE.y && z === TOMBSTILE.z) {
       if (!progress(player).started || ["mined", "tunnel", "fight", "cleared", "freed", "escaped"].includes(progress(player).phase)) return false;
       event.handled = true;
       return startTranscript(api, player, IVAN, PAGE, "the-truth-hurtz-investigating-the-blockage");
     }
-    if (matchesObject(event, MINE_THROUGH, "Blockage") && option === "Mine-through" && x === TOMBSTILE.x && y === TOMBSTILE.y && z === TOMBSTILE.z) {
+    if (matchesObject(event, MINE_THROUGH, "Blockage") && option === "mine-through" && x === TOMBSTILE.x && y === TOMBSTILE.y && z === TOMBSTILE.z) {
       if (!progress(player).started || progress(player).phase !== "pickaxe") return false;
       event.handled = true;
       if (!mining.findBestPickaxe(player)) { player.sendMessage("You need a pickaxe. Ivan said he has a spare one."); return true; }
       return startTranscript(api, player, IVAN, PAGE, "the-truth-hurtz-mining-the-blockage");
     }
-    if (matchesObject(event, TOMB_ENTRANCE, "Cave entrance") && option === "Enter" && x === TOMBSTILE.x && y === TOMBSTILE.y && z === TOMBSTILE.z) {
+    if (matchesObject(event, TOMB_ENTRANCE, "Cave entrance") && option === "enter" && x === TOMBSTILE.x && y === TOMBSTILE.y && z === TOMBSTILE.z) {
       if (progress(player).phase !== "mined") return false;
       event.handled = true;
       setProgress(player, { phase: "tunnel" });
@@ -319,19 +319,19 @@ module.exports = function registerRefinery(api, getQuestStage) {
     // Older saved component accounts could be left on the source-map room
     // after the former plain PrivateArea implementation was destroyed. Let
     // them take the same visible tunnel back into the current exact template.
-    if (matchesObject(event, MINE_TUNNEL, "Tunnel") && option === "Enter" && x === 3168 && y === 7456 && z === 0
+    if (matchesObject(event, MINE_TUNNEL, "Tunnel") && option === "enter" && x === 3168 && y === 7456 && z === 0
       && !sessions.has(player) && ["fight", "cleared", "freed"].includes(progress(player).phase)) {
       event.handled = true;
       enterRoom(player);
       return true;
     }
-    if (matchesObject(event, MINE_TUNNEL, "Tunnel") && option === "Enter" && x === TUNNEL_TILE.x && y === TUNNEL_TILE.y && z === TUNNEL_TILE.z) {
+    if (matchesObject(event, MINE_TUNNEL, "Tunnel") && option === "enter" && x === TUNNEL_TILE.x && y === TUNNEL_TILE.y && z === TUNNEL_TILE.z) {
       if (!["tunnel", "fight", "cleared", "freed"].includes(progress(player).phase)) return false;
       event.handled = true;
       enterRoom(player);
       return true;
     }
-    if (matchesObject(event, CASTLE_EXIT, "Entry") && option === "Enter" && x === 3182 && y === 7470 && z === 0) {
+    if (matchesObject(event, CASTLE_EXIT, "Entry") && option === "enter" && x === 3182 && y === 7470 && z === 0) {
       if (progress(player).phase !== "freed") return false;
       event.handled = true;
       setProgress(player, { phase: "escaped" });
@@ -345,7 +345,7 @@ module.exports = function registerRefinery(api, getQuestStage) {
     if (!player || stepId !== "e9a7zZ" || (Array.isArray(pages) && !pages.some(entry => entry?.page === PAGE))) return null;
     const missingPickaxe = !mining.findBestPickaxe(player);
     if (missingPickaxe && progress(player).phase === "tomb") setProgress(player, { phase: "pickaxe" });
-    return missingPickaxe;
+    return !missingPickaxe;
   }
   function talkIvan(event) {
     const player = event?.player;
