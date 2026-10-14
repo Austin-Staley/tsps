@@ -8,6 +8,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const { registerQuest, loadTranscripts, startTranscript } = require("../QuestRuntime");
   const { handleDrakanDodgeRoll } = require("../bmr/DrakanDodgeRoll.TheBloodMoonRises");
   require("../bmr/Refinery.TheBloodMoonRises")(api, stage);
+  require("../bmr/FinalCastleDeposit.TheBloodMoonRises")(api);
   const PAGE = "The Blood Moon Rises";
   const START_HOOK = "quest:the-blood-moon-rises:start";
   const TOME_ID = ItemIdentifiers.TOME_OF_EXPERIENCE_3;
