@@ -2954,6 +2954,12 @@ module.exports = function registerDesertTreasureII(api) {
       const inShadowMap = Number.isFinite(x) && Number.isFinite(y)
         && x >= 2290 && x <= 2450 && y >= 6280 && y <= 6480;
       if (state.inShadow && !inShadowMap) state = { ...state, inShadow: false };
+      // The live boss is session-scoped. A disconnect loses the active fight;
+      // require the player to disturb the Odd Figure again instead of spawning
+      // an attacking boss automatically at the saved cathedral position.
+      if (state.whispererStarted && !state.whispererDefeated) {
+        state = { ...state, inShadow: false, whispererStarted: false };
+      }
       setLassar(p, state);
       ensurePrescott(p);
     }

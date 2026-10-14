@@ -7107,7 +7107,7 @@ test('Below Ice Mountain leaves Ramarno interactions to an active Desert Treasur
 
 test('Desert Treasure II runs the Whisperer specials, enrage and medallion recovery', () => {
   const { api: base } = mockApi();
-  const interactions = [], playerProcesses = [], itemActions = [], deathHooks = [], playerDeathHooks = [], objectInteractions = [];
+  const interactions = [], playerProcesses = [], itemActions = [], deathHooks = [], playerDeathHooks = [], objectInteractions = [], loginHooks = [];
   const addQueue = [], removeQueue = [], created = [];
   const incomingAttacks = [];
   const npcPendingDamage = [];
@@ -7155,6 +7155,7 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
     : prop === 'onNpcInteraction' ? (name, opts) => interactions.push({ name, opts })
       : prop === 'onPlayerProcess' ? (handler) => playerProcesses.push(handler)
         : prop === 'onItemAction' ? (handler) => itemActions.push(handler)
+          : prop === 'onPlayerLogin' ? (handler) => loginHooks.push(handler)
           : prop === 'onNpcDeath' ? (handler) => deathHooks.push(handler)
             : prop === 'onPlayerDeath' ? (handler) => playerDeathHooks.push(handler)
           : prop === 'onObjectInteraction' ? (handler) => typeof handler === 'function' && objectInteractions.push(handler)
@@ -7427,7 +7428,14 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   attrs.set('desert-treasure-ii:lassar', {
     ...deathRecovery, inShadow: true, sanity: 0, whispererStarted: true, whispererDefeated: false,
   });
+  quest.setStage(player, 10);
   player.location = { x: 2400, y: 6370, z: 0 };
+  loginHooks.forEach((handler) => handler({ player }));
+  assert.equal(attrs.get('desert-treasure-ii:lassar').whispererStarted, false,
+    `relogging during an unfinished attempt resets it before any attacking NPC can spawn (${JSON.stringify({ stage: quest.getStage(player), state: attrs.get('desert-treasure-ii:lassar'), handler: loginHooks[0]?.name })})`);
+  attrs.set('desert-treasure-ii:lassar', {
+    ...attrs.get('desert-treasure-ii:lassar'), inShadow: true, sanity: 0, whispererStarted: true,
+  });
   playerDeathHooks[0]({ player });
   assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, false, 'death returns the quest state to the material realm');
   assert.equal(attrs.get('desert-treasure-ii:lassar').sanity, 100, 'death restores sanity for the next attempt');
