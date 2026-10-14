@@ -2293,6 +2293,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       if (prep.flail) return 112;
       if (prep.stewFed) return 110;
       if (player?.getInventory?.().contains(PREP.stew)) return 104;
+      if (prep.gatherStarted) return 102;
       return prep.introComplete ? 100 : 102;
     }
     if (value === STAGE.SIEGE) {
@@ -5181,6 +5182,16 @@ module.exports = function registerTheBloodMoonRises(api) {
         if (stage(player) !== STAGE.PREPARATIONS) return;
         player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), introComplete: true });
         player.getPacketSender()?.sendVarbit?.(15464, 100);
+      };
+      return;
+    }
+    if (stage(player) === STAGE.PREPARATIONS && request.step?.player &&
+      request.text === "Alright, I'll get to it.") {
+      request.after = () => {
+        const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {};
+        if (stage(player) !== STAGE.PREPARATIONS || !prep.introComplete || prep.gatherStarted) return;
+        player.setAttribute(PREP_ATTRIBUTE, { ...prep, gatherStarted: true });
+        quest.setStage(player, STAGE.PREPARATIONS);
       };
       return;
     }

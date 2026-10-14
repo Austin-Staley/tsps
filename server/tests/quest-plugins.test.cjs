@@ -4196,6 +4196,13 @@ test('Blood Moon resumes the saved native-96 fleeing scene after logout', () => 
   endIntro.after();
   assert.equal(attributes.get('quest.the_blood_moon_rises.preparations').introComplete, true);
   assert.deepEqual(varbits.at(-1), [15464, 100]);
+  const startGathering = { player, step: { player: true }, text: "Alright, I'll get to it." };
+  line(startGathering);
+  assert.equal(typeof startGathering.after, 'function');
+  startGathering.after();
+  assert.equal(attributes.get('quest.the_blood_moon_rises.preparations').gatherStarted, true);
+  assert.ok(varbits.some(([id, value]) => id === 15464 && value === 102),
+    'the captured player reply reveals the Amitire plant for gathering');
 });
 
 test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house and chapel puzzles', () => {
