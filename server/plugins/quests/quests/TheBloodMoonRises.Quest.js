@@ -311,8 +311,8 @@ module.exports = function registerTheBloodMoonRises(api) {
       fromFloor: 2, toFloor: 2, landing: [2305, 7392, 1] },
     { id: CASTLE_DOOR_IDS.DOOR_ALT_M, x: 2304, y: 7392, z: 1, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.DINING,
       fromFloor: 2, toFloor: 2, landing: [2357, 7366, 1] },
-    { id: CASTLE_DOOR_IDS.DOOR, x: 2306, y: 7386, z: 1, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.ABOVE_STUDY,
-      fromFloor: 2, toFloor: 2, landing: [2434, 7373] },
+    { id: CASTLE_DOOR_IDS.DOOR, x: 2306, y: 7386, z: 1, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.UPPER_SOUTH_HALL,
+      fromFloor: 2, toFloor: 2, landing: [2434, 7364] },
     { id: CASTLE_DOOR_IDS.DOOR_M, x: 2434, y: 7365, z: 0, from: CASTLE_ROOM.UPPER_SOUTH_HALL, to: CASTLE_ROOM.THRONE,
       fromFloor: 2, toFloor: 2, landing: [2305, 7386, 1] },
     { id: CASTLE_DOOR_IDS.FULL, x: 2436, y: 7361, z: 0, from: CASTLE_ROOM.UPPER_SOUTH_HALL, to: CASTLE_ROOM.BEDROOM,
@@ -410,7 +410,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     { id: CASTLE_DOOR_IDS.NEW, x: 2441, y: 7389, z: 0, from: CASTLE_ROOM.EXPLOSIVE_ROOM, to: CASTLE_ROOM.SERVANTS_QUARTERS,
       fromFloor: 1, toFloor: 1, landing: [2439, 7394] },
     { id: CASTLE_DOOR_IDS.FULL, x: 2306, y: 7397, z: 1, from: CASTLE_ROOM.THRONE, to: CASTLE_ROOM.ABOVE_STUDY,
-      fromFloor: 2, toFloor: 2, landing: [2435, 7372] },
+      fromFloor: 2, toFloor: 2, landing: [2434, 7373] },
     { id: CASTLE_DOOR_IDS.FULL_M, x: 2434, y: 7372, z: 0, from: CASTLE_ROOM.ABOVE_STUDY, to: CASTLE_ROOM.THRONE,
       fromFloor: 2, toFloor: 2, landing: [2306, 7396, 1] },
     { id: CASTLE_DOOR_IDS.FULL, x: 2525, y: 7363, z: 0, from: CASTLE_ROOM.VENATOR_PUZZLE, to: CASTLE_ROOM.SOLID_KEY_ROOM,
@@ -3394,6 +3394,54 @@ module.exports = function registerTheBloodMoonRises(api) {
     const story = castleStory(player);
     const key = story.newMoon ?? {};
 
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.BEDROOM &&
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) === 2 &&
+      Number(player.getAttribute(CASTLE_NATIVE_STAGE_ATTRIBUTE)) >= 78 && option === "search") {
+      if (id === CASTLE_KEY_LOC_IDS.searchableCrate && x === 2450 && y === 7362) {
+        event.handled = true;
+        const claimed = Number(story.bedroomChunkyPotionsClaimed) || 0;
+        if (claimed >= 2) {
+          player.sendMessage("The crate is empty.");
+          return;
+        }
+        api.sendMultiChatboxPrompt(player, "You search the crate and find some foul chunky potions.",
+          "Leave them", () => {},
+          "Take them", () => {
+            const current = castleStory(player);
+            const currentClaimed = Number(current.bedroomChunkyPotionsClaimed) || 0;
+            if (quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+              Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.BEDROOM ||
+              Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== 2 || currentClaimed >= 2) return;
+            if (castleKeyGive(player, CASTLE_KEY_ITEMS.chunkyPotion1,
+              "You take some foul chunky potions from the crate.")) {
+              player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...current,
+                bedroomChunkyPotionsClaimed: currentClaimed + 1 });
+            }
+          });
+        return;
+      }
+      if (id === 61752 && x === 2449 && y === 7363) {
+        event.handled = true;
+        if (story.bedroomJerkyClaimed) {
+          player.sendMessage("You search the shelves, but find nothing else of use.");
+          return;
+        }
+        api.sendMultiChatboxPrompt(player, "You search the shelves and find some mysterious jerky.",
+          "Leave it", () => {},
+          "Take it", () => {
+            const current = castleStory(player);
+            if (quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+              Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.BEDROOM ||
+              Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== 2 || current.bedroomJerkyClaimed) return;
+            if (castleKeyGive(player, CASTLE_BOOK_ITEMS.mysteryJerky,
+              "You take some mysterious jerky from the shelves.")) {
+              player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...current, bedroomJerkyClaimed: true });
+            }
+          });
+        return;
+      }
+    }
+
     if (id === CASTLE_KEY_LOC_IDS.searchableCrate && x === 2461 && y === 7421 && option === "search" &&
       Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) === CASTLE_ROOM.NORTH_LOBBY_HALL &&
       Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) === 2 &&
@@ -5150,8 +5198,11 @@ module.exports = function registerTheBloodMoonRises(api) {
   function handleCastleChunkyPotionCombine(event) {
     const player = event?.player;
     const oneDose = CASTLE_KEY_ITEMS.chunkyPotion1;
+    const room = Number(player?.getAttribute(CASTLE_ROOM_ATTRIBUTE));
+    const floor = Number(player?.getAttribute(CASTLE_FLOOR_ATTRIBUTE));
     if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
-      Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.SECRET_ROOM ||
+      ![CASTLE_ROOM.SECRET_ROOM, CASTLE_ROOM.BEDROOM].includes(room) ||
+      (room === CASTLE_ROOM.BEDROOM && floor !== 2) ||
       event.usedItemId !== oneDose || event.usedWithItemId !== oneDose) return false;
     event.handled = true;
     const inventory = player.getInventory();
