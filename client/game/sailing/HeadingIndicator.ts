@@ -127,6 +127,8 @@ export class HeadingIndicator {
     private models: [number, number] = [-1, -1];
     private readonly parts = new Map<number, ArrowPart[]>();
     private flash?: { heading: number; at: number };
+    /** How loading the models from the graphics defaults went, for `__headingDebug`. */
+    loadStatus = "not started";
 
     setModels(models: [number, number]): void {
         this.models = models;
@@ -170,6 +172,7 @@ export class HeadingIndicator {
     debugState(getModel: (id: number) => ModelData | undefined): object {
         return {
             models: this.models,
+            loadStatus: this.loadStatus,
             loaded: this.models.map((id) => id >= 0 && !!getModel(id)),
             flash: this.flash ?? null,
         };
@@ -212,6 +215,37 @@ export interface HeadingIndicatorHost {
 }
 
 let lastDebugAt = 0;
+
+interface DeckDebugHost {
+    mapManager?: {
+        mapSquares: Map<number, { id: number; canRender(frame: number): boolean; frameLoaded?: number }>;
+        loadingMapIds: Set<number>;
+        worldEntityMapIds: Set<number>;
+        visibleMaps: { id: number }[];
+    };
+    worldEntityOverlays?: Map<number, unknown>;
+    worldEntityAnimator?: { getTransform(entityIndex: number): unknown; getMovement(entityIndex: number): unknown };
+    stats?: { frameCount: number };
+}
+
+/** Where the boat's deck scene is in the renderer's pipeline (for `__headingDebug`). */
+function deckState(host: DeckDebugHost, entityIndex: number): object {
+    const manager = host.mapManager;
+    if (!manager) return { mapManager: false };
+    const mapX = 200 + entityIndex;
+    const mapId = (mapX << 8) | mapX;
+    const square = manager.mapSquares.get(mapId);
+    return {
+        overlayRecord: host.worldEntityOverlays?.has(entityIndex) ?? null,
+        square: !!square,
+        canRender: square && host.stats ? square.canRender(host.stats.frameCount) : null,
+        loading: manager.loadingMapIds.has(mapId),
+        drawList: manager.worldEntityMapIds.has(mapId),
+        visible: manager.visibleMaps.some((map) => map.id === mapId),
+        movement: !!host.worldEntityAnimator?.getMovement(entityIndex),
+        transform: !!host.worldEntityAnimator?.getTransform(entityIndex),
+    };
+}
 
 /** `__headingDebug = true` in the console logs, once a second, what the indicator saw. */
 function debug(now: number, details: () => object): void {
@@ -269,6 +303,7 @@ export function headingIndicatorTriangles(host: HeadingIndicatorHost, now: numbe
         batches: triangles?.length ?? 0,
         firstVertex: triangles?.[0]?.positions.slice(0, 3) ?? null,
         surface: host.sampleHeightAtExactPlane(boat.position.x / FINE_UNITS_PER_TILE, boat.position.z / FINE_UNITS_PER_TILE, 0),
+        deck: deckState(host as unknown as DeckDebugHost, boatIndex),
     }));
     return triangles;
 }

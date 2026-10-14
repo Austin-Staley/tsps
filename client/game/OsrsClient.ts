@@ -6679,11 +6679,18 @@ export class OsrsClient {
             // stream in: on a fresh browser cache it isn't there yet, and the arrows would be
             // missing for the whole session.
             const cacheInfo = cache.info;
+            headingIndicator.loadStatus = "loading";
             void retryOnMissingGroup(() =>
                 require("../rs/config/defaults/GraphicsDefaults").GraphicsDefaults.load(cacheInfo, this.cacheSystem),
             ).then((defaults) => {
+                headingIndicator.loadStatus = defaults
+                    ? `loaded ${JSON.stringify(defaults.headingIndicatorModels)} (${cacheInfo.game} ${cacheInfo.revision}, index 17 ${this.cacheSystem.indexExists(17) ? "present" : "missing"})`
+                    : "gave up: the group never streamed in";
                 if (defaults) headingIndicator.setModels(defaults.headingIndicatorModels);
-            }).catch((e) => console.warn("[OsrsClient] Failed to load the heading indicator models:", e));
+            }).catch((e) => {
+                headingIndicator.loadStatus = `error: ${e?.message ?? e}`;
+                console.warn("[OsrsClient] Failed to load the heading indicator models:", e);
+            });
 
             this.startClientTickLoop();
             this.renderer.initCache();
