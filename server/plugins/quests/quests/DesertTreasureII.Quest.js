@@ -2366,6 +2366,18 @@ module.exports = function registerDesertTreasureII(api) {
     }
   }
 
+  function handleSucellusDoorToggle(event) {
+    if (event.handled || event.clickType !== 1) return;
+    const tile = sucellusSourceTile(event.player, event.location);
+    const id = event.definition?.id ?? event.objectId;
+    if (stage(event.player) !== S.SUCELLUS || id !== SUCELLUS_MEDALLION_GATE
+      || tile?.x !== 3023 || tile.y !== 6425 || tile.z !== 0) return;
+    // The shared door handler runs before the quest's object hook.
+    const interaction = { ...event, option: "open" };
+    handleObjectInteraction(interaction);
+    if (interaction.handled) event.handled = true;
+  }
+
   function openSucellusGate({ player, object, objectId, definition, location }) {
     const area = player?.getAttribute(SUCELLUS_AREA);
     const tile = sucellusSourceTile(player, location);
@@ -7894,6 +7906,7 @@ module.exports = function registerDesertTreasureII(api) {
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);
   api.onCustomEvent("door:toggle", handleLassarDoorToggle);
+  api.onCustomEvent("door:toggle", handleSucellusDoorToggle);
   api.onCustomEvent("magic:hit-effects", activateTotem);
   api.onCustomEvent("magic:hit-effects", stunLeviathan);
   api.onCombatHitRoll(forceTotemAccuracy);

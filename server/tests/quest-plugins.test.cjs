@@ -9252,7 +9252,13 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   inventory.set(I.ODD_KEY, 1);
   inventory.set(I.ODD_KEY, 0); // simulate the real private-instance ground drop being lost on exit
   bankItems.set(I.ODD_KEY, 1);
-  interactObject(49140, 3023, 6425, 'Open');
+  const westGateToggle = handlers.custom.get('door:toggle')
+    .find(handler => handler.name === 'handleSucellusDoorToggle');
+  const lockedWestGate = { player, objectId: 49140, clickType: 1,
+    location: sourceLocation(3023, 6425), handled: false };
+  westGateToggle(lockedWestGate);
+  assert.equal(lockedWestGate.handled, true,
+    'the shared door toggle cannot bypass the odd-key requirement');
   assert.match(messages.at(-1), /odd key from Duke Sucellus should fit/,
     'a key already in the bank is not duplicated or reclaimed');
   assert.equal(attrs.get('desert-treasure-ii:sucellus-west-room'), undefined);
@@ -9265,8 +9271,10 @@ test('Desert Treasure II prison escape leads to the cache Duke arena and require
   assert.equal(interactObject(49138, 3039, 6433, 'Open'), false);
   assert.equal(inventory.get(I.ODD_KEY), 1,
     'a defeated player who lost the key can recover it by clicking the real Duke gate');
-  assert.equal(interactObject(49140, 3023, 6425, 'Open'), false,
-    'using the odd key unlocks the gate and yields to the shared door swing');
+  const earnedWestGate = { ...lockedWestGate, handled: false };
+  westGateToggle(earnedWestGate);
+  assert.equal(earnedWestGate.handled, false,
+    'using the odd key through the shared toggle yields to the ordinary door swing');
   assert.equal(attrs.get('desert-treasure-ii:sucellus-west-room'), true);
   assert.equal(inventory.get(I.ODD_KEY), 0);
   assert.equal(interactObject(49140, 3023, 6425, 'Open'), false,
