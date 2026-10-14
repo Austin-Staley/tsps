@@ -94,6 +94,7 @@ module.exports = function registerDesertTreasureII(api) {
   const SUCELLUS_PRISON_GEAR = "desert-treasure-ii:sucellus-prison-gear";
   const SUCELLUS_PRISON_PROGRESS = "desert-treasure-ii:sucellus-prison-progress";
   const SUCELLUS_PRISON_CHECKPOINT = "desert-treasure-ii:sucellus-prison-checkpoint";
+  // shortcut: clear floor beside the recorded Assassin; confirm the exact escape landing with a capture.
   const SUCELLUS_ESCAPE_TILE = [47, 39, 2];
   const SUCELLUS_PRISON_COMPLETE = "desert-treasure-ii:sucellus-prison-complete";
   const SUCELLUS_CELL_PROGRESS = "desert-treasure-ii:sucellus-cell-progress";
