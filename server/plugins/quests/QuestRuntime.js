@@ -344,7 +344,7 @@ function sendQuestVarps({ player }) {
     // Bitfield stages must write their varbit: writing the whole parent varp
     // clobbers sibling bits (X Marks/Client of Kourend share veos_quest).
     if (quest.varbitId !== undefined) {
-      sender.sendVarbit(quest.varbitId, quest.getStage(player));
+      sender.sendVarbit(quest.varbitId, quest.varpValue(quest.getStage(player)));
       continue;
     }
     if (!Number.isInteger(quest.varpId) || quest.varpId < 0) continue;
@@ -374,7 +374,10 @@ function registerQuest(api, def) {
   const stageKey = stageAttribute(def.key);
   const quest = {
     ...def,
-    /** The varp value the client sees for a stage; def.varpValue maps stages the cache keys on. */
+    /**
+     * The varp (or varbit) value the client sees for a stage; def.varpValue maps stages the cache
+     * keys on, so a quest can keep its own stage numbers and still show live OSRS's values.
+     */
     varpValue(stage) {
       return def.varpValue ? def.varpValue(stage) | 0 : stage;
     },
@@ -387,7 +390,7 @@ function registerQuest(api, def) {
       // Quests whose stage lives in a varbit of a shared varp (most post-2007
       // quests) set the varbit, so sibling bits in the same varp survive.
       if (def.varbitId !== undefined) {
-        player.getPacketSender().sendVarbit(def.varbitId, value | 0);
+        player.getPacketSender().sendVarbit(def.varbitId, quest.varpValue(value | 0));
       } else {
         player.getPacketSender().sendConfig(def.varpId, quest.varpValue(value | 0));
       }

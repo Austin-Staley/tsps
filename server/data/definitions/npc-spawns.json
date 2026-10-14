@@ -9261,6 +9261,7 @@
   {"level":0,"name":"Dr Ford","x":3364,"y":3171,"id":6589},
   {"level":0,"name":"Hill Giant","x":3372,"y":3152,"id":10374},
   {"level":0,"name":"Hill Giant","x":3373,"y":3148,"id":10376},
+  {"level":0,"name":"Kovac","x":3369,"y":11486,"id":11560,"direction":5,"wanderRadius":0},
   {"level":0,"name":"Hill Giant","x":3375,"y":3144,"id":10374},
   {"level":0,"name":"Hill Giant","x":3376,"y":3150,"id":10374},
   {"level":0,"name":"Hill Giant","x":3379,"y":3144,"id":10376},
