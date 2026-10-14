@@ -39,6 +39,7 @@ function mockApi() {
     playerProcess: [],
     playerLogin: [],
     playerLogout: [],
+    playerBeforeDeath: [],
     npcBeforeDeath: [],
     npcDeath: [],
     npcHitModify: [],
@@ -63,6 +64,7 @@ function mockApi() {
     onPlayerProcess: (h) => handlers.playerProcess.push(h),
     onPlayerLogin: (h) => handlers.playerLogin.push(h),
     onPlayerLogout: (h) => handlers.playerLogout.push(h),
+    onPlayerBeforeDeath: h => handlers.playerBeforeDeath.push(h),
     onNpcBeforeDeath: h => handlers.npcBeforeDeath.push(h),
     onNpcDeath: h => handlers.npcDeath.push(h),
     onNpcHitModify: (h) => handlers.npcHitModify.push(h),
@@ -3632,18 +3634,36 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
   let playerLocation = null;
   const animations = [];
   const pendingDamage = [];
+  const combatHits = [];
   const graphics = [];
   const attackDelays = [];
   const stepsBack = [];
   const prayers = [];
   let transcriptStarts = 0;
   let canKnockback = true;
+  let nextMeleeDamage = 18;
+  let nextMagicDamage = 28;
+  const combatFactory = api.core.CombatFactory;
+  const meleeMethod = combatFactory.MELEE_COMBAT;
+  const magicMethod = combatFactory.MAGIC_COMBAT;
+  const oldMeleeHits = meleeMethod.hits;
+  const oldMagicHits = magicMethod.hits;
+  const oldAddPendingHit = combatFactory.addPendingHit;
+  const combatHit = damage => ({
+    damage,
+    getTotalDamage() { return this.damage; },
+    setTotalDamage(value) { this.damage = value; },
+  });
+  meleeMethod.hits = () => [combatHit(nextMeleeDamage)];
+  magicMethod.hits = () => [combatHit(nextMagicDamage)];
+  combatFactory.addPendingHit = hit => combatHits.push(hit);
   const boss = {
     isNpc: () => true,
     isPlayer: () => false,
     getAsNpc: () => boss,
     getIndex: () => 200,
     getId: () => api.core.NpcIdentifiers.WYRD_8,
+    isRegistered: () => false,
     getArea: () => bossArea,
     setArea: (area) => { bossArea = area; },
     getLocation: () => bossLocation,
@@ -3662,6 +3682,7 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     for (const handler of handlers.custom.get(name) ?? []) handler(request);
   };
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+  let playerHitpoints = 100;
   const player = {
     getUsername: () => 'WyrdFightTest',
     getAttribute: (key) => attributes.get(key),
@@ -3677,7 +3698,9 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     getArea: () => player.area,
     setArea: (area) => { player.area = area; },
     getLocation: () => playerLocation,
-    getHitpoints: () => 100,
+    getHitpoints: () => playerHitpoints,
+    setHitpoints: value => { playerHitpoints = value; },
+    getSkillManager: () => ({ getMaxLevel: () => 99 }),
     getPrayerActive: () => prayers,
     getEquipment: () => ({ get: () => null }),
     getMovementQueue: () => ({ canWalk: () => canKnockback, walkStep: (dx, dy) => {
@@ -3705,6 +3728,15 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
   assert.equal(boss.getArea(), bossArea);
   assert.equal(boss.hitpoints, 1100);
 
+  const prayerRoll = handlers.combatHitRoll.find(handler => handler.name === 'allowWyrdHitThroughPrayer');
+  const wyrdRoll = { attacker: boss, target: player, bypassProtectionPrayer: false };
+  prayerRoll(wyrdRoll);
+  assert.equal(wyrdRoll.bypassProtectionPrayer, true,
+    'the Wyrd hit is rolled normally, then its scripted prayer reduction is applied once');
+  const unrelatedRoll = { attacker: player, target: boss, bypassProtectionPrayer: false };
+  prayerRoll(unrelatedRoll);
+  assert.equal(unrelatedRoll.bypassProtectionPrayer, false, 'the prayer bypass is scoped to the owned Wyrd');
+
   bossLocation = new api.core.Location(2976, 7456, 0);
   playerLocation = new api.core.Location(2976, 7452, 0);
   assert.equal(boss.getHitpoints(), 1100);
@@ -3717,19 +3749,25 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     worldCycle += 4;
     bossArea.process(boss);
     assert.equal(animations.at(-1), 14020, 'the initial distance uses the Wyrd’s magic attack');
-    assert.ok(pendingDamage.at(-1).getDamage() <= 25, 'the unprayerable ranged magic hit stays within its max hit');
+    assert.ok(combatHits.at(-1).getTotalDamage() <= 25, 'the unprayerable ranged magic hit stays within its max hit');
+    assert.equal(combatHits.at(-1).getTotalDamage(), 25, 'magic damage is capped without bypassing its normal hit roll');
+    prayers[api.core.PrayerHandler.PROTECT_FROM_MELEE] = true;
     playerLocation = new api.core.Location(2976, 7455, 0);
     worldCycle += 5;
     bossArea.process(boss);
     assert.equal(animations.at(-1), 14018, 'first attack is the right-arm punch');
+    assert.equal(combatHits.at(-1).getTotalDamage(), 6, 'Protect from Melee reduces an accurate 18-damage punch to one third');
     assert.equal(stepsBack.length, 1, 'each punch knocks the player back one walkable tile');
     worldCycle += 5;
+    nextMeleeDamage = 0;
     canKnockback = false;
     const beforeBlockedPunch = pendingDamage.length;
     bossArea.process(boss);
     assert.equal(animations.at(-1), 14019, 'the next attack uses the other arm');
-    assert.equal(pendingDamage.length, beforeBlockedPunch + 2,
-      'a blocked knockback causes the guide-described light recoil in addition to the punch');
+    assert.equal(pendingDamage.length, beforeBlockedPunch + 1,
+      'a blocked knockback causes the guide-described light recoil; the punch uses normal combat damage');
+    assert.equal(combatHits.at(-1).getTotalDamage(), 0,
+      'a missed ordinary accuracy roll remains a zero-damage punch');
     canKnockback = true;
     worldCycle += 5;
     prayers[api.core.PrayerHandler.PROTECT_FROM_MELEE] = true;
@@ -3781,9 +3819,21 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     assert.equal(lethalHit.preventDeath, true);
     assert.equal(boss.getHitpoints(), 110, 'an overkill hit preserves the Wyrd at the documented 10% cutscene threshold');
     assert.ok(transcriptStarts > dialoguesBeforeLethalHit, 'the 10% transcript starts before the NPC enters its death task');
+
+    const playerDeath = handlers.playerBeforeDeath.find(handler => handler.name === 'handleWyrdPlayerBeforeDeath');
+    assert.equal(typeof playerDeath, 'function', 'Wyrd deaths are handled in the encounter area');
+    const death = { player, preventDeath: false };
+    playerDeath(death);
+    assert.equal(death.preventDeath, true, 'the Wyrd fight uses the Wiki safe-death rule');
+    assert.equal(playerHitpoints, 99, 'a failed attempt returns the player with full Hitpoints');
+    assert.deepEqual(player.destination, [3506, 9838, 0], 'a failed attempt returns to Veliaf outside the laboratory');
+    assert.equal(player.getAttribute('quest.the_blood_moon_rises.wyrd-area'), null, 'the failed instance is cleared for retry');
   } finally {
     api.core.World.getProcessCycle = oldCycle;
     Math.random = originalRandom;
+    meleeMethod.hits = oldMeleeHits;
+    magicMethod.hits = oldMagicHits;
+    combatFactory.addPendingHit = oldAddPendingHit;
   }
 });
 

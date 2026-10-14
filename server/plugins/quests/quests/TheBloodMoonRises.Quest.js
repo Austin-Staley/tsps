@@ -717,7 +717,7 @@ module.exports = function registerTheBloodMoonRises(api) {
         if (now >= encounter.nextAttackAt) {
           encounter.nextAttackAt = now + 5;
           mobile.performAnimation(new Animation(14020));
-          wyrdDamage(player, mobile, Math.floor(Math.random() * 26));
+          queueWyrdCombatHit(encounter, api.core.CombatType.MAGIC, 25);
           player.sendMessage("The Wyrd hurls a magic burst at you. Protection prayers cannot stop it.");
         }
         return;
@@ -730,9 +730,8 @@ module.exports = function registerTheBloodMoonRises(api) {
       if (step === 0 || step === 1 || step === 3 || step === 4) {
         const rightArm = step === 0 || step === 3;
         mobile.performAnimation(new Animation(rightArm ? 14018 : 14019));
-        const rawDamage = Math.floor(Math.random() * 31);
         const meleeProtected = protection[PrayerHandler.PROTECT_FROM_MELEE] === true;
-        wyrdDamage(player, mobile, meleeProtected ? Math.floor(rawDamage / 3) : rawDamage);
+        queueWyrdCombatHit(encounter, api.core.CombatType.MELEE, 30, meleeProtected ? 1 / 3 : 1);
         const dx = Math.sign(px - (bx + 1));
         const dy = Math.sign(py - (by + 1));
         const wasPushed = stepPlayerBack(player, dx, dy);
@@ -773,6 +772,42 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.getCombat().getHitQueue().addPendingDamage([
       new HitDamage(damage, HitMask.RED).setSource(source),
     ]);
+  }
+
+  function allowWyrdHitThroughPrayer(event) {
+    const { attacker, target } = event ?? {};
+    const area = attacker?.getArea?.();
+    const encounter = area && wyrdEncounters.get(area);
+    if (encounter?.boss === attacker && encounter.player === target) event.bypassProtectionPrayer = true;
+  }
+
+  function queueWyrdCombatHit(encounter, type, maxDamage, multiplier = 1) {
+    const method = type === api.core.CombatType.MAGIC
+      ? api.core.CombatFactory.MAGIC_COMBAT
+      : api.core.CombatFactory.MELEE_COMBAT;
+    const hit = method.hits(encounter.boss, encounter.player)[0];
+    if (!hit) return;
+    hit.setTotalDamage(Math.floor(Math.min(maxDamage, hit.getTotalDamage()) * multiplier));
+    api.core.CombatFactory.addPendingHit(hit);
+  }
+
+  function handleWyrdPlayerBeforeDeath(event) {
+    const player = event?.player;
+    const area = player?.getAttribute?.(WYRD_AREA_ATTRIBUTE);
+    const encounter = area && wyrdEncounters.get(area);
+    if (!encounter || encounter.player !== player || encounter.finished) return;
+    // Wiki: death in the Wyrd fight returns the player outside with all items intact.
+    event.preventDeath = true;
+    encounter.finished = true;
+    clearWyrdPools(encounter, false);
+    api.removeNpc(encounter.boss);
+    player.getCombat()?.getHitQueue?.().clear?.();
+    area.leave(player, false);
+    wyrdEncounters.delete(area);
+    player.setAttribute(WYRD_AREA_ATTRIBUTE, null);
+    player.setHitpoints(player.getSkillManager().getMaxLevel(api.core.Skill.HITPOINTS));
+    player.moveTo(new Location(3506, 9838, 0));
+    player.sendMessage("The Wyrd knocks you unconscious. You wake outside the laboratory with your belongings intact.");
   }
 
   function hasWyrdEarProtection(player) {
@@ -5518,6 +5553,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogout(cleanupSlepeManor);
   api.onNpcDeath(handleWyrdDeath);
   api.onNpcBeforeDeath(handleWyrdBeforeDeath);
+  api.onPlayerBeforeDeath(handleWyrdPlayerBeforeDeath);
+  api.onCombatHitRoll(allowWyrdHitThroughPrayer);
   api.onNpcDeath(handleSlepeManorDeath);
   api.onNpcDeath(handlePaterdomusMonkDeath);
   api.onNpcDeath(handleCastleNpcDeath);
