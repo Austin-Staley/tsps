@@ -6525,7 +6525,8 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
   });
   const runtime = require('../plugins/quests/QuestRuntime');
   const startTranscript = runtime.startTranscript;
-  runtime.startTranscript = () => true;
+  let transcriptCalls = 0;
+  runtime.startTranscript = () => { transcriptCalls++; return true; };
   try {
     require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
     const quest = runtime.getRegisteredQuests().at(-1), attrs = new Map(), pendingHits = [], messages = [];
@@ -6652,11 +6653,18 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     playerDeaths.at(-1)({ player: p });
     assert.equal(attrs.get('desert-treasure-ii:final-wight-index'), 0, 'dying restarts the four-wight trial');
     assert.equal(attrs.get('desert-treasure-ii:final-wights-started'), false);
-    assert.equal(attrs.get('desert-treasure-ii:final-cutscene-started'), false, 'retry replays the reveal instead of directly respawning an unsupplied wight');
+    assert.equal(attrs.get('desert-treasure-ii:final-cutscene-started'), true, 'death retains the completed reveal without auto-starting a wight');
     assert.equal(attrs.get('desert-treasure-ii:final-room'), null, 'the failed private room is discarded');
     assert.equal(finalArea.destroyed, true);
     assert.ok(removed.includes(lastBoss), 'the active Persten is removed with its private room');
     assert.ok(registeredObjects.every(object => object.deregistered), 'smoke and potion pools are removed with the private room');
+    const pagesBeforeRetry = transcriptCalls;
+    interactions.find(({ name }) => name === 'Asgarnia Smith').options['Talk-to']({ player: p, npcId: core.NpcIdentifiers.ASGARNIA_SMITH });
+    const retryArea = p.getPrivateArea();
+    assert.ok(retryArea && retryArea !== finalArea, 'Smith starts a fresh private wight attempt after death');
+    assert.equal(transcriptCalls, pagesBeforeRetry, 'retry does not replay the completed Smith reveal');
+    assert.ok(queue.findLast(npc => npc.__dt2FinalWight === 0), 'the chosen retry starts with the Assassin');
+    retryArea.destroy();
   } finally {
     runtime.startTranscript = startTranscript;
   }
@@ -6753,7 +6761,8 @@ test('Desert Treasure II logout from the final trial returns to the vault and cl
 
   assert.equal(area.destroyed, true);
   assert.equal(attrs.get('desert-treasure-ii:final-room'), null);
-  assert.equal(attrs.get('desert-treasure-ii:final-cutscene-started'), false);
+  assert.equal(attrs.get('desert-treasure-ii:final-cutscene-started'), true,
+    'leaving after the reveal keeps it earned while still returning to the safe vault entrance');
   assert.equal(attrs.get('desert-treasure-ii:final-wights-started'), false);
   assert.equal(attrs.get('desert-treasure-ii:final-wight-index'), 0);
   assert.equal(quest.getStage(p), 11, 'logging out does not change earned quest stage');

@@ -3900,6 +3900,9 @@ module.exports = function registerDesertTreasureII(api) {
   function handleLassarPlayerDeath({ player: p }) {
     if (!p) return;
     if (stage(p) === S.FINALE && !p.getAttribute(FINAL_WIGHTS_COMPLETE)) {
+      // Once the reveal's final dialogue action started the trial, deaths can
+      // reset the fight without forcing the completed story scene to replay.
+      const revealComplete = p.getAttribute(FINAL_WIGHTS_STARTED) === true;
       const area = p.getAttribute(FINAL_ROOM);
       if (area instanceof FinalVaultArea) {
         area.leave?.(p, false);
@@ -3909,7 +3912,7 @@ module.exports = function registerDesertTreasureII(api) {
       }
       const owned = spawned.get(p);
       if (owned) owned.finalWight = null;
-      p.setAttribute("desert-treasure-ii:final-cutscene-started", false);
+      p.setAttribute("desert-treasure-ii:final-cutscene-started", revealComplete);
       p.setAttribute(FINAL_WIGHT_INDEX, 0);
       p.setAttribute(FINAL_WIGHTS_STARTED, false);
       p.sendMessage("You are returned to the Ancient Vault. Sliske's wight trial will restart when you enter again.");
@@ -3942,8 +3945,10 @@ module.exports = function registerDesertTreasureII(api) {
     if (current && current === p.getAttribute(FINAL_ROOM) && stage(p) === S.FINALE
       && !p.getAttribute(FINAL_WIGHTS_COMPLETE)) {
       // Logging out leaves the chamber, so a later login must not auto-start
-      // the trial before the player has had a chance to prepare again.
-      p.setAttribute("desert-treasure-ii:final-cutscene-started", false);
+      // the trial before the player has had a chance to prepare again. Keep a
+      // completed reveal so returning to Smith restarts only the wight trial.
+      const revealComplete = p.getAttribute(FINAL_WIGHTS_STARTED) === true;
+      p.setAttribute("desert-treasure-ii:final-cutscene-started", revealComplete);
       p.setAttribute(FINAL_WIGHTS_STARTED, false);
       p.setAttribute(FINAL_WIGHT_INDEX, 0);
     }
