@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * The Tombs of Amascut's Combat Achievements (plugins/combatachievements/) that the raid's end
+ * The Tombs of Amascut's Combat Achievements (plugins/achievements/combatachievements/) that the raid's end
  * decides: the completion counts per mode (Entry's tasks count every mode, "Entry mode (or
  * above)"), the raid level, the deaths, the party size, the time and the invocations. The room
  * tasks (Perfect Het and the rest) need the rooms to say how they went and are not done yet.

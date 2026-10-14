@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * The Gauntlet's Combat Achievements (plugins/combatachievements/): completions count for the
+ * The Gauntlet's Combat Achievements (plugins/achievements/combatachievements/): completions count for the
  * Crystalline or Corrupted Hunllef, and a completed run decides its tasks from its time, what was
  * made in it, the armour worn at the end and how the Hunllef fight went (GauntletHunllef).
  * The completion counts and best times are the run stats the Gauntlet already keeps.

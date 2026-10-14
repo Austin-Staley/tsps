@@ -4,8 +4,8 @@
  * (the obtained items packed into slots 0..n, in category order) and collection_draw (7797);
  * typing in the search sends one collection_delayed_transmit (4100) per obtained item.
  */
-const Data = require("./ClogData");
-const Progress = require("./ClogProgress");
+const Data = require("./Data.CollectionLog");
+const Progress = require("./Progress.CollectionLog");
 
 const COLLECTION = 621;
 const OVERVIEW = 908;
@@ -48,10 +48,6 @@ const TAB_COMPONENTS = [
 const uid = (group, child) => (group << 16) | child;
 
 let pluginApi;
-
-function bind(api) {
-  pluginApi = api;
-}
 
 function currentTab(player) {
   return Data.tabs()[Number(player.getAttribute(TAB_ATTRIBUTE)) || 0] ?? Data.tabs()[0];
@@ -209,4 +205,16 @@ function click(event) {
   event.handled = true;
 }
 
-module.exports = { COLLECTION, OVERVIEW, TAB_COMPONENTS, TAB_ATTRIBUTE, CATEGORY_ATTRIBUTE, bind, open, click, selectTab, showCategory, sendSearch };
+function onOpen({ player, category }) {
+  open(player, category);
+}
+
+module.exports = function attachInterface(api) {
+  pluginApi = api;
+  api.persistAttribute(TAB_ATTRIBUTE, 0);
+  api.persistAttribute(CATEGORY_ATTRIBUTE, 0);
+  api.onCustomEvent("collection-log:open", onOpen);
+  api.onInterfaceActionClick(click);
+};
+
+Object.assign(module.exports, { COLLECTION, OVERVIEW, TAB_COMPONENTS, TAB_ATTRIBUTE, CATEGORY_ATTRIBUTE, open, click, selectTab, showCategory, sendSearch });

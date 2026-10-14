@@ -6,10 +6,9 @@
  * the key ranges of the tabs before it: bosses 0-56, raids 57-59, clues 60-70, minigames 71-92,
  * other 93-123.
  */
-const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
-
 const TAB_STRUCTS = [471, 472, 473, 474, 475];
 
+let CacheDefinitions;
 let data = null;
 
 function load() {
@@ -50,4 +49,13 @@ const categoriesOf = (itemId) => load().categoriesByItem.get(itemId) ?? [];
 const categoryByKey = (tab, key) => tab.categories.find((category) => category.key === key) ?? null;
 const globalIndex = (category) => category.tab.offset + category.key;
 
-module.exports = { TAB_STRUCTS, load, tabs, isLogged, categoriesOf, categoryByKey, globalIndex };
+module.exports = function attachData(api) {
+  CacheDefinitions = api.core.CacheDefinitions;
+};
+
+/** An item's cache name, or undefined. */
+function itemName(itemId) {
+  return CacheDefinitions.getItem(itemId)?.name;
+}
+
+Object.assign(module.exports, { TAB_STRUCTS, itemName, load, tabs, isLogged, categoriesOf, categoryByKey, globalIndex });

@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * The Fortis Colosseum's Combat Achievements (plugins/combatachievements/) that the run decides:
+ * The Fortis Colosseum's Combat Achievements (plugins/achievements/combatachievements/) that the run decides:
  * Sol Heredit's defeats (his own kill count), the run's total time (its waves added up), the
  * modifiers he was beaten with, and wave 11 cleared with a modifier the task names.
  */

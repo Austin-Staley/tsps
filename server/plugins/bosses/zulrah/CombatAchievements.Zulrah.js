@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Zulrah's Combat Achievements (plugins/combatachievements/): its kill count and best time are
+ * Zulrah's Combat Achievements (plugins/achievements/combatachievements/): its kill count and best time are
  * the shrine's own, the speed tasks are timed by the fight when the player is not on a slayer
  * task for it, Perfect Zulrah counts the damage the task names (snakelings, venom clouds, its
  * green form's attacks and its crimson form's tail) and three snakelings killed on one tick is a

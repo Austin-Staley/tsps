@@ -8,7 +8,7 @@
  * (CA_ID-prefixed from rev 234: the chat script makes it a "View" link), the unlock message, then
  * the "Combat Task Completed!" popup with jingle 76. Popups queue (Notifications.plugin.js).
  */
-const Data = require("./CaData");
+const Data = require("./Data.CombatAchievements");
 
 const COMPLETED_ATTRIBUTE = "combat-achievements:completed";
 const CLAIMED_ATTRIBUTE = "combat-achievements:claimed";
@@ -21,10 +21,6 @@ const JINGLE = { id: 76, length: 4974 };
 const TASK_NAME_COLOUR = "0cc919";
 
 let pluginApi;
-
-function bind(api) {
-  pluginApi = api;
-}
 
 /** The 21 varp values, task id N at bit N % 32 of the (N / 32)th. */
 function words(player) {
@@ -174,8 +170,14 @@ function reset(player) {
   sendAll(player, { onlySet: false });
 }
 
-module.exports = {
-  COMPLETED_ATTRIBUTE, CLAIMED_ATTRIBUTE,
-  bind, isComplete, completedTasks, points, claimedTiers, tierStatus, claimableTiers, setClaimed,
-  tierCount, monsterCount, sendAll, sendCounts, complete, reset,
+module.exports = function attachProgress(api) {
+  pluginApi = api;
+  api.persistAttribute(COMPLETED_ATTRIBUTE, Data.TASK_VARPS.map(() => 0));
+  api.persistAttribute(CLAIMED_ATTRIBUTE, []);
 };
+
+Object.assign(module.exports, {
+  COMPLETED_ATTRIBUTE, CLAIMED_ATTRIBUTE,
+  isComplete, completedTasks, points, claimedTiers, tierStatus, claimableTiers, setClaimed,
+  tierCount, monsterCount, sendAll, sendCounts, complete, reset,
+});

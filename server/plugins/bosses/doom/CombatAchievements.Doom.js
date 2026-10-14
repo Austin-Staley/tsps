@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * The Doom of Mokhaiotl's Combat Achievements (plugins/combatachievements/) that a won delve
+ * The Doom of Mokhaiotl's Combat Achievements (plugins/achievements/combatachievements/) that a won delve
  * decides: how deep it was, delve 1's time and a run from delve 1 through 8's time. Its kill
  * count is the delves completed (total_dom_levels, varp 4807), the count DoomRecords keeps.
  */

@@ -1,7 +1,7 @@
 /**
  * The collection log (https://oldschool.runescape.wiki/w/Collection_log): what a player has
  * obtained, the log and overview interfaces, and the new-item message and popup. The contents come
- * from the cache (ClogData); see docs/collection-log.md for the captured packets.
+ * from the cache (Data.CollectionLog); see docs/collection-log.md for the captured packets.
  *
  * Loot counts the moment it drops: every "npc-drops:roll" (NPC drops, and the rewards of the
  * Gauntlet, Doom, Wintertodt, the Colosseum, the Inferno and ToA) is read once its handlers have
@@ -15,12 +15,10 @@
  *   ::clog count <category> <n>      set a category's count
  *   ::clog reset                     clear the log
  */
-const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
-const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
-const Data = require("./ClogData");
-const Progress = require("./ClogProgress");
-const Interface = require("./ClogInterface");
-const REWARD_SHOPS = new Set(require("./data/reward-shops.json"));
+const Data = require("./collectionlog/Data.CollectionLog");
+const Progress = require("./collectionlog/Progress.CollectionLog");
+const Interface = require("./collectionlog/Interface.CollectionLog");
+const REWARD_SHOPS = new Set(require("./collectionlog/data/reward-shops.json"));
 
 const USAGE = "Usage: ::clog <item name|id> [amount] | ::clog count <category> <n> | ::clog reset";
 
@@ -63,7 +61,7 @@ function findItem(text) {
   const wanted = text.toLowerCase();
   for (const tab of Data.tabs()) {
     for (const category of tab.categories) {
-      const match = category.items.find((id) => String(CacheDefinitions.getItem(id)?.name ?? "").toLowerCase() === wanted);
+      const match = category.items.find((id) => String(Data.itemName(id) ?? "").toLowerCase() === wanted);
       if (match !== undefined) return match;
     }
   }
@@ -91,26 +89,21 @@ function clogCommand({ player, parts }) {
     return true;
   }
   Progress.obtain(player, itemId, amount);
-  player.sendMessage(`${CacheDefinitions.getItem(itemId)?.name}: ${Progress.obtained(player, itemId)} obtained.`);
+  player.sendMessage(`${Data.itemName(itemId)}: ${Progress.obtained(player, itemId)} obtained.`);
   return true;
 }
 
 module.exports = {
   name: "CollectionLog",
   register(api) {
-    Progress.bind(api);
-    Interface.bind(api);
-    for (const key of [Progress.ITEMS_ATTRIBUTE, Progress.COUNTS_ATTRIBUTE, Progress.RECENT_ATTRIBUTE, Interface.TAB_ATTRIBUTE, Interface.CATEGORY_ATTRIBUTE]) {
-      api.persistAttribute(key);
-    }
-    api.onPlayerLogin(Progress.restore);
+    Data(api);
+    Progress(api);
+    Interface(api);
     api.onCustomEvent("npc-drops:roll", onLoot);
     api.onCustomEvent("collection-log:obtain", onObtain);
     api.onCustomEvent("collection-log:count", onCount);
     api.onCustomEvent("shop:purchase", onPurchase);
-    api.onCustomEvent("collection-log:open", ({ player, category }) => Interface.open(player, category));
-    api.onInterfaceActionClick(Interface.click);
-    api.registerCommand("clog", clogCommand, PlayerRights.ADMINISTRATOR, "Collection log: ::clog <item> [amount] | count <category> <n> | reset");
+    api.registerCommand("clog", clogCommand, api.core.PlayerRights.ADMINISTRATOR, "Collection log: ::clog <item> [amount] | count <category> <n> | reset");
   },
   _test: { onLoot, onObtain, onCount, onPurchase, clogCommand, findItem },
 };

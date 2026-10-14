@@ -52,10 +52,6 @@ const KILL_COUNT_CONDITION = /\b(?:in|after|within|without|and|while|using|with|
 let core;
 let data = null;
 
-function bind(api) {
-  core = api.core;
-}
-
 function killCountTarget(task) {
   if (task.type !== TYPE.KILL_COUNT) return null;
   const match = KILL_COUNT_PATTERN.exec(task.description.trim());
@@ -177,7 +173,11 @@ const monsterForNpc = (npcName) => load().monstersByNpcName.get(String(npcName).
 const bossList = () => load().bossList;
 const totalPoints = () => load().tiers.at(-1).threshold;
 
-module.exports = {
-  TYPE, TASK_VARPS, TIER_VARBITS, POINTS_VARBIT,
-  bind, load, tasks, task, taskNamed, tiers, monsters, monsterNamed, monsterForNpc, bossList, totalPoints, killCountTarget,
+module.exports = function attachData(api) {
+  core = api.core;
 };
+
+Object.assign(module.exports, {
+  TYPE, TASK_VARPS, TIER_VARBITS, POINTS_VARBIT,
+  load, tasks, task, taskNamed, tiers, monsters, monsterNamed, monsterForNpc, bossList, totalPoints, killCountTarget,
+});

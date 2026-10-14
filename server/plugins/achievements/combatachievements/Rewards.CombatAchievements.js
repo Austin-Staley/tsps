@@ -12,8 +12,8 @@
  * chosen skill's experience comes with "<col=0000ff>Your wish has been granted!</col> You have
  * been awarded 5,000 Runecraft experience!". Experience and level per tier from the Wiki.
  */
-const Data = require("./CaData");
-const Progress = require("./CaProgress");
+const Data = require("./Data.CombatAchievements");
+const Progress = require("./Progress.CombatAchievements");
 
 const GHOMMAL = "Ghommal";
 const REWARDS_VARIANT = "combat-achievement-rewards";
@@ -30,10 +30,6 @@ const LAMPS = [[5000, 20], [10000, 30], [15000, 40], [25000, 50], [35000, 60], [
 const pendingClaim = new WeakMap();
 const pendingRub = new WeakMap();
 let pluginApi;
-
-function bind(api) {
-  pluginApi = api;
-}
 
 const isGhommal = (definition) => definition?.getName?.() === GHOMMAL;
 
@@ -119,4 +115,12 @@ function grantLamp(player, request, skill, name = skill.getName()) {
   return `<col=0000ff>Your wish has been granted!</col> You have been awarded ${request.experience.toLocaleString("en-GB")} ${name} experience!`;
 }
 
-module.exports = { LAMPS, bind, rewardItems, dialogueVariant, dialogueCondition, dialogueLine, claim, rubLamp, grantLamp };
+module.exports = function attachRewards(api) {
+  pluginApi = api;
+  api.onNpcDialogueVariant(dialogueVariant);
+  api.onNpcDialogueCondition(dialogueCondition);
+  api.onCustomEvent("npc-dialogue:line", dialogueLine);
+  api.onItemAction("Antique lamp", { Rub: rubLamp });
+};
+
+Object.assign(module.exports, { LAMPS, rewardItems, dialogueVariant, dialogueCondition, dialogueLine, claim, rubLamp, grantLamp });

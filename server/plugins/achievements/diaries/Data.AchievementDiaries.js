@@ -1,5 +1,5 @@
 /**
- * plugins/diaries/data/achievement-diaries.json, loaded once: the diaries by key, by diary tab row
+ * plugins/achievements/diaries/data/achievement-diaries.json, loaded once: the diaries by key, by diary tab row
  * and by reward NPC, and where each task lives.
  */
 const fs = require("fs");

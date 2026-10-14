@@ -1,9 +1,9 @@
 /**
  * Combat Achievements (https://oldschool.runescape.wiki/w/Combat_Achievements): 655 tasks in six
  * tiers, their points and tier rewards, and the five interfaces. Tasks, tiers and rewards come
- * from the cache (CaData); see docs/combat-achievements.md for the captured packets.
+ * from the cache (Data.CombatAchievements); see docs/combat-achievements.md for the captured packets.
  *
- * Plain kill-count tasks finish from kill counts (CaKills). Every other task is finished by the
+ * Plain kill-count tasks finish from kill counts (Kills.CombatAchievements). Every other task is finished by the
  * content it belongs to, through events (the units in ./tasks/ for content this server has):
  *   api.emitCustomEvent("combat-achievements:complete", { player, task: "Perfect Zulrah" })  name or id
  *   api.emitCustomEvent("combat-achievements:kill", { player, monster: "Barrows", count? })
@@ -20,15 +20,12 @@
  *   ::ca kc <monster> <n>           set a monster's kill count
  *   ::ca reset                      clear every task, claim and kill count
  */
-const Data = require("./CaData");
-const Progress = require("./CaProgress");
-const Kills = require("./CaKills");
-const Interface = require("./CaInterface");
-const Rewards = require("./CaRewards");
-const Fights = require("./CaFights");
-
-/** One file per content's tasks in ./tasks/ (<Unit>.CombatAchievements.js). */
-const UNITS = ["Barrows", "GiantLairs", "KalphiteQueen", "GiantMole", "DagannothKings", "Vorkath"];
+const Data = require("./combatachievements/Data.CombatAchievements");
+const Progress = require("./combatachievements/Progress.CombatAchievements");
+const Kills = require("./combatachievements/Kills.CombatAchievements");
+const Interface = require("./combatachievements/Interface.CombatAchievements");
+const Rewards = require("./combatachievements/Rewards.CombatAchievements");
+const Fights = require("./combatachievements/Fights.CombatAchievements");
 
 const USAGE = "Usage: ::ca complete <task name|id> | ::ca kc <monster> <n> | ::ca reset";
 
@@ -84,26 +81,23 @@ function caCommand({ player, parts }) {
 module.exports = {
   name: "CombatAchievements",
   register(api) {
-    for (const module of [Data, Progress, Kills, Interface, Rewards, Fights]) module.bind(api);
-    for (const key of [Progress.COMPLETED_ATTRIBUTE, Progress.CLAIMED_ATTRIBUTE, Interface.VIEW_ATTRIBUTE]) {
-      api.persistAttribute(key);
-    }
-    api.persistAttribute(Kills.KILLS_ATTRIBUTE, {});
+    Data(api);
+    Progress(api);
+    Kills(api);
+    Fights(api);
+    Interface(api);
+    Rewards(api);
+    // One file per content's tasks (<Unit>.CombatAchievements.js).
+    require("./combatachievements/tasks/Barrows.CombatAchievements")(api, Fights);
+    require("./combatachievements/tasks/GiantLairs.CombatAchievements")(api, Fights);
+    require("./combatachievements/tasks/KalphiteQueen.CombatAchievements")(api, Fights);
+    require("./combatachievements/tasks/GiantMole.CombatAchievements")(api, Fights);
+    require("./combatachievements/tasks/DagannothKings.CombatAchievements")(api, Fights);
+    require("./combatachievements/tasks/Vorkath.CombatAchievements")(api, Fights);
     api.onPlayerLogin(restore);
-    api.onNpcDeath(Kills.onNpcDeath);
-    api.onNpcDeath(Fights.onNpcDeath);
-    api.onPlayerDealtDamage(Fights.onDealt);
-    api.onCombatHitResolved(Fights.onHitResolved);
-    api.onCustomEvent("combat-achievements:kill", Kills.onKill);
     api.onCustomEvent("combat-achievements:complete", onComplete);
     api.onCustomEvent("combat-achievements:open", onOpen);
-    api.onInterfaceActionClick(Interface.onClick);
-    api.onNpcDialogueVariant(Rewards.dialogueVariant);
-    api.onNpcDialogueCondition(Rewards.dialogueCondition);
-    api.onCustomEvent("npc-dialogue:line", Rewards.dialogueLine);
-    api.onItemAction("Antique lamp", { Rub: Rewards.rubLamp });
     api.registerCommand("ca", caCommand, api.core.PlayerRights.ADMINISTRATOR, "Combat Achievements: ::ca complete <task> | kc <monster> <n> | reset");
-    for (const unit of UNITS) require(`./tasks/${unit}.CombatAchievements`)(api, Fights);
   },
   _test: { restore, onComplete, caCommand },
 };

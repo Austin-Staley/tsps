@@ -1,7 +1,7 @@
 "use strict";
 
 /**
- * Wintertodt's Combat Achievements (plugins/combatachievements/): the subdued count, and the tasks
+ * Wintertodt's Combat Achievements (plugins/achievements/combatachievements/): the subdued count, and the tasks
  * the round decides - by the points earned, the warm clothing worn and what happened to the
  * pyromancers and braziers - plus healing a fallen pyromancer and fixing a broken brazier.
  */

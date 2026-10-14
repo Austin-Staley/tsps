@@ -5,7 +5,7 @@
  * right after "Yes please!". With nothing to claim, Talk-to falls through to the NPC's transcript,
  * whose "<NPC> gives you another ..." line hands back a lost reward item.
  */
-const QuestRuntime = require("../quests/QuestRuntime");
+const QuestRuntime = require("../../quests/QuestRuntime");
 const { TIERS, BY_NPC } = require("./Data.AchievementDiaries");
 const Progress = require("./Progress.AchievementDiaries");
 

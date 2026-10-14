@@ -16,9 +16,9 @@
  *
  * A rule gets the fight (see summary()) and the death event, and returns true when the task is done.
  */
-const Data = require("./CaData");
-const Progress = require("./CaProgress");
-const Derived = require("./CaDerivedRules");
+const Data = require("./Data.CombatAchievements");
+const Progress = require("./Progress.CombatAchievements");
+const Derived = require("./DerivedRules.CombatAchievements");
 
 const MELEE_ATTACK_TYPES = ["stab", "slash", "crush"];
 /** The protection prayer that blocks each combat type (PrayerHandler names). */
@@ -41,18 +41,13 @@ let derived = false;
 /** Rules registered by task name, resolved against the cache on the first death. */
 const pending = [];
 
-function bind(api) {
-  pluginApi = api;
-  core = api.core;
-}
-
 function addRule(name, task, test) {
   const key = String(name).toLowerCase();
   if (!rules.has(key)) rules.set(key, []);
   rules.get(key).push({ task, test });
 }
 
-/** The registered rules and those the task descriptions make (CaDerivedRules), once the cache is loaded. */
+/** The registered rules and those the task descriptions make (DerivedRules.CombatAchievements), once the cache is loaded. */
 function ensureRules() {
   if (derived) return;
   derived = true;
@@ -243,4 +238,12 @@ function onNpcDeath(event) {
   }
 }
 
-module.exports = { bind, onKill, onDealt, onHitResolved, onNpcDeath, summary, rules };
+module.exports = function attachFights(api) {
+  pluginApi = api;
+  core = api.core;
+  api.onNpcDeath(onNpcDeath);
+  api.onPlayerDealtDamage(onDealt);
+  api.onCombatHitResolved(onHitResolved);
+};
+
+Object.assign(module.exports, { onKill, onDealt, onHitResolved, onNpcDeath, summary, rules });

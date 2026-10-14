@@ -8,11 +8,7 @@
  * on, the total, highscore and tab counts and the recent-items list. The message and the popup
  * follow the player's option_collection_new_item (varbit 11959: 1 chat, 2 popup).
  */
-const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
-const { CacheDefinitions } = require("../../src/main/typescript/elvarg/game/cache/CacheDefinitions");
-const { Sound } = require("../../src/main/typescript/elvarg/game/Sound");
-const { Sounds } = require("../../src/main/typescript/elvarg/game/Sounds");
-const Data = require("./ClogData");
+const Data = require("./Data.CollectionLog");
 
 const VARP = {
   COUNT: 2943,
@@ -38,13 +34,8 @@ const ITEMS_ATTRIBUTE = "clog.items";
 const COUNTS_ATTRIBUTE = "clog.counts";
 const RECENT_ATTRIBUTE = "clog.recent";
 
-let TaskManager;
 let pluginApi;
-
-function bind(api) {
-  pluginApi = api;
-  TaskManager = api.getTaskManager();
-}
+let core;
 
 function today(now = Date.now()) {
   return Math.floor((now - DAY_ZERO) / 86_400_000);
@@ -117,21 +108,16 @@ function notifySetting(player) {
   return Number.isInteger(sent) && sent > 0 ? sent : NOTIFY_DEFAULT;
 }
 
-class LaterTask extends Task {
-  constructor(ticks, action) {
+function later(ticks, action) {
+  pluginApi.getTaskManager().submit(new (class extends core.Task {
     // Not keyed to the player: a click must not cancel it.
-    super(ticks);
-    this.action = action;
-  }
-
-  execute() {
-    this.stop();
-    this.action();
-  }
+    constructor() { super(ticks); }
+    execute() { this.stop(); action(); }
+  })());
 }
 
 function itemName(itemId) {
-  return String(CacheDefinitions.getItem(itemId)?.name ?? "item");
+  return String(Data.itemName(itemId) ?? "item");
 }
 
 function announce(player, itemId) {
@@ -139,7 +125,7 @@ function announce(player, itemId) {
   const name = itemName(itemId);
   if (setting & NOTIFY_CHAT) player.sendMessage(`New item added to your collection log: <col=ff0000>${name}</col>`);
   if (!(setting & NOTIFY_POPUP)) return;
-  Sounds.sendSound(player, Sound.COLLECTION_LOG_NEW_ITEM);
+  core.Sounds.sendSound(player, core.Sound.COLLECTION_LOG_NEW_ITEM);
   // The popup queues behind any other (plugins/interface/Notifications.plugin.js).
   pluginApi?.emitCustomEvent("notification:show", { player, title: "Collection Log", text: `New item:<br><br><col=ffffff>${name}</col>`, colour: -1 });
 }
@@ -162,11 +148,11 @@ function obtain(player, itemId, amount = 1, { ensure = false, silent = false } =
   const list = recent(player);
   list.unshift([itemId, today()]);
   player.setAttribute(RECENT_ATTRIBUTE, list.slice(0, RECENT_SIZE));
-  TaskManager.submit(new LaterTask(COUNTS_DELAY, () => {
+  later(COUNTS_DELAY, () => {
     if (player.isRegistered?.() === false) return;
     sendCounts(player);
     sendRecent(player);
-  }));
+  });
   return true;
 }
 
@@ -179,8 +165,17 @@ function reset(player) {
   sendRecent(player);
 }
 
-module.exports = {
-  VARP, ITEMS_ATTRIBUTE, COUNTS_ATTRIBUTE, RECENT_ATTRIBUTE,
-  bind, today, items, obtained, uniqueCount, categoryCount, addCategoryCount, setCategoryCount,
-  obtain, restore, reset,
+module.exports = function attachProgress(api) {
+  pluginApi = api;
+  core = api.core;
+  api.persistAttribute(ITEMS_ATTRIBUTE, {});
+  api.persistAttribute(COUNTS_ATTRIBUTE, {});
+  api.persistAttribute(RECENT_ATTRIBUTE, []);
+  api.onPlayerLogin(restore);
 };
+
+Object.assign(module.exports, {
+  VARP, ITEMS_ATTRIBUTE, COUNTS_ATTRIBUTE, RECENT_ATTRIBUTE,
+  today, items, obtained, uniqueCount, categoryCount, addCategoryCount, setCategoryCount,
+  obtain, restore, reset,
+});

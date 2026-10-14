@@ -532,7 +532,7 @@ function collectionLogItemId(pet) {
 }
 
 /**
- * Makes sure every owned pet is in the collection log (plugins/collectionlog/). Only a newly
+ * Makes sure every owned pet is in the collection log (plugins/achievements/collectionlog/). Only a newly
  * recorded pet announces itself; login and reclaiming re-sync silently.
  */
 function syncCollectionLog(player, { silent = true } = {}) {

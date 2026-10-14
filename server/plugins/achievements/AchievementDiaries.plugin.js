@@ -1,7 +1,7 @@
 /**
  * Achievement diaries (https://oldschool.runescape.wiki/w/Achievement_Diary): progress, the diary
  * tab's task lists, reward claiming and the reward lamps, from
- * plugins/diaries/data/achievement-diaries.json. See docs/achievement-diaries.md.
+ * plugins/achievements/diaries/data/achievement-diaries.json. See docs/achievement-diaries.md.
  *
  * Other plugins complete tasks and ask about tiers through custom events:
  *   api.emitCustomEvent("diary:task", { player, diary: "ardougne", task: "<task key>" })
@@ -15,11 +15,11 @@
  *   ::diary <name> <tier|all> complete      complete the tier(s) task by task
  *   ::diary <name> <tier|all> reset         clear the tier(s), rewards included
  */
-const { TIERS, DIARIES, BY_KEY } = require("./Data.AchievementDiaries");
-const Progress = require("./Progress.AchievementDiaries");
-const Journal = require("./Journal.AchievementDiaries");
-const Rewards = require("./Rewards.AchievementDiaries");
-const Lamps = require("./Lamps.AchievementDiaries");
+const { TIERS, DIARIES, BY_KEY } = require("./diaries/Data.AchievementDiaries");
+const Progress = require("./diaries/Progress.AchievementDiaries");
+const Journal = require("./diaries/Journal.AchievementDiaries");
+const Rewards = require("./diaries/Rewards.AchievementDiaries");
+const Lamps = require("./diaries/Lamps.AchievementDiaries");
 
 const USAGE = "Usage: ::diary <name> [easy|medium|hard|elite|all] [complete|reset]";
 

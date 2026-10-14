@@ -8,9 +8,9 @@
  * its content's plugin. Monsters counted by their plugins (data/monsters.json countedByEvent,
  * ownRules) get none: their fights are not one NPC's from first hit to death.
  *
- * The fight is timed from the first hit either way to the death (CaFights).
+ * The fight is timed from the first hit either way to the death (Fights.CombatAchievements).
  */
-const Data = require("./CaData");
+const Data = require("./Data.CombatAchievements");
 const MONSTERS_DATA = require("./data/monsters.json");
 
 const TARGET = "(?:the )?[A-Z][^,.]*?";

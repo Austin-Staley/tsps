@@ -1,7 +1,7 @@
 /**
  * Kill counts for Combat Achievements, and the kill-count tasks they finish ("Kill the King Black
  * Dragon 10 times.", "Open Obor's chest once."). The count's target comes from the task's own
- * description (CaData.killCountTarget), so every plain kill-count task works without a rule.
+ * description (Data.CombatAchievements.killCountTarget), so every plain kill-count task works without a rule.
  *
  * A kill counts for its monster when an NPC of that name dies with the player as killer. Content
  * that is not one NPC's death (a chest, a wave, a subdued boss, a raid) is counted by its plugin:
@@ -17,16 +17,12 @@
  * tasks were completed retroactively). The boss pages show the count through the monster's
  * kill-count varp (data/bosses.json).
  */
-const Data = require("./CaData");
-const Progress = require("./CaProgress");
+const Data = require("./Data.CombatAchievements");
+const Progress = require("./Progress.CombatAchievements");
 
 const KILLS_ATTRIBUTE = "combat-achievements:kills";
 
 let pluginApi;
-
-function bind(api) {
-  pluginApi = api;
-}
 
 function counts(player) {
   return { ...(player.getAttribute(KILLS_ATTRIBUTE) ?? {}) };
@@ -119,4 +115,11 @@ function reset(player) {
   }
 }
 
-module.exports = { KILLS_ATTRIBUTE, bind, counts, killCount, setCount, addKill, checkTasks, onNpcDeath, onKill, restore, reset };
+module.exports = function attachKills(api) {
+  pluginApi = api;
+  api.persistAttribute(KILLS_ATTRIBUTE, {});
+  api.onNpcDeath(onNpcDeath);
+  api.onCustomEvent("combat-achievements:kill", onKill);
+};
+
+Object.assign(module.exports, { KILLS_ATTRIBUTE, counts, killCount, setCount, addKill, checkTasks, onNpcDeath, onKill, restore, reset });

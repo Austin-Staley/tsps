@@ -7,12 +7,12 @@ const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 
 const QuestRuntime = require("../plugins/quests/QuestRuntime");
-const Diaries = require("../plugins/diaries/AchievementDiaries.plugin");
-const Data = require("../plugins/diaries/Data.AchievementDiaries");
-const Progress = require("../plugins/diaries/Progress.AchievementDiaries");
-const Journal = require("../plugins/diaries/Journal.AchievementDiaries");
-const Rewards = require("../plugins/diaries/Rewards.AchievementDiaries");
-const Lamps = require("../plugins/diaries/Lamps.AchievementDiaries");
+const Diaries = require("../plugins/achievements/AchievementDiaries.plugin");
+const Data = require("../plugins/achievements/diaries/Data.AchievementDiaries");
+const Progress = require("../plugins/achievements/diaries/Progress.AchievementDiaries");
+const Journal = require("../plugins/achievements/diaries/Journal.AchievementDiaries");
+const Rewards = require("../plugins/achievements/diaries/Rewards.AchievementDiaries");
+const Lamps = require("../plugins/achievements/diaries/Lamps.AchievementDiaries");
 const CAPTURED = require("./fixtures/achievement-diary-journals.json").journals;
 
 const tasks = [];

@@ -1,5 +1,5 @@
 /**
- * Vorkath's Combat Achievements (plugins/combatachievements/) that her fight decides. A fight is
+ * Vorkath's Combat Achievements (plugins/achievements/combatachievements/) that her fight decides. A fight is
  * timed from her waking (the speed tasks); her specials' damage (acid pools, rapid fire, the
  * zombified spawn's explosion) and the player's prayer are watched through it; kills in a row
  * without leaving her area count for Extended Encounter and, with no special damage, Dodging the

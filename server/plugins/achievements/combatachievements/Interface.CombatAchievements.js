@@ -4,7 +4,7 @@
  * moving between them through the burger menu closes one and opens the next, and
  * ca_last_opened_interface remembers the last, which the account summary's row reopens. Filters,
  * the selected boss and the rewards tier are varbits the server sets from the clicks; everything
- * drawn comes from the cache's scripts reading the progress varbits (CaProgress).
+ * drawn comes from the cache's scripts reading the progress varbits (Progress.CombatAchievements).
  *
  *   Overview: a tier's button opens Tasks filtered to that tier.
  *   Tasks: four dropdowns (tier, type, monster, completed); a task's row is the client's own.
@@ -13,8 +13,8 @@
  *   bar (Tasks filtered to the boss), "Locate" (the world map at the boss) and "Collection-log".
  *   Rewards: a tier's button selects it.
  */
-const Data = require("./CaData");
-const Progress = require("./CaProgress");
+const Data = require("./Data.CombatAchievements");
+const Progress = require("./Progress.CombatAchievements");
 const MONSTERS_DATA = require("./data/monsters.json");
 
 const VIEW_ATTRIBUTE = "combat-achievements:view";
@@ -64,10 +64,6 @@ const BOSS_STATS_RESET_TIME = 1;
 const uid = (group, child) => (group << 16) | child;
 
 let pluginApi;
-
-function bind(api) {
-  pluginApi = api;
-}
 
 function view(player) {
   return { ...(player.getAttribute(VIEW_ATTRIBUTE) ?? {}) };
@@ -292,4 +288,10 @@ function onClick(event) {
   if (event?.player && click(event)) event.handled = true;
 }
 
-module.exports = { VIEW_ATTRIBUTE, GROUP, SCREEN, VARBIT, bind, restore, open, openForCollectionLog, show, click, onClick };
+module.exports = function attachInterface(api) {
+  pluginApi = api;
+  api.persistAttribute(VIEW_ATTRIBUTE, {});
+  api.onInterfaceActionClick(onClick);
+};
+
+Object.assign(module.exports, { VIEW_ATTRIBUTE, GROUP, SCREEN, VARBIT, restore, open, openForCollectionLog, show, click, onClick });

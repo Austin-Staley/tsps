@@ -571,7 +571,7 @@ function searchChest(player, clickType) {
 const MELEE_BROTHERS = new Set([1, 2, 4, 5]); // Dharok, Guthan, Torag and Verac
 const ALL_BROTHERS = BROTHERS.length;
 
-/** The chest looted: its count, and the run's tasks (plugins/combatachievements/). */
+/** The chest looted: its count, and the run's tasks (plugins/achievements/combatachievements/). */
 function combatAchievementsAtChest(player, run) {
   const complete = (task) => pluginApi.emitCustomEvent("combat-achievements:complete", { player, task });
   pluginApi.emitCustomEvent("combat-achievements:kill", { player, monster: "Barrows", count: run.chests });
