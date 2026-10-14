@@ -2055,10 +2055,8 @@ module.exports = function registerDesertTreasureII(api) {
     // inferred playable cadence and should be calibrated against a live capture.
     const boss = spawned.get(player)?.finalWight;
     if (!boss?.isRegistered?.() || boss.getHitpoints?.() <= 0 || boss.getOwner?.() !== player || boss.getArea?.() !== area) return;
-    if (boss.__dt2FinalWight === 1) {
-      // Keep passive regen paused while clearing clones; unblocked charges still heal Ketla.
-      boss.getCombat?.().getLastAttack?.().reset?.();
-    }
+    // Wight healing is scripted; keep generic idle regeneration out of the active trial.
+    boss.getCombat?.().getLastAttack?.().reset?.();
     boss.__dt2FinalWightTicks = (boss.__dt2FinalWightTicks ?? 0) + 1;
     boss.__dt2FinalWightPending ??= [];
     if (boss.__dt2FinalWight === 0) {

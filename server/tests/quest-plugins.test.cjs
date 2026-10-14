@@ -7751,6 +7751,7 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     current.setHitpoints(100);
     area.process(p);
     assert.equal(current.__dt2FinalWightTicks, 1);
+    assert.equal(current.lastAttackResetCount, 1, 'the active Assassin cannot regain generic idle HP on top of its scripted smoke recovery');
     assert.ok(current.__dt2AssassinWhiteSmoke, 'the Assassin creates a white-smoke vulnerability window');
     assert.notDeepEqual([current.__dt2AssassinWhiteSmoke.x, current.__dt2AssassinWhiteSmoke.y],
       [current.__dt2AssassinPinkSmoke.x, current.__dt2AssassinPinkSmoke.y], 'pink and white smoke use distinct cache tiles');
@@ -7868,6 +7869,7 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     current = boss(wightIds[2]);
     p.location = area.tile(32, 50, 0);
     for (let tick = 0; tick < 15; tick++) area.process(p);
+    assert.equal(current.lastAttackResetCount, 15, 'Kasonde only uses its encounter-specific healing');
     assert.ok(pendingHits.some(hit => hit.damage === 32), 'an unavoided Kasonde vial deals typeless damage');
     assert.ok(current.__dt2KasondePools.length > 0, 'vial impacts leave persistent cache-backed floor pools');
     current.__dt2KasondePrayerDrain = { ticks: 11, firstDrain: false };
@@ -7881,6 +7883,7 @@ test('Desert Treasure II final wights expose their distinct smoke, clone, vial a
     current = boss(wightIds[3]);
     p.location = area.tile(32, 47, 0);
     for (let tick = 0; tick < 60; tick++) area.process(p);
+    assert.equal(current.lastAttackResetCount, 60, 'Persten cannot regain generic idle HP during the private trial');
     assert.ok(pendingHits.some(hit => hit.damage === 30), 'Persten lightning hits the warned tile if the player stays');
     assert.equal(current.__dt2PerstenPortals.length, 1, 'Persten skips the second portal anchor when cache collision marks that tile blocked');
     const leech = queue.find(npc => npc.id === 12335 && npc.owner === p);
