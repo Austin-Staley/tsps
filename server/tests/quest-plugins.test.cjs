@@ -8663,6 +8663,13 @@ test('Desert Treasure II opens Lassar from Ramarno and Prescott, then gates the 
     doorToggleHooks[0](unlockDoor);
     assert.equal(unlockDoor.handled, false, 'the shared Doors plugin opens the real cached door after the quest unlocks it');
     assert.equal(counts.get(core.ItemIdentifiers.SHADOW_KEY), 0);
+    const savedUnlock = attrs.get(lassarAttribute);
+    attrs.set(lassarAttribute, { ...savedUnlock, blockerPlaced: false });
+    const reopenFurnace = { ...unlockDoor, handled: false };
+    doorToggleHooks[0](reopenFurnace);
+    assert.equal(reopenFurnace.handled, false, 'the earned furnace unlock survives a consumed key and recalled blocker');
+    assert.equal(counts.get(core.ItemIdentifiers.SHADOW_KEY), 0);
+    attrs.set(lassarAttribute, savedUnlock);
     assert.equal(interact({ player, objectId: portals[4][2], definition: { id: portals[4][2] },
       location: { x: portals[4][0], y: portals[4][1], z: 0 }, option: 'Use' }), true,
     'a previously activated portal remains usable after consuming its purple key');

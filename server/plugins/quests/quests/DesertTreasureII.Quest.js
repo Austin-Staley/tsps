@@ -7795,6 +7795,7 @@ module.exports = function registerDesertTreasureII(api) {
     if (stage(p) !== S.WHISPERER || !state.inShadow || !location
       || x !== 2350 || y !== 6360 || event.objectId !== 48289
       || event.clickType !== 1) return;
+    if (state.doorUnlocked) return;
     if (!state.blockerPlaced) {
       p.sendMessage("The lost souls overwhelm you here. Place the shadow blocker beside the locked doors before crossing the furnace building.");
       event.handled = true;
