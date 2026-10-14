@@ -6241,6 +6241,10 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (x === 2585 && y === 7861) {
       event.handled = true;
       if (Number(state.crankTurns) < 10) { player.sendMessage("You should finish operating the nearby crank first."); return; }
+      if (inventory.contains(HUNT_ITEMS.viturKey)) {
+        player.sendMessage("You have already found the key marked with the Vitur crest.");
+        return;
+      }
       if (!inventory.contains(HUNT_ITEMS.dustyBook)) inventory.adds(HUNT_ITEMS.dustyBook, 1);
       player.sendMessage("You search the bookcase and find a dusty book. Read it to discover the Vitur key.");
       return;
@@ -6361,7 +6365,12 @@ module.exports = function registerTheBloodMoonRises(api) {
     event.handled = true;
     if (!player.getInventory().contains(HUNT_ITEMS.dustyBook)) return;
     player.getInventory().deleteNumber(HUNT_ITEMS.dustyBook, 1);
-    player.getInventory().adds(HUNT_ITEMS.viturKey, 1);
+    if (!player.getInventory().contains(HUNT_ITEMS.viturKey)) {
+      player.getInventory().adds(HUNT_ITEMS.viturKey, 1);
+    } else {
+      player.sendMessage("You already have the key marked with the Vitur crest.");
+      return;
+    }
     player.setAttribute(HUNT_ATTRIBUTE, { ...(player.getAttribute(HUNT_ATTRIBUTE) ?? {}), readBook: true });
     player.sendMessage("A key falls from the dusty book. It is marked with the Vitur crest.");
   }

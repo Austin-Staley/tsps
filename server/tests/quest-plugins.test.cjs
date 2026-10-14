@@ -4182,6 +4182,7 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
   const hunt = handlers.objects.find((handler) => handler.name === 'handleBloodHuntObjects');
   const interact = (x, y, objectId, option) => hunt({ player, objectId, definition: { id: objectId }, option,
     location: { x, y, z: 0 }, handled: false });
+  inventory.deleteNumber(ids.VITUR_KEY, 100);
   inventory.adds(ids.CRANK_WHEEL, 1);
   const fancyDoor = toggle(61844, 2587, 7857);
   assert.equal(fancyDoor.handled, true, 'the fancy-house door stays locked before the crank fills');
@@ -4234,6 +4235,9 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
   const read = handlers.itemAction.find((actions) => actions.Read)?.Read;
   read({ player, itemId: ids.DUSTY_BOOK, handled: false });
   assert.equal(inventory.contains(ids.VITUR_KEY), true, 'reading the dusty book gives the Vitur key');
+  interact(2585, 7861);
+  assert.equal(inventory.contains(ids.DUSTY_BOOK), false, 'the bookcase does not give another book while its key is carried');
+  assert.equal(counts.get(ids.VITUR_KEY), 1, 'reading/recovering the key cannot duplicate it');
   let digit = 0;
   const sequence = [0, 1, 1, 2, 3];
   api.sendMultiChatboxPrompt = (who, title, ...pairs) => pairs[sequence[digit++] * 2 + 1]();
