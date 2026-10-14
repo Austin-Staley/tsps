@@ -219,7 +219,7 @@ module.exports = {
   _test: { tick, start, crawl, climb, squeezeThrough, percyCondition, percyPays, enterMine },
   register(api) {
     Machine.init(api);
-    api.persistAttribute(Mine.STATE_ATTRIBUTE);
+    api.persistAttribute(Mine.STATE_ATTRIBUTE, { sack: {}, machine: [], held: [] });
     api.onServerStartup(start);
     api.onPlayerLogin(login);
     api.onPlayerLogout(logout);

@@ -10,6 +10,8 @@ const { PlayerSession } = require('../dist/net/PlayerSession');
 const { NetworkConstants } = require('../dist/net/NetworkConstants');
 const { GameConstants } = require('../dist/game/GameConstants');
 const { World } = require('../dist/game/World');
+const { Player } = require('../dist/game/entity/impl/player/Player');
+const { PluginManager } = require('../dist/plugins/PluginManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { decodeClientPackets } = require('../dist/net/protocol/ClientProtocol');
 const { Location } = require('../dist/game/model/Location');
@@ -206,8 +208,8 @@ test('player visibility adds at most MAX_NEW_LOCAL_PLAYERS_PER_CYCLE per tick', 
 test('a throwing player removal cannot abort the world remove phase', () => {
   const player = stubMobile({
     getUsername: () => 'edgeboom',
-    canLogout: () => true,
-    forcedLogoutTimer: { finished: () => false },
+    readyToLeaveWorld: () => true,
+    getDisconnectSource: () => 'socket_close',
     isPlayerBot: () => false,
     onRemove() { throw new Error('save failed'); },
   });
@@ -217,6 +219,106 @@ test('a throwing player removal cannot abort the world remove phase', () => {
   assert.doesNotThrow(() => World.process());
   assert.equal(World.getRemovePlayerQueue().length, 0, 'the queue entry is not retained forever');
   assert.equal(World.getPlayers().get(player.getIndex()), null, 'the player is deregistered');
+});
+
+function stubLoggedInPlayer(name, overrides = {}) {
+  const sent = [];
+  const player = stubMobile({
+    getUsername: () => name,
+    isPlayerBot: () => false,
+    disconnectSource: null,
+    setDisconnectSource(source) { if (this.disconnectSource === null) this.disconnectSource = source; },
+    getDisconnectSource() { return this.disconnectSource; },
+    readyToLeaveWorld: () => true,
+    logoutRefusal: () => null,
+    session: {
+      getChannel: () => ({ readyState: 1 }),
+      refuseLogout: (reason) => sent.push(['refused', reason]),
+      logout: () => sent.push(['logout']),
+    },
+    getSession() { return this.session; },
+    ...overrides,
+  });
+  return { player, sent };
+}
+
+function withDisconnectEvents(run) {
+  const events = [];
+  const original = PluginManager.emitPlayerDisconnect;
+  PluginManager.emitPlayerDisconnect = (event) => events.push(event);
+  try {
+    run(events);
+  } finally {
+    PluginManager.emitPlayerDisconnect = original;
+  }
+}
+
+// These players are registered but kept out of the world list, so the tick's other
+// phases (movement, sync, sailing) never see the stubs.
+test('the logout button is answered on the tick and refused in combat', () => {
+  const { player, sent } = stubLoggedInPlayer('edgefighter', {
+    logoutRefusal: () => "You can't log out until 10 seconds after the end of combat.",
+  });
+  player.setRegistered(true);
+  World.queueLogoutRequest(player);
+  assert.deepEqual(sent, [], 'nothing is answered before the tick');
+  World.process();
+  assert.deepEqual(sent, [['refused', "You can't log out until 10 seconds after the end of combat."]]);
+  assert.equal(World.getRemovePlayerQueue().includes(player), false, 'a refused player stays logged in');
+});
+
+test('an accepted logout leaves the world on the same tick with the logout source', () => {
+  const { player, sent } = stubLoggedInPlayer('edgeleaver');
+  player.setRegistered(true);
+  withDisconnectEvents((events) => {
+    World.queueLogoutRequest(player);
+    World.process();
+    assert.deepEqual(sent, [['logout']]);
+    assert.equal(World.getRemovePlayerQueue().includes(player), false, 'removed this tick');
+    assert.deepEqual(events.map((event) => event.source), ['logout']);
+  });
+});
+
+test('a player removed in combat stays in the world and fires disconnect only on leaving', () => {
+  let ready = false;
+  const { player } = stubLoggedInPlayer('edgexlog', { readyToLeaveWorld: () => ready });
+  player.setRegistered(true);
+  withDisconnectEvents((events) => {
+    player.setDisconnectSource('socket_close');
+    World.getRemovePlayerQueue().push(player);
+    World.process();
+    assert.equal(World.getRemovePlayerQueue().includes(player), true, 'held while in combat');
+    assert.deepEqual(events, [], 'disconnect hooks wait for the player to leave');
+    ready = true;
+    World.process();
+    assert.equal(World.getRemovePlayerQueue().includes(player), false);
+    assert.deepEqual(events.map((event) => event.source), ['socket_close']);
+  });
+});
+
+test('a disconnected player leaves out of combat, after 16 ticks of no hits, or after 60 seconds', () => {
+  let cycle = 1000;
+  const originalCycle = World.getProcessCycle;
+  World.getProcessCycle = () => cycle;
+  try {
+    const removing = (ticksSinceAttacked) => ({
+      forcedLogoutTimer: { isRunning: () => false },
+      logoutHoldCycle: -1,
+      inLogoutCombat: Player.prototype.inLogoutCombat,
+      getCombat: () => ({ ticksSinceAttacked: () => ticksSinceAttacked }),
+    });
+    const leaves = (player) => Player.prototype.readyToLeaveWorld.call(player);
+    assert.equal(leaves(removing(Infinity)), true, 'never hit');
+    assert.equal(leaves(removing(16)), true, '16 ticks after the last hit');
+    const fighting = removing(15);
+    assert.equal(leaves(fighting), false, 'hit 15 ticks ago');
+    cycle += 99;
+    assert.equal(leaves(fighting), false, 'still inside the 60 second hold');
+    cycle += 1;
+    assert.equal(leaves(fighting), true, 'forced out after 100 ticks');
+  } finally {
+    World.getProcessCycle = originalCycle;
+  }
 });
 
 test('a disconnect during login cannot build a half-logged-in player', async () => {

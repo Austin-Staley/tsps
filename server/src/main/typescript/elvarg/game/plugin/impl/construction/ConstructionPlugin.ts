@@ -77,6 +77,10 @@ const pendingFurnitureMenus = new WeakMap<ConstructionPlayer, {
   choices: readonly ConstructionBuildable[];
 }>();
 
+function defaultHouse(): PersistedHouse {
+  return { ...createDefaultHouseSave(), owned: false, defaultBuildingMode: false };
+}
+
 export function houseStateFor(player: ConstructionPlayer): PersistedHouse {
   const saved = player.getAttribute(HOUSE_ATTRIBUTE);
   if (saved && typeof saved === "object" && Array.isArray((saved as PlayerHouseSave).rooms)) {
@@ -88,7 +92,7 @@ export function houseStateFor(player: ConstructionPlayer): PersistedHouse {
     return house;
   }
 
-  const house: PersistedHouse = { ...createDefaultHouseSave(), owned: false, defaultBuildingMode: false };
+  const house = defaultHouse();
   player.setAttribute(HOUSE_ATTRIBUTE, house);
   return house;
 }
@@ -1014,7 +1018,7 @@ export const ConstructionPlugin = {
   register(api: PluginApi): void {
     EstateAgentPlugin.register(api);
     ConstructionServants.register(api);
-    api.persistAttribute(HOUSE_ATTRIBUTE);
+    api.persistAttribute(HOUSE_ATTRIBUTE, defaultHouse());
     api.onObjectFirstClick(HOUSE_PORTAL_IDS, enterDefaultHouse);
     api.onObjectSecondClick(HOUSE_PORTAL_IDS, enterNormalHouse);
     api.onObjectThirdClick(HOUSE_PORTAL_IDS, enterBuildingHouse);

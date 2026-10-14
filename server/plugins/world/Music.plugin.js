@@ -255,11 +255,9 @@ module.exports = {
       .filter((entries) => entries.some(({ autoUnlock }) => autoUnlock))
       .map((entries) => entries[0].id);
 
-    for (const attribute of [
-      Progress.UNLOCKED_TRACKS_ATTRIBUTE,
-      Progress.CAPE_OWNED_ATTRIBUTE,
-      Progress.AIR_GUITAR_UNLOCKED_ATTRIBUTE,
-    ]) api.persistAttribute(attribute);
+    api.persistAttribute(Progress.UNLOCKED_TRACKS_ATTRIBUTE);
+    api.persistAttribute(Progress.CAPE_OWNED_ATTRIBUTE);
+    api.persistAttribute(Progress.AIR_GUITAR_UNLOCKED_ATTRIBUTE, false);
     api.onPlayerLogin(onMusicLogin);
     api.onInterfaceActionButton(WELCOME_PLAY_BUTTON_UID, onMusicWelcomeAction);
   // A tab mounted again later (Tutorial Island's unlocks) lost its flags too.

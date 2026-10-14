@@ -176,6 +176,11 @@ export class PlayerSession {
     return true;
   }
 
+  /** Refuses the logout button; the client shows `reason` as a game message. */
+  public refuseLogout(reason: string): void {
+    this.sendClientPacket(encodeLogoutResponse(reason, false));
+  }
+
   /** Logs out as an accepted logout button does: the client is told, then the socket closes. */
   public logout(): void {
     this.sendClientPacket(encodeLogoutResponse());

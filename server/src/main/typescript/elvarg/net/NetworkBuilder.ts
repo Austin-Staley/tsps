@@ -34,7 +34,6 @@ import {
   encodeGameframeBootstrap,
   encodeHandshake,
   encodeLoginResponse,
-  encodeLogoutResponse,
   encodeWelcome,
   PlayerAppearance,
   resolveGameframeRoot,
@@ -124,6 +123,19 @@ const WORLD_INTERACTIONS = new Set([
   "spell_on_object",
   "item_on_ground",
   "spell_on_ground",
+]);
+
+/** Packets the client sends on its own, which don't count as the player's input. */
+const NON_INPUT_PACKETS = new Set([
+  "hello",
+  "ping",
+  "login",
+  "handshake",
+  "logout",
+  "raw",
+  "varp_transmit",
+  "plugin_message",
+  "local_trigger",
 ]);
 
 type PendingLogin = {
@@ -265,6 +277,7 @@ export class ClientConnection {
     if (this.closed) return;
     for (const packet of packets) {
       if (this.player) LunarSpells.expireSpellbookSwap(this.player);
+      if (this.player && !NON_INPUT_PACKETS.has(packet.type)) this.player.lastInputCycle = World.getProcessCycle();
       if (this.player && WORLD_INTERACTIONS.has(packet.type)) {
         if (this.player.getStatus() === PlayerStatus.TRADING) continue;
         const input = { player: this.player, packet, handled: false };
@@ -845,18 +858,10 @@ export class ClientConnection {
         case "handshake":
           this.enterWorld(packet.clientType);
           continue;
-        case "logout": {
-          const refusal = this.player ? PluginManager.emitCanLogout(this.player) : null;
-          if (refusal) {
-            this.send(encodeLogoutResponse(refusal, false));
-            continue;
-          }
-          this.send(encodeLogoutResponse());
-          this.player?.getSession().flushPackets();
-          this.cleanup("logout");
-          this.channel.close(1000, "logout");
-          return;
-        }
+        case "logout":
+          // Answered on the next tick (World.answerLogoutRequest), which closes the socket.
+          if (this.player) World.queueLogoutRequest(this.player);
+          continue;
       }
     }
   }
@@ -1186,14 +1191,12 @@ export class ClientConnection {
     this.closed = true;
     this.releasePendingName();
     if (!this.player) return;
+    // The disconnect hooks fire when the player leaves the world, which a player in
+    // combat does only when it ends (World's removal queue).
+    this.player.setDisconnectSource(source);
     if (!World.getRemovePlayerQueue().includes(this.player)) {
       World.getRemovePlayerQueue().push(this.player);
     }
-    PluginManager.emitPlayerDisconnect({
-      player: this.player,
-      username: this.player.getUsername(),
-      source,
-    });
   }
 }
 import { DialogueOption } from "../game/model/dialogues/DialogueOption";

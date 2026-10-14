@@ -23,9 +23,9 @@ module.exports = {
   register(api) {
     api.onServerStartup(Runtime.start.bind(null, api));
     api.onServerShutdown(Runtime.shutdown);
-    api.persistAttribute(Birdhouses.ATTRIBUTE);
-    api.persistAttribute(Crabs.ATTRIBUTE);
-    api.persistAttribute(DriftNets.ATTRIBUTE);
+    api.persistAttribute(Birdhouses.ATTRIBUTE, {});
+    api.persistAttribute(Crabs.ATTRIBUTE, {});
+    api.persistAttribute(DriftNets.ATTRIBUTE, { nets: {}, stored: 0, until: 0 });
     api.persistAttribute(Rumours.ATTRIBUTE);
     api.persistAttribute(Tracking.ATTRIBUTE);
     api.persistAttribute(Aerial.ATTRIBUTE);

@@ -166,7 +166,7 @@ module.exports = {
       core.ItemIdentifiers.SERPENTINE_HELM_2,
     ]);
 
-    api.persistAttribute(COMBAT_CHARGE_AT_ATTRIBUTE);
+    api.persistAttribute(COMBAT_CHARGE_AT_ATTRIBUTE, null);
     api.onItemAction((event) => {
       if (!chargedIds.has(event.itemId) && !unchargedByCharged.has(event.itemId)) {
         return;
