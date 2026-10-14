@@ -4333,7 +4333,24 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
   assert.equal(inventory.contains(ids.TRAPDOOR_KEY), false, 'the trapdoor key was consumed when its lock opened');
   let chestDigit = 0;
   const chestCode = [2, 4, 0, 4, 7];
-  api.sendMultiChatboxPrompt = (who, title, ...pairs) => pairs[chestCode[chestDigit++] * 2 + 1]();
+  const digitOptions = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'];
+  api.sendMultiChatboxPrompt = (who, title, ...pairs) => {
+    assert.ok(pairs.length / 2 <= 5, 'the chest combination uses supported prompt pages');
+    const desired = digitOptions[chestCode[chestDigit]];
+    const digitIndex = pairs.findIndex((choice, index) => index % 2 === 0 && choice === desired);
+    if (digitIndex >= 0) {
+      chestDigit++;
+      pairs[digitIndex + 1]();
+      return;
+    }
+    const nextPage = pairs.findIndex((choice, index) => index % 2 === 0 && choice === 'More digits...');
+    const previousPage = pairs.findIndex((choice, index) => index % 2 === 0 && choice === 'Back...');
+    const currentPage = Math.floor(digitOptions.indexOf(pairs.find((choice, index) => index % 2 === 0 && digitOptions.includes(choice))) / 3);
+    const targetPage = Math.floor(digitOptions.indexOf(desired) / 3);
+    const navigationIndex = targetPage > currentPage ? nextPage : previousPage;
+    assert.notEqual(navigationIndex, -1, `the chest prompt exposes digit ${desired}`);
+    pairs[navigationIndex + 1]();
+  };
   interact(2576, 7846);
   assert.equal(inventory.contains(ids.JOVKAI_KEY), true, 'the altar chest code yields the Jovkai key');
   assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').chapelPuzzleSolved, true,
@@ -4352,9 +4369,17 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
   assert.deepEqual([cogDrop.tile.getX(), cogDrop.tile.getY(), cogDrop.tile.getZ()], [2582, 7817, 0]);
   inventory.adds(ids.OLD_COG, 1); // GroundItemManager's normal pickup path is exercised in object-reach.test.cjs.
   playerLocation = new api.core.Location(2580, 7811, 0);
+  inventory.deleteNumber(ids.OLD_COG, 1);
   route({ player, objectId: api.core.ObjectIdentifiers.JOVKAI_DOOR,
     definition: { id: api.core.ObjectIdentifiers.JOVKAI_DOOR },
-    object: { getLocation: () => new api.core.Location(2580, 7812, 0) },
+    object: { getLocation: () => new api.core.Location(2580, 7811, 0) },
+    sourceLocation: { x: 2580, y: 7811, z: 0 }, destination: null });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').pursuitStarted, false,
+    'reaching the smithy door without the cog does not start the escape chase');
+  inventory.adds(ids.OLD_COG, 1);
+  route({ player, objectId: api.core.ObjectIdentifiers.JOVKAI_DOOR,
+    definition: { id: api.core.ObjectIdentifiers.JOVKAI_DOOR },
+    object: { getLocation: () => new api.core.Location(2580, 7811, 0) },
     sourceLocation: { x: 2580, y: 7811, z: 0 }, destination: null });
   pursuer = spawnedNpcActors.at(-1);
   assert.deepEqual([pursuer.id, pursuer.definition.x, pursuer.definition.y, pursuer.movementSteps], [16227, 2594, 7808, 2],
@@ -4363,6 +4388,11 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
   assert.equal(pursuitArea.canAttack(pursuer, player), false, 'Drakan cannot attack the player inside the party safe zone');
   assert.equal(pursuitArea.canAttack(player, pursuer), false, 'the pursuit cannot be fought inside the party safe zone');
   pursuitArea.process({ isPlayer: () => true, getAsPlayer: () => player });
+  const partyActorIds = [api.core.NpcIdentifiers.IVAN_STROM_13, api.core.NpcIdentifiers.VELIAF_HURTZ_15,
+    api.core.NpcIdentifiers.VANESCULA_DRAKAN_10, api.core.NpcIdentifiers.SAFALAAN_HALLOW_12];
+  assert.ok(partyActorIds.every((id) => spawnedNpcDefinitions.some((definition) =>
+    definition.id === id && definition.owner === player && definition.ownerOnly)),
+  'the owner-visible crossing party appears when the player naturally reaches the safe zone');
   assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').pursuitStarted, false,
     'the party is a safe zone where the pursuit ends');
   assert.equal(sentVarbits.at(-1)[1], 0, 'the safe party clears the pursuit varbit');
@@ -4389,6 +4419,39 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
   assert.ok(sentVarbits.some(([id, value]) => id === 15485 && value === 1), 'drawbridge repair survives a relog');
   assert.ok(sentVarbits.some(([id, value]) => id === 15596 && value === 1), 'chapel puzzle state survives a relog');
   assert.ok(sentVarbits.some(([id, value]) => id === 15603 && value === 1), 'the pursuit varbit survives a relog');
+});
+
+test('Blood Moon selects chapter dialogue for the shared Ivan and Safalaan NPCs', () => {
+  const { api, handlers } = mockApi();
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  const played = [];
+  runtime.startTranscript = (_api, _player, _npcId, _page, variant) => {
+    played.push(variant);
+    return true;
+  };
+  try {
+    require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+    const quest = runtime.getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+    const attributes = new Map();
+    const player = {
+      getAttribute: key => attributes.get(key),
+      setAttribute: (key, value) => attributes.set(key, value),
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+    };
+    const ids = api.core.NpcIdentifiers;
+    const talkIvan = handlers.npcInteractions.get('Ivan Strom')['Talk-to'];
+    const talkSafalaan = handlers.npcInteractions.get('Safalaan Hallow')['Talk-to'];
+    quest.setStage(player, 45);
+    assert.equal(talkIvan({ player, npcId: ids.IVAN_STROM_13,
+      definition: { getName: () => 'Ivan Strom' } }), true);
+    assert.equal(played.at(-1), 'blood-hunt-talking-to-ivan-in-the-town');
+    assert.equal(talkSafalaan({ player, npcId: ids.SAFALAAN_HALLOW_12,
+      definition: { getName: () => 'Safalaan Hallow' } }), true);
+    assert.equal(played.at(-1), 'blood-hunt-talking-to-safalaan-in-the-town');
+  } finally {
+    runtime.startTranscript = originalStartTranscript;
+  }
 });
 
 test('Blood Moon refiner requires the four correct chemical vials totalling 53 before destroying the stockpile', () => {

@@ -4890,7 +4890,11 @@ module.exports = function registerTheBloodMoonRises(api) {
     constructor() { super([new Boundary(2560, 2660, 7780, 7900, 0)]); }
     getName() { return "Blood Moon Sangvesti Pursuit"; }
     process(member) {
-      if (member?.isPlayer?.()) syncBloodHuntPursuer(member.getAsPlayer());
+      if (member?.isPlayer?.()) {
+        const player = member.getAsPlayer();
+        syncBloodHuntActors(player);
+        syncBloodHuntPursuer(player);
+      }
     }
     postLeave(member) {
       if (member?.isPlayer?.()) cleanupBloodHuntPursuer(member.getAsPlayer());
@@ -5181,6 +5185,9 @@ module.exports = function registerTheBloodMoonRises(api) {
     const alias = ({
       "king roald": "king-roald",
       "the nylocas queen": "nylocas-queen",
+      "ivan strom": "ivan",
+      "safalaan hallow": "safalaan",
+      "efaritay hallow": "efaritay",
       "vanescula drakan": "vanescula",
       // The transcript uses Veliaf's given name in chapter variant IDs.
       "veliaf hurtz": "veliaf",
@@ -6139,19 +6146,22 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.getPacketSender().sendVarbit(15603, state.pursuitStarted ? 1 : 0);
   }
 
-  function promptHuntCode(player, kind) {
+  function promptHuntCode(player, kind, offset = 0) {
     const code = kind === "shed" ? "TOOLS" : "35158";
     const key = kind === "shed" ? "shedDigits" : "chestDigits";
     const state = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
     const entered = state[key] ?? "";
     const options = kind === "shed" ? ["T", "O", "L", "S"] : ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
     const pairs = [];
-    for (const label of options) pairs.push(label, () => {
+    const pageSize = kind === "shed" ? options.length : 3;
+    const page = options.slice(offset, offset + pageSize);
+    for (const label of page) pairs.push(label, () => {
       const current = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
       const value = (current[key] ?? "") + label;
       if (value !== code.slice(0, value.length)) {
         player.setAttribute(HUNT_ATTRIBUTE, { ...current, [key]: "" });
         player.sendMessage("The lock clicks and resets.");
+        promptHuntCode(player, kind);
         return;
       }
       player.setAttribute(HUNT_ATTRIBUTE, { ...current, [key]: value });
@@ -6164,8 +6174,14 @@ module.exports = function registerTheBloodMoonRises(api) {
         player.sendMessage(kind === "shed" ? "The shed lock opens. You take a pair of bolt cutters." : "The altar chest opens. You take the Jovkai key.");
         return;
       }
-      promptHuntCode(player, kind);
+      promptHuntCode(player, kind, offset);
     });
+    if (offset + pageSize < options.length) {
+      pairs.push("More digits...", () => promptHuntCode(player, kind, offset + pageSize));
+    }
+    if (offset > 0) {
+      pairs.push("Back...", () => promptHuntCode(player, kind, 0));
+    }
     api.sendMultiChatboxPrompt(player, `${kind === "shed" ? "Shed" : "Altar chest"} combination (${entered.length + 1} of ${code.length})`, ...pairs);
   }
 
@@ -6317,8 +6333,8 @@ module.exports = function registerTheBloodMoonRises(api) {
       cleanupBloodHuntPursuer(player);
       return;
     }
-    if (ids.includes(ObjectIdentifiers.JOVKAI_DOOR) && x === 2580 && y === 7812 &&
-      sourceY < y && hasItem(player, HUNT_ITEMS.oldCog)) {
+    if (ids.includes(ObjectIdentifiers.JOVKAI_DOOR) && x === 2580 && [7811, 7812].includes(y) &&
+      sourceY <= y && hasItem(player, HUNT_ITEMS.oldCog)) {
       player.setAttribute(HUNT_ATTRIBUTE, { ...hunt, pursuitStarted: true, pursuitSpawn: "blacksmith" });
       player.getPacketSender?.().sendVarbit(15603, 1);
       syncBloodHuntPursuer(player);
