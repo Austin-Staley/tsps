@@ -2,7 +2,7 @@
  * The Truth Hurtz: Ivandis' tomb blockage and the Daeyalt refinery.
  * Coordinates/objectives follow Quest Helper; encounter advice follows the OSRS Wiki quick guide.
  */
-module.exports = function registerRefinery(api) {
+module.exports = function registerRefinery(api, getQuestStage) {
   const {
     Area, Boundary, Equipment, GameObject, HitDamage, HitMask, ItemIdentifiers: I,
     Location, NpcIdentifiers: N, ObjectIdentifiers: O, TemplatedInstanceArea, ObjectManager,
@@ -16,6 +16,7 @@ module.exports = function registerRefinery(api) {
   const PROGRESS_ATTRIBUTE = "the-blood-moon-rises:refinery-progress";
   const STORY_ATTRIBUTE = "quest.the_blood_moon_rises.slepe-story";
   const STAGE_VARBIT = 15464;
+  const SLEPE_QUEST_STAGE = 30;
   const STAGE = Object.freeze({
     ROUTE: 48, TOMB: 50, PICKAXE: 52, MINED: 54, TUNNEL: 56,
     FIGHT: 58, CLEARED: 60, FREED: 61, ESCAPED: 62,
@@ -418,6 +419,7 @@ module.exports = function registerRefinery(api) {
   }
   function syncLogin({ player }) {
     if (!player) return;
+    if (getQuestStage && getQuestStage(player) !== SLEPE_QUEST_STAGE) return;
     if (player.getAttribute(STORY_ATTRIBUTE)?.tombRouteStarted && !progress(player).started) start({ player });
     sync(player);
     const position = player.getLocation();
@@ -439,7 +441,7 @@ module.exports = function registerRefinery(api) {
     if (["fight", "cleared", "freed"].includes(progress(player).phase) && position.getX() >= 8192) enterRoom(player);
   }
   function stageChanged(event) {
-    if (event?.key !== "the_blood_moon_rises" || !event.player) return;
+    if (event?.key !== "the_blood_moon_rises" || event.stage !== SLEPE_QUEST_STAGE || !event.player) return;
     sync(event.player);
   }
 

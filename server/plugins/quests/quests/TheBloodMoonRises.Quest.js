@@ -6,7 +6,7 @@
 module.exports = function registerTheBloodMoonRises(api) {
   const { Animation, Boundary, Equipment, Graphic, HitDamage, HitMask, Item, ItemIdentifiers, Location, NpcIdentifiers, ObjectDefinition, ObjectIdentifiers, PrayerHandler, PrivateArea, Skill, World } = api.core;
   const { registerQuest, loadTranscripts, startTranscript } = require("../QuestRuntime");
-  require("../bmr/Refinery.TheBloodMoonRises")(api);
+  require("../bmr/Refinery.TheBloodMoonRises")(api, stage);
   const PAGE = "The Blood Moon Rises";
   const START_HOOK = "quest:the-blood-moon-rises:start";
   const TOME_ID = ItemIdentifiers.TOME_OF_EXPERIENCE_3;

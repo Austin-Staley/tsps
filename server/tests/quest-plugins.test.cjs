@@ -213,6 +213,28 @@ test('Blood Moon refinery handoff uses valid events, restores the tomb route, an
   assert.deepEqual(varbits.at(-1), [15464, 61]);
 });
 
+test('Blood Moon refinery phase varbit stops overriding the Castle Escape stage', () => {
+  const { api, handlers } = mockApi();
+  const vars = [], attrs = new Map([
+    ['the-blood-moon-rises:refinery-progress', { started: true, phase: 'escaped', killed: [0, 1, 2, 3, 4] }],
+  ]);
+  let questStage = 45;
+  const player = {
+    getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
+    getPacketSender: () => ({ sendVarbit: (id, value) => vars.push([id, value]) }),
+    getLocation: () => new api.core.Location(2535, 7384, 0),
+  };
+  const refinery = require('../plugins/quests/bmr/Refinery.TheBloodMoonRises')(api, () => questStage);
+  refinery.syncLogin({ player });
+  const stageChanged = handlers.custom.get('quest:stage-changed').at(-1);
+  stageChanged({ key: 'the_blood_moon_rises', stage: 45, player });
+  assert.deepEqual(vars, [], 'saved refinery stage 62 cannot overwrite the later Castle stage 45');
+
+  questStage = 30;
+  stageChanged({ key: 'the_blood_moon_rises', stage: 30, player });
+  assert.deepEqual(vars, [[15464, 62]], 'the refinery phase still restores while the quest is in Slepe');
+});
+
 test('Blood Moon refinery copies its exact cache room into a walkable four-plane scene', () => {
   const { api } = mockApi();
   const refinery = require('../plugins/quests/bmr/Refinery.TheBloodMoonRises')(api);
