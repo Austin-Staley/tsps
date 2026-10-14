@@ -13130,7 +13130,7 @@ test('silvthrill ballista uses its actual javelins through the shared ranged che
 
 test('Blood Moon palace spawns usable preparation NPCs once and removes them on departure',()=>{
  const {api}=mockApi(),cast=[],removed=[],attrs=new Map();let progress=60;
- api.spawnNpc=spec=>{const npc={...spec,transformed:spec.id,getId:()=>spec.id,setScriptedMovement(){},getMovementQueue:()=>({setBlockMovement(){}}),setNpcTransformationId(id){npc.transformed=id;}};cast.push(npc);return npc;};api.removeNpc=n=>removed.push(n);
+ api.spawnNpc=spec=>{const npc={...spec,transformed:spec.id,getId:()=>spec.id,getIndex:()=>cast.length+1,getArea:()=>null,isPlayer:()=>false,isNpc:()=>true,getAsNpc(){return this;},setScriptedMovement(){},getMovementQueue:()=>({setBlockMovement(){}}),setNpcTransformationId(id){npc.transformed=id;}};cast.push(npc);return npc;};api.removeNpc=n=>removed.push(n);
  const player={getAttribute:k=>attrs.get(k)};const f=require('../plugins/quests/bmr/Palace.TheBloodMoonRises')({api,stage:()=>progress,preparationAttribute:'prep'});
  f.sync(player);f.sync(player);assert.equal(cast.length,4);assert.ok(cast.every(n=>n.owner===player&&n.ownerOnly&&n.z===1));assert.deepEqual(cast.map(n=>[n.x,n.y]),[[3157,7841],[3157,7839],[3175,7834],[3168,7828]]);
  attrs.set('prep',{stewFed:true});f.sync(player);assert.equal(cast[0].transformed,api.core.NpcIdentifiers.SAFALAAN_HALLOW_12);
@@ -13138,6 +13138,29 @@ test('Blood Moon palace spawns usable preparation NPCs once and removes them on 
  assert.deepEqual(cast.slice(4).map(n=>[n.id,n.x,n.y,n.z,n.ownerOnly]),[[15871,3168,7842,0,true],[15906,3168,7844,0,true]],'the captured lower-floor Veliaf and Vanescula are scoped to the quest owner');
  f.sync(player);assert.equal(cast.length,6,'repeated area processing does not duplicate story NPCs');
  progress=70;f.sync(player);assert.equal(removed.length,6);assert.equal(f.residents.has(player),false);assert.equal(f.preparationTalkers.has(player),false);
+});
+
+test('Blood Moon restores owner-scoped palace preparation NPCs on login and removes them on logout',()=>{
+ const {api,handlers}=mockApi(),cast=[],removed=[],attrs=new Map([
+  ['quest.the_blood_moon_rises.stage',60],
+  ['quest.the_blood_moon_rises.preparations',{stewFed:true,flail:true,stakes:true}],
+ ]);let spawnReady=false;
+ api.spawnNpc=spec=>{if(!spawnReady)return null;const npc={...spec,getId:()=>spec.id,getIndex:()=>cast.length+1,getArea:()=>null,
+  isPlayer:()=>false,isNpc:()=>true,getAsNpc(){return this;},setScriptedMovement(){},
+  getMovementQueue:()=>({setBlockMovement(){}}),setNpcTransformationId(){}};cast.push(npc);return npc;};
+ api.removeNpc=npc=>removed.push(npc);
+ require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+ const player={getAttribute:key=>attrs.get(key),setAttribute:(key,value)=>attrs.set(key,value)};
+ handlers.playerLogin.find(handler=>handler.name==='syncPalaceActorsOnLogin')({player});
+ assert.equal(cast.length,0,'a spawn attempt that is too early to register is retried after login bootstrap');
+ spawnReady=true;
+ handlers.custom.get('player:bootstrap-complete').find(handler=>handler.name==='syncPalaceActorsAfterBootstrap')({player});
+ assert.equal(cast.length,6);
+ assert.deepEqual(cast.slice(4).map(npc=>[npc.id,npc.x,npc.y,npc.z,npc.owner,npc.ownerOnly]),[
+  [15871,3168,7842,0,player,true],[15906,3168,7844,0,player,true],
+ ]);
+ handlers.playerLogout.find(handler=>handler.name==='cleanupPalaceActors')({player});
+ assert.equal(removed.length,6);
 });
 
 test('bridge uses the actual cache palace exit and lets a full-inventory handoff retry',()=>{

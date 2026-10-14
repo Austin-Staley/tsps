@@ -7147,7 +7147,17 @@ module.exports = function registerTheBloodMoonRises(api) {
           return [ids[repaired.includes(key) ? 1 : 0], x, y, ids[0] === SIEGE_HALL.damagedWindow ? 0 : 10, ids[0] === SIEGE_HALL.damagedWindow ? 2 : 0];
         })];
     } });
-  require("../bmr/Palace.TheBloodMoonRises")({ api, stage, preparationAttribute: PREP_ATTRIBUTE, processHall: ({ player }) => hall.enter(player) });
+  const palace = require("../bmr/Palace.TheBloodMoonRises")({ api, stage,
+    preparationAttribute: PREP_ATTRIBUTE, processHall: ({ player }) => hall.enter(player) });
+  function syncPalaceActorsOnLogin({ player }) {
+    if (player) palace.sync(player);
+  }
+  function syncPalaceActorsAfterBootstrap({ player }) {
+    if (player) palace.sync(player);
+  }
+  function cleanupPalaceActors({ player }) {
+    if (player) palace.cleanup(player);
+  }
   const bridge = require("../bmr/Bridge.TheBloodMoonRises")({ api, stage, attribute: SIEGE_DEFENCE_ATTRIBUTE,
     sync: player => quest.setStage(player, STAGE.SIEGE),
     ready: preparationReady,
@@ -7164,6 +7174,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("quest:stage-changed", cleanupSlepeStory);
   api.onCustomEvent("quest:stage-changed", syncBloodHuntPartyOnStageChange);
   api.onCustomEvent("ladders:climb", handleCastleLobbyStairs);
+  api.onCustomEvent("player:bootstrap-complete", syncPalaceActorsAfterBootstrap);
   api.onObjectInteraction(prayAtCastleShrine);
   api.onObjectInteraction(enterVampyriumPortal);
   api.onObjectInteraction(tryCastleReturnPortal);
@@ -7282,6 +7293,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerMapSquareChange(syncCastleLobbyFloorOnMapSquareChange);
   api.onPlayerLogin(handleSiegeLogin);
   api.onPlayerLogin(recoverWyrdEncounterOnLogin);
+  api.onPlayerLogin(syncPalaceActorsOnLogin);
   api.onPlayerLogin(syncHideoutIvan);
   api.onPlayerLogin(syncSlepeIvan);
   api.onPlayerLogin(syncSlepeRoy);
@@ -7301,6 +7313,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogin(syncFinalEfaritayOnLogin);
   api.onPlayerLogin(resumeFinalDrakanVictory);
   api.onPlayerLogout(cleanupCastleActors);
+  api.onPlayerLogout(cleanupPalaceActors);
   api.onPlayerLogout(cleanupBloodHuntActors);
   api.onPlayerLogout(cleanupFirstBloodEncounter);
   api.onPlayerLogout(cleanupFinalEfaritay);
