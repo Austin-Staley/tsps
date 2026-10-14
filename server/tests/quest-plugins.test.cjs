@@ -5435,6 +5435,8 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     sendMessage() {},
   };
   handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: '4G5OZg' });
+  const wyrdQuest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().at(-1);
+  wyrdQuest.setStage(player, 90);
   assert.deepEqual(spawns.map(({ id, x, y, z, ownerOnly }) => ({ id, x, y, z, ownerOnly })), [
     { id: api.core.NpcIdentifiers.WYRD_8, x: 2976, y: 7456, z: 0, ownerOnly: true },
   ]);
@@ -5461,7 +5463,17 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
   api.core.World.getProcessCycle = () => worldCycle;
   Math.random = () => 0.5;
   try {
-    worldCycle += 4;
+    const introEnd = { player, step: { speaker: 'Wyrd' }, text: 'Then stay... Stay and die!' };
+    for (const handler of handlers.custom.get('npc-dialogue:line') ?? []) handler(introEnd);
+    assert.equal(typeof introEnd.after, 'function', 'the final opening line schedules Wyrd combat after it is continued');
+    worldCycle += 20;
+    bossArea.process(boss);
+    assert.equal(animations.length, 0, 'the Wyrd remains harmless while the opening transcript is still displayed');
+    introEnd.after();
+    worldCycle += 3;
+    bossArea.process(boss);
+    assert.equal(animations.length, 0, 'the opening attacks wait until the post-transcript grace period expires');
+    worldCycle++;
     bossArea.process(boss);
     assert.equal(animations.at(-1), 14020, 'the initial distance uses the Wyrd’s magic attack');
     assert.ok(combatHits.at(-1).getTotalDamage() <= 25, 'the unprayerable ranged magic hit stays within its max hit');

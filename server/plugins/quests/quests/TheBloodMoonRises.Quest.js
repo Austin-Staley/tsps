@@ -738,6 +738,9 @@ module.exports = function registerTheBloodMoonRises(api) {
       mobile.getCombat().getLastAttack().reset();
       const player = encounter.player;
       if (player.getArea?.() !== this || player.getHitpoints() <= 0) return;
+      // The Wyrd breaks free several dialogue lines before the opening scene
+      // ends. Keep the encounter dormant until the player's final line lands.
+      if (!encounter.introComplete) return;
 
       const hpPercent = mobile.getHitpoints() / mobile.getMaxHitpoints();
       const threshold = hpPercent <= 0.1 ? 10 : hpPercent <= 0.5 ? 50 : hpPercent <= 0.8 ? 80 : 0;
@@ -2249,10 +2252,20 @@ module.exports = function registerTheBloodMoonRises(api) {
     area.enter(boss);
     player.setAttribute(WYRD_AREA_ATTRIBUTE, area);
     player.moveTo(new Location(2976, 7452, 0));
-    wyrdEncounters.set(area, { area, boss, player, phase: 1, lastCycle: -1, nextAttackAt: World.getProcessCycle() + 4,
+    wyrdEncounters.set(area, { area, boss, player, phase: 1, lastCycle: -1, introComplete: false,
+      nextAttackAt: Number.MAX_SAFE_INTEGER,
       impactAt: 0, warning: null, sequenceStep: 0, slamSide: "left", slamCount: 0,
       meleeMode: null, poolTiles: new Set(), bloodyBlast: false, blastRadius: 0, blastEndsAt: 0, finished: false,
       ending: false, thresholdsSeen: new Set() });
+    return true;
+  }
+
+  function activateWyrdEncounter(player) {
+    const area = player?.getAttribute?.(WYRD_AREA_ATTRIBUTE);
+    const encounter = area && wyrdEncounters.get(area);
+    if (!encounter || encounter.player !== player || encounter.finished || encounter.introComplete) return false;
+    encounter.introComplete = true;
+    encounter.nextAttackAt = World.getProcessCycle() + 4;
     player.sendMessage("The Wyrd breaks free. Its fists knock you back, so leave room behind you. Turn off protection prayers for a screech, and watch its arms before the double slam.");
     return true;
   }
@@ -5488,6 +5501,10 @@ module.exports = function registerTheBloodMoonRises(api) {
   function onBloodMoonDialogueLine(request) {
     const player = request?.player;
     if (!player) return;
+    if (stage(player) === STAGE.WYRDS && request.step?.speaker === "Wyrd"
+      && request.text === "Then stay... Stay and die!") {
+      request.after = () => activateWyrdEncounter(player);
+    }
     if (stage(player) === STAGE.THEATRE && request.text === "We'd better get over there then." &&
       request.step?.speaker === "Ivan Strom") {
       request.after = () => {
