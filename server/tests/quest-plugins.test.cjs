@@ -11177,7 +11177,7 @@ test('Blood Moon shrine examine starts the hideout conversation only at the real
   const sender={sendVarbit:(id,value)=>bits.set(id,value)};
   const player={getAttribute:key=>attrs.get(key),setAttribute:(key,value)=>attrs.set(key,value),getPacketSender:()=>sender,
    getLocation:()=>({getX:()=>3601,getY:()=>9614,getZ:()=>0})};
-  const inspect=handlers.custom.get('world:object-examine').at(-1),event={player,objectId:61174,handled:false};
+  const inspect=handlers.custom.get('world:object-examine').find(handler=>handler.name==='inspectHideoutShrine'),event={player,objectId:61174,handled:false};
   inspect(event);assert.equal(event.handled,true);assert.equal(started[1],9531);assert.equal(started[2],'The Blood Moon Rises');assert.equal(started[3],'starting-out-inspecting-the-shrine');assert.equal(bits.get(15464),8);
   started=null;const distant={...event,handled:false,player:{...player,getLocation:()=>({getX:3610,getY:9614,getZ:0})}};inspect(distant);assert.equal(distant.handled,false);assert.equal(started,null);
  }finally{runtime.startTranscript=original;delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];}
