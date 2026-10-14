@@ -621,6 +621,9 @@ module.exports = function registerTheBloodMoonRises(api) {
   const WYRD_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-area";
   const WYRD_DEFEATED_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-defeated";
   const WYRD_CUTSCENE_ATTRIBUTE = "quest.the_blood_moon_rises.wyrd-cutscene-active";
+  // RSProx 4288 records the stage-150 return from the inspected fence to this
+  // walkable Burgh tile (the player then walks south into the pub scene).
+  const WYRD_BURGH_RETURN = Object.freeze({ x: 3490, y: 9631, z: 0 });
   const DRAKAN_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.drakan-area";
   const FIRST_BLOOD_AREA_ATTRIBUTE = "quest.the_blood_moon_rises.first-blood-area";
   const FIRST_BLOOD_ARENA = Object.freeze({ minX: 2688, maxX: 2735, minY: 7810, maxY: 7880, z: 0 });
@@ -2454,6 +2457,19 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (x == null || y == null || Math.max(Math.abs(x - 3562), Math.abs(y - 3323)) > 2) return false;
     event.handled = true;
     return startTranscript(api, player, 0, PAGE, "fighting-wyrds-inspecting-the-broken-fence");
+  }
+
+  function recoverWyrdBurghLandingOnLogin({ player } = {}) {
+    if (!player || stage(player) !== STAGE.FINAL) return;
+    const location = player.getLocation?.();
+    const x = location?.getX?.() ?? location?.x;
+    const y = location?.getY?.() ?? location?.y;
+    const z = location?.getZ?.() ?? location?.z;
+    // Migrate saves made by the earlier broken-fence handler, which advanced
+    // through the Burgh return but left the player at the swamp fence.
+    if (z === 0 && x >= 3550 && x <= 3575 && y >= 3305 && y <= 3345) {
+      player.moveTo(new Location(WYRD_BURGH_RETURN.x, WYRD_BURGH_RETURN.y, WYRD_BURGH_RETURN.z));
+    }
   }
 
   function nativeStage(value, player) {
@@ -5327,7 +5343,10 @@ module.exports = function registerTheBloodMoonRises(api) {
       advance(player, STAGE.WYRD_DEFEATED);
       player.moveTo(new Location(3562, 3322, 0));
     }
-    if (event.stepId === "xt3dPV") advance(player, STAGE.FENCE_FOUND);
+    if (event.stepId === "xt3dPV" && player.getAttribute(WYRD_DEFEATED_ATTRIBUTE)) {
+      advance(player, STAGE.FENCE_FOUND);
+      player.moveTo(new Location(WYRD_BURGH_RETURN.x, WYRD_BURGH_RETURN.y, WYRD_BURGH_RETURN.z));
+    }
     if (event.stepId === "2QgFZA" && player.getAttribute(WYRD_DEFEATED_ATTRIBUTE)) {
       player.setAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE, 164);
       advance(player, STAGE.FINAL);
@@ -7772,6 +7791,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogin(handleSiegeLogin);
   api.onPlayerLogin(recoverWyrdEncounterOnLogin);
   api.onPlayerLogin(syncPalaceActorsOnLogin);
+  api.onPlayerLogin(recoverWyrdBurghLandingOnLogin);
   api.onPlayerLogin(syncHideoutIvan);
   api.onPlayerLogin(syncSlepeIvan);
   api.onPlayerLogin(syncSlepeRoy);

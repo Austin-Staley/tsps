@@ -5700,6 +5700,27 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     assert.equal(examine(fence), true, 'the actionless cache fence starts its transcript through the native Examine event');
     assert.equal(fence.handled, true, 'the quest claims the fence examine packet');
     assert.equal(transcriptStarts, beforeFence + 1, 'the fence opens the normal post-Wyrd story once');
+
+    const transcriptAction = handlers.custom.get('npc-dialogue:action')
+      .find(handler => handler.name === 'onTranscriptAction');
+    transcriptAction({ player, stepId: 'xt3dPV' });
+    assert.equal(attributes.get('quest.the_blood_moon_rises.stage'), 96,
+      'the recorded fence return advances to the Burgh chapter');
+    assert.deepEqual(player.destination, [3490, 9631, 0],
+      'the fence transcript sends the player to the captured walkable Burgh arrival');
+
+    attributes.set('quest.the_blood_moon_rises.stage', 100);
+    playerLocation = new api.core.Location(3562, 3323, 0);
+    const recoverBurgh = handlers.playerLogin.find(handler => handler.name === 'recoverWyrdBurghLandingOnLogin');
+    recoverBurgh({ player });
+    assert.deepEqual(player.destination, [3490, 9631, 0],
+      'an already-advanced save is migrated from the old blocked swamp landing');
+
+    playerLocation = new api.core.Location(3400, 9600, 0);
+    player.destination = null;
+    recoverBurgh({ player });
+    assert.equal(player.destination, null,
+      'the legacy migration leaves unrelated final-stage locations alone');
   } finally {
     api.core.World.getProcessCycle = oldCycle;
     Math.random = originalRandom;
