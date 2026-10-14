@@ -3902,6 +3902,17 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     assert.equal(playerHitpoints, 99, 'a failed attempt returns the player with full Hitpoints');
     assert.deepEqual(player.destination, [3506, 9838, 0], 'a failed attempt returns to Veliaf outside the laboratory');
     assert.equal(player.getAttribute('quest.the_blood_moon_rises.wyrd-area'), null, 'the failed instance is cleared for retry');
+
+    attributes.set('quest.the_blood_moon_rises.wyrd-defeated', true);
+    const examine = handlers.custom.get('world:object-examine').at(-1);
+    const unrelated = { player, objectId: 61268, handled: false };
+    assert.equal(examine(unrelated), false, 'the fence examine is ignored away from its real tile');
+    playerLocation = new api.core.Location(3562, 3323, 0);
+    const fence = { player, objectId: 61268, handled: false };
+    const beforeFence = transcriptStarts;
+    assert.equal(examine(fence), true, 'the actionless cache fence starts its transcript through the native Examine event');
+    assert.equal(fence.handled, true, 'the quest claims the fence examine packet');
+    assert.equal(transcriptStarts, beforeFence + 1, 'the fence opens the normal post-Wyrd story once');
   } finally {
     api.core.World.getProcessCycle = oldCycle;
     Math.random = originalRandom;

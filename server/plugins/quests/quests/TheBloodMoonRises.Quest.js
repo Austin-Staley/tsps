@@ -1980,10 +1980,17 @@ module.exports = function registerTheBloodMoonRises(api) {
   function inspectWyrdFence(event) {
     const player = event?.player;
     const name = String(event?.definition?.getName?.() ?? "").toLowerCase();
-    if (!player || !player.getAttribute(WYRD_DEFEATED_ATTRIBUTE) || name !== "broken fence") return false;
-    const x = event.location?.getX?.() ?? event.location?.x;
-    const y = event.location?.getY?.() ?? event.location?.y;
-    if (x !== 3562 || y !== 3323) return false;
+    const objectId = event?.objectId ?? event?.definition?.id ?? event?.definition?.getId?.();
+    // The live cache child is exposed as the generic name "Fence" (IDs 61264/61268),
+    // even though the quest transcript calls this scenery the broken fence. Its cache
+    // definition has no option, so the normal object-action packet cannot reach a hook;
+    // claim the native Examine packet at the player's nearby fence tile instead.
+    if (!player || !player.getAttribute(WYRD_DEFEATED_ATTRIBUTE) ||
+      (name !== "broken fence" && ![61264, 61268].includes(objectId))) return false;
+    const location = event.location ?? player.getLocation?.();
+    const x = location?.getX?.() ?? location?.x;
+    const y = location?.getY?.() ?? location?.y;
+    if (x == null || y == null || Math.max(Math.abs(x - 3562), Math.abs(y - 3323)) > 2) return false;
     event.handled = true;
     return startTranscript(api, player, 0, PAGE, "fighting-wyrds-inspecting-the-broken-fence");
   }
@@ -6118,6 +6125,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onNpcBeforeDeath(handleWyrdBeforeDeath);
   api.onPlayerBeforeDeath(handleWyrdPlayerBeforeDeath);
   api.onCombatHitRoll(allowWyrdHitThroughPrayer);
+  api.onCustomEvent("world:object-examine", inspectWyrdFence);
   api.onNpcDeath(handleSlepeManorDeath);
   api.onNpcDeath(handlePaterdomusMonkDeath);
   api.onNpcDeath(handleCastleNpcDeath);
