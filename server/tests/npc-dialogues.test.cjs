@@ -792,3 +792,22 @@ test('an action that starts a new conversation does not resume the old transcrip
  const action=[...chain.getDialogues().values()][0];current=action;action.send(player);
  assert.equal(current,replacement,'the action-started scene must survive the old transcript tail');
 });
+
+
+test('the Lassar vision uses the player head for copies speaking under the player placeholder', () => {
+  const { PlayerDialogue } = require('../dist/game/model/dialogues/entries/impl/PlayerDialogue');
+  let chain;
+  const player = { getUsername: () => 'Test', getDialogueManager: () => ({
+    reset() {}, startDialogues(builder) { chain = builder; },
+  }) };
+  const cloneLine = data['Desert Treasure II - The Fallen Empire'].variants[
+    'the-whisperer-inspecting-the-totem-in-the-cistern'].find(step => step.type === 'line' && step.speaker === '[player name]');
+  assert.ok(cloneLine);
+  startDialogue({ emitCustomEvent() {} }, {
+    player, npcId: 12232, definition: { getId: () => 12232, getName: () => 'Ketla' },
+  }, [cloneLine]);
+  const spoken = [...chain.getDialogues().values()].filter(entry => entry.getText);
+  assert.equal(spoken.length, 1);
+  assert.ok(spoken[0] instanceof PlayerDialogue, 'the copy does not borrow Ketla’s head');
+  assert.equal(spoken[0].getText(), cloneLine.text);
+});

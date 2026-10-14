@@ -610,8 +610,9 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
       // rather than aborting when the speaker is not the NPC being talked to.
       const typedLine = step.type === "line" && typeof step.text === "string";
       if (!step.hook && (typeof step.npc === "string" || typeof step.player === "string" || typedLine)) {
-        const isPlayer = typeof step.player === "string";
-        const speech = isPlayer ? step.player : typedLine ? step.text : step.npc;
+        const isPlayer = typeof step.player === "string"
+          || (typedLine && /^\[(?:player name|playername|player)\]$|^<player name>$/i.test(step.speaker ?? ""));
+        const speech = typeof step.player === "string" ? step.player : typedLine ? step.text : step.npc;
         // Let a plugin skip a line through the mutable payload (as slayer:assignment),
         // e.g. a hand-over line for an item the player is no longer carrying.
         const request = { player, npc: event.npc, npcId, definition, step, text: speech, skip: false };
