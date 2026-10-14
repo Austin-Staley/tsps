@@ -4,7 +4,7 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const QuestRuntime = require('../plugins/quests/QuestRuntime');
-const attachQuestCape = require('../plugins/quests/quest-cape/QuestCape.QuestCape');
+const attachQuestCape = require('../plugins/quests/QuestCape.QuestCape');
 
 const answers = { quests: true, diaries: true };
 const eventHandlers = new Map();

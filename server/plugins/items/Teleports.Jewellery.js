@@ -1,6 +1,6 @@
-const { ItemIds } = require("../../../src/main/typescript/elvarg/util/IdEnums");
-const { GameConstants } = require("../../../src/main/typescript/elvarg/game/GameConstants");
-const { Skill } = require("../../../src/main/typescript/elvarg/game/model/Skill");
+const { ItemIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
+const { GameConstants } = require("../../src/main/typescript/elvarg/game/GameConstants");
+const { Skill } = require("../../src/main/typescript/elvarg/game/model/Skill");
 
 /** Teleport jewellery usable up to this Wilderness level unless a piece says otherwise. */
 const DEFAULT_WILDERNESS_LEVEL = 20;

@@ -1,10 +1,10 @@
 const fs = require("fs");
 const path = require("path");
 
-const { MapRegionReplacementManager } = require("../../src/main/typescript/elvarg/game/collision/MapRegionReplacementManager");
-const { CacheMaps } = require("../../src/main/typescript/elvarg/game/cache/CacheMaps");
-const { Buffer } = require("../../src/main/typescript/elvarg/game/collision/Buffer");
-const { ObjectDefinition } = require("../../src/main/typescript/elvarg/game/definition/ObjectDefinition");
+const { MapRegionReplacementManager } = require("../../../src/main/typescript/elvarg/game/collision/MapRegionReplacementManager");
+const { CacheMaps } = require("../../../src/main/typescript/elvarg/game/cache/CacheMaps");
+const { Buffer } = require("../../../src/main/typescript/elvarg/game/collision/Buffer");
+const { ObjectDefinition } = require("../../../src/main/typescript/elvarg/game/definition/ObjectDefinition");
 const { ObjectType } = require("./ObjectType");
 const {
   PRESET_OUTPUT_PATH,

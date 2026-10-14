@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { ObjectDefinition } = require("../../src/main/typescript/elvarg/game/definition/ObjectDefinition");
+const { ObjectDefinition } = require("../../../src/main/typescript/elvarg/game/definition/ObjectDefinition");
 const { ObjectType } = require("./ObjectType");
 const { PRESET_OUTPUT_PATH, HOUSE_DUMP_DIRECTORY } = require("./ProceduralDataPaths");
 const {

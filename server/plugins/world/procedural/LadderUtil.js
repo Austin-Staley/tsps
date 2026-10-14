@@ -1,5 +1,5 @@
-const { ObjectDefinition } = require("../../src/main/typescript/elvarg/game/definition/ObjectDefinition");
-const { ObjectIdentifiers } = require("../../src/main/typescript/elvarg/util/ObjectIdentifiers");
+const { ObjectDefinition } = require("../../../src/main/typescript/elvarg/game/definition/ObjectDefinition");
+const { ObjectIdentifiers } = require("../../../src/main/typescript/elvarg/util/ObjectIdentifiers");
 const { ObjectType } = require("./ObjectType");
 
 const LADDER_NAME_PATTERN = /^Ladder$/;

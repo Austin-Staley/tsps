@@ -124,7 +124,7 @@ function rejuvenation(event) { return drinkFromPool(event, 2); }
 function fancyRejuvenation(event) { return drinkFromPool(event, 3); }
 
 module.exports = {
-  name: "RejuvinationPool",
+  name: "RejuvenationPool",
   register(api) {
     TaskManager = api.getTaskManager();
     api.onObjectInteraction("Pool of Restoration", { Drink: restoration });

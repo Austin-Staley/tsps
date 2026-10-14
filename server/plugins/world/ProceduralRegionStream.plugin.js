@@ -5,9 +5,9 @@ const { PacketBuilder } = require("../../src/main/typescript/elvarg/net/packet/P
 const { PacketType } = require("../../src/main/typescript/elvarg/net/packet/PacketType");
 const { GameObject } = require("../../src/main/typescript/elvarg/game/entity/impl/object/GameObject");
 const { Location } = require("../../src/main/typescript/elvarg/game/model/Location");
-const { generateBuildingsForRegion, generateSingleHouseForRegion } = require("./BuildingUtil");
-const { generateStreetTownForRegion } = require("./TownUtil");
-const { ObjectType } = require("./ObjectType");
+const { generateBuildingsForRegion, generateSingleHouseForRegion } = require("./procedural/BuildingUtil");
+const { generateStreetTownForRegion } = require("./procedural/TownUtil");
+const { ObjectType } = require("./procedural/ObjectType");
 const {
   writeAnalysisReport,
   writeLearnedPresetFile,
@@ -17,8 +17,8 @@ const {
   decodeRegionTerrainData,
   HOUSE_DUMP_DIRECTORY,
   initRegionBuildingAnalysisCoreAccess,
-} = require("./RegionBuildingAnalysisUtil");
-const { dumpTerrainBiome, loadTerrainBiome } = require("./TerrainBiomeUtil");
+} = require("./procedural/RegionBuildingAnalysisUtil");
+const { dumpTerrainBiome, loadTerrainBiome } = require("./procedural/TerrainBiomeUtil");
 
 const PROCEDURAL_REGION_OPCODE = 12;
 const REGION_PACKET_TYPE = Object.freeze({

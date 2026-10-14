@@ -4,7 +4,7 @@ const path = require("path");
 const { ObjectType } = require("./ObjectType");
 const { decodeRegionObjects, decodeRegionTerrainData } = require("./RegionBuildingAnalysisUtil");
 const { PROCEDURAL_DATA_DIRECTORY } = require("./ProceduralDataPaths");
-const { isWaterOverlayId } = require("../../src/main/typescript/elvarg/game/cache/TerrainWater");
+const { isWaterOverlayId } = require("../../../src/main/typescript/elvarg/game/cache/TerrainWater");
 
 const TERRAIN_BIOME_DIRECTORY = path.join(PROCEDURAL_DATA_DIRECTORY, "terrain-biomes");
 

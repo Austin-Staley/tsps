@@ -1,4 +1,4 @@
-const QuestRuntime = require("../QuestRuntime");
+const QuestRuntime = require("./QuestRuntime");
 
 // Cache DB table 0 is `quest`; its columns identify the title, main quest type, point reward,
 // subquest parent and storyline parent. Child chapters remain covered by their parent quest.

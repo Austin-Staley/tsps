@@ -1,11 +1,11 @@
 // Isolated state-machine and hook checks; no running server or sockets.
-// From server/: node -r ts-node/register/transpile-only plugins/skills/farming/Model.Farming.test.js
+// Run after `yarn build`: node --test tests/farming-model.test.cjs
 // The plugin hands the farming files api.core; outside the server the test does it.
-require("../../../src/main/typescript/elvarg/game/World");
-const { PluginManager } = require("../../../src/main/typescript/elvarg/plugins/PluginManager");
-require("./Core.Farming").init({ core: PluginManager.getCoreApi() });
-const Data = require("./Data.Farming");
-const Model = require("./Model.Farming");
+require("../dist/game/World");
+const { PluginManager } = require("../dist/plugins/PluginManager");
+require("../plugins/skills/farming/Core.Farming").init({ core: PluginManager.getCoreApi() });
+const Data = require("../plugins/skills/farming/Data.Farming");
+const Model = require("../plugins/skills/farming/Model.Farming");
 const assert = require("node:assert/strict");
 
 const now = Date.UTC(2026, 8, 30);
@@ -107,9 +107,9 @@ for (const xp of [6, 14, 23]) {
     assert.equal(first.points + last.points, 35);
 }
 
-const core = require("./Core.Farming");
-const Patches = require("./Patches.Farming");
-const Services = require("./Services.Farming");
+const core = require("../plugins/skills/farming/Core.Farming");
+const Patches = require("../plugins/skills/farming/Patches.Farming");
+const Services = require("../plugins/skills/farming/Services.Farming");
 const hooks = {};
 Patches.attach(new Proxy({}, { get: (_, name) => (...args) => (hooks[name] ??= []).push(args[0]) }));
 const login = hooks.onPlayerLogin[0], logout = hooks.onPlayerLogout[0], mapSquareChanged = hooks.onPlayerMapSquareChange[0];
