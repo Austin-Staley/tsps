@@ -6,6 +6,7 @@
 module.exports = function registerTheBloodMoonRises(api) {
   const { Animation, Boundary, Equipment, Graphic, HitDamage, HitMask, Item, ItemIdentifiers, Location, NpcIdentifiers, ObjectDefinition, ObjectIdentifiers, PrayerHandler, PrivateArea, Skill, World } = api.core;
   const { registerQuest, loadTranscripts, startTranscript } = require("../QuestRuntime");
+  const { handleDrakanDodgeRoll } = require("../bmr/DrakanDodgeRoll.TheBloodMoonRises");
   require("../bmr/Refinery.TheBloodMoonRises")(api, stage);
   const PAGE = "The Blood Moon Rises";
   const START_HOOK = "quest:the-blood-moon-rises:start";
@@ -1192,6 +1193,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       const direction = directions[(fight.lungeIndex + fight.lungeCycles) % directions.length];
       const loc = player.getLocation();
       fight.warning = "lunge-appearances";
+      fight.lungeRolled = false;
       fight.lungeDirection = direction;
       fight.lungeCueIndex = 0;
       fight.markedX = loc.getX();
@@ -1222,7 +1224,8 @@ module.exports = function registerTheBloodMoonRises(api) {
         const dy = player.getLocation().getY() - fight.markedY;
         const verticalAttack = fight.lungeDirection === "north" || fight.lungeDirection === "south";
         const perpendicular = verticalAttack ? Math.abs(dx) : Math.abs(dy);
-        const dodged = perpendicular >= 2 && perpendicular <= 5;
+        const dodged = fight.lungeRolled || (perpendicular >= 2 && perpendicular <= 5);
+        fight.lungeRolled = false;
         if (!dodged) this.hit(player, boss, 28, "Lowerniel's spear lunge catches you.");
         else player.sendMessage("You roll clear of the spear lunge.");
         fight.impactAt = 0;
@@ -1406,6 +1409,12 @@ module.exports = function registerTheBloodMoonRises(api) {
       deathConfirmed: false, ending: false, finished: false });
     player.sendMessage("Lowerniel attacks at full strength. His spear combos require you to dodge; use Protect from Magic against his blood strikes.");
     return true;
+  }
+
+  function handleFinalDrakanDodgeRoute(event) {
+    const area = event?.player?.getArea?.();
+    const fight = area && drakanEncounters.get(area);
+    return handleDrakanDodgeRoll(event, fight, api.core);
   }
 
   function handleFinalDrakanSupplyChest(event) {
@@ -6315,6 +6324,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.persistAttribute(ATTRIBUTE);
   api.onCustomEvent("npc-dialogue:hook", onStartHook);
   api.onCustomEvent("potions:area", handleVampyriumPotionArea);
+  api.onWalkRoute(handleFinalDrakanDodgeRoute);
   api.onCustomEvent("npc-dialogue:action", onTranscriptAction);
   api.onCustomEvent("quest:stage-changed", syncHideoutIvan);
   api.onCustomEvent("quest:stage-changed", syncSlepeIvan);
