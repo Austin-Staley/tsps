@@ -657,6 +657,16 @@ module.exports = function registerTheBloodMoonRises(api) {
   const finalCutsceneActors = new Map();
   const siegeDrakanEncounters = new Map();
   const siegeHallInjured = new Map();
+  function preparationStoryReady(player) {
+    const prep = player?.getAttribute(PREP_ATTRIBUTE) ?? {};
+    return prep.introComplete && prep.stewFed && prep.safalaanAnswered && prep.preparationsDiscussed &&
+      prep.flail && prep.stakes && prep.stakesConversationComplete && prep.veliafFirstTalkComplete &&
+      prep.vanesculaTalkComplete && prep.veliafFollowupComplete;
+  }
+  function preparationReady(player) {
+    return preparationStoryReady(player) && Boolean(player?.getAttribute(PREP_ATTRIBUTE)?.sugadintiReady) &&
+      (hasItem(player, PREP.flail) || player?.getEquipment?.()?.contains?.(PREP.flail)) && hasItem(player, PREP.stakes);
+  }
   const hideoutDefense = require("../bmr/HideoutDefense.TheBloodMoonRises")({ api, stage: player => stage(player),
     hideoutStage: STAGE.HIDEOUT,
     complete: (player, npcId) => startTranscript(api, player, npcId, PAGE, "starting-out-escaping-the-vampyres") });
@@ -4877,9 +4887,8 @@ module.exports = function registerTheBloodMoonRises(api) {
       spawnSiegeInjuredAranei(player);
     }
     if (event.stepId === "Sut83Q") {
-      const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {};
-      if (!prep.flail || !prep.stakes) {
-        player.sendMessage("Before the siege, finish the hallowed flail and cut blisterwood stakes for the defence.");
+      if (!preparationReady(player)) {
+        player.sendMessage("Before the siege, finish your preparations with Ivan, Veliaf, Vanescula and Sugadinti, and bring the Hallowed flail and blisterwood stakes.");
         return;
       }
       player.setAttribute(PREP_COMPLETE, true);
@@ -5241,6 +5250,22 @@ module.exports = function registerTheBloodMoonRises(api) {
   function onBloodMoonDialogueLine(request) {
     const player = request?.player;
     if (!player) return;
+    if (stage(player) === STAGE.PREPARATIONS) {
+      const prepProgress = [
+        ["I hope so too. We're going to need all the advantages we can find.", "stakesConversationComplete"],
+        ["Well, if you want to try getting something out of her, be my guest.", "veliafFirstTalkComplete"],
+        ["Now, as fun as all this has been, my brother will almost certainly be upon you and your new friends soon.", "vanesculaTalkComplete"],
+        ["Best you go and get ready, [player name]. Won't be long until Drakan is here.", "veliafFollowupComplete"],
+        ["I will see that it is. Now, my disciples are gathering on the bridge outside.", "sugadintiReady"],
+      ].find(([text]) => request.text === text || request.text?.startsWith(text));
+      if (prepProgress) {
+        request.after = () => {
+          if (stage(player) !== STAGE.PREPARATIONS) return;
+          player.setAttribute(PREP_ATTRIBUTE, { ...(player.getAttribute(PREP_ATTRIBUTE) ?? {}), [prepProgress[1]]: true });
+        };
+        return;
+      }
+    }
     if (stage(player) === STAGE.PREPARATIONS && !(player.getAttribute(PREP_ATTRIBUTE) ?? {}).ivanSareiIntroComplete &&
       ((request.step?.player && request.text === "I'll get to it.") ||
         (request.step?.speaker === "Sarei" &&
@@ -5459,6 +5484,40 @@ module.exports = function registerTheBloodMoonRises(api) {
         ? "hallowed-preparations-talking-to-ivan-and-sarei-talking-to-them-again"
         : "hallowed-preparations-talking-to-ivan-and-sarei";
       return startTranscript(api, player, event.npcId, PAGE, variant);
+    }
+    if (stage(player) === STAGE.PREPARATIONS && ["veliaf hurtz", "vanescula drakan", "sugadinti vitur"].includes(npcName)) {
+      const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {};
+      const hasFlail = hasItem(player, PREP.flail) || player.getEquipment?.()?.contains?.(PREP.flail);
+      const hasStakes = hasItem(player, PREP.stakes);
+      event.handled = true;
+      if (npcName === "sugadinti vitur") {
+        const variant = preparationStoryReady(player)
+          ? "hallowed-preparations-talking-to-sugadinti-after-finishing-preparations"
+          : "hallowed-preparations-talking-to-sugadinti";
+        return startTranscript(api, player, event.npcId, PAGE, variant);
+      }
+      if (!prep.stakesConversationComplete || !hasFlail || !hasStakes) {
+        player.sendMessage("Finish the Hallowed flail and blisterwood stakes, then speak with Ivan and Sarei about them.");
+        return true;
+      }
+      if (npcName === "veliaf hurtz") {
+        if (prep.vanesculaTalkComplete) {
+          return startTranscript(api, player, event.npcId, PAGE,
+            "hallowed-preparations-talking-to-veliaf-after-talking-to-vanescula");
+        }
+        if (prep.veliafFirstTalkComplete) {
+          player.sendMessage("I should hear what Vanescula has to say before returning to Veliaf.");
+          return true;
+        }
+        return startTranscript(api, player, event.npcId, PAGE, "hallowed-preparations-talking-to-veliaf");
+      }
+      if (!prep.veliafFirstTalkComplete) {
+        player.sendMessage("I should speak to Veliaf before questioning Vanescula.");
+        return true;
+      }
+      return startTranscript(api, player, event.npcId, PAGE, prep.vanesculaTalkComplete
+        ? "hallowed-preparations-talking-to-vanescula-trying-to-talk-to-her-again"
+        : "hallowed-preparations-talking-to-vanescula");
     }
     if (stage(player) === STAGE.SLEPE) {
       const story = player.getAttribute(SLEPE_STORY_ATTRIBUTE) ?? {};
@@ -7091,7 +7150,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   require("../bmr/Palace.TheBloodMoonRises")({ api, stage, preparationAttribute: PREP_ATTRIBUTE, processHall: ({ player }) => hall.enter(player) });
   const bridge = require("../bmr/Bridge.TheBloodMoonRises")({ api, stage, attribute: SIEGE_DEFENCE_ATTRIBUTE,
     sync: player => quest.setStage(player, STAGE.SIEGE),
-    ready: player => { const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {}; return prep.flail && prep.stakes; },
+    ready: preparationReady,
     play: (player, npc, variant) => startTranscript(api, player, npc, PAGE, variant) });
   api.persistAttribute(ATTRIBUTE);
   api.onCustomEvent("npc-dialogue:hook", onStartHook);
@@ -7128,6 +7187,9 @@ module.exports = function registerTheBloodMoonRises(api) {
   // before their generic completed-quest transcript can answer for this stage.
   api.onNpcInteraction("Ivan Strom", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Sarei", { "Talk-to": talkQuestNpc });
+  api.onNpcInteraction("Veliaf Hurtz", { "Talk-to": talkQuestNpc });
+  api.onNpcInteraction("Vanescula Drakan", { "Talk-to": talkQuestNpc });
+  api.onNpcInteraction("Sugadinti Vitur", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Roy", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Veliaf Hurtz", { "Talk-to": talkQuestNpc });
   api.onNpcInteraction("Safalaan Hallow", { "Talk-to": talkQuestNpc });

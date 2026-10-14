@@ -2337,7 +2337,14 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
     'finishing the intro does not mask the captured flail-and-stakes preparation stage');
   const action = handlers.custom.get('npc-dialogue:action').at(-1);
   action({ player, stepId: 'Sut83Q' });
-  assert.equal(quest.getStage(player), 70, 'the siege starts after the player crafts both required defence items');
+  assert.equal(quest.getStage(player), 60, 'the siege handoff waits for the recorded ally conversations');
+  attributes.set('quest.the_blood_moon_rises.preparations', {
+    introComplete: true, stewFed: true, safalaanAnswered: true, preparationsDiscussed: true,
+    flail: true, stakes: true, stakesConversationComplete: true, veliafFirstTalkComplete: true,
+    vanesculaTalkComplete: true, veliafFollowupComplete: true, sugadintiReady: true,
+  });
+  action({ player, stepId: 'Sut83Q' });
+  assert.equal(quest.getStage(player), 70, 'the siege starts after the actual recipes and ordered preparation talks');
   assert.ok(messages.length > 0, 'interactions give feedback while ingredients and equipment are prepared');
   api.core.NpcDefinition.forId = originalForId;
 });
@@ -2443,6 +2450,69 @@ test('Blood Moon Ivan and Sarei preparation dialogue advances to the stake follo
     inventoryIds.delete(api.core.ItemIdentifiers.BLISTERWOOD_STAKE);
     assert.equal(condition({ player, stepId: 'sqIM75' }), true, 'the player must keep the stakes to claim completion');
     assert.equal(condition({ player, stepId: 'cv4yCk' }), false);
+  } finally {
+    npcDialogues.startDialogue = originalStartDialogue;
+  }
+});
+
+test('Blood Moon preparation dialogue follows Veliaf, Vanescula, Veliaf, then Sugadinti', () => {
+  const { api, handlers } = mockApi();
+  const npcDialogues = require('../plugins/npcs/NpcDialogues.plugin');
+  const originalStartDialogue = npcDialogues.startDialogue;
+  let started;
+  npcDialogues.startDialogue = (_api, _event, _steps, _branches, context) => {
+    started = context.pages[0].variants[0];
+  };
+  try {
+    require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+    const prepKey = 'quest.the_blood_moon_rises.preparations';
+    const attributes = new Map([
+      ['quest.the_blood_moon_rises.stage', 60],
+      [prepKey, { introComplete: true, stewFed: true, safalaanAnswered: true, preparationsDiscussed: true,
+        flail: true, stakes: true }],
+    ]);
+    const messages = [];
+    const player = {
+      getAttribute: key => attributes.get(key),
+      setAttribute: (key, value) => attributes.set(key, value),
+      isPlayer: () => true,
+      getAsPlayer() { return this; },
+      getInventory: () => ({ contains: id => [api.core.ItemIdentifiers.HALLOWED_FLAIL,
+        api.core.ItemIdentifiers.BLISTERWOOD_STAKE].includes(id) }),
+      getEquipment: () => ({ contains: () => false }),
+      getPacketSender: () => ({ sendVarbit() {}, sendQuestList() {} }),
+      sendMessage: text => messages.push(text),
+    };
+    const talk = name => handlers.npcInteractions.get(name)['Talk-to']({ player, npcId: 15871,
+      definition: { getName: () => name }, handled: false });
+    const line = handlers.custom.get('npc-dialogue:line').find(handler => handler.name === 'onBloodMoonDialogueLine');
+    const finishLine = (speaker, text) => { const request = { player, step: { speaker }, text }; line(request); request.after?.(); };
+
+    assert.equal(talk('Veliaf Hurtz'), true);
+    assert.equal(started, undefined, 'Veliaf waits until Ivan and Sarei acknowledge the made stakes');
+    attributes.set(prepKey, { ...attributes.get(prepKey), stakesConversationComplete: true });
+    assert.equal(talk('Vanescula Drakan'), true);
+    assert.equal(started, undefined, 'the player must hear Veliaf before questioning Vanescula');
+    assert.equal(talk('Veliaf Hurtz'), true);
+    assert.equal(started, 'hallowed-preparations-talking-to-veliaf');
+    finishLine('Veliaf Hurtz', 'Well, if you want to try getting something out of her, be my guest.');
+    assert.equal(attributes.get(prepKey).veliafFirstTalkComplete, true);
+    assert.equal(talk('Vanescula Drakan'), true);
+    assert.equal(started, 'hallowed-preparations-talking-to-vanescula');
+    finishLine('Vanescula Drakan', 'Now, as fun as all this has been, my brother will almost certainly be upon you and your new friends soon.');
+    assert.equal(attributes.get(prepKey).vanesculaTalkComplete, true);
+    assert.equal(talk('Veliaf Hurtz'), true);
+    assert.equal(started, 'hallowed-preparations-talking-to-veliaf-after-talking-to-vanescula');
+    finishLine('Veliaf Hurtz', "Best you go and get ready, [player name]. Won't be long until Drakan is here.");
+    assert.equal(attributes.get(prepKey).veliafFollowupComplete, true);
+    assert.equal(talk('Sugadinti Vitur'), true);
+    assert.equal(started, 'hallowed-preparations-talking-to-sugadinti-after-finishing-preparations');
+    finishLine('Sugadinti Vitur', 'I will see that it is. Now, my disciples are gathering on the bridge outside.');
+    assert.equal(attributes.get(prepKey).sugadintiReady, true);
+    assert.deepEqual(messages, [
+      'Finish the Hallowed flail and blisterwood stakes, then speak with Ivan and Sarei about them.',
+      'I should speak to Veliaf before questioning Vanescula.',
+    ]);
   } finally {
     npcDialogues.startDialogue = originalStartDialogue;
   }
@@ -13057,7 +13127,11 @@ test('Blood Moon palace spawns usable preparation NPCs once and removes them on 
  api.spawnNpc=spec=>{const npc={...spec,transformed:spec.id,getId:()=>spec.id,setScriptedMovement(){},getMovementQueue:()=>({setBlockMovement(){}}),setNpcTransformationId(id){npc.transformed=id;}};cast.push(npc);return npc;};api.removeNpc=n=>removed.push(n);
  const player={getAttribute:k=>attrs.get(k)};const f=require('../plugins/quests/bmr/Palace.TheBloodMoonRises')({api,stage:()=>progress,preparationAttribute:'prep'});
  f.sync(player);f.sync(player);assert.equal(cast.length,4);assert.ok(cast.every(n=>n.owner===player&&n.ownerOnly&&n.z===1));assert.deepEqual(cast.map(n=>[n.x,n.y]),[[3157,7841],[3157,7839],[3175,7834],[3168,7828]]);
- attrs.set('prep',{stewFed:true});f.sync(player);assert.equal(cast[0].transformed,api.core.NpcIdentifiers.SAFALAAN_HALLOW_12);progress=70;f.sync(player);assert.equal(removed.length,4);assert.equal(f.residents.has(player),false);
+ attrs.set('prep',{stewFed:true});f.sync(player);assert.equal(cast[0].transformed,api.core.NpcIdentifiers.SAFALAAN_HALLOW_12);
+ attrs.set('prep',{stewFed:true,flail:true,stakes:true});f.sync(player);assert.equal(cast.length,6);
+ assert.deepEqual(cast.slice(4).map(n=>[n.id,n.x,n.y,n.z,n.ownerOnly]),[[15871,3168,7842,0,true],[15906,3168,7844,0,true]],'the captured lower-floor Veliaf and Vanescula are scoped to the quest owner');
+ f.sync(player);assert.equal(cast.length,6,'repeated area processing does not duplicate story NPCs');
+ progress=70;f.sync(player);assert.equal(removed.length,6);assert.equal(f.residents.has(player),false);assert.equal(f.preparationTalkers.has(player),false);
 });
 
 test('bridge uses the actual cache palace exit and lets a full-inventory handoff retry',()=>{
