@@ -7348,6 +7348,45 @@ test('Desert Treasure II last medallion route traps the player, requires solving
     handlers.playerProcess.at(-1)({ player: p });
     assert.equal(sentVarbits.filter(([id]) => id === 15159).at(-1)?.[1], 1,
       'the cache-morphed desert return portal appears while the Figure trial is active');
+    assert.equal(cellArea.canTeleport(p, 0), false, "the temple's magical force blocks teleports until the player leaves by its exit");
+    const firstFigure = spawnedFigure;
+    const barrierLocation = { x: 3104, y: 9266, z: 0 };
+    assert.equal(objectHooks[0]({ player: p, objectId: 48781, definition: { id: 48781 }, option: 'Quick-escape', location: barrierLocation }), true,
+      'the cache Quick-escape barrier action opens the Wiki confirmation');
+    let escapePrompt = prompts.at(-1);
+    assert.match(escapePrompt.prompt, /leave the temple/i);
+    const noEscape = escapePrompt.options.findIndex((entry, index) => index % 2 === 0 && entry === 'No.');
+    assert.notEqual(noEscape, -1);
+    escapePrompt.options[noEscape + 1]();
+    assert.equal(p.location.x, 3086, 'declining the escape leaves the player in the cell');
+    assert.equal(spawnedFigure, firstFigure, 'declining escape keeps the current attempt alive');
+    assert.equal(objectHooks[0]({ player: p, objectId: 48781, definition: { id: 48781 }, option: 'Quick-escape', location: barrierLocation }), true);
+    escapePrompt = prompts.at(-1);
+    const yesEscape = escapePrompt.options.findIndex((entry, index) => index % 2 === 0 && entry === 'Yes.');
+    assert.notEqual(yesEscape, -1);
+    escapePrompt.options[yesEscape + 1]();
+    assert.deepEqual([p.location.x, p.location.y, p.location.z], [3175, 2887, 0], 'confirming the cache barrier escape leaves for the south quarry');
+    assert.ok(removedFigures.includes(firstFigure), 'barrier escape removes the old owner-only Figure');
+    assert.equal(attrs.get('desert-treasure-ii:final-figure-defeated'), undefined, 'barrier retreat does not award progression');
+    assert.equal(objectHooks[0]({ player: p, objectId: 49497, definition: { id: 48770 }, option: 'Use', location: { x: 3175, y: 2887, z: 0 } }), true);
+    cellArea.process(p);
+    assert.equal(spawnedFigures.length, 2, 'barrier re-entry starts a fresh Figure attempt');
+    assert.equal(spawnedFigure.hitpoints, 450);
+    assert.equal(objectHooks[0]({ player: p, objectId: 48767, definition: { id: 48767 }, option: 'Use', location: barrierLocation }), true,
+      'the visible, cache-placed cell Portal provides the natural mid-fight retreat when the cache Barrier has no map placement');
+    assert.deepEqual([p.location.x, p.location.y, p.location.z], [3175, 2887, 0]);
+    assert.equal(attrs.get('desert-treasure-ii:final-figure-started'), true, 'retreat keeps the solved cell and retry checkpoint');
+    assert.equal(attrs.get('desert-treasure-ii:final-figure-defeated'), undefined, 'retreat does not award progression');
+    assert.ok(removedFigures.includes(firstFigure), 'retreat removes the old owner-only Figure');
+    assert.equal(p.movementBlocked, false, 'retreat releases the player if the Figure froze them');
+    assert.equal(objectHooks[0]({ player: p, objectId: 49497, definition: { id: 48770 }, option: 'Use', location: { x: 3175, y: 2887, z: 0 } }), true,
+      'the same visible desert portal allows the player to return and retry');
+    cellArea.process(p);
+    assert.equal(spawnedFigures.length, 3, 're-entry creates a fresh Figure instead of resuming depleted health');
+    assert.equal(spawnedFigure.maxHitpoints, 450);
+    assert.equal(spawnedFigure.hitpoints, 450);
+    assert.equal(p.movementBlocked, false);
+    p.location = new core.Location(3086, 9260, 0);
     let attackStyle = 1;
     p.isPlayer = () => true; p.getAsPlayer = () => p;
     p.getFightType = () => ({ getBonusType: () => attackStyle });
@@ -7419,35 +7458,40 @@ test('Desert Treasure II last medallion route traps the player, requires solving
       'the cache-visible portal returns the player to the Figure cell');
     assert.deepEqual([p.location.x, p.location.y, p.location.z], [3103, 9246, 0]);
     process();
-    assert.equal(spawnedFigures.length, 2, 'returning to the cell respawns a fresh Figure after death');
-    assert.equal(spawnedFigures[1].maxHitpoints, 450, 're-entry restores the canonical Figure hitpoints');
+    assert.equal(spawnedFigures.length, 4, 'returning to the cell respawns a fresh Figure after death');
+    assert.equal(spawnedFigures[3].maxHitpoints, 450, 're-entry restores the canonical Figure hitpoints');
     assert.equal(p.movementBlocked, false, 're-entry does not inherit the old freeze');
 
     for (let i = 0; i < 10; i++) figureAttack();
     assert.equal(p.movementBlocked, true);
     cellArea.postLeave(p, false);
     assert.equal(p.movementBlocked, false, 'leaving the cell clears an in-progress movement lock');
-    assert.equal(spawnedFigures[1].scriptedMovement, false, 'leaving releases the Figure combat pause');
-    assert.ok(removedFigures.includes(spawnedFigures[1]), 'leaving despawns the owner-only Figure');
+    assert.equal(spawnedFigures[3].scriptedMovement, false, 'leaving releases the Figure combat pause');
+    assert.ok(removedFigures.includes(spawnedFigures[3]), 'leaving despawns the owner-only Figure');
     cellArea.postLeave(p, true);
     process();
-    assert.equal(spawnedFigures.length, 3, 'the active fight resumes with a fresh Figure after re-entry');
-    assert.equal(spawnedFigures[2].maxHitpoints, 450);
+    assert.equal(spawnedFigures.length, 5, 'the active fight resumes with a fresh Figure after re-entry');
+    assert.equal(spawnedFigures[4].maxHitpoints, 450);
     assert.equal(p.movementBlocked, false);
 
     for (let i = 0; i < 10; i++) figureAttack();
     assert.equal(p.movementBlocked, true);
     logoutHooks.at(-1)({ player: p });
     assert.equal(p.movementBlocked, false, 'logout also clears an in-progress movement lock');
-    assert.equal(spawnedFigures[2].scriptedMovement, false, 'logout releases the Figure combat pause');
+    assert.equal(spawnedFigures[4].scriptedMovement, false, 'logout releases the Figure combat pause');
     process();
-    assert.equal(spawnedFigures.length, 4, 'login can resume the active fight in the cell Area');
+    assert.equal(spawnedFigures.length, 6, 'login can resume the active fight in the cell Area');
 
     p.location = new core.Location(3104, 9265, 0);
+    const retryFigure = spawnedFigure;
     assert.equal(objectHooks[0]({ player: p, objectId: 48767, definition: { id: 48767 }, option: 'Use', location: { x: 3104, y: 9266, z: 0 } }), true,
-      'the real Portal action is claimed while the Figure still holds the player in the cell');
-    assert.deepEqual([p.location.x, p.location.y, p.location.z], [3104, 9265, 0],
-      'the cell portal cannot bypass the unfinished Figure trial');
+      'the real Portal action lets a player retreat while the Figure is still alive');
+    assert.deepEqual([p.location.x, p.location.y, p.location.z], [3175, 2887, 0]);
+    assert.ok(removedFigures.includes(retryFigure), 'the active Figure is removed on retreat');
+    assert.equal(attrs.get('desert-treasure-ii:final-figure-defeated'), undefined, 'retreat does not count as victory');
+    assert.equal(objectHooks[0]({ player: p, objectId: 49497, definition: { id: 48770 }, option: 'Use', location: { x: 3175, y: 2887, z: 0 } }), true);
+    process();
+    assert.equal(spawnedFigure.maxHitpoints, 450, 'the portal retry begins a fresh Figure encounter');
     deathHooks[0]({ killer: p, npc: spawnedFigure });
     assert.equal(attrs.get('desert-treasure-ii:final-figure-defeated'), true);
     assert.equal(inventory.getAmount(core.ItemIdentifiers.WHISPERERS_MEDALLION), 1);

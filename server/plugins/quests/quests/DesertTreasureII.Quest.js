@@ -23,6 +23,8 @@ module.exports = function registerDesertTreasureII(api) {
   const FINAL_FIGURE_ORB_PROJECTILE = 536;
   const FINAL_FIGURE_RETURN_PORTAL = 48770; // cache transform of loc 49497 at 3175,2887
   const FINAL_CELL_EXIT_PORTAL = 48767; // cache Portal inside the hideout cell at 3104,9266
+  const FINAL_CELL_ESCAPE_BARRIER = 48781; // DT2_HIDEOUT_BARRIER_ESCAPE (cache action: Escape / Quick-escape)
+  const FINAL_CELL_LEAVE_BARRIER = 48782; // DT2_HIDEOUT_BARRIER_LEAVE (cache action: Leave)
   // Wiki: approximately every ten attacks, she stuns/shoves the player, then
   // throws an orb. The 3-tick freeze + 2-tick dodge window is inferred from
   // the Wiki's instruction that the stun ends two ticks before impact.
@@ -2268,6 +2270,17 @@ module.exports = function registerDesertTreasureII(api) {
 
   class FinalFigureCellArea extends api.core.Area {
     getName() { return "Mysterious Figure's Cell (Desert Treasure II)"; }
+    canTeleport(player) {
+      const location = player?.getLocation?.();
+      const x = location?.getX?.() ?? location?.x;
+      const y = location?.getY?.() ?? location?.y;
+      const z = location?.getZ?.() ?? location?.z ?? 0;
+      if (stage(player) !== S.WHISPERER || (!player.getAttribute(FINAL_CELL_ACTIVE)
+        && !player.getAttribute(FINAL_FIGURE_DEFEATED))
+        || z !== 0 || x < 3082 || x > 3122 || y < 9243 || y > 9271) return null;
+      player.sendMessage("A strange magical force blocks your teleport. The escape barrier is the only way out.");
+      return false;
+    }
     process(actor) {
       if (!actor?.isPlayer?.()) return;
       const player = actor.getAsPlayer?.() ?? actor;
@@ -2281,11 +2294,7 @@ module.exports = function registerDesertTreasureII(api) {
     postLeave(actor) {
       if (!actor?.isPlayer?.()) return;
       const player = actor.getAsPlayer?.() ?? actor;
-      const figure = spawned.get(player)?.finalFigure;
-      if (!figure) return;
-      clearFinalFigureSpecial(player, figure);
-      api.removeNpc(figure);
-      spawned.get(player).finalFigure = null;
+      dismissFinalFigure(player);
     }
   }
 
@@ -5062,11 +5071,47 @@ module.exports = function registerDesertTreasureII(api) {
     const sucellusTile = sucellusSourceTile(p, location);
     const visibleId = definition?.id ?? objectId;
     const option = String(event.option ?? "").toLowerCase();
+    if ([FINAL_CELL_ESCAPE_BARRIER, FINAL_CELL_LEAVE_BARRIER].includes(visibleId)
+      && location?.z === 0 && location?.x >= 3082 && location?.x <= 3122
+      && location?.y >= 9243 && location?.y <= 9271
+      && ["escape", "quick-escape", "leave"].includes(option)) {
+      const figureDefeated = p.getAttribute(FINAL_FIGURE_DEFEATED) === true;
+      if (s !== S.WHISPERER || (!figureDefeated && (!p.getAttribute(FINAL_CELL_ACTIVE)
+        || !p.getAttribute(FINAL_FIGURE_STARTED)))) {
+        p.sendMessage("The escape barrier is only available during the Mysterious Figure's trial.");
+        return true;
+      }
+      if (figureDefeated) {
+        if (!has(p, I.WHISPERERS_MEDALLION)) {
+          p.sendMessage("You need the Whisperer's medallion before leaving the temple.");
+          return true;
+        }
+        p.moveTo(new api.core.Location(3175, 2887, 0));
+        p.sendMessage("You leave the temple with the Whisperer's medallion.");
+        return true;
+      }
+      api.sendMultiChatboxPrompt(p, "Leave the temple and abandon this attempt? The Mysterious Figure will be waiting when you return.",
+        "Yes.", () => retreatFromFinalFigureCell(p),
+        "No.", () => p.sendMessage("You remain in the temple to face the Mysterious Figure."));
+      return true;
+    }
     if (visibleId === FINAL_CELL_EXIT_PORTAL && location?.x === 3104 && location?.y === 9266
       && location?.z === 0 && option === "use") {
-      if (stage(p) !== S.WHISPERER || !p.getAttribute(FINAL_FIGURE_DEFEATED)
-        || !has(p, I.WHISPERERS_MEDALLION)) {
-        p.sendMessage("The portal remains sealed until the Mysterious Figure is defeated and her medallion recovered.");
+      const figureDefeated = p.getAttribute(FINAL_FIGURE_DEFEATED) === true;
+      if (s !== S.WHISPERER || (!figureDefeated && (!p.getAttribute(FINAL_CELL_ACTIVE)
+        || !p.getAttribute(FINAL_FIGURE_STARTED)))) {
+        p.sendMessage("The portal is sealed until the Mysterious Figure's trial is active.");
+        return true;
+      }
+      if (!figureDefeated) {
+        // Cache 48767 is the only placed exit object in the cell; the cache
+        // also defines barrier IDs 48781/48782, but they have no map placement.
+        // Let the visible Portal serve as the Wiki's mid-fight retreat.
+        retreatFromFinalFigureCell(p);
+        return true;
+      }
+      if (!has(p, I.WHISPERERS_MEDALLION)) {
+        p.sendMessage("The portal remains sealed until you recover the Whisperer's medallion.");
         return true;
       }
       p.moveTo(new api.core.Location(3175, 2887, 0));
@@ -7222,6 +7267,20 @@ module.exports = function registerDesertTreasureII(api) {
       p.sendMessage("The Mysterious Figure attacks. Protect from Magic and change combat styles when she prays against yours.");
     }
     return owned.finalFigure;
+  }
+  function dismissFinalFigure(p) {
+    const owned = spawned.get(p);
+    const figure = owned?.finalFigure;
+    if (!figure) return;
+    clearFinalFigureSpecial(p, figure);
+    api.removeNpc(figure);
+    owned.finalFigure = null;
+  }
+  function retreatFromFinalFigureCell(p) {
+    dismissFinalFigure(p);
+    p.getMovementQueue?.()?.setBlockMovement?.(false)?.reset?.();
+    p.moveTo(new api.core.Location(3175, 2887, 0));
+    p.sendMessage("You escape the temple to the south of the Desert Quarry. The Mysterious Figure will be waiting if you return.");
   }
   function handleFinalFigureHit({ npc, hit }) {
     if (!npc?.__dt2FinalFigure || !hit) return;
