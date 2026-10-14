@@ -584,7 +584,7 @@ module.exports = function registerDesertTreasureII(api) {
     }
     return result;
   }
-  const ASGARNIA_SMITH_VAULT_INITIAL = 12401;
+  const ASGARNIA_SMITH_VAULT_INITIAL = 12291;
   const TOTEMS = [
     { kind: "blood", mask: 4, inactive: 12343, active: 12344, x: 2775, y: 6445, spells: ["BLOOD_BURST", "BLOOD_BLITZ", "BLOOD_BARRAGE"] },
     { kind: "shadow", mask: 2, inactive: 12341, active: 12342, x: 2771, y: 6445, spells: ["SHADOW_BURST", "SHADOW_BLITZ", "SHADOW_BARRAGE"] },

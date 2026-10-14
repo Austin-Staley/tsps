@@ -5840,7 +5840,7 @@ test('Desert Treasure II enters the cache Ancient Vault and requires the four st
     assert.equal(area.height, 4);
     assert.equal(player.location.x, 8202);
     assert.equal(player.location.y, 1615);
-    assert.equal(queues.add[0].id, 12401, 'the room receives the cache initial Asgarnia Smith variant');
+    assert.equal(queues.add[0].id, 12291, 'the room receives the cache Asgarnia Smith variant with Talk-to');
     assert.equal(chunks.filter(([plane, , , chunk]) => plane === 1 && chunk !== null).length, 16);
     const inspect = (id, x, y) => objectInteractions.find(h => h.name === 'handleObjectInteraction')({
       player, objectId: id, location: area.tile(x - 3920, y - 9616, 1),
@@ -6334,6 +6334,7 @@ test('Desert Treasure II final trial spawns on reachable cache floor beside the 
   const { TemplatedInstanceArea } = require('../dist/game/model/areas/impl/TemplatedInstanceArea');
   const { RegionManager } = require('../dist/game/collision/RegionManager');
   const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
   const added = [], combatTargets = [];
   api.core = {
     ...api.core,
@@ -6360,6 +6361,9 @@ test('Desert Treasure II final trial spawns on reachable cache floor beside the 
   };
   quest.setStage(player, 11);
   player.setAttribute('desert-treasure-ii:final-cutscene-started', true);
+  assert.equal(NpcDefinition.forId(12291).getName(), 'Asgarnia Smith');
+  assert.equal(NpcDefinition.forId(12291).getActions()[0], 'Talk-to',
+    'the vault uses the cache NPC variant that exposes the normal Talk-to action');
   handlers.playerLogin.at(-1)({ player });
   assert.equal(player.getAttribute('desert-treasure-ii:final-room'), undefined,
     'a completed reveal marker alone leaves the player outside until the real vault interaction');
