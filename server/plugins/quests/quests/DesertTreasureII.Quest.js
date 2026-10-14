@@ -5083,7 +5083,7 @@ module.exports = function registerDesertTreasureII(api) {
         p.sendMessage("You search the chest and recover your equipment. The Whisperer's medallion is missing.");
         return true;
       }
-      if (location.x === 3086 && location.y === 9260 && option === "inspect"
+      if (visibleId === O.ALTAR_91 && location.x === 3086 && location.y === 9259 && option === "inspect"
         && p.getAttribute(FINAL_CELL_CHEST) && !p.getAttribute(FINAL_FIGURE_STARTED)) {
         p.setAttribute(FINAL_FIGURE_STARTED, true);
         talk(p, N.MYSTERIOUS_FIGURE_2, "the-desert-treasure-inspecting-the-altar-in-the-temple");

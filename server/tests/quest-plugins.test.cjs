@@ -7321,7 +7321,8 @@ test('Desert Treasure II last medallion route traps the player, requires solving
     assert.equal(attrs.get('desert-treasure-ii:final-cell-chest'), true);
     assert.equal(inventory.getAmount(995), 200, 'the chest restores the stored inventory');
     assert.equal(equipment.getAmount(1275), 1, 'the chest restores worn equipment');
-    assert.equal(objectHooks[0]({ player: p, objectId: 37633, option: 'Inspect', location: { x: 3086, y: 9260, z: 0 } }), true);
+    assert.equal(objectHooks[0]({ player: p, objectId: 37633, definition: { id: core.ObjectIdentifiers.ALTAR_91 }, option: 'Inspect', location: { x: 3086, y: 9259, z: 0 } }), true,
+      'the actual transformed cache Altar is the visible Inspect target');
     assert.equal(transcripts.at(-1).variant, 'the-desert-treasure-inspecting-the-altar-in-the-temple');
     p.location = new core.Location(3086, 9260, 0);
     const line = { player: p, npcId: core.NpcIdentifiers.MYSTERIOUS_FIGURE_2, text: 'Very well...' };
