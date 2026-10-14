@@ -73,6 +73,48 @@ function animationRoleByName(name: string | null): CombatAnimationRole | null {
     return null;
 }
 
+/**
+ * An NPC's fights in live captures: `hits` is [hits taken, hits with no animation of its own],
+ * `seen` is animation id -> sightings as [death, block, attack, other] by hit timing.
+ */
+type CapturedAnimations = {
+    hits?: [number, number];
+    seen?: Record<string, [number, number, number, number]>;
+};
+
+/**
+ * Hits an NPC must take in captures before it counts as having no block animation, when at least
+ * half of them show no animation (an NPC that blocks leaves under a third unanswered).
+ */
+const CAPTURED_NO_BLOCK_HITS = 10;
+
+/**
+ * Each role's animation from an NPC's captures. Hit timing cannot tell an attack from a block
+ * (an NPC trading hits attacks the tick before the player's hitsplat too), so the name gives the
+ * role and the captures say which of the NPC's animations it really plays. Timing alone decides
+ * only the clear cases: a death (health bar emptied, then removed) and an animation seen almost
+ * only on hits (the abyssal demon's blink). An NPC hit often that mostly does not animate has no block.
+ */
+function capturedRoles(entry: CapturedAnimations): NonNullable<CombatAnimation["anims"]> {
+    const best: Partial<Record<CombatAnimationRole, { id: number; count: number }>> = {};
+    for (const [key, [death, block, attack]] of Object.entries(entry.seen ?? {})) {
+        const id = Number(key);
+        const role = animationRoleByName(CacheDefinitions.getSeqName(id))
+            ?? (death >= 2 && death >= block + attack ? "death"
+                : block >= 5 && block >= 9 * (attack + death) ? "block" : null);
+        if (!role) continue;
+        const count = role === "death" ? death : block + attack;
+        if ((best[role]?.count ?? -1) < count) best[role] = { id, count };
+    }
+    const roles: NonNullable<CombatAnimation["anims"]> = {};
+    for (const role of ["attack", "block", "death"] as const) {
+        if (best[role]) roles[role] = best[role]!.id;
+    }
+    const [hits = 0, unanswered = 0] = entry.hits ?? [];
+    if (roles.block === undefined && hits >= CAPTURED_NO_BLOCK_HITS && unanswered >= hits / 2) roles.block = -1;
+    return roles;
+}
+
 const normalizeName = (value?: string) => (value ?? "").replace(/\s+/g, " ").trim().toLowerCase();
 
 /** Dump attack_type tokens that mean "this thing can hit you in melee". */
@@ -167,7 +209,17 @@ export class NpcDefinitionLoader extends DefinitionLoader {
             if (entry?.anims) animations[id] = entry;
             if (Number.isInteger(entry?.projectile)) projectiles[id] = entry.projectile as number;
         }
+        // Only hand-made entries stop the guess below; captures leave a role open when they do not settle it.
         const configuredAnimationIds = new Set(Object.keys(animations));
+        // Animations seen in live captures fill what a hand-made entry leaves out.
+        const captured = this.readOptional(directory, "npc-captured-animations.json")?.npcs ?? {};
+        let capturedAnimations = 0;
+        for (const [id, entry] of Object.entries(captured as Record<string, CapturedAnimations>)) {
+            const roles = capturedRoles(entry ?? {});
+            capturedAnimations += Object.keys(roles).length;
+            if (Object.keys(roles).length === 0) continue;
+            animations[id] = { ...animations[id], anims: { ...roles, ...animations[id]?.anims } };
+        }
 
         const roleByAnimation = new Map<number, CombatAnimationRole>();
         for (const animation of Object.values(animations)) {
@@ -182,7 +234,8 @@ export class NpcDefinitionLoader extends DefinitionLoader {
         for (const [npcId, observed] of Object.entries(observedAnimations)) {
             if (!Array.isArray(observed) || observed.length === 0) continue;
             // An observed list has no order to trust: a role comes from the same animation's role
-            // in a configured entry, then from the animation's cache name, and only then by guess.
+            // in a configured or captured entry, then from the animation's cache name, and only
+            // then by guess.
             const inferred: NonNullable<CombatAnimation["anims"]> = {};
             for (const animationId of observed) {
                 const role = roleByAnimation.get(animationId);
@@ -295,7 +348,7 @@ export class NpcDefinitionLoader extends DefinitionLoader {
         }
         (mismatched > 0 ? console.warn : console.debug)(
             `[npc-definitions] cache-backed; configured stats applied=${applied}, mismatched=${mismatched}, ` +
-            `service animations inferred=${inferredAnimations} (by name=${namedAnimations}), guessed=${guessedAnimations}`
+            `service animations captured=${capturedAnimations}, inferred=${inferredAnimations} (by name=${namedAnimations}), guessed=${guessedAnimations}`
         );
         return true;
     }
