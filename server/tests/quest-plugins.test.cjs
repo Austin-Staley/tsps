@@ -2301,6 +2301,15 @@ test('Blood Moon Hallowed preparations make the stew, upgraded flail and stakes 
   itemOnNpc(feeding);
   assert.equal(feeding.handled, true);
   assert.equal(inventory.contains(ids.HALLOWED_MARKS), true, 'feeding Safalaan grants the hallowed marks');
+  assert.equal(varbits.get(15464), 106, 'feeding Safalaan advances to the captured recovery conversation');
+  const dialogueLine = handlers.custom.get('npc-dialogue:line').find(handler => handler.name === 'onBloodMoonDialogueLine');
+  const safalaanReply = { player, step: { player: true }, text: 'Never.' };
+  dialogueLine(safalaanReply); safalaanReply.after();
+  assert.equal(varbits.get(15464), 108, 'the captured reply to Safalaan advances to Efaritay’s advice');
+  const efaritayAdvice = { player, step: { speaker: 'Efaritay Hallow' },
+    text: 'Let me know if you need a hand with anything, but otherwise, I now need to move onto my own preparations.' };
+  dialogueLine(efaritayAdvice); efaritayAdvice.after();
+  assert.equal(varbits.get(15464), 110, 'finishing Efaritay’s preparations conversation unlocks the armoury work');
 
   interact('Workbench', 3176, 7841); choose(3); assert.equal(inventory.contains(ids.KNIFE), true); assert.equal(inventory.contains(ids.HAMMER), false);
   interact('Workbench', 3176, 7841); choose(1); interact('Workbench', 3176, 7841); choose(2);
@@ -12910,7 +12919,7 @@ test('Blood Moon native bitfield mapping restores Slepe refinery phase without c
  attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'freed'});handlers.playerLogin.at(-1)({player});runtime.sendQuestVarps({player});assert.equal(bits.get(15464),61,'the freed refinery exit transform is restored after relog');bits.clear();
  attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'escaped'});quest.setStage(player,30);assert.equal(bits.get(15464),62,'the escape morph survives a chapter stage sync');attrs.delete('the-blood-moon-rises:refinery-progress');bits.clear();
  quest.setStage(player,60);assert.equal(quest.getStage(player),60);assert.equal(bits.get(15464),102);bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),102);quest.setStage(player,70);assert.equal(bits.get(15464),116);
- attrs.set('quest.the_blood_moon_rises.preparations',{stewFed:true});quest.setStage(player,60);assert.equal(bits.get(15464),110);
+ attrs.set('quest.the_blood_moon_rises.preparations',{stewFed:true});quest.setStage(player,60);assert.equal(bits.get(15464),106,'the real handoff advances to the captured Safalaan recovery conversation');
  attrs.set('quest.the_blood_moon_rises.preparations',{flail:true,stakes:true});quest.setStage(player,60);assert.equal(bits.get(15464),114);
  attrs.set('quest.the_blood_moon_rises.siege-defence',{phase:'hall'});quest.setStage(player,70);assert.equal(bits.get(15464),120);
  bits.clear();runtime.sendQuestVarps({player});assert.equal(bits.get(15464),120);assert.equal(quest.getStage(player),70);

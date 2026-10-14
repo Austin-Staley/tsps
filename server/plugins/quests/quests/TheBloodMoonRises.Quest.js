@@ -2305,7 +2305,9 @@ module.exports = function registerTheBloodMoonRises(api) {
       if (prep.introStarted && !prep.introComplete) return 98;
       if (prep.flail && prep.stakes) return 114;
       if (prep.flail) return 112;
-      if (prep.stewFed) return 110;
+      if (prep.preparationsDiscussed) return 110;
+      if (prep.safalaanAnswered) return 108;
+      if (prep.stewFed) return 106;
       if (player?.getInventory?.().contains(PREP.stew)) return 104;
       if (prep.gatherStarted) return 102;
       return prep.introComplete ? 100 : 102;
@@ -5216,6 +5218,25 @@ module.exports = function registerTheBloodMoonRises(api) {
         const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {};
         if (stage(player) !== STAGE.PREPARATIONS || !prep.introComplete || prep.gatherStarted) return;
         player.setAttribute(PREP_ATTRIBUTE, { ...prep, gatherStarted: true });
+        quest.setStage(player, STAGE.PREPARATIONS);
+      };
+      return;
+    }
+    if (stage(player) === STAGE.PREPARATIONS && request.step?.player && request.text === "Never.") {
+      request.after = () => {
+        const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {};
+        if (stage(player) !== STAGE.PREPARATIONS || !prep.stewFed || prep.safalaanAnswered) return;
+        player.setAttribute(PREP_ATTRIBUTE, { ...prep, safalaanAnswered: true });
+        quest.setStage(player, STAGE.PREPARATIONS);
+      };
+      return;
+    }
+    if (stage(player) === STAGE.PREPARATIONS && request.step?.speaker === "Efaritay Hallow" &&
+      request.text?.startsWith("Let me know if you need a hand with anything")) {
+      request.after = () => {
+        const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {};
+        if (stage(player) !== STAGE.PREPARATIONS || !prep.safalaanAnswered || prep.preparationsDiscussed) return;
+        player.setAttribute(PREP_ATTRIBUTE, { ...prep, preparationsDiscussed: true });
         quest.setStage(player, STAGE.PREPARATIONS);
       };
       return;
