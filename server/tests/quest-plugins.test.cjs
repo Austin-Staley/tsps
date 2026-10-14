@@ -7505,7 +7505,7 @@ test('Desert Treasure II handoff creates the four owned wight stages and grants 
     p.getSkillManager = () => ({ getMaxLevel: () => 99, getExperience: skill => xp.get(skill) ?? 0,
       addExperience(skill, amount) { xp.set(skill, (xp.get(skill) ?? 0) + amount); } });
     const lampAction = { player: p, itemId: core.ItemIdentifiers.ANCIENT_LAMP, item: lamp, slot: 0, option: 'Rub', handled: false };
-    registeredHandlers.itemAction.at(-1)(lampAction);
+    registeredHandlers.itemAction.find(h => typeof h === 'function' && h.name === 'handleItemAction')(lampAction);
     assert.equal(lampAction.handled, true, 'the plugin owns the completed lamp action instead of falling through to the generic item handler');
     assert.equal(rewardRequests.at(-1).minLevel, 60);
     assert.ok(rewardRequests.at(-1).skills.includes(core.Skill.ATTACK));
@@ -19542,3 +19542,31 @@ test('Sins escort transcript returns the player to the Burgh shore, not the clip
   assert.deepEqual(moved, [[3529, 3169, 0]]);
 });
 
+
+
+test('DT2 Lassar journal follows consumed keys and recalled devices to the next earned step', () => {
+  const { api } = mockApi();
+  const runtime = require('../plugins/quests/QuestRuntime');
+  require('../plugins/quests/quests/DesertTreasureII.Quest')(api);
+  const quest = runtime.getRegisteredQuests().filter(q => q.key === 'desert_treasure_ii').at(-1);
+  const lassar = { ramarno: true, ropeTied: true, entered: true, blockerSchematic: true,
+    greenKey: true, purpleKey: false, cameTo: true, blackstone: true, blockerDesigned: true,
+    blockerPlaced: false, doorUnlocked: true, basicTorch: true };
+  const player = { getAttribute: key => key === 'quest.desert_treasure_ii.stage' ? 10
+    : key === 'desert-treasure-ii:lassar' ? lassar : undefined,
+    getInventory: () => ({ getAmount: () => 0 }) };
+  assert.match(quest.buildJournal(player).join(' '), /western residential tentacles/,
+    'using the purple key and recalling the blocker must not send the player back to the furnace');
+  lassar.tentacles = { '2417,6413': true, '2424,6439': true };
+  lassar.superiorTorch = true;
+  assert.match(quest.buildJournal(player).join(' '), /anima portal/,
+    'recalling the earned idol after the superior torch must not repeat its schematic step');
+  Object.assign(lassar, { animaPortal: true, plazaTentacle: true, whiteKey: true,
+    braziersComplete: true, perfectSchematicGiven: true });
+  assert.match(quest.buildJournal(player).join(' '), /pub upstairs/,
+    'recalled palace devices must not hide the Silent Choir step after the chest is completed');
+  Object.assign(lassar, { pubRemnant: true, redKeyUsed: true, greenKey: false,
+    greenKeyUsed: true, strangeIcon: true });
+  assert.match(quest.buildJournal(player).join(' '), /Show Ketla the strange icon/,
+    'a consumed green key remains earned when its chest is opened');
+});
