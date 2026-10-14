@@ -844,37 +844,67 @@ test('The Blood Moon Rises starts only after Sarius accepts the yes choice and r
   assert.equal(reclaimed, 1, 'the explicit option delegates to Night at the Theatre’s inventory-safe reclaim event');
 });
 
-test('Blood Moon unique supplies are consumable only during the Vampyrium chapters', () => {
+test('Blood Moon unique supplies are restricted to Vampyrium scenes', () => {
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
   const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
     .filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
   const attributes = new Map();
+  let point = { x: 3500, y: 3200, z: 0 };
+  let area = null;
   const player = {
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
+    getLocation: () => ({ getX: () => point.x, getY: () => point.y, getZ: () => point.z }),
+    getArea: () => area,
     getPacketSender: () => new Proxy({}, { get: () => () => {} }),
   };
   const checkArea = handlers.custom.get('potions:area').at(-1);
-
-  player.getArea = () => null;
-  for (const stage of [0, 45, 100, 110]) {
-    quest.setStage(player, stage);
+  const isInside = () => {
     const request = { player, area: 'vampyrium', inside: false };
     checkArea(request);
-    assert.equal(request.inside, false, `quest stage ${stage} outside an owned Vampyrium area`);
+    return request.inside;
+  };
+
+  quest.setStage(player, 40);
+  attributes.set('quest.the_blood_moon_rises.castle-room', 1);
+  attributes.set('quest.the_blood_moon_rises.castle-floor', 1);
+  point = { x: 2327, y: 7360, z: 0 };
+  assert.equal(isInside(), true, 'the current Castle room and floor are in Vampyrium');
+  point = { x: 3500, y: 3200, z: 0 };
+  assert.equal(isInside(), false, 'a valid Castle stage does not allow use in the mainland');
+
+  quest.setStage(player, 45);
+  point = { x: 2327, y: 7360, z: 0 };
+  assert.equal(isInside(), true, 'the escape route still allows supplies inside the Castle');
+  point = { x: 2603, y: 7847, z: 0 };
+  assert.equal(isInside(), true, 'the escape through Vampyrium permits supplies too');
+  point = { x: 3500, y: 3200, z: 0 };
+  assert.equal(isInside(), false);
+
+  quest.setStage(player, 50);
+  point = { x: 2603, y: 7847, z: 0 };
+  assert.equal(isInside(), true, 'the Blood Hunt scene permits Vampyrium supplies');
+  point = { x: 3500, y: 3200, z: 0 };
+  assert.equal(isInside(), false, 'the same stage on the mainland is denied');
+
+  for (const stage of [60, 70, 90]) {
+    quest.setStage(player, stage);
+    point = { x: 2944, y: 7424, z: 0 };
+    area = {};
+    attributes.set('quest.the_blood_moon_rises.wyrd-area', area);
+    attributes.set('quest.the_blood_moon_rises.siege-drakan-area', area);
+    assert.equal(isInside(), false, `stage ${stage} outside the permitted Vampyrium locations`);
   }
-  const ownedArea = {};
-  player.getArea = () => ownedArea;
-  player.setAttribute('quest.the_blood_moon_rises.drakan-area', ownedArea);
+
   quest.setStage(player, 100);
-  const inside = { player, area: 'vampyrium', inside: false };
-  checkArea(inside);
-  assert.equal(inside.inside, true, 'the final quest stage permits supplies inside its owned encounter');
-  player.getArea = () => ({});
-  const outside = { player, area: 'vampyrium', inside: false };
-  checkArea(outside);
-  assert.equal(outside.inside, false, 'the same player cannot use them after leaving that instance');
+  point = { x: 2500, y: 7830, z: 3 };
+  area = {};
+  attributes.set('quest.the_blood_moon_rises.drakan-area', area);
+  assert.equal(isInside(), true, 'the final owned Drakan arena allows supplies');
+  area = {};
+  assert.equal(isInside(), false, 'another area does not satisfy the owned arena check');
+
   const unrelated = { player, area: 'chambers-of-xeric', inside: false };
   checkArea(unrelated);
   assert.equal(unrelated.inside, false, 'the BMR hook leaves other area-limited potions alone');

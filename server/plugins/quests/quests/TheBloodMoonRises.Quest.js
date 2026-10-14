@@ -2617,8 +2617,20 @@ module.exports = function registerTheBloodMoonRises(api) {
   function handleVampyriumPotionArea(request) {
     if (request?.area !== "vampyrium" || !request.player) return;
     const player = request.player;
-    const area = player.getAttribute(DRAKAN_AREA_ATTRIBUTE);
-    request.inside = stage(player) === STAGE.FINAL && area != null && player.getArea?.() === area;
+    const currentStage = stage(player);
+    const location = player.getLocation?.();
+    const x = location?.getX?.(), y = location?.getY?.(), z = location?.getZ?.();
+    const castleRoom = Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE));
+    const castleFloor = Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE));
+    const inCastle = (currentStage === STAGE.CASTLE || currentStage === STAGE.ESCAPE) &&
+      Object.values(CASTLE_ROOM).includes(castleRoom) &&
+      (castleFloor === 1 || castleFloor === 2) && (z === 0 || z === 1) &&
+      x >= 2300 && x <= 2600 && y >= 7300 && y <= 7440;
+    const inBloodHunt = (currentStage === STAGE.ESCAPE || currentStage === STAGE.BLOOD_HUNT) && z === 0 &&
+      x >= 2565 && x <= 2630 && y >= 7790 && y <= 7880;
+    const drakanArea = player.getAttribute(DRAKAN_AREA_ATTRIBUTE);
+    const inFinalEncounter = currentStage === STAGE.FINAL && drakanArea != null && player.getArea?.() === drakanArea;
+    request.inside = Boolean(inCastle || inBloodHunt || inFinalEncounter);
   }
   function isAtSinsMedallionHideout(event) {
     const location = event?.location ?? event?.npc?.getLocation?.();
