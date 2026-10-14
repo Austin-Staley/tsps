@@ -290,6 +290,7 @@ import { RememberLoginPlugin } from "./plugins/rememberlogin/RememberLoginPlugin
 import { TileMarkersPlugin } from "./plugins/tilemarkers/TileMarkersPlugin";
 import { createHelmSteeringDeps, handleTileClick } from "./sailing/HelmSteering";
 import { headingIndicator } from "./sailing/HeadingIndicator";
+import { retryOnMissingGroup } from "../rs/cache/js5/retryOnMissingGroup";
 import { interactionModes } from "./InteractionModes";
 import { VengeanceTimerPlugin } from "./plugins/vengeancetimer/VengeanceTimerPlugin";
 import { FreezeTimerPlugin, PoisonTimerPlugin } from "./plugins/statustimer/StatusTimerPlugin";
@@ -6671,10 +6672,18 @@ export class OsrsClient {
                 if (graphicsDefaults?.scrollBars >= 0) {
                     this.widgetManager.scrollbarSpriteArchiveId = graphicsDefaults.scrollBars;
                 }
-                if (graphicsDefaults) headingIndicator.setModels(graphicsDefaults.headingIndicatorModels);
             } catch (e) {
                 console.warn("[OsrsClient] Failed to load GraphicsDefaults:", e);
             }
+            // The helm's heading arrows. Read apart from the above, waiting for the group to
+            // stream in: on a fresh browser cache it isn't there yet, and the arrows would be
+            // missing for the whole session.
+            const cacheInfo = cache.info;
+            void retryOnMissingGroup(() =>
+                require("../rs/config/defaults/GraphicsDefaults").GraphicsDefaults.load(cacheInfo, this.cacheSystem),
+            ).then((defaults) => {
+                if (defaults) headingIndicator.setModels(defaults.headingIndicatorModels);
+            }).catch((e) => console.warn("[OsrsClient] Failed to load the heading indicator models:", e));
 
             this.startClientTickLoop();
             this.renderer.initCache();

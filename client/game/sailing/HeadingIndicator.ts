@@ -167,6 +167,14 @@ export class HeadingIndicator {
         return out.length > 0 ? out : undefined;
     }
 
+    debugState(getModel: (id: number) => ModelData | undefined): object {
+        return {
+            models: this.models,
+            loaded: this.models.map((id) => id >= 0 && !!getModel(id)),
+            flash: this.flash ?? null,
+        };
+    }
+
     private partsFor(modelId: number, frame: HeadingIndicatorFrame): ArrowPart[] | undefined {
         if (modelId < 0) return undefined;
         let parts = this.parts.get(modelId);
@@ -203,22 +211,38 @@ export interface HeadingIndicatorHost {
     pickSeaPointAt?(entityIndex: number, mouseX: number, mouseY: number): { x: number; y: number } | undefined;
 }
 
+let lastDebugAt = 0;
+
+/** `__headingDebug = true` in the console logs, once a second, what the indicator saw. */
+function debug(now: number, details: () => object): void {
+    if ((globalThis as { __headingDebug?: boolean }).__headingDebug !== true) return;
+    if (now - lastDebugAt < 1000) return;
+    lastDebugAt = now;
+    console.log("[heading]", JSON.stringify(details()));
+}
+
 /** This frame's heading indicator triangles for a renderer, or undefined off a boat. */
 export function headingIndicatorTriangles(host: HeadingIndicatorHost, now: number): OverlayTriangleBatch[] | undefined {
     const client = host.osrsClient;
     const index = client.playerEcs.getIndexForServerId(client.controlledPlayerServerId);
     const boatIndex = index === undefined ? -1 : client.playerEcs.getWorldViewId(index) | 0;
-    if (boatIndex < 0) return undefined;
+    if (boatIndex < 0) {
+        debug(now, () => ({ step: "not on a boat", index, boatIndex }));
+        return undefined;
+    }
     const boat = client.worldViewManager.getWorldEntity(boatIndex);
     const view = client.worldViewManager.getWorldView(boatIndex);
     const modelLoader = client.modelLoader;
-    if (!boat?.hasPosition || !view || !modelLoader) return undefined;
+    if (!boat?.hasPosition || !view || !modelLoader) {
+        debug(now, () => ({ step: "no boat data", boatIndex, boat: !!boat, placed: boat?.hasPosition, view: !!view, modelLoader: !!modelLoader }));
+        return undefined;
+    }
 
     const input = client.inputManager;
     const mouseInView =
         !!input && input.mouseX >= 0 && input.mouseY >= 0 && !client.menuOpen &&
         (client.camera?.containsScreenPoint(input.mouseX, input.mouseY) ?? true);
-    return headingIndicator.build({
+    const triangles = headingIndicator.build({
         now,
         boat,
         boatIndex,
@@ -232,4 +256,19 @@ export function headingIndicatorTriangles(host: HeadingIndicatorHost, now: numbe
         mouseSeaPoint: mouseInView ? host.pickSeaPointAt?.(boatIndex, input!.mouseX, input!.mouseY) : undefined,
         getModel: (id) => modelLoader.getModel(id),
     });
+    debug(now, () => ({
+        step: "built",
+        boatIndex,
+        boat: { x: boat.position.x, z: boat.position.z, orientation: boat.position.orientation },
+        size: [view.sizeXEntity, view.sizeZEntity],
+        mouse: input ? [input.mouseX, input.mouseY] : null,
+        mouseInView,
+        mouseSeaPoint: mouseInView ? host.pickSeaPointAt?.(boatIndex, input!.mouseX, input!.mouseY) ?? null : null,
+        modes: { root: interactionModes.tileMode(INTERACTION_WORLD_ROOT), boat: interactionModes.tileMode(boatIndex) },
+        ...headingIndicator.debugState((id) => modelLoader.getModel(id)),
+        batches: triangles?.length ?? 0,
+        firstVertex: triangles?.[0]?.positions.slice(0, 3) ?? null,
+        surface: host.sampleHeightAtExactPlane(boat.position.x / FINE_UNITS_PER_TILE, boat.position.z / FINE_UNITS_PER_TILE, 0),
+    }));
+    return triangles;
 }
