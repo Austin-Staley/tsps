@@ -273,3 +273,29 @@ halves and enters Myrmel's pub. The fresh early actor uses the actual Meiyerditc
 examine packet, noble-clothing chest and equipment actions to reach the initial defense. Its public
 Burgh travel previously landed on water, so that overland connection remains a recorded blocker
 until the shore landing is repaired and verified.
+
+The original `dt2earnedqa` actor now gathers and grinds both real mushrooms, mines12actual salts
+and fills/empties both real vats for two poisons. It uses an actual Edgeville Home Teleport and
+Banker, deposits its prison clues and withdraws its already-banked Torva/whip/Berserker ring,
+19carried sharks and existing potions. Returning through the earned asylum stairs/gate, it feeds
+both actual poisons and defeats quest Duke330→0 continuously, avoiding every observed five-tick
+gaze behind the cache pillar and finishing99HP without food/HP grants. Evidence:
+`/tmp/dt2-earned-duke-salt-vats.log`, `/tmp/dt2-earned-duke-bank-kit.log` and
+`/tmp/dt2-earned-duke-natural-fight.log`.
+
+The key drop is lost on the disclosed post-fight logout, and the actual boss gate recovers that
+already-earned key. The shared Doors handler previously opened the west gate before DT2 could
+consume its key/spawn the Assassin; the quest now performs this guard through `door:toggle`.
+The original actor consumes its key, completes the entire western Assassin/Frostenhorn dialogue
+and opens the real chest for Sucellus' medallion. A disclosed public transport fixture puts it
+outside the Ancient Vault; it enters normally and uses the medallion on the actual south-west
+statue, consuming it and unlocking native76/Whisperer0. No target chapter flags were granted or
+copied. Evidence: `/tmp/dt2-earned-duke-medallion.log`, `/tmp/dt2-earned-sucellus-statue.log`.
+
+At `b3a513b34`, **456/456 checks pass across the four route/quest/prison/door suites**, including
+the captured Blood Hunt bank-trapdoor transition and the Burgh shore landing/boarding fixes.
+The connected Blood Hunt actor obtains the ground trapdoor key, performs10bank-crank turns,
+unlocks and physically climbs through the trapdoor, then enters the actual chest code35158.
+The fresh Blood Moon actor completes the opening defense and travels through Ver Sinhaza into
+Slepe; its prerequisite medallion is a disclosed setup item. The rowboat's old Slepe landing
+is still not connected to Ivan by a verified walking route.
