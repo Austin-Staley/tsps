@@ -7218,6 +7218,14 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
   assert.equal(created.filter((npc) => npc.__dt2WhispererSoul).length, 12);
   itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
   assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, true, 'the fragment reaches the shadow realm for the special');
+  const shadowPosition = {
+    x: player.location.getX(), y: player.location.getY(), z: player.location.getZ(),
+  };
+  itemActions[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+  assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, true,
+    'the fragment cannot leave while the player still needs to silence a chant set');
+  assert.deepEqual([player.location.getX(), player.location.getY(), player.location.getZ()],
+    [shadowPosition.x, shadowPosition.y, shadowPosition.z], 'a premature exit attempt leaves the player in the Shadow Realm');
   combatCycle = 10;
   playerProcesses.forEach((handler) => handler({ player }));
   const chantPhrases = new Map([[0, ['Vita!', 2]], [1, ['Oratio!', 3]], [2, ['Sanitas!', 3]], [3, ['Mors!', 4]]]);
@@ -7235,15 +7243,19 @@ test('Desert Treasure II runs the Whisperer specials, enrage and medallion recov
     soul.registered = false;
     deathHooks[0]({ npc: soul, killer: player });
   }
+  itemActions[0]({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
+  assert.equal(attrs.get('desert-treasure-ii:lassar').inShadow, false,
+    'the fragment returns the player after the complete chant set interrupts the siphon');
+  assert.equal(player.location.x, shadowPosition.x + 256,
+    'the completed siphon exit returns to the matching material-cathedral tile');
   playerProcesses.forEach((handler) => handler({ player }));
   assert.equal(boss.__dt2WhispererSpecial, null, 'killing one full matching chant set interrupts the siphon');
-  assert.ok(boss.__dt2WhispererSpecialTicks < originalSoulDeadline,
+  assert.ok(boss.__dt2WhispererSpecialTicks <= originalSoulDeadline,
     'interrupting with Vita preserves the original countdown instead of starting a new bonus window');
-  assert.equal(boss.__dt2WhispererSoulWindowActive, true,
-    'the remaining souls stay attackable only while the original window remains active');
+  assert.equal(boss.__dt2WhispererSoulWindowActive, false,
+    'leaving the Shadow Realm closes the remaining-souls bonus window and cleans up its summons');
   assert.equal(player.hitpoints, 69, 'completing Vita restores 20% of maximum hitpoints');
   for (const soul of created.filter((npc) => npc.__dt2WhispererSoul)) soul.registered = false;
-  itemActions.find(h => typeof h === 'function' && h.name === 'handleItemAction')({ player, itemId: core.ItemIdentifiers.BLACKSTONE_FRAGMENT, option: 'Activate' });
   const completeSet = (group, phrase, count) => {
     boss.__dt2WhispererSpecialStarted = false;
     playerProcesses.forEach((handler) => handler({ player }));

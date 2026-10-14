@@ -4165,15 +4165,21 @@ module.exports = function registerDesertTreasureII(api) {
       const z = location?.getZ?.() ?? location?.z ?? 0;
       const whisperer = spawned.get(p)?.whisperer;
       if (whisperer?.__dt2WhispererSpecial === "soul-siphon") {
-        if (state.inShadow) {
+        if (state.inShadow && whisperer.__dt2WhispererCompletedSoulSet == null) {
           p.sendMessage("The Whisperer still siphons souls. Kill one complete set chanting the same phrase before leaving the Shadow Realm.");
-        } else {
+          event.handled = true;
+          return true;
+        }
+        if (!state.inShadow) {
           p.moveTo(new api.core.Location(x - 256, y, z));
           setLassar(p, { ...state, inShadow: true });
           p.sendMessage("The blackstone fragment draws you into the cathedral's Shadow Realm. Kill one complete set of chanting souls.");
+          event.handled = true;
+          return true;
         }
-        event.handled = true;
-        return true;
+        // A completed chant set interrupts the siphon. Resolve its effect
+        // before returning the player to the material cathedral.
+        resolveWhispererSoulSet(p, whisperer);
       }
       if (whisperer?.__dt2WhispererSpecial && !state.inShadow) {
         p.moveTo(new api.core.Location(x - 256, y, z));
