@@ -1,5 +1,6 @@
 import { CacheDefinitions } from "../game/cache/CacheDefinitions";
 import { ItemDefinition } from "../game/definition/ItemDefinition";
+import { ObjectDefinition } from "../game/definition/ObjectDefinition";
 import { PlayerSave } from "../game/entity/impl/player/persistence/PlayerSave";
 import { ContentApi } from "../net/http/ContentApi";
 import { CustomInterfaceRegistry } from "../game/interfaces/CustomInterfaceRegistry";
@@ -53,6 +54,7 @@ import {
   PluginZoneEvent,
   PluginNpcSpawnDefinition,
   PluginObjectRouteEvent,
+  PluginWalkRouteEvent,
   PluginNpcRouteEvent,
   PluginObjectInteractionEvent,
   PluginPlayerDefeatedEvent,
@@ -190,6 +192,7 @@ export class PluginManager {
   private static activeRegionsHooks: PluginHook<PluginActiveRegionsEvent>[] = [];
   private static pathBlockedHooks: PluginHook<PluginPathBlockedEvent>[] = [];
   private static objectRouteHooks: PluginHook<PluginObjectRouteEvent>[] = [];
+  private static walkRouteHooks: PluginHook<PluginWalkRouteEvent>[] = [];
   private static npcRouteHooks: PluginHook<PluginNpcRouteEvent>[] = [];
   private static objectInteractionHooks: ObjectInteractionHook[] = [];
   private static objectHooksById = new Map<string, ObjectInteractionHook[]>();
@@ -923,6 +926,8 @@ export class PluginManager {
       event.definition = event.object.getDefinition();
     }
 
+    event.option ??= event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "";
+
     const hooks = [
       ...PluginManager.objectInteractionHooks,
       ...(PluginManager.objectHooksById.get(`${event.objectId}:${event.clickType}`) ?? []),
@@ -954,6 +959,15 @@ export class PluginManager {
         return;
       }
     }
+  }
+
+  public static emitWalkRoute(event: PluginWalkRouteEvent): boolean {
+    if (!event?.player || !event.destination) return false;
+    for (const hook of PluginManager.walkRouteHooks) {
+      PluginManager.executeHook(hook, event, "walk_route", "walk_route");
+      if (event.handled) return true;
+    }
+    return false;
   }
 
   public static emitNpcRoute(event: PluginNpcRouteEvent): void {
@@ -2108,6 +2122,7 @@ export class PluginManager {
       ForceMovement: require(`${model}/ForceMovement`).ForceMovement,
       ForceMovementTask: require("../game/task/impl/ForceMovementTask").ForceMovementTask,
       TaskManager: require("../game/task/TaskManager").TaskManager,
+      NPCRespawnTask: require("../game/task/impl/NPCRespawnTask").NPCRespawnTask,
       ItemIdentifiers: require("../util/ItemIdentifiers").ItemIdentifiers,
       ItemIds: require("../util/IdEnums").ItemIds,
       NpcIdentifiers: require("../util/NpcIdentifiers").NpcIdentifiers,
@@ -2791,6 +2806,11 @@ export class PluginManager {
         }
         PluginManager.objectRouteHooks.push({ pluginName, handler });
       },
+      onWalkRoute: (handler) => {
+        if (typeof handler === "function") {
+          PluginManager.walkRouteHooks.push({ pluginName, handler });
+        }
+      },
       onNpcRoute: (handler) => {
         if (typeof handler === "function") PluginManager.npcRouteHooks.push({ pluginName, handler });
       },
@@ -3375,7 +3395,7 @@ export class PluginManager {
             if (filter?.noted !== undefined && (ItemDefinition.forId(event.itemId).isNoted() !== filter.noted)) return;
             if (named) {
               if (ItemDefinition.forId(event.itemId).getName() !== itemNameOrHandler
-                || event.object.getDefinition()?.getName() !== objectNameOrFilter) return;
+                || ObjectDefinition.forPlayer(event.objectId, event.player)?.getName() !== objectNameOrFilter) return;
               if (handler(event) !== false) event.handled = true;
             } else {
               handler(event);

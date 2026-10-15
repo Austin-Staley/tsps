@@ -11,6 +11,7 @@ module.exports = function registerSessionTools(ctx) {
       const { player: p, error } = await core.connectHeadlessClient(username, password);
       if (!p) throw new Error(error);
       await sleepTicks(1);
+      core.PluginManager.emitCustomEvent("agent-mcp:normal-player", { player: p });
       return { username: p.getUsername(), ...status(find(p.getUsername())) };
     }
   );

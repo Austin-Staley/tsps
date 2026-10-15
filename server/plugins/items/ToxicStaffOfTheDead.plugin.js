@@ -104,7 +104,7 @@ function checkCharges({ player, item }) {
 
 function chargeStaff(event) {
   const { player, usedItem, usedWithItem, usedItemId, usedWithItemId } = event;
-  const staff = (chargedIds.has(usedItemId) || chargedByUncharged.has(usedItemId)) ? usedItem : usedWithItem;
+  const staff = (chargedIds.has(usedItemId) || chargedByUncharged.has(usedItemId)) ? usedItem : chargedIds.has(usedWithItemId) || chargedByUncharged.has(usedWithItemId) ? usedWithItem : null;
   const otherId = staff === usedItem ? usedWithItemId : usedItemId;
   if (!staff || Number(otherId) !== zulrahScalesId) {
     return;

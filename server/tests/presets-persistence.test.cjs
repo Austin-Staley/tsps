@@ -415,6 +415,7 @@ test("deposit booth slot actions reach Bank.deposit", () => {
   let onInterfaceActionClick;
   booth.register({
     onObjectInteraction() {},
+    onCustomEvent() {},
     onInterfaceActionClick(handler) { onInterfaceActionClick = handler; },
     onInterfaceActionButton() {},
     onItemOnObject() {},
@@ -442,6 +443,31 @@ test("deposit booth slot actions reach Bank.deposit", () => {
   } finally {
     Bank.deposit = deposit;
   }
+});
+
+test("quest-owned deposit boxes open the native bank deposit interface", () => {
+  const booth = require("../plugins/objects/BankDepositBooth.plugin");
+  let openQuestDeposit;
+  const calls = [];
+  booth.register({
+    onObjectInteraction() {},
+    onInterfaceActionClick() {},
+    onInterfaceActionButton() {},
+    onItemOnObject() {},
+    onCustomEvent(name, handler) {
+      if (name === "bank:open-deposit-box") openQuestDeposit = handler;
+    },
+    emitCanBank: () => null,
+  });
+  const player = {
+    setInterfaceId: (id) => calls.push(["interface", id]),
+    getInventory: () => ({ getItems: () => [] }),
+    getPacketSender: () => new Proxy({}, { get: () => (...args) => calls.push(args) }),
+  };
+  assert.equal(typeof openQuestDeposit, "function");
+  openQuestDeposit({ player });
+  assert.deepEqual(calls[0], ["interface", 192]);
+  assert.ok(calls.some((call) => call[0] === (161 << 16 | 16)), "the native deposit modal is opened");
 });
 
 test("a player preset bot announces its suppressed drops once", () => {

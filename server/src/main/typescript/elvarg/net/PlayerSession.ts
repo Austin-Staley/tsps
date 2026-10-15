@@ -18,6 +18,7 @@ import {
   encodePlayerAppearance,
   encodeInitialPlayerSync,
   encodeLogoutResponse,
+  encodeWalkInteractionMode,
   encodeNpcSync,
   encodePlayerSync,
   encodeRebuildNormal,
@@ -181,8 +182,12 @@ export class PlayerSession {
     this.sendClientPacket(encodeLogoutResponse(reason, false));
   }
 
-  /** Logs out as an accepted logout button does: the client is told, then the socket closes. */
+  /**
+   * Logs out as an accepted logout button does: the client is told, then the socket closes.
+   * Live first sets clicks back to walking, as the client keeps interaction modes (rsprox).
+   */
   public logout(): void {
+    this.sendClientPacket(encodeWalkInteractionMode());
     this.sendClientPacket(encodeLogoutResponse());
     this.flushPackets();
     this.channel.close?.(1000, "logout");

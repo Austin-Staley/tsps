@@ -46,7 +46,6 @@ import {
 import { ObjectActionPacketListener } from "./packet/impl/ObjectActionPacketListener";
 import { NPCOptionPacketListener } from "./packet/impl/NPCOptionPacketListener";
 import { ChatPacketListener } from "./packet/impl/ChatPacketListener";
-import { DialogueOption } from "../game/model/dialogues/DialogueOption";
 import { PlayerOptionPacketListener } from "./packet/impl/PlayerOptionPacketListener";
 import { MagicOnPlayerPacketListener } from "./packet/impl/MagicOnPlayerPacketListener";
 import { LunarSpells } from "../game/content/combat/magic/LunarSpells";
@@ -493,9 +492,7 @@ export class ClientConnection {
           })) {
             continue;
           }
-          if (this.player?.getDialogueManager().canContinue(packet.widgetId)) {
-            this.player.getDialogueManager().advance();
-          }
+          this.player?.getDialogueManager().handleResume(packet.widgetId, packet.childIndex);
           continue;
         }
         case "dialogue_amount": {
@@ -523,6 +520,9 @@ export class ClientConnection {
         }
         case "widget_action":
           if (this.player) {
+            const widgetAction = { player: this.player, packet, handled: false };
+            PluginManager.emitCustomEvent("player:widget-action", widgetAction);
+            if (widgetAction.handled) continue;
             const actionPacket = { ...packet, buttonNum: packet.buttonNum ?? 0 };
             // The dialogue this click can answer: one opened by the click itself (an inventory
             // option's statement) must not take the same click as its option.
@@ -715,6 +715,11 @@ export class ClientConnection {
           }
           continue;
         case "widget_drag":
+          if (this.player) {
+            const widgetDrag = { player: this.player, packet, handled: false };
+            PluginManager.emitCustomEvent("player:widget-action", widgetDrag);
+            if (widgetDrag.handled) continue;
+          }
           if (this.player && !Bank.handleDrag(this.player, packet)) SwitchItemSlotPacketListener.move(
             this.player, packet.sourceWidgetId, packet.sourceSlot, packet.targetSlot
           );
@@ -778,6 +783,13 @@ export class ClientConnection {
           continue;
         case "examine_object":
           if (this.player) {
+            const examineEvent = {
+              player: this.player,
+              objectId: packet.id,
+              handled: false,
+            };
+            PluginManager.emitCustomEvent("world:object-examine", examineEvent);
+            if (examineEvent.handled) continue;
             // A multi-loc's text can be recorded under the variant this player sees.
             const definition = ObjectDefinition.forId(packet.id);
             const seen = ObjectDefinition.examineText(packet.id) === null ? ObjectDefinition.forPlayer(packet.id, this.player) : null;
@@ -1047,11 +1059,17 @@ export class ClientConnection {
       ? (CacheDefinitions.getItem(packet.itemId)?.inventoryActions ?? [])
           .findIndex((action) => action?.toLowerCase() === option) + 1
       : packet.optionIndex;
-    if (optionIndex === 0) return;
-    if (/^(wield|wear|equip|hold)$/.test(option)) {
+    // Quest greegrees have equipment slots but no cache Wield action.
+    if (/^(wield|wear|equip|hold)$/.test(option)
+      && ItemDefinition.forId(packet.itemId).getEquipmentType().getSlot() >= 0) {
       EquipPacketListener.equip(player, packet.itemId, packet.slot, 3214);
-    } else if (ItemActionPacketListener.isDropOption(option, optionIndex)) {
-      DropItemPacketListener.drop(player, packet.itemId, 3214, packet.slot);
+      return;
+    }
+    if (optionIndex === 0) return;
+    if (ItemActionPacketListener.isDropOption(option, optionIndex)) {
+      if (!ItemActionPacketListener.handleAction(player, packet.widgetId, packet.itemId, packet.slot, optionIndex ?? 5, packet.option)) {
+        DropItemPacketListener.drop(player, packet.itemId, 3214, packet.slot);
+      }
     } else if (option === "examine") {
       const definition = ItemDefinition.forId(packet.itemId);
       player.sendMessage(definition.getExamine() || definition.getName());
@@ -1181,3 +1199,4 @@ export class ClientConnection {
     }
   }
 }
+import { DialogueOption } from "../game/model/dialogues/DialogueOption";

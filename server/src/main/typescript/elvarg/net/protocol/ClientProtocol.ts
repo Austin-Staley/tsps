@@ -2,6 +2,7 @@ import { BitWriter } from "./BitWriter";
 import { CLIENT_PACKET_LENGTHS as CLIENT_PACKET_LENGTHS, ClientPacketId as HighClientPacket } from "./ClientPackets";
 import { CLIENT_PACKET_LENGTHS as NATIVE_CLIENT_PACKET_LENGTHS, ClientPacketId as NativeClientPacket } from "./NativeClientPackets";
 import { SERVER_PACKET_LENGTHS, ServerPacketId } from "./ServerPackets";
+import { EntityInteractionMode, INTERACTION_WORLD_DEFAULT, TileInteractionMode } from "./InteractionMode";
 import { deflateSync } from "zlib";
 
 export const enum ClientPacket {
@@ -1207,6 +1208,30 @@ export function encodeCameraShake(slot: number, randomAmplitude: number, sineAmp
   payload.writeUInt16BE(sineAmplitude & 0xffff, 4);
   payload.writeUInt16BE(sineFrequency & 0xffff, 6);
   return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
+}
+
+/**
+ * Sets what tile and entity clicks do in a world (set_interaction_mode): `worldId` is a world
+ * entity index, -1 for the root world or -2 for the default of every world (InteractionMode.ts).
+ */
+export function encodeSetInteractionMode(worldId: number, tileMode: number, entityMode: number): Buffer {
+  const payload = Buffer.alloc(4);
+  payload.writeInt16BE(worldId, 0);
+  payload[2] = tileMode & 0xff;
+  payload[3] = entityMode & 0xff;
+  return encodeServerPacket(ServerPacketId.SET_INTERACTION_MODE, payload);
+}
+
+/** Every world back to walking with all entity options, as live sends before each logout. */
+export function encodeWalkInteractionMode(): Buffer {
+  return encodeSetInteractionMode(INTERACTION_WORLD_DEFAULT, TileInteractionMode.Walk, EntityInteractionMode.All);
+}
+
+/** Drops a world's own interaction mode, so it follows the default again (reset_interaction_mode). */
+export function encodeResetInteractionMode(worldId: number): Buffer {
+  const payload = Buffer.alloc(2);
+  payload.writeInt16BE(worldId, 0);
+  return encodeServerPacket(ServerPacketId.RESET_INTERACTION_MODE, payload);
 }
 
 /** Puts the camera back on the player and stops any shake (cam_reset). */
