@@ -4,7 +4,7 @@
 // collision remains closed in the cache, so the player has to be force-walked through
 // the one-tile fence gap after passing the guard. OSRS consumes a Shantay pass when
 // entering the desert; returning to Al Kharid is free.
-const ObstacleRunner = require("../skills/agility/ObstacleRunner");
+const ObstacleRunner = require("../skills/agility/ObstacleRunner.Agility");
 
 const PASS_LOCATION = Object.freeze({ x: 3302, y: 3116, z: 0 });
 const PASS_OBJECT_ID = 4031;

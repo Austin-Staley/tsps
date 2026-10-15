@@ -8,8 +8,8 @@ const { CachePipeline } = require("../dist/game/cache/CachePipeline");
 before(() => CachePipeline.initialize());
 
 const { MagicSpellbook } = require("../dist/game/model/MagicSpellbook");
-const { GROUP_ID, GLOBAL_ROW_COUNT, PRESET_ROW_START, uid } = require("../plugins/modes/pvp/presetsWidget");
-const presets = require("../plugins/modes/pvp/Presets");
+const { GROUP_ID, GLOBAL_ROW_COUNT, PRESET_ROW_START, uid } = require("../plugins/modes/pvp/PresetsWidget.PvpMode");
+const presets = require("../plugins/modes/pvp/Presets.PvpMode");
 
 function playerWithAttributes(attributes = new Map()) {
   const strings = [];
@@ -44,7 +44,7 @@ function playerWithAttributes(attributes = new Map()) {
 test("disabled presets leave bot inventory and equipment lootable on the ground or in keys", () => {
   const { Location } = require("../dist/game/model/Location");
   const lootKeys = require("../plugins/items/LootKeys.plugin");
-  const botDeathLoot = require("../plugins/bots/runtime/BotDeathLoot");
+  const botDeathLoot = require("../plugins/bots/runtime/DeathLoot.PlayerBots");
   const ground = [];
   const location = new Location(3090, 3600);
   botDeathLoot.initBotDeathLootCoreAccess({
@@ -471,7 +471,7 @@ test("quest-owned deposit boxes open the native bank deposit interface", () => {
 });
 
 test("a player preset bot announces its suppressed drops once", () => {
-  const botDeathLoot = require("../plugins/bots/runtime/BotDeathLoot");
+  const botDeathLoot = require("../plugins/bots/runtime/DeathLoot.PlayerBots");
   const messages = [];
   const killer = {
     isRegistered: () => true,

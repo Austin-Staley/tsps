@@ -7,7 +7,7 @@ Server.installProductionPathResolver();
 
 const { Equipment } = require("../dist/game/model/container/impl/Equipment");
 const { ItemDefinition } = require("../dist/game/definition/ItemDefinition");
-const registerVampyrebane = require("../plugins/combat/effects/Vampyrebane");
+const registerVampyrebane = require("../plugins/combat/effects/Vampyrebane.EquipmentEffects");
 
 const NAMES = new Map([
   [22398, "Ivandis flail"],

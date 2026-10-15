@@ -1917,7 +1917,7 @@ const QUEST_TAB_ICON_FLAGS = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4);
 const ACCOUNT_SUMMARY_ENTRY_LIST_UID = (INTERFACE_CHARACTER_SUMMARY_ID << 16) | 3;
 const ACCOUNT_SUMMARY_QUESTS_ROW = 3; // op1 "Quest List"
 const ACCOUNT_SUMMARY_ACHIEVEMENTS_ROW = 4; // op1 "Achievement Diaries"
-const ACCOUNT_SUMMARY_COMBAT_TASKS_ROW = 5; // op1 "Combat Achievements" (the last screen used; plugins/combatachievements/)
+const ACCOUNT_SUMMARY_COMBAT_TASKS_ROW = 5; // op1 "Combat Achievements" (the last screen used; plugins/achievements/combatachievements/)
 const ACCOUNT_SUMMARY_COLLECTION_LOG_ROW = 6; // op1 "Collection Log", op2 "Collection Overview"
 const ACCOUNT_SUMMARY_PLAYTIME_ROW = 7; // op1 "Reveal"
 

@@ -12,7 +12,7 @@ const { ItemOnGroundManager } = require("../../src/main/typescript/elvarg/game/e
 const { Task } = require("../../src/main/typescript/elvarg/game/task/Task");
 const { TaskManager } = require("../../src/main/typescript/elvarg/game/task/TaskManager");
 const { FLAG_OP1, TYPE_GRAPHIC, TYPE_TEXT, createWidgetGroup } = require("../interface/widgetGroup");
-const { EQUIPMENT_SLOTS, addEquipmentWidgets } = require("../modes/pvp/presetsWidget");
+const { EQUIPMENT_SLOTS, addEquipmentWidgets } = require("../modes/pvp/PresetsWidget.PvpMode");
 
 // Cache 237: confirmation group 756 and rule config varp 286.
 const ARENA = new Boundary(3326, 3383, 3197, 3295, 0);

@@ -572,10 +572,10 @@ export class PluginManager {
     });
 
     // The exported name is only known after evaluation; filter by filename first.
-    const disabledPluginNames = PluginManager.loadDisabledPluginNames();
+    const { switches, defaultEnabled } = PluginManager.loadPluginSwitches();
+    const switchFor = (name: string) => switches.get(normalizePluginName(name));
     const enabledPluginFiles = filteredPluginFiles.filter((pluginPath) => {
-      const fileName = pluginNameFromFile(pluginPath);
-      if (!disabledPluginNames.has(normalizePluginName(fileName))) {
+      if (switchFor(pluginNameFromFile(pluginPath)) !== false) {
         return true;
       }
       disabledCount++;
@@ -584,12 +584,26 @@ export class PluginManager {
     const candidates = PluginManager.collectPluginLoadCandidates(
       enabledPluginFiles
     );
+    const knownNames = new Set([
+      ...pluginFiles.map((pluginPath) => normalizePluginName(pluginNameFromFile(pluginPath))),
+      ...candidates.map((candidate) => normalizePluginName(candidate.pluginName)),
+    ]);
+    for (const name of switches.keys()) {
+      if (!knownNames.has(name)) {
+        console.warn(`[plugins] world.json names a plugin that does not exist: ${name}`);
+      }
+    }
     const membersWorld = isMembersWorld();
     let membersOnlyCount = 0;
     PluginManager.loadPluginCandidatesWithDependencies(
       candidates.filter((candidate) => {
-        // Keep exported-name configuration working when it differs from the filename.
-        if (disabledPluginNames.has(normalizePluginName(candidate.pluginName))) {
+        // The exported name wins over the filename when they differ.
+        const enabled =
+          switchFor(candidate.pluginName) ??
+          switchFor(pluginNameFromFile(candidate.pluginPath)) ??
+          defaultEnabled ??
+          candidate.plugin.enabled !== false;
+        if (!enabled) {
           disabledCount++;
           return false;
         }
@@ -1825,24 +1839,48 @@ export class PluginManager {
     return pluginPaths;
   }
 
-  private static loadDisabledPluginNames(): Set<string> {
-    const configPath = path.join(process.cwd(), "data", "definitions", "world.json");
-    const config = readWorldConfig() as { disabledPlugins?: unknown };
-    if (!config || typeof config !== "object" || Array.isArray(config)) {
-      throw new Error(`[plugins] ${configPath} must contain an object`);
+  /**
+   * world.json `plugins` ({ "Name": true | false }) as normalized name -> on/off; a plugin
+   * it leaves out keeps its own `enabled` default. The older `disabledPlugins` list is read
+   * as it always was: what it names is off and everything else on, defaults included.
+   */
+  private static loadPluginSwitches(): { switches: Map<string, boolean>; defaultEnabled?: boolean } {
+    const config = readWorldConfig() as { plugins?: unknown; disabledPlugins?: unknown };
+    if (config.disabledPlugins !== undefined) {
+      if (
+        !Array.isArray(config.disabledPlugins) ||
+        config.disabledPlugins.some(
+          (pluginName) => typeof pluginName !== "string" || pluginName.trim().length === 0
+        )
+      ) {
+        throw new Error("[plugins] world.json disabledPlugins must be a string[]");
+      }
+      console.warn(
+        '[plugins] world.json disabledPlugins is deprecated and overrides "plugins" and plugin defaults; ' +
+          'replace it with "plugins": { "Name": false }'
+      );
+      return {
+        switches: new Map(config.disabledPlugins.map((name) => [normalizePluginName(name), false])),
+        defaultEnabled: true,
+      };
     }
-    if (config.disabledPlugins === undefined) {
-      return new Set();
-    }
+    const plugins = config.plugins ?? {};
     if (
-      !Array.isArray(config.disabledPlugins) ||
-      config.disabledPlugins.some(
-        (pluginName) => typeof pluginName !== "string" || pluginName.trim().length === 0
-      )
+      !plugins ||
+      typeof plugins !== "object" ||
+      Array.isArray(plugins) ||
+      Object.values(plugins).some((enabled) => typeof enabled !== "boolean")
     ) {
-      throw new Error(`[plugins] ${configPath}.disabledPlugins must be a string[]`);
+      throw new Error('[plugins] world.json "plugins" must map plugin names to true or false');
     }
-    return new Set(config.disabledPlugins.map(normalizePluginName));
+    return {
+      switches: new Map(
+        Object.entries(plugins as Record<string, boolean>).map(([name, enabled]) => [
+          normalizePluginName(name),
+          enabled,
+        ])
+      ),
+    };
   }
 
   /** Reads the world.json `pluginConfig` map once (empty when unset or malformed). */

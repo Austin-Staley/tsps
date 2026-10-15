@@ -13,9 +13,9 @@
  * the theatre and the Mysterious Stranger sells them, so the entrance offers his shop.
  */
 
-const Shared = require("./TobShared");
-const Parties = require("./TobParties");
-const Raid = require("./TobRaid");
+const Shared = require("./Shared.TheatreOfBlood");
+const Parties = require("./Parties.TheatreOfBlood");
+const Raid = require("./RaidState.TheatreOfBlood");
 
 const { INTERFACE, SCRIPT, VARP, VARBIT } = Shared;
 const { RIGHTS } = Parties;

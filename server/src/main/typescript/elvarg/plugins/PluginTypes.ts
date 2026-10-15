@@ -1342,5 +1342,7 @@ export interface PluginModule {
   dependsOn?: string[];
   /** Members content: not loaded when world.json sets membersWorld false. */
   members?: boolean;
+  /** False keeps the plugin off unless world.json `plugins` turns it on. */
+  enabled?: boolean;
   register(api: PluginApi): void;
 }
