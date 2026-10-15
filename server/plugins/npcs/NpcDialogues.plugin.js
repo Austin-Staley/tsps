@@ -524,6 +524,16 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
   function presentMenu(menu, offset = 0, tail = []) {
     const { step, rest, record } = menu;
     context.currentMenu = menu;
+    const notice = { player, npcId, definition, prompt: step.prompt || "Select an Option", warning: null };
+    api.emitCustomEvent("npc-dialogue:menu", notice);
+    const warned = context.warnedMenus ??= new WeakSet();
+    if (notice.warning && !warned.has(step)) {
+      warned.add(step);
+      manager.startDialogues(new DialogueChainBuilder()
+        .add(new api.core.StatementDialogue(0, String(notice.warning)))
+        .add(new ActionDialogue(1, { execute: () => presentMenu(menu, offset, tail) })));
+      return;
+    }
     if (!context.menuHistory.includes(menu)) context.menuHistory.push(menu);
     // An option the wiki guards ("If the player is wearing the Ring of Charos(a):") is hidden
     // only once a plugin answers its condition false; unanswered ones still show.

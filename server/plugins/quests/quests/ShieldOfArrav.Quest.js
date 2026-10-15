@@ -347,7 +347,8 @@ module.exports = function registerShieldOfArravQuest(api) {
     return null;
   }
 
-  function answerDialogueCondition({ npcId, player, text }) {
+  function answerDialogueCondition({ npcId, player, text, stepId, pages }) {
+    if (["Vl3BPs", "JaT1Z6"].includes(stepId) && pages?.some(entry => entry.page === PAGE)) return player.getInventory().isFull();
     const value = String(text).toLowerCase();
 
     if (RELDO_NPC_IDS.has(npcId)) {

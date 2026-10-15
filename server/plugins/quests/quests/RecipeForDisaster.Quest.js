@@ -444,7 +444,7 @@ module.exports = function registerRecipeForDisasterQuest(api) {
     if (value.includes("does not meet the requirements") || value.includes("doesn't meet the requirements")) {
       return !meetsOpeningRequirements(player);
     }
-    if (value.includes("meets the requirements") || value.includes("has completed cook's assistant")) {
+    if (value.includes("meets the requirements") || (COOK_IDS.has(npcId) && value.includes("has completed cook's assistant"))) {
       return meetsOpeningRequirements(player);
     }
     const ingredients = [ItemIdentifiers.EYE_OF_NEWT, ItemIdentifiers.GREENMANS_ALE,

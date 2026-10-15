@@ -888,3 +888,24 @@ test('a quest can select the captured head for a group of cutscene speakers', ()
   const line = [...chain.getDialogues().values()][0];
   assert.equal(line.npcId, 5087);
 });
+
+
+test('quest menu warning pauses once, then presents the same selectable options', () => {
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const core = PluginManager.getCoreApi();
+  const chains = [], menus = [];
+  const player = { getDialogueManager: () => ({ reset() {}, startDialogues: chain => chains.push(chain) }),
+    getPacketSender: () => ({ sendInterfaceRemoval() {} }), sendMessage() {} };
+  const definition = { getName: () => 'Doric', getId: () => 3893 };
+  const api = { core, emitCustomEvent(name, request) { if (name === 'npc-dialogue:menu') request.warning = 'You need 15 Mining.'; },
+    sendMultiChatboxPrompt(_player, title, ...options) { menus.push({title, options}); } };
+  const event = { player, npcId: 3893, npc: null, definition };
+  startDialogue(api, event, [{ type: 'choice', options: [{ text: 'Yes', steps: [{ npc: 'Thanks.' }] }, { text: 'No' }] }], {}, event);
+  [...chains.shift().getDialogues().values()][0].send(player);
+  const entries = [...chains.shift().getDialogues().values()];
+  assert.equal(entries[0].getText(), 'You need 15 Mining.');
+  assert.equal(menus.length, 0);
+  entries[1].send(player);
+  assert.equal(menus.length, 1);
+  assert.deepEqual(menus[0].options.filter(value => typeof value === 'string'), ['Yes', 'No']);
+});
