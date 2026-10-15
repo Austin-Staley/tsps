@@ -252,7 +252,10 @@ class MiningTask extends Task {
       if (InfernalPickaxe.tryCombustOre(player, state.pickaxe.id, state.rock.oreId)) {
         player.sendMessage("The infernal pickaxe smelts the ore as you mine it.");
       } else {
-        player.getInventory().adds(state.rock.oreId, 1);
+        // "mining:ore": a container may take the ore instead (an open coal bag).
+        const ore = { player, oreId: state.rock.oreId, banked: false };
+        pluginApi.emitCustomEvent("mining:ore", ore);
+        if (!ore.banked) player.getInventory().adds(state.rock.oreId, 1);
         player.sendMessage(state.rock.oreMessage ?? "You get some ores.");
       }
       CrystalPickaxe.tryUseCharge(player);
