@@ -15,8 +15,8 @@ const { SkullType } = require("../../src/main/typescript/elvarg/game/model/Skull
 const { DonatorRights } = require("../../src/main/typescript/elvarg/game/model/rights/DonatorRights");
 const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
-const { SqliteSaveHistory, PRE_ROLLBACK_REASON, ROLLBACK_REASON } = require("./SqliteSaveHistory");
-const { createWriter } = require("./SqliteSaveWorker");
+const { SqliteSaveHistory, PRE_ROLLBACK_REASON, ROLLBACK_REASON } = require("./SaveHistory.SqlitePlayerPersistence");
+const { createWriter } = require("./SaveWorker.SqlitePlayerPersistence");
 
 /** Writer threads that die before they're ready, in a row, before saves fall back to the game thread. */
 const MAX_WRITER_FAILURES = 3;
@@ -61,7 +61,7 @@ class SqlitePlayerPersistence extends PlayerPersistence {
     this.findSave = this.database.prepare(
       "SELECT save_json AS saveJson FROM player_saves WHERE username = ?"
     );
-    // This connection only reads once the writer starts (SqliteSaveWorker.js owns the writes).
+    // This connection only reads once the writer starts (SaveWorker.SqlitePlayerPersistence.js owns the writes).
     this.history = new SqliteSaveHistory(this.database);
     this.markInUse();
     /** Restores waiting for an online player's next save: username -> { json, recorded }. */
@@ -89,7 +89,7 @@ class SqlitePlayerPersistence extends PlayerPersistence {
    * if it keeps dying before it's ready, saves are written on the game thread instead.
    */
   startWriter() {
-    const writer = new Worker(path.join(__dirname, "SqliteSaveWorker.js"), {
+    const writer = new Worker(path.join(__dirname, "SaveWorker.SqlitePlayerPersistence.js"), {
       workerData: { databasePath: SqlitePlayerPersistence.DATABASE_PATH, skillCount: SkillManager.AMOUNT_OF_SKILLS },
     });
     this.writer = writer;

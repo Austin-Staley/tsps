@@ -16,7 +16,7 @@ Server.installProductionPathResolver();
 
 const { Player } = require("../dist/game/entity/impl/player/Player");
 const { PluginManager } = require("../dist/plugins/PluginManager");
-const { idsToPrune } = require("../plugins/persistence/SqliteSaveHistory");
+const { idsToPrune } = require("../plugins/persistence/SaveHistory.SqlitePlayerPersistence");
 const Autosave = require("../plugins/persistence/Autosave.plugin");
 const SaveHistory = require("../plugins/commands/SaveHistory.plugin");
 

@@ -13,8 +13,8 @@
  * buy messages.
  */
 
-const Shared = require("./TobShared");
-const Raid = require("./TobRaid");
+const Shared = require("./Shared.TheatreOfBlood");
+const Raid = require("./RaidState.TheatreOfBlood");
 
 const { OBJECT, INTERFACE, VARBIT } = Shared;
 
