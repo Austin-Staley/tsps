@@ -134,6 +134,22 @@ test('synchronous packets coalesce into a single browser frame', async () => {
   assert.deepEqual([...frames[0]], [1, 2]);
 });
 
+test('an accepted logout first sets clicks back to walking, then logs out', () => {
+  const frames = [];
+  const channel = {
+    isOpen: () => true,
+    bufferedAmount: 0,
+    send(frame) { frames.push(frame); return true; },
+    close() {},
+  };
+  new PlayerSession(channel).logout();
+  const bytes = [...Buffer.concat(frames)];
+  // SET_INTERACTION_MODE (145): default world (-2), walk, all entities (rsprox: before every
+  // logout_withreason), then LOGOUT_RESPONSE (4).
+  assert.deepEqual(bytes.slice(0, 5), [145, 0xff, 0xfe, 1, 1]);
+  assert.equal(bytes[5], 4);
+});
+
 test('malformed client frames are rejected at the boundary without a throw downstream', async () => {
   assert.throws(() => decodeClientPackets(Buffer.from([0])), /Unsupported client opcode 0/);
   assert.throws(() => decodeClientPackets(Buffer.from([255])), /Truncated client opcode 255/);

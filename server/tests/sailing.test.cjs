@@ -511,6 +511,8 @@ test("only the player at the helm steers, by heading or by clicking", () => {
     assert.equal(boat.heading, WEST);
     assert.equal(BoatManager.steerToward(sailor, boat.tileX + 10, boat.tileY), true);
     assert.equal(boat.heading, EAST, "a click east of the boat");
+    assert.equal(BoatManager.steerToward(sailor, boat.deckBaseX + 3, boat.deckBaseY + 1), true);
+    assert.equal(boat.heading, EAST, "a deck click at the helm neither steers nor walks");
   } finally {
     BoatManager.dispose(boat);
   }
