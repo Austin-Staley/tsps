@@ -316,6 +316,12 @@ function disassemble(player, combined) {
   inventory.deleteNumber(combined.cape, 1);
   inventory.adds(Capes.MAX.cape, 1);
   inventory.adds(combined.item, 1);
+  // Not captured (the recorded player's hoods were banked): a carried matching hood turns back
+  // into a max hood too, so the pair can be combined again.
+  if (inventory.contains(combined.hood)) {
+    inventory.deleteNumber(combined.hood, 1);
+    inventory.adds(Capes.MAX.hood, 1);
+  }
   const chain = new Capes.core.DialogueChainBuilder();
   chain.add(new Capes.core.DoubleItemStatementDialogue(0, Capes.MAX.cape, combined.item,
     `You disassemble your ${NAVY}${name}${BLACK} back into its original form.`));

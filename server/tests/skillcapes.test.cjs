@@ -248,6 +248,11 @@ test("combining needs the max hood, and makes the combined cape and hood", () =>
   assert.equal(p.getInventory().contains(obj("skillcape_max_infernalcape")), true);
   assert.equal(p.getInventory().contains(obj("skillcape_max_hood_infernalcape")), true);
   assert.equal(p.getInventory().contains(obj("infernal_cape")), false);
+
+  MaxCape._test.disassemble(p, Capes.COMBINED_BY_CAPE.get(obj("skillcape_max_infernalcape")));
+  assert.equal(p.getInventory().contains(obj("skillcape_max")), true);
+  assert.equal(p.getInventory().contains(obj("infernal_cape")), true);
+  assert.equal(p.getInventory().contains(obj("skillcape_max_hood")), true, "a carried hood turns back too");
 });
 
 test("Mac sells the max cape only to a player with every 99, and buys it back for 80%", () => {

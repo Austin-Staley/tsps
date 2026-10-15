@@ -76,7 +76,10 @@ Firemaking cape's light, the Slayer cape's repeat chance).
   "You will lose your Infernal cape if you proceed!", locked items "Combine your Infernal cape (l)
   with your max cape?") and knife disassembly - all as captured.
 - **MacIsland**: the way to Mac (evergreen, stump, rockslide, boulder, log raft, row boat back),
-  each needing its 99, as captured in recordings 3143-3146. The stump and mined rockslide jumps
+  each needing its 99, as captured in recordings 3143-3146. The row boat lands beside the
+  Sinclair Mansion (2726,3589), as live OSRS does.
+- **Cooks' Guild door** (`areas/CooksGuild.plugin.js`): no door handler covered `chefdoor`, so it
+  never opened; it is now walked through as captured (recordings 3181, 3213). The stump and mined rockslide jumps
   are agility shortcut data.
 
 Daily allowances reset at 00:00 UTC and are kept in `skillcapes:daily`; the cache varbits
@@ -91,6 +94,8 @@ mirror them for the client.
 - The Fletching search message, and the Commune and Defence toggles' follow-up prompts (their
   first message boxes are captured), are ours; Near-Reality's port (an RSPS, not a source) was
   only looked at for which options exist.
+- Disassembling also turns a carried matching hood back into a max hood (the captured player's
+  hoods were banked).
 - The Ardougne save tile (the marketplace, 2662,3305) is approximate.
 
 ## Open
