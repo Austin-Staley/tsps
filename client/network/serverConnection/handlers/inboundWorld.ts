@@ -100,7 +100,8 @@ export function handleInboundWorld(msg: any): boolean {
                 const z = (Number(payload.y) || 0) + 0.5;
                 const capturedRates = Number.isInteger(payload.rate) && Number.isInteger(payload.rate2);
                 client.followPlayerCamera = false;
-                if (capturedRates) {
+                const capturedCycles = Number.isInteger(payload.cycles) && payload.cycles > 0;
+                if (capturedRates || capturedCycles) {
                     const packetHeight = client.camera.resolveScriptedHeight(payload.mode, payload.height, payload.heightRelative === true);
                     const heightAt = (targetX: number, targetZ: number): number | undefined => {
                         const controlledIndex = client.playerEcs?.getIndexForServerId?.(client.controlledPlayerServerId) ?? 0;
@@ -110,7 +111,11 @@ export function handleInboundWorld(msg: any): boolean {
                             : undefined;
                         return ground === undefined ? undefined : ground - packetHeight / 128;
                     };
-                    if (payload.mode === "move") client.camera.setScriptedPosition(x, 0, z, payload.rate, payload.rate2, heightAt);
+                    if (capturedCycles) {
+                        if (payload.mode === "move") client.camera.setScriptedPositionCycles(x, z, payload.cycles, payload.easing, payload.ignoreTerrain === true, heightAt, packetHeight);
+                        else client.camera.setScriptedLookCycles(x, z, payload.cycles, payload.easing, payload.trackTarget === true, heightAt);
+                    }
+                    else if (payload.mode === "move") client.camera.setScriptedPosition(x, 0, z, payload.rate, payload.rate2, heightAt);
                     else client.camera.setScriptedLook(x, 0, z, payload.rate, payload.rate2, heightAt);
                     return true;
                 }
@@ -367,8 +372,8 @@ export function handleInboundWorld(msg: any): boolean {
                     ClientState.npcAttackOption = Math.max(0, Math.min(3, value | 0));
                     console.log(`[varp] NPC attack option set to ${ClientState.npcAttackOption}`);
                 } else if (varpId === VARP_FOLLOWER_INDEX) {
-                    const followerIndex = value === 65535 ? -1 : value & 0xffff;
-                    ClientState.followerIndex = followerIndex;
+                    const followerIndex = value & 0xffff;
+                    ClientState.followerIndex = followerIndex === 65535 ? -1 : followerIndex;
                     console.log(`[varp] Follower index set to ${ClientState.followerIndex}`);
                 } else if (varpId === VARP_COMBAT_TARGET_PLAYER_INDEX) {
                     ClientState.combatTargetPlayerIndex = value === -1 ? -1 : value & 0x7ff;

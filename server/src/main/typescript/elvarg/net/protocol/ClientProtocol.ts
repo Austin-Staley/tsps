@@ -1210,29 +1210,43 @@ export function encodeCameraShake(slot: number, randomAmplitude: number, sineAmp
   return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
 }
 
-export interface CameraMovementOptions {
+export type CameraMovementOptions = {
   rate: number;
   rate2: number;
   heightRelative?: boolean;
-}
+} | {
+  cycles: number;
+  easing: "linear" | "ease_in_out_sine" | "ease_out_cubic";
+  ignoreTerrain?: boolean;
+  trackTarget?: boolean;
+  heightRelative?: boolean;
+};
 
 function encodeCameraPosition(mode: number, x: number, y: number, height: number, motion: boolean | CameraMovementOptions): Buffer {
   const captured = typeof motion !== "boolean";
+  const timed = captured && "cycles" in motion;
   if (captured) {
-    for (const [name, value, min, max] of [
-      ["x", x, 0, 65535], ["y", y, 0, 65535], ["height", height, -32768, 32767],
-      ["rate", motion.rate, 0, 255], ["rate2", motion.rate2, 0, 255],
-    ] as const) {
+    const fields = [["x", x, 0, 65535], ["y", y, 0, 65535], ["height", height, -32768, 32767]] as const;
+    for (const [name, value, min, max] of [...fields, ...(timed
+      ? [["cycles", motion.cycles, 1, 65535]] as const
+      : [["rate", motion.rate, 0, 255], ["rate2", motion.rate2, 0, 255]] as const)]) {
       if (!Number.isInteger(value) || value < min || value > max) throw new RangeError(`Invalid camera ${name}: ${value}`);
     }
-    if (motion.heightRelative !== undefined && typeof motion.heightRelative !== "boolean") throw new TypeError("Invalid relative camera height");
+    for (const flag of [motion.heightRelative, ...(timed ? [motion.ignoreTerrain, motion.trackTarget] : [])]) {
+      if (flag !== undefined && typeof flag !== "boolean") throw new TypeError("Invalid camera flag");
+    }
+    if (timed && !["linear", "ease_in_out_sine", "ease_out_cubic"].includes(motion.easing)) throw new RangeError("Invalid camera easing");
   }
-  const payload = Buffer.alloc(captured ? 10 : 8);
-  payload[0] = captured ? mode + 3 : mode;
+  const payload = Buffer.alloc(timed ? 11 : captured ? 10 : 8);
+  payload[0] = timed ? mode + 7 : captured ? mode + 3 : mode;
   payload.writeUInt16BE(x & 0xffff, 1);
   payload.writeUInt16BE(y & 0xffff, 3);
   payload.writeUInt16BE(height & 0xffff, 5);
-  if (captured) {
+  if (timed) {
+    payload.writeUInt16BE(motion.cycles, 7);
+    payload[9] = ["linear", "ease_in_out_sine", "ease_out_cubic"].indexOf(motion.easing);
+    payload[10] = (motion.heightRelative ? 1 : 0) | (motion.ignoreTerrain ? 2 : 0) | (motion.trackTarget ? 4 : 0);
+  } else if (captured) {
     payload[7] = motion.rate;
     payload[8] = motion.rate2;
     payload[9] = motion.heightRelative ? 1 : 0;
@@ -2950,7 +2964,7 @@ export function encodeNpcSync(
     writer.writeBits(large ? 8 : 5, signed(view.y - local.y, large ? 8 : 5));
     writer.writeBits(large ? 8 : 5, signed(view.x - local.x, large ? 8 : 5));
     writer.writeBits(3, view.rotation & 7);
-    writer.writeBits(14, view.typeId & 0x3fff);
+    writer.writeBits(16, view.typeId & 0xffff);
     nextIndices.push(view.index);
     nextSet.add(view.index);
     if (block) updateBlocks.push(writeNpcUpdateBlock(view, writeInteraction, writeHeadIcon));

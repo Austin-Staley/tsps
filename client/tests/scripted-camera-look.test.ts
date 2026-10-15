@@ -188,3 +188,29 @@ assert.deepEqual([...relocate.pos], [10.5, -12, 10.5]);
 assert.deepEqual(sampledTiles.slice(-2), [[10.5, 10.5], [20.5, 10.5]],
     'terrain refresh follows translated public targets, rather than closed-over private coordinates');
 console.log('scripted camera terrain refresh and OSRS rate boundaries: ok');
+
+// Cycle camera packets use eased endpoint interpolation, independent of frame rate.
+const easedWhole = new Camera(0, -2, 0, 256, 2040), easedSplit = new Camera(0, -2, 0, 256, 2040);
+for (const subject of [easedWhole, easedSplit]) {
+    subject.setScriptedPositionCycles(10, 20, 10, "ease_in_out_sine", true, () => -6, 768);
+    subject.setScriptedLookCycles(10, 20, 10, "ease_out_cubic", false, () => -6);
+}
+easedWhole.applySmoothing(100);
+for (const elapsed of [7, 13, 16, 14, 30, 20]) easedSplit.applySmoothing(elapsed);
+assert.deepEqual([...easedWhole.pos], [5, -4, 10], "sine halfway reaches the midpoint");
+assert.deepEqual([...easedWhole.pos], [...easedSplit.pos]);
+assert.equal(easedWhole.getYaw(), easedSplit.getYaw());
+easedWhole.applySmoothing(100);
+assert.deepEqual([...easedWhole.pos], [10, -6, 20]);
+assert.equal(easedWhole.getYaw(), 151, "rotate-to freezes the command-time target angle even as the camera moves");
+easedWhole.clearScriptedCamera();
+const frozen = [...easedWhole.pos];
+easedWhole.applySmoothing(1000);
+assert.deepEqual([...easedWhole.pos], frozen, "reset cancels cycle interpolation");
+const terrainPan = new Camera(0, -3, 0, 256, 0);
+terrainPan.setScriptedPositionCycles(10, 0, 10, "linear", false, x => x * 2 - 5, 640);
+terrainPan.applySmoothing(100);
+assert.deepEqual([...terrainPan.pos], [5, 6, 0], "terrain-aware movement interpolates the height offset while sampling intermediate terrain");
+terrainPan.applySmoothing(100);
+assert.deepEqual([...terrainPan.pos], [10, 15, 0]);
+console.log("cycle camera easing and rotation: ok");
