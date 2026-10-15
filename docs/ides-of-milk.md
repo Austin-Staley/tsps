@@ -30,6 +30,8 @@ The four-page Groats book uses interface 392 and the shared book reader. Shelf a
 
 Existing saved internal stages migrate once to the captured state values. Existing information and reward attributes remain compatible, and all client fields synchronize at login.
 
+Recording 4153 contains no camera movement, look-at or shake packets during the quest route (cycles 111–734). Its bull-release transition uses fades and scene actors while retaining the player's camera.
+
 ## Bull encounter
 
 The north-east Release gate starts a private copy of the cow field. At two ticks, the player moves to (3262,3294), the pen and south-west exit leaves change locally, and Brutus 15626 appears at (3261,3287) with 58 Hitpoints and animation 13790. Controls unlock at four ticks. Other players' gates, cows and fights are unaffected. The mapped pen bull is not a combat shortcut. Cassius and the mapped bull have canonical world spawns; their spawn anchors are inferred from the recording's roaming envelope.

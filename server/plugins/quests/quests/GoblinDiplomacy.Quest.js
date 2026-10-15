@@ -333,6 +333,7 @@ module.exports = function registerGoblinDiplomacyQuest(api) {
     player.setAttribute(SCENE_ATTRIBUTE, 1);
     controls(player, true); fade(player, true);
     later(player, state, 1, () => {
+      for (let axis = 0; axis < 5; axis++) player.getPacketSender().sendCameraShake(axis, 0);
       state.area.enter(player); player.moveTo(state.area.sourceTile(2944, 3504));
       actor(player, state, NpcIdentifiers.GENERAL_BENTNOZE_7, 2958, 3512);
       actor(player, state, NpcIdentifiers.GENERAL_WARTFACE_7, 2958, 3511);
@@ -340,7 +341,7 @@ module.exports = function registerGoblinDiplomacyQuest(api) {
     });
     later(player, state, 2, () => {
       const at = state.area.sourceTile(2961, 3514), look = state.area.sourceTile(2957, 3512);
-      player.getPacketSender().sendCameraMoveTo(at.getX(), at.getY(), 450, true).sendCameraLookAt(look.getX(), look.getY(), 150, true);
+      player.getPacketSender().sendCameraMoveTo(at.getX(), at.getY(), 450, { rate: 232, rate2: 232, heightRelative: false }).sendCameraLookAt(look.getX(), look.getY(), 150, { rate: 232, rate2: 232, heightRelative: false });
       fade(player, false);
     });
     resume(player, state, 3, event.stepId);
@@ -370,7 +371,7 @@ module.exports = function registerGoblinDiplomacyQuest(api) {
     state.returning = true;
     if (player.getPrivateArea() === state.area) state.area.leave(player, false);
     player.moveTo(state.returnTile); state.area.destroy();
-    player.getPacketSender().sendCameraReset();
+    player.getPacketSender().sendCameraUnlock(false).sendCameraReset();
   }
 
   function finishScene(player, state) {

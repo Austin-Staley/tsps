@@ -689,11 +689,11 @@ module.exports = function registerBelowIceMountainQuest(api) {
     const sender = player.getPacketSender();
     if (camera) {
       const tile = scene.sourceTile(camera[0], camera[1]);
-      sender.sendCameraMoveTo(tile.getX(), tile.getY(), camera[2], (camera[4] ?? 232) >= 100);
+      sender.sendCameraMoveTo(tile.getX(), tile.getY(), camera[2], { rate: camera[3] ?? 232, rate2: camera[4] ?? 232 });
     }
     if (look) {
       const tile = scene.sourceTile(look[0], look[1]);
-      sender.sendCameraLookAt(tile.getX(), tile.getY(), look[2], (look[4] ?? 232) >= 100);
+      sender.sendCameraLookAt(tile.getX(), tile.getY(), look[2], { rate: look[3] ?? 232, rate2: look[4] ?? 232 });
     }
   }
 
@@ -748,7 +748,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
     player.getMovementQueue().setBlockMovement(true);
     player.setUntargetable(true);
     scene.burntof = sceneActor(player, scene, NpcIdentifiers.BURNTOF_3, 2956, 3370);
-    sceneCamera(player, scene, [2961, 3369, 400], [2955, 3369, 180]);
+    sceneLater(player, scene, 4, () => sceneCamera(player, scene, [2961, 3369, 400], [2955, 3369, 180]));
     transitionFade(player, scene, 4); // 900 fade out, 904 fade in, 905 first line.
     pauseSceneAction(event, "burntof-master-of-explosives-rock-paper-scissors", 5);
   }
@@ -801,7 +801,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
     player.setUntargetable(true);
     scene.crew = [sceneActor(player, scene, NpcIdentifiers.CHECKAL_2, 2994, 3494), sceneActor(player, scene, NpcIdentifiers.BURNTOF_3, 2996, 3492),
       sceneActor(player, scene, NpcIdentifiers.WILLOW_2, 2997, 3494), sceneActor(player, scene, NpcIdentifiers.MARLEY_2, 2996, 3496)];
-    sceneCamera(player, scene, [2990, 3490, 600], [2997, 3494, 400]);
+    sceneLater(player, scene, 4, () => sceneCamera(player, scene, [2990, 3490, 600], [2997, 3494, 400]));
     transitionFade(player, scene, 4); // 1940 out, 1944 in, 1946 Willow.
     pauseSceneAction(event, ENTRANCE_VARIANT, 6);
   }
@@ -812,7 +812,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
     if (!scene) return false;
     event.handled = true;
     if (stepId === "tVCp4g") {
-      sceneCamera(player, scene, [2989, 3501, 700], [2997, 3494, 350]);
+      sceneLater(player, scene, 8, () => sceneCamera(player, scene, [2989, 3501, 700], [2997, 3494, 350]));
       player.getPacketSender().sendSound(4980, 1, 0);
       sceneLater(player, scene, 6, () => sceneFade(player, true, 15)); // 1953 run, 1959 fade, 1961 line.
       pauseSceneAction(event, ENTRANCE_VARIANT, 8);
@@ -823,7 +823,8 @@ module.exports = function registerBelowIceMountainQuest(api) {
     } else if (stepId === "Gu5UTk") {
       sceneRun(player, scene, 2991, 3501, 4);
       player.getPacketSender().sendSound(4973, 1, 0);
-      sceneLater(player, scene, 7, () => {
+      sceneLater(player, scene, 2, () => sceneCamera(player, scene, [2991, 3500, 800, 1, 1], [2997, 3494, 400]));
+      sceneLater(player, scene, 6, () => {
         player.getPacketSender().sendCameraShake(0, 75);
         scene.explosion = sourceObject(player, scene, EXPLOSION_OBJECT_ID, 2998, 3493);
       });
@@ -831,12 +832,14 @@ module.exports = function registerBelowIceMountainQuest(api) {
         if (scene.explosion) ObjectManager.deregister(scene.explosion, true);
       });
       transitionFade(player, scene, 16, 11); // 1977 run, 1988 out, 1993 in, 1995 line.
+      sceneLater(player, scene, 16, () => {
+        player.getPacketSender().sendCameraReset();
+        sceneCamera(player, scene, [2990, 3490, 600], [2997, 3494, 400]);
+      });
       pauseSceneAction(event, ENTRANCE_VARIANT, 18, () => {
         player.moveTo(scene.sourceTile(2996, 3496));
         sourceObject(player, scene, ObjectIdentifiers.RUINS_ENTRANCE_2, 2999, 3493, 1);
         scene.rubble = sourceObject(player, scene, ObjectIdentifiers.RUBBLE_52, 2998, 3493, 1);
-        player.getPacketSender().sendCameraReset();
-        sceneCamera(player, scene, [2990, 3490, 600], [2997, 3494, 400]);
       });
     } else if (stepId === "SISipN") {
       sceneLater(player, scene, 14, () => sceneFade(player, true, 15)); // 2002 work, 2016 fade, 2018 box.
@@ -854,7 +857,7 @@ module.exports = function registerBelowIceMountainQuest(api) {
       player.setNpcTransformationId?.(NpcIdentifiers.MARLEY_2);
       player.moveTo(scene.sourceTile(2952, 5763));
       scene.tripwires = [sourceObject(player, scene, ObjectIdentifiers.TRIPWIRE_4, 2952, 5766), sourceObject(player, scene, ObjectIdentifiers.TRIPWIRE_4, 2953, 5766)];
-      sceneCamera(player, scene, [2954, 5771, 500], [2952, 5764, 250]);
+      sceneLater(player, scene, 3, () => sceneCamera(player, scene, [2954, 5771, 500], [2952, 5764, 250]));
       transitionFade(player, scene, 3); // 2029 out, 2032 in, 2034 Marley.
       pauseSceneAction(event, ENTRANCE_VARIANT, 5);
     } else if (stepId === "_xHt7N") {
@@ -863,13 +866,11 @@ module.exports = function registerBelowIceMountainQuest(api) {
       pauseSceneAction(event, ENTRANCE_VARIANT, 1);
     } else if (stepId === "RDp8vn") {
       sceneRun(player, scene, 2952, 5767, 3);
-      sceneCamera(player, scene, [2954, 5773, 500, 1, 1], [2952, 5766, 250, 1, 1]);
       pauseSceneAction(event, ENTRANCE_VARIANT, 3);
     } else if (stepId === "9cN7I_") {
       const burntof = scene.crew?.[0];
       burntof?.getMovementQueue?.().addFirstStep(scene.sourceTile(2953, 5775));
       player.getPacketSender().sendSound(2400, 1, 0);
-      sceneCamera(player, scene, [2946, 5768, 700, 5, 5], [2953, 5774, 100, 5, 5]);
     } else if (stepId === "yEp2qP") {
       player.getPacketSender().sendCameraShake(0, 50);
       player.getPacketSender().sendSound(4988, 1, 0);
@@ -950,12 +951,12 @@ module.exports = function registerBelowIceMountainQuest(api) {
     if (event.camera) {
       const [x, y, height, rate, rate2] = event.camera;
       const tile = scene.sourceTile(x, y);
-      player.getPacketSender().sendCameraMoveTo(tile.getX(), tile.getY(), height, rate2 >= 100);
+      player.getPacketSender().sendCameraMoveTo(tile.getX(), tile.getY(), height, { rate, rate2 });
     }
     if (event.look) {
       const [x, y, height, rate, rate2] = event.look;
       const tile = scene.sourceTile(x, y);
-      player.getPacketSender().sendCameraLookAt(tile.getX(), tile.getY(), height, rate2 >= 100);
+      player.getPacketSender().sendCameraLookAt(tile.getX(), tile.getY(), height, { rate, rate2 });
     }
     if (event.line !== undefined) {
       const steps = require("../QuestRuntime").loadTranscripts(api)[PAGE].variants["checkal-the-strongman-talking-to-atlas"];
@@ -1015,6 +1016,29 @@ module.exports = function registerBelowIceMountainQuest(api) {
     const { player, npcId, text } = event;
     if (typeof text !== "string") return;
     const after = (action) => { event.after = action; };
+    const scene = storyScenes.get(player) ?? arenas.get(player);
+    if (scene) {
+      if (text === "Right, let's see what hidden surprises you have in store for me.") after(() => {
+        sceneCamera(player, scene, null, [2952, 5764, 250, 1, 1]);
+        sceneCamera(player, scene, [2954, 5772, 500, 1, 1]);
+      });
+      if (text === "That would have been nasty.") after(() => sceneLater(player, scene, 1, () => {
+        sceneCamera(player, scene, null, [2952, 5766, 250, 1, 1]);
+        sceneCamera(player, scene, [2954, 5773, 500, 1, 1]);
+      }));
+      if (text === "You're impressed? There's nothing here but dust and fallen rocks.") event.before = () => {
+        sceneLater(player, scene, 2, () => sceneCamera(player, scene, [2959, 5768, 800, 2, 2]));
+      };
+      if (text.startsWith("It's not about the money though, right?")) event.before = () => {
+        sceneCamera(player, scene, [2952, 5763, 800, 2, 2], [2952, 5773, 70, 1, 1]);
+      };
+      if (text === "What was that noise?") event.before = () => {
+        sceneCamera(player, scene, [2946, 5768, 700, 5, 5], [2953, 5774, 100, 5, 5]);
+      };
+      if (text === "What the!") after(() => sceneLater(player, scene, 1, () => {
+        sceneCamera(player, scene, [2955, 5772, 450, 2, 2], [2952, 5778, 250, 5, 5]);
+      }));
+    }
     if (npcId === WILLOW_NPC_ID) {
       if (text === "What happened?" && quest.getStage(player) === STAGE_STARTED && mainProgress(STAGE_STARTED, player) < 7) after(() => setMainProgress(player, 7));
       if (text.startsWith("I have no idea where he is these days") && quest.getStage(player) === STAGE_STARTED) after(() => setMainProgress(player, 10));
@@ -1065,14 +1089,14 @@ module.exports = function registerBelowIceMountainQuest(api) {
     }
     if (RAMARNO_NPC_IDS.has(npcId) && text === "Bless my beard..." && quest.getStage(player) === STAGE_GUARDIAN_DEAD) after(() => {
       const area = arenas.get(player);
-      transitionFade(player, area, 8, 3); // Continue 2245, out 2248, complete/in 2253.
+      transitionFade(player, area, 8, 3); // Resume 2245, out 2248, reset 2250, complete/in 2253.
+      sceneLater(player, area, 5, () => player.getPacketSender().sendCameraReset());
       TaskManager.submit(new CountdownTask(player, 8, () => {
         if (quest.getStage(player) !== STAGE_GUARDIAN_DEAD || player.getPrivateArea() !== area) return;
         moveTo(player, { x: 2950, y: 5769 });
         area?.destroy();
         player.getMovementQueue().setBlockMovement(false);
         player.setUntargetable(false);
-        player.getPacketSender().sendCameraReset();
         quest.complete(player);
       }));
     });
@@ -1223,7 +1247,8 @@ module.exports = function registerBelowIceMountainQuest(api) {
       player.setUntargetable(true);
       arena.crew = [sceneActor(player, arena, NpcIdentifiers.BURNTOF_3, 2950, 5772), sceneActor(player, arena, NpcIdentifiers.CHECKAL_2, 2956, 5770),
         sceneActor(player, arena, NpcIdentifiers.MARLEY_2, 2952, 5772), sceneActor(player, arena, NpcIdentifiers.WILLOW_2, 2953, 5771)];
-      sceneCamera(player, arena, [2952, 5761, 200], [2952, 5768, 50]);
+      sceneLater(player, arena, 3, () => sceneCamera(player, arena, [2952, 5761, 200], [2952, 5768, 50]));
+      sceneLater(player, arena, 5, () => sceneCamera(player, arena, [2952, 5763, 800, 2, 2], [2952, 5771, 50, 1, 1]));
       if (quest.getStage(player) === STAGE_RECRUITED) quest.setStage(player, STAGE_GUARDIAN);
       setMainProgress(player, 30);
       api.emitCustomEvent("music:unlock-track", { player, trackId: 691 });
@@ -1239,11 +1264,16 @@ module.exports = function registerBelowIceMountainQuest(api) {
         area.awakening = sceneActor(player, area, NpcIdentifiers.ANCIENT_GUARDIAN_2, 2952, 5778);
         area.awakening?.performAnimation?.(new Animation(8944));
         sceneCamera(player, area, [2948, 5771, 700, 1, 1], [2953, 5778, 100, 1, 1]);
+        player.getPacketSender().sendCameraShake(0, 5);
+        sceneLater(player, area, 2, () => {
+          player.getPacketSender().sendCameraReset();
+          sceneCamera(player, area, [2948, 5771, 700], [2952, 5778, 150, 2, 2]);
+        });
         player.getPacketSender().sendSound(4972, 1, 0);
       }
       setMainProgress(player, 35);
       if (!area) spawnGuardian(player);
-      pauseSceneAction(event, ENTRANCE_VARIANT, 2);
+      pauseSceneAction(event, ENTRANCE_VARIANT, 5);
       return;
     }
     if (stepId === ACTION_CUTSCENE_END) {
@@ -1273,7 +1303,13 @@ module.exports = function registerBelowIceMountainQuest(api) {
         sourceObject(player, area, ObjectIdentifiers.BIG_DOOR_6, 2954, 5780);
         sceneActor(player, area, NpcIdentifiers.RAMARNO, 2952, 5778);
       }
+      player.getPacketSender().sendCameraShake(0, 15);
+      sceneLater(player, area, 3, () => {
+        player.getPacketSender().sendCameraReset();
+        sceneCamera(player, area, [2955, 5772, 450], [2951, 5769, 300]);
+      });
       player.getPacketSender().sendSound(67, 1, 0);
+      pauseSceneAction(event, "finishing-up", 3);
       return;
     }
     if (stepId === ACTION_RAMARNO_DEPARTS) {
@@ -1368,6 +1404,8 @@ module.exports = function registerBelowIceMountainQuest(api) {
     player.setUntargetable(true);
     const area = arenas.get(player);
     transitionFade(player, area, 7, 1); // 2197 death, 2198 out, 2204 in, 2206 first line.
+    sceneLater(player, area, 6, () => player.getPacketSender().sendCameraReset());
+    sceneLater(player, area, 7, () => sceneCamera(player, area, [2957, 5777, 450], [2952, 5773, 300]));
     TaskManager.submit(new CountdownTask(player, 9, () => {
       if (quest.getStage(player) === STAGE_GUARDIAN_DEAD && player.getPrivateArea() === area) {
         startTranscript(api, player, RAMARNO_NPC_ID, PAGE, "finishing-up");

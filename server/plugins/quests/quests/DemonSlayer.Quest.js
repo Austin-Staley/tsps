@@ -1,6 +1,6 @@
 /** Demon Slayer. Capture evidence and remaining presentation gaps: docs/demon-slayer.md. */
 module.exports = function registerDemonSlayerQuest(api) {
-  const { Item, Location, World, Area, PrivateArea, Boundary, Animation, Graphic, Task, TaskManager, StatementDialogue, GameObject, ObjectManager, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const { Item, Location, World, Area, PrivateArea, Boundary, Animation, Graphic, NpcDialogue, DialogueChainBuilder, ActionDialogue, ForceMovement, ForceMovementTask, Task, TaskManager, StatementDialogue, GameObject, ObjectManager, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
   const { registerQuest, refreshQuestList, startTranscript, startDialogue } = require("../QuestRuntime");
 
   const ARIS_NPC_ID = NpcIdentifiers.ARIS;
@@ -24,6 +24,7 @@ module.exports = function registerDemonSlayerQuest(api) {
   const VARBIT_SUMMONING_SEEN = 2569;
   const DENATH_NPC_ID = NpcIdentifiers.DENATH_4;
   const WALLY_NPC_ID = NpcIdentifiers.WALLY;
+  const NPC_DIALOGUE_CONTINUE_UID = (231 << 16) | 5;
   const SUMMONERS = [
     [NpcIdentifiers.DARK_WIZARD_7, 3226, 3371], [NpcIdentifiers.DARK_WIZARD_8, 3229, 3371],
     [NpcIdentifiers.DARK_WIZARD_9, 3226, 3368], [DENATH_NPC_ID, 3229, 3368],
@@ -135,7 +136,7 @@ module.exports = function registerDemonSlayerQuest(api) {
         if (this.vision) endVision(mobile);
         else clearDemonEncounter(mobile);
         setSceneControls(mobile, false);
-        mobile.getPacketSender().sendCameraReset();
+        if (!this.vision) mobile.getPacketSender().sendCameraReset();
       }
       super.postLeave(mobile, logout);
     }
@@ -149,8 +150,8 @@ module.exports = function registerDemonSlayerQuest(api) {
     player.moveTo(new Location(3225, 3371, 0));
     player.setNpcTransformationId(WALLY_NPC_ID);
     setSceneControls(player, true);
-    player.getPacketSender().sendCameraMoveTo(3227, 3369, 300);
-    player.getPacketSender().sendCameraLookAt(3229, 3367, 250);
+    player.getPacketSender().sendCameraMoveTo(3227, 3369, 300, { rate: 232, rate2: 232 });
+    player.getPacketSender().sendCameraLookAt(3229, 3367, 250, { rate: 232, rate2: 232 });
     player.getPacketSender().sendCameraShake(1, 0, 10, 10);
     player.getPacketSender().sendCameraShake(3, 0, 90, 1);
     player.getPacketSender().sendSong(196);
@@ -163,6 +164,7 @@ module.exports = function registerDemonSlayerQuest(api) {
     TaskManager.cancelTasks(scene);
     if (scene.running !== undefined) player.setRunning(scene.running);
     player.setNpcTransformationId(-1);
+    player.setForceMovement(null);
     player.performAnimation(new Animation(-1));
     setSceneControls(player, false);
     player.getPacketSender().sendCameraReset();
@@ -443,6 +445,26 @@ module.exports = function registerDemonSlayerQuest(api) {
     return null;
   }
 
+  function visionTail(steps, text) {
+    for (let index = 0; index < steps.length; index++) {
+      if (steps[index].text === text) return steps.slice(index);
+      for (const option of steps[index].options ?? []) {
+        const tail = visionTail(option.steps ?? [], text);
+        if (tail) return tail;
+      }
+      if (steps[index].steps) {
+        const tail = visionTail(steps[index].steps, text);
+        if (tail) return tail;
+      }
+    }
+    return null;
+  }
+
+  function resumeVision(player, text) {
+    startTranscript(api, player, ARIS_NPC_ID, "Demon Slayer", "starting-demon-slayer",
+      (steps) => visionTail(steps, text));
+  }
+
   // The dump keeps wiki placeholders in a few spoken lines; render them.
   function renderDialogueLine(event) {
     const text = String(event.text || "");
@@ -452,43 +474,60 @@ module.exports = function registerDemonSlayerQuest(api) {
         const scene = visions.get(player);
         scene.running = player.isRunningReturn();
         player.moveTo(new Location(3225, 3363, 0));
-        later(scene, 1, () => {
-          player.setRunning(true);
-          player.getMovementQueue().setBlockMovement(false);
-          player.getMovementQueue().addSteps(new Location(3226, 3365, 0));
-          player.getMovementQueue().addSteps(new Location(3227, 3367, 0));
-        });
+        player.setRunning(true);
+        TaskManager.submit(new ForceMovementTask(player, 2, new ForceMovement(
+          new Location(3225, 3363, 0), new Location(2, 4, 0), 0, 60, 0, 824)));
+
         later(scene, 4, () => {
           player.getMovementQueue().setBlockMovement(true);
           player.performAnimation(new Animation(ANIMATION.wally));
         });
-        event.player.getPacketSender().sendCameraLookAt(3227, 3367, 100, false);
+        event.player.getPacketSender().sendCameraLookAt(3227, 3367, 200, { rate: 2, rate2: 10 });
+        event.player.getPacketSender().sendCameraLookAt(3227, 3367, 100, { rate: 1, rate2: 10 });
         event.player.getPacketSender().sendCameraShake(3, 0, 0, 0);
+        player.getDialogueManager().reset();
+        new NpcDialogue(0, WALLY_NPC_ID, text).send(player);
+        player.getPacketSender().sendString("", NPC_DIALOGUE_CONTINUE_UID).sendInterfaceFlagsRange(NPC_DIALOGUE_CONTINUE_UID, -1, -1, 0);
+        later(scene, 8, () => {
+          if (visions.get(player) === scene) resumeVision(player, "Now, what was that incantation again?");
+        });
       };
       if (text === "Now, what was that incantation again?") event.before = () => {
-        event.player.getPacketSender().sendCameraMoveTo(3227, 3369, 100, false);
+        event.player.getPacketSender().sendCameraMoveTo(3227, 3369, 100, { rate: 2, rate2: 10 });
         event.player.getPacketSender().sendCameraShake(1, 0, 10, 5);
         event.player.getPacketSender().sendCameraShake(3, 0, 2, 50);
+      };
+      if (text === "[word 1]... [word 2]... [word 3]... [word 4]... [word 5]!") event.after = () => {
+        const scene = visions.get(event.player);
+        event.player.getDialogueManager().reset();
+        StatementDialogue.send(event.player, "", false);
+        later(scene, 4, () => {
+          if (visions.get(event.player) === scene) resumeVision(event.player, "I am the greatest demon slayer EVER!");
+        });
       };
       if (text === "I am the greatest demon slayer EVER!") event.before = () => {
         event.player.performAnimation(new Animation(ANIMATION.sword));
         event.player.performGraphic(new Graphic(778));
         event.player.getPacketSender().sendCameraShake(1, 0, 0, 0);
         event.player.getPacketSender().sendCameraShake(3, 0, 0, 0);
-        event.player.getPacketSender().sendCameraMoveTo(3225, 3363, 500);
-        event.player.getPacketSender().sendCameraLookAt(3227, 3367, 200);
+        event.player.getPacketSender().sendCameraMoveTo(3225, 3363, 500, { rate: 232, rate2: 232 });
+        event.player.getPacketSender().sendCameraLookAt(3227, 3367, 200, { rate: 232, rate2: 232 });
       };
     }
     if (event.step?.speaker === "Dark wizards") event.speakerId = NpcIdentifiers.DARK_WIZARD_8;
     const fight = demonEncounters.get(event.player);
-    if (fight?.summoning && text.startsWith("I've got to get out of here")) event.after = () => {
-      fight.summoning = false;
-      for (const actor of fight.actors) actor.performAnimation(new Animation(-1));
-      if (fight.actors.at(-1)) api.removeNpc(fight.actors.pop());
-      event.player.getPacketSender().sendVarbit(VARBIT_SUMMONING_SEEN, 1);
-      event.player.getPacketSender().sendCameraReset();
-      setSceneControls(event.player, false);
-    };
+    if (fight?.summoning && text.startsWith("I've got to get out of here")) {
+      event.before = () => event.player.getPacketSender().sendCameraMoveTo(3226, 3383, 1000, { rate: 1, rate2: 1 });
+      event.after = () => {
+        fight.summoning = false;
+        TaskManager.cancelTasks(fight);
+        for (const actor of fight.actors) actor.performAnimation(new Animation(-1));
+        if (fight.actors.at(-1)) api.removeNpc(fight.actors.pop());
+        event.player.getPacketSender().sendVarbit(VARBIT_SUMMONING_SEEN, 1);
+        event.player.getPacketSender().sendCameraReset();
+        setSceneControls(event.player, false);
+      };
+    }
     if (event.npcId === TRAIBORN_NPC_ID && text.includes("[25-X]")) {
       const stage = quest.getStage(event.player);
       const remaining = Math.max(0, BONES_REQUIRED - (stage - STAGE_COLLECTING_BONES));
@@ -554,6 +593,16 @@ module.exports = function registerDemonSlayerQuest(api) {
     }
     if (stepId === "xjQ9zZ" && demonEncounters.get(player)?.summoning) {
       summonDelrith(player);
+      event.handled = true;
+      player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new ActionDialogue(0, {
+        execute: () => StatementDialogue.send(player, "The wizards cast an evil spell...", false),
+      })));
+      const fight = demonEncounters.get(player);
+      later(fight, 14, () => {
+        if (demonEncounters.get(player) === fight && fight.summoning) {
+          startTranscript(api, player, DENATH_NPC_ID, "Demon Slayer", "the-final-battle", (steps) => steps.slice(4));
+        }
+      });
       return;
     }
     if (stepId === ROVIN_KEY_MESSAGE_ID && ROVIN_NPC_IDS.has(npcId)) {
@@ -750,8 +799,9 @@ module.exports = function registerDemonSlayerQuest(api) {
       const actor = api.spawnNpc({ id, x, y, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
       if (actor) { arena.enter(actor); actor.performAnimation(new Animation(ANIMATION.chant)); fight.actors.push(actor); }
     }
-    player.getPacketSender().sendCameraMoveTo(3224, 3376, 475);
-    player.getPacketSender().sendCameraLookAt(3227, 3369, 300);
+    player.getPacketSender().sendCameraMoveTo(3224, 3376, 475, { rate: 232, rate2: 232 });
+    player.getPacketSender().sendCameraLookAt(3227, 3369, 300, { rate: 232, rate2: 232 });
+    player.getPacketSender().sendCameraMoveTo(3231, 3376, 475, { rate: 1, rate2: 1 });
     startTranscript(api, player, DENATH_NPC_ID, "Demon Slayer", "the-final-battle");
   }
 
@@ -765,18 +815,30 @@ module.exports = function registerDemonSlayerQuest(api) {
       later(tracked, 4, () => ObjectManager.register(new GameObject(ObjectIdentifiers.STONE_TABLE_4,
         new Location(3227, 3369, 0), 10, 0, tracked.arena), true));
     }
-    const npc = api.spawnNpc({ id: DELRITH_NPC_ID, x: 3227, y: 3369, z: 0,
-      wanderRadius: DELRITH_WANDER_RADIUS, owner: player, ownerOnly: true });
-    if (!npc) return;
-    if (tracked.arena) tracked.arena.enter(npc);
-    tracked.delrith = npc;
-    npc.performAnimation(new Animation(ANIMATION.summoned));
-    if (tracked.summoning) {
-      player.getPacketSender().sendCameraMoveTo(3227, 3365, 500);
-      player.getPacketSender().sendCameraLookAt(3227, 3369, 400, false);
-      player.getPacketSender().sendCameraShake(0, 15);
-      later(tracked, 2, () => player.getPacketSender().sendCameraShake(0, 0));
-    }
+    const spawn = () => {
+      if (demonEncounters.get(player) !== tracked || tracked.delrith || tracked.weakened) return;
+      const npc = api.spawnNpc({ id: DELRITH_NPC_ID, x: 3227, y: 3369, z: 0,
+        wanderRadius: DELRITH_WANDER_RADIUS, owner: player, ownerOnly: true });
+      if (!npc) return;
+      if (tracked.arena) tracked.arena.enter(npc);
+      tracked.delrith = npc;
+      npc.performAnimation(new Animation(ANIMATION.summoned));
+    };
+    if (!tracked.summoning) { spawn(); return; }
+    player.getPacketSender().sendCameraLookAt(3227, 3369, 100, { rate: 232, rate2: 232 });
+    player.getPacketSender().sendCameraMoveTo(3227, 3365, 500, { rate: 232, rate2: 232 });
+    later(tracked, 2, () => player.getPacketSender().sendCameraShake(0, 15));
+    later(tracked, 3, () => player.getPacketSender().sendCameraShake(0, 0));
+    later(tracked, 6, () => {
+      spawn();
+      player.getPacketSender().sendCameraLookAt(3227, 3369, 400, { rate: 1, rate2: 1 });
+    });
+    later(tracked, 12, () => tracked.delrith?.getMovementQueue().addSteps(new Location(3227, 3368, 0)));
+    later(tracked, 13, () => {
+      tracked.delrith?.getMovementQueue().addSteps(new Location(3227, 3367, 0));
+      player.getPacketSender().sendCameraMoveTo(3226, 3375, 500, { rate: 232, rate2: 232 });
+      player.getPacketSender().sendCameraLookAt(3227, 3367, 300, { rate: 232, rate2: 232 });
+    });
   }
 
   function spawnWeakenedDelrith(player, npc) {

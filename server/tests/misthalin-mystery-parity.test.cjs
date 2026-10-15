@@ -52,7 +52,7 @@ function harness(name) {
     talk(p, npcId) { const choice = hooks.onNpcDialogueVariant.map(fn => fn({ player: p, npcId })).find(Boolean); assert.ok(choice); runtime.startTranscript(api, p, npcId, typeof choice === 'string' ? 'Misthalin Mystery' : choice.page, typeof choice === 'string' ? choice : choice.variant); },
     tick(count) { while (count-- > 0) [...tasks].forEach(task => task.tick()); },
     choose(p, text) { const prompt = p.prompt; assert.ok(prompt, `no menu for ${text}`); const index = prompt.options.findIndex(label => label === text); assert.ok(index >= 0, `missing ${text} in ${prompt.options}`); p.prompt = null; prompt.pairs[index * 2 + 1](); },
-    continueUntil(p, predicate, limit = 80) { while (!predicate()) { assert.ok(limit-- > 0, `dialogue stalled at ${p.text}`); assert.ok(p.manager.getCurrent(), `dialogue ended at ${p.text}`); p.manager.advance(); } },
+    continueUntil(p, predicate, limit = 160) { while (!predicate()) { assert.ok(limit-- > 0, `dialogue stalled at ${p.text}`); const current=p.manager.getCurrent();assert.ok(current, `dialogue ended at ${p.text}`);if(current instanceof core.ActionDialogue)h.tick(1);else p.manager.advance(); } },
   }; return h;
 }
 function player() {
@@ -119,11 +119,35 @@ test('riddle notes open the captured parchment rather than chat spam',()=>{
 test('the owner island runs the complete Sid and Tayten murders before changing stages',()=>{
   const h=harness('MisthalinMystery'),p=player();const area=island(h,p,10);p.moveTo(new core.Location(1615,4828,0));area.process(p);assert.equal(h.quest.getStage(p),15);assert.equal(p.blocked,true);
   h.continueUntil(p,()=>h.quest.getStage(p)===20,120);assert.equal(area.scene,null);assert.equal(p.blocked,false);assert.ok(h.npcs.some(npc=>npc.animations.includes(7328)));
+  assert.equal(p.log.filter(row=>row[0]==='sendCameraReset').length,0);h.tick(2);assert.equal(p.log.filter(row=>row[0]==='sendCameraReset').length,0);h.tick(1);assert.equal(p.log.filter(row=>row[0]==='sendCameraReset').length,1);
+  assert.deepEqual(p.log.filter(row=>/^sendCamera(MoveTo|LookAt)$/.test(row[0])),[
+    ['sendCameraMoveTo',1614,4826,300,{rate:232,rate2:232,heightRelative:false}],['sendCameraLookAt',1616,4831,275,{rate:232,rate2:232,heightRelative:false}],
+    ['sendCameraMoveTo',1614,4826,300,{rate:10,rate2:15,heightRelative:false}],['sendCameraLookAt',1616,4831,275,{rate:20,rate2:20,heightRelative:false}],
+    ['sendCameraMoveTo',1618,4836,500,{rate:10,rate2:10,heightRelative:false}],['sendCameraLookAt',1615,4832,500,{rate:10,rate2:10,heightRelative:false}],
+  ]);
   h.quest.setStage(p,30);object(h,p,core.ObjectIdentifiers.DOOR_554,1635,4839);h.continueUntil(p,()=>h.quest.getStage(p)===35);assert.equal(area.scene,null);
+  assert.deepEqual(p.log.filter(row=>row[0]==='sendCameraMoveTo').at(-1),['sendCameraMoveTo',1634,4841,1250,{rate:232,rate2:232,heightRelative:false}]);
   assert.ok(h.npcs.every(npc=>npc.owner===p&&npc.ownerOnly));
 });
 test('Mandy kitchen directions do not abort the scene at imported unavailable markers',()=>{
   const h=harness('MisthalinMystery'),p=player();const area=island(h,p,85);object(h,p,core.ObjectIdentifiers.DOOR_560,1630,4840);h.continueUntil(p,()=>h.quest.getStage(p)===90);assert.equal(area.scene,null);assert.ok(p.log.some(row=>row[0]==='text'&&String(row[2]).includes('Another note')));
+  assert.deepEqual(p.log.filter(row=>row[0]==='sendCameraMoveTo'),[
+    ['sendCameraMoveTo',1634,4848,1400,{rate:232,rate2:232,heightRelative:false}],
+    ['sendCameraMoveTo',1622,4837,1400,{rate:10,rate2:10,heightRelative:false}],
+    ['sendCameraMoveTo',1634,4848,1400,{rate:10,rate2:10,heightRelative:false}],
+  ]);
+});
+test('Mandy camera pans wait for the actual continued scene actions and retain their captured gaps',()=>{
+  const h=harness('MisthalinMystery'),p=player();island(h,p,85);object(h,p,core.ObjectIdentifiers.DOOR_560,1630,4840);
+  h.tick(3);assert.equal(p.text,'');h.tick(1);assert.match(p.text,/clearing up/);
+  h.continueUntil(p,()=>p.text==='Ok, well, here I go!');const count=p.log.filter(row=>row[0]==='sendCameraMoveTo').length;
+  h.tick(20);assert.equal(p.log.filter(row=>row[0]==='sendCameraMoveTo').length,count,'reading time cannot advance the next camera');
+  p.manager.advance();assert.deepEqual(p.log.filter(row=>row[0]==='sendCameraMoveTo').at(-1).slice(1,4),[1622,4837,1400]);
+  h.tick(7);assert.equal(p.text,'');h.tick(1);assert.equal(p.text,'Hello, anyone out here?');
+  h.continueUntil(p,()=>p.text==='That psycho! He was just toying with her!');p.manager.advance();
+  h.tick(13);assert.deepEqual(p.log.filter(row=>row[0]==='sendCameraMoveTo').at(-1).slice(1,4),[1622,4837,1400]);
+  h.tick(1);assert.deepEqual(p.log.filter(row=>row[0]==='sendCameraMoveTo').at(-1).slice(1,4),[1634,4848,1400]);
+  h.tick(2);assert.match(p.text,/Another note/);
 });
 test('mirror pushing, shadow warnings and three correctly faced reflections unlock the actual confrontation',()=>{
   const h=harness('MisthalinMystery'),p=player(),area=island(h,p,110);object(h,p,core.ObjectIdentifiers.DOOR_561,1628,4827);h.continueUntil(p,()=>h.quest.getStage(p)===111);assert.equal(area.fighting,true);
@@ -134,6 +158,10 @@ test('mirror pushing, shadow warnings and three correctly faced reflections unlo
   assert.equal(area.reflections,3);assert.equal(h.quest.getStage(p),115);assert.equal(area.fighting,false);assert.equal(area.scene,'reveal');h.tick(2);const reaction=h.npcs.find(n=>n.id===7639);assert.equal(reaction.hitpoints,10);assert.equal(reaction.hits.length,3);assert.equal(mirror.transform,7640);
   assert.equal(h.ground.length,0,'the weapon only drops after the killers reveal themselves');
   h.continueUntil(p,()=>h.quest.getStage(p)===120,150);assert.equal(h.ground.length,1);assert.equal(h.ground[0][1].getId(),I.KILLERS_KNIFE_2);
+  assert.deepEqual(p.log.filter(row=>row[0]==='sendCameraMoveTo').at(-1),['sendCameraMoveTo',1622,4828,300,{rate:5,rate2:5,heightRelative:false}]);
+  assert.deepEqual(p.log.filter(row=>row[0]==='sendCameraLookAt').slice(-2),[
+    ['sendCameraLookAt',1627,4831,275,{rate:5,rate2:5,heightRelative:false}],['sendCameraLookAt',1624,4831,275,{rate:5,rate2:5,heightRelative:false}],
+  ]);
 });
 test('Abigale requires the equipped dropped knife, then Mandy rescues the player and rewards exactly once',()=>{
   const h=harness('MisthalinMystery'),p=player(),area=island(h,p,120);
@@ -141,6 +169,8 @@ test('Abigale requires the equipped dropped knife, then Mandy rescues the player
   p.items.set(I.KILLERS_KNIFE_2,1);h.npcActions.get('Abigale').Fight({player:p});h.continueUntil(p,()=>!p.manager.getCurrent());assert.equal(h.quest.getStage(p),120,'carrying it is not wielding it');
   p.items.set(I.KILLERS_KNIFE_2,0);p.weapon=I.KILLERS_KNIFE_2;h.npcActions.get('Abigale').Fight({player:p});h.continueUntil(p,()=>h.quest.getStage(p)===125);
   object(h,p,core.ObjectIdentifiers.DOOR_561,1628,4827);h.continueUntil(p,()=>h.quest.getStage(p)===130,120);assert.equal(p.weapon,null);assert.equal(area.scene,null);assert.ok(h.npcs.some(npc=>npc.animations.includes(7642)));h.tick(2);assert.ok(h.npcs.some(npc=>npc.transform===N.MANDY_3));
+  assert.deepEqual(p.log.filter(row=>row[0]==='sendCameraMoveTo').at(-1),['sendCameraMoveTo',1620,4826,1300,{rate:232,rate2:232,heightRelative:false}]);
+  assert.deepEqual(p.log.filter(row=>row[0]==='sendCameraLookAt').at(-1),['sendCameraLookAt',1626,4833,150,{rate:232,rate2:232,heightRelative:false}]);
   h.talk(p,N.MANDY_2);h.continueUntil(p,()=>h.quest.isComplete(p));assert.equal(p.attrs.get('quest.points'),1);assert.deepEqual(p.xp,[[core.Skill.CRAFTING.getIndex(),600]]);for(const id of [I.UNCUT_RUBY,I.UNCUT_EMERALD,I.UNCUT_SAPPHIRE])assert.equal(p.items.get(id),1);
 });
 test('all four Lacey answers continue through her murder and the next note',()=>{

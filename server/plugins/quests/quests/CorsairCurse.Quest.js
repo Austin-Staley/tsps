@@ -1,7 +1,7 @@
 /** The Corsair Curse. Capture evidence: docs/f2p-coastal-parity.md. */
 module.exports = function registerCorsairCurseQuest(api) {
   const {
-    GameObject, Area, PrivateArea, Boundary, Animation, Graphic, Task, TaskManager, MagicCombatMethod, CombatSpells, Projectile, StatementDialogue,
+    GameObject, Area, PrivateArea, Boundary, Animation, Graphic, Task, TaskManager, DialogueChainBuilder, ActionDialogue, MagicCombatMethod, CombatSpells, Projectile, StatementDialogue,
     ItemIdentifiers,
     Location,
     NpcIdentifiers,
@@ -765,6 +765,7 @@ module.exports = function registerCorsairCurseQuest(api) {
     if (model !== undefined) player.setNpcTransformationId(model);
     player.getMovementQueue().setBlockMovement(true); player.setUntargetable(true);
     player.getPacketSender().sendVarbit(6719, 2); player.getPacketSender().sendVarbit(12393, 1);
+    for(let axis=0;axis<5;axis++)player.getPacketSender().sendCameraShake(axis,0,0,0);
     return scene;
   }
 
@@ -775,14 +776,56 @@ module.exports = function registerCorsairCurseQuest(api) {
     player.setNpcTransformationId(scene.model); player.performAnimation(new Animation(-1));
     player.getMovementQueue().setBlockMovement(false); player.setUntargetable(false);
     player.getPacketSender().sendVarbit(6719, 0); player.getPacketSender().sendVarbit(12393, 0);
-    player.getPacketSender().sendCameraReset();
+    player.getPacketSender().sendCameraUnlock(false).sendCameraReset();
     if (player.getArea() === scene) scene.leave(player, false);
     player.moveTo(scene.returnTile); scene.destroy();
   }
 
-  function camera(player, x, y, height, tx, ty, th, instant = true) {
-    player.getPacketSender().sendCameraMoveTo(x, y, height, instant);
-    player.getPacketSender().sendCameraLookAt(tx, ty, th, instant);
+  function camera(player, x, y, height, tx, ty, th, rate = 232, rate2 = 100) {
+    const options={rate,rate2,heightRelative:false};
+    player.getPacketSender().sendCameraMoveTo(x, y, height, options);
+    player.getPacketSender().sendCameraLookAt(tx, ty, th, options);
+  }
+  function moveCamera(player,x,y,height,rate,rate2=rate) {
+    player.getPacketSender().sendCameraMoveTo(x,y,height,{rate,rate2,heightRelative:false});
+  }
+  function sceneTail(steps,anchor) {
+    for(let i=0;i<steps.length;i++) {
+      const step=steps[i];
+      if(step.id===anchor||step.text===anchor||step.player===anchor)return steps.slice(i+1);
+      for(const nested of [step.steps,...(step.options??[]).map(option=>option.steps)]) {
+        const result=nested&&sceneTail(nested,anchor);if(result)return result;
+      }
+    }
+    return null;
+  }
+  function freezeScene(player) {
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new ActionDialogue(0,{execute:()=>StatementDialogue.send(player,"",false)})));
+  }
+  function sceneSpeech(player,npcId,name,text) {
+    player.getPacketSender().sendChatboxInterface(231).sendNpcHeadOnInterface(npcId,(231<<16)|2).sendString(name,(231<<16)|4)
+      .sendString(text,(231<<16)|6).sendString("",(231<<16)|5).sendInterfaceFlagsRange((231<<16)|5,-1,-1,0);
+  }
+  function pauseScene(event,ticks) {
+    const {player}=event,scene=scenes.get(player),anchor=event.stepId??event.text;
+    freezeScene(player);
+    event.handled=true;
+    later(scene,ticks,()=>startTranscript(api,player,scene.kind==="colin"?COLIN:GNOCCI,PAGE,scene.kind==="colin"?"colin-s-curse-talking-to-colin":"gnocci-s-curse-talking-to-gnocci",steps=>sceneTail(steps,anchor)??[]));
+  }
+  function gnocciBurial(player) {
+    const scene=scenes.get(player);freezeScene(player);
+    sceneSpeech(player,GNOCCI,"Gnocci the Cook","She's moving!<br>SHE'S POSSESSED!<br>HELP!");
+    later(scene,8,()=>{
+      StatementDialogue.send(player,"",false);camera(player,2510,2835,350,2504,2840,200);
+      const doll=api.spawnNpc({id:DOLL,x:2505,y:2839,z:0,wanderRadius:0,owner:player,ownerOnly:true});if(doll)scene.enter(doll);
+    });
+    later(scene,10,()=>player.performAnimation(new Animation(830)));
+    const line="I buried Her in the sand, by that tree, to the west. But I still feel Her eyes staring into my soul. Please find Her, and kill the demon inside!";
+    later(scene,13,()=>sceneSpeech(player,GNOCCI,"Gnocci the Cook",line));
+    later(scene,18,()=>{
+      endScene(player);setCook(player,COOK_HEARD);
+      startTranscript(api,player,GNOCCI,PAGE,"gnocci-s-curse-talking-to-gnocci",steps=>sceneTail(steps,"OV-LNe")??[]);
+    });
   }
 
   function sceneAction(event) {
@@ -790,36 +833,46 @@ module.exports = function registerCorsairCurseQuest(api) {
     if (stepId === "Gsd1jQ") {
       beginScene(player, "colin", { x: 2528, y: 2841, z: 1 }, COLIN_2);
       camera(player, 2527, 2824, 700, 2527, 2839, 350);
+      const scene=scenes.get(player);later(scene,1,()=>moveCamera(player,2527,2828,700,1));
+      pauseScene(event,1);
     } else if (stepId === "p6ox6g") {
-      endScene(player); setCabinboy(player, CABINBOY_HEARD);
+      const scene=scenes.get(player);freezeScene(player);
+      later(scene,2,()=>{
+        endScene(player);setCabinboy(player,CABINBOY_HEARD);
+        startTranscript(api,player,COLIN,PAGE,"colin-s-curse-talking-to-colin",steps=>sceneTail(steps,"p6ox6g")??[]);
+      });
     } else if (stepId === "Cs_rhQ") {
       beginScene(player, "gnocci", { x: 2500, y: 2840, z: 0 }, GNOCCI_3);
       camera(player, 2499, 2833, 800, 2505, 2837, 200);
       player.performAnimation(new Animation(619));
+      const scene=scenes.get(player);later(scene,1,()=>moveCamera(player,2503,2830,280,3));
+      pauseScene(event,1);
     } else if (stepId === "OV-LNe") {
-      player.performAnimation(new Animation(830));
-      const scene = scenes.get(player);
-      const doll = api.spawnNpc({ id: DOLL, x: 2505, y: 2839, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
-      if (doll) scene.enter(doll);
-      player.getDialogueManager().reset();
-      later(scene, 6, () => {
-        endScene(player); setCook(player, COOK_HEARD);
-        startTranscript(api, player, GNOCCI, PAGE, "gnocci-s-curse-talking-to-gnocci", (steps) => steps[1].options[0].steps.slice(-1));
-      });
+      gnocciBurial(player);
     } else if (stepId === "36K07h") {
       player.performAnimation(new Animation(2171));
       beginScene(player, "telescope", { x: 2528, y: 2816, z: 0 });
       camera(player, 2528, 2821, 400, 2528, 2822, 300);
       const scene = scenes.get(player);
+      later(scene,1,()=>moveCamera(player,2528,2818,400,1));
       const ogre = api.spawnNpc({ id: NpcIdentifiers.BUGS_2, x: 2528, y: 2822, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
       if (ogre) scene.enter(ogre);
-      player.getDialogueManager().reset();
-      later(scene, 10, () => {
+      freezeScene(player);
+      later(scene,9,()=>player.getPacketSender().sendChatboxInterface(217).sendPlayerHeadOnInterface((217<<16)|2)
+        .sendString("That doesn't look anything like a mermaid. That's an ogre!",(217<<16)|6).sendString("",(217<<16)|5).sendInterfaceFlagsRange((217<<16)|5,-1,-1,0));
+      later(scene, 18, () => {
         endScene(player); setCabinboy(player, CABINBOY_TELESCOPE);
         startTranscript(api, player, ITHOI, PAGE, "colin-s-curse-using-ithoi-s-telescope", (steps) => steps.slice(2));
       });
     } else if (["rqXQdP", "Xub2Df", "gXvRex", "8whjhh"].includes(stepId) && scenes.get(player)?.kind === "colin") {
       player.performAnimation(new Animation(2171));
+      const scene=scenes.get(player);
+      if(stepId==="Xub2Df"){moveCamera(player,2523,2830,700,1);pauseScene(event,3);}
+      else {
+        const delay=stepId==="gXvRex"?2:3;
+        later(scene,delay,()=>camera(player,2523,2831,650,2540,2844,350));
+        pauseScene(event,stepId==="rqXQdP"?3:stepId==="gXvRex"?5:6);
+      }
     } else return false;
     event.handled = true;
     return true;
@@ -833,8 +886,9 @@ module.exports = function registerCorsairCurseQuest(api) {
       const scene = beginScene(player, "fire", { x: 2530, y: 2841, z: 1 });
       scene.returnTile = new Location(2529, 2838, 0);
       sendProgress(player); placeDriftwood(player, BURNING_DRIFTWOOD_OBJECT);
-      camera(player, 2529, 2835, 200, 2529, 2841, 170);
-      later(scene, 9, () => {
+      later(scene,3,()=>camera(player, 2529, 2835, 200, 2529, 2841, 170));
+      later(scene,4,()=>moveCamera(player,2529,2837,200,1));
+      later(scene, 10, () => {
         moveTo(player, { x: 2529, y: 2838, z: 0 });
         camera(player, 2531, 2841, 300, 2531, 2835, 240);
         const ithoi = api.spawnNpc({ id: ITHOI_2, x: 2529, y: 2833, z: 0, wanderRadius: 0, owner: player, ownerOnly: true });
@@ -847,7 +901,8 @@ module.exports = function registerCorsairCurseQuest(api) {
           placeDriftwood(player, WET_DRIFTWOOD_OBJECT);
         });
       });
-      later(scene, 23, () => {
+      later(scene,22,()=>moveCamera(player,2531,2840,300,1));
+      later(scene, 26, () => {
         endScene(player); advance(player, STAGE_PROVED);
         startTranscript(api, player, ITHOI, PAGE, "traitor-in-the-midst-attempting-to-light-the-the-driftwood-after-discovering-ithoi-s-lie", (steps) => steps.slice(-1));
       });
@@ -863,17 +918,18 @@ module.exports = function registerCorsairCurseQuest(api) {
     const { player, npcId } = event;
     if (!player || typeof event.text !== "string") return;
     const line = event.text;
-    if (TOCK_NPC_IDS.has(npcId) && line.startsWith("Now, I've a ship moored west of Rimmington.") && quest.getStage(player) === STAGE_STARTED) event.after = () => {
+    if (TOCK_NPC_IDS.has(npcId) && line.startsWith("Now, I've a ship moored west of Rimmington.")) { event.before = () => {
+      if(quest.getStage(player)!==STAGE_STARTED)return;
       const scene = beginScene(player, "ship", { x: 2918, y: 3231, z: 0 });
-      player.getDialogueManager().reset();
-      camera(player, 2943, 3224, 800, 2928, 3224, 100);
-      later(scene, 1, () => camera(player, 2926, 3224, 800, 2911, 3224, 100, false));
-      later(scene, 10, () => player.getPacketSender().sendCameraLookAt(2911, 3227, 100, false));
-      later(scene, 22, () => {
+      freezeScene(player);sceneSpeech(player,CAPTAIN_TOCK_START,"Captain Tock",line);
+      later(scene,2,()=>camera(player, 2943, 3224, 800, 2928, 3224, 100));
+      later(scene, 3, () => camera(player, 2926, 3224, 800, 2911, 3224, 100, 6, 0));
+      later(scene, 12, () => player.getPacketSender().sendCameraLookAt(2911, 3227, 100, {rate:1,rate2:0,heightRelative:false}));
+      later(scene, 23, () => {
         endScene(player);
-        startTranscript(api, player, CAPTAIN_TOCK_START, PAGE, "the-cursed-crew-talking-to-captain-tock", (steps) => steps[1].options[1].steps[4].options[0].steps.slice(3));
+        startTranscript(api, player, CAPTAIN_TOCK_START, PAGE, "the-cursed-crew-talking-to-captain-tock", (steps) => sceneTail(steps,line)??[]);
       });
-    };
+    }; return; }
     event.before = () => {
       const stage = quest.getStage(player);
       if (TOCK_NPC_IDS.has(npcId) && line === "Sure, I'll try to help with your curse." && stage === 0) {
@@ -896,11 +952,24 @@ module.exports = function registerCorsairCurseQuest(api) {
       const scene = scenes.get(player);
       if (scene?.kind === "telescope" && line.startsWith("That doesn't look anything like a mermaid.")) { endScene(player); setCabinboy(player, CABINBOY_TELESCOPE); }
       if (scene?.kind === "colin") {
-        if (line.startsWith("Eh?")) camera(player, 2523, 2831, 650, 2540, 2844, 350);
-        if (line.startsWith("Hello?") || line.startsWith("Can you hear me?")) camera(player, 2524, 2834, 400, 2540, 2839, 350);
-        if (line.startsWith("I can see you moving your arms")) camera(player, 2523, 2831, 650, 2540, 2844, 350);
+        if(line.startsWith("... yes, it's a mermaid!"))moveCamera(player,2523,2831,650,1);
+        if(line.startsWith("I hope she's not angry."))moveCamera(player,2516,2827,1300,2);
       }
-      if (scene?.kind === "gnocci" && line.startsWith("Ooh, what's this?")) { player.performAnimation(new Animation(4185)); camera(player, 2504, 2841, 220, 2505, 2835, 170); }
+      if (scene?.kind === "gnocci" && line.startsWith("Ooh, what's this?")) player.performAnimation(new Animation(4185));
+      if(scene?.kind==="gnocci"&&line.startsWith("She's moving!"))gnocciBurial(player);
+    };
+    const scene=scenes.get(player);
+    if(scene?.kind==="colin"&&line.startsWith("... yes, it's a mermaid!"))event.after=()=>{
+      pauseScene(event,2);later(scene,1,()=>camera(player,2524,2834,400,2540,2839,350));
+    };
+    if(scene?.kind==="colin"&&line.startsWith("I can see you moving your arms"))event.after=()=>{
+      pauseScene(event,6);later(scene,2,()=>camera(player,2524,2834,400,2540,2839,350));
+    };
+    if(scene?.kind==="gnocci"&&line.startsWith("Ooh, what's this?"))event.after=()=>{
+      moveCamera(player,2505,2839,220,1);pauseScene(event,2);
+    };
+    if(scene?.kind==="gnocci"&&line.startsWith("C'mon little lobsters. We don't want to keep the Captain"))event.after=()=>{
+      pauseScene(event,2);later(scene,1,()=>camera(player,2504,2841,220,2505,2835,170));
     };
   }
 

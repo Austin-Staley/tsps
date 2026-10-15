@@ -18,6 +18,8 @@ RSProx recording **3275** supplies the Vampyre route:
 - Basement stairs lead to 3077,9772,0. The coffin is 46237 at 3077,9775,0, shape 10, rotation 3. Clicking it animates loc 11208. Four ticks later NPC 3482 rises with animation 3114; nine ticks after the click, active Count 3481 appears at 3078,9774,0 with animation 3115, alongside open coffin 2615. The coffin returns to its closed appearance four ticks later.
 - Garlic's captured message is “The vampyre seems to weaken.” The successful finishing blow plays player animation 806, consumes the stake and advances varp 178 from 2 to 3. The reward is 3 quest points and 4,825 Attack XP. The player stays in the basement.
 
+The captured Cook's Assistant route (1718, cycles 7083–7095), Sheep Shearer route (1718, 7731–7741), and Vampyre Slayer route (3275, 21929–22225) have no scripted camera movement, look-at or shake packets. Their earlier/later camera packets belong to other content in those recordings. No extra quest camera is introduced.
+
 Raw recordings and account names are deliberately excluded.
 
 ## Implemented checks

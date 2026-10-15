@@ -23,6 +23,8 @@ Capture 1710 enters the weapons store with key 759, kills the weaponsmaster, the
 
 Using a certificate half on another player offers a Yes/No drop prompt. Accepting drops it for that player, with a notice to each participant. Combining opposite halves opens `You combine the two halves to make a complete certificate.` Reading full certificate 769 opens interface 526, text child 3, close child 4. King Roald takes the full certificate and awards 600 coins once.
 
+The captured Shield of Arrav route has no scripted camera movement or look-at packets. Recording 1710's later camera sequence belongs to other content, after this quest completes.
+
 ## Cache checks and implementation
 
 Revision 241 client script 1969 recognizes Phoenix varp 145 at 10 or Black Arm varp 146 at 4 as completed. NPC 5213 transforms into attackable Jonny 14139 at Phoenix state 8, with membership at state 9. These cache states are mapped separately from the plugin's existing saved internal stages. The old private Jonny copy is removed; the canonical NPC supplies the transformation and 8 Hitpoints.

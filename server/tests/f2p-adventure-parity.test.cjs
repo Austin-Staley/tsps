@@ -97,6 +97,7 @@ test('Ernest takes the parts, transforms privately over nine ticks, then rewards
   assert.equal(h.quest.getStage(p),2);assert.equal(p.items.get(I.COINS),undefined);
   h.continueUntil(p,()=>h.quest.isComplete(p));assert.equal(p.items.get(I.COINS),300);assert.equal(p.attrs.get('quest.points'),4);assert.equal(p.getArea(),null);
   assert.deepEqual(h.npcs.map(npc=>npc.id),[N.PROFESSOR_ODDENSTEIN,10556,N.ERNEST]);
+  assert.equal(p.log.filter(row => /sendCamera(MoveTo|LookAt)/.test(row[0])).length, 0, 'Ernest has no directed cameras in the captured route');
 });
 
 test('Ernest compost and poisoned fountain wait for the captured results; relog cancels pending messages', () => {
@@ -136,8 +137,14 @@ test('Dragon Slayer deposits Oracle offerings individually and repairs ship only
 test('Dragon Slayer sails through the private fire and crash sequence, then collects the head before returning to Oziach', () => {
   const h=harness('DragonSlayer'),p=player();h.quest.setStage(p,8);p.moveTo(new core.Location(3048,3207,1));
   h.action(p,N.CAPTAIN_NED,'1nn6tK');h.tick(20);assert.ok(p.getArea() instanceof core.TemplatedInstanceArea);assert.match(p.text,/salt spray/);
-  h.continueUntil(p,()=>p.text==='Oh, well. The weather had been so good up until now.');
+  h.continueUntil(p,()=>p.text==='Clouds surround the ship.');
   assert.ok(p.log.some(entry=>entry[0]==='sendSubInterface'&&entry[2]===543));
+  const stormShotCount = p.log.filter(row => /sendCamera(MoveTo|LookAt)/.test(row[0])).length;
+  h.tick(4); assert.equal(p.text, 'Clouds surround the ship.');
+  assert.equal(p.log.filter(row => /sendCamera(MoveTo|LookAt)/.test(row[0])).length, stormShotCount);
+  h.tick(1); assert.match(p.text, /Looks like there's a storm/);
+  assert.equal(p.log.filter(row => /sendCamera(MoveTo|LookAt)/.test(row[0])).length, stormShotCount + 3);
+  p.manager.advance(); assert.equal(p.text, 'Oh, well. The weather had been so good up until now.');
   p.manager.advance();assert.ok(p.log.some(entry=>entry[0]==='sendSubInterface'&&entry[2]===545));h.tick(1);assert.equal(p.text,'Did you see that?');
   p.manager.advance();p.manager.advance();p.manager.advance();h.tick(4);assert.equal(p.text,"It's the dragon!");
   p.manager.advance();assert.ok(p.log.some(entry=>entry[0]==='sendSubInterface'&&entry[2]===546));h.tick(9);assert.equal(p.text,"We're going to sink!");p.manager.advance();p.manager.advance();p.manager.advance();h.tick(4);assert.equal(h.quest.getStage(p),9);assert.equal(p.configs.get(176),8);h.tick(5);assert.equal(p.blocked,false);
@@ -226,4 +233,76 @@ test('Wormbrain cannot take10000coins when a full backpack cannot receive the ma
   const h=harness('DragonSlayer'),p=player();h.quest.setStage(p,2);p.full=true;p.items.set(I.COINS,10001);
   const action=h.action(p,N.WORMBRAIN,'I8YYjs');assert.equal(p.items.get(I.COINS),10001);assert.equal(p.items.get(I.MAP_PART_2),undefined);assert.equal(action.end,true);
   p.full=false;h.action(p,N.WORMBRAIN,'I8YYjs');assert.equal(p.items.get(I.COINS),1);assert.equal(p.items.get(I.MAP_PART_2),1);
+});
+
+
+test('Dragon Slayer replays captured camera commands in order, with dialogue-triggered pans and timed fire shots', () => {
+  const h = harness('DragonSlayer'), p = player();
+  h.quest.setStage(p, 8); p.moveTo(new core.Location(3048, 3207, 1));
+  h.action(p, N.CAPTAIN_NED, '1nn6tK'); h.tick(19);
+  assert.equal(p.log.filter(row => /sendCamera(MoveTo|LookAt)/.test(row[0])).length, 0);
+  h.tick(1);
+  const area = p.getArea(), origin = area.sourceTile(2056, 5504);
+  const directed = () => p.log.filter(row => /sendCamera(MoveTo|LookAt)/.test(row[0])).map(([kind, x, y, height, options]) =>
+    [kind, x - origin.getX() + 2056, y - origin.getY() + 5504, height, options]);
+  const shot = (kind, x, y, height, rate) => [kind, x, y, height, { rate, rate2: rate, heightRelative: false }];
+  assert.deepEqual(directed(), [shot('sendCameraLookAt', 2069, 5517, 25, 232), shot('sendCameraMoveTo', 2077, 5518, 100, 232), shot('sendCameraMoveTo', 2074, 5516, 100, 1)]);
+  assert.deepEqual(p.log.filter(row => row[0] === 'sendCameraShake').slice(0, 5), [0, 1, 2, 3, 4].map(axis => ['sendCameraShake', axis, 0]));
+  const line = text => { p.log.length = 0; h.line(p, N.CAPTAIN_NED, text).before(); return directed(); };
+  assert.deepEqual(line('And this is a mighty fine ship.'), [shot('sendCameraMoveTo', 2073, 5516, 100, 1), shot('sendCameraLookAt', 2066, 5517, 25, 1)]);
+  h.tick(30); assert.equal(directed().length, 2, 'waiting on a reply must not advance the next shot');
+  assert.deepEqual(line('How much longer until we reach Crandor?'), [shot('sendCameraMoveTo', 2069, 5513, 300, 1), shot('sendCameraLookAt', 2066, 5517, 100, 1)]);
+  assert.deepEqual(line("Looks like there's a storm coming up, cap'n."), [shot('sendCameraLookAt', 2064, 5520, 300, 232), shot('sendCameraMoveTo', 2074, 5525, 1500, 232), shot('sendCameraMoveTo', 2064, 5525, 1500, 1)]);
+  p.log.length = 0; h.action(p, N.CAPTAIN_NED, '1XD38w');
+  assert.deepEqual(directed(), [shot('sendCameraMoveTo', 2072, 5517, 300, 232), shot('sendCameraLookAt', 2062, 5515, 100, 232), shot('sendCameraMoveTo', 2072, 5520, 300, 1)]);
+  h.tick(4); p.log.length = 0; h.action(p, N.CAPTAIN_NED, '07qPBA'); h.tick(2); assert.equal(directed().length, 0);
+  h.tick(1); assert.deepEqual(directed(), [shot('sendCameraMoveTo', 2068, 5518, 300, 232), shot('sendCameraLookAt', 2062, 5518, 100, 232), shot('sendCameraMoveTo', 2074, 5526, 300, 1)]);
+  h.tick(6); assert.deepEqual(directed().slice(3), [shot('sendCameraMoveTo', 2074, 5526, 600, 232), shot('sendCameraLookAt', 2066, 5517, 100, 232), shot('sendCameraMoveTo', 2064, 5518, 400, 1)]);
+  assert.deepEqual(line("We're going to crash!"), [shot('sendCameraMoveTo', 2064, 5518, 400, 2)]);
+  p.log.length = 0; h.action(p, N.CAPTAIN_NED, '9r5-VW'); h.tick(2); assert.ok(!p.log.some(row => row[0] === 'sendCameraReset'));
+  h.tick(1); assert.equal(p.log.filter(row => row[0] === 'sendCameraReset').length, 1);
+  h.tick(1); assert.deepEqual(p.log.filter(row => /sendCamera(MoveTo|LookAt)/.test(row[0])), [shot('sendCameraMoveTo', 2854, 3241, 300, 232), shot('sendCameraLookAt', 2849, 3238, 200, 232)]);
+  h.tick(5); assert.deepEqual(p.log.filter(row => row[0] === 'sendCameraUnlock'), [['sendCameraUnlock', false]]);
+});
+
+test('Elvarg introduction uses both recorded shots and releases the camera only at tick twenty', () => {
+  const h = harness('DragonSlayer'), p = player(); h.quest.setStage(p, 9);
+  h.clicks.get(core.ObjectIdentifiers.HOLE_40)({ player: p });
+  h.tick(3); assert.equal(p.log.filter(row => /sendCamera(MoveTo|LookAt)/.test(row[0])).length, 0);
+  h.tick(1); const area = p.getArea(), origin = area.sourceTile(2816, 9600);
+  const directed = () => p.log.filter(row => /sendCamera(MoveTo|LookAt)/.test(row[0])).map(([kind, x, y, height, options]) =>
+    [kind, x - origin.getX() + 2816, y - origin.getY() + 9600, height, options]);
+  assert.deepEqual(directed(), [
+    ['sendCameraLookAt', 2856, 9650, 150, { rate: 232, rate2: 232, heightRelative: false }],
+    ['sendCameraMoveTo', 2848, 9639, 475, { rate: 232, rate2: 232, heightRelative: false }],
+  ]);
+  h.tick(3); assert.deepEqual(directed().slice(2), [
+    ['sendCameraLookAt', 2866, 9640, 150, { rate: 2, rate2: 2, heightRelative: false }],
+    ['sendCameraMoveTo', 2848, 9639, 250, { rate: 2, rate2: 2, heightRelative: false }],
+  ]);
+  h.tick(8); assert.ok(p.getArea(), 'private scene remains active through tick fifteen');
+  h.tick(1); assert.equal(p.getArea(), null, 'return teleport stays at captured tick sixteen');
+  assert.deepEqual(p.log.filter(row => row[0] === 'sendCameraTranslate'), [['sendCameraTranslate', 2816 - origin.getX(), 9600 - origin.getY()]]);
+  assert.equal(p.blocked, true);
+  const returnedAt = p.getLocation();
+  h.clicks.get(core.ObjectIdentifiers.HOLE_40)({ player: p });
+  h.clicks.get(core.ObjectIdentifiers.CLIMBING_ROPE_13)({ player: p });
+  h.clicks.get(core.ObjectIdentifiers.WALL_161)({ player: p });
+  assert.equal(p.getLocation(), returnedAt, 'repeat entrance/rope/wall clicks cannot replace the deferred release');
+  assert.equal(p.forceMovement, undefined);
+  assert.equal(p.attrs.get('dragon-slayer.shortcut'), undefined);
+  h.tick(3); assert.ok(!p.log.some(row => row[0] === 'sendCameraReset'));
+  h.tick(1); assert.deepEqual(p.log.filter(row => /sendCamera(Unlock|Reset)/.test(row[0])), [['sendCameraUnlock', false], ['sendCameraReset']]);
+  assert.equal(p.getArea(), null); assert.equal(p.blocked, false);
+});
+
+
+test('interrupting Elvarg introduction after the return cancels its delayed shot release and clears the camera', () => {
+  const h = harness('DragonSlayer'), p = player(); h.quest.setStage(p, 9);
+  h.clicks.get(core.ObjectIdentifiers.HOLE_40)({ player: p }); h.tick(16);
+  assert.equal(p.getArea(), null); assert.equal(p.blocked, true);
+  h.hooks.onPlayerLogout[0]({ player: p }); assert.equal(p.blocked, false);
+  const resetCount = p.log.filter(row => row[0] === 'sendCameraReset').length;
+  assert.equal(resetCount, 1); assert.deepEqual(p.log.filter(row => row[0] === 'sendCameraUnlock'), [['sendCameraUnlock', false]]);
+  h.tick(5); assert.equal(p.log.filter(row => row[0] === 'sendCameraReset').length, resetCount);
 });

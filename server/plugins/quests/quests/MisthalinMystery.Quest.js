@@ -1,6 +1,6 @@
 /** Misthalin Mystery: OSRS Wiki and supplied live capture. See docs/misthalin-mystery.md. */
 module.exports = function registerMisthalinMysteryQuest(api) {
-  const { Skill, Location, ObjectDefinition, PrivateArea, Boundary, Animation, Graphic, CountdownTask, TaskManager, GameObject, ObjectManager, Item, ItemOnGroundManager, Equipment, HitDamage, HitMask, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const { Skill, Location, ObjectDefinition, PrivateArea, Boundary, Animation, Graphic, CountdownTask, TaskManager, DialogueChainBuilder, ActionDialogue, StatementDialogue, GameObject, ObjectManager, Item, ItemOnGroundManager, Equipment, HitDamage, HitMask, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
   const { registerQuest, startTranscript, refreshQuestList } = require("../QuestRuntime");
   const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
 
@@ -208,12 +208,31 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   ];
   const WARDROBES = [[1622,4834,1],[1627,4831,2],[1624,4825,3],[1619,4828,0]];
   function later(key,ticks,fn) { TaskManager.submit(new CountdownTask(key,ticks,fn)); }
-  function controls(player,active) {
+  function controls(player,active,reset=true) {
     player.getMovementQueue().reset().setBlockMovement(active);player.setUntargetable(active);
     player.getPacketSender().sendVarbit(12393,active?1:0).sendVarbit(6719,active?2:0);
-    if(!active)player.getPacketSender().sendCameraReset();
+    if(!active&&reset)player.getPacketSender().sendCameraUnlock(false).sendCameraReset();
   }
-  function camera(player,position,look) {player.getPacketSender().sendCameraMoveTo(...position).sendCameraLookAt(...look);}
+  function camera(player,position,look,rate=232,rate2=rate) {
+    const options={rate,rate2,heightRelative:false};
+    if(position)player.getPacketSender().sendCameraMoveTo(...position,options);
+    if(look)player.getPacketSender().sendCameraLookAt(...look,options);
+  }
+  function freezeScene(player) {
+    player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new ActionDialogue(0,{execute:()=>StatementDialogue.send(player,"",false)})));
+  }
+  function playScene(player,area,anchor) {
+    const scene=SCENES[area.scene];
+    startTranscript(api,player,scene.npc,PAGE,scene.variant,steps=>{
+      const visible=steps.filter(step=>step.type!=="unavailable");
+      return anchor?visible.slice(visible.findIndex(step=>step.id===anchor||step.text===anchor||step.player===anchor)+1):visible;
+    });
+  }
+  function pauseScene(event,ticks) {
+    const {player}=event,area=island(player),name=area.scene,anchor=event.stepId??event.text;
+    freezeScene(player);event.handled=true;
+    later(area.cameraKey,ticks,()=>{if(area.scene===name)playScene(player,area,anchor);});
+  }
   class Manor extends PrivateArea {
     constructor(player){super([new Boundary(1600,1663,4792,4863,0)]);this.owner=player;this.actors=new Map();this.scene=null;this.fighting=false;this.reflections=0;this.pushing=false;}
     canTeleport(){return !this.scene&&!this.fighting;}
@@ -227,7 +246,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
       if(stage===STAGE_FUSE_LIT&&at.getX()<=1640&&!this.exploding)explodeWall(this);
     }
     postLeave(actor,logout){
-      if(actor===this.owner){TaskManager.cancelTasks(this);islands.delete(actor);const mandy=mandyByPlayer.get(actor);if(mandy)api.removeNpc(mandy);mandyByPlayer.delete(actor);controls(actor,false);actor.getPacketSender().sendInterfaceRemoval();}
+      if(actor===this.owner){TaskManager.cancelTasks(this);if(this.cameraKey)TaskManager.cancelTasks(this.cameraKey);if(this.resetKey)TaskManager.cancelTasks(this.resetKey);islands.delete(actor);const mandy=mandyByPlayer.get(actor);if(mandy)api.removeNpc(mandy);mandyByPlayer.delete(actor);controls(actor,false);actor.getPacketSender().sendInterfaceRemoval();}
       super.postLeave(actor,logout);
     }
     destroy(){if(this.isDestroyed())return;for(const npc of this.actors.values())api.removeNpc(npc);super.destroy();}
@@ -259,17 +278,19 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     ensureMandy(player);return area;
   }
   const SCENES={
-    sid:{variant:"arriving-to-the-manor-sid-s-demise",npc:NpcIdentifiers.SID,tile:[1615,4828],camera:[1614,4826,300],look:[1616,4831,275]},
-    tayten:{variant:"arriving-to-the-manor-tayten-s-demise",npc:NpcIdentifiers.TAYTEN,tile:[1635,4838],camera:[1636,4834,500],look:[1637,4838,250]},
+    sid:{variant:"arriving-to-the-manor-sid-s-demise",npc:NpcIdentifiers.SID,tile:[1615,4828],camera:[1614,4826,300],look:[1616,4831,275],delay:1},
+    tayten:{variant:"arriving-to-the-manor-tayten-s-demise",npc:NpcIdentifiers.TAYTEN,tile:[1635,4838],camera:[1634,4841,1250],look:[1637,4838,250],delay:12},
     lacey:{variant:"the-second-riddle-run-in-with-lacey",npc:LACEY_NPC_ID,tile:[1631,4849],camera:[1625,4847,375],look:[1632,4850,375]},
-    mandy:{variant:"the-third-riddle-mandy-in-the-kitchen",npc:NpcIdentifiers.MANDY,tile:[1630,4840],camera:[1622,4835,600],look:[1626,4840,250]},
-    intro:{variant:"showdown-confronting-the-killer",npc:NpcIdentifiers.KILLER,tile:[1625,4827],camera:[1619,4824,1250],look:[1623,4830,300]},
-    reveal:{variant:"showdown-defeating-the-killer",npc:NpcIdentifiers.KILLER,tile:[1622,4830],camera:[1619,4824,1250],look:[1623,4830,300]},
-    rescue:{variant:"showdown-leaving-the-manor",npc:NpcIdentifiers.MANDY,tile:[1625,4827],camera:[1619,4824,1250],look:[1623,4830,300]},
+    mandy:{variant:"the-third-riddle-mandy-in-the-kitchen",npc:NpcIdentifiers.MANDY,tile:[1630,4840],camera:[1634,4848,1400],look:[1627,4840,250],delay:4},
+    intro:{variant:"showdown-confronting-the-killer",npc:NpcIdentifiers.KILLER,tile:[1625,4827],camera:[1619,4824,1250],look:[1623,4830,300],delay:6},
+    reveal:{variant:"showdown-defeating-the-killer",npc:NpcIdentifiers.KILLER,tile:[1622,4830],camera:[1619,4824,1250],look:[1623,4830,300],delay:6},
+    rescue:{variant:"showdown-leaving-the-manor",npc:NpcIdentifiers.MANDY,tile:[1625,4827],camera:[1620,4826,1300],look:[1626,4833,150],delay:7},
   };
   function murderScene(player,name){
     const area=enterIsland(player);if(area.scene)return;
-    area.scene=name;controls(player,true);const scene=SCENES[name];
+    if(area.resetKey)TaskManager.cancelTasks(area.resetKey);
+    area.scene=name;area.cameraKey={};controls(player,true);const scene=SCENES[name];
+    for(let axis=0;axis<5;axis++)player.getPacketSender().sendCameraShake(axis,0,0,0);
     player.moveTo(new Location(...scene.tile,0));camera(player,scene.camera,scene.look);
     if(name==="sid")spawnActor(area,NpcIdentifiers.KILLER,NpcIdentifiers.KILLER,1616,4832);
     if(name==="tayten")spawnActor(area,NpcIdentifiers.KILLER,NpcIdentifiers.KILLER,1637,4836);
@@ -281,12 +302,16 @@ module.exports = function registerMisthalinMysteryQuest(api) {
       const reaction=area.actors.get(KNIFE_REACTION_NPC_ID);later(area,2,()=>{if(reaction)api.removeNpc(reaction);area.actors.delete(KNIFE_REACTION_NPC_ID);});
       spawnActor(area,NpcIdentifiers.KILLER,NpcIdentifiers.KILLER,1623,4831);
     }
-    startTranscript(api,player,scene.npc,PAGE,scene.variant,steps=>steps.filter(step=>step.type!=="unavailable"));
+    if(scene.delay){freezeScene(player);later(area.cameraKey,scene.delay,()=>playScene(player,area));}
+    else playScene(player,area);
   }
   function endMurder(player,stage){
     const area=island(player);if(!area)return;
+    const resetDelay={sid:3,tayten:2,lacey:2,mandy:2,intro:11,reveal:2,rescue:2}[area.scene];
+    if(area.cameraKey)TaskManager.cancelTasks(area.cameraKey);
     area.scene=null;if(stage!==undefined&&quest.getStage(player)<stage)quest.setStage(player,stage);
-    controls(player,false);
+    controls(player,false,false);
+    if(resetDelay){area.resetKey={};later(area.resetKey,resetDelay,()=>player.getPacketSender().sendCameraUnlock(false).sendCameraReset());}
     if(stage===STAGE_MANDY_WAITING){const actor=area.actors.get(NpcIdentifiers.MANDY);if(actor)api.removeNpc(actor);area.actors.delete(NpcIdentifiers.MANDY);ensureMandy(player);}
   }
   function wardrobe(area,where,open){ObjectManager.register(new GameObject(open?OPEN_WARDROBE_ID:CLOSED_WARDROBE_ID,new Location(where[0],where[1],0),10,where[2],area),true);}
@@ -363,6 +388,12 @@ module.exports = function registerMisthalinMysteryQuest(api) {
       const missing=3-freeSlots(player);event.text=text.replace("[3 more spaces/2 more spaces/another space]",missing===1?"another space":`${missing} more spaces`);
     }
     if(!area)return;
+    if(area.scene==="sid"&&text==="Woo, party on bro!")event.before=()=>{
+      camera(player,[1614,4826,300],null,10,15);camera(player,null,[1616,4831,275],20,20);
+    };
+    if(area.scene==="reveal"&&text==="What!? How!? There was another killer!?")event.after=()=>{
+      pauseScene(event,5);later(area.cameraKey,1,()=>camera(player,null,[1624,4831,275],5));
+    };
     const endings={sid:["I wonder what it was that I saw fall into that barrel?",STAGE_SID_DEAD],tayten:["What's this? A note? I guess I should read it.",STAGE_TAYTEN_DEAD],lacey:["That monster! I have to stop them! Let's see what that new note says.",STAGE_LACEY_DEAD],mandy:["Another note. This guy really likes playing games, but this is going to be a game he won't win!",STAGE_MANDY_DEAD]};
     const ending=endings[area.scene];if(ending&&text===ending[0])event.after=()=>endMurder(player,ending[1]);
     if(area.scene==="intro"&&text.startsWith("So, this is the end of the line for you."))event.after=()=>startMirrorFight(player);
@@ -373,9 +404,17 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     const area=island(event.player);if(!area)return false;
     const {player,stepId}=event;
     const killer=area.actors.get(NpcIdentifiers.KILLER),victim=area.actors.get(area.scene==="sid"?NpcIdentifiers.SID:area.scene==="tayten"?NpcIdentifiers.TAYTEN:area.scene==="lacey"?NpcIdentifiers.LACEY:NpcIdentifiers.MANDY);
+    if(stepId==="hRO-iS"){camera(player,[1618,4836,500],[1615,4832,500],10);pauseScene(event,4);return true;}
+    if(stepId==="juop9h"){camera(player,[1622,4837,1400],[1627,4840,250],10);pauseScene(event,8);return true;}
+    if(stepId==="Eh_VF5"){
+      pauseScene(event,16);later(area.cameraKey,14,()=>camera(player,[1634,4848,1400],[1627,4840,250],10));return true;
+    }
     if(["ScleeY","RXyM0R","HVer_D","8gRjEC","-ARK2C"].includes(stepId)){killer?.performAnimation(new Animation(7328));victim?.performAnimation(new Animation(836));}
     if(stepId==="EaQMnJ"){killer?.setNpcTransformationId(NpcIdentifiers.ABIGALE_2);area.actors.set(NpcIdentifiers.ABIGALE_3,killer);}
-    if(stepId==="ib3C6A")spawnActor(area,NpcIdentifiers.KILLER_2,NpcIdentifiers.KILLER_2,1625,4831);
+    if(stepId==="ib3C6A"){
+      spawnActor(area,NpcIdentifiers.KILLER_2,NpcIdentifiers.KILLER_2,1625,4831);
+      pauseScene(event,5);later(area.cameraKey,3,()=>camera(player,[1622,4828,300],[1627,4831,275],5));return true;
+    }
     if(stepId==="Zo5pdP")area.actors.get(NpcIdentifiers.KILLER_2)?.setNpcTransformationId(NpcIdentifiers.HEWEY_2);
     if(stepId==="8gRhnK"){killer?.performAnimation(new Animation(7328));area.actors.get(NpcIdentifiers.KILLER_2)?.performAnimation(new Animation(836));}
     if(stepId==="YSPZnz"){dropKillerKnife(player);killer?.setNpcTransformationId(NpcIdentifiers.ABIGALE_3);event.handled=true;return true;}

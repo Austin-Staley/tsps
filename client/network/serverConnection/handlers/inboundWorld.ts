@@ -1,5 +1,5 @@
 import { ClientState } from "../../../game/ClientState";
-import { sampleBridgeHeightForWorldTile } from "../../../game/scene/BridgeHeightSampler";
+import { sampleBridgeHeightForWorldTile, sampleCameraHeightForWorldTile } from "../../../game/scene/BridgeHeightSampler";
 import { interactionModes } from "../../../game/InteractionModes";
 import {
     VARP_AREA_SOUNDS_VOLUME,
@@ -79,9 +79,18 @@ export function handleInboundWorld(msg: any): boolean {
             if (!client?.camera || !payload) return true;
             if (payload.mode === "reset") {
                 client.followPlayerCamera = true;
+                client.camera.clearScriptedCamera();
                 client.camera.setScenePitchOverride(undefined);
                 client.camera.setViewPitchOverride(undefined);
                 client.renderer?.clearCameraShake?.();
+                return true;
+            }
+            if (payload.mode === "unlock") {
+                client.camera.setScriptedPitchUnlocked(payload.unlock === true);
+                return true;
+            }
+            if (payload.mode === "translate") {
+                client.camera.translateScriptedCamera(payload.dx, payload.dy);
                 return true;
             }
             // Camera packets carry global tile coordinates and height above that tile's
@@ -89,13 +98,29 @@ export function handleInboundWorld(msg: any): boolean {
             if (payload.mode === "move" || payload.mode === "look") {
                 const x = (Number(payload.x) || 0) + 0.5;
                 const z = (Number(payload.y) || 0) + 0.5;
+                const capturedRates = Number.isInteger(payload.rate) && Number.isInteger(payload.rate2);
+                client.followPlayerCamera = false;
+                if (capturedRates) {
+                    const packetHeight = client.camera.resolveScriptedHeight(payload.mode, payload.height, payload.heightRelative === true);
+                    const heightAt = (targetX: number, targetZ: number): number | undefined => {
+                        const controlledIndex = client.playerEcs?.getIndexForServerId?.(client.controlledPlayerServerId) ?? 0;
+                        const plane = client.playerEcs?.getLevel?.(controlledIndex) ?? 0;
+                        const ground = client.renderer?.mapManager
+                            ? sampleCameraHeightForWorldTile(client.renderer.mapManager, targetX, targetZ, plane)
+                            : undefined;
+                        return ground === undefined ? undefined : ground - packetHeight / 128;
+                    };
+                    if (payload.mode === "move") client.camera.setScriptedPosition(x, 0, z, payload.rate, payload.rate2, heightAt);
+                    else client.camera.setScriptedLook(x, 0, z, payload.rate, payload.rate2, heightAt);
+                    return true;
+                }
                 const controlledIndex = client.playerEcs?.getIndexForServerId?.(client.controlledPlayerServerId) ?? 0;
                 const plane = client.playerEcs?.getLevel?.(controlledIndex) ?? 0;
                 const ground = client.renderer?.mapManager
                     ? sampleBridgeHeightForWorldTile(client.renderer.mapManager, x, z, plane)
                     : undefined;
                 const height = (ground?.valid ? ground.height : 0) - (Number(payload.height) || 0) / 128;
-                client.followPlayerCamera = false;
+                client.camera.clearScriptedCamera();
                 // A first-person view override must not hide a scripted scene angle.
                 client.camera.setViewPitchOverride(undefined);
                 if (payload.mode === "move") {
@@ -115,7 +140,6 @@ export function handleInboundWorld(msg: any): boolean {
                 // Packet angles are scene angles, whereas snapToPitch/setTargetPitch
                 // accept the player's control range and remap it to 128..383.
                 client.camera.setViewPitchOverride(pitch);
-                // shortcut: eased camera motion uses existing smoothing; preserve OSRS rate fields when the protocol supports them.
                 if (payload.instant) {
                     client.camera.snapToYaw(yaw);
                 } else {

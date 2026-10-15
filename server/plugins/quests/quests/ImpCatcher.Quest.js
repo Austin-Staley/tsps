@@ -67,7 +67,7 @@ module.exports = function registerImpCatcherQuest(api) {
     player.getPacketSender().sendVarbit(12393,1);
     fade(player,true);
     player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new ActionDialogue(0, { execute: () => StatementDialogue.send(player,"You give four coloured beads to Wizard Mizgog.",false) })));
-    later(ritual,1,()=> player.getPacketSender().sendJingle(133,0).sendCameraLookAt(3103,3162,350).sendCameraMoveTo(3103,3161,775));
+    later(ritual,1,()=> player.getPacketSender().sendJingle(133,0).sendCameraLookAt(3103,3162,350,{rate:232,rate2:100,heightRelative:false}).sendCameraMoveTo(3103,3161,775,{rate:232,rate2:100,heightRelative:false}));
     later(ritual,2,()=>fade(player,false));
     later(ritual,5,()=> {
       const npc=casters.get(player) ?? World.getNpcsNear(player.getLocation(),16,player.getPrivateArea?.()??null).find(npc=>npc && isMizgog(npc.getId()));

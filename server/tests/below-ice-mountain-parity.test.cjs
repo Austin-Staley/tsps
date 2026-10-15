@@ -10,11 +10,12 @@ before(async () => {
 let nextIndex = 100;
 function setup() {
   const hooks = { custom: new Map(), variants: [], namedNpcs: new Map(), objects: [], items: [], logout: [] };
-  const tasks = [], spawned = [], removed = [], objects = [], projectiles = [], graphics = [];
+  const tasks = [], spawned = [], removed = [], objects = [], projectiles = [], graphics = [], cameras = [];
+  let tick = 0; const executed = new Set();
   const core = { ...PluginManager.getCoreApi(),
     CountdownTask: class { constructor(key, ticks, run) { Object.assign(this, { key, ticks, run }); } },
     ForceMovementTask: class { constructor(player, ticks, movement) { Object.assign(this, { ticks, run() { player.moveTo(new core.Location(movement.start.x + movement.end.x, movement.start.y + movement.end.y, 0)); } }); } },
-    TaskManager: { submit(task) { tasks.push(task); } },
+    TaskManager: { submit(task) { task.due = tick + task.ticks; tasks.push(task); } },
     ObjectManager: { register(object) { objects.push(object); }, deregister(object) { objects.splice(objects.indexOf(object), 1); object.getPrivateArea()?.detach(object); } },
   };
   const api = new Proxy({ core,
@@ -44,7 +45,12 @@ function setup() {
   const sender = new Proxy({ sendVarbit(id, value) { varbits.set(id, value); return sender; },
     sendCreationMenu(value) { menu = value; return sender; }, sendInterfaceRemoval() { current = null; return sender; },
     sendProjectile(...args) { projectiles.push(args); return sender; }, sendGraphic(...args) { graphics.push(args); return sender; },
-  }, { get(target, key) { return target[key] ?? (() => sender); } });
+  }, { get(target, key) { return target[key] ?? ((...args) => { if (String(key).startsWith("sendCamera")) {
+      if ((key === 'sendCameraMoveTo' || key === 'sendCameraLookAt') && area?.sourceTile) {
+        const origin = area.sourceTile(0, 0); args = [args[0] - origin.getX(), args[1] - origin.getY(), ...args.slice(2)];
+      }
+      cameras.push([tick, key, ...args]);
+    } return sender; }); } });
   const player = {
     getAttribute: key => attrs.get(key), setAttribute(key, value) { attrs.set(key, value); },
     getPacketSender: () => sender, getFrameUpdater: () => null, sendMessage(message) { messages.push(message); },
@@ -63,7 +69,7 @@ function setup() {
   const action = (npcId, stepId) => { const event = { player, npcId, stepId }; api.emitCustomEvent('npc-dialogue:action', event); return event; };
   const line = (npcId, text) => { const event = { player, npcId, text }; api.emitCustomEvent('npc-dialogue:line', event); return event; };
   return { api, hooks, core, quest, attrs, inventory, varbits, messages, animations, xp, player, tasks, spawned, removed, objects, projectiles, graphics,
-    emit, action, line, menu: () => menu, setMiningLevel(value) { miningLevel = value; } };
+    emit, action, line, cameras, tick(count) { while (count-- > 0) { tick++; for (const task of [...tasks]) if (!executed.has(task) && task.due <= tick) { executed.add(task); task.run(); } } }, menu: () => menu, setMiningLevel(value) { miningLevel = value; } };
 }
 const CHECKAL = 'quest.below_ice_mountain.checkal', MARLEY = 'quest.below_ice_mountain.marley';
 test('capture start/recruitment milestones preserve cache morphs and old saves', () => {
@@ -201,4 +207,122 @@ test('the bag shows coins before completion; Ramarno finishes and rewards exactl
   assert.equal(depart.steps[0].text, 'Ramarno departs for his workshop.');
   assert.equal(h.tasks.at(-1).ticks, 3); h.tasks.at(-1).run();
   assert.equal(h.varbits.get(12068), 1);
+});
+
+
+test('the complete workout camera track matches all captured targets, ticks and rates', () => {
+  const h = setup(); h.quest.setStage(h.player, 1); h.attrs.set(CHECKAL, 10);
+  h.action(h.core.NpcIdentifiers.ATLAS, '_RwWTk'); h.tick(205);
+  // Capture 1636, cycles 346–549, normalized out of the private instance.
+  assert.deepEqual(h.cameras, [
+    [1, "sendCameraMoveTo", 3253, 3399, 500, {"rate": 232, "rate2": 232}],
+    [1, "sendCameraLookAt", 3253, 3393, 350, {"rate": 232, "rate2": 232}],
+    [18, "sendCameraLookAt", 3255, 3407, 280, {"rate": 1, "rate2": 1}],
+    [20, "sendCameraMoveTo", 3244, 3410, 670, {"rate": 232, "rate2": 232}],
+    [20, "sendCameraLookAt", 3244, 3405, 250, {"rate": 232, "rate2": 232}],
+    [35, "sendCameraMoveTo", 3244, 3436, 430, {"rate": 3, "rate2": 3}],
+    [44, "sendCameraLookAt", 3244, 3426, 400, {"rate": 232, "rate2": 232}],
+    [44, "sendCameraMoveTo", 3253, 3426, 430, {"rate": 232, "rate2": 232}],
+    [45, "sendCameraLookAt", 3217, 3426, 400, {"rate": 3, "rate2": 3}],
+    [45, "sendCameraMoveTo", 3226, 3426, 430, {"rate": 3, "rate2": 3}],
+    [57, "sendCameraMoveTo", 3079, 3425, 300, {"rate": 232, "rate2": 232}],
+    [57, "sendCameraLookAt", 3075, 3423, 280, {"rate": 232, "rate2": 232}],
+    [77, "sendCameraMoveTo", 3078, 3431, 290, {"rate": 232, "rate2": 232}],
+    [77, "sendCameraLookAt", 3078, 3438, 280, {"rate": 232, "rate2": 232}],
+    [98, "sendCameraReset"],
+    [98, "sendCameraLookAt", 3069, 3422, 280, {"rate": 232, "rate2": 232}],
+    [98, "sendCameraMoveTo", 3069, 3411, 600, {"rate": 232, "rate2": 232}],
+    [103, "sendCameraLookAt", 3066, 3417, 280, {"rate": 2, "rate2": 2}],
+    [103, "sendCameraMoveTo", 3043, 3411, 400, {"rate": 3, "rate2": 3}],
+    [103, "sendCameraLookAt", 3066, 3417, 0, {"rate": 1, "rate2": 1}],
+    [104, "sendCameraLookAt", 3064, 3417, 0, {"rate": 1, "rate2": 1}],
+    [105, "sendCameraLookAt", 3062, 3417, 0, {"rate": 1, "rate2": 1}],
+    [106, "sendCameraLookAt", 3060, 3417, 0, {"rate": 1, "rate2": 1}],
+    [107, "sendCameraLookAt", 3058, 3417, 0, {"rate": 1, "rate2": 1}],
+    [108, "sendCameraLookAt", 3056, 3417, 0, {"rate": 1, "rate2": 1}],
+    [109, "sendCameraLookAt", 3054, 3417, 0, {"rate": 1, "rate2": 1}],
+    [110, "sendCameraLookAt", 3052, 3417, 0, {"rate": 1, "rate2": 1}],
+    [111, "sendCameraLookAt", 3050, 3417, 0, {"rate": 1, "rate2": 1}],
+    [112, "sendCameraLookAt", 3048, 3417, 0, {"rate": 1, "rate2": 1}],
+    [113, "sendCameraLookAt", 3046, 3417, 0, {"rate": 1, "rate2": 1}],
+    [114, "sendCameraLookAt", 3044, 3417, 0, {"rate": 1, "rate2": 1}],
+    [115, "sendCameraLookAt", 3039, 3417, 0, {"rate": 1, "rate2": 0}],
+    [117, "sendCameraMoveTo", 2993, 3427, 400, {"rate": 1, "rate2": 1}],
+    [120, "sendCameraMoveTo", 3033, 3432, 600, {"rate": 3, "rate2": 3}],
+    [120, "sendCameraLookAt", 3013, 3428, 0, {"rate": 1, "rate2": 0}],
+    [123, "sendCameraLookAt", 3000, 3432, 0, {"rate": 1, "rate2": 0}],
+    [131, "sendCameraMoveTo", 3079, 3425, 300, {"rate": 232, "rate2": 232}],
+    [131, "sendCameraLookAt", 3075, 3423, 280, {"rate": 232, "rate2": 232}],
+    [160, "sendCameraMoveTo", 3212, 3397, 300, {"rate": 232, "rate2": 232}],
+    [160, "sendCameraLookAt", 3212, 3392, 280, {"rate": 232, "rate2": 232}],
+    [160, "sendCameraMoveTo", 3212, 3417, 300, {"rate": 3, "rate2": 3}],
+    [160, "sendCameraLookAt", 3212, 3439, 280, {"rate": 3, "rate2": 0}],
+    [171, "sendCameraLookAt", 3211, 3440, 280, {"rate": 1, "rate2": 0}],
+    [171, "sendCameraMoveTo", 3212, 3417, 600, {"rate": 3, "rate2": 3}],
+    [176, "sendCameraLookAt", 3211, 3480, 280, {"rate": 1, "rate2": 0}],
+    [176, "sendCameraMoveTo", 3212, 3457, 600, {"rate": 3, "rate2": 3}],
+    [178, "sendCameraMoveTo", 3211, 3445, 500, {"rate": 232, "rate2": 232}],
+    [178, "sendCameraLookAt", 3211, 3439, 280, {"rate": 232, "rate2": 232}],
+    [183, "sendCameraMoveTo", 3211, 3440, 500, {"rate": 2, "rate2": 2}],
+    [183, "sendCameraLookAt", 3211, 3457, 400, {"rate": 232, "rate2": 232}],
+    [188, "sendCameraMoveTo", 3222, 3458, 700, {"rate": 3, "rate2": 3}],
+    [188, "sendCameraLookAt", 3211, 3471, 650, {"rate": 3, "rate2": 3}],
+    [204, "sendCameraMoveTo", 3079, 3425, 300, {"rate": 232, "rate2": 232}],
+    [204, "sendCameraLookAt", 3075, 3423, 280, {"rate": 232, "rate2": 232}],
+  ]);
+  h.hooks.logout[0]({ player: h.player });
+});
+
+test('Camdozaal camera changes follow each scene transition and dialogue cue', () => {
+  const h = setup(), N = h.core.NpcIdentifiers; h.quest.setStage(h.player, 2);
+  const camera = (method, x, y, height, rate = 232, rate2 = rate) => [method, x, y, height, { rate, rate2 }];
+  const latest = (count) => h.cameras.slice(-count).map(([, ...shot]) => shot);
+  h.action(N.WILLOW, 'fOQUgc'); h.tick(3); assert.equal(h.cameras.length, 0);
+  h.tick(1); assert.deepEqual(latest(2), [camera('sendCameraMoveTo', 2990, 3490, 600), camera('sendCameraLookAt', 2997, 3494, 400)]);
+  h.tick(9); h.action(N.WILLOW, 'tVCp4g'); h.tick(7); assert.equal(h.cameras.length, 2);
+  h.tick(1); assert.deepEqual(latest(2), [camera('sendCameraMoveTo', 2989, 3501, 700), camera('sendCameraLookAt', 2997, 3494, 350)]);
+  h.tick(16); h.action(N.WILLOW, 'Gu5UTk'); h.tick(2);
+  assert.deepEqual(latest(2), [camera('sendCameraMoveTo', 2991, 3500, 800, 1), camera('sendCameraLookAt', 2997, 3494, 400)]);
+  h.tick(4); assert.deepEqual(latest(1), [['sendCameraShake', 0, 75]]);
+  h.tick(10); assert.deepEqual(latest(3), [['sendCameraReset'], camera('sendCameraMoveTo', 2990, 3490, 600), camera('sendCameraLookAt', 2997, 3494, 400)]);
+  h.tick(2); h.action(N.WILLOW, 'JSFicf'); h.tick(3);
+  assert.deepEqual(latest(2), [camera('sendCameraMoveTo', 2954, 5771, 500), camera('sendCameraLookAt', 2952, 5764, 250)]);
+  h.line(N.WILLOW, "Right, let's see what hidden surprises you have in store for me.").after();
+  assert.deepEqual(latest(2), [camera('sendCameraLookAt', 2952, 5764, 250, 1), camera('sendCameraMoveTo', 2954, 5772, 500, 1)]);
+  h.line(N.WILLOW, 'That would have been nasty.').after(); h.tick(1);
+  assert.deepEqual(latest(2), [camera('sendCameraLookAt', 2952, 5766, 250, 1), camera('sendCameraMoveTo', 2954, 5773, 500, 1)]);
+  h.action(N.WILLOW, '1Pscfp'); h.tick(3);
+  assert.deepEqual(latest(2), [camera('sendCameraMoveTo', 2952, 5761, 200), camera('sendCameraLookAt', 2952, 5768, 50)]);
+  h.tick(2); assert.deepEqual(latest(2), [camera('sendCameraMoveTo', 2952, 5763, 800, 2), camera('sendCameraLookAt', 2952, 5771, 50, 1)]);
+  h.line(N.WILLOW, "You're impressed? There's nothing here but dust and fallen rocks.").before(); h.tick(2);
+  assert.deepEqual(latest(1), [camera('sendCameraMoveTo', 2959, 5768, 800, 2)]);
+  h.line(N.WILLOW, "It's not about the money though, right? We've potentially discovered the long lost ruins of an ancient civilisation!").before();
+  assert.deepEqual(latest(2), [camera('sendCameraMoveTo', 2952, 5763, 800, 2), camera('sendCameraLookAt', 2952, 5773, 70, 1)]);
+  h.line(N.WILLOW, 'What was that noise?').before();
+  assert.deepEqual(latest(2), [camera('sendCameraMoveTo', 2946, 5768, 700, 5), camera('sendCameraLookAt', 2953, 5774, 100, 5)]);
+  h.action(N.WILLOW, 'yEp2qP'); h.tick(4); assert.deepEqual(latest(1), [['sendCameraShake', 0, 20]]);
+  h.tick(5); assert.deepEqual(latest(1), [['sendCameraShake', 0, 5]]);
+  h.action(N.WILLOW, 'bxSVrN');
+  assert.deepEqual(latest(3), [['sendCameraReset'], camera('sendCameraMoveTo', 2946, 5768, 700), camera('sendCameraLookAt', 2953, 5774, 100)]);
+  h.action(N.WILLOW, 'wWX1Ws');
+  assert.deepEqual(latest(3), [camera('sendCameraMoveTo', 2948, 5771, 700, 1), camera('sendCameraLookAt', 2953, 5778, 100, 1), ['sendCameraShake', 0, 5]]);
+  h.tick(2); assert.deepEqual(latest(3), [['sendCameraReset'], camera('sendCameraMoveTo', 2948, 5771, 700), camera('sendCameraLookAt', 2952, 5778, 150, 2)]);
+  h.quest.setStage(h.player, 4); h.action(N.RAMARNO_2, 'zy3NHn');
+  assert.deepEqual(latest(2), [camera('sendCameraMoveTo', 2955, 5772, 450, 2), camera('sendCameraLookAt', 2951, 5769, 300, 2)]);
+  h.action(N.RAMARNO_2, 'D1Y7Rh'); assert.deepEqual(latest(1), [['sendCameraShake', 0, 15]]);
+  h.tick(3); assert.deepEqual(latest(3), [['sendCameraReset'], camera('sendCameraMoveTo', 2955, 5772, 450), camera('sendCameraLookAt', 2951, 5769, 300)]);
+  h.line(N.RAMARNO_2, 'What the!').after(); h.tick(1);
+  assert.deepEqual(latest(2), [camera('sendCameraMoveTo', 2955, 5772, 450, 2), camera('sendCameraLookAt', 2952, 5778, 250, 5)]);
+  h.hooks.logout[0]({ player: h.player });
+});
+
+
+test('Ramarno ending resets the camera five ticks after resume, before the reward at eight', () => {
+  const h = setup(), N = h.core.NpcIdentifiers;
+  h.quest.setStage(h.player, 4);
+  h.hooks.objects[0]({ player: h.player, objectId: h.core.ObjectIdentifiers.RUINS_ENTRANCE, clickType: 1 });
+  h.line(N.RAMARNO_2, 'Bless my beard...').after();
+  h.tick(4); assert.deepEqual(h.cameras, []); assert.equal(h.quest.getStage(h.player), 4);
+  h.tick(1); assert.deepEqual(h.cameras, [[5, 'sendCameraReset']]); assert.equal(h.quest.getStage(h.player), 4);
+  h.tick(3); assert.equal(h.quest.getStage(h.player), 5); assert.deepEqual(h.cameras, [[5, 'sendCameraReset']]);
 });

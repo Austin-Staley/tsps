@@ -289,6 +289,7 @@ module.exports = function registerBlackKnightsFortressQuest(api) {
           scenes.delete(player);
           player.setAttribute(SCENE_ATTRIBUTE, 0);
           controls(player, false);
+          player.getPacketSender().sendCameraUnlock(false).sendCameraReset();
           playVariant(api, player, FORTRESS_WITCH_NPC_ID, BKF_PAGE, V_CABBAGE_NORMAL,
             steps => steps.slice(steps.findIndex(step => String(step.text).startsWith("Meow!")) + 1));
         });
@@ -359,6 +360,7 @@ module.exports = function registerBlackKnightsFortressQuest(api) {
     scenes.set(player, state);
     player.setAttribute(SCENE_ATTRIBUTE, 1);
     controls(player, true);
+    for (let axis = 0; axis < 5; axis++) player.getPacketSender().sendCameraShake(axis, 0);
     player.performAnimation(new Animation(4553));
     const thrown = new Graphic(771); thrown.height = 96;
     player.performGraphic(thrown);
@@ -376,7 +378,7 @@ module.exports = function registerBlackKnightsFortressQuest(api) {
     });
     later(player, state, 10, () => {
       const at = state.area.sourceTile(3035, 3499), look = state.area.sourceTile(3032, 3505);
-      player.getPacketSender().sendCameraMoveTo(at.getX(), at.getY(), 1500, true).sendCameraLookAt(look.getX(), look.getY(), 300, true);
+      player.getPacketSender().sendCameraMoveTo(at.getX(), at.getY(), 1500, { rate: 100, rate2: 100, heightRelative: false }).sendCameraLookAt(look.getX(), look.getY(), 300, { rate: 100, rate2: 100, heightRelative: false });
     });
     for (const [tick, key, x, y] of [[19, "witch", 3030, 3508], [20, "witch", 3030, 3507], [22, "witch", 3030, 3508], [23, "witch", 3030, 3509], [28, "witch", 3030, 3508], [29, "witch", 3030, 3507], [30, "witch", 3030, 3506], [32, "witch", 3030, 3507], [33, "witch", 3030, 3508], [34, "witch", 3031, 3508], [38, "witch", 3030, 3508], [39, "witch", 3030, 3507], [45, "captain", 3029, 3510], [46, "captain", 3030, 3510], [53, "witch", 3030, 3506], [55, "witch", 3030, 3505], [56, "witch", 3029, 3505], [57, "witch", 3028, 3505], [58, "witch", 3027, 3505], [60, "captain", 3030, 3509], [61, "captain", 3030, 3508], [62, "captain", 3030, 3507], [63, "witch", 3028, 3505], [63, "captain", 3030, 3506], [64, "witch", 3029, 3505], [64, "captain", 3030, 3505], [66, "captain", 3031, 3505], [67, "witch", 3030, 3505], [68, "witch", 3030, 3504], [68, "captain", 3030, 3505], [69, "captain", 3031, 3505], [72, "captain", 3030, 3505], [73, "captain", 3029, 3505], [74, "captain", 3028, 3505], [75, "captain", 3027, 3505], [76, "captain", 3027, 3506], [77, "captain", 3027, 3507], [78, "witch", 3030, 3505], [79, "witch", 3030, 3506], [79, "captain", 3027, 3506], [80, "witch", 3030, 3507], [81, "witch", 3030, 3508], [82, "witch", 3031, 3508], [85, "captain", 3027, 3507]]) {
       later(player, state, tick, () => state[key]?.getMovementQueue().addFirstStep(state.area.sourceTile(x, y)));

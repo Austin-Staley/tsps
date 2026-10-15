@@ -237,7 +237,8 @@ module.exports = function registerDragonSlayerQuest(api) {
         scenes.delete(mobile); TaskManager.cancelTasks(this);
         for (const npc of this.actors) api.removeNpc(npc);
         mobile.getMovementQueue().setBlockMovement(false); mobile.setUntargetable(false);
-        mobile.getPacketSender().sendVarbit(6719, 0).sendVarbit(542, 0).sendVarbit(4606, 0).sendCameraReset().closeSubInterface(SCENE_OVERLAY_UID);
+        mobile.getPacketSender().sendVarbit(6719, 0).sendVarbit(542, 0).sendVarbit(4606, 0).closeSubInterface(SCENE_OVERLAY_UID);
+        if (!this.cameraReleased) mobile.getPacketSender().sendCameraUnlock(false).sendCameraReset();
         if (logout) mobile.moveTo(this.returnTile);
       }
       super.postLeave(mobile, logout);
@@ -247,19 +248,25 @@ module.exports = function registerDragonSlayerQuest(api) {
     const at = scene.sourceTile(x, y), npc = api.spawnNpc({ id, x: at.getX(), y: at.getY(), z: at.getZ(), owner: scene.owner, ownerOnly: true, wanderRadius: 0 });
     if (npc) { scene.enter(npc); scene.actors.push(npc); } return npc;
   }
-  function camera(player, scene, move, look, instant = true) {
-    const from = scene ? scene.sourceTile(move[0], move[1]) : new Location(move[0], move[1], 0);
-    const to = scene ? scene.sourceTile(look[0], look[1]) : new Location(look[0], look[1], 0);
-    player.getPacketSender().sendCameraMoveTo(from.getX(), from.getY(), move[2], instant).sendCameraLookAt(to.getX(), to.getY(), look[2], instant);
+  function camera(player, scene, move, look, rate = 232, lookFirst = false) {
+    const sender = player.getPacketSender(), options = { rate, rate2: rate, heightRelative: false };
+    const from = move && (scene ? scene.sourceTile(move[0], move[1]) : new Location(move[0], move[1], 0));
+    const to = look && (scene ? scene.sourceTile(look[0], look[1]) : new Location(look[0], look[1], 0));
+    if (lookFirst && look) sender.sendCameraLookAt(to.getX(), to.getY(), look[2], options);
+    if (move) sender.sendCameraMoveTo(from.getX(), from.getY(), move[2], options);
+    if (!lookFirst && look) sender.sendCameraLookAt(to.getX(), to.getY(), look[2], options);
   }
   function voyageContinue(player, anchor) {
     startTranscript(api, player, NED_SCENE_ID, PAGE, VOYAGE, steps => steps.slice(steps.findIndex(step => step.id === anchor) + 1));
   }
   function beginVoyage(player) {
-    if (quest.getStage(player) !== STAGE_NED_READY || scenes.has(player)) return;
+    if (quest.getStage(player) !== STAGE_NED_READY || scenes.has(player) || actions.has(player)) return;
     const scene = new VoyageScene(player); scenes.set(player, scene); freeze(player); fade(player, true);
     player.getPacketSender().sendVarbit(6719, 2).sendVarbit(542, 1).sendVarbit(4606, 1);
-    later(scene, 2, () => player.getPacketSender().sendInterface(SCENE_INTERFACE.journey).sendClientScript(1131, 3).sendSong(147).sendJingle(172, 0));
+    later(scene, 2, () => {
+      for (let axis = 0; axis < 5; axis++) player.getPacketSender().sendCameraShake(axis, 0);
+      player.getPacketSender().sendInterface(SCENE_INTERFACE.journey).sendClientScript(1131, 3).sendSong(147).sendJingle(172, 0);
+    });
     later(scene, 14, () => player.getPacketSender().sendInterface(SCENE_INTERFACE.route));
     later(scene, 20, () => {
       player.moveTo(scene.sourceTile(2067, 5517)); scene.enter(player);
@@ -282,8 +289,10 @@ module.exports = function registerDragonSlayerQuest(api) {
     const {player, stepId} = event, scene = scenes.get(player);
     if (!(scene instanceof VoyageScene)) return;
     if (stepId === "m7RQ3q") {
+      event.handled = true; event.end = true; freeze(player);
+      StatementDialogue.send(player, "Clouds surround the ship.", false);
       player.getPacketSender().sendSubInterface(SCENE_OVERLAY_UID, SCENE_INTERFACE.clouds, 1).sendSong(360).sendSoundEffect(3762, 1, 0);
-      event.box = {statement:true}; return;
+      later(scene, 5, () => voyageContinue(player, stepId)); return;
     }
     if (stepId === "yVgKdy") {
       event.handled = true; event.end = true; freeze(player);
@@ -294,7 +303,7 @@ module.exports = function registerDragonSlayerQuest(api) {
       event.handled = true; event.end = true; freeze(player);
       player.getPacketSender().sendSoundEffect(3750, 1, 0);
       camera(player, scene, [2072, 5517, 300], [2062, 5515, 100]);
-      camera(player, scene, [2072, 5520, 300], [2062, 5515, 100], false);
+      camera(player, scene, [2072, 5520, 300], null, 1);
       for (const [from, to, delay] of [[[2076, 5526], [2065, 5516], 0], [[2073, 5526], [2064, 5516], 30], [[2078, 5526], [2063, 5516], 60]]) fireAt(scene, from, to, delay);
       later(scene, 2, () => { scene.ned?.performAnimation(new Animation(2105)); scene.jenkins?.performAnimation(new Animation(4280)); });
       for (let i = 0; i < 3; i++) later(scene, 2 + i, () => sceneFire(scene, FIRE_SMALL, 2065 - i, 5516));
@@ -307,7 +316,7 @@ module.exports = function registerDragonSlayerQuest(api) {
       later(scene, 1, () => { sceneFire(scene, FIRE_LARGE, 2060, 5516, 2); sceneFire(scene, FIRE_SMALL, 2061, 5518, 2); });
       later(scene, 3, () => {
         player.getPacketSender().closeSubInterface(SCENE_OVERLAY_UID);
-        camera(player, scene, [2068, 5518, 300], [2062, 5518, 100]); camera(player, scene, [2074, 5526, 300], [2062, 5518, 100], false);
+        camera(player, scene, [2068, 5518, 300], [2062, 5518, 100]); camera(player, scene, [2074, 5526, 300], null, 1);
         player.getPacketSender().sendCameraShake(1, 0, 5, 8); scene.jenkins?.moveTo(scene.sourceTile(2066, 5518));
         sceneFire(scene, FIRE_LARGE, 2064, 5516);
         for (let i = 0; i < 5; i++) fireAt(scene, [2057 + i * 3, 5522], [2063 + i, 5518], i * 30);
@@ -320,6 +329,7 @@ module.exports = function registerDragonSlayerQuest(api) {
     if (stepId === "9r5-VW") {
       event.handled = true; event.end = true; freeze(player);
       player.getPacketSender().sendCameraShake(0, 20).sendSoundEffect(3742, 1, 0); StatementDialogue.send(player, "<col=800000>CRASH!", false); fade(player, true);
+      later(scene, 3, () => { scene.cameraReleased = true; player.getPacketSender().sendCameraReset(); });
       later(scene, 4, () => {
         scene.returnTile = new Location(2852, 3238, 0); scene.leave(player, false); player.moveTo(scene.returnTile);
         quest.setStage(player, STAGE_CRANDOR); syncState({player});
@@ -327,7 +337,7 @@ module.exports = function registerDragonSlayerQuest(api) {
         camera(player, null, [2854, 3241, 300], [2849, 3238, 200]); fade(player, false);
         StatementDialogue.send(player, "You are knocked unconscious and later awake on an ash-strewn<br>beach.", false);
         const token = {}; actions.set(player, token);
-        later(token, 5, () => { actions.delete(player); player.getMovementQueue().setBlockMovement(false); player.setUntargetable(false); player.getPacketSender().sendCameraReset().sendInterfaceRemoval().closeSubInterface(SCENE_OVERLAY_UID).sendSong(170); });
+        later(token, 5, () => { if (actions.get(player) !== token) return; actions.delete(player); player.getMovementQueue().setBlockMovement(false); player.setUntargetable(false); player.getPacketSender().sendCameraUnlock(false).sendCameraReset().sendInterfaceRemoval().closeSubInterface(SCENE_OVERLAY_UID).sendSong(170); });
       });
     }
   }
@@ -339,7 +349,10 @@ module.exports = function registerDragonSlayerQuest(api) {
       else { TaskManager.cancelTasks(scene); scene.destroy(); scenes.delete(player); }
     }
     const token = actions.get(player);
-    if (token) { TaskManager.cancelTasks(token); actions.delete(player); }
+    if (token) {
+      TaskManager.cancelTasks(token); actions.delete(player);
+      player.getPacketSender().sendCameraUnlock(false).sendCameraReset().closeSubInterface(SCENE_OVERLAY_UID);
+    }
     player.setForceMovement(null);
     player.getMovementQueue().setBlockMovement(false); player.setUntargetable(false);
   }
@@ -376,15 +389,15 @@ module.exports = function registerDragonSlayerQuest(api) {
     if (request.speaker === "Cabin Boy Jenkins") request.speakerId = JENKINS_SCENE_ID;
     else if (request.speaker === "Captain Ned") request.speakerId = NED_SCENE_ID;
     if (text.startsWith("Ah, it's good to feel")) request.before = () => {
-      camera(player, scene, [2077, 5518, 100], [2069, 5517, 25]); camera(player, scene, [2074, 5516, 100], [2069, 5517, 25], false); player.getPacketSender().sendCameraShake(1, 0, 10, 8);
+      camera(player, scene, [2077, 5518, 100], [2069, 5517, 25], 232, true); camera(player, scene, [2074, 5516, 100], null, 1); player.getPacketSender().sendCameraShake(1, 0, 10, 8);
     };
-    if (text.startsWith("And this is a mighty")) request.before = () => camera(player, scene, [2073, 5516, 100], [2066, 5517, 25], false);
-    if (text.startsWith("How much longer")) request.before = () => camera(player, scene, [2069, 5513, 300], [2066, 5517, 100], false);
+    if (text.startsWith("And this is a mighty")) request.before = () => camera(player, scene, [2073, 5516, 100], [2066, 5517, 25], 1);
+    if (text.startsWith("How much longer")) request.before = () => camera(player, scene, [2069, 5513, 300], [2066, 5517, 100], 1);
     if (text.startsWith("Looks like there's a storm")) request.before = () => {
-      player.getPacketSender().closeSubInterface(SCENE_OVERLAY_UID).sendCameraShake(1, 0); camera(player, scene, [2074, 5525, 1500], [2064, 5520, 300]); camera(player, scene, [2064, 5525, 1500], [2064, 5520, 300], false);
+      player.getPacketSender().sendCameraShake(1, 0); camera(player, scene, [2074, 5525, 1500], [2064, 5520, 300], 232, true); camera(player, scene, [2064, 5525, 1500], null, 1); player.getPacketSender().closeSubInterface(SCENE_OVERLAY_UID);
     };
-    if (text === "We're going to sink!") request.before = () => { camera(player, scene, [2074, 5526, 600], [2066, 5517, 100]); camera(player, scene, [2064, 5518, 400], [2066, 5517, 100], false); player.getPacketSender().sendCameraShake(1, 0, 10, 8); };
-    if (text === "We're going to crash!") request.before = () => camera(player, scene, [2064, 5518, 400], [2066, 5517, 100], false);
+    if (text === "We're going to sink!") request.before = () => { camera(player, scene, [2074, 5526, 600], [2066, 5517, 100]); camera(player, scene, [2064, 5518, 400], null, 1); player.getPacketSender().sendCameraShake(1, 0, 10, 8); };
+    if (text === "We're going to crash!") request.before = () => camera(player, scene, [2064, 5518, 400], null, 2);
   }
 
   // ============================================================================
@@ -820,21 +833,29 @@ module.exports = function registerDragonSlayerQuest(api) {
   }
 
   function handleCrandorOpeningClick({player}) {
+    if (scenes.has(player) || actions.has(player)) return;
     if (saved(player, ELVARG_SEEN_ATTRIBUTE)) { player.moveTo(TILE.crandorLair.clone()); return; }
-    if (scenes.has(player)) return;
     const scene = new VoyageScene(player, true); scene.returnTile = TILE.crandorLair.clone(); scenes.set(player, scene);
     freeze(player); fade(player, true); player.getPacketSender().sendVarbit(6719, 2).sendVarbit(542, 1);
+    for (let axis = 0; axis < 5; axis++) player.getPacketSender().sendCameraShake(axis, 0);
     later(scene, 4, () => {
       player.moveTo(scene.sourceTile(2833, 9656)); scene.enter(player); sceneActor(scene, ELVARG_INTRO_NPC_ID, 2854, 9638);
-      camera(player, scene, [2848, 9639, 475], [2856, 9650, 150]); fade(player, false);
+      camera(player, scene, [2848, 9639, 475], [2856, 9650, 150], 232, true); fade(player, false);
     });
-    later(scene, 7, () => camera(player, scene, [2848, 9639, 250], [2866, 9640, 150], false));
+    later(scene, 7, () => camera(player, scene, [2848, 9639, 250], [2866, 9640, 150], 2, true));
     later(scene, 13, () => fade(player, true));
     later(scene, 16, () => {
+      scene.cameraReleased = true;
+      player.getPacketSender().sendCameraTranslate(2816 - scene.getBaseX(), 9600 - scene.getBaseY());
       player.setAttribute(ELVARG_SEEN_ATTRIBUTE, 1); scene.leave(player, false); player.moveTo(scene.returnTile);
-      player.getMovementQueue().setBlockMovement(true); player.setUntargetable(true); fade(player, false);
+      player.getMovementQueue().setBlockMovement(true); player.setUntargetable(true);
       const token = {}; actions.set(player, token);
-      later(token, 4, () => { actions.delete(player); player.getMovementQueue().setBlockMovement(false); player.setUntargetable(false); player.getPacketSender().sendCameraReset().sendInterfaceRemoval().closeSubInterface(SCENE_OVERLAY_UID); });
+      later(token, 1, () => { if (actions.get(player) === token) fade(player, false); });
+      later(token, 4, () => {
+        if (actions.get(player) !== token) return;
+        actions.delete(player); player.getMovementQueue().setBlockMovement(false); player.setUntargetable(false);
+        player.getPacketSender().sendCameraUnlock(false).sendCameraReset().sendInterfaceRemoval().closeSubInterface(SCENE_OVERLAY_UID);
+      });
     });
   }
 
@@ -844,6 +865,7 @@ module.exports = function registerDragonSlayerQuest(api) {
    * on decides the destination (the generic ladder map link guessed the empty plane 1).
    */
   function climbCrandorRope(player) {
+    if (scenes.has(player) || actions.has(player)) return;
     player.setAttribute(ATTR_SHORTCUT, true);
     const inLair = player.getLocation().getY() >= 6400;
     player.moveTo((inLair ? TILE.crandorSurface : TILE.crandorLair).clone());
@@ -863,7 +885,7 @@ module.exports = function registerDragonSlayerQuest(api) {
   /** The low wall between the entrance rope and Elvarg's chamber. */
   function handleCrandorWallClick(event) {
     const { player } = event;
-    if (actions.has(player)) return;
+    if (scenes.has(player) || actions.has(player)) return;
     const entering = player.getLocation().getX() < 2846;
     if (entering && quest.getStage(player) < STAGE_OZIACH) { player.sendMessage("You have no reason to enter the dragon's lair."); return; }
     if (entering && !saved(player, ELVARG_KILLED_ATTRIBUTE)) api.emitCustomEvent("elvarg:enter", {player, handled:false, aggressive:false});

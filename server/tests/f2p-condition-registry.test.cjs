@@ -6,11 +6,12 @@ require(root + '/dist/Server').Server.installProductionPathResolver();
 const core = require(root + '/dist/plugins/PluginManager').PluginManager.getCoreApi();
 const transcripts = require(root + '/data/definitions/npc-dialogues.json');
 const npcIndex = require(root + '/data/definitions/npc-dialogue-index.json');
-const hooks = [], custom = new Map();
+const hooks = [], variants = [], custom = new Map();
 let registering = 'TutorialIsland';
 const noop = () => {};
 const api = new Proxy({ core,
   onNpcDialogueCondition(fn) { hooks.push({ quest: registering, fn }); },
+  onNpcDialogueVariant(fn) { variants.push({ quest: registering, fn }); },
   onCustomEvent(name, fn) { const handlers = custom.get(name) ?? []; handlers.push(fn); custom.set(name, handlers); },
   emitCustomEvent(name, event) { for (const fn of custom.get(name) ?? []) fn(event); },
   getWorld: () => core.World,
@@ -128,5 +129,28 @@ test('the Fishing Contest guard still accepts the two dwarves who start their qu
   const p = player(), hook = hooks.find(hook => hook.quest === 'FishingContest');
   for (const npcId of [core.NpcIdentifiers.AUSTRI, core.NpcIdentifiers.VESTRI]) {
     assert.equal(hook.fn({player:p,npcId,text:'If the player does not meet the requirements to begin Fishing Contest:'}), true);
+  }
+});
+
+
+test('the complete registry lets Varrock Aris start Demon Slayer and keeps banquet Aris in RFD', () => {
+  const p = player(), N = core.NpcIdentifiers;
+  p.getLocation = () => new core.Location(3203, 3423, 0);
+  const request = npcId => ({ player: p, npcId, definition: core.NpcDefinition.forId(npcId),
+    pages: (npcIndex[npcId] ?? []).map(entry => ({ ...entry, page: entry.page.replace(/^Transcript:/, '') })) });
+  const first = input => {
+    for (const hook of variants) { const answer = hook.fn(input); if (answer) return { quest: hook.quest, answer }; }
+    return null;
+  };
+  assert.deepEqual(first(request(N.ARIS)), { quest: 'DemonSlayer', answer: { page: 'Demon Slayer', variant: 'starting-demon-slayer' } });
+  const rfd = variants.find(hook => hook.quest === 'RecipeForDisaster').fn;
+  for (const stage of [0, 1, 4, 5]) {
+    p.attrs.set('quest.recipe_for_disaster.stage', stage);
+    assert.equal(rfd(request(N.ARIS)), null, `Varrock Aris must defer at RFD stage ${stage}`);
+  }
+  p.attrs.set('quest.recipe_for_disaster.stage', 0);
+  p.getLocation = () => new core.Location(3240, 3220, 0);
+  for (const npcId of [N.ARIS_2, N.ARIS_3]) {
+    assert.deepEqual(rfd(request(npcId)), { page: "Recipe for Disaster/Another Cook's Quest", variant: 'chef-surprise-talking-to-aris' });
   }
 });

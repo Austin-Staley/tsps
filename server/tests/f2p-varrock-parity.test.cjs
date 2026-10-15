@@ -50,7 +50,7 @@ function harness(name) {
     talk(p, npcId) { const choice = hooks.onNpcDialogueVariant.map(fn => fn({ player: p, npcId })).find(Boolean); assert.ok(choice); runtime.startTranscript(api, p, npcId, choice.page, choice.variant); },
     tick(count) { while (count-- > 0) [...tasks].forEach(task => task.tick()); },
     choose(p, text) { const prompt = p.prompt; assert.ok(prompt, `no menu for ${text}`); const index = prompt.options.findIndex(label => label === text); assert.ok(index >= 0, `missing ${text} in ${prompt.options}`); p.prompt = null; prompt.pairs[index * 2 + 1](); },
-    continueUntil(p, predicate, limit = 80) { while (!predicate()) { assert.ok(limit-- > 0, `dialogue stalled at ${p.text}`); assert.ok(p.manager.getCurrent(), `dialogue ended at ${p.text}`); p.manager.advance(); } },
+    continueUntil(p, predicate, limit = 160) { while (!predicate()) { assert.ok(limit-- > 0, `dialogue stalled at ${p.text}`); const current=p.manager.getCurrent();assert.ok(current, `dialogue ended at ${p.text}`);if(current instanceof core.ActionDialogue)h.tick(1);else p.manager.advance(); } },
   }; return h;
 }
 function player() {
@@ -131,7 +131,10 @@ test('Restless river scene has three captured projectiles, delayed reward and sa
   h.hooks.onItemOnObject[0]({player:p,itemId:I.GHOSTS_SKULL,objectId:15061,object:coffin(core)});
   assert.equal(p.items.get(I.GHOSTS_SKULL),0);assert.equal(p.configs.get(107),5);assert.equal(p.xp.length,0);
   h.tick(3);assert.ok(p.getArea() instanceof core.TemplatedInstanceArea);assert.equal(p.blocked,true);
+  const release=p.getArea(),first=release.sourceTile(3252,3193);
+  assert.deepEqual(p.log.find(row=>row[0]==='sendCameraMoveTo'),['sendCameraMoveTo',first.getX(),first.getY(),350,{rate:100,rate2:100,heightRelative:false}]);
   h.tick(14);assert.equal(p.log.filter(row=>row[0]==='sendProjectile').length,3);assert.equal(p.xp.length,0);
+  assert.deepEqual(p.log.filter(row=>row[0]==='sendCameraLookAt').at(-1).slice(3),[25,{rate:5,rate2:5,heightRelative:false}]);
   h.tick(6);assert.equal(h.quest.getStage(p),5);assert.deepEqual(p.xp,[[core.Skill.PRAYER.getIndex(),1125]]);assert.equal(p.getArea(),null);
   assert.deepEqual([p.getLocation().getX(),p.getLocation().getY()],[3247,3193]);
   const q=player();h.quest.setStage(q,4);q.attrs.set('restless-ghost:release-pending',1);h.hooks.onPlayerLogin.at(-1)({player:q});h.hooks.onPlayerLogin.at(-1)({player:q});assert.equal(q.xp.length,1);
@@ -164,12 +167,36 @@ test('the optional Cadava drink preserves Hitpoints, swaps only the potion for a
   h.hooks.onItemAction[0]({player:p,itemId:I.CADAVA_POTION,option:'Drink'});h.choose(p,"Yes, I'll drink it all down.");assert.match(p.text,/defiance/);p.manager.advance();
   h.tick(2);assert.equal(p.items.get(I.CADAVA_POTION),0);assert.equal(p.items.get(I.VIAL),1);h.tick(18);assert.equal(p.blocked,false);assert.equal(p.untargetable,false);assert.match(p.text,/out for hours/);assert.deepEqual(p.animations,[829,836,65535]);assert.equal(h.quest.getStage(p),0);
 });
+test('the crypt tour restores every captured camera shot and waits for each timed pan before continuing',()=>{
+  const h=harness('RomeoAndJuliet'),p=player();h.quest.setStage(p,60);h.action(p,N.ROMEO,'UCaOJi');h.tick(3);
+  const scene=p.getArea(),tile=(x,y)=>{const p=scene.sourceTile(x,y);return [p.getX(),p.getY()];};
+  h.continueUntil(p,()=>p.text==="We're here. Look, Juliet is over there!");
+  assert.deepEqual(p.log.filter(row=>row[0]==='sendCameraMoveTo').at(-1),['sendCameraMoveTo',...tile(2330,4641),400,{rate:100,rate2:100,heightRelative:false}]);
+  const start=p.log.length;p.manager.advance();
+  assert.deepEqual(p.log.filter(row=>row[0]==='sendCameraMoveTo').at(-1).slice(1,4),[...tile(2334,4647),375]);
+  h.tick(4);assert.equal(p.log.slice(start).filter(row=>row[0]==='sendCameraMoveTo').length,1);
+  h.tick(1);assert.deepEqual(p.log.filter(row=>row[0]==='sendCameraMoveTo').at(-1).slice(1,4),[...tile(2330,4647),375]);
+  h.tick(3);assert.deepEqual(p.log.filter(row=>row[0]==='sendCameraMoveTo').at(-1).slice(1,4),[...tile(2324,4644),250]);
+  h.tick(7);assert.deepEqual(p.log.filter(row=>row[0]==='sendCameraMoveTo').at(-1).slice(1,4),[...tile(2330,4641),400]);
+  h.tick(1);assert.match(p.text,/You go over to her/);
+  assert.deepEqual(p.log.slice(start).filter(row=>/^sendCamera(MoveTo|LookAt)$/.test(row[0])),[
+    ['sendCameraMoveTo',...tile(2334,4647),375,{rate:10,rate2:10,heightRelative:false}],['sendCameraLookAt',...tile(2322,4639),250,{rate:10,rate2:10,heightRelative:false}],
+    ['sendCameraMoveTo',...tile(2330,4647),375,{rate:5,rate2:5,heightRelative:false}],['sendCameraLookAt',...tile(2320,4639),250,{rate:5,rate2:5,heightRelative:false}],
+    ['sendCameraMoveTo',...tile(2324,4644),250,{rate:5,rate2:5,heightRelative:false}],['sendCameraLookAt',...tile(2320,4639),200,{rate:5,rate2:5,heightRelative:false}],
+    ['sendCameraMoveTo',...tile(2330,4641),400,{rate:100,rate2:100,heightRelative:false}],['sendCameraLookAt',...tile(2342,4655),25,{rate:100,rate2:100,heightRelative:false}],
+  ]);
+  h.continueUntil(p,()=>!p.manager.getCurrent());h.tick(5);assert.equal(h.quest.getStage(p),100);
+  assert.ok(p.log.some(row=>row[0]==='sendCameraUnlock'&&row[1]===false));
+});
 
 test('Imp Catcher fast-start plays the check, timed ritual, separate stage/reward ticks and one spare exchange', () => {
   const h=harness('ImpCatcher'),p=player();for(const id of [I.RED_BEAD,I.BLACK_BEAD,I.WHITE_BEAD,I.YELLOW_BEAD])p.items.set(id,2);
   h.talk(p,5005);continueToMenu(h,p);h.choose(p,'Give me a quest please.');continueToMenu(h,p);h.choose(p,'Yes.');assert.equal(h.quest.getStage(p),1);
   h.continueUntil(p,()=>p.text.includes('four coloured beads'));assert.equal(p.xp.length,0);assert.equal(p.items.get(I.RED_BEAD),2);
   h.tick(7);assert.equal(p.items.get(I.RED_BEAD),1);assert.equal(p.configs.get(160),2);assert.equal(p.items.get(I.AMULET_OF_ACCURACY),undefined);
+  assert.deepEqual(p.log.filter(row=>/^sendCamera(MoveTo|LookAt)$/.test(row[0])),[
+    ['sendCameraLookAt',3103,3162,350,{rate:232,rate2:100,heightRelative:false}],['sendCameraMoveTo',3103,3161,775,{rate:232,rate2:100,heightRelative:false}],
+  ]);
   h.tick(10);assert.equal(p.items.get(I.AMULET_OF_ACCURACY),1);assert.deepEqual(p.xp,[[core.Skill.MAGIC.getIndex(),875]]);assert.equal(p.attrs.get('quest.points'),undefined);
   h.tick(2);assert.equal(p.attrs.get('quest.points'),1);assert.equal(h.quest.getStage(p),2);
   h.action(p,5005,'jxPdQz');assert.equal(p.items.get(I.AMULET_OF_ACCURACY),2);assert.equal(p.xp.length,1);

@@ -44,3 +44,17 @@ The captures show one successful route through each quest. Sir Vyvin's refusal w
 ## Shared dialogue condition isolation
 
 The full quest registry previously allowed unrelated members quests to answer F2P prose conditions. Dwarf Cannon treated Rune Mysteries research notes as Nulodion’s notes; other broad rules matched ship materials, Tutorial Island equipment and shield-container capacity. Narrow NPC or owned-page guards now keep those predicates in their own quests. Recipe for Disaster’s Cook’s Assistant check is restricted to its Cook, and Shield of Arrav answers its two container-capacity conditions itself. `tests/f2p-condition-registry.test.cjs` loads the actual quest registration order and tutorial instructor handlers to verify held/missing research notes, ship payments and materials, full/available shield-container inventory, tutorial slot/equipment branches and the public Lumbridge Guide’s routing.
+
+
+## Recorded camera coverage
+
+The complete decoded sessions were audited rather than only the dialogue extracts. Goblin Diplomacy and Black Knights' Fortress share `20260817T005704`; Doric is `20260816T164303`, and The Knight's Sword is `20260817T113003` through its completion at tick 3997. The later camera commands in the last session belong to The Corsair Curse and are outside The Knight's Sword's route.
+
+| Quest scene | Captured directed camera commands | Timing and rates |
+| --- | --- | --- |
+| Goblin Diplomacy, orange/blue/brown fitting | Move to `(2961,3514)`, height 450; look at `(2957,3512)`, height 150 | At +2 from each fitting's fade-out; both use `232/232`, `heightrelative=false` |
+| Black Knights' Fortress, cabbage sabotage | Move to `(3035,3499)`, height 1500; look at `(3032,3505)`, height 300 | At +10 from the throw; both use `100/100`, `heightrelative=false` |
+| Doric's Quest | None on the captured quest route | Session/login resets are not quest cutscenes |
+| The Knight's Sword | None on the captured quest route | Later Corsair cameras are not attributed to this quest |
+
+All three Goblin fittings clear the five shake channels one tick before the shot and send `unlock=false` before their return reset. Black Knights clears them at the throw; its camera resets on returning from the room and sends the recorded final unlock/reset three ticks later. All source tiles are translated into the private room. Existing Falador tests now assert these command values, shot boundaries, resets and all three Goblin repetitions, including interrupted fitting cleanup.

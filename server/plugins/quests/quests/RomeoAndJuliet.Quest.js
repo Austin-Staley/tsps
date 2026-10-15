@@ -306,10 +306,25 @@ module.exports = function registerRomeoAndJulietQuest(api) {
       if(current){player.setPositionToFace(current.getLocation());current.setPositionToFace(player.getLocation());}
       if(text==="Right...bottoms up!")current?.performAnimation(new Animation(3284));
       if(text==="Urk!")current?.performAnimation(new Animation(836));
-      if(text==="What's all that screaming?") { actor(scene,DRAUL_NPC_ID,3158,3427);camera(player,scene,[3156,3421,425],[3157,3426,125],false); }
-      if(text==="We're here. Look, Juliet is over there!")camera(player,scene,[2330,4641,400],[2342,4655,25]);
-      if(text==="Ohhh, ok then...") {camera(player,scene,[2322,4639,300],[2328,4654,25]);current?.getMovementQueue().addSteps(scene.sourceTile(2323,4643));}
+      if(text==="What's all that screaming?") { actor(scene,DRAUL_NPC_ID,3158,3427);camera(player,scene,[3156,3421,425],[3157,3426,125],5); }
       if(text==="Hi Romeo...I'm Phillipa!") {const cousin=actor(scene,PHILLIPA_NPC_ID,2331,4645);cousin?.getMovementQueue().addSteps(scene.sourceTile(2325,4644));}
+    };
+    if(scene.kind==="crypt"&&text==="Oh, be quiet...")event.after=()=>{
+      frozenDialogue(player);
+      later(scene,3,()=>camera(player,scene,[2330,4641,400],[2342,4655,25]));
+      later(scene,5,()=>resume(player,ROMEO_NPC_ID,CRYPT_VARIANT,text));
+    };
+    if(scene.kind==="crypt"&&text==="We're here. Look, Juliet is over there!")event.after=()=>{
+      frozenDialogue(player);camera(player,scene,[2334,4647,375],[2322,4639,250],10);
+      later(scene,5,()=>camera(player,scene,[2330,4647,375],[2320,4639,250],5));
+      later(scene,8,()=>camera(player,scene,[2324,4644,250],[2320,4639,200],5));
+      later(scene,15,()=>camera(player,scene,[2330,4641,400],[2342,4655,25]));
+      later(scene,16,()=>resume(player,ROMEO_NPC_ID,CRYPT_VARIANT,text));
+    };
+    if(scene.kind==="crypt"&&text==="Ohhh, ok then...")event.after=()=>{
+      frozenDialogue(player);scene.actors.get(ROMEO_NPC_ID)?.getMovementQueue().addSteps(scene.sourceTile(2323,4643));
+      later(scene,1,()=>camera(player,scene,[2322,4639,300],[2328,4654,25]));
+      later(scene,14,()=>resume(player,ROMEO_NPC_ID,CRYPT_VARIANT,text));
     };
     if(text==="Poor Juliet...make preparations for her body to be placed in the Crypt...")event.after=()=>{
       if(quest.getStage(player)===50&&held(player,CADAVA_POTION_ITEM_ID)) {player.getInventory().deleteNumber(CADAVA_POTION_ITEM_ID,1);quest.setStage(player,60);player.getPacketSender().sendVarbit(JULIET_VARBIT,1);}
@@ -404,7 +419,7 @@ module.exports = function registerRomeoAndJulietQuest(api) {
   }
   function tail(steps,id) {
     for(let i=0;i<steps.length;i++) {
-      if(steps[i].id===id || steps[i].text===id) return steps.slice(i+1);
+      if(steps[i].id===id || steps[i].text===id || steps[i].player===id) return steps.slice(i+1);
       for(const nested of [steps[i].steps,...(steps[i].options??[]).map(o=>o.steps)]) { const found=nested&&tail(nested,id);if(found)return found; }
     }
     return null;
@@ -428,7 +443,7 @@ module.exports = function registerRomeoAndJulietQuest(api) {
         scenes.delete(actor);TaskManager.cancelTasks(this);
         for(const npc of this.actors.values())api.removeNpc(npc);
         actor.getMovementQueue().setBlockMovement(false);actor.setUntargetable(false);
-        actor.getPacketSender().sendVarbit(6719,0).sendVarbit(12393,0).sendCameraReset().closeSubInterface((161<<16)|1);
+        actor.getPacketSender().sendVarbit(6719,0).sendVarbit(12393,0).sendCameraUnlock(false).sendCameraReset().closeSubInterface((161<<16)|1);
         if(logout)actor.moveTo(this.returnTile);
       }
       super.postLeave(actor,logout);
@@ -438,9 +453,10 @@ module.exports = function registerRomeoAndJulietQuest(api) {
     const tile=scene.sourceTile(x,y),npc=api.spawnNpc({id,x:tile.getX(),y:tile.getY(),z:tile.getZ(),owner:scene.owner,ownerOnly:true,wanderRadius:0});
     if(npc){scene.enter(npc);scene.actors.set(id,npc);}return npc;
   }
-  function camera(player,scene,c,l,instant=true) {
+  function camera(player,scene,c,l,rate=100) {
     const a=scene.sourceTile(c[0],c[1]),b=scene.sourceTile(l[0],l[1]);
-    player.getPacketSender().sendCameraMoveTo(a.getX(),a.getY(),c[2],instant).sendCameraLookAt(b.getX(),b.getY(),l[2],instant);
+    const options={rate,rate2:rate,heightRelative:false};
+    player.getPacketSender().sendCameraMoveTo(a.getX(),a.getY(),c[2],options).sendCameraLookAt(b.getX(),b.getY(),l[2],options);
   }
   function endScene(player,done) {
     const scene=scenes.get(player);if(!scene)return;
@@ -453,6 +469,7 @@ module.exports = function registerRomeoAndJulietQuest(api) {
     const scene=new RomanceScene(player,kind);scenes.set(player,scene);
     player.getMovementQueue().reset().setBlockMovement(true);player.setUntargetable(true);
     player.getPacketSender().sendVarbit(6719,2).sendVarbit(12393,1);fade(player,true);frozenDialogue(player);
+    for(let axis=0;axis<5;axis++)player.getPacketSender().sendCameraShake(axis,0,0,0);
     later(scene,3,()=>{
       const spawn=kind==="juliet"?[3157,3425]:[2333,4646];player.moveTo(scene.sourceTile(...spawn));scene.enter(player);fade(player,false);
       if(kind==="juliet") {
@@ -465,7 +482,7 @@ module.exports = function registerRomeoAndJulietQuest(api) {
   function sermon(event) {
     const {player}=event,key={};timed.set(player,key);frozenDialogue(player);
     player.getMovementQueue().setBlockMovement(true);
-    player.getPacketSender().sendCameraMoveTo(3254,3486,325).sendCameraLookAt(3256,3476,25);
+    player.getPacketSender().sendCameraMoveTo(3254,3486,325,{rate:100,rate2:100,heightRelative:false}).sendCameraLookAt(3256,3476,25,{rate:100,rate2:100,heightRelative:false});
     timedSpeech(player,CONGREGATION_NPC_ID,"Zzzzzzzzz");
     for(const [tick,text] of [[5,"Yes, well, it certainly seems"],[7,"like you have a captive"],[9,"audience!"]])later(key,tick,()=>{
       player.forceChat(text);if(tick===5)timedSpeech(player,null,"Yes, well, it certainly seems like you have a captive audience!");

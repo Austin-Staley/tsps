@@ -338,20 +338,22 @@ module.exports = function registerRestlessGhostQuest(api) {
       if (actor === this.owner) {
         scenes.delete(actor); TaskManager.cancelTasks(this);
         actor.getMovementQueue().setBlockMovement(false); actor.setUntargetable(false);
-        actor.getPacketSender().sendVarbit(6719, 0).sendVarbit(12393, 0).sendCameraReset().closeSubInterface((161 << 16) | 1);
+        actor.getPacketSender().sendVarbit(6719, 0).sendVarbit(12393, 0).sendCameraUnlock(false).sendCameraReset().closeSubInterface((161 << 16) | 1);
       }
       super.postLeave(actor, logout);
     }
   }
-  function sceneCamera(player, scene, camera, look, instant = true) {
+  function sceneCamera(player, scene, camera, look, rate = 100) {
     const c = scene.sourceTile(camera[0], camera[1]), l = scene.sourceTile(look[0], look[1]);
-    player.getPacketSender().sendCameraMoveTo(c.getX(), c.getY(), camera[2], instant).sendCameraLookAt(l.getX(), l.getY(), look[2], instant);
+    const options={rate,rate2:rate,heightRelative:false};
+    player.getPacketSender().sendCameraMoveTo(c.getX(), c.getY(), camera[2], options).sendCameraLookAt(l.getX(), l.getY(), look[2], options);
   }
   function fade(player, out) { player.getPacketSender().sendSubInterface((161 << 16) | 1, 174, 1, { postScripts: [{ scriptId: 948, args: out ? [0, 255, 0, 0, 50] : [0, 0, 0, 255, 50] }] }); }
   function releaseSpirit(player) {
     const scene = new ReleaseScene(player); scenes.set(player, scene);
     player.getMovementQueue().reset().setBlockMovement(true); player.setUntargetable(true);
     player.getPacketSender().sendVarbit(6719, 2).sendVarbit(12393, 1);
+    for(let axis=0;axis<5;axis++)player.getPacketSender().sendCameraShake(axis,0,0,0);
     fade(player, true);
     player.moveTo(scene.sourceTile(3248, 3192)); scene.enter(player);
     later(scene, 2, () => {
@@ -368,7 +370,7 @@ module.exports = function registerRestlessGhostQuest(api) {
       if (tick === 10) { scene.ghost?.performAnimation(new Animation(4018)); player.getPacketSender().sendSoundEffect(748, 1, 0); }
       player.getPacketSender().sendProjectile(scene.sourceTile(...from), scene.sourceTile(...to), 0, cycles, 668, 50, 50, null, 0, 30, 0);
       if (tick === 12) sceneCamera(player, scene, [3240,3193,900], [3243,3191,25]);
-      if (tick === 14) { const l=scene.sourceTile(3253,3181); player.getPacketSender().sendCameraLookAt(l.getX(),l.getY(),25,false); }
+      if (tick === 14) { const l=scene.sourceTile(3253,3181); player.getPacketSender().sendCameraLookAt(l.getX(),l.getY(),25,{rate:5,rate2:5,heightRelative:false}); }
     });
     later(scene, 19, () => {
       if (scene.ghost) api.removeNpc(scene.ghost);
