@@ -355,6 +355,7 @@ function end(session, loser) {
     player.sendMessage(loser ? player === loser ? "You lost the duel!" : "You won the duel!" : "Duel declined.");
     menuState.delete(player);
     updateMenu({ player });
+    pluginApi.emitCustomEvent("persistence:save", { player, reason: "duel-settlement" });
   }
 }
 function snapshot(player) {

@@ -46,6 +46,10 @@ function onObtain(request) {
   if (request?.player) request.added = Progress.obtain(request.player, Number(request.itemId), Number(request.amount ?? 1), request);
 }
 
+function isLoggedItem(request) {
+  request.logged = Data.isLogged(request.itemId);
+}
+
 function onCount(request) {
   if (!request?.player) return;
   for (const category of categoriesNamed(request.category)) Progress.addCategoryCount(request.player, category, Number(request.amount ?? 1));
@@ -101,6 +105,7 @@ module.exports = {
     Interface(api);
     api.onCustomEvent("npc-drops:roll", onLoot);
     api.onCustomEvent("collection-log:obtain", onObtain);
+    api.onCustomEvent("collection-log:is-item", isLoggedItem);
     api.onCustomEvent("collection-log:count", onCount);
     api.onCustomEvent("shop:purchase", onPurchase);
     api.registerCommand("clog", clogCommand, api.core.PlayerRights.ADMINISTRATOR, "Collection log: ::clog <item> [amount] | count <category> <n> | reset");

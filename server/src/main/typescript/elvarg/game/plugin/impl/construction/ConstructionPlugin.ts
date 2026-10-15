@@ -31,6 +31,9 @@ type ConstructionPlayer = {
   setAttribute(key: string, value: unknown): void;
 };
 
+let pluginApi: PluginApi;
+function bindSaving(api: PluginApi): void { pluginApi = api; }
+
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
 const TINDERBOX_ID = ItemIdentifiers.TINDERBOX;
@@ -306,6 +309,7 @@ function constructionLevel(player: ConstructionPlayer): number {
 
 function rebuildHouse(player: ConstructionPlayer, house: PlayerHouseInstance): void {
   player.setAttribute(HOUSE_ATTRIBUTE, house.save);
+  pluginApi.emitCustomEvent("persistence:save", { player, reason: "construction" });
   const position = house.getRoomPositionAt(player.getLocation());
   if (!position || !house.getRoom(position)) player.moveTo(house.getEntryLocation());
   if (!house.rebuild(player as Player, true)) player.sendMessage("Unable to rebuild your house.");
@@ -1016,6 +1020,7 @@ export const ConstructionPlugin = {
   name: "Construction",
   members: true,
   register(api: PluginApi): void {
+    bindSaving(api);
     EstateAgentPlugin.register(api);
     ConstructionServants.register(api);
     api.persistAttribute(HOUSE_ATTRIBUTE, defaultHouse());

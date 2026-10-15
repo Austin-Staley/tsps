@@ -26,6 +26,7 @@ function grave(player) {
 
 function setGrave(player, held) {
   player.setAttribute(GRAVE_ATTRIBUTE, held ?? null);
+  Common.api().emitCustomEvent("persistence:save", { player, reason: "grave-storage" });
 }
 
 /** Death's Office's 120 slots; a slot taken from stays empty (null), as live. */
@@ -37,6 +38,7 @@ function office(player) {
 function setOffice(player, records) {
   while (records.length > 0 && !records[records.length - 1]) records.pop();
   player.setAttribute(OFFICE_ATTRIBUTE, records.length > 0 ? records : null);
+  Common.api().emitCustomEvent("persistence:save", { player, reason: "death-retrieval" });
 }
 
 /**
@@ -66,6 +68,7 @@ function coffer(player) {
 
 function setCoffer(player, amount) {
   player.setAttribute(COFFER_ATTRIBUTE, Math.max(0, Math.trunc(amount)) || null);
+  Common.api().emitCustomEvent("persistence:save", { player, reason: "death-coffer" });
 }
 
 function style(player) {

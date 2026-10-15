@@ -15,6 +15,7 @@ import { DonatorRights } from "../../../../model/rights/DonatorRights";
 import { PlayerRights } from "../../../../model/rights/PlayerRights";
 import { ItemContainer } from "../../../../model/container/ItemContainer";
 import { StackType } from "../../../../model/container/StackType";
+import { Inventory } from "../../../../model/container/impl/Inventory";
 import { Appearance } from "../../../../model/Appearance";
 
 export class PlayerSave {
@@ -674,7 +675,19 @@ export class PlayerSave {
         playerSave.skullTimer = player.getSkullTimer();
         playerSave.skullType = player.getSkullType();
 
-        playerSave.inventory = player.getInventory().getCopiedItems();
+        // Uncompleted trades are cancelled on login: include the player's own escrow
+        // in the snapshot without moving items in the running world.
+        const offered = player.getTrading()?.getContainer()?.getValidItems() ?? [];
+        const inventory = new Inventory(player).setItems(player.getInventory().getCopiedItems());
+        for (const item of offered) {
+            const stacks = item.getDefinition().isStackable();
+            const sameStack = stacks && inventory.getItems().some(held => held.getId() === item.getId()
+                && JSON.stringify(held.getMeta() ?? null) === JSON.stringify(item.getMeta() ?? null));
+            const slots = sameStack ? 0 : stacks ? 1 : item.getAmount();
+            if (inventory.getFreeSlots() < slots) throw new Error("Cannot snapshot trade escrow: inventory is full");
+            inventory.add(item.clone(), false);
+        }
+        playerSave.inventory = inventory.getCopiedItems();
         playerSave.equipment = player.getEquipment().getCopiedItems();
         playerSave.appearance = PlayerSave.sanitizeAppearance(player.getAppearance().getLook());
         const liveSkills = player.getSkillManager().getSkills();

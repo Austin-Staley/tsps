@@ -148,6 +148,7 @@ function obtain(player, itemId, amount = 1, { ensure = false, silent = false } =
   const list = recent(player);
   list.unshift([itemId, today()]);
   player.setAttribute(RECENT_ATTRIBUTE, list.slice(0, RECENT_SIZE));
+  pluginApi.emitCustomEvent("persistence:save", { player, reason: "collection-log-unlock" });
   later(COUNTS_DELAY, () => {
     if (player.isRegistered?.() === false) return;
     sendCounts(player);

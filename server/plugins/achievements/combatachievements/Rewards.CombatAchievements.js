@@ -72,6 +72,7 @@ function claim(player, tier) {
   }
   Progress.setClaimed(player, tier);
   for (const itemId of items) player.getInventory().addItem(new pluginApi.core.Item(itemId, 1));
+  pluginApi.emitCustomEvent("persistence:save", { player, reason: "achievement-tier-reward" });
 }
 
 function dialogueLine(request) {

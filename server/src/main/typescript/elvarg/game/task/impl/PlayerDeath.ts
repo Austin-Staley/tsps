@@ -196,6 +196,7 @@ export class PlayerDeathTask extends Task {
                     PluginManager.emitPlayerDefeated(this.killer ?? null, this.player);
                     (this.player as any).__recentDeathDamagerEntries = null;
 
+                    GameConstants.PLAYER_PERSISTENCE.requestSave(this.player, "death");
                     const handledDeath = PluginManager.emitPlayerDeath({
                         player: this.player,
                         killer: this.killer ?? null,
@@ -207,6 +208,7 @@ export class PlayerDeathTask extends Task {
                         const botRespawn = this.resolveBotRespawnLocation();
                         this.player.moveTo(botRespawn ?? GameConstants.DEFAULT_LOCATION);
                     }
+                    GameConstants.PLAYER_PERSISTENCE.requestSave(this.player, "respawn");
 
                     // Stop the event..
                     this.stop();

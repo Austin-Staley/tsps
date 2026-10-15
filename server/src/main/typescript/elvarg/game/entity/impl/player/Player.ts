@@ -591,6 +591,7 @@ export class Player extends Mobile {
         this.setHasVengeance(false);
         this.getVengeanceTimer().stop();
         if (this.getAttribute?.(ATTR_SKIP_PERSISTENCE) !== true) {
+            GameConstants.PLAYER_PERSISTENCE.cancelRequestedSave(this);
             GameConstants.PLAYER_PERSISTENCE.save(this, "logout");
         }
 

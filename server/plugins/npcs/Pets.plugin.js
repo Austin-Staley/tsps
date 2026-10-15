@@ -522,6 +522,7 @@ function recordOwnership(player, pet) {
   });
   if (others.length === owned.length && owned.includes(pet.itemId)) return;
   player.setAttribute(OWNED_ATTRIBUTE, [...others, pet.itemId]);
+  pluginApi.emitCustomEvent("persistence:save", { player, reason: "pet-insurance" });
   syncCollectionLog(player, { silent: false });
 }
 
@@ -630,6 +631,7 @@ function reclaimPets(event) {
     }
     player.getInventory().adds(itemId, 1);
     player.sendMessage(`Probita returns your ${getPetDisplayName(getPetForItemId(itemId))}.`);
+    pluginApi.emitCustomEvent("persistence:save", { player, reason: "pet-retrieval" });
   }
   syncCollectionLog(player);
 }

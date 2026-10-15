@@ -110,6 +110,7 @@ function completeTask(player, diary, taskKey) {
   sender.sendVarbit(diary.tiers[tier].countVarbit, tierCount(player, diary, tier));
   if (!wasStarted) sender.sendVarbit(diary.startedVarbit, 1);
   if (isTierComplete(player, diary, tier)) {
+    api.emitCustomEvent("persistence:save", { player, reason: "diary-tier-completion" });
     api.getTaskManager().submit(new (class extends core.Task {
       constructor() { super(TIER_COMPLETE_DELAY); }
       execute() { this.stop(); announceTierComplete(player, diary, tier); }
@@ -122,6 +123,7 @@ function claimTier(player, diary, tier) {
   const claimed = claimedTiers(player, diary);
   claimed.add(tier);
   store(player, REWARDS_ATTRIBUTE, diary, [...claimed]);
+  api.emitCustomEvent("persistence:save", { player, reason: "diary-tier-reward" });
   player.getPacketSender().sendVarbit(diary.tiers[tier].rewardVarbit, 1);
 }
 

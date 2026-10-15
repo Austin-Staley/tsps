@@ -1194,6 +1194,8 @@ export class ClientConnection {
     // The disconnect hooks fire when the player leaves the world, which a player in
     // combat does only when it ends (World's removal queue).
     this.player.setDisconnectSource(source);
+    this.player.getTrading().closeTrade();
+    GameConstants.PLAYER_PERSISTENCE.requestSave(this.player, "disconnect");
     if (!World.getRemovePlayerQueue().includes(this.player)) {
       World.getRemovePlayerQueue().push(this.player);
     }

@@ -124,6 +124,7 @@ function buy(player, entry, amount) {
       break;
     }
     member.supplyPoints -= entry.cost;
+    Shared.api().emitCustomEvent("persistence:save", { player, reason: "reward-shop" });
     if (entry.id === STAMINA) member.staminaBought = true;
   }
   const sender = player.getPacketSender();
