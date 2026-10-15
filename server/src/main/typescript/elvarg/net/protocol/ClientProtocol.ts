@@ -1210,6 +1210,24 @@ export function encodeCameraShake(slot: number, randomAmplitude: number, sineAmp
   return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
 }
 
+function encodeCameraPosition(mode: number, x: number, y: number, height: number, instant: boolean): Buffer {
+  const payload = Buffer.alloc(8);
+  payload[0] = mode;
+  payload.writeUInt16BE(x & 0xffff, 1);
+  payload.writeUInt16BE(y & 0xffff, 3);
+  payload.writeUInt16BE(height & 0xffff, 5);
+  payload[7] = instant ? 1 : 0;
+  return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
+}
+
+export function encodeCameraMoveTo(x: number, y: number, height: number, instant: boolean): Buffer {
+  return encodeCameraPosition(1, x, y, height, instant);
+}
+
+export function encodeCameraLookAt(x: number, y: number, height: number, instant: boolean): Buffer {
+  return encodeCameraPosition(2, x, y, height, instant);
+}
+
 /**
  * Sets what tile and entity clicks do in a world (set_interaction_mode): `worldId` is a world
  * entity index, -1 for the root world or -2 for the default of every world (InteractionMode.ts).
