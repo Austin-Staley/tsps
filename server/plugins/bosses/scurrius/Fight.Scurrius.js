@@ -239,6 +239,9 @@ function walkTo(npc, state, destination, onArrive) {
         return;
       }
       const movement = npc.getMovementQueue();
+      // The attack that started the walk turns him back to its target as it finishes, so the
+      // facing is dropped each tick of the walk, not just at its start.
+      if (npc.getInteractingMobile() != null) npc.setMobileInteraction(null);
       const arrived = npc.getLocation().equals(target);
       const moved = !npc.getLocation().equals(last);
       last = npc.getLocation().clone();
