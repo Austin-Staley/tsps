@@ -34,6 +34,11 @@ import {
   encodeProjectiles,
   encodeRunClientScript,
   encodeCameraShake,
+  encodeCameraMoveTo,
+  encodeCameraLookAt,
+  encodeCameraUnlock,
+  encodeCameraTranslate,
+  CameraMovementOptions,
   encodeWidgetSetColour, encodeAttackTimer,
   encodeCameraReset,
   encodeSetInteractionMode,
@@ -860,6 +865,26 @@ export class PacketSender {
 
   sendCameraShake(slot: number, randomAmplitude: number, sineAmplitude = 0, sineFrequency = 0): this {
     this.player.getSession().sendClientPacket(encodeCameraShake(slot, randomAmplitude, sineAmplitude, sineFrequency));
+    return this;
+  }
+
+  sendCameraMoveTo(x: number, y: number, height: number, motion: boolean | CameraMovementOptions = true): this {
+    this.player.getSession().sendClientPacket(encodeCameraMoveTo(x, y, height, motion));
+    return this;
+  }
+
+  sendCameraLookAt(x: number, y: number, height: number, motion: boolean | CameraMovementOptions = true): this {
+    this.player.getSession().sendClientPacket(encodeCameraLookAt(x, y, height, motion));
+    return this;
+  }
+
+  sendCameraUnlock(unlock: boolean): this {
+    this.player.getSession().sendClientPacket(encodeCameraUnlock(unlock));
+    return this;
+  }
+
+  sendCameraTranslate(dx: number, dy: number): this {
+    this.player.getSession().sendClientPacket(encodeCameraTranslate(dx, dy));
     return this;
   }
 

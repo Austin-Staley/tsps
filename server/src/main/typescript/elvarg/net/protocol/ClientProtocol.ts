@@ -1210,6 +1210,60 @@ export function encodeCameraShake(slot: number, randomAmplitude: number, sineAmp
   return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
 }
 
+export interface CameraMovementOptions {
+  rate: number;
+  rate2: number;
+  heightRelative?: boolean;
+}
+
+function encodeCameraPosition(mode: number, x: number, y: number, height: number, motion: boolean | CameraMovementOptions): Buffer {
+  const captured = typeof motion !== "boolean";
+  if (captured) {
+    for (const [name, value, min, max] of [
+      ["x", x, 0, 65535], ["y", y, 0, 65535], ["height", height, -32768, 32767],
+      ["rate", motion.rate, 0, 255], ["rate2", motion.rate2, 0, 255],
+    ] as const) {
+      if (!Number.isInteger(value) || value < min || value > max) throw new RangeError(`Invalid camera ${name}: ${value}`);
+    }
+    if (motion.heightRelative !== undefined && typeof motion.heightRelative !== "boolean") throw new TypeError("Invalid relative camera height");
+  }
+  const payload = Buffer.alloc(captured ? 10 : 8);
+  payload[0] = captured ? mode + 3 : mode;
+  payload.writeUInt16BE(x & 0xffff, 1);
+  payload.writeUInt16BE(y & 0xffff, 3);
+  payload.writeUInt16BE(height & 0xffff, 5);
+  if (captured) {
+    payload[7] = motion.rate;
+    payload[8] = motion.rate2;
+    payload[9] = motion.heightRelative ? 1 : 0;
+  } else {
+    payload[7] = motion ? 1 : 0;
+  }
+  return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
+}
+
+export function encodeCameraMoveTo(x: number, y: number, height: number, motion: boolean | CameraMovementOptions): Buffer {
+  return encodeCameraPosition(1, x, y, height, motion);
+}
+
+export function encodeCameraLookAt(x: number, y: number, height: number, motion: boolean | CameraMovementOptions): Buffer {
+  return encodeCameraPosition(2, x, y, height, motion);
+}
+
+export function encodeCameraUnlock(unlock: boolean): Buffer {
+  return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, Buffer.from([6, unlock ? 1 : 0]));
+}
+
+/** Rebase an active shot when a private scene returns to its source map. */
+export function encodeCameraTranslate(dx: number, dy: number): Buffer {
+  if (!Number.isSafeInteger(dx) || !Number.isSafeInteger(dy) || Math.abs(dx) > 0x7fffffff || Math.abs(dy) > 0x7fffffff) throw new RangeError("Invalid camera translation");
+  const payload = Buffer.alloc(9);
+  payload[0] = 7;
+  payload.writeInt32BE(dx, 1);
+  payload.writeInt32BE(dy, 5);
+  return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
+}
+
 /**
  * Sets what tile and entity clicks do in a world (set_interaction_mode): `worldId` is a world
  * entity index, -1 for the root world or -2 for the default of every world (InteractionMode.ts).

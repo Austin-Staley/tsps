@@ -524,6 +524,16 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
   function presentMenu(menu, offset = 0, tail = []) {
     const { step, rest, record } = menu;
     context.currentMenu = menu;
+    const notice = { player, npcId, definition, prompt: step.prompt || "Select an Option", warning: null };
+    api.emitCustomEvent("npc-dialogue:menu", notice);
+    const warned = context.warnedMenus ??= new WeakSet();
+    if (notice.warning && !warned.has(step)) {
+      warned.add(step);
+      manager.startDialogues(new DialogueChainBuilder()
+        .add(new api.core.StatementDialogue(0, String(notice.warning)))
+        .add(new ActionDialogue(1, { execute: () => presentMenu(menu, offset, tail) })));
+      return;
+    }
     if (!context.menuHistory.includes(menu)) context.menuHistory.push(menu);
     // An option the wiki guards ("If the player is wearing the Ring of Charos(a):") is hidden
     // only once a plugin answers its condition false; unanswered ones still show.
@@ -629,9 +639,17 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         playedAny = true;
         // A typed line spoken by someone other than the NPC being talked to (a
         // paired NPC talking to them, a cutscene actor) gets that speaker's head.
-        const speakerId = !isPlayer && typedLine && step.speaker && step.speaker !== definition.getName()
+        const speakerId = request.speakerId ?? (!isPlayer && typedLine && step.speaker && step.speaker !== definition.getName()
           ? (context.speakerIdByName?.get(step.speaker) ?? definition.getId())
-          : definition.getId();
+          : definition.getId());
+        if (typeof request.before === "function") {
+          chain.add(new ActionDialogue(index++, { execute: () => {
+            const current = manager.getCurrent?.();
+            request.before();
+            if (current && manager.getCurrent() !== current) return;
+            manager.advance();
+          } }));
+        }
         for (let start = 0; start < lines.length; start += 4) {
           const text = lines.slice(start, start + 4).join(" ");
           chain.add(isPlayer
@@ -678,12 +696,14 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           if (message.end) return close();
           playedAny = true;
           const [first, second] = Array.isArray(message.box?.items) ? message.box.items : [];
-          if (first !== undefined) {
+          if (first !== undefined || message.box?.statement === true) {
             const text = formatPlayerText(String(message.text ?? ""), player);
             const box = new DialogueChainBuilder();
-            box.add(second === undefined
-              ? new ItemStatementDialogue(0, first, text)
-              : new DoubleItemStatementDialogue(0, first, second, text));
+            box.add(message.box?.statement === true
+              ? new api.core.StatementDialogue(0, text)
+              : second === undefined
+                ? new ItemStatementDialogue(0, first, text)
+                : new DoubleItemStatementDialogue(0, first, second, text));
             box.add(new ActionDialogue(1, { execute: () => run(rest, currentRecord) }));
             manager.startDialogues(box);
             return;
