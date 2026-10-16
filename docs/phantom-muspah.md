@@ -23,7 +23,8 @@ neither captured nor in the Wiki it is marked **estimate**.
 | --- | --- |
 | `Common.PhantomMuspah.js` | The data, tick helpers, graphics, sounds, the overlay script. |
 | `Lair.PhantomMuspah.js` | The way in (Ghorrock Dungeon's crevice), the instance, the way out, logging out and dying inside. |
-| `Fight.PhantomMuspah.js` | One fight: spawn, forms, attacks, form switches, the HUD, the kill. |
+| `Fight.PhantomMuspah.js` | One fight: spawn, forms, form switches, specials' timing, the shield skip, the HUD, the kill. |
+| `Attacks.PhantomMuspah.js` | Its ranged, magic and melee attacks, rolled as they land. |
 | `Spikes.PhantomMuspah.js` | Spikes: the waves, the knock-back, homing spikes, the spikes spreading after the shield. |
 | `Clouds.PhantomMuspah.js` | The teleport special and its lightning clouds. |
 | `Shield.PhantomMuspah.js` | The shockwave, the prayer shield and Soul Split. |
@@ -38,7 +39,7 @@ neither captured nor in the Wiki it is marked **estimate**.
 | --- | --- | --- |
 | Crevice `ghorrock_dungeon_cave_entry` (46597, Enter) at (2908, 10316) | Needs Secrets of the North complete (before that, the quest's own crevice handling runs). Face west; "You enter the icy cavern." in a box with `fade_overlay` [0, 200, 0, 0, 50]; minimap off a tick later; two ticks in, the move into a copy of the lair at (2859, 4259) facing west, the area's music, then the fade back in ([0, 0, 0, 255, 50]) with the box again. | capture (174 attempts) |
 | The instance | All 8x8 chunks of the lair's map square (2816-2879, 4224-4287), planes 0 and 1, unturned. | capture (`build_area`) |
-| Escape crevice `sotn_muspah_escape` (46599) | Placed at (2860, 4258), shape 10, rotation 0, when the boss spawns. Escape and Quick-escape take the player back to (2909, 10317) behind the same fade. | capture (the loc); ours (the trip out: one capture, no response recorded) |
+| Escape crevice `sotn_muspah_escape` (46599) | Placed at (2860, 4258), shape 10, rotation 0, when the boss spawns. Escape takes the player back to (2909, 10317) behind the same fade ("You leave the icy cavern."); Quick-escape at once. | capture (the loc); ours (the trip out and its message: one capture, no response recorded) |
 | Logging out, teleporting, dying | Ends the instance. A player saved inside logs back in by the crevice. A death is a normal death; the grave appears outside the lair (Wiki). | Wiki |
 
 ## The boss
@@ -169,9 +170,34 @@ Loot is the Wiki table in `npc-drops.json`, plus:
   Venator shard), with "You open the frozen cache and find... another frozen cache inside! How
   peculiar." for a cache.
 
+## Checked in game
+
+With the agent MCP (`::muspah`, `::muspahhp`, `::muspahshield`, `::muspahkill`):
+
+- The crevice before Secrets of the North ("The crevice is too narrow...", the quest's) and after
+  (the fade, the instance, both music tracks, the Muspah in ranged or melee form with two spikes,
+  the HUD on 850).
+- Its melee and ranged hits, whip damage on it, Homing spikes at 636 and Lightning clouds after
+  (the teleporting form, back to its form after), the Muspah healing from spike knock-backs.
+- The shockwave at 126 (hit and corrupted with base 4), the shield on the HUD (75, npc 12079),
+  2 drained per attack, Smite breaking it, the post-shield form with its HUD and a spike wave.
+- The kill: kill count, fight duration, Charged ice with its message, loot on its centre tile,
+  the next Muspah 30 seconds later; the escape crevice; a death ending the lair.
+- `tests/phantom-muspah.test.cjs`: the arena, instance tiles, durations, the frozen cache, Charged
+  ice, the Venator shard rule, the shockwave's shelter, corruption's ticks and drains.
+
+How it all looks (graphics, the overlay, spikes rising and moving) is left to playing it.
+
 ## Not in yet
 
 - The scoreboard (46700) and its interface.
 - Sergeant Raymond's warning at the crevice.
 - Enchanted sapphire bolts and corruption spells draining the shield.
 - The defence drain floor (125) and its reset when the shield goes up.
+- The 33% freeze resistance.
+- Combat Achievements counts the kill from the Muspah's death, so its task messages come before
+  the kill count (live sends the kill count first). Counting it by event instead would lose the
+  speed and other tasks derived from the fight.
+- Estimates, to check against a capture: the melee form's still-standing bonus, spike and homing
+  spike damage, how many tiles each post-shield growth adds, where clouds start and what they hit
+  for.
