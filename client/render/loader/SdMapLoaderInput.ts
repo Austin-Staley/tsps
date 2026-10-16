@@ -10,6 +10,9 @@ export type SdMapLoaderInput = {
 
     smoothTerrain: boolean;
 
+    /** Bake keyframe scenery animations a blended frame per client cycle (Animation Smoothing). */
+    smoothLocAnimations?: boolean;
+
     minimizeDrawCalls: boolean;
 
     /**

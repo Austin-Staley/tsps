@@ -58,6 +58,8 @@ export function cacheKey(info: CacheInfo, input: SdMapLoaderInput, npcsHash: str
         input.smoothTerrain,
         input.minimizeDrawCalls,
         input.loadNpcs ? npcsHash : "",
+        // Only when on, so squares cached before this option keep their keys.
+        ...(input.smoothLocAnimations ? ["smoothLocAnimations"] : []),
     ];
     return `${prefix}|${fnv(JSON.stringify(fields))}-${input.mapX},${input.mapY}`;
 }

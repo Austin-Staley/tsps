@@ -567,6 +567,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     colorBanding: number = 255;
 
     smoothTerrain: boolean = false;
+    /** Animation Smoothing state the loaded scenery was baked with (render/render/locs.ts). */
+    smoothLocAnimations?: boolean;
 
     cullBackFace: boolean = true;
 

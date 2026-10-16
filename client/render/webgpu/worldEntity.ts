@@ -156,6 +156,7 @@ export async function loadWorldEntityScene(
         // As for every WebGPU map, NPCs are drawn from the live ECS, not baked.
         loadNpcs: false,
         smoothTerrain: true,
+        smoothLocAnimations: renderer.osrsClient.animationSmoothingPlugin?.smoothsObjects() === true,
         minimizeDrawCalls: true,
         instance: { templateChunks, regionX, regionY },
         overrideRenderPos: { x: entityWorldBaseX, y: entityWorldBaseY },
