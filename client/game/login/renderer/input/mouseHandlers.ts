@@ -2,7 +2,12 @@ import { LoginActions } from "../../LoginAction";
 import type { LoginState } from "../../LoginState";
 import { GameState, LoginIndex } from "../../GameState";
 import type { LoginRendererHost } from "../host";
-import { getWelcomeLayout } from "../layout/geometry";
+import {
+    getWelcomeLayout,
+    STAY_SIGNED_IN_TEXT,
+    USE_ANOTHER_ACCOUNT_TEXT,
+    USE_ANOTHER_ACCOUNT_Y,
+} from "../layout/geometry";
 import { measureText } from "../render/drawUtils";
 
 export function handleWelcomeClick(host: LoginRendererHost, x: number, y: number) {
@@ -66,21 +71,20 @@ export function handleLoginFormClick(host: LoginRendererHost, state: LoginState,
                 return LoginActions.TOGGLE_REMEMBER;
             }
 
-            // Checkbox: Hide username
-            const hideTextWidth = measureText(host, host.fontBold12, "Hide username: ");
-            const hideCheckboxX =
+            // Checkbox: Stay logged in
+            const stayCheckboxX =
                 checkboxX +
                 measureText(host, host.fontBold12, "Remember username: ") +
                 checkboxW +
                 10 +
-                hideTextWidth;
+                measureText(host, host.fontBold12, STAY_SIGNED_IN_TEXT);
             if (
-                x >= hideCheckboxX &&
-                x <= hideCheckboxX + checkboxW &&
+                x >= stayCheckboxX &&
+                x <= stayCheckboxX + checkboxW &&
                 y >= rememberY - checkboxH &&
                 y <= rememberY
             ) {
-                return LoginActions.TOGGLE_HIDE_USERNAME;
+                return LoginActions.TOGGLE_STAY_SIGNED_IN;
             }
         }
 
@@ -188,6 +192,27 @@ export function handleMessageClick(host: LoginRendererHost, state: LoginState, x
         const buttonY = state.loginIndex === LoginIndex.MESSAGE ? 321 : 311;
         if (isButtonHit(host, x, y, host.loginBoxX + 180, buttonY)) {
             return LoginActions.BACK;
+        }
+        return undefined;
+    
+}
+
+export function handleWelcomeDisplayNameClick(host: LoginRendererHost, x: number, y: number) {
+
+        const centerX = host.loginBoxX + 180;
+        if (isButtonHit(host, x, y, centerX, 311)) {
+            return LoginActions.PLAY;
+        }
+        if (host.fontPlain11) {
+            const halfWidth = measureText(host, host.fontPlain11, USE_ANOTHER_ACCOUNT_TEXT) / 2;
+            if (
+                x >= centerX - halfWidth &&
+                x <= centerX + halfWidth &&
+                y >= USE_ANOTHER_ACCOUNT_Y - 12 &&
+                y <= USE_ANOTHER_ACCOUNT_Y + 3
+            ) {
+                return LoginActions.USE_ANOTHER_ACCOUNT;
+            }
         }
         return undefined;
     

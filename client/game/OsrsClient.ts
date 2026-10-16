@@ -120,6 +120,8 @@ import type {
 import {
     sendEmote as netSendEmote,
     sendBankCustomQuantity,
+    LOGIN_FLAG_REMEMBER,
+    LOGIN_FLAG_TOKEN,
     sendLogin,
     sendInteractStop,
     sendLogout,
@@ -267,6 +269,7 @@ import { IProjectileManager } from "./interfaces/IProjectileManager";
 import {
     GameState,
     type LoginAction,
+    LoginActions,
     LoginErrorCode,
     LoginIndex,
     LoginRenderer,
@@ -286,7 +289,6 @@ import { HdPlugin } from "./plugins/hd/HdPlugin";
 import { GroundItemsPlugin } from "./plugins/grounditems/GroundItemsPlugin";
 import { InteractHighlightPlugin } from "./plugins/interacthighlight/InteractHighlightPlugin";
 import { NotesPlugin } from "./plugins/notes/NotesPlugin";
-import { RememberLoginPlugin } from "./plugins/rememberlogin/RememberLoginPlugin";
 import { TileMarkersPlugin } from "./plugins/tilemarkers/TileMarkersPlugin";
 import { createHelmSteeringDeps, handleTileClick } from "./sailing/HelmSteering";
 import { headingIndicator } from "./sailing/HeadingIndicator";
@@ -589,7 +591,6 @@ export class OsrsClient {
     readonly groundItemsPlugin: GroundItemsPlugin;
     readonly interactHighlightPlugin: InteractHighlightPlugin;
     readonly notesPlugin: NotesPlugin;
-    readonly rememberLoginPlugin: RememberLoginPlugin;
     readonly tileMarkersPlugin: TileMarkersPlugin;
     readonly vengeanceTimerPlugin: VengeanceTimerPlugin;
     readonly poisonTimerPlugin: PoisonTimerPlugin;
@@ -1210,7 +1211,6 @@ export class OsrsClient {
         this.groundItemsPlugin = pluginManager.getPlugin(GroundItemsPlugin)!;
         this.interactHighlightPlugin = pluginManager.getPlugin(InteractHighlightPlugin)!;
         this.notesPlugin = pluginManager.getPlugin(NotesPlugin)!;
-        this.rememberLoginPlugin = pluginManager.getPlugin(RememberLoginPlugin)!;
         this.tileMarkersPlugin = pluginManager.getPlugin(TileMarkersPlugin)!;
         this.vengeanceTimerPlugin = pluginManager.getPlugin(VengeanceTimerPlugin)!;
         this.poisonTimerPlugin = pluginManager.getPlugin(PoisonTimerPlugin)!;
@@ -5387,12 +5387,55 @@ export class OsrsClient {
 
     // ========== Login Screen Methods ==========
 
-    setRememberLoginEnabled(enabled: boolean): void {
-        this.rememberLoginPlugin.setEnabled(
-            enabled,
-            this.loginState.username,
+    /** Sends the login: the remembered token after Play, else the typed username and password. */
+    sendLoginRequest(): void {
+        const revision = this.loadedCache?.info?.revision ?? 0;
+        const remembered = this.loginState.loginWithToken
+            ? this.loginState.getRememberedLogin()
+            : undefined;
+        if (remembered) {
+            sendLogin(remembered.username, remembered.token, revision, LOGIN_FLAG_TOKEN);
+            return;
+        }
+        this.loginState.loginWithToken = false;
+        this.loginState.savePersistedLoginState();
+        sendLogin(
+            this.loginState.username.trim(),
             this.loginState.password,
+            revision,
+            this.loginState.staySignedIn ? LOGIN_FLAG_REMEMBER : 0,
         );
+    }
+
+    /** Enter on the login screen: Play for the remembered account, else Login on the form. */
+    submitLoginFromKeyboard(): void {
+        if (this.gameState === GameState.CONNECTING) return;
+        if (this.loginState.loginIndex === LoginIndex.WELCOME_DISPLAY_NAME) {
+            if (this.processLoginAction(LoginActions.PLAY) === "connect") this.sendLoginRequest();
+            return;
+        }
+        if (this.loginState.canAttemptLogin()) {
+            this.loginState.loginWithToken = false;
+            this.updateGameState(GameState.CONNECTING);
+            this.sendLoginRequest();
+        } else {
+            this.loginState.showCredentialValidationError();
+            this.handleLoginKeyInput("Enter", "");
+        }
+    }
+
+    /**
+     * Keeps the "Stay logged in" token the server sent with an accepted login, or forgets this
+     * server's remembered account after a login without it.
+     */
+    onLoginAccepted(loginToken: string | undefined, displayName: string | undefined): void {
+        const state = this.loginState;
+        if (loginToken) {
+            state.rememberLogin(displayName || state.username.trim(), loginToken);
+        } else if (!state.loginWithToken) {
+            state.forgetRememberedLogin();
+        }
+        state.clearLegacyRememberedPassword();
     }
 
     /**
@@ -5422,7 +5465,7 @@ export class OsrsClient {
 
         // Setup new state
         if (newState === GameState.LOGIN_SCREEN) {
-            this.rememberLoginPlugin.restore(this.loginState);
+            this.loginState.showRememberedLogin();
             this.loginState.networkState = 0;
             // Reset loading tracker on return to login
             this.loadingTracker.reset();
@@ -5448,10 +5491,6 @@ export class OsrsClient {
         }
 
         if (newState === GameState.CONNECTING) {
-            this.rememberLoginPlugin.remember(
-                this.loginState.username,
-                this.loginState.password,
-            );
             this.loginState.setResponse("", "Connecting to server...", "", "");
 
             // Set up loading requirements BEFORE server responds
@@ -5539,6 +5578,17 @@ export class OsrsClient {
      */
     handleLoginError(errorCode: number): void {
         console.log(`[OsrsClient] handleLoginError(${errorCode})`);
+        const usedToken = this.loginState.loginWithToken;
+        this.loginState.loginWithToken = false;
+        if (usedToken && errorCode === LoginErrorCode.INVALID_CREDENTIALS) {
+            // The remembered login expired or was signed out: ask for the password instead.
+            this.loginState.forgetRememberedLogin();
+            this.loginState.staySignedIn = true;
+            this.loginState.promptCredentials(true);
+            this.loginState.setResponse("", "Your saved login has expired.", "Please enter your password.", "");
+            this.updateGameState(GameState.LOGIN_SCREEN);
+            return;
+        }
         switch (errorCode) {
             case LoginErrorCode.INVALID_CREDENTIALS:
                 this.loginState.loginIndex = LoginIndex.INVALID_CREDENTIALS;
@@ -5798,7 +5848,6 @@ export class OsrsClient {
                 return "new_user";
 
             case "existing_user":
-                this.rememberLoginPlugin.restore(this.loginState);
                 this.loginState.promptCredentials();
                 if (isMobileMode) {
                     this.loginState.onMobile = true;
@@ -5820,10 +5869,33 @@ export class OsrsClient {
                     return undefined;
                 }
                 // Start connecting
+                this.loginState.loginWithToken = false;
                 this.loginState.virtualKeyboardVisible = false;
-                this.loginState.savePersistedLoginState();
                 this.updateGameState(GameState.CONNECTING);
                 return "connect";
+
+            case "play": {
+                if (this.gameState === GameState.CONNECTING) {
+                    return undefined;
+                }
+                const remembered = this.loginState.getRememberedLogin();
+                if (!remembered) {
+                    this.loginState.showRememberedLogin();
+                    return undefined;
+                }
+                this.loginState.username = remembered.username;
+                this.loginState.password = "";
+                this.loginState.loginWithToken = true;
+                this.loginState.virtualKeyboardVisible = false;
+                this.updateGameState(GameState.CONNECTING);
+                return "connect";
+            }
+
+            case "use_another_account":
+                this.loginState.forgetRememberedLogin();
+                this.loginState.displayName = "";
+                this.loginState.promptCredentials(false);
+                return undefined;
 
             case "cancel":
                 this.loginState.loginIndex = LoginIndex.WELCOME;
@@ -5832,7 +5904,12 @@ export class OsrsClient {
                 return "cancel";
 
             case "try_again":
-                this.loginState.promptCredentials(true);
+                if (this.loginState.getRememberedLogin()) {
+                    this.loginState.loginIndex = LoginIndex.WELCOME;
+                    this.loginState.showRememberedLogin();
+                } else {
+                    this.loginState.promptCredentials(true);
+                }
                 this.loginState.virtualKeyboardVisible = false;
                 return undefined;
 
@@ -5873,6 +5950,10 @@ export class OsrsClient {
             case "toggle_hide_username":
                 this.loginState.isUsernameHidden = !this.loginState.isUsernameHidden;
                 this.loginState.savePersistedLoginState();
+                return undefined;
+
+            case "toggle_stay_signed_in":
+                this.loginState.staySignedIn = !this.loginState.staySignedIn;
                 return undefined;
 
             case "toggle_trust":
@@ -5935,6 +6016,7 @@ export class OsrsClient {
                             : null,
                     );
                     this.loginState.saveLastServer();
+                    this.loginState.showRememberedLogin();
                 }
                 return undefined;
             }
@@ -6027,9 +6109,9 @@ export class OsrsClient {
                 this.loginState.showCredentialValidationError();
                 return;
             }
-            this.loginState.savePersistedLoginState();
+            this.loginState.loginWithToken = false;
             this.updateGameState(GameState.CONNECTING);
-            sendLogin(username.trim(), password, this.loadedCache?.info?.revision ?? 0);
+            this.sendLoginRequest();
         } catch {}
     }
 
@@ -6060,6 +6142,7 @@ export class OsrsClient {
      * Called when login fails.
      */
     onLoginFailed(reason: string): void {
+        this.loginState.loginWithToken = false;
         this.loginState.setResponse("", reason, "", "");
         this.loginState.loginIndex = LoginIndex.INVALID_CREDENTIALS;
         this.updateGameState(GameState.LOGIN_SCREEN);

@@ -201,3 +201,9 @@ export function withContentTransform(host: LoginRendererHost, ctx: RenderContext
         }
 
 }
+
+/** Login form checkbox beside "Remember username". */
+export const STAY_SIGNED_IN_TEXT = "Stay logged in: ";
+/** Link under Play on the remembered-account screen; drops the remembered login. */
+export const USE_ANOTHER_ACCOUNT_TEXT = "Not you? Log in with another account.";
+export const USE_ANOTHER_ACCOUNT_Y = 357;

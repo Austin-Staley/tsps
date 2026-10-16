@@ -16,6 +16,7 @@ export function subscribeLoginResponse(
         error?: string;
         errorCode?: number;
         displayName?: string;
+        loginToken?: string;
     }) => void,
 ): () => void {
     state.loginResponseListeners.add(cb);
@@ -35,12 +36,19 @@ export function subscribeLogoutResponse(
 /**
  * Send login credentials to server.
  * If the state.socket isn't open (e.g., after logout), this will reconnect first.
+ * `password` is the "Stay logged in" token when `flags` has LOGIN_FLAG_TOKEN.
  */
-export async function sendLogin(username: string, password: string, revision: number = 0): Promise<void> {
+export async function sendLogin(
+    username: string,
+    password: string,
+    revision: number = 0,
+    flags: number = 0,
+): Promise<void> {
     // Store credentials for session resumption on reconnect
     state.sessionUsername = username;
     state.sessionPassword = password;
     state.sessionRevision = revision;
+    state.sessionLoginFlags = flags;
     const attemptId = ++state.loginConnectAttemptId;
     if (state.webRtcConfig && !await resolveServerTransport()) return;
     if (attemptId !== state.loginConnectAttemptId) return;
@@ -54,7 +62,7 @@ export async function sendLogin(username: string, password: string, revision: nu
     const sendLoginPayload = () => {
         send({
             type: "login",
-            payload: { username, password, revision },
+            payload: { username, password, revision, flags },
         } as any);
     };
 
@@ -145,6 +153,7 @@ export function suppressReconnection(): void {
     // Clear session credentials - user logged out intentionally
     state.sessionUsername = null;
     state.sessionPassword = null;
+    state.sessionLoginFlags = 0;
     clearLoginConnectRetryTimer();
     try {
         const g: any = (typeof window !== "undefined" ? window : globalThis) as any;

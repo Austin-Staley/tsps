@@ -12,7 +12,6 @@ import { InteractHighlightPlugin } from "../../../game/plugins/interacthighlight
 import { MenuSwapperPlugin } from "../../../game/plugins/menuswapper/MenuSwapperPlugin";
 import { NotesConfig } from "../../../game/plugins/notes/NotesPlugin";
 import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
-import { RememberLoginPlugin } from "../../../game/plugins/rememberlogin/RememberLoginPlugin";
 import { SplitPrivateChatPlugin } from "../../../game/plugins/splitprivatechat/SplitPrivateChatPlugin";
 import { StatusBarsPlugin } from "../../../game/plugins/statusbars/StatusBarsPlugin";
 import { StretchedModePlugin } from "../../../game/plugins/stretchedmode/StretchedModePlugin";
@@ -41,7 +40,6 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     TileMarkersPlugin,
     MenuSwapperPlugin,
     NotesPlugin,
-    RememberLoginPlugin,
     SplitPrivateChatPlugin,
     AnimationSmoothingPlugin,
     AttackTimerPlugin,
@@ -104,11 +102,6 @@ export const LEGACY_CONFIG_MIGRATIONS: ReadonlyArray<LegacyConfigMigration> = [
         name: "hd",
         legacyKey: "xrsps.plugin.hd.enabled",
         enabledKey: "hdplugin",
-    },
-    {
-        name: "rememberlogin",
-        legacyKey: "osrs.plugin.remember_login.v1",
-        enabledKey: "rememberloginplugin",
     },
     {
         name: "menuswapper",

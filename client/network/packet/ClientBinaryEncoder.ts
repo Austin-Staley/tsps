@@ -189,11 +189,12 @@ export class ClientBinaryEncoder {
         return this.buffer.toPacket(ClientPacketId.LOGOUT);
     }
 
-    encodeLogin(username: string, password: string, revision: number): Uint8Array {
+    encodeLogin(username: string, password: string, revision: number, flags: number = 0): Uint8Array {
         this.buffer.reset();
         this.buffer.writeString(username ?? "");
         this.buffer.writeString(password ?? "");
         this.buffer.writeInt(revision);
+        this.buffer.writeByte(flags);
         return this.buffer.toPacket(ClientPacketId.LOGIN);
     }
 
@@ -570,7 +571,12 @@ export function encodeClientMessage(msg: { type: string; payload: any }): Uint8A
             return clientEncoder.encodeLogout();
 
         case "login":
-            return clientEncoder.encodeLogin(payload.username, payload.password, payload.revision);
+            return clientEncoder.encodeLogin(
+                payload.username,
+                payload.password,
+                payload.revision,
+                payload.flags,
+            );
 
         case "walk":
             return clientEncoder.encodeWalk(

@@ -90,7 +90,10 @@ type ClientToServer =
       }
     | { type: "plugin_message"; payload: import("../../../common/network/PluginMessage").PluginMessagePayload }
     | { type: "logout"; payload?: Record<string, never> }
-    | { type: "login"; payload: { username: string; password: string; revision: number } }
+    | {
+          type: "login";
+          payload: { username: string; password: string; revision: number; flags?: number };
+      }
     | { type: "chat"; payload: Record<string, unknown> }
     | { type: "friends_chat_action"; payload: FriendsChatAction }
     | { type: "private_message"; payload: { recipient: string; text: string } }

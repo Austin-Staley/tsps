@@ -1,6 +1,7 @@
 import type { LoginState } from "../../LoginState";
 import type { LoginRendererHost, RenderContext } from "../host";
 import { isCaretVisible } from "../canvas";
+import { USE_ANOTHER_ACCOUNT_TEXT, USE_ANOTHER_ACCOUNT_Y } from "../layout/geometry";
 import { drawButton, drawCenteredText, drawText, truncateFromStart } from "./drawUtils";
 
 export function drawForgotPassword(host: LoginRendererHost, ctx: RenderContext, state: LoginState) {
@@ -241,6 +242,17 @@ export function drawWelcomeDisplayName(host: LoginRendererHost, ctx: RenderConte
             true,
         );
         drawButton(host, ctx, host.loginBoxX + 180, 311, "Play");
+        if (host.fontPlain11) {
+            drawCenteredText(host, 
+                ctx,
+                host.fontPlain11,
+                USE_ANOTHER_ACCOUNT_TEXT,
+                host.loginBoxX + 180,
+                USE_ANOTHER_ACCOUNT_Y,
+                0xffffff,
+                true,
+            );
+        }
     
 }
 

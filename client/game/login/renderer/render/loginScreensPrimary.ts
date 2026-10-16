@@ -1,7 +1,7 @@
 import { GameState } from "../../GameState";
 import type { LoginState } from "../../LoginState";
 import type { LoginRendererHost, RenderContext } from "../host";
-import { getWelcomeLayout } from "../layout/geometry";
+import { getWelcomeLayout, STAY_SIGNED_IN_TEXT } from "../layout/geometry";
 import { isCaretVisible } from "../canvas";
 import { drawButton, drawCenteredText, drawText, drawSprite, measureText, getCheckboxSprite, truncateFromStart } from "./drawUtils";
 
@@ -171,6 +171,17 @@ export function drawLoginForm(host: LoginRendererHost, ctx: RenderContext, state
                     checkboxX + textWidth,
                     textY - host.fontBold12.lineHeight,
                 );
+                const staySprite = getCheckboxSprite(host, state.staySignedIn, false);
+                if (staySprite) {
+                    const stayX = checkboxX + textWidth + rememberSprite.subWidth + 10;
+                    drawText(host, ctx, host.fontBold12, STAY_SIGNED_IN_TEXT, stayX, textY, 0xffff00, true);
+                    drawSprite(host, 
+                        ctx,
+                        staySprite,
+                        stayX + measureText(host, host.fontBold12, STAY_SIGNED_IN_TEXT),
+                        textY - host.fontBold12.lineHeight,
+                    );
+                }
             }
         }
 
