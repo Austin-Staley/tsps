@@ -44,6 +44,7 @@ They spawned with their stats and drops but fought as ordinary NPCs:
   The entrance, the passage at y 5659 and the middle room stay single-way (Wiki: "Past this archway, the entire area is exclusively multi-way").
   - The edges come from the captures: the multi-way icon (varbit 4605) against the player's tile, 1,245 tiles across both recordings, none outside these zones. The archway is the walled passage at x 2155-2156, y 5663-5665; the icon is off at y 5665 and on at 5667.
   - The rest of each edge follows the cavern's walls, so it isn't more exact than the captures need.
+- **Exit rope** (28687, by the entrance): Climb-up takes you out to the cavern entrance at 2026, 5611, the tile captured players enter from. A `loc-teleports.json` entry; no capture climbs it, so its animation and timing are those of the captured Climb-up ropes.
 - **Dwarf cannon:** already can't target demonic gorillas (`NO_CANNON_NPCS`).
 
 ## From the captures
