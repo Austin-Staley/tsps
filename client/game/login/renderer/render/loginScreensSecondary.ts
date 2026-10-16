@@ -1,8 +1,14 @@
 import type { LoginState } from "../../LoginState";
 import type { LoginRendererHost, RenderContext } from "../host";
 import { isCaretVisible } from "../canvas";
-import { REMEMBERED_LOG_OUT_BUTTON_Y, REMEMBERED_NAME_BUTTON_Y } from "../layout/geometry";
-import { drawButton, drawCenteredText, drawText, truncateFromStart } from "./drawUtils";
+import {
+    getRememberedPlayBounds,
+    REMEMBERED_LOG_OUT_TEXT,
+    REMEMBERED_LOG_OUT_Y,
+    REMEMBERED_PLAY_Y,
+    REMEMBERED_TITLE_Y,
+} from "../layout/geometry";
+import { drawButton, drawCenteredText, drawSprite, drawText, truncateFromStart } from "./drawUtils";
 
 export function drawForgotPassword(host: LoginRendererHost, ctx: RenderContext, state: LoginState) {
 
@@ -228,27 +234,47 @@ export function drawWelcomeDisplayName(
 ) {
 
         if (!host.fontBold12) return;
+        const centerX = host.loginBoxX + 180;
         drawCenteredText(host, 
             ctx,
             host.fontBold12,
             `Welcome to ${state.serverName?.trim() || "RSPS.app"}`,
-            host.loginBoxX + 180,
-            201,
+            centerX,
+            REMEMBERED_TITLE_Y,
             0xffff00,
             true,
         );
-        drawCenteredText(host, 
-            ctx,
-            host.fontBold12,
-            isConnecting ? state.response1 : "Click your name to play.",
-            host.loginBoxX + 180,
-            236,
-            0xffffff,
-            true,
-        );
-        if (isConnecting) return;
-        drawButton(host, ctx, host.loginBoxX + 180, REMEMBERED_NAME_BUTTON_Y, state.displayName);
-        drawButton(host, ctx, host.loginBoxX + 180, REMEMBERED_LOG_OUT_BUTTON_Y, "Log out");
+        if (isConnecting) {
+            drawCenteredText(host, ctx, host.fontBold12, state.response1, centerX, REMEMBERED_PLAY_Y + 5, 0xffffff, true);
+            return;
+        }
+
+        const button = getRememberedPlayBounds(host);
+        if (host.titlebuttonLargeSprite && host.playNowTextSprite) {
+            drawSprite(host, ctx, host.titlebuttonLargeSprite, button.x, button.y);
+            const text = host.playNowTextSprite;
+            drawSprite(host, 
+                ctx,
+                text,
+                centerX - Math.floor(text.subWidth / 2),
+                REMEMBERED_PLAY_Y - 13 - Math.floor(text.subHeight / 2),
+            );
+        } else {
+            drawButton(host, ctx, centerX, REMEMBERED_PLAY_Y - 8, "Play Now");
+        }
+        drawCenteredText(host, ctx, host.fontBold12, state.displayName, centerX, REMEMBERED_PLAY_Y + 18, 0xffff00, true);
+
+        if (host.fontPlain11) {
+            drawCenteredText(host, 
+                ctx,
+                host.fontPlain11,
+                REMEMBERED_LOG_OUT_TEXT,
+                centerX,
+                REMEMBERED_LOG_OUT_Y,
+                0xffffff,
+                true,
+            );
+        }
     
 }
 
