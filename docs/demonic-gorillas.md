@@ -38,6 +38,12 @@ They spawned with their stats and drops but fought as ordinary NPCs:
   - A boulder alone can't kill, and it isn't one of the three misses.
 - **Anti-safespot:** a gorilla in Melee that can't reach its target changes style.
 - **Aggression:** the cavern's gorillas are aggressive until the player has completed Monkey Madness II. The cavern is an `Area`, which answers this and counts the anti-safespot ticks for its own NPCs only.
+- **Multi-way combat:** two `multi-combat` zones in `server/data/definitions/world.json` cover the cavern past the archway:
+  - the northern passage and rooms: x 2050-2167, y 5666-5695;
+  - the western room and its passage north: x 2050-2089, y 5640-5665.
+  The entrance, the passage at y 5659 and the middle room stay single-way (Wiki: "Past this archway, the entire area is exclusively multi-way").
+  - The edges come from the captures: the multi-way icon (varbit 4605) against the player's tile, 1,245 tiles across both recordings, none outside these zones. The archway is the walled passage at x 2155-2156, y 5663-5665; the icon is off at y 5665 and on at 5667.
+  - The rest of each edge follows the cavern's walls, so it isn't more exact than the captures need.
 - **Dwarf cannon:** already can't target demonic gorillas (`NO_CANNON_NPCS`).
 
 ## From the captures
@@ -67,7 +73,5 @@ They spawned with their stats and drops but fought as ordinary NPCs:
 
 ## Not covered
 
-- **Multi-way combat:** past the archway the cavern is multi-way (Wiki), but its exact boundaries aren't known here, so the whole cavern stays single-way.
 - **"The third attack must be prayed correctly":** the strategies page says a gorilla changes style consistently only when the third miss was prayed against. Any third miss counts here.
-- **Two gorillas on one player in single-way:** after a death, a gorilla can keep its target while another aggroes. That's the engine's target retention, not this plugin.
 - **The style-change scream:** the Wiki mentions a "bone-chilling scream", but no sound id for it shows in the captures; only the overhead text is sent.
