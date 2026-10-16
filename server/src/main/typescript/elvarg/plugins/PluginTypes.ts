@@ -937,10 +937,6 @@ export interface PluginApi {
     handler: (event: PluginGroundItemInteractionEvent) => void | boolean
   ): void;
   onGroundItemPickup(handler: (event: PluginGroundItemInteractionEvent) => void | boolean): void;
-  onGroundItemSecondClick(
-    itemIds: number | number[],
-    handler: (event: PluginGroundItemInteractionEvent) => void | boolean
-  ): void;
   onItemOnObject(handler: (event: PluginItemOnObjectEvent) => void, filter?: PluginItemUseFilter): void;
   /** Matches exact item and object names. Return false to fall through. */
   onItemOnObject(itemName: string, objectName: string, handler: (event: PluginItemOnObjectEvent) => void | boolean, filter?: PluginItemUseFilter): void;
