@@ -922,7 +922,9 @@ export class ClientConnection {
     try {
       if (save) {
         const stored = String(save.getPasswordHashWithSalt?.() ?? "");
-        let valid = stored === password;
+        // Only a save from before hashing holds the plain password. A hash must never match
+        // the typed text, even though the 64-character limit happens to rule out real ones.
+        let valid = !!stored && !stored.includes(":") && stored === password;
         if (!valid && stored.includes(":")) {
           try {
             valid = await GameConstants.PLAYER_PERSISTENCE.checkPassword(password, save);
