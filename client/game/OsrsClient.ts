@@ -6790,10 +6790,10 @@ export class OsrsClient {
             await showPhase(95, "Loading overlays...");
             this.renderer.initOverlays();
 
-            // Complete - transition to login screen
+            // Complete - transition to login screen (which swaps in a remembered account)
             this.loginState.loadingText = "";
-            this.updateGameState(GameState.LOGIN_SCREEN);
             this.loginState.loginIndex = LoginIndex.WELCOME;
+            this.updateGameState(GameState.LOGIN_SCREEN);
 
             // Auto-login if credentials provided via URL params
             this.tryAutoLogin();
@@ -6801,8 +6801,8 @@ export class OsrsClient {
             console.error("[OsrsClient] Phased loading failed:", err);
             this.loginState.loadingPercent = 100;
             this.loginState.loadingText = "";
-            this.updateGameState(GameState.LOGIN_SCREEN);
             this.loginState.loginIndex = LoginIndex.WELCOME;
+            this.updateGameState(GameState.LOGIN_SCREEN);
         }
     }
 
