@@ -89,7 +89,8 @@ function player() {
 const continueToMenu = (h,p) => h.continueUntil(p, () => Boolean(p.prompt));
 
 function object(h,p,id,x=1647,y=4841) {
-  const event={player:p,objectId:id,definition:{id},location:{x,y,z:0},object:new core.GameObject(id,new core.Location(x,y,0),10,0)};
+  const door=id>=core.ObjectIdentifiers.LARGE_DOOR_94&&id<=core.ObjectIdentifiers.DOOR_561;
+  const event={player:p,objectId:id,definition:{id},location:{x,y,z:0},object:new core.GameObject(id,new core.Location(x,y,0),door?0:10,0)};
   h.hooks.onObjectInteraction[0](event);return event;
 }
 function island(h,p,stage) {

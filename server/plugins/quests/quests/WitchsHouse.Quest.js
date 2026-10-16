@@ -19,6 +19,7 @@
  * is not swapped in the world.
  */
 module.exports = function registerWitchsHouseQuest(api) {
+  const { crossingFor } = require("../../objects/WallDoor.Doors");
   const {
     Skill,
     Item,
@@ -179,20 +180,10 @@ module.exports = function registerWitchsHouseQuest(api) {
    * the door tile itself (the shed's interior starts there, unlike the house).
    */
   function crossDoor(event) {
-    const { player, location } = event;
-    const position = player.getLocation();
-    const face = Number(event.object?.getFace?.() ?? 0) & 0x3;
-    if (face === 0 || face === 2) {
-      const destinationX = position.getX() === location.x
-        ? location.x + (face === 0 ? -1 : 1)
-        : location.x;
-      player.moveTo(new Location(destinationX, position.getY(), location.z));
-      return;
-    }
-    const destinationY = position.getY() === location.y
-      ? location.y + (face === 1 ? 1 : -1)
-      : location.y;
-    player.moveTo(new Location(position.getX(), destinationY, location.z));
+    const { player } = event;
+    const crossing = crossingFor(event.object, player.getLocation());
+    if (!crossing || !Location.isSameTile(player.getLocation(), crossing.approach)) return;
+    player.moveTo(new Location(crossing.destination.x, crossing.destination.y, crossing.destination.z));
   }
 
   function crossElectricGate(event) {
@@ -212,20 +203,8 @@ module.exports = function registerWitchsHouseQuest(api) {
   function routeWallDoor(event) {
     const { player, object } = event;
     if (!object || !WALL_DOOR_LOC_IDS.has(event.objectId)) return;
-    const location = object.getLocation();
-    const position = player.getLocation();
-    const face = Number(object.getFace?.() ?? 0) & 0x3;
-    if (face === 0 || face === 2) {
-      const destinationX = face === 0
-        ? (position.getX() < location.getX() ? location.getX() - 1 : location.getX())
-        : (position.getX() <= location.getX() ? location.getX() : location.getX() + 1);
-      event.destination = { x: destinationX, y: location.getY(), z: location.getZ() };
-      return;
-    }
-    const destinationY = face === 1
-      ? (position.getY() <= location.getY() ? location.getY() : location.getY() + 1)
-      : (position.getY() >= location.getY() ? location.getY() : location.getY() - 1);
-    event.destination = { x: location.getX(), y: destinationY, z: location.getZ() };
+    const crossing = crossingFor(object, event.sourceLocation ?? player.getLocation());
+    if (crossing) event.destination = crossing.approach;
   }
 
   function searchPottedPlant(event) {

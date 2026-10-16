@@ -18,6 +18,24 @@ const { Sounds } = require('../dist/game/Sounds');
 
 const target = { level: 0, destX: 100, destY: 100, srcSize: 1, privateArea: null };
 
+test('wall-door crossings align both coordinates for every face and angled approach', () => {
+  const { crossingFor } = require('../plugins/objects/WallDoor.Doors');
+  for (let face = 0; face < 4; face++) {
+    const door = new GameObject(30112, new Location(100, 100, 0), 0, face, null);
+    const [dx, dy] = [[-1,0],[0,1],[1,0],[0,-1]][face];
+    const tile = {x:100,y:100,z:0},neighbour={x:100+dx,y:100+dy,z:0};
+    for (const side of [-1,1]) for (const offset of [-5,-1,0,1,5]) {
+      const source = {x:100+dx*side*4+dy*offset,y:100+dy*side*4+dx*offset,z:0};
+      const crossing = crossingFor(door, source);
+      assert.deepEqual(crossing.approach, side>0?neighbour:tile);
+      assert.deepEqual(crossing.destination, side>0?tile:neighbour);
+      assert.equal(Math.abs(crossing.approach.x-crossing.destination.x)+Math.abs(crossing.approach.y-crossing.destination.y),1);
+    }
+    assert.deepEqual(crossingFor(door,tile),{approach:tile,destination:neighbour});
+  }
+  assert.equal(crossingFor(new GameObject(30112,new Location(100,100,0),2,0,null),target),null,'corner walls need their own route');
+});
+
 test('object reach respects cardinal sides, walls, rotated footprints and access masks', () => {
   let wall = 0;
   const route = new RsmodRouteFinding(() => wall);

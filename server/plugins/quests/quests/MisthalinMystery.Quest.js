@@ -3,6 +3,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   const { Skill, Location, ObjectDefinition, PrivateArea, Boundary, Animation, Graphic, CountdownTask, TaskManager, DialogueChainBuilder, ActionDialogue, StatementDialogue, GameObject, ObjectManager, Item, ItemOnGroundManager, Equipment, HitDamage, HitMask, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
   const { registerQuest, startTranscript, refreshQuestList } = require("../QuestRuntime");
   const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
+  const { crossingFor } = require("../../objects/WallDoor.Doors");
 
   ObstacleRunner.init(api);
 
@@ -532,20 +533,12 @@ module.exports = function registerMisthalinMysteryQuest(api) {
 
   /** Cross the edge blocked by the door's face, between its tile and its neighbour. */
   function crossDoor(event) {
-    const { player, object, location } = event;
+    const { player, object } = event;
     if (ObstacleRunner.isBusy(player)) return;
     const position = player.getLocation();
-    const face = Number(object.getFace()) & 0x3;
-    let x = position.getX();
-    let y = position.getY();
-    if (face === 0 || face === 2) {
-      const onNeighbour = face === 0 ? x < location.x : x > location.x;
-      x = onNeighbour ? location.x : location.x + (face === 0 ? -1 : 1);
-    } else {
-      const onNeighbour = face === 1 ? y > location.y : y < location.y;
-      y = onNeighbour ? location.y : location.y + (face === 1 ? 1 : -1);
-    }
-    ObstacleRunner.run(event, [{ wait: 1 }, { walk: [[x, y]] }]);
+    const crossing = crossingFor(object, position);
+    if (!crossing || !Location.isSameTile(position, crossing.approach)) return;
+    ObstacleRunner.run(event, [{ wait: 1 }, { walk: [[crossing.destination.x, crossing.destination.y]] }]);
   }
 
   function buildJournal(player, questHandle) {

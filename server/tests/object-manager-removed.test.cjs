@@ -14,6 +14,7 @@ const { Location } = require('../dist/game/model/Location');
 const { World } = require('../dist/game/World');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { ObjectActionPacketListener } = require('../dist/net/packet/impl/ObjectActionPacketListener');
+const { PrivateArea } = require('../dist/game/model/areas/impl/PrivateArea');
 
 before(async () => {
     await CachePipeline.initialize(path.resolve(__dirname, '..'));
@@ -21,6 +22,25 @@ before(async () => {
 });
 
 const removed = () => World.getRemovedObjects();
+
+test('replacing private scenery detaches its old form and snapshot removals detach the registered form', () => {
+    const area = new (class extends PrivateArea {})();
+    const at = new Location(1637, 4835, 0);
+    const opened = new GameObject(5623, at, 10, 3, area);
+    ObjectManager.register(opened, true);
+    ObjectManager.register(opened, true);
+    assert.deepEqual(area.getObjects(), [opened], 'registering the same object keeps its area membership');
+    const closed = new GameObject(5622, at.clone(), 10, 3, area);
+    ObjectManager.register(closed, true);
+    assert.deepEqual(area.getObjects(), [closed], 'old open wardrobe cannot survive in area lookup');
+    assert.equal(MapObjects.get(5623, at, area)?.getPrivateArea(), undefined);
+    assert.equal(MapObjects.get(5622, at, area), closed);
+    const snapshot = new GameObject(5622, at.clone(), 10, 3, area);
+    ObjectManager.deregister(snapshot, true);
+    assert.deepEqual(area.getObjects(), [], 'both snapshot and actual registered form are detached');
+    assert.ok(!World.getObjects().includes(closed));
+    area.destroy();
+});
 
 test('a removed map object is remembered (hidden on scene reloads); a runtime fire is not', () => {
     RegionManager.loadMapFiles(3204, 3229);
