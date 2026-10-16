@@ -1,6 +1,6 @@
 /** Misthalin Mystery: OSRS Wiki and supplied live capture. See docs/misthalin-mystery.md. */
 module.exports = function registerMisthalinMysteryQuest(api) {
-  const { Skill, Location, ObjectDefinition, PrivateArea, Boundary, Animation, Graphic, CountdownTask, TaskManager, DialogueChainBuilder, ActionDialogue, StatementDialogue, GameObject, ObjectManager, Item, ItemOnGroundManager, Equipment, HitDamage, HitMask, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const { Skill, Location, Direction, ObjectDefinition, PrivateArea, Boundary, Animation, Graphic, CountdownTask, TaskManager, DialogueChainBuilder, ActionDialogue, StatementDialogue, GameObject, ObjectManager, Item, ItemOnGroundManager, Equipment, HitDamage, HitMask, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
   const { registerQuest, startTranscript, refreshQuestList } = require("../QuestRuntime");
   const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
   const { crossingFor } = require("../../objects/WallDoor.Doors");
@@ -202,6 +202,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   const MIRROR_SCENERY_ID = 30143, EMPTY_MIRROR_SCENERY_ID = 30144;
   const CLOSED_WARDROBE_ID = 30141, OPEN_WARDROBE_ID = 30142;
   const MIRROR_ID = 7436; // cache mistmyst_mirror, 7640 inert / 7641 Push
+  const KNIFE_PROJECTILE_ID = 214, WARDROBE_SHADOW_ID = 483;
   const ISLAND_ACTORS = [
     [NpcIdentifiers.SID,7430,1615,4832],[NpcIdentifiers.TAYTEN,7431,1639,4838],
     [NpcIdentifiers.LACEY,7432,1629,4850],[NpcIdentifiers.MANDY,7433,1626,4840],
@@ -348,12 +349,15 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     area.mirrorDirection=[0,-1];
     spawnActor(area,KNIFE_REACTION_NPC_ID,KNIFE_REACTION_NPC_ID,1623,4829);
     mirrorScenery(area,new Location(1622,4823,0),false);if(mirror)mirrorScenery(area,mirror.getLocation(),true);
-    shadow(area);
+    // The first warning follows the intro's 11-tick camera reset by 10 ticks.
+    later(area,21,()=>shadow(area));
   }
   function shadow(area){
     if(!area.fighting||area.isDestroyed())return;
     area.warning=WARDROBES[Math.floor(Math.random()*WARDROBES.length)];
-    area.owner.getPacketSender().sendGraphic(new Graphic(483,0,1),new Location(area.warning[0],area.warning[1],0));
+    const graphic=new Graphic(WARDROBE_SHADOW_ID);
+    graphic.height=1; // The three-argument constructor interprets 1 as Priority.MEDIUM.
+    area.owner.getPacketSender().sendGraphic(graphic,new Location(area.warning[0],area.warning[1],0));
     later(area,14,()=>throwKnife(area));
   }
   function throwKnife(area){
@@ -366,9 +370,9 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     const dx=Math.sign(where[0]-at.getX()),dy=Math.sign(where[1]-at.getY());
     const reflects=aligned&&area.mirrorDirection[0]===dx&&area.mirrorDirection[1]===dy;
     const target=aligned?at:opposite,distance=Math.max(Math.abs(source.getX()-target.getX()),Math.abs(source.getY()-target.getY()));
-    // PacketSender takes an absolute end-cycle offset, including the launch delay.
-    player.getPacketSender().sendProjectile(source,target,0,41+distance*5+(aligned?5:0),214,163,146,aligned?mirror:null,41,15,11);
-    if(aligned)player.getPacketSender().sendProjectile(at,reflects?source:new Location(1619,4832,0),0,82+(reflects?distance*10+10:90),214,163,146,null,82,15,11);
+    // Rsprox V2 heights are world units; the legacy sender multiplies its height arguments by four.
+    player.getPacketSender().sendProjectile(source,target,0,41+distance*5+(aligned?5:0),KNIFE_PROJECTILE_ID,163/4,146/4,aligned?mirror:null,41,15,11);
+    if(aligned)player.getPacketSender().sendProjectile(at,reflects?source:new Location(1619,4832,0),0,82+(reflects?distance*10+10:90),KNIFE_PROJECTILE_ID,163/4,146/4,null,82,15,11);
     player.getPacketSender().sendSoundEffect(2707,1,0);
     const reaction=area.actors.get(KNIFE_REACTION_NPC_ID);if(reflects)later(area,1,()=>reaction?.moveTo(source));
     later(area,4,()=>{
@@ -390,10 +394,15 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     if(Math.abs(at.getX()-p.getX())>Math.abs(at.getY()-p.getY()))dy=0;else dx=0;
     if(dx===0&&dy===0)return true;
     const to=new Location(at.getX()+dx,at.getY()+dy,0);
-    // The mirror's 3x3 scenery footprint must stay inside the wardrobe room.
+    // Keep the mirror within the captured push limits inside the wardrobe room.
     if(to.getX()<1622||to.getX()>1624||to.getY()<4828||to.getY()>4831){player.sendMessage("The mirror can't go any further in that direction.");return true;}
-    area.pushing=true;area.mirrorDirection=[dx,dy];player.performAnimation(new Animation(3065));
-    later(area,1,()=>{mirrorScenery(area,at,false);mirror.moveTo(to);mirrorScenery(area,to,true);player.getPacketSender().sendSoundEffect(1395,1,0);mirror.setPositionToFace(new Location(to.getX()+dx,to.getY()+dy,0));player.moveTo(at.clone());});
+    area.pushing=true;player.performAnimation(new Animation(3065));
+    later(area,1,()=>{
+      mirrorScenery(area,at,false);mirror.moveTo(to);mirrorScenery(area,to,true);
+      area.mirrorDirection=[dx,dy];
+      mirror.setFace(Direction.fromDeltas(dx,dy));mirror.faceTile(new Location(to.getX()+dx,to.getY()+dy,0));
+      player.getPacketSender().sendSoundEffect(1395,1,0);player.moveTo(at.clone());
+    });
     later(area,2,()=>{area.pushing=false;player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);});return true;
   }
   function dropKillerKnife(player){

@@ -42,6 +42,25 @@ test('replacing private scenery detaches its old form and snapshot removals deta
     area.destroy();
 });
 
+test('moving solid private scenery clears old tiles and preserves unrelated projectile clipping', () => {
+    const area = new (class extends PrivateArea {})();
+    const tiles = [new Location(100,100,0),new Location(101,100,0),new Location(101,101,0)];
+    for (const tile of tiles) area.setClip(tile,0x20000);
+    let previous = null;
+    for (const tile of [...tiles,...tiles.slice().reverse()]) {
+        if (previous) ObjectManager.register(new GameObject(30144,previous.clone(),10,0,area),true);
+        ObjectManager.register(new GameObject(30143,tile.clone(),10,0,area),true);
+        for (const candidate of tiles) {
+            assert.equal(area.getClip(candidate)&0x100,candidate.equals(tile)?0x100:0,'only the current mirror tile blocks walking');
+            assert.equal(area.getClip(candidate)&0x20000,0x20000,'non-projectile mirror removal preserves other projectile clipping');
+        }
+        previous=tile;
+    }
+    ObjectManager.register(new GameObject(30144,previous.clone(),10,0,area),true);
+    assert.ok(tiles.every(tile=>(area.getClip(tile)&0x100)===0));
+    area.destroy();
+});
+
 test('a removed map object is remembered (hidden on scene reloads); a runtime fire is not', () => {
     RegionManager.loadMapFiles(3204, 3229);
     const stairs = MapObjects.get(56230, new Location(3204, 3229, 0), null);

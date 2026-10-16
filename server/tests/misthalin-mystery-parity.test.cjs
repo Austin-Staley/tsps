@@ -8,6 +8,7 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
+const { PacketSender } = require('../dist/net/packet/PacketSender');
 const runtime = require('../plugins/quests/QuestRuntime');
 const core = PluginManager.getCoreApi();
 const I = core.ItemIdentifiers, N = core.NpcIdentifiers;
@@ -38,6 +39,7 @@ function harness(name) {
         index: nextIndex++, getLocation: () => location, moveTo: to => { location = to; },
         getArea: () => area, setArea: value => { area = value; }, isNpc: () => true, isPlayer: () => false, getAsNpc: () => npc,
         isRegistered: () => !npc.removed, setPositionToFace: to => { npc.facing = to; }, forceChat: text => { npc.said = text; },
+        setFace: direction => { npc.direction = direction; }, faceTile: to => { npc.facing = to; return npc; },
         setNpcTransformationId: id => { npc.transform = id; },
         performAnimation: animation => npc.animations.push(animation.getId()), performGraphic: graphic => npc.graphics.push(graphic.id),
         getMovementQueue: () => movement, step: () => { if(path.length&&!npc.removed)location=path.shift(); },
@@ -200,6 +202,7 @@ test('Mandy camera pans wait for the actual continued scene actions and retain t
 });
 test('mirror pushing, shadow warnings and three correctly faced reflections unlock the actual confrontation',()=>{
   const h=harness('MisthalinMystery'),p=player(),area=island(h,p,110);object(h,p,core.ObjectIdentifiers.DOOR_561,1628,4827);h.continueUntil(p,()=>h.quest.getStage(p)===111);assert.equal(area.fighting,true);
+  h.tick(21);
   object(h,p,core.ObjectIdentifiers.DOOR_561,1628,4827);assert.equal(h.quest.getStage(p),111,'the door cannot bypass the mirror encounter');
   const mirror=area.actors.get(7436);p.moveTo(new core.Location(1621,4828,0));h.npcActions.get('<col=00ffff>Mirror</col>').Push({player:p,npc:mirror});h.tick(2);assert.equal(mirror.getLocation().getX(),1623);p.moveTo(new core.Location(1624,4828,0));h.npcActions.get('<col=00ffff>Mirror</col>').Push({player:p,npc:mirror});h.tick(2);assert.equal(mirror.getLocation().getX(),1622);
   area.warning=[1619,4828,0];const original=Math.random;Math.random=()=>0.99;
@@ -229,8 +232,48 @@ test('all four Lacey answers continue through her murder and the next note',()=>
 });
 test('the mirror cannot move below its captured south boundary or score on a wrong-facing reflection',()=>{
   const h=harness('MisthalinMystery'),p=player(),area=island(h,p,110);object(h,p,core.ObjectIdentifiers.DOOR_561,1628,4827);h.continueUntil(p,()=>h.quest.getStage(p)===111);
+  h.tick(21);
   const mirror=area.actors.get(7436);p.moveTo(new core.Location(1622,4829,0));h.npcActions.get('<col=00ffff>Mirror</col>').Push({player:p,npc:mirror});h.tick(2);assert.equal(mirror.getLocation().getY(),4828);assert.ok(p.messages.includes("The mirror can't go any further in that direction."));
   area.warning=[1619,4828,0];h.tick(16);assert.equal(area.reflections,0);assert.equal(h.quest.getStage(p),111);assert.ok(p.log.some(row=>row[0]==='sendProjectile'));
+});
+test('mirror pushes retain their direction and encoded knife routes use captured heights and wardrobe endpoints', (t) => {
+  const wardrobes = [[1622,4834,1],[1627,4831,2],[1624,4825,3],[1619,4828,0]];
+  const destinations = [[1622,4831],[1624,4831],[1624,4830],[1623,4828]];
+  let choice = 0;
+  t.mock.method(Math, 'random', () => (choice + 0.5) / 4);
+  for (choice = 0; choice < 4; choice++) {
+    const h=harness('MisthalinMystery'),p=player(),area=island(h,p,110),sent=[];
+    const sender=new PacketSender({getSession:()=>({sendClientPacket:packet=>{sent.push(packet);return true;}})});
+    const packets=p.getPacketSender();
+    packets.sendProjectile=(...args)=>sender.sendProjectile(...args);
+    packets.sendGraphic=(...args)=>sender.sendGraphic(...args);
+    object(h,p,core.ObjectIdentifiers.DOOR_561,1628,4827);
+    h.continueUntil(p,()=>h.quest.getStage(p)===111);
+    assert.equal(sent.length,0,'no warning under the intro camera');
+    h.tick(20);assert.equal(sent.length,0);
+    h.tick(1);
+    const warning=sent[0].subarray(-11),where=wardrobes[choice];
+    assert.equal(warning.readUInt16BE(0),483);
+    assert.deepEqual([warning.readUInt16BE(3),warning.readUInt16BE(5),warning[8]],[where[0],where[1],1]);
+    const [x,y]=destinations[choice],dx=Math.sign(where[0]-x),dy=Math.sign(where[1]-y);
+    const mirror=area.actors.get(7436);
+    mirror.moveTo(new core.Location(x-dx,y-dy,0));p.moveTo(new core.Location(x-2*dx,y-2*dy,0));
+    h.npcActions.get('<col=00ffff>Mirror</col>').Push({player:p,npc:mirror});h.tick(2);
+    assert.equal(mirror.direction,core.Direction.fromDeltas(dx,dy));
+    assert.ok(mirror.facing.equals(new core.Location(x+dx,y+dy,0)));
+    h.tick(12);
+    const outward=sent[1].subarray(-29),returned=sent[2].subarray(-29);
+    for(const packet of [outward,returned]){
+      assert.equal(packet.readUInt16BE(0),214);
+      assert.equal(packet.readUInt16BE(7),163,'native V2 start height is not multiplied twice');
+      assert.equal(packet.readUInt16BE(14),146);
+    }
+    const endpoints=packet=>[packet.readUInt16BE(2),packet.readUInt16BE(4),packet.readUInt16BE(9),packet.readUInt16BE(11)];
+    assert.deepEqual(endpoints(outward),[where[0],where[1],x,y]);
+    assert.deepEqual(endpoints(returned),[x,y,where[0],where[1]]);
+    assert.equal(outward.readUInt16BE(19),41);assert.equal(returned.readUInt16BE(19),82);
+    h.hooks.onPlayerLogout[0]({player:p});
+  }
 });
 test('colored door handover consumes its own key when old keys have been recovered',()=>{
   const h=harness('MisthalinMystery'),p=player();h.quest.setStage(p,80);p.items.set(I.RUBY_KEY_2,1);p.items.set(I.EMERALD_KEY_2,1);
