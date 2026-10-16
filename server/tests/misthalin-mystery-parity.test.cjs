@@ -28,13 +28,19 @@ function harness(name) {
     sendMultiChatboxPrompt(p, title, ...pairs) { p.prompt = { title, options: pairs.filter((_, i) => i % 2 === 0), pairs }; return true; },
     spawnNpc(definition) {
       let location = new core.Location(definition.x, definition.y, definition.z), area = null;
+      const path = [];
+      const movement = { addSteps(to) {
+        npc.walkingTo = to;
+        let from = path.at(-1) ?? location;
+        while(!from.equals(to)) { from = new core.Location(from.getX()+Math.sign(to.getX()-from.getX()),from.getY()+Math.sign(to.getY()-from.getY()),to.getZ());path.push(from); }
+      } };
       const npc = { ...definition, animations: [], graphics: [], hits: [], hitpoints: core.NpcDefinition.forId(definition.id).getHitpoints(), getId: () => definition.id, getIndex: () => npc.index,
         index: nextIndex++, getLocation: () => location, moveTo: to => { location = to; },
         getArea: () => area, setArea: value => { area = value; }, isNpc: () => true, isPlayer: () => false, getAsNpc: () => npc,
-        isRegistered: () => !npc.removed, setPositionToFace: noop, forceChat: text => { npc.said = text; },
+        isRegistered: () => !npc.removed, setPositionToFace: to => { npc.facing = to; }, forceChat: text => { npc.said = text; },
         setNpcTransformationId: id => { npc.transform = id; },
         performAnimation: animation => npc.animations.push(animation.getId()), performGraphic: graphic => npc.graphics.push(graphic.id),
-        getMovementQueue: () => ({ addSteps: to => { npc.walkingTo = to; } }),
+        getMovementQueue: () => movement, step: () => { if(path.length&&!npc.removed)location=path.shift(); },
         setCombatXpMultiplier: value => { npc.multiplier = value; },
         getCombat: () => ({ attack: player => { npc.target = player; }, getHitQueue: () => ({addPendingDamage: hits => {for(const hit of hits){npc.hitpoints-=hit.getDamage();npc.hits.push(hit);}}}) }),
       }; npcs.push(npc); return npc;
@@ -50,7 +56,7 @@ function harness(name) {
     line(p, npcId, text) { const event = { player: p, npcId, text }; h.emit('npc-dialogue:line', event); return event; },
     action(p, npcId, stepId) { const event = { player: p, npcId, stepId }; h.emit('npc-dialogue:action', event); return event; },
     talk(p, npcId) { const choice = hooks.onNpcDialogueVariant.map(fn => fn({ player: p, npcId })).find(Boolean); assert.ok(choice); runtime.startTranscript(api, p, npcId, typeof choice === 'string' ? 'Misthalin Mystery' : choice.page, typeof choice === 'string' ? choice : choice.variant); },
-    tick(count) { while (count-- > 0) [...tasks].forEach(task => task.tick()); },
+    tick(count) { while (count-- > 0) { [...tasks].forEach(task => task.tick());npcs.forEach(npc=>npc.step()); } },
     choose(p, text) { const prompt = p.prompt; assert.ok(prompt, `no menu for ${text}`); const index = prompt.options.findIndex(label => label === text); assert.ok(index >= 0, `missing ${text} in ${prompt.options}`); p.prompt = null; prompt.pairs[index * 2 + 1](); },
     continueUntil(p, predicate, limit = 160) { while (!predicate()) { assert.ok(limit-- > 0, `dialogue stalled at ${p.text}`); const current=p.manager.getCurrent();assert.ok(current, `dialogue ended at ${p.text}`);if(current instanceof core.ActionDialogue)h.tick(1);else p.manager.advance(); } },
   }; return h;
@@ -118,16 +124,58 @@ test('riddle notes open the captured parchment rather than chat spam',()=>{
 });
 test('the owner island runs the complete Sid and Tayten murders before changing stages',()=>{
   const h=harness('MisthalinMystery'),p=player();const area=island(h,p,10);p.moveTo(new core.Location(1615,4828,0));area.process(p);assert.equal(h.quest.getStage(p),15);assert.equal(p.blocked,true);
-  h.continueUntil(p,()=>h.quest.getStage(p)===20,120);assert.equal(area.scene,null);assert.equal(p.blocked,false);assert.ok(h.npcs.some(npc=>npc.animations.includes(7328)));
+  h.continueUntil(p,()=>h.quest.getStage(p)===20&&area.scene===null,120);assert.equal(p.blocked,false);assert.ok(h.npcs.some(npc=>npc.animations.includes(7328)));
   assert.equal(p.log.filter(row=>row[0]==='sendCameraReset').length,0);h.tick(2);assert.equal(p.log.filter(row=>row[0]==='sendCameraReset').length,0);h.tick(1);assert.equal(p.log.filter(row=>row[0]==='sendCameraReset').length,1);
   assert.deepEqual(p.log.filter(row=>/^sendCamera(MoveTo|LookAt)$/.test(row[0])),[
     ['sendCameraMoveTo',1614,4826,300,{rate:232,rate2:232,heightRelative:false}],['sendCameraLookAt',1616,4831,275,{rate:232,rate2:232,heightRelative:false}],
     ['sendCameraMoveTo',1614,4826,300,{rate:10,rate2:15,heightRelative:false}],['sendCameraLookAt',1616,4831,275,{rate:20,rate2:20,heightRelative:false}],
     ['sendCameraMoveTo',1618,4836,500,{rate:10,rate2:10,heightRelative:false}],['sendCameraLookAt',1615,4832,500,{rate:10,rate2:10,heightRelative:false}],
   ]);
-  h.quest.setStage(p,30);object(h,p,core.ObjectIdentifiers.DOOR_554,1635,4839);h.continueUntil(p,()=>h.quest.getStage(p)===35);assert.equal(area.scene,null);
+  h.quest.setStage(p,30);object(h,p,core.ObjectIdentifiers.DOOR_554,1635,4838);h.continueUntil(p,()=>h.quest.getStage(p)===35&&area.scene===null);
   assert.deepEqual(p.log.filter(row=>row[0]==='sendCameraMoveTo').at(-1),['sendCameraMoveTo',1634,4841,1250,{rate:232,rate2:232,heightRelative:false}]);
   assert.ok(h.npcs.every(npc=>npc.owner===p&&npc.ownerOnly));
+});
+test('Sid is approached and faced before the stab, collapses at the barrel and the killer leaves before key recovery',()=>{
+  const h=harness('MisthalinMystery'),p=player(),area=island(h,p,10);p.moveTo(new core.Location(1615,4828,0));area.process(p);h.tick(1);
+  const killer=area.actors.get(N.KILLER),sid=area.actors.get(N.SID);
+  assert.equal(p.manager.getCurrent().getNpcId(),N.SID);
+  assert.equal(killer.id,N.KILLER_2);assert.deepEqual([killer.getLocation().getX(),killer.getLocation().getY()],[1619,4835]);
+  p.manager.advance();assert.equal(p.text,'');h.tick(6);
+  assert.deepEqual([killer.getLocation().getX(),killer.getLocation().getY()],[1615,4833]);assert.ok(killer.facing.equals(sid.getLocation()));
+  h.tick(1);assert.match(p.text,/breathing on my neck/);assert.equal(p.manager.getCurrent().getNpcId(),N.SID);p.manager.advance();h.tick(1);assert.equal(sid.transform,N.SID_2);assert.deepEqual(sid.animations,[]);assert.equal(p.manager.getCurrent().getNpcId(),N.SID_2);
+  h.continueUntil(p,()=>p.manager.getCurrent()?.getNpcId?.()===N.KILLER_2);
+  h.continueUntil(p,()=>p.text==='...glargh...help...me...');assert.deepEqual([sid.getLocation().getX(),sid.getLocation().getY()],[1615,4830]);
+  h.continueUntil(p,()=>sid.animations.includes(836));assert.match(p.text,/Sid collapses/);
+  h.continueUntil(p,()=>h.quest.getStage(p)===20);assert.equal(killer.removed,true);assert.equal(area.actors.has(N.KILLER),false);assert.match(p.text,/Gah!/);assert.equal(sid.removed,undefined);
+  h.continueUntil(p,()=>area.scene===null);h.tick(3);assert.equal(sid.removed,true);assert.equal(p.blocked,false);
+});
+test('Tayten is stabbed at close range and the killer drops the note and disappears into the wardrobe',()=>{
+  const h=harness('MisthalinMystery'),p=player(),area=island(h,p,30);object(h,p,core.ObjectIdentifiers.DOOR_554,1635,4838);
+  assert.equal(area.actors.has(N.KILLER),false);h.tick(4);const killer=area.actors.get(N.KILLER),tayten=area.actors.get(N.TAYTEN);
+  assert.equal(killer.id,N.KILLER_2);assert.ok(killer.facing.equals(new core.Location(1637,4837,0)));
+  h.tick(6);assert.deepEqual([killer.getLocation().getX(),killer.getLocation().getY()],[1638,4838]);assert.ok(killer.facing.equals(tayten.getLocation()));assert.deepEqual(killer.animations,[7328]);assert.deepEqual(tayten.animations,[]);
+  h.tick(2);assert.equal(p.text,'Gurgle...');p.manager.advance();assert.equal(p.text,'Nooooo!');assert.deepEqual(tayten.animations,[836]);
+  p.manager.advance();h.tick(6);assert.deepEqual([killer.getLocation().getX(),killer.getLocation().getY()],[1636,4838]);assert.ok(killer.animations.includes(827));
+  h.tick(7);assert.deepEqual([killer.getLocation().getX(),killer.getLocation().getY()],[1637,4836]);assert.ok(killer.facing.equals(new core.Location(1637,4835,0)));assert.ok(killer.animations.includes(828));
+  h.tick(1);assert.equal(killer.removed,true);assert.equal(h.quest.getStage(p),30);h.tick(2);assert.equal(h.quest.getStage(p),35);assert.match(p.text,/A note/);
+  p.manager.advance();h.tick(2);assert.equal(area.scene,null);assert.equal(p.blocked,false);assert.equal(tayten.removed,true);
+  assert.equal(h.objects.at(-1).getId(),core.ObjectIdentifiers.WARDROBE_4);
+});
+test('world clicks and interface closes cannot erase an active scene dialogue or its timed continuation',()=>{
+  const h=harness('MisthalinMystery'),p=player(),area=island(h,p,30);object(h,p,core.ObjectIdentifiers.DOOR_554,1635,4838);
+  for(const ticks of [0,12]){
+    h.tick(ticks);const current=p.manager.getCurrent();
+    for(const name of ['player:world-input','interface:close']){const event={player:p,handled:false};h.emit(name,event);assert.equal(event.handled,true,name);assert.equal(p.manager.getCurrent(),current);}
+  }
+  assert.equal(p.text,'Gurgle...');h.continueUntil(p,()=>area.scene===null);
+  for(const name of ['player:world-input','interface:close']){const event={player:p,handled:false};h.emit(name,event);assert.equal(event.handled,false,name);}
+  assert.equal(h.quest.getStage(p),35);assert.equal(p.blocked,false);
+});
+test('logging out during Tayten\'s opening hold cancels actor tasks and the door can restart after login',()=>{
+  const h=harness('MisthalinMystery'),p=player(),area=island(h,p,30);object(h,p,core.ObjectIdentifiers.DOOR_554,1635,4838);h.tick(3);
+  h.hooks.onPlayerLogout[0]({player:p});h.tick(20);assert.equal(area.isDestroyed(),true);assert.ok(h.npcs.every(npc=>npc.removed));assert.equal(p.blocked,false);assert.equal(p.manager.getCurrent(),undefined);
+  h.hooks.onPlayerLogin.at(-1)({player:p});const restored=p.getArea();assert.notEqual(restored,area);object(h,p,core.ObjectIdentifiers.DOOR_554,1635,4838);
+  h.tick(12);assert.equal(p.text,'Gurgle...');h.continueUntil(p,()=>restored.scene===null);assert.equal(h.quest.getStage(p),35);assert.equal(p.blocked,false);
 });
 test('Mandy kitchen directions do not abort the scene at imported unavailable markers',()=>{
   const h=harness('MisthalinMystery'),p=player();const area=island(h,p,85);object(h,p,core.ObjectIdentifiers.DOOR_560,1630,4840);h.continueUntil(p,()=>h.quest.getStage(p)===90);assert.equal(area.scene,null);assert.ok(p.log.some(row=>row[0]==='text'&&String(row[2]).includes('Another note')));

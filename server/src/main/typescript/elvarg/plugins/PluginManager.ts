@@ -3360,9 +3360,6 @@ export class PluginManager {
 
         registerGroundItemClickHook(clickType, itemIds, handler, "ground-item");
       },
-      onGroundItemSecondClick: (itemIds, handler) => {
-        registerGroundItemClickHook(2, itemIds, handler, "ground-item-second");
-      },
       onGroundItemPickup: (handler) => {
         if (typeof handler !== "function") return;
         PluginManager.groundItemPickupHooks.push({
