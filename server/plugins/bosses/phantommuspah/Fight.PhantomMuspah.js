@@ -336,7 +336,6 @@ class Fight {
     this.events = [];
     this.spikes.homing = [];
     Clouds.clear(this);
-    this.duration = Common.core.World.getProcessCycle() - this.startCycle;
   }
 
   /** The kill has been counted: spikes sink, the HUD goes, and the next one is on its way. */

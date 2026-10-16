@@ -34,7 +34,8 @@ function onMuspahDeath({ npc, killer }) {
   player.setAttribute(Common.KILLS_ATTRIBUTE, kills);
   player.getPacketSender().sendConfig(Common.data.kill.killCountVarp, kills);
   player.sendMessage(`Your Phantom Muspah kill count is: <col=ff0000>${kills}</col>.`);
-  const ticks = fight.duration ?? 0;
+  // From its appearance to this moment, five ticks into its death (captured: 108 ticks, 1:04.80).
+  const ticks = Common.core.World.getProcessCycle() - fight.startCycle;
   const best = Common.count(player, Common.BEST_TICKS_ATTRIBUTE);
   if (!best || ticks < best) {
     player.setAttribute(Common.BEST_TICKS_ATTRIBUTE, ticks);

@@ -40,7 +40,7 @@ neither captured nor in the Wiki it is marked **estimate**.
 | Crevice `ghorrock_dungeon_cave_entry` (46597, Enter) at (2908, 10316) | Needs Secrets of the North complete (before that, the quest's own crevice handling runs). Face west; "You enter the icy cavern." in a box with `fade_overlay` [0, 200, 0, 0, 50]; minimap off a tick later; two ticks in, the move into a copy of the lair at (2859, 4259) facing west, the area's music, then the fade back in ([0, 0, 0, 255, 50]) with the box again. | capture (174 attempts) |
 | The instance | All 8x8 chunks of the lair's map square (2816-2879, 4224-4287), planes 0 and 1, unturned. | capture (`build_area`) |
 | Escape crevice `sotn_muspah_escape` (46599) | Placed at (2860, 4258), shape 10, rotation 0, when the boss spawns. Escape takes the player back to (2909, 10317) behind the same fade ("You leave the icy cavern."); Quick-escape at once. | capture (the loc); ours (the trip out and its message: one capture, no response recorded) |
-| Logging out, teleporting, dying | Ends the instance. A player saved inside logs back in by the crevice. A death is a normal death; the grave appears outside the lair (Wiki). | Wiki |
+| Logging out, teleporting, dying | Ends the instance. A player saved inside logs back in by the crevice. A death is a normal death; the grave appears outside the lair (Wiki), and what fell on the lair's floor (the supply pile) is carried out to the crevice with it. | Wiki (the grave); ours (the floor) |
 
 ## The boss
 
@@ -177,12 +177,15 @@ With the agent MCP (`::muspah`, `::muspahhp`, `::muspahshield`, `::muspahkill`):
 - The crevice before Secrets of the North ("The crevice is too narrow...", the quest's) and after
   (the fade, the instance, both music tracks, the Muspah in ranged or melee form with two spikes,
   the HUD on 850).
+- A form switch from real damage (ranged to melee after 114, with its spike wave), and a spike
+  stopping the player walking onto it.
 - Its melee and ranged hits, whip damage on it, Homing spikes at 636 and Lightning clouds after
   (the teleporting form, back to its form after), the Muspah healing from spike knock-backs.
 - The shockwave at 126 (hit and corrupted with base 4), the shield on the HUD (75, npc 12079),
   2 drained per attack, Smite breaking it, the post-shield form with its HUD and a spike wave.
 - The kill: kill count, fight duration, Charged ice with its message, loot on its centre tile,
-  the next Muspah 30 seconds later; the escape crevice; a death ending the lair.
+  the next Muspah 30 seconds later; the escape crevice; a death ending the lair, with the supply
+  pile carried out to the crevice.
 - `tests/phantom-muspah.test.cjs`: the arena, instance tiles, durations, the frozen cache, Charged
   ice, the Venator shard rule, the shockwave's shelter, corruption's ticks and drains.
 

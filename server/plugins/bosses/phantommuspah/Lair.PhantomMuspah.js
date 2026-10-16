@@ -176,9 +176,22 @@ function recoverOnLogin({ player }) {
   player.moveTo(exitLocation());
 }
 
-/** A death ends the lair; the usual respawn takes the player out (and nothing can pull them back). */
+/**
+ * A death ends the lair; the usual respawn takes the player out (and nothing can pull them back).
+ * What fell on its floor (the supply pile, unclaimed loot) is carried out by the crevice first, as
+ * the grave is, or it would go with the instance.
+ */
 function endOnDeath({ player }) {
-  sessionOf(player)?.end();
+  const session = sessionOf(player);
+  if (!session) return;
+  const { World } = Common.core;
+  const manager = Common.api.getItemOnGroundManager();
+  for (const ground of [...World.getItems()]) {
+    if (ground.getPrivateArea() !== session.area) continue;
+    manager.deregister(ground);
+    manager.registerLocation(player, ground.getItem(), exitLocation(), null);
+  }
+  session.end();
 }
 
 /** A grave from a death in the lair is left outside it, by the crevice (Wiki). */
