@@ -4,7 +4,10 @@ import { GameState, LoginIndex } from "../../GameState";
 import type { LoginRendererHost } from "../host";
 import {
     getWelcomeLayout,
-    STAY_SIGNED_IN_TEXT,
+    LOGIN_FORM_BUTTON_Y,
+    LOGIN_FORM_REMEMBER_Y,
+    LOGIN_FORM_STAY_Y,
+    REMEMBER_USERNAME_TEXT,
     USE_ANOTHER_ACCOUNT_TEXT,
     USE_ANOTHER_ACCOUNT_Y,
 } from "../layout/geometry";
@@ -56,40 +59,27 @@ export function handleLoginFormClick(host: LoginRendererHost, state: LoginState,
             return undefined;
         }
 
-        // Checkbox: Remember username
+        // Checkboxes: the label or the box toggles it, as drawn by drawLoginForm
         if (host.optionsRadioSprite0 && host.fontBold12) {
-            const rememberY = 275; // Updated to match new layout
-            const checkboxX = host.loginBoxX + 180 - 108;
-            const checkboxW = host.optionsRadioSprite0.subWidth;
-            const checkboxH = host.optionsRadioSprite0.subHeight || 15;
-            if (
-                x >= checkboxX &&
-                x <= checkboxX + checkboxW &&
-                y >= rememberY - checkboxH &&
-                y <= rememberY
-            ) {
-                return LoginActions.TOGGLE_REMEMBER;
-            }
-
-            // Checkbox: Stay logged in
-            const stayCheckboxX =
-                checkboxX +
-                measureText(host, host.fontBold12, "Remember username: ") +
-                checkboxW +
-                10 +
-                measureText(host, host.fontBold12, STAY_SIGNED_IN_TEXT);
-            if (
-                x >= stayCheckboxX &&
-                x <= stayCheckboxX + checkboxW &&
-                y >= rememberY - checkboxH &&
-                y <= rememberY
-            ) {
-                return LoginActions.TOGGLE_STAY_SIGNED_IN;
+            const labelX = host.loginBoxX + 180 - 108;
+            const boxRight =
+                labelX +
+                measureText(host, host.fontBold12, REMEMBER_USERNAME_TEXT) +
+                host.optionsRadioSprite0.subWidth;
+            const top = (baseline: number) => baseline - host.fontBold12!.lineHeight;
+            const boxH = host.optionsRadioSprite0.subHeight || 15;
+            if (x >= labelX && x <= boxRight) {
+                if (y >= top(LOGIN_FORM_REMEMBER_Y) && y < top(LOGIN_FORM_REMEMBER_Y) + boxH) {
+                    return LoginActions.TOGGLE_REMEMBER;
+                }
+                if (y >= top(LOGIN_FORM_STAY_Y) && y < top(LOGIN_FORM_STAY_Y) + boxH) {
+                    return LoginActions.TOGGLE_STAY_SIGNED_IN;
+                }
             }
         }
 
         // Buttons
-        const buttonY = 301;
+        const buttonY = LOGIN_FORM_BUTTON_Y;
         if (isButtonHit(host, x, y, host.loginBoxCenter - 80, buttonY)) {
             return LoginActions.LOGIN;
         }
