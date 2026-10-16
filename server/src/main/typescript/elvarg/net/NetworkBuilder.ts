@@ -77,6 +77,16 @@ import { CombatSpells } from "../game/content/combat/magic/CombatSpells";
 import { TeleportHandler } from "../game/model/teleportation/TeleportHandler";
 import { ArceuusSpells } from "../game/content/combat/magic/ArceuusSpells";
 import { SpellTeleports } from "../game/content/combat/magic/SpellTeleports";
+import {
+  LOGIN_FLAG_REMEMBER,
+  LOGIN_FLAG_TOKEN,
+  LOGIN_TOKENS_ATTRIBUTE,
+  checkLoginToken,
+  issueLoginToken,
+  readLoginTokens,
+  revokeLoginToken,
+  type LoginTokenEntry,
+} from "./login/LoginTokens";
 
 const OBJECT_ACTIONS = new ObjectActionPacketListener();
 const NPC_ACTIONS = new NPCOptionPacketListener();
@@ -96,7 +106,7 @@ export function dispatchClientMessages(player: Player, messages: ClientMessages)
 export async function connectHeadlessClient(username: string, password: string): Promise<{ player?: Player; error?: string }> {
   const connection = new ClientConnection(new HeadlessBinaryChannel());
   connection.inject([
-    { type: "login", username, password, revision: CachePipeline.getActive().revision },
+    { type: "login", username, password, revision: CachePipeline.getActive().revision, flags: 0 },
     { type: "handshake", name: username, clientType: 0 },
   ]);
   await connection.idle();
@@ -142,6 +152,8 @@ type PendingLogin = {
   username: string;
   passwordHash: string;
   save: any | null;
+  /** The account's remembered logins after this one, or null when they didn't change. */
+  loginTokens: LoginTokenEntry[] | null;
 };
 
 export function isConfiguredDeveloperUsername(username: string): boolean {
@@ -853,7 +865,7 @@ export class ClientConnection {
         case "ping":
           continue;
         case "login":
-          await this.login(packet.username, packet.password, packet.revision);
+          await this.login(packet.username, packet.password, packet.revision, packet.flags);
           continue;
         case "handshake":
           this.enterWorld(packet.clientType);
@@ -866,7 +878,8 @@ export class ClientConnection {
     }
   }
 
-  private async login(rawUsername: string, password: string, revision: number): Promise<void> {
+  private async login(rawUsername: string, password: string, revision: number, flags = 0): Promise<void> {
+    const tokenLogin = (flags & LOGIN_FLAG_TOKEN) !== 0;
     this.releasePendingName();
     const protocolName = Misc.formatNameForProtocol(rawUsername.trim());
     const username = Misc.formatText(protocolName);
@@ -918,9 +931,34 @@ export class ClientConnection {
       return;
     }
 
+    // A remembered login only signs in to an account that exists.
+    if (tokenLogin && !save) {
+      this.releasePendingName();
+      this.failLogin(3, "Invalid username or password.");
+      return;
+    }
+
     let passwordHash = "";
+    let loginToken = "";
+    let loginTokens: LoginTokenEntry[] | null = null;
     try {
-      if (save) {
+      if (tokenLogin) {
+        const now = Date.now();
+        const entries = readLoginTokens(save.attributes?.[LOGIN_TOKENS_ATTRIBUTE], now);
+        const check = checkLoginToken(entries, password);
+        if (check.kind !== "valid") {
+          if (check.kind === "reused") {
+            console.warn(`[login] ${username}: a replaced login token was used again; revoking it`);
+            await this.saveLoginTokens(username, save, revokeLoginToken(entries, check.index));
+          }
+          this.releasePendingName();
+          this.failLogin(3, "Invalid username or password.");
+          return;
+        }
+        ({ token: loginToken, entries: loginTokens } = issueLoginToken(entries, now, check.index));
+        await this.saveLoginTokens(username, save, loginTokens);
+        passwordHash = String(save.getPasswordHashWithSalt?.() ?? "");
+      } else if (save) {
         const stored = String(save.getPasswordHashWithSalt?.() ?? "");
         // Only a save from before hashing holds the plain password. A hash must never match
         // the typed text, even though the 64-character limit happens to rule out real ones.
@@ -943,6 +981,12 @@ export class ClientConnection {
       } else {
         passwordHash = await GameConstants.PLAYER_PERSISTENCE.encryptPassword(password);
       }
+      if (!tokenLogin && (flags & LOGIN_FLAG_REMEMBER) !== 0) {
+        const now = Date.now();
+        const entries = readLoginTokens(save?.attributes?.[LOGIN_TOKENS_ATTRIBUTE], now);
+        ({ token: loginToken, entries: loginTokens } = issueLoginToken(entries, now));
+        if (save) await this.saveLoginTokens(username, save, loginTokens);
+      }
     } catch (error) {
       console.error(`[login] failed to authenticate ${username}`, error);
       this.releasePendingName();
@@ -956,8 +1000,8 @@ export class ClientConnection {
       this.releasePendingName();
       return;
     }
-    this.pending = { username, passwordHash, save };
-    this.send(encodeLoginResponse(true, -1, "", username));
+    this.pending = { username, passwordHash, save, loginTokens };
+    this.send(encodeLoginResponse(true, -1, "", username, loginToken));
     console.info(`[login] accepted ${username} from ${this.channel.remoteAddress}`);
   }
 
@@ -980,6 +1024,7 @@ export class ClientConnection {
     if (pending.save) pending.save.applyToPlayer(player);
     if (isConfiguredDeveloperUsername(player.getUsername())) player.setRights(PlayerRights.DEVELOPER);
     player.setPasswordHashWithSalt(pending.passwordHash);
+    if (pending.loginTokens) player.setAttribute(LOGIN_TOKENS_ATTRIBUTE, pending.loginTokens);
     player.setLastKnownRegion(player.getLocation().clone());
     player.getUpdateFlag().flag(Flag.APPEARANCE);
 
@@ -1167,6 +1212,22 @@ export class ClientConnection {
         prayer: player.getAppearance().getHeadHint(),
       },
     };
+  }
+
+  /**
+   * Writes the account's remembered logins before answering, so a swapped token is on disk
+   * even if the player never finishes logging in. The live player's copy follows in enterWorld.
+   */
+  private async saveLoginTokens(username: string, save: any, entries: LoginTokenEntry[]): Promise<void> {
+    if (!save) return;
+    save.attributes = { ...(save.attributes ?? {}), [LOGIN_TOKENS_ATTRIBUTE]: entries };
+    try {
+      await GameConstants.PLAYER_PERSISTENCE.updateOffline(username, (stored) => {
+        stored.attributes = { ...(stored.attributes ?? {}), [LOGIN_TOKENS_ATTRIBUTE]: entries };
+      }, "login-token");
+    } catch (error) {
+      console.warn(`[login] could not save login tokens for ${username}`, error);
+    }
   }
 
   private failLogin(code: number, message: string): void {

@@ -298,7 +298,7 @@ export type ClientMessage =
   | { type: "hello" }
   | { type: "ping" }
   | { type: "logout" }
-  | { type: "login"; username: string; password: string; revision: number }
+  | { type: "login"; username: string; password: string; revision: number; flags: number }
   | { type: "handshake"; name: string; clientType: number };
 
 class Reader {
@@ -873,6 +873,8 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
         username: reader.string(),
         password: reader.string(),
         revision: reader.int(),
+        // LOGIN_FLAG_* (net/login/LoginTokens); older clients don't send it.
+        flags: reader.remaining > 0 ? reader.byte() : 0,
       };
     case ClientPacket.HANDSHAKE: {
       const name = reader.string();
@@ -2082,14 +2084,16 @@ export function encodeLoginResponse(
   success: boolean,
   errorCode = -1,
   error = "",
-  displayName = ""
+  displayName = "",
+  /** A new remembered-login token, empty when none was issued. */
+  loginToken = ""
 ): Buffer {
   const fixed = Buffer.alloc(5);
   fixed[0] = success ? 1 : 0;
   fixed.writeInt32BE(errorCode, 1);
   return packet(
     ServerPacket.LOGIN_RESPONSE,
-    Buffer.concat([fixed, string(error), string(displayName)])
+    Buffer.concat([fixed, string(error), string(displayName), string(loginToken)])
   );
 }
 
