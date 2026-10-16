@@ -1981,6 +1981,14 @@ const ACCOUNT_SUMMARY_PLAYTIME_ROW = 7; // op1 "Reveal"
 const EQUIPMENT_QUIVER_SLOT_UID = (387 << 16) | 28;
 const EQUIPMENT_QUIVER_SLOT_FLAGS = (1 << 1) | (1 << 2) | (1 << 10);
 
+// The prayer and spellbook filter menus (prayerbook:filtermenu, magic_spellbook:filtermenu):
+// rows the cache scripts create at runtime, one per filter. Live enables op1 on each row
+// right after mounting the tab (5 prayer rows, 7 spellbook rows); plugins/interface/TabFilters.
+const PRAYERBOOK_FILTER_MENU_UID = (541 << 16) | 42;
+const PRAYERBOOK_FILTER_LAST_ROW = 4;
+const MAGIC_SPELLBOOK_FILTER_MENU_UID = (218 << 16) | 206;
+const MAGIC_SPELLBOOK_FILTER_LAST_ROW = 6;
+
 /** The login's widget flags, each with the component it is on (its interface is uid >>> 16). */
 function gameframeFlagEntries(root: number): Array<[number, Buffer]> {
   const questTabChild = QUEST_TAB_ICON_CHILD_BY_ROOT[root] ?? QUEST_TAB_ICON_CHILD_ID;
@@ -1988,6 +1996,8 @@ function gameframeFlagEntries(root: number): Array<[number, Buffer]> {
   return [
     [EQUIPMENT_QUIVER_SLOT_UID, encodeWidgetSetFlagsRange(EQUIPMENT_QUIVER_SLOT_UID, -1, -1, EQUIPMENT_QUIVER_SLOT_FLAGS)],
     [MAIN_INVENTORY_WIDGET_UID, encodeWidgetSetFlagsRange(MAIN_INVENTORY_WIDGET_UID, 0, 27, MAIN_INVENTORY_SLOT_FLAGS)],
+    [PRAYERBOOK_FILTER_MENU_UID, encodeWidgetSetFlagsRange(PRAYERBOOK_FILTER_MENU_UID, 0, PRAYERBOOK_FILTER_LAST_ROW, FIRST_OPTION_FLAG)],
+    [MAGIC_SPELLBOOK_FILTER_MENU_UID, encodeWidgetSetFlagsRange(MAGIC_SPELLBOOK_FILTER_MENU_UID, 0, MAGIC_SPELLBOOK_FILTER_LAST_ROW, FIRST_OPTION_FLAG)],
     [questTabIcon, encodeWidgetSetFlags(questTabIcon, QUEST_TAB_ICON_FLAGS)],
     [ACCOUNT_SUMMARY_ENTRY_LIST_UID, encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_QUESTS_ROW, ACCOUNT_SUMMARY_ACHIEVEMENTS_ROW, 1 << 1)],
     [ACCOUNT_SUMMARY_ENTRY_LIST_UID, encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_COMBAT_TASKS_ROW, ACCOUNT_SUMMARY_COMBAT_TASKS_ROW, (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4))],

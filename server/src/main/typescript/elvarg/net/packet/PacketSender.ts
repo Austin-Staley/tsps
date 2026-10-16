@@ -392,12 +392,12 @@ export class PacketSender {
         .sendInterfaceDisplayState((593 << 16) | 23, false)
         .sendInterfaceDisplayState((593 << 16) | 28, false);
     }
+    // Mounting a tab again drops the flags the login gave it (the client clears them when the
+    // old mount closes), so the prayer and magic tabs get theirs back (sendGameframeTabSetup).
     if (tabId === 5) {
-      this.player.getSession().sendClientPacket(encodeWidgetOpenSub(
-        (161 << 16) | 81,
-        interfaceId === 17200 ? 77 : 541
-      ));
-      return this;
+      const group = interfaceId === 17200 ? 77 : 541;
+      this.player.getSession().sendClientPacket(encodeWidgetOpenSub((161 << 16) | 81, group));
+      return this.sendGameframeTabSetup(group);
     }
     if (tabId === 6) {
       const spellbook = interfaceId === 12855 ? 1 : interfaceId === 29999 ? 2 : interfaceId === 39999 ? 3 : 0;
@@ -411,7 +411,7 @@ export class PacketSender {
       }
       this.sendVarbit(4070, spellbook);
       this.player.getSession().sendClientPacket(encodeWidgetOpenSub((161 << 16) | 82, 218));
-      return this;
+      return this.sendGameframeTabSetup(218);
     }
     this.player.getSession().sendClientPacket(encodeWidgetOpenSub((161 << 16) | tabId, interfaceId));
     return this;
