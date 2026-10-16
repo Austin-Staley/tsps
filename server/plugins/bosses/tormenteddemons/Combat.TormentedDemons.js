@@ -3,11 +3,14 @@
 /**
  * A tormented demon's own attacks (Wiki: Tormented Demon, Fight overview and Strategies):
  * - melee, ranged (bone shards) or magic (a fireball), every 6 ticks, up to 31, one style at a
- *   time. It closes in to melee and holds back to cast or throw; if it can't reach the player
+ *   time, opening with melee half the time and ranged or magic a quarter each (captured). It
+ *   closes in to melee and holds back to cast or throw; if it can't reach the player
  *   to melee it switches to magic or ranged (Temple.TormentedDemons.js notices that);
  * - every 10th attack it binds the player for 2 ticks, turns their run off and throws two fire
  *   bombs, one at their tile and one at a random walkable tile beside it, landing 4 ticks on for
  *   40-45. It then drops its shield and always changes style;
+ * - its first ranged or magic attack of a fight does a quarter of the damage (captured; Wiki ~75%
+ *   less), unless a 5+ tick attack hit it while its shield was down;
  * - with two demons on a player, the second never melees and never attacks within a tick of the
  *   first (it is moved 3 ticks off when it would); a third and any more only throw single bombs.
  *
@@ -161,6 +164,12 @@ function singleBomb(npc, player) {
   landBombs(player, [tile]);
 }
 
+/** The first ranged or magic attack: a quarter of the damage (a protection prayer still stops it). */
+function weaken(hit) {
+  for (const part of hit.getHits()) part.setDamage(Math.floor((part.getDamage() * Shared.FIRST_ATTACK_DAMAGE_PERCENT) / 100));
+  hit.updateTotalDamage();
+}
+
 function methodClass() {
   if (MethodClass) return MethodClass;
   const { CombatMethod, PendingHit, CombatType } = Shared.core();
@@ -208,7 +217,10 @@ function methodClass() {
 
     hits(character, target) {
       if (this.bomb || !this.style) return [];
-      return [new PendingHit(character, target, this, HIT_DELAY[this.style])];
+      const hit = new PendingHit(character, target, this, HIT_DELAY[this.style]);
+      const fight = Shared.fights.get(character);
+      if (fight && fight.attacks === 1 && this.style !== "melee" && !fight.slowUnshieldedHit) weaken(hit);
+      return [hit];
     }
   };
   return MethodClass;
@@ -218,4 +230,4 @@ function attach(api) {
   api.registerNpcCombatMethodProvider([...Shared.DEMON_IDS], methodClass(), { singleton: false });
 }
 
-module.exports = { attach, engage, keepStaggered, roleOf, methodClass, _test: { styleFor, roleOf } };
+module.exports = { attach, engage, keepStaggered, roleOf, methodClass, _test: { styleFor, roleOf, weaken } };

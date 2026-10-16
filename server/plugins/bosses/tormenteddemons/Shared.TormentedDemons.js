@@ -92,8 +92,22 @@ const DEFENCELESS_TICKS = 30;
 const SHIELD_DAMAGE_PERCENT = 80;
 /** Wiki: the attack made while the shield is down takes 4 ticks, one less per extra demon. */
 const UNSHIELDED_ATTACK_SPEED = 4;
+/**
+ * Captured: its first ranged or magic attack of a fight hits at most a quarter of the later ones
+ * when the player isn't praying against it (Wiki: ~75% less), unless a 5+ tick attack hit it
+ * while its shield was down.
+ */
+const FIRST_ATTACK_DAMAGE_PERCENT = 25;
+const SLOW_ATTACK_TICKS = 5;
 /** Captured: a respawned demon summons itself and can't be attacked for 8 ticks. */
 const SUMMON_TICKS = 8;
+/**
+ * Captured: defenceless, its flames go out - its one body model (53287 / 53285) becomes 55475 /
+ * 55474 - and they come back when it ends and when it respawns.
+ */
+const DEFENCELESS_MODEL = Object.freeze({ 13599: 55475, 13600: 55474 });
+/** The death that counts, for the kill-count varp and Combat Achievements (CombatAchievements.TormentedDemons.js). */
+const KILLED_EVENT = "tormented-demons:killed";
 /** Ranged and magic attack from this far (Wiki: it holds back rather than closing in). */
 const RANGED_DISTANCE = 8;
 
@@ -150,13 +164,21 @@ function combatTypeOf(style) {
 
 // ------------------------------------------------------------------ per-demon state
 
+/**
+ * Captured (528 fights): a fight opens with melee half the time and ranged or magic a quarter
+ * each, whatever style the demon last used.
+ */
+function openingStyle() {
+  return Math.random() < 0.5 ? "melee" : pick(["ranged", "magic"]);
+}
+
 /** One demon's fight. The prayer outlives it (Wiki: kept through respawns). */
 class Fight {
   constructor(npc) {
     this.npc = npc;
     this.target = null;
     this.engagedAt = 0;
-    this.style = "melee";
+    this.style = openingStyle();
     /** "up", "dropping" (drops next tick), "down" (the next attack is unshielded), "spent" (restores next attack). */
     this.shield = "up";
     this.started = false;
@@ -169,6 +191,8 @@ class Fight {
     /** Player -> the attacks launched at it and not landed yet, oldest first. */
     this.launches = new Map();
     this.lostTargetAt = -1;
+    /** A hit from a 5+ tick attack landed while the shield was down: its first attack is no longer weakened. */
+    this.slowUnshieldedHit = false;
   }
 }
 
@@ -251,6 +275,21 @@ function tileGraphic(npc, tile, id, delay) {
   for (const viewer of npc.getPlayersWithinDistance(15)) viewer.getPacketSender().sendGraphic(graphic, tile);
 }
 
+/** Defenceless or not: the debuff graphic and the flames out, or the flames back. */
+function setDefenceless(fight, defenceless) {
+  const npc = fight.npc;
+  fight.defenceless = defenceless;
+  if (defenceless) {
+    fight.defencelessAt = -1;
+    spotanim(npc, SPOT.DEFENCELESS);
+    const model = DEFENCELESS_MODEL[npc.getId()];
+    if (model) npc.setModelCustomisation?.([{ slot: 0, modelId: model }]);
+  } else {
+    fight.defencelessUntilHit = false;
+    npc.setModelCustomisation?.(null);
+  }
+}
+
 function damage(player, amount) {
   const { HitDamage, HitMask } = core();
   if (!player || player.getHitpoints() <= 0) return;
@@ -280,6 +319,10 @@ module.exports = {
   UNSHIELDED_ATTACK_SPEED,
   SUMMON_TICKS,
   RANGED_DISTANCE,
+  FIRST_ATTACK_DAMAGE_PERCENT,
+  SLOW_ATTACK_TICKS,
+  DEFENCELESS_MODEL,
+  KILLED_EVENT,
   attachApi,
   api,
   core,
@@ -301,5 +344,6 @@ module.exports = {
   projectile,
   tileProjectile,
   tileGraphic,
+  setDefenceless,
   damage,
 };

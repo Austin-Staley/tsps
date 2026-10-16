@@ -16,13 +16,16 @@ const { PluginManager } = require("../dist/plugins/PluginManager");
 const Shared = require("../plugins/bosses/tormenteddemons/Shared.TormentedDemons");
 const Shield = require("../plugins/bosses/tormenteddemons/Shield.TormentedDemons");
 const Temple = require("../plugins/bosses/tormenteddemons/Temple.TormentedDemons");
+const Combat = require("../plugins/bosses/tormenteddemons/Combat.TormentedDemons");
+const CombatAchievements = require("../plugins/bosses/tormenteddemons/CombatAchievements.TormentedDemons");
 
 const core = PluginManager.getCoreApi();
 let gamevals = null;
+const events = [];
 
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
-  Shared.attachApi({ core, emitCustomEvent: () => {} });
+  Shared.attachApi({ core, emitCustomEvent: (name, payload) => events.push({ name, payload }) });
   gamevals = new Gamevals();
 });
 
@@ -46,6 +49,7 @@ test("the ids are the cache's tormented demon sequences, graphics and npcs", () 
   assert.equal(spotanim.get(Shared.PROJECTILE.BOMB.id), "luc2_undead_demon_fireball_large_proj");
   assert.equal(spotanim.get(Shared.BOMB_TILE.EXPLOSION.id), "luc2_undead_demon_fireball_large_impact");
   assert.equal(varbit.get(10960), "td_multiway_indicator");
+  assert.equal(gamevals.namesOf(GamevalKind.VARP).get(4240), "wgs_tormented_demon_killcount");
 });
 
 test("each tile takes its room's demon limit, as the captured indicator shows", () => {
@@ -73,6 +77,11 @@ function fakePlayer({ weaponType = "UNARMED", bonusType = 0, weapon = -1, spell 
     getFightType: () => ({ getBonusType: () => bonusType }),
     getEquipment: () => ({ getItems: () => items }),
     getCombat: () => ({ getSelectedSpell: () => spell, getCastSpell: () => castSpell }),
+    attributes: new Map(),
+    getAttribute(key) { return this.attributes.get(key); },
+    setAttribute(key, value) { this.attributes.set(key, value); },
+    configs: [],
+    getPacketSender() { const configs = this.configs; return { sendConfig: (id, value) => configs.push([id, value]) }; },
   };
 }
 
@@ -104,6 +113,9 @@ function fakeDemon(x) {
     getSpawnPosition: () => new Location(x, 4400, 0),
     getLocation: () => new Location(x, 4400, 0),
     setHeadIcon(icon) { this.icon = icon; },
+    models: undefined,
+    setModelCustomisation(models) { this.models = models; },
+    performGraphicInSlot() {},
     getCombat: () => ({ extendAttackDelay: (ticks) => delays.push(ticks) }),
   };
 }
@@ -159,4 +171,74 @@ test("every 150 damage it prays against the style that last hit it, and stops at
   assert.equal(Shared.prayerOf(npc), "melee");
   assert.deepEqual(npc.delays, [Shared.PRAYER_SWAP_STALL]);
   assert.equal(Shared.fightOf(npc).damageSinceSwap, 0);
+});
+
+test("defenceless puts its flames out (the captured model) and they come back after", () => {
+  const npc = fakeDemon(4103);
+  const fight = Shared.fightOf(npc);
+  Shared.setDefenceless(fight, true);
+  assert.equal(fight.defenceless, true);
+  assert.deepEqual(npc.models, [{ slot: 0, modelId: 55475 }]);
+  Shared.setDefenceless(fight, false);
+  assert.equal(fight.defenceless, false);
+  assert.equal(npc.models, null);
+});
+
+function atTick(tick, run) {
+  const original = core.World.processCycle;
+  core.World.processCycle = tick;
+  try { run(); } finally { core.World.processCycle = original; }
+}
+
+const completed = (player) => events
+  .filter((event) => event.name === "combat-achievements:complete" && event.payload.player === player)
+  .map((event) => event.payload.task);
+
+test("kills: the count varp, a kill with the shield down, two and three kills in quick succession", () => {
+  const { killed } = CombatAchievements._test;
+  const player = fakePlayer();
+  atTick(100, () => killed({ player, shieldDown: false }));
+  assert.deepEqual(player.configs.at(-1), [4240, 1]);
+  assert.deepEqual(completed(player), []);
+  atTick(110, () => killed({ player, shieldDown: true }));
+  assert.deepEqual(completed(player), ["Through Fire and Flames"]);
+  // Two kills 3 ticks (1.8 seconds) apart, then a third 2 ticks later: 3 within 5 ticks.
+  atTick(113, () => killed({ player, shieldDown: false }));
+  assert.ok(completed(player).includes("Two Times the Torment"));
+  assert.ok(!completed(player).includes("Three Times the Thrashing"));
+  atTick(115, () => killed({ player, shieldDown: false }));
+  assert.ok(completed(player).includes("Three Times the Thrashing"));
+  assert.deepEqual(player.configs.at(-1), [4240, 4]);
+});
+
+test("Rapid Reload: crossbow hits on three different demons within 3 seconds", () => {
+  const { hitLanded } = CombatAchievements._test;
+  const bow = fakePlayer({ weaponType: "SHORTBOW" });
+  const crossbow = fakePlayer({ weaponType: "CROSSBOW" });
+  const demons = [fakeDemon(4110), fakeDemon(4111), fakeDemon(4112)];
+  const hit = { isAccurate: () => true, getCombatType: () => core.CombatType.RANGED };
+  demons.forEach((npc, i) => atTick(200 + i * 2, () => hitLanded({ attacker: bow, target: npc, hit })));
+  assert.ok(!completed(bow).includes("Rapid Reload"));
+  atTick(300, () => hitLanded({ attacker: crossbow, target: demons[0], hit }));
+  atTick(303, () => hitLanded({ attacker: crossbow, target: demons[1], hit }));
+  atTick(309, () => hitLanded({ attacker: crossbow, target: demons[2], hit }));
+  assert.ok(!completed(crossbow).includes("Rapid Reload"), "the first hit is more than 3 seconds old");
+  atTick(310, () => hitLanded({ attacker: crossbow, target: demons[1], hit }));
+  atTick(311, () => hitLanded({ attacker: crossbow, target: demons[0], hit }));
+  assert.ok(completed(crossbow).includes("Rapid Reload"));
+});
+
+test("its first ranged/magic attack does a quarter, until a 5+ tick attack hits it unshielded", () => {
+  const hit = fakeHit(null, core.CombatType.RANGED, [24]);
+  Combat._test.weaken(hit);
+  // Captured: at most 6 on the first attack against later ones up to 24.
+  assert.equal(hit.total(), 6);
+  const npc = fakeDemon(4104);
+  Shared.setPrayer(npc, "magic");
+  const fast = fakePlayer({ weaponType: "SHORTBOW" });
+  land(npc, fast, core.CombatType.RANGED, [10], { shielded: false, bonus: 0, speed: 3 });
+  assert.equal(Shared.fightOf(npc).slowUnshieldedHit, false);
+  const slow = fakePlayer({ weaponType: "CROSSBOW" });
+  land(npc, slow, core.CombatType.RANGED, [10], { shielded: false, bonus: 20, speed: 6 });
+  assert.equal(Shared.fightOf(npc).slowUnshieldedHit, true);
 });

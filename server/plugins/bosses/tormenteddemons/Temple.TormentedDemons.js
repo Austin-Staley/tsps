@@ -11,7 +11,7 @@
  *   one whose target leaves (teleports, dies, logs out) heals to full;
  * - captured: a respawned demon summons itself (sequence and graphic) and can't be attacked for
  *   8 ticks, keeping the prayer it had; dying, it plays its death graphic, drops its overhead
- *   and sounds at its spawn tile.
+ *   and sounds at its spawn tile, and tells "tormented-demons:killed" who killed it.
  */
 
 const Shared = require("./Shared.TormentedDemons");
@@ -28,6 +28,7 @@ const GIVE_UP_TICKS = 10;
 const RANGED_STYLES = Object.freeze(["ranged", "magic"]);
 
 const shownLimit = new WeakMap();
+let pluginApi = null;
 
 function zoneLimit(location) {
   let best = null;
@@ -61,6 +62,7 @@ function endFight(npc) {
   const fight = Shared.fights.get(npc);
   if (!fight) return;
   Shared.fights.delete(npc);
+  if (fight.defenceless) Shared.setDefenceless(fight, false);
   if (npc.getHitpoints() > 0) npc.setHitpoints(npc.getMaxHitpoints());
   if (npc.getCombat().getTarget()) npc.getCombat().reset();
 }
@@ -70,9 +72,7 @@ function processDemon(area, npc) {
   if (!fight || npc.getHitpoints() <= 0) return;
   const now = Shared.tick();
   if (fight.started && !fight.defenceless && fight.defencelessAt >= 0 && now >= fight.defencelessAt) {
-    fight.defenceless = true;
-    fight.defencelessAt = -1;
-    Shared.spotanim(npc, Shared.SPOT.DEFENCELESS);
+    Shared.setDefenceless(fight, true);
   }
   const player = fight.target;
   if (!player) return;
@@ -107,6 +107,7 @@ function arrive(npc) {
   npc.setMultiCombat(true);
   Shared.setPrayer(npc, Shared.prayerOf(npc));
   if (!respawning.delete(Shared.spawnKey(npc))) return;
+  npc.setModelCustomisation?.(null);
   npc.performAnimation(new Animation(Shared.SEQ.SUMMON));
   Shared.spotanim(npc, Shared.SPOT.SUMMON);
   npc.getTimers().registers(TimerKey.ATTACK_IMMUNITY, Shared.SUMMON_TICKS);
@@ -156,6 +157,12 @@ function createTemple(api) {
 
 function beforeDeath({ npc }) {
   if (!Shared.isDemon(npc)) return;
+  const fight = Shared.fights.get(npc);
+  const player = fight?.target;
+  if (player && player.isRegistered?.() !== false && player.getHitpoints() > 0) {
+    // The shield is down from its drop until the attack after the unshielded one restores it.
+    pluginApi.emitCustomEvent(Shared.KILLED_EVENT, { player, npc, shieldDown: fight.shield === "down" || fight.shield === "spent" });
+  }
   Shared.fights.delete(npc);
   respawning.add(Shared.spawnKey(npc));
   npc.setHeadIcon(-1);
@@ -169,6 +176,7 @@ function beforeDeath({ npc }) {
 }
 
 function attach(api) {
+  pluginApi = api;
   api.registerArea(createTemple(api));
   api.onNpcBeforeDeath(beforeDeath);
 }

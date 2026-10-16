@@ -10,8 +10,8 @@
  *   player) and, for crush melee, heavy ranged (crossbows, ballistae) and spells cast without a
  *   powered staff, deals X^2 - 16 more damage, X its usual attack speed. Against the demon's
  *   prayer that bonus still lands, divided by 3. The attack after it restores the shield;
- * - 30 ticks after the shield first drops it is defenceless: every attack on it lands, until
- *   the first one after its next fire bomb, when the 30 ticks start again.
+ * - 30 ticks after the shield first drops it is defenceless (its flames go out): every attack on
+ *   it lands, until the first one after its next fire bomb, when the 30 ticks start again.
  *
  * Captured: the shield graphic on every attack launched at it, the drop (sequence, graphic and
  * sounds) the tick after the first, the restore graphic on the attack after the unshielded one,
@@ -34,11 +34,16 @@ function weaponType(player) {
   return player.getWeapon?.()?.getName?.() ?? "";
 }
 
+/** A crossbow or ballista: the heavy ranged weapons. */
+function heavyRanged(player) {
+  return HEAVY_RANGED.has(weaponType(player));
+}
+
 /** Whether the unshielded attack's bonus applies to this player's attack of `combatType`. */
 function bonusEligible(player, combatType) {
   const { CombatType } = Shared.core();
   if (combatType === CombatType.MELEE) return player.getFightType?.()?.getBonusType?.() === CRUSH;
-  if (combatType === CombatType.RANGED) return HEAVY_RANGED.has(weaponType(player));
+  if (combatType === CombatType.RANGED) return heavyRanged(player);
   if (combatType === CombatType.MAGIC) {
     const combat = player.getCombat();
     // A powered staff's built-in spell is its autocast; a spell cast by hand still counts.
@@ -94,13 +99,14 @@ function startFight(fight, player) {
 /** An attack launched at the demon: once per attack, before its accuracy roll. */
 function launch(fight, player, combatType) {
   const now = Shared.tick();
-  const entry = { cycle: now, shielded: true, bonus: 0 };
+  const entry = { cycle: now, shielded: true, bonus: 0, speed: 0 };
   if (!fight.started) {
     Shared.spotanim(fight.npc, SPOT.SHIELD);
     startFight(fight, player);
   } else if (fight.shield === "down") {
     entry.shielded = false;
-    entry.bonus = unshieldedBonus(player, combatType);
+    entry.speed = usualSpeed(player);
+    entry.bonus = unshieldedBonus(player, combatType, entry.speed);
     fight.shield = "spent";
     Shared.spotanim(fight.npc, SPOT.SHIELD);
   } else if (fight.shield === "spent") {
@@ -117,8 +123,7 @@ function rollAccuracy(fight, roll) {
   if (!fight.defenceless) return;
   roll.forceAccurate = true;
   if (!fight.defencelessUntilHit) return;
-  fight.defenceless = false;
-  fight.defencelessUntilHit = false;
+  Shared.setDefenceless(fight, false);
   fight.defencelessAt = Shared.tick() + DEFENCELESS_TICKS;
 }
 
@@ -187,6 +192,7 @@ function onHitModify({ npc, hit }) {
   setDamage(hit, amounts);
   const total = amounts.reduce((sum, value) => sum + value, 0);
   if (total <= 0) return;
+  if (!entry.shielded && entry.speed >= Shared.SLOW_ATTACK_TICKS) fight.slowUnshieldedHit = true;
   fight.damageSinceSwap += total;
   if (fight.damageSinceSwap >= PRAYER_SWAP_DAMAGE) swapPrayer(fight, style);
 }
@@ -197,4 +203,4 @@ function attach(api) {
   api.onNpcHitModify(onHitModify);
 }
 
-module.exports = { attach, dropShield, _test: { bonusEligible, unshieldedBonus, launch, onHitModify, onAttackTiming } };
+module.exports = { attach, dropShield, heavyRanged, _test: { bonusEligible, unshieldedBonus, launch, onHitModify, onAttackTiming } };

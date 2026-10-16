@@ -20,6 +20,7 @@ trusted for packets, animations, graphics, sounds and timing; damage comes from 
 | `Shield.TormentedDemons.js` | The player's attacks on it: the fire shield and the unshielded attack, defenceless accuracy, its prayer and the 150-damage swap. |
 | `Temple.TormentedDemons.js` | The temple `Area`: each room's demon limit and its indicator, who may attack which demon, lost targets, the respawn summon, death effects. |
 | `Scroll.TormentedDemons.js` | The Guthixian temple teleport. |
+| `CombatAchievements.TormentedDemons.js` | The kill-count varp and the Combat Achievement tasks. |
 
 Outside the plugin:
 
@@ -71,6 +72,8 @@ captured value except the two where it changes.
 | Ranged | `luc2_undead_demon_spare_ribs` (11389), `luc2_rib_bone_shard_spotanim` (2858, slot 2), projectile 2857 (cycles 60-118, angle 10, progress 200, heights 100-30), sound 9253 at 118. | capture |
 | Magic | `luc2_undead_demon_firey_balls` (11388), projectile 2853 (30-118, angle 0, progress 160, heights 86-30), `luc2_undead_demon_fireball_impact` (2854, slot 2, height 124, delay 118) on the player, sound 9229 at 118. | capture |
 | Hit timing | Both projectiles land at cycle 118 whatever the distance, so the hit lands 4 ticks on. | capture |
+| Opening style | Melee half the time, ranged or magic a quarter each, whatever it last used (528 captured fights in recordings 1756 and 3312: 264 melee, 126 ranged, 138 magic). | capture |
+| First attack | Its first ranged or magic attack of a fight does a quarter of the damage (Strategies: ~75% less). Captured: against players not praying against it, first attacks hit at most 6 (mean ~3) where later ones hit up to 24; the matching protection prayer still stops it. It is full strength once a 5+ tick attack has hit it while its shield was down (Strategies). | capture, Wiki |
 | Styles | It melees when it can reach; if it can't, it switches to magic or ranged and keeps fighting. It changes style after every fire bomb, never to the one it had. | Wiki |
 | First attack | 8 ticks after its shield drops. | capture |
 | Bind and fire bombs | Every 10th attack (~60 ticks): `luc2_undead_demon_explosion_fire` (11387), `entangle_casting` (177, slot 2, height 240), projectile 178 to the player, `entangle_impact` (179, height 124) on them, "The demon's spell binds you!", sounds 9224 (30), 9210 (3), 9215 (36), 9259 (39), 7099, run turned off (varp 173). Two bombs, projectile 2855 (45-115, angle 30, progress 128, heights 86-0), one at the player's tile and one at a random walkable tile beside it, each tile showing 1446 (delay 30) and 2856 (delay 115). | capture |
@@ -86,7 +89,7 @@ captured value except the two where it changes.
 | Fire shield | Cuts damage by 20%, except demonbane weapons and spells and abyssal weapons. Every attack launched at it plays `luc2_undead_demon_shield_spot` (2849, slot 4). | Wiki, capture |
 | Shield drop | The tick after the first attack of a fight (and after every fire bomb): 11387, `luc2_undead_demon_explosion_fire_spot` (2852, slot 4), sounds 9224, 9210 (3), 9215 (36), 9259 (39). | capture |
 | Unshielded attack | The next attack hits unshielded, and the one after it restores the shield (`luc2_undead_demon_shield_restore_spot`, 2850, slot 4). For crush melee, crossbows and ballistae and spells (not a powered staff's own) it deals X^2 - 16 more (X its usual speed: 7 +33, 6 +20, 5 +9) and takes 4 ticks, one less per other demon on the player. Against its prayer the bonus still lands, divided by 3. | Wiki, capture |
-| Defenceless | 30 ticks after the shield first drops, `luc2_undead_accuracy_debuff` (3013, slot 5): every attack lands, until the first one after its next fire bomb, when the 30 ticks start again. | Wiki, capture |
+| Defenceless | 30 ticks after the shield first drops, `luc2_undead_accuracy_debuff` (3013, slot 5) and its flames go out: its one body model (53287 / 53285) becomes 55475 / 55474 (model customisation, slot 0), reset when it ends and on respawn. Every attack lands, until the first one after its next fire bomb, when the 30 ticks start again. | Wiki, capture |
 
 ## Spawning and dying
 
@@ -95,14 +98,21 @@ captured value except the two where it changes.
 | Respawn | `luc2_undead_demon_summon` (11395) and `wgs_undead_demon_summon_spotanim` (2847, slot 4); it can't be attacked for 8 ticks. | capture |
 | Death | 11394 and `luc2_undead_demon_death_spot` (2848), its overhead cleared, area sounds 9333 (4), 9332 (128), 9336 (136) at its spawn tile, range 7. | capture |
 | Drops | `tormented_demon` in `data/definitions/npc-drops.json`, unchanged. | Wiki |
+| Kill count | `wgs_tormented_demon_killcount` (varp 4240): one more each kill (captured), saved as `tormented-demons:kills` and sent at login. | capture |
+
+## Combat Achievements
+
+| Task | Rule |
+| --- | --- |
+| Unending Torment | Kill a Tormented Demon: a plain kill count, counted by Combat Achievements itself. |
+| Through Fire and Flames | The demon dies while its shield is down (from its drop until the attack after the unshielded one restores it). |
+| Two Times the Torment | Two kills within 2 seconds (3 ticks). |
+| Three Times the Thrashing | Three kills within 3 seconds (5 ticks). |
+| Rapid Reload | Accurate crossbow or ballista hits on three different demons within 3 seconds (5 ticks). |
 
 ## Not done
 
-- The flames going out while defenceless: the captures swap its body model (`body_customisation`,
-  models 55474/55475), which the server can't send yet; the graphic still plays.
-- Its first attack doing ~75% less with magic or ranged when the player prays against it with the
-  shield down (Strategies).
-- Combat Achievement tasks and the `wgs_tormented_demon_killcount` varp.
+- A melee demon that can't reach its target switching to range is built but untested.
 - The quest's own pair (13601/13602) keeps its simpler fight in `plugins/quests/wgs/Stone.WhileGuthixSleeps.js`.
 - The live chasm floor is shared; ours stays the quest's private area, so players there don't see
   each other until the temple.
