@@ -98,6 +98,31 @@ function object(h,p,id,x=1647,y=4841) {
 function island(h,p,stage) {
   h.quest.setStage(p,stage);p.moveTo(new core.Location(1637,4802,0));h.hooks.onPlayerLogin.at(-1)({player:p});return p.getArea();
 }
+test('rowboat fades before its message and uses the captured two-tick crossing in both directions',()=>{
+  for(const toIsland of [true,false]){
+    const h=harness('MisthalinMystery'),p=player();
+    if(toIsland){h.quest.setStage(p,10);p.moveTo(new core.Location(3240,3142,0));}else island(h,p,10);
+    const origin=p.getLocation().clone(),destination=toIsland?[1637,4802]:[3240,3142];p.log.length=0;
+    object(h,p,toIsland?core.ObjectIdentifiers.ROWBOAT_9:core.ObjectIdentifiers.ROWBOAT_10);
+    assert.equal(p.blocked,true);assert.equal(p.messages.length,0);
+    const fades=()=>p.log.filter(row=>row[0]==='sendSubInterface');
+    assert.deepEqual(fades()[0].slice(1),[(161<<16)|1,174,1,{postScripts:[{scriptId:948,args:[0,255,0,0,50]}]}]);
+    const click={player:p,handled:false};h.emit('player:world-input',click);assert.equal(click.handled,true);
+    h.tick(1);assert.ok(p.getLocation().equals(origin));assert.equal(p.messages.length,0);
+    h.tick(1);assert.deepEqual([p.getLocation().getX(),p.getLocation().getY()],destination);assert.equal(p.messages.length,1);
+    assert.equal(p.blocked,true,'returning area cleanup must not release control before fade-in');
+    h.tick(1);assert.equal(p.blocked,false);assert.equal(p.varbits.get(12393),0);
+    assert.deepEqual(fades().at(-1).at(-1),{postScripts:[{scriptId:948,args:[0,0,0,255,50]}]});
+    h.tick(2);assert.deepEqual(p.log.at(-1),['closeSubInterface',(161<<16)|1]);
+    h.hooks.onPlayerLogout[0]({player:p});
+  }
+});
+test('logging out during rowboat fade cancels travel and releases movement',()=>{
+  const h=harness('MisthalinMystery'),p=player();h.quest.setStage(p,10);
+  const origin=p.getLocation().clone();object(h,p,core.ObjectIdentifiers.ROWBOAT_9);h.tick(1);
+  h.hooks.onPlayerLogout[0]({player:p});h.tick(10);
+  assert.ok(p.getLocation().equals(origin));assert.equal(p.getArea(),null);assert.equal(p.blocked,false);assert.equal(p.varbits.get(12393),0);
+});
 test('Misthalin writes only its stage varbit and restores partial candles independently',()=>{
   const h=harness('MisthalinMystery'),p=player();h.quest.setStage(p,50);assert.equal(p.varbits.get(3468),50);assert.equal(p.configs.get(1535),undefined);
   p.attrs.set('misthalin-mystery:candles',5);h.hooks.onPlayerLogin.at(-1)({player:p});assert.equal(p.varbits.get(4039),1);assert.equal(p.varbits.get(4041),1);

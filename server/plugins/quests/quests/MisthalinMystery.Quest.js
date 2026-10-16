@@ -188,6 +188,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   const puzzleOpen = new WeakMap();
   const gemProgressByPlayer = new Map();
   const doorKeyByPlayer = new WeakMap();
+  const rowingPlayers = new WeakSet();
 
   const held = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
 
@@ -237,7 +238,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   }
   function protectScene(event) {
     // World input otherwise clears the dialogue before blocked movement rejects it.
-    if(island(event.player)?.scene)event.handled=true;
+    if(island(event.player)?.scene||rowingPlayers.has(event.player))event.handled=true;
   }
   class Manor extends PrivateArea {
     constructor(player){super([new Boundary(1600,1663,4792,4863,0)]);this.owner=player;this.actors=new Map();this.scene=null;this.fighting=false;this.reflections=0;this.pushing=false;}
@@ -252,7 +253,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
       if(stage===STAGE_FUSE_LIT&&at.getX()<=1640&&!this.exploding)explodeWall(this);
     }
     postLeave(actor,logout){
-      if(actor===this.owner){TaskManager.cancelTasks(this);if(this.cameraKey)TaskManager.cancelTasks(this.cameraKey);if(this.resetKey)TaskManager.cancelTasks(this.resetKey);islands.delete(actor);const mandy=mandyByPlayer.get(actor);if(mandy)api.removeNpc(mandy);mandyByPlayer.delete(actor);controls(actor,false);actor.getPacketSender().sendInterfaceRemoval();}
+      if(actor===this.owner){TaskManager.cancelTasks(this);if(this.cameraKey)TaskManager.cancelTasks(this.cameraKey);if(this.resetKey)TaskManager.cancelTasks(this.resetKey);islands.delete(actor);const mandy=mandyByPlayer.get(actor);if(mandy)api.removeNpc(mandy);mandyByPlayer.delete(actor);if(!rowingPlayers.has(actor)){controls(actor,false);actor.getPacketSender().sendInterfaceRemoval();}}
       super.postLeave(actor,logout);
     }
     destroy(){if(this.isDestroyed())return;for(const npc of this.actors.values())api.removeNpc(npc);super.destroy();}
@@ -797,6 +798,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
 
   function boardRowboat(event) {
     const { player, objectId } = event;
+    if (rowingPlayers.has(player)) return;
     if (objectId === ObjectIdentifiers.ROWBOAT_9) {
       if (quest.getStage(player) < STAGE_BRIEFED) {
         startTranscript(
@@ -808,14 +810,24 @@ module.exports = function registerMisthalinMysteryQuest(api) {
         );
         return;
       }
-      startTranscript(api, player, NpcIdentifiers.ABIGALE, PAGE, "starting-out-board-rowboat-to-the-island");
-      later(player,10,()=>{player.moveTo(new Location(1637,4802,0));enterIsland(player);});
-      return;
     }
-    if (objectId === ObjectIdentifiers.ROWBOAT_10) {
-      startTranscript(api, player, NpcIdentifiers.ABIGALE, PAGE, "starting-out-board-rowboat-to-lumbridge-swamp");
-      const area=island(player);if(area)area.leave(player,false);player.moveTo(new Location(3240,3142,0));
-    }
+    const toIsland=objectId===ObjectIdentifiers.ROWBOAT_9;
+    TaskManager.cancelTasks(player);
+    rowingPlayers.add(player);
+    player.getMovementQueue().reset().setBlockMovement(true);
+    player.getPacketSender().sendVarbit(12393,1).sendSubInterface((161<<16)|1,174,1,{postScripts:[{scriptId:948,args:[0,255,0,0,50]}]});
+    // Capture: fade at4164, message/teleport4166, fade-in4167, close4169; approach walking is separate.
+    later(player,2,()=>{
+      startTranscript(api,player,NpcIdentifiers.ABIGALE,PAGE,toIsland?"starting-out-board-rowboat-to-the-island":"starting-out-board-rowboat-to-lumbridge-swamp");
+      if(toIsland){player.moveTo(new Location(1637,4802,0));enterIsland(player);}
+      else{const area=island(player);if(area)area.leave(player,false);player.moveTo(new Location(3240,3142,0));}
+    });
+    later(player,3,()=>{
+      rowingPlayers.delete(player);
+      player.getMovementQueue().setBlockMovement(false);
+      player.getPacketSender().sendVarbit(12393,0).sendSubInterface((161<<16)|1,174,1,{postScripts:[{scriptId:948,args:[0,0,0,255,50]}]});
+    });
+    later(player,5,()=>player.getPacketSender().closeSubInterface((161<<16)|1));
   }
 
   function searchBarrel(event) {
@@ -1499,6 +1511,10 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   function handleLogout({ player }) {
     if (!player) return;
     TaskManager.cancelTasks(player);
+    if(rowingPlayers.delete(player)){
+      player.getMovementQueue().setBlockMovement(false);
+      player.getPacketSender().sendVarbit(12393,0).closeSubInterface((161<<16)|1);
+    }
     const area=island(player);if(area)area.leave(player,true);
     const mandy = mandyByPlayer.get(player);
     if (mandy) api.removeNpc(mandy);
