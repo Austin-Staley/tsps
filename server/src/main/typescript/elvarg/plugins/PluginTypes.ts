@@ -113,6 +113,8 @@ export interface PluginObjectRouteEvent {
   clickType: number;
   sourceLocation: { x: number; y: number; z: number };
   destination: { x: number; y: number; z: number } | null;
+  /** Additional blocked approach sides, in the object's unrotated local frame. */
+  blockAccessFlags?: number;
 }
 
 export interface PluginWalkRouteEvent {

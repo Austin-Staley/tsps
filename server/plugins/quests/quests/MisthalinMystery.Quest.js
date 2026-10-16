@@ -1,8 +1,9 @@
 /** Misthalin Mystery: OSRS Wiki and supplied live capture. See docs/misthalin-mystery.md. */
 module.exports = function registerMisthalinMysteryQuest(api) {
-  const { Skill, Location, ObjectDefinition, PrivateArea, Boundary, Animation, Graphic, CountdownTask, TaskManager, DialogueChainBuilder, ActionDialogue, StatementDialogue, GameObject, ObjectManager, Item, ItemOnGroundManager, Equipment, HitDamage, HitMask, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
+  const { Skill, Location, Direction, ObjectDefinition, PrivateArea, Boundary, Animation, Graphic, CountdownTask, TaskManager, DialogueChainBuilder, ActionDialogue, StatementDialogue, GameObject, ObjectManager, Item, ItemOnGroundManager, Equipment, HitDamage, HitMask, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
   const { registerQuest, startTranscript, refreshQuestList } = require("../QuestRuntime");
   const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
+  const { crossingFor } = require("../../objects/WallDoor.Doors");
 
   ObstacleRunner.init(api);
 
@@ -187,6 +188,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   const puzzleOpen = new WeakMap();
   const gemProgressByPlayer = new Map();
   const doorKeyByPlayer = new WeakMap();
+  const rowingPlayers = new WeakSet();
 
   const held = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
 
@@ -201,6 +203,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   const MIRROR_SCENERY_ID = 30143, EMPTY_MIRROR_SCENERY_ID = 30144;
   const CLOSED_WARDROBE_ID = 30141, OPEN_WARDROBE_ID = 30142;
   const MIRROR_ID = 7436; // cache mistmyst_mirror, 7640 inert / 7641 Push
+  const KNIFE_PROJECTILE_ID = 214, WARDROBE_SHADOW_ID = 483;
   const ISLAND_ACTORS = [
     [NpcIdentifiers.SID,7430,1615,4832],[NpcIdentifiers.TAYTEN,7431,1639,4838],
     [NpcIdentifiers.LACEY,7432,1629,4850],[NpcIdentifiers.MANDY,7433,1626,4840],
@@ -235,7 +238,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   }
   function protectScene(event) {
     // World input otherwise clears the dialogue before blocked movement rejects it.
-    if(island(event.player)?.scene)event.handled=true;
+    if(island(event.player)?.scene||rowingPlayers.has(event.player))event.handled=true;
   }
   class Manor extends PrivateArea {
     constructor(player){super([new Boundary(1600,1663,4792,4863,0)]);this.owner=player;this.actors=new Map();this.scene=null;this.fighting=false;this.reflections=0;this.pushing=false;}
@@ -250,7 +253,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
       if(stage===STAGE_FUSE_LIT&&at.getX()<=1640&&!this.exploding)explodeWall(this);
     }
     postLeave(actor,logout){
-      if(actor===this.owner){TaskManager.cancelTasks(this);if(this.cameraKey)TaskManager.cancelTasks(this.cameraKey);if(this.resetKey)TaskManager.cancelTasks(this.resetKey);islands.delete(actor);const mandy=mandyByPlayer.get(actor);if(mandy)api.removeNpc(mandy);mandyByPlayer.delete(actor);controls(actor,false);actor.getPacketSender().sendInterfaceRemoval();}
+      if(actor===this.owner){TaskManager.cancelTasks(this);if(this.cameraKey)TaskManager.cancelTasks(this.cameraKey);if(this.resetKey)TaskManager.cancelTasks(this.resetKey);islands.delete(actor);const mandy=mandyByPlayer.get(actor);if(mandy)api.removeNpc(mandy);mandyByPlayer.delete(actor);if(!rowingPlayers.has(actor)){controls(actor,false);actor.getPacketSender().sendInterfaceRemoval();}}
       super.postLeave(actor,logout);
     }
     destroy(){if(this.isDestroyed())return;for(const npc of this.actors.values())api.removeNpc(npc);super.destroy();}
@@ -347,12 +350,15 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     area.mirrorDirection=[0,-1];
     spawnActor(area,KNIFE_REACTION_NPC_ID,KNIFE_REACTION_NPC_ID,1623,4829);
     mirrorScenery(area,new Location(1622,4823,0),false);if(mirror)mirrorScenery(area,mirror.getLocation(),true);
-    shadow(area);
+    // The first warning follows the intro's 11-tick camera reset by 10 ticks.
+    later(area,21,()=>shadow(area));
   }
   function shadow(area){
     if(!area.fighting||area.isDestroyed())return;
     area.warning=WARDROBES[Math.floor(Math.random()*WARDROBES.length)];
-    area.owner.getPacketSender().sendGraphic(new Graphic(483,0,1),new Location(area.warning[0],area.warning[1],0));
+    const graphic=new Graphic(WARDROBE_SHADOW_ID);
+    graphic.height=1; // The three-argument constructor interprets 1 as Priority.MEDIUM.
+    area.owner.getPacketSender().sendGraphic(graphic,new Location(area.warning[0],area.warning[1],0));
     later(area,14,()=>throwKnife(area));
   }
   function throwKnife(area){
@@ -365,9 +371,9 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     const dx=Math.sign(where[0]-at.getX()),dy=Math.sign(where[1]-at.getY());
     const reflects=aligned&&area.mirrorDirection[0]===dx&&area.mirrorDirection[1]===dy;
     const target=aligned?at:opposite,distance=Math.max(Math.abs(source.getX()-target.getX()),Math.abs(source.getY()-target.getY()));
-    // PacketSender takes an absolute end-cycle offset, including the launch delay.
-    player.getPacketSender().sendProjectile(source,target,0,41+distance*5+(aligned?5:0),214,163,146,aligned?mirror:null,41,15,11);
-    if(aligned)player.getPacketSender().sendProjectile(at,reflects?source:new Location(1619,4832,0),0,82+(reflects?distance*10+10:90),214,163,146,null,82,15,11);
+    // Rsprox V2 heights are world units; the legacy sender multiplies its height arguments by four.
+    player.getPacketSender().sendProjectile(source,target,0,41+distance*5+(aligned?5:0),KNIFE_PROJECTILE_ID,163/4,146/4,aligned?mirror:null,41,15,11);
+    if(aligned)player.getPacketSender().sendProjectile(at,reflects?source:new Location(1619,4832,0),0,82+(reflects?distance*10+10:90),KNIFE_PROJECTILE_ID,163/4,146/4,null,82,15,11);
     player.getPacketSender().sendSoundEffect(2707,1,0);
     const reaction=area.actors.get(KNIFE_REACTION_NPC_ID);if(reflects)later(area,1,()=>reaction?.moveTo(source));
     later(area,4,()=>{
@@ -389,10 +395,15 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     if(Math.abs(at.getX()-p.getX())>Math.abs(at.getY()-p.getY()))dy=0;else dx=0;
     if(dx===0&&dy===0)return true;
     const to=new Location(at.getX()+dx,at.getY()+dy,0);
-    // The mirror's 3x3 scenery footprint must stay inside the wardrobe room.
+    // Keep the mirror within the captured push limits inside the wardrobe room.
     if(to.getX()<1622||to.getX()>1624||to.getY()<4828||to.getY()>4831){player.sendMessage("The mirror can't go any further in that direction.");return true;}
-    area.pushing=true;area.mirrorDirection=[dx,dy];player.performAnimation(new Animation(3065));
-    later(area,1,()=>{mirrorScenery(area,at,false);mirror.moveTo(to);mirrorScenery(area,to,true);player.getPacketSender().sendSoundEffect(1395,1,0);mirror.setPositionToFace(new Location(to.getX()+dx,to.getY()+dy,0));player.moveTo(at.clone());});
+    area.pushing=true;player.performAnimation(new Animation(3065));
+    later(area,1,()=>{
+      mirrorScenery(area,at,false);mirror.moveTo(to);mirrorScenery(area,to,true);
+      area.mirrorDirection=[dx,dy];
+      mirror.setFace(Direction.fromDeltas(dx,dy));mirror.faceTile(new Location(to.getX()+dx,to.getY()+dy,0));
+      player.getPacketSender().sendSoundEffect(1395,1,0);player.moveTo(at.clone());
+    });
     later(area,2,()=>{area.pushing=false;player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);});return true;
   }
   function dropKillerKnife(player){
@@ -532,20 +543,12 @@ module.exports = function registerMisthalinMysteryQuest(api) {
 
   /** Cross the edge blocked by the door's face, between its tile and its neighbour. */
   function crossDoor(event) {
-    const { player, object, location } = event;
+    const { player, object } = event;
     if (ObstacleRunner.isBusy(player)) return;
     const position = player.getLocation();
-    const face = Number(object.getFace()) & 0x3;
-    let x = position.getX();
-    let y = position.getY();
-    if (face === 0 || face === 2) {
-      const onNeighbour = face === 0 ? x < location.x : x > location.x;
-      x = onNeighbour ? location.x : location.x + (face === 0 ? -1 : 1);
-    } else {
-      const onNeighbour = face === 1 ? y > location.y : y < location.y;
-      y = onNeighbour ? location.y : location.y + (face === 1 ? 1 : -1);
-    }
-    ObstacleRunner.run(event, [{ wait: 1 }, { walk: [[x, y]] }]);
+    const crossing = crossingFor(object, position);
+    if (!crossing || !Location.isSameTile(position, crossing.approach)) return;
+    ObstacleRunner.run(event, [{ wait: 1 }, { walk: [[crossing.destination.x, crossing.destination.y]] }]);
   }
 
   function buildJournal(player, questHandle) {
@@ -795,6 +798,7 @@ module.exports = function registerMisthalinMysteryQuest(api) {
 
   function boardRowboat(event) {
     const { player, objectId } = event;
+    if (rowingPlayers.has(player)) return;
     if (objectId === ObjectIdentifiers.ROWBOAT_9) {
       if (quest.getStage(player) < STAGE_BRIEFED) {
         startTranscript(
@@ -806,14 +810,24 @@ module.exports = function registerMisthalinMysteryQuest(api) {
         );
         return;
       }
-      startTranscript(api, player, NpcIdentifiers.ABIGALE, PAGE, "starting-out-board-rowboat-to-the-island");
-      later(player,10,()=>{player.moveTo(new Location(1637,4802,0));enterIsland(player);});
-      return;
     }
-    if (objectId === ObjectIdentifiers.ROWBOAT_10) {
-      startTranscript(api, player, NpcIdentifiers.ABIGALE, PAGE, "starting-out-board-rowboat-to-lumbridge-swamp");
-      const area=island(player);if(area)area.leave(player,false);player.moveTo(new Location(3240,3142,0));
-    }
+    const toIsland=objectId===ObjectIdentifiers.ROWBOAT_9;
+    TaskManager.cancelTasks(player);
+    rowingPlayers.add(player);
+    player.getMovementQueue().reset().setBlockMovement(true);
+    player.getPacketSender().sendVarbit(12393,1).sendSubInterface((161<<16)|1,174,1,{postScripts:[{scriptId:948,args:[0,255,0,0,50]}]});
+    // Capture: fade at4164, message/teleport4166, fade-in4167, close4169; approach walking is separate.
+    later(player,2,()=>{
+      startTranscript(api,player,NpcIdentifiers.ABIGALE,PAGE,toIsland?"starting-out-board-rowboat-to-the-island":"starting-out-board-rowboat-to-lumbridge-swamp");
+      if(toIsland){player.moveTo(new Location(1637,4802,0));enterIsland(player);}
+      else{const area=island(player);if(area)area.leave(player,false);player.moveTo(new Location(3240,3142,0));}
+    });
+    later(player,3,()=>{
+      rowingPlayers.delete(player);
+      player.getMovementQueue().setBlockMovement(false);
+      player.getPacketSender().sendVarbit(12393,0).sendSubInterface((161<<16)|1,174,1,{postScripts:[{scriptId:948,args:[0,0,0,255,50]}]});
+    });
+    later(player,5,()=>player.getPacketSender().closeSubInterface((161<<16)|1));
   }
 
   function searchBarrel(event) {
@@ -1497,6 +1511,10 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   function handleLogout({ player }) {
     if (!player) return;
     TaskManager.cancelTasks(player);
+    if(rowingPlayers.delete(player)){
+      player.getMovementQueue().setBlockMovement(false);
+      player.getPacketSender().sendVarbit(12393,0).closeSubInterface((161<<16)|1);
+    }
     const area=island(player);if(area)area.leave(player,true);
     const mandy = mandyByPlayer.get(player);
     if (mandy) api.removeNpc(mandy);
