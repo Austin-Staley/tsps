@@ -280,13 +280,15 @@ export class WeaponProfiles {
         // Wiki: range 6, 8 on Longrange; speed from cache param 14 (5). Captures (rsprox): every
         // arrow flies as arrow_venator01_travel01 (2291) from arrow_venator01_launch01 (2289), at
         // starttime 31 and endtime 46 + 2 per tile, heights 39 -> 36, angle 255, progress 11, with
-        // synth 6797.
+        // synth 6797. The hit lands on the tick the arrow does, floor(end / 30) - as the standard
+        // table, 1 + floor((3 + d) / 6), does for its arrow's 46 + 5 per tile - so floor((23 + d) / 15):
+        // 1 up to 6 tiles (captured: the NPC's hitsplat 2 ticks after the shot at 1-6 tiles), 2 beyond.
         this.register({
             itemIds: [ItemIdentifiers.VENATOR_BOW, ItemIdentifiers.VENATOR_BOW_UNCHARGED_],
             attackDistance: 6,
             longRangeDistance: 8,
             longRangeFightType: FightType.SHORTBOW_LONGRANGE,
-            hitDelays: [STANDARD_HIT],
+            hitDelays: [{ base: 0, distanceOffset: 23, divisor: 15 }],
             projectiles: [{ delay: 31, lengthAdjustment: 15, stepMultiplier: 2, startHeight: 39, endHeight: 36, angle: 255, progress: 11 }],
             projectileId: 2291,
             launchGraphic: 2289,

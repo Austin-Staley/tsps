@@ -147,7 +147,7 @@ test('bounces chain from the arrow landing, 15 cycles each, as captured', () => 
         [[2007, 48, 63, 127, 0], [2007, 63, 78, 127, 0]]);
     assert.equal(projectiles[0].source, primary);
     assert.equal(projectiles[1].source, near);
-    assert.deepEqual(hits.map((hit) => hit.getDelay()), [2, 3, 3]);
+    assert.deepEqual(hits.map((hit) => hit.getDelay()), [2, 2, 3], 'the first bounce lands with the arrow, the second a tick later');
 });
 
 test('the second bounce may return to the first target', () => {

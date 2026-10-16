@@ -21,7 +21,11 @@ const BOUNCE_CYCLES = 15;
 const BOUNCE_HEIGHT = 31;
 const BOUNCE_ANGLE = 127;
 const BOUNCE_PROGRESS = 0;
-const CYCLES_PER_TICK = 30;
+/**
+ * Captures (rsprox): the first bounce's hitsplat lands on the same tick as the arrow's, the second's
+ * one tick later, whatever the distance.
+ */
+const BOUNCE_HIT_TICKS = [0, 1];
 const BOUNCE_SOUNDS = [6672, 6735];
 const CREATE_SOUND = 6647;
 /** The bank's op 9 on items with cache param 2257, shown while the bank's item-ops toggle is on. */
@@ -178,7 +182,7 @@ function ricochet(player, primary, method, primaryDelay) {
       .withAngle(BOUNCE_ANGLE)
       .withProgress(BOUNCE_PROGRESS)
       .sendProjectile();
-    const delay = primaryDelay + Math.ceil((end - landed) / CYCLES_PER_TICK);
+    const delay = primaryDelay + BOUNCE_HIT_TICKS[index];
     const hit = new PendingHit(player, target, method, delay);
     CombatFactory.applyStyleDamage(hit, bounceMax);
     hits.push(hit);

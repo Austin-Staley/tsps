@@ -39,6 +39,8 @@ effects, and the Wiki gives the rules.
 | Arrow | `arrow_venator01_travel01` (2291), start 31, end 46 + 2 a tile, angle 255, progress 11, heights 39 → 36 | the same (`projectileId`, `angle`, `progress` in the profile) |
 | Bounces | `nex_finale_attack_proj` (2007) from the target just hit, 15 cycles each, starting where the arrow lands (48 → 63, then 63 → 78 at 1 tile), angle 127, progress 0, height 31 | the same |
 | Bounce sounds | synth 6672 with one bounce; 6672 and 6735 with two; on the attack tick | the same |
+| Arrow's hitsplat on an NPC | 2 ticks after the shot at 1-6 tiles (8,800 of ~10,000 shots at 1 tile; the rest are the previous shot's) | hit delay floor((23 + d) / 15), 1 up to 6 tiles, + the NPC tick (before: the standard 1 + floor((3 + d) / 6), a tick late from 3 tiles) |
+| Bounces' hitsplats | the first on the same tick as the arrow's, the second one tick later, at any distance | the same (before: both a tick after the arrow's) |
 
 The rest, from the item recordings:
 
@@ -73,3 +75,6 @@ These follow the Wiki, with text of our own:
 - The bounces' two-thirds is of the bow's general max hit, without target-specific boosts (slayer
   helmet, salve amulet); the Wiki notes bounces miss some of those bonuses but doesn't list them all.
 - Bounce targets are picked as the arrow is fired, not as it lands.
+- The arrow's hit delay follows the rule the standard table shares with its projectile, the tick the arrow
+  lands (floor(end / 30)); the captures only confirm it up to 6 tiles (one shot at 7 tiles agrees). The
+  Wiki's hit delay page doesn't list the bow.
