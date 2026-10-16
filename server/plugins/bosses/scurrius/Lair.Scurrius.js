@@ -6,7 +6,9 @@
  *   players inside;
  * - the sewage water: "Cross" (with a thinking emote) or "Quick-escape" back out;
  * - each way through fades out, moves the player and fades back in, with the lair's song (Oh
- *   Rats!) inside and the sewers' (Scape Cave) outside;
+ *   Rats!) inside and the sewers' (Scape Cave) outside, and leaving keeps the player out for
+ *   about 15 seconds ("You are exhausted after climbing over the broken bars...");
+ * - no fires in the lair (Wiki), and a death there leaves the grave beside Historian Aldo;
  * - the boss health HUD shows the room's Scurrius while the player is inside;
  * - Scurrius appears with his spawn animation and attacks four ticks later; a kill brings the
  *   next one 30 ticks after he is gone (Wiki respawn, captured 29-30).
@@ -44,6 +46,14 @@ const THINK_ANIM = 857;
 const ENTER_STEPS = Object.freeze({ minimap: 1, move: 3, fadeIn: 4, close: 6 });
 const CROSS_STEPS = Object.freeze({ minimap: 1, move: 2, fadeIn: 4, close: 6 });
 const ESCAPE_STEPS = Object.freeze({ minimap: 1, move: 2, fadeIn: 4, close: 6 });
+
+/** Captured (three recordings): after the move out, the bars refuse the player for 26 ticks (Wiki: about 15 seconds). */
+const REENTRY_TICKS = 26;
+/** When the player last came out over the sewage water (game tick). */
+const LEFT_AT_ATTRIBUTE = "scurrius:left-at";
+/** Wiki: graves of deaths in the lair appear next to Historian Aldo (tile estimated). */
+const GRAVE_TILE = Object.freeze({ x: 3276, y: 9871, z: 0 });
+const DAMP_MESSAGE = "It's far too damp for you to light a fire here.";
 
 /** Captured: the first attack comes four ticks after the spawn. */
 const ARM_TICKS = 4;
@@ -275,7 +285,21 @@ function enter(player, mode) {
   });
 }
 
+/** Captured countdown: whole seconds left, rounded down, and "another second" for the last one. */
+function exhaustedText(ticksLeft) {
+  const seconds = Math.floor(ticksLeft * 0.6);
+  return seconds <= 1
+    ? "You are exhausted after climbing over the broken bars. Please wait for another second."
+    : `You are exhausted after climbing over the broken bars. Please wait for another ${seconds} seconds.`;
+}
+
 function climbThrough(player, mode) {
+  const leftAt = Number(player.getAttribute(LEFT_AT_ATTRIBUTE));
+  const ticksLeft = Number.isFinite(leftAt) ? leftAt + REENTRY_TICKS - core.World.getProcessCycle() : 0;
+  if (ticksLeft > 0) {
+    player.sendMessage(exhaustedText(ticksLeft));
+    return;
+  }
   if (skipsWarning(player)) {
     enter(player, mode);
     return;
@@ -322,8 +346,19 @@ function leave(player, steps, anim) {
   travel(player, steps, Common.OUTSIDE_TILE, {
     anim,
     sound: anim != null ? SOUND.climb : null,
+    onMove: () => player.setAttribute(LEFT_AT_ATTRIBUTE, core.World.getProcessCycle()),
     arrive: () => player.getPacketSender().sendSong(MUSIC.sewers),
   });
+}
+
+function refuseFire(request) {
+  if (!Common.inLair(request.location)) return;
+  request.allowed = false;
+  request.message = DAMP_MESSAGE;
+}
+
+function graveBesideAldo(request) {
+  if (Common.inLair(request.location)) request.tile = { ...GRAVE_TILE };
 }
 
 function cross({ player }) {
@@ -362,6 +397,8 @@ function attach(pluginApi) {
     "Peek (normal)": peek,
   });
   pluginApi.onObjectInteraction("Sewage water", { Cross: cross, "Quick-escape": quickEscape });
+  pluginApi.onCustomEvent("firemaking:can-light", refuseFire);
+  pluginApi.onCustomEvent("gravestones:grave-location", graveBesideAldo);
 }
 
 module.exports = {
@@ -369,6 +406,7 @@ module.exports = {
   get publicBoss() { return publicBoss; },
   _test: {
     WARNING_VARBIT, SKIP_WARNING_ATTRIBUTE, INSTANCE_ATTRIBUTE, ENTER_PROMPT, huds,
+    REENTRY_TICKS, LEFT_AT_ATTRIBUTE, GRAVE_TILE, DAMP_MESSAGE, exhaustedText, refuseFire, graveBesideAldo,
     peekText, climbThrough, enter, cross, quickEscape, onLogin, onBossDeath, spawnPublicBoss, spawnBoss,
     syncHud, aggressive,
     instanceClass: () => InstanceArea,

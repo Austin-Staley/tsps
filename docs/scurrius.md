@@ -21,6 +21,9 @@ Ticks count from the action named; captured gamevals are in brackets.
 - **Peek:** "There are no adventurers through the broken bars." (captured). With players inside, "There is 1 adventurer..." and "There are N adventurers..." follow the wording of the other bosses' Peek lines (Nex, the Nightmare, Zalcano); the lair's own were not captured.
 - **Sewage water** (14204, `rat_boss_exit`) at (3288, 9867): Cross plays `emote_think` (857) and sound 7655, then the fade, the move to (3279, 9869) on +2 and the fade in with Scape Cave (144) on +4; Quick-escape is the same without the emote.
 - **The boss HUD** (interface 303, through the BossHud plugin) shows the room's Scurrius while the player is inside: 1683 = 7221 and 6100 = 1500 in the public lair, 7222 and 500 in an instance.
+- **Re-entry:** after the move out over the water, the bars refuse the player for 26 ticks (recordings 83, 86, 2155; Wiki: about 15 seconds) with "You are exhausted after climbing over the broken bars. Please wait for another N seconds." (whole seconds left, rounded down; "another second." for the last).
+- **No fires:** "It's far too damp for you to light a fire here." (Wiki), through Firemaking's `firemaking:can-light` event.
+- **Graves:** a death in the lair leaves the grave beside Historian Aldo (Wiki), at (3276, 9871) (the tile is an estimate; no capture shows one), through Gravestones' `gravestones:grave-location`.
 - **Instances** are a PrivateArea over the lair's tiles. Leaving one (the water, a teleport, death, logging out) ends it with its Scurrius and rats; logging back in after a logout there puts the player outside the water.
 - **Respawn:** Scurrius appears at (3301, 9867) facing south with `npc_rat_boss_spawn_01` (10686), and attacks 4 ticks later. He is removed 5 ticks into his death animation (`npc_rat_boss_death_01`, 10705), and the next one comes 30 ticks after that (Wiki: 30; captured 29).
 - **Historian Aldo** stands at (3275, 9871), facing south, as 7615 (`rat_boss_biologist_op2`: Talk-to, Trade); varbit 9586 is 1 in every capture, so he is spawned as that variant.
@@ -46,6 +49,8 @@ Ticks count from the action named; captured gamevals are in brackets.
 
 - "Your Scurrius kill count is: <col=ff0000>N</col>." for everyone who damaged him, on the tick the loot drops (varp 4079 `total_rat_boss_kills`, through Combat Achievements).
 - The loot lands on his middle tile. In an instance, and for the top damager in the public lair, it is the MVP table (`scurrius` in `npc-drops.json`); everyone else who helped in the public lair rolls the non-MVP table (`scurrius_2`), each seeing only their own.
+- Only one player gets a spine per kill (Wiki): the top damager's roll first.
+- Ironmen in a group kill get only medium clue scrolls (Wiki): the Ironman plugin's shared-kill rule asks `ironman:shared-kill-keeps`, and Scurrius keeps the clue. Each helper's share goes through `npc-drops:roll` like the killer's, so the rule and the collection log see it.
 
 ## Food piles
 
@@ -62,9 +67,5 @@ Ticks count from the action named; captured gamevals are in brackets.
 ## Not built
 
 - Aldo making rat bone weapons (and crafting them yourself), which need the bone weapons first.
-- The 15-second wait before re-entering after leaving (Wiki), and the feeding damage reduction ("slight", no number on the Wiki).
-- "It's far too damp for you to light a fire here." (Firemaking has no hook for it yet).
-- Ironmen getting only medium clues from group kills.
+- The feeding damage reduction ("slight", no number on the Wiki; the captures are all Leagues, so their damage can't give one).
 - The patrol rats in the sewers outside (7224, 7225), which are scenery.
-- Only one player getting a spine per kill.
-- A player who dies in the lair finding their grave beside Historian Aldo (Wiki).

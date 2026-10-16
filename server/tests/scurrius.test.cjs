@@ -328,3 +328,61 @@ test("the lamp offers its seven skills over two pages", () => {
   assert.equal(Aldo._test.LAMP_XP, 5000);
   assert.equal(Aldo._test.PRAYER_LAMP_XP, 3500);
 });
+
+// ------------------------------------------------------------------ follow-ups
+
+test("leaving keeps the player out for 26 ticks, counted down as captured", () => {
+  const { exhaustedText, LEFT_AT_ATTRIBUTE, REENTRY_TICKS } = Lair._test;
+  assert.equal(REENTRY_TICKS, 26);
+  // Recording 83: 14, 9, 4 and 1 ticks left gave 8, 5, 2 seconds and "another second".
+  assert.equal(exhaustedText(14), "You are exhausted after climbing over the broken bars. Please wait for another 8 seconds.");
+  assert.equal(exhaustedText(9), "You are exhausted after climbing over the broken bars. Please wait for another 5 seconds.");
+  assert.equal(exhaustedText(4), "You are exhausted after climbing over the broken bars. Please wait for another 2 seconds.");
+  assert.equal(exhaustedText(1), "You are exhausted after climbing over the broken bars. Please wait for another second.");
+  const player = createPlayer({ x: 3279, y: 9869 });
+  player.setAttribute(LEFT_AT_ATTRIBUTE, core.World.getProcessCycle());
+  prompts.length = 0;
+  objectHooks.get("Broken bars")["Climb-through (normal)"]({ player });
+  assert.equal(prompts.length, 0);
+  assert.ok(player.log.some((line) => line.startsWith("message You are exhausted")));
+});
+
+test("no fires in the lair, and its deaths' graves go beside Aldo", () => {
+  const fire = { location: new Location(3295, 9867, 0), allowed: true, message: null };
+  Lair._test.refuseFire(fire);
+  assert.equal(fire.allowed, false);
+  assert.equal(fire.message, "It's far too damp for you to light a fire here.");
+  const outside = { location: new Location(3279, 9869, 0), allowed: true, message: null };
+  Lair._test.refuseFire(outside);
+  assert.equal(outside.allowed, true);
+  const grave = { location: new Location(3300, 9866, 0), tile: null };
+  Lair._test.graveBesideAldo(grave);
+  assert.deepEqual(grave.tile, { x: 3276, y: 9871, z: 0 });
+});
+
+test("only one player gets a spine per kill", () => {
+  const spine = core.ItemIdentifiers.SCURRIUS_SPINE;
+  const killer = [{ itemId: 532, amount: 1 }, { itemId: spine, amount: 1 }];
+  const helper = [{ itemId: spine, amount: 1 }, { itemId: 532, amount: 1 }];
+  Kills._test.oneSpine([killer, helper]);
+  assert.ok(killer.some((drop) => drop.itemId === spine));
+  assert.ok(!helper.some((drop) => drop.itemId === spine));
+});
+
+test("Ironmen keep only medium clues from a group kill", () => {
+  const Loot = require("../plugins/modes/ironman/Loot.Ironman");
+  const IronCommon = require("../plugins/modes/ironman/Common.Ironman");
+  const handlers = new Map();
+  const ironApi = new Proxy({
+    core,
+    onCustomEvent: (name, handler) => handlers.set(name, handler),
+    emitCustomEvent: (name, payload) => { if (name === "ironman:shared-kill-keeps") Kills._test.ironmanKeeps(payload); },
+  }, { get: (target, key) => target[key] ?? (() => {}) });
+  IronCommon.init(ironApi);
+  Loot(ironApi);
+  const iron = createPlayer();
+  iron.setAttribute(IronCommon.MODE_ATTRIBUTE, "ironman");
+  const drops = [{ itemId: 532, amount: 1 }, { itemId: core.ItemIdentifiers.CLUE_SCROLL_MEDIUM_, amount: 1 }];
+  handlers.get("npc-drops:roll")({ player: iron, npc: { getId: () => Common.PUBLIC_ID }, npcId: Common.PUBLIC_ID, drops, damagers: [iron, createPlayer()] });
+  assert.deepEqual(drops.map((drop) => drop.itemId), [core.ItemIdentifiers.CLUE_SCROLL_MEDIUM_]);
+});

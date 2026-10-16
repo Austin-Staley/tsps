@@ -5,6 +5,8 @@
  * - The loot lands on his middle tile. In a private instance the player rolls the MVP table; in
  *   the public lair whoever dealt the most damage rolls the MVP table and everyone else who
  *   helped rolls the non-MVP one, each seeing only their own.
+ * - Wiki: only one player gets a spine per kill, and Ironmen in a group kill get nothing but
+ *   medium clues (the Ironman plugin's shared-kill rule, which keeps what this answers).
  */
 const Common = require("./Common.Scurrius");
 
@@ -45,6 +47,19 @@ function roll(player, npcId) {
   return request.drops;
 }
 
+/** Wiki: only one player may receive a spine per kill; the first roll that has one keeps it. */
+function oneSpine(rolls) {
+  const spine = core.ItemIdentifiers.SCURRIUS_SPINE;
+  let given = false;
+  for (const drops of rolls) {
+    for (let i = drops.length - 1; i >= 0; i--) {
+      if (drops[i].itemId !== spine) continue;
+      if (given) drops.splice(i, 1);
+      given = true;
+    }
+  }
+}
+
 function dropFor(player, drops, location) {
   const { Item, ItemDefinition } = core;
   const manager = api.getItemOnGroundManager();
@@ -54,18 +69,32 @@ function dropFor(player, drops, location) {
     const itemId = drop.noted && noteId >= 0 && ItemDefinition.forId(noteId).isNoted() ? noteId : drop.itemId;
     if (ItemDefinition.forId(itemId).isStackable()) manager.registerLocation(player, new Item(itemId, drop.amount), location);
     else for (let i = 0; i < drop.amount; i++) manager.registerLocation(player, new Item(itemId, 1), location);
-    api.emitCustomEvent("collection-log:obtain", { player, itemId: drop.itemId, amount: drop.amount });
   }
 }
 
-/** The public kill: the killer (most damage) rolls the MVP table, the rest the non-MVP one. */
+/**
+ * The public kill: the killer (most damage) rolls the MVP table, the rest the non-MVP one. Each
+ * helper's share goes through "npc-drops:roll" too, so the Ironman rule and the collection log
+ * see it as they see the killer's. Plugins load in path order, so this runs before the Ironman
+ * rule (plugins/modes/) trims the killer's roll.
+ */
 function onRoll(event) {
-  if (event.npcId !== Common.PUBLIC_ID || !Common.isPublic(event.npc)) return;
+  if (event.helperShare || event.npcId !== Common.PUBLIC_ID || !Common.isPublic(event.npc)) return;
   event.drops.splice(0, event.drops.length, ...roll(event.player, MVP_TABLE_NPC));
+  const shares = participants(event.player, event.damagers)
+    .filter((player) => player !== event.player)
+    .map((player) => ({ player, drops: roll(player, NON_MVP_TABLE_NPC) }));
+  oneSpine([event.drops, ...shares.map((share) => share.drops)]);
   const location = middle(event.npc);
-  for (const player of participants(event.player, event.damagers)) {
-    if (player !== event.player) dropFor(player, roll(player, NON_MVP_TABLE_NPC), location);
+  for (const { player, drops } of shares) {
+    api.emitCustomEvent("npc-drops:roll", { player, npc: event.npc, npcId: event.npcId, drops, damagers: event.damagers, helperShare: true });
+    dropFor(player, drops, location);
   }
+}
+
+/** Wiki: Ironmen get medium clues from group kills, and nothing else. */
+function ironmanKeeps(request) {
+  if (Common.isScurrius(request.npc)) request.keep.push(core.ItemIdentifiers.CLUE_SCROLL_MEDIUM_);
 }
 
 function onLocation(where) {
@@ -78,6 +107,7 @@ function attach(pluginApi) {
   pluginApi.onNpcDeath(onDeath);
   pluginApi.onCustomEvent("npc-drops:roll", onRoll);
   pluginApi.onCustomEvent("npc-drops:location", onLocation);
+  pluginApi.onCustomEvent("ironman:shared-kill-keeps", ironmanKeeps);
 }
 
-module.exports = { attach, _test: { participants, onDeath, onRoll, onLocation, MVP_TABLE_NPC, NON_MVP_TABLE_NPC } };
+module.exports = { attach, _test: { participants, onDeath, onRoll, onLocation, oneSpine, ironmanKeeps, MVP_TABLE_NPC, NON_MVP_TABLE_NPC } };
