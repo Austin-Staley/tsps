@@ -910,7 +910,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                         entry.damage = state.hitSplatValues[slot] | 0;
                         entry.count = 1;
                         entry.color = undefined;
-                        entry.scale = RENDER_CONSTANTS.HITSPLAT_PLAYER_SCALE;
+                        entry.scale = RENDER_CONSTANTS.HITSPLAT_SCALE;
                         entry.variant = slot & 3;
                         entry.style = state.hitSplatTypes[slot] | 0;
                         entry.type2 = state.hitSplatTypes2[slot] | 0;
@@ -1161,7 +1161,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                             entry.damage = state.hitSplatValues[slot] | 0;
                             entry.count = 1;
                             entry.color = undefined;
-                            entry.scale = RENDER_CONSTANTS.HITSPLAT_PLAYER_SCALE;
+                            entry.scale = RENDER_CONSTANTS.HITSPLAT_SCALE;
                             entry.variant = slot & 3;
                             entry.style = state.hitSplatTypes[slot] | 0;
                             entry.type2 = state.hitSplatTypes2[slot] | 0;
@@ -1301,7 +1301,7 @@ export function render(host: WebGLOsrsRendererHost, time: number, deltaTime: num
                                 entry.damage = state.hitSplatValues[slot] | 0;
                                 entry.count = 1;
                                 entry.color = undefined;
-                                entry.scale = RENDER_CONSTANTS.HITSPLAT_NPC_SCALE;
+                                entry.scale = RENDER_CONSTANTS.HITSPLAT_SCALE;
                                 entry.variant = slot & 3;
                                 entry.style = state.hitSplatTypes[slot] | 0;
                                 entry.type2 = state.hitSplatTypes2[slot] | 0;
