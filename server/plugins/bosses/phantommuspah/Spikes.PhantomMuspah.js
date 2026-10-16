@@ -105,6 +105,11 @@ class SpikeField {
   rise(tile) {
     const spike = this.spikes.get(key(tile));
     if (!spike || spike.state !== "warned" || this.cleared) return;
+    // A warned tile isn't solid yet: if the Muspah has walked onto it, the spike doesn't come up.
+    if (this.fight.underBoss(tile)) {
+      this.spikes.delete(key(tile));
+      return;
+    }
     const { locs, spikes } = Common.data;
     spike.state = "rising";
     spike.object = this.place(tile, locs.spikePre, spike.rotation);
@@ -124,10 +129,12 @@ class SpikeField {
   /** The ground shakes as spikes stand (sounds 1678 and 6780, a short camera shake). */
   rumble() {
     const { riseSounds, cameraShake } = Common.data.spikes;
-    const sender = this.player.getPacketSender();
-    Common.sounds(this.player, riseSounds);
+    const { player } = this;
+    const sender = player.getPacketSender();
+    Common.sounds(player, riseSounds);
     for (const [slot, amount] of cameraShake) sender.sendCameraShake(slot, amount);
-    this.fight.at(2, () => this.player.isRegistered() && sender.sendCameraReset());
+    // On the world's clock, not the fight's: the shake must stop even if the fight ends now.
+    Common.later(2, () => player.isRegistered() && sender.sendCameraReset());
   }
 
   /** Two near the edge as the Muspah appears. */
@@ -148,7 +155,7 @@ class SpikeField {
 
   /** At a form switch: one beside each group of spikes, and one under the player. */
   switchWave() {
-    const tiles = [this.playerTile()];
+    const tiles = this.underPlayer();
     for (const group of this.groups()) {
       const beside = this.besideGroup(group);
       if (beside.length) tiles.push(Common.pick(beside));
@@ -158,7 +165,7 @@ class SpikeField {
 
   /** After the shield, every fourth attack: under the player, and spreading from every group. */
   growthWave() {
-    const tiles = [this.playerTile()];
+    const tiles = this.underPlayer();
     for (const group of this.groups()) {
       const beside = Common.shuffle(this.besideGroup(group));
       tiles.push(...beside.slice(0, Math.max(1, Math.ceil(group.length / 2))));
@@ -201,6 +208,12 @@ class SpikeField {
     return out;
   }
 
+  /** The player's tile, when a spike can come up there (on the arena's floor). */
+  underPlayer() {
+    const tile = this.playerTile();
+    return Common.onArena(tile) && !this.fight.underBoss(tile) ? [tile] : [];
+  }
+
   playerTile() {
     const [x, y] = this.session.lairTile(this.player.getLocation());
     return [x, y];
@@ -213,7 +226,8 @@ class SpikeField {
     const { player } = this;
     const { knock } = Common.data.spikes;
     const { ForceMovement, ForceMovementTask, TaskManager, Location } = Common.core;
-    const to = this.knockTile(from);
+    // Already being thrown aside this tick: one knock-back at a time.
+    const to = player.getForceMovement() ? null : this.knockTile(from);
     if (to) {
       const dx = to[0] - from[0];
       const dy = to[1] - from[1];

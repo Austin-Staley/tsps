@@ -109,6 +109,8 @@ class Session {
     this.fight = null;
     Corruption.cure(this.player);
     Common.closeOverlay(this.player);
+    // A spike's camera shake may still be running.
+    this.player.getPacketSender().sendCameraReset();
     this.player.setAttribute(Common.INSIDE_ATTRIBUTE, false);
     if (!this.area.isDestroyed()) this.area.destroy();
   }

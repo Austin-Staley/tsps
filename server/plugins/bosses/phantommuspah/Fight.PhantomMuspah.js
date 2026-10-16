@@ -23,6 +23,8 @@ const { SpikeField } = require("./Spikes.PhantomMuspah");
 const OTHER_FORM = { ranged: "melee", melee: "ranged" };
 /** A special or a switch waits this long after an attack, so they don't cut it short. */
 const ACTION_GAP_TICKS = 2;
+/** Form switches are at least this far apart (captured: never closer, even under Leagues damage). */
+const SWITCH_GAP_TICKS = 5;
 /** A second special waits this long after the first (captured: 6 ticks between them). */
 const SPECIAL_GAP_TICKS = 6;
 /** The overlay lifts this long after the Homing spikes' darkness (captured: 5 ticks). */
@@ -44,6 +46,7 @@ class Fight {
     this.specialReadyTick = 0;
     this.switchDamage = 0;
     this.switchHits = 0;
+    this.switchReadyTick = 0;
     this.shockwaveStarted = false;
     this.shieldDone = false;
     this.shield = 0;
@@ -124,6 +127,8 @@ class Fight {
     this.trackStillness();
     if (muspah.getInteractingMobile?.() !== this.player) muspah.setMobileInteraction(this.player);
     if (this.held || !Common.alive(this.player)) return;
+    // The engine drops a target it can't reach (a spike in the way, the switch's pause); it never gives up.
+    if (muspah.getCombat().getTarget() !== this.player) muspah.getCombat().attack(this.player);
     this.turn();
   }
 
@@ -180,6 +185,7 @@ class Fight {
 
   switchDue() {
     const { switch: rules } = Common.data;
+    if (this.tick < this.switchReadyTick) return false;
     const needed = this.form === "ranged" ? rules.rangedDamage : rules.meleeDamage;
     return this.switchHits >= rules.minHits && this.switchDamage >= needed;
   }
@@ -195,8 +201,10 @@ class Fight {
     this.resetSwitch();
     Common.animate(this.muspah, rules.anim);
     this.hold(true);
+    this.switchReadyTick = this.tick + SWITCH_GAP_TICKS;
     this.at(1, () => {
       this.setForm(OTHER_FORM[this.form]);
+      this.resetSwitch();
       Common.animate(this.muspah, rules.appearAnim);
       this.muspah.performGraphic(Common.graphic(rules.appearSpot));
       this.spikes.switchWave();
@@ -267,7 +275,8 @@ class Fight {
       this.at(1, () => this.showHitpoints());
       return;
     }
-    if (this.form === "ranged" || this.form === "melee") {
+    // What lands during a switch's own pause counts for neither form.
+    if ((this.form === "ranged" || this.form === "melee") && !this.held) {
       this.switchDamage += total;
       this.switchHits++;
     }
