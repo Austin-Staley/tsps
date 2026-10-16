@@ -23,6 +23,7 @@ export const enum ClientPacket {
   HANDSHAKE = 202,
   LOGOUT = 203,
   LOGIN = 204,
+  LOGIN_FORGET = 207,
   FACE = 211,
   MOVEMENT_INPUT = 215,
   LOC_INTERACT = 231,
@@ -299,6 +300,7 @@ export type ClientMessage =
   | { type: "ping" }
   | { type: "logout" }
   | { type: "login"; username: string; password: string; revision: number; flags: number }
+  | { type: "login_forget"; username: string; token: string }
   | { type: "handshake"; name: string; clientType: number };
 
 class Reader {
@@ -876,6 +878,8 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
         // LOGIN_FLAG_* (net/login/LoginTokens); older clients don't send it.
         flags: reader.remaining > 0 ? reader.byte() : 0,
       };
+    case ClientPacket.LOGIN_FORGET:
+      return { type: "login_forget", username: reader.string(), token: reader.string() };
     case ClientPacket.HANDSHAKE: {
       const name = reader.string();
       const hasAppearance = reader.byte() !== 0;

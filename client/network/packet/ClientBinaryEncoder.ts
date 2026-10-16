@@ -198,6 +198,13 @@ export class ClientBinaryEncoder {
         return this.buffer.toPacket(ClientPacketId.LOGIN);
     }
 
+    encodeLoginForget(username: string, token: string): Uint8Array {
+        this.buffer.reset();
+        this.buffer.writeString(username ?? "");
+        this.buffer.writeString(token ?? "");
+        return this.buffer.toPacket(ClientPacketId.LOGIN_FORGET);
+    }
+
     // ========================================
     // MOVEMENT
     // ========================================
@@ -577,6 +584,9 @@ export function encodeClientMessage(msg: { type: string; payload: any }): Uint8A
                 payload.revision,
                 payload.flags,
             );
+
+        case "login_forget":
+            return clientEncoder.encodeLoginForget(payload.username, payload.token);
 
         case "walk":
             return clientEncoder.encodeWalk(

@@ -5,6 +5,7 @@ import { send } from "./connection/send";
 import { state } from "./state";
 import type { GameSocket } from "./connection/GameSocket";
 import { resolveServerTransport } from "./outgoing/connectionInfo";
+import { encodeClientMessage } from "../packet/ClientBinaryEncoder";
 
 export function setAutoSendHandshake(auto: boolean): void {
     state.autoSendHandshake = auto;
@@ -129,6 +130,30 @@ export async function sendLogin(
 
     clearLoginConnectRetryTimer();
     sendLoginPayload();
+}
+
+/**
+ * Ask the server to drop a remembered-login token. Uses a short-lived socket of its own so it
+ * works from the login screen whether or not the game socket is open. A WebRTC world has no
+ * plain socket to reach, so its token is left to expire.
+ */
+export function forgetRememberedLogin(username: string, token: string): void {
+    if (typeof WebSocket === "undefined" || state.webRtcConfig) return;
+    let socket: WebSocket;
+    try {
+        socket = new WebSocket(state.lastUrl);
+    } catch {
+        return;
+    }
+    socket.binaryType = "arraybuffer";
+    const closeTimer = setTimeout(() => socket.close(), 5000);
+    socket.addEventListener("open", () => {
+        socket.send(encodeClientMessage({ type: "login_forget", payload: { username, token } }) as any);
+        // close() still delivers the queued packet before the closing handshake.
+        socket.close(1000, "login forget");
+        clearTimeout(closeTimer);
+    });
+    socket.addEventListener("error", () => clearTimeout(closeTimer));
 }
 
 /**

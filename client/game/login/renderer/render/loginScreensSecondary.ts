@@ -1,7 +1,7 @@
 import type { LoginState } from "../../LoginState";
 import type { LoginRendererHost, RenderContext } from "../host";
 import { isCaretVisible } from "../canvas";
-import { USE_ANOTHER_ACCOUNT_TEXT, USE_ANOTHER_ACCOUNT_Y } from "../layout/geometry";
+import { REMEMBERED_LOG_OUT_BUTTON_Y, REMEMBERED_NAME_BUTTON_Y } from "../layout/geometry";
 import { drawButton, drawCenteredText, drawText, truncateFromStart } from "./drawUtils";
 
 export function drawForgotPassword(host: LoginRendererHost, ctx: RenderContext, state: LoginState) {
@@ -220,7 +220,12 @@ export function drawTryAgain(host: LoginRendererHost, ctx: RenderContext, state:
     
 }
 
-export function drawWelcomeDisplayName(host: LoginRendererHost, ctx: RenderContext, state: LoginState) {
+export function drawWelcomeDisplayName(
+    host: LoginRendererHost,
+    ctx: RenderContext,
+    state: LoginState,
+    isConnecting: boolean,
+) {
 
         if (!host.fontBold12) return;
         drawCenteredText(host, 
@@ -228,31 +233,22 @@ export function drawWelcomeDisplayName(host: LoginRendererHost, ctx: RenderConte
             host.fontBold12,
             `Welcome to ${state.serverName?.trim() || "RSPS.app"}`,
             host.loginBoxX + 180,
-            209,
+            201,
             0xffff00,
             true,
         );
         drawCenteredText(host, 
             ctx,
             host.fontBold12,
-            state.displayName,
+            isConnecting ? state.response1 : "Click your name to play.",
             host.loginBoxX + 180,
-            229,
+            236,
             0xffffff,
             true,
         );
-        drawButton(host, ctx, host.loginBoxX + 180, 311, "Play");
-        if (host.fontPlain11) {
-            drawCenteredText(host, 
-                ctx,
-                host.fontPlain11,
-                USE_ANOTHER_ACCOUNT_TEXT,
-                host.loginBoxX + 180,
-                USE_ANOTHER_ACCOUNT_Y,
-                0xffffff,
-                true,
-            );
-        }
+        if (isConnecting) return;
+        drawButton(host, ctx, host.loginBoxX + 180, REMEMBERED_NAME_BUTTON_Y, state.displayName);
+        drawButton(host, ctx, host.loginBoxX + 180, REMEMBERED_LOG_OUT_BUTTON_Y, "Log out");
     
 }
 

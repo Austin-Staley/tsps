@@ -5,9 +5,7 @@ import {
     getWelcomeLayout,
     LOGIN_FORM_BUTTON_Y,
     LOGIN_FORM_REMEMBER_Y,
-    LOGIN_FORM_STAY_Y,
     REMEMBER_USERNAME_TEXT,
-    STAY_SIGNED_IN_TEXT,
 } from "../layout/geometry";
 import { isCaretVisible } from "../canvas";
 import { drawButton, drawCenteredText, drawText, drawSprite, measureText, getCheckboxSprite, truncateFromStart } from "./drawUtils";
@@ -155,16 +153,16 @@ export function drawLoginForm(host: LoginRendererHost, ctx: RenderContext, state
         // Checkboxes (only show when not connecting)
         if (!isConnecting) {
             const labelX = host.loginBoxX + 180 - 108;
-            const boxX = labelX + measureText(host, host.fontBold12, REMEMBER_USERNAME_TEXT);
-            const rows: Array<[string, number, boolean, boolean]> = [
-                [REMEMBER_USERNAME_TEXT, LOGIN_FORM_REMEMBER_Y, state.rememberUsername, state.rememberUsernameHover],
-                [STAY_SIGNED_IN_TEXT, LOGIN_FORM_STAY_Y, state.staySignedIn, false],
-            ];
-            for (const [label, y, checked, hover] of rows) {
-                const sprite = getCheckboxSprite(host, checked, hover);
-                if (!sprite) continue;
-                drawText(host, ctx, host.fontBold12, label, labelX, y, 0xffff00, true);
-                drawSprite(host, ctx, sprite, boxX, y - host.fontBold12.lineHeight);
+            const sprite = getCheckboxSprite(host, state.rememberUsername, state.rememberUsernameHover);
+            if (sprite) {
+                const y = LOGIN_FORM_REMEMBER_Y;
+                drawText(host, ctx, host.fontBold12, REMEMBER_USERNAME_TEXT, labelX, y, 0xffff00, true);
+                drawSprite(host, 
+                    ctx,
+                    sprite,
+                    labelX + measureText(host, host.fontBold12, REMEMBER_USERNAME_TEXT),
+                    y - host.fontBold12.lineHeight,
+                );
             }
         }
 

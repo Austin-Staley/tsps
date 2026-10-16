@@ -202,12 +202,11 @@ export function withContentTransform(host: LoginRendererHost, ctx: RenderContext
 
 }
 
-/** Login form checkboxes, one per row with the boxes in a column, then the Login/Cancel buttons. */
+/** Login form "Remember username" row (also asks to stay logged in), above the Login/Cancel buttons. */
 export const REMEMBER_USERNAME_TEXT = "Remember username: ";
-export const STAY_SIGNED_IN_TEXT = "Stay logged in: ";
-export const LOGIN_FORM_REMEMBER_Y = 274;
-export const LOGIN_FORM_STAY_Y = 291;
+export const LOGIN_FORM_REMEMBER_Y = 281;
 export const LOGIN_FORM_BUTTON_Y = 321;
-/** Link under Play on the remembered-account screen; drops the remembered login. */
-export const USE_ANOTHER_ACCOUNT_TEXT = "Not you? Log in with another account.";
-export const USE_ANOTHER_ACCOUNT_Y = 357;
+
+/** Remembered-account screen: the account name is the Play button, "Log out" forgets it. */
+export const REMEMBERED_NAME_BUTTON_Y = 276;
+export const REMEMBERED_LOG_OUT_BUTTON_Y = 326;

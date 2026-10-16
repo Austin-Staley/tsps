@@ -114,6 +114,33 @@ export async function connectHeadlessClient(username: string, password: string):
   return player ? { player } : { error: connection.getLoginFailure() ?? "Login did not complete." };
 }
 
+/** "Log out" on the remembered-account screen: the server drops that browser's token. */
+async function forgetLoginToken(rawUsername: string, token: string): Promise<void> {
+  const protocolName = Misc.formatNameForProtocol(rawUsername.trim());
+  if (protocolName.length < 1 || protocolName.length > 12 || !Misc.isValidName(protocolName)) return;
+  const username = Misc.formatText(protocolName);
+  const online = World.getPlayerByName(username);
+  if (online) {
+    const entries = readLoginTokens(online.getAttribute(LOGIN_TOKENS_ATTRIBUTE), Date.now());
+    const check = checkLoginToken(entries, token);
+    if (check.kind === "valid") online.setAttribute(LOGIN_TOKENS_ATTRIBUTE, revokeLoginToken(entries, check.index));
+    return;
+  }
+  try {
+    // Only a token the account holds causes a write, so made-up requests cost nothing.
+    const save = GameConstants.PLAYER_PERSISTENCE.load(username);
+    if (!save || checkLoginToken(readLoginTokens(save.attributes?.[LOGIN_TOKENS_ATTRIBUTE], Date.now()), token).kind !== "valid") return;
+    await GameConstants.PLAYER_PERSISTENCE.updateOffline(username, (stored) => {
+      const entries = readLoginTokens(stored.attributes?.[LOGIN_TOKENS_ATTRIBUTE], Date.now());
+      const check = checkLoginToken(entries, token);
+      if (check.kind !== "valid") return;
+      stored.attributes = { ...(stored.attributes ?? {}), [LOGIN_TOKENS_ATTRIBUTE]: revokeLoginToken(entries, check.index) };
+    }, "login-token");
+  } catch (error) {
+    console.warn(`[login] could not forget a login token for ${username}`, error);
+  }
+}
+
 const CLOSE_ON_INTERFACE_CLOSE_ATTRIBUTE = "interface:close-on-interface-close";
 const WORLD_INTERACTIONS = new Set([
   "move",
@@ -866,6 +893,9 @@ export class ClientConnection {
           continue;
         case "login":
           await this.login(packet.username, packet.password, packet.revision, packet.flags);
+          continue;
+        case "login_forget":
+          await forgetLoginToken(packet.username, packet.token);
           continue;
         case "handshake":
           this.enterWorld(packet.clientType);

@@ -23,6 +23,12 @@ const login = decodeClientPacket(
 ) as any;
 assert.deepEqual(login, { type: "login", username: "Zezima", password: "secret", revision: 237, flags: LOGIN_FLAG_REMEMBER });
 
+// "Log out" on the remembered-account screen sends the token to be dropped.
+assert.deepEqual(
+    decodeClientPacket(Buffer.from(clientEncoder.encodeLoginForget("Zezima", "tok"))) as any,
+    { type: "login_forget", username: "Zezima", token: "tok" },
+);
+
 // The login response hands back the token; a server without tokens ends the packet early.
 const withToken = decodeServerPacket(new Uint8Array(encodeLoginResponse(true, -1, "", "Zezima", "tok"))) as any;
 assert.equal(withToken.payload.loginToken, "tok");
@@ -68,15 +74,15 @@ state.loginIndex = LoginIndex.WELCOME_DISPLAY_NAME;
 state.showRememberedLogin();
 assert.equal(state.loginIndex, LoginIndex.WELCOME);
 
-// The removed Remember Login plugin's password is filled in once, with "Stay logged in" ticked.
+// The removed Remember Login plugin's password is filled in once, with "Remember username" ticked.
 store.set("osrs.plugin.remember_login.v1", JSON.stringify({ enabled: true, username: "Zezima", password: "secret" }));
 resetClientPreferencesCache();
 const migrated = new LoginState();
 assert.equal(migrated.username, "Zezima");
 assert.equal(migrated.password, "secret");
-assert.equal(migrated.staySignedIn, true);
+assert.equal(migrated.rememberUsername, true);
 migrated.clearLegacyRememberedPassword();
 assert.equal(store.has("osrs.plugin.remember_login.v1"), false);
 
 assert.notEqual(LOGIN_FLAG_TOKEN, LOGIN_FLAG_REMEMBER);
-console.log("stay logged in: ok");
+console.log("remembered login: ok");

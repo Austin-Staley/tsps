@@ -6,10 +6,9 @@ import {
     getWelcomeLayout,
     LOGIN_FORM_BUTTON_Y,
     LOGIN_FORM_REMEMBER_Y,
-    LOGIN_FORM_STAY_Y,
+    REMEMBERED_LOG_OUT_BUTTON_Y,
+    REMEMBERED_NAME_BUTTON_Y,
     REMEMBER_USERNAME_TEXT,
-    USE_ANOTHER_ACCOUNT_TEXT,
-    USE_ANOTHER_ACCOUNT_Y,
 } from "../layout/geometry";
 import { measureText } from "../render/drawUtils";
 
@@ -59,7 +58,7 @@ export function handleLoginFormClick(host: LoginRendererHost, state: LoginState,
             return undefined;
         }
 
-        // Checkboxes: the label or the box toggles it, as drawn by drawLoginForm
+        // Checkbox: the label or the box toggles it, as drawn by drawLoginForm
         if (host.optionsRadioSprite0 && host.fontBold12) {
             const labelX = host.loginBoxX + 180 - 108;
             const boxRight =
@@ -68,13 +67,13 @@ export function handleLoginFormClick(host: LoginRendererHost, state: LoginState,
                 host.optionsRadioSprite0.subWidth;
             const top = (baseline: number) => baseline - host.fontBold12!.lineHeight;
             const boxH = host.optionsRadioSprite0.subHeight || 15;
-            if (x >= labelX && x <= boxRight) {
-                if (y >= top(LOGIN_FORM_REMEMBER_Y) && y < top(LOGIN_FORM_REMEMBER_Y) + boxH) {
-                    return LoginActions.TOGGLE_REMEMBER;
-                }
-                if (y >= top(LOGIN_FORM_STAY_Y) && y < top(LOGIN_FORM_STAY_Y) + boxH) {
-                    return LoginActions.TOGGLE_STAY_SIGNED_IN;
-                }
+            if (
+                x >= labelX &&
+                x <= boxRight &&
+                y >= top(LOGIN_FORM_REMEMBER_Y) &&
+                y < top(LOGIN_FORM_REMEMBER_Y) + boxH
+            ) {
+                return LoginActions.TOGGLE_REMEMBER;
             }
         }
 
@@ -190,19 +189,11 @@ export function handleMessageClick(host: LoginRendererHost, state: LoginState, x
 export function handleWelcomeDisplayNameClick(host: LoginRendererHost, x: number, y: number) {
 
         const centerX = host.loginBoxX + 180;
-        if (isButtonHit(host, x, y, centerX, 311)) {
+        if (isButtonHit(host, x, y, centerX, REMEMBERED_NAME_BUTTON_Y)) {
             return LoginActions.PLAY;
         }
-        if (host.fontPlain11) {
-            const halfWidth = measureText(host, host.fontPlain11, USE_ANOTHER_ACCOUNT_TEXT) / 2;
-            if (
-                x >= centerX - halfWidth &&
-                x <= centerX + halfWidth &&
-                y >= USE_ANOTHER_ACCOUNT_Y - 12 &&
-                y <= USE_ANOTHER_ACCOUNT_Y + 3
-            ) {
-                return LoginActions.USE_ANOTHER_ACCOUNT;
-            }
+        if (isButtonHit(host, x, y, centerX, REMEMBERED_LOG_OUT_BUTTON_Y)) {
+            return LoginActions.FORGET_REMEMBERED_LOGIN;
         }
         return undefined;
     

@@ -17,9 +17,8 @@ export type LoginAction =
     | { type: "submit_dob" }
     | { type: "toggle_remember" }
     | { type: "toggle_hide_username" }
-    | { type: "toggle_stay_signed_in" }
     | { type: "play" }
-    | { type: "use_another_account" }
+    | { type: "forget_remembered_login" }
     | { type: "toggle_trust" }
     | { type: "open_server_list" }
     | { type: "close_server_list" }
@@ -52,9 +51,8 @@ export const LoginActions = {
     SUBMIT_DOB: { type: "submit_dob" } as const,
     TOGGLE_REMEMBER: { type: "toggle_remember" } as const,
     TOGGLE_HIDE_USERNAME: { type: "toggle_hide_username" } as const,
-    TOGGLE_STAY_SIGNED_IN: { type: "toggle_stay_signed_in" } as const,
     PLAY: { type: "play" } as const,
-    USE_ANOTHER_ACCOUNT: { type: "use_another_account" } as const,
+    FORGET_REMEMBERED_LOGIN: { type: "forget_remembered_login" } as const,
     TOGGLE_TRUST: { type: "toggle_trust" } as const,
     OPEN_SERVER_LIST: { type: "open_server_list" } as const,
     CLOSE_SERVER_LIST: { type: "close_server_list" } as const,

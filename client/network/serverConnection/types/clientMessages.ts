@@ -94,6 +94,7 @@ type ClientToServer =
           type: "login";
           payload: { username: string; password: string; revision: number; flags?: number };
       }
+    | { type: "login_forget"; payload: { username: string; token: string } }
     | { type: "chat"; payload: Record<string, unknown> }
     | { type: "friends_chat_action"; payload: FriendsChatAction }
     | { type: "private_message"; payload: { recipient: string; text: string } }

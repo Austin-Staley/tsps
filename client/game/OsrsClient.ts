@@ -122,6 +122,7 @@ import {
     sendBankCustomQuantity,
     LOGIN_FLAG_REMEMBER,
     LOGIN_FLAG_TOKEN,
+    forgetRememberedLogin,
     sendLogin,
     sendInteractStop,
     sendLogout,
@@ -5403,7 +5404,7 @@ export class OsrsClient {
             this.loginState.username.trim(),
             this.loginState.password,
             revision,
-            this.loginState.staySignedIn ? LOGIN_FLAG_REMEMBER : 0,
+            this.loginState.rememberUsername ? LOGIN_FLAG_REMEMBER : 0,
         );
     }
 
@@ -5425,11 +5426,14 @@ export class OsrsClient {
     }
 
     /**
-     * Keeps the "Stay logged in" token the server sent with an accepted login, or forgets this
-     * server's remembered account after a login without it.
+     * Keeps the remembered-login token the server sent with an accepted login, or forgets this
+     * server's remembered account after a login without "Remember username". A password login
+     * replaces (and revokes) whatever this browser remembered before.
      */
     onLoginAccepted(loginToken: string | undefined, displayName: string | undefined): void {
         const state = this.loginState;
+        const previous = state.getRememberedLogin();
+        if (previous && !state.loginWithToken) forgetRememberedLogin(previous.username, previous.token);
         if (loginToken) {
             state.rememberLogin(displayName || state.username.trim(), loginToken);
         } else if (!state.loginWithToken) {
@@ -5583,7 +5587,6 @@ export class OsrsClient {
         if (usedToken && errorCode === LoginErrorCode.INVALID_CREDENTIALS) {
             // The remembered login expired or was signed out: ask for the password instead.
             this.loginState.forgetRememberedLogin();
-            this.loginState.staySignedIn = true;
             this.loginState.promptCredentials(true);
             this.loginState.setResponse("", "Your saved login has expired.", "Please enter your password.", "");
             this.updateGameState(GameState.LOGIN_SCREEN);
@@ -5891,11 +5894,18 @@ export class OsrsClient {
                 return "connect";
             }
 
-            case "use_another_account":
+            case "forget_remembered_login": {
+                // "Log out" on the remembered-account screen: the server drops the token too.
+                const remembered = this.loginState.getRememberedLogin();
+                if (remembered) {
+                    forgetRememberedLogin(remembered.username, remembered.token);
+                    this.loginState.username = remembered.username;
+                }
                 this.loginState.forgetRememberedLogin();
                 this.loginState.displayName = "";
-                this.loginState.promptCredentials(false);
+                this.loginState.loginIndex = LoginIndex.WELCOME;
                 return undefined;
+            }
 
             case "cancel":
                 this.loginState.loginIndex = LoginIndex.WELCOME;
@@ -5950,10 +5960,6 @@ export class OsrsClient {
             case "toggle_hide_username":
                 this.loginState.isUsernameHidden = !this.loginState.isUsernameHidden;
                 this.loginState.savePersistedLoginState();
-                return undefined;
-
-            case "toggle_stay_signed_in":
-                this.loginState.staySignedIn = !this.loginState.staySignedIn;
                 return undefined;
 
             case "toggle_trust":

@@ -155,3 +155,36 @@ test('changing the password signs out every remembered login', () => {
   player.setPasswordHashWithSalt('second');
   assert.deepEqual(player.getAttribute(tokens.LOGIN_TOKENS_ATTRIBUTE), []);
 });
+
+test('"Log out" on the remembered-account screen drops only that token', async () => {
+  const hash = await PasswordUtil.generatePasswordHashWithSalt('hunter22');
+  const save = accountStore(hash);
+  let writes = 0;
+  const update = GameConstants.PLAYER_PERSISTENCE.updateOffline;
+  GameConstants.PLAYER_PERSISTENCE.updateOffline = async (...args) => { writes++; return update(...args); };
+  const kept = (await login('tokenuser', 'hunter22', tokens.LOGIN_FLAG_REMEMBER)).token;
+  const forgotten = (await login('tokenuser', 'hunter22', tokens.LOGIN_FLAG_REMEMBER)).token;
+  assert.equal(save.attributes[tokens.LOGIN_TOKENS_ATTRIBUTE].length, 2);
+
+  const forget = async (token) => {
+    const connection = new net.ClientConnection(stubChannel());
+    connection.inject([{ type: 'login_forget', username: 'tokenuser', token }]);
+    await connection.idle();
+  };
+  writes = 0;
+  await forget('made-up');
+  assert.equal(writes, 0, 'an unknown token writes nothing');
+  await forget(forgotten);
+  assert.equal(writes, 1);
+  assert.equal(save.attributes[tokens.LOGIN_TOKENS_ATTRIBUTE].length, 1);
+  assert.equal((await login('tokenuser', forgotten, tokens.LOGIN_FLAG_TOKEN)).success, false);
+  assert.equal((await login('tokenuser', kept, tokens.LOGIN_FLAG_TOKEN)).success, true, 'other browsers stay');
+});
+
+test('the forget packet round-trips', () => {
+  const { decodeClientPacket } = require('../dist/net/protocol/ClientProtocol');
+  const body = Buffer.from('Zezima\0tok\0', 'latin1');
+  assert.deepEqual(decodeClientPacket(Buffer.concat([Buffer.from([207, body.length]), body])), {
+    type: 'login_forget', username: 'Zezima', token: 'tok',
+  });
+});

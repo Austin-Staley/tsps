@@ -244,9 +244,6 @@ export class LoginState {
     /** Remember username checkbox hover state */
     rememberUsernameHover: boolean = false;
 
-    /** "Stay logged in" checkbox: the server hands back a token to log in with next time. */
-    staySignedIn: boolean = false;
-
     /** The current login attempt uses the remembered token instead of a password. */
     loginWithToken: boolean = false;
 
@@ -302,7 +299,7 @@ export class LoginState {
     serverIceServers: RTCIceServer[] = [];
 
     /** Persist the last selected server to localStorage */
-    // ========== Stay logged in ==========
+    // ========== Remembered login ==========
 
     /** A token only works on the server that issued it, so each server keeps its own. */
     private get rememberedLoginKey(): string {
@@ -351,7 +348,7 @@ export class LoginState {
     }
 
     /**
-     * Fills in the password the removed Remember Login plugin kept, ticking "Stay logged in"
+     * Fills in the password the removed Remember Login plugin kept, ticking "Remember username"
      * so the next login swaps it for a token. clearLegacyRememberedPassword deletes it then.
      */
     private restoreLegacyRememberedPassword(): void {
@@ -365,7 +362,7 @@ export class LoginState {
         this.username = legacy.username.slice(0, MAX_ACCOUNT_NAME_LENGTH);
         this.password = legacy.password.slice(0, MAX_PASSWORD_LENGTH);
         this.currentLoginField = 1;
-        this.staySignedIn = true;
+        this.rememberUsername = true;
     }
 
     clearLegacyRememberedPassword(): void {
@@ -487,7 +484,6 @@ export class LoginState {
         this.mobileWorldSelectScrollVelocity = 0;
         this.mobileWorldSelectFilter = "";
         this.virtualKeyboardVisible = false;
-        this.staySignedIn = false;
         this.loginWithToken = false;
         this.loadPersistedLoginState();
         this.showRememberedLogin();
