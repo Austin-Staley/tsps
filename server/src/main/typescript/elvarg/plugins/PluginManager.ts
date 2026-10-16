@@ -4165,7 +4165,8 @@ export class PluginManager {
               }
               return instance;
             }
-            return new methodCtor();
+            // The NPC is passed so a per-attack method can read that NPC's own fight state.
+            return new methodCtor(npc);
           },
         };
         PluginManager.registerNpcCombatMethodProviderInternal(
