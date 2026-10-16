@@ -1,7 +1,5 @@
 "use strict";
 
-const { crossingFor } = require("./WallDoor.Doors");
-
 let api;
 let core;
 
@@ -965,15 +963,15 @@ function toggleDoor({ player, object, objectId, definition, location, clickType 
 }
 
 function routeWallDoor(event) {
-  if (event.destination || !DOOR_NAMES.has(event.definition?.getName?.())) return;
-  const option = event.definition.getInteractions?.()?.[event.clickType - 1]?.toLowerCase();
-  if (!["open", "close", "release"].includes(option)) return;
-  const crossing = crossingFor(event.object, event.sourceLocation);
-  if (crossing) event.destination = crossing.approach;
+  const name = event.definition?.getName?.() ?? "";
+  if (event.object?.getType?.() !== 0 ||
+    (!DOOR_NAMES.has(name) && !/\b(?:doors?|doorway|gates?)\b/i.test(name))) return;
+  // A straight wall door is used across its face, never from either end of the wall.
+  event.blockAccessFlags = (event.blockAccessFlags ?? 0) | 0x5;
 }
 
 function registerWallDoorRoutes() {
-  // Quest routes register first, including doors whose usable tile differs from the wall edge.
+  // Explicit routes retain priority for objects whose usable tile differs from the wall edge.
   api.onObjectRoute(routeWallDoor);
 }
 

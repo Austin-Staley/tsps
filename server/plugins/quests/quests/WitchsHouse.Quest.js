@@ -60,7 +60,6 @@ module.exports = function registerWitchsHouseQuest(api) {
   const FRONT_DOOR_LOC_ID = ObjectIdentifiers.DOOR_102;
   const BACK_DOOR_LOC_ID = ObjectIdentifiers.DOOR_103;
   const SHED_DOOR_LOC_ID = ObjectIdentifiers.DOOR_104;
-  const WALL_DOOR_LOC_IDS = new Set([FRONT_DOOR_LOC_ID, BACK_DOOR_LOC_ID, SHED_DOOR_LOC_ID]);
   const FOUNTAIN_LOC_ID = ObjectIdentifiers.FOUNTAIN_4;
   const GATE_LOC_IDS = new Set([ObjectIdentifiers.GATE_66, ObjectIdentifiers.GATE_67]);
   const POTTED_PLANT_LOC_ID = ObjectIdentifiers.POTTED_PLANT_3;
@@ -191,20 +190,6 @@ module.exports = function registerWitchsHouseQuest(api) {
     const x = player.getLocation().getX();
     const destinationX = x <= location.x ? location.x + 1 : location.x - 1;
     player.moveTo(new Location(destinationX, location.y, location.z));
-  }
-
-  /**
-   * Walk-to for a wall door otherwise settles on the nearest floor tile beside
-   * the door tile, and for a wall loc that tile is not always one the door can
-   * be used from (north or south of the shed door): the click then fails with
-   * "You can't reach that!". Send the player to the accepted reach tile on
-   * their own side of the wall instead; the interaction that follows crosses.
-   */
-  function routeWallDoor(event) {
-    const { player, object } = event;
-    if (!object || !WALL_DOOR_LOC_IDS.has(event.objectId)) return;
-    const crossing = crossingFor(object, event.sourceLocation ?? player.getLocation());
-    if (crossing) event.destination = crossing.approach;
   }
 
   function searchPottedPlant(event) {
@@ -500,7 +485,6 @@ module.exports = function registerWitchsHouseQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("door:toggle", handleDoorToggle);
-  api.onObjectRoute(routeWallDoor);
   api.onObjectInteraction(handleObjectInteraction);
   api.onNpcBeforeDeath(handleExperimentBeforeDeath);
   api.onItemOnObject(handleItemOnMouseHole, { noted: false });

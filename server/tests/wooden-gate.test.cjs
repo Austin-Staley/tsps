@@ -127,22 +127,40 @@ function buildHarness({ cacheObjects, objectManager: suppliedObjectManager, real
   return { place, click, sounds, ops, submitted, handlers, routes, regionLoaded: (regionId) => regionLoaded({ regionId }), visibleObjectIds, setDoorToggleHandler: (handler) => { doorToggleHandler = handler; }, restore };
 }
 
-test('shared wall-door routes align angled clicks without overriding quest routes or other locs', () => {
+test('shared wall-door reach masks cover every operation and preserve other object routing', () => {
   const h = buildHarness();
   try {
-    assert.equal(h.routes.length,1,'the fallback is installed on startup');
-    const route = (face, source, options = {}) => {
-      const event={object:new GameObject(30112,new Location(100,100,0),options.shape??0,face,null),
-        sourceLocation:source,clickType:1,destination:options.destination??null,
-        definition:{getName:()=>options.name??'Door',getInteractions:()=>[options.option??'Open']}};
-      h.routes[0](event);return event.destination;
+    assert.equal(h.routes.length, 1, 'the shared reach hook is installed on startup');
+    const route = ({ name = 'Door', shape = 0, face = 0, clickType = 1, blockAccessFlags = 0, destination = null } = {}) => {
+      const event = {
+        object: new GameObject(30112, new Location(100, 100, 0), shape, face, null),
+        sourceLocation: { x: 104, y: 97, z: 0 }, clickType, blockAccessFlags, destination,
+        definition: { getName: () => name, getInteractions: () => ['Open', 'Close', 'Pick-lock'] },
+      };
+      h.routes[0](event);
+      return event;
     };
-    assert.deepEqual(route(2,{x:104,y:97,z:0}),{x:101,y:100,z:0});
-    assert.deepEqual(route(2,{x:97,y:104,z:0}),{x:100,y:100,z:0});
-    const questRoute={x:300,y:400,z:1};
-    assert.equal(route(2,{x:104,y:97,z:0},{destination:questRoute}),questRoute);
-    for(const options of [{shape:2},{shape:10},{name:'Wardrobe'},{option:'Search'}])
-      assert.equal(route(2,{x:104,y:97,z:0},options),null);
+    for (let face = 0; face < 4; face++) {
+      for (const [clickType, option] of [[1, 'Open'], [2, 'Close'], [3, 'Pick-lock'], [0, 'item or spell']]) {
+        const event = route({ face, clickType });
+        assert.equal(event.blockAccessFlags, 0x5, `${option} uses the same local face mask at rotation ${face}`);
+        assert.equal(event.destination, null, 'the shared route finder chooses either usable face tile');
+      }
+    }
+    for (const name of ['Door', 'Doors', 'Large door', 'Castle door', 'Cell Door', 'Glass door',
+      'Doorway', 'Wall', 'Ardougne Wall Door', 'Oak door', 'Heavy door', 'Tomb Door',
+      'Hardwood Grove Doors', 'Gate', 'Metal gate', 'Ancient Gate', 'Sapphire Gate', 'Gate of War']) {
+      assert.equal(route({ name }).blockAccessFlags, 0x5, `${name} uses shared wall-door reach`);
+    }
+    for (const name of ['Ladder', 'Iron ore vein', 'Wardrobe', 'Stained-glass window']) {
+      assert.equal(route({ name }).blockAccessFlags, 0, `${name} retains its ordinary wall reach`);
+    }
+    for (const shape of [2, 4, 9, 10, 11, 22]) {
+      assert.equal(route({ shape }).blockAccessFlags, 0, `shape ${shape} retains its existing reach geometry`);
+    }
+    const questRoute = { x: 300, y: 400, z: 1 };
+    assert.equal(route({ destination: questRoute }).destination, questRoute, 'explicit plugin destinations remain intact');
+    assert.equal(route({ blockAccessFlags: 0xa }).blockAccessFlags, 0xf, 'the door mask retains prior access restrictions');
   } finally { h.restore(); }
 });
 
