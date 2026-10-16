@@ -220,8 +220,8 @@ export const REMEMBERED_LOG_OUT_Y = 357;
 
 /** The large Play Now button's bounds around its centre (titlebutton_large is 218x68). */
 export function getRememberedPlayBounds(host: LoginRendererHost) {
-    const width = host.titlebuttonLargeSprite?.subWidth || 218;
-    const height = host.titlebuttonLargeSprite?.subHeight || 68;
+    const width = host.titlebuttonLargeSprite?.width || 218;
+    const height = host.titlebuttonLargeSprite?.height || 68;
     const centerX = host.loginBoxX + 180;
     return { x: centerX - Math.floor(width / 2), y: REMEMBERED_PLAY_Y - Math.floor(height / 2), width, height };
 }

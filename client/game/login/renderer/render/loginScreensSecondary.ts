@@ -252,12 +252,13 @@ export function drawWelcomeDisplayName(
         const button = getRememberedPlayBounds(host);
         if (host.titlebuttonLargeSprite && host.playNowTextSprite) {
             drawSprite(host, ctx, host.titlebuttonLargeSprite, button.x, button.y);
+            // Centred on the sprite's full canvas: drawSprite adds the offset of its trimmed pixels.
             const text = host.playNowTextSprite;
             drawSprite(host, 
                 ctx,
                 text,
-                centerX - Math.floor(text.subWidth / 2),
-                REMEMBERED_PLAY_Y - 13 - Math.floor(text.subHeight / 2),
+                centerX - Math.floor(text.width / 2),
+                REMEMBERED_PLAY_Y - 13 - Math.floor(text.height / 2),
             );
         } else {
             drawButton(host, ctx, centerX, REMEMBERED_PLAY_Y - 8, "Play Now");
