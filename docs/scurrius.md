@@ -64,8 +64,31 @@ Ticks count from the action named; captured gamevals are in brackets.
 - Trade, or a spine used on him (after "Ah, a Scurrius spine! A captivating subject indeed..."): with no spine, "Ah, I'll need one of Scurrius' spines to do that. Perhaps you could fetch me one?"; with one, "Trade Scurrius' spine for a combat lamp?"; with several, "Trade ALL your Scurrius spines for combat lamps?". Yes swaps every spine for an Antique lamp (28800) with "Aldo gives you an Antique lamp for Scurrius' spine." (or "some Antique lamps for Scurrius' spines.") in an item box.
 - The lamp (Rub): "Choose the skill you wish to gain XP in." with "Attack.", "Strength.", "Defence.", "Prayer.", "More options...", then "Ranged.", "Magic.", "Hitpoints.", "Previous options...". 5,000 experience, or 3,500 in Prayer, with sound 2655 and "<col=0000ff>Your wish has been granted!</col><br>You have been awarded 5,000 Defence XP!".
 
+## Rat bone weapons
+
+`server/plugins/items/RatBoneWeapons.plugin.js`, with units in `server/plugins/items/ratboneweapons/` (Wiki: Bone mace, Bone shortbow, Bone staff, Rat bone weapons; captured in recordings 86, 2152-2156).
+
+- **Rats:** the Wiki's rat attribute list, by name, in `server/plugins/items/data/rat-bone-weapons.json` (Blessed giant rat, Brine rat, Crypt rat, Dungeon rat, Giant crypt rat, Giant rat, Rat, Scurrius, Zombie rat), since the monster dump has no rat attribute; a future dump's `rat` attribute counts too.
+- **In a fight:** anything else is refused with "You can only use this weapon against rats." (captured), and melee and ranged get +10 maximum hit against rats (Wiki). Against Scurrius' rats there is no attack delay (the Scurrius plugin).
+- **Making them yourself:** 300 experience each.
+
+| Weapon | How | Level | Animation | Message when a tool is missing |
+| --- | --- | --- | --- | --- |
+| Bone mace (28792, `rat_bone_mace`) | Spine on an anvil, with a rune mace and a hammer | 35 Smithing | 898 `human_smithing` | "You'll need a hammer to do that." |
+| Bone shortbow (28794, `rat_bone_bow`) | Yew shortbow with the spine, and a knife | 35 Fletching | 6682 `stringing_yew_shortbow` | "You'll need a Knife to do that." |
+| Bone staff (28796, `rat_bone_staff`) | Battlestaff with the spine, 1,000 chaos runes and a chisel | 35 Crafting | 7531 `human_battlestaff_crafting`, graphic 2637, sound 2585 | "You'll need a Chisel to do that." |
+
+  Success shows "You attach the Scurrius' spine to the Yew shortbow to create the Bone shortbow." (and so on) in an item box. The spine used on a rune mace says "I should probably smith this at an anvil..."; a staff without the runes "You need 1,000 chaos runes and a Scurrius' spine to create the Bone staff.". The low-level message ("You need a Crafting level of 35 to do that.") was not captured.
+- **Historian Aldo** makes any of them for 50,000 coins, with no level or tool, through his Talk-to transcript: its materials conditions are answered, and "Aldo handed the Bone mace to you." takes the fee and materials and shows the weapon. Without them for the chosen weapon he says "Come back when you have all the necessary materials.".
+- **The bone staff** holds the 1,000 chaos runes it was made with as charges, up to 20,000, one a cast.
+  - Chaos runes on it ask "How many chaos runes do you wish to add? (0 - N)"; when full, "Your Bone staff is already fully charged.".
+  - Check: "Your Bone staff has N charges remaining.". Uncharge: "You uncharge your Bone staff." in an item box, returning the runes, or "Your Bone staff has no charges to remove.".
+  - Its spell (Wiki): max hit floor(Magic / 3) + 5, plus the +10; attack speed 4; 8 tiles; 35 base Magic experience on a successful hit. That experience is added by the plugin, since the engine doesn't add combat spells' base experience.
+  - Captured cast: animation 393, graphic 2645, area sound 7617, and projectile 2647 (cycles 46 to 46 + 10 a tile, height 45 to 23, angle 10, progress 64). The impact is 2646 at height 124. Every cast also sends "Your weapon has N charges remaining.". That was captured on a Leagues world that never used up charges (always 20,000), so how often live sends it is unconfirmed.
+  - "Your Bone staff has no charges left." for an empty staff was not captured.
+
 ## Not built
 
-- Aldo making rat bone weapons (and crafting them yourself), which need the bone weapons first.
+- Aldo's Trade offering a bone weapon or a lamp when the player has the materials for one ("Trade your Scurrius spines for a bone weapon or combat lamp?"); his Trade only swaps spines for lamps.
 - The feeding damage reduction ("slight", no number on the Wiki; the captures are all Leagues, so their damage can't give one).
 - The patrol rats in the sewers outside (7224, 7225), which are scenery.
