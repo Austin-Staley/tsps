@@ -5895,7 +5895,7 @@ export class OsrsClient {
             }
 
             case "forget_remembered_login": {
-                // "Log out" on the remembered-account screen: the server drops the token too.
+                // "Switch account" on the remembered-account screen: the server drops the token too.
                 const remembered = this.loginState.getRememberedLogin();
                 if (remembered) {
                     forgetRememberedLogin(remembered.username, remembered.token);
