@@ -39,11 +39,11 @@ Ticks count from the action named; captured gamevals are in brackets.
 
 - **To the food:** at 80% he walks to one of the three piles and stands on (3297, 9873), (3304, 9866) or (3298, 9860), facing it. There he plays the eating idle (10689, sent as a `bas` change on live; here the animation is replayed every 3 ticks) and heals five times, about every six ticks, by 5 or 10 per player in the room (heal hitsplat 6). Then he goes back to melee. Reaching 30% ends the feeding.
 - **To the middle:** at 30% he walks to (3298, 9867) and stays there. If he heals above 30% he goes back to eating (Wiki).
-- **His walks** pause his attacks, and players in his way don't stop him.
+- **His walks** pause his attacks. Players in his way don't block him and hits don't stop him (the generic `combat:no-retaliate` flag), and he faces where he walks. While he eats he keeps facing the pile, attacks included (captured: his facing is re-sent with each heal), through a new generic `combat:keep-facing` flag in Combat.
 - **Magic and ranged:** projectiles 2640 and 2642, cycles 30 to 120, height 200 to 100, angle 40, progress 0 (rev 234). The hit lands 4 ticks after the cast, whatever the distance. Cast sounds 7700 (magic) and 7722 (ranged); impacts 2641 and 2643 on the player. Melee lands on the swing's tick.
 - **Max hits (Wiki):** solo 13 melee, 8 magic, 7 ranged, 15-22 rubble; public 13, 14, 13 and 15-24.
 - **Rubble:** twelve tiles (12 in 641 of 989 captured stomps, fewer where they overlapped), always one under each player and the rest anywhere on the floor (x 3290-3306, y 9860-9875). Each tile gets 2644 (`vfx_rat_boss_falling_debris_01`) with delay 60 and the area sound 4175 (delay 240, range 5); the stomp itself plays area sounds 7699 and 7667 at the middle of the room. Rubble hits land 5 ticks after the stomp.
-- **Rats:** six at once, two ticks into the call, on random floor tiles; at most twelve waves (Wiki). The enraged call also plays area sound 7717 (delay 90). Any player's hit kills a rat, and rat bone weapons hit them without an attack delay (Wiki). They stay after Scurrius dies.
+- **Rats:** six at once, two ticks into the call, on random floor tiles; at most twelve waves (Wiki), and calls at least 41 ticks apart (the shortest of 27 captured gaps). The enraged call also plays area sound 7717 (delay 90). Any player's hit kills a rat, and rat bone weapons hit them without an attack delay (Wiki). They stay after Scurrius dies.
 
 ## Loot and kill count
 

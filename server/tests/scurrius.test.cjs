@@ -386,3 +386,11 @@ test("Ironmen keep only medium clues from a group kill", () => {
   handlers.get("npc-drops:roll")({ player: iron, npc: { getId: () => Common.PUBLIC_ID }, npcId: Common.PUBLIC_ID, drops, damagers: [iron, createPlayer()] });
   assert.deepEqual(drops.map((drop) => drop.itemId), [core.ItemIdentifiers.CLUE_SCROLL_MEDIUM_]);
 });
+
+test("rat calls are at least 41 ticks apart, as captured", () => {
+  const { pickAction, RAT_CALL_COOLDOWN_TICKS } = Fight._test;
+  assert.equal(RAT_CALL_COOLDOWN_TICKS, 41);
+  const seen = (state, now) => new Set(Array.from({ length: 300 }, () => pickAction(state, now)));
+  assert.ok(!seen({ phase: "enraged", ratWaves: 1, lastCallAt: 100 }, 140).has("summon"));
+  assert.ok(seen({ phase: "enraged", ratWaves: 1, lastCallAt: 100 }, 141).has("summon"));
+});

@@ -48,10 +48,17 @@ const DEBRIS_SOUND_RANGE = 5;
 const STOMP_SOUND_RANGE = 9;
 const SUMMON_SOUND_DELAY = 90;
 
-/** Wiki: six rats a wave, twelve waves at most. Captured: they appear two ticks into the call. */
+/**
+ * Wiki: six rats a wave, twelve waves at most. Captured: they appear two ticks into the call, and
+ * calls are at least 41 ticks apart (27 gaps between calls, 41 to 190).
+ */
 const RATS_PER_WAVE = 6;
 const RAT_WAVE_LIMIT = 12;
 const RAT_SPAWN_TICKS = 2;
+const RAT_CALL_COOLDOWN_TICKS = 41;
+/** Generic engine flags: no turning back to fight on a hit, and no turning to the target. */
+const NO_RETALIATE_FLAG = "combat:no-retaliate";
+const KEEP_FACING_FLAG = "combat:keep-facing";
 
 /** Captured projectile: a fixed 30-120 cycle flight, so the hit lands 4 ticks after the cast. */
 const PROJECTILE = Object.freeze({ start: 30, end: 120, startHeight: 200, endHeight: 100, angle: 40, progress: 0 });
@@ -107,8 +114,9 @@ function weighted(choices, allowed = () => true) {
   return pool[0][0];
 }
 
-function pickAction(state) {
-  const canSummon = (name) => name !== "summon" || state.ratWaves < RAT_WAVE_LIMIT;
+function pickAction(state, now = core.World.getProcessCycle()) {
+  const canSummon = (name) => name !== "summon"
+    || (state.ratWaves < RAT_WAVE_LIMIT && now - (state.lastCallAt ?? -Infinity) >= RAT_CALL_COOLDOWN_TICKS);
   if (state.phase === "feeding") return weighted(FEEDING, canSummon);
   if (state.phase === "enraged") return weighted(ENRAGED, canSummon);
   return weighted(PHASE_ONE);
@@ -167,6 +175,7 @@ function stomp(npc) {
 
 function summonRats(npc, state) {
   state.ratWaves++;
+  state.lastCallAt = core.World.getProcessCycle();
   const area = npc.getPrivateArea?.() ?? null;
   Common.later(RAT_SPAWN_TICKS, () => {
     if (npc.getHitpoints() <= 0 || !npc.isRegistered?.()) return;
@@ -188,12 +197,14 @@ function stopWalk(npc, state) {
   state.walking = null;
   npc.setScriptedMovement(false);
   npc.removeFlag(core.NPC.WALK_THROUGH_ENTITIES_FLAG);
+  npc.removeFlag(NO_RETALIATE_FLAG);
 }
 
 /**
  * Walks him to `destination`. Combat pauses while the walk is scripted (Combat.preMovementProcess).
  * Wiki: nothing holds him on the way (he breaks free of binds), so players in his path don't
- * either; a walk that stops getting anywhere is given up rather than freezing the boss.
+ * either, and hits don't stop him to turn on the attacker (captured: he faces where he walks);
+ * a walk that stops getting anywhere is given up rather than freezing the boss.
  */
 function walkTo(npc, state, destination, onArrive) {
   const { PathFinder, Task, TaskManager } = core;
@@ -204,6 +215,10 @@ function walkTo(npc, state, destination, onArrive) {
   state.walking = walk;
   npc.setScriptedMovement(true);
   npc.setFlag(core.NPC.WALK_THROUGH_ENTITIES_FLAG, true);
+  npc.setFlag(NO_RETALIATE_FLAG, true);
+  npc.removeFlag(KEEP_FACING_FLAG);
+  npc.setMobileInteraction(null);
+  npc.setPositionToFace(null);
   npc.getMovementQueue().reset();
   PathFinder.calculateWalkRoute(npc, target.getX(), target.getY());
   let failedRepaths = 0;
@@ -256,12 +271,19 @@ function reengage(npc, opponent) {
   if (target) npc.getCombat().attack(target);
 }
 
+/** Turns him to the pile he eats from, and keeps him there while he attacks (captured). */
+function facePile(npc, spot) {
+  npc.setFlag(KEEP_FACING_FLAG, true);
+  npc.setMobileInteraction(null);
+  npc.setPositionToFace(Common.location(spot.face));
+}
+
 /** Five heals, about every six ticks, with the eating animation in between. */
 function startFeeding(npc, state, spot) {
-  const feeding = { heals: 0, ticks: 0 };
+  const feeding = { heals: 0, ticks: 0, spot };
   state.phase = "feeding";
   state.feeding = feeding;
-  npc.setPositionToFace(Common.location(spot.face));
+  facePile(npc, spot);
   npc.performAnimation(new core.Animation(ANIM.feedingIdle));
   core.TaskManager.submit(new (class extends core.Task {
     constructor() {
@@ -275,6 +297,8 @@ function startFeeding(npc, state, spot) {
       feeding.ticks++;
       if (feeding.ticks % FEED_HEAL_TICKS === 0) {
         heal(npc);
+        // Captured: his facing is sent again with each heal.
+        npc.setPositionToFace(Common.location(spot.face));
         if (++feeding.heals >= FEED_HEALS) {
           finishFeeding(npc, state);
           this.stop();
@@ -295,6 +319,7 @@ function heal(npc) {
 
 function finishFeeding(npc, state) {
   state.feeding = null;
+  npc.removeFlag(KEEP_FACING_FLAG);
   if (state.phase === "feeding") state.phase = "combat";
 }
 
@@ -309,6 +334,7 @@ function goEat(npc, state) {
 
 function enrage(npc, state) {
   state.feeding = null;
+  npc.removeFlag(KEEP_FACING_FLAG);
   state.phase = "walking-centre";
   walkTo(npc, state, Common.location(Common.CENTRE_TILE), () => {
     if (state.phase === "walking-centre") state.phase = "enraged";
@@ -466,7 +492,7 @@ module.exports = {
   advancePhase,
   _test: {
     SOLO_MAX_HITS, PUBLIC_MAX_HITS, PHASE_ONE, FEEDING, ENRAGED, RAT_WAVE_LIMIT, ROCKFALL_TILES,
-    pickAction, rockfallTiles, stomp, summonRats, startFeeding, heal, goEat, enrage, oneShotRat,
+    RAT_CALL_COOLDOWN_TICKS, pickAction, rockfallTiles, stomp, summonRats, startFeeding, heal, goEat, enrage, oneShotRat,
     removeRatAttackDelay, defineCombatMethod, maxHitsFor,
   },
 };
