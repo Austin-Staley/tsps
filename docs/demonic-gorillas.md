@@ -27,7 +27,6 @@ They spawned with their stats and drops but fought as ordinary NPCs:
 - **Attack styles:** one style at a time, every 5 ticks: Melee, Ranged or Magic. It starts on a random one.
   - After **three missed hits** in that style (tortured gorillas: four) it says "Rhaaaaaaa!" and changes to one of the other two, at random.
   - A miss is a hit that does no damage, whether the player prayed against it or not.
-  - Misses add up within the style; a hit in between doesn't reset the count.
 - **Protection prayer (demonic only):** a hit in the style it protects against does nothing, from players, thralls or allies alike.
   - Verac's set gets through (its roll hook marks the hit). Special attacks don't.
   - It changes prayer after **four damaging hits and 70 damage** in styles it isn't protecting against, counted together. It then protects against the style of the hit that took it over.
@@ -64,8 +63,11 @@ They spawned with their stats and drops but fought as ordinary NPCs:
 - **Anti-safespot delay:** 10 ticks (two attack cycles) in Melee without reaching its target.
 - **Tortured gorillas' attacks:** they use the demonic gorillas' animations, projectiles and sounds. They share the model rig (same idle and walk), but no capture shows them attacking.
 - **"Dealt damage four times":** read as four damaging hits; zeros don't count.
+- **Missed hits add up within a style:** a hit in between doesn't reset the count. The Wiki says "after missing three hits", but its worked example has three in a row.
 
 ## Not covered
 
 - **Multi-way combat:** past the archway the cavern is multi-way (Wiki), but its exact boundaries aren't known here, so the whole cavern stays single-way.
+- **"The third attack must be prayed correctly":** the strategies page says a gorilla changes style consistently only when the third miss was prayed against. Any third miss counts here.
+- **Two gorillas on one player in single-way:** after a death, a gorilla can keep its target while another aggroes. That's the engine's target retention, not this plugin.
 - **The style-change scream:** the Wiki mentions a "bone-chilling scream", but no sound id for it shows in the captures; only the overhead text is sent.

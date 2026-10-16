@@ -16,9 +16,16 @@ function isGorilla(npc) {
   return DEMONIC_IDS.includes(id) || TORTURED_IDS.includes(id);
 }
 
+/** Asked once a tick per player: aggression asks for every gorilla in range. */
+const questChecks = new WeakMap();
+
 function completedQuest(player) {
+  const cycle = api.core.World.getProcessCycle();
+  const cached = questChecks.get(player);
+  if (cached?.cycle === cycle) return cached.complete;
   const request = { player, key: MONKEY_MADNESS_II, complete: false };
   api.emitCustomEvent("quest:is-complete", request);
+  questChecks.set(player, { cycle, complete: request.complete === true });
   return request.complete === true;
 }
 
