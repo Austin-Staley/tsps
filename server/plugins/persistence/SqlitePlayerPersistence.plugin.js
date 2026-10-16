@@ -15,10 +15,9 @@ const { SkullType } = require("../../src/main/typescript/elvarg/game/model/Skull
 const { DonatorRights } = require("../../src/main/typescript/elvarg/game/model/rights/DonatorRights");
 const { PlayerRights } = require("../../src/main/typescript/elvarg/game/model/rights/PlayerRights");
 const { Misc } = require("../../src/main/typescript/elvarg/util/Misc");
-const { SqliteSaveHistory, PRE_ROLLBACK_REASON, ROLLBACK_REASON } = require("./SqliteSaveHistory");
-const { createWriter } = require("./SqliteSaveWorker");
+const { SqliteSaveHistory, PRE_ROLLBACK_REASON, ROLLBACK_REASON } = require("./SaveHistory.SqlitePlayerPersistence");
 
-/** Writer threads that die before they're ready, in a row, before saves fall back to the game thread. */
+/** Consecutive startup failures before flushing reports an unavailable writer. */
 const MAX_WRITER_FAILURES = 3;
 
 function legacyJsonImportEnabled() {
@@ -61,7 +60,7 @@ class SqlitePlayerPersistence extends PlayerPersistence {
     this.findSave = this.database.prepare(
       "SELECT save_json AS saveJson FROM player_saves WHERE username = ?"
     );
-    // This connection only reads once the writer starts (SqliteSaveWorker.js owns the writes).
+    // This connection only reads once the writer starts (SaveWorker.SqlitePlayerPersistence.js owns the writes).
     this.history = new SqliteSaveHistory(this.database);
     this.markInUse();
     /** Restores waiting for an online player's next save: username -> { json, recorded }. */
@@ -79,17 +78,16 @@ class SqlitePlayerPersistence extends PlayerPersistence {
     this.idleWaiters = [];
     this.sequence = 0;
     this.writerFailures = 0;
-    this.writeHere = null;
     this.startWriter();
   }
 
   /**
    * Starts the writer thread. It is only kept referenced while it has work, so an idle writer
    * doesn't hold the process open. If it dies, a new one gets every unanswered message again;
-   * if it keeps dying before it's ready, saves are written on the game thread instead.
+   * repeated startup failures are reported instead of blocking the game thread with disk writes.
    */
   startWriter() {
-    const writer = new Worker(path.join(__dirname, "SqliteSaveWorker.js"), {
+    const writer = new Worker(path.join(__dirname, "SaveWorker.SqlitePlayerPersistence.js"), {
       workerData: { databasePath: SqlitePlayerPersistence.DATABASE_PATH, skillCount: SkillManager.AMOUNT_OF_SKILLS },
     });
     this.writer = writer;
@@ -102,10 +100,11 @@ class SqlitePlayerPersistence extends PlayerPersistence {
       if (this.writer !== writer) return;
       this.writerFailures++;
       if (this.writerFailures >= MAX_WRITER_FAILURES) {
-        console.error(`[persistence] SQLite save writer keeps failing (exit ${code}); writing saves on the game thread`);
-        this.writeHere = createWriter(this.database, SkillManager.AMOUNT_OF_SKILLS);
         this.writer = null;
-        for (const message of [...this.inFlight.values()]) this.onWritten(this.writeHere(message));
+        const error = new Error(`SQLite save writer unavailable after ${this.writerFailures} startup failures (exit ${code})`);
+        console.error("[persistence]", error);
+        this.writerError = error;
+        for (const resolve of this.idleWaiters.splice(0)) resolve();
         return;
       }
       console.error(`[persistence] SQLite save writer exited (${code}); restarting it with ${this.inFlight.size} unwritten save(s)`);
@@ -122,12 +121,15 @@ class SqlitePlayerPersistence extends PlayerPersistence {
     const row = writes.find((write) => write.kind === "row");
     if (row) this.unwritten.set(username, { seq, json: row.json });
     this.inFlight.set(seq, message);
-    if (this.writeHere) {
-      this.onWritten(this.writeHere(message));
-      return;
+    if (!this.writer) {
+      this.writerFailures = 0;
+      this.writerError = null;
+      this.startWriter();
+      for (const pending of this.inFlight.values()) this.writer.postMessage(pending);
+    } else {
+      if (this.inFlight.size === 1) this.writer.ref();
+      this.writer.postMessage(message);
     }
-    if (this.inFlight.size === 1) this.writer.ref();
-    this.writer.postMessage(message);
   }
 
   onWritten({ seq, username, ok, error }) {
@@ -148,7 +150,10 @@ class SqlitePlayerPersistence extends PlayerPersistence {
 
   /** Waits until the writer has committed everything sent so far (shutdown awaits this). */
   async flush() {
+    await super.flush();
+    if (this.writerError) throw this.writerError;
     if (this.inFlight.size > 0) await new Promise((resolve) => this.idleWaiters.push(resolve));
+    if (this.writerError) throw this.writerError;
     if (this.failedWrites.size > 0) throw this.failedWrites.values().next().value;
   }
 
@@ -191,6 +196,13 @@ class SqlitePlayerPersistence extends PlayerPersistence {
     }
     const keepHistory = player.isPlayerBot?.() !== true;
     this.enqueue(username, [{ kind: "row", json: serialized }, ...(keepHistory ? [{ kind: "history", json: serialized, reason }] : [])]);
+  }
+
+  saveOffline(username, save, reason) {
+    const serialized = JSON.stringify(save, this.replacer.bind(this));
+    this.enqueue(this.normalizeUsername(username), [
+      { kind: "row", json: serialized }, { kind: "history", json: serialized, reason },
+    ]);
   }
 
   /**

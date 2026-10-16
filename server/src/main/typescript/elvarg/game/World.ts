@@ -211,6 +211,7 @@ export class World {
                 return;
             }
             try {
+                GameConstants.PLAYER_PERSISTENCE.cancelRequestedSave(player);
                 GameConstants.PLAYER_PERSISTENCE.save(player, reason);
                 saved++;
             } catch (err) {
@@ -221,6 +222,7 @@ export class World {
         if (saved > 0 || failed > 0) {
             console.info(`[world] savePlayers queued: saved=${saved}, failed=${failed}`);
         }
+        return { saved, failed };
     }
 
     public static getPlayers(): MobileList<Player> {

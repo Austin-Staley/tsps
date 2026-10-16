@@ -345,7 +345,7 @@ module.exports = {
   register(pluginApi) {
     api = pluginApi;
     core = pluginApi.core;
-    require("./tzhaar/TzhaarMonsters")(pluginApi);
+    require("./tzhaar/Monsters.TzhaarFightCaves")(pluginApi);
     CombatAchievements(pluginApi);
     pluginApi.persistAttribute(ATTR_WAVE, null);
     pluginApi.persistAttribute(ATTR_ROTATION, null);

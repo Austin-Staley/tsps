@@ -174,6 +174,7 @@ const core = {
         SIDE_INTERFACE_ID: 15,
         ITEMS_CHILD: 12,
         SIDE_ITEMS_CHILD: 3,
+        DEPOSIT_INVENTORY_CHILD: 47,
         isOpen: () => bankOpen,
         layout: () => [{ tab: 0, slot: 0, item: item(995, 23) }],
         displayItemId: (bankItem: any) => bankItem.getId(),

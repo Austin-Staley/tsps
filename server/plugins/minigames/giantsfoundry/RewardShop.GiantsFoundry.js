@@ -135,6 +135,7 @@ function buyMould(player, entry) {
   Shared.set(player, entry.mould.varbit, 1);
   player.getPacketSender().sendConfig(Shared.VARP.SHOP_SELECTED, 0);
   Shared.setReputation(player, Shared.reputation(player) - entry.cost);
+  Shared.api().emitCustomEvent("persistence:save", { player, reason: "reward-shop" });
   player.sendMessage(MESSAGE.MOULD);
   Shared.sound(player, SOUND_BOUGHT);
   player.getPacketSender().sendClientScript(SCRIPT_SHOP_SETUP, 1);
@@ -162,6 +163,7 @@ function buyItem(player, entry, quantity) {
     return;
   }
   Shared.setReputation(player, Shared.reputation(player) - cost);
+  Shared.api().emitCustomEvent("persistence:save", { player, reason: "reward-shop" });
   inventory.adds(entry.itemId, quantity);
   inventory.refreshItems();
   player.sendMessage(MESSAGE.ITEM);

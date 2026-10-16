@@ -7,7 +7,7 @@ module.exports=function registerStone({api,stage,advance,play,replace,hit}){
  const ATTACKS=[11348,11354,11342],SPECIALS=[11349,11355,11343],TRANSITIONS=[[0,11351,11345],[11344,0,11338],[11339,11350,0]];
  const COMBAT_SKILLS=[Skill.ATTACK,Skill.STRENGTH,Skill.DEFENCE,Skill.RANGED,Skill.MAGIC,Skill.HITPOINTS,Skill.PRAYER];
  const sessions=new WeakMap(),demonStates=new WeakMap(),loc=(x,y)=>new Location(x,y,0),random=(a,b)=>a+Math.floor(Math.random()*(b-a+1));
- const {weaponName}=require('../../combat/effects/GearChecks');
+ const {weaponName}=require('../../combat/effects/GearChecks.EquipmentEffects');
  const DEMONBANE=['silverlight','silverlight (dyed)','darklight','arclight','emberlight','scorching bow','purging staff'];
  const BANE_SPELLS=[api.core.CombatSpells.INFERIOR_DEMONBANE,api.core.CombatSpells.SUPERIOR_DEMONBANE,api.core.CombatSpells.DARK_DEMONBANE];
  const alive=n=>n&&n.getHitpoints()>0&&World.getNpcs().get(n.getIndex())===n;

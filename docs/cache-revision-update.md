@@ -153,7 +153,7 @@ NPC whose name moved into a transform (see below).
 | Bank components +6/+7; chatbox `chatmodal` 567 → 568, `chatdisplay` 56 → 57 | Bank buttons, chat dialogs | `Bank.ts` named constants, literals |
 | Varbit 4398 `ge_newoffer_price` → long varp 5753 | GE price 0, confirm shows "---" | new `VARP_LONG` packet (id 44): `PacketSender.sendVarpLong`, client `VarManager.setVarpLong` |
 | Varbit 12377 `mouseover_text_enabled` → varbit 10035 `mouseover_text_disabled` (inverted) | HUD overlays under the hover text; an aerial fishing option switched on | Settings plugin sends 10035 = 0 |
-| DB table 166 gained a column at 27; table 179 lost three | Sailing parts and facilities | `boatParts.js`, `boatFacilities.js` |
+| DB table 166 gained a column at 27; table 179 lost three | Sailing parts and facilities | `BoatParts.Sailing.js`, `BoatFacilities.Sailing.js` |
 | Display names moved into NPC transforms (Morgan 3479, Dr Harlow 3480: name `null`, a varbit picks the named variant) | none: hooks resolve the variant | — |
 | 431 object and 23 item names gone or reused | compile errors | identifiers regenerated; plugins renamed (e.g. "Scythe of Vitur") |
 | Eight items renamed outright: 9487–9490 "Wizard blizzard" → "Cocktail glass", 9735/9738 "Desert goat horn" → "Goat horn", 23595/23596 "Berserker ring" → "Berserker ring (i)" | Their `item-gameplay.json` entries were skipped (23595 lost its bonuses) | names updated; 23595 takes the imbued +8 its cache params give |

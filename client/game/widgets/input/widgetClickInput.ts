@@ -388,9 +388,11 @@ export function processWidgetClickInput(
                     // Non-draggable widgets: Fire onClick immediately on press
                     const meslayerBeforePrimaryClick =
                         widgetManager?.meslayerContinueWidget ?? null;
+                    const eventScaleX = w._absScaleX ?? 1;
+                    const eventScaleY = w._absScaleY ?? 1;
                     const clickCtx: Partial<ScriptEvent> = {
-                        mouseX: widgetInteraction.clickedWidgetX,
-                        mouseY: widgetInteraction.clickedWidgetY,
+                        mouseX: (widgetInteraction.clickedWidgetX / eventScaleX) | 0,
+                        mouseY: (widgetInteraction.clickedWidgetY / eventScaleY) | 0,
                         opIndex: primaryAction.opIndex ?? 1,
                         targetName: primaryAction.target,
                     };
