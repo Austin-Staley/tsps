@@ -34,6 +34,8 @@ The reveal contains both killers, Abigale killing Hewey and the knife dropping o
 
 Logout destroys private actors, scenery and encounter tasks. Returning reconstructs the manor from the saved stage and candle mask. An interrupted stage111 fight restarts its introduction and puzzle safely; a missing dropped knife can be recovered after re-entering at stage120. Leaving and re-entering also replaces Mandy rather than retaining a removed actor.
 
+The client's initial map-ready notification runs even when a scripted camera disables player following, in both WebGL and WebGPU. Previously, logging into the wardrobe room restarted the introduction while leaving the loading overlay waiting for the dialogue's camera reset. Map readiness still requires loaded player terrain and the normal one-second interval; it no longer waits for the scene to finish or changes the scripted shot. Regression cases for both renderers were added but not run; no build or live/visual check was performed for this change, at the user's request.
+
 ## Verification and limits
 
 After building, run from `server/`:
