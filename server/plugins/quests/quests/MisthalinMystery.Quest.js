@@ -233,6 +233,10 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     freezeScene(player);event.handled=true;
     later(area.cameraKey,ticks,()=>{if(area.scene===name)playScene(player,area,anchor);});
   }
+  function protectScene(event) {
+    // World input otherwise clears the dialogue before blocked movement rejects it.
+    if(island(event.player)?.scene)event.handled=true;
+  }
   class Manor extends PrivateArea {
     constructor(player){super([new Boundary(1600,1663,4792,4863,0)]);this.owner=player;this.actors=new Map();this.scene=null;this.fighting=false;this.reflections=0;this.pushing=false;}
     canTeleport(){return !this.scene&&!this.fighting;}
@@ -292,8 +296,21 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     area.scene=name;area.cameraKey={};controls(player,true);const scene=SCENES[name];
     for(let axis=0;axis<5;axis++)player.getPacketSender().sendCameraShake(axis,0,0,0);
     player.moveTo(new Location(...scene.tile,0));camera(player,scene.camera,scene.look);
-    if(name==="sid")spawnActor(area,NpcIdentifiers.KILLER,NpcIdentifiers.KILLER,1616,4832);
-    if(name==="tayten")spawnActor(area,NpcIdentifiers.KILLER,NpcIdentifiers.KILLER,1637,4836);
+    if(name==="sid")spawnActor(area,NpcIdentifiers.KILLER,NpcIdentifiers.KILLER_2,1619,4835);
+    if(name==="tayten"){
+      area.actors.get(NpcIdentifiers.TAYTEN)?.setPositionToFace(new Location(1640,4838,0));
+      later(area.cameraKey,4,()=>{
+        const killer=spawnActor(area,NpcIdentifiers.KILLER,NpcIdentifiers.KILLER_2,1637,4836);
+        killer?.setPositionToFace(new Location(1637,4837,0));
+        ObjectManager.register(new GameObject(ObjectIdentifiers.WARDROBE_5,new Location(1637,4835,0),10,3,area),true);
+      });
+      later(area.cameraKey,7,()=>area.actors.get(NpcIdentifiers.KILLER)?.getMovementQueue().addSteps(new Location(1638,4838,0)));
+      later(area.cameraKey,8,()=>ObjectManager.register(new GameObject(ObjectIdentifiers.WARDROBE_4,new Location(1637,4835,0),10,3,area),true));
+      later(area.cameraKey,10,()=>{
+        const killer=area.actors.get(NpcIdentifiers.KILLER);
+        killer?.setPositionToFace(new Location(1639,4838,0));killer?.performAnimation(new Animation(7328));
+      });
+    }
     if(name==="lacey")spawnActor(area,NpcIdentifiers.KILLER,NpcIdentifiers.KILLER,1630,4850);
     if(name==="mandy")spawnActor(area,NpcIdentifiers.KILLER,NpcIdentifiers.KILLER,1625,4840);
     if(name==="intro")spawnActor(area,NpcIdentifiers.KILLER,NpcIdentifiers.KILLER,1623,4831);
@@ -307,11 +324,18 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   }
   function endMurder(player,stage){
     const area=island(player);if(!area)return;
+    const victimKey={sid:NpcIdentifiers.SID,tayten:NpcIdentifiers.TAYTEN}[area.scene];
     const resetDelay={sid:3,tayten:2,lacey:2,mandy:2,intro:11,reveal:2,rescue:2}[area.scene];
+    if(["sid","tayten","lacey","mandy"].includes(area.scene)){
+      const killer=area.actors.get(NpcIdentifiers.KILLER);if(killer)api.removeNpc(killer);area.actors.delete(NpcIdentifiers.KILLER);
+    }
     if(area.cameraKey)TaskManager.cancelTasks(area.cameraKey);
     area.scene=null;if(stage!==undefined&&quest.getStage(player)<stage)quest.setStage(player,stage);
     controls(player,false,false);
-    if(resetDelay){area.resetKey={};later(area.resetKey,resetDelay,()=>player.getPacketSender().sendCameraUnlock(false).sendCameraReset());}
+    if(resetDelay){area.resetKey={};later(area.resetKey,resetDelay,()=>{
+      if(victimKey!==undefined){const victim=area.actors.get(victimKey);if(victim)api.removeNpc(victim);area.actors.delete(victimKey);}
+      player.getPacketSender().sendCameraUnlock(false).sendCameraReset();
+    });}
     if(stage===STAGE_MANDY_WAITING){const actor=area.actors.get(NpcIdentifiers.MANDY);if(actor)api.removeNpc(actor);area.actors.delete(NpcIdentifiers.MANDY);ensureMandy(player);}
   }
   function wardrobe(area,where,open){ObjectManager.register(new GameObject(open?OPEN_WARDROBE_ID:CLOSED_WARDROBE_ID,new Location(where[0],where[1],0),10,where[2],area),true);}
@@ -388,9 +412,14 @@ module.exports = function registerMisthalinMysteryQuest(api) {
       const missing=3-freeSlots(player);event.text=text.replace("[3 more spaces/2 more spaces/another space]",missing===1?"another space":`${missing} more spaces`);
     }
     if(!area)return;
+    if(area.scene==="sid"){
+      if(event.step?.speaker==="Killer")event.speakerId=NpcIdentifiers.KILLER_2;
+      if(event.step?.speaker==="Sid"&&!["Woo, party on bro!","Woah, that wind totally just felt like someone breathing on my neck!"].includes(text))event.speakerId=NpcIdentifiers.SID_2;
+    }
     if(area.scene==="sid"&&text==="Woo, party on bro!")event.before=()=>{
       camera(player,[1614,4826,300],null,10,15);camera(player,null,[1616,4831,275],20,20);
     };
+    if(area.scene==="tayten"&&text==="Nooooo!")event.before=()=>area.actors.get(NpcIdentifiers.TAYTEN)?.performAnimation(new Animation(836));
     if(area.scene==="reveal"&&text==="What!? How!? There was another killer!?")event.after=()=>{
       pauseScene(event,5);later(area.cameraKey,1,()=>camera(player,null,[1624,4831,275],5));
     };
@@ -404,12 +433,38 @@ module.exports = function registerMisthalinMysteryQuest(api) {
     const area=island(event.player);if(!area)return false;
     const {player,stepId}=event;
     const killer=area.actors.get(NpcIdentifiers.KILLER),victim=area.actors.get(area.scene==="sid"?NpcIdentifiers.SID:area.scene==="tayten"?NpcIdentifiers.TAYTEN:area.scene==="lacey"?NpcIdentifiers.LACEY:NpcIdentifiers.MANDY);
-    if(stepId==="hRO-iS"){camera(player,[1618,4836,500],[1615,4832,500],10);pauseScene(event,4);return true;}
+    if(stepId==="ZjjuVp"){
+      killer?.getMovementQueue().addSteps(new Location(1618,4835,0));killer?.getMovementQueue().addSteps(new Location(1615,4833,0));
+      pauseScene(event,7);later(area.cameraKey,6,()=>killer?.setPositionToFace(new Location(1615,4832,0)));return true;
+    }
+    if(stepId==="ScleeY"){
+      killer?.performAnimation(new Animation(7328));later(area.cameraKey,1,()=>victim?.setNpcTransformationId(NpcIdentifiers.SID_2));
+    }
+    if(stepId==="hRO-iS"){
+      victim?.getMovementQueue().addSteps(new Location(1615,4830,0));
+      camera(player,[1618,4836,500],[1615,4832,500],10);pauseScene(event,4);return true;
+    }
+    if(stepId==="yX2amu")victim?.performAnimation(new Animation(836));
+    if(stepId==="sbWPCY"){
+      killer?.getMovementQueue().addSteps(new Location(1615,4837,0));pauseScene(event,7);
+      later(area.cameraKey,7,()=>{if(killer)api.removeNpc(killer);area.actors.delete(NpcIdentifiers.KILLER);quest.setStage(player,STAGE_SID_DEAD);});return true;
+    }
+    if(stepId==="qIQhiW"){
+      pauseScene(event,16);
+      later(area.cameraKey,3,()=>killer?.getMovementQueue().addSteps(new Location(1636,4838,0)));
+      later(area.cameraKey,6,()=>killer?.performAnimation(new Animation(827)));
+      later(area.cameraKey,9,()=>{killer?.getMovementQueue().addSteps(new Location(1637,4837,0));killer?.getMovementQueue().addSteps(new Location(1637,4836,0));});
+      later(area.cameraKey,12,()=>{killer?.performAnimation(new Animation(545));killer?.setPositionToFace(new Location(1637,4835,0));});
+      later(area.cameraKey,13,()=>{killer?.performAnimation(new Animation(828));ObjectManager.register(new GameObject(ObjectIdentifiers.WARDROBE_5,new Location(1637,4835,0),10,3,area),true);});
+      later(area.cameraKey,14,()=>{if(killer)api.removeNpc(killer);area.actors.delete(NpcIdentifiers.KILLER);});
+      later(area.cameraKey,16,()=>quest.setStage(player,STAGE_TAYTEN_DEAD));
+      later(area,17,()=>ObjectManager.register(new GameObject(ObjectIdentifiers.WARDROBE_4,new Location(1637,4835,0),10,3,area),true));return true;
+    }
     if(stepId==="juop9h"){camera(player,[1622,4837,1400],[1627,4840,250],10);pauseScene(event,8);return true;}
     if(stepId==="Eh_VF5"){
       pauseScene(event,16);later(area.cameraKey,14,()=>camera(player,[1634,4848,1400],[1627,4840,250],10));return true;
     }
-    if(["ScleeY","RXyM0R","HVer_D","8gRjEC","-ARK2C"].includes(stepId)){killer?.performAnimation(new Animation(7328));victim?.performAnimation(new Animation(836));}
+    if(["HVer_D","8gRjEC","-ARK2C"].includes(stepId)){killer?.setPositionToFace(victim.getLocation());killer?.performAnimation(new Animation(7328));victim?.performAnimation(new Animation(836));}
     if(stepId==="EaQMnJ"){killer?.setNpcTransformationId(NpcIdentifiers.ABIGALE_2);area.actors.set(NpcIdentifiers.ABIGALE_3,killer);}
     if(stepId==="ib3C6A"){
       spawnActor(area,NpcIdentifiers.KILLER_2,NpcIdentifiers.KILLER_2,1625,4831);
@@ -1487,6 +1542,8 @@ module.exports = function registerMisthalinMysteryQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:line", sceneLine);
+  api.onCustomEvent("player:world-input", protectScene);
+  api.onCustomEvent("interface:close", protectScene);
   api.onNpcInteraction("<col=00ffff>Mirror</col>",{Push:pushMirror});
   api.onNpcInteraction("Abigale",{Fight:fightAbigale});
   api.onCustomEvent("door:toggle", claimQuestDoor);
