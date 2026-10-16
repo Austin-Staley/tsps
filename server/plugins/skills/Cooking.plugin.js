@@ -13,32 +13,33 @@ const FIRE_COOK_ANIMATION = new Animation(896);
 const RANGE_COOK_ANIMATION = new Animation(897);
 const COOK_INTERVAL_TICKS = 4;
 
+// Wiki Cooking range (Lumbridge Castle): only these recipes get its lower burn level.
 const COOKABLES = Object.freeze([
-  { raw: ItemIds.RAW_BEEF, cooked: ItemIds.COOKED_MEAT, burnt: ItemIds.BURNT_MEAT, level: 1, xp: 30, stopBurn: 34, name: "meat" },
-  { raw: ItemIds.RAW_RAT_MEAT, cooked: ItemIds.COOKED_MEAT, burnt: ItemIds.BURNT_MEAT, level: 1, xp: 30, stopBurn: 34, name: "rat meat" },
-  { raw: ItemIds.RAW_CHICKEN, cooked: ItemIds.COOKED_CHICKEN, burnt: ItemIds.BURNT_CHICKEN, level: 1, xp: 30, stopBurn: 34, name: "chicken" },
+  { raw: ItemIds.RAW_BEEF, cooked: ItemIds.COOKED_MEAT, burnt: ItemIds.BURNT_MEAT, level: 1, xp: 30, lumbridgeStopBurn: 31, stopBurn: 34, name: "meat" },
+  { raw: ItemIds.RAW_RAT_MEAT, cooked: ItemIds.COOKED_MEAT, burnt: ItemIds.BURNT_MEAT, level: 1, xp: 30, lumbridgeStopBurn: 31, stopBurn: 34, name: "rat meat" },
+  { raw: ItemIds.RAW_CHICKEN, cooked: ItemIds.COOKED_CHICKEN, burnt: ItemIds.BURNT_CHICKEN, level: 1, xp: 30, lumbridgeStopBurn: 31, stopBurn: 34, name: "chicken" },
   { raw: ItemIds.RAW_RABBIT, cooked: ItemIds.COOKED_RABBIT, burnt: ItemIds.BURNT_RABBIT, level: 1, xp: 30, stopBurn: 37, name: "rabbit" },
-  { raw: ItemIds.BREAD_DOUGH, cooked: ItemIds.BREAD, burnt: ItemIds.BURNT_BREAD, level: 1, xp: 40, stopBurn: 38, name: "bread", rangeOnly: true },
-  { raw: ItemIds.RAW_SHRIMPS, cooked: ItemIds.SHRIMPS, burnt: ItemIds.BURNT_SHRIMP, level: 1, xp: 30, stopBurn: 33, name: "shrimp" },
-  { raw: ItemIds.RAW_ANCHOVIES, cooked: ItemIds.ANCHOVIES, burnt: ItemIds.BURNT_FISH, level: 1, xp: 30, stopBurn: 34, name: "anchovies" },
-  { raw: ItemIds.RAW_SARDINE, cooked: ItemIds.SARDINE, burnt: ItemIds.BURNT_FISH, level: 1, xp: 40, stopBurn: 38, name: "sardine" },
+  { raw: ItemIds.BREAD_DOUGH, cooked: ItemIds.BREAD, burnt: ItemIds.BURNT_BREAD, level: 1, xp: 40, lumbridgeStopBurn: 34, stopBurn: 38, name: "bread", rangeOnly: true },
+  { raw: ItemIds.RAW_SHRIMPS, cooked: ItemIds.SHRIMPS, burnt: ItemIds.BURNT_SHRIMP, level: 1, xp: 30, lumbridgeStopBurn: 31, stopBurn: 34, name: "shrimp" },
+  { raw: ItemIds.RAW_ANCHOVIES, cooked: ItemIds.ANCHOVIES, burnt: ItemIds.BURNT_FISH, level: 1, xp: 30, lumbridgeStopBurn: 31, stopBurn: 34, name: "anchovies" },
+  { raw: ItemIds.RAW_SARDINE, cooked: ItemIds.SARDINE, burnt: ItemIds.BURNT_FISH, level: 1, xp: 40, lumbridgeStopBurn: 34, stopBurn: 38, name: "sardine" },
   { raw: ItemIds.RAW_KARAMBWANJI, cooked: ItemIds.POISON_KARAMBWAN, burnt: ItemIds.POISON_KARAMBWAN, level: 1, xp: 80, stopBurn: 1, name: "poison karambwan" },
   { raw: ItemIds.RAW_UGTHANKI_MEAT, cooked: ItemIds.UGTHANKI_MEAT, burnt: ItemIds.BURNT_MEAT, level: 1, xp: 40, stopBurn: 64, name: "ugthanki meat" },
-  { raw: ItemIds.RAW_HERRING, cooked: ItemIds.HERRING, burnt: ItemIds.BURNT_FISH_3, level: 5, xp: 50, stopBurn: 42, name: "herring" },
+  { raw: ItemIds.RAW_HERRING, cooked: ItemIds.HERRING, burnt: ItemIds.BURNT_FISH_3, level: 5, xp: 50, lumbridgeStopBurn: 38, stopBurn: 41, name: "herring" },
   { raw: ItemIds.RAW_GUPPY, cooked: ItemIds.GUPPY, burnt: ItemIds.RUINED_GUPPY, level: 7, xp: 12, stopBurn: 34, name: "guppy" },
-  { raw: ItemIds.RAW_MACKEREL, cooked: ItemIds.MACKEREL, burnt: ItemIds.BURNT_FISH_5, level: 10, xp: 60, stopBurn: 45, name: "mackerel" },
+  { raw: ItemIds.RAW_MACKEREL, cooked: ItemIds.MACKEREL, burnt: ItemIds.BURNT_FISH_5, level: 10, xp: 60, lumbridgeStopBurn: 41, stopBurn: 45, name: "mackerel" },
   { raw: ItemIds.RAW_BIRD_MEAT, cooked: ItemIds.ROAST_BIRD_MEAT, burnt: ItemIds.BURNT_BIRD_MEAT, level: 11, xp: 60, stopBurn: 47, name: "bird meat" },
-  { raw: ItemIds.THIN_SNAIL, cooked: ItemIds.THIN_SNAIL_MEAT, burnt: ItemIds.BURNT_SNAIL, level: 12, xp: 70, stopBurn: 38, name: "snail" },
-  { raw: ItemIds.RAW_TROUT, cooked: ItemIds.TROUT, burnt: ItemIds.BURNT_FISH_3, level: 15, xp: 70, stopBurn: 50, name: "trout" },
+  { raw: ItemIds.THIN_SNAIL, cooked: ItemIds.THIN_SNAIL_MEAT, burnt: ItemIds.BURNT_SNAIL, level: 12, xp: 70, lumbridgeStopBurn: 43, stopBurn: 47, name: "snail" },
+  { raw: ItemIds.RAW_TROUT, cooked: ItemIds.TROUT, burnt: ItemIds.BURNT_FISH_3, level: 15, xp: 70, lumbridgeStopBurn: 45, stopBurn: 49, name: "trout" },
   { raw: ItemIds.SPIDER_ON_SHAFT, cooked: ItemIds.SPIDER_ON_SHAFT_5, burnt: ItemIds.BURNT_SPIDER, level: 16, xp: 80, stopBurn: 34, name: "spider on shaft" },
-  { raw: ItemIds.LEAN_SNAIL, cooked: ItemIds.LEAN_SNAIL_MEAT, burnt: ItemIds.BURNT_SNAIL, level: 17, xp: 80, stopBurn: 42, name: "snail" },
-  { raw: ItemIds.RAW_COD, cooked: ItemIds.COD, burnt: ItemIds.BURNT_FISH_3, level: 18, xp: 75, stopBurn: 52, name: "cod" },
-  { raw: ItemIds.RAW_PIKE, cooked: ItemIds.PIKE, burnt: ItemIds.BURNT_FISH_5, level: 20, xp: 80, stopBurn: 54, name: "pike" },
+  { raw: ItemIds.LEAN_SNAIL, cooked: ItemIds.LEAN_SNAIL_MEAT, burnt: ItemIds.BURNT_SNAIL, level: 17, xp: 80, lumbridgeStopBurn: 46, stopBurn: 47, name: "snail" },
+  { raw: ItemIds.RAW_COD, cooked: ItemIds.COD, burnt: ItemIds.BURNT_FISH_3, level: 18, xp: 75, lumbridgeStopBurn: 46, stopBurn: 51, name: "cod" },
+  { raw: ItemIds.RAW_PIKE, cooked: ItemIds.PIKE, burnt: ItemIds.BURNT_FISH_5, level: 20, xp: 80, lumbridgeStopBurn: 49, stopBurn: 54, name: "pike" },
   { raw: ItemIds.RAW_CAVEFISH, cooked: ItemIds.CAVEFISH, burnt: ItemIds.RUINED_CAVEFISH, level: 20, xp: 23, stopBurn: 50, name: "cavefish" },
   { raw: ItemIds.RAW_BEAST_MEAT, cooked: ItemIds.ROAST_BEAST_MEAT, burnt: ItemIds.BURNT_BEAST_MEAT, level: 21, xp: 82.5, stopBurn: 58, name: "beast meat" },
   { raw: ItemIds.CRAB_MEAT, cooked: ItemIds.COOKED_CRAB_MEAT, burnt: ItemIds.BURNT_CRAB_MEAT, level: 21, xp: 100, stopBurn: 21, name: "crab meat" },
-  { raw: ItemIds.FAT_SNAIL, cooked: ItemIds.FAT_SNAIL_MEAT, burnt: ItemIds.BURNT_SNAIL, level: 22, xp: 95, stopBurn: 45, name: "snail" },
-  { raw: ItemIds.RAW_SALMON, cooked: ItemIds.SALMON, burnt: ItemIds.BURNT_FISH_3, level: 25, xp: 90, stopBurn: 58, name: "salmon" },
+  { raw: ItemIds.FAT_SNAIL, cooked: ItemIds.FAT_SNAIL_MEAT, burnt: ItemIds.BURNT_SNAIL, level: 22, xp: 95, lumbridgeStopBurn: 51, stopBurn: 56, name: "snail" },
+  { raw: ItemIds.RAW_SALMON, cooked: ItemIds.SALMON, burnt: ItemIds.BURNT_FISH_3, level: 25, xp: 90, lumbridgeStopBurn: 55, stopBurn: 58, name: "salmon" },
   { raw: ItemIds.RAW_SLIMY_EEL, cooked: ItemIds.COOKED_SLIMY_EEL, burnt: ItemIds.BURNT_EEL, level: 28, xp: 95, stopBurn: 58, name: "slimy eel" },
   { raw: ItemIds.RAW_TUNA, cooked: ItemIds.TUNA, burnt: ItemIds.BURNT_FISH_7, level: 30, xp: 100, stopBurn: 58, name: "tuna" },
   { raw: ItemIds.RAW_KARAMBWAN, cooked: ItemIds.COOKED_KARAMBWAN, burnt: ItemIds.BURNT_KARAMBWAN, level: 30, xp: 190, stopBurn: 99, name: "karambwan" },
@@ -58,6 +59,21 @@ const COOKABLES = Object.freeze([
   { raw: ItemIds.RAW_ANGLERFISH, cooked: ItemIds.ANGLERFISH, burnt: ItemIds.BURNT_ANGLERFISH, level: 84, xp: 230, stopBurn: 98, name: "anglerfish" },
   { raw: ItemIds.RAW_DARK_CRAB, cooked: ItemIds.DARK_CRAB, burnt: ItemIds.BURNT_DARK_CRAB, level: 90, xp: 215, stopBurn: 99, name: "dark crab" },
   { raw: ItemIds.RAW_MANTA_RAY, cooked: ItemIds.MANTA_RAY, burnt: ItemIds.BURNT_MANTA_RAY, level: 91, xp: 216.2, stopBurn: 99, name: "manta ray" },
+  // Chambers of Xeric fish and bats (Wiki levels and XP; burn levels not on the Wiki).
+  { raw: 20855, cooked: 20856, burnt: 20854, level: 1, xp: 10, stopBurn: 21, name: "pysk fish" },
+  { raw: 20857, cooked: 20858, burnt: 20854, level: 15, xp: 13, stopBurn: 35, name: "suphi fish" },
+  { raw: 20859, cooked: 20860, burnt: 20854, level: 30, xp: 16, stopBurn: 50, name: "leckish fish" },
+  { raw: 20861, cooked: 20862, burnt: 20854, level: 45, xp: 19, stopBurn: 65, name: "brawk fish" },
+  { raw: 20863, cooked: 20864, burnt: 20854, level: 60, xp: 22, stopBurn: 75, name: "mycil fish" },
+  { raw: 20865, cooked: 20866, burnt: 20854, level: 75, xp: 25, stopBurn: 85, name: "roqed fish" },
+  { raw: 20867, cooked: 20868, burnt: 20854, level: 90, xp: 28, stopBurn: 97, name: "kyren fish" },
+  { raw: 20870, cooked: 20871, burnt: 20869, level: 1, xp: 10, stopBurn: 21, name: "guanic bat" },
+  { raw: 20872, cooked: 20873, burnt: 20869, level: 15, xp: 13, stopBurn: 35, name: "prael bat" },
+  { raw: 20874, cooked: 20875, burnt: 20869, level: 30, xp: 16, stopBurn: 50, name: "giral bat" },
+  { raw: 20876, cooked: 20877, burnt: 20869, level: 45, xp: 19, stopBurn: 65, name: "phluxia bat" },
+  { raw: 20878, cooked: 20879, burnt: 20869, level: 60, xp: 22, stopBurn: 75, name: "kryket bat" },
+  { raw: 20880, cooked: 20881, burnt: 20869, level: 75, xp: 25, stopBurn: 85, name: "murng bat" },
+  { raw: 20882, cooked: 20883, burnt: 20869, level: 90, xp: 28, stopBurn: 97, name: "psykk bat" },
 ]);
 
 const COOKABLE_BY_RAW = new Map(COOKABLES.map((cookable) => [cookable.raw, cookable]));
@@ -91,7 +107,10 @@ const GAUNTLETS_STOP_BURN = new Map([
   [ItemIds.RAW_ANGLERFISH, 93],
 ]);
 
-function stopBurnLevel(player, cookable) {
+function stopBurnLevel(player, cookable, objectId) {
+  if (objectId !== undefined && objectId === pluginApi?.core?.ObjectIdentifiers.COOKING_RANGE && cookable.lumbridgeStopBurn !== undefined) {
+    return cookable.lumbridgeStopBurn;
+  }
   const hands = player.getEquipment?.()?.getItems?.()[Equipment.HANDS_SLOT]?.getId?.();
   if (hands !== ItemIds.COOKING_GAUNTLETS) {
     return cookable.stopBurn;
@@ -99,18 +118,19 @@ function stopBurnLevel(player, cookable) {
   return GAUNTLETS_STOP_BURN.get(cookable.raw) ?? cookable.stopBurn;
 }
 
-/** Wiki: a worn Cooking cape never burns food, and supersedes the gauntlets. */
+/** Wiki: a worn Cooking cape (or max cape) never burns food, and supersedes the gauntlets. */
 function wearingCookingCape(player) {
-  const cape = player.getEquipment?.()?.getItems?.()[Equipment.CAPE_SLOT]?.getId?.();
-  return cape === ItemIds.COOKING_CAPE || cape === ItemIds.COOKING_CAPE_T_;
+  const request = { player, skill: "COOKING", result: false };
+  pluginApi?.emitCustomEvent("skillcape:has-perk", request);
+  return request.result === true;
 }
 
-function isSuccess(player, cookable) {
+function isSuccess(player, cookable, objectId) {
   const cookingLevel = player.getSkillManager().getCurrentLevel(Skill.COOKING);
   if (wearingCookingCape(player)) {
     return true;
   }
-  const stopBurn = stopBurnLevel(player, cookable);
+  const stopBurn = stopBurnLevel(player, cookable, objectId);
   if (cookingLevel >= stopBurn) {
     return true;
   }
@@ -137,6 +157,14 @@ function stopCooking(activeSessions, player, resetAnimation = true) {
 }
 
 function startCooking(player, object, cookable, activeSessions) {
+  if (object.getId() === pluginApi.core.ObjectIdentifiers.COOKING_RANGE) {
+    const request = { player, key: "cooks_assistant", complete: null };
+    pluginApi.emitCustomEvent("quest:is-complete", request);
+    if (request.complete !== true) {
+      player.sendMessage("You need to complete Cook's Assistant to use this range.");
+      return false;
+    }
+  }
   if (player.getSkillManager().getCurrentLevel(Skill.COOKING) < cookable.level) {
     player.sendMessage(`You need a Cooking level of at least ${cookable.level} to cook this.`);
     return false;
@@ -213,7 +241,7 @@ class CookingTask extends Task {
         player,
         rawId: session.cookable.raw,
         itemId: cookable.cooked,
-        burn: !isSuccess(player, session.cookable),
+        burn: !isSuccess(player, session.cookable, session.objectId),
       };
       pluginApi.emitCustomEvent("cooking:burn", burnRequest);
       if (!burnRequest.burn) {
@@ -269,15 +297,13 @@ function handleCook(activeSessions, event) {
     return;
   }
 
-  const started = startCooking(
+  event.handled = true;
+  startCooking(
     event.player,
     event.object,
     cookable,
     activeSessions
   );
-  if (started) {
-    event.handled = true;
-  }
 }
 
 function handleRangeCook(activeSessions, event) {
@@ -319,12 +345,14 @@ module.exports = {
     api.onPlayerDisconnect(({ player }) => {
       stopCooking(activeSessions, player, false);
     });
-    api.onPlayerLevelUp(({ player }) => {
+    api.onCustomEvent("level-up:popup-opened", ({ player }) => {
       stopCooking(activeSessions, player, false);
     });
 
     api.onItemOnObject(handleCook.bind(null, activeSessions), { noted: false });
     api.onObjectInteraction("Range", { Cook: handleRangeCook.bind(null, activeSessions) });
+    api.onObjectInteraction("Cooking range", { Cook: handleRangeCook.bind(null, activeSessions) });
+    api.onObjectInteraction("Stove", { Cook: handleRangeCook.bind(null, activeSessions) });
     api.onCustomEvent("cooking:raw-xp", answerRawXp);
 
     api.log("registered", {
@@ -336,5 +364,5 @@ module.exports = {
   COOKABLE_BY_RAW,
   COOKABLE_OBJECT_NAMES,
   FIRE_OBJECT_NAMES,
-  _test: { isSuccess, stopBurnLevel, wearingCookingCape, GAUNTLETS_STOP_BURN, COOKABLE_BY_RAW },
+  _test: { startCooking, isSuccess, stopBurnLevel, wearingCookingCape, GAUNTLETS_STOP_BURN, COOKABLE_BY_RAW, setApi: (value) => { pluginApi = value; } },
 };

@@ -2,6 +2,8 @@ import { App as PicoApp, UniformBuffer } from "picogl";
 
 import type { GroundItemOverlayEntry } from "../../game/data/ground/GroundItemStore";
 import type { TileHighlightRenderEntry } from "../../game/highlights/TileHighlightManager";
+import type { IndexedSprite } from "../../rs/sprite/IndexedSprite";
+import type { OverlayTriangleBatch } from "../../game/sailing/HeadingIndicator";
 
 export enum RenderPhase {
     ToSceneFramebuffer = "toSceneFramebuffer",
@@ -114,6 +116,7 @@ export interface OverheadPrayerEntry {
     headIconHint?: boolean;
     /** Cache-defined overhead sprites for NPCs, which may contain multiple icons. */
     npcHeadIcons?: { archiveId: number; spriteId: number }[];
+    customHeadIcons?: readonly IndexedSprite[];
 }
 
 export interface OverlayUpdateArgs {
@@ -132,6 +135,8 @@ export interface OverlayUpdateArgs {
         // Current true tile marker
         currentTile?: { x: number; y: number; plane?: number };
         tileHighlights?: ReadonlyArray<TileHighlightRenderEntry>;
+        /** The helm's heading arrows (HeadingIndicator), as world triangles per colour. */
+        headingIndicator?: ReadonlyArray<OverlayTriangleBatch>;
         // Animation / timing
         clientTickPhase: number;
         // Player frame sampling (for overlays that need it)

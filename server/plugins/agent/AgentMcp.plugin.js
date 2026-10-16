@@ -27,7 +27,8 @@ function mcpEnabled() {
  * keeps its real rank.
  */
 function grantDeveloperRights({ player }) {
-  if (!mcpEnabled()) return;
+  // Bots aren't driven through MCP; a shutdown save would keep the rank in their saves.
+  if (!mcpEnabled() || player?.isPlayerBot?.() === true) return;
   if (!savedRights.has(player)) savedRights.set(player, player.getRights());
   player.setRights(pluginApi.core.PlayerRights.DEVELOPER);
   // StaffCrowns may have read the rights before this hook ran.
@@ -38,6 +39,12 @@ function restoreRights({ player }) {
   if (!savedRights.has(player)) return;
   player.setRights(savedRights.get(player));
   savedRights.delete(player);
+}
+
+// Headless playthroughs need normal damage and death; command temporarily elevates itself.
+function normalPlayer(event) {
+  event.player.setRights(pluginApi.core.PlayerRights.NONE);
+  pluginApi.emitCustomEvent("account:refresh-chat-icons", { player: event.player });
 }
 
 function buildMcpServer(core) {
@@ -52,6 +59,7 @@ function buildMcpServer(core) {
   require("./mcp/Testing.AgentMcp")(ctx);
   require("./mcp/Load.AgentMcp")(ctx);
   require("./mcp/Perf.AgentMcp")(ctx);
+  require("./mcp/Vision.AgentMcp")(ctx);
   return server;
 }
 
@@ -108,6 +116,7 @@ module.exports = {
     api.onServerShutdown(stopMcpServer);
     api.onPlayerLogin(grantDeveloperRights);
     api.onPlayerLogout(restoreRights);
+    api.onCustomEvent("agent-mcp:normal-player", normalPlayer);
   },
   _test: { grantDeveloperRights, restoreRights, mcpEnabled },
 };

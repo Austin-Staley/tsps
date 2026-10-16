@@ -47,8 +47,8 @@ test("DB table gamevals name every column; rev 241 inserted sail_pattern_option 
 });
 
 test("sailing reads its DB tables at the columns the cache names", () => {
-  const parts = require("../plugins/skills/sailing/boatParts");
-  const facilities = require("../plugins/skills/sailing/boatFacilities");
+  const parts = require("../plugins/skills/sailing/BoatParts.Sailing");
+  const facilities = require("../plugins/skills/sailing/BoatFacilities.Sailing");
   const column = (table, name) => gamevals.tableColumn(table, name);
   // sailing_boat (166): each part's option list, the recovery fee and the hotspots.
   assert.deepEqual(
@@ -60,4 +60,51 @@ test("sailing reads its DB tables at the columns the cache names", () => {
   // The sail options (179): its loc and stats row.
   assert.equal(parts.PART_COLUMNS.sails.loc[0], column(179, "loc"));
   assert.equal(parts.PART_COLUMNS.sails.stats, column(179, "facility_stats"));
+});
+
+test("a failed gameval read is retried, not remembered as an empty table list (#559)", () => {
+  const store = CachePipeline.getStore();
+  let fail = true;
+  const flaky = new Gamevals({
+    read: (index, archive) => {
+      if (fail) throw new Error("Invalid ptr");
+      return store.read(index, archive);
+    },
+  });
+  assert.throws(() => flaky.allTables(), /Invalid ptr/);
+  assert.throws(() => flaky.allInterfaces(), /Invalid ptr/);
+  fail = false;
+  assert.equal(flaky.allTables().get(166).name, "sailing_boat");
+  assert.equal(flaky.componentId("chatbox:chatmodal"), (162 << 16) | 568);
+});
+
+test("a cache whose index list stops short of the gamevals is re-downloaded (#559)", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "cache-"));
+  for (const file of ["main_file_cache.dat2", "info.json", "keys.json"]) fs.writeFileSync(path.join(dir, file), "");
+  fs.writeFileSync(path.join(dir, "main_file_cache.idx255"), Buffer.alloc(36));
+  assert.equal(CachePipeline.isValid(dir), false);
+  fs.writeFileSync(path.join(dir, "main_file_cache.idx255"), Buffer.alloc(150));
+  assert.equal(CachePipeline.isValid(dir), true);
+  fs.rmSync(dir, { recursive: true });
+});
+
+test("a browser host with an incomplete cache fails without downloading from OpenRS2 (#559)", async (t) => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "browser-cache-"));
+  const previous = process.env.BROWSER_HOST;
+  const network = t.mock.method(globalThis, "fetch", async () => { throw new TypeError("network error"); });
+  try {
+    fs.writeFileSync(path.join(root, "target.txt"), "osrs-241_2026-09-30");
+    process.env.BROWSER_HOST = "1";
+    await assert.rejects(CachePipeline.initialize(root), /Browser-host cache is missing or incomplete/);
+    await CachePipeline.initialize(path.resolve(__dirname, ".."));
+    assert.equal(network.mock.callCount(), 0);
+  } finally {
+    if (previous === undefined) delete process.env.BROWSER_HOST;
+    else process.env.BROWSER_HOST = previous;
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

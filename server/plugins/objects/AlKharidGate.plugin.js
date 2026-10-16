@@ -18,7 +18,7 @@
  * leaves (METALGATEOPENL/R); 44052/44053/44050/44051 resolved closed variants.
  */
 const { startTranscript } = require("../quests/QuestRuntime");
-const ObstacleRunner = require("../skills/agility/ObstacleRunner");
+const ObstacleRunner = require("../skills/agility/ObstacleRunner.Agility");
 
 const GATE_LEAF_IDS = new Set([44598, 44599]);
 const OPEN_LEFT_ID = 1571;
@@ -30,7 +30,8 @@ const GATE_CLOSE_DELAY_TICKS = 2;
 
 // Prince Ali Rescue stage (plugins/quests/quests/PrinceAliRescue.Quest.js).
 const QUEST_STAGE_ATTRIBUTE = "quest.prince_ali_rescue.stage";
-const QUEST_COMPLETE_STAGE = 110;
+// Rescue grants free passage before Hassan awards the quest at110.
+const QUEST_FREE_PASS_STAGE = 100;
 const VARIANT_BEFORE_QUEST = "before-completing-prince-ali-rescue-quest";
 const VARIANT_AFTER_QUEST = "after-completing-prince-ali-rescue-quest";
 
@@ -71,7 +72,7 @@ function rememberedGate(player) {
 
 function startGuardDialogue(player, object) {
   rememberGate(player, object);
-  const variant = questStage(player) >= QUEST_COMPLETE_STAGE ? VARIANT_AFTER_QUEST : VARIANT_BEFORE_QUEST;
+  const variant = questStage(player) >= QUEST_FREE_PASS_STAGE ? VARIANT_AFTER_QUEST : VARIANT_BEFORE_QUEST;
   const guardId = player.getLocation().getX() < object.getLocation().getX()
     ? core.NpcIdentifiers.BORDER_GUARD
     : core.NpcIdentifiers.BORDER_GUARD_2;

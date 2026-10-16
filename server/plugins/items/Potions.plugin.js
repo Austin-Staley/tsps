@@ -41,11 +41,16 @@ const ATTR_DIVINE_STATE = "potions:divine:state";
 const ATTR_OVERLOAD_STATE = "potions:overload:state";
 const ATTR_MENAPHITE_STATE = "potions:menaphite:state";
 const ATTR_PRAYER_REGEN_STATE = "potions:prayer-regen:state";
+const ATTR_PRAYER_ENHANCE = "potions:prayer-enhance";
+/** Prayer enhance: a prayer point every 6 ticks. */
+const PRAYER_ENHANCE_INTERVAL_MS = 6 * 600;
+/** Areas a potion can be limited to, and what a player is told outside them. */
+const AREA_MESSAGES = { "chambers-of-xeric": "You can only sip this potion while inside the Chambers of Xeric." };
 /** Shared 60-second cycle that decays every temporary skill boost by one (Wiki). */
 const ATTR_BOOST_CYCLE = "potions:boost-cycle";
 /** When the player logged out; timed effects are paused while offline. */
 const ATTR_PAUSED_AT = "potions:paused-at";
-const PERSISTED_ATTRIBUTES = [ATTR_STAMINA_END, ATTR_STAMINA_ACC, ATTR_DIVINE_STATE, ATTR_OVERLOAD_STATE, ATTR_MENAPHITE_STATE, ATTR_PRAYER_REGEN_STATE, ATTR_BOOST_CYCLE, ATTR_PAUSED_AT];
+const PERSISTED_ATTRIBUTES = [ATTR_STAMINA_END, ATTR_STAMINA_ACC, ATTR_DIVINE_STATE, ATTR_OVERLOAD_STATE, ATTR_MENAPHITE_STATE, ATTR_PRAYER_REGEN_STATE, ATTR_PRAYER_ENHANCE, ATTR_BOOST_CYCLE, ATTR_PAUSED_AT];
 
 const BOOST_DECAY_MS = 60 * 1000;
 const MENAPHITE_DURATION_MS = 5 * 60 * 1000;
@@ -123,14 +128,16 @@ function applyAntifire(player, seconds, tier = DragonfireProtectionTier.ANTIFIRE
 }
 
 const PRAYER_BONUS_WORN = [
-  Items.PRAYER_CAPE, Items.PRAYER_CAPE_T_, Items.PRAYER_CAPE_2, Items.PRAYER_CAPE_T__2,
   Items.RING_OF_THE_GODS_I_, Items.RING_OF_THE_GODS_I__2, Items.RING_OF_THE_GODS_I__3,
   Items.RING_OF_THE_GODS_I__4, Items.RING_OF_THE_GODS_I__5, Items.RING_OF_THE_GODS_I__6,
 ];
 
-/** Wiki: a worn prayer cape or ring of the gods (i), or a carried holy wrench, boosts prayer restores. */
+/** Wiki: a ring of the gods (i), a carried holy wrench, or a Prayer cape (or max cape) worn or
+ * carried - it acts as a holy wrench - boosts prayer restores. */
 function hasPrayerRestoreBonus(player) {
-  return player.getInventory?.()?.contains?.(Items.HOLY_WRENCH) === true ||
+  const cape = { player, skill: "PRAYER", inventory: true, result: false };
+  pluginApi?.emitCustomEvent("skillcape:has-perk", cape);
+  return cape.result === true || player.getInventory?.()?.contains?.(Items.HOLY_WRENCH) === true ||
     PRAYER_BONUS_WORN.some((itemId) => player.getEquipment?.()?.contains?.(itemId) === true);
 }
 
@@ -186,6 +193,35 @@ function applySaradominBrew(player) {
   lowerSkillByCurrent(player, Skill.STRENGTH, 2, 0.1, 0);
   lowerSkillByCurrent(player, Skill.RANGED, 2, 0.1, 0);
   lowerSkillByCurrent(player, Skill.MAGIC, 2, 0.1, 0);
+}
+
+/** Vampyrium supplies follow the same stat formulas as their Wiki equivalents. */
+function applyRankFrothyPotion(player) {
+  for (const skill of [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE]) {
+    boostSkill(player, skill, 5, 0.15);
+  }
+}
+
+function applyFoulChunkyPotion(player) {
+  applySuperRestore(player);
+  applyPrayerRegeneration(player);
+}
+
+function applyRancidSlimyPotion(player) {
+  const hpBoost = Math.floor(2 + getMaxLevel(player, Skill.HITPOINTS) * 0.15);
+  boostSkill(player, Skill.DEFENCE, 2, 0.2);
+  heal(player, hpBoost, hpBoost);
+  for (const skill of [Skill.ATTACK, Skill.STRENGTH, Skill.MAGIC, Skill.RANGED]) {
+    lowerSkillByCurrent(player, skill, 1, 0);
+  }
+}
+
+function applyJarOfCongealedBlood(player) {
+  for (const skill of [Skill.HITPOINTS, Skill.PRAYER]) {
+    const max = getMaxLevel(player, skill);
+    if (getCurrentLevel(player, skill) < max) setCurrentLevel(player, skill, max);
+  }
+  restoreRunEnergy(player, 100);
 }
 
 function applyZamorakBrew(player) {
@@ -358,8 +394,12 @@ function startStamina(player) {
 }
 
 function applyStamina(player) {
+  applyStaminaRequest({player});
+}
+
+function applyStaminaRequest({player,energy=20,durationMs=STAMINA_DURATION_MS}) {
   // Ring of endurance doubles this by mutating the payload (Wiki).
-  const request = { player, energy: 20, durationMs: STAMINA_DURATION_MS };
+  const request = { player, energy, durationMs };
   pluginApi.emitCustomEvent("potions:stamina-effect", request);
   restoreRunEnergy(player, request.energy);
   player.setAttribute(ATTR_STAMINA_END, Date.now() + request.durationMs);
@@ -429,6 +469,7 @@ function registerPotion(definition) {
     name: definition.name,
     effect: definition.effect,
     canUse: typeof definition.canUse === "function" ? definition.canUse : null,
+    area: definition.area ?? null,
     requiresFoodPermission: Boolean(definition.requiresFoodPermission),
     shareable: definition.shareable !== false,
     // null: nothing is left once the last dose is drunk.
@@ -582,6 +623,34 @@ registerPotion({
     boostSkill(player, Skill.STRENGTH, 5, 0.15);
     boostSkill(player, Skill.DEFENCE, 5, 0.15);
   },
+});
+registerPotion({
+  name: "Rank frothy potion",
+  chains: [doseChain("RANK_FROTHY_POTION_4_", "RANK_FROTHY_POTION_3_", "RANK_FROTHY_POTION_2_", "RANK_FROTHY_POTION_1_")],
+  emptyItemId: null,
+  area: "vampyrium",
+  effect: applyRankFrothyPotion,
+});
+registerPotion({
+  name: "Foul chunky potion",
+  chains: [doseChain("FOUL_CHUNKY_POTION_4_", "FOUL_CHUNKY_POTION_3_", "FOUL_CHUNKY_POTION_2_", "FOUL_CHUNKY_POTION_1_")],
+  emptyItemId: null,
+  area: "vampyrium",
+  effect: applyFoulChunkyPotion,
+});
+registerPotion({
+  name: "Rancid slimy potion",
+  chains: [doseChain("RANCID_SLIMY_POTION_4_", "RANCID_SLIMY_POTION_3_", "RANCID_SLIMY_POTION_2_", "RANCID_SLIMY_POTION_1_")],
+  emptyItemId: null,
+  area: "vampyrium",
+  effect: applyRancidSlimyPotion,
+});
+registerPotion({
+  name: "Jar of congealed blood",
+  chains: [[Items.JAR_OF_CONGEALED_BLOOD]],
+  emptyItemId: null,
+  area: "vampyrium",
+  effect: applyJarOfCongealedBlood,
 });
 registerPotion({
   name: "Ranging potion",
@@ -944,6 +1013,63 @@ registerPotion({
   effect: applyMenaphiteRemedy,
 });
 
+// ---------------------------------------------------------------- Chambers of Xeric gourd potions
+// Not on the Wiki (to check against a capture): the boosts by strength (weak / normal / strong). Wiki:
+// they can only be sipped inside the raid, and the gourd breaks when finished.
+
+/** Gourd potion ids are 1-4 doses ascending; the chain runs 4 down to 1. */
+function gourdChain(oneDose) {
+  return [oneDose + 3, oneDose + 2, oneDose + 1, oneDose];
+}
+
+function registerGourd(name, oneDose, effect, canUse) {
+  registerPotion({ name, chains: [gourdChain(oneDose)], emptyItemId: null, area: "chambers-of-xeric", effect, canUse });
+}
+
+const GOURD_STRENGTHS = [
+  { suffix: " (-)", flat: 4, percent: 0.1, restore: [6, 0.2], enhanceTicks: 268, aid: [0.1, 0.05], overload: [4, 0.1] },
+  { suffix: "", flat: 5, percent: 0.13, restore: [8, 0.25], enhanceTicks: 375, aid: [0.15, 0.075], overload: [5, 0.13] },
+  { suffix: " (+)", flat: 6, percent: 0.16, restore: [11, 0.3], enhanceTicks: 483, aid: [0.2, 0.1], overload: [6, 0.16] },
+];
+const GOURD_FIRST_DOSE = {
+  elder: [20913, 20917, 20921], twisted: [20925, 20929, 20933], kodai: [20937, 20941, 20945],
+  revitalisation: [20949, 20953, 20957], prayerEnhance: [20961, 20965, 20969], xericsAid: [20973, 20977, 20981],
+  overload: [20985, 20989, 20993], antipoison: [25754, 25758, 25762],
+};
+/** Wiki: the raid's antipoisons give 90 seconds, six minutes and nine minutes of immunity. */
+const GOURD_ANTIPOISON_SECONDS = [90, 360, 540];
+
+/** Xeric's aid: Defence and Hitpoints up (past the maximum), the other combat stats down. */
+function applyXericsAid(player, [up, down]) {
+  boostSkill(player, Skill.DEFENCE, 5, up);
+  heal(player, Math.floor(getMaxLevel(player, Skill.HITPOINTS) * up), Math.floor(getMaxLevel(player, Skill.HITPOINTS) * up));
+  for (const skill of [Skill.ATTACK, Skill.STRENGTH, Skill.MAGIC, Skill.RANGED]) lowerSkillByCurrent(player, skill, 2, down);
+}
+
+GOURD_STRENGTHS.forEach((strength, tier) => {
+  const { suffix, flat, percent } = strength;
+  registerGourd(`Elder${suffix}`, GOURD_FIRST_DOSE.elder[tier], (player) => {
+    for (const skill of [Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE]) boostSkill(player, skill, flat, percent);
+  });
+  registerGourd(`Twisted${suffix}`, GOURD_FIRST_DOSE.twisted[tier], (player) => boostSkill(player, Skill.RANGED, flat, percent));
+  registerGourd(`Kodai${suffix}`, GOURD_FIRST_DOSE.kodai[tier], (player) => boostSkill(player, Skill.MAGIC, flat, percent));
+  registerGourd(`Revitalisation${suffix}`, GOURD_FIRST_DOSE.revitalisation[tier], (player) => {
+    for (const skill of Skill.values()) {
+      if (skill !== Skill.HITPOINTS) restoreSkillToBaseWithFormula(player, skill, strength.restore[0], strength.restore[1]);
+    }
+  });
+  registerGourd(`Prayer enhance${suffix}`, GOURD_FIRST_DOSE.prayerEnhance[tier], (player) => {
+    const now = Date.now();
+    player.setAttribute(ATTR_PRAYER_ENHANCE, { endsAt: now + strength.enhanceTicks * 600, nextAt: now + PRAYER_ENHANCE_INTERVAL_MS });
+  });
+  registerGourd(`Xeric's aid${suffix}`, GOURD_FIRST_DOSE.xericsAid[tier], (player) => applyXericsAid(player, strength.aid));
+  const antipoison = suffix ? `Antipoison${suffix}` : "Antipoison potion";
+  registerGourd(antipoison, GOURD_FIRST_DOSE.antipoison[tier], (player) => applyPoisonImmunity(player, GOURD_ANTIPOISON_SECONDS[tier]));
+  registerGourd(`Overload${suffix} (Chambers of Xeric)`, GOURD_FIRST_DOSE.overload[tier],
+    (player) => applyOverload(player, strength.overload[0], strength.overload[1]),
+    (player) => getCurrentLevel(player, Skill.HITPOINTS) >= 50);
+});
+
 function processStamina(player) {
   const endsAt = player.getAttribute(ATTR_STAMINA_END);
   if (!Number.isFinite(endsAt)) {
@@ -1008,6 +1134,31 @@ function processDivine(player) {
   }
 }
 
+/**
+ * Whether a player is somewhere an area-limited potion works: the area's plugin answers
+ * potions:area { player, area } by setting `inside`.
+ */
+function inArea(player, area) {
+  const request = { player, area, inside: false };
+  pluginApi.emitCustomEvent("potions:area", request);
+  return request.inside === true;
+}
+
+function processPrayerEnhance(player) {
+  const state = player.getAttribute(ATTR_PRAYER_ENHANCE);
+  if (!state) return;
+  const now = Date.now();
+  if (now >= state.endsAt) {
+    player.setAttribute(ATTR_PRAYER_ENHANCE, null);
+    player.sendMessage("<col=ef1020>Your prayer enhance effect has worn off.</col>");
+    return;
+  }
+  if (now < state.nextAt) return;
+  state.nextAt = now + PRAYER_ENHANCE_INTERVAL_MS;
+  const max = getMaxLevel(player, Skill.PRAYER);
+  if (getCurrentLevel(player, Skill.PRAYER) < max) getSkillManager(player).increaseCurrentLevel(Skill.PRAYER, 1, max);
+}
+
 function processOverload(player) {
   const state = player.getAttribute(ATTR_OVERLOAD_STATE);
   if (!state) {
@@ -1057,6 +1208,11 @@ function handlePotionDrink(player, itemId, slot) {
     return true;
   }
 
+  if (entry.potion.area && !inArea(player, entry.potion.area)) {
+    player.sendMessage(AREA_MESSAGES[entry.potion.area] ?? "You cannot use that here.");
+    return true;
+  }
+
   if (entry.potion.requiresFoodPermission && !canEat(player, itemId)) {
     player.sendMessage("You cannot eat here.");
     return true;
@@ -1098,8 +1254,11 @@ function handlePotionDrink(player, itemId, slot) {
   }
 
   if (entry.replacementId === entry.potion.emptyItemId) {
-    player.sendMessage("You have finished your potion.");
+    player.sendMessage(entry.potion.area === "chambers-of-xeric"
+      ? "You have finished your potion. The gourd vial disintegrates."
+      : "You have finished your potion.");
   }
+  pluginApi.emitCustomEvent("potions:drunk", { player, itemId, name: entry.potion.name });
 
   return true;
 }
@@ -1144,14 +1303,42 @@ function resumeTimedEffects({ player }) {
   if (Number.isFinite(staminaEnd) && staminaEnd > 0) player.setAttribute(ATTR_STAMINA_END, staminaEnd + offline);
   const boostCycle = Number(player.getAttribute(ATTR_BOOST_CYCLE));
   if (Number.isFinite(boostCycle) && boostCycle > 0) player.setAttribute(ATTR_BOOST_CYCLE, boostCycle + offline);
-  for (const key of [ATTR_DIVINE_STATE, ATTR_OVERLOAD_STATE, ATTR_MENAPHITE_STATE, ATTR_PRAYER_REGEN_STATE]) {
+  for (const key of [ATTR_DIVINE_STATE, ATTR_OVERLOAD_STATE, ATTR_MENAPHITE_STATE, ATTR_PRAYER_REGEN_STATE, ATTR_PRAYER_ENHANCE]) {
     const state = player.getAttribute(key);
     if (!state || typeof state !== "object") continue;
-    for (const field of ["endsAt", "nextBoostAt", "nextDamageAt", "nextRestoreAt"]) {
+    for (const field of ["endsAt", "nextBoostAt", "nextDamageAt", "nextRestoreAt", "nextAt"]) {
       if (Number.isFinite(state[field])) state[field] += offline;
     }
     player.setAttribute(key, state);
   }
+}
+
+/** The hitpoints orb's "Cure" (orbs:healthbutton). */
+const HEALTH_ORB_CURE_UID = (160 << 16) | 9;
+/** The potions it can drink: those that cure poison or venom. */
+const CURE_POTIONS = new Set([
+  "Antipoison", "Superantipoison", "Antidote+", "Antidote++", "Sanfew serum",
+  "Anti-venom", "Anti-venom+", "Antipoison mix", "Antidote+ mix",
+]);
+
+/**
+ * "Cure" on the hitpoints orb drinks the first such potion in the inventory, as drinking it
+ * does (rsprox captures: the drink's animation, sound and messages); with none, "You haven't
+ * got anything capable of curing your poison.".
+ */
+function cureFromHealthOrb({ player }) {
+  if (!player || (!player.isPoisoned?.() && !player.isVenomed?.())) return;
+  const items = player.getInventory().getItems();
+  for (let slot = 0; slot < items.length; slot++) {
+    const itemId = items[slot]?.getId?.() ?? -1;
+    if (itemId <= 0) continue;
+    const entry = POTION_BY_ITEM_ID.get(itemId);
+    if (entry && CURE_POTIONS.has(entry.potion.name)) {
+      handlePotionDrink(player, itemId, slot);
+      return;
+    }
+  }
+  player.sendMessage("You haven't got anything capable of curing your poison.");
 }
 
 module.exports = {
@@ -1162,16 +1349,20 @@ module.exports = {
   _test: {
     applyPrayerRestore, applySanfewRestore, applyAncientBrew, restorePrayerOverheal, applyDivine, processDivine,
     applyMenaphiteRemedy, processMenaphite, applyPrayerRegeneration, processPrayerRegeneration, clearPrayerRegeneration,
+    applyRankFrothyPotion, applyFoulChunkyPotion, applyRancidSlimyPotion, applyJarOfCongealedBlood,
     processBoostDecay, curePoisonAndVenom, pauseTimedEffects, resumeTimedEffects,
     findPotionEntry: (itemId) => POTION_BY_ITEM_ID.get(itemId) ?? null,
+    cureFromHealthOrb,
   },
   getPotionName(itemId) {
     return POTION_BY_ITEM_ID.get(itemId)?.potion?.name ?? null;
   },
   register(api) {
+    api.onCustomEvent("potions:apply-stamina", applyStaminaRequest);
     pluginApi = api;
     initDragonfireProtectionCoreAccess(api);
     PERSISTED_ATTRIBUTES.forEach((key) => api.persistAttribute(key));
+    api.persistAttribute(ATTR_PRAYER_REGEN_STATE, null);
     api.onPlayerLogout(pauseTimedEffects);
     api.onPlayerLogin(resumeTimedEffects);
     api.onPlayerDeath(clearPrayerRegeneration);
@@ -1180,6 +1371,7 @@ module.exports = {
       const { player, itemId, slot } = event;
       return handlePotionDrink(player, itemId, slot);
     });
+    api.onInterfaceActionButton(HEALTH_ORB_CURE_UID, cureFromHealthOrb);
 
     api.onPlayerProcess(({ player }) => {
       if (player?.isPlayerBot?.()) {
@@ -1190,6 +1382,7 @@ module.exports = {
       processOverload(player);
       processMenaphite(player);
       processPrayerRegeneration(player);
+      processPrayerEnhance(player);
       processBoostDecay(player);
       processDragonfireProtection(player);
     });

@@ -2,7 +2,8 @@ const { Animation } = require("../../src/main/typescript/elvarg/game/model/Anima
 const { Graphic } = require("../../src/main/typescript/elvarg/game/model/Graphic");
 const { Equipment } = require("../../src/main/typescript/elvarg/game/model/container/impl/Equipment");
 
-const EMOTE_CONTENTS_UID = (216 << 16) | 2;
+const EMOTES_GROUP_ID = 216;
+const EMOTE_CONTENTS_UID = (EMOTES_GROUP_ID << 16) | 2;
 const WELCOME_PLAY_BUTTON_UID = (378 << 16) | 72;
 const LAST_EMOTE_SLOT = 55;
 const EMOTE_ACTION_FLAGS = (1 << 1) | (1 << 2);
@@ -181,6 +182,11 @@ module.exports = {
             return false;
         });
 
+        // A tab mounted again later (Tutorial Island's unlocks) lost its flags too.
+        api.onCustomEvent("gameframe:tab-mounted", ({ player, group }) => {
+            if (group === EMOTES_GROUP_ID) queueMicrotask(() => enableEmoteActions(player));
+        });
+
         api.onInterfaceActionButton(EMOTE_CONTENTS_UID, ({ player, slot, action }) => {
             if (!Number.isInteger(slot) || slot < 0 || slot > LAST_EMOTE_SLOT) {
                 return false;
@@ -213,6 +219,9 @@ module.exports = {
             player.getMovementQueue().reset();
             player.setFollowing(null);
             player.performAnimation(new Animation(emote.sequence));
+            // Quest actions may depend on a real emote at the player's current
+            // tile. Emit only after the normal busy/combat/slot gates pass.
+            api.emitCustomEvent("player:emote", { player, slot, sequence: emote.sequence });
             if (emote.graphic !== undefined) {
                 player.performGraphic(new Graphic(emote.graphic));
             }

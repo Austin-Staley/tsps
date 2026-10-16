@@ -1353,6 +1353,8 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             if (wAny._absLogicalY !== logicalY) wAny._absLogicalY = logicalY;
             if (wAny._absWidth !== width) wAny._absWidth = width;
             if (wAny._absHeight !== height) wAny._absHeight = height;
+            wAny._absScaleX = rootScaleX;
+            wAny._absScaleY = rootScaleY;
         } catch {}
         if (profileWidgetRender) {
             boundsMs += performance.now() - boundsStartMs;
@@ -3670,6 +3672,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
         // - Type 11 (layer): renders ONLY dynamic children (w.children)
         if (!isContainer) {
             leafWidgets++;
+            opts.afterWidgetDrawn?.(widgetUid, w);
             return; // Non-containers have finished rendering their content above
         }
 
@@ -3789,7 +3792,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                 if (interfaceParentGroup !== undefined && widgetManager) {
                     const roots = widgetManager.getAllGroupRoots(interfaceParentGroup);
                     for (const root of roots) {
-                        if (root != null) {
+                        if (root != null && !root.__renderSeparately) {
                             const interfaceParentDispatchStartMs = profileWidgetRender
                                 ? performance.now()
                                 : 0;
@@ -3810,6 +3813,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                     }
                 }
 
+                if (interfaceParentGroup !== undefined) opts.afterInterfaceDrawn?.(interfaceParentGroup);
                 // Restore scissor after drawing children
                 // Restore clip after child rendering
                 sc.pop();
@@ -3822,6 +3826,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
         } else if (profileWidgetRender) {
             containerScaffoldMs += performance.now() - containerScaffoldStartMs;
         }
+        opts.afterWidgetDrawn?.(widgetUid, w);
     }
     // Maintain the root clip as the baseline scissor so container pop() calls
     // do not reset clipping back to the full viewport during partial redraws.
@@ -3832,6 +3837,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
         fullClip.y1 - fullClip.y0,
     );
     drawNode(root, 0, 0, true, false);
+    opts.afterInterfaceDrawn?.(root.groupId ?? (root.uid >>> 16));
 
     // Render deferred dragged widgets on top.
     // Only inventory-style widgets (dragRenderBehaviour >= 2) are deferred.
@@ -3938,6 +3944,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
         }
     } catch {}
     glr.flush();
+    opts.afterMenuDrawn?.();
 
     // NOTE: Input is processed once per frame by WidgetsOverlay after ALL roots are rendered,
     // so clicks/hover can hit targets from any root (bank, dialogs, etc.).

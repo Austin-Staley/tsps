@@ -1,4 +1,6 @@
 import { ClientState } from "../../../game/ClientState";
+import { sampleBridgeHeightForWorldTile, sampleCameraHeightForWorldTile } from "../../../game/scene/BridgeHeightSampler";
+import { interactionModes } from "../../../game/InteractionModes";
 import {
     VARP_AREA_SOUNDS_VOLUME,
     VARP_COMBAT_TARGET_PLAYER_INDEX,
@@ -46,7 +48,17 @@ export function handleInboundWorld(msg: any): boolean {
         if (Number.isInteger(slot) && slot >= 1 && slot <= 8) {
             if (option) ClientState.playerOptions.set(slot, { option, priority });
             else ClientState.playerOptions.delete(slot);
+            for (const listener of ClientState.playerOptionsChangedListeners) listener(slot - 1);
         }
+        return true;
+    }
+    if (msg.type === "set_interaction_mode") {
+        const { worldId, tileMode, entityMode } = msg.payload;
+        interactionModes.set(worldId, tileMode, entityMode);
+        return true;
+    }
+    if (msg.type === "reset_interaction_mode") {
+        interactionModes.reset(msg.payload.worldId);
         return true;
     }
     if (msg.type === "region_replacement") {
@@ -67,36 +79,76 @@ export function handleInboundWorld(msg: any): boolean {
             if (!client?.camera || !payload) return true;
             if (payload.mode === "reset") {
                 client.followPlayerCamera = true;
+                client.camera.clearScriptedCamera();
+                client.camera.setScenePitchOverride(undefined);
+                client.camera.setViewPitchOverride(undefined);
                 client.renderer?.clearCameraShake?.();
                 return true;
             }
-            if (payload.mode === "move") {
-                client.followPlayerCamera = false;
-                const height = -Math.abs(Number(payload.height) || 0) / 128;
-                if (payload.instant) {
-                    client.camera.snapToPosition(payload.x, height, payload.y);
-                } else {
-                    client.camera.setTargetPosition(payload.x, height, payload.y);
-                }
+            if (payload.mode === "unlock") {
+                client.camera.setScriptedPitchUnlocked(payload.unlock === true);
                 return true;
             }
-            if (payload.mode === "look") {
+            if (payload.mode === "translate") {
+                client.camera.translateScriptedCamera(payload.dx, payload.dy);
+                return true;
+            }
+            // Camera packets carry global tile coordinates and height above that tile's
+            // ground, in 1/128-tile units. Both movement and look target tile centres.
+            if (payload.mode === "move" || payload.mode === "look") {
+                const x = (Number(payload.x) || 0) + 0.5;
+                const z = (Number(payload.y) || 0) + 0.5;
+                const capturedRates = Number.isInteger(payload.rate) && Number.isInteger(payload.rate2);
                 client.followPlayerCamera = false;
-                const targetX = Number(payload.x) || 0;
-                const targetY = Number(payload.y) || 0;
-                const targetHeight = -Math.abs(Number(payload.height) || 0) / 128;
-                const dx = targetX - client.camera.getPosX();
-                const dz = targetY - client.camera.getPosZ();
-                const dy = targetHeight - client.camera.getPosY();
+                const capturedCycles = Number.isInteger(payload.cycles) && payload.cycles > 0;
+                if (capturedRates || capturedCycles) {
+                    const packetHeight = client.camera.resolveScriptedHeight(payload.mode, payload.height, payload.heightRelative === true);
+                    const heightAt = (targetX: number, targetZ: number): number | undefined => {
+                        const controlledIndex = client.playerEcs?.getIndexForServerId?.(client.controlledPlayerServerId) ?? 0;
+                        const plane = client.playerEcs?.getLevel?.(controlledIndex) ?? 0;
+                        const ground = client.renderer?.mapManager
+                            ? sampleCameraHeightForWorldTile(client.renderer.mapManager, targetX, targetZ, plane)
+                            : undefined;
+                        return ground === undefined ? undefined : ground - packetHeight / 128;
+                    };
+                    if (capturedCycles) {
+                        if (payload.mode === "move") client.camera.setScriptedPositionCycles(x, z, payload.cycles, payload.easing, payload.ignoreTerrain === true, heightAt, packetHeight);
+                        else client.camera.setScriptedLookCycles(x, z, payload.cycles, payload.easing, payload.trackTarget === true, heightAt);
+                    }
+                    else if (payload.mode === "move") client.camera.setScriptedPosition(x, 0, z, payload.rate, payload.rate2, heightAt);
+                    else client.camera.setScriptedLook(x, 0, z, payload.rate, payload.rate2, heightAt);
+                    return true;
+                }
+                const controlledIndex = client.playerEcs?.getIndexForServerId?.(client.controlledPlayerServerId) ?? 0;
+                const plane = client.playerEcs?.getLevel?.(controlledIndex) ?? 0;
+                const ground = client.renderer?.mapManager
+                    ? sampleBridgeHeightForWorldTile(client.renderer.mapManager, x, z, plane)
+                    : undefined;
+                const height = (ground?.valid ? ground.height : 0) - (Number(payload.height) || 0) / 128;
+                client.camera.clearScriptedCamera();
+                // A first-person view override must not hide a scripted scene angle.
+                client.camera.setViewPitchOverride(undefined);
+                if (payload.mode === "move") {
+                    if (payload.instant) {
+                        client.camera.snapToPosition(x, height, z);
+                    } else {
+                        client.camera.setTargetPosition(x, height, z);
+                    }
+                    return true;
+                }
+                const dx = x - client.camera.getPosX();
+                const dz = z - client.camera.getPosZ();
+                const dy = height - client.camera.getPosY();
                 const horizontal = Math.max(0.0001, Math.hypot(dx, dz));
-                const yaw = (Math.round(Math.atan2(dx, dz) * (2048 / (Math.PI * 2))) + 1024) & 2047;
-                const pitch = Math.max(0, Math.min(512, Math.round(Math.atan2(-dy, horizontal) * (2048 / (Math.PI * 2)))));
+                const yaw = Math.round(Math.atan2(dx, dz) * (2048 / (Math.PI * 2))) & 2047;
+                const pitch = Math.round(Math.atan2(dy, horizontal) * (2048 / (Math.PI * 2)));
+                // Packet angles are scene angles, whereas snapToPitch/setTargetPitch
+                // accept the player's control range and remap it to 128..383.
+                client.camera.setViewPitchOverride(pitch);
                 if (payload.instant) {
                     client.camera.snapToYaw(yaw);
-                    client.camera.snapToPitch(pitch);
                 } else {
                     client.camera.setTargetYaw(yaw);
-                    client.camera.setTargetPitch(pitch);
                 }
                 return true;
             }
@@ -200,13 +252,13 @@ export function handleInboundWorld(msg: any): boolean {
                 // Apply varp updates
                 if (payload.varps) {
                     for (const [id, value] of Object.entries(payload.varps)) {
-                        vm.setVarp?.(Number(id), Number(value));
+                        vm.setServerVarp?.(Number(id), Number(value));
                     }
                 }
                 // Apply varbit updates
                 if (payload.varbits) {
                     for (const [id, value] of Object.entries(payload.varbits)) {
-                        vm.setVarbit?.(Number(id), Number(value));
+                        vm.setServerVarbit?.(Number(id), Number(value));
                     }
                 }
             }
@@ -251,7 +303,7 @@ export function handleInboundWorld(msg: any): boolean {
             const payload = msg.payload as { varpId: number; value: bigint };
             mv._serverVarpSync = true;
             try {
-                mv.varManager.setVarpLong(payload.varpId | 0, payload.value);
+                mv.varManager.setServerVarpLong(payload.varpId | 0, payload.value);
             } finally {
                 mv._serverVarpSync = false;
             }
@@ -270,7 +322,7 @@ export function handleInboundWorld(msg: any): boolean {
                 // Use _serverVarpSync flag to prevent sending back to server
                 mv._serverVarpSync = true;
                 try {
-                    mv.varManager.setVarp?.(varpId, value);
+                    mv.varManager.setServerVarp?.(varpId, value);
                 } finally {
                     mv._serverVarpSync = false;
                 }
@@ -320,8 +372,8 @@ export function handleInboundWorld(msg: any): boolean {
                     ClientState.npcAttackOption = Math.max(0, Math.min(3, value | 0));
                     console.log(`[varp] NPC attack option set to ${ClientState.npcAttackOption}`);
                 } else if (varpId === VARP_FOLLOWER_INDEX) {
-                    const followerIndex = value === 65535 ? -1 : value & 0xffff;
-                    ClientState.followerIndex = followerIndex;
+                    const followerIndex = value & 0xffff;
+                    ClientState.followerIndex = followerIndex === 65535 ? -1 : followerIndex;
                     console.log(`[varp] Follower index set to ${ClientState.followerIndex}`);
                 } else if (varpId === VARP_COMBAT_TARGET_PLAYER_INDEX) {
                     ClientState.combatTargetPlayerIndex = value === -1 ? -1 : value & 0x7ff;
@@ -345,7 +397,7 @@ export function handleInboundWorld(msg: any): boolean {
                 // Use _serverVarpSync flag to prevent sending back to server
                 mv._serverVarpSync = true;
                 try {
-                    const result = mv.varManager.setVarbit?.(
+                    const result = mv.varManager.setServerVarbit?.(
                         payload.varbitId | 0,
                         payload.value | 0,
                     );

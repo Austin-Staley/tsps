@@ -4,6 +4,7 @@
  * Replaces JSON.parse for server-to-client messages.
  * Returns the same message format as the JSON protocol for compatibility.
  */
+import { parsePluginMessage } from "../../common/network/PluginMessage";
 import {
     INSTANCE_CHUNK_COUNT,
     PLANE_COUNT,
@@ -990,6 +991,8 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                 const argType = reader.readByte();
                 if (argType === 0) {
                     args.push(reader.readString());
+                } else if (argType === 2) {
+                    args.push(reader.readLong());
                 } else {
                     args.push(reader.readInt());
                 }
@@ -1463,6 +1466,17 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
             };
         }
 
+        case ServerPacketId.SET_INTERACTION_MODE: {
+            const worldId = reader.readSignedShort();
+            const tileMode = reader.readByte() & 0xff;
+            const entityMode = reader.readByte() & 0xff;
+            return { type: "set_interaction_mode", payload: { worldId, tileMode, entityMode } };
+        }
+
+        case ServerPacketId.RESET_INTERACTION_MODE: {
+            return { type: "reset_interaction_mode", payload: { worldId: reader.readSignedShort() } };
+        }
+
         case ServerPacketId.LOC_ANIM: {
             const locId = reader.readShort();
             const tile = { x: reader.readShort(), y: reader.readShort() };
@@ -1510,6 +1524,30 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
                         sineFrequency: reader.readShort(),
                     },
                 };
+            }
+            if (mode === 4 || mode === 5) {
+                return {
+                    type: "camera",
+                    payload: {
+                        mode: mode === 4 ? "move" : "look",
+                        x: reader.readShort(), y: reader.readShort(), height: reader.readSignedShort(),
+                        rate: reader.readByte(), rate2: reader.readByte(), heightRelative: reader.readBoolean(),
+                    },
+                };
+            }
+            if (mode === 8 || mode === 9) {
+                const x = reader.readShort(), y = reader.readShort(), height = reader.readSignedShort();
+                const cycles = reader.readShort(), easingId = reader.readByte(), flags = reader.readByte();
+                const easing = ["linear", "ease_in_out_sine", "ease_out_cubic"][easingId];
+                if (!easing) return null;
+                return { type: "camera", payload: { mode: mode === 8 ? "move" : "look", x, y, height, cycles, easing,
+                    heightRelative: (flags & 1) !== 0, ignoreTerrain: (flags & 2) !== 0, trackTarget: (flags & 4) !== 0 } };
+            }
+            if (mode === 6) {
+                return { type: "camera", payload: { mode: "unlock", unlock: reader.readBoolean() } };
+            }
+            if (mode === 7) {
+                return { type: "camera", payload: { mode: "translate", dx: reader.readInt(), dy: reader.readInt() } };
             }
             return null;
         }
@@ -1986,6 +2024,9 @@ export function decodeServerPacket(data: Uint8Array | ArrayBuffer): DecodedServe
         // ========================================
         // DEBUG
         // ========================================
+
+        case ServerPacketId.PLUGIN_MESSAGE:
+            return { type: "plugin_message", payload: parsePluginMessage(reader.readBytes(reader.remaining)) };
 
         case ServerPacketId.DEBUG_PACKET: {
             const jsonStr = reader.readString();

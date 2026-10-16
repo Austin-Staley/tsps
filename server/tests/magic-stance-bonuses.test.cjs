@@ -186,6 +186,16 @@ test('demonbanes: +20% accuracy, +40% and +25% damage with the Mark, doubled wit
     assert.equal(CombatSpells.UNDEAD_GRASP.demonbaneAccuracyMultiplier(plain), 1, 'not a demonbane spell');
 });
 
+test('demonbanes against a more vulnerable demon: the bonus scales with it (Wiki: void flares 200%)', () => {
+    const { CombatSpells } = require('../dist/game/content/combat/magic/CombatSpells');
+    const spell = CombatSpells.DARK_DEMONBANE;
+    const flare = { getAttribute: (key) => (key === 'combat:demonbane-vulnerability' ? 2 : undefined) };
+    const purging = arceuusPlayer({ weapon: 29594 });
+    purging.setAttribute('arceuus:mark-until', Date.now() + 60_000);
+    purging.getCombat = () => ({ getTarget: () => flare });
+    assert.deepEqual([spell.demonbaneAccuracyMultiplier(purging), spell.demonbaneDamageMultiplier(purging)], [2.6, 2]);
+});
+
 test('Mark of Darkness: 3 ticks per base Magic level (x5 with a purging staff), a warning 10 ticks before, then it fades (Wiki)', () => {
     const { ArceuusSpells } = require('../dist/game/content/combat/magic/ArceuusSpells');
     const { TaskManager } = require('../dist/game/task/TaskManager');
@@ -274,4 +284,36 @@ test("a manual cast keeps its cast animation: the combat reset after it doesn't 
     combat.target = {};
     combat.reset();
     assert.deepEqual(animations, [65535], 'an ordinary reset still stops the animation');
+});
+
+
+test('magic impact effects use the launched spell after another spell has been cast', () => {
+ const {MagicCombatMethod}=require('../dist/game/content/combat/method/impl/MagicCombatMethod');
+ const {Sounds}=require('../dist/game/Sounds');const old=Sounds.sendSound,calls=[];Sounds.sendSound=()=>{};
+ const launched={spellId:()=>-1,endGraphic:()=>null,impactSound:()=>null,finishCast:(a,t,accurate,damage)=>calls.push([accurate,damage])};
+ const attacker={getHitpoints:()=>99,getCombat:()=>({getPreviousCast:()=>({finishCast:()=>assert.fail('a later spell cannot replace the launched bind')})})};
+ const target={getHitpoints:()=>99};const hit={getAttacker:()=>attacker,getTarget:()=>target,isAccurate:()=>true,getTotalDamage:()=>7,getSpell:()=>launched};
+ try{new MagicCombatMethod().handleAfterHitEffects(hit);assert.deepEqual(calls,[[true,7]]);hit.getSpell=()=>null;new MagicCombatMethod().handleAfterHitEffects(hit);assert.equal(calls.length,1);}finally{Sounds.sendSound=old;}
+});
+
+test('accurate combat spells expose a typed generic hit-effects event to plugins', () => {
+    const { CombatSpells } = require('../dist/game/content/combat/magic/CombatSpells');
+    const { PluginManager } = require('../dist/plugins/PluginManager');
+    const emit = PluginManager.emitCustomEvent;
+    const events = [];
+    PluginManager.emitCustomEvent = (name, event) => events.push([name, event]);
+    try {
+        const attacker = {};
+        const target = {};
+        const hit = { isAccurate: () => true, getAttacker: () => attacker, getTarget: () => target, getTotalDamage: () => 9 };
+        CombatSpells.FIRE_WAVE.onHitCalc(hit);
+        assert.equal(events.length, 1);
+        assert.equal(events[0][0], 'magic:hit-effects');
+        assert.deepEqual(events[0][1], { attacker, target, spell: CombatSpells.FIRE_WAVE, hit, allowed: true });
+
+        CombatSpells.FIRE_WAVE.onHitCalc({ ...hit, isAccurate: () => false });
+        assert.equal(events.length, 1, 'misses do not trigger spell-specific effects');
+    } finally {
+        PluginManager.emitCustomEvent = emit;
+    }
 });

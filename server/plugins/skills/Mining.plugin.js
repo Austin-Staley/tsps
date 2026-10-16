@@ -7,6 +7,7 @@ const { GameObject } = require("../../src/main/typescript/elvarg/game/entity/imp
 const { ItemIds, ObjectIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const InfernalPickaxe = require("./mining/InfernalPickaxe.Mining");
 const CrystalPickaxe = require("./mining/CrystalPickaxe.Mining");
+const ClueGeodes = require("./mining/ClueGeodes.Mining");
 
 const DEPLETED_ROCK_ID = 2704;
 const MINING_ANIMATION_INTERVAL_TICKS = 4;
@@ -31,6 +32,7 @@ const ROCKS = [
   { objectName: "Clay rocks", objectIds: [9711, 9712, 9713, 15503, 15504, 15505], level: 1, xp: 5, oreId: ItemIds.CLAY, petBase: 741600, cycles: 11, respawnTicks: 2 },
   { objectName: "Copper rocks", objectIds: [7453,7484], level: 1, xp: 18, oreId: ItemIds.COPPER_ORE, petBase: 741600, cycles: 12, respawnTicks: 4 },
   { objectName: "Tin rocks", objectIds: [7485, 7486], level: 1, xp: 8, oreId: ItemIds.TIN_ORE, petBase: 741600, cycles: 12, respawnTicks: 4 },
+  { objectName: "Blurite rocks", objectIds: [ObjectIds.BLURITE_ROCKS, ObjectIds.BLURITE_ROCKS_2], level: 10, xp: 17.5, oreId: ItemIds.BLURITE_ORE, successLow: 90, successHigh: 350, respawnTicks: 42 },
   { objectName: "Iron rocks", objectIds: [7455, 7488], level: 15, xp: 35, oreId: ItemIds.IRON_ORE, petBase: 741600, cycles: 13, respawnTicks: 5 },
   { objectName: "Silver rocks", objectIds: [7457], level: 20, xp: 40, oreId: ItemIds.SILVER_ORE, petBase: 741600, cycles: 14, respawnTicks: 7 },
   { objectName: "Coal rocks", objectIds: [7456], level: 30, xp: 50, oreId: ItemIds.COAL, petBase: 290640, cycles: 15, respawnTicks: 7 },
@@ -77,6 +79,23 @@ function getMiningLevel(player) {
   return player.getSkillManager().getCurrentLevel(Skill.MINING);
 }
 
+/**
+ * The level the success rolls use: the visible level plus invisible boosts other plugins add
+ * ("mining:level-boost", the celestial ring's +4). Requirements still read the visible level.
+ */
+function getRollMiningLevel(player) {
+  const request = { player, boost: 0 };
+  pluginApi.emitCustomEvent("mining:level-boost", request);
+  return getMiningLevel(player) + Math.max(0, Number(request.boost) || 0);
+}
+
+/** "mining:best-pickaxe": the best pickaxe the player can use, for other mining content (stars). */
+function answerBestPickaxe(request) {
+  if (request && request.player && request.pickaxe == null) {
+    request.pickaxe = findBestPickaxe(request.player);
+  }
+}
+
 function findBestPickaxe(player) {
   const miningLevel = getMiningLevel(player);
   const weapon = player.getEquipment().getItems()[Equipment.WEAPON_SLOT];
@@ -94,8 +113,9 @@ function findBestPickaxe(player) {
 }
 
 function cyclesRequired(player, rock, pickaxe) {
+  if (rock.successLow !== undefined) return 1;
   let cycles = rock.cycles + Math.floor(Math.random() * 5);
-  cycles -= getMiningLevel(player) * 0.1;
+  cycles -= getRollMiningLevel(player) * 0.1;
   cycles -= cycles * pickaxe.speed;
   const tickBudget = Math.max(3, Math.floor(cycles));
   return Math.max(1, Math.ceil(tickBudget / pickaxe.attemptIntervalTicks));
@@ -226,19 +246,28 @@ class MiningTask extends Task {
       }
       state.nextOreAttemptTick = this.cycle + state.attemptIntervalTicks;
 
-      state.cyclesUntilOre--;
-      if (state.cyclesUntilOre > 0) {
-        continue;
+      if (state.rock.successLow !== undefined) {
+        // Wiki skilling success chart interpolates level 1/99 values on a 256-sided roll.
+        const level = Math.max(1, Math.min(99, getRollMiningLevel(player)));
+        const chance = Math.floor(state.rock.successLow + (state.rock.successHigh - state.rock.successLow) * (level - 1) / 98);
+        if (Math.floor(Math.random() * 256) >= chance) continue;
+      } else {
+        state.cyclesUntilOre--;
+        if (state.cyclesUntilOre > 0) continue;
       }
 
       if (InfernalPickaxe.tryCombustOre(player, state.pickaxe.id, state.rock.oreId)) {
         player.sendMessage("The infernal pickaxe smelts the ore as you mine it.");
       } else {
-        player.getInventory().adds(state.rock.oreId, 1);
+        // "mining:ore": a container may take the ore instead (an open coal bag).
+        const ore = { player, oreId: state.rock.oreId, banked: false };
+        pluginApi.emitCustomEvent("mining:ore", ore);
+        if (!ore.banked) player.getInventory().adds(state.rock.oreId, 1);
         player.sendMessage(state.rock.oreMessage ?? "You get some ores.");
       }
       CrystalPickaxe.tryUseCharge(player);
       player.getSkillManager().addExperiences(Skill.MINING, state.rock.xp);
+      mineExtraOre(player, state.rock);
       pluginApi.emitCustomEvent("mining:success", { player, skill: Skill.MINING, petBase: state.rock.petBase });
       if (state.rock.infinite) {
         if (player.getInventory().isFull()) {
@@ -258,6 +287,23 @@ class MiningTask extends Task {
 let TaskManager;
 let ObjectManager;
 let pluginApi;
+
+/**
+ * "mining:extra-ore": a mining enhancer (the charged celestial ring) may grant a second ore with
+ * its experience. Without room for it, neither is given (Wiki, Mod Ash).
+ */
+function mineExtraOre(player, rock) {
+  if (rock.infinite) {
+    return;
+  }
+  const request = { player, oreId: rock.oreId, rockLevel: rock.level, extra: false };
+  pluginApi.emitCustomEvent("mining:extra-ore", request);
+  if (!request.extra || player.getInventory().isFull()) {
+    return;
+  }
+  player.getInventory().adds(rock.oreId, 1);
+  player.getSkillManager().addExperiences(Skill.MINING, rock.xp);
+}
 
 function handleMine(event) {
   const rock = ROCK_BY_NAME.get(event.definition.getName());
@@ -290,9 +336,10 @@ module.exports = {
     api.onPlayerDisconnect(({ player }) => {
       stopMining(activeSessions, player, false);
     });
-    api.onPlayerLevelUp(({ player }) => {
+    api.onCustomEvent("level-up:popup-opened", ({ player }) => {
       stopMining(activeSessions, player, false);
     });
+    api.onCustomEvent("mining:best-pickaxe", answerBestPickaxe);
 
     for (const rock of ALL_ROCKS) {
       api.onObjectInteraction(rock.objectName, { Mine: handleMine });
@@ -300,6 +347,7 @@ module.exports = {
 
     InfernalPickaxe.attach(api);
     CrystalPickaxe.attach(api);
+    ClueGeodes.attach(api);
 
     api.log("registered", {
       rocks: ROCKS.length,

@@ -74,13 +74,6 @@ const SEARCHABLE_NEST_IDS = new Set([
   BIRD_NESTS.RING_NEST,
 ]);
 
-const WOODCUTTING_CAPE_IDS = [
-  ItemIds.WOODCUTTING_CAPE,
-  ItemIds.WOODCUT_CAPE_T_,
-  ItemIds.MAX_CAPE,
-  ItemIds.MAX_CAPE_2,
-  ItemIds.MAX_CAPE_3,
-];
 const WOODCUTTING_CAPE_NEST_MULTIPLIER = 1.1;
 
 const LUMBERJACK_OUTFIT = [
@@ -750,11 +743,18 @@ function rollBirdNestId(player) {
   ]).id;
 }
 
+/** Wiki: a worn Woodcutting cape (or max cape) makes nests 10% likelier. */
+function wearsWoodcuttingCape(player) {
+  const request = { player, skill: "WOODCUTTING", result: false };
+  pluginApi?.emitCustomEvent("skillcape:has-perk", request);
+  return request.result === true;
+}
+
 function maybeDropBirdNest(player) {
   if (!player) {
     return;
   }
-  const chance = isWearing(player, Equipment.CAPE_SLOT, WOODCUTTING_CAPE_IDS)
+  const chance = wearsWoodcuttingCape(player)
     ? WOODCUTTING_CAPE_NEST_MULTIPLIER / BIRD_NEST_DROP_CHANCE
     : 1 / BIRD_NEST_DROP_CHANCE;
   if (Math.random() >= chance) {
@@ -1120,11 +1120,16 @@ function requestedChop(event) {
   if (tree) event.handled = startWoodcutting(event.player, event.object, tree, activeSessionsRef);
 }
 
+function requestedAxe(event) {
+  event.axe = findBestUsableAxe(event.player);
+}
+
 module.exports = {
   name: "Woodcutting",
   register(api) {
     pluginApi = api;
     api.onCustomEvent("woodcutting:chop", requestedChop);
+    api.onCustomEvent("woodcutting:axe", requestedAxe);
     TaskManager = api.getTaskManager();
     ObjectManager = api.getObjectManager();
     ItemOnGroundManager = api.getItemOnGroundManager();
@@ -1143,7 +1148,7 @@ module.exports = {
     api.onPlayerDisconnect(({ player }) => {
       stopWoodcutting(activeSessions, player, false);
     });
-    api.onPlayerLevelUp(({ player }) => {
+    api.onCustomEvent("level-up:popup-opened", ({ player }) => {
       stopWoodcutting(activeSessions, player, false);
     });
 

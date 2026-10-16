@@ -1,5 +1,6 @@
 import { CacheDefinitions } from "../game/cache/CacheDefinitions";
 import { ItemDefinition } from "../game/definition/ItemDefinition";
+import { ObjectDefinition } from "../game/definition/ObjectDefinition";
 import { PlayerSave } from "../game/entity/impl/player/persistence/PlayerSave";
 import { ContentApi } from "../net/http/ContentApi";
 import { CustomInterfaceRegistry } from "../game/interfaces/CustomInterfaceRegistry";
@@ -40,6 +41,7 @@ import {
   PluginItemOnPlayerEvent,
   PluginItemOnObjectEvent,
   PluginSpellOnObjectEvent,
+  PluginSpellOnItemEvent,
   PluginNpcDeathEvent,
   PluginNpcBeforeDeathEvent,
   PluginNpcHitModifyEvent,
@@ -52,6 +54,7 @@ import {
   PluginZoneEvent,
   PluginNpcSpawnDefinition,
   PluginObjectRouteEvent,
+  PluginWalkRouteEvent,
   PluginNpcRouteEvent,
   PluginObjectInteractionEvent,
   PluginPlayerDefeatedEvent,
@@ -82,6 +85,7 @@ import {
   PluginShouldDropItemsOnDeathEvent,
   PluginShouldKeepItemOnDeathEvent,
   PluginPlayerDeathItemDropEvent,
+  PluginPlayerDeathDropsEvent,
   PluginPlayerDeathEvent,
   PluginPlayerBeforeDeathEvent,
   PluginPlayerOptionEvent,
@@ -188,6 +192,7 @@ export class PluginManager {
   private static activeRegionsHooks: PluginHook<PluginActiveRegionsEvent>[] = [];
   private static pathBlockedHooks: PluginHook<PluginPathBlockedEvent>[] = [];
   private static objectRouteHooks: PluginHook<PluginObjectRouteEvent>[] = [];
+  private static walkRouteHooks: PluginHook<PluginWalkRouteEvent>[] = [];
   private static npcRouteHooks: PluginHook<PluginNpcRouteEvent>[] = [];
   private static objectInteractionHooks: ObjectInteractionHook[] = [];
   private static objectHooksById = new Map<string, ObjectInteractionHook[]>();
@@ -236,6 +241,7 @@ export class PluginManager {
   private static shouldDropItemsOnDeathHooks: PluginHook<PluginShouldDropItemsOnDeathEvent>[] = [];
   private static shouldKeepItemOnDeathHooks: PluginHook<PluginShouldKeepItemOnDeathEvent>[] = [];
   private static playerDeathItemDropHooks: PluginHook<PluginPlayerDeathItemDropEvent>[] = [];
+  private static playerDeathDropsHooks: PluginHook<PluginPlayerDeathDropsEvent>[] = [];
   private static canEquipHooks: PluginHook<PluginCanEquipEvent>[] = [];
   private static canUseItemHooks: PluginHook<PluginCanUseItemEvent>[] = [];
   private static canGainExperienceHooks: PluginHook<PluginCanGainExperienceEvent>[] = [];
@@ -261,6 +267,7 @@ export class PluginManager {
   private static itemOnGroundItemHooks: PluginHook<PluginItemOnGroundItemEvent>[] =
     [];
   private static spellOnObjectHooks: PluginHook<PluginSpellOnObjectEvent>[] = [];
+  private static spellOnItemHooks: PluginHook<PluginSpellOnItemEvent>[] = [];
   private static groundItemInteractionHooks: PluginHook<PluginGroundItemInteractionEvent>[] =
     [];
   private static groundItemPickupHooks: PluginHook<PluginGroundItemInteractionEvent>[] = [];
@@ -565,10 +572,10 @@ export class PluginManager {
     });
 
     // The exported name is only known after evaluation; filter by filename first.
-    const disabledPluginNames = PluginManager.loadDisabledPluginNames();
+    const { switches, defaultEnabled } = PluginManager.loadPluginSwitches();
+    const switchFor = (name: string) => switches.get(normalizePluginName(name));
     const enabledPluginFiles = filteredPluginFiles.filter((pluginPath) => {
-      const fileName = pluginNameFromFile(pluginPath);
-      if (!disabledPluginNames.has(normalizePluginName(fileName))) {
+      if (switchFor(pluginNameFromFile(pluginPath)) !== false) {
         return true;
       }
       disabledCount++;
@@ -577,12 +584,26 @@ export class PluginManager {
     const candidates = PluginManager.collectPluginLoadCandidates(
       enabledPluginFiles
     );
+    const knownNames = new Set([
+      ...pluginFiles.map((pluginPath) => normalizePluginName(pluginNameFromFile(pluginPath))),
+      ...candidates.map((candidate) => normalizePluginName(candidate.pluginName)),
+    ]);
+    for (const name of switches.keys()) {
+      if (!knownNames.has(name)) {
+        console.warn(`[plugins] world.json names a plugin that does not exist: ${name}`);
+      }
+    }
     const membersWorld = isMembersWorld();
     let membersOnlyCount = 0;
     PluginManager.loadPluginCandidatesWithDependencies(
       candidates.filter((candidate) => {
-        // Keep exported-name configuration working when it differs from the filename.
-        if (disabledPluginNames.has(normalizePluginName(candidate.pluginName))) {
+        // The exported name wins over the filename when they differ.
+        const enabled =
+          switchFor(candidate.pluginName) ??
+          switchFor(pluginNameFromFile(candidate.pluginPath)) ??
+          defaultEnabled ??
+          candidate.plugin.enabled !== false;
+        if (!enabled) {
           disabledCount++;
           return false;
         }
@@ -754,6 +775,26 @@ export class PluginManager {
   }
 
   /** Spawns a plugin NPC (optionally owner-only) and returns it, or null. */
+  /** Equipment-tab click 1 is Remove; clicks 2+ are the worn options (item params 451+). */
+  private static readonly WORN_OPTION_PARAM = 451;
+  private static readonly FIRST_WORN_OPTION_CLICK = 2;
+
+  /**
+   * The option an item click names: a worn option when it came from the equipment tab
+   * (a Slayer helmet's worn Check is its inventory Disassemble's slot), else an inventory one.
+   */
+  private static itemActionOption(definition: any, event: PluginItemActionEvent): string | null {
+    const { Equipment } = require("../game/model/container/impl/Equipment");
+    if (event.interfaceId === Equipment.INVENTORY_INTERFACE_ID) {
+      if (event.option) return event.option;
+      const index = event.clickType - PluginManager.FIRST_WORN_OPTION_CLICK;
+      if (index < 0) return null;
+      const worn = definition.params?.get?.(PluginManager.WORN_OPTION_PARAM + index);
+      return typeof worn === "string" ? worn : null;
+    }
+    return definition.inventoryActions?.[event.clickType - 1] ?? null;
+  }
+
   public static spawnNpc(definition: PluginNpcSpawnDefinition): any {
     const id = Math.trunc(Number(definition?.id));
     if (!Number.isFinite(id) || id < 0) {
@@ -885,6 +926,8 @@ export class PluginManager {
       event.definition = event.object.getDefinition();
     }
 
+    event.option ??= event.definition?.getInteractions?.()?.[event.clickType - 1] ?? "";
+
     const hooks = [
       ...PluginManager.objectInteractionHooks,
       ...(PluginManager.objectHooksById.get(`${event.objectId}:${event.clickType}`) ?? []),
@@ -916,6 +959,15 @@ export class PluginManager {
         return;
       }
     }
+  }
+
+  public static emitWalkRoute(event: PluginWalkRouteEvent): boolean {
+    if (!event?.player || !event.destination) return false;
+    for (const hook of PluginManager.walkRouteHooks) {
+      PluginManager.executeHook(hook, event, "walk_route", "walk_route");
+      if (event.handled) return true;
+    }
+    return false;
   }
 
   public static emitNpcRoute(event: PluginNpcRouteEvent): void {
@@ -1264,6 +1316,16 @@ export class PluginManager {
     return event.handled === true;
   }
 
+  /** Every hook sees the death's lost items in turn; each takes what it holds from the lists. */
+  public static emitPlayerDeathDrops(event: PluginPlayerDeathDropsEvent): void {
+    if (!event || !event.player) {
+      return;
+    }
+    for (const hook of PluginManager.playerDeathDropsHooks) {
+      PluginManager.executeHook(hook, event, "player_death_drops", "player_death_drops");
+    }
+  }
+
   public static emitCanEquip(player: any, slot: number, item: any): boolean | null {
     const event: PluginCanEquipEvent = { player, slot, item, allow: null };
     for (const hook of PluginManager.canEquipHooks) {
@@ -1550,6 +1612,18 @@ export class PluginManager {
     return event.handled === true;
   }
 
+  public static emitSpellOnItem(event: PluginSpellOnItemEvent): boolean {
+    if (event.player.getInventory().getItems()[event.slot]?.getId() !== event.itemId ||
+        PluginManager.emitCanUseItem(event.player, event.itemId, "magic") === false) {
+      return true;
+    }
+    for (const hook of PluginManager.spellOnItemHooks) {
+      if (event.handled) break;
+      PluginManager.executeHook(hook, event, "spell_on_item", "spell_on_item");
+    }
+    return event.handled === true;
+  }
+
   public static emitGroundItemInteraction(
     event: PluginGroundItemInteractionEvent
   ): boolean {
@@ -1765,24 +1839,48 @@ export class PluginManager {
     return pluginPaths;
   }
 
-  private static loadDisabledPluginNames(): Set<string> {
-    const configPath = path.join(process.cwd(), "data", "definitions", "world.json");
-    const config = readWorldConfig() as { disabledPlugins?: unknown };
-    if (!config || typeof config !== "object" || Array.isArray(config)) {
-      throw new Error(`[plugins] ${configPath} must contain an object`);
+  /**
+   * world.json `plugins` ({ "Name": true | false }) as normalized name -> on/off; a plugin
+   * it leaves out keeps its own `enabled` default. The older `disabledPlugins` list is read
+   * as it always was: what it names is off and everything else on, defaults included.
+   */
+  private static loadPluginSwitches(): { switches: Map<string, boolean>; defaultEnabled?: boolean } {
+    const config = readWorldConfig() as { plugins?: unknown; disabledPlugins?: unknown };
+    if (config.disabledPlugins !== undefined) {
+      if (
+        !Array.isArray(config.disabledPlugins) ||
+        config.disabledPlugins.some(
+          (pluginName) => typeof pluginName !== "string" || pluginName.trim().length === 0
+        )
+      ) {
+        throw new Error("[plugins] world.json disabledPlugins must be a string[]");
+      }
+      console.warn(
+        '[plugins] world.json disabledPlugins is deprecated and overrides "plugins" and plugin defaults; ' +
+          'replace it with "plugins": { "Name": false }'
+      );
+      return {
+        switches: new Map(config.disabledPlugins.map((name) => [normalizePluginName(name), false])),
+        defaultEnabled: true,
+      };
     }
-    if (config.disabledPlugins === undefined) {
-      return new Set();
-    }
+    const plugins = config.plugins ?? {};
     if (
-      !Array.isArray(config.disabledPlugins) ||
-      config.disabledPlugins.some(
-        (pluginName) => typeof pluginName !== "string" || pluginName.trim().length === 0
-      )
+      !plugins ||
+      typeof plugins !== "object" ||
+      Array.isArray(plugins) ||
+      Object.values(plugins).some((enabled) => typeof enabled !== "boolean")
     ) {
-      throw new Error(`[plugins] ${configPath}.disabledPlugins must be a string[]`);
+      throw new Error('[plugins] world.json "plugins" must map plugin names to true or false');
     }
-    return new Set(config.disabledPlugins.map(normalizePluginName));
+    return {
+      switches: new Map(
+        Object.entries(plugins as Record<string, boolean>).map(([name, enabled]) => [
+          normalizePluginName(name),
+          enabled,
+        ])
+      ),
+    };
   }
 
   /** Reads the world.json `pluginConfig` map once (empty when unset or malformed). */
@@ -1989,6 +2087,7 @@ export class PluginManager {
       CombatMethod: require(`${combat}/method/CombatMethod`).CombatMethod,
       CombatSpecial: require(`${combat}/CombatSpecial`).CombatSpecial,
       CombatFactory: require(`${combat}/CombatFactory`).CombatFactory,
+      CombatEquipment: require(`${combat}/CombatEquipment`).CombatEquipment,
       CombatRange: require(`${combat}/CombatRange`).CombatRange,
       CanAttackResponse: require(`${combat}/CombatFactory`).CanAttackResponse,
       CombatType: require(`${combat}/CombatType`).CombatType,
@@ -2023,6 +2122,7 @@ export class PluginManager {
       ForceMovement: require(`${model}/ForceMovement`).ForceMovement,
       ForceMovementTask: require("../game/task/impl/ForceMovementTask").ForceMovementTask,
       TaskManager: require("../game/task/TaskManager").TaskManager,
+      NPCRespawnTask: require("../game/task/impl/NPCRespawnTask").NPCRespawnTask,
       ItemIdentifiers: require("../util/ItemIdentifiers").ItemIdentifiers,
       ItemIds: require("../util/IdEnums").ItemIds,
       NpcIdentifiers: require("../util/NpcIdentifiers").NpcIdentifiers,
@@ -2034,6 +2134,7 @@ export class PluginManager {
       Sounds: require("../game/Sounds").Sounds,
       Location: require(`${model}/Location`).Location,
       Mobile: require("../game/entity/impl/Mobile").Mobile,
+      encodePluginMessage: require("../net/protocol/ClientProtocol").encodePluginMessage,
       encodeFinePosition: require("../net/protocol/ClientProtocol").encodeFinePosition,
       Boundary: require(`${model}/Boundary`).Boundary,
       PolygonalBoundary: require(`${model}/PolygonalBoundary`).PolygonalBoundary,
@@ -2056,7 +2157,10 @@ export class PluginManager {
       ItemOnGroundManager: require("../game/entity/impl/grounditem/ItemOnGroundManager").ItemOnGroundManager,
       ItemDefinition: require("../game/definition/ItemDefinition").ItemDefinition,
       EquipPacketListener: require("../net/packet/impl/EquipPacketListener").EquipPacketListener,
+      PlayerDeathTask: require("../game/task/impl/PlayerDeath").PlayerDeathTask,
+      CombatPoisonData: require("../game/task/impl/CombatPoisonEffect").CombatPoisonData,
       CacheDefinitions: require("../game/cache/CacheDefinitions").CacheDefinitions,
+      Wilderness: require("../game/content/wilderness/Wilderness").Wilderness,
       PathFinder: require(`${model}/movement/path/PathFinder`).PathFinder,
       RsmodRouteFinding: require(`${model}/movement/path/RsmodRouteFinding`).RsmodRouteFinding,
       NpcDefinition: require("../game/definition/NpcDefinition").NpcDefinition,
@@ -2087,7 +2191,10 @@ export class PluginManager {
       Server: require("../Server").Server,
       PluginManager: require("./PluginManager").PluginManager,
       ShopManager: require("../game/model/container/shop/ShopManager").ShopManager,
+      ShopDefinition: require("../game/definition/ShopDefinition").ShopDefinition,
       MultiChatboxPrompt: require("../game/model/menu/MultiChatboxPrompt").MultiChatboxPrompt,
+      ChatPacketListener: require("../net/packet/impl/ChatPacketListener").ChatPacketListener,
+      TradeState: require("../game/content/Trading").TradeState,
       dispatchClientMessages: require("../net/NetworkBuilder").dispatchClientMessages,
       connectHeadlessClient: require("../net/NetworkBuilder").connectHeadlessClient,
     });
@@ -2699,6 +2806,11 @@ export class PluginManager {
         }
         PluginManager.objectRouteHooks.push({ pluginName, handler });
       },
+      onWalkRoute: (handler) => {
+        if (typeof handler === "function") {
+          PluginManager.walkRouteHooks.push({ pluginName, handler });
+        }
+      },
       onNpcRoute: (handler) => {
         if (typeof handler === "function") PluginManager.npcRouteHooks.push({ pluginName, handler });
       },
@@ -3009,6 +3121,12 @@ export class PluginManager {
           },
         });
       },
+      onPlayerDeathDrops: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.playerDeathDropsHooks.push({ pluginName, handler });
+      },
       onPlayerDeathItemDrop: (handler) => {
         if (typeof handler !== "function") {
           return;
@@ -3242,9 +3360,6 @@ export class PluginManager {
 
         registerGroundItemClickHook(clickType, itemIds, handler, "ground-item");
       },
-      onGroundItemSecondClick: (itemIds, handler) => {
-        registerGroundItemClickHook(2, itemIds, handler, "ground-item-second");
-      },
       onGroundItemPickup: (handler) => {
         if (typeof handler !== "function") return;
         PluginManager.groundItemPickupHooks.push({
@@ -3277,7 +3392,7 @@ export class PluginManager {
             if (filter?.noted !== undefined && (ItemDefinition.forId(event.itemId).isNoted() !== filter.noted)) return;
             if (named) {
               if (ItemDefinition.forId(event.itemId).getName() !== itemNameOrHandler
-                || event.object.getDefinition()?.getName() !== objectNameOrFilter) return;
+                || ObjectDefinition.forPlayer(event.objectId, event.player)?.getName() !== objectNameOrFilter) return;
               if (handler(event) !== false) event.handled = true;
             } else {
               handler(event);
@@ -3393,6 +3508,20 @@ export class PluginManager {
           },
         });
       },
+      onSpellOnItem: (handler) => {
+        if (typeof handler !== "function") {
+          return;
+        }
+        PluginManager.spellOnItemHooks.push({
+          pluginName,
+          handler: (event) => {
+            if (!event || event.handled || !event.player) {
+              return;
+            }
+            handler(event);
+          },
+        });
+      },
       onItemAction: (
         handler: string | ((event: PluginItemActionEvent) => void),
         actions?: Record<string, (event: PluginItemActionEvent) => void | boolean>
@@ -3421,7 +3550,7 @@ export class PluginManager {
             }
             const definition = CacheDefinitions.getItem(event.itemId);
             if (definition?.name !== handler || event.clickType < 1 || event.clickType > 5) return;
-            const option = definition.inventoryActions[event.clickType - 1];
+            const option = PluginManager.itemActionOption(definition, event);
             const action = namedActions.get(option);
             if (action && action(event) !== false) event.handled = true;
           },
@@ -3731,7 +3860,7 @@ export class PluginManager {
       registerItemShopCurrency: (itemId, options) => {
         ShopManager.registerItemCurrency(itemId, options);
       },
-      persistAttribute: (key) => PlayerSave.persistAttribute(key),
+      persistAttribute: (key, defaultValue) => PlayerSave.persistAttribute(key, defaultValue),
       setPlayerPersistence: (persistence) => {
         if (
           !persistence ||
@@ -3999,6 +4128,9 @@ export class PluginManager {
           return;
         }
         PluginManager.registerCombatMethodResolverInternal(pluginName, resolver);
+      },
+      registerNpcCombatOption: (option) => {
+        require("../game/definition/NpcDefinition").NpcDefinition.addCombatOption(option);
       },
       registerNpcCombatMethodProvider: (npcIds, methodCtor, options) => {
         const normalized = Array.isArray(npcIds) ? npcIds : [npcIds];

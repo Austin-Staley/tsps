@@ -1,5 +1,7 @@
 import type { TileHighlightRenderEntry } from "../../../game/highlights/TileHighlightManager";
+import type { OverlayTriangleBatch } from "../../../game/sailing/HeadingIndicator";
 import { GPU_BUFFER_USAGE, GPU_SHADER_STAGE, SCENE_DEPTH_FORMAT } from "../bindings";
+import { createScenePipeline, withSampleCount } from "../multisample";
 import { WORLD_OVERLAY_WGSL } from "../shaders/overlay.wgsl";
 import type { OverlayHost } from "./OverlayHost";
 
@@ -58,6 +60,7 @@ export class TileMarkerLayer {
         label: string;
     }>;
     private tileHighlights?: ReadonlyArray<TileHighlightRenderEntry>;
+    private headingIndicator?: ReadonlyArray<OverlayTriangleBatch>;
 
     hoverColor = [1, 1, 0, 1];
     hoverFillColor = [1, 1, 0, 0.25];
@@ -126,7 +129,7 @@ export class TileMarkerLayer {
             depthCompare: "less-equal" as const,
         };
         const depthPipeline = (format: GPUTextureFormat, kind: "fill" | "line", label: string) =>
-            device.createRenderPipeline({
+            createScenePipeline(device, {
                 label,
                 layout,
                 vertex,
@@ -164,6 +167,7 @@ export class TileMarkerLayer {
         this.hoverEnabled = !!state.hoverEnabled;
         this.actorServerTiles = state.actorServerTiles;
         this.tileHighlights = state.tileHighlights;
+        this.headingIndicator = state.headingIndicator;
 
         const resolvePlane = (tile: { x: number; y: number; plane?: number }): number => {
             if (typeof tile.plane === "number" && Number.isFinite(tile.plane)) return tile.plane | 0;
@@ -193,8 +197,8 @@ export class TileMarkerLayer {
         this.buildGeometry();
     }
 
-    drawWorld(pass: GPURenderPassEncoder, useExtensionFormat: boolean = false): void {
-        this.drawSegments(pass, this.worldSegments, true, useExtensionFormat);
+    drawWorld(pass: GPURenderPassEncoder, useExtensionFormat: boolean = false, sampleCount: number = 1): void {
+        this.drawSegments(pass, this.worldSegments, true, useExtensionFormat, sampleCount);
     }
 
     drawScreen(pass: GPURenderPassEncoder): void {
@@ -239,6 +243,10 @@ export class TileMarkerLayer {
                 const line = this.colorFromRgb(highlight.colorRgb, 1.0);
                 this.pushLine(highlight.x, highlight.y, effPlane, sample, line, target);
             }
+        }
+
+        if (this.headingIndicator) {
+            for (const batch of this.headingIndicator) this.pushTriangles(batch, this.worldSegments);
         }
 
         if (this.hoverEnabled && this.actorServerTiles && this.actorServerTiles.length > 0) {
@@ -306,6 +314,14 @@ export class TileMarkerLayer {
         target.push({ first, count: 5, kind: "line", depth: target === this.worldSegments });
     }
 
+    /** World triangles already in tile units (the helm's heading arrows). */
+    private pushTriangles(batch: OverlayTriangleBatch, target: DrawSegment[]): void {
+        const first = this.floats / FLOATS_PER_VERTEX;
+        const p = batch.positions;
+        for (let i = 0; i < p.length; i += 3) this.pushVertex(p[i], p[i + 1], p[i + 2], batch.rgba);
+        target.push({ first, count: p.length / 3, kind: "fill", depth: target === this.worldSegments });
+    }
+
     private pushVertex(x: number, y: number, z: number, color: number[]): void {
         const required = this.floats + FLOATS_PER_VERTEX;
         if (this.data.length < required) {
@@ -331,6 +347,7 @@ export class TileMarkerLayer {
         segments: DrawSegment[],
         withDepth: boolean,
         useExtensionFormat: boolean = false,
+        sampleCount: number = 1,
     ): void {
         if (segments.length === 0) return;
         const usedBytes = this.floats * 4;
@@ -367,7 +384,7 @@ export class TileMarkerLayer {
                       ? (extensionPipelines ? this.lineDepthPipelineExt : this.lineDepthPipeline) ??
                         this.lineDepthPipeline
                       : this.linePipeline;
-            pass.setPipeline(pipeline);
+            pass.setPipeline(withDepth ? withSampleCount(pipeline, sampleCount) : pipeline);
             pass.draw(segment.count, 1, segment.first, 0);
         }
     }

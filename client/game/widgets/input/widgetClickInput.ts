@@ -2,7 +2,7 @@ import { sendResumeNameDialog, sendWidgetAction, sendWidgetActionMessage } from 
 import { ClientPacketId, createPacket, queuePacket } from "../../../network/packet";
 import type { ScriptEvent } from "../../../rs/cs2/Cs2Vm";
 import { spawnSearchPick } from "../../../rs/cs2/spawnSearch";
-import { shouldTransmitAction } from "../../../widgets/WidgetFlags";
+import { shouldShowMenuOption, shouldTransmitAction } from "../../../widgets/WidgetFlags";
 import {
     isPauseButtonWidget as isPauseButtonWidgetUtil,
     sanitizeText,
@@ -13,6 +13,16 @@ import type { WidgetManager } from "../../../widgets/WidgetManager";
 import type { WidgetInputControllerDeps, WidgetInputFrame, WidgetInputState } from "./widgetInputTypes";
 import type { PrimaryWidgetAction } from "./widgetPrimaryAction";
 import { isCombatSkillWidgetAction } from "../widgetActionPayload";
+
+/** Whether a widget offers a menu op of its own: an op with text, shown by its flags or onOp. */
+function offersMenuOp(w: any, getWidgetFlags: (w: any) => number): boolean {
+    if (!Array.isArray(w?.actions)) return false;
+    const flags = getWidgetFlags(w) | 0;
+    const hasOnOpHandler = !!(w.eventHandlers?.onOp || w.onOp);
+    return w.actions.some(
+        (action: any, index: number) => !!sanitizeText(action) && shouldShowMenuOption(flags, index, hasOnOpHandler),
+    );
+}
 
 export function processWidgetClickInput(
     deps: WidgetInputControllerDeps,
@@ -59,9 +69,19 @@ export function processWidgetClickInput(
                 // entry: a component whose ops are all empty (or the cache's "*" placeholder)
                 // offers nothing, so the click falls through to what lies under it - e.g. the
                 // bolt pouch slot (387:30), emptied by script 4039, over Dizana's quiver slot.
+                // An op is offered only with its transmit flag or an onOp handler (as the
+                // right-click menu does): a layer given an op by script but no flag for its own
+                // slot - the Slayer Rewards Tasks tab's view_tasks (426:36), which lies over the
+                // Cancel/Block/Store buttons - mustn't take their clicks.
+                const opFlags = getWidgetFlags(w) | 0;
+                const hasOnOpHandler = !!(w.eventHandlers?.onOp || w.onOp);
                 const hasActionList = Array.isArray(w.actions) && w.actions.length > 0;
                 const hasActions =
-                    hasActionList && w.actions.some((action: any) => !!sanitizeText(action));
+                    hasActionList &&
+                    w.actions.some(
+                        (action: any, index: number) =>
+                            !!sanitizeText(action) && shouldShowMenuOption(opFlags, index, hasOnOpHandler),
+                    );
                 const opsCleared = hasActionList && !hasActions;
                 const getWidgetByUid = (uid: number) => widgetManager?.getWidgetByUid(uid);
                 const isPauseButtonWidget = isPauseButtonWidgetUtil(
@@ -106,6 +126,23 @@ export function processWidgetClickInput(
                     (!isDynamicWidget && hasTransmitOps && !opsCleared) ||
                     hasSpellAction
                 );
+                // A widget that is only draggable (an interface's invisible resize handles) offers
+                // no menu op, so a left-click runs the top menu entry beneath it, as OSRS does:
+                // the gravestone window's corner handle lies over its Close button.
+                const dragOnly =
+                    hasHandlers &&
+                    !!(w.isDraggable || w.eventHandlers?.onDrag || w.onDrag) &&
+                    !hasActions &&
+                    !hasOnOpHandler &&
+                    !hasInventoryItem &&
+                    !isPauseButtonWidget &&
+                    !hasSpellAction &&
+                    !(!isDynamicWidget && hasTransmitOps && !opsCleared) &&
+                    !(w.eventHandlers?.onClick || w.eventHandlers?.onClickRepeat || w.eventHandlers?.onHold ||
+                        w.eventHandlers?.onRelease || w.onClick || w.onClickRepeat || w.onHold || w.onRelease);
+                if (dragOnly && clickHits.slice(0, i).some((below: any) => offersMenuOp(below, getWidgetFlags))) {
+                    continue;
+                }
                 if (hasHandlers) {
                     widgetInteraction.clickedWidget = w;
                     widgetInteraction.clickedWidgetParent = widgetInteraction.resolveClickedWidgetParent(w);
@@ -265,6 +302,16 @@ export function processWidgetClickInput(
                     // Handlers can mutate widget ops (e.g., Mute -> Unmute), but the transmitted action
                     // should reflect what was clicked pre-mutation.
                     const primaryAction = getPrimaryWidgetAction(w);
+                    if (deps.handlePluginWidgetAction?.({
+                        widget: w,
+                        ...primaryAction,
+                        source: "primary",
+                        cursorX: widgetInteraction.clickedWidgetX,
+                        cursorY: widgetInteraction.clickedWidgetY,
+                    })) {
+                        widgetInteraction.clickedWidgetHandled = true;
+                        break;
+                    }
 
                     // A ::items / ::npcs result row: send the pick ourselves and skip the
                     // cache search's select script, which resumes the dialog and closes the
@@ -341,9 +388,11 @@ export function processWidgetClickInput(
                     // Non-draggable widgets: Fire onClick immediately on press
                     const meslayerBeforePrimaryClick =
                         widgetManager?.meslayerContinueWidget ?? null;
+                    const eventScaleX = w._absScaleX ?? 1;
+                    const eventScaleY = w._absScaleY ?? 1;
                     const clickCtx: Partial<ScriptEvent> = {
-                        mouseX: widgetInteraction.clickedWidgetX,
-                        mouseY: widgetInteraction.clickedWidgetY,
+                        mouseX: (widgetInteraction.clickedWidgetX / eventScaleX) | 0,
+                        mouseY: (widgetInteraction.clickedWidgetY / eventScaleY) | 0,
                         opIndex: primaryAction.opIndex ?? 1,
                         targetName: primaryAction.target,
                     };

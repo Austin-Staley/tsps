@@ -1,7 +1,9 @@
+import { VoiceChatPlugin } from "../../../game/plugins/voice/VoiceChatPlugin";
 import { AnimationSmoothingPlugin } from "../../../game/plugins/animationsmoothing/AnimationSmoothingPlugin";
 import { AttackTimerPlugin } from "../../../game/plugins/attacktimer/AttackTimerPlugin";
 import { FirstPersonPlugin } from "../../../game/plugins/firstperson/FirstPersonPlugin";
 import { GameFrame317Plugin } from "../../../game/plugins/gameframe317/GameFrame317Plugin";
+import { GpuPlugin } from "../../../game/plugins/gpu/GpuPlugin";
 import { GroundItemsConfig } from "../../../game/plugins/grounditems/GroundItemsConfig";
 import { GroundItemsPlugin } from "../../../game/plugins/grounditems/GroundItemsPlugin";
 import { HdPlugin } from "../../../game/plugins/hd/HdPlugin";
@@ -13,7 +15,10 @@ import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
 import { RememberLoginPlugin } from "../../../game/plugins/rememberlogin/RememberLoginPlugin";
 import { SplitPrivateChatPlugin } from "../../../game/plugins/splitprivatechat/SplitPrivateChatPlugin";
 import { StatusBarsPlugin } from "../../../game/plugins/statusbars/StatusBarsPlugin";
+import { StretchedModePlugin } from "../../../game/plugins/stretchedmode/StretchedModePlugin";
 import { OpponentInfoPlugin } from "../../../game/plugins/opponentinfo/OpponentInfoPlugin";
+import { PrayerPlugin } from "../../../game/plugins/tabreorder/PrayerPlugin";
+import { SpellbookPlugin } from "../../../game/plugins/tabreorder/SpellbookPlugin";
 import {
     FreezeTimerPlugin,
     PoisonTimerPlugin,
@@ -29,6 +34,7 @@ import type { PluginClass } from "./Plugin";
 /** Static core plugin list (RuneLite's `PluginManager.loadCorePlugins`). */
 export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     ConfigPlugin,
+    VoiceChatPlugin,
     HdPlugin,
     FirstPersonPlugin,
     GameFrame317Plugin,
@@ -47,6 +53,10 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     WeatherPlugin,
     StatusBarsPlugin,
     OpponentInfoPlugin,
+    SpellbookPlugin,
+    PrayerPlugin,
+    StretchedModePlugin,
+    GpuPlugin,
 ];
 
 /** Legacy `osrs.plugin.*.v1` localStorage blobs to fold into rl.config. */

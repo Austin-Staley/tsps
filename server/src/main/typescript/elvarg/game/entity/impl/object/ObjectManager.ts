@@ -69,6 +69,7 @@ export class ObjectManager {
             && a.getType() === b.getType()
             && a.getFace() === b.getFace()
             && a.getPrivateArea() === b.getPrivateArea()
+            && a.getOwner() === b.getOwner()
             && a.getLocation().equals(b.getLocation());
     }
 
@@ -114,6 +115,9 @@ export class ObjectManager {
         for (let regionX = baseX >> 6; regionX <= (baseX + this.SCENE_SIZE - 1) >> 6; regionX++) {
             for (let regionY = baseY >> 6; regionY <= (baseY + this.SCENE_SIZE - 1) >> 6; regionY++) {
                 for (const object of ObjectManager.objectsByRegion.get(`${regionX},${regionY}`) ?? []) {
+                    if (object.getOwner() && object.getOwner() !== player) {
+                        continue;
+                    }
                     if (viewedArea !== object.getPrivateArea()) {
                         continue;
                     }
@@ -129,18 +133,21 @@ export class ObjectManager {
                 }
             }
         }
+        for (const object of MapObjects.ownerObjectsInScene(player, baseX, baseY, this.SCENE_SIZE)) {
+            player.getPacketSender().sendObject(object);
+        }
     }
 
     public static register(object: GameObject, playerUpdate: boolean) {
         // Check for matching object on this tile.
         for (const o of [...ObjectManager.objectsAt(object.getLocation())]) {
-            if (o.getType() === object.getType() && object.getPrivateArea() == o.getPrivateArea()) {
+            if (o.getType() === object.getType() && object.getPrivateArea() == o.getPrivateArea()
+                && object.getOwner() === o.getOwner()) {
                 ObjectManager.removeFromWorld(o);
             }
         }
 
         // Put back exactly as the map had it (a door closed again, from Doors' snapshot copy).
-        let restoresCopy = false;
         for (let index = World.getRemovedObjects().length - 1; index >= 0; index--) {
             const removed = World.getRemovedObjects()[index];
             if (removed.getType() !== object.getType()) {
@@ -154,17 +161,14 @@ export class ObjectManager {
             }
             RegionManager.removeObjectClipping(removed);
             World.getRemovedObjects().splice(index, 1);
-            if (ObjectManager.sameObjectIdentity(removed, object)) restoresCopy = true;
             // It takes a removed map object's place (a door closed again): removing it later must
             // hide that spot on scene reloads, as for the original.
             object.markBaseMap();
         }
 
-        // A map object put back on its own tile (a tree or rock respawning, a door closed
-        // again) restores the map: players still get the spawn, but nothing is kept, as for an
-        // untouched tree. Keeping it left every tree, rock and door ever used in the runtime
-        // object list for good, re-sent on every scene load.
-        if (!(object.isMapOriginal() || restoresCopy) || object.getPrivateArea()) {
+        // Original map objects need no replay when they respawn. Snapshot copies (doors)
+        // must replay their restored state to clients that cached the open door while away.
+        if (!object.isMapOriginal() || object.getPrivateArea()) {
             ObjectManager.addToWorld(object);
         }
         if (playerUpdate) {
@@ -239,6 +243,7 @@ export class ObjectManager {
             case OperationType.SPAWN:
             case OperationType.DESPAWN:
                 World.forEachNetworkPlayer((player) => {
+                    if (object.getOwner() && object.getOwner() !== player) return;
                     if (this.viewedArea(player) != object.getPrivateArea()) {
                         return;
                     }

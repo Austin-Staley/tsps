@@ -3,6 +3,13 @@ import { IncomingMessage, ServerResponse } from "http";
 import { BinaryChannel, MAX_GAME_MESSAGE_BYTES } from "./BinaryChannel";
 
 const POLL_TIMEOUT_MS = 10_000;
+// WebContainer fetches occasionally drop (#559). The page retries for up to
+// RETRY_MS, so an aborted poll only ends the session once that has passed.
+const RETRY_MS = 15_000;
+// The page runs in the same tab as this server, and a page that goes away sends
+// DELETE first. One that stops polling has usually stalled, as both players' pages did
+// together in #559, so give it minutes rather than seconds to come back.
+const ABANDON_MS = 2 * 60_000;
 
 export const BROWSER_HOST_BRIDGE_HTML = `<!doctype html><meta charset="utf-8"><script>
 addEventListener("message", function connect(event) {
@@ -13,6 +20,26 @@ addEventListener("message", function connect(event) {
   let closed = false;
   let sendTail = Promise.resolve();
   let contentRequests = 0;
+  // The host pauses polling while its peer drains slowly, so unsent frames stay
+  // queued on the server, where outbound backpressure can see them.
+  let paused;
+  let resumePoll;
+  // Sends carry a sequence number and polls ack the last batch they got, so
+  // the server can drop repeated sends and repeat a batch whose poll was lost.
+  let sendSeq = 0;
+  let ack = 0;
+  const retrying = async (request) => {
+    const deadline = Date.now() + ${RETRY_MS};
+    for (let delay = 250; ; delay = Math.min(delay * 2, 2000)) {
+      try {
+        return await request();
+      } catch (error) {
+        // fetch() and body reads reject with a TypeError on network failure.
+        if (closed || !(error instanceof TypeError) || Date.now() + delay > deadline) throw error;
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+  };
   const fetchContent = async (request) => {
     const { id, path } = request;
     if (!Number.isSafeInteger(id) || typeof path !== "string" || path.length > 2048 ||
@@ -41,19 +68,21 @@ addEventListener("message", function connect(event) {
     if (sessionId) fetch("/browser-host/session/" + sessionId, { method: "DELETE", keepalive: true }).catch(() => {});
   };
   const pollOnce = async () => {
-    const response = await fetch("/browser-host/session/" + sessionId + "/poll", { cache: "no-store" });
+    const response = await fetch("/browser-host/session/" + sessionId + "/poll?ack=" + ack, { cache: "no-store" });
     if (response.status === 204) return;
     if (response.status === 404 || response.status === 410) {
       closed = true;
-      port.postMessage({ type: "close" });
+      port.postMessage({ type: "close", message: response.headers.get("X-Close-Reason") ||
+        (response.status === 404 ? "game session not found" : "game session closed") });
       return;
     }
     if (!response.ok) throw new Error("WebContainer HTTP poll failed: " + response.status);
     const data = await response.arrayBuffer();
+    ack = Number(response.headers.get("X-Seq"));
     if (data.byteLength) port.postMessage({ type: "message", data }, [data]);
   };
   const poll = async () => {
-    while (!closed) await pollOnce();
+    while (!closed) await (paused || retrying(pollOnce));
   };
   port.onmessage = (event) => {
     if (closed) return;
@@ -63,10 +92,18 @@ addEventListener("message", function connect(event) {
       const data = event.data.data;
       const bytes = data.byteLength;
       sendTail = sendTail.then(async () => {
-        const response = await fetch("/browser-host/session/" + sessionId + "/send", { method: "POST", body: data });
-        if (!response.ok) throw new Error("WebContainer HTTP send failed: " + response.status);
+        const seq = ++sendSeq;
+        await retrying(async () => {
+          const response = await fetch("/browser-host/session/" + sessionId + "/send?seq=" + seq, { method: "POST", body: data });
+          if (!response.ok) throw new Error("WebContainer HTTP send failed: " + response.status);
+        });
         port.postMessage({ type: "sent", bytes });
       }).catch(fail);
+    } else if (event.data?.type === "pause") {
+      if (!paused) paused = new Promise((resolve) => { resumePoll = resolve; });
+    } else if (event.data?.type === "resume") {
+      paused = undefined;
+      resumePoll?.();
     } else if (event.data?.type === "close") {
       closed = true;
       fetch("/browser-host/session/" + sessionId, { method: "DELETE", keepalive: true })
@@ -98,7 +135,14 @@ export class BrowserHostHttpChannel implements BinaryChannel {
   private readonly errorHandlers: Array<(error: Error) => void> = [];
   private poll?: ServerResponse;
   private pollTimeout?: NodeJS.Timeout;
+  private abandonTimeout?: NodeJS.Timeout;
   private closed = false;
+  private closeReason = "";
+  /** The last batch sent to a poll, kept until the next poll acks it. */
+  private unacked?: Buffer;
+  private sentSeq = 0;
+  private receivedSeq = 0;
+  private lastPollAt = 0;
 
   public get bufferedAmount(): number {
     return this.queuedBytes;
@@ -119,8 +163,9 @@ export class BrowserHostHttpChannel implements BinaryChannel {
     this.flushPoll();
   }
 
-  public receive(payload: Buffer): void {
-    if (!this.isOpen()) return;
+  public receive(payload: Buffer, seq: number): void {
+    if (!this.isOpen() || seq <= this.receivedSeq) return;
+    this.receivedSeq = seq;
     if (payload.length > MAX_GAME_MESSAGE_BYTES) {
       this.reject(new Error(`Browser-host HTTP message exceeds ${MAX_GAME_MESSAGE_BYTES} bytes`));
       return;
@@ -128,16 +173,26 @@ export class BrowserHostHttpChannel implements BinaryChannel {
     this.dataHandler?.(payload);
   }
 
-  public attachPoll(response: ServerResponse): void {
-    if (!this.isOpen() && this.queued.length === 0) {
+  public attachPoll(response: ServerResponse, ack: number): void {
+    const gap = Date.now() - this.lastPollAt;
+    if (this.lastPollAt && gap > RETRY_MS) console.info(`[browser-host] poll resumed after ${Math.round(gap / 1000)}s`);
+    this.lastPollAt = Date.now();
+    if (ack === this.sentSeq) this.unacked = undefined;
+    if (this.isDrained()) {
       response.statusCode = 410;
+      response.setHeader("X-Close-Reason", this.closeReason);
       response.end();
       return;
     }
+    clearTimeout(this.abandonTimeout);
     this.finishPoll(204);
     this.poll = response;
     response.on("close", () => {
-      if (!response.writableEnded && this.poll === response) this.close();
+      if (response.writableEnded || this.poll !== response) return;
+      clearTimeout(this.pollTimeout);
+      this.poll = undefined;
+      this.abandonTimeout = setTimeout(() => this.close(1001, `no poll for ${ABANDON_MS / 1000}s`), ABANDON_MS);
+      this.abandonTimeout.unref?.();
     });
     this.pollTimeout = setTimeout(() => this.finishPoll(204), POLL_TIMEOUT_MS);
     this.pollTimeout.unref?.();
@@ -147,6 +202,10 @@ export class BrowserHostHttpChannel implements BinaryChannel {
   public close(code?: number, reason?: string): void {
     if (this.closed) return;
     this.closed = true;
+    // Header-safe, as the page reads it from the poll that ends the session.
+    this.closeReason = (reason || "closed by the game server").replace(/[^\x20-\x7e]/g, "?");
+    console.info(`[browser-host] game session closed: ${this.closeReason}`);
+    clearTimeout(this.abandonTimeout);
     if (this.queued.length > 0) this.flushPoll();
     else this.finishPoll(410);
     for (const handler of this.closeHandlers) handler(code, reason);
@@ -169,20 +228,24 @@ export class BrowserHostHttpChannel implements BinaryChannel {
   }
 
   public isDrained(): boolean {
-    return this.closed && this.queued.length === 0;
+    return this.closed && this.queued.length === 0 && !this.unacked;
   }
 
   private flushPoll(): void {
-    if (!this.poll || this.queued.length === 0) return;
-    const frames: Buffer[] = [];
-    let bytes = 0;
-    while (this.queued.length > 0 && bytes + this.queued[0].length <= MAX_GAME_MESSAGE_BYTES) {
-      const frame = this.queued.shift()!;
-      frames.push(frame);
-      bytes += frame.length;
-      this.queuedBytes -= frame.length;
+    if (!this.poll || (!this.unacked && this.queued.length === 0)) return;
+    if (!this.unacked) {
+      const frames: Buffer[] = [];
+      let bytes = 0;
+      while (this.queued.length > 0 && bytes + this.queued[0].length <= MAX_GAME_MESSAGE_BYTES) {
+        const frame = this.queued.shift()!;
+        frames.push(frame);
+        bytes += frame.length;
+        this.queuedBytes -= frame.length;
+      }
+      this.unacked = Buffer.concat(frames, bytes);
+      this.sentSeq++;
     }
-    this.finishPoll(200, Buffer.concat(frames, bytes));
+    this.finishPoll(200, this.unacked);
   }
 
   private finishPoll(status: number, body?: Buffer): void {
@@ -192,16 +255,18 @@ export class BrowserHostHttpChannel implements BinaryChannel {
     this.poll = undefined;
     if (!response || response.writableEnded) return;
     response.statusCode = status;
+    if (status === 410) response.setHeader("X-Close-Reason", this.closeReason);
     if (body) {
       response.setHeader("Content-Type", "application/octet-stream");
       response.setHeader("Content-Length", body.length);
+      response.setHeader("X-Seq", this.sentSeq);
     }
     response.end(body);
   }
 
   private reject(error: Error): void {
     for (const handler of this.errorHandlers) handler(error);
-    this.close();
+    this.close(1009, error.message);
   }
 }
 
@@ -227,7 +292,7 @@ export class BrowserHostHttpBridge {
       return true;
     }
 
-    const match = /^\/browser-host\/session\/([0-9a-f-]+)(?:\/(poll|send))?$/.exec(request.url ?? "");
+    const match = /^\/browser-host\/session\/([0-9a-f-]+)(?:\/(poll|send)\?(?:ack|seq)=(\d+))?$/.exec(request.url ?? "");
     if (!match) return false;
     const channel = this.sessions.get(match[1]);
     if (!channel) {
@@ -236,21 +301,20 @@ export class BrowserHostHttpBridge {
       return true;
     }
     if (request.method === "GET" && match[2] === "poll") {
-      const drained = channel.isDrained();
-      channel.attachPoll(response);
-      if (drained) this.sessions.delete(match[1]);
+      channel.attachPoll(response, Number(match[3]));
+      if (channel.isDrained()) this.sessions.delete(match[1]);
       return true;
     }
     if (request.method === "POST" && match[2] === "send") {
-      void this.receive(request, response, channel).catch(() => {
-        channel.close();
+      void this.receive(request, response, channel, Number(match[3])).catch((error) => {
+        channel.close(1011, `send failed: ${(error as Error).message}`);
         if (!response.headersSent) response.statusCode = 400;
         if (!response.writableEnded) response.end();
       });
       return true;
     }
     if (request.method === "DELETE" && !match[2]) {
-      channel.close();
+      channel.close(1000, "browser host closed the session");
       this.sessions.delete(match[1]);
       response.statusCode = 204;
       response.end();
@@ -264,7 +328,8 @@ export class BrowserHostHttpBridge {
   private async receive(
     request: IncomingMessage,
     response: ServerResponse,
-    channel: BrowserHostHttpChannel
+    channel: BrowserHostHttpChannel,
+    seq: number
   ): Promise<void> {
     const chunks: Buffer[] = [];
     let bytes = 0;
@@ -274,12 +339,12 @@ export class BrowserHostHttpBridge {
       if (bytes > MAX_GAME_MESSAGE_BYTES) {
         response.statusCode = 413;
         response.end();
-        channel.close();
+        channel.close(1009, `message over ${MAX_GAME_MESSAGE_BYTES} bytes`);
         return;
       }
       chunks.push(buffer);
     }
-    channel.receive(Buffer.concat(chunks, bytes));
+    channel.receive(Buffer.concat(chunks, bytes), seq);
     response.statusCode = 204;
     response.end();
   }

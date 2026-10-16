@@ -1,4 +1,5 @@
 import { GameConstants } from "../../GameConstants";
+import { MORTAL_DEVELOPER_ATTRIBUTE } from "../../entity/impl/Mobile";
 import { CombatFactory } from "../../content/combat/CombatFactory";
 import { ItemDefinition } from "../../definition/ItemDefinition";
 import { ItemOnGroundManager } from "../../entity/impl/grounditem/ItemOnGroundManager";
@@ -82,14 +83,15 @@ export class PlayerDeathTask extends Task {
                         const position = deathPosition;
                         let dropped = false;
                         let pluginHandledDrop = false;
+                        const layout = PlayerDeathTask.slotLayout(this.player);
+                        const lostUntradeables: Item[] = [];
 
                         for (let item of playerItems) {
                             const dropEligible =
                                 shouldDropItemsOnDeath &&
                                 (item.isTradeable() || (!item.isLostOnDeath() && Barrows.isBarrowsItem(item.getId()))) &&
                                 !this.itemsToKeep.includes(item) &&
-                                this.player.getRights() !== PlayerRights.OWNER &&
-                                this.player.getRights() !== PlayerRights.DEVELOPER;
+                                !PlayerDeathTask.keepsEverything(this.player);
                             const deathDropEvent = {
                                 player: this.player,
                                 killer: this.killer ?? null,
@@ -115,34 +117,48 @@ export class PlayerDeathTask extends Task {
                                 // Remove all carried items on death without ground spawns.
                                 continue;
                             }
-                            // Keep tradeable items
-                            if (
-                                item.isLostOnDeath() ||
-                                (!item.isTradeable() && !Barrows.isBarrowsItem(item.getId())) ||
-                                this.itemsToKeep.includes(item)
-                            ) {
+                            // Owners and developers keep everything.
+                            if (PlayerDeathTask.keepsEverything(this.player)) {
                                 if (!item.isLostOnDeath() && !this.itemsToKeep.includes(item)) {
                                     this.itemsToKeep.push(item);
                                 }
                                 continue;
                             }
-                            // Don't drop items if we're owner or dev
-                            if (this.player.getRights() === PlayerRights.OWNER || this.player.getRights() === PlayerRights.DEVELOPER) {
-                                break;
+                            if (item.isLostOnDeath() || this.itemsToKeep.includes(item)) {
+                                continue;
                             }
-
+                            // Untradeables are kept unless a death-drops hook takes them (a grave).
+                            if (!item.isTradeable() && !Barrows.isBarrowsItem(item.getId())) {
+                                lostUntradeables.push(item);
+                                continue;
+                            }
                             droppedItems.push(item);
+                        }
 
-                            if (shouldDropItemsOnDeath) {
-                                // Drop item
-                                ItemOnGroundManager.registerLocation(
-                                    this.killer ? this.killer : this.player,
-                                    item,
-                                    position
-                                );
-                                dropped = true;
+                        // Emitted with nothing lost too: a death still changes an existing grave.
+                        if (shouldDropItemsOnDeath && !PlayerDeathTask.keepsEverything(this.player)) {
+                            const before = droppedItems.length + lostUntradeables.length;
+                            PluginManager.emitPlayerDeathDrops({
+                                player: this.player,
+                                killer: this.killer ?? null,
+                                location: position,
+                                items: droppedItems,
+                                untradeables: lostUntradeables,
+                                layout,
+                            });
+                            if (droppedItems.length + lostUntradeables.length < before) {
+                                pluginHandledDrop = true;
                             }
                         }
+                        for (const item of droppedItems) {
+                            ItemOnGroundManager.registerLocation(
+                                this.killer ? this.killer : this.player,
+                                item,
+                                position
+                            );
+                            dropped = true;
+                        }
+                        this.itemsToKeep.push(...lostUntradeables);
 
                         // Handle defeat..
                         if (this.killer) {
@@ -169,7 +185,7 @@ export class PlayerDeathTask extends Task {
                                     id = brokenItem.getBrokenItem();
                                     this.player.sendMessage(`Your ${ItemDefinition.forId(it.getId()).getName()} has been broken. You can fix it by talking to Perdu.`);
                                 }
-                                this.player.getInventory().adds(id, it.getAmount());
+                                this.player.getInventory().addItem(it.clone().setId(id));
                             }
                             this.itemsToKeep.length = 0;
                         }
@@ -180,6 +196,7 @@ export class PlayerDeathTask extends Task {
                     PluginManager.emitPlayerDefeated(this.killer ?? null, this.player);
                     (this.player as any).__recentDeathDamagerEntries = null;
 
+                    GameConstants.PLAYER_PERSISTENCE.requestSave(this.player, "death");
                     const handledDeath = PluginManager.emitPlayerDeath({
                         player: this.player,
                         killer: this.killer ?? null,
@@ -191,6 +208,7 @@ export class PlayerDeathTask extends Task {
                         const botRespawn = this.resolveBotRespawnLocation();
                         this.player.moveTo(botRespawn ?? GameConstants.DEFAULT_LOCATION);
                     }
+                    GameConstants.PLAYER_PERSISTENCE.requestSave(this.player, "respawn");
 
                     // Stop the event..
                     this.stop();
@@ -263,9 +281,25 @@ export class PlayerDeathTask extends Task {
      * Nightmare staff: the staff and its orb, `deathComponents` in item-gameplay.json) drops as
      * those components for the killer, and the item itself is gone (Wiki).
      */
+    /** The item id in each inventory and equipment slot, -1 where empty. */
+    private static slotLayout(player: Player): { inventory: number[]; equipment: number[] } {
+        const ids = (items: Item[]) => items.map((item) => (item && item.getId() > 0 && item.getAmount() > 0 ? item.getId() : -1));
+        return {
+            inventory: ids(player.getInventory().getItems()),
+            equipment: ids(player.getEquipment().getItems()),
+        };
+    }
+
+    /** Owners and developers keep everything, unless they made themselves mortal (::mortal). */
+    private static keepsEverything(player: Player): boolean {
+        const rights = player.getRights();
+        return (rights === PlayerRights.OWNER || rights === PlayerRights.DEVELOPER)
+            && player.getAttribute(MORTAL_DEVELOPER_ATTRIBUTE) !== true;
+    }
+
     private static splitIntoComponents(player: Player, killer: Player | null | undefined, kept: Item[], items: Item[]): Item[] {
         if (!killer || killer === player || !Wilderness.isIn(player)) return items;
-        if (player.getRights() === PlayerRights.OWNER || player.getRights() === PlayerRights.DEVELOPER) return items;
+        if (PlayerDeathTask.keepsEverything(player)) return items;
         return items.flatMap((item) => {
             const components = item.getDefinition().getDeathComponents();
             if (components.length === 0 || kept.includes(item) || item.isLostOnDeath()) return [item];
@@ -273,7 +307,8 @@ export class PlayerDeathTask extends Task {
         });
     }
 
-    private static getItemsToKeep(player: Player): Item[] {
+    /** The items a death lets the player keep: the three most valuable (four with Protect Item, none skulled). */
+    public static getItemsToKeep(player: Player): Item[] {
         const items: Item[] = [];
         const alwaysKept: Item[] = [];
         for (const item of [...player.getInventory().getItems(), ...player.getEquipment().getItems()]) {

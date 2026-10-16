@@ -14,6 +14,8 @@ import { IProjectileManager } from "./interfaces/IProjectileManager";
 import type { PlayerSpotAnimationEvent } from "./sync/PlayerSyncTypes";
 import type { WidgetsOverlay } from "../ui/devoverlay/WidgetsOverlay";
 import { gammaFromScreenBrightness, loadScreenBrightness } from "../ui/ScreenBrightness";
+import { multiLocVarps } from "../render/loc/MultiLocVarps";
+import { getMapSquareId } from "../rs/map/MapFileIndex";
 
 /** Optional details of a LOC change (moves, rotations, shape changes). */
 export type LocChangeOptions = {
@@ -70,6 +72,136 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
     uiHidden: boolean = false;
     widgetsOverlay?: WidgetsOverlay;
 
+    // OSRS camera shake slots (0:X, 1:Y, 2:Z, 3:Yaw, 4:Pitch).
+    public readonly cameraShakeEnabled: boolean[] = [false, false, false, false, false];
+    public readonly cameraShakeRandomAmplitude: number[] = [0, 0, 0, 0, 0];
+    public readonly cameraShakeWaveAmplitude: number[] = [0, 0, 0, 0, 0];
+    public readonly cameraShakeWaveSpeed: number[] = [0, 0, 0, 0, 0];
+    public readonly cameraShakeWavePhase: number[] = [0, 0, 0, 0, 0];
+    public cameraShakeLastClientCycle: number = -1;
+
+    setCameraShakeSlot(
+        slot: number,
+        randomAmplitude: number,
+        waveAmplitude: number,
+        waveSpeed: number,
+        phase: number = 0,
+    ): void {
+
+        const idx = slot | 0;
+        if (idx < 0 || idx >= 5) return;
+        this.cameraShakeEnabled[idx] = true;
+        this.cameraShakeRandomAmplitude[idx] = randomAmplitude | 0;
+        this.cameraShakeWaveAmplitude[idx] = waveAmplitude | 0;
+        this.cameraShakeWaveSpeed[idx] = waveSpeed | 0;
+        this.cameraShakeWavePhase[idx] = phase | 0;
+        this.cameraShakeLastClientCycle = -1;
+
+    }
+
+    clearCameraShakeSlot(slot: number): void {
+
+        const idx = slot | 0;
+        if (idx < 0 || idx >= 5) return;
+        this.cameraShakeEnabled[idx] = false;
+        this.cameraShakeRandomAmplitude[idx] = 0;
+        this.cameraShakeWaveAmplitude[idx] = 0;
+        this.cameraShakeWaveSpeed[idx] = 0;
+        this.cameraShakeWavePhase[idx] = 0;
+
+    }
+
+    clearCameraShake(): void {
+
+        for (let i = 0; i < 5; i++) {
+            this.clearCameraShakeSlot(i);
+        }
+        this.cameraShakeLastClientCycle = -1;
+
+    }
+
+    computeCameraShakeOffsets(clientCycle: number): {
+        x: number;
+        y: number;
+        z: number;
+        yaw: number;
+        pitch: number;
+        active: boolean;
+    } {
+
+        if (this.cameraShakeLastClientCycle < 0) {
+            this.cameraShakeLastClientCycle = clientCycle;
+        }
+        let cyclesElapsed = (clientCycle - this.cameraShakeLastClientCycle) | 0;
+        if (cyclesElapsed < 0 || cyclesElapsed > 200) {
+            cyclesElapsed = 1;
+        }
+        if (cyclesElapsed > 0) {
+            this.cameraShakeLastClientCycle = clientCycle;
+        }
+
+        let x = 0;
+        let y = 0;
+        let z = 0;
+        let yaw = 0;
+        let pitch = 0;
+        let active = false;
+
+        for (let i = 0; i < 5; i++) {
+            if (!this.cameraShakeEnabled[i]) continue;
+            active = true;
+            if (cyclesElapsed > 0) {
+                this.cameraShakeWavePhase[i] = (this.cameraShakeWavePhase[i] + cyclesElapsed) | 0;
+            }
+            const randomAmp = this.cameraShakeRandomAmplitude[i] | 0;
+            const waveAmp = this.cameraShakeWaveAmplitude[i] | 0;
+            const waveSpeed = this.cameraShakeWaveSpeed[i] | 0;
+            const randomTerm = Math.random() * (randomAmp * 2 + 1) - randomAmp;
+            const waveTerm = Math.sin((this.cameraShakeWavePhase[i] * waveSpeed) / 100.0) * waveAmp;
+            const value = (randomTerm + waveTerm) | 0;
+
+            switch (i) {
+                case 0:
+                    x += value;
+                    break;
+                case 1:
+                    y += value;
+                    break;
+                case 2:
+                    z += value;
+                    break;
+                case 3:
+                    yaw += value;
+                    break;
+                case 4:
+                    pitch += value;
+                    break;
+            }
+        }
+
+        return { x, y, z, yaw, pitch, active };
+
+    }
+
+    /** Temporary draw perturbation; leave the scripted movement targets untouched. */
+    applyCameraShake(clientCycle: number): (() => void) | undefined {
+        const shake = this.computeCameraShakeOffsets(clientCycle);
+        if (!shake.active) return;
+        const camera = this.osrsClient.camera;
+        const [x, y, z] = camera.pos;
+        const yaw = camera.yaw;
+        camera.pos[0] += shake.x / 128;
+        camera.pos[1] += shake.y / 128;
+        camera.pos[2] += shake.z / 128;
+        camera.yaw = (yaw + shake.yaw) & 2047;
+        if (shake.pitch) camera.setRenderPitchOverride(clamp(camera.getScenePitchAngle() + shake.pitch, 128, 383));
+        return () => {
+            camera.pos[0] = x; camera.pos[1] = y; camera.pos[2] = z;
+            camera.yaw = yaw;
+            camera.setRenderPitchOverride(undefined);
+        };
+    }
+
     /** Drops any cached roof visibility state so the next frame recomputes it. */
     invalidateRoofState(): void {}
 
@@ -80,8 +212,10 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
     }
 
     protected override getEffectiveFpsLimit(): number {
-        let limit = super.getEffectiveFpsLimit();
-        let target = Number(this.osrsClient.targetFps) | 0;
+        // The GPU plugin's cap replaces the client's own, mobile battery caps included.
+        const gpu = this.osrsClient.gpuPlugin?.settings();
+        let limit = gpu ? gpu.fpsLimit : super.getEffectiveFpsLimit();
+        let target = gpu ? 0 : Number(this.osrsClient.targetFps) | 0;
         // Never honor CS2 mobile battery caps (~20) on desktop.
         if (!isMobileMode && target > 0 && target < 60) {
             target = 0;
@@ -222,6 +356,7 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
             this.osrsClient.handleUiHover();
         }
         if (!this.uiHidden) {
+            this.osrsClient.runMouseFollowingTimers();
             // Update widget layout (CS2 positioning/sizing)
             this.osrsClient.updateWidgets();
         }
@@ -231,6 +366,7 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
     }
 
     handleKeyInput(deltaTime: number) {
+        if (this.osrsClient.editorCameraInput?.(deltaTime)) return;
         const deltaTimeSec = deltaTime / 1000;
 
         const inputManager = this.osrsClient.inputManager;
@@ -503,6 +639,47 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
     refreshGamemodeWorldLocs(): void {}
 
     onRegionReplacement(_payload: RegionReplacementEvent): void {}
+
+    private changedVarps = new Set<number>();
+
+    /**
+     * A varp (or a varbit on it) changed. A multiloc's look is baked into its square's build, so
+     * the loaded squares holding a multiloc that reads this varp are rebuilt; changes made together
+     * (one server tick's varbits) rebuild each square once.
+     */
+    onVarpChange(varpId: number): void {
+        if (this.changedVarps.size === 0) queueMicrotask(() => this.reloadMultiLocSquares());
+        this.changedVarps.add(varpId | 0);
+    }
+
+    private reloadMultiLocSquares(): void {
+        const changed = this.changedVarps;
+        this.changedVarps = new Set();
+        const client = this.osrsClient;
+        const varbitLoader = client.loaderFactory?.getVarBitTypeLoader?.();
+        // Builds read the workers' copy of the vars, squares loaded later too.
+        client.updateVars();
+        if (!client.locTypeLoader || !varbitLoader) return;
+        for (const map of this.mapManager.mapSquares.values()) {
+            const varps = multiLocVarps((map as { tileLocIdsByLevel?: Int32Array[] }).tileLocIdsByLevel, client.locTypeLoader, varbitLoader);
+            if (![...changed].some((varp) => varps.has(varp))) continue;
+            // A boat's deck is built from its template chunks, not loaded as a map square: a
+            // plain reload of its square built an empty one in its place and the boat vanished
+            // (boarding sets the sailing varbits its multilocs read).
+            const mapId = getMapSquareId(map.mapX, map.mapY);
+            const deck = this.mapManager.worldEntityMapIds.has(mapId)
+                ? client.worldViewManager.getWorldViewByOverlayMapId(mapId)
+                : undefined;
+            if (deck) this.scheduleWorldEntityLocRebuild(deck.id);
+            else this.reloadMultiLocSquare(map.mapX, map.mapY);
+        }
+    }
+
+    /** Rebuilds one loaded square's locs (backends override). */
+    protected reloadMultiLocSquare(_mapX: number, _mapY: number): void {}
+
+    /** Rebuilds a world entity's deck scene after its locs changed (backends override). */
+    scheduleWorldEntityLocRebuild(_entityIndex: number): void {}
 
     // Instanced areas (REBUILD_REGION): the scene is one built map square while active.
     /** True while an instance scene replaces normal map streaming. */
