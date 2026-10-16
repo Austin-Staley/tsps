@@ -31,6 +31,14 @@ for (const [encode, mode] of [[encodeCameraMoveTo, "move"], [encodeCameraLookAt,
             type: "camera", payload: { mode, x: 2850, y: 10230, height: -200, ...options },
         });
     }
+    for (const easing of ["linear", "ease_in_out_sine", "ease_out_cubic"] as const) {
+        const options = { cycles: 210, easing, heightRelative: false, ignoreTerrain: true, trackTarget: false };
+        assert.deepEqual(decodeServerPacket(new Uint8Array(encode(3128, 3476, 400, options))), {
+            type: "camera", payload: { mode, x: 3128, y: 3476, height: 400, ...options },
+        });
+    }
+    assert.throws(() => encode(3128, 3476, 400, { cycles: 0, easing: "linear" }), RangeError);
+    assert.throws(() => encode(3128, 3476, 400, { cycles: 10, easing: "unknown" } as any), RangeError);
     assert.throws(() => encode(2850, 10230, 100, { rate: -1, rate2: 10 }), RangeError);
     assert.throws(() => encode(2850, 10230, 100, { rate: 10, rate2: 256 }), RangeError);
     assert.throws(() => encode(2850, 10230, NaN, { rate: 10, rate2: 10 }), RangeError);

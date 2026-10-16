@@ -538,8 +538,9 @@ test("every task quest names a task and a registered quest", () => {
   const path = require("path");
   const dir = path.join(__dirname, "../plugins/quests/quests");
   const keys = new Set();
-  for (const file of fs.readdirSync(dir)) {
-    for (const match of fs.readFileSync(path.join(dir, file), "utf8").matchAll(/^\s+key: "([a-z0-9_]+)"/gm)) keys.add(match[1]);
+  for (const file of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!file.isFile() || !file.name.endsWith(".Quest.js")) continue;
+    for (const match of fs.readFileSync(path.join(dir, file.name), "utf8").matchAll(/\bkey:\s*"([a-z0-9_]+)"/g)) keys.add(match[1]);
   }
   const taskQuests = require("../plugins/skills/data/slayer-masters.json").taskQuests;
   for (const [id, needs] of Object.entries(taskQuests)) {

@@ -909,3 +909,34 @@ test('quest menu warning pauses once, then presents the same selectable options'
   assert.equal(menus.length, 1);
   assert.deepEqual(menus[0].options.filter(value => typeof value === 'string'), ['Yes', 'No']);
 });
+
+test('typed speakers retain their name with a nameless transform-parent head and captured expressions', () => {
+  let chain;
+  const sent = [], sender = new Proxy({}, { get: (_target, key) => (...args) => { sent.push([key, ...args]); return sender; } });
+  const player = { getUsername: () => 'Test', getPacketSender: () => sender,
+    getDialogueManager: () => ({ startDialogues: value => { chain = value; } }) };
+  const definition = { getName: () => 'null', getId: () => 13404 };
+  startDialogue({ emitCustomEvent(name, request) { if (name === 'npc-dialogue:line') request.expression = 567; } },
+    { player, npcId: 13404, definition }, [{ type: 'line', speaker: 'Sue', text: 'Peace at last!' }]);
+  const line = [...chain.getDialogues().values()][0]; line.send(player);
+  assert.ok(sent.some(row => row[0] === 'sendString' && row[1] === 'Sue' && row[2] === (231 << 16 | 4)));
+  assert.ok(sent.some(row => row[0] === 'sendInterfaceAnimation' && row[2] === 567));
+  sent.length = 0;
+  startDialogue({ emitCustomEvent() {} }, { player, npcId: 13404, definition }, [{ player: 'Hello!', expression: 554 }]);
+  [...chain.getDialogues().values()][0].send(player);
+  assert.ok(sent.some(row => row[0] === 'sendInterfaceAnimation' && row[2] === 554));
+});
+
+test('paired cutscene NPCs can use the native right-side chatbox without the player head', () => {
+  let chain;
+  const sent = [], sender = new Proxy({}, { get: (_target, key) => (...args) => { sent.push([key, ...args]); return sender; } });
+  const player = { getUsername: () => 'Test', getPacketSender: () => sender,
+    getDialogueManager: () => ({ startDialogues: value => { chain = value; } }) };
+  startDialogue({ emitCustomEvent(_name, request) { request.speakerId = 16536; request.side = 'right'; } },
+    { player, npcId: 16527, definition: { getName: () => 'Outlaw', getId: () => 16527 } },
+    [{ type: 'line', speaker: 'Outlaw', text: "A little mangy mutt. Can we keep 'em?" }]);
+  [...chain.getDialogues().values()][0].send(player);
+  assert.ok(sent.some(row => row[0] === 'sendChatboxInterface' && row[1] === 217));
+  assert.ok(sent.some(row => row[0] === 'sendNpcHeadOnInterface' && row[1] === 16536 && row[2] === (217 << 16 | 2)));
+  assert.ok(!sent.some(row => row[0] === 'sendPlayerHeadOnInterface'));
+});

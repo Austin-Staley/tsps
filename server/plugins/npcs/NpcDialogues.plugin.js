@@ -625,7 +625,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         const speech = typeof step.player === "string" ? step.player : typedLine ? step.text : step.npc;
         // Let a plugin skip a line through the mutable payload (as slayer:assignment),
         // e.g. a hand-over line for an item the player is no longer carrying.
-        const request = { player, npc: event.npc, npcId, definition, step, text: speech, skip: false };
+        const request = { player, npc: event.npc, npcId, definition, step, text: speech, pages: context.pages, skip: false };
         api.emitCustomEvent("npc-dialogue:line", request);
         if (request.skip) {
           if (step.steps?.length) {
@@ -650,11 +650,14 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
             manager.advance();
           } }));
         }
+        const animation = request.expression ?? step.expression;
+        const expression = Number.isInteger(animation) && animation >= 0 ? animation : undefined;
+        const speakerName = request.speakerName ?? (typedLine ? step.speaker : undefined);
         for (let start = 0; start < lines.length; start += 4) {
           const text = lines.slice(start, start + 4).join(" ");
           chain.add(isPlayer
-            ? new PlayerDialogue(index++, text)
-            : new NpcDialogue(index++, speakerId, text));
+            ? new PlayerDialogue(index++, text, expression)
+            : new NpcDialogue(index++, speakerId, text, speakerName, expression, (request.side ?? step.side) === "right" ? 217 : 231));
         }
         // `after` (set by a line handler) runs once the player continues past the line,
         // before the conversation carries on: a teleport the wiki only narrates, say.
@@ -683,7 +686,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         if (step.type === "message") {
           // Item hand-outs are also `message` steps; let quests hook their id.
           const message = {
-            player, npc: event.npc, npcId, definition, step,
+            player, npc: event.npc, npcId, definition, step, pages: context.pages,
             text: step.text, target: step.target, stepId: step.id, kind: "message", handled: false,
           };
           const previous = manager.getCurrent?.();
@@ -712,7 +715,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           return run(rest, currentRecord);
         }
         const action = {
-          player, npc: event.npc, npcId, definition, step,
+          player, npc: event.npc, npcId, definition, step, pages: context.pages,
           text: step.text, action: step.action, target: step.target, stepId: step.id, handled: false,
         };
         const current = manager.getCurrent?.();
