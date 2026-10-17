@@ -86,9 +86,9 @@ The chance of the extra axe is 0.6, from the captured sets.
 
 With one of his slashes a head (12226) rises on a tile within 3 of him, clear of him and the player, and faces the player.
 
-- It plays scream spotanim 2550 and sound 3539, with the message "<col=ff289d>Vardorvis' head gazes upon you...</col>".
+- It plays scream spotanim 2550 and sound 3539 (a magic head: 277), with the message "<col=ff289d>Vardorvis' head gazes upon you...</col>".
 - Projectile 2521: start 15, end 90, angle 8, heights 124 to 96. The impact spotanim 2552 goes on the player at once (slot 2, delay 90, height 124).
-- Three ticks later the head goes. Unless the player has Protect from Missiles on (or he's dead), their protection prayers switch off with "You've been injured and can't use protection prayers!" and 10 Prayer drains (Wiki).
+- Three ticks later the head goes and the projectile lands with sound 4015, blocked or not. Unless the player has Protect from Missiles on (or he's dead), their protection prayers switch off with "You've been injured and can't use protection prayers!" and 10 Prayer drains (Wiki).
 - For 3 ticks (Wiki) turning a protection prayer back on is refused: "You've been injured and can't use that prayer!".
 - Awakened, it can be magic instead (2520, scream 2549, impact 2551; Protect from Magic). Below half his hitpoints two come, one of each, a tick apart in either order. Both are captured (recording 3285's awakened attempt).
 

@@ -5,6 +5,8 @@
  * he still lives - their protection prayers switch off: "You've been injured and can't use
  * protection prayers!", 10 Prayer drained (Wiki), and for 3 ticks they can't be turned back on
  * ("You've been injured and can't use that prayer!").
+ * The head screams as it rises (sound 3539; 277 for a magic one) and its projectile lands with
+ * sound 4015, blocked or not (captured).
  * The head is ranged (Protect from Missiles). Awakened it can be magic (Protect from Magic), and
  * below half his hitpoints two heads come, one of each, a tick apart in either order (Wiki; both
  * captured).
@@ -62,7 +64,7 @@ function launch(fight, style) {
   npc.setScriptedMovement?.(true);
   npc.setPositionToFace(player.getLocation());
   npc.performGraphic(Common.graphic(spec.scream));
-  Common.sound(player, head.sound);
+  Common.sound(player, spec.sound);
   const { Projectile } = Common.core;
   const shot = head.projectile;
   new Projectile(npc.getLocation(), Projectile.centreOf(player), player, spec.projectile, shot.start, shot.end, shot.startHeight, shot.endHeight, session.area)
@@ -76,6 +78,7 @@ function launch(fight, style) {
     if (npc.isRegistered()) Common.api.removeNpc(npc);
     fight.heads = fight.heads.filter((other) => other !== npc);
     if (!fight.alive() || !player.isRegistered() || player.getHitpoints() <= 0) return;
+    Common.sound(player, head.landSound);
     if (Common.protectedFrom(player, spec.prayer)) return;
     lockOut(fight);
   });

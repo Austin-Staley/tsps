@@ -105,7 +105,7 @@
     "message": "<col=ff289d>Vardorvis' head gazes upon you...</col>",
     "lockMessage": "You've been injured and can't use protection prayers!",
     "refusedMessage": "You've been injured and can't use that prayer!",
-    "sound": 3539,
+    "landSound": 4015,
     "flightTicks": 3,
     "lockTicks": 3,
     "prayerDrain": 10,
@@ -113,8 +113,8 @@
     "pairGapTicks": 1,
     "pairBelowShare": 0.5,
     "styles": {
-      "ranged": { "projectile": 2521, "scream": 2550, "impact": 2552, "prayer": "PROTECT_FROM_MISSILES" },
-      "magic": { "projectile": 2520, "scream": 2549, "impact": 2551, "prayer": "PROTECT_FROM_MAGIC" }
+      "ranged": { "projectile": 2521, "scream": 2550, "impact": 2552, "sound": 3539, "prayer": "PROTECT_FROM_MISSILES" },
+      "magic": { "projectile": 2520, "scream": 2549, "impact": 2551, "sound": 277, "prayer": "PROTECT_FROM_MAGIC" }
     },
     "projectile": { "start": 15, "end": 90, "angle": 8, "progress": 0, "startHeight": 124, "endHeight": 96 },
     "impact": { "delay": 90, "height": 124 }
