@@ -143,8 +143,7 @@ export class Combat {
         if (this.character.isPlayer()) TaskManager.cancelTasks(this.character.getIndex());
         this.character.getMovementQueue().reset();
         this.character.setFollowing(null);
-        this.character.setPositionToFace(null);
-        this.character.setMobileInteraction(target);
+        this.faceTarget(target, true);
         if (this.character.isPlayer()) {
             this.character.getAsPlayer().getPacketSender().sendConfig(COMBAT_TARGET_PLAYER_VARP, target.isPlayer() ? target.getIndex() : -1);
         }
@@ -221,7 +220,7 @@ export class Combat {
             state.attackBlocked = true;
         }
 
-        this.character.setMobileInteraction(target);
+        this.faceTarget(target);
 
         if (this.manualMovementUntilCycle >= cycle) {
             return;
@@ -690,6 +689,16 @@ export class Combat {
         if (this.target !== target || this.generation !== generation) return;
         this.generation++;
         this.cycleState = null;
+        this.faceTarget(target);
+    }
+
+    /**
+     * Turns the fighter to its target, unless content holds its facing elsewhere with the
+     * "combat:keep-facing" flag (Scurrius keeps facing the food pile he eats from).
+     */
+    private faceTarget(target: Mobile, clearFacePosition = false): void {
+        if (this.character.hasFlag?.("combat:keep-facing") === true) return;
+        if (clearFacePosition) this.character.setPositionToFace(null);
         this.character.setMobileInteraction(target);
     }
 
