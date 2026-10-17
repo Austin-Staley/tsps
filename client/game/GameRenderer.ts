@@ -10,6 +10,7 @@ import { OsrsRendererType } from "./GameRenderers";
 import { getAxisDeadzone } from "./InputManager";
 import { MapManager, MapSquare } from "./MapManager";
 import { OsrsClient } from "./OsrsClient";
+import type { CameraRotation } from "./plugins/ClientPluginManager";
 import { IProjectileManager } from "./interfaces/IProjectileManager";
 import type { PlayerSpotAnimationEvent } from "./sync/PlayerSyncTypes";
 import type { WidgetsOverlay } from "../ui/devoverlay/WidgetsOverlay";
@@ -185,6 +186,7 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
 
     /** Temporary draw perturbation; leave the scripted movement targets untouched. */
     applyCameraShake(clientCycle: number): (() => void) | undefined {
+        if (this.osrsClient.cameraShakeDisabled) return;
         const shake = this.computeCameraShakeOffsets(clientCycle);
         if (!shake.active) return;
         const camera = this.osrsClient.camera;
@@ -366,6 +368,7 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
     }
 
     handleKeyInput(deltaTime: number) {
+        this.startCameraRotation(deltaTime);
         if (this.osrsClient.editorCameraInput?.(deltaTime)) return;
         const deltaTimeSec = deltaTime / 1000;
 
@@ -389,21 +392,22 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
             input: inputManager,
             deltaTime,
         });
+        const rotation = this.cameraRotation;
         if (!pluginHandlesCameraKeys && inputManager.isKeyDown("ArrowUp")) {
             // Up tilts camera downward (increase positive pitch)
-            camera.updatePitch(camera.pitch, deltaPitch);
+            rotation.keyPitch += deltaPitch;
         }
         if (!pluginHandlesCameraKeys && inputManager.isKeyDown("ArrowDown")) {
             // Down tilts camera upward (decrease positive pitch)
-            camera.updatePitch(camera.pitch, -deltaPitch);
+            rotation.keyPitch -= deltaPitch;
         }
         if (!pluginHandlesCameraKeys && inputManager.isKeyDown("ArrowRight")) {
             // Right rotates view to the right (negative yaw delta due to RS yaw basis)
-            camera.updateYaw(camera.yaw, -deltaYaw);
+            rotation.keyYaw -= deltaYaw;
         }
         if (!pluginHandlesCameraKeys && inputManager.isKeyDown("ArrowLeft")) {
             // Left rotates view to the left
-            camera.updateYaw(camera.yaw, deltaYaw);
+            rotation.keyYaw += deltaYaw;
         }
 
         // camera position controls
@@ -498,22 +502,20 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         }
 
         // Middle-mouse camera drag (RuneLite style, works while following)
-        const deltaCamX = inputManager.getDeltaCameraX();
-        const deltaCamY = inputManager.getDeltaCameraY();
-        if (deltaCamX !== 0 || deltaCamY !== 0) {
-            camera.updatePitch(camera.pitch, deltaCamY * -0.9);
-            camera.updateYaw(camera.yaw, deltaCamX * -0.9);
-        }
+        const rotation = this.cameraRotation;
+        rotation.dragPitch += inputManager.getDeltaCameraY() * -0.9;
+        rotation.dragYaw += inputManager.getDeltaCameraX() * -0.9;
 
         // Middle-mouse held + scroll: rotate camera (RuneLite parity).
-        const wheelCamX = inputManager.wheelCamDeltaX;
-        const wheelCamY = inputManager.wheelCamDeltaY;
-        if (wheelCamX !== 0 || wheelCamY !== 0) {
-            const scale = 0.005;
-            camera.updatePitch(camera.pitch, wheelCamY * scale);
-            camera.updateYaw(camera.yaw, wheelCamX * -scale);
-            camera.updated = true;
-        }
+        const wheelScale = 0.005;
+        rotation.dragPitch += inputManager.wheelCamDeltaY * wheelScale;
+        rotation.dragYaw += inputManager.wheelCamDeltaX * -wheelScale;
+
+        this.osrsClient.clientPlugins.transformCameraRotation(rotation);
+        const pitch = rotation.keyPitch + rotation.dragPitch;
+        const yaw = rotation.keyYaw + rotation.dragYaw;
+        if (pitch !== 0) camera.updatePitch(camera.pitch, pitch);
+        if (yaw !== 0) camera.updateYaw(camera.yaw, yaw);
 
         // Scroll wheel zoom.
         // Follow-camera zoom is driven by widget onScroll handlers on the main viewport root.
@@ -542,6 +544,28 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
                 camera.updated = true;
             }
         }
+    }
+
+    private cameraRotationState?: CameraRotation;
+
+    /** This frame's player camera rotation: keys add to it, then handleMouseInput applies it. */
+    private get cameraRotation(): CameraRotation {
+        this.cameraRotationState ??= {
+            camera: this.osrsClient.camera,
+            deltaTime: 0,
+            keyYaw: 0,
+            keyPitch: 0,
+            dragYaw: 0,
+            dragPitch: 0,
+        };
+        return this.cameraRotationState;
+    }
+
+    private startCameraRotation(deltaTime: number): void {
+        const rotation = this.cameraRotation;
+        rotation.camera = this.osrsClient.camera;
+        rotation.deltaTime = deltaTime;
+        rotation.keyYaw = rotation.keyPitch = rotation.dragYaw = rotation.dragPitch = 0;
     }
 
     handleControllerInput(deltaTime: number) {
