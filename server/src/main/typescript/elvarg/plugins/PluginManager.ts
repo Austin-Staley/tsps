@@ -2160,6 +2160,7 @@ export class PluginManager {
       PlayerDeathTask: require("../game/task/impl/PlayerDeath").PlayerDeathTask,
       CombatPoisonData: require("../game/task/impl/CombatPoisonEffect").CombatPoisonData,
       CacheDefinitions: require("../game/cache/CacheDefinitions").CacheDefinitions,
+      readTemplateRegion: require("../game/collision/TemplateRegionData").readTemplateRegion,
       Wilderness: require("../game/content/wilderness/Wilderness").Wilderness,
       PathFinder: require(`${model}/movement/path/PathFinder`).PathFinder,
       RsmodRouteFinding: require(`${model}/movement/path/RsmodRouteFinding`).RsmodRouteFinding,
