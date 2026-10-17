@@ -619,7 +619,7 @@
     "12080": {"name": "Phantom Muspah", "anims": {"attack": -1, "block": -1, "death": 9941}, "deathTicks": 5, "respawn": 0},
     "12082": {"name": "Phantom Muspah", "anims": {"attack": -1, "block": -1, "death": 9941}, "deathTicks": 5, "respawn": 0},
     "12083": {"name": "Lightning cloud", "anims": {"attack": -1, "block": -1, "death": -1}, "respawn": 0},
-    "12224": {"name": "Vardorvis", "anims": {"attack": 10340, "block": -1, "death": 10346, "spawn": 10345}},
+    "12223": {"name": "Vardorvis", "anims": {"attack": 10340, "block": -1, "death": 10346, "spawn": 10345}, "deathTicks": 4, "respawn": 0},
     "12810": {"name": "Jaguar warrior", "anims": {"attack": 10847, "block": 10848, "death": 10849}},
     "12811": {"name": "Serpent shaman", "anims": {"attack": 10859, "block": -1, "death": 10860}},
     "12812": {"name": "Minotaur", "anims": {"attack": 10843, "block": 10841, "death": 10846}},
