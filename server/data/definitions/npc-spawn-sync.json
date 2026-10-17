@@ -4,6 +4,12 @@
     "2353": {"label": "Sailing sea creature", "skip": false, "why": "Sea encounters for Sailing (sharks, rays, krakens, seabirds) in open water; reachable only by boat."}
   },
   "ids": {
+    "6609": {"label": "Wilderness boss", "skip": true, "why": "Callisto spawns in its lair (docs/wilderness-bosses.md); the Wiki pins it on the surface entrance."},
+    "6610": {"label": "Wilderness boss", "skip": true, "why": "Venenatis spawns in its lair (docs/wilderness-bosses.md); the Wiki pins it on the surface entrance."},
+    "6611": {"label": "Wilderness boss", "skip": true, "why": "Vet'ion spawns in its lair (docs/wilderness-bosses.md); the Wiki pins it on the surface entrance."},
+    "11992": {"label": "Wilderness boss", "skip": true, "why": "Artio spawns in its lair (docs/wilderness-bosses.md); the Wiki pins it on the surface entrance."},
+    "11993": {"label": "Wilderness boss", "skip": true, "why": "Calvar'ion spawns in its lair (docs/wilderness-bosses.md); the Wiki pins it on the surface entrance."},
+    "11998": {"label": "Wilderness boss", "skip": true, "why": "Spindel spawns in its lair (docs/wilderness-bosses.md); the Wiki pins it on the surface entrance."},
     "12861": {"label": "Quest stage", "skip": true, "why": "Attala before Perilous Moons; after it she's in Cam Torum (13099)."},
     "12876": {"label": "Quest stage", "skip": true, "why": "The builder before Perilous Moons; after it he's in Cam Torum (12877)."},
     "14209": {"label": "Quest stage", "skip": true, "why": "Antos injured, during the quest; he's well (14211) after it."},
