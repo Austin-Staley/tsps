@@ -158,6 +158,7 @@ function applyWikiCorrections(tableById) {
   }
   correctMadAngel(tableById.mad_angel);
   correctSkotizo(tableById.skotizo);
+  correctAmoxliatl(tableById.amoxliatl);
   const kalphiteQueen = tableById.kalphite_queen;
   if (!kalphiteQueen) {
     return;
@@ -217,6 +218,19 @@ function correctSkotizo(table) {
   }
   table.main_max_roll = 100;
   table.tertiary = (table.tertiary || []).filter((entry) => !SKOTIZO_TOTEMS.has(entry.item_id));
+}
+
+/**
+ * Amoxliatl (Wiki, Drops): two rolls on her table plus one frozen tear roll per kill. The
+ * export lists the tears' three amounts as separate rolls of their own (6/10, 3/10, 1/10); they
+ * are one roll of 10, made once per kill rather than with each main roll.
+ */
+function correctAmoxliatl(table) {
+  if (!table) return;
+  table.rolls = 2;
+  for (const entry of table.entries || []) {
+    if (entry.section === "Frozen tears") Object.assign(entry, { roll_group: "amoxliatl_tears", once_per_kill: true });
+  }
 }
 
 function loadDrops() {
@@ -384,8 +398,11 @@ function resolveEntry(entry, player) {
   return drops;
 }
 
-/** One roll on a table: its pre-roll, main roll and separate rolls. */
-function rollOnce(table, entries, player) {
+/**
+ * One roll on a table: its pre-roll, main roll and separate rolls. Separate rolls marked
+ * `once_per_kill` are made on the first of a table's `rolls` only.
+ */
+function rollOnce(table, entries, player, first = true) {
   const drops = [];
   const main = [];
   const separateGroups = new Map();
@@ -400,6 +417,7 @@ function rollOnce(table, entries, player) {
         preRollHit = true;
       }
     } else if (entry.separate_roll) {
+      if (entry.once_per_kill && !first) continue;
       if (entry.roll_group) {
         const group = separateGroups.get(entry.roll_group) || [];
         group.push(entry);
@@ -444,7 +462,7 @@ function rollOnce(table, entries, player) {
 /**
  * One kill: guaranteed drops, then a pre-roll (which replaces the main roll when it hits),
  * then a single weighted main-table roll, then independent separate/tertiary rolls. A table
- * with `rolls` repeats everything but the guaranteed and tertiary drops that many times.
+ * with `rolls` repeats everything but the guaranteed, tertiary and `once_per_kill` drops that many times.
  */
 function rollTable(table, player, npc) {
   const drops = [];
@@ -456,7 +474,7 @@ function rollTable(table, player, npc) {
   }
   const rolls = Number.isInteger(table.rolls) && table.rolls > 1 ? table.rolls : 1;
   for (let roll = 0; roll < rolls; roll++) {
-    drops.push(...rollOnce(table, entries, player));
+    drops.push(...rollOnce(table, entries, player, roll === 0));
   }
 
   for (const entry of table.tertiary || []) {
