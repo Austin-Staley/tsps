@@ -12,6 +12,7 @@ const Common = require("../plugins/bosses/amoxliatl/Common.Amoxliatl");
 const { onFloor, floorTiles } = require("../plugins/bosses/amoxliatl/Fight.Amoxliatl");
 const UnstableIce = require("../plugins/bosses/amoxliatl/UnstableIce.Amoxliatl");
 const CombatAchievements = require("../plugins/bosses/amoxliatl/CombatAchievements.Amoxliatl");
+const { ChatType, encodeChatMessage } = require("../dist/net/protocol/ClientProtocol");
 
 const FROZEN_TEAR = 29895;
 const emitted = [];
@@ -99,4 +100,15 @@ test("the fight's tasks are judged from what it saw", () => {
   assert.deepEqual(judged(clean, 40), ["Amoxliatl Speed-Trialist", "Amoxliatl Speed-Chaser", "Nagua Negation", "Totally Shattered", "Without Ralos' Light"]);
   assert.deepEqual(judged({ ...clean, damageTaken: 3, prayerLost: true, shattered: true }, 60, 10), ["Amoxliatl Speed-Trialist", "Kemo Makti"]);
   assert.deepEqual(judged({ ...clean, damageTaken: 1, prayerLost: true, shattered: true, usedTemotli: true, otherWeapon: false }, 100), ["Temotli Triumph"]);
+});
+
+test("her line goes to the chatbox as npc_say with her name, the Unstable Ice line as spam", () => {
+  // The chat packet's body: the text, the chat type, the sender's name, the prefix, the player id.
+  const body = (packet) => packet.subarray(packet.length - (packet.readUInt16BE(1)));
+  const line = body(encodeChatMessage("game", "Euat!", "Amoxliatl", "", -1, ChatType.NPC_SAY));
+  assert.equal(line.toString("latin1", 0, 5), "Euat!");
+  assert.equal(line[6], 116);
+  assert.equal(line.toString("latin1", 7, 16), "Amoxliatl");
+  assert.equal(body(encodeChatMessage("game", "x", "", "", -1, ChatType.SPAM))[2], 105);
+  assert.equal(body(encodeChatMessage("game", "x"))[2], 0);
 });

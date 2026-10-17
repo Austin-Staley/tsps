@@ -100,6 +100,8 @@ class Fight {
     const { Animation } = this.core;
     this.boss.performAnimation(new Animation(spawn.anim));
     this.boss.forceChat(spawn.say);
+    // As captured, the line goes to the chatbox too, as her npc_say message.
+    this.player.getPacketSender().sendTypedMessage(this.core.ChatType.NPC_SAY, spawn.say, this.boss.getDefinition().getName());
     this.hudShown = true;
     this.shownHp = this.boss.getHitpoints();
     Common.api.emitCustomEvent("boss-hud:show", {

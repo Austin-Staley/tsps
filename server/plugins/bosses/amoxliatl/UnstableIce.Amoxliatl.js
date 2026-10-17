@@ -46,7 +46,7 @@ function launch(fight) {
   const { Animation, Projectile } = Common.core;
   const ice = Common.data.unstableIce;
   fight.boss.performAnimation(new Animation(ice.anim));
-  fight.player.sendMessage(ice.message);
+  fight.player.getPacketSender().sendTypedMessage(Common.core.ChatType.SPAM, ice.message);
   const [min, max] = ice.count;
   const tiles = targets(fight, Common.randomInt(min, max));
   const from = Projectile.centreOf(fight.boss);

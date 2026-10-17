@@ -27,7 +27,7 @@ Once The Heart of Darkness is done, the door west of the frost nagua (`vmq3_ruin
 | 2 | Map square 5446 (8x8 chunks, plane 0, unturned) copied into the instance; the player at 1376,4511 facing west; the three ice blockages (54282) added at 1377,4510-4512; the track The Guardian of Tapoyauik (807) |
 | 4 | The minimap on, not busy, the fade back in; the multiway indicator on |
 | 6 | The fade overlay closed |
-| 7 | She rises at 1362,4510 facing east (11527), "Euat! You are not welcome here!", and the boss HUD comes up in her colours (3204, 11761, 21407) |
+| 7 | She rises at 1362,4510 facing east (11527), "Euat! You are not welcome here!" overhead and in the chatbox (`npc_say`), and the boss HUD comes up in her colours (3204, 11761, 21407) |
 
 The blockages: Exit asks "Are you sure you want to exit?" (Yes./No.); Quick-exit doesn't. Out is the same fade, landing at 1602,9631. Leaving any way (the blockages, a teleport, death, logging out) ends the chamber; a player who logs out inside, or is saved there, logs back in outside the door.
 
@@ -77,6 +77,7 @@ Counted by event (`combat-achievements/data/monsters.json`), so the kill count a
 
 - `npc-combat-defs.json`: her death 11532 and no block or attack animation (the plugin plays her attacks), the blocks with none, so the human ones never play on them.
 - `monsters-complete.json`: immune to poison and venom (Wiki).
+- `PacketSender.sendTypedMessage(chatType, text, from)` with `api.core.ChatType` (`SPAM` 105, `NPC_SAY` 116): game messages on the chatbox's other channels, which `sendMessage` (type 0) can't reach.
 
 ## Estimates
 
@@ -89,7 +90,6 @@ Counted by event (`combat-achievements/data/monsters.json`), so the kill count a
 
 ## Not in yet
 
-- Her line in the chatbox: live also sends it as an `npc_say` game message, which tsps doesn't encode. The Unstable Ice message goes out as a game message, not the captured `spam` type.
 - Freeze immunity (Wiki: immune to freezes).
 - The quest's fight in her chamber (`amoxliatl_quest`, her `amoxliatl_quest_inactive` turn and the banishment): the quest plugin keeps its own.
 

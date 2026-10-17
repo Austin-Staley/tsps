@@ -958,6 +958,15 @@ function string(value: string): Buffer {
   return Buffer.concat([Buffer.from(value, "latin1"), Buffer.from([0])]);
 }
 
+/** Chatbox channels a game message can go to (the cache's chat types, as rsprox names them). */
+export const ChatType = {
+  GAME: 0,
+  /** Filtered out with "Filter: on" (the Game tab's filter). */
+  SPAM: 105,
+  /** An NPC's overhead line, shown as "Name: text"; the NPC's name goes in `from`. */
+  NPC_SAY: 116,
+} as const;
+
 export function encodeChatMessage(
   messageType: "game" | "public" | "private_in" | "private_out" | "channel" | "clan" | "trade" | "server",
   text: string,
