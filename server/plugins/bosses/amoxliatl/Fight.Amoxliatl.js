@@ -5,9 +5,9 @@
  *   her colours, and 4 ticks later she attacks; then every 8 ticks. She follows the player to
  *   melee distance (the Wiki's "drag").
  * - Her standard attack (11530) is a magic hit of up to 22 on the same tick, which Protect from
- *   Magic blocks, with ice spikes across the floor around the player. 3 ticks later an icy pool
- *   forms on the tile the player stood on; it deals 6-10 a tick to anyone on it (Wiki) and stays
- *   until she dies.
+ *   Magic blocks, with ice spikes across the floor around the player. 3 ticks later the spikes
+ *   come up, 6-10 to a player still on one, and an icy pool forms on the tile the player stood on;
+ *   it deals 6-10 a tick to anyone on it (Wiki) and stays until she dies.
  * - After every 2-4 standard attacks (Wiki) a special, the first at random and then in turn:
  *   Icicle Crash (Fight here) and Unstable Ice (UnstableIce.Amoxliatl). With the player on the
  *   path to her platform she has no room for Unstable Ice and only uses Icicle Crash.
@@ -171,22 +171,39 @@ class Fight {
     const { attack } = Common.data;
     this.boss.performAnimation(new Animation(attack.anim));
     const [x, y] = this.playerTile();
-    this.spikes(x, y);
+    const spiked = this.spikes(x, y);
+    this.at(Common.data.spikes.damageTicks, () => this.spikesErupt(spiked));
     this.at(Common.data.pools.afterTicks, () => this.placePool(x, y));
     // Lands on the same tick (captured); the engine rolls it against Protect from Magic.
     return new PendingHit(this.boss, this.player, magicStyle(), 0);
   }
 
-  /** Spikes on the floor around the player, thinning out with distance (as captured). */
+  /** Spikes on the floor around the player, thinning out with distance (as captured): their tiles. */
   spikes(px, py) {
     const { spotanim, reach, chance } = Common.data.spikes;
+    const spiked = new Set();
     for (const [x, y] of floorTiles()) {
       const distance = Math.max(Math.abs(x - px), Math.abs(y - py));
       if (distance > reach) continue;
       if (Math.random() < chance[Math.min(distance, chance.length - 1)]) {
         Common.tileGraphic(this.player, this.session.tile([x, y, 0]), spotanim);
+        spiked.add(key(x, y));
       }
     }
+    return spiked;
+  }
+
+  /**
+   * The spikes come up 3 ticks after her attack (as captured): a player still on one of their
+   * tiles takes 6-10. This runs before the player's own step that tick, so stepping off within
+   * 2 ticks is safe - the Wiki's "step back two tiles".
+   */
+  spikesErupt(spiked) {
+    if (this.over || this.player.getHitpoints() <= 0) return;
+    const [x, y] = this.playerTile();
+    if (!spiked.has(key(x, y))) return;
+    const [min, max] = Common.data.spikes.damage;
+    this.hurtPlayer(Common.randomInt(min, max));
   }
 
   special() {

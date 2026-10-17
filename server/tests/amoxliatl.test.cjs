@@ -9,7 +9,7 @@ Server.installProductionPathResolver();
 const { Location } = require("../dist/game/model/Location");
 const { __internals } = require("../plugins/npcs/NpcDrops.plugin");
 const Common = require("../plugins/bosses/amoxliatl/Common.Amoxliatl");
-const { onFloor, floorTiles } = require("../plugins/bosses/amoxliatl/Fight.Amoxliatl");
+const { Fight, onFloor, floorTiles, key } = require("../plugins/bosses/amoxliatl/Fight.Amoxliatl");
 const UnstableIce = require("../plugins/bosses/amoxliatl/UnstableIce.Amoxliatl");
 const CombatAchievements = require("../plugins/bosses/amoxliatl/CombatAchievements.Amoxliatl");
 const { ChatType, encodeChatMessage } = require("../dist/net/protocol/ClientProtocol");
@@ -111,4 +111,15 @@ test("her line goes to the chatbox as npc_say with her name, the Unstable Ice li
   assert.equal(line.toString("latin1", 7, 16), "Amoxliatl");
   assert.equal(body(encodeChatMessage("game", "x", "", "", -1, ChatType.SPAM))[2], 105);
   assert.equal(body(encodeChatMessage("game", "x"))[2], 0);
+});
+
+test("the spikes hurt a player still on one when they come up, not one who stepped off", () => {
+  const hits = [];
+  const fightOn = (x, y) => ({ over: false, player: { getHitpoints: () => 99 }, playerTile: () => [x, y], hurtPlayer: (damage) => hits.push(damage) });
+  const spiked = new Set([key(1365, 4511), key(1366, 4511)]);
+  Fight.prototype.spikesErupt.call(fightOn(1365, 4511), spiked);
+  assert.equal(hits.length, 1);
+  assert.ok(hits[0] >= 6 && hits[0] <= 10, `${hits[0]}`);
+  Fight.prototype.spikesErupt.call(fightOn(1365, 4513), spiked);
+  assert.equal(hits.length, 1, "stepped off: no damage");
 });
