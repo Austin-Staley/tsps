@@ -44,7 +44,7 @@ const COMBAT_TARGET_PLAYER_VARP = 1075;
 /** Owns one character's target, attack deadline, approach route, and delayed hits. */
 export class Combat {
     private readonly hitQueue = new HitQueue(this.character);
-    private readonly damageMap = new Map<Player, HitDamageCache>();
+    private damageMap: Map<Player, HitDamageCache> | null = null;
     private readonly lastAttack = new Stopwatch();
     private readonly poisonImmunityTimer = new SecondsTimer();
     private readonly fireImmunityTimer = new SecondsTimer();
@@ -479,44 +479,44 @@ export class Combat {
     public addDamage(entity: Mobile, amount: number): void {
         if (amount <= 0 || entity.isNpc()) return;
         const player = entity as Player;
-        const cached = this.damageMap.get(player);
+        const cached = this.damageMap?.get(player);
         if (cached) cached.incrementDamage(amount);
-        else this.damageMap.set(player, new HitDamageCache(amount));
+        else (this.damageMap ??= new Map()).set(player, new HitDamageCache(amount));
     }
 
     public getKiller(clearMap: boolean): Player | null {
         let damage = 0;
         let killer: Player | null = null;
-        for (const [player, cached] of this.damageMap) {
+        for (const [player, cached] of this.damageMap ?? []) {
             if (!player.isRegistered() || cached.getStopwatch() > CombatConstants.DAMAGE_CACHE_TIMEOUT) continue;
             if (cached.getDamage() > damage) {
                 damage = cached.getDamage();
                 killer = player;
             }
         }
-        if (clearMap) this.damageMap.clear();
+        if (clearMap) this.damageMap = null;
         return killer;
     }
 
     /** Forgets recorded player damage; a fight that disengaged must not win a later kill. */
     public clearDamageMap(): void {
-        this.damageMap.clear();
+        this.damageMap = null;
     }
 
     public damageMapContains(player: Player): boolean {
-        const cached = this.damageMap.get(player);
+        const cached = this.damageMap?.get(player);
         return cached != null && cached.getStopwatch() < CombatConstants.DAMAGE_CACHE_TIMEOUT;
     }
 
     public getRecentDamagers(): Player[] {
-        return [...this.damageMap].flatMap(([player, cached]) =>
+        return [...(this.damageMap ?? [])].flatMap(([player, cached]) =>
             player.isRegistered() && cached.getDamage() > 0 && cached.getStopwatch() < CombatConstants.DAMAGE_CACHE_TIMEOUT
                 ? [player] : []
         );
     }
 
     public getRecentDamagerEntries(): Array<{ player: Player; damage: number }> {
-        return [...this.damageMap].flatMap(([player, cached]) =>
+        return [...(this.damageMap ?? [])].flatMap(([player, cached]) =>
             player.isRegistered() && cached.getDamage() > 0 && cached.getStopwatch() < CombatConstants.DAMAGE_CACHE_TIMEOUT
                 ? [{ player, damage: cached.getDamage() }] : []
         );
