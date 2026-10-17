@@ -894,6 +894,18 @@ function handleSmith(event) {
   if (anvilAccess(event)) openEquipmentCreationInterface(event.player);
 }
 
+// The rusted anvil in Lumbridge can only be used to smith bronze.
+const RUSTED_ANVIL_BRONZE_ONLY_MESSAGE = "You can only use bronze bars to smith on this anvil.";
+
+function handleRustedAnvilSmith(event) {
+  if (!anvilAccess(event)) return;
+  if (!event.player.getInventory().contains(ItemIds.BRONZE_BAR)) {
+    event.player.sendMessage(RUSTED_ANVIL_BRONZE_ONLY_MESSAGE);
+    return;
+  }
+  openEquipmentCreationInterface(event.player, ItemIds.BRONZE_BAR);
+}
+
 function handleSmithingItemOnObject(event) {
   const { player, object, itemId } = event;
   const name = object.getDefinition().getName();
@@ -908,34 +920,19 @@ function handleSmithingItemOnObject(event) {
     return;
   }
 
- if (name === "Anvil" || name === "An experimental anvil" || name === "Rusted anvil") {
-    if (name === "Rusted anvil" && itemId !== ItemIds.BRONZE_BAR) {
-      player.sendMessage("You can only use bronze bars to smith on this anvil.");
-      event.handled = true;
-      return;
-    }
-
+  if (name === "Anvil" || name === "An experimental anvil" || name === "Rusted anvil") {
     if (SMITHABLE_EQUIPMENT_BY_BAR.has(itemId)) {
       event.handled = true;
       if (!anvilAccess(event)) return;
+      if (name === "Rusted anvil" && itemId !== ItemIds.BRONZE_BAR) {
+        player.sendMessage(RUSTED_ANVIL_BRONZE_ONLY_MESSAGE);
+        return;
+      }
       openEquipmentCreationInterface(player, itemId);
       event.handled = true;
       return;
     }
   }
-
-}
-
-function handleRustedAnvilInteraction(player, itemUsed, object) {
-    const itemId = itemUsed.id;
-
-    // Only intercept if it's a non-bronze smithable bar
-    if (itemId !== ItemIds.BRONZE_BAR && SMITHABLE_EQUIPMENT_BY_BAR.has(itemId)) {
-        player.sendMessage("You can only use bronze bars on this rusted anvil.");
-        return;
-    }
-
-    performSmithAction(player, object, itemUsed); 
 }
 
 module.exports = {
@@ -967,13 +964,7 @@ module.exports = {
     api.onObjectInteraction("Small furnace", { Smelt: handleSmelt });
     api.onObjectInteraction("Anvil", { Smith: handleSmith });
     api.onObjectInteraction("An experimental anvil", { Use: handleSmith });
-
-    // Rusted anvil in lumbridge only works for bronze bars
-    api.onItemOnObject({
-        objectId: ObjectIds.RUSTED_ANVIL,
-        handler: handleRustedAnvilInteraction
-    });
-
+    api.onObjectInteraction("Rusted anvil", { Smith: handleRustedAnvilSmith });
 
     api.onInterfaceActionButton(
       SMELTING_SKILLMULTI_BUTTON_IDS,
