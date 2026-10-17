@@ -44,12 +44,13 @@ const COMBAT_TARGET_PLAYER_VARP = 1075;
 /** Owns one character's target, attack deadline, approach route, and delayed hits. */
 export class Combat {
     private readonly hitQueue = new HitQueue(this.character);
-    private readonly damageMap = new Map<Player, HitDamageCache>();
+    private damageMap: Map<Player, HitDamageCache> | null = null;
     private readonly lastAttack = new Stopwatch();
-    private readonly poisonImmunityTimer = new SecondsTimer();
-    private readonly fireImmunityTimer = new SecondsTimer();
-    private readonly teleblockTimer = new SecondsTimer();
-    private readonly prayerBlockTimer = new SecondsTimer();
+    // Most NPCs never use these; each SecondsTimer also holds a Stopwatch, so allocate on first use.
+    private poisonImmunityTimer: SecondsTimer | null = null;
+    private fireImmunityTimer: SecondsTimer | null = null;
+    private teleblockTimer: SecondsTimer | null = null;
+    private prayerBlockTimer: SecondsTimer | null = null;
     private nextAttackCycle = 0;
     private target: Mobile | null = null;
     private autoRetaliating = false;
@@ -478,44 +479,44 @@ export class Combat {
     public addDamage(entity: Mobile, amount: number): void {
         if (amount <= 0 || entity.isNpc()) return;
         const player = entity as Player;
-        const cached = this.damageMap.get(player);
+        const cached = this.damageMap?.get(player);
         if (cached) cached.incrementDamage(amount);
-        else this.damageMap.set(player, new HitDamageCache(amount));
+        else (this.damageMap ??= new Map()).set(player, new HitDamageCache(amount));
     }
 
     public getKiller(clearMap: boolean): Player | null {
         let damage = 0;
         let killer: Player | null = null;
-        for (const [player, cached] of this.damageMap) {
+        for (const [player, cached] of this.damageMap ?? []) {
             if (!player.isRegistered() || cached.getStopwatch() > CombatConstants.DAMAGE_CACHE_TIMEOUT) continue;
             if (cached.getDamage() > damage) {
                 damage = cached.getDamage();
                 killer = player;
             }
         }
-        if (clearMap) this.damageMap.clear();
+        if (clearMap) this.damageMap = null;
         return killer;
     }
 
     /** Forgets recorded player damage; a fight that disengaged must not win a later kill. */
     public clearDamageMap(): void {
-        this.damageMap.clear();
+        this.damageMap = null;
     }
 
     public damageMapContains(player: Player): boolean {
-        const cached = this.damageMap.get(player);
+        const cached = this.damageMap?.get(player);
         return cached != null && cached.getStopwatch() < CombatConstants.DAMAGE_CACHE_TIMEOUT;
     }
 
     public getRecentDamagers(): Player[] {
-        return [...this.damageMap].flatMap(([player, cached]) =>
+        return [...(this.damageMap ?? [])].flatMap(([player, cached]) =>
             player.isRegistered() && cached.getDamage() > 0 && cached.getStopwatch() < CombatConstants.DAMAGE_CACHE_TIMEOUT
                 ? [player] : []
         );
     }
 
     public getRecentDamagerEntries(): Array<{ player: Player; damage: number }> {
-        return [...this.damageMap].flatMap(([player, cached]) =>
+        return [...(this.damageMap ?? [])].flatMap(([player, cached]) =>
             player.isRegistered() && cached.getDamage() > 0 && cached.getStopwatch() < CombatConstants.DAMAGE_CACHE_TIMEOUT
                 ? [{ player, damage: cached.getDamage() }] : []
         );
@@ -565,10 +566,10 @@ export class Combat {
     public setAmmunition(ammunition: Ammunition | null): void { this.ammunition = ammunition; }
     public getRangeAmmoData(): RangedData { return this.ammunition as unknown as RangedData; }
     public setRangeAmmoData(data: RangedData): void { this.ammunition = data as unknown as Ammunition; }
-    public getPoisonImmunityTimer(): SecondsTimer { return this.poisonImmunityTimer; }
-    public getFireImmunityTimer(): SecondsTimer { return this.fireImmunityTimer; }
-    public getTeleblockTimer(): SecondsTimer { return this.teleblockTimer; }
-    public getPrayerBlockTimer(): SecondsTimer { return this.prayerBlockTimer; }
+    public getPoisonImmunityTimer(): SecondsTimer { return this.poisonImmunityTimer ??= new SecondsTimer(); }
+    public getFireImmunityTimer(): SecondsTimer { return this.fireImmunityTimer ??= new SecondsTimer(); }
+    public getTeleblockTimer(): SecondsTimer { return this.teleblockTimer ??= new SecondsTimer(); }
+    public getPrayerBlockTimer(): SecondsTimer { return this.prayerBlockTimer ??= new SecondsTimer(); }
     public getLastAttack(): Stopwatch { return this.lastAttack; }
 
     private shouldRetreat(): boolean {
