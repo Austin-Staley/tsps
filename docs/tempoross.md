@@ -156,7 +156,10 @@ about 2,600/2,500 per player solo down to 1,800/1,700 each with 40.
   Spirit Anglers will ferry you back to the Ruins of Unkah in 20 seconds.", "Subdued in
   <time>. Personal best: <time>.", "Points: <n>. Personal best: <n>.", "Reward permits: <n>.
   Total permits: <n>.", "Your Tempoross kill count is: <n>.", jingle 288; the hosts say
-  "Tempoross has retreated to the depths!". After 31 ticks: mesbox "Victorious, you sail back to
+  "Tempoross has retreated to the depths!". Tempoross plays `fsb_death` (8904) and the hosts turn into their
+  victory variants (10586, 10588, 10595, 10597, with "Leave"). A tick later the hosts and the
+  cannoneers cheer (862); then the hosts dance every 5 ticks (`emote_dance` 866 or
+  `emote_dance_scottish` 2106) and each cannoneer cheers again every 5-9 ticks. After 31 ticks: mesbox "Victorious, you sail back to
   the Ruins of Unkah to prepare for the next encounter...", then Captain Pudi: "Excellent work
   out there! The seas are safe for a little longer thanks to you!".
 - **Loss:** mesbox "The force of Tempoross' storm forces the Spirit Anglers to sail back to

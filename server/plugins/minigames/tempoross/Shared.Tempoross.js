@@ -122,6 +122,10 @@ const ANIM = {
   BOSS_SPAWN: 8897,
   BOSS_TORRENT: 8903,
   BOSS_LIGHTNING: 8905,
+  BOSS_DEATH: 8904,
+  CHEER: 862,
+  DANCE: 866,
+  DANCE_SCOTTISH: 2106,
   CLOUD_GROWING: 8876,
   CLOUD_CHARGING: 8877,
   CLOUD_ATTACK: 8878,
@@ -259,9 +263,9 @@ function fade(player, out) {
   });
 }
 
-function animate(player, id) {
+function animate(entity, id) {
   const { Animation } = core();
-  player.performAnimation(new Animation(id));
+  entity?.performAnimation(new Animation(id));
 }
 
 /** A Graphic with a raw height (the captures' 124 for the tether), or none. */

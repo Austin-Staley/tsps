@@ -66,6 +66,8 @@
     "enragedStormPerTick": 12,
     "poolsActiveAfter": 11,
     "victoryTicks": 31,
+    "$celebration": "captures: hosts cheer +1 then dance every 5 ticks; cannoneers cheer +1 then every 5-9 ticks",
+    "celebration": { "hostDanceTicks": 5, "cannoneerCheerTicks": [5, 9] },
     "firstAttackTicks": 49,
     "attackCooldown": [50, 55],
     "lowEnergyCalm": 0.1,

@@ -28,7 +28,7 @@ class Cannons {
   constructor(fight) {
     this.fight = fight;
     this.cove = fight.cove;
-    /** { data, npc, crateLoc, cannonLoc, queue: fish ids, disabledUntil, nextShot, look } */
+    /** { data, npc, cannoneer, crateLoc, cannonLoc, queue: fish ids, disabledUntil, nextShot, look } */
     this.crates = [];
   }
 
@@ -44,7 +44,7 @@ class Cannons {
         nextShot: 0,
         look: 0,
       };
-      this.cove.spawnNpc(data.cannoneer[0], [data.cannoneer[1], data.cannoneer[2]]);
+      crate.cannoneer = this.cove.spawnNpc(data.cannoneer[0], [data.cannoneer[1], data.cannoneer[2]]);
       this.crates.push(crate);
     }
   }

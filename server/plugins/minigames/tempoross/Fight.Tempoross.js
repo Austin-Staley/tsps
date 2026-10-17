@@ -19,7 +19,7 @@ const Cannons = require("./Cannons.Tempoross");
 const Tethers = require("./Tethers.Tempoross");
 const Attacks = require("./Attacks.Tempoross");
 
-const { DATA, NPC, VARBIT, SCRIPT, INTERFACE, JINGLE, MUSIC } = Shared;
+const { DATA, NPC, VARBIT, SCRIPT, INTERFACE, JINGLE, MUSIC, ANIM } = Shared;
 const F = DATA.fight;
 
 const HUD_DELAY = 3;
@@ -210,11 +210,37 @@ class Fight {
     const time = this.ticks - Math.max(0, this.firstSurfaceTick);
     this.attacks.clearAll();
     this.setBoss(NPC.BOSS_DRAWING_WATER);
+    Shared.animate(this.boss, ANIM.BOSS_DEATH);
     this.spots.onOver();
     for (const host of this.hosts) host.npc?.setNpcTransformationId(host.victory);
     this.hostsSay("Tempoross has retreated to the depths!");
     this.forEachPlayer((player) => this.reward(player, time));
+    this.celebrate();
     Shared.later(this, F.victoryTicks, () => this.sailBack(true));
+  }
+
+  /**
+   * Captured on every win: a tick later the hosts and cannoneers cheer; then the hosts dance
+   * (866 or the Scottish 2106) every 5 ticks and each cannoneer cheers again every 5-9 ticks.
+   */
+  celebrate() {
+    const { hostDanceTicks, cannoneerCheerTicks } = F.celebration;
+    const crew = this.cannons.crates.map((crate) => ({ npc: crate.cannoneer, next: 1 }));
+    let ticks = 0;
+    Shared.repeat(this, 1, () => {
+      if (this.cove.ended) return false;
+      ticks += 1;
+      for (const host of this.hosts) {
+        if (ticks === 1) Shared.animate(host.npc, ANIM.CHEER);
+        else if (ticks % hostDanceTicks === 0) Shared.animate(host.npc, Shared.pick([ANIM.DANCE, ANIM.DANCE_SCOTTISH]));
+      }
+      for (const member of crew) {
+        if (ticks < member.next) continue;
+        Shared.animate(member.npc, ANIM.CHEER);
+        member.next = ticks + Shared.randomInt(...cannoneerCheerTicks);
+      }
+      return true;
+    });
   }
 
   reward(player, time) {
