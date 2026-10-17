@@ -39,6 +39,8 @@ export type NpcUpdateBlock = {
     exactMove?: ForcedMovementUpdate;
     /** A world tile to turn to once (OSRS npc face coord). */
     faceTile?: { x: number; y: number };
+    /** Body-model slot overrides (OSRS npc model customisation); an empty list resets them. */
+    modelCustomisation?: Array<{ slot: number; modelId: number }>;
     say?: string;
     colorOverride?: {
         startCycle: number;
@@ -212,7 +214,7 @@ export class NpcUpdateDecoder {
             const rotIdx = stream.readBits(3) | 0;
             const defaultRot = DIRECTION_TO_ORIENTATION[rotIdx & 7];
             const rot = (typeof defaultRot === "number" ? defaultRot : 0) & 2047;
-            const typeId = stream.readBits(14) | 0;
+            const typeId = stream.readBits(16) | 0;
 
             // Deck NPCs are relative to the player's deck tile, main-world NPCs to the root tile.
             const inMainWorld = worldViewId < 0;
@@ -388,6 +390,18 @@ export class NpcUpdateDecoder {
                 const x = stream.readUnsignedShortBE() | 0;
                 const y = stream.readUnsignedShortBE() | 0;
                 block.faceTile = { x, y };
+            }
+
+            // MODEL_CUSTOMISATION (0x1000): body-model slot replacements (empty = reset).
+            if ((mask & 0x1000) !== 0) {
+                const count = stream.readUnsignedByte() | 0;
+                const entries: Array<{ slot: number; modelId: number }> = [];
+                for (let i = 0; i < count; i++) {
+                    const slot = stream.readUnsignedByte() | 0;
+                    const modelId = stream.readUnsignedShortLE() | 0;
+                    entries.push({ slot, modelId });
+                }
+                block.modelCustomisation = entries;
             }
 
             if (Object.keys(block).length > 0) {

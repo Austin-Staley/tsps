@@ -9,6 +9,7 @@ import { Scene } from "../../rs/scene/Scene";
 import { MapManager } from "../MapManager";
 import { OsrsClient } from "../OsrsClient";
 import { Ray, rayIntersectsBox } from "../math/Raycast";
+import { baseNpcTypeId } from "../../custom/npcs/NpcModelOverrideRegistry";
 import { InteractType } from "../../render/InteractType";
 import { WebGLMapSquare } from "../../render/WebGLMapSquare";
 import { interpolateActorHeight, sampleBridgeHeightForWorldTile } from "./BridgeHeightSampler";
@@ -28,9 +29,9 @@ const MODEL_WORLD_SCALE = 1.0 / 128.0;
 const FOG_CORNER_ROUNDING = 0.0;
 
 type LocModelMesh = {
-    verticesX: Int32Array;
-    verticesY: Int32Array;
-    verticesZ: Int32Array;
+    verticesX: Int32Array | Float32Array;
+    verticesY: Int32Array | Float32Array;
+    verticesZ: Int32Array | Float32Array;
     indices1: Int32Array;
     indices2: Int32Array;
     indices3: Int32Array;
@@ -130,6 +131,11 @@ export class SceneRaycaster {
         vec3.normalize(newDir, newDir);
 
         return new Ray(newOrigin, newDir);
+    }
+
+    /** The draw distance in tiles, the GPU plugin's while it is on. */
+    private drawDistance(): number {
+        return this.osrsClient.gpuPlugin?.settings()?.drawDistance ?? this.osrsClient.renderDistance;
     }
 
     private getControlledPlayerWorldViewId(): number {
@@ -246,7 +252,7 @@ export class SceneRaycaster {
         const maxDistance =
             typeof options?.maxDistance === "number"
                 ? options.maxDistance
-                : Math.max(32, this.osrsClient.renderDistance + 32);
+                : Math.max(32, this.drawDistance() + 32);
         if (!Number.isFinite(maxDistance) || maxDistance <= 0) {
             return hits;
         }
@@ -291,7 +297,7 @@ export class SceneRaycaster {
             // Ignore - fog filtering will be disabled
         }
         if (typeof playerWorldX === "number" && typeof playerWorldZ === "number") {
-            const fogEnd = Number(this.osrsClient.renderDistance) || 0;
+            const fogEnd = Number(this.drawDistance()) || 0;
             if (Number.isFinite(fogEnd) && fogEnd >= 0) {
                 fogCutoff = fogEnd;
             }
@@ -660,7 +666,10 @@ export class SceneRaycaster {
             const worldX = (npcEcs.getWorldX(ecsId) | 0) / 128.0;
             const worldZ = (npcEcs.getWorldY(ecsId) | 0) / 128.0;
             const size = Math.max(1, npcEcs.getSize(ecsId) | 0);
-            const interactId = npcEcs.getNpcTypeId(ecsId) | 0;
+            // Interaction always speaks the cache's type id: a model customisation
+            // re-points the RENDER type to a synthetic id, and everything the pick
+            // path feeds (menu names, actions, heights) must stay the server's id.
+            const interactId = baseNpcTypeId(npcEcs.getNpcTypeId(ecsId) | 0);
             if (!(interactId > 0)) continue;
             const npcPlane = npcEcs.getLevel(ecsId) | 0;
             if (typeof basePlane === "number" && (npcPlane | 0) !== (basePlane | 0)) {

@@ -34,10 +34,10 @@ import {
   encodeGameframeBootstrap,
   encodeHandshake,
   encodeLoginResponse,
-  encodeLogoutResponse,
   encodeWelcome,
   PlayerAppearance,
   resolveGameframeRoot,
+  encodePluginMessage,
 } from "./protocol/ClientProtocol";
 import {
   WORLD_MAP_CLOSE_WIDGET_ID,
@@ -46,7 +46,6 @@ import {
 import { ObjectActionPacketListener } from "./packet/impl/ObjectActionPacketListener";
 import { NPCOptionPacketListener } from "./packet/impl/NPCOptionPacketListener";
 import { ChatPacketListener } from "./packet/impl/ChatPacketListener";
-import { DialogueOption } from "../game/model/dialogues/DialogueOption";
 import { PlayerOptionPacketListener } from "./packet/impl/PlayerOptionPacketListener";
 import { MagicOnPlayerPacketListener } from "./packet/impl/MagicOnPlayerPacketListener";
 import { LunarSpells } from "../game/content/combat/magic/LunarSpells";
@@ -78,6 +77,16 @@ import { CombatSpells } from "../game/content/combat/magic/CombatSpells";
 import { TeleportHandler } from "../game/model/teleportation/TeleportHandler";
 import { ArceuusSpells } from "../game/content/combat/magic/ArceuusSpells";
 import { SpellTeleports } from "../game/content/combat/magic/SpellTeleports";
+import {
+  LOGIN_FLAG_REMEMBER,
+  LOGIN_FLAG_TOKEN,
+  LOGIN_TOKENS_ATTRIBUTE,
+  checkLoginToken,
+  issueLoginToken,
+  readLoginTokens,
+  revokeLoginToken,
+  type LoginTokenEntry,
+} from "./login/LoginTokens";
 
 const OBJECT_ACTIONS = new ObjectActionPacketListener();
 const NPC_ACTIONS = new NPCOptionPacketListener();
@@ -97,12 +106,39 @@ export function dispatchClientMessages(player: Player, messages: ClientMessages)
 export async function connectHeadlessClient(username: string, password: string): Promise<{ player?: Player; error?: string }> {
   const connection = new ClientConnection(new HeadlessBinaryChannel());
   connection.inject([
-    { type: "login", username, password, revision: CachePipeline.getActive().revision },
+    { type: "login", username, password, revision: CachePipeline.getActive().revision, flags: 0 },
     { type: "handshake", name: username, clientType: 0 },
   ]);
   await connection.idle();
   const player = connection.getPlayer();
   return player ? { player } : { error: connection.getLoginFailure() ?? "Login did not complete." };
+}
+
+/** "Log out" on the remembered-account screen: the server drops that browser's token. */
+async function forgetLoginToken(rawUsername: string, token: string): Promise<void> {
+  const protocolName = Misc.formatNameForProtocol(rawUsername.trim());
+  if (protocolName.length < 1 || protocolName.length > 12 || !Misc.isValidName(protocolName)) return;
+  const username = Misc.formatText(protocolName);
+  const online = World.getPlayerByName(username);
+  if (online) {
+    const entries = readLoginTokens(online.getAttribute(LOGIN_TOKENS_ATTRIBUTE), Date.now());
+    const check = checkLoginToken(entries, token);
+    if (check.kind === "valid") online.setAttribute(LOGIN_TOKENS_ATTRIBUTE, revokeLoginToken(entries, check.index));
+    return;
+  }
+  try {
+    // Only a token the account holds causes a write, so made-up requests cost nothing.
+    const save = GameConstants.PLAYER_PERSISTENCE.load(username);
+    if (!save || checkLoginToken(readLoginTokens(save.attributes?.[LOGIN_TOKENS_ATTRIBUTE], Date.now()), token).kind !== "valid") return;
+    await GameConstants.PLAYER_PERSISTENCE.updateOffline(username, (stored) => {
+      const entries = readLoginTokens(stored.attributes?.[LOGIN_TOKENS_ATTRIBUTE], Date.now());
+      const check = checkLoginToken(entries, token);
+      if (check.kind !== "valid") return;
+      stored.attributes = { ...(stored.attributes ?? {}), [LOGIN_TOKENS_ATTRIBUTE]: revokeLoginToken(entries, check.index) };
+    }, "login-token");
+  } catch (error) {
+    console.warn(`[login] could not forget a login token for ${username}`, error);
+  }
 }
 
 const CLOSE_ON_INTERFACE_CLOSE_ATTRIBUTE = "interface:close-on-interface-close";
@@ -126,10 +162,25 @@ const WORLD_INTERACTIONS = new Set([
   "spell_on_ground",
 ]);
 
+/** Packets the client sends on its own, which don't count as the player's input. */
+const NON_INPUT_PACKETS = new Set([
+  "hello",
+  "ping",
+  "login",
+  "handshake",
+  "logout",
+  "raw",
+  "varp_transmit",
+  "plugin_message",
+  "local_trigger",
+]);
+
 type PendingLogin = {
   username: string;
   passwordHash: string;
   save: any | null;
+  /** The account's remembered logins after this one, or null when they didn't change. */
+  loginTokens: LoginTokenEntry[] | null;
 };
 
 export function isConfiguredDeveloperUsername(username: string): boolean {
@@ -209,6 +260,8 @@ export class ClientConnection {
   private pending?: PendingLogin;
   private reservedName?: string;
   private player?: Player;
+  private pluginMessageWindow = 0;
+  private pluginMessageCount = 0;
   private closed = false;
   private loginFailure?: string;
   private input = Promise.resolve();
@@ -263,6 +316,7 @@ export class ClientConnection {
     if (this.closed) return;
     for (const packet of packets) {
       if (this.player) LunarSpells.expireSpellbookSwap(this.player);
+      if (this.player && !NON_INPUT_PACKETS.has(packet.type)) this.player.lastInputCycle = World.getProcessCycle();
       if (this.player && WORLD_INTERACTIONS.has(packet.type)) {
         if (this.player.getStatus() === PlayerStatus.TRADING) continue;
         const input = { player: this.player, packet, handled: false };
@@ -276,6 +330,19 @@ export class ClientConnection {
         }
       }
       switch (packet.type) {
+        case "plugin_message": {
+          if (!this.player) continue;
+          const now = Date.now();
+          if (now - this.pluginMessageWindow >= 1000) {
+            this.pluginMessageWindow = now;
+            this.pluginMessageCount = 0;
+          }
+          if (++this.pluginMessageCount > 64) continue;
+          const event = { player: this.player, channel: packet.channel, data: packet.data, handled: false };
+          PluginManager.emitCustomEvent("network:plugin-message", event);
+          if (!event.handled) this.player.getSession().sendClientPacket(encodePluginMessage(packet.channel, { type: "unavailable" }));
+          continue;
+        }
         case "movement_input":
           if (this.player && this.player.getStatus() !== PlayerStatus.TRADING) {
             PluginManager.emitCustomEvent("player:movement-input", { player: this.player, packet });
@@ -464,9 +531,7 @@ export class ClientConnection {
           })) {
             continue;
           }
-          if (this.player?.getDialogueManager().canContinue(packet.widgetId)) {
-            this.player.getDialogueManager().advance();
-          }
+          this.player?.getDialogueManager().handleResume(packet.widgetId, packet.childIndex);
           continue;
         }
         case "dialogue_amount": {
@@ -494,7 +559,13 @@ export class ClientConnection {
         }
         case "widget_action":
           if (this.player) {
+            const widgetAction = { player: this.player, packet, handled: false };
+            PluginManager.emitCustomEvent("player:widget-action", widgetAction);
+            if (widgetAction.handled) continue;
             const actionPacket = { ...packet, buttonNum: packet.buttonNum ?? 0 };
+            // The dialogue this click can answer: one opened by the click itself (an inventory
+            // option's statement) must not take the same click as its option.
+            const openDialogue = this.player.getDialogueManager().getCurrent();
             const equipmentSlot = EquipPacketListener.resolveEquipmentSlot(actionPacket.groupId, actionPacket.childId);
             if (WORLD_MAP_ORB_WIDGET_IDS.includes(actionPacket.widgetId) && actionPacket.buttonNum === 2) {
               this.player.getPacketSender().toggleWorldMap();
@@ -618,7 +689,9 @@ export class ClientConnection {
                 });
               }
             }
-            if (this.player.getDialogueManager().isActive() && actionPacket.buttonNum > 0 && actionPacket.buttonNum <= 5) {
+            if (this.player.getDialogueManager().isActive() && openDialogue != null &&
+                this.player.getDialogueManager().getCurrent() === openDialogue &&
+                actionPacket.buttonNum > 0 && actionPacket.buttonNum <= 5) {
               this.player.getDialogueManager().handleOption(actionPacket.buttonNum - 1 as DialogueOption);
             }
           }
@@ -652,7 +725,15 @@ export class ClientConnection {
             packet.targetItemId,
             packet.targetSlot,
             CacheDefinitions.getSpellName(packet.sourceWidgetId, packet.sourceItemId),
-          ) && !MAGIC_ITEMS.castOnItem(
+          ) && !PluginManager.emitSpellOnItem({
+            player: this.player,
+            spellName: CacheDefinitions.getSpellName(packet.sourceWidgetId, packet.sourceItemId),
+            spellWidget: packet.sourceWidgetId,
+            spellItemId: packet.sourceItemId,
+            itemId: packet.targetItemId,
+            slot: packet.targetSlot,
+            handled: false,
+          }) && !MAGIC_ITEMS.castOnItem(
             this.player,
             this.resolveClientCombatSpellId(
               packet.sourceWidgetId,
@@ -673,6 +754,11 @@ export class ClientConnection {
           }
           continue;
         case "widget_drag":
+          if (this.player) {
+            const widgetDrag = { player: this.player, packet, handled: false };
+            PluginManager.emitCustomEvent("player:widget-action", widgetDrag);
+            if (widgetDrag.handled) continue;
+          }
           if (this.player && !Bank.handleDrag(this.player, packet)) SwitchItemSlotPacketListener.move(
             this.player, packet.sourceWidgetId, packet.sourceSlot, packet.targetSlot
           );
@@ -736,8 +822,17 @@ export class ClientConnection {
           continue;
         case "examine_object":
           if (this.player) {
+            const examineEvent = {
+              player: this.player,
+              objectId: packet.id,
+              handled: false,
+            };
+            PluginManager.emitCustomEvent("world:object-examine", examineEvent);
+            if (examineEvent.handled) continue;
+            // A multi-loc's text can be recorded under the variant this player sees.
             const definition = ObjectDefinition.forId(packet.id);
-            this.player.sendMessage(definition?.getExamine() ?? "It's nothing special.");
+            const seen = ObjectDefinition.examineText(packet.id) === null ? ObjectDefinition.forPlayer(packet.id, this.player) : null;
+            this.player.sendMessage((seen && ObjectDefinition.examineText(seen.id) ? seen : definition)?.getExamine() ?? "It's nothing special.");
           }
           continue;
         case "appearance":
@@ -797,28 +892,24 @@ export class ClientConnection {
         case "ping":
           continue;
         case "login":
-          await this.login(packet.username, packet.password, packet.revision);
+          await this.login(packet.username, packet.password, packet.revision, packet.flags);
+          continue;
+        case "login_forget":
+          await forgetLoginToken(packet.username, packet.token);
           continue;
         case "handshake":
           this.enterWorld(packet.clientType);
           continue;
-        case "logout": {
-          const refusal = this.player ? PluginManager.emitCanLogout(this.player) : null;
-          if (refusal) {
-            this.send(encodeLogoutResponse(refusal, false));
-            continue;
-          }
-          this.send(encodeLogoutResponse());
-          this.player?.getSession().flushPackets();
-          this.cleanup("logout");
-          this.channel.close(1000, "logout");
-          return;
-        }
+        case "logout":
+          // Answered on the next tick (World.answerLogoutRequest), which closes the socket.
+          if (this.player) World.queueLogoutRequest(this.player);
+          continue;
       }
     }
   }
 
-  private async login(rawUsername: string, password: string, revision: number): Promise<void> {
+  private async login(rawUsername: string, password: string, revision: number, flags = 0): Promise<void> {
+    const tokenLogin = (flags & LOGIN_FLAG_TOKEN) !== 0;
     this.releasePendingName();
     const protocolName = Misc.formatNameForProtocol(rawUsername.trim());
     const username = Misc.formatText(protocolName);
@@ -870,11 +961,38 @@ export class ClientConnection {
       return;
     }
 
+    // A remembered login only signs in to an account that exists.
+    if (tokenLogin && !save) {
+      this.releasePendingName();
+      this.failLogin(3, "Invalid username or password.");
+      return;
+    }
+
     let passwordHash = "";
+    let loginToken = "";
+    let loginTokens: LoginTokenEntry[] | null = null;
     try {
-      if (save) {
+      if (tokenLogin) {
+        const now = Date.now();
+        const entries = readLoginTokens(save.attributes?.[LOGIN_TOKENS_ATTRIBUTE], now);
+        const check = checkLoginToken(entries, password);
+        if (check.kind !== "valid") {
+          if (check.kind === "reused") {
+            console.warn(`[login] ${username}: a replaced login token was used again; revoking it`);
+            await this.saveLoginTokens(username, save, revokeLoginToken(entries, check.index));
+          }
+          this.releasePendingName();
+          this.failLogin(3, "Invalid username or password.");
+          return;
+        }
+        ({ token: loginToken, entries: loginTokens } = issueLoginToken(entries, now, check.index));
+        await this.saveLoginTokens(username, save, loginTokens);
+        passwordHash = String(save.getPasswordHashWithSalt?.() ?? "");
+      } else if (save) {
         const stored = String(save.getPasswordHashWithSalt?.() ?? "");
-        let valid = stored === password;
+        // Only a save from before hashing holds the plain password. A hash must never match
+        // the typed text, even though the 64-character limit happens to rule out real ones.
+        let valid = !!stored && !stored.includes(":") && stored === password;
         if (!valid && stored.includes(":")) {
           try {
             valid = await GameConstants.PLAYER_PERSISTENCE.checkPassword(password, save);
@@ -893,6 +1011,12 @@ export class ClientConnection {
       } else {
         passwordHash = await GameConstants.PLAYER_PERSISTENCE.encryptPassword(password);
       }
+      if (!tokenLogin && (flags & LOGIN_FLAG_REMEMBER) !== 0) {
+        const now = Date.now();
+        const entries = readLoginTokens(save?.attributes?.[LOGIN_TOKENS_ATTRIBUTE], now);
+        ({ token: loginToken, entries: loginTokens } = issueLoginToken(entries, now));
+        if (save) await this.saveLoginTokens(username, save, loginTokens);
+      }
     } catch (error) {
       console.error(`[login] failed to authenticate ${username}`, error);
       this.releasePendingName();
@@ -906,8 +1030,8 @@ export class ClientConnection {
       this.releasePendingName();
       return;
     }
-    this.pending = { username, passwordHash, save };
-    this.send(encodeLoginResponse(true, -1, "", username));
+    this.pending = { username, passwordHash, save, loginTokens };
+    this.send(encodeLoginResponse(true, -1, "", username, loginToken));
     console.info(`[login] accepted ${username} from ${this.channel.remoteAddress}`);
   }
 
@@ -930,6 +1054,7 @@ export class ClientConnection {
     if (pending.save) pending.save.applyToPlayer(player);
     if (isConfiguredDeveloperUsername(player.getUsername())) player.setRights(PlayerRights.DEVELOPER);
     player.setPasswordHashWithSalt(pending.passwordHash);
+    if (pending.loginTokens) player.setAttribute(LOGIN_TOKENS_ATTRIBUTE, pending.loginTokens);
     player.setLastKnownRegion(player.getLocation().clone());
     player.getUpdateFlag().flag(Flag.APPEARANCE);
 
@@ -1011,11 +1136,17 @@ export class ClientConnection {
       ? (CacheDefinitions.getItem(packet.itemId)?.inventoryActions ?? [])
           .findIndex((action) => action?.toLowerCase() === option) + 1
       : packet.optionIndex;
-    if (optionIndex === 0) return;
-    if (/^(wield|wear|equip|hold)$/.test(option)) {
+    // Quest greegrees have equipment slots but no cache Wield action.
+    if (/^(wield|wear|equip|hold)$/.test(option)
+      && ItemDefinition.forId(packet.itemId).getEquipmentType().getSlot() >= 0) {
       EquipPacketListener.equip(player, packet.itemId, packet.slot, 3214);
-    } else if (ItemActionPacketListener.isDropOption(option, optionIndex)) {
-      DropItemPacketListener.drop(player, packet.itemId, 3214, packet.slot);
+      return;
+    }
+    if (optionIndex === 0) return;
+    if (ItemActionPacketListener.isDropOption(option, optionIndex)) {
+      if (!ItemActionPacketListener.handleAction(player, packet.widgetId, packet.itemId, packet.slot, optionIndex ?? 5, packet.option)) {
+        DropItemPacketListener.drop(player, packet.itemId, 3214, packet.slot);
+      }
     } else if (option === "examine") {
       const definition = ItemDefinition.forId(packet.itemId);
       player.sendMessage(definition.getExamine() || definition.getName());
@@ -1060,8 +1191,12 @@ export class ClientConnection {
       // bones' "Bury" is their op3, where Take usually sits).
       PickupItemPacketListener.pickup(player, packet.itemId, packet.x, packet.y, packet.stackId);
     } else {
+      // A named option (the agent MCP) is resolved to its op number, as the client sends it.
+      const named = option
+        ? CacheDefinitions.getItem(packet.itemId)?.groundActions?.findIndex((action) => action?.toLowerCase() === option) ?? -1
+        : -1;
       SecondGroundItemOptionPacketListener.interact(
-        player, packet.itemId, packet.x, packet.y, packet.optionIndex ?? 2
+        player, packet.itemId, packet.x, packet.y, packet.optionIndex ?? (named >= 0 ? named + 1 : 2)
       );
     }
   }
@@ -1113,6 +1248,22 @@ export class ClientConnection {
     };
   }
 
+  /**
+   * Writes the account's remembered logins before answering, so a swapped token is on disk
+   * even if the player never finishes logging in. The live player's copy follows in enterWorld.
+   */
+  private async saveLoginTokens(username: string, save: any, entries: LoginTokenEntry[]): Promise<void> {
+    if (!save) return;
+    save.attributes = { ...(save.attributes ?? {}), [LOGIN_TOKENS_ATTRIBUTE]: entries };
+    try {
+      await GameConstants.PLAYER_PERSISTENCE.updateOffline(username, (stored) => {
+        stored.attributes = { ...(stored.attributes ?? {}), [LOGIN_TOKENS_ATTRIBUTE]: entries };
+      }, "login-token");
+    } catch (error) {
+      console.warn(`[login] could not save login tokens for ${username}`, error);
+    }
+  }
+
   private failLogin(code: number, message: string): void {
     this.loginFailure = message;
     this.send(encodeLoginResponse(false, code, message));
@@ -1137,13 +1288,14 @@ export class ClientConnection {
     this.closed = true;
     this.releasePendingName();
     if (!this.player) return;
+    // The disconnect hooks fire when the player leaves the world, which a player in
+    // combat does only when it ends (World's removal queue).
+    this.player.setDisconnectSource(source);
+    this.player.getTrading().closeTrade();
+    GameConstants.PLAYER_PERSISTENCE.requestSave(this.player, "disconnect");
     if (!World.getRemovePlayerQueue().includes(this.player)) {
       World.getRemovePlayerQueue().push(this.player);
     }
-    PluginManager.emitPlayerDisconnect({
-      player: this.player,
-      username: this.player.getUsername(),
-      source,
-    });
   }
 }
+import { DialogueOption } from "../game/model/dialogues/DialogueOption";

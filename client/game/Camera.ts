@@ -16,6 +16,27 @@ export enum ProjectionType {
     ORTHO,
 }
 
+type CameraEasing = "linear" | "ease_in_out_sine" | "ease_out_cubic";
+interface CameraTween {
+    cycles: number;
+    elapsed: number;
+    easing: CameraEasing;
+    start: vec3;
+    ignoreTerrain?: boolean;
+    packetHeight?: number;
+    startHeight?: number;
+    trackTarget?: boolean;
+    angles?: { pitch: number; yaw: number; targetPitch: number; targetYaw: number };
+}
+interface ScriptedCameraShot {
+    target: vec3;
+    rate: number;
+    rate2: number;
+    snapPending: boolean;
+    tween?: CameraTween;
+    heightAt?: (x: number, z: number) => number | undefined;
+}
+
 export class Camera {
     static moveCameraRotOrigin: vec3 = vec3.create();
     static deltaTemp: vec3 = vec3.create();
@@ -23,6 +44,17 @@ export class Camera {
     private static readonly FOV_SCRIPT_SCALE = 256;
 
     pos: vec3;
+    readonly focalPoint: vec3 = vec3.create();
+
+    setFocalPoint(x: number, y: number, z: number): void {
+        vec3.set(this.focalPoint, x, y, z);
+    }
+
+    moveFocalPoint(x: number, y: number, z: number): void {
+        const dx = x - this.focalPoint[0], dy = y - this.focalPoint[1], dz = z - this.focalPoint[2];
+        this.setFocalPoint(x, y, z);
+        this.snapToPosition(this.pos[0] + dx, this.pos[1] + dy, this.pos[2] + dz);
+    }
 
     pitch: number;
     yaw: number;
@@ -32,7 +64,13 @@ export class Camera {
     private targetYaw: number;
     private scenePitchOverride: number | undefined;
     private viewPitchOverride: number | undefined;
+    private renderPitchOverride: number | undefined;
     private viewZoomScale: number = 1;
+    private scriptedMove?: ScriptedCameraShot;
+    private scriptedLook?: ScriptedCameraShot;
+    private scriptedCycleMs = 0;
+    private scriptedPitchUnlocked = false;
+    private scriptedHeights = { move: 0, look: 0 };
 
     private readonly positionMaxSpeedPerSec = 12; // tiles per second toward target
     private readonly positionSpringPerSec = 6; // proportional easing factor
@@ -63,6 +101,14 @@ export class Camera {
     viewportHeight: number = 0;
     viewportXOffset: number = 0;
     viewportYOffset: number = 0;
+    /**
+     * Device pixels per OSRS viewport unit. Fixed mode's viewport is 512x334 units however
+     * large it is drawn, so OSRS's viewport-size rules (FOV, zoom clamps) see that size and
+     * the result is scaled up; 1 means the viewport is measured in device pixels.
+     */
+    private viewportUnitScaleX: number = 1;
+    private viewportUnitScaleY: number = 1;
+    private viewportAspect: number = 1;
     screenWidth: number = 0;
     screenHeight: number = 0;
 
@@ -127,12 +173,173 @@ export class Camera {
         this.updated = true;
     }
 
+    resolveScriptedHeight(mode: "move" | "look", height: number, relative: boolean): number {
+        return this.scriptedHeights[mode] = relative ? this.scriptedHeights[mode] + height : height;
+    }
+
+    setScriptedPosition(x: number, y: number, z: number, rate: number, rate2: number,
+        heightAt?: (x: number, z: number) => number | undefined): void {
+        if (!this.scriptedMove && !this.scriptedLook) this.setViewPitchOverride(undefined);
+        const shot = this.scriptedMove = { target: vec3.fromValues(x, y, z), rate, rate2, heightAt, snapPending: rate2 >= 100 };
+        const heightReady = this.refreshScriptedHeight(shot);
+        if (shot.snapPending) {
+            // Centre streaming on a cold scene without inventing its missing ground elevation.
+            this.snapToPosition(x, heightReady ? shot.target[1] : this.pos[1], z);
+            shot.snapPending = !heightReady;
+        }
+    }
+
+    setScriptedLook(x: number, y: number, z: number, rate: number, rate2: number,
+        heightAt?: (x: number, z: number) => number | undefined): void {
+        if (!this.scriptedMove && !this.scriptedLook) this.setViewPitchOverride(undefined);
+        const shot = this.scriptedLook = { target: vec3.fromValues(x, y, z), rate, rate2, heightAt, snapPending: rate2 >= 100 };
+        if (this.refreshScriptedHeight(shot) && this.refreshScriptedHeight(this.scriptedMove) && !this.scriptedMove?.snapPending && shot.snapPending) this.advanceScriptedLook();
+    }
+
+    setScriptedPositionCycles(x: number, z: number, cycles: number, easing: CameraEasing, ignoreTerrain: boolean,
+        heightAt: (x: number, z: number) => number | undefined, packetHeight: number): void {
+        this.setScriptedPosition(x, this.pos[1], z, 0, 0, heightAt);
+        this.scriptedMove!.tween = { cycles, elapsed: 0, easing, start: vec3.clone(this.pos), ignoreTerrain, packetHeight };
+    }
+
+    setScriptedLookCycles(x: number, z: number, cycles: number, easing: CameraEasing, trackTarget: boolean,
+        heightAt: (x: number, z: number) => number | undefined): void {
+        this.setScriptedLook(x, this.pos[1], z, 0, 0, heightAt);
+        const shot = this.scriptedLook!;
+        shot.tween = { cycles, elapsed: 0, easing, start: vec3.clone(this.pos), trackTarget };
+        if (this.refreshScriptedHeight(shot)) this.advanceScriptedLook();
+    }
+
+    private tweenProgress(tween: CameraTween): number {
+        const progress = Math.min(1, tween.elapsed / Math.max(1, tween.cycles));
+        if (tween.easing === "ease_in_out_sine") return (1 - Math.cos(Math.PI * progress)) / 2;
+        if (tween.easing === "ease_out_cubic") return 1 - Math.pow(1 - progress, 3);
+        return progress;
+    }
+
+    private refreshScriptedHeight(shot: ScriptedCameraShot | undefined): boolean {
+        if (!shot?.heightAt) return true;
+        const height = shot.heightAt(shot.target[0], shot.target[2]);
+        if (height === undefined || !Number.isFinite(height)) return false;
+        shot.target[1] = height;
+        return true;
+    }
+
+    setScriptedPitchUnlocked(unlock: boolean): void {
+        this.scriptedPitchUnlocked = unlock;
+    }
+
+    translateScriptedCamera(dx: number, dz: number): void {
+        this.snapToPosition(this.pos[0] + dx, this.pos[1], this.pos[2] + dz);
+        for (const shot of [this.scriptedMove, this.scriptedLook]) {
+            if (shot) {
+                shot.target[0] += dx; shot.target[2] += dz;
+                if (shot.tween) { shot.tween.start[0] += dx; shot.tween.start[2] += dz; }
+            }
+        }
+    }
+
+    clearScriptedCamera(): void {
+        const wasScripted = this.scriptedMove || this.scriptedLook;
+        this.scriptedMove = this.scriptedLook = undefined;
+        this.scriptedCycleMs = 0;
+        this.scriptedPitchUnlocked = false;
+        this.scriptedHeights = { move: 0, look: 0 };
+        if (wasScripted) {
+            this.snapToPosition(this.pos[0], this.pos[1], this.pos[2]);
+            this.snapToYaw(this.yaw);
+        }
+    }
+
+    private scriptedStep(current: number, target: number, rate: number, rate2: number): number {
+        const distance = Math.abs(target - current);
+        return current + Math.sign(target - current) * Math.min(distance, Math.trunc(distance * rate2 / 1000) + rate);
+    }
+
+    private advanceScriptedLook(): void {
+        const look = this.scriptedLook;
+        if (!look) return;
+        const dx = Math.trunc((look.target[0] - this.pos[0]) * 128);
+        const dy = Math.trunc((look.target[1] - this.pos[1]) * 128);
+        const dz = Math.trunc((look.target[2] - this.pos[2]) * 128);
+        const horizontal = Math.trunc(Math.hypot(dx, dz));
+        const angleScale = 325.9490051269531;
+        let pitch = Math.trunc(Math.atan2(dy, horizontal) * angleScale) & 2047;
+        if (this.scriptedPitchUnlocked) {
+            if (pitch > 1024) pitch -= 2048;
+        } else pitch = clamp(pitch, 128, 383);
+        const yaw = Math.trunc(Math.atan2(dx, dz) * angleScale) & 2047;
+        if (look.tween) {
+            const tween = look.tween;
+            const angles = tween.angles ??= { pitch: this.getScenePitchAngle(), yaw: this.yaw, targetPitch: pitch, targetYaw: yaw };
+            if (tween.trackTarget) { angles.targetPitch = pitch; angles.targetYaw = yaw; }
+            const progress = this.tweenProgress(tween);
+            this.viewPitchOverride = Math.round(angles.pitch + (angles.targetPitch - angles.pitch) * progress);
+            this.snapToYaw(Math.round(angles.yaw + this.normalizeYawDelta(angles.targetYaw - angles.yaw) * progress));
+        } else if (look.snapPending) {
+            this.viewPitchOverride = pitch;
+            this.snapToYaw(yaw);
+        } else {
+            this.viewPitchOverride = this.scriptedStep(Math.trunc(this.getScenePitchAngle()), pitch, look.rate, look.rate2);
+            const delta = this.normalizeYawDelta(yaw - Math.trunc(this.yaw));
+            this.snapToYaw(this.scriptedStep(Math.trunc(this.yaw), Math.trunc(this.yaw) + delta, look.rate, look.rate2));
+        }
+        look.snapPending = false;
+        this.updated = true;
+    }
+
+    private advanceScriptedCamera(deltaTimeMs: number): void {
+        const move = this.scriptedMove, look = this.scriptedLook;
+        const moveReady = this.refreshScriptedHeight(move), lookReady = this.refreshScriptedHeight(look);
+        if (!moveReady || !lookReady) { this.scriptedCycleMs = 0; return; }
+        if (move?.snapPending) {
+            this.snapToPosition(move.target[0], move.target[1], move.target[2]);
+            move.snapPending = false;
+        }
+        if (look?.snapPending) this.advanceScriptedLook();
+        // OSRS applies the constant + proportional rates in integer fine units every 20ms.
+        this.scriptedCycleMs += Math.max(0, deltaTimeMs);
+        while (this.scriptedCycleMs >= 20) {
+            this.scriptedCycleMs -= 20;
+            if (move) {
+                const tween = move.tween;
+                if (tween) {
+                    // Terrain-aware pans interpolate height above the ground at each tile.
+                    if (!tween.ignoreTerrain && tween.startHeight === undefined) {
+                        const startY = move.heightAt?.(tween.start[0], tween.start[2]);
+                        if (startY === undefined) return;
+                        tween.startHeight = (startY - tween.start[1]) * 128 + (tween.packetHeight ?? 0);
+                    }
+                    const nextElapsed = Math.min(tween.cycles, tween.elapsed + 1);
+                    const previousElapsed = tween.elapsed;
+                    tween.elapsed = nextElapsed;
+                    const progress = this.tweenProgress(tween);
+                    const position = vec3.clone(this.pos);
+                    for (let axis = 0; axis < 3; axis++) position[axis] = Math.round((tween.start[axis] + (move.target[axis] - tween.start[axis]) * progress) * 128) / 128;
+                    if (!tween.ignoreTerrain) {
+                        const ground = move.heightAt?.(position[0], position[2]);
+                        if (ground === undefined) { tween.elapsed = previousElapsed; return; }
+                        position[1] = ground + ((tween.packetHeight ?? 0) - (tween.startHeight! + ((tween.packetHeight ?? 0) - tween.startHeight!) * progress)) / 128;
+                    }
+                    vec3.copy(this.pos, position);
+                } else for (let axis = 0; axis < 3; axis++) {
+                    const current = Math.trunc(this.pos[axis] * 128), target = Math.trunc(move.target[axis] * 128);
+                    this.pos[axis] = this.scriptedStep(current, target, move.rate, move.rate2) / 128;
+                }
+                vec3.copy(this.targetPos, this.pos);
+                this.updatedPosition = this.updated = true;
+            }
+            if (look?.tween) look.tween.elapsed = Math.min(look.tween.cycles, look.tween.elapsed + 1);
+            this.advanceScriptedLook();
+        }
+    }
+
     private wrapYawInternal(yaw: number): number {
         return ((yaw % 2048) + 2048) % 2048;
     }
 
     private normalizeYawDelta(delta: number): number {
-        let normalized = ((delta % 2048) + 2048) % 2048;
+        let normalized = delta % 2048;
         if (normalized > 1024) {
             normalized -= 2048;
         } else if (normalized < -1024) {
@@ -146,7 +353,12 @@ export class Camera {
     }
 
     getScenePitchAngle(): number {
-        return this.viewPitchOverride ?? this.scenePitchOverride ?? this.getControlPitchAngle();
+        return this.renderPitchOverride ?? this.viewPitchOverride ?? this.scenePitchOverride ?? this.getControlPitchAngle();
+    }
+
+    setRenderPitchOverride(pitch: number | undefined): void {
+        this.renderPitchOverride = pitch;
+        this.updated = true;
     }
 
     getScenePitchOverride(): number | undefined {
@@ -171,6 +383,15 @@ export class Camera {
 
     getViewZoomScale(): number {
         return this.viewZoomScale;
+    }
+
+    setViewportUnitScale(scaleX: number, scaleY: number): void {
+        const x = Number.isFinite(scaleX) && scaleX > 0 ? scaleX : 1;
+        const y = Number.isFinite(scaleY) && scaleY > 0 ? scaleY : 1;
+        if (x === this.viewportUnitScaleX && y === this.viewportUnitScaleY) return;
+        this.viewportUnitScaleX = x;
+        this.viewportUnitScaleY = y;
+        this.updated = true;
     }
 
     setViewZoomScale(scale: number): void {
@@ -212,6 +433,10 @@ export class Camera {
 
     applySmoothing(deltaTimeMs: number): void {
         if (!Number.isFinite(deltaTimeMs)) {
+            return;
+        }
+        if (this.scriptedMove || this.scriptedLook) {
+            this.advanceScriptedCamera(deltaTimeMs);
             return;
         }
         const dt = Math.max(0, deltaTimeMs) / 1000;
@@ -316,6 +541,7 @@ export class Camera {
             (this.yaw - 1024) * RS_TO_RADIANS,
         );
 
+        vec3.add(this.focalPoint, this.focalPoint, Camera.deltaTemp);
         vec3.add(this.pos, this.pos, Camera.deltaTemp);
         vec3.copy(this.targetPos, this.pos);
         this.updated = true;
@@ -366,13 +592,14 @@ export class Camera {
         this.viewportHeight = viewportMetrics.viewportHeight;
         this.viewportXOffset = (viewportX | 0) + viewportMetrics.viewportXOffset;
         this.viewportYOffset = (viewportY | 0) + viewportMetrics.viewportYOffset;
+        this.viewportAspect = viewportMetrics.aspect;
 
         // Projection
         mat4.identity(this.projectionMatrix);
         if (this.projectionType === ProjectionType.PERSPECTIVE) {
             const fovY =
                 2 * Math.atan(this.viewportHeight / (2 * this.viewportZoom * this.viewZoomScale));
-            const aspect = this.viewportWidth / this.viewportHeight;
+            const aspect = this.viewportAspect;
             mat4.perspective(this.projectionMatrix, fovY, aspect, 0.1, 1024.0 * 4);
         } else {
             mat4.ortho(
@@ -414,15 +641,20 @@ export class Camera {
     computeViewportMetricsForSize(
         width: number,
         height: number,
-    ): { viewportZoom: number; viewportWidth: number; viewportHeight: number } {
-        const { viewportZoom, viewportWidth, viewportHeight } = this.computeOsrsViewportForSize(
-            width,
-            height,
-        );
+    ): {
+        viewportZoom: number;
+        viewportWidth: number;
+        viewportHeight: number;
+        /** The effective height in OSRS viewport units, for OSRS's own viewport-size rules. */
+        unitViewportHeight: number;
+    } {
+        const { viewportZoom, viewportWidth, viewportHeight, unitViewportHeight } =
+            this.computeOsrsViewportForSize(width, height);
         return {
             viewportZoom: Math.max(1, viewportZoom | 0),
             viewportWidth: Math.max(1, viewportWidth | 0),
             viewportHeight: Math.max(1, viewportHeight | 0),
+            unitViewportHeight,
         };
     }
 
@@ -472,8 +704,10 @@ export class Camera {
     }
 
     private computeOsrsViewportForSize(width: number, height: number) {
-        let viewportWidth = Math.max(1, width | 0);
-        let viewportHeight = Math.max(1, height | 0);
+        const unitX = this.viewportUnitScaleX;
+        const unitY = this.viewportUnitScaleY;
+        let viewportWidth = Math.max(1, Math.round(width / unitX));
+        let viewportHeight = Math.max(1, Math.round(height / unitY));
         let viewportXOffset = 0;
         let viewportYOffset = 0;
 
@@ -517,12 +751,16 @@ export class Camera {
         // Client.viewportZoom is an integer (var3 * var6 / 334).
         const viewportZoom = ((viewportHeight * fovScale) / 334) | 0;
 
+        // Back to device pixels; the aspect stays the unit one, so a viewport stretched
+        // unevenly shows the same scene stretched rather than more of it.
         return {
-            viewportZoom,
-            viewportWidth,
-            viewportHeight,
-            viewportXOffset,
-            viewportYOffset,
+            viewportZoom: (viewportZoom * unitY) | 0,
+            viewportWidth: Math.max(1, Math.round(viewportWidth * unitX)),
+            viewportHeight: Math.max(1, Math.round(viewportHeight * unitY)),
+            viewportXOffset: Math.round(viewportXOffset * unitX),
+            viewportYOffset: Math.round(viewportYOffset * unitY),
+            unitViewportHeight: viewportHeight,
+            aspect: viewportWidth / viewportHeight,
         };
     }
 
@@ -565,6 +803,9 @@ export class Camera {
     getMapY(): number {
         return this.getPosZ() >> 6;
     }
+
+    getTargetYaw(): number { return this.targetYaw; }
+    getTargetPitch(): number { return this.targetPitch; }
 
     getTargetPos(): vec3 {
         return this.targetPos;

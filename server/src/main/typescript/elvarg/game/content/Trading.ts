@@ -300,16 +300,14 @@ export class Trading {
                     received: givingItems,
                     given: receivingItems,
                 });
-                // Save both at once, so a crash can't leave one save from
-                // before the trade and the other from after it.
-                Trading.save(this.player);
-                Trading.save(interact_);
                 if (this.player.isPlayerBot && this.player.isPlayerBot() && receivingItems.length > 0) {
                     (this.player as any).getTradingInteraction?.().receivedItems?.(receivingItems, interact_);
                 }
                 // Reset attributes for both players...
                 this.resetAttributes();
                 interact_.getTrading().resetAttributes();
+                Trading.save(this.player);
+                Trading.save(interact_);
                 this.player.getSession().sendClientPacket(encodeTradeClose("Trade accepted!"));
                 interact_.getSession().sendClientPacket(encodeTradeClose("Trade accepted!"));
                 // Send interface removal for both players...
@@ -389,10 +387,8 @@ export class Trading {
 
                     Trading.moveItems(from, to, slot, amount);
 
-                    if (this.interact.isPlayerBot && this.interact.isPlayerBot()) {
-                        // Automatically accept the trade whenever an item is added by the player
-                        this.interact.getTrading().acceptTrade();
-                    }
+                    // A bot with a trading handler re-judges the trade whenever the offer changes.
+                    (this.interact as any).getTradingInteraction?.()?.offerChanged?.(this.player);
                 }
             } else {
                 this.player.getPacketSender().sendInterfaceRemoval();
@@ -565,6 +561,6 @@ export class Trading {
     }
 }
 
-enum TradeState {
+export enum TradeState {
     NONE, REQUESTED_TRADE, TRADE_SCREEN, ACCEPTED_TRADE_SCREEN, CONFIRM_SCREEN, ACCEPTED_CONFIRM_SCREEN
 }

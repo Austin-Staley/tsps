@@ -28,11 +28,12 @@ before(async () => {
       TeleportType: { TELE_TAB: "TELE_TAB" },
     },
     onItemAction: (name, actions) => { breakTablet = actions.Break; },
+    onCustomEvent() {},
   });
 });
 
-const { facilityNamed, setFacility, teleportFocusOf } = require("../plugins/skills/sailing/boatFacilities");
-const { slotVarbits } = require("../plugins/skills/sailing/boatVarbits");
+const { facilityNamed, setFacility, teleportFocusOf } = require("../plugins/skills/sailing/BoatFacilities.Sailing");
+const { slotVarbits } = require("../plugins/skills/sailing/BoatVarbits.Sailing");
 
 function boat(slot, dock, { focus = "Greater teleport focus", kind = "docked" } = {}) {
   const owned = { slot, type: "sloop", name: [], cargo: [], location: kind === "docked" ? { kind, dock } : { kind } };

@@ -1353,6 +1353,8 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
             if (wAny._absLogicalY !== logicalY) wAny._absLogicalY = logicalY;
             if (wAny._absWidth !== width) wAny._absWidth = width;
             if (wAny._absHeight !== height) wAny._absHeight = height;
+            wAny._absScaleX = rootScaleX;
+            wAny._absScaleY = rootScaleY;
         } catch {}
         if (profileWidgetRender) {
             boundsMs += performance.now() - boundsStartMs;
@@ -3399,8 +3401,35 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                 canvasAny2.__modelRenderCache = modelCache;
             }
 
+            // An animated model only changes when its frame does (a frame lasts several 20 ms
+            // client cycles; renders come every display frame). Keep each widget's last render
+            // and redraw it until the frame or anything else it was drawn with changes.
+            const sequenceFrame =
+                liveMovementFrame !== undefined ? liveMovementFrame : (w.modelFrame ?? 0) | 0;
+            const animatedKey =
+                isAnimated && !cacheKey && !isPlayerDesignPreview && !isPlayerModel
+                    ? `wa:${modelCacheId}:${sequenceId}:${sequenceFrame}:${rx}:${ry}:${rz}:${zoom}:${offX}:${offY}:o${
+                          ortho ? 1 : 0
+                      }:${width}:${height}`
+                    : null;
+            let animatedMemo: Map<
+                number,
+                { key: string; tex: any; offsetX: number; offsetY: number; w: number; h: number }
+            > = canvasAny2.__animatedModelMemo;
+            if (!animatedMemo) {
+                animatedMemo = new Map();
+                canvasAny2.__animatedModelMemo = animatedMemo;
+            }
+            const lastAnimated = animatedKey ? animatedMemo.get(w.uid) : undefined;
+
             // Check cache before expensive rendering
-            const cached = cacheKey ? modelCache.get(cacheKey) : null;
+            const cached = cacheKey
+                ? modelCache.get(cacheKey)
+                : lastAnimated &&
+                    lastAnimated.key === animatedKey &&
+                    glr.getTexture(`wm:dyn:${w.uid}`) === lastAnimated.tex
+                  ? lastAnimated
+                  : null;
 
             if (cached) {
                 modelCacheHits++;
@@ -3443,10 +3472,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                         orthographic: ortho,
                         widget: w,
                         sequenceId,
-                        sequenceFrame:
-                            liveMovementFrame !== undefined
-                                ? liveMovementFrame
-                                : (w.modelFrame ?? 0) | 0,
+                        sequenceFrame,
                         depthTest: true,
                     },
                     width,
@@ -3464,6 +3490,16 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                     // Cache the result for static models
                     if (cacheKey) {
                         modelCache.set(cacheKey, {
+                            tex,
+                            offsetX: res.offsetX | 0,
+                            offsetY: res.offsetY | 0,
+                            w: can.width,
+                            h: can.height,
+                        });
+                    }
+                    if (animatedKey) {
+                        animatedMemo.set(w.uid, {
+                            key: animatedKey,
                             tex,
                             offsetX: res.offsetX | 0,
                             offsetY: res.offsetY | 0,
@@ -3670,6 +3706,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
         // - Type 11 (layer): renders ONLY dynamic children (w.children)
         if (!isContainer) {
             leafWidgets++;
+            opts.afterWidgetDrawn?.(widgetUid, w);
             return; // Non-containers have finished rendering their content above
         }
 
@@ -3789,7 +3826,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                 if (interfaceParentGroup !== undefined && widgetManager) {
                     const roots = widgetManager.getAllGroupRoots(interfaceParentGroup);
                     for (const root of roots) {
-                        if (root != null) {
+                        if (root != null && !root.__renderSeparately) {
                             const interfaceParentDispatchStartMs = profileWidgetRender
                                 ? performance.now()
                                 : 0;
@@ -3810,6 +3847,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
                     }
                 }
 
+                if (interfaceParentGroup !== undefined) opts.afterInterfaceDrawn?.(interfaceParentGroup);
                 // Restore scissor after drawing children
                 // Restore clip after child rendering
                 sc.pop();
@@ -3822,6 +3860,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
         } else if (profileWidgetRender) {
             containerScaffoldMs += performance.now() - containerScaffoldStartMs;
         }
+        opts.afterWidgetDrawn?.(widgetUid, w);
     }
     // Maintain the root clip as the baseline scissor so container pop() calls
     // do not reset clipping back to the full viewport during partial redraws.
@@ -3832,6 +3871,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
         fullClip.y1 - fullClip.y0,
     );
     drawNode(root, 0, 0, true, false);
+    opts.afterInterfaceDrawn?.(root.groupId ?? (root.uid >>> 16));
 
     // Render deferred dragged widgets on top.
     // Only inventory-style widgets (dragRenderBehaviour >= 2) are deferred.
@@ -3938,6 +3978,7 @@ export function renderWidgetTreeGL(glr: GLRenderer, root: Widget, opts: GLRender
         }
     } catch {}
     glr.flush();
+    opts.afterMenuDrawn?.();
 
     // NOTE: Input is processed once per frame by WidgetsOverlay after ALL roots are rendered,
     // so clicks/hover can hit targets from any root (bank, dialogs, etc.).

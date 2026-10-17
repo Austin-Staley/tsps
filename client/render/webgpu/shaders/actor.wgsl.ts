@@ -1,6 +1,7 @@
 /**
  * WGSL port of the WebGL actor shaders for the WebGPU backend:
- *   client/render/shaders/npc.vert.glsl        -> vs_npc, vs_gfx (spot animations and projectiles)
+ *   client/render/shaders/npc.vert.glsl        -> vs_npc, vs_gfx (spot animations)
+ *   client/render/shaders/projectile.vert.glsl -> vs_projectile
  *   client/render/shaders/player.vert.glsl     -> vs_player
  *   client/render/shaders/main.frag.glsl       -> fs_actor (water path omitted; actors never
  *                                                 take the floor-water branch)
@@ -331,6 +332,27 @@ fn decodeActorInfo(index: i32) -> ActorInfo {
     return info;
 }
 
+struct ProjectileInfo {
+    tilePos: vec2<f32>,
+    plane: u32,
+    yaw: u32,
+    pitch: u32,
+    roll: u32,
+};
+
+fn decodeProjectileInfo(index: i32) -> ProjectileInfo {
+    let data = textureLoad(u_actorData, getDataTexCoordFromIndex(index * 2), 0);
+    let pitchHi = (data.b >> 13u) & 0x7u;
+    let pitchLo = (data.a >> 9u) & 0xfu;
+    return ProjectileInfo(
+        vec2<f32>(decodeSignedU16(data.r), decodeSignedU16(data.g)) + actorU.u_subOffset,
+        data.b & 0x3u,
+        (data.b >> 2u) & 0x7ffu,
+        ((pitchHi << 4u) | pitchLo) << 4u,
+        ((data.a >> 13u) & 0x7u) << 8u,
+    );
+}
+
 // GLSL row-vector matrix multiply (v * M) reproduced with WGSL matrices, which are
 // also column-major: result[j] = dot(v, M[j]).
 fn glslRowMul(v: vec4<f32>, m: mat4x4<f32>) -> vec4<f32> {
@@ -407,10 +429,10 @@ fn actorFogAmount(localPos: vec4<f32>) -> f32 {
 }
 `;
 
-type ActorKind = "npc" | "gfx" | "player";
+type ActorKind = "npc" | "gfx" | "player" | "projectile";
 
-/** Kinds whose geometry is the 16-byte actor stride (4th word: HD normal + base HSL). */
-const WIDE_KINDS: ReadonlySet<ActorKind> = new Set(["npc", "player"]);
+/** Actor geometry carries normal/base HSL and fractional position words. */
+const WIDE_KINDS: ReadonlySet<ActorKind> = new Set(["npc", "player", "gfx", "projectile"]);
 
 /**
  * WGSL statements that decode and place one actor vertex. Defines `vertex`, `actorRotation`,
@@ -419,11 +441,28 @@ const WIDE_KINDS: ReadonlySet<ActorKind> = new Set(["npc", "player"]);
  */
 function placement(kind: ActorKind): string {
     const player = kind === "player";
+    const projectile = kind === "projectile";
+    const info = projectile
+        ? `
+    let info = decodeProjectileInfo(i32(actorU.u_dataOffset + actorU.u_drawId));
+    let actorRotation = info.yaw;
+    let actorHslOverride = vec4<f32>(-1.0, -1.0, -1.0, 0.0);`
+        : `
+    let info = decodeActorInfo(i32(actorU.u_dataOffset + actorU.u_drawId));
+    let actorRotation = info.rotation;
+    let actorHslOverride = info.hslOverride;`;
+    const localVertex = projectile
+        ? `glslRowMul(glslRowMul(vec4<f32>(vertex.pos, 1.0),
+            rotationZ(f32(info.roll) * RS_TO_RADIANS)), rotationX(f32(info.pitch) * RS_TO_RADIANS))`
+        : "vec4<f32>(vertex.pos, 1.0)";
     // player.vert.glsl: GPU-posed vertices are moved by their label's pose matrix, whose
     // rotation also turns their rest-pose normals (poseLinear).
+    const fraction = WIDE_KINDS.has(kind)
+        ? `vertex.pos += vec3<f32>(f32(a_positionFraction & 1023u), -f32((a_positionFraction >> 10u) & 1023u), f32((a_positionFraction >> 20u) & 1023u)) / 1024.0;` : "";
     const pose = player
         ? `
     var vertex = decodeVertex(a_vertex.x, a_vertex.y, a_vertex.z, scene.u_brightness, actorHslOverride);
+    ${fraction}
     var poseLinear = IDENTITY3;
     if (a_label > 0u && actorU.u_poseRow >= 0) {
         let texel = i32(a_label - 1u) * 3;
@@ -435,7 +474,8 @@ function placement(kind: ActorKind): string {
         poseLinear = transpose(mat3x3<f32>(r0.xyz, r1.xyz, r2.xyz));
     }`
         : `
-    let vertex = decodeVertex(a_vertex.x, a_vertex.y, a_vertex.z, scene.u_brightness, actorHslOverride);
+    var vertex = decodeVertex(a_vertex.x, a_vertex.y, a_vertex.z, scene.u_brightness, actorHslOverride);
+    ${fraction}
     let poseLinear = IDENTITY3;`;
     // player.vert.glsl: the equipment face layer biases projected depth only, keeping the
     // original screen position and perspective.
@@ -451,12 +491,10 @@ function placement(kind: ActorKind): string {
     let clip = scene.u_projectionMatrix * viewPos;
     let clipPosition = vec4<f32>(clip.x, clip.y, (clip.z + clip.w) * 0.5, clip.w);`;
     return `
-    let info = decodeActorInfo(i32(actorU.u_dataOffset + actorU.u_drawId));
-    let actorRotation = info.rotation;
-    let actorHslOverride = info.hslOverride;${pose}
+${info}${pose}
 
     var localPos = glslRowMul(
-        vec4<f32>(vertex.pos, 1.0),
+        ${localVertex},
         rotationY(f32(actorRotation) * RS_TO_RADIANS),
     ) + vec4<f32>(info.tilePos.x, 0.0, info.tilePos.y, 0.0);
 
@@ -472,7 +510,7 @@ function placement(kind: ActorKind): string {
 
 function vertexParams(kind: ActorKind): string {
     const wide = WIDE_KINDS.has(kind);
-    return `@location(0) a_vertex: vec${wide ? 4 : 3}<u32>${kind === "player" ? ", @location(1) a_label: u32" : ""}`;
+    return `@location(0) a_vertex: vec${wide ? 4 : 3}<u32>${wide ? ", @location(3) a_positionFraction: u32" : ""}${kind === "player" ? ", @location(1) a_label: u32" : ""}`;
 }
 
 function sceneVertexEntry(kind: ActorKind, ext?: WebGPUSceneShaders): string {
@@ -538,8 +576,8 @@ fn sampleModelTexture(textureId: u32, texCoord: vec2<f32>) -> vec4<f32> {
 
 @fragment
 fn fs_actor(input: ActorVertexOutput, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
-    var textureColor = sampleModelTexture(input.v_texId, input.v_texCoord);
-${slots?.textureSample ?? ""}
+    var textureColor = vec4<f32>(1.0);
+${slots?.textureSample ?? "    textureColor = sampleModelTexture(input.v_texId, input.v_texCoord);"}
     var alpha = textureColor.a * input.v_color.a;
 ${discardBlock}
     let material = getMaterial(input.v_texId);
@@ -574,7 +612,7 @@ ${slots?.shade ?? ""}
 `;
 }
 
-const ACTOR_KINDS: ActorKind[] = ["npc", "gfx", "player"];
+const ACTOR_KINDS: ActorKind[] = ["npc", "gfx", "player", "projectile"];
 
 export const ACTOR_FRAGMENT_ENTRY = "fs_actor";
 export const ACTOR_DEPTH_FRAGMENT_ENTRY = "fs_depth";

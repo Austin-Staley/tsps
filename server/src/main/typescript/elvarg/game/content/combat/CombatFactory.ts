@@ -568,12 +568,19 @@ export class CombatFactory {
             "combat.process.can_attack.multi_check",
             () => CombatFactory.multiCombatBetween(attacker, target)
         )) {
+            // An always-multi NPC (a boss's summoned minion) never ties up the one it fights: a
+            // player a hellhound is biting may still attack its master in a singles lair.
+            const lockedBy = (mobile: Mobile) => {
+                const by = mobile.getCombat().getAttacker();
+                return by != null && !(by.isNpc() && by.getAsNpc().isMultiCombat());
+            };
             if (
                 ServerPerf.measurePhase("combat.process.can_attack.attacker_busy", () =>
                     (
                         CombatFactory.isBeingAttacked(attacker) &&
                         attacker.getCombat().getAttacker() != target &&
-                        attacker.getCombat().getAttacker().getHitpoints() > 0
+                        attacker.getCombat().getAttacker().getHitpoints() > 0 &&
+                        lockedBy(attacker)
                     ) || !attacker.getCombat().getHitQueue().isEmpty(target)
                 )
             ) {
@@ -583,11 +590,11 @@ export class CombatFactory {
             // Here we check if we are already in combat with another entity.
             if (
                 ServerPerf.measurePhase("combat.process.can_attack.target_busy", () =>
-                    (CombatFactory.isBeingAttacked(target) && target.getCombat().getAttacker() != attacker) ||
+                    (CombatFactory.isBeingAttacked(target) && target.getCombat().getAttacker() != attacker && lockedBy(target)) ||
                     !target.getCombat().getHitQueue().isEmpty(attacker)
                 )
             ) {
-                return CanAttackResponse.ALREADY_UNDER_ATTACK;
+                return CanAttackResponse.TARGET_IN_COMBAT;
             }
         }
 
@@ -1027,7 +1034,6 @@ export class CombatFactory {
             if (!alreadyPoisoned) {
                 player.sendMessage("You have been poisoned!");
             }
-            player.getPacketSender().sendPoisonType(poisonOrbType);
         }
 
         entity.setVenomed(isVenom);
@@ -1270,12 +1276,14 @@ export class CombatFactory {
         }
     }
 
-    static freeze(character: Mobile, seconds: number) {
+    /** `message` is what a frozen player is told (some bosses send their own, coloured). */
+    static freeze(character: Mobile, seconds: number, message: string = "You have been frozen!") {
         if (character.getTimers().has(TimerKey.FREEZE) || character.getTimers().has(TimerKey.FREEZE_IMMUNITY)) {
             return;
         }
 
-        if (character.getSize() > 2) {
+        // Large NPCs shrug freezes off, unless one opts in (Callisto and Artio can be frozen).
+        if (character.getSize() > 2 && !character.hasFlag("combat:freezable")) {
             return;
         }
 
@@ -1285,7 +1293,7 @@ export class CombatFactory {
         character.getMovementQueue().reset();
 
         if (character.isPlayer()) {
-            character.getAsPlayer().sendMessage("You have been frozen!");
+            character.getAsPlayer().sendMessage(message);
             character.getAsPlayer().getPacketSender().sendEffectTimer(seconds, EffectTimer.FREEZE);
         }
     }
@@ -1560,6 +1568,8 @@ export class CombatFactory {
 export enum CanAttackResponse {
     INVALID_TARGET,
     ALREADY_UNDER_ATTACK,
+    /** Single combat: someone else is fighting the target. */
+    TARGET_IN_COMBAT,
     CANT_ATTACK_IN_AREA,
     COMBAT_METHOD_NOT_ALLOWED,
     LEVEL_DIFFERENCE_TOO_GREAT,

@@ -3,6 +3,7 @@ import type { Ray } from "../../../game/math/Raycast";
 import type { SdMapData } from "../../loader/SdMapData";
 import type { WebGPUMapSquare } from "../WebGPUMapSquare";
 import type { WebGPURenderer } from "../WebGPURenderer";
+import { RENDER_CONSTANTS } from "../../render/constants";
 import { ClickCrossLayer } from "./ClickCrossLayer";
 import { GroundItemLabelLayer } from "./GroundItemLabelLayer";
 import { GroundItemMeshes } from "./GroundItemMeshes";
@@ -40,6 +41,8 @@ export class WebGPUOverlays {
     private groundItemLabels?: GroundItemLabelLayer;
     private hitsplats?: HitsplatLayer;
 
+    getHost(): OverlayHost | undefined { return this.host; }
+
     /** Screen position to a world ray (HelmSteering), through the shared overlay host. */
     screenToRay(mouseX: number, mouseY: number): Ray | null {
         return this.host?.screenToRay(mouseX, mouseY) ?? null;
@@ -68,7 +71,7 @@ export class WebGPUOverlays {
         const world = getWorldResources(this.renderer);
         if (!device || !format || !world) return;
         try {
-            const host = new OverlayHost(this.renderer);
+            const host = this.renderer.interactionHost;
             const screen = new ScreenLayer(device, format);
             screen.init();
 
@@ -171,7 +174,10 @@ export class WebGPUOverlays {
             host.updateInteractionFrame();
             host.populateFrame(timeMs, deltaMs);
             screen.begin();
-            screen.setCanvasResolution(this.renderer.canvas.width, this.renderer.canvas.height);
+            const bufW = this.renderer.canvas.width;
+            const bufH = this.renderer.canvas.height;
+            screen.setCanvasResolution(bufW, bufH);
+            this.syncScale(this.renderer.getUiRenderMetrics(bufW, bufH).renderScaleX);
 
             this.clickCross?.setTime(timeMs);
             this.clickCross?.update(timeMs);
@@ -183,6 +189,14 @@ export class WebGPUOverlays {
         }
     }
 
+    /** The canvas is at device pixel ratio; size sprites/text like WebGL's overlay scale sync (frame/render.ts). */
+    private syncScale(scale: number): void {
+        for (const layer of [this.overheadText, this.hitsplats, this.overheadPrayer, this.clickCross, this.groundItemLabels, this.tileText]) {
+            if (layer) layer.scale = scale;
+        }
+        if (this.healthBars) this.healthBars.scale = scale * RENDER_CONSTANTS.HEALTH_BAR_VISUAL_SCALE;
+    }
+
     /** World pass (depth available): ground item meshes and depth-aware tile markers. */
     drawWorld(pass: GPURenderPassEncoder): void {
         if (!this.initialized) return;
@@ -190,7 +204,7 @@ export class WebGPUOverlays {
         const hdrActive = !!world?.extensionActive && !!world.extension?.sceneColorFormat;
         try {
             this.groundMeshes?.drawWorld(pass);
-            this.tileMarker?.drawWorld(pass, hdrActive);
+            this.tileMarker?.drawWorld(pass, hdrActive, world?.sampleCount ?? 1);
         } catch (error) {
             console.warn("[webgpu] overlays world draw failed", error);
         }
@@ -252,7 +266,7 @@ export class WebGPUOverlays {
         this.interactHighlight?.dispose();
         this.groundMeshes?.dispose();
         this.screen?.destroy();
-        this.host?.dispose();
+
         this.host = undefined;
         this.screen = undefined;
         this.groundMeshes = undefined;

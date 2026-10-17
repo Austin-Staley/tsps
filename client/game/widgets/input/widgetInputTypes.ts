@@ -66,6 +66,7 @@ export type WidgetInputControllerDeps = {
         eventContext?: Partial<ScriptEvent>,
     ) => void;
     handleWidgetAction: (event: WidgetActionEvent) => void;
+    handlePluginWidgetAction?: (event: WidgetActionEvent) => boolean;
     handleTradeWidgetAction: (
         widget: any,
         event: { option?: string; slot?: number; itemId?: number },
@@ -76,6 +77,8 @@ export type WidgetInputControllerDeps = {
         fromSlot: number,
         toSlot: number,
     ) => void;
+    /** Client plugins see a widget dropped on another; true keeps it from the server. */
+    handlePluginWidgetDrag?: (source: any, target: any) => boolean;
     buildWidgetActionPayload: (
         event: Parameters<
             import("../WidgetActionRouter").WidgetActionRouter["buildWidgetActionPayload"]

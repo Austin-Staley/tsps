@@ -4,6 +4,7 @@
  * Replaces JSON.stringify for client-to-server messages.
  * All encoding methods match OSRS buffer patterns.
  */
+import { encodePluginMessagePayload } from "../../common/network/PluginMessage";
 import { CLIENT_PACKET_LENGTHS, ClientPacketId } from "../../common/packets/ClientPacketId";
 import {
     FriendsChatActionCode,
@@ -188,12 +189,20 @@ export class ClientBinaryEncoder {
         return this.buffer.toPacket(ClientPacketId.LOGOUT);
     }
 
-    encodeLogin(username: string, password: string, revision: number): Uint8Array {
+    encodeLogin(username: string, password: string, revision: number, flags: number = 0): Uint8Array {
         this.buffer.reset();
         this.buffer.writeString(username ?? "");
         this.buffer.writeString(password ?? "");
         this.buffer.writeInt(revision);
+        this.buffer.writeByte(flags);
         return this.buffer.toPacket(ClientPacketId.LOGIN);
+    }
+
+    encodeLoginForget(username: string, token: string): Uint8Array {
+        this.buffer.reset();
+        this.buffer.writeString(username ?? "");
+        this.buffer.writeString(token ?? "");
+        return this.buffer.toPacket(ClientPacketId.LOGIN_FORGET);
     }
 
     // ========================================
@@ -540,6 +549,15 @@ export function encodeClientMessage(msg: { type: string; payload: any }): Uint8A
     const { type, payload } = msg;
 
     switch (type) {
+        case "plugin_message": {
+            const bytes = encodePluginMessagePayload(payload);
+            const result = new Uint8Array(bytes.length + 3);
+            result[0] = ClientPacketId.PLUGIN_MESSAGE;
+            result[1] = bytes.length >> 8;
+            result[2] = bytes.length & 255;
+            result.set(bytes, 3);
+            return result;
+        }
         case "movement_input":
             return clientEncoder.encodeMovementInput(payload);
 
@@ -560,7 +578,15 @@ export function encodeClientMessage(msg: { type: string; payload: any }): Uint8A
             return clientEncoder.encodeLogout();
 
         case "login":
-            return clientEncoder.encodeLogin(payload.username, payload.password, payload.revision);
+            return clientEncoder.encodeLogin(
+                payload.username,
+                payload.password,
+                payload.revision,
+                payload.flags,
+            );
+
+        case "login_forget":
+            return clientEncoder.encodeLoginForget(payload.username, payload.token);
 
         case "walk":
             return clientEncoder.encodeWalk(

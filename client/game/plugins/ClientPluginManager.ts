@@ -1,3 +1,4 @@
+import type { WidgetActionEvent } from "../widgets/widgetActionPayload";
 import type { Camera } from "../Camera";
 import type { HitsplatEventPayload } from "../GameRenderer";
 import type { InputManager } from "../InputManager";
@@ -9,6 +10,8 @@ import type { ClickRegistry } from "../../widgets/gl/click-registry";
 import type { SimpleMenuEntry } from "../../ui/menu/MenuEngine";
 import type { MenuTransformContext } from "../../ui/menu/menuTransforms";
 import type { FontLoader } from "../../widgets/components/TextRenderer";
+import type { IndexedSprite } from "../../rs/sprite/IndexedSprite";
+import type { Cs2Vm } from "../../rs/cs2/Cs2Vm";
 import type {
     WebGPUSceneExtension,
     WebGPUSceneExtensionContext,
@@ -86,6 +89,20 @@ export type CameraInputContext = {
     deltaTime: number;
 };
 
+/**
+ * This frame's camera rotation from the player, in RS angle units (2048 per turn), before it
+ * is applied: the arrow keys, and the middle-mouse drag and middle-held wheel. A plugin may
+ * change it (RuneLite's camera speed and invert), or add to it with no input (a slide).
+ */
+export type CameraRotation = {
+    camera: Camera;
+    deltaTime: number;
+    keyYaw: number;
+    keyPitch: number;
+    dragYaw: number;
+    dragPitch: number;
+};
+
 export type GamepadContext = {
     gamepad: Gamepad;
     camera: Camera;
@@ -113,7 +130,18 @@ export type HealthBarEvent = {
     bar: { id: number; health: number; health2: number; removed?: boolean };
 };
 
+/**
+ * A `runelite_callback` a clientscript ran (RuneLite's ScriptCallbackEvent). The event's
+ * values are on the VM's stacks (see rs/cs2/sortCallbacks.ts for the sort callbacks).
+ */
+export type ScriptCallbackEvent = { eventName: string; vm: Cs2Vm };
+
+/** A widget dragged onto another (RuneLite's WidgetDrag on release). */
+export type WidgetDragEvent = { source: any; target: any };
+
 export interface ClientPlugin {
+    /** Extra player headicons; return stable, immutable sprites so textures can be reused. */
+    getPlayerHeadIcons?(serverId: number): readonly IndexedSprite[] | undefined;
     transformSceneProgram?(source: ProgramSource): ProgramSource;
     sceneProgramsReady?(renderer: WebGLOsrsRenderer, programs: Program[]): void;
     beforeSceneRender?(renderer: WebGLOsrsRenderer, drawActors: () => void): void;
@@ -127,6 +155,7 @@ export interface ClientPlugin {
     handleCameraMouse?(context: CameraInputContext): boolean;
     handleCameraScroll?(context: CameraInputContext): boolean;
     updateInteractionPointer?(camera: Camera): void;
+    transformCameraRotation?(rotation: CameraRotation): void;
     handleCameraFollow?(context: CameraFollowContext): boolean;
     /** A connected standard-mapping controller, each frame; return true to take it over. */
     handleGamepad?(context: GamepadContext): boolean;
@@ -136,12 +165,18 @@ export interface ClientPlugin {
     onHealthBar?(event: HealthBarEvent): void;
     /** A clientscript finished, nested calls included (RuneLite's ScriptPostFired). */
     onScriptFinished?(scriptId: number): void;
+    /** A clientscript ran `runelite_callback`. */
+    onScriptCallback?(event: ScriptCallbackEvent): void;
+    /** A widget was dropped on another; return true to keep the drag from the server. */
+    onWidgetDragComplete?(event: WidgetDragEvent): boolean;
     shouldKeepWorldMenuOpen?(): boolean;
     /** Supplies an alternate gameframe (e.g. the classic 317 frame). */
     gameFrame?: GameFrameProvider;
     widgetOverlay?: WidgetOverlay;
     /** Handle a client-side `::command`; return true to consume it (no server round trip). */
     handleClientCommand?(command: string): boolean;
+    /** Handle a widget action locally; return true to consume it before CS2 or network dispatch. */
+    handleWidgetAction?(event: WidgetActionEvent): boolean;
     /** Reorders or extends a menu (top first); its first eligible entry is the left-click. */
     transformMenuEntries?(
         entries: SimpleMenuEntry[],
@@ -154,6 +189,15 @@ export class ClientPluginManager {
 
     add(plugin: ClientPlugin): void {
         this.plugins.push(plugin);
+    }
+
+    playerHeadIcons(serverId: number): IndexedSprite[] {
+        const icons: IndexedSprite[] = [];
+        for (const plugin of this.plugins) {
+            const sprites = plugin.getPlayerHeadIcons?.(serverId);
+            if (sprites) icons.push(...sprites);
+        }
+        return icons;
     }
 
     transformSceneProgram(source: ProgramSource): ProgramSource {
@@ -217,6 +261,10 @@ export class ClientPluginManager {
         for (const plugin of this.plugins) plugin.updateInteractionPointer?.(camera);
     }
 
+    transformCameraRotation(rotation: CameraRotation): void {
+        for (const plugin of this.plugins) plugin.transformCameraRotation?.(rotation);
+    }
+
     handleCameraFollow(context: CameraFollowContext): boolean {
         return this.plugins.some((plugin) => plugin.handleCameraFollow?.(context) === true);
     }
@@ -237,6 +285,14 @@ export class ClientPluginManager {
         for (const plugin of this.plugins) plugin.onScriptFinished?.(scriptId);
     }
 
+    onScriptCallback(event: ScriptCallbackEvent): void {
+        for (const plugin of this.plugins) plugin.onScriptCallback?.(event);
+    }
+
+    onWidgetDragComplete(event: WidgetDragEvent): boolean {
+        return this.plugins.some((plugin) => plugin.onWidgetDragComplete?.(event) === true);
+    }
+
     shouldKeepWorldMenuOpen(): boolean {
         return this.plugins.some((plugin) => plugin.shouldKeepWorldMenuOpen?.() === true);
     }
@@ -254,6 +310,10 @@ export class ClientPluginManager {
         const overlays: WidgetOverlay[] = [];
         for (const plugin of this.plugins) if (plugin.widgetOverlay) overlays.push(plugin.widgetOverlay);
         return overlays;
+    }
+
+    handleWidgetAction(event: WidgetActionEvent): boolean {
+        return this.plugins.some(plugin => plugin.handleWidgetAction?.(event) === true);
     }
 
     handleClientCommand(command: string): boolean {

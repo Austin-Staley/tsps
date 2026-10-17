@@ -1,6 +1,7 @@
 import { PrayerHandler, PrayerData } from "../../../../content/PrayerHandler";
 import { AggressionTolerance } from "../../npc/AggressionTolerance";
 import { CREATION_MENU_LAST_ITEM_ATTRIBUTE } from "../../../../../net/packet/PacketSender";
+import { LOGIN_TOKENS_ATTRIBUTE } from "../../../../../net/login/LoginTokens";
 import { normalizeSailingState, type SailingState } from "../../../../content/sailing/SailingState";
 import { FightType } from "../../../../content/combat/FightType";
 import { CombatSpells } from "../../../../content/combat/magic/CombatSpells";
@@ -15,6 +16,7 @@ import { DonatorRights } from "../../../../model/rights/DonatorRights";
 import { PlayerRights } from "../../../../model/rights/PlayerRights";
 import { ItemContainer } from "../../../../model/container/ItemContainer";
 import { StackType } from "../../../../model/container/StackType";
+import { Inventory } from "../../../../model/container/impl/Inventory";
 import { Appearance } from "../../../../model/Appearance";
 
 export class PlayerSave {
@@ -43,13 +45,23 @@ export class PlayerSave {
         ...Object.values(PlayerSave.LEGACY_FIELD_ATTRIBUTES),
         AggressionTolerance.ATTRIBUTE,
         CREATION_MENU_LAST_ITEM_ATTRIBUTE,
+        LOGIN_TOKENS_ATTRIBUTE,
     ]);
 
-    public static persistAttribute(key: string): void {
+    /** JSON of each attribute's default: a value equal to it isn't saved, and a save without the key loads it. */
+    private static readonly attributeDefaults = new Map<string, string>([
+        ["ring-of-recoil:damage", "0"],
+        [LOGIN_TOKENS_ATTRIBUTE, "[]"],
+    ]);
+
+    public static persistAttribute(key: string, defaultValue?: unknown): void {
         if (typeof key !== "string" || !key.trim() || key !== key.trim()) {
             throw new Error("Persistent attribute keys must be non-empty strings without surrounding whitespace");
         }
         PlayerSave.persistentAttributeKeys.add(key);
+        if (defaultValue !== undefined) {
+            PlayerSave.attributeDefaults.set(key, JSON.stringify(PlayerSave.cloneAttribute(key, defaultValue)));
+        }
     }
 
     private static readonly CAMEL_CASE_ATTRIBUTE_KEY = /([a-z0-9])([A-Z])/g;
@@ -592,6 +604,8 @@ export class PlayerSave {
         for (const key of PlayerSave.persistentAttributeKeys) {
             if (Object.prototype.hasOwnProperty.call(this.attributes ?? {}, key)) {
                 player.setAttribute(key, PlayerSave.cloneAttribute(key, this.attributes[key]));
+            } else if (PlayerSave.attributeDefaults.has(key) && player.getAttribute(key) === undefined) {
+                player.setAttribute(key, JSON.parse(PlayerSave.attributeDefaults.get(key)!));
             }
         }
 
@@ -666,7 +680,19 @@ export class PlayerSave {
         playerSave.skullTimer = player.getSkullTimer();
         playerSave.skullType = player.getSkullType();
 
-        playerSave.inventory = player.getInventory().getCopiedItems();
+        // Uncompleted trades are cancelled on login: include the player's own escrow
+        // in the snapshot without moving items in the running world.
+        const offered = player.getTrading()?.getContainer()?.getValidItems() ?? [];
+        const inventory = new Inventory(player).setItems(player.getInventory().getCopiedItems());
+        for (const item of offered) {
+            const stacks = item.getDefinition().isStackable();
+            const sameStack = stacks && inventory.getItems().some(held => held.getId() === item.getId()
+                && JSON.stringify(held.getMeta() ?? null) === JSON.stringify(item.getMeta() ?? null));
+            const slots = sameStack ? 0 : stacks ? 1 : item.getAmount();
+            if (inventory.getFreeSlots() < slots) throw new Error("Cannot snapshot trade escrow: inventory is full");
+            inventory.add(item.clone(), false);
+        }
+        playerSave.inventory = inventory.getCopiedItems();
         playerSave.equipment = player.getEquipment().getCopiedItems();
         playerSave.appearance = PlayerSave.sanitizeAppearance(player.getAppearance().getLook());
         const liveSkills = player.getSkillManager().getSkills();
@@ -682,6 +708,7 @@ export class PlayerSave {
             [...PlayerSave.persistentAttributeKeys]
                 .filter((key) => player.getAttribute(key) !== undefined)
                 .map((key) => [key, PlayerSave.cloneAttribute(key, player.getAttribute(key))])
+                .filter(([key, value]) => JSON.stringify(value) !== PlayerSave.attributeDefaults.get(key as string))
         );
 
         playerSave.friends = PlayerSave.normalizeRelationListToStrings(

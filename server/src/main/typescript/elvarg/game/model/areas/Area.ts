@@ -69,12 +69,26 @@ export abstract class Area {
         return null;
     }
 
+    /** Explicitly allows or refuses spell targeting, including non-combat puzzle NPCs. */
+    canCastOnNpc(player: Player, npc: NPC, spell: any): boolean | null {
+        return null;
+    }
+
     canTeleport(player: Player, wildernessLevelLimit: number, destination?: any): boolean | null {
         return null;
     }
 
     /** true keeps `npc` aggressive towards `player` despite their tolerance timer. */
     npcAggressionTolerance(player: Player, npc: NPC): boolean | null {
+        return null;
+    }
+
+    /**
+     * Whether an aggressive `npc` starts a fight with `player`: false never (wearing its god's
+     * item in the God Wars Dungeon), true always (even if not aggressive elsewhere, past its
+     * combat-level and tolerance checks).
+     */
+    npcAggression(player: Player, npc: NPC): boolean | null {
         return null;
     }
 

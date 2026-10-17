@@ -10,10 +10,11 @@
  * Near-Reality: the statement when Help is used without a potion.
  */
 
-const Shared = require("./WintertodtShared");
-const Round = require("./WintertodtRound");
-const Corners = require("./WintertodtCorners");
+const Shared = require("./Shared.Wintertodt");
+const Round = require("./Round.Wintertodt");
+const Corners = require("./Corners.Wintertodt");
 const Supplies = require("./Supplies.Wintertodt");
+const CombatAchievements = require("./CombatAchievements.Wintertodt");
 
 const HEAL_POINTS = 75;
 
@@ -56,7 +57,10 @@ function heal(player, npc) {
   const wasDown = !c.pyromancerHealthy;
   Corners.healPyromancer(index);
   Round.addPoints(player, HEAL_POINTS);
-  if (wasDown) Round.broadcast();
+  if (wasDown) {
+    Round.broadcast();
+    CombatAchievements.healedFallenPyromancer(player);
+  }
   return true;
 }
 

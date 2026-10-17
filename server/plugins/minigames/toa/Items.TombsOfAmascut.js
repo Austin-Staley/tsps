@@ -6,7 +6,7 @@
  * rune pouch and the keris partisan's jewels. Tumeken's shadow is plugins/items/TumekensShadow.plugin.js.
  */
 
-const Shared = require("./ToaShared");
+const Shared = require("./Shared.TombsOfAmascut");
 
 const ANIMATION = { FORTIFY: 3676, CHISEL: 8833, FUSE: 791 };
 const WARD_SOUL_RUNES = 10000;
@@ -159,8 +159,8 @@ function threadRunePouch({ player }) {
       if (!pouch || !inventory.contains(I.THREAD_OF_ELIDINIS)) return;
       inventory.deleteNumber(I.RUNE_POUCH, 1);
       inventory.deleteNumber(I.THREAD_OF_ELIDINIS, 1);
-      // The upgraded pouch keeps whatever runes the old one held.
-      inventory.addItem(new Item(I.DIVINE_RUNE_POUCH, 1, pouch.getMeta()));
+      // A pouch's runes are kept on the player (RunePouch), so the upgraded pouch has them too.
+      inventory.addItem(new Item(I.DIVINE_RUNE_POUCH, 1));
       player.sendMessage("You skillfully weave the Thread of Elidinis into the rune pouch and watch as it transforms into something more.");
     });
   });

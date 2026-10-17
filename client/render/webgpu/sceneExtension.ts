@@ -10,7 +10,7 @@
  *
  * With a `depth` shader the core also builds depth-only pipelines. They place geometry exactly
  * like the scene entries and call the extension's `sceneDepthPosition(viewPos)` for the clip
- * position; `beforeScene` records its own pass and fills it with `renderer.drawSceneDepth(pass)`.
+ * position; `beforeScene` records its own passes through `drawWorldDepth` and `drawActorDepth`.
  */
 import type { WebGPURenderer } from "./WebGPURenderer";
 
@@ -22,7 +22,7 @@ export const ACTOR_EXTENSION_FIRST_LOCATION = 5;
 /**
  * WGSL for one shader family. Vertex slot scope: world `vertex`, `modelInfo`, `localPos`,
  * `viewPos`, `out`; actor `vertex`, `localPos`, `viewPos`, `out`, `actorRotation`,
- * `actorHslOverride`, `extraWord` (the 4th u32 of 16-byte actor vertices, else 0) and
+ * `actorHslOverride`, `extraWord` (the 4th u32 of actor vertices) and
  * `poseLinear` (the GPU pose's rotation, identity when posed on the CPU). Fragment slot scope:
  * `input`, `front_facing`, `textureColor`, `alpha`, `material`, `paletteColor`, `surface`, `fog`,
  * `fogColor` (and, in the world shader, `isFloorWater`).
@@ -34,7 +34,7 @@ export interface WgslSceneSlots {
     varyings: string;
     /** Statements at the end of the vertex entry. */
     vertex: string;
-    /** Statements after the base texture sample; may replace `textureColor`. */
+    /** Statements that fill `textureColor` (initially white), including the cache fallback. */
     textureSample: string;
     /** WGSL bool: whether the cache's animated texture frames apply. */
     animateTexture: string;

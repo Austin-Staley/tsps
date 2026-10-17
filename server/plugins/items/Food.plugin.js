@@ -108,14 +108,17 @@ function skill(name) {
   return core.Skill[name.toUpperCase()];
 }
 
-/** Wiki: Anglerfish heals by the eater's Hitpoints level, at most 22. */
-function getAnglerfishHeal(currentHp) {
+/**
+ * Wiki: Anglerfish heals by the eater's Hitpoints level, at most 22. The level they levelled up
+ * to, not the health left in it: a low-HP 99 still gets the 99 heal.
+ */
+function getAnglerfishHeal(hitpointsLevel) {
   let c = 2;
-  if (currentHp >= 25) c = 4;
-  if (currentHp >= 50) c = 6;
-  if (currentHp >= 75) c = 8;
-  if (currentHp >= 93) c = 13;
-  return Math.min(22, Math.floor(currentHp / 10 + c));
+  if (hitpointsLevel >= 25) c = 4;
+  if (hitpointsLevel >= 50) c = 6;
+  if (hitpointsLevel >= 75) c = 8;
+  if (hitpointsLevel >= 93) c = 13;
+  return Math.min(22, Math.floor(hitpointsLevel / 10 + c));
 }
 
 /**
@@ -152,8 +155,12 @@ function healBy(player, amount, overheal = 0) {
 function applyStats(player, effect) {
   for (const [name, amount] of Object.entries(effect.boost ?? {})) boostSkill(player, skill(name), amount, 0);
   for (const [name, amount] of Object.entries(effect.drain ?? {})) lowerSkillByMax(player, skill(name), amount, 0, 1);
-  for (const [name, amount] of Object.entries(effect.restore ?? {})) restoreSkillToBaseWithFormula(player, skill(name), amount, 0);
+  for (const [name, amount] of Object.entries(effect.restore ?? {})) {
+    restoreSkillToBaseWithFormula(player, skill(name), typeof amount === "number" ? amount : amount.flat ?? 0,
+      typeof amount === "number" ? 0 : amount.percent ?? 0);
+  }
   if (effect.runEnergy) restoreRunEnergy(player, effect.runEnergy);
+  if (effect.stamina) pluginApi.emitCustomEvent("potions:apply-stamina", { player, energy: 20 });
   if (effect.curePoison) curePoisonAndVenom(player);
 }
 
@@ -202,6 +209,14 @@ function mayEat(player, itemId, food) {
     player.sendMessage("You cannot eat here.");
     return false;
   }
+  if (food.area) {
+    const request = { player, area: food.area, inside: false };
+    pluginApi.emitCustomEvent("food:area", request);
+    if (!request.inside) {
+      player.sendMessage("You cannot eat these supplies here.");
+      return false;
+    }
+  }
   const timers = player.getTimers();
   if (timers.has(core.TimerKey.STUN)) {
     player.sendMessage("You're currently stunned!");
@@ -246,7 +261,7 @@ function applyFood(player, food, random = Math.random) {
   }
   let healed;
   if (food.special === "anglerfish") {
-    const amount = getAnglerfishHeal(skills.getCurrentLevel(core.Skill.HITPOINTS));
+    const amount = getAnglerfishHeal(maxHp);
     healed = healBy(player, amount, canAnglerfishOverheal(player) ? amount : 0);
   } else {
     healed = healBy(player, healAmount(food.heal, maxHp, random));
@@ -271,7 +286,7 @@ function eatMessage(food, bite, itemId) {
 function eat(event) {
   const { player, itemId, slot, clickType } = event;
   const found = foodBite(itemId);
-  if (!found || core.CacheDefinitions.getItem(itemId).inventoryActions[clickType - 1] !== EAT_OPTION) return;
+  if (!found || core.CacheDefinitions.getItem(itemId).inventoryActions[clickType - 1] !== (found.food.option ?? EAT_OPTION)) return;
   event.handled = true;
   const { food, bite } = found;
   if (food.refuse) {

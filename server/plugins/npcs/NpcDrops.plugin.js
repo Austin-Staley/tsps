@@ -36,6 +36,20 @@ const KALPHITE_QUEEN_NOTED_ITEMS = new Set([
   1391, 3049, 207, 3051, 219, 2363, 1783, 444, 1513, 1621, 1619, 1617, 245, 3138, 1987, 5940, 6016,
 ]);
 
+/**
+ * Wiki, Looting bag: "obtained as a drop from any monster in the Wilderness, excluding aviansie,
+ * abyssal demons, and Black chinchompas". The tables list it on monsters found everywhere (rats,
+ * black demons...), so where the monster dies decides it.
+ */
+const LOOTING_BAG = "Looting bag";
+const LOOTING_BAG_EXCLUDED = new Set(["Aviansie", "Abyssal demon", "Black chinchompa"]);
+
+function lootingBagDrops(npc) {
+  if (!Wilderness.isInLocation(npc?.getLocation?.())) return false;
+  const name = (npc.getCurrentDefinition?.() ?? npc.getDefinition?.())?.getName?.();
+  return !LOOTING_BAG_EXCLUDED.has(name);
+}
+
 /** npcId -> array of shared table objects (one instance per distinct table) */
 const tablesByNpc = new Map();
 /** shared table name -> [{ itemId, quantity, weight }] */
@@ -114,6 +128,14 @@ function applyOverrides(dump, subtables, overrides) {
         if (!table[field].some((existing) => existing.item_id === entry.item_id)) table[field].push(entry);
       }
     }
+    // Sections the Wiki lists on the page but that are not this table's normal kill (a boss's
+    // contract rewards, say): left out of every roll.
+    const removed = new Set(change.removeSections ?? []);
+    if (removed.size > 0) {
+      for (const field of ["entries", "tertiary"]) {
+        if (table[field]) table[field] = table[field].filter((entry) => !removed.has(entry.section));
+      }
+    }
   }
   for (const [name, table] of Object.entries(overrides.subtables ?? {})) subtables[name] ??= table;
 }
@@ -130,7 +152,13 @@ function applyWikiCorrections(tableById) {
   if (tableById.zulrah) {
     tableById.zulrah.rolls = 2;
   }
+  // Vorkath: two rolls on its table per kill, tertiary drops excluded (Wiki, Drops).
+  if (tableById.vorkath) {
+    tableById.vorkath.rolls = 2;
+  }
   correctMadAngel(tableById.mad_angel);
+  correctSkotizo(tableById.skotizo);
+  correctAmoxliatl(tableById.amoxliatl);
   const kalphiteQueen = tableById.kalphite_queen;
   if (!kalphiteQueen) {
     return;
@@ -172,6 +200,37 @@ function correctMadAngel(table) {
     if (Number.isInteger(entry.out_of) && entry.out_of === table.main_max_roll) entry.out_of = 150;
   }
   table.main_max_roll = 150;
+}
+
+const SKOTIZO_TOTEMS = new Set([19679, 19681, 19683, 19685]);
+
+/**
+ * Skotizo (Wiki, Drops): one guaranteed roll of the ancient shard table (75/15/5/4/1 in 100) on
+ * top of a main table out of 100 - the export folded the shards into the main roll out of 199.
+ * His totem table (4/128: a whole totem or the piece the player lacks) is the Skotizo plugin's,
+ * so the four flat totem tertiaries go.
+ */
+function correctSkotizo(table) {
+  if (!table) return;
+  for (const entry of table.entries || []) {
+    if (entry.section === "Ancient shards") Object.assign(entry, { separate_roll: true, roll_group: "skotizo_shards", out_of: 100 });
+    else if (Number.isInteger(entry.out_of) && entry.out_of === table.main_max_roll) entry.out_of = 100;
+  }
+  table.main_max_roll = 100;
+  table.tertiary = (table.tertiary || []).filter((entry) => !SKOTIZO_TOTEMS.has(entry.item_id));
+}
+
+/**
+ * Amoxliatl (Wiki, Drops): two rolls on her table plus one frozen tear roll per kill. The
+ * export lists the tears' three amounts as separate rolls of their own (6/10, 3/10, 1/10); they
+ * are one roll of 10, made once per kill rather than with each main roll.
+ */
+function correctAmoxliatl(table) {
+  if (!table) return;
+  table.rolls = 2;
+  for (const entry of table.entries || []) {
+    if (entry.section === "Frozen tears") Object.assign(entry, { roll_group: "amoxliatl_tears", once_per_kill: true });
+  }
 }
 
 function loadDrops() {
@@ -339,8 +398,11 @@ function resolveEntry(entry, player) {
   return drops;
 }
 
-/** One roll on a table: its pre-roll, main roll and separate rolls. */
-function rollOnce(table, entries, player) {
+/**
+ * One roll on a table: its pre-roll, main roll and separate rolls. Separate rolls marked
+ * `once_per_kill` are made on the first of a table's `rolls` only.
+ */
+function rollOnce(table, entries, player, first = true) {
   const drops = [];
   const main = [];
   const separateGroups = new Map();
@@ -355,6 +417,7 @@ function rollOnce(table, entries, player) {
         preRollHit = true;
       }
     } else if (entry.separate_roll) {
+      if (entry.once_per_kill && !first) continue;
       if (entry.roll_group) {
         const group = separateGroups.get(entry.roll_group) || [];
         group.push(entry);
@@ -399,7 +462,7 @@ function rollOnce(table, entries, player) {
 /**
  * One kill: guaranteed drops, then a pre-roll (which replaces the main roll when it hits),
  * then a single weighted main-table roll, then independent separate/tertiary rolls. A table
- * with `rolls` repeats everything but the guaranteed and tertiary drops that many times.
+ * with `rolls` repeats everything but the guaranteed, tertiary and `once_per_kill` drops that many times.
  */
 function rollTable(table, player, npc) {
   const drops = [];
@@ -411,7 +474,7 @@ function rollTable(table, player, npc) {
   }
   const rolls = Number.isInteger(table.rolls) && table.rolls > 1 ? table.rolls : 1;
   for (let roll = 0; roll < rolls; roll++) {
-    drops.push(...rollOnce(table, entries, player));
+    drops.push(...rollOnce(table, entries, player, roll === 0));
   }
 
   for (const entry of table.tertiary || []) {
@@ -424,6 +487,7 @@ function rollTable(table, player, npc) {
       conditionalTertiarySkipped++;
       continue;
     }
+    if (entry.name === LOOTING_BAG && !lootingBagDrops(npc)) continue;
     const wildernessClue = /^clue scroll \((?!beginner\))/i.test(entry.name || "") &&
       isWearingImbuedRingOfWealth(player) && Wilderness.isInLocation(npc?.getLocation?.());
     if (hits(entry, wildernessClue)) {
@@ -433,6 +497,21 @@ function rollTable(table, player, npc) {
 
   return drops;
 }
+
+/**
+ * Answers npc-drops:extra-rolls { player, npc, npcId, rolls, drops }: `rolls` more rolls of the
+ * NPC's table, without its always-drops, pushed onto `drops` (Chambers of Xeric scavenger beasts
+ * drop three items at a time).
+ */
+function extraRolls(event) {
+  ensureDropsLoaded?.();
+  const table = tableForNpc(event.npcId);
+  if (!table || !Array.isArray(event.drops)) return;
+  const rolling = { ...table, entries: (table.entries || []).filter((entry) => !entry.always), tertiary: [] };
+  for (let i = 0; i < (event.rolls ?? 0); i++) event.drops.push(...rollTable(rolling, event.player, event.npc));
+}
+
+let ensureDropsLoaded = null;
 
 function tableForNpc(npcId) {
   const tables = tablesByNpc.get(npcId);
@@ -451,6 +530,9 @@ function dropFor(player, npc, npcId, location, damagers = []) {
   }
 
   const drops = rollTable(table, player, npc);
+  // Loot that depends on where or what the NPC was rather than its table (the Catacombs of
+  // Kourend's totem pieces and shards), added before anything below reads the drops.
+  pluginApi?.emitCustomEvent("npc-drops:add", { player, npc, npcId, drops });
   // Drops that depend on the killer's progress (Warriors' Guild defenders) are edited in place.
   // `damagers`: every player who damaged the npc (an Ironman gets nothing when others helped).
   pluginApi?.emitCustomEvent("npc-drops:roll", { player, npc, npcId, drops, damagers });
@@ -460,7 +542,12 @@ function dropFor(player, npc, npcId, location, damagers = []) {
   // Where the loot lands; a boss whose body is out of reach (Zulrah) moves it under the killer.
   const where = { player, npc, npcId, location };
   pluginApi.emitCustomEvent("npc-drops:location", where);
-  location = where.location;
+  placeDrops(player, drops, where.location);
+  return drops.length;
+}
+
+/** Puts rolled drops on the ground for `player` (noted where the table says), or coins in the pack. */
+function placeDrops(player, drops, location) {
   for (const drop of drops) {
     if (!Number.isInteger(drop.itemId) || drop.amount <= 0) {
       continue;
@@ -489,7 +576,6 @@ function dropFor(player, npc, npcId, location, damagers = []) {
       }
     }
   }
-  return drops.length;
 }
 
 module.exports = {
@@ -505,13 +591,28 @@ module.exports = {
       if (!stats) stats = loadDrops();
       return stats;
     };
+    ensureDropsLoaded = ensureDrops;
+    api.onCustomEvent("npc-drops:extra-rolls", extraRolls);
 
     // "npc-drops:roll-table" { player, table, drops }: a table outside an NPC's own (a boss's
     // chest) rolled with the same roller and shared tables; the drops are pushed onto `drops`.
+    // { player, npcId, drops, npc? } rolls that NPC's own table instead, for a boss that rewards
+    // several players without dying to each (the Nightmare); `npc` places it (looting bags), and
+    // `entryFilter(entry)` keeps only some of its entries (a shared kill rolling its parts apart).
     api.onCustomEvent("npc-drops:roll-table", (request) => {
       ensureDrops();
-      request.drops.push(...rollTable(request.table, request.player, null));
+      let table = request.table ?? tableForNpc(request.npcId);
+      if (table && typeof request.entryFilter === "function") {
+        table = {
+          ...table,
+          entries: (table.entries || []).filter(request.entryFilter),
+          tertiary: (table.tertiary || []).filter(request.entryFilter),
+        };
+      }
+      if (table) request.drops.push(...rollTable(table, request.player, request.npc ?? null));
     });
+    // "npc-drops:place" { player, drops, location }: drops rolled elsewhere, put down as a kill's.
+    api.onCustomEvent("npc-drops:place", ({ player, drops, location }) => placeDrops(player, drops, location));
 
     api.onNpcDeath(({ killer, npc, npcId, damagers }) => {
       if (!killer || !npc) {
@@ -519,6 +620,14 @@ module.exports = {
       }
       const id = Number.isInteger(npcId) ? npcId : npc.getId?.();
       if (!Number.isInteger(id)) {
+        return;
+      }
+      // "npc-drops:claim": a boss that shares its loot between players (the Wilderness bosses)
+      // takes the kill over, rolling each share with npc-drops:roll-table and placing it with
+      // npc-drops:place.
+      const claim = { killer, npc, npcId: id, damagers: damagers ?? [], handled: false };
+      api.emitCustomEvent("npc-drops:claim", claim);
+      if (claim.handled) {
         return;
       }
       try {

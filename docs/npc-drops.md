@@ -8,7 +8,9 @@
 | `npc-drop-subtables.json` | the shared tables (rare drop table, gems, herbs, seeds, talismans…) | generated |
 | `npc-drop-overrides.json` | hand edits on top of the two | by hand |
 
-Corrections that need logic (Zulrah's two rolls, the Mad Angel's supply batch, the animated bronze armour) stay in code, in `applyWikiCorrections`.
+Corrections that need logic (Zulrah's two rolls, the Mad Angel's supply batch, Skotizo's shard roll, Amoxliatl's two rolls with one frozen tear roll, the animated bronze armour) stay in code, in `applyWikiCorrections`.
+
+Loot that depends on where or what the NPC was rather than its table is added by other plugins on `npc-drops:add` { player, npc, npcId, drops }, emitted straight after the roll and before `npc-drops:roll` (so the Collection Log and Ironman rules see it): the Catacombs of Kourend's totem pieces and shards, and Skotizo's totem table ([skotizo.md](skotizo.md)).
 
 ## Regenerating
 
@@ -34,6 +36,7 @@ cp docs/drops-json/subtables.json ../tsps/server/data/definitions/npc-drop-subta
 | `removeNpcs` | NPC ids that drop nothing themselves | the Ents (6594, 7234, 9474): their trunk gives the loot |
 | `addNpcs` | NPC ids mapped to a table the dumper doesn't map them to | 110 variants and versions (Phosani's Nightmare, the Nightmare, Ghast, Kalphite Guardian, Slagilith…), added by hand in September |
 | `tables.<id>.addEntries` / `addTertiary` | entries added to a table | the Abyssal Sire's pet, the Abyssal orphan |
+| `tables.<id>.removeSections` | sections of a table left out of every roll | Yama's Contract section (what his contracts reward, not a normal kill) |
 | `subtables` | shared tables the dumper doesn't export | the uncommon seed table (Obor, Bryophyta) |
 
 ## The 2026-10-07 refresh

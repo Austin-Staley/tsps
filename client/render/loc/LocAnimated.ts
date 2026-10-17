@@ -6,6 +6,9 @@ export class LocAnimated {
     seqType?: SeqType;
 
     frame = 0;
+    /** Client cycles into the current keyframe (0-based) and its length, for smoothed frames. */
+    frameCycle = 0;
+    frameLength = 1;
     cycleStart: number;
     private lastSoundFrame: number = -1;
     // Reusable context object for onFrameSound callback to avoid allocation
@@ -51,7 +54,49 @@ export class LocAnimated {
         }
     }
 
-    getDrawRangeIndex(isAlpha: boolean, isInteract: boolean, isLod: boolean) {
+    /**
+     * A square's locs are rebuilt when one of its multilocs changes (a varbit the cache reads),
+     * but the animations on them go on: OSRS keeps a loc's animation object through its transform
+     * changes. Each rebuilt loc playing the same sequence on the same loc picks up where it was,
+     * instead of restarting (the Giants' Foundry crucible poured twice when it emptied mid-pour).
+     */
+    static carryOver(previous: readonly LocAnimated[], next: readonly LocAnimated[]): void {
+        if (previous.length === 0) return;
+        const byLoc = new Map<string, LocAnimated>();
+        for (const loc of previous) {
+            if (loc.seqType) byLoc.set(loc.key(), loc);
+        }
+        for (const loc of next) {
+            const old = byLoc.get(loc.key());
+            if (!old || old.seqType?.id !== loc.seqType?.id) continue;
+            loc.frame = old.frame;
+            loc.frameCycle = old.frameCycle;
+            loc.frameLength = old.frameLength;
+            loc.cycleStart = old.cycleStart;
+            loc.lastSoundFrame = old.lastSoundFrame;
+        }
+    }
+
+    private key(): string {
+        return `${this.id},${this.x},${this.y},${this.level},${this.rotation}`;
+    }
+
+    /**
+     * The baked frame to draw. Smoothed animations (anim.frameStarts) bake a few blended steps
+     * through each keyframe; otherwise it is the keyframe itself, as `frame` is.
+     */
+    drawFrame(): number {
+        const starts = this.anim.frameStarts;
+        const frame = this.frame | 0;
+        if (!starts) return frame;
+        const start = starts[frame] ?? 0;
+        const steps = Math.max(1, (starts[frame + 1] ?? this.anim.frames.length) - start);
+        // Steps are spread evenly through the keyframe (SdMapDataLoader.smoothedFrameRuns).
+        const step = Math.floor(((this.frameCycle | 0) * steps) / this.frameLength);
+        return start + Math.min(step, steps - 1);
+    }
+
+        getDrawRangeIndex(isAlpha: boolean, isInteract: boolean, isLod: boolean) {
         if (isInteract) {
             if (isLod) {
                 return isAlpha
@@ -120,6 +165,12 @@ export class LocAnimated {
         }
 
         this.cycleStart = cycle - elapsed;
+        // A keyframe's cycles run 1..length here (cycleStart starts a cycle back).
+        this.frameCycle = this.seqType && !this.seqType.isSkeletalSeq() ? Math.max(0, elapsed - 1) : 0;
+        this.frameLength =
+            this.seqType && !this.seqType.isSkeletalSeq()
+                ? Math.max(1, this.seqType.getFrameLength(seqFrameLoader, this.frame) | 0)
+                : 1;
 
         if (this.seqType && this.frame < previousFrame) {
             this.lastSoundFrame = -1;

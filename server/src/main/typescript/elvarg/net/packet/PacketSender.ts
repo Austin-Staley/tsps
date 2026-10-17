@@ -1,4 +1,4 @@
-import { encodePlayerOption } from "../protocol/ClientProtocol";
+import { encodeGameframeTabSetup, encodePlayerOption, resolveGameframeRoot } from "../protocol/ClientProtocol";
 import { BIT_MASKS } from "../../game/cache/codec/rs/MathConstants";
 import { PacketBuilder } from "./PacketBuilder";
 import { ValueType } from "./ValueType";
@@ -34,8 +34,15 @@ import {
   encodeProjectiles,
   encodeRunClientScript,
   encodeCameraShake,
+  encodeCameraMoveTo,
+  encodeCameraLookAt,
+  encodeCameraUnlock,
+  encodeCameraTranslate,
+  CameraMovementOptions,
   encodeWidgetSetColour, encodeAttackTimer,
   encodeCameraReset,
+  encodeSetInteractionMode,
+  encodeResetInteractionMode,
   encodeChatFilterSettings,
   encodeRunEnergy,
   encodeSkillsDelta,
@@ -222,8 +229,11 @@ export class PacketSender {
     ))) return this;
   }
 
-  sendPoisonType(type: number): this {
-    this.player.getSession().write(new PacketBuilder(184).put(type));
+  /** Re-sends the login's setup for one side tab after it is mounted again (encodeGameframeTabSetup). */
+  sendGameframeTabSetup(group: number): this {
+    for (const packet of encodeGameframeTabSetup(group, resolveGameframeRoot(this.player))) {
+      this.player.getSession().sendClientPacket(packet);
+    }
     return this;
   }
 
@@ -382,12 +392,12 @@ export class PacketSender {
         .sendInterfaceDisplayState((593 << 16) | 23, false)
         .sendInterfaceDisplayState((593 << 16) | 28, false);
     }
+    // Mounting a tab again drops the flags the login gave it (the client clears them when the
+    // old mount closes), so the prayer and magic tabs get theirs back (sendGameframeTabSetup).
     if (tabId === 5) {
-      this.player.getSession().sendClientPacket(encodeWidgetOpenSub(
-        (161 << 16) | 81,
-        interfaceId === 17200 ? 77 : 541
-      ));
-      return this;
+      const group = interfaceId === 17200 ? 77 : 541;
+      this.player.getSession().sendClientPacket(encodeWidgetOpenSub((161 << 16) | 81, group));
+      return this.sendGameframeTabSetup(group);
     }
     if (tabId === 6) {
       const spellbook = interfaceId === 12855 ? 1 : interfaceId === 29999 ? 2 : interfaceId === 39999 ? 3 : 0;
@@ -401,7 +411,7 @@ export class PacketSender {
       }
       this.sendVarbit(4070, spellbook);
       this.player.getSession().sendClientPacket(encodeWidgetOpenSub((161 << 16) | 82, 218));
-      return this;
+      return this.sendGameframeTabSetup(218);
     }
     this.player.getSession().sendClientPacket(encodeWidgetOpenSub((161 << 16) | tabId, interfaceId));
     return this;
@@ -627,6 +637,12 @@ export class PacketSender {
 
   sendMessage(message: string): this {
     if (this.player.getSession().sendClientPacket(encodeChatMessage("game", message ?? ""))) return this;
+  }
+
+  /** A game message on one of the chatbox's channels (`ChatType`): spam, or an NPC's line with its name as `from`. */
+  sendTypedMessage(chatType: number, message: string, from = ""): this {
+    this.player.getSession().sendClientPacket(encodeChatMessage("game", message ?? "", from, "", -1, chatType));
+    return this;
   }
 
   sendPublicChat(message: string, from: string, playerId: number): this {
@@ -858,6 +874,41 @@ export class PacketSender {
     return this;
   }
 
+  sendCameraMoveTo(x: number, y: number, height: number, motion: boolean | CameraMovementOptions = true): this {
+    this.player.getSession().sendClientPacket(encodeCameraMoveTo(x, y, height, motion));
+    return this;
+  }
+
+  sendCameraLookAt(x: number, y: number, height: number, motion: boolean | CameraMovementOptions = true): this {
+    this.player.getSession().sendClientPacket(encodeCameraLookAt(x, y, height, motion));
+    return this;
+  }
+
+  sendCameraUnlock(unlock: boolean): this {
+    this.player.getSession().sendClientPacket(encodeCameraUnlock(unlock));
+    return this;
+  }
+
+  sendCameraTranslate(dx: number, dy: number): this {
+    this.player.getSession().sendClientPacket(encodeCameraTranslate(dx, dy));
+    return this;
+  }
+
+  /**
+   * Sets what tile and entity clicks do in a world: a world entity index, -1 for the root world
+   * or -2 for the default of every world (net/protocol/InteractionMode.ts).
+   */
+  sendInteractionMode(worldId: number, tileMode: number, entityMode: number): this {
+    this.player.getSession().sendClientPacket(encodeSetInteractionMode(worldId, tileMode, entityMode));
+    return this;
+  }
+
+  /** Drops a world's own interaction mode, so it follows the default again. */
+  sendResetInteractionMode(worldId: number): this {
+    this.player.getSession().sendClientPacket(encodeResetInteractionMode(worldId));
+    return this;
+  }
+
   /** Resets the camera, ending any shake. */
   sendCameraReset(): this {
     this.player.getSession().sendClientPacket(encodeCameraReset());
@@ -895,7 +946,8 @@ export class PacketSender {
     lockon: any,
     delay: number,
     angle: number = 16,
-    distanceOffset: number = 64
+    distanceOffset: number = 64,
+    source: any = null
   ): this {
     if (
       !start ||
@@ -909,6 +961,7 @@ export class PacketSender {
     }
 
     const targetIndex = this.resolveProjectileTargetIndex(lockon);
+    const sourceIndex = source == null ? 0 : this.resolveProjectileTargetIndex(source);
     if (this.player.getSession().sendClientPacket(encodeProjectiles([{
       projectileId,
       source: { x: start.getX(), y: start.getY(), level: start.getZ?.() ?? 0 },
@@ -919,10 +972,16 @@ export class PacketSender {
       startPos: distanceOffset,
       startCycleOffset: delay,
       endCycleOffset: Math.max(delay + 1, speed),
-      targetActor: targetIndex < 0
-        ? { kind: "player", index: -targetIndex - 1 }
-        : targetIndex > 0 ? { kind: "npc", index: targetIndex - 1 } : undefined,
+      targetActor: PacketSender.projectileActor(targetIndex),
+      sourceActor: PacketSender.projectileActor(sourceIndex),
     }]))) return this;
+  }
+
+  /** A resolved lock-on index (players negative, NPCs positive, 0 none) as the packet's actor. */
+  private static projectileActor(index: number): { kind: "player" | "npc"; index: number } | undefined {
+    if (index < 0) return { kind: "player", index: -index - 1 };
+    if (index > 0) return { kind: "npc", index: index - 1 };
+    return undefined;
   }
 
   private resolveProjectileTargetIndex(lockon: any): number {
@@ -1196,6 +1255,11 @@ export class PacketSender {
     return this.subInterfaceTargets.has(WORLD_MAP_GROUP_ID);
   }
 
+  /** Whether `groupId` is mounted as a sub-interface (modal or overlay) right now. */
+  isSubInterfaceOpen(groupId: number): boolean {
+    return this.subInterfaceTargets.has(groupId);
+  }
+
   /** The last position sendWorldMapPosition sent, packed; -1 before any. */
   private worldMapPosition = -1;
 
@@ -1259,7 +1323,7 @@ export class PacketSender {
 
   sendInterfaceScript(
     scriptId: number,
-    args: (number | string)[] = [],
+    args: (number | string | bigint)[] = [],
     varps?: Record<number, number>,
     varbits?: Record<number, number>,
     inventories?: Record<number, ScriptInventorySnapshot>

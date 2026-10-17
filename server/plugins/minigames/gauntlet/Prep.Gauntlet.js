@@ -12,13 +12,15 @@
  * Near-Reality's, as the Wiki gives neither.
  */
 
-const Shared = require("./GauntletShared");
-const Run = require("./GauntletRun");
-const Items = require("./GauntletItems");
-const Resources = require("./GauntletResources");
-const Rewards = require("./GauntletRewards");
+const Shared = require("./Shared.Gauntlet");
+const Run = require("./RunState.Gauntlet");
+const Items = require("./Items.Gauntlet");
+const Resources = require("./Resources.Gauntlet");
+const Rewards = require("./Rewards.Gauntlet");
 
 const ANIMATION = { FILL: 827, COOK: 896, GRIND: 364, MIX: 363 };
+/** A weapon made at this tier is attuned (0 basic, 2 perfected). */
+const ATTUNED_TIER = 1;
 const TOOL_NAMES = [["sceptre", "a sceptre"], ["axe", "an axe"], ["pickaxe", "a pickaxe"], ["harpoon", "a harpoon"], ["pestle", "a pestle and mortar"]];
 const RECIPE_BOOK_INTERFACE = 640;
 const MAIN_MODAL_UID = (161 << 16) | 16;
@@ -208,6 +210,8 @@ function sing(player, run, recipe, amount) {
       player.getSkillManager().addExperiences(Skill.SMITHING, recipe.xp);
     }
     if (recipe.gear) run.addPoints(Rewards.POINTS.tiers[recipe.tier]);
+    if (recipe.kind === "armour") run.made.armour++;
+    if (recipe.kind === "weapon" && recipe.tier === ATTUNED_TIER) run.made.attunedWeapons++;
     else if (recipe.id === items.comboFish) run.addPoints(Rewards.POINTS.comboFish);
   }
   player.getInventory().refreshItems();
@@ -295,6 +299,7 @@ function finishPotion(event) {
   player.getInventory().delete(items.dust, Items.DUST_PER_POTION);
   player.getInventory().delete(items.grymPotion, 1);
   player.getInventory().adds(items.egniol3, 1);
+  run.made.egniol++;
   player.getInventory().refreshItems();
   animate(player, ANIMATION.MIX);
   player.getSkillManager().addExperiences(Shared.core().Skill.HERBLORE, 10);

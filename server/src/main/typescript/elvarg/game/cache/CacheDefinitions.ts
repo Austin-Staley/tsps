@@ -1,5 +1,6 @@
 import { ArchiveVarBitTypeLoader } from "./codec/rs/config/vartype/bit/VarBitTypeLoader";
 import type { VarManager } from "./codec/rs/config/vartype/VarManager";
+import type { Archive } from "./codec/rs/cache/Archive";
 import { CacheIndexDat2 } from "./codec/rs/cache/CacheIndex";
 import type { CacheInfo } from "./codec/rs/cache/CacheInfo";
 import { ConfigType } from "./codec/rs/cache/ConfigType";
@@ -15,6 +16,7 @@ import {
 import { CachePipeline } from "./CachePipeline";
 import { ObjType } from "./codec/rs/config/objtype/ObjType";
 import { DbRowType } from "./codec/rs/config/dbrow/DbRowType";
+import { Gamevals, GamevalKind } from "./Gamevals";
 import { ByteBuffer } from "./codec/rs/io/ByteBuffer";
 import { Type } from "./codec/rs/config/Type";
 
@@ -43,7 +45,10 @@ export class CacheDefinitions {
     private static customItems = new Map<number, ServerCustomItem>();
     private static customItemTypes = new Map<number, ObjType>();
     private static customModels?: Array<{ id: number; data: string }>;
-    private static dbRows?: { byId: Map<number, DbRowType>; byTable: Map<number, DbRowType[]> };
+    private static dbArchive?: Archive;
+    private static dbRowIdsByTable?: Map<number, number[]>;
+    private static readonly dbRows = new Map<number, DbRowType>();
+    private static readonly dbTables = new Map<number, readonly DbRowType[]>();
     private static structParams = new Map<number, ReadonlyMap<number, number | string>>();
     private static enumValues = new Map<number, ReadonlyMap<number, number | string>>();
     /** The struct archive, read once: re-reading it per struct took ~75 ms each. */
@@ -83,33 +88,138 @@ export class CacheDefinitions {
         return this.getState().npcs.load(id);
     }
 
-    /** Every cache database row, decoded once (the whole archive takes well under a second). */
-    private static getDbRows() {
-        if (this.dbRows) return this.dbRows;
-        const configs = CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore());
-        const archive = configs.getArchive(ConfigType.OSRS.dbRow);
-        const byId = new Map<number, DbRowType>();
-        const byTable = new Map<number, DbRowType[]>();
-        for (const id of configs.getFileIds(ConfigType.OSRS.dbRow) ?? []) {
+    private static getDbArchive(): Archive {
+        if (!this.dbArchive) {
+            const configs = CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore());
+            this.dbArchive = configs.getArchive(ConfigType.OSRS.dbRow);
+        }
+        return this.dbArchive;
+    }
+
+    /** Only table membership is indexed; unused rows retain no decoded column data. */
+    private static getDbRowIdsByTable(): Map<number, number[]> {
+        if (this.dbRowIdsByTable) return this.dbRowIdsByTable;
+        const archive = this.getDbArchive();
+        const byTable = new Map<number, number[]>();
+        for (const id of archive.fileIds) {
             const file = archive.getFile(id);
             if (!file) continue;
-            const row = DbRowType.decode(id, new Int8Array(file.data));
-            byId.set(id, row);
-            if (!byTable.has(row.tableId)) byTable.set(row.tableId, []);
-            byTable.get(row.tableId)!.push(row);
+            const tableId = DbRowType.readTableId(file.data);
+            let ids = byTable.get(tableId);
+            if (!ids) byTable.set(tableId, ids = []);
+            ids.push(id);
         }
-        this.dbRows = { byId, byTable };
-        return this.dbRows;
+        this.dbRowIdsByTable = byTable;
+        return byTable;
     }
 
-    /** A cache database row by id (the rows cache scripts read with db_getfield). */
+    /** A cache database row by id, decoded and retained only when requested. */
     static getDbRow(id: number): DbRowType | undefined {
-        return this.getDbRows().byId.get(id);
+        const cached = this.dbRows.get(id);
+        if (cached) return cached;
+        const file = this.getDbArchive().getFile(id);
+        if (!file) return undefined;
+        const row = DbRowType.decode(id, file.data);
+        this.dbRows.set(id, row);
+        return row;
     }
 
-    /** Every row of a cache database table, in id order. */
+    /** Every row of a requested table, in id order, sharing the individual row cache. */
     static getDbTableRows(tableId: number): readonly DbRowType[] {
-        return this.getDbRows().byTable.get(tableId) ?? [];
+        const cached = this.dbTables.get(tableId);
+        if (cached) return cached;
+        const ids = this.getDbRowIdsByTable().get(tableId);
+        if (!ids) return [];
+        const rows = ids.map((id) => this.getDbRow(id)!);
+        this.dbTables.set(tableId, rows);
+        return rows;
+    }
+
+    /** A cache database table's id by its gameval name (`slayer_task`), or null. */
+    static getDbTableId(name: string): number | null {
+        for (const [id, table] of this.getGamevals().allTables()) {
+            if (table.name === name) return id;
+        }
+        return null;
+    }
+
+    /** A database table column's id by its gameval name, or null; columns can move between revisions. */
+    static getDbColumn(tableId: number, column: string): number | null {
+        return this.getGamevals().tableColumn(tableId, column);
+    }
+
+    /** A database table's column names by column id (empty when the cache has no names for it). */
+    static getDbColumns(tableId: number): readonly string[] {
+        return this.getGamevals().allTables().get(tableId)?.columns ?? [];
+    }
+
+    /** A varbit's id by its gameval name (`slayer_points`), or null. */
+    static getVarbitId(name: string): number | null {
+        return this.idByName(GamevalKind.VARBIT).get(name) ?? null;
+    }
+
+    /** A varp's id by its gameval name (`slayer_count`), or null. */
+    static getVarpId(name: string): number | null {
+        return this.idByName(GamevalKind.VARP).get(name) ?? null;
+    }
+
+    /** A loc's id by its gameval name (`ent_totems_site_1_base`), or null. */
+    static getLocId(name: string): number | null {
+        return this.idByName(GamevalKind.LOC).get(name) ?? null;
+    }
+
+    /** An NPC's id by its gameval name (`ent_totems_ent`), or null. */
+    static getNpcId(name: string): number | null {
+        return this.idByName(GamevalKind.NPC).get(name) ?? null;
+    }
+
+    /** An obj's id by its gameval name (`oak_logs`), or null. */
+    static getObjId(name: string): number | null {
+        return this.idByName(GamevalKind.OBJ).get(name) ?? null;
+    }
+
+    /** An animation's id by its gameval name (`human_pickupfloor`), or null. */
+    static getSeqId(name: string): number | null {
+        return this.idByName(GamevalKind.SEQ).get(name) ?? null;
+    }
+
+    /** An animation's gameval name (`human_pickupfloor`), or null when the cache has none for it. */
+    static getSeqName(id: number): string | null {
+        return this.getGamevals().namesOf(GamevalKind.SEQ).get(id) ?? null;
+    }
+
+    /** Every named animation: id -> gameval name. */
+    static getSeqNames(): ReadonlyMap<number, string> {
+        return this.getGamevals().namesOf(GamevalKind.SEQ);
+    }
+
+    /** A graphic's id by its gameval name, or null. */
+    static getSpotanimId(name: string): number | null {
+        return this.idByName(GamevalKind.SPOTANIM).get(name) ?? null;
+    }
+
+    /** An interface component's packed id by its gameval name (`bankside:runepouch_top`), or null. */
+    static getComponentId(name: string): number | null {
+        return this.getGamevals().componentId(name);
+    }
+
+    private static idsByName = new Map<GamevalKind, Map<string, number>>();
+
+    private static idByName(kind: GamevalKind): Map<string, number> {
+        let ids = this.idsByName.get(kind);
+        if (!ids) {
+            ids = new Map();
+            for (const [id, name] of this.getGamevals().namesOf(kind)) ids.set(name, id);
+            this.idsByName.set(kind, ids);
+        }
+        return ids;
+    }
+
+    private static gamevals?: Gamevals;
+
+    private static getGamevals(): Gamevals {
+        this.gamevals ??= new Gamevals(CachePipeline.getStore());
+        return this.gamevals;
     }
 
     /**

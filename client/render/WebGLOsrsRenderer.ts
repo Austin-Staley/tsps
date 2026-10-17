@@ -27,6 +27,7 @@ import {
     subscribeTick,
 } from "../network/ServerConnection";
 import { sendLogin } from "../network/ServerConnection";
+import { baseNpcTypeId } from "../custom/npcs/NpcModelOverrideRegistry";
 import { flushPackets } from "../network/packet";
 import { createTextureArray } from "../picogl/PicoTexture";
 import { RS_TO_RADIANS } from "../rs/MathConstants";
@@ -566,10 +567,14 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     colorBanding: number = 255;
 
     smoothTerrain: boolean = false;
+    /** Animation Smoothing state the loaded scenery was baked with (render/render/locs.ts). */
+    smoothLocAnimations?: number;
 
     cullBackFace: boolean = true;
 
     msaaEnabled: boolean = false;
+    /** MSAA samples the scene framebuffer was last built for, before the GPU's cap. */
+    msaaSamplesRequested: number = 0;
     fxaaEnabled: boolean = false;
 
     loadNpcs: boolean = true;
@@ -708,14 +713,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     // Terrain-driven minimum pitch pressure (scaled by 256).
     public cameraTerrainPitchPressure: number = 0;
 
-    // OSRS camera shake slots (0:X, 1:Y, 2:Z, 3:Yaw, 4:Pitch).
-    public readonly cameraShakeEnabled: boolean[] = [false, false, false, false, false];
-    public readonly cameraShakeRandomAmplitude: number[] = [0, 0, 0, 0, 0];
-    public readonly cameraShakeWaveAmplitude: number[] = [0, 0, 0, 0, 0];
-    public readonly cameraShakeWaveSpeed: number[] = [0, 0, 0, 0, 0];
-    public readonly cameraShakeWavePhase: number[] = [0, 0, 0, 0, 0];
-    public cameraShakeLastClientCycle: number = -1;
-
     // PERF: scratch objects for follow-cam math (avoid per-frame allocations)
     public followCamRot: mat4 = mat4.create();
     public followCamForward: vec3 = vec3.create();
@@ -810,7 +807,8 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
                 kind: "npc",
                 ecsId,
                 serverId,
-                npcTypeId: this.osrsClient.npcEcs.getNpcTypeId(ecsId),
+                // Cache type for picking; the synthetic render type stays visual only.
+                npcTypeId: baseNpcTypeId(this.osrsClient.npcEcs.getNpcTypeId(ecsId)),
                 plane: 0,
             });
         const previousOnMapRemoved = this.mapManager.onMapRemoved;
@@ -1357,7 +1355,7 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
 
     /** Animation smoothing draws this NPC via the unbatched path, not the map's baked frames. */
     public isNpcSmoothed(ecsId: number): boolean {
-        return render.npcSmoothingCycle(this, ecsId) >= 0;
+        return render.isNpcAnimationSmoothed(this, ecsId);
     }
 
     initFramebuffers(): void {
@@ -1685,6 +1683,10 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         return render.setMsaa(this, enabled);
     }
 
+    getRequestedMsaaSamples(): number {
+        return render.getRequestedMsaaSamples(this);
+    }
+
     setFxaa(enabled: boolean): void {
         return render.setFxaa(this, enabled);
     }
@@ -1811,35 +1813,6 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         plane: number,
     ): number | undefined {
         return render.sampleTileVertexHeightWorldUnits(this, tileX, tileY, plane);
-    }
-
-    public setCameraShakeSlot(
-        slot: number,
-        randomAmplitude: number,
-        waveAmplitude: number,
-        waveSpeed: number,
-        phase: number = 0,
-    ): void {
-        return render.setCameraShakeSlot(this, slot, randomAmplitude, waveAmplitude, waveSpeed, phase);
-    }
-
-    public clearCameraShakeSlot(slot: number): void {
-        return render.clearCameraShakeSlot(this, slot);
-    }
-
-    public clearCameraShake(): void {
-        return render.clearCameraShake(this);
-    }
-
-    public computeCameraShakeOffsets(clientCycle: number): {
-        x: number;
-        y: number;
-        z: number;
-        yaw: number;
-        pitch: number;
-        active: boolean;
-    } {
-        return render.computeCameraShakeOffsets(this, clientCycle);
     }
 
     public updateCameraFollow(deltaTime?: number, timeSec?: number): void {
@@ -2002,7 +1975,7 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     }
 
     public resolveNpcHighlightTargetFromEntry(
-        entry: Pick<SimpleMenuEntry, "targetType" | "targetId" | "mapX" | "mapY"> | undefined,
+        entry: Pick<SimpleMenuEntry, "targetType" | "targetId" | "mapX" | "mapY" | "npcServerId"> | undefined,
         fallbackTile?: { tileX: number; tileY: number; plane?: number },
     ): NpcHighlightTarget | undefined {
         return render.resolveNpcHighlightTargetFromEntry(this, entry, fallbackTile);
@@ -2015,7 +1988,7 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
     }
 
     public resolveInteractHighlightTargetFromEntry(
-        entry: Pick<SimpleMenuEntry, "targetType" | "targetId" | "mapX" | "mapY"> | undefined,
+        entry: Pick<SimpleMenuEntry, "targetType" | "targetId" | "mapX" | "mapY" | "npcServerId"> | undefined,
         fallbackTile?: { tileX: number; tileY: number; plane?: number },
     ): InteractHighlightTarget | undefined {
         return render.resolveInteractHighlightTargetFromEntry(this, entry, fallbackTile);
@@ -2529,6 +2502,11 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
         },
     ): void {
         return render.onLocChange(this, oldId, newId, tile, level, opts);
+    }
+
+    protected override reloadMultiLocSquare(mapX: number, mapY: number): void {
+        if (this.instanceActive) this.scheduleInstanceLocRebuild();
+        else this.scheduleLocGeometryUpdate(mapX, mapY, "full");
     }
 
     onRegionReplacement(payload: {

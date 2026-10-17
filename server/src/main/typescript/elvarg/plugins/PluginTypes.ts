@@ -99,6 +99,7 @@ export interface PluginObjectInteractionEvent {
   definition?: ObjectDefinition;
   objectId: number;
   clickType: number;
+  option?: string;
   location: { x: number; y: number; z: number };
   sourceLocation?: { x: number; y: number; z: number };
   handled: boolean;
@@ -112,6 +113,14 @@ export interface PluginObjectRouteEvent {
   clickType: number;
   sourceLocation: { x: number; y: number; z: number };
   destination: { x: number; y: number; z: number } | null;
+  /** Additional blocked approach sides, in the object's unrotated local frame. */
+  blockAccessFlags?: number;
+}
+
+export interface PluginWalkRouteEvent {
+  player: any;
+  destination: { x: number; y: number; z: number };
+  handled: boolean;
 }
 
 export interface PluginNpcInteractionEvent {
@@ -389,6 +398,22 @@ export interface PluginPlayerDeathItemDropEvent {
   handled: boolean;
 }
 
+/**
+ * Everything a death is about to lose, once, after the per-item `onPlayerDeathItemDrop` hooks
+ * (also when that is nothing).
+ * A plugin takes items by removing them from `items` (headed for the floor) or `untradeables`
+ * (otherwise kept); whatever is left falls to the floor or is kept, as without the hook.
+ */
+export interface PluginPlayerDeathDropsEvent {
+  player: any;
+  killer: any;
+  location: any;
+  items: any[];
+  untradeables: any[];
+  /** Item ids per slot before the death emptied them (-1 for an empty slot). */
+  layout: { inventory: number[]; equipment: number[] };
+}
+
 export interface PluginCanEquipEvent {
   player: any;
   slot: number;
@@ -565,6 +590,18 @@ export interface PluginSpellOnObjectEvent {
   spellItemId: number;
   spellId: number;
   location: { x: number; y: number; z: number };
+  handled: boolean;
+}
+
+export interface PluginSpellOnItemEvent {
+  player: any;
+  /** Spellbook name of the cast spell, e.g. "Lvl-1 Enchant"; undefined if the cache has none. */
+  spellName: string | undefined;
+  spellWidget: number;
+  spellItemId: number;
+  /** The inventory item the spell was cast on. */
+  itemId: number;
+  slot: number;
   handled: boolean;
 }
 
@@ -776,6 +813,7 @@ export interface PluginApi {
   onPathBlocked(handler: (event: PluginPathBlockedEvent) => void): void;
   onPlayerPathBlocked(handler: (event: PluginPlayerPathBlockedEvent) => void): void;
   onObjectRoute(handler: (event: PluginObjectRouteEvent) => void): void;
+  onWalkRoute(handler: (event: PluginWalkRouteEvent) => void): void;
   onObjectInteraction(handler: (event: PluginObjectInteractionEvent) => void): void;
   /** Exact, case-sensitive object name and option matching. Return false to fall through. */
   onObjectInteraction(
@@ -849,6 +887,7 @@ export interface PluginApi {
   onPlayerDeathItemDrop(
     handler: (event: PluginPlayerDeathItemDropEvent) => void
   ): void;
+  onPlayerDeathDrops(handler: (event: PluginPlayerDeathDropsEvent) => void): void;
   onCanEquip(handler: (event: PluginCanEquipEvent) => void): void;
   onCanUseItem(handler: (event: PluginCanUseItemEvent) => void): void;
   onCanGainExperience(handler: (event: PluginCanGainExperienceEvent) => void): void;
@@ -900,10 +939,6 @@ export interface PluginApi {
     handler: (event: PluginGroundItemInteractionEvent) => void | boolean
   ): void;
   onGroundItemPickup(handler: (event: PluginGroundItemInteractionEvent) => void | boolean): void;
-  onGroundItemSecondClick(
-    itemIds: number | number[],
-    handler: (event: PluginGroundItemInteractionEvent) => void | boolean
-  ): void;
   onItemOnObject(handler: (event: PluginItemOnObjectEvent) => void, filter?: PluginItemUseFilter): void;
   /** Matches exact item and object names. Return false to fall through. */
   onItemOnObject(itemName: string, objectName: string, handler: (event: PluginItemOnObjectEvent) => void | boolean, filter?: PluginItemUseFilter): void;
@@ -919,6 +954,7 @@ export interface PluginApi {
   onItemOnNpc(handler: (event: PluginItemOnNpcEvent) => void, filter?: PluginItemUseFilter): void;
   onItemOnGroundItem(handler: (event: PluginItemOnGroundItemEvent) => void, filter?: PluginItemUseFilter): void;
   onSpellOnObject(handler: (event: PluginSpellOnObjectEvent) => void): void;
+  onSpellOnItem(handler: (event: PluginSpellOnItemEvent) => void): void;
   onItemAction(handler: (event: PluginItemActionEvent) => void): void;
   /** Exact item name and inventory option matching. Return false to fall through. */
   onItemAction(itemName: string, actions: Record<string, (event: PluginItemActionEvent) => void | boolean>): void;
@@ -1033,8 +1069,11 @@ export interface PluginApi {
     itemId: number,
     options?: { name?: string; aliases?: string[] }
   ): void;
-  /** Save and restore this player attribute; values must be JSON-compatible. */
-  persistAttribute(key: string): void;
+  /**
+   * Save and restore this player attribute; values must be JSON-compatible.
+   * With a default, a value equal to it isn't saved, and a save without the key loads it.
+   */
+  persistAttribute(key: string, defaultValue?: unknown): void;
   setPlayerPersistence(persistence: PlayerPersistence): void;
   setExperienceRate(rate: number): void;
   getActiveRegionSnapshot(): PluginActiveRegionsEvent;
@@ -1153,14 +1192,20 @@ export interface PluginApi {
   registerCombatSpecial(definition: PluginCombatSpecialDefinition): void;
   registerCombatMethodResolver(resolver: PluginCombatMethodResolver): void;
   /**
+   * Makes an NPC menu option start a fight as "Attack" does, for every NPC that has it (the
+   * Nightmare's totems' "Charge"): clicking it attacks, and spells can be cast on them.
+   */
+  registerNpcCombatOption(option: string): void;
+  /**
    * Registers a combat method provider for one or more NPC IDs.
    * @param npcIds identifiers to bring under this method
-   * @param methodCtor constructor for the combat method to instantiate
+   * @param methodCtor constructor for the combat method to instantiate; with `singleton: false`
+   *   it is built for each attack and given the attacking NPC
    * @param options optional overrides (default to a singleton instance)
    */
   registerNpcCombatMethodProvider(
     npcIds: number | number[],
-    methodCtor: new () => any,
+    methodCtor: new (npc?: any) => any,
     options?: { singleton?: boolean }
   ): void;
 }
@@ -1177,6 +1222,7 @@ export interface PluginCoreApi {
   CombatMethod: any;
   CombatSpecial: any;
   CombatFactory: any;
+  CombatEquipment: any;
   CanAttackResponse: any;
   CombatType: any;
   SkullType: any;
@@ -1192,6 +1238,7 @@ export interface PluginCoreApi {
   FightStyle: any;
   WeaponInterfaceManager: any;
   PrayerHandler: any;
+  ChatType: any;
   DuelRule: any;
   RegionManager: any;
   Animation: any;
@@ -1210,6 +1257,7 @@ export interface PluginCoreApi {
   ForceMovement: any;
   ForceMovementTask: any;
   TaskManager: any;
+  NPCRespawnTask: any;
   ItemIdentifiers: any;
   ItemIds: any;
   NpcIdentifiers: any;
@@ -1221,6 +1269,7 @@ export interface PluginCoreApi {
   Sounds: any;
   Location: any;
   Mobile: any;
+  encodePluginMessage: typeof import("../net/protocol/ClientProtocol").encodePluginMessage;
   encodeFinePosition: typeof import("../net/protocol/ClientProtocol").encodeFinePosition;
   Boundary: any;
   PolygonalBoundary: any;
@@ -1244,7 +1293,13 @@ export interface PluginCoreApi {
   ItemOnGroundManager: any;
   ItemDefinition: any;
   EquipPacketListener: any;
+  /** The death task; `getItemsToKeep(player)` is what a death would let the player keep. */
+  PlayerDeathTask: any;
+  /** Which items poison, and how strongly. */
+  CombatPoisonData: any;
   CacheDefinitions: any;
+  readTemplateRegion: typeof import("../game/collision/TemplateRegionData").readTemplateRegion;
+  Wilderness: any;
   PathFinder: any;
   RsmodRouteFinding: any;
   NpcDefinition: any;
@@ -1274,7 +1329,11 @@ export interface PluginCoreApi {
   Server: any;
   PluginManager: any;
   ShopManager: any;
+  ShopDefinition: any;
   MultiChatboxPrompt: any;
+  /** Public chat as a client sends it (filter, mute, broadcast): bots speak through it too. */
+  ChatPacketListener: any;
+  TradeState: any;
   dispatchClientMessages: (player: any, messages: any[]) => boolean;
   connectHeadlessClient: (username: string, password: string) => Promise<{ player?: any; error?: string }>;
 }
@@ -1284,5 +1343,7 @@ export interface PluginModule {
   dependsOn?: string[];
   /** Members content: not loaded when world.json sets membersWorld false. */
   members?: boolean;
+  /** False keeps the plugin off unless world.json `plugins` turns it on. */
+  enabled?: boolean;
   register(api: PluginApi): void;
 }

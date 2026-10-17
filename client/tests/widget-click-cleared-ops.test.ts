@@ -88,4 +88,34 @@ assert.equal(click([quiverSlot, withOp])[0], withOp);
 const flagsOnly = { ...boltPouchSlot, actions: undefined };
 assert.equal(click([quiverSlot, flagsOnly])[0], flagsOnly);
 
+// An op needs its transmit flag or an onOp handler, as in the right-click menu. The Slayer Rewards
+// Tasks tab's view_tasks layer (426:36) gets "View List" by script but no flag for its own slot,
+// and lies over the Cancel button (a script-run dynamic child of 426:29): Cancel takes the click.
+const cancelButton = {
+    uid: (426 << 16) | 29, groupId: 426, fileId: -1, childIndex: 12,
+    x: 0, y: 0, width: 57, height: 22, actions: ["Cancel"], eventHandlers: { onOp: {} },
+};
+const viewTasksLayer = {
+    uid: (426 << 16) | 36, groupId: 426, fileId: 36, childIndex: -1,
+    x: 0, y: 0, width: 468, height: 200, actions: ["View List"],
+};
+assert.equal(click([cancelButton, viewTasksLayer])[0], cancelButton);
+// With its flag, the same op takes the click.
+assert.equal(click([cancelButton, { ...viewTasksLayer, flags: 2 }])[0].fileId, 36);
+
+// A widget that is only draggable offers no op, so the click runs the op beneath it: the
+// gravestone window (672) puts invisible resize handles (draggable script children of 672:0)
+// over its corners, and the top-right one lies over the Close button (672:3).
+const closeButton = {
+    uid: (672 << 16) | 3, groupId: 672, fileId: 3, childIndex: -1,
+    x: 0, y: 0, width: 26, height: 23, actions: ["Close"], flags: 2, eventHandlers: { onOp: {} },
+};
+const resizeHandle = {
+    uid: 672 << 16, groupId: 672, fileId: -1, childIndex: 2,
+    x: 0, y: 0, width: 40, height: 40, isDraggable: true,
+};
+assert.equal(click([closeButton, resizeHandle])[0], closeButton, "the resize handle doesn't take Close's click");
+// With nothing beneath offering an op, the handle still takes the click (to be dragged).
+assert.equal(click([{ ...closeButton, actions: undefined, flags: 0, eventHandlers: undefined }, resizeHandle])[0], resizeHandle);
+
 console.log("widget click cleared ops test passed");

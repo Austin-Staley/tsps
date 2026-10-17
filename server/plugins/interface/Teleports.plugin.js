@@ -4,7 +4,7 @@ const { GameConstants } = require("../../src/main/typescript/elvarg/game/GameCon
 const {
   createHotspotAnchorLocation,
   getEnabledWildernessHotspots,
-} = require("../bots/behaviours/pvp/WildernessHotspotRegistry.js");
+} = require("../bots/behaviours/pvp/WildernessHotspotRegistry.PlayerBots.js");
 
 const HOME_TELEPORT_BUTTON_IDS = new Set([19210, 21741]);
 const TRAINING_TELEPORT_BUTTON_IDS = new Set([1164, 13035, 30064]);
@@ -22,7 +22,6 @@ const PVP_DIALOGUE_OPTION_BUTTON_IDS = new Set([
 const ATTR_PVP_TELEPORT_PAGE = "teleports:pvp_page";
 const ATTR_BOSS_TELEPORT_PAGE = "teleports:boss_page";
 const ATTR_COUNT_DRAYNOR_PENDING_INSTANCE = "count_draynor:pending_instance";
-const ATTR_ELVARG_PENDING_INSTANCE = "elvarg:pending_instance";
 const DIALOGUE_OPTION_BUTTON_IDS = [2494, 2495, 2496, 2497, 2498, 2482, 2483, 2484, 2485];
 
 // Approximate Chaos Temple surface location matching the current bot hotspot anchor.
@@ -33,8 +32,14 @@ const COUNT_DRAYNOR_TELEPORT_DESTINATION = new Location(3077, 9772, 0);
 // the path reaches him over the decaying trunk at 3682,3716, so land just north
 // of it: walkable, connected and beside the trunk's Climb side.
 const DERANGED_ARCHAEOLOGIST_TELEPORT_DESTINATION = new Location(3682, 3718, 0);
-// Elvarg lives in the Crandor/Karamja dungeon lair (OSRS).
-const ELVARG_TELEPORT_DESTINATION = new Location(2852, 9637, 0);
+// Land outside the low wall; climbing it starts the private Elvarg encounter.
+const ELVARG_TELEPORT_DESTINATION = new Location(2845, 9636, 0);
+// Vorkath sleeps in the centre of Ungael's crater (2269, 4062); land outside by
+// the ice-chunks wall and climb over.
+const VORKATH_TELEPORT_DESTINATION = new Location(2272, 4052, 0);
+// Araxxor's lair sits behind the webbed tunnels (3631, 9812); land in the
+// corridor east of the lair wall and squeeze through the web tunnel to enter.
+const ARAXXOR_TELEPORT_DESTINATION = new Location(3658, 9816, 0);
 const BOSS_TELEPORT_DESTINATIONS = new Map([
   [28151, new Location(3290, 3847, 0)], // Callisto
   [28152, new Location(3261, 3927, 0)], // Chaos Elemental
@@ -42,7 +47,7 @@ const BOSS_TELEPORT_DESTINATIONS = new Map([
   [28154, new Location(2977, 3702, 0)], // Crazy Archaeologist
   [28155, new Location(3010, 3849, 0)], // King Black Dragon entrance
   [28156, new Location(3233, 10341, 0)], // Scorpia
-  [28157, new Location(3332, 3734, 0)], // Venenatis
+  [28157, new Location(3320, 3796, 0)], // Venenatis: the Silk Chasm entrance
   [28158, new Location(3219, 3788, 0)], // Vet'ion
   [28159, COUNT_DRAYNOR_TELEPORT_DESTINATION], // Count Draynor
 ]);
@@ -61,10 +66,6 @@ function setBossInstancePending(player, destination) {
   player.setAttribute(
     ATTR_COUNT_DRAYNOR_PENDING_INSTANCE,
     destinationMatches(destination, COUNT_DRAYNOR_TELEPORT_DESTINATION) === true
-  );
-  player.setAttribute(
-    ATTR_ELVARG_PENDING_INSTANCE,
-    destinationMatches(destination, ELVARG_TELEPORT_DESTINATION) === true
   );
 }
 
@@ -224,7 +225,15 @@ function getBossTeleportPages() {
         { label: "Count Draynor", destination: BOSS_TELEPORT_DESTINATIONS.get(28159) },
         { label: "Deranged Archaeologist", destination: DERANGED_ARCHAEOLOGIST_TELEPORT_DESTINATION },
         { label: "Elvarg", destination: ELVARG_TELEPORT_DESTINATION },
-        { label: "Back", nextPage: 1 },
+        { label: "Vorkath", destination: VORKATH_TELEPORT_DESTINATION },
+        { label: "More options", nextPage: 3 },
+      ],
+    },
+    {
+      title: "Boss teleports",
+      options: [
+        { label: "Araxxor", destination: ARAXXOR_TELEPORT_DESTINATION },
+        { label: "Back", nextPage: 2 },
         { label: "Close", close: true },
       ],
     },

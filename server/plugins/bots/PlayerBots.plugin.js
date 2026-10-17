@@ -5,18 +5,20 @@ const { ObjectIds } = require("../../src/main/typescript/elvarg/util/IdEnums");
 const {
   resetMovementState,
   initPlayerBotStateCoreAccess,
-} = require("./behaviours/state/PlayerBotState");
-const { registerBotCommands } = require("./runtime/registerBotCommands");
-const { registerBotEvents } = require("./runtime/registerBotEvents");
-const { createBotPluginLogging } = require("./runtime/BotPluginLogging");
-const { bootPlayerBotsRuntime } = require("./runtime/BotPluginBoot");
-const { createBotBenchmark } = require("./runtime/BotBenchmark");
-const { startBotSites } = require("./brain/BotSiteSpawner");
-const { setActiveBotRuntime } = require("./runtime/BotRuntimeRegistry");
-const { PVP_BOT_SETTINGS } = require("./behaviours/pvp/WildernessHotspotRegistry");
+} = require("./behaviours/state/State.PlayerBots");
+const { registerBotCommands } = require("./runtime/RegisterBotCommands.PlayerBots");
+const { registerBotEvents } = require("./runtime/RegisterBotEvents.PlayerBots");
+const { createBotPluginLogging } = require("./runtime/PluginLogging.PlayerBots");
+const { bootPlayerBotsRuntime } = require("./runtime/PluginBoot.PlayerBots");
+const { createBotBenchmark } = require("./runtime/Benchmark.PlayerBots");
+const { startBotSites } = require("./brain/SiteSpawner.PlayerBots");
+const { setActiveBotRuntime } = require("./runtime/RuntimeRegistry.PlayerBots");
+const { PVP_BOT_SETTINGS } = require("./behaviours/pvp/WildernessHotspotRegistry.PlayerBots");
 const {
   registerBotStatusInteractions,
-} = require("./runtime/registerBotStatusInteractions");
+} = require("./runtime/RegisterBotStatusInteractions.PlayerBots");
+const { registerAiBots } = require("./ai/RegisterAiBots.PlayerBots");
+const { AI_BOT_ATTRIBUTE } = require("./ai/Config.PlayerBots");
 
 const BOT_BEHAVIOR_MODE = Object.freeze({
   ROAMING: "roaming",
@@ -185,18 +187,23 @@ const BOT_CONFIG = Object.freeze({
   }),
 });
 
+/** Scripted bots accept every duel; AI bots aren't scripted, so they are left out. */
+function isScriptedBot(player) {
+  return player?.isPlayerBot?.() === true && player.getAttribute?.(AI_BOT_ATTRIBUTE) !== true;
+}
+
 function registerDuelBotAcceptance(api) {
   const accept = (event) => {
-    if (event?.player?.isPlayerBot?.() === true) event.accept = true;
+    if (isScriptedBot(event?.player)) event.accept = true;
   };
   for (const eventName of ["duelarena:request", "duelarena:rules-changed", "duelarena:accept", "duelarena:accept-clicked"]) {
     api.onCustomEvent(eventName, accept);
   }
   api.onCustomEvent("duelarena:validate-winnings", (event) => {
-    if (event?.player?.isPlayerBot?.() === true) event.handled = true;
+    if (isScriptedBot(event?.player)) event.handled = true;
   });
   api.onCustomEvent("duelarena:settle-winnings", (event) => {
-    if (event?.player?.isPlayerBot?.() === true) event.handled = true;
+    if (isScriptedBot(event?.player)) event.handled = true;
   });
 }
 
@@ -263,6 +270,15 @@ module.exports = {
       taskManager: api.getTaskManager(),
       flashHintArrowTaskFactory: boot.flashHintArrowTaskFactory,
       brainRegistry: boot.brainRegistry,
+    });
+
+    registerAiBots({
+      api,
+      botApi,
+      runtime: boot.runtime,
+      registry: boot.brainRegistry,
+      world: boot.brainWorld,
+      resetMovementState,
     });
 
     registerBotEvents({

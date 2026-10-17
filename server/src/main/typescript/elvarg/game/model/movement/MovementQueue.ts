@@ -22,6 +22,8 @@ import { FastDeque } from "../../../util/FastDeque";
 import { ServerPerf } from "../../../util/ServerPerf";
 import { Wilderness } from "../../content/wilderness/Wilderness";
 import { applyRunEnergyRestoreModifiers } from "../../content/combat/EquipmentEffects";
+import { PluginManager } from "../../../plugins/PluginManager";
+import type { PluginObjectRouteEvent } from "../../../plugins/PluginTypes";
 import * as fs from "fs";
 import * as path from "path";
 export class MovementQueue {
@@ -352,6 +354,11 @@ export class MovementQueue {
         }
         this.reset();
         this.walkToReset();
+        if (this.player && require("../../../plugins/PluginManager").PluginManager.emitWalkRoute({
+            player: this.player,
+            destination: { x: destination.getX(), y: destination.getY(), z: destination.getZ() },
+            handled: false,
+        })) return;
         PathFinder.calculateWalkRoute(this.player, destination.getX(), destination.getY());
     }
 
@@ -1093,7 +1100,7 @@ export class MovementQueue {
         this.resetFollow();
     }
 
-    private buildObjectRouteSpec(object: GameObject) {
+    private buildObjectRouteSpec(object: GameObject, blockAccessFlags = 0) {
         const objectX = object.getLocation().getX();
         const objectY = object.getLocation().getY();
         const type = object.getType();
@@ -1104,7 +1111,7 @@ export class MovementQueue {
             const def = ObjectDefinition.forId(id);
             const xLength = def.getSizeX();
             const yLength = def.getSizeY();
-            const blockingMask = def.getBlockingMask();
+            const blockingMask = def.getBlockingMask() | blockAccessFlags;
 
             return {
                 objectX,
@@ -1135,12 +1142,12 @@ export class MovementQueue {
             routeXLength: 0,
             routeYLength: 0,
             routeDirection: direction,
-            routeBlockingMask: 0,
+            routeBlockingMask: blockAccessFlags,
             reachWidth: 1,
             reachLength: 1,
             reachAngle: direction,
             reachShape: type,
-            reachBlockAccessFlags: 0,
+            reachBlockAccessFlags: blockAccessFlags,
         };
     }
 
@@ -1269,7 +1276,25 @@ export class MovementQueue {
             entity.getLocation().getZ() === this.player.getLocation().getZ();
     }
 
-    public walkToObject(object: GameObject, action: Action) {
+    public walkToObject(object: GameObject, action: Action, clickType = 0) {
+        const location = this.player.getLocation();
+        const routeEvent: PluginObjectRouteEvent = {
+            player: this.player,
+            object,
+            objectId: object.getId(),
+            definition: ObjectDefinition.forPlayer(object.getId(), this.player) ?? undefined,
+            clickType,
+            sourceLocation: { x: location.getX(), y: location.getY(), z: location.getZ() },
+            destination: null,
+        };
+        // All object users share route overrides and reach restrictions, including items and bots.
+        PluginManager.emitObjectRoute(routeEvent);
+        if (routeEvent.destination) {
+            const { x, y, z } = routeEvent.destination;
+            this.walkToTile(new Location(x, y, z), () => action.execute());
+            return;
+        }
+
         let mobility = this.getMobility();
         if (!mobility.canMove()) {
             mobility.sendMessage(this.player);
@@ -1286,7 +1311,7 @@ export class MovementQueue {
 
         this.walkToReset();
 
-        const routeSpec = this.buildObjectRouteSpec(object);
+        const routeSpec = this.buildObjectRouteSpec(object, routeEvent.blockAccessFlags);
         const objectX = routeSpec.objectX;
         const objectY = routeSpec.objectY;
         const type = routeSpec.type;

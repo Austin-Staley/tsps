@@ -32,10 +32,12 @@ const OWNED_ATTRIBUTE = "pets.owned";
 
 const INTERACTION_ANIM = new Animation(827);
 const FOLLOWER_INDEX_VARP = 447;
+const FOLLOWER_ITEM_VARP = 448;
 const MAX_XP = 200000000;
 let pluginApi = null;
 let TaskClass = null;
 let TaskManagerRef = null;
+let NPCRespawnTaskRef = null;
 let ItemDefinitionClass = null;
 /** Per-player task keys, so cancelling the cat clock never touches another plugin's tasks. */
 const CAT_TASK_KEY = new WeakMap();
@@ -464,6 +466,17 @@ const PETS = [
   },
 ];
 
+// Cache puppy followers and their inventory forms have the same colour order;
+// each real item is followed by its bank placeholder.
+const FIRST_PUPPY_NPC_ID = NpcIdentifiers.LABRADOR_PUPPY;
+const LAST_PUPPY_NPC_ID = NpcIdentifiers.YORKIE_PUPPY_3;
+const FIRST_PUPPY_ITEM_ID = ItemIdentifiers.LABRADOR_PUPPY;
+for (let npcId = FIRST_PUPPY_NPC_ID; npcId <= LAST_PUPPY_NPC_ID; npcId++) {
+  PETS.push({ enumName: `SHELTER_PUPPY_${npcId}`, petId: npcId, morphId: 0,
+    itemId: FIRST_PUPPY_ITEM_ID + (npcId - FIRST_PUPPY_NPC_ID) * 2,
+    dialogue: -1, reclaimable: false, puppy: true });
+}
+
 const PET_BY_ID = new Map();
 const PET_BY_ITEM_ID = new Map();
 const PET_BY_NAME = new Map();
@@ -521,6 +534,7 @@ function recordOwnership(player, pet) {
   });
   if (others.length === owned.length && owned.includes(pet.itemId)) return;
   player.setAttribute(OWNED_ATTRIBUTE, [...others, pet.itemId]);
+  pluginApi.emitCustomEvent("persistence:save", { player, reason: "pet-insurance" });
   syncCollectionLog(player, { silent: false });
 }
 
@@ -532,7 +546,7 @@ function collectionLogItemId(pet) {
 }
 
 /**
- * Makes sure every owned pet is in the collection log (plugins/collectionlog/). Only a newly
+ * Makes sure every owned pet is in the collection log (plugins/achievements/collectionlog/). Only a newly
  * recorded pet announces itself; login and reclaiming re-sync silently.
  */
 function syncCollectionLog(player, { silent = true } = {}) {
@@ -600,6 +614,30 @@ function holdsPetItem(player, itemId) {
 }
 
 /** Probita's "Let's have a look...": every insured pet the player no longer has comes back. */
+/**
+ * "pets:current" { player, pet }: answers with the player's follower in the world, if any
+ * (Temple Trekking's followers won't leave while one wanders).
+ */
+function answerCurrentPet(request) {
+  const pet = request?.player?.getAttribute?.(CURRENT_PET_ATTRIBUTE);
+  if (pet?.isRegistered?.()) request.pet = pet;
+}
+
+function answerPetDefinitions(request) {
+  request.pets = PETS;
+}
+
+function releasePet(request) {
+  const { player, npc } = request;
+  if (!npc || !getPetByNpcId(npc.getId()) || player?.getAttribute?.(CURRENT_PET_ATTRIBUTE) !== npc
+      || npc.getOwner?.() !== player) return;
+  despawnPetNpc(npc);
+  player.setAttribute(CURRENT_PET_ATTRIBUTE, null);
+  player.setAttribute(LAST_PET_ATTRIBUTE, null);
+  syncFollowerIndex(player, null);
+  request.released = true;
+}
+
 function reclaimPets(event) {
   if (event.npcId !== NpcIdentifiers.PROBITA || event.action !== "open_interface" || event.target !== "Pet Insurance") {
     return;
@@ -620,6 +658,7 @@ function reclaimPets(event) {
     }
     player.getInventory().adds(itemId, 1);
     player.sendMessage(`Probita returns your ${getPetDisplayName(getPetForItemId(itemId))}.`);
+    pluginApi.emitCustomEvent("persistence:save", { player, reason: "pet-retrieval" });
   }
   syncCollectionLog(player);
 }
@@ -818,7 +857,7 @@ function clearCatState(player) {
 function stopCatTask(player) {
   const key = CAT_TASK_KEY.get(player);
   if (key) {
-    TaskManagerRef?.cancelTask?.(key);
+    TaskManagerRef?.cancelTasks?.(key);
     CAT_TASK_KEY.delete(player);
   }
 }
@@ -1122,7 +1161,18 @@ function chaseVermin(player, npc, pet) {
     player.sendMessage(`Your ${catNoun(info)} pounces, but the ${name.toLowerCase()} gets away.`);
     return true;
   }
+  const caughtLocation = vermin.getLocation?.().clone?.();
   despawnPetNpc(vermin);
+  const respawnTicks = vermin.getDefinition?.()?.getRespawn?.() ?? 0;
+  if (respawnTicks > 0 && TaskManagerRef?.submit && NPCRespawnTaskRef) {
+    TaskManagerRef.submit(new NPCRespawnTaskRef(vermin, respawnTicks));
+  }
+  pluginApi?.emitCustomEvent?.("pets:vermin-caught", {
+    player,
+    cat: npc,
+    verminName: name,
+    location: caughtLocation,
+  });
   if (name === "Hell-Rat" && info.stage === "kitten") {
     // Chasing a hell-rat turns any kitten into the generic Hell-kitten (Wiki, Cat).
     const state = getCatState(player);
@@ -1289,7 +1339,9 @@ function despawnPetNpc(npc) {
 
 function syncFollowerIndex(player, pet) {
   const index = pet?.isRegistered?.() ? pet.getIndex?.() ?? -1 : -1;
-  player?.getPacketSender?.().sendConfig(FOLLOWER_INDEX_VARP, index > 0 ? index : 65535);
+  const definition = pet ? getPetByNpcId(pet.getId()) : null;
+  player?.getPacketSender?.().sendConfig(FOLLOWER_INDEX_VARP, index > 0 ? (pet.getId() << 16) | index : -1);
+  player?.getPacketSender?.().sendConfig(FOLLOWER_ITEM_VARP, index > 0 ? definition?.itemId ?? -1 : -1);
 }
 
 function drop(player, itemId, reward, { silent = false } = {}) {
@@ -1374,8 +1426,8 @@ function drop(player, itemId, reward, { silent = false } = {}) {
     } else {
       player.getInventory().deleteNumber(pet.itemId, 1);
       Sounds.sendSound(player, Sound.DROP_ITEM);
-      player.sendMessage("You drop your pet..");
-      player.performAnimation(INTERACTION_ANIM);
+      if (!pet.puppy) player.sendMessage("You drop your pet..");
+      player.performAnimation(pet.puppy ? new Animation(-1) : INTERACTION_ANIM);
       player.setPositionToFace(npc.getLocation());
     }
   } else if (reward) {
@@ -1408,7 +1460,11 @@ function pickup(player, npc, { auto = false } = {}) {
   if (
     !pet ||
     !npc.isPet?.() ||
-    npc.getOwner?.()?.getIndex?.() !== player.getIndex?.()
+    npc.getOwner?.()?.getIndex?.() !== player.getIndex?.() ||
+    // NPC removal is queued until the world update. A second click on the same
+    // follower can arrive before that removal; only the active follower may
+    // transfer its item, so the queued duplicate cannot mint another copy.
+    player.getAttribute(CURRENT_PET_ATTRIBUTE) !== npc
   ) {
     return false;
   }
@@ -1428,6 +1484,7 @@ function pickup(player, npc, { auto = false } = {}) {
     player.getInventory().adds(pet.itemId, 1);
   }
 
+  if (pet.puppy && !auto) player.getPacketSender().sendInterfaceRemoval();
   player.getMovementQueue().reset();
   player.performAnimation(INTERACTION_ANIM);
   const despawnResult = despawnPetNpc(npc);
@@ -1442,8 +1499,9 @@ function pickup(player, npc, { auto = false } = {}) {
     removeNpcQueueSize: World.getRemoveNPCQueue().length,
   });
 
-  player.sendMessage("You pick up your pet..");
-  Sounds.sendSound(player, Sound.PICK_UP_ITEM);
+  if (!pet.puppy) player.sendMessage("You pick up your pet..");
+  if (pet.puppy) player.getPacketSender().sendSoundEffect(2582, 1, 20);
+  else Sounds.sendSound(player, Sound.PICK_UP_ITEM);
   // The item now in hand is the current form; a cross-item morph replaces the record.
   recordOwnership(player, pet);
   if (catInfoOf(pet)) stopCatTask(player);
@@ -1497,7 +1555,7 @@ function morph(player, npc) {
   return true;
 }
 
-function interact(player, npc) {
+function interact(player, npc, action = "Interact") {
   if (!npc || !player?.getAttribute?.(CURRENT_PET_ATTRIBUTE)) {
     return false;
   }
@@ -1510,6 +1568,10 @@ function interact(player, npc) {
   if (player.getAttribute(CURRENT_PET_ATTRIBUTE) !== npc) {
     return false;
   }
+
+  const request = { player, npc, pet, action, handled: false };
+  pluginApi?.emitCustomEvent?.("pets:interact", request);
+  if (request.handled) return true;
 
   // Cats get the OSRS Interact menu (Stroke / Chase vermin / Guess age / Shoo away).
   if (catInfoOf(pet)) {
@@ -1533,6 +1595,7 @@ function handlePetClick(event) {
   const action = String(event.definition?.getActions?.()?.[event.clickType - 1] ?? "");
   const lower = action.toLowerCase();
   if (lower === "pick-up") return pickup(event.player, event.npc);
+  if (lower === "pet") return interact(event.player, event.npc, "Pet");
   if (lower === "metamorphosis" || lower === "metamorph") return morph(event.player, event.npc);
   if (lower === "talk-to" || lower === "interact" || lower === "stroke") {
     return interact(event.player, event.npc);
@@ -1705,6 +1768,7 @@ module.exports = {
     pluginApi = api;
     TaskClass = api.core?.Task ?? null;
     TaskManagerRef = api.core?.TaskManager ?? null;
+    NPCRespawnTaskRef = api.core?.NPCRespawnTask ?? null;
     ItemDefinitionClass = api.core?.ItemDefinition ?? null;
     fillSkillPetVariants(api.core);
     api.persistAttribute(OWNED_ATTRIBUTE);
@@ -1719,6 +1783,9 @@ module.exports = {
     }
     api.onCustomEvent("npc-drops:roll", awardDroppedPets);
     api.onCustomEvent("npc-dialogue:action", reclaimPets);
+    api.onCustomEvent("pets:current", answerCurrentPet);
+    api.onCustomEvent("pets:definitions", answerPetDefinitions);
+    api.onCustomEvent("pets:release", releasePet);
     api.onItemDropPolicy(onPetItemDropPolicy);
     api.onItemOnNpc(handleItemOnCat);
     api.onItemOnNpc(handleGullFeed);

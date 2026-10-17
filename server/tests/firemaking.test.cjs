@@ -25,6 +25,7 @@ test("firemaking logs, success chance, pyromancer bonus and campfire timers foll
 
   // OSRS Wiki making-fires table: level and exact XP for every combustible log.
   const expected = [
+    [I.KINDLING_2, 1, 48],
     [I.LOGS, 1, 40],
     [I.ACHEY_TREE_LOGS, 1, 40],
     [I.OAK_LOGS, 15, 60],
@@ -122,16 +123,18 @@ test("lighting, tending and expiry move a log from inventory to fire to ashes", 
     emitCustomEvent: () => {},
     emitFiremakingBlocked: () => false,
     onPlayerDisconnect: (handler) => { hooks.disconnect = handler; },
-    onPlayerLevelUp: (handler) => { hooks.levelUp = handler; },
     onItemOnItem: (handler) => { hooks.itemOnItem = handler; },
     onItemOnGroundItem: (handler) => { hooks.itemOnGroundItem = handler; },
-    onGroundItemSecondClick: (ids, handler) => { hooks.groundItemSecondClick = handler; },
+    onGroundItemClick: (ids, clickType, handler) => { hooks.groundItemClick = { ids, clickType, handler }; },
     onItemOnObject: (handler) => { hooks.itemOnObject = handler; },
     onObjectInteraction: (name, actions) => { hooks.objectInteraction = { name, actions }; },
     log: () => {},
   };
   const Firemaking = require("../plugins/skills/Firemaking.plugin");
   Firemaking.register(api);
+  // Ground logs are "Take" (op3) and "Light" (op4) in the cache.
+  assert.equal(hooks.groundItemClick.clickType, 4);
+  assert.ok(hooks.groundItemClick.ids.includes(I.LOGS));
 
   const location = new Location(3200, 3200, 0);
   const inventory = new Map([[I.LOGS, 5]]);

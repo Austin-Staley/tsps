@@ -7,15 +7,22 @@
  * (King Roald, Reldo, ...) fall back to it after the other quests' handlers.
  */
 const QUESTS = [
-  "AnimalMagnetism", "AnotherSliceOfHAM", "ARuffSituation", "AscentOfArceuus",
+  "RecipeForDisaster",
+  "WhileGuthixSleeps",
+  "ANightAtTheTheatre",
+  // Sins of the Father is the last Myreque chapter, so it registers before the
+  // earlier ones (In Search of/In Aid/Darkness of Hallowvale, A Taste of Hope):
+  // its stage window wins the shared Myreque NPCs and it defers outside it.
+  "SinsOfTheFather", "TheBloodMoonRises",
+  "AKingdomDivided", "AnimalMagnetism", "AnotherSliceOfHAM", "ARuffSituation", "AscentOfArceuus",
   "AtFirstLight", "BelowIceMountain", "BeneathCursedSands", "BetweenARock",
   "BigChompyBirdHunting", "Biohazard", "BlackKnightsFortress", "BoneVoyage",
   "CabinFever", "ChildrenOfTheSun", "ClientOfKourend", "ClockTower",
   "ColdWar", "Contact", "CooksAssistant", "CorsairCurse",
   "CrabQuest", "CreatureOfFenkenstrain", "CurrentAffairs", "CurseOfArrav",
   "DarknessOfHallowvale", "DeathOnTheIsle", "DeathPlateau", "DeathToTheDorgeshuun",
-  "DefenderOfVarrock", "DemonSlayer", "DepthsOfDespair", "DesertTreasureI",
-  "DeviousMinds", "DigSite", "DoricsQuest", "DragonSlayer",
+  "DefenderOfVarrock", "DemonSlayer", "DepthsOfDespair", "DesertTreasureI", "DesertTreasureII",
+  "DeviousMinds", "DigSite", "DoricsQuest", "DragonSlayer", "DragonSlayerII",
   "DreamMentor", "DruidicRitual", "DwarfCannon", "EadgarsRuse",
   "EaglesPeak", "ElementalWorkshopI", "ElementalWorkshopII", "EnakhrasLament",
   "EnlightenedJourney", "ErnestTheChicken", "EthicallyAcquiredAntiquities", "EyesOfGlouphrie",
@@ -27,7 +34,7 @@ const QUESTS = [
   "HauntedMine", "HazeelCult", "HeroesQuest", "HolyGrail",
   "HorrorFromTheDeep", "IcthlarinsLittleHelper", "IdesOfMilk", "ImpCatcher",
   "InAidOfTheMyreque", "InSearchOfTheMyreque", "JunglePotion", "KingsRansom",
-  "KnightsSword", "LandOfTheGoblins", "LegendsQuest", "LostCity",
+  "KnightsSword", "LandOfTheGoblins", "LearningTheRopes", "LegendsQuest", "LostCity",
   "LostTribe", "LunarDiplomacy", "MakingFriendsWithMyArm", "MakingHistory",
   "MeatAndGreet", "MerlinsCrystal", "MisthalinMystery", "MonkeyMadnessI",
   "MonkeyMadnessII", "MonksFriend", "MountainDaughter", "MourningsEndPartI",
@@ -40,10 +47,10 @@ const QUESTS = [
   "RibbitingTale", "RomeoAndJuliet", "RovingElves", "RoyalTrouble",
   "RumDeal", "RuneMysteries", "ScorpionCatcher", "Scrambled",
   "SeaSlug", "SecretsOfTheNorth", "ShadesOfMortton", "ShadowOfTheStorm",
-  "ShadowsOfCustodia", "SheepHerder", "SheepShearer", "ShieldOfArrav",
+  "ShadowsOfCustodia", "SheepHerder", "SheepShearer", "ShieldOfArrav", "SongOfTheElves",
   "ShiloVillage", "SleepingGiants", "SlugMenace", "SoulsBane",
   "SpiritsOfTheElid", "SwanSong", "TaiBwoWannaiTrio", "TailOfTwoCats",
-  "TaleOfTheRighteous", "TearsOfGuthix", "TempleOfIkov", "TempleOfTheEye",
+  "TaleOfTheRighteous", "TasteOfHope", "TearsOfGuthix", "TempleOfIkov", "TempleOfTheEye",
   "TheFeud", "TheFinalDawn", "TheFremennikExiles", "TheFremennikIsles",
   "TheGolem", "TheHeartOfDarkness", "ThroneOfMiscellania", "TouristTrap",
   "TowerOfLife", "TreeGnomeVillage", "TribalTotem", "TrollRomance",
@@ -58,22 +65,27 @@ const F2P_QUESTS = new Set([
   "BelowIceMountain",
   "BlackKnightsFortress", "CooksAssistant", "CorsairCurse", "DemonSlayer", "DoricsQuest",
   "DragonSlayer", "ErnestTheChicken", "GoblinDiplomacy", "ImpCatcher", "KnightsSword",
-  "MisthalinMystery", "IdesOfMilk", "PiratesTreasure", "PrinceAliRescue", "RestlessGhost", "RomeoAndJuliet",
+  "LearningTheRopes", "MisthalinMystery", "IdesOfMilk", "PiratesTreasure", "PrinceAliRescue", "RestlessGhost", "RomeoAndJuliet",
   "RuneMysteries", "SheepShearer", "ShieldOfArrav", "VampyreSlayer", "WitchsPotion",
   "XMarksTheSpot",
 ]);
 
 /**
- * The api the quests get: their login hooks skip bots. A bot has no client to send quest progress
- * to and does no quests, and running every quest's login hook (about 160 of them) cost a bot
- * ~85 ms to log in: a minute of startup with the bot population, and a frozen tick when Pest
- * Control fills a lander with bots.
+ * The api the quests get: their login and death hooks skip bots. A bot has no client to send
+ * quest progress to and does no quests, and running every quest's login hook (about 160 of them)
+ * cost a bot ~85 ms to log in: a minute of startup with the bot population, and a frozen tick
+ * when Pest Control fills a lander with bots. The death hooks are worse per event: the bot
+ * population dies constantly in combat training, and Horror from the Deep's cleanup scans every
+ * NPC in the world (about 30k) on each one, which showed up as the Quests plugin's top cost in
+ * `::pluginperf`.
  */
+const BOT_SKIPPED_HOOKS = new Set(["onPlayerLogin", "onPlayerDeath"]);
+
 function forPlayers(api) {
   return new Proxy(api, {
     get(target, property) {
-      if (property === "onPlayerLogin") {
-        return (handler) => target.onPlayerLogin((event) => {
+      if (BOT_SKIPPED_HOOKS.has(property)) {
+        return (handler) => target[property]((event) => {
           if (event?.player?.isPlayerBot?.() === true) return;
           return handler(event);
         });

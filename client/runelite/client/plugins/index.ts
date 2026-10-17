@@ -1,7 +1,11 @@
+import { AnimationSmoothingConfig } from "../../../game/plugins/animationsmoothing/AnimationSmoothingConfig";
+import { VoiceChatPlugin } from "../../../game/plugins/voice/VoiceChatPlugin";
 import { AnimationSmoothingPlugin } from "../../../game/plugins/animationsmoothing/AnimationSmoothingPlugin";
 import { AttackTimerPlugin } from "../../../game/plugins/attacktimer/AttackTimerPlugin";
+import { CameraPlugin } from "../../../game/plugins/camera/CameraPlugin";
 import { FirstPersonPlugin } from "../../../game/plugins/firstperson/FirstPersonPlugin";
 import { GameFrame317Plugin } from "../../../game/plugins/gameframe317/GameFrame317Plugin";
+import { GpuPlugin } from "../../../game/plugins/gpu/GpuPlugin";
 import { GroundItemsConfig } from "../../../game/plugins/grounditems/GroundItemsConfig";
 import { GroundItemsPlugin } from "../../../game/plugins/grounditems/GroundItemsPlugin";
 import { HdPlugin } from "../../../game/plugins/hd/HdPlugin";
@@ -10,10 +14,12 @@ import { InteractHighlightPlugin } from "../../../game/plugins/interacthighlight
 import { MenuSwapperPlugin } from "../../../game/plugins/menuswapper/MenuSwapperPlugin";
 import { NotesConfig } from "../../../game/plugins/notes/NotesPlugin";
 import { NotesPlugin } from "../../../game/plugins/notes/NotesPlugin";
-import { RememberLoginPlugin } from "../../../game/plugins/rememberlogin/RememberLoginPlugin";
 import { SplitPrivateChatPlugin } from "../../../game/plugins/splitprivatechat/SplitPrivateChatPlugin";
 import { StatusBarsPlugin } from "../../../game/plugins/statusbars/StatusBarsPlugin";
+import { StretchedModePlugin } from "../../../game/plugins/stretchedmode/StretchedModePlugin";
 import { OpponentInfoPlugin } from "../../../game/plugins/opponentinfo/OpponentInfoPlugin";
+import { PrayerPlugin } from "../../../game/plugins/tabreorder/PrayerPlugin";
+import { SpellbookPlugin } from "../../../game/plugins/tabreorder/SpellbookPlugin";
 import {
     FreezeTimerPlugin,
     PoisonTimerPlugin,
@@ -29,6 +35,7 @@ import type { PluginClass } from "./Plugin";
 /** Static core plugin list (RuneLite's `PluginManager.loadCorePlugins`). */
 export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     ConfigPlugin,
+    VoiceChatPlugin,
     HdPlugin,
     FirstPersonPlugin,
     GameFrame317Plugin,
@@ -37,7 +44,6 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     TileMarkersPlugin,
     MenuSwapperPlugin,
     NotesPlugin,
-    RememberLoginPlugin,
     SplitPrivateChatPlugin,
     AnimationSmoothingPlugin,
     AttackTimerPlugin,
@@ -47,6 +53,11 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     WeatherPlugin,
     StatusBarsPlugin,
     OpponentInfoPlugin,
+    SpellbookPlugin,
+    PrayerPlugin,
+    StretchedModePlugin,
+    GpuPlugin,
+    CameraPlugin,
 ];
 
 /** Legacy `osrs.plugin.*.v1` localStorage blobs to fold into rl.config. */
@@ -71,6 +82,7 @@ export const LEGACY_CONFIG_MIGRATIONS: ReadonlyArray<LegacyConfigMigration> = [
     },
     {
         name: "animationsmoothing",
+        config: AnimationSmoothingConfig,
         legacyKey: "osrs.plugin.animation_smoothing.v1",
         enabledKey: "animationsmoothingplugin",
     },
@@ -98,11 +110,6 @@ export const LEGACY_CONFIG_MIGRATIONS: ReadonlyArray<LegacyConfigMigration> = [
         name: "hd",
         legacyKey: "xrsps.plugin.hd.enabled",
         enabledKey: "hdplugin",
-    },
-    {
-        name: "rememberlogin",
-        legacyKey: "osrs.plugin.remember_login.v1",
-        enabledKey: "rememberloginplugin",
     },
     {
         name: "menuswapper",

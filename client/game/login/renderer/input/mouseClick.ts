@@ -25,6 +25,7 @@ import {
     handleDobClick,
     handleMessageClick,
     handleTryAgainClick,
+    handleWelcomeDisplayNameClick,
     handleBannedClick,
     handleOkMessageClick,
     isButtonHit,
@@ -216,11 +217,12 @@ export function handleMouseClick(
             const buttonPos = getServerListButtonPosition(host);
             const buttonW = host.worldSelectButtonSprite.subWidth || 100;
             const buttonH = host.worldSelectButtonSprite.subHeight || 35;
+            const point = toContentPoint(host, x, y);
             if (
-                x >= buttonPos.x &&
-                x <= buttonPos.x + buttonW &&
-                y >= buttonPos.y &&
-                y <= buttonPos.y + buttonH
+                point.x >= buttonPos.x &&
+                point.x <= buttonPos.x + buttonW &&
+                point.y >= buttonPos.y &&
+                point.y <= buttonPos.y + buttonH
             ) {
                 return LoginActions.OPEN_SERVER_LIST;
             }
@@ -255,6 +257,8 @@ export function handleMouseClick(
                 return handleMessageClick(host, state, content.x, content.y);
             case LoginIndex.TRY_AGAIN:
                 return handleTryAgainClick(host, content.x, content.y);
+            case LoginIndex.WELCOME_DISPLAY_NAME:
+                return handleWelcomeDisplayNameClick(host, content.x, content.y);
             case LoginIndex.BANNED:
                 return handleBannedClick(host, content.x, content.y);
             case LoginIndex.OK_MESSAGE:

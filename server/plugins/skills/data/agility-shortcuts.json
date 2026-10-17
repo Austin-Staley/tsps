@@ -1519,6 +1519,20 @@
       "note": "Trunk lies east-west at 3682,3716 (dump:loc: size 1x2 rot 3); fixed ends keep the crossing straight instead of snapping x to the loc base tile. 2-tick landing so the 60-cycle flight and climb anim finish before the runner lands and resets."
     },
     {
+      "name": "Ice chunks (Ungael)",
+      "object": 31990,
+      "level": 1,
+      "between": {"ends":[[2272,4052,0],[2272,4054,0]],"cross":[{"use":"climbOver","args":["to","CLIMB_OVER",2]},{"msg":"You climb over the ice."}]},
+      "note": "Crater wall at 2272,4053 (dump:loc); fixed ends keep the crossing straight. As rsprox captures show both ways: 839 over a 2-tick exact move (0-60 cycles), then \"You climb over the ice.\"."
+    },
+    {
+      "name": "Ice chunks (Ungael, north)",
+      "object": 25337,
+      "level": 1,
+      "between": {"ends":[[2272,4076,0],[2272,4078,0]],"cross":[{"use":"climbOver","args":["to","CLIMB_OVER",2]},{"msg":"You climb over the ice."}]},
+      "note": "Loc 25337 at 2272,4077 morphs to climb-over loc 31992 at Vorkath exit varbit 6108 value 30; the normal child 31991 has no operation."
+    },
+    {
       "name": "Broken fence (Rellekka)",
       "object": 544,
       "level": 57,
@@ -3691,6 +3705,62 @@
           {"anim":-1}
         ]
       }
+    },
+    {
+      "name": "Tree stump (Mac's island)",
+      "object": 27061,
+      "level": 99,
+      "xp": 0,
+      "requires": [{"skills": {"agility": 99}}],
+      "between": {
+        "ends": [[2830,3543,0],[2828,3543,0]],
+        "cross": [
+          {"msg":"You jump over the stump."},
+          {"sound":2453},
+          {"move":"to","anim":"CLIMB_OVER","speed":[30,94],"ticks":3}
+        ]
+      },
+      "unverified": "the refusal below 99 Agility (no capture)",
+      "note": "The way to Mac (Wiki: Mac); the stump stands while the evergreen is chopped. rsprox captures 3144, 3146"
+    },
+    {
+      "name": "Rockslide (Mac's island)",
+      "object": 27063,
+      "level": 1,
+      "xp": 0,
+      "requires": [{"skills": {"defence": 99}}],
+      "between": {
+        "ends": [[2822,3540,0],[2820,3539,0]],
+        "cross": [
+          {"msg":"You jump over the rocks."},
+          {"sound":2453},
+          {"move":"to","anim":"CLIMB_OVER","speed":[30,94],"ticks":3}
+        ]
+      },
+      "unverified": "the refusal below 99 Defence (no capture)",
+      "note": "The way to Mac (Wiki: Mac); the mined rockslide. rsprox captures 3144, 3146"
+    },
+    {
+      "name": "Araxxor lair web tunnel (in)",
+      "object": 54161,
+      "level": 1,
+      "render": "LONG_CRAWL",
+      "steps": [
+        {"sound":2454},
+        {"walk":[[3647,9815]]}
+      ],
+      "note": "The squeeze-through into Araxxor's lair (OSRS Wiki); crawl movement and ends ours"
+    },
+    {
+      "name": "Araxxor lair web tunnel (out)",
+      "object": 54274,
+      "level": 1,
+      "render": "LONG_CRAWL",
+      "steps": [
+        {"sound":2454},
+        {"walk":[[3658,9815]]}
+      ],
+      "note": "The squeeze-through out of Araxxor's lair (OSRS Wiki); crawl movement and ends ours"
     }
   ]
 }

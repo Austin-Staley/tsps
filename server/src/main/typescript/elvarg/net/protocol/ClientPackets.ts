@@ -14,6 +14,9 @@ export const enum ClientPacketId {
     HANDSHAKE = 202,
     LOGOUT = 203,
     LOGIN = 204,
+    PLUGIN_MESSAGE = 205,
+    /** Forget a remembered login: username + token. Sent on its own socket from the login screen. */
+    LOGIN_FORGET = 207,
 
     // ========================================
     // MOVEMENT (210-219)
@@ -88,7 +91,9 @@ export const CLIENT_PACKET_LENGTHS: Record<ClientPacketId, number> = {
     [ClientPacketId.PING]: 4, // time(4)
     [ClientPacketId.HANDSHAKE]: -1,
     [ClientPacketId.LOGOUT]: 0,
+    [ClientPacketId.PLUGIN_MESSAGE]: -2,
     [ClientPacketId.LOGIN]: -2, // username + password (variable)
+    [ClientPacketId.LOGIN_FORGET]: -1, // username + token (variable)
 
     [ClientPacketId.WALK]: 5, // x(2) + y(2) + flags(1)
     [ClientPacketId.FACE]: -1,

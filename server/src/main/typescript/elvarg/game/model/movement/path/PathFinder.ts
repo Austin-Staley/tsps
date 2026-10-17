@@ -332,7 +332,8 @@ export class PathFinder {
     static calculateGroundItemRoute(entity: Mobile, destination: Location) {
         return PathFinder.applyRsmodRoute(entity, destination.getX(), destination.getY(), {
             locShape: -1,
-            moveNear: false,
+            // Blocked item tiles can still be picked up from a collision-reachable side.
+            moveNear: true,
         });
     }
 
@@ -390,6 +391,7 @@ export class PathFinder {
         } else if (size !== 0) {
             locShape = size - 1;
             locAngle = direction;
+            blockAccessFlags = blockingMask;
         }
 
         return PathFinder.applyRsmodRoute(entity, destX, destY, {

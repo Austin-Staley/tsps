@@ -316,7 +316,10 @@ function harvest(player, patch) {
     animate(player, ANIM.HARVEST);
     award(player, crop.harvest * (["FLOWER", "BELLADONNA"].includes(crop.type) ? 1 : amount));
     const variable = Data.COMPOSTABLE_YIELD.has(crop.type) || ["BUSH", "CACTUS", "GRAPES", "CORAL"].includes(crop.type);
-    const cape = player.getEquipment().contains(Data.itemId("Farming cape")) || player.getEquipment().contains(Data.itemId("Farming cape(t)"));
+    // Wiki: a worn Farming cape (or max cape) saves herb lives more often.
+    const capePerk = { player, skill: "FARMING", result: false };
+    core.PluginManager.emitCustomEvent("skillcape:has-perk", capePerk);
+    const cape = capePerk.result === true;
     const vars = player.getPacketSender();
     const diary = crop.type !== "HERB" ? 0 : patch.x === 2813 && patch.y === 3463
         ? vars.getVarbit(4478) ? 25 : vars.getVarbit(4477) ? 17 : vars.getVarbit(4476) ? 10 : 0
@@ -367,6 +370,11 @@ function inspect(player, patch) {
         : state.scarecrow ? "A scarecrow protects nearby sweetcorn." : state.weeds ? "This patch needs weeding." : "This patch is ready for planting.");
     player.sendMessage(`Soil: ${["untreated", "compost", "supercompost", "ultracompost"][state.compost]}.${state.watered ? " The crop is watered." : ""}`);
 }
+function canUsePatch(player, patch) {
+    const request = { player, patch, allowed: true };
+    core.PluginManager.emitCustomEvent("farming:can-use-patch", request);
+    return request.allowed !== false;
+}
 function objectInteraction(event) {
     const { player, object, location } = event;
     WORK.delete(player);
@@ -383,6 +391,7 @@ function objectInteraction(event) {
     const patch = findPatch(object.getId(), location);
     if (!patch) return;
     event.handled = true;
+    if (!canUsePatch(player, patch)) return;
     Model.advanceFarm(farmFor(player), Date.now());
     if (!gate(player)) return;
     const action = core.ObjectDefinition.forPlayer(object.getId(), player)?.getInteractions()?.[event.clickType - 1]?.toLowerCase() ?? "";
@@ -437,6 +446,7 @@ function itemOnObject(event) {
         return;
     }
     event.handled = true;
+    if (!canUsePatch(player, patch)) return;
     if (!gate(player) || !player.getInventory().contains(id)) return;
     Model.advanceFarm(farmFor(player), Date.now());
     const state = stateFor(player, patch);
@@ -482,7 +492,9 @@ function itemOnNpc(event) {
 function spellOnObject(event) {
     WORK.delete(event.player);
     const patch = findPatch(event.object.getId(), event.location);
-    if (patch) Spells.farmingSpell(event, patch);
+    if (!patch) return;
+    if (!canUsePatch(event.player, patch)) { event.handled = true; return; }
+    Spells.farmingSpell(event, patch);
 }
 /** A grown tree's Travel opens the spirit tree network's menu (SpiritTrees). */
 function spiritTravel(player, patch) {
@@ -659,7 +671,7 @@ function attach(api) {
     api.onPlayerMapSquareChange(mapSquareChanged);
     api.onPlayerLogout(logout);
     api.onPlayerLogout(Tithe.titheLogout);
-    api.onPlayerLevelUp(cancelWork);
+    api.onCustomEvent("level-up:popup-opened", cancelWork);
     api.onObjectInteraction(objectInteraction);
     api.onItemOnObject(itemOnObject, { noted: false });
     api.onItemOnItem(itemOnItem, { noted: false });
@@ -681,12 +693,18 @@ function attach(api) {
     api.onCustomEvent("player:world-input", Hespori.hesporiInput);
     api.onCustomEvent("player:world-input", cancelWork);
     api.onCustomEvent("npc-drops:generated", Hespori.hesporiLoot);
+    api.onCustomEvent("hespori:quest-challenge", Hespori.challengeHespori);
+    api.onCustomEvent("hespori:quest-process", Hespori.hesporiProcess);
+    api.onCustomEvent("hespori:quest-can-attack", Hespori.hesporiCanAttack);
+    api.onCustomEvent("hespori:quest-leave", Hespori.hesporiLogout);
+    api.onNpcDeath(Hespori.questHesporiDeath);
     api.onCombatHitRoll(Hespori.hesporiHitRoll);
     api.onCombatHitResolved(Hespori.hesporiHit);
     api.onPlayerDealtDamage(Hespori.hesporiDamage);
     api.onPlayerDeathItemDrop(Hespori.hesporiDeathDrop);
     api.onPlayerDeath(Hespori.hesporiPlayerDeath);
     api.registerNpcCombatMethodProvider(core.NpcIdentifiers.HESPORI, Hespori.HesporiCombat, { singleton: false });
+    api.registerNpcCombatMethodProvider(core.NpcIdentifiers.HESPORI_2, Hespori.HesporiCombat, { singleton: false });
 }
 
 Object.assign(module.exports, { FARM_ATTRIBUTE, farmFor, stateFor, hasTool, requireTool, award, give, choose, clearPatch, syncPatch, nearPatch, water, fertilize, cure, noteSeedling, advanceTime, attach, tick: farmingTick });

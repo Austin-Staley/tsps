@@ -142,7 +142,10 @@ export function processWidgetReleaseInput(
             widgetInteraction.isDraggingWidget = false;
             widgetInteraction.clickedWidget = null;
 
-            if (sourceGroupId !== 149 && dragTarget != null) {
+            const pluginHandled =
+                dragTarget != null && deps.handlePluginWidgetDrag?.(w, dragTarget) === true;
+
+            if (sourceGroupId !== 149 && dragTarget != null && !pluginHandled) {
                 // Non-inventory drag-drop - send IF_BUTTOND packet
                 // For dynamically created children (fileId === -1),
                 // send the PARENT container's UID, not the child's own UID.
@@ -184,17 +187,12 @@ export function processWidgetReleaseInput(
             delete widgetInteraction.dragRenderAreaAbsY;
         } else {
             // Mouse button released without dragging - fire onClick (for draggable widgets) and onRelease
+            const widget = widgetInteraction.clickedWidget;
+            const eventScaleX = widget._absScaleX ?? 1;
+            const eventScaleY = widget._absScaleY ?? 1;
             const releaseCtx: Partial<ScriptEvent> = {
-                mouseX:
-                    mx -
-                    (widgetInteraction.clickedWidget._absX ??
-                        widgetInteraction.clickedWidget.x ??
-                        0),
-                mouseY:
-                    my -
-                    (widgetInteraction.clickedWidget._absY ??
-                        widgetInteraction.clickedWidget.y ??
-                        0),
+                mouseX: ((mx - (widget._absX ?? widget.x ?? 0)) / eventScaleX) | 0,
+                mouseY: ((my - (widget._absY ?? widget.y ?? 0)) / eventScaleY) | 0,
                 opIndex: 1,
             };
 

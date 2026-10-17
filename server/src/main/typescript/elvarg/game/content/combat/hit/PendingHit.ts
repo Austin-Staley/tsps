@@ -13,6 +13,7 @@ import { CombatSpecial } from "../CombatSpecial";
 import { DamageFormulas } from "../formula/DamageFormulas";
 import type { SpecialDamageBounds } from "../CombatFactory";
 import type { WeaponSpecialTraits } from "../WeaponSpecialTraits";
+import type { CombatSpell } from "../magic/CombatSpell";
 
 type PendingHitConfig = {
     delay?: number;
@@ -36,6 +37,10 @@ export class PendingHit {
     private experience = true;
     /** Optional per-hitsplat extra reveal delays (from `hitDelayTicks`). */
     private hitDelays?: number[];
+    /** Spell selected when this hit was launched; the caster may clear it before impact. */
+    private spell: CombatSpell | null = null;
+    /** A roll hook (Verac's set) let this hit through protection prayers. */
+    private protectionBypassed = false;
 
     constructor(attacker: Mobile, target: Mobile, method: CombatMethod, delayOrConfig?: number | PendingHitConfig, handleAfterHitEffects?: boolean) {
         this.attacker = attacker;
@@ -88,6 +93,15 @@ export class PendingHit {
         return this.method;
     }
 
+    public getSpell(): CombatSpell | null {
+        return this.spell;
+    }
+
+    public setSpell(spell: CombatSpell | null): PendingHit {
+        this.spell = spell;
+        return this;
+    }
+
     public getHits(): HitDamage[] {
         return this.hits;
     }
@@ -107,6 +121,11 @@ export class PendingHit {
 
     public isAccurate(): boolean {
         return this.accurate;
+    }
+
+    /** Whether a roll hook let this hit through protection prayers (not a special's own trait). */
+    public bypassesProtectionPrayer(): boolean {
+        return this.protectionBypassed;
     }
 
     public setTotalDamage(damage: number): void {
@@ -180,6 +199,7 @@ export class PendingHit {
         if (hitAmount === 1) {
             const roll = { attacker: this.attacker, target: this.target, combatType: this.combatType, forceAccurate: false, forceMaxHit: false, bypassProtectionPrayer: false };
             PluginManager.emitCombatHitRoll(roll);
+            if (roll.bypassProtectionPrayer) this.protectionBypassed = true;
             const resolved = PendingHit.withForcedMax(this.rollSpecialTraits(traits, roll.forceAccurate, rollAccuracy, 0), roll.forceMaxHit);
             this.accurate = resolved.accurate;
             const damage: HitDamage = this.accurate
@@ -220,6 +240,7 @@ export class PendingHit {
         for (let i = 0; i < hits.length; i++) {
             const roll = { attacker: this.attacker, target: this.target, combatType: this.combatType, forceAccurate: false, forceMaxHit: false, bypassProtectionPrayer: false };
             PluginManager.emitCombatHitRoll(roll);
+            if (roll.bypassProtectionPrayer) this.protectionBypassed = true;
             let resolved: { accurate: boolean; bounds?: SpecialDamageBounds };
             if (i > 0 && traits?.sharedAccuracyRollAcrossHits === true) {
                 resolved = { accurate: firstAccurate === true, bounds: firstBounds };

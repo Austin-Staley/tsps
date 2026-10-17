@@ -105,8 +105,12 @@ function pickVariant(npc) {
 
 /** Transcript page name -> an NPC id that speaks it, so cutscene/paired speakers
  * get their own chathead instead of borrowing the NPC being talked to. */
-function speakerIdIndex(index) {
+function speakerIdIndex(index, NpcDefinition) {
   const byName = new Map();
+  for (const id of Object.keys(index ?? {})) {
+    const npcName = NpcDefinition?.forId(Number(id))?.getName();
+    if (npcName && npcName !== "null" && !byName.has(npcName)) byName.set(npcName, Number(id));
+  }
   for (const [id, pages] of Object.entries(index ?? {})) {
     for (const entry of pages ?? []) {
       const name = String(entry.page ?? "").replace(/^Transcript:/, "");
@@ -304,7 +308,10 @@ function flatten(steps, opts = {}) {
     if (opts.stopped) break;
     const step = steps[position];
     if (step.type === "jump") {
-      const target = resolveJump(step, steps[position - 1]);
+      // Some wiki exports inline the target body on a "continue" jump instead
+      // of storing it in the page-level jump table. Prefer that body so nested
+      // quest branches do not stop at the jump marker.
+      const target = Array.isArray(step.steps) ? step.steps : resolveJump(step, steps[position - 1]);
       // "end": a jump we cannot replay. Stop rather than leak into the next step.
       if (target === "end") {
         out.push({ type: "end" });
@@ -517,6 +524,16 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
   function presentMenu(menu, offset = 0, tail = []) {
     const { step, rest, record } = menu;
     context.currentMenu = menu;
+    const notice = { player, npcId, definition, prompt: step.prompt || "Select an Option", warning: null };
+    api.emitCustomEvent("npc-dialogue:menu", notice);
+    const warned = context.warnedMenus ??= new WeakSet();
+    if (notice.warning && !warned.has(step)) {
+      warned.add(step);
+      manager.startDialogues(new DialogueChainBuilder()
+        .add(new api.core.StatementDialogue(0, String(notice.warning)))
+        .add(new ActionDialogue(1, { execute: () => presentMenu(menu, offset, tail) })));
+      return;
+    }
     if (!context.menuHistory.includes(menu)) context.menuHistory.push(menu);
     // An option the wiki guards ("If the player is wearing the Ring of Charos(a):") is hidden
     // only once a plugin answers its condition false; unanswered ones still show.
@@ -586,8 +603,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         manager.startDialogues(chain);
         return;
       }
-      // "shows other/previous options": replay a menu already shown, then carry
-      // on with whatever followed the jump in this queue.
+      // A menu jump abandons this option; the menu already owns its continuation.
       if (step.type === "gomenu" && step.menu) {
         // A parser-split "shows other options" jump immediately before a choice
         // really means "show that choice" (Wanted!'s squireship offer); replaying
@@ -596,8 +612,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         if (next && next.type === "choice") {
           continue;
         }
-        const after = queue.slice(position + 1);
-        chain.add(new ActionDialogue(index++, { execute: () => presentMenu(step.menu, 0, after) }));
+        chain.add(new ActionDialogue(index++, { execute: () => presentMenu(step.menu) }));
         manager.startDialogues(chain);
         return;
       }
@@ -605,11 +620,12 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
       // rather than aborting when the speaker is not the NPC being talked to.
       const typedLine = step.type === "line" && typeof step.text === "string";
       if (!step.hook && (typeof step.npc === "string" || typeof step.player === "string" || typedLine)) {
-        const isPlayer = typeof step.player === "string";
-        const speech = isPlayer ? step.player : typedLine ? step.text : step.npc;
+        const isPlayer = typeof step.player === "string"
+          || (typedLine && /^\[(?:player name|playername|player)\]$|^<player name>$/i.test(step.speaker ?? ""));
+        const speech = typeof step.player === "string" ? step.player : typedLine ? step.text : step.npc;
         // Let a plugin skip a line through the mutable payload (as slayer:assignment),
         // e.g. a hand-over line for an item the player is no longer carrying.
-        const request = { player, npc: event.npc, npcId, definition, step, text: speech, skip: false };
+        const request = { player, npc: event.npc, npcId, definition, step, text: speech, pages: context.pages, skip: false };
         api.emitCustomEvent("npc-dialogue:line", request);
         if (request.skip) {
           if (step.steps?.length) {
@@ -623,20 +639,33 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         playedAny = true;
         // A typed line spoken by someone other than the NPC being talked to (a
         // paired NPC talking to them, a cutscene actor) gets that speaker's head.
-        const speakerId = !isPlayer && typedLine && step.speaker && step.speaker !== definition.getName()
+        const speakerId = request.speakerId ?? (!isPlayer && typedLine && step.speaker && step.speaker !== definition.getName()
           ? (context.speakerIdByName?.get(step.speaker) ?? definition.getId())
-          : definition.getId();
+          : definition.getId());
+        if (typeof request.before === "function") {
+          chain.add(new ActionDialogue(index++, { execute: () => {
+            const current = manager.getCurrent?.();
+            request.before();
+            if (current && manager.getCurrent() !== current) return;
+            manager.advance();
+          } }));
+        }
+        const animation = request.expression ?? step.expression;
+        const expression = Number.isInteger(animation) && animation >= 0 ? animation : undefined;
+        const speakerName = request.speakerName ?? (typedLine ? step.speaker : undefined);
         for (let start = 0; start < lines.length; start += 4) {
           const text = lines.slice(start, start + 4).join(" ");
           chain.add(isPlayer
-            ? new PlayerDialogue(index++, text)
-            : new NpcDialogue(index++, speakerId, text));
+            ? new PlayerDialogue(index++, text, expression)
+            : new NpcDialogue(index++, speakerId, text, speakerName, expression, (request.side ?? step.side) === "right" ? 217 : 231));
         }
         // `after` (set by a line handler) runs once the player continues past the line,
         // before the conversation carries on: a teleport the wiki only narrates, say.
         if (step.steps?.length || typeof request.after === "function") {
           chain.add(new ActionDialogue(index++, { execute: () => {
+            const current = manager.getCurrent?.();
             request.after?.();
+            if (current && manager.getCurrent() !== current) return;
             run(rest, currentRecord);
           } }));
           manager.startDialogues(chain);
@@ -657,19 +686,27 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
         if (step.type === "message") {
           // Item hand-outs are also `message` steps; let quests hook their id.
           const message = {
-            player, npc: event.npc, npcId, definition, step,
+            player, npc: event.npc, npcId, definition, step, pages: context.pages,
             text: step.text, target: step.target, stepId: step.id, kind: "message", handled: false,
           };
+          const previous = manager.getCurrent?.();
           api.emitCustomEvent("npc-dialogue:action", message);
+          const replacement = manager.getCurrent?.();
+          if (replacement && replacement !== previous) {
+            if (!message.handled) player.sendMessage(formatPlayerText(String(message.text ?? ""), player));
+            return;
+          }
           if (message.end) return close();
           playedAny = true;
           const [first, second] = Array.isArray(message.box?.items) ? message.box.items : [];
-          if (first !== undefined) {
+          if (first !== undefined || message.box?.statement === true) {
             const text = formatPlayerText(String(message.text ?? ""), player);
             const box = new DialogueChainBuilder();
-            box.add(second === undefined
-              ? new ItemStatementDialogue(0, first, text)
-              : new DoubleItemStatementDialogue(0, first, second, text));
+            box.add(message.box?.statement === true
+              ? new api.core.StatementDialogue(0, text)
+              : second === undefined
+                ? new ItemStatementDialogue(0, first, text)
+                : new DoubleItemStatementDialogue(0, first, second, text));
             box.add(new ActionDialogue(1, { execute: () => run(rest, currentRecord) }));
             manager.startDialogues(box);
             return;
@@ -678,10 +715,14 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           return run(rest, currentRecord);
         }
         const action = {
-          player, npc: event.npc, npcId, definition, step,
+          player, npc: event.npc, npcId, definition, step, pages: context.pages,
           text: step.text, action: step.action, target: step.target, stepId: step.id, handled: false,
         };
+        const current = manager.getCurrent?.();
         api.emitCustomEvent("npc-dialogue:action", action);
+        // Quest actions may start a different conversation (for example, after
+        // a cutscene action). Do not let this transcript's remaining tail replace it.
+        if (current && manager.getCurrent() !== current) return;
         // A handler can also hand back `steps` to play first (a story picked from another page).
         if (action.handled) return action.end ? close() : run([...(action.steps ?? []), ...rest], currentRecord);
         if (step.type === "end") return close();
@@ -732,13 +773,8 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
           if (request.line) return run([{ npc: request.line }, ...rest], currentRecord);
         }
         if (step.type === "action") {
-          // "npc-dialogue:action": a plugin that owns this stage direction (an interface to
-          // open, say) sets handled and takes over the conversation from here.
-          const request = { player, npcId, action: step.action, target: step.target, handled: false };
-          api.emitCustomEvent("npc-dialogue:action", request);
-          if (request.handled) return;
-          // Unhandled prose stage directions ("The player lights a tinderbox.")
-          // have no executable contract; continue the branch rather than abort.
+          // The step was already emitted with its id above. An unhandled prose
+          // direction ("The player lights a tinderbox.") has no further contract.
           return run(rest, currentRecord);
         }
         // ponytail: unknown step type with no executable contract. Stop safely.
@@ -755,7 +791,7 @@ function startDialogue(api, event, steps, branches = {}, context = {}) {
 
 module.exports = {
   name: "NpcDialogues",
-  // Exported for tests/npc-dialogues.test.cjs; nothing else reads them.
+  // Shared by quest transcript playback and dialogue regressions.
   pickVariant,
   aliasKeys,
   flatten,
@@ -763,6 +799,8 @@ module.exports = {
   startDialogue,
   collectPageLines,
   collectPageOptions,
+  collectMenuBefore,
+  speakerIdIndex,
   register(api) {
     const dialogueFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogues.json");
     const indexFile = path.join(GameConstants.DEFINITIONS_DIRECTORY, "npc-dialogue-index.json");
@@ -789,7 +827,7 @@ module.exports = {
       } catch {
         index = {};
       }
-      loaded = { data, aliases: aliasKeys(data), index, speakerIdByName: speakerIdIndex(index) };
+      loaded = { data, aliases: aliasKeys(data), index, speakerIdByName: speakerIdIndex(index, api.core.NpcDefinition) };
       return loaded;
     };
 
@@ -800,7 +838,9 @@ module.exports = {
     const resolveTranscript = (event) => {
       const { data, aliases, index, speakerIdByName } = load();
       const npcId = event.npcId;
-      const pages = (Array.isArray(index[String(npcId)]) ? index[String(npcId)] : [])
+      // A transform the index doesn't know (Dr Harlow 16277) falls back to the spawned parent (3480).
+      const entries = [npcId, event.npc?.getId?.()].map((id) => index[String(id)]).find(Array.isArray) ?? [];
+      const pages = entries
         .map((entry) => ({ page: String(entry.page ?? "").replace(/^Transcript:/, ""), variants: Array.isArray(entry.variants) ? entry.variants : [] }))
         .filter((entry) => Object.hasOwn(data, entry.page));
       const context = { player: event.player, npc: event.npc, npcId, definition: event.definition, pages, speakerIdByName };

@@ -57,6 +57,7 @@ import { World } from "../../../World";
 import { PluginManager } from "../../../../plugins/PluginManager";
 import { ServerPerf } from "../../../../util/ServerPerf";
 import { getSequencePriority } from "../../../cache/NpcAnimationScanner";
+import { LOGIN_TOKENS_ATTRIBUTE } from "../../../../net/login/LoginTokens";
 
 const ATTR_SKIP_PERSISTENCE = "bot-skip-persistence";
 const DEFAULT_AUDIO_SETTINGS: Readonly<Record<number, number>> = {
@@ -97,6 +98,10 @@ export class Player extends Mobile {
     private vengeTimer: SecondsTimer = new SecondsTimer();
     // Logout
     public forcedLogoutTimer = new SecondsTimer();
+    /** Why the connection ended, for the disconnect hooks fired when the player leaves the world. */
+    private disconnectSource: string | null = null;
+    /** Cycle a removal in combat started waiting, -1 when not waiting. */
+    private logoutHoldCycle = -1;
     // Trading
     private trading = new Trading(this);
     // Owned boats and where they are
@@ -113,6 +118,8 @@ export class Player extends Mobile {
     private session: PlayerSession;
     public status: PlayerStatus = PlayerStatus.NONE;
     public interfaceId: number = -1
+    /** The process cycle of the player's last click or key press (0 before any since login). */
+    public lastInputCycle = 0;
     private multiIcon: number;
     private isRunning = true;
     private playerBot = false;
@@ -221,7 +228,6 @@ export class Player extends Mobile {
         this.getMovementQueue().setBlockMovement(false).reset();
         this.getPacketSender().sendEffectTimer(0, EffectTimer.ANTIFIRE).sendEffectTimer(0, EffectTimer.FREEZE)
             .sendEffectTimer(0, EffectTimer.VENGEANCE).sendEffectTimer(0, EffectTimer.TELE_BLOCK);
-        this.getPacketSender().sendPoisonType(0);
         this.getPacketSender().sendSpecialAttackState(false);
         this.setUntargetable(false);
         this.isDying = false;
@@ -286,12 +292,9 @@ export class Player extends Mobile {
         return this;
     }
     public heal(amount: number) {
-        let level = this.getSkillManager().getMaxLevel(Skill.HITPOINTS);
-        if ((this.getSkillManager().getCurrentLevel(Skill.HITPOINTS) + amount) >= level) {
-            this.setHitpoints(level);
-        } else {
-            this.setHitpoints(this.getSkillManager().getCurrentLevel(Skill.HITPOINTS) + amount);
-        }
+        const current = this.getSkillManager().getCurrentLevel(Skill.HITPOINTS);
+        const cap = Math.max(current, this.getSkillManager().getMaxLevel(Skill.HITPOINTS));
+        this.setHitpoints(Math.min(current + amount, cap));
     }
 
     public getBaseAttack(type: CombatType): number {
@@ -364,6 +367,17 @@ export class Player extends Mobile {
         super.performAnimation(animation);
     }
 
+    /** The hitpoints orb's poison state as last sent (varp 102); undefined sends it on the first tick. */
+    private lastPoisonOrb: number | undefined = undefined;
+
+    /** Sends the orb's poison/venom/immunity value when it changes (CombatPoisonEffect.orbValue). */
+    private syncPoisonOrb(): void {
+        const value = CombatPoisonEffect.orbValue(this);
+        if (value === this.lastPoisonOrb) return;
+        this.lastPoisonOrb = value;
+        this.getPacketSender().sendConfig(CombatPoisonEffect.ORB_VARP, value);
+    }
+
     public process() {
         const isBot = this.isPlayerBot();
         const timed = <T>(phase: string, fn: () => T): T =>
@@ -376,6 +390,7 @@ export class Player extends Mobile {
 
         // Timers
         timed("timers", () => this.getTimers().process());
+        if (!isBot) this.syncPoisonOrb();
 
         const movement = this.getMovementQueue();
         const combat = this.getCombat();
@@ -471,6 +486,11 @@ export class Player extends Mobile {
                                     }
                                 }
 
+                                // "stats:restore-rate": gear may raise how fast a stat restores (the Hitpoints cape).
+                                const restore = { player: this, skill, rate: restoreRate };
+                                PluginManager.emitCustomEvent("stats:restore-rate", restore);
+                                restoreRate = restore.rate;
+
                                 this.getSkillManager().increaseCurrentLevel(skill, restoreRate, max);
                             }
                         } else if (current > max) {
@@ -499,22 +519,43 @@ export class Player extends Mobile {
         }
     }
 
-    /**
-     
-    Can the player logout?
-    @returns Yes if they can logout, false otherwise.
-    */
-    canLogout(): boolean {
-        if (CombatFactory.isBeingAttacked(this)) {
-            this.sendMessage("You must wait a few seconds after being out of combat before doing this.");
-            return false;
-        }
-        if (this.busy()) {
-            this.sendMessage("You cannot log out at the moment.");
-            return false;
-        }
-        return true;
+    /** Ticks after the last hit taken before the logout button works: "10 seconds" (rsprox captures). */
+    public static readonly LOGOUT_COMBAT_TICKS = 16;
+    /** Ticks a player removed in combat stays in the world before being forced out: 60 seconds (OSRS Wiki). */
+    public static readonly LOGOUT_HOLD_TICKS = 100;
+
+    /** Whether the player was hit in combat too recently to log out. */
+    inLogoutCombat(): boolean {
+        return this.getCombat().ticksSinceAttacked() < Player.LOGOUT_COMBAT_TICKS;
     }
+
+    /** Why the logout button is refused right now, or null when it works. Plugins add their own refusals. */
+    logoutRefusal(): string | null {
+        return this.inLogoutCombat() ? "You can't log out until 10 seconds after the end of combat." : null;
+    }
+
+    /** Records why the connection ended; the first reason wins. */
+    setDisconnectSource(source: string): void {
+        if (this.disconnectSource === null) this.disconnectSource = source;
+    }
+
+    getDisconnectSource(): string | null {
+        return this.disconnectSource;
+    }
+
+    /**
+     * Whether a player queued for removal leaves the world this tick. Out of combat they
+     * leave at once; a player hit in the last 16 ticks stays (and can still be attacked)
+     * until combat ends or 60 seconds pass, as after a disconnect in live OSRS.
+     */
+    readyToLeaveWorld(): boolean {
+        if (this.forcedLogoutTimer.isRunning() && this.forcedLogoutTimer.finished()) return true;
+        if (!this.inLogoutCombat()) return true;
+        const cycle = World.getProcessCycle();
+        if (this.logoutHoldCycle < 0) this.logoutHoldCycle = cycle;
+        return cycle - this.logoutHoldCycle >= Player.LOGOUT_HOLD_TICKS;
+    }
+
     /**
      
     Requests a logout by sending the logout packet to the client. This leads to
@@ -556,6 +597,7 @@ export class Player extends Mobile {
         this.setHasVengeance(false);
         this.getVengeanceTimer().stop();
         if (this.getAttribute?.(ATTR_SKIP_PERSISTENCE) !== true) {
+            GameConstants.PLAYER_PERSISTENCE.cancelRequestedSave(this);
             GameConstants.PLAYER_PERSISTENCE.save(this, "logout");
         }
 
@@ -700,6 +742,10 @@ export class Player extends Mobile {
     }
 
     public setPasswordHashWithSalt(passwordHashWithSalt: string): Player {
+        // A new password signs out every remembered login.
+        if (this.passwordHashWithSalt && this.passwordHashWithSalt !== passwordHashWithSalt) {
+            this.setAttribute(LOGIN_TOKENS_ATTRIBUTE, []);
+        }
         this.passwordHashWithSalt = passwordHashWithSalt;
         return this;
     }
@@ -809,6 +855,9 @@ export class Player extends Mobile {
     }
 
     public setInterfaceId(interfaceId: number): this {
+        if (this.interfaceId >= 0 && interfaceId >= 0 && this.interfaceId !== interfaceId) {
+            PluginManager.emitCustomEvent("interface:closed", { player: this, interfaceId: this.interfaceId });
+        }
         this.interfaceId = interfaceId;
         return this;
     }

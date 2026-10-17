@@ -28,14 +28,13 @@ export class ObjectActionPacketListener {
       y,
       player.getLocation().getZ()
     );
-    const sourceLocation = player.getLocation().clone();
     const object = MapObjects.getPrivateArea(player, id, objectLocation);
     if (!object) {
       return;
     }
     const definition = ObjectDefinition.forPlayer(object.getId(), player);
     if (!definition) return;
-    if (clickType < 1 || clickType > 5) {
+    if (!Number.isInteger(clickType) || clickType < 1 || clickType > 5) {
       const normalized = action?.trim().toLowerCase();
       clickType = normalized
         ? (definition?.getInteractions()?.findIndex((option) => option?.toLowerCase() === normalized) ?? -1) + 1
@@ -44,20 +43,6 @@ export class ObjectActionPacketListener {
     if (clickType < 1 || clickType > 5) return;
 
     const option = definition?.getInteractions()?.[clickType - 1]?.toLowerCase();
-    const routeEvent = {
-      player,
-      object,
-      definition,
-      objectId: object.getId(),
-      clickType,
-      sourceLocation: {
-        x: sourceLocation.getX(),
-        y: sourceLocation.getY(),
-        z: sourceLocation.getZ(),
-      },
-      destination: null as { x: number; y: number; z: number } | null,
-    };
-    PluginManager.emitObjectRoute(routeEvent);
     const executeInteraction = () => {
       const interactionLocation = player.getLocation().clone();
       player.getMovementQueue().reset();
@@ -70,6 +55,7 @@ export class ObjectActionPacketListener {
         definition,
         objectId: object.getId(),
         clickType,
+        option,
         location: {
           x: object.getLocation().getX(),
           y: object.getLocation().getY(),
@@ -91,16 +77,18 @@ export class ObjectActionPacketListener {
         return;
       }
 
-      console.warn(
-        `[object-click-debug] unhandled id=${object.getId()} name="${definition?.getName() ?? "?"}" ` +
-        `type=${object.getType()} face=${object.getFace()} loc=${object.getLocation().getX()},${object.getLocation().getY()},${object.getLocation().getZ()} ` +
-        `action="${definition?.getInteractions()?.[clickType - 1] ?? "?"}"`
-      );
     };
 
     // From a boat deck there is no path across the water: main-world locs (a dock's
     // gangplank) are used from the deck when close to the tile under the player.
     if (player.getPrivateArea()?.countsAsMainWorld() && object.getPrivateArea() == null) {
+      const source = player.getLocation();
+      // Route hooks also release the helm, even when no land route can be built.
+      PluginManager.emitObjectRoute({
+        player, object, definition, objectId: object.getId(), clickType,
+        sourceLocation: { x: source.getX(), y: source.getY(), z: source.getZ() },
+        destination: null,
+      });
       const root = BoatManager.rootLocation(player);
       const location = object.getLocation();
       if (Math.max(Math.abs(location.getX() - root.getX()), Math.abs(location.getY() - root.getY())) <= DECK_REACH_TILES) {
@@ -111,14 +99,8 @@ export class ObjectActionPacketListener {
       return;
     }
 
-    if (routeEvent.destination) {
-      const { x: routeX, y: routeY, z: routeZ } = routeEvent.destination;
-      player.getMovementQueue().walkToTile(new Location(routeX, routeY, routeZ), executeInteraction);
-      return;
-    }
-
     player.getMovementQueue().walkToObject(object, {
       execute: executeInteraction,
-    });
+    }, clickType);
   }
 }

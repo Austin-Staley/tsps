@@ -1,7 +1,9 @@
 import AdmZip = require("adm-zip");
 import fs = require("fs");
 import path = require("path");
+import { SectorCluster } from "./codec/rs/cache/store/SectorCluster";
 import { FileStore } from "./codec/rs/cache/store/FileStore";
+import { GAMEVAL_INDEX } from "./Gamevals";
 
 const OPENRS2 = "https://archive.openrs2.org";
 const REQUIRED_FILES = [
@@ -67,6 +69,9 @@ export class CachePipeline {
     fs.mkdirSync(caches, { recursive: true });
 
     if (!this.isValid(directory)) {
+      if (process.env.BROWSER_HOST === "1") {
+        throw new Error("Browser-host cache is missing or incomplete; restart the server to reload it");
+      }
       await this.download(caches, directory, name, revision, date);
     }
 
@@ -92,8 +97,10 @@ export class CachePipeline {
     return this.active;
   }
 
+  /** Every required file is there, and the index list reaches the gamevals (a stale or cut-short cache does not). */
   private static isValid(directory: string): boolean {
-    return REQUIRED_FILES.every((file) => fs.existsSync(path.join(directory, file)));
+    return REQUIRED_FILES.every((file) => fs.existsSync(path.join(directory, file)))
+      && fs.statSync(path.join(directory, "main_file_cache.idx255")).size > GAMEVAL_INDEX * SectorCluster.SIZE;
   }
 
   private static async download(

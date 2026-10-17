@@ -120,6 +120,9 @@ import type {
 import {
     sendEmote as netSendEmote,
     sendBankCustomQuantity,
+    LOGIN_FLAG_REMEMBER,
+    LOGIN_FLAG_TOKEN,
+    forgetRememberedLogin,
     sendLogin,
     sendInteractStop,
     sendLogout,
@@ -267,6 +270,7 @@ import { IProjectileManager } from "./interfaces/IProjectileManager";
 import {
     GameState,
     type LoginAction,
+    LoginActions,
     LoginErrorCode,
     LoginIndex,
     LoginRenderer,
@@ -286,16 +290,22 @@ import { HdPlugin } from "./plugins/hd/HdPlugin";
 import { GroundItemsPlugin } from "./plugins/grounditems/GroundItemsPlugin";
 import { InteractHighlightPlugin } from "./plugins/interacthighlight/InteractHighlightPlugin";
 import { NotesPlugin } from "./plugins/notes/NotesPlugin";
-import { RememberLoginPlugin } from "./plugins/rememberlogin/RememberLoginPlugin";
 import { TileMarkersPlugin } from "./plugins/tilemarkers/TileMarkersPlugin";
-import { createHelmSteeringDeps, steerFromHelm } from "./sailing/HelmSteering";
+import { createHelmSteeringDeps, handleTileClick } from "./sailing/HelmSteering";
+import { headingIndicator } from "./sailing/HeadingIndicator";
+import { retryOnMissingGroup } from "../rs/cache/js5/retryOnMissingGroup";
+import { interactionModes } from "./InteractionModes";
 import { VengeanceTimerPlugin } from "./plugins/vengeancetimer/VengeanceTimerPlugin";
 import { FreezeTimerPlugin, PoisonTimerPlugin } from "./plugins/statustimer/StatusTimerPlugin";
 import { AttackTimerPlugin } from "./plugins/attacktimer/AttackTimerPlugin";
 import { AnimationSmoothingPlugin } from "./plugins/animationsmoothing/AnimationSmoothingPlugin";
+import { StretchedModePlugin } from "./plugins/stretchedmode/StretchedModePlugin";
+import { GpuPlugin } from "./plugins/gpu/GpuPlugin";
 import { MenuSwapperPlugin } from "./plugins/menuswapper/MenuSwapperPlugin";
 import { WeatherPlugin } from "./plugins/weather/WeatherPlugin";
 import { RuneLite } from "../runelite/client/RuneLite";
+import { notifyActorGraphic, notifyActorHitsplat, notifyActorHealth } from "./ActorEventHooks";
+import { dispatchMenuAction } from "../ui/menu/menuEvents";
 import { setMenuTransform } from "../ui/menu/menuTransforms";
 import {
     SPLIT_PRIVATE_CHAT_VARP,
@@ -319,6 +329,7 @@ import {
 } from "./state";
 import { initPlayerSyncHuffman } from "./sync/HuffmanProvider";
 import { NpcUpdateDecoder } from "./sync/NpcUpdateDecoder";
+import { baseNpcTypeId, registerNpcModelOverride } from "../custom/npcs/NpcModelOverrideRegistry";
 import { applyNpcExactMove } from "./sync/NpcExactMove";
 import { applyNpcFaceTile } from "./sync/NpcFaceTile";
 import { PlayerSyncManager } from "./sync/PlayerSyncManager";
@@ -350,7 +361,8 @@ import {
     fetchInterfaceDefinition,
     fetchContent,
 } from "../network/serverConnection/contentApi";
-import { resolveWidgetIdentifiers } from "./widgets/widgetActionPayload";
+import { resolveWidgetIdentifiers, inferWidgetOpId } from "./widgets/widgetActionPayload";
+import { isPauseButtonWidget } from "../widgets/menu/utils";
 import { RenderDataWorkerPool } from "./worker/RenderDataWorkerPool";
 import { WorldMapController, type WorldMapRenderedIcon } from "./worldMap/WorldMapController";
 import { WorldViewManager } from "./worldview/WorldViewManager";
@@ -440,6 +452,11 @@ const SCRIPT_CHATBOX_SEARCH_CLOSE = 138;
 
 // Use shared OSRS rotation scale
 
+/** logout:world_switcher (182:3). */
+const LOGOUT_WORLD_SWITCHER_UID = (182 << 16) | 3;
+/** The logout tab's stone (stone10) in the modern, classic and fixed layouts (rsprox captures). */
+const LOGOUT_STONE_UIDS = new Set([(161 << 16) | 46, (164 << 16) | 34, (548 << 16) | 51]);
+
 export class OsrsClient {
     private static readonly CLIENT_TICK_MS = 20;
     // Maximum amount of client-tick backlog (in ms) we will attempt to simulate.
@@ -455,11 +472,17 @@ export class OsrsClient {
 
     /** Load the editor only for its opt-in URL. */
     private loadEditModePlugin(): void {
+        this.editorLaunching = true;
+        document.body.classList.add("map-editor-launching");
         void import("./plugins/editmode/install")
             .then(({ installEditMode }) => {
                 installEditMode(this);
             })
-            .catch((err) => console.log("[edit-mode-plugin] failed to load", err));
+            .catch((err) => {
+                this.editorLaunching = false;
+                document.body.classList.remove("map-editor-launching");
+                console.log("[edit-mode-plugin] failed to load", err);
+            });
     }
 
     inputManager: InputManager = new InputManager();
@@ -569,13 +592,14 @@ export class OsrsClient {
     readonly groundItemsPlugin: GroundItemsPlugin;
     readonly interactHighlightPlugin: InteractHighlightPlugin;
     readonly notesPlugin: NotesPlugin;
-    readonly rememberLoginPlugin: RememberLoginPlugin;
     readonly tileMarkersPlugin: TileMarkersPlugin;
     readonly vengeanceTimerPlugin: VengeanceTimerPlugin;
     readonly poisonTimerPlugin: PoisonTimerPlugin;
     readonly freezeTimerPlugin: FreezeTimerPlugin;
     readonly attackTimerPlugin: AttackTimerPlugin;
     readonly animationSmoothingPlugin: AnimationSmoothingPlugin;
+    readonly stretchedModePlugin: StretchedModePlugin;
+    readonly gpuPlugin: GpuPlugin;
     readonly menuSwapperPlugin: MenuSwapperPlugin;
     readonly splitPrivateChatPlugin: SplitPrivateChatPlugin;
     readonly clientPlugins: ClientPluginManager = new ClientPluginManager();
@@ -708,6 +732,9 @@ export class OsrsClient {
     // Feature toggles
     hoverOverlayEnabled: boolean = false;
 
+    editorLaunching = false;
+    editorCameraInput?: (deltaTime: number) => boolean;
+
     /**
      * Renders the world instead of the login screen while logged out, streaming
      * map squares around the camera rather than a player. Driven by the dev-only
@@ -814,6 +841,7 @@ export class OsrsClient {
     get dragSourceWidget(): any {
         return this.widgetInteraction?.dragSourceWidget ?? null;
     }
+    getWidgetInteractionState(): WidgetInteractionController | undefined { return this.widgetInteraction; }
 
     set dragSourceWidget(value: any) {
         if (this.widgetInteraction) {
@@ -916,6 +944,8 @@ export class OsrsClient {
     private minimapImageAccess: Map<number, number> = new Map();
 
     cameraSpeed: number = 1;
+    /** Ignore the server's camera shake (the Camera plugin's "Disable camera shake"). */
+    cameraShakeDisabled: boolean = false;
 
     // Camera behavior
     // When true, disables free-cam and keeps camera focused on Player[0]
@@ -1001,6 +1031,8 @@ export class OsrsClient {
     private readonly npcInstances: NpcInstanceFlushController;
     /** Overhead icons the server set on NPCs, by server index (they override the type's own). */
     readonly npcHeadIcons = new Map<number, Array<{ archiveId: number; spriteId: number }>>();
+    /** Server NPC id -> synthetic render type id for its model customisation (enrage legs). */
+    private readonly npcModelOverrides = new Map<number, number>();
 
     private resolveChatPlayerNameForScript(_scriptId: number): string {
         let baseName = this.localPlayerName ?? "";
@@ -1099,8 +1131,11 @@ export class OsrsClient {
             ),
         );
         setNpcExamineIdResolver((serverId) => this.resolveNpcExamineTypeId(serverId));
-        const helmSteering = createHelmSteeringDeps(this, sendSetHeading);
-        setHelmSteeringHandler((worldX, worldY) => steerFromHelm(helmSteering, worldX, worldY));
+        const helmSteering = createHelmSteeringDeps(this, (heading) => {
+            sendSetHeading(heading);
+            headingIndicator.onHeadingSet(heading, performance.now());
+        });
+        setHelmSteeringHandler((worldX, worldY) => handleTileClick(helmSteering, worldX, worldY));
         const globalState = globalThis as typeof globalThis & {
             DEBUG_PROJECTILES?: boolean;
             DEBUG_PROJECTILES_VERBOSE?: boolean;
@@ -1179,13 +1214,15 @@ export class OsrsClient {
         this.groundItemsPlugin = pluginManager.getPlugin(GroundItemsPlugin)!;
         this.interactHighlightPlugin = pluginManager.getPlugin(InteractHighlightPlugin)!;
         this.notesPlugin = pluginManager.getPlugin(NotesPlugin)!;
-        this.rememberLoginPlugin = pluginManager.getPlugin(RememberLoginPlugin)!;
         this.tileMarkersPlugin = pluginManager.getPlugin(TileMarkersPlugin)!;
         this.vengeanceTimerPlugin = pluginManager.getPlugin(VengeanceTimerPlugin)!;
         this.poisonTimerPlugin = pluginManager.getPlugin(PoisonTimerPlugin)!;
         this.freezeTimerPlugin = pluginManager.getPlugin(FreezeTimerPlugin)!;
         this.attackTimerPlugin = pluginManager.getPlugin(AttackTimerPlugin)!;
         this.animationSmoothingPlugin = pluginManager.getPlugin(AnimationSmoothingPlugin)!;
+        this.stretchedModePlugin = pluginManager.getPlugin(StretchedModePlugin)!;
+        this.loginRenderer.loginStretch = () => this.stretchedModePlugin.loginStretch();
+        this.gpuPlugin = pluginManager.getPlugin(GpuPlugin)!;
         this.menuSwapperPlugin = pluginManager.getPlugin(MenuSwapperPlugin)!;
         this.splitPrivateChatPlugin = pluginManager.getPlugin(SplitPrivateChatPlugin)!;
         this.firstPersonPlugin = pluginManager.getPlugin(FirstPersonPlugin)!;
@@ -1461,9 +1498,12 @@ export class OsrsClient {
             executeScriptListener: (widget, listener, eventContext) =>
                 this.executeScriptListener(widget, listener, eventContext),
             handleWidgetAction: (event) => this.handleWidgetAction(event),
+            handlePluginWidgetAction: (event) => this.clientPlugins.handleWidgetAction(event),
             handleTradeWidgetAction: (widget, event, groupId, childId) =>
                 this.handleTradeWidgetAction(widget, event, groupId, childId),
             handleInventorySlotMove: (from, to) => this.handleInventorySlotMove(from, to),
+            handlePluginWidgetDrag: (source, target) =>
+                this.clientPlugins.onWidgetDragComplete({ source, target }),
             buildWidgetActionPayload: (event) =>
                 this.widgetActionRouter.buildWidgetActionPayload(event) ?? null,
             resolveTransmitFlagWidget: (eventWidget, payload) =>
@@ -2188,6 +2228,10 @@ export class OsrsClient {
             },
         });
 
+        this.cs2Vm.scriptCallbackListeners.add((_script, eventName) =>
+            this.clientPlugins.onScriptCallback({ eventName, vm: this.cs2Vm }),
+        );
+
         this.initCustomInterfaces();
         this.initWidgetInteractionController();
         this.initSpellSelectionController();
@@ -2346,6 +2390,7 @@ export class OsrsClient {
                         }
                     } catch {}
                     this.renderer?.registerSpotAnimation(event);
+                    notifyActorGraphic({ type: "player", serverId: event.serverId, graphic: event.spotId });
                 } catch (err) {
                     console.warn("[OsrsClient] registerSpotAnimation failed", err);
                 }
@@ -2362,11 +2407,13 @@ export class OsrsClient {
                     } catch {}
                 }
                 this.clientPlugins.onHitsplat(payload as any);
+                notifyActorHitsplat(payload);
                 if (this.renderer) this.renderer.registerHitsplat(payload as any);
                 else this.hitsplatFlush.queueHitsplat(payload as any);
             },
             onHealthBar: (payload) => {
                 this.clientPlugins.onHealthBar({ type: "player", ...payload });
+                notifyActorHealth({ type: "player", ...payload });
                 try {
                     if (this.renderer) {
                         (this.renderer as any).registerPlayerHealthBarUpdate?.(payload);
@@ -2539,13 +2586,13 @@ export class OsrsClient {
                         if (payload.varps) {
                             for (const [id, value] of Object.entries(payload.varps)) {
                                 console.log(`[OsrsClient] Setting varp ${id} = ${value}`);
-                                this.varManager.setVarp(Number(id), Number(value));
+                                this.varManager.setServerVarp(Number(id), Number(value));
                             }
                         }
                         if (payload.varbits) {
                             for (const [id, value] of Object.entries(payload.varbits)) {
                                 console.log(`[OsrsClient] Setting varbit ${id} = ${value}`);
-                                this.varManager.setVarbit(Number(id), Number(value));
+                                this.varManager.setServerVarbit(Number(id), Number(value));
                             }
                         }
                     } finally {
@@ -2864,7 +2911,7 @@ export class OsrsClient {
                                     console.log(
                                         `[OsrsClient] run_script: Setting varp ${id} = ${value}`,
                                     );
-                                    this.varManager.setVarp(Number(id), Number(value));
+                                    this.varManager.setServerVarp(Number(id), Number(value));
                                 }
                             }
                             if (payload.varbits) {
@@ -2872,7 +2919,7 @@ export class OsrsClient {
                                     console.log(
                                         `[OsrsClient] run_script: Setting varbit ${id} = ${value}`,
                                     );
-                                    this.varManager.setVarbit(Number(id), Number(value));
+                                    this.varManager.setServerVarbit(Number(id), Number(value));
                                 }
                             }
                         } finally {
@@ -2904,9 +2951,12 @@ export class OsrsClient {
                     }
                     const intArgs: number[] = [];
                     const stringArgs: string[] = [];
+                    const longArgs: bigint[] = [];
                     for (const arg of args) {
                         if (typeof arg === "number") {
                             intArgs.push(arg | 0);
+                        } else if (typeof arg === "bigint") {
+                            longArgs.push(arg);
                         } else if (typeof arg === "string") {
                             stringArgs.push(arg);
                         }
@@ -2914,7 +2964,7 @@ export class OsrsClient {
 
                     // A negative id carries only vars and inventories, with no script to run.
                     const script = scriptId >= 0 ? this.cs2Vm.context.loadScript(scriptId) : null;
-                    if (script) this.cs2Vm.run(script, intArgs, stringArgs);
+                    if (script) this.cs2Vm.run(script, intArgs, stringArgs, undefined, longArgs);
                 }
             } else if ((payload as any)?.action === "set_varbits") {
                 // Server-initiated varbit sync without running a script
@@ -2927,7 +2977,7 @@ export class OsrsClient {
                             console.log(
                                 `[OsrsClient] set_varbits: Setting varbit ${id} = ${value}`,
                             );
-                            this.varManager.setVarbit(Number(id), Number(value));
+                            this.varManager.setServerVarbit(Number(id), Number(value));
                         }
                     } finally {
                         this._serverVarpSync = false;
@@ -2969,6 +3019,7 @@ export class OsrsClient {
                             height: (payload.height ?? 0) | 0,
                             startCycle,
                         });
+                        notifyActorGraphic({ type: "player", serverId: sid, graphic: payload.spotId | 0 });
                     } else if (typeof payload.npcId === "number") {
                         const npcServerId = payload.npcId | 0;
                         this.renderer?.registerNpcSpotAnimation({
@@ -2977,6 +3028,7 @@ export class OsrsClient {
                             height: (payload.height ?? 0) | 0,
                             startCycle,
                         });
+                        notifyActorGraphic({ type: "npc", serverId: npcServerId, graphic: payload.spotId | 0 });
                     } else if (payload.tile) {
                         this.renderer?.registerWorldSpotAnimation({
                             spotId: payload.spotId | 0,
@@ -3861,8 +3913,34 @@ export class OsrsClient {
         return this.worldMap.getWorldMapMenuEntriesAt(screenX, screenY);
     }
 
+    getPlayerServerTile(serverId: number): { tileX: number; tileY: number } | undefined {
+        return this.playerSyncManager?.getServerTile(serverId);
+    }
+    getNpcModelOverride(serverId: number) { return this.npcInstances.instanceMap.get(`sid:${serverId}`)?.modelOverride; }
+
     handleWidgetAction(event: Parameters<WidgetActionRouter["handleWidgetAction"]>[0]): void {
-        if ((event.widget?.uid | 0) === ((182 << 16) | 3)) {
+        const widget = event.widget;
+        const opIndex = event.opIndex ?? inferWidgetOpId(widget, event.option);
+        const pause = isPauseButtonWidget(widget, w => this.widgetManager.getWidgetFlags(w));
+        const opcode = opIndex === 0 ? 25 : opIndex === undefined && pause ? 30 :
+            (opIndex ?? 1) - 1 > (widget?.targetPriority ?? 4) ? 1007 : 57;
+        const widgetId = resolveWidgetIdentifiers(this.widgetManager, widget)?.widgetId ?? widget?.uid ?? -1;
+        dispatchMenuAction({ param0: event.slot ?? widget?.childIndex ?? -1, param1: widgetId,
+            opcode, identifier: opIndex ?? 1, itemId: event.itemId ?? widget?.itemId ?? -1,
+            option: event.option ?? "", target: event.target ?? "", screenX: event.cursorX ?? 0, screenY: event.cursorY ?? 0 },
+            (action) => this.handleNativeWidgetAction({ ...event, option: action.option, target: action.target,
+                slot: action.param0, itemId: action.itemId,
+                opIndex: opIndex === undefined && action.identifier === 1 ? undefined : action.identifier,
+                widget }));
+    }
+
+    private handleNativeWidgetAction(event: Parameters<WidgetActionRouter["handleWidgetAction"]>[0]): void {
+        if (this.clientPlugins.handleWidgetAction(event)) return;
+        const uid = event.widget?.uid | 0;
+        // The logout tab's "World Switcher" button, and the same option on the logout tab's
+        // stone (stone10 of each layout), open the server list.
+        const worldSwitcherOption = (event.option ?? "").replace(/<[^>]*>/g, "").trim() === "World Switcher";
+        if (uid === LOGOUT_WORLD_SWITCHER_UID || (worldSwitcherOption && LOGOUT_STONE_UIDS.has(uid))) {
             this.processLoginAction({ type: "open_server_list" });
             return;
         }
@@ -3908,7 +3986,7 @@ export class OsrsClient {
         this.processLoginAction(action);
     }
 
-    private runClientScriptWithInts(scriptId: number, args: number[]): void {
+    runClientScriptWithInts(scriptId: number, args: number[]): void {
         if (!this.cs2Vm) return;
         const script = this.cs2Vm.context?.loadScript?.(scriptId | 0);
         if (!script) return;
@@ -4066,6 +4144,13 @@ export class OsrsClient {
 
     private processWidgetTransmits(): void {
         this.widgetTransmitProcessor.processWidgetTransmits();
+    }
+
+    /** Per frame: moves the cursor mouseover box to where the mouse is now (see WidgetTransmitProcessor). */
+    runMouseFollowingTimers(): void {
+        const input = this.inputManager;
+        if (!this.widgetTransmitProcessor || !input) return;
+        this.widgetTransmitProcessor.runMouseFollowingTimers(input.mouseX, input.mouseY);
     }
 
     private applyMasterVolume(): void {
@@ -5311,12 +5396,58 @@ export class OsrsClient {
 
     // ========== Login Screen Methods ==========
 
-    setRememberLoginEnabled(enabled: boolean): void {
-        this.rememberLoginPlugin.setEnabled(
-            enabled,
-            this.loginState.username,
+    /** Sends the login: the remembered token after Play, else the typed username and password. */
+    sendLoginRequest(): void {
+        const revision = this.loadedCache?.info?.revision ?? 0;
+        const remembered = this.loginState.loginWithToken
+            ? this.loginState.getRememberedLogin()
+            : undefined;
+        if (remembered) {
+            sendLogin(remembered.username, remembered.token, revision, LOGIN_FLAG_TOKEN);
+            return;
+        }
+        this.loginState.loginWithToken = false;
+        this.loginState.savePersistedLoginState();
+        sendLogin(
+            this.loginState.username.trim(),
             this.loginState.password,
+            revision,
+            this.loginState.rememberUsername ? LOGIN_FLAG_REMEMBER : 0,
         );
+    }
+
+    /** Enter on the login screen: Play for the remembered account, else Login on the form. */
+    submitLoginFromKeyboard(): void {
+        if (this.gameState === GameState.CONNECTING) return;
+        if (this.loginState.loginIndex === LoginIndex.WELCOME_DISPLAY_NAME) {
+            if (this.processLoginAction(LoginActions.PLAY) === "connect") this.sendLoginRequest();
+            return;
+        }
+        if (this.loginState.canAttemptLogin()) {
+            this.loginState.loginWithToken = false;
+            this.updateGameState(GameState.CONNECTING);
+            this.sendLoginRequest();
+        } else {
+            this.loginState.showCredentialValidationError();
+            this.handleLoginKeyInput("Enter", "");
+        }
+    }
+
+    /**
+     * Keeps the remembered-login token the server sent with an accepted login, or forgets this
+     * server's remembered account after a login without "Remember username". A password login
+     * replaces (and revokes) whatever this browser remembered before.
+     */
+    onLoginAccepted(loginToken: string | undefined, displayName: string | undefined): void {
+        const state = this.loginState;
+        const previous = state.getRememberedLogin();
+        if (previous && !state.loginWithToken) forgetRememberedLogin(previous.username, previous.token);
+        if (loginToken) {
+            state.rememberLogin(displayName || state.username.trim(), loginToken);
+        } else if (!state.loginWithToken) {
+            state.forgetRememberedLogin();
+        }
+        state.clearLegacyRememberedPassword();
     }
 
     /**
@@ -5346,7 +5477,7 @@ export class OsrsClient {
 
         // Setup new state
         if (newState === GameState.LOGIN_SCREEN) {
-            this.rememberLoginPlugin.restore(this.loginState);
+            this.loginState.showRememberedLogin();
             this.loginState.networkState = 0;
             // Reset loading tracker on return to login
             this.loadingTracker.reset();
@@ -5372,10 +5503,6 @@ export class OsrsClient {
         }
 
         if (newState === GameState.CONNECTING) {
-            this.rememberLoginPlugin.remember(
-                this.loginState.username,
-                this.loginState.password,
-            );
             this.loginState.setResponse("", "Connecting to server...", "", "");
 
             // Set up loading requirements BEFORE server responds
@@ -5463,6 +5590,16 @@ export class OsrsClient {
      */
     handleLoginError(errorCode: number): void {
         console.log(`[OsrsClient] handleLoginError(${errorCode})`);
+        const usedToken = this.loginState.loginWithToken;
+        this.loginState.loginWithToken = false;
+        if (usedToken && errorCode === LoginErrorCode.INVALID_CREDENTIALS) {
+            // The remembered login expired or was signed out: ask for the password instead.
+            this.loginState.forgetRememberedLogin();
+            this.loginState.promptCredentials(true);
+            this.loginState.setResponse("", "Your saved login has expired.", "Please enter your password.", "");
+            this.updateGameState(GameState.LOGIN_SCREEN);
+            return;
+        }
         switch (errorCode) {
             case LoginErrorCode.INVALID_CREDENTIALS:
                 this.loginState.loginIndex = LoginIndex.INVALID_CREDENTIALS;
@@ -5722,7 +5859,6 @@ export class OsrsClient {
                 return "new_user";
 
             case "existing_user":
-                this.rememberLoginPlugin.restore(this.loginState);
                 this.loginState.promptCredentials();
                 if (isMobileMode) {
                     this.loginState.onMobile = true;
@@ -5744,10 +5880,40 @@ export class OsrsClient {
                     return undefined;
                 }
                 // Start connecting
+                this.loginState.loginWithToken = false;
                 this.loginState.virtualKeyboardVisible = false;
-                this.loginState.savePersistedLoginState();
                 this.updateGameState(GameState.CONNECTING);
                 return "connect";
+
+            case "play": {
+                if (this.gameState === GameState.CONNECTING) {
+                    return undefined;
+                }
+                const remembered = this.loginState.getRememberedLogin();
+                if (!remembered) {
+                    this.loginState.showRememberedLogin();
+                    return undefined;
+                }
+                this.loginState.username = remembered.username;
+                this.loginState.password = "";
+                this.loginState.loginWithToken = true;
+                this.loginState.virtualKeyboardVisible = false;
+                this.updateGameState(GameState.CONNECTING);
+                return "connect";
+            }
+
+            case "forget_remembered_login": {
+                // "Switch account" on the remembered-account screen: the server drops the token too.
+                const remembered = this.loginState.getRememberedLogin();
+                if (remembered) {
+                    forgetRememberedLogin(remembered.username, remembered.token);
+                    this.loginState.username = remembered.username;
+                }
+                this.loginState.forgetRememberedLogin();
+                this.loginState.displayName = "";
+                this.loginState.loginIndex = LoginIndex.WELCOME;
+                return undefined;
+            }
 
             case "cancel":
                 this.loginState.loginIndex = LoginIndex.WELCOME;
@@ -5756,7 +5922,12 @@ export class OsrsClient {
                 return "cancel";
 
             case "try_again":
-                this.loginState.promptCredentials(true);
+                if (this.loginState.getRememberedLogin()) {
+                    this.loginState.loginIndex = LoginIndex.WELCOME;
+                    this.loginState.showRememberedLogin();
+                } else {
+                    this.loginState.promptCredentials(true);
+                }
                 this.loginState.virtualKeyboardVisible = false;
                 return undefined;
 
@@ -5859,6 +6030,7 @@ export class OsrsClient {
                             : null,
                     );
                     this.loginState.saveLastServer();
+                    this.loginState.showRememberedLogin();
                 }
                 return undefined;
             }
@@ -5951,9 +6123,9 @@ export class OsrsClient {
                 this.loginState.showCredentialValidationError();
                 return;
             }
-            this.loginState.savePersistedLoginState();
+            this.loginState.loginWithToken = false;
             this.updateGameState(GameState.CONNECTING);
-            sendLogin(username.trim(), password, this.loadedCache?.info?.revision ?? 0);
+            this.sendLoginRequest();
         } catch {}
     }
 
@@ -5984,6 +6156,7 @@ export class OsrsClient {
      * Called when login fails.
      */
     onLoginFailed(reason: string): void {
+        this.loginState.loginWithToken = false;
         this.loginState.setResponse("", reason, "", "");
         this.loginState.loginIndex = LoginIndex.INVALID_CREDENTIALS;
         this.updateGameState(GameState.LOGIN_SCREEN);
@@ -6499,6 +6672,7 @@ export class OsrsClient {
                     markVarTransmit(varpId);
                 }
                 this.applyAudioVarpChange(varpId, newValue);
+                this.renderer?.onVarpChange(varpId);
                 if (!this._serverVarpSync && TRANSMIT_VARPS.has(varpId) && isServerConnected()) {
                     try {
                         sendVarpTransmit(varpId, newValue);
@@ -6598,6 +6772,22 @@ export class OsrsClient {
             } catch (e) {
                 console.warn("[OsrsClient] Failed to load GraphicsDefaults:", e);
             }
+            // The helm's heading arrows. Read apart from the above, waiting for the group to
+            // stream in: on a fresh browser cache it isn't there yet, and the arrows would be
+            // missing for the whole session.
+            const cacheInfo = cache.info;
+            headingIndicator.loadStatus = "loading";
+            void retryOnMissingGroup(() =>
+                require("../rs/config/defaults/GraphicsDefaults").GraphicsDefaults.load(cacheInfo, this.cacheSystem),
+            ).then((defaults) => {
+                headingIndicator.loadStatus = defaults
+                    ? `loaded ${JSON.stringify(defaults.headingIndicatorModels)} (${cacheInfo.game} ${cacheInfo.revision}, index 17 ${this.cacheSystem.indexExists(17) ? "present" : "missing"})`
+                    : "gave up: the group never streamed in";
+                if (defaults) headingIndicator.setModels(defaults.headingIndicatorModels);
+            }).catch((e) => {
+                headingIndicator.loadStatus = `error: ${e?.message ?? e}`;
+                console.warn("[OsrsClient] Failed to load the heading indicator models:", e);
+            });
 
             this.startClientTickLoop();
             this.renderer.initCache();
@@ -6608,10 +6798,10 @@ export class OsrsClient {
             await showPhase(95, "Loading overlays...");
             this.renderer.initOverlays();
 
-            // Complete - transition to login screen
+            // Complete - transition to login screen (which swaps in a remembered account)
             this.loginState.loadingText = "";
-            this.updateGameState(GameState.LOGIN_SCREEN);
             this.loginState.loginIndex = LoginIndex.WELCOME;
+            this.updateGameState(GameState.LOGIN_SCREEN);
 
             // Auto-login if credentials provided via URL params
             this.tryAutoLogin();
@@ -6619,8 +6809,8 @@ export class OsrsClient {
             console.error("[OsrsClient] Phased loading failed:", err);
             this.loginState.loadingPercent = 100;
             this.loginState.loadingText = "";
-            this.updateGameState(GameState.LOGIN_SCREEN);
             this.loginState.loginIndex = LoginIndex.WELCOME;
+            this.updateGameState(GameState.LOGIN_SCREEN);
         }
     }
 
@@ -7593,6 +7783,7 @@ export class OsrsClient {
                     delayCycles: typeof hit.delayCycles === "number" ? hit.delayCycles | 0 : 0,
                     tick: loopCycle | 0,
                 };
+                notifyActorHitsplat(payload);
                 if (this.renderer) this.renderer.registerHitsplat(payload);
                 else this.hitsplatFlush.queueHitsplat(payload);
             }
@@ -7602,12 +7793,17 @@ export class OsrsClient {
             for (const bar of block.healthBars) {
                 const entry = { serverId, bar };
                 this.clientPlugins.onHealthBar({ type: "npc", ...entry });
+                notifyActorHealth({ type: "npc", ...entry });
                 if (this.renderer) {
                     (this.renderer as any).registerNpcHealthBarUpdate?.(entry);
                 } else {
                     this.hitsplatFlush.queueNpcHealthBar(entry);
                 }
             }
+        }
+
+        if (Array.isArray(block.modelCustomisation)) {
+            this.applyNpcModelCustomisation(serverId, block.modelCustomisation);
         }
 
         if (block.say && ecsId !== undefined) {
@@ -7639,7 +7835,46 @@ export class OsrsClient {
                     startCycle,
                     slot: spot.slot | 0,
                 });
+                notifyActorGraphic({ type: "npc", serverId, graphic: spot.id | 0 });
             }
+        }
+    }
+
+    /**
+     * A server model customisation for one NPC: register the overrides under a synthetic
+     * type id and re-point the NPC's render instance at it (or back at the cache type on a
+     * reset). The square reload rebuilds the geometry with the new models.
+     */
+    private applyNpcModelCustomisation(
+        serverId: number,
+        entries: Array<{ slot: number; modelId: number }>,
+    ): void {
+        const sid = serverId | 0;
+        const key = `sid:${sid}`;
+        const instance = this.npcInstances.instanceMap.get(key);
+        console.info("[npc-models] customisation for", sid, "entries", entries.length, "instance?", !!instance);
+        if (!instance) return;
+        const baseId = baseNpcTypeId(instance.typeId);
+        if (entries.length === 0) {
+            this.npcModelOverrides.delete(sid);
+            delete instance.modelOverride;
+        } else {
+            const syntheticId = registerNpcModelOverride(baseId, entries);
+            this.npcModelOverrides.set(sid, syntheticId);
+            // The worker is another thread: the override rides the instance to it.
+            instance.modelOverride = { baseId, models: entries.map((entry) => ({ slot: entry.slot | 0, modelId: entry.modelId | 0 })) };
+        }
+        const nextTypeId = this.npcModelOverrides.get(sid) ?? baseId;
+        // The WebGPU actor renderer resolves each NPC's model per frame from the
+        // ECS type id, so re-point that too or the customisation never shows.
+        const ecsId = this.npcEcs.getEcsIdForServer(sid);
+        if (ecsId !== undefined && (this.npcEcs.getNpcTypeId(ecsId) | 0) !== (nextTypeId | 0)) {
+            this.npcEcs.setNpcTypeId(ecsId, nextTypeId | 0);
+        }
+        if ((instance.typeId | 0) !== (nextTypeId | 0)) {
+            instance.typeId = nextTypeId | 0;
+            this.npcInstances.markMapPendingReload(this.getNpcInstanceRenderMapId(instance));
+            this.npcInstances.scheduleFlush();
         }
     }
 
@@ -7661,9 +7896,22 @@ export class OsrsClient {
                     : undefined
                 : prev?.worldViewId;
         const owner = this.npcOwnerMap(worldTileX, worldTileY);
+        // A model override only rides its own base type: a transformation (the corpse) drops it.
+        const override = this.npcModelOverrides.get(sid);
+        if (override !== undefined && baseNpcTypeId(override) !== (typeId | 0)) {
+            this.npcModelOverrides.delete(sid);
+            if (prev) delete (prev as { modelOverride?: unknown }).modelOverride;
+        }
+        const renderTypeId = override !== undefined && baseNpcTypeId(override) === (typeId | 0) ? override : typeId | 0;
+        // Keep the ECS render type authoritative alongside the instance snapshot
+        // (a transformation, or the drop above, must show the server's type).
+        const ecsForType = this.npcEcs.getEcsIdForServer(sid);
+        if (ecsForType !== undefined && (this.npcEcs.getNpcTypeId(ecsForType) | 0) !== (renderTypeId | 0)) {
+            this.npcEcs.setNpcTypeId(ecsForType, renderTypeId | 0);
+        }
         const nextInstance: NpcInstance = {
             serverId: sid,
-            typeId: typeId | 0,
+            typeId: renderTypeId,
             x: worldTileX | 0,
             y: worldTileY | 0,
             level: level | 0,
@@ -7708,6 +7956,7 @@ export class OsrsClient {
         // Keep OSRS-style global NPC index array in sync for menuAction packet gates.
         ClientState.npcs[sid] = null;
         this.npcHeadIcons.delete(sid);
+        this.npcModelOverrides.delete(sid);
         try {
             (this.renderer as any)?.clearNpcHealthBars?.(sid);
         } catch {}
@@ -8220,6 +8469,8 @@ export class OsrsClient {
                 console.warn("[OsrsClient] ChatHistory clear error:", err);
             }
             this.splitPrivateChatPlugin.clear();
+            // Live sets walk again before every logout; a dropped connection doesn't get that far.
+            interactionModes.clear();
 
             // Clear the last account's varps and transient varcs, keeping persistent client
             // preferences loaded: the next login only sends its non-zero varps, so anything
@@ -8249,6 +8500,7 @@ export class OsrsClient {
      * Call this on HMR/fast refresh to prevent audio leaks.
      */
     dispose(): void {
+        document.body.classList.remove("map-editor-launching");
         console.log("[OsrsClient] Disposing...");
         try {
             this.renderer?.stop();

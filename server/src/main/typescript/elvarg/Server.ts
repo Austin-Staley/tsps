@@ -18,6 +18,7 @@ import { NetworkConstants } from "./net/NetworkConstants";
 import { PluginManager } from "./plugins/PluginManager";
 import { Flooder } from "./util/flood/Flooder";
 import { ServerLogger } from "./util/ServerLogger";
+import { PlayerPunishment } from "./util/PlayerPunishment";
 
 export class Server {
   private static flooder: Flooder = new Flooder();
@@ -157,11 +158,14 @@ export class Server {
         `[shutdown] ${reason} received. Persisting ${onlinePlayers} online players...`
       );
       PluginManager.emitServerShutdown({ timestamp: Date.now() });
-      World.savePlayers("shutdown");
-      await GameConstants.PLAYER_PERSISTENCE.flush();
+      const saved = World.savePlayers("shutdown");
+      await Promise.all([GameConstants.PLAYER_PERSISTENCE.flush(), PlayerPunishment.flush()]);
+      if (saved.failed > 0) throw new Error(`${saved.failed} player snapshot(s) failed`);
       console.info("[shutdown] Player persistence completed.");
     } catch (err) {
-      console.error("[shutdown] Player persistence failed.", err);
+      console.error("[shutdown] Persistence failed; shutdown cancelled. Fix the error and retry the shutdown.", err);
+      Server.shuttingDown = false;
+      return;
     }
 
     if (mode === "restart") {
@@ -221,11 +225,25 @@ export class Server {
       );
       // Start game logic (schedules GameEngine ticks, loads definitions, etc.)
       new GameBuilder().initialize();
+      Server.releaseStartupMemory();
       new NetworkBuilder().initialize(NetworkConstants.WEBSOCKET_PORT);
     } catch (e) {
       console.log(e, "error");
       console.error(`An error occurred while binding the Bootstrap: ${e}`);
       process.exit(1);
+    }
+  }
+
+  /**
+   * Startup peaks well above the steady heap, and the tick loop never idles long enough for V8's
+   * memory reducer to hand the freed pages back (~300 MiB on native Node). One last-resort GC does.
+   */
+  private static releaseStartupMemory(): void {
+    try {
+      require("v8").setFlagsFromString("--expose-gc");
+      require("vm").runInNewContext("gc")({ type: "major", execution: "sync", flavor: "last-resort" });
+    } catch {
+      // Runtimes without these builtins (the browser host's WebContainer) manage their own memory.
     }
   }
 

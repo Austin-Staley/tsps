@@ -31,7 +31,7 @@ import {
 export function drawLoginScreenToCtx(host: LoginRendererHost, ctx: RenderContext, state: LoginState, gameState: GameState): void {
 
         // Draw classic login panels inside the centered/scaled content band.
-        withContentTransform(host, ctx, () => {
+        withContentTransform(host, ctx, (ctx) => {
             // Draw titlebox background at classic coordinates.
             if (host.titleboxSprite) {
                 drawSprite(host, ctx, host.titleboxSprite, host.LOGIN_BOX_X, host.TITLEBOX_Y);
@@ -70,7 +70,7 @@ export function drawLoginScreenToCtx(host: LoginRendererHost, ctx: RenderContext
                     drawTryAgain(host, ctx, state);
                     break;
                 case LoginIndex.WELCOME_DISPLAY_NAME:
-                    drawWelcomeDisplayName(host, ctx, state);
+                    drawWelcomeDisplayName(host, ctx, state, gameState === GameState.CONNECTING);
                     break;
                 case LoginIndex.TERMS:
                     drawTerms(host, ctx, state);

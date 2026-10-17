@@ -2,6 +2,7 @@ import { BitWriter } from "./BitWriter";
 import { CLIENT_PACKET_LENGTHS as CLIENT_PACKET_LENGTHS, ClientPacketId as HighClientPacket } from "./ClientPackets";
 import { CLIENT_PACKET_LENGTHS as NATIVE_CLIENT_PACKET_LENGTHS, ClientPacketId as NativeClientPacket } from "./NativeClientPackets";
 import { SERVER_PACKET_LENGTHS, ServerPacketId } from "./ServerPackets";
+import { EntityInteractionMode, INTERACTION_WORLD_DEFAULT, TileInteractionMode } from "./InteractionMode";
 import { deflateSync } from "zlib";
 
 export const enum ClientPacket {
@@ -22,6 +23,7 @@ export const enum ClientPacket {
   HANDSHAKE = 202,
   LOGOUT = 203,
   LOGIN = 204,
+  LOGIN_FORGET = 207,
   FACE = 211,
   MOVEMENT_INPUT = 215,
   LOC_INTERACT = 231,
@@ -158,6 +160,8 @@ export type NpcView = Tile & ActorUpdateView & {
   exactMove?: ForcedMovementView;
   /** A tile to turn to once (OSRS npc face coord). */
   faceTile?: { x: number; y: number };
+  /** Body-model slot overrides (OSRS npc model customisation); an empty list resets them. */
+  modelCustomisation?: { slot: number; modelId: number }[];
   /** Its walk step is sent as a crawl (half walking speed on the client). */
   crawl?: boolean;
   rotation: number;
@@ -184,6 +188,11 @@ export type ProjectileView = {
   startCycleOffset: number;
   endCycleOffset: number;
   targetActor?: { kind: "player" | "npc"; index: number };
+  /**
+   * The actor it is fired by: the client starts it from where that actor is drawn until it
+   * launches, so a caster still walking onto its tile doesn't fire from ahead of itself.
+   */
+  sourceActor?: { kind: "player" | "npc"; index: number };
 };
 
 export type SkillView = {
@@ -239,6 +248,7 @@ export type FriendsChatSnapshot = {
 };
 
 export type ClientMessage =
+  | { type: "plugin_message"; channel: string; data: Record<string, unknown> }
   /** modifierFlags is the click's key byte (OSRS: 1 Ctrl, 2 Ctrl+Shift); run forces running. */
   | { type: "movement_input"; seq: number; dx: number; dy: number; rotation: number; duration: number; active: boolean; running: boolean }
   | { type: "move"; worldX: number; worldY: number; modifierFlags: number; run?: boolean }
@@ -289,7 +299,8 @@ export type ClientMessage =
   | { type: "hello" }
   | { type: "ping" }
   | { type: "logout" }
-  | { type: "login"; username: string; password: string; revision: number }
+  | { type: "login"; username: string; password: string; revision: number; flags: number }
+  | { type: "login_forget"; username: string; token: string }
   | { type: "handshake"; name: string; clientType: number };
 
 class Reader {
@@ -425,6 +436,8 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
   }
 
   switch (opcode) {
+    case HighClientPacket.PLUGIN_MESSAGE:
+      return { type: "plugin_message", ...decodePluginMessagePayload(reader.bytes(reader.remaining)) };
     case NativeClientPacket.IF_BUTTON: {
       const widgetId = reader.int();
       return { type: "widget_action", widgetId, groupId: widgetId >>> 16, childId: widgetId & 0xffff, buttonNum: 1, simple: true };
@@ -862,7 +875,11 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
         username: reader.string(),
         password: reader.string(),
         revision: reader.int(),
+        // LOGIN_FLAG_* (net/login/LoginTokens); older clients don't send it.
+        flags: reader.remaining > 0 ? reader.byte() : 0,
       };
+    case ClientPacket.LOGIN_FORGET:
+      return { type: "login_forget", username: reader.string(), token: reader.string() };
     case ClientPacket.HANDSHAKE: {
       const name = reader.string();
       const hasAppearance = reader.byte() !== 0;
@@ -879,6 +896,25 @@ export function decodeClientPacket(frame: Buffer): ClientMessage {
     default:
       return { type: "raw", opcode, payload: frame.subarray(frame.length - length) };
   }
+}
+
+// Mirrored by client/common/network/PluginMessage.ts.
+const MAX_PLUGIN_MESSAGE_BYTES = 16_384;
+
+export function decodePluginMessagePayload(bytes: Buffer): { channel: string; data: Record<string, unknown> } {
+  if (bytes.length > MAX_PLUGIN_MESSAGE_BYTES) throw new Error("Plugin message is too large");
+  const value = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
+  if (!value || typeof value.channel !== "string" || !/^[a-z][a-z0-9:-]{0,63}$/.test(value.channel)
+    || !value.data || typeof value.data !== "object" || Array.isArray(value.data)) {
+    throw new Error("Invalid plugin message");
+  }
+  return value;
+}
+
+export function encodePluginMessage(channel: string, data: Record<string, unknown>): Buffer {
+  const bytes = Buffer.from(JSON.stringify({ channel, data }), "utf8");
+  decodePluginMessagePayload(bytes);
+  return encodeServerPacket(ServerPacketId.PLUGIN_MESSAGE, bytes);
 }
 
 export function encodeServerPacket(opcode: ServerPacketId, payload: Buffer): Buffer {
@@ -927,6 +963,15 @@ function packet(opcode: ServerPacket, payload: Buffer, lengthBytes: 0 | 1 | 2 = 
 function string(value: string): Buffer {
   return Buffer.concat([Buffer.from(value, "latin1"), Buffer.from([0])]);
 }
+
+/** Chatbox channels a game message can go to (the cache's chat types, as rsprox names them). */
+export const ChatType = {
+  GAME: 0,
+  /** Filtered out with "Filter: on" (the Game tab's filter). */
+  SPAM: 105,
+  /** An NPC's overhead line, shown as "Name: text"; the NPC's name goes in `from`. */
+  NPC_SAY: 116,
+} as const;
 
 export function encodeChatMessage(
   messageType: "game" | "public" | "private_in" | "private_out" | "channel" | "clan" | "trade" | "server",
@@ -1178,6 +1223,98 @@ export function encodeCameraShake(slot: number, randomAmplitude: number, sineAmp
   payload.writeUInt16BE(sineAmplitude & 0xffff, 4);
   payload.writeUInt16BE(sineFrequency & 0xffff, 6);
   return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
+}
+
+export type CameraMovementOptions = {
+  rate: number;
+  rate2: number;
+  heightRelative?: boolean;
+} | {
+  cycles: number;
+  easing: "linear" | "ease_in_out_sine" | "ease_out_cubic";
+  ignoreTerrain?: boolean;
+  trackTarget?: boolean;
+  heightRelative?: boolean;
+};
+
+function encodeCameraPosition(mode: number, x: number, y: number, height: number, motion: boolean | CameraMovementOptions): Buffer {
+  const captured = typeof motion !== "boolean";
+  const timed = captured && "cycles" in motion;
+  if (captured) {
+    const fields = [["x", x, 0, 65535], ["y", y, 0, 65535], ["height", height, -32768, 32767]] as const;
+    for (const [name, value, min, max] of [...fields, ...(timed
+      ? [["cycles", motion.cycles, 1, 65535]] as const
+      : [["rate", motion.rate, 0, 255], ["rate2", motion.rate2, 0, 255]] as const)]) {
+      if (!Number.isInteger(value) || value < min || value > max) throw new RangeError(`Invalid camera ${name}: ${value}`);
+    }
+    for (const flag of [motion.heightRelative, ...(timed ? [motion.ignoreTerrain, motion.trackTarget] : [])]) {
+      if (flag !== undefined && typeof flag !== "boolean") throw new TypeError("Invalid camera flag");
+    }
+    if (timed && !["linear", "ease_in_out_sine", "ease_out_cubic"].includes(motion.easing)) throw new RangeError("Invalid camera easing");
+  }
+  const payload = Buffer.alloc(timed ? 11 : captured ? 10 : 8);
+  payload[0] = timed ? mode + 7 : captured ? mode + 3 : mode;
+  payload.writeUInt16BE(x & 0xffff, 1);
+  payload.writeUInt16BE(y & 0xffff, 3);
+  payload.writeUInt16BE(height & 0xffff, 5);
+  if (timed) {
+    payload.writeUInt16BE(motion.cycles, 7);
+    payload[9] = ["linear", "ease_in_out_sine", "ease_out_cubic"].indexOf(motion.easing);
+    payload[10] = (motion.heightRelative ? 1 : 0) | (motion.ignoreTerrain ? 2 : 0) | (motion.trackTarget ? 4 : 0);
+  } else if (captured) {
+    payload[7] = motion.rate;
+    payload[8] = motion.rate2;
+    payload[9] = motion.heightRelative ? 1 : 0;
+  } else {
+    payload[7] = motion ? 1 : 0;
+  }
+  return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
+}
+
+export function encodeCameraMoveTo(x: number, y: number, height: number, motion: boolean | CameraMovementOptions): Buffer {
+  return encodeCameraPosition(1, x, y, height, motion);
+}
+
+export function encodeCameraLookAt(x: number, y: number, height: number, motion: boolean | CameraMovementOptions): Buffer {
+  return encodeCameraPosition(2, x, y, height, motion);
+}
+
+export function encodeCameraUnlock(unlock: boolean): Buffer {
+  return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, Buffer.from([6, unlock ? 1 : 0]));
+}
+
+/** Rebase an active shot when a private scene returns to its source map. */
+export function encodeCameraTranslate(dx: number, dy: number): Buffer {
+  if (!Number.isSafeInteger(dx) || !Number.isSafeInteger(dy) || Math.abs(dx) > 0x7fffffff || Math.abs(dy) > 0x7fffffff) throw new RangeError("Invalid camera translation");
+  const payload = Buffer.alloc(9);
+  payload[0] = 7;
+  payload.writeInt32BE(dx, 1);
+  payload.writeInt32BE(dy, 5);
+  return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
+}
+
+/**
+ * Sets what tile and entity clicks do in a world (set_interaction_mode): `worldId` is a world
+ * entity index, -1 for the root world or -2 for the default of every world (InteractionMode.ts).
+ */
+export function encodeSetInteractionMode(worldId: number, tileMode: number, entityMode: number): Buffer {
+  const payload = Buffer.alloc(4);
+  payload.writeInt16BE(worldId, 0);
+  payload[2] = tileMode & 0xff;
+  payload[3] = entityMode & 0xff;
+  return encodeServerPacket(ServerPacketId.SET_INTERACTION_MODE, payload);
+}
+
+/** Every world back to walking with all entity options, as live sends before each logout. */
+export function encodeWalkInteractionMode(): Buffer {
+  return encodeSetInteractionMode(INTERACTION_WORLD_DEFAULT, TileInteractionMode.Walk, EntityInteractionMode.All);
+}
+
+/** Drops a world's own interaction mode, so it follows the default again (reset_interaction_mode). */
+export function encodeResetInteractionMode(worldId: number): Buffer {
+  const payload = Buffer.alloc(2);
+  payload.writeInt16BE(worldId, 0);
+  return encodeServerPacket(ServerPacketId.RESET_INTERACTION_MODE, payload);
 }
 
 /** Puts the camera back on the player and stops any shake (cam_reset). */
@@ -1753,7 +1890,7 @@ function scriptInventories(inventories?: Record<number, ScriptInventorySnapshot>
 
 export function encodeWidgetRunScript(
   scriptId: number,
-  args: (number | string)[] = [],
+  args: (number | string | bigint)[] = [],
   varps?: Record<number, number>,
   varbits?: Record<number, number>,
   inventories?: Record<number, ScriptInventorySnapshot>
@@ -1784,10 +1921,15 @@ export function encodeRunClientScript(scriptId: number, args: (number | string)[
   return encodeServerPacket(ServerPacketId.RUN_CLIENT_SCRIPT, Buffer.concat([id, scriptArgs(args)]));
 }
 
-function scriptArgs(args: (number | string)[]): Buffer {
+function scriptArgs(args: (number | string | bigint)[]): Buffer {
   const parts: Buffer[] = [Buffer.from([args.length])];
   for (const arg of args) {
-    if (typeof arg === "number") {
+    if (typeof arg === "bigint") {
+      const value = Buffer.alloc(9);
+      value[0] = 2;
+      value.writeBigInt64BE(arg, 1);
+      parts.push(value);
+    } else if (typeof arg === "number") {
       const value = Buffer.alloc(5);
       value[0] = 1;
       value.writeInt32BE(arg | 0, 1);
@@ -1822,6 +1964,12 @@ export const MAIN_INVENTORY_SLOT_FLAGS = 0x1207fe;
 export const DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID = (116 << 16) | 40;
 const DISPLAY_SETTINGS_DROPDOWN_OPTION_SLOTS = 5;
 const FIRST_OPTION_FLAG = 1 << 1;
+// "Player/NPC 'Attack' options" dropdowns beside it (116:38, 116:39). Live sends op1 on the
+// option rows 1..5 (five player options) and 1..4 (four NPC options).
+export const ATTACK_PRIORITY_PLAYER_BUTTONS_UID = (116 << 16) | 38;
+export const ATTACK_PRIORITY_NPC_BUTTONS_UID = (116 << 16) | 39;
+const ATTACK_PRIORITY_PLAYER_OPTIONS = 5;
+const ATTACK_PRIORITY_NPC_OPTIONS = 4;
 
 // Quest tab icon child per gameframe root, from the cache pane redirect enums
 // (1129 fixed / 1130 stretch / 1131 classic). Not a mount - this is a flag on a
@@ -1858,7 +2006,7 @@ const QUEST_TAB_ICON_FLAGS = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4);
 const ACCOUNT_SUMMARY_ENTRY_LIST_UID = (INTERFACE_CHARACTER_SUMMARY_ID << 16) | 3;
 const ACCOUNT_SUMMARY_QUESTS_ROW = 3; // op1 "Quest List"
 const ACCOUNT_SUMMARY_ACHIEVEMENTS_ROW = 4; // op1 "Achievement Diaries"
-const ACCOUNT_SUMMARY_COMBAT_TASKS_ROW = 5; // op1-4 Overview/Bosses/Tasks/Rewards (Combat Achievements - not yet built)
+const ACCOUNT_SUMMARY_COMBAT_TASKS_ROW = 5; // op1 "Combat Achievements" (the last screen used; plugins/achievements/combatachievements/)
 const ACCOUNT_SUMMARY_COLLECTION_LOG_ROW = 6; // op1 "Collection Log", op2 "Collection Overview"
 const ACCOUNT_SUMMARY_PLAYTIME_ROW = 7; // op1 "Reveal"
 
@@ -1868,18 +2016,54 @@ const ACCOUNT_SUMMARY_PLAYTIME_ROW = 7; // op1 "Reveal"
 const EQUIPMENT_QUIVER_SLOT_UID = (387 << 16) | 28;
 const EQUIPMENT_QUIVER_SLOT_FLAGS = (1 << 1) | (1 << 2) | (1 << 10);
 
-export function encodeGameframeFlags(root: number = 161): Buffer[] {
+// The prayer and spellbook filter menus (prayerbook:filtermenu, magic_spellbook:filtermenu):
+// rows the cache scripts create at runtime, one per filter. Live enables op1 on each row
+// right after mounting the tab (5 prayer rows, 7 spellbook rows); plugins/interface/TabFilters.
+const PRAYERBOOK_FILTER_MENU_UID = (541 << 16) | 42;
+const PRAYERBOOK_FILTER_LAST_ROW = 4;
+const MAGIC_SPELLBOOK_FILTER_MENU_UID = (218 << 16) | 206;
+const MAGIC_SPELLBOOK_FILTER_LAST_ROW = 6;
+
+/** The login's widget flags, each with the component it is on (its interface is uid >>> 16). */
+function gameframeFlagEntries(root: number): Array<[number, Buffer]> {
   const questTabChild = QUEST_TAB_ICON_CHILD_BY_ROOT[root] ?? QUEST_TAB_ICON_CHILD_ID;
+  const questTabIcon = (root << 16) | questTabChild;
   return [
-    encodeWidgetSetFlagsRange(EQUIPMENT_QUIVER_SLOT_UID, -1, -1, EQUIPMENT_QUIVER_SLOT_FLAGS),
-    encodeWidgetSetFlagsRange(MAIN_INVENTORY_WIDGET_UID, 0, 27, MAIN_INVENTORY_SLOT_FLAGS),
-    encodeWidgetSetFlags((root << 16) | questTabChild, QUEST_TAB_ICON_FLAGS),
-    encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_QUESTS_ROW, ACCOUNT_SUMMARY_ACHIEVEMENTS_ROW, 1 << 1),
-    encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_COMBAT_TASKS_ROW, ACCOUNT_SUMMARY_COMBAT_TASKS_ROW, (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4)),
-    encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_COLLECTION_LOG_ROW, ACCOUNT_SUMMARY_COLLECTION_LOG_ROW, (1 << 1) | (1 << 2)),
-    encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_PLAYTIME_ROW, ACCOUNT_SUMMARY_PLAYTIME_ROW, 1 << 1),
-    encodeWidgetSetFlagsRange(DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID, 0, DISPLAY_SETTINGS_DROPDOWN_OPTION_SLOTS, FIRST_OPTION_FLAG),
+    [EQUIPMENT_QUIVER_SLOT_UID, encodeWidgetSetFlagsRange(EQUIPMENT_QUIVER_SLOT_UID, -1, -1, EQUIPMENT_QUIVER_SLOT_FLAGS)],
+    [MAIN_INVENTORY_WIDGET_UID, encodeWidgetSetFlagsRange(MAIN_INVENTORY_WIDGET_UID, 0, 27, MAIN_INVENTORY_SLOT_FLAGS)],
+    [PRAYERBOOK_FILTER_MENU_UID, encodeWidgetSetFlagsRange(PRAYERBOOK_FILTER_MENU_UID, 0, PRAYERBOOK_FILTER_LAST_ROW, FIRST_OPTION_FLAG)],
+    [MAGIC_SPELLBOOK_FILTER_MENU_UID, encodeWidgetSetFlagsRange(MAGIC_SPELLBOOK_FILTER_MENU_UID, 0, MAGIC_SPELLBOOK_FILTER_LAST_ROW, FIRST_OPTION_FLAG)],
+    [questTabIcon, encodeWidgetSetFlags(questTabIcon, QUEST_TAB_ICON_FLAGS)],
+    [ACCOUNT_SUMMARY_ENTRY_LIST_UID, encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_QUESTS_ROW, ACCOUNT_SUMMARY_ACHIEVEMENTS_ROW, 1 << 1)],
+    [ACCOUNT_SUMMARY_ENTRY_LIST_UID, encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_COMBAT_TASKS_ROW, ACCOUNT_SUMMARY_COMBAT_TASKS_ROW, (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4))],
+    [ACCOUNT_SUMMARY_ENTRY_LIST_UID, encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_COLLECTION_LOG_ROW, ACCOUNT_SUMMARY_COLLECTION_LOG_ROW, (1 << 1) | (1 << 2))],
+    [ACCOUNT_SUMMARY_ENTRY_LIST_UID, encodeWidgetSetFlagsRange(ACCOUNT_SUMMARY_ENTRY_LIST_UID, ACCOUNT_SUMMARY_PLAYTIME_ROW, ACCOUNT_SUMMARY_PLAYTIME_ROW, 1 << 1)],
+    [DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID, encodeWidgetSetFlagsRange(DISPLAY_SETTINGS_DROPDOWN_BUTTONS_UID, 0, DISPLAY_SETTINGS_DROPDOWN_OPTION_SLOTS, FIRST_OPTION_FLAG)],
+    [ATTACK_PRIORITY_PLAYER_BUTTONS_UID, encodeWidgetSetFlagsRange(ATTACK_PRIORITY_PLAYER_BUTTONS_UID, 1, ATTACK_PRIORITY_PLAYER_OPTIONS, FIRST_OPTION_FLAG)],
+    [ATTACK_PRIORITY_NPC_BUTTONS_UID, encodeWidgetSetFlagsRange(ATTACK_PRIORITY_NPC_BUTTONS_UID, 1, ATTACK_PRIORITY_NPC_OPTIONS, FIRST_OPTION_FLAG)],
   ];
+}
+
+export function encodeGameframeFlags(root: number = 161): Buffer[] {
+  return gameframeFlagEntries(root).map(([, packet]) => packet);
+}
+
+/**
+ * What the login sends for one side tab, for mounting it again: the client drops an
+ * interface's flags when it closes, so a tab the tutorial kept closed needs its flags (and the
+ * quest tab its journal, with the character summary's) once more when it opens.
+ */
+export function encodeGameframeTabSetup(group: number, root: number = 161): Buffer[] {
+  const packets: Buffer[] = [];
+  const groups = [group];
+  if (group === SIDE_JOURNAL_GROUP_ID) {
+    packets.push(encodeOpenSub(SIDE_JOURNAL_GROUP_ID, SIDE_JOURNAL_TAB_CONTAINER_CHILD_ID, INTERFACE_CHARACTER_SUMMARY_ID));
+    groups.push(INTERFACE_CHARACTER_SUMMARY_ID);
+  }
+  for (const [uid, packet] of gameframeFlagEntries(root)) {
+    if (groups.includes(uid >>> 16)) packets.push(packet);
+  }
+  return packets;
 }
 
 // Transient player attribute set from the handshake's clientType byte.
@@ -1999,14 +2183,16 @@ export function encodeLoginResponse(
   success: boolean,
   errorCode = -1,
   error = "",
-  displayName = ""
+  displayName = "",
+  /** A new remembered-login token, empty when none was issued. */
+  loginToken = ""
 ): Buffer {
   const fixed = Buffer.alloc(5);
   fixed[0] = success ? 1 : 0;
   fixed.writeInt32BE(errorCode, 1);
   return packet(
     ServerPacket.LOGIN_RESPONSE,
-    Buffer.concat([fixed, string(error), string(displayName)])
+    Buffer.concat([fixed, string(error), string(displayName), string(loginToken)])
   );
 }
 
@@ -2233,6 +2419,7 @@ const NPC_MASK = {
   HEAD_ICONS: 0x200,
   EXACT_MOVE: 0x400,
   FACE_TILE: 0x800,
+  MODEL_CUSTOMISATION: 0x1000,
   SPOT_ANIM: 0x20000,
 } as const;
 
@@ -2362,6 +2549,7 @@ function npcUpdateMask(view: NpcView, writeInteraction: boolean, writeHeadIcon =
     (view.forcedChat !== undefined ? NPC_MASK.FORCED_CHAT : 0) |
     (view.exactMove ? NPC_MASK.EXACT_MOVE : 0) |
     (view.faceTile ? NPC_MASK.FACE_TILE : 0) |
+    (view.modelCustomisation ? NPC_MASK.MODEL_CUSTOMISATION : 0) |
     (view.graphics?.length ? NPC_MASK.SPOT_ANIM : 0);
 }
 
@@ -2460,6 +2648,13 @@ function writeNpcUpdateBlock(view: NpcView, writeInteraction: boolean, writeHead
   if (view.faceTile) {
     shortBE(bytes, view.faceTile.x & 0xffff);
     shortBE(bytes, view.faceTile.y & 0xffff);
+  }
+  if (view.modelCustomisation) {
+    bytes.push(view.modelCustomisation.length & 0xff);
+    for (const entry of view.modelCustomisation) {
+      bytes.push(entry.slot & 0xff);
+      shortLE(bytes, entry.modelId & 0xffff);
+    }
   }
   return Buffer.from(bytes);
 }
@@ -2804,7 +2999,7 @@ export function encodeNpcSync(
     writer.writeBits(large ? 8 : 5, signed(view.y - local.y, large ? 8 : 5));
     writer.writeBits(large ? 8 : 5, signed(view.x - local.x, large ? 8 : 5));
     writer.writeBits(3, view.rotation & 7);
-    writer.writeBits(14, view.typeId & 0x3fff);
+    writer.writeBits(16, view.typeId & 0xffff);
     nextIndices.push(view.index);
     nextSet.add(view.index);
     if (block) updateBlocks.push(writeNpcUpdateBlock(view, writeInteraction, writeHeadIcon));
@@ -2855,8 +3050,9 @@ export function encodeProjectiles(projectiles: ProjectileView[]): Buffer {
     payload.writeUInt16BE(projectile.startPos & 0xffff, offset + 17);
     payload.writeUInt16BE(projectile.startCycleOffset & 0xffff, offset + 19);
     payload.writeUInt16BE(projectile.endCycleOffset & 0xffff, offset + 21);
-    payload[offset + 23] = 0;
-    payload.writeUInt16BE(0, offset + 24);
+    payload[offset + 23] = projectile.sourceActor?.kind === "player" ? 1
+      : projectile.sourceActor?.kind === "npc" ? 2 : 0;
+    payload.writeUInt16BE(projectile.sourceActor?.index ?? 0, offset + 24);
     payload[offset + 26] = projectile.targetActor?.kind === "player" ? 1
       : projectile.targetActor?.kind === "npc" ? 2 : 0;
     payload.writeUInt16BE(projectile.targetActor?.index ?? 0, offset + 27);
