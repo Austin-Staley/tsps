@@ -25,6 +25,11 @@
  *   each hit a third of the total, 14 XP for the first and 2 for the second (Wiki: 16 total).
  *   Mistimed clicks lose 2.
  * - Check (op3): "The retort is empty." / "The retort contains Anti-leech lotion."
+ * - The progress bar: an invisible NPC (13918) in front of the station carries headbar 33,
+ *   sent from the current fill to full (50) over the ticks left at one a tick (30 cycles each):
+ *   startfill 0, endtime 600 at a total of 20. A jump (a hit, a retort click) or a miss spawns
+ *   it afresh with the new fill (25 over 300 at 10 of 20); finishing or leaving removes it
+ *   (normal-world recordings 4186, 4197).
  * - Walking away pauses it: the potion and progress stay in the station (a Leagues capture
  *   finishes a potion left in the alembic hundreds of ticks earlier).
  */
@@ -38,6 +43,7 @@ const STATIONS = {
     noun: "retort",
     modifier: Shared.MODIFIER.RETORT,
     loc: Shared.LOC.RETORT,
+    bar: { x: 1397, y: 9326 },
     potionVarbit: Shared.VARBIT.RETORT_POTION,
     progressVarbit: Shared.VARBIT.RETORT_PROGRESS,
     verb: "concentrating",
@@ -51,6 +57,7 @@ const STATIONS = {
     noun: "agitator",
     modifier: Shared.MODIFIER.AGITATOR,
     loc: Shared.LOC.AGITATOR,
+    bar: { x: 1394, y: 9329 },
     potionVarbit: Shared.VARBIT.AGITATOR_POTION,
     progressVarbit: Shared.VARBIT.AGITATOR_PROGRESS,
     hitVarbit: Shared.VARBIT.HIT_SKILLSHOT_AGITATOR,
@@ -66,6 +73,7 @@ const STATIONS = {
     noun: "alembic",
     modifier: Shared.MODIFIER.ALEMBIC,
     loc: Shared.LOC.ALEMBIC,
+    bar: { x: 1391, y: 9326 },
     potionVarbit: Shared.VARBIT.ALEMBIC_POTION,
     progressVarbit: Shared.VARBIT.ALEMBIC_PROGRESS,
     hitVarbit: Shared.VARBIT.HIT_SKILLSHOT_ALEMBIC,
@@ -93,6 +101,7 @@ const ALEMBIC_CUE_PROGRESS = 4;
 const AGITATOR_CUE_RANGE = [2, 5];
 const SOUND_CUE = 2655;
 const SOUND_FINISHED = 2582;
+const BAR = { HEADBAR: 33, WIDTH: 50, CYCLES_PER_TICK: 30 };
 /** Whether digweed went into the potion now in a station, kept beside its varbit. */
 const DIGWEED_FIELD = (station) => `${station.key}Digweed`;
 
@@ -130,6 +139,25 @@ function firstUnfinished(player) {
   return -1;
 }
 
+function removeBar(state) {
+  if (state?.bar) Shared.api().removeNpc(state.bar);
+  if (state) state.bar = null;
+}
+
+/** The bar from the current progress to full, at one a tick; spawned afresh as live does. */
+function showBar(player, state, progress, needed) {
+  removeBar(state);
+  const { bar } = state.station;
+  const npc = Shared.api().spawnNpc({ id: Shared.NPC.TABLE_BAR, x: bar.x, y: bar.y, z: Shared.LAB.z, wanderRadius: 0, owner: player });
+  if (!npc) return;
+  state.bar = npc;
+  npc.showHeadbar(BAR.HEADBAR, {
+    fill: Math.floor((BAR.WIDTH * progress) / needed),
+    endFill: BAR.WIDTH,
+    duration: Math.max(0, needed - progress) * BAR.CYCLES_PER_TICK,
+  });
+}
+
 function begin(player, station) {
   const { Location } = Shared.core();
   const location = player.getLocation();
@@ -146,7 +174,9 @@ function begin(player, station) {
     cueTick: -1,
     // A potion picked back up keeps its hit: the bonus comes once per potion (Wiki).
     hits: station.hitVarbit && Shared.get(player, station.hitVarbit) === 1 ? cue.hits : 0,
+    bar: null,
   });
+  showBar(player, work.get(player), Shared.get(player, station.progressVarbit), total(player));
   Shared.animate(player, station.human);
   Shared.animateLoc(player, station.loc, `${station.machine}_interact01`);
 }
@@ -265,6 +295,7 @@ function tick(player, now) {
     ? click(player, station, state, now, progress, needed)
     : progress + 1;
   setProgress(player, station, Math.min(needed, next));
+  if (next !== progress + 1 && next < needed) showBar(player, state, Math.max(0, next), needed);
   if (station.cue && state.cueTick < 0 && state.hits < station.cue.hits && next >= state.cueProgress) cue(player, station, state, now);
   if (next >= needed) {
     finish(player, station);
@@ -296,11 +327,12 @@ function finish(player, station) {
   player.sendMessage(`You finish ${station.verb} the ${Shared.coloured(player, entry.name)}.`);
   Shared.sound(player, SOUND_FINISHED);
   Shared.animateLoc(player, station.loc, `${station.machine}_idle02`);
-  work.delete(player);
+  stop(player);
   player.performAnimation(new (Shared.core().Animation)(-1));
 }
 
 function stop(player) {
+  removeBar(work.get(player));
   work.delete(player);
 }
 

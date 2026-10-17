@@ -109,6 +109,8 @@ const NPC = {
   /** mm_lab_tech_02, at the top of the stairs. */
   CLANILA: 13923,
   CLANILA_NAME: "Clanila",
+  /** mm_lab_table_bar: invisible, in front of a working station, carrying its progress headbar. */
+  TABLE_BAR: 13918,
   /** mm_lab_conveyor_chatter: carries the "+N Mox" overhead text for ten ticks. */
   CONVEYOR_CHATTER: 13919,
 };

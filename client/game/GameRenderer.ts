@@ -14,7 +14,7 @@ import { IProjectileManager } from "./interfaces/IProjectileManager";
 import type { PlayerSpotAnimationEvent } from "./sync/PlayerSyncTypes";
 import type { WidgetsOverlay } from "../ui/devoverlay/WidgetsOverlay";
 import { gammaFromScreenBrightness, loadScreenBrightness } from "../ui/ScreenBrightness";
-import { multiLocVarps } from "../render/loc/MultiLocVarps";
+import { multiLocVariants, multiLocVarps } from "../render/loc/MultiLocVarps";
 import { getMapSquareId } from "../rs/map/MapFileIndex";
 
 /** Optional details of a LOC change (moves, rotations, shape changes). */
@@ -641,6 +641,11 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
     onRegionReplacement(_payload: RegionReplacementEvent): void {}
 
     private changedVarps = new Set<number>();
+    /**
+     * Each loaded square's multiloc variants as last built, with the loc arrays they were read
+     * from; `pending` marks a rebuild this class asked for, whose new arrays are not known yet.
+     */
+    private multiLocBuilds = new Map<number, { ids: unknown; variants: string; pending: boolean }>();
 
     /**
      * A varp (or a varbit on it) changed. A multiloc's look is baked into its square's build, so
@@ -663,10 +668,19 @@ export abstract class GameRenderer<T extends MapSquare = MapSquare> extends Rend
         for (const map of this.mapManager.mapSquares.values()) {
             const varps = multiLocVarps((map as { tileLocIdsByLevel?: Int32Array[] }).tileLocIdsByLevel, client.locTypeLoader, varbitLoader);
             if (![...changed].some((varp) => varps.has(varp))) continue;
+            const mapId = getMapSquareId(map.mapX, map.mapY);
+            const ids = (map as { tileLocIdsByLevel?: Int32Array[] }).tileLocIdsByLevel;
+            const variants = multiLocVariants(ids, client.locTypeLoader, client.varManager);
+            const built = this.multiLocBuilds.get(mapId);
+            if (built && built.variants === variants && (built.ids === ids || built.pending)) {
+                // Still the old arrays: the rebuild asked for is in flight.
+                this.multiLocBuilds.set(mapId, { ids, variants, pending: built.pending && built.ids === ids });
+                continue;
+            }
+            this.multiLocBuilds.set(mapId, { ids, variants, pending: true });
             // A boat's deck is built from its template chunks, not loaded as a map square: a
             // plain reload of its square built an empty one in its place and the boat vanished
             // (boarding sets the sailing varbits its multilocs read).
-            const mapId = getMapSquareId(map.mapX, map.mapY);
             const deck = this.mapManager.worldEntityMapIds.has(mapId)
                 ? client.worldViewManager.getWorldViewByOverlayMapId(mapId)
                 : undefined;
