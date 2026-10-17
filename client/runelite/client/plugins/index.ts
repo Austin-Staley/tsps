@@ -1,6 +1,7 @@
 import { VoiceChatPlugin } from "../../../game/plugins/voice/VoiceChatPlugin";
 import { AnimationSmoothingPlugin } from "../../../game/plugins/animationsmoothing/AnimationSmoothingPlugin";
 import { AttackTimerPlugin } from "../../../game/plugins/attacktimer/AttackTimerPlugin";
+import { CameraPlugin } from "../../../game/plugins/camera/CameraPlugin";
 import { FirstPersonPlugin } from "../../../game/plugins/firstperson/FirstPersonPlugin";
 import { GameFrame317Plugin } from "../../../game/plugins/gameframe317/GameFrame317Plugin";
 import { GpuPlugin } from "../../../game/plugins/gpu/GpuPlugin";
@@ -57,6 +58,7 @@ export const CORE_PLUGINS: ReadonlyArray<PluginClass> = [
     PrayerPlugin,
     StretchedModePlugin,
     GpuPlugin,
+    CameraPlugin,
 ];
 
 /** Legacy `osrs.plugin.*.v1` localStorage blobs to fold into rl.config. */

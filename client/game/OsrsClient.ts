@@ -942,6 +942,8 @@ export class OsrsClient {
     private minimapImageAccess: Map<number, number> = new Map();
 
     cameraSpeed: number = 1;
+    /** Ignore the server's camera shake (the Camera plugin's "Disable camera shake"). */
+    cameraShakeDisabled: boolean = false;
 
     // Camera behavior
     // When true, disables free-cam and keeps camera focused on Player[0]
@@ -3983,7 +3985,7 @@ export class OsrsClient {
         this.processLoginAction(action);
     }
 
-    private runClientScriptWithInts(scriptId: number, args: number[]): void {
+    runClientScriptWithInts(scriptId: number, args: number[]): void {
         if (!this.cs2Vm) return;
         const script = this.cs2Vm.context?.loadScript?.(scriptId | 0);
         if (!script) return;
