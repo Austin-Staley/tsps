@@ -613,6 +613,7 @@
     "11919": {"name": "Farmer", "anims": {"attack": 386, "block": 387, "death": 836}, "sounds": {"death": 512}},
     "11920": {"name": "Farmer", "anims": {"attack": 386, "block": 387, "death": 836}, "sounds": {"death": 512}},
     "11921": {"name": "Farmer", "anims": {"attack": 433, "block": 434, "death": 836}, "sounds": {"death": 512}},
+    "12223": {"name": "Vardorvis", "anims": {"attack": 10340, "block": -1, "death": 10346, "spawn": 10345}, "deathTicks": 4, "respawn": 0},
     "12224": {"name": "Vardorvis", "anims": {"attack": 10340, "block": -1, "death": 10346, "spawn": 10345}},
     "12810": {"name": "Jaguar warrior", "anims": {"attack": 10847, "block": 10848, "death": 10849}},
     "12811": {"name": "Serpent shaman", "anims": {"attack": 10859, "block": -1, "death": 10860}},
