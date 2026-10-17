@@ -3217,7 +3217,6 @@
   {"level":0,"name":"","x":3210,"y":3803,"id":5861,"wanderRadius":0},
   {"level":0,"name":"Lava dragon","x":3211,"y":3809,"id":6593},
   {"level":0,"name":"Lava dragon","x":3213,"y":3819,"id":6593},
-  {"level":0,"name":"Vet'ion","x":3219,"y":3788,"id":6611},
   {"level":0,"name":"Lava dragon","x":3223,"y":3830,"id":6593},
   {"level":0,"name":"Chaos dwarf","x":3233,"y":3783,"id":291},
   {"level":0,"name":"Chaos dwarf","x":3241,"y":3796,"id":291},
@@ -11673,7 +11672,6 @@
   {"level":0,"name":"Rat","x":2548,"y":9421,"id":2854},
   {"level":0,"name":"Greater demon","x":3282,"y":3880,"id":2028},
   {"level":0,"name":"Greater demon","x":3287,"y":3894,"id":2029},
-  {"level":0,"name":"Callisto","x":3290,"y":3847,"id":6609},
   {"level":0,"name":"Greater demon","x":3296,"y":3872,"id":2027},
   {"level":0,"name":"Greater demon","x":3304,"y":3886,"id":2026},
   {"level":0,"name":"Lesser demon","x":3311,"y":3845,"id":2005},
@@ -19150,7 +19148,6 @@
   {"level":0,"name":"Iceberg","x":2923,"y":3980,"id":5818},
   {"level":0,"name":"Iceberg","x":2925,"y":3978,"id":5817},
   {"level":0,"name":"Iceberg","x":2927,"y":3971,"id":5817},
-  {"level":0,"name":"Venenatis","x":3332,"y":3734,"id":6610},
   {"level":0,"name":"Mine cart","x":2697,"y":4498,"id":3622,"wanderRadius":0},
   {"level":0,"name":"Mine cart","x":2715,"y":4516,"id":3623,"wanderRadius":0},
   {"level":0,"name":"Mine cart","x":2727,"y":4509,"id":3621,"wanderRadius":0},
@@ -30566,5 +30563,11 @@
   {"id":11171,"name":"Vyrewatch","x":3687,"y":9643,"level":0,"wanderRadius":0},
   {"level":0,"name":"Barus","x":1460,"y":3780,"id":12255,"wanderRadius":4},
   {"id": 6142, "name": "Ernest", "x": 3110, "y": 3365, "level": 2, "source": "rsprox:discord:f2p240"},
-  {"level":0,"name":"Hill Giant","x":3362,"y":3146,"id":11467,"wanderRadius":0}
+  {"level":0,"name":"Hill Giant","x":3362,"y":3146,"id":11467,"wanderRadius":0},
+  {"level":0,"name":"Callisto","x":3356,"y":10322,"id":6609,"direction":1},
+  {"level":0,"name":"Artio","x":1756,"y":11538,"id":11992,"direction":1},
+  {"level":1,"name":"Vet'ion","x":3294,"y":10201,"id":6611,"direction":1},
+  {"level":1,"name":"Calvar'ion","x":1886,"y":11545,"id":11993,"direction":1},
+  {"level":2,"name":"Venenatis","x":3421,"y":10202,"id":6610,"direction":1},
+  {"level":2,"name":"Spindel","x":1629,"y":11546,"id":11998,"direction":1}
 ]

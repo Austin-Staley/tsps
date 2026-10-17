@@ -524,7 +524,12 @@ function dropFor(player, npc, npcId, location, damagers = []) {
   // Where the loot lands; a boss whose body is out of reach (Zulrah) moves it under the killer.
   const where = { player, npc, npcId, location };
   pluginApi.emitCustomEvent("npc-drops:location", where);
-  location = where.location;
+  placeDrops(player, drops, where.location);
+  return drops.length;
+}
+
+/** Puts rolled drops on the ground for `player` (noted where the table says), or coins in the pack. */
+function placeDrops(player, drops, location) {
   for (const drop of drops) {
     if (!Number.isInteger(drop.itemId) || drop.amount <= 0) {
       continue;
@@ -553,7 +558,6 @@ function dropFor(player, npc, npcId, location, damagers = []) {
       }
     }
   }
-  return drops.length;
 }
 
 module.exports = {
@@ -574,13 +578,23 @@ module.exports = {
 
     // "npc-drops:roll-table" { player, table, drops }: a table outside an NPC's own (a boss's
     // chest) rolled with the same roller and shared tables; the drops are pushed onto `drops`.
-    // { player, npcId, drops } rolls that NPC's own table instead, for a boss that rewards
-    // several players without dying to each (the Nightmare).
+    // { player, npcId, drops, npc? } rolls that NPC's own table instead, for a boss that rewards
+    // several players without dying to each (the Nightmare); `npc` places it (looting bags), and
+    // `entryFilter(entry)` keeps only some of its entries (a shared kill rolling its parts apart).
     api.onCustomEvent("npc-drops:roll-table", (request) => {
       ensureDrops();
-      const table = request.table ?? tableForNpc(request.npcId);
-      if (table) request.drops.push(...rollTable(table, request.player, null));
+      let table = request.table ?? tableForNpc(request.npcId);
+      if (table && typeof request.entryFilter === "function") {
+        table = {
+          ...table,
+          entries: (table.entries || []).filter(request.entryFilter),
+          tertiary: (table.tertiary || []).filter(request.entryFilter),
+        };
+      }
+      if (table) request.drops.push(...rollTable(table, request.player, request.npc ?? null));
     });
+    // "npc-drops:place" { player, drops, location }: drops rolled elsewhere, put down as a kill's.
+    api.onCustomEvent("npc-drops:place", ({ player, drops, location }) => placeDrops(player, drops, location));
 
     api.onNpcDeath(({ killer, npc, npcId, damagers }) => {
       if (!killer || !npc) {
@@ -588,6 +602,14 @@ module.exports = {
       }
       const id = Number.isInteger(npcId) ? npcId : npc.getId?.();
       if (!Number.isInteger(id)) {
+        return;
+      }
+      // "npc-drops:claim": a boss that shares its loot between players (the Wilderness bosses)
+      // takes the kill over, rolling each share with npc-drops:roll-table and placing it with
+      // npc-drops:place.
+      const claim = { killer, npc, npcId: id, damagers: damagers ?? [], handled: false };
+      api.emitCustomEvent("npc-drops:claim", claim);
+      if (claim.handled) {
         return;
       }
       try {

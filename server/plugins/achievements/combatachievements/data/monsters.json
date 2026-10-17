@@ -29,6 +29,18 @@
   "npcs": {
     "Grotesque Guardians": [
       "Dusk"
+    ],
+    "Callisto": [
+      "Callisto",
+      "Artio"
+    ],
+    "Venenatis": [
+      "Venenatis",
+      "Spindel"
+    ],
+    "Vet'ion": [
+      "Vet'ion",
+      "Calvar'ion"
     ]
   },
   "collectionLog": {

@@ -1275,7 +1275,8 @@ export class CombatFactory {
             return;
         }
 
-        if (character.getSize() > 2) {
+        // Large NPCs shrug freezes off, unless one opts in (Callisto and Artio can be frozen).
+        if (character.getSize() > 2 && !character.hasFlag("combat:freezable")) {
             return;
         }
 
