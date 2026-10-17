@@ -46,10 +46,11 @@ export class Combat {
     private readonly hitQueue = new HitQueue(this.character);
     private damageMap: Map<Player, HitDamageCache> | null = null;
     private readonly lastAttack = new Stopwatch();
-    private readonly poisonImmunityTimer = new SecondsTimer();
-    private readonly fireImmunityTimer = new SecondsTimer();
-    private readonly teleblockTimer = new SecondsTimer();
-    private readonly prayerBlockTimer = new SecondsTimer();
+    // Most NPCs never use these; each SecondsTimer also holds a Stopwatch, so allocate on first use.
+    private poisonImmunityTimer: SecondsTimer | null = null;
+    private fireImmunityTimer: SecondsTimer | null = null;
+    private teleblockTimer: SecondsTimer | null = null;
+    private prayerBlockTimer: SecondsTimer | null = null;
     private nextAttackCycle = 0;
     private target: Mobile | null = null;
     private autoRetaliating = false;
@@ -566,10 +567,10 @@ export class Combat {
     public setAmmunition(ammunition: Ammunition | null): void { this.ammunition = ammunition; }
     public getRangeAmmoData(): RangedData { return this.ammunition as unknown as RangedData; }
     public setRangeAmmoData(data: RangedData): void { this.ammunition = data as unknown as Ammunition; }
-    public getPoisonImmunityTimer(): SecondsTimer { return this.poisonImmunityTimer; }
-    public getFireImmunityTimer(): SecondsTimer { return this.fireImmunityTimer; }
-    public getTeleblockTimer(): SecondsTimer { return this.teleblockTimer; }
-    public getPrayerBlockTimer(): SecondsTimer { return this.prayerBlockTimer; }
+    public getPoisonImmunityTimer(): SecondsTimer { return this.poisonImmunityTimer ??= new SecondsTimer(); }
+    public getFireImmunityTimer(): SecondsTimer { return this.fireImmunityTimer ??= new SecondsTimer(); }
+    public getTeleblockTimer(): SecondsTimer { return this.teleblockTimer ??= new SecondsTimer(); }
+    public getPrayerBlockTimer(): SecondsTimer { return this.prayerBlockTimer ??= new SecondsTimer(); }
     public getLastAttack(): Stopwatch { return this.lastAttack; }
 
     private shouldRetreat(): boolean {

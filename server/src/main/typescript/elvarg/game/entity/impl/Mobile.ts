@@ -99,13 +99,8 @@ export abstract class Mobile extends Entity {
      * doesn't expire on its own.
      */
     private venomed = false;
-    private prayerState: boolean[] | null = null;
-    private curseState: boolean[] | null = null;
-    // Keep the public mutable-array API; actors that never use prayers pay no allocation.
-    get prayerActive(): boolean[] { return this.prayerState ??= new Array<boolean>(30); }
-    set prayerActive(value: boolean[]) { this.prayerState = value; }
-    get curseActive(): boolean[] { return this.curseState ??= new Array<boolean>(20); }
-    set curseActive(value: boolean[]) { this.curseState = value; }
+    // Allocated on first use: most actors never touch prayers.
+    private prayerActive: boolean[] | null = null;
     resetMovementQueue = false;
     needsPlacement = false;
     untargetable = false;
@@ -574,29 +569,15 @@ export abstract class Mobile extends Entity {
     }
 
     getPrayerActive(): boolean[] {
-        return this.prayerActive;
+        return this.prayerActive ??= new Array<boolean>(30);
     }
     setPrayerActives(prayerActive: boolean[]): Mobile {
         this.prayerActive = prayerActive;
         return this;
     }
 
-    getCurseActive(): boolean[] {
-        return this.curseActive;
-    }
-
-    setCurseActive(curseActive: boolean[]): Mobile {
-        this.curseActive = curseActive;
-        return this;
-    }
-
     setPrayerActive(id: number, prayerActive: boolean): Mobile {
-        this.prayerActive[id] = prayerActive;
-        return this;
-    }
-
-    setCurseActives(id: number, curseActive: boolean): Mobile {
-        this.curseActive[id] = curseActive;
+        this.getPrayerActive()[id] = prayerActive;
         return this;
     }
 

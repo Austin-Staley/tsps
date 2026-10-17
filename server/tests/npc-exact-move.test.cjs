@@ -174,21 +174,24 @@ test('idle NPC state stays unallocated until used and stays private to each acto
   assert.equal(a.attributes, null);
   assert.equal(a.slotGraphics, null);
   assert.equal(a.combatOverrideViews, null);
-  assert.equal(a.prayerState, null);
-  assert.equal(a.curseState, null);
+  assert.equal(a.prayerActive, null);
   a.setAttribute('test', 42);
   assert.equal(a.getAttribute('test'), 42);
   assert.equal(b.getAttribute('test'), undefined);
-  a.setPrayerActive(3, true).setCurseActives(2, true);
+  a.setPrayerActive(3, true);
   assert.equal(a.getPrayerActive().length, 30);
-  assert.equal(a.getCurseActive().length, 20);
   assert.equal(a.getPrayerActive()[3], true);
-  assert.equal(a.getCurseActive()[2], true);
   a.getPrayerActive()[3] = false;
-  a.prayerActive[4] = true;
+  a.getPrayerActive()[4] = true;
   assert.equal(a.getPrayerActive()[3], false);
   assert.equal(a.getPrayerActive()[4], true);
-  assert.equal(b.prayerState, null, 'another NPC still has no prayer array');
+  for (const name of ['poisonImmunityTimer', 'fireImmunityTimer', 'teleblockTimer', 'prayerBlockTimer']) {
+    assert.equal(b.getCombat()[name], null, `${name} is allocated on first use`);
+  }
+  const teleblock = a.getCombat().getTeleblockTimer();
+  assert.equal(teleblock.finished(), true);
+  assert.equal(a.getCombat().getTeleblockTimer(), teleblock, 'the lazily created timer is kept');
+  assert.equal(b.prayerActive, null, 'another NPC still has no prayer array');
   const replacement = [true];
   a.setPrayerActives(replacement);
   assert.equal(a.prayerActive, replacement, 'the mutable array API keeps caller identity');
