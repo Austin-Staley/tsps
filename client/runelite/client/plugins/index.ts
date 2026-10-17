@@ -1,3 +1,4 @@
+import { AnimationSmoothingConfig } from "../../../game/plugins/animationsmoothing/AnimationSmoothingConfig";
 import { VoiceChatPlugin } from "../../../game/plugins/voice/VoiceChatPlugin";
 import { AnimationSmoothingPlugin } from "../../../game/plugins/animationsmoothing/AnimationSmoothingPlugin";
 import { AttackTimerPlugin } from "../../../game/plugins/attacktimer/AttackTimerPlugin";
@@ -81,6 +82,7 @@ export const LEGACY_CONFIG_MIGRATIONS: ReadonlyArray<LegacyConfigMigration> = [
     },
     {
         name: "animationsmoothing",
+        config: AnimationSmoothingConfig,
         legacyKey: "osrs.plugin.animation_smoothing.v1",
         enabledKey: "animationsmoothingplugin",
     },
