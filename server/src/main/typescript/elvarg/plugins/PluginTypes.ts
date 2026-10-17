@@ -1298,6 +1298,7 @@ export interface PluginCoreApi {
   /** Which items poison, and how strongly. */
   CombatPoisonData: any;
   CacheDefinitions: any;
+  readTemplateRegion: typeof import("../game/collision/TemplateRegionData").readTemplateRegion;
   Wilderness: any;
   PathFinder: any;
   RsmodRouteFinding: any;
