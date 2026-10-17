@@ -170,10 +170,11 @@ about 2,600/2,500 per player solo down to 1,800/1,700 each with 40.
 | Harpoon a fishing spot | "You start harpooning fish."; on a catch "You catch a harpoonfish!", +5 points (see "Tick rates") |
 | Harpoon a jumping spot | as above; on a bonus: "You manage to catch an extra harpoonfish as it jumps out of the water." |
 | Cook-at the shrine | `human_cooking`, sound 2577; every 3 ticks "You successfully cook a harpoonfish.", +10 points |
-| Fill a crate | "You start loading harpoonfish into the cannon."; every 2 ticks `human_cooking` (delay 1), sound 4959, one fish out, +65 points cooked / +20 raw; next tick the cannon's `loc_anim` 8871 (8872 on the east ship), area sounds 4949/4945 and projectile 525 to Tempoross (start height 57, end 90, 100 cycles) |
+| Fill a crate | "You start loading harpoonfish into the cannon."; every 2 ticks `human_cooking` (delay 1), sound 4959, one fish out, +65 points cooked / +20 raw; next tick the cannon's `loc_anim` 8871 (8872 on the east ship), area sounds 4949/4945 and projectile 525 from the cannon's muzzle tile ((3040, 2851), (3040, 2847), (3054, 2851), (3054, 2847)) to the middle of Tempoross (3047, 2849), start height 57, end 90, 100 cycles, with impact 1838 sent alongside (delay 100, height 24) |
 | Fill after the fight is won | mesbox "The cannons aren't needed anymore." |
 | Tether | `human_bone_sacrifice`, spotanim 1844, sound 1439 (2 loops), varbit 11895 set; +2 spotanim 1845 looping; "You securely tether yourself to the mast." / "...to the totem pole." |
 | Untether | `human_pickuptable`, spotanim 1846, sound 2247, varbit 0; "You untether yourself from the mast." |
+| After a wave | tethered players are untethered 2 ticks after the hit (captured at +2; done for them, not by a click) |
 | Walk while tethered | "You must untether yourself to move away." |
 | Repair | `human_poh_build`, sound 938, "You repair the mast." / "...the totem pole."; without a hammer: mesbox "You need a hammer to repair the mast." |
 | Douse a fire | `skip_throw_bucketofwater`, sounds 1733 and 2412, "You extinguish the fire.", bucket of water to bucket, +40 points |

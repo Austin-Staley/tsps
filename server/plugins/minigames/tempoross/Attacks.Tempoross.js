@@ -127,6 +127,9 @@ class Attacks {
     });
     fight.tethers.breakSites();
     this.clearFires();
+    this.at(F.untetherAfterWave, () => {
+      for (const player of [...fight.tethers.tethered.keys()]) fight.tethers.untether(player);
+    });
   }
 
   // ------------------------------------------------------------------ lightning and fires
@@ -277,7 +280,7 @@ class Attacks {
       && Shared.actionOf(player) === "load"));
     const crate = Shared.pick(loading.length > 0 ? loading : crates);
     Shared.animate(fight.boss, ANIM.BOSS_TORRENT);
-    const from = fight.boss.getLocation();
+    const from = this.cove.tile([...DATA.cove.bossCentre, 0]);
     this.cove.mapGraphic(GFX.TORRENT_CAST, from);
     this.cove.projectile(GFX.TORRENT, from, crate.cannonLoc.getLocation(), { cycles: 120, slope: 127 });
     this.at(F.torrentTicks, () => fight.cannons.disable(crate));

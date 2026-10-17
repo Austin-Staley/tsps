@@ -24,9 +24,6 @@ const AMMO = {
   [ITEM.RAW]: { points: DATA.points.loadRaw, damage: DATA.damage.raw, gfx: GFX.PROJECTILE_RAW, xp: 1 },
 };
 
-/** rsprox prints projectile heights as sent; PacketSender takes them a quarter of that. */
-const HEIGHT_UNITS = 4;
-
 class Cannons {
   constructor(fight) {
     this.fight = fight;
@@ -74,26 +71,26 @@ class Cannons {
     }
   }
 
+  /**
+   * Captured: the projectile leaves the cannon's muzzle tile (DATA crates' `muzzle`) for the
+   * middle of Tempoross, heights 57 to 90 over 100 cycles, and the impact graphic goes out with
+   * it, delayed 100 cycles.
+   */
   fire(crate, fishId) {
     const ammo = AMMO[fishId];
     const cannon = crate.cannonLoc;
-    const boss = this.fight.boss;
-    if (!ammo || !cannon || !boss) return;
+    if (!ammo || !cannon || !this.fight.boss) return;
     const mirrored = crate.data.side === "east";
     this.cove.locAnim(cannon, mirrored ? ANIM.CANNON_FIRING_MIRROR : ANIM.CANNON_FIRING);
-    const at = cannon.getLocation();
-    this.cove.areaSound(SOUND.CANNON_FIRE, at, 5);
-    this.cove.areaSound(SOUND.CANNON_FIRE_2, at, 5, 9);
-    const [start, end] = F.projectileHeights;
-    this.cove.projectile(ammo.gfx, at, boss.getLocation(), {
-      cycles: F.projectileCycles,
-      startHeight: Math.round(start / HEIGHT_UNITS),
-      endHeight: Math.round(end / HEIGHT_UNITS),
-    });
+    const muzzle = this.cove.tile([...crate.data.muzzle, 0]);
+    const target = this.cove.tile([...DATA.cove.bossCentre, 0]);
+    this.cove.areaSound(SOUND.CANNON_FIRE, muzzle, 5);
+    this.cove.areaSound(SOUND.CANNON_FIRE_2, muzzle, 5, 9);
+    const [startHeight, endHeight] = F.projectileHeights;
+    this.cove.projectile(ammo.gfx, muzzle, target, { cycles: F.projectileCycles, startHeight, endHeight });
+    this.cove.mapGraphic(GFX.IMPACT, target, 24, F.impactDelay);
     Shared.later(this.fight, F.shotLandsTicks, () => {
-      if (this.fight.stopped) return;
-      this.cove.mapGraphic(GFX.IMPACT, boss.getLocation(), 24);
-      this.fight.damageEnergy(ammo.damage);
+      if (!this.fight.stopped) this.fight.damageEnergy(ammo.damage);
     });
   }
 

@@ -20,16 +20,18 @@
     "planes": 4,
     "arrival": [[3035, 2852], [3035, 2851], [3038, 2853]],
     "boss": [3043, 2845],
+    "$bossCentre": "where the captures aim cannon fire and cast the torrent from: the middle of its 9x9",
+    "bossCentre": [3047, 2849],
     "spiritPools": [[3046, 2843], [3046, 2853]],
     "spotSites": {
       "north": [[3037, 2868], [3038, 2868], [3048, 2873], [3051, 2866], [3051, 2867]],
       "south": [[3036, 2835], [3037, 2835], [3046, 2826], [3046, 2827], [3048, 2829]]
     },
     "crates": [
-      { "npc": 10576, "tile": [3038, 2850], "loc": [40968, 40972, 40976], "cannoneer": [10599, 3039, 2850], "cannon": 41238, "cannonTile": [3038, 2851], "side": "west" },
-      { "npc": 10577, "tile": [3038, 2848], "loc": [40969, 40973, 40977], "cannoneer": [10600, 3039, 2848], "cannon": 41239, "cannonTile": [3038, 2846], "side": "west" },
-      { "npc": 10578, "tile": [3056, 2850], "loc": [40970, 40974, 40978], "cannoneer": [10601, 3055, 2850], "cannon": 41240, "cannonTile": [3054, 2851], "side": "east" },
-      { "npc": 10579, "tile": [3056, 2848], "loc": [40971, 40975, 40979], "cannoneer": [10602, 3055, 2848], "cannon": 41241, "cannonTile": [3054, 2846], "side": "east" }
+      { "npc": 10576, "tile": [3038, 2850], "loc": [40968, 40972, 40976], "cannoneer": [10599, 3039, 2850], "cannon": 41238, "cannonTile": [3038, 2851], "muzzle": [3040, 2851], "side": "west" },
+      { "npc": 10577, "tile": [3038, 2848], "loc": [40969, 40973, 40977], "cannoneer": [10600, 3039, 2848], "cannon": 41239, "cannonTile": [3038, 2846], "muzzle": [3040, 2847], "side": "west" },
+      { "npc": 10578, "tile": [3056, 2850], "loc": [40970, 40974, 40978], "cannoneer": [10601, 3055, 2850], "cannon": 41240, "cannonTile": [3054, 2851], "muzzle": [3054, 2851], "side": "east" },
+      { "npc": 10579, "tile": [3056, 2848], "loc": [40971, 40975, 40979], "cannoneer": [10602, 3055, 2848], "cannon": 41241, "cannonTile": [3054, 2846], "muzzle": [3054, 2847], "side": "east" }
     ],
     "hosts": [
       { "id": 10587, "victory": 10588, "tile": [3036, 2852], "side": "west" },
@@ -87,7 +89,9 @@
     "crateFull": 15,
     "projectileCycles": 100,
     "projectileHeights": [57, 90],
-    "shotLandsTicks": 2
+    "shotLandsTicks": 2,
+    "impactDelay": 100,
+    "untetherAfterWave": 2
   },
   "damage": { "raw": 100, "cooked": 150, "crystallised": 100, "poolMax": 120 },
   "points": {
