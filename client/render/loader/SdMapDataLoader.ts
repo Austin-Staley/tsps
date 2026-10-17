@@ -1,3 +1,4 @@
+import { nextSequenceFrame } from "../../rs/model/seq/FrameInterpolation";
 import { ConfigType } from "../../rs/cache/ConfigType";
 import { IndexType } from "../../rs/cache/IndexType";
 import { BasTypeLoader } from "../../rs/config/bastype/BasTypeLoader";
@@ -902,18 +903,19 @@ const SMOOTHED_STEPS_PER_FRAME = 4;
 /**
  * Each keyframe's baked frames when smoothed (Animation Smoothing), as [keyframe, cycles into
  * it]: evenly spaced through its length, one per client cycle up to SMOOTHED_STEPS_PER_FRAME.
- * The last keyframe is never blended (it would blend toward nothing), as for players and NPCs.
+ * A final keyframe blends only when the object has a valid loop target.
  */
 function smoothedFrameRuns(
     locModelLoader: LocModelLoader,
     seqType: SeqType,
+    maxSteps: number,
 ): { frame: number; cycle: number }[] {
     const runs: { frame: number; cycle: number }[] = [];
     const count = seqType.frameIds.length;
     for (let frame = 0; frame < count; frame++) {
         const length =
-            frame + 1 < count ? seqType.getFrameLength(locModelLoader.seqFrameLoader, frame) | 0 : 1;
-        const steps = Math.max(1, Math.min(length, SMOOTHED_STEPS_PER_FRAME));
+            nextSequenceFrame(seqType, frame, "object") !== undefined ? seqType.getFrameLength(locModelLoader.seqFrameLoader, frame) | 0 : 1;
+        const steps = Math.max(1, Math.min(length, maxSteps === 0 ? length : maxSteps));
         for (let step = 0; step < steps; step++) {
             runs.push({ frame, cycle: Math.round((step * length) / steps) });
         }
@@ -927,6 +929,7 @@ function addLocAnimationFrames(
     entity: LocEntity,
     locType: LocType,
     smoothAnimations: boolean,
+    maxSteps: number,
 ): AnimationFrames | undefined {
     const seqType = locModelLoader.seqTypeLoader.load(entity.seqId);
     // [keyframe, cycles into it] per baked frame; skeletal seqs already bake every cycle.
@@ -940,7 +943,7 @@ function addLocAnimationFrames(
             return undefined;
         }
         if (smoothAnimations && !EXCLUDED_SEQUENCES.has(seqType.id)) {
-            bakes = smoothedFrameRuns(locModelLoader, seqType);
+            bakes = smoothedFrameRuns(locModelLoader, seqType, maxSteps);
             frameStarts = [];
             bakes.forEach((bake, index) => {
                 if (bake.cycle === 0) frameStarts![bake.frame] = index;
@@ -966,6 +969,7 @@ function addLocAnimationFrames(
             bakes[i].frame,
             undefined,
             bakes[i].cycle,
+            frameStarts !== undefined,
         );
         if (model) {
             frames[i] = sceneBuf.addModelAnimFrame(model, false, undefined, doubleSided, locType.id);
@@ -996,6 +1000,7 @@ export function addLocEntities(
     sceneBuf: SceneBuffer,
     locEntities: SceneLocEntity[],
     smoothAnimations: boolean = false,
+    maxSteps: number = SMOOTHED_STEPS_PER_FRAME,
 ): Iterable<LocAnimatedGroup> {
     const locAnimatedGroupMap = new Map<number, LocAnimatedGroup>();
 
@@ -1111,6 +1116,7 @@ export function addLocEntities(
                     entity,
                     locType,
                     smoothAnimations,
+                    maxSteps,
                 );
                 if (!anim) {
                     continue;
@@ -1367,6 +1373,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             loadNpcs,
             smoothTerrain,
             smoothLocAnimations = false,
+            smoothLocAnimationSteps = SMOOTHED_STEPS_PER_FRAME,
             minimizeDrawCalls,
             doorOnly = false,
             locOnly = false,
@@ -1700,6 +1707,7 @@ export class SdMapDataLoader implements RenderDataLoader<SdMapLoaderInput, SdMap
             locSceneBuf,
             locEntities,
             smoothLocAnimations,
+            smoothLocAnimationSteps,
         );
 
         if (!shouldLoadDoorOnly) {

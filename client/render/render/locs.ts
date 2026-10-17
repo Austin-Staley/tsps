@@ -415,7 +415,8 @@ export function getExtraLocsForMap(host: WebGLOsrsRendererHost,
  * the loaded scenery. The first call only records the state the loaded squares were built with.
  */
 export function syncLocAnimationSmoothing(host: WebGLOsrsRendererHost): void {
-        const smooth = host.osrsClient.animationSmoothingPlugin?.smoothsObjects() === true;
+        const settings = host.osrsClient.animationSmoothingPlugin?.objectSettings();
+        const smooth = settings?.smoothLocAnimations ? settings.smoothLocAnimationSteps : -1;
         if (host.smoothLocAnimations === smooth) return;
         const first = host.smoothLocAnimations === undefined;
         host.smoothLocAnimations = smooth;

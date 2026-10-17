@@ -84,7 +84,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
 
     private world?: WorldResources;
     /** Animation Smoothing state the loaded scenery was baked with (syncLocAnimationSmoothing). */
-    private smoothLocAnimations?: boolean;
+    private smoothLocAnimations?: number;
     /** This frame's roof limit and culling inputs, reused by scene and shadow draws. */
     private frameRoofPlaneLimit = 3;
     private frameScenery?: SceneryDrawContext;
@@ -310,7 +310,8 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
      * rebuilds the loaded scenery. The first call only records the state they were built with.
      */
     private syncLocAnimationSmoothing(): void {
-        const smooth = this.osrsClient.animationSmoothingPlugin?.smoothsObjects() === true;
+        const settings = this.osrsClient.animationSmoothingPlugin?.objectSettings();
+        const smooth = settings?.smoothLocAnimations ? settings.smoothLocAnimationSteps : -1;
         if (this.smoothLocAnimations === smooth) return;
         const first = this.smoothLocAnimations === undefined;
         this.smoothLocAnimations = smooth;
@@ -344,7 +345,7 @@ export class WebGPURenderer extends GameRenderer<WebGPUMapSquare> {
             maxLevel: Math.max(0, Math.min(Scene.MAX_LEVELS - 1, Scene.MAX_LEVELS - 1)),
             loadNpcs: false,
             smoothTerrain: true,
-            smoothLocAnimations: this.osrsClient.animationSmoothingPlugin?.smoothsObjects() === true,
+            ...this.osrsClient.animationSmoothingPlugin?.objectSettings(),
             minimizeDrawCalls: true,
             loadedTextureIds: this.world?.loadedTextureIds ?? new Set<number>(),
             locOverrides: this.locOverrides,

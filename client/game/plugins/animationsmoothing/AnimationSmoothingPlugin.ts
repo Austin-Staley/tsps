@@ -1,3 +1,5 @@
+import { inject } from "@runelite/client/plugins/PluginInjector";
+import { AnimationSmoothingConfig } from "./AnimationSmoothingConfig";
 import { Plugin, type PluginDescriptor } from "@runelite/client/plugins/Plugin";
 
 import { EXCLUDED_NPC_IDLES, EXCLUDED_SEQUENCES } from "./exclusions";
@@ -18,24 +20,35 @@ export class AnimationSmoothingPlugin extends Plugin {
         configKey: "animationsmoothingplugin",
     };
 
+    static config = AnimationSmoothingConfig;
+    private readonly config = inject(AnimationSmoothingConfig);
+
+    objectSettings(): { smoothLocAnimations: boolean; smoothLocAnimationSteps: number } {
+        const quality = this.config.sceneryQuality();
+        return {
+            smoothLocAnimations: this.smoothsObjects(),
+            smoothLocAnimationSteps: quality === 0 || quality === 8 ? quality : 4,
+        };
+    }
+
     /** Whether a player's animation (action or movement) is blended. */
     smoothsPlayer(seqId: number): boolean {
-        return this.isEnabled() && !EXCLUDED_SEQUENCES.has(seqId);
+        return this.isEnabled() && this.config.players() && !EXCLUDED_SEQUENCES.has(seqId);
     }
 
     /** Whether graphics (spotanims on actors and the ground, and projectiles) are blended. */
     smoothsGraphics(): boolean {
-        return this.isEnabled();
+        return this.isEnabled() && this.config.graphics();
     }
 
     /** Whether scenery animations are baked blended (read when a map square is built). */
     smoothsObjects(): boolean {
-        return this.isEnabled();
+        return this.isEnabled() && this.config.objects();
     }
 
     /** Whether an NPC's animation is blended; `action` is false for its movement/idle pose. */
     smoothsNpc(npcTypeId: number, seqId: number, action: boolean): boolean {
-        if (!this.isEnabled() || EXCLUDED_SEQUENCES.has(seqId)) return false;
+        if (!this.isEnabled() || !this.config.npcs() || EXCLUDED_SEQUENCES.has(seqId)) return false;
         return action || !EXCLUDED_NPC_IDLES.has(npcTypeId);
     }
 }

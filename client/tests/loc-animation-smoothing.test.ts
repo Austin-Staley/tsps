@@ -1,3 +1,4 @@
+import { nextSequenceFrame } from "../rs/model/seq/FrameInterpolation";
 import { strict as assert } from "node:assert";
 
 import { LocAnimated } from "../render/loc/LocAnimated";
@@ -62,10 +63,10 @@ const state: any = {
     minimapImageRenderer: { renderMinimap: () => undefined, renderMinimapHd: () => undefined },
 };
 
-async function flagAnim(smooth: boolean) {
+async function flagAnim(smooth: boolean, steps = 4) {
     const result: any = await new SdMapDataLoader().load(state, {
         mapX: 50, mapY: 50, maxLevel: 3, loadNpcs: false, smoothTerrain: true, minimizeDrawCalls: true,
-        loadedTextureIds: new Set<number>(), smoothLocAnimations: smooth,
+        loadedTextureIds: new Set<number>(), smoothLocAnimations: smooth, smoothLocAnimationSteps: steps,
     });
     const flag = result.data.locsAnimated.find((l: any) => l.locId === 5628);
     assert.ok(flag, "flag at 3211, 3225");
@@ -80,7 +81,7 @@ async function flagAnim(smooth: boolean) {
     const on = await flagAnim(true);
     const seq1730 = state.seqTypeLoader.load(1730);
     const expected = seq1730.frameIds.map((_: number, i: number) =>
-        i + 1 < seq1730.frameIds.length
+        nextSequenceFrame(seq1730, i, "object") !== undefined
             ? Math.max(1, Math.min(seq1730.getFrameLength(state.seqFrameLoader, i), 4))
             : 1,
     );
@@ -90,6 +91,15 @@ async function flagAnim(smooth: boolean) {
     // A blended step is new geometry, not a copy of its keyframe.
     assert.notEqual(on.frames[1][0], on.frames[0][0]);
 
+    const high = await flagAnim(true, 8);
+    const maximum = await flagAnim(true, 0);
+    const expectedCount = (steps: number) => seq1730.frameIds.reduce((n: number, _: number, i: number) => {
+        const length = nextSequenceFrame(seq1730, i, "object") === undefined ? 1 : seq1730.getFrameLength(state.seqFrameLoader, i);
+        return n + Math.max(1, Math.min(length, steps || length));
+    }, 0);
+    assert.equal(high.frames.length, expectedCount(8));
+    assert.equal(maximum.frames.length, expectedCount(0));
+    assert.ok(maximum.frames.length >= on.frames.length);
     console.log("loc animation smoothing tests passed");
     process.exit(0);
 })();

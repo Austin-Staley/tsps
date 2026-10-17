@@ -568,7 +568,7 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
 
     smoothTerrain: boolean = false;
     /** Animation Smoothing state the loaded scenery was baked with (render/render/locs.ts). */
-    smoothLocAnimations?: boolean;
+    smoothLocAnimations?: number;
 
     cullBackFace: boolean = true;
 
@@ -1355,7 +1355,7 @@ export class WebGLOsrsRenderer extends GameRenderer<WebGLMapSquare> {
 
     /** Animation smoothing draws this NPC via the unbatched path, not the map's baked frames. */
     public isNpcSmoothed(ecsId: number): boolean {
-        return render.npcSmoothingCycle(this, ecsId) >= 0;
+        return render.isNpcAnimationSmoothed(this, ecsId);
     }
 
     initFramebuffers(): void {
