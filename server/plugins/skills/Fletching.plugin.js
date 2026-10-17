@@ -19,8 +19,6 @@ const TICKS_ARROWS_AND_DARTS = 2;
 const TICKS_FEATHER_BOLTS = 1;
 const CREATION_ALL_SENTINEL = 28;
 
-let fletchingTick = 0;
-
 function itemId(name) {
   const id = ItemIds[name];
   return Number.isInteger(id) ? id : null;
@@ -531,10 +529,12 @@ function getFletchingLevel(player) {
 }
 
 function stopFletchingSession(activeSessions, player, resetAnimation = true) {
-  if (!activeSessions.has(player)) {
+  const task = activeSessions.get(player);
+  if (!task) {
     return;
   }
   activeSessions.delete(player);
+  task.stop();
   if (resetAnimation) {
     player.performAnimation(Animation.DEFAULT_RESET_ANIMATION);
   }
@@ -623,13 +623,9 @@ function startFletchingSession(activeSessions, player, recipe, requestedAmount) 
   }
 
   stopFletchingSession(activeSessions, player, false);
-  activeSessions.set(player, {
-    recipe,
-    remaining: targetAmount,
-    interval: recipe.intervalTicks,
-    nextActionTick: fletchingTick + recipe.intervalTicks,
-    location: player.getLocation().clone(),
-  });
+  const task = new FletchingTask(activeSessions, player, recipe, targetAmount);
+  activeSessions.set(player, task);
+  TaskManager.submit(task);
 
   player.performAnimation(recipe.animation);
 
@@ -668,49 +664,49 @@ function sendCreationMenuForRecipes(activeSessions, player, title, recipes) {
   return true;
 }
 
+// Keyed to the player, so their next walk or interaction cancels it (walkToReset). Moving
+// does not: live OSRS keeps fletching while the player walks or runs.
 class FletchingTask extends Task {
-  constructor(activeSessions) {
-    super(1);
+  constructor(activeSessions, player, recipe, remaining) {
+    super(1, player.getIndex(), false);
     this.activeSessions = activeSessions;
-    this.cycle = 0;
+    this.player = player;
+    this.recipe = recipe;
+    this.remaining = remaining;
+    this.ticksUntilAction = recipe.intervalTicks;
+  }
+
+  stop() {
+    super.stop();
+    if (this.activeSessions.get(this.player) === this) {
+      this.activeSessions.delete(this.player);
+    }
   }
 
   execute() {
-    this.cycle++;
-    fletchingTick = this.cycle;
+    const { player, recipe } = this;
+    if (!player.isRegistered?.() || player.getHitpoints() <= 0) {
+      this.stop();
+      return;
+    }
 
-    for (const [player, session] of this.activeSessions) {
-      if (!player || !player.isRegistered?.() || player.getHitpoints() <= 0) {
-        this.activeSessions.delete(player);
-        continue;
-      }
+    if (player.getForceMovement() != null) {
+      stopFletchingSession(this.activeSessions, player);
+      return;
+    }
 
-      if (!player.getLocation().equals(session.location) ||
-          player.getMovementQueue().size() > 0 || player.getForceMovement() != null) {
-        stopFletchingSession(this.activeSessions, player);
-        continue;
-      }
+    if (--this.ticksUntilAction > 0) {
+      return;
+    }
+    this.ticksUntilAction = recipe.intervalTicks - fletchingKnifeBonus(player, recipe);
 
-      if (!Number.isInteger(session.remaining) || session.remaining <= 0) {
-        stopFletchingSession(this.activeSessions, player, false);
-        continue;
-      }
+    if (!performFletchingAction(player, recipe)) {
+      stopFletchingSession(this.activeSessions, player);
+      return;
+    }
 
-      if (this.cycle < session.nextActionTick) {
-        continue;
-      }
-
-      session.nextActionTick = this.cycle + session.interval - fletchingKnifeBonus(player, session.recipe);
-
-      if (!performFletchingAction(player, session.recipe)) {
-        stopFletchingSession(this.activeSessions, player);
-        continue;
-      }
-
-      session.remaining--;
-      if (session.remaining <= 0) {
-        stopFletchingSession(this.activeSessions, player, false);
-      }
+    if (--this.remaining <= 0) {
+      stopFletchingSession(this.activeSessions, player, false);
     }
   }
 }
@@ -798,7 +794,6 @@ module.exports = {
   register(api) {
     TaskManager = api.getTaskManager();
     const activeSessions = new Map();
-    TaskManager.submit(new FletchingTask(activeSessions));
 
     api.onPlayerDisconnect(({ player }) => {
       stopFletchingSession(activeSessions, player, false);
