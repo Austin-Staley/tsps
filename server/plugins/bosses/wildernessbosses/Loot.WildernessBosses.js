@@ -7,8 +7,8 @@
  * - Uniques are decided per kill: one roll of the unique table, given to one of those players
  *   chosen by share. The pet is rolled for each of them, as likely as their share.
  * - The top damager gets big bones and the entry fee discount; the others bones.
- * - Everyone rewarded has their kill count told ("Your Artio kill count is: N.", captured with
- *   the discount message before the drop messages, four ticks into the death).
+ * - Everyone rewarded gets the kill and is told the count ("Your Artio kill count is: N.", captured
+ *   with the discount message before the drop messages, four ticks into the death).
  *
  * The damage is read before the death clears it (onNpcBeforeDeath), and the kill is taken over
  * from NpcDrops through "npc-drops:claim".
@@ -107,12 +107,28 @@ function announce(lair, player, drop) {
   for (const other of listeners.length > 0 ? listeners : [player]) other.sendMessage(text);
 }
 
+function tellKillCount(player, lair, kills) {
+  player.sendMessage(`Your ${lair.boss} kill count is: <col=ff0000>${kills}</col>.`);
+}
+
+/**
+ * One more kill for everyone rewarded. The main bosses' counts are Combat Achievements' (which
+ * tells the count before any task it finishes); a singles boss keeps its own, and its kill counts
+ * for its main boss's Combat Achievements too (Wiki).
+ */
 function addKill(player, lair) {
+  if (!lair.killVarp) {
+    api.emitCustomEvent("combat-achievements:kill", {
+      player, monster: lair.monster, announce: (kills) => tellKillCount(player, lair, kills),
+    });
+    return;
+  }
   const all = { ...(player.getAttribute(Common.KILLS_ATTRIBUTE) ?? {}) };
   all[lair.key] = (Number(all[lair.key]) || 0) + 1;
   player.setAttribute(Common.KILLS_ATTRIBUTE, all);
-  if (lair.killVarp) player.getPacketSender().sendConfig(lair.killVarp, all[lair.key]);
-  player.sendMessage(`Your ${lair.boss} kill count is: <col=ff0000>${all[lair.key]}</col>.`);
+  player.getPacketSender().sendConfig(lair.killVarp, all[lair.key]);
+  tellKillCount(player, lair, all[lair.key]);
+  api.emitCustomEvent("combat-achievements:kill", { player, monster: lair.monster });
 }
 
 /** Before the death clears the damage record: who hit it, and how hard. */

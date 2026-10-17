@@ -5,10 +5,9 @@
  */
 const Common = require("./Common.WildernessBosses");
 
-/** The six lair bosses and Scorpia. */
-const BOSS_IDS = new Set([...Common.LAIRS.flatMap((lair) => lair.bossIds), 6615]);
-
 let core = null;
+/** The six lair bosses and Scorpia. */
+let BOSS_IDS = new Set();
 
 function toEntrance({ player, parts }) {
   const lair = Common.LAIR_BY_KEY.get(String(parts[1] ?? "").toLowerCase());
@@ -44,8 +43,11 @@ function bossHitpoints({ player, parts }) {
   return true;
 }
 
-module.exports = function attachCommands(api) {
+function attach(api) {
   core = api.core;
+  BOSS_IDS = new Set([...Common.LAIRS.flatMap((lair) => lair.bossIds), core.NpcIdentifiers.SCORPIA]);
   api.registerCommand("wildboss", toEntrance, api.core.PlayerRights.OWNER, "Go to a Wilderness boss lair's entrance: ::wildboss <boss>");
   api.registerCommand("wildbosshp", bossHitpoints, api.core.PlayerRights.OWNER, "Set the boss of your Wilderness lair to a share of its life: ::wildbosshp <percent>");
-};
+}
+
+module.exports = { attach };

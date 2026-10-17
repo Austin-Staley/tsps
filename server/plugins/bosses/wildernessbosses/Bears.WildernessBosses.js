@@ -9,8 +9,8 @@
  *   17, blocked by Protect from Missiles), landing as the projectile does. Five ticks.
  * - The knockback orb (attack_magic01, windblast) every 8-12 attacks: unless Protect from Magic
  *   is on when it lands, everyone within a tile of the target is thrown 3 tiles away from the
- *   bear, taking 5 damage, and 15 more for each tile a wall or a trap stopped them short. Eight
- *   ticks.
+ *   bear, taking 5 damage, and 15 more for each tile a wall stopped them short; a trap that stops
+ *   them deals the 5 and springs on them (Wiki). Eight ticks.
  * - At 66% and 33% of its hitpoints it roars (enraged01) the tick after the hit that crossed,
  *   shaking off a freeze, and from then on lays five bear traps every 6 ticks across the lair.
  * - The first freeze always lands when it isn't frozen (Wiki); it can be frozen despite its
@@ -69,10 +69,6 @@ let api = null;
 let core = null;
 let PrayerHandler = null;
 
-function randomBetween(min, max) {
-  return min + Math.floor(Math.random() * (max - min + 1));
-}
-
 function bearOf(npc) {
   return BEARS[npc?.getId?.()] ?? null;
 }
@@ -87,38 +83,17 @@ function centre(npc, bear) {
   return { x: base.getX() + half, y: base.getY() + half, z: base.getZ() };
 }
 
-/** Edge distance from the bear's body to a tile (0 under it, 1 next to it, diagonals too). */
-function edgeDistance(npc, bear, x, y) {
-  const base = npc.getLocation();
-  const maxX = base.getX() + sizeOf(bear) - 1;
-  const maxY = base.getY() + sizeOf(bear) - 1;
-  const dx = x < base.getX() ? base.getX() - x : x > maxX ? x - maxX : 0;
-  const dy = y < base.getY() ? base.getY() - y : y > maxY ? y - maxY : 0;
-  return Math.max(dx, dy);
-}
-
 function canMelee(npc, bear, target) {
   const at = target.getLocation();
-  return at.getZ() === npc.getLocation().getZ() && edgeDistance(npc, bear, at.getX(), at.getY()) === 1;
+  return at.getZ() === npc.getLocation().getZ() && Common.edgeDistance(npc, at.getX(), at.getY()) === 1;
 }
 
 function protects(player, prayer) {
   return PrayerHandler.isActivated(player, prayer);
 }
 
-function alive(mobile) {
-  return mobile?.isRegistered?.() && mobile.getHitpoints() > 0;
-}
-
 function hit(player, damage) {
   player.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(damage, damage > 0 ? core.HitMask.RED : core.HitMask.BLUE)]);
-}
-
-/** The bear's damage, counted as the bear's (retaliation, the damage record). */
-function bearHit(npc, method, player, damage, delay) {
-  const pending = new core.PendingHit(npc, player, method, { delay, rollAccuracy: false });
-  pending.setTotalDamage(damage);
-  core.CombatFactory.addPendingHit(pending);
 }
 
 function lairOf(bear) {
@@ -126,7 +101,7 @@ function lairOf(bear) {
 }
 
 function lairPlayers(bear) {
-  return Caves.playersIn(bear.key).filter((player) => alive(player));
+  return Caves.playersIn(bear.key).filter(Common.alive);
 }
 
 // ------------------------------------------------------------------ attacks
@@ -140,9 +115,9 @@ function melee(npc, bear, method, target) {
   });
   if (!struck.includes(target) && target.isPlayer()) struck.push(target);
   for (const player of struck) {
-    const rolled = randomBetween(bear.meleeMin, bear.meleeMax);
+    const rolled = Common.randomBetween(bear.meleeMin, bear.meleeMax);
     const damage = protects(player, PrayerHandler.PROTECT_FROM_MELEE) ? Math.floor(rolled / 2) : rolled;
-    bearHit(npc, method, player, damage, 0);
+    Common.bossHit(npc, method, player, damage, 0);
   }
 }
 
@@ -168,8 +143,8 @@ function ranged(npc, bear, method) {
     projectileTo(npc, bear, player, RANGED, end);
     player.performGraphic(new core.Graphic(RANGED.impactGraphic, end));
     player.getPacketSender().sendSoundEffect(RANGED.impactSound, 1, end);
-    const damage = protects(player, PrayerHandler.PROTECT_FROM_MISSILES) ? 0 : randomBetween(0, bear.rangedMax);
-    bearHit(npc, method, player, damage, Math.max(0, Math.floor(end / 30) - 1));
+    const damage = protects(player, PrayerHandler.PROTECT_FROM_MISSILES) ? 0 : Common.randomBetween(0, bear.rangedMax);
+    Common.bossHit(npc, method, player, damage, Math.max(0, Math.floor(end / 30) - 1));
   }
 }
 
@@ -201,7 +176,7 @@ function knockBack(npc, bear, player) {
   player.performAnimation(new core.Animation(KNOCKBACK.animation, 20));
   for (const sound of KNOCKBACK.sounds) player.getPacketSender().sendSoundEffect(sound, 1, 0);
   const damage = trapped ? KNOCKBACK.baseDamage : KNOCKBACK.baseDamage + KNOCKBACK.perBlockedTile * (KNOCKBACK.tiles - moved);
-  Common.later(KNOCKBACK.damageAfterTicks, () => alive(player) && hit(player, damage), player);
+  Common.later(KNOCKBACK.damageAfterTicks, () => Common.alive(player) && hit(player, damage), player);
 }
 
 /** Captured: the orb flies 60 + 12 per tile and lands floor(end / 30) ticks later. */
@@ -210,7 +185,7 @@ function orb(npc, bear, target) {
   const end = ORB.start + 12 * distanceFromCentre(npc, bear, target);
   projectileTo(npc, bear, target, ORB, end);
   Common.later(Math.floor(end / 30), () => {
-    if (!alive(npc) || !alive(target)) return;
+    if (!Common.alive(npc) || !Common.alive(target)) return;
     const at = target.getLocation();
     for (const player of lairPlayers(bear)) {
       const where = player.getLocation();
@@ -233,7 +208,7 @@ function checkRoar(npc, bear, incoming) {
 }
 
 function roar(npc, bear) {
-  if (!alive(npc)) return;
+  if (!Common.alive(npc)) return;
   npc.performAnimation(new core.Animation(ANIMATION.roar));
   npc.performGraphic(new core.Graphic(bear.roarGraphic));
   npc.getTimers().cancel(core.TimerKey.FREEZE);
@@ -256,7 +231,7 @@ function combatClass() {
       npc.setAttribute(ATTACKS_ATTRIBUTE, attacks);
       npc.setPositionToFace(target.getLocation());
       if (attacks >= (Number(npc.getAttribute(NEXT_ORB_ATTRIBUTE)) || ORB_EVERY.max)) {
-        npc.setAttribute(NEXT_ORB_ATTRIBUTE, attacks + randomBetween(ORB_EVERY.min, ORB_EVERY.max));
+        npc.setAttribute(NEXT_ORB_ATTRIBUTE, attacks + Common.randomBetween(ORB_EVERY.min, ORB_EVERY.max));
         orb(npc, bear, target);
         character.getCombat().setAttackDelay(SPEED.magic);
       } else if (canMelee(npc, bear, target)) {
@@ -318,12 +293,21 @@ function spawned(npc) {
   if (!bear) return;
   npc.setAttribute(PHASE_ATTRIBUTE, 0);
   npc.setAttribute(ATTACKS_ATTRIBUTE, 0);
-  npc.setAttribute(NEXT_ORB_ATTRIBUTE, randomBetween(ORB_EVERY.min, ORB_EVERY.max));
+  npc.setAttribute(NEXT_ORB_ATTRIBUTE, Common.randomBetween(ORB_EVERY.min, ORB_EVERY.max));
   npc.setFlag("combat:close-in");
   npc.setFlag("combat:freezable");
   npc.setFlag("combat:no-regen");
   npc.performAnimation(new core.Animation(ANIMATION.spawn));
   npc.getCombat().setAttackDelay(FIRST_ATTACK_TICKS);
+  Traps.clear(bear.key, false);
+}
+
+/** An abandoned fight (Caves): its traps go and it starts over at its first phase. */
+function reset(npc) {
+  const bear = bearOf(npc);
+  if (!bear) return;
+  npc.setAttribute(PHASE_ATTRIBUTE, 0);
+  npc.setAttribute(ATTACKS_ATTRIBUTE, 0);
   Traps.clear(bear.key, false);
 }
 
@@ -340,7 +324,7 @@ function attach(pluginApi) {
   pluginApi.onNpcHitModify(hitModify);
   pluginApi.onCombatHitRoll(hitRoll);
   pluginApi.onNpcBeforeDeath(died);
-  for (const bear of Object.values(BEARS)) Common.FIGHTS.set(bear.key, { spawned, playerTick: Traps.playerTick });
+  for (const bear of Object.values(BEARS)) Common.FIGHTS.set(bear.key, { spawned, reset, playerTick: Traps.playerTick });
 }
 
-module.exports = { attach, _test: { BEARS, edgeDistance, awayStep, checkRoar, lairOf } };
+module.exports = { attach, _test: { BEARS, awayStep, checkRoar, lairOf } };

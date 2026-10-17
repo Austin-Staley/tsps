@@ -13,6 +13,9 @@
     "Fortis Colosseum",
     "Doom of Mokhaiotl", "Araxxor",
     "Skotizo",
+    "Callisto",
+    "Venenatis",
+    "Vet'ion",
     "Moons of Peril",
     "Royal Titans",
     "Chambers of Xeric",
@@ -29,18 +32,6 @@
   "npcs": {
     "Grotesque Guardians": [
       "Dusk"
-    ],
-    "Callisto": [
-      "Callisto",
-      "Artio"
-    ],
-    "Venenatis": [
-      "Venenatis",
-      "Spindel"
-    ],
-    "Vet'ion": [
-      "Vet'ion",
-      "Calvar'ion"
     ]
   },
   "collectionLog": {

@@ -10,18 +10,13 @@ export class Wilderness {
         [2944, 3391, 3520, 4351],
         [2944, 3455, 9920, 10879],
     ];
-    // [minX, maxX, minY, maxY, level] - the Wilderness boss caves, which script 384 levels
-    // before the strips above: Callisto's Den, Vet'ion's Rest, the Silk Chasm and the three
-    // singles lairs. The Escape Caves rise 33 to 40 with y (ESCAPE_CAVES).
-    private static readonly FIXED_LEVEL_AREAS = [
-        [3264, 3327, 10176, 10239, 35],
-        [3392, 3455, 10176, 10239, 35],
-        [3328, 3391, 10304, 10367, 40],
-        [1728, 1791, 11520, 11583, 21],
-        [1856, 1919, 11520, 11583, 21],
-        [1600, 1663, 11520, 11583, 29],
-    ];
-    private static readonly ESCAPE_CAVES = [3328, 3391, 10240, 10303];
+    /** Plugin-given levels (e.g. the Wilderness boss caves), asked before the strips above. */
+    private static readonly levelSources = new Map<string, (x: number, y: number) => number | null>();
+
+    /** Gives the level of some tiles: `source` answers a level, or null to pass. A reload replaces it by name. */
+    public static setLevelSource(name: string, source: (x: number, y: number) => number | null): void {
+        Wilderness.levelSources.set(name, source);
+    }
 
     public static isInSafeBuilding(location: Location | null | undefined): boolean {
         return !!location && WORLD_ZONE_BOUNDARIES["all-buildings-safe"].some((boundary) => boundary.inside(location)) &&
@@ -56,15 +51,11 @@ export class Wilderness {
      * not inherit a level from its y.
      */
     public static levelAt(x: number, y: number): number {
-        for (const [minX, maxX, minY, maxY, level] of Wilderness.FIXED_LEVEL_AREAS) {
-            if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
+        for (const source of Wilderness.levelSources.values()) {
+            const level = source(x, y);
+            if (level != null) {
                 return level;
             }
-        }
-        const [escapeMinX, escapeMaxX, escapeMinY, escapeMaxY] = Wilderness.ESCAPE_CAVES;
-        if (x >= escapeMinX && x <= escapeMaxX && y >= escapeMinY && y <= escapeMaxY) {
-            // Script 384: 33 + scale(y % 64 - 6, 50, 7), an integer division.
-            return 33 + Math.trunc(((y % 64) - 6) * 7 / 50);
         }
         for (const [minX, maxX, minY, maxY] of Wilderness.LEVELLED_AREAS) {
             if (x >= minX && x <= maxX && y >= minY && y <= maxY) {

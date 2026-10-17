@@ -17,8 +17,6 @@
 const Common = require("./Common.WildernessBosses");
 const Caves = require("./Caves.WildernessBosses");
 
-const SIZE = 4;
-
 const SPIDERS = Object.freeze({
   6610: Object.freeze({ key: "venenatis", spiderling: 12000, melee: 21, ranged: 35, magic: 30 }),
   11998: Object.freeze({ key: "spindel", spiderling: 12001, melee: 14, ranged: 31, magic: 24 }),
@@ -77,16 +75,8 @@ const webs = new Map();
 /** player -> lair key whose web drained them last tick (one message a visit) */
 const caught = new WeakMap();
 
-function randomBetween(min, max) {
-  return min + Math.floor(Math.random() * (max - min + 1));
-}
-
 function spiderOf(npc) {
   return SPIDERS[npc?.getRealId?.()] ?? null;
-}
-
-function alive(mobile) {
-  return mobile?.isRegistered?.() && mobile.getHitpoints() > 0;
 }
 
 function broodOf(npc) {
@@ -95,7 +85,7 @@ function broodOf(npc) {
     brood = { spiderlings: [] };
     broods.set(npc, brood);
   }
-  brood.spiderlings = brood.spiderlings.filter(alive);
+  brood.spiderlings = brood.spiderlings.filter(Common.alive);
   return brood;
 }
 
@@ -105,25 +95,8 @@ function centre(npc) {
   return { x: base.getX() + 2, y: base.getY() + 2, z: base.getZ() };
 }
 
-function edgeDistance(npc, x, y) {
-  const base = npc.getLocation();
-  const dx = x < base.getX() ? base.getX() - x : x > base.getX() + SIZE - 1 ? x - (base.getX() + SIZE - 1) : 0;
-  const dy = y < base.getY() ? base.getY() - y : y > base.getY() + SIZE - 1 ? y - (base.getY() + SIZE - 1) : 0;
-  return Math.max(dx, dy);
-}
-
-function open(x, y, z) {
-  return !core.RegionManager.blocked(new core.Location(x, y, z), null);
-}
-
 function prayerBlocks(player, prayer, npc) {
   return PrayerHandler.isActivated(player, prayer) && broodOf(npc).spiderlings.length === 0;
-}
-
-function spiderHit(npc, method, player, damage, delay) {
-  const pending = new core.PendingHit(npc, player, method, { delay, rollAccuracy: false });
-  pending.setTotalDamage(damage);
-  core.CombatFactory.addPendingHit(pending);
 }
 
 // ------------------------------------------------------------------ attacks
@@ -140,23 +113,23 @@ function shoot(npc, method, spider, target, kind) {
     .withSource(npc).withAngle(SHOT_SHAPE.angle).withProgress(SHOT_SHAPE.progress).sendProjectile();
   target.performGraphic(new core.Graphic(shot.impact, end, shot.impactHeight));
   const prayer = kind === "ranged" ? PrayerHandler.PROTECT_FROM_MISSILES : PrayerHandler.PROTECT_FROM_MAGIC;
-  const damage = prayerBlocks(target, prayer, npc) ? 0 : randomBetween(0, spider[kind]);
-  spiderHit(npc, method, target, damage, Math.max(0, Math.floor(end / 30) - 1));
+  const damage = prayerBlocks(target, prayer, npc) ? 0 : Common.randomBetween(0, spider[kind]);
+  Common.bossHit(npc, method, target, damage, Math.max(0, Math.floor(end / 30) - 1));
 }
 
 function bite(npc, method, spider, target) {
   npc.performAnimation(new core.Animation(ANIMATION.melee));
-  const damage = prayerBlocks(target, PrayerHandler.PROTECT_FROM_MELEE, npc) ? 0 : randomBetween(0, spider.melee);
-  spiderHit(npc, method, target, damage, 0);
+  const damage = prayerBlocks(target, PrayerHandler.PROTECT_FROM_MELEE, npc) ? 0 : Common.randomBetween(0, spider.melee);
+  Common.bossHit(npc, method, target, damage, 0);
 }
 
 /** A few tiles to one side, every fourth attack (Wiki). */
 function shuffle(npc) {
   const base = npc.getLocation();
   for (let tries = 0; tries < 10; tries++) {
-    const x = base.getX() + randomBetween(-MOVE_RANGE, MOVE_RANGE);
-    const y = base.getY() + randomBetween(-MOVE_RANGE, MOVE_RANGE);
-    if ((x === base.getX() && y === base.getY()) || !open(x, y, base.getZ())) continue;
+    const x = base.getX() + Common.randomBetween(-MOVE_RANGE, MOVE_RANGE);
+    const y = base.getY() + Common.randomBetween(-MOVE_RANGE, MOVE_RANGE);
+    if ((x === base.getX() && y === base.getY()) || !Common.open(x, y, base.getZ())) continue;
     npc.getMovementQueue().addFirstStep(new core.Location(x, y, base.getZ()));
     return;
   }
@@ -164,13 +137,15 @@ function shuffle(npc) {
 
 // ------------------------------------------------------------------ spiderlings
 
+/** Up to two at a time: a call only tops the brood up (the Wiki gives no larger number). */
 function callSpiderlings(npc, spider, target) {
   const brood = broodOf(npc);
   const from = centre(npc);
-  for (let i = 0, tries = 0; i < SPIDERLINGS && tries < 100; tries++) {
-    const x = from.x + randomBetween(-SPIDERLING_RANGE, SPIDERLING_RANGE);
-    const y = from.y + randomBetween(-SPIDERLING_RANGE, SPIDERLING_RANGE);
-    if (!open(x, y, from.z) || edgeDistance(npc, x, y) < 1) continue;
+  const wanted = SPIDERLINGS - brood.spiderlings.length;
+  for (let i = 0, tries = 0; i < wanted && tries < 100; tries++) {
+    const x = from.x + Common.randomBetween(-SPIDERLING_RANGE, SPIDERLING_RANGE);
+    const y = from.y + Common.randomBetween(-SPIDERLING_RANGE, SPIDERLING_RANGE);
+    if (!Common.open(x, y, from.z) || Common.edgeDistance(npc, x, y) < 1) continue;
     const spiderling = core.NPC.create(spider.spiderling, new core.Location(x, y, from.z));
     spiderling.__skipDefaultRespawn = true;
     spiderling.__wildernessBoss = npc;
@@ -183,9 +158,11 @@ function callSpiderlings(npc, spider, target) {
   }
 }
 
-function dismissBrood(npc) {
+/** With her, the spiderlings die; an abandoned fight just takes them away. */
+function dismissBrood(npc, die = true) {
   for (const spiderling of broodOf(npc).spiderlings) {
-    spiderling.setHitpoints(0);
+    if (die) spiderling.setHitpoints(0);
+    else core.World.getRemoveNPCQueue().push(spiderling);
   }
 }
 
@@ -228,7 +205,7 @@ function spreadWeb(spider, land) {
   for (const [dx, dy, piece, rotation] of WEB_PATTERN) {
     const x = land.getX() + dx;
     const y = land.getY() + dy;
-    if (!open(x, y, land.getZ())) continue;
+    if (!Common.open(x, y, land.getZ())) continue;
     const key = `${x},${y}`;
     const old = map.get(key);
     if (old) api.getObjectManager().deregister(old.object, true);
@@ -283,7 +260,7 @@ function combatClass() {
       npc.setPositionToFace(target.getLocation());
       character.getCombat().setAttackDelay(SPEED);
       const at = target.getLocation();
-      if (edgeDistance(npc, at.getX(), at.getY()) === 1) {
+      if (Common.edgeDistance(npc, at.getX(), at.getY()) === 1) {
         bite(npc, this, spider, target);
         return;
       }
@@ -308,10 +285,20 @@ function combatClass() {
     type() {
       const npc = this.npc;
       const target = npc?.getCombat?.().getTarget?.() ?? null;
-      if (npc && target && edgeDistance(npc, target.getLocation().getX(), target.getLocation().getY()) === 1) return CombatType.MELEE;
+      if (npc && target && Common.edgeDistance(npc, target.getLocation().getX(), target.getLocation().getY()) === 1) return CombatType.MELEE;
       return CombatType.RANGED;
     }
   };
+}
+
+/** An abandoned fight (Caves): the spiderlings and webs go, and the cycle starts over. */
+function reset(npc) {
+  const spider = spiderOf(npc);
+  if (!spider) return;
+  dismissBrood(npc, false);
+  clearWebs(spider.key);
+  npc.setAttribute(CYCLE_ATTRIBUTE, 0);
+  npc.setAttribute(ATTACKS_ATTRIBUTE, 0);
 }
 
 function spawned(npc) {
@@ -320,7 +307,6 @@ function spawned(npc) {
   npc.setAttribute(CYCLE_ATTRIBUTE, 0);
   npc.setAttribute(ATTACKS_ATTRIBUTE, 0);
   npc.setFlag("combat:no-regen");
-  npc.setMultiCombat(true);
   npc.performAnimation(new core.Animation(ANIMATION.spawn));
   npc.getCombat().setAttackDelay(FIRST_ATTACK_TICKS);
   clearWebs(spider.key);
@@ -339,7 +325,7 @@ function attach(pluginApi) {
   pluginApi.registerNpcCombatMethodProvider(Object.keys(SPIDERS).map(Number), combatClass(), { singleton: false });
   pluginApi.onNpcBeforeDeath(beforeDeath);
   pluginApi.onCombatHitResolved(spiderlingBite);
-  for (const spider of Object.values(SPIDERS)) Common.FIGHTS.set(spider.key, { spawned, playerTick });
+  for (const spider of Object.values(SPIDERS)) Common.FIGHTS.set(spider.key, { spawned, reset, playerTick });
 }
 
-module.exports = { attach, _test: { SPIDERS, WEB_PATTERN, edgeDistance } };
+module.exports = { attach, _test: { SPIDERS, WEB_PATTERN } };

@@ -91,10 +91,6 @@ function pick(list) {
   return list[Math.floor(Math.random() * list.length)];
 }
 
-function randomBetween(min, max) {
-  return min + Math.floor(Math.random() * (max - min + 1));
-}
-
 /** By his own id: getId() answers with the form he has taken. */
 function bossOf(npc) {
   return BOSSES[npc?.getRealId?.()] ?? null;
@@ -109,17 +105,13 @@ function fightOf(npc) {
   return fight;
 }
 
-function alive(mobile) {
-  return mobile?.isRegistered?.() && mobile.getHitpoints() > 0;
-}
-
 /** A line in his voice: shouted in his second form. */
 function say(npc, fight, line) {
   npc.forceChat(fight.form === 2 ? line.toUpperCase() : line);
 }
 
 function lairPlayers(boss) {
-  return Caves.playersIn(boss.key).filter(alive);
+  return Caves.playersIn(boss.key).filter(Common.alive);
 }
 
 function toLair(boss, send) {
@@ -139,24 +131,6 @@ function chebyshev(ax, ay, bx, by) {
   return Math.max(Math.abs(ax - bx), Math.abs(ay - by));
 }
 
-/** Edge distance from his 3x3 body (0 under him). */
-function edgeDistance(npc, x, y) {
-  const base = npc.getLocation();
-  const dx = x < base.getX() ? base.getX() - x : x > base.getX() + SIZE - 1 ? x - (base.getX() + SIZE - 1) : 0;
-  const dy = y < base.getY() ? base.getY() - y : y > base.getY() + SIZE - 1 ? y - (base.getY() + SIZE - 1) : 0;
-  return Math.max(dx, dy);
-}
-
-function open(x, y, z) {
-  return !core.RegionManager.blocked(new core.Location(x, y, z), null);
-}
-
-function bossHit(npc, method, player, damage) {
-  const pending = new core.PendingHit(npc, player, method, { delay: 0, rollAccuracy: false });
-  pending.setTotalDamage(damage);
-  core.CombatFactory.addPendingHit(pending);
-}
-
 function scaled(fight, value) {
   return fight.form === 2 ? Math.round(value * SECOND_FORM_DAMAGE) : value;
 }
@@ -168,14 +142,14 @@ function boltTiles(npc, boss) {
   const from = centre(npc);
   for (const player of lairPlayers(boss).slice(0, MAX_TARGETED_BOLTS)) {
     const at = player.getLocation();
-    const x = at.getX() + randomBetween(-1, 1);
-    const y = at.getY() + randomBetween(-1, 1);
-    tiles.push(open(x, y, at.getZ()) ? new core.Location(x, y, at.getZ()) : at.clone());
+    const x = at.getX() + Common.randomBetween(-1, 1);
+    const y = at.getY() + Common.randomBetween(-1, 1);
+    tiles.push(Common.open(x, y, at.getZ()) ? new core.Location(x, y, at.getZ()) : at.clone());
   }
   for (let tries = 0, added = 0; added < RANDOM_BOLTS && tries < 100; tries++) {
-    const x = from.x + randomBetween(-BOLT_RANGE, BOLT_RANGE);
-    const y = from.y + randomBetween(-BOLT_RANGE, BOLT_RANGE);
-    if (!open(x, y, from.z)) continue;
+    const x = from.x + Common.randomBetween(-BOLT_RANGE, BOLT_RANGE);
+    const y = from.y + Common.randomBetween(-BOLT_RANGE, BOLT_RANGE);
+    if (!Common.open(x, y, from.z)) continue;
     tiles.push(new core.Location(x, y, from.z));
     added++;
   }
@@ -194,7 +168,7 @@ function strike(npc, method, boss, fight, tiles, form) {
       }
       if (nearest > 1) continue;
       const max = nearest === 0 ? boss.bolt : boss.splash;
-      bossHit(npc, method, player, randomBetween(0, form === 2 ? Math.round(max * SECOND_FORM_DAMAGE) : max));
+      Common.bossHit(npc, method, player, Common.randomBetween(0, form === 2 ? Math.round(max * SECOND_FORM_DAMAGE) : max));
     }
   }, npc);
 }
@@ -228,7 +202,7 @@ function bashTiles(npc, target) {
   const tiles = [];
   for (let x = bx - 2; x <= bx + SIZE + 1; x++) {
     for (let y = by - 2; y <= by + SIZE + 1; y++) {
-      const distance = edgeDistance(npc, x, y);
+      const distance = Common.edgeDistance(npc, x, y);
       if (distance < 1 || distance > 2) continue;
       let hit = false;
       if (shape === "ring") {
@@ -262,7 +236,7 @@ function bash(npc, method, boss, fight, target) {
     for (const player of lairPlayers(boss)) {
       const at = player.getLocation();
       if (!struck.has(`${at.getX()},${at.getY()}`)) continue;
-      bossHit(npc, method, player, randomBetween(0, scaled(fight, boss.bash)));
+      Common.bossHit(npc, method, player, Common.randomBetween(0, scaled(fight, boss.bash)));
       player.sendMessage(STAGGER_MESSAGE);
       player.getCombat().extendAttackDelay(STAGGER_TICKS);
     }
@@ -273,20 +247,20 @@ function bash(npc, method, boss, fight, target) {
 
 function callHounds(npc, boss, fight) {
   fight.houndsPending = false;
-  if (!alive(npc) || fight.reborn) return;
+  if (!Common.alive(npc) || fight.reborn) return;
   npc.performAnimation(new core.Animation(ANIMATION.hounds[fight.form - 1]));
   say(npc, fight, pick(LINES.hounds));
   const from = centre(npc);
   const players = lairPlayers(boss);
   for (let i = 0, tries = 0; i < HOUNDS && tries < 100; tries++) {
-    const x = from.x + randomBetween(-HOUND_RANGE, HOUND_RANGE);
-    const y = from.y + randomBetween(-HOUND_RANGE, HOUND_RANGE);
-    if (!open(x, y, from.z) || edgeDistance(npc, x, y) < 2) continue;
+    const x = from.x + Common.randomBetween(-HOUND_RANGE, HOUND_RANGE);
+    const y = from.y + Common.randomBetween(-HOUND_RANGE, HOUND_RANGE);
+    if (!Common.open(x, y, from.z) || Common.edgeDistance(npc, x, y) < 2) continue;
     const hound = core.NPC.create(boss.hounds[fight.form - 1], new core.Location(x, y, from.z));
     hound.__skipDefaultRespawn = true;
     hound.__wildernessBoss = npc;
     hound.getMovementCoordinator?.().setRadius?.(20);
-    // In the singles tomb too, the hounds join his fight: anyone may hit them, and they him.
+    // Always multi, so in the singles tomb too they join his fight without tying anyone up.
     hound.setMultiCombat(true);
     core.World.getAddNPCQueue().push(hound);
     fight.hounds.push(hound);
@@ -305,9 +279,9 @@ function houndDied({ npc }) {
   const boss = npc?.__wildernessBoss;
   if (!boss) return;
   const fight = fights.get(boss);
-  if (!fight || !alive(boss)) return;
+  if (!fight || !Common.alive(boss)) return;
   if (fight.hounds.some((hound) => hound !== npc && hound.isRegistered() && hound.getHitpoints() > 0)) return;
-  Common.later(1, () => alive(boss) && say(boss, fight, pick(LINES.houndsDead)), boss);
+  Common.later(1, () => Common.alive(boss) && say(boss, fight, pick(LINES.houndsDead)), boss);
 }
 
 function dismissHounds(fight) {
@@ -422,7 +396,7 @@ function combatClass() {
       }
       npc.setPositionToFace(target.getLocation());
       const at = target.getLocation();
-      if (edgeDistance(npc, at.getX(), at.getY()) === 1 && Math.random() < BASH_CHANCE) bash(npc, this, boss, fight, target);
+      if (Common.edgeDistance(npc, at.getX(), at.getY()) === 1 && Math.random() < BASH_CHANCE) bash(npc, this, boss, fight, target);
       else lightning(npc, this, boss, fight);
       character.getCombat().setAttackDelay(fight.form === 2 ? SPEED.second : SPEED.first);
     }
@@ -441,6 +415,17 @@ function combatClass() {
   };
 }
 
+/** An abandoned fight (Caves): his hounds go, and he is back in his first form, coffin whole. */
+function reset(npc) {
+  const boss = bossOf(npc);
+  if (!boss) return;
+  const fight = fightOf(npc);
+  dismissHounds(fight);
+  Object.assign(fight, { form: 1, houndsCalled: false, houndsPending: false, reborn: false });
+  npc.setNpcTransformationId(-1);
+  setCoffin(boss, COFFIN.whole);
+}
+
 function spawned(npc) {
   const boss = bossOf(npc);
   if (!boss) return;
@@ -449,8 +434,6 @@ function spawned(npc) {
   Object.assign(fight, { form: 1, houndsCalled: false, houndsPending: false, reborn: false });
   npc.setFlag("combat:close-in");
   npc.setFlag("combat:no-regen");
-  // He and his hounds fight as one, in the singles tomb too.
-  npc.setMultiCombat(true);
   npc.performAnimation(new core.Animation(ANIMATION.spawn));
   npc.getCombat().setAttackDelay(FIRST_ATTACK_TICKS);
   setCoffin(boss, COFFIN.whole);
@@ -462,7 +445,7 @@ function attach(pluginApi) {
   pluginApi.registerNpcCombatMethodProvider(Object.keys(BOSSES).map(Number), combatClass(), { singleton: false });
   pluginApi.onNpcHitModify(hitModify);
   pluginApi.onNpcBeforeDeath(beforeDeath);
-  for (const boss of Object.values(BOSSES)) Common.FIGHTS.set(boss.key, { spawned });
+  for (const boss of Object.values(BOSSES)) Common.FIGHTS.set(boss.key, { spawned, reset });
 }
 
-module.exports = { attach, _test: { BOSSES, bashTiles, ringTiles, edgeDistance } };
+module.exports = { attach, _test: { BOSSES, bashTiles, ringTiles } };

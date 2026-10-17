@@ -27,6 +27,10 @@ const Hud = require("./Hud.WildernessBosses");
 const REQUIRE_DIARY_CONFIG = "WildernessBosses:requireDiary";
 const ENTERED_AT_ATTRIBUTE = "wilderness-bosses:entered-at";
 const TELEPORT_LOCK_TICKS = 3;
+const ENGAGED_AT_ATTRIBUTE = "wilderness-bosses:engaged-at";
+const ABANDONED_TICKS = 100;
+/** The engaged-at value of a boss already reset, until it fights again. */
+const RESET = "reset";
 
 /** As captured: the escape caves are crawled through (human_longcrawl). */
 const LONG_CRAWL = 2796;
@@ -228,7 +232,7 @@ function peek(event) {
   if (!lair || event.objectId !== lair.entrance.id) return false;
   const { player } = event;
   player.setPositionToFace(new core.Location(lair.entrance.at[0], lair.entrance.at[1], lair.entrance.at[2]));
-  const kills = Common.kills(player, lair.key);
+  const kills = Common.kills(player, lair);
   if (kills < Common.DATA.peekKills) {
     player.sendMessage(kills === 0 ? PEEK_NO_KILLS : PEEK_MORE_KILLS(Common.DATA.peekKills - kills));
     return true;
@@ -358,9 +362,46 @@ function teleportLocked(player) {
  */
 function rouse(player, lair, area) {
   const boss = Hud.bossIn(area, lair);
-  if (!boss || boss.getHitpoints() <= 0 || player.getHitpoints() <= 0 || boss.getCombat().getTarget()) return;
+  if (!boss || boss.getHitpoints() <= 0 || player.getHitpoints() <= 0) return;
+  const target = boss.getCombat().getTarget();
+  if (target && area.hasMember(target)) return;
   const method = core.CombatFactory.getMethod(boss);
   if (core.CombatFactory.canAttack(boss, method, player) === core.CanAttackResponse.CAN_ATTACK) boss.getCombat().attack(player);
+}
+
+/**
+ * A fight nobody is in any more (no target left in the lair, not hit, for 100 ticks: everyone
+ * left, died or logged out) starts over, so the next group finds a whole boss with no hounds, traps or webs
+ * left behind. Ours: OSRS's own timing isn't known.
+ */
+function watchFight(boss, lair, area) {
+  const now = core.World.getProcessCycle();
+  const target = boss.getCombat().getTarget();
+  const engaged = (target != null && area.hasMember(target)) || boss.getCombat().ticksSinceAttacked() < 2;
+  const since = boss.getAttribute(ENGAGED_AT_ATTRIBUTE);
+  // A boss with nobody near isn't processed at all, so a long gap since it was last engaged is
+  // an abandoned fight too, even if its old target has just come back.
+  if (Number.isInteger(since) && now - since >= ABANDONED_TICKS && boss.getHitpoints() > 0) {
+    boss.setAttribute(ENGAGED_AT_ATTRIBUTE, RESET);
+    boss.getCombat().reset();
+    Common.FIGHTS.get(lair.key)?.reset?.(boss);
+    boss.setHitpoints(boss.getMaxHitpoints());
+    boss.getCombat().clearDamageMap();
+    return;
+  }
+  if (engaged || since == null) boss.setAttribute(ENGAGED_AT_ATTRIBUTE, now);
+}
+
+/**
+ * The caves' Wilderness levels, as cache script 384 gives them: each lair's whole map square has
+ * one level, and the Escape Caves rise 33 to 40 with y (33 + scale(y % 64 - 6, 50, 7)).
+ */
+function levelAt(x, y) {
+  const inSquare = ([minX, minY, maxX, maxY]) => x >= minX && x <= maxX && y >= minY && y <= maxY;
+  const lair = Common.LAIRS.find((each) => inSquare(each.box));
+  if (lair) return lair.level;
+  if (inSquare(Common.ESCAPE.box)) return 33 + Math.trunc(((y % 64) - 6) * 7 / 50);
+  return null;
 }
 
 function createLairArea(lair) {
@@ -372,7 +413,10 @@ function createLairArea(lair) {
 
     process(mobile) {
       Common.rules()?.process(mobile);
-      if (!mobile.isPlayer()) return;
+      if (mobile.isNpc()) {
+        if (lair.bossIds.includes(mobile.getId())) watchFight(mobile.getAsNpc(), lair, this);
+        return;
+      }
       Hud.process(mobile.getAsPlayer(), lair, this);
       rouse(mobile.getAsPlayer(), lair, this);
       Common.FIGHTS.get(lair.key)?.playerTick?.(mobile.getAsPlayer(), lair);
@@ -430,6 +474,7 @@ function playersIn(lairKey) {
 function attach(pluginApi) {
   api = pluginApi;
   core = pluginApi.core;
+  core.Wilderness.setLevelSource("wilderness-bosses", levelAt);
   for (const key of [Common.FEE_PAID_ATTRIBUTE, Common.NO_WARNING_ATTRIBUTE, Common.VISITED_ATTRIBUTE]) {
     pluginApi.persistAttribute(key, false);
   }

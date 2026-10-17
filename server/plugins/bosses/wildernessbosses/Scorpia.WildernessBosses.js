@@ -48,10 +48,6 @@ function fightOf(npc) {
   return fight;
 }
 
-function alive(mobile) {
-  return mobile?.isRegistered?.() && mobile.getHitpoints() > 0;
-}
-
 function tileOf(event) {
   return [event.location.x, event.location.y];
 }
@@ -113,8 +109,8 @@ function watch(scorpia, fight) {
 
     execute() {
       const now = core.World.getProcessCycle();
-      fight.guardians = fight.guardians.filter(({ npc }) => alive(npc) || core.World.getAddNPCQueue().includes(npc));
-      if (!alive(scorpia) || fight.guardians.length === 0) {
+      fight.guardians = fight.guardians.filter(({ npc }) => Common.alive(npc) || core.World.getAddNPCQueue().includes(npc));
+      if (!Common.alive(scorpia) || fight.guardians.length === 0) {
         for (const { npc } of fight.guardians) core.World.getRemoveNPCQueue().push(npc);
         fight.guardians = [];
         this.stop();

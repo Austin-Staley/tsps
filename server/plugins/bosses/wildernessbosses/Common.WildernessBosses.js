@@ -33,7 +33,7 @@ const FEE_AMOUNT_ATTRIBUTE = "wilderness-bosses:fee-amount";
 const NO_WARNING_ATTRIBUTE = "wilderness-bosses:no-fee-warning";
 /** Persisted: been in a lair or the Escape Caves since last leaving the Wilderness. */
 const VISITED_ATTRIBUTE = "wilderness-bosses:visited";
-/** Persisted kill counts, by lair key: { callisto: 3, artio: 12 }. */
+/** Persisted kill counts of the singles bosses, by lair key: { artio: 12 }. */
 const KILLS_ATTRIBUTE = "wilderness-bosses:kills";
 
 const LAIRS = DATA.lairs;
@@ -105,6 +105,40 @@ function rules() {
   return wildernessRules;
 }
 
+function randomBetween(min, max) {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+function alive(mobile) {
+  return !!mobile?.isRegistered?.() && mobile.getHitpoints() > 0;
+}
+
+/** Whether a tile is walkable ground. */
+function open(x, y, z) {
+  return !core.RegionManager.blocked(new core.Location(x, y, z), null);
+}
+
+/** Edge distance from an NPC's body to a tile: 0 under it, 1 next to it (diagonals too). */
+function edgeDistance(npc, x, y) {
+  const base = npc.getLocation();
+  const size = npc.getSize();
+  const maxX = base.getX() + size - 1;
+  const maxY = base.getY() + size - 1;
+  const dx = x < base.getX() ? base.getX() - x : x > maxX ? x - maxX : 0;
+  const dy = y < base.getY() ? base.getY() - y : y > maxY ? y - maxY : 0;
+  return Math.max(dx, dy);
+}
+
+/**
+ * A boss's scripted blow: `damage` exactly (prayer already weighed by the caller), landing as its
+ * own hit so the target retaliates and the damage counts.
+ */
+function bossHit(npc, method, player, damage, delay = 0) {
+  const pending = new core.PendingHit(npc, player, method, { delay, rollAccuracy: false });
+  pending.setTotalDamage(damage);
+  core.CombatFactory.addPendingHit(pending);
+}
+
 /**
  * A summoned NPC (a hellhound, a spiderling) attacks `target` once it is in the world: the add
  * queue only registers it at the end of the tick.
@@ -126,8 +160,15 @@ function isDiaryComplete(player, tier) {
   return request.complete === true;
 }
 
-function kills(player, key) {
-  return Number(player.getAttribute(KILLS_ATTRIBUTE)?.[key]) || 0;
+/**
+ * A player's kill count of a lair's boss: Combat Achievements' for the three main bosses (it keeps
+ * theirs), the plugin's own for the singles bosses, which Combat Achievements has no page for.
+ */
+function kills(player, lair) {
+  if (lair.killVarp) return Number(player.getAttribute(KILLS_ATTRIBUTE)?.[lair.key]) || 0;
+  const request = { player, monster: lair.monster };
+  api.emitCustomEvent("combat-achievements:count", request);
+  return Number(request.total) || 0;
 }
 
 module.exports = {
@@ -160,6 +201,11 @@ module.exports = {
   boundary,
   later,
   rules,
+  randomBetween,
+  alive,
+  open,
+  edgeDistance,
+  bossHit,
   engage,
   isDiaryComplete,
   kills,

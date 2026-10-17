@@ -17,7 +17,8 @@ const CHILL_MESSAGE = "<col=ef1020>You feel a chill down your spine as the air i
 /** Persisted: the decay state, and when the player was last in the caves (epoch minutes). */
 const STATE_ATTRIBUTE = "wilderness-bosses:escape-decay";
 const LAST_SEEN_ATTRIBUTE = "wilderness-bosses:escape-last-seen";
-/** This visit: whether the air weakens the player, the next step's tick, and the first drain told. */
+/** Whether the air weakens the player this visit (persisted: a relog doesn't clear the air), the
+ * next step's tick, and whether the visit's first drain was told. */
 const DECAYING_ATTRIBUTE = "wilderness-bosses:escape-decaying";
 const NEXT_STEP_ATTRIBUTE = "wilderness-bosses:escape-next-step";
 const TOLD_ATTRIBUTE = "wilderness-bosses:escape-told";
@@ -60,7 +61,12 @@ function step(player) {
   if (player.getAttribute(DECAYING_ATTRIBUTE) !== true) return;
   const now = core.World.getProcessCycle();
   const next = player.getAttribute(NEXT_STEP_ATTRIBUTE);
-  if (!Number.isInteger(next) || now < next) return;
+  if (!Number.isInteger(next)) {
+    // Back from a logout: the steps go on from here.
+    player.setAttribute(NEXT_STEP_ATTRIBUTE, now + Common.ESCAPE.decay.stepTicks);
+    return;
+  }
+  if (now < next) return;
   const { decay } = Common.ESCAPE;
   player.setAttribute(NEXT_STEP_ATTRIBUTE, now + decay.stepTicks);
   player.setAttribute(LAST_SEEN_ATTRIBUTE, nowMinutes());
@@ -101,7 +107,8 @@ function createArea() {
 
     postLeave(mobile, logout) {
       Common.rules()?.postLeave(mobile, logout);
-      if (mobile.isPlayer()) mobile.getAsPlayer().setAttribute(DECAYING_ATTRIBUTE, false);
+      // Logging out keeps the visit going; walking or teleporting out ends it.
+      if (mobile.isPlayer() && !logout) mobile.getAsPlayer().setAttribute(DECAYING_ATTRIBUTE, false);
     }
 
     canAttack(attacker, target) {
@@ -128,6 +135,7 @@ function attach(pluginApi) {
   core = pluginApi.core;
   pluginApi.persistAttribute(STATE_ATTRIBUTE, 0);
   pluginApi.persistAttribute(LAST_SEEN_ATTRIBUTE, 0);
+  pluginApi.persistAttribute(DECAYING_ATTRIBUTE, false);
   pluginApi.onPlayerLogin(sendState);
   escapeArea = createArea();
   pluginApi.registerArea(escapeArea);

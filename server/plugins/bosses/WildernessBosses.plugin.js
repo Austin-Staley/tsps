@@ -31,6 +31,6 @@ module.exports = {
     Vetion.attach(api);
     Spiders.attach(api);
     Scorpia.attach(api);
-    Commands(api);
+    Commands.attach(api);
   },
 };

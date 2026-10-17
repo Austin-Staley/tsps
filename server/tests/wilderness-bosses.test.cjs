@@ -75,7 +75,7 @@ test('the loot goes to the top ten by damage, each with at least a quarter of th
 });
 
 test('the shield bash covers the captured shapes', (t) => {
-  const npc = { getLocation: () => new core.Location(1884, 11544, 1) };
+  const npc = { getLocation: () => new core.Location(1884, 11544, 1), getSize: () => 3 };
   const at = (x, y) => ({ getLocation: () => new core.Location(x, y, 1) });
   t.mock.method(Math, 'random', () => 0.9);
   // The corner as captured: 12 tiles south-west of him, 2 deep.

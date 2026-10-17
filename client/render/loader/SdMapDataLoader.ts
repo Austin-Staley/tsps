@@ -260,6 +260,7 @@ function buildTerrainPickData(
         tile: SceneTile | undefined,
         drawPlane: number,
         heightPlane: number = drawPlane,
+        includeHidden: boolean = true,
     ): void => {
         const tileModel = tile?.tileModel;
         if (!tileModel) return;
@@ -293,7 +294,7 @@ function buildTerrainPickData(
         addFaces(tileModel.faces);
         // Invisible faces (transparent overlays such as bridge decks) are not
         // rendered but stay click-testable, like every face of a drawn tile.
-        if (tileModel.hiddenFaces.length > 0) {
+        if (includeHidden && tileModel.hiddenFaces.length > 0) {
             addFaces(tileModel.hiddenFaces);
         }
     };
@@ -309,7 +310,9 @@ function buildTerrainPickData(
                 const bridgeColumn = (scene.tileRenderFlags[1][x][y] & 0x2) !== 0;
                 const heightPlane = bridgeColumn ? level + 1 : level;
                 if (level === 0 && (scene.tileRenderFlags[1][x][y] & 0x8) !== 0) {
-                    addTile(scene.tiles[1][x]?.[y], level, bridgeColumn ? 2 : 1);
+                    // Only what is drawn: an invisible layer above the floor (the bear caves'
+                    // 0xff00ff overlay on plane 1) must not catch the click meant for the floor.
+                    addTile(scene.tiles[1][x]?.[y], level, bridgeColumn ? 2 : 1, false);
                 }
 
                 const tile = scene.tiles[level][x]?.[y];
