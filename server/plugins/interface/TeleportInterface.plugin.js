@@ -101,6 +101,7 @@ const DESTINATIONS = {
     teleport("Duel Arena", location(3366, 3266), TeleportType.NORMAL),
     teleport("Fortis Colosseum", location(1799, 9506), TeleportType.NORMAL),
     teleport("Pest Control", location(2657, 2639), TeleportType.NORMAL),
+    teleport("Tempoross", location(3137, 2840), TeleportType.NORMAL),
     teleport("TzHaar Fight Caves", location(2438, 5168), TeleportType.NORMAL),
     teleport("TzHaar Fight Pits", location(2399, 5177), TeleportType.NORMAL),
     teleport("The Gauntlet", location(3032, 6127, 1), TeleportType.NORMAL),
