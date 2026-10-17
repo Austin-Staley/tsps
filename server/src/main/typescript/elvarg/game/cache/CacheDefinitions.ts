@@ -193,6 +193,16 @@ export class CacheDefinitions {
         return this.getGamevals().namesOf(GamevalKind.SEQ);
     }
 
+    /** A database row's id by its gameval name (`mixology_rewards`), or null. */
+    static getDbRowId(name: string): number | null {
+        return this.idByName(GamevalKind.DBROW).get(name) ?? null;
+    }
+
+    /** A database row's gameval name, or null when the cache has none for it. */
+    static getDbRowName(id: number): string | null {
+        return this.getGamevals().namesOf(GamevalKind.DBROW).get(id) ?? null;
+    }
+
     /** A graphic's id by its gameval name, or null. */
     static getSpotanimId(name: string): number | null {
         return this.idByName(GamevalKind.SPOTANIM).get(name) ?? null;
