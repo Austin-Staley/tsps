@@ -875,6 +875,15 @@ export class Player extends Mobile {
         return this;
     }
 
+    /** A transformed appearance carries no items, so the equipment tab gets the worn inventory. */
+    public setNpcTransformationId(npcTransformationId: number): this {
+        super.setNpcTransformationId(npcTransformationId);
+        if (npcTransformationId >= 0) {
+            this.getEquipment()?.sendWornInventory();
+        }
+        return this;
+    }
+
     public getFrameUpdater(): FrameUpdater {
         return this.frameUpdater;
     }
