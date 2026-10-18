@@ -7,19 +7,21 @@
  * kill with contribution-scaled drops. Combat Achievements are decided by the fight
  * (CombatAchievements.RoyalTitans.js). Full behaviour in docs/royal-titans.md.
  */
-const Area = require("./royal-titans/Area.RoyalTitans");
-const Combat = require("./royal-titans/Combat.RoyalTitans");
-const Specials = require("./royal-titans/Specials.RoyalTitans");
-const Minions = require("./royal-titans/Minions.RoyalTitans");
-const Corpse = require("./royal-titans/Corpse.RoyalTitans");
-const Hud = require("./royal-titans/Hud.RoyalTitans");
-const Commands = require("./royal-titans/Commands.RoyalTitans");
-const CombatAchievements = require("./royal-titans/CombatAchievements.RoyalTitans");
+const Shared = require("./royaltitans/Shared.RoyalTitans");
+const Area = require("./royaltitans/Area.RoyalTitans");
+const Combat = require("./royaltitans/Combat.RoyalTitans");
+const Specials = require("./royaltitans/Specials.RoyalTitans");
+const Minions = require("./royaltitans/Minions.RoyalTitans");
+const Corpse = require("./royaltitans/Corpse.RoyalTitans");
+const Hud = require("./royaltitans/Hud.RoyalTitans");
+const Commands = require("./royaltitans/Commands.RoyalTitans");
+const CombatAchievements = require("./royaltitans/CombatAchievements.RoyalTitans");
 
 module.exports = {
   name: "RoyalTitans",
   members: true,
   register(api) {
+    Shared.init(api);
     Combat.attach(api);
     Specials.attach(api);
     Minions.attach(api);

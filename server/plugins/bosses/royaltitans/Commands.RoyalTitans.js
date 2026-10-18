@@ -6,19 +6,14 @@
  */
 const Shared = require("./Shared.RoyalTitans");
 const Area = require("./Area.RoyalTitans");
-const Combat = require("./Combat.RoyalTitans");
+const Specials = require("./Specials.RoyalTitans");
 
 let core = null;
 
-function sessionOf(player) {
-  return Area.sessionOfPlayer(player);
-}
-
 function liveTitans(player) {
-  const session = sessionOf(player);
+  const session = Area.sessionOfPlayer(player);
   if (!session) return [];
-  return [session.branda, session.eldric].filter((npc) =>
-    npc && Shared.isLiveTitan(npc.getId()) && npc.isRegistered?.() && (npc.getHitpoints?.() ?? 0) > 0);
+  return [session.branda, session.eldric].filter((npc) => npc && Shared.isLiveTitan(npc.getId()) && Shared.alive(npc));
 }
 
 function killTitans({ player }) {
@@ -45,9 +40,8 @@ function setTitanHitpoints({ player, parts }) {
   }
   for (const npc of titans) npc.setHitpoints(hitpoints);
   // Setting HP at or below the threshold by hand must teleport exactly like a real hit.
-  const Specials = require("./Specials.RoyalTitans");
   Specials.teleportTitans(titans[0]);
-  const teleported = titans[0].getAttribute?.(Shared.ATTR_TELEPORTED) === true ? " (teleported)" : "";
+  const teleported = titans[0].getAttribute(Shared.TELEPORTED_ATTRIBUTE) === true ? " (teleported)" : "";
   player.sendMessage(`The Royal Titans now have ${hitpoints} hitpoints${teleported}.`);
   return true;
 }
@@ -58,7 +52,7 @@ function forceBlast({ player }) {
     player.sendMessage("You have no active Royal Titans.");
     return true;
   }
-  for (const npc of titans) npc.setAttribute(Shared.ATTR_BLAST_AT, core.World.getProcessCycle());
+  for (const npc of titans) npc.setAttribute(Shared.BLAST_AT_ATTRIBUTE, core.World.getProcessCycle());
   player.sendMessage("The next attack will charge the Elemental Blast.");
   return true;
 }

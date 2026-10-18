@@ -2,7 +2,7 @@
 
 Branda the Fire Queen and Eldric the Ice King in the Asgarnian Ice Dungeon.
 
-**Status: implemented and playtested.** All units in `server/plugins/bosses/royal-titans/` + teleports entry; unit tests 13/13 (`server/tests/royal-titans.test.cjs`). Live-verified via agent MCP (solo + duo to full kills, all three claim paths, respawn, grave, scoreboard opens, exit, logout/login): see Testing. Open assumptions: 18, each with how to confirm it; visually unconfirmed (needs manual look): boss-HUD bar rendering (values verified on the wire), scoreboard text values, blast/safe-tile visuals.
+**Status: implemented and playtested.** All units in `server/plugins/bosses/royaltitans/` + teleports entry; unit tests 18/18 (`server/tests/royal-titans.test.cjs`). Live-verified via agent MCP (solo + duo to full kills, all three claim paths, respawn, grave, scoreboard opens, exit, logout/login): see Testing. Open assumptions are listed at the end, each with how to confirm it; visually unconfirmed (needs a manual look): boss-HUD bar rendering (values verified on the wire), scoreboard text values, blast/safe-tile visuals.
 
 ## Sources and honesty labels
 
@@ -11,14 +11,14 @@ Every claim below carries one label:
 | Label | Meaning |
 | --- | --- |
 | [WIKI] | The OSRS Wiki (Royal Titans, Branda the Fire Queen, Eldric the Ice King, Fire/Ice elemental pages; fetched Oct 2026). |
-| [LOG] | rsprox captures in osrs-captures (`royal_titans.sqlite`, revs 223-235). Only three recordings hold arena fights: 228/02283 (solo, 5:20 kill), 235/03398 and 235/03402 (solo, longer). The other 150 are entrance/scoreboard clicks, pets and unrelated activity. Ticks are recording ticks. |
+| [LOG] | rsprox captures (https://rsprox.net/database), revs 223-237. Only three recordings hold arena fights: 228/02283 (solo, 5:20 kill), 235/03398 and 235/03402 (solo, longer); the entrance Join prompt is in 235/03402. The rest are entrance/scoreboard clicks, pets and unrelated activity. Ticks are recording ticks. |
 | [EST] | Our reasoned assumption where neither source speaks. Each one says what would confirm it. |
 | [CACHE] | Verifiable from the game cache (`dump_ops.ts`, `dump-loc`, identifiers). Not yet run. |
 
 There is no third titan: both the Wiki and every capture show the duo only [WIKI] [LOG].
 
 The plugin will be `server/plugins/bosses/RoyalTitans.plugin.js`, with one unit per part of
-the fight in `server/plugins/bosses/royal-titans/`.
+the fight in `server/plugins/bosses/royaltitans/`.
 
 | File | What it owns |
 | --- | --- |
@@ -53,17 +53,18 @@ All four combat NPCs already have matching entries in `server/data/definitions/m
 - **Instanced** [LOG]: live builds a dynamic region from base (2880-2952, 9536+) to (15680+, 2560+); we copy the same authored map instead — a `TemplatedInstanceArea` of 4x4 chunks (source chunk 362,1194, unturned), allocated a slot outside the real map (tile 8192+/1600+, 7x60 slots, 20-chunk stride, released when the instance empties). Each party gets its own drawn copy and its own collision/locs, the client is sent the REBUILD_REGION palette, and everything the fight spawns is area-scoped. Party 1-2 [WIKI]. A second player can join a solo fight only while the titans are still fresh (see Assumptions).
   - The arena tiles are authored space (2896-2927 x 9552-9583); the instance lands them at `base + (tile - 2896, tile - 9552)` via `Shared.instanceTile`.
   - The exit loc (55987) is part of the copied chunks, so it exists per-instance; the entrance tunnel and scoreboard stay in the real world (2948/2954), outside the copy.
-  - Quick-escape (exit op2) routes the click onto the player's own tile first, so it works from anywhere in the arena instead of pathing to the tunnel.
+  - Both exit options route the click onto the player's own tile first, so they work from anywhere in the arena (the tunnel sits in the wall) instead of pathing to it.
 - **Getting there** [WIKI]: western Asgarnian Ice Dungeon (fairy ring `AIQ`); giantsoul amulet teleports outside the entrance tunnel.
 - **Entrance** [LOG]: loc `royal_titans_entrance` (55986) at (2948, 9573).
-  - op1: chatmenu "Select an option": `Start a fight (Your friends will be able to join you).|Join a fight.|Do nothing.` (runclientscript 58).
-  - op2: **Quick-start** [LOG + WIKI changelog]: skips straight to the warning box and always starts your own fresh fight (never a stranger's; Enter > Join a fight is the duo path).
-  - Choosing either shows messagebox 229: "You are about to begin an encounter with the Royal Titans. Dying during this encounter will not be considered a safe death. To leave, you'll need to use <col=ff0000>'Quick-escape'</col> via the tunnel" and sets varbit `royal_titans_enter_warning` (16089) [LOG].
-  - Refused with messagebox "The fight with the Royal Titans is in a critical stage. You'll have to wait until the next fight begins." when a fight is past the join point (see Assumptions).
-- **Arena landing** [LOG]: (2911, 9573), north edge. Entry plays the fade overlay in, `minimap_state` (6719) 2→0, music "In the Pits" (midi 469). Leaving reverses it: fade, boss HUD cleared (hide + container empty), minimap 0→2.
+  - op1 **Enter**: chatmenu "Select an option": `Start a fight (Your friends will be able to join you).|Join a fight.|Do nothing.` (runclientscript 58). "Join a fight." asks for the name like op2.
+  - op2 **Join** [LOG 235/03402]: name input (meslayer_mode8, script 109) "Whose fight would you like to join? You must be on their friends' list." The named player must be in a fight they started, have the joiner on their friends' list, have room (1-2 players) and still be joinable (Assumption 1); the replies to a name were never captured (Assumption 19).
+  - op3 **Quick-start** [WIKI changelog]: skips the menu, never the warning, and always starts your own fresh fight.
+  - Starting or joining shows messagebox 229: "You are about to begin an encounter with the Royal Titans. Dying during this encounter will not be considered a safe death. To leave, you'll need to use <col=ff0000>'Quick-escape'</col> via the tunnel", then the chatmenu "Are you sure you wish to proceed?" `Yes.|Yes, and don't ask again.|No.` [LOG 228/02283]. "Yes, and don't ask again." sets varbit `royal_titans_enter_warning` (16089), saved and sent at login (live sends it with the login varbits); with it set, both are skipped [EST: that the warning box goes too].
+  - A join past the join point gets the messagebox "The fight with the Royal Titans is in a critical stage. You'll have to wait until the next fight begins." (see Assumptions). Starting your own fight is never refused.
+- **Entry** [LOG 228/02283]: on Yes, the crawl (`human_longcrawl` 2796, sound 2454 x2 delay 4) and the fade out; +1 `minimap_state` (6719) 0→2; +3 the move to (2911, 9573) with Branda's spawn; +4 minimap 2→0, fade in, music "In the Pits" (midi 469); +6 the fade overlay closes. The minimap is only hidden during the fade, both ways.
 - **Exit** [LOG]: loc `royal_titans_exit` (55987) at (2910, 9578), arena north wall.
-  - op2: leaves the instance to **(2950, 9574)** (outside, by the entrance).
-  - op1 from afar: "You should be able to escape from here." (purpose/condition — see Assumptions).
+  - op2 Quick-escape [LOG 228/02283]: fade out and HUD cleared, +1 minimap 0→2, +2 the move to **(2950, 9574)** (outside, by the entrance), +4 minimap 2→0 and fade in, +6 overlay closed.
+  - op1 Inspect: "You should be able to escape from here."
   - Teleporting out nullifies incoming damage [WIKI changelog].
 - **Death** [WIKI]: unsafe; gravestone outside the entrance, standard retrieval.
 - **Scoreboard** [LOG]: loc `royal_titans_scoreboard` (56004) at (2954, 9577), op1 opens interface 909 as the main modal (161:16): title "Royal Titans Statistics"; `pkc` personal KC, `pd` personal deaths, `pbt` personal best, `gkc` global KC (58,395,586 seen), `gd` global deaths (967,404 seen), `gbt` global best (0:37.80 seen). Personal best is persisted per player (attribute) and also answers the CA `personal-best`/`reset-best` requests, Araxxor-style.
@@ -88,7 +89,7 @@ All four combat NPCs already have matching entries in `server/data/definitions/m
 | Elementals (14150/14151) | ? [CACHE] | Attack (seen) | — | — |
 | Row hitboxes (14152/14153) | Douse / Melt → hint, no effect (live names seen) | — (spells clear via cast-on-NPC) | — | — |
 | Corpses (14148/14149) | Loot | — (absent, cache dump confirms) | Sacrifice | Take pages |
-| Entrance (55986, "Tunnel") | Enter (menu) | Join (direct) | Quick-start (direct) | — |
+| Entrance (55986, "Tunnel") | Enter (menu) | Join (name input) | Quick-start (direct) | — |
 | Exit (55987, "Tunnel") | Inspect → hint, always | Quick-escape → leave to (2950, 9574) | — | — |
 | Shortcut (55988/55989) | Traverse (already wired) | — | — | — |
 | Scoreboard (56004, "Scoreboard") | Read → interface 909 | — | — | — |
@@ -96,6 +97,8 @@ All four combat NPCs already have matching entries in `server/data/definitions/m
 Corpse opnames [WIKI infoboxes] and order [CACHE dump]; live ops verified in testing; entrance/exit/scoreboard names [LOG, live-observed]. Live-titan op1 and minion op1 still [CACHE].
 
 ## Boss HUD [LOG]
+
+After a kill the HUD clears (varp 1683 → -1, `cc_deleteall` on the container). The client's open script (2376 → 2377) remembers the npc it opened on (varc 1259) and only rebuilds the bar for that npc, so the HUD reopens on the titan it was last opened on and switches after.
 
 The HUD follows the player's engagement, switching between the titans: varp 1683 `hpbar_hud_npc` = 14147 → 12596 → -1 → 14147 … as the player changes target, with `hp_hud_open` (2376) each switch; current/max via the standard varbits (see `docs/boss-hud.md`). Reuse the `BossHud` plugin events (`boss-hud:show/update/hide/reset`) from `Hud.RoyalTitans.js`; exit clears it (hide + container empty, captured). Minions and rows never show it.
 
@@ -152,7 +155,7 @@ Map anims (tiles) — row spawn rows 3218/3221, teleport grids 3219/3222, row de
 
 ### Sounds (area sounds with tile + delay [LOG])
 
-Fire rows 10116 + 10118 (delay 122); ice rows 10146/10147 (delay 5) + 10148 (delay 120); blast 10119; minions 10172/10190; melee-impact candidates 227 / 4029 / 4031 (delay 56, co-occur with stomps — confirm mapping [EST]).
+Captured [LOG 02283, 03398, 03402]. Area sounds, per row tile at range 1: fire rows (Branda) 10147 (delay 5) + 10148 (delay 120) as they appear and 10146 as a tile clears or runs out; ice rows (Eldric) 10116 (delay 5) + 10118 (delay 122), 10119 (delay 4) as a spell clears a tile, 10117 (delay 4) as the row runs out. Elementals: 10190 (fire) / 10172 (ice) on each one's tile at range 5 as it stands up; an exploding elemental 10042/10041/10039/10038 (delays 6/18/27/40, range 10). Player sounds: 10139 whenever a titan takes a hit, 10155 three times (delays 28/88/148) with the blast's aoe02, and as a claim's loot lands 10102 (Branda's corpse) or 10108 (Eldric's). No sound with the stomp or the teleport (227/1460/4029/4031 are the player's own spell sounds).
 
 ### Interfaces, varps/varbits, music, maps, items
 
@@ -175,16 +178,16 @@ y=9561  Eldric static (2910,9561)
 ```
 
 - **Spawn** [LOG]: Branda (2906, 9566) facing east, `fire_giant_branda_queen_spawn01` (11966); one tick later Eldric (2914, 9566) facing west, `ice_giant_eldric_king_spawn01` (11963). First player-attackable ~2 ticks later (see Assumptions on duration).
-- **Roam** [LOG]: Branda x≈2904-2911, Eldric x≈2910-2917, y≈9561-9572. Movement rule (see Attacks): attack every 7th tick, step toward the target on the ticks between.
+- **Roam** [LOG 02283, 03398, 03402]: before the teleport each titan keeps to its own side of the 5-wide lane (x 2909-2913) and never enters it. It attacks from one of two spots: its **lane edge** (SW x 2906 Branda / 2914 Eldric) or the **back** (2904 / 2916), any y 9561-9571; x 2905/2915 is only walked through. After a stomp at the edge it stays (83%); otherwise, 9 ticks after the attack, it walks a tile a tick 2-6 tiles: from the edge back out, from the back up to the edge (45%) or along the back. It attacks 2 ticks after arriving. Coming up to the edge it calls out a flavour line as it sets off ("You can't escape me!", "Here I come!", ...); 96 of 105 mobile shouts are at the back. It never faces the player (face angles): mobile, straight across the lane (Branda 1536 east, Eldric 512 west); static, toward the arena (Branda 0 south, Eldric 1024 north); corpses the same as static.
 - **Static (post-teleport)** [LOG]: Branda (2910, 9571), Eldric (2910, 9561), floor locs 55993/55994 and 55997/55998 plus `invisible_type8_blocking` (26209) under them.
-- **Corpses** [LOG]: `rt_fire_queen_inactive` (14148) at (2910, 9571), `rt_ice_king_inactive` (14149) at (2910, 9561); death floor locs 55995/55996 and 55999/56000 on the death anims.
+- **Corpses** [LOG]: a dying titan plays `..._inactive01` (Branda 11990, Eldric 11985) and becomes `rt_fire_queen_inactive` (14148) / `rt_ice_king_inactive` (14149) where it stands, mobile or static, and stays there until the claim schedule's death anims (both corpses visible). Death floors 55995/55996 and 55999/56000 come with the death anims.
 - **Rows** [LOG]: always x=2909-2913; y varies per cast with no player correlation over 27 sampled casts (e.g. row 9570 while the player stands at 9567; 9562 while at 9569). Implemented as a random y band in 9562-9572 [EST — verify live whether uniform].
-- **Safe tile** [LOG]: `vfx_giant_attack_aoe_protection01` (56003, shape 22) at the blast convergence, e.g. (2912, 9567). Examine: "This looks like a safe spot." [WIKI trivia].
+- **Safe tile** [LOG 03398, 03402]: `vfx_giant_attack_aoe_protection01` (56003, shape 22). Both titans fighting: any tile of the blast area (x 2909-2913, y 9564-9570; 18 different tiles captured). One left: the row farthest from it, random x (Branda alone: y 9564; Eldric alone: y 9570). Examine: "This looks like a safe spot." [WIKI trivia].
 
 ## Attacks (mobile phases) [LOG] [WIKI]
 
-- **Cadence and movement:** each titan runs its own ~7-tick cycle (combined attacks land ~3-4 ticks apart, interleaved). On the attack tick it attacks; on the ticks between it steps 1 tile toward its target (bursts of 2-8 consecutive walk ticks captured, e.g. 1331-1336 between attacks at 1327/1338), stopping when in melee reach. Wiki: they walk one tile at a time toward the arena until meleeable [LOG pattern + WIKI; exact stop/edge behaviour — see Assumptions]. Both cast while walking and from the arena edge.
-- **Melee stomp** (`..._attack_melee01`: Branda 11974, Eldric 11973): face_coord at target, then a **5-wide (x) by 3-deep (y) telegraph block centred on the player's tile at cast** (captured 2909-2913 × 9562-9564), graphic 3211 (`vfx_ice_giant_eldric_king_melee01_proj01`) **regardless of caster** [LOG]. Per-tile delay +2 per tile of distance from the casting titan (0/2/4/6/8 seen, rising away from the caster) [LOG]. Wiki: 3x5 AoE in front, fully blocked by Protect from Melee, crush, max 26 (26 also the max player-hit in 03402 [LOG]). Damage lands per tile as its delay expires [EST — verify: per-tile vs single +1-tick hit].
+- **Cadence and movement** [LOG]: 7 ticks after a stomp, 10 + walk steps (12-16) after a walk. The choice follows the spot over 273 mobile attacks: lane edge 82% stomp / 15% rows / 3% elementals; back 75% rows / 25% elementals, never a stomp. A titan never summons while its own elementals are alive (0 of 69 captured summons).
+- **Melee stomp** (`..._attack_melee01`: Branda 11974, Eldric 11973): graphic 3211 (`vfx_ice_giant_eldric_king_melee01_proj01`, either caster) over the whole lane width (x 2909-2913) on the **caster's own three rows** (93 of 93 mobile stomps), delayed +2 client cycles per tile beyond the first from its body (0-8 from the edge, 4-12 from the back). The caster lines its middle row up with the player first (64 of 93 exactly, the rest within a row): at the edge it steps along y between attacks. After the teleport the stomp covers the whole arena (y 9564-9570). Wiki: fully blocked by Protect from Melee, crush, max 26 [LOG].
 - **Ranged/magic:** the titans have none; all distance pressure is rows, elementals, then the blast. Melee + Protect from Melee is the whole prayer game until the enrage [WIKI] [LOG].
 
 ## NPC shouts [LOG]
@@ -214,12 +217,12 @@ Either titan casts either special. Told apart by anim + slot-2 spotanim (fire su
 
 - **Elemental row (`..._attack_summon01`: Branda 11976, Eldric 11977):**
   - Same tick: 5-wide `..._loc01_spawn01` vfx row (fire 3218, ice 3221) at x=2909-2913. **+4 ticks:** five hitbox NPCs on it: `rs_loc_attack_fire_hitbox` (14152) / `rs_loc_attack_ice_hitbox` (14153).
-  - **Clearing:** any opposite-element spell removes tiles early (fire row: water/ice spell; ice row: fire spell). Live-verified: casting the right surge at a row tile clears that tile (the hit-interception path), and clicking Douse/Melt with the right spell in hand clears it too; anything else hints. The client keeps a spell selected after a successful cast (OSRS), so repeated casts work without re-selecting. Cleared tiles play `..._loc01_despawn01` (Branda 3220, Eldric 3223) and become `invisible_type8_nonblocking` (29733); overlapping rows track their own graphics, so one row clearing never strips another's.
-  - **Lifetime ~40 ticks** if left alone (captured lives 34-40); spell-cleared rows die in 2-10. Walking/standing on a live tile deals the wall hit (max 12 [WIKI]; 10/12 player-hits in 02283 [LOG]); rows never vanish under your feet and don't physically block (OSRS NPCs are walk-through). Contact damage pulses about every 3 ticks — rate estimated [EST], Wiki gives no interval.
-  - **Sounds:** fire 10116 + 10118 (delay 122); ice 10146/10147 (delay 5) + 10148 (delay 120), range 1 per tile.
+  - **Clearing:** any opposite-element spell removes tiles early (fire row: water/ice spell; ice row: fire spell): the tile hit and the row's tiles either side of it (captured: hits on x 2911 despawn 2910-2912 together, +2-3 ticks after the impact). Live-verified: casting the right surge at a row tile clears that tile (the hit-interception path), and clicking Douse/Melt with the right spell in hand clears it too; anything else hints. Cleared tiles play `..._loc01_despawn01` (Branda 3220, Eldric 3223) and become `invisible_type8_nonblocking` (29733); overlapping rows track their own graphics, so one row clearing never strips another's. Fire and ice cancel out: when a row's hitboxes would stand up on the other element's row, that row's tiles despawn (grid, sound, marker) and the new row never appears beyond its cast grid [LOG 02283]. Same-element rows overlap. Each tile has one shape-10 loc, the element's `..._loc01_idle01` while a row stands there. Live then swaps a cleared tile to `invisible_type8_nonblocking` (29733); we remove the loc instead, which looks the same, because our client drew later ground graphics (the stomp telegraph) under that marker.
+  - **Lifetime ~40 ticks** if left alone (captured lives 34-40); spell-cleared rows die in 2-10. Walking/standing on a live tile deals the wall hit (max 12 [WIKI]; 10/12 player-hits in 02283 [LOG]); rows never vanish under your feet and don't physically block (OSRS NPCs are walk-through). Contact damage pulses about every 3 ticks — rate estimated [EST], Wiki gives no interval. Overlapping rows are tracked one by one, so each expires on its own.
+  - **Sounds:** see Sounds above (fire 10147/10148, ice 10116/10118, per tile).
 - **Summon elementals (`..._attack_summon02`: Branda 11978, Eldric 11977):**
-  - **+2 ticks:** three `rt_summon_elemental_fire` (14150) / `rt_summon_elemental_ice` (14151) on adjacent tiles near the caster (e.g. (2912, 9563-9565), (2913, 9568-9570)) with `..._spawn01` (fire 11956, ice 11954) + spawn spotanim (ice 3202).
-  - Walk to the player, `..._attack01` (fire 11947, ice 11950) about every 4 ticks, max 4 [WIKI]. Sounds 10172/10190 around minion casts [LOG].
+  - **+2 ticks:** three `rt_summon_elemental_fire` (14150) / `rt_summon_elemental_ice` (14151) in a column at a random lane x, independent of where the caster stands [LOG]: mobile, fire at the north end (first tile y 9569-9571), ice at the south end (y 9561-9563); static, against the caster's footprint (fire y 9568-9570, ice y 9564-9566). Spawn anims 11956/11954 + spotanims 3204/3202, sounds above.
+  - Walk to the player, `..._attack01` (fire 11947, ice 11950) about every 4 ticks, max 4 [WIKI]. Spawn sounds 10190/10172 [LOG].
 
 ## Minion fuse and explode [LOG] [WIKI]
 
@@ -232,12 +235,12 @@ Either titan casts either special. Told apart by anim + slot-2 spotanim (fire su
 When either titan first reaches ~210 HP:
 
 - **Teleport** [LOG]: Branda anim 11984 → `vfx_branda_queen_loc01_spawn02` (3219) grid over x=2909-2913, y=9571-9573 + 29733 markers → 3 ticks later telejump to (2910, 9571), spawn anim 11966 + slot-2 3217, floors 55993/55994, blocking 26209 tiles. Eldric mirrors (teleport 11983, spawn02 vfx 3222 over y=9561-9563, telejump (2910, 9561), spawn 11963, floors 55997/55998).
-- **Static** for the rest of the fight; they keep summoning (rows + elementals onto the arena) and meleeing, melee now reaching the whole arena [WIKI] [LOG: elementals + melee01 continue post-teleport].
-- **Elemental Blast, periodic** [LOG]:
-  - **Charge (`..._aoe01`: Branda 11981, Eldric 11979):** slot-2 charge spotanims (fire 3214); safe tile 56003 appears the same tick at the convergence. Ranged x6 holds through charge and attack [WIKI].
-  - **Fire (`..._aoe02`: Branda 11982, Eldric 11980), 6 ticks later:** slot-2 spotanims (fire 3215), then full-arena projectile grids — ice 3210 over the south half, fire 3209 over the north half (x=2909-2913, y=9564-9570 captured, repeated the next tick). Sound 10119.
+- **Static** for the rest of the fight: no rows; stomps and elementals 2:1 between blasts [LOG]. When one titan dies before the teleport, the survivor teleports on the next tick and fights on alone from its static tile [LOG 03398].
+- **Elemental Blast, periodic** [LOG]: every 22, 29 or 36 ticks (one to three other attacks between; 5/11/6 captured), the first 10 ticks after the teleport.
+  - **Charge (`..._aoe01`: Branda 11981, Eldric 11979):** slot-2 charge spotanims (fire 3214); the safe tile 56003 appears the same tick, with `royal_titans_area_attack_timer_handler` (NPC 14154) on it carrying the progress bar: headbar 78 filling 0 → 30 over 210 client cycles, the NPC gone 7 ticks later [LOG, 58 of 58 blasts]. Ranged x6 holds through charge and attack [WIKI].
+  - **Fire (`..._aoe02`: Branda 11982, Eldric 11980), 6 ticks later:** slot-2 spotanims (fire 3215) and the pulse sounds; then at +1/+3/+5 the grids and the damage together. The grids cover the blast area except the safe tile: with both titans, fire (3209) on the rows north of the safe tile's row and ice (3210) on that row and south; a lone titan draws only its own grid, over the whole area.
   - **Damage: three pulses at +1/+3/+5 after AoE02** (e.g. 830→831/833/835 = 14/23/18; max 26 seen) [LOG]. Empty windows (808, 987, 1592, 1614, 1643, 1679, 1730, 1795, 1824, 2388 in 03402) = player on the safe tile, no damage. Off-tile damage numbers — see Assumptions.
-- **One titan down first** [WIKI; LOG killed both together so this is unwitnessed]: the survivor focuses the team, melee pierces protection prayers, and the safe tile sits as far from it as possible. Kill them in quick succession.
+- **One titan down first** [LOG 03398, 03402]: the survivor teleports (if it hadn't), casts alone (only its own animations, shouts and grid), and the safe tile goes to the row farthest from it. The corpse stays until both are down and can't be claimed before. Wiki: its melee pierces protection prayers (unwitnessed).
 
 ## Death, corpses, loot [LOG] [WIKI]
 
@@ -283,8 +286,8 @@ Kill-count tasks read varp 4648 `total_royal_titan_kills` [LOG numeric id]; `ca_
 
 ## Death handling, logout, multicombat
 
-- **Death is unsafe** [WIKI]: gravestone outside the entrance. tsps has no graves (Doom precedent, `Delve.Doom.js`): what would drop lands at the grave tile outside the entrance instead. Grave tile [EST, Doom pattern; confirm live tile].
-- **Logout inside** puts the player back outside the entrance on login; if the party's fight is still live they rejoin it instead (verified live, Yama-domain precedent) [EST, repo pattern].
+- **Death is unsafe** [WIKI]: the gravestone goes outside the entrance at (2950, 9574) (`gravestones:grave-location`) [EST: live grave tile].
+- **Logout inside** keeps the player's place while a partner is still in the fight: the relog lands back in it. A solo logout ends the instance, and the relog lands outside the entrance [EST, repo pattern].
 - **Multicombat assumed** [EST]: the instance inherits the ice-dungeon base map (multicombat outside, `multiway_indicator` 4605 = 1 in the dungeon [LOG]); duo + minions require it. Verify the indicator shows inside the arena.
 
 ## Out of scope (separate content)
@@ -293,7 +296,7 @@ Twinflame staff assembly, desiccated-page conversion at plinths, Deadeye/Mystic 
 
 ## Testing
 
-Unit: `server/tests/royal-titans.test.cjs`, 13 tests (helpers, safe tile, spell tiers, shares, loot scaling, CA decisions, streaks) — all pass. Developer commands: `::royalhp <n>`, `::royalkill` (leaves 1 HP — engine deaths need a killer), `::royalblast`.
+Unit: `server/tests/royal-titans.test.cjs`, 18 tests (helpers, safe tile, spell tiers, row clearing, weakness, shares, loot scaling, CA decisions incl. Let them fight, streaks, the join rule) — all pass. Developer commands: `::royalhp <n>`, `::royalkill` (leaves 1 HP — engine deaths need a killer), `::royalblast`.
 
 Live playtest (agent MCP, solo + duo, invulnerable + mortal): entry/menu/Quick-start/warning/instance/music/minimap/multiway/fades; spawns; melee both ways to deaths; rows (Douse/Melt) + minion trios; teleport at 210 to exact tiles; blast damage; HUD target-switching (values on the wire); duo join same instance; exit reversal (minimap/multiway/HUD cleared); scoreboard opens 909; KC/duration/eligible messages; CA completions through the real path (One by one, Elemental Company, No time to pray, Perfect); Loot (2 rolls scaled), Sacrifice-miss, Take pages (11); one-claim-per-player + corpse validity stamps; grave redirect (sharks outside); gated respawn (no mid-fight or post-kill doubles); logout/login incl. duo rejoin to live fights. Second-claim refusal seen in captures; live re-check pending.
 
@@ -302,8 +305,8 @@ Still needing eyes/alive checks: boss-HUD bar rendering (values verified, never 
 ## Assumptions (all [EST]; confirm in implementation via MCP)
 
 1. **Join rule.** Wiki: "as long as one of the Titans has not lost more than 25%". Implemented as: join allowed while **both** titans are above 450 HP. The literal "one" reading (either above 450) would let players join nearly-finished fights, which the Titan Killer reset rule suggests is unintended. Confirm: try joining at various HP states live.
-2. **Critical-stage block.** Entry/Quick-start refused once **either titan has teleported** (phase 3) with the critical-stage mesbox; before that, Join works under rule 1. The captures show the message but not the exact trigger state. Confirm live.
-3. **Titan walking.** Per 7-tick cycle: attack on the attack tick, step 1 tile toward the target on the other ticks until in melee reach (bursts of 2-8 walk ticks [LOG]). Stop condition at the arena edge and pathing around live rows [EST]. Confirm live.
+2. **Critical-stage block.** A join is refused once **either titan has teleported** (phase 3) with the critical-stage mesbox; before that, Join works under rule 1. The captures show the message but not the exact trigger state. Confirm live.
+3. **Titan walking.** Modelled from the captured timeline: walks only after rows/elementals, 2-6 random tiles on the titan's side. Whether live weights the destination (it often steps back out to x 2904/2916) is not modelled. Confirm live.
 4. **Row y-selection.** No correlation with player position over 27 casts [LOG]. Implemented as random y in 9562-9572 [EST]. Confirm live (uniform? caster-side bands?).
 5. **Blast damage.** Three pulses +1/+3/+5 after AoE02, max ~26, safe tile avoids all. Assumed: each pulse rolls independently per player off the tile (not distance-scaled). Confirm numbers with Protect prayers off.
 6. **Explode damage.** Small (≤12 seen), single roll on the minion's tile + adjacents at explode+1, avoided by moving 2+ tiles away. Confirm max live.
@@ -316,6 +319,8 @@ Still needing eyes/alive checks: boss-HUD bar rendering (values verified, never 
 13. **Melee shape.** Telegraph is the captured 5x3 player-centred block, delays +2/tile from the caster [LOG]; damage assumed on the same tiles as delays expire (wiki 3x5 agrees on shape). Confirm per-tile damage timing live.
 14. **Teleport landing.** (2950, 9574): verified walkable and connected live (exit lands there; walked to entrance/scoreboard). Resolved.
 15. **Row-clear spell gate.** Dropped: any opposite-element spell clears (the captures show the hint only after physical clicks; Yama precedent). Resolved.
-16. **Duo join flow.** Verified live repeatedly: same-entrance Join drops the partner into the live instance. Resolved; scaling per Assumption 12.
+16. **Duo join flow.** Join by name, friends' list required (captured prompt). Verified live: refused without the friend entry, joined with it. Scaling per Assumption 12.
 17. **Unclaimed-corpses schedule.** All corpse timings are claim-anchored (see Death section); a player who never clicks is unwitnessed. Assumed: same offsets from kill+19. Confirm live (or that nothing stalls).
 18. **Respawn while looting.** Fresh spawns arrive ~31-34 ticks after the claim even if the player is still in the arena — assumed they do not aggro/interfere until attacked (no capture shows the overlap). Confirm live.
+19. **Join replies.** Only the prompt is captured. The replies are ours: "That player isn't fighting the Royal Titans.", "You must be on their friends' list to join their fight.", "That fight is already full." Confirm live.
+20. **Movement.** The titans stand on blocked floor (lava/ice) beside the lane, so their own steps ignore clipping; the combat engine never chases with them and they never wander. After the teleport they stay on their static tiles.
