@@ -150,6 +150,23 @@ export class UseItemPacketListener {
     if (!target || !item || item.getId() !== itemId || !this.canUse(player, itemId)) {
       return;
     }
+    const definition = target.getCurrentDefinition(player);
+    const routeEvent = {
+      player,
+      npc: target,
+      definition,
+      npcId: target.getContentId(player),
+      npcIndex: targetIndex,
+      clickType: 0,
+      location: {
+        x: target.getLocation().getX(),
+        y: target.getLocation().getY(),
+        z: target.getLocation().getZ(),
+      },
+      handled: false,
+      range: 1,
+    };
+    PluginManager.emitNpcRoute(routeEvent);
     player.getMovementQueue().walkToEntity(target, () => {
       player.setPositionToFace(target.getLocation());
       PluginManager.emitItemOnNpc({
@@ -163,7 +180,7 @@ export class UseItemPacketListener {
         slot,
         handled: false,
       });
-    });
+    }, routeEvent.range);
   }
 
   public static spellOnObject(
