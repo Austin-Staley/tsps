@@ -33,6 +33,7 @@ const Scrying = require("./Scrying.Construction");
 const CapeHanger = require("./CapeHanger.Construction");
 const Trophies = require("./Trophies.Construction");
 const MahoganyHomes = require("./MahoganyHomes.Construction");
+const MaxHouse = require("./MaxHouse.Construction");
 
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
@@ -1206,6 +1207,9 @@ function attach(api) {
   api.registerCommand("hotspots", Commands.listHotspots, PlayerRights.DEVELOPER);
   api.registerCommand("housemats", Commands.houseMaterials, PlayerRights.DEVELOPER, "Spawn the materials to build a piece of furniture or a room");
   api.registerCommand("deletehouse", Commands.deleteHouse, PlayerRights.DEVELOPER, "Delete your house, so you have to buy a new one");
+  api.registerCommand("maxhouse", MaxHouse.maxHouse, PlayerRights.DEVELOPER, "Replace your house with one of every room, fully furnished (::restorehouse undoes it)");
+  api.registerCommand("restorehouse", MaxHouse.restoreHouse, PlayerRights.DEVELOPER, "Bring back the house ::maxhouse replaced");
+  api.persistAttribute(MaxHouse.BACKUP_ATTRIBUTE, null);
   api.onObjectFirstClick(ROOM_DOOR_HOTSPOT_IDS, openRoomDoor);
   api.onObjectFifthClick(ROOM_DOOR_HOTSPOT_IDS, openRoomDoor);
   api.onObjectFirstClick(furnitureObjectIds, tryRemoveFurniture);
