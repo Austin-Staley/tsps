@@ -130,4 +130,4 @@ function attachMountedItems(api) {
   for (const name of Object.keys(AMULETS)) api.onObjectInteraction(name, AMULET_OPTIONS);
 }
 
-Object.assign(module.exports, { attachMountedItems });
+Object.assign(module.exports, { attachMountedItems, mythicalCapeTeleport });

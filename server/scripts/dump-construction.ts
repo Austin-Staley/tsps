@@ -172,7 +172,46 @@ async function main() {
         if (match) (stones[match[1]] ??= {})[match[2]] = id;
     }
 
+    // Cape hanger: each poh_mounted_* cape loc and the cape (and hood) that shows it.
+    const objIds = new Map([...new Gamevals().namesOf(GamevalKind.OBJ)].map(([id, name]) => [name, id]));
+    const skillNames: Record<string, string> = { ranged: "ranging", diary: "ad", quest: "qp" };
+    const maxNames: Record<string, string> = { fire: "firecape", ava: "anma" };
+    const plainCapes: Record<string, string> = { fire_cape: "tzhaar_cape_fire", infernal_cape: "infernal_cape", championscape: "champion_cape", mythicalcape: "mythical_cape" };
+    const mounted: Record<string, { cape: number; hood?: number }> = {};
+    for (const [id, name] of [...new Gamevals().namesOf(GamevalKind.LOC)].sort(([a], [b]) => a - b)) {
+        const key = /^poh_mounted_(.+)$/.exec(name)?.[1];
+        if (!key || key === "capestand_blank") continue;
+        let cape: string | undefined;
+        let hood: string | undefined;
+        const max = /^max_cape(?:_(.+))?$/.exec(key);
+        const skill = /^([a-z]+)_cape(_trim)?$/.exec(key);
+        if (plainCapes[key]) cape = plainCapes[key];
+        else if (max) {
+            const variant = max[1] ? `_${maxNames[max[1]] ?? max[1]}` : "";
+            cape = `skillcape_max${variant}`;
+            hood = `skillcape_max_hood${variant}`;
+        } else if (skill?.[1] === "music") {
+            cape = skill[2] ? "music_cape_trimmed" : "music_cape";
+            hood = "music_cape_hood";
+        } else if (skill) {
+            const base = `skillcape_${skillNames[skill[1]] ?? skill[1]}`;
+            cape = skill[2] ? `${base}_trimmed` : base;
+            hood = `${base}_hood`;
+        }
+        const capeId = cape && objIds.get(cape);
+        if (capeId == null) {
+            if (cape) notes.push(`mounted cape ${name}: no obj ${cape}`);
+            continue;
+        }
+        const hoodId = hood ? objIds.get(hood) : undefined;
+        mounted[id] = hoodId != null ? { cape: capeId, hood: hoodId } : { cape: capeId };
+    }
+
     const outputs: Record<string, string> = {
+        "mounted-capes.json":
+            "{\n" +
+            Object.entries(mounted).map(([loc, items]) => `  ${JSON.stringify(loc)}: ${JSON.stringify(items)}`).join(",\n") +
+            "\n}\n",
         "attack-stones.json":
             "{\n" +
             Object.entries(stones).map(([stone, forms]) => `  ${JSON.stringify(stone)}: ${JSON.stringify(forms)}`).join(",\n") +

@@ -26,6 +26,11 @@ const ThroneRoom = require("./ThroneRoom.Construction");
 const Menagerie = require("./Menagerie.Construction");
 const GamesRoom = require("./GamesRoom.Construction");
 const CombatRings = require("./CombatRings.Construction");
+const Tea = require("./Tea.Construction");
+const TipJar = require("./TipJar.Construction");
+const Bookcase = require("./Bookcase.Construction");
+const Scrying = require("./Scrying.Construction");
+const CapeHanger = require("./CapeHanger.Construction");
 
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
@@ -1032,6 +1037,7 @@ function leftHouse(player, house) {
   if (house.owner === player) advertisedHouses.delete(house);
   GamesRoom.leftGamesRoom(player, house);
   CombatRings.leftCombatRoom(player);
+  Tea.leftWithTea(player);
 }
 
 // Kourend and Varlamore house locations need a visit first (Estate agent check).
@@ -1069,6 +1075,11 @@ function attach(api) {
   Menagerie.attachMenagerie(api);
   GamesRoom.attachGamesRoom(api);
   CombatRings.attachCombatRings(api);
+  Tea.attachTea(api);
+  TipJar.attachTipJar(api);
+  Bookcase.attachBookcase(api);
+  Scrying.attachScrying(api);
+  CapeHanger.attachCapeHanger(api);
   api.persistAttribute(HOUSE_ATTRIBUTE, defaultHouse());
   api.onObjectFirstClick(HOUSE_PORTAL_IDS, enterDefaultHouse);
   api.onObjectSecondClick(HOUSE_PORTAL_IDS, enterNormalHouse);
@@ -1104,4 +1115,4 @@ function attach(api) {
   api.onPlayerLogout(logoutHouse);
 }
 
-Object.assign(module.exports, { houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, houseFor, saveHouse, rebuildHouse, isBuildingMode, constructionLevel, getBuildMaterials, useMaterial, withArticle, hotspotChoices, furnitureCreationText, processOccupant, leftHouse, attach });
+Object.assign(module.exports, { enterHouse, visitHouse, houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, houseFor, saveHouse, rebuildHouse, isBuildingMode, constructionLevel, getBuildMaterials, useMaterial, withArticle, hotspotChoices, furnitureCreationText, processOccupant, leftHouse, attach });

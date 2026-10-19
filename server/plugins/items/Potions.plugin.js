@@ -472,6 +472,9 @@ function registerPotion(definition) {
     area: definition.area ?? null,
     requiresFoodPermission: Boolean(definition.requiresFoodPermission),
     shareable: definition.shareable !== false,
+    // Drinks with their own animation and messages: { animation, messages(itemId) } in place of
+    // the potion swig and "You have finished your potion.".
+    drink: definition.drink ?? null,
     // null: nothing is left once the last dose is drunk.
     emptyItemId: definition.emptyItemId === null
       ? NO_EMPTY_ITEM
@@ -524,11 +527,14 @@ registerPotion({ name: "Beer", chains: [[Items.BEER]], emptyItemId: Items.BEER_G
     lowerSkillByCurrent(player, Skill.ATTACK, 1, 0.06);
   } });
 
-// POH refreshments use the same consumption, cooldown and stat-boost rules as potions.
-for (const [id, cup, boost] of [[Items.CUP_OF_TEA_9, Items.EMPTY_CUP_3, 1],
-  [Items.CUP_OF_TEA_11, Items.PORCELAIN_CUP_2, 2], [Items.CUP_OF_TEA_13, Items.PORCELAIN_CUP_3, 3]]) {
+// POH refreshments use the same consumption, cooldown and stat-boost rules as potions, with the
+// cup's own drinking animation and messages (rsprox captures: human_drink_from_teacup_*, "You drink
+// the cup of (milky) tea.", "You feel refreshed and ready for more building.").
+for (const [id, cup, boost, animation] of [[Items.CUP_OF_TEA_9, Items.EMPTY_CUP_3, 1, 3702],
+  [Items.CUP_OF_TEA_11, Items.PORCELAIN_CUP_2, 2, 3703], [Items.CUP_OF_TEA_13, Items.PORCELAIN_CUP_3, 3, 3704]]) {
   registerPotion({ name: "Cup of tea", chains: [[id], [id + 1]], emptyItemId: cup,
-    requiresFoodPermission: true, effect: player => boostSkill(player, Skill.CONSTRUCTION, boost, 0) });
+    requiresFoodPermission: true, effect: player => boostSkill(player, Skill.CONSTRUCTION, boost, 0),
+    drink: { animation, messages: (itemId) => [itemId === id ? "You drink the cup of tea." : "You drink the cup of milky tea.", "You feel refreshed and ready for more building."] } });
 }
 for (const [id, effect] of [
   [Items.BEER_3, player => { boostSkill(player, Skill.STRENGTH, 1, 0.02); lowerSkillByCurrent(player, Skill.ATTACK, 1, 0.06); }],
@@ -1237,7 +1243,7 @@ function handlePotionDrink(player, itemId, slot) {
   timers.extendOrRegister(TimerKey.FOOD, 3);
 
   player.getPacketSender().sendInterfaceRemoval();
-  player.performAnimation(DRINK_ANIMATION);
+  player.performAnimation(entry.potion.drink?.animation ? new Animation(entry.potion.drink.animation) : DRINK_ANIMATION);
   Sounds.sendSound(player, Sound.DRINK);
 
   inventory.setItem(slot, new Item(entry.replacementId, entry.replacementId === NO_EMPTY_ITEM ? 0 : 1)).refreshItems();
@@ -1253,7 +1259,9 @@ function handlePotionDrink(player, itemId, slot) {
     }
   }
 
-  if (entry.replacementId === entry.potion.emptyItemId) {
+  if (entry.potion.drink?.messages) {
+    for (const message of entry.potion.drink.messages(itemId)) player.sendMessage(message);
+  } else if (entry.replacementId === entry.potion.emptyItemId) {
     player.sendMessage(entry.potion.area === "chambers-of-xeric"
       ? "You have finished your potion. The gourd vial disintegrates."
       : "You have finished your potion.");
