@@ -1,6 +1,7 @@
 "use strict";
 
 const { CacheDefinitions, Location, Skill, TeleportHandler } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 const Portals = require("./Portals.Construction");
 
@@ -20,21 +21,14 @@ const Portals = require("./Portals.Construction");
 //   and removing by dragging a slot back, aren't captured: adding costs 1,000x the spell's runes
 //   from the inventory on Done, needs its Magic level, and removing refunds nothing (Wiki).
 //   Marble holds 4, gilded 8, crystalline 41 (Wiki).
-const MENU = 17, CONFIG = 19;
+const MENU = Ids.iface("telenexus_teleport"), CONFIG = Ids.iface("telenexus");
 const ROWS = 13, KEYS = 8, ALT_ROWS = 17, ALT_KEYS = 7, OPTIONS_LAYER = 10;
 const LEFT_CLICK_LAYER = 3, LEFT_TEXT = 6, LEFT_CLICK_OPTIONS = 8, DONE = 9, NON_SLOTTED = 22, CONFIRM_DETAILS = 29, SLOTTED = 39;
 const COST_INV = 619;
-const NEXUS_ID = 6670, LEFT = 6653, LEFT_TEMP = 6669;
-const SLOT_VARBITS = [
-  6654, 6655, 6656, 6657, 6658, 6659, 6660, 6661, 6662, 6663, 6664, 6665, 6666, 6667, 6668, 6554, 6555, 6556,
-  10080, 10081, 10082, 10083, 10084, 10085, 10086, 10087, 10088, 10089, 10090, 10091, 10019, 10020, 10021, 10022, 10023,
-  20111, 20112, 20113, 20114, 20115, 20116, 20117, 20118, 20119, 20120,
-];
-const TEMP_VARBITS = [
-  6672, 6673, 6674, 6675, 6676, 6677, 6678, 6679, 6680, 6681, 6682, 6683, 6684, 6685, 6686, 6568, 6569, 6582,
-  10092, 10093, 10094, 10095, 10096, 10097, 10098, 10099, 10100, 10101, 10102, 10103, 10024, 10025, 10026, 10027, 10028,
-  20121, 20122, 20123, 20124, 20125, 20126, 20127, 20128, 20129, 20130,
-];
+const NEXUS_ID = Ids.varbit("poh_nexus_id"), LEFT = Ids.varbit("poh_nexus_left_click"), LEFT_TEMP = Ids.varbit("poh_nexus_left_click_temp");
+// The 45 slots: poh_nexus_tele_<n>, and the interfaces' poh_nexus_tele_<n>_temp copies.
+const SLOT_VARBITS = Array.from({ length: 45 }, (_, index) => Ids.varbit(`poh_nexus_tele_${index + 1}`));
+const TEMP_VARBITS = Array.from({ length: 45 }, (_, index) => Ids.varbit(`poh_nexus_tele_${index + 1}_temp`));
 const TIERS = { MARBLE_PORTAL_NEXUS: { id: 1, slots: 4 }, GILDED_PORTAL_NEXUS: { id: 2, slots: 8 }, CRYSTALLINE_PORTAL_NEXUS: { id: 3, slots: 41 } };
 // rows2: the alternates, with the middle of their captured landings.
 const ALTERNATES = [[151, [3165, 3477, 0]], [154, [2726, 3486, 0]], [156, [2583, 3095, 0]]];

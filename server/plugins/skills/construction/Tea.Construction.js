@@ -1,6 +1,7 @@
 "use strict";
 
-const { CountdownTask, TaskManager } = require("./Core.Construction");
+const { CountdownTask, ItemIdentifiers, TaskManager } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 
 // Tea (rsprox captures, Wiki): a full kettle (filled at a sink, WaterSources) on a stove says
@@ -11,22 +12,26 @@ const House = require("./House.Construction");
 // first." without them); the pot into a cup: "You pour some tea."; milk makes it milky. Drinking is
 // the Potions plugin's (the Construction boost and the captured drinking messages); cups of tea
 // vanish when their drinker leaves the house (Wiki).
-const KETTLE = 7688;
-const HOT_KETTLE = 7691;
-const FULL_KETTLE = 7690;
-const TEA_LEAVES = 7738;
-const MILK = 1927;
-const EMPTY_BUCKET = 1925;
+const KETTLE = Ids.obj("poh_kettle_empty");
+const HOT_KETTLE = Ids.obj("poh_kettle_boiled");
+const FULL_KETTLE = Ids.obj("poh_kettle_water");
+const TEA_LEAVES = Ids.obj("poh_tea_leaves");
+const MILK = ItemIdentifiers.BUCKET_OF_MILK;
+const EMPTY_BUCKET = ItemIdentifiers.BUCKET;
 const BOIL_SOUND = 935;
 const BOIL_TICKS = 8;
 // Stove furniture -> its loc with a kettle on (poh_stove_<n>_kettle); the plain firepit has none.
-const KETTLE_LOCS = { FIREPIT_WITH_HOOK: 13530, FIREPIT_WITH_POT: 13532, SMALL_OVEN: 13535, LARGE_OVEN: 13538, STEEL_RANGE: 13540, FANCY_RANGE: 13543 };
+const KETTLE_LOCS = Object.fromEntries(Object.entries({
+  FIREPIT_WITH_HOOK: 2, FIREPIT_WITH_POT: 3, SMALL_OVEN: 4, LARGE_OVEN: 5, STEEL_RANGE: 6, FANCY_RANGE: 7,
+}).map(([key, stove]) => [key, Ids.loc(`poh_stove_${stove}_kettle`)]));
 // poh_teapot_<material>_{empty,leaves,4..1} and poh_<material>cup_{empty,tea,tea_milky}.
 const SETS = [
-  { empty: 7702, leaves: 7700, pots: [7698, 7696, 7694, 7692], cup: 7728, tea: 7730, milky: 7731 },
-  { empty: 7714, leaves: 7712, pots: [7710, 7708, 7706, 7704], cup: 7732, tea: 7733, milky: 7734 },
-  { empty: 7726, leaves: 7724, pots: [7722, 7720, 7718, 7716], cup: 7735, tea: 7736, milky: 7737 },
-];
+  ["clay", "clay"], ["porcelain", "china"], ["giltporcelain", "giltchina"],
+].map(([pot, cup]) => ({
+  empty: Ids.obj(`poh_teapot_${pot}_empty`), leaves: Ids.obj(`poh_teapot_${pot}_leaves`),
+  pots: [1, 2, 3, 4].map((portions) => Ids.obj(`poh_teapot_${pot}_${portions}`)),
+  cup: Ids.obj(`poh_${cup}cup_empty`), tea: Ids.obj(`poh_${cup}cup_tea`), milky: Ids.obj(`poh_${cup}cup_tea_milky`),
+}));
 const TEA_CUPS = SETS.flatMap(set => [set.tea, set.milky]);
 
 /** furniture -> { boiled } for kettles on stoves */

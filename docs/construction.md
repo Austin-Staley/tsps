@@ -26,6 +26,7 @@ covers something, this page says so.
 | `Dungeon`, `ThroneRoom` | Guards, traps, doors, treasure, oubliette; the throne room lever, trapdoors and cages, challenge mode |
 | `MahoganyHomes` | Contractors, contracts, the clients' homes, the reward shop |
 | `Menu`, `Commands` | The generic option menu (script 217); `::hotspots` |
+| `Ids` | Ids by the cache's gameval names (`Ids.loc("poh_exit_portal")`); a name the cache lacks stops the plugin loading |
 
 Walls, windows and scenery collide as the cache's template chunks place them (each room turned
 with its rotation), with the chunks' blocked tiles; doors and furniture add their own collision.
@@ -54,6 +55,14 @@ built loc ids, build animation, tools and upgrade source (`furniture.json`), roo
 chunks and hotspots (`rooms.json`), the hotspot locs, trophy experience (Wiki) and each Mahogany
 Homes client and the Wiki's planks per piece. `yarn dump:construction` (in `server/`) reports rows
 the data names that the cache lost, and cache rows and trophies with no hand data yet.
+
+The units name every loc, NPC, obj, animation, graphic, varp, varbit and interface by its gameval
+through `Ids`, and families by their pattern (`poh_nexus_tele_<n>`,
+`poh_elemental_balance_<tier>_<colour><n>`, `chair_sit_ready_throne_<n>`, the door spaces
+`poh_hotspot_door*`). Sounds, client scripts, enums and struct params have no gamevals and stay
+named constants. The data files above still hold loc, obj and animation ids as numbers.
+
+The house save attribute is `Data.HOUSE_ATTRIBUTE`; every unit that writes it imports that.
 
 A furniture row may say `savesAs`: an upgrade row (a trophy display's next wood) saves as the
 furniture it makes.
@@ -261,6 +270,14 @@ when drunk from, with no message or sound (captures).
 Already there before this page: portal chamber and nexus teleports, altars and incense burners,
 spellbook and occult altars, pools, costume room storage, servants, the Estate agent, guests and
 adverts, house options, the house viewer, chairs.
+
+Moving the house to Hosidius needs a visit to Great Kourend first, and Aldarin a visit to
+Varlamore (Wiki). Nothing else in tsps records those visits (the cache's
+`zeah_playerhasvisited` and `varlamore_visited` varbits are never set, and varbits aren't saved),
+so `House` keeps `visitedKourend` / `visitedVarlamore` in the house save from
+`onPlayerMapSquareChange`, which fires once per 64x64 map square crossed. It is a global hook
+because both regions span hundreds of map squares, the case `docs/agents/areas.md` gives it for;
+the estate agent also accepts either varbit if a quest ever sets it.
 
 ## Not done yet
 

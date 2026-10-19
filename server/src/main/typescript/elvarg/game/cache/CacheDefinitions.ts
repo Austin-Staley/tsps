@@ -228,6 +228,12 @@ export class CacheDefinitions {
         return this.getGamevals().componentId(name);
     }
 
+    /** An interface's group id by its gameval name (`poh_jewellery_box`), or null. */
+    static getInterfaceId(name: string): number | null {
+        for (const [group, iface] of this.getGamevals().allInterfaces()) if (iface.name === name) return group;
+        return null;
+    }
+
     private static idsByName = new Map<GamevalKind, Map<string, number>>();
 
     private static idByName(kind: GamevalKind): Map<string, number> {

@@ -1,6 +1,7 @@
 "use strict";
 
 const { api, ItemIdentifiers, DialogueChainBuilder, StatementDialogue, PlayerDialogue } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 const Menu = require("./Menu.Construction");
 
@@ -47,10 +48,13 @@ function observe(event) {
 // battlestaffs (100 runes of the new element) on the elemental sphere and mystic staffs (1,000)
 // on the crystal of power (Wiki). "Select an element" and the refusals are from captures.
 const ELEMENTS = ["Earth", "Air", "Fire", "Water"];
+function staves(name) {
+  return Object.fromEntries(ELEMENTS.map((element) => [element, Ids.obj(name(element.toLowerCase()))]));
+}
 const STAVES = [
-  { tier: 1, cost: 0, ids: { Air: 1381, Water: 1383, Earth: 1385, Fire: 1387 } },
-  { tier: 2, cost: 100, ids: { Air: 1397, Water: 1395, Earth: 1399, Fire: 1393 } },
-  { tier: 3, cost: 1000, ids: { Air: 1405, Water: 1403, Earth: 1407, Fire: 1401 } },
+  { tier: 1, cost: 0, ids: staves((element) => `staff_of_${element}`) },
+  { tier: 2, cost: 100, ids: staves((element) => `${element}_battlestaff`) },
+  { tier: 3, cost: 1000, ids: staves((element) => `mystic_${element}_staff`) },
 ];
 const RUNES = { Air: ItemIdentifiers.AIR_RUNE, Water: ItemIdentifiers.WATER_RUNE, Earth: ItemIdentifiers.EARTH_RUNE, Fire: ItemIdentifiers.FIRE_RUNE };
 const BALLS = { CRYSTAL_BALL: 1, ELEMENTAL_SPHERE: 2, CRYSTAL_OF_POWER: 3 };

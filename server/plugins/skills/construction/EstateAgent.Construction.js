@@ -1,9 +1,17 @@
 "use strict";
 
 const { api, Skill, ItemIdentifiers: Items, DialogueChainBuilder, NpcDialogue, ActionDialogue, EndDialogue } = require("./Core.Construction");
+const Data = require("./Data.Construction");
+const Ids = require("./Ids.Construction");
 const Estate = require("./Estate.Construction");
 const House = require("./House.Construction");
 const Menu = require("./Menu.Construction");
+
+const KOUREND_VISITED_VARBIT = Ids.varbit("zeah_playerhasvisited");
+const VARLAMORE_VISITED_VARBIT = Ids.varbit("varlamore_visited");
+const SONG_OF_THE_ELVES_VARBIT = Ids.varbit("sote");
+const CHRISTMAS_STYLE_VARBIT = Ids.varbit("xmas20_poh_wallkit");
+const DEADMAN_STYLE_VARBIT = Ids.varbit("deadman_2026_poh_ornament_unlocked");
 
 function say(event, text, next) {
   event.player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
@@ -19,7 +27,7 @@ function stillAtAgent(event) {
 }
 
 function saveHouse(player) {
-  player.setAttribute("construction:house", House.houseStateFor(player));
+  player.setAttribute(Data.HOUSE_ATTRIBUTE, House.houseStateFor(player));
   House.syncHouseOptions(player);
 }
 
@@ -124,13 +132,13 @@ function changeHouse(event, kind, index) {
   if (kind === "location") {
     const destination = Estate.HOUSE_LOCATIONS[index];
     if ((saved.location ?? 1) === destination.id) { say(event, "Your house is already there."); return; }
-    if (destination.id === 8 && !saved.visitedKourend && player.getPacketSender().getVarbit(4897) === 0) {
+    if (destination.id === 8 && !saved.visitedKourend && player.getPacketSender().getVarbit(KOUREND_VISITED_VARBIT) === 0) {
       say(event, "You must visit Great Kourend before moving your house to Hosidius."); return;
     }
-    if (destination.id === 13 && !saved.visitedVarlamore && player.getPacketSender().getVarbit(9650) === 0) {
+    if (destination.id === 13 && !saved.visitedVarlamore && player.getPacketSender().getVarbit(VARLAMORE_VISITED_VARBIT) === 0) {
       say(event, "You must visit Varlamore before moving your house to Aldarin."); return;
     }
-    if (destination.id === 9 && player.getPacketSender().getVarbit(9016) < 200) {
+    if (destination.id === 9 && player.getPacketSender().getVarbit(SONG_OF_THE_ELVES_VARBIT) < 200) {
       say(event, "Prifddinas? I've never heard of it. Are you sure it's a real place?"); return;
     }
     if (!pay(event, choice.cost)) return;
@@ -139,8 +147,8 @@ function changeHouse(event, kind, index) {
   } else {
     const style = Estate.HOUSE_STYLES[index], oldStyle = Estate.houseStyleIndex(saved);
     if (oldStyle === index) { say(event, "Your house is already decorated in that style."); return; }
-    const unlocked = saved.unlockedStyles?.includes(index) || (index === 9 && player.getPacketSender().getVarbit(11723) === 1)
-      || (index === 12 && player.getPacketSender().getVarbit(19672) === 1);
+    const unlocked = saved.unlockedStyles?.includes(index) || (index === 9 && player.getPacketSender().getVarbit(CHRISTMAS_STYLE_VARBIT) === 1)
+      || (index === 12 && player.getPacketSender().getVarbit(DEADMAN_STYLE_VARBIT) === 1);
     if (style.holiday && !unlocked) { say(event, `You must complete a ${style.holiday} event to unlock that house style.`); return; }
     const inventory = player.getInventory();
     const blueprint = style.blueprint && (index === 7 || !unlocked) ? style.blueprint : 0;
@@ -168,7 +176,7 @@ function selectMenu(event, kind, index) {
   const choice = choices[index];
   const style = kind === "style" ? Estate.HOUSE_STYLES[index] : undefined;
   const usesBlueprint = style?.blueprint && (index === 7 || (!House.houseStateFor(event.player).unlockedStyles?.includes(index)
-    && !(index === 12 && event.player.getPacketSender().getVarbit(19672) === 1)));
+    && !(index === 12 && event.player.getPacketSender().getVarbit(DEADMAN_STYLE_VARBIT) === 1)));
   api.sendMultiChatboxPrompt(event.player, `${kind === "location" ? "Move" : "Redecorate"} your house: ${choice.name}?`,
     `Yes (${choice.cost.toLocaleString("en-US")} coins${usesBlueprint ? " and blueprints" : ""}).`, () => changeHouse(event, kind, index),
     "No, thanks.", () => {});

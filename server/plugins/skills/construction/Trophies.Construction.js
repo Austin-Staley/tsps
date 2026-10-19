@@ -1,6 +1,7 @@
 "use strict";
 
 const { api, Animation, CacheDefinitions, CountdownTask, DialogueChainBuilder, ItemStatementDialogue, ActionDialogue, NpcDialogue, Skill, TaskManager } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 
 // Skill hall trophies (rsprox captures, cache scripts 7847-7855): the head and fishing spaces take
@@ -19,7 +20,7 @@ const WOODS = { head: ["teak", "mahogany", "gilded"], fish: ["oak", "teak", "mah
 // fish 5214's): the stuffed item the row uses, its level, menu icon and the loc it shows in each
 // display wood (poh_trophy_<name>_<wood>). Experience for mounting is the Wiki's, by row name.
 const EXPERIENCE = require("./data/trophy-experience.json");
-const PLANKS = new Set([8778, 8780, 8782, 8784, 32923]);
+const PLANKS = new Set(["plank_oak", "plank_teak", "plank_mahogany", "gold_leaf", "any_nails"].map(Ids.obj));
 const FURNITURE_TABLE = CacheDefinitions.getDbTableId("furniture");
 const furnitureColumn = (name) => CacheDefinitions.getDbColumn(FURNITURE_TABLE, name);
 const FISH = new Set([...CacheDefinitions.getEnumValues(5214).values()].map(Number));
@@ -42,25 +43,25 @@ const TROPHIES = [...CacheDefinitions.getEnumValues(5215)].sort(([a], [b]) => a 
     locs, experience: EXPERIENCE[rowName] ?? {},
   };
 });
-const MENU = 912;
-const SIDE = 911;
+const MENU = Ids.iface("poh_trophy_menu");
+const SIDE = Ids.iface("poh_trophy_side");
 const TIER_COMPONENTS = new Set([4, 5, 6]);
 const SIDE_ITEMS = 0;
-const MAIN_MODAL_UID = (161 << 16) | 16;
-const SIDE_MODAL_UID = (161 << 16) | 74; // toplevel_osrs_stretch:sidemodal
+const MAIN_MODAL_UID = Ids.component("toplevel_osrs_stretch:mainmodal");
+const SIDE_MODAL_UID = Ids.component("toplevel_osrs_stretch:sidemodal");
 const SIDE_MODAL_TYPE = 3;
-const VARP_TIER = 261;
-const VARP_SHOWN = 262;
-const VARP_TYPE = 263;
-const VARP_MOUNTED = 264;
+const VARP_TIER = Ids.varp("if1");
+const VARP_SHOWN = Ids.varp("if2");
+const VARP_TYPE = Ids.varp("if3");
+const VARP_MOUNTED = Ids.varp("if4");
 const TYPE_IDS = { head: 2, fish: 4 };
-const REACH = 3621; // reach_forward_high
+const REACH = Ids.seq("reach_forward_high");
 const DISPLAYS = {
   HEAD_DISPLAY_TEAK: { type: "head", tier: 1 }, HEAD_DISPLAY_MAHOGANY: { type: "head", tier: 2 }, HEAD_DISPLAY_GILDED: { type: "head", tier: 3 },
   FISH_DISPLAY_OAK: { type: "fish", tier: 1 }, FISH_DISPLAY_TEAK: { type: "fish", tier: 2 }, FISH_DISPLAY_MAHOGANY: { type: "fish", tier: 3 },
 };
 const MOUNTED_ATTRIBUTE = "construction:trophies";
-const KURASK = 410; // the chathead
+const KURASK = Ids.npc("slayer_kursk_1"); // the chathead
 // Furniture of the old trophy system (one piece per trophy), by the trophy it showed.
 const OLD_TROPHIES = {
   CRAWLING_HAND: 0, COCKATRICE_HEAD: 1, BASILISK_HEAD: 2, KURASK_HEAD: 3, ABYSSAL_DEMON_HEAD: 4, KBD_HEADS: 5,
@@ -240,4 +241,4 @@ function attachTrophies(api) {
   api.onCustomEvent("interface:close", ({ player }) => openFor.delete(player));
 }
 
-Object.assign(module.exports, { attachTrophies, refreshDisplays });
+Object.assign(module.exports, { attachTrophies, refreshDisplays, MOUNTED_ATTRIBUTE });

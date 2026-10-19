@@ -4,6 +4,7 @@ const {
   api, Animation, CacheDefinitions, DialogueChainBuilder, NpcDialogue, ActionDialogue, Equipment, ItemDefinition, Skill,
   ItemIdentifiers: Items,
 } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 
 // Mahogany Homes (Wiki; no rsprox captures, so every dialogue line and message here is ours
@@ -52,13 +53,14 @@ const TIERS = [
 const STEEL_BAR = Items.STEEL_BAR;
 const STEEL_REPAIR_XP = 120;
 const BROKEN = 1, OLD = 3, EMPTY = 4, BUILT = 5;
-const BUILD = 3676;
-const REMOVE = 3685;
-const DISCUSSED_VARBIT = 10562;
-const AMY = [10428, 6439, 7417]; // con_contractor and the forms it shows
+const BUILD = Ids.seq("human_poh_build");
+const REMOVE = Ids.seq("human_throw_away");
+const DISCUSSED_VARBIT = Ids.varbit("con_contract_discussed");
+const HOTSPOT_VARBITS = Array.from({ length: 8 }, (_, index) => Ids.varbit(`con_contract_hotspot_${index + 1}_display`));
+const AMY = ["con_contractor", "con_contractor_1op", "con_contractor_3op"].map(Ids.npc); // and the forms it shows
 const CITIES = { varrock: "Varrock", falador: "Falador", ardy: "East Ardougne", hosidius: "Hosidius" };
 const PARTS = { north: "north", south: "south", east: "east", west: "west", mid: "middle", southeast: "south-east" };
-const OUTFIT = [Items.CARPENTERS_HELMET, Items.CARPENTERS_HELMET + 2, Items.CARPENTERS_HELMET + 4, Items.CARPENTERS_HELMET + 6];
+const OUTFIT = ["construction_hat", "construction_shirt", "construction_trousers", "construction_boots"].map(Ids.obj);
 const OUTFIT_BONUS = 1.025;
 const CONTRACT_ATTRIBUTE = "construction:contract";
 const LAST_TIER_ATTRIBUTE = "construction:contract-last-tier";
@@ -66,24 +68,25 @@ const POINTS_ATTRIBUTE = "construction:carpenter-points";
 const COMPLETED_ATTRIBUTE = "construction:contracts-completed";
 const DISCUSSED_ATTRIBUTE = "construction:contract-discussed";
 const COMPLETED_CAP = 30000;
-// The reward shop (interface 673, cache scripts 3146 and 3524-3528): the entries in enum 2645's
+// The reward shop (construction_contract_shop, cache scripts 3146 and 3524-3528): the entries in enum 2645's
 // order and the Wiki's prices; each entry draws four children and the heading two, in the order
 // 5, 6, 4, 7, (heading), 1, 0, 2, 3, so its clickable child is at these slots.
-const SHOP = 673;
+const SHOP = Ids.iface("construction_contract_shop");
 const SHOP_OPTIONS = 3;
 const SHOP_CONFIRM = 6;
-const POINTS_VARP = 261;
+const POINTS_VARP = Ids.varp("if1");
 const REWARDS = [
-  { itemId: 24872, cost: 400 }, { itemId: 24874, cost: 800 }, { itemId: 24876, cost: 600 }, { itemId: 24878, cost: 200 },
-  { itemId: 24882, cost: 350 }, { itemId: 24884, cost: 25 }, { itemId: 24880, cost: 500 }, { itemId: 24885, cost: 2000 },
-];
+  ["construction_hat", 400], ["construction_shirt", 800], ["construction_trousers", 600], ["construction_boots", 200],
+  ["plank_sack", 350], ["construction_supply_crate", 25], ["wearable_saw", 500], ["hosidius_blueprints", 2000],
+].map(([name, cost]) => ({ itemId: Ids.obj(name), cost }));
 const SHOP_SLOTS = { 0: 5, 4: 6, 8: 4, 12: 7, 18: 1, 22: 0, 26: 2, 30: 3 };
 // The supply crate: one roll of the Wiki's table (Drop Rate Project), noted.
 const CRATE = [
-  [8790, 9, 5], [8790, 10, 1], [3420, 9, 5], [3420, 10, 1], [8782, 6, 15], [8782, 7, 3], [8778, 28, 10], [8778, 29, 15],
-  [8778, 30, 5], [1761, 45, 5], [1761, 46, 10], [1761, 47, 10], [1761, 48, 5], [2353, 23, 5], [2353, 24, 20], [2353, 25, 5],
-  [8780, 15, 20], [8780, 16, 4],
-];
+  ["cloth", 9, 5], ["cloth", 10, 1], ["limestonebrick", 9, 5], ["limestonebrick", 10, 1], ["plank_mahogany", 6, 15],
+  ["plank_mahogany", 7, 3], ["plank_oak", 28, 10], ["plank_oak", 29, 15], ["plank_oak", 30, 5], ["softclay", 45, 5],
+  ["softclay", 46, 10], ["softclay", 47, 10], ["softclay", 48, 5], ["steel_bar", 23, 5], ["steel_bar", 24, 20],
+  ["steel_bar", 25, 5], ["plank_teak", 15, 20], ["plank_teak", 16, 4],
+].map(([name, amount, weight]) => [Ids.obj(name), amount, weight]);
 
 const HOME_BY_KEY = new Map(HOMES.map(home => [home.key, home]));
 const HOTSPOT_BY_LOC = new Map(HOMES.flatMap(home => home.hotspots.map(hotspot => [hotspot.loc, { home, hotspot }])));
@@ -102,7 +105,7 @@ function setContract(player, contract) {
 function sendHotspots(player) {
   const contract = contractOf(player);
   const sender = player.getPacketSender();
-  for (let index = 1; index <= 8; index++) sender.sendVarbit(10553 + index, contract?.states?.[index] ?? 0);
+  HOTSPOT_VARBITS.forEach((varbit, index) => sender.sendVarbit(varbit, contract?.states?.[index + 1] ?? 0));
   sender.sendVarbit(DISCUSSED_VARBIT, player.getAttribute(DISCUSSED_ATTRIBUTE) ? 1 : 0);
 }
 

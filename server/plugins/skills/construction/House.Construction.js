@@ -1,6 +1,7 @@
 "use strict";
 
 const { api, World, Animation, Equipment, Flag, Location, Skill, PrivateChatStatus, ItemIdentifiers, ItemDefinition, PlayerRights } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const EstateAgent = require("./EstateAgent.Construction");
 const Servants = require("./Servants.Construction");
 const Estate = require("./Estate.Construction");
@@ -43,19 +44,25 @@ const TINDERBOX_ID = ItemIdentifiers.TINDERBOX;
 const NAIL_IDS = [ItemIdentifiers.BRONZE_NAILS, ItemIdentifiers.IRON_NAILS, ItemIdentifiers.STEEL_NAILS,
   ItemIdentifiers.BLACK_NAILS, ItemIdentifiers.MITHRIL_NAILS, ItemIdentifiers.ADAMANTITE_NAILS,
   ItemIdentifiers.RUNE_NAILS, ItemIdentifiers.DRAGON_NAILS];
-const HOUSE_PORTAL_IDS = [...Estate.HOUSE_LOCATIONS.map(location => location.portal), 30172];
-const EXIT_PORTAL_ID = 4525;
-const HOUSE_LOCKED_VARBIT = 2183;
-const GARDEN_CENTERPIECE_HOTSPOT_ID = 15361;
-const ROOM_DOOR_HOTSPOT_IDS = [...new Set([...Array.from({ length: 18 }, (_, index) => 15305 + index), ...Estate.HOUSE_STYLES.flatMap(style => style.doorHotspots)])];
-const COINS_ID = 995;
-const HOUSE_ATTRIBUTE = "construction:house";
-const FURNITURE_BUILD_INTERFACE = 458;
+// poh_portal_op: Yanille's portal once the Ardougne diary has changed it.
+const DIARY_PORTAL_ID = Ids.loc("poh_portal_op");
+const HOUSE_PORTAL_IDS = [...Estate.HOUSE_LOCATIONS.map(location => location.portal), DIARY_PORTAL_ID];
+const EXIT_PORTAL_ID = Ids.loc("poh_exit_portal");
+const HOUSE_LOCKED_VARBIT = Ids.varbit("poh_house_locked");
+const GARDEN_CENTERPIECE_HOTSPOT_ID = Ids.loc("poh_crude_garden_1"); // the garden's centrepiece space
+const ROOM_DOOR_HOTSPOT_IDS = [...new Set([...Data.ROOM_DOOR_HOTSPOT_IDS, ...Estate.HOUSE_STYLES.flatMap(style => style.doorHotspots)])];
+const COINS_ID = ItemIdentifiers.COINS;
+const { HOUSE_ATTRIBUTE } = Data;
+const FURNITURE_BUILD_INTERFACE = Ids.iface("poh_furniture_creation");
 const FURNITURE_BUILD_LIST_UID = (FURNITURE_BUILD_INTERFACE << 16) | 2;
-const HOUSE_BOARD_INTERFACE = 52;
+// poh_furniture_creation's scripts: one furniture entry, then the list (no gamevals for scripts).
+const FURNITURE_ENTRY_SCRIPT = 1404;
+const FURNITURE_LIST_SCRIPT = 1406;
+const REMOVE_ANIMATION = Ids.seq("human_throw_away");
+const HOUSE_BOARD_INTERFACE = Ids.iface("poh_board");
 const HOUSE_BOARD_ROW_SCRIPT = 3110;
 const HOUSE_BOARD_LAST_ROW = 200;
-const HOUSE_BOARD_LOCATION_VARBIT = 9449;
+const HOUSE_BOARD_LOCATION_VARBIT = Ids.varbit("poh_board_last_loc");
 
 // Expand the named furniture groups used by parlour hotspot menus.
 const FURNITURE_GROUPS = {
@@ -75,8 +82,14 @@ const FURNITURE_GROUPS = {
   HALL_STAIRS_DOWN: ["HALL_RUG", "HALL_OPULENT_RUG", "OAK_STAIRCASE_DOWN", "TEAK_STAIRCASE_DOWN", "SPIRAL_STAIRCASE", "MARBLE_STAIRCASE_DOWN", "MARBLE_SPIRAL_STAIRCASE"],
 };
 
-const HOUSE_OPTIONS_INTERFACE = 370;
-const SETTINGS_TARGET_UID = (161 << 16) | 87;
+const HOUSE_OPTIONS_INTERFACE = Ids.iface("poh_options");
+const SETTINGS_SIDE_INTERFACE = Ids.iface("settings_side");
+const OPTIONS_VARBITS = {
+  location: Ids.varbit("poh_house_location"), style: Ids.varbit("poh_house_style"), buildingMode: Ids.varbit("poh_building_mode"),
+  teleportOutside: Ids.varbit("poh_tele_toggle"), defaultBuildingMode: Ids.varbit("poh_teleport_building_mode"),
+  doors: Ids.varbit("poh_doors_option"),
+};
+const SETTINGS_TARGET_UID = Ids.component("toplevel_osrs_stretch:side11");
 const HOUSE_KICK_OPTION = 7;
 const houseOptionsOpen = new WeakSet();
 const kickOptionVisible = new WeakSet();
@@ -327,7 +340,7 @@ function rebuildHouse(player, house) {
   syncHouseOptions(player);
 }
 
-const ROOM_CREATION_INTERFACE = 212;
+const ROOM_CREATION_INTERFACE = Ids.iface("poh_add_room");
 const pendingRoomMenus = new WeakMap();
 
 function chooseRoom(player, house, target) {
@@ -537,12 +550,12 @@ function syncHouseOptions(player) {
   const saved = houseStateFor(player);
   const house = houseFor(player);
   const sender = player.getPacketSender();
-  sender.sendVarbit(2187, saved.owned === false ? 0 : Estate.houseLocation(saved).id);
-  sender.sendVarbit(2188, Estate.houseStyleIndex(saved));
-  sender.sendVarbit(2176, house?.buildingMode ? 1 : 0);
-  sender.sendVarbit(4744, saved.teleportOutside ? 1 : 0);
-  sender.sendVarbit(14670, saved.defaultBuildingMode ? 1 : 0);
-  sender.sendVarbit(6269, saved.doorMode ?? 0);
+  sender.sendVarbit(OPTIONS_VARBITS.location, saved.owned === false ? 0 : Estate.houseLocation(saved).id);
+  sender.sendVarbit(OPTIONS_VARBITS.style, Estate.houseStyleIndex(saved));
+  sender.sendVarbit(OPTIONS_VARBITS.buildingMode, house?.buildingMode ? 1 : 0);
+  sender.sendVarbit(OPTIONS_VARBITS.teleportOutside, saved.teleportOutside ? 1 : 0);
+  sender.sendVarbit(OPTIONS_VARBITS.defaultBuildingMode, saved.defaultBuildingMode ? 1 : 0);
+  sender.sendVarbit(OPTIONS_VARBITS.doors, saved.doorMode ?? 0);
   if (houseOptionsOpen.has(player)) sender.sendString("Rooms: " + (house?.getRoomCount() ?? saved.rooms.flat(2).filter(Boolean).length),
     (HOUSE_OPTIONS_INTERFACE << 16) | 23);
 }
@@ -561,18 +574,18 @@ function closeHouseSettings(event) {
   if (!houseOptionsOpen.has(event.player) || event.player.getInterfaceId() >= 0
     || event.player.getPacketSender().hasInterruptibleInterface() === true) return;
   houseOptionsOpen.delete(event.player);
-  event.player.getPacketSender().sendSubInterface(SETTINGS_TARGET_UID, 116, 1);
+  event.player.getPacketSender().sendSubInterface(SETTINGS_TARGET_UID, SETTINGS_SIDE_INTERFACE, 1);
   event.handled = true;
 }
 
 function handleHouseOptions(event) {
   const { player, groupId, childId, action } = event;
   if (action !== 1) return false;
-  if (groupId === 116 && childId === 31) { openHouseSettings(player); return true; }
+  if (groupId === SETTINGS_SIDE_INTERFACE && childId === 31) { openHouseSettings(player); return true; }
   if (groupId !== HOUSE_OPTIONS_INTERFACE || !houseOptionsOpen.has(player)) return false;
   if (childId === 24) {
     houseOptionsOpen.delete(player);
-    player.getPacketSender().sendSubInterface(SETTINGS_TARGET_UID, 116, 1);
+    player.getPacketSender().sendSubInterface(SETTINGS_TARGET_UID, SETTINGS_SIDE_INTERFACE, 1);
     return true;
   }
   const saved = houseStateFor(player);
@@ -620,7 +633,15 @@ function houseTablet(request) {
   request.onArrival = outside ? null : () => { enterHouse(player, saved.defaultBuildingMode); };
 }
 
-const HOUSE_VIEWER_INTERFACE = 422;
+const HOUSE_VIEWER_INTERFACE = Ids.iface("poh_viewer");
+const VIEWER_VARBITS = {
+  selectedRoom: Ids.varbit("poh_viewer_selectedroom"), destination: Ids.varbit("poh_viewer_destination"),
+  rotation: Ids.varbit("poh_viewer_rot"), rotating: Ids.varbit("poh_viewer_enable_rot"), type: Ids.varbit("poh_viewer_type"),
+  selectedDoors: Ids.varbit("poh_viewer_selecteddoors"), adjacentDoors: Ids.varbit("poh_viewer_adjacentdoors"),
+};
+// The viewer's client scripts: one room's slot, and the grid (no gamevals for scripts).
+const VIEWER_ROOM_SCRIPT = 1376;
+const VIEWER_GRID_SCRIPT = 1382;
 const houseViewers = new WeakMap();
 
 function openHouseViewer(player) {
@@ -657,12 +678,12 @@ function refreshHouseViewer(player, viewer) {
       packed |= BigInt(value) << BigInt(15 + slot * 5);
     });
     // Script 1376 carries bit 31 of the first word in bit 30 of the second word.
-    sender.sendClientScript(1376, index, 4165 + roomId, 0, Number(packed & 0x7fffffffn),
+    sender.sendClientScript(VIEWER_ROOM_SCRIPT, index, Data.ROOM_ROW_BY_ID.get(roomId), 0, Number(packed & 0x7fffffffn),
       Number((packed >> 32n) | (((packed >> 31n) & 1n) << 30n)), 0);
     sender.sendInterfaceFlags((HOUSE_VIEWER_INTERFACE << 16) | (index + 5), 1 << 1);
   }
   // The cache uses a 9x9 click grid on each of three floors and hides unused room slots itself.
-  sender.sendClientScript(1382, viewer.rooms.length, 0, (2 << 28) | (7 << 14) | 7, player.getLocation().getZ());
+  sender.sendClientScript(VIEWER_GRID_SCRIPT, viewer.rooms.length, 0, (2 << 28) | (7 << 14) | 7, player.getLocation().getZ());
   sender.sendInterfaceFlagsRange((HOUSE_VIEWER_INTERFACE << 16) | 5, 0, 242, (1 << 1) | (1 << 6));
   for (const child of [63, 64, 65, 66, 67, 68, 69]) sender.sendInterfaceFlags((HOUSE_VIEWER_INTERFACE << 16) | child, 1 << 1);
   sender.sendInterfaceFlags((HOUSE_VIEWER_INTERFACE << 16) | 46, 1 << 2);
@@ -673,32 +694,32 @@ function syncViewerSelection(player, viewer) {
   if (viewer.newRoom) return syncRoomPreview(player, viewer);
   const room = viewer.selected && viewer.house.getRoom(viewer.selected);
   const sender = player.getPacketSender();
-  sender.sendVarbit(5329, viewer.selected ? viewer.rooms.findIndex(p => p.x === viewer.selected.x && p.y === viewer.selected.y && p.plane === viewer.selected.plane) + 1 : 0);
-  sender.sendVarbit(5333, room ? Data.ROOM_BY_KEY.get(room.roomKey).id : 0);
-  sender.sendVarbit(5331, viewer.rotation);
-  sender.sendVarbit(5332, viewer.mode === "rotate" ? 1 : 0);
+  sender.sendVarbit(VIEWER_VARBITS.selectedRoom, viewer.selected ? viewer.rooms.findIndex(p => p.x === viewer.selected.x && p.y === viewer.selected.y && p.plane === viewer.selected.plane) + 1 : 0);
+  sender.sendVarbit(VIEWER_VARBITS.type, room ? Data.ROOM_BY_KEY.get(room.roomKey).id : 0);
+  sender.sendVarbit(VIEWER_VARBITS.rotation, viewer.rotation);
+  sender.sendVarbit(VIEWER_VARBITS.rotating, viewer.mode === "rotate" ? 1 : 0);
   const destination = viewer.destination;
-  sender.sendVarbit(5330, destination ? destination.plane * 81 + destination.y * 9 + destination.x + 1 : viewer.mode === "move" ? 244 : 0);
-  sender.sendVarbit(5334, room ? viewer.house.getRoomDoorMask(viewer.selected) : 0);
-  sender.sendVarbit(5335, destination ? viewer.house.getAdjacentDoorMask(destination) : viewer.selected ? viewer.house.getAdjacentDoorMask(viewer.selected) : 0);
+  sender.sendVarbit(VIEWER_VARBITS.destination, destination ? destination.plane * 81 + destination.y * 9 + destination.x + 1 : viewer.mode === "move" ? 244 : 0);
+  sender.sendVarbit(VIEWER_VARBITS.selectedDoors, room ? viewer.house.getRoomDoorMask(viewer.selected) : 0);
+  sender.sendVarbit(VIEWER_VARBITS.adjacentDoors, destination ? viewer.house.getAdjacentDoorMask(destination) : viewer.selected ? viewer.house.getAdjacentDoorMask(viewer.selected) : 0);
   if (destination && room) {
-    sender.sendClientScript(1376, -1, 0, 0, destination.x | (destination.y << 3) | (destination.plane << 6)
+    sender.sendClientScript(VIEWER_ROOM_SCRIPT, -1, 0, 0, destination.x | (destination.y << 3) | (destination.plane << 6)
       | (viewer.rotation << 8) | (Data.ROOM_BY_KEY.get(room.roomKey).id << 10), 0, 0);
   }
 }
 
-/** The room being added, drawn at its destination (varbits 5329-5335, script 1376 slot -1). */
+/** The room being added, drawn at its destination (the viewer varbits, VIEWER_ROOM_SCRIPT slot -1). */
 function syncRoomPreview(player, viewer) {
   const { house, destination, newRoom, rotation } = viewer;
   const sender = player.getPacketSender();
-  sender.sendVarbit(5329, viewer.rooms.length + 1);
-  sender.sendVarbit(5333, newRoom.id);
-  sender.sendVarbit(5331, rotation);
-  sender.sendVarbit(5332, 1);
-  sender.sendVarbit(5330, destination.plane * 81 + destination.y * 9 + destination.x + 1);
-  sender.sendVarbit(5334, house.templateDoorMask(newRoom.key));
-  sender.sendVarbit(5335, house.getAdjacentDoorMask(destination));
-  sender.sendClientScript(1376, -1, 0, 0, destination.x | (destination.y << 3) | (destination.plane << 6)
+  sender.sendVarbit(VIEWER_VARBITS.selectedRoom, viewer.rooms.length + 1);
+  sender.sendVarbit(VIEWER_VARBITS.type, newRoom.id);
+  sender.sendVarbit(VIEWER_VARBITS.rotation, rotation);
+  sender.sendVarbit(VIEWER_VARBITS.rotating, 1);
+  sender.sendVarbit(VIEWER_VARBITS.destination, destination.plane * 81 + destination.y * 9 + destination.x + 1);
+  sender.sendVarbit(VIEWER_VARBITS.selectedDoors, house.templateDoorMask(newRoom.key));
+  sender.sendVarbit(VIEWER_VARBITS.adjacentDoors, house.getAdjacentDoorMask(destination));
+  sender.sendClientScript(VIEWER_ROOM_SCRIPT, -1, 0, 0, destination.x | (destination.y << 3) | (destination.plane << 6)
     | (rotation << 8) | (newRoom.id << 10), 0, 0);
 }
 
@@ -882,7 +903,7 @@ function chooseFurniture(player, house, target) {
   choices.forEach((buildable, index) => {
     // Script 1404 resolves the preview item and name through furniture DB table 110.
     sender.sendClientScript(
-      1404,
+      FURNITURE_ENTRY_SCRIPT,
       index + 1,
       buildable.menuRowId,
       buildable.level,
@@ -891,7 +912,7 @@ function chooseFurniture(player, house, target) {
     );
   });
   sender
-    .sendClientScript(1406, choices.length, 0)
+    .sendClientScript(FURNITURE_LIST_SCRIPT, choices.length, 0)
     .sendInterfaceFlagsRange(FURNITURE_BUILD_LIST_UID, 1, choices.length, 1);
   pendingFurnitureMenus.set(player, { house, target, choices });
 }
@@ -936,7 +957,7 @@ function tryRemoveFurniture(event) {
     if (currentProblem) return player.sendMessage(currentProblem);
     const removed = house.removeFurniture(event.location, event.objectId, type);
     if (!removed) return;
-    player.performAnimation(new Animation(3685));
+    player.performAnimation(new Animation(REMOVE_ANIMATION));
     rebuildHouse(player, house);
     player.sendMessage(`You remove the ${formatBuildable({ key: removed.buildableKey })}.`);
   }, "No", () => {});
@@ -975,12 +996,13 @@ function handleFurnitureAction(event) {
 }
 
 // Cache-native ready poses for the seven parlour chairs, in furniture-menu order.
-const CHAIR_READY_ANIMATIONS = [4073, 4075, 4077, 4081, 4083, 4085, 4087];
+const CHAIR_READY_ANIMATIONS = Array.from({ length: 7 }, (_, index) => Ids.seq(`chair_sit_ready_chair${index + 1}`));
 // Thrones sit like chairs, with their own ready poses (chair_sit_ready_throne_1..7, captures).
 const THRONES = ["OAK_THRONE", "TEAK_THRONE", "MAHOGANY_THRONE", "GILDED_THRONE", "SKELETON_THRONE", "CRYSTAL_THRONE", "DEMONIC_THRONE"];
-const THRONE_READY_ANIMATION = 4111;
+const THRONE_READY_ANIMATIONS = THRONES.map((_, index) => Ids.seq(`chair_sit_ready_throne_${index + 1}`));
 const DINING_BENCHES = ["WOODEN_BENCH", "OAK_BENCH", "CARVED_OAK_BENCH", "TEAK_BENCH", "CARVED_TEAK_BENCH", "MAHOGANY_BENCH", "GILDED_BENCH"];
-const CHAIR_SIT_ANIMATION = 4103;
+const BENCH_READY_ANIMATIONS = DINING_BENCHES.map((_, index) => Ids.seq(`chair_sit_ready_diningchairs_${index + 1}`));
+const CHAIR_SIT_ANIMATION = Ids.seq("chair_sit");
 // A half-turn takes 32 client cycles; allow two server ticks before sitting.
 const CHAIR_TURN_TICKS = 2;
 const seatedPlayers = new WeakMap();
@@ -1042,7 +1064,7 @@ function sitOnChair({ player, object, objectId, location }) {
   standFromChair(player);
   // chairFront already rotates the player for diagonal chairs. Their alternate
   // idle sequences contain another body turn, so keep the unrotated pose.
-  const ready = throne >= 0 ? THRONE_READY_ANIMATION + throne : bench >= 0 ? 4089 + bench * 2 : CHAIR_READY_ANIMATIONS[index];
+  const ready = throne >= 0 ? THRONE_READY_ANIMATIONS[throne] : bench >= 0 ? BENCH_READY_ANIMATIONS[bench] : CHAIR_READY_ANIMATIONS[index];
   seatedPlayers.set(player, { house, location: seatLocation, objectId, type, furniture, ready, front,
     sitCycle: World.getProcessCycle() + CHAIR_TURN_TICKS, sitting: false,
     previousAnimation: player.getSkillAnimation() ?? 0 });
@@ -1084,7 +1106,7 @@ function openHouseDoor(event) {
 function nearbyHouseLocation(player, objectId) {
   const direct = Estate.HOUSE_LOCATIONS.find(location => location.portal === objectId || location.board === objectId);
   if (direct) return direct.id;
-  if (objectId === 30172) return 6; // Yanille's diary-transformed portal.
+  if (objectId === DIARY_PORTAL_ID) return 6; // Yanille
   const house = houseFor(player);
   if (house) return Estate.houseLocation(house.save).id;
   const position = player.getLocation();
@@ -1205,8 +1227,8 @@ function attach(api) {
   api.onObjectFirstClick(EXIT_PORTAL_ID, leaveHouse);
   api.onObjectSecondClick(EXIT_PORTAL_ID, toggleHouseLock);
   api.onObjectThirdClick(EXIT_PORTAL_ID, removeAdvertisement);
-  api.registerCommand("house", houseCommand);
-  api.registerCommand("hotspots", Commands.listHotspots, PlayerRights.DEVELOPER);
+  api.registerCommand("house", houseCommand, PlayerRights.NONE, "Open your house options");
+  api.registerCommand("hotspots", Commands.listHotspots, PlayerRights.DEVELOPER, "List the Construction hotspots in the room you stand in");
   api.registerCommand("housemats", Commands.houseMaterials, PlayerRights.DEVELOPER, "Spawn the materials to build a piece of furniture or a room");
   api.registerCommand("deletehouse", Commands.deleteHouse, PlayerRights.DEVELOPER, "Delete your house, so you have to buy a new one");
   api.registerCommand("maxhouse", MaxHouse.maxHouse, PlayerRights.DEVELOPER, "Replace your house with one of every room, fully furnished (::restorehouse undoes it)");

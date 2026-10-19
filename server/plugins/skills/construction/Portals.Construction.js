@@ -1,6 +1,7 @@
 "use strict";
 
 const { api, Skill, TeleportHandler, TeleportType, Wilderness, SpellTeleports, LunarSpells, ArceuusSpells, ObjectIdentifiers } = require("./Core.Construction");
+const Data = require("./Data.Construction");
 const Instance = require("./Instance.Construction");
 const aliases = { moonclan: "LUNAR_ISLE", "ape atoll": "MARIM", "kourend castle": "KOUREND", "fenkenstrain's castle": "FENKENSTRAINS_CASTLE", waterbirth: "WATERBIRTH_ISLAND", watchtower: "YANILLE_WATCHTOWER", barbarian: "BARBARIAN_OUTPOST", khazard: "PORT_KHAZARD" };
 function houseDestinations() {
@@ -52,7 +53,7 @@ function configureHouseDestination(player, house, furniture, name) {
     furniture.displayObjectId = destination.portalIds[tier];
     player.getSkillManager().addExperiences(Skill.MAGIC, destination.experience * 5);
   }
-  house.owner.setAttribute("construction:house", house.save);
+  house.owner.setAttribute(Data.HOUSE_ATTRIBUTE, house.save);
   for (const occupant of house.getPlayers()) house.rebuild(occupant, house.buildingMode);
   player.sendMessage(`Added ${name}.`);
   return true;
@@ -79,7 +80,7 @@ function chooseDestination(player, house, furniture, mode, page = 0) {
       } else api.sendMultiChatboxPrompt(player, "Remove this teleport without refunding runes?", "Yes", () => {
         if (house.owner !== player || !current(player, house, furniture)) return;
         furniture.destinations = furniture.destinations?.filter(name => name !== destination.name);
-        player.setAttribute("construction:house", house.save);
+        player.setAttribute(Data.HOUSE_ATTRIBUTE, house.save);
       }, "No", () => {});
     }
   });

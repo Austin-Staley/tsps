@@ -1,6 +1,7 @@
 "use strict";
 
 const { api, Animation, CacheDefinitions, Skill } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 const Mounted = require("./Mounted.Construction");
 
@@ -38,10 +39,10 @@ for (const [loc, name] of [...CacheDefinitions.getLocNames()].sort(([a], [b]) =>
   const hoodId = hood ? CacheDefinitions.getObjId(hood) : null;
   MOUNTED[loc] = hoodId != null ? { cape: capeId, hood: hoodId } : { cape: capeId };
 }
-const HANGER = 29166;
-const PICK_UP = 832;
-const ADMIRE = 6937;
-const MYTHICAL_CAPE = 22114;
+const HANGER = Ids.loc("poh_mounted_capestand_blank");
+const PICK_UP = Ids.seq("human_pickuptable");
+const ADMIRE = Ids.seq("castlewars_pray_start");
+const MYTHICAL_CAPE = Ids.obj("mythical_cape");
 // Mounted cape option -> the cape item's option of the same use.
 const ITEM_OPTIONS = { Perks: "Features" };
 

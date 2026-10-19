@@ -1,13 +1,14 @@
 "use strict";
 
 const { Animation, PluginManager } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 
 // Combat dummies (rsprox captures): Attach swaps the dummy for its NPC ("You attach the sand
 // bag."), which takes hits and never falls; Detach swaps back. The NPC has the cache's 1,000
 // hitpoints, topped up every tick, and never retaliates.
-const DUMMY_NPCS = { COMBAT_DUMMY: 2668, UNDEAD_COMBAT_DUMMY: 7413 };
-const PICK_UP = 832;
+const DUMMY_NPCS = { COMBAT_DUMMY: Ids.npc("poh_combat_dummy_npc"), UNDEAD_COMBAT_DUMMY: Ids.npc("poh_combat_dummy_undeadslayer_npc") };
+const PICK_UP = Ids.seq("human_pickuptable");
 const NO_RETALIATE = "combat:no-retaliate";
 
 /** house -> Map(npc -> furniture it stands in for) */

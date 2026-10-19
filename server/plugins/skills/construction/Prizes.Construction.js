@@ -1,6 +1,7 @@
 "use strict";
 
-const { api, DialogueChainBuilder, StatementDialogue } = require("./Core.Construction");
+const { api, DialogueChainBuilder, ItemIdentifiers, StatementDialogue } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 
 // Games room prize chests (rsprox captures): Open tells everyone else "You must have a prize key or
@@ -9,8 +10,8 @@ const House = require("./House.Construction");
 // of that game hears synth 933 and "A little key appears in your pack!" (a prize key), which opens
 // the chest. The owner fills the chest with coins, up to the Wiki's maximum per chest; that coins
 // are the prize, and how they go in, is this server's reading of "Prize amount".
-const COINS = 995;
-const PRIZE_KEY = 7678;
+const COINS = ItemIdentifiers.COINS;
+const PRIZE_KEY = Ids.obj("poh_prize_key");
 const KEY_SOUND = 933;
 const CHEST_LIMITS = { OAK_PRIZE_CHEST: 20000, TEAK_PRIZE_CHEST: 50000, MAHOGANY_PRIZE_CHEST: 100000 };
 const GAME_NAMES = {

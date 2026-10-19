@@ -1,6 +1,7 @@
 "use strict";
 
 const { api, Animation, GameObject, Location } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const Estate = require("./Estate.Construction");
 const House = require("./House.Construction");
 const Dungeon = require("./Dungeon.Construction");
@@ -10,12 +11,12 @@ const Dungeon = require("./Dungeon.Construction");
 // ("The trapdoor opens!"); a cage holds them while the owner picks what to do ("Release|Cancel"
 // for the steel cage, "Release|Drop into oubliette|Expel from house" for the magic cages). The
 // second op turns challenge mode on and off (its message is this server's).
-const PULL_LEVER = 3611;
+const PULL_LEVER = Ids.seq("human_pull_lever");
 const FLOOR_TRAPS = {
   TRAP_TRAPDOOR: { trapdoor: true },
-  STEEL_CAGE_TRAP: { cage: 13681, options: ["Release", "Cancel"] },
-  LESSER_MAGIC_CAGE: { cage: 13682, options: ["Release", "Drop into oubliette", "Expel from house"] },
-  GREATER_MAGIC_CAGE: { cage: 13683, options: ["Release", "Drop into oubliette", "Expel from house"] },
+  STEEL_CAGE_TRAP: { cage: Ids.loc("poh_cage_throneroom"), options: ["Release", "Cancel"] },
+  LESSER_MAGIC_CAGE: { cage: Ids.loc("poh_magic_cage_lesser"), options: ["Release", "Drop into oubliette", "Expel from house"] },
+  GREATER_MAGIC_CAGE: { cage: Ids.loc("poh_magic_cage_greater"), options: ["Release", "Drop into oubliette", "Expel from house"] },
 };
 const OUBLIETTE = "OUBLIETTE";
 

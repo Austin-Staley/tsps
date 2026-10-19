@@ -1,6 +1,7 @@
 "use strict";
 
 const { Animation, Equipment, ItemDefinition, Location, Skill, Task, TaskManager } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 const Prizes = require("./Prizes.Construction");
 
@@ -12,8 +13,8 @@ const Prizes = require("./Prizes.Construction");
 // players' shots and scores and marks the "Winner!" once everyone has had ten shots ("You've had
 // your ten shots. You should wait for the other players to finish."). The scoring itself (a hit
 // chance and score per shot from Ranged level) is this server's.
-const OVERLAY = 401;
-const OVERLAY_HUD_UID = (161 << 16) | 8;
+const OVERLAY = Ids.iface("poh_ranging");
+const OVERLAY_HUD_UID = Ids.component("toplevel_osrs_stretch:overlay_hud");
 const PLAYER_TEXT = [9, 10, 11, 12];
 const SHOTS_TEXT = [13, 14, 15, 16];
 const SCORE_TEXT = [17, 18, 19, 20];
@@ -23,15 +24,15 @@ const MAX_PLAYERS = 4;
 const SHOT_TICKS = 3;
 const GAMES = {
   HOOP_AND_STICK: {
-    game: "hoop", throwAnimations: [3602, 3603], projectile: 612, throwSound: 2708, hitSound: 976, landTicks: 2, hitLoc: 13399,
+    game: "hoop", throwAnimations: [Ids.seq("human_throw_hoop1"), Ids.seq("human_throw_hoop2")], projectile: Ids.spotanim("poh_hoop_projectile"), throwSound: 2708, hitSound: 976, landTicks: 2, hitLoc: Ids.loc("poh_stick+hoop2"),
     score: (level) => (Math.random() < Math.min(0.95, 0.4 + level / 165) ? 1 : 0),
   },
   DARTBOARD: {
-    game: "darts", throwAnimations: [5061], projectile: 613, hitSound: 944, landTicks: 2, hitLoc: 13401,
+    game: "darts", throwAnimations: [Ids.seq("snakeboss_blowpipe_attack")], projectile: Ids.spotanim("poh_dart_projectile"), hitSound: 944, landTicks: 2, hitLoc: Ids.loc("poh_dartboard2"),
     requires: thrownWeapon, score: ringScore,
   },
   ARCHERY_TARGET: {
-    game: "archery", throwAnimations: [426], projectile: 614, hitSound: 944, landTicks: 3, hitLoc: 13403,
+    game: "archery", throwAnimations: [Ids.seq("human_bow")], projectile: Ids.spotanim("poh_arrow_projectile"), hitSound: 944, landTicks: 3, hitLoc: Ids.loc("poh_archery_target2"),
     requires: bowAndArrow, score: ringScore,
   },
 };

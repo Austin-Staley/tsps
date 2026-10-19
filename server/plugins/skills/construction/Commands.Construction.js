@@ -5,8 +5,8 @@ const Data = require("./Data.Construction");
 const Instance = require("./Instance.Construction");
 const House = require("./House.Construction");
 
-const COINS = 995;
-const HOUSE_ATTRIBUTE = "construction:house";
+const COINS = Items.COINS;
+const { HOUSE_ATTRIBUTE } = Data;
 
 /** ::hotspots - every build hotspot of the room you stand in, with its tile. */
 function listHotspots({ player }) {

@@ -1,6 +1,7 @@
 "use strict";
 
 const { PluginManager } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 const Prizes = require("./Prizes.Construction");
 
@@ -13,13 +14,14 @@ const Prizes = require("./Prizes.Construction");
 // ends the game. "You've just had your turn." stops one player guessing twice running while others
 // play. Filling the word in wins: "Hangman word: ICEGIANT! <name> is the winner!". Words are the
 // Wiki's list. The no-winner ending and its message are this server's.
-const INTERFACE = 393;
+const INTERFACE = Ids.iface("poh_hangman");
 const LETTERS = 26; // poh_hangman_letter1..26 are components 0..25
 const GUESS_BUTTON = 27;
 const GUESS_BOX = 28;
 const WORD_BOX = 29;
 const INSTRUCTIONS = 31;
-const MANNEQUIN = 144; // armour1; armour10 is 153
+// The mannequin, one form per wrong guess: poh_hangman_armour1 to poh_hangman_armour10.
+const MANNEQUIN = Array.from({ length: 10 }, (_, index) => Ids.npc(`poh_hangman_armour${index + 1}`));
 const PIECES = 10;
 const WRONG_SOUND = 970;
 const MAX_GUESS = 5;
@@ -63,7 +65,7 @@ function activate(event) {
 
 function start(player, house, furniture, location) {
   if (games.has(house) || House.houseFor(player) !== house || house.buildingMode) return;
-  const npc = PluginManager.spawnNpc({ id: MANNEQUIN, x: location.x, y: location.y, z: location.z, wanderRadius: 0 });
+  const npc = PluginManager.spawnNpc({ id: MANNEQUIN[0], x: location.x, y: location.y, z: location.z, wanderRadius: 0 });
   if (!npc) return;
   npc.__skipDefaultRespawn = true;
   house.enter(npc);
@@ -145,7 +147,7 @@ function guess(player, house, game, letters) {
   } else {
     game.wrong++;
     for (const occupant of house.getPlayers()) occupant.getPacketSender().sendSound(WRONG_SOUND, 0, 0);
-    if (game.wrong < PIECES) game.npc.setNpcTransformationId?.(MANNEQUIN + game.wrong);
+    if (game.wrong < PIECES) game.npc.setNpcTransformationId?.(MANNEQUIN[game.wrong]);
   }
   const shown = pattern(game);
   if (!shown.includes("_")) {

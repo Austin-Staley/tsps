@@ -1,6 +1,7 @@
 "use strict";
 
 const { Animation, CountdownTask, Graphic, Location, PluginManager, RegionManager, TaskManager } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 const Prizes = require("./Prizes.Construction");
 
@@ -12,11 +13,11 @@ const Prizes = require("./Prizes.Construction");
 // no hunt on, "The stone is inert. No fairy is hidden in the house." The distances behind each
 // message, and where she can hide (any free floor tile on the fairy house's floor), are this
 // server's.
-const STONE = 7677;
-const FAIRY = 154;
+const STONE = Ids.obj("poh_treasure_hunt_stone");
+const FAIRY = Ids.npc("poh_treasure_hunt_fairy");
 const HIDE_SOUND = 1930;
 const SMOKEPUFF = 86;
-const DANCE = 866;
+const DANCE = Ids.seq("emote_dance");
 const FAIRY_TICKS = 10;
 
 /** house -> { tile: Location, furniture, last: WeakMap(player -> distance) } */

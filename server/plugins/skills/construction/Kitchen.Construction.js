@@ -1,12 +1,13 @@
 "use strict";
 
 const { api, Animation, CountdownTask, ItemIdentifiers, TaskManager } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 const KITCHEN = require("./data/kitchen.json");
 
 // rsprox captures: filling a glass plays poh_barrel_use1, then the barrel's pour animation with
 // the glass changing two ticks later.
-const BARREL_USE = 3660;
+const BARREL_USE = Ids.seq("poh_barrel_use1");
 const MENU_SIZE = 5;
 
 function kitchenFurniture(event) {

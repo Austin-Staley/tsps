@@ -11,6 +11,8 @@ const { CacheDefinitions } = require("./Core.Construction");
  * each room's template chunk and hotspot keys; the hotspot locs. Chunk coordinates are tile-chunk
  * coordinates, not map-square coordinates.
  */
+/** The player's house save. */
+const HOUSE_ATTRIBUTE = "construction:house";
 const ANY_NAILS_OBJ = 32923; // the furniture table's "any nails"
 
 const column = (table, name) => CacheDefinitions.getDbColumn(CacheDefinitions.getDbTableId(table), name);
@@ -63,6 +65,12 @@ const CONSTRUCTION_ROOMS = require("./data/rooms.json").map((room) => {
   return { ...room, level: Number(row.column(ROOM.level)[1] ?? room.level), cost: Number(row.column(ROOM.cost)[0] ?? room.cost) };
 });
 
+/** Each room type's poh_room DB row, which the house viewer's script takes. */
+const ROOM_ROW_BY_ID = new Map([...roomRows].map(([id, row]) => [id, row.id]));
+
+/** The room door spaces of every style: poh_hotspot_door{l,r}_<style> and poh_hotspot_door_dungeon<n>. */
+const ROOM_DOOR_HOTSPOT_IDS = new Set([...CacheDefinitions.getLocNames()].filter(([, name]) => name.startsWith("poh_hotspot_door")).map(([id]) => id));
+
 /** Furniture row choices in house-viewer slot order, by room id. */
 const CONSTRUCTION_VIEWER_FURNITURE = Object.fromEntries([...roomRows].filter(([id]) => id > 0).map(([id, row]) => [id,
   row.column(ROOM.hotspots).map((hotspotRow) => CacheDefinitions.getDbRow(Number(hotspotRow))?.column(BUILD_DATA).map(Number) ?? [])]));
@@ -88,4 +96,4 @@ function hotspotIn(roomKey, objectId) {
   return HOTSPOTS_BY_ROOM.get(roomKey)?.get(objectId) ?? null;
 }
 
-Object.assign(module.exports, { CONSTRUCTION_ROOMS, HOUSE_TEMPLATE_CHUNKS, CONSTRUCTION_HOTSPOTS, CONSTRUCTION_BUILDABLES, ROOM_BY_KEY, HOTSPOT_BY_OBJECT_ID, HOTSPOT_BY_KEY, BUILDABLE_BY_KEY, CONSTRUCTION_VIEWER_FURNITURE, hotspotIn });
+Object.assign(module.exports, { HOUSE_ATTRIBUTE, CONSTRUCTION_ROOMS, HOUSE_TEMPLATE_CHUNKS, CONSTRUCTION_HOTSPOTS, CONSTRUCTION_BUILDABLES, ROOM_BY_KEY, HOTSPOT_BY_OBJECT_ID, HOTSPOT_BY_KEY, BUILDABLE_BY_KEY, CONSTRUCTION_VIEWER_FURNITURE, ROOM_ROW_BY_ID, ROOM_DOOR_HOTSPOT_IDS, hotspotIn });

@@ -1,6 +1,7 @@
 "use strict";
 
 const { api, CacheDefinitions, PluginManager } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 
 // The menagerie (rsprox captures, cache scripts 639-643): using a pet on menagerie furniture
@@ -8,12 +9,13 @@ const House = require("./House.Construction");
 // bit i of varps 864 / 1416 / 4718 is set, and a click takes the pet back. Toggle sets varbit
 // 2013 (poh_menagerie_closed); stored pets roam the menagerie rooms while it is 0 and the house
 // isn't in building mode.
-const MENAGERIE_INTERFACE = 211;
+const MENAGERIE_INTERFACE = Ids.iface("poh_menagerie");
 const LIST = 7;
 const ROAM_TOGGLE = 9;
 const PET_ENUM = 985;
-const STORED_VARPS = [[864, 0], [1416, 32], [4718, 63]];
-const CLOSED_VARBIT = 2013;
+// Which pets are stored, from slot 0, 32 and 63 of the enum on.
+const STORED_VARPS = [["prayer20", 0], ["menagerie_contents2", 32], ["menagerie_contents3", 63]].map(([name, first]) => [Ids.varp(name), first]);
+const CLOSED_VARBIT = Ids.varbit("poh_menagerie_closed");
 const STORED_ATTRIBUTE = "construction:menagerie";
 const CLOSED_ATTRIBUTE = "construction:menagerie-closed";
 const MENAGERIE_ROOMS = new Set(["MENAGERIE_INDOORS", "MENAGERIE_OUTDOORS"]);

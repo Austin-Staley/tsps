@@ -4,6 +4,7 @@ const {
   Animation, CountdownTask, DialogueChainBuilder, Graphic, Location, NpcDialogue, OptionDialogue,
   PluginManager, RegionManager, Task, TaskManager,
 } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 const Prizes = require("./Prizes.Construction");
 
@@ -14,17 +15,20 @@ const Prizes = require("./Prizes.Construction");
 // emotes; players in the 7x7 around him copy them, and the first to copy ten wins, after which he
 // goes back in his box. Banish asks "Have you had enough fun for now?". How long players have to
 // copy each emote, the count messages and the Banish answers are this server's.
-const NPC_ID = 155;
+const NPC_ID = Ids.npc("poh_mimic");
 const SUMMON_SOUND = 952;
-const ELEVATE = 3588;
-const BOX_OPENS = 610;
-const OPEN_BOX = 13391;
+const ELEVATE = Ids.seq("poh_jester_elevate");
+const BOX_OPENS = Ids.spotanim("poh_jester_box_opens");
+const OPEN_BOX = Ids.loc("poh_mime_jester2");
 const EMOTE_TICKS = 8;
 const RADIUS = 3;
 const WIN = 10;
 // The default emotes: yes, no, bow, angry, think, wave, shrug, cheer, beckon, laugh, jump for
 // joy, yawn, dance, jig, spin, headbang, cry, blow kiss, panic, raspberry, clap, salute.
-const EMOTES = [855, 856, 858, 859, 857, 863, 2113, 862, 864, 861, 2109, 2111, 866, 2106, 2107, 2108, 860, 1374, 2105, 2110, 865, 2112];
+const EMOTES = [
+  "yes", "no", "bow", "angry", "think", "wave", "shrug", "cheer", "beckon", "laugh", "jump_with_joy", "yawn", "dance",
+  "dance_scottish", "dance_spin", "dance_headbang", "cry", "blow_kiss", "panic", "ya_boo_sucks", "clap", "fremmenik_salute",
+].map((emote) => Ids.seq(`emote_${emote}`));
 
 /** house -> { npc, furniture, emote, copied: Set, scores: Map(player -> n) } */
 const shows = new WeakMap();

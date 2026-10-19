@@ -1,7 +1,8 @@
 "use strict";
 
-const { RegionManager, Boundary, PrivateArea, Skill, Location, CachePipeline, CacheMaps, CacheDefinitions, ByteBuffer, GameObject, encodeLocAddChange, encodeLocDel, encodeRebuildRegion,
+const { RegionManager, Boundary, PrivateArea, Skill, Location, CachePipeline, CacheDefinitions, GameObject, encodeLocAddChange, encodeLocDel, encodeRebuildRegion,
   getTemplateRegion, templateChunkKey, rotateChunkLoc, rotateChunkTile, ObjectDefinition } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const Estate = require("./Estate.Construction");
 const Servants = require("./Servants.Construction");
 const House = require("./House.Construction");
@@ -16,12 +17,10 @@ const HOUSE_SIZE = 104;
 const HOUSE_STRIDE = 112;
 const HOUSE_ALLOCATION_COLUMNS = 16;
 const HOUSE_ALLOCATION_COUNT = HOUSE_ALLOCATION_COLUMNS * HOUSE_ALLOCATION_COLUMNS;
-const ROOM_DOOR_HOTSPOT_MIN = 15305;
-const ROOM_DOOR_HOTSPOT_MAX = 15322;
-const PREVIEW_WALL = 15452; // poh_preview_wall
+const PREVIEW_WALL = Ids.loc("poh_preview_wall");
 const BLOCKED_TILE = 0x200000;
-const HOUSE_BUILDING_MODE_VARBIT = 2176;
-const HOUSE_DYNAMIC_WINDOW = 13830;
+const HOUSE_BUILDING_MODE_VARBIT = Ids.varbit("poh_building_mode");
+const HOUSE_DYNAMIC_WINDOW = Ids.loc("poh_dynamic_window");
 const allocatedHouses = new Array(HOUSE_ALLOCATION_COUNT).fill(false);
 function allocateHouse() {
   const index = allocatedHouses.findIndex((used) => !used);
@@ -286,7 +285,7 @@ class PlayerHouseInstance extends PrivateArea {
   }
 
   resolveObject(id, location) {
-    if ((id >= ROOM_DOOR_HOTSPOT_MIN && id <= ROOM_DOOR_HOTSPOT_MAX)
+    if (Data.ROOM_DOOR_HOTSPOT_IDS.has(id)
       || Estate.HOUSE_STYLES[Estate.houseStyleIndex(this.save)].doorHotspots.includes(id)) {
       const target = this.getDoorTarget({ x: location.getX(), y: location.getY(), z: location.getZ() }) ?? this.getDoorTargetAtLocation(location);
       if (!target) return null;
@@ -350,7 +349,7 @@ class PlayerHouseInstance extends PrivateArea {
     if (template.outdoors) return 15;
     let mask = 0;
     for (const object of PlayerHouseInstance.getTemplateObjects(Estate.houseStyleIndex(this.save))) {
-      if (((object.id < ROOM_DOOR_HOTSPOT_MIN || object.id > ROOM_DOOR_HOTSPOT_MAX)
+      if ((!Data.ROOM_DOOR_HOTSPOT_IDS.has(object.id)
         && !Estate.HOUSE_STYLES[Estate.houseStyleIndex(this.save)].doorHotspots.includes(object.id))
         || object.sourceChunkX !== template.sourceChunkX || object.sourceChunkY !== template.sourceChunkY) continue;
       const edge = object.localX === 0 ? 3 : object.localY === 7 ? 0 : object.localX === 7 ? 1 : 2;
@@ -551,7 +550,7 @@ class PlayerHouseInstance extends PrivateArea {
       .map(hotspot => {
         const local = this.rotatedFootprint(hotspot.localX, hotspot.localY, hotspot.id, hotspot.face, rotation);
         const location = new Location(baseX + local.x, baseY + local.y, position.plane);
-        const door = (hotspot.id >= ROOM_DOOR_HOTSPOT_MIN && hotspot.id <= ROOM_DOOR_HOTSPOT_MAX) || doorIds.includes(hotspot.id);
+        const door = Data.ROOM_DOOR_HOTSPOT_IDS.has(hotspot.id) || doorIds.includes(hotspot.id);
         if (!door && !Data.hotspotIn(roomKey, hotspot.id)) return null; // windows and the like
         if (!door) return new GameObject(hotspot.id, location, hotspot.type, (hotspot.face + rotation) & 3, this);
         const edge = local.x === 0 ? 0 : local.y === 7 ? 1 : local.x === 7 ? 2 : 3;
@@ -595,7 +594,7 @@ class PlayerHouseInstance extends PrivateArea {
               player.getSession().sendClientPacket(encodeLocDel(worldX, worldY, plane, hotspot.type, (hotspot.face + room.rotation) & 3));
               continue;
             }
-            if ((hotspot.id < ROOM_DOOR_HOTSPOT_MIN || hotspot.id > ROOM_DOOR_HOTSPOT_MAX)
+            if (!Data.ROOM_DOOR_HOTSPOT_IDS.has(hotspot.id)
               && !Estate.HOUSE_STYLES[Estate.houseStyleIndex(this.save)].doorHotspots.includes(hotspot.id)) continue;
             const target = this.getDoorTargetFromEdge(x, y, plane, local.x, local.y);
             if (!target) continue;
@@ -658,7 +657,7 @@ class PlayerHouseInstance extends PrivateArea {
 
   /** Door and furniture spaces: drawn as doors and furniture instead. Windows stay, being wall. */
   isTemplateHotspot(id, style) {
-    return (id >= ROOM_DOOR_HOTSPOT_MIN && id <= ROOM_DOOR_HOTSPOT_MAX) || Estate.HOUSE_STYLES[style].doorHotspots.includes(id)
+    return Data.ROOM_DOOR_HOTSPOT_IDS.has(id) || Estate.HOUSE_STYLES[style].doorHotspots.includes(id)
       || Data.HOTSPOT_BY_OBJECT_ID.has(id) || !!CacheDefinitions.getObject(id)?.actions?.includes("Build");
   }
 
@@ -924,38 +923,24 @@ class PlayerHouseInstance extends PrivateArea {
     const regions = new Set([...Data.CONSTRUCTION_ROOMS, ...Object.values(Data.HOUSE_TEMPLATE_CHUNKS)]
       .map(({ sourceChunkX, sourceChunkY }) => (((sourceChunkX + chunkOffset) >> 3) << 8) | (sourceChunkY >> 3)));
     for (const regionId of regions) {
-      const data = CacheMaps.getRegion(regionId)?.objectData;
-      if (!data) throw new Error(`Construction template region ${regionId} is missing from the active cache.`);
-      const buffer = new ByteBuffer(data);
-      let objectId = -1;
-      while (buffer.offset < data.length) {
-        const objectDelta = buffer.readSmart3();
-        if (objectDelta === 0) break;
-        objectId += objectDelta;
-        let packedLocation = 0;
-        while (true) {
-          const locationDelta = buffer.readUnsignedSmart();
-          if (locationDelta === 0) break;
-          packedLocation += locationDelta - 1;
-          const info = buffer.readUnsignedByte();
-          if ((packedLocation >> 12) !== style % 4) continue;
-          if ((objectId < ROOM_DOOR_HOTSPOT_MIN || objectId > ROOM_DOOR_HOTSPOT_MAX)
-            && !Estate.HOUSE_STYLES[style].doorHotspots.includes(objectId)
-            && objectId !== HOUSE_DYNAMIC_WINDOW
-            && !Data.HOTSPOT_BY_OBJECT_ID.has(objectId)
-            && !CacheDefinitions.getObject(objectId).actions?.includes("Build")) continue;
-          const localX = (packedLocation >> 6) & 0x3f;
-          const localY = packedLocation & 0x3f;
-          objects.push({
-            id: objectId,
-            sourceChunkX: (regionId >> 8) * 8 + (localX >> 3) - chunkOffset,
-            sourceChunkY: (regionId & 0xff) * 8 + (localY >> 3),
-            localX: localX & 7,
-            localY: localY & 7,
-            type: info >> 2,
-            face: info & 3,
-          });
-        }
+      const region = getTemplateRegion(regionId);
+      if (!region) throw new Error(`Construction template region ${regionId} is missing from the active cache.`);
+      for (const loc of region.chunks.flat()) {
+        if (loc.plane !== style % 4) continue;
+        if (!Data.ROOM_DOOR_HOTSPOT_IDS.has(loc.id)
+          && !Estate.HOUSE_STYLES[style].doorHotspots.includes(loc.id)
+          && loc.id !== HOUSE_DYNAMIC_WINDOW
+          && !Data.HOTSPOT_BY_OBJECT_ID.has(loc.id)
+          && !CacheDefinitions.getObject(loc.id).actions?.includes("Build")) continue;
+        objects.push({
+          id: loc.id,
+          sourceChunkX: (regionId >> 8) * 8 + (loc.localX >> 3) - chunkOffset,
+          sourceChunkY: (regionId & 0xff) * 8 + (loc.localY >> 3),
+          localX: loc.localX & 7,
+          localY: loc.localY & 7,
+          type: loc.type,
+          face: loc.face,
+        });
       }
     }
     this.templateObjects.set(style, objects);

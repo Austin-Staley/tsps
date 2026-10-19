@@ -1,6 +1,7 @@
 "use strict";
 
 const { api, Animation, Skill } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const Data = require("./Data.Construction");
 const House = require("./House.Construction");
 const WORKBENCH = require("./data/workbench.json");
@@ -8,18 +9,18 @@ const WORKBENCH = require("./data/workbench.json");
 // rsprox captures: Work-at opens poh_furniture_creation_menu, laid out by its own script from the
 // category enum; a category opens the furniture list (the build menu's interface, with flatpack
 // mode on in script 1406) and a pick makes that furniture's flatpack.
-const CATEGORY_INTERFACE = 397;
+const CATEGORY_INTERFACE = Ids.iface("poh_furniture_creation_menu");
 const CATEGORY_LIST = (CATEGORY_INTERFACE << 16) | 2;
 const CATEGORY_SCROLLBAR = (CATEGORY_INTERFACE << 16) | 3;
 const CATEGORY_INIT_SCRIPT = 348;
 const CATEGORY_ROWS = 48;
-const FURNITURE_INTERFACE = 458;
+const FURNITURE_INTERFACE = Ids.iface("poh_furniture_creation");
 const FURNITURE_LIST = (FURNITURE_INTERFACE << 16) | 2;
 const ENTRY_SCRIPT = 1404;
 const LIST_SCRIPT = 1406;
 const OP1_EVENTS = 1 << 1;
 const PAUSE_BUTTON_EVENTS = 1;
-const BUILD_ANIMATION = 3676;
+const BUILD_ANIMATION = Ids.seq("human_poh_build");
 
 const FLATPACK_OF = new Map(WORKBENCH.categories.flatMap(category => category.flatpacks));
 const FURNITURE_OF_FLATPACK = new Map(WORKBENCH.categories.flatMap(category => category.flatpacks.map(([key, item]) => [item, key])));

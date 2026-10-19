@@ -1,6 +1,7 @@
 "use strict";
 
 const { api, Animation, CombatType, Equipment, EquipPacketListener, Location, Skill } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 
 // Combat room rings (rsprox captures, Wiki): Climb-over on the ropes plays
@@ -15,27 +16,36 @@ const House = require("./House.Construction");
 // wield the pugel stick.") only at an end ("You should get on the balance beam at one end."), and
 // Get-down plays balance_beam_jumpoff and takes the pugel off. Pugel blows knock the other player
 // off instead of hurting; how often, and the defeat and knock-off messages, are this server's.
-const RED_GLOVES = 7671;
-const BLUE_GLOVES = 7673;
-const WOODEN_SWORD = 7675;
-const WOODEN_SHIELD = 7676;
-const PUGEL = 7679;
+const RED_GLOVES = Ids.obj("poh_boxing_gloves_red");
+const BLUE_GLOVES = Ids.obj("poh_boxing_gloves_blue");
+const WOODEN_SWORD = Ids.obj("poh_wooden_sword");
+const WOODEN_SHIELD = Ids.obj("poh_wooden_shield");
+const PUGEL = Ids.obj("poh_pugel");
 const HOUSE_ONLY_ITEMS = [RED_GLOVES, BLUE_GLOVES, WOODEN_SWORD, WOODEN_SHIELD, PUGEL];
-const CLIMB = { none: 3688, [RED_GLOVES]: 3689, [BLUE_GLOVES]: 3690 };
-const BEAM_GET_UP = 3599;
-const BEAM_FALL_OFF = 3597;
-const BEAM_JUMP_OFF = 3598;
+const CLIMB = {
+  none: Ids.seq("human_get_over_combatring_nogloves"), [RED_GLOVES]: Ids.seq("human_get_over_combatring_redgloves"),
+  [BLUE_GLOVES]: Ids.seq("human_get_over_combatring_bluegloves"),
+};
+const BEAM_GET_UP = Ids.seq("balance_beam_getup");
+const BEAM_FALL_OFF = Ids.seq("balance_beam_falloff");
+const BEAM_JUMP_OFF = Ids.seq("balance_beam_jumpoff");
 const KNOCK_OFF_CHANCE = 1 / 3;
 const BEAM_REACH = 3; // end to end
 // Each ring's rope (or barrier) locs and the locs of the tiles inside it.
 const RINGS = {
-  BOXING_RING: { ropes: [13129, 13130, 13131, 13132], inside: [13126, 13127, 13128], rule: "boxing" },
-  FENCING_RING: { ropes: [13133], inside: [13134, 13135, 13136], rule: "fencing" },
-  COMBAT_RING: { ropes: [13137], inside: [13138, 13139, 13140] },
-  RANGING_PEDESTALS: { ropes: [13145], inside: [13147] },
+  BOXING_RING: {
+    ropes: ["poh_boxing_ringwall_white", "poh_boxing_ringwall_corner", "poh_boxing_ringwall_red", "poh_boxing_ringwall_blue"].map(Ids.loc),
+    inside: ["poh_boxing_ring_mat_corner", "poh_boxing_ring_mat_middle", "poh_boxing_ring_mat_side"].map(Ids.loc), rule: "boxing",
+  },
+  FENCING_RING: {
+    ropes: [Ids.loc("poh_fencing_ringwall")],
+    inside: ["poh_fencing_ring_mat_side", "poh_fencing_ring_mat_corner", "poh_fencing_ring_mat_middle"].map(Ids.loc), rule: "fencing",
+  },
+  COMBAT_RING: { ropes: [Ids.loc("poh_combat_ringwall")], inside: ["poh_combat_mat_corner", "poh_combat_mat_side", "poh_combat_mat_middle"].map(Ids.loc) },
+  RANGING_PEDESTALS: { ropes: [Ids.loc("poh_magic_circle_wall")], inside: [Ids.loc("poh_magic_circle_mat")] },
 };
-const BEAM_ENDS = [13143, 13144];
-const BEAM_MIDDLE = 13142;
+const BEAM_ENDS = [Ids.loc("poh_balancebeam_endl"), Ids.loc("poh_balancebeam_endr")];
+const BEAM_MIDDLE = Ids.loc("poh_balancebeam_middle");
 const RACKS = {
   GLOVE_RACK: [["Red boxing gloves", RED_GLOVES], ["Blue boxing gloves", BLUE_GLOVES]],
   WEAPONS_RACK: [["Red boxing gloves", RED_GLOVES], ["Blue boxing gloves", BLUE_GLOVES], ["Wooden sword", WOODEN_SWORD], ["Wooden shield", WOODEN_SHIELD]],
@@ -176,7 +186,7 @@ function standOnBeam(event) {
     return true;
   }
   player.sendMessage("Climbing on to beam.");
-  if (!wielded) EquipPacketListener.equip(player, PUGEL, player.getInventory().getSlotForItemId(PUGEL), 3214);
+  if (!wielded) EquipPacketListener.equip(player, PUGEL, player.getInventory().getSlotForItemId(PUGEL), player.getInventory().constructor.INTERFACE_ID);
   player.performAnimation(new Animation(BEAM_GET_UP));
   player.moveTo(new Location(event.location.x, event.location.y, event.location.z));
   return true;

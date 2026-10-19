@@ -1,6 +1,10 @@
 "use strict";
 
 const { api, PluginManager, World, Item, Skill, Bank, ItemDefinition, PathFinder, NpcIdentifiers: Npcs, ItemIdentifiers: Items, DialogueChainBuilder, NpcDialogue, EndDialogue } = require("./Core.Construction");
+const Data = require("./Data.Construction");
+const Ids = require("./Ids.Construction");
+const SERVANT_TYPE_VARBIT = Ids.varbit("poh_servant_type");
+const SERVANT_PAY_VARBIT = Ids.varbit("poh_servant_pay");
 const Instance = require("./Instance.Construction");
 const House = require("./House.Construction");
 const Estate = require("./Estate.Construction");
@@ -40,9 +44,9 @@ function hasServantBeds(save) {
 function definition(save) { return SERVANTS.find(s => s.id === save.servant?.id); }
 function persist(player) {
   const save = House.houseStateFor(player);
-  player.setAttribute("construction:house", save);
-  player.getPacketSender().sendVarbit(2190, definition(save)?.type ?? 0);
-  player.getPacketSender().sendVarbit(2191, save.servant?.uses ?? 0);
+  player.setAttribute(Data.HOUSE_ATTRIBUTE, save);
+  player.getPacketSender().sendVarbit(SERVANT_TYPE_VARBIT, definition(save)?.type ?? 0);
+  player.getPacketSender().sendVarbit(SERVANT_PAY_VARBIT, save.servant?.uses ?? 0);
 }
 function say(player, id, text) {
   player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new NpcDialogue(0, id, text), new EndDialogue(1)));
@@ -459,7 +463,7 @@ function processServant(player) {
   }
 }
 function login({ player }) {
-  const saved = player.getAttribute("construction:house");
+  const saved = player.getAttribute(Data.HOUSE_ATTRIBUTE);
   if (!saved?.servant) return;
   bankCargo(player);
   persist(player);

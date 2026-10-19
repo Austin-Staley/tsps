@@ -1,42 +1,28 @@
 "use strict";
 
-const { api, Item, ItemDefinition, CachePipeline, CacheIndexDat2, IndexType, ConfigType, ByteBuffer } = require("./Core.Construction");
+const { api, CacheDefinitions, Item, ItemDefinition } = require("./Core.Construction");
+const Data = require("./Data.Construction");
 const Instance = require("./Instance.Construction");
 // Native costume-room enums: set representatives, set members, and alternatives.
 const STORAGE_ENUMS = {
   MAGIC_WARDROBE: [3289], ARMOUR_CASE: [3290], FANCY_DRESS_BOX: [3291],
   CAPE_RACK: [3292], TREASURE_CHEST: [3293, 3294, 3295, 3296, 3297, 3298], TOY_BOX: [3299],
 };
-let enumArchive;
-const enumCache = new Map();
+/** A numeric cache enum; the costume room's are all obj -> obj or int -> obj. */
 function numericEnum(id) {
-  const cached = enumCache.get(id);
-  if (cached) return cached;
-  enumArchive ??= CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore()).getArchive(ConfigType.DAT2.enums);
-  const file = enumArchive.getFile(id);
-  if (!file) throw new Error(`Missing costume storage enum ${id}`);
-  const buffer = new ByteBuffer(new Int8Array(file.data));
-  const entries = new Map();
-  for (let opcode = buffer.readUnsignedByte(); opcode; opcode = buffer.readUnsignedByte()) {
-    if (opcode === 1 || opcode === 2) buffer.readUnsignedByte();
-    else if (opcode === 3) buffer.readString();
-    else if (opcode === 4) buffer.readInt();
-    else if (opcode === 6 || opcode === 8) {
-      if (opcode === 8) buffer.readUnsignedShort();
-      const count = buffer.readUnsignedShort();
-      for (let i = 0; i < count; i++) entries.set(opcode === 8 ? buffer.readUnsignedShort() : buffer.readInt(), buffer.readInt());
-    } else throw new Error(`Non-numeric costume enum ${id}: opcode ${opcode}`);
-  }
-  enumCache.set(id, entries);
-  return entries;
+  const values = CacheDefinitions.getEnumValues(id);
+  if (!values.size) throw new Error(`Missing costume storage enum ${id}`);
+  return values;
 }
+// The set members of each representative, and the alternatives an item can stand for.
+const SET_MEMBERS_ENUM = 3077, ALTERNATES_ENUM = 3303, ALTERNATE_SETS_ENUM = 3304;
 
 function storageItems(furniture) {
   const result = new Map();
   let enums = STORAGE_ENUMS[furniture.hotspotKey];
   if (!enums) return result;
   if (furniture.hotspotKey === "TREASURE_CHEST") enums = enums.slice(0, furniture.buildableKey.startsWith("OAK") ? 2 : furniture.buildableKey.startsWith("TEAK") ? 3 : 6);
-  const members = numericEnum(3077), alternates = numericEnum(3303), alternateSets = numericEnum(3304);
+  const members = numericEnum(SET_MEMBERS_ENUM), alternates = numericEnum(ALTERNATES_ENUM), alternateSets = numericEnum(ALTERNATE_SETS_ENUM);
   for (const enumId of enums) for (const representative of numericEnum(enumId).values()) {
     const set = members.has(representative) ? [...numericEnum(members.get(representative)).values()] : [representative];
     for (const id of set) {
@@ -73,7 +59,7 @@ function depositHouseItem(player, house, furniture, slot) {
   if (set == null) return false;
   const stored = furniture.storage ??= {};
   const countsTowardLimit = (representative) => furniture.hotspotKey !== "CAPE_RACK"
-    || (numericEnum(3077).has(representative) && [...numericEnum(numericEnum(3077).get(representative)).values()].some(id => ItemDefinition.forId(id).getName().toLowerCase().includes("hood")));
+    || (numericEnum(SET_MEMBERS_ENUM).has(representative) && [...numericEnum(numericEnum(SET_MEMBERS_ENUM).get(representative)).values()].some(id => ItemDefinition.forId(id).getName().toLowerCase().includes("hood")));
   const used = new Set(Object.keys(stored).filter(id => stored[Number(id)] > 0).map(id => allowed.get(Number(id))).filter(id => id != null && countsTowardLimit(id)));
   if (countsTowardLimit(set) && !used.has(set) && used.size >= capacity(furniture)) { player.sendMessage("Upgrade this furniture to store more sets."); return false; }
   const amount = item.getAmount();
@@ -81,7 +67,7 @@ function depositHouseItem(player, house, furniture, slot) {
   const id = item.getId();
   inventory.deleteAtSlot(slot, amount);
   stored[id] = (stored[id] ?? 0) + amount;
-  player.setAttribute("construction:house", house.save);
+  player.setAttribute(Data.HOUSE_ATTRIBUTE, house.save);
   return true;
 }
 
@@ -95,7 +81,7 @@ function withdrawHouseItem(player, house, furniture, id) {
   inventory.addItem(new Item(id, 1));
   if (inventory.getAmount(id) !== before + 1) return false;
   if (--stored[id] === 0) delete stored[id];
-  player.setAttribute("construction:house", house.save);
+  player.setAttribute(Data.HOUSE_ATTRIBUTE, house.save);
   return true;
 }
 

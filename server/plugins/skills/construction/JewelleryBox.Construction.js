@@ -1,18 +1,19 @@
 "use strict";
 
 const { Location, TeleportHandler, TeleportType } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const { JEWELLERY, RING_OF_WEALTH_DESTINATIONS, DEFAULT_WILDERNESS_LEVEL } = require("../../items/Teleports.Jewellery");
 const House = require("./House.Construction");
 const BOX_DATA = require("./data/jewellery-box.json");
 
 // rsprox captures: Teleport Menu opens this modal, its init script lays out the destinations, and
 // a destination click is a resume_pausebutton on the universe layer with the slot as sub.
-const JEWELLERY_BOX_INTERFACE = 590;
+const JEWELLERY_BOX_INTERFACE = Ids.iface("poh_jewellery_box");
 const JEWELLERY_BOX_UNIVERSE = (JEWELLERY_BOX_INTERFACE << 16) | 0;
 const JEWELLERY_BOX_INIT_SCRIPT = 1685;
 const PAUSE_BUTTON_EVENTS = 1;
 // poh_jewellerybox_multi: the last destination (slot + 1), which also picks the box's quick-teleport op.
-const LAST_DESTINATION_VARBIT = 2308;
+const LAST_DESTINATION_VARBIT = Ids.varbit("poh_jewellerybox_multi");
 const LAST_DESTINATION_ATTRIBUTE = "construction:jewellery-box-last";
 // The init script strikes out destinations whose bit is clear (0 Tears of Guthix, 1 Kourend,
 // 2 Miscellania, 3 Dondakan's Rock, 4 Fortis Colosseum). The jewellery itself doesn't gate any of

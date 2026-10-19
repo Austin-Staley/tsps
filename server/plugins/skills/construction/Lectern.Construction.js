@@ -4,6 +4,7 @@ const {
   Animation, CacheDefinitions, DialogueChainBuilder, Item, ItemIdentifiers, ItemStatementDialogue, MagicSpellbook,
   PluginManager, Skill, Sound, Sounds, Spell, Task, TaskManager,
 } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 const LECTERN_DATA = require("./data/lectern.json");
 
@@ -11,17 +12,17 @@ const LECTERN_DATA = require("./data/lectern.json");
 // list) and makexcrafting (the quantity). A tab click sets tablet_to_make (the tab's 1-based
 // slot); confirm closes the interface and makes one tablet every 4 ticks, the animation and
 // sound on the first tick and the tablet the tick after.
-const TELETABS_INTERFACE = 403;
+const TELETABS_INTERFACE = Ids.iface("teletabs_craft_if");
 const MAKE_BUTTONS = { 5: 1, 6: 5, 7: 10 };
 const MAKE_X = 8;
 const MAKE_ALL = 9;
 const CONFIRM = 14;
 const FIRST_TAB = 19;
 const LAST_TAB = 39;
-const TELETAB_ENUM_VARP = 4074;
-const MAKE_AMOUNT_VARP = 2224;
-const TABLET_VARBIT = 10600;
-const CREATE_ANIMATION = 4067;
+const TELETAB_ENUM_VARP = Ids.varp("teletab_enum");
+const MAKE_AMOUNT_VARP = Ids.varp("makexcrafting");
+const TABLET_VARBIT = Ids.varbit("tablet_to_make");
+const CREATE_ANIMATION = Ids.seq("poh_create_magic_tablet");
 const CREATE_SOUND = new Sound(228, 1, 0, 0);
 const INTERVAL_TICKS = 4;
 const NO_CLAY = "You need some soft clay to use this lectern.";

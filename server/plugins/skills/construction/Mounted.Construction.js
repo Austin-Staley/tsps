@@ -1,13 +1,14 @@
 "use strict";
 
 const { Location, Animation, Graphic, Priority, TeleportHandler, TeleportType } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const { JEWELLERY, DEFAULT_WILDERNESS_LEVEL } = require("../../items/Teleports.Jewellery");
 const House = require("./House.Construction");
 const Menu = require("./Menu.Construction");
 
 // rsprox captures: the mounted talisman casts arceuus_necromancy_anim with xeric_teleport_spotanim
 // and lands three ticks later, with no landing animation.
-const XERICS_TELEPORT = new TeleportType(3, new Animation(3865, Priority.HIGH), null, null, new Graphic(1612), null, null);
+const XERICS_TELEPORT = new TeleportType(3, new Animation(Ids.seq("arceuus_necromancy_anim"), Priority.HIGH), null, null, new Graphic(Ids.spotanim("xeric_teleport_spotanim")), null, null);
 const MYTHS_GUILD = [2458, 2850, 0];
 
 const destinationsOf = key => JEWELLERY.find(piece => piece.key === key).destinations;
@@ -21,27 +22,27 @@ const tileOf = (key, label) => destinationsOf(key).find(entry => entry.label ===
  */
 const AMULETS = {
   "Xeric's Talisman": {
-    base: 33419,
+    base: Ids.loc("poh_amulet_xeric"),
     teleportTitle: "Xeric's Talisman teleports",
     configTitle: "Xeric's Talisman left click",
     teleportType: XERICS_TELEPORT,
     destinations: [
-      { label: "Xeric's Lookout", option: "Look out", loc: 33411, tile: [1578, 3529, 0] },
-      { label: "Xeric's Glade", option: "Glade", loc: 33412, tile: [1751, 3566, 0] },
-      { label: "Xeric's Inferno", option: "Inferno", loc: 33413, tile: [1505, 3819, 0] },
-      { label: "Xeric's Heart", option: "Heart", loc: 33414, tile: [1642, 3673, 0] },
-      { label: "Xeric's Honour", option: "Honour", loc: 33415, tile: [1254, 3563, 0] },
+      { label: "Xeric's Lookout", option: "Look out", loc: Ids.loc("poh_amulet_xeric_lookout"), tile: [1578, 3529, 0] },
+      { label: "Xeric's Glade", option: "Glade", loc: Ids.loc("poh_amulet_xeric_glade"), tile: [1751, 3566, 0] },
+      { label: "Xeric's Inferno", option: "Inferno", loc: Ids.loc("poh_amulet_xeric_inferno"), tile: [1505, 3819, 0] },
+      { label: "Xeric's Heart", option: "Heart", loc: Ids.loc("poh_amulet_xeric_heart"), tile: [1642, 3673, 0] },
+      { label: "Xeric's Honour", option: "Honour", loc: Ids.loc("poh_amulet_xeric_honour"), tile: [1254, 3563, 0] },
     ],
   },
   "Digsite Pendant": {
-    base: 33420,
+    base: Ids.loc("poh_amulet_digsite"),
     teleportTitle: "Digsite Pendant teleport",
     configTitle: "Digsite Pendant left click",
     teleportType: TeleportType.NORMAL,
     destinations: [
-      { label: "Digsite", option: "Digsite", loc: 33416, tile: tileOf("digsite", "Digsite") },
-      { label: "Fossil Island", option: "Fossil Island", loc: 33417, tile: tileOf("digsite", "Fossil Island") },
-      { label: "Lithkren", option: "Lithkren", loc: 33418, tile: tileOf("digsite", "Lithkren") },
+      { label: "Digsite", option: "Digsite", loc: Ids.loc("poh_amulet_dig_digsite"), tile: tileOf("digsite", "Digsite") },
+      { label: "Fossil Island", option: "Fossil Island", loc: Ids.loc("poh_amulet_dig_fossil"), tile: tileOf("digsite", "Fossil Island") },
+      { label: "Lithkren", option: "Lithkren", loc: Ids.loc("poh_amulet_dig_lithkren"), tile: tileOf("digsite", "Lithkren") },
     ],
   },
 };

@@ -1,6 +1,7 @@
 "use strict";
 
-const { api, Animation, CountdownTask, Location, Skill, TaskManager, DialogueChainBuilder, StatementDialogue } = require("./Core.Construction");
+const { api, Animation, CountdownTask, ItemIdentifiers, Location, Skill, TaskManager, DialogueChainBuilder, StatementDialogue } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const Data = require("./Data.Construction");
 const House = require("./House.Construction");
 
@@ -10,8 +11,8 @@ const House = require("./House.Construction");
 // from rsprox captures; ladders and trapdoors play human_reachforladder and move a tick later.
 const BASEMENT = 0;
 const TOP_FLOOR = 2;
-const COINS = 995;
-const CLIMB_LADDER = 828;
+const COINS = ItemIdentifiers.COINS;
+const CLIMB_LADDER = Ids.seq("human_reachforladder");
 
 // What each piece of stair furniture connects to, and the piece it pairs with when building a
 // room through it. `ladder`: climbed with the ladder animation.
@@ -41,7 +42,10 @@ const ROOM_BELOW = {
 // A dungeon stairs room takes the up-going staircases; any of them will do below an entrance.
 const DUNGEON_STAIRCASES = ["OAK_STAIRCASE_UP", "TEAK_STAIRCASE_UP", "SPIRAL_STAIRCASE", "MARBLE_STAIRCASE_UP", "MARBLE_SPIRAL_STAIRCASE"];
 // Throne room trapdoors open in place; their open locs take Go-down.
-const OPEN_TRAPDOORS = { OAK_TRAPDOOR: 13678, TEAK_TRAPDOOR: 13679, MAHOGANY_TRAPDOOR: 13680 };
+const OPEN_TRAPDOORS = {
+  OAK_TRAPDOOR: Ids.loc("poh_trapdoor_oak_open_7"), TEAK_TRAPDOOR: Ids.loc("poh_trapdoor_teak_open_7"),
+  MAHOGANY_TRAPDOOR: Ids.loc("poh_trapdoor_mag_open_7"),
+};
 
 function say(player, text) {
   player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0, text)));

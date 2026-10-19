@@ -1,10 +1,12 @@
 "use strict";
 
 const Data = require("./Data.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 const Instance = require("./Instance.Construction");
 const Portals = require("./Portals.Construction");
 const Nexus = require("./Nexus.Construction");
+const Trophies = require("./Trophies.Construction");
 
 // ::maxhouse (developer): replaces the house with one of every room, each with the best piece on
 // every space, for testing. The old house is kept for ::restorehouse. Levels, room counts and the
@@ -13,9 +15,8 @@ const Nexus = require("./Nexus.Construction");
 // the dungeon stairs under the skill hall and the oubliette under the throne room, and the rest of
 // the dungeon grows from the stairs. Portals, the nexus, the cape hanger, trophy displays and the
 // prize chest come set up.
-const HOUSE_ATTRIBUTE = "construction:house";
+const { HOUSE_ATTRIBUTE } = Data;
 const BACKUP_ATTRIBUTE = "construction:house-backup";
-const TROPHIES_ATTRIBUTE = "construction:trophies";
 const GRID = 8;
 const GROUND = 1, UPPER = 2, BASEMENT = 0;
 const GROUND_ROOMS = [
@@ -28,8 +29,8 @@ const BASEMENT_ROOMS = ["DUNGEON_CORRIDOR", "DUNGEON_JUNCTION", "TREASURE_ROOM"]
 const PICKS = { GARDEN: { CENTERPIECE: "EXIT_PORTAL" } };
 const PORTAL_DESTINATIONS = ["varrock teleport", "camelot teleport", "ardougne teleport"];
 const NEXUS_DESTINATIONS = ["varrock teleport", "lumbridge teleport", "falador teleport", "camelot teleport", "ardougne teleport", "watchtower teleport", "trollheim teleport", "kharyrll teleport"];
-const MAX_CAPE = { cape: 13280, hood: 13281 };
-const MAX_CAPE_LOC = 29170;
+const MAX_CAPE = { cape: Ids.obj("skillcape_max"), hood: Ids.obj("skillcape_max_hood") };
+const MAX_CAPE_LOC = Ids.loc("poh_mounted_max_cape");
 const TROPHY_FOR = { head: 7, fish: 18 }; // Vorkath's head, swift marlin
 const PRIZE = 100000;
 const OFFSETS = [[0, 1], [1, 0], [0, -1], [-1, 0]]; // doorway edges: north, east, south, west
@@ -100,7 +101,7 @@ function layout(save) {
 function setUp(player, house) {
   const destinations = Portals.houseDestinations();
   let portal = 0;
-  const trophies = new Set(player.getAttribute(TROPHIES_ATTRIBUTE) ?? []);
+  const trophies = new Set(player.getAttribute(Trophies.MOUNTED_ATTRIBUTE) ?? []);
   for (const { furniture } of house.furnitureEntries()) {
     const key = furniture.buildableKey;
     if (key.endsWith("_PORTAL_FRAME")) {
@@ -123,7 +124,7 @@ function setUp(player, house) {
       trophies.add(trophy);
     }
   }
-  player.setAttribute(TROPHIES_ATTRIBUTE, [...trophies]);
+  player.setAttribute(Trophies.MOUNTED_ATTRIBUTE, [...trophies]);
   house.save.prize = PRIZE;
 }
 

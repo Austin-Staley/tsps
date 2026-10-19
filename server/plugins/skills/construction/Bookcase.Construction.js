@@ -1,6 +1,7 @@
 "use strict";
 
 const { Animation, CacheDefinitions, ItemDefinition } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 
 // Bookcases (rsprox captures, cache scripts 7834-7843): Search opens poh_bookcase, which lists the
@@ -9,12 +10,13 @@ const House = require("./House.Construction");
 // poh_larder_examine, "You're already carrying a copy of that book." or "You have not found that
 // book yet.". A book counts as found once the player has carried or banked it when they search a
 // bookcase; the live game marks it when the book is first obtained.
-const INTERFACE = 910;
+const INTERFACE = Ids.iface("poh_bookcase");
 const BOOKS_COMPONENT = 5;
 const BOOK_ENUM = 5210;
-const FOUND_VARPS = [805, 261, 262, 263, 264, 265, 266, 1037];
+// The varps the bookcase's script reads the found books from, in its order.
+const FOUND_VARPS = ["macro_bee_pos_1", "if1", "if2", "if3", "if4", "if5", "if6", "pattern_varp"].map(Ids.varp);
 const FOUND_ATTRIBUTE = "construction:books-found";
-const TAKE_BOOK = 3659;
+const TAKE_BOOK = Ids.seq("poh_larder_examine");
 
 let books = null;
 

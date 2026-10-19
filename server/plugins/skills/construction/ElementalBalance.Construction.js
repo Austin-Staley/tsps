@@ -1,6 +1,7 @@
 "use strict";
 
 const { CombatSpells, CountdownTask, PluginManager, Skill, TaskManager } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 const Prizes = require("./Prizes.Construction");
 
@@ -12,10 +13,15 @@ const Prizes = require("./Prizes.Construction");
 // the runes must be in the inventory (no staves, no rune pouch). Whoever turns it white wins.
 // How unbalanced it starts, the casting range and the win message are this server's.
 const ACTIVATE_SOUND = 227;
+/** A balance's NPC forms: poh_elemental_balance_<tier> when white, _<tier>_<colour><1-6> otherwise. */
+function balanceForms(tier, start) {
+  const forms = (colour) => Array.from({ length: 6 }, (_, index) => Ids.npc(`poh_elemental_balance_${tier}_${colour}${index + 1}`));
+  return { white: Ids.npc(`poh_elemental_balance_${tier}`), start, red: forms("red"), blue: forms("blue"), green: forms("green"), cyan: forms("cyan") };
+}
 const TIERS = {
-  LESSER_MAGICAL_BALANCE: { white: 3370, start: 3, red: [3371, 3372, 3373, 3374, 3375, 3376], blue: [3377, 3378, 3379, 3380, 3381, 3382], green: [3383, 3384, 3385, 3386, 3387, 3401], cyan: [3402, 3403, 3404, 3405, 3406, 3407] },
-  MEDIUM_MAGICAL_BALANCE: { white: 3408, start: 5, red: [3409, 3410, 3411, 3412, 3457, 3777], blue: [4301, 4302, 4620, 4621, 4622, 4623], green: [4624, 4865, 4866, 4867, 4868, 4869], cyan: [4870, 4871, 4989, 4990, 4991, 4992] },
-  GREATER_MAGICAL_BALANCE: { white: 4993, start: 6, red: [4994, 4995, 4996, 4997, 4998, 4999], blue: [5000, 5001, 5002, 5003, 5004, 5009], green: [5010, 5011, 5012, 5013, 5014, 5015], cyan: [5016, 5017, 5018, 5019, 5020, 5021] },
+  LESSER_MAGICAL_BALANCE: balanceForms(1, 3),
+  MEDIUM_MAGICAL_BALANCE: balanceForms(2, 5),
+  GREATER_MAGICAL_BALANCE: balanceForms(3, 6),
 };
 const ELEMENTS = { FIRE: ["fire", 1], WATER: ["fire", -1], EARTH: ["earth", 1], WIND: ["earth", -1] };
 const STRENGTH = { STRIKE: 1, BOLT: 2, BLAST: 3, WAVE: 4, SURGE: 5 };

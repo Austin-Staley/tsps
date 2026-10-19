@@ -4,6 +4,7 @@ const {
   api, Animation, GameObject, HitDamage, HitMask, Location, Misc, PluginManager, Skill, ItemIdentifiers,
   DialogueChainBuilder, StatementDialogue,
 } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 
 // The house dungeon, oubliette and treasure room. Guard, guardian and trap levels, the treasure
@@ -11,39 +12,47 @@ const House = require("./House.Construction");
 // locked-door messages are not on the Wiki or in captures and are this server's.
 
 // Monster furniture is a statue-like loc while building and its NPC otherwise (same gameval name).
-const MONSTERS = {
-  SKELETON_GUARD: 130, GUARD_DOG: 131, HOBGOBLIN: 132, TROLL_GUARD: 133, HUGE_SPIDER: 134, HELLHOUND: 135,
-  BABY_RED_DRAGON: 137, KALPHITE_SOLDIER: 138, STEEL_DRAGON: 139, DAGANNOTH: 140, TOK_XIL: 141, DEMON: 142,
-  ROCNAR: 143, RUNE_DRAGON: 8027,
-};
+const MONSTERS = Object.fromEntries(Object.entries({
+  SKELETON_GUARD: "poh_skeleton", GUARD_DOG: "poh_guarddog", HOBGOBLIN: "poh_hobgoblin", TROLL_GUARD: "poh_troll",
+  HUGE_SPIDER: "poh_giantspider", HELLHOUND: "poh_hellhound", BABY_RED_DRAGON: "poh_babyreddragon",
+  KALPHITE_SOLDIER: "poh_kalphite_soldier", STEEL_DRAGON: "poh_steel_dragon", DAGANNOTH: "poh_dagganoth", TOK_XIL: "poh_tok_xil",
+  DEMON: "poh_demon", ROCNAR: "poh_oub_monster1", RUNE_DRAGON: "poh_rune_dragon",
+}).map(([key, name]) => [key, Ids.npc(name)]));
 const GUARDIANS = new Set(["DEMON", "KALPHITE_SOLDIER", "TOK_XIL", "DAGANNOTH", "STEEL_DRAGON", "RUNE_DRAGON"]);
 const GUARD_REACH = 4;
 
 // Doors: closed leaves and their open locs (left, right); Wiki odds to pick (no lockpick / with
 // one) and force, interpolated from level 1 to 99, and the experience for a success.
+function openDoors(wood) {
+  return [Ids.loc(`poh_dungeon_ldoor_${wood}_open`), Ids.loc(`poh_dungeon_rdoor_${wood}_open`)];
+}
 const DOORS = {
-  OAK_DOOR: { open: [13350, 13351], pick: [4, 98], lockpick: [24, 98], xp: 10 },
-  STEEL_PLATED_DOOR: { open: [13352, 13353], pick: [2.3, 49.2], lockpick: [21.9, 49.2], xp: 15 },
-  MARBLE_DOOR: { open: [13354, 13355], pick: [1.17, 19.92], lockpick: [20.7, 19.92], xp: 20 },
+  OAK_DOOR: { open: openDoors("oak"), pick: [4, 98], lockpick: [24, 98], xp: 10 },
+  STEEL_PLATED_DOOR: { open: openDoors("steel"), pick: [2.3, 49.2], lockpick: [21.9, 49.2], xp: 15 },
+  MARBLE_DOOR: { open: openDoors("marble"), pick: [1.17, 19.92], lockpick: [20.7, 19.92], xp: 20 },
 };
 // Oubliette cages: their door locs open the same way, as hard as the doors their metal matches.
+function openCage(kind) {
+  return Ids.loc(`poh_cage_dungeon_${kind}_door_open`);
+}
 const CAGES = {
-  OAK_CAGE: { open: [13315], door: "OAK_DOOR" }, OAK_AND_STEEL_CAGE: { open: [13318], door: "STEEL_PLATED_DOOR" },
-  STEEL_CAGE: { open: [13321], door: "STEEL_PLATED_DOOR" }, SPIKED_CAGE: { open: [13324], door: "MARBLE_DOOR" },
-  BONE_CAGE: { open: [13327], door: "MARBLE_DOOR" },
+  OAK_CAGE: { open: [openCage("oak")], door: "OAK_DOOR" }, OAK_AND_STEEL_CAGE: { open: [openCage("oak+steel")], door: "STEEL_PLATED_DOOR" },
+  STEEL_CAGE: { open: [openCage("steel")], door: "STEEL_PLATED_DOOR" }, SPIKED_CAGE: { open: [openCage("steel+spikes")], door: "MARBLE_DOOR" },
+  BONE_CAGE: { open: [openCage("bones")], door: "MARBLE_DOOR" },
 };
-const LOCKPICK = 1523;
+const LOCKPICK = ItemIdentifiers.LOCKPICK;
 const DOOR_OFFSETS = [[-1, 0], [0, 1], [1, 0], [0, -1]];
 
 const TRAPS = new Set(["SPIKE_TRAP", "MAN_TRAP", "TANGLE_VINE", "MARBLE_TRAP", "TELEPORT_TRAP"]);
 const TANGLE_TICKS = 8;
 const OUBLIETTE_FLOORS = { SPIKES: [1, 5], TENTACLE_POOL: [1, 3], FLAME_PIT: [2, 8] };
+const OUBLIETTE_FLOOR_KEYS = new Set(Object.keys(OUBLIETTE_FLOORS));
 const HAZARD_INTERVAL = 4;
 
 // Treasure chests act as one store, as large as the best chest built (Wiki), filled every 5 minutes.
 const CHEST_LIMITS = { WOODEN_CRATE: 10000, OAK_CHEST: 20000, TEAK_CHEST: 50000, MAHOGANY_CHEST: 75000, MAGIC_CHEST: 100000 };
 const TREASURE_COOLDOWN_MS = 5 * 60 * 1000;
-const COINS = 995;
+const COINS = ItemIdentifiers.COINS;
 
 /** house -> { monsters: Map(npc -> entry), dead: Set(furniture), openDoors: Map(key -> objects), challenge, trapped: Map(player -> tile) } */
 const states = new WeakMap();
@@ -142,7 +151,7 @@ function processOccupant(player, house) {
     }
   }
   if (Misc.getRandom(HAZARD_INTERVAL - 1) === 0) {
-    const floor = furnitureOn(house, at, new Set(Object.keys(OUBLIETTE_FLOORS)));
+    const floor = furnitureOn(house, at, OUBLIETTE_FLOOR_KEYS);
     if (floor) hurt(player, OUBLIETTE_FLOORS[floor.furniture.buildableKey]);
   }
 }

@@ -1,6 +1,8 @@
 "use strict";
 
 const { api, Bank, Item, DialogueChainBuilder, ItemStatementDialogue, StatementDialogue, ActionDialogue } = require("./Core.Construction");
+const Data = require("./Data.Construction");
+const Ids = require("./Ids.Construction");
 const House = require("./House.Construction");
 
 // Tip jars (rsprox captures, Wiki): guests tip coins or platinum tokens from their inventory; the
@@ -10,9 +12,9 @@ const House = require("./House.Construction");
 // Active/Muted" and "Attempt to bank on logout: Enabled/Disabled" and switches them. All of a
 // house's jars share one balance, which stays until taken. The amount prompt, the tip and
 // notification messages and the Setup menu's wording are this server's.
-const COINS = 995;
-const PLATINUM = 13204;
-const TIP_JAR_ITEM = 20634;
+const COINS = Ids.obj("coins");
+const PLATINUM = Ids.obj("platinum");
+const TIP_JAR_ITEM = Ids.obj("poh_tipjar");
 const GREEN = "004f00";
 const RED = "7f0000";
 
@@ -138,7 +140,7 @@ function bankOnLogout({ player }) {
   if (jar.platinum) bank(player, PLATINUM, jar.platinum);
   jar.coins = 0;
   jar.platinum = 0;
-  player.setAttribute("construction:house", saved);
+  player.setAttribute(Data.HOUSE_ATTRIBUTE, saved);
 }
 
 function attachTipJar(api) {

@@ -1,6 +1,7 @@
 "use strict";
 
 const { api, CountdownTask, DialogueChainBuilder, StatementDialogue, ActionDialogue, Location, TaskManager } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const Estate = require("./Estate.Construction");
 const House = require("./House.Construction");
 const Portals = require("./Portals.Construction");
@@ -11,8 +12,8 @@ const Portals = require("./Portals.Construction");
 // overlay and "You view <place>..." until they continue, when they come back to the pool.
 // Direct-portal is the portal chamber's (Portals). The live game hides the scrying player; this
 // server has no hidden players, so they stand at the destination while they look.
-const OVERLAY = 404;
-const OVERLAY_ATMOSPHERE_UID = (161 << 16) | 1;
+const OVERLAY = Ids.iface("poh_scrying_pool");
+const OVERLAY_ATMOSPHERE_UID = Ids.component("toplevel_osrs_stretch:overlay_atmosphere");
 const LOOK_TICKS = 50;
 
 /** player -> where to put them back */

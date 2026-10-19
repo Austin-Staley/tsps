@@ -1,6 +1,7 @@
 "use strict";
 
 const { Animation, Skill, ItemIdentifiers, ArceuusOfferings } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
 const Instance = require("./Instance.Construction");
 const ALTAR_BONUS = { OAK_ALTAR: 1, TEAK_ALTAR: 1.1, CLOTH_ALTAR: 1.25, MAHOGANY_ALTAR: 1.5, LIMESTONE_ALTAR: 1.75, MARBLE_ALTAR: 2, GILDED_ALTAR: 2.5 };
 const BURNERS = new Set(["INCENSE_BURNER", "MAHOGANY_BURNER", "MARBLE_BURNER"]);
@@ -18,7 +19,7 @@ function lightHouseBurner(event) {
   if (!player.getClickDelay().elapsedTime(1200)) return true;
   inventory.delete(ItemIdentifiers.MARRENTILL, 1);
   house.litBurners.set(furniture, Date.now() + (200 + level + Math.floor(Math.random() * level)) * 600);
-  player.performAnimation(new Animation(3687));
+  player.performAnimation(new Animation(Ids.seq("human_light_torch")));
   player.getSkillManager().addExperiences(Skill.FIREMAKING, 50);
   player.getClickDelay().reset();
   house.redrawFurniture();
@@ -48,7 +49,7 @@ function offerHouseBones(event) {
   const room = house.getRoom(house.getRoomPositionAt(event.location));
   const lit = Object.values(room?.furnitureByLocation ?? {}).filter(value => BURNERS.has(value.buildableKey) && (house.litBurners.get(value) ?? 0) > Date.now()).length;
   inventory.delete(event.itemId, 1);
-  player.performAnimation(new Animation(3705));
+  player.performAnimation(new Animation(Ids.seq("human_bone_sacrifice")));
   player.getSkillManager().addExperiences(Skill.PRAYER, xp * (multiplier + Math.min(2, lit) * 0.5));
   player.getClickDelay().reset();
   return true;
