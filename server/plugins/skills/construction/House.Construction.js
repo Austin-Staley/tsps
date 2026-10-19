@@ -19,6 +19,7 @@ const Stairs = require("./Stairs.Construction");
 const Workshop = require("./Workshop.Construction");
 const Kitchen = require("./Kitchen.Construction");
 const Workbench = require("./Workbench.Construction");
+const Study = require("./Study.Construction");
 
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
@@ -737,7 +738,10 @@ function hotspotChoices(hotspotKey) {
 }
 
 function chooseFurniture(player, house, target) {
-  const choices = hotspotChoices(target.hotspotKey);
+  // The cache hides some rows from build menus; they are reached as an upgrade of what's there.
+  const existing = house.getFurnitureAtTarget(target)?.buildableKey;
+  const choices = hotspotChoices(target.hotspotKey)
+    .filter((buildable) => !buildable.hidden || buildable.materials.some((material) => material.source === existing));
   if (choices.length === 0) {
     player.getPacketSender().sendInterfaceRemoval();
     player.sendMessage("This construction hotspot does not have a buildable configured yet.");
@@ -1038,6 +1042,7 @@ function attach(api) {
   Workshop.attachWorkshop(api);
   Kitchen.attachKitchen(api);
   Workbench.attachWorkbench(api);
+  Study.attachStudy(api);
   api.persistAttribute(HOUSE_ATTRIBUTE, defaultHouse());
   api.onObjectFirstClick(HOUSE_PORTAL_IDS, enterDefaultHouse);
   api.onObjectSecondClick(HOUSE_PORTAL_IDS, enterNormalHouse);
