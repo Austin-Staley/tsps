@@ -36,7 +36,7 @@
       }
     },
     {
-      "id": "edge_low", "enabled": true, "x": 3073, "y": 3531, "radius": 5, "bots": 18,
+      "id": "edge_low", "enabled": true, "x": 3073, "y": 3531, "radius": 5, "bots": 12,
       "pvp": {
         "style": "pure",
         "combat": [55, 85],
@@ -46,7 +46,7 @@
       }
     },
     {
-      "id": "edge_mid", "enabled": true, "x": 3090, "y": 3531, "radius": 5, "bots": 14,
+      "id": "edge_mid", "enabled": true, "x": 3090, "y": 3531, "radius": 5, "bots": 10,
       "pvp": {
         "style": "mid",
         "combat": [88, 100],
@@ -56,7 +56,7 @@
       }
     },
     {
-      "id": "edge_mains", "enabled": true, "x": 3108, "y": 3531, "radius": 5, "bots": 20,
+      "id": "edge_mains", "enabled": true, "x": 3108, "y": 3531, "radius": 5, "bots": 14,
       "pvp": {
         "style": "main",
         "combat": [115, 126],
@@ -66,7 +66,7 @@
       }
     },
     {
-      "id": "varrock_ditch", "enabled": true, "x": 3243, "y": 3526, "bots": 80,
+      "id": "varrock_ditch", "enabled": true, "x": 3243, "y": 3526, "bots": 40,
       "area": { "minX": 3228, "maxX": 3262, "minY": 3525, "maxY": 3542 },
       "pvp": {
         "style": "f2p",
@@ -75,7 +75,7 @@
       }
     },
     {
-      "id": "green_drags_gate", "enabled": true, "x": 2988, "y": 3610, "bots": 8,
+      "id": "green_drags_gate", "enabled": true, "x": 2988, "y": 3610, "bots": 4,
       "area": { "minX": 2974, "maxX": 3002, "minY": 3598, "maxY": 3622 },
       "pvp": {
         "style": "pure",
@@ -86,7 +86,7 @@
       }
     },
     {
-      "id": "revs_entrance", "enabled": true, "x": 3134, "y": 3838, "radius": 5, "bots": 8,
+      "id": "revs_entrance", "enabled": true, "x": 3134, "y": 3838, "radius": 5, "bots": 4,
       "pvp": {
         "style": "deep",
         "combat": [115, 126],
@@ -98,7 +98,7 @@
   ],
   "pvp": {
     "botPool": 845,
-    "activeRegionBotsPerRegion": 32,
+    "activeRegionBotsPerRegion": 48,
     "activeRegionInset": 1
   }
 }
