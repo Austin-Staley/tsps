@@ -623,6 +623,15 @@ function answerCurrentPet(request) {
   if (pet?.isRegistered?.()) request.pet = pet;
 }
 
+/**
+ * "pets:owns" { player, itemId, owns }: whether the player owns the pet that item is (or one of
+ * its family), as the Font of Consumption asks before it rolls an unsired.
+ */
+function answerOwnsPet(request) {
+  const pet = getPetForItemId(request?.itemId);
+  if (pet && request.player && ownsPetFamily(request.player, pet)) request.owns = true;
+}
+
 function answerPetDefinitions(request) {
   request.pets = PETS;
 }
@@ -1784,6 +1793,7 @@ module.exports = {
     api.onCustomEvent("npc-drops:roll", awardDroppedPets);
     api.onCustomEvent("npc-dialogue:action", reclaimPets);
     api.onCustomEvent("pets:current", answerCurrentPet);
+    api.onCustomEvent("pets:owns", answerOwnsPet);
     api.onCustomEvent("pets:definitions", answerPetDefinitions);
     api.onCustomEvent("pets:release", releasePet);
     api.onItemDropPolicy(onPetItemDropPolicy);
