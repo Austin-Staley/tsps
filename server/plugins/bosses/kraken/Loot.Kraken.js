@@ -4,13 +4,18 @@
  * Where Kraken loot lands (see ../Kraken.plugin.js for behaviour and sources).
  *
  * The Kraken's body sits in deep water, so the default loot tile (its own location)
- * is unreachable. Loot goes to a fixed verified shore tile just south of the pool
- * (stood on in testing), as with Zulrah and Vorkath moving loot off the boss.
+ * is unreachable. Loot goes to a fixed shore tile south of the pool, as with Zulrah
+ * and Vorkath moving loot off the boss.
  */
 
 const Shared = require("./Shared.Kraken");
 
-/** Shore tile south of the boss pool, verified walkable (stood on in testing). */
+/**
+ * Shore tile south of the boss pool. Chosen because it is verified walkable: the
+ * tester stood on it while the boss died at (2278-2282, 10034-10038), and loot
+ * placed there is reachable. It is ~18 tiles from the body, so the killer collects
+ * after the fight rather than mid-fight.
+ */
 const LOOT_TILE = [2280, 10031];
 
 function placeLoot(where) {

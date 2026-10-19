@@ -31,6 +31,10 @@ function ids() {
   };
 }
 
+/**
+ * Surfacing animations from data/definitions/npc-animations.json (rev 241; the role
+ * mapping the loader reads): 7135 surfaces cave krakens and the boss, 3860 a tentacle.
+ */
 const SURFACE_ANIM = {
   cave: 7135,
   boss: 7135,

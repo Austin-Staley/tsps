@@ -10,14 +10,19 @@
  *   boss's own respawn timer elapses.
  * - A tentacle killed while the Kraken is down respawns normally as its whirlpool.
  * Deaths respawn as whirlpools because the engine clears the transformation first.
+ *
+ * State is keyed by private area (open world included): each area runs its own pending
+ * flag and dead list, so a future instanced fight cannot mix with the public one. A
+ * server restart clears the memory, and the engine re-spawns every whirlpool from
+ * npc-spawns.json at boot, so nothing can strand whirlpools missing.
  */
 
 const Shared = require("./Shared.Kraken");
 
-/** While true, deaths are collected for one simultaneous respawn instead of respawning. */
-let simultaneousPending = false;
-/** Whirlpools to respawn together: [{ id, at }]. */
-const deadThisFight = [];
+/** Areas with a joint respawn scheduled: their deaths join it instead of respawning. */
+const simultaneousPending = new Set();
+/** Area -> whirlpools to respawn together: [{ id, at }]. */
+const deadByArea = new Map();
 
 function later(ticks, action) {
   const { Task, TaskManager } = Shared.core();
@@ -34,6 +39,19 @@ function later(ticks, action) {
   );
 }
 
+function areaOf(npc) {
+  return npc?.getPrivateArea?.() ?? null;
+}
+
+function deadList(area) {
+  let list = deadByArea.get(area);
+  if (!list) {
+    list = [];
+    deadByArea.set(area, list);
+  }
+  return list;
+}
+
 function livingIn(area, npcId) {
   let World = null;
   try {
@@ -43,7 +61,8 @@ function livingIn(area, npcId) {
   }
   const found = [];
   for (const other of World?.getNpcs?.() ?? []) {
-    if (!other?.isNpc?.() || other.getId?.() !== npcId) continue;
+    if (!other?.isNpc?.()) continue;
+    if (other.getId?.() !== npcId) continue;
     if (!Shared.alive(other)) continue;
     if (other.getPrivateArea?.() !== area) continue;
     found.push(other);
@@ -58,35 +77,38 @@ function bossUp(area) {
 
 function tentacleDied({ npc }) {
   if (!npc || npc.getId?.() !== Shared.ids().TENTACLE) return;
-  if (simultaneousPending || bossUp(npc.getPrivateArea?.())) {
+  const area = areaOf(npc);
+  if (simultaneousPending.has(area) || bossUp(area)) {
     // Mid-fight (or fight cleanup): stay dead, come back with the rest after the fight.
     npc.__skipDefaultRespawn = true;
-    deadThisFight.push({ id: Shared.ids().TENTACLE_WHIRLPOOL, at: npc.getSpawnPosition() });
+    deadList(area).push({ id: Shared.ids().TENTACLE_WHIRLPOOL, at: npc.getSpawnPosition() });
     return;
   }
   // Boss is down: a normal respawn as the whirlpool.
   npc.__skipDefaultRespawn = false;
 }
 
-function respawnAll() {
+function respawnAll(area) {
   const { NPC, World } = Shared.core();
-  for (const { id, at } of deadThisFight.splice(0)) {
+  for (const { id, at } of (deadByArea.get(area) ?? []).splice(0)) {
     try {
       World.getAddNPCQueue().push(NPC.create(id, at));
     } catch {
       // One failed spawn must not block the rest.
     }
   }
-  simultaneousPending = false;
+  deadByArea.delete(area);
+  simultaneousPending.delete(area);
 }
 
 function bossDied({ npc }) {
   if (!npc || npc.getId?.() !== Shared.ids().BOSS) return;
-  simultaneousPending = true;
+  const area = areaOf(npc);
+  simultaneousPending.add(area);
   npc.__skipDefaultRespawn = true;
-  deadThisFight.push({ id: Shared.ids().BOSS_WHIRLPOOL, at: npc.getSpawnPosition() });
+  deadList(area).push({ id: Shared.ids().BOSS_WHIRLPOOL, at: npc.getSpawnPosition() });
   // The remaining tentacles die with the Kraken; their deaths join the same respawn.
-  for (const tentacle of livingIn(npc.getPrivateArea?.(), Shared.ids().TENTACLE)) {
+  for (const tentacle of livingIn(area, Shared.ids().TENTACLE)) {
     try {
       tentacle.setHitpoints(0);
     } catch {
@@ -94,7 +116,7 @@ function bossDied({ npc }) {
     }
   }
   const delay = npc.getDefinition?.()?.getRespawn?.() ?? 25;
-  later(delay, respawnAll);
+  later(delay, () => respawnAll(area));
 }
 
 function attach(api) {

@@ -5,6 +5,11 @@
  * Wiki (Kraken, Cave kraken): Magic is the only reliable damage — Ranged deals 1/7th of
  * its normal damage, and Melee cannot be used at all (even halberds). A long-range melee
  * hit shows "You can't attack it properly like that." (Wiki).
+ *
+ * Only player attackers are filtered (id test first): thralls attack as NPCs, so their
+ * hits pass through untouched — the boss is not thrall-immune (Wiki), and per-NPC
+ * thrall immunity is not modelled anywhere yet. Cannons need no handling here either:
+ * cannon-restrictions.json bans them cove-wide ("You can't set up a cannon here.").
  */
 
 const Shared = require("./Shared.Kraken");
@@ -13,8 +18,7 @@ const MELEE_MESSAGE = "You can't attack it properly like that.";
 
 function magicOnly({ npc, hit }) {
   if (!npc || !hit) return;
-  const npcId = npc.getId?.() ?? npc.getAsNpc?.()?.getId?.();
-  if (!Shared.isMagicOnlyId(npcId)) return;
+  if (!Shared.isMagicOnlyId(npc.getId?.())) return;
   const attacker = hit.getAttacker?.();
   if (!attacker?.isPlayer?.()) return;
   const { CombatType } = Shared.core();

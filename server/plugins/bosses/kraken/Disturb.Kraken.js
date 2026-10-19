@@ -4,7 +4,8 @@
  * Disturbing Kraken whirlpools (see ../Kraken.plugin.js for behaviour and sources).
  *
  * Wiki (Kraken): to start the fight, use a fishing explosive on the large whirlpool (496)
- * for an instant wake, or disturb the four whirlpools around it (5534) first — only when
+ * (the wake lands 6 ticks after the throw, estimate), or disturb the four whirlpools
+ * around it (5534) first — only when
  * all four are disturbed can the larger one be disturbed, waking the Kraken (494) with
  * level 112 Enormous Tentacles (5535). Wiki (Cave kraken): fishing explosives do NOT
  * surface regular cave krakens (493); those are Disturbed normally.
@@ -117,11 +118,16 @@ function disturb({ player, npc }) {
   return false;
 }
 
+/** Whirlpools with a throw already in the air: further throws are swallowed, not consumed. */
+const pendingWakes = new Set();
+
 /**
  * Fishing explosive on the large whirlpool: wakes the Kraken and its tentacles (Wiki).
- * The player throws (783, estimate) and the wake lands a moment later. One explosive
- * is consumed (estimate). Used on anything else kraken it does nothing (Wiki: explosives
- * cannot surface regular cave krakens).
+ * The player throws (783, estimate) and the wake lands a moment later. The explosive
+ * is consumed when the wake lands, not on the throw, so spam, logout or death in the
+ * window costs nothing (all estimates: consumption, throw anim, delay).
+ * Used on anything else kraken it does nothing (Wiki: explosives cannot surface
+ * regular cave krakens).
  */
 function explosive({ player, target, itemId }) {
   const { BOSS, BOSS_WHIRLPOOL } = Shared.ids();
@@ -137,11 +143,14 @@ function explosive({ player, target, itemId }) {
     }
     return;
   }
+  if (pendingWakes.has(target)) return true;
+  pendingWakes.add(target);
   const { SURFACE_ANIM } = Shared;
-  player.getInventory()?.deleteNumber?.(itemId, 1);
   player.performAnimation(new Animation(THROW_ANIM));
   later(THROW_DELAY_TICKS, () => {
+    pendingWakes.delete(target);
     if (!Shared.alive(target) || target.getId?.() !== BOSS_WHIRLPOOL || !Shared.alive(player)) return;
+    player.getInventory()?.deleteNumber?.(itemId, 1);
     surface(target, BOSS, SURFACE_ANIM.boss, player);
     wakeNearbyTentacles(target, player);
   });
@@ -149,11 +158,17 @@ function explosive({ player, target, itemId }) {
 }
 
 function npcRoute(event) {
-  if (event.definition?.getName?.() !== "Whirlpool" && event.definition?.getName?.() !== "Cave kraken" && event.definition?.getName?.() !== "Kraken" && event.definition?.getName?.() !== "Enormous Tentacle") return;
-  // Item-on-NPC routes carry clickType 0: any kraken gets the reach so a misused
-  // explosive answers "Nothing interesting happens." instead of a routing error.
-  const isOptionClick = Number.isInteger(event.clickType) && event.clickType >= 1 && event.clickType <= 5;
-  if (isOptionClick) {
+  // Ids first: only kraken whirlpools and surfaced forms qualify, before any
+  // definition reads. Item-on-NPC routes carry clickType 0: any kraken gets the
+  // reach so a misused explosive answers "Nothing interesting happens." instead
+  // of a routing error.
+  const { CAVE_KRAKEN, BOSS, TENTACLE } = Shared.ids();
+  const surfaced = Shared.surfacedFor(event.npcId);
+  const isKraken = surfaced != null || event.npcId === CAVE_KRAKEN || event.npcId === BOSS || event.npcId === TENTACLE;
+  if (!isKraken) return;
+  if (Number.isInteger(event.clickType) && event.clickType >= 1 && event.clickType <= 5) {
+    const name = event.definition?.getName?.();
+    if (name !== "Whirlpool") return;
     if (event.definition?.getActions?.()?.[event.clickType - 1] !== "Disturb") return;
   }
   event.range = DISTURB_RANGE;

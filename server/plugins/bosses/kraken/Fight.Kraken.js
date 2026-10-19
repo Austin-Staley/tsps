@@ -15,17 +15,32 @@
 
 const Shared = require("./Shared.Kraken");
 
-/** Surfaced NPC id -> projectile and impact graphic. */
-const SHOTS = {
-  492: { projectile: 162, impact: 163 },
-  494: { projectile: 156, impact: 157 },
-  5535: { projectile: 162, impact: 163 },
-};
+/**
+ * Surfaced NPC id -> projectile and impact graphic, keyed from NpcIdentifiers (rule 4).
+ * Ids verified with `yarn dump:spotanim 156 157 162 163` (rev 241: 156/162 share model
+ * 3115 seq 692, 157/163 model 3116 seq 693), matching the Wiki's "resembles Fire Wave";
+ * the same pair already drives Zulrah's magic (162/163) and Vorkath's dragonfire
+ * impact (156). Travel heights/delay copy the engine's own NPC magic
+ * (MagicCombatMethod.start: delay 0, speed 20, heights 43/31). ReasonPS pointed at
+ * the same projectile family; the cache and Wiki above are the justification (rule 10).
+ */
+let SHOTS = null;
+function shotsTable() {
+  if (!SHOTS) {
+    const { CAVE_KRAKEN, BOSS, TENTACLE } = Shared.ids();
+    SHOTS = {
+      [CAVE_KRAKEN]: { projectile: 162, impact: 163 },
+      [BOSS]: { projectile: 156, impact: 157 },
+      [TENTACLE]: { projectile: 162, impact: 163 },
+    };
+  }
+  return SHOTS;
+}
 /** NPC magic lands a fixed 3 ticks after the cast, as the engine's own NPC cast does. */
 const HIT_DELAY_TICKS = 3;
 
 function shotsFor(npcId) {
-  return SHOTS[npcId] ?? SHOTS[494];
+  return shotsTable()[npcId] ?? shotsTable()[Shared.ids().BOSS];
 }
 
 let KrakenMethod = null;

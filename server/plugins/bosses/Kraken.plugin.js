@@ -17,11 +17,13 @@
  * Deaths respawn as whirlpools via the engine (NPCDeathTask clears the transformation
  * before queuing the respawn). The cove is multicombat (Area.Kraken.js over the
  * Slayer-area box) so the boss and its tentacles can pile one player. Loot lands on
- * the nearest walkable tile to the killer (Loot.Kraken.js), not under the body.
+ * a fixed verified shore tile (Loot.Kraken.js), not under the body.
  *
- * Estimates (no capture yet): BOSS_WAKE_RADIUS, the early-Disurb "Nothing happens."
- * message, and consuming the fishing explosive. Slayer-task-only attacks and the 25k
- * private instance are follow-ups, not implemented here.
+ * Estimates (no capture yet): BOSS_WAKE_RADIUS and DISTURB_RANGE, the early-Disurb
+ * "Nothing happens." message, explosive consumption, the throw animation (783) and
+ * the 6-tick throw-to-wake delay. The boss-side crevice landing is RSPS-cross-checked
+ * (see Crevice.Kraken.js). Slayer-task-only attacks and the 25k private instance are
+ * follow-ups, not implemented here.
  */
 
 const Shared = require("./kraken/Shared.Kraken");

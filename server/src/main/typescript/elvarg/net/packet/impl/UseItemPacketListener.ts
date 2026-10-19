@@ -151,6 +151,10 @@ export class UseItemPacketListener {
       return;
     }
     const definition = target.getCurrentDefinition(player);
+    // Item use has no option click, so clickType 0 marks item routes for onNpcRoute
+    // handlers. Every such handler sees these (Death's desk, graves); like the NPC
+    // options they already extend, item use is the same physical reach, so a handler
+    // that extends range applies to both.
     const routeEvent = {
       player,
       npc: target,
