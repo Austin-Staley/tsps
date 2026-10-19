@@ -38,6 +38,7 @@ import {
   encodeCameraLookAt,
   encodeCameraUnlock,
   encodeCameraRotateBy,
+  encodeCameraMoveArc,
   encodeCameraTranslate,
   CameraMovementOptions,
   CameraEasing,
@@ -888,6 +889,13 @@ export class PacketSender {
 
   sendCameraRotateBy(pitch: number, yaw: number, cycles: number, easing: CameraEasing = "linear"): this {
     this.player.getSession().sendClientPacket(encodeCameraRotateBy(pitch, yaw, cycles, easing));
+    return this;
+  }
+
+  /** cam_moveto_arc: swings the camera to (x, y) around (centreX, centreY) over client cycles. */
+  sendCameraMoveArc(centreX: number, centreY: number, x: number, y: number, height: number, cycles: number,
+    easing: CameraEasing = "linear", ignoreTerrain = false): this {
+    this.player.getSession().sendClientPacket(encodeCameraMoveArc(centreX, centreY, x, y, height, cycles, easing, ignoreTerrain));
     return this;
   }
 

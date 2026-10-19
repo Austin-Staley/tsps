@@ -27,6 +27,8 @@ interface CameraTween {
     startHeight?: number;
     trackTarget?: boolean;
     angles?: { pitch: number; yaw: number; targetPitch: number; targetYaw: number };
+    /** cam_moveto_arc: the tile centre the move swings around. */
+    arc?: { cx: number; cz: number };
 }
 interface ScriptedCameraShot {
     target: vec3;
@@ -202,6 +204,13 @@ export class Camera {
         this.scriptedMove!.tween = { cycles, elapsed: 0, easing, start: vec3.clone(this.pos), ignoreTerrain, packetHeight };
     }
 
+    /** cam_moveto_arc: a timed move along the circle about (cx, cz), radius and height eased with it. */
+    setScriptedPositionArc(cx: number, cz: number, x: number, z: number, cycles: number, easing: CameraEasing,
+                           heightAt: (x: number, z: number) => number | undefined, packetHeight: number, ignoreTerrain = true): void {
+        this.setScriptedPositionCycles(x, z, cycles, easing, ignoreTerrain, heightAt, packetHeight);
+        this.scriptedMove!.tween!.arc = { cx, cz };
+    }
+
     setScriptedLookCycles(x: number, z: number, cycles: number, easing: CameraEasing, trackTarget: boolean,
         heightAt: (x: number, z: number) => number | undefined): void {
         this.setScriptedLook(x, this.pos[1], z, 0, 0, heightAt);
@@ -337,6 +346,18 @@ export class Camera {
                     const progress = this.tweenProgress(tween);
                     const position = vec3.clone(this.pos);
                     for (let axis = 0; axis < 3; axis++) position[axis] = Math.round((tween.start[axis] + (move.target[axis] - tween.start[axis]) * progress) * 128) / 128;
+                    if (tween.arc) {
+                        const { cx, cz } = tween.arc;
+                        const startAngle = Math.atan2(tween.start[2] - cz, tween.start[0] - cx);
+                        let turn = Math.atan2(move.target[2] - cz, move.target[0] - cx) - startAngle;
+                        if (turn > Math.PI) turn -= 2 * Math.PI;
+                        else if (turn < -Math.PI) turn += 2 * Math.PI;
+                        const startRadius = Math.hypot(tween.start[0] - cx, tween.start[2] - cz);
+                        const radius = startRadius + (Math.hypot(move.target[0] - cx, move.target[2] - cz) - startRadius) * progress;
+                        const angle = startAngle + turn * progress;
+                        position[0] = Math.round((cx + Math.cos(angle) * radius) * 128) / 128;
+                        position[2] = Math.round((cz + Math.sin(angle) * radius) * 128) / 128;
+                    }
                     if (!tween.ignoreTerrain) {
                         const ground = move.heightAt?.(position[0], position[2]);
                         if (ground === undefined) { tween.elapsed = previousElapsed; return; }

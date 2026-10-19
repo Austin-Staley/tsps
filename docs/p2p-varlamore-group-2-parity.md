@@ -1,4 +1,4 @@
-# Group 2: Ethically Acquired Antiquities, Meat and Greet and At First Light
+# Varlamore quest batches from RSProx 1695
 
 Source: [RSProx recording 1695](https://rsprox.net/download/1695), revision 226. Raw recordings and
 transcriptions stay outside the repository (they carry account details). Identifiers were checked
@@ -89,7 +89,7 @@ the capture.
 
 ## Verification
 
-`server/tests/p2p-varlamore-group-2-parity.test.cjs` (21 tests) covers each route's stages,
+`server/tests/p2p-varlamore-group-2-parity.test.cjs` covers each route's stages,
 varbits, boxes, menus, scenes, cameras, combat, migration and recovery. Each quest was also
 played from a fresh account through the agent MCP on this branch's server with normal
 interactions only (talk, options, objects, item use, combat): EAA 2→38 including the door,
@@ -108,3 +108,93 @@ advert and minotaur; AFL 1→12 including the bushes, poultice, pile, report, be
 - Menu titles use the shared "Select an Option" default; the capture shows "Select an option".
 - Emelio and Fox use their concrete NPC ids rather than the capture's multi-NPC roots.
 - A complete visual comparison with live OSRS is still outstanding.
+
+
+## Twilight's Promise (ticks 400–2423)
+
+The next batch uses native `vmq2` stages 0–50 and the individual knight, crest,
+Azali and Itzla visibility varbits. It restores the crypt entrance, all four
+knight errands, the crate and letter, Azali's escort/rest/fountain sequence,
+Mezan's two-style spar, Velam's judgement, Renu's feed and flight, and the
+Teomat attack and aftermath. The eight cultists are real combat targets; Mezan
+changes protection after a streak of attacks in one style. Progress and scene
+cleanup survive logout. Earlier stage values are migrated once.
+
+Quetzal travel uses the cache landing table and interface 874, with saved
+unlocks, locked-destination checks and a single flight at a time. The new camera
+arc packet is encoded and decoded by the server and client together.
+
+## The Heart of Darkness (ticks 2423–4992)
+
+Native `vmq3` stages 0–76 cover the Queen's visit, inn payment and sleep,
+recruit conversations, the four trials, initiation, Tapoyauik and Servius's
+ending. World NPCs use the cache multi-NPC roots; temporary actors and objects
+belong to private scenes and are removed on exit/logout.
+
+- The first trial saves each player's letter code, direction order and phrase.
+  The letter and direction chests use cache interfaces 809/810, real wheel
+  values, normal input packets, inventory space checks and recoverable clues.
+  Inspecting the three scraps combines them into the completed note.
+- The second trial has four combat waves, 16 opponents, finite medical supplies,
+  bandages for the player and Itzla, and a retry after the companion falls. Strong
+  brawlers warn before their slam. The third trial chooses a saved random traitor
+  and uses the transcript's Mictl clues; the fourth is Itzla's nonlethal duel,
+  including prayer disabling, a warned sweep and protection against specials.
+- The ruins restore their mining blockage, hostile nagua, crabs and traps in the
+  private area, including after relog. The route uses the ledges, icy slide,
+  platforms, four levers and chain shortcut. The icon puzzle saves its intact
+  statue and mural order, rejects wrong elements and penalises wrong sequences.
+- The quest's Amoxliatl uses the existing instanced boss encounter with the
+  quest variant. Victory advances this quest without normal loot, boss kill counts,
+  personal bests, combat achievements or respawn. Servius grants rewards once,
+  on the final captured line rather than the later Final Dawn transcript tail.
+
+## Death on the Isle (ticks 5884–7030)
+
+The quest follows native `doti` stages 0–50: uniform theft, staff entrance,
+masked party, cellar, interrogation, evidence, accusations, Adala, backstage,
+and the staged finale. The butler holds inventory and equipment with their
+original slots and metadata, persists both sets, and returns the original gear
+on exit. Quest clues are acquired through their actual objects and pickpockets,
+and completion waits for the guards' final line.
+
+Adala is a real level-49 opponent with nonlethal win/loss outcomes; interruption
+and relog retain a retry instead of granting a win. The accusation and stage
+have private actors. The finale uses the captured stage strikes and native
+fight varbit. The backstage bookshelf is searchable at its captured placement;
+its clue is required alongside poison, clothing and the costumer's answers.
+
+## Additional verification and limits
+
+The extended parity tests cover the new stages, random puzzles, full inventory,
+scene cleanup, retries, held-gear metadata, dialogue progression and one-time
+rewards. Client camera tests cover the arc decoder and terrain behavior. Live
+MCP checks completed Twilight's Promise 0→50, including the escort, Mezan,
+Quetzal flight and eight cultists, and Death on the Isle 0→50, including Adala,
+all backstage clues and the stage fight. Both completions survived relog;
+Death on the Isle returned the original held gear. Final test totals and the
+Heart of Darkness route are recorded in PR #680. Heart of Darkness completed
+0→76 through all four trials, the ruins puzzle, a real 400-HP guardian victory
+and Servius's reward, with stage 76 retained on relog. A normal guardian death
+retained stage 72 and allowed a retry without granting victory.
+
+Testing uses fresh quest states with prerequisite quests, ordinary equipment,
+combat levels and travel supplied as fixtures. Target quest stages and combat
+victories are earned through normal interactions. The scripted tower solver
+reads the generated puzzle from that test account's saved state; it submits
+normal lock inputs and dialogue choices. Unit tests also cover wrong answers.
+
+The earlier visual gaps remain. Additional known limits:
+
+- Twilight's Promise's allied sparring is cosmetic: the player defeats all eight
+  cultists. The Wiki also allows allied kills.
+- Trial brawler slam damage uses its normal maximum because the available source
+  does not specify the special's maximum. Random puzzle distributions, trap
+  initial phase and some failure/re-entry presentation are inferred.
+- Ruins crabs begin active at the captured crab/ice-block positions; their dormant
+  ice-block transition is not reproduced. Nagua use the normal combat system.
+- Quest Amoxliatl reuses the existing boss's hazard damage/timing. Quest-specific
+  differences from the repeatable encounter have not received a visual comparison.
+- Quetzal building, whistles and appearance customisation are outside this batch.
+- A full rendered comparison with live OSRS remains outstanding. Camera packet
+  changes require the client and server to be deployed together.

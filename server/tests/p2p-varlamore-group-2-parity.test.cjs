@@ -16,24 +16,36 @@ const noop = () => {};
 before(async () => { await CachePipeline.initialize(path.resolve(__dirname, '..')); new NpcDefinitionLoader().load(); });
 
 function harness(name) {
-  const hooks = {}, events = {}, tasks = [], areas = [], npcs = [], removed = [], objects = [], ground = [], clicks = new Map(), buttons = new Map(), namedNpcs = new Map(), namedObjects = new Map(), itemActions = new Map();
+  const hooks = {}, events = {}, tasks = [], areas = [], combatResolvers = [], npcs = [], removed = [], objects = [], ground = [], clicks = new Map(), buttons = new Map(), namedNpcs = new Map(), namedObjects = new Map(), itemActions = new Map();
   const objectManager = {register: object => objects.push(object), deregister: object => { const i=objects.indexOf(object); if(i>=0)objects.splice(i,1); }};
   const taskManager = {
     submit(task) { task.setRunning(true); tasks.push(task); },
     cancelTasks(key) { tasks.filter(task => task.key === key).forEach(task => task.stop()); },
   };
+  function attach(map, name, actions) {
+    const current = map.get(name) ?? {};
+    for (const [action, callback] of Object.entries(actions)) {
+      const previous = current[action];
+      current[action] = previous ? event => {
+        const result = previous(event);
+        return result === true || event.handled ? result : callback(event);
+      } : callback;
+    }
+    map.set(name, current);
+  }
   const api = new Proxy({ core: { ...core, World: { ...core.World, getNpcsNear: () => npcs }, TaskManager: taskManager,
     MultiChatboxPrompt: { getPending: p => p.prompt }, ObjectManager: { register: object => objects.push(object), deregister: noop } },
     getTaskManager: () => taskManager,
-    onNpcsInteraction: (names, actions) => names.forEach(name => namedNpcs.set(name, actions)),
-    onItemAction: (name, actions) => itemActions.set(name, actions),
+    onNpcsInteraction: (names, actions) => names.forEach(name => attach(namedNpcs, name, actions)),
+    onItemAction: (name, actions) => { if (typeof name === 'function') (hooks.onItemAction ??= []).push(name); else itemActions.set(name, actions); },
     registerArea: area => areas.push(area),
+    registerCombatMethodResolver: resolver => combatResolvers.push(resolver),
     getObjectManager: () => objectManager,
     getItemOnGroundManager: () => ({ registerLocation: (...args) => ground.push(args) }),
     onInterfaceActionButton: (ids, fn) => [].concat(ids).forEach(id => { const callbacks=buttons.get(id) ?? []; callbacks.push(fn); buttons.set(id,callbacks); }),
     onObjectClick: (ids, click, fn) => [].concat(ids).forEach(id => clicks.set(id, fn)),
-    onNpcInteraction: (name, actions) => namedNpcs.set(name, actions),
-    onObjectInteraction: (name, actions) => { if (typeof name === 'function') (hooks.onObjectInteraction ??= []).push(name); else namedObjects.set(name, actions); },
+    onNpcInteraction: (name, actions) => { if (typeof name === 'function') (hooks.onNpcInteraction ??= []).push(name); else attach(namedNpcs, name, actions); },
+    onObjectInteraction: (name, actions) => { if (typeof name === 'function') (hooks.onObjectInteraction ??= []).push(name); else attach(namedObjects, name, actions); },
     onObjectFirstClick: (ids, fn) => [].concat(ids).forEach(id => clicks.set(id, fn)),
     persistAttribute: noop,
     onCustomEvent: (key, fn) => (events[key] ??= []).push(fn),
@@ -48,10 +60,11 @@ function harness(name) {
         performAnimation: animation => npc.animations.push(animation.getId()), performGraphic: graphic => npc.graphics.push(graphic.id),
         getMovementQueue: () => ({ reset() { return this; }, addSteps: to => { npc.walkingTo = to; } }),
         exactMove: (to, options) => { npc.exact = options; location = to; },
-        setFollowing: target => { npc.following = target; }, setMobileInteraction: noop, setNpcTransformationId: noop,
+        setFollowing: target => { npc.following = target; }, setMobileInteraction: noop, setNpcTransformationId: id => { npc.transformed = id; },
+        hitpoints: 100, getHitpoints: () => npc.hitpoints, heal: amount => { npc.hitpoints += amount; },
         setPet: noop, setOwner: noop, getOwner: () => definition.owner,
         setCombatXpMultiplier: value => { npc.multiplier = value; },
-        getCombat: () => ({ attack: player => { npc.target = player; } }),
+        getCombat: () => ({ attack: player => { npc.target = player; }, reset: () => { npc.target = null; } }),
       }; npcs.push(npc); return npc;
     }, removeNpc: npc => { npc.removed = true; removed.push(npc); },
   }, { get: (target, key) => target[key] ?? ((...args) => (hooks[key] ??= []).push(args.find(x => typeof x === 'function'))) });
@@ -60,10 +73,10 @@ function harness(name) {
     for (const fn of hooks.onNpcDialogueCondition ?? []) { const answer = fn(event); if (answer !== null && answer !== undefined) return answer; }
     return null;
   };
-  const h = { api, hooks, events, tasks, areas, npcs, removed, objects, ground, clicks, buttons, namedNpcs, namedObjects, itemActions, quest: runtime.getRegisteredQuests().at(-1),
+  const h = { api, hooks, events, tasks, areas, combatResolvers, npcs, removed, objects, ground, clicks, buttons, namedNpcs, namedObjects, itemActions, quest: runtime.getRegisteredQuests().at(-1),
     emit: (name, event) => (events[name] ?? []).forEach(fn => fn(event)),
-    line(p, npcId, text) { const event = { player: p, npcId, text }; h.emit('npc-dialogue:line', event); return event; },
-    action(p, npcId, stepId) { const event = { player: p, npcId, stepId }; h.emit('npc-dialogue:action', event); return event; },
+    line(p, npcId, text) { const event = { player: p, npcId, text, pages: [{ page: h.quest.name }] }; h.emit('npc-dialogue:line', event); return event; },
+    action(p, npcId, stepId) { const event = { player: p, npcId, stepId, pages: [{ page: h.quest.name }] }; h.emit('npc-dialogue:action', event); return event; },
     talk(p, npcId) { const choice = (hooks.onNpcDialogueVariant ?? []).map(fn => fn({ player: p, npcId })).find(Boolean); assert.ok(choice); runtime.startTranscript(api, p, npcId, typeof choice === 'string' ? h.quest.name : choice.page, typeof choice === 'string' ? choice : choice.variant); },
     tick(count) { while (count-- > 0) [...tasks].forEach(task => task.tick()); },
     choose(p, text) { const prompt = p.prompt; assert.ok(prompt, `no menu for ${text}`); const index = prompt.options.findIndex(label => label === text); assert.ok(index >= 0, `missing ${text} in ${prompt.options}`); p.prompt = null; prompt.pairs[index * 2 + 1](); },
@@ -78,21 +91,26 @@ function player() {
     deleteNumber(id, amount) { assert.ok((items.get(id) ?? 0) >= amount); items.set(id, items.get(id) - amount); },
   };
   const packet = new Proxy({
+    sendInterfaceScript(id, args) { require('../dist/net/protocol/ClientProtocol').encodeWidgetRunScript(id, args); log.push(['sendInterfaceScript', id, args]); return packet; },
     sendConfig(id, value) { configs.set(id, value); return packet; }, sendVarbit(id, value) { varbits.set(id, value); return packet; },
+    getVarbit: id => varbits.get(id) ?? 0, getVarp: id => configs.get(id) ?? 0,
     sendString(text, uid) { if ([6,3,2].some(child => [217,231,229,193].some(group => uid === (group << 16 | child)))) p.text = text; log.push(['text',uid,text]); return packet; },
     sendInterfaceRemoval() { p.manager.reset(); p.prompt = null; return packet; },
   }, { get: (t, key) => t[key] ?? ((...args) => { log.push([key, ...args]); return packet; }) });
-  const p = { setEnteredAmountAction: action => { p.amountAction = action; }, attrs, items, configs, varbits, log, xp, messages: [], animations: [], prompt: null, text: '', index: nextIndex++,
+  const p = { setEnteredAmountAction: action => { if (action !== null) assert.equal(typeof action.execute, 'function'); p.amountAction = action; }, attrs, items, configs, varbits, log, xp, messages: [], animations: [], prompt: null, text: '', index: nextIndex++,
     getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value), getInventory: () => inv,
-    getBanks: () => [{ getAmount: id => p.bank?.get(id) ?? 0 }], getEquipment: () => ({ get: () => p.amulet ? { getId: () => p.amulet } : null }),
+    getBanks: () => [{ getAmount: id => p.bank?.get(id) ?? 0 }], getEquipment: () => ({ get: () => p.amulet ? { getId: () => p.amulet } : null, getItems: () => p.equipment ?? [] }),
+    setInterfaceId: id => { p.interfaceId = id; }, getInterfaceId: () => p.interfaceId ?? -1,
     getSession: () => ({ sendClientPacket: frame => { log.push(['frame',Buffer.from(frame)]); return true; } }), getPacketSender: () => packet, getDialogueManager: () => p.manager, getUpdateFlag: () => ({ flag: noop }),
     getSkillManager: () => ({ addExperiences: (skill, amount) => xp.push([skill.getIndex(),amount]), getCombatLevel: () => p.combat ?? 3, getCurrentLevel: () => p.magic ?? 99, getMaxLevel: () => p.level ?? 99 }),
-    getMovementQueue: () => ({ reset() { return this; }, setBlockMovement(value) { p.blocked = value; return this; }, addSteps(to) { location = to; return this; }, isBlockMovement: () => Boolean(p.blocked) }),
+    getMovementQueue: () => ({ handleRegionChange: noop, reset() { return this; }, setBlockMovement(value) { p.blocked = value; return this; }, addSteps(to) { location = to; return this; }, isBlockMovement: () => Boolean(p.blocked) }),
     setUntargetable: value => { p.untargetable = value; }, setForceMovement: movement => {p.forceMovement=movement;}, getLocation: () => location, moveTo: to => { location = to; },
     getArea: () => area, getPrivateArea: () => area, setArea: value => { area = value; }, getIndex: () => p.index,
     isPlayer: () => true, isNpc: () => false, getAsPlayer: () => p, isRegistered: () => true,
-    getCombat: () => ({getHitQueue:()=>({addPendingDamage: damage=>{p.damage=damage;}})}),
+    getCombat: () => ({reset: noop, getHitQueue:()=>({addPendingDamage: damage=>{p.damage=damage;}})}),
     getUsername: () => 'Parity', getAppearance: () => ({ isMale: () => true }), setPositionToFace: noop, forceChat: noop,
+    getHitpoints: () => 99, setLocation: to => { location = to; }, setWalkingDirection: noop,
+    setSkillAnimation: noop, getForceMovement: () => p.forceMovement,
     performAnimation: a => p.animations.push(a.getId()), sendMessage: text => p.messages.push(text),
   }; p.manager = new DialogueManager(p); return p;
 }
@@ -612,4 +630,520 @@ test("AFL keeps its line hooks when The Corsair Curse's line handler runs after 
   quest.setStage(p, 1);
   const line = h.line(p, N.GUILD_SCRIBE_VERITY, "If anyone did, it would've been Wolf. She's always getting Fox into some kind of trouble.");
   line.before(); assert.equal(quest.getStage(p), 2);
+});
+
+// ---------------------------------------------------------------------------
+// Twilight's Promise (RSProx 1695, ticks 400-2423)
+// ---------------------------------------------------------------------------
+function tp() {
+  const h = harness('TwilightPromise'), p = player();
+  (h.events['quest:is-complete'] ??= []).push(event => { if (event.key === 'children_of_the_sun') event.complete = true; });
+  (h.events['quest:is-started'] ??= []).push(event => { if (event.key === 'the_heart_of_darkness') event.started = false; });
+  return { h, p };
+}
+const mockNpc = (id, x, y) => ({ getId: () => id, getLocation: () => new core.Location(x, y, 0), isRegistered: () => true, performAnimation: noop, forceChat: noop });
+function tpTalk(h, p, npcId, npc = null) {
+  const variant = (h.hooks.onNpcDialogueVariant ?? []).map(fn => fn({ player: p, npcId, npc })).find(Boolean);
+  assert.ok(variant, `no variant for ${npcId}`);
+  runtime.startTranscript(h.api, p, npcId, h.quest.name, variant, null, npc);
+  return variant;
+}
+const finish = (h, p) => { h.continueUntil(p, () => !p.manager.getCurrent() && !p.prompt); };
+const lastBox = (p) => p.log.filter(row => row[0] === 'sendItemOnInterfaces').at(-1);
+
+test('TP: the twins start it (2) and point to the temple (4); Metzli moves it to 6 and 8; the crypt to 10 and 12', () => {
+  const { h, p } = tp();
+  tpTalk(h, p, N.ENNIUS_TULLUS_2); continueToMenu(h, p); assert.equal(p.prompt.title, "Start the Twilight's Promise quest?");
+  h.choose(p, 'Yes.'); assert.equal(h.quest.getStage(p), 2);
+  assert.ok(p.messages.includes("You've started a new quest: <col=081190>Twilight's Promise</col>"));
+  h.continueUntil(p, () => p.text === 'Where do I find this temple?'); assert.equal(h.quest.getStage(p), 2);
+  p.manager.advance(); assert.equal(p.text, 'On the other side of the bazaar, south of here.'); assert.equal(h.quest.getStage(p), 4);
+  finish(h, p);
+  const metzli = mockNpc(13376, 1698, 3088);
+  tpTalk(h, p, N.METZLI_TEOKAN_OF_RANUL, metzli);
+  h.continueUntil(p, () => p.text.startsWith('Yes. As Teokan of Ranul')); assert.equal(h.quest.getStage(p), 6);
+  continueToMenu(h, p); h.choose(p, "I'm meant to be meeting Prince Itzla here.");
+  h.continueUntil(p, () => p.text.startsWith('Yes you are.')); assert.equal(h.quest.getStage(p), 8);
+  p.manager.reset(); p.prompt = null;
+  const prince = mockNpc(13378, 1683, 9515);
+  tpTalk(h, p, N.PRINCE_ITZLA_ARKAN_3, prince);
+  h.continueUntil(p, () => p.text.startsWith("You're quite right, of course.")); assert.equal(h.quest.getStage(p), 10);
+  h.continueUntil(p, () => p.text.startsWith('Then it sounds like we')); assert.equal(h.quest.getStage(p), 12);
+});
+
+test('TP: Furia hands over the crest in its item box (14), showing the crest box to each group of knights', () => {
+  const { h, p } = tp(); h.quest.setStage(p, 12);
+  tpTalk(h, p, N.FURIA_TULLUS_2);
+  h.continueUntil(p, () => p.text === 'Furia gives you a crest.');
+  assert.equal(lastBox(p)[2], I.VARLAMORE_CREST); assert.equal(p.items.get(I.VARLAMORE_CREST), 1);
+  assert.equal(h.quest.getStage(p), 14); assert.equal(p.varbits.get(9833), 1); assert.equal(p.varbits.get(9834), 1);
+  p.manager.reset(); p.prompt = null;
+  tpTalk(h, p, N.KNIGHT_OF_VARLAMORE_9);
+  h.continueUntil(p, () => p.text === 'You show the crest to the knights.'); assert.equal(lastBox(p)[2], I.VARLAMORE_CREST);
+  h.continueUntil(p, () => p.text.startsWith('Well this doesn')); assert.equal(p.varbits.get(9829), 1);
+});
+
+test('TP bazaar: the man in blue gives up the amulet a tick after the attempt (2); handing it in makes 3 and 16', () => {
+  const { h, p } = tp(); h.quest.setStage(p, 14); p.attrs.set('quest.twilights_promise.recruits', 1);
+  const event = { player: p, npcId: N.CITIZEN_27, npc: mockNpc(13399, 1686, 3108) };
+  assert.equal(h.namedNpcs.get('Citizen').Pickpocket(event), true);
+  assert.deepEqual(p.messages, ["You attempt to pick the man's pocket."]);
+  h.tick(1); assert.equal(p.messages.at(-1), "You pick the man's pocket and find the stolen amulet.");
+  assert.equal(p.text, "You pick the man's pocket and find the stolen amulet."); assert.equal(lastBox(p)[2], I.STOLEN_AMULET);
+  assert.equal(p.items.get(I.STOLEN_AMULET), 1); assert.equal(p.varbits.get(9829), 2);
+  p.manager.reset();
+  tpTalk(h, p, N.KNIGHT_OF_VARLAMORE_9);
+  h.continueUntil(p, () => p.text === 'You give the amulet to the knights.');
+  assert.equal(p.items.get(I.STOLEN_AMULET), 0); assert.equal(p.varbits.get(9829), 3); assert.equal(h.quest.getStage(p), 16);
+});
+
+test("TP cothon: only the crate at 1778,3149 holds the weapons, in the capture's two-item box", () => {
+  const { h, p } = tp(); h.quest.setStage(p, 14); p.attrs.set('quest.twilights_promise.recruits', 1 << 2);
+  const search = (x, y, id = 50870) => { p.manager.reset(); h.namedObjects.get(id === 50870 ? 'Crate' : 'Crates').Search({ player: p, definition: { id }, objectId: id, location: { x, y, z: 0 } }); };
+  search(1738, 3130); assert.equal(p.messages.at(-1), "You search the crate, but you don't find the weapons you're looking for.");
+  search(1778, 3149); assert.ok(p.log.some(row => row[0] === 'text' && /full of weapons/.test(row[2])));
+  const box = p.log.filter(row => row[0] === 'sendItemOnInterfaces').slice(-2).map(row => row[2]);
+  assert.deepEqual(box, [1279, 1311]); assert.equal(p.varbits.get(9830), 2);
+  p.manager.reset(); tpTalk(h, p, N.KNIGHT_OF_VARLAMORE_13);
+  h.continueUntil(p, () => p.text === 'Great!'); assert.equal(p.varbits.get(9830), 3); assert.equal(h.quest.getStage(p), 16);
+});
+
+test('TP pub: Azali follows (9834=2) and the fountain scene sobers her (pub 2, 9834=3); her answer makes 3', () => {
+  const { h, p } = tp(); h.quest.setStage(p, 14); p.items.set(I.VARLAMORE_CREST, 1);
+  tpTalk(h, p, N.KNIGHT_OF_VARLAMORE_15);
+  h.continueUntil(p, () => p.text.startsWith('Ohh...'));
+  assert.equal(p.varbits.get(9831), 1); assert.equal(p.varbits.get(9834), 2);
+  const azali = h.npcs.find(npc => npc.id === 13393); assert.ok(azali); assert.equal(azali.following, p);
+  assert.deepEqual([azali.x, azali.y], [1721, 3075]);
+  finish(h, p);
+  at(p, 1756, 3070); azali.moveTo(new core.Location(1755, 3069, 0));
+  h.hooks.onPlayerProcess.forEach(fn => fn({ player: p }));
+  assert.ok(azali.removed); h.tick(2);
+  const actors = h.npcs.filter(npc => !npc.removed).map(npc => npc.id);
+  assert.ok(actors.includes(12913) && actors.includes(12930));
+  h.tick(1); assert.ok(p.log.some(row => row[0] === 'sendCameraMoveTo' && row[1] === 1760 && row[2] === 3060 && row[3] === 650));
+  h.tick(6); assert.ok(h.npcs.find(npc => npc.id === 12930).animations.includes(10942));
+  h.tick(8); assert.equal(p.varbits.get(9831), 2); assert.equal(p.varbits.get(9834), 3);
+  h.tick(6); assert.equal(p.text, 'Oh boy...');
+  h.continueUntil(p, () => p.text.startsWith('This day is the worst')); assert.equal(p.varbits.get(9831), 3); assert.equal(h.quest.getStage(p), 16);
+});
+
+test('TP Mezan prays against a style used four times, falls without dying and answers in the lobby', () => {
+  const { h, p } = tp(); h.quest.setStage(p, 14); p.attrs.set('quest.twilights_promise.recruits', 1 << 6);
+  tpTalk(h, p, N.KNIGHT_OF_VARLAMORE_21); continueToMenu(h, p); h.choose(p, "I'm ready. Let's do this.");
+  h.continueUntil(p, () => p.text === 'Kuani!'); p.manager.advance(); h.tick(2);
+  const mezan = h.npcs.find(npc => npc.id === 12916 && !npc.removed); assert.ok(mezan);
+  const prayers = []; Object.assign(mezan, { getPrayerActive: () => prayers, setPrayerActive: (id, on) => { prayers[id] = on; }, getHeadIcon: () => mezan.icon ?? -1, setHeadIcon: icon => { mezan.icon = icon; } });
+  const hit = (type) => { const parts = [{ damage: 5, setDamage(v) { this.damage = v; } }]; return { getCombatType: () => type, getHits: () => parts, updateTotalDamage: noop, parts }; };
+  for (let i = 0; i < 4; i++) h.hooks.onPlayerDealtDamage.forEach(fn => fn({ player: p, target: mezan, hit: hit(core.CombatType.MELEE) }));
+  h.tick(1); assert.equal(mezan.__tpProtecting, 'melee'); assert.ok(['Ralos will defend me!', "Ralos' light protects me!", 'Shield me, Ralos!'].includes(mezan.said));
+  const blocked = hit(core.CombatType.MELEE); h.hooks.onNpcHitModify.forEach(fn => fn({ npc: mezan, hit: blocked })); assert.equal(blocked.parts[0].damage, 0);
+  const event = { npc: mezan, preventDeath: false }; h.hooks.onNpcBeforeDeath.forEach(fn => fn(event)); assert.equal(event.preventDeath, true);
+  h.tick(2); assert.equal(p.varbits.get(9832), 2);
+  h.tick(6); assert.match(p.text, /^You fought well in there/);
+  h.continueUntil(p, () => p.text === 'Perfect! Thanks.'); assert.equal(p.varbits.get(9832), 3); assert.equal(h.quest.getStage(p), 16);
+});
+
+test('TP judgement: the crest goes back (24), the letter (26) and its paper (28), then the verdict (30, 32) and Regulus (34)', () => {
+  const { h, p } = tp(); h.quest.setStage(p, 22); p.items.set(I.VARLAMORE_CREST, 1);
+  tpTalk(h, p, N.FURIA_TULLUS_2); h.continueUntil(p, () => p.text === "We'll keep the knights busy until you're done.");
+  assert.equal(h.quest.getStage(p), 24); assert.equal(p.items.get(I.VARLAMORE_CREST), 0); assert.equal(p.varbits.get(11123), 1); assert.equal(p.varbits.get(9834), 0);
+  finish(h, p); p.attrs.set('quest.twilights_promise.letter-chest', 50866);
+  const chest = (id) => ({ getLocation: () => new core.Location(1648, 3142, 2), getType: () => 10, getFace: () => 0, getId: () => id });
+  h.namedObjects.get('Chest').Open({ player: p, definition: { id: 50865 }, objectId: 50865, object: chest(50865) });
+  assert.equal(p.messages.at(-1), 'You search the chest, but find nothing of interest.');
+  h.namedObjects.get('Chest').Open({ player: p, definition: { id: 50866 }, objectId: 50866, object: chest(50866) });
+  assert.equal(p.text, 'You search the chest and find a letter inside.'); assert.equal(lastBox(p)[2], I.INCRIMINATING_LETTER);
+  assert.equal(h.quest.getStage(p), 26); assert.ok(p.log.some(row => row[0] === 'sendObject' && row[1].getId() === 50869));
+  finish(h, p);
+  h.itemActions.get('Incriminating letter').Read({ player: p });
+  assert.ok(p.log.some(row => row[0] === 'text' && row[2] === 'Velam,')); assert.equal(h.quest.getStage(p), 28);
+  tpTalk(h, p, N.ENNIUS_TULLUS_2); h.continueUntil(p, () => p.text.startsWith('Then it sounds like Velam')); assert.equal(h.quest.getStage(p), 30);
+  p.manager.advance(); h.tick(2);
+  const live = () => h.npcs.filter(npc => !npc.removed).map(npc => npc.id);
+  for (const id of [12903, 12905, 12907, 12909, 12911, 12915, 12891, 12893]) assert.ok(live().includes(id), `actor ${id}`);
+  h.tick(6); assert.equal(p.text, ''); h.tick(1); assert.equal(p.text, 'Velam, step forward.');
+  p.manager.advance(); h.tick(3); assert.match(p.text, /found to be a traitor/);
+  h.continueUntil(p, () => p.text === "For you, this is the only thing that's right."); p.manager.advance();
+  h.tick(1); assert.ok(h.npcs.find(npc => npc.id === 12909).animations.includes(836));
+  h.tick(6); assert.equal(p.text, 'The rest of you are dismissed.');
+  p.manager.advance(); h.tick(3); assert.equal(h.quest.getStage(p), 32); assert.equal(p.items.get(I.INCRIMINATING_LETTER), 0);
+  h.tick(6); assert.equal(p.text, 'You killed him!'); assert.ok(!live().includes(12893));
+  h.continueUntil(p, () => p.text.startsWith('You should not waste time')); assert.equal(h.quest.getStage(p), 34);
+});
+
+test('TP Regulus hands over the feed (36); Renu eats for nine ticks (38), then the quetzal map opens', () => {
+  const { h, p } = tp(); h.quest.setStage(p, 34);
+  const quetzal = []; for (const name of ['quetzal:introduce', 'quetzal:unlock', 'quetzal:open']) (h.events[name] ??= []).push(() => quetzal.push(name));
+  tpTalk(h, p, N.REGULUS_CENTO_3); continueToMenu(h, p); h.choose(p, 'I was told to ask you about getting to the Teomat.');
+  h.continueUntil(p, () => p.text === 'Renu perks up at the sound of her name.');
+  h.continueUntil(p, () => p.text === 'Regulus gives you some quetzal feed.'); assert.equal(lastBox(p)[2], I.QUETZAL_FEED);
+  assert.equal(h.quest.getStage(p), 36); assert.equal(p.items.get(I.QUETZAL_FEED), 1); assert.deepEqual(quetzal, ['quetzal:introduce']);
+  finish(h, p);
+  const renu = mockNpc(13355, 1696, 3141);
+  h.namedNpcs.get('Renu').Feed({ player: p, npcId: N.RENU_2, npc: renu });
+  assert.equal(p.text, 'Hello, Renu. I have something for you here.'); p.manager.advance();
+  assert.ok(p.animations.includes(10939)); h.tick(8); assert.equal(h.quest.getStage(p), 36);
+  h.tick(1); assert.equal(h.quest.getStage(p), 38); assert.equal(p.items.get(I.QUETZAL_FEED), 0);
+  assert.equal(p.text, 'Renu eagerly takes the feed from you.'); assert.deepEqual(quetzal, ['quetzal:introduce', 'quetzal:unlock']);
+  h.continueUntil(p, () => p.text === "Kuani! I reckon she'll let you ride her now."); p.manager.advance();
+  assert.deepEqual(quetzal.at(-1), 'quetzal:open');
+});
+
+test('TP Teomat: Itzla (40, 42), Metzli and the attack (44), eight cultists (46), the guard (48) and completion', () => {
+  const { h, p } = tp(); h.quest.setStage(p, 38);
+  h.events['npc-dialogue:line'].unshift(event => { event.text = event.text.replaceAll('[player name]', p.getUsername()); });
+  const itzla = mockNpc(13379, 1454, 3173);
+  tpTalk(h, p, N.PRINCE_ITZLA_ARKAN_3, itzla);
+  h.continueUntil(p, () => /^Now, Parity, did your/.test(p.text)); assert.equal(h.quest.getStage(p), 40);
+  h.continueUntil(p, () => p.text === "Right, I'll go and see if she can help me."); assert.equal(h.quest.getStage(p), 42);
+  finish(h, p);
+  tpTalk(h, p, N.METZLI_TEOKAN_OF_RANUL, mockNpc(13377, 1451, 3194));
+  h.continueUntil(p, () => p.text === "I guess I'd better..."); assert.equal(h.quest.getStage(p), 44);
+  h.continueUntil(p, () => /I need you outside, now!/.test(p.text)); p.manager.advance(); h.tick(2);
+  const cultists = h.npcs.filter(npc => !npc.removed && npc.id >= 12918 && npc.id <= 12923);
+  assert.equal(cultists.length, 8); h.tick(1); assert.equal(cultists.find(npc => npc.id === 12918).target, p);
+  for (const npc of cultists) h.hooks.onNpcDeath.forEach(fn => fn({ npc, npcId: npc.id, killer: p }));
+  assert.equal(p.messages.at(-1), 'Enemies Defeated: 8/8');
+  h.tick(3); assert.equal(h.quest.getStage(p), 46); assert.equal(p.varbits.get(11123), 2);
+  h.tick(8); assert.equal(p.text, 'What happened?!');
+  h.continueUntil(p, () => p.text === "Of course, my Prince. We'll go at once."); p.manager.advance();
+  assert.equal(h.quest.getStage(p), 48); assert.equal(p.varbits.get(11123), 1);
+  h.tick(6); assert.equal(p.text, 'Well... this has been a bit of a mess.');
+  h.continueUntil(p, () => p.text.startsWith("However, let's not worry")); assert.equal(h.quest.getStage(p), 50);
+  assert.ok(p.messages.includes("Congratulations, you've completed a quest: <col=081190>Twilight's Promise</col>"));
+  assert.deepEqual(p.xp, [[core.Skill.THIEVING.getIndex(), 3000]]);
+});
+
+test('TP old saves map once to the captured stages', () => {
+  const h = harness('TwilightPromise');
+  const old = (stage, flags = 0) => { const p = player(); p.attrs.set('quest.twilights_promise.stage', stage); p.attrs.set('quest.twilights_promise.flags', flags); h.emit('player:bootstrap-complete', { player: p }); return h.quest.getStage(p); };
+  assert.equal(old(4), 6); assert.equal(old(10), 12); assert.equal(old(26), 26); assert.equal(old(26, 1), 28);
+  assert.equal(old(28), 30); assert.equal(old(30), 32); assert.equal(old(32), 34); assert.equal(old(40), 38); assert.equal(old(44), 44);
+});
+
+// The Heart of Darkness: actual transcript choices, lock input and recoverable encounters.
+function hod() {
+  const h = harness('TheHeartOfDarkness'), p = player();
+  require('../plugins/skills/agility/ObstacleRunner.Agility').init(h.api);
+  (h.events['quest:is-complete'] ??= []).push(event => { if (event.key === 'twilights_promise') event.complete = true; });
+  const action = (name, option, id, extra = {}) => h.namedObjects.get(name)[option]({ player: p, objectId: id, definition: { id }, ...extra });
+  const talk = id => tpTalk(h, p, id);
+  const enterTower = value => { h.quest.setStage(p, value); const event = { player: p, objectId: 54369 }; h.emit('ladders:climb', event); assert.equal(event.handled, true); h.tick(4); };
+  return { h, p, action, talk, enterTower };
+}
+
+test('HOD start, Queen, room payment and sleep follow the captured checkpoints and cannot rent without coins', () => {
+  const { h, p, talk, action } = hod();
+  talk(12896); continueToMenu(h, p); h.choose(p, 'Yes.');
+  assert.equal(h.quest.getStage(p), 2);
+  h.continueUntil(p, () => p.text === 'Ah... This should be fun.'); assert.equal(h.quest.getStage(p), 4);
+  p.manager.advance(); h.tick(12); assert.equal(p.text, 'Mother.');
+  h.continueUntil(p, () => p.text === 'Yes, my Queen. May the sun light your way.'); p.manager.advance();
+  assert.equal(h.quest.getStage(p), 6); h.tick(7);
+  h.continueUntil(p, () => p.text.startsWith('One of the only people')); assert.equal(h.quest.getStage(p), 8);
+  finish(h, p); talk(14020); continueToMenu(h, p); h.choose(p, "I'd like to rent the basement room.");
+  finish(h, p); assert.equal(h.quest.getStage(p), 10); assert.equal(p.items.get(I.COINS), undefined);
+  p.items.set(I.COINS, 30); talk(14020); continueToMenu(h, p); h.choose(p, "I'd like to rent the basement room."); continueToMenu(h, p); h.choose(p, "I'll take it.");
+  h.continueUntil(p, () => h.quest.getStage(p) === 12);
+  assert.equal(h.quest.getStage(p), 12); assert.equal(p.items.get(I.COINS), 0);
+  finish(h, p); action('Bed', 'Rest', 55374); h.continueUntil(p, () => /quickly fall asleep/.test(p.text));
+  h.tick(4); assert.equal(h.quest.getStage(p), 14); h.tick(2);
+  h.continueUntil(p, () => p.text.startsWith('Exactly! Return to me')); assert.equal(h.quest.getStage(p), 16);
+  p.manager.advance(); assert.equal(h.quest.getStage(p), 18);
+});
+
+test('HOD reclaims only missing robes when other pieces are equipped', () => {
+  const { h, p, action } = hod(); h.quest.setStage(p, 50);
+  p.equipment = [29868,29870,29872].map(id => new core.Item(id));
+  action('Chest', 'Open', 54515); h.tick(1); finish(h, p);
+  assert.equal(p.items.get(29874), 1);
+  for (const id of [29868,29870,29872]) assert.equal(p.items.get(id), undefined);
+});
+
+test('HOD first trial uses the cache letter wheels and ordered direction lock, handles a full bag and recovers the saved puzzle', () => {
+  const { h, p, action, enterTower } = hod(); enterTower(30); finish(h, p);
+  h.namedNpcs.get('Emissary Ascended').Pickpocket({ player: p, npcId: 13767 }); h.tick(1);
+  assert.equal(p.items.get(29877), 1);
+  h.hooks.onItemOnObject.forEach(fn => fn({ player: p, itemId: 29877, objectId: 55354 }));
+  assert.equal(p.varbits.get(11165), 1); assert.equal(p.items.get(29877), 0);
+  const gate = new core.GameObject(55354, new core.Location(1644,3220,1), 0, 1);
+  p.moveTo(new core.Location(1644,3221,1));
+  h.emit('door:toggle', { player: p, objectId: 55354, object: gate }); h.tick(8);
+  assert.equal(p.getLocation().getY(), 3220);
+  p.full = true; action('Chest', 'Open', 54372); assert.equal(p.items.get(29878), undefined);
+  p.full = false; action('Chest', 'Open', 54372); assert.equal(p.items.get(29878), 1);
+  const data = p.attrs.get('the-heart-of-darkness:tower');
+  action('Chest', 'Open', 54376); const wrong = p.amountAction; wrong.execute(-1); assert.equal(p.varbits.get(11166), 0);
+  action('Chest', 'Open', 54376);
+  const code = Number(data.letters.split('').map((letter, i) => core.CacheDefinitions.getDbRow(3698 + i).columns.get(0).indexOf(letter)).join('') + '00');
+  p.amountAction.execute(code); assert.equal(p.items.get(29879), 1); assert.equal(p.varbits.get(11166), 1);
+  action('Chest', 'Open', 54374); p.amountAction.execute(data.directions.reduce((sum, dir, i) => sum + dir * 4 ** i, 0) * 10 + 4);
+  assert.equal(p.items.get(29882), 1);
+  h.itemActions.get('Scrap of paper').Inspect({ player: p, itemId: 29880 }); assert.equal(p.items.get(29883), 1);
+  for (const id of [29880, 29881, 29882]) assert.equal(p.items.get(id), 0);
+  p.manager.reset(); p.prompt = null;
+  h.namedNpcs.get('Forebearer Janus')['Talk-to']({ player: p, npcId: 13766 }); continueToMenu(h, p); h.choose(p, 'About that passphrase...'); continueToMenu(h, p);
+  for (const word of data.phrase) h.choose(p, word + '.');
+  assert.equal(h.quest.getStage(p), 34);
+  p.manager.reset(); p.prompt = null;
+  h.namedNpcs.get('Forebearer Janus')['Talk-to']({ player: p, npcId: 13766 }); continueToMenu(h, p); h.choose(p, 'Yes.');
+  h.continueUntil(p, () => p.text.startsWith('Welcome to your next trial.')); p.manager.advance(); h.tick(4);
+  assert.equal(h.quest.getStage(p), 36);
+  h.hooks.onPlayerLogout.forEach(fn => fn({ player: p }));
+  assert.equal(p.getLocation().getZ(), 0); assert.deepEqual(p.attrs.get('the-heart-of-darkness:tower').phrase, data.phrase);
+});
+
+test('HOD second trial has four waves, finite medical boxes, companion healing and failure recovery', () => {
+  const { h, p, action, enterTower } = hod(); enterTower(36); p.manager.reset();
+  const itzla = h.npcs.find(npc => npc.id === 13771 && !npc.removed);
+  const medical = { getId: () => 54378, getLocation: () => new core.Location(1645, 3218, 2) };
+  for (let i = 0; i < 6; i++) action('Medical box', 'Take-from', 54378, { object: medical });
+  assert.equal(p.items.get(29884), 5);
+  h.hooks.onItemOnNpc.forEach(fn => fn({ player: p, itemId: 29884, target: itzla }));
+  assert.equal(itzla.hitpoints, 118); assert.equal(p.items.get(29884), 4);
+  p.heal = amount => { p.healed = amount; };
+  h.itemActions.get('Bandages').Heal({ player: p, itemId: 29884 });
+  assert.equal(p.healed, 12); assert.equal(p.items.get(29884), 3);
+  const otherBox = { getId: () => 54378, getLocation: () => new core.Location(1645, 3219, 2) };
+  action('Medical box', 'Take-many', 54378, { object: otherBox }); p.amountAction.execute(-1);
+  assert.equal(p.items.get(29884), 3); p.amountAction.execute(99);
+  assert.equal(p.items.get(29884), 8);
+  h.namedNpcs.get('Prince Itzla Arkan').Heal({ player: p, npc: itzla });
+  assert.equal(itzla.hitpoints, 136); assert.equal(p.items.get(29884), 7);
+
+  const line = h.line(p, 13766, 'Then let the trial commence.'); line.after(); h.tick(3);
+  let defeated = 0;
+  for (let wave = 0; wave < 4; wave++) {
+    for (let pair = 0; pair < (wave === 3 ? 1 : 2); pair++) {
+      const fighters = h.npcs.filter(npc => npc.__hodTrial && !npc.__hodDefeated);
+      assert.equal(fighters.length, wave === 3 ? 4 : 2);
+      if (wave === 3) assert.deepEqual(fighters.map(npc => [npc.x,npc.y]), [[1637,3217],[1636,3218],[1636,3225],[1637,3226]]);
+      for (const npc of fighters) { const event = { npc }; h.hooks.onNpcBeforeDeath.forEach(fn => fn(event)); assert.equal(event.preventDeath, true); defeated++; }
+    }
+    h.tick(6);
+  }
+  assert.equal(defeated, 16); assert.equal(h.quest.getStage(p), 38);
+  h.hooks.onPlayerLogout.forEach(fn => fn({ player: p })); enterTower(36); p.manager.reset();
+  h.line(p, 13766, 'Then let the trial commence.').after();
+  const companion = h.npcs.find(npc => npc.__hodCompanion && !npc.removed);
+  const event = { npc: companion }; h.hooks.onNpcBeforeDeath.forEach(fn => fn(event));
+  assert.equal(event.preventDeath, true); assert.equal(p.varbits.get(11133), 1); assert.equal(p.getLocation().getZ(), 0);
+  assert.equal(h.quest.getStage(p), 36);
+});
+
+test('HOD the third trial exposes the random traitor and the final duel yields without killing Itzla', () => {
+  const { h, p, enterTower } = hod(); enterTower(38); p.manager.reset();
+  h.namedNpcs.get('Forebearer Janus')['Talk-to']({ player: p, npcId: 13766 }); continueToMenu(h, p); h.choose(p, 'Yes.');
+  h.continueUntil(p, () => p.text.startsWith('Welcome to your third trial.')); p.manager.advance(); h.tick(4);
+  assert.equal(h.quest.getStage(p), 40);
+  assert.equal(h.npcs.filter(npc => npc.id >= 13780 && npc.id <= 13783 && !npc.removed).length, 4);
+  finish(h, p);
+  const data = p.attrs.get('the-heart-of-darkness:tower');
+  const names = ['Tenoch','Silia','Adrius','Eleuia'];
+  h.namedNpcs.get(names[data.traitor]).Choose({ player: p, npcId: 13780 + data.traitor });
+  h.choose(p, 'Yes.'); h.continueUntil(p, () => h.quest.getStage(p) === 42); finish(h, p);
+  h.namedNpcs.get('Forebearer Janus')['Talk-to']({ player: p, npcId: 13766 }); continueToMenu(h, p); h.choose(p, 'Yes.');
+  h.continueUntil(p, () => p.text === 'Ready yourselves! May the best warrior win!'); p.manager.advance();
+  assert.equal(h.quest.getStage(p), 44);
+  const opponent = h.npcs.find(npc => npc.id === 13784 && !npc.removed); assert.ok(opponent); assert.equal(opponent.target, p);
+  const event = { npc: opponent }; h.hooks.onNpcBeforeDeath.forEach(fn => fn(event));
+  assert.equal(event.preventDeath, true); assert.equal(opponent.transformed, 13785); assert.equal(h.quest.getStage(p), 46);
+  h.tick(2); finish(h, p); assert.equal(p.getLocation().getZ(), 0);
+});
+
+test('HOD the strong brawler warns on every third swing and its slam can be dodged', () => {
+  const { h, p, enterTower } = hod(); enterTower(36); p.manager.reset();
+  h.line(p, 13766, 'Then let the trial commence.').after(); h.tick(3);
+  const npc = h.npcs.find(npc => npc.__hodTrial), scene = npc.__hodTrial;
+  const Brawler = h.hooks.registerNpcCombatMethodProvider.find(ctor => ctor.name === 'BrawlerCombat');
+  npc.__hodSwings = 2; scene.itzla.isRegistered = () => false;
+  p.moveTo(new core.Location(npc.getLocation().getX(), npc.getLocation().getY() + 1, 2));
+  assert.deepEqual(new Brawler().hits(npc, p), []); assert.ok(npc.animations.includes(11556));
+  assert.ok(p.log.some(row => row[0] === 'sendGraphic'));
+  p.moveTo(new core.Location(npc.getLocation().getX(), npc.getLocation().getY() + 3, 2));
+  h.tick(3); assert.equal(p.damage, undefined);
+});
+
+test('HOD ruins require all levers and icons in the random mural order, then award Servius rewards once', () => {
+  const { h, p, action } = hod(); h.quest.setStage(p, 62);
+  for (const id of [55365, 55366, 55367]) action('Lever', 'Pull', id);
+  assert.equal(h.quest.getStage(p), 62); action('Lever', 'Pull', 55368); assert.equal(h.quest.getStage(p), 64);
+  const data = p.attrs.get('the-heart-of-darkness:ruins');
+  action('Markings', 'Inspect', 55361);
+  assert.equal(p.text, `The mural depicts fire. The word '${['Zema', 'Oma', 'Yeya', 'Naui'][data.order.indexOf(0)]}' is carved into it.`);
+  p.manager.reset();
+  action('Broken statue', 'Inspect', 54459);
+  assert.ok(p.text.startsWith('The statue has a fire symbol at the base.'));
+  p.manager.reset();
+  for (const [i, id] of [55356, 55357, 55358, 55359].entries()) {
+    if (i === data.intact) continue;
+    action('Urn', 'Search', id);
+    const icon = [29885, 29888, 29887, 29886][i];
+    h.hooks.onItemOnObject.forEach(fn => fn({ player: p, itemId: icon, objectId: [54459, 54465, 54471, 54477][i] }));
+    assert.equal(p.items.get(icon), 0);
+  }
+  for (const i of [...data.order].reverse()) action('Statue', 'Touch', [54459, 54465, 54471, 54477][i]);
+  assert.equal(h.quest.getStage(p), 64); assert.ok(p.damage);
+  for (const i of data.order) action('Statue', 'Touch', [54459, 54465, 54471, 54477][i]);
+  assert.equal(h.quest.getStage(p), 68);
+  h.quest.setStage(p, 74); p.manager.reset();
+  h.namedNpcs.get('Servius, Teokan of Ralos')['Talk-to']({ player: p, npcId: 13694 });
+  h.continueUntil(p, () => p.text === 'Timoiva, my child, and may the sun light your way.'); assert.equal(h.quest.getStage(p), 74);
+  p.manager.advance(); assert.equal(h.quest.getStage(p), 76); assert.equal(p.xp.length, 4);
+  assert.ok(p.xp.every(([, xp]) => xp === 8000));
+  h.quest.complete(p); assert.equal(p.xp.length, 4);
+});
+
+test('HOD the private ruins restore their mining blockage and damaging traps on relog', () => {
+  const { h, p } = hod(); p.attrs.set('the-heart-of-darkness:stage-version', 1);
+  h.quest.setStage(p, 58); p.moveTo(new core.Location(1693, 9633, 2));
+  h.emit('player:bootstrap-complete', { player: p });
+  assert.ok(h.objects.some(object => object.getId() === 54501 && object.getPrivateArea() === p.getArea()));
+  h.namedObjects.get('Barrel')['Take-pickaxe']({ player: p, objectId: 54517 });
+  assert.equal(p.items.get(1265), 1);
+  h.hooks.onPlayerLogout.forEach(fn => fn({ player: p }));
+  h.quest.setStage(p, 62); p.moveTo(new core.Location(1682, 9604, 2));
+  p.attrs.get('the-heart-of-darkness:ruins').intact = 1;
+  const stunned = []; p.getTimers = () => ({ register: (...args) => stunned.push(args) });
+  h.emit('player:bootstrap-complete', { player: p });
+  const area = p.getArea(); assert.equal(area.canTeleport(), true);
+  for (const id of [54459,54465,54471,54477]) assert.ok(h.objects.some(object => object.getId() === id && object.getType() === 11));
+  assert.deepEqual([11124,11127,11125,11126].map(id => p.varbits.get(id)), [0,1,0,0]);
+  assert.ok(h.npcs.some(npc => !npc.removed && npc.id === N.FROST_NAGUA_3));
+  assert.ok(h.npcs.some(npc => !npc.removed && npc.id === N.FROST_CRAB_2));
+  for (let i = 0; i < 3; i++) area.process(p);
+  assert.ok(p.damage[0].getDamage() >= 6 && p.damage[0].getDamage() <= 12);
+  assert.equal(stunned[0][1], 2);
+  h.hooks.onPlayerLogout.forEach(fn => fn({ player: p }));
+  assert.equal(p.getArea(), null);
+});
+
+test('HOD platforms land on the clicked tile and pulling the shortcut leaves the player downstairs', () => {
+  const { h, p, action } = hod(); h.quest.setStage(p, 62);
+  p.attrs.set('the-heart-of-darkness:stage-version', 1);
+  p.moveTo(new core.Location(1698,9655,1)); h.emit('player:bootstrap-complete', { player: p });
+  const route = { player: p, objectId: 54539, object: new core.GameObject(54539,new core.Location(1696,9655,1),10,0), sourceLocation: { x:1698,y:9655,z:1 } };
+  h.hooks.onObjectRoute.forEach(fn => fn(route)); assert.deepEqual(route.destination, { x:1698,y:9655,z:1 });
+  action('Frozen platform','Jump-to',54539,{ object: new core.GameObject(54539,new core.Location(1696,9655,1),10,0) }); h.tick(4);
+  assert.deepEqual([p.getLocation().getX(),p.getLocation().getY()], [1696,9655]);
+  p.moveTo(new core.Location(1670,9632,0));
+  action('Chain','Pull',55375,{ object: new core.GameObject(55375,new core.Location(1670,9631,0),10,0) }); h.tick(3);
+  assert.equal(p.varbits.get(11174), 1); assert.equal(p.getLocation().getZ(), 0);
+  action('Chain','Climb-up',55375,{ object: new core.GameObject(55375,new core.Location(1670,9631,0),10,0) }); h.tick(4);
+  assert.equal(p.getLocation().getZ(), 2);
+});
+
+function doti() {
+  const h = harness('DeathOnTheIsle'), p = player();
+  p.attrs.set('death-on-the-isle:stage-version', 1);
+  (h.events['quest:is-complete'] ??= []).push(event => { if (event.key === 'children_of_the_sun') event.complete = true; });
+  const npc = (id, option = 'Talk-to', extra = {}) => {
+    const event = { player: p, npcId: id, clickType: 1, definition: { getActions: () => [option] }, ...extra };
+    h.hooks.onNpcInteraction.forEach(fn => fn(event)); return event;
+  };
+  const object = id => {
+    const event = { player: p, objectId: id, definition: { id } };
+    h.hooks.onObjectInteraction.forEach(fn => fn(event)); return event;
+  };
+  return { h, p, npc, object };
+}
+
+test('DOTI starts at 2, gives the uniform instructions at 4, enters the window at 6 and rejects a full bag', () => {
+  const { h, p, npc, object } = doti();
+  npc(13818); continueToMenu(h, p); h.choose(p, 'Yes.'); assert.equal(h.quest.getStage(p), 2);
+  finish(h, p); assert.equal(h.quest.getStage(p), 4);
+  object(54701); assert.equal(h.quest.getStage(p), 6);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [1401, 2967]);
+  p.full = true; object(54723); assert.equal(p.items.get(29914), undefined);
+  p.full = false; object(54723); assert.equal(p.items.get(29914), 1); assert.equal(p.items.get(29915), 1);
+  finish(h, p); npc(13818);
+  h.continueUntil(p, () => p.text.startsWith('Just good fortune.')); p.manager.advance();
+  assert.equal(h.quest.getStage(p), 6); h.tick(3); assert.equal(h.quest.getStage(p), 8); h.tick(1);
+  finish(h, p); assert.equal(h.quest.getStage(p), 10);
+});
+
+test('DOTI reports every cellar clue without an incorrect missing-evidence warning', () => {
+  const { h, p, npc } = doti(); h.quest.setStage(p, 22);
+  for (const key of ['clue.jug','clue.pottery','clue.storage','clue.box','clue.stool','body']) p.attrs.set('quest.death_on_the_isle.' + key, true);
+  npc(13834); continueToMenu(h, p); h.choose(p, "I think I've found everything there is to find so far. What now?");
+  finish(h, p); assert.equal(h.quest.getStage(p), 26);
+  assert.ok(!p.log.some(row => row[0] === 'text' && row[2].includes('Are you sure')));
+});
+
+test('DOTI holds and returns the original inventory and equipment with metadata, across login and repeat visits', () => {
+  const { h, p } = doti();
+  const container = size => {
+    let items = Array.from({ length: size }, () => new core.Item(-1, 0));
+    return { getItems: () => items, setItems: next => { items = next; }, refreshItems: noop,
+      getAmount: id => items.filter(item => item.getId() === id).reduce((n, item) => n + item.getAmount(), 0),
+      getFreeSlots: () => items.filter(item => item.getId() < 0).length,
+      adds(id, amount) { const i = items.findIndex(item => item.getId() < 0); assert.ok(i >= 0); items[i] = new core.Item(id, amount); },
+      deleteNumber(id, amount) { const i = items.findIndex(item => item.getId() === id); assert.ok(i >= 0); items[i] = new core.Item(-1, 0); },
+    };
+  };
+  const inventory = container(28), equipment = container(14);
+  inventory.getItems()[8] = new core.Item(995, 12345);
+  equipment.getItems()[3] = new core.Item(12926, 1, { charges: 6789 });
+  p.getInventory = () => inventory; p.getEquipment = () => equipment;
+  h.quest.setStage(p, 12); h.action(p, 13833, '9kVMFj'); h.tick(4);
+  assert.equal(h.quest.getStage(p), 14); assert.equal(inventory.getAmount(995), 0);
+  assert.ok(p.attrs.get('death-on-the-isle:held-gear'));
+  assert.equal(equipment.getItems()[core.Equipment.WEAPON_SLOT].getId(), I.BUTLERS_TRAY);
+  inventory.adds(29922, 1);
+  h.hooks.onPlayerLogout.forEach(fn => fn({ player: p })); h.hooks.onPlayerLogin.forEach(fn => fn({ player: p }));
+  h.action(p, 13833, 'GMJFxO'); h.tick(4);
+  assert.equal(inventory.getItems()[8].getAmount(), 12345);
+  assert.deepEqual(equipment.getItems()[3].meta, { charges: 6789 });
+  h.action(p, 13833, '9kVMFj'); h.tick(4); assert.equal(inventory.getAmount(29922), 1);
+  h.action(p, 13833, 'GMJFxO'); h.tick(4); assert.equal(inventory.getAmount(995), 12345);
+});
+
+test('DOTI backstage requires searching the real bookshelf and discussing every clue', () => {
+  const { h, p, npc, object } = doti(); h.quest.setStage(p, 38);
+  const key = flag => 'quest.death_on_the_isle.' + flag;
+  for (const flag of ['backstage.poison','backstage.clothing','chat.actors','chat.poison','chat.clothing','chat.bookshelf']) p.attrs.set(key(flag), true);
+  h.emit('npc-dialogue:choice', { player: p, npcId: 13837, stepId: '4N708L', option: 'Did you know there was a hidden passage in here?' });
+  assert.notEqual(p.attrs.get(key('backstage.bookshelf')), true); assert.equal(h.quest.getStage(p), 38);
+  object(54726); assert.equal(p.attrs.get(key('backstage.bookshelf')), true); assert.equal(h.quest.getStage(p), 40);
+});
+
+test('DOTI Attack uses the staged combat method and preserves actors through their scripted moves', () => {
+  const { h, p } = doti(); h.quest.setStage(p, 40); h.action(p, 13834, 'lPk2UZ');
+  const method = h.combatResolvers[0].resolve(p); assert.ok(method);
+  for (let i = 0; i < 4; i++) {
+    const npc = h.npcs.find(npc => npc.id === 13838 && !npc.removed); assert.ok(npc);
+    method.start(p, npc); assert.deepEqual(method.hits(), []); finish(h, p);
+    if (i < 3) assert.equal(npc.removed, undefined);
+  }
+  assert.equal(h.quest.getStage(p), 50);
+});
+
+test('DOTI interruption cannot win Adala, and the finale rewards wait for the guards\' final line', () => {
+  const { h, p, npc } = doti(); h.quest.setStage(p, 30); p.attrs.set('quest.death_on_the_isle.fight.active', true);
+  h.hooks.onPlayerLogin.forEach(fn => fn({ player: p }));
+  assert.equal(h.quest.getStage(p), 30); assert.equal(p.attrs.get('quest.death_on_the_isle.fight.outcome'), 0);
+  h.quest.setStage(p, 49);
+  runtime.startTranscript(h.api, p, 13838, 'Death on the Isle', 'the-stage-attacking-naiatli-again', steps => steps.slice(steps.findIndex(step => step.id === 'wdaiPu') + 1));
+  h.continueUntil(p, () => p.text.startsWith('You win some and you lose some I guess.'));
+  assert.equal(h.quest.getStage(p), 49); assert.equal(p.xp.length, 0);
+  p.manager.advance(); assert.equal(h.quest.getStage(p), 50);
+  assert.deepEqual(p.xp.map(([, amount]) => amount), [10000, 7500, 5000]);
+  h.quest.complete(p); assert.equal(p.xp.length, 3);
+});
+
+test('Quetzals use cache destinations, reject closed or locked map clicks, and finish the captured flight once', () => {
+  const h = harness('TwilightPromise'), p = player();
+  const plugin = require('../plugins/world/Quetzals.plugin'); plugin.register(h.api);
+  h.emit('quetzal:unlock', { player: p });
+  const sites = plugin._test.landingSites(), slot = sites.findIndex(site => site.id !== 1 && site.autoUnlocked);
+  assert.ok(slot >= 0); const site = sites[slot];
+  const click = chosen => plugin._test.chooseSite({ player: p, groupId: 874, childId: 15, slot: chosen });
+  click(slot); assert.notEqual(p.blocked, true);
+  p.setInterfaceId(874); click(sites.findIndex(site => !site.autoUnlocked)); assert.notEqual(p.blocked, true);
+  click(slot); assert.equal(p.blocked, true); click(slot); assert.equal(h.tasks.length, 1);
+  h.tick(3); assert.notEqual(p.getLocation().getX(), site.x);
+  h.tick(1); assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [site.x, site.y, site.z]);
+  h.tick(3); assert.equal(p.blocked, false); assert.equal(p.varbits.get(6719), 0);
+  assert.ok(p.log.some(row => row[0] === 'closeSubInterface' && row[1] === ((161 << 16) | 1)));
 });

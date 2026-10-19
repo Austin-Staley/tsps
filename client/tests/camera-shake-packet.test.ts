@@ -9,6 +9,7 @@ import {
     encodeCameraUnlock,
     encodeCameraTranslate,
     encodeCameraRotateBy,
+    encodeCameraMoveArc,
 } from "../../server/src/main/typescript/elvarg/net/protocol/ClientProtocol";
 
 // The server's camera shake and reset reach the client's CAMERA_CONTROL decoder intact.
@@ -60,5 +61,10 @@ for (const yaw of [1024, -1024]) {
 }
 assert.throws(() => encodeCameraRotateBy(0, 1024, 0, "linear"), RangeError);
 assert.throws(() => encodeCameraRotateBy(0, 1024, 5, "unknown" as any), RangeError);
+// The Heart of Darkness's nagua pan swings with cam_moveto_arc.
+assert.deepEqual(decodeServerPacket(new Uint8Array(encodeCameraMoveArc(1680, 9636, 1685, 9640, 1000, 270, "ease_in_out_sine", true))), {
+    type: "camera", payload: { mode: "arc", centreX: 1680, centreY: 9636, x: 1685, y: 9640, height: 1000, cycles: 270, easing: "ease_in_out_sine", ignoreTerrain: true },
+});
+assert.throws(() => encodeCameraMoveArc(1680, 9636, 1685, 9640, 1000, 0, "linear"), RangeError);
 
 console.log("camera shake packet: ok");

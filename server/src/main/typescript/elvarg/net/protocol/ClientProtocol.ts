@@ -1298,6 +1298,30 @@ export function encodeCameraRotateBy(pitch: number, yaw: number, cycles: number,
   return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
 }
 
+/**
+ * cam_moveto_arc: moves the camera to (x, y) along the circle about (centreX, centreY), at
+ * `height`, over client cycles.
+ */
+export function encodeCameraMoveArc(centreX: number, centreY: number, x: number, y: number, height: number,
+  cycles: number, easing: CameraEasing, ignoreTerrain = false): Buffer {
+  for (const [name, value, min, max] of [["centre x", centreX, 0, 65535], ["centre y", centreY, 0, 65535], ["x", x, 0, 65535],
+    ["y", y, 0, 65535], ["height", height, -32768, 32767], ["cycles", cycles, 1, 65535]] as const) {
+    if (!Number.isInteger(value) || value < min || value > max) throw new RangeError(`Invalid camera ${name}: ${value}`);
+  }
+  if (!CAMERA_EASINGS.includes(easing)) throw new RangeError("Invalid camera easing");
+  const payload = Buffer.alloc(15);
+  payload[0] = 11;
+  payload.writeUInt16BE(centreX, 1);
+  payload.writeUInt16BE(centreY, 3);
+  payload.writeUInt16BE(x, 5);
+  payload.writeUInt16BE(y, 7);
+  payload.writeInt16BE(height, 9);
+  payload.writeUInt16BE(cycles, 11);
+  payload[13] = CAMERA_EASINGS.indexOf(easing);
+  payload[14] = ignoreTerrain ? 2 : 0;
+  return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, payload);
+}
+
 export function encodeCameraUnlock(unlock: boolean): Buffer {
   return encodeServerPacket(ServerPacketId.CAMERA_CONTROL, Buffer.from([6, unlock ? 1 : 0]));
 }
