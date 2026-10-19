@@ -3,7 +3,8 @@
  *
  * As captured (02283, 03398, 03402): summon01 lays a 5-wide vfx row (fire 3218, ice 3221)
  * the same tick and five hitbox NPCs (14152/14153) stand on it 4 ticks later; rows live ~40
- * ticks unless a spell of the opposite element clears the tile hit and its neighbours.
+ * ticks unless a strong-enough spell of the opposite element clears the tile hit and its
+ * neighbours. Standing on a tile at formation blocks that tile (one wall hit, Wiki).
  * summon02 stands up a column of three elementals 2 ticks later at the caster's end of the
  * lane. The 35% teleport (or the partner's death) moves the titans still fighting to their
  * static tiles. The blast charges (aoe01 + safe tile 56003) and fires 6 ticks later
@@ -173,12 +174,33 @@ function startRow(npc, target) {
     if (!fighting(npc) || session.area.isDestroyed()) return;
     const rowId = kind === "fire" ? Shared.FIRE_ROW_ID : Shared.ICE_ROW_ID;
     const cast = {};
+    // Tiles a living player stands on at formation, as tile key -> players.
+    const occupants = new Map();
+    for (const player of session.players ?? []) {
+      if (!alive(player)) continue;
+      const pos = tileOf(player);
+      if (!pos) continue;
+      const key = Shared.tileKey(pos.x, pos.y);
+      if (!occupants.has(key)) occupants.set(key, []);
+      occupants.get(key).push(player);
+    }
     for (const [x, y] of spots) {
       // Fire and ice cancel out: where the other element's row stands, that tile despawns
       // and this one never appears (captured).
       const opposite = rowsAt(session, x, y).filter((other) => other.getAttribute(Shared.ROW_ATTRIBUTE).kind !== kind);
       if (opposite.length > 0) {
         for (const other of opposite) removeRowTile(session, other, true);
+        continue;
+      }
+      // Standing on a tile at formation blocks it: no NPC, no loc, and each occupant
+      // takes the wall hit once (Wiki; captured 02283 T1352, 03398). No despawn vfx.
+      const standing = occupants.get(Shared.tileKey(x, y));
+      if (standing) {
+        for (const player of standing) {
+          const damage = 1 + core.Misc.getRandom(Shared.WALL_MAX - 1);
+          player.getCombat().getHitQueue().addPendingDamage([new core.HitDamage(damage, core.HitMask.RED)]);
+          CombatAchievements.avoidableDamage(player, damage, "row");
+        }
         continue;
       }
       const hitbox = core.NPC.create(rowId, new core.Location(x, y, 0));
@@ -202,9 +224,8 @@ function startRow(npc, target) {
  * hints, as captured ("...strong enough to..."). */
 function tryRowClear({ player, npc }) {
   const kind = npc.getId() === Shared.FIRE_ROW_ID ? "fire" : "ice";
-  const need = kind === "fire" ? "water" : "fire";
   const session = sessionOfNpc(npc);
-  if (session && Minions.spellElementOf(player) === need) {
+  if (session && Minions.clearsRow(player, kind)) {
     clearRowTile(session, npc, true);
     return true;
   }
@@ -243,7 +264,7 @@ function removeRowTile(session, hitbox, cleared) {
 
 /** The live row tiles on (x, y). */
 function rowsAt(session, x, y) {
-  return [...session.rows].filter((hitbox) => {
+  return [...(session.rows ?? [])].filter((hitbox) => {
     const row = hitbox.getAttribute(Shared.ROW_ATTRIBUTE);
     return row.x === x && row.y === y && hitbox.isRegistered();
   });
@@ -464,11 +485,25 @@ function spawnSafeTimer(session, at) {
 /**
  * The safe tile, authored: anywhere in the blast area with both titans fighting; with one
  * left, on the row farthest from it (Branda alone: y 9564; Eldric alone: y 9570), random x.
+ * Never on a live wall tile (captured: 0 overlaps in 58 blasts); if walls cover every
+ * candidate, any tile (never fail).
  */
 function blastSafeTile(session) {
   const { minX, maxX, minY, maxY } = Shared.BLAST_AREA;
   const brandaIn = fighting(session.branda);
   const eldricIn = fighting(session.eldric);
+  const rows = [];
+  if (brandaIn && !eldricIn) rows.push(minY);
+  else if (eldricIn && !brandaIn) rows.push(maxY);
+  else for (let y = minY; y <= maxY; y++) rows.push(y);
+  const free = [];
+  for (const y of rows) {
+    for (let x = minX; x <= maxX; x++) {
+      const at = arenaSpot(session, x, y);
+      if (rowsAt(session, at.x, at.y).length === 0) free.push({ x, y });
+    }
+  }
+  if (free.length > 0) return Shared.pick(free);
   const x = Shared.randomBetween(minX, maxX);
   if (brandaIn && !eldricIn) return { x, y: minY };
   if (eldricIn && !brandaIn) return { x, y: maxY };
