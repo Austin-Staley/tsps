@@ -4,6 +4,7 @@ const Data = require("./Data.Construction");
 const House = require("./House.Construction");
 const Instance = require("./Instance.Construction");
 const Portals = require("./Portals.Construction");
+const Nexus = require("./Nexus.Construction");
 
 // ::maxhouse (developer): replaces the house with one of every room, each with the best piece on
 // every space, for testing. The old house is kept for ::restorehouse. Levels, room counts and the
@@ -111,7 +112,8 @@ function setUp(player, house) {
       }
       portal++;
     } else if (furniture.hotspotKey === "PORTAL_NEXUS") {
-      furniture.destinations = NEXUS_DESTINATIONS.filter(name => destinations.some(data => data.name === name));
+      const ids = NEXUS_DESTINATIONS.map(name => [...Nexus.destinations().values()].find(data => data.spellName === name)?.id).filter(Boolean);
+      player.setAttribute(Nexus.STATE_ATTRIBUTE, { slots: ids, left: ids[0] ?? 0 });
     } else if (key === "CAPE_HANGER") {
       furniture.mountedCape = { ...MAX_CAPE };
       furniture.displayObjectId = MAX_CAPE_LOC;

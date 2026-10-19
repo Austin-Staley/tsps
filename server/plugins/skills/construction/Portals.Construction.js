@@ -93,11 +93,9 @@ function useHousePortal(event) {
   const furniture = house.getFurnitureAt(event.location, event.objectId, event.object?.getType() ?? 10);
   if (!furniture) return false;
   const action = event.definition?.getInteractions()?.[event.clickType - 1]?.toLowerCase();
+  // The nexus has its own interfaces (Nexus).
   if (furniture.hotspotKey === "PORTAL_NEXUS" && ["teleport", "teleport menu", "configuration"].includes(action ?? "")) {
-    if (action !== "configuration") chooseDestination(event.player, house, furniture, "teleport");
-    else if (house.owner !== event.player) event.player.sendMessage("Only the owner can configure the nexus.");
-    else api.sendMultiChatboxPrompt(event.player, "Portal nexus configuration", "Add destination", () => chooseDestination(event.player, house, furniture, "add"), "Remove destination", () => chooseDestination(event.player, house, furniture, "remove"), "Cancel", () => {});
-    return true;
+    return require("./Nexus.Construction").nexusOption(event, action);
   }
   if (furniture.buildableKey.endsWith("_PORTAL_FRAME") && action === "enter") {
     chooseDestination(event.player, house, furniture, "teleport");

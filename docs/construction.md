@@ -27,6 +27,10 @@ covers something, this page says so.
 | `MahoganyHomes` | Contractors, contracts, the clients' homes, the reward shop |
 | `Menu`, `Commands` | The generic option menu (script 217); `::hotspots` |
 
+Walls, windows and scenery collide as the cache's template chunks place them (each room turned
+with its rotation), with the chunks' blocked tiles; doors and furniture add their own collision.
+Before this every wall could be walked through.
+
 The house runs as an `Area`: per-tick work (chairs, servants, burners, the owner's Kick option,
 combat dummies, dungeon traps and guards) happens in `PlayerHouseInstance.process` for
 occupants only. Its `canAttack` lets players fight only inside a ring, and `canCastOnNpc`
@@ -80,6 +84,22 @@ placement of it in the room (all tiles of a rug, every window's curtains); Remov
   10600; confirm makes one tablet every 4 ticks (`poh_create_magic_tablet`, synth 228), each
   taking soft clay and runes (staves and the rune pouch count). Levels, runes and experience per
   tablet are the Wiki's (Magic tablet).
+
+### Portal nexus
+
+Its interfaces are the live ones (rsprox captures; cache enums 1375 and 1377 and their structs
+give each destination's name, runes, Magic level and alternate). The player's slots are varbits
+`poh_nexus_tele_<n>` and `poh_nexus_left_click`; the interfaces work on their `_temp` copies.
+
+- **Teleport** goes to the left-click destination (the menu when there is none).
+- **Teleport Menu** opens `telenexus_teleport` (17); a row teleports at once, and the second
+  list gives the Grand Exchange, Seers' Village and Yanille (landings from captures).
+- **Configuration** opens `telenexus` (19). Dragging a slot onto the portal makes it the
+  left-click destination and its options pick it or its alternate; Done saves (captured). Adding
+  a destination (dragging it from the available list), reordering and removing slots aren't
+  captured: new destinations cost 1,000x the spell's runes from the inventory on Done and need
+  its Magic level, removing refunds nothing, and a nexus holds 4, 8 or 41 (Wiki).
+- Older saves' destination lists on the nexus become the player's slots.
 
 ### Floors
 
@@ -231,6 +251,9 @@ through a staircase or trapdoor ask Yes/No instead (captures).
 
 A new house's save lists its garden's exit portal by hotspot only; loading a house now places
 such furniture, so the portal shows, and you arrive in front of it.
+
+Pools of restoration to ornate rejuvenation (RejuvenationPool plugin) play `poh_pool_drink`
+when drunk from, with no message or sound (captures).
 
 Already there before this page: portal chamber and nexus teleports, altars and incense burners,
 spellbook and occult altars, pools, costume room storage, servants, the Estate agent, guests and

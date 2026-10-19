@@ -34,6 +34,7 @@ const CapeHanger = require("./CapeHanger.Construction");
 const Trophies = require("./Trophies.Construction");
 const MahoganyHomes = require("./MahoganyHomes.Construction");
 const MaxHouse = require("./MaxHouse.Construction");
+const Nexus = require("./Nexus.Construction");
 
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
@@ -1194,6 +1195,7 @@ function attach(api) {
   CapeHanger.attachCapeHanger(api);
   Trophies.attachTrophies(api);
   MahoganyHomes.attachMahoganyHomes(api);
+  Nexus.attachNexus(api);
   api.persistAttribute(HOUSE_ATTRIBUTE, defaultHouse());
   api.onObjectFirstClick(HOUSE_PORTAL_IDS, enterDefaultHouse);
   api.onObjectSecondClick(HOUSE_PORTAL_IDS, enterNormalHouse);
