@@ -1,63 +1,21 @@
-// Refreshes the Construction plugin's data (plugins/skills/construction/data) from the
-// cache's own POH tables:
-//   110 furniture    - level, materials and menu icon of every buildable furniture row
-//   111 poh_room     - room cost and level, and the hotspot rows of each room
-//   112 poh_hotspot  - the furniture rows each hotspot offers, in menu order
-// Cache-derived fields (name, level, materials, menu icon) refresh; experience, built loc ids, the build animation, tool
-// requirements and upgrade sources (the furniture that must already stand there) are
-// server-owned and kept. Rows the data doesn't have yet are listed, not added.
+// Reports where the Construction plugin's hand data (plugins/skills/construction/data) and the
+// cache's POH tables part ways. The plugin reads names, levels, materials, menu icons, room costs
+// and the viewer's furniture rows from the cache when it loads; the data files hold only what the
+// cache lacks (experience, built loc ids, build animation, tools, upgrade sources, room
+// templates). After a cache update this lists:
+//   - furniture rows or rooms the data names that the cache no longer has (exit 1),
+//   - furniture rows (table 110) and rooms (table 111) with no hand data yet: new furniture
+//     needs its experience and built loc ids added to furniture.json,
+//   - trophies (enum 5215) with no experience in trophy-experience.json.
 //
-//   yarn dump:construction [--check]
+//   yarn dump:construction
 //
-// --check writes nothing and exits 1 if the data is out of date.
 // Needs the cache in server/caches - run `yarn ensure-cache` first.
 import * as fs from "fs";
 import path = require("path");
 
 import { CachePipeline } from "../src/main/typescript/elvarg/game/cache/CachePipeline";
-import { CacheIndexDat2 } from "../src/main/typescript/elvarg/game/cache/codec/rs/cache/CacheIndex";
-import { IndexType } from "../src/main/typescript/elvarg/game/cache/codec/rs/cache/IndexType";
-import { ByteBuffer } from "../src/main/typescript/elvarg/game/cache/codec/rs/io/ByteBuffer";
-import { Gamevals, GamevalKind } from "../src/main/typescript/elvarg/game/cache/Gamevals";
-import { decodeRow } from "./combat-style-table";
 import { CacheDefinitions } from "../src/main/typescript/elvarg/game/cache/CacheDefinitions";
-
-const DBROW_ARCHIVE = 38;
-const FURNITURE_TABLE = 110;
-const ROOM_TABLE = 111;
-const HOTSPOT_TABLE = 112;
-
-// Table 110 columns.
-const FURNITURE_MENU_OBJ = 0;
-const FURNITURE_NAME = 1;
-const FURNITURE_MATERIALS = 2; // (obj, count) pairs
-const FURNITURE_LEVEL = 3; // (stat, level)
-const FURNITURE_HIDDEN = 5;
-// Table 111 columns.
-const ROOM_COST = 2;
-const ROOM_ID = 3;
-const ROOM_LEVEL = 4; // (stat, level)
-const ROOM_HOTSPOTS = 7;
-// Table 112 columns.
-const HOTSPOT_FURNITURE = 0;
-
-// The tables list "any nails" as one obj; the plugin takes the cheapest nails held.
-const ANY_NAILS_OBJ = 32923;
-
-type Material = { itemId?: number; amount: number; source?: string };
-type Furniture = {
-    key: string;
-    name?: string;
-    level: number;
-    experience: number;
-    menuItemId: number;
-    menuRowId?: number;
-    hidden?: boolean;
-    buildAnimationId: number;
-    objectIds: number[];
-    materials: Material[];
-};
-type Room = { key: string; id: number; name: string; level: number; cost: number; [field: string]: unknown };
 
 const dataDir = path.resolve(__dirname, "..", "plugins", "skills", "construction", "data");
 
@@ -65,216 +23,46 @@ function readJson<T>(file: string): T {
     return JSON.parse(fs.readFileSync(path.join(dataDir, file), "utf8"));
 }
 
-/** One row per line so cache bumps diff cleanly. */
-function rows(values: unknown[]): string {
-    return "[\n" + values.map((value) => "  " + JSON.stringify(value)).join(",\n") + "\n]\n";
-}
-
-function readTables(configs: CacheIndexDat2): Map<number, Map<number, Map<number, any[]>>> {
-    const tables = new Map<number, Map<number, Map<number, any[]>>>(
-        [FURNITURE_TABLE, ROOM_TABLE, HOTSPOT_TABLE].map((table) => [table, new Map()]),
-    );
-    // Load the whole dbrow archive once: per-file getFile() re-reads the archive.
-    const archive = configs.getArchive(DBROW_ARCHIVE);
-    for (const rowId of archive.fileIds) {
-        const file = archive.getFile(rowId);
-        if (!file) continue;
-        const row = decodeRow(new ByteBuffer(new Int8Array(file.data)));
-        tables.get(row.tableId)?.set(rowId, row.columns);
-    }
-    return tables;
-}
-
-function cacheMaterials(columns: Map<number, any[]>): Material[] {
-    const pairs = columns.get(FURNITURE_MATERIALS) ?? [];
-    const materials: Material[] = [];
-    for (let i = 0; i + 1 < pairs.length; i += 2) {
-        const [obj, amount] = [pairs[i], pairs[i + 1]];
-        materials.push(obj === ANY_NAILS_OBJ ? { amount, source: "NAILS" } : { itemId: obj, amount });
-    }
-    return materials;
-}
-
 async function main() {
-    const check = process.argv.includes("--check");
     await CachePipeline.initialize(path.resolve(__dirname, ".."));
-    const configs = CacheIndexDat2.fromStore(IndexType.DAT2.configs, CachePipeline.getStore());
-    const tables = readTables(configs);
-    const rowNames = new Gamevals().namesOf(GamevalKind.DBROW);
-    const furnitureRows = tables.get(FURNITURE_TABLE)!;
-    const roomRows = tables.get(ROOM_TABLE)!;
-    const hotspotRows = tables.get(HOTSPOT_TABLE)!;
+    const furnitureTable = CacheDefinitions.getDbTableId("furniture")!;
+    const roomTable = CacheDefinitions.getDbTableId("poh_room")!;
+    const furnitureName = CacheDefinitions.getDbColumn(furnitureTable, "name")!;
+    const roomName = CacheDefinitions.getDbColumn(roomTable, "name")!;
+    const roomType = CacheDefinitions.getDbColumn(roomTable, "room_type")!;
+    const problems: string[] = [];
     const notes: string[] = [];
 
-    const furniture = readJson<Furniture[]>("furniture.json");
-    const furnitureKeys = new Set(furniture.map((entry) => entry.key));
+    const furniture = readJson<{ key: string; menuRowId?: number }[]>("furniture.json");
     const usedRows = new Set<number>();
-    const refreshed = furniture.map((entry) => {
-        if (entry.menuRowId == null) return entry; // not POH furniture (raid storage units)
-        const columns = furnitureRows.get(entry.menuRowId);
-        if (!columns) {
-            notes.push(`${entry.key}: furniture row ${entry.menuRowId} is gone`);
-            return entry;
-        }
+    for (const entry of furniture) {
+        if (entry.menuRowId == null) continue; // not POH furniture (raid storage units)
+        const row = CacheDefinitions.getDbRow(entry.menuRowId);
+        if (row?.tableId !== furnitureTable) problems.push(`${entry.key}: furniture row ${entry.menuRowId} is gone`);
         usedRows.add(entry.menuRowId);
-        // Server-owned requirements: the furniture an upgrade replaces, and tools.
-        const kept = entry.materials.filter(
-            (material) => material.itemId == null && (furnitureKeys.has(material.source ?? "") || material.source?.startsWith("Tool.")),
-        );
-        const hidden = (columns.get(FURNITURE_HIDDEN) ?? [0])[0] === 1;
-        const { hidden: _previous, ...rest } = entry;
-        return {
-            ...rest,
-            name: (columns.get(FURNITURE_NAME) ?? [entry.name])[0],
-            level: (columns.get(FURNITURE_LEVEL) ?? [0, entry.level])[1],
-            menuItemId: (columns.get(FURNITURE_MENU_OBJ) ?? [entry.menuItemId])[0],
-            ...(hidden ? { hidden } : {}),
-            materials: [...kept, ...cacheMaterials(columns)],
-        };
-    });
-    for (const rowId of [...furnitureRows.keys()].filter((id) => !usedRows.has(id))) {
-        const name = (furnitureRows.get(rowId)!.get(1) ?? [""])[0];
-        notes.push(`furniture row ${rowId} ${rowNames.get(rowId)} ("${name}") is not in furniture.json`);
     }
-
-    const rooms = readJson<Room[]>("rooms.json");
-    const roomsById = new Map([...roomRows.values()].map((columns) => [(columns.get(ROOM_ID) ?? [-1])[0], columns]));
-    const refreshedRooms = rooms.map((room) => {
-        const columns = roomsById.get(room.id);
-        if (!columns) {
-            notes.push(`room ${room.key}: no poh_room row with id ${room.id}`);
-            return room;
-        }
-        return {
-            ...room,
-            level: (columns.get(ROOM_LEVEL) ?? [0, room.level])[1],
-            cost: (columns.get(ROOM_COST) ?? [room.cost])[0],
-        };
-    });
-    for (const [id, columns] of roomsById) {
-        if (id > 0 && !rooms.some((room) => room.id === id)) {
-            notes.push(`poh_room id ${id} ("${(columns.get(1) ?? [""])[0]}") is not in rooms.json`);
+    for (const row of CacheDefinitions.getDbTableRows(furnitureTable)) {
+        if (!usedRows.has(row.id)) {
+            notes.push(`furniture row ${row.id} ${CacheDefinitions.getDbRowName(row.id)} ("${row.column(furnitureName)[0]}") is not in furniture.json`);
         }
     }
 
-    // The house viewer lists each room's hotspots in table order, each with its furniture rows.
-    const viewer: Record<string, number[][]> = {};
-    for (const [id, columns] of [...roomsById].sort(([a], [b]) => a - b)) {
-        if (id <= 0) continue;
-        viewer[id] = (columns.get(ROOM_HOTSPOTS) ?? []).map(
-            (hotspotRow: number) => hotspotRows.get(hotspotRow)?.get(HOTSPOT_FURNITURE) ?? [],
-        );
+    const rooms = readJson<{ key: string; id: number }[]>("rooms.json");
+    const roomRows = new Map(CacheDefinitions.getDbTableRows(roomTable).map((row) => [row.int(roomType, -1), row]));
+    for (const room of rooms) if (!roomRows.has(room.id)) problems.push(`room ${room.key}: no poh_room row with id ${room.id}`);
+    for (const [id, row] of roomRows) {
+        if (id > 0 && !rooms.some((room) => room.id === id)) notes.push(`poh_room id ${id} ("${row.column(roomName)[0]}") is not in rooms.json`);
     }
 
-    // Games room combat stones: poh_tbt_<stone>_<crush><stab><slash> crack forms and the broken one.
-    const stones: Record<string, Record<string, number>> = {};
-    for (const [id, name] of [...new Gamevals().namesOf(GamevalKind.NPC)].sort(([a], [b]) => a - b)) {
-        const match = /^poh_tbt_([a-z]+)_([0-3]{3}|destroyed)$/.exec(name);
-        if (match) (stones[match[1]] ??= {})[match[2]] = id;
+    const experience = readJson<Record<string, unknown>>("trophy-experience.json");
+    for (const value of CacheDefinitions.getEnumValues(5215).values()) {
+        const name = CacheDefinitions.getDbRowName(Number(value));
+        if (name && !experience[name]) notes.push(`trophy ${name} has no experience in trophy-experience.json`);
     }
 
-    // Cape hanger: each poh_mounted_* cape loc and the cape (and hood) that shows it.
-    const objIds = new Map([...new Gamevals().namesOf(GamevalKind.OBJ)].map(([id, name]) => [name, id]));
-    const skillNames: Record<string, string> = { ranged: "ranging", diary: "ad", quest: "qp" };
-    const maxNames: Record<string, string> = { fire: "firecape", ava: "anma" };
-    const plainCapes: Record<string, string> = { fire_cape: "tzhaar_cape_fire", infernal_cape: "infernal_cape", championscape: "champion_cape", mythicalcape: "mythical_cape" };
-    const mounted: Record<string, { cape: number; hood?: number }> = {};
-    for (const [id, name] of [...new Gamevals().namesOf(GamevalKind.LOC)].sort(([a], [b]) => a - b)) {
-        const key = /^poh_mounted_(.+)$/.exec(name)?.[1];
-        if (!key || key === "capestand_blank") continue;
-        let cape: string | undefined;
-        let hood: string | undefined;
-        const max = /^max_cape(?:_(.+))?$/.exec(key);
-        const skill = /^([a-z]+)_cape(_trim)?$/.exec(key);
-        if (plainCapes[key]) cape = plainCapes[key];
-        else if (max) {
-            const variant = max[1] ? `_${maxNames[max[1]] ?? max[1]}` : "";
-            cape = `skillcape_max${variant}`;
-            hood = `skillcape_max_hood${variant}`;
-        } else if (skill?.[1] === "music") {
-            cape = skill[2] ? "music_cape_trimmed" : "music_cape";
-            hood = "music_cape_hood";
-        } else if (skill) {
-            const base = `skillcape_${skillNames[skill[1]] ?? skill[1]}`;
-            cape = skill[2] ? `${base}_trimmed` : base;
-            hood = `${base}_hood`;
-        }
-        const capeId = cape && objIds.get(cape);
-        if (capeId == null) {
-            if (cape) notes.push(`mounted cape ${name}: no obj ${cape}`);
-            continue;
-        }
-        const hoodId = hood ? objIds.get(hood) : undefined;
-        mounted[id] = hoodId != null ? { cape: capeId, hood: hoodId } : { cape: capeId };
-    }
-
-    // Skill hall trophies (enum 5215 -> furniture row, as poh_trophy_menu lists them; heads are
-    // enum 5213's, fish 5214's): the stuffed item the row uses, its level, and the loc it shows in
-    // each display wood. Mounting experience is ours (the Wiki's), kept from the file.
-    const WOODS: Record<string, string[]> = { head: ["teak", "mahogany", "gilded"], fish: ["oak", "teak", "mahogany"] };
-    const PLANKS = new Set([8778, 8780, 8782, 8784, ANY_NAILS_OBJ]);
-    const locIds = new Map([...new Gamevals().namesOf(GamevalKind.LOC)].map(([id, name]) => [name, id]));
-    const fishKeys = new Set([...CacheDefinitions.getEnumValues(5214).values()].map(Number));
-    const oldTrophies = new Map(readJson<any[]>("trophies.json").map((entry) => [entry.key, entry]));
-    const trophies: any[] = [];
-    for (const [key, value] of [...CacheDefinitions.getEnumValues(5215)].sort(([a], [b]) => Number(a) - Number(b))) {
-        const rowId = Number(value);
-        const columns = furnitureRows.get(rowId);
-        const rowName = rowNames.get(rowId) ?? "";
-        if (!columns) {
-            notes.push(`trophy ${key}: furniture row ${rowId} is gone`);
-            continue;
-        }
-        const display = fishKeys.has(key) ? "fish" : "head";
-        const base = rowName.replace(/^poh_trophy_/, "").replace(/_head$/, "");
-        const locs: Record<string, number> = {};
-        WOODS[display].forEach((wood, tier) => {
-            const id = locIds.get(`poh_trophy_${base}_${wood}`);
-            if (id != null) locs[tier + 1] = id;
-        });
-        const materials = columns.get(FURNITURE_MATERIALS) ?? [];
-        let item = -1;
-        for (let i = 0; i < materials.length; i += 2) if (!PLANKS.has(materials[i])) item = materials[i];
-        trophies.push({
-            key,
-            row: rowId,
-            name: (columns.get(FURNITURE_NAME) ?? [""])[0],
-            display,
-            item,
-            menuItem: (columns.get(FURNITURE_MENU_OBJ) ?? [-1])[0],
-            level: (columns.get(FURNITURE_LEVEL) ?? [0, 0])[1],
-            locs,
-            experience: oldTrophies.get(key)?.experience ?? {},
-        });
-    }
-
-    const outputs: Record<string, string> = {
-        "trophies.json": rows(trophies),
-        "mounted-capes.json":
-            "{\n" +
-            Object.entries(mounted).map(([loc, items]) => `  ${JSON.stringify(loc)}: ${JSON.stringify(items)}`).join(",\n") +
-            "\n}\n",
-        "attack-stones.json":
-            "{\n" +
-            Object.entries(stones).map(([stone, forms]) => `  ${JSON.stringify(stone)}: ${JSON.stringify(forms)}`).join(",\n") +
-            "\n}\n",
-        "furniture.json": rows(refreshed),
-        "rooms.json": rows(refreshedRooms),
-        "viewer-furniture.json":
-            "{\n" +
-            Object.entries(viewer).map(([id, slots]) => `  ${JSON.stringify(id)}: ${JSON.stringify(slots)}`).join(",\n") +
-            "\n}\n",
-    };
-    let stale = false;
-    for (const [file, text] of Object.entries(outputs)) {
-        const target = path.join(dataDir, file);
-        if (fs.existsSync(target) && fs.readFileSync(target, "utf8") === text) continue;
-        stale = true;
-        if (!check) fs.writeFileSync(target, text);
-        console.log(`${check ? "out of date" : "updated"}: ${file}`);
-    }
+    for (const problem of problems) console.log(`problem: ${problem}`);
     for (const note of notes) console.log(`note: ${note}`);
-    if (check && stale) process.exit(1);
+    if (problems.length) process.exit(1);
 }
 
 main().then(

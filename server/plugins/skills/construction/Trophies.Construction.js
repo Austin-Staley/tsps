@@ -1,11 +1,11 @@
 "use strict";
 
-const { api, Animation, CountdownTask, DialogueChainBuilder, ItemStatementDialogue, ActionDialogue, NpcDialogue, Skill, TaskManager } = require("./Core.Construction");
+const { api, Animation, CacheDefinitions, CountdownTask, DialogueChainBuilder, ItemStatementDialogue, ActionDialogue, NpcDialogue, Skill, TaskManager } = require("./Core.Construction");
 const House = require("./House.Construction");
 
 // Skill hall trophies (rsprox captures, cache scripts 7847-7855): the head and fishing spaces take
 // a blank display in one of three woods, whose Trophies op opens poh_trophy_menu (912) with
-// poh_trophy_side (911). The menu lists each trophy (data/trophies.json from dump:construction)
+// poh_trophy_side (911). The menu lists each trophy (TROPHIES below)
 // under Basic, Superior or Elite by level and reads varps 261 (the display's wood, 1-3), 262 (the
 // trophy shown), 263 (2 for heads, 4 for fish) and 264 (a bit per trophy the owner has mounted).
 // A stuffed item clicked in the side panel is mounted for good (reach_forward_high, its
@@ -14,7 +14,34 @@ const House = require("./House.Construction");
 // heads offer their combat experience first ("You can get 200 XP in Defence, Attack, Strength,
 // Ranged and Magic for installing that head."), which may be declined (Wiki). Experience per
 // trophy is the Wiki's (the basilisk's Slayer 341 is captured); the decline prompt is ours.
-const TROPHIES = require("./data/trophies.json");
+const WOODS = { head: ["teak", "mahogany", "gilded"], fish: ["oak", "teak", "mahogany"] };
+// The trophy menu's trophies (cache enum 5215: menu index -> furniture row; heads are enum 5213's,
+// fish 5214's): the stuffed item the row uses, its level, menu icon and the loc it shows in each
+// display wood (poh_trophy_<name>_<wood>). Experience for mounting is the Wiki's, by row name.
+const EXPERIENCE = require("./data/trophy-experience.json");
+const PLANKS = new Set([8778, 8780, 8782, 8784, 32923]);
+const FURNITURE_TABLE = CacheDefinitions.getDbTableId("furniture");
+const furnitureColumn = (name) => CacheDefinitions.getDbColumn(FURNITURE_TABLE, name);
+const FISH = new Set([...CacheDefinitions.getEnumValues(5214).values()].map(Number));
+const TROPHIES = [...CacheDefinitions.getEnumValues(5215)].sort(([a], [b]) => a - b).map(([key, value]) => {
+  const row = CacheDefinitions.getDbRow(Number(value));
+  const rowName = CacheDefinitions.getDbRowName(Number(value)) ?? "";
+  const display = FISH.has(Number(key)) ? "fish" : "head";
+  const base = rowName.replace(/^poh_trophy_/, "").replace(/_head$/, "");
+  const locs = {};
+  WOODS[display].forEach((wood, tier) => {
+    const id = CacheDefinitions.getLocId(`poh_trophy_${base}_${wood}`);
+    if (id != null) locs[tier + 1] = id;
+  });
+  const materials = row?.column(furnitureColumn("material_cost")) ?? [];
+  let item = -1;
+  for (let i = 0; i + 1 < materials.length; i += 2) if (!PLANKS.has(materials[i])) item = materials[i];
+  return {
+    key: Number(key), row: Number(value), name: String(row?.column(furnitureColumn("name"))[0] ?? base), display, item,
+    menuItem: Number(row?.column(furnitureColumn("model_obj"))[0] ?? -1), level: Number(row?.column(furnitureColumn("level_requirement"))[1] ?? 1),
+    locs, experience: EXPERIENCE[rowName] ?? {},
+  };
+});
 const MENU = 912;
 const SIDE = 911;
 const TIER_COMPONENTS = new Set([4, 5, 6]);
@@ -32,7 +59,6 @@ const DISPLAYS = {
   HEAD_DISPLAY_TEAK: { type: "head", tier: 1 }, HEAD_DISPLAY_MAHOGANY: { type: "head", tier: 2 }, HEAD_DISPLAY_GILDED: { type: "head", tier: 3 },
   FISH_DISPLAY_OAK: { type: "fish", tier: 1 }, FISH_DISPLAY_TEAK: { type: "fish", tier: 2 }, FISH_DISPLAY_MAHOGANY: { type: "fish", tier: 3 },
 };
-const WOODS = { head: ["teak", "mahogany", "gilded"], fish: ["oak", "teak", "mahogany"] };
 const MOUNTED_ATTRIBUTE = "construction:trophies";
 const KURASK = 410; // the chathead
 // Furniture of the old trophy system (one piece per trophy), by the trophy it showed.
@@ -206,7 +232,9 @@ function talkTo(event) {
 
 function attachTrophies(api) {
   api.persistAttribute(MOUNTED_ATTRIBUTE, []);
-  const names = new Set(["Teak display", "Mahogany display", "Gilded display", "Oak display", ...TROPHIES.map(trophy => trophy.name)]);
+  // The mounted locs' own names ("Vorkath head"), which differ from the menu's ("Vorkath's Head").
+  const mountedNames = TROPHIES.flatMap(trophy => Object.values(trophy.locs)).map(id => CacheDefinitions.getObject(id)?.name).filter(Boolean);
+  const names = new Set(["Teak display", "Mahogany display", "Gilded display", "Oak display", ...mountedNames]);
   for (const name of names) api.onObjectInteraction(name, { Trophies: trophiesOption, "Talk-to": talkTo });
   api.onInterfaceActionClick(interfaceClick);
   api.onCustomEvent("interface:close", ({ player }) => openFor.delete(player));

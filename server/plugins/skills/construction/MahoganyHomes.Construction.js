@@ -10,16 +10,39 @@ const House = require("./House.Construction");
 // except "I'd better leave this alone right now."): Amy in Falador, then also Marlo (Varrock),
 // Ellie (East Ardougne) and Angelo (Hosidius) give contracts at four tiers (Beginner, Novice,
 // Adept, Expert: levels 1/20/50/70, planks, oak, teak, mahogany) for a random client's home in
-// any of the four cities (data/mahogany-homes.json: the cache's con_contract_<home>_hotspot<n>
-// multilocs, the varbit con_contract_hotspot_<n>_display each reads, and where yarn dump:loc
-// places them). A home's hotspot shows 1 broken (Repair: a plank of the tier, or a steel bar for a
-// sink, range or bath), 3 old furniture (Remove), 4 an empty space (Build: the Wiki's planks per
-// piece) and 5-8 the new piece in plain, oak, teak or mahogany wood; 0 is the home as it stands.
+// any of the four cities (HOMES below, from the cache). A home's hotspot shows 1 broken (Repair: a
+// plank of the tier, or a steel bar for a sink, range or bath), 3 old furniture (Remove), 4 an
+// empty space (Build: the Wiki's planks per piece) and 5-8 the new piece in plain, oak, teak or
+// mahogany wood; 0 is the home as it stands.
 // Speaking to the client when the work is done gives the tier's experience and Carpenter points
 // and a cup of tea (run energy to 100%). The Wiki's experience per plank, per repair and per
 // contract is used; the full Carpenter's outfit adds 2.5%. Which pieces need work is our
 // approximation of the Wiki's per-client layouts. Amy's Rewards opens the reward shop (673).
-const HOMES = require("./data/mahogany-homes.json");
+// The homes, from the cache: each con_contract_<home>_hotspot<n> multiloc, the display varbit it
+// reads (con_contract_hotspot_<n>_display), and its piece of furniture, named by its empty-space
+// form (or its broken form for the pieces that are only ever repaired). ./data has the clients
+// and the Wiki's planks per piece.
+const MAHOGANY = require("./data/mahogany-homes.json");
+const HOMES = (() => {
+  const names = CacheDefinitions.getLocNames();
+  const homes = new Map();
+  for (const [loc, name] of [...names].sort(([a], [b]) => a - b)) {
+    const match = /^con_contract_(.+)_hotspot(\d)$/.exec(name);
+    if (!match) continue;
+    const transforms = CacheDefinitions.getObject(loc)?.transforms ?? [];
+    const buildable = transforms[3] > 0;
+    const kind = (names.get(buildable ? transforms[4] : transforms[1]) ?? "").replace(/^con_contract_/, "")
+      .replace(/_(empty|broken)$/, "").replace(/^(varrock|falador|ardy|hosidius)_[a-z]+_/, "");
+    const home = homes.get(match[1]) ?? { key: match[1], city: match[1].split("_")[0], client: CacheDefinitions.getNpcId(MAHOGANY.clients[match[1]]), hotspots: [] };
+    homes.set(match[1], home);
+    const index = Number(match[2]);
+    home.hotspots.push(buildable
+      ? { index, loc, kind, buildable, planks: MAHOGANY.planks[kind] ?? 2 }
+      : { index, loc, kind, buildable, repair: MAHOGANY.steelRepairs.includes(kind) ? "steel bar" : "plank" });
+  }
+  for (const home of homes.values()) home.hotspots.sort((a, b) => a.index - b.index);
+  return [...homes.values()].filter(home => home.client != null);
+})();
 const TIERS = [
   { name: "Beginner", level: 1, plank: Items.PLANK, planks: "planks", buildXp: 22.5, repairXp: 127.5, contractXp: 500, points: 2 },
   { name: "Novice", level: 20, plank: Items.OAK_PLANK, planks: "oak planks", buildXp: 48, repairXp: 160, contractXp: 1250, points: 3 },

@@ -38,19 +38,22 @@ sends spells on the elemental balance to the game.
 
 ## Data
 
-`yarn dump:construction` (in `server/`) refreshes the furniture, rooms and house viewer data from
-the cache's POH tables: 110 `furniture` (name, level, materials, menu icon, hidden-in-menu),
-111 `poh_room` (cost, level, hotspot rows) and 112 `poh_hotspot` (furniture per hotspot). It
-lists table rows the data doesn't have yet. Experience, built loc ids, build animations, tools
-and upgrade sources are not in those tables and are kept by hand. It also writes
-`attack-stones.json` (the combat stone's crack forms), `mounted-capes.json` (each mounted cape
-loc and its cape and hood) and `trophies.json` (the trophy menu's trophies, their stuffed item,
-level and loc per display wood; experience kept by hand). `--check` only reports. The cache
-revision update guide has the step.
+Whatever the cache has is read from it when the plugin loads, by gameval name, so a cache update
+needs no data refresh:
 
-`mahogany-homes.json` is the Mahogany Homes homes: each `con_contract_<home>_hotspot<n>` loc,
-the display varbit it reads, its furniture kind and the Wiki's planks, and its tile from
-`yarn dump:loc` (rerun it for the hotspot ids after a cache update).
+- Furniture name, level, materials, menu icon and hidden-in-menu from DB table 110 `furniture`;
+  room level and cost from 111 `poh_room`; the house viewer's furniture rows per hotspot from
+  112 `poh_hotspot`.
+- The combat stone's crack forms (`poh_tbt_<stone>_<crush><stab><slash>` NPCs), each mounted
+  cape loc and its cape and hood (`poh_mounted_*`), the trophy menu's trophies (enum 5215, their
+  furniture rows and the `poh_trophy_<name>_<wood>` locs) and the Mahogany Homes homes (the
+  `con_contract_<home>_hotspot<n>` multilocs and the furniture each turns into).
+
+`plugins/skills/construction/data/` keeps only what the cache doesn't: each piece's experience,
+built loc ids, build animation, tools and upgrade source (`furniture.json`), room names, template
+chunks and hotspots (`rooms.json`), the hotspot locs, trophy experience (Wiki) and each Mahogany
+Homes client and the Wiki's planks per piece. `yarn dump:construction` (in `server/`) reports rows
+the data names that the cache lost, and cache rows and trophies with no hand data yet.
 
 A furniture row may say `savesAs`: an upgrade row (a trophy display's next wood) saves as the
 furniture it makes.

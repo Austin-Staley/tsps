@@ -1,6 +1,6 @@
 "use strict";
 
-const { CombatType, HitDamage, HitMask, PluginManager, Skill } = require("./Core.Construction");
+const { CacheDefinitions, CombatType, HitDamage, HitMask, PluginManager, Skill } = require("./Core.Construction");
 const House = require("./House.Construction");
 const Prizes = require("./Prizes.Construction");
 
@@ -12,8 +12,15 @@ const Prizes = require("./Prizes.Construction");
 // "Fragments of stone hit you in the face!" for 1-2 damage. Hits give 2.5% of their damage as
 // experience in the attack style's skills and none in Hitpoints (Wiki); whoever dealt the most
 // damage wins. How often fragments fly is this server's.
-// poh_tbt_<stone>_<crush><stab><slash> crack forms and the broken one (yarn dump:construction).
-const FORMS = require("./data/attack-stones.json");
+// poh_tbt_<stone>_<crush><stab><slash>: the 64 crack forms and the broken one, by gameval name.
+const FORMS = Object.fromEntries(["clay", "limestone", "marble"].map((stone) => {
+  const forms = { destroyed: CacheDefinitions.getNpcId(`poh_tbt_${stone}_destroyed`) };
+  for (let crack = 0; crack < 64; crack++) {
+    const digits = [crack >> 4, (crack >> 2) & 3, crack & 3].join("");
+    forms[digits] = CacheDefinitions.getNpcId(`poh_tbt_${stone}_${digits}`);
+  }
+  return [stone, forms];
+}));
 const STONES = { CLAY_ATTACK_STONE: "clay", LIMESTONE_ATTACK_STONE: "limestone", MARBLE_ATTACK_STONE: "marble" };
 const XP_SHARE = 0.025;
 const CHIP_CHANCE = 1 / 10;

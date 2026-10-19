@@ -7,12 +7,37 @@ const Mounted = require("./Mounted.Construction");
 // The cape hanger (rsprox captures, Wiki): using a cape (and its hood, for capes that have one) on
 // the blank hanger plays human_pickuptable and "You mount your cape and hood for display." ("You
 // need both the cape and the hood for display.", "You can't display that here.", "There's
-// something there already."); the hanger shows the cape's poh_mounted_* loc (data/mounted-capes.json
-// from dump:construction). Take gives them back ("You remove your cape from the hanger.", "You don't
-// have space to take the cape and hood."), Admire plays castlewars_pray_start, and the cape's own
+// something there already."); the hanger shows the cape's poh_mounted_* loc (MOUNTED below). Take
+// gives them back ("You remove your cape from the hanger.", "You don't have space to take the cape
+// and hood."), Admire plays castlewars_pray_start, and the cape's own
 // options (Teleport, Perks, Spellbook, Commune, Search) work for the owner as the worn cape's do.
 // An untrimmed skillcape shows trimmed once its owner has two 99s (Wiki).
-const MOUNTED = require("./data/mounted-capes.json");
+// Each poh_mounted_* cape loc and the cape (and hood) it shows, by the cache's gameval names:
+// poh_mounted_<skill>_cape[_trim] -> skillcape_<skill>[_trimmed] + skillcape_<skill>_hood, the max
+// capes -> skillcape_max[_<variant>] + its hood, and the capes without hoods by name.
+const SKILL_NAMES = { ranged: "ranging", diary: "ad", quest: "qp" };
+const MAX_NAMES = { fire: "firecape", ava: "anma" };
+const PLAIN_CAPES = { fire_cape: "tzhaar_cape_fire", infernal_cape: "infernal_cape", championscape: "champion_cape", mythicalcape: "mythical_cape" };
+const MOUNTED = {};
+for (const [loc, name] of [...CacheDefinitions.getLocNames()].sort(([a], [b]) => a - b)) {
+  const key = /^poh_mounted_(.+)$/.exec(name)?.[1];
+  if (!key || key === "capestand_blank") continue;
+  let cape, hood;
+  const max = /^max_cape(?:_(.+))?$/.exec(key), skill = /^([a-z]+)_cape(_trim)?$/.exec(key);
+  if (PLAIN_CAPES[key]) cape = PLAIN_CAPES[key];
+  else if (max) {
+    const variant = max[1] ? `_${MAX_NAMES[max[1]] ?? max[1]}` : "";
+    [cape, hood] = [`skillcape_max${variant}`, `skillcape_max_hood${variant}`];
+  } else if (skill?.[1] === "music") [cape, hood] = [skill[2] ? "music_cape_trimmed" : "music_cape", "music_cape_hood"];
+  else if (skill) {
+    const base = `skillcape_${SKILL_NAMES[skill[1]] ?? skill[1]}`;
+    [cape, hood] = [skill[2] ? `${base}_trimmed` : base, `${base}_hood`];
+  }
+  const capeId = cape && CacheDefinitions.getObjId(cape);
+  if (capeId == null) continue;
+  const hoodId = hood ? CacheDefinitions.getObjId(hood) : null;
+  MOUNTED[loc] = hoodId != null ? { cape: capeId, hood: hoodId } : { cape: capeId };
+}
 const HANGER = 29166;
 const PICK_UP = 832;
 const ADMIRE = 6937;

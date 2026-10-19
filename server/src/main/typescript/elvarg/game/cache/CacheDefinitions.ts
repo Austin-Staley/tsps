@@ -193,6 +193,21 @@ export class CacheDefinitions {
         return this.getGamevals().namesOf(GamevalKind.SEQ);
     }
 
+    /** Every named loc: id -> gameval name. */
+    static getLocNames(): ReadonlyMap<number, string> {
+        return this.getGamevals().namesOf(GamevalKind.LOC);
+    }
+
+    /** Every named obj: id -> gameval name. */
+    static getObjNames(): ReadonlyMap<number, string> {
+        return this.getGamevals().namesOf(GamevalKind.OBJ);
+    }
+
+    /** Every named NPC: id -> gameval name. */
+    static getNpcNames(): ReadonlyMap<number, string> {
+        return this.getGamevals().namesOf(GamevalKind.NPC);
+    }
+
     /** A database row's id by its gameval name (`mixology_rewards`), or null. */
     static getDbRowId(name: string): number | null {
         return this.idByName(GamevalKind.DBROW).get(name) ?? null;
