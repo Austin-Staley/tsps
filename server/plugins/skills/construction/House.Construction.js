@@ -1,6 +1,6 @@
 "use strict";
 
-const { api, World, Animation, Flag, Location, Skill, PrivateChatStatus, ItemIdentifiers, ItemDefinition, PlayerRights } = require("./Core.Construction");
+const { api, World, Animation, Equipment, Flag, Location, Skill, PrivateChatStatus, ItemIdentifiers, ItemDefinition, PlayerRights } = require("./Core.Construction");
 const EstateAgent = require("./EstateAgent.Construction");
 const Servants = require("./Servants.Construction");
 const Estate = require("./Estate.Construction");
@@ -32,9 +32,11 @@ const Bookcase = require("./Bookcase.Construction");
 const Scrying = require("./Scrying.Construction");
 const CapeHanger = require("./CapeHanger.Construction");
 const Trophies = require("./Trophies.Construction");
+const MahoganyHomes = require("./MahoganyHomes.Construction");
 
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
+const SAWS = [ItemIdentifiers.SAW, ItemIdentifiers.CRYSTAL_SAW, ItemIdentifiers.AMYS_SAW];
 const TINDERBOX_ID = ItemIdentifiers.TINDERBOX;
 const NAIL_IDS = [ItemIdentifiers.BRONZE_NAILS, ItemIdentifiers.IRON_NAILS, ItemIdentifiers.STEEL_NAILS,
   ItemIdentifiers.BLACK_NAILS, ItemIdentifiers.MITHRIL_NAILS, ItemIdentifiers.ADAMANTITE_NAILS,
@@ -678,7 +680,7 @@ function withArticle(name) {
 
 function getBuildMaterials(player, house, target, buildable) {
   if (constructionLevel(player) < buildable.level) return `You need Construction level ${buildable.level} to build that.`;
-  if (!player.getInventory().contains(HAMMER_ID) || !player.getInventory().contains(SAW_ID)) return "You need a hammer and a saw to build that.";
+  if (!player.getInventory().contains(HAMMER_ID) || !hasSaw(player)) return "You need a hammer and a saw to build that.";
   // A flatpack is made away from any hotspot: no furniture there to upgrade.
   const existing = target ? house.getFurnitureAtTarget(target) : null;
   if (existing && !buildable.materials.some(material => material.source === existing.buildableKey)) return "Remove the existing furniture first, or select its next upgrade.";
@@ -705,6 +707,12 @@ function getBuildMaterials(player, house, target, buildable) {
     if (player.getInventory().getAmount(itemId) + storedAmount(player, itemId) < amount) return "You do not have the required materials.";
   }
   return requiredItems;
+}
+
+/** A saw, the crystal saw or Amy's saw, carried or (Amy's) in the off-hand. */
+function hasSaw(player) {
+  const offhand = player.getEquipment().getItems()[Equipment.SHIELD_SLOT]?.getId?.();
+  return SAWS.some(id => player.getInventory().contains(id) || offhand === id);
 }
 
 /** What a carried container (the plank sack) holds of a material ("storage:amount"). */
@@ -1082,6 +1090,7 @@ function attach(api) {
   Scrying.attachScrying(api);
   CapeHanger.attachCapeHanger(api);
   Trophies.attachTrophies(api);
+  MahoganyHomes.attachMahoganyHomes(api);
   api.persistAttribute(HOUSE_ATTRIBUTE, defaultHouse());
   api.onObjectFirstClick(HOUSE_PORTAL_IDS, enterDefaultHouse);
   api.onObjectSecondClick(HOUSE_PORTAL_IDS, enterNormalHouse);
@@ -1117,4 +1126,4 @@ function attach(api) {
   api.onPlayerLogout(logoutHouse);
 }
 
-Object.assign(module.exports, { enterHouse, visitHouse, houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, houseFor, saveHouse, rebuildHouse, isBuildingMode, constructionLevel, getBuildMaterials, useMaterial, withArticle, hotspotChoices, furnitureCreationText, processOccupant, leftHouse, attach });
+Object.assign(module.exports, { enterHouse, visitHouse, storedAmount, houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, houseFor, saveHouse, rebuildHouse, isBuildingMode, constructionLevel, getBuildMaterials, useMaterial, withArticle, hotspotChoices, furnitureCreationText, processOccupant, leftHouse, attach });
