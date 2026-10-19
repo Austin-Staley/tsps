@@ -23,7 +23,14 @@ function delayed(id: number, delay: number, priority: Priority): Animation {
 
 export class TeleportType {
     // Spellbooks
-    public static readonly NORMAL = new TeleportType(3, new Animation(714, Priority.HIGH), null, new Animation(715, Priority.HIGH), new Graphic(308, 0, GraphicHeight.HIGH), null, null);
+    // Standard spellbook teleport: arms wide (714) on cast, the bubble (308) flashing just
+    // before departure, 715 + burst on landing 3 ticks after cast. The bubble must not fire
+    // with the arms (714 rises first, so a same-tick bubble reads as coming first), and its
+    // anim is only 0.4s long (vs 2.3s for ancient's): fired at T+1 it is long gone by departure.
+    // Middle step runs at T+1; delay is client cycles (20ms), so 15 puts the flash at T+1.5.
+    // Start tick 4 (not 3): TeleportTask runs steps 0 and 1 on the cast tick, so the
+    // arrival step lands a tick later than its number (see TELE_TAB below).
+    public static readonly NORMAL = new TeleportType(4, new Animation(714, Priority.HIGH), null, new Animation(715, Priority.HIGH), null, new Graphic(308, 15, GraphicHeight.HIGH), null);
     public static readonly ANCIENT = new TeleportType(5, new Animation(1979, Priority.HIGH), null, Animation.DEFAULT_RESET_ANIMATION, new Graphic(392, GraphicHeight.LOW, Priority.HIGH), null, null);
     public static readonly LUNAR = new TeleportType(4, new Animation(1816, Priority.HIGH), null, new Animation(715, Priority.HIGH), new Graphic(308, GraphicHeight.LOW, Priority.HIGH), null, null);
     public static readonly ARCEUUS = new TeleportType(4, new Animation(1816, Priority.HIGH), null, new Animation(715, Priority.HIGH), new Graphic(747, GraphicHeight.HIGH, Priority.HIGH), null, null);
