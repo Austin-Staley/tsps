@@ -1,6 +1,7 @@
 "use strict";
 
-const { RegionManager, Boundary, PrivateArea, Skill, Location, CachePipeline, CacheMaps, CacheDefinitions, ByteBuffer, GameObject, encodeLocAddChange, encodeLocDel, encodeRebuildRegion } = require("./Core.Construction");
+const { RegionManager, Boundary, PrivateArea, Skill, Location, CachePipeline, CacheMaps, CacheDefinitions, ByteBuffer, GameObject, encodeLocAddChange, encodeLocDel, encodeRebuildRegion,
+  getTemplateRegion, templateChunkKey, rotateChunkLoc, rotateChunkTile, ObjectDefinition } = require("./Core.Construction");
 const Estate = require("./Estate.Construction");
 const Servants = require("./Servants.Construction");
 const House = require("./House.Construction");
@@ -18,6 +19,7 @@ const HOUSE_ALLOCATION_COUNT = HOUSE_ALLOCATION_COLUMNS * HOUSE_ALLOCATION_COLUM
 const ROOM_DOOR_HOTSPOT_MIN = 15305;
 const ROOM_DOOR_HOTSPOT_MAX = 15322;
 const PREVIEW_WALL = 15452; // poh_preview_wall
+const BLOCKED_TILE = 0x200000;
 const HOUSE_BUILDING_MODE_VARBIT = 2176;
 const HOUSE_DYNAMIC_WINDOW = 13830;
 const allocatedHouses = new Array(HOUSE_ALLOCATION_COUNT).fill(false);
@@ -443,6 +445,7 @@ class PlayerHouseInstance extends PrivateArea {
     player.getPacketSender().sendVarbit(HOUSE_BUILDING_MODE_VARBIT, buildingMode ? 1 : 0);
     const center = this.getSceneCenter();
     const palette = this.buildPalette(buildingMode);
+    this.applyTemplateCollision(palette);
     const seenRegions = new Set();
     const xteas = [];
     for (const plane of palette) {
@@ -607,6 +610,56 @@ class PlayerHouseInstance extends PrivateArea {
         }
       }
     }
+  }
+
+  /**
+   * The walls, windows and scenery the client draws from each room's template chunk collide as
+   * they do in the cache's map (a templated instance does the same); without this every wall could
+   * be walked through. Hotspots are left out: furniture and doors are placed with their own
+   * collision. Blocked tiles in the chunk settings block too.
+   */
+  applyTemplateCollision(palette) {
+    for (const object of this.templateClipObjects ?? []) RegionManager.removeObjectClipping(object);
+    for (const tile of this.templateBlockedTiles ?? []) this.setClip(tile, this.getClip(tile) & ~BLOCKED_TILE);
+    this.templateClipObjects = [];
+    this.templateBlockedTiles = [];
+    const style = Estate.houseStyleIndex(this.save);
+    for (let plane = 0; plane < palette.length; plane++) {
+      for (let x = 0; x < palette[plane].length; x++) {
+        for (let y = 0; y < palette[plane][x].length; y++) {
+          const chunk = palette[plane][x][y];
+          if (chunk === -1) continue;
+          const sourceX = (chunk >>> 14) & 0x3ff, sourceY = (chunk >>> 3) & 0x7ff;
+          const sourcePlane = (chunk >>> 24) & 3, rotation = (chunk >>> 1) & 3;
+          const region = getTemplateRegion(((sourceX >> 3) << 8) | (sourceY >> 3));
+          if (!region) continue;
+          const baseX = this.allocation.baseX + x * 8, baseY = this.allocation.baseY + y * 8;
+          for (const loc of region.chunks[templateChunkKey(sourcePlane, sourceX, sourceY)] ?? []) {
+            if (this.isTemplateHotspot(loc.id, style)) continue;
+            const definition = ObjectDefinition.forId(loc.id);
+            const [toX, toY] = rotateChunkLoc(loc.localX & 7, loc.localY & 7, rotation, definition?.getSizeX() ?? 1, definition?.getSizeY() ?? 1, loc.face);
+            const object = new GameObject(loc.id, new Location(baseX + toX, baseY + toY, plane), loc.type, (loc.face + rotation) & 3, this);
+            this.detach(object);
+            RegionManager.addObjectClipping(object);
+            this.templateClipObjects.push(object);
+          }
+          const tileX = (sourceX & 7) * 8, tileY = (sourceY & 7) * 8;
+          for (let dx = 0; dx < 8; dx++) for (let dy = 0; dy < 8; dy++) {
+            if ((region.settings[(sourcePlane << 12) | ((tileX + dx) << 6) | (tileY + dy)] & 1) === 0) continue;
+            const [toX, toY] = rotateChunkTile(dx, dy, rotation);
+            const tile = new Location(baseX + toX, baseY + toY, plane);
+            this.setClip(tile, this.getClip(tile) | BLOCKED_TILE);
+            this.templateBlockedTiles.push(tile);
+          }
+        }
+      }
+    }
+  }
+
+  /** Door and furniture spaces: drawn as doors and furniture instead. Windows stay, being wall. */
+  isTemplateHotspot(id, style) {
+    return (id >= ROOM_DOOR_HOTSPOT_MIN && id <= ROOM_DOOR_HOTSPOT_MAX) || Estate.HOUSE_STYLES[style].doorHotspots.includes(id)
+      || Data.HOTSPOT_BY_OBJECT_ID.has(id) || !!CacheDefinitions.getObject(id)?.actions?.includes("Build");
   }
 
   refreshDoors() {

@@ -1360,6 +1360,10 @@ export interface PluginCoreApi {
   ByteBuffer: typeof import("../game/cache/codec/rs/io/ByteBuffer").ByteBuffer;
   encodeRebuildRegion: typeof import("../net/protocol/ClientProtocol").encodeRebuildRegion;
   encodeLocAddChange: typeof import("../net/protocol/ClientProtocol").encodeLocAddChange;
+  getTemplateRegion: typeof import("../game/collision/TemplateRegionData").getTemplateRegion;
+  templateChunkKey: typeof import("../game/collision/TemplateRegionData").templateChunkKey;
+  rotateChunkLoc: typeof import("../game/model/areas/impl/TemplatedInstanceArea").rotateChunkLoc;
+  rotateChunkTile: typeof import("../game/model/areas/impl/TemplatedInstanceArea").rotateChunkTile;
   encodeLocDel: typeof import("../net/protocol/ClientProtocol").encodeLocDel;
   PrivateChatStatus: typeof import("../game/model/PlayerRelations").PrivateChatStatus;
   SpellTeleports: typeof import("../game/content/combat/magic/SpellTeleports").SpellTeleports;
