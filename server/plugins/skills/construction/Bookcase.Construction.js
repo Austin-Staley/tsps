@@ -66,7 +66,7 @@ function interfaceClick(event) {
   const book = bookList().find(([slot]) => slot === event.slot);
   if (!book) return;
   const [slot, itemId] = book;
-  if (event.opId > 1) return player.sendMessage(ItemDefinition.forId(itemId)?.getExamine?.() ?? "It's a book.");
+  if ((event.opId ?? event.action ?? 1) > 1) return player.sendMessage(ItemDefinition.forId(itemId)?.getExamine?.() ?? "It's a book.");
   if (!foundBooks(player).has(slot)) return player.sendMessage("You have not found that book yet.");
   if (player.getInventory().contains(itemId)) return player.sendMessage("You're already carrying a copy of that book.");
   if (player.getInventory().getFreeSlots() === 0) return player.sendMessage("You don't have enough inventory space.");

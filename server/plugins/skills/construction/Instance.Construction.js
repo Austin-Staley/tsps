@@ -7,6 +7,7 @@ const House = require("./House.Construction");
 const Dungeon = require("./Dungeon.Construction");
 const Menagerie = require("./Menagerie.Construction");
 const GamesRoom = require("./GamesRoom.Construction");
+const Trophies = require("./Trophies.Construction");
 const CombatRings = require("./CombatRings.Construction");
 const Data = require("./Data.Construction");
 const Palette = require("./Palette.Construction");
@@ -218,13 +219,15 @@ class PlayerHouseInstance extends PrivateArea {
   setFurniture(target, buildable) {
     const room = this.getRoom(target.position);
     if (!room) return;
+    // An upgrade row (a display's next wood) saves as the furniture it makes.
+    const savedKey = buildable.savesAs ?? buildable.key;
     const furnitureByLocation = { ...room.furnitureByLocation };
     const placements = this.hotspotPlacements(room.roomKey, target.hotspotKey);
     for (const placement of placements.length ? placements : [{ ...target, id: target.sourceObjectId }]) {
       const key = this.furnitureKey(placement.localX, placement.localY, placement.type);
       furnitureByLocation[key] = {
         ...furnitureByLocation[key],
-        buildableKey: buildable.key,
+        buildableKey: savedKey,
         hotspotKey: target.hotspotKey,
         sourceObjectId: placement.id,
         localX: placement.localX,
@@ -235,7 +238,7 @@ class PlayerHouseInstance extends PrivateArea {
     }
     this.save.rooms[target.position.plane][target.position.x][target.position.y] = {
       ...room,
-      furniture: { ...room.furniture, [target.hotspotKey]: buildable.key },
+      furniture: { ...room.furniture, [target.hotspotKey]: savedKey },
       furnitureByLocation,
     };
   }
@@ -415,6 +418,7 @@ class PlayerHouseInstance extends PrivateArea {
   /** Replays the current saved layout after a room edit. */
   rebuild(player, buildingMode) {
     this.buildingMode = buildingMode;
+    Trophies.refreshDisplays(this);
     // Remove old solid doors before the new scene installs its construction hotspots.
     if (buildingMode) this.refreshDoors();
     this.clearFurniture();

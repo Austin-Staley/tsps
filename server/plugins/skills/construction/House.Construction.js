@@ -31,6 +31,7 @@ const TipJar = require("./TipJar.Construction");
 const Bookcase = require("./Bookcase.Construction");
 const Scrying = require("./Scrying.Construction");
 const CapeHanger = require("./CapeHanger.Construction");
+const Trophies = require("./Trophies.Construction");
 
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
@@ -1080,6 +1081,7 @@ function attach(api) {
   Bookcase.attachBookcase(api);
   Scrying.attachScrying(api);
   CapeHanger.attachCapeHanger(api);
+  Trophies.attachTrophies(api);
   api.persistAttribute(HOUSE_ATTRIBUTE, defaultHouse());
   api.onObjectFirstClick(HOUSE_PORTAL_IDS, enterDefaultHouse);
   api.onObjectSecondClick(HOUSE_PORTAL_IDS, enterNormalHouse);

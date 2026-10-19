@@ -97,9 +97,9 @@ function interfaceClick(event) {
     refreshPets(house);
     return;
   }
-  const slot = event.slot ?? event.action;
+  const slot = event.slot;
   const slots = stored(player);
-  if (event.childId !== LIST || !slots.has(slot) || event.opId > 1) return;
+  if (event.childId !== LIST || !slots.has(slot) || (event.opId ?? event.action ?? 1) > 1) return;
   if (player.getInventory().getFreeSlots() === 0) return player.sendMessage("You don't have enough inventory space.");
   slots.delete(slot);
   player.setAttribute(STORED_ATTRIBUTE, [...slots]);

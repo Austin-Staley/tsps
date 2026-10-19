@@ -1,0 +1,21 @@
+[
+  {"key":0,"row":5660,"name":"Crawling hand","display":"head","item":7982,"menuItem":8260,"level":38,"locs":{"1":56113,"2":56114,"3":56115},"experience":{"CONSTRUCTION":31,"SLAYER":261}},
+  {"key":1,"row":5663,"name":"Cockatrice head","display":"head","item":7983,"menuItem":8261,"level":38,"locs":{"1":56116,"2":56117,"3":56118},"experience":{"CONSTRUCTION":44,"SLAYER":294}},
+  {"key":2,"row":5666,"name":"Basilisk head","display":"head","item":7984,"menuItem":8262,"level":38,"locs":{"1":56119,"2":56120,"3":56121},"experience":{"CONSTRUCTION":63,"SLAYER":341}},
+  {"key":3,"row":5669,"name":"Kurask head","display":"head","item":7985,"menuItem":8263,"level":58,"locs":{"2":56122,"3":56123},"experience":{"CONSTRUCTION":77,"SLAYER":657}},
+  {"key":4,"row":5671,"name":"Abyssal head","display":"head","item":7986,"menuItem":8264,"level":58,"locs":{"2":56124,"3":56125},"experience":{"CONSTRUCTION":109,"SLAYER":889}},
+  {"key":5,"row":5673,"name":"KBD heads","display":"head","item":7987,"menuItem":8265,"level":78,"locs":{"3":56126},"experience":{"CONSTRUCTION":223,"combat":{"ATTACK":200,"STRENGTH":200,"DEFENCE":200,"RANGED":200,"MAGIC":200}}},
+  {"key":6,"row":5674,"name":"KQ head","display":"head","item":7988,"menuItem":8266,"level":78,"locs":{"3":56127},"experience":{"CONSTRUCTION":223,"combat":{"ATTACK":200,"STRENGTH":200,"DEFENCE":200,"RANGED":200,"MAGIC":200}}},
+  {"key":7,"row":5675,"name":"Vorkath's Head","display":"head","item":21909,"menuItem":21912,"level":82,"locs":{"3":56128},"experience":{"CONSTRUCTION":223,"combat":{"ATTACK":200,"STRENGTH":200,"DEFENCE":200,"RANGED":200,"MAGIC":200}}},
+  {"key":8,"row":5676,"name":"Alchemical Hydra head","display":"head","item":23079,"menuItem":23081,"level":82,"locs":{"3":56129},"experience":{}},
+  {"key":9,"row":5682,"name":"Mounted Bass","display":"fish","item":7990,"menuItem":8267,"level":36,"locs":{"1":56133,"2":56134,"3":56135},"experience":{"CONSTRUCTION":31,"FISHING":151}},
+  {"key":10,"row":5685,"name":"Mounted Swordfish","display":"fish","item":7992,"menuItem":8268,"level":56,"locs":{"2":56136,"3":56137},"experience":{"CONSTRUCTION":50,"FISHING":230}},
+  {"key":11,"row":5687,"name":"Mounted Shark","display":"fish","item":7994,"menuItem":8269,"level":76,"locs":{"3":56138},"experience":{"CONSTRUCTION":70,"FISHING":350}},
+  {"key":12,"row":5688,"name":"Mounted Harpoonfish","display":"fish","item":25561,"menuItem":25563,"level":66,"locs":{"2":56139,"3":56140},"experience":{"CONSTRUCTION":59,"FISHING":239}},
+  {"key":13,"row":7119,"name":"Mounted Giant Blue Krill","display":"fish","item":31410,"menuItem":31445,"level":64,"locs":{"2":58666,"3":58667},"experience":{"CONSTRUCTION":59,"FISHING":239}},
+  {"key":14,"row":7121,"name":"Mounted Golden Haddock","display":"fish","item":31414,"menuItem":31447,"level":68,"locs":{"2":58668,"3":58669},"experience":{"CONSTRUCTION":70,"FISHING":250}},
+  {"key":15,"row":7123,"name":"Mounted Orangefin","display":"fish","item":31418,"menuItem":31449,"level":74,"locs":{"2":58670,"3":58671},"experience":{"CONSTRUCTION":70,"FISHING":250}},
+  {"key":16,"row":7125,"name":"Mounted Huge Halibut","display":"fish","item":31422,"menuItem":31451,"level":78,"locs":{"3":58672},"experience":{"CONSTRUCTION":74,"FISHING":354}},
+  {"key":17,"row":7126,"name":"Mounted Purplefin","display":"fish","item":31426,"menuItem":31452,"level":82,"locs":{"3":58673},"experience":{"CONSTRUCTION":77,"FISHING":357}},
+  {"key":18,"row":7127,"name":"Mounted Swift Marlin","display":"fish","item":31430,"menuItem":31453,"level":86,"locs":{"3":58674},"experience":{"CONSTRUCTION":80,"FISHING":360}}
+]

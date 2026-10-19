@@ -20,6 +20,7 @@ import { IndexType } from "../src/main/typescript/elvarg/game/cache/codec/rs/cac
 import { ByteBuffer } from "../src/main/typescript/elvarg/game/cache/codec/rs/io/ByteBuffer";
 import { Gamevals, GamevalKind } from "../src/main/typescript/elvarg/game/cache/Gamevals";
 import { decodeRow } from "./combat-style-table";
+import { CacheDefinitions } from "../src/main/typescript/elvarg/game/cache/CacheDefinitions";
 
 const DBROW_ARCHIVE = 38;
 const FURNITURE_TABLE = 110;
@@ -207,7 +208,48 @@ async function main() {
         mounted[id] = hoodId != null ? { cape: capeId, hood: hoodId } : { cape: capeId };
     }
 
+    // Skill hall trophies (enum 5215 -> furniture row, as poh_trophy_menu lists them; heads are
+    // enum 5213's, fish 5214's): the stuffed item the row uses, its level, and the loc it shows in
+    // each display wood. Mounting experience is ours (the Wiki's), kept from the file.
+    const WOODS: Record<string, string[]> = { head: ["teak", "mahogany", "gilded"], fish: ["oak", "teak", "mahogany"] };
+    const PLANKS = new Set([8778, 8780, 8782, 8784, ANY_NAILS_OBJ]);
+    const locIds = new Map([...new Gamevals().namesOf(GamevalKind.LOC)].map(([id, name]) => [name, id]));
+    const fishKeys = new Set([...CacheDefinitions.getEnumValues(5214).values()].map(Number));
+    const oldTrophies = new Map(readJson<any[]>("trophies.json").map((entry) => [entry.key, entry]));
+    const trophies: any[] = [];
+    for (const [key, value] of [...CacheDefinitions.getEnumValues(5215)].sort(([a], [b]) => Number(a) - Number(b))) {
+        const rowId = Number(value);
+        const columns = furnitureRows.get(rowId);
+        const rowName = rowNames.get(rowId) ?? "";
+        if (!columns) {
+            notes.push(`trophy ${key}: furniture row ${rowId} is gone`);
+            continue;
+        }
+        const display = fishKeys.has(key) ? "fish" : "head";
+        const base = rowName.replace(/^poh_trophy_/, "").replace(/_head$/, "");
+        const locs: Record<string, number> = {};
+        WOODS[display].forEach((wood, tier) => {
+            const id = locIds.get(`poh_trophy_${base}_${wood}`);
+            if (id != null) locs[tier + 1] = id;
+        });
+        const materials = columns.get(FURNITURE_MATERIALS) ?? [];
+        let item = -1;
+        for (let i = 0; i < materials.length; i += 2) if (!PLANKS.has(materials[i])) item = materials[i];
+        trophies.push({
+            key,
+            row: rowId,
+            name: (columns.get(FURNITURE_NAME) ?? [""])[0],
+            display,
+            item,
+            menuItem: (columns.get(FURNITURE_MENU_OBJ) ?? [-1])[0],
+            level: (columns.get(FURNITURE_LEVEL) ?? [0, 0])[1],
+            locs,
+            experience: oldTrophies.get(key)?.experience ?? {},
+        });
+    }
+
     const outputs: Record<string, string> = {
+        "trophies.json": rows(trophies),
         "mounted-capes.json":
             "{\n" +
             Object.entries(mounted).map(([loc, items]) => `  ${JSON.stringify(loc)}: ${JSON.stringify(items)}`).join(",\n") +
