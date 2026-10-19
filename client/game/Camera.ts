@@ -16,7 +16,7 @@ export enum ProjectionType {
     ORTHO,
 }
 
-type CameraEasing = "linear" | "ease_in_out_sine" | "ease_out_cubic";
+type CameraEasing = "linear" | "ease_in_out_sine" | "ease_out_cubic" | "ease_out_sine";
 interface CameraTween {
     cycles: number;
     elapsed: number;
@@ -210,10 +210,31 @@ export class Camera {
         if (this.refreshScriptedHeight(shot)) this.advanceScriptedLook();
     }
 
+    /**
+     * cam_rotateby: turns the view by a yaw delta (2048 units a turn) over client cycles. A
+     * scripted look keeps its distance and turns its target about the camera.
+     */
+    // ponytail: yaw only; every captured cam_rotateby has pitch 0. Add pitch when one doesn't.
+    rotateScriptedBy(_pitch: number, yaw: number, cycles: number, easing: CameraEasing): void {
+        const look = this.scriptedLook;
+        if (!look) {
+            this.setTargetYaw(this.wrapYawInternal(this.yaw + yaw));
+            return;
+        }
+        const dx = look.target[0] - this.pos[0], dz = look.target[2] - this.pos[2];
+        const radius = Math.hypot(dx, dz), angle = Math.atan2(dx, dz) + (yaw * Math.PI) / 1024;
+        look.target[0] = Math.round((this.pos[0] + radius * Math.sin(angle)) * 128) / 128;
+        look.target[2] = Math.round((this.pos[2] + radius * Math.cos(angle)) * 128) / 128;
+        look.snapPending = false;
+        look.tween = { cycles: Math.max(1, cycles), elapsed: 0, easing, start: vec3.clone(this.pos) };
+        if (this.refreshScriptedHeight(look)) this.advanceScriptedLook();
+    }
+
     private tweenProgress(tween: CameraTween): number {
         const progress = Math.min(1, tween.elapsed / Math.max(1, tween.cycles));
         if (tween.easing === "ease_in_out_sine") return (1 - Math.cos(Math.PI * progress)) / 2;
         if (tween.easing === "ease_out_cubic") return 1 - Math.pow(1 - progress, 3);
+        if (tween.easing === "ease_out_sine") return Math.sin((Math.PI * progress) / 2);
         return progress;
     }
 

@@ -213,4 +213,18 @@ terrainPan.applySmoothing(100);
 assert.deepEqual([...terrainPan.pos], [5, 6, 0], "terrain-aware movement interpolates the height offset while sampling intermediate terrain");
 terrainPan.applySmoothing(100);
 assert.deepEqual([...terrainPan.pos], [10, 15, 0]);
+const speakerTurn = new Camera(0, -2, 0, 256, 0);
+speakerTurn.setScriptedPosition(3257.5, 0, 3449.5, 232, 100, () => -2);
+speakerTurn.setScriptedLook(3256.5, 0, 3449.5, 232, 100, () => -2);
+speakerTurn.applySmoothing(20);
+const facingHaig = speakerTurn.getYaw();
+speakerTurn.rotateScriptedBy(0, 1024, 5, "linear");
+speakerTurn.applySmoothing(40);
+assert.ok(speakerTurn.getYaw() !== facingHaig && speakerTurn.getYaw() !== (facingHaig + 1024) % 2048, "cam_rotateby turns over its cycles");
+speakerTurn.applySmoothing(60);
+// Within the look's own integer-angle truncation (1537 west, 511 east).
+assert.ok(Math.abs(speakerTurn.getYaw() - (facingHaig + 1024) % 2048) <= 2, "cam_rotateby turns half a circle to the other speaker");
+speakerTurn.rotateScriptedBy(0, -1024, 5, "ease_out_sine");
+speakerTurn.applySmoothing(100);
+assert.equal(speakerTurn.getYaw(), facingHaig, "and back");
 console.log("cycle camera easing and rotation: ok");

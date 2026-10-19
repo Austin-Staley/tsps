@@ -93,6 +93,10 @@ export function handleInboundWorld(msg: any): boolean {
                 client.camera.translateScriptedCamera(payload.dx, payload.dy);
                 return true;
             }
+            if (payload.mode === "rotate") {
+                client.camera.rotateScriptedBy(payload.pitch, payload.yaw, payload.cycles, payload.easing);
+                return true;
+            }
             // Camera packets carry global tile coordinates and height above that tile's
             // ground, in 1/128-tile units. Both movement and look target tile centres.
             if (payload.mode === "move" || payload.mode === "look") {

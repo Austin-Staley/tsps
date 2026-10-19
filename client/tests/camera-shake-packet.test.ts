@@ -8,6 +8,7 @@ import {
     encodeCameraLookAt,
     encodeCameraUnlock,
     encodeCameraTranslate,
+    encodeCameraRotateBy,
 } from "../../server/src/main/typescript/elvarg/net/protocol/ClientProtocol";
 
 // The server's camera shake and reset reach the client's CAMERA_CONTROL decoder intact.
@@ -31,7 +32,7 @@ for (const [encode, mode] of [[encodeCameraMoveTo, "move"], [encodeCameraLookAt,
             type: "camera", payload: { mode, x: 2850, y: 10230, height: -200, ...options },
         });
     }
-    for (const easing of ["linear", "ease_in_out_sine", "ease_out_cubic"] as const) {
+    for (const easing of ["linear", "ease_in_out_sine", "ease_out_cubic", "ease_out_sine"] as const) {
         const options = { cycles: 210, easing, heightRelative: false, ignoreTerrain: true, trackTarget: false };
         assert.deepEqual(decodeServerPacket(new Uint8Array(encode(3128, 3476, 400, options))), {
             type: "camera", payload: { mode, x: 3128, y: 3476, height: 400, ...options },
@@ -50,5 +51,14 @@ for (const unlock of [true, false]) {
 assert.deepEqual(decodeServerPacket(new Uint8Array(encodeCameraTranslate(-5376, 8000))), {
     type: "camera", payload: { mode: "translate", dx: -5376, dy: 8000 },
 });
+
+// Ethically Acquired Antiquities' interrogation turns between speakers with cam_rotateby.
+for (const yaw of [1024, -1024]) {
+    assert.deepEqual(decodeServerPacket(new Uint8Array(encodeCameraRotateBy(0, yaw, 5, "linear"))), {
+        type: "camera", payload: { mode: "rotate", pitch: 0, yaw, cycles: 5, easing: "linear" },
+    });
+}
+assert.throws(() => encodeCameraRotateBy(0, 1024, 0, "linear"), RangeError);
+assert.throws(() => encodeCameraRotateBy(0, 1024, 5, "unknown" as any), RangeError);
 
 console.log("camera shake packet: ok");

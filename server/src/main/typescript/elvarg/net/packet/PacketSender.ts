@@ -37,8 +37,10 @@ import {
   encodeCameraMoveTo,
   encodeCameraLookAt,
   encodeCameraUnlock,
+  encodeCameraRotateBy,
   encodeCameraTranslate,
   CameraMovementOptions,
+  CameraEasing,
   encodeWidgetSetColour, encodeAttackTimer,
   encodeCameraReset,
   encodeSetInteractionMode,
@@ -881,6 +883,11 @@ export class PacketSender {
 
   sendCameraLookAt(x: number, y: number, height: number, motion: boolean | CameraMovementOptions = true): this {
     this.player.getSession().sendClientPacket(encodeCameraLookAt(x, y, height, motion));
+    return this;
+  }
+
+  sendCameraRotateBy(pitch: number, yaw: number, cycles: number, easing: CameraEasing = "linear"): this {
+    this.player.getSession().sendClientPacket(encodeCameraRotateBy(pitch, yaw, cycles, easing));
     return this;
   }
 
