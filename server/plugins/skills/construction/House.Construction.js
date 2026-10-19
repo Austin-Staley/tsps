@@ -18,6 +18,7 @@ const Lectern = require("./Lectern.Construction");
 const Stairs = require("./Stairs.Construction");
 const Workshop = require("./Workshop.Construction");
 const Kitchen = require("./Kitchen.Construction");
+const Workbench = require("./Workbench.Construction");
 
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
@@ -659,7 +660,8 @@ function withArticle(name) {
 function getBuildMaterials(player, house, target, buildable) {
   if (constructionLevel(player) < buildable.level) return `You need Construction level ${buildable.level} to build that.`;
   if (!player.getInventory().contains(HAMMER_ID) || !player.getInventory().contains(SAW_ID)) return "You need a hammer and a saw to build that.";
-  const existing = house.getFurnitureAtTarget(target);
+  // A flatpack is made away from any hotspot: no furniture there to upgrade.
+  const existing = target ? house.getFurnitureAtTarget(target) : null;
   if (existing && !buildable.materials.some(material => material.source === existing.buildableKey)) return "Remove the existing furniture first, or select its next upgrade.";
   const requiredItems = new Map();
   for (const material of buildable.materials) {
@@ -677,7 +679,7 @@ function getBuildMaterials(player, house, target, buildable) {
     else if (material.source === "Tool.TINDER_BOX") {
       if (!player.getInventory().contains(TINDERBOX_ID)) return "You need a tinderbox to build that.";
     } else if (material.source && Data.BUILDABLE_BY_KEY.has(material.source)) {
-      if (house.getFurnitureAtTarget(target)?.buildableKey !== material.source) return `You need the ${material.source.replace(/_/g, " ").toLowerCase()} already built there.`;
+      if (target && house.getFurnitureAtTarget(target)?.buildableKey !== material.source) return `You need the ${material.source.replace(/_/g, " ").toLowerCase()} already built there.`;
     } else return "This build has an unsupported material requirement.";
   }
   for (const [itemId, amount] of requiredItems) {
@@ -720,18 +722,22 @@ function materialName(material) {
 }
 
 function furnitureCreationText(buildable) {
-  const name = formatBuildable(buildable);
+  // The build menu shows the cache's own name ("Crude wooden chair|Plank: 2<br>Nails: 2<br><br>").
+  const name = buildable.name ?? formatBuildable(buildable);
   const materials = buildable.materials.slice(0, 4).map((material) => `${materialName(material)}: ${material.amount.toLocaleString()}`);
   return `${name}|${[...materials, "", "", "", ""].slice(0, 4).join("<br>")}<br>`;
 }
 
-function chooseFurniture(player, house, target) {
-  const hotspot = Data.HOTSPOT_BY_KEY.get(target.hotspotKey);
-  if (!hotspot) return;
-  const choices = hotspot.buildables
+/** What a hotspot offers in its build menu, named groups expanded. */
+function hotspotChoices(hotspotKey) {
+  return (Data.HOTSPOT_BY_KEY.get(hotspotKey)?.buildables ?? [])
     .flatMap((key) => FURNITURE_GROUPS[key] ?? [key])
     .map((key) => Data.BUILDABLE_BY_KEY.get(key))
     .filter((buildable) => buildable?.menuRowId != null);
+}
+
+function chooseFurniture(player, house, target) {
+  const choices = hotspotChoices(target.hotspotKey);
   if (choices.length === 0) {
     player.getPacketSender().sendInterfaceRemoval();
     player.sendMessage("This construction hotspot does not have a buildable configured yet.");
@@ -1031,6 +1037,7 @@ function attach(api) {
   Stairs.attachStairs(api);
   Workshop.attachWorkshop(api);
   Kitchen.attachKitchen(api);
+  Workbench.attachWorkbench(api);
   api.persistAttribute(HOUSE_ATTRIBUTE, defaultHouse());
   api.onObjectFirstClick(HOUSE_PORTAL_IDS, enterDefaultHouse);
   api.onObjectSecondClick(HOUSE_PORTAL_IDS, enterNormalHouse);
@@ -1066,4 +1073,4 @@ function attach(api) {
   api.onPlayerLogout(logoutHouse);
 }
 
-Object.assign(module.exports, { houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, houseFor, saveHouse, rebuildHouse, isBuildingMode, constructionLevel, getBuildMaterials, useMaterial, withArticle, processOccupant, leftHouse, attach });
+Object.assign(module.exports, { houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, houseFor, saveHouse, rebuildHouse, isBuildingMode, constructionLevel, getBuildMaterials, useMaterial, withArticle, hotspotChoices, furnitureCreationText, processOccupant, leftHouse, attach });
