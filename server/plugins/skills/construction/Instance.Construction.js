@@ -6,6 +6,7 @@ const Servants = require("./Servants.Construction");
 const House = require("./House.Construction");
 const Dungeon = require("./Dungeon.Construction");
 const Menagerie = require("./Menagerie.Construction");
+const GamesRoom = require("./GamesRoom.Construction");
 const Data = require("./Data.Construction");
 const Palette = require("./Palette.Construction");
 const HOUSE_SIZE = 104;
@@ -441,6 +442,7 @@ class PlayerHouseInstance extends PrivateArea {
     if (!buildingMode) this.refreshDoors();
     Dungeon.refreshMonsters(this);
     Menagerie.refreshPets(this);
+    GamesRoom.resetGames(this);
     return sent;
   }
 
@@ -448,6 +450,11 @@ class PlayerHouseInstance extends PrivateArea {
   exitHouse(player, destination) {
     this.leave(player, false);
     player.moveTo(destination);
+  }
+
+  /** Spells on a games room orb work the game instead of hitting it. */
+  canCastOnNpc(player, npc, spell) {
+    return GamesRoom.castOnGame(player, npc, spell);
   }
 
   destroy() {
@@ -761,6 +768,12 @@ class PlayerHouseInstance extends PrivateArea {
     const room = this.getRoom({ x, y, plane });
     if (!room) return null;
     return this.getDoorTargetFromEdge(x, y, plane, relativeX & 7, relativeY & 7);
+  }
+
+  /** The south-west tile of the room at a grid position. */
+  roomCorner(position) {
+    const gridOffset = Math.floor((Palette.HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
+    return new Location(this.allocation.baseX + (position.x + gridOffset) * 8, this.allocation.baseY + (position.y + gridOffset) * 8, position.plane);
   }
 
   getRoomPositionAt(location) {

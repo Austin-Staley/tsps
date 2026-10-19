@@ -165,7 +165,18 @@ async function main() {
         );
     }
 
+    // Games room combat stones: poh_tbt_<stone>_<crush><stab><slash> crack forms and the broken one.
+    const stones: Record<string, Record<string, number>> = {};
+    for (const [id, name] of [...new Gamevals().namesOf(GamevalKind.NPC)].sort(([a], [b]) => a - b)) {
+        const match = /^poh_tbt_([a-z]+)_([0-3]{3}|destroyed)$/.exec(name);
+        if (match) (stones[match[1]] ??= {})[match[2]] = id;
+    }
+
     const outputs: Record<string, string> = {
+        "attack-stones.json":
+            "{\n" +
+            Object.entries(stones).map(([stone, forms]) => `  ${JSON.stringify(stone)}: ${JSON.stringify(forms)}`).join(",\n") +
+            "\n}\n",
         "furniture.json": rows(refreshed),
         "rooms.json": rows(refreshedRooms),
         "viewer-furniture.json":
@@ -176,7 +187,7 @@ async function main() {
     let stale = false;
     for (const [file, text] of Object.entries(outputs)) {
         const target = path.join(dataDir, file);
-        if (fs.readFileSync(target, "utf8") === text) continue;
+        if (fs.existsSync(target) && fs.readFileSync(target, "utf8") === text) continue;
         stale = true;
         if (!check) fs.writeFileSync(target, text);
         console.log(`${check ? "out of date" : "updated"}: ${file}`);

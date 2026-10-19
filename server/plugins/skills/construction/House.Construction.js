@@ -24,6 +24,7 @@ const CombatRoom = require("./CombatRoom.Construction");
 const Dungeon = require("./Dungeon.Construction");
 const ThroneRoom = require("./ThroneRoom.Construction");
 const Menagerie = require("./Menagerie.Construction");
+const GamesRoom = require("./GamesRoom.Construction");
 
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
@@ -1028,6 +1029,7 @@ function leftHouse(player, house) {
   standFromChair(player);
   syncKickOption(player);
   if (house.owner === player) advertisedHouses.delete(house);
+  GamesRoom.leftGamesRoom(player, house);
 }
 
 // Kourend and Varlamore house locations need a visit first (Estate agent check).
@@ -1063,6 +1065,7 @@ function attach(api) {
   Dungeon.attachDungeon(api);
   ThroneRoom.attachThroneRoom(api);
   Menagerie.attachMenagerie(api);
+  GamesRoom.attachGamesRoom(api);
   api.persistAttribute(HOUSE_ATTRIBUTE, defaultHouse());
   api.onObjectFirstClick(HOUSE_PORTAL_IDS, enterDefaultHouse);
   api.onObjectSecondClick(HOUSE_PORTAL_IDS, enterNormalHouse);
