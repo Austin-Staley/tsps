@@ -330,7 +330,7 @@ const pendingRoomMenus = new WeakMap();
 
 function chooseRoom(player, house, target) {
   if (houseFor(player) !== house || !isBuildingMode(player)) return;
-  pendingRoomMenus.set(player, { house, target });
+  pendingRoomMenus.set(player, { house, target, viewer: player.getInterfaceId() === HOUSE_VIEWER_INTERFACE });
   player.getPacketSender().sendInterface(ROOM_CREATION_INTERFACE)
     .sendInterfaceFlagsRange((ROOM_CREATION_INTERFACE << 16) | 4, 1, 29, 1);
 }
@@ -343,8 +343,38 @@ function selectRoomFromInterface(event) {
   const room = Data.CONSTRUCTION_ROOMS.find(candidate => candidate.id === id);
   if (!room) { event.player.sendMessage("That room is not available yet."); return true; }
   pendingRoomMenus.delete(event.player);
-  previewRoom(event.player, pending.house, pending.target, room);
+  if (pending.viewer) previewRoom(event.player, pending.house, pending.target, room);
+  else roomMenu(event.player, pending.house, pending.target, room, startingRotation(pending.house, pending.target, room));
   return true;
+}
+
+/** Turned so one of the room's doorways meets a neighbour's. */
+function startingRotation(house, target, room) {
+  const doors = house.templateDoorMask(room.key), adjacent = house.getAdjacentDoorMask(target);
+  return [0, 1, 2, 3].find(turn => rotatedDoors(doors, turn) & adjacent) ?? 0;
+}
+
+/**
+ * rsprox captures (poh_add_room:list, rev 229-236): a room picked at a door hotspot is built from
+ * the chatbox, "Select an option" with Rotate clockwise / Rotate anticlockwise / Build / Cancel
+ * (Build / Cancel for a room every way round alike). Rotating sends the same menu again; Build
+ * takes the coins and rebuilds the house.
+ */
+function roomMenu(player, house, target, room, rotation) {
+  if (houseFor(player) !== house || !isBuildingMode(player)) return;
+  const problem = house.canPlaceRoom(room, target, constructionLevel(player));
+  if (problem) {
+    player.getPacketSender().sendInterfaceRemoval();
+    return player.sendMessage(problem);
+  }
+  const viewer = { house, destination: target, newRoom: room, rotation };
+  const build = () => buildRoom(player, viewer, false);
+  if (house.templateDoorMask(room.key) === 15) return api.sendMultiChatboxPrompt(player, "Select an option", "Build", build, "Cancel", () => {});
+  api.sendMultiChatboxPrompt(player, "Select an option",
+    "Rotate clockwise", () => roomMenu(player, house, target, room, (rotation + 1) & 3),
+    "Rotate anticlockwise", () => roomMenu(player, house, target, room, (rotation + 3) & 3),
+    "Build", build,
+    "Cancel", () => {});
 }
 
 /** A room type's doorways turned to a rotation, as getAdjacentDoorMask turns its neighbours'. */
@@ -353,8 +383,8 @@ function rotatedDoors(doors, rotation) {
 }
 
 /**
- * rsprox captures (poh_add_room:list): the pick doesn't build the room. The house viewer opens with
- * it placed at the spot (poh_viewer_destination, _selectedroom, _type, _enable_rot and the
+ * rsprox captures (poh_add_room:list): a room picked from the house viewer isn't built straight away
+ * either. The viewer opens with it placed at the spot (poh_viewer_destination, _selectedroom, _type, _enable_rot and the
  * doorways), to be turned with Clockwise/Anticlockwise and built with Done, which takes the coins,
  * rebuilds the house and opens the viewer again. It starts turned so a doorway meets a neighbour's.
  */
@@ -365,15 +395,14 @@ function previewRoom(player, house, target, room) {
     player.getPacketSender().sendInterfaceRemoval();
     return player.sendMessage(problem);
   }
-  const doors = house.templateDoorMask(room.key), adjacent = house.getAdjacentDoorMask(target);
-  const rotation = [0, 1, 2, 3].find(turn => rotatedDoors(doors, turn) & adjacent) ?? 0;
+  const rotation = startingRotation(house, target, room);
   player.getPacketSender().sendInterface(HOUSE_VIEWER_INTERFACE);
   const viewer = { house, rooms: [], rotation, mode: "rotate", destination: target, newRoom: room };
   houseViewers.set(player, viewer);
   refreshHouseViewer(player, viewer);
 }
 
-function buildRoom(player, viewer) {
+function buildRoom(player, viewer, reopenViewer = true) {
   const { house, destination: target, newRoom: room, rotation } = viewer;
   if (houseFor(player) !== house || !isBuildingMode(player)) return;
   const problem = house.canPlaceRoom(room, target, constructionLevel(player));
@@ -383,7 +412,7 @@ function buildRoom(player, viewer) {
   house.placeRoom(target, room, rotation);
   rebuildHouse(player, house);
   player.sendMessage(`You build ${withArticle(room.name)}.`);
-  openHouseViewer(player);
+  if (reopenViewer) openHouseViewer(player);
 }
 
 function manageRoom(player, house, target) {

@@ -94,12 +94,23 @@ class PlayerHouseInstance extends PrivateArea {
       for (const column of plane) {
         for (let y = 0; y < column.length; y++) {
           const room = column[y];
-          if (!room?.furnitureByLocation) continue;
+          if (!room) continue;
           const furnitureByLocation = {};
-          for (const saved of Object.values(room.furnitureByLocation)) {
+          for (const saved of Object.values(room.furnitureByLocation ?? {})) {
             const template = this.getTemplateHotspot(room.roomKey, saved.sourceObjectId, saved.localX, saved.localY);
             const furniture = template ? { ...saved, sourceObjectId: template.id, type: template.type, face: template.face } : saved;
             furnitureByLocation[this.furnitureKey(furniture.localX, furniture.localY, furniture.type)] = furniture;
+          }
+          // A new house's save (and the oldest saves) list furniture by hotspot only, without its
+          // placements: the starting garden's exit portal was never drawn. Place each of them.
+          for (const [hotspotKey, buildableKey] of Object.entries(room.furniture ?? {})) {
+            if (!buildableKey || Object.values(furnitureByLocation).some(furniture => furniture.hotspotKey === hotspotKey)) continue;
+            const [placement] = this.hotspotPlacements(room.roomKey, hotspotKey);
+            if (!placement) continue;
+            furnitureByLocation[this.furnitureKey(placement.localX, placement.localY, placement.type)] = {
+              buildableKey, hotspotKey, sourceObjectId: placement.id,
+              localX: placement.localX, localY: placement.localY, type: placement.type, face: placement.face,
+            };
           }
           // Older saves furnished only the clicked placement of a hotspot (one tile of a rug).
           for (const furniture of Object.values(furnitureByLocation)) {
@@ -491,7 +502,8 @@ class PlayerHouseInstance extends PrivateArea {
         const room = this.save.rooms[1][x][y];
         if (!room || !this.hasExitPortal(room)) continue;
         const savedExit = Object.values(room.furnitureByLocation ?? {}).find((furniture) => furniture.buildableKey === "EXIT_PORTAL");
-        const local = Palette.rotateHotspot(savedExit?.localX ?? 3, savedExit?.localY ?? 2, room.rotation);
+        // In front of the portal (it is 2x2, from its saved corner), not on it.
+        const local = Palette.rotateHotspot(savedExit?.localX ?? 3, savedExit ? savedExit.localY - 1 : 2, room.rotation);
         return new Location(this.allocation.baseX + (gridOffset + x) * 8 + local.x, this.allocation.baseY + (gridOffset + y) * 8 + local.y, 1);
       }
     }
