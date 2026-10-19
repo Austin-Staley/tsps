@@ -33,6 +33,7 @@ jobs:
                   fetch-depth: 1
 
             - uses: anthropics/claude-code-action@v1
+              id: claude
               with:
                   anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
                   github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -55,3 +56,11 @@ jobs:
                       Put specific findings on the lines they concern with inline comments, and keep the summary comment short: what the PR does, then the findings ranked by severity. Do not pad the review with praise or style nits the surrounding code does not follow. If there is nothing worth changing, say so in one line.
 
                       For any other @claude question, answer it directly from the code.'
+
+            # The action hides Claude's output on public repos. When a run fails, print only the
+            # final result message (an API or auth error), not the tool output.
+            - name: Show Claude error
+              if: failure() && steps.claude.outputs.execution_file != ''
+              env:
+                  EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+              run: jq -r '.[] | select(.type == "result") | {result, errors}' "$EXECUTION_FILE"
