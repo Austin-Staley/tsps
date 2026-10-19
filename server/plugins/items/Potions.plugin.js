@@ -406,9 +406,9 @@ function applyStaminaRequest({player,energy=20,durationMs=STAMINA_DURATION_MS}) 
   player.setAttribute(ATTR_STAMINA_ACC, 0);
 }
 
-function applyDivine(player, baseEffect, affectedSkills) {
+function applyDivine(player, baseEffect, affectedSkills, { damage = 10 } = {}) {
   baseEffect(player);
-  damageButKeepAlive(player, 10);
+  if (damage > 0) damageButKeepAlive(player, damage);
 
   const targets = affectedSkills
     .filter(Boolean)
@@ -919,6 +919,35 @@ registerPotion({
   effect: applyMix(applyStamina),
 });
 
+/**
+ * Moonlight potion (Wiki): its strength comes from the drinker's Herblore level. Prayer: the
+ * greater of 7 + 25% of the Prayer level and 7 + 30% of the Herblore level, nothing below 38
+ * Herblore. Attack, Strength and Defence: 3 + 10% from 33 Herblore, 5 + 15% from 45 (Attack),
+ * 55 (Strength) and 66 (Defence); from 70 Defence is 7 + 20% and held like a divine potion's for
+ * five minutes, without the divine potions' damage.
+ */
+function applyMoonlightPotion(player) {
+  const herblore = getCurrentLevel(player, Skill.HERBLORE);
+  if (herblore >= 38) {
+    const prayer = getMaxLevel(player, Skill.PRAYER);
+    restorePrayer(player, Math.max(Math.floor(prayer * 0.25), Math.floor(herblore * 0.3)) + 7, 0);
+  }
+  if (herblore < 33) return;
+  const tier = (from) => (herblore >= from ? [5, 0.15] : [3, 0.1]);
+  boostSkill(player, Skill.ATTACK, ...tier(45));
+  boostSkill(player, Skill.STRENGTH, ...tier(55));
+  if (herblore >= 70) {
+    applyDivine(player, (p) => boostSkill(p, Skill.DEFENCE, 7, 0.2), [Skill.DEFENCE], { damage: 0 });
+  } else {
+    boostSkill(player, Skill.DEFENCE, ...tier(66));
+  }
+}
+
+registerPotion({
+  name: "Moonlight potion",
+  chains: [doseChain("MOONLIGHT_POTION_4_", "MOONLIGHT_POTION_3_", "MOONLIGHT_POTION_2_", "MOONLIGHT_POTION_1_")],
+  effect: applyMoonlightPotion,
+});
 registerPotion({
   name: "Divine super attack potion",
   chains: [doseChain("DIVINE_SUPER_ATTACK_POTION_4_", "DIVINE_SUPER_ATTACK_POTION_3_", "DIVINE_SUPER_ATTACK_POTION_2_", "DIVINE_SUPER_ATTACK_POTION_1_")],
