@@ -15,10 +15,10 @@ function listHotspots({ player }) {
   }
   player.sendMessage(`${room.roomKey} at ${position.x},${position.y} plane ${position.plane}, rotation ${room.rotation}:`);
   for (const tile of house.hotspotTiles(position)) {
-    const hotspot = Data.HOTSPOT_BY_OBJECT_ID.get(tile.id);
-    if (!hotspot) continue;
-    const name = CacheDefinitions.getObject?.(tile.id)?.name ?? "";
-    player.sendMessage(`${hotspot.key} ${tile.id} "${name}" at ${tile.x} ${tile.y} ${tile.plane}`);
+    const name = CacheDefinitions.getObject(tile.id)?.name ?? "";
+    if (!/space|hotspot/i.test(name)) continue;
+    const key = Data.HOTSPOT_BY_OBJECT_ID.get(tile.id)?.key ?? "(not in hotspots.json)";
+    player.sendMessage(`${key} ${tile.id} "${name}" at ${tile.x} ${tile.y} ${tile.plane}`);
   }
 }
 

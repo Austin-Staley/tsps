@@ -10,6 +10,11 @@ const Altars = require("./Altars.Construction");
 const Data = require("./Data.Construction");
 const Instance = require("./Instance.Construction");
 const Commands = require("./Commands.Construction");
+const JewelleryBox = require("./JewelleryBox.Construction");
+const Menu = require("./Menu.Construction");
+const Mounted = require("./Mounted.Construction");
+const SuperiorGarden = require("./SuperiorGarden.Construction");
+const Lectern = require("./Lectern.Construction");
 
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
@@ -278,6 +283,11 @@ function constructionLevel(player) {
   return player.getSkillManager().getCurrentLevel(Skill.CONSTRUCTION);
 }
 
+/** Saves the owner's house after furniture changed in place (no rebuild). */
+function saveHouse(house) {
+  house.owner.setAttribute(HOUSE_ATTRIBUTE, house.save);
+  api.emitCustomEvent("persistence:save", { player: house.owner, reason: "construction" });
+}
 function rebuildHouse(player, house) {
   player.setAttribute(HOUSE_ATTRIBUTE, house.save);
   api.emitCustomEvent("persistence:save", { player, reason: "construction" });
@@ -319,7 +329,7 @@ function buildRoom(player, house, target, room) {
   player.getInventory().delete(COINS_ID, room.cost);
   house.placeRoom(target, room);
   rebuildHouse(player, house);
-  player.sendMessage(`You build a ${room.name}.`);
+  player.sendMessage(`You build ${withArticle(room.name)}.`);
 }
 
 function manageRoom(player, house, target) {
@@ -632,7 +642,12 @@ function handleHouseViewer(event) {
 }
 
 function formatBuildable(buildable) {
-  return buildable.key.replace(/_/g, " ").toLowerCase();
+  const name = Data.BUILDABLE_BY_KEY.get(buildable.key)?.name ?? buildable.key.replace(/_/g, " ");
+  return name.toLowerCase();
+}
+
+function withArticle(name) {
+  return `${/^[aeiou]/i.test(name) ? "an" : "a"} ${name}`;
 }
 
 function getBuildMaterials(player, house, target, buildable) {
@@ -688,7 +703,7 @@ function buildFurniture(player, house, target, buildable) {
   house.setFurniture(target, buildable);
   player.getSkillManager().addExperiences(Skill.CONSTRUCTION, buildable.experience);
   rebuildHouse(player, house);
-  player.sendMessage(`You build a ${formatBuildable(buildable)}.`);
+  player.sendMessage(`You build ${withArticle(formatBuildable(buildable))}.`);
 }
 
 function materialName(material) {
@@ -1002,6 +1017,11 @@ const furnitureObjectIds = [...new Set(Data.CONSTRUCTION_BUILDABLES.flatMap(buil
 function attach(api) {
   EstateAgent.attachEstateAgents(api);
   Servants.attachServants(api);
+  Menu.attachMenus(api);
+  JewelleryBox.attachJewelleryBoxes(api);
+  Mounted.attachMountedItems(api);
+  SuperiorGarden.attachSuperiorGarden(api);
+  Lectern.attachLecterns(api);
   api.persistAttribute(HOUSE_ATTRIBUTE, defaultHouse());
   api.onObjectFirstClick(HOUSE_PORTAL_IDS, enterDefaultHouse);
   api.onObjectSecondClick(HOUSE_PORTAL_IDS, enterNormalHouse);
@@ -1037,4 +1057,4 @@ function attach(api) {
   api.onPlayerLogout(logoutHouse);
 }
 
-Object.assign(module.exports, { houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, processOccupant, leftHouse, attach });
+Object.assign(module.exports, { houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, houseFor, saveHouse, processOccupant, leftHouse, attach });

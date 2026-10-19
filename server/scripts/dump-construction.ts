@@ -3,7 +3,7 @@
 //   110 furniture    - level, materials and menu icon of every buildable furniture row
 //   111 poh_room     - room cost and level, and the hotspot rows of each room
 //   112 poh_hotspot  - the furniture rows each hotspot offers, in menu order
-// Cache-derived fields refresh; experience, built loc ids, the build animation, tool
+// Cache-derived fields (name, level, materials, menu icon) refresh; experience, built loc ids, the build animation, tool
 // requirements and upgrade sources (the furniture that must already stand there) are
 // server-owned and kept. Rows the data doesn't have yet are listed, not added.
 //
@@ -28,6 +28,7 @@ const HOTSPOT_TABLE = 112;
 
 // Table 110 columns.
 const FURNITURE_MENU_OBJ = 0;
+const FURNITURE_NAME = 1;
 const FURNITURE_MATERIALS = 2; // (obj, count) pairs
 const FURNITURE_LEVEL = 3; // (stat, level)
 const FURNITURE_HIDDEN = 5;
@@ -45,6 +46,7 @@ const ANY_NAILS_OBJ = 32923;
 type Material = { itemId?: number; amount: number; source?: string };
 type Furniture = {
     key: string;
+    name?: string;
     level: number;
     experience: number;
     menuItemId: number;
@@ -122,6 +124,7 @@ async function main() {
         const { hidden: _previous, ...rest } = entry;
         return {
             ...rest,
+            name: (columns.get(FURNITURE_NAME) ?? [entry.name])[0],
             level: (columns.get(FURNITURE_LEVEL) ?? [0, entry.level])[1],
             menuItemId: (columns.get(FURNITURE_MENU_OBJ) ?? [entry.menuItemId])[0],
             ...(hidden ? { hidden } : {}),

@@ -1,5 +1,5 @@
 [
-  {"key":"PORTAL_NEXUS","id":28,"name":"portal nexus","level":72,"cost":200000,"sourceChunkX":235,"sourceChunkY":888,"outdoors":false,"basement":false,"hotspots":["PORTAL_NEXUS","CURTAIN","RUG"]},
+  {"key":"PORTAL_NEXUS","id":28,"name":"portal nexus","level":72,"cost":200000,"sourceChunkX":235,"sourceChunkY":888,"outdoors":false,"basement":false,"hotspots":["PORTAL_NEXUS","NEXUS_CURTAINS","NEXUS_RUG","NEXUS_AMULET"]},
   {"key":"SUPERIOR_GARDEN","id":26,"name":"superior garden","level":65,"cost":75000,"sourceChunkX":237,"sourceChunkY":880,"outdoors":true,"basement":false,"hotspots":["TELEPORT_SPACE","TOPIARY_SPACE","POOL_SPACE","THEME_SPACE","FENCE_SPACE","GARDEN_BENCH_1","GARDEN_BENCH_2"]},
   {"key":"MENAGERIE_OUTDOORS","id":25,"name":"outdoor menagerie","level":37,"cost":30000,"sourceChunkX":239,"sourceChunkY":880,"outdoors":true,"basement":false,"hotspots":["PET_HOUSE","EMPTY","HABITAT","SCRATCHING_POST","ARENA","PET_LIST","PET_FEEDER"]},
   {"key":"GARDEN","id":2,"name":"garden","level":1,"cost":1000,"sourceChunkX":232,"sourceChunkY":881,"outdoors":true,"basement":false,"hotspots":["CENTERPIECE","BIG_TREE","SMALL_TREE","BIG_PLANT_1","BIG_PLANT_2","SMALL_PLANT_1","SMALL_PLANT_2","GARDEN_TIP_JAR"]},

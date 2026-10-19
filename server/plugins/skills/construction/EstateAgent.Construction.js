@@ -3,9 +3,7 @@
 const { api, Skill, ItemIdentifiers: Items, DialogueChainBuilder, NpcDialogue, ActionDialogue, EndDialogue } = require("./Core.Construction");
 const Estate = require("./Estate.Construction");
 const House = require("./House.Construction");
-const MENU = 187;
-const MENU_OPTIONS = (MENU << 16) | 3;
-const pendingMenus = new WeakMap();
+const Menu = require("./Menu.Construction");
 
 function say(event, text, next) {
   event.player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
@@ -104,13 +102,9 @@ function offerCape(event) {
 function showMenu(event, kind) {
   if (House.houseStateFor(event.player).owned === false) { offerHouse(event); return true; }
   const choices = kind === "location" ? Estate.HOUSE_LOCATIONS : Estate.HOUSE_STYLES;
-  const sender = event.player.getPacketSender();
-  sender.sendInterfaceRemoval();
-  sender.sendInterface(MENU);
-  sender.sendClientScript(217, 1, kind === "location" ? "Move house" : "Redecorate house",
-    choices.map(choice => `${choice.name} (level ${choice.level}) - ${choice.cost.toLocaleString("en-US")} coins`).join("|"));
-  sender.sendInterfaceFlagsRange(MENU_OPTIONS, 0, choices.length - 1, 1);
-  pendingMenus.set(event.player, { event, kind });
+  Menu.openMenu(event.player, kind === "location" ? "Move house" : "Redecorate house",
+    choices.map(choice => `${choice.name} (level ${choice.level}) - ${choice.cost.toLocaleString("en-US")} coins`),
+    index => selectMenu(event, kind, index));
   return true;
 }
 
@@ -168,23 +162,15 @@ function changeHouse(event, kind, index) {
   say(event, kind === "location" ? `Your house has been moved to ${choice.name}.` : `Your house has been redecorated in the ${choice.name} style.`);
 }
 
-function selectMenu(event) {
-  if (event.groupId !== MENU || event.childId !== 3) return;
-  const pending = pendingMenus.get(event.player);
-  if (!pending) return;
-  event.handled = true;
-  if (event.player.getInterfaceId() !== MENU || !stillAtAgent(pending.event)) return;
-  const index = event.slot ?? event.action;
-  const choices = pending.kind === "location" ? Estate.HOUSE_LOCATIONS : Estate.HOUSE_STYLES;
-  if (!Number.isInteger(index) || index < 0 || index >= choices.length) return;
-  pendingMenus.delete(event.player);
-  event.player.getPacketSender().sendInterfaceRemoval();
+function selectMenu(event, kind, index) {
+  if (!stillAtAgent(event)) return;
+  const choices = kind === "location" ? Estate.HOUSE_LOCATIONS : Estate.HOUSE_STYLES;
   const choice = choices[index];
-  const style = pending.kind === "style" ? Estate.HOUSE_STYLES[index] : undefined;
+  const style = kind === "style" ? Estate.HOUSE_STYLES[index] : undefined;
   const usesBlueprint = style?.blueprint && (index === 7 || (!House.houseStateFor(event.player).unlockedStyles?.includes(index)
     && !(index === 12 && event.player.getPacketSender().getVarbit(19672) === 1)));
-  api.sendMultiChatboxPrompt(event.player, `${pending.kind === "location" ? "Move" : "Redecorate"} your house: ${choice.name}?`,
-    `Yes (${choice.cost.toLocaleString("en-US")} coins${usesBlueprint ? " and blueprints" : ""}).`, () => changeHouse(pending.event, pending.kind, index),
+  api.sendMultiChatboxPrompt(event.player, `${kind === "location" ? "Move" : "Redecorate"} your house: ${choice.name}?`,
+    `Yes (${choice.cost.toLocaleString("en-US")} coins${usesBlueprint ? " and blueprints" : ""}).`, () => changeHouse(event, kind, index),
     "No, thanks.", () => {});
 }
 
@@ -206,15 +192,11 @@ function talk(event) {
   return true;
 }
 
-function closeMenu({ player }) { pendingMenus.delete(player); }
 
 function attachEstateAgents(api) {
   api.onNpcInteraction("Estate agent", { "Talk-to": talk, Relocate: relocate, Redecorate: redecorate });
   api.onNpcInteraction("Estate Agent", { "Talk-to": talk, Relocate: relocate, Redecorate: redecorate });
   api.onNpcInteraction("Alwyn", { "Talk-to": talk, Relocate: relocate, Redecorate: redecorate });
-  api.onInterfaceActionClick(selectMenu);
-  api.onCustomEvent("interface:close", closeMenu);
-  api.onPlayerLogout(closeMenu);
 }
 
 Object.assign(module.exports, { attachEstateAgents });
