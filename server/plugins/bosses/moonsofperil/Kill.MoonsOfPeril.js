@@ -10,6 +10,10 @@
  */
 const Common = require("./Common.MoonsOfPeril");
 
+// Ticks after login before missed kills are re-sent, so the quest's transcript opens on a
+// loaded client.
+const LOGIN_RESEND_TICKS = 2;
+
 function landing(player, moon) {
   const { landing: rule } = Common.data.moons[moon];
   const after = Object.entries(rule.ifDead ?? {}).find(([other]) => Common.isDead(player, other));
@@ -47,13 +51,31 @@ function kill(fight) {
     if (player.isRegistered()) Common.varbit(player, "hideNpc", 0);
   });
   Common.later(timing.landTicks, () => {
+    // A logout here is caught up at login (resendKills).
     if (!player.isRegistered()) return;
-    fight.end();
-    player.getMovementQueue().reset();
-    player.moveTo(camp);
+    // A death in the meantime has ended the fight and moved the player already.
+    if (!fight.ended) {
+      fight.end();
+      player.getMovementQueue().reset();
+      player.moveTo(camp);
+    }
     Common.closePortal(player);
     Common.api.emitCustomEvent("moons-of-peril:killed", { player, moon });
   });
 }
 
-module.exports = { kill, landing };
+/**
+ * Re-sends the kill of every subdued Moon after login, for a kill whose landing a logout cut
+ * short. The quest counts each Moon once, so the ones it already has change nothing.
+ */
+function resendKills({ player }) {
+  if (Common.deadMask(player) === 0) return;
+  Common.later(LOGIN_RESEND_TICKS, () => {
+    if (!player.isRegistered()) return;
+    for (const moon of Common.MOONS) {
+      if (Common.isDead(player, moon)) Common.api.emitCustomEvent("moons-of-peril:killed", { player, moon });
+    }
+  });
+}
+
+module.exports = { kill, landing, resendKills };

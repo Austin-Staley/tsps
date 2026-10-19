@@ -49,8 +49,9 @@
  *    portals; the boss rooms' entrances land in front of each Moon's statue.
  *  - The Moons themselves are the MoonsOfPeril plugin's (bosses/MoonsOfPeril):
  *    during the fight stages it lets the player through the statues
- *    ("moons-of-peril:can-enter"), and each kill ("moons-of-peril:killed")
- *    counts here and plays the defeat transcript.
+ *    ("moons-of-peril:can-enter"), each kill ("moons-of-peril:killed")
+ *    counts here and plays the defeat transcript, and from the ritual on it
+ *    runs the camps ("moons-of-peril:camps-open").
  *  - The talisman "Locate" step only acts within four tiles of the summon point
  *    (1525,9580,0); elsewhere it repeats Attala's line. The live north/south and
  *    east/west pull messages are not in the transcript dump and are not authored.
@@ -1459,6 +1460,11 @@ module.exports = function registerPerilousMoonsQuest(api) {
     request.allow = true;
   }
 
+  /** Neypotzli's camps are the MoonsOfPeril plugin's from the ritual on, Moons done included. */
+  function handleCampsOpen(request) {
+    if (request?.player && stageOf(request.player) >= STAGE_RITUAL) request.open = true;
+  }
+
   function handleNpcDeath(event) {
     const npc = event.npc;
     const player = npc?.getOwner?.() ?? (event.killer?.isPlayer?.() ? event.killer : null);
@@ -1745,6 +1751,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
   api.onZoneEnter(ECLIPSE_MOON_ZONE, handleEclipseMoonEnter);
   api.onCustomEvent("moons-of-peril:can-enter", handleCanEnter);
   api.onCustomEvent("moons-of-peril:killed", handleMoonKilled);
+  api.onCustomEvent("moons-of-peril:camps-open", handleCampsOpen);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

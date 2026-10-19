@@ -12,6 +12,7 @@ const Common = require("./Common.MoonsOfPeril");
 const Cycle = require("./Cycle.MoonsOfPeril");
 const Curses = require("./Curses.MoonsOfPeril");
 const { Fight } = require("./Fight.MoonsOfPeril");
+const Kill = require("./Kill.MoonsOfPeril");
 
 const QUEST = "perilous_moons";
 const ALREADY_SUBDUED = (name) => `You have already subdued the ${name}. Claim your reward from the Lunar Chest first.`;
@@ -234,6 +235,7 @@ function attachArena(api) {
   api.onObjectInteraction("Stairs", { "Quick-escape": leaveByStairs, Escape: leaveByStairs });
   api.onNpcHitModify(hitMoon);
   api.onPlayerLogin(recoverOnLogin);
+  api.onPlayerLogin(Kill.resendKills);
   api.onPlayerDeath(endOnDeath);
   api.onCustomEvent("gravestones:grave-location", graveOutside);
 }

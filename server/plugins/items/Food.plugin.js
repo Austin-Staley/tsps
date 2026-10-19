@@ -134,9 +134,9 @@ function canAnglerfishOverheal(player) {
   return combat?.getTarget?.() == null && combat?.getAttacker?.() == null;
 }
 
-/** A heal from the data: a number, a { min, max } roll, or { flat, percent } of Hitpoints level. */
 /**
- * The heal of a bite. `levels` (skill name -> base level) feeds `lowestOf`: the lowest of each
+ * The heal of a bite, from the data: a number, a { min, max } roll, { flat, percent } of
+ * Hitpoints level, or `lowestOf`. `levels` (skill name -> base level) feeds `lowestOf`: the lowest of each
  * skill's level divided by its number, rounded as `round` says (the Neypotzli foods).
  */
 function healAmount(heal, maxHp, random = Math.random, levels = () => 0) {

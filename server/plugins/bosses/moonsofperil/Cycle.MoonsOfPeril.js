@@ -188,6 +188,8 @@ class MoonArena {
     this.lastPhase = phase;
     if (this.fights.size === 0) {
       if (this.circle || this.oldCircle) this.clearCircle();
+      // Nobody is left to see a special bring the Moon back (Blood Rain's backAt).
+      if (this.hidden) this.setHidden(false);
       return;
     }
     const where = this.position(phase);

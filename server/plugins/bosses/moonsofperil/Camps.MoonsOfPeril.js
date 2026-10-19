@@ -22,14 +22,14 @@ const Common = require("./Common.MoonsOfPeril");
 const supplies = () => Common.data.supplies;
 const itemId = (name) => Common.core.ItemIdentifiers[name];
 
-/** The quest is past its gathering (the statues let the player through), or done. */
+/** The quest is past its gathering (from the ritual on, Moons done included), or done. */
 function afterGathering(player) {
   const done = { player, key: "perilous_moons", complete: false };
   Common.api.emitCustomEvent("quest:is-complete", done);
   if (done.complete) return true;
-  const during = { player, moon: null, allow: false };
-  Common.api.emitCustomEvent("moons-of-peril:can-enter", during);
-  return during.allow === true;
+  const request = { player, open: false };
+  Common.api.emitCustomEvent("moons-of-peril:camps-open", request);
+  return request.open === true;
 }
 
 /** A chance that grows from `low` at `from` to `high` at 99 with the skill's level. */

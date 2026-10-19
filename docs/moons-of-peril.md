@@ -9,7 +9,9 @@ page is the research behind the implementation. It is built from rsprox captures
 It is one plugin, `server/plugins/bosses/MoonsOfPeril.plugin.js`, with one unit per part in
 `server/plugins/bosses/moonsofperil/` and its data in `server/plugins/bosses/data/moons-of-peril.json`.
 The Perilous Moons quest lets the player through the statues during its fight stages
-(`moons-of-peril:can-enter`) and counts each kill (`moons-of-peril:killed`).
+(`moons-of-peril:can-enter`), counts each kill (`moons-of-peril:killed`, re-sent at login for a
+kill whose landing a logout cut short), and opens the camps from the ritual stage on
+(`moons-of-peril:camps-open`).
 
 ## Layout
 
