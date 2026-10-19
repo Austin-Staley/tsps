@@ -131,7 +131,8 @@ function testSymbols(session, player, part = "both") {
   const [px, py] = session.authored(player.getLocation());
   const tiles = [];
   for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) tiles.push([px + dx, py + dy]);
-  const viewers = session.viewers();
+  // The player too: the public fight only shows its graphics near the arena, and this runs anywhere.
+  const viewers = [...new Set([...session.viewers(), player])];
   for (const tile of tiles) {
     if (part !== "strike") session.setLoc(tile, Shared.SCENERY_SHAPE, Shared.randomBetween(0, 3), Shared.LOC.SYMBOL);
     if (part !== "glow") session.graphic(tile, Shared.GFX.SYMBOL, part === "strike" ? 0 : SYMBOL_DELAY, viewers);
