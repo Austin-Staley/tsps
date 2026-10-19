@@ -92,6 +92,16 @@ class PlayerHouseInstance extends PrivateArea {
             const furniture = template ? { ...saved, sourceObjectId: template.id, type: template.type, face: template.face } : saved;
             furnitureByLocation[this.furnitureKey(furniture.localX, furniture.localY, furniture.type)] = furniture;
           }
+          // Older saves furnished only the clicked placement of a hotspot (one tile of a rug).
+          for (const furniture of Object.values(furnitureByLocation)) {
+            for (const placement of this.hotspotPlacements(room.roomKey, furniture.hotspotKey)) {
+              const key = this.furnitureKey(placement.localX, placement.localY, placement.type);
+              furnitureByLocation[key] ??= {
+                buildableKey: furniture.buildableKey, hotspotKey: furniture.hotspotKey, sourceObjectId: placement.id,
+                localX: placement.localX, localY: placement.localY, type: placement.type, face: placement.face,
+              };
+            }
+          }
           column[y] = { ...room, furnitureByLocation };
         }
       }
@@ -145,11 +155,11 @@ class PlayerHouseInstance extends PrivateArea {
     location,
     sourceObjectId,
   ) {
-    const hotspot = Data.HOTSPOT_BY_OBJECT_ID.get(sourceObjectId);
     const position = this.getRoomPositionAt(location);
     const room = position ? this.getRoom(position) : null;
     const template = room ? Data.ROOM_BY_KEY.get(room.roomKey) : null;
-    if (!hotspot || !position || !room || !template || !template.hotspots.includes(hotspot.key)) return null;
+    const hotspot = room ? Data.hotspotIn(room.roomKey, sourceObjectId) : null;
+    if (!hotspot || !position || !room || !template) return null;
 
     const placement = PlayerHouseInstance.getTemplateObjects(Estate.houseStyleIndex(this.save)).find(object => {
       if (object.id !== sourceObjectId || object.sourceChunkX !== template.sourceChunkX || object.sourceChunkY !== template.sourceChunkY) return false;
@@ -187,24 +197,38 @@ class PlayerHouseInstance extends PrivateArea {
     return room?.furnitureByLocation?.[this.furnitureKey(target.localX, target.localY, target.type)] ?? null;
   }
 
+  /** Every template placement of `hotspotKey` in a room of type `roomKey` (a rug's tiles, all curtains). */
+  hotspotPlacements(roomKey, hotspotKey) {
+    const template = Data.ROOM_BY_KEY.get(roomKey);
+    if (!template) return [];
+    return PlayerHouseInstance.getTemplateObjects(Estate.houseStyleIndex(this.save)).filter(object =>
+      object.sourceChunkX === template.sourceChunkX && object.sourceChunkY === template.sourceChunkY
+      && Data.hotspotIn(roomKey, object.id)?.key === hotspotKey);
+  }
+
+  /** Building on a hotspot furnishes all of its placements in the room. */
   setFurniture(target, buildable) {
     const room = this.getRoom(target.position);
     if (!room) return;
-    const key = this.furnitureKey(target.localX, target.localY, target.type);
-    const furniture = {
-      ...this.getFurnitureAtTarget(target),
-      buildableKey: buildable.key,
-      hotspotKey: target.hotspotKey,
-      sourceObjectId: target.sourceObjectId,
-      localX: target.localX,
-      localY: target.localY,
-      type: target.type,
-      face: target.face,
-    };
+    const furnitureByLocation = { ...room.furnitureByLocation };
+    const placements = this.hotspotPlacements(room.roomKey, target.hotspotKey);
+    for (const placement of placements.length ? placements : [{ ...target, id: target.sourceObjectId }]) {
+      const key = this.furnitureKey(placement.localX, placement.localY, placement.type);
+      furnitureByLocation[key] = {
+        ...furnitureByLocation[key],
+        buildableKey: buildable.key,
+        hotspotKey: target.hotspotKey,
+        sourceObjectId: placement.id,
+        localX: placement.localX,
+        localY: placement.localY,
+        type: placement.type,
+        face: placement.face,
+      };
+    }
     this.save.rooms[target.position.plane][target.position.x][target.position.y] = {
       ...room,
       furniture: { ...room.furniture, [target.hotspotKey]: buildable.key },
-      furnitureByLocation: { ...room.furnitureByLocation, [key]: furniture },
+      furnitureByLocation,
     };
   }
 
@@ -223,12 +247,11 @@ class PlayerHouseInstance extends PrivateArea {
     const room = position ? this.getRoom(position) : null;
     const furniture = this.getFurnitureAt(location, objectId, type);
     if (!position || !room || !furniture) return null;
-    const remaining = { ...room.furnitureByLocation };
-    delete remaining[this.furnitureKey(furniture.localX, furniture.localY, type)];
+    // Removing takes the furniture off every placement of its hotspot, as building put it there.
+    const remaining = Object.fromEntries(Object.entries(room.furnitureByLocation ?? {})
+      .filter(([, entry]) => entry.hotspotKey !== furniture.hotspotKey));
     const legacyFurniture = { ...room.furniture };
-    if (!Object.values(remaining).some((entry) => entry.hotspotKey === furniture.hotspotKey && entry.buildableKey === furniture.buildableKey)) {
-      delete legacyFurniture[furniture.hotspotKey];
-    }
+    delete legacyFurniture[furniture.hotspotKey];
     this.save.rooms[position.plane][position.x][position.y] = {
       ...room,
       furniture: legacyFurniture,
@@ -587,7 +610,7 @@ class PlayerHouseInstance extends PrivateArea {
           for (const furniture of Object.values(room.furnitureByLocation ?? {})) {
             const buildable = Data.BUILDABLE_BY_KEY.get(furniture.buildableKey);
             if (!buildable) continue;
-            const hotspot = Data.HOTSPOT_BY_OBJECT_ID.get(furniture.sourceObjectId);
+            const hotspot = Data.HOTSPOT_BY_KEY.get(furniture.hotspotKey) ?? Data.hotspotIn(room.roomKey, furniture.sourceObjectId);
             const variant = hotspot ? hotspot.objectIds.indexOf(furniture.sourceObjectId) : -1;
             const objectId = (this.litBurners.get(furniture) ?? 0) > Date.now() ? buildable.objectIds[0] + 1
               : furniture.displayObjectId ?? buildable.objectIds[variant] ?? buildable.objectIds.find((id) => id >= 0) ?? -1;
@@ -706,7 +729,7 @@ class PlayerHouseInstance extends PrivateArea {
   getTemplateHotspot(roomKey, id, localX, localY) {
     const room = Data.ROOM_BY_KEY.get(roomKey);
     return room && PlayerHouseInstance.getTemplateObjects(Estate.houseStyleIndex(this.save)).find((object) =>
-      (object.id === id || (Data.HOTSPOT_BY_OBJECT_ID.has(id) && Data.HOTSPOT_BY_OBJECT_ID.get(object.id)?.key === Data.HOTSPOT_BY_OBJECT_ID.get(id)?.key))
+      (object.id === id || (Data.hotspotIn(roomKey, id) && Data.hotspotIn(roomKey, object.id)?.key === Data.hotspotIn(roomKey, id)?.key))
       && object.localX === localX && object.localY === localY
       && object.sourceChunkX === room.sourceChunkX && object.sourceChunkY === room.sourceChunkY);
   }

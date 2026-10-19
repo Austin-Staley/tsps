@@ -17,7 +17,7 @@ function listHotspots({ player }) {
   for (const tile of house.hotspotTiles(position)) {
     const name = CacheDefinitions.getObject(tile.id)?.name ?? "";
     if (!/space|hotspot/i.test(name)) continue;
-    const key = Data.HOTSPOT_BY_OBJECT_ID.get(tile.id)?.key ?? "(not in hotspots.json)";
+    const key = Data.hotspotIn(room.roomKey, tile.id)?.key ?? "(not in this room's hotspots)";
     player.sendMessage(`${key} ${tile.id} "${name}" at ${tile.x} ${tile.y} ${tile.plane}`);
   }
 }

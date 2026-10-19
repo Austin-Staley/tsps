@@ -15,6 +15,7 @@ const Menu = require("./Menu.Construction");
 const Mounted = require("./Mounted.Construction");
 const SuperiorGarden = require("./SuperiorGarden.Construction");
 const Lectern = require("./Lectern.Construction");
+const Stairs = require("./Stairs.Construction");
 
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
@@ -43,6 +44,9 @@ const FURNITURE_GROUPS = {
   BOOKCASES: ["WOODEN_BOOKCASE", "OAK_BOOKCASE", "MAHOGANY_BOOKCASE"],
   FIREPLACES: ["CLAY_FIREPLACE", "STONE_FIREPLACE", "MARBLE_FIREPLACE"],
   CURTAIN: ["TORN_CURTAINS", "CURTAINS", "OPULENT_CURTAINS"],
+  // The hall and dungeon stair spaces take a rug or a staircase (cache hotspot row stair_hotspot).
+  HALL_STAIRS_UP: ["HALL_RUG", "HALL_OPULENT_RUG", "OAK_STAIRCASE_UP", "TEAK_STAIRCASE_UP", "SPIRAL_STAIRCASE", "MARBLE_STAIRCASE_UP", "MARBLE_SPIRAL_STAIRCASE"],
+  HALL_STAIRS_DOWN: ["HALL_RUG", "HALL_OPULENT_RUG", "OAK_STAIRCASE_DOWN", "TEAK_STAIRCASE_DOWN", "SPIRAL_STAIRCASE", "MARBLE_STAIRCASE_DOWN", "MARBLE_SPIRAL_STAIRCASE"],
 };
 
 const HOUSE_OPTIONS_INTERFACE = 370;
@@ -720,7 +724,7 @@ function furnitureCreationText(buildable) {
 }
 
 function chooseFurniture(player, house, target) {
-  const hotspot = Data.HOTSPOT_BY_OBJECT_ID.get(target.sourceObjectId);
+  const hotspot = Data.HOTSPOT_BY_KEY.get(target.hotspotKey);
   if (!hotspot) return;
   const choices = hotspot.buildables
     .flatMap((key) => FURNITURE_GROUPS[key] ?? [key])
@@ -1022,6 +1026,7 @@ function attach(api) {
   Mounted.attachMountedItems(api);
   SuperiorGarden.attachSuperiorGarden(api);
   Lectern.attachLecterns(api);
+  Stairs.attachStairs(api);
   api.persistAttribute(HOUSE_ATTRIBUTE, defaultHouse());
   api.onObjectFirstClick(HOUSE_PORTAL_IDS, enterDefaultHouse);
   api.onObjectSecondClick(HOUSE_PORTAL_IDS, enterNormalHouse);
@@ -1057,4 +1062,4 @@ function attach(api) {
   api.onPlayerLogout(logoutHouse);
 }
 
-Object.assign(module.exports, { houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, houseFor, saveHouse, processOccupant, leftHouse, attach });
+Object.assign(module.exports, { houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, houseFor, saveHouse, rebuildHouse, isBuildingMode, constructionLevel, getBuildMaterials, useMaterial, withArticle, processOccupant, leftHouse, attach });
