@@ -1,6 +1,6 @@
 "use strict";
 
-const { Item, ItemDefinition, CachePipeline, CacheIndexDat2, IndexType, ConfigType, ByteBuffer } = require("./Core.Construction");
+const { api, Item, ItemDefinition, CachePipeline, CacheIndexDat2, IndexType, ConfigType, ByteBuffer } = require("./Core.Construction");
 const Instance = require("./Instance.Construction");
 // Native costume-room enums: set representatives, set members, and alternatives.
 const STORAGE_ENUMS = {
@@ -99,7 +99,7 @@ function withdrawHouseItem(player, house, furniture, id) {
   return true;
 }
 
-function listStorage(api, event, page = 0) {
+function listStorage(event, page = 0) {
   const context = currentFurniture(event);
   if (!context) return;
   const { house, furniture } = context;
@@ -109,21 +109,21 @@ function listStorage(api, event, page = 0) {
   for (const [id, amount] of entries.slice(page * 4, page * 4 + 4)) options.push(`${ItemDefinition.forId(Number(id)).getName()} x${amount}`, () => {
     if (house.owner !== event.player) { event.player.sendMessage("Only the owner can withdraw stored items."); return; }
     withdrawHouseItem(event.player, house, furniture, Number(id));
-    listStorage(api, event, page);
+    listStorage(event, page);
   });
-  if ((page + 1) * 4 < entries.length) options.push("More items", () => listStorage(api, event, page + 1));
+  if ((page + 1) * 4 < entries.length) options.push("More items", () => listStorage(event, page + 1));
   api.sendMultiChatboxPrompt(event.player, house.owner === event.player ? "Withdraw an item" : "View stored items", ...options);
 }
 
-function openHouseStorage(api, event) {
+function openHouseStorage(event) {
   const context = currentFurniture(event);
   if (!context) return false;
   const { house, furniture } = context;
-  if (house.owner !== event.player) { listStorage(api, event); return true; }
+  if (house.owner !== event.player) { listStorage(event); return true; }
   api.sendMultiChatboxPrompt(event.player, "Costume storage", "Deposit inventory", () => {
     for (let slot = 0; slot < 28; slot++) depositHouseItem(event.player, house, furniture, slot);
     event.player.sendMessage("Stored eligible costume items. Use an item on the furniture to deposit it individually.");
-  }, "Withdraw items", () => listStorage(api, event), "Cancel", () => {});
+  }, "Withdraw items", () => listStorage(event), "Cancel", () => {});
   return true;
 }
 

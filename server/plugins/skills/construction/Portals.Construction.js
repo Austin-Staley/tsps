@@ -1,6 +1,6 @@
 "use strict";
 
-const { Skill, TeleportHandler, TeleportType, Wilderness, SpellTeleports, LunarSpells, ArceuusSpells, ObjectIdentifiers } = require("./Core.Construction");
+const { api, Skill, TeleportHandler, TeleportType, Wilderness, SpellTeleports, LunarSpells, ArceuusSpells, ObjectIdentifiers } = require("./Core.Construction");
 const Instance = require("./Instance.Construction");
 const aliases = { moonclan: "LUNAR_ISLE", "ape atoll": "MARIM", "kourend castle": "KOUREND", "fenkenstrain's castle": "FENKENSTRAINS_CASTLE", waterbirth: "WATERBIRTH_ISLAND", watchtower: "YANILLE_WATCHTOWER", barbarian: "BARBARIAN_OUTPOST", khazard: "PORT_KHAZARD" };
 function houseDestinations() {
@@ -58,7 +58,7 @@ function configureHouseDestination(player, house, furniture, name) {
   return true;
 }
 
-function chooseDestination(api, player, house, furniture, mode, page = 0) {
+function chooseDestination(player, house, furniture, mode, page = 0) {
   if (!current(player, house, furniture)) return;
   const nexus = furniture.hotspotKey === "PORTAL_NEXUS";
   const destinations = houseDestinations().filter(data => mode === "add" ? !(furniture.destinations ?? []).includes(data.name) && (nexus || data.portalIds.every(Number.isInteger)) : furniture.destinations?.includes(data.name));
@@ -83,24 +83,24 @@ function chooseDestination(api, player, house, furniture, mode, page = 0) {
       }, "No", () => {});
     }
   });
-  if ((page + 1) * 4 < destinations.length) options.push("More destinations", () => chooseDestination(api, player, house, furniture, mode, page + 1));
+  if ((page + 1) * 4 < destinations.length) options.push("More destinations", () => chooseDestination(player, house, furniture, mode, page + 1));
   api.sendMultiChatboxPrompt(player, mode === "teleport" ? "Choose a destination" : "Configure destinations", ...options);
 }
 
-function useHousePortal(api, event) {
+function useHousePortal(event) {
   const house = event.player.getPrivateArea();
   if (!(house instanceof Instance.PlayerHouseInstance)) return false;
   const furniture = house.getFurnitureAt(event.location, event.objectId, event.object?.getType() ?? 10);
   if (!furniture) return false;
   const action = event.definition?.getInteractions()?.[event.clickType - 1]?.toLowerCase();
   if (furniture.hotspotKey === "PORTAL_NEXUS" && ["teleport", "teleport menu", "configuration"].includes(action ?? "")) {
-    if (action !== "configuration") chooseDestination(api, event.player, house, furniture, "teleport");
+    if (action !== "configuration") chooseDestination(event.player, house, furniture, "teleport");
     else if (house.owner !== event.player) event.player.sendMessage("Only the owner can configure the nexus.");
-    else api.sendMultiChatboxPrompt(event.player, "Portal nexus configuration", "Add destination", () => chooseDestination(api, event.player, house, furniture, "add"), "Remove destination", () => chooseDestination(api, event.player, house, furniture, "remove"), "Cancel", () => {});
+    else api.sendMultiChatboxPrompt(event.player, "Portal nexus configuration", "Add destination", () => chooseDestination(event.player, house, furniture, "add"), "Remove destination", () => chooseDestination(event.player, house, furniture, "remove"), "Cancel", () => {});
     return true;
   }
   if (furniture.buildableKey.endsWith("_PORTAL_FRAME") && action === "enter") {
-    chooseDestination(api, event.player, house, furniture, "teleport");
+    chooseDestination(event.player, house, furniture, "teleport");
     return true;
   }
   if (action !== "direct-portal") return false;
@@ -109,7 +109,7 @@ function useHousePortal(api, event) {
   const portals = Object.values(house.getRoom(position).furnitureByLocation ?? {}).filter(value => value.buildableKey.endsWith("_PORTAL_FRAME"));
   if (!portals.length) { event.player.sendMessage("Build a portal frame in this room first."); return true; }
   const options = [];
-  portals.forEach((portal, i) => options.push(`Portal ${i + 1}: ${portal.destinations?.[0] ?? "empty"}`, () => chooseDestination(api, event.player, house, portal, "add")));
+  portals.forEach((portal, i) => options.push(`Portal ${i + 1}: ${portal.destinations?.[0] ?? "empty"}`, () => chooseDestination(event.player, house, portal, "add")));
   api.sendMultiChatboxPrompt(event.player, "Which portal?", ...options);
   return true;
 }

@@ -1,6 +1,6 @@
 "use strict";
 
-const { PluginManager, World, Item, Skill, Bank, ItemDefinition, PathFinder, NpcIdentifiers: Npcs, ItemIdentifiers: Items, DialogueChainBuilder, NpcDialogue, EndDialogue } = require("./Core.Construction");
+const { api, PluginManager, World, Item, Skill, Bank, ItemDefinition, PathFinder, NpcIdentifiers: Npcs, ItemIdentifiers: Items, DialogueChainBuilder, NpcDialogue, EndDialogue } = require("./Core.Construction");
 const Instance = require("./Instance.Construction");
 const House = require("./House.Construction");
 const Estate = require("./Estate.Construction");
@@ -246,17 +246,17 @@ function quantity(player, action) {
   } });
   player.getPacketSender().sendEnterInputPrompt("Enter amount:");
 }
-function fetchMenu(api, player, page = 0) {
+function fetchMenu(player, page = 0) {
   const options = [];
   for (const id of MATERIALS.slice(page * 4, page * 4 + 4)) options.push(ItemDefinition.forId(id).getName(), () => quantity(player, amount => startServantTask(player, { kind: "fetch", itemId: id, amount })));
-  if ((page + 1) * 4 < MATERIALS.length) options.push("More...", () => fetchMenu(api, player, page + 1));
+  if ((page + 1) * 4 < MATERIALS.length) options.push("More...", () => fetchMenu(player, page + 1));
   api.sendMultiChatboxPrompt(player, "Bring something from the bank", ...options);
 }
-function confirmFire(api, event) {
+function confirmFire(event) {
   api.sendMultiChatboxPrompt(event.player, "Do you really want to fire your servant?", "Yes", () => { if (atNpc(event)) fireServant(event.player); }, "No", () => {});
 }
-function bankMenu(api, player) {
-  api.sendMultiChatboxPrompt(player, "Go to the bank...", "Bring something from the bank", () => fetchMenu(api, player),
+function bankMenu(player) {
+  api.sendMultiChatboxPrompt(player, "Go to the bank...", "Bring something from the bank", () => fetchMenu(player),
     "Take something to the bank", () => player.sendMessage("Use the item on your servant to have it taken to the bank."));
 }
 function returnCargo(player) {
@@ -268,18 +268,18 @@ function returnCargo(player) {
   removeNpc(runtime);
   persist(player);
 }
-function ownerMenu(api, event) {
+function ownerMenu(event) {
   const player = event.player, runtime = ownerContext(player), servant = House.houseStateFor(player).servant;
   if (!runtime || runtime.npc !== event.npc || runtime.due !== undefined || !servant) return;
   if (!payServant(player, true)) {
     api.sendMultiChatboxPrompt(player, `Your servant requires ${definition(runtime.house.save).wage} coins.`,
       "Pay", () => { if (ownerContext(player)?.npc === event.npc && payServant(player)) deliver(player); },
-      "I'll pay you later", () => {}, "You're fired!", () => confirmFire(api, event));
+      "I'll pay you later", () => {}, "You're fired!", () => confirmFire(event));
     return;
   }
   if (servant.cargo) {
     api.sendMultiChatboxPrompt(player, "Your servant is holding your items.", "Receive items", () => deliver(player),
-      "Take them to the bank", () => returnCargo(player), "You're fired!", () => confirmFire(api, event));
+      "Take them to the bank", () => returnCargo(player), "You're fired!", () => confirmFire(event));
     return;
   }
   if (runtime.meal || runtime.guide) {
@@ -288,7 +288,7 @@ function ownerMenu(api, event) {
       runtime.meal = undefined;
       if (runtime.guide?.guest.getFollowing() === runtime.npc) runtime.guide.guest.setFollowing(null);
       runtime.guide = undefined;
-    }, "You're fired!", () => confirmFire(api, event));
+    }, "You're fired!", () => confirmFire(event));
     return;
   }
   const options = [];
@@ -297,7 +297,7 @@ function ownerMenu(api, event) {
   if (last && SAWMILL.has(logs) && definition(runtime.house.save).level >= 30) {
     options.push("Take those logs to the sawmill", () => startServantTask(player, { kind: "sawmill", itemId: logs, amount: last.amount }));
   } else if (last) options.push("Repeat last task", () => startServantTask(player, last));
-  options.push("Serve...", () => serveMenu(api, player), "Go to the bank...", () => bankMenu(api, player),
+  options.push("Serve...", () => serveMenu(player), "Go to the bank...", () => bankMenu(player),
     "Go to the sawmill...", () => player.sendMessage(definition(runtime.house.save).level >= 30 ? "Use your logs on your servant." : "This servant cannot visit the sawmill."),
     "More...", () => api.sendMultiChatboxPrompt(player, "Select an option", "Greet guests", () => {
       if (!ownerContext(player)) return;
@@ -305,10 +305,10 @@ function ownerMenu(api, event) {
       runtime.npc?.setFollowing(null);
       runtime.npc?.moveTo(runtime.house.getEntryLocation());
       persist(player);
-    }, "You're fired!", () => confirmFire(api, event)));
+    }, "You're fired!", () => confirmFire(event)));
   api.sendMultiChatboxPrompt(player, "How may I help you?", ...options);
 }
-function talk(api, event) {
+function talk(event) {
   const def = SERVANTS.find(s => s.id === event.npcId || s.id + 1 === event.npcId);
   if (!def && event.npcId !== Npcs.CHIEF_SERVANT) return false;
   if (!atNpc(event)) return true;
@@ -316,19 +316,19 @@ function talk(api, event) {
   if (house instanceof Instance.PlayerHouseInstance) {
     const runtime = house.owner && runtimes.get(house.owner);
     if (runtime?.npc !== event.npc) return true;
-    if (house.owner === player) ownerMenu(api, event);
-    else guestMenu(api, player, runtime);
+    if (house.owner === player) ownerMenu(event);
+    else guestMenu(player, runtime);
   } else if (event.npcId === Npcs.CHIEF_SERVANT) {
     api.sendMultiChatboxPrompt(player, "Servants' Guild", "Tell me about servants", () => say(player, event.npcId,
       "Our servants can fetch supplies, take items to the bank, greet guests and serve refreshments. Build two bedrooms with beds, then speak to the servant you wish to hire. More experienced servants carry more and travel faster."),
-      "Fire my servant", () => confirmFire(api, event), "Nothing, thanks", () => {});
+      "Fire my servant", () => confirmFire(event), "Nothing, thanks", () => {});
   } else {
     api.sendMultiChatboxPrompt(player, `Hire for ${def.wage} coins?`, "You're hired!", () => hire(event),
       "What can you do?", () => say(player, def.id, `I carry ${def.capacity} items and need ${def.ticks * 0.6} seconds for a trip. My wage is ${def.wage} coins for eight services.${def.level >= 30 ? " I can also visit the sawmill." : " I cannot visit the sawmill."}`), "No, thanks", () => {});
   }
   return true;
 }
-function itemOnServant(api, event) {
+function itemOnServant(event) {
   const player = event.player, runtime = ownerContext(player);
   if (!runtime || event.target !== runtime.npc) return;
   event.handled = true;
@@ -363,7 +363,7 @@ function changeServantMoney(player, amount) {
   player.sendMessage(`Your servant's money bag contains ${house.save.servantMoney} coins.`);
   return true;
 }
-function useServantFurniture(api, event) {
+function useServantFurniture(event) {
   const house = event.player.getPrivateArea();
   if (!(house instanceof Instance.PlayerHouseInstance)) return false;
   const furniture = house.getFurnitureAt(event.location, event.objectId, event.object?.getType() ?? 10);
@@ -377,7 +377,7 @@ function useServantFurniture(api, event) {
   return true;
 }
 
-function serveMenu(api, player) {
+function serveMenu(player) {
   api.sendMultiChatboxPrompt(player, "Serve...", "Tea", () => api.sendMultiChatboxPrompt(player, "Would you like milk?",
     "Yes, please", () => prepareMeal(player, "tea", true), "No, thanks", () => prepareMeal(player, "tea", false)),
     "Dinner", () => prepareMeal(player, "dinner"), "Drinks", () => prepareMeal(player, "drinks"));
@@ -399,7 +399,7 @@ function prepareMeal(player, kind, milk = false) {
   servant.uses++;
   persist(player);
 }
-function guestMenu(api, guest, runtime) {
+function guestMenu(guest, runtime) {
   const owner = runtime.house.owner;
   if (runtime.due !== undefined || !payServant(owner, true)) { guest.sendMessage("The servant is busy."); return; }
   api.sendMultiChatboxPrompt(guest, "How may I help you?", "Take me to the owner", () => guide(guest, runtime, false),
@@ -466,8 +466,8 @@ function login({ player }) {
 }
 
 function attachServants(api) {
-  api.onNpcFirstClick([...SERVANTS.flatMap(s => [s.id, s.id + 1]), Npcs.CHIEF_SERVANT], talk.bind(null, api));
-  api.onItemOnNpc(itemOnServant.bind(null, api));
+  api.onNpcFirstClick([...SERVANTS.flatMap(s => [s.id, s.id + 1]), Npcs.CHIEF_SERVANT], talk);
+  api.onItemOnNpc(itemOnServant);
   api.onPlayerLogin(login);
 }
 

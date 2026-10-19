@@ -1,6 +1,6 @@
 "use strict";
 
-const { Skill, ItemIdentifiers: Items, DialogueChainBuilder, NpcDialogue, ActionDialogue, EndDialogue } = require("./Core.Construction");
+const { api, Skill, ItemIdentifiers: Items, DialogueChainBuilder, NpcDialogue, ActionDialogue, EndDialogue } = require("./Core.Construction");
 const Estate = require("./Estate.Construction");
 const House = require("./House.Construction");
 const MENU = 187;
@@ -58,13 +58,13 @@ function buyHouse(event) {
   say(event, "Thank you. Go through the Rimmington house portal and you will find your house ready for you to start building in it.", () => giveGuide(event));
 }
 
-function offerHouse(api, event) {
+function offerHouse(event) {
   say(event, "I can sell you a starting house in Rimmington for 1000 coins. As your Construction level increases, you can have it moved to other areas and redecorated in other styles.", () =>
     api.sendMultiChatboxPrompt(event.player, "Do you want to buy a starter house?",
       "Yes please!", () => buyHouse(event), "No thanks", () => {}));
 }
 
-function describeHouses(api, event) {
+function describeHouses(event) {
   api.sendMultiChatboxPrompt(event.player, "What would you like to know?",
     "How do I get started?", () => say(event, "Enter your house in building mode. Bring a hammer, a saw and materials, then select a hotspot to build furniture. Your Construction guide explains the rooms and furniture you can build."),
     "How do I get building materials?", () => say(event, "Take logs to a sawmill to have them made into planks. You can buy nails and a saw there. Different furniture requires different materials, which are shown in the build menu."),
@@ -92,7 +92,7 @@ function buyCape(event) {
   say(event, "Wear your cape with pride! You have mastered Construction.");
 }
 
-function offerCape(api, event) {
+function offerCape(event) {
   if (event.player.getSkillManager().getMaxLevel(Skill.CONSTRUCTION) < 99) {
     say(event, "This is a cape of accomplishment. When you reach level 99 Construction, I can sell you one for 99,000 coins.");
     return;
@@ -101,8 +101,8 @@ function offerCape(api, event) {
     "Yes, please.", () => buyCape(event), "No, thanks.", () => {});
 }
 
-function showMenu(api, event, kind) {
-  if (House.houseStateFor(event.player).owned === false) { offerHouse(api, event); return true; }
+function showMenu(event, kind) {
+  if (House.houseStateFor(event.player).owned === false) { offerHouse(event); return true; }
   const choices = kind === "location" ? Estate.HOUSE_LOCATIONS : Estate.HOUSE_STYLES;
   const sender = event.player.getPacketSender();
   sender.sendInterfaceRemoval();
@@ -114,8 +114,8 @@ function showMenu(api, event, kind) {
   return true;
 }
 
-function relocate(api, event) { return showMenu(api, event, "location"); }
-function redecorate(api, event) { return showMenu(api, event, "style"); }
+function relocate(event) { return showMenu(event, "location"); }
+function redecorate(event) { return showMenu(event, "style"); }
 
 function changeHouse(event, kind, index) {
   if (!stillAtAgent(event)) return;
@@ -168,7 +168,7 @@ function changeHouse(event, kind, index) {
   say(event, kind === "location" ? `Your house has been moved to ${choice.name}.` : `Your house has been redecorated in the ${choice.name} style.`);
 }
 
-function selectMenu(api, event) {
+function selectMenu(event) {
   if (event.groupId !== MENU || event.childId !== 3) return;
   const pending = pendingMenus.get(event.player);
   if (!pending) return;
@@ -188,19 +188,19 @@ function selectMenu(api, event) {
     "No, thanks.", () => {});
 }
 
-function talk(api, event) {
+function talk(event) {
   say(event, "Hello. Welcome to the Gielinor Housing Agency! What can I do for you?", () => {
     if (House.houseStateFor(event.player).owned === false) {
       api.sendMultiChatboxPrompt(event.player, "What would you like to say?",
-        "How can I get a house?", () => offerHouse(api, event),
-        "Tell me about houses.", () => describeHouses(api, event));
+        "How can I get a house?", () => offerHouse(event),
+        "Tell me about houses.", () => describeHouses(event));
     } else {
       api.sendMultiChatboxPrompt(event.player, "What would you like to say?",
-        "Can you move my house please?", () => relocate(api, event),
-        "Can you redecorate my house please?", () => redecorate(api, event),
+        "Can you move my house please?", () => relocate(event),
+        "Can you redecorate my house please?", () => redecorate(event),
         "Could I have a Construction guidebook?", () => giveGuide(event),
-        "Tell me about houses.", () => describeHouses(api, event),
-        "Tell me about your skillcape.", () => offerCape(api, event));
+        "Tell me about houses.", () => describeHouses(event),
+        "Tell me about your skillcape.", () => offerCape(event));
     }
   });
   return true;
@@ -209,10 +209,10 @@ function talk(api, event) {
 function closeMenu({ player }) { pendingMenus.delete(player); }
 
 function attachEstateAgents(api) {
-  api.onNpcInteraction("Estate agent", { "Talk-to": talk.bind(null, api), Relocate: relocate.bind(null, api), Redecorate: redecorate.bind(null, api) });
-  api.onNpcInteraction("Estate Agent", { "Talk-to": talk.bind(null, api), Relocate: relocate.bind(null, api), Redecorate: redecorate.bind(null, api) });
-  api.onNpcInteraction("Alwyn", { "Talk-to": talk.bind(null, api), Relocate: relocate.bind(null, api), Redecorate: redecorate.bind(null, api) });
-  api.onInterfaceActionClick(selectMenu.bind(null, api));
+  api.onNpcInteraction("Estate agent", { "Talk-to": talk, Relocate: relocate, Redecorate: redecorate });
+  api.onNpcInteraction("Estate Agent", { "Talk-to": talk, Relocate: relocate, Redecorate: redecorate });
+  api.onNpcInteraction("Alwyn", { "Talk-to": talk, Relocate: relocate, Redecorate: redecorate });
+  api.onInterfaceActionClick(selectMenu);
   api.onCustomEvent("interface:close", closeMenu);
   api.onPlayerLogout(closeMenu);
 }

@@ -3,6 +3,7 @@
 const { RegionManager, Boundary, PrivateArea, Skill, Location, CachePipeline, CacheMaps, CacheDefinitions, ByteBuffer, GameObject, encodeLocAddChange, encodeLocDel, encodeRebuildRegion } = require("./Core.Construction");
 const Estate = require("./Estate.Construction");
 const Servants = require("./Servants.Construction");
+const House = require("./House.Construction");
 const Data = require("./Data.Construction");
 const Palette = require("./Palette.Construction");
 const HOUSE_SIZE = 104;
@@ -369,10 +370,15 @@ class PlayerHouseInstance extends PrivateArea {
     return sent;
   }
 
+  process(mobile) {
+    if (mobile.isPlayer()) House.processOccupant(mobile.getAsPlayer(), this);
+  }
+
   postLeave(mobile, logout) {
     if (mobile.isNpc()) { this.remove(mobile); return; }
     if (mobile.isPlayer()) Servants.leaveServantHouse(mobile.getAsPlayer(), this);
     super.postLeave(mobile, logout);
+    if (mobile.isPlayer()) House.leftHouse(mobile.getAsPlayer(), this);
   }
 
   /** Replays the current saved layout after a room edit. */

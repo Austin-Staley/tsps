@@ -1,6 +1,6 @@
 "use strict";
 
-const { World, Animation, Flag, Location, Skill, PrivateChatStatus, ItemIdentifiers } = require("./Core.Construction");
+const { api, World, Animation, Flag, Location, Skill, PrivateChatStatus, ItemIdentifiers } = require("./Core.Construction");
 const EstateAgent = require("./EstateAgent.Construction");
 const Servants = require("./Servants.Construction");
 const Estate = require("./Estate.Construction");
@@ -9,8 +9,6 @@ const Portals = require("./Portals.Construction");
 const Altars = require("./Altars.Construction");
 const Data = require("./Data.Construction");
 const Instance = require("./Instance.Construction");
-let pluginApi;
-function bindSaving(api) { pluginApi = api; }
 
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
@@ -281,7 +279,7 @@ function constructionLevel(player) {
 
 function rebuildHouse(player, house) {
   player.setAttribute(HOUSE_ATTRIBUTE, house.save);
-  pluginApi.emitCustomEvent("persistence:save", { player, reason: "construction" });
+  api.emitCustomEvent("persistence:save", { player, reason: "construction" });
   const position = house.getRoomPositionAt(player.getLocation());
   if (!position || !house.getRoom(position)) player.moveTo(house.getEntryLocation());
   if (!house.rebuild(player, true)) player.sendMessage("Unable to rebuild your house.");
@@ -323,7 +321,7 @@ function buildRoom(player, house, target, room) {
   player.sendMessage(`You build a ${room.name}.`);
 }
 
-function manageRoom(api, player, house, target) {
+function manageRoom(player, house, target) {
   const room = house.getRoom(target);
   if (!room) return;
   const name = room.roomKey.replace(/_/g, " ").toLowerCase();
@@ -345,7 +343,7 @@ function manageRoom(api, player, house, target) {
   }, "Cancel", () => {});
 }
 
-function openRoomDoor(api, event) {
+function openRoomDoor(event) {
   const player = event.player;
   const house = houseFor(player);
   if (!house || !isBuildingMode(player)) return false;
@@ -364,10 +362,10 @@ function openRoomDoor(api, event) {
     const current = onTargetSide ? target : doorRoom;
     const adjoining = onTargetSide ? doorRoom : target;
     api.sendMultiChatboxPrompt(player, "Which room do you want to manage?",
-      "Room on this side", () => manageRoom(api, player, house, current),
-      "Room on the other side", () => manageRoom(api, player, house, adjoining),
+      "Room on this side", () => manageRoom(player, house, current),
+      "Room on the other side", () => manageRoom(player, house, adjoining),
       "Cancel", () => {});
-  } else manageRoom(api, player, house, target);
+  } else manageRoom(player, house, target);
   return true;
 }
 
@@ -571,7 +569,7 @@ function syncViewerSelection(player, viewer) {
   }
 }
 
-function handleHouseViewer(api, event) {
+function handleHouseViewer(event) {
   const { player, groupId, childId, action } = event;
   if (groupId !== HOUSE_VIEWER_INTERFACE) return false;
   const viewer = houseViewers.get(player);
@@ -758,7 +756,7 @@ function openBuildMenu(event) {
   return true;
 }
 
-function tryRemoveFurniture(api, event) {
+function tryRemoveFurniture(event) {
   if (event.definition?.getInteractions()?.[event.clickType - 1]?.toLowerCase() !== "remove") return false;
   const player = event.player;
   const house = houseFor(player);
@@ -795,12 +793,12 @@ function onItemOnObject(event) {
   return openBuildMenu(event);
 }
 
-function handleFurnitureAction(api, event) {
+function handleFurnitureAction(event) {
   const house = houseFor(event.player);
   if (!house) return;
   const action = event.definition?.getInteractions()?.[event.clickType - 1]?.toLowerCase();
   if (action === "sit-on" && sitOnChair(event)) { event.handled = true; return; }
-  if (action === "remove") { if (tryRemoveFurniture(api, event)) event.handled = true; return; }
+  if (action === "remove") { if (tryRemoveFurniture(event)) event.handled = true; return; }
   if (action === "upgrade") {
     if (!isBuildingMode(event.player)) { event.player.sendMessage("Only the owner can upgrade furniture in building mode."); event.handled = true; return; }
     const saved = house.getFurnitureAt(event.location, event.objectId, event.object?.getType() ?? 10);
@@ -808,9 +806,9 @@ function handleFurnitureAction(api, event) {
     if (saved && position) { chooseFurniture(event.player, house, { ...saved, position }); event.handled = true; }
     return;
   }
-  if (Servants.useServantFurniture(api, event) || Portals.useHousePortal(api, event)
+  if (Servants.useServantFurniture(event) || Portals.useHousePortal(event)
     || (["light", "re-light"].includes(action ?? "") && Altars.lightHouseBurner(event))
-    || (["open", "search", "view"].includes(action ?? "") && Storage.openHouseStorage(api, event))) event.handled = true;
+    || (["open", "search", "view"].includes(action ?? "") && Storage.openHouseStorage(event))) event.handled = true;
 }
 
 // Cache-native ready poses for the seven parlour chairs, in furniture-menu order.
@@ -956,7 +954,7 @@ function visitLastHouse({ player }) {
 }
 function houseCommand({ player }) { openHouseSettings(player); }
 function handleHouseItem(event) { if (onItemOnObject(event)) event.handled = true; }
-function handleHouseInterface(api, event) { if (selectFurnitureFromInterface(event) || selectRoomFromInterface(event) || handleAdvertisementInterface(event) || handleHouseOptions(event) || handleHouseViewer(api, event)) event.handled = true; }
+function handleHouseInterface(event) { if (selectFurnitureFromInterface(event) || selectRoomFromInterface(event) || handleAdvertisementInterface(event) || handleHouseOptions(event) || handleHouseViewer(event)) event.handled = true; }
 function loginHouse({ player }) {
   houseOptionsOpen.delete(player);
   kickOptionVisible.delete(player);
@@ -968,32 +966,38 @@ function loginHouse({ player }) {
   }
 }
 function logoutHouse({ player }) { standFromChair(player); releaseHouse(player, true); }
-function processHouse({ player }) {
+/** Per tick, for players inside a house only (PlayerHouseInstance.process). */
+function processOccupant(player, house) {
   processChair(player);
   Servants.processServant(player);
-  const position = player.getLocation();
-  if (!player.getPrivateArea() && position.getX() >= 1024 && position.getX() < 2048) {
-    const saved = houseStateFor(player);
-    if (position.getY() >= 3200 && position.getY() < 4096 && !saved.visitedKourend) {
-      saved.visitedKourend = true;
-      player.setAttribute(HOUSE_ATTRIBUTE, saved);
-    } else if (position.getY() >= 2816 && position.getY() < 3200 && !saved.visitedVarlamore) {
-      saved.visitedVarlamore = true;
-      player.setAttribute(HOUSE_ATTRIBUTE, saved);
-    }
-  }
-  const house = houseFor(player);
   syncKickOption(player);
-  if (house) Altars.expireHouseBurners(house);
-  const owned = activeHouses.get(player);
-  if (owned && (owned.isDestroyed() || house !== owned)) advertisedHouses.delete(owned);
+  Altars.expireHouseBurners(house);
+}
+
+/** PlayerHouseInstance.postLeave, after the player is out of the house. */
+function leftHouse(player, house) {
+  standFromChair(player);
+  syncKickOption(player);
+  if (house.owner === player) advertisedHouses.delete(house);
+}
+
+// Kourend and Varlamore house locations need a visit first (Estate agent check).
+function recordRegionVisit({ player, location }) {
+  if (player.getPrivateArea() || location.getX() < 1024 || location.getX() >= 2048) return;
+  const saved = houseStateFor(player);
+  if (location.getY() >= 3200 && location.getY() < 4096 && !saved.visitedKourend) {
+    saved.visitedKourend = true;
+    player.setAttribute(HOUSE_ATTRIBUTE, saved);
+  } else if (location.getY() >= 2816 && location.getY() < 3200 && !saved.visitedVarlamore) {
+    saved.visitedVarlamore = true;
+    player.setAttribute(HOUSE_ATTRIBUTE, saved);
+  }
 }
 
 const hotspotIds = [...Data.HOTSPOT_BY_OBJECT_ID.keys()].filter(id => id >= 0);
 const furnitureObjectIds = [...new Set(Data.CONSTRUCTION_BUILDABLES.flatMap(buildable => buildable.objectIds.filter(id => id >= 0)))];
 
 function attach(api) {
-  bindSaving(api);
   EstateAgent.attachEstateAgents(api);
   Servants.attachServants(api);
   api.persistAttribute(HOUSE_ATTRIBUTE, defaultHouse());
@@ -1006,18 +1010,18 @@ function attach(api) {
   api.onObjectSecondClick(EXIT_PORTAL_ID, toggleHouseLock);
   api.onObjectThirdClick(EXIT_PORTAL_ID, removeAdvertisement);
   api.registerCommand("house", houseCommand);
-  api.onObjectFirstClick(ROOM_DOOR_HOTSPOT_IDS, openRoomDoor.bind(null, api));
-  api.onObjectFifthClick(ROOM_DOOR_HOTSPOT_IDS, openRoomDoor.bind(null, api));
-  api.onObjectFirstClick(furnitureObjectIds, tryRemoveFurniture.bind(null, api));
-  api.onObjectSecondClick(furnitureObjectIds, tryRemoveFurniture.bind(null, api));
-  api.onObjectFifthClick(furnitureObjectIds, tryRemoveFurniture.bind(null, api));
+  api.onObjectFirstClick(ROOM_DOOR_HOTSPOT_IDS, openRoomDoor);
+  api.onObjectFifthClick(ROOM_DOOR_HOTSPOT_IDS, openRoomDoor);
+  api.onObjectFirstClick(furnitureObjectIds, tryRemoveFurniture);
+  api.onObjectSecondClick(furnitureObjectIds, tryRemoveFurniture);
+  api.onObjectFifthClick(furnitureObjectIds, tryRemoveFurniture);
   api.onObjectFirstClick(hotspotIds, onObject);
   api.onObjectSecondClick(hotspotIds, onObject);
   api.onObjectFifthClick(hotspotIds, onObject);
-  api.onObjectInteraction(handleFurnitureAction.bind(null, api));
+  api.onObjectInteraction(handleFurnitureAction);
   api.onObjectRoute(routeHouseChair);
   api.onItemOnObject(handleHouseItem, { noted: false });
-  api.onInterfaceActionClick(handleHouseInterface.bind(null, api));
+  api.onInterfaceActionClick(handleHouseInterface);
   api.onCustomEvent("player:option-route", kickGuest);
   api.onCustomEvent("door:toggle", openHouseDoor);
   api.onCustomEvent("interface:close", closeHouseSettings);
@@ -1025,9 +1029,9 @@ function attach(api) {
   api.onCustomEvent("construction:house-tablet", houseTablet);
   api.onCustomEvent("construction:owns-house", ownsHouse);
   api.onPlayerLogin(loginHouse);
-  api.onPlayerProcess(processHouse);
+  api.onPlayerMapSquareChange(recordRegionVisit);
   api.onPlayerDisconnect(logoutHouse);
   api.onPlayerLogout(logoutHouse);
 }
 
-Object.assign(module.exports, { houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, attach });
+Object.assign(module.exports, { houseStateFor, releaseHouse, canVisitHouse, syncHouseOptions, isSeatedForDinner, processOccupant, leftHouse, attach });
