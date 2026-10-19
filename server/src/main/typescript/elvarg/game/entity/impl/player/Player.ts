@@ -579,6 +579,9 @@ export class Player extends Mobile {
 
         // Return offered items to both players before this player is saved.
         this.getTrading().closeTrade();
+        this.setFollowing(null);
+        this.setMobileInteraction(null);
+        this.setPositionToFace(null);
         // Record a boat at sea (and step ashore) before this player is saved.
         (require("../../../content/sailing/Sailing") as typeof import("../../../content/sailing/Sailing"))
             .Sailing.onLogout(this);

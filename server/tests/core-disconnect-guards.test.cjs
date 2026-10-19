@@ -95,6 +95,80 @@ test('interaction stop cancels queued walking without routing back to an old til
   assert.deepEqual(stopped, ['route', 'walk-task']);
 });
 
+test('player teleports clear follow-owned interaction and facing across relocation paths', () => {
+  const { Mobile } = require('../dist/game/entity/impl/Mobile');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { Boundary } = require('../dist/game/model/Boundary');
+  const originalBlocked = RegionManager.blocked;
+  const makePlayer = () => new Player(new PlayerSession(stubChannel()));
+  RegionManager.blocked = () => false;
+  try {
+    for (const relocate of [
+      (player) => player.moveTo(new Location(3200, 3200, 0)),
+      (player) => player.smartMove(new Location(3200, 3200, 0), 0),
+      (player) => player.smartMoves(new Boundary(3200, 3200, 3200, 3200, 0)),
+    ]) {
+      const player = makePlayer();
+      player.getMovementQueue().handleRegionChange = () => {};
+      const leader = { getLocation: () => new Location(3201, 3201, 0) };
+      player.setFollowing(leader);
+      player.setMobileInteraction(leader);
+      player.setPositionToFace(leader.getLocation());
+      relocate(player);
+      assert.equal(player.getFollowing(), null);
+      assert.equal(player.getInteractingMobile(), null);
+      assert.equal(player.getPositionToFace(), null);
+    }
+  } finally {
+    RegionManager.blocked = originalBlocked;
+  }
+
+  const player = makePlayer();
+  const unrelatedFace = new Location(3300, 3300, 0);
+  player.setFollowing({ getLocation: () => new Location(3201, 3201, 0) });
+  player.setPositionToFace(unrelatedFace);
+  player.moveTo(new Location(3200, 3200, 0));
+  assert.equal(player.getPositionToFace(), unrelatedFace, 'relocation preserves a face target unrelated to following');
+
+  const mobile = new Mobile(new Location(3200, 3200, 0));
+  const owner = { getLocation: () => new Location(3201, 3201, 0) };
+  mobile.setFollowing(owner);
+  mobile.moveTo(new Location(3202, 3202, 0));
+  assert.equal(mobile.getFollowing(), owner, 'non-player follower behavior is unchanged');
+});
+
+test('follow rejects the first index outside player-list capacity before lookup', () => {
+  const { FollowPlayerPacketListener } = require('../dist/net/packet/impl/FollowPlayerPacketListener');
+  const originalGetPlayers = World.getPlayers;
+  let lookups = 0;
+  World.getPlayers = () => ({ capacityReturn: () => 2, get() { lookups++; } });
+  try {
+    FollowPlayerPacketListener.request({ busy: () => false, getIndex: () => 1, setFollowing() {} }, 2);
+  } finally {
+    World.getPlayers = originalGetPlayers;
+  }
+  assert.equal(lookups, 0);
+});
+
+test('invalid player-option indices leave follow state untouched', () => {
+  const { PlayerOptionPacketListener } = require('../dist/net/packet/impl/PlayerOptionPacketListener');
+  const originalGetPlayers = World.getPlayers;
+  let cleared = false;
+  let lookups = 0;
+  World.getPlayers = () => ({ get() { lookups++; return { getHitpoints: () => 99 }; } });
+  try {
+    PlayerOptionPacketListener.executeClientOption({
+      getHitpoints: () => 99,
+      busy: () => false,
+      setFollowing() { cleared = true; },
+    }, 1, 9);
+  } finally {
+    World.getPlayers = originalGetPlayers;
+  }
+  assert.equal(cleared, false);
+  assert.equal(lookups, 0, 'invalid options are rejected before target lookup');
+});
+
 test('a throwing removal hook cannot corrupt list size or leak its slot', () => {
   const list = new MobileList(4);
   const doomed = stubMobile({ onRemove() { throw new Error('save failed'); } });
