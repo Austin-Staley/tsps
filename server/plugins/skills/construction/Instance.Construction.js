@@ -4,6 +4,7 @@ const { RegionManager, Boundary, PrivateArea, Skill, Location, CachePipeline, Ca
 const Estate = require("./Estate.Construction");
 const Servants = require("./Servants.Construction");
 const House = require("./House.Construction");
+const Dungeon = require("./Dungeon.Construction");
 const Data = require("./Data.Construction");
 const Palette = require("./Palette.Construction");
 const HOUSE_SIZE = 104;
@@ -61,6 +62,8 @@ class PlayerHouseInstance extends PrivateArea {
   doorTargets = new Map();
   /** Furniture not drawn for now (a combat dummy while its NPC stands in for it); not saved. */
   hiddenFurniture = new Set();
+  /** Objects drawn over the furniture for now (open dungeon doors, a throne room cage); sent to everyone who enters. */
+  extraObjects = [];
   allocation;
 
   /** Test-house allocations are process-local and must never be restored as normal map tiles. */
@@ -435,6 +438,7 @@ class PlayerHouseInstance extends PrivateArea {
     this.refreshHotspots(player, buildingMode);
     this.refreshFurniture(player);
     if (!buildingMode) this.refreshDoors();
+    Dungeon.refreshMonsters(this);
     return sent;
   }
 
@@ -599,6 +603,7 @@ class PlayerHouseInstance extends PrivateArea {
   }
 
   refreshFurniture(player) {
+    for (const object of this.extraObjects) player.getPacketSender().sendObject(object);
     if (this.furnitureObjects.length) {
       for (const object of this.furnitureObjects) player.getPacketSender().sendObject(object);
       return;
@@ -626,6 +631,8 @@ class PlayerHouseInstance extends PrivateArea {
               this,
             );
             this.furnitureObjects.push(object);
+            // Furniture blocks the way as its loc does (a dungeon door, a table; not a rug).
+            RegionManager.addObjectClipping(object);
             player.getPacketSender().sendObject(object);
           }
         }
@@ -634,7 +641,56 @@ class PlayerHouseInstance extends PrivateArea {
   }
 
   clearFurniture() {
-    for (const object of this.furnitureObjects.splice(0)) this.detach(object);
+    for (const object of this.furnitureObjects.splice(0)) {
+      RegionManager.removeObjectClipping(object);
+      this.detach(object);
+    }
+  }
+
+  /** Every piece of furniture with its room position and the world tile its placement is drawn on. */
+  furnitureEntries() {
+    const gridOffset = Math.floor((Palette.HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
+    const entries = [];
+    for (let plane = 0; plane < 3; plane++) for (let x = 0; x < this.gridSize; x++) for (let y = 0; y < this.gridSize; y++) {
+      const room = this.save.rooms[plane][x][y];
+      for (const furniture of Object.values(room?.furnitureByLocation ?? {})) {
+        const local = this.rotatedFootprint(furniture.localX, furniture.localY, furniture.sourceObjectId, furniture.face, room.rotation);
+        entries.push({ furniture, room, position: { x, y, plane },
+          location: new Location(this.allocation.baseX + (gridOffset + x) * 8 + local.x, this.allocation.baseY + (gridOffset + y) * 8 + local.y, plane),
+          face: (furniture.face + room.rotation) & 3 });
+      }
+    }
+    return entries;
+  }
+
+  addExtraObject(object) {
+    this.extraObjects.push(object);
+    for (const player of this.getPlayers()) player.getPacketSender().sendObject(object);
+  }
+
+  removeExtraObject(object) {
+    const index = this.extraObjects.indexOf(object);
+    if (index < 0) return;
+    this.extraObjects.splice(index, 1);
+    RegionManager.removeObjectClipping(object);
+    this.detach(object);
+    for (const player of this.getPlayers()) player.getPacketSender().sendObjectRemoval(object);
+  }
+
+  /** Takes a piece of furniture off the map for now (not saved): a dummy or guard stands in. */
+  hideFurniture(furniture) {
+    this.hiddenFurniture.add(furniture);
+    for (const object of this.furnitureObjects.filter(drawn => this.getFurnitureAt(
+      { x: drawn.getLocation().getX(), y: drawn.getLocation().getY(), z: drawn.getLocation().getZ() }, drawn.getId(), drawn.getType()) === furniture)) {
+      this.furnitureObjects.splice(this.furnitureObjects.indexOf(object), 1);
+      RegionManager.removeObjectClipping(object);
+      this.detach(object);
+      for (const player of this.getPlayers()) player.getPacketSender().sendObjectRemoval(object);
+    }
+  }
+
+  showFurniture(furniture) {
+    if (this.hiddenFurniture.delete(furniture)) this.redrawFurniture();
   }
 
   redrawFurniture() {

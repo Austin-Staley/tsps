@@ -1,6 +1,6 @@
 "use strict";
 
-const { Animation, PluginManager, encodeLocDel } = require("./Core.Construction");
+const { Animation, PluginManager } = require("./Core.Construction");
 const House = require("./House.Construction");
 
 // Combat dummies (rsprox captures): Attach swaps the dummy for its NPC ("You attach the sand
@@ -35,19 +35,10 @@ function attach(event) {
   npc.setFlag?.(NO_RETALIATE, true);
   house.enter(npc);
   dummiesIn(house).set(npc, furniture);
-  hideLoc(house, furniture, event.object);
+  house.hideFurniture(furniture);
   player.performAnimation(new Animation(PICK_UP));
   player.sendMessage("You attach the sand bag.");
   return true;
-}
-
-function hideLoc(house, furniture, object) {
-  house.hiddenFurniture.add(furniture);
-  house.furnitureObjects = house.furnitureObjects.filter(drawn => drawn !== object);
-  const at = object.getLocation();
-  for (const occupant of house.getPlayers()) {
-    occupant.getSession().sendClientPacket(encodeLocDel(at.getX(), at.getY(), at.getZ(), object.getType(), object.getFace()));
-  }
 }
 
 function detach(event) {
@@ -57,8 +48,7 @@ function detach(event) {
   dummiesIn(house).delete(event.npc);
   house.leave(event.npc, false);
   PluginManager.removeNpc(event.npc);
-  house.hiddenFurniture.delete(furniture);
-  house.redrawFurniture();
+  house.showFurniture(furniture);
   event.player.performAnimation(new Animation(PICK_UP));
   event.player.sendMessage("You detach the sand bag.");
   return true;

@@ -21,6 +21,8 @@ const Kitchen = require("./Kitchen.Construction");
 const Workbench = require("./Workbench.Construction");
 const Study = require("./Study.Construction");
 const CombatRoom = require("./CombatRoom.Construction");
+const Dungeon = require("./Dungeon.Construction");
+const ThroneRoom = require("./ThroneRoom.Construction");
 
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
@@ -49,6 +51,12 @@ const FURNITURE_GROUPS = {
   BOOKCASES: ["WOODEN_BOOKCASE", "OAK_BOOKCASE", "MAHOGANY_BOOKCASE"],
   FIREPLACES: ["CLAY_FIREPLACE", "STONE_FIREPLACE", "MARBLE_FIREPLACE"],
   CURTAIN: ["TORN_CURTAINS", "CURTAINS", "OPULENT_CURTAINS"],
+  // Dungeon spaces, in the house viewer's order (cache table 111/112).
+  GUARDS: ["SKELETON_GUARD", "GUARD_DOG", "HOBGOBLIN", "BABY_RED_DRAGON", "HUGE_SPIDER", "TROLL_GUARD", "HELLHOUND"],
+  DUNGEON_TRAPS: ["SPIKE_TRAP", "MAN_TRAP", "TANGLE_VINE", "MARBLE_TRAP", "TELEPORT_TRAP"],
+  DUNGEON_DOORS: ["OAK_DOOR", "STEEL_PLATED_DOOR", "MARBLE_DOOR"],
+  DUNGEON_LIGHTINGS: ["CANDLES", "TORCH", "SKULL_TORCH"],
+  DUNGEON_DECORATIONS: ["DECORATIVE_BLOOD", "DECORATIVE_PIPE", "HANGING_SKELETON"],
   // The hall and dungeon stair spaces take a rug or a staircase (cache hotspot row stair_hotspot).
   HALL_STAIRS_UP: ["HALL_RUG", "HALL_OPULENT_RUG", "OAK_STAIRCASE_UP", "TEAK_STAIRCASE_UP", "SPIRAL_STAIRCASE", "MARBLE_STAIRCASE_UP", "MARBLE_SPIRAL_STAIRCASE"],
   HALL_STAIRS_DOWN: ["HALL_RUG", "HALL_OPULENT_RUG", "OAK_STAIRCASE_DOWN", "TEAK_STAIRCASE_DOWN", "SPIRAL_STAIRCASE", "MARBLE_STAIRCASE_DOWN", "MARBLE_SPIRAL_STAIRCASE"],
@@ -847,6 +855,9 @@ function handleFurnitureAction(event) {
 
 // Cache-native ready poses for the seven parlour chairs, in furniture-menu order.
 const CHAIR_READY_ANIMATIONS = [4073, 4075, 4077, 4081, 4083, 4085, 4087];
+// Thrones sit like chairs, with their own ready poses (chair_sit_ready_throne_1..7, captures).
+const THRONES = ["OAK_THRONE", "TEAK_THRONE", "MAHOGANY_THRONE", "GILDED_THRONE", "SKELETON_THRONE", "CRYSTAL_THRONE", "DEMONIC_THRONE"];
+const THRONE_READY_ANIMATION = 4111;
 const DINING_BENCHES = ["WOODEN_BENCH", "OAK_BENCH", "CARVED_OAK_BENCH", "TEAK_BENCH", "CARVED_TEAK_BENCH", "MAHOGANY_BENCH", "GILDED_BENCH"];
 const CHAIR_SIT_ANIMATION = 4103;
 // A half-turn takes 32 client cycles; allow two server ticks before sitting.
@@ -892,7 +903,8 @@ function sitOnChair({ player, object, objectId, location }) {
   const furniture = house?.getFurnitureAt(location, objectId, type);
   const index = furniture ? FURNITURE_GROUPS.PARLOUR_CHAIRS.indexOf(furniture.buildableKey) : -1;
   const bench = furniture ? DINING_BENCHES.indexOf(furniture.buildableKey) : -1;
-  if (!house || !furniture || (index < 0 && bench < 0)) return false;
+  const throne = furniture ? THRONES.indexOf(furniture.buildableKey) : -1;
+  if (!house || !furniture || (index < 0 && bench < 0 && throne < 0)) return false;
   const seatLocation = new Location(location.x, location.y, location.z);
   const front = chairFront(object);
   // ObjectActionPacketListener routes first; never seat a distant or stale click.
@@ -909,7 +921,7 @@ function sitOnChair({ player, object, objectId, location }) {
   standFromChair(player);
   // chairFront already rotates the player for diagonal chairs. Their alternate
   // idle sequences contain another body turn, so keep the unrotated pose.
-  const ready = bench >= 0 ? 4089 + bench * 2 : CHAIR_READY_ANIMATIONS[index];
+  const ready = throne >= 0 ? THRONE_READY_ANIMATION + throne : bench >= 0 ? 4089 + bench * 2 : CHAIR_READY_ANIMATIONS[index];
   seatedPlayers.set(player, { house, location: seatLocation, objectId, type, furniture, ready, front,
     sitCycle: World.getProcessCycle() + CHAIR_TURN_TICKS, sitting: false,
     previousAnimation: player.getSkillAnimation() ?? 0 });
@@ -1007,6 +1019,7 @@ function processOccupant(player, house) {
   syncKickOption(player);
   Altars.expireHouseBurners(house);
   CombatRoom.tendDummies(house);
+  Dungeon.processOccupant(player, house);
 }
 
 /** PlayerHouseInstance.postLeave, after the player is out of the house. */
@@ -1046,6 +1059,8 @@ function attach(api) {
   Workbench.attachWorkbench(api);
   Study.attachStudy(api);
   CombatRoom.attachCombatRoom(api);
+  Dungeon.attachDungeon(api);
+  ThroneRoom.attachThroneRoom(api);
   api.persistAttribute(HOUSE_ATTRIBUTE, defaultHouse());
   api.onObjectFirstClick(HOUSE_PORTAL_IDS, enterDefaultHouse);
   api.onObjectSecondClick(HOUSE_PORTAL_IDS, enterNormalHouse);
