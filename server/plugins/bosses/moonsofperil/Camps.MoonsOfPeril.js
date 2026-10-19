@@ -306,6 +306,8 @@ module.exports = function attachCamps(api) {
   api.onObjectInteraction("Grubby sapling", { "Collect-from": collectGrub });
   api.onItemOnItem("Pestle and mortar", "Moonlight grub", crushGrub);
   api.onItemOnItem("Moonlight grub paste", "Vial of water", makePotion);
+  // Not an Area: the Moon arenas are Areas inside Neypotzli and an actor holds one Area at a
+  // time. Leaving is checked per map square crossed (areas.md), not per tick.
   api.onPlayerMapSquareChange(onMapSquare);
   api.onPlayerLogin(onLogin);
 };
