@@ -7,6 +7,7 @@ const House = require("./House.Construction");
 const Dungeon = require("./Dungeon.Construction");
 const Menagerie = require("./Menagerie.Construction");
 const GamesRoom = require("./GamesRoom.Construction");
+const CombatRings = require("./CombatRings.Construction");
 const Data = require("./Data.Construction");
 const Palette = require("./Palette.Construction");
 const HOUSE_SIZE = 104;
@@ -450,6 +451,11 @@ class PlayerHouseInstance extends PrivateArea {
   exitHouse(player, destination) {
     this.leave(player, false);
     player.moveTo(destination);
+  }
+
+  /** Players may fight each other only inside one of the combat room's rings. */
+  canAttack(attacker, target) {
+    return CombatRings.canFight(attacker, target, this);
   }
 
   /** Spells on a games room orb work the game instead of hitting it. */
