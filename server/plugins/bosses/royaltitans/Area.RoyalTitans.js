@@ -212,6 +212,7 @@ function createSession(owner) {
     area: new TitansArea(), owner, players: [], branda: null, eldric: null,
     spawnedAt: 0, over: false, respawnAt: 0, claimedBy: null, corpses: [],
     rows: new Set(), minions: new Set(), staticLocs: [], tileLocs: new Map(),
+    pendingRows: [],
   };
   sessions.set(session.area, session);
   return session;

@@ -170,20 +170,17 @@ function startRow(npc, target) {
     areaSounds(Shared.SOUND.rowSpawn[kind], at.x, at.y, Shared.ROW_SOUND_RANGE);
   }
   CombatAchievements.rowSpawned(session, kind);
+  // Tiles targeted but not yet formed: the blast steers clear of them too, as live never
+  // puts a safe tile on a wall (0 overlaps in 58 blasts, at charge and at fire).
+  const pending = { tiles: spots };
+  if (!session.pendingRows) session.pendingRows = [];
+  session.pendingRows.push(pending);
   later(Shared.ROW_SPAWN_TICKS, () => {
+    session.pendingRows = (session.pendingRows ?? []).filter((other) => other !== pending);
     if (!fighting(npc) || session.area.isDestroyed()) return;
     const rowId = kind === "fire" ? Shared.FIRE_ROW_ID : Shared.ICE_ROW_ID;
     const cast = {};
-    // Tiles a living player stands on at formation, as tile key -> players.
-    const occupants = new Map();
-    for (const player of session.players ?? []) {
-      if (!alive(player)) continue;
-      const pos = tileOf(player);
-      if (!pos) continue;
-      const key = Shared.tileKey(pos.x, pos.y);
-      if (!occupants.has(key)) occupants.set(key, []);
-      occupants.get(key).push(player);
-    }
+    const occupants = occupantsByTile(session, spots);
     for (const [x, y] of spots) {
       // Fire and ice cancel out: where the other element's row stands, that tile despawns
       // and this one never appears (captured).
@@ -268,6 +265,26 @@ function rowsAt(session, x, y) {
     const row = hitbox.getAttribute(Shared.ROW_ATTRIBUTE);
     return row.x === x && row.y === y && hitbox.isRegistered();
   });
+}
+
+/**
+ * Living players standing on the given instance tiles right now, as tile key -> players.
+ * A row tile occupied at formation never forms: each occupant takes the wall hit instead
+ * (Wiki; captured 02283 T1352, 03398).
+ */
+function occupantsByTile(session, spots) {
+  const wanted = new Set(spots.map(([x, y]) => Shared.tileKey(x, y)));
+  const occupants = new Map();
+  for (const player of session.players ?? []) {
+    if (!alive(player)) continue;
+    const pos = tileOf(player);
+    if (!pos) continue;
+    const key = Shared.tileKey(pos.x, pos.y);
+    if (!wanted.has(key)) continue;
+    if (!occupants.has(key)) occupants.set(key, []);
+    occupants.get(key).push(player);
+  }
+  return occupants;
 }
 
 /** Natural expiry only (spell clears go through clearRowTile with cleared=true). */
@@ -485,8 +502,8 @@ function spawnSafeTimer(session, at) {
 /**
  * The safe tile, authored: anywhere in the blast area with both titans fighting; with one
  * left, on the row farthest from it (Branda alone: y 9564; Eldric alone: y 9570), random x.
- * Never on a live wall tile (captured: 0 overlaps in 58 blasts); if walls cover every
- * candidate, any tile (never fail).
+ * Never on a live wall tile, nor on one still forming (captured: 0 overlaps in 58 blasts,
+ * at charge and at fire); if walls cover every candidate, any tile (never fail).
  */
 function blastSafeTile(session) {
   const { minX, maxX, minY, maxY } = Shared.BLAST_AREA;
@@ -496,10 +513,15 @@ function blastSafeTile(session) {
   if (brandaIn && !eldricIn) rows.push(minY);
   else if (eldricIn && !brandaIn) rows.push(maxY);
   else for (let y = minY; y <= maxY; y++) rows.push(y);
+  const targeted = new Set();
+  for (const row of session.pendingRows ?? []) {
+    for (const [x, y] of row.tiles) targeted.add(Shared.tileKey(x, y));
+  }
   const free = [];
   for (const y of rows) {
     for (let x = minX; x <= maxX; x++) {
       const at = arenaSpot(session, x, y);
+      if (targeted.has(Shared.tileKey(at.x, at.y))) continue;
       if (rowsAt(session, at.x, at.y).length === 0) free.push({ x, y });
     }
   }
@@ -660,6 +682,7 @@ function endFight(session) {
   session.safeObject = null;
   for (const object of session.tileLocs.values()) core.ObjectManager.deregister(object, true);
   session.tileLocs.clear();
+  session.pendingRows = [];
   clearStaticLocs(session);
 }
 
@@ -699,6 +722,6 @@ function attach(api) {
 module.exports = {
   attach, areaSounds, telegraphMelee, startRow, clearRowTile, startMinions, teleportTitans,
   survivorEnraged, takeBlastTurn, blastSafeTile, endFight, addLoc, clearStaticLocs,
-  rowAttackAllowed, planWalk, faceAcross, spotOf, hasOwnMinions,
+  rowAttackAllowed, planWalk, faceAcross, spotOf, hasOwnMinions, occupantsByTile,
   _test: { blastSafeTile },
 };

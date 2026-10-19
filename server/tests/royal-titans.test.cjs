@@ -121,6 +121,31 @@ test("blast safe tile: never on a live wall tile, any tile if all covered", () =
   assert.ok(tile.x >= 2909 && tile.x <= 2913 && tile.y >= 9564 && tile.y <= 9570);
 });
 
+test("blast safe tile: steers clear of rows still forming", () => {
+  const pending = { tiles: [[2911, 9566]] };
+  const session = { branda: fakeTitan(12596), eldric: fakeTitan(14147), rows: new Set(), pendingRows: [pending] };
+  for (let i = 0; i < 50; i++) {
+    const tile = Specials.blastSafeTile(session);
+    assert.ok(!(tile.x === 2911 && tile.y === 9566), "safe tile avoids targeted tiles");
+  }
+});
+
+test("formation blocking: occupants of targeted tiles take the hit", () => {
+  const at = (x, y, hp = 99) => ({
+    getLocation: () => ({ getX: () => x, getY: () => y }),
+    isRegistered: () => true,
+    getHitpoints: () => hp,
+  });
+  const spots = [[2909, 9566], [2910, 9566], [2911, 9566], [2912, 9566], [2913, 9566]];
+  const session = { players: [at(2911, 9566), at(2911, 9566), at(2913, 9566), at(2900, 9500)] };
+  const occupants = Specials.occupantsByTile(session, spots);
+  assert.deepEqual([...occupants.keys()], ["2911,9566", "2913,9566"]);
+  assert.equal(occupants.get("2911,9566").length, 2);
+  assert.equal(occupants.get("2913,9566").length, 1);
+  const withCorpse = { players: [at(2911, 9566, 0)] };
+  assert.equal(Specials.occupantsByTile(withCorpse, spots).size, 0);
+});
+
 test("mobile attacks follow the spot: stomps from the edge, never from the back", () => {
   const { pickSpecial } = Combat._test;
   const titan = fakeTitan(12596);
