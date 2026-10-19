@@ -1,8 +1,9 @@
 name: Claude review
 
-# Comment "@claude review" (or any @claude question) on a pull request. Only collaborators can
-# trigger it, and comment events always run this file from main, so fork PRs get the same
-# read-only setup: Claude can comment, but cannot push or run the PR's code.
+# Comment "@claude review" (or any @claude question) on a pull request. It runs on one
+# person's Claude subscription, so only their comments trigger it. Comment events always run
+# this file from main, so fork PRs get the same read-only setup: Claude can comment, but cannot
+# push or run the PR's code.
 on:
     issue_comment:
         types: [created]
@@ -19,7 +20,7 @@ jobs:
             github.repository == 'RSPSApp/tsps' &&
             (github.event_name == 'pull_request_review_comment' || github.event.issue.pull_request) &&
             contains(github.event.comment.body, '@claude') &&
-            contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
+            github.event.comment.user.login == 'Bandit-HaxUnit'
         runs-on: ubuntu-latest
         timeout-minutes: 30
         permissions:
