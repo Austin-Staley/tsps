@@ -235,6 +235,15 @@ adverts, house options, the house viewer, chairs.
 
 ## Testing
 
+Developer commands:
+
+- `::housemats <furniture or room>` gives what building it needs: its materials, a hammer and
+  saw, and a tinderbox for burners; a room gives its cost in coins. A name matching several
+  pieces (the head and fish "Teak display") lists them, and their keys work too
+  (`::housemats HEAD_DISPLAY_TEAK`). An upgrade says what it needs built first.
+- `::deletehouse` deletes your house, taking you and any guests out of it, so you can buy a new
+  one from an Estate agent.
+
 `::hotspots` (developer) lists the build hotspots of the room you stand in, with their tiles, so
 furniture can be built with the agent MCP: `object_option` Build on the hotspot, then
 `send_packet` `dialogue_continue` on 458:2 with the menu choice (1-based) once 458 is open. Rooms

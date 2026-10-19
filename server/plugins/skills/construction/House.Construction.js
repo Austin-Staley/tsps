@@ -1154,6 +1154,8 @@ function attach(api) {
   api.onObjectThirdClick(EXIT_PORTAL_ID, removeAdvertisement);
   api.registerCommand("house", houseCommand);
   api.registerCommand("hotspots", Commands.listHotspots, PlayerRights.DEVELOPER);
+  api.registerCommand("housemats", Commands.houseMaterials, PlayerRights.DEVELOPER, "Spawn the materials to build a piece of furniture or a room");
+  api.registerCommand("deletehouse", Commands.deleteHouse, PlayerRights.DEVELOPER, "Delete your house, so you have to buy a new one");
   api.onObjectFirstClick(ROOM_DOOR_HOTSPOT_IDS, openRoomDoor);
   api.onObjectFifthClick(ROOM_DOOR_HOTSPOT_IDS, openRoomDoor);
   api.onObjectFirstClick(furnitureObjectIds, tryRemoveFurniture);
