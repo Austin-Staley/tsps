@@ -26,6 +26,8 @@ bones and the possible satchel/flask drops as defined by each canonical table.
 The plugin attaches hooks during registration, then registers its persistent altar state and
 dungeon area during server startup. It removes living owned creatures when the owner leaves the
 dungeon, logs out, dies, or the server shuts down; death clears the altar's active-creature guard.
+Activation also forgets a creature removed without dying, freeing that altar; creatures still
+queued for registration retain their guard until registered or their queued spawn is cancelled.
 
 Sources: [OSRS Wiki: Creature Creation](https://oldschool.runescape.wiki/w/Creature_Creation),
 [Tower of Life](https://oldschool.runescape.wiki/w/Tower_of_Life), and the checked revision 241

@@ -135,6 +135,7 @@ function harness(t, members = true) {
       }, getNpcTransformationId: () => p.transformation ?? -1,
       getLocation: () => p.location, getUsername: () => 'Player', busy: () => !!p.isBusy,
       getCombat: () => ({ getTarget: () => p.target, getAttacker: () => p.attacker }),
+      getCombatFollowing: () => p.combatFollowing,
       getPrivateArea: () => p.privateArea, getArea: () => p.area,
       getDueling: () => ({ inDuel: () => !!p.duel }), getForceMovement: () => p.movement,
       getInterfaceId: () => p.interfaceId, setInterfaceId(id) { p.interfaceId = id; },
@@ -209,6 +210,22 @@ test('natural scheduling waits for the due time, checks on five-minute intervals
   assert.equal(npc.following, p); assert.equal(npc.definition.ownerOnly, undefined);
   h.hooks['Sandwich lady'].Dismiss({ player: p, npc });
   h.emit('PlayerProcess', { player: p }); assert.equal(h.npcs.length, 1, 'dismissal keeps the timer set at spawn');
+});
+
+test('a teleport invitation can spawn during combat but does not move the player without acceptance', t => {
+  const h = harness(t), p = h.player();
+  p.target = {}; p.attacker = {}; p.combatFollowing = {};
+  const origin = p.location.clone();
+  const npc = h.spawn(p, 20);
+  assert.equal(npc.definition.id, N.MYSTERIOUS_OLD_MAN_5);
+  assert.equal(p.location.equals(origin), true);
+  assert.equal(Teleports.hasSession(p), false);
+  h.emit('PlayerProcess', { player: p });
+  assert.equal(p.location.equals(origin), true, 'processing the invitation does not teleport either');
+  h.hooks['Mysterious Old Man']['Talk-to']({ player: p, npc, handled: false });
+  choose(h, p, 1);
+  assert.equal(p.location.equals(origin), true, 'declining the invitation leaves the fight in place');
+  assert.equal(Teleports.hasSession(p), false);
 });
 
 test('the due timestamp survives relogin and an offline-expired timer moves 10–70 minutes ahead', t => {

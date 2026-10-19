@@ -22,6 +22,7 @@ function harness(options = {}) {
   const hooks = {};
   const spawned = [];
   const removed = [];
+  const addQueue = [];
   const persisted = [];
   const diaries = { easy: false, medium: false };
   const core = {
@@ -32,6 +33,7 @@ function harness(options = {}) {
     ItemDefinition: { forId: (id) => ({ getName: () => `item ${id}` }) },
     Area: class { constructor(boundaries) { this.boundaries = boundaries; } },
     Boundary: class { constructor(...values) { this.values = values; } },
+    World: { getAddNPCQueue: () => addQueue },
   };
   const api = {
     core,
@@ -52,7 +54,8 @@ function harness(options = {}) {
     spawnNpc(definition) {
       if (options.spawnThrows) throw new Error("spawn failed");
       if (options.spawnReturnsFalse) return null;
-      const npc = { definition };
+      const npc = { definition, registered: !options.spawnQueued, isRegistered() { return this.registered; } };
+      if (options.spawnQueued) addQueue.push(npc);
       spawned.push(npc);
       return npc;
     },
@@ -98,7 +101,7 @@ function harness(options = {}) {
     return { player, objectId, location, itemId, itemSlot, handled: false };
   }
   const altarEvent = (player, objectId = objectIds.SYMBOL_OF_LIFE, location = { x: 3058, y: 4410, z: 0 }) => ({ player, objectId, location });
-  return { hooks, spawned, removed, persisted, diaries, player, objectEvent, altarEvent, plugin };
+  return { hooks, spawned, removed, addQueue, persisted, diaries, player, objectEvent, altarEvent, plugin };
 }
 
 function put(h, player, id, slot = 0) {
@@ -226,6 +229,38 @@ test("one living creature per player per altar preserves priming until that crea
   h.hooks.npcDeath({ npc: h.spawned[0] });
   h.hooks.activate(h.altarEvent(p));
   assert.equal(h.spawned.length, 2);
+});
+
+test("a creature removed without dying releases its altar on activation and is forgotten by cleanup", () => {
+  const h = harness();
+  const p = h.player();
+  primeNewtroost(h, p);
+  h.hooks.activate(h.altarEvent(p));
+  const removed = h.spawned[0];
+  removed.registered = false;
+  primeNewtroost(h, p);
+  h.hooks.activate(h.altarEvent(p));
+  assert.equal(h.spawned.length, 2);
+  assert.equal(p.getAttribute("creature-creation:newtroost"), 0);
+  assert.equal(p.getAttribute("creature-creation:newtroost-second"), 0);
+  h.hooks.logout({ player: p });
+  assert.deepEqual(h.removed, [h.spawned[1]], "the removed creature no longer retains owned cleanup state");
+});
+
+test("a creature queued for registration still blocks duplicate activation", () => {
+  const h = harness({ spawnQueued: true });
+  const p = h.player();
+  primeNewtroost(h, p);
+  h.hooks.activate(h.altarEvent(p));
+  assert.equal(h.spawned[0].isRegistered(), false);
+  primeNewtroost(h, p);
+  h.hooks.activate(h.altarEvent(p));
+  assert.equal(h.spawned.length, 1);
+  assert.equal(p.getAttribute("creature-creation:newtroost"), itemIds.EYE_OF_NEWT);
+  assert.equal(p.getAttribute("creature-creation:newtroost-second"), itemIds.FEATHER);
+  h.addQueue.length = 0;
+  h.hooks.activate(h.altarEvent(p));
+  assert.equal(h.spawned.length, 2, "cancelling the queued spawn releases the altar too");
 });
 
 test("drop hook notes only Wiki diary ingredient drops; unrelated creatures are untouched", () => {

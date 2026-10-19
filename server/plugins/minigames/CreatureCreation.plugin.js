@@ -139,6 +139,10 @@ function activate(api, core, { player, objectId, location }) {
     return true;
   }
   if (busyPlayers.has(player)) return true;
+  const existing = activeByAltar.get(player)?.get(altar.key);
+  if (existing && !existing.isRegistered() && !core.World.getAddNPCQueue().includes(existing)) {
+    forgetNpc({ npc: existing });
+  }
   if (activeByAltar.get(player)?.has(altar.key)) {
     message(core, player, "The creature at this altar must be defeated before another can be created here.");
     return true;

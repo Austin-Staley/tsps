@@ -41,6 +41,16 @@ PvP Wilderness, and transformed players are ineligible. Ignored events expire af
 one minute; an event's dismissal or completion does not reset its timer. A due event
 stalled by a busy action remains pending and is attempted when that action clears. The
 18-second attention reminder has no published interval and remains an implementation detail.
+
+Combat is not a blanket scheduler veto. This interprets the Wiki's
+[Trivia](https://oldschool.runescape.wiki/w/Random_events#Trivia), which describes the
+post-2014 events as independent of the player's activity, alongside Spawn mechanics'
+location/transformation exclusions and interface/Make-X stalls. The Wiki does not state
+a separate combat eligibility rule; no packet capture verifies that edge case. Spawning
+an invitation never teleports the player: `Teleports.begin` runs only after accepting
+the event's dialogue. A regression covers a Mime invitation with combat target, attacker
+and combat-following set, including ignoring and declining it without movement.
+
 Normal-world rsprox captures 3147/rev232 and 2483 show an emote-unlock interface and
 initial Count Check placement only; they provide no spawn-timing evidence.
 
@@ -236,7 +246,7 @@ index 5. The command still bypasses the cooldown and enabled flag but requires t
 player to be outside restricted actions and areas, including private instances and
 Tutorial Island.
 
-Verify after build: `node --test tests/random-events.test.cjs`. The 53 tests
+Verify after build: `node --test tests/random-events.test.cjs`. The 54 tests
 cover every new event's registration, dialogues, interfaces, mechanisms, reward
 progression, owner checks, wrong-answer paths, expiry and cleanup, plus the
 Mystery box and Book of Knowledge reward paths. From `client/`, `yarn tsx
