@@ -16,6 +16,8 @@ const Mounted = require("./Mounted.Construction");
 const SuperiorGarden = require("./SuperiorGarden.Construction");
 const Lectern = require("./Lectern.Construction");
 const Stairs = require("./Stairs.Construction");
+const Workshop = require("./Workshop.Construction");
+const Kitchen = require("./Kitchen.Construction");
 
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
@@ -1027,6 +1029,8 @@ function attach(api) {
   SuperiorGarden.attachSuperiorGarden(api);
   Lectern.attachLecterns(api);
   Stairs.attachStairs(api);
+  Workshop.attachWorkshop(api);
+  Kitchen.attachKitchen(api);
   api.persistAttribute(HOUSE_ATTRIBUTE, defaultHouse());
   api.onObjectFirstClick(HOUSE_PORTAL_IDS, enterDefaultHouse);
   api.onObjectSecondClick(HOUSE_PORTAL_IDS, enterNormalHouse);
