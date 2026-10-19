@@ -85,6 +85,7 @@ const DESTINATIONS = {
     teleport("Count Draynor", location(3077, 9772), TeleportType.NORMAL),
     teleport("Elvarg", location(2852, 9637), TeleportType.NORMAL),
     teleport("Kalphite Queen", location(3508, 9494), TeleportType.NORMAL),
+    teleport("Kraken", location(2280, 10016), TeleportType.NORMAL),
     teleport("Corporeal Beast", location(2966, 4252, 2), TeleportType.NORMAL),
     teleport("Zulrah", location(2196, 3056), TeleportType.NORMAL),
     teleport("Doom of Mokhaiotl", location(1311, 9531, 1), TeleportType.NORMAL),
