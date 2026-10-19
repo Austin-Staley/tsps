@@ -9,7 +9,7 @@
       }
     },
     {
-      "id": "edge_low", "enabled": true, "x": 3073, "y": 3531, "radius": 5, "bots": 12,
+      "id": "edge_low", "enabled": true, "x": 3073, "y": 3531, "radius": 5, "bots": 5,
       "pvp": {
         "style": "pure",
         "combat": [55, 85],
@@ -19,7 +19,7 @@
       }
     },
     {
-      "id": "edge_mid", "enabled": true, "x": 3090, "y": 3531, "radius": 5, "bots": 10,
+      "id": "edge_mid", "enabled": true, "x": 3090, "y": 3531, "radius": 5, "bots": 5,
       "pvp": {
         "style": "mid",
         "combat": [88, 100],
@@ -29,7 +29,7 @@
       }
     },
     {
-      "id": "edge_mains", "enabled": true, "x": 3108, "y": 3531, "radius": 5, "bots": 14,
+      "id": "edge_mains", "enabled": true, "x": 3108, "y": 3531, "radius": 5, "bots": 5,
       "pvp": {
         "style": "main",
         "combat": [115, 126],
@@ -39,7 +39,7 @@
       }
     },
     {
-      "id": "varrock_ditch", "enabled": true, "x": 3243, "y": 3526, "bots": 40,
+      "id": "varrock_ditch", "enabled": true, "x": 3243, "y": 3526, "bots": 10,
       "area": { "minX": 3228, "maxX": 3262, "minY": 3525, "maxY": 3542 },
       "pvp": {
         "style": "f2p",
