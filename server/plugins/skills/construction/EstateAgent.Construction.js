@@ -1,37 +1,31 @@
-import type { PluginApi, PluginNpcInteractionEvent, PluginInterfaceActionClickEvent } from "../../../../plugins/PluginTypes";
-import type { Player } from "../../../entity/impl/player/Player";
-import { Skill } from "../../../model/Skill";
-import { ItemIdentifiers as Items } from "../../../../util/ItemIdentifiers";
-import { DialogueChainBuilder } from "../../../model/dialogues/builders/DialogueChainBuilder";
-import { NpcDialogue } from "../../../model/dialogues/entries/impl/NpcDialogue";
-import { ActionDialogue } from "../../../model/dialogues/entries/impl/ActionDialogue";
-import { EndDialogue } from "../../../model/dialogues/entries/impl/EndDialogue";
-import { HOUSE_LOCATIONS, HOUSE_STYLES, houseStyleIndex } from "./HouseEstateData";
-import { houseStateFor, releaseHouse, syncHouseOptions } from "./ConstructionPlugin";
+"use strict";
 
+const { Skill, ItemIdentifiers: Items, DialogueChainBuilder, NpcDialogue, ActionDialogue, EndDialogue } = require("./Core.Construction");
+const Estate = require("./Estate.Construction");
+const House = require("./House.Construction");
 const MENU = 187;
 const MENU_OPTIONS = (MENU << 16) | 3;
-const pendingMenus = new WeakMap<Player, { event: PluginNpcInteractionEvent; kind: "location" | "style" }>();
+const pendingMenus = new WeakMap();
 
-function say(event: PluginNpcInteractionEvent, text: string, next?: () => void): void {
+function say(event, text, next) {
   event.player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
     new NpcDialogue(0, event.npcId, text),
     next ? new ActionDialogue(1, { execute: next }) : new EndDialogue(1),
   ));
 }
 
-function stillAtAgent(event: PluginNpcInteractionEvent): boolean {
+function stillAtAgent(event) {
   const current = event.player.getLocation(), npc = event.npc.getLocation();
   return !event.player.getPrivateArea() && current.getZ() === npc.getZ()
     && Math.max(Math.abs(current.getX() - npc.getX()), Math.abs(current.getY() - npc.getY())) <= 6;
 }
 
-function saveHouse(player: Player): void {
-  player.setAttribute("construction:house", houseStateFor(player));
-  syncHouseOptions(player);
+function saveHouse(player) {
+  player.setAttribute("construction:house", House.houseStateFor(player));
+  House.syncHouseOptions(player);
 }
 
-function pay(event: PluginNpcInteractionEvent, amount: number): boolean {
+function pay(event, amount) {
   if (!stillAtAgent(event)) return false;
   if (event.player.getInventory().getAmount(Items.COINS) < amount) {
     say(event, `You need ${amount.toLocaleString("en-US")} coins to do that.`);
@@ -41,7 +35,7 @@ function pay(event: PluginNpcInteractionEvent, amount: number): boolean {
   return true;
 }
 
-function giveGuide(event: PluginNpcInteractionEvent): void {
+function giveGuide(event) {
   if (!stillAtAgent(event)) return;
   const inventory = event.player.getInventory();
   if (inventory.contains(Items.CONSTRUCTION_GUIDE) || event.player.getBanks().some(bank => bank?.contains(Items.CONSTRUCTION_GUIDE))) {
@@ -54,8 +48,8 @@ function giveGuide(event: PluginNpcInteractionEvent): void {
   }
 }
 
-function buyHouse(event: PluginNpcInteractionEvent): void {
-  const saved = houseStateFor(event.player);
+function buyHouse(event) {
+  const saved = House.houseStateFor(event.player);
   if (saved.owned !== false || !pay(event, 1000)) return;
   saved.owned = true;
   saved.location = 1;
@@ -64,13 +58,13 @@ function buyHouse(event: PluginNpcInteractionEvent): void {
   say(event, "Thank you. Go through the Rimmington house portal and you will find your house ready for you to start building in it.", () => giveGuide(event));
 }
 
-function offerHouse(api: PluginApi, event: PluginNpcInteractionEvent): void {
+function offerHouse(api, event) {
   say(event, "I can sell you a starting house in Rimmington for 1000 coins. As your Construction level increases, you can have it moved to other areas and redecorated in other styles.", () =>
     api.sendMultiChatboxPrompt(event.player, "Do you want to buy a starter house?",
       "Yes please!", () => buyHouse(event), "No thanks", () => {}));
 }
 
-function describeHouses(api: PluginApi, event: PluginNpcInteractionEvent): void {
+function describeHouses(api, event) {
   api.sendMultiChatboxPrompt(event.player, "What would you like to know?",
     "How do I get started?", () => say(event, "Enter your house in building mode. Bring a hammer, a saw and materials, then select a hotspot to build furniture. Your Construction guide explains the rooms and furniture you can build."),
     "How do I get building materials?", () => say(event, "Take logs to a sawmill to have them made into planks. You can buy nails and a saw there. Different furniture requires different materials, which are shown in the build menu."),
@@ -79,8 +73,8 @@ function describeHouses(api: PluginApi, event: PluginNpcInteractionEvent): void 
     "That's all, thanks.", () => {});
 }
 
-function buyCape(event: PluginNpcInteractionEvent): void {
-  const player: Player = event.player;
+function buyCape(event) {
+  const player = event.player;
   if (player.getSkillManager().getMaxLevel(Skill.CONSTRUCTION) < 99) {
     say(event, "You need a Construction level of 99 to buy a cape of accomplishment.");
     return;
@@ -98,7 +92,7 @@ function buyCape(event: PluginNpcInteractionEvent): void {
   say(event, "Wear your cape with pride! You have mastered Construction.");
 }
 
-function offerCape(api: PluginApi, event: PluginNpcInteractionEvent): void {
+function offerCape(api, event) {
   if (event.player.getSkillManager().getMaxLevel(Skill.CONSTRUCTION) < 99) {
     say(event, "This is a cape of accomplishment. When you reach level 99 Construction, I can sell you one for 99,000 coins.");
     return;
@@ -107,9 +101,9 @@ function offerCape(api: PluginApi, event: PluginNpcInteractionEvent): void {
     "Yes, please.", () => buyCape(event), "No, thanks.", () => {});
 }
 
-function showMenu(api: PluginApi, event: PluginNpcInteractionEvent, kind: "location" | "style"): boolean {
-  if (houseStateFor(event.player).owned === false) { offerHouse(api, event); return true; }
-  const choices = kind === "location" ? HOUSE_LOCATIONS : HOUSE_STYLES;
+function showMenu(api, event, kind) {
+  if (House.houseStateFor(event.player).owned === false) { offerHouse(api, event); return true; }
+  const choices = kind === "location" ? Estate.HOUSE_LOCATIONS : Estate.HOUSE_STYLES;
   const sender = event.player.getPacketSender();
   sender.sendInterfaceRemoval();
   sender.sendInterface(MENU);
@@ -120,21 +114,21 @@ function showMenu(api: PluginApi, event: PluginNpcInteractionEvent, kind: "locat
   return true;
 }
 
-function relocate(api: PluginApi, event: PluginNpcInteractionEvent): boolean { return showMenu(api, event, "location"); }
-function redecorate(api: PluginApi, event: PluginNpcInteractionEvent): boolean { return showMenu(api, event, "style"); }
+function relocate(api, event) { return showMenu(api, event, "location"); }
+function redecorate(api, event) { return showMenu(api, event, "style"); }
 
-function changeHouse(event: PluginNpcInteractionEvent, kind: "location" | "style", index: number): void {
+function changeHouse(event, kind, index) {
   if (!stillAtAgent(event)) return;
-  const player: Player = event.player, saved = houseStateFor(player);
+  const player = event.player, saved = House.houseStateFor(player);
   if (saved.owned === false) return;
-  const choice = kind === "location" ? HOUSE_LOCATIONS[index] : HOUSE_STYLES[index];
+  const choice = kind === "location" ? Estate.HOUSE_LOCATIONS[index] : Estate.HOUSE_STYLES[index];
   if (!choice) return;
   if (player.getSkillManager().getMaxLevel(Skill.CONSTRUCTION) < choice.level) {
     say(event, `You need a Construction level of ${choice.level} for that. A temporary boost will not help.`);
     return;
   }
   if (kind === "location") {
-    const destination = HOUSE_LOCATIONS[index];
+    const destination = Estate.HOUSE_LOCATIONS[index];
     if ((saved.location ?? 1) === destination.id) { say(event, "Your house is already there."); return; }
     if (destination.id === 8 && !saved.visitedKourend && player.getPacketSender().getVarbit(4897) === 0) {
       say(event, "You must visit Great Kourend before moving your house to Hosidius."); return;
@@ -146,10 +140,10 @@ function changeHouse(event: PluginNpcInteractionEvent, kind: "location" | "style
       say(event, "Prifddinas? I've never heard of it. Are you sure it's a real place?"); return;
     }
     if (!pay(event, choice.cost)) return;
-    releaseHouse(player, false);
+    House.releaseHouse(player, false);
     saved.location = destination.id;
   } else {
-    const style = HOUSE_STYLES[index], oldStyle = houseStyleIndex(saved);
+    const style = Estate.HOUSE_STYLES[index], oldStyle = Estate.houseStyleIndex(saved);
     if (oldStyle === index) { say(event, "Your house is already decorated in that style."); return; }
     const unlocked = saved.unlockedStyles?.includes(index) || (index === 9 && player.getPacketSender().getVarbit(11723) === 1)
       || (index === 12 && player.getPacketSender().getVarbit(19672) === 1);
@@ -164,7 +158,7 @@ function changeHouse(event: PluginNpcInteractionEvent, kind: "location" | "style
       say(event, "Make room for me to return your Twisted blueprints before changing styles."); return;
     }
     if (!pay(event, choice.cost)) return;
-    releaseHouse(player, false);
+    House.releaseHouse(player, false);
     if (blueprint) inventory.delete(blueprint, 1);
     if (returnedBlueprint) inventory.adds(Items.TWISTED_BLUEPRINTS, 1);
     if ((style.blueprint && index !== 7) || style.holiday) saved.unlockedStyles = [...new Set([...(saved.unlockedStyles ?? []), index])];
@@ -174,29 +168,29 @@ function changeHouse(event: PluginNpcInteractionEvent, kind: "location" | "style
   say(event, kind === "location" ? `Your house has been moved to ${choice.name}.` : `Your house has been redecorated in the ${choice.name} style.`);
 }
 
-function selectMenu(api: PluginApi, event: PluginInterfaceActionClickEvent): void {
+function selectMenu(api, event) {
   if (event.groupId !== MENU || event.childId !== 3) return;
   const pending = pendingMenus.get(event.player);
   if (!pending) return;
   event.handled = true;
   if (event.player.getInterfaceId() !== MENU || !stillAtAgent(pending.event)) return;
   const index = event.slot ?? event.action;
-  const choices = pending.kind === "location" ? HOUSE_LOCATIONS : HOUSE_STYLES;
-  if (!Number.isInteger(index) || index! < 0 || index! >= choices.length) return;
+  const choices = pending.kind === "location" ? Estate.HOUSE_LOCATIONS : Estate.HOUSE_STYLES;
+  if (!Number.isInteger(index) || index < 0 || index >= choices.length) return;
   pendingMenus.delete(event.player);
   event.player.getPacketSender().sendInterfaceRemoval();
-  const choice = choices[index!];
-  const style = pending.kind === "style" ? HOUSE_STYLES[index!] : undefined;
-  const usesBlueprint = style?.blueprint && (index === 7 || (!houseStateFor(event.player).unlockedStyles?.includes(index!)
+  const choice = choices[index];
+  const style = pending.kind === "style" ? Estate.HOUSE_STYLES[index] : undefined;
+  const usesBlueprint = style?.blueprint && (index === 7 || (!House.houseStateFor(event.player).unlockedStyles?.includes(index)
     && !(index === 12 && event.player.getPacketSender().getVarbit(19672) === 1)));
   api.sendMultiChatboxPrompt(event.player, `${pending.kind === "location" ? "Move" : "Redecorate"} your house: ${choice.name}?`,
-    `Yes (${choice.cost.toLocaleString("en-US")} coins${usesBlueprint ? " and blueprints" : ""}).`, () => changeHouse(pending.event, pending.kind, index!),
+    `Yes (${choice.cost.toLocaleString("en-US")} coins${usesBlueprint ? " and blueprints" : ""}).`, () => changeHouse(pending.event, pending.kind, index),
     "No, thanks.", () => {});
 }
 
-function talk(api: PluginApi, event: PluginNpcInteractionEvent): boolean {
+function talk(api, event) {
   say(event, "Hello. Welcome to the Gielinor Housing Agency! What can I do for you?", () => {
-    if (houseStateFor(event.player).owned === false) {
+    if (House.houseStateFor(event.player).owned === false) {
       api.sendMultiChatboxPrompt(event.player, "What would you like to say?",
         "How can I get a house?", () => offerHouse(api, event),
         "Tell me about houses.", () => describeHouses(api, event));
@@ -212,17 +206,15 @@ function talk(api: PluginApi, event: PluginNpcInteractionEvent): boolean {
   return true;
 }
 
-function closeMenu({ player }: { player: Player }): void { pendingMenus.delete(player); }
+function closeMenu({ player }) { pendingMenus.delete(player); }
 
-export const EstateAgentPlugin = {
-  name: "EstateAgents",
-  register(api: PluginApi): void {
-    api.onNpcInteraction("Estate agent", { "Talk-to": talk.bind(null, api), Relocate: relocate.bind(null, api), Redecorate: redecorate.bind(null, api) });
-    api.onNpcInteraction("Estate Agent", { "Talk-to": talk.bind(null, api), Relocate: relocate.bind(null, api), Redecorate: redecorate.bind(null, api) });
-    api.onNpcInteraction("Alwyn", { "Talk-to": talk.bind(null, api), Relocate: relocate.bind(null, api), Redecorate: redecorate.bind(null, api) });
-    api.onInterfaceActionClick(selectMenu.bind(null, api));
-    api.onCustomEvent("interface:close", closeMenu);
-    api.onPlayerLogout(closeMenu);
-  },
-};
+function attachEstateAgents(api) {
+  api.onNpcInteraction("Estate agent", { "Talk-to": talk.bind(null, api), Relocate: relocate.bind(null, api), Redecorate: redecorate.bind(null, api) });
+  api.onNpcInteraction("Estate Agent", { "Talk-to": talk.bind(null, api), Relocate: relocate.bind(null, api), Redecorate: redecorate.bind(null, api) });
+  api.onNpcInteraction("Alwyn", { "Talk-to": talk.bind(null, api), Relocate: relocate.bind(null, api), Redecorate: redecorate.bind(null, api) });
+  api.onInterfaceActionClick(selectMenu.bind(null, api));
+  api.onCustomEvent("interface:close", closeMenu);
+  api.onPlayerLogout(closeMenu);
+}
 
+Object.assign(module.exports, { attachEstateAgents });

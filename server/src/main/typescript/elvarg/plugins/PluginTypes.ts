@@ -1352,6 +1352,20 @@ export interface PluginCoreApi {
   TradeState: any;
   dispatchClientMessages: (player: any, messages: any[]) => boolean;
   connectHeadlessClient: (username: string, password: string) => Promise<{ player?: any; error?: string }>;
+  CachePipeline: typeof import("../game/cache/CachePipeline").CachePipeline;
+  CacheMaps: typeof import("../game/cache/CacheMaps").CacheMaps;
+  CacheIndexDat2: typeof import("../game/cache/codec/rs/cache/CacheIndex").CacheIndexDat2;
+  IndexType: typeof import("../game/cache/codec/rs/cache/IndexType").IndexType;
+  ConfigType: typeof import("../game/cache/codec/rs/cache/ConfigType").ConfigType;
+  ByteBuffer: typeof import("../game/cache/codec/rs/io/ByteBuffer").ByteBuffer;
+  encodeRebuildRegion: typeof import("../net/protocol/ClientProtocol").encodeRebuildRegion;
+  encodeLocAddChange: typeof import("../net/protocol/ClientProtocol").encodeLocAddChange;
+  encodeLocDel: typeof import("../net/protocol/ClientProtocol").encodeLocDel;
+  PrivateChatStatus: typeof import("../game/model/PlayerRelations").PrivateChatStatus;
+  SpellTeleports: typeof import("../game/content/combat/magic/SpellTeleports").SpellTeleports;
+  LunarSpells: typeof import("../game/content/combat/magic/LunarSpells").LunarSpells;
+  ArceuusSpells: typeof import("../game/content/combat/magic/ArceuusSpells").ArceuusSpells;
+  ArceuusOfferings: typeof import("../game/content/combat/magic/ArceuusOfferings");
 }
 
 export interface PluginModule {

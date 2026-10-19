@@ -1,24 +1,16 @@
-import type { PluginApi, PluginObjectInteractionEvent } from "../../../../plugins/PluginTypes";
-import type { Player } from "../../../entity/impl/player/Player";
-import { Skill } from "../../../model/Skill";
-import { TeleportHandler } from "../../../model/teleportation/TeleportHandler";
-import { TeleportType } from "../../../model/teleportation/TeleportType";
-import { Wilderness } from "../../../content/wilderness/Wilderness";
-import { SpellTeleports } from "../../../content/combat/magic/SpellTeleports";
-import { LunarSpells } from "../../../content/combat/magic/LunarSpells";
-import { ArceuusSpells } from "../../../content/combat/magic/ArceuusSpells";
-import { ObjectIdentifiers } from "../../../../util/ObjectIdentifiers";
-import { PlayerHouseInstance, type SavedHouseFurniture } from "./PlayerHouseInstance";
+"use strict";
 
-const aliases: Record<string, string> = { moonclan: "LUNAR_ISLE", "ape atoll": "MARIM", "kourend castle": "KOUREND", "fenkenstrain's castle": "FENKENSTRAINS_CASTLE", waterbirth: "WATERBIRTH_ISLAND", watchtower: "YANILLE_WATCHTOWER", barbarian: "BARBARIAN_OUTPOST", khazard: "PORT_KHAZARD" };
-export function houseDestinations() {
+const { Skill, TeleportHandler, TeleportType, Wilderness, SpellTeleports, LunarSpells, ArceuusSpells, ObjectIdentifiers } = require("./Core.Construction");
+const Instance = require("./Instance.Construction");
+const aliases = { moonclan: "LUNAR_ISLE", "ape atoll": "MARIM", "kourend castle": "KOUREND", "fenkenstrain's castle": "FENKENSTRAINS_CASTLE", waterbirth: "WATERBIRTH_ISLAND", watchtower: "YANILLE_WATCHTOWER", barbarian: "BARBARIAN_OUTPOST", khazard: "PORT_KHAZARD" };
+function houseDestinations() {
   // Reuse the spell system's costs and destinations; home/house spells cannot be directed.
   return [...SpellTeleports.getTeleportDestinations(), ...LunarSpells.getTeleportDestinations(), ...ArceuusSpells.getTeleportDestinations().map(data => ({ ...data, name: data.name === "ape atoll teleport" ? "ape atoll dungeon teleport" : data.name }))]
     .filter(data => data.runes.length && data.name !== "teleport to house")
     .map(data => {
       const name = data.name.replace(/ teleport$/, "");
       const key = aliases[name] ?? name.replace(/ /g, "_").toUpperCase();
-      const ids = ObjectIdentifiers as unknown as Record<string, number>;
+      const ids = ObjectIdentifiers;
       // Revision 237 names the mahogany Watchtower model "Yanille Portal".
       const portalIds = name === "watchtower"
         ? [ObjectIdentifiers.YANILLE_WATCHTOWER_PORTAL, ObjectIdentifiers.YANILLE_PORTAL_2, ObjectIdentifiers.YANILLE_WATCHTOWER_PORTAL_2]
@@ -27,11 +19,11 @@ export function houseDestinations() {
     });
 }
 
-function current(player: Player, house: PlayerHouseInstance, furniture: SavedHouseFurniture): boolean {
+function current(player, house, furniture) {
   return player.getPrivateArea() === house && house.save.rooms.flat(2).some(room => Object.values(room?.furnitureByLocation ?? {}).includes(furniture));
 }
 
-export function configureHouseDestination(player: Player, house: PlayerHouseInstance, furniture: SavedHouseFurniture, name: string): boolean {
+function configureHouseDestination(player, house, furniture, name) {
   if (house.owner !== player || !current(player, house, furniture)) return false;
   const nexus = furniture.hotspotKey === "PORTAL_NEXUS";
   if (!nexus && !furniture.buildableKey.endsWith("_PORTAL_FRAME")) return false;
@@ -66,12 +58,12 @@ export function configureHouseDestination(player: Player, house: PlayerHouseInst
   return true;
 }
 
-function chooseDestination(api: PluginApi, player: Player, house: PlayerHouseInstance, furniture: SavedHouseFurniture, mode: "add" | "remove" | "teleport", page = 0): void {
+function chooseDestination(api, player, house, furniture, mode, page = 0) {
   if (!current(player, house, furniture)) return;
   const nexus = furniture.hotspotKey === "PORTAL_NEXUS";
   const destinations = houseDestinations().filter(data => mode === "add" ? !(furniture.destinations ?? []).includes(data.name) && (nexus || data.portalIds.every(Number.isInteger)) : furniture.destinations?.includes(data.name));
   if (!destinations.length) { player.sendMessage("There are no destinations to select."); return; }
-  const options: Array<string | (() => void)> = [];
+  const options = [];
   for (const destination of destinations.slice(page * 4, page * 4 + 4)) options.push(destination.name, () => {
     if (!current(player, house, furniture)) return;
     if (mode === "teleport") {
@@ -95,9 +87,9 @@ function chooseDestination(api: PluginApi, player: Player, house: PlayerHouseIns
   api.sendMultiChatboxPrompt(player, mode === "teleport" ? "Choose a destination" : "Configure destinations", ...options);
 }
 
-export function useHousePortal(api: PluginApi, event: PluginObjectInteractionEvent): boolean {
+function useHousePortal(api, event) {
   const house = event.player.getPrivateArea();
-  if (!(house instanceof PlayerHouseInstance)) return false;
+  if (!(house instanceof Instance.PlayerHouseInstance)) return false;
   const furniture = house.getFurnitureAt(event.location, event.objectId, event.object?.getType() ?? 10);
   if (!furniture) return false;
   const action = event.definition?.getInteractions()?.[event.clickType - 1]?.toLowerCase();
@@ -113,11 +105,13 @@ export function useHousePortal(api: PluginApi, event: PluginObjectInteractionEve
   }
   if (action !== "direct-portal") return false;
   if (house.owner !== event.player) { event.player.sendMessage("Only the owner can direct portals."); return true; }
-  const position = house.getRoomPositionAt(event.location)!;
-  const portals = Object.values(house.getRoom(position)!.furnitureByLocation ?? {}).filter(value => value.buildableKey.endsWith("_PORTAL_FRAME"));
+  const position = house.getRoomPositionAt(event.location);
+  const portals = Object.values(house.getRoom(position).furnitureByLocation ?? {}).filter(value => value.buildableKey.endsWith("_PORTAL_FRAME"));
   if (!portals.length) { event.player.sendMessage("Build a portal frame in this room first."); return true; }
-  const options: Array<string | (() => void)> = [];
+  const options = [];
   portals.forEach((portal, i) => options.push(`Portal ${i + 1}: ${portal.destinations?.[0] ?? "empty"}`, () => chooseDestination(api, event.player, house, portal, "add")));
   api.sendMultiChatboxPrompt(event.player, "Which portal?", ...options);
   return true;
 }
+
+Object.assign(module.exports, { houseDestinations, configureHouseDestination, useHousePortal });
