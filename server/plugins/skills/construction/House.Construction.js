@@ -20,6 +20,7 @@ const Workshop = require("./Workshop.Construction");
 const Kitchen = require("./Kitchen.Construction");
 const Workbench = require("./Workbench.Construction");
 const Study = require("./Study.Construction");
+const CombatRoom = require("./CombatRoom.Construction");
 
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
@@ -1005,6 +1006,7 @@ function processOccupant(player, house) {
   Servants.processServant(player);
   syncKickOption(player);
   Altars.expireHouseBurners(house);
+  CombatRoom.tendDummies(house);
 }
 
 /** PlayerHouseInstance.postLeave, after the player is out of the house. */
@@ -1043,6 +1045,7 @@ function attach(api) {
   Kitchen.attachKitchen(api);
   Workbench.attachWorkbench(api);
   Study.attachStudy(api);
+  CombatRoom.attachCombatRoom(api);
   api.persistAttribute(HOUSE_ATTRIBUTE, defaultHouse());
   api.onObjectFirstClick(HOUSE_PORTAL_IDS, enterDefaultHouse);
   api.onObjectSecondClick(HOUSE_PORTAL_IDS, enterNormalHouse);

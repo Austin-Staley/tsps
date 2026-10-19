@@ -59,6 +59,8 @@ class PlayerHouseInstance extends PrivateArea {
   visibleDoors = [];
   furnitureObjects = [];
   doorTargets = new Map();
+  /** Furniture not drawn for now (a combat dummy while its NPC stands in for it); not saved. */
+  hiddenFurniture = new Set();
   allocation;
 
   /** Test-house allocations are process-local and must never be restored as normal map tiles. */
@@ -609,7 +611,7 @@ class PlayerHouseInstance extends PrivateArea {
           if (!room) continue;
           for (const furniture of Object.values(room.furnitureByLocation ?? {})) {
             const buildable = Data.BUILDABLE_BY_KEY.get(furniture.buildableKey);
-            if (!buildable) continue;
+            if (!buildable || this.hiddenFurniture.has(furniture)) continue;
             const hotspot = Data.HOTSPOT_BY_KEY.get(furniture.hotspotKey) ?? Data.hotspotIn(room.roomKey, furniture.sourceObjectId);
             const variant = hotspot ? hotspot.objectIds.indexOf(furniture.sourceObjectId) : -1;
             const objectId = (this.litBurners.get(furniture) ?? 0) > Date.now() ? buildable.objectIds[0] + 1
