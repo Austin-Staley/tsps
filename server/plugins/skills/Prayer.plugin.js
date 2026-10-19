@@ -5,6 +5,9 @@
  *   api.emitCustomEvent("prayer:bury", { player, itemId, scale, crushed })
  *     -> sets `handled` when `itemId` is a bone: its experience (times `scale`, default 1) and
  *        its Prayer restore are given. `crushed` (the bonecrusher) leaves out bones it can't crush.
+ *   api.emitCustomEvent("prayer:bone", { itemId, bone: null })
+ *     -> sets `bone` to the bone's row ({ xp, level, ... }) when `itemId` is a bone, for content
+ *        that gives its own experience (altars).
  *   api.onCustomEvent("prayer:bone-restore", (event) => { event.restore = event.points; })
  *     -> asked after every burial; `points` is the bone's restore, and Prayer gives back
  *        `restore` once, so two sources (the Catacombs, a dragonbone necklace) never stack.
@@ -59,6 +62,11 @@ function buryRequest(request) {
   request.handled = true;
 }
 
+/** "prayer:bone": the bone's row for `itemId`. */
+function boneRequest(request) {
+  if (request) request.bone = boneFor(request.itemId);
+}
+
 function buryBone({ player, itemId, slot }) {
   const core = api.core;
   const bone = boneFor(itemId);
@@ -107,5 +115,6 @@ module.exports = {
     api = pluginApi;
     api.onItemFirstAction(buryBone);
     api.onCustomEvent("prayer:bury", buryRequest);
+    api.onCustomEvent("prayer:bone", boneRequest);
   },
 };

@@ -25,6 +25,9 @@ unchanged.
 - **`prayer:bury`** `{ player, itemId, scale, crushed }`: buries a bone without the spade. It sets
   `handled`, gives the experience times `scale` and the restore. With `crushed` it skips
   `crush: false` bones.
+- **`prayer:bone`** `{ itemId, bone }`: sets `bone` to the bone's row (`xp`, `level`, ...) when
+  `itemId` is a bone, for content that gives its own experience without a burial, so no restore
+  (the Chaos Temple altar, `BoneAltars.plugin.js`; docs/bone-altars.md).
 - **`prayer:bone-restore`** `{ player, itemId, points, restore }`: asked after every burial.
   Listeners set `restore` to `points`, and Prayer gives it back once, up to the Prayer level. So the
   Catacombs (`CatacombsOfKourend.plugin.js`) and a dragonbone necklace
@@ -67,6 +70,7 @@ Charges are saved in `bonecrusher:charges`, up to 2,147,483,647 (the cache's
 - The bonecrusher necklace (bonecrusher + dragonbone necklace + hydra tail).
 - Destroying the bonecrusher (the Wiki says its tokens fall out).
 - Bones placed in the inventory by Hunter creatures (the Wiki says the bonecrusher takes them).
-- The Zealot's robes' chance to save bones and bonemeal.
+- The Zealot's robes' chance to save bones and bonemeal (only the Chaos Temple altar has it;
+  docs/bone-altars.md).
 - The message for burying superior dragon bones below 70 Prayer is ours: "You need a Prayer level
   of 70 to bury these bones."
