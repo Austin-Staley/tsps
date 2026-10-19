@@ -6445,7 +6445,8 @@ test('Desert Treasure II requires and solves the real eight-cell golem grid', ()
   runtime.startTranscript = (_api, _player, _npcId, _page, variant) => {
     assert.ok(transcripts[variant], `missing golem transcript: ${variant}`);
     if (variant.includes('powering-up-the-golem-machine-') && !variant.includes('banikan')) {
-      assert.equal(transcripts[variant][0].type, 'line', 'the archive report must display before Banikan speaks');
+      assert.equal(transcripts[variant][0].type, 'message', 'the source archive report must display before Banikan speaks');
+      assert.match(transcripts[variant][0].text, /Designation:|Rank:/);
     }
     searches.push(variant);
     return true;
@@ -14790,31 +14791,28 @@ test('Gertrude sells a replacement kitten for 100 coins after her quest', () => 
 });
 
 
-test('Ratcatchers restores the missing kitten menu branch from Gertrude’s transcript', () => {
-  const { restoreGertrudeKittenOption } = require('../plugins/quests/quests/Ratcatchers.Quest')._test;
-  const transcripts = require('../data/definitions/npc-dialogues.json');
-  const source = transcripts.Ratcatchers.variants['talking-to-gertrude-talking-to-gertrude-again-after-starting-the-quest'];
-  const find = (steps) => {
+test('Ratcatchers exports the complete kitten purchase with Gertrude’s canonical effect', () => {
+  const record = require('../data/definitions/npc-dialogues.json').Ratcatchers;
+  const source = record.variants['talking-to-gertrude-talking-to-gertrude-again-after-starting-the-quest'];
+  const seen = new Set();
+  const nodes = [];
+  const visit = (steps) => {
     for (const step of steps ?? []) {
-      const option = (step.options ?? []).find((entry) => entry.text === 'Do you have any more kittens?');
-      if (option) return option;
-      for (const nested of step.options ?? []) {
-        const match = find(nested.steps);
-        if (match) return match;
+      nodes.push(step);
+      visit(step.steps);
+      visit(step.options);
+      if (step.type === 'call' && !seen.has(step.branch)) {
+        seen.add(step.branch);
+        visit(record.branches[step.branch]);
       }
-      const match = find(step.steps);
-      if (match) return match;
     }
-    return null;
   };
-  const before = find(source);
-  assert.equal(before.steps, undefined, 'the Ratcatchers export omits this option branch');
-  const restored = restoreGertrudeKittenOption(source);
-  const option = find(restored);
-  assert.ok(option.steps.some((step) => step.player === 'Do you have any more kittens?'));
-  assert.ok(option.steps.some((step) => step.type === 'condition' && step.text.includes('at least 100 coins')));
-  assert.equal(JSON.stringify(option.steps).includes('Q44J0B'), true, 'the purchase keeps Gertrude’s canonical hand-out action');
-  assert.equal(before.steps, undefined, 'the canonical transcript data remains untouched');
+  visit(source);
+  const option = nodes.find(step => step.text === 'Do you have any more kittens?');
+  assert.ok(option.steps.some(step => step.player === 'Do you have any more kittens?'));
+  assert.ok(option.steps.some(step => step.type === 'condition' && step.text.includes('at least 100 coins')));
+  assert.ok(nodes.some(step => step.id === 'Q44J0B'), 'the purchase keeps Gertrude’s canonical hand-out action');
+  assert.ok(nodes.some(step => step.condition === 'With the Ring of Charos(a) equipped:' && step.text.startsWith('[Charm]')));
 });
 
 
@@ -16961,15 +16959,30 @@ test('DT2 completes Banikan departure during dialogue and reveals the last searc
     const variants = require('../data/definitions/npc-dialogues.json')['Desert Treasure II - The Fallen Empire'].variants;
     const resolve = handlers.condition[0];
     const { flatten } = require('../plugins/npcs/NpcDialogues.plugin');
-    const queue = flatten(variants['familiar-faces-powering-up-the-golem-machine-the-whisperer-true-name-classified'],{resolveCondition:step=>resolve({player,text:step.text})});
+    const record = require('../data/definitions/npc-dialogues.json')['Desert Treasure II - The Fallen Empire'];
+    const collect = steps => {
+      const queue = [], seen = new Set();
+      const visit = steps => {
+        for (const step of flatten(steps, {resolveCondition: node => resolve({player, text: node.text})})) {
+          if (step.type === 'jump_to') visit(step.steps);
+          else if (step.type === 'call' && !seen.has(step.branch)) {
+            seen.add(step.branch);
+            visit(record.branches[step.branch]);
+          } else queue.push(step);
+        }
+      };
+      visit(steps);
+      return queue;
+    };
+    const queue = collect(variants['familiar-faces-powering-up-the-golem-machine-the-whisperer-true-name-classified']);
     assert.ok(queue.some(step=>step.id==='T24jg_'),'the last report flows into the departure conversation');
     handlers.custom.get('npc-dialogue:action')[0]({player,stepId:'T24jg_'});
     assert.equal(quest.varbitValue(6,player),40);
     handlers.objects.find(h => h.name === 'handleObjectInteraction')({player,objectId:49511,location:{x:8214,y:1619,z:0},option:'Operate'});
     assert.equal(quest.getStage(player),7);
-    const report = variants[played.at(-1)];
+    const report = collect(variants[played.at(-1)]);
     assert.ok(report.some(step=>step.player==='Repeat last search.'));
-    assert.ok(report.some(step=>step.type==='line'&&step.text==='Frostenhorn'),'the archived name must be shown');
+    assert.ok(report.some(step=>step.type==='message'&&step.text.split('\n')[0]==='Frostenhorn'),'the archived name must be shown');
     assert.equal(quest.varbitValue(7,player),42);
   } finally { runtime.startTranscript = original; }
 });
