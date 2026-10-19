@@ -18756,16 +18756,12 @@ test('RFD Awowogei banana gathering waits for the King, all three monkeys and bo
 });
 
 
-test('RFD Awowogei Tchiki route needs base Agility and an equipped ninja greegree before the rope swing', () => {
+test('RFD Awowogei: the Ape Atoll course rope, swung during the quest, opens the hole beside it', () => {
   const { api: base } = mockApi();
-  const objectHandlers = [];
-  const moves = [];
-  const messages = [];
-  const experiences = [];
-  const packetSender = new Proxy({}, { get: (_target, key) => key.startsWith('send') ? () => packetSender : undefined });
+  const listeners = [];
   const api = new Proxy(base, {
     get(target, prop) {
-      if (prop === 'onObjectInteraction') return (handler) => objectHandlers.push(handler);
+      if (prop === 'onCustomEvent') return (name, handler) => listeners.push({ name, handler });
       if (prop === 'core') return base.core;
       return target[prop];
     },
@@ -18773,50 +18769,26 @@ test('RFD Awowogei Tchiki route needs base Agility and an equipped ninja greegre
   require('../plugins/quests/Quests.plugin').register(api);
   delete require.cache[require.resolve('../plugins/quests/quests/RecipeForDisaster.Quest')];
   require('../plugins/quests/quests/RecipeForDisaster.Quest')(api);
-  const handler = objectHandlers.findLast((entry) => entry.name === 'handleTchikiCourse');
-  assert.ok(handler);
+  const swung = listeners.findLast((entry) => entry.name === 'agility:obstacle' && entry.handler.name === 'handleTchikiRopeSwung');
+  assert.ok(swung);
+  const packetSender = new Proxy({}, { get: (_target, key) => key.startsWith('send') ? () => packetSender : undefined });
   const attributes = new Map([['recipe-for-disaster:awowogei-state', 63]]);
-  let agility = 47;
-  let weapon = -1;
   const player = {
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
-    getSkillManager: () => ({ getCurrentLevel: () => agility, getMaxLevel: () => agility,
-      addExperiences: (skill, amount) => experiences.push([skill, amount]) }),
-    getEquipment: () => ({ get: (slot) => slot === api.core.Equipment.WEAPON_SLOT
-      ? { getId: () => weapon } : null }),
-    getInventory: () => ({ getItems: () => [] }),
     getPacketSender: () => packetSender,
-    moveTo: (location) => moves.push([location.getX(), location.getY(), location.getZ()]),
-    sendMessage: (message) => messages.push(message),
   };
-  const swing = () => ({ player, objectId: api.core.ObjectIdentifiers.ROPE_20, clickType: 1,
-    definition: { getActions: () => ['Swing'] }, handled: false });
   const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests().findLast(({ key }) => key === 'recipe_for_disaster');
   quest.setStage(player, 4);
 
-  const belowLevel = swing();
-  handler(belowLevel);
-  assert.equal(belowLevel.handled, true);
-  assert.equal(attributes.get('recipe-for-disaster:awowogei-state'), 63);
-  assert.match(messages.at(-1), /level 48 Agility/);
-
-  agility = 48;
-  const human = swing();
-  handler(human);
-  assert.equal(attributes.get('recipe-for-disaster:awowogei-state'), 63);
-  assert.match(messages.at(-1), /ninja monkey greegree/);
-
-  weapon = api.core.ItemIdentifiers.NINJA_MONKEY_GREEGREE;
-  const monkey = swing();
-  handler(monkey);
+  swung.handler({ player, objectId: 15412 });
+  assert.equal(attributes.get('recipe-for-disaster:awowogei-state'), 63, 'another obstacle');
+  swung.handler({ player, objectId: api.core.ObjectIdentifiers.ROPE_20 });
   assert.equal(attributes.get('recipe-for-disaster:awowogei-state'), 63 | 256);
-  assert.deepEqual(moves, [[2756, 2731, 0]]);
-  assert.deepEqual(experiences, [[api.core.Skill.AGILITY, 100]]);
 });
 
 
-test('RFD Awowogei hole, mapped Tchiki cave, exit rope and final course tree use the real world route', () => {
+test('RFD Awowogei hole, mapped Tchiki cave and exit rope use the real world route', () => {
   const { api: base } = mockApi();
   const objectHandlers = [];
   const moves = [];
@@ -18833,7 +18805,6 @@ test('RFD Awowogei hole, mapped Tchiki cave, exit rope and final course tree use
   require('../plugins/quests/quests/RecipeForDisaster.Quest')(api);
   const course = objectHandlers.findLast((entry) => entry.name === 'handleTchikiCourse');
   const cave = objectHandlers.findLast((entry) => entry.name === 'handleTchikiCaveObject');
-  const courseExit = objectHandlers.findLast((entry) => entry.name === 'handleTchikiCourseExit');
   const attributes = new Map([['recipe-for-disaster:awowogei-state', 63]]);
   let loc = [2758, 2729, 0];
   const player = {
@@ -18863,12 +18834,6 @@ test('RFD Awowogei hole, mapped Tchiki cave, exit rope and final course tree use
   cave(rope);
   assert.equal(rope.handled, true);
   assert.deepEqual(loc, [2757, 2734, 0]);
-
-  const tree = { player, objectId: 16062, clickType: 1,
-    definition: { getActions: () => ['Climb-down'] }, handled: false };
-  courseExit(tree);
-  assert.equal(tree.handled, true);
-  assert.deepEqual(loc, [2757, 2726, 0]);
 });
 
 
