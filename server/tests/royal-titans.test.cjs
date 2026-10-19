@@ -100,6 +100,52 @@ test("blast safe tile: anywhere in the area, or the row farthest from a lone sur
   assert.equal(Specials.blastSafeTile(eldricDown).y, 9564);
 });
 
+test("blast safe tile: never on a live wall tile, any tile if all covered", () => {
+  const row = fakeRowNpc(14152, 2911, 9566);
+  row.setAttribute(Shared.ROW_ATTRIBUTE, { kind: "fire", x: 2911, y: 9566 });
+  const withRow = { branda: fakeTitan(12596), eldric: fakeTitan(14147), rows: new Set([row]) };
+  for (let i = 0; i < 50; i++) {
+    const tile = Specials.blastSafeTile(withRow);
+    assert.ok(!(tile.x === 2911 && tile.y === 9566), "safe tile avoids the live wall tile");
+    assert.ok(tile.x >= 2909 && tile.x <= 2913 && tile.y >= 9564 && tile.y <= 9570);
+  }
+  const covered = new Set();
+  for (let x = 2909; x <= 2913; x++) {
+    for (let y = 9564; y <= 9570; y++) {
+      const tile = fakeRowNpc(14152, x, y);
+      tile.setAttribute(Shared.ROW_ATTRIBUTE, { kind: "fire", x, y });
+      covered.add(tile);
+    }
+  }
+  const tile = Specials.blastSafeTile({ branda: fakeTitan(12596), eldric: fakeTitan(14147), rows: covered });
+  assert.ok(tile.x >= 2909 && tile.x <= 2913 && tile.y >= 9564 && tile.y <= 9570);
+});
+
+test("blast safe tile: steers clear of rows still forming", () => {
+  const pending = { tiles: [[2911, 9566]] };
+  const session = { branda: fakeTitan(12596), eldric: fakeTitan(14147), rows: new Set(), pendingRows: [pending] };
+  for (let i = 0; i < 50; i++) {
+    const tile = Specials.blastSafeTile(session);
+    assert.ok(!(tile.x === 2911 && tile.y === 9566), "safe tile avoids targeted tiles");
+  }
+});
+
+test("formation blocking: occupants of targeted tiles take the hit", () => {
+  const at = (x, y, hp = 99) => ({
+    getLocation: () => ({ getX: () => x, getY: () => y }),
+    isRegistered: () => true,
+    getHitpoints: () => hp,
+  });
+  const spots = [[2909, 9566], [2910, 9566], [2911, 9566], [2912, 9566], [2913, 9566]];
+  const session = { players: [at(2911, 9566), at(2911, 9566), at(2913, 9566), at(2900, 9500)] };
+  const occupants = Specials.occupantsByTile(session, spots);
+  assert.deepEqual([...occupants.keys()], ["2911,9566", "2913,9566"]);
+  assert.equal(occupants.get("2911,9566").length, 2);
+  assert.equal(occupants.get("2913,9566").length, 1);
+  const withCorpse = { players: [at(2911, 9566, 0)] };
+  assert.equal(Specials.occupantsByTile(withCorpse, spots).size, 0);
+});
+
 test("mobile attacks follow the spot: stomps from the edge, never from the back", () => {
   const { pickSpecial } = Combat._test;
   const titan = fakeTitan(12596);
@@ -165,8 +211,8 @@ test("row clearing: water surge clears a fire tile", () => {
   assert.deepEqual(attacker.messages, []);
 });
 
-test("row clearing: any opposite-element spell clears, wrong element hints", () => {
-  for (const spell of ["WATER_SURGE", "WATER_STRIKE", "ICE_BARRAGE"]) {
+test("row clearing: blast-tier water and any ice spell clear fire, weaker hints", () => {
+  for (const spell of ["WATER_SURGE", "WATER_WAVE", "WATER_BLAST", "ICE_RUSH", "ICE_BURST", "ICE_BLITZ", "ICE_BARRAGE"]) {
     const npc = fakeRowNpc(14152, 2911, 9566);
     const attacker = fakeCaster(spell);
     attacker.sendMessage = function (text) { this.messages.push(text); };
@@ -175,7 +221,7 @@ test("row clearing: any opposite-element spell clears, wrong element hints", () 
     assert.equal(hit.getHits()[0].getDamage(), 1, spell);
     assert.deepEqual(attacker.messages, []);
   }
-  for (const spell of ["FIRE_SURGE", "WIND_STRIKE", null]) {
+  for (const spell of ["WATER_STRIKE", "WATER_BOLT", "FIRE_SURGE", "WIND_STRIKE", null]) {
     const npc = fakeRowNpc(14152, 2911, 9566);
     const attacker = fakeCaster(spell);
     attacker.sendMessage = function (text) { this.messages.push(text); };
@@ -194,6 +240,27 @@ test("row clearing: fire surge clears an ice tile", () => {
   Minions._test.rowClearingHit({ npc, hit });
   assert.equal(hit.getHits()[0].getDamage(), 1);
   assert.deepEqual(attacker.messages, []);
+});
+
+test("row clearing: weak fire hints on ice, blast-tier clears", () => {
+  for (const spell of ["FIRE_BLAST", "FIRE_WAVE"]) {
+    const npc = fakeRowNpc(14153, 2911, 9566);
+    const attacker = fakeCaster(spell);
+    attacker.sendMessage = function (text) { this.messages.push(text); };
+    const hit = fakeSpellHit(attacker);
+    Minions._test.rowClearingHit({ npc, hit });
+    assert.equal(hit.getHits()[0].getDamage(), 1, spell);
+    assert.deepEqual(attacker.messages, []);
+  }
+  for (const spell of ["FIRE_STRIKE", "FIRE_BOLT", "WATER_SURGE"]) {
+    const npc = fakeRowNpc(14153, 2911, 9566);
+    const attacker = fakeCaster(spell);
+    attacker.sendMessage = function (text) { this.messages.push(text); };
+    const hit = fakeSpellHit(attacker);
+    Minions._test.rowClearingHit({ npc, hit });
+    assert.equal(hit.getHits()[0].getDamage(), 0);
+    assert.ok(attacker.messages.some((text) => /strong enough/.test(text)));
+  }
 });
 
 function fakeDuelist(spell, targetId) {

@@ -153,6 +153,22 @@ function spellTier(spell) {
   return "other";
 }
 
+/**
+ * Whether the player's current spell clears a row of `kind` (Wiki + captured hints):
+ * the opposite element and strong enough — blast tier or greater for water and fire
+ * (Wiki "Blast or greater"); every ice spell qualifies (Wiki "ice spells are also
+ * effective", weakest is Ice Rush at 82).
+ */
+function clearsRow(player, kind) {
+  const spell = selectedSpell(player) ?? recentSpell(player);
+  if (kind === "fire") {
+    if (spellElement(spell) !== "water") return false;
+    if (/^ICE_/.test(spellName(spell) ?? "")) return true;
+  } else if (spellElement(spell) !== "fire") return false;
+  const tier = spellTier(spell);
+  return tier === "surge" || tier === "wave" || tier === "blast";
+}
+
 function magicBonus(player) {
   return player.getBonusManager().getAttackBonus()[attackMagicIndex] ?? 0;
 }
@@ -231,15 +247,14 @@ function spellElementOf(player) {
   return spellElement(selectedSpell(player) ?? recentSpell(player));
 }
 
-/** Row tiles clear to opposite-element spells; anything else hints and does nothing. */
+/** Row tiles clear to strong-enough opposite-element spells; anything else hints and does nothing. */
 function rowClearingHit({ npc, hit }) {
   if (!Shared.isRowHitbox(npc.getId())) return;
   const attacker = hit.getAttacker();
   if (!attacker?.isPlayer()) return;
   const session = sessionOfNpc(npc);
   const kind = npc.getId() === Shared.FIRE_ROW_ID ? "fire" : "ice";
-  const element = spellElementOf(attacker);
-  const opposite = kind === "fire" ? element === "water" : element === "fire";
+  const opposite = clearsRow(attacker, kind);
   for (const part of hit.getHits()) part.setDamage(opposite ? 1 : 0);
   hit.updateTotalDamage();
   if (!opposite) {
@@ -339,6 +354,6 @@ function attach(api) {
 }
 
 module.exports = {
-  attach, spawnTrio, tickSession, explodeTrio, spellElementOf,
-  _test: { spellTier, spellElement, elementalAccuracy, rowClearingHit, weaknessDamage, weaknessAccuracy },
+  attach, spawnTrio, tickSession, explodeTrio, spellElementOf, clearsRow,
+  _test: { spellTier, spellElement, elementalAccuracy, rowClearingHit, clearsRow, weaknessDamage, weaknessAccuracy },
 };
