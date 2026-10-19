@@ -325,8 +325,14 @@ class PlayerHouseInstance extends PrivateArea {
   }
 
   getRoomDoorMask(position) {
-    const room = this.getRoom(position), template = room && Data.ROOM_BY_KEY.get(room.roomKey);
-    if (!room || !template) return 0;
+    const room = this.getRoom(position);
+    return room ? this.templateDoorMask(room.roomKey) : 0;
+  }
+
+  /** A room type's doorways (bit per edge: north, east, south, west) before it is rotated. */
+  templateDoorMask(roomKey) {
+    const template = Data.ROOM_BY_KEY.get(roomKey);
+    if (!template) return 0;
     if (template.outdoors) return 15;
     let mask = 0;
     for (const object of PlayerHouseInstance.getTemplateObjects(Estate.houseStyleIndex(this.save))) {

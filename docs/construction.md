@@ -213,6 +213,15 @@ Carpenter's outfit adds 2.5%. Last-tier contract repeats the last tier; Rewards 
 of it, so its dialogue and messages are ours (except "I'd better leave this alone right now."),
 and which pieces need work approximates the Wiki's per-client layouts.
 
+### Adding a room
+
+Picking a room in the room menu (212) doesn't build it (rsprox captures): the house viewer (422)
+opens with the room shown at the spot through varbits 5329-5335 (selected room, destination,
+rotation, rotate mode, room type and doorways) and script 1376. It starts turned so one of its
+doorways meets a neighbour's; Clockwise and Anticlockwise turn it, Done takes the coins and builds
+it, then the viewer opens again, and Cancel leaves the plain viewer. Rooms built through a
+staircase or trapdoor still ask Yes/No instead (captures).
+
 Already there before this page: portal chamber and nexus teleports, altars and incense burners,
 spellbook and occult altars, pools, costume room storage, servants, the Estate agent, guests and
 adverts, house options, the house viewer, chairs.
@@ -229,4 +238,5 @@ adverts, house options, the house viewer, chairs.
 `::hotspots` (developer) lists the build hotspots of the room you stand in, with their tiles, so
 furniture can be built with the agent MCP: `object_option` Build on the hotspot, then
 `send_packet` `dialogue_continue` on 458:2 with the menu choice (1-based) once 458 is open. Rooms
-are built from a door hotspot the same way with 212:4 and the room id.
+are picked from a door hotspot the same way with 212:4 and the room id, then built with a
+`widget_action` on the viewer's Done (422:69); 422:65 and 422:66 turn the preview.

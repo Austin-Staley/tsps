@@ -330,7 +330,7 @@ const pendingRoomMenus = new WeakMap();
 
 function chooseRoom(player, house, target) {
   if (houseFor(player) !== house || !isBuildingMode(player)) return;
-  pendingRoomMenus.set(player, { house, target, viewer: player.getInterfaceId() === HOUSE_VIEWER_INTERFACE });
+  pendingRoomMenus.set(player, { house, target });
   player.getPacketSender().sendInterface(ROOM_CREATION_INTERFACE)
     .sendInterfaceFlagsRange((ROOM_CREATION_INTERFACE << 16) | 4, 1, 29, 1);
 }
@@ -343,21 +343,47 @@ function selectRoomFromInterface(event) {
   const room = Data.CONSTRUCTION_ROOMS.find(candidate => candidate.id === id);
   if (!room) { event.player.sendMessage("That room is not available yet."); return true; }
   pendingRoomMenus.delete(event.player);
-  event.player.getPacketSender().sendInterfaceRemoval();
-  buildRoom(event.player, pending.house, pending.target, room);
-  if (pending.viewer) openHouseViewer(event.player);
+  previewRoom(event.player, pending.house, pending.target, room);
   return true;
 }
 
-function buildRoom(player, house, target, room) {
+/** A room type's doorways turned to a rotation, as getAdjacentDoorMask turns its neighbours'. */
+function rotatedDoors(doors, rotation) {
+  return ((doors << rotation) | (doors >> (4 - rotation))) & 15;
+}
+
+/**
+ * rsprox captures (poh_add_room:list): the pick doesn't build the room. The house viewer opens with
+ * it placed at the spot (poh_viewer_destination, _selectedroom, _type, _enable_rot and the
+ * doorways), to be turned with Clockwise/Anticlockwise and built with Done, which takes the coins,
+ * rebuilds the house and opens the viewer again. It starts turned so a doorway meets a neighbour's.
+ */
+function previewRoom(player, house, target, room) {
+  if (houseFor(player) !== house || !isBuildingMode(player)) return;
+  const problem = house.canPlaceRoom(room, target, constructionLevel(player));
+  if (problem) {
+    player.getPacketSender().sendInterfaceRemoval();
+    return player.sendMessage(problem);
+  }
+  const doors = house.templateDoorMask(room.key), adjacent = house.getAdjacentDoorMask(target);
+  const rotation = [0, 1, 2, 3].find(turn => rotatedDoors(doors, turn) & adjacent) ?? 0;
+  player.getPacketSender().sendInterface(HOUSE_VIEWER_INTERFACE);
+  const viewer = { house, rooms: [], rotation, mode: "rotate", destination: target, newRoom: room };
+  houseViewers.set(player, viewer);
+  refreshHouseViewer(player, viewer);
+}
+
+function buildRoom(player, viewer) {
+  const { house, destination: target, newRoom: room, rotation } = viewer;
   if (houseFor(player) !== house || !isBuildingMode(player)) return;
   const problem = house.canPlaceRoom(room, target, constructionLevel(player));
   if (problem) return player.sendMessage(problem);
   if (player.getInventory().getAmount(COINS_ID) < room.cost) return player.sendMessage("You don't have enough coins to build that room.");
   player.getInventory().delete(COINS_ID, room.cost);
-  house.placeRoom(target, room);
+  house.placeRoom(target, room, rotation);
   rebuildHouse(player, house);
   player.sendMessage(`You build ${withArticle(room.name)}.`);
+  openHouseViewer(player);
 }
 
 function manageRoom(player, house, target) {
@@ -592,6 +618,7 @@ function refreshHouseViewer(player, viewer) {
 }
 
 function syncViewerSelection(player, viewer) {
+  if (viewer.newRoom) return syncRoomPreview(player, viewer);
   const room = viewer.selected && viewer.house.getRoom(viewer.selected);
   const sender = player.getPacketSender();
   sender.sendVarbit(5329, viewer.selected ? viewer.rooms.findIndex(p => p.x === viewer.selected.x && p.y === viewer.selected.y && p.plane === viewer.selected.plane) + 1 : 0);
@@ -606,6 +633,30 @@ function syncViewerSelection(player, viewer) {
     sender.sendClientScript(1376, -1, 0, 0, destination.x | (destination.y << 3) | (destination.plane << 6)
       | (viewer.rotation << 8) | (Data.ROOM_BY_KEY.get(room.roomKey).id << 10), 0, 0);
   }
+}
+
+/** The room being added, drawn at its destination (varbits 5329-5335, script 1376 slot -1). */
+function syncRoomPreview(player, viewer) {
+  const { house, destination, newRoom, rotation } = viewer;
+  const sender = player.getPacketSender();
+  sender.sendVarbit(5329, viewer.rooms.length + 1);
+  sender.sendVarbit(5333, newRoom.id);
+  sender.sendVarbit(5331, rotation);
+  sender.sendVarbit(5332, 1);
+  sender.sendVarbit(5330, destination.plane * 81 + destination.y * 9 + destination.x + 1);
+  sender.sendVarbit(5334, house.templateDoorMask(newRoom.key));
+  sender.sendVarbit(5335, house.getAdjacentDoorMask(destination));
+  sender.sendClientScript(1376, -1, 0, 0, destination.x | (destination.y << 3) | (destination.plane << 6)
+    | (rotation << 8) | (newRoom.id << 10), 0, 0);
+}
+
+/** Clockwise, Anticlockwise, Done and Cancel while a new room is shown. */
+function handleRoomPreview(player, viewer, childId) {
+  if (childId === 65) viewer.rotation = (viewer.rotation + 1) & 3;
+  else if (childId === 66) viewer.rotation = (viewer.rotation + 3) & 3;
+  else if (childId === 69) return buildRoom(player, viewer);
+  else if (childId === 68) return openHouseViewer(player);
+  syncRoomPreview(player, viewer);
 }
 
 function handleHouseViewer(event) {
@@ -633,6 +684,7 @@ function handleHouseViewer(event) {
     return true;
   }
   if (action !== 1 || childId == null) return true;
+  if (viewer.newRoom) return handleRoomPreview(player, viewer, childId), true;
   if (childId >= 6 && childId <= 43 && !viewer.mode) {
     const selected = viewer.rooms[childId - 6];
     if (selected) { viewer.selected = selected; viewer.rotation = viewer.house.getRoom(selected).rotation; }
