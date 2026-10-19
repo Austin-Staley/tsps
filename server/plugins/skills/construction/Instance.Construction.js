@@ -5,6 +5,7 @@ const Estate = require("./Estate.Construction");
 const Servants = require("./Servants.Construction");
 const House = require("./House.Construction");
 const Dungeon = require("./Dungeon.Construction");
+const Menagerie = require("./Menagerie.Construction");
 const Data = require("./Data.Construction");
 const Palette = require("./Palette.Construction");
 const HOUSE_SIZE = 104;
@@ -439,6 +440,7 @@ class PlayerHouseInstance extends PrivateArea {
     this.refreshFurniture(player);
     if (!buildingMode) this.refreshDoors();
     Dungeon.refreshMonsters(this);
+    Menagerie.refreshPets(this);
     return sent;
   }
 

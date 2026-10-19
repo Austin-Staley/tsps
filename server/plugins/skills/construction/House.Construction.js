@@ -23,6 +23,7 @@ const Study = require("./Study.Construction");
 const CombatRoom = require("./CombatRoom.Construction");
 const Dungeon = require("./Dungeon.Construction");
 const ThroneRoom = require("./ThroneRoom.Construction");
+const Menagerie = require("./Menagerie.Construction");
 
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
@@ -1061,6 +1062,7 @@ function attach(api) {
   CombatRoom.attachCombatRoom(api);
   Dungeon.attachDungeon(api);
   ThroneRoom.attachThroneRoom(api);
+  Menagerie.attachMenagerie(api);
   api.persistAttribute(HOUSE_ATTRIBUTE, defaultHouse());
   api.onObjectFirstClick(HOUSE_PORTAL_IDS, enterDefaultHouse);
   api.onObjectSecondClick(HOUSE_PORTAL_IDS, enterNormalHouse);
