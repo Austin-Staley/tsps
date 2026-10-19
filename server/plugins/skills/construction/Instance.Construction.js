@@ -444,6 +444,25 @@ class PlayerHouseInstance extends PrivateArea {
     return new Location(this.allocation.baseX + 52, this.allocation.baseY + 52, 1);
   }
 
+  /** Where each template hotspot of the room at `position` lands in this house. */
+  hotspotTiles(position) {
+    const room = this.getRoom(position);
+    const template = room ? Data.ROOM_BY_KEY.get(room.roomKey) : null;
+    if (!room || !template) return [];
+    const gridOffset = Math.floor((Palette.HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
+    return PlayerHouseInstance.getTemplateObjects(Estate.houseStyleIndex(this.save))
+      .filter(hotspot => hotspot.sourceChunkX === template.sourceChunkX && hotspot.sourceChunkY === template.sourceChunkY)
+      .map(hotspot => {
+        const local = this.rotatedFootprint(hotspot.localX, hotspot.localY, hotspot.id, hotspot.face, room.rotation);
+        return {
+          id: hotspot.id,
+          x: this.allocation.baseX + (gridOffset + position.x) * 8 + local.x,
+          y: this.allocation.baseY + (gridOffset + position.y) * 8 + local.y,
+          plane: position.plane,
+        };
+      });
+  }
+
   refreshHotspots(player, buildingMode) {
     for (const door of this.roomDoors.splice(0)) {
       this.detach(door);

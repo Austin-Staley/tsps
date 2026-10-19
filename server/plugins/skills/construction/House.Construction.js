@@ -1,6 +1,6 @@
 "use strict";
 
-const { api, World, Animation, Flag, Location, Skill, PrivateChatStatus, ItemIdentifiers } = require("./Core.Construction");
+const { api, World, Animation, Flag, Location, Skill, PrivateChatStatus, ItemIdentifiers, ItemDefinition, PlayerRights } = require("./Core.Construction");
 const EstateAgent = require("./EstateAgent.Construction");
 const Servants = require("./Servants.Construction");
 const Estate = require("./Estate.Construction");
@@ -9,6 +9,7 @@ const Portals = require("./Portals.Construction");
 const Altars = require("./Altars.Construction");
 const Data = require("./Data.Construction");
 const Instance = require("./Instance.Construction");
+const Commands = require("./Commands.Construction");
 
 const HAMMER_ID = ItemIdentifiers.HAMMER;
 const SAW_ID = ItemIdentifiers.SAW;
@@ -667,7 +668,7 @@ function getBuildMaterials(player, house, target, buildable) {
 /** What a carried container (the plank sack) holds of a material ("storage:amount"). */
 function storedAmount(player, itemId) {
   const request = { player, itemId, amount: 0 };
-  pluginApi?.emitCustomEvent("storage:amount", request);
+  api.emitCustomEvent("storage:amount", request);
   return request.amount;
 }
 
@@ -675,7 +676,7 @@ function storedAmount(player, itemId) {
 function useMaterial(player, itemId, amount) {
   const held = Math.min(amount, player.getInventory().getAmount(itemId));
   if (held > 0) player.getInventory().delete(itemId, held);
-  if (amount > held) pluginApi?.emitCustomEvent("storage:take", { player, itemId, amount: amount - held, taken: 0 });
+  if (amount > held) api.emitCustomEvent("storage:take", { player, itemId, amount: amount - held, taken: 0 });
 }
 
 function buildFurniture(player, house, target, buildable) {
@@ -691,9 +692,10 @@ function buildFurniture(player, house, target, buildable) {
 }
 
 function materialName(material) {
-  if (material.itemId != null) return material.source?.replace(/_/g, " ").toLowerCase() || `Item ${material.itemId}`;
+  if (material.itemId != null) return ItemDefinition.forId(material.itemId).getName();
+  if (material.source === "NAILS") return "Nails";
   if (material.source && Data.BUILDABLE_BY_KEY.has(material.source)) return formatBuildable({ key: material.source });
-  return material.source?.replace(/^Tool\./, "").replace(/\.toItem\(.*\)$/, "").replace(/_/g, " ").toLowerCase() || "Unknown material";
+  return material.source?.replace(/^Tool\./, "").replace(/_/g, " ").toLowerCase() || "Unknown material";
 }
 
 function furnitureCreationText(buildable) {
@@ -1010,6 +1012,7 @@ function attach(api) {
   api.onObjectSecondClick(EXIT_PORTAL_ID, toggleHouseLock);
   api.onObjectThirdClick(EXIT_PORTAL_ID, removeAdvertisement);
   api.registerCommand("house", houseCommand);
+  api.registerCommand("hotspots", Commands.listHotspots, PlayerRights.DEVELOPER);
   api.onObjectFirstClick(ROOM_DOOR_HOTSPOT_IDS, openRoomDoor);
   api.onObjectFifthClick(ROOM_DOOR_HOTSPOT_IDS, openRoomDoor);
   api.onObjectFirstClick(furnitureObjectIds, tryRemoveFurniture);
