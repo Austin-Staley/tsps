@@ -1239,7 +1239,7 @@ export class ClientConnection {
         look[Appearance.LEGS],
         look[Appearance.FEET],
       ].map((value) => value ?? -1),
-      equip: displayEquipment.map((item) => item?.getId?.() ?? -1),
+      equip: player.getAppearanceEquipmentIds(),
       equipQty: displayEquipment.map((item) => item?.getAmount?.() ?? 0),
       headIcons: {
         skull: player.isSkulled() ? player.getSkullIconId() : -1,

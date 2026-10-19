@@ -92,6 +92,7 @@ const DESTINATIONS = {
     teleport("Araxxor", location(3658, 9816), TeleportType.NORMAL),
     teleport("Yama", location(1439, 10076), TeleportType.NORMAL),
     teleport("Skotizo", location(1662, 10049), TeleportType.NORMAL),
+    teleport("Royal Titans", location(2950, 9574), TeleportType.NORMAL),
   ],
   [TAB.MINIGAMES]: [
     teleport("Barrows", location(3565, 3315), TeleportType.NORMAL),
