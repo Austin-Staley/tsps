@@ -55,7 +55,8 @@ jobs:
                       5. client/ has no agent docs; review it for correctness bugs, leaks and per-frame cost.
                       6. Look for real bugs too: wrong conditions, missing null checks on players or NPCs that can log out or despawn, state that is never cleared, timers or tasks that outlive their owner.
 
-                      Put specific findings on the lines they concern with inline comments, and keep the summary comment short: what the PR does, then the findings ranked by severity. Do not pad the review with praise or style nits the surrounding code does not follow. If there is nothing worth changing, say so in one line.
+                      Post every finding tied to specific code as an inline comment on that line with mcp__github_inline_comment__create_inline_comment, before writing the summary. Then keep the summary comment short: what the PR does, then one line per finding, most severe first, linking or naming the line it was posted on.
+                      Only report findings that need an action from the author: a fix, a check, or an answer. Leave out observations that need no change, such as duplication the language forces or tests that still pass. Do not pad the review with praise or style nits the surrounding code does not follow. If there is nothing worth changing, say so in one line.
 
                       For any other @claude question, answer it directly from the code.'
 
