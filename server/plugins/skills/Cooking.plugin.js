@@ -91,8 +91,9 @@ function cookedResult(player, cookable) {
   return { ...cookable, cooked: ItemIds.POISON_KARAMBWAN, xp: 80, name: "poison karambwan" };
 }
 
-const FIRE_OBJECT_NAMES = new Set(["Fire", "Forester's Campfire"]);
-const COOKABLE_OBJECT_NAMES = new Set(["Cooking range", "Range", "Stove", ...FIRE_OBJECT_NAMES]);
+// A player-owned house's kitchen stoves: firepits cook as fires, the ovens and ranges as ranges.
+const FIRE_OBJECT_NAMES = new Set(["Fire", "Forester's Campfire", "Firepit", "Firepit with hook", "Firepit with pot"]);
+const COOKABLE_OBJECT_NAMES = new Set(["Cooking range", "Range", "Stove", "Small oven", "Large oven", "Steel range", "Fancy range", ...FIRE_OBJECT_NAMES]);
 
 /**
  * Wiki: cooking gauntlets only affect lobster, swordfish, kyatt, monkfish,
@@ -353,6 +354,7 @@ module.exports = {
     api.onObjectInteraction("Range", { Cook: handleRangeCook.bind(null, activeSessions) });
     api.onObjectInteraction("Cooking range", { Cook: handleRangeCook.bind(null, activeSessions) });
     api.onObjectInteraction("Stove", { Cook: handleRangeCook.bind(null, activeSessions) });
+    api.onObjectInteraction("Fancy range", { Cook: handleRangeCook.bind(null, activeSessions) });
     api.onCustomEvent("cooking:raw-xp", answerRawXp);
 
     api.log("registered", {

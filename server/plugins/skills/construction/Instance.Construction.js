@@ -1,91 +1,28 @@
-import { HOUSE_STYLES, houseStyleIndex } from "./HouseEstateData";
-import { enterServantHouse, leaveServantHouse, type SavedServant } from "./ConstructionServants";
-import type { Mobile } from "../../../entity/impl/Mobile";
-import { RegionManager } from "../../../collision/RegionManager";
-import { Boundary } from "../../../model/Boundary";
-import { PrivateArea } from "../../../model/areas/impl/PrivateArea";
-import { Skill } from "../../../model/Skill";
-import { Location } from "../../../model/Location";
-import { CachePipeline } from "../../../cache/CachePipeline";
-import { CacheMaps } from "../../../cache/CacheMaps";
-import { CacheDefinitions } from "../../../cache/CacheDefinitions";
-import { ByteBuffer } from "../../../cache/codec/rs/io/ByteBuffer";
-import { GameObject } from "../../../entity/impl/object/GameObject";
-import { encodeLocAddChange, encodeLocDel, encodeRebuildRegion } from "../../../../net/protocol/ClientProtocol";
-import type { Player } from "../../../entity/impl/player/Player";
-import { BUILDABLE_BY_KEY, CONSTRUCTION_ROOMS, HOTSPOT_BY_OBJECT_ID, HOUSE_TEMPLATE_CHUNKS, ROOM_BY_KEY, type ConstructionBuildable, type ConstructionRoom } from "./ConstructionData";
-import { emptyHousePalette, HOUSE_PLANES, HOUSE_SCENE_CHUNKS, packTemplateChunk, rotateHotspot } from "./HousePaletteCompiler";
+"use strict";
 
-export type SavedHouseRoom = Readonly<{
-  roomKey: string;
-  rotation: number;
-  furniture: Readonly<Record<string, string>>;
-  /** Location-keyed furniture keeps repeated hotspots independent and rotates with its room. */
-  furnitureByLocation?: Readonly<Record<string, SavedHouseFurniture>>;
-}>;
-
-export type SavedHouseFurniture = {
-  buildableKey: string;
-  hotspotKey: string;
-  sourceObjectId: number;
-  localX: number;
-  localY: number;
-  type: number;
-  face: number;
-  destinations?: string[];
-  displayObjectId?: number;
-  storage?: Record<number, number>;
-};
-
-/** JSON-safe player persistence shape. `rooms[plane][x][y]` is a room or null. */
-export type PlayerHouseSave = {
-  rooms: Array<Array<Array<SavedHouseRoom | null>>>;
-  locked?: boolean;
-  /** Missing ownership on legacy saves means an already-owned house. */
-  owned?: boolean;
-  location?: number;
-  style?: number;
-  unlockedStyles?: number[];
-  visitedKourend?: boolean;
-  visitedVarlamore?: boolean;
-  servant?: SavedServant;
-  servantMoney?: number;
-  /** 0 closed, 1 open, 2 no doors (native House Options varbit 6269). */
-  doorMode?: number;
-};
-
-export type HouseAllocation = Readonly<{ baseX: number; baseY: number }>;
-export type HouseRoomPosition = Readonly<{ x: number; y: number; plane: number }>;
-export type HouseFurnitureTarget = Readonly<{
-  position: HouseRoomPosition;
-  hotspotKey: string;
-  sourceObjectId: number;
-  localX: number;
-  localY: number;
-  type: number;
-  face: number;
-}>;
-
+const { RegionManager, Boundary, PrivateArea, Skill, Location, CachePipeline, CacheDefinitions, GameObject, encodeLocAddChange, encodeLocDel, encodeRebuildRegion,
+  getTemplateRegion, templateChunkKey, rotateChunkLoc, rotateChunkTile, ObjectDefinition } = require("./Core.Construction");
+const Ids = require("./Ids.Construction");
+const Estate = require("./Estate.Construction");
+const Servants = require("./Servants.Construction");
+const House = require("./House.Construction");
+const Dungeon = require("./Dungeon.Construction");
+const Menagerie = require("./Menagerie.Construction");
+const GamesRoom = require("./GamesRoom.Construction");
+const Trophies = require("./Trophies.Construction");
+const CombatRings = require("./CombatRings.Construction");
+const Data = require("./Data.Construction");
+const Palette = require("./Palette.Construction");
 const HOUSE_SIZE = 104;
 const HOUSE_STRIDE = 112;
 const HOUSE_ALLOCATION_COLUMNS = 16;
 const HOUSE_ALLOCATION_COUNT = HOUSE_ALLOCATION_COLUMNS * HOUSE_ALLOCATION_COLUMNS;
-const ROOM_DOOR_HOTSPOT_MIN = 15305;
-const ROOM_DOOR_HOTSPOT_MAX = 15322;
-const HOUSE_BUILDING_MODE_VARBIT = 2176;
-const HOUSE_DYNAMIC_WINDOW = 13830;
-
-type TemplateObject = Readonly<{
-  id: number;
-  sourceChunkX: number;
-  sourceChunkY: number;
-  localX: number;
-  localY: number;
-  type: number;
-  face: number;
-}>;
-const allocatedHouses = new Array<boolean>(HOUSE_ALLOCATION_COUNT).fill(false);
-function allocateHouse(): HouseAllocation {
+const PREVIEW_WALL = Ids.loc("poh_preview_wall");
+const BLOCKED_TILE = 0x200000;
+const HOUSE_BUILDING_MODE_VARBIT = Ids.varbit("poh_building_mode");
+const HOUSE_DYNAMIC_WINDOW = Ids.loc("poh_dynamic_window");
+const allocatedHouses = new Array(HOUSE_ALLOCATION_COUNT).fill(false);
+function allocateHouse() {
   const index = allocatedHouses.findIndex((used) => !used);
   if (index < 0) throw new Error("No Construction instance allocation is available.");
   allocatedHouses[index] = true;
@@ -95,16 +32,16 @@ function allocateHouse(): HouseAllocation {
   };
 }
 
-function releaseHouse(allocation: HouseAllocation): void {
+function releaseHouse(allocation) {
   const x = Math.trunc((allocation.baseX - 6400) / HOUSE_STRIDE);
   const y = Math.trunc((allocation.baseY - 6400) / HOUSE_STRIDE);
   const index = y * HOUSE_ALLOCATION_COLUMNS + x;
   if (index >= 0 && index < allocatedHouses.length) allocatedHouses[index] = false;
 }
 
-export function createDefaultHouseSave(): PlayerHouseSave {
+function createDefaultHouseSave() {
   const rooms = Array.from({ length: 3 }, () =>
-    Array.from({ length: 8 }, () => Array<SavedHouseRoom | null>(8).fill(null)),
+    Array.from({ length: 8 }, () => Array(8).fill(null)),
   );
   rooms[1][4][4] = { roomKey: "GARDEN", rotation: 0, furniture: { CENTERPIECE: "EXIT_PORTAL" } };
   rooms[1][4][5] = { roomKey: "PARLOUR", rotation: 0, furniture: {} };
@@ -112,33 +49,37 @@ export function createDefaultHouseSave(): PlayerHouseSave {
 }
 
 /** Minimal 4x4 grass test map with one Parlour, used by ::myhouse. */
-export function createTestHouseSave(): PlayerHouseSave {
+function createTestHouseSave() {
   const rooms = Array.from({ length: 3 }, () =>
-    Array.from({ length: 8 }, () => Array<SavedHouseRoom | null>(8).fill(null)),
+    Array.from({ length: 8 }, () => Array(8).fill(null)),
   );
   rooms[1][1][1] = { roomKey: "PARLOUR", rotation: 0, furniture: {} };
   return { rooms };
 }
 
-export class PlayerHouseInstance extends PrivateArea {
-  public owner: Player | null = null;
-  public buildingMode = false;
-  public readonly litBurners = new Map<SavedHouseFurniture, number>();
-  private static readonly templateObjects = new Map<number, readonly TemplateObject[]>();
-  private readonly roomDoors: GameObject[] = [];
-  private readonly visibleDoors: Array<{ object: GameObject; origin: Location; face: number; style: number; side: number; open: boolean }> = [];
-  private readonly furnitureObjects: GameObject[] = [];
-  private readonly doorTargets = new Map<string, HouseRoomPosition>();
-  public readonly allocation: HouseAllocation;
+class PlayerHouseInstance extends PrivateArea {
+  owner = null;
+  buildingMode = false;
+  litBurners = new Map();
+  static templateObjects = new Map();
+  roomDoors = [];
+  visibleDoors = [];
+  furnitureObjects = [];
+  doorTargets = new Map();
+  /** Furniture not drawn for now (a combat dummy while its NPC stands in for it); not saved. */
+  hiddenFurniture = new Set();
+  /** Objects drawn over the furniture for now (open dungeon doors, a throne room cage); sent to everyone who enters. */
+  extraObjects = [];
+  allocation;
 
   /** Test-house allocations are process-local and must never be restored as normal map tiles. */
-  public static isAllocationLocation(location: Location): boolean {
+  static isAllocationLocation(location) {
     const maximum = 6400 + HOUSE_ALLOCATION_COLUMNS * HOUSE_STRIDE;
     return location.getX() >= 6400 && location.getX() < maximum
       && location.getY() >= 6400 && location.getY() < maximum;
   }
 
-  constructor(public readonly save: PlayerHouseSave, private readonly gridSize = 8) {
+  constructor(save, gridSize = 8) {
     const allocation = allocateHouse();
     super(Array.from({ length: 4 }, (_, plane) => new Boundary(
       allocation.baseX,
@@ -147,6 +88,7 @@ export class PlayerHouseInstance extends PrivateArea {
       allocation.baseY + HOUSE_SIZE - 1,
       plane,
     )));
+    this.save = save; this.gridSize = gridSize;
     this.allocation = allocation;
     // Older saves used a fabricated shape 10 / face 0 for every hotspot.
     // Re-key them with the template placement so existing furniture is repaired too.
@@ -154,12 +96,33 @@ export class PlayerHouseInstance extends PrivateArea {
       for (const column of plane) {
         for (let y = 0; y < column.length; y++) {
           const room = column[y];
-          if (!room?.furnitureByLocation) continue;
-          const furnitureByLocation: Record<string, SavedHouseFurniture> = {};
-          for (const saved of Object.values(room.furnitureByLocation)) {
+          if (!room) continue;
+          const furnitureByLocation = {};
+          for (const saved of Object.values(room.furnitureByLocation ?? {})) {
             const template = this.getTemplateHotspot(room.roomKey, saved.sourceObjectId, saved.localX, saved.localY);
             const furniture = template ? { ...saved, sourceObjectId: template.id, type: template.type, face: template.face } : saved;
             furnitureByLocation[this.furnitureKey(furniture.localX, furniture.localY, furniture.type)] = furniture;
+          }
+          // A new house's save (and the oldest saves) list furniture by hotspot only, without its
+          // placements: the starting garden's exit portal was never drawn. Place each of them.
+          for (const [hotspotKey, buildableKey] of Object.entries(room.furniture ?? {})) {
+            if (!buildableKey || Object.values(furnitureByLocation).some(furniture => furniture.hotspotKey === hotspotKey)) continue;
+            const [placement] = this.hotspotPlacements(room.roomKey, hotspotKey);
+            if (!placement) continue;
+            furnitureByLocation[this.furnitureKey(placement.localX, placement.localY, placement.type)] = {
+              buildableKey, hotspotKey, sourceObjectId: placement.id,
+              localX: placement.localX, localY: placement.localY, type: placement.type, face: placement.face,
+            };
+          }
+          // Older saves furnished only the clicked placement of a hotspot (one tile of a rug).
+          for (const furniture of Object.values(furnitureByLocation)) {
+            for (const placement of this.hotspotPlacements(room.roomKey, furniture.hotspotKey)) {
+              const key = this.furnitureKey(placement.localX, placement.localY, placement.type);
+              furnitureByLocation[key] ??= {
+                buildableKey: furniture.buildableKey, hotspotKey: furniture.hotspotKey, sourceObjectId: placement.id,
+                localX: placement.localX, localY: placement.localY, type: placement.type, face: placement.face,
+              };
+            }
           }
           column[y] = { ...room, furnitureByLocation };
         }
@@ -167,33 +130,33 @@ export class PlayerHouseInstance extends PrivateArea {
     }
   }
 
-  public buildPalette(buildingMode: boolean): number[][][] {
-    const palette = emptyHousePalette();
-    const gridOffset = Math.floor((HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
-    for (let plane = 0; plane < HOUSE_PLANES; plane++) {
+  buildPalette(buildingMode) {
+    const palette = Palette.emptyHousePalette();
+    const gridOffset = Math.floor((Palette.HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
+    for (let plane = 0; plane < Palette.HOUSE_PLANES; plane++) {
       for (let x = 0; x < 8; x++) {
         for (let y = 0; y < 8; y++) {
           const room = plane < this.save.rooms.length ? this.save.rooms[plane]?.[x]?.[y] : null;
           const withinGrid = x < this.gridSize && y < this.gridSize;
           const template = room
-            ? ROOM_BY_KEY.get(room.roomKey)
+            ? Data.ROOM_BY_KEY.get(room.roomKey)
             : !withinGrid
               ? null
               : plane === 0
-              ? HOUSE_TEMPLATE_CHUNKS.basementFloor
+              ? Data.HOUSE_TEMPLATE_CHUNKS.basementFloor
               : plane === 1
-                ? HOUSE_TEMPLATE_CHUNKS.groundFloor
+                ? Data.HOUSE_TEMPLATE_CHUNKS.groundFloor
                 : buildingMode
-                  ? HOUSE_TEMPLATE_CHUNKS.blank
+                  ? Data.HOUSE_TEMPLATE_CHUNKS.blank
                   : null;
           if (room && !template) {
             throw new Error(`Unknown Construction room template: ${room.roomKey}`);
           }
           if (!template) continue;
-          palette[plane][x + gridOffset][y + gridOffset] = packTemplateChunk({
-            sourceChunkX: template.sourceChunkX + Math.floor(houseStyleIndex(this.save) / 4) * 8,
+          palette[plane][x + gridOffset][y + gridOffset] = Palette.packTemplateChunk({
+            sourceChunkX: template.sourceChunkX + Math.floor(Estate.houseStyleIndex(this.save) / 4) * 8,
             sourceChunkY: template.sourceChunkY,
-            sourcePlane: houseStyleIndex(this.save) % 4,
+            sourcePlane: Estate.houseStyleIndex(this.save) % 4,
             rotation: room?.rotation ?? 0,
           });
         }
@@ -202,25 +165,25 @@ export class PlayerHouseInstance extends PrivateArea {
     return palette;
   }
 
-  public getRoom(position: HouseRoomPosition): SavedHouseRoom | null {
+  getRoom(position) {
     return this.isRoomPosition(position) ? this.save.rooms[position.plane][position.x][position.y] : null;
   }
 
-  public getDoorTarget(location: { x: number; y: number; z: number }): HouseRoomPosition | null {
+  getDoorTarget(location) {
     return this.doorTargets.get(`${location.x}:${location.y}:${location.z}`) ?? null;
   }
 
-  public getFurnitureTarget(
-    location: { x: number; y: number; z: number },
-    sourceObjectId: number,
-  ): HouseFurnitureTarget | null {
-    const hotspot = HOTSPOT_BY_OBJECT_ID.get(sourceObjectId);
+  getFurnitureTarget(
+    location,
+    sourceObjectId,
+  ) {
     const position = this.getRoomPositionAt(location);
     const room = position ? this.getRoom(position) : null;
-    const template = room ? ROOM_BY_KEY.get(room.roomKey) : null;
-    if (!hotspot || !position || !room || !template || !template.hotspots.includes(hotspot.key)) return null;
+    const template = room ? Data.ROOM_BY_KEY.get(room.roomKey) : null;
+    const hotspot = room ? Data.hotspotIn(room.roomKey, sourceObjectId) : null;
+    if (!hotspot || !position || !room || !template) return null;
 
-    const placement = PlayerHouseInstance.getTemplateObjects(houseStyleIndex(this.save)).find(object => {
+    const placement = PlayerHouseInstance.getTemplateObjects(Estate.houseStyleIndex(this.save)).find(object => {
       if (object.id !== sourceObjectId || object.sourceChunkX !== template.sourceChunkX || object.sourceChunkY !== template.sourceChunkY) return false;
       const local = this.rotatedFootprint(object.localX, object.localY, object.id, object.face, room.rotation);
       return local.x === ((location.x - this.allocation.baseX) & 7) && local.y === ((location.y - this.allocation.baseY) & 7);
@@ -237,7 +200,7 @@ export class PlayerHouseInstance extends PrivateArea {
     };
   }
 
-  public getFurnitureAt(location: { x: number; y: number; z: number }, objectId: number, type: number): SavedHouseFurniture | null {
+  getFurnitureAt(location, objectId, type) {
     const position = this.getRoomPositionAt(location);
     const room = position ? this.getRoom(position) : null;
     if (!position || !room) return null;
@@ -246,38 +209,54 @@ export class PlayerHouseInstance extends PrivateArea {
       return value.type === type && local.x === ((location.x - this.allocation.baseX) & 7) && local.y === ((location.y - this.allocation.baseY) & 7);
     });
     if (!furniture) return null;
-    const buildable = BUILDABLE_BY_KEY.get(furniture.buildableKey);
+    const buildable = Data.BUILDABLE_BY_KEY.get(furniture.buildableKey);
     return buildable && (buildable.objectIds.includes(objectId) || furniture.displayObjectId === objectId
       || (this.litBurners.has(furniture) && buildable.objectIds[0] + 1 === objectId)) ? furniture : null;
   }
 
-  public getFurnitureAtTarget(target: HouseFurnitureTarget): SavedHouseFurniture | null {
+  getFurnitureAtTarget(target) {
     const room = this.getRoom(target.position);
     return room?.furnitureByLocation?.[this.furnitureKey(target.localX, target.localY, target.type)] ?? null;
   }
 
-  public setFurniture(target: HouseFurnitureTarget, buildable: ConstructionBuildable): void {
+  /** Every template placement of `hotspotKey` in a room of type `roomKey` (a rug's tiles, all curtains). */
+  hotspotPlacements(roomKey, hotspotKey) {
+    const template = Data.ROOM_BY_KEY.get(roomKey);
+    if (!template) return [];
+    return PlayerHouseInstance.getTemplateObjects(Estate.houseStyleIndex(this.save)).filter(object =>
+      object.sourceChunkX === template.sourceChunkX && object.sourceChunkY === template.sourceChunkY
+      && Data.hotspotIn(roomKey, object.id)?.key === hotspotKey);
+  }
+
+  /** Building on a hotspot furnishes all of its placements in the room. */
+  setFurniture(target, buildable) {
     const room = this.getRoom(target.position);
     if (!room) return;
-    const key = this.furnitureKey(target.localX, target.localY, target.type);
-    const furniture: SavedHouseFurniture = {
-      ...this.getFurnitureAtTarget(target),
-      buildableKey: buildable.key,
-      hotspotKey: target.hotspotKey,
-      sourceObjectId: target.sourceObjectId,
-      localX: target.localX,
-      localY: target.localY,
-      type: target.type,
-      face: target.face,
-    };
+    // An upgrade row (a display's next wood) saves as the furniture it makes.
+    const savedKey = buildable.savesAs ?? buildable.key;
+    const furnitureByLocation = { ...room.furnitureByLocation };
+    const placements = this.hotspotPlacements(room.roomKey, target.hotspotKey);
+    for (const placement of placements.length ? placements : [{ ...target, id: target.sourceObjectId }]) {
+      const key = this.furnitureKey(placement.localX, placement.localY, placement.type);
+      furnitureByLocation[key] = {
+        ...furnitureByLocation[key],
+        buildableKey: savedKey,
+        hotspotKey: target.hotspotKey,
+        sourceObjectId: placement.id,
+        localX: placement.localX,
+        localY: placement.localY,
+        type: placement.type,
+        face: placement.face,
+      };
+    }
     this.save.rooms[target.position.plane][target.position.x][target.position.y] = {
       ...room,
-      furniture: { ...room.furniture, [target.hotspotKey]: buildable.key },
-      furnitureByLocation: { ...room.furnitureByLocation, [key]: furniture },
+      furniture: { ...room.furniture, [target.hotspotKey]: savedKey },
+      furnitureByLocation,
     };
   }
 
-  public canRemoveFurniture(location: { x: number; y: number; z: number }, objectId: number, type: number): string | null {
+  canRemoveFurniture(location, objectId, type) {
     const furniture = this.getFurnitureAt(location, objectId, type);
     if (!furniture) return "There is no constructed furniture there.";
     if (Object.values(furniture.storage ?? {}).some(amount => amount > 0)) return "Empty this storage before removing it.";
@@ -287,17 +266,16 @@ export class PlayerHouseInstance extends PrivateArea {
     return null;
   }
 
-  public removeFurniture(location: { x: number; y: number; z: number }, objectId: number, type: number): SavedHouseFurniture | null {
+  removeFurniture(location, objectId, type) {
     const position = this.getRoomPositionAt(location);
     const room = position ? this.getRoom(position) : null;
     const furniture = this.getFurnitureAt(location, objectId, type);
     if (!position || !room || !furniture) return null;
-    const remaining = { ...room.furnitureByLocation };
-    delete remaining[this.furnitureKey(furniture.localX, furniture.localY, type)];
+    // Removing takes the furniture off every placement of its hotspot, as building put it there.
+    const remaining = Object.fromEntries(Object.entries(room.furnitureByLocation ?? {})
+      .filter(([, entry]) => entry.hotspotKey !== furniture.hotspotKey));
     const legacyFurniture = { ...room.furniture };
-    if (!Object.values(remaining).some((entry) => entry.hotspotKey === furniture.hotspotKey && entry.buildableKey === furniture.buildableKey)) {
-      delete legacyFurniture[furniture.hotspotKey];
-    }
+    delete legacyFurniture[furniture.hotspotKey];
     this.save.rooms[position.plane][position.x][position.y] = {
       ...room,
       furniture: legacyFurniture,
@@ -306,9 +284,9 @@ export class PlayerHouseInstance extends PrivateArea {
     return furniture;
   }
 
-  public override resolveObject(id: number, location: Location): GameObject | null {
-    if ((id >= ROOM_DOOR_HOTSPOT_MIN && id <= ROOM_DOOR_HOTSPOT_MAX)
-      || HOUSE_STYLES[houseStyleIndex(this.save)].doorHotspots.includes(id)) {
+  resolveObject(id, location) {
+    if (Data.ROOM_DOOR_HOTSPOT_IDS.has(id)
+      || Estate.HOUSE_STYLES[Estate.houseStyleIndex(this.save)].doorHotspots.includes(id)) {
       const target = this.getDoorTarget({ x: location.getX(), y: location.getY(), z: location.getZ() }) ?? this.getDoorTargetAtLocation(location);
       if (!target) return null;
       this.doorTargets.set(`${location.getX()}:${location.getY()}:${location.getZ()}`, target);
@@ -321,13 +299,13 @@ export class PlayerHouseInstance extends PrivateArea {
     // temporary server object after confirming that it belongs to this room.
     const target = this.getFurnitureTarget({ x: location.getX(), y: location.getY(), z: location.getZ() }, id);
     if (!target || this.getFurnitureAtTarget(target)) return null;
-    const rotation = this.getRoom(target.position)!.rotation;
+    const rotation = this.getRoom(target.position).rotation;
     const hotspot = new GameObject(id, location.clone(), target.type, (target.face + rotation) & 3, this);
     this.detach(hotspot);
     return hotspot;
   }
 
-  public canPlaceRoom(room: ConstructionRoom, position: HouseRoomPosition, constructionLevel: number): string | null {
+  canPlaceRoom(room, position, constructionLevel) {
     if (!this.isRoomPosition(position)) return "That room location is outside your house.";
     if (this.getRoom(position)) return "There is already a room there.";
     if (!this.fitsHouseDimensions(position, constructionLevel)) return "That exceeds the house dimensions for your Construction level.";
@@ -337,7 +315,7 @@ export class PlayerHouseInstance extends PrivateArea {
     if (room.outdoors && position.plane !== 1) return "You can only add that room on surface level.";
     if (position.plane > 1) {
       const below = this.getRoom({ ...position, plane: position.plane - 1 });
-      if (!below || ROOM_BY_KEY.get(below.roomKey)?.outdoors) return "You can't add a room with nothing below to support it.";
+      if (!below || Data.ROOM_BY_KEY.get(below.roomKey)?.outdoors) return "You can't add a room with nothing below to support it.";
     }
     if (room.key === "COSTUME_ROOM" && this.hasRoom("COSTUME_ROOM")) return "You may only have one costume room.";
     if (room.key === "PORTAL_NEXUS" && this.hasRoom("PORTAL_NEXUS")) return "You may only have one portal nexus room.";
@@ -347,11 +325,11 @@ export class PlayerHouseInstance extends PrivateArea {
     return null;
   }
 
-  public placeRoom(position: HouseRoomPosition, room: ConstructionRoom, rotation = 0): void {
+  placeRoom(position, room, rotation = 0) {
     this.save.rooms[position.plane][position.x][position.y] = { roomKey: room.key, rotation: rotation & 3, furniture: {} };
   }
 
-  public rotateRoom(position: HouseRoomPosition, rotation?: number): SavedHouseRoom | null {
+  rotateRoom(position, rotation) {
     const room = this.getRoom(position);
     if (!room) return null;
     const rotated = { ...room, rotation: (rotation ?? room.rotation + 1) & 3 };
@@ -359,14 +337,20 @@ export class PlayerHouseInstance extends PrivateArea {
     return rotated;
   }
 
-  public getRoomDoorMask(position: HouseRoomPosition): number {
-    const room = this.getRoom(position), template = room && ROOM_BY_KEY.get(room.roomKey);
-    if (!room || !template) return 0;
+  getRoomDoorMask(position) {
+    const room = this.getRoom(position);
+    return room ? this.templateDoorMask(room.roomKey) : 0;
+  }
+
+  /** A room type's doorways (bit per edge: north, east, south, west) before it is rotated. */
+  templateDoorMask(roomKey) {
+    const template = Data.ROOM_BY_KEY.get(roomKey);
+    if (!template) return 0;
     if (template.outdoors) return 15;
     let mask = 0;
-    for (const object of PlayerHouseInstance.getTemplateObjects(houseStyleIndex(this.save))) {
-      if (((object.id < ROOM_DOOR_HOTSPOT_MIN || object.id > ROOM_DOOR_HOTSPOT_MAX)
-        && !HOUSE_STYLES[houseStyleIndex(this.save)].doorHotspots.includes(object.id))
+    for (const object of PlayerHouseInstance.getTemplateObjects(Estate.houseStyleIndex(this.save))) {
+      if ((!Data.ROOM_DOOR_HOTSPOT_IDS.has(object.id)
+        && !Estate.HOUSE_STYLES[Estate.houseStyleIndex(this.save)].doorHotspots.includes(object.id))
         || object.sourceChunkX !== template.sourceChunkX || object.sourceChunkY !== template.sourceChunkY) continue;
       const edge = object.localX === 0 ? 3 : object.localY === 7 ? 0 : object.localX === 7 ? 1 : 2;
       mask |= 1 << edge;
@@ -374,7 +358,7 @@ export class PlayerHouseInstance extends PrivateArea {
     return mask;
   }
 
-  public getAdjacentDoorMask(position: HouseRoomPosition): number {
+  getAdjacentDoorMask(position) {
     const offsets = [[0, 1], [1, 0], [0, -1], [-1, 0]];
     return offsets.reduce((mask, [dx, dy], edge) => {
       const adjacent = { x: position.x + dx, y: position.y + dy, plane: position.plane };
@@ -385,33 +369,33 @@ export class PlayerHouseInstance extends PrivateArea {
     }, 0);
   }
 
-  public canMoveRoom(from: HouseRoomPosition, to: HouseRoomPosition): string | null {
+  canMoveRoom(from, to) {
     const room = this.getRoom(from);
     if (!room) return "There is no room there.";
     if (!this.isRoomPosition(to)) return "That room location is outside your house.";
     if (this.getRoom(to)) return "There is already a room there.";
     if (!this.fitsHouseDimensions(to, this.owner?.getSkillManager().getMaxLevel(Skill.CONSTRUCTION) ?? 99, from)) return "That exceeds the house dimensions for your Construction level.";
     if (from.plane === 1 && this.getRoom({ ...from, plane: 2 })) return "That room supports a room above it.";
-    const definition = ROOM_BY_KEY.get(room.roomKey)!;
+    const definition = Data.ROOM_BY_KEY.get(room.roomKey);
     if (definition.basement && to.plane !== 0) return "This room belongs in the basement.";
     if (definition.outdoors && to.plane !== 1) return "This room belongs on the surface.";
     if (to.plane === 2) {
       const below = this.getRoom({ ...to, plane: 1 });
-      if (!below || ROOM_BY_KEY.get(below.roomKey)?.outdoors
+      if (!below || Data.ROOM_BY_KEY.get(below.roomKey)?.outdoors
         || (from.plane === 1 && from.x === to.x && from.y === to.y)) return "This room needs a room below to support it.";
     }
     return null;
   }
 
-  public moveRoom(from: HouseRoomPosition, to: HouseRoomPosition, rotation: number): boolean {
+  moveRoom(from, to, rotation) {
     if (this.canMoveRoom(from, to)) return false;
-    const room = this.getRoom(from)!;
+    const room = this.getRoom(from);
     this.save.rooms[to.plane][to.x][to.y] = { ...room, rotation: rotation & 3 };
     this.removeRoom(from);
     return true;
   }
 
-  public canRemoveRoom(position: HouseRoomPosition): string | null {
+  canRemoveRoom(position) {
     const room = this.getRoom(position);
     if (!room) return "There is no room there.";
     if (Object.values(room.furnitureByLocation ?? {}).some(furniture => Object.values(furniture.storage ?? {}).some(amount => amount > 0))) return "Empty the storage in this room before removing it.";
@@ -422,40 +406,47 @@ export class PlayerHouseInstance extends PrivateArea {
     return null;
   }
 
-  public removeRoom(position: HouseRoomPosition): void {
+  removeRoom(position) {
     if (this.isRoomPosition(position)) this.save.rooms[position.plane][position.x][position.y] = null;
   }
 
   /** Moves a player into this allocation and immediately streams its dynamic scene. */
-  public enterHouse(player: Player, buildingMode: boolean): boolean {
+  enterHouse(player, buildingMode) {
     this.buildingMode = buildingMode;
-    PlayerHouseInstance.getTemplateObjects(houseStyleIndex(this.save));
+    PlayerHouseInstance.getTemplateObjects(Estate.houseStyleIndex(this.save));
     const previousArea = player.getArea();
     if (previousArea && previousArea !== this) previousArea.leave(player, false);
     this.enter(player);
     player.moveTo(this.getEntryLocation());
     const sent = this.rebuild(player, buildingMode);
-    if (sent) enterServantHouse(player, this);
+    if (sent) Servants.enterServantHouse(player, this);
     return sent;
   }
 
-  public postLeave(mobile: Mobile, logout: boolean): void {
+  process(mobile) {
+    if (mobile.isPlayer()) House.processOccupant(mobile.getAsPlayer(), this);
+  }
+
+  postLeave(mobile, logout) {
     if (mobile.isNpc()) { this.remove(mobile); return; }
-    if (mobile.isPlayer()) leaveServantHouse(mobile.getAsPlayer(), this);
+    if (mobile.isPlayer()) Servants.leaveServantHouse(mobile.getAsPlayer(), this);
     super.postLeave(mobile, logout);
+    if (mobile.isPlayer()) House.leftHouse(mobile.getAsPlayer(), this);
   }
 
   /** Replays the current saved layout after a room edit. */
-  public rebuild(player: Player, buildingMode: boolean): boolean {
+  rebuild(player, buildingMode) {
     this.buildingMode = buildingMode;
+    Trophies.refreshDisplays(this);
     // Remove old solid doors before the new scene installs its construction hotspots.
     if (buildingMode) this.refreshDoors();
     this.clearFurniture();
     player.getPacketSender().sendVarbit(HOUSE_BUILDING_MODE_VARBIT, buildingMode ? 1 : 0);
     const center = this.getSceneCenter();
     const palette = this.buildPalette(buildingMode);
-    const seenRegions = new Set<number>();
-    const xteas: number[][] = [];
+    this.applyTemplateCollision(palette);
+    const seenRegions = new Set();
+    const xteas = [];
     for (const plane of palette) {
       for (const column of plane) {
         for (const chunk of column) {
@@ -474,54 +465,114 @@ export class PlayerHouseInstance extends PrivateArea {
     this.refreshHotspots(player, buildingMode);
     this.refreshFurniture(player);
     if (!buildingMode) this.refreshDoors();
+    Dungeon.refreshMonsters(this);
+    Menagerie.refreshPets(this);
+    GamesRoom.resetGames(this);
     return sent;
   }
 
   /** Leaving clears the private area; PlayerSession emits REBUILD_NORMAL next tick. */
-  public exitHouse(player: Player, destination: Location): void {
+  exitHouse(player, destination) {
     this.leave(player, false);
     player.moveTo(destination);
   }
 
-  public destroy(): void {
+  /** Players may fight each other only inside one of the combat room's rings. */
+  canAttack(attacker, target) {
+    return CombatRings.canFight(attacker, target, this);
+  }
+
+  /** Spells on a games room orb work the game instead of hitting it. */
+  canCastOnNpc(player, npc, spell) {
+    return GamesRoom.castOnGame(player, npc, spell);
+  }
+
+  destroy() {
     if (this.isDestroyed()) return;
-    if (this.owner && this.save.servant) leaveServantHouse(this.owner, this);
+    if (this.owner && this.save.servant) Servants.leaveServantHouse(this.owner, this);
     releaseHouse(this.allocation);
     super.destroy();
   }
 
-  public getSceneCenter(): Readonly<{ x: number; y: number }> {
+  getSceneCenter() {
     return { x: (this.allocation.baseX + 52) >> 3, y: (this.allocation.baseY + 52) >> 3 };
   }
 
-  public getEntryLocation(): Location {
-    const gridOffset = Math.floor((HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
+  getEntryLocation() {
+    const gridOffset = Math.floor((Palette.HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
     for (let x = 0; x < this.gridSize; x++) {
       for (let y = 0; y < this.gridSize; y++) {
         const room = this.save.rooms[1][x][y];
         if (!room || !this.hasExitPortal(room)) continue;
         const savedExit = Object.values(room.furnitureByLocation ?? {}).find((furniture) => furniture.buildableKey === "EXIT_PORTAL");
-        const local = rotateHotspot(savedExit?.localX ?? 3, savedExit?.localY ?? 2, room.rotation);
+        // In front of the portal (it is 2x2, from its saved corner), not on it.
+        const local = Palette.rotateHotspot(savedExit?.localX ?? 3, savedExit ? savedExit.localY - 1 : 2, room.rotation);
         return new Location(this.allocation.baseX + (gridOffset + x) * 8 + local.x, this.allocation.baseY + (gridOffset + y) * 8 + local.y, 1);
       }
     }
     return new Location(this.allocation.baseX + 52, this.allocation.baseY + 52, 1);
   }
 
-  private refreshHotspots(player: Player, buildingMode: boolean): void {
+  /** Where each template hotspot of the room at `position` lands in this house. */
+  hotspotTiles(position) {
+    const room = this.getRoom(position);
+    const template = room ? Data.ROOM_BY_KEY.get(room.roomKey) : null;
+    if (!room || !template) return [];
+    const gridOffset = Math.floor((Palette.HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
+    return PlayerHouseInstance.getTemplateObjects(Estate.houseStyleIndex(this.save))
+      .filter(hotspot => hotspot.sourceChunkX === template.sourceChunkX && hotspot.sourceChunkY === template.sourceChunkY)
+      .map(hotspot => {
+        const local = this.rotatedFootprint(hotspot.localX, hotspot.localY, hotspot.id, hotspot.face, room.rotation);
+        return {
+          id: hotspot.id,
+          x: this.allocation.baseX + (gridOffset + position.x) * 8 + local.x,
+          y: this.allocation.baseY + (gridOffset + position.y) * 8 + local.y,
+          plane: position.plane,
+        };
+      });
+  }
+
+  /**
+   * rsprox captures: before a room picked at a door is built, its doorways show as poh_preview_wall
+   * (shape 0, facing their edge: west 0, north 1, east 2, south 3) and its furniture spaces as their
+   * hotspot locs, turned with the room. Floor spaces (rugs) aren't shown.
+   */
+  previewObjects(roomKey, position, rotation) {
+    const template = Data.ROOM_BY_KEY.get(roomKey);
+    if (!template) return [];
+    const style = Estate.houseStyleIndex(this.save);
+    const doorIds = Estate.HOUSE_STYLES[style].doorHotspots;
+    const gridOffset = Math.floor((Palette.HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
+    const baseX = this.allocation.baseX + (gridOffset + position.x) * 8;
+    const baseY = this.allocation.baseY + (gridOffset + position.y) * 8;
+    return PlayerHouseInstance.getTemplateObjects(style)
+      .filter(hotspot => hotspot.sourceChunkX === template.sourceChunkX && hotspot.sourceChunkY === template.sourceChunkY && hotspot.type !== 22)
+      .map(hotspot => {
+        const local = this.rotatedFootprint(hotspot.localX, hotspot.localY, hotspot.id, hotspot.face, rotation);
+        const location = new Location(baseX + local.x, baseY + local.y, position.plane);
+        const door = Data.ROOM_DOOR_HOTSPOT_IDS.has(hotspot.id) || doorIds.includes(hotspot.id);
+        if (!door && !Data.hotspotIn(roomKey, hotspot.id)) return null; // windows and the like
+        if (!door) return new GameObject(hotspot.id, location, hotspot.type, (hotspot.face + rotation) & 3, this);
+        const edge = local.x === 0 ? 0 : local.y === 7 ? 1 : local.x === 7 ? 2 : 3;
+        return new GameObject(PREVIEW_WALL, location, 0, edge, this);
+      })
+      .filter(Boolean);
+  }
+
+  refreshHotspots(player, buildingMode) {
     for (const door of this.roomDoors.splice(0)) {
       this.detach(door);
     }
     this.doorTargets.clear();
 
-    const gridOffset = Math.floor((HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
+    const gridOffset = Math.floor((Palette.HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
     for (let plane = 0; plane < 3; plane++) {
       for (let x = 0; x < this.gridSize; x++) {
         for (let y = 0; y < this.gridSize; y++) {
           const room = this.save.rooms[plane][x][y];
-          const template = room ? ROOM_BY_KEY.get(room.roomKey) : null;
+          const template = room ? Data.ROOM_BY_KEY.get(room.roomKey) : null;
           if (!room || !template) continue;
-          for (const hotspot of PlayerHouseInstance.getTemplateObjects(houseStyleIndex(this.save))) {
+          for (const hotspot of PlayerHouseInstance.getTemplateObjects(Estate.houseStyleIndex(this.save))) {
             if (hotspot.sourceChunkX !== template.sourceChunkX || hotspot.sourceChunkY !== template.sourceChunkY) continue;
             const local = this.rotatedFootprint(hotspot.localX, hotspot.localY, hotspot.id, hotspot.face, room.rotation);
             const worldX = this.allocation.baseX + (gridOffset + x) * 8 + local.x;
@@ -530,9 +581,9 @@ export class PlayerHouseInstance extends PrivateArea {
               // Dynamic windows are layout markers, not furniture/building-mode ghosts.
               const adjacent = this.getDoorTargetFromEdge(x, y, plane, local.x, local.y);
               const neighbour = adjacent && this.getRoom(adjacent);
-              const indoors = neighbour && !ROOM_BY_KEY.get(neighbour.roomKey)?.outdoors;
+              const indoors = neighbour && !Data.ROOM_BY_KEY.get(neighbour.roomKey)?.outdoors;
               player.getSession().sendClientPacket(encodeLocAddChange(
-                indoors ? HOUSE_STYLES[houseStyleIndex(this.save)].wall : HOUSE_STYLES[houseStyleIndex(this.save)].window,
+                indoors ? Estate.HOUSE_STYLES[Estate.houseStyleIndex(this.save)].wall : Estate.HOUSE_STYLES[Estate.houseStyleIndex(this.save)].window,
                 worldX, worldY, plane, hotspot.type, (hotspot.face + room.rotation) & 3,
               ));
               continue;
@@ -543,8 +594,8 @@ export class PlayerHouseInstance extends PrivateArea {
               player.getSession().sendClientPacket(encodeLocDel(worldX, worldY, plane, hotspot.type, (hotspot.face + room.rotation) & 3));
               continue;
             }
-            if ((hotspot.id < ROOM_DOOR_HOTSPOT_MIN || hotspot.id > ROOM_DOOR_HOTSPOT_MAX)
-              && !HOUSE_STYLES[houseStyleIndex(this.save)].doorHotspots.includes(hotspot.id)) continue;
+            if (!Data.ROOM_DOOR_HOTSPOT_IDS.has(hotspot.id)
+              && !Estate.HOUSE_STYLES[Estate.houseStyleIndex(this.save)].doorHotspots.includes(hotspot.id)) continue;
             const target = this.getDoorTargetFromEdge(x, y, plane, local.x, local.y);
             if (!target) continue;
             const location = new Location(
@@ -560,49 +611,99 @@ export class PlayerHouseInstance extends PrivateArea {
     }
   }
 
-  public refreshDoors(): void {
+  /**
+   * The walls, windows and scenery the client draws from each room's template chunk collide as
+   * they do in the cache's map (a templated instance does the same); without this every wall could
+   * be walked through. Hotspots are left out: furniture and doors are placed with their own
+   * collision. Blocked tiles in the chunk settings block too.
+   */
+  applyTemplateCollision(palette) {
+    for (const object of this.templateClipObjects ?? []) RegionManager.removeObjectClipping(object);
+    for (const tile of this.templateBlockedTiles ?? []) this.setClip(tile, this.getClip(tile) & ~BLOCKED_TILE);
+    this.templateClipObjects = [];
+    this.templateBlockedTiles = [];
+    const style = Estate.houseStyleIndex(this.save);
+    for (let plane = 0; plane < palette.length; plane++) {
+      for (let x = 0; x < palette[plane].length; x++) {
+        for (let y = 0; y < palette[plane][x].length; y++) {
+          const chunk = palette[plane][x][y];
+          if (chunk === -1) continue;
+          const sourceX = (chunk >>> 14) & 0x3ff, sourceY = (chunk >>> 3) & 0x7ff;
+          const sourcePlane = (chunk >>> 24) & 3, rotation = (chunk >>> 1) & 3;
+          const region = getTemplateRegion(((sourceX >> 3) << 8) | (sourceY >> 3));
+          if (!region) continue;
+          const baseX = this.allocation.baseX + x * 8, baseY = this.allocation.baseY + y * 8;
+          for (const loc of region.chunks[templateChunkKey(sourcePlane, sourceX, sourceY)] ?? []) {
+            if (this.isTemplateHotspot(loc.id, style)) continue;
+            const definition = ObjectDefinition.forId(loc.id);
+            const [toX, toY] = rotateChunkLoc(loc.localX & 7, loc.localY & 7, rotation, definition?.getSizeX() ?? 1, definition?.getSizeY() ?? 1, loc.face);
+            const object = new GameObject(loc.id, new Location(baseX + toX, baseY + toY, plane), loc.type, (loc.face + rotation) & 3, this);
+            this.detach(object);
+            RegionManager.addObjectClipping(object);
+            this.templateClipObjects.push(object);
+          }
+          const tileX = (sourceX & 7) * 8, tileY = (sourceY & 7) * 8;
+          for (let dx = 0; dx < 8; dx++) for (let dy = 0; dy < 8; dy++) {
+            if ((region.settings[(sourcePlane << 12) | ((tileX + dx) << 6) | (tileY + dy)] & 1) === 0) continue;
+            const [toX, toY] = rotateChunkTile(dx, dy, rotation);
+            const tile = new Location(baseX + toX, baseY + toY, plane);
+            this.setClip(tile, this.getClip(tile) | BLOCKED_TILE);
+            this.templateBlockedTiles.push(tile);
+          }
+        }
+      }
+    }
+  }
+
+  /** Door and furniture spaces: drawn as doors and furniture instead. Windows stay, being wall. */
+  isTemplateHotspot(id, style) {
+    return Data.ROOM_DOOR_HOTSPOT_IDS.has(id) || Estate.HOUSE_STYLES[style].doorHotspots.includes(id)
+      || Data.HOTSPOT_BY_OBJECT_ID.has(id) || !!CacheDefinitions.getObject(id)?.actions?.includes("Build");
+  }
+
+  refreshDoors() {
     for (const door of this.visibleDoors.splice(0)) {
       RegionManager.removeObjectClipping(door.object);
       this.detach(door.object);
       for (const player of this.getPlayers()) player.getPacketSender().sendObjectRemoval(door.object);
     }
     if (this.buildingMode || this.save.doorMode === 2) return;
-    const offset = Math.floor((HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
+    const offset = Math.floor((Palette.HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
     for (let plane = 0; plane < 3; plane++) for (let x = 0; x < this.gridSize; x++) for (let y = 0; y < this.gridSize; y++) {
       const room = this.getRoom({ x, y, plane });
-      const template = room && ROOM_BY_KEY.get(room.roomKey);
+      const template = room && Data.ROOM_BY_KEY.get(room.roomKey);
       if (!room || !template || template.outdoors) continue;
-      for (const hotspot of PlayerHouseInstance.getTemplateObjects(houseStyleIndex(this.save))) {
-        if (!HOUSE_STYLES[houseStyleIndex(this.save)].doorHotspots.includes(hotspot.id) || hotspot.sourceChunkX !== template.sourceChunkX || hotspot.sourceChunkY !== template.sourceChunkY) continue;
-        const local = rotateHotspot(hotspot.localX, hotspot.localY, room.rotation);
+      for (const hotspot of PlayerHouseInstance.getTemplateObjects(Estate.houseStyleIndex(this.save))) {
+        if (!Estate.HOUSE_STYLES[Estate.houseStyleIndex(this.save)].doorHotspots.includes(hotspot.id) || hotspot.sourceChunkX !== template.sourceChunkX || hotspot.sourceChunkY !== template.sourceChunkY) continue;
+        const local = Palette.rotateHotspot(hotspot.localX, hotspot.localY, room.rotation);
         const neighbor = this.getDoorTargetFromEdge(x, y, plane, local.x, local.y);
         const other = neighbor && this.getRoom(neighbor);
         // Two adjacent room templates describe the same doorway. Keep one pair.
-        if (other && !ROOM_BY_KEY.get(other.roomKey)?.outdoors && (neighbor!.x < x || neighbor!.y < y)) continue;
+        if (other && !Data.ROOM_BY_KEY.get(other.roomKey)?.outdoors && (neighbor.x < x || neighbor.y < y)) continue;
         const origin = new Location(this.allocation.baseX + (offset + x) * 8 + local.x,
           this.allocation.baseY + (offset + y) * 8 + local.y, plane);
-        const style = houseStyleIndex(this.save), side = HOUSE_STYLES[style].doorHotspots.indexOf(hotspot.id);
+        const style = Estate.houseStyleIndex(this.save), side = Estate.HOUSE_STYLES[style].doorHotspots.indexOf(hotspot.id);
         const face = (hotspot.face + room.rotation) & 3;
         const door = { origin, face, style, side, open: this.save.doorMode === 1,
-          object: null as unknown as GameObject };
+          object: null };
         this.visibleDoors.push(door);
         this.drawDoor(door);
       }
     }
   }
 
-  private drawDoor(door: PlayerHouseInstance["visibleDoors"][number]): void {
+  drawDoor(door) {
     const offsets = [[-1, 0], [0, 1], [1, 0], [0, -1]];
     const [dx, dy] = door.open ? offsets[door.face] : [0, 0];
     // Turn away from the pair's centre so each leaf stays on its outer hinge.
     const face = door.open ? (door.face + (door.side ? 3 : 1)) & 3 : door.face;
-    door.object = new GameObject(HOUSE_STYLES[door.style].doors[door.side + (door.open ? 2 : 0)],
+    door.object = new GameObject(Estate.HOUSE_STYLES[door.style].doors[door.side + (door.open ? 2 : 0)],
       door.origin.transform(dx, dy), 0, face, this);
     RegionManager.addObjectClipping(door.object);
     for (const player of this.getPlayers()) player.getPacketSender().sendObject(door.object);
   }
 
-  public toggleDoor(id: number, location: Location): boolean {
+  toggleDoor(id, location) {
     const clicked = this.visibleDoors.find(door => door.object.getId() === id && door.object.getLocation().equals(location));
     if (!clicked) return false;
     const pair = this.visibleDoors.filter(door => door.face === clicked.face && door.style === clicked.style
@@ -618,21 +719,22 @@ export class PlayerHouseInstance extends PrivateArea {
     return true;
   }
 
-  private refreshFurniture(player: Player): void {
+  refreshFurniture(player) {
+    for (const object of this.extraObjects) player.getPacketSender().sendObject(object);
     if (this.furnitureObjects.length) {
       for (const object of this.furnitureObjects) player.getPacketSender().sendObject(object);
       return;
     }
-    const gridOffset = Math.floor((HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
+    const gridOffset = Math.floor((Palette.HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
     for (let plane = 0; plane < 3; plane++) {
       for (let x = 0; x < this.gridSize; x++) {
         for (let y = 0; y < this.gridSize; y++) {
           const room = this.save.rooms[plane][x][y];
           if (!room) continue;
           for (const furniture of Object.values(room.furnitureByLocation ?? {})) {
-            const buildable = BUILDABLE_BY_KEY.get(furniture.buildableKey);
-            if (!buildable) continue;
-            const hotspot = HOTSPOT_BY_OBJECT_ID.get(furniture.sourceObjectId);
+            const buildable = Data.BUILDABLE_BY_KEY.get(furniture.buildableKey);
+            if (!buildable || this.hiddenFurniture.has(furniture)) continue;
+            const hotspot = Data.HOTSPOT_BY_KEY.get(furniture.hotspotKey) ?? Data.hotspotIn(room.roomKey, furniture.sourceObjectId);
             const variant = hotspot ? hotspot.objectIds.indexOf(furniture.sourceObjectId) : -1;
             const objectId = (this.litBurners.get(furniture) ?? 0) > Date.now() ? buildable.objectIds[0] + 1
               : furniture.displayObjectId ?? buildable.objectIds[variant] ?? buildable.objectIds.find((id) => id >= 0) ?? -1;
@@ -646,6 +748,8 @@ export class PlayerHouseInstance extends PrivateArea {
               this,
             );
             this.furnitureObjects.push(object);
+            // Furniture blocks the way as its loc does (a dungeon door, a table; not a rug).
+            RegionManager.addObjectClipping(object);
             player.getPacketSender().sendObject(object);
           }
         }
@@ -653,33 +757,82 @@ export class PlayerHouseInstance extends PrivateArea {
     }
   }
 
-  private clearFurniture(): void {
-    for (const object of this.furnitureObjects.splice(0)) this.detach(object);
+  clearFurniture() {
+    for (const object of this.furnitureObjects.splice(0)) {
+      RegionManager.removeObjectClipping(object);
+      this.detach(object);
+    }
   }
 
-  public redrawFurniture(): void {
+  /** Every piece of furniture with its room position and the world tile its placement is drawn on. */
+  furnitureEntries() {
+    const gridOffset = Math.floor((Palette.HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
+    const entries = [];
+    for (let plane = 0; plane < 3; plane++) for (let x = 0; x < this.gridSize; x++) for (let y = 0; y < this.gridSize; y++) {
+      const room = this.save.rooms[plane][x][y];
+      for (const furniture of Object.values(room?.furnitureByLocation ?? {})) {
+        const local = this.rotatedFootprint(furniture.localX, furniture.localY, furniture.sourceObjectId, furniture.face, room.rotation);
+        entries.push({ furniture, room, position: { x, y, plane },
+          location: new Location(this.allocation.baseX + (gridOffset + x) * 8 + local.x, this.allocation.baseY + (gridOffset + y) * 8 + local.y, plane),
+          face: (furniture.face + room.rotation) & 3 });
+      }
+    }
+    return entries;
+  }
+
+  addExtraObject(object) {
+    this.extraObjects.push(object);
+    for (const player of this.getPlayers()) player.getPacketSender().sendObject(object);
+  }
+
+  removeExtraObject(object) {
+    const index = this.extraObjects.indexOf(object);
+    if (index < 0) return;
+    this.extraObjects.splice(index, 1);
+    RegionManager.removeObjectClipping(object);
+    this.detach(object);
+    for (const player of this.getPlayers()) player.getPacketSender().sendObjectRemoval(object);
+  }
+
+  /** Takes a piece of furniture off the map for now (not saved): a dummy or guard stands in. */
+  hideFurniture(furniture) {
+    this.hiddenFurniture.add(furniture);
+    for (const object of this.furnitureObjects.filter(drawn => this.getFurnitureAt(
+      { x: drawn.getLocation().getX(), y: drawn.getLocation().getY(), z: drawn.getLocation().getZ() }, drawn.getId(), drawn.getType()) === furniture)) {
+      this.furnitureObjects.splice(this.furnitureObjects.indexOf(object), 1);
+      RegionManager.removeObjectClipping(object);
+      this.detach(object);
+      for (const player of this.getPlayers()) player.getPacketSender().sendObjectRemoval(object);
+    }
+  }
+
+  showFurniture(furniture) {
+    if (this.hiddenFurniture.delete(furniture)) this.redrawFurniture();
+  }
+
+  redrawFurniture() {
     this.clearFurniture();
     for (const player of this.getPlayers()) this.refreshFurniture(player);
   }
 
-  private isRoomPosition(position: HouseRoomPosition): boolean {
+  isRoomPosition(position) {
     return Number.isInteger(position.x) && Number.isInteger(position.y) && Number.isInteger(position.plane)
       && position.plane >= 0 && position.plane < 3
       && position.x >= 0 && position.x < this.gridSize
       && position.y >= 0 && position.y < this.gridSize;
   }
 
-  public getRoomCount(): number {
+  getRoomCount() {
     return this.save.rooms.flat(2).filter((room) => room != null).length;
   }
 
-  public getMaxRooms(level: number): number {
+  getMaxRooms(level) {
     if (level >= 99) return 38;
     if (level >= 96) return 37;
     return level >= 26 ? 25 + Math.floor((level - 26) / 6) : 24;
   }
 
-  private fitsHouseDimensions(target: HouseRoomPosition, level: number, moving?: HouseRoomPosition): boolean {
+  fitsHouseDimensions(target, level, moving) {
     let minX = target.x, maxX = target.x, minY = target.y, maxY = target.y;
     for (let plane = 0; plane < 3; plane++) for (let x = 0; x < this.gridSize; x++) for (let y = 0; y < this.gridSize; y++) {
       if (!this.getRoom({ x, y, plane }) || (moving?.x === x && moving.y === y && moving.plane === plane)) continue;
@@ -690,21 +843,21 @@ export class PlayerHouseInstance extends PrivateArea {
     return maxX - minX < size && maxY - minY < size;
   }
 
-  private hasRoom(key: string): boolean {
+  hasRoom(key) {
     return this.save.rooms.flat(2).some((room) => room?.roomKey === key);
   }
 
-  private hasExitPortal(room: SavedHouseRoom): boolean {
+  hasExitPortal(room) {
     return room.furniture.CENTERPIECE === "EXIT_PORTAL"
       || room.furniture.FORMAL_GARDEN_CENTERPIECE === "EXIT_PORTAL"
       || Object.values(room.furnitureByLocation ?? {}).some((furniture) => furniture.buildableKey === "EXIT_PORTAL");
   }
 
-  private getExitPortalCount(): number {
-    return this.save.rooms.flat(2).filter((room): room is SavedHouseRoom => room != null).filter((room) => this.hasExitPortal(room)).length;
+  getExitPortalCount() {
+    return this.save.rooms.flat(2).filter((room) => room != null).filter((room) => this.hasExitPortal(room)).length;
   }
 
-  private getDoorTargetFromEdge(x: number, y: number, plane: number, localX: number, localY: number): HouseRoomPosition | null {
+  getDoorTargetFromEdge(x, y, plane, localX, localY) {
     const target = localX === 0 ? { x: x - 1, y, plane }
       : localX === 7 ? { x: x + 1, y, plane }
         : localY === 0 ? { x, y: y - 1, plane }
@@ -713,10 +866,10 @@ export class PlayerHouseInstance extends PrivateArea {
     return target && this.isRoomPosition(target) ? target : null;
   }
 
-  private getDoorTargetAtLocation(location: Location): HouseRoomPosition | null {
+  getDoorTargetAtLocation(location) {
     const relativeX = location.getX() - this.allocation.baseX;
     const relativeY = location.getY() - this.allocation.baseY;
-    const gridOffset = Math.floor((HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
+    const gridOffset = Math.floor((Palette.HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
     const x = Math.floor(relativeX / 8) - gridOffset;
     const y = Math.floor(relativeY / 8) - gridOffset;
     const plane = location.getZ();
@@ -725,8 +878,14 @@ export class PlayerHouseInstance extends PrivateArea {
     return this.getDoorTargetFromEdge(x, y, plane, relativeX & 7, relativeY & 7);
   }
 
-  public getRoomPositionAt(location: { x: number; y: number; z: number }): HouseRoomPosition | null {
-    const gridOffset = Math.floor((HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
+  /** The south-west tile of the room at a grid position. */
+  roomCorner(position) {
+    const gridOffset = Math.floor((Palette.HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
+    return new Location(this.allocation.baseX + (position.x + gridOffset) * 8, this.allocation.baseY + (position.y + gridOffset) * 8, position.plane);
+  }
+
+  getRoomPositionAt(location) {
+    const gridOffset = Math.floor((Palette.HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
     const position = {
       x: Math.floor((location.x - this.allocation.baseX) / 8) - gridOffset,
       y: Math.floor((location.y - this.allocation.baseY) / 8) - gridOffset,
@@ -735,70 +894,58 @@ export class PlayerHouseInstance extends PrivateArea {
     return this.isRoomPosition(position) ? position : null;
   }
 
-  private rotatedFootprint(x: number, y: number, id: number, face: number, rotation: number): Readonly<{ x: number; y: number }> {
+  rotatedFootprint(x, y, id, face, rotation) {
     const definition = CacheDefinitions.getObject(id);
     const width = (face & 1) ? definition.sizeY : definition.sizeX;
     const height = (face & 1) ? definition.sizeX : definition.sizeY;
-    const origin = rotateHotspot(x, y, rotation);
-    const opposite = rotateHotspot(x + width - 1, y + height - 1, rotation);
+    const origin = Palette.rotateHotspot(x, y, rotation);
+    const opposite = Palette.rotateHotspot(x + width - 1, y + height - 1, rotation);
     return { x: Math.min(origin.x, opposite.x), y: Math.min(origin.y, opposite.y) };
   }
 
-  private furnitureKey(localX: number, localY: number, type: number): string {
+  furnitureKey(localX, localY, type) {
     return `${localX}:${localY}:${type}`;
   }
 
-  private getTemplateHotspot(roomKey: string, id: number, localX: number, localY: number): TemplateObject | undefined {
-    const room = ROOM_BY_KEY.get(roomKey);
-    return room && PlayerHouseInstance.getTemplateObjects(houseStyleIndex(this.save)).find((object) =>
-      (object.id === id || (HOTSPOT_BY_OBJECT_ID.has(id) && HOTSPOT_BY_OBJECT_ID.get(object.id)?.key === HOTSPOT_BY_OBJECT_ID.get(id)?.key))
+  getTemplateHotspot(roomKey, id, localX, localY) {
+    const room = Data.ROOM_BY_KEY.get(roomKey);
+    return room && PlayerHouseInstance.getTemplateObjects(Estate.houseStyleIndex(this.save)).find((object) =>
+      (object.id === id || (Data.hotspotIn(roomKey, id) && Data.hotspotIn(roomKey, object.id)?.key === Data.hotspotIn(roomKey, id)?.key))
       && object.localX === localX && object.localY === localY
       && object.sourceChunkX === room.sourceChunkX && object.sourceChunkY === room.sourceChunkY);
   }
 
-  private static getTemplateObjects(style = 0): readonly TemplateObject[] {
+  static getTemplateObjects(style = 0) {
     const cached = this.templateObjects.get(style);
     if (cached) return cached;
     const chunkOffset = Math.floor(style / 4) * 8;
-    const objects: TemplateObject[] = [];
-    const regions = new Set([...CONSTRUCTION_ROOMS, ...Object.values(HOUSE_TEMPLATE_CHUNKS)]
+    const objects = [];
+    const regions = new Set([...Data.CONSTRUCTION_ROOMS, ...Object.values(Data.HOUSE_TEMPLATE_CHUNKS)]
       .map(({ sourceChunkX, sourceChunkY }) => (((sourceChunkX + chunkOffset) >> 3) << 8) | (sourceChunkY >> 3)));
     for (const regionId of regions) {
-      const data = CacheMaps.getRegion(regionId)?.objectData;
-      if (!data) throw new Error(`Construction template region ${regionId} is missing from the active cache.`);
-      const buffer = new ByteBuffer(data);
-      let objectId = -1;
-      while (buffer.offset < data.length) {
-        const objectDelta = buffer.readSmart3();
-        if (objectDelta === 0) break;
-        objectId += objectDelta;
-        let packedLocation = 0;
-        while (true) {
-          const locationDelta = buffer.readUnsignedSmart();
-          if (locationDelta === 0) break;
-          packedLocation += locationDelta - 1;
-          const info = buffer.readUnsignedByte();
-          if ((packedLocation >> 12) !== style % 4) continue;
-          if ((objectId < ROOM_DOOR_HOTSPOT_MIN || objectId > ROOM_DOOR_HOTSPOT_MAX)
-            && !HOUSE_STYLES[style].doorHotspots.includes(objectId)
-            && objectId !== HOUSE_DYNAMIC_WINDOW
-            && !HOTSPOT_BY_OBJECT_ID.has(objectId)
-            && !CacheDefinitions.getObject(objectId).actions?.includes("Build")) continue;
-          const localX = (packedLocation >> 6) & 0x3f;
-          const localY = packedLocation & 0x3f;
-          objects.push({
-            id: objectId,
-            sourceChunkX: (regionId >> 8) * 8 + (localX >> 3) - chunkOffset,
-            sourceChunkY: (regionId & 0xff) * 8 + (localY >> 3),
-            localX: localX & 7,
-            localY: localY & 7,
-            type: info >> 2,
-            face: info & 3,
-          });
-        }
+      const region = getTemplateRegion(regionId);
+      if (!region) throw new Error(`Construction template region ${regionId} is missing from the active cache.`);
+      for (const loc of region.chunks.flat()) {
+        if (loc.plane !== style % 4) continue;
+        if (!Data.ROOM_DOOR_HOTSPOT_IDS.has(loc.id)
+          && !Estate.HOUSE_STYLES[style].doorHotspots.includes(loc.id)
+          && loc.id !== HOUSE_DYNAMIC_WINDOW
+          && !Data.HOTSPOT_BY_OBJECT_ID.has(loc.id)
+          && !CacheDefinitions.getObject(loc.id).actions?.includes("Build")) continue;
+        objects.push({
+          id: loc.id,
+          sourceChunkX: (regionId >> 8) * 8 + (loc.localX >> 3) - chunkOffset,
+          sourceChunkY: (regionId & 0xff) * 8 + (loc.localY >> 3),
+          localX: loc.localX & 7,
+          localY: loc.localY & 7,
+          type: loc.type,
+          face: loc.face,
+        });
       }
     }
     this.templateObjects.set(style, objects);
     return objects;
   }
 }
+
+Object.assign(module.exports, { createDefaultHouseSave, createTestHouseSave, PlayerHouseInstance });
