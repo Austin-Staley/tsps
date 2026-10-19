@@ -66,7 +66,9 @@
     "13837": {"label": "Quest stage", "skip": true, "why": "Varlamore quests use the cache multi-NPCs in npc-spawns.json and private scene actors; do not add duplicate static variants."},
     "13838": {"label": "Quest stage", "skip": true, "why": "Varlamore quests use the cache multi-NPCs in npc-spawns.json and private scene actors; do not add duplicate static variants."},
     "13839": {"label": "Quest stage", "skip": true, "why": "Varlamore quests use the cache multi-NPCs in npc-spawns.json and private scene actors; do not add duplicate static variants."},
-    "13840": {"label": "Quest stage", "skip": true, "why": "Varlamore quests use the cache multi-NPCs in npc-spawns.json and private scene actors; do not add duplicate static variants."}
+    "13840": {"label": "Quest stage", "skip": true, "why": "Varlamore quests use the cache multi-NPCs in npc-spawns.json and private scene actors; do not add duplicate static variants."},
+    "14009": {"label": "Spawned by a plugin", "skip": true, "why": "The Hueycoatl's head: Hueycoatl.plugin.js spawns the fight's set (docs/hueycoatl.md)."},
+    "14008": {"label": "Spawned by a plugin", "skip": true, "why": "The Hueycoatl's arena seer: Hueycoatl.plugin.js spawns her with the fight's set."}
   },
   "unalignedLayers": {"label": "Wiki map layer not aligned", "skip": true, "why": "The Wiki draws some dungeons on their own map layers with other coordinates; when too few of a layer's spawns line up with existing ones to work out the shift, its spawns could land in the wrong place."},
   "names": {
