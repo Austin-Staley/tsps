@@ -189,7 +189,7 @@ export function isConfiguredDeveloperUsername(username: string): boolean {
 }
 
 export class NetworkBuilder {
-  public initialize(port: number): WebSocketServer {
+  public initialize(port: number): WebSocketServer | undefined {
     const browserHost = process.env.BROWSER_HOST === "1";
     const browserHostBridge = browserHost
       ? new BrowserHostHttpBridge((channel) => new ClientConnection(channel))
@@ -233,14 +233,16 @@ export class NetworkBuilder {
       response.setHeader("Content-Length", pack.length);
       response.end(pack);
     });
-    const server = new WebSocketServer({
+    // Browser-host clients arrive through the HTTP bridge above, never a WebSocket.
+    // Only dedicated/desktop deployments need the game WebSocket listener.
+    const server = browserHost ? undefined : new WebSocketServer({
       server: http,
       perMessageDeflate: false,
       maxPayload: MAX_GAME_MESSAGE_BYTES,
     });
-    server.on("connection", (socket, request) => new ClientConnection(new WebSocketBinaryChannel(socket, request)));
-    server.on("listening", () => console.info(`[network] client websocket listening on ${port}`));
-    server.on("error", (error) => console.error("[network] websocket error", error));
+    server?.on("connection", (socket, request) => new ClientConnection(new WebSocketBinaryChannel(socket, request)));
+    server?.on("listening", () => console.info(`[network] client websocket listening on ${port}`));
+    server?.on("error", (error) => console.error("[network] websocket error", error));
     http.listen(port);
     if (!browserHost) {
       // node-datachannel is a native addon; only require it outside the
