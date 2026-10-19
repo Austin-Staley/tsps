@@ -56,6 +56,7 @@ jobs:
                       6. Look for real bugs too: wrong conditions, missing null checks on players or NPCs that can log out or despawn, state that is never cleared, timers or tasks that outlive their owner.
 
                       Post every finding tied to specific code as an inline comment on that line with mcp__github_inline_comment__create_inline_comment, before writing the summary. Then keep the summary comment short: what the PR does, then one line per finding, most severe first, linking or naming the line it was posted on.
+                      Before asking the author a question, check whether the repo answers it: search for where a value is set, where a function is called, or what a constant covers, and follow timing through the code (scheduled tasks, delays, tick counts). If the code answers it, state the answer and its consequence as the finding, citing the file and line. Only ask when the answer depends on the cache, the Wiki, live captures or intent.
                       Only report findings that need an action from the author: a fix, a check, or an answer. Leave out observations that need no change, such as duplication the language forces or tests that still pass. Do not pad the review with praise or style nits the surrounding code does not follow. If there is nothing worth changing, say so in one line.
 
                       For any other @claude question, answer it directly from the code.'
