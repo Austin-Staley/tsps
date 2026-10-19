@@ -357,8 +357,8 @@ function startingRotation(house, target, room) {
 /**
  * rsprox captures (poh_add_room:list, rev 229-236): a room picked at a door hotspot is built from
  * the chatbox, "Select an option" with Rotate clockwise / Rotate anticlockwise / Build / Cancel
- * (Build / Cancel for a room every way round alike). Rotating sends the same menu again; Build
- * takes the coins and rebuilds the house.
+ * (Build / Cancel for a one-door room). The room shows in place meanwhile (previewObjects).
+ * Rotating sends the menu again; Build takes the coins and rebuilds the house.
  */
 function roomMenu(player, house, target, room, rotation) {
   if (houseFor(player) !== house || !isBuildingMode(player)) return;
@@ -367,14 +367,35 @@ function roomMenu(player, house, target, room, rotation) {
     player.getPacketSender().sendInterfaceRemoval();
     return player.sendMessage(problem);
   }
+  player.getPacketSender().sendInterfaceRemoval();
+  showRoomPreview(player, house.previewObjects(room.key, target, rotation));
   const viewer = { house, destination: target, newRoom: room, rotation };
-  const build = () => buildRoom(player, viewer, false);
-  if (house.templateDoorMask(room.key) === 15) return api.sendMultiChatboxPrompt(player, "Select an option", "Build", build, "Cancel", () => {});
+  const build = () => { clearRoomPreview(player); buildRoom(player, viewer, false); };
+  const cancel = () => clearRoomPreview(player);
+  // One-door rooms (portal chamber, throne room, treasure room) only face their door (captures).
+  const doors = house.templateDoorMask(room.key);
+  if ((doors & (doors - 1)) === 0) return api.sendMultiChatboxPrompt(player, "Select an option", "Build", build, "Cancel", cancel);
   api.sendMultiChatboxPrompt(player, "Select an option",
     "Rotate clockwise", () => roomMenu(player, house, target, room, (rotation + 1) & 3),
     "Rotate anticlockwise", () => roomMenu(player, house, target, room, (rotation + 3) & 3),
     "Build", build,
-    "Cancel", () => {});
+    "Cancel", cancel);
+}
+
+/** player -> the preview locs on show */
+const roomPreviews = new WeakMap();
+
+function showRoomPreview(player, objects) {
+  clearRoomPreview(player);
+  roomPreviews.set(player, objects);
+  for (const object of objects) player.getPacketSender().sendObject(object);
+}
+
+function clearRoomPreview(player) {
+  const objects = roomPreviews.get(player);
+  if (!objects) return;
+  roomPreviews.delete(player);
+  for (const object of objects) player.getPacketSender().sendObjectRemoval(object);
 }
 
 /** A room type's doorways turned to a rotation, as getAdjacentDoorMask turns its neighbours'. */

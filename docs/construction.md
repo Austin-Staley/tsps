@@ -217,9 +217,11 @@ and which pieces need work approximates the Wiki's per-client layouts.
 
 Rsprox captures of picking a room in the room menu (212, rev 229-236):
 
-- **At a door hotspot:** the chatbox asks "Select an option" with Rotate clockwise / Rotate
-  anticlockwise / Build / Cancel (Build / Cancel for a room alike every way round). Rotating asks
-  again; Build takes the coins and rebuilds the house. The server sends no preview of the room.
+- **At a door hotspot:** the room list closes and the chatbox asks "Select an option" with Rotate
+  clockwise / Rotate anticlockwise / Build / Cancel (Build / Cancel for the one-door rooms:
+  portal chamber, throne room, treasure room). Meanwhile the room shows in place: a
+  `poh_preview_wall` on each doorway and its furniture spaces, turned with it. Rotating redraws
+  it and asks again; Build takes the coins and rebuilds the house; Cancel takes the preview away.
 - **From the house viewer:** the viewer shows the room at the spot (varbits 5329-5335, script
   1376), Clockwise and Anticlockwise turn it, Done builds it and opens the viewer again, and
   Cancel goes back to the plain viewer.

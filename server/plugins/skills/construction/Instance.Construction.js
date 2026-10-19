@@ -17,6 +17,7 @@ const HOUSE_ALLOCATION_COLUMNS = 16;
 const HOUSE_ALLOCATION_COUNT = HOUSE_ALLOCATION_COLUMNS * HOUSE_ALLOCATION_COLUMNS;
 const ROOM_DOOR_HOTSPOT_MIN = 15305;
 const ROOM_DOOR_HOTSPOT_MAX = 15322;
+const PREVIEW_WALL = 15452; // poh_preview_wall
 const HOUSE_BUILDING_MODE_VARBIT = 2176;
 const HOUSE_DYNAMIC_WINDOW = 13830;
 const allocatedHouses = new Array(HOUSE_ALLOCATION_COUNT).fill(false);
@@ -527,6 +528,33 @@ class PlayerHouseInstance extends PrivateArea {
           plane: position.plane,
         };
       });
+  }
+
+  /**
+   * rsprox captures: before a room picked at a door is built, its doorways show as poh_preview_wall
+   * (shape 0, facing their edge: west 0, north 1, east 2, south 3) and its furniture spaces as their
+   * hotspot locs, turned with the room. Floor spaces (rugs) aren't shown.
+   */
+  previewObjects(roomKey, position, rotation) {
+    const template = Data.ROOM_BY_KEY.get(roomKey);
+    if (!template) return [];
+    const style = Estate.houseStyleIndex(this.save);
+    const doorIds = Estate.HOUSE_STYLES[style].doorHotspots;
+    const gridOffset = Math.floor((Palette.HOUSE_SCENE_CHUNKS - this.gridSize) / 2);
+    const baseX = this.allocation.baseX + (gridOffset + position.x) * 8;
+    const baseY = this.allocation.baseY + (gridOffset + position.y) * 8;
+    return PlayerHouseInstance.getTemplateObjects(style)
+      .filter(hotspot => hotspot.sourceChunkX === template.sourceChunkX && hotspot.sourceChunkY === template.sourceChunkY && hotspot.type !== 22)
+      .map(hotspot => {
+        const local = this.rotatedFootprint(hotspot.localX, hotspot.localY, hotspot.id, hotspot.face, rotation);
+        const location = new Location(baseX + local.x, baseY + local.y, position.plane);
+        const door = (hotspot.id >= ROOM_DOOR_HOTSPOT_MIN && hotspot.id <= ROOM_DOOR_HOTSPOT_MAX) || doorIds.includes(hotspot.id);
+        if (!door && !Data.hotspotIn(roomKey, hotspot.id)) return null; // windows and the like
+        if (!door) return new GameObject(hotspot.id, location, hotspot.type, (hotspot.face + rotation) & 3, this);
+        const edge = local.x === 0 ? 0 : local.y === 7 ? 1 : local.x === 7 ? 2 : 3;
+        return new GameObject(PREVIEW_WALL, location, 0, edge, this);
+      })
+      .filter(Boolean);
   }
 
   refreshHotspots(player, buildingMode) {
