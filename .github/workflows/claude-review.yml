@@ -27,6 +27,7 @@ jobs:
             pull-requests: write
             issues: write
             actions: read
+            id-token: write
         steps:
             - uses: actions/checkout@v4
               with:
@@ -35,7 +36,12 @@ jobs:
             - uses: anthropics/claude-code-action@v1
               id: claude
               with:
-                  anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+                  # Workload identity federation: the run's GitHub OIDC token is exchanged for a
+                  # short-lived Anthropic token. These are identifiers, not secrets.
+                  anthropic_federation_rule_id: fdrl_019dpe5xEyWWdiTxzfvvFRwZ
+                  anthropic_organization_id: c6ffd6b6-9fda-41ae-9c05-267ed6249509
+                  anthropic_service_account_id: svac_01QWscork3DZ7KADoEUwA6xM
+                  anthropic_workspace_id: wrkspc_01PBZW5HYAnbc5yazGPp52kW
                   github_token: ${{ secrets.GITHUB_TOKEN }}
                   claude_args: |
                       --model claude-sonnet-5-5
