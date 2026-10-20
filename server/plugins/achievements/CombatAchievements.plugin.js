@@ -102,6 +102,7 @@ module.exports = {
     require("./combatachievements/tasks/GiantMole.CombatAchievements")(api, Fights);
     require("./combatachievements/tasks/DagannothKings.CombatAchievements")(api, Fights);
     require("./combatachievements/tasks/Vorkath.CombatAchievements")(api, Fights);
+    require("./combatachievements/tasks/Sarachnis.CombatAchievements")(api, Fights);
     api.onPlayerLogin(restore);
     api.onCustomEvent("combat-achievements:complete", onComplete);
     api.onCustomEvent("combat-achievements:open", onOpen);
