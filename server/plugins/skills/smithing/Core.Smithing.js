@@ -7,4 +7,10 @@ module.exports = {
   init(api) {
     Object.assign(module.exports, api.core, { api });
   },
+  /** Whether the quest runtime has `key` (e.g. "the_tourist_trap") complete for the player. */
+  questComplete(player, key) {
+    const request = { player, key, complete: false };
+    module.exports.api.emitCustomEvent("quest:is-complete", request);
+    return request.complete === true;
+  },
 };

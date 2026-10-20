@@ -1,7 +1,13 @@
 /**
- * Smelting at a furnace: the Smelt menu (the skillmulti list, interface 270), using ore on a
+ * Smelting at a furnace: the Smelt menu (the shared skillmulti CreationMenu), ore used on a
  * furnace, and the smelt loop. A carried coal bag's coal is used after the inventory's
  * (docs/storage-items.md).
+ *
+ * Captured (rsprox, docs/smithing.md): choosing a bar plays human_furnace (899) with sound 2725
+ * and the "You smelt ..." message on the same tick; the bar, "You retrieve a bar of ..." and
+ * the XP come 4 ticks later, and the next ore starts on the 5th. Iron fails half the time:
+ * "The ore is too impure and you fail to refine it." With no ore at all the furnace says "You
+ * don't have any ore to smelt." in a message box.
  */
 const Core = require("./Core.Smithing");
 const Data = require("./Data.Smithing");
@@ -10,43 +16,22 @@ const Sessions = require("./Sessions.Smithing");
 const SMELT_ANIMATION = 899;
 // Wiki: goldsmith gauntlets (or the Smithing or max cape) raise gold bar XP from 22.5 to 56.2.
 const GOLDSMITH_GAUNTLETS_BONUS_XP = 33.7;
-
-const SMELTING_SKILLMULTI_GROUP_ID = 270;
-const SMELTING_SKILLMULTI_FIRST_ITEM_COMPONENT = 15;
-const SMELTING_SKILLMULTI_MAX_QUANTITY = 28;
-const SMELTING_SKILLMULTI_TARGET_UID = (162 << 16) | 568;
-const SMELTING_CHATMODAL_UNCLAMP_VARBIT = 10670;
-// Widget transmit flags: bit (opIndex+1) must be set for that right-click op to reach the
-// server (see WidgetActionRouter.shouldTransmitAction on the client). The skillmulti list
-// exposes 5 ops per item - Make 1/5/10/X/All - so ops 1-5 (bits 1-5) all need to be enabled;
-// leaving only bit 1 set (as before) silently dropped every click except plain "Make 1".
-const SMELTING_SKILLMULTI_OP_FLAGS = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5);
-const SMELTING_INTERVAL_TICKS = 5;
-// The first item in a batch produces almost immediately (1 tick), only repeats wait the full
-// interval. Using the full interval for the first one too made every batch open with what
-// looked like a stalled/doubled pause.
-const FIRST_DELAY_TICKS = 1;
+const SMELT_TITLE = "What would you like to smelt?";
+const NO_ORE_MESSAGE = "You don't have any ore to smelt.";
+const SMELT_INTERVAL_TICKS = 5;
+const SMELT_FINISH_TICKS = 4;
+/** The skillmulti list's quantity cap, also what the old menu clamped to. */
+const MAX_QUANTITY = 28;
 
 /** Every furnace loc, for the bots' object catalog. Filled in when the plugin registers. */
 const FURNACE_OBJECT_IDS = new Set();
-const OPEN_MENUS = new Set();
 
-// This list is routed through the mesLayer "continue" packet (cc_resume_pausebutton, per the
-// cache's skillmulti_itembutton_triggered script). Disassembly shows that opcode's childIndex
-// argument is `get_varc_int 200` - the client's own "currently selected quantity" var - sent
-// as the literal number, not an op/menu index. The quantity-mode buttons (1/5/10/All) and the
-// native X text box (if_setonkey) all just write that var client-side; by the time an item is
-// clicked, `action` already is the exact quantity to make. A bare/no-mode click sends 0.
+/** The list's op flags (Make 1/5/10/X/All, bits 1-5); the CreationMenu sends the same. */
+const SMELTING_SKILLMULTI_OP_FLAGS = (1 << 1) | (1 << 2) | (1 << 3) | (1 << 4) | (1 << 5);
+
+/** The skillmulti list sends the chosen quantity itself; a bare click sends 0 (make one). */
 function quantityForSmeltAction(action) {
-  return Number.isInteger(action) && action > 0
-    ? Math.min(action, SMELTING_SKILLMULTI_MAX_QUANTITY)
-    : 1;
-}
-
-function menuButtonIds() {
-  return Data.smeltMenuRecipes().map(
-    (_, index) => (SMELTING_SKILLMULTI_GROUP_ID << 16) | (SMELTING_SKILLMULTI_FIRST_ITEM_COMPONENT + index)
-  );
+  return Number.isInteger(action) && action > 0 ? Math.min(action, MAX_QUANTITY) : 1;
 }
 
 /** What a carried container (the coal bag) holds of an ingredient ("storage:amount"). */
@@ -56,14 +41,17 @@ function storedAmount(player, itemId) {
   return request.amount;
 }
 
+function available(player, itemId) {
+  return player.getInventory().getAmount(itemId) + storedAmount(player, itemId);
+}
+
 function hasIngredients(player, recipe) {
-  const inventory = player.getInventory();
-  for (const [itemId, amount] of recipe.ingredients) {
-    if (inventory.getAmount(itemId) < amount && inventory.getAmount(itemId) + storedAmount(player, itemId) < amount) {
-      return false;
-    }
-  }
-  return true;
+  return recipe.ingredients.every(([itemId, amount]) => available(player, itemId) >= amount);
+}
+
+/** How many of a recipe the player's ore (and coal bag) covers. */
+function batches(player, recipe) {
+  return Math.min(...recipe.ingredients.map(([itemId, amount]) => Math.floor(available(player, itemId) / amount)));
 }
 
 /** Wiki (Coal bag): the inventory's coal goes first, then the bag's ("storage:take"). */
@@ -85,94 +73,82 @@ function smeltingXp(player, recipe) {
   return boosted ? recipe.xp + GOLDSMITH_GAUNTLETS_BONUS_XP : recipe.xp;
 }
 
-function openMenu(player) {
-  const recipes = Data.smeltMenuRecipes();
-  const sender = player.getPacketSender();
-  const itemIds = recipes.map((recipe) => recipe.barId);
-  while (itemIds.length < 18) itemIds.push(-1);
-
-  OPEN_MENUS.add(player);
-  sender
-    .sendInterfaceScript(2379)
-    .sendVarbit(SMELTING_CHATMODAL_UNCLAMP_VARBIT, 1)
-    .sendInterfaceDisplayState(SMELTING_SKILLMULTI_TARGET_UID, false)
-    .sendSubInterface(SMELTING_SKILLMULTI_TARGET_UID, SMELTING_SKILLMULTI_GROUP_ID, 0);
-  for (const buttonId of menuButtonIds()) {
-    sender.sendInterfaceFlagsRange(buttonId, 0, SMELTING_SKILLMULTI_MAX_QUANTITY, SMELTING_SKILLMULTI_OP_FLAGS);
-  }
-  sender.sendInterfaceScript(2046, [
-    13,
-    ["What would you like to smelt?", ...recipes.map((recipe) => recipe.name)].join("|"),
-    SMELTING_SKILLMULTI_MAX_QUANTITY,
-    ...itemIds,
-    SMELTING_SKILLMULTI_MAX_QUANTITY,
-  ]);
+function statement(player, text) {
+  const { DialogueChainBuilder, StatementDialogue } = Core;
+  player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0, text)));
 }
 
-function closeMenu(player) {
-  if (!OPEN_MENUS.delete(player)) return;
-  player
-    .getPacketSender()
-    .closeSubInterface(SMELTING_SKILLMULTI_TARGET_UID)
-    .sendInterfaceDisplayState(SMELTING_SKILLMULTI_TARGET_UID, true);
+function levelOf(player, recipe) {
+  return player.getSkillManager().getCurrentLevel(recipe.skill ?? Core.Skill.SMITHING);
 }
 
-/** Closes the menu of a player who walked off, died or logged out. */
-function closeAbandonedMenus() {
-  for (const player of OPEN_MENUS) {
-    if (!player?.isRegistered?.() || player.getMovementQueue().size() > 0 || player.getForceMovement() != null) {
-      closeMenu(player);
-    }
-  }
+/**
+ * The Gold bar choice smelts Family Crest's 'perfect' gold ore when that is all the gold ore
+ * the player has.
+ */
+function resolveRecipe(player, recipe) {
+  if (recipe.barId !== Core.ItemIdentifiers.GOLD_BAR || hasIngredients(player, recipe)) return recipe;
+  const perfect = Data.SMELTING_RECIPES.find((candidate) => candidate.barId === Core.ItemIdentifiers.PERFECT_GOLD_BAR);
+  return perfect && hasIngredients(player, perfect) ? perfect : recipe;
 }
 
-function smeltOnce(player, recipe) {
-  const inventory = player.getInventory();
-  const skill = recipe.skill ?? Core.Skill.SMITHING;
-  const level = player.getSkillManager().getCurrentLevel(skill);
-  if (level < recipe.level) {
-    player.sendMessage(`You need a Smithing level of at least ${recipe.level} to smelt this bar.`);
-    return false;
-  }
+/** Opens the cycle: the message, animation and sound; the ore goes in on the finish tick. */
+function beginSmelt(player, recipe) {
   if (!hasIngredients(player, recipe)) {
-    player.sendMessage(recipe.missingMessage ?? "You don't have the required ores to smelt this bar.");
+    player.sendMessage(recipe.missingMessage);
     return false;
   }
-
-  consumeIngredients(player, recipe);
-  Core.Sounds.sendSound(player, Core.Sound.SMELTING);
+  if (recipe.smeltMessage) player.sendMessage(recipe.smeltMessage);
   player.performAnimation(new Core.Animation(SMELT_ANIMATION));
-
-  const successChance = recipe.successChance ?? 1;
-  if (Math.random() <= successChance) {
-    inventory.addItem(new Core.Item(recipe.barId, 1));
-    player.getSkillManager().addExperiences(skill, smeltingXp(player, recipe));
-    player.sendMessage(recipe.successMessage ?? "You retrieve a bar of metal.");
-    Core.api.emitCustomEvent("smelting:success", { player, skill, itemId: recipe.barId });
-  } else {
-    player.sendMessage("The ore is too impure and fails to become a bar.");
-  }
+  Core.Sounds.sendSound(player, Core.Sound.SMELTING);
   return true;
 }
 
-function startSmelting(player, recipe, amount) {
-  if (!recipe || !Number.isInteger(amount) || amount <= 0) return false;
-  if (player.getSkillManager().getCurrentLevel(Core.Skill.SMITHING) < recipe.level) {
-    player.sendMessage(`You need a Smithing level of at least ${recipe.level} to smelt this bar.`);
+function finishSmelt(player, recipe) {
+  if (!hasIngredients(player, recipe)) {
+    player.sendMessage(recipe.missingMessage);
+    return false;
+  }
+  consumeIngredients(player, recipe);
+  const inventory = player.getInventory();
+  for (const [itemId, amount] of recipe.byproducts ?? []) inventory.addItem(new Core.Item(itemId, amount));
+  const outcome = { player, recipe, success: Math.random() < (recipe.successChance ?? 1), bars: 1 };
+  Core.api.emitCustomEvent("smithing:smelt-outcome", outcome);
+  if (!outcome.success) {
+    player.sendMessage(recipe.failMessage);
+    return true;
+  }
+  const skill = recipe.skill ?? Core.Skill.SMITHING;
+  inventory.addItem(new Core.Item(recipe.barId, outcome.bars));
+  player.getSkillManager().addExperiences(skill, smeltingXp(player, recipe) * outcome.bars);
+  if (recipe.retrieveMessage) player.sendMessage(recipe.retrieveMessage);
+  Core.api.emitCustomEvent("smelting:success", { player, skill, itemId: recipe.barId });
+  return true;
+}
+
+function startSmelting(player, chosen, amount) {
+  if (!chosen || !Number.isInteger(amount) || amount <= 0) return false;
+  const recipe = resolveRecipe(player, chosen);
+  if (recipe.quest && !Core.questComplete(player, recipe.quest)) {
+    player.sendMessage(`You need to complete ${Data.questName(recipe.quest)} to smelt ${recipe.barPhrase}.`);
+    return false;
+  }
+  if (levelOf(player, recipe) < recipe.level) {
+    statement(player, `You need a Smithing level of ${recipe.level} to smelt ${recipe.barPhrase}.`);
     return false;
   }
   if (!hasIngredients(player, recipe)) {
-    player.sendMessage("You don't have the required ores to smelt this bar.");
+    player.sendMessage(recipe.missingMessage);
     return false;
   }
   Sessions.start(player, {
     type: "smelt",
     remaining: amount,
-    interval: SMELTING_INTERVAL_TICKS,
-    firstDelay: FIRST_DELAY_TICKS,
-    step: (smelter) => smeltOnce(smelter, recipe),
+    interval: SMELT_INTERVAL_TICKS,
+    finishDelay: SMELT_FINISH_TICKS,
+    begin: (smelter) => beginSmelt(smelter, recipe),
+    step: (smelter) => finishSmelt(smelter, recipe),
   });
-  player.performAnimation(new Core.Animation(SMELT_ANIMATION));
   return true;
 }
 
@@ -180,28 +156,39 @@ function isSmeltingActive(player) {
   return Sessions.typeOf(player) === "smelt";
 }
 
+function openMenu(player, recipes) {
+  const { CreationMenu } = Core;
+  const byBar = new Map(recipes.map((recipe) => [recipe.barId, recipe]));
+  const most = Math.max(1, ...recipes.map((recipe) => batches(player, resolveRecipe(player, recipe))));
+  player.getPacketSender().sendCreationMenu(
+    new CreationMenu(SMELT_TITLE, [...byBar.keys()], { execute: (barId, amount) => startSmelting(player, byBar.get(barId), amount) }, {
+      maxAmount: Math.min(most, MAX_QUANTITY),
+    })
+  );
+}
+
+/** "Smelt" on a furnace: the menu lists every bar; with no ore at all, a message box instead. */
 function smelt({ player }) {
-  openMenu(player);
+  const recipes = Data.smeltMenuRecipes();
+  const hasOre = Data.SMELTING_RECIPES.some((recipe) => !recipe.skill && recipe.ingredients.some(([id]) => id !== Core.ItemIdentifiers.COAL && available(player, id) > 0));
+  if (!hasOre) {
+    statement(player, NO_ORE_MESSAGE);
+    return;
+  }
+  openMenu(player, recipes);
 }
 
-function chooseBar({ player, buttonId, action }) {
-  if (!OPEN_MENUS.has(player)) return false;
-  const recipe = Data.smeltMenuRecipes()[(buttonId & 0xffff) - SMELTING_SKILLMULTI_FIRST_ITEM_COMPONENT];
-  if (!recipe) return false;
-  closeMenu(player);
-  return startSmelting(player, recipe, quantityForSmeltAction(action));
-}
-
-/** Ore (or sand) used on a furnace smelts it straight away. */
+/**
+ * An item used on a furnace: ore opens the Smelt menu; sand, soda ash and 'perfect' gold ore,
+ * which aren't on it, open a menu of their own product.
+ */
 function useOnFurnace(event) {
-  const recipe = Data.SMELTING_RECIPES.find((candidate) => candidate.ingredients.some(([id]) => id === event.itemId));
-  if (!recipe) return;
-  smeltOnce(event.player, recipe);
+  const recipes = Data.SMELTING_RECIPES.filter((recipe) => recipe.ingredients.some(([id]) => id === event.itemId));
+  if (recipes.length === 0) return;
   event.handled = true;
-}
-
-function forget(player) {
-  OPEN_MENUS.delete(player);
+  const offMenu = recipes.filter((recipe) => recipe.notInMenu);
+  if (offMenu.length > 0) openMenu(event.player, offMenu);
+  else smelt(event);
 }
 
 function fillFurnaceIds() {
@@ -215,7 +202,6 @@ module.exports = function attach(api) {
   // Some furnaces (e.g. Tutorial Island 10082) only offer "Use".
   api.onObjectInteraction("Furnace", { Smelt: smelt, Use: smelt });
   api.onObjectInteraction("Small furnace", { Smelt: smelt });
-  api.onInterfaceActionButton(menuButtonIds(), chooseBar);
 };
 
 Object.assign(module.exports, {
@@ -228,6 +214,4 @@ Object.assign(module.exports, {
   startSmelting,
   isSmeltingActive,
   useOnFurnace,
-  closeAbandonedMenus,
-  forget,
 });

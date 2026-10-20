@@ -2,6 +2,12 @@
  * Anvil smithing: the smithing interface (312) for the best bar the player can work, its
  * 1/5/10/X/All quantity row, and the smith loop. Interface 312 draws its own products from
  * varbit smithing_bar_type (client scripts 415 -> 430), so the server only sets the varbit.
+ *
+ * Captured (rsprox, docs/smithing.md): opening sets smithing_bar_type and varp makexcrafting
+ * (the bars held); a click sets smithing_bar_lasttype/smithing_item_lasttype, closes the
+ * interface and plays human_smithing (898) on the same tick, then each item comes 3 ticks later
+ * and every 5 after, with "You hammer the steel and make ten dart tips." Smith with no bar: a
+ * message box "You should select an item from your inventory and use it on the anvil."
  */
 const Core = require("./Core.Smithing");
 const Data = require("./Data.Smithing");
@@ -11,7 +17,8 @@ const SMITH_ANIMATION = 898;
 const MAIN_MODAL_TARGET_UID = (161 << 16) | 16;
 const SMITHING_BAR_TYPE_VARBIT = 3216;
 const SMITHING_INTERVAL_TICKS = 5;
-const FIRST_DELAY_TICKS = 1;
+const FIRST_DELAY_TICKS = 3;
+const NO_BAR_MESSAGE = "You should select an item from your inventory and use it on the anvil.";
 const ALL_QUANTITY_CAP = 28;
 /** The quantity row left of the products: components 3-7 select 1, 5, 10, X and All. */
 const QUANTITY_MODE_COMPONENTS = new Map([[3, 1], [4, 5], [5, 10], [6, "x"], [7, "all"]]);
@@ -32,9 +39,36 @@ function smithingLevel(player) {
   return player.getSkillManager().getCurrentLevel(Core.Skill.SMITHING);
 }
 
+/** Wiki (Smithing): a hammer, or an Imcando hammer carried or wielded (either hand). */
+function hasHammer(player) {
+  const { ItemIdentifiers: Items, Equipment } = Core;
+  const hammers = [Items.HAMMER, Items.IMCANDO_HAMMER, Items.IMCANDO_HAMMER_OFF_HAND_];
+  const equipment = player.getEquipment?.();
+  const wielded = [Equipment.WEAPON_SLOT, Equipment.SHIELD_SLOT].map((slot) => equipment?.get(slot)?.getId?.());
+  return hammers.some((id) => player.getInventory().contains(id) || wielded.includes(id));
+}
+
+function statement(player, text) {
+  const { DialogueChainBuilder, StatementDialogue } = Core;
+  player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0, text)));
+}
+
+/** Members products on a free world, and products behind a quest the client greys out. */
+function unlocked(player, product) {
+  if (product.members && !Core.WorldDefinition.isMembersWorld()) {
+    player.sendMessage("You need to be on a members' world to make that.");
+    return false;
+  }
+  if (product.quest && !Core.questComplete(player, product.quest)) {
+    player.sendMessage(`You need to complete ${Data.questName(product.quest)} to make that.`);
+    return false;
+  }
+  return true;
+}
+
 function canSmith(player, product) {
   const inventory = player.getInventory();
-  if (!inventory.contains(Core.ItemIdentifiers.HAMMER)) {
+  if (!hasHammer(player)) {
     player.sendMessage("You need a hammer to work metal bars.");
     return false;
   }
@@ -56,13 +90,13 @@ function smithOnce(player, product) {
   inventory.addItem(new Core.Item(product.itemId, product.amount));
   player.performAnimation(new Core.Animation(SMITH_ANIMATION));
   player.getSkillManager().addExperiences(Core.Skill.SMITHING, product.xp);
-  player.sendMessage("You hammer the metal and shape an item.");
+  player.sendMessage(`You hammer the ${product.metal} and make ${product.phrase}.`);
   Core.api.emitCustomEvent("smithing:success", { player, skill: Core.Skill.SMITHING, itemId: product.itemId });
   return true;
 }
 
 function startSmithing(player, product, amount) {
-  if (!product || !Number.isInteger(amount) || amount <= 0 || !canSmith(player, product)) return false;
+  if (!product || !Number.isInteger(amount) || amount <= 0 || !unlocked(player, product) || !canSmith(player, product)) return false;
   Sessions.start(player, {
     type: "smith",
     remaining: amount,
@@ -74,29 +108,25 @@ function startSmithing(player, product, amount) {
   return true;
 }
 
-/** The bar to show: the one used on the anvil, else the best one carried that the player can work. */
+/**
+ * The bar to show: the one used on the anvil, else the best carried bar the player can work
+ * something from, else the lowest carried bar (the interface reds out what they can't make).
+ */
 function chooseBar(player, preferredBarId) {
   const inventory = player.getInventory();
+  if (Number.isInteger(preferredBarId) && inventory.contains(preferredBarId) && Data.BAR_TYPE_BY_BAR.has(preferredBarId)) {
+    return preferredBarId;
+  }
   const level = smithingLevel(player);
-  const lowestLevel = (bar) => Math.min(...Data.productsFor(bar).map((product) => product.level));
-  if (Number.isInteger(preferredBarId) && Data.BAR_TYPE_BY_BAR.has(preferredBarId)) {
-    if (level < lowestLevel(preferredBarId)) {
-      player.sendMessage(`You need a Smithing level of at least ${lowestLevel(preferredBarId)} to smith this bar.`);
-      return null;
-    }
-    if (inventory.contains(preferredBarId)) return preferredBarId;
-  }
-  let best = null;
-  for (const bar of Data.anvilBars()) {
-    if (inventory.contains(bar) && level >= lowestLevel(bar)) best = bar;
-  }
-  return best;
+  const carried = Data.anvilBars().filter((bar) => inventory.contains(bar));
+  const workable = carried.filter((bar) => Data.productsFor(bar).some((product) => level >= product.level));
+  return workable.at(-1) ?? carried[0] ?? null;
 }
 
 function openInterface(player, preferredBarId = null) {
   const bar = chooseBar(player, preferredBarId);
   if (bar == null) {
-    player.sendMessage("You don't have any bars in your inventory which can be used with your Smithing level.");
+    statement(player, NO_BAR_MESSAGE);
     return false;
   }
   OPEN_MENUS.set(player, bar);
@@ -104,6 +134,7 @@ function openInterface(player, preferredBarId = null) {
   player
     .getPacketSender()
     .sendVarbit(SMITHING_BAR_TYPE_VARBIT, Data.BAR_TYPE_BY_BAR.get(bar))
+    .sendConfig(Core.CacheDefinitions.getVarpId("makexcrafting"), player.getInventory().getAmount(bar))
     .sendSubInterface(MAIN_MODAL_TARGET_UID, Data.SMITHING_INTERFACE, 0);
   for (const component of range(FIRST_PRODUCT_COMPONENT, LAST_PRODUCT_COMPONENT)) {
     player.getPacketSender().sendInterfaceFlags(buttonId(component), 2);
@@ -150,10 +181,14 @@ function chooseProduct({ player, buttonId: id }) {
   if (!product) return false;
 
   const selected = SELECTED_QUANTITY.get(player) ?? 1;
-  OPEN_MENUS.delete(player);
   const started = startSmithing(player, product, selected === "all" ? ALL_QUANTITY_CAP : selected);
-  if (started) closeInterface(player);
-  return started;
+  if (!started) return false;
+  player
+    .getPacketSender()
+    .sendVarbit(Core.CacheDefinitions.getVarbitId("smithing_bar_lasttype"), Data.BAR_TYPE_BY_BAR.get(bar))
+    .sendVarbit(Core.CacheDefinitions.getVarbitId("smithing_item_lasttype"), product.slotIndex);
+  closeInterface(player);
+  return true;
 }
 
 function anvilAccess(event) {

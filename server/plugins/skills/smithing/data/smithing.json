@@ -1,13 +1,30 @@
 {
   "$comment": "What the cache doesn't hold about Smithing. Anvil products (level, bars, amount) come from cache enums 844-846 and their slots from anvil-layout.json (yarn dump:smithing); this file has the furnace recipes and the experience. Item keys are ItemIdentifiers names.",
   "source": "https://oldschool.runescape.wiki/w/Smithing",
+  "$smelting": "Furnace recipes in Smelt-menu order (rsprox captures, rev 227-235 normal worlds: Bronze, Blurite, Iron, Silver, Steel, Gold, Mithril, Adamantite, Runite). Messages: rev 237 captures where docs/smithing.md says so, the same pattern otherwise.",
   "smelting": [
     {
       "name": "Bronze bar",
       "bar": "BRONZE_BAR",
       "level": 1,
       "xp": 6.2,
-      "ingredients": [["COPPER_ORE", 1], ["TIN_ORE", 1]]
+      "ingredients": [["COPPER_ORE", 1], ["TIN_ORE", 1]],
+      "barPhrase": "a bronze bar",
+      "smeltMessage": "You smelt the copper and tin together in the furnace.",
+      "retrieveMessage": "You retrieve a bar of bronze.",
+      "missingMessage": "You need at least one copper ore and one tin ore to smelt a bronze bar."
+    },
+    {
+      "name": "Blurite bar",
+      "bar": "BLURITE_BAR",
+      "level": 13,
+      "xp": 8,
+      "ingredients": [["BLURITE_ORE", 1]],
+      "barPhrase": "a blurite bar",
+      "smeltMessage": "You smelt the blurite in the furnace.",
+      "retrieveMessage": "You retrieve a bar of blurite.",
+      "missingMessage": "You need at least one blurite ore to smelt a blurite bar.",
+      "quest": "the_knights_sword"
     },
     {
       "name": "Iron bar",
@@ -15,62 +32,93 @@
       "level": 15,
       "xp": 12.5,
       "ingredients": [["IRON_ORE", 1]],
-      "successChance": 0.5
+      "barPhrase": "an iron bar",
+      "smeltMessage": "You smelt the iron in the furnace.",
+      "retrieveMessage": "You retrieve a bar of iron.",
+      "missingMessage": "You need at least one iron ore to smelt an iron bar.",
+      "successChance": 0.5,
+      "failMessage": "The ore is too impure and you fail to refine it."
     },
     {
       "name": "Silver bar",
       "bar": "SILVER_BAR",
       "level": 20,
       "xp": 13.7,
-      "ingredients": [["SILVER_ORE", 1]]
+      "ingredients": [["SILVER_ORE", 1]],
+      "barPhrase": "a silver bar",
+      "smeltMessage": "You smelt the silver in the furnace.",
+      "retrieveMessage": "You retrieve a bar of silver.",
+      "missingMessage": "You need at least one silver ore to smelt a silver bar."
     },
     {
       "name": "Steel bar",
       "bar": "STEEL_BAR",
       "level": 30,
       "xp": 17.5,
-      "ingredients": [["IRON_ORE", 1], ["COAL", 2]]
+      "ingredients": [["IRON_ORE", 1], ["COAL", 2]],
+      "barPhrase": "a steel bar",
+      "smeltMessage": "You smelt the iron in the furnace along with two heaps of coal.",
+      "retrieveMessage": "You retrieve a bar of steel.",
+      "missingMessage": "You need at least one iron ore and two coal to smelt a steel bar."
     },
     {
       "name": "Gold bar",
       "bar": "GOLD_BAR",
       "level": 40,
       "xp": 22.5,
-      "ingredients": [["GOLD_ORE", 1]]
+      "ingredients": [["GOLD_ORE", 1]],
+      "barPhrase": "a gold bar",
+      "smeltMessage": "You smelt the gold in the furnace.",
+      "retrieveMessage": "You retrieve a bar of gold.",
+      "missingMessage": "You need at least one gold ore to smelt a gold bar."
     },
     {
       "name": "Mithril bar",
       "bar": "MITHRIL_BAR",
       "level": 50,
       "xp": 30,
-      "ingredients": [["MITHRIL_ORE", 1], ["COAL", 4]]
+      "ingredients": [["MITHRIL_ORE", 1], ["COAL", 4]],
+      "barPhrase": "a mithril bar",
+      "smeltMessage": "You smelt the mithril in the furnace along with four heaps of coal.",
+      "retrieveMessage": "You retrieve a bar of mithril.",
+      "missingMessage": "You need at least one mithril ore and four coal to smelt a mithril bar."
     },
     {
       "name": "Adamantite bar",
       "bar": "ADAMANTITE_BAR",
       "level": 70,
       "xp": 37.5,
-      "ingredients": [["ADAMANTITE_ORE", 1], ["COAL", 6]]
+      "ingredients": [["ADAMANTITE_ORE", 1], ["COAL", 6]],
+      "barPhrase": "an adamantite bar",
+      "smeltMessage": "You smelt the adamantite in the furnace along with six heaps of coal.",
+      "retrieveMessage": "You retrieve a bar of adamantite.",
+      "missingMessage": "You need at least one adamantite ore and six coal to smelt an adamantite bar."
     },
     {
       "name": "Runite bar",
       "bar": "RUNITE_BAR",
       "level": 85,
       "xp": 50,
-      "ingredients": [["RUNITE_ORE", 1], ["COAL", 8]]
+      "ingredients": [["RUNITE_ORE", 1], ["COAL", 8]],
+      "barPhrase": "a runite bar",
+      "smeltMessage": "You smelt the runite in the furnace along with eight heaps of coal.",
+      "retrieveMessage": "You retrieve a bar of runite.",
+      "missingMessage": "You need at least one runite ore and eight coal to smelt a runite bar."
     },
     {
-      "$comment": "https://oldschool.runescape.wiki/w/'perfect'_gold_bar - Family Crest's quest bar.",
       "name": "'perfect' gold bar",
       "bar": "PERFECT_GOLD_BAR",
       "level": 40,
       "xp": 22.5,
       "ingredients": [["PERFECT_GOLD_ORE", 1]],
       "missingMessage": "You need 'perfect' gold ore to smelt this bar.",
-      "successMessage": "You smelt the 'perfect' gold ore into a bar."
+      "barPhrase": "a 'perfect' gold bar",
+      "notInMenu": true,
+      "smeltMessage": "You smelt the 'perfect' gold in the furnace.",
+      "retrieveMessage": "You smelt the 'perfect' gold ore into a bar.",
+      "$comment": "https://oldschool.runescape.wiki/w/'perfect'_gold_bar - Family Crest's quest bar; the Gold bar choice uses its ore when no normal gold ore is held."
     },
     {
-      "$comment": "https://oldschool.runescape.wiki/w/Molten_glass - Crafting, made by using sand or soda ash on a furnace; not in the smelt menu.",
       "name": "Molten glass",
       "bar": "MOLTEN_GLASS",
       "level": 1,
@@ -79,9 +127,64 @@
       "notInMenu": true,
       "ingredients": [["BUCKET_OF_SAND", 1], ["SODA_ASH", 1]],
       "missingMessage": "You need sand and soda ash to make glass.",
-      "successMessage": "You heat the sand and soda ash in the furnace to make glass."
+      "barPhrase": "molten glass",
+      "smeltMessage": null,
+      "retrieveMessage": "You heat the sand and soda ash in the furnace to make glass.",
+      "$comment": "https://oldschool.runescape.wiki/w/Molten_glass - Crafting; sand or soda ash used on a furnace.",
+      "byproducts": [["BUCKET", 1]]
     }
   ],
+  "$phrases": "The end of 'You hammer the <metal> and make <phrase>' per anvil slot label (Shayzien labels without their tier); objPhrases win for one product. rsprox captures (rev 237) where docs/smithing.md says so, the same wording otherwise.",
+  "phrases": {
+    "Dagger": "a dagger",
+    "Sword": "a sword",
+    "Scimitar": "a scimitar",
+    "Longsword": "a longsword",
+    "2h sword": "a two-handed sword",
+    "Axe": "an axe",
+    "Mace": "a mace",
+    "Warhammer": "a warhammer",
+    "Battleaxe": "a battleaxe",
+    "Claws": "a pair of claws",
+    "Chainbody": "a chainbody",
+    "Platelegs": "a pair of plate legs",
+    "Plateskirt": "a plateskirt",
+    "Platebody": "a platebody",
+    "Nails": "fifteen nails",
+    "Med helm": "a medium helm",
+    "Full helm": "a full helm",
+    "Sq shield": "a square shield",
+    "Kiteshield": "a kite shield",
+    "Dart tips": "ten dart tips",
+    "Arrowtips": "fifteen arrowtips",
+    "Knives": "five throwing knives",
+    "Wire": "some wire",
+    "Bolts": "ten crossbow bolts",
+    "Limbs": "a pair of crossbow limbs",
+    "Javelin tips": "five javelin heads",
+    "Keel parts": "some keel parts",
+    "Iron spit": "an iron spit",
+    "Studs": "some studs",
+    "Chain": "a chain",
+    "Grapple tip": "a mithril grapple tip",
+    "Gloves": "a pair of gloves",
+    "Boots": "a pair of boots",
+    "Helm": "a helm",
+    "Greaves": "a pair of greaves"
+  },
+  "objPhrases": {
+    "oil_lantern_frame": "an oil lantern frame",
+    "bullseye_lantern_nolens": "a bullseye lantern"
+  },
+  "questNames": {
+    "the_knights_sword": "The Knight's Sword",
+    "the_tourist_trap": "The Tourist Trap",
+    "death_plateau": "Death Plateau",
+    "pandemonium": "Pandemonium",
+    "dwarf_cannon": "Dwarf Cannon",
+    "dragon_slayer_ii": "Dragon Slayer II",
+    "between_a_rock": "Between a Rock..."
+  },
   "$xpPerBar": "Smithing#Smithing_tables: anvil experience is per bar used, whatever the product.",
   "xpPerBar": {
     "BRONZE_BAR": 12.5,

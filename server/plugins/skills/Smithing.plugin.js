@@ -20,7 +20,6 @@ function useItemOnObject(event) {
 
 function disconnect({ player }) {
   Sessions.stop(player, false);
-  Smelting.forget(player);
   Anvil.forget(player);
 }
 
@@ -49,7 +48,6 @@ module.exports = {
   register(api) {
     Core.init(api);
     Data.load(api.core);
-    Sessions.everyTick(Smelting.closeAbandonedMenus);
     Sessions.everyTick(Anvil.closeAbandonedMenus);
     api.getTaskManager().submit(Sessions.createTask());
     api.onPlayerDisconnect(disconnect);

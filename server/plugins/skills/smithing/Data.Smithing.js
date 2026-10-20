@@ -37,6 +37,7 @@ function load(apiCore) {
       ...recipe,
       barId: item(recipe.bar),
       ingredients: recipe.ingredients.map(([name, amount]) => [item(name), amount]),
+      byproducts: (recipe.byproducts ?? []).map(([name, amount]) => [item(name), amount]),
       skill: recipe.skill ? core.Skill[recipe.skill] : undefined,
     });
   }
@@ -55,6 +56,7 @@ function productsByBar() {
   const bars = CacheDefinitions.getEnumValues(BARS_ENUM);
   const amounts = CacheDefinitions.getEnumValues(AMOUNT_ENUM);
   const slotIndex = CacheDefinitions.getEnumValues(ITEM_LASTTYPE_ENUM);
+  const objNames = CacheDefinitions.getObjNames();
   const xpPerBar = new Map(Object.entries(data.xpPerBar).map(([name, xp]) => [ItemIdentifiers[name], xp]));
   const productXp = new Map(Object.entries(data.productXp).map(([name, xp]) => [ItemIdentifiers[name], xp]));
   products = new Map();
@@ -63,10 +65,13 @@ function productsByBar() {
       const barsUsed = Number(bars.get(slot.item) ?? 1);
       return {
         barId: bar,
+        /** The metal in "You hammer the <metal> and make ...": the bar's gameval without "_bar". */
+        metal: String(objNames.get(bar) ?? "").replace(/_bar$/, ""),
         component: slot.component,
         slotIndex: Number(slotIndex.get((SMITHING_INTERFACE << 16) | slot.component) ?? 0),
         itemId: slot.item,
         label: slot.label,
+        phrase: data.objPhrases[slot.obj] ?? data.phrases[slot.label.replace(/ \(\d\)$/, "")] ?? `a ${slot.label.toLowerCase()}`,
         level: Number(levels.get(slot.item)),
         bars: barsUsed,
         amount: Number(amounts.get(slot.item) ?? 1),
@@ -77,6 +82,10 @@ function productsByBar() {
     }));
   }
   return products;
+}
+
+function questName(key) {
+  return data.questNames[key] ?? key;
 }
 
 function productsFor(barId) {
@@ -96,4 +105,5 @@ module.exports = {
   smeltMenuRecipes,
   productsFor,
   anvilBars,
+  questName,
 };

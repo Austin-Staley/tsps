@@ -5,32 +5,37 @@ const { test, before, afterEach } = require("node:test");
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 const { PluginManager } = require("../dist/plugins/PluginManager");
-const { ItemIds: I } = require("../dist/util/IdEnums");
+const { ItemIdentifiers: I } = require("../dist/util/ItemIdentifiers");
 const { Skill } = require("../dist/game/model/Skill");
 const Smithing = require("../plugins/skills/Smithing.plugin");
 
 const buttons = new Map(), objects = new Map(), tasks = [], players = [];
-let disconnect, itemOnObject;
+let disconnect, itemOnObject, CacheDefinitions;
 let denyAnvil = false;
 Smithing.register({
   core: PluginManager.getCoreApi(),
   getTaskManager: () => ({ submit(task) { task.setRunning(true); tasks.push(task); } }),
   onPlayerDisconnect: handler => { disconnect = handler; },
-  onCustomEvent() {}, emitCustomEvent(name, request) { if (name === "smithing:anvil-access") request.denied = denyAnvil; },
+  onCustomEvent() {},
+  emitCustomEvent(name, request) {
+    if (name === "smithing:anvil-access") request.denied = denyAnvil;
+    if (name === "quest:is-complete") request.complete = request.player.quests?.has(request.key) ?? false;
+  },
   onItemOnObject: handler => { itemOnObject = handler; }, onSpellOnItem() {}, log() {},
   onObjectInteraction: (name, actions) => objects.set(name, actions),
   onInterfaceActionButton: (ids, handler) => { for (const id of ids) buttons.set(id, handler); },
 });
 before(async () => {
   const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+  ({ CacheDefinitions } = require("../dist/game/cache/CacheDefinitions"));
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
 });
 afterEach(() => { for (const player of players.splice(0)) disconnect({ player }); });
 
 function playerWith(barId = I.BRONZE_BAR, bars = 27) {
   const items = new Map([[I.HAMMER, 1], [barId, bars]]);
-  const player = { items, xp: 0, level: 99, moving: false, interfaceId: -1 };
-  const sender = new Proxy({}, { get: () => () => sender });
+  const player = { items, xp: 0, level: 99, moving: false, interfaceId: -1, messages: [], sent: [], statements: [], equipped: new Map() };
+  const sender = new Proxy({}, { get: (_, name) => (...args) => { player.sent.push([name, ...args]); return sender; } });
   Object.assign(player, {
     getInventory: () => ({
       contains: id => (items.get(id) ?? 0) > 0,
@@ -38,17 +43,20 @@ function playerWith(barId = I.BRONZE_BAR, bars = 27) {
       deleteNumber: (id, n) => items.set(id, items.get(id) - n),
       addItem: item => items.set(item.getId(), (items.get(item.getId()) ?? 0) + item.getAmount()),
     }),
+    getEquipment: () => ({ get: slot => player.equipped.has(slot) ? { getId: () => player.equipped.get(slot) } : null }),
     getSkillManager: () => ({
       getCurrentLevel: () => player.level,
-      addExperiences: (skill, xp) => { assert.equal(skill, Skill.SMITHING); player.xp += xp; },
+      addExperiences: (skill, xp) => { player.xpSkill = skill; player.xp += xp; },
     }),
+    getDialogueManager: () => ({ startDialogues: chain => player.statements.push(chain) }),
     getPacketSender: () => sender,
     getInterfaceId: () => player.interfaceId,
     setInterfaceId: id => { player.interfaceId = id; },
     setEnteredAmountAction: action => { player.amountAction = action; },
     getMovementQueue: () => ({ size: () => player.moving ? 1 : 0 }),
     getForceMovement: () => null, isRegistered: () => true, getHitpoints: () => 99,
-    performAnimation() {}, sendMessage() {},
+    performAnimation(animation) { player.animation = animation?.getId?.(); },
+    sendMessage(message) { player.messages.push(message); },
   });
   players.push(player);
   return player;
@@ -63,6 +71,9 @@ function ticks(count = 140) {
     for (const task of [...tasks]) if (!task.tick()) tasks.splice(tasks.indexOf(task), 1);
   }
 }
+const sent = (player, name) => player.sent.filter(([sentName]) => sentName === name).map(([, ...args]) => args);
+const lastMenu = player => sent(player, "sendCreationMenu").at(-1)?.[0];
+const statementText = player => player.statements.at(-1)?.getDialogues?.()?.[0]?.text ?? player.statements.at(-1)?.dialogues?.[0]?.text;
 
 for (const [label, component, quantity] of [["1", 3, 1], ["5", 4, 5], ["10", 5, 10], ["X", 6, 3], ["All", 7, 27]]) {
   test(`${label} remains selected after making items and reopening the anvil`, () => {
@@ -130,7 +141,7 @@ test("anvil XP follows the metal and bars consumed, including multi-item recipes
       const player = playerWith(bar, bars);
       open(player);
       assert.equal(click(player, component), true);
-      ticks(2);
+      ticks(4);
       assert.equal(player.items.get(bar), 0);
       assert.equal(player.xp, xp * bars, `bar ${bar}, component ${component}`);
     }
@@ -150,7 +161,6 @@ test("missing hammer, level, or bars preserves inventory and grants no XP", () =
     assert.equal(player.xp, 0);
   }
 });
-
 
 test("anvil access rules cover Smith and using bars without consuming anything", () => {
   const player = playerWith(), before = new Map(player.items);
@@ -185,4 +195,145 @@ test("the rusted anvil only works bronze and ignores other items", () => {
   const bronze = playerWith();
   objects.get("Rusted anvil").Smith({ player: bronze });
   assert.equal(bronze.interfaceId, 312);
+});
+
+// Captured (rsprox, recs 1610, 3461): the click closes the interface on its tick, the first item
+// comes 3 ticks later and the next every 5, each with "You hammer the <metal> and make ...".
+test("anvil timing, messages and the last-made varbits follow the captures", () => {
+  const player = playerWith(I.STEEL_BAR, 3);
+  player.quests = new Set(["the_tourist_trap"]);
+  open(player);
+  assert.deepEqual(sent(player, "sendConfig").at(-1), [CacheDefinitions.getVarpId("makexcrafting"), 3]);
+  click(player, 5);
+  click(player, 29);
+  assert.equal(player.interfaceId, -1);
+  const varbits = new Map(sent(player, "sendVarbit"));
+  assert.equal(varbits.get(CacheDefinitions.getVarbitId("smithing_bar_lasttype")), 3);
+  assert.equal(varbits.get(CacheDefinitions.getVarbitId("smithing_item_lasttype")), 21);
+  ticks(3);
+  assert.equal(player.items.get(I.STEEL_DART_TIP) ?? 0, 0);
+  ticks(1);
+  assert.equal(player.items.get(I.STEEL_DART_TIP), 10);
+  assert.equal(player.messages.at(-1), "You hammer the steel and make ten dart tips.");
+  ticks(4);
+  assert.equal(player.items.get(I.STEEL_DART_TIP), 10);
+  ticks(1);
+  assert.equal(player.items.get(I.STEEL_DART_TIP), 20);
+});
+
+test("Smith with no bar opens a message box instead of the interface", () => {
+  const player = playerWith(I.COAL, 1);
+  open(player);
+  assert.equal(player.interfaceId, -1);
+  assert.equal(player.statements.length, 1);
+});
+
+test("quest-gated products need their quest", () => {
+  const player = playerWith(I.BRONZE_BAR, 4);
+  open(player);
+  assert.equal(click(player, 18), false);
+  assert.match(player.messages.at(-1), /Death Plateau/);
+  player.quests = new Set(["death_plateau"]);
+  open(player);
+  assert.equal(click(player, 18), true);
+  ticks(4);
+  assert.equal(player.items.get(I.BRONZE_CLAWS), 1);
+});
+
+test("a wielded Imcando hammer works the anvil", () => {
+  const player = playerWith();
+  player.items.delete(I.HAMMER);
+  player.equipped.set(3, I.IMCANDO_HAMMER);
+  open(player);
+  assert.equal(click(player, 9), true);
+  ticks(4);
+  assert.equal(player.items.get(I.BRONZE_DAGGER), 1);
+});
+
+// Smelting: the shared CreationMenu lists every bar; captured timing is 4 ticks to the bar,
+// 5 between bars, with "You smelt ..." on the choosing tick.
+function furnaceWith(entries) {
+  const player = playerWith(I.HAMMER, 1);
+  for (const [id, amount] of entries) player.items.set(id, amount);
+  return player;
+}
+const furnace = { getDefinition: () => ({ getName: () => "Furnace" }) };
+
+test("Smelt lists every bar, and smelts on the captured timing", () => {
+  const player = furnaceWith([[I.COPPER_ORE, 2], [I.TIN_ORE, 2]]);
+  objects.get("Furnace").Smelt({ player });
+  const menu = lastMenu(player);
+  assert.equal(menu.getTitle(), "What would you like to smelt?");
+  assert.deepEqual(menu.getItems(), [I.BRONZE_BAR, I.BLURITE_BAR, I.IRON_BAR, I.SILVER_BAR, I.STEEL_BAR,
+    I.GOLD_BAR, I.MITHRIL_BAR, I.ADAMANTITE_BAR, I.RUNITE_BAR]);
+  menu.execute(I.BRONZE_BAR, 2);
+  ticks(1);
+  assert.equal(player.messages.at(-1), "You smelt the copper and tin together in the furnace.");
+  assert.equal(player.animation, 899);
+  ticks(3);
+  assert.equal(player.items.get(I.BRONZE_BAR) ?? 0, 0);
+  ticks(1);
+  assert.equal(player.items.get(I.BRONZE_BAR), 1);
+  assert.equal(player.messages.at(-1), "You retrieve a bar of bronze.");
+  assert.equal(player.xp, 6.2);
+  ticks(5);
+  assert.equal(player.items.get(I.BRONZE_BAR), 2);
+});
+
+test("Smelt with no ore says so in a message box", () => {
+  const player = furnaceWith([[I.COAL, 5]]);
+  objects.get("Furnace").Smelt({ player });
+  assert.equal(lastMenu(player), undefined);
+  assert.equal(player.statements.length, 1);
+});
+
+test("too low a level is a message box; impure iron is lost", (t) => {
+  const low = furnaceWith([[I.GOLD_ORE, 1]]);
+  low.level = 39;
+  objects.get("Furnace").Smelt({ player: low });
+  lastMenu(low).execute(I.GOLD_BAR, 1);
+  ticks(6);
+  assert.equal(low.items.get(I.GOLD_ORE), 1);
+  assert.equal(low.statements.length, 1);
+
+  t.mock.method(Math, "random", () => 0.9);
+  const player = furnaceWith([[I.IRON_ORE, 1]]);
+  objects.get("Furnace").Smelt({ player });
+  lastMenu(player).execute(I.IRON_BAR, 1);
+  ticks(6);
+  assert.equal(player.items.get(I.IRON_ORE), 0);
+  assert.equal(player.items.get(I.IRON_BAR) ?? 0, 0);
+  assert.equal(player.messages.at(-1), "The ore is too impure and you fail to refine it.");
+  assert.equal(player.xp, 0);
+});
+
+test("ore used on a furnace opens the Smelt menu; sand opens molten glass", () => {
+  const player = furnaceWith([[I.IRON_ORE, 1]]);
+  const event = { player, itemId: I.IRON_ORE, object: furnace };
+  itemOnObject(event);
+  assert.equal(event.handled, true);
+  assert.equal(lastMenu(player).getTitle(), "What would you like to smelt?");
+  assert.equal(player.items.get(I.IRON_ORE), 1);
+
+  const glass = furnaceWith([[I.BUCKET_OF_SAND, 1], [I.SODA_ASH, 1]]);
+  itemOnObject({ player: glass, itemId: I.BUCKET_OF_SAND, object: furnace });
+  assert.deepEqual(lastMenu(glass).getItems(), [I.MOLTEN_GLASS]);
+  lastMenu(glass).execute(I.MOLTEN_GLASS, 1);
+  ticks(6);
+  assert.equal(glass.items.get(I.MOLTEN_GLASS), 1);
+  assert.equal(glass.items.get(I.BUCKET), 1);
+  assert.equal(glass.xpSkill, Skill.CRAFTING);
+});
+
+test("blurite needs The Knight's Sword", () => {
+  const player = furnaceWith([[I.BLURITE_ORE, 1]]);
+  objects.get("Furnace").Smelt({ player });
+  lastMenu(player).execute(I.BLURITE_BAR, 1);
+  ticks(6);
+  assert.equal(player.items.get(I.BLURITE_BAR) ?? 0, 0);
+  player.quests = new Set(["the_knights_sword"]);
+  lastMenu(player).execute(I.BLURITE_BAR, 1);
+  ticks(6);
+  assert.equal(player.items.get(I.BLURITE_BAR), 1);
+  assert.equal(player.xp, 8);
 });

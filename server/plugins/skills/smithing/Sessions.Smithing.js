@@ -1,8 +1,9 @@
 /**
  * Smithing's make-X loops (smelting, anvil work, cannonballs): one task ticks every player's
- * session. A session makes its first item `firstDelay` ticks after it starts, then one every
- * `interval` ticks, until `remaining` runs out, `step` returns false, or the player moves,
- * dies or logs out.
+ * session. Each cycle starts `firstDelay` ticks after the session (then every `interval`
+ * ticks): `begin(player)` runs the cycle's opening (a message, the animation), and
+ * `step(player)` makes the item `finishDelay` ticks later. Either returning false ends the
+ * session, as do `remaining` running out and the player moving, dying or logging out.
  */
 const Core = require("./Core.Smithing");
 
@@ -11,10 +12,14 @@ const SESSIONS = new Map();
 const EVERY_TICK = [];
 let tick = 0;
 
-/** `step(player)` makes one item; false ends the session. `onStop(player)` runs however it ends. */
-function start(player, { type, remaining, interval, firstDelay, step, onStop }) {
+function start(player, { type, remaining, interval, firstDelay = 0, finishDelay = 0, begin, step, onStop }) {
   stop(player, false);
-  SESSIONS.set(player, { type, remaining, interval, nextTick: tick + firstDelay, step, onStop });
+  SESSIONS.set(player, {
+    type, remaining, interval, finishDelay, begin, step, onStop,
+    // The task's next run is the tick the session started on (offset 0).
+    nextCycle: tick + 1 + firstDelay,
+    finishAt: null,
+  });
 }
 
 function stop(player, resetAnimation = true) {
@@ -33,6 +38,23 @@ function everyTick(fn) {
   EVERY_TICK.push(fn);
 }
 
+function advance(player, session) {
+  if (session.finishAt == null && tick >= session.nextCycle) {
+    session.nextCycle = tick + session.interval;
+    if (session.begin && !session.begin(player)) return false;
+    session.finishAt = tick + session.finishDelay;
+  }
+  if (session.finishAt == null || tick < session.finishAt) return true;
+  session.finishAt = null;
+  if (!session.step(player)) return false;
+  if (--session.remaining <= 0) {
+    stop(player, false);
+    return true;
+  }
+  return true;
+}
+
+/** Runs one tick. Sessions started during the tick's packets get their opening this tick. */
 function process() {
   tick++;
   for (const fn of EVERY_TICK) fn();
@@ -45,17 +67,10 @@ function process() {
       stop(player);
       continue;
     }
-    if (tick < session.nextTick) continue;
-    session.nextTick = tick + session.interval;
-    if (!session.step(player)) {
-      stop(player);
-      continue;
-    }
-    if (--session.remaining <= 0) stop(player, false);
+    if (!advance(player, session)) stop(player);
   }
 }
 
-/** The ticking task; a closure-free Task subclass built from `api.core`. */
 function createTask() {
   class SmithingTask extends Core.Task {
     constructor() {
