@@ -87,7 +87,6 @@ The Wiki's recipes, one row per dose where the dose count matters:
   captured "You don't know how to make super antifire potions yet. Maybe someone can teach you.";
   the divine potions need Song of the Elves; the sanfew steps need Zogre Flesh Eaters started, the
   last one finished. Those other refusals have no capture and say "Nothing interesting happens."
-  as a missing ingredient does.
 
 ## Grinding
 
