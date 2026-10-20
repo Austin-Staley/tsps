@@ -22,6 +22,29 @@ function start(player, { type, remaining, interval, firstDelay = 0, finishDelay 
   });
 }
 
+/**
+ * A one-off timed action (godsword or shield repairs): `steps` run at their tick offsets from
+ * now (offset 0 is this tick); walking off cancels the rest.
+ */
+function timeline(player, type, steps) {
+  const ordered = [...steps].sort((a, b) => a.at - b.at);
+  start(player, {
+    type,
+    remaining: 1,
+    interval: 1,
+    begin: () => true,
+    step: (actor) => {
+      const session = SESSIONS.get(actor);
+      session.elapsed = (session.elapsed ?? -1) + 1;
+      while (ordered.length && ordered[0].at <= session.elapsed) {
+        if (ordered.shift().run(actor) === false) return false;
+      }
+      if (ordered.length) session.remaining++;
+      return true;
+    },
+  });
+}
+
 function stop(player, resetAnimation = true) {
   const session = SESSIONS.get(player);
   if (!session) return;
@@ -84,4 +107,4 @@ function createTask() {
   return new SmithingTask();
 }
 
-module.exports = { start, stop, typeOf, everyTick, createTask };
+module.exports = { start, stop, typeOf, everyTick, createTask, timeline };

@@ -12,6 +12,9 @@
 const Core = require("./Core.Smithing");
 const Data = require("./Data.Smithing");
 const Sessions = require("./Sessions.Smithing");
+const Godswords = require("./Godswords.Smithing");
+const DragonShields = require("./DragonShields.Smithing");
+const { hasHammer, messageBox } = require("./Dialogue.Smithing");
 
 const SMITH_ANIMATION = 898;
 const MAIN_MODAL_TARGET_UID = (161 << 16) | 16;
@@ -37,20 +40,6 @@ const range = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => from
 
 function smithingLevel(player) {
   return player.getSkillManager().getCurrentLevel(Core.Skill.SMITHING);
-}
-
-/** Wiki (Smithing): a hammer, or an Imcando hammer carried or wielded (either hand). */
-function hasHammer(player) {
-  const { ItemIdentifiers: Items, Equipment } = Core;
-  const hammers = [Items.HAMMER, Items.IMCANDO_HAMMER, Items.IMCANDO_HAMMER_OFF_HAND_];
-  const equipment = player.getEquipment?.();
-  const wielded = [Equipment.WEAPON_SLOT, Equipment.SHIELD_SLOT].map((slot) => equipment?.get(slot)?.getId?.());
-  return hammers.some((id) => player.getInventory().contains(id) || wielded.includes(id));
-}
-
-function statement(player, text) {
-  const { DialogueChainBuilder, StatementDialogue } = Core;
-  player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0, text)));
 }
 
 /** Members products on a free world, and products behind a quest the client greys out. */
@@ -143,7 +132,7 @@ function openInterface(player, preferredBarId = null) {
   }
   const bar = chooseBar(player, preferredBarId);
   if (bar == null) {
-    statement(player, NO_BAR_MESSAGE);
+    messageBox(player, NO_BAR_MESSAGE);
     return false;
   }
   OPEN_MENUS.set(player, bar);
@@ -214,8 +203,12 @@ function anvilAccess(event) {
   return !request.denied;
 }
 
+/** Smith: godsword pieces or a visage and anti-dragon shield go first, then the interface. */
 function smith(event) {
-  if (anvilAccess(event)) openInterface(event.player);
+  if (!anvilAccess(event)) return;
+  const { player } = event;
+  if (Godswords.smithAtAnvil(player) || DragonShields.smithAtAnvil(player)) return;
+  openInterface(player);
 }
 
 function smithRustedAnvil(event) {

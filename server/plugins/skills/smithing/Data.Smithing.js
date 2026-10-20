@@ -23,6 +23,7 @@ const BAR_TYPE_BY_BAR = new Map(layout.bars.map(({ barType, bar }) => [bar, barT
 let core = null;
 let products = null;
 let cannonballList = null;
+let spearList = null;
 
 /** Resolves the item names in smithing.json. Safe to call again; any plugin's `api.core` will do. */
 function load(apiCore) {
@@ -112,6 +113,20 @@ function bluriteProducts() {
   }));
 }
 
+/** Barbarian spears and hastas by bar: { barId, logId, level, xp, spearId, hastaId }. */
+function spears() {
+  const objId = (name) => core.CacheDefinitions.getObjId(name);
+  spearList ??= data.spears.map((entry) => ({
+    barId: core.ItemIdentifiers[entry.bar],
+    logId: core.ItemIdentifiers[entry.log],
+    level: entry.level,
+    xp: entry.xp,
+    spearId: objId(entry.spear),
+    hastaId: objId(entry.hasta),
+  }));
+  return spearList;
+}
+
 function questName(key) {
   return data.questNames[key] ?? key;
 }
@@ -136,4 +151,5 @@ module.exports = {
   questName,
   cannonballs,
   bluriteProducts,
+  spears,
 };

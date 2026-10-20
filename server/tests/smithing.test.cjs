@@ -11,6 +11,7 @@ const Smithing = require("../plugins/skills/Smithing.plugin");
 
 const buttons = new Map(), objects = new Map(), itemActions = new Map(), events = new Map(), tasks = [], players = [];
 let disconnect, itemOnObject, CacheDefinitions;
+const extraItemOnObject = [];
 let denyAnvil = false;
 Smithing.register({
   core: PluginManager.getCoreApi(),
@@ -24,7 +25,8 @@ Smithing.register({
   },
   persistAttribute() {},
   onItemAction: (name, actions) => itemActions.set(name, actions),
-  onItemOnObject: handler => { itemOnObject = handler; }, onSpellOnItem() {}, log() {},
+  onItemOnObject: (handler) => { if (!itemOnObject) itemOnObject = handler; else extraItemOnObject.push(handler); },
+  onItemOnItem() {}, onSpellOnItem() {}, log() {},
   onObjectInteraction: (name, actions) => objects.set(name, actions),
   onInterfaceActionButton: (ids, handler) => { for (const id of ids) buttons.set(id, handler); },
 });
@@ -57,7 +59,7 @@ function playerWith(barId = I.BRONZE_BAR, bars = 27) {
       getCurrentLevel: () => player.level,
       addExperiences: (skill, xp) => { player.xpSkill = skill; player.xp += xp; },
     }),
-    getDialogueManager: () => ({ startDialogues: chain => player.statements.push(chain) }),
+    getDialogueManager: () => ({ startDialogues: chain => player.statements.push(chain), reset() {} }),
     getPacketSender: () => sender,
     getInterfaceId: () => player.interfaceId,
     setInterfaceId: id => { player.interfaceId = id; },
@@ -455,4 +457,77 @@ test("Varrock armour smelts two bars at the Edgeville furnace", (t) => {
   lastMenu(elsewhere).execute(I.MITHRIL_BAR, 1);
   ticks(6);
   assert.equal(elsewhere.items.get(I.MITHRIL_BAR), 1);
+});
+
+const anvil = { getDefinition: () => ({ getName: () => "Anvil" }) };
+const dialogueTexts = (player) => player.statements.map((chain) => [...chain.getDialogues().values()].map((d) => d.getText?.() ?? "").join(" "));
+/** Presses continue on the last dialogue chain: runs its ActionDialogue, if any. */
+const continueDialogue = (player) => {
+  for (const dialogue of player.statements.at(-1).getDialogues().values()) dialogue.action?.execute?.();
+};
+
+// Captured (rsprox recs 1515, 1517): the message box and hammering at once, the result 6 ticks in.
+test("two godsword shards forge into a pair, then the blade, 100 XP each", () => {
+  const player = playerWith(I.GODSWORD_SHARD_1, 1);
+  player.items.set(I.GODSWORD_SHARD_3, 1);
+  player.items.set(I.GODSWORD_SHARD_2, 1);
+  open(player);
+  assert.equal(player.interfaceId, -1);
+  ticks(6);
+  assert.equal(player.items.get(I.GODSWORD_SHARDS_1_2) ?? 0, 0);
+  ticks(1);
+  assert.equal(player.items.get(I.GODSWORD_SHARDS_1_2), 1);
+  assert.equal(player.xp, 100);
+  itemOnObject({ player, itemId: I.GODSWORD_SHARD_3, object: anvil });
+  ticks(7);
+  assert.equal(player.items.get(I.GODSWORD_BLADE), 1);
+  assert.equal(player.xp, 200);
+
+  const one = playerWith(I.GODSWORD_SHARD_1, 1);
+  itemOnObject({ player: one, itemId: I.GODSWORD_SHARD_1, object: anvil });
+  assert.match(dialogueTexts(one).join(), /at least two different Godsword blade pieces/);
+});
+
+test("dragon sq shield halves are repaired at an anvil after the message boxes", () => {
+  const player = playerWith(I.SHIELD_LEFT_HALF, 1);
+  itemOnObject({ player, itemId: I.SHIELD_LEFT_HALF, object: anvil });
+  assert.match(dialogueTexts(player).join(), /other half/);
+  player.items.set(I.SHIELD_RIGHT_HALF, 1);
+  itemOnObject({ player, itemId: I.SHIELD_LEFT_HALF, object: anvil });
+  assert.match(dialogueTexts(player).at(-1), /You set to work trying to fix the ancient shield/);
+  continueDialogue(player);
+  ticks(7);
+  assert.match(dialogueTexts(player).at(-1), /restored the dragon square shield/);
+  assert.equal(player.items.get(I.DRAGON_SQ_SHIELD) ?? 0, 0);
+  continueDialogue(player);
+  assert.equal(player.items.get(I.DRAGON_SQ_SHIELD), 1);
+  assert.equal(player.items.get(I.SHIELD_LEFT_HALF), 0);
+  assert.equal(player.xp, 75);
+});
+
+test("a barbarian anvil makes spears and hastas from a bar and a log", () => {
+  const player = playerWith(I.STEEL_BAR, 2);
+  player.items.set(I.WILLOW_LOGS, 2);
+  const barbarian = { getDefinition: () => ({ getName: () => "Barbarian anvil" }) };
+  for (const handler of extraItemOnObject) handler({ player, itemId: I.STEEL_BAR, object: barbarian });
+  assert.deepEqual(lastMenu(player).getItems(), [I.STEEL_SPEAR, I.STEEL_HASTA]);
+  lastMenu(player).execute(I.STEEL_HASTA, 2);
+  ticks(10);
+  assert.equal(player.items.get(I.STEEL_HASTA), 2);
+  assert.equal(player.items.get(I.WILLOW_LOGS), 0);
+  assert.equal(player.xp, 150);
+});
+
+test("Smith with a draconic visage and anti-dragon shield makes an uncharged dragonfire shield", () => {
+  const player = playerWith(I.DRACONIC_VISAGE, 1);
+  player.items.set(I.ANTI_DRAGON_SHIELD, 1);
+  open(player);
+  assert.equal(player.interfaceId, -1);
+  assert.match(dialogueTexts(player).at(-1), /attach the ancient draconic visage/);
+  continueDialogue(player);
+  ticks(9);
+  assert.equal(player.items.get(CacheDefinitions.getObjId("dragonfire_shield_uncharged")), 1);
+  assert.equal(player.items.get(I.DRACONIC_VISAGE), 0);
+  assert.equal(player.xp, 2000);
+  assert.match(dialogueTexts(player).at(-1), /into a dragonfire shield/);
 });

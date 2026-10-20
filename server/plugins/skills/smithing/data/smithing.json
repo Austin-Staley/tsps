@@ -162,6 +162,15 @@
     {"item": "BLURITE_BOLTS_UNF_", "level": 8, "xp": 17.5, "amount": 10, "phrase": "ten blurite crossbow bolts"},
     {"item": "BLURITE_LIMBS", "level": 13, "xp": 17.5, "amount": 1, "phrase": "a pair of crossbow limbs"}
   ],
+  "$spears": "https://oldschool.runescape.wiki/w/Barbarian_Training#Smithing - a bar and a matching log make a spear or a hasta at a barbarian anvil only; same level and experience for both, 4 ticks.",
+  "spears": [
+    {"bar": "BRONZE_BAR", "log": "LOGS", "level": 5, "xp": 25, "spear": "bronze_spear", "hasta": "brut_bronze_spear"},
+    {"bar": "IRON_BAR", "log": "OAK_LOGS", "level": 20, "xp": 50, "spear": "iron_spear", "hasta": "brut_iron_spear"},
+    {"bar": "STEEL_BAR", "log": "WILLOW_LOGS", "level": 35, "xp": 75, "spear": "steel_spear", "hasta": "brut_steel_spear"},
+    {"bar": "MITHRIL_BAR", "log": "MAPLE_LOGS", "level": 55, "xp": 100, "spear": "mithril_spear", "hasta": "brut_mithril_spear"},
+    {"bar": "ADAMANTITE_BAR", "log": "YEW_LOGS", "level": 75, "xp": 125, "spear": "adamant_spear", "hasta": "brut_adamant_spear"},
+    {"bar": "RUNITE_BAR", "log": "MAGIC_LOGS", "level": 90, "xp": 150, "spear": "rune_spear", "hasta": "brut_rune_spear"}
+  ],
   "$phrases": "The end of 'You hammer the <metal> and make <phrase>' per anvil slot label (Shayzien labels without their tier); objPhrases win for one product. rsprox captures (rev 237) where docs/smithing.md says so, the same wording otherwise.",
   "phrases": {
     "Dagger": "a dagger",

@@ -1,7 +1,9 @@
 /**
  * Smithing: smelting at furnaces and smithing at anvils. The units live in smithing/:
  * Data (cache products + data/smithing.json), Sessions (the make-X loops), Smelting, Anvil,
- * Cannonballs, Gear (ring of forging, Varrock armour) and Superheat. docs/smithing.md has the sources.
+ * Cannonballs, Gear (ring of forging, Varrock armour), Godswords, DragonShields (dragon and
+ * visage shields, the dragon forge), Spears (the barbarian anvil) and Superheat.
+ * docs/smithing.md has the sources.
  */
 const Core = require("./smithing/Core.Smithing");
 const Data = require("./smithing/Data.Smithing");
@@ -10,6 +12,9 @@ const Smelting = require("./smithing/Smelting.Smithing");
 const Anvil = require("./smithing/Anvil.Smithing");
 const Cannonballs = require("./smithing/Cannonballs.Smithing");
 const Gear = require("./smithing/Gear.Smithing");
+const Godswords = require("./smithing/Godswords.Smithing");
+const DragonShields = require("./smithing/DragonShields.Smithing");
+const Spears = require("./smithing/Spears.Smithing");
 const Superheat = require("./smithing/Superheat.Smithing");
 
 const FURNACE_NAMES = new Set(["Furnace", "Small furnace", "Lovakite furnace"]);
@@ -17,7 +22,9 @@ const FURNACE_NAMES = new Set(["Furnace", "Small furnace", "Lovakite furnace"]);
 function useItemOnObject(event) {
   const name = event.object.getDefinition().getName();
   if (FURNACE_NAMES.has(name)) Cannonballs.useOnFurnace(event) || Smelting.useOnFurnace(event);
-  else if (Anvil.ANVIL_NAMES.includes(name)) Anvil.useOnAnvil(event);
+  else if (name === "Rusted anvil") Anvil.useOnAnvil(event);
+  else if (Anvil.ANVIL_NAMES.includes(name)) Godswords.useOnAnvil(event) || DragonShields.useOnAnvil(event) || Anvil.useOnAnvil(event);
+  else if (event.objectId === Core.CacheDefinitions.getLocId(DragonShields.SHIELD_MACHINE)) DragonShields.useOnShieldMachine(event);
 }
 
 function disconnect({ player }) {
@@ -59,6 +66,9 @@ module.exports = {
     Anvil(api);
     Cannonballs(api);
     Gear(api);
+    Godswords(api);
+    DragonShields(api);
+    Spears(api);
     Superheat(api);
   },
 };
