@@ -168,6 +168,9 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     Object.freeze([O.LARGE_DOOR_24, O.LARGE_DOOR_25, O.LARGE_DOOR_26, O.LARGE_DOOR_27]),
     Object.freeze([O.LARGE_DOOR_28, O.LARGE_DOOR_29, O.LARGE_DOOR_30, O.LARGE_DOOR_31]),
     Object.freeze([O.GATE_40, O.GATE_41, O.GATE_29, O.GATE_30]),
+    // Sins of the Father Arboretum: closed leaves 39251/39253 swing east into
+    // the nameless 39252/39254 leaves on the adjacent tiles (capture 1637).
+    Object.freeze([O.LARGE_DOOR_100, O.LARGE_DOOR_101, 39252, 39254]),
     // Tutorial Island mining exit: same metal gate as 1727/1728 (9717 is the left leaf).
     Object.freeze([O.GATE_92, O.GATE_93, O.GATE_29, O.GATE_30]),
     // Tutorial Island rat cage: same metal gate, face 0 (9719 is the left/south leaf).
@@ -224,6 +227,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.LARGE_DOOR_16, O.LARGE_DOOR_18],
     [O.LARGE_DOOR_7, O.LARGE_DOOR_9],
     [O.LARGE_DOOR_8, O.LARGE_DOOR_10],
+    // Sins of the Father Arboretum double door (capture 1637).
+    [O.LARGE_DOOR_100, O.LARGE_DOOR_101],
   ]);
   SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID = new Map();
   for (const [a, b] of SPECIAL_DOUBLE_DOOR_PAIRS) {

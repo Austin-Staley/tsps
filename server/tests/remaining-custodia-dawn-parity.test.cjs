@@ -402,6 +402,31 @@ test('The Final Dawn top stair claims through real Ladders/LocTeleports', () => 
   assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1646, 3091, 0]);
 });
 
+test('The Final Dawn Teumo house squeeze door enters and exits through captured sides', () => {
+  RegionManager.init();
+  RegionManager.loadMapFiles(1464, 9569, true);
+  const door = MapObjects.get(56475, new core.Location(1464, 9569, 1), null);
+  assert.ok(door, 'real vmq4_teumo_house_door exists on the map');
+  const h = harness('TheFinalDawn'), p = player();
+  const LocTeleports = require('../plugins/world/LocTeleports.plugin');
+  LocTeleports.register(h.api);
+  h.quest.setStage(p, 29);
+
+  p.moveTo(new core.Location(1463, 9569, 1));
+  assert.equal(LocTeleports._test.play(p, door, 1), true, 'outside Squeeze-through is handled');
+  h.tick(6);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1465, 9569, 1],
+    'captured inward landing inside Teumo house');
+  assert.equal(h.quest.getStage(p), 29, 'entering the house does not advance the quest');
+
+  p.moveTo(new core.Location(1465, 9570, 1));
+  assert.equal(LocTeleports._test.play(p, door, 1), true, 'inside Squeeze-through is handled');
+  h.tick(6);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1463, 9570, 1],
+    'captured outward landing outside Teumo house');
+  assert.equal(h.quest.getStage(p), 29, 'exiting the house does not advance the quest');
+});
+
 test('The Final Dawn safehouse door is owner-scoped and clears both stair routes', () => {
   RegionManager.init();
   RegionManager.loadMapFiles(1649, 3093, true);

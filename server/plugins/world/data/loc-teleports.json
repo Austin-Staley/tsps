@@ -453,7 +453,7 @@
     {"name":"vmq2_temple_stairs_top","id":50859,"display":"Staircase","option":"Climb-down","op":1,"x":1692,"y":3088,"z":0,"to":[1694,9492,0],"tick":4,"fade":true,"recordings":1},
     {"name":"vmq2_temple_stairs_bottom","id":50860,"display":"Staircase","option":"Climb-up","op":1,"x":1691,"y":9492,"z":0,"to":[1692,3087,0],"tick":4,"fade":true,"recordings":1},
     {"name":"vmq4_crypt_of_tonali_entry","id":56636,"display":"Passageway","option":"Enter","op":1,"x":1305,"y":3033,"z":0,"to":[1312,9346,2],"tick":4,"fade":true,"recordings":3},
-    {"name":"vmq4_teumo_house_door","id":56475,"display":"Door","option":"Squeeze-through","op":1,"x":1464,"y":9569,"z":1,"to":[1463,9570,1],"anim":6103,"animTick":3,"tick":4,"sound":2452,"recordings":1},
+    {"name":"vmq4_teumo_house_door","id":56475,"display":"Door","option":"Squeeze-through","op":1,"x":1464,"y":9569,"z":1,"sides":[{"from":[1463,9569,1],"to":[1465,9569,1]},{"from":[1465,9570,1],"to":[1463,9570,1]}],"anim":6103,"animTick":3,"tick":4,"sound":2452,"recordings":1,"source":"RSProx 3128: outside 1463,9569 -> inside 1465,9569; inside 1465,9570 -> outside 1463,9570"},
     {"name":"watchladderdown","id":2797,"display":"Ladder","option":"Climb-down","op":1,"x":2933,"y":4711,"z":2,"to":[2549,3112,1],"anim":828,"animTick":1,"tick":2,"recordings":3},
     {"name":"wild_boss_escape_cave_exit01","id":47147,"display":"Cave","option":"Exit","op":1,"x":3358,"y":10244,"z":0,"to":[3283,3773,0],"anim":2796,"animTick":2,"tick":3,"sound":2454,"recordings":4},
     {"name":"wild_boss_escape_cave_exit02","id":47148,"display":"Cave","option":"Exit","op":1,"x":3336,"y":10287,"z":0,"to":[3262,3831,0],"anim":2796,"animTick":2,"tick":3,"sound":2454,"recordings":2},
