@@ -21,6 +21,7 @@ let core = null;
 let herbsByGrimy = null;
 let recipesByIngredient = null;
 let unfinishedByHerb = null;
+let grindsByItem = null;
 
 function init(pluginApi) {
   api = pluginApi;
@@ -44,6 +45,10 @@ function index() {
   }
   recipesByIngredient = new Map();
   unfinishedByHerb = new Map();
+  grindsByItem = new Map();
+  for (const row of DATA.grinding) {
+    grindsByItem.set(gameval("obj", row.item), { ...row, itemId: gameval("obj", row.item), productId: gameval("obj", row.product), amount: row.amount ?? [1, 1] });
+  }
   const vialOfWater = gameval("obj", "vial_water");
   for (const row of DATA.recipes) {
     const recipe = { ...row, productId: gameval("obj", row.product), ingredients: items(row.ingredients), returns: items(row.returns) };
@@ -62,6 +67,12 @@ function index() {
 function herbFor(grimyId) {
   index();
   return herbsByGrimy.get(grimyId) ?? null;
+}
+
+/** What a pestle and mortar grinds the item into ({ itemId, productId, amount, message }), or null. */
+function grindFor(itemId) {
+  index();
+  return grindsByItem.get(itemId) ?? null;
 }
 
 /** Every recipe that takes both items, in data order (lowest level first). */
@@ -138,7 +149,8 @@ function run(player, step) {
 
 module.exports = {
   MIX_ANIMATION, MIX_SOUND,
-  init, gameval, herbFor, recipesWith, answerUnfinished, level, questDone, canUseHerblore,
+  init, gameval, herbFor, grindFor, recipesWith, answerUnfinished, level, questDone, canUseHerblore,
   wearsHerbloreCape, spam, animate, sound, addXp, run,
+  get api() { return api; },
   get core() { return core; },
 };

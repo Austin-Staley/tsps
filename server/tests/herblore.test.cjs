@@ -11,7 +11,7 @@ const Herblore = require("../plugins/skills/Herblore.plugin");
 
 let core;
 const hooks = { firstAction: [], itemOnItem: [], customEvents: new Map() };
-const world = { quests: new Map(), cape: false };
+const world = { quests: new Map(), cape: false, diaries: new Set() };
 
 const api = new Proxy({
   onItemFirstAction(handler) { hooks.firstAction.push(handler); },
@@ -21,6 +21,7 @@ const api = new Proxy({
     if (name === "quest:is-complete") request.complete = world.quests.get(request.key) ?? true;
     if (name === "quest:is-started") request.started = world.quests.get(`${request.key}:started`) ?? true;
     if (name === "skillcape:has-perk") request.result = world.cape;
+    if (name === "diary:is-complete") request.complete = world.diaries.has(`${request.diary}:${request.tier}`);
   },
 }, { get: (target, key) => (key === "core" ? core : key in target ? target[key] : () => {}) });
 
@@ -34,6 +35,7 @@ before(async () => {
 beforeEach(() => {
   world.quests.clear();
   world.cape = false;
+  world.diaries.clear();
 });
 
 const obj = (name) => core.CacheDefinitions.getObjId(name);
@@ -331,4 +333,45 @@ test("divine potions take a crystal dust per dose", () => {
   assert.equal(who.inv.count("2dosedivineattack"), 1);
   assert.equal(who.inv.count("prif_crystal_shard_crushed"), 48);
   assert.deepEqual(who.sent.spam, ["You mix 2 pieces of crushed crystal into your potion."]);
+});
+
+test("a pestle and mortar grinds at once, two ticks later, then every three", () => {
+  const who = player([["pestle_and_mortar"], ...Array(4).fill(["unicorn_horn"])]);
+  assert.equal(use(who, "pestle_and_mortar", "unicorn_horn"), true);
+  assert.equal(who.inv.count("unicorn_horn_dust"), 1);
+  assert.deepEqual(who.sent.animations, [core.CacheDefinitions.getSeqId("human_herbing_grind")]);
+  assert.deepEqual(who.sent.spam, ["You grind the unicorn horn to dust."]);
+  ticks(2);
+  assert.equal(who.inv.count("unicorn_horn_dust"), 2);
+  ticks(2);
+  assert.equal(who.inv.count("unicorn_horn_dust"), 2);
+  ticks(1);
+  assert.equal(who.inv.count("unicorn_horn_dust"), 3);
+  ticks(10);
+  assert.equal(who.inv.count("unicorn_horn_dust"), 4);
+  assert.equal(who.sent.xp, 0);
+});
+
+test("lava scales grind into 3 to 6 shards, half as many again with the hard Wilderness Diary", () => {
+  const who = player([["pestle_and_mortar"], ["lava_scale"]]);
+  use(who, "lava_scale", "pestle_and_mortar");
+  const shards = who.inv.count("lava_shard");
+  assert.ok(shards >= 3 && shards <= 6);
+  assert.deepEqual(who.sent.spam, [`You grind the lava dragon scale into ${shards} shards.`]);
+  world.diaries.add("wilderness:hard");
+  const diary = player([["pestle_and_mortar"], ["lava_scale"]]);
+  use(diary, "lava_scale", "pestle_and_mortar");
+  assert.ok([4, 6, 7, 9].includes(diary.inv.count("lava_shard")));
+});
+
+test("a stack of crystal shards is crushed at once, ten dust each", () => {
+  const who = player([["pestle_and_mortar"], ["prif_crystal_shard", 3]]);
+  use(who, "pestle_and_mortar", "prif_crystal_shard");
+  assert.equal(who.inv.count("prif_crystal_shard_crushed"), 30);
+  assert.equal(who.inv.count("prif_crystal_shard"), 0);
+});
+
+test("a pestle and mortar on anything else is left to other plugins", () => {
+  const who = player([["pestle_and_mortar"], ["ashes"]]);
+  assert.equal(use(who, "pestle_and_mortar", "ashes"), false);
 });

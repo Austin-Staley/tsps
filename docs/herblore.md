@@ -85,6 +85,24 @@ The Wiki's recipes, one row per dose where the dose count matters:
   last one finished. Those other refusals have no capture and say "Nothing interesting happens."
   as a missing ingredient does.
 
+## Grinding
+
+A pestle and mortar on a secondary; no Herblore level or XP. Recordings 70 and 1875 (unicorn
+horn), 468 (anchovies, the same loop), 1849 (bird nest); the other messages are from the capture
+archive's message log.
+
+- **Timing:** at once, two ticks later, then every three ticks until none are left or the player
+  does something else (also the Wiki's "0, then 2, then 3 ticks").
+- **Animation and sound:** `human_herbing_grind` (364) with synth 2608.
+- **Messages:** "You grind the unicorn horn to dust.", "You grind the chocolate to dust.", "You
+  grind the bird's nest down.", "You grind down the blue dragon scale.", "You grind the goat's
+  horn into dust.", "You grind down the superior dragon bones.", "You grind the lava dragon scale
+  into 5 shards.", "You crush your crystal shards down to a powdery form."
+- **Lava scale (Wiki):** 3 to 6 shards, and half as many again, rounded down, with the hard
+  Wilderness Diary. The Wiki says higher levels average more; with no formula, tsps rolls evenly.
+- **Crystal shards (Wiki):** 10 crystal dust each; a stack is crushed at once. Live also says
+  "You crush some of your crystal shards down to a powdery form."; when is not known.
+
 ## Druidic Ritual
 
 Herblore needs Druidic Ritual (dbrow `skill_feature_herblore_overview_0`). Without it, cleaning and
@@ -110,6 +128,9 @@ These messages follow the captured pattern but have no recording of their own:
 - Superantipoison reuses antipoison's "You mix the unicorn horn into your potion."
 - Goading and prayer regeneration were both captured with aldarium, once as "the Aldarium" and
   once as "the aldarium"; which is which is a guess.
+
+Grinding: "You grind the kebbit teeth to dust." and "You grind the nihil shard into dust." have no
+capture, and nihil shards, a stack like crystal shards, are ground all at once.
 
 ## Experience
 

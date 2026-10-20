@@ -162,5 +162,17 @@
     {"product": "3dose4antidragon", "level": 98, "xp": 120, "ticks": 2, "ingredients": [["3dose3antidragon", 1], ["lava_shard", 3]], "message": "You mix {count} lava scale shards into your potion.", "upgrade": true, "quest": "dragon_slayer_ii"},
     {"product": "4dose4antidragon", "level": 98, "xp": 160, "ticks": 2, "ingredients": [["4dose3antidragon", 1], ["lava_shard", 4]], "message": "You mix {count} lava scale shards into your potion.", "upgrade": true, "quest": "dragon_slayer_ii"},
     {"product": "4dose4antidragon", "level": 98, "xp": 180, "ticks": 2, "ingredients": [["4dose2antidragon", 1], ["crushed_dragon_bones", 1]], "message": "You mix the crushed superior dragon bones into your antifire potion.", "upgrade": true, "quest": "dragon_slayer_ii"}
+  ],
+  "grinding": [
+    {"item": "unicorn_horn", "product": "unicorn_horn_dust", "message": "You grind the unicorn horn to dust."},
+    {"item": "chocolate_bar", "product": "chocolate_dust", "message": "You grind the chocolate to dust."},
+    {"item": "bird_nest_empty", "product": "crushed_bird_nest", "message": "You grind the bird's nest down."},
+    {"item": "blue_dragon_scale", "product": "dragon_scale_dust", "message": "You grind down the blue dragon scale."},
+    {"item": "desert_goat_horn", "product": "ground_desert_goat_horn", "message": "You grind the goat's horn into dust."},
+    {"item": "huntingbeast_sabreteeth", "product": "huntingbeast_sabreteeth_dust", "message": "You grind the kebbit teeth to dust."},
+    {"item": "lava_scale", "product": "lava_shard", "amount": [3, 6], "message": "You grind the lava dragon scale into {count} shards."},
+    {"item": "dragon_bones_superior", "product": "crushed_dragon_bones", "message": "You grind down the superior dragon bones."},
+    {"item": "nihil_shard", "product": "nihil_dust", "message": "You grind the nihil shard into dust."},
+    {"item": "prif_crystal_shard", "product": "prif_crystal_shard_crushed", "amount": [10, 10], "message": "You crush your crystal shards down to a powdery form."}
   ]
 }
