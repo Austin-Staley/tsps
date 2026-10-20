@@ -488,6 +488,8 @@
     {"name":"fai_falador_castle_spiralstairs","id":24072,"display":"Staircase","option":"Climb-up","op":1,"x":2960,"y":3338,"z":1,"to":[2959,3339,2],"anim":828,"animTick":1,"tick":2,"recordings":0,"source":"https://oldschool.runescape.wiki/w/While_Guthix_Sleeps/Quick_guide"},
     {"name":"fai_falador_castle_spiralstairstop","id":24074,"display":"Staircase","option":"Climb-down","op":1,"x":2960,"y":3339,"z":2,"to":[2959,3339,1],"anim":827,"animTick":1,"tick":2,"recordings":0,"source":"https://oldschool.runescape.wiki/w/While_Guthix_Sleeps/Quick_guide"},
     {"name":"fai_falador_castle_spiralstairs","id":24072,"display":"Staircase","option":"Climb-up","op":1,"x":2957,"y":3338,"z":2,"to":[2959,3339,3],"anim":828,"animTick":1,"tick":2,"recordings":0,"source":"https://oldschool.runescape.wiki/w/While_Guthix_Sleeps/Quick_guide"},
-    {"name":"fai_falador_castle_spiralstairstop","id":24074,"display":"Staircase","option":"Climb-down","op":1,"x":2958,"y":3338,"z":3,"to":[2959,3339,2],"anim":827,"animTick":1,"tick":2,"recordings":0,"source":"https://oldschool.runescape.wiki/w/While_Guthix_Sleeps/Quick_guide"}
+    {"name":"fai_falador_castle_spiralstairstop","id":24074,"display":"Staircase","option":"Climb-down","op":1,"x":2958,"y":3338,"z":3,"to":[2959,3339,2],"anim":827,"animTick":1,"tick":2,"recordings":0,"source":"https://oldschool.runescape.wiki/w/While_Guthix_Sleeps/Quick_guide"},
+    {"name":"fortis_wooden_spiralstairs_middle","id":52631,"display":"Staircase","option":"Climb-up","op":2,"x":1647,"y":3091,"z":1,"to":[1649,3091,2],"tick":1,"recordings":1,"source":"capture3128"},
+    {"name":"fortis_wooden_spiralstairs_middle","id":52631,"display":"Staircase","option":"Climb-down","op":3,"x":1647,"y":3091,"z":1,"to":[1646,3091,0],"tick":1,"recordings":1,"source":"capture3128"}
   ]
 }

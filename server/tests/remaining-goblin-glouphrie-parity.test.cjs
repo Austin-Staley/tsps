@@ -146,6 +146,7 @@ function player(overrides = {}) {
   const flags = new Set();
   const movementQueue = {
     points: [],
+    size() { return movementQueue.points.length; },
     reset() { movementQueue.points.length = 0; return movementQueue; },
     setBlockMovement(value) { p.blocked = value; return movementQueue; },
     addSteps(step) { movementQueue.points.length = 0; p.moveTo(step); return movementQueue; },
@@ -378,17 +379,33 @@ test('LOTG temple spawns and guard mail use the capture 1694 ids and tiles', () 
   });
   assert.equal(mailFor(N.GUARD_155, I.BLACK_GOBLIN_MAIL, 3733, 4320), false, 'white guard rejects black mail');
 
-  const passAt = (x, y, mail) => {
+  const passAt = (guard, x, y, mail) => {
     p.getEquipment = () => ({ get: () => ({ getId: () => mail }) });
     p.moveTo(new core.Location(x, y, 0));
-    npcInteraction(h, p, N.GUARD_155, 2, actions(['Talk-to', 'Pass']));
+    npcInteraction(h, p, guard, 2, actions(['Talk-to', 'Pass']));
     return [p.getLocation().getX(), p.getLocation().getY()];
   };
-  assert.deepEqual(passAt(3733, 4320, I.WHITE_GOBLIN_MAIL), [3731, 4320], 'accepted pass crosses the mouth');
-  assert.deepEqual(passAt(3733, 4320, I.BLACK_GOBLIN_MAIL), [3733, 4320], 'denied pass does not move');
-  assert.deepEqual(passAt(3731, 4320, I.WHITE_GOBLIN_MAIL), [3733, 4320], 'accepted exit crosses back');
-  assert.deepEqual(passAt(3731, 4320, I.BLACK_GOBLIN_MAIL), [3733, 4320], 'wrong mail exit is thrown out');
-  assert.equal(condition({ player: p, npcId: N.GUARD_155, stepId: 'uDN0yd' }), true);
+  const guardTos = [
+    [3731, 4320], [3734, 4330], [3754, 4330], [3757, 4320], [3754, 4310], [3734, 4310],
+  ];
+  guards.forEach(([guard], index) => {
+    const [fromX, fromY] = guardMouths[index];
+    const [toX, toY] = guardTos[index];
+    assert.deepEqual(passAt(guard, fromX, fromY, mails[index]), [toX, toY], `guard ${guard} pass in`);
+    assert.deepEqual(passAt(guard, toX, toY, mails[index]), [fromX, fromY], `guard ${guard} pass out`);
+    assert.equal(p.flags.has('movement:ignore-clipping'), false, 'scoped flag restored');
+  });
+  assert.deepEqual(passAt(N.GUARD_154, 3754, 4329, I.BLACK_GOBLIN_MAIL), [3752, 4328],
+    'actual cardinal guard approach reverses through the black mouth');
+  assert.deepEqual(passAt(N.GUARD_154, 3754, 4329, I.WHITE_GOBLIN_MAIL), [3752, 4328],
+    'wrong mail from the cardinal inside approach is thrown out');
+  assert.equal(condition({ player: p, npcId: N.GUARD_154, stepId: 'uDN0yd' }), true);
+  assert.deepEqual(passAt(N.GUARD_154, 3752, 4329, I.WHITE_GOBLIN_MAIL), [3752, 4329],
+    'wrong mail from the outside cardinal approach does not enter');
+  assert.deepEqual(passAt(N.GUARD_155, 3733, 4320, I.BLACK_GOBLIN_MAIL), [3733, 4320],
+    'denied entry does not move');
+  assert.deepEqual(passAt(N.GUARD_155, 3731, 4320, I.BLACK_GOBLIN_MAIL), [3733, 4320],
+    'wrong mail exit is thrown out');
   assert.equal(p.flags.has('movement:ignore-clipping'), false, 'scoped clipping flag is restored');
 
   const done = player();
@@ -402,6 +419,27 @@ test('LOTG temple spawns and guard mail use the capture 1694 ids and tiles', () 
   assert.deepEqual([done.getLocation().getX(), done.getLocation().getY()], [3731, 4320],
     'post-quest pass still crosses without progress');
   assert.equal(h.quest.getStage(done), 56);
+});
+
+test('LOTG guard pass restores scoped clipping on walk cancel and logout', () => {
+  const h = harness('LandOfTheGoblins');
+  const p = player();
+  h.quest.setStage(p, 34);
+  h.login(p);
+  p.getEquipment = () => ({ get: () => ({ getId: () => I.WHITE_GOBLIN_MAIL }) });
+  const pending = { size: () => 1, reset: () => pending, addSteps: noop, setBlockMovement: () => pending };
+  p.getMovementQueue = () => pending;
+  p.moveTo(new core.Location(3733, 4320, 0));
+  npcInteraction(h, p, N.GUARD_155, 2, actions(['Talk-to', 'Pass']));
+  assert.equal(p.flags.has('movement:ignore-clipping'), true, 'flag active while queue is pending');
+  for (const fn of h.hooks.onWalkRoute ?? []) fn({ player: p });
+  assert.equal(p.flags.has('movement:ignore-clipping'), false, 'walk cancel restores the flag');
+
+  p.moveTo(new core.Location(3733, 4320, 0));
+  npcInteraction(h, p, N.GUARD_155, 2, actions(['Talk-to', 'Pass']));
+  assert.equal(p.flags.has('movement:ignore-clipping'), true);
+  for (const fn of h.hooks.onPlayerLogout ?? []) fn({ player: p });
+  assert.equal(p.flags.has('movement:ignore-clipping'), false, 'logout restores the flag');
 });
 
 test('LOTG Bighead unlocks keys and the six keys open the crypt', () => {

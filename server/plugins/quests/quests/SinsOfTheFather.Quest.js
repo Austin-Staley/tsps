@@ -474,7 +474,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   const CARL_FOLLOW_FAIL_DISTANCE = 14;
   const CARL_VIEW_RANGE = 10;
   const CARL_LOOKBACK_TICKS = 15; // capture 1637: every look-back pauses for 15 ticks
-  const HIDEOUT_CRATE_OBJECT_ID = 17987; // "Crate" Search (silver sickle (b))
+  const HIDEOUT_CRATE_OBJECT_ID = 32575; // actual cache Crate, Search (Old Man Ral's base)
   const LAB_ESCAPE_GATE_ID = 37992; // "Gate" Escape (Kroy's lab)
   const SLEPE_ROWBOAT_OBJECT_ID = 32602; // cache "Row boat" Travel at Slepe
 
@@ -591,9 +591,12 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   const BRIDGE_TILE = { x: 3439, y: 3400, z: 0, rotation: 1 };
   const DEAD_TREE_TILE = { x: 3441, y: 3403, z: 0 };
   const ZOMBIE_TILE = { x: 3442, y: 3398, z: 0 };
+  // Capture 1637: player encounter start 2334,5005; 9612 add at (-2,+3) and
+  // 9613 add at (-6,+5).  Source post-vine corridor anchor 3438,3398 maps
+  // those to dry, melee-reachable 3436,3401 and 3432,3403 (old tiles were water).
   const TREK_NAIL_TILES = [
-    { x: 3433, y: 3398, z: 0 },
-    { x: 3431, y: 3396, z: 0 },
+    { x: 3436, y: 3401, z: 0 },
+    { x: 3432, y: 3403, z: 0 },
   ];
   const TREK_JUVI_TILES = [
     { x: 3426, y: 3390, z: 0 },
@@ -1324,13 +1327,19 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     }
     if (stage >= STAGE_ESCORT && stage < STAGE_ESCORT_DONE) {
       if (!hasBit(player, BIT_TREK)) {
-        syncPersonalObject(player, TREK_TREE_TILE, SWAMP_VINES_OBJECT_ID);
+        // Once the captured long vine exists, the tree offers Swing-from directly.
+        // Before that the small-vines Cut-vine object is the only interaction.
+        syncPersonalObject(
+          player,
+          TREK_TREE_TILE,
+          held(player, LONG_VINE_ITEM_ID) ? SWAMP_TREE_OBJECT_ID : SWAMP_VINES_OBJECT_ID,
+        );
         syncPersonalObject(player, TREK_RUCKSACK_TILE, SWAMP_RUCKSACK_OBJECT_ID);
       } else {
         syncPersonalObject(player, TREK_TREE_TILE, SWAMP_TREE_OBJECT_ID);
       }
       const repairs = bridgeRepairs(player);
-      syncPersonalObject(player, BRIDGE_TILE, repairs === 0 ? null : BRIDGE_OBJECT_IDS[repairs], 22, BRIDGE_TILE.rotation);
+      syncPersonalObject(player, BRIDGE_TILE, BRIDGE_OBJECT_IDS[repairs], 22, BRIDGE_TILE.rotation);
       if (field(player, NAIL_SHIFT) >= 2 && repairs < 3) {
         syncPersonalObject(player, DEAD_TREE_TILE, DEAD_TREE_OBJECT_ID);
       } else {
@@ -3056,6 +3065,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
       event.handled = true;
       if (!held(player, SILVER_SICKLE_BLESSED_ITEM_ID)) {
         give(player, SILVER_SICKLE_BLESSED_ITEM_ID, 1);
+        player.sendMessage("You find a silver sickle (b).");
       }
       return;
     }
@@ -3355,6 +3365,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
       player.getInventory().deleteNumber(SHORT_VINE_ITEM_ID, 3);
       give(player, LONG_VINE_ITEM_ID, 1);
       player.sendMessage("You twist the vines together to make a long vine.");
+      syncQuestObjects(player);
       return;
     }
     if (pair.has(RUBY_ITEM_ID) && pair.has(SILVER_SICKLE_BLESSED_ITEM_ID)) {

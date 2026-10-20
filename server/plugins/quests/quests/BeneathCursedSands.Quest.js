@@ -267,6 +267,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
   const KEY_URN = ObjectIdentifiers.URN_44; // 43981
   const LILY = ObjectIdentifiers.LILY; // 43984, lily present
   const LILY_PICKED = ObjectIdentifiers.LILY_3; // 43986, already picked
+  const LILY_PLACED = 44593; // placed map loc; cache transforms it to 43984 at stage 76
   const STEPPING_STONE = ObjectIdentifiers.STEPPING_STONE_48; // 43988
   const CHEMISTRY_TABLE = ObjectIdentifiers.CHEMISTRY_TABLE_3; // 43991
   const PILLAR_INTERFACE = 750;
@@ -1605,7 +1606,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
       startTranscript(api, player, MAISA_CAMP, PAGE, "the-ruins-of-ullek-searching-the-urn-by-mehhar");
       return;
     }
-    if (objectId === LILY) {
+    if (objectId === LILY || objectId === LILY_PLACED) {
       event.handled = true;
       pickLily(player);
       return;
@@ -1787,6 +1788,53 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
       request.handled = true;
       if (stage >= STAGE_UPPER_OPEN) enterChampionArena(player);
       else openUpperDoor(player, location);
+    }
+  }
+
+  /**
+   * Captured River Elid cross: the stone and the island lily are clicked from the bank,
+   * not walked onto. Allow those two clicks in place so the normal object action runs.
+   */
+  const STEPPING_STONE_TILE = new Location(3353, 2923, 0);
+  const LILY_TILE = new Location(3353, 2927, 0);
+
+  function atObjectTile(event, tile) {
+    const at = event.object?.getLocation?.() ?? event.object?.location;
+    if (!at) return false;
+    return (
+      (at.getX?.() ?? at.x) === tile.getX() &&
+      (at.getY?.() ?? at.y) === tile.getY() &&
+      (at.getZ?.() ?? at.z) === tile.getZ()
+    );
+  }
+
+  function clickedOption(event, wanted) {
+    const definition = event.definition ?? api.core.CacheDefinitions?.getObject?.(event.objectId);
+    const actions = definition?.getInteractions?.() ?? definition?.actions ?? [];
+    return String(actions[event.clickType - 1] ?? "").toLowerCase() === wanted;
+  }
+
+  function routeSteppingStones(event) {
+    const { player, objectId } = event ?? {};
+    if (!player) return;
+    if (quest.getStage(player) < STAGE_LILY_HUNT) return;
+    const at = player.getLocation?.();
+    if (!at || at.getZ?.() !== 0) return;
+    const x = at.getX();
+    const y = at.getY();
+    if (objectId === STEPPING_STONE) {
+      if (!atObjectTile(event, STEPPING_STONE_TILE) || !clickedOption(event, "cross")) return;
+      // Captured click tile 3353,2921 plus the immediate 2-tile bank approaches only.
+      if (x < 3351 || x > 3355 || y < 2919 || y > 2921) return;
+      if (Math.max(Math.abs(x - 3353), Math.abs(y - 2923)) > 2) return;
+      event.destination = { x, y, z: 0 };
+      return;
+    }
+    if (objectId === LILY || objectId === LILY_PLACED) {
+      if (!atObjectTile(event, LILY_TILE) || !clickedOption(event, "pick")) return;
+      // The scripted Roger landing 3353,2926 and its adjacent island tiles only.
+      if (Math.max(Math.abs(x - 3353), Math.abs(y - 2927)) > 1) return;
+      event.destination = { x, y, z: 0 };
     }
   }
 
@@ -2052,6 +2100,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     onReward: grantReward,
   });
 
+  api.onObjectRoute(routeSteppingStones);
   api.onNpcInteraction((event) => {
     if (!event?.player || !BCS_NECROPOLIS_CITIZEN_IDS.has(event.npcId)) return;
     const definition = event.definition ?? api.core.NpcDefinition.forId(event.npcId);

@@ -382,6 +382,26 @@ test('The Final Dawn safehouse dog accepts the real alert content id 14237', () 
   }
 });
 
+test('The Final Dawn top stair claims through real Ladders/LocTeleports', () => {
+  RegionManager.init();
+  RegionManager.loadMapFiles(1647, 3091, true);
+  const middle = MapObjects.get(52631, new core.Location(1647, 3091, 1), null);
+  assert.ok(middle, 'real middle staircase exists');
+  const h = harness('TheFinalDawn'), p = player();
+  require('../plugins/world/LocTeleports.plugin').register(h.api);
+  require('../plugins/objects/Ladders.plugin').register(h.api);
+  p.moveTo(new core.Location(1646, 3091, 1));
+  const event = clickType => ({ player: p, objectId: 52631, clickType, object: middle,
+    definition: { getName: () => 'Staircase' }, handled: false });
+  h.namedObjects.get('Staircase')['Climb-up'](event(2));
+  h.tick(4);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1649, 3091, 2]);
+  p.moveTo(new core.Location(1646, 3091, 1));
+  h.namedObjects.get('Staircase')['Climb-down'](event(3));
+  h.tick(4);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1646, 3091, 0]);
+});
+
 test('The Final Dawn safehouse door is owner-scoped and clears both stair routes', () => {
   RegionManager.init();
   RegionManager.loadMapFiles(1649, 3093, true);
@@ -474,6 +494,11 @@ test('The Final Dawn safehouse stairs advance 18 to 19 on the normal Ladders cli
   RegionManager.loadMapFiles(1647, 3091, true);
   const bottom = MapObjects.get(52630, new core.Location(1647, 3091, 0), null);
   assert.ok(bottom, 'real bottom staircase exists');
+  const locs = require('../plugins/world/data/loc-teleports.json').locs;
+  const top = locs.find(entry => entry.id === 52631 && entry.z === 1 && entry.op === 2);
+  const down = locs.find(entry => entry.id === 52631 && entry.z === 1 && entry.op === 3);
+  assert.deepEqual(top?.to, [1649, 3091, 2], 'captured top landing');
+  assert.deepEqual(down?.to, [1646, 3091, 0], 'captured middle descent');
   const h = harness('TheFinalDawn'), p = player();
   require('../plugins/objects/Ladders.plugin').register(h.api);
   p.moveTo(new core.Location(1646, 3091, 0));

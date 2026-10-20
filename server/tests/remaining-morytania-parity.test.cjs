@@ -23,7 +23,7 @@ before(async () => {
   CacheRegionManager.init();
 });
 
-function harness(name, page = null) {
+function harness(name, page = null, options = {}) {
   const hooks = {}, events = {}, tasks = [], npcs = [], removed = [], objects = [], deregistered = [], worldPlayers = [], areas = [], namedNpcs = new Map(), namedObjects = new Map();
   const api = new Proxy({
     core: {
@@ -33,8 +33,8 @@ function harness(name, page = null) {
         submit(task) { task.setRunning(true); tasks.push(task); },
         cancelTasks(key) { tasks.filter(task => task.key === key).forEach(task => task.stop()); },
       },
-      MapObjects: { get: () => null },
-      ObjectManager: {
+      MapObjects: options.realObjects ? core.MapObjects : { get: () => null },
+      ObjectManager: options.realObjects ? core.ObjectManager : {
         register(object) { if (!objects.includes(object)) objects.push(object); },
         deregister(object) { deregistered.push(object); const index = objects.indexOf(object); if (index >= 0) objects.splice(index, 1); },
       },
@@ -465,6 +465,170 @@ test('Sins trek requires the vine, axe, logs, three bridge repairs and crossing 
   object(13837);
   assert.equal(p.attrs.get('quest.sins_of_the_father.bits') & (1 << 15), 1 << 15);
   assert.ok(h.npcs.some(n => [9614, 9615].includes(n.getId()) && !n.removed), 'crossing spawns the juvinates');
+});
+
+test('Sins long vine installs the real Swamp tree branch and normal Swing-from crosses', () => {
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const { MapObjects } = core;
+  const ObjectManager = core.ObjectManager;
+  ObjectDefinition.init();
+  CacheRegionManager.loadMapFiles(3442, 3408, true);
+  const tile = new core.Location(3442, 3408, 0);
+  const ownedIds = p => ObjectManager.objectsAt(tile)
+    .filter(object => object.getOwner() === p)
+    .map(object => object.getId());
+  const swing = (h, p, handled = false) => {
+    const event = { player: p, objectId: 38005, location: { x: 3442, y: 3408, z: 0 }, handled };
+    h.hooks.onObjectInteraction.at(-1)(event);
+    return event;
+  };
+
+  // Positive: stage 36 with the long vine already held on login.
+  const h = harness('SinsOfTheFather', null, { realObjects: true }), p = player();
+  p.moveTo(new core.Location(3444, 3411, 0));
+  p.items.set(7777, 1);
+  h.quest.setStage(p, 36);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.ok(ownedIds(p).includes(38005), 'stage36 + long vine installs real 38005 Swamp tree branch');
+  assert.ok(!ownedIds(p).includes(13847), 'the Cut-vine object is replaced, not layered');
+  const event = swing(h, p);
+  assert.equal(event.handled, true, 'normal Swing-from object interaction handles the branch');
+  assert.equal(p.attrs.get('quest.sins_of_the_father.bits') & (1 << 13), 1 << 13, 'Swing-from sets BIT_TREK');
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3437, 3402], 'Swing-from crosses to the captured trek tile');
+  assert.equal(p.items.get(7777), 1, 'crossing does not duplicate or consume the long vine');
+  assert.equal(h.quest.getStage(p), 36, 'the crossing does not grant a target stage');
+
+  // Combining three short vines must sync the tree immediately.
+  const c = harness('SinsOfTheFather', null, { realObjects: true }), q = player();
+  q.moveTo(new core.Location(3444, 3411, 0));
+  q.items.set(7778, 3);
+  c.quest.setStage(q, 36);
+  c.hooks.onPlayerLogin[0]({ player: q });
+  assert.ok(ownedIds(q).includes(13847), 'short-vine stage shows the Cut-vine object first');
+  c.hooks.onItemOnItem[0]({ player: q, usedItemId: 7778, usedWithItemId: 7778 });
+  assert.equal(q.items.get(7777), 1, 'combine yields exactly one long vine');
+  assert.equal(q.items.get(7778), 0, 'combine consumes all three short vines');
+  assert.ok(ownedIds(q).includes(38005), 'combine syncs the real Swing-from branch at once');
+  assert.ok(!ownedIds(q).includes(13847), 'combine removes the Cut-vine object');
+
+  // Negative: no long vine.
+  const n = harness('SinsOfTheFather', null, { realObjects: true }), r = player();
+  r.moveTo(new core.Location(3444, 3411, 0));
+  n.quest.setStage(r, 36);
+  n.hooks.onPlayerLogin[0]({ player: r });
+  assert.ok(ownedIds(r).includes(13847), 'without the long vine the Cut-vine object stays');
+  assert.ok(!ownedIds(r).includes(38005), 'without the long vine there is no Swing-from branch');
+  const noVine = swing(n, r);
+  assert.equal(noVine.handled, true, 'the no-vine branch option is still a normal handled interaction');
+  assert.equal(r.attrs.get('quest.sins_of_the_father.bits') & (1 << 13), 0, 'no vine never sets BIT_TREK');
+  assert.deepEqual([r.getLocation().getX(), r.getLocation().getY()], [3444, 3411], 'no vine does not cross');
+
+  // Negative: long vine but wrong stage.
+  const w = harness('SinsOfTheFather', null, { realObjects: true }), v = player();
+  v.moveTo(new core.Location(3444, 3411, 0));
+  v.items.set(7777, 1);
+  w.quest.setStage(v, 34);
+  w.hooks.onPlayerLogin[0]({ player: v });
+  assert.ok(!ownedIds(v).includes(38005), 'pre-escort stage does not install the branch');
+  const wrongStage = swing(w, v);
+  assert.equal(wrongStage.handled, false, 'wrong-stage branch is not handled');
+  assert.equal(v.attrs.get('quest.sins_of_the_father.bits') & (1 << 13), 0, 'wrong stage never sets BIT_TREK');
+});
+
+test('Sins trek nail spawns and broken bridge use real walkable cache hooks', () => {
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const { MapObjects } = core;
+  const ObjectManager = core.ObjectManager;
+  ObjectDefinition.init();
+  CacheRegionManager.loadMapFiles(3439, 3400, true);
+  const h = harness('SinsOfTheFather', null, { realObjects: true }), p = player();
+  p.moveTo(new core.Location(3444, 3411, 0));
+  p.items.set(7777, 1);
+  h.quest.setStage(p, 36);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  const swing = { player: p, objectId: 38005, location: { x: 3442, y: 3408, z: 0 }, handled: false };
+  h.hooks.onObjectInteraction.at(-1)(swing);
+  assert.equal(swing.handled, true);
+
+  // Capture 1637 adds: 9612 at player(-2,+3), 9613 at (-6,+5), both melee land tiles.
+  const nails = [9612, 9613].map(id => h.npcs.find(npc => npc.getId() === id && !npc.removed));
+  assert.ok(nails.every(Boolean), 'both nail beasts spawn');
+  assert.deepEqual(nails.map(npc => [npc.getLocation().getX(), npc.getLocation().getY()]),
+    [[3436, 3401], [3432, 3403]], 'nail spawns use the capture-relative walkable tiles');
+  const walk = (x, y) => !CacheRegionManager.blocked(new core.Location(x, y, 0), null)
+    && !CacheRegionManager.isWater(new core.Location(x, y, 0));
+  const can = (from, to) => CacheRegionManager.canMove(from[0], from[1], to[0], to[1], 0, 1, 1, null) !== false;
+  for (const npc of nails) {
+    const tile = [npc.getLocation().getX(), npc.getLocation().getY()];
+    assert.equal(walk(...tile), true, `nail tile ${tile} is dry walkable land`);
+    const queue = [[3437, 3402]], seen = new Set(['3437,3402']);
+    let reachable = false;
+    for (let i = 0; i < queue.length && !reachable; i++) {
+      const current = queue[i];
+      if (Math.max(Math.abs(current[0] - tile[0]), Math.abs(current[1] - tile[1])) <= 1) { reachable = true; break; }
+      for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1],[-1,-1],[-1,1],[1,-1],[1,1]]) {
+        const next = [current[0] + dx, current[1] + dy], key = next.join(',');
+        if (seen.has(key) || !walk(...next) || !can(current, next)) continue;
+        seen.add(key); queue.push(next);
+      }
+    }
+    assert.equal(reachable, true, `melee route reaches nail ${tile} from the post-vine landing`);
+  }
+
+  for (const npc of nails) h.hooks.onNpcDeath[0]({ npc, npcId: npc.getId(), killer: p });
+  assert.equal((p.attrs.get('quest.sins_of_the_father.bits') >> 16) & 3, 2, 'both real nail kills reach NAIL_SHIFT 2');
+  const bridgeIds = () => ObjectManager.objectsAt(new core.Location(3439, 3400, 0))
+    .filter(object => object.getOwner() === p).map(object => object.getId());
+  assert.deepEqual(bridgeIds(), [13834], 'zero-repair bridge installs real Broken bridge 13834');
+
+  p.items.set(1351, 1); p.items.set(1511, 3);
+  const useBridge = id => {
+    const event = { player: p, objectId: id, location: { x: 3439, y: 3400, z: 0 }, handled: false };
+    h.hooks.onObjectInteraction.at(-1)(event);
+    return event;
+  };
+  assert.equal(useBridge(13834).handled, true);
+  assert.equal(p.attrs.get('sins-of-the-father:bridge-repairs'), 1);
+  assert.deepEqual(bridgeIds(), [13835], 'first log swaps to the next real bridge id');
+  assert.equal(useBridge(13835).handled, true);
+  assert.deepEqual(bridgeIds(), [13836]);
+  assert.equal(useBridge(13836).handled, true);
+  assert.deepEqual(bridgeIds(), [13837]);
+  assert.equal(p.items.get(1511), 0, 'three repairs consume exactly three logs');
+  assert.equal(useBridge(13837).handled, true);
+  assert.equal(p.attrs.get('quest.sins_of_the_father.bits') & (1 << 15), 1 << 15, 'normal Cross sets BIT_BRIDGE');
+  assert.ok(h.npcs.some(npc => [9614, 9615].includes(npc.getId()) && !npc.removed), 'crossing spawns the juvinates');
+});
+
+test('Sins hideout silver-sickle crate uses the real cache 32575 Search handler', () => {
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const { MapObjects } = core;
+  ObjectDefinition.init();
+  CacheRegionManager.loadMapFiles(3597, 9615, true);
+  const crateTile = new core.Location(3597, 9615, 0);
+  assert.equal(MapObjects.get(32575, crateTile, null)?.getId(), 32575, 'real cache places Crate 32575 at 3597,9615');
+  assert.equal(MapObjects.get(17987, crateTile, null), null, 'wrong crate 17987 is not at the hideout tile');
+  assert.ok((ObjectDefinition.forId(32575)?.getInteractions?.() || []).includes('Search'), '32575 exposes normal Search');
+
+  const h = harness('SinsOfTheFather'), p = player();
+  h.quest.setStage(p, 114);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  const search = { player: p, objectId: 32575, location: { x: 3597, y: 9615, z: 0 }, handled: false };
+  h.hooks.onObjectInteraction.at(-1)(search);
+  assert.equal(search.handled, true);
+  assert.equal(p.items.get(2963), 1, 'normal Search gives exactly one silver sickle (b)');
+  assert.ok(p.messages.some(text => text.includes('silver sickle (b)')), 'capture-style Search message');
+  const again = { player: p, objectId: 32575, location: { x: 3597, y: 9615, z: 0 }, handled: false };
+  h.hooks.onObjectInteraction.at(-1)(again);
+  assert.equal(p.items.get(2963), 1, 'searching again never duplicates the sickle');
+
+  const low = harness('SinsOfTheFather'), q = player();
+  low.quest.setStage(q, 113);
+  low.hooks.onPlayerLogin[0]({ player: q });
+  const early = { player: q, objectId: 32575, location: { x: 3597, y: 9615, z: 0 }, handled: false };
+  low.hooks.onObjectInteraction.at(-1)(early);
+  assert.equal(early.handled, false, 'pre-logs crate is not handled');
+  assert.equal(q.items.get(2963) ?? 0, 0, 'pre-logs crate grants nothing');
 });
 
 test('Sins Vanstrom enrages at zero hp, heals to 200, uses lightning, then dies once', () => {

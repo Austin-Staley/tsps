@@ -247,7 +247,6 @@ module.exports = function registerRedReefQuest(api) {
 
   // Action/message step ids (research pack).
   const GIVE_DIVING_GEAR_ACTION_IDS = new Set(["Wq1UDW", "pHjCEB"]);
-  const DREDGER_REPAIRED_ACTION_ID = "XpLPqf";
   const REPAIR_DREDGER_MESSAGE_ID = "A1Ua7w";
   const SURFACE_RETURN_MESSAGE_ID = "NpiI3y";
   const SHIPS_SUNK_MESSAGE_ID = "58k-ri";
@@ -270,11 +269,13 @@ module.exports = function registerRedReefQuest(api) {
   const FLOOPA_GROVE_TILE = { x: 3194, y: 2490, z: 0 };
   const FLOOPA_HOUSE_TILE = { x: 3186, y: 2405, z: 0 };
   const SPENCER_SURFACE_TILE = { x: 2878, y: 2505, z: 0 };
-  const SPENCER_DIVING_A_TILE = { x: 2837, y: 8922, z: 1 };
+  // Capture 4152: the dive teleports the player to 2837,8922 and the visible diving Spencer
+  // (15018 -> multinpc 15020) is added at 2836,8922 only for the stage 30->32 transition; it is
+  // deleted the tick trr becomes 32. The first repair is the object click, not a Spencer talk.
   const SPENCER_DIVING_B_TILE = { x: 2857, y: 8915, z: 1 };
-  const SEABED_DIVE_TILE = { x: 2836, y: 8922, z: 1 };
-  const BETHEL_TILE = { x: 2862, y: 2323, z: 2 };
-  const LOBSTER_TILE = { x: 2841, y: 8946, z: 1 };
+  const SEABED_DIVE_TILE = { x: 2837, y: 8922, z: 1 };
+  const BETHEL_TILE = { x: 2865, y: 2324, z: 2 }; // captured add 15025, open tile
+  const LOBSTER_TILE = { x: 2847, y: 8938, z: 1 }; // captured add 15034, reachable
   // Walkable (object-free) tiles on the Last Light isle from the loc dump.
   // The last two tiles are the primary capture's trr_pirate adds (RedReefDiscord ticks
   // 626-1246), replacing the old QH points 2847,2326 (water) and 2855,2333 (ocean-clipped);
@@ -541,10 +542,10 @@ module.exports = function registerRedReefQuest(api) {
     syncZenith(player, stage);
     const zenith = ownedShips(player).get(ZENITH_SHIP_ID);
 
+    // The stage-30 diving Spencer (15018/15020) is a transition add that the capture deletes
+    // when trr becomes 32; stage 32 is repaired by the object click, so spawn no A NPC here.
     let spencer = null;
-    if (stage >= STAGE_DIVING && stage < STAGE_DREDGER_AGAIN) {
-      spencer = { id: SPENCER_DIVING_A_NPC_ID, ...SPENCER_DIVING_A_TILE };
-    } else if (stage >= STAGE_DREDGER_AGAIN && stage < STAGE_SURFACE_PLAN) {
+    if (stage >= STAGE_DREDGER_AGAIN && stage < STAGE_SURFACE_PLAN) {
       spencer = { id: SPENCER_DIVING_B_NPC_ID, ...SPENCER_DIVING_B_TILE };
     }
     syncSpawn(player, state, "spencer", spencer);
@@ -824,13 +825,6 @@ module.exports = function registerRedReefQuest(api) {
       }
       return;
     }
-    if (stepId === DREDGER_REPAIRED_ACTION_ID) {
-      if (npcId !== SPENCER_BRENTWOOD_NPC_ID && npcId !== SPENCER_DIVING_A_NPC_ID
-        && npcId !== SPENCER_DIVING_B_NPC_ID) return;
-      if (quest.getStage(player) !== STAGE_DIVING) return;
-      spawnLobster(player);
-      return;
-    }
     if (stepId === REPAIR_DREDGER_MESSAGE_ID) {
       if (quest.getStage(player) !== STAGE_DREDGER_AGAIN) return;
       const state = questSpawns.get(player);
@@ -966,6 +960,11 @@ module.exports = function registerRedReefQuest(api) {
     event.handled = true;
     const stage = quest.getStage(player);
     if (stage < STAGE_DIVING || stage > STAGE_DREDGER_AGAIN) return;
+    if (stage === STAGE_DIVING) {
+      player.sendMessage("A giant lobster attacks you!");
+      spawnLobster(player);
+      return;
+    }
     startTranscript(api, player, SPENCER_BRENTWOOD_NPC_ID, PAGE, REPAIR_DREDGER_VARIANT);
   }
 

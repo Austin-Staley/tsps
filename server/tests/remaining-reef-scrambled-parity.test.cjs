@@ -309,6 +309,12 @@ test('Red Reef receptionist, displays and Paxton follow 14/16/18 and the pirate 
   assert.equal(h.quest.getStage(p), 24);
   const bethel = h.npcs.find(npc => npc.id === N.BLACK_EYE_BETHEL && !npc.removed);
   assert.ok(bethel);
+  assert.deepEqual([bethel.x, bethel.y, bethel.z], [2865, 2324, 2], 'captured Bethel add tile');
+  if (RegionManager.regions.size === 0) RegionManager.init();
+  assert.equal(RegionManager.getClipping(2865, 2324, 2, null) & 0x200000, 0,
+    'captured Bethel tile is walkable (old 2862,2323 was blocked)');
+  assert.equal(RegionManager.getClipping(2865, 2325, 2, null) & 0x200000, 0,
+    'a cardinal melee neighbour of Bethel is walkable');
   h.hooks.onNpcDeath[0]({ npc: bethel, killer: p });
   assert.equal(h.quest.getStage(p), 26);
 });
@@ -326,20 +332,10 @@ test('Red Reef diving route reaches 42 through lobster, dredger messages and the
   h.continueToMenu(p);
   h.choose(p, "Let's go.");
   assert.equal(h.quest.getStage(p), 32);
-  assert.equal(p.getLocation().getX(), 2836);
-  // The captured XpLPqf action is in the diving-Spencer transcript (content id 15020),
-  // not the base Spencer/repair-object id.
-  h.talk(p, 15020);
-  for (let i = 0; i < 40 && !h.npcs.some(npc => npc.id === N.GIANT_LOBSTER_4 && !npc.removed); i++) {
-    if (p.manager.getCurrent()) p.manager.advance(); else break;
-  }
-  const lobster = h.npcs.find(npc => npc.id === N.GIANT_LOBSTER_4 && !npc.removed);
-  assert.ok(lobster, 'the real diving-Spencer transcript spawns the lobster');
-  h.action(p, 15020, 'XpLPqf');
-  assert.equal(h.npcs.filter(npc => npc.id === N.GIANT_LOBSTER_4 && !npc.removed).length, 1,
-    'replaying the action at stage 32 does not duplicate the lobster');
-  h.hooks.onNpcDeath[0]({ npc: lobster, killer: p });
-  assert.equal(h.quest.getStage(p), 34);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [2837, 8922],
+    'the dive lands on the captured player tile');
+  assert.equal(h.npcs.some(npc => [15018, 15020].includes(npc.id) && !npc.removed), false,
+    'the stage-30 diving Spencer is not a stage-32 talk fallback');
 
   // The repair object is the raw placed parent 58497; its current definition is 58500.
   if (RegionManager.regions.size === 0) RegionManager.init();
@@ -347,14 +343,27 @@ test('Red Reef diving route reaches 42 through lobster, dredger messages and the
   assert.ok(dredger, 'the raw placed dredger exists');
   const dredgerDefinition = core.ObjectDefinition.forPlayer(dredger.getId(), p);
   assert.equal(dredgerDefinition?.id, 58500, 'the placed parent resolves to the repair child');
+  // The stage-32 object click, not a Spencer talk, is the canonical first repair.
+  h.hooks.onObjectInteraction[0]({ player: p, object: dredger, objectId: dredger.getId(),
+    definition: dredgerDefinition, location: { x: 2844, y: 8942, z: 1 }, handled: false });
+  const lobster = h.npcs.find(npc => npc.id === N.GIANT_LOBSTER_4 && !npc.removed);
+  assert.ok(lobster, 'the stage-32 repair click spawns the giant lobster');
+  assert.deepEqual([lobster.x, lobster.y, lobster.z], [2847, 8938, 1], 'captured lobster add tile');
+  assert.equal(RegionManager.getClipping(2847, 8938, 1, null) & 0x200000, 0,
+    'captured lobster tile is reachable (old 2841,8946 was blocked)');
+  h.action(p, 15020, 'XpLPqf');
+  assert.equal(h.npcs.filter(npc => npc.id === N.GIANT_LOBSTER_4 && !npc.removed).length, 1,
+    'the deck XpLPqf message cannot spawn a second lobster');
+  h.hooks.onNpcDeath[0]({ npc: lobster, killer: p });
+  assert.equal(h.quest.getStage(p), 34);
+
   h.hooks.onObjectInteraction[0]({ player: p, object: dredger, objectId: dredger.getId(),
     definition: dredgerDefinition, location: { x: 2844, y: 8942, z: 1 }, handled: false });
   for (let i = 0; i < 20 && h.quest.getStage(p) === 34; i++) {
     if (p.manager.getCurrent()) p.manager.advance(); else break;
   }
-  assert.equal(h.quest.getStage(p), 36, 'the raw parent repair finishes through its real message transcript');
+  assert.equal(h.quest.getStage(p), 36, 'the second repair finishes through its real message transcript');
   h.action(p, 15020, 'NpiI3y');
-  h.action(p, 15018, 'NpiI3y');
   assert.equal(h.quest.getStage(p), 38);
   h.line(p, N.SPENCER_BRENTWOOD, "Thank you. I'd best be on my way.");
   assert.equal(h.quest.getStage(p), 40);

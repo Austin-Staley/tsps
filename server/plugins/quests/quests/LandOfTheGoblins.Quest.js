@@ -674,7 +674,7 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
   function pollGuardPass(player, token, ticks) {
     if (guardPassMoves.get(player)?.token !== token) return;
     const queue = player.getMovementQueue();
-    if (queue.points?.length === 0 || ticks <= 0) {
+    if (queue.size() === 0 || ticks <= 0) {
       finishGuardPass(player);
       return;
     }
@@ -1258,8 +1258,12 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
     if (tribe === undefined) return;
     const pass = TRIBE_GUARD_PASS[tribe];
     const location = player.getLocation();
+    if (location.getZ() !== 0) return;
     const at = (tile) =>
-      location.getX() === tile.x && location.getY() === tile.y && location.getZ() === 0;
+      location.getX() === tile.x && location.getY() === tile.y;
+    const guard = TRIBE_GUARD_TILES[tribe];
+    const adjacent =
+      Math.max(Math.abs(location.getX() - guard.x), Math.abs(location.getY() - guard.y)) <= 1;
     const fromDistance = Math.abs(location.getX() - pass.from.x) + Math.abs(location.getY() - pass.from.y);
     const toDistance = Math.abs(location.getX() - pass.to.x) + Math.abs(location.getY() - pass.to.y);
     const leaving = !at(pass.from) && toDistance < fromDistance;
@@ -1267,8 +1271,9 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
     enclaveTribe.set(player, { tribe, leaving });
     startTranscript(api, player, npcId, PAGE, "the-temple-of-tribes-talking-to-enclave-guards");
     if (correct) {
-      if (at(pass.from)) walkGuardPass(player, pass.to);
-      else if (at(pass.to)) walkGuardPass(player, pass.from);
+      // Npc interaction may have auto-pathed to a cardinal guard tile, not the exact
+      // captured mouth tile, so cross from any valid adjacent approach.
+      if (adjacent) walkGuardPass(player, leaving ? pass.from : pass.to);
     } else if (leaving) {
       // Captured throw-out (1694): player is moved back to the hall-side mouth.
       player.moveTo(new Location(pass.from.x, pass.from.y, 0));
