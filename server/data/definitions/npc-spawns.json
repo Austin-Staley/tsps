@@ -7208,7 +7208,7 @@
   {"level":0,"name":"Dark warrior","x":3548,"y":6139,"id":531},
   {"level":0,"name":"Dark warrior","x":3555,"y":6139,"id":531},
   {"level":0,"name":"Dark warrior","x":3562,"y":6137,"id":531},
-  {"level":0,"name":"Sarachnis","x":1840,"y":9900,"id":8713},
+  {"level":0,"name":"Sarachnis","x":1840,"y":9900,"id":8713,"wanderRadius":5},
   {"level":0,"name":"Ice spider","x":3593,"y":10217,"id":3022},
   {"level":0,"name":"Long-tailed Wyvern","x":3596,"y":10195,"id":7792},
   {"level":0,"name":"Long-tailed Wyvern","x":3599,"y":10186,"id":7792},
