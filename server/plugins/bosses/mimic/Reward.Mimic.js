@@ -25,11 +25,19 @@ const Shared = require("./Shared.Mimic");
 const Lair = require("./Lair.Mimic");
 
 const DEFEATED_ATTRIBUTE = "mimic:defeated";
-/** Elite origin throughout (rolls and tables); master waits on origin tracking. */
-const ROLLS_PER_CHEST = 5;
-/** Elite consumable max quantities for attempt-scaled tiers: floor(max * R / 5). */
-const TIER_MAX = { 560: 600, 565: 500, 207: 25, 245: 25, 389: 15 };
-/** Clue casket loot window (Near-Reality's ClueRewardInterface group). */
+/** Elite consumable max quantities for attempt-scaled tiers: floor(max * R / 5).
+ * Maxima mirror the_mimic entries in npc-drops.json (the canonical table data). */
+function tierMax() {
+  const { ItemIdentifiers: I } = Shared.core();
+  return new Map([
+    [I.DEATH_RUNE, 600],
+    [I.BLOOD_RUNE, 500],
+    [I.GRIMY_RANARR_WEED, 25],
+    [I.WINE_OF_ZAMORAK, 25],
+    [I.RAW_MANTA_RAY, 15],
+  ]);
+}
+/** Clue casket loot window (group 73, item grid on child 3; verified in cache). */
 const LOOT_INTERFACE = 73;
 const LOOT_GRID_UID = (73 << 16) | 3;
 /** Script 1065 populates inventory container 141 (Barrows' pattern). */
@@ -103,8 +111,8 @@ function openMimic(event) {
     pluginApi?.emitCustomEvent("npc-drops:extra-rolls", { player, npc: null, npcId: Shared.ids().BOSS, rolls: rolls - 1, drops });
   }
   for (const drop of drops) {
-    const max = TIER_MAX[drop.itemId];
-    if (max != null) drop.amount = Math.max(1, Math.floor((max * rolls) / ROLLS_PER_CHEST));
+    const max = tierMax().get(drop.itemId);
+    if (max != null) drop.amount = Math.max(1, Math.floor((max * rolls) / Shared.FRESH_ROLLS));
   }
   const stacks = give(player, drops);
   const first = drops.find((drop) => drop.itemId !== PLANK) ?? drops[0];
@@ -128,24 +136,14 @@ function onDropsGenerated(event) {
   player.setAttribute?.(DEFEATED_ATTRIBUTE, true);
 }
 
-/** Dying with the fight on costs a roll; with the boss dead it is free. */
-function onDeath(event) {
-  const { player } = event ?? {};
-  if (!player) return;
-  const area = player.getArea?.();
-  const session = area ? Lair.sessionOf(area) : null;
-  if (!session) return;
-  if (session.owner && player !== session.owner && player.getAsPlayer?.() !== session.owner) return;
-  if (session.boss && Shared.alive(session.boss)) Shared.spendRoll(player);
-}
-
+/** Dying is observed through postLeave (the respawn leaves the arena), which
+ * spends the roll there; no hook here, so a death can never cost twice. */
 function attach(api) {
   pluginApi = api;
   api.persistAttribute(DEFEATED_ATTRIBUTE, false);
   api.persistAttribute(Shared.ROLLS_ATTRIBUTE, Shared.FRESH_ROLLS);
   api.onItemAction("Mimic", { Open: openMimic });
   api.onCustomEvent("npc-drops:generated", onDropsGenerated);
-  api.onPlayerDeath(onDeath);
 }
 
-module.exports = { attach, openMimic, onDropsGenerated, onDeath, DEFEATED_ATTRIBUTE };
+module.exports = { attach, openMimic, onDropsGenerated, DEFEATED_ATTRIBUTE };

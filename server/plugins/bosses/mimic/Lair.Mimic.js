@@ -84,9 +84,18 @@ function areaClass() {
       }
     }
 
-    /** Leaving, dying or logging out ends the fight and cleans up. */
+    /**
+     * The owner leaving with the fight on costs one roll, however they leave
+     * (keyhole, teleport, logout, death respawn): every leave or death. With
+     * the boss dead the exit is free, as is simultaneous death. Then the fight
+     * ends and cleans up as before.
+     */
     postLeave(mobile, logout) {
-      if (mobile.isPlayer?.() && mobile.getAsPlayer?.() === this.owner) end(this);
+      if (mobile.isPlayer?.() && mobile.getAsPlayer?.() === this.owner) {
+        const session = sessions.get(this);
+        if (session?.boss && Shared.alive(session.boss)) Shared.spendRoll(mobile.getAsPlayer());
+        end(this);
+      }
       super.postLeave(mobile, logout);
     }
   };
@@ -125,7 +134,16 @@ function enterArena(player) {
   const [cx, cy, cz] = Shared.CASKET_TILE;
   const npc = spawnNpc(ids.CHALLENGE, cx, cy, cz, player);
   if (!npc) {
-    return true;
+    // No casket, no fight: send the player back out instead of stranding them
+    // in a sessionless arena whose keyhole would do nothing.
+    const [wx, wy, wz] = Shared.WATSON_TILE;
+    player.moveTo(new Location(wx, wy, wz));
+    try {
+      area.destroy();
+    } catch {
+      // Post-leave cleanup may already have destroyed it.
+    }
+    return false;
   }
   area.add(npc);
   sessions.set(area, { boss: null, casket: npc, minions: {}, stompCount: 0, owner: player });
@@ -186,12 +204,9 @@ function leave({ player, object }) {
   // Clicks arrive one-based via DialogueManager.handleResume (1 = first option).
   built.add(new OptionDialogue(0, { executeOption: (option) => {
     if (Number(option) === 1) {
-      // Leaving with the fight on costs a roll; the victory exit is free.
-      const area = player.getArea?.();
-      const session = area ? sessionOf(area) : null;
-      if (session?.boss && Shared.alive(session.boss)) Shared.spendRoll(player);
       doLeave(player);
       // Answer the click, or the box sits on "Please wait..." after leaving.
+      // (The roll, if any is owed, is spent by postLeave on the way out.)
       player.getPacketSender?.()?.sendInterfaceRemoval?.();
     } else player.getPacketSender?.()?.sendInterfaceRemoval?.();
   } }, "Yes, leave this place.", "No, stay here.").setTitle("Are you sure you wish to leave?"));
@@ -199,9 +214,21 @@ function leave({ player, object }) {
   return true;
 }
 
+/** A death in the arena leaves its grave outside, by the strange casket: the
+ * instance is destroyed on exit, so nothing recoverable may stay inside. */
+function graveOutside(request) {
+  const player = request?.player;
+  if (!player) return;
+  const area = player.getArea?.();
+  if (!(area instanceof areaClass()) || !sessions.has(area)) return;
+  const [x, y, z] = Shared.WATSON_TILE;
+  request.tile = { x, y, z };
+}
+
 function attach(api) {
   pluginApi = api;
   api.onObjectInteraction("Keyhole", { Use: leave, Exit: leave });
+  api.onCustomEvent("gravestones:grave-location", graveOutside);
 }
 
 module.exports = { attach, enterArena, leave, end, sessionOf, areaClass, spawnNpc };

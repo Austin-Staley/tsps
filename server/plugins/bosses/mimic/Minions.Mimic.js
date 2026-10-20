@@ -8,8 +8,9 @@
  * while their projectiles fly distance-scaled shapes, so damage detaches from the
  * visuals. These methods keep the data-driven ids and only complete the
  * presentation, mirroring the player spell/arrow shapes:
- * - Ranger: the configured projectile (npc-combat-defs.json 8636 → 1574, the lit
- *   fire arrow) on the canonical arrow shape (delay 41, 46 + 5/tile, heights
+ * - Ranger: the configured projectile (npc-combat-defs.json 8636 → 1574; NR-oracle
+ *   value, triangulated as the lit fire arrow from bronze-tier strength and the
+ *   orange streak, still awaiting a capture) on the canonical arrow shape (delay 41, 46 + 5/tile, heights
  *   43/31), hitsplat rounded to the visual landing. Max 12, speed 4, distance 6:
  *   all the dump's (monsters-complete.json), unchanged.
  * - Mage: Earth Wave whole (CombatSpells.EARTH_WAVE: cast 164, flight 165, impact

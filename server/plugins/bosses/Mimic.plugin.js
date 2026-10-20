@@ -3,9 +3,10 @@
 /**
  * The Mimic, the elite-clue casket boss (see docs/mimic.md for behaviour and sources).
  *
- * Behaviour: https://oldschool.runescape.wiki/w/The_Mimic and .../Cave_kraken (candy,
- * minions, stomp). Near-Reality's fight was cross-checked mechanic by mechanic and
- * matches the Wiki throughout; where this plugin follows its structure it says so.
+ * Behaviour comes from https://oldschool.runescape.wiki/w/The_Mimic (and the
+ * Strange casket transcript for the dialogue). Near-Reality is a behaviour oracle
+ * only (leaked dump, no license, no code ported): values taken from it alone are
+ * marked NR-only where they are used, and the PR lists them.
  * Combat stats, drops and spawns already exist in data/definitions; this plugin adds
  * the private fight: entry, challenge, attack script, minions, stomp and exit.
  * Deaths respawn as whirlpools via the engine (it clears the transformation first).
@@ -13,8 +14,8 @@
  * Estimates (no capture yet): DISTURB/wake ranges, throw-adjacent timings, the exact
  * candy flight arc, and the challenge transform having no animation. Mimic-casket
  * acquisition (elite/master casket opening) needs the clue system and is a follow-up;
- * anyone holding item 23184 can enter for now. Death retrieval and the boss timer
- * are follow-ups (gravestones handle drops by default).
+ * anyone holding item 23184 can enter for now. The 90k strange-casket death
+ * retrieval and the boss timer are follow-ups (arena graves go outside instead).
  */
 
 const Shared = require("./mimic/Shared.Mimic");

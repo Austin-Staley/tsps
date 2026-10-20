@@ -4,13 +4,10 @@
  * The Mimic's attacks (see ../Mimic.plugin.js for behaviour and sources).
  *
  * Wiki (The Mimic): 186 combat, 5x5, Crush + Magic, max hit 23, weak to Magic, speed
- * 3. Near-Reality's attack() picks per swing: in melee distance a third crush
- * (anim 8308), a third follow step, a third candy volley (anim 8309); out of
- * melee half follow, half volley. The volley is six candies: three pink plus one
- * red, green and blue. Failing to step out of the way of a pink candy hits ~10;
- * red/green/blue spawn the Third Age Warrior/Mage/Ranger (one of each at most —
- * killing them is pointless, they respawn on the next volley).
- * Stomp damage while standing under it is handled by the lair area, escalating per tick.
+ * 3; six-candy volleys (three purple plus red/green/blue spawning the minions),
+ * pink hurting about 10 unless stepped off, pointless minions, escalating stomp.
+ * Per-swing choice is NR-only (attack() thirds/halves, inclusive random reading);
+ * the volley tiles mirror NR's six (NR-only) inside the cache-mapped arena.
  * Speeds and max hits stay the dump's (monsters-complete.json: boss 3 ticks/max 23;
  * minions 40 hp, max 18/12/16).
  *
@@ -21,11 +18,11 @@
 const Shared = require("./Shared.Mimic");
 const Lair = require("./Lair.Mimic");
 
-/** Estimate: tiles are picked in the arena only; the volley mirrors NR's six tiles. */
+/** Estimate: tiles are picked in the arena only; six tiles is NR-only. */
 const VOLLEY_TILES = 6;
 const VOLLEY_RADIUS = 3;
 const VOLLEY_TRIES = 500;
-/** Pink candy damage when still on the tile (Wiki: about 10; NR: 8-12). */
+/** Pink candy damage: Wiki says about 10; NR rolls 8-12 (NR-only range). */
 const PINK_MIN = 8;
 const PINK_MAX = 12;
 /**
@@ -220,6 +217,8 @@ function throwCandy(boss, target, tile, candy, method) {
     if (candy === Shared.CANDY.PINK) {
       const at = target.getLocation();
       if (at.getX() === tile.getX() && at.getY() === tile.getY() && at.getZ() === tile.getZ()) {
+        // PendingHit snapshots the method's style at construction, so later
+        // swings can't retype this hit (it stays Magic whatever follows).
         const hit = new PendingHit(boss, target, method, 0);
         hit.setTotalDamage(PINK_MIN + Math.floor(Math.random() * (PINK_MAX - PINK_MIN + 1)));
         CombatFactory.addPendingHit(hit);
@@ -264,7 +263,11 @@ function spawnMinion(boss, target, tile, candy) {
   }
 }
 
-/** Stomp damage for being under the boss; the lair area calls this per tick. */
+/**
+ * Stomp damage for being under the boss; the lair area calls this per tick.
+ * methodInstance never swings, so its style stays the MAGIC default: the hit
+ * snapshots that at construction and no later swing can retype it.
+ */
 function stompHit(boss, player, damage) {
   if (!Shared.alive(boss) || !Shared.alive(player) || !methodInstance) return;
   const hit = new (Shared.core().PendingHit)(boss, player, methodInstance, 0);

@@ -2,9 +2,9 @@
 
 The elite-clue casket boss in the arena below Watson's house, built from
 the OSRS Wiki ([The Mimic](https://oldschool.runescape.wiki/w/The_Mimic)) with
-Near-Reality's fight cross-checked mechanic by mechanic — every behaviour below holds
-in both, and the Wiki wins where they differ. Near-Reality is a leaked dump with no
-license: a behaviour oracle only, no code was ported.
+Near-Reality's fight cross-checked mechanic by mechanic. Near-Reality is a leaked dump with no
+license: a behaviour oracle only, no code was ported. Where only NR attests a value,
+the Shipped cell says NR-only.
 
 The plugin is `server/plugins/bosses/Mimic.plugin.js`, units in
 `server/plugins/bosses/mimic/`.
@@ -18,7 +18,7 @@ The plugin is `server/plugins/bosses/Mimic.plugin.js`, units in
 | `Minions.Mimic.js` | Minion attacks: ranger fire-arrow flight + synced hits, mage Earth Wave cast/flight/impact + synced hits. |
 | `Reward.Mimic.js` | Chest Open messages + rolls: kill suppresses ground drops and marks defeated; leave/death with the fight on spends one roll (simultaneous free); Open outside pays one table pass per remaining roll with attempt-scaled quantities and consumes the chest. |
 
-Already in data (not this plugin): combat stats (`monsters-complete.json`: 8633 max 23/speed 3, minions 40 hp), drops (`npc-drops.json`: `the_mimic`, `the_mimic_2`), spawns (open-world 8633 left alone), animations (`npc-animations.json`; boss block explicitly -1, it has no flinch), ranger projectile (`npc-combat-defs.json`: 8636 → 1574; YT shows an orange streak = lit fire arrow, and its +7 ranged strength is bronze-tier), mage projectile (8637 → 165, Earth Wave: the Wiki green; max 16 from the dump), Slayer/task gating (none per Wiki), kill tracking (`bosses.json`: Mimic varp 2221), the strange casket object (34733) and keyhole (34727).
+Already in data (not this plugin): combat stats (`monsters-complete.json`: 8633 max 23/speed 3, minions 40 hp), drops (`npc-drops.json`: `the_mimic`, `the_mimic_2`), spawns (open-world 8633 left alone), animations (`npc-animations.json`; boss block explicitly -1, it has no flinch), ranger projectile (`npc-combat-defs.json`: 8636 → 1574; NR-oracle value triangulated as lit fire arrow from bronze-tier strength and the orange streak, still awaiting a capture), mage projectile (8637 → 165, Earth Wave: the Wiki green; max 16 from the dump), Slayer/task gating (none per Wiki), kill tracking (`bosses.json`: Mimic varp 2221), the strange casket object (34733) and keyhole (34727).
 
 ## Triangulation (Near-Reality vs Wiki)
 

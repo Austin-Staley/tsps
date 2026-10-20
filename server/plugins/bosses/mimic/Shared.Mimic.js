@@ -39,19 +39,18 @@ const ARENA = { minX: 2710, maxX: 2727, minY: 4311, maxY: 4324, z: 1 };
 const ENTRANCE_TILE = [2719, 4314, 1];
 const CASKET_TILE = [2718, 4319, 1];
 /** By the strange casket upstairs in Watson's house (object at 1645, 3569): the exit tile.
- * Near-Reality exits to (1641, 3578), but on this map that is the balcony, so the exit
- * goes to the casket instead (verified walkable: stood on in testing). */
+ * (Verified walkable: stood on in testing.) */
 const WATSON_TILE = [1645, 3570, 1];
 
 /**
  * Surfacing/attack anims from data/definitions/npc-animations.json (rev 241): 8633's
- * entries are 8308 (melee swing) and 8309 (candy throw), matching Near-Reality's use.
+ * entries decode as mimic_melee, mimic_charge_ranged and mimic_death (cache seq names).
  */
 const ANIM = { MELEE: 8308, CANDY: 8309 };
 
 /**
- * The four candy types (Near-Reality's mapping, matching the Wiki: three pink that
- * hurt, one red/blue/green that spawns the warrior/mage/ranger).
+ * The four candy types (Wiki: three pink that hurt, one red/blue/green that spawns
+ * the warrior/mage/ranger; the colour order is NR-only).
  * Projectile/impact ids decode in this cache (rev 241, `yarn dump:spotanim`).
  */
 const CANDY = {
@@ -68,9 +67,9 @@ function alive(entity) {
 }
 
 /**
- * Rolls state, tracked per Mimic item (Near-Reality does the same): six chances
- * from a master clue, five from elite, spent one per leave or death.
- * Fresh chests default to elite until the clue system tracks origin.
+ * Rolls state, tracked per Mimic item: six chances from a master clue, five from
+ * elite (Wiki article); fresh chests default to elite until the clue system
+ * tracks origin.
  */
 const ROLLS_META_KEY = "mimic-rolls";
 const ROLLS_ATTRIBUTE = "mimic:rolls";
