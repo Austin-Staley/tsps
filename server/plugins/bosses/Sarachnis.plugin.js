@@ -3,7 +3,7 @@
  * (Wiki: Sarachnis; docs/sarachnis.md): the multi-combat lair with its boss HUD,
  * the webs and thick-web entrance with rented private instances, and the fight -
  * melee/ranged standards, the web every fourth attack with its sprint, the 5/10
- * heal on damaging hits, and the spawns at half and a quarter health.
+ * heal on successful hits, and the spawns at 66% and 33% health.
  */
 const Common = require("./sarachnis/Common.Sarachnis");
 const Fight = require("./sarachnis/Fight.Sarachnis");

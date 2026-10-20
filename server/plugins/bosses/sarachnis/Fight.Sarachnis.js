@@ -19,6 +19,12 @@ const { ANIM, PROJECTILE_ID, PROJECTILE_SHAPE, SOUND, HEAL, HEAL_SPLAT } = Commo
 /** Generic engine flags, as in the Scurrius walk. */
 const NO_RETALIATE_FLAG = "combat:no-retaliate";
 
+/** Ticks with nobody in the room before a fight counts as a new one. */
+const RESET_IDLE_TICKS = 100;
+
+/** Created NPCs go through here so tests can watch without touching the world. */
+let createMinion = (id, tile) => core.NPC.create(id, tile);
+
 const states = new WeakMap();
 
 let api = null;
@@ -116,8 +122,11 @@ function webRoom(npc) {
   castSound(npc, SOUND.web);
   const players = Common.playersInRoom(npc);
   for (const player of players) {
-    sendShot(npc, player, "web");
-    Common.later(2, () => {
+    // The bind, the boots line and the web loc land with the visible bolt: the delay
+    // is travel-based (1-3 ticks), not a fixed 2 - submission 3932 only ever showed it,
+    // booted, at the far end.
+    const delay = sendShot(npc, player, "web");
+    Common.later(delay, () => {
       if (!npc.isRegistered?.() || (player.getHitpoints?.() ?? 1) <= 0) return;
       if (Common.wearsAraneaBoots(player)) {
         player.sendMessage(Common.BOOTS_MESSAGE);
@@ -219,14 +228,15 @@ function spawnTileNear(npc) {
   return Common.location(Common.TELEPORT_TILE);
 }
 
-/** Captured: one of each per player in the room, on random lair tiles. */
-function spawnMinions(npc, state) {
-  const players = Common.playersInRoom(npc);
-  if (players.length === 0) return;
+/** Captured: one of each per player in the room, on random lair tiles. Returns whether
+ * the wave appeared: a threshold crossing with nobody around keeps its wave for whoever
+ * shows up next instead of consuming it. */
+function spawnMinions(npc, state, players = Common.playersInRoom(npc)) {
+  if (players.length === 0) return false;
   const area = npc.getPrivateArea?.() ?? null;
   for (const player of players) {
     for (const id of [Common.MELEE_SPAWN_ID, Common.MAGE_SPAWN_ID]) {
-      const minion = core.NPC.create(id, spawnTileNear(npc));
+      const minion = createMinion(id, spawnTileNear(npc));
       minion.__skipDefaultRespawn = true;
       minion.setMultiCombat?.(true);
       if (area) area.add(minion);
@@ -235,6 +245,7 @@ function spawnMinions(npc, state) {
       minion.getCombat().attack(player);
     }
   }
+  return true;
 }
 
 /**
@@ -245,16 +256,30 @@ function spawnMinions(npc, state) {
  */
 function checkSpawns(npc, incomingDamage = 0) {
   if (!Common.isSarachnis(npc)) return;
-  const state = stateOf(npc);
+  let state = stateOf(npc);
+  const now = core.World.getProcessCycle();
   const max = maxHitpoints(npc);
   const projected = (npc.getHitpoints?.() ?? 0) - (Number.isFinite(incomingDamage) ? incomingDamage : 0);
   if (projected <= 0) return;
+  const players = Common.playersInRoom(npc);
+  if (players.length > 0) {
+    state.lastSeen = now;
+  } else if (now - (state.lastSeen ?? now) > RESET_IDLE_TICKS && state.spawned.size > 0) {
+    // Everyone left or died mid-fight: the next group starts fresh, without the
+    // previous group's leftover minions piling onto the new waves.
+    for (const minion of state.minions) {
+      if (minion?.isRegistered?.() && (minion.getHitpoints?.() ?? 0) > 0) minion.setHitpoints(0);
+    }
+    states.delete(npc);
+    state = stateOf(npc);
+    state.lastSeen = now;
+  }
   const ratio = projected / max;
   for (const threshold of Common.SPAWN_THRESHOLDS) {
-    if (ratio <= threshold && !state.spawned.has(threshold)) {
-      state.spawned.add(threshold);
-      spawnMinions(npc, state);
-    }
+    if (ratio > threshold || state.spawned.has(threshold)) continue;
+    // The threshold is only consumed when the wave actually appears: crossing it
+    // with an empty room keeps the wave for whoever shows up next.
+    if (spawnMinions(npc, state, players)) state.spawned.add(threshold);
   }
 }
 
@@ -355,6 +380,10 @@ function defineCombatMethod() {
       const hit = new PendingHit(character, target, this, melee ? 0 : (this.shotDelay ?? Common.landingTicks(Common.projectileEnd(PROJECTILE_SHAPE.ranged, 4)) - 1));
       const rolled = hit.getTotalDamage();
       hit.setTotalDamage(Math.min(Common.MAX_HIT, rolled));
+      // The heal reads the style from the hit, not from shared state: a ranged bolt
+      // can still be in the air when the next attack (or the web, which clears
+      // lastStyle) overwrites it, and must still heal 10.
+      hit.sarachnisStyle = melee ? "melee" : "ranged";
       return [hit];
     }
 
@@ -369,8 +398,7 @@ function defineCombatMethod() {
       const damage = hit.getTotalDamage?.() ?? 0;
       // Inspect Repellent fails only on actual damage, not on blocked zeros.
       if (damage > 0) attacker.setAttribute(Common.ATTR_DEALT_DAMAGE, true);
-      const state = states.get(attacker);
-      const style = state?.lastStyle;
+      const style = hit.sarachnisStyle ?? states.get(attacker)?.lastStyle;
       const amount = style === "ranged" ? HEAL.ranged : HEAL.melee;
       attacker.heal(amount);
       attacker.performGraphic(new core.Graphic(Common.HEAL_GFX, 0, 92));
@@ -404,5 +432,5 @@ module.exports = {
   modifyHit,
   onBossDeath,
   defineCombatMethod,
-  _test: { stateOf, isAdjacent, edgeDistance, checkSpawns, spawnMinions },
+  _test: { stateOf, isAdjacent, edgeDistance, checkSpawns, spawnMinions, setCreateMinion: (fn) => { createMinion = fn; }, resetCreateMinion: () => { createMinion = (id, tile) => core.NPC.create(id, tile); } },
 };

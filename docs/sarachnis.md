@@ -70,8 +70,9 @@ out to (1842, 9913) (inferred: live's own exit is the separate 34859 face). The 
 too, at (1842, 9913), so every entry starts on the right side of the web.
 - **Private instances** (Wiki, never bought in the logs): 25,000 coins from the bank,
 12,500 once `ca_tier_status_hard` (12865) is at least unlocked; the fee is taken outside,
-then the player walks in through the web and the instance (a PrivateArea over the tomb's
-tiles) with its own Sarachnis at (1840, 9900) appears as they arrive, respawning every 16 ticks while it
+then the player walks in through the web; the instance (a PrivateArea over the tomb's
+tiles) with its own Sarachnis at (1840, 9900) is created in the same tick as the payment,
+respawning every 16 ticks while it
 has players, ending when empty (leaving, teleporting, dying or logging out, which puts
 the player back outside).
 
@@ -99,6 +100,9 @@ over 65 kills, while the player never touches a sang staff) plus the magenta spl
 the waves a little lower, around half and a quarter - likely tick attribution against her
 constant self-healing - so the Wiki wins), one 8714 + one 8715 per player in the room
 on random walkable lair tiles, attacking that player; they die with her (8318 each).
+A threshold is only consumed when its wave actually appears (crossing it with an empty
+room keeps the wave), and a room left empty for a while resets to a fresh fight so the
+next group is not met by stale minions plus full new waves.
 Minion visuals come from `npc-combat-defs.json` (8147, 4410 with bolt 1682); their exact
 attack sounds (543, and 227 with delay 116 for the bolt) are not wired.
 - **Leaving ends the fight:** stepping out of the tomb breaks combat both ways (boss and

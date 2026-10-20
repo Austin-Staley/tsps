@@ -142,12 +142,11 @@ function rentInstance(player) {
   }
   player.sendMessage(`<col=ef1020>${formatCoins(fee)} coins is taken from your bank to rent a private instance.</col>`);
   // Onto the other side first, like the public way in; the instance and its Sarachnis
-  // appear with the arrival. The step goes through the web itself, so it is forced.
+  // appear in the same tick as the payment, so no logout, death or teleport in between
+  // can take the coins without an instance to show for them. The step goes through the
+  // web itself, so it is forced.
   player.moveTo(Common.location(Common.TELEPORT_TILE));
-  Common.later(2, () => {
-    if (!player.isRegistered?.()) return;
-    if (Common.inLair(player.getLocation())) Lair.createInstance(player);
-  });
+  Lair.createInstance(player);
 }
 
 function fightPrivately({ player, objectId }) {

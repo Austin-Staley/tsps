@@ -76,7 +76,7 @@ const BOOTS_MESSAGE = "Your Aranea boots let you avoid the spider-based attack."
 const LEECH_MESSAGE = "Sarachnis leeches some health as she damages you.";
 /** Cache: aranea boots in all of their variants. */
 const ARANEA_BOOT_IDS = [29806, 29807, 29808, 33202, 33203];
-/** Captured: the waves fire around half and a quarter health (not 66/33; see docs). */
+/** Wiki: the waves fire at 66% and 33%. */
 const SPAWN_THRESHOLDS = Object.freeze([...DATA.combat.spawnThresholds]);
 /** Captured attack speed and reach;captured removal and respawn. */
 const ATTACK_SPEED = DATA.combat.attackSpeed;
@@ -93,7 +93,6 @@ const HARD_TIER_VARBIT = DATA.instance.hardTierVarbit;
 /** NPC attribute keys (kebab-case, namespaced) for the Combat Achievement rules. */
 const ATTR_RANGED_TWICE = "sarachnis:ranged-twice";
 const ATTR_DEALT_DAMAGE = "sarachnis:dealt-damage";
-const ATTR_BOUND = "sarachnis:bound";
 /** Player attribute: in a private instance, so a login there puts them outside. */
 const INSTANCE_ATTRIBUTE = "sarachnis:in-instance";
 
@@ -141,18 +140,19 @@ function wearsAraneaBoots(player) {
   return ARANEA_BOOT_IDS.includes(id);
 }
 
-/** A slash weapon wielded, or any knife carried, for the webs (Wiki). */
+/** A slash weapon wielded, or any knife carried, for the webs. This is a plain reading
+ * of the Wiki's "a slash weapon or a knife": a weapon swung in a slash style counts as
+ * the former, and knives count from anywhere carried since that is how the slash tool is
+ * normally to hand for webs. No capture shows the interaction (every log wears Aranea
+ * boots), so both halves are deliberately permissive rather than exact. */
 function hasSlashTool(player) {
   const slash = BonusManager?.ATTACK_SLASH ?? 1;
   const fightType = player?.getFightType?.();
   if (fightType?.getBonusType?.() === slash) return true;
-  const names = [];
   const equipment = player?.getEquipment?.()?.getItems?.() ?? [];
   for (const item of equipment) {
     if (item?.isValid?.() === false) continue;
-    const name = String(item?.getDefinition?.()?.getName?.() ?? "");
-    if (/knife$/i.test(name)) return true;
-    names.push(name);
+    if (/knife$/i.test(String(item?.getDefinition?.()?.getName?.() ?? ""))) return true;
   }
   const inventory = player?.getInventory?.()?.getItems?.() ?? [];
   for (const item of inventory) {
@@ -202,7 +202,7 @@ module.exports = {
   BOOTS_MESSAGE, LEECH_MESSAGE, ARANEA_BOOT_IDS, SPAWN_THRESHOLDS,
   ATTACK_SPEED, ATTACK_DISTANCE, RESPAWN_TICKS, DEATH_TICKS,
   INSTANCE_FEE, INSTANCE_DISCOUNTED_FEE, HARD_TIER_VARBIT,
-  ATTR_RANGED_TWICE, ATTR_DEALT_DAMAGE, ATTR_BOUND, INSTANCE_ATTRIBUTE,
+  ATTR_RANGED_TWICE, ATTR_DEALT_DAMAGE, INSTANCE_ATTRIBUTE,
   init, location, within, inLair, isSarachnis, isMinion, playersInRoom,
   wearsAraneaBoots, hasSlashTool, projectileEnd, landingTicks, tileDistance, later,
   get api() { return api; },

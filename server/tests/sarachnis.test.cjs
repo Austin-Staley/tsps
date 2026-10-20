@@ -159,19 +159,62 @@ test("the projectile ends grow with travel and the hit lands from the end", () =
 });
 
 test("spawns fire at two thirds and a third health, once each", () => {
-  let hp = 400;
-  const npc = { ...fakeNpc(Common.BOSS_ID), getHitpoints: () => hp };
-  Fight.reset(npc);
-  Fight._test.checkSpawns(npc, 135);
-  assert.ok(!Fight._test.stateOf(npc).spawned.has(0.66));
-  hp = 265;
-  Fight._test.checkSpawns(npc, 1);
-  const state = Fight._test.stateOf(npc);
-  assert.ok(state.spawned.has(0.66));
-  assert.ok(!state.spawned.has(0.33));
-  hp = 133;
-  Fight._test.checkSpawns(npc, 1);
-  assert.ok(Fight._test.stateOf(npc).spawned.has(0.33));
+  const created = [];
+  const attacked = [];
+  Fight._test.setCreateMinion((id, tile) => {
+    const minion = {
+      getId: () => id,
+      getLocation: () => tile,
+      isRegistered: () => true,
+      getHitpoints: () => 30,
+      setHitpoints: () => {},
+      __skipDefaultRespawn: false,
+      setMultiCombat: () => {},
+      getCombat: () => ({ attack: (target) => attacked.push([id, target]) }),
+    };
+    created.push(minion);
+    return minion;
+  });
+  try {
+    const inLair = (x, y) => ({
+      getLocation: () => new Location(x, y, 0),
+      getPrivateArea: () => null,
+      getHitpoints: () => 50,
+      isPlayer: () => true,
+    });
+    const playerA = inLair(1840, 9900);
+    const playerB = inLair(1841, 9901);
+    let hp = 400;
+    const npc = {
+      ...fakeNpc(Common.BOSS_ID),
+      getHitpoints: () => hp,
+      getPlayersWithinDistance: () => [],
+    };
+    Fight.reset(npc);
+    // Crossing with an empty room consumes nothing; the wave waits for company.
+    hp = 265;
+    Fight._test.checkSpawns(npc, 1);
+    assert.ok(!Fight._test.stateOf(npc).spawned.has(0.66));
+    assert.equal(created.length, 0);
+    // One pair per player in the room, each attacking their own player.
+    npc.getPlayersWithinDistance = () => [playerA, playerB];
+    Fight._test.checkSpawns(npc, 1);
+    const state = Fight._test.stateOf(npc);
+    assert.ok(state.spawned.has(0.66));
+    assert.equal(created.length, 4);
+    assert.deepEqual(attacked.map(([id]) => id).sort(), [8714, 8714, 8715, 8715]);
+    assert.ok(attacked.every(([, target]) => target === playerA || target === playerB));
+    // Second wave only at the second threshold, once.
+    hp = 133;
+    const before = created.length;
+    Fight._test.checkSpawns(npc, 1);
+    assert.ok(Fight._test.stateOf(npc).spawned.has(0.33));
+    assert.equal(created.length, before + 4);
+    Fight._test.checkSpawns(npc, 50);
+    assert.equal(created.length, before + 4);
+  } finally {
+    Fight._test.resetCreateMinion();
+  }
 });
 
 test("the heal fires on successful hits, message only with damage", () => {
@@ -211,6 +254,13 @@ test("the heal fires on successful hits, message only with damage", () => {
   assert.match(messages[0], /leeches some health/);
   method.handleAfterHitEffects(hit(false, 0));
   assert.deepEqual(healed, [5, 5]);
+  // The style travels with the hit: a ranged bolt landing after the next attack
+  // started still heals 10, even though shared state moved on.
+  Fight.stateOf(boss).lastStyle = "melee";
+  const late = hit(true, 12);
+  late.sarachnisStyle = "ranged";
+  method.handleAfterHitEffects(late);
+  assert.deepEqual(healed, [5, 5, 10]);
 });
 
 test("she only goes for players inside, and lets go of leavers", () => {
@@ -291,6 +341,22 @@ test("the web comes after four standards, then the count restarts", () => {
   assert.equal(Fight.stateOf(npc).attacks, 0);
   runTicks(6);
   assert.ok(moves.length > 0);
+});
+
+test("an emptied room starts the next group fresh, without stale minions", () => {
+  const killed = [];
+  const alive = { isRegistered: () => true, getHitpoints: () => 30, setHitpoints: () => { killed.push("alive"); } };
+  const dead = { isRegistered: () => true, getHitpoints: () => 0, setHitpoints: () => { killed.push("dead"); } };
+  let hp = 400;
+  const npc = { ...fakeNpc(Common.BOSS_ID), getHitpoints: () => hp };
+  Fight.reset(npc);
+  const state = Fight._test.stateOf(npc);
+  state.spawned.add(0.66);
+  state.minions.push(alive, dead);
+  state.lastSeen = -1000;
+  Fight._test.checkSpawns(npc, 0);
+  assert.deepEqual([...Fight._test.stateOf(npc).spawned], []);
+  assert.deepEqual(killed, ["alive"]);
 });
 
 test("the plugin registers its combat method, lair area and web handlers", () => {
@@ -463,7 +529,6 @@ test("a rented instance is entered on the other side of the web", () => {
   assert.equal(Entrance._test.fightPrivately({ player: renter, objectId: Common.ENTRANCE_ID }), true);
   assert.deepEqual([at.getX(), at.getY()], [1842, 9911]);
   assert.ok(messages.some((text) => text.includes("25,000")));
-  assert.equal(renter.getPrivateArea(), null);
-  runTicks(3);
+  // Atomic: the instance exists in the same tick as the payment, then the step in.
   assert.ok(renter.getPrivateArea() instanceof Lair._test.instanceClass());
 });
