@@ -80,6 +80,7 @@ module.exports = {
     api.onObjectInteraction("Crab trap (empty)", { Bait: Crabs.bait });
     for (const name of ["Crab trap (baited)", "Crab trap (full)"]) api.onObjectInteraction(name, { Empty: Crabs.empty });
     api.onNpcInteraction("Ceto", { "Talk-to": DriftNets.pay, Pay: DriftNets.pay });
+    api.onObjectInteraction("Tunnel", { Enter: DriftNets.tunnelEnter, Pay: DriftNets.tunnelPay });
     api.onNpcInteraction("Fish shoal", { Chase: DriftNets.chase });
     for (const name of ["Drift net anchors", "Drift net (full)"]) api.onObjectInteraction(name, {
       "Set up": DriftNets.setup, "Take down": DriftNets.takeDown, Harvest: DriftNets.harvest, Inspect: DriftNets.inspect });

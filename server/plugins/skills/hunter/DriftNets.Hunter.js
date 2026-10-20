@@ -3,6 +3,8 @@
 const C = require("./Context.Hunter"), { H } = C;
 const ATTRIBUTE = "hunter.drift-nets";
 const bases = new Map(), sessions = new Map(), chasing = new Map();
+// ponytail: no capture of the entrance; inside by the plant door, and beside the tunnel on Ceto's side.
+const INSIDE_TILE = [3737, 10299, 1], OUTSIDE_TILE = [3729, 10294, 1];
 let Area;
 
 function state(player) {
@@ -39,7 +41,7 @@ function enter(player) {
   };
   const area = new Area();
   area.enter(player);
-  player.moveTo(new H.core.Location(3731, 10293, 1));
+  player.moveTo(new H.core.Location(...INSIDE_TILE));
   H.core.RegionManager.loadMapFiles(3740, 10295);
   for (const rows of H.core.MapObjects.mapObjects.values()) {
     for (const o of rows) {
@@ -69,6 +71,18 @@ function pay({ player, npc }) {
   return true;
 }
 
+/** The tunnel beside Ceto: Enter goes in once access is paid for, Pay asks as she does. */
+function tunnelEnter({ player, object, objectId }) {
+  if (objectId !== H.core.ObjectIdentifiers.TUNNEL_50) return false;
+  if (C.nearby(player, object)) enter(player);
+  return true;
+}
+
+function tunnelPay({ player, object, objectId }) {
+  if (objectId !== H.core.ObjectIdentifiers.TUNNEL_50) return false;
+  return pay({ player, npc: object });
+}
+
 function purchase(player, cost) {
   if (!permitted(player)) return;
   if (state(player).until === -1) { enter(player); return; }
@@ -81,7 +95,7 @@ function login({ player }) {
   const l = player.getLocation();
   if (l.getZ() === 1 && l.getX() >= 3730 && l.getX() <= 3752 && l.getY() >= 10285 && l.getY() <= 10305) {
     if (permitted(player) && (state(player).until === -1 || state(player).until > Date.now())) enter(player);
-    else player.moveTo(new H.core.Location(3728, 10293, 1));
+    else player.moveTo(new H.core.Location(...OUTSIDE_TILE));
   }
   sync({ player });
 }
@@ -130,10 +144,8 @@ function capture(player, net, active) {
   sync({ player });
 }
 
-function nearAnchor(npc, location) {
-  const here = npc.getLocation();
-  return here.getZ() === location.getZ()
-    && Math.max(Math.abs(here.getX() - location.getX()), Math.abs(here.getY() - location.getY())) <= 1;
+function nearAnchor(npc, anchor) {
+  return C.footprintDistance(npc.getLocation(), anchor) <= 1;
 }
 
 // ponytail: Wiki does not publish scare odds or passive timing; both are explicit
@@ -296,7 +308,7 @@ function use(event) {
 function exit({ player }) {
   if (!sessions.has(player)) return false;
   cleanup({ player });
-  player.moveTo(new H.core.Location(3728, 10293, 1));
+  player.moveTo(new H.core.Location(...OUTSIDE_TILE));
   return true;
 }
 
@@ -316,7 +328,7 @@ function process() {
     if (H.tick >= run.due || !npc.isRegistered() || !npc.isVisible() || !C.active(run.player)
       || net !== run.net || net.count >= 10 || net.rewards || !target) { chasing.delete(npc); continue; }
     if (H.tick % 2 === 0) H.core.PathFinder.calculateWalkRoute(npc, target.getLocation().getX(), target.getLocation().getY());
-    if (nearAnchor(npc, target.getLocation())) {
+    if (nearAnchor(npc, target)) {
       capture(run.player, net, true);
       C.hide(npc, 8);
       chasing.delete(npc);
@@ -329,5 +341,5 @@ function process() {
   }
 }
 
-module.exports = { ATTRIBUTE, initialize, state, enter, pay, setup, chase, harvest, inspect, takeDown, storage, use, exit,
+module.exports = { ATTRIBUTE, initialize, state, enter, pay, tunnelEnter, tunnelPay, setup, chase, harvest, inspect, takeDown, storage, use, exit,
   cleanup, process, login, sync, experience, rewards, fossil, bases };
