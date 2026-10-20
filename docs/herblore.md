@@ -43,6 +43,24 @@ Recording 4213; the level message is from recordings 1757 and 1835.
   messages, "You clean the Grimy marrentill." then "You put the Marrentill into the vial of
   water.", with the cleaning XP and no animation or sound.
 
+### Make-X and timing
+
+Recordings 239, 3140, 4098, 4100, 4213. Using one ingredient on the other opens the skillmulti
+menu in the chatbox: clientscript 2046 (`skillmulti_setup`) with first argument 0, the title "How
+many do you wish to make?" and the product, and the most the inventory makes as both the limit and
+the amount it opens on. With only one to make there is no menu.
+
+Ticks count from the click in the menu:
+
+| Tick | Captured |
+| --- | --- |
+| 0 | the menu closes; `human_herbing_vial` and synth 2608, no product yet |
+| 1 | the first product, with the animation, the sound and the message |
+| then | one more every 1 tick (unfinished potions), 2 ticks (potions) or 3 ticks (forgotten brew, extended anti-venom+), each with the animation and sound |
+
+The Herblore cape's grimy herbs (recording 3140) start on tick 0 and go every tick. The Wiki's
+recipe data gives the same ticks per recipe.
+
 ## Druidic Ritual
 
 Herblore needs Druidic Ritual (dbrow `skill_feature_herblore_overview_0`). Without it, cleaning and

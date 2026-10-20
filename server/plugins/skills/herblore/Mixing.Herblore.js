@@ -89,6 +89,55 @@ function chooseRecipe(player, recipes) {
   return recipe ?? null;
 }
 
+/** How many of the recipe the inventory holds the ingredients for. */
+function makeable(inventory, recipe) {
+  return Math.min(...recipe.ingredients.map(({ id, count }) => Math.floor(inventory.getAmount(id) / count)));
+}
+
+/**
+ * Makes `amount` (rsprox captures): the animation and sound as the menu closes, the first potion
+ * a tick later and the next every `ticks` (1 for unfinished potions, 2 for most, 3 for forgotten
+ * brew and extended anti-venom+). A grimy herb the cape cleans starts at once and goes every tick,
+ * without the animation.
+ */
+function start(player, recipe, amount) {
+  Common.core.TaskManager.cancelTasks(player.getIndex());
+  let remaining = amount;
+  if (recipe.cleaned) {
+    if (!makeOne(player, recipe) || --remaining <= 0) return;
+  } else {
+    Common.animate(player, Common.MIX_ANIMATION);
+    Common.sound(player, Common.MIX_SOUND);
+  }
+  let wait = 1;
+  Common.run(player, () => {
+    if (--wait > 0) return true;
+    if (!makeOne(player, recipe)) return false;
+    wait = recipe.ticks;
+    return --remaining > 0;
+  });
+}
+
+/**
+ * The skillmulti menu as captured: "How many do you wish to make?", clientscript 2046's first
+ * argument 0, and the most the inventory makes as both the limit and the amount it opens on.
+ * With only one to make, it is made at once.
+ */
+function offer(player, recipe) {
+  const most = makeable(player.getInventory(), recipe);
+  if (most <= 1) {
+    makeOne(player, recipe);
+    return;
+  }
+  const { CreationMenu } = Common.core;
+  player.getPacketSender().sendCreationMenu(new CreationMenu(
+    "How many do you wish to make?",
+    [recipe.productId],
+    { execute: (productId, amount) => start(player, recipe, Math.min(amount, makeable(player.getInventory(), recipe))) },
+    { mode: 0, maxAmount: most, lastAmount: most },
+  ));
+}
+
 function mix(event) {
   const { player, usedItemId, usedWithItemId } = event;
   const found = Common.recipesWith(usedItemId, usedWithItemId);
@@ -96,7 +145,7 @@ function mix(event) {
   if (recipes.length === 0) return;
   event.handled = true;
   const recipe = chooseRecipe(player, recipes);
-  if (recipe) makeOne(player, recipe);
+  if (recipe) offer(player, recipe);
 }
 
 module.exports = function attachMixing(api) {

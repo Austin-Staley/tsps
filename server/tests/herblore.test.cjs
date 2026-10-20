@@ -72,6 +72,7 @@ function player(contents, level = 99) {
   const sent = { messages: [], spam: [], sounds: [], animations: [], xp: 0 };
   const inv = inventory(contents);
   const sender = new Proxy({
+    sendCreationMenu(menu) { sent.menu = menu; return sender; },
     sendTypedMessage(type, text) { sent.spam.push(text); return sender; },
     sendSound(id) { sent.sounds.push(id); return sender; },
   }, { get: (target, key) => key in target ? target[key] : () => sender });
@@ -94,6 +95,17 @@ function click(who, name) {
   const slot = who.inv.getItems().findIndex((item) => item.getId() === itemId);
   const event = { player: who, itemId, slot, clickType: 1 };
   return hooks.firstAction.some((handler) => handler(event) !== false);
+}
+
+function ticks(count) {
+  for (let i = 0; i < count; i++) core.TaskManager.process();
+}
+
+/** Picks an amount in the open skillmulti menu, as the client's resume_pausebutton does. */
+function choose(who, amount) {
+  const menu = who.sent.menu;
+  who.sent.menu = null;
+  menu.execute(menu.getItems()[0], amount);
 }
 
 function use(who, used, usedWith) {
@@ -204,4 +216,55 @@ test("herblore:unfinished answers Zahur with the herb's unfinished potion", () =
   const request = { herbId: obj("toadflax"), potion: null };
   hooks.customEvents.get("herblore:unfinished")(request);
   assert.equal(request.potion, obj("toadflaxvial"));
+});
+
+test("more than one opens the captured skillmulti menu", () => {
+  const who = player([...Array(14).fill(["ranarr_weed"]), ...Array(14).fill(["vial_water"])]);
+  use(who, "vial_water", "ranarr_weed");
+  const menu = who.sent.menu;
+  assert.equal(menu.getTitle(), "How many do you wish to make?");
+  assert.deepEqual(menu.getItems(), [obj("ranarrvial")]);
+  assert.deepEqual(menu.getOptions(), { mode: 0, maxAmount: 14, lastAmount: 14 });
+  assert.equal(who.inv.count("ranarrvial"), 0);
+});
+
+test("unfinished potions come a tick after the menu closes, then one a tick", () => {
+  const who = player([...Array(14).fill(["ranarr_weed"]), ...Array(14).fill(["vial_water"])]);
+  use(who, "vial_water", "ranarr_weed");
+  choose(who, 14);
+  assert.equal(who.inv.count("ranarrvial"), 0);
+  assert.deepEqual(who.sent.sounds, [2608], "the animation and sound as the menu closes");
+  ticks(1);
+  assert.equal(who.inv.count("ranarrvial"), 1);
+  ticks(13);
+  assert.equal(who.inv.count("ranarrvial"), 14);
+  assert.equal(who.sent.spam.length, 14);
+  ticks(2);
+  assert.equal(who.sent.sounds.length, 15);
+});
+
+test("finished potions come every two ticks, and stop at the amount chosen", () => {
+  const who = player([...Array(5).fill(["ranarrvial"]), ...Array(5).fill(["snape_grass"])]);
+  use(who, "snape_grass", "ranarrvial");
+  choose(who, 3);
+  ticks(1);
+  assert.equal(who.inv.count("3doseprayerrestore"), 1);
+  ticks(1);
+  assert.equal(who.inv.count("3doseprayerrestore"), 1);
+  ticks(1);
+  assert.equal(who.inv.count("3doseprayerrestore"), 2);
+  ticks(10);
+  assert.equal(who.inv.count("3doseprayerrestore"), 3);
+  assert.equal(who.inv.count("ranarrvial"), 2);
+});
+
+test("the Herblore cape's grimy herbs start at once and go every tick", () => {
+  world.cape = true;
+  const who = player([...Array(3).fill(["unidentified_marentill"]), ...Array(3).fill(["vial_water"])]);
+  use(who, "unidentified_marentill", "vial_water");
+  choose(who, 3);
+  assert.equal(who.inv.count("marrentillvial"), 1);
+  ticks(2);
+  assert.equal(who.inv.count("marrentillvial"), 3);
+  assert.deepEqual(who.sent.animations, []);
 });
