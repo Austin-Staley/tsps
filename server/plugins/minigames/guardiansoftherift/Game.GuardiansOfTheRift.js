@@ -59,6 +59,8 @@ const COUNTDOWN = new Map([
 ]);
 
 const START_POWER_PERCENT = 10;
+/** The lobby's first countdown line ("30 seconds"): an empty temple holds there, silently. */
+const EMPTY_LOBBY_HOLD = 50;
 const SURGE_PERCENT = 60;
 const SURGE_SOUND = 1465;
 const SURGE_SHAKE_TICKS = 2;
@@ -167,15 +169,18 @@ function maxPowerFor(count) {
   return 250 * Math.min(players, 20) + 200 * Math.max(0, players - 20);
 }
 
+/** A player leaving lowers the maximum; the power can't stand above it. */
 function updateMaxPower() {
   game.maxPower = maxPowerFor(game.players.size);
+  game.power = Math.min(game.power, game.maxPower);
 }
 
 function addPower(amount) {
   if (game.phase !== PHASE.PREPARE && game.phase !== PHASE.ATTACK) return;
   game.power = Math.max(0, Math.min(game.maxPower, game.power + amount));
   if (!game.surged && powerPercent() >= SURGE_PERCENT) surge();
-  if (game.power >= game.maxPower) charged();
+  // Only stones fed complete the charge: a drop in the maximum alone never wins the game.
+  if (amount > 0 && game.power >= game.maxPower) charged();
   else if (game.power <= 0 && game.phase === PHASE.ATTACK) lose();
 }
 
@@ -446,7 +451,12 @@ function tickPortal() {
 
 // ------------------------------------------------------------------ the loop
 
+/** With nobody inside the barrier the lobby waits at its 30 seconds: no game for an empty temple. */
 function tickLobby() {
+  if (game.players.size === 0 && game.timer <= EMPTY_LOBBY_HOLD) {
+    game.timer = EMPTY_LOBBY_HOLD;
+    return;
+  }
   const line = COUNTDOWN.get(game.timer);
   if (line) message(line);
   if (--game.timer <= 0) openRift();

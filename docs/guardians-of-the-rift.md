@@ -134,6 +134,11 @@ Ticks from the rift opening:
   guardians play `statue_runestone01_active`, inactive ones `statue_runestone01_inactive` (loc anims).
 - **Power:** each guardian stone fed adds one to the power (the HUD's units). The maximum is
   250 per player in the game and 200 for each past the 20th (Wiki). A solo game needs 250 stones.
+  When a player leaves, the power is clamped to the lower maximum. Only stones fed complete the
+  charge.
+- **An empty temple** holds its lobby at the 30-second line (ours). Nobody hears the countdown and
+  no game opens until someone is inside the barrier. No creatures come through a game everyone
+  has left.
 - **NPC chatter** (Tamara, Cordelia, Felix): "We need to power up the Great Guardian!", "We need
   more rift guardians!", "Take uncharged cells with you to charge them at altars!", "The cells here
   can be used to power up barriers and rift guardians!", "Remember to combine guardian fragments
@@ -414,6 +419,8 @@ Ticks from the rift opening:
   - Big-search: the animation, and three ticks later up to five rewards at once.
   - A search costs an elemental and a catalytic point (Wiki). Searching with 25 pearls instead
     isn't built.
+  - A search is rolled first and given only if the whole roll fits. Otherwise the inventory-full
+    message shows and the points stay.
 - **Loot** (Wiki; `server/plugins/minigames/data/guardians-of-the-rift-rewards.json`):
   - The main table out of 140: pouches, runes, talismans, pearls, the intricate pouch, ashes and
     the needle.

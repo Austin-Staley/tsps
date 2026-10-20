@@ -116,23 +116,22 @@ function rollSearch(player) {
 
 // ------------------------------------------------------------------ giving
 
-function hasRoom(player, itemId) {
+/** Free slots a set of rewards needs: none for a stack already held (a pet may need one). */
+function slotsNeeded(player, rewards) {
   const inventory = player.getInventory();
-  if (inventory.getFreeSlots() > 0) return true;
-  return Shared.core().ItemDefinition.forId(itemId)?.isStackable?.() && inventory.contains(itemId);
+  return rewards.filter((reward) => {
+    const itemId = Shared.obj(reward.item);
+    return !(Shared.core().ItemDefinition.forId(itemId)?.isStackable?.() && inventory.contains(itemId));
+  }).length;
 }
 
-/** Gives one reward; false if there was no room for it. */
+/** Gives one reward the inventory has been checked to hold. */
 function give(player, reward) {
   const itemId = Shared.obj(reward.item);
   if (reward.pet) {
     const event = { player, drops: [{ itemId, amount: 1 }] };
     Shared.api().emitCustomEvent("npc-drops:roll", event);
     if (event.drops.length === 0) return true;
-  }
-  if (!hasRoom(player, itemId)) {
-    player.getInventory().full();
-    return false;
   }
   player.getInventory().adds(itemId, reward.amount);
   player.getInventory().refreshItems();
@@ -147,15 +146,21 @@ function searchesLeft(player) {
   return Math.min(points.elemental, points.catalytic);
 }
 
-/** Spends a search's points and gives its rewards; false if the inventory filled up. */
+/**
+ * One search: the whole roll must fit before anything is given, then its points are spent and
+ * every reward handed over. False when there are no searches left or no room.
+ */
 function searchOnce(player) {
   if (searchesLeft(player) <= 0) return false;
-  const points = Records.points(player);
-  for (const reward of rollSearch(player)) {
-    if (!give(player, reward)) return false;
+  const rewards = rollSearch(player);
+  if (slotsNeeded(player, rewards) > player.getInventory().getFreeSlots()) {
+    player.getInventory().full();
+    return false;
   }
+  const points = Records.points(player);
   Records.setPoints(player, points.elemental - 1, points.catalytic - 1);
   Records.addSearches(player, 1);
+  for (const reward of rewards) give(player, reward);
   return true;
 }
 

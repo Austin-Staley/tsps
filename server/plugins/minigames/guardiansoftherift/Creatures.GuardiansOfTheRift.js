@@ -96,7 +96,9 @@ function animate(npc, name) {
 
 // ------------------------------------------------------------------ spawning
 
+/** Nothing comes through for a game everyone has left. */
 function spawnBatch() {
+  if (Game.players().length === 0) return;
   const count = batchSize(Game.players().length);
   const mix = Game._game.surged ? MIX.surged : MIX.calm;
   const viewers = Temple.inTemple();

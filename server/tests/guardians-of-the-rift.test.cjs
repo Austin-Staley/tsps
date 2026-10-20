@@ -1058,3 +1058,45 @@ test('the abyssal needle stitches the four pouches into a colossal pouch', () =>
   assert.deepEqual(player.messages.slice(-2), ['You attempt to stitch together all of the pouches.', 'Your colossal pouch can hold 40 essence.']);
   assert.equal(player.xpBySkill.Crafting, 1000);
 });
+
+// ------------------------------------------------------------------ review fixes
+
+test('a player leaving lowers the maximum without winning the game for the rest', () => {
+  const stayer = fakePlayer('Stayer');
+  const leaver = fakePlayer('Leaver');
+  barrier(leaver, 'Quick-pass');
+  openGame(stayer);
+  Game._game.phase = Game.PHASE.ATTACK;
+  Game._game.power = 400;
+  assert.equal(Game._game.maxPower, 500);
+  barrier(leaver, 'Quick-pass');
+  assert.equal(Game._game.maxPower, 250);
+  assert.equal(Game._game.power, 250, 'clamped to the new maximum');
+  Game.addPower(-1);
+  assert.equal(Game.phase(), Game.PHASE.ATTACK, 'a creature hit is no win');
+  Game.addPower(1);
+  assert.equal(Game.phase(), Game.PHASE.CHARGED, 'a stone fed completes it');
+});
+
+test('an empty temple holds the lobby at 30 seconds; the first player in starts the countdown', () => {
+  Game._game.timer = 52;
+  ticks(10);
+  assert.equal(Game.phase(), Game.PHASE.LOBBY);
+  assert.equal(Game._game.timer, 50);
+  const player = fakePlayer();
+  barrier(player, 'Quick-pass');
+  ticks(1);
+  assert.equal(player.messages.at(-1), 'The rift will become active in 30 seconds.');
+  ticks(49);
+  assert.equal(Game.phase(), Game.PHASE.PREPARE);
+});
+
+test('a search that would not fit gives nothing and keeps its points', () => {
+  const player = fakePlayer();
+  Records.setPoints(player, 3, 3);
+  for (let i = 0; i < 28; i++) player.inventory.slots[i] = { id: 1, amount: 1 };
+  rift(player, 'Search');
+  ticks(5);
+  assert.deepEqual(Records.points(player), { elemental: 3, catalytic: 3 });
+  assert.ok(!player.messages.some((message) => message.startsWith('You found some loot')));
+});
