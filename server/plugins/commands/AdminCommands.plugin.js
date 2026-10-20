@@ -470,8 +470,15 @@ function giveItemCommand({ player, parts }) {
     return true;
   }
   const inventory = target.getInventory();
+  // Only what fits, as ::runes does, so the container never tells the target they
+  // "couldn't hold all those items" without saying who sent them.
+  const room = ItemDefinition.forId(id)?.isStackable?.()
+    ? (inventory.contains(id) || inventory.getFreeSlots() > 0 ? amount : 0)
+    : Math.min(amount, inventory.getFreeSlots());
   const before = inventory.getAmount(id);
-  inventory.adds(id, amount);
+  if (room > 0) {
+    inventory.adds(id, room);
+  }
   const given = inventory.getAmount(id) - before;
   if (given <= 0) {
     player.sendMessage(`${target.getUsername()}'s inventory is full.`);

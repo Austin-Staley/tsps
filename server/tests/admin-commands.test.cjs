@@ -115,16 +115,21 @@ test("::give takes a number before the name as the amount", () => {
   assert.equal(admin.messages.at(-1), "Gave 5 Guys 1 x Shark (385).");
 });
 
-test("::give says how many fit, and refuses unknown items and players who aren't online", () => {
+test("::give gives only what fits, and refuses unknown items and players who aren't online", () => {
   const admin = login("Admin", Rights.ADMINISTRATOR);
   const bob = login("Bob");
-  for (let slot = 0; slot < 26; slot++) bob.getInventory().adds(I.ABYSSAL_WHIP, 1);
+  bob.getInventory().adds(I.COINS, 1);
+  for (let slot = 0; slot < 25; slot++) bob.getInventory().adds(I.ABYSSAL_WHIP, 1);
   type(admin, "give 385 5 bob");
   assert.equal(bob.getInventory().getAmount(I.SHARK), 2);
   assert.equal(admin.messages.at(-1), "Gave Bob 2 x Shark (385); only 2 of 5 fit.");
-  assert.equal(bob.messages.at(-1), "Admin gave you 2 x Shark.");
+  assert.deepEqual(bob.messages, ["Admin gave you 2 x Shark."], "not told they couldn't hold the rest");
+
+  type(admin, "give 995 100 bob"); // a full inventory still takes more of a stack it has
+  assert.equal(bob.getInventory().getAmount(I.COINS), 101);
   type(admin, "give 385 bob");
   assert.equal(admin.messages.at(-1), "Bob's inventory is full.");
+  assert.deepEqual(bob.messages, ["Admin gave you 2 x Shark.", "Admin gave you 100 x Coins."]);
 
   type(admin, "give 9999999 bob");
   assert.equal(admin.messages.at(-1), "There is no item 9999999.");
