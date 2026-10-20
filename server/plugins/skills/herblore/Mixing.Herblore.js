@@ -107,8 +107,9 @@ function makeable(inventory, recipe) {
 /**
  * Makes `amount` (rsprox captures): the animation and sound as the menu closes, the first potion
  * a tick later and the next every `ticks` (1 for unfinished potions, 2 for most, 3 for forgotten
- * brew and extended anti-venom+). A grimy herb the cape cleans starts at once and goes every tick,
- * without the animation.
+ * brew and extended anti-venom+). A grimy herb the cape cleans starts at once and goes every tick
+ * (its recipes are unfinished potions, 1 tick), without the animation. `wait` counts from the
+ * cycle that shows the click (Common.run), so 2 is tick 1.
  */
 function start(player, recipe, amount) {
   Common.core.TaskManager.cancelTasks(player.getIndex());

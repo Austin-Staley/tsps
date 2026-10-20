@@ -1,7 +1,8 @@
 /**
  * A pestle and mortar on a Herblore secondary (rsprox captures): `human_herbing_grind` with synth
  * 2608 and the item's message, at once, then two ticks later, then every three ticks until none
- * are left or the player does something else. A stack (crystal shards) is ground all at once.
+ * are left or the player does something else. A stack (crystal shards) is ground all at once,
+ * each item rolled on its own.
  */
 const Common = require("./Common.Herblore");
 
@@ -28,7 +29,8 @@ function grindOne(player, grind) {
   if (held <= 0 || inventory.getAmount(pestle) <= 0) return false;
   const stack = Common.core.ItemDefinition.forId(grind.itemId).isStackable();
   const used = stack ? held : 1;
-  const made = stack ? used * amount(player, grind) : amount(player, grind);
+  let made = 0;
+  for (let n = 0; n < used; n++) made += amount(player, grind);
   inventory.deleteNumber(grind.itemId, used);
   inventory.addItem(new Common.core.Item(grind.productId, made));
   Common.animate(player, GRIND_ANIMATION);
