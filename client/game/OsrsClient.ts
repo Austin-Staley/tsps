@@ -7443,6 +7443,10 @@ export class OsrsClient {
             localTileY: decodeBase.tileY | 0,
             rootTileX: payload.rootTileX | 0,
             rootTileY: payload.rootTileY | 0,
+            worldViewBase: (worldViewId: number) => {
+                const view = this.worldViewManager.getWorldView(worldViewId | 0);
+                return view && !view.isTopLevel() ? { x: view.regionX * 8, y: view.regionY * 8 } : undefined;
+            },
             level: decodeBase.level | 0,
         });
 
@@ -7588,9 +7592,16 @@ export class OsrsClient {
             );
             this.npcEcs.setLevel(existingEcs, spawn.level | 0);
             this.npcEcs.setOccTile(existingEcs, localTileX, localTileY, spawn.level | 0);
-            if ((spawn as any).worldViewId !== undefined && (spawn as any).worldViewId >= 0) {
-                this.npcEcs.setWorldViewId(existingEcs, (spawn as any).worldViewId);
-                this.worldViewManager.addNpcToWorldView((spawn as any).worldViewId, existingEcs);
+            const nextWorldView = (spawn as any).worldViewId ?? -1;
+            const previousWorldView = this.npcEcs.getWorldViewId(existingEcs) | 0;
+            if (previousWorldView !== nextWorldView) {
+                if (previousWorldView >= 0) {
+                    this.worldViewManager.removeNpcFromWorldView(previousWorldView, existingEcs);
+                }
+                this.npcEcs.setWorldViewId(existingEcs, nextWorldView);
+                if (nextWorldView >= 0) {
+                    this.worldViewManager.addNpcToWorldView(nextWorldView, existingEcs);
+                }
             }
 
             // Keep the instance map entry up to date for geometry streaming.
@@ -7963,6 +7974,8 @@ export class OsrsClient {
         } catch {}
         const ecsId = this.npcEcs.getEcsIdForServer(sid);
         if (ecsId !== undefined) {
+            const worldViewId = this.npcEcs.getWorldViewId(ecsId) | 0;
+            if (worldViewId >= 0) this.worldViewManager.removeNpcFromWorldView(worldViewId, ecsId);
             this.npcEcs.destroyNpc(ecsId);
         }
         this.npcInstances.instanceMap.delete(instanceKey);

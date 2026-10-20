@@ -138,6 +138,14 @@ export interface PluginNpcRouteEvent extends PluginNpcInteractionEvent {
   range: number;
 }
 
+/** A world entity (static ship or boat) menu option, such as Board or Attack. */
+export interface PluginWorldEntityInteractionEvent {
+  player: any;
+  entityIndex: number;
+  clickType: number;
+  handled: boolean;
+}
+
 /** Context handed to dialogue plugins when a Talk-to transcript is about to play. */
 export interface PluginNpcDialogueContext {
   player: any;
@@ -836,6 +844,8 @@ export interface PluginApi {
     actions: Record<string, (event: PluginObjectInteractionEvent) => void | boolean>
   ): void;
   onNpcInteraction(handler: (event: PluginNpcInteractionEvent) => void): void;
+  /** World entity (static ship/boat) options, by op number (1-6). */
+  onWorldEntityInteraction(handler: (event: PluginWorldEntityInteractionEvent) => void): void;
   /** Set a non-combat NPC option's approach range before movement starts. */
   onNpcRoute(handler: (event: PluginNpcRouteEvent) => void): void;
   /** Exact, case-sensitive NPC name and option matching. Return false to fall through. */
@@ -1131,6 +1141,7 @@ export interface PluginApi {
   emitObjectInteraction(event: PluginObjectInteractionEvent): boolean;
   /** Runs the NPC option handlers as a click would (a bot fishing a spot). */
   emitNpcInteraction(event: PluginNpcInteractionEvent): boolean;
+  emitWorldEntityInteraction(event: PluginWorldEntityInteractionEvent): boolean;
   /** Runs the item-on-object handlers as a use would (a bot cooking on a range). */
   emitItemOnObject(event: PluginItemOnObjectEvent): boolean;
   emitPlayerLogin(event: PluginPlayerLoginEvent): void;
@@ -1299,6 +1310,9 @@ export interface PluginCoreApi {
     isEnabled(): boolean;
   };
   World: any;
+  BoatManager: any;
+  Sailing: any;
+  BOAT_VIEW_DISTANCE: number;
   GameObject: any;
   PrivateArea: any;
   TemplatedInstanceArea: any;

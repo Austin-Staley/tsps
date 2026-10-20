@@ -350,6 +350,7 @@ export class PlayerSession {
     const npcViews = ServerPerf.measurePhase("network.flush.build_npc_views", () =>
       player.getLocalNpcs().map((npc) => {
         const location = npc.getLocation();
+        const npcBoat = BoatManager.getBoatAboard(npc);
         const face = npc.getFace()?.getDirection?.();
         const positionToFace = npc.getUpdateFlag().flagged(Flag.FACE_POSITION)
           ? npc.getPositionToFace()
@@ -359,6 +360,7 @@ export class PlayerSession {
           interactionIndex: this.interactionIndex(npc.getInteractingMobile()),
           index: npc.getIndex(),
           typeId: npc.getId(),
+          worldView: npcBoat?.entityIndex,
           headIcon: npc.getHeadIcon(),
           x: location.getX(),
           y: location.getY(),
@@ -391,7 +393,14 @@ export class PlayerSession {
       : current;
     const npcSync = ServerPerf.measurePhase(
       "network.flush.encode_npc_sync",
-      () => encodeNpcSync(tick, npcLocal, npcViews, this.npcSyncState)
+      () => encodeNpcSync(
+        tick, npcLocal, npcViews, this.npcSyncState,
+        boatAboard ? current : undefined,
+        (worldView) => {
+          const boat = BoatManager.getBoat(worldView);
+          return boat ? { x: boat.deckBaseX, y: boat.deckBaseY, level: 0 } : undefined;
+        },
+      )
     );
 
     const syncSent = ServerPerf.measurePhase("network.flush.socket_send", () => {

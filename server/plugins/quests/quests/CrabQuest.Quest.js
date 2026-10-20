@@ -5,13 +5,12 @@
  * supplies the bottle start, the shell hand-in, the string-instrument chain, the
  * crab-hunting investigations, the ceremony and the completion reward.
  *
- * Stages (varbit 15842 "crab_main", varp 5739 bits 0-5; scripts/lookup-gameval.ts
- * varbit crab_main):
- *   0 not started, 1 drank from the bottle / gathering shells, 2 seven shells
- *   handed in / need the string instrument, 3 instrument given / recruiting
- *   leaders, 4 at least six leaders found (the crab offers to wait), 5 all eleven
- *   leaders found, 6 the dance lesson shown (the "crab rave"), 7 ceremony ready,
- *   8 complete.
+ * Stages (varbit 15842 "crab_main", varp 5739 bits 0-6), as live sends them and as
+ * Quest Helper's loadSteps keys on them:
+ *   0 not started, 5 drank from the bottle, 10/15/20 the crab's explanation,
+ *   25 gathering shells, 30 seven shells handed in, 35/37 gathering the floatsam,
+ *   40 instrument made, 45 instrument handed in, 47 instrument tuned and recruiting,
+ *   50 all eleven leaders recruited, 55 dance lesson, 60 ceremony, 63 complete.
  *
  * The main beach crab (16471) and the quest scenery (bottle 62439/62440, palms
  * 62470, magic tree 62473, trees 62475, plant 62477, bush 62478) are not placed
@@ -22,15 +21,19 @@
  * Source: OSRS Wiki "Crab Quest" page, quick guide and transcript; cache ids and
  * the varbit confirmed with scripts/lookup-gameval.ts and CacheDefinitions.
  *
- * Gaps: quest scenery has no map placements, so its tiles are the closest free
- * tiles to the island's known anchors. The wiki "sit down and wait" coax is
- * approximated by investigating a scared tree a second time. Cutscenes play as
- * transcript dialogue with no camera work. The dream/headache (boat and teleport
- * lock) and the shy crab's chest scene are not implemented; the eleven leaders
- * alone advance the ceremony. No post-quest beach-crab variant exists, so a
+ * Gaps: quest scenery has no map placements, so the runtime objects use the Quest Helper
+ * coordinates (magic tree 3043,2640; palms/bushes/plant/trees around it). The wiki "sit down and wait" coax is
+ * approximated by investigating a scared tree a second time. The dance lesson and
+ * ceremony play captured fades and camera moves (after the dance camera, before the
+ * ceremony camera, and the final dance arc); the capture's skybox (cam_skybox 61359) has
+ * no core packet yet. The shy crab 16484 is spawned at 3045,2653 with the captured opening
+ * conversation; its later relocation/scutter-away is a remaining gap. The dream/headache
+ * (boat and teleport lock) is not implemented. No post-quest beach-crab variant exists, so a
  * completed player replays "crab-hunting-talking-to-the-crab-again". The Crab
  * dance emote is not unlocked (the dance conditions answer "not unlocked"). The
  * requirement refusal is a plain system message because the transcript has none.
+ * Shells and recruits are de-duplicated by per-item/per-spot flags, and the instrument
+ * hand-in/tuning stages only advance on the transcript's own hand-in and tune messages.
  */
 module.exports = function registerCrabQuestQuest(api) {
   const {
@@ -45,20 +48,34 @@ module.exports = function registerCrabQuestQuest(api) {
   const { loadTranscripts, registerQuest, refreshQuestList, startTranscript } =
     require("../QuestRuntime");
   const { startDialogue } = require("../../npcs/NpcDialogues.plugin.js");
+  const { createQuestScenes } = require("../QuestScenes");
+  const Scenes = createQuestScenes(api);
 
+  const STAGE_VERSION_ATTRIBUTE = "quest.crab_quest.stage-version";
+  const STAGE_VERSION = 2;
   const PAGE = "Crab Quest";
   const START_HOOK = "quest:crab-quest:start";
 
+  // The values live sends and Quest Helper's loadSteps use (CrabQuest capture):
+  // intro 5/10/15/20, shells 25, instrument 30/35/37/40, recruiting 45/47,
+  // ceremony 50/55/60, complete 63. The old 0-8 ladder never matched the varbit.
   const STAGE_VARBIT = 15842; // "crab_main"
   const STAGE_NOT_STARTED = 0;
-  const STAGE_SHELLS = 1;
-  const STAGE_INSTRUMENT = 2;
-  const STAGE_RECRUITING = 3;
-  const STAGE_SIX_LEADERS = 4;
-  const STAGE_ALL_LEADERS = 5;
-  const STAGE_DANCE_READY = 6;
-  const STAGE_CEREMONY = 7;
-  const STAGE_COMPLETE = 8;
+  const STAGE_START = 5;
+  const STAGE_LEARN = 10;
+  const STAGE_STORY = 15;
+  const STAGE_PLEA = 20;
+  const STAGE_SHELLS = 25;
+  const STAGE_INSTRUMENT = 30;
+  const STAGE_MATERIALS = 35;
+  const STAGE_MATERIALS_READY = 37;
+  const STAGE_INSTRUMENT_MADE = 40;
+  const STAGE_RECRUITING = 45;
+  const STAGE_TUNING = 47;
+  const STAGE_ALL_LEADERS = 50;
+  const STAGE_DANCE_READY = 55;
+  const STAGE_CEREMONY = 60;
+  const STAGE_COMPLETE = 63;
 
   const SAILING_REQUIREMENT = 40;
   const FISHING_REQUIREMENT = 30;
@@ -69,8 +86,14 @@ module.exports = function registerCrabQuestQuest(api) {
     "You need a Sailing level of 40 and a Fishing level of 30 to start this quest.";
 
   const MAIN_CRAB_NPC_ID = NpcIdentifiers.CRAB_9; // 16471, "Crab", Talk-to
+  const SHY_CRAB_NPC_ID = 16484; // crab_shycrab parent, multinpc Crab
+  const BAND_CRAB_NPC_ID = 16483; // resolved crab_bandcrab transform (QH/capture chathead)
+  const SHY_CRAB_CONTENT_ID = BAND_CRAB_NPC_ID;
   const PENGUIN_CRAB_NPC_ID = NpcIdentifiers.CRAB_18; // 16485, "'Crab'"
-  const CRAB_NPC_IDS = new Set([MAIN_CRAB_NPC_ID, PENGUIN_CRAB_NPC_ID]);
+  const CRAB_NPC_IDS = new Set([MAIN_CRAB_NPC_ID, PENGUIN_CRAB_NPC_ID, BAND_CRAB_NPC_ID]);
+  // Interface 216 slot 54 (cache enum 1001 -> sprite 5248) is the real Sit emote;
+  // the capture's op=1 plays emote_sit_loop 10061.
+  const SIT_EMOTE_SLOT = 54;
   const FLOATSAM_NPC_IDS = new Set([
     NpcIdentifiers.FLOATSAM, // 16475, "Net"
     NpcIdentifiers.FLOATSAM_2, // 16476
@@ -107,16 +130,16 @@ module.exports = function registerCrabQuestQuest(api) {
   const CRAB_BUSH_OBJECT_ID = 62478; // "Bush", Investigate
 
   const BOTTLE_TILE = { x: 3055, y: 2639 };
-  const MAIN_CRAB_TILE = { x: 3052, y: 2640 };
-  const NET_TILE = { x: 3052, y: 2636 };
+  const MAIN_CRAB_TILE = { x: 3057, y: 2637 };
+  const NET_TILE = { x: 3061, y: 2646 };
   const SHELL_TILES = [
-    { x: 3022, y: 2631 },
-    { x: 3026, y: 2634 },
-    { x: 3031, y: 2633 },
-    { x: 3036, y: 2632 },
-    { x: 3040, y: 2637 },
-    { x: 3047, y: 2631 },
-    { x: 3051, y: 2633 },
+    { x: 3059, y: 2648 },
+    { x: 3051, y: 2634 },
+    { x: 3063, y: 2642 },
+    { x: 3040, y: 2636 },
+    { x: 3036, y: 2643 },
+    { x: 3044, y: 2652 },
+    { x: 3050, y: 2655 },
     { x: 3057, y: 2632 },
     { x: 3060, y: 2634 },
   ];
@@ -141,8 +164,13 @@ module.exports = function registerCrabQuestQuest(api) {
   const MAGIC_TREE_STEP = "5WiO-g";
   const DIPPER_STEP = "beb_BL";
   const KID_CRAB_STEP = "ByoUzK";
+  const CRAB_VOICE_TRAILS_STEP = "Rp9LU6";
+  const INSTRUMENT_GIVEN_STEP = "YAKnYw";
+  const INSTRUMENT_ONE_NOTE_STEP = "IJKINA";
+  const INSTRUMENT_TUNED_STEP = "zUZGcG";
   const DANCE_BEGINS_STEP = "uZozUI";
   const DANCE_ENDS_STEP = "UOa-Sd";
+  const CEREMONY_DANCE_STEP = "twF4TG";
   const CEREMONY_COMPLETE_STEP = "Wk9imR";
   const SHELL_COLLECTION_MESSAGE_STEP = "Uf9RIo";
 
@@ -150,6 +178,20 @@ module.exports = function registerCrabQuestQuest(api) {
   const BASS_NAME = "A bass.";
   const BANJO_NAME = "I don't actually know.";
   const PLAY_STYLE_OPTIONS = new Set(["Let me show you!", "I can try and explain.", BANJO_NAME]);
+
+  const CUTSCENE_BOUNDS = [[3020, 3080, 2620, 2670, 0]];
+  const SHY_CRAB_ATTRIBUTE = "quest.crab_quest.shy-met";
+  const SHY_CRAB_LINES = [
+    { speaker: "Crab", text: "Oh. Sorry. You've come to the wrong crab!" },
+    { player: "How comes?" },
+    { speaker: "Crab", text: "First, I'm a girl and girls are never ceremonial leaders. Besides, I get very nervous standing in front of others... I'm afraid to mess up." },
+    { player: "What if you do? Messing up is a part of life. You fall and pick yourself back up again." },
+    { speaker: "Crab", text: "I know that, and yet I can't help it. I have this uneasy feeling that I don't belong... But I just really want to be accepted." },
+    { speaker: "Crab", text: "You see, there's this one crab... He's kind and funny... and handsome! When he's around I feel like everything is going to be okay. But unfortunately, I can't even look at him!" },
+    { speaker: "Crab", text: "For a start. I... get all red. In fact I get all red just thinking about him!" },
+    { player: "Awww. I don't know which crab is the one that caught your eye, but you obviously like him. Hey, maybe he's a ceremonial leader this year?" },
+    { speaker: "Crab", text: "I already can't handle how awesome he is. If he was a ceremonial leader as well, how could I possibly approach him? I already can't!" },
+  ];
 
   const DONE_JOINED_VARIANT = "crab-hunting-investigating-a-tree-plant-or-bush-after-the-crab-goes-to-practice";
   const WHILE_OUT_VARIANT = "crab-hunting-investigating-a-tree-plant-or-bush-while-the-crab-is-out";
@@ -206,59 +248,67 @@ module.exports = function registerCrabQuestQuest(api) {
   const SPOTS = [
     {
       objectId: CRAB_MAGIC_TREE_OBJECT_ID,
-      x: 3042,
-      y: 2639,
+      x: 3043,
+      y: 2640,
+      sitTile: { x: 3042, y: 2640 }, // QH sitForCrabSix
       first: "crab-hunting-investigating-the-magic-tree",
       variant: "crab-hunting-investigating-the-magic-tree-sitting-by-the-magic-tree",
       joinBit: 1 << 0,
     },
     {
       objectId: CRAB_PALM_OBJECT_ID,
-      x: 3044,
-      y: 2646,
+      x: 3042,
+      y: 2637,
+      sitTile: { x: 3041, y: 2638 }, // QH sitForCrabOne
       first: "crab-hunting-investigating-the-palm-south-of-the-magic-tree",
       variant: "crab-hunting-investigating-the-palm-south-of-the-magic-tree-sitting-by-the-palm",
       joinBit: 1 << 1,
     },
     {
+      // Not a QH spot. Its solid loc sits on the only land corridor into the
+      // magic-tree/avium pocket, making the leaders at 3043,2640 and 3042,2637
+      // unreachable. Keep the entry so saved SCARED/MET bit indices stay stable,
+      // but never place it.
       objectId: CRAB_PALM_OBJECT_ID,
       x: 3039,
       y: 2644,
+      place: false,
       variant: "crab-hunting-investigating-the-palm-south-west-of-the-magic-tree",
     },
     {
       objectId: CRAB_TREE_OBJECT_ID,
-      x: 3034,
-      y: 2634,
+      x: 3037,
+      y: 2644,
+      sitTile: { x: 3038, y: 2644 }, // QH sitForCrabNine
       first: "crab-hunting-investigating-the-tree-north-west-of-the-magic-tree",
       variant: "crab-hunting-investigating-the-tree-north-west-of-the-magic-tree-sitting-by-the-palm",
       joinBit: 1 << 2,
     },
     {
       objectId: CRAB_PALM_OBJECT_ID,
-      x: 3032,
-      y: 2648,
+      x: 3037,
+      y: 2647,
       variant: "crab-hunting-investigating-the-western-most-palm",
       joinBit: 1 << 3,
     },
     {
       objectId: CRAB_PALM_OBJECT_ID,
-      x: 3038,
+      x: 3039,
       y: 2647,
       variant: "crab-hunting-investigating-the-palm-directly-east-of-the-western-most-palm",
       joinBit: 1 << 4,
     },
     {
       objectId: CRAB_PALM_OBJECT_ID,
-      x: 3041,
-      y: 2645,
+      x: 3040,
+      y: 2649,
       variant: "crab-hunting-investigating-the-palm-directly-north-east-of-the-western-most-palm",
       joinBit: 1 << 5,
     },
     {
       objectId: CRAB_PALM_OBJECT_ID,
-      x: 3054,
-      y: 2663,
+      x: 3048,
+      y: 2658,
       variant: "crab-hunting-investigating-the-northern-most-palm",
       joinBit: 1 << 6,
       chathead: PENGUIN_CRAB_NPC_ID,
@@ -271,8 +321,9 @@ module.exports = function registerCrabQuestQuest(api) {
     },
     {
       objectId: CRAB_TREE_OBJECT_ID,
-      x: 3028,
-      y: 2655,
+      x: 3047,
+      y: 2656,
+      sitTile: { x: 3046, y: 2655 }, // QH sitForCrabTen
       first: "crab-hunting-investigating-the-north-western-most-tree",
       variant: "crab-hunting-investigating-the-north-western-most-tree-sitting-by-the-tree",
       joinBit: 1 << 7,
@@ -286,22 +337,22 @@ module.exports = function registerCrabQuestQuest(api) {
     },
     {
       objectId: CRAB_PLANT_OBJECT_ID,
-      x: 3053,
-      y: 2655,
+      x: 3054,
+      y: 2656,
       variant: "crab-hunting-investigating-the-plant",
       joinBit: 1 << 8,
     },
     {
       objectId: CRAB_BUSH_OBJECT_ID,
-      x: 3048,
-      y: 2633,
+      x: 3050,
+      y: 2636,
       variant: "crab-hunting-investigating-the-western-bush",
       joinBit: 1 << 9,
     },
     {
       objectId: CRAB_BUSH_OBJECT_ID,
-      x: 3058,
-      y: 2642,
+      x: 3057,
+      y: 2640,
       variant: "crab-hunting-investigating-the-eastern-bush",
       joinBit: 1 << 10,
     },
@@ -402,9 +453,7 @@ module.exports = function registerCrabQuestQuest(api) {
 
   function recountLeaders(player) {
     if (quest.isComplete(player)) return;
-    const count = leaderCount(player);
-    if (count >= ALL_LEADER_COUNT) setStage(player, STAGE_ALL_LEADERS);
-    else if (count >= SIX_LEADER_COUNT) setStage(player, STAGE_SIX_LEADERS);
+    if (leaderCount(player) >= ALL_LEADER_COUNT) setStage(player, STAGE_ALL_LEADERS);
   }
 
   // ==========================================================================
@@ -470,7 +519,10 @@ module.exports = function registerCrabQuestQuest(api) {
     if (objectsInstalled) return;
     objectsInstalled = true;
     registerObject(CRAB_BOTTLE_OBJECT_ID, BOTTLE_TILE);
-    for (const spot of SPOTS) registerObject(spot.objectId, spot, spot.rotation ?? 0);
+    for (const spot of SPOTS) {
+      if (spot.place === false) continue;
+      registerObject(spot.objectId, spot, spot.rotation ?? 0);
+    }
   }
 
   function swapBottleToPost() {
@@ -515,7 +567,7 @@ module.exports = function registerCrabQuestQuest(api) {
     if (!manager?.registerLocation || !manager?.getGroundItem) return;
     const stage = quest.getStage(player);
     const privateArea = player.getPrivateArea?.() ?? null;
-    if (stage === STAGE_SHELLS) {
+    if (stage >= STAGE_SHELLS && stage < STAGE_INSTRUMENT) {
       for (let index = 0; index < SHELL_TILES.length; index++) {
         if (hasFlag(player, SHELLS_PICKED_ATTRIBUTE, 1 << index)) continue;
         const itemId = ALL_SHELL_ITEM_IDS[index];
@@ -526,7 +578,7 @@ module.exports = function registerCrabQuestQuest(api) {
         manager.registerLocation(player, new Item(itemId, 1), position);
       }
     }
-    if (stage === STAGE_INSTRUMENT && !hasFlag(player, NET_PICKED_ATTRIBUTE, 1)) {
+    if (stage >= STAGE_INSTRUMENT && stage < STAGE_RECRUITING && !hasFlag(player, NET_PICKED_ATTRIBUTE, 1)) {
       const position = new Location(NET_TILE.x, NET_TILE.y, 0);
       if (!manager.getGroundItem(player.getUsername(), BIG_FISHING_NET_ITEM_ID, position, privateArea)) {
         manager.registerLocation(player, new Item(BIG_FISHING_NET_ITEM_ID, 1), position);
@@ -534,10 +586,46 @@ module.exports = function registerCrabQuestQuest(api) {
     }
   }
 
+  function sendCamera(player, move, look) {
+    const sender = player.getPacketSender();
+    sender.sendCameraMoveTo(move[0], move[1], move[2], { rate: 232, rate2: 100, heightRelative: false });
+    sender.sendCameraLookAt(look[0], look[1], look[2], { rate: 232, rate2: 100, heightRelative: false });
+  }
+
+  function startDanceScene(player) {
+    if (Scenes.get(player)?.name === "crab-dance") return Scenes.get(player);
+    const scene = Scenes.open(player, "crab-dance", CUTSCENE_BOUNDS);
+    Scenes.actor(scene, 16480, [3060, 2640, 0]);
+    Scenes.actor(scene, 16482, [3064, 2640, 0]);
+    Scenes.fade(player, true);
+    Scenes.later(scene, 1, () => {
+      sendCamera(player, [3071, 2637, 470], [3062, 2641, 50]);
+      Scenes.later(scene, 1, () => Scenes.fade(player, false));
+    });
+    return scene;
+  }
+
+  function startCeremonyScene(player) {
+    const scene = Scenes.get(player)?.name === "crab-ceremony"
+      ? Scenes.get(player)
+      : Scenes.open(player, "crab-ceremony", CUTSCENE_BOUNDS);
+    Scenes.fade(player, true);
+    Scenes.later(scene, 1, () => {
+      sendCamera(player, [3071, 2624, 450], [3062, 2632, 100]);
+      player.getPacketSender().sendCameraMoveArc(3062, 2632, 3062, 2632, 450, 400, "linear");
+      sendCamera(player, [3052, 2641, 600], [3061, 2644, 100]);
+      Scenes.later(scene, 1, () => Scenes.fade(player, false));
+      for (const [id, x, y] of [[16480, 3060, 2643], [16482, 3064, 2643]]) {
+        if (!scene.actors.some((npc) => npc.getId?.() === id)) Scenes.actor(scene, id, [x, y, 0]);
+      }
+    });
+    return scene;
+  }
+
   function syncNpcs(player) {
     if (!player || player.isPlayerBot?.() === true) return;
     const stage = quest.getStage(player);
-    if (stage >= STAGE_SHELLS) {
+    if (stage >= STAGE_START && !quest.isComplete(player)) {
       spawnTracked(player, "main-crab", {
         id: MAIN_CRAB_NPC_ID,
         ...MAIN_CRAB_TILE,
@@ -546,6 +634,11 @@ module.exports = function registerCrabQuestQuest(api) {
       });
     } else {
       removeTracked(player, "main-crab");
+    }
+    if (stage >= STAGE_RECRUITING && !quest.isComplete(player)) {
+      spawnTracked(player, "shy-crab", { id: SHY_CRAB_NPC_ID, x: 3045, y: 2653, z: 0, wanderRadius: 0 });
+    } else {
+      removeTracked(player, "shy-crab");
     }
     syncGroundItems(player);
   }
@@ -559,7 +652,7 @@ module.exports = function registerCrabQuestQuest(api) {
     const { player } = event;
     if (quest.isComplete(player) || quest.getStage(player) !== STAGE_NOT_STARTED) return;
     if (!meetsRequirements(player)) return;
-    setStage(player, STAGE_SHELLS);
+    setStage(player, STAGE_START);
   }
 
   function drinkFromBottle(player) {
@@ -629,15 +722,16 @@ module.exports = function registerCrabQuestQuest(api) {
       return;
     }
     const stage = quest.getStage(player);
-    if (stage < STAGE_RECRUITING && hasAnyShell(player)) {
+    if (stage < STAGE_RECRUITING && hasAnyShell(player) && handedShellCount(player) < SHELL_COUNT) {
       playShellHandIn(player);
       return;
     }
-    if (stage === STAGE_SHELLS) {
+    if (stage <= STAGE_SHELLS) {
       startTranscript(api, player, MAIN_CRAB_NPC_ID, PAGE, "handing-in-seashells");
       return;
     }
-    if (stage === STAGE_INSTRUMENT) {
+    if (stage >= STAGE_INSTRUMENT && stage < STAGE_RECRUITING) {
+      // The transcript's own conditions cover a missing instrument and allow remaking it.
       startTranscript(
         api,
         player,
@@ -647,18 +741,18 @@ module.exports = function registerCrabQuestQuest(api) {
       );
       return;
     }
-    if (stage === STAGE_RECRUITING) {
-      startTranscript(api, player, MAIN_CRAB_NPC_ID, PAGE, "crab-hunting-talking-to-the-crab-again");
-      return;
-    }
-    if (stage === STAGE_SIX_LEADERS) {
-      startTranscript(
-        api,
-        player,
-        MAIN_CRAB_NPC_ID,
-        PAGE,
-        "crab-hunting-after-finding-all-six-leaders-to-join-practise-talking-to-the-main-crab"
-      );
+    if (stage >= STAGE_RECRUITING && stage < STAGE_ALL_LEADERS) {
+      if (leaderCount(player) >= SIX_LEADER_COUNT) {
+        startTranscript(
+          api,
+          player,
+          MAIN_CRAB_NPC_ID,
+          PAGE,
+          "crab-hunting-after-finding-all-six-leaders-to-join-practise-talking-to-the-main-crab"
+        );
+      } else {
+        startTranscript(api, player, MAIN_CRAB_NPC_ID, PAGE, "crab-hunting-talking-to-the-crab-again");
+      }
       return;
     }
     if (stage === STAGE_ALL_LEADERS) {
@@ -676,6 +770,7 @@ module.exports = function registerCrabQuestQuest(api) {
       return;
     }
     if (stage === STAGE_CEREMONY) {
+      startCeremonyScene(player);
       startTranscript(api, player, MAIN_CRAB_NPC_ID, PAGE, "crab-rave-the-ceremony");
       return;
     }
@@ -691,6 +786,13 @@ module.exports = function registerCrabQuestQuest(api) {
       talkToMainCrab(player);
       return;
     }
+    if (npcId === SHY_CRAB_NPC_ID || npcId === SHY_CRAB_CONTENT_ID) {
+      if (action !== "Talk-to") return;
+      event.handled = true;
+      player.setAttribute(SHY_CRAB_ATTRIBUTE, true);
+      playSteps(player, SHY_CRAB_NPC_ID, SHY_CRAB_LINES);
+      return;
+    }
     if (FLOATSAM_NPC_IDS.has(npcId)) {
       if (action !== "Net") return;
       event.handled = true;
@@ -699,7 +801,8 @@ module.exports = function registerCrabQuestQuest(api) {
   }
 
   function netFloatsam(player) {
-    if (quest.getStage(player) !== STAGE_INSTRUMENT) {
+    const stage = quest.getStage(player);
+    if (stage < STAGE_INSTRUMENT || stage >= STAGE_RECRUITING || hasItem(player, INSTRUMENT_ITEM_ID)) {
       playSteps(player, MAIN_CRAB_NPC_ID, variantSteps("drinking-from-bottle-interacting-with-the-floatsam"));
       return;
     }
@@ -720,6 +823,8 @@ module.exports = function registerCrabQuestQuest(api) {
     }
     for (const itemId of missing) player.getInventory().adds(itemId, 1);
     player.setAttribute(MATERIALS_FISHED_ATTRIBUTE, true);
+    if (hasAllMaterials(player)) setStage(player, STAGE_MATERIALS_READY);
+    else setStage(player, STAGE_MATERIALS);
     startTranscript(
       api,
       player,
@@ -811,6 +916,10 @@ module.exports = function registerCrabQuestQuest(api) {
   function handleChoice(event) {
     const { player, npcId, option } = event;
     if (npcId !== MAIN_CRAB_NPC_ID) return;
+    if (option === "I'll see what I can do." && quest.getStage(player) === STAGE_INSTRUMENT) {
+      setStage(player, STAGE_MATERIALS);
+      return;
+    }
     if (option === DISASTER_NAME) {
       player.setAttribute(INSTRUMENT_NAME_ATTRIBUTE, "disaster");
       return;
@@ -823,11 +932,27 @@ module.exports = function registerCrabQuestQuest(api) {
       player.setAttribute(INSTRUMENT_NAME_ATTRIBUTE, "banjo");
       return;
     }
-    if (!PLAY_STYLE_OPTIONS.has(option)) return;
-    if (hasItem(player, INSTRUMENT_ITEM_ID)) {
-      player.getInventory().deleteNumber(INSTRUMENT_ITEM_ID, 1);
+    if (!PLAY_STYLE_OPTIONS.has(option)) {
+      if (option === "I will experiment, then!") setStage(player, STAGE_TUNING);
+      return;
     }
-    setStage(player, STAGE_RECRUITING);
+    setStage(player, STAGE_TUNING);
+  }
+
+  /** The bottle's opening conversation advances the intro stages 5/10/15/20/25. */
+  function handleLine(event) {
+    const { player, npcId, text } = event;
+    if (!CRAB_NPC_IDS.has(npcId) || typeof text !== "string") return;
+    const stage = quest.getStage(player);
+    if (stage === STAGE_START && text.includes("Are you learning, though?")) {
+      setStage(player, STAGE_LEARN);
+      return;
+    }
+    if (stage === STAGE_LEARN && text.includes("not had a good experience in the past")) {
+      setStage(player, STAGE_STORY);
+      return;
+    }
+    if (stage === STAGE_PLEA && text === "See ya!") setStage(player, STAGE_SHELLS);
   }
 
   function handleAction(event) {
@@ -844,18 +969,44 @@ module.exports = function registerCrabQuestQuest(api) {
       }
       return;
     }
+    if (stepId === INSTRUMENT_GIVEN_STEP) {
+      if (hasItem(player, INSTRUMENT_ITEM_ID)) player.getInventory().deleteNumber(INSTRUMENT_ITEM_ID, 1);
+      setStage(player, STAGE_RECRUITING);
+      return;
+    }
+    if (stepId === INSTRUMENT_ONE_NOTE_STEP) {
+      setStage(player, STAGE_TUNING);
+      return;
+    }
+    if (stepId === CRAB_VOICE_TRAILS_STEP) {
+      setStage(player, STAGE_PLEA);
+      return;
+    }
+    if (stepId === INSTRUMENT_TUNED_STEP) {
+      setStage(player, STAGE_TUNING);
+      return;
+    }
     if (stepId === DANCE_BEGINS_STEP) {
       event.handled = true;
+      startDanceScene(player);
       setStage(player, STAGE_DANCE_READY);
       return;
     }
     if (stepId === DANCE_ENDS_STEP) {
       event.handled = true;
+      sendCamera(player, [3071, 2624, 450], [3062, 2632, 100]);
       setStage(player, STAGE_CEREMONY);
+      return;
+    }
+    if (stepId === CEREMONY_DANCE_STEP) {
+      event.handled = true;
+      sendCamera(player, [3061, 2644, 800], [3051, 2644, 100]);
+      player.getPacketSender().sendCameraMoveArc(3051, 2644, 3051, 2644, 800, 360, "ease_in_out_sine");
       return;
     }
     if (stepId === CEREMONY_COMPLETE_STEP) {
       event.handled = true;
+      Scenes.end(player, false);
       swapBottleToPost();
       if (!quest.isComplete(player)) quest.complete(player);
       return;
@@ -888,7 +1039,7 @@ module.exports = function registerCrabQuestQuest(api) {
   }
 
   function chatheadFor(spot) {
-    return spot.chathead ?? MAIN_CRAB_NPC_ID;
+    return spot.chathead ?? BAND_CRAB_NPC_ID;
   }
 
   function investigateSpot(player, spot) {
@@ -916,8 +1067,36 @@ module.exports = function registerCrabQuestQuest(api) {
       startTranscript(api, player, chatheadFor(spot), PAGE, spot.first);
       return;
     }
+    if (spot.sitTile && !hasFlag(player, MET_ATTRIBUTE, bit)) {
+      // The capture repeats the too-scared line until the player sits; the
+      // crab only comes out on the real Sit emote (handled below).
+      if (spot.first) startTranscript(api, player, chatheadFor(spot), PAGE, spot.first);
+      else player.sendMessage(NO_CRAB_TEXT);
+      return;
+    }
+    // A later investigate is recovery for a crab already coaxed out.
     setFlag(player, MET_ATTRIBUTE, bit);
     startTranscript(api, player, chatheadFor(spot), PAGE, spot.variant);
+  }
+
+  /** The captured coax: after the too-scared line, Sit on the spot's tile. */
+  function handleEmote(event) {
+    const { player, slot } = event;
+    if (!player || slot !== SIT_EMOTE_SLOT) return;
+    const stage = quest.getStage(player);
+    if (quest.isComplete(player) || stage < STAGE_RECRUITING || stage >= STAGE_ALL_LEADERS) return;
+    const here = player.getLocation();
+    for (const spot of SPOTS) {
+      if (!spot.sitTile || spot.joinBit === undefined) continue;
+      if (hasFlag(player, RECRUITED_ATTRIBUTE, spot.joinBit)) continue;
+      const bit = spotBit(spot);
+      if (hasFlag(player, MET_ATTRIBUTE, bit) || !hasFlag(player, SCARED_ATTRIBUTE, bit)) continue;
+      if (here.getX() !== spot.sitTile.x || here.getY() !== spot.sitTile.y || here.getZ() !== 0) continue;
+      setFlag(player, MET_ATTRIBUTE, bit);
+      player.sendMessage("And now, you wait...");
+      startTranscript(api, player, chatheadFor(spot), PAGE, spot.variant);
+      return;
+    }
   }
 
   // ==========================================================================
@@ -928,7 +1107,8 @@ module.exports = function registerCrabQuestQuest(api) {
     const { player, usedItemId, usedWithItemId } = event;
     if (!MATERIAL_ITEM_IDS.has(usedItemId) || !MATERIAL_ITEM_IDS.has(usedWithItemId)) return;
     event.handled = true;
-    if (quest.getStage(player) !== STAGE_INSTRUMENT) return;
+    const stage = quest.getStage(player);
+    if (stage < STAGE_INSTRUMENT || stage >= STAGE_RECRUITING) return;
     if (!hasAllMaterials(player)) {
       player.sendMessage(NEED_MATERIALS_TEXT);
       return;
@@ -938,6 +1118,7 @@ module.exports = function registerCrabQuestQuest(api) {
     player.getInventory().deleteNumber(BOWSTRING_ITEM_ID, 1);
     player.getInventory().adds(INSTRUMENT_ITEM_ID, 1);
     player.setAttribute(INSTRUMENT_MADE_ATTRIBUTE, true);
+    setStage(player, STAGE_INSTRUMENT_MADE);
     player.sendMessage(CRAFT_MESSAGE_TEXT);
   }
 
@@ -977,6 +1158,15 @@ module.exports = function registerCrabQuestQuest(api) {
     }
   }
 
+  /** Maps the old 1..8 ladder onto the live 5..63 values once. */
+  function migrateStage({ player }) {
+    if (player.getAttribute(STAGE_VERSION_ATTRIBUTE) === STAGE_VERSION) return;
+    const old = quest.getStage(player);
+    const migrated = { 1: 25, 2: 30, 3: 45, 4: 47, 5: 50, 6: 55, 7: 60, 8: 63 }[old];
+    if (migrated !== undefined) quest.setStage(player, migrated);
+    player.setAttribute(STAGE_VERSION_ATTRIBUTE, STAGE_VERSION);
+  }
+
   function handleLogin({ player }) {
     installObjects();
     refreshQuestList(player);
@@ -984,6 +1174,8 @@ module.exports = function registerCrabQuestQuest(api) {
   }
 
   function handleLogout({ player }) {
+    Scenes.end(player, true);
+    Scenes.closeFade(player);
     removeAllTracked(player);
   }
 
@@ -1018,10 +1210,10 @@ module.exports = function registerCrabQuestQuest(api) {
       "wants to be a ceremonial leader at the crab ceremony.",
       "",
     ];
-    if (stage === STAGE_SHELLS) {
+    if (stage < STAGE_INSTRUMENT) {
       lines.push("I should gather seashells from around the island and bring");
       lines.push("them to the crab. I have handed in " + handedShellCount(player) + "/7 good shells.");
-    } else if (stage === STAGE_INSTRUMENT) {
+    } else if (stage < STAGE_RECRUITING) {
       lines.push("The crab can't play 7 shells at once, so I agreed to make him");
       lines.push("a string instrument from the flotsam on the beach.");
     } else if (stage < STAGE_ALL_LEADERS) {
@@ -1057,13 +1249,15 @@ module.exports = function registerCrabQuestQuest(api) {
   api.persistAttribute(MAGIC_TREE_MET_ATTRIBUTE);
   api.persistAttribute(DIPPER_MET_ATTRIBUTE);
   api.persistAttribute(KID_CRAB_MET_ATTRIBUTE);
+  api.persistAttribute(SHY_CRAB_ATTRIBUTE, false);
+  api.persistAttribute(STAGE_VERSION_ATTRIBUTE, 0);
 
   quest = registerQuest(api, {
     key: "crab_quest",
     name: "Crab Quest",
     varpId: 5739,
     varbitId: STAGE_VARBIT,
-    startedValue: STAGE_SHELLS,
+    startedValue: STAGE_START,
     completionValue: STAGE_COMPLETE,
     questPoints: 1,
     xpRewards: [
@@ -1079,11 +1273,14 @@ module.exports = function registerCrabQuestQuest(api) {
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
+  api.onCustomEvent("npc-dialogue:line", handleLine);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("player:emote", handleEmote);
   api.onNpcInteraction(handleNpcInteraction);
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemOnItem(handleItemOnItem);
   api.onGroundItemPickup(handleGroundItemPickup);
+  api.onPlayerLogin(migrateStage);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
 };

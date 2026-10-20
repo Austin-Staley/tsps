@@ -32,6 +32,17 @@ const UNDERGROUND_OFFSET = 6400;
 const SEARCH_RADIUS = 4;
 const MAX_PLANE = 3;
 
+/**
+ * Cache ladders whose two ends are farther apart than the map-wide underground offset. The
+ * Wizards' Tower basement ladder (2148 at 3103,9576) climbs to the ground-floor ladder 2147 at
+ * 3104,3162; the 6414-tile gap is outside the 6400 offset and the 4-tile search, so link the
+ * exact pair instead of moving either object or clearing floor clipping.
+ */
+const CANONICAL_ENDS = new Map([
+  ["2148:3103,9576,0", { direction: UP, id: 2147, x: 3104, y: 3162, z: 0 }],
+  ["2147:3104,3162,0", { direction: DOWN, id: 2148, x: 3103, y: 9576, z: 0 }],
+]);
+
 function options(id) {
   return (ObjectDefinition.forId(id)?.getInteractions?.() ?? []).filter(Boolean).map((option) => option.toLowerCase());
 }
@@ -74,6 +85,12 @@ function objectsAround(x, y, z, radius) {
  */
 function otherEnd(object, direction) {
   const from = object.getLocation();
+  const canonical = CANONICAL_ENDS.get(`${object.getId()}:${from.getX()},${from.getY()},${from.getZ()}`);
+  if (canonical) {
+    if (canonical.direction !== direction) return null;
+    return objectsAround(canonical.x, canonical.y, canonical.z, 0)
+      .find((candidate) => candidate.getId() === canonical.id) ?? null;
+  }
   const area = footprint(object);
   const nearest = (candidates, x, y) => candidates
     .filter((candidate) => climbs(candidate.getId(), -direction))

@@ -19,17 +19,21 @@
  * Stages (varbit 9819; the even checkpoints are Quest Helper's step keys):
  *   0 not started, 2 accepted (kill the sulphur nagua), 4 nagua dealt with,
  *   5 city access granted, 6 inside Cam Torum (talk to Jessamine), 7 enter
- *   Neypotzli, 8 talk to the trio, 10 all three camps built, 12 camps reported
- *   (receive the earth/water talismans), 15 talismans enchanted by Nahta,
- *   16 talismans infused by the blacksmith, 17 return to Neypotzli, 18 locate
- *   with the infused talismans, 19 Eyatlalli found (return to the antechamber),
- *   23 gather scales/tail/paste, 27 items placed (fight the Moons), 28 fighting
- *   the Moons, 30 all three Moons defeated (talk to the trio), 31 complete.
+ *   Neypotzli, 8 talk to the trio, 10 all three camps built, 12 camps reported,
+ *   13/14 inscription choices, 15 receive the earth/water talismans, 16 Nahta
+ *   enchants them, 17 the blacksmith infuses them, 18 return to Neypotzli,
+ *   19 Eyatlalli found, 20/21/22 her meeting lines, 23 gather scales/tail/paste,
+ *   24/25/26 place them, 27 the ritual starts (fight the Moons), 28/29 fighting
+ *   the Moons, 30 all three defeated (talk to Jessamine and Zuma), 31 finishing
+ *   line, 36 complete (captured 31 -> 36).
  *
  * Sibling varbits driven here: 9820-9822 pmoon_camp_1..3 (one per camp),
  * 9823 pmoon_murals_inspected (bitmask: 1=Attala, 2=Zuma), 9858-9860
  * pmoon_boss_blood/blue/eclipse_dead (varp 4157), 9871 pmoon_lizard_trap_set_1,
  * 16624 pmoon_eyatlalli_vis.
+ *
+ * Stages 13/14 and 20-22/24-26 are the intermediate values the live server
+ * wrote during those conversations (capture 1693); they gate no new content.
  *
  * Rewards per the OSRS Wiki: 2 Quest points, 40,000 Slayer, 5,000 Runecraft,
  * 5,000 Hunter and 5,000 Fishing XP, access to Neypotzli and the Moons of Peril
@@ -47,22 +51,29 @@
  *    on the Cooking stove at each camp tile rather than on a "Camp spot".
  *  - Entrance landing tiles are chosen from open collision tiles near the real
  *    portals; the boss rooms' entrances land in front of each Moon's statue.
+ *  - The Eclipse meeting uses the captured camera track and ends on the recorded
+ *    28->29 stage boundary; Eyatlalli's meeting/ritual lines send the captured
+ *    camera shakes, and entering Neypotzli uses the captured fade/camera pull.
  *  - The Moons themselves are the MoonsOfPeril plugin's (bosses/MoonsOfPeril):
  *    during the fight stages it lets the player through the statues
  *    ("moons-of-peril:can-enter"), each kill ("moons-of-peril:killed")
  *    counts here and plays the defeat transcript, and from the ritual on it
  *    runs the camps ("moons-of-peril:camps-open").
- *  - The talisman "Locate" step only acts within four tiles of the summon point
- *    (1525,9580,0); elsewhere it repeats Attala's line. The live north/south and
- *    east/west pull messages are not in the transcript dump and are not authored.
+ *  - The talisman "Locate" step only acts within four tiles of the captured
+ *    streambound summon point (1483,9692,0); elsewhere it repeats Attala's line.
+ *    The live north/south and east/west pull messages are not in the transcript
+ *    dump and are not authored.
+ *  - The long-winding tunnels at 51377 (1527,9670) -> (1513,9596) and
+ *    (1512,9560) -> (1355,9538) use the captured fade and message; the 1493,9579
+ *    gate is a walk-through opening, not a tunnel, and stays unteleported.
  *  - Gathering is single-step: one "Trap" click per rock (two needed), Grubby
  *    sapling, river fishing spot (62193, unnamed in the cache) and the knife
  *    recipes give the ritual items with short system messages the dump does not
  *    contain. The trap varbit 9871 is only sent, not read, for the pair state.
  *  - "Attempt to speak to any of the three" after locating Eyatlalli always plays
  *    the full after-meeting conversation (no already-appeared sub-variant).
- *  - The trio's finishing lines must all be heard before Eyatlalli completes the
- *    quest; a player who skips one hears the line again on the next talk.
+ *  - The finishing route follows Quest Helper: Jessamine and Zuma, then
+ *    Eyatlalli completes the quest. Attala's finishing line is optional.
  */
 module.exports = function registerPerilousMoonsQuest(api) {
   const {
@@ -76,6 +87,8 @@ module.exports = function registerPerilousMoonsQuest(api) {
     Skill,
   } = api.core;
   const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
+  const { createQuestScenes } = require("../QuestScenes");
+  const Scenes = createQuestScenes(api, {});
 
   const PAGE = "Perilous Moons";
   const START_HOOK = "quest:perilous-moons:start";
@@ -175,7 +188,8 @@ module.exports = function registerPerilousMoonsQuest(api) {
   const STAGE_RITUAL = 27;
   const STAGE_MOONS = 28;
   const STAGE_MOONS_DONE = 30;
-  const STAGE_COMPLETE = 31;
+  const STAGE_FINISHED = 31;
+  const STAGE_COMPLETE = 36;
 
   const MURAL_BIT_ATTALA = 1;
   const MURAL_BIT_ZUMA = 2;
@@ -189,6 +203,9 @@ module.exports = function registerPerilousMoonsQuest(api) {
   const TRIO_BIT_JESSAMINE = 2;
   const TRIO_BIT_ZUMA = 4;
   const ALL_TRIO_MASK = TRIO_BIT_ATTALA | TRIO_BIT_JESSAMINE | TRIO_BIT_ZUMA;
+  // Quest Helper finishes with Jessamine and Zuma, then Eyatlalli; Attala's
+  // optional conversation is not a completion gate.
+  const FINISH_TRIO_MASK = TRIO_BIT_JESSAMINE | TRIO_BIT_ZUMA;
 
   // Attributes (kebab-case, namespaced; declared once).
   const CAMPS_ATTRIBUTE = "perilous-moons:camps";
@@ -197,6 +214,10 @@ module.exports = function registerPerilousMoonsQuest(api) {
   const TRIO_ATTRIBUTE = "perilous-moons:trio-talked";
   const TRAPS_ATTRIBUTE = "perilous-moons:traps-set";
   const ECLIPSE_SEEN_ATTRIBUTE = "perilous-moons:eclipse-cutscene";
+  // 0 = legacy save, 2 = this build. Old completed saves used stage 31; newer
+  // saves reserve 31 for the finishing line and complete at 36.
+  const STAGE_SCHEMA_ATTRIBUTE = "perilous-moons:stage-schema";
+  const STAGE_SCHEMA_VERSION = 2;
 
   // Tiles.
   const SURFACE_ATTALA_TILE = { x: 1435, y: 3124, z: 0 };
@@ -206,22 +227,24 @@ module.exports = function registerPerilousMoonsQuest(api) {
   const NEY_ZUMA_TILE = { x: 1447, y: 9632, z: 1 };
   const EYATLALLI_TILE = { x: 1445, y: 9639, z: 1 };
   const NAGUA_TILE = { x: 1453, y: 3129, z: 0 };
-  const LOCATE_TILE = { x: 1525, y: 9580, z: 0 };
+  // Captured 1693: the talismans pull at the streambound camp and Eyatlalli
+  // appears at 1483,9692; this is not the Lunar Chest shrine tile.
+  const LOCATE_TILE = { x: 1483, y: 9692, z: 0 };
   const LOCATE_RADIUS = 4;
   const SURFACE_LANDING = { x: 1435, y: 3128, z: 0 };
-  const CAM_TORUM_LANDING = { x: 1439, y: 9512, z: 1 };
-  const CAM_TORUM_EXIT = { x: 1441, y: 9597, z: 1 };
-  const NEYPOTZLI_LANDING = { x: 1440, y: 9618, z: 1 };
-  const PRISON_LANDING = { x: 1388, y: 9573, z: 0 };
-  const EARTHBOUND_LANDING = { x: 1402, y: 9717, z: 0 };
-  const STREAMBOUND_LANDING = { x: 1482, y: 9671, z: 0 };
-  const CAVE_TO_ANTECHAMBER_LANDING = { x: 1421, y: 9654, z: 1 };
-  const CAVE_TO_EARTHBOUND_LANDING = { x: 1402, y: 9720, z: 0 };
-  // In front of each Moon's statue (pmoon_entry_statue_*), on the side away from its arena.
-  const BLUE_ROOM_LANDING = { x: 1440, y: 9656, z: 0 };
-  const BLOOD_ROOM_LANDING = { x: 1414, y: 9632, z: 0 };
-  const ECLIPSE_ROOM_LANDING = { x: 1463, y: 9632, z: 0 };
-  const CAVE_EXIT_LANDING = { x: 1440, y: 9618, z: 1 };
+  const CAM_TORUM_LANDING = { x: 1439, y: 9509, z: 1 };
+  const CAM_TORUM_EXIT = { x: 1439, y: 9599, z: 1 };
+  const NEYPOTZLI_LANDING = { x: 1440, y: 9615, z: 1 };
+  const PRISON_LANDING = { x: 1388, y: 9575, z: 0 };
+  const EARTHBOUND_LANDING = { x: 1403, y: 9717, z: 0 };
+  const STREAMBOUND_LANDING = { x: 1481, y: 9669, z: 0 };
+  const CAVE_TO_ANTECHAMBER_LANDING = { x: 1522, y: 9719, z: 0 };
+  const CAVE_TO_EARTHBOUND_LANDING = { x: 1522, y: 9719, z: 0 };
+  // Captured arena-side landings (the old values were outside the arenas).
+  const BLUE_ROOM_LANDING = { x: 1441, y: 9676, z: 0 };
+  const BLOOD_ROOM_LANDING = { x: 1418, y: 9632, z: 0 };
+  const ECLIPSE_ROOM_LANDING = { x: 1461, y: 9632, z: 0 };
+  const CAVE_EXIT_LANDING = { x: 1440, y: 9615, z: 1 };
 
   // The three camp spots and their varbits (lookup-gameval pmoon_camp_1..3).
   const CAMP_SITES = [
@@ -417,6 +440,15 @@ module.exports = function registerPerilousMoonsQuest(api) {
   const LINE_MURALS_ATTALA = "Now where is that fool priest?";
   const LINE_MURALS_ZUMA = "Alright, calm down, both of you. Let's go see what the actual archaeologist has to say.";
   const LINE_CAMPS_TASK = "The surrounding caverns are quite large. If you could take some building supplies and set up some camps in each of them, it would make further exploration a lot easier.";
+  const LINE_CAMPS_POINT = "You make a good point.";
+  const LINE_TALISMANS_TASK = "Hmm... Nahta will know what to do with these. [player name], take them to him in Cam Torum's magic shop. Tell him I sent you.";
+  const LINE_RITUAL_BEGINS = "The ritual is in motion, but the wound to the seal will not close with the Moons still raging against it. I must ask you for one more small favour.";
+  const LINE_EYAT_SHAKE = "Argh!";
+  const LINE_EYAT_ATTALA = "I knew I shouldn't have let that fool priest in!";
+  const LINE_EYAT_ZUMA = "Zuma must have done something!";
+  const LINE_ECLIPSE_ZUMA = "I can't believe it... An emissary of my god, standing before me...";
+  const LINE_ECLIPSE_WARN = "Zuma, no! Step back!";
+  const LINE_ECLIPSE_LEAVE = "Get out of here!";
   const LINE_CITY_INVITE = "Meet me inside the ruins. We need help setting up some base camps for further exploration.";
   const LINE_INFUSED_BRIEF = "Of course, we've not tried something like this before, so I imagine it will require you to do some testing.";
   const LINE_GATHER_TASK = "Yes. Bring me scales of a bream, the tail of a moss lizard and paste made of moonlight grubs. I will begin preparing the rest of the ritual.";
@@ -429,6 +461,15 @@ module.exports = function registerPerilousMoonsQuest(api) {
     [LINE_MURALS_ATTALA, handleMuralsAttalaLine],
     [LINE_MURALS_ZUMA, handleMuralsZumaLine],
     [LINE_CAMPS_TASK, handleCampsTaskLine],
+    [LINE_CAMPS_POINT, handleCampsPointLine],
+    [LINE_TALISMANS_TASK, handleTalismansTaskLine],
+    [LINE_RITUAL_BEGINS, handleRitualBeginsLine],
+    [LINE_EYAT_SHAKE, handleEyatShakeLine],
+    [LINE_EYAT_ATTALA, handleEyatAttalaLine],
+    [LINE_EYAT_ZUMA, handleEyatZumaLine],
+    [LINE_ECLIPSE_ZUMA, handleEclipseZumaLine],
+    [LINE_ECLIPSE_WARN, handleEclipseWarnLine],
+    [LINE_ECLIPSE_LEAVE, handleEclipseLeaveLine],
     [LINE_CITY_INVITE, handleCityInviteLine],
     [LINE_INFUSED_BRIEF, handleInfusedBriefLine],
     [LINE_GATHER_TASK, handleGatherTaskLine],
@@ -440,6 +481,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
 
   /** Per-player owner-only quest spawns, keyed by role. */
   const trackedNpcs = new WeakMap();
+  const eclipseScene = new WeakSet();
   let quest;
   let crateInstalled = false;
 
@@ -734,7 +776,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
       return hasAllRitualItems(player) ? V_EYAT_ITEMS : V_EYAT_AGAIN;
     }
     if (stage < STAGE_MOONS_DONE) return V_EYAT_AFTER_PASTE;
-    return (trioMask(player) & ALL_TRIO_MASK) === ALL_TRIO_MASK ? V_FIN_EYAT : V_EYAT_AFTER_PASTE;
+    return (trioMask(player) & FINISH_TRIO_MASK) === FINISH_TRIO_MASK ? V_FIN_EYAT : V_EYAT_AFTER_PASTE;
   }
 
   function selectNahtaVariant(player) {
@@ -879,6 +921,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
     if (hook !== START_HOOK || !player) return;
     if (!ATTALA_NPC_IDS.has(npcId) && !ZUMA_NPC_IDS.has(npcId)) return;
     if (stageOf(player) !== 0) return;
+    player.setAttribute(STAGE_SCHEMA_ATTRIBUTE, STAGE_SCHEMA_VERSION);
     quest.setStage(player, STAGE_STARTED);
     syncNpcs(player);
   }
@@ -928,7 +971,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
         giveToolIfMissing(player, SAW_ITEM_ID);
         return;
       case MESSAGE_GIVE_TALISMANS:
-        if (stageOf(player) === STAGE_CAMPS_DONE && player.getInventory().getFreeSlots() >= 2) {
+        if (stageOf(player) >= STAGE_CAMPS_DONE && stageOf(player) < STAGE_TALISMANS && player.getInventory().getFreeSlots() >= 2) {
           player.getInventory().adds(WATER_TALISMAN_ITEM_ID, 1);
           player.getInventory().adds(EARTH_TALISMAN_ITEM_ID, 1);
           quest.setStage(player, STAGE_TALISMANS);
@@ -988,16 +1031,20 @@ module.exports = function registerPerilousMoonsQuest(api) {
           player.getInventory().adds(INFUSED_WATER_TALISMAN_ITEM_ID, 1);
         }
         return;
+      case MESSAGE_PLACE_SCALES:
+        if (stageOf(player) === STAGE_GATHER) quest.setStage(player, STAGE_GATHER + 1);
+        return;
+      case MESSAGE_PLACE_TAIL:
+        if (stageOf(player) === STAGE_GATHER + 1) quest.setStage(player, STAGE_GATHER + 2);
+        return;
       case MESSAGE_PLACE_PASTE:
         if (stageOf(player) >= STAGE_GATHER && stageOf(player) < STAGE_RITUAL) {
           player.getInventory().deleteNumber(BREAM_SCALES_ITEM_ID, 1);
           player.getInventory().deleteNumber(MOSS_LIZARD_TAIL_ITEM_ID, 1);
           player.getInventory().deleteNumber(MOONLIGHT_GRUB_PASTE_ITEM_ID, 1);
-          quest.setStage(player, STAGE_RITUAL);
+          quest.setStage(player, STAGE_GATHER + 3);
         }
         return;
-      case MESSAGE_PLACE_SCALES:
-      case MESSAGE_PLACE_TAIL:
       case MESSAGE_CRATE_NO_SPACE:
       case MESSAGE_CRATE_TAKE:
       case MESSAGE_CRATE_TAKE_2:
@@ -1028,7 +1075,10 @@ module.exports = function registerPerilousMoonsQuest(api) {
     if (!held(player, itemId)) player.getInventory().adds(itemId, 1);
   }
 
+  const DIALOGUE_NPC_IDS = new Set([...ATTALA_NPC_IDS, ...ZUMA_NPC_IDS, ...JESSAMINE_NPC_IDS, ...EYATLALLI_NPC_IDS]);
+
   function handleLine(event) {
+    if (!event.player || !DIALOGUE_NPC_IDS.has(event.npcId)) return;
     const handler = LINES.get(event.text);
     if (handler) handler(event);
   }
@@ -1053,6 +1103,38 @@ module.exports = function registerPerilousMoonsQuest(api) {
     const stage = stageOf(player);
     if (stage < STAGE_IN_NEY || stage >= STAGE_CAMPS) return;
     quest.setStage(player, STAGE_CAMPS);
+  }
+
+  function handleCampsPointLine({ player }) {
+    if (stageOf(player) === STAGE_CAMPS_DONE) quest.setStage(player, STAGE_CAMPS_DONE + 1);
+  }
+
+  function handleTalismansTaskLine({ player }) {
+    if (stageOf(player) === STAGE_CAMPS_DONE + 1) quest.setStage(player, STAGE_CAMPS_DONE + 2);
+  }
+
+  function handleRitualBeginsLine({ player }) {
+    if (stageOf(player) === STAGE_GATHER + 3) quest.setStage(player, STAGE_RITUAL);
+    shakeCamera(player);
+  }
+
+  function handleEyatShakeLine({ player }) {
+    if (stageOf(player) === STAGE_EYAT_FOUND) quest.setStage(player, STAGE_EYAT_FOUND + 1);
+    shakeCamera(player);
+  }
+
+  function shakeCamera(player) {
+    const sender = player.getPacketSender();
+    sender.sendCameraShake(0, 8).sendCameraShake(1, 8).sendCameraShake(2, 8);
+    Scenes.later(player, 4, () => player.isRegistered() && player.getPacketSender().sendCameraReset());
+  }
+
+  function handleEyatAttalaLine({ player }) {
+    if (stageOf(player) === STAGE_EYAT_FOUND + 1) quest.setStage(player, STAGE_EYAT_FOUND + 2);
+  }
+
+  function handleEyatZumaLine({ player }) {
+    if (stageOf(player) === STAGE_EYAT_FOUND + 2) quest.setStage(player, STAGE_EYAT_FOUND + 3);
   }
 
   function handleCityInviteLine({ player }) {
@@ -1086,17 +1168,21 @@ module.exports = function registerPerilousMoonsQuest(api) {
     if (stageOf(player) !== STAGE_MOONS_DONE) return;
     addMaskBit(player, TRIO_ATTRIBUTE, TRIO_BIT_ZUMA);
     maybeFinishTrio(player);
+    if ((trioMask(player) & FINISH_TRIO_MASK) === FINISH_TRIO_MASK) {
+      quest.setStage(player, STAGE_FINISHED);
+    }
   }
 
-  /** The trio bits gate Eyatlalli's final conversation; she sets stage 31. */
+  /** The Jessamine and Zuma bits gate Eyatlalli's final conversation. */
   function maybeFinishTrio(player) {
-    // Nothing to do beyond recording the bit; Eyatlalli's variant selector reads it.
     void player;
   }
 
   function handleCompleteLine({ player }) {
     if (stageOf(player) < STAGE_MOONS_DONE || quest.isComplete(player)) return;
-    if ((trioMask(player) & ALL_TRIO_MASK) !== ALL_TRIO_MASK) return;
+    if ((trioMask(player) & FINISH_TRIO_MASK) !== FINISH_TRIO_MASK) return;
+    player.setAttribute(STAGE_SCHEMA_ATTRIBUTE, STAGE_SCHEMA_VERSION);
+    if (stageOf(player) < STAGE_FINISHED) quest.setStage(player, STAGE_FINISHED);
     if (!quest.complete(player)) return;
     syncNpcs(player);
   }
@@ -1243,9 +1329,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
         startTranscript(api, player, JESSAMINE_NPC_ID, PAGE, V_RUINS_GUARD);
         return;
       }
-      player.moveTo(new Location(NEYPOTZLI_LANDING.x, NEYPOTZLI_LANDING.y, NEYPOTZLI_LANDING.z));
-      if (stageOf(player) === STAGE_IN_NEY) quest.setStage(player, STAGE_TRIO);
-      syncNpcs(player);
+      enterNeypotzli(player);
       return;
     }
     if (entrance.kind === "ney-exit") {
@@ -1258,7 +1342,46 @@ module.exports = function registerPerilousMoonsQuest(api) {
     }
     if (entrance.kind === "cavern") {
       handleCavernEntrance(player, entrance);
+      return;
     }
+    if (entrance.kind === "tunnel") {
+      handleTunnelGate(player, entrance.landing);
+    }
+  }
+
+  function enterNeypotzli(player) {
+    Scenes.fade(player, true);
+    Scenes.controls(player, true, true);
+    player.moveTo(new Location(NEYPOTZLI_LANDING.x, NEYPOTZLI_LANDING.y, NEYPOTZLI_LANDING.z));
+    if (stageOf(player) === STAGE_IN_NEY) quest.setStage(player, STAGE_TRIO);
+    syncNpcs(player);
+    Scenes.later(player, 3, () => {
+      if (!player.isRegistered()) return;
+      Scenes.fade(player, false);
+      player.getPacketSender()
+        .sendCameraMoveTo(1448, 9580, 1400, { rate: 100, rate2: 100 })
+        .sendCameraLookAt(1448, 9581, 10, { rate: 100, rate2: 100 });
+      Scenes.later(player, 6, () => {
+        if (!player.isRegistered()) return;
+        player.getPacketSender().sendCameraReset();
+        Scenes.controls(player, false);
+      });
+    });
+  }
+
+  /** The long winding tunnels between the caverns (captured fade + message). */
+  function handleTunnelGate(player, landing) {
+    Scenes.fade(player, true);
+    Scenes.controls(player, true, true);
+    player.sendMessage("You follow a long and winding tunnel before emerging on the other side.");
+    player.moveTo(new Location(landing.x, landing.y, landing.z));
+    Scenes.later(player, 3, () => {
+      if (!player.isRegistered()) return;
+      Scenes.fade(player, false);
+      Scenes.later(player, 2, () => {
+        if (player.isRegistered()) Scenes.controls(player, false);
+      });
+    });
   }
 
   function handleSurfaceEntrance(player) {
@@ -1431,6 +1554,9 @@ module.exports = function registerPerilousMoonsQuest(api) {
     [`${ENTRANCE_3X3_OBJECT_ID}:1404:9703:0`, { kind: "boss-entrance", boss: "blue", landing: BLUE_ROOM_LANDING }],
     [`${ENTRANCE_2X2_OBJECT_ID}:1388:9589:0`, { kind: "boss-entrance", boss: "blood", landing: BLOOD_ROOM_LANDING }],
     [`${ENTRANCE_2X2_OBJECT_ID}:1509:9673:0`, { kind: "boss-entrance", boss: "eclipse", landing: ECLIPSE_ROOM_LANDING }],
+    // Captured tunnel gates (oploc1 51377 Pass-through; capture 1693 teleports).
+    [`${ENTRANCE_3X3_OBJECT_ID}:1527:9670:0`, { kind: "tunnel", landing: { x: 1513, y: 9596, z: 0 } }],
+    [`${ENTRANCE_3X3_OBJECT_ID}:1512:9560:0`, { kind: "tunnel", landing: { x: 1355, y: 9538, z: 0 } }],
   ]);
 
   // ==========================================================================
@@ -1440,7 +1566,38 @@ module.exports = function registerPerilousMoonsQuest(api) {
   function ensureEclipseCutscene(player) {
     if (player.getAttribute(ECLIPSE_SEEN_ATTRIBUTE) === true) return;
     player.setAttribute(ECLIPSE_SEEN_ATTRIBUTE, true);
+    eclipseScene.add(player);
+    Scenes.controls(player, true, true);
+    player.getPacketSender()
+      .sendCameraMoveTo(1478, 9632, 875, { rate: 100, rate2: 100 })
+      .sendCameraLookAt(1493, 9632, 750, { rate: 100, rate2: 100 });
     startTranscript(api, player, ZUMA_NPC_ID, PAGE, V_MOON_ECLIPSE_MEET);
+  }
+
+  function handleEclipseZumaLine({ player }) {
+    if (!eclipseScene.has(player)) return;
+    player.getPacketSender().sendCameraMoveTo(1475, 9632, 875,
+      { cycles: 300, easing: "ease_in_out_sine", ignoreTerrain: true });
+  }
+
+  function handleEclipseWarnLine({ player }) {
+    if (!eclipseScene.has(player)) return;
+    player.getPacketSender().sendCameraMoveTo(1473, 9632, 800,
+      { cycles: 200, easing: "ease_in_out_sine", ignoreTerrain: true });
+  }
+
+  function handleEclipseLeaveLine({ player }) {
+    if (!eclipseScene.has(player)) return;
+    player.getPacketSender()
+      .sendCameraMoveTo(1469, 9632, 1200, { cycles: 90, easing: "ease_in_out_sine", ignoreTerrain: true })
+      .sendCameraLookAt(1488, 9632, 0, { rate: 1, rate2: 20 });
+    Scenes.later(player, 8, () => {
+      if (!player.isRegistered()) return;
+      eclipseScene.delete(player);
+      player.getPacketSender().sendCameraReset();
+      Scenes.controls(player, false);
+      if (stageOf(player) === STAGE_MOONS) quest.setStage(player, STAGE_MOONS + 1);
+    });
   }
 
   /** Teleporting into the Eclipse Moon's room also plays Zuma's first meeting with it. */
@@ -1499,14 +1656,29 @@ module.exports = function registerPerilousMoonsQuest(api) {
   // ==========================================================================
 
   function handleLogin({ player }) {
+    migrateLegacyStage(player);
     installCampSuppliesCrate();
     syncNpcs(player);
     syncSiblingVarbits(player);
     refreshQuestList(player);
   }
 
+  /** Old saves used 31 as completion. Do not replay their rewards. */
+  function migrateLegacyStage(player) {
+    const stage = stageOf(player);
+    if (stage >= STAGE_COMPLETE || attributeMask(player, STAGE_SCHEMA_ATTRIBUTE) >= STAGE_SCHEMA_VERSION) return;
+    if (stage === STAGE_FINISHED) {
+      quest.setStage(player, STAGE_COMPLETE);
+    } else if (stage > 0) {
+      player.setAttribute(STAGE_SCHEMA_ATTRIBUTE, STAGE_SCHEMA_VERSION);
+    }
+  }
+
   function handleLogout({ player }) {
-    if (player) removeAllTracked(player);
+    if (!player) return;
+    Scenes.cancel(player);
+    eclipseScene.delete(player);
+    removeAllTracked(player);
   }
 
   /** ::quest <name> reset clears the quest-owned bits and spawns. */
@@ -1518,6 +1690,11 @@ module.exports = function registerPerilousMoonsQuest(api) {
     player.setAttribute(TRIO_ATTRIBUTE, 0);
     player.setAttribute(TRAPS_ATTRIBUTE, 0);
     player.setAttribute(ECLIPSE_SEEN_ATTRIBUTE, false);
+    player.setAttribute(STAGE_SCHEMA_ATTRIBUTE, 0);
+    Scenes.cancel(player);
+    eclipseScene.delete(player);
+    player.getPacketSender().sendCameraReset();
+    Scenes.controls(player, false);
     removeAllTracked(player);
     syncSiblingVarbits(player);
   }
@@ -1556,13 +1733,22 @@ module.exports = function registerPerilousMoonsQuest(api) {
         "<col=ff0000>QUEST COMPLETE!</col>",
       ];
     }
+    if (stage >= STAGE_FINISHED) {
+      return [
+        ...history,
+        "<str>I gathered the ritual items and distracted all three Moons of Peril while</str>",
+        "<str>Eyatlalli repaired the seal.</str>",
+        "",
+        "I should finish speaking to <col=800000>Eyatlalli</col>.",
+      ];
+    }
     if (stage >= STAGE_MOONS_DONE) {
       return [
         ...history,
         "<str>I gathered the ritual items and distracted all three Moons of Peril while</str>",
         "<str>Eyatlalli repaired the seal.</str>",
         "",
-        "I should return to the antechamber and speak to Attala, Zuma and Jessamine,",
+        "I should return to the antechamber and speak to Jessamine and Zuma,",
         "then to <col=800000>Eyatlalli</col>.",
       ];
     }
@@ -1713,6 +1899,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
   api.persistAttribute(TRIO_ATTRIBUTE);
   api.persistAttribute(TRAPS_ATTRIBUTE);
   api.persistAttribute(ECLIPSE_SEEN_ATTRIBUTE);
+  api.persistAttribute(STAGE_SCHEMA_ATTRIBUTE, 0);
 
   quest = registerQuest(api, {
     key: "perilous_moons",

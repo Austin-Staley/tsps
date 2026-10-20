@@ -28,7 +28,7 @@ import {
     subscribeTick,
 } from "../../../network/ServerConnection";
 import { sendLogin } from "../../../network/ServerConnection";
-import { sendPlayerOption } from "../../../network/serverConnection/outgoing/interact";
+import { sendPlayerOption, sendWorldEntityOption } from "../../../network/serverConnection/outgoing/interact";
 import { flushPackets } from "../../../network/packet";
 import { createTextureArray } from "../../../picogl/PicoTexture";
 import { RS_TO_RADIANS } from "../../../rs/MathConstants";
@@ -333,6 +333,7 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
             // PERF: Reuse cached arrays/sets instead of allocating new ones each frame
             const locIds = host.cachedLocIds;
             locIds.clear();
+            const worldEntityIds = new Set<number>();
             const objIds = host.cachedObjIds;
             objIds.clear();
             const npcIds = host.cachedNpcIds;
@@ -818,6 +819,39 @@ export function checkInteractions(host: WebGLOsrsRendererHost, ): void {
                     const dedupeKey = `${interactId | 0}|${localX | 0}|${localY | 0}`;
                     if (locIds.has(dedupeKey)) continue;
                     locIds.add(dedupeKey);
+
+                    // A loc hit on a static ship's deck scene offers the world entity's own
+                    // actions (Board/Attack) instead, unless the player is already on it.
+                    const weIndex = (host as any).getWorldEntityIndexForMapId?.(hit.mapId);
+                    const currentWorldView = (host as any).getControlledPlayerWorldViewId?.() ?? -1;
+                    if (typeof weIndex === "number" && weIndex >= 0 && !worldEntityIds.has(weIndex)) {
+                        worldEntityIds.add(weIndex);
+                        const overlay = (host as any).worldEntityOverlays?.get(weIndex);
+                        const weType = overlay && host.osrsClient.worldEntityTypeLoader?.load(overlay.configId);
+                        let actions = (weType?.actions ?? []).map((action: string | null, index: number) =>
+                            action ? { action, index } : undefined).filter(Boolean) as Array<{ action: string; index: number }>;
+                        if (actions.length === 0 && weType?.name && weType.name !== "null") {
+                            actions = [{ action: "Board", index: 0 }];
+                        }
+                        if (weIndex === currentWorldView) {
+                            const board = actions.find(({ action }) => /^board$/i.test(action));
+                            if (!board) actions = [];
+                            else actions = [{ action: "Disembark", index: board.index }];
+                        }
+                        for (const { action, index } of actions) {
+                            menuEntries.push({
+                                option: action,
+                                targetId: weIndex,
+                                targetType: MenuTargetType.WORLD_ENTITY,
+                                targetName: weType?.name || "ship",
+                                targetLevel: -1,
+                                mapX: localX,
+                                mapY: localY,
+                                opcode: MenuOpcode.Custom,
+                                onClick: () => sendWorldEntityOption(weIndex, index + 1),
+                            });
+                        }
+                    }
 
                     // Item selection suppresses normal actions/examine.
                     if (ClientState.isItemSelected === 1) {

@@ -37,6 +37,7 @@ const DOOR_NAMES = new Set([
 let SELF_OPENING_DOOR_IDS, SINGLE_DOOR_OPEN_IDS, COMPOSITE_DOOR_OPENINGS, WOODEN_GATES, WOODEN_GATE_BY_ID;
 let DOUBLE_DOOR_ID_FAMILIES, DOUBLE_DOOR_FAMILY_IDS_BY_ID;
 let SPECIAL_DOUBLE_DOOR_PAIRS, SPECIAL_DOUBLE_DOOR_PARTNER_IDS_BY_ID, SPECIAL_DOUBLE_DOOR_OPEN_IDS_BY_CLOSED_ID;
+let THRESHOLD_DOOR_LEAF_IDS, THRESHOLD_DOOR_FAMILY_BY_ID;
 
 function defineDoorData({ ObjectIdentifiers: O }) {
   // Doors with no open variant in the cache: OSRS opens them by rotating the same loc
@@ -67,7 +68,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     // Ghorrock Prison's western gate has no separate open loc in the cache.
     O.GATE_282,
     // The Champions' Guild door (1805): its id+1 is an unrelated nameless loc.
-    O.DOOR_45]);
+    O.DOOR_45,
+    ]);
   // Single doors the pairing below can't find: the open variant is not closedId + 1 (e.g. Large
   // door 1517 -> 1520, same models), or it has no "Close" (DOOR_181, the open Keldagrim door on
   // the way to the Blast Furnace, shares DOOR_180's model but offers no option). Witch's House's
@@ -92,6 +94,8 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.STOREROOM_DOOR, O.STOREROOM_DOOR + 1],
     // Slepe church crypt gate: its open form 39513 has the same model but no action.
     [O.GATE_210, O.GATE_211],
+    [O.DOOR_47, 2001],
+    [O.DOOR_48, 2003],
   ]);
 
   // Tree Gnome Stronghold main gate: one 5x2 loc (190, face 2) opens into two
@@ -103,6 +107,17 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.DOOR_55, [[2055, 0, -1, 2]]],
     // shortcut: swing west past the Rehnison entrance chair; confirm against a live OSRS capture.
     [O.DOOR_85, [[O.DOOR_86, 0, 1, 0]]],
+  ]);
+
+  // Dorgesh-Kaan city entrance (Land of the Goblins escort). The cache map places the two
+  // closed leaves (6919/6920) on the threshold and two actionless same-model panels (22539/
+  // 22540) immediately behind it. Opening either leaf must clear both the leaves and those
+  // static panels; autoclose restores all four. The actionless ids have no named property.
+  THRESHOLD_DOOR_LEAF_IDS = new Set([O.DOOR_176, O.DOOR_177]);
+  const thresholdDoorFamily = Object.freeze([O.DOOR_176, O.DOOR_177, 22539, 22540]);
+  THRESHOLD_DOOR_FAMILY_BY_ID = new Map([
+    [O.DOOR_176, thresholdDoorFamily],
+    [O.DOOR_177, thresholdDoorFamily],
   ]);
 
   // OSRS wooden gates are two locs that pivot together around the hinge post: a hinge panel
@@ -331,6 +346,9 @@ function buildDoorCatalog() {
     }
     if (SELF_OPENING_DOOR_IDS.has(id)) {
       closedToOpen.set(id, id);
+      continue;
+    }
+    if (THRESHOLD_DOOR_FAMILY_BY_ID.has(id)) {
       continue;
     }
     const partner = core.CacheDefinitions.getObject(id + 1);
@@ -913,6 +931,41 @@ function resolveDoubleDoorPair(clicked) {
   return right ? [clicked, right] : null;
 }
 
+/** Clears a threshold whose static actionless panels sit behind the two clickable leaves. */
+function handleThresholdDoor(player, object, objectId, location) {
+  const family = THRESHOLD_DOOR_FAMILY_BY_ID.get(objectId);
+  if (!family || !object || !location) return false;
+  const privateArea = player?.getPrivateArea?.() ?? null;
+  const closedObjects = [];
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      const at = cloneLocation(
+        (location.getX?.() ?? location.x) + dx,
+        (location.getY?.() ?? location.y) + dy,
+        location.getZ?.() ?? location.z ?? 0,
+      );
+      for (const id of family) {
+        const candidate = core.MapObjects.get(id, at, privateArea) ?? privateArea?.resolveObject?.(id, at);
+        if (candidate && !closedObjects.some((entry) => entry.getId() === id
+          && locationKey(entry.getLocation()) === locationKey(at))) {
+          closedObjects.push(candidate);
+        }
+      }
+    }
+  }
+  // Both clickable leaves must be present; otherwise leave this to the ordinary path.
+  if (![...THRESHOLD_DOOR_LEAF_IDS].every((id) => closedObjects.some((entry) => entry.getId() === id))) {
+    return false;
+  }
+  for (const entry of closedObjects) core.ObjectManager.deregister(entry, true);
+  const anchorKey = doorStateKey(`threshold:${closedObjects
+    .map((entry) => `${entry.getId()}:${locationKey(entry.getLocation())}`)
+    .sort().join('|')}`, privateArea);
+  rememberOpenObjects(anchorKey, closedObjects, [], objectId);
+  core.Sounds.sendSound(player, doorSound(objectId, true));
+  return true;
+}
+
 function handleDoubleDoor(player, object, objectId, location) {
   const x = location?.getX?.() ?? location?.x;
   const y = location?.getY?.() ?? location?.y;
@@ -968,6 +1021,7 @@ function toggleDoor({ player, object, objectId, definition, location, clickType 
   if (request.handled) return true;
   if (handleCompositeDoor(player, object, objectId)) return true;
   if (handleWoodenGate(player, object, objectId, location)) return true;
+  if (handleThresholdDoor(player, object, objectId, location)) return true;
   if (handleDoubleDoor(player, object, objectId, location)) return true;
   return handleMappedDoor(player, object, definition?.id ?? objectId, location);
 }

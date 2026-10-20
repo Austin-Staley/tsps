@@ -1090,12 +1090,12 @@ test('Sins of the Father opens its boat route from the Slepe rowboat after compl
   quest.setStage(player, 999);
   const boat = handlers.objects.find(handler => handler.name === 'handleObjectInteraction');
 
-  const wrongLocation = { player, objectId: 32602, location: { x: 3662, y: 3279, z: 0 }, handled: false };
+  const wrongLocation = { player, objectId: 32602, location: { x: 3661, y: 3279, z: 0 }, handled: false };
   boat(wrongLocation);
   assert.equal(wrongLocation.handled, false, 'the Slepe route is scoped to its cache boat anchor');
   assert.equal(prompt, undefined);
 
-  const travel = { player, objectId: 32602, location: { x: 3661, y: 3279, z: 0 }, option: 'Travel', handled: false };
+  const travel = { player, objectId: 32602, location: { x: 3662, y: 3279, z: 0 }, option: 'Travel', handled: false };
   boat(travel);
   assert.equal(travel.handled, true);
   assert.equal(prompt.title, 'Where would you like to sail?');
@@ -2159,10 +2159,10 @@ test('Ivan reclaims a lost Drakan medallion only after Sins of the Father is com
   };
   const actions = handlers.custom.get('npc-dialogue:action');
   const reclaim = stepId => actions.forEach(handler => handler({ player, npcId: 4440, stepId }));
-  quest.setStage(player, 299);
+  quest.setStage(player, 137);
   reclaim('ZoWCuH');
   assert.equal(items.get(22400) ?? 0, 0, 'the post-quest NPC action does not bypass Sins completion');
-  quest.setStage(player, 300);
+  quest.setStage(player, 138);
   const postQuestIvan = spawned.find(npc => npc.id === 4440 && npc.x === 3598 && npc.y === 9613);
   assert.deepEqual(
     [postQuestIvan?.x, postQuestIvan?.y, postQuestIvan?.z],
@@ -6362,9 +6362,18 @@ test('Blood Moon hall defence supplies hammers and potions, records repairs and 
 });
 
 test('Blood Moon starts the scoped Theatre encounter and advances after Vasilias', () => {
+  // The quest destructures startTranscript when it registers, so patch it first.
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  let startedVariant;
+  runtime.startTranscript = (_api, _player, _npc, _page, variant) => {
+    startedVariant = variant;
+    return true;
+  };
   const { api, handlers } = mockApi();
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
-  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+  runtime.startTranscript = originalStartTranscript;
+  const { getRegisteredQuests } = runtime;
   const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
   const attributes = new Map();
   const player = {
@@ -6384,15 +6393,17 @@ test('Blood Moon starts the scoped Theatre encounter and advances after Vasilias
   handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: '1Z5SGt' });
   assert.equal(started, 1, 'the ready dialogue enters the shared scoped raid instead of starting a duplicate arena');
   assert.equal(attributes.get('quest.the_blood_moon_rises.tob-challenge').started, true);
-  const npcDefinition = api.core.NpcDefinition;
-  const originalForId = npcDefinition.forId;
-  npcDefinition.forId = (id) => ({ getId: () => id, getName: () => 'Sugadinti Vitur' });
-  try {
-    api.emitCustomEvent('tob:bmr-completed', { player });
-  } finally {
-    npcDefinition.forId = originalForId;
-  }
-  assert.equal(quest.getStage(player), 90, 'the Vasilias clear advances to the Wyrd chapter');
+  api.emitCustomEvent('tob:bmr-completed', { player });
+  assert.equal(startedVariant, 'another-night-at-the-theatre-after-killing-the-nylocas-vasilias');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.theatre-native-stage'), 138,
+    'the Vasilias clear starts the captured 138 conversation');
+  handlers.custom.get('npc-dialogue:line').find(handler => handler.name === 'onBloodMoonDialogueLine')
+    .call(null, { player, text: 'Go quick, my child. I wish you good luck.', step: { speaker: 'Sugadinti Vitur' },
+      pages: [{ page: 'The Blood Moon Rises', variants: ['another-night-at-the-theatre-after-killing-the-nylocas-vasilias'] }] });
+  assert.equal(attributes.get('quest.the_blood_moon_rises.theatre-native-stage'), 140,
+    'the closing line moves the native stage to 140');
+  handlers.custom.get('npc-dialogue:action').at(-1)({ player, stepId: '4G5OZg' });
+  assert.equal(quest.getStage(player), 90, 'the post-Vasilias scene advances to the Wyrd chapter');
   assert.equal(attributes.get('quest.the_blood_moon_rises.tob-challenge').completed, true);
 });
 
@@ -14339,11 +14350,12 @@ test('bridge uses the actual cache palace exit and lets a full-inventory handoff
 });
 
 test('Blood Moon native bitfield mapping restores Slepe refinery phase without changing quest stage',()=>{
- const {api,handlers}=mockApi();require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);const runtime=require('../plugins/quests/QuestRuntime'),quest=runtime.getRegisteredQuests().filter(q=>q.key==='the_blood_moon_rises').at(-1),attrs=new Map(),bits=new Map();const sender=new Proxy({}, {get:(_,key)=>key==='sendVarbit'?(id,n)=>bits.set(id,n):()=>sender});const player={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getPacketSender:()=>sender};
+ const {api,handlers}=mockApi();require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);const runtime=require('../plugins/quests/QuestRuntime'),quest=runtime.getRegisteredQuests().filter(q=>q.key==='the_blood_moon_rises').at(-1),attrs=new Map([['the-blood-moon-rises:start-dialogue-complete',true]]),bits=new Map();const sender=new Proxy({}, {get:(_,key)=>key==='sendVarbit'?(id,n)=>bits.set(id,n):()=>sender});const player={getAttribute:k=>attrs.get(k),setAttribute:(k,v)=>attrs.set(k,v),getPacketSender:()=>sender};
  quest.setStage(player,10);assert.equal(bits.get(15464),4);assert.equal(bits.get(15467),1,'the stage-10 hideout NPC transform makes Ivan visible');
  handlers.playerLogin.at(-1)({player});assert.equal(bits.get(15464),4);assert.equal(bits.get(15467),1,'the hideout NPC transform is restored after relog');
  attrs.set('quest.the_blood_moon_rises.hideout-shrine-inspected',true);quest.setStage(player,10);assert.equal(bits.get(15464),8,'the shrine cutscene advances the native varbit');
- quest.setStage(player,20);assert.equal(bits.get(15464),12);assert.equal(bits.get(15467),2,'the ready-to-leave stage shows Ivan’s trade/disguise variant');
+ quest.setStage(player,20);assert.equal(bits.get(15464),10,'the hideout opens at native stage 10');
+ attrs.set('the-blood-moon-rises:hideout-cutscene-started',true);quest.setStage(player,20);assert.equal(bits.get(15464),12);assert.equal(bits.get(15467),2,'the ready-to-leave stage shows Ivan’s trade/disguise variant');
  quest.setStage(player,30);assert.equal(bits.get(15464),16);assert.equal(bits.get(15467),0,'the hideout Ivan is hidden after the story moves to Slepe');bits.clear();
  attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'fight'});runtime.sendQuestVarps({player});assert.equal(bits.get(15464),58);assert.equal(quest.getStage(player),30,'the refinery morph must not advance the quest journal stage');bits.clear();
  attrs.set('the-blood-moon-rises:refinery-progress',{started:true,phase:'cleared'});runtime.sendQuestVarps({player});assert.equal(bits.get(15464),60,'killing the guards alone does not unlock the exit before the slaves escape');bits.clear();
@@ -14449,7 +14461,9 @@ test('Blood Moon shrine examine starts the hideout conversation only at the real
   const player={getAttribute:key=>attrs.get(key),setAttribute:(key,value)=>attrs.set(key,value),getPacketSender:()=>sender,
    getLocation:()=>({getX:()=>3601,getY:()=>9614,getZ:()=>0})};
   const inspect=handlers.custom.get('world:object-examine').find(handler=>handler.name==='inspectHideoutShrine'),event={player,objectId:61174,handled:false};
-  inspect(event);assert.equal(event.handled,true);assert.equal(started[1],9531);assert.equal(started[2],'The Blood Moon Rises');assert.equal(started[3],'starting-out-inspecting-the-shrine');assert.equal(bits.get(15464),8);
+  inspect(event);assert.equal(event.handled,true);assert.equal(started[1],9531);assert.equal(started[2],'The Blood Moon Rises');assert.equal(started[3],'starting-out-inspecting-the-shrine');assert.equal(bits.get(15464),6,'the shrine objectbox opens at native stage 6');
+  handlers.custom.get('npc-dialogue:line').find(handler=>handler.name==='onBloodMoonDialogueLine')({player,text:'[player name].',
+   step:{speaker:'Ivan Strom'},pages:[{page:'The Blood Moon Rises',variants:['starting-out-inspecting-the-shrine']}]});assert.equal(bits.get(15464),8,'its first line advances to native stage 8');
   started=null;const distant={...event,handled:false,player:{...player,getLocation:()=>({getX:3610,getY:9614,getZ:0})}};inspect(distant);assert.equal(distant.handled,false);assert.equal(started,null);
  }finally{runtime.startTranscript=original;delete require.cache[require.resolve('../plugins/quests/quests/TheBloodMoonRises.Quest')];}
 });
@@ -14664,7 +14678,9 @@ test('Fremennik Exiles yields Longhall Brundt to Lunar Seal recovery before its 
   require('../plugins/quests/quests/TheFremennikExiles.Quest')(api);
   const player = {
     getAttribute: () => 0,
+    getSkillManager: () => ({ getMaxLevel: () => 0 }),
     getInventory: () => ({ getAmount: () => 0 }),
+    getBank: () => null,
   };
   const event = { player, npcId: api.core.NpcIdentifiers.BRUNDT_THE_CHIEFTAIN_6, clickType: 1, handled: false };
   assert.equal(brundtTalk(event), false);
@@ -14998,7 +15014,10 @@ test('Current Affairs and Prying Times start gates require every registered prer
   require('../plugins/quests/quests/CurrentAffairs.Quest')(api);
   require('../plugins/quests/quests/PryingTimes.Quest')(api);
   const [currentAffairs, pryingTimes] = conditions;
-  const player = { getSkillManager: () => ({ getMaxLevel: () => 99, getCurrentLevel: () => 99 }) };
+  const player = {
+    getSkillManager: () => ({ getMaxLevel: () => 99, getCurrentLevel: () => 99 }),
+    getInventory: () => ({ getAmount: () => 0, getFreeSlots: () => 28 }),
+  };
   assert.equal(currentAffairs({ npcId: api.core.NpcIdentifiers.ARHEIN, player, stepId: 'mNhEI-' }), true,
     'missing Pandemonium blocks Current Affairs');
   assert.equal(pryingTimes({ npcId: api.core.NpcIdentifiers.SQUAWKING_STEVE_BEANIE, player, stepId: 'aifq0J' }), true,
@@ -19391,13 +19410,14 @@ test('RFD counts diving weight in grams and checks the apparatus in the cape slo
   };
   const player = { getInventory: () => inventory, getEquipment: () => equipment };
 
-  assert.equal(condition({ player, text: 'If the player weighs more than 27kg:' }), false);
-  assert.equal(condition({ player, text: 'If the player has lost their diving apparatus:' }), false);
+  const ask = event => condition({ ...event, pages: [{ page: 'Recipe for Disaster/Freeing Pirate Pete' }] });
+  assert.equal(ask({ player, text: 'If the player weighs more than 27kg:' }), false);
+  assert.equal(ask({ player, text: 'If the player has lost their diving apparatus:' }), false);
   inventoryItems.push(makeItem(231, 12999));
-  assert.equal(condition({ player, text: 'If the player weighs more than 27kg:' }), false);
+  assert.equal(ask({ player, text: 'If the player weighs more than 27kg:' }), false);
   inventoryItems.push(makeItem(232, 1));
-  assert.equal(condition({ player, text: 'If the player weighs more than 27kg:' }), true);
-  assert.equal(condition({ player, text: 'If the player is properly equipped:' }), false);
+  assert.equal(ask({ player, text: 'If the player weighs more than 27kg:' }), true);
+  assert.equal(ask({ player, text: 'If the player is properly equipped:' }), false);
 });
 
 
@@ -20669,41 +20689,6 @@ test('Blood Moon registers its final Castle deposit chest handler', () => {
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
   assert.ok(handlers.namedObjects.some(({ target, actions }) => target === 'Chest' && typeof actions.Deposit === 'function'));
 });
-test('Sins of the Father opens its boat route from the Slepe rowboat after completion', () => {
-  const { api, handlers } = mockApi();
-  let prompt;
-  api.sendMultiChatboxPrompt = (_player, title, ...options) => { prompt = { title, options }; };
-  const moved = [];
-  const attributes = new Map();
-  const player = {
-    getAttribute: key => attributes.get(key),
-    setAttribute: (key, value) => attributes.set(key, value),
-    getLocation: () => new api.core.Location(3661, 3278, 0),
-    moveTo: location => moved.push([location.getX(), location.getY(), location.getZ()]),
-    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
-    sendMessage() {},
-  };
-  require('../plugins/quests/quests/SinsOfTheFather.Quest')(api);
-  const quest = require('../plugins/quests/QuestRuntime').getRegisteredQuests()
-    .filter(entry => entry.key === 'sins_of_the_father').at(-1);
-  quest.setStage(player, 999);
-  const boat = handlers.objects.find(handler => handler.name === 'handleObjectInteraction');
-
-  const wrongLocation = { player, objectId: 32602, location: { x: 3662, y: 3279, z: 0 }, handled: false };
-  boat(wrongLocation);
-  assert.equal(wrongLocation.handled, false, 'the Slepe route is scoped to its cache boat anchor');
-  assert.equal(prompt, undefined);
-
-  const travel = { player, objectId: 32602, location: { x: 3661, y: 3279, z: 0 }, option: 'Travel', handled: false };
-  boat(travel);
-  assert.equal(travel.handled, true);
-  assert.equal(prompt.title, 'Where would you like to sail?');
-  const graveyard = prompt.options.findIndex((value, index) => index % 2 === 0 && value === 'Icyene Graveyard.');
-  assert.notEqual(graveyard, -1);
-  prompt.options[graveyard + 1]();
-  assert.deepEqual(moved, [[3696, 3199, 0]], 'the destination uses the existing clear graveyard landing');
-});
-
 test('Sins boat lands on Burgh shore with a collision-valid route inland', () => {
   const { api, handlers } = mockApi();
   const attributes = new Map();
@@ -21018,3 +21003,599 @@ test('Blood Moon Solid-key door enters the reachable laboratory side', () => {
   'the landing has a cache path to the shelves needed for the refiner');
 });
 
+
+test('Curator Haig belongs to the active Golem museum step, then The Dig Site, then Bone Voyage', () => {
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const { api: base, handlers } = mockApi();
+  const api = new Proxy(base, {
+    get(target, prop) {
+      if (prop === 'emitCustomEvent') return (name, request) => {
+        if (name === 'quest:is-complete' || name === 'quest:is-started') {
+          const quest = runtime.getRegisteredQuests().filter(entry => entry.key === request?.key).at(-1);
+          if (quest && request.player) request[name === 'quest:is-complete' ? 'complete' : 'started'] =
+            name === 'quest:is-complete' ? quest.isComplete(request.player) : quest.isStarted(request.player);
+          return;
+        }
+        base.emitCustomEvent(name, request);
+      };
+      return target[prop];
+    },
+  });
+  for (const quest of ['BoneVoyage', 'DigSite', 'TheGolem']) {
+    delete require.cache[require.resolve(`../plugins/quests/quests/${quest}.Quest`)];
+    require(`../plugins/quests/quests/${quest}.Quest`)(api);
+  }
+  const attributes = new Map();
+  const player = { getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value) };
+  const select = () => {
+    const context = { player, npcId: 5214, pages: [] };
+    const owners = ['Bone Voyage', 'The Dig Site', 'The Golem'];
+    for (let index = 0; index < handlers.variant.length; index++) {
+      const choice = handlers.variant[index](context);
+      if (choice) return { owner: owners[index], choice };
+    }
+    return null;
+  };
+
+  attributes.set('quest.the_dig_site.stage', 9);
+  attributes.set('quest.the_golem.stage', 3);
+  const golem = select();
+  assert.equal(golem.owner, 'The Golem', 'the active Golem museum step wins over the earlier quests');
+  assert.equal(golem.choice.page, 'The Golem');
+
+  attributes.set('quest.the_golem.stage', 0);
+  attributes.set('quest.the_dig_site.stage', 0);
+  assert.equal(select().owner, 'The Dig Site', 'The Dig Site still starts through the curator');
+
+  attributes.set('quest.the_dig_site.stage', 9);
+  assert.equal(select().owner, 'Bone Voyage', 'Bone Voyage still starts once The Dig Site is complete');
+
+  attributes.set('quest.the_dig_site.stage', 0);
+  attributes.set('quest.the_golem.stage', 10);
+  assert.equal(select().owner, 'The Dig Site', 'a completed Golem does not hide The Dig Site approval');
+
+  attributes.set('quest.the_dig_site.stage', 9);
+  assert.equal(select().owner, 'Bone Voyage', 'Bone Voyage still starts after Dig Site completion');
+});
+
+test('My Arm earlier quests yield to the Secrets of the North Weiss scene and still work outside it', () => {
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  const started = [];
+  runtime.startTranscript = (_api, _player, npcId, page, variant) => {
+    started.push({ npcId, page, variant });
+    return true;
+  };
+  const { api: base } = mockApi();
+  const interactions = [];
+  const api = new Proxy(base, {
+    get(target, prop) {
+      if (prop === 'onNpcInteraction') return (name, actions) => {
+        if (typeof name === 'string') interactions.push({ name, actions });
+      };
+      return target[prop];
+    },
+  });
+  try {
+    for (const quest of ['MakingFriendsWithMyArm', 'MyArmsBigAdventure', 'SecretsOfTheNorth']) {
+      delete require.cache[require.resolve(`../plugins/quests/quests/${quest}.Quest`)];
+      require(`../plugins/quests/quests/${quest}.Quest`)(api);
+    }
+  } finally {
+    runtime.startTranscript = originalStartTranscript;
+  }
+  const attributes = new Map([
+    ['quest.making_friends_with_my_arm.stage', 200], // SOTN's requirement is complete
+    ["quest.my_arms_big_adventure.stage", 60],
+  ]);
+  const player = { getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value) };
+  const talk = (npcId, name) => {
+    const event = { player, npcId, clickType: 1, handled: false,
+      definition: { getName: () => name, getActions: () => ['Talk-to'] } };
+    for (const hook of interactions.filter(entry => entry.name === name)) {
+      const action = hook.actions['Talk-to'];
+      if (action && action(event) !== false) { event.handled = true; break; }
+    }
+    return event;
+  };
+  const myArm = api.core.NpcIdentifiers.MY_ARM_3; // 742, the captured Weiss My Arm
+  const snowflake = api.core.NpcIdentifiers.SNOWFLAKE; // 8431, the paired speaker
+  for (const stage of [12, 13, 14]) {
+    attributes.set('quest.secrets_of_the_north.stage', stage);
+    started.length = 0;
+    assert.equal(talk(myArm, 'My Arm').handled, true);
+    assert.deepEqual(started.map(call => [call.npcId, call.page]),
+      [[myArm, 'Secrets of the North']], `SOTN stage ${stage} owns My Arm with his own chathead`);
+    attributes.set('quest.secrets_of_the_north.stage', stage);
+    started.length = 0;
+    assert.equal(talk(snowflake, 'Snowflake').handled, true);
+    assert.deepEqual(started.map(call => [call.npcId, call.page]),
+      [[snowflake, 'Secrets of the North']], `SOTN stage ${stage} reaches Snowflake's paired dialogue`);
+  }
+  attributes.set('quest.secrets_of_the_north.stage', 0);
+  started.length = 0;
+  assert.equal(talk(myArm, 'My Arm').handled, true);
+  assert.equal(started.at(-1).page, "My Arm's Big Adventure", 'My Arm still works outside the North scene');
+  assert.equal(started.at(-1).variant, 'starting-off-talking-to-my-arm-again');
+
+  // Making Friends with My Arm has the same yield even while its own quest is in progress.
+  const makingFriends = interactions.filter(entry => entry.name === 'My Arm')[0].actions['Talk-to'];
+  attributes.set('quest.making_friends_with_my_arm.stage', 100);
+  attributes.set('quest.secrets_of_the_north.stage', 13);
+  assert.equal(makingFriends({ player, npcId: myArm, clickType: 1, handled: false,
+    definition: { getName: () => 'My Arm', getActions: () => ['Talk-to'] } }), false);
+  attributes.set('quest.secrets_of_the_north.stage', 0);
+  started.length = 0;
+  assert.notEqual(makingFriends({ player, npcId: myArm, clickType: 1, handled: false,
+    definition: { getName: () => 'My Arm', getActions: () => ['Talk-to'] } }), false);
+  assert.equal(started.at(-1).page, 'Making Friends with My Arm');
+});
+
+test('Uzer Evil Dave 902/1987 resolves Shadow, while Recipe for Disaster keeps Edgeville', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const index = JSON.parse(fs.readFileSync(path.join(__dirname, '../data/definitions/npc-dialogue-index.json'), 'utf8'));
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  const started = [];
+  runtime.startTranscript = (_api, _player, npcId, page, variant) => {
+    started.push({ npcId, page, variant });
+    return true;
+  };
+  try {
+    const { api: base, handlers } = mockApi();
+    const interactions = [];
+    const api = new Proxy(base, {
+      get(target, prop) {
+        if (prop === 'onNpcInteraction') return (name, actions) => {
+          if (typeof name === 'function') interactions.push(name);
+          else if (actions && typeof actions['Talk-to'] === 'function') interactions.push(actions['Talk-to']);
+        };
+        return target[prop];
+      },
+    });
+    for (const quest of ['RecipeForDisaster', 'ShadowOfTheStorm']) {
+      delete require.cache[require.resolve(`../plugins/quests/quests/${quest}.Quest`)];
+      require(`../plugins/quests/quests/${quest}.Quest`)(api);
+    }
+
+    const attributes = new Map([
+      ['quest.recipe_for_disaster.stage', 4],
+      ['quest.shadow_of_the_storm.stage', 20],
+    ]);
+    const location = (x, y, z = 0) => ({ getX: () => x, getY: () => y, getZ: () => z });
+    let at = location(2721, 4914); // the Uzer portal Evil Dave
+    const player = {
+      getAttribute: key => attributes.get(key),
+      setAttribute: (key, value) => attributes.set(key, value),
+      getLocation: () => at,
+      getInventory: () => ({ getAmount: () => 0, adds: () => true, getFreeSlots: () => 28, deleteNumber: () => true }),
+      getEquipment: () => ({ getItems: () => [], get: () => null }),
+      getSkillManager: () => ({ getCurrentLevel: () => 99, getMaxLevel: () => 99, addExperiences() {} }),
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+      sendMessage() {},
+    };
+    const pagesFor = (npcId, npc) => {
+      const entry = index[String(npcId)] ?? index[String(npc?.getId?.())] ?? [];
+      return entry.map(page => ({ page: String(page.page).replace(/^Transcript:/, ''), variants: page.variants ?? [] }));
+    };
+    const dispatch = (npcId, pageNpcId = npcId) => {
+      const npc = { getId: () => pageNpcId, getLocation: () => at };
+      const event = { player, npc, npcId, clickType: 1, handled: false,
+        definition: { getName: () => 'Evil Dave', getActions: () => ['Talk-to'] } };
+      for (const handler of interactions) {
+        if (handler(event) === true || event.handled) break;
+      }
+      if (event.handled) return { handled: true, transcript: started.at(-1) };
+      const context = { player, npc, npcId, pages: pagesFor(npcId, npc) };
+      for (const select of handlers.variant) {
+        const choice = select(context);
+        if (!choice) continue;
+        const variant = typeof choice === 'string' ? choice : choice.variant;
+        const page = typeof choice === 'object' && choice.page
+          ? choice.page : context.pages.find(entry => entry.variants.includes(variant))?.page;
+        return { handled: false, page, variant };
+      }
+      return { handled: false, page: null, variant: null };
+    };
+
+    started.length = 0;
+    const cached = dispatch(902);
+    assert.equal(cached.handled, false, 'Recipe for Disaster no longer claims Uzer Dave');
+    assert.equal(cached.page, 'Shadow of the Storm');
+    assert.equal(cached.variant, 'infiltrating-the-wizards');
+    assert.deepEqual(index['1987'].map(entry => entry.page), ['Transcript:Shadow of the Storm'],
+      'the raw portal id resolves to the Shadow page without the shared 902 pages');
+    assert.deepEqual(index['913'].map(entry => entry.page), ['Transcript:Shadow of the Storm'],
+      'the passage transform keeps the same canonical Shadow mapping');
+    started.length = 0;
+    const raw = dispatch(1987, 902);
+    assert.equal(raw.handled, true, 'the Shadow legacy id handler claims its raw portal id');
+    assert.equal(raw.transcript.npcId, 902, 'the raw 1987 transform keeps the resolved Evil Dave chathead');
+    assert.equal(raw.transcript.page, 'Shadow of the Storm');
+    assert.equal(raw.transcript.variant, 'infiltrating-the-wizards');
+
+    attributes.set('quest.shadow_of_the_storm.stage', 30);
+    at = location(2720, 4900, 2);
+    started.length = 0;
+    const throne = dispatch(902);
+    assert.equal(throne.page, 'Shadow of the Storm', 'the throne-room Evil Dave is also Shadow-owned');
+    assert.equal(throne.variant, 'infiltrating-the-wizards-talking-to-the-dark-wizards-evil-dave');
+    attributes.set('quest.shadow_of_the_storm.stage', 20);
+
+    at = location(3236, 3220); // Evil Dave's Edgeville basement
+    started.length = 0;
+    const rfd = dispatch(902);
+    assert.equal(rfd.handled, true, 'Recipe for Disaster still owns its own Evil Dave');
+    assert.equal(rfd.transcript.page, 'Recipe for Disaster/Freeing Evil Dave');
+    assert.equal(rfd.transcript.variant, 'talking-to-evil-dave');
+  } finally {
+    runtime.startTranscript = originalStartTranscript;
+  }
+});
+
+test('RFD condition scope keeps Current Affairs eligible at Arhein while RFD opening still works at the Cook', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const index = JSON.parse(fs.readFileSync(path.join(__dirname, '../data/definitions/npc-dialogue-index.json'), 'utf8'));
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const { api: base, handlers } = mockApi();
+  const api = new Proxy(base, {
+    get(target, prop) {
+      if (prop === 'emitCustomEvent') return (name, request) => {
+        if (name === 'quest:is-complete' || name === 'quest:is-started') {
+          const quest = runtime.getRegisteredQuests().filter(entry => entry.key === request?.key).at(-1);
+          if (quest && request.player) request[name === 'quest:is-complete' ? 'complete' : 'started'] =
+            name === 'quest:is-complete' ? quest.isComplete(request.player) : quest.isStarted(request.player);
+          return;
+        }
+        base.emitCustomEvent(name, request);
+      };
+      return target[prop];
+    },
+  });
+  // Parent order: RFD first, Current Affairs later.
+  for (const quest of ['RecipeForDisaster', 'CooksAssistant', 'CurrentAffairs', 'Pandemonium']) {
+    delete require.cache[require.resolve(`../plugins/quests/quests/${quest}.Quest`)];
+    require(`../plugins/quests/quests/${quest}.Quest`)(api);
+  }
+  const quest = key => runtime.getRegisteredQuests().filter(entry => entry.key === key).at(-1);
+  const attributes = new Map([
+    ['quest.cooks_assistant.stage', quest('cooks_assistant').completionValue],
+    ['quest.pandemonium.stage', quest('pandemonium').completionValue],
+  ]);
+  let cooking = 0;
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getSkillManager: () => ({
+      getMaxLevel: skill => skill === api.core.Skill.COOKING ? cooking : 99,
+      getCurrentLevel: skill => skill === api.core.Skill.COOKING ? cooking : 99,
+    }),
+    getInventory: () => ({ getAmount: () => 0, getFreeSlots: () => 28 }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+  };
+  const pagesFor = npcId => index[String(npcId)].map(entry =>
+    ({ page: String(entry.page).replace(/^Transcript:/, ''), variants: entry.variants ?? [] }));
+  const rfdCondition = handlers.condition[0];
+  const arhein = { player, npcId: 3200, stepId: 'mNhEI-',
+    text: 'If the player does not meet the requirements to begin the quest:', pages: pagesFor(3200) };
+  assert.equal(rfdCondition(arhein), null, 'RFD no longer answers the Current Affairs page');
+  const answer = handlers.condition.map(handler => handler(arhein)).find(result => typeof result === 'boolean');
+  assert.equal(answer, false, 'all eligible Current Affairs requirements take the normal start branch');
+  const arheinStart = handlers.variant.map(handler => handler({ player, npcId: 3200, pages: pagesFor(3200) }))
+    .find(result => result);
+  const arheinVariant = typeof arheinStart === 'string' ? arheinStart : arheinStart.variant;
+  const arheinPage = typeof arheinStart === 'object' && arheinStart.page
+    ? arheinStart.page : pagesFor(3200).find(entry => entry.variants.includes(arheinVariant))?.page;
+  assert.equal(arheinPage, 'Current Affairs');
+  assert.equal(arheinVariant, 'starting-off-talking-to-arhein', 'the duck question still starts normally');
+
+  const cook = { player, npcId: 4626, stepId: 'rfd-opening',
+    text: "If the player is on a members' world:", pages: pagesFor(4626) };
+  assert.equal(rfdCondition(cook), true, 'RFD still answers its own opening membership branch');
+  const requirements = { ...cook, text: 'If the player does not meet the requirements to begin the quest:' };
+  assert.equal(rfdCondition(requirements), true, 'RFD opening is still not eligible at Cooking 0');
+  cooking = 10;
+  assert.equal(rfdCondition(requirements), false, 'RFD opening becomes eligible at Cooking 10');
+  assert.deepEqual(handlers.variant[0]({ player, npcId: 4626, pages: pagesFor(4626) }),
+    { page: 'Recipe for Disaster/Another Cook\'s Quest', variant: 'starting-out' },
+    'RFD still starts through the Cook with Cook\'s Assistant complete');
+});
+
+test('Prying Times before Pandemonium owns Steve after the prerequisite completes', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const index = JSON.parse(fs.readFileSync(path.join(__dirname, '../data/definitions/npc-dialogue-index.json'), 'utf8'));
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const { api: base, handlers } = mockApi();
+  const api = new Proxy(base, {
+    get(target, prop) {
+      if (prop === 'emitCustomEvent') return (name, request) => {
+        if (name === 'quest:is-complete' || name === 'quest:is-started') {
+          const entry = runtime.getRegisteredQuests().filter(quest => quest.key === request?.key).at(-1);
+          if (entry && request.player) request[name === 'quest:is-complete' ? 'complete' : 'started'] =
+            name === 'quest:is-complete' ? entry.isComplete(request.player) : entry.isStarted(request.player);
+          return;
+        }
+        base.emitCustomEvent(name, request);
+      };
+      return target[prop];
+    },
+  });
+  // Parent order: Prying Times before Pandemonium.
+  for (const questName of ['PryingTimes', 'Pandemonium']) {
+    delete require.cache[require.resolve(`../plugins/quests/quests/${questName}.Quest`)];
+    require(`../plugins/quests/quests/${questName}.Quest`)(api);
+  }
+  const quest = key => runtime.getRegisteredQuests().filter(entry => entry.key === key).at(-1);
+  const attributes = new Map([
+    ['quest.pandemonium.stage', quest('pandemonium').completionValue],
+    ['quest.prying_times.stage', 5],
+  ]);
+  const player = { getAttribute: key => attributes.get(key), setAttribute: (key, value) => attributes.set(key, value) };
+  const pages = index['14968'].map(entry =>
+    ({ page: String(entry.page).replace(/^Transcript:/, ''), variants: entry.variants ?? [] }));
+  const result = handlers.variant.map(handler => handler({ player, npcId: 14968, pages }))
+    .find(choice => choice);
+  const variant = typeof result === 'string' ? result : result.variant;
+  const page = typeof result === 'object' && result.page
+    ? result.page : pages.find(entry => entry.variants.includes(variant))?.page;
+  assert.equal(page, 'Prying Times', 'Prying Times owns Steve before Pandemonium can replay his post-quest page');
+  assert.equal(variant, 'starting-off-talking-to-steave-beanie-again-before-he-writes-in-the-log');
+});
+
+test('Shadows of Custodia: the current cache wall transform Inspects and Reinforces through the real object handler', () => {
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  const transcripts = [];
+  runtime.startTranscript = (_api, _player, npcId, page, variant) => {
+    transcripts.push({ npcId, page, variant });
+    return true;
+  };
+  delete require.cache[require.resolve('../plugins/quests/quests/ShadowsOfCustodia.Quest')];
+  const { api, handlers } = mockApi();
+  try {
+    require('../plugins/quests/quests/ShadowsOfCustodia.Quest')(api);
+  } finally {
+    runtime.startTranscript = originalStartTranscript;
+  }
+  const quest = runtime.getRegisteredQuests().filter(entry => entry.key === 'shadows_of_custodia').at(-1);
+  assert.ok(quest, 'real Shadows of Custodia registration');
+
+  const attributes = new Map();
+  let logs = 0, hammer = 0;
+  const varbits = new Map();
+  const packet = new Proxy({
+    sendVarbit: (id, value) => { varbits.set(id, value); return packet; },
+  }, { get: (target, key) => target[key] ?? (() => packet) });
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getPacketSender: () => packet,
+    getInventory: () => ({
+      getAmount: id => id === api.core.ItemIdentifiers.MAPLE_LOGS ? logs : id === api.core.ItemIdentifiers.HAMMER ? hammer : 0,
+      deleteNumber: (id, amount) => { if (id === api.core.ItemIdentifiers.MAPLE_LOGS) logs -= amount; },
+    }),
+    getLocation: () => new api.core.Location(1378, 3358, 0),
+    sendMessage: () => {},
+  };
+  const stage = value => player.setAttribute('quest.shadows_of_custodia.stage', value);
+  const click = (id, clickType = 1) => {
+    const definition = api.core.ObjectDefinition.forId(id);
+    assert.ok(definition, `cache definition ${id}`);
+    const event = { player, objectId: id, definition, clickType, location: definition.getLocation?.() ?? player.getLocation(), handled: false };
+    handlers.objects[0](event);
+    return event;
+  };
+
+  assert.equal(api.core.ObjectDefinition.forId(56433).getName(), 'Wall');
+  assert.equal(api.core.ObjectDefinition.forId(56433).getInteractions()[0], 'Inspect');
+  assert.equal(api.core.ObjectDefinition.forId(56435).getInteractions()[0], 'Reinforce');
+
+  stage(5);
+  const inspect = click(56433);
+  assert.equal(inspect.handled, true, 'current transformed 56433 Inspect is handled');
+  assert.equal(quest.getStage(player), 6, 'the real wall Inspect advances stage 5 -> 6');
+  assert.ok(transcripts.some(entry => entry.variant === 'parents-anguish-finding-the-fabric-inspecting-the-wall'));
+
+  click(56433);
+  assert.equal(quest.getStage(player), 6, 'repeated Inspect cannot advance further');
+
+  // Reinforce is not available before the boys are home; it must not repair early.
+  const early = click(56435);
+  assert.equal(early.handled, true);
+  assert.equal(quest.getStage(player), 6, 'early Reinforce leaves the stage unchanged');
+  assert.equal(attributes.get('quest.shadows_of_custodia.flags') ?? 0, 0, 'early Reinforce does not set the wall flag');
+
+  stage(15);
+  logs = 4; hammer = 1;
+  const reinforced = click(56435);
+  assert.equal(reinforced.handled, true);
+  assert.equal(attributes.get('quest.shadows_of_custodia.flags') & (1 << 4), 1 << 4, 'real 56435 Reinforce sets the wall flag');
+  assert.equal(logs, 0, 'four maple logs consumed');
+  assert.ok(transcripts.some(entry => entry.variant === 'helping-around-town-reinforcing-the-wall'));
+});
+
+test('ForgettableTale yields Blue Opal Director 5999 to Giant Dwarf and keeps its own active window', () => {
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  const started = [];
+  runtime.startTranscript = (_api, _player, npcId, page, variant) => {
+    started.push({ npcId, page, variant });
+    return true;
+  };
+  const { api: base, handlers } = mockApi();
+  const interactions = [];
+  const api = new Proxy(base, {
+    get(target, prop) {
+      if (prop === 'onNpcInteraction') return (name, actions) => {
+        if (typeof name === 'string' && actions?.['Talk-to']) interactions.push({ name, action: actions['Talk-to'] });
+      };
+      if (prop === 'onNpcsInteraction') return (names, actions) => {
+        for (const name of names) if (actions?.['Talk-to']) interactions.push({ name, action: actions['Talk-to'] });
+      };
+      return target[prop];
+    },
+  });
+  try {
+    for (const questName of ['ForgettableTale', 'GiantDwarf']) {
+      delete require.cache[require.resolve(`../plugins/quests/quests/${questName}.Quest`)];
+      require(`../plugins/quests/quests/${questName}.Quest`)(api);
+    }
+  } finally {
+    runtime.startTranscript = originalStartTranscript;
+  }
+  const attributes = new Map([
+    ['quest.forgettable_tale.stage', 0],
+    ['quest.giant_dwarf.stage', 30],
+    ['quest.giant_dwarf.company', 3],
+    ['quest.giant_dwarf.points', 80],
+  ]);
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({ getAmount: () => 0 }),
+    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+  };
+  const talk = (npcId, name) => {
+    const event = { player, npcId, clickType: 1, handled: false,
+      definition: { getName: () => name, getActions: () => ['Talk-to'] } };
+    for (const hook of interactions.filter(entry => entry.name === name)) {
+      const result = hook.action(event);
+      if (result === false) continue;
+      event.handled = true;
+      break;
+    }
+    return event;
+  };
+
+  started.length = 0;
+  assert.equal(talk(5999, 'Blue Opal Director').handled, true);
+  assert.deepEqual(started.at(-1), {
+    npcId: 5999, page: 'The Giant Dwarf', variant: 'the-head-of-a-dwarf-talking-to-a-company-director',
+  }, 'the inactive Forgettable director hook yields to Giant tasks');
+
+  attributes.set('quest.giant_dwarf.points', 100);
+  for (const handler of handlers.custom.get('npc-dialogue:choice') ?? []) {
+    handler({ player, npcId: 5999, option: "I'd like to officially join your company." });
+  }
+  assert.equal(attributes.get('quest.giant_dwarf.joined'), true);
+  assert.equal(attributes.get('quest.giant_dwarf.company'), 3);
+
+  attributes.set('quest.forgettable_tale.stage', 10);
+  started.length = 0;
+  assert.equal(talk(5999, 'Blue Opal Director').handled, true);
+  assert.deepEqual(started.at(-1), {
+    npcId: 5999, page: 'Forgettable Tale...',
+    variant: 'exploring-the-closed-tunnel-before-entering-the-tunnel-talking-to-the-company-director',
+  }, 'the active Forgettable window keeps its own director dialogue');
+
+  attributes.set('quest.forgettable_tale.stage', 0);
+  assert.equal(talk(2385, 'Cart conductor').handled, false,
+    'an inactive Forgettable cart conductor falls back to the generic dialogue');
+});
+
+test('Giant Dwarf owns Veldaban only for its stage 40 meeting; completed Giant leaves Forgettable start alone', () => {
+  const { api, handlers } = mockApi();
+  const runtime = require('../plugins/quests/QuestRuntime');
+  const originalStartTranscript = runtime.startTranscript;
+  runtime.startTranscript = () => true;
+  try {
+    // The shipped Quests.plugin registers ForgettableTale before GiantDwarf; keep
+    // that exact order so the first-answer variant chain is the real one.
+    const order = require('../plugins/quests/Quests.plugin').QUESTS;
+    assert.ok(order.indexOf('ForgettableTale') < order.indexOf('GiantDwarf'));
+    for (const questName of ['ForgettableTale', 'GiantDwarf']) {
+      delete require.cache[require.resolve(`../plugins/quests/quests/${questName}.Quest`)];
+      require(`../plugins/quests/quests/${questName}.Quest`)(api);
+    }
+  } finally {
+    runtime.startTranscript = originalStartTranscript;
+  }
+
+  const index = require('../data/definitions/npc-dialogue-index.json');
+  const dialogues = require('../data/definitions/npc-dialogues.json');
+  const attributes = new Map();
+  const rewardXp = new Map();
+  const packet = new Proxy({}, { get: () => () => packet });
+  const player = {
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => ({
+      getAmount: () => 0, adds() {}, deleteNumber() {}, getFreeSlots: () => 28, getItems: () => [],
+    }),
+    getPacketSender: () => packet,
+    getSkillManager: () => ({
+      addExperiences: (skill, amount) => rewardXp.set(skill, (rewardXp.get(skill) ?? 0) + amount),
+    }),
+    getFrameUpdater: () => ({ clear() {} }),
+    getDialogueManager: () => ({ isActive: () => false }),
+    isRegistered: () => false,
+    sendMessage() {},
+  };
+
+  // Same first-answer and page lookup NpcDialogues.plugin uses for Talk-to.
+  const firstVariant = (npcId) => {
+    const pages = (index[String(npcId)] ?? [])
+      .map(entry => ({ page: String(entry.page).replace(/^Transcript:/, ''), variants: entry.variants }))
+      .filter(entry => Object.hasOwn(dialogues, entry.page));
+    const context = { player, npcId, pages };
+    for (const hook of handlers.variant) {
+      const choice = hook(context);
+      if (!choice) continue;
+      const wanted = typeof choice === 'string' ? choice : choice.variant;
+      const wantedPage = typeof choice === 'object' ? choice.page : undefined;
+      const page = wantedPage
+        ? pages.find(entry => entry.page === wantedPage)
+        : pages.find(entry => entry.variants.includes(wanted))
+          ?? pages.find(entry => Object.hasOwn(dialogues[entry.page]?.variants ?? {}, wanted));
+      return { wanted, page: page?.page };
+    }
+    return null;
+  };
+
+  for (const npcId of [2228, 6045]) {
+    attributes.clear();
+    attributes.set('quest.forgettable_tale.stage', 0);
+    attributes.set('quest.giant_dwarf.stage', 40);
+    assert.deepEqual(firstVariant(npcId), {
+      wanted: 'art-by-committee-talking-to-commander-veldaban', page: 'The Giant Dwarf',
+    }, `Giant stage 40 owns Veldaban ${npcId}`);
+
+    attributes.set('quest.giant_dwarf.stage', 50);
+    const afterComplete = firstVariant(npcId);
+    assert.equal(afterComplete.page, 'Forgettable Tale...', `completed Giant allows FFT start on ${npcId}`);
+    assert.equal(afterComplete.wanted, 'starting-out-without-fishing-contest-completed');
+
+    attributes.set('quest.giant_dwarf.stage', 30);
+    assert.equal(firstVariant(npcId).wanted, 'starting-out-without-fishing-contest-completed',
+      `unrelated Veldaban ${npcId} dialogue is unchanged`);
+
+    attributes.set('quest.forgettable_tale.stage', 11);
+    attributes.set('quest.giant_dwarf.stage', 40);
+    assert.equal(firstVariant(npcId).wanted, 'brewing-talking-to-veldaban-after-hearing-the-drunken-dwarf-s-story',
+      `an active Forgettable Tale keeps its own Veldaban ${npcId} dialogue`);
+  }
+
+  // The selected Giant meeting transcript drives the real action handlers to stage 50 once.
+  attributes.clear();
+  attributes.set('quest.forgettable_tale.stage', 0);
+  attributes.set('quest.giant_dwarf.stage', 40);
+  attributes.set('quest.giant_dwarf.company', 3);
+  const action = (stepId) => {
+    const event = { player, npcId: 6045, stepId, handled: false };
+    for (const handler of handlers.custom.get('npc-dialogue:action') ?? []) handler(event);
+    return event;
+  };
+  const meeting = action('LsMtIf');
+  assert.deepEqual(meeting.steps, dialogues['The Giant Dwarf'].variants['art-by-committee-the-consortium-meeting'],
+    'stage 40 uses the real Consortium meeting transcript');
+  action('lEFN0h');
+  assert.equal(attributes.get('quest.giant_dwarf.stage'), 50);
+  const xpAfterCompletion = [...rewardXp.values()].reduce((sum, value) => sum + value, 0);
+  assert.equal(xpAfterCompletion, 12000, 'the quest reward is granted once');
+  action('lEFN0h');
+  assert.equal([...rewardXp.values()].reduce((sum, value) => sum + value, 0), xpAfterCompletion,
+    'replaying the completion action cannot grant the reward twice');
+});

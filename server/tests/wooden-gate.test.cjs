@@ -1460,3 +1460,54 @@ test('Rehnison door opens a real path past the entrance chair to the hidden bed'
     assert.equal(route.success, true, 'the entrance must connect to the clear tile south-west of the bed');
   } finally { area.destroy(); h.restore(); }
 });
+
+test('Dorgesh-Kaan city doors open both leaves and static panels, then walk and autoclose', async () => {
+  await initializeMapCollisionOnce();
+  const definitions = new Map([6919, 6920, 22539, 22540].map((id) => [id, CacheDefinitions.getObject(id)]));
+  const h = buildHarness({ cacheObjects: definitions, realMapObjects: true, objectManager: ObjectManager });
+  const player = {
+    getUsername: () => 'door-6919',
+    isPlayerBot: () => false,
+    getPrivateArea: () => null,
+    getRights: () => 0,
+    getSession: () => ({ isTileInScene: () => true }),
+    getLocation: () => new Location(3318, 9604, 0),
+    getAttribute: () => 0,
+    setAttribute: () => {},
+    getPacketSender: () => ({ sendObject: () => {}, sendObjectRemoval: () => {} }),
+  };
+  const route = () => new RsmodRouteFinding().findRoute({
+    level: 0, srcX: 3318, srcY: 9604, srcSize: 1, destX: 3318, destY: 9597,
+    privateArea: null, moveNear: false,
+  });
+  const object = (id, x, y) => MapObjects.get(id, new Location(x, y, 0), null);
+  const clear = () => {
+    for (const [id, x, y] of [[6919, 3317, 9601], [6920, 3318, 9601],
+      [22540, 3317, 9600], [22539, 3318, 9600]]) {
+      assert.equal(object(id, x, y), null, `open threshold removes ${id}`);
+    }
+  };
+  const restored = () => {
+    for (const [id, x, y] of [[6919, 3317, 9601], [6920, 3318, 9601],
+      [22540, 3317, 9600], [22539, 3318, 9600]]) {
+      assert.equal(object(id, x, y)?.getId(), id, `autoclose restores ${id}`);
+    }
+  };
+  try {
+    for (const [leaf, x] of [[6919, 3317], [6920, 3318]]) {
+      const base = object(leaf, x, 9601);
+      assert.equal(base?.getId(), leaf, `cache map has leaf ${leaf}`);
+      assert.equal(RegionManager.canMove(3318, 9601, 3318, 9600, 0, 1, 1, null), false,
+        'closed doors block the north step through the threshold');
+      assert.equal(h.handlers.get('Door')['Open']({
+        player, object: base, objectId: leaf, definition: { id: leaf }, location: base.getLocation(), clickType: 1,
+      }), true, `opening ${leaf} handles the threshold`);
+      clear();
+      assert.equal(route().success, true, 'the normal route finder walks through the opened threshold');
+      h.submitted.at(-1).execute();
+      restored();
+      assert.equal(RegionManager.canMove(3318, 9601, 3318, 9600, 0, 1, 1, null), false,
+        'autoclose restores the blocked doorway');
+    }
+  } finally { h.restore(); }
+});

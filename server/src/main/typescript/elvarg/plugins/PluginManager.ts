@@ -47,6 +47,7 @@ import {
   PluginNpcHitModifyEvent,
   PluginNpcAggressionToleranceEvent,
   PluginNpcInteractionEvent,
+  PluginWorldEntityInteractionEvent,
   PluginNpcInteractionDefinition,
   PluginNpcDialogueContext,
   PluginNpcDialogueConditionEvent,
@@ -200,6 +201,7 @@ export class PluginManager {
   private static objectHooksByName = new Map<string, ObjectInteractionHook[]>();
   private static nextObjectHookOrder = 0;
   private static npcInteractionHooks: PluginHook<PluginNpcInteractionEvent>[] = [];
+  private static worldEntityInteractionHooks: PluginHook<PluginWorldEntityInteractionEvent>[] = [];
   /**
    * `onAnyNpcInteraction` hooks. Kept apart from the id/name hooks so a generic
    * transcript handler (e.g. NpcDialogues) never outruns a specific plugin that
@@ -997,6 +999,18 @@ export class PluginManager {
         }
         PluginManager.executeHook(hook, event, "npc_interaction", "npc_interaction");
       }
+    }
+    return event.handled === true;
+  }
+
+  /** Runs a world entity menu option through plugins; true when one handled it. */
+  public static emitWorldEntityInteraction(event: PluginWorldEntityInteractionEvent): boolean {
+    if (!event || !event.player || !Number.isInteger(event.entityIndex)) {
+      return false;
+    }
+    for (const hook of PluginManager.worldEntityInteractionHooks) {
+      if (event.handled) break;
+      PluginManager.executeHook(hook, event, "world_entity_interaction", "world_entity_interaction");
     }
     return event.handled === true;
   }
@@ -2157,6 +2171,9 @@ export class PluginManager {
         isEnabled: () => PluginManager.isPluginPerformanceProfilingEnabled(),
       }),
       World: require("../game/World").World,
+      BoatManager: require("../game/content/sailing/BoatManager").BoatManager,
+      BOAT_VIEW_DISTANCE: require("../game/content/sailing/WorldEntitySync").BOAT_VIEW_DISTANCE,
+      Sailing: require("../game/content/sailing/Sailing").Sailing,
       GameObject: require("../game/entity/impl/object/GameObject").GameObject,
       PrivateArea: require(`${model}/areas/impl/PrivateArea`).PrivateArea,
       TemplatedInstanceArea: require(`${model}/areas/impl/TemplatedInstanceArea`).TemplatedInstanceArea,
@@ -2838,6 +2855,11 @@ export class PluginManager {
       },
       onNpcRoute: (handler) => {
         if (typeof handler === "function") PluginManager.npcRouteHooks.push({ pluginName, handler });
+      },
+      onWorldEntityInteraction: (handler: (event: PluginWorldEntityInteractionEvent) => void) => {
+        if (typeof handler === "function") {
+          PluginManager.worldEntityInteractionHooks.push({ pluginName, handler });
+        }
       },
       onNpcInteraction: (
         handler: string | ((event: PluginNpcInteractionEvent) => void),
@@ -3967,6 +3989,7 @@ export class PluginManager {
       emitFiremakingBlocked: (event) => PluginManager.emitFiremakingBlocked(event),
       emitObjectInteraction: (event) => PluginManager.emitObjectInteraction(event),
       emitNpcInteraction: (event) => PluginManager.emitNpcInteraction(event),
+      emitWorldEntityInteraction: (event) => PluginManager.emitWorldEntityInteraction(event),
       emitItemOnObject: (event) => PluginManager.emitItemOnObject(event),
       emitPlayerLogin: (event) => PluginManager.emitPlayerLogin(event),
       emitCustomEvent: (eventName, payload) =>

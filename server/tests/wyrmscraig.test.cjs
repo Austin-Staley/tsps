@@ -58,6 +58,8 @@ function createPlayer({ x = 2530, y = 2205, prayers = [] } = {}) {
       if (method === "sendVarbit" || method === "sendSoundEffect") log.push(`${method} ${args.slice(0, 3).join(" ")}`);
       if (method === "sendSubInterface") log.push(`fade ${args[3]?.postScripts?.[0]?.args?.[1]}`);
       if (method === "sendGraphic") log.push(`graphic ${args[0].id}`);
+      if (method === "sendInterface") log.push(`interface ${args[0]}`);
+      if (method === "sendInterfaceScript") log.push(`script ${args[0]} ${JSON.stringify(args[1])}`);
       return sender;
     },
   });
@@ -67,6 +69,7 @@ function createPlayer({ x = 2530, y = 2205, prayers = [] } = {}) {
     isRegistered: () => true,
     getLocation: () => location,
     moveTo: (to) => { location = to; log.push(`move ${to.getX()} ${to.getY()}`); },
+    sendMessage: (message) => log.push(`message ${message}`),
     setLocation: (to) => { location = to; },
     setPositionToFace: () => {},
     performAnimation: (animation) => log.push(`anim ${animation.getId?.() ?? animation.id}`),
@@ -77,6 +80,10 @@ function createPlayer({ x = 2530, y = 2205, prayers = [] } = {}) {
     getPrayerActive: () => active,
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
+    setEnteredAmountAction(value) { this.amountAction = value; },
+    getEnteredAmountAction() { return this.amountAction; },
+    setInterfaceId(value) { this.interfaceId = value; },
+    getInterfaceId() { return this.interfaceId; },
     getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: (damage) => hits.push(...damage.map((d) => d.getDamage())) }) }),
   };
 }
@@ -89,7 +96,7 @@ test("the data: every id is the cache's, under the names the captures print", ()
   const spotanim = gamevals.namesOf(GamevalKind.SPOTANIM);
   const varbit = gamevals.namesOf(GamevalKind.VARBIT);
   const { cave, openAccess } = AreaCommon.data;
-  assert.deepEqual(openAccess.varbits.map(({ id }) => varbit.get(id)), ["ffg", "wyrmscraig_cliff_shortcut"]);
+  assert.deepEqual(openAccess.varbits.map(({ id }) => varbit.get(id)), ["wyrmscraig_cliff_shortcut"]);
   assert.deepEqual([loc(cave.entrance.id).name, loc(cave.entrance.id).actions[0]], ["Cave", "Enter"]);
   assert.deepEqual([loc(cave.exit.id).name, loc(cave.exit.id).actions[0]], ["Cave", "Exit"]);
 
@@ -129,11 +136,53 @@ test("the shortcuts: levels and ends as the Wiki and the capture have them", () 
 
 // ------------------------------------------------------------------ open access and the cave
 
-test("open access: every login gets Fallen From Grace's finished state", () => {
+test("open access: login unlocks only the cliff shortcut and never forces Fallen From Grace", () => {
   const player = createPlayer();
   for (const hook of loginHooks) hook({ player });
-  assert.ok(player.log.includes("sendVarbit 15759 20"));
   assert.ok(player.log.includes("sendVarbit 15720 1"));
+  assert.equal(player.log.some((line) => line.startsWith("sendVarbit 15759")), false,
+    "Fallen From Grace owns 15759; Wyrmscraig must not force its finished state");
+});
+
+test("as captured: the Mad Angel door is claimed by Fallen From Grace until its lock is picked", () => {
+  const namedObjects = new Map();
+  const custom = new Map();
+  const doorApi = new Proxy({
+    core,
+    onObjectInteraction: (name, actions) => {
+      if (typeof name === "string") namedObjects.set(name, { ...(namedObjects.get(name) ?? {}), ...actions });
+    },
+    onCustomEvent: (name, fn) => custom.set(name, [...(custom.get(name) ?? []), fn]),
+    emitCustomEvent: (name, event) => { for (const fn of custom.get(name) ?? []) fn(event); },
+  }, { get: (target, key) => target[key] ?? (() => {}) });
+
+  MadAngel.register(doorApi);
+  require("../plugins/quests/quests/FallenFromGrace.Quest")(doorApi);
+  const ffg = require("../plugins/quests/QuestRuntime").getRegisteredQuests()
+    .filter((quest) => quest.key === "fallen_from_grace").at(-1);
+  const door = namedObjects.get("Cathedral door").Open;
+
+  const locked = createPlayer({ x: 2542, y: 2215 });
+  ffg.setStage(locked, 18);
+  assert.equal(door({ player: locked, objectId: 62368 }), true);
+  assert.ok(locked.log.includes("interface 811"), 'the real 5-pin lock UI opens');
+  assert.ok(locked.log.some((line) => line.startsWith("script 6994")), 'the 811 renderer runs');
+  assert.ok(locked.amountAction, 'the real amount callback is armed');
+  assert.equal(locked.log.some((line) => line.startsWith("anim 4282")), false, "FFG claims the first pick, no movement");
+  assert.equal(locked.getLocation().getX(), 2542);
+  locked.amountAction.execute(7152); // captured second 811 session, P2 tick 621
+  assert.ok(locked.log.some((line) => line.includes("successfully pick the lock")));
+  assert.ok(locked.getAttribute('quest.fallen_from_grace.flags') & (1 << 7), 'CATHEDRAL_OPENED set by the lock');
+
+  assert.equal(door({ player: locked, objectId: 62368 }), true);
+  assert.ok(locked.log.some((line) => line.startsWith("anim 4282")), "the opened door falls through to MadAngel");
+  runTicks(1);
+  assert.notEqual(locked.getLocation().getX(), 2542, "the default door movement runs once FFG releases it");
+
+  const finished = createPlayer({ x: 2542, y: 2215 });
+  ffg.setStage(finished, 20);
+  assert.equal(door({ player: finished, objectId: 62368 }), true);
+  assert.ok(finished.log.some((line) => line.startsWith("anim 4282")), "post-quest door is ordinary MadAngel access");
 });
 
 test("as captured: the cave - the crawl, the fade, the move 2 ticks in, and back out", () => {

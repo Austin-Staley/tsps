@@ -33,8 +33,8 @@ module.exports = function registerDemonSlayerQuest(api) {
   /** Temple of the Eye's stage attribute. Its tower stages (6-25) give Traiborn
    * dialogue of their own, so Demon Slayer must not shadow him there. */
   const TEMPLE_OF_THE_EYE_STAGE_ATTRIBUTE = "quest.temple_of_the_eye.stage";
-  const TOTE_TOWER_STAGE = 6;
-  const TOTE_COMPLETE_STAGE = 26;
+  const TOTE_TOWER_STAGE = 60;
+  const TOTE_COMPLETE_STAGE = 130;
   const STAGE_STARTED = 1;
   const STAGE_KEY_HUNT = 2;
   const STAGE_COLLECTING_BONES = 3;

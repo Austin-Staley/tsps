@@ -51,8 +51,8 @@ module.exports = function registerRuneMysteriesQuest(api) {
   /** Temple of the Eye's stage attribute. Its tower/portal stages (6-25) give
    * Sedridor dialogue of their own, so Rune Mysteries must not shadow him there. */
   const TEMPLE_OF_THE_EYE_STAGE_ATTRIBUTE = "quest.temple_of_the_eye.stage";
-  const TOTE_TOWER_STAGE = 6;
-  const TOTE_COMPLETE_STAGE = 26;
+  const TOTE_TOWER_STAGE = 60;
+  const TOTE_COMPLETE_STAGE = 130;
 
   const TALISMAN_VARBIT = 13720; // cache runemysteries_talisman
   const TALISMAN_ATTRIBUTE = "rune-mysteries:talisman-received";

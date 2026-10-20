@@ -1,0 +1,640 @@
+// From server/: node --test tests/remaining-desert-parity.test.cjs (after yarn build).
+const assert = require('node:assert/strict');
+const { test } = require('node:test');
+const path = require('node:path');
+const { Server } = require('../dist/Server');
+Server.installProductionPathResolver();
+const { PluginManager } = require('../dist/plugins/PluginManager');
+const runtime = require('../plugins/quests/QuestRuntime');
+const core = PluginManager.getCoreApi();
+const I = core.ItemIdentifiers;
+const noop = () => {};
+
+function harness(questFile) {
+  let clock = 1000;
+  const hooks = {}, events = {}, tasks = [], transcripts = [], objects = [], npcs = [];
+  class PrivateArea {
+    constructor() { this.entities = []; this.destroyed = false; }
+    add(actor) { this.entities.push(actor); actor.setArea(this); }
+    enter(actor) { this.add(actor); }
+    leave(actor, logout) { this.postLeave(actor, logout); }
+    postLeave(actor) { this.entities = this.entities.filter(value => value !== actor); actor.setArea(null); this.destroy(); }
+    destroy() { this.destroyed = true; }
+    isDestroyed() { return this.destroyed; }
+  }
+  const api = new Proxy({
+    core: { ...core, PrivateArea, World: { getProcessCycle: () => clock },
+      TaskManager: {
+        submit: task => { task.setRunning(true); tasks.push(task); },
+        cancelTasks: key => tasks.filter(task => task.key === key).forEach(task => task.stop()),
+      },
+      MapObjects: { get: () => null },
+      ObjectManager: { register: object => objects.push(object), deregister: noop },
+    },
+    persistAttribute: noop,
+    onCustomEvent: (name, handler) => (events[name] ??= []).push(handler),
+    emitCustomEvent: (name, event) => (events[name] ?? []).forEach(handler => handler(event)),
+    onInterfaceActionButton: (ids, handler) => (hooks.onInterfaceActionButton ??= []).push(handler),
+    spawnNpc: definition => {
+      let area, at = new core.Location(definition.x, definition.y, definition.z);
+      const npc = { ...definition, getId: () => definition.id, getArea: () => area, setArea: value => { area = value; },
+        isRegistered: () => true, getOwner: () => definition.owner, getLocation: () => at,
+        getSpawnLocation: () => at, moveTo: value => { at = value; },
+        getHitpoints: () => 100, getCombat: () => ({ reset: noop }), getDefinition: () => ({ getRespawn: () => 36 }),
+        setCombatXpMultiplier: noop, setPositionToFace: noop, performAnimation: noop, performGraphic: noop };
+      npcs.push(npc); return npc;
+    },
+    removeNpc: npc => { npc.removed = true; },
+    getItemOnGroundManager: () => ({ registerLocation: noop }),
+    getWorld: () => ({ getNpcs: () => [] }),
+  }, { get: (target, key) => target[key] ?? ((handler) => (hooks[key] ??= []).push(handler)) });
+  const original = runtime.startTranscript;
+  runtime.startTranscript = (...args) => { transcripts.push(args); return true; };
+  try { require(questFile)(api); }
+  finally { runtime.startTranscript = original; }
+  return { api, hooks, tasks, transcripts, objects, npcs, quest: runtime.getRegisteredQuests().at(-1),
+    emit: (name, event) => (events[name] ?? []).forEach(handler => handler(event)),
+    variant: context => hooks.onNpcDialogueVariant[0](context),
+    action: (player, npcId, stepId) => { const event = { player, npcId, stepId }; (events['npc-dialogue:action'] ?? []).forEach(handler => handler(event)); return event; },
+    itemAction: (player, itemId, option, slot) => { const event = { player, itemId, option, slot }; (hooks.onItemAction ?? []).forEach(handler => handler(event)); return event; },
+    object: (player, objectId, clickType = 1, definition = null, location = null) => { const event = { player, objectId, clickType, definition, location, handled: false }; (hooks.onObjectInteraction ?? []).forEach(handler => handler(event)); return event; },
+    button: (player, buttonId) => { const event = { player, buttonId, handled: false }; (hooks.onInterfaceActionButton ?? []).forEach(handler => handler(event)); return event; },
+    tick(count) { while (count-- > 0) [...tasks].forEach(task => task.tick()); },
+    advanceClock(count) { clock += count; },
+  };
+}
+
+function player() {
+  const attributes = new Map(), items = new Map(), varbits = new Map(), messages = [], slots = [], xpBySkill = new Map();
+  let lastBuilder = null, blockXp = false;
+  let location = new core.Location(3254, 3274, 0), area = null;
+  const interfaces = [], scripts = [], camera = [], strings = new Map();
+  const packet = new Proxy({
+    sendVarbit: (id, value) => { varbits.set(id, value); return packet; },
+    getVarbit: id => varbits.get(id) ?? 0,
+    getVarp: () => 0,
+    sendConfig: () => packet,
+    sendInterface: id => { interfaces.push(id); return packet; },
+    sendInterfaceScript: (id, args) => { scripts.push([id, args]); return packet; },
+    sendInterfaceRemoval: () => packet,
+    sendSubInterface: () => packet,
+    closeSubInterface: () => packet,
+    sendEnterAmountPrompt: text => { p.amountPrompt = text; return packet; },
+    sendString: (text, id) => { strings.set(id, text); return packet; },
+    sendCameraMoveTo: (x, y, height) => { camera.push(['move', x, y, height]); return packet; },
+    sendCameraLookAt: (x, y, height) => { camera.push(['look', x, y, height]); return packet; },
+    sendCameraReset: () => { camera.push(['reset']); return packet; },
+    sendCameraShake: (axis, random) => { camera.push(['shake', axis, random]); return packet; },
+    sendSoundEffect: () => packet,
+  }, { get: (target, key) => target[key] ?? (() => packet) });
+  const inventory = {
+    getAmount: id => items.get(id) ?? 0,
+    getFreeSlots: () => p.full ? 0 : 28,
+    isFull: () => Boolean(p.full),
+    get: slot => slots[slot],
+    adds: (id, amount = 1) => items.set(id, (items.get(id) ?? 0) + amount),
+    deleteNumber: (id, amount = 1) => { assert.ok((items.get(id) ?? 0) >= amount); items.set(id, items.get(id) - amount); },
+    deleteAtSlot: (slot, amount = 1) => { const item = slots[slot]; if (!item) return false; const id = item.getId(); slots[slot] = undefined;
+      items.set(id, Math.max(0, (items.get(id) ?? 0) - amount)); return true; },
+  };
+  const p = {
+    attributes, items, varbits, messages, interfaces, scripts, camera, strings, slots, xpBySkill,
+    get lastBuilder() { return lastBuilder; }, set lastBuilder(value) { lastBuilder = value; },
+    get blockXp() { return blockXp; }, set blockXp(value) { blockXp = value; },
+    getUsername: () => 'Q6desert1',
+    getAttribute: key => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    setEnteredAmountAction: action => { p.amountAction = action; },
+    getInventory: () => inventory,
+    getPacketSender: () => packet,
+    getDialogueManager: () => ({ startDialogues: builder => { lastBuilder = builder; }, reset: noop, isActive: () => false }),
+    getMovementQueue: () => ({ reset() { return this; }, setBlockMovement() { return this; } }),
+    getLocation: () => location,
+    moveTo: value => { location = value; },
+    getArea: () => area,
+    setUntargetable: noop,
+    performGraphic: noop,
+    setArea: value => { area = value; },
+    getHitpoints: () => 100,
+    isRegistered: () => true,
+    getCombat: () => ({ reset: noop }),
+    sendMessage: text => messages.push(text),
+    getSkillManager: () => ({
+      getMaxLevel: () => 99,
+      getCombatLevel: () => 126,
+      getExperience: skill => xpBySkill.get(skill) ?? 0,
+      addExperiences: (skill, amount) => { p.xp = (p.xp ?? 0) + amount; },
+      addExperience: (skill, amount) => { if (blockXp) return; xpBySkill.set(skill, (xpBySkill.get(skill) ?? 0) + amount); p.xp = (p.xp ?? 0) + amount; },
+    }),
+  };
+  return p;
+}
+
+test('Contact: the High Priest refuses to start without both quest prerequisites', () => {
+  const h = harness('../plugins/quests/quests/Contact.Quest');
+  const p = player();
+  assert.equal(h.variant({ player: p, npcId: 4206, npc: {} }), null);
+  const condition = { player: p, stepId: 'eHzg2g' };
+  (h.hooks.onNpcDialogueCondition[0])(condition);
+  // The condition hook returns the answer rather than mutating the event.
+  assert.equal(h.hooks.onNpcDialogueCondition[0](condition), true);
+});
+
+test('Contact: Osman only opens the Sophanem cutscene after the Al Kharid send-off', () => {
+  const h = harness('../plugins/quests/quests/Contact.Quest');
+  const p = player();
+  const osman = { getLocation: () => new core.Location(3285, 2812, 0) };
+
+  h.quest.setStage(p, 60); // Osman has not agreed yet
+  assert.equal(h.variant({ player: p, npcId: 4286, npc: osman }), null,
+    'talking outside Sophanem before Osman agrees must not skip the persuasion');
+
+  h.quest.setStage(p, 70); // Osman agreed to meet outside Sophanem
+  assert.equal(
+    h.variant({ player: p, npcId: 4286, npc: osman }),
+    'i-spy-with-my-little-eye-talking-to-osman-outside-sophanem'
+  );
+});
+
+test('Contact: Maisa stops replaying the quiz once Osman has been sent for', () => {
+  const h = harness('../plugins/quests/quests/Contact.Quest');
+  const p = player();
+  const maisa = { getLocation: () => new core.Location(2258, 4317, 0) };
+
+  h.quest.setStage(p, 50);
+  assert.equal(h.variant({ player: p, npcId: 3876, npc: maisa }), 'kaleef-s-corpse-talking-to-maisa');
+  h.quest.setStage(p, 60);
+  assert.equal(
+    h.variant({ player: p, npcId: 3876, npc: maisa }),
+    'kaleef-s-corpse-talking-to-maisa-again-after-correctly-answering-but-before-speaking-to-osman'
+  );
+  h.quest.setStage(p, 90);
+  assert.equal(h.variant({ player: p, npcId: 3876, npc: maisa }), null);
+});
+
+test('Contact: the chasm boss ladder is a real route into the Giant Scarab lair', () => {
+  const h = harness('../plugins/quests/quests/Contact.Quest');
+  const p = player();
+  h.quest.setStage(p, 0);
+  const locked = { player: p, objectId: 20287, handled: false };
+  h.emit('ladders:climb', locked);
+  assert.equal(locked.handled, true);
+  assert.notEqual(p.getLocation().getY(), 4298, 'the boss ladder is locked before Jex is told');
+
+  h.quest.setStage(p, 40);
+  const open = { player: p, objectId: 20287, handled: false };
+  h.emit('ladders:climb', open);
+  assert.equal(open.handled, true);
+  assert.equal(p.getLocation().getX(), 2297);
+  assert.equal(p.getLocation().getY(), 4298);
+  assert.equal(h.transcripts.length, 0, 'the ordinary chasm descent does not replay cut scene 3');
+
+  h.quest.setStage(p, 90);
+  const prepared = { player: p, objectId: 20287, handled: false };
+  h.emit('ladders:climb', prepared);
+  h.tick(1);
+  assert.equal(h.transcripts.at(-1)[4], 'beetle-battle-cut-scene-3-osman-and-maisa-speak-below-sophanem');
+});
+
+test('Beneath Cursed Sands: Maisa falls back to her generic dialogue after completion', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  for (const stage of [90, 102, 106, 108]) {
+    h.quest.setStage(p, stage);
+    assert.equal(
+      h.variant({ player: p, npcId: 11474, npc: { getLocation: () => new core.Location(3378, 2794, 0) } }),
+      null,
+      `stage ${stage} is the High Priest finale, not a Maisa replay`
+    );
+  }
+});
+
+test('Beneath Cursed Sands: the Sophanem High Priest hands in the finale at stages 102-104', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  for (const stage of [102, 104, 106]) {
+    h.quest.setStage(p, stage);
+    assert.equal(
+      h.variant({ player: p, npcId: 4206, npc: {} }),
+      'fight-with-the-menaphite-akh-talking-to-maisa-or-the-high-priest',
+      `stage ${stage} must be the finish conversation, not the cure hand-in`
+    );
+  }
+});
+
+test('Beneath Cursed Sands: the Quest Helper citizen anchor is the spawned citizen', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 14);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  const citizen = h.npcs.find(npc => npc.id === 11537);
+  assert.ok(citizen, 'bcs_necropolis_citizen_5 should be spawned for the guard-fight step');
+  assert.equal(citizen.getLocation().getX(), 3347);
+  assert.equal(citizen.getLocation().getY(), 2718);
+  assert.equal(h.variant({ player: p, npcId: 11537, npc: citizen }), 'starting-off-talking-to-a-citizen');
+});
+test('Contact: captured varbit milestones use 10/20 for the opening', () => {
+  const h = harness('../plugins/quests/quests/Contact.Quest');
+  const p = player();
+  h.action(p, 4206, 'DFAYNr');
+  assert.equal(h.quest.getStage(p), 10);
+  h.action(p, 4206, 'tEWAER');
+  assert.equal(h.quest.getStage(p), 20);
+});
+
+test('Contact: the recorded temple ladder and trapdoor landings are preserved', () => {
+  const h = harness('../plugins/quests/quests/Contact.Quest');
+  const p = player();
+  h.quest.setStage(p, 40);
+  const ladder = { player: p, objectId: 20275, handled: false };
+  h.emit('ladders:climb', ladder);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [2765, 5131]);
+  const trapdoor = { player: p, objectId: 20340, handled: false };
+  h.emit('ladders:climb', trapdoor);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [2166, 4409, 2]);
+  assert.equal(p.varbits.get(3279), 1);
+});
+
+test('Contact: the recorded chasm traps are clickable and the boss ladder gates reentry', () => {
+  const h = harness('../plugins/quests/quests/Contact.Quest');
+  const p = player();
+  const trap = h.object(p, 20271);
+  assert.equal(trap.handled, true);
+  assert.match(p.messages.at(-1), /trap/i);
+});
+
+test('Beneath Cursed Sands: the seven-digit chest code is 1118513', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 32);
+  p.items.set(I.CHEST_3, 1);
+  h.itemAction(p, I.CHEST_3, 'Open');
+  assert.ok(p.amountAction, 'opening the chest must ask for the recorded code');
+  p.amountAction.execute(1234567);
+  assert.equal(p.items.get(I.CHEST_3), 1);
+  assert.equal(p.items.get(I.SCARAB_MOULD) ?? 0, 0);
+  p.amountAction.execute(1118513);
+  assert.equal(p.items.get(I.CHEST_3), 0);
+  assert.equal(p.items.get(I.SCARAB_MOULD), 1);
+});
+
+test('Beneath Cursed Sands: the recorded chemistry valves reach 12/39/45', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 82);
+  const table = h.object(p, 43991);
+  assert.equal(table.handled, true);
+  assert.ok(p.interfaces.includes(751));
+  for (let i = 0; i < 15; i++) h.button(p, (751 << 16) | 25);
+  for (let i = 0; i < 15; i++) h.button(p, (751 << 16) | 27);
+  h.button(p, (751 << 16) | 28);
+  h.button(p, (751 << 16) | 26);
+  h.button(p, (751 << 16) | 28);
+  h.button(p, (751 << 16) | 26);
+  assert.equal(p.varbits.get(13863), 12);
+  assert.equal(p.varbits.get(13864), 39);
+  assert.equal(p.varbits.get(13865), 45);
+  assert.equal(h.quest.getStage(p), 84);
+  assert.equal(h.transcripts.at(-1)[4], 'cure-me-pox-warming-up-the-equipment');
+});
+
+test('Contact: actual transcript choice and condition events credit both Maisa answers', () => {
+  for (const npcId of [3876, 6164]) {
+    const h = harness('../plugins/quests/quests/Contact.Quest');
+    const p = player();
+    h.quest.setStage(p, 50);
+    const choices = ['Draynor Village.', 'Leela.'];
+    const previousConditions = [...PluginManager.npcDialogueConditionHooks];
+    for (const handler of h.hooks.onNpcDialogueCondition ?? []) PluginManager.npcDialogueConditionHooks.push({ pluginName: 'Contact.Quest', handler });
+    h.api.sendMultiChatboxPrompt = (player, title, ...pairs) => {
+      const wanted = choices.shift();
+      const index = pairs.indexOf(wanted);
+      assert.ok(index >= 0, `missing option ${wanted} in ${pairs.filter(x => typeof x === 'string')}`);
+      pairs[index + 1]();
+      return true;
+    };
+    let current;
+    const manager = {
+      reset() {}, advance() {}, getCurrent: () => current,
+      startDialogues(chain) {
+        current = chain;
+        for (const entry of [...chain.getDialogues().values()].sort((a, b) => a.getIndex() - b.getIndex())) {
+          if (current !== chain) break;
+          if (entry.constructor.name === 'ActionDialogue') entry.send(p);
+          else entry.send?.(p);
+        }
+      },
+    };
+    p.getDialogueManager = () => manager;
+    const { loadTranscripts } = require('../plugins/quests/QuestRuntime');
+    const record = loadTranscripts(h.api)['Contact!'];
+    const { startDialogue } = require('../plugins/npcs/NpcDialogues.plugin');
+    const definition = { getName: () => 'Maisa', getId: () => npcId };
+    const event = { player: p, npcId, definition };
+    startDialogue(h.api, event, record.variants['kaleef-s-corpse-talking-to-maisa'], record.branches, {
+      player: p, npc: event.npc, npcId, definition, pages: [{ page: 'Contact!', variants: ['kaleef-s-corpse-talking-to-maisa'] }],
+    });
+    try {
+      assert.equal(h.quest.getStage(p), 60, `both correct answers must advance 50 -> 60 for npc ${npcId}`);
+    } finally {
+      PluginManager.npcDialogueConditionHooks.splice(0, PluginManager.npcDialogueConditionHooks.length, ...previousConditions);
+    }
+  }
+});
+test('Beneath Cursed Sands: pillar interface 750 requires three clicks and advances to 38', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 36);
+  h.action(p, 11474, 'aCMKC-');
+  assert.ok(p.interfaces.includes(750));
+  assert.equal(p.varbits.get(13849), 18);
+  for (let i = 0; i < 3; i++) h.button(p, (750 << 16) | 8);
+  assert.equal(p.varbits.get(13849), 15);
+  assert.equal(h.quest.getStage(p), 36);
+  h.button(p, (750 << 16) | 9);
+  assert.equal(h.quest.getStage(p), 38);
+  p.interfaces.length = 0;
+  h.quest.setStage(p, 36);
+  h.object(p, 43900);
+  assert.ok(p.interfaces.includes(750), 're-entering the pillar at stage 36 must reopen 750');
+  assert.match(p.messages.at(-1), /click from the nearby entry/);
+});
+
+test('Beneath Cursed Sands: closing and reopening the pillar keeps rotation progress', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 36);
+  h.object(p, 43900);
+  h.button(p, (750 << 16) | 8);
+  assert.equal(p.varbits.get(13849), 17);
+  p.interfaces.length = 0;
+  h.object(p, 43900);
+  assert.ok(p.interfaces.includes(750));
+  assert.equal(p.varbits.get(13849), 17, 'reopening must not reset the rotation');
+});
+
+test('Beneath Cursed Sands: tomb entry uses the captured camera heights and holds for 12 ticks', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 36);
+  h.object(p, 43954);
+  assert.deepEqual(p.camera.find((entry) => entry[0] === 'move'), ['move', 3420, 9241, 580]);
+  assert.deepEqual(p.camera.find((entry) => entry[0] === 'look'), ['look', 3410, 9252, 380]);
+  assert.equal(h.quest.getStage(p), 40);
+  h.tick(12);
+  assert.equal(p.camera.at(-1)[0], 'reset', 'camera must reset after the captured hold');
+});
+
+test('Beneath Cursed Sands: recorded lore panels 748 and 749 use their widget text', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 32);
+  h.itemAction(p, I.STONE_TABLET_5, 'Read');
+  assert.ok(p.interfaces.includes(748));
+  assert.match(p.strings.get(((748) << 16) | 4), /Zamorakians are coming/);
+  h.object(p, 43971);
+  assert.ok(p.interfaces.includes(749));
+  assert.match(p.strings.get(((749) << 16) | 3), /great sacrifice/);
+});
+
+test('Beneath Cursed Sands: the necropolis arrival sends the captured camera pair', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.action(p, 11474, 'xBeK96');
+  assert.deepEqual(p.camera.find((entry) => entry[0] === 'move'), ['move', 3322, 2743, 480]);
+  assert.deepEqual(p.camera.find((entry) => entry[0] === 'look'), ['look', 3332, 2735, 290]);
+});
+test('Contact: cut scene 1 sends the captured camera pair and resets', () => {
+  const h = harness('../plugins/quests/quests/Contact.Quest');
+  const p = player();
+  h.action(p, 4206, 'DFAYNr');
+  h.tick(2);
+  assert.ok(p.camera.some((entry) => entry[0] === 'move' && entry[1] === 3278 && entry[2] === 2786 && entry[3] === 480));
+  assert.ok(p.camera.some((entry) => entry[0] === 'look' && entry[1] === 3261 && entry[2] === 2783 && entry[3] === 320));
+});
+
+function lampMenu(p) {
+  assert.ok(p.lastBuilder, 'lamp Rub should open a dialogue menu');
+  return [...p.lastBuilder.getDialogues().values()].find(entry => typeof entry.getOptions === 'function');
+}
+
+function putLamp(p, slot) {
+  const item = new core.Item(I.COMBAT_LAMP, 1);
+  p.slots[slot] = item;
+  p.items.set(I.COMBAT_LAMP, 1);
+  return item;
+}
+
+test('Contact: Combat lamp Rub grants two 7000 XP wishes and deletes after the second', () => {
+  const h = harness('../plugins/quests/quests/Contact.Quest');
+  const p = player();
+  putLamp(p, 5);
+
+  const rub = h.itemAction(p, I.COMBAT_LAMP, 'Rub', 5);
+  assert.equal(rub.handled, true);
+  let menu = lampMenu(p);
+  assert.equal(menu.getTitle(), '<col=000080>Which stat do you wish for?');
+  assert.deepEqual(menu.getOptions(), ['Attack.', 'Strength.', 'Defence.', 'Hitpoints.', 'Another wish.']);
+
+  menu.execute(2); // Strength.
+  assert.equal(p.xpBySkill.get(core.Skill.STRENGTH), 7000);
+  assert.equal(p.varbits.get(3287), 1);
+  assert.equal(p.slots[5]?.getId(), I.COMBAT_LAMP, 'first wish keeps the lamp');
+  menu.execute(2); // repeated confirm on the consumed menu
+  assert.equal(p.xpBySkill.get(core.Skill.STRENGTH), 7000, 'repeated Rub choice cannot double-pay');
+
+  h.itemAction(p, I.COMBAT_LAMP, 'Rub', 5);
+  lampMenu(p).execute(5); // Another wish.
+  menu = lampMenu(p);
+  assert.equal(menu.getTitle(), '<col=000080>Which stat do you wish for?');
+  assert.deepEqual(menu.getOptions(), ['Ranged.', 'Magic.', 'Nothing at the moment.', 'Previous wishes.']);
+  menu.execute(1); // Ranged.
+  assert.equal(p.xpBySkill.get(core.Skill.RANGED), 7000);
+  assert.equal(p.varbits.get(3287), 2);
+  assert.equal(p.slots[5], undefined, 'second wish deletes the lamp');
+  assert.ok(p.messages.includes('The lamp dissipates into smoke that drifts away.'));
+
+  p.lastBuilder = null;
+  h.itemAction(p, I.COMBAT_LAMP, 'Rub', 5);
+  assert.equal(p.lastBuilder, null, 'third wish cannot open a reward menu');
+});
+
+test('Contact: Combat lamp menus keep the lamp without XP (nothing, relog, moved/gone, XP blocked)', () => {
+  const h = harness('../plugins/quests/quests/Contact.Quest');
+
+  // Nothing at the moment / Previous wishes.
+  let p = player();
+  putLamp(p, 5);
+  h.itemAction(p, I.COMBAT_LAMP, 'Rub', 5);
+  lampMenu(p).execute(5);
+  lampMenu(p).execute(3); // Nothing at the moment.
+  assert.equal(p.varbits.get(3287) ?? 0, 0);
+  assert.equal(p.slots[5]?.getId(), I.COMBAT_LAMP);
+  h.itemAction(p, I.COMBAT_LAMP, 'Rub', 5);
+  lampMenu(p).execute(5);
+  lampMenu(p).execute(4); // Previous wishes.
+  assert.deepEqual(lampMenu(p).getOptions(), ['Attack.', 'Strength.', 'Defence.', 'Hitpoints.', 'Another wish.']);
+
+  // Relog syncs the persisted wish count to varbit 3287.
+  p.attributes.set('contact:lamp-wishes', 1);
+  p.varbits.delete(3287);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(p.varbits.get(3287), 1);
+
+  // Moved after the menu opened: no XP, nothing consumed.
+  p = player();
+  putLamp(p, 5);
+  h.itemAction(p, I.COMBAT_LAMP, 'Rub', 5);
+  const movedMenu = lampMenu(p);
+  p.slots[6] = p.slots[5]; p.slots[5] = undefined;
+  movedMenu.execute(1);
+  assert.equal(p.xpBySkill.get(core.Skill.ATTACK), undefined);
+  assert.equal(p.varbits.get(3287) ?? 0, 0);
+  assert.equal(p.slots[6]?.getId(), I.COMBAT_LAMP);
+
+  // Replaced by a different Item instance with the same id: stale menu rejects.
+  p = player();
+  putLamp(p, 5);
+  h.itemAction(p, I.COMBAT_LAMP, 'Rub', 5);
+  const replacedMenu = lampMenu(p);
+  p.slots[5] = new core.Item(I.COMBAT_LAMP, 1);
+  replacedMenu.execute(1);
+  assert.equal(p.xpBySkill.get(core.Skill.ATTACK), undefined);
+  assert.equal(p.varbits.get(3287) ?? 0, 0);
+  assert.equal(p.slots[5]?.getId(), I.COMBAT_LAMP);
+
+  // Item gone before confirmation: no XP and no varbit change.
+  p = player();
+  putLamp(p, 5);
+  h.itemAction(p, I.COMBAT_LAMP, 'Rub', 5);
+  const goneMenu = lampMenu(p);
+  p.slots[5] = undefined; p.items.set(I.COMBAT_LAMP, 0);
+  goneMenu.execute(1);
+  assert.equal(p.xpBySkill.get(core.Skill.ATTACK), undefined);
+  assert.equal(p.varbits.get(3287) ?? 0, 0);
+
+  // XP blocked: keep the lamp and let the player retry.
+  p = player();
+  putLamp(p, 5);
+  p.blockXp = true;
+  h.itemAction(p, I.COMBAT_LAMP, 'Rub', 5);
+  lampMenu(p).execute(1);
+  assert.equal(p.varbits.get(3287) ?? 0, 0);
+  assert.equal(p.slots[5]?.getId(), I.COMBAT_LAMP);
+  assert.ok(p.messages.includes('You cannot gain experience in that skill right now.'));
+});
+
+test('Beneath Cursed Sands: the finale starts on the captured necropolis camera', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 92);
+  h.action(p, 11474, 'PZPIrV');
+  assert.deepEqual(p.camera.find((entry) => entry[0] === 'move'), ['move', 3331, 2731, 630]);
+  assert.deepEqual(p.camera.find((entry) => entry[0] === 'look'), ['look', 3349, 2724, 310]);
+});
+test('Beneath Cursed Sands: logout resets a running camera', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.action(p, 11474, 'xBeK96');
+  h.hooks.onPlayerLogout[0]({ player: p });
+  assert.equal(p.camera.at(-1)[0], 'reset');
+});
+test('Beneath Cursed Sands: real cache entry -> citizen -> guard -> ruins keeps stage order', async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(path.resolve(__dirname, '..'));
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 14);
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const cachedEntry = CacheDefinitions.getObject(44008);
+  assert.equal(cachedEntry?.name, 'Blocked Entry');
+  const entryDefinition = { ...cachedEntry, getId: () => cachedEntry.id, getName: () => cachedEntry.name, getInteractions: () => cachedEntry.actions };
+  const entry = h.object(p, 44008, 1, entryDefinition);
+  assert.equal(entry.handled, true);
+  assert.equal(h.quest.getStage(p), 16);
+  assert.equal(h.transcripts.at(-1)[4], 'starting-off-inspecting-the-blocked-entry-after-finishing-the-cutscene');
+  for (const npcId of [11537, 11540]) {
+    const definition = core.NpcDefinition.forId(npcId);
+    assert.equal(definition.getActions()[0].toLowerCase(), 'talk-to');
+    const citizenEvent = { player: p, npcId, clickType: 1, definition, handled: false };
+    h.hooks.onNpcInteraction[0](citizenEvent);
+    assert.equal(citizenEvent.handled, true, `citizen ${npcId} Talk-to must dispatch`);
+    assert.equal(h.transcripts.at(-1)[4], 'starting-off-talking-to-a-citizen');
+  }
+  h.action(p, 11537, 'V9HUjH');
+  assert.equal(h.quest.getStage(p), 18);
+  const guard = h.npcs.find(npc => npc.id === 11529);
+  assert.ok(guard, 'the Head Menaphite Guard must spawn for the triggered fight');
+  h.hooks.onNpcDeath[0]({ killer: p, npc: guard, npcId: 11529 });
+  assert.equal(h.quest.getStage(p), 20);
+  h.emit('npc-dialogue:line', { player: p, npcId: 11474, text: 'Will do.' });
+  assert.equal(h.quest.getStage(p), 22);
+  h.action(p, 11474, 'Jpi6NF');
+  assert.equal(h.quest.getStage(p), 26);
+});
+
+test('Contact: the canonical Maisa spawn is the captured chasm tile', () => {
+  const spawns = require('../data/definitions/npc-spawns.json');
+  const maisa = spawns.filter(entry => entry.id === 6164);
+  assert.deepEqual(maisa.map(({ x, y }) => [x, y]), [[2258, 4317]]);
+});
+test('Beneath Cursed Sands: urn riddle requires the exact map and lever opens only at 48', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const urnDef = CacheDefinitions.getObject(43979);
+  const urnObject = { ...urnDef, getId: () => urnDef.id, getName: () => urnDef.name, getInteractions: () => urnDef.actions };
+  const place = (y, emblemId, action) => {
+    p.items.set(emblemId, 1);
+    h.object(p, 43979, 1, urnObject, new core.Location(3394, y, 0));
+    h.action(p, 11474, action);
+  };
+  h.quest.setStage(p, 46);
+  place(9247, 26953, 's3vs8q'); // wrong: scarab in centre-south
+  h.action(p, 11474, 'vRtBKz');
+  assert.equal(h.quest.getStage(p), 46, 'wrong map must not advance');
+  assert.match(p.messages.at(-1), /doesn't budge/);
+
+  p.items.set(26953, 0);
+  p.attributes.set('beneath-cursed-sands:urns', 0);
+  place(9251, 26953, 's3vs8q'); // northern scarab
+  place(9249, 26957, '1VnAt1'); // centre-north human
+  place(9247, 26958, 'Gu8Ien'); // centre-south baboon
+  place(9245, 26959, 'itrHbI'); // southern crocodile
+  h.action(p, 11474, 'vRtBKz');
+  assert.equal(h.quest.getStage(p), 48);
+});
+
+test('Beneath Cursed Sands: tomb levers reset after 100 ticks and open only when fast', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const leverDef = CacheDefinitions.getObject(43967);
+  const leverObject = { ...leverDef, getId: () => leverDef.id, getName: () => leverDef.name, getInteractions: () => leverDef.actions };
+  const lever = (y) => h.object(p, 43967, 1, leverObject, new core.Location(3439, y, 0));
+  h.quest.setStage(p, 42);
+  lever(9225);
+  assert.equal(h.quest.getStage(p), 44);
+  h.advanceClock(101);
+  lever(9271);
+  assert.equal(h.quest.getStage(p), 44, 'late second lever must reset');
+  lever(9225);
+  h.advanceClock(1);
+  lever(9271);
+  assert.equal(h.quest.getStage(p), 46);
+});
+
+test('Beneath Cursed Sands: inner lever door is gated on the solved urn riddle', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const doorDef = CacheDefinitions.getObject(43962);
+  const door = { ...doorDef, getId: () => doorDef.id, getName: () => doorDef.name, getInteractions: () => doorDef.actions };
+  h.quest.setStage(p, 46);
+  p.moveTo(new core.Location(3390, 9248, 0));
+  h.object(p, 43962, 1, door, new core.Location(3389, 9248, 0));
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3390, 9248]);
+  h.quest.setStage(p, 48);
+  p.attributes.set('beneath-cursed-sands:urns', (4) | (2 << 4) | (1 << 8) | (3 << 12));
+  h.object(p, 43962, 1, door, new core.Location(3389, 9248, 0));
+  assert.notDeepEqual([p.getLocation().getX(), p.getLocation().getY()], [3390, 9248]);
+});

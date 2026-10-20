@@ -38,11 +38,8 @@
  * ring of wealth teleport).
  *
  * Gaps / approximations:
- *  - The Emotes plugin claims the emote interface button, so emote clicks
- *    cannot be observed (the same limitation LostTribe documents). The
- *    courtship emote steps are folded into talks/gifts: the dance/clap gates
- *    are skipped, and the "blow kiss" gate is the "Hello, dear."/"Good day"
- *    greeting talk after the third set of dialogues.
+ *  - The dance/clap and blow-kiss steps are real emote gates (`player:emote`),
+ *    matching Quest Helper; the emote varbits 96/97 are mirrored for guides.
  *  - Advisor Ghrim spawns as the nameless transform parent 3670 (varp 359
  *    drives it to 5447/5448), which is what the dialogue index and this
  *    selector key on.
@@ -51,10 +48,11 @@
  *    open_interface action answers with a system message and the 10,000 coins
  *    stay a completion-scroll line only. Ring of Wealth's Miscellania
  *    teleport is not quest-gated (separate plugin).
- *  - Public support starts at 25% when the pen is signed and every coal/maple
- *    /fishing action on the islands adds 5% (the wiki's rate is roughly 1%
- *    per action over ~55 actions). Raking flax/herbs is not hooked because
- *    farming emits no rake event.
+ *  - Public support starts at 32% when the pen is signed, matching capture 91,
+ *    and each mining/woodcutting/fishing success or raw lobster handed to
+ *    Fisherman Frodi adds 1%. Raking flax/herbs is not hooked because farming
+ *    emits no rake event; capture 91 support came from lobster fishing, which
+ *    this server reaches through the Frodi hand-in (raw lobster item-on-NPC).
  *  - The wiki's "[number]%" and "[Fremennik name]" blanks are filled from
  *    state and the player name; "{{...}}" annotations are stripped from lines.
  *  - If the player declines at the start, the transcript's acceptance lines
@@ -101,6 +99,27 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
   const VARBIT_AFFECTION = 73; // misc_affection, varp 361 bits 25-31
   const VARBIT_ACCEPTED_TO_RULE = 14606; // misc_acceptedtorule, varp 362 bit 28
   const VARBIT_PARTNER = 14607; // misc_partner_multivar, varp 363 bit 29
+  // Courtship varbits (cache names); Quest Helper reads these, so mirror them
+  // instead of only keeping the private bitfield.
+  const VARBIT_S1_D1 = 85;
+  const VARBIT_S1_D2 = 86;
+  const VARBIT_S1_D3 = 87;
+  const VARBIT_S2_D1 = 88;
+  const VARBIT_S2_D2 = 89;
+  const VARBIT_S2_D3 = 90;
+  const VARBIT_S3_D1 = 91;
+  const VARBIT_S3_D2 = 92;
+  const VARBIT_S3_D3 = 93;
+  const VARBIT_S1_GIVE = 94;
+  const VARBIT_S2_GIVE = 95;
+  const VARBIT_S1_EMOTE = 96;
+  const VARBIT_S3_EMOTE = 97;
+
+  // Emote interface slots (216 content): dance, blow kiss, clap.
+  const EMOTE_SLOT_DANCE = 12;
+  const EMOTE_SLOT_BLOW_KISS = 17;
+  const EMOTE_SLOT_CLAP = 20;
+  const PARTNER_ROOM_MAX_DISTANCE = 3;
 
   const STAGE_STARTED = 10;
   const STAGE_TRUST = 20;
@@ -139,10 +158,10 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
   const BIT_KISS = 1 << 13;
   const BIT_MET_PARTNER = 1 << 14;
   const BIT_GUARD_GREETED = 1 << 15;
+  const BIT_S1_EMOTE = 1 << 16;
   const S1_ALL = BIT_S1_D1 | BIT_S1_D2 | BIT_S1_D3;
   const S2_ALL = BIT_S2_D1 | BIT_S2_D2 | BIT_S2_D3;
   const S3_ALL = BIT_S3_D1 | BIT_S3_D2 | BIT_S3_D3;
-  const COURTING_BITS = 0x7fff;
 
   const START_HOOK = "quest:throne-of-miscellania:start";
 
@@ -389,26 +408,26 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
 
   // The correct answers to the random courtship dialogues: text -> [bit, affection].
   const BRAND_ANSWERS = new Map([
-    ["Be still, my heart.", [BIT_S1_D1, 5]],
-    ["They don't understand your poetry as I do.", [BIT_S1_D2, 5]],
-    ["You will be the greatest bard!", [BIT_S1_D3, 5]],
-    ["How poetic.", [BIT_S2_D1, 3]],
-    ["How inspiring!", [BIT_S2_D2, 3]],
-    ["A much nobler pursuit, to be sure.", [BIT_S2_D3, 3]],
-    ["That was lovely. I'm touched!", [BIT_S3_D1, 3]],
-    ["I wouldn't presume to have the skill...", [BIT_S3_D2, 3]],
-    ["I'm glad to hear it.", [BIT_S3_D3, 3]],
+    ["Be still, my heart.", [BIT_S1_D1, 1]],
+    ["They don't understand your poetry as I do.", [BIT_S1_D2, 1]],
+    ["You will be the greatest bard!", [BIT_S1_D3, 1]],
+    ["How poetic.", [BIT_S2_D1, 1]],
+    ["How inspiring!", [BIT_S2_D2, 1]],
+    ["A much nobler pursuit, to be sure.", [BIT_S2_D3, 1]],
+    ["That was lovely. I'm touched!", [BIT_S3_D1, 1]],
+    ["I wouldn't presume to have the skill...", [BIT_S3_D2, 1]],
+    ["I'm glad to hear it.", [BIT_S3_D3, 1]],
   ]);
   const ASTRID_ANSWERS = new Map([
-    ["Archery is a noble art!", [BIT_S1_D1, 5]],
-    ["Hahahaha!", [BIT_S1_D2, 5]],
-    ["He's been very helpful.", [BIT_S1_D3, 5]],
-    ["That sounds like a good idea.", [BIT_S2_D1, 3]],
-    ["What happened next?", [BIT_S2_D2, 3]],
-    ["I'm quite fond of it myself.", [BIT_S2_D3, 3]],
-    ["It's a lovely little country.", [BIT_S3_D1, 3]],
-    ["And what a great bard he makes!", [BIT_S3_D2, 3]],
-    ["I suppose you don't have much opportunity to.", [BIT_S3_D3, 3]],
+    ["Archery is a noble art!", [BIT_S1_D1, 1]],
+    ["Hahahaha!", [BIT_S1_D2, 1]],
+    ["He's been very helpful.", [BIT_S1_D3, 1]],
+    ["That sounds like a good idea.", [BIT_S2_D1, 1]],
+    ["What happened next?", [BIT_S2_D2, 1]],
+    ["I'm quite fond of it myself.", [BIT_S2_D3, 1]],
+    ["It's a lovely little country.", [BIT_S3_D1, 1]],
+    ["And what a great bard he makes!", [BIT_S3_D2, 1]],
+    ["I suppose you don't have much opportunity to.", [BIT_S3_D3, 1]],
   ]);
   const RANDOM_COURT_VARIANTS = new Set([
     V_BRAND_S1,
@@ -456,10 +475,19 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
   const ISLAND_MAX_X = 2627;
   const ISLAND_MIN_Y = 3835;
   const ISLAND_MAX_Y = 3904;
-  const APPROVAL_PER_ACTION = 5;
-  const APPROVAL_START = 25;
+  // Capture 91 starts at 32% and each lobster/action adds 1%.
+  const APPROVAL_PER_ACTION = 1;
+  const APPROVAL_START = 32;
+
+  const FISHERMAN_FRODI_NPC_ID = NpcIdentifiers.FISHERMAN_FRODI; // 3655
+  const RAW_LOBSTER_ITEM_ID = ItemIdentifiers.RAW_LOBSTER; // 377
+  const FRODI_TILE = { x: 2576, y: 3852 };
+  const FRODI_HAND_IN_RANGE = 8;
 
   const refusingStart = new WeakSet();
+  // The ring transcript's real menus are gift "Yes"/"Goodbye." then proposal
+  // "Yes"/"No"; the proposal line itself is a player step, not an option.
+  const proposalStage = new WeakMap();
 
   let quest;
 
@@ -526,10 +554,25 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
 
   function sendSideVarbits(player) {
     const sender = player.getPacketSender();
+    const value = bits(player);
+    const flag = (bit) => ((value & bit) !== 0 ? 1 : 0);
     sender.sendVarbit(VARBIT_APPROVAL, approval(player));
     sender.sendVarbit(VARBIT_AFFECTION, affection(player));
     sender.sendVarbit(VARBIT_ACCEPTED_TO_RULE, trusted(player) ? 1 : 0);
     sender.sendVarbit(VARBIT_PARTNER, partner(player));
+    sender.sendVarbit(VARBIT_S1_D1, flag(BIT_S1_D1));
+    sender.sendVarbit(VARBIT_S1_D2, flag(BIT_S1_D2));
+    sender.sendVarbit(VARBIT_S1_D3, flag(BIT_S1_D3));
+    sender.sendVarbit(VARBIT_S2_D1, flag(BIT_S2_D1));
+    sender.sendVarbit(VARBIT_S2_D2, flag(BIT_S2_D2));
+    sender.sendVarbit(VARBIT_S2_D3, flag(BIT_S2_D3));
+    sender.sendVarbit(VARBIT_S3_D1, flag(BIT_S3_D1));
+    sender.sendVarbit(VARBIT_S3_D2, flag(BIT_S3_D2));
+    sender.sendVarbit(VARBIT_S3_D3, flag(BIT_S3_D3));
+    sender.sendVarbit(VARBIT_S1_GIVE, flag(BIT_S1_GIVE));
+    sender.sendVarbit(VARBIT_S2_GIVE, flag(BIT_S2_GIVE));
+    sender.sendVarbit(VARBIT_S1_EMOTE, flag(BIT_S1_EMOTE));
+    sender.sendVarbit(VARBIT_S3_EMOTE, flag(BIT_KISS));
   }
 
   function advanceStage(player, stage) {
@@ -602,31 +645,33 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
   /**
    * The talk variant for the courted heir at a given progress point. Selecting
    * the intro / formal introduction / gift reaction / kiss greeting also
-   * records that step (the emote gates the wiki has are folded into talks).
+   * records that step. The dance/clap and blow-kiss emotes are real gates, as
+   * Quest Helper's route has them.
    */
   function courtTalkVariant(player, brand) {
     const value = bits(player);
     if ((value & BIT_MET_PARTNER) === 0) {
       setBits(player, value | BIT_MET_PARTNER);
+      if (affection(player) === 0) addAffection(player, 10);
       return brand ? V_BRAND_INTRO : V_ASTRID_INTRO;
     }
     if ((value & S1_ALL) !== S1_ALL) return brand ? V_BRAND_S1 : V_ASTRID_S1;
     if ((value & BIT_S1_GIVE) === 0) return brand ? V_BRAND_S1_DONE : V_ASTRID_S1_DONE;
+    if ((value & BIT_S1_EMOTE) === 0) return brand ? V_BRAND_S1_DONE : V_ASTRID_S1_DONE;
     if ((value & BIT_FORMAL) === 0) {
       setBits(player, value | BIT_FORMAL);
+      addAffection(player, 5);
       return brand ? V_BRAND_FORMAL : V_ASTRID_FORMAL;
     }
     if ((value & S2_ALL) !== S2_ALL) return brand ? V_BRAND_S2 : V_ASTRID_S2;
     if ((value & BIT_S2_GIVE) === 0) return brand ? V_BRAND_S2_DONE : V_ASTRID_S2_DONE;
     if ((value & BIT_GIFT_TALK) === 0) {
       setBits(player, value | BIT_GIFT_TALK);
+      addAffection(player, 6);
       return brand ? V_BRAND_CAKE_TALK : V_ASTRID_BOW_TALK;
     }
     if ((value & S3_ALL) !== S3_ALL) return brand ? V_BRAND_S3 : V_ASTRID_S3;
-    if ((value & BIT_KISS) === 0) {
-      setBits(player, value | BIT_KISS);
-      return brand ? V_BRAND_S3_DONE : V_ASTRID_S3_DONE;
-    }
+    if ((value & BIT_KISS) === 0) return brand ? V_BRAND_S3_DONE : V_ASTRID_S3_DONE;
     if (trusted(player)) {
       if (brand) return married(player) ? V_BRAND_MARRIED : V_BRAND_RING_TAKEN;
       return married(player) ? V_ASTRID_MARRIED : V_ASTRID_RING_TAKEN;
@@ -766,6 +811,39 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
     return null;
   }
 
+  function partnerRoomTile(brand) {
+    return brand ? { x: 2502, y: 3852 } : { x: 2502, y: 3867 };
+  }
+
+  function nearPartnerRoom(player, brand) {
+    const location = player.getLocation();
+    const tile = partnerRoomTile(brand);
+    return location.getZ() === 1 &&
+      Math.abs(location.getX() - tile.x) <= PARTNER_ROOM_MAX_DISTANCE &&
+      Math.abs(location.getY() - tile.y) <= PARTNER_ROOM_MAX_DISTANCE;
+  }
+
+  /** Dance (Astrid) / clap (Brand) after the flowers, then blow kiss before the ring. */
+  function handleEmote(event) {
+    const { player, slot } = event;
+    if (!player || quest.getStage(player) !== STAGE_STARTED || !onMiscellania(player)) return;
+    const brand = partner(player) === PARTNER_BRAND;
+    if (!nearPartnerRoom(player, brand)) return;
+    const value = bits(player);
+    const firstSetEmote = brand ? EMOTE_SLOT_CLAP : EMOTE_SLOT_DANCE;
+    if ((value & BIT_S1_GIVE) !== 0 && (value & BIT_S1_EMOTE) === 0 && slot === firstSetEmote) {
+      setBits(player, value | BIT_S1_EMOTE);
+      addAffection(player, 1);
+      sendSideVarbits(player);
+      return;
+    }
+    if ((value & S3_ALL) === S3_ALL && (value & BIT_KISS) === 0 && slot === EMOTE_SLOT_BLOW_KISS) {
+      setBits(player, value | BIT_KISS);
+      addAffection(player, 1);
+      sendSideVarbits(player);
+    }
+  }
+
   function ghrimVariant(player) {
     const stage = quest.getStage(player);
     if (stage >= STAGE_COMPLETE) return V_GHRIM_POST;
@@ -851,41 +929,68 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
     sendSideVarbits(player);
   }
 
+  /** Trust belongs to one heir, so changing heir drops it and restarts the courtship. */
+  function switchHeir(player, value) {
+    const stage = quest.getStage(player);
+    if (stage !== STAGE_STARTED && stage !== STAGE_TRUST) return;
+    if (partner(player) === value) return;
+    setPartner(player, value);
+    resetCourtship(player);
+    setTrusted(player, false);
+    setMarried(player, false);
+    if (stage === STAGE_TRUST) quest.setStage(player, STAGE_STARTED);
+  }
+
   function handleChoice(event) {
     const { player, npcId, option } = event;
     if (!player || typeof option !== "string") return;
     if (npcId === KING_VARGAS_NPC_ID) {
       if (option.startsWith("I want to earn Prince Brand")) {
-        setPartner(player, PARTNER_BRAND);
-        if (option.includes("instead")) resetCourtship(player);
+        switchHeir(player, PARTNER_BRAND);
         return;
       }
       if (option.startsWith("I want to earn Princess Astrid")) {
-        setPartner(player, PARTNER_ASTRID);
-        if (option.includes("instead")) resetCourtship(player);
+        switchHeir(player, PARTNER_ASTRID);
         return;
       }
       if (option === "I think Princess Astrid would make the best heir.") {
-        setPartner(player, PARTNER_ASTRID);
+        switchHeir(player, PARTNER_ASTRID);
         return;
       }
       if (option === "I think Prince Brand would make the best heir.") {
-        setPartner(player, PARTNER_BRAND);
+        switchHeir(player, PARTNER_BRAND);
         return;
       }
+    }
+    const proposal = proposalStage.get(player);
+    if (proposal && (isBrand(npcId) || isAstrid(npcId))) {
+      if (proposal === 1) {
+        proposalStage.delete(player);
+        if (option === "Yes") proposalStage.set(player, 2);
+        return;
+      }
+      proposalStage.delete(player);
+      if (option === "Yes" && !trusted(player) && consumeOneOf(player, RING_ITEM_IDS)) {
+        setTrusted(player, true);
+        setMarried(player, true);
+        addAffection(player, 6);
+        advanceStage(player, STAGE_TRUST);
+      }
+      return;
     }
     if (
       (isBrand(npcId) || isAstrid(npcId)) &&
       (option === "Prince Brand, will you marry me?" || option === "Princess Astrid, will you marry me?")
     ) {
       if (quest.getStage(player) === STAGE_STARTED) {
+        if (!trusted(player) && !consumeOneOf(player, RING_ITEM_IDS)) return;
         if (!trusted(player)) {
-          consumeOneOf(player, RING_ITEM_IDS);
           setTrusted(player, true);
+          addAffection(player, 6);
           advanceStage(player, STAGE_TRUST);
         }
+        setMarried(player, true);
       }
-      setMarried(player, true);
       return;
     }
     if (option === "[Random option]") {
@@ -979,9 +1084,10 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
     const { player, npcId, stepId, kind } = event;
     if (!player) return;
     if (kind === "message" && (stepId === MESSAGE_BRAND_RING || stepId === MESSAGE_ASTRID_RING)) {
-      if (quest.getStage(player) === STAGE_STARTED && !trusted(player)) {
-        consumeOneOf(player, RING_ITEM_IDS);
+      proposalStage.delete(player);
+      if (quest.getStage(player) === STAGE_STARTED && !trusted(player) && consumeOneOf(player, RING_ITEM_IDS)) {
         setTrusted(player, true);
+        addAffection(player, 6);
         advanceStage(player, STAGE_TRUST);
       }
       return;
@@ -1003,7 +1109,7 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
     if (stepId === ACTION_ROYAL_TROUBLE) {
       event.handled = true;
       event.end = true;
-      player.sendMessage("Royal Trouble is not yet available on this world.");
+      player.sendMessage("Speak to Advisor Ghrim if you wish to investigate the kingdom's troubles.");
       return;
     }
     if (stepId === ACTION_VARGAS_PEN_CONTINUE) {
@@ -1055,6 +1161,15 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
     const { player, itemId } = event;
     const npcId = event.npcId ?? event.target?.getId?.();
     if (!player || !Number.isInteger(itemId)) return;
+    if (npcId === FISHERMAN_FRODI_NPC_ID) {
+      if (itemId !== RAW_LOBSTER_ITEM_ID || quest.getStage(player) !== STAGE_SUPPORT) return;
+      event.handled = true;
+      if (!held(player, RAW_LOBSTER_ITEM_ID) || approval(player) >= 100) return;
+      player.getInventory().deleteNumber(RAW_LOBSTER_ITEM_ID, 1);
+      setApproval(player, approval(player) + APPROVAL_PER_ACTION);
+      player.sendMessage("You give Fisherman Frodi the lobster.");
+      return;
+    }
     const targetBrand = isBrand(npcId);
     const targetAstrid = isAstrid(npcId);
     if (!targetBrand && !targetAstrid) return;
@@ -1072,7 +1187,7 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
       }
       player.getInventory().deleteNumber(itemId, 1);
       setBits(player, bits(player) | BIT_S1_GIVE);
-      addAffection(player, 5);
+      addAffection(player, 1);
       playVariant(player, npcId, targetBrand ? V_BRAND_FLOWERS : V_ASTRID_FLOWERS);
       return;
     }
@@ -1085,7 +1200,9 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
         playVariant(player, npcId, targetBrand ? V_BRAND_RING2 : V_ASTRID_RING2);
         return;
       }
-      player.getInventory().deleteNumber(itemId, 1);
+      // Keep the ring until the proposal is accepted, so a logout before the
+      // answer cannot consume it with no pending state to resume.
+      proposalStage.set(player, 1);
       playVariant(player, npcId, targetBrand ? V_BRAND_RING : V_ASTRID_RING);
       return;
     }
@@ -1100,7 +1217,7 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
       }
       player.getInventory().deleteNumber(itemId, 1);
       setBits(player, bits(player) | BIT_S2_GIVE);
-      addAffection(player, 5);
+      addAffection(player, 1);
       playVariant(player, npcId, V_ASTRID_BOW);
       return;
     }
@@ -1115,7 +1232,7 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
       }
       player.getInventory().deleteNumber(itemId, 1);
       setBits(player, bits(player) | BIT_S2_GIVE);
-      addAffection(player, 5);
+      addAffection(player, 1);
       playVariant(player, npcId, V_BRAND_CAKE);
       return;
     }
@@ -1126,11 +1243,22 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
   // Public support
   // ==========================================================================
 
+  function nearFrodi(player) {
+    const location = player.getLocation();
+    return Math.abs(location.getX() - FRODI_TILE.x) <= FRODI_HAND_IN_RANGE &&
+      Math.abs(location.getY() - FRODI_TILE.y) <= FRODI_HAND_IN_RANGE;
+  }
+
   function handleSkillingSuccess(event) {
-    const { player } = event;
+    const { player, itemId } = event;
     if (!player || quest.getStage(player) !== STAGE_SUPPORT || !onMiscellania(player)) return;
     const before = approval(player);
     if (before >= 100) return;
+    // Capture 91: a lobster catch beside Frodi is handed straight to him.
+    if (itemId === RAW_LOBSTER_ITEM_ID && held(player, RAW_LOBSTER_ITEM_ID) && nearFrodi(player)) {
+      player.getInventory().deleteNumber(RAW_LOBSTER_ITEM_ID, 1);
+      player.sendMessage("You catch a lobster and give it to Fisherman Frodi.");
+    }
     setApproval(player, Math.min(100, before + APPROVAL_PER_ACTION));
     if (before < 75 && approval(player) >= 75) {
       player.sendMessage("You have gained enough support to become regent. Speak to King Vargas.");
@@ -1235,6 +1363,7 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("npc-dialogue:action", handleAction);
+  api.onCustomEvent("player:emote", handleEmote);
   api.onItemOnNpc(handleItemOnNpc, { noted: false });
   api.onItemOnItem(handleItemOnItem);
   api.onCustomEvent("mining:success", handleSkillingSuccess);

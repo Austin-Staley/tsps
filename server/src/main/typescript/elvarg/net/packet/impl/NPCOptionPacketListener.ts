@@ -4,6 +4,7 @@ import { NpcInteractionManager } from "../../../game/entity/impl/npc/NpcInteract
 import { PluginManager } from "../../../plugins/PluginManager";
 import { Combat } from "../../../game/content/combat/Combat";
 import { NpcDefinition } from "../../../game/definition/NpcDefinition";
+import { BoatManager } from "../../../game/content/sailing/BoatManager";
 
 export class NPCOptionPacketListener {
   public executeOption(player: any, index: number, clickType: number): void {
@@ -20,7 +21,18 @@ export class NPCOptionPacketListener {
     if (index < 0 || index > World.getNpcs().capacityReturn()) { trace("DROPPED: index range"); return; }
     const npc = World.getNpcs().get(index);
     if (!npc) { trace("DROPPED: npc slot empty"); return; }
-    if (!player.getLocation().isWithinDistance(npc.getLocation(), 24)) { trace("DROPPED: >24 tiles", npc); return; }
+    const playerBoat = BoatManager.getBoatAboard(player);
+    const npcBoat = BoatManager.getBoatAboard(npc);
+    if (npcBoat && npcBoat !== playerBoat) { trace("DROPPED: other boat", npc); return; }
+    const npcArea = npc.getPrivateArea?.() ?? null;
+    if (npcArea && npcArea !== player.getPrivateArea?.()) { trace("DROPPED: private area", npc); return; }
+    const npcOwner = npc.getOwner?.();
+    if (npcOwner && npcOwner !== player) { trace("DROPPED: foreign owner", npc); return; }
+    // Aboard, the client sees main-world NPCs at their root position while the player stands
+    // in a deck scene; range must be measured root-to-root.
+    const playerRoot = BoatManager.rootLocation(player);
+    const npcRoot = BoatManager.rootLocation(npc);
+    if (!playerRoot.isWithinDistance(npcRoot, 24)) { trace("DROPPED: >24 tiles", npc); return; }
 
     const definition = npc.getCurrentDefinition(player);
     const option = definition?.getActions()?.[clickType - 1]?.toLowerCase();

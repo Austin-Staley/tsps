@@ -4,7 +4,31 @@ module.exports = function registerWorldTools(ctx) {
     core, tool, z, player, find, send, items, tile, settle, status, sleepTicks, takeMessages, takeClient, area,
     nearby, nearest, npcClick, inventorySlot, MAX_WAIT_TICKS,
   } = ctx;
-  const { World, Skill } = core;
+  const { World, Skill, BoatManager, BOAT_VIEW_DISTANCE } = core;
+
+  /** Read-only mirror of WorldEntitySync's visibility/root-range/plane filter. */
+  const worldEntities = (p) => {
+    const root = BoatManager.rootLocation(p);
+    const aboard = BoatManager.getBoatAboard(p);
+    const distance = (boat) =>
+      Math.max(Math.abs(boat.tileX - root.getX()), Math.abs(boat.tileY - root.getY()));
+    return BoatManager.all()
+      .filter((boat) => boat === aboard
+        || (boat.level === root.getZ() && distance(boat) <= BOAT_VIEW_DISTANCE
+          && BoatManager.canSeeBoat(p, boat)))
+      .sort((a, b) => (a === aboard ? -1 : b === aboard ? 1 : distance(a) - distance(b)))
+      .map((boat) => ({
+        entityIndex: boat.entityIndex,
+        configId: boat.configId,
+        x: boat.tileX,
+        y: boat.tileY,
+        z: boat.level,
+        sizeX: boat.sizeX,
+        sizeZ: boat.sizeZ,
+        aboard: boat === aboard,
+        owner: boat.ownerPlayerId === p.getIndex(),
+      }));
+  };
 
   tool("list_players", "Online players and where they are.", {}, () =>
     World.getPlayers().stream().filter(Boolean).map((p) => ({
@@ -13,7 +37,7 @@ module.exports = function registerWorldTools(ctx) {
 
   tool(
     "observe",
-    "Snapshot of a player: position, area, stats, inventory, equipment, nearby NPCs/objects/ground items, game messages and client updates (varbits, varps, interface opens/closes/hides) since the last call. Pass varbits/varps to read their current values.",
+    "Snapshot of a player: position, area, visible world entities (boats/ships), stats, inventory, equipment, nearby NPCs/objects/ground items, game messages and client updates (varbits, varps, interface opens/closes/hides) since the last call. Pass varbits/varps to read their current values.",
     {
       player, radius: z.number().int().min(1).max(32).default(15),
       varbits: z.array(z.number().int().min(0)).max(50).default([]),
@@ -27,6 +51,7 @@ module.exports = function registerWorldTools(ctx) {
         worldTick: World.getProcessCycle(),
         ...tile(p.getLocation()),
         area: area(p),
+        worldEntities: worldEntities(p),
         hitpoints: p.getHitpoints(),
         runEnergy: p.getRunEnergy(),
         ...(varbits.length ? { varbitValues: Object.fromEntries(varbits.map((id) => [id, sender.getVarbit(id)])) } : {}),

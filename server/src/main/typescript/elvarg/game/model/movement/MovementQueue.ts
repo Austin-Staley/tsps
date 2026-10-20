@@ -1,4 +1,5 @@
 import { RegionManager } from "../../collision/RegionManager";
+import { BoatManager } from "../../content/sailing/BoatManager";
 import type { Mobile } from "../../entity/impl/Mobile";
 import { World } from "../../World";
 import { Dueling, DuelRule } from "../../content/Duelling";
@@ -1164,6 +1165,20 @@ export class MovementQueue {
             return;
         }
 
+        // A main-world NPC seen from a boat deck lives in the world's coordinate space while
+        // the player stands in the deck scene. Resolve that interaction from the boat's root
+        // tile instead of trying to path the deck scene across the map and timing out.
+        if (this.isProjectedMainWorldNpc(entity)) {
+            if (this.reachedProjectedNpc(entity, range)) {
+                this.player.setMobileInteraction(entity);
+                runnable?.();
+            } else {
+                this.reset();
+                this.player.sendMessage("I can't reach that!");
+            }
+            return;
+        }
+
         this.reset();
 
         this.walkToReset();
@@ -1274,6 +1289,34 @@ export class MovementQueue {
             entity.getHitpoints() > 0 &&
             entity.getPrivateArea() === this.player.getPrivateArea() &&
             entity.getLocation().getZ() === this.player.getLocation().getZ();
+    }
+
+    /** An NPC in the main world that a player aboard a boat can see and talk to from its root. */
+    private isProjectedMainWorldNpc(entity: Mobile): boolean {
+        if (!entity?.isNpc?.() || !BoatManager.getBoatAboard(this.player)) return false;
+        // Same-deck and other-boat NPCs keep local deck routing; only main-world actors project.
+        if (BoatManager.getBoatAboard(entity)) return false;
+        if (entity.getPrivateArea()) return false;
+        const owner = (entity as NPC).getOwner?.();
+        return !owner || owner === this.player;
+    }
+
+    private reachedProjectedNpc(entity: Mobile, range: number): boolean {
+        const root = BoatManager.rootLocation(this.player);
+        const target = entity.getLocation();
+        const reach = Math.max(1, range) + Math.max(0, entity.getSize() - 1);
+        if (!root.isWithinDistance(target, reach)) return false;
+        // Main-world clipping, not the deck's private area: the boat is only a viewpoint here.
+        return RegionManager.canProjectileMove(
+            root.getX(),
+            root.getY(),
+            target.getX(),
+            target.getY(),
+            root.getZ(),
+            Math.max(1, this.player.getSize()),
+            Math.max(1, this.player.getSize()),
+            null
+        );
     }
 
     public walkToObject(object: GameObject, action: Action, clickType = 0) {

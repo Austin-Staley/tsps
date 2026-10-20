@@ -1,0 +1,874 @@
+// From server/: node --test tests/remaining-morytania-parity.test.cjs (after yarn build).
+// Focused Sins of the Father / Children of the Sun parity checks against the
+// live 226 rsprox transcript (/tmp/tsps-600-parallel/transcripts/1637.txt).
+const assert = require('node:assert/strict');
+const { test, before } = require('node:test');
+const path = require('node:path');
+const { Server } = require('../dist/Server');
+Server.installProductionPathResolver();
+const { PluginManager } = require('../dist/plugins/PluginManager');
+const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
+const runtime = require('../plugins/quests/QuestRuntime');
+const core = PluginManager.getCoreApi();
+const I = core.ItemIdentifiers, N = core.NpcIdentifiers;
+const TOME_OF_EXPERIENCE = 24690; // myq5 "Tome of Experience"
+let nextIndex = 1;
+const noop = () => {};
+before(async () => {
+  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  new NpcDefinitionLoader().load();
+});
+
+function harness(name, page = null) {
+  const hooks = {}, events = {}, tasks = [], npcs = [], removed = [], objects = [], deregistered = [], worldPlayers = [], areas = [], namedNpcs = new Map(), namedObjects = new Map();
+  const api = new Proxy({
+    core: {
+      ...core,
+      World: { ...core.World, getNpcs: () => npcs, getNpcsNear: () => npcs, getPlayers: () => worldPlayers },
+      TaskManager: {
+        submit(task) { task.setRunning(true); tasks.push(task); },
+        cancelTasks(key) { tasks.filter(task => task.key === key).forEach(task => task.stop()); },
+      },
+      MapObjects: { get: () => null },
+      ObjectManager: {
+        register(object) { if (!objects.includes(object)) objects.push(object); },
+        deregister(object) { deregistered.push(object); const index = objects.indexOf(object); if (index >= 0) objects.splice(index, 1); },
+      },
+    },
+    persistAttribute: noop,
+    registerArea: area => areas.push(area),
+    onNpcInteraction: (target, actions) => namedNpcs.set(target, actions),
+    onObjectInteraction: (target, actions) => { if (typeof target === 'function') (hooks.onObjectInteraction ??= []).push(target); else namedObjects.set(target, actions); },
+    onCustomEvent: (key, fn) => (events[key] ??= []).push(fn),
+    emitCustomEvent: (key, event) => (events[key] ?? []).forEach(fn => fn(event)),
+    sendMultiChatboxPrompt(p, title, ...pairs) { p.prompt = { title, options: pairs.filter((_, i) => i % 2 === 0), pairs }; return true; },
+    spawnNpc(definition) {
+      let location = new core.Location(definition.x, definition.y, definition.z), area = null;
+      const npc = {
+        ...definition, animations: [], graphics: [], getId: () => definition.id, getIndex: () => npc.index,
+        index: nextIndex++, getLocation: () => location, moveTo: to => { location = to; },
+        getArea: () => area, setArea: value => { area = value; }, isNpc: () => true, isPlayer: () => false,
+        getAsNpc: () => npc, isRegistered: () => !npc.removed, getOwner: () => definition.owner,
+        setPositionToFace: noop, forceChat: noop, performAnimation: noop, performGraphic: noop,
+        getMovementQueue: () => ({ reset() { return this; }, hasPendingWork: () => false, addFirstStep: to => { location = to; } }),
+        setNpcTransformationId: id => { npc.transformedId = id; }, setCombatXpMultiplier: noop,
+        setHitpoints: hp => { npc.hitpoints = hp; return npc; }, getHitpoints: () => npc.hitpoints ?? 2000,
+        getCombat: () => ({ reset: noop }),
+      };
+      npcs.push(npc);
+      return npc;
+    },
+    removeNpc: npc => { npc.removed = true; removed.push(npc); },
+  }, { get: (target, key) => target[key] ?? ((...args) => (hooks[key] ??= []).push(args.find(x => typeof x === 'function'))) });
+  require(`../plugins/quests/quests/${name}.Quest`)(api);
+  PluginManager.emitNpcDialogueCondition = event => {
+    for (const fn of hooks.onNpcDialogueCondition ?? []) {
+      const answer = fn(event);
+      if (answer !== null && answer !== undefined) return answer;
+    }
+    return null;
+  };
+  if (page) {
+    (events['npc-dialogue:start'] ??= []).push(request => {
+      if (request.handled) return;
+      request.handled = runtime.startTranscript(api, request.player, request.npcId, page, request.variant);
+    });
+  }
+  const h = {
+    api, hooks, events, tasks, npcs, removed, objects, deregistered, worldPlayers, areas, namedNpcs, namedObjects,
+    login(player) { (hooks.onPlayerLogin ?? []).forEach(fn => fn({ player })); },
+    logout(player) { (hooks.onPlayerLogout ?? []).forEach(fn => fn({ player })); },
+    quest: runtime.getRegisteredQuests().at(-1),
+    emit: (name, event) => (events[name] ?? []).forEach(fn => fn(event)),
+    action(p, npcId, stepId) {
+      const event = { player: p, npcId, stepId };
+      h.emit('npc-dialogue:action', event);
+      return event;
+    },
+    talk(p, npcId) {
+      const choice = (hooks.onNpcDialogueVariant ?? []).map(fn => fn({ player: p, npcId })).find(Boolean);
+      assert.ok(choice, `no variant for ${npcId}`);
+      if (h.events['npc-dialogue:start']) {
+        const request = { player: p, npcId, variant: typeof choice === 'string' ? choice : choice.variant };
+        h.emit('npc-dialogue:start', request);
+        assert.ok(request.handled, `variant did not start: ${request.variant}`);
+        return;
+      }
+      runtime.startTranscript(api, p, npcId, h.quest.name, typeof choice === 'string' ? choice : choice.variant);
+    },
+    tick(count) { while (count-- > 0) [...tasks].forEach(task => task.tick()); },
+    choose(p, text) {
+      const prompt = p.prompt;
+      assert.ok(prompt, `no menu for ${text}`);
+      const index = prompt.options.findIndex(label => label === text);
+      assert.ok(index >= 0, `missing ${text} in ${prompt.options}`);
+      p.prompt = null;
+      prompt.pairs[index * 2 + 1]();
+    },
+    continueUntil(p, predicate, limit = 200) {
+      while (!predicate()) {
+        assert.ok(limit-- > 0, `dialogue stalled at ${p.text}`);
+        const current = p.manager.getCurrent();
+        assert.ok(current, `dialogue ended at ${p.text}`);
+        p.manager.advance();
+      }
+    },
+    condition(event) { return PluginManager.emitNpcDialogueCondition(event); },
+  };
+  return h;
+}
+
+function player() {
+  const attrs = new Map(), items = new Map(), configs = new Map(), varbits = new Map(), log = [], xp = [];
+  let location = new core.Location(3729, 3318, 0), area = null;
+  const inv = {
+    getAmount: id => items.get(id) ?? 0,
+    isFull: () => false,
+    getFreeSlots: () => 28,
+    contains: id => (items.get(id) ?? 0) > 0,
+    adds(id, amount) { items.set(id, (items.get(id) ?? 0) + amount); },
+    deleteNumber(id, amount) {
+      assert.ok((items.get(id) ?? 0) >= amount, `missing item ${id}`);
+      items.set(id, items.get(id) - amount);
+    },
+    get(slot) {
+      const entry = [...items.entries()][slot];
+      return entry && entry[1] > 0 ? { getId: () => entry[0], getAmount: () => entry[1] } : null;
+    },
+  };
+  const packet = new Proxy({
+    sendConfig(id, value) { configs.set(id, value); return packet; },
+    sendVarbit(id, value) { varbits.set(id, value); return packet; },
+    sendString(text, uid) { if ([6, 3, 2].some(child => [217, 231, 229, 193].some(group => uid === (group << 16 | child)))) p.text = text; log.push(['text', uid, text]); return packet; },
+    sendInterfaceRemoval() { p.manager.reset(); p.prompt = null; return packet; },
+  }, { get: (t, key) => t[key] ?? ((...args) => { log.push([key, ...args]); return packet; }) });
+  const p = {
+    attrs, items, configs, varbits, log, xp, messages: [], prompt: null, text: '', index: nextIndex++,
+    getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value), getInventory: () => inv,
+    getEquipment: () => ({ get: () => p.weapon ? { getId: () => p.weapon } : null }),
+    getPacketSender: () => packet, getDialogueManager: () => p.manager, getUpdateFlag: () => ({ flag: noop }),
+    getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: hits => { p.damage = (p.damage ?? []).concat(hits); } }) }),
+    getSkillManager: () => ({
+      getMaxLevel: () => p.level ?? 99,
+      getCurrentLevel: () => p.level ?? 99,
+      addExperience: (skill, amount) => xp.push([skill?.getIndex?.(), amount]),
+    }),
+    getMovementQueue: () => ({ reset() { return this; }, setBlockMovement: noop }),
+    getLocation: () => location, moveTo: to => { location = to; },
+    getArea: () => area, getPrivateArea: () => area, setArea: value => { area = value; },
+    getIndex: () => p.index, isPlayer: () => true, isNpc: () => false, getAsPlayer: () => p,
+    isRegistered: () => true, isPlayerBot: () => false, getUsername: () => 'Parity',
+    getAppearance: () => ({ isMale: () => true }), setPositionToFace: noop, forceChat: noop,
+    performAnimation: noop, sendMessage: text => p.messages.push(text),
+  };
+  p.manager = new DialogueManager(p);
+  return p;
+}
+
+const completeQuests = (h, keys) => (h.events['quest:is-complete'] ??= []).push(event => {
+  if (keys.includes(event.key)) event.complete = true;
+});
+
+// ---------------------------------------------------------------------------
+// Children of the Sun
+// ---------------------------------------------------------------------------
+
+test('Children native stages: start, first meeting and 16→18→20→22→24 handoff complete once', () => {
+  const h = harness('ChildrenOfTheSun', 'Children of the Sun'), p = player();
+  p.moveTo(new core.Location(3225, 3426, 0));
+  h.talk(p, N.ALINA);
+  h.continueUntil(p, () => Boolean(p.prompt));
+  h.choose(p, 'Yes.');
+  assert.equal(h.quest.getStage(p), 2, 'accepting Alina starts vmq1 at 2');
+  assert.equal(p.varbits.get(9646), 1, 'first Alina meeting sets vmq1_met_alina');
+
+  h.quest.setStage(p, 16);
+  h.action(p, N.SERGEANT_TOBYN, 'D5boc3');
+  assert.equal(h.quest.getStage(p), 18, 'entering the cell is native stage 18');
+  h.action(p, N.SERGEANT_TOBYN, '4aa1xN');
+  assert.equal(h.quest.getStage(p), 20, 'leaving the cell is native stage 20');
+  p.moveTo(new core.Location(3202, 3473, 2));
+  h.action(p, N.SERGEANT_TOBYN, 'VS01WH');
+  assert.equal(h.quest.getStage(p), 22, 'Itzla departing is native stage 22');
+  const resumed = h.hooks.onNpcDialogueVariant.map(fn => fn({ player: p, npcId: N.SERGEANT_TOBYN })).find(Boolean);
+  assert.equal(resumed, 'interrogation-talking-again-after-itzla-departs', 'a relog at 22 resumes the closing roof dialogue');
+  h.action(p, N.SERGEANT_TOBYN, '9QLQQG');
+  assert.equal(h.quest.getStage(p), 24, 'completion is native stage 24');
+  assert.equal(p.varbits.get(9645), 2);
+  assert.equal(p.attrs.get('quest.points'), 1);
+  const points = p.attrs.get('quest.points');
+  h.action(p, N.SERGEANT_TOBYN, '9QLQQG');
+  assert.equal(p.attrs.get('quest.points'), points, 'completion rewards are paid once');
+});
+
+test('Children tail failure returns to Alina and restarts through the captured variant', () => {
+  const h = harness('ChildrenOfTheSun', 'Children of the Sun'), p = player();
+  h.quest.setStage(p, 4);
+  h.action(p, N.ALINA, 'r2Pt3E');
+  assert.equal(h.quest.getStage(p), 6);
+  const guard = h.npcs.find(npc => npc.getId() === N.GUARD_186);
+  assert.ok(guard, 'the bag guard spawns when tailing starts');
+  for (let i = 0; i < 5; i++) {
+    p.moveTo(guard.getLocation());
+    h.hooks.onPlayerProcess[0]({ player: p });
+  }
+  assert.equal(h.quest.getStage(p), 2, 'being spotted aborts the tail');
+  assert.equal(p.attrs.get('quest.children_of_the_sun.tail-fail'), 1);
+  const choice = h.hooks.onNpcDialogueVariant.map(fn => fn({ player: p, npcId: N.ALINA })).find(Boolean);
+  assert.equal(choice, 'investigation-talking-to-noah-or-alina-after-starting-to-tail-the-guard');
+});
+
+test('Children marking rejects a wrong guard and completes the set of four bandits only', () => {
+  const h = harness('ChildrenOfTheSun', 'Children of the Sun'), p = player();
+  h.quest.setStage(p, 12);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  const mark = (id) => h.namedNpcs.get('Guard').Mark({ player: p, npcId: id });
+  mark(N.GUARD_199); // fifth post, one of the real guards
+  assert.equal(h.quest.getStage(p), 12);
+  assert.equal(p.attrs.get('quest.children_of_the_sun.guards'), 1 << 4);
+  assert.equal(p.varbits.get(9637), 2, 'the wrongly marked guard is visibly marked');
+  h.namedNpcs.get('Guard').Unmark({ player: p, npcId: N.GUARD_200 });
+  for (const id of [N.GUARD_187, N.GUARD_190, N.GUARD_193, N.GUARD_196]) mark(id);
+  assert.equal(h.quest.getStage(p), 14, 'four correct marks finish the marking stage');
+  assert.equal(p.varbits.get(9637), 0, 'unmarking clears the wrong guard varbit');
+});
+
+// ---------------------------------------------------------------------------
+// Sins of the Father
+// ---------------------------------------------------------------------------
+
+test('Sins uses native myq5 values and Kroy table varbits 1 after death, 2 after smashing', () => {
+  const h = harness('SinsOfTheFather'), p = player();
+  completeQuests(h, ['taste_of_hope']);
+  p.moveTo(new core.Location(3729, 3318, 0));
+  h.emit('npc-dialogue:choice', { player: p, npcId: N.VELIAF_HURTZ_2, option: 'Yes.' });
+  assert.equal(h.quest.getStage(p), 2, 'start message sets myq5=2');
+  assert.equal(p.varbits.get(7255), 2);
+
+  h.quest.setStage(p, 18);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(p.varbits.get(10353), 1, 'both tables read 1 when Kroy is dead');
+  assert.equal(p.varbits.get(10354), 1);
+  const destroy = (x, y) => h.namedObjects.get('Lab table').Destroy({ player: p, objectId: 37983, location: { x, y, z: 1 } });
+  destroy(3729, 9760);
+  assert.equal(p.varbits.get(10353), 2, 'a smashed table reads 2');
+  assert.equal(h.quest.getStage(p), 18, 'one table is not enough');
+  destroy(3725, 9759);
+  assert.equal(p.varbits.get(10354), 2);
+  assert.equal(h.quest.getStage(p), 20, 'both tables advance myq5 to 20');
+
+  h.quest.setStage(p, 138);
+  assert.equal(p.varbits.get(7255), 138, 'completion is native myq5=138');
+});
+
+test('Sins disguise condition requires the whole noble set and records Trader Sven', () => {
+  const h = harness('SinsOfTheFather'), p = player();
+  h.quest.setStage(p, 72);
+  const hasDisguise = () => h.condition({ player: p, stepId: 'Y7Eh4F', text: 'If the player has the vyre disguise' });
+  const lacksDisguise = () => h.condition({ player: p, stepId: 'CIrOJv', text: 'If the player does not have the vyre disguise' });
+  p.items.set(I.VYRE_NOBLE_TOP_UNSCENTED_, 1);
+  assert.equal(hasDisguise(), false, 'a single piece is not a disguise');
+  assert.equal(lacksDisguise(), true);
+  p.items.set(I.VYRE_NOBLE_LEGS_UNSCENTED_, 1);
+  p.items.set(I.VYRE_NOBLE_SHOES_UNSCENTED_, 1);
+  assert.equal(hasDisguise(), true);
+  assert.equal(lacksDisguise(), false);
+
+  assert.notEqual(p.varbits.get(10359), 1);
+  h.emit('npc-dialogue:line', { player: p, npcId: N.TRADER_SVEN, text: 'I specifically deal in vyrewatch uniforms.' });
+  assert.equal(p.varbits.get(10359), 1, 'talking to Trader Sven mirrors myq5_noble_disguise');
+});
+
+test('Sins escort → boat → mausoleum advances through native myq5 checkpoints', () => {
+  const h = harness('SinsOfTheFather'), p = player();
+  h.quest.setStage(p, 34);
+  h.action(p, N.IVAN_STROM_10, 'uRyt8i');
+  assert.equal(h.quest.getStage(p), 34);
+  h.action(p, N.IVAN_STROM_10, '_popnC');
+  assert.equal(h.quest.getStage(p), 36, 'escort starts at 36');
+  h.action(p, N.IVAN_STROM_10, 'uD7Qcw');
+  assert.equal(h.quest.getStage(p), 38, 'Ivan delivered at 38');
+  p.moveTo(new core.Location(3529, 3169, 0));
+  const boat = h.hooks.onObjectInteraction.at(-1);
+  boat({ player: p, objectId: 38089, location: { x: 3523, y: 3169, z: 0 }, handled: false });
+  assert.equal(h.quest.getStage(p), 44, 'boat arrival at the Icyene Graveyard is 44');
+
+  h.quest.setStage(p, 48);
+  p.moveTo(new core.Location(3704, 3190, 0));
+  const unlock = h.namedObjects.get('Mausoleum door').Unlock;
+  unlock({ player: p, objectId: 39519 });
+  unlock({ player: p, objectId: 39519 });
+  assert.equal(h.quest.getStage(p), 50, 'the first unlock only plays the briefing and marks the lock ready');
+  const sums = uid => Number(p.log.filter(row => row[0] === 'text' && row[1] === uid).at(-1)?.[2]);
+  const rowSums = [26, 27, 28, 29, 30].map(c => sums((665 << 16) | c));
+  const colSums = [19, 20, 21, 22, 23].map(c => sums((665 << 16) | c));
+  assert.ok(rowSums.every(Number.isInteger) && colSums.every(Number.isInteger), 'the tomb interface receives its sums');
+  const click = slot => h.hooks.onInterfaceActionButton[0]({ player: p, buttonId: (665 << 16) | 32, slot, handled: false });
+  click(0);
+  assert.equal(h.quest.getStage(p), 50, 'an unsolved grid does not unlock the door');
+  const rowPatterns = rowSums.map(sum => {
+    const patterns = [];
+    for (let mask = 0; mask < 32; mask++) {
+      const value = [0, 1, 2, 3, 4].filter(c => mask & (1 << c)).reduce((total, c) => total + c + 1, 0);
+      if (value === sum) patterns.push(mask);
+    }
+    return patterns;
+  });
+  let solution = -1;
+  const search = (row, mask) => {
+    if (solution >= 0) return;
+    if (row === 5) {
+      const cols = [0, 1, 2, 3, 4].map(c => [0, 1, 2, 3, 4].filter(r => mask & (1 << (r * 5 + c))).reduce((total, r) => total + r + 1, 0));
+      if (cols.every((v, i) => v === colSums[i])) solution = mask;
+      return;
+    }
+    for (const pattern of rowPatterns[row]) search(row + 1, mask | (pattern << (row * 5)));
+  };
+  search(0, 0);
+  assert.ok(solution >= 0, 'the generated Kakurasu puzzle is solvable');
+  click(0); // undo the probe click
+  for (let i = 0; i < 25; i++) if (solution & (1 << i)) click(i);
+  assert.equal(h.quest.getStage(p), 52, 'solving the grid opens the mausoleum at 52');
+  h.emit('npc-dialogue:line', { player: p, npcId: N.SAFALAAN_HALLOW_2, text: "Please, inform the others for me." });
+  assert.equal(h.quest.getStage(p), 54, 'Safalaan asking for the others starts convincing at 54');
+  assert.equal(p.varbits.get(7255), 54);
+});
+
+test('Sins finale reaches 138 and grants the experience tome once', () => {
+  const h = harness('SinsOfTheFather'), p = player();
+  h.quest.setStage(p, 130);
+  h.action(p, N.VANSTROM_KLAUSE_15, 'I_cLuQ');
+  assert.equal(h.quest.getStage(p), 132);
+  h.action(p, N.IVAN_STROM, 'y7Pa27');
+  h.action(p, N.IVAN_STROM, 'epguG1');
+  assert.equal(h.quest.getStage(p), 138);
+  assert.equal(p.varbits.get(7255), 138);
+  assert.equal(p.items.get(TOME_OF_EXPERIENCE), 1);
+  h.action(p, N.IVAN_STROM, 'epguG1');
+  assert.equal(p.items.get(TOME_OF_EXPERIENCE), 1, 'completion cannot pay the tome twice');
+});
+
+
+test('Sins migrates every legacy overlapping stage once and leaves native saves alone', () => {
+  const legacy = [
+    [20, 6], [100, 36], [130, 54], [300, 138],
+  ];
+  for (const [oldStage, nativeStage] of legacy) {
+    const h = harness('SinsOfTheFather'), p = player();
+    p.attrs.set('quest.sins_of_the_father.stage', oldStage);
+    h.hooks.onPlayerLogin[0]({ player: p });
+    assert.equal(h.quest.getStage(p), nativeStage, `legacy ${oldStage} maps to ${nativeStage}`);
+    assert.equal(p.attrs.get('quest.sins_of_the_father.schema'), 2);
+  }
+  const oldComplete = harness('SinsOfTheFather'), done = player();
+  done.attrs.set('quest.sins_of_the_father.stage', 300);
+  done.attrs.set('quest.points', 7);
+  oldComplete.hooks.onPlayerLogin[0]({ player: done });
+  assert.equal(oldComplete.quest.getStage(done), 138);
+  assert.equal(done.attrs.get('quest.points'), 7, 'old completion does not pay quest points again');
+  assert.equal(done.items.get(24690) ?? 0, 0, 'old completion does not grant a second tome');
+
+  const h = harness('SinsOfTheFather'), fresh = player();
+  h.quest.setStage(fresh, 20); // real native transition writes the schema marker
+  assert.equal(fresh.attrs.get('quest.sins_of_the_father.schema'), 2);
+  h.hooks.onPlayerLogin[0]({ player: fresh });
+  assert.equal(h.quest.getStage(fresh), 20, 'native stage 20 is not reinterpreted as Hameln');
+});
+
+test('Children migrates old completed 22 to 24 without paying rewards twice', () => {
+  const h = harness('ChildrenOfTheSun', 'Children of the Sun'), p = player();
+  p.attrs.set('quest.children_of_the_sun.stage', 22);
+  p.attrs.set('quest.points', 5);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(h.quest.getStage(p), 24);
+  assert.equal(h.quest.isComplete(p), true);
+  assert.equal(p.attrs.get('quest.points'), 5, 'migration does not award quest points again');
+  assert.equal(p.varbits.get(9645), 2);
+
+  const fresh = player();
+  h.quest.setStage(fresh, 22); // native transition writes the schema marker
+  assert.equal(fresh.attrs.get('quest.children_of_the_sun.schema'), 2);
+  h.hooks.onPlayerLogin[0]({ player: fresh });
+  assert.equal(h.quest.getStage(fresh), 22, 'fresh native 22 stays Itzla-left, not complete');
+  assert.equal(h.quest.isComplete(fresh), false);
+});
+
+test('Children cell scene places captured actors, walks Itzla and recovers on relog', () => {
+  const h = harness('ChildrenOfTheSun', 'Children of the Sun'), p = player();
+  h.quest.setStage(p, 16);
+  h.action(p, N.SERGEANT_TOBYN, 'D5boc3');
+  assert.equal(h.quest.getStage(p), 18);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [3204, 3473, 2]);
+  const bandit = h.npcs.find(npc => npc.getId() === N.BANDIT_20);
+  assert.ok(bandit, 'the captured cell bandit is spawned');
+  assert.deepEqual([bandit.getLocation().getX(), bandit.getLocation().getY()], [3201, 3470]);
+  const itzla = h.npcs.find(npc => npc.getId() === N.PRINCE_ITZLA_ARKAN_2);
+  assert.ok(itzla);
+  h.tick(2);
+  assert.deepEqual([itzla.getLocation().getX(), itzla.getLocation().getY()], [3204, 3470], 'Itzla walks to the bars');
+
+  const relog = player();
+  relog.attrs.set('quest.children_of_the_sun.stage', 18);
+  relog.attrs.set('quest.children_of_the_sun.schema', 2);
+  h.hooks.onPlayerLogin[0]({ player: relog });
+  assert.ok(h.npcs.some(npc => npc.getId() === N.BANDIT_20 && !npc.removed), 'relogging in 18 restores the cell scene');
+
+  h.action(p, N.SERGEANT_TOBYN, '4aa1xN');
+  assert.equal(h.quest.getStage(p), 20);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [10172, 3399, 2]);
+  h.tick(1);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [3203, 3473, 2]);
+  assert.ok(!h.npcs.some(npc => npc.getId() === N.BANDIT_20 && !npc.removed && npc.getOwner?.() === p));
+  h.action(p, N.SERGEANT_TOBYN, 'VS01WH');
+  assert.equal(h.quest.getStage(p), 22);
+});
+
+test('Sins trek requires the vine, axe, logs, three bridge repairs and crossing before juvinates', () => {
+  const h = harness('SinsOfTheFather'), p = player();
+  h.quest.setStage(p, 36);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  const object = (id, x = 3439, y = 3400) => {
+    const event = { player: p, objectId: id, location: { x, y, z: 0 }, handled: false };
+    h.hooks.onObjectInteraction.at(-1)(event);
+    return event;
+  };
+  object(13872, 3446, 3411);
+  assert.equal(p.items.get(946) ?? 0, 1, 'the rucksack supplies a knife');
+  for (let i = 0; i < 3; i++) object(13847, 3442, 3408);
+  assert.equal(p.items.get(7778), 3);
+  h.hooks.onItemOnItem[0]({ player: p, usedItemId: 7778, usedWithItemId: 7778 });
+  assert.equal(p.items.get(7777), 1, 'three short vines make the long vine');
+  object(38005, 3442, 3408);
+  assert.equal(h.quest.getStage(p), 36);
+
+  for (const npcId of [9612, 9613]) {
+    const npc = h.npcs.find(n => n.getId() === npcId && !n.removed);
+    assert.ok(npc, `nail beast ${npcId} spawned`);
+    h.hooks.onNpcDeath[0]({ npc, npcId, killer: p });
+  }
+  assert.ok(h.npcs.some(n => n.getId() === 5647 && !n.removed), 'the bridge zombie spawns after the nail beasts');
+  const zombie = h.npcs.find(n => n.getId() === 5647 && !n.removed);
+  h.hooks.onNpcDeath[0]({ npc: zombie, npcId: 5647, killer: p });
+  assert.equal(p.items.get(1351) ?? 0, 1, 'the zombie gives the axe');
+  object(1365, 3441, 3403); object(1365, 3441, 3403); object(1365, 3441, 3403);
+  assert.equal(p.items.get(1511), 3);
+  assert.equal(object(13834).handled, true);
+  assert.equal(p.attrs.get('quest.sins_of_the_father.bridge-repairs'), 1);
+  object(13835); object(13836);
+  assert.equal(p.attrs.get('quest.sins_of_the_father.bridge-repairs'), 3);
+  assert.equal(p.items.get(1511), 0, 'three logs repair all three sections');
+  assert.ok(!h.npcs.some(n => [9614, 9615].includes(n.getId()) && !n.removed), 'juvinates wait for the crossing');
+  object(13837);
+  assert.equal(p.attrs.get('quest.sins_of_the_father.bits') & (1 << 15), 1 << 15);
+  assert.ok(h.npcs.some(n => [9614, 9615].includes(n.getId()) && !n.removed), 'crossing spawns the juvinates');
+});
+
+test('Sins Vanstrom enrages at zero hp, heals to 200, uses lightning, then dies once', () => {
+  const h = harness('SinsOfTheFather'), p = player();
+  h.quest.setStage(p, 130);
+  h.action(p, N.VANSTROM_KLAUSE_15, '2PLAE9');
+  const vanstrom = h.npcs.find(n => n.getId() === N.VANSTROM_KLAUSE_15 && !n.removed);
+  assert.ok(vanstrom);
+  const before = { npc: vanstrom, preventDeath: false };
+  h.hooks.onNpcBeforeDeath[0](before);
+  assert.equal(before.preventDeath, true);
+  assert.equal(vanstrom.transformedId, N.VANSTROM_KLAUSE_17);
+  assert.equal(vanstrom.hitpoints, 200);
+  const arena = h.areas.find(area => area.constructor.name === 'VanstromArena');
+  assert.ok(arena, 'Vanstrom specials run from their arena');
+  for (let i = 0; i < 5; i++) arena.process(p);
+  h.tick(1);
+  assert.ok((p.damage ?? []).length >= 1, 'phase two lightning can hit the player');
+  h.hooks.onNpcDeath[0]({ npc: vanstrom, npcId: N.VANSTROM_KLAUSE_17, killer: p });
+  assert.equal(h.quest.getStage(p), 130, 'the death cutscene still drives the final stage');
+});
+
+
+test('Sins replay sends the captured Castle Drakan, escape and hideout cameras and resets after interrupt', () => {
+  const h = harness('SinsOfTheFather'), p = player();
+  const moves = () => p.log.filter(row => row[0] === 'sendCameraMoveTo');
+  const resets = () => p.log.filter(row => row[0] === 'sendCameraReset').length;
+  h.quest.setStage(p, 128);
+  h.action(p, N.SAFALAAN_HALLOW_2, 'HgxSdS');
+  h.tick(11);
+  assert.ok(moves().some(row => row[1] === 3589 && row[2] === 3358 && row[3] === 500), 'castle camera move');
+  assert.ok(p.log.some(row => row[0] === 'sendCameraLookAt' && row[1] === 3574 && row[2] === 3358), 'castle camera look-at');
+
+  h.action(p, N.SAFALAAN_HALLOW_2, 'I_cLuQ');
+  h.tick(4);
+  assert.ok(moves().some(row => row[1] === 3570 && row[2] === 3365 && row[3] === 500), 'escape camera move');
+
+  h.action(p, N.IVAN_STROM, 'y7Pa27');
+  const resetsBefore = resets();
+  h.tick(12);
+  assert.ok(moves().some(row => row[1] === 3594 && row[2] === 9613), 'hideout camera after the escape');
+  h.tick(40);
+  assert.ok(resets() > resetsBefore, 'hideout camera resets after the scene');
+
+  const h2 = harness('SinsOfTheFather'), p2 = player();
+  h2.quest.setStage(p2, 128);
+  h2.action(p2, N.SAFALAAN_HALLOW_2, 'HgxSdS');
+  h2.tick(11);
+  const count = p2.log.filter(row => row[0] === 'sendCameraMoveTo').length;
+  h2.hooks.onPlayerLogout[0]({ player: p2 });
+  assert.ok(p2.log.some(row => row[0] === 'sendCameraReset'), 'logout resets the camera');
+  h2.tick(30);
+  assert.equal(p2.log.filter(row => row[0] === 'sendCameraMoveTo').length, count, 'queued shots do not survive logout');
+});
+
+test('Sins stage-dependent route objects are per-player, not global', () => {
+  const h = harness('SinsOfTheFather');
+  const late = player();
+  const early = player();
+  const doorOverlay = (p, id) => h.objects.filter((object) =>
+    object.getOwner() === p && object.getId() === id && object.getLocation().getX() === 3704);
+
+  h.quest.setStage(late, 120); // mausoleum opened for the late player
+  h.login(late);
+  assert.equal(doorOverlay(late, 38071).length, 1, 'late player sees their open door');
+
+  h.quest.setStage(early, 50); // actionable closed door for the early player
+  h.login(early);
+  assert.equal(doorOverlay(early, 38070).length, 1, 'early player gets their own Unlock door');
+  assert.equal(doorOverlay(late, 38071).length, 1, 'early login must not remove the late player\'s overlay');
+  assert.equal(h.objects.filter((object) => object.getOwner() === null && [38070, 38071].includes(object.getId())).length, 0,
+    'no global mausoleum door may be installed by a single player');
+
+  h.quest.setStage(early, 120);
+  h.login(early);
+  assert.equal(doorOverlay(early, 38071).length, 1, 'the second player gets their own open door');
+  assert.equal(doorOverlay(early, 38070).length, 0);
+  assert.equal(doorOverlay(late, 38071).length, 1, 'the first player keeps theirs');
+
+  h.logout(late);
+  assert.equal(doorOverlay(late, 38071).length, 0, 'logout removes the owner overlay');
+  assert.equal(doorOverlay(early, 38071).length, 1, 'the other player keeps their overlay');
+});
+
+test('Children replay sends the captured delegation, eavesdrop and roof cameras with resets', () => {
+  const h = harness('ChildrenOfTheSun', 'Children of the Sun'), p = player();
+  const moves = () => p.log.filter(row => row[0] === 'sendCameraMoveTo');
+  const resets = () => p.log.filter(row => row[0] === 'sendCameraReset').length;
+  h.quest.setStage(p, 4);
+  h.action(p, N.ALINA, 'wltzqo');
+  h.tick(3);
+  assert.ok(moves().some(row => row[1] === 3213 && row[2] === 3433 && row[3] === 460), 'delegation camera');
+  const delegationResets = resets();
+  h.tick(43);
+  assert.ok(resets() > delegationResets, 'delegation camera resets');
+
+  h.quest.setStage(p, 8);
+  h.action(p, N.BAG_GUARD_NPC_ID ?? 12662, 'V-D092');
+  h.tick(3);
+  assert.ok(moves().some(row => row[1] === 3252 && row[2] === 3396), 'eavesdrop camera');
+  const eavesdropResets = resets();
+  h.tick(18);
+  assert.ok(resets() > eavesdropResets, 'eavesdrop camera resets');
+
+  h.quest.setStage(p, 14);
+  h.action(p, N.SERGEANT_TOBYN, 'PiLgte');
+  h.tick(15);
+  assert.ok(moves().some(row => row[1] === 3207 && row[2] === 3471 && row[3] === 311), 'roof camera');
+  const roofResets = resets();
+  h.tick(25);
+  assert.ok(resets() > roofResets, 'roof camera resets');
+});
+
+test('Children camera timeline is cancelled and reset on logout', () => {
+  const h = harness('ChildrenOfTheSun', 'Children of the Sun'), p = player();
+  h.quest.setStage(p, 4);
+  h.action(p, N.ALINA, 'wltzqo');
+  h.tick(3);
+  const count = p.log.filter(row => row[0] === 'sendCameraMoveTo').length;
+  h.hooks.onPlayerLogout[0]({ player: p });
+  assert.ok(p.log.some(row => row[0] === 'sendCameraReset'));
+  h.tick(60);
+  assert.equal(p.log.filter(row => row[0] === 'sendCameraMoveTo').length, count);
+});
+
+
+test('Sins recorded camera clusters cover Carl, crypt/Kroy, Paterdomus, graveyard, lab, Damien and prison', () => {
+  const hasMove = (p, x, y) => p.log.some(row => row[0] === 'sendCameraMoveTo' && row[1] === x && row[2] === y);
+
+  {
+    const h = harness('SinsOfTheFather'), p = player();
+    h.quest.setStage(p, 6);
+    h.namedObjects.get('Barrel').Inspect({ player: p, objectId: 37980 });
+    h.tick(8);
+    assert.ok(hasMove(p, 3758, 3289), 'Carl barrel camera');
+    const before = p.log.filter(row => row[0] === 'sendCameraReset').length;
+    h.tick(43);
+    assert.ok(p.log.filter(row => row[0] === 'sendCameraReset').length > before, 'Carl camera resets');
+  }
+  {
+    const h = harness('SinsOfTheFather'), p = player();
+    h.quest.setStage(p, 14);
+    p.attrs.set('quest.sins_of_the_father.bits', 1 << 9);
+    h.emit('ladders:climb', { player: p, objectId: 32637, clickType: 1, object: { getLocation: () => new core.Location(3738, 3316, 0) }, handled: false });
+    h.tick(1);
+    assert.ok(hasMove(p, 3728, 3300), 'crypt descent camera');
+    h.tick(153);
+    assert.ok(p.log.some(row => row[0] === 'sendCameraMoveTo' && row[1] === 3730 && row[2] === 9764), 'Kroy fight camera');
+    assert.ok(p.log.some(row => row[0] === 'sendCameraMoveTo' && row[1] === 3728 && row[2] === 9751), 'Kroy transition camera');
+    h.tick(25);
+    assert.ok(p.log.some(row => row[0] === 'sendCameraReset'), 'Kroy camera resets');
+  }
+  {
+    const h = harness('SinsOfTheFather'), p = player();
+    h.quest.setStage(p, 24);
+    h.namedNpcs.get('Ivan Strom')['Talk-to']({ player: p, npcId: N.IVAN_STROM });
+    h.tick(5);
+    assert.ok(hasMove(p, 3541, 3514), 'Paterdomus meeting camera');
+  }
+  {
+    const h = harness('SinsOfTheFather'), p = player();
+    h.quest.setStage(p, 44);
+    h.namedNpcs.get('Veliaf Hurtz')['Talk-to']({ player: p, npcId: N.VELIAF_HURTZ_2 });
+    h.tick(1);
+    assert.ok(hasMove(p, 3690, 3185), 'Icyene graveyard camera');
+  }
+  {
+    const h = harness('SinsOfTheFather'), p = player();
+    h.quest.setStage(p, 58);
+    h.action(p, N.SAFALAAN_HALLOW_2, '2Ond7l');
+    h.tick(9);
+    assert.ok(hasMove(p, 3610, 9730), 'laboratory camera');
+  }
+  {
+    const h = harness('SinsOfTheFather'), p = player();
+    h.quest.setStage(p, 80);
+    h.action(p, N.VELIAF_HURTZ_2, 'OieoC2');
+    h.tick(5);
+    assert.ok(hasMove(p, 3725, 3357), 'Damien manor camera');
+  }
+  {
+    const h = harness('SinsOfTheFather'), p = player();
+    h.quest.setStage(p, 94);
+    h.namedNpcs.get('Maria Gadderanks')['Talk-to']({ player: p, npcId: N.MARIA_GADDERANKS });
+    h.tick(5);
+    assert.ok(hasMove(p, 3622, 3379), 'Darkmeyer prison camera');
+  }
+});
+
+
+test('Sins anchors are per-player personal overlays, resynced after region load and removed only for their owner', () => {
+  const h = harness('SinsOfTheFather');
+  const a = player(), b = player();
+  h.quest.setStage(a, 6);
+  h.quest.setStage(b, 6);
+  h.worldPlayers.push(a, b);
+  h.hooks.onPlayerLogin[0]({ player: a });
+  h.hooks.onPlayerLogin[0]({ player: b });
+  const barrels = () => h.objects.filter(object => object.getId() === 37980);
+  assert.equal(barrels().length, 2, 'each player gets their own barrel overlay');
+  assert.deepEqual(new Set(barrels().map(object => object.getOwner())), new Set([a, b]));
+  assert.ok(barrels().every(object => object.getOwner()), 'anchors are owner-only, not global');
+
+  assert.ok(h.hooks.onRegionLoaded?.length, 'quest listens for real region loads');
+  h.hooks.onRegionLoaded[0]({ regionId: 12345, absX: 3749, absY: 3290 });
+  assert.equal(barrels().length, 2, 'region load resync does not duplicate owner objects');
+  assert.deepEqual(new Set(barrels().map(object => object.getOwner())), new Set([a, b]));
+
+  h.hooks.onPlayerLogout[0]({ player: a });
+  assert.equal(barrels().length, 1, 'logout removes only that player anchor');
+  assert.equal(barrels()[0].getOwner(), b);
+});
+
+test('Children tail follows the collision-valid captured route to the door and only then finishes', () => {
+  const h = harness('ChildrenOfTheSun', 'Children of the Sun'), p = player();
+  h.quest.setStage(p, 4);
+  h.action(p, N.ALINA, 'r2Pt3E');
+  assert.equal(h.quest.getStage(p), 6);
+  const guard = () => h.npcs.find(npc => npc.getId() === N.GUARD_186 && !npc.removed);
+  assert.ok(guard());
+  let finishedEarly = false;
+  for (let tick = 0; tick < 700; tick++) {
+    const before = guard();
+    if (!before) break;
+    p.moveTo(new core.Location(before.getLocation().getX(), before.getLocation().getY() - 10, 0));
+    h.hooks.onPlayerProcess[0]({ player: p });
+    const after = guard();
+    if (!after) break;
+    if (h.quest.getStage(p) === 8 && (after.getLocation().getX() !== 3258 || after.getLocation().getY() !== 3400)) finishedEarly = true;
+    if (h.quest.getStage(p) === 8) break;
+  }
+  assert.equal(h.quest.getStage(p), 8, 'tail completed (not stuck at 3248,3391)');
+  assert.equal(finishedEarly, false, 'tail does not finish at an early tile');
+  assert.deepEqual([guard().getLocation().getX(), guard().getLocation().getY()], [3258, 3400], 'guard reaches the door approach');
+
+  const door = { player: p, objectId: 50048, location: { x: 3259, y: 3400 }, handled: false };
+  h.emit('door:toggle', door);
+  assert.equal(door.handled, true, 'the bandit door cutscene is claimed after the real tail');
+});
+
+
+test('Sins barrel owner overlay resolves through runtime MapObjects for its owner only', () => {
+  const { GameObject, Location, MapObjects, ObjectManager, ObjectDefinition, PlayerRights, RegionManager } = core;
+  ObjectDefinition.init();
+  const owner = { getPrivateArea: () => null, getRights: () => PlayerRights.NONE };
+  const other = { getPrivateArea: () => null, getRights: () => PlayerRights.NONE };
+  const tile = new Location(3749, 3291, 0);
+  RegionManager.loadMapFiles(tile.getX(), tile.getY());
+  const definition = ObjectDefinition.forPlayer(37980, owner);
+  assert.equal(definition?.id, 37980, 'the current definition keeps the actionable barrel id');
+  const object = new GameObject(37980, tile, 10, 0, null).setOwner(owner);
+  ObjectManager.register(object, true);
+  try {
+    assert.equal(MapObjects.getPrivateArea(owner, 37980, tile), object, 'owner click validation finds the personal overlay');
+    assert.notEqual(MapObjects.getPrivateArea(other, 37980, tile), object, 'another player cannot resolve the personal overlay');
+  } finally {
+    ObjectManager.deregister(object, true);
+  }
+});
+
+
+test('Sins canonical crypt landing is walkable and reaches Kroy through real collision', () => {
+  const { Location, RegionManager } = core;
+  RegionManager.init();
+  const landing = new Location(3738, 9703, 1);
+  assert.equal(RegionManager.blocked(landing, null), false, 'canonical 32637 destination is walkable');
+  const arrival = [3728, 9742];
+  assert.equal(RegionManager.blocked(new Location(arrival[0], arrival[1], 1), null), false, 'captured Kroy cutscene arrival is walkable');
+  const { MapObjects, ObjectDefinition, ObjectManager } = core;
+  ObjectDefinition.init();
+  RegionManager.loadMapFiles(3728, 9752);
+  const gate = MapObjects.get(39512, new Location(3728, 9752, 1), null);
+  assert.ok(gate, 'the crypt gate exists');
+  RegionManager.removeObjectClipping(gate);
+  const goal = [3727, 9759];
+  const queue = [arrival];
+  const seen = new Set([queue[0].join(',')]);
+  let reached = false;
+  for (let index = 0; index < queue.length && !reached; index++) {
+    const [x, y] = queue[index];
+    if (x === goal[0] && y === goal[1]) { reached = true; break; }
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
+      if (seen.has(key) || Math.abs(nx - 3728) > 40 || Math.abs(ny - 9742) > 70) continue;
+      if (RegionManager.blocked(new Location(nx, ny, 1), null)) continue;
+      if (RegionManager.canMove(x, y, nx, ny, 1, 1, 1, null) === false) continue;
+      seen.add(key);
+      queue.push([nx, ny]);
+    }
+  }
+  assert.equal(reached, true, 'crypt landing has a real route to the Kroy lab tile');
+});
+
+test('Sins mandatory player landings and cache entry objects are valid', () => {
+  const { Location, MapObjects, ObjectDefinition, RegionManager } = core;
+  ObjectDefinition.init();
+  RegionManager.init();
+  const landings = [
+    [3738, 9703, 1, 'crypt ladder'], [3704, 3191, 0, 'mausoleum inside'],
+    [3529, 3169, 0, 'Burgh boat'], [3696, 3199, 0, 'Icyene boat'],
+    [3627, 3332, 0, 'Darkmeyer crack exit'], [3627, 3328, 0, 'Meiyerditch crack'],
+    [3565, 3362, 0, 'Castle Drakan'], [3494, 9628, 0, 'hideout arrival'],
+    [3666, 3279, 0, 'Slepe rowboat shore'], [3600, 9740, 0, 'laboratory'],
+  ];
+  for (const [x, y, z, label] of landings) {
+    assert.equal(RegionManager.blocked(new Location(x, y, z), null), false, `${label} landing is walkable`);
+  }
+  RegionManager.loadMapFiles(3727, 3300);
+  RegionManager.loadMapFiles(3704, 3190);
+  const stairs = MapObjects.get(32637, new Location(3727, 3300, 0), null);
+  assert.ok(stairs, 'church crypt stairs object exists');
+  assert.ok((ObjectDefinition.forId(32637).getInteractions() || []).includes('Climb-down'), 'stairs offer Climb-down');
+  const door = MapObjects.get(39519, new Location(3704, 3190, 0), null);
+  assert.ok(door, 'mausoleum door map object exists');
+  assert.ok((ObjectDefinition.forId(38070).getInteractions() || []).includes('Unlock'), 'personal closed door offers Unlock');
+  assert.ok((ObjectDefinition.forId(38071).getInteractions() || []).includes('Open'), 'personal open door offers Open');
+});
+
+test('Sins Carl follow walks the captured route, fails/retries, then starts the crypt eavesdrop at 14', () => {
+  const h = harness('SinsOfTheFather'), p = player();
+  p.moveTo(new core.Location(3750, 3296, 0));
+  h.quest.setStage(p, 12);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  const carl = () => h.npcs.find(npc => npc.getId() === 9558 && !npc.removed);
+  assert.ok(carl(), 'Carl follow NPC spawns at stage 12');
+  const followArea = h.areas.find(area => area.constructor.name === 'CarlFollowArea');
+  assert.ok(followArea, 'Carl follow runs from a Slepe area, not a global process hook');
+  let finishedAt = null;
+  for (let tick = 0; tick < 900; tick++) {
+    const before = carl();
+    if (!before) break;
+    p.moveTo(new core.Location(before.getLocation().getX() - 12, before.getLocation().getY(), 0));
+    followArea.process(p);
+    if ((p.attrs.get('quest.sins_of_the_father.bits') || 0) & (1 << 9)) { finishedAt = tick; break; }
+    assert.equal(h.quest.getStage(p), 12, 'follow does not advance to the crypt early');
+  }
+  assert.notEqual(finishedAt, null, 'Carl reaches the crypt and finishes the follow');
+  assert.equal(h.quest.getStage(p), 12, 'Carl finishing unlocks the normal crypt stairs at stage 12');
+  h.emit('ladders:climb', { player: p, objectId: 32637, clickType: 1, object: { getLocation: () => new core.Location(3727, 3300, 0) }, handled: false });
+  assert.equal(h.quest.getStage(p), 12);
+  assert.ok(p.prompt, 'the stairs ask the QH Continue choice');
+  h.choose(p, 'Continue the Sins of the Father quest.');
+  h.continueUntil(p, () => !p.manager.getCurrent());
+  h.tick(3);
+  assert.equal(h.quest.getStage(p), 14, 'the Continue choice advances to the crypt scene at 14');
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [3728, 9742, 1], 'the crypt scene uses the captured Kroy arrival');
+
+  const f = harness('SinsOfTheFather'), q = player();
+  q.moveTo(new core.Location(3750, 3296, 0));
+  f.quest.setStage(q, 12);
+  f.hooks.onPlayerLogin[0]({ player: q });
+  q.moveTo(new core.Location(3780, 3320, 0));
+  const failArea = f.areas.find(area => area.constructor.name === 'CarlFollowArea');
+  for (let tick = 0; tick < 4; tick++) failArea.process(q);
+  assert.equal(f.quest.getStage(q), 6, 'falling too far resets to Hameln for a real retry');
+  assert.ok(f.quest.getStage(q) < 12);
+});
+
+
+test('Sins Carl too-close/seen fails with the captured retry feedback', () => {
+  const h = harness('SinsOfTheFather'), p = player();
+  p.moveTo(new core.Location(3750, 3296, 0));
+  h.quest.setStage(p, 12);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  const carl = () => h.npcs.find(npc => npc.getId() === 9558 && !npc.removed);
+  const area = h.areas.find(entry => entry.constructor.name === 'CarlFollowArea');
+  for (let tick = 0; tick < 5; tick++) {
+    const npc = carl();
+    if (!npc) break;
+    p.moveTo(new core.Location(npc.getLocation().getX() - 12, npc.getLocation().getY(), 0));
+    area.process(p);
+  }
+  const npc = carl();
+  assert.ok(npc);
+  p.moveTo(npc.getLocation());
+  for (let tick = 0; tick < 3 && h.quest.getStage(p) === 12; tick++) area.process(p);
+  assert.equal(h.quest.getStage(p), 6, 'being seen/too close resets for the captured retry');
+  assert.ok(p.messages.some(text => text.includes('failed to stay hidden from Carl')) || /see you there|failed to stay hidden/i.test(p.text), 'captured caught-if-seen feedback');
+});
+
+test('Sins Carl progress never follows player proximity: relog near the end restarts at the canonical start', () => {
+  const h = harness('SinsOfTheFather'), p = player();
+  p.moveTo(new core.Location(3731, 3307, 0)); // near the crypt end, no earned progress
+  h.quest.setStage(p, 12);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  const carl = h.npcs.find(npc => npc.getId() === 9558 && !npc.removed);
+  assert.ok(carl);
+  assert.deepEqual([carl.getLocation().getX(), carl.getLocation().getY()], [3750, 3296], 'follow always starts at the canonical start for a fresh attempt');
+  const area = h.areas.find(entry => entry.constructor.name === 'CarlFollowArea');
+  for (let tick = 0; tick < 4; tick++) area.process(p);
+  assert.equal(h.quest.getStage(p), 6, 'teleporting near the end does not grant the tail; proximity starts a retry');
+  assert.equal((p.attrs.get('quest.sins_of_the_father.bits') || 0) & (1 << 9), 0, 'no BIT_TRAIL without walking the route');
+  assert.ok(area.getBoundaries().every(boundary => !boundary.inside(new core.Location(3750, 3308, 1))), 'follow area is the surface Slepe street');
+});
+
+test('Sins Carl logout removes the actor, keeps no trail bit, and resumes a fresh canonical attempt', () => {
+  const h = harness('SinsOfTheFather'), p = player();
+  p.moveTo(new core.Location(3750, 3296, 0));
+  h.quest.setStage(p, 12);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.ok(h.npcs.some(npc => npc.getId() === 9558 && !npc.removed));
+  h.hooks.onPlayerLogout[0]({ player: p });
+  assert.ok(!h.npcs.some(npc => npc.getId() === 9558 && !npc.removed), 'logout cleans the Carl actor');
+  assert.equal((p.attrs.get('quest.sins_of_the_father.bits') || 0) & (1 << 9), 0);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  const carl = h.npcs.find(npc => npc.getId() === 9558 && !npc.removed);
+  assert.ok(carl);
+  assert.deepEqual([carl.getLocation().getX(), carl.getLocation().getY()], [3750, 3296]);
+});
