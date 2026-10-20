@@ -1,5 +1,6 @@
 /**
- * Burying bones, from plugins/skills/data/bones.json (docs/prayer-bones.md).
+ * Burying bones, from plugins/skills/data/bones.json, and scattering demonic ashes, from
+ * plugins/skills/data/ashes.json (docs/prayer-bones.md).
  *
  * Other plugins bury through custom events:
  *   api.emitCustomEvent("prayer:bury", { player, itemId, scale, crushed })
@@ -13,24 +14,37 @@
  *        `restore` once, so two sources (the Catacombs, a dragonbone necklace) never stack.
  */
 const DATA = require("./data/bones.json");
+const ASHES = require("./data/ashes.json");
 
-const BURY_DELAY_MS = 1200; // Two OSRS game ticks.
+const BURY_DELAY_MS = 1200; // Two OSRS game ticks; scattering ashes waits the same (the Wiki gives no separate figure).
 const BURY_ANIMATION = 827; // human_pickupfloor
+const SCATTER_ANIMATION = 827; // human_pickupfloor, until the scatter animation is identified in the cache (no seq is named for it).
 
 let api = null;
 let bones = null;
+let ashes = null;
 
-/** The bone rows by item id, resolved from their gamevals on first use. */
-function boneFor(itemId) {
-  if (!bones) {
-    bones = new Map();
-    for (const row of DATA.bones) {
-      const id = api.core.CacheDefinitions.getObjId(row.obj);
-      if (!Number.isInteger(id)) throw new Error(`[Prayer] unknown obj gameval ${row.obj}`);
-      bones.set(id, row);
-    }
+/** Rows keyed by item id, resolved from their obj gamevals on first use. */
+function rowsByItemId(rows) {
+  const map = new Map();
+  for (const row of rows) {
+    const id = api.core.CacheDefinitions.getObjId(row.obj);
+    if (!Number.isInteger(id)) throw new Error(`[Prayer] unknown obj gameval ${row.obj}`);
+    map.set(id, row);
   }
+  return map;
+}
+
+/** The bone rows by item id. */
+function boneFor(itemId) {
+  if (!bones) bones = rowsByItemId(DATA.bones);
   return bones.get(itemId) ?? null;
+}
+
+/** The demonic ash rows by item id. */
+function ashFor(itemId) {
+  if (!ashes) ashes = rowsByItemId(ASHES.ashes);
+  return ashes.get(itemId) ?? null;
 }
 
 /** Experience is whole in tsps; a bone's tenths round up, as the old table did (bones 4.5 -> 5). */
@@ -67,31 +81,23 @@ function boneRequest(request) {
   if (request) request.bone = boneFor(request.itemId);
 }
 
-function buryBone({ player, itemId, slot }) {
+/**
+ * The two-tick rite shared by burying and scattering. The item is consumed and `complete` runs
+ * together on the resolving tick, so an interrupted rite keeps its item, including on logout
+ * before the account is saved.
+ */
+function consumeAfterTwoTicks(player, slot, itemId, { animation, sound }, complete) {
   const core = api.core;
-  const bone = boneFor(itemId);
-  if (!bone) return false;
-  if (!player.getClickDelay().elapsedTime(BURY_DELAY_MS)) return true;
   const inventory = player.getInventory();
-  if (inventory.get(slot)?.getId() !== itemId) return true;
-  if (bone.level && player.getSkillManager().getMaxLevel(core.Skill.PRAYER) < bone.level) {
-    player.sendMessage(`You need a Prayer level of ${bone.level} to bury these bones.`);
-    return true;
-  }
-
   player.getSkillManager().stopSkillable();
   player.getPacketSender().sendInterfaceRemoval();
-  player.performAnimation(new core.Animation(BURY_ANIMATION));
-  core.Sounds.sendSound(player, core.Sound.BURY_BONES);
+  player.performAnimation(new core.Animation(animation));
+  if (sound) core.Sounds.sendSound(player, sound);
   const location = player.getLocation().clone();
-  // Consume and award XP together on the resolving tick. An interrupted burial
-  // keeps its bone, including on logout before the account is saved.
   const task = new core.CountdownTask(player, 2, () => {
     if (!canComplete() || inventory.get(slot)?.getId() !== itemId) return;
     inventory.deleteAtSlot(slot, 1);
-    player.sendMessage("You dig a hole in the ground..");
-    player.sendMessage(`..and bury the ${core.ItemDefinition.forId(itemId).getName()}.`);
-    award(player, itemId, bone, 1);
+    complete();
   });
   function canComplete() {
     return player.isRegistered() && player.getHitpoints() > 0 &&
@@ -106,6 +112,36 @@ function buryBone({ player, itemId, slot }) {
   };
   api.getTaskManager().submit(task);
   player.getClickDelay().reset();
+}
+
+function buryBone({ player, itemId, slot }) {
+  const core = api.core;
+  const bone = boneFor(itemId);
+  if (!bone) return false;
+  if (!player.getClickDelay().elapsedTime(BURY_DELAY_MS)) return true;
+  if (player.getInventory().get(slot)?.getId() !== itemId) return true;
+  if (bone.level && player.getSkillManager().getMaxLevel(core.Skill.PRAYER) < bone.level) {
+    player.sendMessage(`You need a Prayer level of ${bone.level} to bury these bones.`);
+    return true;
+  }
+  consumeAfterTwoTicks(player, slot, itemId, { animation: BURY_ANIMATION, sound: core.Sound.BURY_BONES }, () => {
+    player.sendMessage("You dig a hole in the ground..");
+    player.sendMessage(`..and bury the ${core.ItemDefinition.forId(itemId).getName()}.`);
+    award(player, itemId, bone, 1);
+  });
+  return true;
+}
+
+/** "Scatter" on demonic ashes: Prayer experience, no restore (Wiki, Remains). */
+function scatterAshes({ player, itemId, slot }) {
+  const ash = ashFor(itemId);
+  if (!ash) return false;
+  if (!player.getClickDelay().elapsedTime(BURY_DELAY_MS)) return true;
+  if (player.getInventory().get(slot)?.getId() !== itemId) return true;
+  consumeAfterTwoTicks(player, slot, itemId, { animation: SCATTER_ANIMATION }, () => {
+    player.sendMessage("You scatter the ashes.");
+    player.getSkillManager().addExperiences(api.core.Skill.PRAYER, experience(ash.xp, 1));
+  });
   return true;
 }
 
@@ -114,6 +150,7 @@ module.exports = {
   register(pluginApi) {
     api = pluginApi;
     api.onItemFirstAction(buryBone);
+    api.onItemFirstAction(scatterAshes);
     api.onCustomEvent("prayer:bury", buryRequest);
     api.onCustomEvent("prayer:bone", boneRequest);
   },

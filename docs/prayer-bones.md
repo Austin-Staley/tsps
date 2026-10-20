@@ -18,6 +18,28 @@ whole, so tenths round up, as the old table did (bones 4.5 → 5, bat bones 5.3 
 The core's `ArceuusOfferings.BONE_XP` (Sinister Offering, Construction altars) is separate and
 unchanged.
 
+## Demonic ashes
+
+`server/plugins/skills/data/ashes.json` lists the ashes that demons drop instead of bones, by obj gameval.
+Their inventory option is **Scatter** (the item's first option in the cache), handled by the same
+Prayer plugin: a two-tick rite like burying, the ash is consumed and the experience given together on
+the resolving tick, and an interrupted scatter keeps the ash. Ashes restore no Prayer, cannot be
+offered at altars, and the members-only ones are refused on free worlds by `FreeToPlay` through
+the item's members flag, so the data holds only the experience.
+
+| Ashes | `xp` (scattering) | Members | Source (Wiki, Remains) |
+| --- | --- | --- | --- |
+| Fiendish ashes | 10 | no | imps, fiends |
+| Vile ashes | 25 | no | hellhounds and others |
+| Malicious ashes | 65 | yes | black demons and others |
+| Abyssal ashes | 85 | yes | abyssal demons, Abyssal Sire |
+| Infernal ashes | 110 | yes | Cerberus, K'ril Tsutsaroth, Skotizo, Tormented Demons, Zalcano |
+
+Not covered: Demonic Offering (three times the experience), the Ash sanctifier and the sacred bone
+burner. The chat line "You scatter the ashes." and the two-tick delay follow burying; the Wiki gives
+neither. No sequence in the cache is named for scattering, so the animation is the burying one until
+the real one is identified (the Wiki's "Scattering ashes" gif shows a standing sideways sweep).
+
 ## Events
 
 `server/plugins/skills/Prayer.plugin.js`:

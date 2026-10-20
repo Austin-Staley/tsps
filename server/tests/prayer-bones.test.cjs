@@ -15,14 +15,16 @@ const { ObjectIdentifiers: Objects } = require("../dist/util/ObjectIdentifiers")
 const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
 
 const DATA = require("../plugins/skills/data/bones.json");
+const ASHES = require("../plugins/skills/data/ashes.json");
 
 const handlers = new Map();
+const firstActions = [];
 const api = {
   core: { Skill, Location, Equipment, ItemIdentifiers: Items, ObjectIdentifiers: Objects, CacheDefinitions },
   emitCustomEvent: (name, payload) => (handlers.get(name) ?? []).forEach((handler) => handler(payload)),
   onCustomEvent: (name, handler) => handlers.set(name, [...(handlers.get(name) ?? []), handler]),
   persistAttribute() {},
-  onItemFirstAction() {},
+  onItemFirstAction(handler) { firstActions.push(handler); },
   onItemAction() {},
   onItemOnItem() {},
   onObjectInteraction() {},
@@ -166,4 +168,23 @@ test("every hundredth charge says how many are left, and a crush in the Catacomb
   kill(who, [{ itemId: Items.BONES, amount: 2 }]);
   assert.deepEqual(who.messages, ["Your bonecrusher has 5,700 charges left."]);
   assert.equal(who.levels.current, 52);
+});
+
+test("every demonic ash in the data is a real obj whose first option is Scatter, with the Wiki's experience", () => {
+  const wiki = { fiendish_ashes: 10, vile_ashes: 25, malicious_ashes: 65, abyssal_ashes: 85, infernal_ashes: 110 };
+  assert.deepEqual(ASHES.ashes.map((row) => row.obj), Object.keys(wiki));
+  for (const row of ASHES.ashes) {
+    const id = CacheDefinitions.getObjId(row.obj);
+    assert.ok(Number.isInteger(id), row.obj);
+    assert.equal(CacheDefinitions.getItem(id).inventoryActions[0], "Scatter", row.obj);
+    assert.equal(row.xp, wiki[row.obj], row.obj);
+  }
+});
+
+test("the first-action handlers leave items that are neither bones nor ashes alone", () => {
+  const who = player();
+  assert.equal(firstActions.length, 2);
+  for (const handler of firstActions) {
+    assert.equal(handler({ player: who, itemId: Items.COINS, slot: 0, handled: false }), false);
+  }
 });
