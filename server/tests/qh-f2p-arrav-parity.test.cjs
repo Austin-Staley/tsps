@@ -8,6 +8,7 @@ const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
 const core = PluginManager.getCoreApi();
 before(async () => {
   await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(require('node:path').resolve(__dirname, '..'));
+  new (require('../dist/game/definition/loader/impl/NpcDefinitionLoader').NpcDefinitionLoader)().load();
 });
 let actorIndex = 1;
 let worldNpcs = [];
@@ -197,4 +198,103 @@ test('12WBZW reaches the quest handler through real NpcDialogues with event.npc'
   { pages: [{ page: 'Shield of Arrav' }] });
   for (const dialogue of chain.getDialogues().values()) dialogue.send(p);
   assert.deepEqual(attacks, [p]);
+});
+
+function realDispatchPlayer(shieldStage, ds2Stage) {
+  const attributes = new Map([['quest.shield_of_arrav.stage', shieldStage]]);
+  if (ds2Stage !== undefined) attributes.set('quest.dragon_slayer_ii.stage', ds2Stage);
+  const items = new Map();
+  const state = { texts: [], packets: [], chain: null, sends: 0 };
+  let packet;
+  packet = new Proxy({}, { get: (_, method) => (...args) => { state.packets.push([method, ...args]); return packet; } });
+  const inventory = {
+    getAmount: (id) => items.get(id) || 0,
+    adds: (id, amount) => items.set(id, (items.get(id) || 0) + amount),
+    deleteNumber: (id, amount) => items.set(id, Math.max(0, (items.get(id) || 0) - amount)),
+    contains: (id) => (items.get(id) || 0) > 0,
+    isFull: () => false, getFreeSlots: () => 28,
+    getItems: () => [], getValidItems: () => [],
+  };
+  const p = {
+    attributes, items,
+    getAttribute: (key) => attributes.get(key),
+    setAttribute: (key, value) => attributes.set(key, value),
+    getInventory: () => inventory,
+    getEquipment: () => ({ get: () => null, getAmount: () => 0, getItems: () => [] }),
+    getBanks: () => [],
+    getSkillManager: () => ({ getCombatLevel: () => 20, getExperience: () => 0, getCurrentLevel: () => 1,
+      getMaxLevel: () => 1, addExperience() {}, addExperiences() {} }),
+    getPacketSender: () => packet,
+    getDialogueManager: () => ({
+      startDialogues(builder) {
+        const queue = [builder];
+        while (queue.length) {
+          const chain = queue.shift();
+          state.chain = chain;
+          for (const dialogue of [...chain.getDialogues().values()]) {
+            if (typeof dialogue.getText === 'function') state.texts.push(dialogue.getText());
+            if (typeof dialogue.getOptions === 'function') state.texts.push(dialogue.getOptions().join(' | '));
+            if (dialogue.constructor.name === 'ActionDialogue') {
+              if (++state.sends > 200) throw new Error('dialogue chain runaway');
+              dialogue.send(p);
+            }
+          }
+        }
+      },
+      reset() {}, isActive: () => false, getCurrent: () => null, advance() {},
+    }),
+    getFrameUpdater: () => ({ clear() {} }),
+    getUsername: () => 'RealDispatch', getLocation: () => new core.Location(3209, 3495, 0),
+    getIndex: () => 101, isPlayer: () => true, isNpc: () => false, getAsPlayer: () => p,
+    getPrivateArea: () => null, getArea: () => null, moveTo() {}, sendMessage() {},
+  };
+  return { player: p, texts: () => state.texts, packets: () => state.packets, chain: () => state.chain };
+}
+
+function dispatchReldo(player) {
+  const definition = core.NpcDefinition.forId(core.NpcIdentifiers.RELDO);
+  const npc = { getId: () => core.NpcIdentifiers.RELDO, getCurrentDefinition: () => definition,
+    getLocation: () => new core.Location(3209, 3495, 0), getIndex: () => 101 };
+  const event = { player, npc, npcId: core.NpcIdentifiers.RELDO, clickType: 1, handled: false };
+  return { handled: PluginManager.emitNpcInteraction(event), event };
+}
+
+function dispatchText(dispatch) {
+  const menuOptions = dispatch.packets()
+    .filter(([method, script, , options]) => method === 'sendClientScript' && script === 58 && typeof options === 'string')
+    .map(([, , , options]) => options.split('|').join(' | '));
+  return [...dispatch.texts(), ...menuOptions].join('\n');
+}
+
+test('real PluginManager named dispatch defers inactive DS2 Reldo and keeps active DS2', () => {
+  if (!global.__arravRealPlugins) {
+    // Quest files export their register(api) function; Quests.plugin uses this same API.
+    require('../plugins/quests/quests/DragonSlayerII.Quest')(PluginManager.createApi('DragonSlayerII'));
+    require('../plugins/quests/quests/ShieldOfArrav.Quest')(PluginManager.createApi('ShieldOfArrav'));
+    PluginManager.registerPluginCandidate({
+      pluginPath: 'NpcDialogues.plugin.js', pluginName: 'NpcDialogues',
+      plugin: require('../plugins/npcs/NpcDialogues.plugin'), dependsOn: [],
+    });
+    global.__arravRealPlugins = true;
+  }
+
+  const inactive = realDispatchPlayer(0, 0);
+  assert.equal(dispatchReldo(inactive.player).handled, true);
+  const inactiveText = dispatchText(inactive);
+  assert.match(inactiveText, /Hello, stranger\./, 'inactive DS2 must defer to the Shield start transcript');
+  assert.doesNotMatch(inactiveText, /Ask about Tristan\./);
+
+  const active = realDispatchPlayer(0, 8);
+  assert.equal(dispatchReldo(active.player).handled, true);
+  const activeText = dispatchText(active);
+  assert.match(activeText, /Ask about Tristan\./, 'active DS2 key chapter must still own Reldo');
+  assert.doesNotMatch(activeText, /Hello, stranger\./);
+
+  for (const [label, ds2Stage] of [['completed', 14], ['unrelated forge chapter', 9]]) {
+    const deferred = realDispatchPlayer(0, ds2Stage);
+    assert.equal(dispatchReldo(deferred.player).handled, true, `${label} DS2 must defer`);
+    const text = dispatchText(deferred);
+    assert.match(text, /Hello, stranger\./, `${label} DS2 must let Shield handle Reldo`);
+    assert.doesNotMatch(text, /Ask about Tristan\./);
+  }
 });

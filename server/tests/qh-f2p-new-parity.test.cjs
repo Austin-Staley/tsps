@@ -331,3 +331,59 @@ test('real post-quest Gillie Talk-to hands the amulet, then exactly one unused l
     w.cleanup();
   }
 });
+
+test('Longhall door leaves use the cache open locs and unseal Atlas through real clipping', () => {
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
+  const { ObjectManager } = require('../dist/game/entity/impl/object/ObjectManager');
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+  RegionManager.init();
+  for (const [x, y] of [[3078, 3435], [3079, 3435], [3075, 3439], [3074, 3441]]) RegionManager.loadMapFiles(x, y);
+
+  const actions = {};
+  const doorCore = {
+    ...core, ObjectManager, MapObjects,
+    Sounds: { sendSound() {} },
+    TaskManager: { submit() {}, cancelTasks() {} },
+  };
+  delete require.cache[require.resolve('../plugins/objects/Doors.plugin.js')];
+  require('../plugins/objects/Doors.plugin.js').register({
+    core: doorCore,
+    onObjectInteraction: (name, handlers) => { if (name === 'Longhall door') Object.assign(actions, handlers); },
+    onRegionLoaded() {}, onServerStartup() {}, onObjectRoute() {}, emitCustomEvent() {},
+  });
+  assert.equal(typeof actions.Open, 'function', 'Longhall door must reach the Doors dispatch');
+  assert.equal(typeof actions.Close, 'function');
+
+  const player = { getPrivateArea: () => null, getLocation: () => new core.Location(3078, 3434, 0) };
+  const finder = new RsmodRouteFinding();
+  const route = () => finder.findRoute({
+    level: 0, srcX: 3078, srcY: 3434, srcSize: 1, destX: 3076, destY: 3438,
+    destWidth: 1, destLength: 1, locAngle: 0, locShape: -1, moveNear: false,
+    blockAccessFlags: 0, maxWaypoints: 25, privateArea: null,
+  });
+  const click = (id, x, y, option) => {
+    const object = MapObjects.get(id, new core.Location(x, y, 0), null);
+    assert.ok(object, `map object ${id}@${x},${y}`);
+    actions[option]({
+      player, object, objectId: id, definition: { id },
+      location: new core.Location(x, y, 0), clickType: 1, handled: false,
+    });
+  };
+
+  assert.equal(route().success, false, 'closed Longhall leaves seal the Atlas entrance');
+  click(11621, 3078, 3435, 'Open');
+  click(11620, 3079, 3435, 'Open');
+  assert.equal(MapObjects.get(11621, new core.Location(3078, 3435, 0), null), null);
+  assert.equal(MapObjects.get(11620, new core.Location(3079, 3435, 0), null), null);
+  assert.ok(MapObjects.get(11625, new core.Location(3078, 3436, 0), null), 'west leaf becomes 11625');
+  assert.ok(MapObjects.get(11624, new core.Location(3079, 3436, 0), null), 'east leaf becomes 11624');
+  assert.equal(route().success, true, 'both open cache leaves clear the threshold');
+  assert.deepEqual(route().waypoints.at(-1), { x: 3076, y: 3438, z: 0 });
+
+  click(11625, 3078, 3436, 'Close');
+  click(11624, 3079, 3436, 'Close');
+  assert.ok(MapObjects.get(11621, new core.Location(3078, 3435, 0), null), 'west leaf closes back to 11621');
+  assert.ok(MapObjects.get(11620, new core.Location(3079, 3435, 0), null), 'east leaf closes back to 11620');
+  assert.equal(route().success, false, 'closing both leaves seals the entrance again');
+});

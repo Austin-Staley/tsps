@@ -11,6 +11,7 @@ const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/Npc
 const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
 const { RegionManager } = require('../dist/game/collision/RegionManager');
 const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+const ClimbLinks = require('../plugins/objects/ClimbLinks');
 const runtime = require('../plugins/quests/QuestRuntime');
 const core = PluginManager.getCoreApi();
 const I = core.ItemIdentifiers, N = core.NpcIdentifiers, O = core.ObjectIdentifiers;
@@ -22,6 +23,8 @@ before(async () => {
   ObjectDefinition.init();
   RegionManager.init();
   RegionManager.loadMapFiles(2836, 9600, true);
+  RegionManager.loadMapFiles(2556, 9844, true);
+  RegionManager.loadMapFiles(3019, 9850, true);
 });
 
 function harness(withDoors = false) {
@@ -78,7 +81,7 @@ const doorToggle = (h, p, objectId, clickType = 1, interactions = ['Open']) => {
 
 function player() {
   const attrs = new Map(), items = new Map(), varbits = new Map(), messages = [];
-  let location = new core.Location(3210, 3220, 0), privateArea = null;
+  let location = new core.Location(3210, 3220, 0), privateArea = null, movementBlocked = false;
   const packet = new Proxy({
     sendVarbit(id, value) { varbits.set(id, value); return packet; },
     sendConfig(id, value) { varbits.set(`config:${id}`, value); return packet; },
@@ -101,7 +104,14 @@ function player() {
     getPrivateArea: () => privateArea,
     setPrivateArea: value => { privateArea = value; },
     getArea: () => null,
-    getMovementQueue: () => ({ reset() { return this; }, setBlockMovement() { return this; } }),
+    getHitpoints: () => 99,
+    getMovementQueue: () => ({
+      isMovementBlocked: () => movementBlocked,
+      setBlockMovement(value) { movementBlocked = value; return this; },
+      reset() { return this; },
+      didMovePreviousCycle: () => false,
+    }),
+    performAnimation: () => {},
     setForceMovement: () => {},
     setUntargetable: () => {},
     sendMessage: text => messages.push(text),
@@ -325,4 +335,88 @@ test('the real Doors route uses the same clickable wall for both crossings while
   assert.deepEqual([locked.getLocation().getX(), locked.getLocation().getY()], [2836, 9598]);
   assert.equal(locked.attrs.get('dragon-slayer.shortcut'), true);
   assert.equal(h.objects.length, 0);
+});
+
+function ladderHarness() {
+  const hooks = {}, events = {}, interactions = new Map(), tasks = [];
+  const taskManager = {
+    submit(task) { task.setRunning(true); tasks.push(task); },
+    cancelTasks(key) { for (const task of tasks.filter(entry => entry.key === key)) task.stop(); },
+  };
+  const api = new Proxy({
+    core,
+    persistAttribute: () => {},
+    getTaskManager: () => taskManager,
+    onObjectInteraction: (name, actions) => {
+      if (typeof name !== 'string' || !actions) return;
+      const named = interactions.get(name) ?? {};
+      for (const [option, action] of Object.entries(actions)) {
+        named[option] = event => { if (action(event) !== false) event.handled = true; };
+      }
+      interactions.set(name, named);
+    },
+    onCustomEvent: (key, fn) => (events[key] ??= []).push(fn),
+    emitCustomEvent: (key, event) => (events[key] ?? []).forEach(fn => fn(event)),
+  }, {
+    get: (target, key) => target[key] ?? ((...args) => {
+      (hooks[key] ??= []).push(args.find(value => typeof value === 'function'));
+    }),
+  });
+  require('../plugins/quests/quests/RovingElves.Quest')(api);
+  require('../plugins/objects/Ladders.plugin').register(api);
+  return {
+    hooks, events, interactions,
+    emit: (key, event) => (events[key] ?? []).forEach(fn => fn(event)),
+    runTasks(cycles = 8) {
+      let active = [...tasks];
+      tasks.length = 0;
+      for (let cycle = 0; cycle < cycles && active.length > 0; cycle++) {
+        for (const task of active) task.tick();
+        active = active.filter(task => task.isRunning());
+      }
+      tasks.push(...active);
+      return active.length;
+    },
+  };
+}
+
+test('Roving Elves claims only its cache-placed tomb ladder; the shared Dwarven Mine ladder keeps the canonical Ice Mountain Climb-up exit', () => {
+  const h = ladderHarness();
+  const tomb = MapObjects.get(17387, new core.Location(2556, 9844, 0), null);
+  const mine = MapObjects.get(17387, new core.Location(3019, 9850, 0), null);
+  assert.ok(tomb, 'real Glarial tomb ladder 17387 at 2556,9844');
+  assert.ok(mine, 'real Dwarven Mine Oracle ladder 17387 at 3019,9850');
+  assert.equal(tomb.getDefinition().getName(), 'Ladder');
+  assert.equal(mine.getDefinition().getName(), 'Ladder');
+  assert.equal(tomb.getDefinition().getInteractions()[0], 'Climb-up');
+  assert.equal(mine.getDefinition().getInteractions()[0], 'Climb-up');
+
+  const tombPlayer = player();
+  tombPlayer.moveTo(new core.Location(2556, 9845, 0));
+  const tombEvent = {
+    player: tombPlayer, object: tomb, objectId: 17387, definition: tomb.getDefinition(),
+    location: tomb.getLocation(), clickType: 1, handled: false,
+  };
+  h.interactions.get('Ladder')['Climb-up'](tombEvent);
+  assert.equal(tombEvent.handled, true);
+  assert.deepEqual([tombPlayer.getLocation().getX(), tombPlayer.getLocation().getY(), tombPlayer.getLocation().getZ()], [2557, 3445, 0]);
+
+  const minePlayer = player();
+  const mineFrom = new core.Location(3019, 9851, 0);
+  minePlayer.moveTo(mineFrom);
+  const expectedMineExit = ClimbLinks.destination(mine, ClimbLinks.UP, mineFrom, null, false);
+  assert.ok(expectedMineExit, 'real ClimbLinks has the normal mine exit');
+  assert.deepEqual([expectedMineExit.getX(), expectedMineExit.getY(), expectedMineExit.getZ()], [3018, 3450, 0], 'Ice Mountain surface');
+  const mineEvent = {
+    player: minePlayer, object: mine, objectId: 17387, definition: mine.getDefinition(),
+    location: mine.getLocation(), clickType: 1, handled: false,
+  };
+  h.interactions.get('Ladder')['Climb-up'](mineEvent);
+  assert.equal(h.runTasks(), 0, 'the bounded Ladders climb task completed');
+  assert.deepEqual([minePlayer.getLocation().getX(), minePlayer.getLocation().getY(), minePlayer.getLocation().getZ()], [3018, 3450, 0],
+    'the Oracle-room ladder exits normally to Ice Mountain');
+
+  const request = { player: minePlayer, object: mine, objectId: 17387, clickType: 1, handled: false };
+  h.emit('ladders:climb', request);
+  assert.equal(request.handled, false, 'Roving Elves does not claim the mine ladder');
 });

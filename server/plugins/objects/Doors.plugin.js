@@ -28,6 +28,7 @@ const DOOR_NAMES = new Set([
   "Glass door", "Magic door", "Metal door", "Mind Door", "Mithril door", "Tent door", "Wall",
   "Gate", "Metal gate", "Doorway", "Tree Door", "Storeroom Door", "Ardougne Wall Door",
   "Vitur door", "Myrmel door", "Shadum door", "Jovkai door", "Chained door", "Trapdoor",
+  "Longhall door",
 ]);
 
 // Always name locs by their core.ObjectIdentifiers property (O.DOOR_358), never a raw id: the
@@ -94,6 +95,10 @@ function defineDoorData({ ObjectIdentifiers: O }) {
     [O.GATE_210, O.GATE_211],
     [O.DOOR_47, 2001],
     [O.DOOR_48, 2003],
+    // Barbarian Village Longhall: both leaves open four ids later (11620->11624,
+    // 11621->11625); 11622/11623 are unused actionless locs.
+    [O.LONGHALL_DOOR, O.LONGHALL_DOOR_3],
+    [O.LONGHALL_DOOR_2, O.LONGHALL_DOOR_4],
   ]);
 
   // Tree Gnome Stronghold main gate: one 5x2 loc (190, face 2) opens into two
