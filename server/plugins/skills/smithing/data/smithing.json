@@ -1,0 +1,96 @@
+{
+  "$comment": "What the cache doesn't hold about Smithing. Anvil products (level, bars, amount) come from cache enums 844-846 and their slots from anvil-layout.json (yarn dump:smithing); this file has the furnace recipes and the experience. Item keys are ItemIdentifiers names.",
+  "source": "https://oldschool.runescape.wiki/w/Smithing",
+  "smelting": [
+    {
+      "name": "Bronze bar",
+      "bar": "BRONZE_BAR",
+      "level": 1,
+      "xp": 6.2,
+      "ingredients": [["COPPER_ORE", 1], ["TIN_ORE", 1]]
+    },
+    {
+      "name": "Iron bar",
+      "bar": "IRON_BAR",
+      "level": 15,
+      "xp": 12.5,
+      "ingredients": [["IRON_ORE", 1]],
+      "successChance": 0.5
+    },
+    {
+      "name": "Silver bar",
+      "bar": "SILVER_BAR",
+      "level": 20,
+      "xp": 13.7,
+      "ingredients": [["SILVER_ORE", 1]]
+    },
+    {
+      "name": "Steel bar",
+      "bar": "STEEL_BAR",
+      "level": 30,
+      "xp": 17.5,
+      "ingredients": [["IRON_ORE", 1], ["COAL", 2]]
+    },
+    {
+      "name": "Gold bar",
+      "bar": "GOLD_BAR",
+      "level": 40,
+      "xp": 22.5,
+      "ingredients": [["GOLD_ORE", 1]]
+    },
+    {
+      "name": "Mithril bar",
+      "bar": "MITHRIL_BAR",
+      "level": 50,
+      "xp": 30,
+      "ingredients": [["MITHRIL_ORE", 1], ["COAL", 4]]
+    },
+    {
+      "name": "Adamantite bar",
+      "bar": "ADAMANTITE_BAR",
+      "level": 70,
+      "xp": 37.5,
+      "ingredients": [["ADAMANTITE_ORE", 1], ["COAL", 6]]
+    },
+    {
+      "name": "Runite bar",
+      "bar": "RUNITE_BAR",
+      "level": 85,
+      "xp": 50,
+      "ingredients": [["RUNITE_ORE", 1], ["COAL", 8]]
+    },
+    {
+      "$comment": "https://oldschool.runescape.wiki/w/'perfect'_gold_bar - Family Crest's quest bar.",
+      "name": "'perfect' gold bar",
+      "bar": "PERFECT_GOLD_BAR",
+      "level": 40,
+      "xp": 22.5,
+      "ingredients": [["PERFECT_GOLD_ORE", 1]],
+      "missingMessage": "You need 'perfect' gold ore to smelt this bar.",
+      "successMessage": "You smelt the 'perfect' gold ore into a bar."
+    },
+    {
+      "$comment": "https://oldschool.runescape.wiki/w/Molten_glass - Crafting, made by using sand or soda ash on a furnace; not in the smelt menu.",
+      "name": "Molten glass",
+      "bar": "MOLTEN_GLASS",
+      "level": 1,
+      "xp": 20,
+      "skill": "CRAFTING",
+      "notInMenu": true,
+      "ingredients": [["BUCKET_OF_SAND", 1], ["SODA_ASH", 1]],
+      "missingMessage": "You need sand and soda ash to make glass.",
+      "successMessage": "You heat the sand and soda ash in the furnace to make glass."
+    }
+  ],
+  "$xpPerBar": "Smithing#Smithing_tables: anvil experience is per bar used, whatever the product.",
+  "xpPerBar": {
+    "BRONZE_BAR": 12.5,
+    "IRON_BAR": 25,
+    "STEEL_BAR": 37.5,
+    "MITHRIL_BAR": 50,
+    "ADAMANTITE_BAR": 62.5,
+    "RUNITE_BAR": 75
+  },
+  "$productXp": "Products whose experience isn't the bar's per-bar rate times the bars used.",
+  "productXp": {}
+}

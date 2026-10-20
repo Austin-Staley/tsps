@@ -1,0 +1,99 @@
+/**
+ * Smithing data. The anvil's products come from the cache: enum 846 (product -> level), 845
+ * (-> bars) and 844 (-> amount made), laid out per bar as client script 430 draws them
+ * (data/anvil-layout.json, written by `yarn dump:smithing`). Furnace recipes and experience,
+ * which the cache doesn't hold, are in data/smithing.json.
+ */
+const layout = require("./data/anvil-layout.json");
+const data = require("./data/smithing.json");
+
+/** Interface "smithing", the anvil's product grid. */
+const SMITHING_INTERFACE = 312;
+const AMOUNT_ENUM = 844;
+const BARS_ENUM = 845;
+const LEVEL_ENUM = 846;
+/** Interface component -> the 1-based slot index varbit smithing_item_lasttype holds. */
+const ITEM_LASTTYPE_ENUM = 1101;
+
+/** The furnace recipes, filled in by load() so the bots and the Blast Furnace share one array. */
+const SMELTING_RECIPES = [];
+/** smithing_bar_type value -> bar, and back (enum 1253, as laid out). */
+const BAR_TYPE_BY_BAR = new Map(layout.bars.map(({ barType, bar }) => [bar, barType]));
+
+let core = null;
+let products = null;
+
+/** Resolves the item names in smithing.json. Safe to call again; any plugin's `api.core` will do. */
+function load(apiCore) {
+  if (core) return;
+  core = apiCore;
+  const item = (name) => {
+    const id = core.ItemIdentifiers[name];
+    if (!Number.isInteger(id)) throw new Error(`Smithing: unknown item ${name}`);
+    return id;
+  };
+  for (const recipe of data.smelting) {
+    SMELTING_RECIPES.push({
+      ...recipe,
+      barId: item(recipe.bar),
+      ingredients: recipe.ingredients.map(([name, amount]) => [item(name), amount]),
+      skill: recipe.skill ? core.Skill[recipe.skill] : undefined,
+    });
+  }
+}
+
+/** The bars the furnace's Smelt menu lists, in its order. */
+function smeltMenuRecipes() {
+  return SMELTING_RECIPES.filter((recipe) => !recipe.notInMenu);
+}
+
+/** Every anvil product, by bar: { component, itemId, label, level, bars, amount, xp, members, quest }. */
+function productsByBar() {
+  if (products) return products;
+  const { CacheDefinitions, ItemIdentifiers } = core;
+  const levels = CacheDefinitions.getEnumValues(LEVEL_ENUM);
+  const bars = CacheDefinitions.getEnumValues(BARS_ENUM);
+  const amounts = CacheDefinitions.getEnumValues(AMOUNT_ENUM);
+  const slotIndex = CacheDefinitions.getEnumValues(ITEM_LASTTYPE_ENUM);
+  const xpPerBar = new Map(Object.entries(data.xpPerBar).map(([name, xp]) => [ItemIdentifiers[name], xp]));
+  const productXp = new Map(Object.entries(data.productXp).map(([name, xp]) => [ItemIdentifiers[name], xp]));
+  products = new Map();
+  for (const { bar, slots } of layout.bars) {
+    products.set(bar, slots.map((slot) => {
+      const barsUsed = Number(bars.get(slot.item) ?? 1);
+      return {
+        barId: bar,
+        component: slot.component,
+        slotIndex: Number(slotIndex.get((SMITHING_INTERFACE << 16) | slot.component) ?? 0),
+        itemId: slot.item,
+        label: slot.label,
+        level: Number(levels.get(slot.item)),
+        bars: barsUsed,
+        amount: Number(amounts.get(slot.item) ?? 1),
+        xp: productXp.get(slot.item) ?? (xpPerBar.get(bar) ?? 0) * barsUsed,
+        members: slot.members === true,
+        quest: slot.quest,
+      };
+    }));
+  }
+  return products;
+}
+
+function productsFor(barId) {
+  return productsByBar().get(barId) ?? [];
+}
+
+/** The bars an anvil works, lowest first (the cache's bar-type order). */
+function anvilBars() {
+  return layout.bars.map(({ bar }) => bar);
+}
+
+module.exports = {
+  SMITHING_INTERFACE,
+  SMELTING_RECIPES,
+  BAR_TYPE_BY_BAR,
+  load,
+  smeltMenuRecipes,
+  productsFor,
+  anvilBars,
+};

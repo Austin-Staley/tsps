@@ -1,8 +1,10 @@
 // Run after `yarn build`: node --test tests/smithing.test.cjs
 const assert = require("node:assert/strict");
-const { test, afterEach } = require("node:test");
+const path = require("node:path");
+const { test, before, afterEach } = require("node:test");
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
+const { PluginManager } = require("../dist/plugins/PluginManager");
 const { ItemIds: I } = require("../dist/util/IdEnums");
 const { Skill } = require("../dist/game/model/Skill");
 const Smithing = require("../plugins/skills/Smithing.plugin");
@@ -11,12 +13,17 @@ const buttons = new Map(), objects = new Map(), tasks = [], players = [];
 let disconnect, itemOnObject;
 let denyAnvil = false;
 Smithing.register({
+  core: PluginManager.getCoreApi(),
   getTaskManager: () => ({ submit(task) { task.setRunning(true); tasks.push(task); } }),
   onPlayerDisconnect: handler => { disconnect = handler; },
   onCustomEvent() {}, emitCustomEvent(name, request) { if (name === "smithing:anvil-access") request.denied = denyAnvil; },
   onItemOnObject: handler => { itemOnObject = handler; }, onSpellOnItem() {}, log() {},
   onObjectInteraction: (name, actions) => objects.set(name, actions),
   onInterfaceActionButton: (ids, handler) => { for (const id of ids) buttons.set(id, handler); },
+});
+before(async () => {
+  const { CachePipeline } = require("../dist/game/cache/CachePipeline");
+  await CachePipeline.initialize(path.resolve(__dirname, ".."));
 });
 afterEach(() => { for (const player of players.splice(0)) disconnect({ player }); });
 
