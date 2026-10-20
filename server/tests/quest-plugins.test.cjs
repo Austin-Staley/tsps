@@ -5560,6 +5560,7 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
   meleeMethod.hits = () => [combatHit(nextMeleeDamage)];
   magicMethod.hits = () => [combatHit(nextMagicDamage)];
   combatFactory.addPendingHit = hit => combatHits.push(hit);
+  let playerCombatResets = 0, bossCombatResets = 0;
   const boss = {
     isNpc: () => true,
     isPlayer: () => false,
@@ -5572,7 +5573,7 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     getLocation: () => bossLocation,
     setMultiCombat() {},
     setScriptedMovement(value) { this.scriptedMovement = value; },
-    getCombat: () => ({ getLastAttack: () => ({ reset() {} }) }),
+    getCombat: () => ({ reset() { bossCombatResets++; }, getLastAttack: () => ({ reset() {} }) }),
     performAnimation(animation) { animations.push(animation.getId()); },
     forceChat() {},
     setMaxHitpoints(value) { this.maxHitpoints = value; },
@@ -5585,7 +5586,7 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     for (const handler of handlers.custom.get(name) ?? []) handler(request);
   };
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
-  let playerHitpoints = 100;
+  let playerHitpoints = 100, movementBlocked = false;
   const player = {
     getUsername: () => 'WyrdFightTest',
     getAttribute: (key) => attributes.get(key),
@@ -5612,8 +5613,10 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     getEquipment: () => ({ get: () => null }),
     getMovementQueue: () => ({ canWalk: () => canKnockback, walkStep: (dx, dy) => {
       stepsBack.push([dx, dy]); playerLocation = new api.core.Location(playerLocation.getX() + dx, playerLocation.getY() + dy, 0);
-    } }),
+    }, reset() { return this; }, setBlockMovement(value) { movementBlocked = value; return this; } }),
+    setUntargetable() {},
     getCombat: () => ({
+      reset() { playerCombatResets++; },
       getHitQueue: () => ({ addPendingDamage: (hits) => pendingDamage.push(...hits) }),
       setAttackDelay: (ticks) => attackDelays.push(ticks),
     }),
@@ -5754,6 +5757,14 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     assert.deepEqual(nativeStagesAtTranscript.at(-1), [15464, 146],
       'the overkill fallback sends native stage 146 before the 10% transcript starts');
     assert.ok(transcriptStarts > dialoguesBeforeLethalHit, 'the 10% transcript starts before the NPC enters its death task');
+    assert.equal(movementBlocked, true, 'the mandatory 10% scene locks movement');
+    assert.ok(playerCombatResets > 0 && bossCombatResets > 0, 'story entry clears autoattacks on both actors');
+    dialogueActive = false;
+    movementBlocked = true;
+    wyrdQuest.setStage(player, 90);
+    worldCycle += 1;
+    bossArea.process(boss);
+    assert.equal(dialogueActive, true, 'a cancelled 10% chatbox is reopened on the next free tick');
 
     const playerDeath = handlers.playerBeforeDeath.find(handler => handler.name === 'handleWyrdPlayerBeforeDeath');
     assert.equal(typeof playerDeath, 'function', 'Wyrd deaths are handled in the encounter area');
@@ -5763,6 +5774,7 @@ test('The Wyrd transcript action starts a private encounter with the cache-mappe
     assert.equal(playerHitpoints, 99, 'a failed attempt returns the player with full Hitpoints');
     assert.deepEqual(player.destination, [3506, 9838, 0], 'a failed attempt returns to Veliaf outside the laboratory');
     assert.equal(player.getAttribute('quest.the_blood_moon_rises.wyrd-area'), null, 'the failed instance is cleared for retry');
+    assert.equal(movementBlocked, false, 'death cleanup restores movement controls');
 
     attributes.set('quest.the_blood_moon_rises.wyrd-defeated', true);
     const examine = handlers.custom.get('world:object-examine').at(-1);

@@ -847,7 +847,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     process(mobile) {
       if (!mobile?.isNpc?.()) return;
       const encounter = wyrdEncounters.get(this);
-      if (!encounter || mobile !== encounter.boss || encounter.finished || mobile.getHitpoints() <= 0) return;
+      if (!encounter || mobile !== encounter.boss || encounter.finished) return;
+      if (mobile.getHitpoints() <= 0 && !encounter.pendingEnding) return;
       const now = World.getProcessCycle();
       if (encounter.lastCycle === now) return;
       encounter.lastCycle = now;
@@ -859,20 +860,27 @@ module.exports = function registerTheBloodMoonRises(api) {
       // ends. Keep the encounter dormant until the player's final line lands.
       if (!encounter.introComplete) return;
 
-      const hpPercent = mobile.getHitpoints() / mobile.getMaxHitpoints();
-      const threshold = hpPercent <= 0.1 ? 10 : hpPercent <= 0.5 ? 50 : hpPercent <= 0.8 ? 80 : 0;
-      if (threshold && !encounter.thresholdsSeen.has(threshold)) {
-        encounter.thresholdsSeen.add(threshold);
-        if (threshold === 10) {
-          encounter.ending = true;
-          player.setAttribute(WYRD_CUTSCENE_ATTRIBUTE, true);
-          quest.setStage(player, STAGE.WYRDS);
-        }
-        startTranscript(api, player, mobile.getId(), PAGE, `fighting-wyrds-upon-reaching-${threshold}-hp`);
+      // Never start or consume a threshold while another conversation owns the
+      // chatbox: actual QA shows a walk/attack click cancelling the mandatory
+      // 10% scene when it was started underneath the intro.
+      if (player.getDialogueManager?.()?.isActive?.()) return;
+      if (encounter.pendingEnding || encounter.ending) {
+        // The 10% scene is mandatory. If a movement/attack cancelled its chatbox
+        // before dJZbqF advanced the chapter, reopen it on the next free tick.
+        if (stage(player) === STAGE.WYRDS) startWyrdEnding(encounter);
         return;
       }
-      if (player.getDialogueManager?.()?.isActive?.()) return;
-      if (encounter.ending) return;
+      const hpPercent = mobile.getHitpoints() / mobile.getMaxHitpoints();
+      const threshold = hpPercent <= 0.1 ? 10 : hpPercent <= 0.5 ? 50 : hpPercent <= 0.8 ? 80 : 0;
+      if (threshold === 10) {
+        startWyrdEnding(encounter);
+        return;
+      }
+      if (threshold && !encounter.thresholdsSeen.has(threshold) &&
+        startTranscript(api, player, mobile.getId(), PAGE, `fighting-wyrds-upon-reaching-${threshold}-hp`)) {
+        encounter.thresholdsSeen.add(threshold);
+        return;
+      }
 
       const loc = player.getLocation();
       const px = loc.getX();
@@ -1036,6 +1044,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     clearWyrdPools(encounter, false);
     api.removeNpc(encounter.boss);
     player.getCombat()?.getHitQueue?.().clear?.();
+    Scenes.controls(player, false);
     area.leave(player, false);
     wyrdEncounters.delete(area);
     player.setAttribute(WYRD_AREA_ATTRIBUTE, null);
@@ -2782,6 +2791,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     // instance. Re-entering the fight returns native progress to its 144 step.
     if (player.getAttribute(WYRD_CUTSCENE_ATTRIBUTE)) {
       player.setAttribute(WYRD_CUTSCENE_ATTRIBUTE, false);
+      Scenes.controls(player, false);
       quest.setStage(player, STAGE.WYRDS);
     }
     const area = new WyrdEncounterArea(player.getUsername?.());
@@ -2816,6 +2826,27 @@ module.exports = function registerTheBloodMoonRises(api) {
     return true;
   }
 
+  function startWyrdEnding(encounter) {
+    const { player, boss } = encounter;
+    if (encounter.finished || stage(player) !== STAGE.WYRDS) return false;
+    if (player.getDialogueManager?.()?.isActive?.()) return false;
+    // Native 146 marks the held 10% scene and is published before its first line.
+    player.setAttribute(WYRD_CUTSCENE_ATTRIBUTE, true);
+    quest.setStage(player, STAGE.WYRDS);
+    if (!startTranscript(api, player, boss.getId(), PAGE, "fighting-wyrds-upon-reaching-10-hp")) {
+      player.setAttribute(WYRD_CUTSCENE_ATTRIBUTE, false);
+      return false;
+    }
+    encounter.ending = true;
+    encounter.pendingEnding = false;
+    encounter.thresholdsSeen.add(10);
+    // The 10% scene is mandatory: stop autoattacks, pending targets and movement.
+    player.getCombat().reset();
+    boss.getCombat().reset();
+    Scenes.controls(player, true, true);
+    return true;
+  }
+
   function handleWyrdDeath(event) {
     if (handleSiegeDrakanDeath(event)) return;
     if (handleDrakanDeath(event)) return;
@@ -2825,13 +2856,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (!encounter || npc !== encounter.boss || encounter.finished || event?.killer !== encounter.player) return;
     // A lethal hit can skip over 10% between NPC processing ticks. Keep the same
     // story outcome as the threshold trigger: Safalaan knocks the player out and flees.
-    if (!encounter.ending) {
-      encounter.ending = true;
-      encounter.thresholdsSeen.add(10);
-      encounter.player.setAttribute(WYRD_CUTSCENE_ATTRIBUTE, true);
-      quest.setStage(encounter.player, STAGE.WYRDS);
-      startTranscript(api, encounter.player, npc.getId(), PAGE, "fighting-wyrds-upon-reaching-10-hp");
-    }
+    encounter.pendingEnding = true;
+    startWyrdEnding(encounter);
   }
 
   function handleWyrdBeforeDeath(event) {
@@ -2843,13 +2869,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     // Preserve the boss at that threshold when one large hit would otherwise kill it.
     event.preventDeath = true;
     npc.setHitpoints(110);
-    if (!encounter.ending) {
-      encounter.ending = true;
-      encounter.thresholdsSeen.add(10);
-      encounter.player.setAttribute(WYRD_CUTSCENE_ATTRIBUTE, true);
-      quest.setStage(encounter.player, STAGE.WYRDS);
-      startTranscript(api, encounter.player, npc.getId(), PAGE, "fighting-wyrds-upon-reaching-10-hp");
-    }
+    encounter.pendingEnding = true;
+    startWyrdEnding(encounter);
   }
 
   function cleanupWyrdEncounter({ player } = {}) {
@@ -2860,6 +2881,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       encounter.finished = true;
       clearWyrdPools(encounter, false);
       api.removeNpc(encounter.boss);
+      Scenes.controls(player, false);
       area.leave(player, false);
       wyrdEncounters.delete(area);
     }
@@ -6075,6 +6097,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       }
       player.setAttribute(WYRD_AREA_ATTRIBUTE, null);
       player.setAttribute(WYRD_CUTSCENE_ATTRIBUTE, false);
+      Scenes.controls(player, false);
       player.setAttribute(WYRD_DEFEATED_ATTRIBUTE, true);
       advance(player, STAGE.WYRD_DEFEATED);
       player.moveTo(new Location(3562, 3322, 0));

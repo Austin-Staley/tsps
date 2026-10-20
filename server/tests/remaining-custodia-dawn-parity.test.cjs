@@ -161,6 +161,7 @@ function player(level = 99, current = 99) {
     sendObject: object => { clientSpawns.push(object); return packet; },
     sendInterface: id => { p.interface = id; return packet; },
     sendInterfaceScript: (id, args) => { p.interfaceScript = { id, args }; return packet; },
+    sendEnterAmountPrompt: title => { p.amountPrompt = title; return packet; },
   }, { get: (t, key) => t[key] ?? (() => packet) });
   const p = {
     attrs, items, configs, varbits, log, clientRemovals, clientSpawns, messages: [], camera: [], full: false,
@@ -363,7 +364,9 @@ test('The Final Dawn mirrors Quest Helper progress varbits from actual progress 
   p.items.set(I.ROOT_KINDLING, 20);
   for (const [need, expected] of [[2, 1], [6, 2], [6, 3]]) {
     h.object(p, 56690, 1, { x: 1282, y: 9445, z: 1 });
-    h.choose(p, String(need));
+    if (p.manager.getCurrent()) p.manager.advance();
+    assert.ok(p.amountAction, `moon countdialog step ${expected}`);
+    p.amountAction.execute(need);
     assert.equal(p.varbits.get(16677), expected, `moon progress step ${expected}`);
   }
 
@@ -1290,15 +1293,74 @@ test('The Final Dawn Ancient roots Fletch uses the captured action and knife bla
   assert.equal(p.items.get(I.ROOT_KINDLING), 4);
 });
 
-test('The Final Dawn moon statue asks for the captured kindling count', () => {
+test('The Final Dawn moon statue uses the captured countdialog for 2/6/6 kindling', () => {
   const h = harness('TheFinalDawn'), p = player();
+  const moon = 'quest.the_final_dawn.moon';
   h.quest.setStage(p, 55);
-  p.items.set(I.ROOT_KINDLING, 8);
+  p.attrs.set('quest.the_final_dawn.sun', 3);
+  p.items.set(I.ROOT_KINDLING, 14);
+
+  // Progress 0 opens the captured burnt-kindling messagebox, then the native amount prompt.
   h.object(p, 56690);
-  assert.ok(p.prompt);
-  h.choose(p, '2');
-  assert.equal(p.attrs.get('quest.the_final_dawn.moon'), 1);
-  assert.equal(p.items.get(I.ROOT_KINDLING), 6);
+  assert.equal(p.prompt, undefined, 'no invented 8-option chatbox prompt');
+  assert.ok(p.manager.getCurrent(), 'messagebox is shown first');
+  p.manager.advance();
+  assert.equal(p.amountPrompt, 'How much kindling do you want to place on the statue? (1 - 14)');
+  assert.ok(p.amountAction, 'countdialog is armed');
+
+  // Wrong amount burns what was offered and does not advance.
+  p.amountAction.execute(1);
+  assert.equal(p.attrs.get(moon) ?? 0, 0);
+  assert.equal(p.items.get(I.ROOT_KINDLING), 13);
+  assert.ok(p.messages.includes('<col=ff3045>The statue rejects the kindling and incinerates it.'));
+  assert.equal(p.amountAction, null, 'wrong amount clears the stale prompt');
+
+  // More than held is refused without consuming anything.
+  h.object(p, 56690);
+  p.manager.advance();
+  assert.equal(p.amountPrompt, 'How much kindling do you want to place on the statue? (1 - 13)');
+  p.amountAction.execute(99);
+  assert.equal(p.attrs.get(moon) ?? 0, 0);
+  assert.equal(p.items.get(I.ROOT_KINDLING), 13);
+  assert.ok(p.messages.includes('You do not have that much kindling.'));
+
+  // Captured order-2 offerings: 2, 6, 6.
+  h.object(p, 56690);
+  p.manager.advance();
+  p.amountAction.execute(2);
+  assert.equal(p.attrs.get(moon), 1);
+  assert.equal(p.items.get(I.ROOT_KINDLING), 11);
+
+  h.object(p, 56690);
+  assert.equal(p.amountPrompt, 'How much kindling do you want to place on the statue? (1 - 11)');
+  p.amountAction.execute(6);
+  assert.equal(p.attrs.get(moon), 2);
+  assert.equal(p.items.get(I.ROOT_KINDLING), 5);
+
+  // The third offer still needs 6; 5 held is refused, then 6 completes the statue.
+  h.object(p, 56690);
+  p.amountAction.execute(6);
+  assert.equal(p.attrs.get(moon), 2);
+  assert.equal(p.items.get(I.ROOT_KINDLING), 5);
+  p.items.set(I.ROOT_KINDLING, 7);
+  h.object(p, 56690);
+  p.amountAction.execute(6);
+  assert.equal(p.attrs.get(moon), 3);
+  assert.equal(p.items.get(I.ROOT_KINDLING), 1);
+  assert.equal(h.quest.getStage(p), 60);
+  assert.ok(p.messages.includes('<col=229628>The ruins shake as you activate the final statue.'));
+});
+
+test('The Final Dawn moon statue ignores clicks outside the cavern stages', () => {
+  const h = harness('TheFinalDawn'), p = player();
+  p.items.set(I.ROOT_KINDLING, 6);
+  for (const stage of [54, 62]) {
+    h.quest.setStage(p, stage);
+    h.object(p, 56690);
+    assert.equal(p.amountAction, undefined, `no prompt at stage ${stage}`);
+    assert.equal(p.amountPrompt, undefined, `no prompt title at stage ${stage}`);
+    assert.equal(p.attrs.get('quest.the_final_dawn.moon') ?? 0, 0);
+  }
 });
 
 test('The Final Dawn temple chest validates the captured four-pin code, first attempt allowed', () => {

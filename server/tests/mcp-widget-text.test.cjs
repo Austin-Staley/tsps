@@ -74,3 +74,35 @@ test('widget reads are capped at 100 packed ids', () => {
   assert.doesNotThrow(() => schema.parse({ player: 'qa', widgets: Array.from({ length: 100 }, (_, i) => i) }));
   assert.throws(() => schema.parse({ player: 'qa', widgets: Array.from({ length: 101 }, (_, i) => i) }));
 });
+
+// Dialogue amount prompts use the native resume_countdialog packet, not a quest-specific shortcut.
+const dialogueTools = {};
+const sentPackets = [];
+let amountPromptOpen = false;
+require('../plugins/agent/mcp/Dialogue.AgentMcp')({
+  core: { MultiChatboxPrompt: { getPending: () => null } },
+  tool: (name, _description, _schema, handler) => { dialogueTools[name] = handler; },
+  z,
+  player: z.string(),
+  find: () => ({
+    getEnteredAmountAction: () => (amountPromptOpen ? {} : null),
+    getDialogueManager: () => ({ getCurrent: () => null }),
+  }),
+  send: (_player, packet) => { sentPackets.push(packet); return {}; },
+  status: () => ({}),
+  sleepTicks: async () => {},
+});
+
+test('dialogue_amount sends the native client amount packet only while an amount prompt is open', async () => {
+  amountPromptOpen = false;
+  await assert.rejects(
+    dialogueTools.dialogue_amount({ player: 'qa', amount: 6 }),
+    /No enter-amount prompt is open/
+  );
+  assert.deepEqual(sentPackets, []);
+
+  amountPromptOpen = true;
+  const result = await dialogueTools.dialogue_amount({ player: 'qa', amount: 6 });
+  assert.deepEqual(sentPackets, [{ type: 'dialogue_amount', amount: 6 }]);
+  assert.equal(result.amount, 6);
+});

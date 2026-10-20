@@ -66,7 +66,9 @@
  */
 module.exports = function registerTheFinalDawnQuest(api) {
   const {
+    ActionDialogue,
     CountdownTask,
+    DialogueChainBuilder,
     Equipment,
     GameObject,
     Item,
@@ -76,6 +78,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
     ObjectManager,
     RegionManager,
     Skill,
+    StatementDialogue,
     TaskManager,
   } = api.core;
   const { registerQuest, startTranscript, loadTranscripts, refreshQuestList } = require("../QuestRuntime");
@@ -567,6 +570,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
   const teumoBarrels = new WeakMap();
   const teumoFireplace = new WeakMap();
   const strangeTileArrivals = new WeakMap();
+  const moonKindlingPrompt = new WeakMap();
   const Scenes = createQuestScenes(api);
   let quest;
 
@@ -1873,38 +1877,8 @@ module.exports = function registerTheFinalDawnQuest(api) {
 
     if (objectId === MOON_STATUE_OBJECT) {
       event.handled = true;
-      if (stage < STAGE_CAVERN) return;
-      const progress = Number(player.getAttribute(MOON_ATTRIBUTE)) || 0;
-      if (progress >= 3) {
-        player.sendMessage("There looks to be a small amount of burnt kindling around the statue.");
-        return;
-      }
-      if (player.getInventory().getAmount(ROOT_KINDLING_ITEM) <= 0) {
-        player.sendMessage("There looks to be a small amount of burnt kindling around the statue.");
-        return;
-      }
-      const need = moonNeed(player, progress);
-      api.sendMultiChatboxPrompt(player, "How much kindling?", ...Array.from({ length: 8 }, (_, i) => [`${i + 1}`, () => {
-        const amount = i + 1;
-        const heldKindling = player.getInventory().getAmount(ROOT_KINDLING_ITEM);
-        if (heldKindling < amount) { player.sendMessage("You do not have that much kindling."); return; }
-        player.getInventory().deleteNumber(ROOT_KINDLING_ITEM, amount);
-        if (amount !== need) {
-          player.sendMessage("The statue rejects the kindling and incinerates it.");
-          return;
-        }
-        const next = progress + 1;
-        player.setAttribute(MOON_ATTRIBUTE, next);
-        syncQuestVarbits(player);
-        if (next >= 3) {
-          player.sendMessage("The statue lights up with energy as it accepts your offering of kindling.");
-          player.sendMessage("Nice work! I think you did it!");
-          if ((Number(player.getAttribute(SUN_ATTRIBUTE)) || 0) >= 3) setStage(player, STAGE_PUZZLES_DONE);
-          return;
-        }
-        player.sendMessage("The statue seems to glow as it accepts your offering of kindling.");
-        if (progress === 0) player.sendMessage("Whatever you're doing seems to be working. Keep at it!");
-      }]).flat());
+      if (stage < STAGE_CAVERN || stage > STAGE_DOORS) return;
+      openMoonKindling(player);
       return;
     }
 
@@ -2066,6 +2040,80 @@ module.exports = function registerTheFinalDawnQuest(api) {
   function moonNeed(player, progress) {
     player.getPacketSender().sendVarbit(MOON_ORDER_VARBIT, 2);
     return MOON_KINDLING_NEEDS[progress] ?? MOON_KINDLING_NEEDS[0];
+  }
+
+  /**
+   * Capture 3128: clicking the moon statue shows the burnt-kindling messagebox once before the
+   * first successful offering, then opens the native numeric prompt
+   * "How much kindling do you want to place on the statue? (1 - <held>)"
+   * (meslayer_mode7 / resume_countdialog).
+   */
+  function cancelMoonKindlingPrompt(player) {
+    const action = moonKindlingPrompt.get(player);
+    if (action && player.getEnteredAmountAction?.() === action) player.setEnteredAmountAction(null);
+    moonKindlingPrompt.delete(player);
+  }
+
+  function openMoonKindling(player) {
+    cancelMoonKindlingPrompt(player);
+    const progress = Number(player.getAttribute(MOON_ATTRIBUTE)) || 0;
+    const held = player.getInventory().getAmount(ROOT_KINDLING_ITEM);
+    if (progress >= 3 || held <= 0) {
+      player.sendMessage("There looks to be a small amount of burnt kindling around the statue.");
+      return;
+    }
+    moonNeed(player, progress);
+    if (progress === 0) {
+      player.getDialogueManager().startDialogues(new DialogueChainBuilder()
+        .add(new StatementDialogue(0, "There looks to be a small amount of burnt kindling around the statue."))
+        .add(new ActionDialogue(1, { execute: () => startMoonKindlingPrompt(player, held) })));
+      return;
+    }
+    startMoonKindlingPrompt(player, held);
+  }
+
+  function startMoonKindlingPrompt(player, held) {
+    player.getDialogueManager().reset();
+    const action = { execute: (amount) => handleMoonKindlingAmount(player, action, amount) };
+    moonKindlingPrompt.set(player, action);
+    player.setEnteredAmountAction(action);
+    player.getPacketSender().sendEnterAmountPrompt(
+      `How much kindling do you want to place on the statue? (1 - ${held})`
+    );
+  }
+
+  function handleMoonKindlingAmount(player, action, amount) {
+    if (moonKindlingPrompt.get(player) !== action) return;
+    if (player.getEnteredAmountAction?.() !== action) return;
+    cancelMoonKindlingPrompt(player);
+    if (quest.getStage(player) < STAGE_CAVERN || quest.getStage(player) > STAGE_DOORS) return;
+    const progress = Number(player.getAttribute(MOON_ATTRIBUTE)) || 0;
+    if (progress >= 3) return;
+    const held = player.getInventory().getAmount(ROOT_KINDLING_ITEM);
+    if (!Number.isInteger(amount) || amount <= 0) return;
+    if (held < amount) {
+      player.sendMessage("You do not have that much kindling.");
+      return;
+    }
+    const need = moonNeed(player, progress);
+    player.getInventory().deleteNumber(ROOT_KINDLING_ITEM, amount);
+    if (amount !== need) {
+      player.sendMessage("<col=ff3045>The statue rejects the kindling and incinerates it.");
+      return;
+    }
+    const next = progress + 1;
+    player.setAttribute(MOON_ATTRIBUTE, next);
+    syncQuestVarbits(player);
+    if (next >= 3) {
+      player.sendMessage("<col=a53fff>The statue lights up with energy as it accepts your offering of kindling.");
+      if ((Number(player.getAttribute(SUN_ATTRIBUTE)) || 0) >= 3) {
+        setStage(player, STAGE_PUZZLES_DONE);
+        player.sendMessage("<col=229628>The ruins shake as you activate the final statue.");
+      }
+      return;
+    }
+    player.sendMessage("<col=a53fff>The statue seems to glow as it accepts your offering of kindling.");
+    if (progress === 0) player.sendMessage("Whatever you're doing seems to be working. Keep at it!");
   }
 
   /** Three successful imbues require the player and Itzla at the engraved altars. */
@@ -2709,6 +2757,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
 
   function handleLogout({ player }) {
     if (!player) return;
+    cancelMoonKindlingPrompt(player);
     Scenes.end(player, true);
     stopTemplePatrol(player);
     clearSafehouseTopObjects(player);

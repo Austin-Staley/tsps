@@ -65,7 +65,7 @@ function harness({ realObjects = false } = {}) {
         isPlayer: () => false, getAsNpc() { return npc; }, getLocation: () => new core.Location(definition.x, definition.y, definition.z),
         getHitpoints: () => npc.hp ?? 1, setHitpoints(value) { npc.hp = value; }, getArea: () => npc.area ?? null, setArea(value) { npc.area = value; }, getOwner: () => definition.owner,
         getMovementQueue: () => ({ reset() { return this; }, setBlockMovement: noop, addFirstStep: noop }),
-        getCombat: () => ({ attack: noop, getLastAttack: () => ({ reset: noop }) }), remove: noop,
+        getCombat: () => ({ reset: noop, attack: noop, getLastAttack: () => ({ reset: noop }) }), remove: noop,
         setMaxHitpoints: noop, setScriptedMovement: noop, setMultiCombat: noop, setNpcTransformationId: noop,
         setFlag: noop, performAnimation: noop, performGraphic: noop, forceChat: noop,
         setPositionToFace: noop, exactMove: noop, setFollowing: noop };
@@ -111,7 +111,8 @@ function player(name = 'Parity') {
     getArea: () => area, getPrivateArea: () => area, setArea: value => { area = value; },
     isPlayer: () => true, isNpc: () => false, getAsPlayer: () => p, isRegistered: () => true,
     getIndex: () => p.index, getUsername: () => name, getAppearance: () => ({ isMale: () => true }), sendMessage: text => messages.push(text),
-    setPositionToFace: noop, forceChat: noop, performAnimation: noop, setUntargetable: noop, getCombat: () => ({ getHitQueue: () => ({ addPendingDamage: noop }) }),
+    getHitpoints: () => p.hitpoints ?? 99,
+    setPositionToFace: noop, forceChat: noop, performAnimation: noop, setUntargetable: noop, getCombat: () => ({ reset: noop, getHitQueue: () => ({ addPendingDamage: noop }) }),
   };
   p.manager = new DialogueManager(p);
   return p;
@@ -1242,6 +1243,85 @@ test('native 128 raw theatre parents resolve and native 140 spawns the captured 
   assert.ok(talk({ player: p, npcId: 15874, definition: { getName: () => 'Veliaf Hurtz' } }));
   assert.equal(p.varbits.get(15464), 142);
   assert.ok(p.manager.getCurrent(), 'canonical fighting-wyrds conversation starts');
+});
+
+test('Wyrd 10% story starts on a real HP jump, survives a cancelled chatbox, and completes the scene', () => {
+  const h = harness(), p = player('WyrdTen');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 90);
+  h.emit('npc-dialogue:action', { player: p, stepId: '4G5OZg', kind: 'action' });
+  const boss = h.npcs.find(npc => npc.id === core.NpcIdentifiers.WYRD_8);
+  assert.ok(boss, 'the Wyrd spawns');
+  boss.getMaxHitpoints = () => 1100;
+  const activate = { player: p, text: 'Then stay... Stay and die!', step: { speaker: 'Wyrd' },
+    pages: [{ page: 'The Blood Moon Rises', variants: ['fighting-wyrds'] }] };
+  h.emit('npc-dialogue:line', activate);
+  activate.after();
+  const area = p.getPrivateArea();
+  const originalCycle = h.api.core.World.getProcessCycle;
+  let cycle = 1000;
+  h.api.core.World.getProcessCycle = () => ++cycle;
+  try {
+    boss.setHitpoints(0);
+    h.emit('npc-before-death', { npc: boss, killer: p });
+    assert.equal(boss.getHitpoints(), 110, 'a lethal hit is held at the 10% story threshold');
+    assert.equal(p.manager.getCurrent()?.getText?.(), 'Argh!', 'the real 10% transcript starts');
+    assert.equal(p.movementBlocked, true, 'the mandatory story locks movement');
+
+    p.manager.reset();
+    area.process(boss);
+    assert.equal(p.manager.getCurrent()?.getText?.(), 'Argh!', 'a cancelled chatbox reopens the 10% story');
+    assert.equal(p.movementBlocked, true, 'the retry keeps movement locked');
+
+    let guard = 200;
+    while (p.manager.isActive() && guard-- > 0) p.manager.advance();
+    assert.equal(h.quest.getStage(p), 95, 'the real scene action completes the Wyrd chapter');
+    assert.equal(p.varbits.get(15464), 148, 'native 148 is reached');
+    assert.equal(p.attrs.get('quest.the_blood_moon_rises.wyrd-defeated'), true);
+    assert.equal(p.movementBlocked, false, 'movement is restored after the scene');
+  } finally {
+    h.api.core.World.getProcessCycle = originalCycle;
+  }
+});
+
+test('Wyrd normal 80/50/10 story thresholds play in order without duplicates', () => {
+  const h = harness(), p = player('WyrdNormal');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 90);
+  h.emit('npc-dialogue:action', { player: p, stepId: '4G5OZg', kind: 'action' });
+  const boss = h.npcs.find(npc => npc.id === core.NpcIdentifiers.WYRD_8);
+  boss.getMaxHitpoints = () => 1100;
+  const activate = { player: p, text: 'Then stay... Stay and die!', step: { speaker: 'Wyrd' },
+    pages: [{ page: 'The Blood Moon Rises', variants: ['fighting-wyrds'] }] };
+  h.emit('npc-dialogue:line', activate);
+  activate.after();
+  const area = p.getPrivateArea();
+  const originalCycle = h.api.core.World.getProcessCycle;
+  let cycle = 2000;
+  h.api.core.World.getProcessCycle = () => ++cycle;
+  const finish = () => { let guard = 100; while (p.manager.isActive() && guard-- > 0) p.manager.advance(); };
+  try {
+    boss.setHitpoints(880);
+    area.process(boss);
+    assert.ok(p.manager.getCurrent()?.getText?.().includes('Leave!'), 'the captured 80% line plays');
+    finish();
+    assert.equal(p.manager.isActive(), false, 'the 80% conversation completes once');
+
+    boss.setHitpoints(550);
+    area.process(boss);
+    assert.ok(p.manager.getCurrent()?.getText?.().includes('Hunger!'), 'the captured 50% line plays');
+    finish();
+
+    boss.setHitpoints(110);
+    area.process(boss);
+    assert.equal(p.manager.getCurrent()?.getText?.(), 'Argh!', 'the captured 10% line plays');
+    finish();
+    assert.equal(h.quest.getStage(p), 95, 'the normal threshold route also completes the scene');
+    assert.equal(p.varbits.get(15464), 148);
+    assert.equal(p.movementBlocked, false);
+  } finally {
+    h.api.core.World.getProcessCycle = originalCycle;
+  }
 });
 
 test('gathering threshold spawns Ivan then Sugadinti and both reach the same canon', () => {
