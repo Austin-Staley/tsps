@@ -23,8 +23,13 @@ function made({ player, itemId }) {
   }
 }
 
-module.exports = function attachDiaries(pluginApi) {
+function init(pluginApi) {
   api = pluginApi;
   tasks = DATA.diaryTasks.map((task) => ({ ...task, itemIds: new Set(task.items.map(Shared.itemId)) }));
-  api.onCustomEvent("fletching:made", made);
-};
+}
+
+function attach(pluginApi) {
+  pluginApi.onCustomEvent("fletching:made", made);
+}
+
+module.exports = { init, attach };

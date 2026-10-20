@@ -19,11 +19,16 @@ function stop({ player }) {
   Shared.stopFletching(player);
 }
 
-module.exports = function attachRecipes(api) {
+function init() {
   knifeId = Shared.itemId("KNIFE");
   barkId = Shared.itemId("CELASTRUS_BARK");
+}
+
+function attach(api) {
   api.onItemOnItem(itemOnItem, { noted: false });
   api.onItemAction("Celastrus bark", { Fletch: fletchBark });
   api.onPlayerDisconnect(stop);
   api.onCustomEvent("level-up:popup-opened", stop);
 };
+
+module.exports = { init, attach };

@@ -16,6 +16,7 @@ const I = core.ItemIdentifiers;
 const hooks = { itemOnItem: [], itemActions: {}, events: {}, tasks: [] };
 /** Answers for the events Fletching asks other plugins: quest state and Slayer unlocks. */
 const answers = { started: new Set(), complete: new Set(), unlocks: new Set() };
+const diaryTasks = [];
 let Shared = null;
 
 function fakeApi() {
@@ -33,12 +34,13 @@ function fakeApi() {
       if (name === "quest:is-started") event.started = answers.started.has(event.key);
       if (name === "quest:is-complete") event.complete = answers.complete.has(event.key);
       if (name === "slayer:has-unlock") event.unlocked = answers.unlocks.has(event.name);
+      if (name === "diary:task") diaryTasks.push(`${event.diary}:${event.task}`);
       for (const handler of hooks.events[name] ?? []) handler(event);
     },
   };
 }
 
-function player({ level = 99, items = {} } = {}) {
+function player({ level = 99, items = {}, at = [3000, 3000] } = {}) {
   const counts = new Map(Object.entries(items).map(([name, n]) => [I[name], n]));
   const attrs = new Map(), varbits = new Map(), messages = [], animations = [];
   let menu = null, xp = 0;
@@ -61,7 +63,7 @@ function player({ level = 99, items = {} } = {}) {
     getEquipment: () => ({ contains: () => false }),
     getPacketSender: () => sender,
     getSkillManager: () => ({ getCurrentLevel: () => level, addExperiences: (skill, amount) => { xp += amount; } }),
-    getLocation: () => new core.Location(3000, 3000, 0),
+    getLocation: () => new core.Location(at[0], at[1], 0),
     getForceMovement: () => null,
     isRegistered: () => true,
     getHitpoints: () => 99,
@@ -100,6 +102,7 @@ beforeEach(() => {
   answers.started.clear();
   answers.complete.clear();
   answers.unlocks.clear();
+  diaryTasks.length = 0;
 });
 
 test("every recipe resolves to cache items, animations and varbits", () => {
@@ -253,4 +256,21 @@ test("a fletching knife takes a tick off each log after the first", () => {
   ticks = 0;
   while (quick.isRunning()) { quick.execute(); ticks++; }
   assert.equal(ticks, 2 + 2 + 2);
+});
+
+test("the Gnome Stronghold diary task counts stringing an oak shortbow there, not cutting it", () => {
+  const p = player({ at: [2440, 3430], items: { KNIFE: 1, OAK_LOGS: 1, BOW_STRING: 1 } });
+  use(p, "KNIFE", "OAK_LOGS");
+  p.menu().execute(I.OAK_SHORTBOW_U_, 1);
+  runTask();
+  assert.deepEqual(diaryTasks, []);
+  use(p, "BOW_STRING", "OAK_SHORTBOW_U_");
+  runTask();
+  assert.equal(p.count("OAK_SHORTBOW"), 1);
+  assert.deepEqual(diaryTasks, ["western:fletch-an-oak-shortbow-in-the-gnome-stronghold"]);
+
+  const away = player({ items: { OAK_SHORTBOW_U_: 1, BOW_STRING: 1 } });
+  use(away, "BOW_STRING", "OAK_SHORTBOW_U_");
+  runTask();
+  assert.equal(diaryTasks.length, 1);
 });

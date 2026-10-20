@@ -30,8 +30,8 @@
     "parts": { "ticks": 2, "menu": "make", "animation": "human_fletching" }
   },
   "diaryTasks": [
-    { "diary": "western", "task": "fletch-an-oak-shortbow-in-the-gnome-stronghold", "items": ["OAK_SHORTBOW_U_", "OAK_SHORTBOW"], "areas": [[2370, 2500, 3380, 3520]] },
-    { "diary": "western", "task": "fletch-a-magic-longbow-in-tirannwn", "items": ["MAGIC_LONGBOW_U_", "MAGIC_LONGBOW"], "areas": [[2140, 2370, 3060, 3330], [3200, 3330, 5950, 6150]] },
+    { "diary": "western", "task": "fletch-an-oak-shortbow-in-the-gnome-stronghold", "items": ["OAK_SHORTBOW"], "areas": [[2370, 2500, 3380, 3520]] },
+    { "diary": "western", "task": "fletch-a-magic-longbow-in-tirannwn", "items": ["MAGIC_LONGBOW"], "areas": [[2140, 2370, 3060, 3330], [3200, 3330, 5950, 6150]] },
     { "diary": "desert", "task": "fletch-some-dragon-darts-at-the-bedabin-camp", "items": ["DRAGON_DART"], "areas": [[3160, 3190, 3020, 3055]] }
   ],
   "recipes": [

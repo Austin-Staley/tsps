@@ -165,13 +165,15 @@ function login({ player }) {
   sendVarbits(player);
 }
 
-module.exports = function attachSpool(api) {
+function init(api) {
   core = api.core;
   spoolId = Shared.itemId("BOW_STRING_SPOOL");
   bowStringId = Shared.itemId("BOW_STRING");
   Shared.registerVirtualMaterial(bowStringId, SOURCE);
   Shared.addTriggerAlias(spoolId, bowStringId);
+}
 
+function attach(api) {
   api.persistAttribute(CHARGES_ATTRIBUTE, 0);
   api.persistAttribute(SPARES_ATTRIBUTE, 0);
   api.onPlayerLogin(login);
@@ -179,7 +181,6 @@ module.exports = function attachSpool(api) {
   api.onItemOnItem("Bow string", "Bow string spool", stringsOnSpool);
   api.onItemOnItem("Bow string spool", "Bow string spool", combineSpools, { noted: false });
   api.onCustomEvent("crafting:spun", absorbSpun);
-};
+}
 
-module.exports.CAPACITY_BY_SPARES = CAPACITY_BY_SPARES;
-module.exports.CHARGES_ATTRIBUTE = CHARGES_ATTRIBUTE;
+module.exports = { init, attach, CAPACITY_BY_SPARES, CHARGES_ATTRIBUTE };

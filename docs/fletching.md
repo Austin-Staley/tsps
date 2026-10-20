@@ -29,12 +29,12 @@ Status:
   - **Other assembled items:** the mith grapple, the light and heavy ballistae, the webweaver bow (u).
   - **Requirements:**
     - Big Chompy Bird Hunting started (ogre arrows);
-    - Zogre Flesh Eaters (comp ogre bow, brutal arrows);
+    - Zogre Flesh Eaters: completed for the unstrung comp bow, started for stringing it and for brutal arrows (the Wiki recipes say "Completion" and "Partial completion" respectively);
     - the Slayer unlock Broader Fletching (broad arrows, broad bolts, amethyst broad bolts).
   - **Make-X for darts and bolts:** All Settings 316, varbit `option_fletch_dart_or_bolt_makex`. Off (the default), each click makes one set at once; on, a menu of up to 10 sets.
   - **The fletching knife:** a tick off each knife action after the first.
   - **The bow string spool:** account-bound bow strings, Fill/Check/Empty, notes, spare spools for capacity, stringing from it, and filling it from spun bow strings through `crafting:spun`.
-  - **Achievement diaries:** the oak shortbow in the Gnome Stronghold and the magic longbow in Tirannwn (Western Provinces), and dragon darts at the Bedabin Camp (Desert).
+  - **Achievement diaries:** stringing an oak shortbow in the Gnome Stronghold and a magic longbow in Tirannwn (Western Provinces), and dragon darts at the Bedabin Camp (Desert). The Wiki lists each bow task's items as the unstrung bow and a bow string, so cutting the unstrung bow doesn't count. The Wiki gives no bounds for these places: the Bedabin Camp box is the one desert heat uses, and the Gnome Stronghold and Tirannwn (with Prifddinas) boxes are our estimates around their walls and towns.
 - **Not done:**
   - "Smith and fletch ten rune darts within Varrock" (Varrock elite): there is no Smithing signal to pair it with yet.
   - Filterable ("spam") chat messages, which the server doesn't support yet.
@@ -52,6 +52,8 @@ Status:
 | `Recipes.Fletching.js` | Item on item and celastrus bark's Fletch option. |
 | `Spool.Fletching.js` | The bow string spool. |
 | `Diaries.Fletching.js` | The diary tasks done by fletching something in a place. |
+
+Each unit has an `init` (ids, recipes, the spool as a bow string source) and an `attach` (hooks only), run in that order as the Slayer plugin does.
 
 A recipe in `fletching.json` takes its group's defaults (tool, ticks, menu, animation, sound, message) and overrides what differs. It starts from one item pair: its tool on its first material, or its first material on its second. Every recipe one pair starts shares a menu, so a knife on teak logs offers the teak stock and the hunter's spear together.
 
@@ -93,4 +95,5 @@ No capture covers knife on logs, gem tips, javelins, shields, the spool or the V
 - gem tips and tipping;
 - the Broader Fletching and quest gates;
 - the spool;
-- the fletching knife's timing.
+- the fletching knife's timing;
+- the diary task (strung bow only, inside the area).
