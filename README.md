@@ -37,7 +37,7 @@ Run `yarn start`. Your world appears in the World list once it registers. Keep t
 
 ## Links
 
-- [Discord](https://discord.gg/3dzttF2q73) — questions, help and development chat
+- [Discord](https://discord.gg/Xh7vKxEV) — questions, help and development chat
 - [Progress](https://rsps.app/progress) — how much of OSRS is implemented, by category
 - [Host a world](https://rsps.app/host)
 
