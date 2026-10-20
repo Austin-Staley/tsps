@@ -11,6 +11,9 @@ const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManage
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
 const runtime = require('../plugins/quests/QuestRuntime');
+const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
+const { TaskManager } = require('../dist/game/task/TaskManager');
+const { World } = require('../dist/game/World');
 const core = PluginManager.getCoreApi();
 const I = core.ItemIdentifiers, N = core.NpcIdentifiers, O = core.ObjectIdentifiers;
 let nextIndex = 1;
@@ -22,7 +25,19 @@ before(async () => {
 });
 
 function harness(name) {
-  const hooks = {}, events = {}, tasks = [], npcs = [], removed = [], ground = [], objects = [], npcActions = new Map(), completedQuests = new Set();
+  const hooks = {}, events = {}, tasks = [], npcs = [], removed = [], ground = [], objects = [], npcActions = new Map(), completedQuests = new Set(), worldItems = [];
+  function registerGround(p, item, position) {
+    const object = {
+      removed: false,
+      getItem: () => item,
+      getOwner: () => p.getUsername(),
+      getPosition: () => position,
+      isPendingRemoval: () => object.removed,
+    };
+    worldItems.push(object);
+    ground.push([p, item, position]);
+    return object;
+  }
   const api = new Proxy({
     core: {
       ...core,
@@ -49,7 +64,16 @@ function harness(name) {
       else (events[key] ?? []).forEach(fn => fn(event));
     },
     getObjectManager: () => ({ register: object => objects.push(object), deregister: object => { const i = objects.indexOf(object); if (i >= 0) objects.splice(i, 1); } }),
-    getItemOnGroundManager: () => ({ registerLocation: (...args) => ground.push(args) }),
+    getItemOnGroundManager: () => ({
+      registerLocation: (p, item, position) => registerGround(p, item, position),
+      registerNonGlobals: (p, item, position) => { registerGround(p, item, position); },
+      deregister: (object) => {
+        const index = worldItems.indexOf(object);
+        if (index >= 0) worldItems.splice(index, 1);
+        object.removed = true;
+      },
+    }),
+    getWorld: () => ({ getItems: () => worldItems.filter(object => !object.removed) }),
     sendMultiChatboxPrompt(p, title, ...pairs) {
       p.prompt = { title, options: pairs.filter((_, i) => i % 2 === 0), pairs };
       return true;
@@ -68,7 +92,7 @@ function harness(name) {
     return null;
   };
   const h = {
-    api, hooks, events, tasks, npcs, removed, ground, objects, npcActions, completedQuests,
+    api, hooks, events, tasks, npcs, removed, ground, objects, npcActions, completedQuests, worldItems,
     quest: Array.isArray(name) ? runtime.getRegisteredQuests().find(q => q.key === 'defender_of_varrock') : runtime.getRegisteredQuests().at(-1),
     quests: runtime.getRegisteredQuests(),
     emit: (name, event) => (events[name] ?? []).forEach(fn => fn(event)),
@@ -124,6 +148,7 @@ function player() {
     attrs, items, configs, varbits, log, xp, levels, messages: [], prompt: null, text: '', index: nextIndex++,
     getAttribute: key => attrs.get(key), setAttribute: (key, value) => attrs.set(key, value),
     getInventory: () => inv,
+    getBanks: () => [{ getAmount: id => p.bank?.get(id) ?? 0 }],
     getEquipment: () => ({ getItems: () => [], get: () => null }),
     getPacketSender: () => packet, getDialogueManager: () => p.manager,
     getSkillManager: () => ({
@@ -135,7 +160,7 @@ function player() {
     getLocation: () => location, moveTo: to => { location = to; },
     getArea: () => null, getPrivateArea: () => null, setArea: noop, getIndex: () => p.index, getSpellbook: () => p.spellbook ?? core.MagicSpellbook.NORMAL,
     isPlayer: () => true, isNpc: () => false, getAsPlayer: () => p, isRegistered: () => true,
-    getUsername: () => 'Parity', getAppearance: () => ({ isMale: () => true }),
+    getUsername: () => p.username ?? 'Parity', getAppearance: () => ({ isMale: () => true }),
     setPositionToFace: noop, forceChat: noop, sendMessage: text => p.messages.push(text),
   };
   p.manager = new DialogueManager(p);
@@ -585,6 +610,110 @@ test('Defender of Varrock base-zone entry unlocks only a fully inspected trail',
   assert.deepEqual([q.getLocation().getX(), q.getLocation().getY()], [3560, 4551]);
 });
 
+test('Defender has the eight captured single bottle floor spawns and gates return empties', () => {
+  const h = harness('DefenderOfVarrock');
+  const sources = (p) => h.worldItems.filter(item => !item.removed && item.getOwner() === p.getUsername() && item.getItem().getId() === I.BOTTLE);
+  const p = player();
+  h.quest.setStage(p, 18);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(sources(p).length, 8, 'capture 1636 has eight single-bottle spawns');
+  assert.deepEqual(
+    sources(p).map(item => [item.getPosition().getX(), item.getPosition().getY()]).sort(),
+    [[3531,4600],[3534,4595],[3536,4600],[3537,4572],[3540,4569],[3542,4569],[3544,4573],[3547,4568]].sort());
+  assert.ok(sources(p).every(item => item.staticSpawn === true && item.getItem().getAmount() === 1));
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(sources(p).length, 8, 'repeat lifecycle does not duplicate the spawns');
+
+  // Lifecycle does not early-restock a partially picked set; the four-tick respawn owns that.
+  h.api.getItemOnGroundManager().deregister(sources(p)[0]);
+  h.hooks.onZoneEnter[0]({ player: p });
+  assert.equal(sources(p).length, 7, 'no forced early restock while the respawn timer would run');
+  for (const item of [...sources(p)]) h.api.getItemOnGroundManager().deregister(item);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(sources(p).length, 8, 'a fully missing source is seeded again on lifecycle');
+
+  // No invented three-owned cap: extra banked bottles or a full inventory do not remove spawns.
+  p.bank = new Map([[I.BOTTLE, 3]]);
+  p.full = true;
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(sources(p).length, 8);
+  p.full = false;
+
+  const other = player(); other.username = 'Other'; h.quest.setStage(other, 18);
+  h.hooks.onPlayerLogin[0]({ player: other });
+  assert.equal(sources(other).length, 8);
+  assert.notEqual(sources(other)[0].getOwner(), sources(p)[0].getOwner());
+
+  // Capture 1636: both gates return the three empties to the inventory.
+  p.items.set(I.BOTTLE_OF_MIST, 3);
+  h.object(p, DOV_GATE_1, 'Open', 3536, 4571);
+  h.tick(1);
+  assert.equal(p.items.get(I.BOTTLE_OF_MIST), 0);
+  assert.equal(p.items.get(I.BOTTLE), 3, 'gate 1 returns the empties');
+
+  const second = player(); h.quest.setStage(second, 24);
+  second.items.set(I.BOTTLE_OF_MIST, 3);
+  h.object(second, DOV_GATE_2, 'Open', 3540, 4597);
+  h.tick(1);
+  assert.equal(second.items.get(I.BOTTLE_OF_MIST), 0);
+  assert.equal(second.items.get(I.BOTTLE), 3, 'gate 2 returns the empties too');
+});
+
+test('real ItemOnGroundManager respawns a captured bottle after four ticks', () => {
+  const username = 'BottleOwner';
+  const position = new core.Location(3537, 4572, 0);
+  const items = new Map();
+  const inventory = {
+    getFreeSlots: () => (globalThis.__full ? 0 : 28),
+    getAmount: id => items.get(id) ?? 0,
+    contains: id => (items.get(id) ?? 0) > 0,
+    addItem: item => items.set(item.getId(), (items.get(item.getId()) ?? 0) + item.getAmount()),
+    full() {},
+  };
+  const packet = new Proxy({}, { get: () => () => packet });
+  const realPlayer = {
+    username, getUsername: () => username, isPlayerBot: () => false,
+    getLocation: () => position, getPrivateArea: () => null,
+    getInventory: () => inventory, getMovementQueue: () => ({ reset() {} }), getSize: () => 1,
+    getLastItemPickup: () => ({ reset() {} }), getSession: () => ({ getChannel: () => ({ readyState: 1 }) }),
+    getPacketSender: () => packet, sendMessage: () => {}, isPlayer: () => true,
+  };
+  const ours = () => World.getItems().filter(item => item.getOwner() === username && item.getItem().getId() === I.BOTTLE);
+  const tick = () => { ItemOnGroundManager.process(); TaskManager.process(); };
+  const source = ItemOnGroundManager.registerLocation(realPlayer, new core.Item(I.BOTTLE, 1), position.clone());
+  source.staticSpawn = true;
+  source.respawnTimer = 4;
+  ItemOnGroundManager.pickup(realPlayer, source);
+  assert.equal(items.get(I.BOTTLE), 1, 'normal pickup gives one bottle');
+  assert.equal(ours()[0].isPendingRemoval(), true);
+  tick();
+  assert.equal(ours().length, 0);
+  for (let i = 0; i < 2; i++) tick();
+  assert.equal(ours().length, 0, 'not before the fourth tick');
+  tick();
+  assert.equal(ours().length, 1, 'the picked bottle respawns on the four-tick task');
+  assert.equal(ours()[0].getItem().getAmount(), 1);
+  assert.equal(ours()[0].getLocation?.()?.getX?.(), undefined);
+  assert.equal(ours()[0].getPosition().getX(), 3537);
+  assert.equal(ours()[0].getPosition().getY(), 4572);
+  assert.equal(ours()[0].getOwner(), username);
+  const respawned = ours()[0];
+  ItemOnGroundManager.pickup(realPlayer, respawned);
+  tick();
+  for (let i = 0; i < 4; i++) tick();
+  assert.equal(ours().length, 1, 'repeated pickup respawns indefinitely');
+
+  const blocked = ItemOnGroundManager.registerLocation(realPlayer, new core.Item(I.BOTTLE, 1), new core.Location(3531, 4600, 0));
+  blocked.staticSpawn = true; blocked.respawnTimer = 4;
+  globalThis.__full = true;
+  ItemOnGroundManager.pickup(realPlayer, blocked);
+  assert.ok(World.getItems().includes(blocked), 'a full inventory does not consume the ground bottle');
+  globalThis.__full = false;
+  ItemOnGroundManager.deregister(blocked);
+  tick();
+  for (const item of [...ours()]) { ItemOnGroundManager.deregister(item); tick(); }
+});
+
 test('Defender of Varrock keeps an owner-only Elias at the base landing', () => {
   const h = harness('DefenderOfVarrock'), p = player();
   h.quest.setStage(p, 14);
@@ -603,7 +732,7 @@ test('Defender of Varrock balcony, mist bottles and the two gated crossings', ()
   assert.ok(h.quest.getStage(p) >= 16);
   h.line(p, N.ELIAS_WHITE, BALCONY_LINE);
   assert.ok(h.quest.getStage(p) >= 18);
-  assert.equal(h.ground.length, 1, 'three bottles are placed on the ground');
+  assert.equal(h.worldItems.filter(item => !item.removed && item.getItem().getId() === I.BOTTLE).length, 8, 'the captured eight bottle spawns are present');
   assert.deepEqual(p.log.filter(row => row[0] === 'sendCameraMoveTo').at(-1).slice(1, 3), [3563, 4570], 'first balcony camera');
   assert.deepEqual(p.log.filter(row => row[0] === 'sendCameraLookAt').at(-1).slice(1, 3), [3569, 4572], 'first balcony look-at');
   h.hooks.onNpcDeath[0]({ npcId: N.ARMOURED_ZOMBIE, killer: p, npc: { getLocation: () => new core.Location(3540, 4571, 0) } });
@@ -622,12 +751,9 @@ test('Defender of Varrock balcony, mist bottles and the two gated crossings', ()
   gate(DOV_GATE_1);
   assert.equal(p.items.get(I.BOTTLE_OF_MIST), 0);
   h.tick(1);
-  assert.equal(h.quest.getStage(p), 24, 'the Arrav transcript itself places the second bottles');
+  assert.equal(h.quest.getStage(p), 24, 'Arrav advances to the second gate section');
   assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3539, 4571], 'gate 1 lands on the captured east tile');
-  assert.equal(p.attrs.get('quest.defender_of_varrock.bits') & (1 << 6), 1 << 6);
-  assert.equal(h.ground.length, 2, 'both bottle hand-outs happened');
-  assert.equal(h.ground.at(-1)[1].getId(), I.BOTTLE);
-  assert.equal(h.ground.at(-1)[1].getAmount(), 3);
+  assert.equal(p.items.get(I.BOTTLE), 3, 'gate 1 returns the empty bottles for the second gate');
   p.items.set(I.BOTTLE_OF_MIST, 3);
   gate(DOV_GATE_2);
   h.tick(1);

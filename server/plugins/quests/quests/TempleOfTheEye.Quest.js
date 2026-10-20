@@ -320,9 +320,10 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   const BASEMENT_PORTAL_TILE = { x: 3104, y: 9574, z: 0 };
   const BASEMENT_LANDING_TILE = { x: 3106, y: 9571, z: 0 };
   const TOWER_ENTRANCE_TILE = { x: 3104, y: 3163, z: 0 };
-  const CORDELIA_TOWER_TILE = { x: 3107, y: 3160, z: 1 };
-  const FELIX_TOWER_TILE = { x: 3115, y: 3163, z: 1 };
-  const TAMARA_TOWER_TILE = { x: 3110, y: 3166, z: 1 };
+  // Capture 1693 addnpc coords (not Quest Helper's interaction WorldPoints).
+  const CORDELIA_TOWER_TILE = { x: 3110, y: 3161, z: 1 };
+  const FELIX_TOWER_TILE = { x: 3111, y: 3163, z: 1 };
+  const TAMARA_TOWER_TILE = { x: 3113, y: 3163, z: 1 };
   const ABYSS_CENTRE_TILE = { x: 3040, y: 4839, z: 0 };
   const MIND_ALTAR_TILE = { x: 2793, y: 4827, z: 0 };
   const WATER_ALTAR_TILE = { x: 2720, y: 4831, z: 0 };
@@ -1762,10 +1763,18 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   // Login / logout
   // ---------------------------------------------------------------------------
 
+  function syncTowerPuzzleVarbits(player) {
+    for (const apprentice of TOWER_APPRENTICES.values()) {
+      const seen = bitSet(player, TOWER_SEEN_ATTRIBUTE, apprentice.bit) ? 1 : 0;
+      player.getPacketSender().sendVarbit(TOWER_PUZZLE_VARBITS[apprentice.key], seen);
+    }
+  }
+
   function handleLogin({ player }) {
     installWorld();
     migrateLegacyStage(player);
     syncSpawns(player);
+    syncTowerPuzzleVarbits(player);
     syncEnergyObjects(player);
     player.getPacketSender().sendVarbit(TUTORIAL_VARBIT, tutorialProgress(player));
     player.getPacketSender().sendVarbit(13740, (teleports(player) & ABYSS_TELEPORT_BIT) !== 0 ? 1 : 0);

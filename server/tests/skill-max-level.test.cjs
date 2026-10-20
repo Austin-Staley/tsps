@@ -479,7 +479,7 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
     let completed = 0, queued = 0;
     const queue = { player: { ...p, getIndex: () => 1, setMobileInteraction() {} }, getMobility: () => ({ canMove: () => true }),
       checkDestination: () => true, reset() {}, walkToReset() {}, isInteractionTargetValid: () => true,
-      canInteractWithUnreachableNpc: () => false };
+      isProjectedMainWorldNpc: () => false, canInteractWithUnreachableNpc: () => false };
     try {
       core.PathFinder.reachedEntity = () => false;
       core.PathFinder.calculateEntityRoute = () => {};

@@ -46,11 +46,14 @@
  *   52 Agility, 50 Attack, 50 Slayer, 49 Magic) gate the start, plus A Taste
  *   of Hope completion; the warning for a low combat level is computed from
  *   the skill levels.
- * - Carl's follow is area-scoped (surface Slepe) and uses the captured Quest
- *   Helper line points joined on the real collision map. QH look-back points
- *   pause/turn Carl; sight uses the view cone plus blocked-tile line of sight,
- *   and too-close/seen or too-far resets to Hameln for the captured retry.
- *   Progress persists by checkpoint, never by player proximity. The normal end
+ * - Carl's follow is area-scoped (surface Slepe) and uses NPC 9558's actual
+ *   spawn and walk updates from capture 1637 (ticks 1164-1504), on the real
+ *   collision map. The barrel action teleports the player to the captured
+ *   follow start (3754,3307). Captured idle points pause/turn Carl; sight uses
+ *   the view cone plus blocked-tile line of sight, and too-close/seen or
+ *   too-far resets to Hameln for the captured retry. Progress persists by
+ *   captured step, never by player proximity; blocked barrel/stairs tiles stay
+ *   out of the NPC chain. The normal end
  *   unlocks the church stairs; the stairs' captured "Continue the Sins of the
  *   Father quest." choice starts the cutscene/Kroy room. Kroy's QH-only potion
  *   throw is not modelled (no capture evidence here). Tables are per-player
@@ -351,21 +354,123 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   const BRIDGE_OBJECT_IDS = [13834, 13835, 13836, 13837]; // broken, fixed 1-3
   const ZOMBIE_NPC_ID = 5647; // templetrek_zombie
   const CARL_FOLLOW_NPC_ID = 9558; // myq5_carl_follow
-  const CARL_FOLLOW_START = { x: 3750, y: 3296, z: 0 };
-  const CARL_FOLLOW_END = { x: 3728, y: 3301, z: 0 };
-  // Quest Helper line points, with its (0,0) hiding markers removed.
-  const CARL_FOLLOW_CHECKPOINTS = [
-    { x: 3750, y: 3296 }, { x: 3750, y: 3291 }, { x: 3751, y: 3291 },
-    { x: 3752, y: 3291 }, { x: 3752, y: 3295 }, { x: 3753, y: 3295 },
-    { x: 3753, y: 3298 }, { x: 3753, y: 3306 }, { x: 3752, y: 3307 },
-    { x: 3751, y: 3307 }, { x: 3750, y: 3307 }, { x: 3749, y: 3308 },
-    { x: 3748, y: 3309 }, { x: 3748, y: 3310 }, { x: 3751, y: 3315, lookBack: true },
-    { x: 3747, y: 3316 }, { x: 3740, y: 3324, lookBack: true }, { x: 3740, y: 3328 },
-    { x: 3718, y: 3325, lookBack: true }, { x: 3718, y: 3328 }, { x: 3700, y: 3323, lookBack: true },
-    { x: 3703, y: 3320 }, { x: 3705, y: 3305, lookBack: true }, { x: 3707, y: 3310 },
-    { x: 3719, y: 3312, lookBack: true }, { x: 3718, y: 3316 }, { x: 3731, y: 3318 },
-    { x: 3731, y: 3307 }, { ...CARL_FOLLOW_END },
+  const CARL_FOLLOW_START = { x: 3748, y: 3310, z: 0 }; // capture 1637 tick 1164
+  // Actual NPC 9558 spawn + walk updates from capture 1637 ticks 1164-1504.
+  const CAPTURED_CARL_ROUTE = [
+    { x: 3748, y: 3310 },
+    { x: 3748, y: 3311 },
+    { x: 3748, y: 3312 },
+    { x: 3748, y: 3313 },
+    { x: 3748, y: 3314 },
+    { x: 3748, y: 3315 },
+    { x: 3748, y: 3316 },
+    { x: 3748, y: 3317 },
+    { x: 3748, y: 3318, lookBack: true },
+    { x: 3748, y: 3319 },
+    { x: 3747, y: 3320 },
+    { x: 3747, y: 3321 },
+    { x: 3747, y: 3322 },
+    { x: 3746, y: 3323 },
+    { x: 3746, y: 3324 },
+    { x: 3745, y: 3325 },
+    { x: 3744, y: 3326 },
+    { x: 3743, y: 3327 },
+    { x: 3742, y: 3328 },
+    { x: 3741, y: 3328 },
+    { x: 3740, y: 3328 },
+    { x: 3739, y: 3328 },
+    { x: 3738, y: 3328 },
+    { x: 3737, y: 3328 },
+    { x: 3736, y: 3328 },
+    { x: 3735, y: 3328 },
+    { x: 3734, y: 3328, lookBack: true },
+    { x: 3733, y: 3328 },
+    { x: 3732, y: 3327 },
+    { x: 3731, y: 3326 },
+    { x: 3730, y: 3326 },
+    { x: 3729, y: 3325 },
+    { x: 3728, y: 3325 },
+    { x: 3727, y: 3324 },
+    { x: 3726, y: 3324 },
+    { x: 3725, y: 3324 },
+    { x: 3724, y: 3324 },
+    { x: 3723, y: 3324 },
+    { x: 3722, y: 3324 },
+    { x: 3721, y: 3325 },
+    { x: 3720, y: 3326 },
+    { x: 3719, y: 3327 },
+    { x: 3718, y: 3327 },
+    { x: 3717, y: 3328 },
+    { x: 3716, y: 3328 },
+    { x: 3715, y: 3328 },
+    { x: 3714, y: 3328, lookBack: true },
+    { x: 3713, y: 3328 },
+    { x: 3712, y: 3328 },
+    { x: 3711, y: 3328 },
+    { x: 3710, y: 3327 },
+    { x: 3709, y: 3326 },
+    { x: 3708, y: 3325 },
+    { x: 3707, y: 3324 },
+    { x: 3706, y: 3324 },
+    { x: 3705, y: 3324 },
+    { x: 3704, y: 3324 },
+    { x: 3703, y: 3323 },
+    { x: 3702, y: 3322 },
+    { x: 3702, y: 3321 },
+    { x: 3702, y: 3320 },
+    { x: 3702, y: 3319, lookBack: true },
+    { x: 3702, y: 3318 },
+    { x: 3703, y: 3317 },
+    { x: 3703, y: 3316 },
+    { x: 3703, y: 3315 },
+    { x: 3703, y: 3314 },
+    { x: 3703, y: 3313 },
+    { x: 3703, y: 3312 },
+    { x: 3704, y: 3311 },
+    { x: 3705, y: 3311 },
+    { x: 3706, y: 3311 },
+    { x: 3707, y: 3311 },
+    { x: 3708, y: 3311 },
+    { x: 3709, y: 3311 },
+    { x: 3710, y: 3312 },
+    { x: 3711, y: 3313 },
+    { x: 3712, y: 3313 },
+    { x: 3713, y: 3313 },
+    { x: 3714, y: 3313 },
+    { x: 3715, y: 3314 },
+    { x: 3716, y: 3315 },
+    { x: 3717, y: 3316 },
+    { x: 3718, y: 3317 },
+    { x: 3719, y: 3317 },
+    { x: 3720, y: 3317 },
+    { x: 3721, y: 3317 },
+    { x: 3722, y: 3317, lookBack: true },
+    { x: 3723, y: 3317 },
+    { x: 3724, y: 3317 },
+    { x: 3725, y: 3317 },
+    { x: 3726, y: 3317 },
+    { x: 3727, y: 3317 },
+    { x: 3728, y: 3317 },
+    { x: 3729, y: 3317 },
+    { x: 3730, y: 3317 },
+    { x: 3731, y: 3316 },
+    { x: 3732, y: 3315 },
+    { x: 3732, y: 3314 },
+    { x: 3732, y: 3313 },
+    { x: 3733, y: 3312 },
+    { x: 3733, y: 3311 },
+    { x: 3733, y: 3310 },
+    { x: 3733, y: 3309 },
+    { x: 3732, y: 3308 },
+    { x: 3731, y: 3308 },
+    { x: 3730, y: 3308 },
+    { x: 3729, y: 3308 },
+    { x: 3728, y: 3307 },
+    { x: 3728, y: 3306 },
+    { x: 3728, y: 3305 },
+    { x: 3728, y: 3304 },
   ];
+
   const CARL_FOLLOW_FAIL_DISTANCE = 14;
   const CARL_VIEW_RANGE = 10;
   const CARL_LOOKBACK_TICKS = 6;
@@ -900,45 +1005,10 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   function carlTileWalkable(x, y) {
     try { return !RegionManager.blocked(new Location(x, y, 0), null); } catch { return false; }
   }
-  function carlSegment(from, to) {
-    const startKey = `${from.x},${from.y}`;
-    const goalKey = `${to.x},${to.y}`;
-    const queue = [[from.x, from.y]];
-    const parent = new Map([[startKey, null]]);
-    for (let index = 0; index < queue.length; index++) {
-      const [x, y] = queue[index];
-      if (`${x},${y}` === goalKey) break;
-      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
-        if (parent.has(key) || Math.abs(nx - from.x) > 30 || Math.abs(ny - from.y) > 30) continue;
-        if (!carlTileWalkable(nx, ny)) continue;
-        if (RegionManager.canMove(x, y, nx, ny, 0, 1, 1, null) === false) continue;
-        parent.set(key, `${x},${y}`);
-        queue.push([nx, ny]);
-      }
-    }
-    if (!parent.has(goalKey)) return null;
-    const path = [];
-    for (let key = goalKey; key && key !== startKey; key = parent.get(key)) {
-      const [x, y] = key.split(",").map(Number);
-      path.push({ x, y });
-    }
-    return path.reverse();
-  }
   function carlRoute() {
-    if (carlRouteCache !== undefined) return carlRouteCache;
-    const route = [{ x: CARL_FOLLOW_START.x, y: CARL_FOLLOW_START.y }];
-    for (let index = 1; index < CARL_FOLLOW_CHECKPOINTS.length; index++) {
-      const from = CARL_FOLLOW_CHECKPOINTS[index - 1];
-      const to = CARL_FOLLOW_CHECKPOINTS[index];
-      const segment = carlSegment(from, to);
-      if (!segment) { carlRouteCache = null; return null; }
-      if (to.lookBack) segment[segment.length - 1].lookBack = true;
-      route.push(...segment);
-    }
-    carlRouteCache = route;
-    return route;
+    return CAPTURED_CARL_ROUTE;
   }
+
   function removeCarlFollow(player) {
     const session = carlFollowSessions.get(player);
     if (!session) return;
@@ -950,7 +1020,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   }
   function startCarlFollow(player) {
     removeCarlFollow(player);
-    const route = carlRoute() ?? CARL_FOLLOW_CHECKPOINTS;
+    const route = carlRoute();
     const index = Math.min(route.length - 1, carlProgress(player));
     const start = route[index];
     const npc = api.spawnNpc({
@@ -1667,6 +1737,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     switch (stepId) {
       case "bsrbMj": // The player begins following Carl.
         player.setAttribute(CARL_PROGRESS_ATTRIBUTE, 0);
+        teleport(player, { x: 3754, y: 3307, z: 0 }); // capture 1637 tick 1164
         if (quest.getStage(player) < STAGE_FOLLOWING) advance(player, STAGE_FOLLOWING);
         return;
       case "5Nx48P": // Kroy attacks the player.

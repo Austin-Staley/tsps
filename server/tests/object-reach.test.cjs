@@ -13,6 +13,9 @@ const { Location } = require('../dist/game/model/Location');
 const { TaskManager } = require('../dist/game/task/TaskManager');
 const { World } = require('../dist/game/World');
 const { ItemOnGroundManager } = require('../dist/game/entity/impl/grounditem/ItemOnGroundManager');
+const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+const { Item } = require('../dist/game/model/Item');
+const { UseItemPacketListener } = require('../dist/net/packet/impl/UseItemPacketListener');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { Sounds } = require('../dist/game/Sounds');
 
@@ -103,6 +106,95 @@ test('wall approach masks reject door flanks in both reach checks and route sear
   assert.equal(near.alternative, true);
   assert.equal(sealed.reachedAbsolute({ ...target, locShape: 0, locAngle: 2, blockAccessFlags: 0x5,
     srcX: near.endX, srcY: near.endY }), false, 'move-near cannot make a blocked doorway operable');
+});
+
+
+test('object routes build MORPH sizes and masks from the player-resolved child', (t) => {
+  const player = {
+    isPlayer: () => true, isNpc: () => false, getAsPlayer() { return this; },
+    getPacketSender: () => ({ getVarbit: () => 6, getVarp: () => 0 }),
+  };
+  const queue = new MovementQueue(player);
+  const parent = { getSizeX: () => 4, getSizeY: () => 3, getBlockingMask: () => 27, getId: () => 56522 };
+  const child = { getSizeX: () => 1, getSizeY: () => 2, getBlockingMask: () => 23, getId: () => 56523 };
+  t.mock.method(ObjectDefinition, 'forId', () => parent);
+  t.mock.method(ObjectDefinition, 'forPlayer', () => child);
+  const spec = queue.buildObjectRouteSpec(new GameObject(56522, new Location(1719, 9706, 0), 10, 0, null));
+  assert.deepEqual([spec.routeXLength, spec.routeYLength, spec.routeBlockingMask], [1, 2, 23]);
+  assert.deepEqual([spec.reachWidth, spec.reachLength, spec.reachAngle, spec.reachBlockAccessFlags], [1, 2, 0, 23]);
+});
+
+test('stage 6 painting resolves to its MORPH child and west-adjacent canvas reach', async () => {
+  const path = require('node:path');
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  ObjectDefinition.init();
+  RegionManager.loadMapFiles(1719, 9706, true);
+  const player = { getPacketSender: () => ({ getVarbit: id => id === 16663 ? 6 : 0, getVarp: () => 0 }) };
+  const painting = ObjectDefinition.forPlayer(56522, player);
+  assert.equal(painting.id, 56523);
+  assert.deepEqual([painting.getSizeX(), painting.getSizeY(), painting.getBlockingMask()], [1, 2, 23]);
+  const stand = {
+    getLocation: () => ({ getZ: () => 0, getX: () => 1718, getY: () => 9706 }),
+    getSize: () => 1, getPrivateArea: () => null,
+  };
+  assert.equal(PathFinder.reachedObject(stand, 1719, 9706, painting.getSizeX(), painting.getSizeY(),
+    0, 10, painting.getBlockingMask()), true);
+  const plain = ObjectDefinition.forPlayer(56523, player);
+  assert.deepEqual([plain.getSizeX(), plain.getSizeY(), plain.getBlockingMask()],
+    [painting.getSizeX(), painting.getSizeY(), painting.getBlockingMask()],
+    'untransformed routing keeps the same footprint and mask');
+});
+
+test('stage 6 canvas dispatches on the painting through the real item-on-object route', async (t) => {
+  const path = require('node:path');
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  ObjectDefinition.init();
+  RegionManager.loadMapFiles(1719, 9706, true);
+  const painting = new GameObject(56522, new Location(1719, 9706, 0), 10, 0, null);
+  MapObjects.add(painting);
+  t.after(() => MapObjects.remove(painting));
+
+  const noop = () => {};
+  let location = new Location(1718, 9706, 0);
+  const player = {
+    isPlayer: () => true, isNpc: () => false, isPlayerBot: () => false, getAsPlayer() { return this; },
+    getIndex: () => 999, getUsername: () => 'canvas-route', getSize: () => 1, getRights: () => -1,
+    getLocation: () => location, getPrivateArea: () => null,
+    getPacketSender: () => ({ getVarbit: id => id === 16663 ? 6 : 0, getVarp: () => 0, sendDestination: noop }),
+    getInventory: () => ({ capacity: () => 28, getItems: () => [new Item(30950, 1)] }),
+    getFollowing: () => null, getTimers: () => ({ has: () => false }), getHitpoints: () => 10,
+    getCombat: () => ({ setCastSpell: noop, reset: noop }), getSkillManager: () => ({ stopSkillable: noop }),
+    getDueling: () => ({ getButtonDelay: () => ({ finished: () => true }), inDuel: () => false }),
+    getTrading: () => ({ getButtonDelay: () => ({ finished: () => true }) }),
+    setPositionToFace: noop, setDirection: noop, setWalkingDirection: noop, setRunningDirection: noop,
+    sendMessage: noop,
+  };
+  const queue = new MovementQueue(player);
+  player.getMovementQueue = () => queue;
+  queue.getMobility = () => ({ canMove: () => true });
+  queue.checkDestination = () => true;
+  queue.walkToReset = noop;
+  const seen = [];
+  t.mock.method(PluginManager, 'emitCanUseItem', () => true);
+  t.mock.method(PluginManager, 'emitItemOnObject', event => { seen.push(event); event.handled = true; return true; });
+  t.after(() => TaskManager.cancelTasks(player.getIndex()));
+
+  UseItemPacketListener.itemOnObject(player, 149, 56522, 30950, 0, 1719, 9706);
+  for (let i = 0; i < 10 && seen.length === 0; i++) {
+    World.processCycle++;
+    TaskManager.process();
+    queue.beginCycle?.();
+    if (queue.hasPendingWork?.()) queue.process();
+    TaskManager.processWalkTo(player.getIndex());
+  }
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].objectId, 56522);
+  assert.equal(seen[0].itemId, 30950);
+  assert.deepEqual([seen[0].location.x, seen[0].location.y], [1719, 9706]);
 });
 
 test('every walkToObject caller shares route masks and cannot operate a door from its flank', (t) => {

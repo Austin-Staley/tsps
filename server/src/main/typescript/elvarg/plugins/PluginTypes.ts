@@ -136,6 +136,8 @@ export interface PluginNpcInteractionEvent {
 
 export interface PluginNpcRouteEvent extends PluginNpcInteractionEvent {
   range: number;
+  /** A plugin-owned interaction that ignores the normal projectile clip within `range`. */
+  ignoreProjectileClip?: boolean;
 }
 
 /** A world entity (static ship or boat) menu option, such as Board or Attack. */

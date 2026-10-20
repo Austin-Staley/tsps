@@ -1,5 +1,4 @@
 import { RegionManager } from "../../collision/RegionManager";
-import { BoatManager } from "../../content/sailing/BoatManager";
 import type { Mobile } from "../../entity/impl/Mobile";
 import { World } from "../../World";
 import { Dueling, DuelRule } from "../../content/Duelling";
@@ -27,6 +26,9 @@ import { PluginManager } from "../../../plugins/PluginManager";
 import type { PluginObjectRouteEvent } from "../../../plugins/PluginTypes";
 import * as fs from "fs";
 import * as path from "path";
+const getBoatManager = () =>
+    require("../../content/sailing/BoatManager").BoatManager as typeof import("../../content/sailing/BoatManager").BoatManager;
+
 export class MovementQueue {
     private static readonly BOT_FOLLOW_REPATH_COOLDOWN_MS = 500;
 
@@ -1109,7 +1111,9 @@ export class MovementQueue {
         const direction = object.getFace();
 
         if (type === 10 || type === 11 || type === 22) {
-            const def = ObjectDefinition.forId(id);
+            // Multi-locs expose their real footprint/mask only after the player's
+            // varbits resolve the MORPH child; raw ids can carry the parent's size.
+            const def = ObjectDefinition.forPlayer(id, this.player) ?? ObjectDefinition.forId(id);
             const xLength = def.getSizeX();
             const yLength = def.getSizeY();
             const blockingMask = def.getBlockingMask() | blockAccessFlags;
@@ -1152,7 +1156,7 @@ export class MovementQueue {
         };
     }
 
-    public walkToEntity(entity: Mobile, runnable?: () => void, range = 1) {
+    public walkToEntity(entity: Mobile, runnable?: () => void, range = 1, ignoreProjectileClip = false) {
         let mobility = this.getMobility();
         if (!mobility.canMove()) {
             mobility.sendMessage(this.player);
@@ -1185,7 +1189,7 @@ export class MovementQueue {
 
         const reached = () => range <= 1 ? PathFinder.reachedEntity(this.player, entity) :
             this.isInteractionTargetValid(entity) && this.player.getLocation().isWithinDistance(entity.getLocation(), range)
-            && RegionManager.canProjectileAttack(this.player, this.player.getLocation(), entity.getLocation());
+            && (ignoreProjectileClip || RegionManager.canProjectileAttack(this.player, this.player.getLocation(), entity.getLocation()));
         if (reached()) {
             this.player.setMobileInteraction(entity);
             runnable?.();
@@ -1293,16 +1297,17 @@ export class MovementQueue {
 
     /** An NPC in the main world that a player aboard a boat can see and talk to from its root. */
     private isProjectedMainWorldNpc(entity: Mobile): boolean {
-        if (!entity?.isNpc?.() || !BoatManager.getBoatAboard(this.player)) return false;
+        const boatManager = getBoatManager();
+        if (!entity?.isNpc?.() || !boatManager.getBoatAboard(this.player)) return false;
         // Same-deck and other-boat NPCs keep local deck routing; only main-world actors project.
-        if (BoatManager.getBoatAboard(entity)) return false;
+        if (boatManager.getBoatAboard(entity)) return false;
         if (entity.getPrivateArea()) return false;
         const owner = (entity as NPC).getOwner?.();
         return !owner || owner === this.player;
     }
 
     private reachedProjectedNpc(entity: Mobile, range: number): boolean {
-        const root = BoatManager.rootLocation(this.player);
+        const root = getBoatManager().rootLocation(this.player);
         const target = entity.getLocation();
         const reach = Math.max(1, range) + Math.max(0, entity.getSize() - 1);
         if (!root.isWithinDistance(target, reach)) return false;

@@ -144,20 +144,27 @@ test('Old bowsMade=2 save recovers guard and advances to stage 16 without consum
   assert.equal(h.quest.getStage(p), 16);
 });
 
-test('Den scene owns the owner-only NPCs, cleans them on logout and respawns after login', () => {
+test('Den entry scene ends at the captured boundary and leaves owner NPCs visible without relog', () => {
   const h = harness(), p = player();
   h.quest.setStage(p, 10);
-  const enter = h.object(p, 56439, new core.Location(1295, 3373, 0));
-  enter.definition = { getInteractions: () => ['', 'Enter'] };
-  h.tick(3);
+  h.object(p, 56439, new core.Location(1295, 3373, 0));
+  h.tick(4);
   const boy = h.npcs.find(npc => npc.id === N.INJURED_BOY && !npc.removed);
   assert.ok(boy, 'injured boy spawned');
-  assert.equal(boy.getArea(), p.getArea(), 'boy belongs to the private den scene');
-
-  for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
-  assert.equal(boy.isRegistered(), false);
+  assert.equal(p.getArea(), null, 'private den scene has ended');
+  assert.equal(boy.getArea(), null, 'owner NPC is in the normal world');
+  const count = h.npcs.filter(npc => npc.id === N.INJURED_BOY && !npc.removed).length;
   for (const fn of h.hooks.onPlayerLogin) fn({ player: p });
-  const respawned = h.npcs.find(npc => npc.id === N.INJURED_BOY && !npc.removed);
-  assert.ok(respawned && respawned !== boy, 'boy respawns naturally on login');
-  assert.equal(respawned.getArea(), null);
+  assert.equal(h.npcs.filter(npc => npc.id === N.INJURED_BOY && !npc.removed).length, count);
+});
+
+test('One real Antos rescue transcript completes Ariadna and the quest at stage 22', () => {
+  const h = harness(), p = player();
+  h.quest.setStage(p, 20);
+  p.setAttribute('quest.shadows_of_custodia.flags', 1 << 8); // creatures already slain
+  const lines = [];
+  (h.events['npc-dialogue:line'] ??= []).push(event => lines.push({ text: event.text, stage: h.quest.getStage(p), npc: event.npcId }));
+  runtime.startTranscript(h.api, p, N.ANTOS, 'Shadows of Custodia', 'rescuing-antos-talking-to-antos-after-killing-the-strange-creatures');
+  drain(p, 300);
+  assert.equal(h.quest.getStage(p), 24);
 });

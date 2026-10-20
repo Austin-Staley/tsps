@@ -850,7 +850,7 @@ test('Sins Carl progress never follows player proximity: relog near the end rest
   h.hooks.onPlayerLogin[0]({ player: p });
   const carl = h.npcs.find(npc => npc.getId() === 9558 && !npc.removed);
   assert.ok(carl);
-  assert.deepEqual([carl.getLocation().getX(), carl.getLocation().getY()], [3750, 3296], 'follow always starts at the canonical start for a fresh attempt');
+  assert.deepEqual([carl.getLocation().getX(), carl.getLocation().getY()], [3748, 3310], 'follow always starts at the captured NPC spawn for a fresh attempt');
   const area = h.areas.find(entry => entry.constructor.name === 'CarlFollowArea');
   for (let tick = 0; tick < 4; tick++) area.process(p);
   assert.equal(h.quest.getStage(p), 6, 'teleporting near the end does not grant the tail; proximity starts a retry');
@@ -870,5 +870,47 @@ test('Sins Carl logout removes the actor, keeps no trail bit, and resumes a fres
   h.hooks.onPlayerLogin[0]({ player: p });
   const carl = h.npcs.find(npc => npc.getId() === 9558 && !npc.removed);
   assert.ok(carl);
-  assert.deepEqual([carl.getLocation().getX(), carl.getLocation().getY()], [3750, 3296]);
+  assert.deepEqual([carl.getLocation().getX(), carl.getLocation().getY()], [3748, 3310]);
+});
+
+
+test('Sins Carl captured checkpoints form a fully walkable cache route start to crypt end', () => {
+  const { Location, RegionManager } = core;
+  RegionManager.init();
+  const points = [[3748,3310],[3748,3311],[3748,3312],[3748,3313],[3748,3314],[3748,3315],[3748,3316],[3748,3317],[3748,3318],[3748,3319],[3747,3320],[3747,3321],[3747,3322],[3746,3323],[3746,3324],[3745,3325],[3744,3326],[3743,3327],[3742,3328],[3741,3328],[3740,3328],[3739,3328],[3738,3328],[3737,3328],[3736,3328],[3735,3328],[3734,3328],[3733,3328],[3732,3327],[3731,3326],[3730,3326],[3729,3325],[3728,3325],[3727,3324],[3726,3324],[3725,3324],[3724,3324],[3723,3324],[3722,3324],[3721,3325],[3720,3326],[3719,3327],[3718,3327],[3717,3328],[3716,3328],[3715,3328],[3714,3328],[3713,3328],[3712,3328],[3711,3328],[3710,3327],[3709,3326],[3708,3325],[3707,3324],[3706,3324],[3705,3324],[3704,3324],[3703,3323],[3702,3322],[3702,3321],[3702,3320],[3702,3319],[3702,3318],[3703,3317],[3703,3316],[3703,3315],[3703,3314],[3703,3313],[3703,3312],[3704,3311],[3705,3311],[3706,3311],[3707,3311],[3708,3311],[3709,3311],[3710,3312],[3711,3313],[3712,3313],[3713,3313],[3714,3313],[3715,3314],[3716,3315],[3717,3316],[3718,3317],[3719,3317],[3720,3317],[3721,3317],[3722,3317],[3723,3317],[3724,3317],[3725,3317],[3726,3317],[3727,3317],[3728,3317],[3729,3317],[3730,3317],[3731,3316],[3732,3315],[3732,3314],[3732,3313],[3733,3312],[3733,3311],[3733,3310],[3733,3309],[3732,3308],[3731,3308],[3730,3308],[3729,3308],[3728,3307],[3728,3306],[3728,3305],[3728,3304]];
+
+  const walkable = (x, y) => !RegionManager.blocked(new Location(x, y, 0), null);
+  const segment = (from, to) => {
+    const startKey = `${from[0]},${from[1]}`, goalKey = `${to[0]},${to[1]}`;
+    const queue = [from], parent = new Map([[startKey, null]]);
+    for (let index = 0; index < queue.length; index++) {
+      const [x, y] = queue[index];
+      if (`${x},${y}` === goalKey) break;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
+        if (parent.has(key) || !walkable(nx, ny)) continue;
+        if (RegionManager.canMove(x, y, nx, ny, 0, 1, 1, null) === false) continue;
+        parent.set(key, `${x},${y}`);
+        queue.push([nx, ny]);
+      }
+    }
+    if (!parent.has(goalKey)) return null;
+    const path = [];
+    for (let key = goalKey; key && key !== startKey; key = parent.get(key)) {
+      const [x, y] = key.split(',').map(Number);
+      path.push([x, y]);
+    }
+    return path.reverse();
+  };
+  let steps = 0;
+  for (let index = 1; index < points.length; index++) {
+    const path = segment(points[index - 1], points[index]);
+    assert.ok(path, `Carl segment ${points[index - 1]} → ${points[index]} connects`);
+    for (const [x, y] of path) {
+      assert.equal(walkable(x, y), true, `Carl step (${x},${y}) is walkable`);
+      steps++;
+    }
+  }
+  assert.ok(steps > 100, 'the expanded Carl route covers the full captured walk');
+  assert.deepEqual(points[points.length - 1], [3728, 3304], 'route ends at the captured crypt approach, not a teleport/blocked stairs tile');
 });

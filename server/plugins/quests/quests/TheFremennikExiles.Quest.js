@@ -65,6 +65,7 @@ module.exports = function registerTheFremennikExilesQuest(api) {
     Location,
     NpcDefinition,
     NpcIdentifiers,
+    MapObjects,
     ObjectDefinition,
     ObjectIdentifiers,
     ObjectManager,
@@ -297,6 +298,14 @@ module.exports = function registerTheFremennikExilesQuest(api) {
   // once the buttons are released, with a short grace for walking through.
   const WATERBIRTH_GATE_CLOSE_TICKS = 500;
   const WATERBIRTH_BUTTON_RELEASE_TICKS = 5;
+  const WATERBIRTH_SUPPORT_RANGE = 4;
+  const WATERBIRTH_SUPPORT_RESPAWN_TICKS = 25; // cache NpcDefinition respawn; door restore is inferred
+  const WATERBIRTH_CENTRAL_DOOR_ID = 8967;
+  const WATERBIRTH_CENTRAL_DOOR_TILES = [
+    new Location(2545, 10141, 0),
+    new Location(2543, 10143, 0),
+    new Location(2545, 10145, 0),
+  ];
   // Nameless multiloc parents placed in the map; forPlayer resolves them to the 37391+ ids.
   const SAND_PIT_PARENT = 4373;
   const ROCKSLIDE_PARENT = 20091;
@@ -2073,34 +2082,77 @@ module.exports = function registerTheFremennikExilesQuest(api) {
     pulseWaterbirthGate(doorId);
   }
 
+  function runeThrownaxeEquipped(player) {
+    const weapon = player.getEquipment?.().get?.(Equipment.WEAPON_SLOT)?.getId?.();
+    return weapon === ItemIdentifiers.RUNE_THROWNAXE || weapon === ItemIdentifiers.RUNE_THROWNAXE_2;
+  }
+
+  function isWaterbirthSupportDestroy(event) {
+    const { player, npc } = event;
+    if (!player || !npc) return false;
+    if (!isExiled(player)) return false;
+    const stage = stageOf(player);
+    if (stage < STAGE_COMPONENTS || stage >= STAGE_MARKET) return false;
+    const npcId = npc.getContentId?.(player) ?? event.npcId;
+    if (npcId !== WATERBIRTH_SUPPORT_MIDDLE) return false;
+    if (npc.getOwner?.() && npc.getOwner() !== player) return false;
+    const action = event.definition?.getActions?.()?.[event.clickType - 1];
+    if (String(action ?? "").toLowerCase() !== "destroy") return false;
+    if (!runeThrownaxeEquipped(player) || player.getSpecialPercentage() < 10) return false;
+    if (player.getLocation().getY() === WATERBIRTH_SUPPORT_TILE.getY()) return false;
+    return player.getLocation().isWithinDistance(npc.getLocation(), WATERBIRTH_SUPPORT_RANGE);
+  }
+
+  /** Handler-side death step: remove the actual cache-map central doors and restore
+   *  their original type/face with the support respawn. The door restore uses the cache
+   *  support respawn (25 ticks); no recorded primary door timer exists, so this is an
+   *  inference. */
+  function openWaterbirthCentralDoors() {
+    const removed = [];
+    for (const tile of WATERBIRTH_CENTRAL_DOOR_TILES) {
+      const object = MapObjects.get(WATERBIRTH_CENTRAL_DOOR_ID, tile, null)
+        ?? (ObjectManager.objectsAt?.(tile) ?? []).find((entry) => entry.getId?.() === WATERBIRTH_CENTRAL_DOOR_ID);
+      if (!object) continue;
+      removed.push({ tile, type: object.getType(), face: object.getFace() });
+      ObjectManager.deregister(object, true);
+    }
+    TaskManager.cancelTasks("waterbirth-central-doors");
+    const task = new Task(WATERBIRTH_SUPPORT_RESPAWN_TICKS, "waterbirth-central-doors");
+    task.execute = () => {
+      task.stop();
+      for (const { tile, type, face } of removed) {
+        const present = MapObjects.get(WATERBIRTH_CENTRAL_DOOR_ID, tile, null)
+          ?? (ObjectManager.objectsAt?.(tile) ?? []).find((entry) => entry.getId?.() === WATERBIRTH_CENTRAL_DOOR_ID);
+        if (!present) ObjectManager.register(new GameObject(WATERBIRTH_CENTRAL_DOOR_ID, tile, type, face, null), true);
+      }
+    };
+    TaskManager.submit(task);
+  }
+
   function destroyWaterbirthSupport(event) {
     const { player } = event;
-    if (!player || !isExiled(player) || stageOf(player) < STAGE_COMPONENTS || stageOf(player) >= STAGE_MARKET) return;
-    const npc = event.npc;
-    const npcId = npc?.getContentId?.(player) ?? event.npcId;
-    if (!WATERBIRTH_SUPPORT_IDS.has(npcId)) return;
-    const weapon = player.getEquipment?.().get?.(Equipment.WEAPON_SLOT)?.getId?.();
-    const runeThrownaxe = weapon === ItemIdentifiers.RUNE_THROWNAXE || weapon === ItemIdentifiers.RUNE_THROWNAXE_2;
-    if (!runeThrownaxe) {
-      player.sendMessage("You need a rune thrownaxe to knock down the door-supports.");
-      return;
-    }
-    if (npcId !== WATERBIRTH_SUPPORT_MIDDLE || player.getLocation().getY() === WATERBIRTH_SUPPORT_TILE.getY()) {
-      player.sendMessage("This door does not seem to be openable from this side...");
-      return;
-    }
-    if (player.getSpecialPercentage() < 10) {
-      player.sendMessage("You need more special attack energy.");
-      return;
-    }
+    if (!isWaterbirthSupportDestroy(event)) return;
     player.decrementSpecialPercentage(10);
     const nearby = World.getNpcsNear?.(WATERBIRTH_SUPPORT_TILE, 8, null) ?? [];
     for (const support of nearby) {
       const id = support?.getContentId?.(player) ?? support?.getId?.();
       if (WATERBIRTH_SUPPORT_IDS.has(id) && support?.isRegistered?.()) support.setHitpoints?.(0);
     }
+    openWaterbirthCentralDoors();
     player.sendMessage("The rune thrownaxe bounces between the door-supports, knocking them all down.");
     event.handled = true;
+  }
+
+  /**
+   * Wiki Exiles route: from the north/south path, use the Rune thrownaxe special on the
+   * west/middle support (2253), not the door directly opposite. Real cache collision blocks
+   * the ordinary projectile line, so this scoped route asks core for the quest-local ranged
+   * clip exception; it must not perform the attack itself.
+   */
+  function routeWaterbirthSupport(event) {
+    if (!isWaterbirthSupportDestroy(event)) return;
+    event.range = WATERBIRTH_SUPPORT_RANGE;
+    event.ignoreProjectileClip = true;
   }
 
   function summonFossegrimen(player) {
@@ -2591,6 +2643,7 @@ module.exports = function registerTheFremennikExilesQuest(api) {
   api.onNpcInteraction("Sailor", { "Talk-to": talksToMyQuest });
   api.onNpcInteraction("Fossegrimen", { "Talk-to": talksToMyQuest });
   api.onNpcInteraction("Door-support", { Destroy: destroyWaterbirthSupport });
+  api.onNpcRoute(routeWaterbirthSupport);
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:action", handleAction);

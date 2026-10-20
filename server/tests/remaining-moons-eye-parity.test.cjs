@@ -197,9 +197,14 @@ test('Temple of the Eye follows varbit stages 5..125 through dialogue, items, al
   assert.equal(stage(), 70); assert.equal(p.items.get(I.ABYSSAL_INCANTATION), 0);
   finishTo(N.WIZARD_TRAIBORN, 'I need your apprentices to help with an incantation.');
   assert.equal(stage(), 75);
-  for (const npcId of [N.APPRENTICE_FELIX_2, N.APPRENTICE_TAMARA, N.APPRENTICE_CORDELIA]) finishTo(npcId);
+  for (const [npcId, varbit] of [[N.APPRENTICE_FELIX_2, 13743], [N.APPRENTICE_TAMARA, 13742], [N.APPRENTICE_CORDELIA, 13744]]) {
+    finishTo(npcId);
+    assert.equal(p.varbits.get(varbit), 1, `riddle marker ${varbit}`);
+  }
   h.tick(3);
   assert.equal(p.attrs.get('quest.temple_of_the_eye.tower-apprentices') & 7, 7, `riddles ${p.attrs.get('quest.temple_of_the_eye.tower-apprentices')}`);
+  for (const fn of h.hooks.onPlayerLogin ?? []) fn({ player: p });
+  assert.deepEqual([13742, 13743, 13744].map(id => p.varbits.get(id)), [1, 1, 1], 'seen riddle markers resync on relog');
   assert.ok(p.log.some(row => row[0] === 'sendInterface' && row[1] === 291), 'riddle interface 291 opens');
   assert.ok(p.log.some(row => row[0] === 'text' && row[1] === ((291 << 16) | 8) && row[2].startsWith('Fire is four')), 'Cordelia riddle text');
   h.action(p, N.APPRENTICE_FELIX_2, 't_zXOj'); h.tick(1);
@@ -481,6 +486,34 @@ test('Temple of the Eye restores the energy prefix on relog', () => {
   p.attrs.set('quest.temple_of_the_eye.energy-progress', 3);
   for (const fn of h.hooks.onPlayerLogin ?? []) fn({ player: p });
   assert.deepEqual([13747,13748,13749,13750,13751,13752].map(id => p.varbits.get(id)), [2,2,2,1,1,1]);
+});
+
+test('Temple tower apprentices spawn on the captured first-floor tiles reachable by the cache map', () => {
+  RegionManager.init();
+  const h = harness('TempleOfTheEye');
+  const p = player();
+  h.quest.setStage(p, 75);
+  p.attrs.set('temple-of-the-eye:stage-schema', 2);
+  for (const fn of h.hooks.onPlayerLogin ?? []) fn({ player: p });
+  const spawned = (id) => h.npcs.find(npc => npc.id === id);
+  for (const [id, x, y] of [[N.APPRENTICE_CORDELIA, 3110, 3161], [N.APPRENTICE_FELIX_2, 3111, 3163],
+    [N.APPRENTICE_TAMARA, 3113, 3163]]) {
+    const npc = spawned(id);
+    assert.ok(npc, `spawn ${id}`);
+    assert.deepEqual([npc.x, npc.y, npc.z], [x, y, 1], `capture 1693 addnpc ${id}`);
+  }
+  const route = (dx, dy) => {
+    const checkpoints = [];
+    const queue = { lastDestX: 0, lastDestY: 0, reset() { return this; }, setRoute() { return this; },
+      setPathX() { return this; }, setPathY() { return this; }, syncDestinationFlagToRoute() { return this; },
+      addCheckpoint(tile) { checkpoints.push(tile); return this; } };
+    const entity = { getMovementQueue: () => queue, getLocation: () => new Location(3113, 3163, 1), getSize: () => 1,
+      getPrivateArea: () => null, isPlayer: () => true, getAsPlayer: () => ({ getUsername: () => 'parity' }) };
+    return PathFinder.calculateRoute(entity, 1, dx, dy, 0, 0, 0, 0, false);
+  };
+  assert.equal(RegionManager.blocked(new Location(3113, 3163, 1), null), false);
+  assert.ok(route(3111, 3163) > 0, 'Felix is on the reachable room floor');
+  assert.ok(route(3110, 3161) > 0, 'Cordelia is on the reachable room floor');
 });
 
 test('Wizards Tower basement ladder 2148 reaches the 2147 ground-floor ladder through normal dispatch', () => {

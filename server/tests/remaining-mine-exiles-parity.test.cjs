@@ -13,7 +13,8 @@ before(async () => {
 
 function setup(pluginPath, questKey, options = {}) {
   const waterbirth = options.waterbirth === true;
-  const hooks = { custom: new Map(), variants: [], conditions: [], namedNpcs: new Map(), objects: [], itemOnObject: [], itemOnItem: [], itemActions: new Map(), deaths: [], hits: [], logins: [], logouts: [], teleports: [], interfaceButtons: new Map() };
+  const realDoors = options.realDoors === true;
+  const hooks = { custom: new Map(), variants: [], conditions: [], namedNpcs: new Map(), objects: [], itemOnObject: [], itemOnItem: [], itemActions: new Map(), deaths: [], hits: [], logins: [], logouts: [], teleports: [], interfaceButtons: new Map(), npcRoutes: [] };
   const tasks = [], spawned = [], removed = [], messages = [], xp = [], menus = [];
   const objects = [], registrations = [], groundItems = new Map();
   let npcsNear = [], players = [], weaponId = -1, special = 100;
@@ -25,10 +26,28 @@ function setup(pluginPath, questKey, options = {}) {
     ObjectManager: waterbirth ? {
       deregister(object) { const at = objects.indexOf(object); if (at >= 0) objects.splice(at, 1); },
       register(object) { objects.push(object); registrations.push(object); },
-      objectsAt() { return objects.slice(); },
+      objectsAt(location) {
+        if (!location) return objects.slice();
+        return objects.filter((object) => {
+          const at = object.getLocation?.();
+          return at && at.getX() === location.getX() && at.getY() === location.getY() && at.getZ() === location.getZ();
+        });
+      },
     } : { deregister() {} },
   };
   if (waterbirth) {
+    if (realDoors) {
+      const realObjectManager = require('../dist/game/entity/impl/object/ObjectManager').ObjectManager;
+      const realMapObjects = require('../dist/game/entity/impl/object/MapObjects').MapObjects;
+      core.ObjectManager = realObjectManager;
+      core.MapObjects = realMapObjects;
+    } else {
+      core.MapObjects = {
+        get(id, location) {
+          return objects.find((object) => object.getId?.() === id && object.getLocation?.().equals(location)) ?? null;
+        },
+      };
+    }
     core.ItemOnGroundManager = {
       registerLocation(player, item, location) {
         groundItems.set(`${location.getX()},${location.getY()},${location.getZ()},${item.getId()}`, { player, item, location });
@@ -60,6 +79,7 @@ function setup(pluginPath, questKey, options = {}) {
     onNpcHitModify(fn) { hooks.hits.push(fn); },
     onInterfaceActionButton(ids, fn) { for (const id of Array.isArray(ids) ? ids : [ids]) hooks.interfaceButtons.set(id, fn); },
     onCanTeleport(fn) { hooks.teleports.push(fn); },
+    onNpcRoute(fn) { hooks.npcRoutes.push(fn); },
     onPlayerLogin(fn) { hooks.logins.push(fn); },
     onPlayerLogout(fn) { hooks.logouts.push(fn); },
     onCustomEvent(name, fn) { const list = hooks.custom.get(name) ?? []; list.push(fn); hooks.custom.set(name, list); },
@@ -155,6 +175,7 @@ function setup(pluginPath, questKey, options = {}) {
     },
     choice(npcId, option) { api.emitCustomEvent('npc-dialogue:choice', event('choice', { npcId, option })); },
     death(npcId, npc) { for (const fn of hooks.deaths) fn(event('death', { npcId, npc, killer: player })); },
+    npcRoute(event) { for (const fn of hooks.npcRoutes) fn(event); return event; },
     hit(npcId, npc) { for (const fn of hooks.hits) fn({ npc: npc ?? { getId: () => npcId, getContentId: () => npcId }, hit: { getAttacker: () => player } }); },
     tick(count) { while (count-- > 0) { tick++; for (const task of [...tasks]) { if (!task.__done && task.due <= tick) { task.__done = true; task.run(); } } } },
     interfaceButton(buttonId, action = 1) { const fn = hooks.interfaceButtons.get(buttonId); assert.ok(fn, `missing interface hook ${buttonId}`); fn(event('button', { buttonId, action })); },
@@ -477,6 +498,34 @@ test('Brundt world spawn ids resolve to the real cache NPCs and the quest dispat
 });
 
 test('Haunted ladder links use real cache objects, reachable landings and both directions', () => {
+  const far = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles', { waterbirth: true });
+  far.quest.setStage(far.player, 50);
+  const farMiddle = { getId: () => 2253, getContentId: () => 2253, isRegistered: () => true, getOwner: () => null,
+    getLocation: () => new far.core.Location(2543, 10143, 0), setHitpoints(value) { this.hp = value; } };
+  far.setNpcsNear([farMiddle]);
+  far.setWeapon(ITEMS(far).RUNE_THROWNAXE);
+  far.setSpecial(100);
+  far.setLocation(new far.core.Location(2545, 10160, 0));
+  far.npcRoute({ player: far.player, npc: farMiddle, npcId: 2253, clickType: 2,
+    definition: { getActions: () => [null, 'Destroy'] }, range: 1, handled: false });
+  assert.equal(farMiddle.hp, undefined, 'a support beyond the scoped reach cannot be destroyed');
+  assert.equal(far.player.getSpecialPercentage(), 100, 'out-of-range clicks spend no energy');
+
+  const foreign = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles', { waterbirth: true });
+  foreign.quest.setStage(foreign.player, 50);
+  const foreignMiddle = { getId: () => 2253, getContentId: () => 2253, isRegistered: () => true,
+    getOwner: () => ({}), getLocation: () => new foreign.core.Location(2543, 10143, 0),
+    setHitpoints(value) { this.hp = value; } };
+  foreign.setNpcsNear([foreignMiddle]);
+  foreign.setWeapon(ITEMS(foreign).RUNE_THROWNAXE);
+  foreign.setSpecial(100);
+  foreign.setLocation(new foreign.core.Location(2545, 10146, 0));
+  const foreignClick = { player: foreign.player, npc: foreignMiddle, npcId: 2253, clickType: 2,
+    definition: { getActions: () => [null, 'Destroy'] }, range: 1, handled: false };
+  foreign.npcRoute(foreignClick);
+  assert.equal(foreignClick.range, 1, 'a foreign-owned support gets no route widening');
+  assert.equal(foreignClick.ignoreProjectileClip, undefined, 'a foreign-owned support gets no clip exception');
+
   const { RegionManager } = require('../dist/game/collision/RegionManager');
   const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
   const ClimbLinks = require('../plugins/objects/ClimbLinks');
@@ -681,45 +730,97 @@ test('Waterbirth pet rock can be placed on a floor button and used as the second
   assert.ok(h.groundItems.has('2490,10162,0,3695'), 'the rock lands on the button tile');
 });
 
-test('Waterbirth door-supports need the rune thrownaxe special at the middle support from a side path', () => {
+test('Waterbirth door-support route only recommends the real rune-thrownaxe reach', () => {
   const side = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles', { waterbirth: true });
   const I = ITEMS(side);
   side.quest.setStage(side.player, 50);
-  const supports = [2250, 2253, 2256].map((id) => ({
-    getId: () => id, getContentId: () => id, isRegistered: () => true,
+  const tiles = [[2545, 10141], [2543, 10143], [2545, 10145]];
+  const supports = [2250, 2253, 2256].map((id, index) => ({
+    getId: () => id, getContentId: () => id, isRegistered: () => true, getOwner: () => null,
+    getLocation: () => new side.core.Location(tiles[index][0], tiles[index][1], 0),
     setHitpoints(value) { this.hp = value; },
   }));
+  const doors = tiles.map(([x, y]) => ({
+    getId: () => 8967, getLocation: () => new side.core.Location(x, y, 0),
+    getType: () => 10, getFace: () => 0, getPrivateArea: () => null,
+  }));
+  side.objects.push(...doors);
   side.setNpcsNear(supports);
   side.setWeapon(I.RUNE_THROWNAXE);
   side.setSpecial(100);
-  side.setLocation(new side.core.Location(2540, 10141, 0));
-  side.hooks.namedNpcs.get('Door-support').Destroy({ player: side.player, npc: supports[1], npcId: 2253, handled: false });
-  assert.deepEqual(supports.map((npc) => npc.hp), [0, 0, 0], 'all supports go through the canonical NPC death path');
+  side.setLocation(new side.core.Location(2545, 10146, 0));
+  const middle = supports[1];
+  const click = {
+    player: side.player, npc: middle, npcId: 2253, clickType: 2,
+    definition: { getActions: () => [null, 'Destroy'] }, range: 1, handled: false,
+  };
+  side.npcRoute(click);
+  assert.equal(click.range, 4, 'the route recommends the rune thrownaxe attack reach');
+  assert.equal(click.ignoreProjectileClip, true, 'the route asks core to honour the support clip exception');
+  assert.equal(side.player.getSpecialPercentage(), 100, 'routing must not spend special energy');
+  assert.deepEqual(supports.map((npc) => npc.hp), [undefined, undefined, undefined], 'routing must not kill supports');
+  assert.equal(side.objects.filter((object) => object.getId?.() === 8967).length, 3, 'routing must not open doorways');
+  assert.equal(side.attrs.has('quest.the_fremennik_exiles.waterbirth-supports-down'), false, 'routing persists nothing');
+
+  side.hooks.namedNpcs.get('Door-support').Destroy(click);
+  assert.equal(side.player.getSpecialPercentage(), 90, 'the real NPC callback spends exactly 10% once');
+  assert.deepEqual(supports.map((npc) => npc.hp), [0, 0, 0], 'the callback kills all three through the NPC death path');
   assert.equal(side.removed.length, 0, 'supports are not permanently removed from the world');
-  assert.equal(side.player.getSpecialPercentage(), 90, 'the special costs 10% energy');
-  assert.equal(side.attrs.has('quest.the_fremennik_exiles.waterbirth-supports-down'), false, 'support state is not persisted per player');
+  assert.equal(side.objects.some((object) => object.getId?.() === 8967), false, 'the callback removes the central doors');
+  side.tick(25);
+  assert.equal(side.registrations.filter((object) => object.getId?.() === 8967).length, 3, 'doors restore with the support respawn');
   const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
   NpcDefinition.init?.();
   assert.equal(NpcDefinition.forId(2253).getRespawn(), 25, 'canonical door-support respawn is unchanged');
 
   const front = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles', { waterbirth: true });
   front.quest.setStage(front.player, 50);
-  const middle = { getId: () => 2253, getContentId: () => 2253, isRegistered: () => true };
-  front.setNpcsNear([middle]);
+  const frontMiddle = { getId: () => 2253, getContentId: () => 2253, isRegistered: () => true, getOwner: () => null,
+    getLocation: () => new front.core.Location(2543, 10143, 0), setHitpoints(value) { this.hp = value; } };
+  front.setNpcsNear([frontMiddle]);
   front.setWeapon(ITEMS(front).RUNE_THROWNAXE);
   front.setSpecial(100);
-  front.setLocation(new front.core.Location(2540, 10143, 0));
-  front.hooks.namedNpcs.get('Door-support').Destroy({ player: front.player, npc: middle, npcId: 2253, handled: false });
-  assert.equal(front.removed.length, 0, 'the support in front of the player cannot be destroyed');
-  assert.match(front.messages.at(-1), /openable from this side/);
+  front.setLocation(new front.core.Location(2545, 10143, 0));
+  const frontClick = { player: front.player, npc: frontMiddle, npcId: 2253, clickType: 2,
+    definition: { getActions: () => [null, 'Destroy'] }, range: 1, handled: false };
+  front.npcRoute(frontClick);
+  assert.equal(frontClick.range, 1, 'the support directly in front gets no route widening');
+  assert.equal(frontClick.ignoreProjectileClip, undefined, 'the support directly in front gets no clip exception');
 
   const noAxe = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles', { waterbirth: true });
   noAxe.quest.setStage(noAxe.player, 50);
-  noAxe.setNpcsNear([middle]);
-  noAxe.setLocation(new noAxe.core.Location(2540, 10141, 0));
-  noAxe.hooks.namedNpcs.get('Door-support').Destroy({ player: noAxe.player, npc: middle, npcId: 2253, handled: false });
-  assert.equal(noAxe.removed.length, 0, 'without the rune thrownaxe nothing is knocked down');
-  assert.match(noAxe.messages.at(-1), /rune thrownaxe/);
+  const noAxeMiddle = { getId: () => 2253, getContentId: () => 2253, isRegistered: () => true, getOwner: () => null,
+    getLocation: () => new noAxe.core.Location(2543, 10143, 0), setHitpoints(value) { this.hp = value; } };
+  noAxe.setNpcsNear([noAxeMiddle]);
+  noAxe.setLocation(new noAxe.core.Location(2545, 10146, 0));
+  const noAxeClick = { player: noAxe.player, npc: noAxeMiddle, npcId: 2253, clickType: 2,
+    definition: { getActions: () => [null, 'Destroy'] }, range: 1, handled: false };
+  noAxe.npcRoute(noAxeClick);
+  assert.equal(noAxeClick.range, 1, 'wrong weapon gets no route widening');
+  assert.equal(noAxeClick.ignoreProjectileClip, undefined, 'wrong weapon gets no clip exception');
+
+  const far = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles', { waterbirth: true });
+  far.quest.setStage(far.player, 50);
+  const farMiddle = { getId: () => 2253, getContentId: () => 2253, isRegistered: () => true, getOwner: () => null,
+    getLocation: () => new far.core.Location(2543, 10143, 0), setHitpoints(value) { this.hp = value; } };
+  far.setNpcsNear([farMiddle]);
+  far.setWeapon(ITEMS(far).RUNE_THROWNAXE);
+  far.setSpecial(100);
+  far.setLocation(new far.core.Location(2545, 10150, 0));
+  const farClick = { player: far.player, npc: farMiddle, npcId: 2253, clickType: 2,
+    definition: { getActions: () => [null, 'Destroy'] }, range: 1, handled: false };
+  far.npcRoute(farClick);
+  assert.equal(farClick.range, 1, 'out-of-range clicks get no route widening');
+  assert.equal(farClick.ignoreProjectileClip, undefined, 'out-of-range clicks get no clip exception');
+
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { Location } = require('../dist/game/model/Location');
+  RegionManager.loadMapFiles(2432, 10112, false);
+  assert.equal(RegionManager.canProjectileAttack(
+    { getSize: () => 1, getPrivateArea: () => null },
+    new Location(2545, 10146, 0),
+    new Location(2543, 10143, 0),
+  ), false, 'normal projectile LOS is blocked; the support primary source grants a 5-tile clip exception');
 });
 
 test('Waterbirth gate is shared: two players can cooperate, and release closes it', () => {
@@ -826,4 +927,77 @@ test('Waterbirth captured landings, cache gate ids and the lower pathfinder reac
     getMovementQueue: queue,
   };
   assert.equal(PathFinder.calculateWalkRoute(player, 1850, 4392), 1, 'the captured landing walks to Bardur');
+});
+
+
+test('NPC route clip permission calls the real walkToEntity callback once', () => {
+  const { MovementQueue } = require('../dist/game/model/movement/MovementQueue');
+  const { Location } = require('../dist/game/model/Location');
+  const player = {
+    getIndex: () => 1, isPlayer: () => true, getAsPlayer: () => player,
+    getLocation: () => new Location(2545, 10146, 0), getPrivateArea: () => null,
+    getSize: () => 1, getHitpoints: () => 99, isRegistered: () => true,
+    setMobileInteraction() {}, getMovementQueue: () => queue,
+  };
+  const npc = {
+    isNpc: () => true, isRegistered: () => true, getHitpoints: () => 1,
+    getPrivateArea: () => null, getLocation: () => new Location(2543, 10143, 0),
+    getSize: () => 1, getId: () => 2253,
+  };
+  const queue = Object.create(MovementQueue.prototype);
+  queue.character = player;
+  queue.player = player;
+  queue.getMobility = () => ({ canMove: () => true, sendMessage() {} });
+  queue.checkDestination = () => true;
+  queue.reset = () => {};
+  queue.walkToReset = () => {};
+  queue.isProjectedMainWorldNpc = () => false;
+  let calls = 0;
+  queue.walkToEntity(npc, () => { calls += 1; }, 4, true);
+  assert.equal(calls, 1, 'the scoped clip exception reaches the normal NPC callback once');
+});
+
+test('Waterbirth handler opens the real base-map door clipping and restores it', () => {
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+  const { Location } = require('../dist/game/model/Location');
+  const { PathFinder } = require('../dist/game/model/movement/path/PathFinder');
+  RegionManager.loadMapFiles(2432, 10112, false);
+  const tile = new Location(2545, 10145, 0);
+  assert.ok(MapObjects.get(8967, tile, null), 'cache base-map door resolves');
+  assert.equal(RegionManager.blocked(tile, null), true, 'base door starts blocking');
+
+  const h = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles', { waterbirth: true, realDoors: true });
+  h.quest.setStage(h.player, 50);
+  const middle = { getId: () => 2253, getContentId: () => 2253, isRegistered: () => true, getOwner: () => null,
+    getLocation: () => new h.core.Location(2543, 10143, 0), setHitpoints(value) { this.hp = value; } };
+  h.setNpcsNear([middle]);
+  h.setWeapon(ITEMS(h).RUNE_THROWNAXE);
+  h.setSpecial(100);
+  h.setLocation(new h.core.Location(2545, 10146, 0));
+  const click = { player: h.player, npc: middle, npcId: 2253, clickType: 2,
+    definition: { getActions: () => [null, 'Destroy'] }, range: 1, handled: false };
+  h.npcRoute(click);
+  assert.ok(MapObjects.get(8967, tile, null), 'routing alone leaves the base door in place');
+  h.hooks.namedNpcs.get('Door-support').Destroy(click);
+  assert.equal(MapObjects.get(8967, tile, null), null, 'the handler removes the actual base door');
+  assert.equal(RegionManager.blocked(tile, null), false, 'base-map clipping is cleared');
+
+  const queue = () => {
+    const q = {};
+    for (const method of ['reset', 'setRoute', 'syncDestinationFlagToRoute', 'setPathX', 'setPathY', 'setLastDestX', 'setLastDestY']) {
+      q[method] = () => q;
+    }
+    return new Proxy(q, { get: (target, key) => target[key] ?? (() => q) });
+  };
+  const walker = {
+    getLocation: () => new Location(2545, 10146, 0), getSize: () => 1, getPrivateArea: () => null,
+    isPlayer: () => true, getAsPlayer: () => ({ isPlayerBot: () => false, getUsername: () => 'tester' }),
+    getMovementQueue: queue,
+  };
+  assert.ok(PathFinder.calculateWalkRoute(walker, 2545, 10144) > 0, 'path into the ladder room opens');
+
+  h.tick(25);
+  assert.ok(MapObjects.get(8967, tile, null), 'the base door is restored with the support respawn');
+  assert.equal(RegionManager.blocked(tile, null), true, 'base-map clipping closes again');
 });

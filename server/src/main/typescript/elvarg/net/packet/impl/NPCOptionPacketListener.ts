@@ -51,7 +51,7 @@ export class NPCOptionPacketListener {
     const routeEvent = {
       player, npc, definition, npcId: npc.getContentId(player), npcIndex: index, clickType,
       location: { x: npc.getLocation().getX(), y: npc.getLocation().getY(), z: npc.getLocation().getZ() },
-      handled: false, range: 1,
+      handled: false, range: 1, ignoreProjectileClip: false,
     };
     PluginManager.emitNpcRoute(routeEvent);
     player.getMovementQueue().walkToEntity(npc, () => {
@@ -70,7 +70,7 @@ export class NPCOptionPacketListener {
         npc.setMobileInteraction?.(player);
         npc.setPositionToFace?.(player.getLocation());
       }
-    }, routeEvent.range);
+    }, routeEvent.range, routeEvent.ignoreProjectileClip === true);
   }
 
   private static operate(player: any, npc: any, index: number, clickType: number, definition: any, option: string | undefined): void {

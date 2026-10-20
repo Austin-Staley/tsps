@@ -559,10 +559,12 @@ module.exports = function registerShadowsOfCustodiaQuest(api) {
         event.handled = true;
         if (event.text) player.sendMessage(String(event.text));
         removeDenNpc(player, "antos");
+        // The Ariadna continuation in this same transcript completes on stage 22;
+        // write it before the fade so the final captured line can complete once.
+        if (quest.getStage(player) < STAGE_ANTOS_RETURNED) quest.setStage(player, STAGE_ANTOS_RETURNED);
         Scenes.fade(player, true);
         Scenes.later(player, 2, () => {
           player.moveTo(new Location(ARIADNA_LANDING.x, ARIADNA_LANDING.y, ARIADNA_LANDING.z));
-          if (quest.getStage(player) < STAGE_ANTOS_RETURNED) quest.setStage(player, STAGE_ANTOS_RETURNED);
           Scenes.fade(player, false);
           Scenes.later(player, 2, () => Scenes.closeFade(player));
         });
@@ -919,11 +921,13 @@ module.exports = function registerShadowsOfCustodiaQuest(api) {
       }
       player.moveTo(new Location(DEN_LANDING.x, DEN_LANDING.y, DEN_LANDING.z));
       if (stage >= STAGE_MOUNTAINS && stage < STAGE_DEN) quest.setStage(player, STAGE_DEN);
-      syncDenNpcs(player);
       Scenes.fade(player, false);
       Scenes.later(player, 2, () => {
         Scenes.closeFade(player);
-        Scenes.controls(player, false);
+        // The captured den transition ends with the fade-in. Keeping this private
+        // scene alive blocked the normal path and hid owner-only den NPCs.
+        Scenes.end(player, false);
+        syncDenNpcs(player);
       });
     });
   }

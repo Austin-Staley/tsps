@@ -47,7 +47,10 @@
  *   the trail is followed, and his "while following" conversation is played from
  *   his Jolly Boar spawn;
  * - the red mist is captured object 50690, spawned where an armoured zombie
- *   dies; using an empty bottle on it consumes the object and fills the bottle;
+ *   dies; using an empty bottle on it consumes the object and fills the bottle.
+ *   The captured base bottle spawn at 3537,4572 is a normal reusable ground
+ *   pickup. Both gates return the three empty bottles on use (capture 1636);
+ *   the spawn is re-established after death/relog/base re-entry if missing;
  * - the base is the real (non-instanced) map, so the captured balcony/Arrav
  *   views use their recorded camera positions. The final invasion is chatbox
  *   dialogue but replays all four captured camera cuts at their dialogue
@@ -151,7 +154,6 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
   const BIT_BALCONY_1 = 1 << 3;
   const BIT_BALCONY_2 = 1 << 4;
   const BIT_BOTTLES_1 = 1 << 5;
-  const BIT_BOTTLES_2 = 1 << 6;
 
   // ==========================================================================
   // Ids
@@ -288,7 +290,11 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
   const BASE_ENTRY_LANDING = { x: 3560, y: 4551 };
   const BASE_EXIT_LANDING = { x: 3345, y: 3514 };
   const BASE_ELIAS_TILE = { x: 3560, y: 4551 };
-  const BASE_BOTTLES_TILE = { x: 3537, y: 4572 };
+  // Capture 1636 lines 29589-29596: eight individual Bottle (28804) floor spawns.
+  const BOTTLE_SPAWN_TILES = [
+    { x: 3534, y: 4595 }, { x: 3531, y: 4600 }, { x: 3542, y: 4569 }, { x: 3540, y: 4569 },
+    { x: 3537, y: 4572 }, { x: 3536, y: 4600 }, { x: 3547, y: 4568 }, { x: 3544, y: 4573 },
+  ];
   const BASE_ZONE = { minX: 3490, maxX: 3620, minY: 4530, maxY: 4630, levels: [0] };
   const JOLLY_BOAR_ELIAS_TILE = { x: 3283, y: 3501 };
   const PALACE_ELIAS_TILE = { x: 3208, y: 3475 };
@@ -441,6 +447,7 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
   const eliasByPlayer = new Map();
   const dialogueContext = new WeakMap();
   const mistObjects = new WeakMap();
+  const bottleRespawnPending = new WeakSet();
   let worldInstalled = false;
 
   function stageOf(player) {
@@ -712,6 +719,7 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
   function handleLogin({ player }) {
     installWorld();
     migrate(player);
+    ensureBottleSource(player);
     syncElias(player);
     sendTrailVarbits(player);
     refreshQuestList(player);
@@ -1155,7 +1163,7 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
     if (value.startsWith(LINE_ARRAV_DONE)) {
       if (stageOf(player) >= STAGE_ARRAV && stageOf(player) < STAGE_SECOND_BOTTLES) {
         ensureStage(player, STAGE_SECOND_BOTTLES);
-        giveBottles(player, BIT_BOTTLES_2);
+        ensureBottleSource(player);
       }
       return;
     }
@@ -1348,7 +1356,9 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
    * Varrock player's first descent can land here instead of in handleTrapdoor.
    */
   function handleBaseEnter({ player }) {
-    if (!player || !questActive(player) || hasBit(player, BIT_ENTERED_BASE)) return;
+    if (!player) return;
+    ensureBottleSource(player);
+    if (!questActive(player) || hasBit(player, BIT_ENTERED_BASE)) return;
     // Curse of Arrav owns the placed trapdoor and can teleport first. Validate the
     // Defender trail and the real key here too, so a lost key cannot bypass entry.
     if (stageOf(player) < STAGE_TRACK_MAX) {
@@ -1382,12 +1392,15 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
       // Play first: the transcript's mist conditions read the bottles synchronously.
       play(player, ELIAS_CHATHEAD, V_GATE);
       player.getInventory().deleteNumber(BOTTLE_OF_MIST_ITEM, 3);
+      // Capture 1636: both gates return the three empty bottles to the inventory.
+      player.getInventory().adds(BOTTLE_ITEM, 3);
       afterDialogue(player, () => {
         if (player.isRegistered?.() === false || !questActive(player)) return;
         const landing = gate2 ? GATE_2_LANDING : GATE_1_LANDING;
         player.moveTo(new Location(landing.x, landing.y, 0));
         if (gate2) {
           ensureStage(player, STAGE_BALCONY_2);
+          ensureBottleSource(player);
           return;
         }
         ensureStage(player, STAGE_GATE_1);
@@ -1443,15 +1456,58 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
     }
   }
 
+  /** The captured base bottle pickups are normal reusable floor spawns. */
+  function bottleRecoveryActive(player) {
+    return questActive(player) && stageOf(player) >= STAGE_FIRST_BOTTLES &&
+      !hasBit(player, BIT_GATE_2) && stageOf(player) < STAGE_BALCONY_2;
+  }
+
+  function ownBottleSources(player) {
+    return (api.getWorld?.()?.getItems?.() ?? []).filter((item) =>
+      !item.isPendingRemoval?.() && item.getOwner?.() === player.getUsername() && item.getItem?.()?.getId?.() === BOTTLE_ITEM);
+  }
+
+  /**
+   * Capture 1636 spawns eight normal single Bottle (28804) floor items. Keep any
+   * missing ones present while a gate still needs bottles; they are static,
+   * owner-only pickups, not an inventory grant or a total-owned cap.
+   */
+  function ensureBottleSource(player) {
+    if (!bottleRecoveryActive(player) || bottleRespawnPending.has(player)) return;
+    const manager = api.getItemOnGroundManager?.();
+    if (!manager) return;
+    const present = new Set(ownBottleSources(player).map((item) => {
+      const at = item.getPosition?.();
+      return `${at?.getX?.()},${at?.getY?.()}`;
+    }));
+    if (present.size > 0) return; // respawning missing ones is the 4-tick task's job
+    for (const spawn of BOTTLE_SPAWN_TILES) {
+      const ground = manager.registerLocation(player, new Item(BOTTLE_ITEM, 1), new Location(spawn.x, spawn.y, 0));
+      if (ground) {
+        ground.staticSpawn = true;
+        ground.respawnTimer = 4; // capture 1636: picked bottle returns after four ticks
+      }
+    }
+  }
+
+  /** Lifecycle only seeds missing sources; the 4-tick ground respawn handles pickups. */
+  function handleBottlePickup(event) {
+    const { player, groundItemId, location } = event;
+    if (!player || groundItemId !== BOTTLE_ITEM) return;
+    if (!BOTTLE_SPAWN_TILES.some((spawn) => spawn.x === location?.x && spawn.y === location?.y)) return;
+    bottleRespawnPending.add(player);
+    const { CountdownTask, TaskManager } = api.core;
+    if (CountdownTask && TaskManager) {
+      TaskManager.submit(new CountdownTask(player, 4, () => bottleRespawnPending.delete(player)));
+    } else {
+      setTimeout(() => bottleRespawnPending.delete(player), 2400);
+    }
+  }
+
   function giveBottles(player, bit) {
     if (hasBit(player, bit)) return;
     setBit(player, bit);
-    const manager = api.getItemOnGroundManager?.();
-    if (manager) {
-      manager.registerLocation(player, new Item(BOTTLE_ITEM, 3), new Location(BASE_BOTTLES_TILE.x, BASE_BOTTLES_TILE.y, 0));
-      return;
-    }
-    player.getInventory().adds(BOTTLE_ITEM, 3);
+    ensureBottleSource(player);
   }
 
   function handleNpcDeath(event) {
@@ -1618,6 +1674,7 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
 
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
+  api.onGroundItemPickup(handleBottlePickup);
   api.onCustomEvent("quest:stage-changed", handleStageChanged);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
   api.onCustomEvent("npc-dialogue:choice", handleDialogueChoice);
