@@ -149,6 +149,9 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
     // Box traps accept spicy tomato/minced meat, deadfalls a jerboa tail; both return on dismantle.
     p.counts.clear(); p.counts.set(I.BOX_TRAP, 1); p.counts.set(I.SPICY_TOMATO, 1); p.counts.set(I.SPICY_MINCED_MEAT, 1);
     Traps.activate({ player: p, itemId: I.BOX_TRAP }); advance(3);
+    assert.equal(H.traps.size, 0, "box traps wait for Nickolaus's lesson in Eagles' Peak");
+    p.attrs.set("quest.eagles_peak.stage", 6);
+    Traps.activate({ player: p, itemId: I.BOX_TRAP }); advance(3);
     const boxTrap = [...H.traps][0]; assert.ok(boxTrap);
     Traps.bait({ player: p, object: boxTrap.objects[0], itemId: I.RAW_BEEF });
     assert.equal(boxTrap.bait, null, "box traps reject bait outside tomato/minced meat");
@@ -402,11 +405,57 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
     q.moveTo(anchor.getLocation().clone().add(0,1));q.options[1][1]();
     assert.equal(Drift.state(q).nets[anchor.getId()],undefined);assert.equal(q.counts.has(I.NUMULITE),false);
     assert.ok(q.banks.some(b=>b.items.size>0));Drift.cleanup({player:q});
+    // Ceto's transcript: its conditions follow the player's access and numulites.
+    const Ceto = require("../plugins/skills/hunter/Ceto.Hunter");
+    const cetoSays = text => Ceto.condition({ player: q, npcId: core.NpcIdentifiers.CETO, text });
+    Drift.state(q).until = 0; q.counts.set(I.NUMULITE, 200);
+    assert.equal(cetoSays("If the player has the level requirements to drift net fish, but has not paid for a day's access:"), true);
+    assert.equal(cetoSays("If the player has at least 200 numulites in their inventory:"), true);
+    assert.ok(Drift.buyDay(q)); assert.equal(q.counts.has(I.NUMULITE), false);
+    assert.equal(cetoSays("If the player has paid to access for the day:"), true);
+    assert.equal(cetoSays("If the player has paid for permanent access:"), false);
+    assert.equal(Ceto.condition({ player: q, npcId: core.NpcIdentifiers.ANNETTE, text: "If the player has paid for permanent access:" }), null);
+    // The lines the payments hang on are the transcript's own words.
+    const transcript = JSON.stringify(require("../data/definitions/npc-dialogues.json").Ceto);
+    for (const words of [Ceto.PAY_TEXT, Ceto.ENTERS_LINE, Ceto.PERMANENT_LINE]) assert.ok(transcript.includes(JSON.stringify(words)), words);
+    Drift.state(q).until = 0; q.counts.set(I.NUMULITE, 200);
+    const give = { player: q, npcId: core.NpcIdentifiers.CETO, action: "give", text: Ceto.PAY_TEXT, handled: false };
+    Ceto.action(give);
+    assert.ok(give.handled && !give.end && Drift.state(q).until > Date.now(), "the give step pays for the day");
+    const broke = { player: q, npcId: core.NpcIdentifiers.CETO, action: "give", text: Ceto.PAY_TEXT, handled: false };
+    Ceto.action(broke); assert.ok(broke.end, "no numulites ends the conversation");
+    q.counts.set(I.NUMULITE, 20000);
+    const thanks = { player: q, npcId: core.NpcIdentifiers.CETO, text: Ceto.PERMANENT_LINE, skip: false };
+    Ceto.line(thanks);
+    assert.equal(Drift.state(q).until, -1); assert.equal(q.counts.has(I.NUMULITE), false);
     q.equipment.clear();q.counts.clear();q.moveTo(new core.Location(1370,3620));q.counts.set(I.KING_WORM,2);
     Aerial.borrow({player:q});const spot=prey(core.NpcIdentifiers.FISHING_SPOT_12,q.getLocation().clone().add(2,0));
     const preAerial=q.experience.get(Skill.HUNTER);Aerial.fish({player:q,npc:spot,npcId:spot.getId()});advance(1);
     assert.ok(q.experience.get(Skill.HUNTER)>preAerial);assert.equal(q.counts.get(I.KING_WORM),1);
     Aerial.cleanup({player:q});Runtime.cleanup({player:q});
+
+    // Tracking: the object the visible tracks lead to reveals the next set, and the last one hides the kebbit.
+    const t = player(), tracked = [];
+    t.counts.set(I.NOOSE_WAND, 1); t.sendMessage = m => tracked.push(m);
+    const trailAt = ([x, y, z]) => new core.GameObject(1, new core.Location(x, y, z), 10, 0, null);
+    const segmentOf = varbit => Tracking.data.segments.find(s => s.varbit === varbit);
+    const burrow = trailAt(Tracking.data.segments.find(s => s.burrow && s.kebbit === "feldip_weasel").start);
+    t.moveTo(burrow.getLocation().clone());
+    Tracking.inspect({ player: t, object: burrow, definition: { getName: () => "Burrow" } });
+    let searches = 0;
+    while (!tracked.at(-1).startsWith("Something is moving here") && searches++ < 15) {
+      const varbit = [...t.configs.keys()].at(-1), segment = segmentOf(varbit);
+      const forwards = t.configs.get(varbit) === (segment.inverted ? 5 : 4);
+      const spot = trailAt(forwards ? segment.end : segment.start);
+      t.moveTo(spot.getLocation().clone());
+      Tracking.inspect({ player: t, object: spot, definition: { getName: () => "Bush" } });
+      assert.notEqual(tracked.at(-1), "You find no new tracks here.", "the object the tracks lead to continues the trail");
+    }
+    assert.ok(searches < 15, "the trail ends at the kebbit");
+    const hide = trailAt([t.getLocation().getX(), t.getLocation().getY(), t.getLocation().getZ()]);
+    Tracking.catchPrey({ player: t, object: hide }); advance(2);
+    assert.equal(t.experience.get(Skill.HUNTER), 48, "a Feldip weasel gives 48 Hunter XP");
+    assert.ok(t.counts.has(I.FELDIP_WEASEL_FUR));
 
     const route = { npcId: core.NpcIdentifiers.FISHING_SPOT_12, definition: { getActions: () => ["Catch"] }, clickType: 1, range: 1 };
     Runtime.npcRoute(route); assert.equal(route.range, 9);
