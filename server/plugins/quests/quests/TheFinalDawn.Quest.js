@@ -852,6 +852,8 @@ module.exports = function registerTheFinalDawnQuest(api) {
       syncTracked(player, "chimalli", null);
       syncTracked(player, "lucius", null);
     }
+    // A saved stage-62 fight resumes with the captured Metzli actor; spawnMetzli is idempotent.
+    if (stage === STAGE_METZLI) spawnMetzli(player);
     syncTracked(player, "servius-teklan", stage === STAGE_TWINS || stage === STAGE_ATTALA_DONE || stage === STAGE_CRYPT
       ? { id: SERVIUS_CRYPT_ID, x: 1236, y: 3105, z: 0, wanderRadius: 0 }
       : null);

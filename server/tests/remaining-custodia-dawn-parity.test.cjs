@@ -1513,6 +1513,32 @@ test('The Final Dawn glowing symbol only starts the fight at stage 41', () => {
   assert.ok(h.npcs.some(npc => npc.id === 14362));
 });
 
+test('The Final Dawn resumes a saved stage62 fight with one captured Metzli actor', () => {
+  const h = harness('TheFinalDawn'), p = player();
+  h.quest.setStage(p, 62);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  const bosses = () => h.npcs.filter(npc => npc.id === 14313 && !npc.removed);
+  assert.equal(bosses().length, 1, 'one real Metzli actor for a saved stage62 fight');
+  assert.deepEqual(
+    [bosses()[0].getLocation().getX(), bosses()[0].getLocation().getY(), bosses()[0].getLocation().getZ()],
+    [1312, 9500, 1], 'captured Metzli chamber tile'
+  );
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(bosses().length, 1, 'repeat login does not duplicate Metzli');
+
+  for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
+  const relogged = player();
+  h.quest.setStage(relogged, 62);
+  h.hooks.onPlayerLogin[0]({ player: relogged });
+  assert.equal(bosses().length, 1, 'relog resumes one Metzli actor');
+
+  const dead = player();
+  h.quest.setStage(dead, 63);
+  h.hooks.onPlayerLogin[0]({ player: dead });
+  assert.equal(h.npcs.filter(npc => npc.id === 14313 && npc.getOwner() === dead && !npc.removed).length, 0,
+    'a saved stage63 fight does not respawn Metzli');
+});
+
 test('The Final Dawn logout removes every tracked owner NPC before a fresh login', () => {
   const h = harness('TheFinalDawn'), p = player();
   h.quest.setStage(p, 23);

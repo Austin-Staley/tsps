@@ -28,7 +28,7 @@ const Records = require('../plugins/bosses/doom/Records.DoomOfMokhaiotl');
 const Burrow = require('../plugins/bosses/doom/Burrow.DoomOfMokhaiotl');
 const { chargeTicks } = require('../plugins/bosses/doom/Shield.DoomOfMokhaiotl');
 
-const hooks = { objects: [], prompts: [], hitModify: [], beforeDeath: [], attack: [], timing: [], roll: [], buttons: {} };
+const hooks = { objects: [], prompts: [], hitModify: [], beforeDeath: [], attack: [], timing: [], roll: [], buttons: {}, login: [], zone: [] };
 let nextIndex = 1;
 const SIZES = { [Shared.NPC.DOOM]: 5, [Shared.NPC.EARTHEN_SHIELD]: 3 };
 
@@ -108,8 +108,8 @@ function fakeApi() {
     core: PluginManager.getCoreApi(),
     persistAttribute() {},
     registerNpcCombatMethodProvider() {},
-    onPlayerLogin() {},
-    onZoneEnter() {},
+    onPlayerLogin: (handler) => hooks.login.push(handler),
+    onZoneEnter: (_zone, handler) => hooks.zone.push(handler),
     onObjectInteraction: (handler) => hooks.objects.push(handler),
     onCanAttack: (handler) => hooks.attack.push(handler),
     onNpcBeforeDeath: (handler) => hooks.beforeDeath.push(handler),
@@ -271,6 +271,43 @@ test('the cache has the Doom, its larvae and locs where the capture put them', (
   assert.equal(entrance.transformVarbit, Shared.VARBIT.FINAL_DAWN);
   assert.equal(entrance.transforms[Shared.FINAL_DAWN_COMPLETE], Shared.OBJECT.ENTRANCE_OPEN);
   assert.equal(CacheDefinitions.getObject(Shared.OBJECT.ENTRANCE_OPEN).actions[0], 'Pass-through');
+});
+
+test('an unfinished Final Dawn login or ruins entry never rewrites the quest stage varbit', () => {
+  const p = fakePlayer();
+  p.varbits.set(Shared.VARBIT.FINAL_DAWN, 62);
+  for (const handler of hooks.login) handler({ player: p });
+  for (const handler of hooks.zone) handler({ player: p });
+  assert.equal(p.varbits.get(Shared.VARBIT.FINAL_DAWN), 62, 'quest-owned stage stays 62');
+  assert.equal(Lobby.openEntrance, undefined, 'no unconditional completion writer remains');
+});
+
+test('the Doom entrance leaves an unfinished quest Inspect to the quest handler', () => {
+  const p = fakePlayer();
+  p.varbits.set(Shared.VARBIT.FINAL_DAWN, 65);
+  const inspect = {
+    player: p, objectId: Shared.OBJECT.ENTRANCE, clickType: 2, handled: false,
+    definition: { getInteractions: () => ['', 'Inspect'] },
+  };
+  for (const handler of hooks.objects) handler(inspect);
+  assert.equal(inspect.handled, false, 'Inspect is not consumed before quest completion');
+  assert.deepEqual([p.location.getX(), p.location.getY(), p.location.getZ()], [1311, 9556, 0], 'no lobby teleport');
+});
+
+test('a genuinely completed Final Dawn still opens the boss entrance with Pass-through', () => {
+  const p = fakePlayer();
+  p.varbits.set(Shared.VARBIT.FINAL_DAWN, Shared.FINAL_DAWN_COMPLETE);
+  const pass = {
+    player: p, objectId: Shared.OBJECT.ENTRANCE_OPEN, clickType: 1, handled: false,
+    definition: { getInteractions: () => ['Pass-through'] },
+  };
+  for (const handler of hooks.objects) {
+    if (pass.handled) break;
+    handler(pass);
+  }
+  assert.equal(pass.handled, true, 'completed quest still enters the lobby');
+  ticks(2);
+  assert.deepEqual([p.location.getX(), p.location.getY(), p.location.getZ()], [1311, 9540, 0]);
 });
 
 test('the arrival, the volatile earth tiles and the lobby tiles are open floor', () => {

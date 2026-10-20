@@ -1324,6 +1324,30 @@ test('Wyrd normal 80/50/10 story thresholds play in order without duplicates', (
   }
 });
 
+test('Ivan 158 real Talk-to transcript reaches native 160 then 164 through its actual lines', () => {
+  const h = harness(), p = player('Ivan158');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 96);
+  p.attrs.set('quest.the_blood_moon_rises.final-native-stage', 158);
+  p.moveTo(new core.Location(2846, 7391, 0));
+  const talk = h.npcInteractions.get('Ivan Strom')['Talk-to'];
+  const event = { player: p, npc: { getId: () => 15855 }, npcId: 15855,
+    definition: { getName: () => 'Ivan Strom' }, handled: false };
+  assert.equal(talk(event), true, 'the real Ivan Talk-to transcript starts');
+  assert.ok(p.manager.getCurrent(), 'the captured Ivan conversation is on screen');
+
+  let guard = 300;
+  while (h.quest.getStage(p) !== 100 && guard-- > 0) {
+    const current = p.manager.getCurrent();
+    assert.ok(current, 'the real transcript ended before the final chapter');
+    p.manager.advance();
+  }
+  assert.equal(h.quest.getStage(p), 100, 'the full normal conversation advances to the final chapter');
+  assert.equal(Number(p.attrs.get('quest.the_blood_moon_rises.final-native-stage')), 164,
+    'the Sugadinti handoff crosses 158 -> 160 -> 164');
+  assert.equal(p.varbits.get(15464), 164, 'native 164 is published');
+});
+
 test('gathering threshold spawns Ivan then Sugadinti and both reach the same canon', () => {
   const h = harness(), p = player('GatherEnd');
   enablePrereqs(h, new Set(PREREQS));
@@ -1346,7 +1370,8 @@ test('gathering threshold spawns Ivan then Sugadinti and both reach the same can
     'a 158 relog stays at the captured castle landing');
   assert.ok(h.npcs.some(npc => npc.id === 15852 && !h.removed.includes(npc)),
     'the login sync restores castle Ivan');
-  const line = { player: p, text: "My children, I'm sorry for rushing you inside.",
+  const line = { player: p,
+    text: "My children, I'm sorry for rushing you inside. Time was of the essence in gaining control of the vampyres. However, I have promising news. It seems that for now at least, most are willing to accept me as their ruler.",
     pages: [{ page: 'The Blood Moon Rises', variants: ['night-of-the-blood-moon-talking-to-ivan'] }],
     step: { speaker: 'Sugadinti Vitur' } };
   h.emit('npc-dialogue:line', line);

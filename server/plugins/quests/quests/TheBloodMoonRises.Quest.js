@@ -6453,7 +6453,8 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (stage(player) === STAGE.FENCE_FOUND &&
       Number(player.getAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE)) === 158 &&
       isQuestLine(request, "night-of-the-blood-moon-talking-to-ivan",
-        "My children, I'm sorry for rushing you inside.", "Sugadinti Vitur")) {
+        "My children, I'm sorry for rushing you inside. Time was of the essence in gaining control of the vampyres. However, I have promising news. It seems that for now at least, most are willing to accept me as their ruler.",
+        "Sugadinti Vitur")) {
       setFinalNativeStage(player, 160);
       syncGatheringCastleActors(player);
     }
