@@ -185,7 +185,7 @@ class Instance {
 
   removePlayer(player, logout) {
     if (!this.players.delete(player)) return;
-    player.setAttribute(Common.INSTANCE_ATTRIBUTE, null);
+    player.setAttribute(Common.INSTANCE_ATTRIBUTE, false);
     this.fight?.playerLeft(player);
     const { varbits, barrierStates, instance } = Common.data;
     if (logout) {
@@ -238,14 +238,19 @@ function instanceOf(player) {
 
 // ------------------------------------------------------------------ the way in
 
-/** Into an instance: the God Wars fader where they stand, the rebuilt chamber a tick later (captured). */
-function bringIn(player, instance) {
+/**
+ * Into an instance: the God Wars fader where they stand, the rebuilt chamber a tick later (captured).
+ * `resolve()` gives the instance on that tick (a new one is only built and paid for then), or null.
+ */
+function bringIn(player, resolve) {
   const { instance: spec, chamber } = Common.data;
   player.getMovementQueue().reset();
   player.getPacketSender().sendInterfaceRemoval();
   player.getPacketSender().sendClientScript(spec.faderScript, 1, 1, 1, (spec.fader[0] << 16) | spec.fader[1]);
   Common.later(1, () => {
-    if (!player.isRegistered() || instance.ended) return;
+    if (!player.isRegistered()) return;
+    const instance = resolve();
+    if (!instance || instance.ended) return;
     instance.addPlayer(player);
     instance.area.enter(player);
     player.moveTo(instance.tile(chamber.entry));
@@ -271,15 +276,15 @@ function start(player) {
     Common.statement(player, texts.costShort.replace("[cost]", cost.toLocaleString("en-US")));
     return;
   }
-  confirm(player, () => {
-    if (player.getInventory().getAmount(COINS) < cost || instanceOf(player)) return;
+  confirm(player, () => bringIn(player, () => {
+    if (player.getInventory().getAmount(COINS) < cost || instanceOf(player)) return null;
     player.getInventory().delete(COINS, cost);
     // An old instance still holding friends carries on without its owner.
     instances.delete(player);
     const instance = new Instance(player);
     instances.set(player, instance);
-    bringIn(player, instance);
-  });
+    return instance;
+  }));
 }
 
 /** The captured warning and "Are you sure you wish to begin?", unless "don't ask again" was picked. */
@@ -330,7 +335,12 @@ function join(player) {
         Common.statement(player, texts.inProgress);
         return;
       }
-      confirm(player, () => !instance.ended && !instance.fight && bringIn(player, instance));
+      confirm(player, () => bringIn(player, () => {
+        if (instance.ended) return null;
+        if (!instance.fight) return instance;
+        Common.statement(player, texts.inProgress);
+        return null;
+      }));
     },
   });
   player.getPacketSender().sendEnterInputPrompt(texts.joinPrompt);
@@ -356,7 +366,7 @@ function recoverOnLogin({ player }) {
   const { varbits } = Common.data;
   if (player.getAttribute(Common.SKIP_WARNING_ATTRIBUTE) === true) player.getPacketSender().sendVarbit(varbits.barrierWarningHidden, 1);
   if (!player.getAttribute(Common.INSTANCE_ATTRIBUTE) || instanceOf(player)) return;
-  player.setAttribute(Common.INSTANCE_ATTRIBUTE, null);
+  player.setAttribute(Common.INSTANCE_ATTRIBUTE, false);
   player.moveTo(Common.toLocation(Common.data.prison.entryRoom));
 }
 
@@ -369,8 +379,8 @@ function leave(player) {
 }
 
 function attachInstance(api) {
-  api.persistAttribute(Common.SKIP_WARNING_ATTRIBUTE);
-  api.persistAttribute(Common.INSTANCE_ATTRIBUTE);
+  api.persistAttribute(Common.SKIP_WARNING_ATTRIBUTE, false);
+  api.persistAttribute(Common.INSTANCE_ATTRIBUTE, false);
   api.onPlayerLogin(recoverOnLogin);
 }
 

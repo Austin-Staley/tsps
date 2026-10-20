@@ -103,7 +103,7 @@ function claim({ player }) {
 }
 
 function attachReclaim(api) {
-  api.persistAttribute(Common.RECLAIM_ATTRIBUTE);
+  api.persistAttribute(Common.RECLAIM_ATTRIBUTE, []);
   api.onPlayerDeathItemDrop(keepDroppedItem);
   api.onPlayerDeath(died);
   api.onObjectFirstClick(Common.data.objects.chest, claim);

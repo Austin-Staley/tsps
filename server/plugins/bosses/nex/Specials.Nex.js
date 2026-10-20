@@ -24,9 +24,9 @@ const FREEZE_TICKS = 15;
 const FREEZE_GAP = 5;
 /** Protection prayers stay off this long (the engine's prayer-block timer counts seconds; Sever's 8 ticks). */
 const PRAYER_BLOCK_SECONDS = 5;
-/** Thrown out of her way (the dash, the ice prison's ring): seq 1157, as Near-Reality. */
+/** Thrown out of her way (the dash, the ice prison's ring): seq 1157, the cache's human_troll_flyback. Unverified: no capture has a player thrown. */
 const THROWN_ANIM = 1157;
-/** Containment's icicles hold anyone inside for 10 ticks (Near-Reality). */
+/** Containment's icicles hold anyone inside for 10 ticks. Unverified: no OSRS source (docs/nex.md). */
 const CONTAINMENT_HOLD_TICKS = 10;
 const REAVER_SELF_HEAL = 0.25;
 const REAVER_HITPOINTS = 150;
@@ -278,7 +278,7 @@ function besideHer(fight, player) {
 
 /**
  * Protection prayers off and blocked for a while (the engine's prayer-block timer); "You've been
- * injured and can't use protection prayers!" when one was on (Near-Reality sends it only then).
+ * injured and can't use protection prayers!" when one was on (unverified: every captured case had one on).
  */
 function disableProtection(player) {
   const { PrayerHandler } = Common.core;
@@ -296,7 +296,7 @@ function hold(player, ticks) {
 
 /**
  * Throws a player toward `dest` as a forced move (seq 1157), stopping on the last walkable tile of
- * the line (Near-Reality doesn't check; we keep players out of walls).
+ * the line, so nobody lands in a wall.
  */
 function thrown(fight, player, dest, startCycles, endCycles) {
   const { ForceMovement, ForceMovementTask, Location, RegionManager, TaskManager } = Common.core;
@@ -345,7 +345,7 @@ function dash(fight) {
 }
 
 /**
- * Wiki: up to 50 to anyone in the aisle she charges down. Near-Reality: a tick into the charge they
+ * Wiki: up to 50 to anyone in the aisle she charges down. Unverified (nobody was hit in the captures): a tick into the charge they
  * are thrown (seq 1157, cycles 30-80) to 3 tiles past her middle tile along the dash, hit the next.
  */
 function charge(fight, aisle, end, home) {
@@ -570,7 +570,7 @@ function prison(fight) {
     const { Location, RegionManager } = Common.core;
     const stalagmites = [];
     for (const [x, y] of ring(centre.getX() - 1, centre.getY() - 1, centre.getX() + 1, centre.getY() + 1)) {
-      // Near-Reality: only on free tiles, and anyone standing there is pushed a tile outward.
+      // Only on walkable tiles, and anyone standing on one is pushed a tile outward (unverified: not captured).
       const tile = new Location(x, y, centre.getZ());
       if (RegionManager.blocked(tile, fight.arena.area)) continue;
       for (const player of alive(fight)) {
@@ -700,7 +700,7 @@ function reaverClass() {
       return [hit];
     }
 
-    /** Near-Reality: a reaver heals itself a quarter of the damage it deals. */
+    /** A reaver heals itself a quarter of the damage it deals (unverified: not captured). */
     handleAfterHitEffects(hit) {
       const target = hit.getTarget();
       if (!target?.isPlayer?.() || !hit.isAccurate()) return;

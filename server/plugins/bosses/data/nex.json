@@ -316,6 +316,12 @@
     "maxHit": 50,
     "hudFadeTick": 5
   },
+  "loot": {
+    "$comment": "On her npc-drops.json table. The Wiki: two common drops a kill, the MVP +10% (quantities and unique chance). minShare is ours: the Wiki gives no figure.",
+    "commonRolls": 2,
+    "mvpBonus": 1.1,
+    "minShare": 0.01
+  },
   "kill": {
     "count": "Your Nex kill count is: <col=ff0000>[n]</col>.",
     "duration": "Fight duration: <col=ff0000>[time]</col>.",

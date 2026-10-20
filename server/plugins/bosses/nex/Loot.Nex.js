@@ -1,48 +1,23 @@
 /**
- * Nex's loot (Wiki, "Nex" drops), on the ground under her as captured with the kill messages:
- * - Loot needs a minimum share of the damage to Nex, her mages and reavers (ours: 1%). Players who
- *   died or left get nothing and their share isn't passed on.
- * - Uniques: 1/43 per kill, split by share; the unique is a Torva piece, the Nihil horn 2/12 each,
- *   Zaryte vambraces 3/12, the ancient hilt 1/12.
- * - Two common drops a kill, their quantities split by share. The MVP (most damage) gets +10%
- *   quantities, +10% unique chance and the big bones ("You were the MVP for this fight!", captured).
- * - Separate rolls (blood essence, rune sword, nihil shards) and tertiaries (elite clue 1/48,
- *   Nexling 1/500), each as likely as the player's share.
+ * Nex's loot, rolled on her table in data/definitions/npc-drops.json (the Wiki's) and shared out by
+ * damage as the Wiki describes ("Nex", drop mechanics), on the ground under her as captured:
+ * - Everyone present with a minimum share of the damage to Nex, her mages and the reavers is owed
+ *   loot (the Wiki gives no figure: `loot.minShare` is ours). Those who died or left get nothing.
+ * - "Two common drops are guaranteed after each kill": two rolls of her main table make the kill's
+ *   lump, and each player gets their share of its quantities.
+ * - Uniques: "1/43 ... divided by contribution", so every player rolls the unique entries with their
+ *   chance scaled by their share; the separate rolls and tertiaries likewise.
+ * - The MVP (most damage) gets +10% quantities, +10% unique chance and the big bones (her table's
+ *   always-drop), and is told "You were the MVP for this fight!" (captured).
  */
 const Common = require("./Common.Nex");
 
-const UNIQUE_RATE = 43;
-const MVP_BONUS = 1.1;
-const MIN_SHARE = 0.01;
-const COMMON_DROPS = 2;
-
-const UNIQUES = [
-  ["TORVA_FULL_HELM_DAMAGED_", 2], ["TORVA_PLATEBODY_DAMAGED_", 2], ["TORVA_PLATELEGS_DAMAGED_", 2],
-  ["NIHIL_HORN", 2], ["ZARYTE_VAMBRACES", 3], ["ANCIENT_HILT", 1],
-];
-
-/** The common drops: [item, min, max, noted, companion [item, min, max]]. */
-const COMMONS = [
-  ["BLOOD_RUNE", 84, 876], ["DEATH_RUNE", 85, 986], ["SOUL_RUNE", 86, 592], ["DRAGON_BOLTS_UNF_", 12, 283],
-  ["STEEL_CANNONBALL", 42, 2252], ["AIR_ORB", 6, 100, true], ["UNCUT_RUBY", 3, 80, true],
-  ["UNCUT_DIAMOND", 3, 64, true], ["WINE_OF_ZAMORAK", 4, 64, true], ["SHARK", 10, 10, false, ["PRAYER_POTION_4_", 3, 3]],
-  ["SARADOMIN_BREW_4_", 1, 10, false, ["SUPER_RESTORE_4_", 1, 5]], ["ECUMENICAL_KEY_SHARD", 6, 39],
-];
-
-/** Separate rolls: [item, chance, min, max]. */
-const SEPARATE = [
-  ["BLOOD_ESSENCE", 1 / 82, 1, 2], ["RUNE_SWORD", 1 / 209, 1, 1],
-  ["NIHIL_SHARD", 5 / 82, 80, 85], ["NIHIL_SHARD", 8 / 209, 85, 95],
-];
-
-function itemId(name) {
-  const id = Common.core.ItemIdentifiers[name];
-  if (id == null) throw new Error(`Nex loot: unknown item ${name}`);
-  return id;
-}
+const isUnique = (entry) => entry.section === "Uniques";
+const isTertiary = (entry) => entry.section === "Tertiary";
 
 /** Each present player's share of the damage, the MVP among them. */
 function shares(contribution, present) {
+  const { minShare } = Common.data.loot;
   let total = 0;
   for (const amount of contribution.values()) total += amount;
   const owed = [];
@@ -50,55 +25,50 @@ function shares(contribution, present) {
   for (const player of present) {
     const amount = contribution.get(player) ?? 0;
     const share = total > 0 ? amount / total : 0;
-    if (share < MIN_SHARE) continue;
+    if (share < minShare) continue;
     owed.push({ player, share });
     if (!mvp || amount > (contribution.get(mvp) ?? 0)) mvp = player;
   }
   return { owed, mvp };
 }
 
-function pickUnique(random) {
-  const total = UNIQUES.reduce((sum, [, weight]) => sum + weight, 0);
-  let roll = random() * total;
-  for (const [name, weight] of UNIQUES) {
-    if ((roll -= weight) < 0) return itemId(name);
-  }
-  return itemId(UNIQUES[0][0]);
+function roll(player, entryFilter) {
+  const request = { player, npcId: Common.data.npcs.nex, drops: [], entryFilter };
+  Common.api.emitCustomEvent("npc-drops:roll-table", request);
+  return request.drops;
 }
 
-function rollCommons(random) {
-  const lump = [];
-  const pool = [...COMMONS];
-  for (let i = 0; i < COMMON_DROPS && pool.length > 0; i++) {
-    const [name, min, max, noted, companion] = pool.splice(Math.floor(random() * pool.length), 1)[0];
-    lump.push({ itemId: itemId(name), amount: min + Math.floor(random() * (max - min + 1)), noted: noted === true });
-    if (companion) {
-      const [other, otherMin, otherMax] = companion;
-      lump.push({ itemId: itemId(other), amount: otherMin + Math.floor(random() * (otherMax - otherMin + 1)), noted: false });
-    }
+/** The kill's lump: her main table rolled `loot.commonRolls` times. */
+function rollCommons(player) {
+  const drops = [];
+  for (let i = 0; i < Common.data.loot.commonRolls; i++) {
+    drops.push(...roll(player, (entry) => !entry.always && !entry.separate_roll && !isTertiary(entry)));
   }
-  return lump;
+  return drops;
 }
 
-/** Everything one kill gives, per player: [{ player, share, mvp, drops: [{ itemId, amount, noted }] }]. */
+/**
+ * Everything one kill gives, per player: [{ player, share, mvp, drops }]. `random` decides each
+ * share-scaled entry (an entry kept with chance `scale` is then rolled at its own rarity).
+ */
 function rollLoot(contribution, present, random = Math.random) {
   const { owed, mvp } = shares(contribution, present);
-  const lump = rollCommons(random);
-  const { ItemIdentifiers } = Common.core;
+  if (owed.length === 0) return [];
+  const { mvpBonus } = Common.data.loot;
+  const lump = rollCommons(mvp);
   return owed.map(({ player, share }) => {
-    const bonus = player === mvp ? MVP_BONUS : 1;
+    const bonus = player === mvp ? mvpBonus : 1;
     const drops = [];
-    if (player === mvp) drops.push({ itemId: ItemIdentifiers.BIG_BONES, amount: 1, noted: false });
+    if (player === mvp) drops.push(...roll(player, (entry) => entry.always === true));
     for (const drop of lump) {
       const amount = Math.floor(drop.amount * share * bonus);
       if (amount >= 1) drops.push({ ...drop, amount });
     }
-    if (random() < (share * bonus) / UNIQUE_RATE) drops.push({ itemId: pickUnique(random), amount: 1, noted: false });
-    for (const [name, chance, min, max] of SEPARATE) {
-      if (random() < chance * share) drops.push({ itemId: itemId(name), amount: min + Math.floor(random() * (max - min + 1)), noted: false });
-    }
-    if (random() < share / 48) drops.push({ itemId: ItemIdentifiers.CLUE_SCROLL_ELITE_, amount: 1, noted: false });
-    if (random() < share / 500) drops.push({ itemId: ItemIdentifiers.NEXLING, amount: 1, noted: false });
+    drops.push(...roll(player, (entry) => {
+      if (!entry.separate_roll && !isTertiary(entry)) return false;
+      const scale = isUnique(entry) ? share * bonus : share;
+      return random() < scale;
+    }));
     return { player, share, mvp: player === mvp, drops };
   });
 }
@@ -127,4 +97,4 @@ function reward(fight, players, where) {
   }
 }
 
-module.exports = { reward, rollLoot, shares, pickUnique, UNIQUE_RATE, MIN_SHARE };
+module.exports = { reward, rollLoot, shares };

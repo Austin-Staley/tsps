@@ -3,6 +3,12 @@ const assert = require("node:assert/strict");
 const { test } = require("node:test");
 
 const events = [];
+const FAKE_TABLE = [
+  { item_id: 532, always: true },
+  { item_id: 565, amount: 100 },
+  { item_id: 26235, separate_roll: true, section: "Uniques" },
+  { item_id: 12073, section: "Tertiary" },
+];
 const fakeApi = {
   core: {
     Location: class {
@@ -17,7 +23,15 @@ const fakeApi = {
     }),
     ItemDefinition: { forId: (id) => ({ getName: () => ({ 1: "Ancient d'hide body", 2: "Ancient hilt", 3: "Torva platebody", 4: "Rune platebody", 5: "Zaryte vambraces", 6: "Ring of endurance", 7: "Gloves of darkness" })[id] ?? "" }) },
   },
-  emitCustomEvent(name, payload) { events.push([name, payload]); },
+  emitCustomEvent(name, payload) {
+    events.push([name, payload]);
+    // A stand-in for NpcDrops: every entry the filter keeps drops once.
+    if (name === "npc-drops:roll-table") {
+      for (const entry of FAKE_TABLE.filter((each) => !payload.entryFilter || payload.entryFilter(each))) {
+        payload.drops.push({ itemId: entry.item_id, amount: entry.amount ?? 1, noted: false });
+      }
+    }
+  },
 };
 
 const Common = require("../plugins/bosses/nex/Common.Nex");
@@ -47,12 +61,19 @@ test("shares: present players over 1% of the damage, the MVP the biggest", () =>
   assert.equal(owed[0].share, 0.3);
 });
 
-test("the MVP alone gets the big bones", () => {
+test("loot: the MVP alone gets the big bones, the lump split by share, share-scaled rolls", () => {
   const [a, b] = [{}, {}];
-  const loot = Loot.rollLoot(new Map([[a, 700], [b, 300]]), [a, b], () => 0.999);
-  const bones = (entry) => entry.drops.some((drop) => drop.itemId === 532);
-  assert.equal(bones(loot.find((entry) => entry.player === a)), true);
-  assert.equal(bones(loot.find((entry) => entry.player === b)), false);
+  const loot = Loot.rollLoot(new Map([[a, 700], [b, 300]]), [a, b], () => 0.5);
+  const of = (player) => loot.find((entry) => entry.player === player).drops;
+  const ids = (player) => of(player).map((drop) => drop.itemId);
+  assert.equal(ids(a).includes(532), true);
+  assert.equal(ids(b).includes(532), false);
+  // Two rolls of the main table (100 blood runes each): 70% (+10% MVP) and 30%.
+  assert.equal(of(a).filter((drop) => drop.itemId === 565).reduce((sum, drop) => sum + drop.amount, 0), 2 * Math.floor(100 * 0.7 * 1.1));
+  assert.equal(of(b).filter((drop) => drop.itemId === 565).reduce((sum, drop) => sum + drop.amount, 0), 2 * 30);
+  // random() = 0.5: kept for the 70% player (0.77 for the unique), not for the 30% one.
+  assert.equal(ids(a).includes(26235), true);
+  assert.equal(ids(b).includes(26235), false);
 });
 
 /** A fight without the engine: the parts act() and the phase rules use. */

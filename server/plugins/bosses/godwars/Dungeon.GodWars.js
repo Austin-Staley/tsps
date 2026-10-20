@@ -236,8 +236,8 @@ function setRespawns() {
 
 function attachDungeon(api) {
   const { entrance } = Common.data;
-  for (const faction of Common.factions) api.persistAttribute(Common.killsAttribute(faction.key));
-  for (const god of Common.essenceGods) api.persistAttribute(Common.essenceAttribute(god.key));
+  for (const faction of Common.factions) api.persistAttribute(Common.killsAttribute(faction.key), 0);
+  for (const god of Common.essenceGods) api.persistAttribute(Common.essenceAttribute(god.key), 0);
   api.persistAttribute(Common.ENTRANCE_ROPE_ATTRIBUTE);
   api.registerArea(new (dungeonArea())());
   api.onServerStartup(setRespawns);

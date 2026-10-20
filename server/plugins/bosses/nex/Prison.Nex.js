@@ -272,9 +272,9 @@ function teleport({ player }) {
 
 function attachPrison(api) {
   const { objects, items } = Common.data;
-  api.persistAttribute(Common.UNLOCKED_ATTRIBUTE);
-  api.persistAttribute(Common.ALTAR_ATTRIBUTE);
-  api.persistAttribute(SKIP_DOOR_ATTRIBUTE);
+  api.persistAttribute(Common.UNLOCKED_ATTRIBUTE, false);
+  api.persistAttribute(Common.ALTAR_ATTRIBUTE, 0);
+  api.persistAttribute(SKIP_DOOR_ATTRIBUTE, false);
   prisonArea = new (areaClass())();
   api.registerArea(prisonArea);
   api.onNpcDeath(creditKill);
