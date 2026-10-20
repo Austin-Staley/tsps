@@ -109,7 +109,7 @@ function start(player, recipe, amount) {
     Common.animate(player, Common.MIX_ANIMATION);
     Common.sound(player, Common.MIX_SOUND);
   }
-  let wait = 1;
+  let wait = 2;
   Common.run(player, () => {
     if (--wait > 0) return true;
     if (!makeOne(player, recipe)) return false;

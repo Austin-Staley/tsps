@@ -105,6 +105,10 @@ function click(who, name) {
   return hooks.firstAction.some((handler) => handler(event) !== false);
 }
 
+/**
+ * Game cycles. A click is handled between cycles, so the first cycle after it is the tick the
+ * capture calls 0, the second tick 1, and so on.
+ */
 function ticks(count) {
   for (let i = 0; i < count; i++) core.TaskManager.process();
 }
@@ -240,10 +244,11 @@ test("unfinished potions come a tick after the menu closes, then one a tick", ()
   const who = player([...Array(14).fill(["ranarr_weed"]), ...Array(14).fill(["vial_water"])]);
   use(who, "vial_water", "ranarr_weed");
   choose(who, 14);
-  assert.equal(who.inv.count("ranarrvial"), 0);
   assert.deepEqual(who.sent.sounds, [2608], "the animation and sound as the menu closes");
   ticks(1);
-  assert.equal(who.inv.count("ranarrvial"), 1);
+  assert.equal(who.inv.count("ranarrvial"), 0, "tick 0");
+  ticks(1);
+  assert.equal(who.inv.count("ranarrvial"), 1, "tick 1");
   ticks(13);
   assert.equal(who.inv.count("ranarrvial"), 14);
   assert.equal(who.sent.spam.length, 14);
@@ -255,12 +260,12 @@ test("finished potions come every two ticks, and stop at the amount chosen", () 
   const who = player([...Array(5).fill(["ranarrvial"]), ...Array(5).fill(["snape_grass"])]);
   use(who, "snape_grass", "ranarrvial");
   choose(who, 3);
+  ticks(2);
+  assert.equal(who.inv.count("3doseprayerrestore"), 1, "tick 1");
   ticks(1);
-  assert.equal(who.inv.count("3doseprayerrestore"), 1);
+  assert.equal(who.inv.count("3doseprayerrestore"), 1, "tick 2");
   ticks(1);
-  assert.equal(who.inv.count("3doseprayerrestore"), 1);
-  ticks(1);
-  assert.equal(who.inv.count("3doseprayerrestore"), 2);
+  assert.equal(who.inv.count("3doseprayerrestore"), 2, "tick 3");
   ticks(10);
   assert.equal(who.inv.count("3doseprayerrestore"), 3);
   assert.equal(who.inv.count("ranarrvial"), 2);
@@ -272,8 +277,12 @@ test("the Herblore cape's grimy herbs start at once and go every tick", () => {
   use(who, "unidentified_marentill", "vial_water");
   choose(who, 3);
   assert.equal(who.inv.count("marrentillvial"), 1);
-  ticks(2);
-  assert.equal(who.inv.count("marrentillvial"), 3);
+  ticks(1);
+  assert.equal(who.inv.count("marrentillvial"), 1, "tick 0");
+  ticks(1);
+  assert.equal(who.inv.count("marrentillvial"), 2, "tick 1");
+  ticks(1);
+  assert.equal(who.inv.count("marrentillvial"), 3, "tick 2");
   assert.deepEqual(who.sent.animations, []);
 });
 
@@ -348,11 +357,13 @@ test("a pestle and mortar grinds at once, two ticks later, then every three", ()
   assert.deepEqual(who.sent.animations, [core.CacheDefinitions.getSeqId("human_herbing_grind")]);
   assert.deepEqual(who.sent.spam, ["You grind the unicorn horn to dust."]);
   ticks(2);
-  assert.equal(who.inv.count("unicorn_horn_dust"), 2);
-  ticks(2);
-  assert.equal(who.inv.count("unicorn_horn_dust"), 2);
+  assert.equal(who.inv.count("unicorn_horn_dust"), 1, "tick 1");
   ticks(1);
-  assert.equal(who.inv.count("unicorn_horn_dust"), 3);
+  assert.equal(who.inv.count("unicorn_horn_dust"), 2, "tick 2");
+  ticks(2);
+  assert.equal(who.inv.count("unicorn_horn_dust"), 2, "tick 4");
+  ticks(1);
+  assert.equal(who.inv.count("unicorn_horn_dust"), 3, "tick 5");
   ticks(10);
   assert.equal(who.inv.count("unicorn_horn_dust"), 4);
   assert.equal(who.sent.xp, 0);

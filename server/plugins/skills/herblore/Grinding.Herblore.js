@@ -42,7 +42,7 @@ function grind(event) {
   event.handled = true;
   Common.core.TaskManager.cancelTasks(player.getIndex());
   if (!grindOne(player, found)) return;
-  let wait = 2;
+  let wait = 3;
   Common.run(player, () => {
     if (--wait > 0) return true;
     wait = 3;
