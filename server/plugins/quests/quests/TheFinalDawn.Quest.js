@@ -175,7 +175,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
     14374, // vmq4_servius_cutscene
     14376, // vmq4_servius_palace
   ]);
-  const SERVIUS_BASEMENT_ID = 14249; // vmq4_servius_basement
+  const SERVIUS_BASEMENT_ID = 14311; // vmq4_servius_teumo_house_downstairs (captured Talk-to variant)
   const SERVIUS_CRYPT_ID = 14309; // vmq4_servius_tal_teklan
   const QUEEN_IDS = new Set([
     NpcIdentifiers.QUEEN_ZYANYI_ARKAN, // 11012
@@ -223,7 +223,8 @@ module.exports = function registerTheFinalDawnQuest(api) {
     NpcIdentifiers.ATTALA_4, // 14339
     13415, 14337, 14338, 14340, 16669,
   ]);
-  const ATTALA_TALK_ID = 13415; // cam_torum_attala
+  const ATTALA_TALK_ID = 13415; // cam_torum_attala (transcript metadata)
+  const ATTALA_BASEMENT_ID = 14338; // vmq4_attala_teumo_house (captured basement Talk-to variant)
   const GALNA_ID = NpcIdentifiers.GALNA; // 14342
   const VIBIA_OUTSIDE_ID = 14302; // vmq4_captain_vibia_outside_house
   const VIBIA_INSIDE_ID = 14303; // vmq4_captain_vibia_inside_house
@@ -398,6 +399,18 @@ module.exports = function registerTheFinalDawnQuest(api) {
   const TONALI_CAVERN_TILE = { x: 1330, y: 9450, z: 1 };
   const METZLI_CHAMBER_TILE = { x: 1311, y: 9497, z: 1 };
 
+  // Capture 3128 places these owner-only quest barrels over the decorative 56495 row.
+  const TEUMO_BARREL_OBJECTS = [
+    { id: 56490, x: 1469, y: 9571, face: 3 },
+    { id: 56491, x: 1466, y: 9573, face: 1 },
+    { id: 56492, x: 1464, y: 9568, face: 2 },
+    { id: 56493, x: 1466, y: 9568, face: 3 },
+    { id: 56494, x: 1471, y: 9567, face: 2 },
+  ];
+  const TEUMO_BASEMENT_ZONE = { minX: 1460, maxX: 1474, minY: 9563, maxY: 9576, levels: [0] };
+  const TEUMO_FIRE_TILE = { x: 1463, y: 9571, z: 0, face: 3 };
+  const TEUMO_FIRE_LIT_OBJECT = 56497;
+  const TEUMO_FIRE_OUT_OBJECT = 56496;
   const DRINK_BY_BARREL = new Map([
     [56490, BEER_GLASS_ITEM],
     [56491, BEER_ITEM],
@@ -524,6 +537,8 @@ module.exports = function registerTheFinalDawnQuest(api) {
   const safehouseDoorNpcs = new WeakMap();
   const safehouseTrapNpcs = new WeakMap();
   const safehouseTopObjects = new WeakMap();
+  const teumoBarrels = new WeakMap();
+  const teumoFireplace = new WeakMap();
   const strangeTileArrivals = new WeakMap();
   const Scenes = createQuestScenes(api);
   let quest;
@@ -786,10 +801,13 @@ module.exports = function registerTheFinalDawnQuest(api) {
       : null);
     const inTeumoBasement = stage >= STAGE_TEUMO_BASEMENT && stage < STAGE_NEYPOTZLI;
     syncTracked(player, "attala-basement", inTeumoBasement
-      ? { id: ATTALA_TALK_ID, x: 1466, y: 9571, z: 0, wanderRadius: 0 }
+      ? { id: ATTALA_BASEMENT_ID, x: 1466, y: 9571, z: 0, wanderRadius: 0 }
       : null);
     syncTracked(player, "servius-basement", inTeumoBasement
-      ? { id: SERVIUS_BASEMENT_ID, x: 1466, y: 9570, z: 0, wanderRadius: 0 }
+      ? { id: SERVIUS_BASEMENT_ID, x: 1467, y: 9570, z: 0, wanderRadius: 0 }
+      : null);
+    syncTracked(player, "eyatlalli", stage >= STAGE_NEYPOTZLI_ENTRY && stage < STAGE_LOCATE
+      ? { id: EYATLALLI_TALK_ID, x: 1439, y: 9627, z: 1, wanderRadius: 0 }
       : null);
     syncTracked(player, "servius-teklan", stage === STAGE_TWINS || stage === STAGE_ATTALA_DONE || stage === STAGE_CRYPT
       ? { id: SERVIUS_CRYPT_ID, x: 1236, y: 3105, z: 0, wanderRadius: 0 }
@@ -798,6 +816,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
     syncTracked(player, "itzla", itzlaTile
       ? { id: ITZLA_QUEST_ID, x: itzlaTile.x, y: itzlaTile.y, z: itzlaTile.z, wanderRadius: 0 }
       : null);
+    ensureTeumoBarrels(player);
     ensureSafehouseLoot(player);
   }
 
@@ -1001,6 +1020,48 @@ module.exports = function registerTheFinalDawnQuest(api) {
     return true;
   }
 
+  function inTeumoBasement(player) {
+    const location = player.getLocation();
+    return location && location.getZ() === 0
+      && location.getX() >= TEUMO_BASEMENT_ZONE.minX && location.getX() <= TEUMO_BASEMENT_ZONE.maxX
+      && location.getY() >= TEUMO_BASEMENT_ZONE.minY && location.getY() <= TEUMO_BASEMENT_ZONE.maxY;
+  }
+
+  function clearTeumoBarrels(player) {
+    for (const object of teumoBarrels.get(player) ?? []) ObjectManager.deregister(object, true);
+    teumoBarrels.delete(player);
+    const fire = teumoFireplace.get(player);
+    if (fire) ObjectManager.deregister(fire, true);
+    teumoFireplace.delete(player);
+  }
+
+  /** Owner-only Teumo puzzle barrels and the captured lit/out fireplace state. */
+  function ensureTeumoBarrels(player) {
+    const stage = quest.getStage(player);
+    if (stage < STAGE_TEUMO_BASEMENT || stage > STAGE_PUZZLE || !inTeumoBasement(player)) {
+      clearTeumoBarrels(player);
+      return;
+    }
+    if (!teumoBarrels.has(player)) {
+      const objects = [];
+      for (const entry of TEUMO_BARREL_OBJECTS) {
+        const object = new GameObject(entry.id, new Location(entry.x, entry.y, 0), 10, entry.face, null).setOwner(player);
+        ObjectManager.register(object, true);
+        objects.push(object);
+      }
+      teumoBarrels.set(player, objects);
+    }
+    const fireId = stage >= STAGE_PUZZLE ? TEUMO_FIRE_OUT_OBJECT : TEUMO_FIRE_LIT_OBJECT;
+    const current = teumoFireplace.get(player);
+    if (current?.getId?.() !== fireId) {
+      if (current) ObjectManager.deregister(current, true);
+      const fire = new GameObject(fireId, new Location(TEUMO_FIRE_TILE.x, TEUMO_FIRE_TILE.y, TEUMO_FIRE_TILE.z),
+        10, TEUMO_FIRE_TILE.face, null).setOwner(player);
+      ObjectManager.register(fire, true);
+      teumoFireplace.set(player, fire);
+    }
+  }
+
   function clearSafehouseTopObjects(player) {
     const existing = safehouseTopObjects.get(player);
     if (!existing) return;
@@ -1078,6 +1139,14 @@ module.exports = function registerTheFinalDawnQuest(api) {
     strangeTileArrivals.set(player, `${x},${y},${z}`);
     player.getMovementQueue().reset();
     player.moveTo(new Location(x, y, z));
+  }
+
+  function handleTeumoBasementEnter({ player }) {
+    ensureTeumoBarrels(player);
+  }
+
+  function handleTeumoBasementExit({ player }) {
+    clearTeumoBarrels(player);
   }
 
   function handleSafehouseZoneEnter({ player }) {
@@ -2510,6 +2579,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
     Scenes.end(player, true);
     stopTemplePatrol(player);
     clearSafehouseTopObjects(player);
+    clearTeumoBarrels(player);
     clearTrackedNpcs(player);
   }
 
@@ -2661,6 +2731,8 @@ module.exports = function registerTheFinalDawnQuest(api) {
     api.onZoneEnter({ minX: x, maxX: x, minY: y, maxY: y, levels: [z] }, handleStrangeTileStep);
   }
   api.onZoneEnter(SAFEHOUSE_ZONE, handleSafehouseZoneEnter);
+  api.onZoneEnter(TEUMO_BASEMENT_ZONE, handleTeumoBasementEnter);
+  api.onZoneExit(TEUMO_BASEMENT_ZONE, handleTeumoBasementExit);
   api.onCustomEvent("ladders:climb", advanceSafehouseStairs);
   api.onCustomEvent("ladders:climb", claimTempleStairs);
 };

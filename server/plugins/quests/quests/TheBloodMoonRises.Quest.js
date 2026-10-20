@@ -112,6 +112,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   const CASTLE_TRANSITION_PENDING_ATTRIBUTE = "quest.the_blood_moon_rises.castle-transition-pending";
   const CASTLE_BOOK_VARBITS = Object.freeze([15550, 15551, 15552, 15553, 15554, 15555, 15556, 15557]);
   const CASTLE_GILDED_BOOKCASE_VARBIT = 15525;
+  // 61698 Empty mount -> 61700 Mounted shield (Search) via varbit 15526.
+  const CASTLE_SHIELD_MOUNT_VARBIT = 15526;
   const CASTLE_BOOKCASE_INTERFACE = 962;
   const CASTLE_BOOK_ITEMS = Object.freeze({ gilded: 33767, vampyre: 33768, fullMoonKey: ItemIdentifiers.FULL_MOON_KEY,
     mysteryJerky: ItemIdentifiers.MYSTERIOUS_JERKY,
@@ -7342,12 +7344,26 @@ module.exports = function registerTheBloodMoonRises(api) {
     return true;
   }
 
+  function giveMountedShieldSolidKey(player) {
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE) return;
+    const state = player.getAttribute(SOLID_KEY_ATTRIBUTE) ?? { shield: false, mounted: false, key: false };
+    if (player.getInventory().contains(ItemIdentifiers.SOLID_KEY)) {
+      player.sendMessage("You already have the solid key.");
+      return;
+    }
+    if (!giveInventoryItem(player, ItemIdentifiers.SOLID_KEY,
+      "Make room in your inventory before taking the solid key.")) return;
+    player.setAttribute(SOLID_KEY_ATTRIBUTE, { ...state, key: true });
+    player.sendMessage("You search the mounted shield and find a solid looking key. You take it.");
+  }
+
   function handleSolidKeyObjects(event) {
     const player = event?.player;
     if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE) return;
     const { x, y, z } = event.location ?? {};
     if (z !== 0) return;
     const name = String(event.definition?.getName?.() ?? "").toLowerCase();
+    const option = String(event.option ?? "").toLowerCase();
     const basinState = player.getAttribute(BASIN_PUZZLE_ATTRIBUTE) ?? { basins: {}, symbol: false };
     const state = player.getAttribute(SOLID_KEY_ATTRIBUTE) ?? { shield: false, mounted: false, key: false };
     if (name === "crate" && x === 2439 && y === 7378) {
@@ -7362,12 +7378,16 @@ module.exports = function registerTheBloodMoonRises(api) {
       return;
     }
     if (x !== 2543 || y !== 7361) return;
-    if (state.mounted) {
-      event.handled = true;
-      if (!giveInventoryItem(player, ItemIdentifiers.SOLID_KEY, "Make room in your inventory before taking the solid key.")) return;
-      player.setAttribute(SOLID_KEY_ATTRIBUTE, { ...state, key: true });
-      player.sendMessage("You search the mounted shield and take the solid key.");
+    const visibleId = event.definition?.id ?? event.objectId;
+    if (!state.mounted || (visibleId !== 61700 && name !== "mounted shield") || option !== "search") return;
+    event.handled = true;
+    if (player.getInventory().contains(ItemIdentifiers.SOLID_KEY)) {
+      player.sendMessage("You already have the solid key.");
+      return;
     }
+    api.sendMultiChatboxPrompt(player, "Search the compartment?",
+      "Yes.", () => giveMountedShieldSolidKey(player),
+      "No.", () => {});
   }
 
   function setClockValue(player, side, hand, value) {
@@ -7970,13 +7990,24 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (x !== 2543 || y !== 7361 || z !== 0) return;
     event.handled = true;
     const state = player.getAttribute(SOLID_KEY_ATTRIBUTE) ?? { shield: false, mounted: false, key: false };
+    if (state.mounted) {
+      player.sendMessage("The shield is already mounted.");
+      return;
+    }
     if (!state.assembled || !player.getInventory().contains(ItemIdentifiers.SHIELD_WITH_SYMBOL)) {
       player.sendMessage("The shield is missing its ancient symbol.");
       return;
     }
     player.getInventory().deleteNumber(ItemIdentifiers.SHIELD_WITH_SYMBOL, 1);
     player.setAttribute(SOLID_KEY_ATTRIBUTE, { ...state, mounted: true });
-    player.sendMessage("You mount the shield on the southern wall.");
+    player.getPacketSender().sendVarbit(CASTLE_SHIELD_MOUNT_VARBIT, 1);
+    player.sendMessage("You place the shield on the mount and a hidden compartment beneath it opens.");
+  }
+
+  function syncSolidKeyMountOnLogin({ player } = {}) {
+    if (!player) return;
+    const state = player.getAttribute(SOLID_KEY_ATTRIBUTE) ?? {};
+    player.getPacketSender()?.sendVarbit?.(CASTLE_SHIELD_MOUNT_VARBIT, state.mounted ? 1 : 0);
   }
 
   function handleRefiner(event) {
@@ -8456,6 +8487,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogin(resetBloodMoonSceneOnLogin);
   api.onPlayerLogin(syncCastleRoomOnLogin);
   api.onPlayerLogin(syncCastleChapelPortalOnLogin);
+  api.onPlayerLogin(syncSolidKeyMountOnLogin);
   api.onPlayerLogin(recoverFinalDrakanLanding);
   api.onPlayerLogin(syncFinalEfaritayOnLogin);
   api.onPlayerLogin(syncGatheringCastleIvanOnLogin);

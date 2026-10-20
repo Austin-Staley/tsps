@@ -86,6 +86,7 @@ function player(name = 'Parity') {
     deleteNumber(id, n = 1) { items.set(id, (items.get(id) ?? 0) - n); } };
   const packet = new Proxy({
     sendVarbit(id, value) { varbits.set(id, value); varbitHistory.push([id, value]); packets.varbits.push([id, value]); return packet; },
+    getVarbit(id) { return varbits.get(id) ?? 0; },
     sendSubInterface(...args) { packets.interfaces.push(args); return packet; },
     closeSubInterface(...args) { packets.closes.push(args); return packet; },
     sendCameraMoveTo(...args) { packets.cameras.push(['move', ...args]); return packet; },
@@ -1364,4 +1365,61 @@ test('cog use on the Sangvesti mechanism is mandatory and consumes the earned co
   assert.ok(p.manager.getCurrent(), 'the canonical crossing conversation starts');
   continueUntil(p, () => p.varbits.get(15464) === 88, 100);
   assert.equal(p.varbits.get(15464), 88, 'bridge lowering advances 86 -> 88');
+});
+
+test('mounted shield sends 15526 and gives the solid key through the compartment prompt', () => {
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  ObjectDefinition.init();
+  const h = harness(), p = player('MountedShield');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 40);
+  const STATE = 'quest.the_blood_moon_rises.castle-solid-key-puzzle';
+  p.attrs.set(STATE, { shield: true, mounted: false, assembled: true, key: false });
+  p.getInventory().adds(I.SHIELD_WITH_SYMBOL, 1);
+  const mount = h.itemOnObject.find(fn => fn.name === 'handleMountShield');
+  mount({ player: p, itemId: I.SHIELD_WITH_SYMBOL,
+    location: { x: 2543, y: 7361, z: 0 }, handled: false });
+  assert.equal(p.getInventory().getAmount(I.SHIELD_WITH_SYMBOL), 0);
+  assert.equal(p.attrs.get(STATE).mounted, true);
+  assert.equal(p.varbits.get(15526), 1, 'mount sends the captured transform varbit');
+  assert.equal(ObjectDefinition.forPlayer(61698, p).id, 61700,
+    'the saved mount resolves to Mounted shield for the player');
+
+  const object = h.objectHooks.find(fn => fn.name === 'handleSolidKeyObjects');
+  const search = { player: p, objectId: 61698,
+    definition: { id: 61700, getName: () => 'Mounted shield' },
+    option: 'Search', location: { x: 2543, y: 7361, z: 0 }, handled: false };
+  object(search);
+  assert.equal(search.handled, true);
+  assert.equal(p.prompt?.title, 'Search the compartment?');
+  choose(p, 'Yes.');
+  assert.equal(p.getInventory().getAmount(I.SOLID_KEY), 1);
+  assert.equal(p.attrs.get(STATE).key, true);
+
+  object({ ...search, handled: false });
+  assert.equal(p.getInventory().getAmount(I.SOLID_KEY), 1, 'searching while holding the key does not duplicate it');
+  assert.equal(p.prompt, null);
+  const inspect = { ...search, option: 'Inspect', handled: false };
+  object(inspect);
+  assert.equal(inspect.handled, false, 'Inspect does not use the compartment');
+
+  const p2 = player('NotMounted');
+  h.quest.setStage(p2, 40);
+  p2.attrs.set(STATE, { shield: true, mounted: false, assembled: true, key: false });
+  const unmounted = { ...search, player: p2, handled: false };
+  object(unmounted);
+  assert.equal(unmounted.handled, false);
+  assert.equal(p2.getInventory().getAmount(I.SOLID_KEY), 0);
+
+  p.getInventory().deleteNumber(I.SOLID_KEY, 1);
+  object({ ...search, handled: false });
+  choose(p, 'Yes.');
+  assert.equal(p.getInventory().getAmount(I.SOLID_KEY), 1, 'a lost key can be recovered from the mount');
+
+  const p3 = player('MountResync');
+  h.quest.setStage(p3, 40);
+  p3.attrs.set(STATE, { shield: true, mounted: true, assembled: true, key: false });
+  h.emit('player:login', { player: p3 });
+  assert.equal(p3.varbits.get(15526), 1, 'login resyncs the mounted shield varbit');
+  assert.equal(ObjectDefinition.forPlayer(61698, p3).id, 61700);
 });

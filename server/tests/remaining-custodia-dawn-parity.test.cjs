@@ -672,6 +672,97 @@ test('The Final Dawn stage23 login restores the open owner door and captured NPC
   for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
 });
 
+test('The Final Dawn Teumo basement registers captured barrels, rejects wrong drinks and restores on login', () => {
+  const h = harness('TheFinalDawn'), p = player();
+  h.api.core.ObjectManager.deregister = object => { object.removed = true; };
+  p.moveTo(new core.Location(1466, 9572, 0));
+  h.quest.setStage(p, 31);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  const expected = [
+    [56490, 1469, 9571, 3], [56491, 1466, 9573, 1], [56492, 1464, 9568, 2],
+    [56493, 1466, 9568, 3], [56494, 1471, 9567, 2],
+  ];
+  for (const [id, x, y, face] of expected) {
+    const object = h.objects.find(entry => entry.id === id);
+    assert.ok(object, `captured barrel ${id} registered`);
+    assert.equal(object.getOwner(), p, `barrel ${id} is owner-scoped`);
+    assert.deepEqual([object.getLocation().getX(), object.getLocation().getY(), object.getLocation().getZ()], [x, y, 0]);
+    assert.equal(object.getFace(), face);
+  }
+
+  const litFire = h.objects.find(object => object.id === 56497 && object.getOwner() === p);
+  assert.ok(litFire, 'captured lit fireplace 56497 is registered at stage31');
+  assert.deepEqual([litFire.getLocation().getX(), litFire.getLocation().getY(), litFire.getLocation().getZ()], [1463, 9571, 0]);
+  assert.ok(!h.objects.some(object => object.id === 56496 && object.getOwner() === p && !object.removed),
+    'out fireplace is not shown before the drinks are placed');
+
+  p.items.set(I.BEER, 1);
+  for (const fn of h.hooks.onItemOnObject) fn({ player: p, objectId: 56490, itemId: I.BEER, handled: false });
+  assert.equal(p.items.get(I.BEER), 1, 'wrong drink is not consumed');
+  assert.equal(p.attrs.get('quest.the_final_dawn.barrels') ?? 0, 0, 'wrong drink does not count');
+
+  for (const [objectId, itemId] of [[56491, I.BEER], [56492, I.STEAMFORGE_BREW], [56493, I.DWARVEN_STOUT], [56494, I.WIZARDS_MIND_BOMB], [56490, I.BEER_GLASS]]) {
+    p.items.set(itemId, 1);
+    for (const fn of h.hooks.onItemOnObject) fn({ player: p, objectId, itemId, handled: false });
+  }
+  assert.equal(p.attrs.get('quest.the_final_dawn.barrels'), 5);
+  assert.equal(h.quest.getStage(p), 32);
+  assert.ok(h.objects.some(object => object.id === 56496 && object.getOwner() === p && !object.removed),
+    'solved puzzle swaps in the captured out fireplace 56496');
+  assert.equal(litFire.removed, true, 'lit fireplace is removed after the puzzle');
+
+  const p2 = player();
+  p2.moveTo(new core.Location(1466, 9572, 0));
+  h.quest.setStage(p2, 31);
+  h.hooks.onPlayerLogin[0]({ player: p2 });
+  for (const fn of h.hooks.onPlayerLogout) fn({ player: p2 });
+  h.hooks.onPlayerLogin[0]({ player: p2 });
+  for (const [id] of expected) {
+    const live = h.objects.filter(object => object.id === id && object.getOwner() === p2 && !object.removed);
+    assert.equal(live.length, 1, `login restores exactly one barrel ${id}`);
+    assert.equal(live[0].getOwner(), p2);
+  }
+  assert.ok(h.objects.some(object => object.id === 56497 && object.getOwner() === p2 && !object.removed),
+    'login restores the stage31 lit fireplace');
+  for (const fn of h.hooks.onPlayerLogout) fn({ player: p2 });
+});
+
+test('The Final Dawn Teumo barrels restore on normal basement re-entry after an outside login', () => {
+  const h = harness('TheFinalDawn'), p = player();
+  h.api.core.ObjectManager.deregister = object => { object.removed = true; };
+  p.moveTo(new core.Location(1466, 9572, 0));
+  h.quest.setStage(p, 31);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  for (const id of [56490, 56491, 56492, 56493, 56494, 56497]) {
+    assert.equal(h.objects.filter(object => object.id === id && object.getOwner() === p && !object.removed).length, 1);
+  }
+
+  for (const fn of h.hooks.onZoneExit ?? []) fn({ player: p });
+  for (const id of [56490, 56491, 56492, 56493, 56494, 56497]) {
+    assert.equal(h.objects.filter(object => object.id === id && object.getOwner() === p && !object.removed).length, 0,
+      `leaving the basement clears ${id}`);
+  }
+
+  p.moveTo(new core.Location(1466, 9571, 1));
+  for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
+  p.moveTo(new core.Location(1466, 9571, 1));
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(h.quest.getStage(p), 31, 'outside login does not advance the stage');
+  for (const id of [56490, 56491, 56492, 56493, 56494, 56497]) {
+    assert.equal(h.objects.filter(object => object.id === id && object.getOwner() === p && !object.removed).length, 0,
+      `outside login does not restore ${id}`);
+  }
+
+  p.moveTo(new core.Location(1466, 9572, 0));
+  for (const fn of h.hooks.onZoneEnter ?? []) fn({ player: p });
+  assert.equal(h.quest.getStage(p), 31, 're-entry does not advance the stage');
+  for (const id of [56490, 56491, 56492, 56493, 56494, 56497]) {
+    assert.equal(h.objects.filter(object => object.id === id && object.getOwner() === p && !object.removed).length, 1,
+      `normal re-entry restores exactly one ${id}`);
+  }
+  for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
+});
+
 test('The Final Dawn registers the captured z2 plant/pot owner-scoped', () => {
   const plantDef = CacheDefinitions.getObject(56470), potDef = CacheDefinitions.getObject(56472);
   assert.ok(plantDef && potDef, 'real cache definitions load');
@@ -788,6 +879,56 @@ test('The Final Dawn fragment Touch uses the captured inventory action', () => {
   for (const fn of h.hooks.onItemAction) fn({ player: p, itemId: I.KEYSTONE_FRAGMENT, option: 'Touch', handled: false });
   assert.equal(p.varbits.get(16671), 1);
   assert.equal(h.quest.getStage(p), 40);
+});
+
+test('The Final Dawn Teumo basement spawns captured Attala/Servius and the real report reaches Neypotzli', () => {
+  const h = harness('TheFinalDawn'), p = player();
+  p.moveTo(new core.Location(1466, 9572, 0));
+  h.quest.setStage(p, 35);
+  h.hooks.onPlayerLogin[0]({ player: p });
+
+  const attala = h.npcs.find(npc => npc.id === 14338 && !npc.removed);
+  const servius = h.npcs.find(npc => npc.id === 14311 && !npc.removed);
+  assert.ok(attala && servius, 'captured basement Attala and Servius spawn');
+  assert.equal(attala.getOwner(), p);
+  assert.equal(servius.getOwner(), p);
+  assert.deepEqual([attala.getLocation().getX(), attala.getLocation().getY(), attala.getLocation().getZ()], [1466, 9571, 0]);
+  assert.deepEqual([servius.getLocation().getX(), servius.getLocation().getY(), servius.getLocation().getZ()], [1467, 9570, 0]);
+
+  const vars = { getVarbit: id => (id === 16663 ? 35 : 0), getVarp: () => 0 };
+  const attalaDef = CacheDefinitions.resolveNpc(14338, vars);
+  const serviusDef = CacheDefinitions.resolveNpc(14311, vars);
+  assert.equal(attalaDef?.name, 'Attala');
+  assert.ok(attalaDef?.actions?.includes('Talk-to'), '14338 resolves to Talk-to Attala at stage35');
+  assert.equal(serviusDef?.name, 'Servius, Teokan of Ralos');
+  assert.ok(serviusDef?.actions?.includes('Talk-to'), '14311 resolves to Talk-to Servius at stage35');
+
+  h.namedNpcs.get('Attala')['Talk-to']({ player: p, npcId: 14338 });
+  for (let step = 0; step < 300 && p.manager.getCurrent() && h.quest.getStage(p) < 37; step++) p.manager.advance();
+  assert.equal(h.quest.getStage(p), 37, 'real report dialogue advances 35 -> 36 -> 37');
+});
+
+test('The Final Dawn Eyatlalli spawns at Neypotzli and real Talk-to gives the fragment', () => {
+  const h = harness('TheFinalDawn'), p = player();
+  p.moveTo(new core.Location(1440, 9616, 1));
+  h.quest.setStage(p, 37);
+  h.hooks.onPlayerLogin[0]({ player: p });
+
+  const eyatlalli = h.npcs.find(npc => npc.id === 14354 && !npc.removed);
+  assert.ok(eyatlalli, 'raw Eyatlalli 14354 spawns');
+  assert.equal(eyatlalli.getOwner(), p);
+  assert.deepEqual([eyatlalli.getLocation().getX(), eyatlalli.getLocation().getY(), eyatlalli.getLocation().getZ()], [1439, 9627, 1]);
+  const vars = { getVarbit: id => (id === 16663 ? 37 : 0), getVarp: () => 0 };
+  const definition = CacheDefinitions.resolveNpc(14354, vars);
+  assert.equal(definition?.id, 14355);
+  assert.equal(definition?.name, 'Eyatlalli');
+  assert.ok(definition?.actions?.includes('Talk-to'), '14354 resolves to Talk-to Eyatlalli at stage37');
+
+  h.namedNpcs.get('Eyatlalli')['Talk-to']({ player: p, npcId: 14354 });
+  assert.equal(h.quest.getStage(p), 38, 'first Eyatlalli talk sets stage38');
+  for (let step = 0; step < 400 && p.manager.getCurrent() && h.quest.getStage(p) < 39; step++) p.manager.advance();
+  assert.equal(h.quest.getStage(p), 39, 'the real transcript gives the fragment and reaches stage39');
+  assert.equal(p.items.get(I.KEYSTONE_FRAGMENT), 1);
 });
 
 test('The Final Dawn Servius Teumo basement report accepts content id 14311', () => {

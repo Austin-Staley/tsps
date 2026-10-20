@@ -4379,6 +4379,8 @@ test('Blood Moon Chapel Library lever opens the Servants Quarters portal after t
 
 test('Blood Moon solid key requires the symbol, shield assembly, and southern wall mount', () => {
   const { api, handlers } = mockApi();
+  const prompts = [];
+  api.sendMultiChatboxPrompt = (who, title, ...pairs) => { prompts.push({ title, pairs }); return true; };
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
   const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
   const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
@@ -4414,7 +4416,11 @@ test('Blood Moon solid key requires the symbol, shield assembly, and southern wa
   assert.equal(inventory.contains(I.SHIELD_WITH_SYMBOL), true);
   const mount = handlers.itemOnObject.find((handler) => handler.name === 'handleMountShield');
   mount({ player, itemId: I.SHIELD_WITH_SYMBOL, location: { x: 2543, y: 7361, z: 0 }, handled: false });
-  object({ player, definition: { getName: () => 'Shield' }, location: { x: 2543, y: 7361, z: 0 }, handled: false });
+  object({ player, objectId: 61698, definition: { id: 61700, getName: () => 'Mounted shield' },
+    option: 'Search', location: { x: 2543, y: 7361, z: 0 }, handled: false });
+  assert.equal(prompts.length, 1);
+  assert.equal(prompts[0].title, 'Search the compartment?');
+  prompts[0].pairs[1]();
   assert.equal(inventory.contains(I.SOLID_KEY), true, 'searching the mounted shield yields the solid key');
 });
 
