@@ -418,7 +418,7 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
   const GRUBFOOT_MINE_TILE = { x: 3318, y: 9613 };
   const GRUBFOOT_LAB_TILE = { x: 2702, y: 5369 };
   const GRUBFOOT_VILLAGE_TILE = { x: 2957, y: 3514 };
-  const ZANIK_LAB_TILE = { x: 2706, y: 5366 };
+  const ZANIK_LAB_TILE = { x: 2703, y: 5366 };
   const ZANIK_CAVE_TILE = { x: 2617, y: 9797 };
   const ZANIK_PRISON_TILE = { x: 3755, y: 4340 };
   const ENTRANCE_GUARD_TILES = [
@@ -660,7 +660,7 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
     }
 
     const zanikLab =
-      (stage >= STAGE_CUTSCENE && stage < STAGE_CAVE) ||
+      (stage >= STAGE_STARTED && stage < STAGE_CAVE) ||
       (stage >= STAGE_FREED && stage < STAGE_MACHINE);
     if (zanikLab) {
       moveTracked(player, "zanik-lab", ZANIK_LAB_NPC_ID, ZANIK_LAB_TILE);

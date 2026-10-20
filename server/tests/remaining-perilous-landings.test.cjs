@@ -114,3 +114,80 @@ test('cache placements, boss visibility areas and PathFinder show every arena is
     assert.equal(core.NpcDefinition.forId(moon === 'blue' ? 13013 : moon === 'blood' ? 13011 : 13012)?.getName?.(), spec.name);
   }
 });
+
+test('Nahta/Blacksmith capture spawns and exact RSMOD routes out of the shop to the forge', () => {
+  const spawns = require('../data/definitions/npc-spawns.json');
+  const nahta = spawns.find(spawn => spawn.id === 13036);
+  const smith = spawns.find(spawn => spawn.id === 13038);
+  assert.deepEqual([nahta.x, nahta.y, nahta.level], [1428, 9565, 1], 'RSProx 1693 Nahta add, not QH WorldPoint 1424,9568');
+  assert.deepEqual([smith.x, smith.y, smith.level], [1448, 9582, 1], 'RSProx 1693 Blacksmith add, not QH WorldPoint 1448,9584');
+  RegionManager.loadMapFiles(1421, 9569);
+  RegionManager.loadMapFiles(1448, 9584);
+  const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
+  const route = new RsmodRouteFinding((x, y, z, area) => RegionManager.getClipping(x, y, z, area));
+  const escape = route.findRoute({ level: 1, srcX: 1421, srcY: 9569, srcSize: 1,
+    destX: 1425, destY: 9567, moveNear: false, maxWaypoints: 80, privateArea: null });
+  assert.equal(escape.success, true, 'continuous cache route 1421,9569 -> 1425,9567');
+  assert.equal(escape.endX, 1425); assert.equal(escape.endY, 9567);
+  const throughClosedShop = route.findRoute({ level: 1, srcX: 1425, srcY: 9567, srcSize: 1,
+    destX: 1448, destY: 9584, moveNear: false, maxWaypoints: 80, privateArea: null });
+  assert.equal(throughClosedShop.success, false, 'no false continuous claim through the shop door');
+  const beforeDoor = route.findRoute({ level: 1, srcX: 1421, srcY: 9569, srcSize: 1,
+    destX: 1430, destY: 9568, moveNear: false, maxWaypoints: 80, privateArea: null });
+  assert.equal(beforeDoor.success, true); assert.equal(beforeDoor.endX, 1430); assert.equal(beforeDoor.endY, 9568);
+  const forge = route.findRoute({ level: 1, srcX: 1435, srcY: 9575, srcSize: 1,
+    destX: 1448, destY: 9584, moveNear: false, maxWaypoints: 80, privateArea: null });
+  assert.equal(forge.success, true, 'continuous cache route outside shop -> blacksmith interaction tile');
+  assert.equal(forge.endX, 1448); assert.equal(forge.endY, 9584);
+});
+
+test('shop Squeeze-through 51005 is a captured two-way transition and the real object interaction reaches the Blacksmith', () => {
+  const data = require('../plugins/world/data/loc-teleports.json').locs
+    .find(entry => entry.id === 51005 && entry.x === 1431 && entry.y === 9567 && entry.z === 1);
+  assert.deepEqual(data.sides, [
+    { from: [1430, 9567, 1], to: [1432, 9567, 1] },
+    { from: [1432, 9568, 1], to: [1430, 9568, 1] },
+  ], 'RSProx 1693 west->east and east->west destinations');
+  assert.equal(data.anim, 6103); assert.equal(data.animTick, 3); assert.equal(data.tick, 4);
+  assert.equal(data.sound, 2452);
+
+  RegionManager.loadMapFiles(1431, 9567);
+  const door = MapObjects.get(51005, new core.Location(1431, 9567, 1), null);
+  assert.ok(door, 'raw cache MapObject 51005 at 1431,9567,1');
+  assert.equal(door.getDefinition().getInteractions()[0], 'Squeeze-through');
+
+  let objectHook;
+  const api = { core, persistAttribute() {}, onObjectInteraction(fn) { objectHook = fn; }, onItemOnObject() {}, onCustomEvent() {} };
+  require('../plugins/world/LocTeleports.plugin').register(api);
+  const p = player();
+  p.performAnimation = animation => { p.animation = animation.getId(); };
+  p.getHitpoints = () => 99;
+  p.getPrivateArea = () => null;
+  p.getMovementQueue = () => ({ blocked: false, isMovementBlocked() { return this.blocked; }, setBlockMovement(value) { this.blocked = value; return this; }, reset() { return this; } });
+
+  const click = (x, y) => {
+    p.moveTo(new core.Location(x, y, 1));
+    objectHook({ player: p, object: door, clickType: 1 });
+  };
+
+  click(1430, 9568);
+  core.TaskManager.process();
+  core.TaskManager.process();
+  assert.equal(p.animation, 6103, 'captured animation before the move');
+  assert.deepEqual(pos(p), [1430, 9568, 1], 'still on the west side before the captured move tick');
+  core.TaskManager.process();
+  assert.deepEqual(pos(p), [1432, 9567, 1], 'west->east landing');
+
+  click(1432, 9568);
+  for (let tick = 0; tick < 3; tick++) core.TaskManager.process();
+  assert.deepEqual(pos(p), [1430, 9568, 1], 'east->west landing');
+
+  const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
+  const route = new RsmodRouteFinding((x, y, z, area) => RegionManager.getClipping(x, y, z, area));
+  const toSmith = route.findRoute({ level: 1, srcX: 1432, srcY: 9567, srcSize: 1, destX: 1448, destY: 9584, moveNear: false, maxWaypoints: 80, privateArea: null });
+  assert.equal(toSmith.success, true); assert.equal(toSmith.endX, 1448); assert.equal(toSmith.endY, 9584);
+  const fromSmith = route.findRoute({ level: 1, srcX: 1448, srcY: 9584, srcSize: 1, destX: 1432, destY: 9568, moveNear: false, maxWaypoints: 80, privateArea: null });
+  assert.equal(fromSmith.success, true); assert.equal(fromSmith.endX, 1432); assert.equal(fromSmith.endY, 9568);
+  const backInside = route.findRoute({ level: 1, srcX: 1430, srcY: 9568, srcSize: 1, destX: 1421, destY: 9569, moveNear: false, maxWaypoints: 80, privateArea: null });
+  assert.equal(backInside.success, true); assert.equal(backInside.endX, 1421); assert.equal(backInside.endY, 9569);
+});

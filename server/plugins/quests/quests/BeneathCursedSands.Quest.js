@@ -888,7 +888,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
 
   function showCamera(player, move, look, options = {}) {
     stopCamera(player);
-    Scenes.controls(player, true, options.cutscene !== false);
+    if (options.lockControls !== false) Scenes.controls(player, true, options.cutscene !== false);
     Scenes.camera(player, move, look);
     const token = {};
     cameraWatch.set(player, token);
@@ -974,8 +974,9 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
         return;
       case "V9HUjH": // the fight begins
         event.handled = true;
+        stopCamera(player);
         setStage(player, STAGE_GUARD_FIGHT);
-        showCamera(player, [3331, 2730, 580], [3349, 2726, 280]);
+        showCamera(player, [3331, 2730, 580], [3349, 2726, 280], { lockControls: false, poll: true });
         return;
       case "IDLAQq": // flee from the fight
         removeTracked(player, "guard");

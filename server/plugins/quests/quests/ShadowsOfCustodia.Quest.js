@@ -832,6 +832,19 @@ module.exports = function registerShadowsOfCustodiaQuest(api) {
     return npc;
   }
 
+  /** Wait for the private area's queued NPC removal, then spawn world den actors once. */
+  function resyncDenAfterScene(player, attempts = 6) {
+    if (!player?.isRegistered?.()) return;
+    const tracked = denNpcs.get(player);
+    const pending = tracked && [tracked.boy, tracked.antos].some(npc => npc?.isRegistered?.());
+    if (pending && attempts > 0) {
+      Scenes.later(player, 1, () => resyncDenAfterScene(player, attempts - 1));
+      return;
+    }
+    denNpcs.delete(player);
+    syncDenNpcs(player);
+  }
+
   function syncDenNpcs(player) {
     const stage = quest.getStage(player);
     const tracked = denNpcs.get(player) ?? { boy: null, antos: null };
@@ -927,7 +940,7 @@ module.exports = function registerShadowsOfCustodiaQuest(api) {
         // The captured den transition ends with the fade-in. Keeping this private
         // scene alive blocked the normal path and hid owner-only den NPCs.
         Scenes.end(player, false);
-        syncDenNpcs(player);
+        Scenes.later(player, 1, () => resyncDenAfterScene(player));
       });
     });
   }

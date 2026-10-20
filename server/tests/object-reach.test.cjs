@@ -21,6 +21,16 @@ const { Sounds } = require('../dist/game/Sounds');
 
 const target = { level: 0, destX: 100, destY: 100, srcSize: 1, privateArea: null };
 
+let cacheReady;
+function ensureCache() {
+  if (!cacheReady) {
+    const path = require('node:path');
+    const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+    cacheReady = CachePipeline.initialize(path.resolve(__dirname, '..'));
+  }
+  return cacheReady;
+}
+
 test('wall-door crossings align both coordinates for every face and angled approach', () => {
   const { crossingFor } = require('../plugins/objects/WallDoor.Doors');
   for (let face = 0; face < 4; face++) {
@@ -125,12 +135,14 @@ test('object routes build MORPH sizes and masks from the player-resolved child',
 });
 
 test('stage 6 painting resolves to its MORPH child and west-adjacent canvas reach', async () => {
-  const path = require('node:path');
-  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { RegionManager } = require('../dist/game/collision/RegionManager');
-  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  await ensureCache();
   ObjectDefinition.init();
+  RegionManager.init();
+  const regionId = RegionManager.regionIdForTile(1719, 9706);
   RegionManager.loadMapFiles(1719, 9706, true);
+  assert.ok(RegionManager.getRegionid(regionId)?.isLoaded(), 'real map region loaded');
+  assert.ok(MapObjects.get(56522, new Location(1719, 9706, 0), null), 'real raw painting exists');
   const player = { getPacketSender: () => ({ getVarbit: id => id === 16663 ? 6 : 0, getVarp: () => 0 }) };
   const painting = ObjectDefinition.forPlayer(56522, player);
   assert.equal(painting.id, 56523);
@@ -139,8 +151,11 @@ test('stage 6 painting resolves to its MORPH child and west-adjacent canvas reac
     getLocation: () => ({ getZ: () => 0, getX: () => 1718, getY: () => 9706 }),
     getSize: () => 1, getPrivateArea: () => null,
   };
+  assert.equal(RegionManager.getClipping(1718, 9706, 0, null), 8, 'drawing wall blocks the west edge');
+  const atTile = MapObjects.mapObjects.get(MapObjects.getHash(1719, 9706, 0)) ?? [];
+  assert.ok(atTile.some(o => o.getId() === 24720 && o.getType() === 0), 'painting is mounted on a wall');
   assert.equal(PathFinder.reachedObject(stand, 1719, 9706, painting.getSizeX(), painting.getSizeY(),
-    0, 10, painting.getBlockingMask()), true);
+    0, 10, painting.getBlockingMask()), false, 'plain rectangle reach rejects the mounted-wall edge');
   const plain = ObjectDefinition.forPlayer(56523, player);
   assert.deepEqual([plain.getSizeX(), plain.getSizeY(), plain.getBlockingMask()],
     [painting.getSizeX(), painting.getSizeY(), painting.getBlockingMask()],
@@ -148,15 +163,15 @@ test('stage 6 painting resolves to its MORPH child and west-adjacent canvas reac
 });
 
 test('stage 6 canvas dispatches on the painting through the real item-on-object route', async (t) => {
-  const path = require('node:path');
-  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
   const { RegionManager } = require('../dist/game/collision/RegionManager');
-  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  await ensureCache();
   ObjectDefinition.init();
+  RegionManager.init();
+  const regionId = RegionManager.regionIdForTile(1719, 9706);
   RegionManager.loadMapFiles(1719, 9706, true);
-  const painting = new GameObject(56522, new Location(1719, 9706, 0), 10, 0, null);
-  MapObjects.add(painting);
-  t.after(() => MapObjects.remove(painting));
+  assert.ok(RegionManager.getRegionid(regionId)?.isLoaded(), 'real map region loaded');
+  const painting = MapObjects.get(56522, new Location(1719, 9706, 0), null);
+  assert.ok(painting, 'real raw painting exists');
 
   const noop = () => {};
   let location = new Location(1718, 9706, 0);
@@ -195,6 +210,27 @@ test('stage 6 canvas dispatches on the painting through the real item-on-object 
   assert.equal(seen[0].objectId, 56522);
   assert.equal(seen[0].itemId, 30950);
   assert.deepEqual([seen[0].location.x, seen[0].location.y], [1719, 9706]);
+
+  assert.equal(queue.isMountedDecorationReachable(painting, 23, 0), true, 'west mounting-wall edge allowed');
+  for (const [x, y] of [[1720, 9706], [1719, 9705], [1719, 9708]]) {
+    location = new Location(x, y, 0);
+    assert.equal(queue.isMountedDecorationReachable(painting, 23, 0), false,
+      `mask23 blocks non-west approach ${x},${y}`);
+  }
+  location = new Location(1718, 9706, 0);
+  assert.equal(queue.isMountedDecorationReachable(painting, 23, 1), false,
+    'rotated mask23 still blocks the west edge');
+  assert.equal(queue.isMountedDecorationReachable(painting, 0, 0), false,
+    'ordinary default mask0 is not a single declared front');
+  const wrongWall = new GameObject(56522, new Location(1711, 9711, 0), 10, 0, null);
+  MapObjects.add(wrongWall);
+  t.after(() => MapObjects.remove(wrongWall));
+  location = new Location(1710, 9711, 0);
+  assert.equal(queue.isMountedDecorationReachable(wrongWall, 23, 0), false,
+    'wall orientation must match the declared front edge');
+  location = new Location(1718, 9706, 1);
+  assert.equal(queue.isMountedDecorationReachable(painting, 23, 0), false,
+    'different floor has no mounted wall');
 });
 
 test('every walkToObject caller shares route masks and cannot operate a door from its flank', (t) => {

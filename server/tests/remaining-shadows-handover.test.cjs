@@ -19,8 +19,9 @@ before(async () => {
   new NpcDefinitionLoader().load();
 });
 
-function harness() {
+function harness(options = {}) {
   const hooks = {}, events = {}, tasks = [], npcs = [], objects = [], areas = [];
+  const realNpcs = options.realNpcs === true;
   const api = new Proxy({
     core: {
       ...core,
@@ -44,6 +45,11 @@ function harness() {
     getWorld: () => ({ getNpcs: () => npcs }),
     getItemOnGroundManager: () => ({ registerLocation: noop, getGroundItem: noop }),
     spawnNpc(definition) {
+      if (realNpcs) {
+        const npc = PluginManager.spawnNpc(definition);
+        if (npc) npcs.push(npc);
+        return npc;
+      }
       let area = null;
       const npc = {
         ...definition, index: nextIndex++, getId: () => definition.id,
@@ -55,7 +61,7 @@ function harness() {
       npcs.push(npc);
       return npc;
     },
-    removeNpc: npc => { npc.removed = true; },
+    removeNpc: npc => { if (realNpcs) PluginManager.removeNpc(npc); else npc.removed = true; },
   }, { get: (target, key) => target[key] ?? ((...args) => (hooks[key] ??= []).push(args.find(x => typeof x === 'function'))) });
   require('../plugins/quests/quests/ShadowsOfCustodia.Quest')(api);
   PluginManager.emitNpcDialogueCondition = event => {
@@ -70,6 +76,10 @@ function harness() {
     quest: runtime.getRegisteredQuests().at(-1),
     emit: (name, event) => (events[name] ?? []).forEach(fn => fn(event)),
     tick(count = 1) { while (count-- > 0) for (const task of [...tasks]) task.tick(); },
+    processNpcRemovalQueue() {
+      const queue = core.World.getRemoveNPCQueue();
+      while (queue.length) core.World.getNpcs().remove(queue.shift());
+    },
     object(player, objectId, location) {
       const event = { player, objectId, clickType: 2, location, definition: { getInteractions: () => ['', 'Enter'] } };
       for (const fn of hooks.onObjectInteraction ?? []) fn(event);
@@ -144,18 +154,25 @@ test('Old bowsMade=2 save recovers guard and advances to stage 16 without consum
   assert.equal(h.quest.getStage(p), 16);
 });
 
-test('Den entry scene ends at the captured boundary and leaves owner NPCs visible without relog', () => {
-  const h = harness(), p = player();
+test('Den entry ends the private scene, processes the removal queue, and exposes the boy for talk without relog', () => {
+  const h = harness({ realNpcs: true }), p = player();
   h.quest.setStage(p, 10);
   h.object(p, 56439, new core.Location(1295, 3373, 0));
-  h.tick(4);
-  const boy = h.npcs.find(npc => npc.id === N.INJURED_BOY && !npc.removed);
-  assert.ok(boy, 'injured boy spawned');
-  assert.equal(p.getArea(), null, 'private den scene has ended');
-  assert.equal(boy.getArea(), null, 'owner NPC is in the normal world');
-  const count = h.npcs.filter(npc => npc.id === N.INJURED_BOY && !npc.removed).length;
-  for (const fn of h.hooks.onPlayerLogin) fn({ player: p });
-  assert.equal(h.npcs.filter(npc => npc.id === N.INJURED_BOY && !npc.removed).length, count);
+  h.tick(2); // fade completes and queues the old scene actor
+  h.tick(1); // deferred resync sees it still registered, waits
+  h.processNpcRemovalQueue(); // real World removeNPCQueue processing
+  h.tick(2); // deferred resync now spawns the world actor
+  const alive = h.npcs.filter(npc => npc.id === N.INJURED_BOY && npc.isRegistered());
+  assert.equal(alive.length, 1);
+  assert.equal(p.getArea(), null);
+  assert.ok(core.World.getNpcs().get(alive[0].getIndex?.()) === alive[0] || Array.from(core.World.getNpcs()).includes(alive[0]));
+
+  const variant = (h.hooks.onNpcDialogueVariant ?? []).map(fn => fn({ player: p, npcId: N.INJURED_BOY })).find(Boolean);
+  assert.ok(variant);
+  runtime.startTranscript(h.api, p, N.INJURED_BOY, typeof variant === 'string' ? h.quest.name : variant.page, typeof variant === 'string' ? variant : variant.variant);
+  drain(p, 300);
+  h.tick(3);
+  assert.equal(h.quest.getStage(p), 14);
 });
 
 test('One real Antos rescue transcript completes Ariadna and the quest at stage 22', () => {

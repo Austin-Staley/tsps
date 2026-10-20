@@ -67,6 +67,8 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
     ObjectManager,
     RegionManager,
     Skill,
+    Task,
+    TaskManager,
   } = api.core;
   const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
   const { createQuestScenes } = require("../QuestScenes");
@@ -1616,20 +1618,69 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
     );
   }
 
-  function climbSewerLadder(event) {
-    const { player, location } = event;
-    if (event.objectId !== SEWER_LADDER_UP_OBJECT_ID || !inSewer(location)) return false;
+  /**
+   * The captured sewer landings are the ladder's own tile on the other plane. A normal
+   * walk queued by the click can apply after the moveTo and leave the player one tile
+   * east (1530,4236,0), which is an isolated pocket. Cancel the walk and hold movement
+   * across the landing cycle, then release it, before the scripted plane change.
+   */
+  function clearSewerWalkAndClimb(player, destination) {
+    const movement = player.getMovementQueue();
+    movement.setBlockMovement(true);
+    movement.reset();
+    movement.walkToReset?.();
+    const start = player.getLocation().clone();
+    const privateArea = player.getPrivateArea?.() ?? null;
+    TaskManager.submit(
+      new (class extends Task {
+        constructor() {
+          super(1, player, !(movement.didMovePreviousCycle?.() ?? false));
+        }
+        execute() {
+          if (player.getLocation().equals(start) && (player.getHitpoints?.() ?? 1) > 0 && (player.getPrivateArea?.() ?? null) === privateArea) {
+            player.moveTo(destination);
+          }
+          this.stop();
+        }
+        stop() {
+          movement.setBlockMovement(false);
+          super.stop();
+        }
+      })()
+    );
+  }
+
+  function sewerLadderDestination(objectId, location) {
+    if (objectId !== SEWER_LADDER_UP_OBJECT_ID && objectId !== SEWER_LADDER_DOWN_OBJECT_ID) return null;
+    if (!inSewer(location)) return null;
     const tile = tileOf(location);
-    player.moveTo(new Location(tile.getX(), tile.getY(), tile.getZ() + 1));
+    const delta = objectId === SEWER_LADDER_UP_OBJECT_ID ? 1 : -1;
+    return new Location(tile.getX(), tile.getY(), tile.getZ() + delta);
+  }
+
+  function climbSewerLadder(event) {
+    const { player } = event;
+    const destination = sewerLadderDestination(event.objectId, event.location);
+    if (!destination) return false;
+    clearSewerWalkAndClimb(player, destination);
     return true;
   }
 
   function descendSewerLadder(event) {
-    const { player, location } = event;
-    if (event.objectId !== SEWER_LADDER_DOWN_OBJECT_ID || !inSewer(location)) return false;
-    const tile = tileOf(location);
-    player.moveTo(new Location(tile.getX(), tile.getY(), tile.getZ() - 1));
+    const { player } = event;
+    const destination = sewerLadderDestination(event.objectId, event.location);
+    if (!destination) return false;
+    clearSewerWalkAndClimb(player, destination);
     return true;
+  }
+
+  function claimSewerLadder(event) {
+    const { player, object, objectId } = event;
+    const location = object?.getLocation?.() ?? event.location;
+    const destination = sewerLadderDestination(objectId, location);
+    if (!destination) return;
+    clearSewerWalkAndClimb(player, destination);
+    event.handled = true;
   }
 
   function handleBossDoorZone({ player }) {
@@ -1951,6 +2002,7 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
   api.onCustomEvent("door:toggle", handleGateToggle);
   api.onObjectInteraction("Tunnel", { Enter: handleTunnelEnter });
   api.onObjectInteraction("Sewer entrance", { Enter: handleSewerEnter });
+  api.onCustomEvent("ladders:climb", claimSewerLadder);
   api.onObjectInteraction("Ladder", {
     [SEWER_LADDER_CHILD]: climbSewerLadder,
     [SEWER_LADDER_TOP_CHILD]: descendSewerLadder,

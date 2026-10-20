@@ -1002,9 +1002,6 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   // Carl's town follow: captured Quest Helper line points joined on the real
   // collision map, so the required leg is walked rather than skipped.
   let carlRouteCache;
-  function carlTileWalkable(x, y) {
-    try { return !RegionManager.blocked(new Location(x, y, 0), null); } catch { return false; }
-  }
   function carlRoute() {
     return CAPTURED_CARL_ROUTE;
   }
@@ -1045,13 +1042,18 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
       ? "plague-s-end-if-caught-by-carl"
       : "plague-s-end-if-the-player-falls-too-far-behind-carl");
   }
-  /** A blocked tile between Carl and the player hides the player from a look-back. */
+  /**
+   * RSMOD/RegionManager ray: each Bresenham step must be traversable, so wall
+   * and prop edge clipping blocks sight, not just blocked destination tiles.
+   */
   function carlLineBlocked(from, to) {
     const steps = Math.max(Math.abs(to.x - from.x), Math.abs(to.y - from.y));
-    for (let step = 1; step < steps; step++) {
+    let previous = from;
+    for (let step = 1; step <= steps; step++) {
       const x = Math.round(from.x + (to.x - from.x) * step / steps);
       const y = Math.round(from.y + (to.y - from.y) * step / steps);
-      if (carlTileWalkable(x, y) === false) return true;
+      if (RegionManager.canMove(previous.x, previous.y, x, y, 0, 1, 1, null) === false) return true;
+      previous = { x, y };
     }
     return false;
   }

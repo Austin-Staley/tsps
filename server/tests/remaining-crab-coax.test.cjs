@@ -16,18 +16,28 @@ before(async () => {
 });
 
 function setup() {
-  const hooks = { custom: new Map(), objects: [], login: [] };
+  const hooks = { custom: new Map(), objects: [], login: [], npcs: [] };
   const attrs = new Map();
   const inventory = new Map();
   const messages = [];
   const persistentKeys = new Map();
   const placed = [];
+  const spawned = [];
+  const removed = [];
+  const tasks = [];
+  const xp = [];
+  let area = null;
+  let currentDialogue = null;
   let location = { x: 3041, y: 2638, z: 0 };
   const core = {
     ...PluginManager.getCoreApi(),
     ObjectManager: {
       register(object) { placed.push({ id: object.getId(), x: object.getLocation().getX(), y: object.getLocation().getY() }); },
       deregister() {},
+    },
+    TaskManager: {
+      submit(task) { task.setRunning?.(true); tasks.push(task); },
+      cancelTasks(key) { for (const task of tasks) if (task.key === key) task.stop?.(); },
     },
   };
   const api = new Proxy({
@@ -36,7 +46,7 @@ function setup() {
     onCustomEvent(name, fn) { const list = hooks.custom.get(name) ?? []; list.push(fn); hooks.custom.set(name, list); },
     emitCustomEvent(name, event) { for (const fn of hooks.custom.get(name) ?? []) fn({ player, ...event }); },
     onNpcDialogueCondition() {},
-    onNpcInteraction() {},
+    onNpcInteraction(fn) { hooks.npcs.push(fn); },
     onObjectInteraction(fn) { hooks.objects.push(fn); },
     onItemOnItem() {},
     onGroundItemPickup() {},
@@ -44,9 +54,26 @@ function setup() {
     onPlayerLogout() {},
     onNpcDialogueVariant() {},
     spawnNpc(definition) {
-      return { definition, getId: () => definition.id, getLocation: () => new core.Location(definition.x ?? 0, definition.y ?? 0, 0) };
+      const npc = {
+        definition,
+        registered: true,
+        getIndex: () => 100 + spawned.length,
+        getId: () => definition.id,
+        getLocation: () => new core.Location(definition.x ?? 0, definition.y ?? 0, definition.z ?? 0),
+        getArea: () => npc.__area,
+        setArea: (value) => { npc.__area = value; },
+        getPrivateArea: () => npc.__area,
+        isRegistered: () => npc.registered,
+        isOwnerOnly: () => definition.ownerOnly,
+        getOwner: () => definition.owner,
+        setPositionToFace() {},
+        performAnimation() {},
+        moveTo() {},
+      };
+      spawned.push(npc);
+      return npc;
     },
-    removeNpc() {},
+    removeNpc(npc) { npc.registered = false; removed.push(npc); },
     getItemOnGroundManager() { return { getGroundItem: () => undefined, registerLocation: () => {} }; },
   }, { get(target, key) { return target[key] ?? (() => {}); } });
   const sender = new Proxy({
@@ -66,15 +93,26 @@ function setup() {
       deleteNumber(id, count) { inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - count)); },
       getFreeSlots: () => 28,
     }),
-    getSkillManager: () => ({ getMaxLevel: () => 99, getCurrentLevel: () => 99, addExperiences() {} }),
-    getLocation: () => new core.Location(location.x, location.y, location.z),
+    getSkillManager: () => ({ getMaxLevel: () => 99, getCurrentLevel: () => 99, addExperiences(skill, amount) { xp.push([skill, amount]); } }),
+    getLocation: () => location.getX ? location : new core.Location(location.x, location.y, location.z),
     moveTo(value) { location = value; },
-    getDialogueManager: () => ({ isActive: () => false, startDialogues() {}, getCurrent() { return null; } }),
-    getPrivateArea: () => null,
-    getMovementQueue: () => ({ reset() { return this; } }),
+    getDialogueManager: () => ({
+      isActive: () => currentDialogue !== null,
+      startDialogues(chain) { currentDialogue = chain; },
+      getCurrent: () => currentDialogue,
+      reset() { currentDialogue = null; },
+    }),
+    getArea: () => area,
+    setArea: (value) => { area = value; },
+    getPrivateArea: () => area instanceof core.PrivateArea ? area : null,
+    getMovementQueue: () => ({ reset() { return this; }, setBlockMovement() { return this; } }),
+    setUntargetable() {},
     getEquipment: () => ({ getItems: () => [] }),
     getUsername: () => 'crab-coax-test',
     getIndex: () => 1,
+    isPlayer: () => true,
+    isNpc: () => false,
+    getAsPlayer() { return player; },
     isPlayerBot: () => false,
   };
   const loadQuest = () => {
@@ -89,11 +127,12 @@ function setup() {
     const location = { x, y, z: 0 };
     for (const fn of hooks.objects) fn({ player, objectId, clickType: 1, location, definition });
   };
+  const tick = (count = 1) => { while (count-- > 0) for (const task of [...tasks]) task.tick?.(); };
   const sit = (x, y, slot = SIT_SLOT) => {
     player.moveTo({ x, y, z: 0 });
     emit('player:emote', { slot, sequence: SIT_LOOP });
   };
-  return { core, hooks, attrs, inventory, messages, persistentKeys, placed, player, loadQuest, emit, investigate, sit, setLocation(x, y) { location = { x, y, z: 0 }; } };
+  return { core, hooks, attrs, inventory, messages, persistentKeys, placed, spawned, removed, tasks, xp, player, loadQuest, emit, investigate, sit, tick, setLocation(x, y) { location = { x, y, z: 0 }; }, get area() { return area; }, get currentDialogue() { return currentDialogue; } };
 }
 
 // `bit` is the spot-array index bit used by SCARED/MET (join bits differ).
@@ -215,6 +254,74 @@ test('Crab tree NW sits at 3037,2643; the 2x2 tree refuses 3038,2644', () => {
   assert.equal(h.attrs.get('quest.crab_quest.met') & (1 << 3), 0, 'Sit on the tree/NPC-spawn tile is refused');
   h.sit(3037, 2643);
   assert.ok((h.attrs.get('quest.crab_quest.met') & (1 << 3)) !== 0, 'captured Sit tile 3037,2643 coaxes');
+});
+
+test('Crab dance and ceremony use the captured talkable main crab end and complete once', () => {
+  const h = setup();
+  const quest = h.loadQuest();
+  quest.setStage(h.player, 50);
+  h.emit('npc-dialogue:action', { npcId: 16471, stepId: 'uZozUI' });
+  assert.equal(quest.getStage(h.player), 55, 'dance scene starts at 55');
+
+  const endDefinition = h.core.NpcDefinition.forId(16474);
+  assert.deepEqual(endDefinition.getActions().filter(Boolean), ['Talk-to'], 'cache 16474 is talkable');
+  const danceNpc = h.spawned.find((npc) => npc.getId() === 16474);
+  assert.ok(danceNpc, 'crab_maincrab_end 16474 spawned in the dance scene');
+  assert.deepEqual([danceNpc.getLocation().getX(), danceNpc.getLocation().getY()], [3062, 2641], 'captured dance NPC tile');
+  assert.ok(danceNpc.getArea(), 'dance NPC attached to the private scene area');
+  assert.ok(h.placed.some((entry) => entry.id === 62479 && entry.x === 3062 && entry.y === 2641), 'crab circle 62479');
+  assert.ok(h.placed.some((entry) => entry.id === 62480 && entry.x === 3062 && entry.y === 2642), 'human circle 62480');
+  assert.deepEqual([h.player.getLocation().getX(), h.player.getLocation().getY()], [3062, 2642], 'captured player tile');
+
+  // Real NPC option dispatch: Talk-to on the scene NPC starts the stage-55 transcript.
+  h.hooks.npcs.at(-1)({ player: h.player, npcId: 16474, clickType: 1, definition: endDefinition });
+  assert.ok(h.currentDialogue, 'stage-55 transcript started');
+  h.emit('npc-dialogue:action', { npcId: 16474, stepId: 'UOa-Sd' });
+  assert.equal(quest.getStage(h.player), 60, 'dance transcript ends at 60');
+
+  // Talking again opens the ceremony scene and spawns its own talkable 16474.
+  h.hooks.npcs.at(-1)({ player: h.player, npcId: 16474, clickType: 1, definition: endDefinition });
+  h.tick(1);
+  const ceremonyNpc = h.spawned.filter((npc) => npc.getId() === 16474).at(-1);
+  assert.deepEqual([ceremonyNpc.getLocation().getX(), ceremonyNpc.getLocation().getY()], [3062, 2643], 'captured ceremony NPC tile');
+  assert.ok(ceremonyNpc.getArea(), 'ceremony NPC attached to the private scene area');
+  assert.equal(danceNpc.isRegistered(), false, 'dance scene actor removed, not left as a ghost');
+
+  h.emit('npc-dialogue:action', { npcId: 16474, stepId: 'twF4TG' });
+  h.emit('npc-dialogue:action', { npcId: 16474, stepId: 'Wk9imR' });
+  assert.equal(quest.getStage(h.player), 63);
+  assert.equal(quest.isComplete(h.player), true);
+  assert.equal(h.inventory.get(34589), 1, 'Shell collection once');
+  assert.deepEqual(h.xp.map(([, amount]) => amount).sort((a, b) => a - b), [3000, 10000], 'Sailing/Fishing rewards once');
+  assert.equal(ceremonyNpc.isRegistered(), false, 'ceremony actor removed on completion');
+  const sceneSpawns = h.spawned.filter((npc) => [16480, 16482, 16474].includes(npc.getId()));
+  assert.ok(sceneSpawns.every((npc) => !npc.isRegistered()), 'no phantom scene NPCs after cleanup');
+
+  // A repeated completion action cannot grant the reward twice.
+  h.emit('npc-dialogue:action', { npcId: 16474, stepId: 'Wk9imR' });
+  assert.equal(h.inventory.get(34589), 1);
+  assert.equal(h.xp.length, 2);
+});
+
+test('Crab login at 55 and 60 restores the real scene actors', () => {
+  const dance = setup();
+  const danceQuest = dance.loadQuest();
+  danceQuest.setStage(dance.player, 55);
+  dance.player.moveTo(new dance.core.Location(3062, 2642, 0));
+  for (const fn of dance.hooks.login) fn({ player: dance.player });
+  assert.ok(dance.player.getPrivateArea(), 'stage-55 login restored the private scene');
+  assert.ok(dance.spawned.some((npc) => npc.getId() === 16474), 'stage-55 login restored the main crab end');
+  assert.ok(dance.placed.some((entry) => entry.id === 62480));
+
+  const ceremony = setup();
+  const ceremonyQuest = ceremony.loadQuest();
+  ceremonyQuest.setStage(ceremony.player, 60);
+  ceremony.player.moveTo(new ceremony.core.Location(3062, 2642, 0));
+  for (const fn of ceremony.hooks.login) fn({ player: ceremony.player });
+  ceremony.tick(1);
+  assert.ok(ceremony.player.getPrivateArea(), 'stage-60 login restored the private scene');
+  const endNpc = ceremony.spawned.find((npc) => npc.getId() === 16474);
+  assert.deepEqual([endNpc.getLocation().getX(), endNpc.getLocation().getY()], [3062, 2643], 'stage-60 main crab end restored');
 });
 
 test('Crab Sit uses the real cached slot 54 loop', () => {

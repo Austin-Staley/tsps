@@ -203,8 +203,8 @@ test('Pandemonium uses the captured varbit stages and the real raft cargo route'
   assert.equal(sailActions[1], 'Set', 'cache Sails Set is option 2');
   assert.equal(clickAction(h, 29506, 'Sails', sailActions, 1).handled, true);
   assert.equal(quest.getStage(h.player), 10, 'sails start the voyage');
-  boat.fineX = 3031 * 128 + 64;
-  boat.fineY = 3039 * 128 + 64;
+  boat.fineX = 3032 * 128 + 64;
+  boat.fineY = 3050 * 128;
   BoatManager.tick();
   assert.equal(quest.getStage(h.player), 12, 'the ship arrives at the captured wreck point');
   h.hooks.named.get('Will')['Talk-to']({ player: h.player, npcId: h.core.NpcIdentifiers.WILL, definition: { getName: () => 'Will' } });
@@ -483,6 +483,11 @@ test('Pandemonium uses the actual static-ship blueprint and its lifecycle hooks'
   const StaticShips = require('../plugins/skills/sailing/StaticShips.Sailing');
   const { BoatManager } = require('../dist/game/content/sailing/BoatManager');
   for (const stale of StaticShips.all()) StaticShips.dispose(stale);
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  RegionManager.init();
+  for (const [x, y] of [[3054, 3193], [3054, 3120], [3051, 3110], [3048, 3070], [3032, 3050]]) {
+    RegionManager.loadMapFiles(x, y, true);
+  }
   const definition = StaticShips.definitions.get('pandemonium_tutorial_ship');
   assert.ok(definition, 'shared data supplies the tutorial ship');
   assert.deepEqual(definition.walkableTiles, [[3, 2], [3, 3], [3, 4]]);
@@ -493,6 +498,7 @@ test('Pandemonium uses the actual static-ship blueprint and its lifecycle hooks'
   const ship = StaticShips.all()[0];
   assert.equal(ship.boat.ownerOnly, true);
   assert.equal(ship.boat.ownerPlayerId, 1);
+  assert.equal(`${ship.boat.tileX},${ship.boat.tileY}`, '3054,3193', 'captured start root');
   assert.equal(BoatManager.getBoatAboard(h.player), ship.boat, 'the player boards the real deck');
   assert.ok(BoatManager.getSpec(ship.boat).locs.some((loc) => loc.id === 59554), 'real helm loc on deck');
   assert.ok(StaticShips.get(ship.boat.entityIndex), 'the shared registry owns it');
@@ -508,17 +514,13 @@ test('Pandemonium uses the actual static-ship blueprint and its lifecycle hooks'
   assert.equal(quest.getStage(h.player), 10, 'helm alone does not reach the wreck');
   clickAction(h, 29506, 'Sails', sailActions, 1);
   assert.equal(quest.getStage(h.player), 10, 'raising sails starts the voyage, not arrival');
-  assert.equal(ship.boat.moveMode, 2, 'the captured voyage runs under normal boat movement');
+  assert.equal(ship.boat.moveMode, 1, 'the captured voyage runs at half sail');
   const startY = ship.boat.fineY;
-  const originalSailable = BoatManager.isSailable;
-  BoatManager.isSailable = () => true;
-  try { for (let tick = 0; tick < 10; tick++) BoatManager.tick(); }
-  finally { BoatManager.isSailable = originalSailable; }
-  assert.notEqual(ship.boat.fineY, startY, 'the static ship actually moves in the world');
-  ship.boat.fineX = 3031 * 128 + 64;
-  ship.boat.fineY = 3039 * 128 + 64;
-  BoatManager.tick();
-  assert.equal(quest.getStage(h.player), 12, 'the captured wreck point arrives at stage 12');
+  for (let tick = 0; tick < 300 && quest.getStage(h.player) < 12; tick++) BoatManager.tick();
+  assert.notEqual(ship.boat.fineY, startY, 'the static ship actually moves on the real map');
+  assert.equal(quest.getStage(h.player), 12, `the real collision route reaches the captured wreck (boat ${ship.boat.tileX},${ship.boat.tileY})`);
+  assert.ok(Math.abs(ship.boat.tileX - 3032) <= 2 && Math.abs(ship.boat.tileY - 3050) <= 2,
+    'the boat stops at the captured wreck root');
   assert.equal(h.varbits.get(18315), 1, 'reached-wreck varbit set on arrival');
   assert.ok(BoatManager.getSpec(ship.boat).locs.some((loc) => loc.id === 60482), 'real placed salvaging hook on the deck');
   assert.ok(BoatManager.getSpec(ship.boat).locs.some((loc) => loc.id === 60464), 'wreck loc present');
@@ -601,8 +603,8 @@ test('Pandemonium relog restores stages 12/14 at the earned wreck, docked and ar
   for (const login of h.hooks.login) login({ player: h.player });
   let ship = StaticShips.all()[0];
   assert.ok(ship, 'stage 12 login restores the actual static ship');
-  assert.equal(ship.boat.tileX, 3031);
-  assert.equal(ship.boat.tileY, 3039);
+  assert.equal(ship.boat.tileX, 3032);
+  assert.equal(ship.boat.tileY, 3050);
   assert.equal(BoatManager.getBoatAboard(h.player), ship.boat, 'the player is restored on the deck');
   assert.equal(ship.boat.moveMode, 0, 'the voyage is stopped at the wreck');
   const spec = BoatManager.getSpec(ship.boat);
@@ -627,8 +629,8 @@ test('Pandemonium relog restores stages 12/14 at the earned wreck, docked and ar
   for (const login of h.hooks.login) login({ player: h.player });
   ship = StaticShips.all()[0];
   assert.ok(ship, 'stage 14 relog rebuilds the actual static ship');
-  assert.equal(ship.boat.tileX, 3031);
-  assert.equal(ship.boat.tileY, 3039);
+  assert.equal(ship.boat.tileX, 3032);
+  assert.equal(ship.boat.tileY, 3050);
   assert.equal(BoatManager.getBoatAboard(h.player), ship.boat);
   assert.equal(BoatManager.getSpec(ship.boat).locs.filter((loc) => loc.id === 60482).length, 1);
   h.clickObject(60482);

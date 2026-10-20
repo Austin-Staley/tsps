@@ -86,11 +86,12 @@ module.exports = function registerCrabQuestQuest(api) {
     "You need a Sailing level of 40 and a Fishing level of 30 to start this quest.";
 
   const MAIN_CRAB_NPC_ID = NpcIdentifiers.CRAB_9; // 16471, "Crab", Talk-to
+  const MAIN_CRAB_END_NPC_ID = 16474; // captured crab_maincrab_end, Talk-to in the dance/ceremony scene
   const SHY_CRAB_NPC_ID = 16484; // crab_shycrab parent, multinpc Crab
   const BAND_CRAB_NPC_ID = 16483; // resolved crab_bandcrab transform (QH/capture chathead)
   const SHY_CRAB_CONTENT_ID = BAND_CRAB_NPC_ID;
   const PENGUIN_CRAB_NPC_ID = NpcIdentifiers.CRAB_18; // 16485, "'Crab'"
-  const CRAB_NPC_IDS = new Set([MAIN_CRAB_NPC_ID, PENGUIN_CRAB_NPC_ID, BAND_CRAB_NPC_ID]);
+  const CRAB_NPC_IDS = new Set([MAIN_CRAB_NPC_ID, MAIN_CRAB_END_NPC_ID, PENGUIN_CRAB_NPC_ID, BAND_CRAB_NPC_ID]);
   // Interface 216 slot 54 (cache enum 1001 -> sprite 5248) is the real Sit emote;
   // the capture's op=1 plays emote_sit_loop 10061.
   const SIT_EMOTE_SLOT = 54;
@@ -597,6 +598,10 @@ module.exports = function registerCrabQuestQuest(api) {
     const scene = Scenes.open(player, "crab-dance", CUTSCENE_BOUNDS);
     Scenes.actor(scene, 16480, [3060, 2640, 0]);
     Scenes.actor(scene, 16482, [3064, 2640, 0]);
+    Scenes.actor(scene, MAIN_CRAB_END_NPC_ID, [3062, 2641, 0]);
+    Scenes.loc(scene, { id: 62479, x: 3062, y: 2641 });
+    Scenes.loc(scene, { id: 62480, x: 3062, y: 2642 });
+    player.moveTo(new Location(3062, 2642, 0));
     Scenes.fade(player, true);
     Scenes.later(scene, 1, () => {
       sendCamera(player, [3071, 2637, 470], [3062, 2641, 50]);
@@ -615,7 +620,7 @@ module.exports = function registerCrabQuestQuest(api) {
       player.getPacketSender().sendCameraMoveArc(3062, 2632, 3062, 2632, 450, 400, "linear");
       sendCamera(player, [3052, 2641, 600], [3061, 2644, 100]);
       Scenes.later(scene, 1, () => Scenes.fade(player, false));
-      for (const [id, x, y] of [[16480, 3060, 2643], [16482, 3064, 2643]]) {
+      for (const [id, x, y] of [[16480, 3060, 2643], [16482, 3064, 2643], [MAIN_CRAB_END_NPC_ID, 3062, 2643]]) {
         if (!scene.actors.some((npc) => npc.getId?.() === id)) Scenes.actor(scene, id, [x, y, 0]);
       }
     });
@@ -766,12 +771,12 @@ module.exports = function registerCrabQuestQuest(api) {
       return;
     }
     if (stage === STAGE_DANCE_READY) {
-      startTranscript(api, player, MAIN_CRAB_NPC_ID, PAGE, "crab-rave");
+      startTranscript(api, player, MAIN_CRAB_END_NPC_ID, PAGE, "crab-rave");
       return;
     }
     if (stage === STAGE_CEREMONY) {
       startCeremonyScene(player);
-      startTranscript(api, player, MAIN_CRAB_NPC_ID, PAGE, "crab-rave-the-ceremony");
+      startTranscript(api, player, MAIN_CRAB_END_NPC_ID, PAGE, "crab-rave-the-ceremony");
       return;
     }
     startTranscript(api, player, MAIN_CRAB_NPC_ID, PAGE, "drinking-from-bottle");
@@ -780,7 +785,7 @@ module.exports = function registerCrabQuestQuest(api) {
   function handleNpcInteraction(event) {
     const { player, npcId, clickType, definition } = event;
     const action = definition?.getActions?.()[clickType - 1];
-    if (npcId === MAIN_CRAB_NPC_ID) {
+    if (npcId === MAIN_CRAB_NPC_ID || npcId === MAIN_CRAB_END_NPC_ID) {
       if (action !== "Talk-to") return;
       event.handled = true;
       talkToMainCrab(player);
@@ -1167,10 +1172,18 @@ module.exports = function registerCrabQuestQuest(api) {
     player.setAttribute(STAGE_VERSION_ATTRIBUTE, STAGE_VERSION);
   }
 
+  function restoreScene(player) {
+    if (quest.isComplete(player)) return;
+    const stage = quest.getStage(player);
+    if (stage === STAGE_DANCE_READY) startDanceScene(player);
+    else if (stage === STAGE_CEREMONY) startCeremonyScene(player);
+  }
+
   function handleLogin({ player }) {
     installObjects();
     refreshQuestList(player);
     syncNpcs(player);
+    restoreScene(player);
   }
 
   function handleLogout({ player }) {

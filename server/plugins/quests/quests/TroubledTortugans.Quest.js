@@ -925,7 +925,11 @@ module.exports = function registerTroubledTortugansQuest(api) {
       owner: player,
       ownerOnly: true,
     });
-    if (npc) shellbaneByPlayer.set(player, npc);
+    if (npc) {
+      // Owner NPCs on a boat deck only sync/attack when they join its private deck.
+      if (onboard) addToPlayerArea(player, npc);
+      shellbaneByPlayer.set(player, npc);
+    }
     return npc;
   }
 

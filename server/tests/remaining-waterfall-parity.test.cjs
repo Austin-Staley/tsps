@@ -499,6 +499,55 @@ test('the Waterfall dungeon doors swap to their cache open locs', () => {
   }
 });
 
+test('north Waterfall large doors match the captured west swing and keep the threshold routable', () => {
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
+  const { ObjectManager } = require('../dist/game/entity/impl/object/ObjectManager');
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+  RegionManager.init();
+  RegionManager.loadMapFiles(2581, 9876);
+  const names = {};
+  const doorCore = {
+    ...core, ObjectManager, MapObjects,
+    Sounds: { sendSound() {} },
+    TaskManager: { submit() {}, cancelTasks() {} },
+  };
+  require('../plugins/objects/Doors.plugin.js').register({
+    core: doorCore,
+    onObjectInteraction: (name, actions) => { if (name === 'Large door') Object.assign(names, actions); },
+    onRegionLoaded() {}, onServerStartup() {}, onObjectRoute() {}, emitCustomEvent() {},
+  });
+  const player = { getPrivateArea: () => null, getLocation: () => new core.Location(2581, 9876, 0) };
+  const north = MapObjects.get(1521, new core.Location(2582, 9875, 0), null);
+  assert.ok(north, 'the north large door is on the real map');
+  names.Open({
+    player, object: north, objectId: 1521, definition: { id: 1521 },
+    location: new core.Location(2582, 9875, 0), clickType: 1, handled: false,
+  });
+  // Captured Waterfall pose: the pair swings west to 2581,9875/76, faces 3/1.
+  const left = MapObjects.get(1522, new core.Location(2581, 9875, 0), null);
+  const right = MapObjects.get(1525, new core.Location(2581, 9876, 0), null);
+  assert.ok(left && right, 'both open leaves are at the captured west pose');
+  assert.equal(left.getFace(), 3);
+  assert.equal(right.getFace(), 1);
+  assert.equal(MapObjects.get(1521, new core.Location(2582, 9875, 0), null), null);
+  assert.equal(MapObjects.get(1524, new core.Location(2582, 9876, 0), null), null);
+  assert.equal(RegionManager.blocked(new core.Location(2581, 9876, 0), null), false);
+  const route = new RsmodRouteFinding().findRoute({
+    level: 0, srcX: 2581, srcY: 9876, srcSize: 1, destX: 2584, destY: 9876,
+    destWidth: 1, destLength: 1, locAngle: 0, locShape: -1, moveNear: false,
+    blockAccessFlags: 0, maxWaypoints: 25, privateArea: null,
+  });
+  assert.equal(route.success, true, 'exact RSMod route from the captured pose through the threshold');
+  assert.deepEqual(route.waypoints.at(-1), { x: 2584, y: 9876, z: 0 });
+
+  names.Open({
+    player, object: right, objectId: 1525, definition: { id: 1525 },
+    location: new core.Location(2581, 9876, 0), clickType: 1, handled: false,
+  });
+  assert.ok(MapObjects.get(1521, new core.Location(2582, 9875, 0), null), 'close restores the north pair');
+});
+
 test('rope crossing uses owner objects, leaves the base rock, and keeps two players isolated', () => {
   const { RegionManager } = require('../dist/game/collision/RegionManager');
   const { PathFinder } = require('../dist/game/model/movement/path/PathFinder');

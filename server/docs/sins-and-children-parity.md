@@ -50,7 +50,7 @@ marker, so a new native stage 20/22 is never reinterpreted as old progress.
 | --- | --- | --- |
 | Start/accept, requirements | Veliaf at Slepe; Taste of Hope + skills | Alina/Noah dialog choice |
 | Dialogue branches | Wiki transcript variants by stage | 18 wiki variants + conditions |
-| Carl follow | area-scoped Slepe route from NPC 9558's actual capture-1637 spawn/walk updates; captured start teleport (3754,3307); look-back pauses/view-cone/LOS hiding; seen/too-close and too-far reset/retry; persisted captured steps never infer from proximity; stairs require earned follow and captured Continue choice | — |
+| Carl follow | area-scoped Slepe route from NPC 9558's actual capture-1637 spawn/walk updates; captured start teleport (3754,3307); look-back pauses/view-cone and RegionManager edge-ray LOS hiding; seen/too-close and too-far reset/retry; persisted captured steps never infer from proximity; stairs require earned follow and captured Continue choice | — |
 | Trek | rucksack knife, 3 short vines → long vine, vine swing, nail beasts, zombie axe, dead-tree logs, three bridge repairs, crossing, juvinates | — |
 | Mausoleum | actionable per-player door overlays 38070/38071; captured interface 665 Kakurasu: row/col sums, dynamic OP1 buttons, solved grid advances 52 | — |
 | Other objects | per-player barrel/boat/table/door overlays (owner objects re-synced on region load), crypt stairs landing 3738,9703→captured Kroy arrival, crypt gate 39512/39513, cracked wall, Arboretum valves/tree/shelves, hideout crate | bandit door, Varrock stairs/roof |
@@ -95,5 +95,5 @@ overlapping stages, Vanstrom enrage/lightning, all captured camera groups and
 their resets/logout cancellation, per-player object isolation/packet lookup,
 region-load resync, the collision-valid tail-to-door route, canonical crypt landing/Kroy route and
 crypt gate, Carl follow/look-back too-close/far/retry, persisted-checkpoint vs
-proximity/relog/logout cleanup, all captured Carl NPC steps walkable and connected full spawn→crypt, the captured Continue stairs gate, and the
+proximity/relog/logout cleanup, all captured Carl NPC steps walkable/connected and the first look-back wall hides the captured position, the captured Continue stairs gate, and the
 132/138 finale with a single tome reward.

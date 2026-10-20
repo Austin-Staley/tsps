@@ -949,6 +949,8 @@ test('real NpcDialogues: false-wall message action arms Yes/No through the actua
   const { GameObject } = require('../dist/game/entity/impl/object/GameObject');
   const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
   const { PluginManager: PM } = require('../dist/plugins/PluginManager');
+  const { TaskManager } = require('../dist/game/task/TaskManager');
+  const { PathFinder } = require('../dist/game/model/movement/path/PathFinder');
   await CachePipeline.initialize(path.resolve('.'));
   RegionManager.init();
   new NpcDefinitionLoader().load();
@@ -956,6 +958,7 @@ test('real NpcDialogues: false-wall message action arms Yes/No through the actua
   const api = PM.createApi('remaining-north-real-dialogues');
   require('../plugins/npcs/NpcDialogues.plugin').register(api);
   require('../plugins/quests/quests/SecretsOfTheNorth.Quest')(api);
+  require('../plugins/objects/Ladders.plugin').register(api);
   const north = runtime.getRegisteredQuests().filter(q => q.key === 'secrets_of_the_north').at(-1);
 
   function account() {
@@ -976,13 +979,21 @@ test('real NpcDialogues: false-wall message action arms Yes/No through the actua
     return p;
   }
 
-  function openFalseWall(p) {
-    const object = new GameObject(46707, new core.Location(2572, 3270, 1), 10, 0, null);
+  function emitObject(p, id, x, y, z) {
+    const object = new GameObject(id, new core.Location(x, y, z), 10, 0, null);
     PM.emitObjectInteraction({
-      player: p, object, objectId: 46707, definition: ObjectDefinition.forId(46707),
+      player: p, object, objectId: id, definition: ObjectDefinition.forId(id),
       clickType: 1, location: object.getLocation(), handled: false,
     });
+  }
+
+  function openFalseWall(p) {
+    emitObject(p, 46707, 2572, 3270, 1);
     assert.ok(p.getDialogueManager().isActive() || MultiChatboxPrompt.getPending(p), 'real NpcDialogues started');
+  }
+
+  function tickTasks(times = 2) {
+    for (let i = 0; i < times; i++) TaskManager.process();
   }
 
   function reachOptions(p) {
@@ -1011,6 +1022,40 @@ test('real NpcDialogues: false-wall message action arms Yes/No through the actua
   choose(yes, 'Yes.');
   assert.equal(yes.getAttribute('secrets-of-the-north:hidden-passage'), true);
   assert.deepEqual([yes.getLocation().getX(), yes.getLocation().getY(), yes.getLocation().getZ()], [2572, 3270, 1]);
+
+  // Real ladder up to the walkable z2 landing, then the chest from that landing.
+  emitObject(yes, 16683, 2573, 3271, 1);
+  tickTasks();
+  assert.deepEqual([yes.getLocation().getX(), yes.getLocation().getY(), yes.getLocation().getZ()], [2572, 3271, 2]);
+  assert.equal(RegionManager.blocked(new core.Location(2572, 3271, 2), null), false, 'real z2 landing walkable');
+  const chestDef = ObjectDefinition.forId(46572);
+  const landingStand = { getLocation: () => yes.getLocation(), getSize: () => 1, getPrivateArea: () => null };
+  assert.equal(PathFinder.reachedObject(landingStand, 2572, 3270, 1, 1, 0, 10, chestDef.getBlockingMask()),
+    true, 'real landing reaches the hidden chest');
+  emitObject(yes, 46572, 2572, 3270, 2);
+  assert.equal((yes.getAttribute('secrets-of-the-north:evidence') ?? 0) & 8, 8, 'real chest message marked evidence');
+
+  // Leave, then the persistent passage still lets the real wall page re-enter.
+  emitObject(yes, 16679, 2573, 3271, 2);
+  tickTasks();
+  assert.deepEqual([yes.getLocation().getX(), yes.getLocation().getY(), yes.getLocation().getZ()], [2572, 3269, 1]);
+  openFalseWall(yes);
+  choose(yes, 'Yes.');
+  assert.deepEqual([yes.getLocation().getX(), yes.getLocation().getY(), yes.getLocation().getZ()], [2572, 3270, 1],
+    'already-true passage re-enters on a later real Yes');
+  emitObject(yes, 16683, 2573, 3271, 1);
+  tickTasks();
+  assert.deepEqual([yes.getLocation().getX(), yes.getLocation().getY(), yes.getLocation().getZ()], [2572, 3271, 2],
+    'real ladder works after re-entry');
+  emitObject(yes, 46572, 2572, 3270, 2);
+  assert.equal((yes.getAttribute('secrets-of-the-north:evidence') ?? 0) & 8, 8);
+
+  // Simulate an already-true saved flag after relog.
+  const after = account();
+  after.setAttribute('secrets-of-the-north:hidden-passage', true);
+  openFalseWall(after);
+  choose(after, 'Yes.');
+  assert.deepEqual([after.getLocation().getX(), after.getLocation().getY(), after.getLocation().getZ()], [2572, 3270, 1]);
 
   const no = account();
   openFalseWall(no);

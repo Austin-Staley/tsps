@@ -383,8 +383,19 @@ module.exports = function registerPandemoniumQuest(api) {
   }
 
   const tutorialScenes = new Map();
-  const WORLD_WRECK_TILE = { x: 3031, y: 3039 };
-  const ARRIVAL_TILES = 2;
+  // Captured worldentity roots (PandemoniumDiscord): start (3054.5,3193.5), wreck
+  // (3032.5,3050.0). The QH wreck zone contains the final root; waypoints follow the offline
+  // real-collision route around the Port Sarim coast.
+  const TUTORIAL_START_FINE = { fineX: 3054 * 128 + 64, fineY: 3193 * 128 + 64 };
+  const WORLD_WRECK_FINE = { fineX: 3032 * 128 + 64, fineY: 3050 * 128 };
+  const WORLD_WRECK_TILE = { x: 3032, y: 3050 };
+  const WORLD_WRECK_ZONE = { minX: 3018, maxX: 3040, minY: 3030, maxY: 3050 };
+  // Offline real BoatCollision/tickBoat route from the captured start to the captured wreck
+  // root, run-length encoded as [packed heading, half-sail ticks].
+  const VOYAGE_HEADING_RUNS = [
+    [0, 94], [1, 10], [0, 4], [1, 2], [0, 8], [1, 10],
+    [0, 14], [1, 2], [0, 16], [1, 20], [2, 18], [0, 2],
+  ];
 
   function tutorialScene(player) {
     return tutorialScenes.get(player) ?? null;
@@ -448,11 +459,7 @@ module.exports = function registerPandemoniumQuest(api) {
     const ship = StaticShips.spawn(TUTORIAL_SHIP_ID, {
       owner: player,
       ownerOnly: true,
-      ...(atWreck ? {
-        fineX: WORLD_WRECK_TILE.x * 128 + 64,
-        fineY: WORLD_WRECK_TILE.y * 128 + 64,
-        angle: 0,
-      } : {}),
+      ...(atWreck ? { ...WORLD_WRECK_FINE, angle: 0 } : { ...TUTORIAL_START_FINE, angle: 0 }),
     });
     if (!ship) return false;
     const deck = BoatManager.getDeck(ship.boat);
@@ -461,15 +468,14 @@ module.exports = function registerPandemoniumQuest(api) {
     StaticShips.board(player, ship);
     const helmTaken = atWreck || (stage >= STAGE_SAIL_ACCEPTED && player.getAttribute(TUTORIAL_HELM_ATTRIBUTE) === true);
     const sailsRaised = atWreck || (stage >= STAGE_SAIL_ACCEPTED && player.getAttribute(TUTORIAL_SAILS_ATTRIBUTE) === true);
-    const scene = { boat: ship.boat, deck, will, anne, staticShip: ship, helmTaken, sailsRaised, voyageStarted: sailsRaised && !atWreck, arrived: atWreck };
+    const scene = { boat: ship.boat, deck, will, anne, staticShip: ship, helmTaken, sailsRaised, voyageStarted: sailsRaised && !atWreck, arrived: atWreck, headingRun: 0, headingTicks: 0 };
     tutorialScenes.set(player, scene);
     if (helmTaken) scene.boat.helmPlayerId = player.getIndex();
     scene.boat.moveMode = sailingContent.MOVE_MODE.STOPPED;
     if (atWreck) {
       addWreckLocs(scene);
     } else if (scene.voyageStarted) {
-      BoatManager.steerToward(player, WORLD_WRECK_TILE.x, WORLD_WRECK_TILE.y);
-      scene.boat.moveMode = sailingContent.MOVE_MODE.FULL;
+      startVoyage(scene);
     } else {
       tutorialFadeIn(player, ship.boat);
     }
@@ -989,19 +995,35 @@ module.exports = function registerPandemoniumQuest(api) {
     scene.sailsRaised = true;
     scene.voyageStarted = true;
     player.setAttribute(TUTORIAL_SAILS_ATTRIBUTE, true);
-    BoatManager.steerToward(player, WORLD_WRECK_TILE.x, WORLD_WRECK_TILE.y);
-    scene.boat.moveMode = sailingContent.MOVE_MODE.FULL;
+    startVoyage(scene);
     return true;
   }
 
-  /** Runs after boat movement each tick: the static tutorial ship arrives in open water. */
+  function startVoyage(scene) {
+    scene.headingRun = 0;
+    scene.headingTicks = VOYAGE_HEADING_RUNS[0][1];
+    scene.boat.heading = VOYAGE_HEADING_RUNS[0][0] * 128;
+    scene.boat.moveMode = sailingContent.MOVE_MODE.HALF;
+  }
+
+  /** Follow a collision-checked route between the captured start and wreck positions. */
   function watchTutorialVoyages() {
     for (const [player, scene] of tutorialScenes) {
       if (!scene.voyageStarted || scene.arrived) continue;
       if (player.isRegistered?.() === false) continue;
+      if (scene.headingTicks > 0) scene.headingTicks--;
+      if (scene.headingTicks === 0 && scene.headingRun < VOYAGE_HEADING_RUNS.length - 1) {
+        scene.headingRun++;
+        const [heading, ticks] = VOYAGE_HEADING_RUNS[scene.headingRun];
+        scene.headingTicks = ticks;
+        scene.boat.heading = heading * 128;
+        scene.boat.moveMode = sailingContent.MOVE_MODE.HALF;
+      }
       const boat = scene.boat;
-      if (Math.abs(boat.tileX - WORLD_WRECK_TILE.x) <= ARRIVAL_TILES
-        && Math.abs(boat.tileY - WORLD_WRECK_TILE.y) <= ARRIVAL_TILES) {
+      if (boat.tileX >= WORLD_WRECK_ZONE.minX && boat.tileX <= WORLD_WRECK_ZONE.maxX
+        && boat.tileY >= WORLD_WRECK_ZONE.minY && boat.tileY <= WORLD_WRECK_ZONE.maxY
+        && Math.abs(boat.tileX - WORLD_WRECK_TILE.x) <= 2
+        && Math.abs(boat.tileY - WORLD_WRECK_TILE.y) <= 2) {
         arriveAtWreck(player, scene);
       }
     }

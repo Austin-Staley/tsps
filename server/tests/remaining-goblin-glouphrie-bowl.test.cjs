@@ -12,7 +12,7 @@ const BOWL = { raw: 49910, inspect: 49610, sing: 49611, eyes: 17239 };
 const ITEM = { seed: 28575, chime: 28577, redCircle: 9597 };
 const BOWL_TILE = { x: 2793, y: 4256 };
 
-let PluginManager, core, Player, CacheDefinitions, ObjectDefinition, MapObjects, ObjectActionPacketListener;
+let PluginManager, core, Player, CacheDefinitions, ObjectDefinition, MapObjects, ObjectActionPacketListener, PathFinder;
 
 before(async () => {
   await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(ROOT);
@@ -21,6 +21,7 @@ before(async () => {
   ({ ObjectDefinition } = require('../dist/game/definition/ObjectDefinition'));
   ({ MapObjects } = require('../dist/game/entity/impl/object/MapObjects'));
   ({ ObjectActionPacketListener } = require('../dist/net/packet/impl/ObjectActionPacketListener'));
+  ({ PathFinder } = require('../dist/game/model/movement/path/PathFinder'));
   PluginManager.loadPluginSwitches = () => ({ switches: new Map() });
   const quiet = [console.log, console.info, console.debug, console.warn];
   console.log = console.info = console.debug = console.warn = () => {};
@@ -176,4 +177,30 @@ test('real ObjectActionPacketListener resolves the raw 49911 key chest before PO
   // The same listener path at the golden chest stays gated by order/position.
   new ObjectActionPacketListener().executeAction(p, 49612, 2789, 4258, 1);
   assert.equal(p.getInventory().getAmount(28574), 0, 'golden chest is not blanket-opened');
+});
+
+test('sewer ladders clear queued walks and land on the captured tile both directions', () => {
+  const down = player(42, 0);
+  down.p.setLocation(new core.Location(1530, 4236, 1));
+  down.p.getMovementQueue().walkStep(1, 0); // queued normal walk that used to win
+  const downObject = MapObjects.get(49701, new core.Location(1529, 4236, 1), null);
+  assert.ok(downObject, 'down ladder exists on the shipped map');
+  const downRequest = { player: down.p, object: downObject, objectId: 49701, clickType: 3, handled: false };
+  PluginManager.emitCustomEvent('ladders:climb', downRequest);
+  assert.equal(downRequest.handled, true, 'POG claims the sewer ladder before the generic landing');
+  for (let tick = 0; tick < 4; tick++) core.TaskManager.process();
+  assert.deepEqual([down.p.getLocation().getX(), down.p.getLocation().getY(), down.p.getLocation().getZ()], [1529, 4236, 0], 'down lands on the captured tile after several ticks');
+  assert.equal(PathFinder.findWalkable(down.p, 1529, 4252, 1), true, 'lower landing can walk to the next ladder');
+
+  const up = player(42, 0);
+  up.p.setLocation(new core.Location(1479, 4239, 0));
+  up.p.getMovementQueue().walkStep(0, 1);
+  const upObject = MapObjects.get(49700, new core.Location(1479, 4239, 0), null);
+  assert.ok(upObject, 'up ladder exists on the shipped map');
+  const upRequest = { player: up.p, object: upObject, objectId: 49700, clickType: 1, handled: false };
+  PluginManager.emitCustomEvent('ladders:climb', upRequest);
+  assert.equal(upRequest.handled, true);
+  for (let tick = 0; tick < 4; tick++) core.TaskManager.process();
+  assert.deepEqual([up.p.getLocation().getX(), up.p.getLocation().getY(), up.p.getLocation().getZ()], [1479, 4239, 1]);
+  assert.equal(PathFinder.findWalkable(up.p, 1484, 4238, 1), true, 'upper landing can reach the gate corridor');
 });

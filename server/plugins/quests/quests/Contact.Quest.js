@@ -654,7 +654,6 @@ module.exports = function registerContactQuest(api) {
       }
       if (value === "i want to talk to you about sophanem") {
         if (stage === STAGE_MAISA_CONVINCED) setBit(player, BIT_OSMAN_MET);
-        else if (stage === STAGE_OSMAN_AGREED) setBit(player, BIT_OSMAN_SENT);
       }
     }
   }

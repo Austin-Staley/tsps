@@ -55,7 +55,7 @@
  *   than the full multi-page interface.
  */
 module.exports = function registerFallenFromGraceQuest(api) {
-  const { Item, ItemIdentifiers, Location, NpcIdentifiers, ObjectIdentifiers, Skill } =
+  const { CountdownTask, Item, ItemIdentifiers, Location, NpcIdentifiers, ObjectIdentifiers, Skill, TaskManager } =
     api.core;
   const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
   const { createQuestLockpicking } = require("../QuestLockpicking");
@@ -177,6 +177,15 @@ module.exports = function registerFallenFromGraceQuest(api) {
   const BASEMENT_STAIRS_OBJECT_ID = ObjectIdentifiers.STAIRCASE_273; // 62255 Climb-up
   const CATHEDRAL_STAIRS_OBJECT_ID = ObjectIdentifiers.STAIRCASE_272; // 62254 Climb-down
   const CAVE_ENTRANCE_SAILABLE_OBJECT_ID = 62217; // wyrmscraig_cave_entrance_sailable, Sail
+  // Captured P2 tick 29: the skiff crosses the south-west cave mouth without an object click.
+  // The cache pool at 2562,2203 is the portal face, and a real east-facing skiff hull stops at
+  // x2539 on the y2188 approach (open water ends at x2543); the recorded boat root then
+  // reappears at 2577.5,8606.5 (the cavern mooring).
+  // Keep this a narrow quest gate, not a proximity radius: the boat must actually reach the
+  // legal open-sea edge of the captured approach line.
+  const CAVERN_APPROACH = { minX: 2539, maxX: 2557, minY: 2187, maxY: 2189, z: 0 };
+  const CAVERN_MOORING = { fineX: 329920, fineY: 1101632, z: 0, angle: 1408 }; // 2577.5,8606.5
+  const CAVE_BOAT_TYPES = new Set(["raft", "skiff"]);
   const CATHEDRAL_DOOR_OBJECT_IDS = new Set([62368, 62369]);
   const CREVICE_OBJECT_ID = ObjectIdentifiers.CREVICE_57; // 62257 Squeeze-through
   // ffg_corpse_keenan (no identifier: the raw multi-loc is named "null" and resolves to
@@ -928,6 +937,89 @@ module.exports = function registerFallenFromGraceQuest(api) {
   }
 
   // ==========================================================================
+  // Captured automatic cavern passage
+  // ==========================================================================
+
+  const cavernApproachKeys = new Map();
+
+  function later(key, ticks, action) {
+    TaskManager.submit(new CountdownTask(key, ticks, action));
+  }
+
+  function stopCavernApproachWatch(player) {
+    const key = cavernApproachKeys.get(player);
+    if (key) TaskManager.cancelTasks?.(key);
+    cavernApproachKeys.delete(player);
+  }
+
+  function caveBoat(player) {
+    const boat = BoatManager.getBoatAboard(player);
+    if (!boat || boat.static || boat.ownerPlayerId !== player.getIndex()) return null;
+    const type = BoatManager.getSpec(boat)?.type;
+    return CAVE_BOAT_TYPES.has(type) ? boat : null;
+  }
+
+  function inCavernApproach(boat) {
+    if (boat.level !== CAVERN_APPROACH.z) return false;
+    const x = Math.floor(boat.fineX / 128);
+    const y = Math.floor(boat.fineY / 128);
+    return x >= CAVERN_APPROACH.minX && x <= CAVERN_APPROACH.maxX
+      && y >= CAVERN_APPROACH.minY && y <= CAVERN_APPROACH.maxY;
+  }
+
+  /** One captured transition: move the player's boat to the cavern mooring and stay aboard. */
+  function enterCavernByBoat(player, boat) {
+    stopCavernApproachWatch(player);
+    boat.fineX = CAVERN_MOORING.fineX;
+    boat.fineY = CAVERN_MOORING.fineY;
+    boat.level = CAVERN_MOORING.z;
+    boat.angle = CAVERN_MOORING.angle;
+    boat.heading = CAVERN_MOORING.angle;
+    boat.moveMode = 0;
+    Sailing.dock(player, "wyrmscraig_cave");
+    setFlag(player, FLAG_WYRMS_ENTRY);
+    quest.setStage(player, STAGE_CAVERN);
+    player.sendMessage("You sail through the cave opening.");
+  }
+
+  function startCavernApproachWatch(player) {
+    if (cavernApproachKeys.has(player) || quest.getStage(player) !== STAGE_CORMAC_PLAN) return;
+    if (!caveBoat(player)) return;
+    const key = {};
+    cavernApproachKeys.set(player, key);
+    const tick = () => {
+      if (cavernApproachKeys.get(player) !== key) return;
+      if (quest.getStage(player) !== STAGE_CORMAC_PLAN) {
+        cavernApproachKeys.delete(player);
+        return;
+      }
+      const boat = caveBoat(player);
+      if (!boat) {
+        cavernApproachKeys.delete(player);
+        return;
+      }
+      if (inCavernApproach(boat)) {
+        enterCavernByBoat(player, boat);
+        return;
+      }
+      later(key, 2, tick);
+    };
+    later(key, 2, tick);
+  }
+
+  function handleSailingBoarded({ player }) {
+    if (player) startCavernApproachWatch(player);
+  }
+
+  function handleSailingLeft({ player }) {
+    if (player) stopCavernApproachWatch(player);
+  }
+
+  function handleLogout({ player }) {
+    if (player) stopCavernApproachWatch(player);
+  }
+
+  // ==========================================================================
   // NPC death
   // ==========================================================================
 
@@ -1034,6 +1126,7 @@ module.exports = function registerFallenFromGraceQuest(api) {
   function handleLogin({ player }) {
     refreshQuestList(player);
     ensureHat(player);
+    startCavernApproachWatch(player);
   }
 
   // ==========================================================================
@@ -1213,6 +1306,9 @@ module.exports = function registerFallenFromGraceQuest(api) {
   api.onCustomEvent("ladders:climb", handleLadderClaim);
   api.onZoneEnter(SURFACE_ZONE, handleSurfaceZoneEnter);
   api.onZoneEnter(CAVERN_ZONE, handleCavernZoneEnter);
+  api.onCustomEvent("sailing:boarded", handleSailingBoarded);
+  api.onCustomEvent("sailing:left", handleSailingLeft);
   api.onPlayerLogin(migrateStage);
   api.onPlayerLogin(handleLogin);
+  api.onPlayerLogout(handleLogout);
 };

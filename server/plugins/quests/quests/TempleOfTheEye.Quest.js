@@ -1780,6 +1780,8 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
     player.getPacketSender().sendVarbit(13740, (teleports(player) & ABYSS_TELEPORT_BIT) !== 0 ? 1 : 0);
     player.getPacketSender().sendVarbit(13753, (teleports(player) & TOWER_TELEPORT_BIT) !== 0 ? 1 : 0);
     player.getPacketSender().sendVarbit(13746, flag(player, INCANTATION_GIVEN_ATTRIBUTE) ? 1 : 0);
+    // Mirror the captured completion reward varbit; never re-grant the reward.
+    player.getPacketSender().sendVarbit(13757, quest.isComplete(player) ? 1 : 0);
   }
 
   function handleLogout({ player }) {

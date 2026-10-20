@@ -1481,12 +1481,10 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
       case FALSE_WALL:
         if (stage < STAGE_MURDER) return;
         event.handled = true;
-        if (hasFlag(player, HIDDEN_PASSAGE_ATTRIBUTE)) {
-          pendingFalseWall.delete(player);
-          falseWallInteraction.delete(player);
-        } else {
-          falseWallInteraction.set(player, { objectId: FALSE_WALL, stage, at: Date.now() });
-        }
+        // The secret door is repeatable: every real wall click starts a fresh
+        // confirmation page, whether the passage was already used or not.
+        pendingFalseWall.delete(player);
+        falseWallInteraction.set(player, { objectId: FALSE_WALL, stage, at: Date.now() });
         startTranscript(api, player, GUARD_NPC, PAGE, "a-death-in-the-family-knocking-at-the-false-wall");
         return;
       case HIDDEN_ROOM_CHEST:

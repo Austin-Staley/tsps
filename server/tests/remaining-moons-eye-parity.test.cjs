@@ -571,6 +571,23 @@ test('Wizards Tower basement ladder 2148 reaches the 2147 ground-floor ladder th
   assert.deepEqual([location.getX(), location.getY(), location.getZ()], [3105, 3162, 0]);
 });
 
+test('Temple login mirrors the captured reward varbit without re-granting it', () => {
+  const h = harness('TempleOfTheEye');
+  const done = player();
+  h.quest.setStage(done, 130);
+  done.attrs.set('temple-of-the-eye:stage-schema', 2);
+  for (const fn of h.hooks.onPlayerLogin ?? []) fn({ player: done });
+  assert.equal(done.varbits.get(13757), 1);
+  assert.equal(done.xp.length, 0, 'login does not grant reward XP again');
+  assert.equal(done.items.get(I.MEDIUM_POUCH) ?? 0, 0, 'login does not grant the pouch again');
+
+  const mid = player();
+  h.quest.setStage(mid, 75);
+  mid.attrs.set('temple-of-the-eye:stage-schema', 2);
+  for (const fn of h.hooks.onPlayerLogin ?? []) fn({ player: mid });
+  assert.equal(mid.varbits.get(13757), 0);
+});
+
 test('Perilous Moons migrates legacy completed 31 without replaying rewards, but a fresh 31 still completes', () => {
   const h = harness('PerilousMoons');
   const old = player();

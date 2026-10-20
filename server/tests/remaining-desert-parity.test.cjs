@@ -108,7 +108,7 @@ function player() {
     getInventory: () => inventory,
     getPacketSender: () => packet,
     getDialogueManager: () => ({ startDialogues: builder => { lastBuilder = builder; }, reset: noop, isActive: () => false }),
-    getMovementQueue: () => ({ reset() { return this; }, setBlockMovement() { return this; } }),
+    getMovementQueue: () => ({ reset() { return this; }, setBlockMovement(value) { p.movementBlocked = value === true; return this; } }),
     getLocation: () => location,
     moveTo: value => { location = value; },
     getArea: () => area,
@@ -154,6 +154,15 @@ test('Contact: Osman only opens the Sophanem cutscene after the Al Kharid send-o
     h.variant({ player: p, npcId: 4286, npc: osman }),
     'i-spy-with-my-little-eye-talking-to-osman-outside-sophanem'
   );
+});
+
+test('Contact: the captured Osman stage-70 choice does not reference a sent-bit', () => {
+  const h = harness('../plugins/quests/quests/Contact.Quest');
+  const p = player();
+  h.quest.setStage(p, 70);
+  const event = { player: p, npcId: core.NpcIdentifiers.OSMAN_9, option: 'I want to talk to you about Sophanem.' };
+  assert.doesNotThrow(() => h.emit('npc-dialogue:choice', event));
+  assert.equal(h.quest.getStage(p), 70, 'the choice keeps the captured Osman-agreed stage');
 });
 
 test('Contact: Maisa stops replaying the quiz once Osman has been sent for', () => {
@@ -560,7 +569,10 @@ test('Beneath Cursed Sands: real cache entry -> citizen -> guard -> ruins keeps 
     assert.equal(citizenEvent.handled, true, `citizen ${npcId} Talk-to must dispatch`);
     assert.equal(h.transcripts.at(-1)[4], 'starting-off-talking-to-a-citizen');
   }
+  h.action(p, 11537, 'fyqclq');
+  assert.equal(p.movementBlocked, true, 'the guard cut scene blocks movement');
   h.action(p, 11537, 'V9HUjH');
+  assert.equal(p.movementBlocked, false, 'the guard fight must clear the cut-scene movement lock');
   assert.equal(h.quest.getStage(p), 18);
   const guard = h.npcs.find(npc => npc.id === 11529);
   assert.ok(guard, 'the Head Menaphite Guard must spawn for the triggered fight');
@@ -637,4 +649,36 @@ test('Beneath Cursed Sands: inner lever door is gated on the solved urn riddle',
   p.attributes.set('beneath-cursed-sands:urns', (4) | (2 << 4) | (1 << 8) | (3 << 12));
   h.object(p, 43962, 1, door, new core.Location(3389, 9248, 0));
   assert.notDeepEqual([p.getLocation().getX(), p.getLocation().getY()], [3390, 9248]);
+});
+test('Beneath Cursed Sands: shipped guard transcript clears scene controls and spawns the fight', async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(path.resolve(__dirname, '..'));
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 16);
+  h.action(p, 11537, 'fyqclq');
+  assert.equal(p.movementBlocked, true);
+  let current;
+  const manager = {
+    reset() {}, advance() {}, getCurrent: () => current,
+    startDialogues(chain) {
+      current = chain;
+      for (const entry of [...chain.getDialogues().values()].sort((a, b) => a.getIndex() - b.getIndex())) {
+        if (current !== chain) break;
+        if (entry.constructor.name === 'ActionDialogue') entry.send(p);
+        else entry.send?.(p);
+      }
+    },
+  };
+  p.getDialogueManager = () => manager;
+  const { loadTranscripts } = require('../plugins/quests/QuestRuntime');
+  const { startDialogue } = require('../plugins/npcs/NpcDialogues.plugin');
+  const record = loadTranscripts(h.api)['Beneath Cursed Sands'];
+  const definition = core.NpcDefinition.forId(11537);
+  const event = { player: p, npcId: 11537, definition };
+  startDialogue(h.api, event, record.variants['starting-off-guard-cutscene'], record.branches, {
+    player: p, npc: event.npc, npcId: 11537, definition, pages: [{ page: 'Beneath Cursed Sands', variants: ['starting-off-guard-cutscene'] }],
+  });
+  assert.equal(h.quest.getStage(p), 18);
+  assert.equal(p.movementBlocked, false);
+  assert.ok(h.npcs.some(npc => npc.id === 11529));
 });

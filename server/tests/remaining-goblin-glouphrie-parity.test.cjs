@@ -733,8 +733,10 @@ test('POG tree, sewer, birds and final cutscene complete at 50', () => {
   assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1472, 4238, 0], 'sewer entrance lands at the first chamber');
   const ladder = (objectId, x, y, z) => (h.hooks.onObjectInteraction ?? []).forEach((fn) => fn({ player: p, objectId, location: { x, y, z } }));
   ladder(49700, 1479, 4239, 0);
+  h.tick(1);
   assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1479, 4239, 1], 'sewer ladder climbs in place');
   ladder(49701, 1479, 4239, 1);
+  h.tick(1);
   assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1479, 4239, 0], 'sewer ladder descends in place');
   p.moveTo(new core.Location(1506, 4319, 1));
   h.zone(p);
@@ -1000,4 +1002,26 @@ test('POG terrorbirds require the crystal chime to be attacked, not equipped or 
   assert.equal(attack(), null, 'carrying the chime allows the attack');
   const otherOwnersBird = { isNpc: () => true, getId: () => N.WARPED_TERRORBIRD, getOwner: () => player() };
   assert.equal(area.canAttack(p, otherOwnersBird), null, 'another player-owned bird is not denied');
+});
+
+
+test('stage-2 city arrival spawns canonical Zanik in the lab and Talk-to plays the shipped opening', () => {
+  const h = harness('LandOfTheGoblins');
+  const p = player();
+  h.quest.setStage(p, 2);
+  p.moveTo(new core.Location(2747, 5374, 0));
+  h.login(p);
+  h.zone(p);
+  const zanik = h.npcs.find((npc) => npc.getOwner?.() === p && npc.getId?.() === N.ZANIK_17);
+  assert.ok(zanik, 'Zanik is spawned at stage 2 after city entry/login');
+  assert.deepEqual([zanik.getLocation().getX(), zanik.getLocation().getY()], [2703, 5366]);
+  h.zone(p);
+  assert.equal(h.npcs.filter((npc) => npc.getOwner?.() === p && npc.getId?.() === N.ZANIK_17).length, 1,
+    'login plus city-entry hooks do not duplicate Zanik');
+
+  npcInteractionWith(h, p, zanik, 1, actions(['Talk-to']));
+  const current = p.manager.getCurrent();
+  assert.ok(current, 'Talk-to starts the shipped Zanik dialogue');
+  assert.match(String(current.getText?.() ?? ''), /Hello, Parity!/);
+  assert.equal(h.quest.getStage(p), 4, 'talking to Zanik advances stage 2 -> 4');
 });

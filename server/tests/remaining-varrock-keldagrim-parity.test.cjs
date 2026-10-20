@@ -659,6 +659,42 @@ test('Defender has the eight captured single bottle floor spawns and gates retur
   assert.equal(second.items.get(I.BOTTLE), 3, 'gate 2 returns the empties too');
 });
 
+test('Defender gates cross bidirectionally from the actual side after the first pass', () => {
+  const h = harness('DefenderOfVarrock'), p = player();
+  h.quest.setStage(p, 24);
+  p.attrs.set('quest.defender_of_varrock.bits', (1 << 0) | (1 << 1) | (1 << 2)); // entered + both gates passed
+  const gate1 = () => h.object(p, DOV_GATE_1, 'Open', 3536, 4571);
+  p.moveTo(new core.Location(3535, 4571, 0)); gate1();
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3539, 4571], 'west side crosses to east');
+  gate1();
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3535, 4571], 'east side crosses to west');
+
+  const gate2 = () => h.object(p, DOV_GATE_2, 'Open', 3540, 4597);
+  p.moveTo(new core.Location(3535, 4597, 0)); gate2();
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3544, 4598], 'gate 2 west -> east');
+  gate2();
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3535, 4597], 'gate 2 east -> west');
+});
+
+test('real PathFinder routes gate 1 west to gate 2 west and back to the bottle floor', () => {
+  core.RegionManager.loadMapFiles(3535, 4597);
+  const route = (sx, sy, dx, dy) => {
+    const location = new core.Location(sx, sy, 0);
+    const movement = {
+      reset() { return this; }, setRoute() { return this; }, setPathX() { return this; },
+      setPathY() { return this; }, addCheckpoint() { return this; }, syncDestinationFlagToRoute() { return this; },
+    };
+    const mobile = {
+      getLocation: () => location, getSize: () => 1, getPrivateArea: () => null,
+      isPlayer: () => false, getAsPlayer: () => null, getMovementQueue: () => movement,
+    };
+    return core.PathFinder.calculateRoute(mobile, 1, dx, dy, 0, 0, 0, 0, true);
+  };
+  assert.ok(route(3535, 4571, 3535, 4597) > 0, 'gate 1 west landing connects to gate 2 west approach');
+  assert.ok(route(3539, 4571, 3537, 4572) > 0, 'repeat gate 1 east side reaches the bottle floor');
+  assert.ok(route(3535, 4597, 3544, 4598) > 0, 'gate 2 west approach connects through the door');
+});
+
 test('real ItemOnGroundManager respawns a captured bottle after four ticks', () => {
   const username = 'BottleOwner';
   const position = new core.Location(3537, 4572, 0);
@@ -752,7 +788,11 @@ test('Defender of Varrock balcony, mist bottles and the two gated crossings', ()
   assert.equal(p.items.get(I.BOTTLE_OF_MIST), 0);
   h.tick(1);
   assert.equal(h.quest.getStage(p), 24, 'Arrav advances to the second gate section');
-  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3539, 4571], 'gate 1 lands on the captured east tile');
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3535, 4571], 'gate 1 crosses east -> west like capture 1636');
+  gate(DOV_GATE_1);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3539, 4571], 'passed gate 1 returns west -> east');
+  gate(DOV_GATE_1);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3535, 4571], 'passed gate 1 returns east -> west');
   assert.equal(p.items.get(I.BOTTLE), 3, 'gate 1 returns the empty bottles for the second gate');
   p.items.set(I.BOTTLE_OF_MIST, 3);
   gate(DOV_GATE_2);

@@ -10,6 +10,7 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
+const { RegionManager: CacheRegionManager } = require('../dist/game/collision/RegionManager');
 const runtime = require('../plugins/quests/QuestRuntime');
 const core = PluginManager.getCoreApi();
 const I = core.ItemIdentifiers, N = core.NpcIdentifiers;
@@ -19,6 +20,7 @@ const noop = () => {};
 before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
   new NpcDefinitionLoader().load();
+  CacheRegionManager.init();
 });
 
 function harness(name, page = null) {
@@ -707,8 +709,8 @@ test('Children tail follows the collision-valid captured route to the door and o
 test('Sins barrel owner overlay resolves through runtime MapObjects for its owner only', () => {
   const { GameObject, Location, MapObjects, ObjectManager, ObjectDefinition, PlayerRights, RegionManager } = core;
   ObjectDefinition.init();
-  const owner = { getPrivateArea: () => null, getRights: () => PlayerRights.NONE };
-  const other = { getPrivateArea: () => null, getRights: () => PlayerRights.NONE };
+  const owner = { getPrivateArea: () => null, getRights: () => PlayerRights.NONE, getPacketSender: () => ({ getVarbit: () => 0 }) };
+  const other = { getPrivateArea: () => null, getRights: () => PlayerRights.NONE, getPacketSender: () => ({ getVarbit: () => 0 }) };
   const tile = new Location(3749, 3291, 0);
   RegionManager.loadMapFiles(tile.getX(), tile.getY());
   const definition = ObjectDefinition.forPlayer(37980, owner);
@@ -875,8 +877,10 @@ test('Sins Carl logout removes the actor, keeps no trail bit, and resumes a fres
 
 
 test('Sins Carl captured checkpoints form a fully walkable cache route start to crypt end', () => {
-  const { Location, RegionManager } = core;
+  const { Location, MapObjects, RegionManager } = core;
   RegionManager.init();
+  assert.ok(RegionManager.getRegion(3748, 3318), 'real cache region is loaded for the LOS test');
+  assert.ok(MapObjects.mapObjects.size > 0, 'real map objects are loaded, not an empty mock');
   const points = [[3748,3310],[3748,3311],[3748,3312],[3748,3313],[3748,3314],[3748,3315],[3748,3316],[3748,3317],[3748,3318],[3748,3319],[3747,3320],[3747,3321],[3747,3322],[3746,3323],[3746,3324],[3745,3325],[3744,3326],[3743,3327],[3742,3328],[3741,3328],[3740,3328],[3739,3328],[3738,3328],[3737,3328],[3736,3328],[3735,3328],[3734,3328],[3733,3328],[3732,3327],[3731,3326],[3730,3326],[3729,3325],[3728,3325],[3727,3324],[3726,3324],[3725,3324],[3724,3324],[3723,3324],[3722,3324],[3721,3325],[3720,3326],[3719,3327],[3718,3327],[3717,3328],[3716,3328],[3715,3328],[3714,3328],[3713,3328],[3712,3328],[3711,3328],[3710,3327],[3709,3326],[3708,3325],[3707,3324],[3706,3324],[3705,3324],[3704,3324],[3703,3323],[3702,3322],[3702,3321],[3702,3320],[3702,3319],[3702,3318],[3703,3317],[3703,3316],[3703,3315],[3703,3314],[3703,3313],[3703,3312],[3704,3311],[3705,3311],[3706,3311],[3707,3311],[3708,3311],[3709,3311],[3710,3312],[3711,3313],[3712,3313],[3713,3313],[3714,3313],[3715,3314],[3716,3315],[3717,3316],[3718,3317],[3719,3317],[3720,3317],[3721,3317],[3722,3317],[3723,3317],[3724,3317],[3725,3317],[3726,3317],[3727,3317],[3728,3317],[3729,3317],[3730,3317],[3731,3316],[3732,3315],[3732,3314],[3732,3313],[3733,3312],[3733,3311],[3733,3310],[3733,3309],[3732,3308],[3731,3308],[3730,3308],[3729,3308],[3728,3307],[3728,3306],[3728,3305],[3728,3304]];
 
   const walkable = (x, y) => !RegionManager.blocked(new Location(x, y, 0), null);
@@ -913,4 +917,30 @@ test('Sins Carl captured checkpoints form a fully walkable cache route start to 
   }
   assert.ok(steps > 100, 'the expanded Carl route covers the full captured walk');
   assert.deepEqual(points[points.length - 1], [3728, 3304], 'route ends at the captured crypt approach, not a teleport/blocked stairs tile');
+});
+
+
+test('Sins Carl first look-back respects the captured wall hiding obstruction', () => {
+  const h = harness('SinsOfTheFather'), p = player();
+  p.moveTo(new core.Location(3754, 3307, 0));
+  h.quest.setStage(p, 12);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  const area = h.areas.find(entry => entry.constructor.name === 'CarlFollowArea');
+  const carl = () => h.npcs.find(npc => npc.getId() === 9558 && !npc.removed);
+  const captured = [[3752, 3308], [3751, 3310], [3751, 3312], [3751, 3314], [3751, 3315]];
+  let atLookback = false;
+  for (let tick = 0; tick < 40 && !atLookback; tick++) {
+    const target = captured[Math.min(tick, captured.length - 1)];
+    p.moveTo(new core.Location(target[0], target[1], 0));
+    area.process(p);
+    assert.equal(h.quest.getStage(p), 12, 'captured hiding path survives the first look-back');
+    const npc = carl();
+    if (npc?.getLocation().getX() === 3748 && npc.getLocation().getY() === 3318) atLookback = true;
+  }
+  assert.equal(atLookback, true, 'Carl reaches the captured first look-back');
+  for (let tick = 0; tick < 5; tick++) {
+    p.moveTo(new core.Location(3751, 3315, 0)); // captured hiding position behind the cache wall
+    area.process(p);
+    assert.equal(h.quest.getStage(p), 12, 'captured hide spot stays hidden through the pause');
+  }
 });

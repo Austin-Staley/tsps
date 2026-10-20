@@ -996,3 +996,47 @@ test('Troubled Tortugans ignores wrong-port disembark and starts the Pearl arriv
   for (const logout of h.hooks.logouts) logout({ player: h.player });
   assert.ok(h.removed.includes(sailor), 'Pearl actors are removed on logout');
 });
+
+test('Troubled Tortugans Shellbane joins the real boat deck on the shipped arrival fallback', () => {
+  const h = makeHarness('../plugins/quests/quests/TroubledTortugans.Quest');
+  const N = h.core.NpcIdentifiers;
+  const { BoatDeckArea } = require('../dist/game/content/sailing/BoatDeckArea');
+  const boat = { deckBaseX: 11000, deckBaseY: 9600, sceneBaseX: 11000, sceneBaseY: 9600, containsDeckTile: () => true };
+  const area = new BoatDeckArea(boat, { walkableDeck: [{ x: 4, y: 3 }], locs: [] });
+  h.player.getPrivateArea = () => area;
+  h.player.moveTo(new h.core.Location(11004, 9603, 0));
+  h.quest.setStage(h.player, 34);
+  h.varbits.set(19136, 1);
+  h.sailing.activeBoatSlot = 0;
+  h.sailing.boats = [{ slot: 0, location: { kind: 'at_sea', fineX: 3354 * 128, fineY: 2216 * 128 } }];
+
+  h.emit('sailing:left', { reason: 'disembark', boat: { worldTile: () => ({ x: 3354, y: 2216, level: 0 }) } });
+  assert.equal(h.quest.getStage(h.player), 36);
+  h.tick(5);
+  const deckBoss = h.spawned.find(npc => npc.getId() === N.SHELLBANE_GRYPHON_2);
+  assert.ok(deckBoss, 'the shipped arrival fallback spawns Shellbane');
+  assert.equal(deckBoss.getArea(), area, 'the deck boss joins the real BoatDeckArea');
+  assert.ok(area.entities.includes(deckBoss), 'the deck area queues the boss for sync');
+  assert.equal(deckBoss.getOwner(), h.player);
+
+  deckBoss.setHitpoints(40);
+  h.player.moveTo(new h.core.Location(3354, 2215, 0));
+  h.varbits.set(19136, 0);
+  h.sailing.boats[0].location = { kind: 'docked', dock: 'the_little_pearl' };
+  h.emit('sailing:left', { reason: 'disembark', boat: { worldTile: () => ({ x: 3354, y: 2216, level: 0 }) } });
+  assert.ok(h.removed.includes(deckBoss), 'disembarking removes the deck boss');
+  const landBoss = h.spawned.filter(npc => npc.getId() === N.SHELLBANE_GRYPHON_2).at(-1);
+  assert.notEqual(landBoss, deckBoss);
+  assert.deepEqual([landBoss.getLocation().getX(), landBoss.getLocation().getY()], [3356, 2208]);
+  assert.equal(landBoss.getHitpoints(), 40, 'earned damage follows the boss ashore');
+
+  for (const logout of h.hooks.logouts) logout({ player: h.player });
+  assert.ok(h.removed.includes(landBoss), 'logout cleanup removes the boss/actors');
+  h.quest.setStage(h.player, 36);
+  h.player.moveTo(new h.core.Location(3354, 2215, 0));
+  const pearlZone = h.hooks.zones.find(entry => entry.zone.minX === 3338);
+  pearlZone.fn({ player: h.player });
+  const retryBoss = h.spawned.filter(npc => npc.getId() === N.SHELLBANE_GRYPHON_2).at(-1);
+  assert.ok(retryBoss && retryBoss !== landBoss, 'zone re-entry retries the Shellbane');
+  assert.deepEqual([retryBoss.getLocation().getX(), retryBoss.getLocation().getY()], [3356, 2208]);
+});

@@ -284,9 +284,15 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
   ]);
 
   const TRAPDOOR_TILE = { x: 3343, y: 3515 };
-  // Captured landing tiles on the far side of each base gate.
-  const GATE_1_LANDING = { x: 3539, y: 4571 };
-  const GATE_2_LANDING = { x: 3544, y: 4598 };
+  // Capture 1636: gate 1 is crossed east -> west (3539,4571 -> 3535,4571),
+  // gate 2 is crossed west -> east (3535,4597 -> 3544,4598). A later return
+  // uses the opposite landing; never force one side.
+  const GATE_1_TILE = { x: 3536, y: 4571 };
+  const GATE_2_TILE = { x: 3540, y: 4597 };
+  const GATE_1_WEST_LANDING = { x: 3535, y: 4571 };
+  const GATE_1_EAST_LANDING = { x: 3539, y: 4571 };
+  const GATE_2_WEST_LANDING = { x: 3535, y: 4597 };
+  const GATE_2_EAST_LANDING = { x: 3544, y: 4598 };
   const BASE_ENTRY_LANDING = { x: 3560, y: 4551 };
   const BASE_EXIT_LANDING = { x: 3345, y: 3514 };
   const BASE_ELIAS_TILE = { x: 3560, y: 4551 };
@@ -1369,6 +1375,15 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
     descendToBase(player);
   }
 
+  function crossGate(player, gate2) {
+    const gate = gate2 ? GATE_2_TILE : GATE_1_TILE;
+    const west = player.getLocation().getX() < gate.x;
+    const landing = gate2
+      ? (west ? GATE_2_EAST_LANDING : GATE_2_WEST_LANDING)
+      : (west ? GATE_1_EAST_LANDING : GATE_1_WEST_LANDING);
+    player.moveTo(new Location(landing.x, landing.y, 0));
+  }
+
   function handleGate(event) {
     const { player, objectId } = event;
     if (!player) return;
@@ -1396,8 +1411,7 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
       player.getInventory().adds(BOTTLE_ITEM, 3);
       afterDialogue(player, () => {
         if (player.isRegistered?.() === false || !questActive(player)) return;
-        const landing = gate2 ? GATE_2_LANDING : GATE_1_LANDING;
-        player.moveTo(new Location(landing.x, landing.y, 0));
+        crossGate(player, gate2);
         if (gate2) {
           ensureStage(player, STAGE_BALCONY_2);
           ensureBottleSource(player);
@@ -1411,10 +1425,7 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
       });
       return;
     }
-    // The captured crossing lands well past the door frame; the old one-tile
-    // step landed inside the closed gate and left the player unable to reach gate 2.
-    const landing = gate2 ? GATE_2_LANDING : GATE_1_LANDING;
-    player.moveTo(new Location(landing.x, landing.y, 0));
+    crossGate(player, gate2);
   }
 
   /**
