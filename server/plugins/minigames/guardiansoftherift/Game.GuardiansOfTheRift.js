@@ -60,6 +60,8 @@ const COUNTDOWN = new Map([
 
 const START_POWER_PERCENT = 10;
 const SURGE_PERCENT = 60;
+const SURGE_SOUND = 1465;
+const SURGE_SHAKE_TICKS = 2;
 /** "Closing the rift" jingle (rsprox captures). */
 const VICTORY_JINGLE = 292;
 
@@ -210,6 +212,12 @@ function newGameId() {
   return 1 + Math.floor(Math.random() * 0x7ffffffe);
 }
 
+/** Wiki: fragments, essence and talismans can't leave a game; pouches give up guardian essence too. */
+function removeGameItems(player) {
+  Shared.removeItems(player, Shared.GAME_ITEMS);
+  Shared.api().emitCustomEvent("runecrafting:remove-guardian-essence", { player });
+}
+
 /** North of the barrier: into the game, or waiting for the next one. */
 function join(player) {
   if (game.players.has(player)) return;
@@ -235,7 +243,9 @@ function leave(player) {
   Shared.setVarbit(player, Shared.VARBIT.CATALYTIC_EARNED, 0);
   Shared.setVarbit(player, Shared.VARBIT.ELEMENTAL_EARNED, 0);
   Shared.setVarbit(player, Shared.VARBIT.MINING_COUNT, 0);
-  Shared.removeItems(player, Shared.GAME_ITEMS);
+  Shared.setVarbit(player, Shared.VARBIT.PORTAL_BOTTOM_VISIBLE, 0);
+  Shared.stopAction(player);
+  removeGameItems(player);
   closeHud(player);
   updateMaxPower();
   emit("leave", { player });
@@ -306,7 +316,7 @@ function openRift() {
   game.startingPlayers = game.players.size;
   for (const [player, state] of game.players) {
     Object.assign(state, freshState(), { gameId: newGameId() });
-    Shared.removeItems(player, Shared.GAME_ITEMS);
+    removeGameItems(player);
     Shared.setVarp(player, Shared.VARP.GAME_ID, state.gameId);
     Shared.setVarbit(player, Shared.VARBIT.IS_PLAYING, 1);
     Shared.setVarbit(player, Shared.VARBIT.FINISHED_GAME, 0);
@@ -326,9 +336,17 @@ function attack() {
   emit("attack", {});
 }
 
+/** rsprox captures: sound 1465 and a left-right camera shake (5, 15, 10), reset two ticks later. */
 function surge() {
   game.surged = true;
-  message("<col=ef1020>The rift burns intensely... More creatures from the Abyss are emerging!</col>");
+  const shaken = players();
+  for (const player of shaken) {
+    player.sendMessage("<col=ef1020>The rift burns intensely... More creatures from the Abyss are emerging!</col>");
+    player.getPacketSender().sendSound(SURGE_SOUND, 1, 0).sendCameraShake(0, 5, 15, 10);
+  }
+  Shared.later(SURGE_SHAKE_TICKS, () => {
+    for (const player of shaken) if (player.isRegistered()) player.getPacketSender().sendCameraReset();
+  });
   emit("surge", {});
 }
 

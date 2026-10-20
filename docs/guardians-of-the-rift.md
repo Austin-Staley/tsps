@@ -4,7 +4,8 @@ The Runecraft minigame in the Temple of the Eye, built from the OSRS Wiki, live 
 the cache. It is one plugin, `server/plugins/minigames/GuardiansOfTheRift.plugin.js`, with one
 unit per part of the game in `server/plugins/minigames/guardiansoftherift/` (the Wintertodt layout).
 
-Status: phase 1 (lobby, barrier, game loop, HUD, Power-up, end-of-game rewards) is built. The
+Status: phases 1-2 (lobby, barrier, game loop, HUD, Power-up, end-of-game rewards; mining,
+workbench, portals, rubble, Deposit Pool, essence pouches) are built. The
 phases are at the end.
 
 ## Sources
@@ -171,25 +172,62 @@ Ticks from the rift opening:
 - **Visual-effects:** a chat menu: "Your current preference is to not see colourful full screen
   effects." with "Enable them." and "Disable them.".
 
-### Fragments, essence and the workbench
+### Fragments, essence and the workbench (rev 241)
 
-- **Mine guardian parts / remains / large remains:**
-  - The pickaxe animation and "You swing your pick at the rock.".
-  - Fragments arrive with "You manage to mine some guardian fragments.", sound 3600 and `gotr_mining_count` +1.
-  - At 250 fragments: "You have reached the limit of 250 resources mined for this game and will not be receiving further XP."
-- **Huge guardian remains:**
-  - "You manage to mine some guardian essence."
-  - When full: mesbox "Your inventory is too full to hold any more guardian essence." with sound 2277.
-- **Mining before the rift opens:** "There's no need to do that right now." (essence tier 2).
-- **Workbench, Work-at:** anim `gotr_chisel_essence`, sound 2586, and one fragment becomes one
-  guardian essence each action until none are left ("You have no more guardian fragments to combine.").
-- **Rubble, Climb:**
-  - Anim `death_human_climbing_down`, then exactmove 4 tiles over 90 client cycles (3633 <-> 3637, y 9503) with sound 2454.
-  - Wiki: 56 Agility, unboostable.
-- **Huge-remains portals:**
-  - Enter: sound 1098, then the `gotr_overlay` fade.
-  - 2 ticks later: teleport to 3592,9503, "You step through the portal and find yourself in another part of the temple.", and `gotr_portal_bottom_visible` 1.
-  - The exit portal (38044) returns the player to the main area and sets the varbit to 0.
+- **Mining** guardian parts, guardian remains, large remains (past the rubble) and huge remains:
+  - "You swing your pick at the rock." (spam) and the pickaxe animation. The first success comes
+    two ticks later, then one every pickaxe interval (3 ticks with a dragon pickaxe; every attempt
+    succeeds).
+  - Each success: "You manage to mine some guardian fragments." / "You manage to mine some
+    guardian essence." (spam), sound 3600, 5 Mining XP, and `gotr_mining_count` up by the amount.
+  - Per success: parts and remains 1-3 fragments, large remains 2-4, huge remains 4-6 essence
+    (captured; the Wiki agrees). Mining enhancers (Varrock armour, celestial ring) double these on
+    live; the plugin doesn't apply them yet.
+  - At 250: "You have reached the limit of 250 resources mined for this game and will not be
+    receiving further XP." Mining goes on without XP.
+  - Before the rift opens: "There's no need to do that right now."
+  - No pickaxe: mesbox "You need a pickaxe to mine this rock. You do not have a pickaxe which you
+    have the Mining level to use."
+  - Huge remains with a full inventory: mesbox "Your inventory is too full to hold any more
+    guardian essence." and sound 2277.
+- **Workbench, Work-at:** each tick the `gotr_chisel_essence` animation, sound 2586, one fragment
+  out and one essence in, and Crafting XP of level/10 (1 to 5, Wiki). It stops with "You have no
+  more guardian fragments to combine." or a full inventory (mesbox "Your inventory is too full to
+  hold any more essence.", sound 2277). With no fragments: objectbox with the fragments, "You'll
+  need at least one guardian fragment to craft guardian essence."
+- **Rubble, Climb:** `death_human_climbing_down` (delay 10); a tick later a 4-tile exactmove
+  over 90 cycles (3633 <-> 3637, y 9503, facing west) with sound 2454 x6 (delay 19), and sound
+  2455 on landing. Wiki: 56 Agility, unboostable. The refusal ("You need an Agility level of 56
+  to climb this rubble.") is ours.
+- **Huge-remains portals:** `gotr_agility_portal_top` opens at east 3627,9503, south east
+  3627,9493, south west 3603,9493 or south 3615,9487.
+  - Enter: on arrival `gotr_portal_bottom_visible` 1, the HUD closes, `gotr_overlay` opens in the
+    atmosphere slot with script 5984 `[44090, 15855475]`, and sound 1098.
+  - Two ticks later "You step through the portal and find yourself in another part of the
+    temple." (spam), the move to 3592,9503, and script 5985. A tick later the overlay closes and
+    the HUD comes back.
+  - The way back (`gotr_agility_portal_bottom_parent`, a multiloc shown by that varbit) is the
+    same with the varbit 0, to 3608,9500.
+  - With Visual-effects off, the plugin skips the overlay.
+- **Deposit Pool:**
+  - Deposit-runes: `human_leverdown_walkmerge`, every rune to the bank, "You deposit all of your
+    runes into the pool." With none: "You have no runes to deposit into the pool."
+  - Deposit-items opens the deposit box.
+  - The game's items can't be banked: "A magical force prevents you from banking this item!"
+- **Essence pouches** (`plugins/skills/runecrafting/Pouches.Runecrafting.js`):
+  - A pouch holds one kind of essence. Its count and kind are varbits (`<size>_essence_pouch`,
+    `<size>_essence_pouch_type`: 1 rune, 2 pure, 3 daeyalt, 4 guardian; 0 when empty).
+  - Fill on a full pouch, or with nothing to fill it with, empties it (the left-click swap).
+  - Messages: "You do not have any essence to fill your pouch with.", "The pouch contains guardian
+    essence, so you can fill it only with more guardian essence.", "There is no essence in this
+    pouch.", "There are forty guardian essences in this pouch.", "You do not have any free space in
+    your inventory.", "Your pouch has decayed through use."
+  - The colossal pouch holds 8/16/27/40 at 25/50/75/85 Runecraft (Wiki).
+  - Decay is simplified from the Wiki. A pouch decays after about 270/261/120/320 essence stored
+    (medium, large, giant, colossal), never while a Runecraft or max cape is worn. A decayed pouch
+    holds 3/7/9/35 until repaired.
+  - Leaving the game empties guardian essence from every pouch (`colossal_essence_pouch` went to
+    0 on leaving in the capture).
 
 ### Portal Guardians and altars
 

@@ -204,10 +204,52 @@ function repeat(ticks, action) {
   return task;
 }
 
+/**
+ * One repeated action per player (mining, the workbench): starting another, moving, or
+ * `stopAction` ends it. `step(ticks)` runs every tick and returns false to stop.
+ */
+function startAction(player, name, step) {
+  stopAction(player);
+  const origin = player.getLocation();
+  let ticks = 0;
+  const action = { name, task: null };
+  action.task = repeat(1, () => {
+    if (player.__gotrAction !== action || !player.isRegistered()) return false;
+    if (!player.getLocation().equals(origin) || step(++ticks) === false) {
+      endAction(player, action);
+      return false;
+    }
+    return true;
+  });
+  player.__gotrAction = action;
+}
+
+function endAction(player, action) {
+  if (player.__gotrAction !== action) return;
+  player.__gotrAction = null;
+  animate(player, null);
+}
+
+function stopAction(player) {
+  const action = player.__gotrAction;
+  if (!action) return;
+  action.task?.stop();
+  endAction(player, action);
+}
+
 function statement(player, text) {
   const { DialogueChainBuilder, StatementDialogue, EndDialogue } = core();
   player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
     new StatementDialogue(0, text),
+    new EndDialogue(1),
+  ));
+}
+
+/** An objectbox: the item's model beside the text. */
+function itemStatement(player, item, text) {
+  const { DialogueChainBuilder, ItemStatementDialogue, EndDialogue } = core();
+  player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(
+    new ItemStatementDialogue(0, obj(item), text),
     new EndDialogue(1),
   ));
 }
@@ -297,6 +339,6 @@ module.exports = {
   MAX_ENERGY_PER_TYPE, MAX_ENERGY_TOTAL, REWARD_ENERGY, MINING_XP_CAP, HUD_PERIOD, RIFT_GUARDIAN_CAP,
   LOC, NPC, ITEM, GAME_ITEMS, VARBIT, VARP, INTERFACE, SCRIPT, OVERLAY_HUD_UID, OVERLAY_ATMOSPHERE_UID,
   loc, isLoc, npc, obj, seq, spotanim, iface, setVarbit, getVarbit, setVarp,
-  location, inTemple, inGameSide, now, later, repeat, statement, options, npcSays, spam, highlight,
+  location, inTemple, inGameSide, now, later, repeat, startAction, stopAction, statement, itemStatement, options, npcSays, spam, highlight,
   animate, graphic, sound, runecraftLevel, addXp, questComplete, count, removeItems, formatNumber, random,
 };

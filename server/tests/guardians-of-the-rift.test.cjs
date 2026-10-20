@@ -17,8 +17,16 @@ const Temple = require('../plugins/minigames/guardiansoftherift/Temple.Guardians
 const Barrier = require('../plugins/minigames/guardiansoftherift/Barrier.GuardiansOfTheRift');
 const GreatGuardian = require('../plugins/minigames/guardiansoftherift/GreatGuardian.GuardiansOfTheRift');
 const Rewards = require('../plugins/minigames/guardiansoftherift/Rewards.GuardiansOfTheRift');
+const Mining = require('../plugins/minigames/guardiansoftherift/Mining.GuardiansOfTheRift');
+const Workbench = require('../plugins/minigames/guardiansoftherift/Workbench.GuardiansOfTheRift');
+const Portals = require('../plugins/minigames/guardiansoftherift/Portals.GuardiansOfTheRift');
+const DepositPool = require('../plugins/minigames/guardiansoftherift/DepositPool.GuardiansOfTheRift');
+const Pouches = require('../plugins/skills/runecrafting/Pouches.Runecrafting');
 
-const hooks = { objects: {}, npcs: {}, custom: {}, login: [], logout: [], conditions: [], areas: [], prompts: [], dialogues: [] };
+const hooks = {
+  objects: {}, npcs: {}, items: {}, clicks: {}, custom: {}, login: [], logout: [], conditions: [], areas: [], prompts: [],
+  dialogues: [], canBankItem: [],
+};
 
 function fakeApi() {
   return {
@@ -36,9 +44,15 @@ function fakeApi() {
     emitCustomEvent: (name, payload) => {
       if (name === 'quest:is-complete') payload.complete = payload.player.questDone;
       if (name === 'npc-dialogue:start') { hooks.dialogues.push(payload.variant); payload.handled = true; }
+      if (name === 'mining:best-pickaxe') payload.pickaxe = payload.player.pickaxe ?? null;
+      if (name === 'skillcape:has-perk') payload.result = payload.player.cape === true;
       for (const handler of hooks.custom[name] ?? []) handler(payload);
     },
     sendMultiChatboxPrompt: (player, title, ...args) => hooks.prompts.push({ player, title, args }),
+    onItemAction: (name, actions) => { hooks.items[name] = actions; },
+    onObjectClick: (ids, clickType, handler) => { hooks.clicks[`${ids}:${clickType}`] = handler; },
+    onCanBankItem: (handler) => hooks.canBankItem.push(handler),
+    getTaskManager: () => TaskManager,
   };
 }
 
@@ -50,6 +64,12 @@ function container(size) {
       const stack = slots.find((slot) => slot?.id === id);
       if (stack) stack.amount += amount;
       else slots[slots.indexOf(null)] = { id, amount };
+      return self;
+    },
+    /** Like ItemContainer.adds: stackables pile up, anything else takes a slot each. */
+    adds(id, amount = 1) {
+      if (STACKABLE.has(id)) return self.add(id, amount);
+      for (let i = 0; i < amount && slots.includes(null); i++) slots[slots.indexOf(null)] = { id, amount: 1 };
       return self;
     },
     delete(id, amount = 1) {
@@ -70,12 +90,14 @@ function container(size) {
   return self;
 }
 
+const STACKABLE = new Set();
+
 function fakePlayer(name = 'Tester', { runecraft = 99, questDone = true, x = 3615, y = 9480 } = {}) {
   const varbits = new Map();
   const attributes = new Map();
   const p = {
     name, questDone, messages: [], statements: [], scripts: [], interfaces: [], animations: [], jingles: [],
-    xpBySkill: {}, runEnergy: 50, special: 100,
+    xpBySkill: {}, runEnergy: 50, special: 100, levels: {}, sounds: [],
     location: new Location(x, y, 0),
     inventory: container(28),
     isRegistered: () => true,
@@ -99,7 +121,8 @@ function fakePlayer(name = 'Tester', { runecraft = 99, questDone = true, x = 361
     getRunEnergy: () => p.runEnergy,
     setRunEnergy: (value) => { p.runEnergy = Math.min(100, value); },
     getSkillManager: () => ({
-      getMaxLevel: () => runecraft,
+      getMaxLevel: (skill) => (skill?.getName?.() === 'Runecrafting' ? runecraft : p.levels[skill?.getName?.()] ?? 99),
+      getCurrentLevel: () => 99,
       addExperiences(skill, amount) {
         const key = skill?.getName?.() ?? String(skill);
         p.xpBySkill[key] = (p.xpBySkill[key] ?? 0) + amount;
@@ -116,7 +139,10 @@ function fakePlayer(name = 'Tester', { runecraft = 99, questDone = true, x = 361
         sendClientScript: (id, ...args) => { p.scripts.push([id, ...args]); return sender; },
         sendTypedMessage: (type, message) => { p.messages.push(message); return sender; },
         sendJingle: (id) => { p.jingles.push(id); return sender; },
-        sendSound: () => sender,
+        sendSound: (id) => { p.sounds.push(id); return sender; },
+        sendSoundEffect: (id) => { p.sounds.push(id); return sender; },
+        sendCameraShake: () => sender,
+        sendCameraReset: () => sender,
         sendRunEnergy: () => sender,
         sendProjectile: () => sender,
       };
@@ -170,6 +196,12 @@ before(() => {
   Barrier.attach(api);
   GreatGuardian.attach(api);
   Rewards.attach(api);
+  Mining.attach(api);
+  Workbench.attach(api);
+  Portals.attach(api);
+  DepositPool.attach(api);
+  Pouches.attach(api);
+  for (const name of Shared.GAME_ITEMS) if (Shared.core().ItemDefinition.forId(Shared.obj(name)).isStackable()) STACKABLE.add(Shared.obj(name));
 });
 
 beforeEach(() => {
@@ -356,4 +388,180 @@ test('Peek reports the power mid-game and the adventurers inside', () => {
   const watcher = fakePlayer('Watcher');
   barrier(watcher, 'Peek');
   assert.match(statementText(watcher), /Creatures from the Abyss are coming through the rift\. There were 1 adventurer inside when it opened\. Great Guardian power: 10%/);
+});
+
+// ------------------------------------------------------------------ phase 2: essence
+
+const DRAGON_PICKAXE = { attemptIntervalTicks: 3, animation: { getId: () => 7139 } };
+
+function mine(player, loc) {
+  const name = { gotr_essence_tier_1: 'Guardian parts', gotr_essence_tier_2: 'Large guardian remains', gotr_essence_tier_3: 'Huge guardian remains' }[loc];
+  return hooks.objects[name].Mine({ player, objectId: Shared.loc(loc) });
+}
+
+test('mining waits for the rift and needs a pickaxe', () => {
+  const player = fakePlayer('Miner');
+  barrier(player, 'Quick-pass');
+  mine(player, 'gotr_essence_tier_1');
+  assert.equal(player.messages.at(-1), "There's no need to do that right now.");
+  Game.skip();
+  ticks(1);
+  mine(player, 'gotr_essence_tier_1');
+  assert.match(statementText(player), /You need a pickaxe to mine this rock/);
+});
+
+test('large remains give 2-4 fragments a success, 5 XP each, and the count stops paying at 250', () => {
+  const player = fakePlayer('Miner');
+  player.pickaxe = DRAGON_PICKAXE;
+  openGame(player);
+  mine(player, 'gotr_essence_tier_2');
+  assert.equal(player.messages.at(-1), 'You swing your pick at the rock.');
+  ticks(2);
+  const first = player.inventory.getAmount(Shared.obj(Shared.ITEM.FRAGMENTS));
+  assert.ok(first >= 2 && first <= 4, `2-4 fragments, got ${first}`);
+  assert.equal(player.xpBySkill.Mining, 5);
+  assert.equal(player.varbit(Shared.VARBIT.MINING_COUNT), first);
+  ticks(3);
+  assert.equal(player.xpBySkill.Mining, 10, 'one success every 3 ticks with a dragon pickaxe');
+  Game.stateOf(player).mined = 249;
+  ticks(3);
+  assert.equal(player.varbit(Shared.VARBIT.MINING_COUNT), 250);
+  assert.match(player.messages.at(-1), /limit of 250 resources mined/);
+  ticks(3);
+  assert.equal(player.xpBySkill.Mining, 15, 'no XP past 250');
+  Shared.stopAction(player);
+});
+
+test('huge remains give 4-6 essence until the inventory is full', () => {
+  const player = fakePlayer('Miner');
+  player.pickaxe = DRAGON_PICKAXE;
+  openGame(player);
+  player.inventory.adds(995, 1);
+  STACKABLE.add(995);
+  for (let i = 0; i < 20; i++) player.inventory.adds(1, 1);
+  mine(player, 'gotr_essence_tier_3');
+  ticks(2);
+  const essence = player.inventory.getAmount(Shared.obj(Shared.ITEM.ESSENCE));
+  assert.ok(essence >= 4 && essence <= 6);
+  ticks(3);
+  assert.equal(player.inventory.getFreeSlots(), 0);
+  assert.match(statementText(player), /too full to hold any more guardian essence/);
+  assert.ok(player.sounds.includes(2277));
+});
+
+test('the workbench turns a fragment into essence each tick for level/10 Crafting XP', () => {
+  const player = fakePlayer('Crafter');
+  player.levels.Crafting = 37;
+  openGame(player);
+  player.inventory.add(Shared.obj(Shared.ITEM.FRAGMENTS), 3);
+  hooks.objects.Workbench['Work-at']({ player, objectId: Shared.loc('gotr_workbench') });
+  ticks(3);
+  assert.equal(player.inventory.getAmount(Shared.obj(Shared.ITEM.ESSENCE)), 3);
+  assert.equal(player.xpBySkill.Crafting, 9, '3 XP each at level 37');
+  ticks(1);
+  assert.equal(player.messages.at(-1), 'You have no more guardian fragments to combine.');
+  const empty = fakePlayer('Empty');
+  hooks.objects.Workbench['Work-at']({ player: empty, objectId: Shared.loc('gotr_workbench') });
+  assert.match(statementText(empty), /at least one guardian fragment/);
+  assert.equal(Workbench.craftingXp({ getSkillManager: () => ({ getMaxLevel: () => 5 }) }), 1);
+  assert.equal(Workbench.craftingXp({ getSkillManager: () => ({ getMaxLevel: () => 99 }) }), 5);
+});
+
+test('a huge-remains portal opens at the captured tiles with its message', () => {
+  const player = fakePlayer();
+  openGame(player);
+  Game._game.phase = Game.PHASE.ATTACK;
+  Game._game.portal.opensIn = 1;
+  ticks(1);
+  const direction = Game.portal().direction;
+  assert.ok(direction >= 1 && direction <= 4);
+  assert.equal(player.messages.at(-1), `<col=ef1020>A portal to the huge guardian fragment mine has opened to the ${Portals.PORTALS[direction].name}!</col>`);
+  ticks(44);
+  assert.equal(Game.portal().direction, 0, 'open 44 ticks');
+});
+
+test('game items are refused by the bank', () => {
+  const player = fakePlayer();
+  const event = { player, item: { getId: () => Shared.obj(Shared.ITEM.ESSENCE) }, allow: null };
+  for (const handler of hooks.canBankItem) handler(event);
+  assert.equal(event.allow, false);
+  assert.equal(player.messages.at(-1), 'A magical force prevents you from banking this item!');
+});
+
+// ------------------------------------------------------------------ essence pouches
+
+function pouch(player, option, name = 'Colossal pouch') {
+  const id = Shared.core().CacheDefinitions.getObjId({ 'Colossal pouch': 'rcu_pouch_colossal', 'Giant pouch': 'rcu_pouch_giant', 'Small pouch': 'rcu_pouch_small' }[name]);
+  return hooks.items[name][option]({ player, itemId: id });
+}
+
+test('pouches hold one kind of essence, shown on their varbits; Fill empties a full pouch', () => {
+  const player = fakePlayer('Pouch', { runecraft: 85 });
+  const colossal = Shared.core().CacheDefinitions.getObjId('rcu_pouch_colossal');
+  player.inventory.adds(colossal, 1);
+  player.inventory.adds(Shared.obj(Shared.ITEM.ESSENCE), 24);
+  pouch(player, 'Fill');
+  assert.equal(player.inventory.getAmount(Shared.obj(Shared.ITEM.ESSENCE)), 0);
+  assert.equal(player.varbit('colossal_essence_pouch'), 24);
+  assert.equal(player.varbit('colossal_essence_pouch_type'), 4, 'guardian essence');
+  pouch(player, 'Check');
+  assert.equal(player.messages.at(-1), 'There are twenty-four guardian essences in this pouch.');
+
+  player.inventory.adds(7936, 3);
+  pouch(player, 'Fill');
+  assert.equal(player.messages.at(-1), 'The pouch contains guardian essence, so you can fill it only with more guardian essence.');
+  player.inventory.delete(7936, 3);
+
+  pouch(player, 'Fill');
+  assert.equal(player.inventory.getAmount(Shared.obj(Shared.ITEM.ESSENCE)), 24, 'nothing to fill with: Fill empties');
+  assert.equal(player.varbit('colossal_essence_pouch'), 0);
+  assert.equal(player.varbit('colossal_essence_pouch_type'), 0);
+  pouch(player, 'Empty');
+  assert.equal(player.messages.at(-1), 'There is no essence in this pouch.');
+  pouch(player, 'Fill');
+  assert.equal(player.varbit('colossal_essence_pouch'), 24);
+  for (const handler of hooks.custom['runecrafting:remove-guardian-essence']) handler({ player });
+  assert.equal(player.varbit('colossal_essence_pouch'), 0, 'guardian essence never leaves the game');
+});
+
+test('the colossal pouch holds 8/16/27/40 by Runecraft level, and pouches decay with use', () => {
+  const capacity = (level) => Pouches._test.capacity(fakePlayer('L', { runecraft: level }), Pouches._test.pouchFor(Shared.core().CacheDefinitions.getObjId('rcu_pouch_colossal')));
+  assert.deepEqual([24, 25, 50, 75, 85, 99].map(capacity), [0, 8, 16, 27, 40, 40]);
+
+  const player = fakePlayer('Decay', { runecraft: 99 });
+  const giant = Shared.core().CacheDefinitions.getObjId('rcu_pouch_giant');
+  const degraded = Shared.core().CacheDefinitions.getObjId('rcu_pouch_giant_degrade');
+  player.inventory.adds(giant, 1);
+  for (let use = 0; use < 10; use++) {
+    player.inventory.adds(7936, 12);
+    pouch(player, 'Fill', 'Giant pouch');
+    pouch(player, 'Empty', 'Giant pouch');
+    player.inventory.delete(7936, 12);
+  }
+  assert.equal(player.inventory.getAmount(degraded), 1, 'Wiki: about 120 essence');
+  assert.equal(player.messages.at(-1), 'Your pouch has decayed through use.');
+  const request = { player, repaired: 0 };
+  for (const handler of hooks.custom['runecrafting:repair-pouches']) handler(request);
+  assert.equal(request.repaired, 1);
+  assert.equal(player.inventory.getAmount(giant), 1);
+
+  const caped = fakePlayer('Caped', { runecraft: 99 });
+  caped.cape = true;
+  caped.inventory.adds(giant, 1);
+  for (let use = 0; use < 12; use++) {
+    caped.inventory.adds(7936, 12);
+    pouch(caped, 'Fill', 'Giant pouch');
+    pouch(caped, 'Empty', 'Giant pouch');
+    caped.inventory.delete(7936, 12);
+  }
+  assert.equal(caped.inventory.getAmount(giant), 1, 'a Runecraft cape stops decay');
+});
+
+test('old saves load: rune and pure essence keep their counts', () => {
+  const player = fakePlayer('Old');
+  player.setAttribute(Pouches.POUCHES_ATTRIBUTE, [
+    { pouch: { itemId: Shared.core().CacheDefinitions.getObjId('rcu_pouch_small') }, runeEssenceAmt: 0, pureEssenceAmt: 3 },
+  ]);
+  pouch(player, 'Check', 'Small pouch');
+  assert.equal(player.messages.at(-1), 'There are three pure essences in this pouch.');
 });
