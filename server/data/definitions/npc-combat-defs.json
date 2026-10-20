@@ -12,6 +12,8 @@
     "319": {"name": "Corporeal Beast", "anims": {"attack": 1683, "block": 1677, "death": 1676}},
     "377": {"name": "Phosani's Nightmare", "anims": {"attack": -1, "block": -1, "death": -1}},
     "378": {"name": "The Nightmare", "anims": {"attack": -1, "block": -1, "death": -1}},
+    "498": {"name": "Smoke devil", "anims": {"attack": 3847, "block": 3848, "death": 3849}, "projectile": 644, "respawn": 7},
+    "499": {"name": "Thermonuclear smoke devil", "anims": {"attack": 3847, "block": 3848, "death": 3849}, "projectile": 644, "deathTicks": 5, "respawn": 15},
     "655": {"name": "Goblin", "anims": {"attack": 6185, "block": 6183, "death": 6182}, "sounds": {"death": 512}},
     "656": {"name": "Goblin", "anims": {"attack": 6188, "block": 6189, "death": 6190}, "sounds": {"death": 512}},
     "657": {"name": "Goblin", "anims": {"attack": 6185, "block": 6183, "death": 6182}, "sounds": {"death": 512}},

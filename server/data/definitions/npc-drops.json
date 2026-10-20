@@ -181828,6 +181828,7 @@
           ],
           "pre_roll": true,
           "weight": 1,
+          "out_of": 350,
           "rarity_raw": "1/350",
           "section": "Pre-roll"
         },
