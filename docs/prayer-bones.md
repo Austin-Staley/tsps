@@ -22,10 +22,11 @@ unchanged.
 
 `server/plugins/skills/data/ashes.json` lists the ashes that demons drop instead of bones, by obj gameval.
 Their inventory option is **Scatter** (the item's first option in the cache), handled by the same
-Prayer plugin: a two-tick rite like burying, the ash is consumed and the experience given together on
-the resolving tick, and an interrupted scatter keeps the ash. Ashes restore no Prayer, cannot be
-offered at altars, and the members-only ones are refused on free worlds by `FreeToPlay` through
-the item's members flag, so the data holds only the experience.
+Prayer plugin. Unlike burying, a scatter resolves on the tick it is clicked: the ash is consumed, the
+experience given, "You scatter the ashes." sent, and the player plays seq 2295
+(`farming_ingredient_sprinkle`) with synth 2444 (`farming_sprinkle`), all at once and with no
+spotanim. Ashes restore no Prayer, cannot be offered at altars, and the members-only ones are refused
+on free worlds by `FreeToPlay` through the item's members flag, so the data holds only the experience.
 
 | Ashes | `xp` (scattering) | Members | Source (Wiki, Remains) |
 | --- | --- | --- | --- |
@@ -35,10 +36,17 @@ the item's members flag, so the data holds only the experience.
 | Abyssal ashes | 85 | yes | abyssal demons, Abyssal Sire |
 | Infernal ashes | 110 | yes | Cerberus, K'ril Tsutsaroth, Skotizo, Tormented Demons, Zalcano |
 
+Captured from live OSRS (rsprox.net recordings 2123, revision 227, and 3013, revision 231): each
+Scatter click on an ash (`IF_BUTTON2`/`IF_BUTTONX` on the inventory) is answered on the next server
+tick, in one batch, by the game message "You scatter the ashes." (chat type 105), the slot emptied,
+the Prayer experience (Vile ashes +25 on a normal world), the sequence (delay 0, no spotanim flag) and
+the synth (one loop, no delay). Of the 11 recordings rsprox holds with that message, 10 contain seq
+2295. A scatter can lack it when another animation replaces it in the same tick: one of 2123's three
+scatters came on the tick the player ate a karambwan. The two-tick click delay between scatters is
+burying's; the captures only show scatters three or more ticks apart.
+
 Not covered: Demonic Offering (three times the experience), the Ash sanctifier and the sacred bone
-burner. The chat line "You scatter the ashes." and the two-tick delay follow burying; the Wiki gives
-neither. No sequence in the cache is named for scattering, so the animation is the burying one until
-the real one is identified (the Wiki's "Scattering ashes" gif shows a standing sideways sweep).
+burner.
 
 ## Events
 

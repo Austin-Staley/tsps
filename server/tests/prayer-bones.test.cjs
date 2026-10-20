@@ -13,6 +13,8 @@ const { Equipment } = require("../dist/game/model/container/impl/Equipment");
 const { ItemIdentifiers: Items } = require("../dist/util/ItemIdentifiers");
 const { ObjectIdentifiers: Objects } = require("../dist/util/ObjectIdentifiers");
 const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
+const { Animation } = require("../dist/game/model/Animation");
+const { Sound } = require("../dist/game/Sound");
 
 const DATA = require("../plugins/skills/data/bones.json");
 const ASHES = require("../plugins/skills/data/ashes.json");
@@ -20,7 +22,10 @@ const ASHES = require("../plugins/skills/data/ashes.json");
 const handlers = new Map();
 const firstActions = [];
 const api = {
-  core: { Skill, Location, Equipment, ItemIdentifiers: Items, ObjectIdentifiers: Objects, CacheDefinitions },
+  core: {
+    Skill, Location, Equipment, ItemIdentifiers: Items, ObjectIdentifiers: Objects, CacheDefinitions, Animation, Sound,
+    Sounds: { sendSound: (who, sound) => who.sounds?.push(sound) },
+  },
   emitCustomEvent: (name, payload) => (handlers.get(name) ?? []).forEach((handler) => handler(payload)),
   onCustomEvent: (name, handler) => handlers.set(name, [...(handlers.get(name) ?? []), handler]),
   persistAttribute() {},
@@ -187,4 +192,27 @@ test("the first-action handlers leave items that are neither bones nor ashes alo
   for (const handler of firstActions) {
     assert.equal(handler({ player: who, itemId: Items.COINS, slot: 0, handled: false }), false);
   }
+});
+
+test("a scatter resolves on the click, with the sequence, synth, message and experience live OSRS sends", () => {
+  const vile = CacheDefinitions.getObjId("vile_ashes");
+  const who = player();
+  const slots = [{ getId: () => vile }];
+  const animations = [];
+  const skills = who.getSkillManager();
+  Object.assign(who, {
+    sounds: [],
+    getClickDelay: () => ({ elapsedTime: () => true, reset() {} }),
+    getInventory: () => ({ get: (slot) => slots[slot] ?? null, deleteAtSlot: (slot) => { slots[slot] = null; } }),
+    getSkillManager: () => ({ ...skills, stopSkillable() {} }),
+    getPacketSender: () => ({ sendInterfaceRemoval() {} }),
+    performAnimation: (animation) => animations.push(animation),
+  });
+  // This api has no CountdownTask or task manager, so a scatter that waited for a later tick throws.
+  assert.deepEqual(firstActions.map((handler) => handler({ player: who, itemId: vile, slot: 0, handled: false })), [false, true]);
+  assert.equal(slots[0], null);
+  assert.equal(who.xp.get(Skill.PRAYER), 25);
+  assert.deepEqual(who.messages, ["You scatter the ashes."]);
+  assert.deepEqual(animations.map((animation) => animation.id), [2295]);
+  assert.deepEqual(who.sounds.map((sound) => sound.getId()), [2444]);
 });

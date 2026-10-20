@@ -16,9 +16,11 @@
 const DATA = require("./data/bones.json");
 const ASHES = require("./data/ashes.json");
 
-const BURY_DELAY_MS = 1200; // Two OSRS game ticks; scattering ashes waits the same (the Wiki gives no separate figure).
+const BURY_DELAY_MS = 1200; // Two OSRS game ticks.
 const BURY_ANIMATION = 827; // human_pickupfloor
-const SCATTER_ANIMATION = 827; // human_pickupfloor, until the scatter animation is identified in the cache (no seq is named for it).
+// Scattering as live OSRS sends it (rsprox captures, docs/prayer-bones.md): no spotanim.
+const SCATTER_ANIMATION = 2295; // farming_ingredient_sprinkle
+const SCATTER_SOUND = 2444; // farming_sprinkle
 
 let api = null;
 let bones = null;
@@ -81,23 +83,31 @@ function boneRequest(request) {
   if (request) request.bone = boneFor(request.itemId);
 }
 
-/**
- * The two-tick rite shared by burying and scattering. The item is consumed and `complete` runs
- * together on the resolving tick, so an interrupted rite keeps its item, including on logout
- * before the account is saved.
- */
-function consumeAfterTwoTicks(player, slot, itemId, { animation, sound }, complete) {
+function buryBone({ player, itemId, slot }) {
   const core = api.core;
+  const bone = boneFor(itemId);
+  if (!bone) return false;
+  if (!player.getClickDelay().elapsedTime(BURY_DELAY_MS)) return true;
   const inventory = player.getInventory();
+  if (inventory.get(slot)?.getId() !== itemId) return true;
+  if (bone.level && player.getSkillManager().getMaxLevel(core.Skill.PRAYER) < bone.level) {
+    player.sendMessage(`You need a Prayer level of ${bone.level} to bury these bones.`);
+    return true;
+  }
+
   player.getSkillManager().stopSkillable();
   player.getPacketSender().sendInterfaceRemoval();
-  player.performAnimation(new core.Animation(animation));
-  if (sound) core.Sounds.sendSound(player, sound);
+  player.performAnimation(new core.Animation(BURY_ANIMATION));
+  core.Sounds.sendSound(player, core.Sound.BURY_BONES);
   const location = player.getLocation().clone();
+  // Consume and award XP together on the resolving tick. An interrupted burial
+  // keeps its bone, including on logout before the account is saved.
   const task = new core.CountdownTask(player, 2, () => {
     if (!canComplete() || inventory.get(slot)?.getId() !== itemId) return;
     inventory.deleteAtSlot(slot, 1);
-    complete();
+    player.sendMessage("You dig a hole in the ground..");
+    player.sendMessage(`..and bury the ${core.ItemDefinition.forId(itemId).getName()}.`);
+    award(player, itemId, bone, 1);
   });
   function canComplete() {
     return player.isRegistered() && player.getHitpoints() > 0 &&
@@ -112,36 +122,31 @@ function consumeAfterTwoTicks(player, slot, itemId, { animation, sound }, comple
   };
   api.getTaskManager().submit(task);
   player.getClickDelay().reset();
-}
-
-function buryBone({ player, itemId, slot }) {
-  const core = api.core;
-  const bone = boneFor(itemId);
-  if (!bone) return false;
-  if (!player.getClickDelay().elapsedTime(BURY_DELAY_MS)) return true;
-  if (player.getInventory().get(slot)?.getId() !== itemId) return true;
-  if (bone.level && player.getSkillManager().getMaxLevel(core.Skill.PRAYER) < bone.level) {
-    player.sendMessage(`You need a Prayer level of ${bone.level} to bury these bones.`);
-    return true;
-  }
-  consumeAfterTwoTicks(player, slot, itemId, { animation: BURY_ANIMATION, sound: core.Sound.BURY_BONES }, () => {
-    player.sendMessage("You dig a hole in the ground..");
-    player.sendMessage(`..and bury the ${core.ItemDefinition.forId(itemId).getName()}.`);
-    award(player, itemId, bone, 1);
-  });
   return true;
 }
 
-/** "Scatter" on demonic ashes: Prayer experience, no restore (Wiki, Remains). */
+/**
+ * "Scatter" on demonic ashes: Prayer experience, no restore (Wiki, Remains). Unlike burying, it
+ * resolves on the tick it is clicked: live OSRS removes the ash and sends the experience, the
+ * message, the sequence and the synth together.
+ */
 function scatterAshes({ player, itemId, slot }) {
+  const core = api.core;
   const ash = ashFor(itemId);
   if (!ash) return false;
+  // Burying's two-tick click delay; the captures only show scatters three or more ticks apart.
   if (!player.getClickDelay().elapsedTime(BURY_DELAY_MS)) return true;
-  if (player.getInventory().get(slot)?.getId() !== itemId) return true;
-  consumeAfterTwoTicks(player, slot, itemId, { animation: SCATTER_ANIMATION }, () => {
-    player.sendMessage("You scatter the ashes.");
-    player.getSkillManager().addExperiences(api.core.Skill.PRAYER, experience(ash.xp, 1));
-  });
+  const inventory = player.getInventory();
+  if (inventory.get(slot)?.getId() !== itemId) return true;
+
+  player.getSkillManager().stopSkillable();
+  player.getPacketSender().sendInterfaceRemoval();
+  inventory.deleteAtSlot(slot, 1);
+  player.performAnimation(new core.Animation(SCATTER_ANIMATION));
+  core.Sounds.sendSound(player, new core.Sound(SCATTER_SOUND, 1, 0, 0));
+  player.sendMessage("You scatter the ashes.");
+  player.getSkillManager().addExperiences(core.Skill.PRAYER, ash.xp);
+  player.getClickDelay().reset();
   return true;
 }
 
