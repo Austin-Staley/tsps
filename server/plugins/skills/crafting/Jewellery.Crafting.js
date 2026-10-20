@@ -97,7 +97,15 @@ function craftFurnaceProduct(player, product) {
   return true;
 }
 
+/**
+ * The cache's menu (script 2940) only gives a product its Craft option when the player has the
+ * level and materials, so this is a guard: refuse before the menu closes or anything animates.
+ */
 function startFurnaceProduct(player, menu, product) {
+  if (Shared.craftingLevel(player) < product.level) {
+    player.sendMessage(`You need a Crafting level of at least ${product.level} to craft this.`);
+    return;
+  }
   if (!hasFurnaceMaterials(player, product)) return;
   player.setAttribute(JEWELLERY_MENU_ATTRIBUTE, null);
   player.setInterfaceId(-1);

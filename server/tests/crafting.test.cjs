@@ -477,3 +477,16 @@ test('a hide shield short on hides says how many it needs', t => {
   assert.equal(getMenu(), undefined);
   assert.deepEqual(messages(player.log), ['You need 2 hard leather to make this.']);
 });
+
+test('a furnace product above the Crafting level is refused before the menu closes or anything animates', t => {
+  membersWorld(t, true);
+  const { player } = playerWith([[ItemIds.SILVER_BAR, 1], [ItemIds.TIARA_MOULD, 1]], { level: 22 });
+  const furnace = { getDefinition: () => ({ getName: () => 'Furnace' }) };
+  handlers.handleBarOnFurnace({ player, itemId: ItemIds.SILVER_BAR, object: furnace, handled: false });
+  player.log.length = 0;
+  const before = tasks.length;
+  handlers.button({ player, buttonId: (6 << 16) | 28, handled: false });
+  assert.equal(tasks.length, before);
+  assert.deepEqual(player.log, [['message', 'You need a Crafting level of at least 23 to craft this.']]);
+  assert.equal(player.getInterfaceId(), 6);
+});
