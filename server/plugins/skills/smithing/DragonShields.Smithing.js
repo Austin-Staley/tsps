@@ -22,9 +22,8 @@
 const Core = require("./Core.Smithing");
 const Data = require("./Data.Smithing");
 const Sessions = require("./Sessions.Smithing");
-const { messageBox, itemBox, hasHammer, smithingLevel, obj } = require("./Dialogue.Smithing");
+const { messageBox, itemBox, hasHammer, smithingLevel, obj, hammering } = require("./Common.Smithing");
 
-const SMITH_ANIMATION = 898;
 const DRAGON_FORGE = "ds2_ac_forge_anvil";
 const SHIELD_MACHINE = "fossil_lab_shield_maker";
 
@@ -65,7 +64,7 @@ function forgeRecipes() {
   ];
 }
 
-const animate = (player) => player.performAnimation(new Core.Animation(SMITH_ANIMATION));
+const animate = (player) => player.performAnimation(hammering());
 const carries = (player, ids) => ids.every((id) => player.getInventory().contains(id));
 
 function give(player, used, result, xp) {

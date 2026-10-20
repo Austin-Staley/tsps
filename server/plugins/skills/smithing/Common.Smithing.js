@@ -1,6 +1,6 @@
 /**
- * Message boxes for the repair-style smithing (godswords, shields): a plain box or one showing
- * an item, optionally running `then` when the player continues.
+ * Helpers shared by the Smithing units: message boxes (optionally running `then` on continue),
+ * hammers, the Smithing level, and cache lookups by gameval name.
  */
 const Core = require("./Core.Smithing");
 
@@ -33,11 +33,32 @@ function smithingLevel(player) {
   return player.getSkillManager().getCurrentLevel(Core.Skill.SMITHING);
 }
 
-/** The cache id of an obj gameval, e.g. "godwars_godsword_blade1". */
-function obj(name) {
-  const id = Core.CacheDefinitions.getObjId(name);
-  if (id == null) throw new Error(`Smithing: unknown obj ${name}`);
+function required(kind, name, id) {
+  if (id == null) throw new Error(`Smithing: unknown ${kind} ${name}`);
   return id;
 }
 
-module.exports = { messageBox, itemBox, hasHammer, smithingLevel, obj };
+/** The cache id of an obj gameval, e.g. "godwars_godsword_blade1". */
+function obj(name) {
+  return required("obj", name, Core.CacheDefinitions.getObjId(name));
+}
+
+function varbit(name) {
+  return required("varbit", name, Core.CacheDefinitions.getVarbitId(name));
+}
+
+function varp(name) {
+  return required("varp", name, Core.CacheDefinitions.getVarpId(name));
+}
+
+/** An Animation of a seq gameval, e.g. "human_smithing". */
+function animation(name) {
+  return new Core.Animation(required("seq", name, Core.CacheDefinitions.getSeqId(name)));
+}
+
+/** The anvil and repair hammering. */
+function hammering() {
+  return animation("human_smithing");
+}
+
+module.exports = { messageBox, itemBox, hasHammer, smithingLevel, obj, varbit, varp, animation, hammering };

@@ -12,8 +12,8 @@
 const Core = require("./Core.Smithing");
 const Data = require("./Data.Smithing");
 const Sessions = require("./Sessions.Smithing");
+const { animation } = require("./Common.Smithing");
 
-const SMELT_ANIMATION = 899;
 // Wiki: goldsmith gauntlets (or the Smithing or max cape) raise gold bar XP from 22.5 to 56.2.
 const GOLDSMITH_GAUNTLETS_BONUS_XP = 33.7;
 const SMELT_TITLE = "What would you like to smelt?";
@@ -100,7 +100,7 @@ function beginSmelt(player, recipe) {
     return false;
   }
   if (recipe.smeltMessage) player.sendMessage(recipe.smeltMessage);
-  player.performAnimation(new Core.Animation(SMELT_ANIMATION));
+  player.performAnimation(animation("human_furnace"));
   Core.Sounds.sendSound(player, Core.Sound.SMELTING);
   return true;
 }

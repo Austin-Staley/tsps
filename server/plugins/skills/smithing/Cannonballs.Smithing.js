@@ -5,15 +5,15 @@
  * for each bar the player carries (with a mould), and a bar used on a furnace opens it too.
  *
  * Not captured: the Wiki gives 8 ticks for the first batch and 10 between, the bone-burying
- * animation (827), and the experience; the messages are the game's long-standing ones, not
+ * animation (human_pickupfloor), and the experience; the messages are the game's long-standing ones, not
  * checked against a capture (docs/smithing.md).
  */
 const Core = require("./Core.Smithing");
 const Data = require("./Data.Smithing");
 const Sessions = require("./Sessions.Smithing");
 const Smelting = require("./Smelting.Smithing");
+const { animation } = require("./Common.Smithing");
 
-const POUR_ANIMATION = 827;
 const FIRST_TICKS = 8;
 const INTERVAL_TICKS = 10;
 const BALLS_PER_BAR = 4;
@@ -54,7 +54,7 @@ function begin(player, cannonball) {
   if (player.getInventory().getAmount(cannonball.barId) <= 0 || !mouldOf(player)) return pour(player, cannonball);
   player.sendMessage(`You heat the ${cannonball.metal} bar into a liquid state.`);
   player.sendMessage("You pour the molten metal into your cannonball mould.");
-  player.performAnimation(new Core.Animation(POUR_ANIMATION));
+  player.performAnimation(animation("human_pickupfloor"));
   return true;
 }
 

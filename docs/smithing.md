@@ -5,8 +5,8 @@ Smelting at furnaces and smithing at anvils (`server/plugins/skills/Smithing.plu
 ## Where the data comes from
 
 - **Anvil products come from the cache.** Enum 846 maps a product to its level, 845 to its bars and 844 to the amount made. Interface 312 draws its own products: client script 430 switches on varbit `smithing_bar_type` (enum 1253: 1 bronze ... 6 runite, 7 lovakite) and lays the slots out, hiding claws until Death Plateau (varp 314), greying out dart tips until The Tourist Trap, and showing bolts, limbs, javelin tips and keel parts only on members worlds (keel parts after Pandemonium, script 9022).
-- **`yarn dump:smithing`** reads that layout out of script 430 into `smithing/data/anvil-layout.json` (component, product obj, label, members, quest). `yarn dump:smithing --check` exits 1 when the cache no longer matches it. There is no enum or table with the layout.
-- **`smithing/data/smithing.json`** holds what the cache doesn't: furnace recipes and their messages, experience (per bar, Wiki), the "You hammer the ..." phrases, cannonballs, blurite products and barbarian spears.
+- **`yarn dump:smithing`** reads that layout out of script 430 into `server/plugins/skills/data/smithing-anvil-layout.json` (component, product obj, label, members, quest). `yarn dump:smithing --check` exits 1 when the cache no longer matches it. There is no enum or table with the layout.
+- **`server/plugins/skills/data/smithing.json`** holds what the cache doesn't: furnace recipes and their messages, experience (per bar, Wiki), the "You hammer the ..." phrases, cannonballs, blurite products and barbarian spears.
 - Enum 1101 maps a product component to the 1-based slot index varbit `smithing_item_lasttype` holds.
 
 ## Smelting

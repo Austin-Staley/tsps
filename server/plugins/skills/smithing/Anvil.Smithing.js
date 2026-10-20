@@ -14,11 +14,9 @@ const Data = require("./Data.Smithing");
 const Sessions = require("./Sessions.Smithing");
 const Godswords = require("./Godswords.Smithing");
 const DragonShields = require("./DragonShields.Smithing");
-const { hasHammer, messageBox } = require("./Dialogue.Smithing");
+const { hasHammer, messageBox, varbit, varp, hammering } = require("./Common.Smithing");
 
-const SMITH_ANIMATION = 898;
-const MAIN_MODAL_TARGET_UID = (161 << 16) | 16;
-const SMITHING_BAR_TYPE_VARBIT = 3216;
+const MAIN_MODAL = "toplevel_osrs_stretch:mainmodal";
 const SMITHING_INTERVAL_TICKS = 5;
 const FIRST_DELAY_TICKS = 3;
 const NO_BAR_MESSAGE = "You should select an item from your inventory and use it on the anvil.";
@@ -35,7 +33,8 @@ const OPEN_MENUS = new Map();
 /** player -> the selected quantity ("all", "x" amount or a number); kept until disconnect. */
 const SELECTED_QUANTITY = new Map();
 
-const buttonId = (component) => (Data.SMITHING_INTERFACE << 16) | component;
+const buttonId = (component) => (Data.smithingInterface() << 16) | component;
+const mainModal = () => Core.CacheDefinitions.getComponentId(MAIN_MODAL);
 const range = (from, to) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
 
 function smithingLevel(player) {
@@ -77,7 +76,7 @@ function smithOnce(player, product) {
   const inventory = player.getInventory();
   inventory.deleteNumber(product.barId, product.bars);
   inventory.addItem(new Core.Item(product.itemId, product.amount));
-  player.performAnimation(new Core.Animation(SMITH_ANIMATION));
+  player.performAnimation(hammering());
   player.getSkillManager().addExperiences(Core.Skill.SMITHING, product.xp);
   player.sendMessage(`You hammer the ${product.metal} and make ${product.phrase}.`);
   Core.api.emitCustomEvent("smithing:success", { player, skill: Core.Skill.SMITHING, itemId: product.itemId });
@@ -93,7 +92,7 @@ function startSmithing(player, product, amount) {
     firstDelay: FIRST_DELAY_TICKS,
     step: (smith) => smithOnce(smith, product),
   });
-  player.performAnimation(new Core.Animation(SMITH_ANIMATION));
+  player.performAnimation(hammering());
   return true;
 }
 
@@ -136,12 +135,12 @@ function openInterface(player, preferredBarId = null) {
     return false;
   }
   OPEN_MENUS.set(player, bar);
-  player.setInterfaceId(Data.SMITHING_INTERFACE);
+  player.setInterfaceId(Data.smithingInterface());
   player
     .getPacketSender()
-    .sendVarbit(SMITHING_BAR_TYPE_VARBIT, Data.BAR_TYPE_BY_BAR.get(bar))
-    .sendConfig(Core.CacheDefinitions.getVarpId("makexcrafting"), player.getInventory().getAmount(bar))
-    .sendSubInterface(MAIN_MODAL_TARGET_UID, Data.SMITHING_INTERFACE, 0);
+    .sendVarbit(varbit("smithing_bar_type"), Data.BAR_TYPE_BY_BAR.get(bar))
+    .sendConfig(varp("makexcrafting"), player.getInventory().getAmount(bar))
+    .sendSubInterface(mainModal(), Data.smithingInterface(), 0);
   for (const component of range(FIRST_PRODUCT_COMPONENT, LAST_PRODUCT_COMPONENT)) {
     player.getPacketSender().sendInterfaceFlags(buttonId(component), 2);
   }
@@ -149,10 +148,10 @@ function openInterface(player, preferredBarId = null) {
 }
 
 function closeInterface(player) {
-  if (!player?.isRegistered?.() || player.getInterfaceId() !== Data.SMITHING_INTERFACE) return;
+  if (!player?.isRegistered?.() || player.getInterfaceId() !== Data.smithingInterface()) return;
   OPEN_MENUS.delete(player);
   player.setInterfaceId(-1);
-  player.getPacketSender().closeSubInterface(MAIN_MODAL_TARGET_UID);
+  player.getPacketSender().closeSubInterface(mainModal());
 }
 
 /** Closes the interface of a player who walked off, died or logged out. */
@@ -182,7 +181,7 @@ function selectQuantity({ player, buttonId: id }) {
 
 function chooseProduct({ player, buttonId: id }) {
   const bar = OPEN_MENUS.get(player);
-  if (player.getInterfaceId() !== Data.SMITHING_INTERFACE || bar == null) return false;
+  if (player.getInterfaceId() !== Data.smithingInterface() || bar == null) return false;
   const product = Data.productsFor(bar).find((candidate) => candidate.component === (id & 0xffff));
   if (!product) return false;
 
@@ -191,8 +190,8 @@ function chooseProduct({ player, buttonId: id }) {
   if (!started) return false;
   player
     .getPacketSender()
-    .sendVarbit(Core.CacheDefinitions.getVarbitId("smithing_bar_lasttype"), Data.BAR_TYPE_BY_BAR.get(bar))
-    .sendVarbit(Core.CacheDefinitions.getVarbitId("smithing_item_lasttype"), product.slotIndex);
+    .sendVarbit(varbit("smithing_bar_lasttype"), Data.BAR_TYPE_BY_BAR.get(bar))
+    .sendVarbit(varbit("smithing_item_lasttype"), product.slotIndex);
   closeInterface(player);
   return true;
 }
@@ -239,6 +238,7 @@ function forget(player) {
 }
 
 module.exports = function attach(api) {
+  Sessions.everyTick(closeAbandonedMenus);
   api.onObjectInteraction("Anvil", { Smith: smith });
   api.onObjectInteraction("An experimental anvil", { Use: smith });
   api.onObjectInteraction("Rusted anvil", { Smith: smithRustedAnvil });
@@ -246,4 +246,4 @@ module.exports = function attach(api) {
   api.onInterfaceActionButton(range(FIRST_PRODUCT_COMPONENT, LAST_PRODUCT_COMPONENT).map(buttonId), chooseProduct);
 };
 
-Object.assign(module.exports, { ANVIL_NAMES: ["Anvil", "An experimental anvil", "Rusted anvil"], useOnAnvil, closeAbandonedMenus, forget });
+Object.assign(module.exports, { ANVIL_NAMES: ["Anvil", "An experimental anvil", "Rusted anvil"], useOnAnvil, forget });

@@ -56,12 +56,10 @@ module.exports = {
   isSmeltingActive: Smelting.isSmeltingActive,
   register(api) {
     Core.init(api);
-    Data.load(api.core);
-    Sessions.everyTick(Anvil.closeAbandonedMenus);
-    api.getTaskManager().submit(Sessions.createTask());
     api.onPlayerDisconnect(disconnect);
     api.onCustomEvent("level-up:popup-opened", levelUpPopup);
     api.onItemOnObject(useItemOnObject, { noted: false });
+    Sessions(api);
     Smelting(api);
     Anvil(api);
     Cannonballs(api);

@@ -1,14 +1,12 @@
 /**
  * Smithing data. The anvil's products come from the cache: enum 846 (product -> level), 845
  * (-> bars) and 844 (-> amount made), laid out per bar as client script 430 draws them
- * (data/anvil-layout.json, written by `yarn dump:smithing`). Furnace recipes and experience,
- * which the cache doesn't hold, are in data/smithing.json.
+ * (plugins/skills/data/smithing-anvil-layout.json, written by `yarn dump:smithing`). Furnace
+ * recipes and experience, which the cache doesn't hold, are in plugins/skills/data/smithing.json.
  */
-const layout = require("./data/anvil-layout.json");
-const data = require("./data/smithing.json");
+const layout = require("../data/smithing-anvil-layout.json");
+const data = require("../data/smithing.json");
 
-/** Interface "smithing", the anvil's product grid. */
-const SMITHING_INTERFACE = 312;
 const AMOUNT_ENUM = 844;
 const BARS_ENUM = 845;
 const LEVEL_ENUM = 846;
@@ -24,6 +22,11 @@ let core = null;
 let products = null;
 let cannonballList = null;
 let spearList = null;
+
+/** The anvil's product grid, interface "smithing". */
+function smithingInterface() {
+  return core.CacheDefinitions.getInterfaceId("smithing");
+}
 
 /** Resolves the item names in smithing.json. Safe to call again; any plugin's `api.core` will do. */
 function load(apiCore) {
@@ -70,7 +73,7 @@ function productsByBar() {
         /** The metal in "You hammer the <metal> and make ...": the bar's gameval without "_bar". */
         metal: String(objNames.get(bar) ?? "").replace(/_bar$/, ""),
         component: slot.component,
-        slotIndex: Number(slotIndex.get((SMITHING_INTERFACE << 16) | slot.component) ?? 0),
+        slotIndex: Number(slotIndex.get((smithingInterface() << 16) | slot.component) ?? 0),
         itemId: slot.item,
         label: slot.label,
         phrase: data.objPhrases[slot.obj] ?? data.phrases[slot.label.replace(/ \(\d\)$/, "")] ?? `a ${slot.label.toLowerCase()}`,
@@ -141,8 +144,8 @@ function anvilBars() {
 }
 
 module.exports = {
-  SMITHING_INTERFACE,
   SMELTING_RECIPES,
+  smithingInterface,
   BAR_TYPE_BY_BAR,
   load,
   smeltMenuRecipes,

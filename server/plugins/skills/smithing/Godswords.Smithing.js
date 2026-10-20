@@ -10,11 +10,10 @@
  */
 const Core = require("./Core.Smithing");
 const Sessions = require("./Sessions.Smithing");
-const { messageBox, itemBox, hasHammer, smithingLevel } = require("./Dialogue.Smithing");
+const { messageBox, itemBox, hasHammer, smithingLevel, hammering } = require("./Common.Smithing");
 
 const LEVEL = 80;
 const XP = 100;
-const SMITH_ANIMATION = 898;
 const START_MESSAGE = "You set to work, trying to fix the ancient sword...";
 const DONE_MESSAGE = "Even for an experienced smith it is not an easy task, but eventually it is done.";
 const NEED_TWO_MESSAGE = "You need at least two different Godsword blade pieces in your inventory to reforge them.";
@@ -83,7 +82,7 @@ function forge(player) {
     messageBox(player, `You need a Smithing level of ${LEVEL} to repair the Godsword.`);
     return;
   }
-  const animate = () => player.performAnimation(new Core.Animation(SMITH_ANIMATION));
+  const animate = () => player.performAnimation(hammering());
   Sessions.timeline(player, "godsword", [
     { at: 0, run: () => { messageBox(player, START_MESSAGE); animate(); } },
     { at: 3, run: animate },

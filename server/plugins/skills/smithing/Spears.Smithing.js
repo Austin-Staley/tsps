@@ -13,11 +13,10 @@ const Core = require("./Core.Smithing");
 const Data = require("./Data.Smithing");
 const Sessions = require("./Sessions.Smithing");
 const QuestRuntime = require("../../quests/QuestRuntime");
-const { messageBox, hasHammer, smithingLevel } = require("./Dialogue.Smithing");
+const { messageBox, hasHammer, smithingLevel, hammering } = require("./Common.Smithing");
 
 const BARBARIAN_ANVIL = "Barbarian anvil";
 const TRAINED_ATTRIBUTE = "barbarian-training:smithing";
-const SMITH_ANIMATION = 898;
 const INTERVAL_TICKS = 4;
 const SELECT_BAR_MESSAGE = "You should select a suitable metal bar from your inventory and use it on the anvil.";
 const NO_HAMMER_MESSAGE = "You need a hammer in order to smith here.";
@@ -45,7 +44,7 @@ function makeOne(player, recipe, itemId) {
   inventory.deleteNumber(recipe.barId, 1);
   inventory.deleteNumber(recipe.logId, 1);
   inventory.addItem(new Core.Item(itemId, 1));
-  player.performAnimation(new Core.Animation(SMITH_ANIMATION));
+  player.performAnimation(hammering());
   player.getSkillManager().addExperiences(Core.Skill.SMITHING, recipe.xp);
   Core.api.emitCustomEvent("smithing:success", { player, skill: Core.Skill.SMITHING, itemId });
   return true;

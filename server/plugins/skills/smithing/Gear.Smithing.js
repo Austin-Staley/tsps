@@ -14,8 +14,6 @@
 const Core = require("./Core.Smithing");
 const Smelting = require("./Smelting.Smithing");
 
-/** The interface id item-action events give for a worn item. */
-const EQUIPMENT_INTERFACE = 1688;
 const RING_CHARGES = 140;
 const RING_CHARGES_ATTRIBUTE = "smithing:ring-of-forging-charges";
 const VARROCK_ARMOUR_CHANCE = 0.1;
@@ -90,7 +88,7 @@ function checkRing({ player }) {
 
 function breakRing(event) {
   const { player, slot, interfaceId } = event;
-  const container = interfaceId === EQUIPMENT_INTERFACE ? player.getEquipment() : player.getInventory();
+  const container = interfaceId === Core.Equipment.INVENTORY_INTERFACE_ID ? player.getEquipment() : player.getInventory();
   container.set(slot, new Core.Item(-1));
   container.refreshItems();
   player.setAttribute(RING_CHARGES_ATTRIBUTE, RING_CHARGES);

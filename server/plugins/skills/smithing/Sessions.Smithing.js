@@ -107,4 +107,8 @@ function createTask() {
   return new SmithingTask();
 }
 
-module.exports = { start, stop, typeOf, everyTick, createTask, timeline };
+module.exports = function attach(api) {
+  api.getTaskManager().submit(createTask());
+};
+
+Object.assign(module.exports, { start, stop, typeOf, everyTick, timeline });

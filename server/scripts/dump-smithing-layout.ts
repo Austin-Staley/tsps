@@ -1,4 +1,4 @@
-// Writes the anvil's product layout (plugins/skills/smithing/data/anvil-layout.json) from the
+// Writes the anvil's product layout (plugins/skills/data/smithing-anvil-layout.json) from the
 // cache. The smithing interface (312) draws its own products: client script 430 switches on
 // the bar (enum 1253 of varbit smithing_bar_type) and, for each slot, calls script 431 with the
 // slot's component, its label and the product obj, some behind a quest or members check. No
@@ -21,7 +21,7 @@ const LAYOUT_SCRIPT = 430;
 const SLOT_SCRIPT = 431;
 const BAR_TYPE_ENUM = 1253;
 const LEVEL_ENUM = 846;
-const OUT = path.resolve(__dirname, "..", "plugins", "skills", "smithing", "data", "anvil-layout.json");
+const OUT = path.resolve(__dirname, "..", "plugins", "skills", "data", "smithing-anvil-layout.json");
 
 /**
  * What the script's checks mean. Script 430 reads the quest varps (and, for keel parts, script

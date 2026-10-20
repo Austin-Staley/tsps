@@ -13,27 +13,30 @@ const buttons = new Map(), objects = new Map(), itemActions = new Map(), events 
 let disconnect, itemOnObject, CacheDefinitions;
 const extraItemOnObject = [];
 let denyAnvil = false;
-Smithing.register({
-  core: PluginManager.getCoreApi(),
-  getTaskManager: () => ({ submit(task) { task.setRunning(true); tasks.push(task); } }),
-  onPlayerDisconnect: handler => { disconnect = handler; },
-  onCustomEvent: (name, handler) => events.set(name, [...(events.get(name) ?? []), handler]),
-  emitCustomEvent(name, request) {
-    if (name === "smithing:anvil-access") request.denied = denyAnvil;
-    if (name === "quest:is-complete") request.complete = request.player.quests?.has(request.key) ?? false;
-    for (const handler of events.get(name) ?? []) handler(request);
-  },
-  persistAttribute() {},
-  onItemAction: (name, actions) => itemActions.set(name, actions),
-  onItemOnObject: (handler) => { if (!itemOnObject) itemOnObject = handler; else extraItemOnObject.push(handler); },
-  onItemOnItem() {}, onSpellOnItem() {}, log() {},
-  onObjectInteraction: (name, actions) => objects.set(name, actions),
-  onInterfaceActionButton: (ids, handler) => { for (const id of ids) buttons.set(id, handler); },
-});
+function registerSmithing() {
+  Smithing.register({
+    core: PluginManager.getCoreApi(),
+    getTaskManager: () => ({ submit(task) { task.setRunning(true); tasks.push(task); } }),
+    onPlayerDisconnect: handler => { disconnect = handler; },
+    onCustomEvent: (name, handler) => events.set(name, [...(events.get(name) ?? []), handler]),
+    emitCustomEvent(name, request) {
+      if (name === "smithing:anvil-access") request.denied = denyAnvil;
+      if (name === "quest:is-complete") request.complete = request.player.quests?.has(request.key) ?? false;
+      for (const handler of events.get(name) ?? []) handler(request);
+    },
+    persistAttribute() {},
+    onItemAction: (name, actions) => itemActions.set(name, actions),
+    onItemOnObject: (handler) => { if (!itemOnObject) itemOnObject = handler; else extraItemOnObject.push(handler); },
+    onItemOnItem() {}, onSpellOnItem() {}, log() {},
+    onObjectInteraction: (name, actions) => objects.set(name, actions),
+    onInterfaceActionButton: (ids, handler) => { for (const id of ids) buttons.set(id, handler); },
+  });
+}
 before(async () => {
   const { CachePipeline } = require("../dist/game/cache/CachePipeline");
   ({ CacheDefinitions } = require("../dist/game/cache/CacheDefinitions"));
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
+  registerSmithing();
 });
 afterEach(() => { for (const player of players.splice(0)) disconnect({ player }); });
 
@@ -280,7 +283,7 @@ test("Smelt lists every bar, and smelts on the captured timing", () => {
   menu.execute(I.BRONZE_BAR, 2);
   ticks(1);
   assert.equal(player.messages.at(-1), "You smelt the copper and tin together in the furnace.");
-  assert.equal(player.animation, 899);
+  assert.equal(player.animation, CacheDefinitions.getSeqId("human_furnace"));
   ticks(3);
   assert.equal(player.items.get(I.BRONZE_BAR) ?? 0, 0);
   ticks(1);
