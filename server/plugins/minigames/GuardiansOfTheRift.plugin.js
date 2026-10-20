@@ -19,6 +19,7 @@ module.exports = {
     require("./guardiansoftherift/Workbench.GuardiansOfTheRift").attach(api);
     require("./guardiansoftherift/Portals.GuardiansOfTheRift").attach(api);
     require("./guardiansoftherift/DepositPool.GuardiansOfTheRift").attach(api);
+    require("./guardiansoftherift/Altars.GuardiansOfTheRift").attach(api);
     require("./guardiansoftherift/Rewards.GuardiansOfTheRift").attach(api);
     require("./guardiansoftherift/Commands.GuardiansOfTheRift").attach(api);
   },

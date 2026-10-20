@@ -4,8 +4,8 @@ The Runecraft minigame in the Temple of the Eye, built from the OSRS Wiki, live 
 the cache. It is one plugin, `server/plugins/minigames/GuardiansOfTheRift.plugin.js`, with one
 unit per part of the game in `server/plugins/minigames/guardiansoftherift/` (the Wintertodt layout).
 
-Status: phases 1-2 (lobby, barrier, game loop, HUD, Power-up, end-of-game rewards; mining,
-workbench, portals, rubble, Deposit Pool, essence pouches) are built. The
+Status: phases 1-3 (lobby, barrier, game loop, HUD, Power-up, end-of-game rewards; mining,
+workbench, portals, rubble, Deposit Pool, essence pouches; Portal Guardians and altars) are built. The
 phases are at the end.
 
 ## Sources
@@ -229,33 +229,58 @@ Ticks from the rift opening:
   - Leaving the game empties guardian essence from every pouch (`colossal_essence_pouch` went to
     0 on leaving in the capture).
 
-### Portal Guardians and altars
+### Portal Guardians and altars (rev 241)
 
-- **Enter an active guardian:** anim, sound 1098 and the overlay fade. 2 ticks later the player is
-  teleported to the altar with "You step through the rift and find yourself at the <Rune> Altar."
-- **Captured altar tiles:**
-
-  | Altar | Tile |
-  | --- | --- |
-  | Air | 2841,4829 |
-  | Water | 2726,4832 |
-  | Fire | 2574,4849 |
-  | Mind | 2793,4828 |
-  | Body | 2521,4834 |
-  | Law | only the rebuild zone (308,602) |
-  | Chaos | only the rebuild zone (285,604) |
-
-  Earth, Nature, Cosmic, Death and Blood are not in the captures yet.
-- **Inactive guardian:** mesbox "The Guardian is dormant. Its energy might return soon."
-- **Without the stones handed in:**
-  - The Great Guardian's dialogue: "Human, I need the power of the guardian stones."
-  - Mesbox: "You should feed the guardian stones to the Great Guardian before making more of them."
-- **Crafting at the altar** turns each guardian essence into a rune and one guardian stone of the
-  altar's type (Wiki). Elemental altars give elemental stones; catalytic altars give catalytic
-  stones; combination runes give polyelemental stones.
-  - An uncharged cell becomes the altar's tier of charged cell.
-  - Each essence has a 1/250 chance of a portal talisman.
-  - "You discover a strange talisman during the runecrafting process!" (capture) is the talisman message.
+- **Enter an active Guardian:**
+  - On arrival the HUD closes, `gotr_overlay` opens with the altar's colours (script 5984) and
+    sound 1098.
+  - Two ticks later: "You step through the rift and find yourself at the <Rune> Altar." (spam),
+    the move and script 5985. A tick later the HUD is back.
+  - The altar's own portal (Use) comes back the same way to 3615,9491 with "You step through the
+    portal and find yourself back in the temple."
+  - The player stays in the game while at that altar. Teleporting anywhere else ends it.
+- **Arrival tiles (captured):** air 2841,4829; water 2726,4832; fire 2574,4849; body 2521,4834;
+  nature 2400,4835; law 2464,4818; blood 3239,4832 (the true Blood Altar, `blood_altar` 43479,
+  exit `bloodtemple_exit_portal` 43478). Mind 2793,4828 is from the Leagues capture. Earth
+  2655,4830, cosmic 2162,4833, chaos 2281,4837 and death 2208,4830 are the Runecrafting
+  plugin's talisman tiles.
+- **Overlay colours (script 5984 [model, colour]):**
+  - air `[38742, 15724013]`
+  - water, body and law `[44091, 527582]`
+  - fire and chaos `[44092, 16293385]`
+  - nature `[44089, 2809369]`
+  - blood `[35737, 12262933]`
+  - huge-remains portals `[44090, 15855475]`
+  - Earth, mind, cosmic and death aren't captured; the plugin borrows the closest.
+- **Guardian animations:** active Guardians loop `statue_runestone01_active`, the rest
+  `statue_runestone01_inactive` (loc anims).
+- **Refusals:**
+  - A dormant Guardian: mesbox "The Guardian is dormant. Its energy might return soon."
+  - Holding guardian stones: the Great Guardian's transcript "Human, I need the power of the
+    guardian stones." then "You should feed the guardian stones to the Great Guardian before
+    making more of them."
+  - A missing quest: mesbox "You must complete Mourning's End Part II before you can enter this
+    rift." The Wiki's quests are Lost City (cosmic), Troll Stronghold (law), Mourning's End
+    Part II (death) and Sins of the Father (blood).
+- **Crafting guardian essence** (Craft-rune; plain Runecraft outside a game):
+  - human_runecraft with the runecrafting spotanim (height 92) and sound 2710.
+  - Runes as normal crafting, one guardian stone an essence (elemental at air, water, earth and
+    fire, catalytic elsewhere), and the altar's XP. The capture's 22 law essence gave 209
+    (9.5 each). The Runecrafting plugin's XP table is corrected to the Wiki's
+    (5/5.5/6/6.5/7/7.5/8/8.5/8.7/9/9.5/10, 10.5 at the true Blood Altar).
+  - One uncharged cell is charged to the altar's tier, while no charged cell is held: "Your cell
+    absorbs a small/moderate/high/immense amount of excess energy."
+  - Cell tiers (Wiki): weak at air, mind and body; medium at water, cosmic and chaos; strong at
+    earth, nature and law; overcharged at fire, death and blood.
+  - Portal talismans (Wiki): 1/250 an essence unless Toggle-talisman turned them off; "You
+    discover a strange talisman during the runecrafting process!" (Leagues capture).
+  - Combination runes and polyelemental stones aren't built.
+- **Portal talisman on its Guardian (Wiki):** enters even while the Guardian is dormant. It's
+  used up unless the Guardian is active: "The portal talisman shatters and you find yourself at
+  the altar it originated from." (captured).
+- **Toggle-talisman:** flips `gotr_talisman_toggle_<rune>`. The chat line ("You will no longer
+  find portal talismans at the Air Altar.") is ours.
+- Lantern bonus runes ("Your lantern gets you a bonus rune.") come with the rewards phase.
 - **Power-up on the Great Guardian (rev 241):**
   - Two ticks after the click: anim `human_runecraft_walkmerge`, spotanim `runecrafting` (height 92),
     sound 5369 and a `pyramid_waterstrike_travel` projectile to the Guardian (start 25, end 60,

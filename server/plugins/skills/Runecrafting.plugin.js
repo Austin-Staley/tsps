@@ -118,20 +118,21 @@ function initialize(api) {
 
   RUNES_BY_ALTAR_ID = new Map([
     [ObjectIdentifiers.ALTAR_33, { runeId: ItemIdentifiers.AIR_RUNE, level: 1, xp: 5, pureOnly: false, multiplier: [[11, 2], [22, 3], [33, 4], [44, 5], [55, 6], [66, 7], [77, 8], [88, 9], [99, 10]] }],
-    [ObjectIdentifiers.ALTAR_34, { runeId: ItemIdentifiers.MIND_RUNE, level: 2, xp: 6, pureOnly: false, multiplier: [[14, 2], [28, 3], [42, 4], [56, 5], [70, 6], [84, 7], [98, 8]] }],
-    [ObjectIdentifiers.ALTAR_35, { runeId: ItemIdentifiers.WATER_RUNE, level: 5, xp: 7, pureOnly: false, multiplier: [[19, 2], [38, 3], [57, 4], [76, 5], [95, 6]] }],
-    [ObjectIdentifiers.ALTAR_36, { runeId: ItemIdentifiers.EARTH_RUNE, level: 9, xp: 8, pureOnly: false, multiplier: [[26, 2], [52, 3], [78, 4]] }],
-    [ObjectIdentifiers.ALTAR_37, { runeId: ItemIdentifiers.FIRE_RUNE, level: 14, xp: 9, pureOnly: false, multiplier: [[35, 2], [70, 3]] }],
-    [ObjectIdentifiers.ALTAR_38, { runeId: ItemIdentifiers.BODY_RUNE, level: 20, xp: 10, pureOnly: false, multiplier: [[46, 2], [92, 3]] }],
-    [ObjectIdentifiers.ALTAR_39, { runeId: ItemIdentifiers.COSMIC_RUNE, level: 27, xp: 11, pureOnly: true, multiplier: [[59, 2]] }],
-    [ObjectIdentifiers.ALTAR_55, { runeId: ItemIdentifiers.CHAOS_RUNE, level: 35, xp: 12, pureOnly: true, multiplier: [[74, 2]] }],
-    [ObjectIdentifiers.ALTAR_57, { runeId: ItemIdentifiers.ASTRAL_RUNE, level: 40, xp: 13, pureOnly: true, multiplier: [[82, 2]] }],
-    [ObjectIdentifiers.ALTAR_46, { runeId: ItemIdentifiers.NATURE_RUNE, level: 44, xp: 14, pureOnly: true, multiplier: [[91, 2]] }],
-    [ObjectIdentifiers.ALTAR_40, { runeId: ItemIdentifiers.LAW_RUNE, level: 54, xp: 15, pureOnly: true, multiplier: [[95, 2]] }],
-    [ObjectIdentifiers.ALTAR_56, { runeId: ItemIdentifiers.DEATH_RUNE, level: 65, xp: 16, pureOnly: true, multiplier: [[99, 2]] }],
+    [ObjectIdentifiers.ALTAR_34, { runeId: ItemIdentifiers.MIND_RUNE, level: 2, xp: 5.5, pureOnly: false, multiplier: [[14, 2], [28, 3], [42, 4], [56, 5], [70, 6], [84, 7], [98, 8]] }],
+    [ObjectIdentifiers.ALTAR_35, { runeId: ItemIdentifiers.WATER_RUNE, level: 5, xp: 6, pureOnly: false, multiplier: [[19, 2], [38, 3], [57, 4], [76, 5], [95, 6]] }],
+    [ObjectIdentifiers.ALTAR_36, { runeId: ItemIdentifiers.EARTH_RUNE, level: 9, xp: 6.5, pureOnly: false, multiplier: [[26, 2], [52, 3], [78, 4]] }],
+    [ObjectIdentifiers.ALTAR_37, { runeId: ItemIdentifiers.FIRE_RUNE, level: 14, xp: 7, pureOnly: false, multiplier: [[35, 2], [70, 3]] }],
+    [ObjectIdentifiers.ALTAR_38, { runeId: ItemIdentifiers.BODY_RUNE, level: 20, xp: 7.5, pureOnly: false, multiplier: [[46, 2], [92, 3]] }],
+    [ObjectIdentifiers.ALTAR_39, { runeId: ItemIdentifiers.COSMIC_RUNE, level: 27, xp: 8, pureOnly: true, multiplier: [[59, 2]] }],
+    [ObjectIdentifiers.ALTAR_55, { runeId: ItemIdentifiers.CHAOS_RUNE, level: 35, xp: 8.5, pureOnly: true, multiplier: [[74, 2]] }],
+    [ObjectIdentifiers.ALTAR_57, { runeId: ItemIdentifiers.ASTRAL_RUNE, level: 40, xp: 8.7, pureOnly: true, multiplier: [[82, 2]] }],
+    [ObjectIdentifiers.ALTAR_46, { runeId: ItemIdentifiers.NATURE_RUNE, level: 44, xp: 9, pureOnly: true, multiplier: [[91, 2]] }],
+    [ObjectIdentifiers.ALTAR_40, { runeId: ItemIdentifiers.LAW_RUNE, level: 54, xp: 9.5, pureOnly: true, multiplier: [[95, 2]] }],
+    [ObjectIdentifiers.ALTAR_56, { runeId: ItemIdentifiers.DEATH_RUNE, level: 65, xp: 10, pureOnly: true, multiplier: [[99, 2]] }],
     [ObjectIdentifiers.BLOOD_ALTAR, { runeId: ItemIdentifiers.BLOOD_RUNE, level: 75, xp: 27, pureOnly: true, multiplier: [] }],
   ]);
-  RUNES_BY_ALTAR_ID.set(ObjectIdentifiers.ALTAR_83, RUNES_BY_ALTAR_ID.get(ObjectIdentifiers.BLOOD_ALTAR));
+  // The true Blood Altar binds pure essence (Wiki: 77 Runecraft, 10.5 XP an essence).
+  RUNES_BY_ALTAR_ID.set(ObjectIdentifiers.ALTAR_83, { runeId: ItemIdentifiers.BLOOD_RUNE, level: 77, xp: 10.5, pureOnly: true, multiplier: [] });
 
   TALISMANS = new Map([
     [ItemIdentifiers.AIR_TALISMAN, { name: "Air talisman", runeId: ItemIdentifiers.AIR_RUNE, x: 2841, y: 4829, ruinX: 2983, ruinY: 3288 }],
@@ -299,6 +300,21 @@ function handleCraftRunes(event) {
 
   event.handled = true;
   return true;
+}
+
+/**
+ * "runecrafting:altar-rune" { player, objectId, rune }: what an altar crafts, for content that
+ * crafts its own essence there (Guardians of the Rift): { runeId, level, xp, amount, petBase } with
+ * `amount` the runes an essence makes at the player's level, or null.
+ */
+function answerAltarRune(request) {
+  const runeData = RUNES_BY_ALTAR_ID.get(request?.objectId);
+  if (!runeData || !request.player) return;
+  const level = request.player.getSkillManager().getCurrentLevel(Skill.RUNECRAFTING);
+  request.rune = {
+    runeId: runeData.runeId, level: runeData.level, xp: runeData.xp, amount: runeMultiplier(level, runeData),
+    petBase: runeData.runeId === ItemIdentifiers.BLOOD_RUNE ? BLOOD_RIFT_GUARDIAN_BASE : RIFT_GUARDIAN_BASE,
+  };
 }
 
 function locateDirection(player, ruinX, ruinY) {
@@ -550,6 +566,7 @@ module.exports = {
     api.onObjectInteraction("Portal", { Use: handleExitPortal });
 
     Pouches.attach(api);
+    api.onCustomEvent("runecrafting:altar-rune", answerAltarRune);
 
     for (const talisman of TALISMANS.values()) {
       api.onItemAction(talisman.name, { Locate: handleTalismanLocate });

@@ -22,11 +22,13 @@ const Workbench = require('../plugins/minigames/guardiansoftherift/Workbench.Gua
 const Portals = require('../plugins/minigames/guardiansoftherift/Portals.GuardiansOfTheRift');
 const DepositPool = require('../plugins/minigames/guardiansoftherift/DepositPool.GuardiansOfTheRift');
 const Pouches = require('../plugins/skills/runecrafting/Pouches.Runecrafting');
+const Altars = require('../plugins/minigames/guardiansoftherift/Altars.GuardiansOfTheRift');
 
 const hooks = {
   objects: {}, npcs: {}, items: {}, clicks: {}, custom: {}, login: [], logout: [], conditions: [], areas: [], prompts: [],
-  dialogues: [], canBankItem: [],
+  dialogues: [], canBankItem: [], itemOnObject: {},
 };
+const QUESTS_DONE = new Set(['temple_of_the_eye']);
 
 function fakeApi() {
   return {
@@ -42,7 +44,8 @@ function fakeApi() {
     onNpcDialogueCondition: (handler) => hooks.conditions.push(handler),
     onCustomEvent: (name, handler) => (hooks.custom[name] ??= []).push(handler),
     emitCustomEvent: (name, payload) => {
-      if (name === 'quest:is-complete') payload.complete = payload.player.questDone;
+      if (name === 'quest:is-complete') payload.complete = payload.player.questDone && (payload.key === 'temple_of_the_eye' || QUESTS_DONE.has(payload.key));
+      if (name === 'runecrafting:altar-rune') payload.rune = { runeId: 557, level: 9, xp: 6.5, amount: 4, petBase: 1 };
       if (name === 'npc-dialogue:start') { hooks.dialogues.push(payload.variant); payload.handled = true; }
       if (name === 'mining:best-pickaxe') payload.pickaxe = payload.player.pickaxe ?? null;
       if (name === 'skillcape:has-perk') payload.result = payload.player.cape === true;
@@ -52,6 +55,7 @@ function fakeApi() {
     onItemAction: (name, actions) => { hooks.items[name] = actions; },
     onObjectClick: (ids, clickType, handler) => { hooks.clicks[`${ids}:${clickType}`] = handler; },
     onCanBankItem: (handler) => hooks.canBankItem.push(handler),
+    onItemOnObject: (item, object, handler) => { hooks.itemOnObject[`${item}|${object}`] = handler; },
     getTaskManager: () => TaskManager,
   };
 }
@@ -145,6 +149,7 @@ function fakePlayer(name = 'Tester', { runecraft = 99, questDone = true, x = 361
         sendCameraReset: () => sender,
         sendRunEnergy: () => sender,
         sendProjectile: () => sender,
+        sendObjectAnimation: () => sender,
       };
       return sender;
     },
@@ -201,6 +206,7 @@ before(() => {
   Portals.attach(api);
   DepositPool.attach(api);
   Pouches.attach(api);
+  Altars.attach(api);
   for (const name of Shared.GAME_ITEMS) if (Shared.core().ItemDefinition.forId(Shared.obj(name)).isStackable()) STACKABLE.add(Shared.obj(name));
 });
 
@@ -564,4 +570,96 @@ test('old saves load: rune and pure essence keep their counts', () => {
   ]);
   pouch(player, 'Check', 'Small pouch');
   assert.equal(player.messages.at(-1), 'There are three pure essences in this pouch.');
+});
+
+// ------------------------------------------------------------------ phase 3: Portal Guardians and altars
+
+const EARTH = Altars.ALTARS.find((altar) => altar.key === 'earth');
+const BLOOD = Altars.ALTARS.find((altar) => altar.key === 'blood');
+
+function attackPhase(player) {
+  openGame(player);
+  Game._game.phase = Game.PHASE.ATTACK;
+  Game._game.altars = { elemental: EARTH.index, catalytic: BLOOD.index, changesIn: 33 };
+}
+
+function enter(player, altar) {
+  return hooks.objects[`Guardian of ${altar.name}`].Enter({ player, objectId: Shared.loc(altar.guardian) });
+}
+
+test('a dormant Guardian, held stones and a missing quest keep the rift shut', () => {
+  const player = fakePlayer();
+  attackPhase(player);
+  enter(player, Altars.ALTARS.find((altar) => altar.key === 'air'));
+  assert.match(statementText(player), /The Guardian is dormant\. Its energy might return soon\./);
+  enter(player, BLOOD);
+  assert.match(statementText(player), /You must complete Sins of the Father before you can enter this rift\./);
+  player.inventory.add(Shared.obj(Shared.ITEM.ELEMENTAL_STONE), 3);
+  enter(player, EARTH);
+  assert.match(hooks.dialogues.at(-1), /entering-a-portal-guardian-with-any-type-of-guardian-stone/);
+  assert.equal(player.location.getY(), 9484, 'still in the temple');
+});
+
+test('an active Guardian takes the player to its altar and stays in the game; the portal brings them back', () => {
+  const player = fakePlayer();
+  attackPhase(player);
+  enter(player, EARTH);
+  ticks(2);
+  assert.equal(player.messages.at(-1), 'You step through the rift and find yourself at the Earth Altar.');
+  assert.deepEqual([player.location.getX(), player.location.getY()], [2655, 4830]);
+  ticks(6);
+  assert.equal(Game.isPlaying(player), true, 'an altar trip keeps the game');
+  hooks.objects.Portal.Use({ player, objectId: Shared.loc(EARTH.exit) });
+  ticks(2);
+  assert.equal(player.messages.at(-1), 'You step through the portal and find yourself back in the temple.');
+  assert.deepEqual([player.location.getX(), player.location.getY()], [3615, 9491]);
+
+  enter(player, EARTH);
+  ticks(2);
+  player.location = new Location(3222, 3218, 0);
+  ticks(6);
+  assert.equal(Game.isPlaying(player), false, 'teleporting away from the altar leaves the game');
+});
+
+test('crafting guardian essence makes runes, a stone each, the XP and charges one cell to the altar tier', () => {
+  const player = fakePlayer();
+  attackPhase(player);
+  player.inventory.adds(Shared.obj(Shared.ITEM.ESSENCE), 10);
+  player.inventory.add(Shared.obj(Shared.ITEM.UNCHARGED_CELL), 3);
+  STACKABLE.add(557);
+  hooks.objects.Altar['Craft-rune']({ player, objectId: Shared.loc(EARTH.altar) });
+  assert.equal(player.inventory.getAmount(Shared.obj(Shared.ITEM.ESSENCE)), 0);
+  assert.equal(player.inventory.getAmount(557), 40);
+  assert.equal(player.inventory.getAmount(Shared.obj(Shared.ITEM.ELEMENTAL_STONE)), 10);
+  assert.equal(player.inventory.getAmount(Shared.obj('gotr_cell_tier3')), 1, 'earth charges strong cells');
+  assert.equal(player.inventory.getAmount(Shared.obj(Shared.ITEM.UNCHARGED_CELL)), 2);
+  assert.ok(player.messages.includes('Your cell absorbs a high amount of excess energy.'));
+  assert.equal(player.xpBySkill.Runecrafting, 65);
+
+  player.inventory.adds(Shared.obj(Shared.ITEM.ESSENCE), 5);
+  hooks.objects.Altar['Craft-rune']({ player, objectId: Shared.loc(EARTH.altar) });
+  assert.equal(player.inventory.getAmount(Shared.obj('gotr_cell_tier3')), 1, 'one charged cell at a time');
+  assert.equal(player.inventory.getAmount(Shared.obj(Shared.ITEM.UNCHARGED_CELL)), 2);
+
+  const outsider = fakePlayer('Outsider');
+  outsider.inventory.adds(Shared.obj(Shared.ITEM.ESSENCE), 1);
+  assert.equal(hooks.objects.Altar['Craft-rune']({ player: outsider, objectId: Shared.loc(EARTH.altar) }), false, 'outside a game it is plain Runecraft');
+});
+
+test('a portal talisman opens its dormant Guardian and shatters; Toggle-talisman flips its varbit', () => {
+  const player = fakePlayer();
+  attackPhase(player);
+  const air = Altars.ALTARS.find((altar) => altar.key === 'air');
+  player.inventory.add(Shared.obj(air.talisman), 1);
+  hooks.itemOnObject['Portal talisman (air)|Guardian of Air']({ player, objectId: Shared.loc(air.guardian), itemId: Shared.obj(air.talisman) });
+  assert.equal(player.inventory.getAmount(Shared.obj(air.talisman)), 0);
+  assert.equal(player.messages.at(-1), 'The portal talisman shatters and you find yourself at the altar it originated from.');
+  ticks(2);
+  assert.deepEqual([player.location.getX(), player.location.getY()], [2841, 4829]);
+
+  hooks.objects['Guardian of Air']['Toggle-talisman']({ player: fakePlayer('Toggler'), objectId: Shared.loc(air.guardian) });
+  const toggler = fakePlayer('Toggler2');
+  hooks.objects['Guardian of Air']['Toggle-talisman']({ player: toggler, objectId: Shared.loc(air.guardian) });
+  assert.equal(toggler.varbit(air.toggle), 1);
+  assert.equal(Records.setting(toggler, air.toggle), 1);
 });
