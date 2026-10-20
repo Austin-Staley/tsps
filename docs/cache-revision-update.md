@@ -130,7 +130,7 @@ plugins and the dialogue index meet the spawn on the same id; an item-on-NPC eve
 ### 10. Play
 
 The tools do not see behaviour that depends on server data, or features that never existed. Check
-in game: world map (switch maps), compass and head icons, hover text and HUD overlays, chat, bank
+in game: the login screen (its art is the cache's `title.jpg`), world map (switch maps), compass and head icons, hover text and HUD overlays, chat, bank
 (all buttons, tags), GE (buy, sell, collect, abort), shops, a skill menu, settings, sailing, and an
 NPC whose name moved into a transform (see below).
 
@@ -186,6 +186,7 @@ id moves with it: look for such keys in persisted attributes.
 | `equipment` (84): weight 51 → 50, attack speed 53/54 → 52/53 | Wrong texts on the equipment stats screen | `EquipmentStats.plugin.js` |
 | A Combat Achievements monster (The Fractured Archive) inserted at key 26: every later key +1 | Saved kill counts (keyed by monster key) would attach to the next boss; tasks bumped the wrong boss's counter | `dump:ca-bosses`; kill counts now saved by monster name, old numeric saves read through `data/legacy-monster-keys.json` (the 2026-09-30 keys) |
 | Client script strings carry text templates: `<str_name=value>` defines a value, `<str_name>` draws it (2 scripts on 2026-09-30, 14 now: quest names in "Requires", "Quest:", the quest list and journal, region unlocks, Slayer unblock, Gauntlet shards) | The names were dropped (bitmap font) or the tags drawn as text (widget renderer) | `rs/font/textTemplates.ts`, resolved where text is drawn, measured or wrapped |
+| `title.jpg` (binary index) is the Raids 4 login art | The login screen kept showing the bundled classic archway (`public/images/loading-bg.jpg`), which never came from the cache | the client builds the background from `title.jpg` and its mirror, as the OSRS client does; the bundled image is the fallback |
 | Six new weapons, one new Eat item (Leftovers) | `weapon-data` and `food-effects` tests | `sync:weapon-types` (the Wiki gives Obligator and Zorya's tome "Unarmed" for now); Leftovers listed as raid food |
 
 `compare:cache` reported only the Opponent Info literal; the rest were found by searching for the

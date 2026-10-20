@@ -65,8 +65,49 @@ export function loadLogoImage(host: LoginRendererHost): Promise<boolean> {
     
 }
 
-export async function loadTitleBackground(host: LoginRendererHost): Promise<boolean> {
+/**
+ * The title background as the OSRS client builds it: the cache's title.jpg (binary index), the
+ * left half, beside a mirrored copy that shares its middle column (765 wide for the 383-wide
+ * art). It follows Jagex's login screens (the Raids 4 art from the 2026-10-20 cache).
+ */
+async function loadCacheTitleBackground(cache: CacheSystem): Promise<ImageBitmap | undefined> {
+    const index = cache.getIndex(IndexType.DAT2.binary);
+    const archiveId = index.getArchiveId("title.jpg");
+    if (archiveId === -1) return undefined;
+    const file = index.getArchive(archiveId).getFile(0);
+    if (!file) return undefined;
+    const bytes = new Uint8Array(file.data.buffer, file.data.byteOffset, file.data.byteLength);
+    const half = await createImageBitmap(new Blob([bytes.slice()], { type: "image/jpeg" }));
+    const width = half.width * 2 - 1;
+    const canvas = new OffscreenCanvas(width, half.height);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+        half.close();
+        return undefined;
+    }
+    ctx.drawImage(half, 0, 0);
+    ctx.translate(width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(half, 0, 0);
+    half.close();
+    return canvas.transferToImageBitmap();
+}
 
+/** The cache's title art, or the bundled image when the cache has none. */
+export async function loadTitleBackground(host: LoginRendererHost, cache?: CacheSystem): Promise<boolean> {
+
+        if (cache) {
+            try {
+                const image = await loadCacheTitleBackground(cache);
+                if (image) {
+                    host.titleBackgroundImage = image;
+                    console.log("[LoginRenderer] Title background loaded from the cache");
+                    return true;
+                }
+            } catch (e) {
+                console.warn("[LoginRenderer] Cache title background failed:", e);
+            }
+        }
         try {
             const response = await fetch(`${PUBLIC_PATH}/images/loading-bg.jpg`);
             if (response.ok) {

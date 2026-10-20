@@ -23,15 +23,15 @@ export function getTitleBackgroundLayout(host: LoginRendererHost) {
 
 export function getLogicalFirePositions(host: LoginRendererHost) {
 
-        // Classic 765-scene fire edges mapped into the 1089-wide title art:
-        //   cropX = (1089 - 765) / 2 = 162
-        //   left  = 162 + (-22) = 140
-        //   right = 162 + (765 - 128 + 22) = 821
-        // Track those art-space X values through the cover-fit background transform.
+        // Classic 765-scene fire edges (-22 and 765 - 128 + 22) in the title art, whose middle
+        // 765 columns are the scene: no crop for the cache's 765-wide art, (1089 - 765) / 2 = 162
+        // for the bundled 1089-wide image. Track those art-space X values through the cover-fit
+        // background transform.
         const bg = getTitleBackgroundLayout(host);
-        const artW = LOGIN_LAYOUT.TITLE_BG_WIDTH;
-        const leftSrcX = LOGIN_LAYOUT.TITLE_BG_CROP_X - 22;
-        const rightSrcX = LOGIN_LAYOUT.TITLE_BG_CROP_X + host.SCENE_WIDTH - 128 + 22;
+        const artW = host.titleBackgroundImage?.width || LOGIN_LAYOUT.TITLE_BG_WIDTH;
+        const cropX = Math.max(0, Math.floor((artW - host.SCENE_WIDTH) / 2));
+        const leftSrcX = cropX - 22;
+        const rightSrcX = cropX + host.SCENE_WIDTH - 128 + 22;
         // Scale fire sprites with the background so bowl size matches the art.
         const fireScale = bg.drawW / artW;
         return {

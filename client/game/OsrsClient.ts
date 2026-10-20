@@ -6533,7 +6533,7 @@ export class OsrsClient {
             // Phase 1: Loading title background (network fetch)
             await showPhase(5, "Loading title...");
             try {
-                await this.loginRenderer.loadTitleBackground();
+                await this.loginRenderer.loadTitleBackground(this.cacheSystem);
             } catch (e) {
                 console.warn("[OsrsClient] Title background load failed:", e);
             }
