@@ -24,10 +24,11 @@
  *
  * Side state lives in persisted attributes and is mirrored to the cache's own
  * side varbits (confirmed with `lookup-gameval varbit misc`): 72 misc_approval
- * (varp 361 bits 18-24), 73 misc_affection (25-31), 14606 misc_acceptedtorule
- * (varp 362 bit 28) and 14607 misc_partner_multivar (varp 363 bit 29; 1 =
- * Prince Brand, 0 = Princess Astrid per Quest Helper). The wiki's s1/s2/s3
- * courtship dialogue progress is our own persisted bitfield.
+ * (varp 361 bits 18-24, a 7-bit native 0..127 value, not a percentage), 73
+ * misc_affection (25-31), 14606 misc_acceptedtorule (varp 362 bit 28) and
+ * 14607 misc_partner_multivar (varp 363 bit 29; 1 = Prince Brand, 0 = Princess
+ * Astrid per Quest Helper). The wiki's s1/s2/s3 courtship dialogue progress is
+ * our own persisted bitfield.
  *
  * Requirements per the OSRS Wiki: The Fremennik Trials and Heroes' Quest
  * complete, both gated with quest:is-complete on the "Yes." start hook (the
@@ -48,11 +49,15 @@
  *    open_interface action answers with a system message and the 10,000 coins
  *    stay a completion-scroll line only. Ring of Wealth's Miscellania
  *    teleport is not quest-gated (separate plugin).
- *  - Public support starts at 32% when the pen is signed, matching capture 91,
- *    and each mining/woodcutting/fishing success or raw lobster handed to
- *    Fisherman Frodi adds 1%. Raking flax/herbs is not hooked because farming
- *    emits no rake event; capture 91 support came from lobster fishing, which
- *    this server reaches through the Frodi hand-in (raw lobster item-on-NPC).
+ *  - Public support starts at native 32 (25%) when the pen is signed, matching
+ *    capture 91's varbit; each mining/woodcutting/fishing success or raw lobster
+ *    handed to Fisherman Frodi adds one native point. Quest Helper requires
+ *    native 96 for 75% (floor(96*100/127) = 75). Raking flax/herbs is not
+ *    hooked because farming emits no rake event; capture 91 support came from
+ *    lobster fishing, which this server reaches through the Frodi hand-in.
+ *  - Saves written before the native scale stored 0..100 percent under the
+ *    legacy approval attribute; the first read upgrades that to the equivalent
+ *    native value so the displayed percentage (and progress) is unchanged.
  *  - The wiki's "[number]%" and "[Fremennik name]" blanks are filled from
  *    state and the player name; "{{...}}" annotations are stripped from lines.
  *  - If the player declines at the start, the transcript's acceptance lines
@@ -140,7 +145,9 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
   const TRUST_ATTRIBUTE = "throne-of-miscellania:trust";
   const MARRIED_ATTRIBUTE = "throne-of-miscellania:married";
   const AFFECTION_ATTRIBUTE = "throne-of-miscellania:affection";
+  // Legacy saves stored a percentage here; new saves use the native scale below.
   const APPROVAL_ATTRIBUTE = "throne-of-miscellania:approval";
+  const APPROVAL_NATIVE_ATTRIBUTE = "throne-of-miscellania:approval-native";
 
   const BIT_S1_D1 = 1 << 0;
   const BIT_S1_D2 = 1 << 1;
@@ -475,7 +482,10 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
   const ISLAND_MAX_X = 2627;
   const ISLAND_MIN_Y = 3835;
   const ISLAND_MAX_Y = 3904;
-  // Capture 91 starts at 32% and each lobster/action adds 1%.
+  // Cache varbit 72 is 7-bit: native 0..127. Capture 91 starts at 32 and each
+  // lobster/action adds one native point; Quest Helper's 75% gate is native 96.
+  const APPROVAL_MAX = 127;
+  const APPROVAL_THRESHOLD = 96;
   const APPROVAL_PER_ACTION = 1;
   const APPROVAL_START = 32;
 
@@ -542,12 +552,31 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
     sendSideVarbits(player);
   }
 
+  function clampApproval(value) {
+    return Math.max(0, Math.min(APPROVAL_MAX, value | 0));
+  }
+
+  /** The percentage the cache script and Quest Helper show for a native value. */
+  function approvalPercent(player) {
+    return Math.floor((approval(player) * 100) / APPROVAL_MAX);
+  }
+
+  function legacyApprovalToNative(percent) {
+    return clampApproval(Math.ceil((percent * APPROVAL_MAX) / 100));
+  }
+
   function approval(player) {
-    return Math.max(0, Number(player.getAttribute(APPROVAL_ATTRIBUTE)) || 0);
+    const native = Number(player.getAttribute(APPROVAL_NATIVE_ATTRIBUTE));
+    if (Number.isFinite(native) && native >= 0) return clampApproval(native);
+    const legacy = Number(player.getAttribute(APPROVAL_ATTRIBUTE));
+    if (!Number.isFinite(legacy) || legacy <= 0) return 0;
+    const migrated = legacyApprovalToNative(legacy);
+    player.setAttribute(APPROVAL_NATIVE_ATTRIBUTE, migrated);
+    return migrated;
   }
 
   function setApproval(player, value) {
-    player.setAttribute(APPROVAL_ATTRIBUTE, Math.max(0, Math.min(100, value | 0)));
+    player.setAttribute(APPROVAL_NATIVE_ATTRIBUTE, clampApproval(value));
     sendSideVarbits(player);
     refreshQuestList(player);
   }
@@ -683,7 +712,7 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
     const stage = quest.getStage(player);
     if (stage >= STAGE_COMPLETE) return { page: PAGE, variant: V_VARGAS_POST };
     if (stage >= STAGE_SUPPORT) {
-      return { page: PAGE, variant: approval(player) >= 75 ? V_VARGAS_SUPPORT_DONE : V_VARGAS_SIGNED };
+      return { page: PAGE, variant: approval(player) >= APPROVAL_THRESHOLD ? V_VARGAS_SUPPORT_DONE : V_VARGAS_SIGNED };
     }
     if (stage >= STAGE_PEN) {
       if (held(player, GIANT_PEN_ITEM_ID)) {
@@ -890,9 +919,9 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
       case COND_KILLED_CITIZEN:
         return false;
       case COND_AT_LEAST_75:
-        return approval(player) >= 75;
+        return approval(player) >= APPROVAL_THRESHOLD;
       case COND_LESS_THAN_75:
-        return approval(player) < 75;
+        return approval(player) < APPROVAL_THRESHOLD;
       case COND_TRUSTED_BRAND:
         return trusted(player) && partner(player) === PARTNER_BRAND;
       case COND_TRUSTED_ASTRID:
@@ -1037,7 +1066,7 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
       event.text = event.text.split("[Fremennik name]").join(player.getUsername?.() ?? "");
     }
     if (event.text.includes("[number]%")) {
-      event.text = event.text.replace("[number]%", `${approval(player)}%`);
+      event.text = event.text.replace("[number]%", `${approvalPercent(player)}%`);
     }
     if (event.text.includes("{{")) {
       event.text = event.text.replace(/\{\{[^}]*\}\}/g, "").trimEnd();
@@ -1095,7 +1124,7 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
     if (stepId === ACTION_COMPLETE) {
       event.handled = true;
       event.end = true;
-      if (!quest.isComplete(player) && quest.getStage(player) >= STAGE_SUPPORT && approval(player) >= 75) {
+      if (!quest.isComplete(player) && quest.getStage(player) >= STAGE_SUPPORT && approval(player) >= APPROVAL_THRESHOLD) {
         quest.complete(player);
       }
       return;
@@ -1164,7 +1193,7 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
     if (npcId === FISHERMAN_FRODI_NPC_ID) {
       if (itemId !== RAW_LOBSTER_ITEM_ID || quest.getStage(player) !== STAGE_SUPPORT) return;
       event.handled = true;
-      if (!held(player, RAW_LOBSTER_ITEM_ID) || approval(player) >= 100) return;
+      if (!held(player, RAW_LOBSTER_ITEM_ID) || approval(player) >= APPROVAL_MAX) return;
       player.getInventory().deleteNumber(RAW_LOBSTER_ITEM_ID, 1);
       setApproval(player, approval(player) + APPROVAL_PER_ACTION);
       player.sendMessage("You give Fisherman Frodi the lobster.");
@@ -1253,14 +1282,14 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
     const { player, itemId } = event;
     if (!player || quest.getStage(player) !== STAGE_SUPPORT || !onMiscellania(player)) return;
     const before = approval(player);
-    if (before >= 100) return;
+    if (before >= APPROVAL_MAX) return;
     // Capture 91: a lobster catch beside Frodi is handed straight to him.
     if (itemId === RAW_LOBSTER_ITEM_ID && held(player, RAW_LOBSTER_ITEM_ID) && nearFrodi(player)) {
       player.getInventory().deleteNumber(RAW_LOBSTER_ITEM_ID, 1);
       player.sendMessage("You catch a lobster and give it to Fisherman Frodi.");
     }
-    setApproval(player, Math.min(100, before + APPROVAL_PER_ACTION));
-    if (before < 75 && approval(player) >= 75) {
+    setApproval(player, before + APPROVAL_PER_ACTION);
+    if (before < APPROVAL_THRESHOLD && approval(player) >= APPROVAL_THRESHOLD) {
       player.sendMessage("You have gained enough support to become regent. Speak to King Vargas.");
     }
   }
@@ -1283,7 +1312,7 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
     if (stage >= STAGE_SUPPORT) {
       return [
         "The treaty is signed; I must win the support of the people.",
-        `Current support: <col=800000>${approval(player)}%</col> (75% needed).`,
+        `Current support: <col=800000>${approvalPercent(player)}%</col> (75% needed).`,
         "Mine coal, chop maples, fish or rake the patches on the islands.",
       ];
     }
@@ -1345,6 +1374,7 @@ module.exports = function registerThroneOfMiscellaniaQuest(api) {
   api.persistAttribute(MARRIED_ATTRIBUTE);
   api.persistAttribute(AFFECTION_ATTRIBUTE);
   api.persistAttribute(APPROVAL_ATTRIBUTE);
+  api.persistAttribute(APPROVAL_NATIVE_ATTRIBUTE, -1);
 
   quest = registerQuest(api, {
     key: "throne_of_miscellania",

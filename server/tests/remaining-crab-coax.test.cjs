@@ -16,7 +16,7 @@ before(async () => {
 });
 
 function setup() {
-  const hooks = { custom: new Map(), objects: [], login: [], npcs: [] };
+  const hooks = { custom: new Map(), objects: [], login: [], npcs: [], ground: [] };
   const attrs = new Map();
   const inventory = new Map();
   const messages = [];
@@ -26,6 +26,8 @@ function setup() {
   const removed = [];
   const tasks = [];
   const xp = [];
+  const varbits = [];
+  const groundItems = [];
   let area = null;
   let currentDialogue = null;
   let location = { x: 3041, y: 2638, z: 0 };
@@ -49,7 +51,7 @@ function setup() {
     onNpcInteraction(fn) { hooks.npcs.push(fn); },
     onObjectInteraction(fn) { hooks.objects.push(fn); },
     onItemOnItem() {},
-    onGroundItemPickup() {},
+    onGroundItemPickup(fn) { hooks.ground.push(fn); },
     onPlayerLogin(fn) { hooks.login.push(fn); },
     onPlayerLogout() {},
     onNpcDialogueVariant() {},
@@ -74,10 +76,10 @@ function setup() {
       return npc;
     },
     removeNpc(npc) { npc.registered = false; removed.push(npc); },
-    getItemOnGroundManager() { return { getGroundItem: () => undefined, registerLocation: () => {} }; },
+    getItemOnGroundManager() { return { getGroundItem: () => undefined, registerLocation(_player, item, position) { groundItems.push({ id: item.getId(), x: position.getX(), y: position.getY() }); } }; },
   }, { get(target, key) { return target[key] ?? (() => {}); } });
   const sender = new Proxy({
-    sendVarbit() { return sender; },
+    sendVarbit(id, value) { varbits.push({ id, value }); return sender; },
     sendInterface() { return sender; },
     sendInterfaceScript() { return sender; },
     sendInterfaceRemoval() { return sender; },
@@ -127,12 +129,15 @@ function setup() {
     const location = { x, y, z: 0 };
     for (const fn of hooks.objects) fn({ player, objectId, clickType: 1, location, definition });
   };
+  const pickup = (groundItemId, x, y) => {
+    for (const fn of hooks.ground) fn({ player, groundItemId, location: { x, y, z: 0 } });
+  };
   const tick = (count = 1) => { while (count-- > 0) for (const task of [...tasks]) task.tick?.(); };
   const sit = (x, y, slot = SIT_SLOT) => {
     player.moveTo({ x, y, z: 0 });
     emit('player:emote', { slot, sequence: SIT_LOOP });
   };
-  return { core, hooks, attrs, inventory, messages, persistentKeys, placed, spawned, removed, tasks, xp, player, loadQuest, emit, investigate, sit, tick, setLocation(x, y) { location = { x, y, z: 0 }; }, get area() { return area; }, get currentDialogue() { return currentDialogue; } };
+  return { core, hooks, attrs, inventory, messages, persistentKeys, placed, spawned, removed, tasks, xp, varbits, groundItems, player, loadQuest, emit, investigate, pickup, sit, tick, setLocation(x, y) { location = { x, y, z: 0 }; }, get area() { return area; }, get currentDialogue() { return currentDialogue; } };
 }
 
 // `bit` is the spot-array index bit used by SCARED/MET (join bits differ).
@@ -322,6 +327,256 @@ test('Crab login at 55 and 60 restores the real scene actors', () => {
   assert.ok(ceremony.player.getPrivateArea(), 'stage-60 login restored the private scene');
   const endNpc = ceremony.spawned.find((npc) => npc.getId() === 16474);
   assert.deepEqual([endNpc.getLocation().getX(), endNpc.getLocation().getY()], [3062, 2643], 'stage-60 main crab end restored');
+});
+
+test('Crab publishes native sub-varbits for shells, floatsam and recruits without advancing', () => {
+  const valueOf = (h, id) => [...h.varbits].reverse().find((entry) => entry.id === id)?.value;
+  const h = setup();
+  const quest = h.loadQuest();
+
+  quest.setStage(h.player, 25);
+  h.varbits.length = 0;
+  h.pickup(34575, 3059, 2648); // crab_shell_1 at the QH shellOne tile
+  assert.equal(valueOf(h, 15844), 0, 'a picked but unhanded shell is not a returned native bit');
+  assert.equal(valueOf(h, 15845), 0);
+  assert.equal(quest.getStage(h.player), 25, 'publishing shells does not advance');
+
+  h.inventory.set(34575, 1); // the pickup puts the shell in the inventory
+  h.varbits.length = 0;
+  h.hooks.npcs.at(-1)({
+    player: h.player,
+    npcId: 16471,
+    clickType: 1,
+    definition: h.core.NpcDefinition.forId(16471),
+  });
+  assert.equal(valueOf(h, 15844), 1, 'handing in crab_shell_1 sets crab_seashell_1');
+  assert.equal(valueOf(h, 15845), 0, 'other colours stay zero');
+  assert.equal(valueOf(h, 15846), 0);
+  assert.equal(h.attrs.get('quest.crab_quest.shells-handed'), 1, 'handed count still advances once');
+  assert.equal(h.attrs.get('crab-quest:shells-handed-mask'), 1 << 0, 'per-colour handed mask recorded at consume');
+  assert.equal(quest.getStage(h.player), 25, 'handing in one shell does not advance');
+
+  quest.setStage(h.player, 35);
+  h.inventory.set(305, 1); // big fishing net
+  h.varbits.length = 0;
+  h.hooks.npcs.at(-1)({
+    player: h.player,
+    npcId: 16475,
+    clickType: 1,
+    definition: { getActions: () => ['Net'] },
+  });
+  assert.equal(valueOf(h, 15852), 3, 'one native net action hides all three floatsam materials');
+  assert.equal(quest.getStage(h.player), 37, 'materials still reach the established 37 stage');
+
+  quest.setStage(h.player, 47);
+  h.varbits.length = 0;
+  h.emit('npc-dialogue:action', { npcId: 16483, stepId: '5WiO-g' }); // magic tree = QH crabSix
+  assert.equal(valueOf(h, 15858), 1, 'magic tree sets bandmate_6');
+  assert.equal(valueOf(h, 15874), 1, 'magic tree sets recruited_bandmate_6');
+  assert.equal(valueOf(h, 15853), 0, 'other bandmate bits stay clear');
+  assert.equal(quest.getStage(h.player), 47, 'recruiting one leader does not advance');
+
+  h.emit('npc-dialogue:action', { npcId: 16485, stepId: 'yUuVKM' }); // penguin palm = crabSeven
+  assert.equal(valueOf(h, 15859), 1, 'penguin palm sets bandmate_7');
+  assert.equal(valueOf(h, 15875), 1, 'penguin palm sets recruited_bandmate_7');
+  assert.equal(valueOf(h, 15867), 1, 'penguin recruitment publishes the kicked-penguin flag');
+  assert.equal(quest.getStage(h.player), 47);
+});
+
+test('Crab blocks unproven partial progress and login restores every native flag', () => {
+  const valueOf = (h, id) => [...h.varbits].reverse().find((entry) => entry.id === id)?.value;
+  const h = setup();
+  const quest = h.loadQuest();
+  quest.setStage(h.player, 47);
+
+  const firstSix = ['5WiO-g', 'OrHsAs', 'uxsvrh', 'XBEBvy', 'XffNTB', 'MVf-5E'];
+  for (const stepId of firstSix) h.emit('npc-dialogue:action', { npcId: 16483, stepId });
+  assert.equal(valueOf(h, 15881), 0, 'six leaders do not publish partial complete');
+
+  const nextFour = ['yUuVKM', 'nJXHcW', 'ByoUzK', 'UtfH3c'];
+  for (const stepId of nextFour) h.emit('npc-dialogue:action', { npcId: 16483, stepId });
+  assert.equal(valueOf(h, 15881), 0, 'ten leaders do not publish a guessed partial threshold');
+  assert.equal(quest.getStage(h.player), 47, 'partial complete does not advance the quest');
+
+  h.attrs.set('quest.crab_quest.shells-handed', 2);
+  h.attrs.set('crab-quest:shells-handed-mask', (1 << 0) | (1 << 2));
+  h.attrs.set('quest.crab_quest.materials-fished', true);
+  h.attrs.set('crab-quest:shy-progress', 3);
+  h.varbits.length = 0;
+
+  for (const fn of h.hooks.login) fn({ player: h.player });
+
+  const published = h.varbits.map((entry) => entry.id).filter((id) => id >= 15844 && id <= 15881 && id !== 15842);
+  const expected = [
+    15844, 15845, 15846, 15847, 15848, 15849, 15850, // seashells
+    15852, // floatsam
+    15853, 15869, 15854, 15870, 15855, 15871, 15856, 15872, 15857, 15873, 15858, 15874,
+    15859, 15875, 15860, 15876, 15861, 15877, 15862, 15878, 15863, 15879,
+    15865, // shy
+    15867, // kicked penguin
+    15868, // in quest
+    15881, // partial complete
+  ];
+  assert.deepEqual(published, expected, 'login restores the sub-varbits in a stable order');
+  assert.equal(valueOf(h, 15844), 1, 'handed shell 1 restored');
+  assert.equal(valueOf(h, 15845), 0, 'unhanded shell stays zero');
+  assert.equal(valueOf(h, 15846), 1, 'handed shell 3 restored');
+  assert.equal(valueOf(h, 15852), 3, 'fished floatsam restored');
+  assert.equal(valueOf(h, 15865), 2, 'scuttered shy crab restored at 2');
+  assert.equal(valueOf(h, 15867), 1, 'penguin flag restored');
+  assert.equal(valueOf(h, 15868), 1, 'active quest restores the instance flag');
+  assert.equal(valueOf(h, 15881), 0, 'blocked partial stays zero on login');
+  assert.equal(quest.getStage(h.player), 47, 'login publication does not advance');
+});
+
+test('Crab legacy hand-in count derives colours only when complete and never from pickups', () => {
+  const valueOf = (h, id) => [...h.varbits].reverse().find((entry) => entry.id === id)?.value;
+  const partial = setup();
+  const partialQuest = partial.loadQuest();
+  partialQuest.setStage(partial.player, 30);
+  partial.attrs.set('quest.crab_quest.shells-handed', 3);
+  partial.attrs.set('quest.crab_quest.shells-picked', 0b1111111);
+  for (const fn of partial.hooks.login) fn({ player: partial.player });
+  for (let index = 0; index < 7; index++) {
+    assert.equal(valueOf(partial, 15844 + index), 0, `legacy partial count does not guess shell ${index + 1}`);
+  }
+  assert.equal(partialQuest.getStage(partial.player), 30);
+
+  const complete = setup();
+  const completeQuest = complete.loadQuest();
+  completeQuest.setStage(complete.player, 30);
+  complete.attrs.set('quest.crab_quest.shells-handed', 7);
+  for (const fn of complete.hooks.login) fn({ player: complete.player });
+  for (let index = 0; index < 7; index++) {
+    assert.equal(valueOf(complete, 15844 + index), 1, `completed hand-in count derives shell ${index + 1}`);
+  }
+  assert.equal(completeQuest.getStage(complete.player), 30);
+});
+
+test('Crab does not count a duplicate colour towards the seven shells', () => {
+  const h = setup();
+  const quest = h.loadQuest();
+  quest.setStage(h.player, 25);
+  const talk = () => h.hooks.npcs.at(-1)({
+    player: h.player,
+    npcId: 16471,
+    clickType: 1,
+    definition: h.core.NpcDefinition.forId(16471),
+  });
+
+  h.inventory.set(34575, 2);
+  talk();
+  assert.equal(h.attrs.get('quest.crab_quest.shells-handed'), 1, 'first colour counted once');
+  assert.equal(h.attrs.get('crab-quest:shells-handed-mask'), 1 << 0);
+
+  talk();
+  assert.equal(h.attrs.get('quest.crab_quest.shells-handed'), 1, 'duplicate colour does not increment again');
+  assert.equal(h.attrs.get('crab-quest:shells-handed-mask'), 1 << 0);
+  assert.equal(h.inventory.get(34575), 0, 'duplicate shell is still consumed');
+  assert.equal(quest.getStage(h.player), 25, 'duplicate colour cannot reach the seven-shell stage');
+});
+
+test('Crab re-registers picked-then-lost shells and net but not handed-in or held ones', () => {
+  const lostShell = setup();
+  lostShell.loadQuest().setStage(lostShell.player, 25);
+  lostShell.attrs.set('quest.crab_quest.shells-picked', 1 << 0);
+  for (const fn of lostShell.hooks.login) fn({ player: lostShell.player });
+  assert.ok(lostShell.groundItems.some((item) => item.id === 34575 && item.x === 3059 && item.y === 2648), 'lost picked shell respawns at its canonical tile');
+
+  const handedShell = setup();
+  handedShell.loadQuest().setStage(handedShell.player, 25);
+  handedShell.attrs.set('quest.crab_quest.shells-picked', 1 << 0);
+  handedShell.attrs.set('crab-quest:shells-handed-mask', 1 << 0);
+  for (const fn of handedShell.hooks.login) fn({ player: handedShell.player });
+  assert.ok(!handedShell.groundItems.some((item) => item.id === 34575), 'handed-in shell does not respawn');
+
+  const heldShell = setup();
+  heldShell.loadQuest().setStage(heldShell.player, 25);
+  heldShell.attrs.set('quest.crab_quest.shells-picked', 1 << 0);
+  heldShell.inventory.set(34575, 1);
+  for (const fn of heldShell.hooks.login) fn({ player: heldShell.player });
+  assert.ok(!heldShell.groundItems.some((item) => item.id === 34575), 'held shell does not duplicate');
+
+  const lostNet = setup();
+  lostNet.loadQuest().setStage(lostNet.player, 35);
+  lostNet.attrs.set('quest.crab_quest.net-picked', 1);
+  for (const fn of lostNet.hooks.login) fn({ player: lostNet.player });
+  assert.ok(lostNet.groundItems.some((item) => item.id === 305 && item.x === 3061 && item.y === 2646), 'lost picked net respawns at its canonical tile');
+
+  const heldNet = setup();
+  heldNet.loadQuest().setStage(heldNet.player, 35);
+  heldNet.attrs.set('quest.crab_quest.net-picked', 1);
+  heldNet.inventory.set(305, 1);
+  for (const fn of heldNet.hooks.login) fn({ player: heldNet.player });
+  assert.ok(!heldNet.groundItems.some((item) => item.id === 305), 'held net does not duplicate');
+});
+
+test('Crab shy palm conversation reaches 15865=2 only through the captured blush and scutter', () => {
+  const valueOf = (h, id) => [...h.varbits].reverse().find((entry) => entry.id === id)?.value;
+  const h = setup();
+  const quest = h.loadQuest();
+  quest.setStage(h.player, 47);
+
+  h.investigate(62472, 3044, 2653); // crab_palm_update03
+  assert.ok(h.messages.includes('A crab comes out shyly.'));
+  const found = h.spawned.filter((npc) => npc.getId() === 16484).at(-1);
+  assert.deepEqual([found.getLocation().getX(), found.getLocation().getY()], [3045, 2653], 'captured shy spawn tile');
+  assert.equal(valueOf(h, 15865), 0, 'finding the palm does not publish shy progress');
+  assert.ok(h.currentDialogue, 'investigating the palm starts the captured conversation');
+  const dialogueTexts = [...h.currentDialogue.getDialogues().values()]
+    .map((entry) => entry.getText?.())
+    .filter(Boolean);
+  assert.ok(dialogueTexts.some((text) => text.includes("Oh. Sorry. You've come to the wrong crab!")), 'captured opening line plays');
+  assert.ok(dialogueTexts.some((text) => text.includes('If only I could be more like...')), 'captured pre-blush line plays');
+
+  h.hooks.npcs.at(-1)({
+    player: h.player,
+    npcId: 16484,
+    clickType: 1,
+    definition: h.core.NpcDefinition.forId(16484),
+  });
+  assert.equal(valueOf(h, 15865), 0, 'talking alone does not force 2');
+
+  h.emit('npc-dialogue:action', { npcId: 16484, stepId: 'shy-crab-blush' });
+  assert.equal(valueOf(h, 15865), 1, 'captured blush publishes 1');
+  assert.ok(h.messages.includes('The crab appears to turn bright red.'));
+  assert.equal(quest.getStage(h.player), 47);
+
+  h.emit('npc-dialogue:action', { npcId: 16484, stepId: 'shy-crab-scutter' });
+  assert.equal(valueOf(h, 15865), 2, 'captured scutter publishes 2');
+  assert.ok(h.messages.includes('The crab scutters away.'));
+  const relocated = h.spawned.filter((npc) => npc.getId() === 16484).at(-1);
+  assert.deepEqual([relocated.getLocation().getX(), relocated.getLocation().getY()], [3055, 2650], 'captured scutter tile');
+  assert.equal(found.isRegistered(), false, 'the old shy crab is removed');
+  assert.equal(quest.getStage(h.player), 47, 'shy conversation does not advance the quest');
+
+  const relog = setup();
+  const relogQuest = relog.loadQuest();
+  relogQuest.setStage(relog.player, 47);
+  relog.attrs.set('crab-quest:shy-progress', 3);
+  for (const fn of relog.hooks.login) fn({ player: relog.player });
+  const restored = relog.spawned.filter((npc) => npc.getId() === 16484).at(-1);
+  assert.deepEqual([restored.getLocation().getX(), restored.getLocation().getY()], [3055, 2650], 'login restores the scuttered tile');
+  assert.equal(valueOf(relog, 15865), 2);
+
+  const legacy = setup();
+  const legacyQuest = legacy.loadQuest();
+  legacyQuest.setStage(legacy.player, 47);
+  legacy.attrs.set('crab-quest:shy-met', true);
+  for (const fn of legacy.hooks.login) fn({ player: legacy.player });
+  assert.equal(valueOf(legacy, 15865), 0, 'legacy met state is not upgraded to blush or scutter');
+});
+
+test('Crab clears the native instance flag on completion only', () => {
+  const valueOf = (h, id) => [...h.varbits].reverse().find((entry) => entry.id === id)?.value;
+  const h = setup();
+  const quest = h.loadQuest();
+  quest.setStage(h.player, 60);
+  h.varbits.length = 0;
+  h.emit('npc-dialogue:action', { npcId: 16474, stepId: 'Wk9imR' });
+  assert.equal(quest.getStage(h.player), 63, 'ceremony completion still reaches 63');
+  assert.equal(valueOf(h, 15868), 0, 'completed quest leaves the instance flag clear');
+  assert.equal(valueOf(h, 15842), 63, 'stage varbit still publishes 63');
 });
 
 test('Crab Sit uses the real cached slot 54 loop', () => {

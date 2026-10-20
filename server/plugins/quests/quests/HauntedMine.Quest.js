@@ -219,10 +219,12 @@ module.exports = function registerHauntedMineQuest(api) {
   const POINTS_SETTINGS_TARGET_UID = (164 << 16) | 16;
   const POINTS_SETTINGS_START_BUTTON = (POINTS_SETTINGS_GROUP << 16) | 155;
 
-  // Levers A-H each toggle the captured cache varbit for that junction.
+  // Levers A-H each toggle the captured cache varbit for that junction. The physical A and B
+  // levers are crossed in the cache: object A drives varbit HAUNTEDMINE_LEVER_B (2385) and
+  // object B drives HAUNTEDMINE_LEVER_A (2386), as Quest Helper's leverA/leverB conditions do.
   const LEVER_VARBIT_BY_OBJECT = new Map([
-    [ObjectIdentifiers.LEVER_26, 2386], // A
-    [ObjectIdentifiers.LEVER_27, 2385], // B
+    [ObjectIdentifiers.LEVER_26, 2385], // A (varbit B)
+    [ObjectIdentifiers.LEVER_27, 2386], // B (varbit A)
     [ObjectIdentifiers.LEVER_28, 2387], // C
     [ObjectIdentifiers.LEVER_29, 2388], // D
     [ObjectIdentifiers.LEVER_30, 2389], // E

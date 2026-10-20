@@ -296,8 +296,17 @@ test('Crab Quest uses 5/25/30/45/47/50/55/60/63 and hands in all seven shells', 
   assert.equal(quest.getStage(h.player), 45);
   h.action(h.core.NpcIdentifiers.CRAB_9, 'zUZGcG');
   assert.equal(quest.getStage(h.player), 47);
+  h.hooks.objects[0]({
+    player: h.player,
+    objectId: 62472,
+    clickType: 1,
+    location: new h.core.Location(3044, 2653, 0),
+    definition: { getActions: () => ['Investigate'] },
+  });
+  assert.equal(h.attrs.get('crab-quest:shy-progress'), 1, 'canonical palm investigation reveals the shy crab');
+  assert.equal(h.varbits.get(15865), 0, 'finding the shy crab alone is not native 15865 progress');
   h.hooks.npcs[0]({ player: h.player, npcId: 16483, clickType: 1, definition: { getActions: () => ['Talk-to'], getName: () => 'Crab' } });
-  assert.equal(h.attrs.get('crab-quest:shy-met'), true, 'the resolved shy-crab transform is reachable');
+  assert.equal(h.attrs.get('crab-quest:shy-progress'), 1, 'talking alone does not complete the shy branch');
 
   const joins = ['5WiO-g', 'OrHsAs', 'uxsvrh', 'XBEBvy', 'XffNTB', 'MVf-5E', 'yUuVKM', 'nJXHcW', 'ByoUzK', 'UtfH3c', 'beb_BL'];
   for (const stepId of joins) h.action(h.core.NpcIdentifiers.CRAB_9, stepId);

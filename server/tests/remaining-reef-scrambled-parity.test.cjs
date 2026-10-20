@@ -332,6 +332,7 @@ test('Red Reef diving route reaches 42 through lobster, dredger messages and the
   h.continueToMenu(p);
   h.choose(p, "Let's go.");
   assert.equal(h.quest.getStage(p), 32);
+  assert.equal(p.varbits.get(19526), 1, 'the dive publishes player_diving');
   assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [2837, 8922],
     'the dive lands on the captured player tile');
   assert.equal(h.npcs.some(npc => [15018, 15020].includes(npc.id) && !npc.removed), false,
@@ -365,6 +366,7 @@ test('Red Reef diving route reaches 42 through lobster, dredger messages and the
   assert.equal(h.quest.getStage(p), 36, 'the second repair finishes through its real message transcript');
   h.action(p, 15020, 'NpiI3y');
   assert.equal(h.quest.getStage(p), 38);
+  assert.equal(p.varbits.get(19526), 0, 'surfacing clears player_diving');
   h.line(p, N.SPENCER_BRENTWOOD, "Thank you. I'd best be on my way.");
   assert.equal(h.quest.getStage(p), 40);
   h.action(p, N.ELDER_RALEY, 'vNjARR');
@@ -549,4 +551,72 @@ test("Scrambled stage 26 opens King's men finale through the shipped transcript 
   h.talk(p, N.NEZKETI);
   for (let step = 0; step < 40 && p.manager.getCurrent(); step++) p.manager.advance();
   assert.deepEqual(p.xp, rewards, 'post-quest dialogue must not grant rewards again');
+});
+
+
+test('Red Reef restores player_diving only for the actual seabed and clears it on the surface', () => {
+  const h = harness('RedReef'), p = player(), other = player();
+  const seabed = new core.Location(2837, 8922, 1);
+  const surface = new core.Location(2851, 2326, 0);
+
+  for (const stage of [32, 34, 36]) {
+    h.quest.setStage(p, stage);
+    p.moveTo(seabed);
+    h.login(p);
+    assert.equal(p.varbits.get(19526), 1, `stage ${stage} in the seabed restores player_diving`);
+  }
+
+  h.quest.setStage(p, 38);
+  p.moveTo(surface);
+  h.login(p);
+  assert.equal(p.varbits.get(19526), 0, 'surface login clears player_diving');
+  h.quest.setStage(p, 40);
+  h.login(p);
+  assert.equal(p.varbits.get(19526), 0, 'stage 40 login stays surfaced');
+
+  // Completed quest must not clear another diving area's bit on login.
+  p.varbits.set(19526, 1);
+  h.quest.setStage(p, 42);
+  h.login(p);
+  assert.equal(p.varbits.get(19526), 1, 'stage 42 must not touch unrelated diving state');
+
+  // Scoped to the actual player: another player's login cannot change this one.
+  h.quest.setStage(other, 32);
+  other.moveTo(seabed);
+  h.login(other);
+  assert.equal(other.varbits.get(19526), 1);
+  assert.equal(p.varbits.get(19526), 1, 'no cross-player varbit writes');
+});
+
+test('Red Reef stage-40 Zenith Spencer disembark uses the normal StaticShips return', () => {
+  const h = harness('RedReef'), p = player();
+  try {
+    h.quest.setStage(p, 40);
+    const zenith = StaticShips.all().find(ship =>
+      ship.id === 'the_zenith' && ship.boat.ownerPlayerId === p.getIndex());
+    assert.ok(zenith, 'stage 40 keeps the real Zenith');
+    const deckSpencer = () => [...World.getNpcs()].some(npc =>
+      npc?.getId?.() === N.SPENCER_BRENTWOOD && !npc.removed);
+    assert.ok(deckSpencer(), 'stage 40 keeps the real aboard Spencer until normal exit');
+    p.items.set(I.MEDALLION_OF_THE_DEEP, 1);
+    p.moveTo(new core.Location(2870, 2504, 0));
+    const landing = p.getLocation().clone();
+    assert.equal(StaticShips.board(p, zenith), null);
+    assert.equal(p.getArea()?.boat, zenith.boat);
+    h.talk(p, N.SPENCER_BRENTWOOD);
+    h.continueToMenu(p);
+    h.choose(p, "Actually, I'd like to disembark.");
+    assert.notEqual(p.getArea()?.boat, zenith.boat, 'the normal choice leaves the Zenith');
+    assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()],
+      [landing.getX(), landing.getY()], 'returns to the canonical boarding landing');
+    assert.equal(h.quest.getStage(p), 40, 'disembarking does not advance the quest');
+    assert.ok(deckSpencer(), 'Spencer stays aboard for a later normal exit');
+    assert.ok(StaticShips.all().some(ship => ship.id === 'the_zenith' &&
+      ship.boat.ownerPlayerId === p.getIndex()), 'the Zenith is not disposed by disembarking');
+    assert.deepEqual(p.xp, [], 'no rewards on disembark');
+  } finally {
+    for (const ship of StaticShips.all()) {
+      if (ship.boat.ownerPlayerId === p.getIndex()) StaticShips.dispose(ship);
+    }
+  }
 });

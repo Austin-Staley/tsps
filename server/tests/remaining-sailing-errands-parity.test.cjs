@@ -503,10 +503,35 @@ test('Troubled Tortugans follows the Quest Helper stages through repairs, tracki
   assert.equal(h.quest.getStage(h.player), 22);
 
   h.hooks.namedObjects.get('Monument').Inspect({ player: h.player, objectId: 58445 });
-  assert.equal(h.quest.getStage(h.player), 24);
-  for (const objectId of [58449, 58467, 58452, 58455]) {
-    const name = [58467].includes(objectId) ? 'Rockslide' : 'Plant';
+  assert.equal(h.quest.getStage(h.player), 24, 'the captured monument step jumps 22 to 24');
+  assert.equal(h.varbits.get(18322), 1, 'the monument publishes hunting trail 1');
+  for (const varbit of [18323, 18324, 18325, 18326]) {
+    assert.equal(h.varbits.get(varbit), 0, `trail ${varbit} stays zero until its find`);
+  }
+
+  const trailFinds = [
+    [58449, 'Plant', 18323],
+    [58467, 'Rockslide', 18324],
+    [58452, 'Plant', 18325],
+    [58455, 'Plant', 18326],
+  ];
+  for (let index = 0; index < trailFinds.length; index++) {
+    const [objectId, name, varbit] = trailFinds[index];
+    assert.equal(h.varbits.get(varbit), 0, `trail find ${index + 1} is unpublished before inspection`);
     h.hooks.namedObjects.get(name).Inspect({ player: h.player, objectId });
+    assert.equal(h.varbits.get(varbit), 1, `trail find ${index + 1} publishes its varbit`);
+    assert.equal(h.quest.getStage(h.player), index === trailFinds.length - 1 ? 26 : 24,
+      'only the final find advances the recorded stage');
+    if (index === 1) {
+      for (const logout of h.hooks.logouts) logout({ player: h.player });
+      for (const login of h.hooks.logins) login({ player: h.player });
+      assert.equal(h.quest.getStage(h.player), 24, 'login restoration does not advance the quest');
+      for (const [, , previousVarbit] of trailFinds.slice(0, index + 1)) {
+        assert.equal(h.varbits.get(previousVarbit), 1, `login restores trail varbit ${previousVarbit}`);
+      }
+      assert.equal(h.varbits.get(18325), 0, 'login keeps unfinished trail steps at zero');
+      assert.equal(h.varbits.get(18326), 0, 'login keeps unfinished trail steps at zero');
+    }
   }
   assert.equal(h.quest.getStage(h.player), 26);
 
@@ -556,9 +581,13 @@ test('Troubled Tortugans Shieldbane fight and final hand-in complete once', () =
   h.line(15000, shippedKorel.at(-1).player);
   assert.equal(h.quest.getStage(h.player), 42);
 
+  h.attrs.set('troubled-tortugans:trail', 5);
   const shippedFinal = runtime.loadTranscripts(h.api)['Troubled Tortugans'].variants['part-3-talking-to-floopa-or-elder-raley'];
   h.line(N.ELDER_RALEY, shippedFinal.find(step => step.text?.startsWith('No, no, no!')).text);
   assert.equal(h.quest.getStage(h.player), 44);
+  for (const varbit of [18322, 18323, 18324, 18325, 18326]) {
+    assert.equal(h.varbits.get(varbit), 0, `completion clears trail varbit ${varbit}`);
+  }
   assert.equal(h.xp.filter((entry) => entry.amount === 10000).length, 1);
   assert.equal(h.xp.filter((entry) => entry.amount === 8000).length, 1);
   const xpBeforeRelog = h.xp.length;

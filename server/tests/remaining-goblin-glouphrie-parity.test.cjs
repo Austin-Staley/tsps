@@ -11,6 +11,7 @@ const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManage
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
 const runtime = require('../plugins/quests/QuestRuntime');
+const { createQuestScenes } = require('../plugins/quests/QuestScenes');
 const core = PluginManager.getCoreApi();
 const I = core.ItemIdentifiers, N = core.NpcIdentifiers;
 let nextIndex = 1;
@@ -20,6 +21,42 @@ before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, '..'));
   new NpcDefinitionLoader().load();
   core.RegionManager.init();
+});
+
+test('shared scene controls publish and clear the cinematic marker in step with 542', () => {
+  const scenes = createQuestScenes({ core });
+  const varbits = new Map();
+  const player = () => ({
+    getMovementQueue: () => ({ reset() { return this; }, setBlockMovement() {} }),
+    setUntargetable() {},
+    getPacketSender: () => ({ sendVarbit(id, value) { varbits.set(id, value); return this; } }),
+  });
+  const other = new Map();
+  const otherPlayer = {
+    getMovementQueue: () => ({ reset() { return this; }, setBlockMovement() {} }),
+    setUntargetable() {},
+    getPacketSender: () => ({ sendVarbit(id, value) { other.set(id, value); return this; } }),
+  };
+
+  const p = player();
+  scenes.controls(p, true, true);
+  assert.equal(varbits.get(542), 1, 'cinematic sets cutscene_status');
+  assert.equal(varbits.get(12139), 1, 'cinematic sets the shared QH marker');
+
+  varbits.clear();
+  scenes.controls(p, true);
+  assert.equal(varbits.has(542), false, 'non-cinematic controls do not mark a cutscene');
+  assert.equal(varbits.has(12139), false, 'non-cinematic controls do not mark a cutscene');
+
+  scenes.controls(p, false);
+  assert.equal(varbits.get(542), 0, 'controls off clears cutscene_status');
+  assert.equal(varbits.get(12139), 0, 'controls off clears the shared QH marker');
+
+  scenes.controls(otherPlayer, true, true);
+  assert.equal(other.get(542), 1);
+  assert.equal(other.get(12139), 1);
+  assert.equal(varbits.get(542), 0, 'another player does not change the first marker');
+  assert.equal(varbits.get(12139), 0, 'another player does not change the first marker');
 });
 
 function harness(pluginName, options = {}) {
@@ -456,6 +493,15 @@ test('LOTG Bighead unlocks keys and the six keys open the crypt', () => {
   h.line(p, N.HIGH_PRIEST_BIGHEAD, 'Crypt door locked by six keys, kept by six tribal priests.');
   assert.equal(h.quest.getStage(p), 34);
 
+  p.varbits.clear();
+  h.login(p);
+  assert.equal(p.varbits.get(13602), 0, 'whitefish knowledge stays false until Aggie explains it');
+  h.line(p, N.AGGIE, 'Hemenster Whitefish?');
+  assert.equal(p.varbits.get(13602), 0, 'an unrelated Aggie line does not publish knowledge');
+  h.line(p, N.AGGIE, 'Anyway, if you do have something you want the dye removing from, just bring me a Hemenster Whitefish and five coins.');
+  assert.equal(p.varbits.get(13602), 1, 'Aggie publishes the native whitefish knowledge bit');
+  assert.equal(h.quest.getStage(p), 34, 'whitefish knowledge does not advance the quest');
+
   h.quest.setStage(p, 32);
   npcInteraction(h, p, N.PRIEST_12, 2, actions(['Talk-to', 'Pickpocket', null, null]));
   assert.equal(p.items.get(I.SARAGORGAK_KEY), undefined, 'keys are not stealable before Bighead explains the crypt');
@@ -511,6 +557,15 @@ test('LOTG machine only runs at stage 50 and completes once through the box', ()
 
   h.line(p, N.OLDAK, 'meet us by the fungus ring');
   assert.equal(h.quest.getStage(p), 50);
+  p.varbits.clear();
+  h.login(p);
+  assert.equal(p.varbits.get(13618), 0, 'machine explanation is false before Oldak explains it');
+  assert.equal(p.varbits.get(13611), 0, 'fairy ring is idle before activation');
+  h.line(p, N.OLDAK_3, 'Ah, the machine is nearly ready.');
+  assert.equal(p.varbits.get(13618), 0, 'the intro line does not publish the explanation');
+  h.line(p, N.OLDAK_3, 'The inner circle has a radius of one zurg, the middle circle has a radius of two zurgs, and the outer circle has a radius of three zurgs. You will need to distribute the power in proportion to the area of each circle.');
+  assert.equal(p.varbits.get(13618), 1, 'Oldak publishes the machine explanation bit');
+  assert.equal(h.quest.getStage(p), 50, 'the explanation does not advance the quest');
   object(h, p, core.ObjectIdentifiers.MACHINE_20);
   assert.ok(p.log.some((row) => row[0] === 'sendSubInterface' && row[1] === ((161 << 16) | 16) && row[2] === 738), 'opens the real 738 relay');
   const press = (child) => {
@@ -527,10 +582,15 @@ test('LOTG machine only runs at stage 50 and completes once through the box', ()
   ], [9, 4, 1], 'relay values persist for relog');
   press(38);
   assert.ok(p.log.some((row) => row[0] === 'closeSubInterface' && row[1] === ((161 << 16) | 16)));
-  assert.equal(h.quest.getStage(p), 50);
+  assert.equal(p.varbits.get(13611), 1, 'correct relay publishes the animating flag');
+  assert.equal(h.quest.getStage(p), 50, 'activation does not advance the stage before arrival');
   h.action(p, N.OLDAK_3, 'UszKmx');
   assert.equal(h.quest.getStage(p), 52);
+  assert.equal(p.varbits.get(13611), 2, 'arrival publishes the captured cutscene value');
   assert.ok(p.log.some((row) => row[0] === 'sendCameraMoveTo' && row[1] === 3568 && row[2] === 4366 && row[3] === 450), 'Yu\'biusk camera track');
+  h.tick(10);
+  assert.equal(p.varbits.get(13611), 0, 'the animating flag clears when the cutscene ends');
+  assert.equal(h.quest.getStage(p), 52, 'cutscene cleanup does not advance the quest');
   h.action(p, N.ZANIK_7, 'Eh5lL0');
   assert.equal(h.quest.getStage(p), 54);
   assert.ok(p.log.some((row) => row[0] === 'sendCameraMoveTo' && row[1] === 3546 && row[2] === 4389 && row[3] === 580), 'strange-box camera track');
@@ -550,6 +610,8 @@ test('LOTG dream cutscene drives camera, fade, minimap and interruption cleanup'
   assert.ok(p.log.some((row) => row[0] === 'sendSubInterface' && row[2] === 174), 'fade overlay');
   assert.equal(p.varbits.get(6719), 2);
   assert.equal(p.varbits.get(542), 1);
+  assert.equal(p.varbits.get(12139), 1, 'shared cinematic marker matches 542');
+  assert.equal(h.quest.getStage(p), 4, 'the cinematic marker does not advance the quest');
   assert.equal(p.blocked, true);
   h.tick(5);
   assert.ok(p.log.some((row) => row[0] === 'sendCameraMoveTo' && row[1] === 3868 && row[2] === 4391));
@@ -557,12 +619,17 @@ test('LOTG dream cutscene drives camera, fade, minimap and interruption cleanup'
   assert.ok(p.log.some((row) => row[0] === 'sendCameraReset'));
   assert.equal(p.varbits.get(6719), 0);
   assert.equal(p.varbits.get(542), 0);
+  assert.equal(p.varbits.get(12139), 0, 'shared cinematic marker clears with 542');
+  assert.equal(h.quest.getStage(p), 4, 'cleanup does not advance the quest');
   assert.equal(p.blocked, false);
 
   // Logging out mid-scene cancels the camera and re-enables controls.
   h.action(p, N.ZANIK_17, 'zSUlVq');
   for (const fn of h.hooks.onPlayerLogout ?? []) fn({ player: p });
   assert.equal(p.varbits.get(6719), 0);
+  assert.equal(p.varbits.get(542), 0);
+  assert.equal(p.varbits.get(12139), 0, 'logout clears the shared cinematic marker');
+  assert.equal(h.quest.getStage(p), 4, 'logout cleanup does not advance the quest');
   assert.equal(p.blocked, false);
   const before = p.log.length;
   h.tick(8);
@@ -913,12 +980,15 @@ test('LOTG relog restores goblin form and does not duplicate quest pickups', () 
   const h = harness('LandOfTheGoblins');
   const p = player();
   h.quest.setStage(p, 20);
-  p.attrs.set('quest.land_of_the_goblins.bits', (1 << 6) | (1 << 8));
+  p.attrs.set('quest.land_of_the_goblins.bits', (1 << 6) | (1 << 8) | (1 << 14) | (1 << 15));
   p.varbits.clear();
   h.login(p);
   runtime.sendQuestVarps({ player: p });
   assert.equal(p.varbits.get(13599), 20);
   assert.equal(p.varbits.get(13612), 1);
+  assert.equal(p.varbits.get(13602), 1, 'relog restores native whitefish knowledge');
+  assert.equal(p.varbits.get(13618), 1, 'relog restores the native machine explanation');
+  assert.equal(p.varbits.get(13611), 0, 'relog never restores a stale cutscene animation');
 
   object(h, p, core.ObjectIdentifiers.CRATE_284);
   assert.equal(p.items.get(I.DORGESH_KAAN_SPHERE), undefined, 'already-found sphere is not re-granted');

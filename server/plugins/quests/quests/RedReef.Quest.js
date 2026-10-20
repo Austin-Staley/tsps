@@ -17,14 +17,15 @@
  *   12 receptionist arranged a meeting (inspect the display cases)
  *   14 displays inspected (meet Theodore Paxton)
  *   16 tasked with Black Eye Bethel at Last Light
- *   20 docked at Last Light (the pirate ship fight is passed through, see gaps)
- *   22 pirates defeated (climb the lighthouse)
- *   24 Black Eye Bethel defeated (return to Paxton)
- *   26 Paxton sends you to the Zenith
- *   28 aboard the Zenith (talk to Spencer Brentwood)
- *   30 diving with Spencer on the seabed
- *   32 repair the northern coral dredger
- *   34 repair it again after the giant lobster
+ *   18 pirate ships (Paxton's task; sail south and sink them)
+ *   20 pirate ships sunk (dock/disembark at Last Light)
+ *   22 six pirate crew defeated on the island (climb the lighthouse)
+ *   24 island crew defeated (climb to Black Eye Bethel)
+ *   26 Black Eye Bethel defeated (return to Paxton)
+ *   28 Zenith known (board and talk to Spencer Brentwood)
+ *   30 aboard the Zenith (Spencer gives diving gear; dive)
+ *   32 diving on the seabed (first dredger repair / giant lobster)
+ *   34 repair the northern coral dredger again
  *   36 report to Spencer at the eastern dredger
  *   38 hear Spencer's plan back on the surface
  *   40 report to Floopa and Elder Raley
@@ -41,11 +42,11 @@
  * Rewards per the wiki: 2 Quest points, 15,000 Sailing XP, 5,000 Smithing XP, the
  * Bosun's workbench schematic (33423) and access to the Sacred Grove.
  *
- * Naval encounter: sailing uses the generic boat system (Red Rock is a real port). On the
- * captured approach to Last Light the six pirate-boat crew NPCs (15677-15682) are spawned;
- * the player must defeat them before the ships count as sunk (varbit 13219, stage 20), then
- * disembark on foot to reach the island (22). The repo has no NPC-boat hull/cannon model, so
- * the captured crews are fought directly instead of through cannon fire.
+ * Naval encounter: sailing uses the generic boat system (Red Rock is a real port). The two
+ * captured pirate ships use generic ship combat; sinking both sets stage 20 and varbit 13219.
+ * At stage 22 the six island pirate-crew NPCs (ids 15021-15024 over six captured tiles) are
+ * spawned on Last Light; defeating all six sets stage 24. The repo has no NPC-boat hull/cannon
+ * model, so the captured crews are fought directly instead of through cannon fire.
  *
  * Black Eye Bethel uses the cache NPC and the captured mechanics in a level-2 area: periodic
  * sweep/charge with a dodge window, rune-scimitar and dragon-scimitar switches, and the
@@ -258,6 +259,8 @@ module.exports = function registerRedReefQuest(api) {
   const SURFACE_PLAN_LAST_LINE = "Thank you. I'd best be on my way.";
   const FINALE_GIFT_LINE = "Now, before you go I had something to give you that you might find useful.";
   const DIVE_CONFIRM_OPTION = "Let's go.";
+  const ZENITH_DISEMBARK_OPTION = "Actually, I'd like to disembark.";
+  const PLAYER_DIVING_VARBIT = 19526;
 
   // ==========================================================================
   // Zones and spawn points
@@ -276,6 +279,8 @@ module.exports = function registerRedReefQuest(api) {
   const SEABED_DIVE_TILE = { x: 2837, y: 8922, z: 1 };
   const BETHEL_TILE = { x: 2865, y: 2324, z: 2 }; // captured add 15025, open tile
   const LOBSTER_TILE = { x: 2847, y: 8938, z: 1 }; // captured add 15034, reachable
+  // The quest seabed around the dive tile; used only to restore player_diving on login.
+  const RED_REEF_SEABED_ZONE = { minX: 2820, maxX: 2900, minY: 8880, maxY: 8980, level: 1 };
   // Walkable (object-free) tiles on the Last Light isle from the loc dump.
   // The last two tiles are the primary capture's trr_pirate adds (RedReefDiscord ticks
   // 626-1246), replacing the old QH points 2847,2326 (water) and 2855,2333 (ocean-clipped);
@@ -305,6 +310,30 @@ module.exports = function registerRedReefQuest(api) {
 
   const held = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
   const freeSlots = (player) => player.getInventory().getFreeSlots();
+
+  function inRedReefSeabed(player) {
+    const location = player.getLocation?.();
+    return !!location
+      && location.getZ() === RED_REEF_SEABED_ZONE.level
+      && location.getX() >= RED_REEF_SEABED_ZONE.minX
+      && location.getX() <= RED_REEF_SEABED_ZONE.maxX
+      && location.getY() >= RED_REEF_SEABED_ZONE.minY
+      && location.getY() <= RED_REEF_SEABED_ZONE.maxY;
+  }
+
+  function sendDiving(player, value) {
+    player.getPacketSender().sendVarbit(PLAYER_DIVING_VARBIT, value);
+  }
+
+  /** Restore the client's diving bit from this player's actual quest location and stage. */
+  function syncDivingState(player) {
+    const stage = quest.getStage(player);
+    if (stage >= STAGE_DIVING && stage < STAGE_SURFACE_PLAN) {
+      sendDiving(player, inRedReefSeabed(player) ? 1 : 0);
+    } else if (stage === STAGE_SURFACE_PLAN || stage === STAGE_RETURN_FLOOPA) {
+      sendDiving(player, 0);
+    }
+  }
 
   function wearing(player, itemIds) {
     for (const item of player.getEquipment().getItems()) {
@@ -471,7 +500,7 @@ module.exports = function registerRedReefQuest(api) {
     const wanted =
       !!zenith &&
       ((stage >= STAGE_ZENITH_KNOWN && stage < STAGE_DIVING) ||
-        (stage >= STAGE_SURFACE_PLAN && stage < STAGE_RETURN_FLOOPA));
+        (stage >= STAGE_SURFACE_PLAN && stage < STAGE_COMPLETE));
     if (!wanted) {
       if (state.spencerDeck) api.removeNpc(state.spencerDeck);
       state.spencerDeck = null;
@@ -669,6 +698,12 @@ module.exports = function registerRedReefQuest(api) {
     if (stage >= STAGE_SURFACE_PLAN && stage < STAGE_RETURN_FLOOPA) {
       return "back-on-the-surface-talking-to-spencer";
     }
+    // The surface-plan conversation ends at stage 40; talking to Spencer on the Zenith
+    // again uses the captured aboard variant, whose "Actually, I'd like to disembark."
+    // choice is handled below through the normal StaticShips return trip.
+    if (stage === STAGE_RETURN_FLOOPA) {
+      return "aboard-the-zenith-talking-to-spencer-again";
+    }
     return null;
   }
 
@@ -757,14 +792,24 @@ module.exports = function registerRedReefQuest(api) {
 
   function handleChoice(event) {
     if (event.npcId !== SPENCER_BRENTWOOD_NPC_ID) return;
-    if (String(event.option ?? "").trim() !== DIVE_CONFIRM_OPTION) return;
     const { player } = event;
+    const option = String(event.option ?? "").trim();
+    if (option === ZENITH_DISEMBARK_OPTION) {
+      if (quest.getStage(player) !== STAGE_RETURN_FLOOPA) return;
+      const zenith = ownedShips(player).get(ZENITH_SHIP_ID);
+      if (!zenith || player.getArea?.()?.boat !== zenith.boat) return;
+      sendDiving(player, 0);
+      StaticShips.leave(player);
+      return;
+    }
+    if (option !== DIVE_CONFIRM_OPTION) return;
     const stage = quest.getStage(player);
     if (stage < STAGE_ABOARD_ZENITH || stage >= STAGE_DIVING) return;
     const zenith = ownedShips(player).get(ZENITH_SHIP_ID);
     if (zenith && player.getArea?.()?.boat === zenith.boat) player.getArea().leave(player, false);
     player.moveTo(new Location(SEABED_DIVE_TILE.x, SEABED_DIVE_TILE.y, SEABED_DIVE_TILE.z));
     quest.setStage(player, STAGE_DIVING);
+    sendDiving(player, 1);
   }
 
   function handleDialogueLine(event) {
@@ -848,6 +893,7 @@ module.exports = function registerRedReefQuest(api) {
         );
       }
       quest.setStage(player, STAGE_SURFACE_PLAN);
+      sendDiving(player, 0);
       return;
     }
     if (stepId === COMPLETE_ACTION_ID) {
@@ -1175,6 +1221,7 @@ module.exports = function registerRedReefQuest(api) {
     if (quest.getStage(player) >= STAGE_MEETING_ARRANGED) sendDisplayCaseVarps(player);
     ensureSpawns(player);
     refreshQuestList(player);
+    syncDivingState(player);
   }
 
   /** Old unversioned saves used 16..30 for the same nodes; move them onto the captured scale. */

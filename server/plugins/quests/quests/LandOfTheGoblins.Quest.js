@@ -99,9 +99,12 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
   // Varbit 13612 lotg_player_is_a_goblin (varp 3355 bit 31).
   const VARBIT_GOBLIN_FORM = 13612;
   const VARBIT_GOBLIN_TYPE = 13615; // lotg_goblin_type (varp 3356 bits 11-13)
+  const VARBIT_KNOWS_WHITEFISH = 13602; // lotg_know_about_fish (varp 3355 bit 11)
   const VARBIT_MACHINE_1 = 13603; // lotg_connectors_1 (varp 3355 bits 12-15)
   const VARBIT_MACHINE_2 = 13604; // lotg_connectors_2
   const VARBIT_MACHINE_3 = 13605; // lotg_connectors_3
+  const VARBIT_FAIRY_RING_ANIMATING = 13611; // lotg_fairy_ring_animating (varp 3355 bits 29-30)
+  const VARBIT_MACHINE_EXPLAINED = 13618; // lotg_machine_explained (varp 3356 bit 20)
   const MACHINE_INTERFACE = 738;
   const MACHINE_FLOATER_UID = (161 << 16) | 16;
   const MACHINE_ADD = new Map([[21, 0], [23, 1], [25, 2]]);
@@ -181,6 +184,9 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
   const BIT_PRISON_TALK = 1 << 11;
   const BIT_CRYPT_UNLOCKED = 1 << 12;
   const BIT_BOX_OPENED = 1 << 13;
+  // Helper-facing dialogue knowledge, persisted with the other quest bits.
+  const BIT_KNOWS_WHITEFISH = 1 << 14;
+  const BIT_MACHINE_EXPLAINED = 1 << 15;
 
   // NPCs (cache names in NpcIdentifiers.ts).
   const GRUBFOOT_NPC_ID = NpcIdentifiers.GRUBFOOT_8; // 11255, mine entrance / lab
@@ -493,6 +499,8 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
   const pendingGoblinPotion = new WeakMap();
   /** The 9-4-1 relay values while the player is using interface 738. */
   const machinePower = new WeakMap();
+  /** Captured machine animation values 1/2 while the Yu'biusk cutscene plays. */
+  const fairyRingAnimating = new WeakMap();
   const Scenes = createQuestScenes(api);
   /** Owner-only quest spawns per player, keyed by a stable key. */
   const trackedNpcs = new WeakMap();
@@ -537,6 +545,19 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
 
   function setCryptBit(player, index) {
     player.setAttribute(CRYPT_ATTRIBUTE, cryptMask(player) | (1 << index));
+  }
+
+  /** Publish the helper's native Land of the Goblins sub-varbits (bit siblings survive). */
+  function syncQuestVarbits(player) {
+    const sender = player.getPacketSender();
+    sender.sendVarbit(VARBIT_KNOWS_WHITEFISH, hasBit(player, BIT_KNOWS_WHITEFISH) ? 1 : 0);
+    sender.sendVarbit(VARBIT_MACHINE_EXPLAINED, hasBit(player, BIT_MACHINE_EXPLAINED) ? 1 : 0);
+    sender.sendVarbit(VARBIT_FAIRY_RING_ANIMATING, fairyRingAnimating.get(player) ?? 0);
+  }
+
+  function setFairyRingAnimating(player, value) {
+    fairyRingAnimating.set(player, value);
+    syncQuestVarbits(player);
   }
 
   function allKeysHeld(player) {
@@ -1097,7 +1118,10 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
     Scenes.later(player, 8, () => {
       Scenes.camera(player, [3534, 4396, 650], [3537, 4390, 350]);
     });
-    Scenes.later(player, 10, () => finishCutscene(player));
+    Scenes.later(player, 10, () => {
+      setFairyRingAnimating(player, 0);
+      finishCutscene(player);
+    });
   }
 
   function startBoxCutscene(player) {
@@ -1164,6 +1188,7 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
       event.handled = true;
       setStage(player, STAGE_YUBIUSK);
       teleport(player, YUBIUSK_TELEPORT_TILE);
+      setFairyRingAnimating(player, 2);
       startYubiuskCutscene(player);
       return;
     }
@@ -1207,6 +1232,20 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
     const { player, npcId, text } = event;
     if (!text) return;
     const value = String(text);
+    if (AGGIE_NPC_IDS.has(npcId) && value.includes("bring me a Hemenster Whitefish and five coins")) {
+      setBit(player, BIT_KNOWS_WHITEFISH);
+      syncQuestVarbits(player);
+      return;
+    }
+    if (
+      (OLDAK_LAB_NPC_IDS.has(npcId) || npcId === OLDAK_RING_NPC_ID) &&
+      quest.getStage(player) === STAGE_MACHINE &&
+      value.includes("The inner circle has a radius of one zurg")
+    ) {
+      setBit(player, BIT_MACHINE_EXPLAINED);
+      syncQuestVarbits(player);
+      return;
+    }
     if (npcId === MAKEOVER_MAGE_NPC_ID || npcId === NpcIdentifiers.MAKEOVER_MAGE) {
       if (value.includes("add some pharmakos berries")) {
         if (quest.getStage(player) < STAGE_MAGE) setStage(player, STAGE_MAGE);
@@ -1531,6 +1570,7 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
         return;
       }
       player.getPacketSender().closeSubInterface(MACHINE_FLOATER_UID);
+      setFairyRingAnimating(player, 1);
       startTranscript(
         api,
         player,
@@ -1831,6 +1871,8 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
       player.getPacketSender().sendVarbit(VARBIT_GOBLIN_FORM, hasBit(player, BIT_GOBLIN_FORM) ? 1 : 0);
       if (hasBit(player, BIT_GOBLIN_FORM)) applyGoblinAppearance(player);
     }
+    fairyRingAnimating.delete(player);
+    syncQuestVarbits(player);
     syncQuestNpcs(player);
   }
 
@@ -1838,6 +1880,7 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
     finishGuardPass(player);
     finishCutscene(player);
     machinePower.delete(player);
+    fairyRingAnimating.delete(player);
     removeAllTracked(player);
   }
 

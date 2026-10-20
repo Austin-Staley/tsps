@@ -60,6 +60,14 @@ module.exports = function registerCrabQuestQuest(api) {
   // intro 5/10/15/20, shells 25, instrument 30/35/37/40, recruiting 45/47,
   // ceremony 50/55/60, complete 63. The old 0-8 ladder never matched the varbit.
   const STAGE_VARBIT = 15842; // "crab_main"
+  const CRAB_SEASHELL_VARBIT = 15844; // "crab_seashell_1"..'_7'
+  const CRAB_FLOATSAM_HIDDEN_VARBIT = 15852; // 0..3, 3 = no floatsam left
+  const CRAB_BANDMATE_VARBIT = 15853; // "crab_bandmate_1"..'_11'
+  const CRAB_SHY_VARBIT = 15865; // 1 = met/blushing, 2 = scuttered away
+  const CRAB_KICKED_PENGUIN_VARBIT = 15867;
+  const CRAB_INSTANCE_VARBIT = 15868;
+  const CRAB_RECRUITED_BANDMATE_VARBIT = 15869; // "crab_recruited_bandmate_1"..'_11'
+  const CRAB_PARTIAL_COMPLETE_VARBIT = 15881;
   const STAGE_NOT_STARTED = 0;
   const STAGE_START = 5;
   const STAGE_LEARN = 10;
@@ -125,6 +133,7 @@ module.exports = function registerCrabQuestQuest(api) {
   const CRAB_BOTTLE_OBJECT_ID = 62439; // "Bottle", Drink
   const CRAB_BOTTLE_POST_OBJECT_ID = 62440; // "Bottle", Reminisce
   const CRAB_PALM_OBJECT_ID = 62470; // "Palm", Investigate
+  const CRAB_SHY_PALM_OBJECT_ID = 62472; // "Palm" (crab_palm_update03), Investigate
   const CRAB_MAGIC_TREE_OBJECT_ID = 62473; // "Magic tree", Investigate
   const CRAB_TREE_OBJECT_ID = 62475; // "Tree", Investigate
   const CRAB_PLANT_OBJECT_ID = 62477; // "Plant", Investigate
@@ -132,6 +141,9 @@ module.exports = function registerCrabQuestQuest(api) {
 
   const BOTTLE_TILE = { x: 3055, y: 2639 };
   const MAIN_CRAB_TILE = { x: 3057, y: 2637 };
+  const SHY_CRAB_PALM_TILE = { x: 3044, y: 2653 };
+  const SHY_CRAB_TILE = { x: 3045, y: 2653 };
+  const SHY_CRAB_RELOCATED_TILE = { x: 3055, y: 2650 };
   const NET_TILE = { x: 3061, y: 2646 };
   const SHELL_TILES = [
     { x: 3059, y: 2648 },
@@ -162,6 +174,17 @@ module.exports = function registerCrabQuestQuest(api) {
     ["beb_BL", 1 << 10], // eastern bush ("Dipper")
   ]);
 
+  // Quest Helper's bandmate numbering (bandmate_1..11) in this file's join-bit
+  // order: crabOne palm, crabTwo east bush, crabThree NW palm, crabFour plant,
+  // crabFive western palm, crabSix magic tree, crabSeven penguin palm,
+  // crabEight west bush, crabNine avium tree, crabTen north avium, crabEleven
+  // east palm.
+  const BANDMATE_JOIN_BITS = [
+    1 << 1, 1 << 10, 1 << 5, 1 << 8, 1 << 3, 1 << 0,
+    1 << 6, 1 << 9, 1 << 2, 1 << 7, 1 << 4,
+  ];
+  const PENGUIN_JOIN_BIT = 1 << 6; // northern-most palm ("'Crab'" penguin)
+
   const MAGIC_TREE_STEP = "5WiO-g";
   const DIPPER_STEP = "beb_BL";
   const KID_CRAB_STEP = "ByoUzK";
@@ -181,17 +204,40 @@ module.exports = function registerCrabQuestQuest(api) {
   const PLAY_STYLE_OPTIONS = new Set(["Let me show you!", "I can try and explain.", BANJO_NAME]);
 
   const CUTSCENE_BOUNDS = [[3020, 3080, 2620, 2670, 0]];
-  const SHY_CRAB_ATTRIBUTE = "crab-quest:shy-met";
+  const SHY_CRAB_ATTRIBUTE = "crab-quest:shy-met"; // legacy boolean, migrated to progress
+  const SHY_CRAB_PROGRESS_ATTRIBUTE = "crab-quest:shy-progress";
+  const SHY_CRAB_HIDDEN = 0;
+  const SHY_CRAB_FOUND = 1;
+  const SHY_CRAB_BLUSHING = 2;
+  const SHY_CRAB_SCUTTERED = 3;
+  const SHY_CRAB_BLUSH_STEP = "shy-crab-blush";
+  const SHY_CRAB_SCUTTER_STEP = "shy-crab-scutter";
+  // Captured CrabQuest.txt conversation; blush and scutter are the only native
+  // 15865 transitions (0->1 mid-conversation, 1->2 after the last line).
   const SHY_CRAB_LINES = [
-    { speaker: "Crab", text: "Oh. Sorry. You've come to the wrong crab!" },
+    { player: "Hey there! I'm looking for ceremonial leaders to help my friend on the beach." },
+    { npc: "Oh. Sorry. You've come to the wrong crab!" },
     { player: "How comes?" },
-    { speaker: "Crab", text: "First, I'm a girl and girls are never ceremonial leaders. Besides, I get very nervous standing in front of others... I'm afraid to mess up." },
+    { npc: "First, I'm a girl and girls are never ceremonial leaders. Besides, I get very nervous standing in front of others... I'm afraid to mess up." },
     { player: "What if you do? Messing up is a part of life. You fall and pick yourself back up again." },
-    { speaker: "Crab", text: "I know that, and yet I can't help it. I have this uneasy feeling that I don't belong... But I just really want to be accepted." },
-    { speaker: "Crab", text: "You see, there's this one crab... He's kind and funny... and handsome! When he's around I feel like everything is going to be okay. But unfortunately, I can't even look at him!" },
-    { speaker: "Crab", text: "For a start. I... get all red. In fact I get all red just thinking about him!" },
+    { npc: "I know that, and yet I can't help it. I have this uneasy feeling that I don't belong... But I just really want to be accepted." },
+    { player: "I hear you." },
+    { npc: "If only I could be more like..." },
+    { type: "message", id: SHY_CRAB_BLUSH_STEP, text: "" },
+    { npc: "You see, there's this one crab... He's kind and funny... and handsome! When he's around I feel like everything is going to be okay. But unfortunately, I can't even look at him!" },
+    { player: "Why not?" },
+    { npc: "For a start. I... get all red. In fact I get all red just thinking about him!" },
+    { npc: "It's really confusing how he makes me feel at ease yet so nervous at the same time. If I was a ceremonial leader and I spotted him... I would mess up for sure." },
+    { npc: "No, the only way I can ever look at him is to steal some side glances..." },
+    { player: "Wait. Since you walk sideways, which way IS a side glance?" },
+    { npc: "The way I'm walking! Which means if I try to walk towards him, I can't even look where I'm going!" },
+    { npc: "So I look at him from afar when he doesn't know I'm around. Yet among a thousand crabs on the beach, he's the only one I see." },
     { player: "Awww. I don't know which crab is the one that caught your eye, but you obviously like him. Hey, maybe he's a ceremonial leader this year?" },
-    { speaker: "Crab", text: "I already can't handle how awesome he is. If he was a ceremonial leader as well, how could I possibly approach him? I already can't!" },
+    { npc: "I already can't handle how awesome he is. If he was a ceremonial leader as well, how could I possibly approach him? I already can't!" },
+    { player: "I clearly can't convince you to join, but the leaders will be practising on the beach if you wanted to check in advance whether the crab of your dreams will be playing." },
+    { player: "And if he is, that might be your chance! Who knows! Maybe 'that crab you can't look at' only wants one thing: for you to look at him!" },
+    { npc: "Very unlikely! But maybe I will take a peek. The good thing about being pessimistic is that you're happy when you're wrong!" },
+    { type: "message", id: SHY_CRAB_SCUTTER_STEP, text: "" },
   ];
 
   const DONE_JOINED_VARIANT = "crab-hunting-investigating-a-tree-plant-or-bush-after-the-crab-goes-to-practice";
@@ -210,6 +256,7 @@ module.exports = function registerCrabQuestQuest(api) {
   const SCARED_ATTRIBUTE = "quest.crab_quest.scared";
   const MET_ATTRIBUTE = "quest.crab_quest.met";
   const SHELLS_HANDED_ATTRIBUTE = "quest.crab_quest.shells-handed";
+  const SHELLS_HANDED_MASK_ATTRIBUTE = "crab-quest:shells-handed-mask";
   const SHELLS_PICKED_ATTRIBUTE = "quest.crab_quest.shells-picked";
   const NET_PICKED_ATTRIBUTE = "quest.crab_quest.net-picked";
   const MATERIALS_FISHED_ATTRIBUTE = "quest.crab_quest.materials-fished";
@@ -414,6 +461,14 @@ module.exports = function registerCrabQuestQuest(api) {
     return Number(player.getAttribute(SHELLS_HANDED_ATTRIBUTE)) || 0;
   }
 
+  function handedShellMask(player) {
+    return Number(player.getAttribute(SHELLS_HANDED_MASK_ATTRIBUTE)) || 0;
+  }
+
+  function shyCrabProgress(player) {
+    return Number(player.getAttribute(SHY_CRAB_PROGRESS_ATTRIBUTE)) || 0;
+  }
+
   function hasAllMaterials(player) {
     return (
       hasItem(player, PLANK_ITEM_ID) &&
@@ -438,6 +493,45 @@ module.exports = function registerCrabQuestQuest(api) {
     return popcount(flags(player, RECRUITED_ATTRIBUTE));
   }
 
+  /**
+   * Publishes the quest's saved sub-state to the client varp bits Quest Helper
+   * reads. sendVarbit writes only these bits, so the stage and sibling bits in
+   * varps 5739/5740 are preserved.
+   */
+  function syncVarbits(player) {
+    const sender = player.getPacketSender();
+    const stage = quest.getStage(player);
+    const handedMask = handedShellMask(player);
+    for (let index = 0; index < SHELL_COUNT; index++) {
+      sender.sendVarbit(CRAB_SEASHELL_VARBIT + index, handedMask & (1 << index) ? 1 : 0);
+    }
+    // The server's single net action grants all three materials at once.
+    sender.sendVarbit(CRAB_FLOATSAM_HIDDEN_VARBIT, materialsFished(player) ? 3 : 0);
+    BANDMATE_JOIN_BITS.forEach((bit, index) => {
+      const recruited = hasFlag(player, RECRUITED_ATTRIBUTE, bit) ? 1 : 0;
+      sender.sendVarbit(CRAB_BANDMATE_VARBIT + index, recruited);
+      sender.sendVarbit(CRAB_RECRUITED_BANDMATE_VARBIT + index, recruited);
+    });
+    const shyProgress = shyCrabProgress(player);
+    sender.sendVarbit(
+      CRAB_SHY_VARBIT,
+      shyProgress >= SHY_CRAB_SCUTTERED ? 2 : shyProgress >= SHY_CRAB_BLUSHING ? 1 : 0
+    );
+    sender.sendVarbit(
+      CRAB_KICKED_PENGUIN_VARBIT,
+      hasFlag(player, RECRUITED_ATTRIBUTE, PENGUIN_JOIN_BIT) ? 1 : 0
+    );
+    // This server plays the quest on the beach rather than a private instance,
+    // but the flag still means "currently in the quest" for Quest Helper.
+    sender.sendVarbit(
+      CRAB_INSTANCE_VARBIT,
+      stage >= STAGE_START && !quest.isComplete(player) ? 1 : 0
+    );
+    // shortcut: the early-return trigger is unproven; keep guiding recruitment
+    // until another capture establishes when 15881 becomes true.
+    sender.sendVarbit(CRAB_PARTIAL_COMPLETE_VARBIT, 0);
+  }
+
   function meetsRequirements(player) {
     const skills = player.getSkillManager();
     return (
@@ -450,6 +544,7 @@ module.exports = function registerCrabQuestQuest(api) {
     if (quest.getStage(player) >= stage) return;
     quest.setStage(player, stage);
     syncNpcs(player);
+    syncVarbits(player);
   }
 
   function recountLeaders(player) {
@@ -520,6 +615,7 @@ module.exports = function registerCrabQuestQuest(api) {
     if (objectsInstalled) return;
     objectsInstalled = true;
     registerObject(CRAB_BOTTLE_OBJECT_ID, BOTTLE_TILE);
+    registerObject(CRAB_SHY_PALM_OBJECT_ID, SHY_CRAB_PALM_TILE);
     for (const spot of SPOTS) {
       if (spot.place === false) continue;
       registerObject(spot.objectId, spot, spot.rotation ?? 0);
@@ -569,8 +665,12 @@ module.exports = function registerCrabQuestQuest(api) {
     const stage = quest.getStage(player);
     const privateArea = player.getPrivateArea?.() ?? null;
     if (stage >= STAGE_SHELLS && stage < STAGE_INSTRUMENT) {
+      const handedMask = handedShellMask(player);
       for (let index = 0; index < SHELL_TILES.length; index++) {
-        if (hasFlag(player, SHELLS_PICKED_ATTRIBUTE, 1 << index)) continue;
+        // Only a colour actually handed in is permanent. A picked-then-lost
+        // shell (or net) is re-registered at its canonical ground tile; a held
+        // item is skipped so it cannot duplicate.
+        if (handedMask & (1 << index)) continue;
         const itemId = ALL_SHELL_ITEM_IDS[index];
         if (hasItem(player, itemId)) continue;
         const tile = SHELL_TILES[index];
@@ -579,7 +679,7 @@ module.exports = function registerCrabQuestQuest(api) {
         manager.registerLocation(player, new Item(itemId, 1), position);
       }
     }
-    if (stage >= STAGE_INSTRUMENT && stage < STAGE_RECRUITING && !hasFlag(player, NET_PICKED_ATTRIBUTE, 1)) {
+    if (stage >= STAGE_INSTRUMENT && stage < STAGE_RECRUITING && !hasItem(player, BIG_FISHING_NET_ITEM_ID)) {
       const position = new Location(NET_TILE.x, NET_TILE.y, 0);
       if (!manager.getGroundItem(player.getUsername(), BIG_FISHING_NET_ITEM_ID, position, privateArea)) {
         manager.registerLocation(player, new Item(BIG_FISHING_NET_ITEM_ID, 1), position);
@@ -640,12 +740,24 @@ module.exports = function registerCrabQuestQuest(api) {
     } else {
       removeTracked(player, "main-crab");
     }
-    if (stage >= STAGE_RECRUITING && !quest.isComplete(player)) {
-      spawnTracked(player, "shy-crab", { id: SHY_CRAB_NPC_ID, x: 3045, y: 2653, z: 0, wanderRadius: 0 });
+    if (stage >= STAGE_RECRUITING && !quest.isComplete(player) && shyCrabProgress(player) >= SHY_CRAB_FOUND) {
+      const tile = shyCrabProgress(player) >= SHY_CRAB_SCUTTERED ? SHY_CRAB_RELOCATED_TILE : SHY_CRAB_TILE;
+      spawnTracked(player, "shy-crab", { id: SHY_CRAB_NPC_ID, ...tile, z: 0, wanderRadius: 0 });
     } else {
       removeTracked(player, "shy-crab");
     }
     syncGroundItems(player);
+  }
+
+  /** The captured scutter is a delete at 3045,2653 and an add at 3055,2650. */
+  function relocateShyCrab(player) {
+    removeTracked(player, "shy-crab");
+    spawnTracked(player, "shy-crab", {
+      id: SHY_CRAB_NPC_ID,
+      ...SHY_CRAB_RELOCATED_TILE,
+      z: 0,
+      wanderRadius: 0,
+    });
   }
 
   // ==========================================================================
@@ -698,9 +810,18 @@ module.exports = function registerCrabQuestQuest(api) {
     if (shells.length === 0) return null;
     const steps = [];
     steps.push(...conditionSteps("handing-in-seashells", shells.length === 1 ? "mp1abt" : "6eoFGP"));
-    let correct = handedShellCount(player);
+    let correct = Math.max(handedShellCount(player), popcount(handedShellMask(player)));
     for (const itemId of shells) {
       if (SHELL_ITEM_IDS.includes(itemId)) {
+        const shellIndex = SHELL_ITEM_IDS.indexOf(itemId);
+        const bit = 1 << shellIndex;
+        // A duplicate of an already-handed colour must not increment the count
+        // towards seven again.
+        if (handedShellMask(player) & bit) {
+          player.getInventory().deleteNumber(itemId, 1);
+          continue;
+        }
+        player.setAttribute(SHELLS_HANDED_MASK_ATTRIBUTE, handedShellMask(player) | bit);
         steps.push(...variantSteps(SHELL_MESSAGE_VARIANTS.get(itemId)));
         correct += 1;
         if (correct >= SHELL_COUNT) steps.push(...variantSteps(LAST_SHELL_VARIANT));
@@ -718,6 +839,7 @@ module.exports = function registerCrabQuestQuest(api) {
     const steps = shellHandInSteps(player);
     if (!steps) return false;
     if (handedShellCount(player) >= SHELL_COUNT) setStage(player, STAGE_INSTRUMENT);
+    syncVarbits(player);
     return playSteps(player, MAIN_CRAB_NPC_ID, steps);
   }
 
@@ -793,9 +915,14 @@ module.exports = function registerCrabQuestQuest(api) {
     }
     if (npcId === SHY_CRAB_NPC_ID || npcId === SHY_CRAB_CONTENT_ID) {
       if (action !== "Talk-to") return;
-      event.handled = true;
-      player.setAttribute(SHY_CRAB_ATTRIBUTE, true);
-      playSteps(player, SHY_CRAB_NPC_ID, SHY_CRAB_LINES);
+      const progress = shyCrabProgress(player);
+      if (progress === SHY_CRAB_FOUND || progress === SHY_CRAB_BLUSHING) {
+        event.handled = true;
+        playSteps(player, SHY_CRAB_NPC_ID, SHY_CRAB_LINES);
+      } else if (progress === SHY_CRAB_SCUTTERED) {
+        // No further captured dialogue after she scutters to the practice.
+        event.handled = true;
+      }
       return;
     }
     if (FLOATSAM_NPC_IDS.has(npcId)) {
@@ -803,6 +930,17 @@ module.exports = function registerCrabQuestQuest(api) {
       event.handled = true;
       netFloatsam(player);
     }
+  }
+
+  function investigateShyCrabPalm(player) {
+    const stage = quest.getStage(player);
+    if (quest.isComplete(player) || stage < STAGE_TUNING || stage >= STAGE_ALL_LEADERS) return;
+    if (shyCrabProgress(player) >= SHY_CRAB_FOUND) return;
+    player.setAttribute(SHY_CRAB_PROGRESS_ATTRIBUTE, SHY_CRAB_FOUND);
+    syncNpcs(player);
+    player.sendMessage("A crab comes out shyly.");
+    syncVarbits(player);
+    playSteps(player, SHY_CRAB_NPC_ID, SHY_CRAB_LINES);
   }
 
   function netFloatsam(player) {
@@ -830,6 +968,7 @@ module.exports = function registerCrabQuestQuest(api) {
     player.setAttribute(MATERIALS_FISHED_ATTRIBUTE, true);
     if (hasAllMaterials(player)) setStage(player, STAGE_MATERIALS_READY);
     else setStage(player, STAGE_MATERIALS);
+    syncVarbits(player);
     startTranscript(
       api,
       player,
@@ -962,6 +1101,20 @@ module.exports = function registerCrabQuestQuest(api) {
 
   function handleAction(event) {
     const { player, npcId, stepId } = event;
+    if (stepId === SHY_CRAB_BLUSH_STEP || stepId === SHY_CRAB_SCUTTER_STEP) {
+      if (npcId !== SHY_CRAB_NPC_ID && npcId !== SHY_CRAB_CONTENT_ID) return;
+      event.handled = true;
+      if (stepId === SHY_CRAB_BLUSH_STEP) {
+        player.setAttribute(SHY_CRAB_PROGRESS_ATTRIBUTE, SHY_CRAB_BLUSHING);
+        player.sendMessage("The crab appears to turn bright red.");
+      } else {
+        player.setAttribute(SHY_CRAB_PROGRESS_ATTRIBUTE, SHY_CRAB_SCUTTERED);
+        relocateShyCrab(player);
+        player.sendMessage("The crab scutters away.");
+      }
+      syncVarbits(player);
+      return;
+    }
     if (!CRAB_NPC_IDS.has(npcId) || !stepId) return;
     const joinedBit = JOINED_STEP_BITS.get(stepId);
     if (joinedBit !== undefined) {
@@ -971,6 +1124,7 @@ module.exports = function registerCrabQuestQuest(api) {
         if (stepId === DIPPER_STEP) player.setAttribute(DIPPER_MET_ATTRIBUTE, true);
         if (stepId === KID_CRAB_STEP) player.setAttribute(KID_CRAB_MET_ATTRIBUTE, true);
         recountLeaders(player);
+        syncVarbits(player);
       }
       return;
     }
@@ -1014,6 +1168,7 @@ module.exports = function registerCrabQuestQuest(api) {
       Scenes.end(player, false);
       swapBottleToPost();
       if (!quest.isComplete(player)) quest.complete(player);
+      syncVarbits(player);
       return;
     }
     if (stepId === SHELL_COLLECTION_MESSAGE_STEP) {
@@ -1137,6 +1292,12 @@ module.exports = function registerCrabQuestQuest(api) {
       drinkFromBottle(player);
       return;
     }
+    if (objectId === CRAB_SHY_PALM_OBJECT_ID) {
+      if (definition?.getActions?.()[clickType - 1] !== "Investigate") return;
+      event.handled = true;
+      investigateShyCrabPalm(player);
+      return;
+    }
     const spot = spotAt(objectId, location);
     if (!spot) return;
     if (definition?.getActions?.()[clickType - 1] !== "Investigate") return;
@@ -1151,6 +1312,7 @@ module.exports = function registerCrabQuestQuest(api) {
       const tile = SHELL_TILES[shellIndex];
       if (tile && tile.x === location.x && tile.y === location.y) {
         setFlag(player, SHELLS_PICKED_ATTRIBUTE, 1 << shellIndex);
+        syncVarbits(player);
       }
       return;
     }
@@ -1160,6 +1322,7 @@ module.exports = function registerCrabQuestQuest(api) {
       location.y === NET_TILE.y
     ) {
       setFlag(player, NET_PICKED_ATTRIBUTE, 1);
+      syncVarbits(player);
     }
   }
 
@@ -1172,6 +1335,22 @@ module.exports = function registerCrabQuestQuest(api) {
     player.setAttribute(STAGE_VERSION_ATTRIBUTE, STAGE_VERSION);
   }
 
+  /**
+   * Fills sub-state that older saves could not record. A handed-in count of
+   * seven proves all seven colours were consumed; partial counts prove nothing
+   * about which colours, so they are left at 0 rather than guessed.
+   */
+  function migrateSubState(player) {
+    if (handedShellCount(player) >= SHELL_COUNT) {
+      player.setAttribute(SHELLS_HANDED_MASK_ATTRIBUTE, (1 << SHELL_COUNT) - 1);
+    }
+    // The old plugin only knew "met"; that proves the crab was found, not that
+    // the captured blush/scutter conversation ran.
+    if (shyCrabProgress(player) === SHY_CRAB_HIDDEN && player.getAttribute(SHY_CRAB_ATTRIBUTE) === true) {
+      player.setAttribute(SHY_CRAB_PROGRESS_ATTRIBUTE, SHY_CRAB_FOUND);
+    }
+  }
+
   function restoreScene(player) {
     if (quest.isComplete(player)) return;
     const stage = quest.getStage(player);
@@ -1182,8 +1361,17 @@ module.exports = function registerCrabQuestQuest(api) {
   function handleLogin({ player }) {
     installObjects();
     refreshQuestList(player);
+    migrateSubState(player);
     syncNpcs(player);
+    syncVarbits(player);
     restoreScene(player);
+  }
+
+  function handleBootstrap({ player }) {
+    if (!player || player.isPlayerBot?.() === true) return;
+    migrateStage({ player });
+    migrateSubState(player);
+    syncVarbits(player);
   }
 
   function handleLogout({ player }) {
@@ -1254,6 +1442,7 @@ module.exports = function registerCrabQuestQuest(api) {
   api.persistAttribute(SCARED_ATTRIBUTE);
   api.persistAttribute(MET_ATTRIBUTE);
   api.persistAttribute(SHELLS_HANDED_ATTRIBUTE);
+  api.persistAttribute(SHELLS_HANDED_MASK_ATTRIBUTE, 0);
   api.persistAttribute(SHELLS_PICKED_ATTRIBUTE);
   api.persistAttribute(NET_PICKED_ATTRIBUTE);
   api.persistAttribute(MATERIALS_FISHED_ATTRIBUTE);
@@ -1263,6 +1452,7 @@ module.exports = function registerCrabQuestQuest(api) {
   api.persistAttribute(DIPPER_MET_ATTRIBUTE);
   api.persistAttribute(KID_CRAB_MET_ATTRIBUTE);
   api.persistAttribute(SHY_CRAB_ATTRIBUTE, false);
+  api.persistAttribute(SHY_CRAB_PROGRESS_ATTRIBUTE, 0);
   api.persistAttribute(STAGE_VERSION_ATTRIBUTE, 0);
 
   quest = registerQuest(api, {
@@ -1295,5 +1485,6 @@ module.exports = function registerCrabQuestQuest(api) {
   api.onGroundItemPickup(handleGroundItemPickup);
   api.onPlayerLogin(migrateStage);
   api.onPlayerLogin(handleLogin);
+  api.onCustomEvent("player:bootstrap-complete", handleBootstrap);
   api.onPlayerLogout(handleLogout);
 };

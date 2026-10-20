@@ -226,7 +226,15 @@ test('Haunted Mine captured stage route reaches the shard once through real inte
   assert.equal(h.cameras.resets, 1, 'camera resets after the cart tutorial');
   assert.equal(h.quest.getStage(h.player), 3, 'cart puzzle must not invent a stage');
   h.object(O.LEVER_28);
-  for (const lever of [O.LEVER_26, O.LEVER_27, O.LEVER_30, O.LEVER_31]) h.object(lever);
+  h.object(O.LEVER_26);
+  assert.equal(h.varbits.get(2385), 1, 'physical lever A drives cache varbit HAUNTEDMINE_LEVER_B');
+  assert.equal(h.varbits.get(2386), 0, 'physical lever A never touches cache varbit HAUNTEDMINE_LEVER_A');
+  assert.equal(h.player.getAttribute('haunted-mine:levers') & 3, 1, 'pulling A alone only sets the varbit-B rail bit');
+  h.object(O.LEVER_27);
+  assert.equal(h.varbits.get(2386), 1, 'physical lever B drives cache varbit HAUNTEDMINE_LEVER_A');
+  assert.equal(h.player.getAttribute('haunted-mine:levers') & 3, 3, 'A and B keep their own internal rail bits');
+  h.object(O.LEVER_30);
+  h.object(O.LEVER_31);
   assert.equal(h.player.getAttribute(HM_BITS) & 2, 2, 'the solved junction sends the fungus cart across');
   h.object(O.MINE_CART_6, { object: { getLocation: () => new h.core.Location(2774, 4537, 0) } });
   h.action(N.ZEALOT, 'Rx786B');
@@ -280,6 +288,40 @@ test('Haunted Mine captured stage route reaches the shard once through real inte
   assert.equal(h.inventory.get(I.SALVE_SHARD), 2, 'the outcrop remains cuttable after the quest');
   assert.equal(h.quest.getStage(h.player), 11);
   assert.equal(h.player.getAttribute('quest.points'), points, 'repeat shards never pay points again');
+  assert.equal(h.xp.filter((entry) => entry.skill === h.core.Skill.STRENGTH).length, 1, 'repeat shards never pay XP again');
+});
+
+test('Haunted Mine physical A/B levers bind to the crossed cache varbits Quest Helper uses', () => {
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const varbitB = CacheDefinitions.getVarbit(2385);
+  const varbitA = CacheDefinitions.getVarbit(2386);
+  assert.equal(varbitB.baseVar, 383, 'HAUNTEDMINE_LEVER_B lives on varp 383');
+  assert.equal(varbitB.startBit, 1, 'HAUNTEDMINE_LEVER_B is bit 1');
+  assert.equal(varbitA.baseVar, 383, 'HAUNTEDMINE_LEVER_A lives on varp 383');
+  assert.equal(varbitA.startBit, 2, 'HAUNTEDMINE_LEVER_A is bit 2');
+  RegionManager.loadMapFiles(2785, 4517);
+  const objectsAt = (x, y) => (MapObjects.mapObjects.get(MapObjects.getHash(x, y, 0)) ?? []).map((object) => object.getId());
+  assert.ok(objectsAt(2785, 4517).includes(4950), 'physical lever A object 4950 stands at Quest Helper pull A');
+  assert.ok(objectsAt(2784, 4517).includes(4951), 'physical lever B object 4951 stands at Quest Helper pull B');
+  assert.equal(CacheDefinitions.getObject(4950).name, 'Lever');
+  assert.equal(CacheDefinitions.getObject(4951).name, 'Lever');
+
+  const h = setup('../plugins/quests/quests/HauntedMine.Quest', 'haunted_mine');
+  h.quest.setStage(h.player, 1);
+  h.object(4950);
+  assert.equal(h.varbits.get(2385), 1, 'A drives varbit B');
+  assert.equal(h.varbits.get(2386), undefined, 'A never drives varbit A');
+  h.object(4950);
+  assert.equal(h.varbits.get(2385), 0, 'A toggles back off');
+  h.object(4951);
+  assert.equal(h.varbits.get(2386), 1, 'B drives varbit A');
+  assert.equal(h.varbits.get(2385), 0, 'B never drives varbit B');
+  h.object(4950);
+  h.hooks.logins[0]({ player: h.player });
+  assert.equal(h.varbits.get(2385), 1, 'login restores lever A through varbit B');
+  assert.equal(h.varbits.get(2386), 1, 'login restores lever B through varbit A');
 });
 
 test('Haunted Mine recovery: relog resends captured varps and spares a second key', () => {

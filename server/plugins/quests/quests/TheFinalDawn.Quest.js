@@ -445,6 +445,18 @@ module.exports = function registerTheFinalDawnQuest(api) {
   const MOON_ORDER_ATTRIBUTE = "the-final-dawn:moon-order";
   const SUN_ORDER_VARBIT = 16676; // vmq4_sun_puzzle_order
   const MOON_ORDER_VARBIT = 16692; // vmq4_moon_puzzle_order
+  // Quest Helper mirrors of captured progress. Only values produced by the
+  // plugin's real actions/attributes are sent; route features it does not model
+  // (drawer choice 16666, lift 16694) are left untouched.
+  const BEER_GIVEN_VARBIT = 16670; // vmq4_teumo_wife_beer_given
+  const TEMPLE_DRAW_UNLOCKED_VARBIT = 16667; // vmq4_temple_draw_unlocked
+  const SUN_PROGRESS_VARBIT = 16675; // vmq4_sun_puzzle_progress
+  const MOON_PROGRESS_VARBIT = 16677; // vmq4_moon_puzzle_progress
+  const SUN_ITZLA_STATE_VARBIT = 16712; // vmq4_sun_puzzle_itzla_state
+  const FINAL_RALOS_VARBIT = 16695; // vmq4_final_chamber_ralos_inspect
+  const FINAL_RANUL_VARBIT = 16696; // vmq4_final_chamber_ranul_inspect
+  const FINAL_TABLET_VARBIT = 16697; // vmq4_final_chamber_tablet_inspect
+  const FINAL_DOOR_VARBIT = 16717; // vmq4_final_chamber_door_inspect
   const WAVE_ATTRIBUTE = "the-final-dawn:wave";
   const SAFEHOUSE_ATTRIBUTE = "quest.the_final_dawn.safehouse-talked";
   const TEUMO_INTRO_ATTRIBUTE = "quest.the_final_dawn.teumo-intro";
@@ -829,10 +841,36 @@ module.exports = function registerTheFinalDawnQuest(api) {
     return null;
   }
 
+  /** Mirror only the progress the plugin actually holds into Quest Helper's subvarbits. */
+  function syncQuestVarbits(player) {
+    const stage = quest.getStage(player);
+    const flags = bits(player);
+    const sun = Math.max(0, Math.min(3, Number(player.getAttribute(SUN_ATTRIBUTE)) || 0));
+    const moon = Math.max(0, Math.min(3, Number(player.getAttribute(MOON_ATTRIBUTE)) || 0));
+    const sender = player.getPacketSender();
+    sender.sendVarbit(BEER_GIVEN_VARBIT, stage >= STAGE_TEUMO_BASEMENT ? 1 : 0);
+    // The key actually opening the drawers is only represented by its result:
+    // the canvas was taken or has already been used on the painting.
+    sender.sendVarbit(TEMPLE_DRAW_UNLOCKED_VARBIT,
+      stage >= STAGE_BACKROOM && (held(player, CANVAS_PIECE_ITEM) || stage >= STAGE_SCROLL) ? 1 : 0);
+    sender.sendVarbit(SUN_PROGRESS_VARBIT, sun);
+    sender.sendVarbit(SUN_ITZLA_STATE_VARBIT, sun < 3 && ensureSunItzla(player) !== -1 ? 1 : 0);
+    sender.sendVarbit(MOON_PROGRESS_VARBIT, moon);
+    sender.sendVarbit(FINAL_RALOS_VARBIT, flags & BIT_RALOS ? 1 : 0);
+    sender.sendVarbit(FINAL_RANUL_VARBIT, flags & BIT_RANUL ? 1 : 0);
+    sender.sendVarbit(FINAL_TABLET_VARBIT, flags & BIT_TABLET_ONE ? 1 : 0);
+    sender.sendVarbit(FINAL_DOOR_VARBIT, flags & BIT_DOOR ? 1 : 0);
+  }
+
+  function handleBootstrap({ player }) {
+    syncQuestVarbits(player);
+  }
+
   function setStage(player, stage) {
     quest.setStage(player, stage);
     if (stage === STAGE_CAVERN) ensureSunItzla(player);
     ensureQuestNpcs(player);
+    syncQuestVarbits(player);
   }
 
   // ==========================================================================
@@ -1821,6 +1859,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
         }
         const next = progress + 1;
         player.setAttribute(MOON_ATTRIBUTE, next);
+        syncQuestVarbits(player);
         if (next >= 3) {
           player.sendMessage("The statue lights up with energy as it accepts your offering of kindling.");
           player.sendMessage("Nice work! I think you did it!");
@@ -1872,6 +1911,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
       player.sendMessage("You search the skeleton and find a tablet.");
       setBit(player, BIT_TABLET_ONE);
       setBit(player, BIT_TABLET_TWO);
+      syncQuestVarbits(player);
       for (const axis of [0, 1]) player.getPacketSender().sendCameraShake(axis, 4);
       player.getPacketSender().sendCameraShake(2, 2);
       Scenes.later(player, 2, () => player.getPacketSender().sendCameraReset());
@@ -1883,6 +1923,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
       event.handled = true;
       if (stage !== STAGE_EXPLORE) return;
       setBit(player, BIT_DOOR);
+      syncQuestVarbits(player);
       player.sendMessage("You go to return to the chamber where you found Metzli, but hear a horrifying screeching sound coming from within. You decide it's probably best to remain here.");
       checkRuinsExplored(player);
       return;
@@ -1893,6 +1934,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
       if (stage !== STAGE_EXPLORE) return;
       player.sendMessage("The statue appears to be some sort of memorial. It has a single word engraved upon it: 'Ralos'");
       setBit(player, BIT_RALOS);
+      syncQuestVarbits(player);
       checkRuinsExplored(player);
       return;
     }
@@ -1902,6 +1944,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
       if (stage !== STAGE_EXPLORE) return;
       player.sendMessage("The statue appears to be some sort of memorial. It has a single word engraved upon it: 'Ranul'");
       setBit(player, BIT_RANUL);
+      syncQuestVarbits(player);
       checkRuinsExplored(player);
       return;
     }
@@ -1973,6 +2016,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
       "Tell Itzla where to stand",
       ...Object.entries(DIRECTION_INDEX).flatMap(([label, index]) => [label, () => {
         player.setAttribute(SUN_ITZLA_ATTRIBUTE, index);
+        syncQuestVarbits(player);
         player.sendMessage(`Itzla moves to the ${SUN_ALTAR_NAMES[index]} altar.`);
         player.getPacketSender().sendInterfaceRemoval();
       }])
@@ -2007,11 +2051,13 @@ module.exports = function registerTheFinalDawnQuest(api) {
     const next = progress + 1;
     player.setAttribute(SUN_ATTRIBUTE, next);
     if (next >= 3) {
+      syncQuestVarbits(player);
       player.sendMessage("You imbue the altar and the central statue lights up with energy.");
       if ((Number(player.getAttribute(MOON_ATTRIBUTE)) || 0) >= 3) setStage(player, STAGE_PUZZLES_DONE);
       return;
     }
     player.setAttribute(SUN_ITZLA_ATTRIBUTE, -1);
+    syncQuestVarbits(player);
     player.sendMessage("You imbue the altar, and hear a grinding sound coming from the central statue.");
     if (progress === 0) player.sendMessage("That seemed to do the trick! Keep it up.");
   }
@@ -2071,6 +2117,29 @@ module.exports = function registerTheFinalDawnQuest(api) {
       return;
     }
     player.sendMessage("The fragment doesn't react here.");
+  }
+
+  /** Perilous Moons owns the Neypotzli entrances; claim only the captured Dawn realm landings. */
+  function handlePerilousTransport(request) {
+    const { player, objectId, source } = request;
+    if (!player || !source) return;
+    const at = (x, y, z) => source.x === x && source.y === y && source.z === z;
+    const stage = quest.getStage(player);
+    if (objectId === STREAMBOUND_ENTRY_OBJECT && stage === STAGE_NEYPOTZLI
+      && at(1458, 9650, 1) && request.destination?.x === 1481 && request.destination?.y === 9669
+      && request.destination?.z === 0) {
+      setStage(player, STAGE_LOCATE);
+      return;
+    }
+    if (objectId === EARTHBOUND_ENTRY_OBJECT && stage === STAGE_LOCATE
+      && neypotzliCheckpoint(player) >= 1 && at(1521, 9720, 0)) {
+      request.destination = { ...EARTHBOUND_TILE };
+      return;
+    }
+    if (objectId === ANCIENT_PRISON_ENTRY_OBJECT && stage === STAGE_LOCATE
+      && neypotzliCheckpoint(player) >= 2 && at(1373, 9664, 0)) {
+      request.destination = { ...ANCIENT_PRISON_TILE };
+    }
   }
 
   function handleGlowingSymbol(event) {
@@ -2560,6 +2629,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
     ensureSafehouseDoorState(player);
     ensureSafehouseTopObjects(player);
     syncNeypotzliCheckpoint(player);
+    syncQuestVarbits(player);
     if (quest.getStage(player) === STAGE_WAVES) spawnCultistWave(player);
     if (quest.getStage(player) === STAGE_QUEEN_CAM && inInterrogationZone(player)) resumeInterrogation(player);
     refreshQuestList(player);
@@ -2726,6 +2796,8 @@ module.exports = function registerTheFinalDawnQuest(api) {
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("door:toggle", handleDoorToggle);
+  api.onCustomEvent("perilous-moons:transport", handlePerilousTransport);
+  api.onCustomEvent("player:bootstrap-complete", handleBootstrap);
   for (const key of STRANGE_TILE_LINKS.keys()) {
     const [x, y, z] = key.split(",").map(Number);
     api.onZoneEnter({ minX: x, maxX: x, minY: y, maxY: y, levels: [z] }, handleStrangeTileStep);

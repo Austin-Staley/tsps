@@ -2,8 +2,8 @@
 //
 // Route cross-checked against the OSRS Wiki transcripts, RuneLite Quest Helper
 // (Zoinkwiz/quest-helper @ 06da90f, ThroneOfMiscellania/RoyalTrouble) and the
-// cache varbits. RSProx captures (rsprox download 91) were not decoded when
-// this test was written; see jobs/miscellania.done.md for the evidence gap.
+// cache varbits. Varbit 72 is the cache's 7-bit native misc_approval scale
+// (0..127): capture 91 starts at 32, Quest Helper requires 96 for 75%.
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { before, test } = require('node:test');
@@ -314,10 +314,10 @@ test('Throne of Miscellania: anthem, treaty, giant pen, support and one completi
   assert.equal(p.items.get(I.GIANT_PEN), 0);
   assert.equal(h.quest.getStage(p), 90);
 
-  assert.equal(p.varbits.get(72), 32, 'capture starts support at 32%');
+  assert.equal(p.varbits.get(72), 32, 'capture starts support at native 32');
   const completion = h.action(p, N.KING_VARGAS, '7ukkOd');
   assert.equal(completion.handled, true);
-  assert.equal(h.quest.getStage(p), 90, '32% support is not enough');
+  assert.equal(h.quest.getStage(p), 90, 'native 32 is not enough');
 
   // The recorded route hands lobsters to Fisherman Frodi; wrong items and
   // anything outside the support stage do nothing.
@@ -326,14 +326,27 @@ test('Throne of Miscellania: anthem, treaty, giant pen, support and one completi
   assert.equal(p.items.get(I.RAW_LOBSTER), 1);
   assert.equal(p.varbits.get(72), 32);
   p.moveTo(new core.Location(2550, 3890, 0));
-  for (let i = 0; i < 43; i++) {
+  for (let i = 0; i < 63; i++) {
     p.items.set(I.RAW_LOBSTER, 1);
     h.itemOnNpc(p, N.FISHERMAN_FRODI, I.RAW_LOBSTER);
   }
-  assert.equal(p.varbits.get(72), 75);
+  assert.equal(p.varbits.get(72), 95, 'one native point below the 75% gate');
   assert.equal(p.items.get(I.RAW_LOBSTER) ?? 0, 0);
   assert.match(p.messages.at(-1), /Fisherman Frodi/);
+  assert.equal(h.hooks.onNpcDialogueCondition[0]({ player: p, stepId: 'Wrg10w' }), false,
+    'Quest Helper 75% condition stays false at native 95');
+  assert.doesNotMatch(h.variant(N.KING_VARGAS, p).variant, /after-gaining-enough-support$/);
+  h.action(p, N.KING_VARGAS, '7ukkOd');
+  assert.equal(h.quest.getStage(p), 90, 'native 95 does not complete');
+
+  p.items.set(I.RAW_LOBSTER, 1);
+  h.itemOnNpc(p, N.FISHERMAN_FRODI, I.RAW_LOBSTER);
+  assert.equal(p.varbits.get(72), 96, '75% is native 96');
+  assert.equal(h.hooks.onNpcDialogueCondition[0]({ player: p, stepId: 'Wrg10w' }), true);
   assert.match(h.variant(N.KING_VARGAS, p).variant, /after-gaining-enough-support$/);
+  const percentLine = h.line(p, N.KING_VARGAS, 'Your current approval rating is [number]%.');
+  assert.equal(percentLine.text, 'Your current approval rating is 75%.',
+    'the native scale still reads as 75% to the player');
   h.action(p, N.KING_VARGAS, '7ukkOd');
   assert.equal(h.quest.getStage(p), 100);
   const points = p.attributes.get('quest.points');
@@ -562,7 +575,7 @@ test('Throne of Miscellania: a lobster catch beside Frodi is handed in automatic
   const done = new Set(); completeThronePrerequisites(done);
   const h = harness(throne(), done), p = h.player();
   h.quest.setStage(p, 90);
-  p.attributes.set('throne-of-miscellania:approval', 32);
+  p.attributes.set('throne-of-miscellania:approval-native', 32);
   p.moveTo(new core.Location(2573, 3855, 0));
 
   // The fishing plugin has already landed the catch before it emits the event.
@@ -595,6 +608,61 @@ test('Throne of Miscellania: a lobster catch beside Frodi is handed in automatic
   h.emit('fishing:success', { player: p, skill: core.Skill.FISHING, itemId: I.RAW_LOBSTER });
   assert.equal(p.items.get(I.RAW_LOBSTER), 1);
   assert.equal(p.varbits.get(72), 37);
+});
+
+test('Throne of Miscellania: native approval survives login and legacy percentages migrate once', () => {
+  const done = new Set(); completeThronePrerequisites(done);
+  const h = harness(throne(), done), p = h.player();
+  h.quest.setStage(p, 90);
+  p.attributes.set('throne-of-miscellania:approval-native', 96);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(p.varbits.get(72), 96, 'a native save restores unchanged');
+  assert.equal(p.attributes.get('throne-of-miscellania:approval-native'), 96);
+
+  // The persisted default is -1 ("not migrated yet"), not a valid native value.
+  const fresh = h.player();
+  h.quest.setStage(fresh, 90);
+  h.hooks.onPlayerLogin[0]({ player: fresh });
+  assert.equal(fresh.varbits.get(72), 0, 'a missing attribute reads as no support');
+
+  const defaulted = h.player();
+  h.quest.setStage(defaulted, 90);
+  defaulted.attributes.set('throne-of-miscellania:approval-native', -1);
+  h.hooks.onPlayerLogin[0]({ player: defaulted });
+  assert.equal(defaulted.varbits.get(72), 0, 'the -1 sentinel alone is no support');
+
+  // Old saves held 0..100 percent under the legacy key. Native ceil keeps the
+  // same displayed percentage without inventing progress.
+  const legacy75 = h.player();
+  h.quest.setStage(legacy75, 90);
+  legacy75.attributes.set('throne-of-miscellania:approval-native', -1);
+  legacy75.attributes.set('throne-of-miscellania:approval', 75);
+  h.hooks.onPlayerLogin[0]({ player: legacy75 });
+  assert.equal(legacy75.varbits.get(72), 96, 'legacy 75% becomes Quest Helper native 96');
+  assert.equal(legacy75.attributes.get('throne-of-miscellania:approval-native'), 96);
+  const line75 = h.line(legacy75, N.KING_VARGAS, 'Your current approval rating is [number]%.');
+  assert.equal(line75.text, 'Your current approval rating is 75%.');
+
+  const legacy32 = h.player();
+  h.quest.setStage(legacy32, 90);
+  legacy32.attributes.set('throne-of-miscellania:approval', 32);
+  h.hooks.onPlayerLogin[0]({ player: legacy32 });
+  assert.equal(legacy32.varbits.get(72), 41, 'legacy 32% becomes native 41, not a reset');
+  assert.equal(legacy32.attributes.get('throne-of-miscellania:approval-native'), 41);
+
+  // Native 0 is authoritative once written; it must not re-read the legacy key.
+  const zero = h.player();
+  h.quest.setStage(zero, 90);
+  zero.attributes.set('throne-of-miscellania:approval-native', 0);
+  zero.attributes.set('throne-of-miscellania:approval', 75);
+  h.hooks.onPlayerLogin[0]({ player: zero });
+  assert.equal(zero.varbits.get(72), 0, 'native zero wins over the legacy value');
+
+  // A second login must not migrate the now-native value again.
+  h.hooks.onPlayerLogin[0]({ player: legacy75 });
+  assert.equal(legacy75.varbits.get(72), 96);
+  h.hooks.onPlayerLogin[0]({ player: legacy32 });
+  assert.equal(legacy32.varbits.get(72), 41);
 });
 
 test('Throne of Miscellania: the real ring Yes/Yes proposal earns trust', () => {

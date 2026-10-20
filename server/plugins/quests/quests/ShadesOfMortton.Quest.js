@@ -13,9 +13,13 @@
  * discussed, 55 temple repair begun, 60 altar can be lit, 65 sacred oil made,
  * 70 pyre logs made, 75 logs on the pyre, 80 shade cremated, 85 complete.
  * The rev-227 capture also writes temple varps 343 (repair %) and 345
- * (sanctity). Varp 340 is a bitfield: cache varbit "made_perm_serum" is bit 7,
- * and the capture's cure values are 12 for Razmire (bits 2+3) and 15 for both
- * priests (adds bits 0+1). Repair follows the captured build-tick model: one
+ * (sanctity). Varp 340 is a bitfield: the cache names made_perm_serum (bit 7),
+ * pyre_loc (9-13) and temple_resources (14-27). Quest Helper requires bit 1/3
+ * for partial 207 cures and bit 5/6 for permanent 208; bits 0/2 (used 207) come
+ * from the older LostCity-derived partial mask. Bit 7 matches the cache's
+ * made_perm_serum and is set at the altar. The capture's 207 cure values are
+ * 12 for Razmire (bits 2+3) and 15 for both priests (adds bits 0+1). Repair
+ * follows the captured build-tick model: one
  * material set per tick, +1% repair and +1 sanctity, with a worn Flamtaer
  * bracelet performing five ticks per click.
  *
@@ -74,11 +78,13 @@ module.exports = function registerShadesOfMorttonQuest(api) {
   const VARP_MORTTON_MULTI = 340;
   const VARP_TEMPLE_REPAIRED = 343;
   const VARP_TEMPLE_SANCTITY = 345;
-  // Varp 340 is a bitfield (cache: made_perm_serum is its bit 7). The
-  // rev-227 capture cures Razmire to 12 (bits 2+3) and Ulsquire to 15
-  // (the same bits plus 1+2), so the pair is OR-ed into one cure mask.
+  // Varp 340: bits 1/3 are Quest Helper's partial 207 visible flags (kept as
+  // 3/12 with the LostCity-derived 0/2 used flags), bits 5/6 are its permanent
+  // 208 flags, and bit 7 is the cache's made_perm_serum, set at the altar.
   const MULTI_ULSQUIRE_CURED = 0b0011;
   const MULTI_RAZMIRE_CURED = 0b1100;
+  const MULTI_ULSQUIRE_PERMANENT = 1 << 5;
+  const MULTI_RAZMIRE_PERMANENT = 1 << 6;
   const MULTI_PERM_SERUM = 1 << 7;
   const FLAMTAER_BRACELET_REPAIRS = 5;
 
@@ -233,6 +239,7 @@ module.exports = function registerShadesOfMorttonQuest(api) {
   const PERM_RAZMIRE_ATTRIBUTE = "shades-of-mortton:perm-razmire";
   const MULTI_ATTRIBUTE = "shades-of-mortton:multi";
   const PERM_GIFT_ATTRIBUTE = "shades-of-mortton:perm-gift";
+  const MADE_PERM_SERUM_ATTRIBUTE = "shades-of-mortton:made-perm-serum";
 
   const DIARY_TITLE = "Diary of Herbi Flax";
   // Capture 1846 ticks 7163-7166: the book opens on the page 11 spread.
@@ -308,13 +315,19 @@ module.exports = function registerShadesOfMorttonQuest(api) {
 
   function curedMultiValue(player) {
     let value = 0;
-    if (player.getAttribute(PERM_ULSQUIRE_ATTRIBUTE) || player.getAttribute(MET_ULSQUIRE_ATTRIBUTE)) {
+    if (player.getAttribute(MET_ULSQUIRE_ATTRIBUTE)) {
       value |= MULTI_ULSQUIRE_CURED;
     }
-    if (player.getAttribute(PERM_RAZMIRE_ATTRIBUTE) || player.getAttribute(MET_RAZMIRE_ATTRIBUTE)) {
+    if (player.getAttribute(MET_RAZMIRE_ATTRIBUTE)) {
       value |= MULTI_RAZMIRE_CURED;
     }
-    if (player.getAttribute(PERM_ULSQUIRE_ATTRIBUTE) || player.getAttribute(PERM_RAZMIRE_ATTRIBUTE)) {
+    if (player.getAttribute(PERM_ULSQUIRE_ATTRIBUTE)) {
+      value |= MULTI_ULSQUIRE_PERMANENT;
+    }
+    if (player.getAttribute(PERM_RAZMIRE_ATTRIBUTE)) {
+      value |= MULTI_RAZMIRE_PERMANENT;
+    }
+    if (player.getAttribute(MADE_PERM_SERUM_ATTRIBUTE)) {
       value |= MULTI_PERM_SERUM;
     }
     return value;
@@ -327,14 +340,9 @@ module.exports = function registerShadesOfMorttonQuest(api) {
   }
 
   function syncCuredNpcs(player) {
-    if (player.getAttribute(MULTI_ATTRIBUTE) === undefined) {
-      setMulti(player);
-      return;
-    }
-    player.getPacketSender().sendConfig(
-      VARP_MORTTON_MULTI,
-      Number(player.getAttribute(MULTI_ATTRIBUTE)) || 0
-    );
+    // Rebuild from the saved cure attributes so permanent 208 bits (5/6) and
+    // the altar bit (7) survive login even if an older save cached a stale mask.
+    setMulti(player);
   }
 
   function remainingCount(player) {
@@ -894,6 +902,8 @@ module.exports = function registerShadesOfMorttonQuest(api) {
       if (player.getInventory().getAmount(serumId) <= 0) continue;
       player.getInventory().deleteNumber(serumId, 1);
       player.getInventory().adds(permanentId, 1);
+      player.setAttribute(MADE_PERM_SERUM_ATTRIBUTE, true);
+      setMulti(player);
       player.sendMessage("You sanctify the serum in the sacred flame.");
       return;
     }
@@ -1083,6 +1093,7 @@ module.exports = function registerShadesOfMorttonQuest(api) {
   api.persistAttribute(PERM_RAZMIRE_ATTRIBUTE, false);
   api.persistAttribute(MULTI_ATTRIBUTE);
   api.persistAttribute(PERM_GIFT_ATTRIBUTE, false);
+  api.persistAttribute(MADE_PERM_SERUM_ATTRIBUTE, false);
 
   quest = registerQuest(api, {
     key: "shades_of_mortton",

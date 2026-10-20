@@ -1344,11 +1344,11 @@ module.exports = function registerPerilousMoonsQuest(api) {
       return;
     }
     if (entrance.kind === "cavern") {
-      handleCavernEntrance(player, entrance);
+      handleCavernEntrance(player, entrance, event);
       return;
     }
     if (entrance.kind === "tunnel") {
-      handleTunnelGate(player, entrance.landing);
+      handleTunnelGate(player, entrance.landing, event);
     }
   }
 
@@ -1373,11 +1373,17 @@ module.exports = function registerPerilousMoonsQuest(api) {
   }
 
   /** The long winding tunnels between the caverns (captured fade + message). */
-  function handleTunnelGate(player, landing) {
+  function handleTunnelGate(player, landing, event) {
     Scenes.fade(player, true);
     Scenes.controls(player, true, true);
     player.sendMessage("You follow a long and winding tunnel before emerging on the other side.");
-    player.moveTo(new Location(landing.x, landing.y, landing.z));
+    const transport = {
+      player, objectId: event?.objectId, source: event?.location,
+      destination: { x: landing.x, y: landing.y, z: landing.z },
+    };
+    api.emitCustomEvent("perilous-moons:transport", transport);
+    const destination = transport.destination ?? landing;
+    player.moveTo(new Location(destination.x, destination.y, destination.z));
     Scenes.later(player, 3, () => {
       if (!player.isRegistered()) return;
       Scenes.fade(player, false);
@@ -1397,7 +1403,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
     syncNpcs(player);
   }
 
-  function handleCavernEntrance(player, entrance) {
+  function handleCavernEntrance(player, entrance, event) {
     const stage = stageOf(player);
     if (stage < STAGE_TRIO) {
       startTranscript(api, player, ATTALA_NPC_ID, PAGE, V_GUARD_NO_TALK);
@@ -1408,7 +1414,13 @@ module.exports = function registerPerilousMoonsQuest(api) {
       return;
     }
     const landing = entrance.landing;
-    player.moveTo(new Location(landing.x, landing.y, landing.z));
+    const transport = {
+      player, objectId: event.objectId, source: event.location,
+      destination: { x: landing.x, y: landing.y, z: landing.z },
+    };
+    api.emitCustomEvent("perilous-moons:transport", transport);
+    const destination = transport.destination ?? landing;
+    player.moveTo(new Location(destination.x, destination.y, destination.z));
   }
 
   function handleBossEntrance(player, entrance) {

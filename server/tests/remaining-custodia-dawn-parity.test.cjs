@@ -59,7 +59,7 @@ function harness(name) {
       for (const [action, fn] of Object.entries(actions)) npcHandlers.push({ name, action, fn });
     },
     sendMultiChatboxPrompt(p, title, ...pairs) { p.prompt = { title, options: pairs.filter((_, i) => i % 2 === 0), pairs }; return true; },
-    onItemAction: (name, actions) => (hooks.onItemAction ??= []).push(...Object.values(actions)),
+    onItemAction: (name, actions) => (hooks.onItemAction ??= []).push(...Object.values(actions ?? {})),
     spawnNpc(definition) {
       let tile = new core.Location(definition.x, definition.y, definition.z);
       const npc = {
@@ -322,6 +322,72 @@ test('The Final Dawn sun altar consumes essence and the barrel puzzle needs the 
   h.object(p, 56496);
   h.action(p, N.ATTALA, 'pRXkuK');
   assert.equal(h.quest.getStage(p), 34);
+});
+
+test('The Final Dawn mirrors Quest Helper progress varbits from actual progress only', () => {
+  const h = harness('TheFinalDawn'), p = player();
+  h.quest.setStage(p, 30);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(p.varbits.get(16670) ?? 0, 0, 'beer not given before the action');
+  h.action(p, N.GALNA, 'FvNbYY');
+  assert.equal(h.quest.getStage(p), 31);
+  assert.equal(p.varbits.get(16670), 1, 'beer action mirrors 16670');
+
+  const legacy = player();
+  h.quest.setStage(legacy, 45);
+  h.hooks.onPlayerLogin[0]({ player: legacy });
+  assert.equal(legacy.varbits.get(16670), 1, 'older stage truthfully implies beer given');
+
+  p.varbits.delete(16670);
+  h.emit('player:bootstrap-complete', { player: p });
+  assert.equal(p.varbits.get(16670), 1, 'bootstrap resends 16670');
+
+  h.quest.setStage(p, 55);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  p.moveTo(new core.Location(1330, 9446, 1));
+  h.namedNpcs.get('Prince Itzla Arkan')['Talk-to']({ player: p, npcId: 14279 });
+  h.choose(p, 'East.');
+  assert.equal(p.varbits.get(16712), 1, 'Itzla moved mirrors 16712');
+  for (let step = 0; step < 3; step++) {
+    const [playerAltar, itzlaAltar] = sunPair(step);
+    p.attrs.set('the-final-dawn:sun-itzla', itzlaAltar);
+    p.items.set(I.KUHU_ESSENCE, 1);
+    h.object(p, 56687, 1, { x: SUN_TILES[playerAltar][0], y: SUN_TILES[playerAltar][1], z: 1 });
+    assert.equal(p.varbits.get(16675), step + 1, `sun progress step ${step + 1}`);
+    assert.equal(p.varbits.get(16712), 0, 'successful imbue resets Itzla state');
+  }
+
+  p.items.set(I.ROOT_KINDLING, 20);
+  for (const [need, expected] of [[2, 1], [6, 2], [6, 3]]) {
+    h.object(p, 56690, 1, { x: 1282, y: 9445, z: 1 });
+    h.choose(p, String(need));
+    assert.equal(p.varbits.get(16677), expected, `moon progress step ${expected}`);
+  }
+
+  h.quest.setStage(p, 65);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  h.object(p, 56600, 1, { x: 1304, y: 9527, z: 1 });
+  assert.equal(p.varbits.get(16695), 1, 'Ralos inspect mirrored');
+  h.object(p, 56603, 1, { x: 1317, y: 9527, z: 1 });
+  assert.equal(p.varbits.get(16696), 1, 'Ranul inspect mirrored');
+  h.object(p, 56613, 1, { x: 1310, y: 9533, z: 1 });
+  assert.equal(p.varbits.get(16717), 1, 'door inspect mirrored');
+  h.object(p, 56595, 1, { x: 1307, y: 9532, z: 1 });
+  assert.equal(p.varbits.get(16697), 1, 'tablet inspect mirrored');
+  assert.equal(h.quest.getStage(p), 66);
+
+  h.quest.setStage(p, 6);
+  p.items.set(I.KEY_37, 1);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(p.varbits.get(16667) ?? 0, 0, 'drawers locked until the key is used');
+  h.object(p, 56530, 1, { x: 1713, y: 9714, z: 0 });
+  assert.ok(p.items.get(I.CANVAS_PIECE), 'drawer action took the canvas');
+  assert.equal(p.varbits.get(16667), 1, 'drawer unlock mirrored from the real search');
+  h.quest.setStage(p, 4);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(p.varbits.get(16667) ?? 0, 0, 'drawers closed before the key');
+  assert.equal(p.varbits.get(16666), undefined, 'unmodeled drawer choice is not faked');
+  assert.equal(p.varbits.get(16694), undefined, 'unmodeled lift is not faked');
 });
 
 
@@ -936,6 +1002,55 @@ test('The Final Dawn Servius Teumo basement report accepts content id 14311', ()
   h.quest.setStage(p, 35);
   h.action(p, 14311, 'AxIldc');
   assert.equal(h.quest.getStage(p), 37);
+});
+
+test('The Final Dawn claims only its Neypotzli realm transports through Perilous Moons', () => {
+  const h = harness(['PerilousMoons', 'TheFinalDawn']);
+  const moons = h.quests.find(quest => quest.key === 'perilous_moons');
+  assert.ok(moons, 'Perilous Moons registered');
+  const perilous = h.hooks.onObjectInteraction[0];
+  const dawn = h.hooks.onObjectInteraction[1];
+  const click = (player, objectId, x, y, z) => ({
+    player, objectId, clickType: 1,
+    object: { getId: () => objectId, getLocation: () => new core.Location(x, y, z) },
+    definition: { getInteractions: () => ['Pass-through'] },
+    location: { x, y, z }, handled: false,
+  });
+
+  const p = player();
+  moons.setStage(p, 20);
+  h.quest.setStage(p, 39);
+  const streambound = click(p, 51376, 1458, 9650, 1);
+  perilous(streambound);
+  assert.equal(streambound.handled, true);
+  assert.equal(h.quest.getStage(p), 40, 'actual Moons transport advances Dawn 39 -> 40');
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1481, 9669, 0]);
+
+  const p2 = player();
+  moons.setStage(p2, 20);
+  h.quest.setStage(p2, 31);
+  const inactive = click(p2, 51376, 1458, 9650, 1);
+  perilous(inactive);
+  assert.equal(h.quest.getStage(p2), 31, 'inactive Dawn is unchanged by the same entrance');
+
+  const p3 = player();
+  moons.setStage(p3, 20);
+  h.quest.setStage(p3, 40);
+  p3.attrs.set('the-final-dawn:neypotzli-checkpoint', 1);
+  const earthbound = click(p3, 51378, 1521, 9720, 0);
+  perilous(earthbound);
+  assert.deepEqual([p3.getLocation().getX(), p3.getLocation().getY(), p3.getLocation().getZ()], [1390, 9676, 0],
+    'checkpoint1 transport lands on the captured Earthbound tile');
+  assert.equal(h.quest.getStage(p3), 40, 'Earthbound keeps stage40');
+
+  const p4 = player();
+  h.quest.setStage(p4, 40);
+  p4.attrs.set('the-final-dawn:neypotzli-checkpoint', 2);
+  const ancient = click(p4, 51377, 1373, 9664, 0);
+  dawn(ancient);
+  assert.deepEqual([p4.getLocation().getX(), p4.getLocation().getY(), p4.getLocation().getZ()], [1347, 9590, 0],
+    'checkpoint2 Dawn handler lands on the captured Ancient Prison tile');
+  assert.equal(h.quest.getStage(p4), 40, 'Ancient Prison keeps stage40');
 });
 
 test('The Final Dawn Strange Tiles step between the moon chamber and final floor', () => {

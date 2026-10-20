@@ -63,7 +63,7 @@ function harness() {
         getHitpoints: () => npc.hp ?? 1, setHitpoints(value) { npc.hp = value; }, getArea: () => npc.area ?? null, setArea(value) { npc.area = value; }, getOwner: () => definition.owner,
         getMovementQueue: () => ({ reset() { return this; }, setBlockMovement: noop, addFirstStep: noop }),
         getCombat: () => ({ attack: noop, getLastAttack: () => ({ reset: noop }) }), remove: noop,
-        setMaxHitpoints: noop, setScriptedMovement: noop, setMultiCombat: noop,
+        setMaxHitpoints: noop, setScriptedMovement: noop, setMultiCombat: noop, setNpcTransformationId: noop,
         setFlag: noop, performAnimation: noop, performGraphic: noop, forceChat: noop,
         setPositionToFace: noop, exactMove: noop, setFollowing: noop };
       npcs.push(npc); return npc;
@@ -1239,7 +1239,7 @@ test('native 128 raw theatre parents resolve and native 140 spawns the captured 
   assert.ok(p.manager.getCurrent(), 'canonical fighting-wyrds conversation starts');
 });
 
-test('gathering threshold finishes at the castle landing and spawns Ivan only at the real end', () => {
+test('gathering threshold spawns Ivan then Sugadinti and both reach the same canon', () => {
   const h = harness(), p = player('GatherEnd');
   enablePrereqs(h, new Set(PREREQS));
   h.quest.setStage(p, 96);
@@ -1261,6 +1261,23 @@ test('gathering threshold finishes at the castle landing and spawns Ivan only at
     'a 158 relog stays at the captured castle landing');
   assert.ok(h.npcs.some(npc => npc.id === 15852 && !h.removed.includes(npc)),
     'the login sync restores castle Ivan');
+  const line = { player: p, text: "My children, I'm sorry for rushing you inside.",
+    pages: [{ page: 'The Blood Moon Rises', variants: ['night-of-the-blood-moon-talking-to-ivan'] }],
+    step: { speaker: 'Sugadinti Vitur' } };
+  h.emit('npc-dialogue:line', line);
+  line.after?.();
+  assert.equal(p.varbits.get(15464), 160);
+  const sugadinti = h.npcs.find(npc => npc.id === 15957);
+  assert.ok(sugadinti, 'raw Sugadinti parent spawns during native 160');
+  assert.deepEqual([sugadinti.getLocation().getX(), sugadinti.getLocation().getY()], [2846, 7389]);
+  const sugadintiTalk = h.npcInteractions.get('Sugadinti Vitur')['Talk-to'];
+  assert.ok(sugadintiTalk({ player: p, npcId: 15957, definition: { getName: () => 'Sugadinti Vitur' } }));
+  assert.ok(p.manager.getCurrent(), 'Sugadinti routes to the canonical talking-to-ivan transcript');
+  h.emit('player:logout', { player: p });
+  assert.ok(h.removed.includes(sugadinti), 'logout removes castle Sugadinti');
+  h.emit('player:login', { player: p });
+  assert.ok(h.npcs.some(npc => npc.id === 15957 && !h.removed.includes(npc)),
+    'login restores castle Sugadinti at native 160');
 });
 
 test('supply chest opens the cache-owned vampyrium omnishop repeatedly, with no auto grant', () => {
@@ -1422,4 +1439,104 @@ test('mounted shield sends 15526 and gives the solid key through the compartment
   h.emit('player:login', { player: p3 });
   assert.equal(p3.varbits.get(15526), 1, 'login resyncs the mounted shield varbit');
   assert.equal(ObjectDefinition.forPlayer(61698, p3).id, 61700);
+});
+
+test('stage 164 Efaritay uses the captured graveyard tile while 174 keeps its cutscene tile', () => {
+  const h = harness(), p = player('Efaritay164');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 96);
+  p.attrs.set('quest.the_blood_moon_rises.final-native-stage', 160);
+  const line = { player: p, text: 'Thank you, and good luck, my child.',
+    pages: [{ page: 'The Blood Moon Rises', variants: ['night-of-the-blood-moon-talking-to-ivan'] }],
+    step: { speaker: 'Sugadinti Vitur' } };
+  h.emit('npc-dialogue:line', line);
+  line.after?.();
+  assert.equal(h.quest.getStage(p), 100);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3700, 3185]);
+  const efaritay = h.npcs.find(npc => npc.id === N.EFARITAY_HALLOW_3);
+  assert.ok(efaritay, 'the stage-164 Efaritay actor spawns');
+  assert.deepEqual([efaritay.getLocation().getX(), efaritay.getLocation().getY()], [3700, 3185]);
+
+  p.attrs.set('quest.the_blood_moon_rises.drakan-death-confirmed', true);
+  h.emit('npc-dialogue:action', { player: p, stepId: 'HNA3XS', kind: 'action' });
+  assert.equal(p.varbits.get(15464), 174);
+  assert.ok(h.npcs.some(npc => npc.getLocation().getX() === 3706 && npc.getLocation().getY() === 3211),
+    'the 174 cutscene actors remain on the primary 3706,3211 tiles');
+});
+
+test('Quest Helper sub-progress varbits publish from modeled actions and login restore', () => {
+  const h = harness(), p = player('QhProgress');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 60);
+  const prepLine = text => ({ player: p, text,
+    pages: [{ page: 'The Blood Moon Rises', variants: ['hallowed-preparations-talking-to-ivan-and-sarei'] }],
+    step: { speaker: 'Ivan Strom' } });
+  const ivanLine = prepLine("I hope so too. We're going to need all the advantages we can find.");
+  h.emit('npc-dialogue:line', ivanLine);
+  ivanLine.after?.();
+  assert.equal(p.varbits.get(15473), 1, 'Ivan hideout progress step 1');
+  const veliafLine = prepLine('Well, if you want to try getting something out of her, be my guest.');
+  h.emit('npc-dialogue:line', veliafLine);
+  veliafLine.after?.();
+  assert.equal(p.varbits.get(15474), 1, 'Veliaf hideout progress step 1');
+
+  const p2 = player('QhStakes');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p2, 60);
+  p2.attrs.set('quest.the_blood_moon_rises.preparations', { stakes: true });
+  h.emit('player:login', { player: p2 });
+  assert.equal(p2.varbits.get(15473), 2, 'login restores the fletched-stakes progress');
+
+  p2.attrs.set('quest.the_blood_moon_rises.preparations',
+    { stakes: true, ivanSareiIntroComplete: true, stakesConversationComplete: true });
+  const ack = { player: p2, text: "I hope so too. We're going to need all the advantages we can find.",
+    pages: [{ page: 'The Blood Moon Rises', variants: ['hallowed-preparations-talking-to-ivan-and-sarei-talking-to-them-again'] }],
+    step: { player: 'I hope so too.' } };
+  h.emit('npc-dialogue:line', ack);
+  ack.after?.();
+  assert.equal(p2.varbits.get(15473), 3, 'the actual stakes acknowledgement publishes step 3');
+
+  p.attrs.set('quest.the_blood_moon_rises.preparations',
+    { ...(p.attrs.get('quest.the_blood_moon_rises.preparations') ?? {}),
+      veliafFirstTalkComplete: true, vanesculaTalkComplete: true, veliafFollowupComplete: true });
+  h.emit('player:login', { player: p });
+  assert.equal(p.varbits.get(15474), 3, 'login restores completed Veliaf progress');
+
+  h.quest.setStage(p, 50);
+  p.attrs.set('quest.the_blood_moon_rises.blood-hunt', { nativeStage: 84 });
+  h.emit('npc-dialogue:action', { player: p, stepId: 'lvEeSL', kind: 'message', text: 'Ivan hands over supplies.' });
+  assert.equal(p.varbits.get(15481), 1, 'actual Ivan supply handover publishes the supply warning');
+
+  h.quest.setStage(p, 40);
+  h.emit('npc-dialogue:action', { player: p, stepId: 'ikSyAR', kind: 'action' });
+  assert.equal(p.varbits.get(15482), 1, 'actual Vampyrium arrival publishes in_vampyrium');
+  p.moveTo(new core.Location(2846, 7391, 0));
+  h.quest.setStage(p, 45);
+  h.emit('quest:stage-changed', { player: p });
+  assert.equal(p.varbits.get(15482), 0, 'returning to Morytania clears in_vampyrium');
+
+  const realm = (stage, x, y, z = 0) => {
+    p.moveTo(new core.Location(x, y, z));
+    h.quest.setStage(p, stage);
+    h.emit('quest:stage-changed', { player: p });
+    return p.varbits.get(15482);
+  };
+  assert.equal(realm(45, 2576, 7838), 1, 'native-88 town');
+  assert.equal(realm(50, 2950, 7831), 1, 'native-94/98 refuge');
+  assert.equal(realm(60, 3157, 7839, 1), 1, 'preparations palace');
+  assert.equal(realm(70, 3168, 7855, 1), 1, 'siege hall');
+  assert.equal(realm(60, 3161, 7710), 0, 'Morytania castle entry stays outside');
+  assert.equal(realm(60, 2846, 7391), 0, 'Morytania gathering landing stays outside');
+  assert.equal(realm(60, 2843, 7646), 1, 'temporary Vampyrium resupply remains inside');
+
+  h.quest.setStage(p, 100);
+  p.attrs.set('quest.the_blood_moon_rises.final-portal-used', true);
+  p.attrs.set('quest.the_blood_moon_rises.final-native-stage', 168);
+  p.moveTo(new core.Location(2507, 7383, 0));
+  h.emit('player:login', { player: p });
+  assert.equal(p.varbits.get(15482), 1, 'final Vampyrium realm is true at 168');
+  p.attrs.set('quest.the_blood_moon_rises.final-native-stage', 174);
+  p.moveTo(new core.Location(3731, 3220, 0));
+  h.emit('quest:stage-changed', { player: p });
+  assert.equal(p.varbits.get(15482), 0, '174 outside Vampyrium is false');
 });

@@ -86,6 +86,8 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
   // Stage values / varbits
   // ==========================================================================
 
+  const VARBIT_INVESTIGATED_ENTRY = 13844; // bcs_investigated_entry, varp 3421 bit 12
+  const VARBIT_FOUND_MOULD = 13847; // bcs_found_mould, varp 3421 bits 15-17
   const VARBIT_LILY = 13850; // bcs_lily_type
   const VARBIT_OWED_PARTISAN = 13853; // bcs_owed_partisan
   const VARBIT_OWED_CIRCLET = 13854; // bcs_owed_circlet
@@ -326,6 +328,9 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
 
   const INTRO_ATTRIBUTE = "beneath-cursed-sands:maisa-intro";
   const ENTRY_INSPECTED_ATTRIBUTE = "beneath-cursed-sands:entry-inspected";
+  const TABLET_FOUND_ATTRIBUTE = "beneath-cursed-sands:tablet-found";
+  const TABLET_READ_ATTRIBUTE = "beneath-cursed-sands:tablet-read";
+  const MOULD_FOUND_ATTRIBUTE = "beneath-cursed-sands:mould-found";
   const TALKED_CITIZEN_ATTRIBUTE = "beneath-cursed-sands:talked-citizen";
   const URNS_ATTRIBUTE = "beneath-cursed-sands:urns";
   const LEVERS_ATTRIBUTE = "beneath-cursed-sands:levers";
@@ -427,7 +432,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     quest.setStage(player, value);
     syncNpcs(player);
     // Lily/owed varbits live in the same parent varp as the stage.
-    sendQuestBits(player);
+    syncQuestVarbits(player);
   }
 
   function introDone(player) {
@@ -517,8 +522,20 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     return null;
   }
 
-  function sendQuestBits(player) {
+  /** The native bcs_found_mould values the helper reads: 1 found, 2 read, 4 mould taken. */
+  function foundMouldState(player) {
+    if (hasFlag(player, MOULD_FOUND_ATTRIBUTE) || quest.getStage(player) >= STAGE_EMBLEM) return 4;
+    if (hasFlag(player, TABLET_READ_ATTRIBUTE)) return 2;
+    if (hasFlag(player, TABLET_FOUND_ATTRIBUTE)) return 1;
+    return 0;
+  }
+
+  /** Publish the persisted BCS sub-varbits, leaving every bit sibling untouched. */
+  function syncQuestVarbits(player) {
     const sender = player.getPacketSender();
+    const stage = quest.getStage(player);
+    sender.sendVarbit(VARBIT_INVESTIGATED_ENTRY, entryInspected(player) || stage >= STAGE_ENTRY_INSPECTED ? 1 : 0);
+    sender.sendVarbit(VARBIT_FOUND_MOULD, foundMouldState(player));
     sender.sendVarbit(VARBIT_LILY, lilyType(player));
     sender.sendVarbit(VARBIT_OWED_PARTISAN, owedPartisan(player) ? 1 : 0);
     sender.sendVarbit(VARBIT_OWED_CIRCLET, owedCirclet(player) ? 1 : 0);
@@ -1056,7 +1073,9 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
         return;
       case "PCiLey": // well: stone tablet found
         if (!hasItem(player, STONE_TABLET_ITEM)) player.getInventory().adds(STONE_TABLET_ITEM, 1);
+        flag(player, TABLET_FOUND_ATTRIBUTE, true);
         if (quest.getStage(player) < STAGE_TABLET) setStage(player, STAGE_TABLET);
+        syncQuestVarbits(player);
         return;
       case "D9NBz-": // dig up an old chest
         if (!hasItem(player, CHEST_ITEM)) player.getInventory().adds(CHEST_ITEM, 1);
@@ -1139,7 +1158,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
       case "L2Rz7X": // lily picked
         if (!hasItem(player, LILY_ITEM)) player.getInventory().adds(LILY_ITEM, 1);
         if (quest.getStage(player) < STAGE_LILY_PICKED) setStage(player, STAGE_LILY_PICKED);
-        sendQuestBits(player);
+        syncQuestVarbits(player);
         return;
       case "EHRsdS": // Maisa departs to get the venom
         removeTracked(player, "nardah-maisa");
@@ -1353,7 +1372,9 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     }
     if (itemId === STONE_TABLET_ITEM && option === "Read") {
       event.handled = true;
+      flag(player, TABLET_READ_ATTRIBUTE, true);
       openLorePanel(player, LORE_TABLET_INTERFACE, TABLET_LORE);
+      syncQuestVarbits(player);
       return;
     }
     if (itemId === CHEST_ITEM && option === "Open") {
@@ -1378,7 +1399,9 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     player.getInventory().deleteNumber(CHEST_ITEM, 1);
     if (!hasItem(player, SCARAB_MOULD_ITEM)) player.getInventory().adds(SCARAB_MOULD_ITEM, 1);
     player.sendMessage("You unlock the chest and recover a scarab mould from within.");
+    flag(player, MOULD_FOUND_ATTRIBUTE, true);
     if (quest.getStage(player) < STAGE_MOULD) setStage(player, STAGE_MOULD);
+    syncQuestVarbits(player);
   }
 
   function openLorePanel(player, interfaceId, lines) {
@@ -1550,6 +1573,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
       event.handled = true;
       flag(player, ENTRY_INSPECTED_ATTRIBUTE, true);
       if (stage < STAGE_ENTRY_INSPECTED) setStage(player, STAGE_ENTRY_INSPECTED);
+      else syncQuestVarbits(player);
       startTranscript(api, player, MAISA_CAMP, PAGE, "starting-off-inspecting-the-blocked-entry-after-finishing-the-cutscene");
       return;
     }
@@ -1648,6 +1672,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     if (!entryInspected(player)) {
       flag(player, ENTRY_INSPECTED_ATTRIBUTE, true);
       if (quest.getStage(player) < STAGE_ENTRY_INSPECTED) setStage(player, STAGE_ENTRY_INSPECTED);
+      else syncQuestVarbits(player);
       startTranscript(api, player, MAISA_CAMP, PAGE, "starting-off-inspecting-the-blocked-entry-after-finishing-the-cutscene");
     }
   }
@@ -1971,7 +1996,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
   function handleLogin({ player }) {
     installTombLevers();
     syncNpcs(player);
-    sendQuestBits(player);
+    syncQuestVarbits(player);
     // Only resume a genuinely unfinished intro when physically inside the west arena;
     // stage 58 outside (e.g. 3432,9248) must re-enter through 43960 first.
     if (inChampionArena(player)) startChampionIntro(player);
@@ -1982,7 +2007,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
   }
 
   function handleBootstrap({ player }) {
-    sendQuestBits(player);
+    syncQuestVarbits(player);
   }
 
   function buildJournal(player, questHandle) {
@@ -2081,6 +2106,9 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
 
   api.persistAttribute(INTRO_ATTRIBUTE);
   api.persistAttribute(ENTRY_INSPECTED_ATTRIBUTE);
+  api.persistAttribute(TABLET_FOUND_ATTRIBUTE, false);
+  api.persistAttribute(TABLET_READ_ATTRIBUTE, false);
+  api.persistAttribute(MOULD_FOUND_ATTRIBUTE, false);
   api.persistAttribute(TALKED_CITIZEN_ATTRIBUTE);
   api.persistAttribute(URNS_ATTRIBUTE);
   api.persistAttribute(LEVERS_ATTRIBUTE);

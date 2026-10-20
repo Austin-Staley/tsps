@@ -2144,6 +2144,16 @@ test('Ivan reclaims a lost Drakan medallion only after Sins of the Father is com
     .filter(entry => entry.key === 'sins_of_the_father').at(-1);
   const attributes = new Map();
   const items = new Map();
+  const messages = [];
+  let freeSlots = 28;
+  let bloodMoonStarted = false;
+  let bloodMoonComplete = false;
+  const emitCustomEvent = api.emitCustomEvent;
+  api.emitCustomEvent = (name, request) => {
+    if (name === 'quest:is-started' && request.key === 'the_blood_moon_rises') request.started = bloodMoonStarted;
+    if (name === 'quest:is-complete' && request.key === 'the_blood_moon_rises') request.complete = bloodMoonComplete;
+    emitCustomEvent(name, request);
+  };
   const player = {
     isPlayerBot: () => true,
     getAttribute: key => attributes.get(key),
@@ -2153,12 +2163,13 @@ test('Ivan reclaims a lost Drakan medallion only after Sins of the Father is com
       getAmount: id => items.get(id) ?? 0,
       contains: id => (items.get(id) ?? 0) > 0,
       adds: (id, amount) => { items.set(id, (items.get(id) ?? 0) + amount); return true; },
-      getFreeSlots: () => 28 - [...items.values()].reduce((sum, amount) => sum + amount, 0),
+      getFreeSlots: () => freeSlots,
     }),
-    sendMessage() {},
+    sendMessage: text => messages.push(text),
   };
   const actions = handlers.custom.get('npc-dialogue:action');
   const reclaim = stepId => actions.forEach(handler => handler({ player, npcId: 4440, stepId }));
+  attributes.set('quest.sins_of_the_father.tome-chapters', 1);
   quest.setStage(player, 137);
   reclaim('ZoWCuH');
   assert.equal(items.get(22400) ?? 0, 0, 'the post-quest NPC action does not bypass Sins completion');
@@ -2169,10 +2180,56 @@ test('Ivan reclaims a lost Drakan medallion only after Sins of the Father is com
     [3598, 9613, 0],
     'the actionable post-quest Ivan is placed at his canonical Meiyerditch hideout tile',
   );
-  reclaim('ZoWCuH');
+
+  const chooseVariant = handlers.variant.at(-1);
+  const ivanContext = {
+    player,
+    npcId: 4440,
+    definition: { getName: () => 'Ivan Strom' },
+    pages: [
+      { page: 'In Aid of the Myreque', variants: ['the-myreque-s-job-offer-ivan-strom'] },
+      { page: 'Ivan Strom', variants: ['standard-dialogue-after-completing-in-search-of-the-myreque',
+        'standard-dialogue-after-completing-sins-of-the-father'] },
+    ],
+  };
+  assert.equal(chooseVariant(ivanContext), 'standard-dialogue-after-completing-sins-of-the-father',
+    'post-Sins Ivan selects the canonical transcript with the medallion reclaim option');
+  bloodMoonStarted = true;
+  assert.equal(chooseVariant(ivanContext), null, 'an active Blood Moon chapter keeps Ivan ownership');
+  bloodMoonStarted = false;
+  bloodMoonComplete = true;
+  assert.equal(chooseVariant(ivanContext), null, 'completed Blood Moon also keeps Ivan ownership');
+  bloodMoonComplete = false;
+
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const ivanVariant = JSON.parse(fs.readFileSync(
+    path.join(__dirname, '../data/definitions/npc-dialogues.json'), 'utf8',
+  ))['Ivan Strom'].variants['standard-dialogue-after-completing-sins-of-the-father'];
+  let medallionActionId;
+  const walk = steps => (steps || []).forEach(step => {
+    for (const option of step.options ?? []) {
+      if (option.text === "I need another Drakan's Medallion.") {
+        medallionActionId = (option.steps ?? []).find(entry => entry.type === 'action')?.id;
+      }
+      walk(option.steps);
+    }
+    walk(step.steps);
+  });
+  walk(ivanVariant);
+  assert.equal(medallionActionId, 'ZoWCuH',
+    'the canonical post-Sins option is wired to the medallion reclaim action');
+
+  freeSlots = 0;
+  reclaim(medallionActionId);
+  assert.equal(items.get(22400) ?? 0, 0, 'a full backpack cannot hand out the medallion');
+  assert.ok(messages.some(text => text.includes('empty inventory slot')), 'a full backpack reports the missing slot');
+  freeSlots = 28;
+  reclaim(medallionActionId);
   assert.equal(items.get(22400), 1, 'Ivan restores the actual quest reward after the transcript reclaim action');
   reclaim('R8U1L0');
   assert.equal(items.get(22400), 1, 'repeating the other transcript variant cannot duplicate the medallion');
+  assert.equal(attributes.get('quest.sins_of_the_father.tome-chapters'), 1, 'medallion reclaim leaves the tome chapter count alone');
   delete require.cache[require.resolve('../plugins/quests/quests/SinsOfTheFather.Quest')];
 });
 
@@ -4621,7 +4678,9 @@ test('Blood Moon Ivan preserves the four-slot supply handout until it fits', () 
     [api.core.ItemIdentifiers.FOUL_CHUNKY_POTION_3_, 1],
   ].sort((a, b) => a[0] - b[0]));
   assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').suppliesClaimed, true);
-  assert.deepEqual(sentVarbits.at(-1), [15565, 0]);
+  assert.deepEqual(sentVarbits.find(([id]) => id === 15565), [15565, 0]);
+  assert.deepEqual(sentVarbits.filter(([id]) => id === 15481).at(-1), [15481, 1],
+    'the actual supply handover publishes the Quest Helper warning varbit');
   const duplicate = claim();
   action(duplicate);
   assert.equal(duplicate.end, true);

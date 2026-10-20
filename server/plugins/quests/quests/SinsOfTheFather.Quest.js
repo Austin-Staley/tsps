@@ -96,6 +96,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   const PAGE = "Sins of the Father";
   const START_HOOK = "quest:sins-of-the-father:start";
   const PREREQUISITE_KEY = "taste_of_hope";
+  const BLOOD_MOON_KEY = "the_blood_moon_rises";
   const BITS_ATTRIBUTE = "quest.sins_of_the_father.bits";
   const TOME_USES_ATTRIBUTE = "quest.sins_of_the_father.tome-chapters";
   const BRIDGE_ATTRIBUTE = "sins-of-the-father:bridge-repairs";
@@ -834,6 +835,12 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     const request = { player, key, complete: null };
     api.emitCustomEvent("quest:is-complete", request);
     return request.complete === true;
+  }
+
+  function questStarted(player, key) {
+    const request = { player, key, started: false };
+    api.emitCustomEvent("quest:is-started", request);
+    return request.started === true;
   }
 
   function meetsRequirements(player) {
@@ -2517,7 +2524,16 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
       }
       return null;
     }
-    if (quest.isComplete(player)) return null;
+    if (quest.isComplete(player)) {
+      // Post-Sins Ivan keeps the canonical transcript with the medallion reclaim
+      // option. Blood Moon owns Ivan while it is in progress (and after it is
+      // complete); its earlier variant hook supplies that page instead.
+      const bloodMoonOwned = questStarted(player, BLOOD_MOON_KEY) || questComplete(player, BLOOD_MOON_KEY);
+      if (npcId === IVAN_ID && !bloodMoonOwned) {
+        return "standard-dialogue-after-completing-sins-of-the-father";
+      }
+      return null;
+    }
     if (VELIAF_IDS.has(npcId)) {
       if (stage < STAGE_HAMELN) return "slepe-s-sleeper-plague-talking-to-veliaf-talking-to-veliaf-again";
       if (stage < STAGE_FOLLOWING) return "slepe-s-sleeper-plague-talking-to-hameln-report-back-to-veliaf";

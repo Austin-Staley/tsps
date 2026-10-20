@@ -20,8 +20,10 @@
  * to Enter at 27 (58439 -> 58440/58441).
  *
  * Repairs use the sibling varbits of varp 4961: 18327-18332 (1 = Repair option
- * visible, 2 = repaired) and 18333 for the free shield. Their values are
- * persisted in "troubled-tortugans:*" attributes and re-sent on login and on
+ * visible, 2 = repaired) and 18333 for the free shield. Tracking publishes
+ * 18322-18326 as each trail step is found (capture 3456 sets 0 -> 1 in order
+ * and clears them on completion). Their values are persisted in
+ * "troubled-tortugans:*" attributes and re-sent on login and on
  * player:bootstrap-complete, because the runtime only re-sends the stage.
  *
  * Rewards (OSRS Wiki): 1 Quest point, 10,000 Sailing XP and 8,000 Slayer XP
@@ -130,6 +132,7 @@ module.exports = function registerTroubledTortugansQuest(api) {
   // Varbits ("tt" family, varp 4961).
   const VARP_TROUBLED_TORTUGANS = 4961; // "tt" stage and repair bits
   const VARBIT_STAGE = 18321; // "tt", bits 0-5
+  const VARBIT_TRAIL = [18322, 18323, 18324, 18325, 18326]; // hunting trail 1-5, bits 6-15
   const VARBIT_REPAIR_KRILL_STALL = 18327;
   const VARBIT_REPAIR_KRILL_WALL = 18328;
   const VARBIT_REPAIR_STROM_WALL = 18329;
@@ -676,6 +679,7 @@ module.exports = function registerTroubledTortugansQuest(api) {
       && text.startsWith("No, no, no! Thank you")
       && (RALEY_NPC_IDS.has(npcId) || INJURED_TORTUGAN_NPC_IDS.has(npcId) || FLOOPA_NPC_IDS.has(npcId))) {
       quest.complete(player);
+      syncProgressVarbits(player); // the capture clears the trail flags on completion
     }
   }
 
@@ -806,6 +810,7 @@ module.exports = function registerTroubledTortugansQuest(api) {
     if (trailProgress(player) === 0 && stage < STAGE_TRAIL_FOUND) {
       player.setAttribute(TRAIL_ATTRIBUTE, 1);
       quest.setStage(player, STAGE_TRAIL_FOUND);
+      syncProgressVarbits(player);
       player.sendMessage("You notice a set of tracks leading west from the monument.");
       return true;
     }
@@ -824,6 +829,7 @@ module.exports = function registerTroubledTortugansQuest(api) {
       player.setAttribute(TRAIL_ATTRIBUTE, trail + 1);
       trackingAnswer.set(player, kind);
       if (trail + 1 >= TRAIL_STEPS) quest.setStage(player, STAGE_UNBLOCK_CAVE);
+      syncProgressVarbits(player);
     } else {
       trackingAnswer.set(player, "none");
     }
@@ -1304,10 +1310,16 @@ module.exports = function registerTroubledTortugansQuest(api) {
     const stage = quest.getStage(player);
     const done = repairsDone(player);
     const repairsActive = stage >= STAGE_REPAIRS_GIVEN;
+    const trail = quest.isComplete(player) ? 0 : trailProgress(player);
     const packet = player.getPacketSender();
     for (const repair of REPAIRS) {
       const value = (done & repair.bit) !== 0 ? 2 : repairsActive ? 1 : 0;
       packet.sendVarbit(repair.varbit, value);
+    }
+    // The capture sets each trail varbit to 1 as its step is inspected and
+    // clears them all when the quest completes.
+    for (let step = 0; step < VARBIT_TRAIL.length; step++) {
+      packet.sendVarbit(VARBIT_TRAIL[step], trail > step ? 1 : 0);
     }
     packet.sendVarbit(VARBIT_FREE_SHIELD, freeShieldGiven(player) ? 1 : 0);
   }

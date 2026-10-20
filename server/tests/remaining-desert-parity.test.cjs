@@ -287,6 +287,56 @@ test('Beneath Cursed Sands: the seven-digit chest code is 1118513', () => {
   assert.equal(p.items.get(I.SCARAB_MOULD), 1);
 });
 
+test('Beneath Cursed Sands: entry inspection publishes native 13844 and login restores it', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 14);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(p.varbits.get(13844), 0, 'an uninspected entry stays zero');
+  const entry = h.object(p, 44008);
+  assert.equal(entry.handled, true);
+  assert.equal(h.quest.getStage(p), 16);
+  assert.equal(p.varbits.get(13844), 1, 'inspecting the blocked entry publishes 1');
+  p.varbits.delete(13844);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(p.varbits.get(13844), 1, 'login restores the persisted inspection');
+  const pristine = player();
+  h.quest.setStage(pristine, 14);
+  h.hooks.onPlayerLogin[0]({ player: pristine });
+  assert.equal(pristine.varbits.get(13844), 0);
+});
+
+test('Beneath Cursed Sands: tablet and mould progress publishes 13847 without advancing', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 32);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(p.varbits.get(13847), 0, 'unfinished tablet events stay zero');
+  p.varbits.set(13844, 1);
+
+  h.action(p, 11474, 'PCiLey');
+  assert.equal(h.quest.getStage(p), 32, 'finding the tablet does not advance the quest');
+  assert.equal(p.varbits.get(13847), 1, 'found tablet is native 1');
+
+  h.itemAction(p, I.STONE_TABLET_5, 'Read');
+  assert.equal(h.quest.getStage(p), 32, 'reading the tablet does not advance the quest');
+  assert.equal(p.varbits.get(13847), 2, 'read tablet is native 2, which Quest Helper requires');
+  assert.equal(p.varbits.get(13844), 1, 'the sibling 13844 bit survives');
+
+  p.varbits.delete(13847);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(p.varbits.get(13847), 2, 'login restores the read tablet');
+
+  p.items.set(I.CHEST_3, 1);
+  h.itemAction(p, I.CHEST_3, 'Open');
+  p.amountAction.execute(1118513);
+  assert.equal(h.quest.getStage(p), 32, 'opening the chest does not advance the quest');
+  assert.equal(p.varbits.get(13847), 4, 'recovering the mould is native 4');
+  p.varbits.delete(13847);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.equal(p.varbits.get(13847), 4, 'login restores the found mould');
+});
+
 test('Beneath Cursed Sands: the recorded chemistry valves reach 12/39/45', () => {
   const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
   const p = player();

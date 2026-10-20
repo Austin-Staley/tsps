@@ -400,6 +400,7 @@ test("Shades of Mort'ton repairs to native 100/20, sanctifies serum and complete
   h.give(I.SERUM_207_4_, 1);
   h.itemOnObject(I.SERUM_207_4_, O.FLAMING_FIRE_ALTAR);
   assert.equal(h.inventory.get(I.SERUM_208_4_), 1);
+  assert.ok((h.configs.get(340) & 128) !== 0, 'sanctifying 207 sets made_perm_serum bit 7');
 
   h.give(I.SACRED_OIL_4_, 5);
   h.hooks.itemOnItem[0]({ player: h.player, usedItemId: I.SACRED_OIL_4_, usedWithItemId: I.MAGIC_LOGS });
@@ -493,7 +494,7 @@ test('Tai Bwo Wannai Trio migrates old completion without replaying the reward',
   assert.equal(h.inventory.get(h.core.ItemIdentifiers.COINS) ?? 0, 0);
 });
 
-test("Shades of Mort'ton migrates old saves and sets the permanent-serum bit", () => {
+test("Shades of Mort'ton migrates old saves and publishes the native 207/208 cure bits", () => {
   const legacy = setup('../plugins/quests/quests/ShadesOfMortton.Quest');
   legacy.attrs.set('quest.shades_of_mortton.stage', 100);
   legacy.login();
@@ -513,11 +514,34 @@ test("Shades of Mort'ton migrates old saves and sets the permanent-serum bit", (
   const cured = setup('../plugins/quests/quests/ShadesOfMortton.Quest');
   const I = cured.core.ItemIdentifiers, N = cured.core.NpcIdentifiers;
   cured.quest.setStage(cured.player, 80);
+  cured.give(I.SERUM_207_4_, 1);
+  for (const fn of cured.hooks.itemOnNpc) fn({ player: cured.player, npcId: N.ULSQUIRE_SHAUNCY, itemId: I.SERUM_207_4_, handled: false });
+  assert.equal(cured.configs.get(340) & 0b1111, 0b0011, '207 on Ulsquire sets partial bits 0+1, not permanent bits');
+  assert.equal(cured.configs.get(340) & 0b11100000, 0, '207 does not set permanent or made bits');
+
   cured.give(I.SERUM_208_4_, 1);
   for (const fn of cured.hooks.itemOnNpc) fn({ player: cured.player, npcId: N.RAZMIRE_KEELGAN, itemId: I.SERUM_208_4_, handled: false });
   const multi = cured.configs.get(340);
-  assert.ok((multi & 128) !== 0, 'made_perm_serum bit is set by serum 208');
-  assert.ok((multi & 12) !== 0, 'Razmire cure bits are set');
+  assert.equal(multi & 64, 64, '208 on Razmire sets native permanent bit 6');
+  assert.equal(multi & 32, 0, '208 on Razmire does not set Ulsquire bit 5');
+  assert.equal(multi & 0b1100, 0, '208 is not published as the 207 Razmire partial mask');
+  assert.equal(multi & 128, 0, 'using 208 does not pretend the player sanctified it');
+
+  cured.give(I.SERUM_208_4_, 1);
+  for (const fn of cured.hooks.itemOnNpc) fn({ player: cured.player, npcId: N.ULSQUIRE_SHAUNCY, itemId: I.SERUM_208_4_, handled: false });
+  assert.equal(cured.configs.get(340) & 32, 32, '208 on Ulsquire sets native permanent bit 5');
+  assert.equal(cured.configs.get(340) & 64, 64, 'Razmire permanent bit survives the second use');
+
+  const permanent = setup('../plugins/quests/quests/ShadesOfMortton.Quest');
+  permanent.attrs.set('shades-of-mortton:perm-ulsquire', true);
+  permanent.attrs.set('shades-of-mortton:perm-razmire', true);
+  permanent.attrs.set('shades-of-mortton:made-perm-serum', true);
+  permanent.login();
+  const restored = permanent.configs.get(340);
+  assert.equal(restored & 32, 32, 'login restores Ulsquire permanent bit 5');
+  assert.equal(restored & 64, 64, 'login restores Razmire permanent bit 6');
+  assert.equal(restored & 128, 128, 'login restores made_perm_serum bit 7');
+  assert.equal(restored & 0b1111, 0, 'login does not invent a partial 207 mask');
 });
 
 test("Shades of Mort'ton first repair gives the captured 1% repair / 2% sanctity, then a sanctity tick", () => {

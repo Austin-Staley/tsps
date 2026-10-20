@@ -291,8 +291,12 @@ test('crime scene evidence needs all four finds and the third-find prompt is not
   const answerCondition = h.hooks.onNpcDialogueCondition[0];
   h.object(p, O.CERIL_CARNILLEAN, at(2564, 3268, 1));
   h.action(p, 'kSSea9');
+  assert.deepEqual([14726, 14727, 14728, 14729].map(id => p.varbits.get(id)), [0, 1, 0, 0],
+    'inspected body publishes only its own native flag');
   h.object(p, O.BROKEN_WINDOW, at(2569, 3268, 1));
   h.action(p, 'dEf_k3');
+  assert.deepEqual([14726, 14727, 14728, 14729].map(id => p.varbits.get(id)), [0, 1, 1, 0],
+    'inspected window keeps the body flag and adds window');
   const condition = { player: p, text: 'If this is the third piece of evidence observed:', pages };
   const replied = answerCondition(condition);
   assert.equal(replied, false, 'two pieces is not the third');
@@ -300,10 +304,15 @@ test('crime scene evidence needs all four finds and the third-find prompt is not
 
   h.object(p, O.WALL_169, at(2566, 3268, 1));
   h.action(p, 'HJ2S0x');
+  assert.deepEqual([14726, 14727, 14728, 14729].map(id => p.varbits.get(id)), [1, 1, 1, 0],
+    'inspected wall does not invent the chest flag');
   assert.equal(answerCondition(condition), true, 'third piece');
 
   h.object(p, O.CHEST_161, at(2572, 3270, 2));
   h.action(p, 'iHp8Db');
+  assert.deepEqual([14726, 14727, 14728, 14729].map(id => p.varbits.get(id)), [1, 1, 1, 1],
+    'all four inspections are published');
+  assert.equal(stage(h, p), 2, 'publishing evidence does not advance the quest');
   h.talk('Guard', p, N.GUARD_180);
   assert.equal(variant(h), 'a-death-in-the-family-talking-to-the-carnillean-guard-after-inspecting-the-crime-scene');
 });
@@ -325,8 +334,15 @@ test('guard investigation explains the three findings and hands over the Evelot 
   const answerCondition = h.hooks.onNpcDialogueCondition[0];
   assert.equal(answerCondition(condition), false);
   h.line(p, 'The window was broken from the outside.');
+  assert.deepEqual([14730, 14731, 14732].map(id => p.varbits.get(id)), [0, 1, 0],
+    'explained window publishes only the window flag');
   h.line(p, 'Ceril was stabbed from behind.');
+  assert.deepEqual([14730, 14731, 14732].map(id => p.varbits.get(id)), [1, 1, 0],
+    'explained body keeps the window flag');
   h.line(p, 'A hidden room above us was broken into.');
+  assert.deepEqual([14730, 14731, 14732].map(id => p.varbits.get(id)), [1, 1, 1],
+    'all three explanations are published');
+  assert.equal(stage(h, p), 2, 'reporting the findings does not advance the quest');
   assert.equal(answerCondition(condition), true);
   h.action(p, 'w415Kw');
   assert.equal(stage(h, p), 3);
@@ -534,8 +550,13 @@ test('North information chain tracks both questions and advances only when both 
   const answerCondition = h.hooks.onNpcDialogueCondition[0];
   assert.equal(answerCondition(asked), false);
   h.line(p, 'Why would the killer come here?');
+  assert.deepEqual([14743, 14744].map(id => p.varbits.get(id)), [1, 0],
+    'killer question publishes without the ritual question');
   assert.equal(answerCondition(asked), false);
   h.line(p, 'What is this ritual you keep talking about?');
+  assert.deepEqual([14743, 14744].map(id => p.varbits.get(id)), [1, 1],
+    'both questions are published');
+  assert.equal(stage(h, p), 14, 'asking questions does not advance the quest');
   assert.equal(answerCondition(asked), true);
   h.action(p, 't1w8IH');
   assert.equal(stage(h, p), 15);
@@ -1433,9 +1454,18 @@ test('relogin while on the trail keeps progress and respawns the route NPCs', ()
   const h = harness(), p = startQuest(h);
   h.setStage(p, 4);
   h.object(p, O.BARRELS_8, at(2568, 3152));
+  p.setAttribute('secrets-of-the-north:evidence', 5);
+  p.setAttribute('secrets-of-the-north:explained', 3);
+  p.setAttribute('secrets-of-the-north:questions', 1);
   h.setStage(p, 5);
   assert.ok(h.npcs.some(n => n.id === N.EVELOT && !n.removed));
+  const restored = () => assert.deepEqual(
+    [...[14726, 14727, 14728, 14729], ...[14730, 14731, 14732], ...[14743, 14744]].map(id => p.varbits.get(id)),
+    [1, 1, 0, 0, 1, 1, 0, 1, 0],
+    'login restores persisted native flags and clears unfinished siblings');
+  restored();
   h.login(p);
   assert.ok(h.npcs.some(n => n.id === N.EVELOT && !n.removed));
   assert.equal(stage(h, p), 5);
+  restored();
 });

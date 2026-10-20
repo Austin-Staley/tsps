@@ -249,6 +249,25 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
   const ASKED_RITUAL = 2;
   const ASKED_ALL = ASKED_KILLER | ASKED_RITUAL;
 
+  // Native crime-scene/report/question flags on varp 3742 (QH reads these
+  // directly; its requirements are 0/1 and >=1). Send every flag, including
+  // the zeroes, so unfinished events stay explicitly false for the helper.
+  const EVIDENCE_VARBITS = new Map([
+    [EVIDENCE_WALL, 14726],
+    [EVIDENCE_BODY, 14727],
+    [EVIDENCE_WINDOW, 14728],
+    [EVIDENCE_CHEST, 14729],
+  ]);
+  const TOLD_VARBITS = new Map([
+    [TOLD_BODY, 14730],
+    [TOLD_WINDOW, 14731],
+    [TOLD_CHEST, 14732],
+  ]);
+  const QUESTION_VARBITS = new Map([
+    [ASKED_KILLER, 14743],
+    [ASKED_RITUAL, 14744],
+  ]);
+
   // ==========================================================================
   // Ids
   // ==========================================================================
@@ -1164,8 +1183,19 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
   // Stage-direction actions and messages
   // ==========================================================================
 
+  function syncDetails(player) {
+    const packet = player.getPacketSender();
+    const publish = (varbits, bits) => {
+      for (const [bit, varbit] of varbits) packet.sendVarbit(varbit, bits & bit ? 1 : 0);
+    };
+    publish(EVIDENCE_VARBITS, evidence(player));
+    publish(TOLD_VARBITS, told(player));
+    publish(QUESTION_VARBITS, questions(player));
+  }
+
   function markEvidence(player, bit) {
     player.setAttribute(EVIDENCE_ATTRIBUTE, (evidence(player) | bit) | 0);
+    syncDetails(player);
   }
 
   function handleAction(event) {
@@ -1411,22 +1441,27 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
     }
     if (line.startsWith("The window was broken from the outside.")) {
       player.setAttribute(TOLD_ATTRIBUTE, (told(player) | TOLD_WINDOW) | 0);
+      syncDetails(player);
       return;
     }
     if (line.startsWith("Ceril was stabbed from behind.")) {
       player.setAttribute(TOLD_ATTRIBUTE, (told(player) | TOLD_BODY) | 0);
+      syncDetails(player);
       return;
     }
     if (line.startsWith("A hidden room above us was broken into.")) {
       player.setAttribute(TOLD_ATTRIBUTE, (told(player) | TOLD_CHEST) | 0);
+      syncDetails(player);
       return;
     }
     if (line.startsWith("Why would the killer come here?")) {
       player.setAttribute(QUESTIONS_ATTRIBUTE, (questions(player) | ASKED_KILLER) | 0);
+      syncDetails(player);
       return;
     }
     if (line.startsWith("What is this ritual you keep talking about?")) {
       player.setAttribute(QUESTIONS_ATTRIBUTE, (questions(player) | ASKED_RITUAL) | 0);
+      syncDetails(player);
       return;
     }
     if (line.startsWith("Speak with their leader and find out if anything of note has occurred here recently.")) {
@@ -2164,6 +2199,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
       }
     }
     if (quest.getStage(player) === STAGE_FINALE) player.getPacketSender().sendCameraReset();
+    syncDetails(player);
     syncNpcs(player);
   }
 
