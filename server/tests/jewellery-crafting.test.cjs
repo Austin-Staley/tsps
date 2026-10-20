@@ -15,6 +15,7 @@ before(async () => {
   const api = PluginManager.createApi('JewelleryTest');
   require('../plugins/skills/EnchantJewellery.plugin').register(api);
   require('../plugins/items/ElementalStaves.plugin').register(api);
+  require('../plugins/skills/CraftingSpells.plugin').register(api);
   require('../plugins/skills/Crafting.plugin').register({ ...api,
     onItemOnItem: handler => { crafting[handler.name] = handler; },
     onItemOnObject: handler => { crafting[handler.name] = handler; },
@@ -191,3 +192,88 @@ test('all eight amulets string in either order with real identifiers and the liv
   }
 });
 
+// --- Spells that make Crafting materials (plugins/skills/craftingspells)
+
+/** A player whose inventory holds real Item objects, so spells can convert them in place. */
+function spellPlayer(entries, book = core.MagicSpellbook.LUNAR) {
+  const player = playerWith();
+  let items = entries.flatMap(([id, n]) => core.ItemDefinition.forId(id).isStackable()
+    ? [new core.Item(id, n)] : Array.from({ length: n }, () => new core.Item(id, 1)));
+  const count = id => items.filter(item => item.getId() === id).reduce((sum, item) => sum + item.getAmount(), 0);
+  const inventory = {
+    getItems: () => items, getValidItems: () => items.filter(item => item.getAmount() > 0),
+    getAmount: count, contains: id => count(id) > 0, refreshItems() {},
+    deleteNumber(id, n) {
+      for (const item of items) {
+        if (n <= 0 || item.getId() !== id) continue;
+        const take = Math.min(n, item.getAmount()); item.setAmount(item.getAmount() - take); n -= take;
+      }
+      items = items.filter(item => item.getAmount() > 0);
+      return inventory;
+    },
+    deletes: item => inventory.deleteNumber(item.id, item.getAmount()),
+    addItem: item => { items.push(new core.Item(item.getId(), item.getAmount())); return inventory; },
+    forceAdd: (_player, item) => inventory.addItem(item),
+  };
+  player.getInventory = () => inventory;
+  player.book = book;
+  player.getSkillManager = () => ({ getCurrentLevel: () => 99, getMaxLevel: () => 99, addExperiences: (skill, xp) => player.log.push(['xp', skill, xp]) });
+  player.count = count;
+  return player;
+}
+function castSelf(player, spellName) {
+  return PluginManager.emitSpellCast({ player, spellName, spellWidget: -1, spellItemId: -1, handled: false });
+}
+const craftingXp = player => player.log.filter(row => row[0] === 'xp' && row[1] === core.Skill.CRAFTING).map(row => row[2]);
+
+test('Spin Flax spins at most five flax with the Wiki runes and 15 Crafting XP each', () => {
+  const I = ItemIdentifiers;
+  const player = spellPlayer([[I.FLAX, 7], [I.ASTRAL_RUNE, 1], [I.NATURE_RUNE, 2], [I.AIR_RUNE, 5]]);
+  assert.equal(castSelf(player, 'Spin Flax'), true);
+  assert.equal(player.count(I.BOW_STRING), 5);
+  assert.equal(player.count(I.FLAX), 2);
+  assert.deepEqual(craftingXp(player), [75]);
+  assert.equal(player.count(I.ASTRAL_RUNE) + player.count(I.NATURE_RUNE) + player.count(I.AIR_RUNE), 0);
+  assert.ok(player.log.some(row => row[0] === 'graphic' && row[1] === 728));
+});
+
+test('Tan Leather tans five hides, cowhide and snake hide included', () => {
+  const I = ItemIdentifiers;
+  const player = spellPlayer([[I.COWHIDE, 3], [I.SNAKE_HIDE, 3], [I.ASTRAL_RUNE, 2], [I.NATURE_RUNE, 1], [I.FIRE_RUNE, 5]]);
+  castSelf(player, 'Tan Leather');
+  assert.equal(player.count(I.LEATHER) + player.count(I.SNAKESKIN), 5);
+  assert.equal(player.count(I.COWHIDE) + player.count(I.SNAKE_HIDE), 1);
+});
+
+test('Superglass Make counts giant seaweed as six ash and gives 10 Crafting XP per sand', () => {
+  const I = ItemIdentifiers, random = Math.random;
+  Math.random = () => 0.99;
+  try {
+    const player = spellPlayer([[I.BUCKET_OF_SAND, 7], [I.GIANT_SEAWEED, 1], [I.SODA_ASH, 1],
+      [I.ASTRAL_RUNE, 2], [I.FIRE_RUNE, 6], [I.AIR_RUNE, 10]]);
+    castSelf(player, 'Superglass Make');
+    assert.equal(player.count(I.MOLTEN_GLASS), 7);
+    assert.equal(player.count(I.BUCKET_OF_SAND) + player.count(I.GIANT_SEAWEED) + player.count(I.SODA_ASH), 0);
+    assert.deepEqual(craftingXp(player), [70]);
+  } finally { Math.random = random; }
+});
+
+test('the Lunar crafting spells need the Lunar spellbook and leave other self-casts alone', () => {
+  const I = ItemIdentifiers;
+  const player = spellPlayer([[I.FLAX, 1], [I.ASTRAL_RUNE, 1], [I.NATURE_RUNE, 2], [I.AIR_RUNE, 5]], core.MagicSpellbook.NORMAL);
+  assert.equal(castSelf(player, 'Spin Flax'), false);
+  assert.equal(player.count(I.FLAX), 1);
+  assert.equal(castSelf(player, 'Bones to Bananas'), false);
+});
+
+test('Charge Air Orb on the Obelisk of Air uses one unpowered orb per cast and the Wiki runes', () => {
+  const I = ItemIdentifiers;
+  const player = spellPlayer([[I.UNPOWERED_ORB, 2], [I.COSMIC_RUNE, 3], [I.AIR_RUNE, 30]], core.MagicSpellbook.NORMAL);
+  const widget = core.CacheDefinitions.getSpellByName('Charge Air Orb');
+  const obelisk = { getDefinition: () => ({ getName: () => 'Obelisk of Air' }) };
+  PluginManager.emitSpellOnObject({ player, object: obelisk, objectId: 2152, spellWidget: widget.widgetId,
+    spellChild: -1, spellItemId: widget.itemId, spellId: -1, location: { x: 0, y: 0, z: 0 }, handled: false });
+  assert.equal(player.count(I.AIR_ORB), 1);
+  assert.equal(player.count(I.UNPOWERED_ORB), 1);
+  assert.equal(player.count(I.COSMIC_RUNE) + player.count(I.AIR_RUNE), 0);
+});
