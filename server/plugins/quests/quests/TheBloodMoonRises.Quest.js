@@ -732,7 +732,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const finalEfaritays = new Map();
   const finalCutsceneActors = new Map();
   const siegeDrakanEncounters = new Map();
-  const siegeHallInjured = new Map();
+  const siegeAranei = new Map();
   const theatreActors = new Map();
   const gatheringCastleIvans = new Map();
   const gatheringCastleSugadintis = new Map();
@@ -2431,93 +2431,199 @@ module.exports = function registerTheBloodMoonRises(api) {
     pillar: ObjectIdentifiers.PILLAR_150,
     damagedWindow: ObjectIdentifiers.DAMAGED_WINDOW,
     window: ObjectIdentifiers.WINDOW_20,
-    barricade: ObjectIdentifiers.BARRICADE_60,
+    barricade: ObjectIdentifiers.BARRICADE_61,
     hammer: ItemIdentifiers.HAMMER,
     healingPotion: ItemIdentifiers.HEALING_POTION,
     injuredAranei: [NpcIdentifiers.ARANEI_108, NpcIdentifiers.ARANEI_109, NpcIdentifiers.ARANEI_110,
       NpcIdentifiers.ARANEI_111, NpcIdentifiers.ARANEI_112, NpcIdentifiers.ARANEI_113],
+    aranei: [
+      { normal: NpcIdentifiers.ARANEI_102, injured: NpcIdentifiers.ARANEI_108, x: 3161, y: 7854 },
+      { normal: NpcIdentifiers.ARANEI_103, injured: NpcIdentifiers.ARANEI_109, x: 3163, y: 7855 },
+      { normal: NpcIdentifiers.ARANEI_104, injured: NpcIdentifiers.ARANEI_110, x: 3165, y: 7855 },
+      { normal: NpcIdentifiers.ARANEI_105, injured: NpcIdentifiers.ARANEI_111, x: 3171, y: 7855 },
+      { normal: NpcIdentifiers.ARANEI_106, injured: NpcIdentifiers.ARANEI_112, x: 3173, y: 7855 },
+      { normal: NpcIdentifiers.ARANEI_107, injured: NpcIdentifiers.ARANEI_113, x: 3175, y: 7854 },
+    ],
     repairLocations: new Map([
       ["3174,7855", [ObjectIdentifiers.DAMAGED_PILLAR_2, ObjectIdentifiers.PILLAR_150]],
       ["3162,7855", [ObjectIdentifiers.DAMAGED_PILLAR_2, ObjectIdentifiers.PILLAR_150]],
       ["3176,7858", [ObjectIdentifiers.DAMAGED_WINDOW, ObjectIdentifiers.WINDOW_20]],
+      ["3172,7858", [ObjectIdentifiers.DAMAGED_WINDOW, ObjectIdentifiers.WINDOW_20]],
       ["3174,7858", [ObjectIdentifiers.DAMAGED_WINDOW, ObjectIdentifiers.WINDOW_20]],
+      ["3160,7858", [ObjectIdentifiers.DAMAGED_WINDOW, ObjectIdentifiers.WINDOW_20]],
       ["3162,7858", [ObjectIdentifiers.DAMAGED_WINDOW, ObjectIdentifiers.WINDOW_20]],
       ["3164,7858", [ObjectIdentifiers.DAMAGED_WINDOW, ObjectIdentifiers.WINDOW_20]],
     ]),
   };
 
-  function hallDefenceState(player) {
-    return player.getAttribute(SIEGE_DEFENCE_ATTRIBUTE) ?? { phase: "bridge", integrity: 100, healed: [], repaired: [] };
+  // Captured P3: the hall opens at 650 with a 300-tick timer. Loss per tick is
+  // exactly 2 per damaged pillar plus 1 per injured Aranei; windows are
+  // cosmetic. Timer expiry does not change the formula. Repairs remove the
+  // pillar/window source and heals revert one Aranei; neither raises the meter.
+  // shortcut: the only detail the capture does not decode is the attack cadence
+  // (when pillars/windows break and Aranei fall); the intervals below follow the
+  // observed acceleration without replaying the recorded timeline.
+  const HALL_STATE_VERSION = 1;
+  const HALL_INTEGRITY_MAX = 650;
+  const HALL_SIEGE_TICKS = 300;
+  const HALL_PILLAR_DAMAGE = 2;
+  const HALL_ARANEI_DAMAGE = 1;
+  const HALL_FIRST_PILLAR_TICK = 28;
+  const HALL_FIRST_WINDOW_TICK = 14;
+  const HALL_FIRST_ARANEI_TICK = 43;
+  const HALL_INTEGRITY_OVERLAY_UID = (161 << 16) | 8;
+  const HALL_INTEGRITY_INTERFACE = 968;
+  const HALL_INTEGRITY_SCRIPT = 9674;
+  const HALL_PILLAR_KEYS = [...SIEGE_HALL.repairLocations]
+    .filter(([, ids]) => ids[0] === SIEGE_HALL.damagedPillar).map(([key]) => key);
+  const HALL_WINDOW_KEYS = [...SIEGE_HALL.repairLocations]
+    .filter(([, ids]) => ids[0] === SIEGE_HALL.damagedWindow).map(([key]) => key);
+  const hallHuds = new WeakSet();
+
+  function freshHallState() {
+    return { version: HALL_STATE_VERSION, phase: "hall", integrity: HALL_INTEGRITY_MAX,
+      timer: HALL_SIEGE_TICKS, elapsed: 0, damaged: {}, injured: {},
+      nextPillarTick: HALL_FIRST_PILLAR_TICK, nextWindowTick: HALL_FIRST_WINDOW_TICK,
+      nextAraneiTick: HALL_FIRST_ARANEI_TICK };
   }
 
-  // The live defense uses a continuously falling integrity meter. Cache data
-  // and the transcript expose the 50% story threshold, but not its server tick
-  // cadence or exact repair gains. These two timing/gain values are shortcuts
-  // pending live calibration; integrity, rather than a repair-count gate, is
-  // the actual win condition.
-  const HALL_INTEGRITY_INTERVAL = 20;
-  const HALL_INTEGRITY_LOSS = 1;
-  const HALL_INTEGRITY_THRESHOLD = 50;
-  // shortcut: the Wiki says a player must participate but does not publish a
-  // count; require three distinct repair/heal actions before the breach scene.
-  const HALL_PARTICIPATION_REQUIRED = 3;
+  function hallDefenceState(player) {
+    const raw = player.getAttribute(SIEGE_DEFENCE_ATTRIBUTE) ?? { phase: "bridge", integrity: 100 };
+    if (raw.phase !== "hall" || raw.version === HALL_STATE_VERSION) return raw;
+    // Legacy saves used a 0-100 bar, a participation gate and a permanent
+    // repaired list; the capture replaced all three.
+    const migrated = { ...freshHallState(),
+      integrity: Math.max(0, Math.min(HALL_INTEGRITY_MAX,
+        Math.round((Number(raw.integrity) || 0) * (HALL_INTEGRITY_MAX / 100)))) };
+    // A qualified legacy defence had already survived the old 20-minute holdout,
+    // so its 300-tick story timer cannot still be running after the migration.
+    if (raw.qualified) migrated.timer = 0;
+    return migrated;
+  }
 
-  function applyHallIntegrity(player, delta, participated = false) {
-    const state = hallDefenceState(player);
-    if (state.phase !== "hall") return;
-    const integrity = Math.max(0, Math.min(100, (state.integrity ?? 100) + delta));
-    const updated = { ...state, integrity,
-      participation: (state.participation ?? 0) + (participated ? 1 : 0) };
+  function publishHallIntegrity(player, state) {
+    const sender = player.getPacketSender?.();
+    if (!sender || state.phase !== "hall") return;
+    if (!hallHuds.has(player)) {
+      hallHuds.add(player);
+      sender.sendSubInterface?.(HALL_INTEGRITY_OVERLAY_UID, HALL_INTEGRITY_INTERFACE, 1);
+      sender.sendString?.("Hideout Integrity", (HALL_INTEGRITY_INTERFACE << 16) | 6);
+    }
+    sender.sendClientScript?.(HALL_INTEGRITY_SCRIPT, state.integrity, HALL_INTEGRITY_MAX,
+      state.timer, HALL_SIEGE_TICKS);
+  }
+
+  function closeHallIntegrity(player) {
+    if (!hallHuds.delete(player)) return;
+    player.getPacketSender?.()?.closeSubInterface?.(HALL_INTEGRITY_OVERLAY_UID);
+  }
+
+  function hallDamage(state) {
+    const pillars = HALL_PILLAR_KEYS.filter(key => state.damaged?.[key]).length;
+    const injured = Object.values(state.injured ?? {}).filter(Boolean).length;
+    return pillars * HALL_PILLAR_DAMAGE + injured * HALL_ARANEI_DAMAGE;
+  }
+
+  function hallDamageChanged(previous, next) {
+    const keys = new Set([...Object.keys(previous.damaged ?? {}), ...Object.keys(next.damaged ?? {})]);
+    for (const key of keys) {
+      if (Boolean(previous.damaged?.[key]) !== Boolean(next.damaged?.[key])) return true;
+    }
+    return false;
+  }
+
+  function advanceHallDefence(state) {
+    const next = { ...state, elapsed: (state.elapsed ?? 0) + 1,
+      damaged: { ...(state.damaged ?? {}) }, injured: { ...(state.injured ?? {}) } };
+    next.timer = Math.max(0, state.timer - 1);
+    if (next.elapsed >= next.nextPillarTick) {
+      const key = HALL_PILLAR_KEYS.find(target => !next.damaged[target]);
+      if (key) next.damaged[key] = true;
+      next.nextPillarTick += Math.max(20, 70 - Math.floor(next.elapsed / 8));
+    }
+    if (next.elapsed >= next.nextWindowTick) {
+      const key = HALL_WINDOW_KEYS.find(target => !next.damaged[target]);
+      if (key) next.damaged[key] = true;
+      next.nextWindowTick += Math.max(12, 40 - Math.floor(next.elapsed / 15));
+    }
+    if (next.elapsed >= next.nextAraneiTick) {
+      const index = SIEGE_HALL.aranei.findIndex((_, i) => !next.injured[i]);
+      if (index >= 0) next.injured[index] = true;
+      next.nextAraneiTick += Math.max(5, 14 - Math.floor(next.elapsed / 35));
+    }
+    next.integrity = Math.max(0, state.integrity - hallDamage(next));
+    return next;
+  }
+
+  function syncSiegeAranei(player, state) {
+    const npcs = siegeAranei.get(player.getUsername?.() ?? player.getIndex?.());
+    if (!npcs) return;
+    SIEGE_HALL.aranei.forEach((def, index) => {
+      const npc = npcs.get(index);
+      if (!npc) return;
+      const id = state.injured?.[index] ? def.injured : def.normal;
+      if ((npc.getNpcTransformationId?.() ?? npc.getId?.()) !== id) npc.setNpcTransformationId?.(id);
+    });
+  }
+
+  function failHallDefence(player) {
+    player.sendMessage("You failed to defend the hideout!");
+    const state = freshHallState();
+    player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, state);
+    hall.refresh?.(player);
+    syncSiegeAranei(player, state);
+    publishHallIntegrity(player, state);
+  }
+
+  function breachHallDefence(player, state) {
+    const updated = { ...state, phase: "breach", integrity: 0 };
     player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
-    if (integrity <= HALL_INTEGRITY_THRESHOLD && !updated.qualified) {
-      if (updated.participation < HALL_PARTICIPATION_REQUIRED) {
-        updated.integrity = HALL_INTEGRITY_THRESHOLD + 1;
-        player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
-        player.sendMessage("The Aranei need more help before the doors give way. Repair another damaged window or pillar, or heal a fallen Aranei.");
-        return;
-      }
-      updated.qualified = true;
-      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
-    }
-    if (integrity === 0 && updated.qualified) {
-      updated.phase = "breach";
-      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
-      quest.setStage(player, STAGE.SIEGE);
-      startTranscript(api, player, NpcIdentifiers.LOWERNIEL_DRAKAN_19, PAGE,
-        "drakan-s-siege-upon-reaching-0-hideout-integrity");
-    }
+    closeHallIntegrity(player);
+    quest.setStage(player, STAGE.SIEGE);
+    startTranscript(api, player, NpcIdentifiers.LOWERNIEL_DRAKAN_19, PAGE,
+      "drakan-s-siege-upon-reaching-0-hideout-integrity");
   }
 
   function processSiegeDefence({ player }) {
     if (!player || stage(player) !== STAGE.SIEGE) return;
     const state = hallDefenceState(player);
     if (state.phase !== "hall") return;
-    const cycle = World.getProcessCycle();
-    if (cycle < (state.nextIntegrityLossCycle ?? cycle + HALL_INTEGRITY_INTERVAL)) {
-      if (state.nextIntegrityLossCycle === undefined) player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE,
-        { ...state, nextIntegrityLossCycle: cycle + HALL_INTEGRITY_INTERVAL });
-      return;
-    }
-    applyHallIntegrity(player, -HALL_INTEGRITY_LOSS);
-    const updated = hallDefenceState(player);
-    player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE,
-      { ...updated, nextIntegrityLossCycle: cycle + HALL_INTEGRITY_INTERVAL });
+    const updated = advanceHallDefence(state);
+    player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, updated);
+    if (hallDamageChanged(state, updated)) hall.refresh?.(player);
+    syncSiegeAranei(player, updated);
+    publishHallIntegrity(player, updated);
+    if (updated.integrity > 0) return;
+    // P2 primary: reaching 0 before the timer shows "You failed to defend the
+    // hideout!" and restarts a fresh 650/300 defence.
+    if (updated.timer > 0) failHallDefence(player);
+    else breachHallDefence(player, updated);
   }
 
-  function injuredAraneiKey(npc) {
-    const location = npc.getLocation?.();
-    return `aranei:${location?.getX?.()},${location?.getY?.()},${location?.getZ?.()}`;
-  }
-
-  function spawnSiegeInjuredAranei(player) {
+  function spawnSiegeAranei(player) {
     const state = hallDefenceState(player);
-    if (state.phase !== "hall" || (state.healed ?? []).includes("aranei:3173,7855,1")) return;
+    if (state.phase !== "hall") return;
     const key = player.getUsername?.() ?? player.getIndex?.();
-    const old = siegeHallInjured.get(key);
-    if (old && old.isRegistered?.() && old.getHitpoints?.() > 0) return;
-    const npc = api.spawnNpc({ id: NpcIdentifiers.ARANEI_112, x: 3173, y: 7855, z: 1,
-      wanderRadius: 0, owner: player, ownerOnly: true });
-    if (npc) { player.getPrivateArea?.()?.enter(npc); siegeHallInjured.set(key, npc); }
+    let npcs = siegeAranei.get(key);
+    if (!npcs) siegeAranei.set(key, npcs = new Map());
+    SIEGE_HALL.aranei.forEach((def, index) => {
+      const injured = Boolean(state.injured?.[index]);
+      const old = npcs.get(index);
+      if (old?.isRegistered?.()) {
+        const id = injured ? def.injured : def.normal;
+        if ((old.getNpcTransformationId?.() ?? old.getId?.()) !== id) old.setNpcTransformationId?.(id);
+        return;
+      }
+      const npc = api.spawnNpc({ id: injured ? def.injured : def.normal, x: def.x, y: def.y, z: 1,
+        wanderRadius: 0, owner: player, ownerOnly: true });
+      if (npc) { player.getPrivateArea?.()?.enter(npc); npcs.set(index, npc); }
+    });
+  }
+
+  function removeSiegeAranei(player) {
+    const key = player.getUsername?.() ?? player.getIndex?.();
+    for (const npc of siegeAranei.get(key)?.values() ?? []) api.removeNpc(npc);
+    siegeAranei.delete(key);
   }
 
   function handleSiegeLogin({ player }) {
@@ -2534,29 +2640,17 @@ module.exports = function registerTheBloodMoonRises(api) {
       return;
     }
     hall.enter(player);
-    if (state.phase === "hall") player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE,
-      { ...state, nextIntegrityLossCycle: World.getProcessCycle() + HALL_INTEGRITY_INTERVAL });
-    spawnSiegeInjuredAranei(player);
+    if (state.phase === "hall") {
+      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, state);
+      publishHallIntegrity(player, state);
+    }
+    spawnSiegeAranei(player);
   }
 
   function handleSiegeLogout({ player }) {
     if (!player) return;
-    const key = player.getUsername?.() ?? player.getIndex?.();
-    const npc = siegeHallInjured.get(key);
-    if (npc) api.removeNpc(npc);
-    siegeHallInjured.delete(key);
-  }
-
-  function replaceHallObject(event, replacementId) {
-    const object = event.object;
-    if (!object) return false;
-    const location = object.getLocation();
-    const area = hall.sessions.get(event.player);
-    if (!area || object.getPrivateArea?.() !== area) return false;
-    const replacement = new api.core.GameObject(replacementId, location.clone(), object.getType(), object.getFace(), area);
-    api.core.ObjectManager.deregister(object, true);
-    api.core.ObjectManager.register(replacement, true);
-    return true;
+    closeHallIntegrity(player);
+    removeSiegeAranei(player);
   }
 
   function handleSiegeHallObject(event) {
@@ -2571,8 +2665,18 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (objectId === SIEGE_HALL.hammerCrate || objectId === SIEGE_HALL.potionCrate) {
       event.handled = true;
       const item = objectId === SIEGE_HALL.hammerCrate ? SIEGE_HALL.hammer : SIEGE_HALL.healingPotion;
-      if (!inventory.contains(item)) inventory.adds(item, 1);
-      player.sendMessage(item === SIEGE_HALL.hammer ? "You take a hammer from the crate." : "You take a healing potion from the crate.");
+      const label = item === SIEGE_HALL.hammer ? "hammer" : "healing potion";
+      if (inventory.contains(item)) {
+        player.sendMessage(`You already have a ${label}.`);
+        return;
+      }
+      const before = inventory.getAmount(item);
+      inventory.adds(item, 1);
+      if (inventory.getAmount(item) === before) {
+        player.sendMessage("You have no room in your inventory.");
+        return;
+      }
+      player.sendMessage(`You take a ${label} from the crate.`);
       return;
     }
 
@@ -2588,17 +2692,18 @@ module.exports = function registerTheBloodMoonRises(api) {
     const repair = SIEGE_HALL.repairLocations.get(repairKey);
     if (!repair || objectId !== repair[0]) return;
     event.handled = true;
-    if (!(state.repaired ?? []).includes(repairKey) && !inventory.contains(SIEGE_HALL.hammer)) {
+    if (!inventory.contains(SIEGE_HALL.hammer)) {
       player.sendMessage("You need a hammer from the crate in the hall to repair this.");
       return;
     }
-    if ((state.repaired ?? []).includes(repairKey)) {
+    if (!state.damaged?.[repairKey]) {
       player.sendMessage("You have already repaired this part of the hall.");
       return;
     }
-    if (!replaceHallObject(event, repair[1])) return;
-    player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { ...state, repaired: [...(state.repaired ?? []), repairKey] });
-    applyHallIntegrity(player, 8, true);
+    const damaged = { ...state.damaged };
+    delete damaged[repairKey];
+    player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { ...state, damaged });
+    hall.refresh?.(player);
     player.sendMessage(repair[0] === SIEGE_HALL.damagedPillar ? "You brace and repair the damaged pillar." : "You repair the damaged window.");
   }
 
@@ -2627,19 +2732,18 @@ module.exports = function registerTheBloodMoonRises(api) {
       stage(player) !== STAGE.SIEGE || hallDefenceState(player).phase !== "hall") return false;
     if (npc.getOwner?.() !== player || npc.getArea?.() !== hall.sessions.get(player)) return false;
     event.handled = true;
+    const index = SIEGE_HALL.aranei.findIndex(def => def.injured === npcId);
     const state = hallDefenceState(player);
-    const key = injuredAraneiKey(npc);
-    if ((state.healed ?? []).includes(key)) return;
     const inventory = player.getInventory();
     if (!inventory.contains(SIEGE_HALL.healingPotion)) {
       player.sendMessage("The Aranei needs a healing potion from the crate in the hall.");
       return;
     }
     inventory.deleteNumber(SIEGE_HALL.healingPotion, 1);
-    npc.setNpcTransformationId?.(NpcIdentifiers.ARANEI_106);
-    player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { ...state, healed: [...(state.healed ?? []), key] });
-    applyHallIntegrity(player, 12, true);
-    siegeHallInjured.delete(player.getUsername?.() ?? player.getIndex?.());
+    npc.setNpcTransformationId?.(SIEGE_HALL.aranei[index].normal);
+    const injured = { ...(state.injured ?? {}) };
+    delete injured[index];
+    player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { ...state, injured });
     player.sendMessage("You give the healing potion to the Aranei and help them back to their feet.");
   }
 
@@ -5548,7 +5652,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.moveTo(new Location(CASTLE_SIEGE_HALL_ARRIVAL.x, CASTLE_SIEGE_HALL_ARRIVAL.y,
         CASTLE_SIEGE_HALL_ARRIVAL.z));
       if (!hall.enter(player)) return false;
-      spawnSiegeInjuredAranei(player);
+      spawnSiegeAranei(player);
       player.getPacketSender().sendVarbit(15464, nativeStage(STAGE.SIEGE, player));
     }
     publishHelperVarbits(player);
@@ -5843,10 +5947,12 @@ module.exports = function registerTheBloodMoonRises(api) {
     const next = ACTION_STAGE[event.stepId];
     if (event.stepId === "vqg4qO") {
       if (stage(player) !== STAGE.SIEGE || !bridge.finish(player)) return;
-      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, { phase: "hall", integrity: 100, healed: [], repaired: [] });
+      const state = freshHallState();
+      player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE, state);
       quest.setStage(player, STAGE.SIEGE);
       hall.enter(player);
-      spawnSiegeInjuredAranei(player);
+      publishHallIntegrity(player, state);
+      spawnSiegeAranei(player);
     }
     if (event.stepId === "Sut83Q") {
       if (!preparationReady(player)) {
@@ -8436,12 +8542,19 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.persistAttribute(CASTLE_UNLOCKED_PASSAGES_ATTRIBUTE);
   const hall = require("../bmr/Hall.TheBloodMoonRises")({ api, state: hallDefenceState,
     process: processSiegeDefence, cleanup: handleSiegeLogout, scenery: player => {
-      const repaired = hallDefenceState(player).repaired ?? [];
-      // shortcut: potion-crate placement is inferred on reachable hall flooring; calibrate against a live OSRS capture.
-      return [[SIEGE_HALL.hammerCrate, 3177, 7843], [SIEGE_HALL.potionCrate, 3171, 7847],
-        [SIEGE_HALL.barricade, 3167, 7844], ...[...SIEGE_HALL.repairLocations].map(([key, ids]) => {
+      const damaged = hallDefenceState(player).damaged ?? {};
+      // P3 4336-4348: the four crates, barricade and windows at their exact
+      // captured tiles, shapes and rotations.
+      return [[SIEGE_HALL.hammerCrate, 3173, 7847, 10, 1],
+        [SIEGE_HALL.hammerCrate, 3162, 7849, 10, 0],
+        [SIEGE_HALL.potionCrate, 3174, 7848, 11, 0],
+        [SIEGE_HALL.potionCrate, 3163, 7847, 11, 3],
+        [SIEGE_HALL.barricade, 3167, 7844, 10, 2],
+        ...[...SIEGE_HALL.repairLocations].map(([key, ids]) => {
           const [x, y] = key.split(',').map(Number);
-          return [ids[repaired.includes(key) ? 1 : 0], x, y, ids[0] === SIEGE_HALL.damagedWindow ? 0 : 10, ids[0] === SIEGE_HALL.damagedWindow ? 2 : 0];
+          return [ids[damaged[key] ? 0 : 1], x, y,
+            ids[0] === SIEGE_HALL.damagedWindow ? 0 : 10,
+            ids[0] === SIEGE_HALL.damagedWindow ? 3 : 0];
         })];
     } });
   const palace = require("../bmr/Palace.TheBloodMoonRises")({ api, stage,

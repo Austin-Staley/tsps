@@ -6279,164 +6279,159 @@ test('Blood Moon siege barrier action starts the second private Lowerniel fight 
   assert.equal(total, 810, 'the lethal multi-hit is capped at 58% so the escape cutscene cannot be skipped');
 });
 
-test('Blood Moon hall defence supplies hammers and potions, records repairs and heals a fallen Aranei', () => {
+test('Blood Moon hall defence spawns six Aranei, crates and repairs the captured hall', () => {
   const { api, handlers } = mockApi();
-  const replaced = [], objectManager = api.core.ObjectManager;
+  const replaced = [], removed = [], objectManager = api.core.ObjectManager;
   const originalDeregister = objectManager.deregister, originalRegister = objectManager.register;
-  objectManager.deregister = object => replaced.push(['remove', object]);
-  objectManager.register = object => replaced.push(['add', object]);
-  api.core = { ...api.core, PrivateArea: class extends api.core.PrivateArea {
-    constructor() { super([]); this.objects = []; }
-    enter(member) { member.area = this; }
-    add(object) { object.setArea(this); this.objects.push(object); }
-    getObjects() { return this.objects; }
-    postLeave() {}
-  } };
-  let cycle = 0, palace, loginHook;
-  api.onPlayerLogin = handler => { if(handler.name==='handleSiegeLogin')loginHook=handler; };
-  api.registerArea = area => { palace = area; };
   const originalGetProcessCycle = api.core.World.getProcessCycle;
-  api.core.World.getProcessCycle = () => cycle;
-  const spawns = [];
-  const injured = {
-    getId: () => api.core.NpcIdentifiers.ARANEI_112,
-    getIndex: () => 800,
-    getLocation: () => new api.core.Location(3173, 7855, 1),
-    getHitpoints: () => 30,
-    isRegistered: () => true,
-    setNpcTransformationId(id) { this.transformedId = id; },
-  };
-  api.spawnNpc = (definition) => (spawns.push(definition), injured);
-  const persisted = []; api.persistAttribute = key => persisted.push(key);
-  require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
-  assert(!persisted.includes('quest.the_blood_moon_rises.siege-drakan-area'), 'live combat areas must not enter JSON player saves');
-  assert(persisted.includes('quest.the_blood_moon_rises.siege-defence'), 'the earned siege checkpoint is saved');
-  const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
-  const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
-  const attributes = new Map();
-  const counts = new Map();
-  const inventory = {
-    contains: (id) => (counts.get(id) ?? 0) > 0,
-    adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
-    deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
-  };
-  const player = {
-    isPlayer: () => true, getAsPlayer: () => player,
-    getUsername: () => 'SiegeHallTest',
-    getPrivateArea: () => player.area,
-    getAttribute: (key) => attributes.get(key),
-    setAttribute: (key, value) => attributes.set(key, value),
-    getInventory: () => inventory,
-    getPacketSender: () => new Proxy({}, { get: () => () => {} }),
-    getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
-    sendMessage() {},
-  };
-  quest.setStage(player, 70);
-  attributes.set('quest.the_blood_moon_rises.siege-defence',{phase:'hall',integrity:100,healed:[],repaired:[]});
-  palace.process(player);
-  loginHook({player});
-  assert.deepEqual(spawns.map(({ id, x, y, z, ownerOnly }) => ({ id, x, y, z, ownerOnly })), [
-    { id: api.core.NpcIdentifiers.ARANEI_112, x: 3173, y: 7855, z: 1, ownerOnly: true },
-  ]);
-  assert.equal(replaced.filter(([kind])=>kind==='add').length,9,'the actual hall scenery is spawned inside its private instance');
-  assert.ok(replaced.every(([,object])=>object.getPrivateArea()===player.area));
-  const routeWindow = handlers.routes.find(handler => handler.name === 'routeSiegeHallWindowRepair');
-  assert.ok(routeWindow, 'north-wall window clicks have a hall-scoped reachable approach');
-  const approach = { x: 3176, y: 7857, z: 1 };
-  const { RegionManager } = api.core;
-  assert.equal(RegionManager.blocked(new api.core.Location(approach.x, approach.y, approach.z), null), false,
-    'the interior-side window approach is a cache-walkable tile');
-  const reachable = new Set(['3168,7855']), queue = [[3168, 7855]];
-  for (let index = 0; index < queue.length; index++) {
-    const [x, y] = queue[index];
-    for (const [dx, dy] of [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
-      const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
-      if (nx < 3154 || nx > 3183 || ny < 7823 || ny > 7861 || reachable.has(key) ||
-        !RegionManager.canMove(x, y, nx, ny, 1, 1, 1, null)) continue;
-      reachable.add(key);
-      queue.push([nx, ny]);
-    }
-  }
-  assert.equal(reachable.has(`${approach.x},${approach.y}`), true,
-    'the window approach connects to the cache-walkable hall entrance');
-  const windowLocation = new api.core.Location(3176, 7858, 1);
-  const windowObject = { getLocation: () => windowLocation, getPrivateArea: () => player.area };
-  const windowRoute = { player, object: windowObject, objectId: api.core.ObjectIdentifiers.DAMAGED_WINDOW,
-    definition: { id: api.core.ObjectIdentifiers.DAMAGED_WINDOW, getInteractions: () => ['Repair'] },
-    clickType: 1, sourceLocation: { x: 3168, y: 7855, z: 1 }, destination: null };
-  routeWindow(windowRoute);
-  assert.deepEqual(windowRoute.destination, approach);
-  const outsideRoute = { ...windowRoute, object: { ...windowObject, getPrivateArea: () => null }, destination: null };
-  routeWindow(outsideRoute);
-  assert.equal(outsideRoute.destination, null, 'the route cannot affect public or another player’s hall');
-  replaced.length=0;
-  const interact = handlers.objects.find((handler) => handler.name === 'handleSiegeHallObject');
-  const objectEvent = (id, x, y, option = 'Repair') => {
-    const location = new api.core.Location(x, y, 1);
-    const object = { getLocation: () => location, getType: () => 10, getFace: () => 0, getPrivateArea: () => player.area };
-    const event = { player, object, objectId: id, definition: { id }, location: { x, y, z: 1 }, option, handled: false };
-    interact(event);
-    return event;
-  };
-  const ids = api.core.ObjectIdentifiers;
-  objectEvent(ids.CRATE_OF_HAMMERS_2, 3177, 7843, 'Take-from');
-  objectEvent(ids.CRATE_OF_POTIONS, 3171, 7847, 'Take-from');
-  assert.equal(inventory.contains(api.core.ItemIdentifiers.HAMMER), true);
-  assert.equal(inventory.contains(api.core.ItemIdentifiers.HEALING_POTION), true);
-  const npc = {
-    getId: () => api.core.NpcIdentifiers.ARANEI_108,
-    getOwner: () => player, getArea: () => player.area,
-    getIndex: () => 800,
-    getLocation: () => new api.core.Location(3173, 7855, 1),
-    setNpcTransformationId(id) { this.transformedId = id; },
-  };
-  const heal = handlers.npcInteractions.get('Aranei').Heal;
-  const healEvent = { player, npc, npcId: npc.getId(), handled: false };
-  const otherEvent={...healEvent,npc:{...npc,getOwner:()=>({})}};heal(otherEvent);assert.equal(otherEvent.handled,false,'another defender cannot heal this player’s instance');
-  heal(healEvent);
-  assert.equal(healEvent.handled, true);
-  assert.equal(npc.transformedId, api.core.NpcIdentifiers.ARANEI_106);
-  objectEvent(ids.DAMAGED_PILLAR_2, 3174, 7855);
-  objectEvent(ids.DAMAGED_PILLAR_2, 3162, 7855);
-  objectEvent(ids.DAMAGED_WINDOW, 3176, 7858);
-  const state = attributes.get('quest.the_blood_moon_rises.siege-defence');
-  assert.equal(state.repaired.length, 3);
-  assert.equal(state.healed.length, 1);
-  assert.equal(state.integrity, 100, 'repairs and healing support the integrity hold instead of completing it directly');
-  assert.equal(replaced.filter(([kind]) => kind === 'add').length, 3, 'each fixed cache loc is replaced with its repaired variant');
-  assert.equal(handlers.playerProcess.some(h=>h.name==='processSiegeDefence'),false,'hall timing belongs to its area');
-  const process = ({player}) => player.area.process(player);
-  attributes.set('quest.the_blood_moon_rises.siege-defence', { ...state, integrity: 51, participation: 0, nextIntegrityLossCycle: 20 });
-  cycle = 20;
-  const npcDefinition = api.core.NpcDefinition;
-  const originalForId = npcDefinition.forId;
-  npcDefinition.forId = (id) => ({ getId: () => id, getName: () => 'Lowerniel Drakan' });
   try {
+    objectManager.deregister = object => replaced.push(['remove', object]);
+    objectManager.register = object => replaced.push(['add', object]);
+    api.core = { ...api.core, PrivateArea: class extends api.core.PrivateArea {
+      constructor() { super([]); this.objects = []; }
+      enter(member) { member.area = this; }
+      add(object) { object.setArea(this); this.objects.push(object); }
+      getObjects() { return this.objects; }
+      postLeave() {}
+    } };
+    api.core.World.getProcessCycle = () => 0;
+    const spawns = [], spawnedNpcs = [];
+    api.spawnNpc = definition => {
+      const npc = { id: definition.id, x: definition.x, y: definition.y, z: definition.z, owner: definition.owner,
+        getId() { return npc.id; }, getIndex: () => 800 + spawnedNpcs.length,
+        getLocation: () => new api.core.Location(npc.x, npc.y, npc.z),
+        getHitpoints: () => 30, isRegistered: () => true, getOwner: () => npc.owner,
+        getArea: () => npc.area, setArea: area => { npc.area = area; },
+        getNpcTransformationId: () => npc.transformedId ?? npc.id,
+        setNpcTransformationId(id) { npc.transformedId = id; } };
+      spawns.push(definition); spawnedNpcs.push(npc); return npc;
+    };
+    api.removeNpc = npc => removed.push(npc);
+    const persisted = []; api.persistAttribute = key => persisted.push(key);
+    require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
+    assert(!persisted.includes('quest.the_blood_moon_rises.siege-drakan-area'), 'live combat areas must not enter JSON player saves');
+    assert(persisted.includes('quest.the_blood_moon_rises.siege-defence'), 'the earned siege checkpoint is saved');
+    const { getRegisteredQuests } = require('../plugins/quests/QuestRuntime');
+    const quest = getRegisteredQuests().filter((entry) => entry.key === 'the_blood_moon_rises').at(-1);
+    const attributes = new Map(), counts = new Map();
+    const inventory = {
+      getAmount: (id) => counts.get(id) ?? 0,
+      contains: (id) => (counts.get(id) ?? 0) > 0,
+      adds: (id, amount) => (counts.set(id, (counts.get(id) ?? 0) + amount), true),
+      deleteNumber: (id, amount) => counts.set(id, Math.max(0, (counts.get(id) ?? 0) - amount)),
+    };
+    const player = {
+      isPlayer: () => true, getAsPlayer: () => player,
+      getUsername: () => 'SiegeHallTest',
+      getPrivateArea: () => player.area,
+      getAttribute: (key) => attributes.get(key),
+      setAttribute: (key, value) => attributes.set(key, value),
+      getInventory: () => inventory,
+      getPacketSender: () => new Proxy({}, { get: () => () => {} }),
+      getDialogueManager: () => ({ reset() {}, startDialogues() {} }),
+      sendMessage() {},
+    };
+    const SIEGE = 'quest.the_blood_moon_rises.siege-defence';
+    const hallState = () => ({ version: 1, phase: 'hall', integrity: 650, timer: 300, elapsed: 0,
+      damaged: {}, injured: { 0: true }, nextPillarTick: 1000, nextWindowTick: 1000, nextAraneiTick: 1000 });
+    quest.setStage(player, 70);
+    attributes.set(SIEGE, hallState());
+    const loginHook = handlers.playerLogin.find(handler => handler.name === 'handleSiegeLogin');
+    loginHook({ player });
+    assert.deepEqual(spawns.map(({ id, x, y, z, ownerOnly }) => ({ id, x, y, z, ownerOnly })), [
+      { id: api.core.NpcIdentifiers.ARANEI_108, x: 3161, y: 7854, z: 1, ownerOnly: true },
+      { id: api.core.NpcIdentifiers.ARANEI_103, x: 3163, y: 7855, z: 1, ownerOnly: true },
+      { id: api.core.NpcIdentifiers.ARANEI_104, x: 3165, y: 7855, z: 1, ownerOnly: true },
+      { id: api.core.NpcIdentifiers.ARANEI_105, x: 3171, y: 7855, z: 1, ownerOnly: true },
+      { id: api.core.NpcIdentifiers.ARANEI_106, x: 3173, y: 7855, z: 1, ownerOnly: true },
+      { id: api.core.NpcIdentifiers.ARANEI_107, x: 3175, y: 7854, z: 1, ownerOnly: true },
+    ], 'all six captured Aranei spawn at their real tiles');
+    assert.equal(replaced.filter(([kind])=>kind==='add').length, 13,
+      'the captured four crates, barricade, two pillars and six windows are spawned inside the private instance');
+    assert.ok(replaced.every(([,object])=>object.getPrivateArea()===player.area));
+    const routeWindow = handlers.routes.find(handler => handler.name === 'routeSiegeHallWindowRepair');
+    assert.ok(routeWindow, 'north-wall window clicks have a hall-scoped reachable approach');
+    const approach = { x: 3176, y: 7857, z: 1 };
+    const { RegionManager } = api.core;
+    assert.equal(RegionManager.blocked(new api.core.Location(approach.x, approach.y, approach.z), null), false,
+      'the interior-side window approach is a cache-walkable tile');
+    const reachable = new Set(['3168,7855']), queue = [[3168, 7855]];
+    for (let index = 0; index < queue.length; index++) {
+      const [x, y] = queue[index];
+      for (const [dx, dy] of [[0, 1], [1, 0], [0, -1], [-1, 0], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+        const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
+        if (nx < 3154 || nx > 3183 || ny < 7823 || ny > 7861 || reachable.has(key) ||
+          !RegionManager.canMove(x, y, nx, ny, 1, 1, 1, null)) continue;
+        reachable.add(key); queue.push([nx, ny]);
+      }
+    }
+    assert.equal(reachable.has(`${approach.x},${approach.y}`), true,
+      'the window approach connects to the cache-walkable hall entrance');
+    const windowLocation = new api.core.Location(3176, 7858, 1);
+    const windowObject = { getLocation: () => windowLocation, getPrivateArea: () => player.area };
+    const windowRoute = { player, object: windowObject, objectId: api.core.ObjectIdentifiers.DAMAGED_WINDOW,
+      definition: { id: api.core.ObjectIdentifiers.DAMAGED_WINDOW, getInteractions: () => ['Repair'] },
+      clickType: 1, sourceLocation: { x: 3168, y: 7855, z: 1 }, destination: null };
+    routeWindow(windowRoute);
+    assert.deepEqual(windowRoute.destination, approach);
+    const outsideRoute = { ...windowRoute, object: { ...windowObject, getPrivateArea: () => null }, destination: null };
+    routeWindow(outsideRoute);
+    assert.equal(outsideRoute.destination, null, 'the route cannot affect public or another player’s hall');
+    replaced.length = 0;
+    const interact = handlers.objects.find((handler) => handler.name === 'handleSiegeHallObject');
+    const objectEvent = (id, x, y, option = 'Repair') => {
+      const location = new api.core.Location(x, y, 1);
+      const object = { getLocation: () => location, getType: () => 10, getFace: () => 0, getPrivateArea: () => player.area };
+      const event = { player, object, objectId: id, definition: { id }, location: { x, y, z: 1 }, option, handled: false };
+      interact(event);
+      return event;
+    };
+    const ids = api.core.ObjectIdentifiers;
+    objectEvent(ids.CRATE_OF_HAMMERS_2, 3173, 7847, 'Take-from');
+    objectEvent(ids.CRATE_OF_POTIONS, 3174, 7848, 'Take-from');
+    assert.equal(inventory.contains(api.core.ItemIdentifiers.HAMMER), true);
+    assert.equal(inventory.contains(api.core.ItemIdentifiers.HEALING_POTION), true);
+    objectEvent(ids.CRATE_OF_HAMMERS_2, 3162, 7849, 'Take-from');
+    assert.equal(inventory.getAmount(api.core.ItemIdentifiers.HAMMER), 1, 'a second crate gives no extra hammer');
+    const npc = spawnedNpcs[0];
+    const heal = handlers.npcInteractions.get('Aranei').Heal;
+    const healEvent = { player, npc, npcId: npc.getId(), handled: false };
+    const otherEvent={...healEvent,npc:{...npc,getOwner:()=>({})}};heal(otherEvent);assert.equal(otherEvent.handled,false,'another defender cannot heal this player’s instance');
+    heal(healEvent);
+    assert.equal(healEvent.handled, true);
+    assert.equal(npc.transformedId, api.core.NpcIdentifiers.ARANEI_102, 'healing returns the fallen Aranei to its captured normal id');
+    attributes.set(SIEGE, { ...attributes.get(SIEGE), injured: {} });
+    replaced.length = 0;
+    attributes.set(SIEGE, { ...attributes.get(SIEGE),
+      damaged: { '3174,7855': true, '3162,7855': true, '3176,7858': true } });
+    objectEvent(ids.DAMAGED_PILLAR_2, 3174, 7855);
+    objectEvent(ids.DAMAGED_PILLAR_2, 3162, 7855);
+    objectEvent(ids.DAMAGED_WINDOW, 3176, 7858);
+    const state = attributes.get(SIEGE);
+    assert.deepEqual(state.damaged, {}, 'repairs clear the real damaged targets');
+    assert.equal(state.repaired, undefined, 'there is no permanent repaired list any more');
+    assert.equal(state.integrity, 650, 'repairs remove sources instead of adding integrity');
+    assert.equal(replaced.filter(([kind]) => kind === 'add').length, 39, 'each repair refreshes the 13 captured hall locs');
+    assert.equal(handlers.playerProcess.some(h=>h.name==='processSiegeDefence'),false,'hall timing belongs to its area');
+    const process = ({player}) => player.area.process(player);
+    attributes.set(SIEGE, { ...hallState(), integrity: 7, damaged: { '3174,7855': true }, injured: { 0: true } });
     process({ player });
-    assert.equal(attributes.get('quest.the_blood_moon_rises.siege-defence').phase, 'hall',
-      'integrity alone cannot end the defence without the required participation');
-    attributes.set('quest.the_blood_moon_rises.siege-defence', {
-      ...attributes.get('quest.the_blood_moon_rises.siege-defence'), integrity: 51, participation: 3,
-    });
-    cycle = 40;
+    assert.equal(attributes.get(SIEGE).integrity, 4, 'one damaged pillar plus one injured Aranei costs exactly 3');
+    assert.equal(attributes.get(SIEGE).phase, 'hall');
+    attributes.set(SIEGE, { ...attributes.get(SIEGE), integrity: 2, timer: 0 });
     process({ player });
-    assert.equal(attributes.get('quest.the_blood_moon_rises.siege-defence').qualified, true);
-    assert.equal(attributes.get('quest.the_blood_moon_rises.siege-defence').phase, 'hall', '50% qualifies participation without starting the breach');
-    attributes.set('quest.the_blood_moon_rises.siege-defence', { ...attributes.get('quest.the_blood_moon_rises.siege-defence'), integrity: 1 });
-    cycle = 60; process({ player });
+    assert.equal(attributes.get(SIEGE).phase, 'breach', 'zero integrity after the timer starts the barricade cutscene');
+    const oldHall = player.area; oldHall.postLeave(player, true); replaced.length = 0;
+    const spawnCount = spawns.length;
+    loginHook({player});
+    assert.notEqual(player.area, oldHall, 'the saved breach restores a new owned hall');
+    assert(replaced.some(([kind, object]) => kind === 'add' && object.getId() === ids.BARRICADE_61), 'the saved breach has the captured 62164 barricade');
+    assert.equal(spawns.length, spawnCount, 'no Aranei respawn on the breach checkpoint');
   } finally {
-    npcDefinition.forId = originalForId;
+    objectManager.deregister = originalDeregister;
+    objectManager.register = originalRegister;
+    api.core.World.getProcessCycle = originalGetProcessCycle;
   }
-  assert.equal(attributes.get('quest.the_blood_moon_rises.siege-defence').phase, 'breach',
-    'the barricade cutscene begins only at zero integrity');
-  const oldHall = player.area; oldHall.postLeave(player, true); replaced.length = 0;
-  loginHook({player});
-  assert.notEqual(player.area, oldHall, 'the saved breach restores a new owned hall');
-  assert(replaced.some(([kind, object]) => kind === 'add' && object.getId() === ids.BARRICADE_60), 'the saved breach has a real barricade to resume the fight');
-  assert.equal(spawns.length, 1, 'healed Aranei do not respawn on the breach checkpoint');
-  objectManager.deregister = originalDeregister;
-  objectManager.register = originalRegister;
-  api.core.World.getProcessCycle = originalGetProcessCycle;
 });
 
 test('Blood Moon starts the scoped Theatre encounter and advances after Vasilias', () => {

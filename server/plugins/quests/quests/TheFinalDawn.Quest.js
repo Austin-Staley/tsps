@@ -212,10 +212,24 @@ module.exports = function registerTheFinalDawnQuest(api) {
     NpcIdentifiers.PRINCE_ITZLA_ARKAN_19, // 14279
     NpcIdentifiers.PRINCE_ITZLA_ARKAN_20, // 14280
     NpcIdentifiers.PRINCE_ITZLA_ARKAN_21, // 14281
-    NpcIdentifiers.PRINCE_ITZLA_ARKAN_22, // 14282
+    NpcIdentifiers.PRINCE_ITZLA_ARKAN_22, // 14283 option variant
+    NpcIdentifiers.PRINCE_ITZLA_ARKAN_23, // 14284 moved option variant
+    14282, // vmq4_itzla_crypt_puzzle_sun raw base
     NpcIdentifiers.PRINCE_ITZLA_ARKAN_24, // 14286
   ]);
   const ITZLA_QUEST_ID = NpcIdentifiers.PRINCE_ITZLA_ARKAN_19; // 14279
+  const SUN_PUZZLE_ITZLA_ID = 14282; // vmq4_itzla_crypt_puzzle_sun (raw base; 14283/14284 are option variants)
+  const MOON_PUZZLE_ITZLA_ID = NpcIdentifiers.PRINCE_ITZLA_ARKAN_21; // 14281 vmq4_itzla_crypt_puzzle_moon
+  const SUN_PUZZLE_ITZLA_TILE = { x: 1327, y: 9446, z: 1 }; // QH VMQ4_ITZLA_CRYPT_PUZZLE_SUN
+  const MOON_PUZZLE_ITZLA_TILE = { x: 1298, y: 9446, z: 1 }; // QH VMQ4_ITZLA_CRYPT_PUZZLE_MOON
+  // Only E/N/NW have captured/QH Itzla stand tiles; solved orders use only these three.
+  // Other menu directions fall back to the cache altar tile, never an invented stand tile.
+  const SUN_ITZLA_STAND_TILES = {
+    1: [1338, 9446], // east
+    6: [1324, 9452], // north-west
+    7: [1330, 9454], // north
+  };
+  const SUN_ITZLA_IDS = new Set([14282, 14283, 14284]); // raw + resolved puzzle-sun variants
   const ATTALA_IDS = new Set([
     NpcIdentifiers.ATTALA, // 12861
     NpcIdentifiers.ATTALA_2, // 13099
@@ -710,7 +724,13 @@ module.exports = function registerTheFinalDawnQuest(api) {
       if (existing) tracked.delete(key);
       return null;
     }
-    if (existing?.isRegistered?.() && existing.getId?.() === definition.id) return existing;
+    if (existing?.isRegistered?.() && existing.getId?.() === definition.id) {
+      const at = existing.getLocation?.();
+      if (at && (at.getX() !== definition.x || at.getY() !== definition.y || at.getZ() !== definition.z)) {
+        existing.moveTo?.(new Location(definition.x, definition.y, definition.z));
+      }
+      return existing;
+    }
     if (existing?.isRegistered?.()) api.removeNpc(existing);
     const npc = api.spawnNpc({ ...definition, owner: player, ownerOnly: true });
     if (npc) tracked.set(key, npc);
@@ -832,8 +852,16 @@ module.exports = function registerTheFinalDawnQuest(api) {
       ? { id: SERVIUS_CRYPT_ID, x: 1236, y: 3105, z: 0, wanderRadius: 0 }
       : null);
     const itzlaTile = itzlaTileForStage(stage);
-    syncTracked(player, "itzla", itzlaTile
+    const sunPuzzle = stage === STAGE_CAVERN;
+    const sunStand = sunItzlaStandTile(player);
+    syncTracked(player, "itzla", itzlaTile && !sunPuzzle
       ? { id: ITZLA_QUEST_ID, x: itzlaTile.x, y: itzlaTile.y, z: itzlaTile.z, wanderRadius: 0 }
+      : null);
+    syncTracked(player, "itzla-sun", sunPuzzle
+      ? { id: SUN_PUZZLE_ITZLA_ID, x: sunStand[0], y: sunStand[1], z: SUN_PUZZLE_ITZLA_TILE.z, wanderRadius: 0 }
+      : null);
+    syncTracked(player, "itzla-moon", sunPuzzle
+      ? { id: MOON_PUZZLE_ITZLA_ID, x: MOON_PUZZLE_ITZLA_TILE.x, y: MOON_PUZZLE_ITZLA_TILE.y, z: MOON_PUZZLE_ITZLA_TILE.z, wanderRadius: 0 }
       : null);
     ensureTeumoBarrels(player);
     ensureSafehouseLoot(player);
@@ -979,8 +1007,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
     }
     const stage = quest.getStage(player);
     if (stage === STAGE_CAVERN && inSunRoom(player)) {
-      ensureSunItzla(player);
-      promptSunItzla(player);
+      play(player, npcId, "crypt-assault-sun-chamber-talking-to-prince-itzla");
       return true;
     }
     if (stage >= STAGE_ENNIUS && stage <= STAGE_DESCEND) {
@@ -2017,18 +2044,22 @@ module.exports = function registerTheFinalDawnQuest(api) {
     return current === undefined || current === null ? -1 : Number(current) || 0;
   }
 
-  function promptSunItzla(player) {
-    api.sendMultiChatboxPrompt(
-      player,
-      "Tell Itzla where to stand",
-      ...Object.entries(DIRECTION_INDEX).flatMap(([label, index]) => [label, () => {
-        player.setAttribute(SUN_ITZLA_ATTRIBUTE, index);
-        syncQuestVarbits(player);
-        player.sendMessage(`Itzla moves to the ${SUN_ALTAR_NAMES[index]} altar.`);
-        player.getPacketSender().sendInterfaceRemoval();
-      }])
-    );
+  /** The saved prompt choice places the sun actor at its recorded stand tile on login. */
+  function sunItzlaStandTile(player) {
+    const index = Number(player.getAttribute(SUN_ITZLA_ATTRIBUTE));
+    return Number.isInteger(index) && index >= 0 && index < 8
+      ? (SUN_ITZLA_STAND_TILES[index] ?? SUN_ALTAR_TILES[index])
+      : [SUN_PUZZLE_ITZLA_TILE.x, SUN_PUZZLE_ITZLA_TILE.y];
   }
+
+  function moveSunItzla(player, index) {
+    const itzla = tracked(player, "itzla-sun");
+    if (!itzla) return;
+    const [x, y] = SUN_ITZLA_STAND_TILES[index] ?? SUN_ALTAR_TILES[index] ?? [SUN_PUZZLE_ITZLA_TILE.x, SUN_PUZZLE_ITZLA_TILE.y];
+    itzla.moveTo(new Location(x, y, SUN_PUZZLE_ITZLA_TILE.z));
+  }
+
+
 
   function moonNeed(player, progress) {
     player.getPacketSender().sendVarbit(MOON_ORDER_VARBIT, 2);
@@ -2400,6 +2431,15 @@ module.exports = function registerTheFinalDawnQuest(api) {
         player.moveTo(new Location(TEMPLE_HIDDEN_ROOM_TILE.x, TEMPLE_HIDDEN_ROOM_TILE.y, TEMPLE_HIDDEN_ROOM_TILE.z));
       }
       return;
+    }
+    const direction = DIRECTION_INDEX[option] ?? DIRECTION_INDEX[String(option)
+      .replace(/north west/i, 'North-west').replace(/north east/i, 'North-east')
+      .replace(/south west/i, 'South-west').replace(/south east/i, 'South-east')];
+    if (SUN_ITZLA_IDS.has(npcId) && quest.getStage(player) === STAGE_CAVERN && inSunRoom(player)
+      && direction !== undefined) {
+      player.setAttribute(SUN_ITZLA_ATTRIBUTE, direction);
+      moveSunItzla(player, direction);
+      syncQuestVarbits(player);
     }
     if (VIBIA_IDS.has(npcId) && option === "I'll get searching.") {
       if (quest.getStage(player) !== STAGE_HOUSE_OPEN) return;

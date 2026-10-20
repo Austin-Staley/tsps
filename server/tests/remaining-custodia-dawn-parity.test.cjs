@@ -345,7 +345,10 @@ test('The Final Dawn mirrors Quest Helper progress varbits from actual progress 
   h.quest.setStage(p, 55);
   h.hooks.onPlayerLogin[0]({ player: p });
   p.moveTo(new core.Location(1330, 9446, 1));
-  h.namedNpcs.get('Prince Itzla Arkan')['Talk-to']({ player: p, npcId: 14279 });
+  h.namedNpcs.get('Prince Itzla Arkan')['Talk-to']({ player: p, npcId: 14282 });
+  for (let step = 0; step < 200 && p.manager.getCurrent() && !p.prompt; step++) p.manager.advance();
+  h.choose(p, 'Can you go to an altar for me?');
+  for (let step = 0; step < 200 && p.manager.getCurrent() && !p.prompt; step++) p.manager.advance();
   h.choose(p, 'East.');
   assert.equal(p.varbits.get(16712), 1, 'Itzla moved mirrors 16712');
   for (let step = 0; step < 3; step++) {
@@ -1091,6 +1094,127 @@ test('The Final Dawn twins cutscene lands in the arena, and stage43 symbol re-en
   }
   for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
   for (const fn of h2.hooks.onPlayerLogout) fn({ player: p2 });
+});
+
+test('The Final Dawn sun room spawns the puzzle-specific Itzla and moves him to recorded altars', () => {
+  const h = harness('TheFinalDawn'), p = player();
+  p.moveTo(new core.Location(1332, 9453, 1));
+  h.quest.setStage(p, 55);
+  h.hooks.onPlayerLogin[0]({ player: p });
+
+  const sun = h.npcs.find(npc => npc.id === 14282 && npc.getOwner() === p && !npc.removed);
+  const moon = h.npcs.find(npc => npc.id === 14281 && npc.getOwner() === p && !npc.removed);
+  assert.ok(sun, 'vmq4_itzla_crypt_puzzle_sun 14282 spawns at stage55');
+  assert.ok(moon, 'vmq4_itzla_crypt_puzzle_moon 14281 spawns at stage55');
+  assert.deepEqual([sun.getLocation().getX(), sun.getLocation().getY(), sun.getLocation().getZ()], [1327, 9446, 1]);
+  assert.deepEqual([moon.getLocation().getX(), moon.getLocation().getY(), moon.getLocation().getZ()], [1298, 9446, 1]);
+  assert.ok(!h.npcs.some(npc => npc.id === 14279 && npc.getOwner() === p && !npc.removed),
+    'generic crypt Itzla 14279 is not used at stage55');
+  const vars = { getVarbit: id => (id === 16663 ? 55 : 0), getVarp: () => 0 };
+  assert.ok(CacheDefinitions.resolveNpc(14282, vars)?.actions?.includes('Talk-to'),
+    '14282 resolves to a Talk-to sun-puzzle Itzla');
+
+  const advanceToPrompt = () => {
+    for (let step = 0; step < 200 && p.manager.getCurrent() && !p.prompt; step++) p.manager.advance();
+    assert.ok(p.prompt, 'dialogue reached a prompt');
+  };
+  const talkAndChooseAltar = direction => {
+    h.namedNpcs.get('Prince Itzla Arkan')['Talk-to']({ player: p, npcId: 14282 });
+    advanceToPrompt();
+    assert.ok(p.prompt.options.includes('Can you go to an altar for me?'), 'normal altar ask option is present');
+    h.choose(p, 'Can you go to an altar for me?');
+    advanceToPrompt();
+    for (let page = 0; page < 4 && !p.prompt.options.includes(direction); page++) {
+      assert.ok(p.prompt.options.includes('More...'), 'direction menu has a More page');
+      h.choose(p, 'More...');
+      advanceToPrompt();
+    }
+    h.choose(p, direction);
+    for (let step = 0; step < 200 && p.manager.getCurrent() && !p.prompt; step++) p.manager.advance();
+  };
+  talkAndChooseAltar('North.');
+  assert.deepEqual([sun.getLocation().getX(), sun.getLocation().getY(), sun.getLocation().getZ()], [1330, 9454, 1],
+    'North dialogue choice physically moves the sun-puzzle actor to the QH north stand tile');
+  talkAndChooseAltar('East.');
+  assert.deepEqual([sun.getLocation().getX(), sun.getLocation().getY(), sun.getLocation().getZ()], [1338, 9446, 1],
+    'East dialogue choice moves to the captured east altar tile');
+  talkAndChooseAltar('North west.');
+  assert.deepEqual([sun.getLocation().getX(), sun.getLocation().getY(), sun.getLocation().getZ()], [1324, 9452, 1],
+    'North-west dialogue choice moves to the captured north-west altar tile');
+  assert.equal(h.quest.getStage(p), 55, 'movement dialogue does not change stage');
+
+  const pSaved = player();
+  pSaved.moveTo(new core.Location(1332, 9453, 1));
+  pSaved.attrs.set('the-final-dawn:sun-itzla', 7);
+  h.quest.setStage(pSaved, 55);
+  h.hooks.onPlayerLogin[0]({ player: pSaved });
+  const savedSun = h.npcs.find(npc => npc.id === 14282 && npc.getOwner() === pSaved && !npc.removed);
+  assert.deepEqual([savedSun.getLocation().getX(), savedSun.getLocation().getY(), savedSun.getLocation().getZ()], [1330, 9454, 1],
+    'login spawns the sun actor on the saved chosen stand tile');
+
+  const h2 = harness('TheFinalDawn'), p2 = player();
+  p2.moveTo(new core.Location(1312, 9493, 1));
+  h2.quest.setStage(p2, 53);
+  h2.hooks.onPlayerLogin[0]({ player: p2 });
+  assert.ok(h2.npcs.some(npc => npc.id === 14279 && npc.getOwner() === p2 && !npc.removed),
+    'Ennius-stage actor is the generic crypt Itzla 14279');
+  h2.quest.setStage(p2, 55);
+  h2.hooks.onPlayerLogin[0]({ player: p2 });
+  assert.ok(!h2.npcs.some(npc => npc.id === 14279 && npc.getOwner() === p2 && !npc.removed),
+    '52->55 replacement removes generic Itzla');
+  assert.equal(h2.npcs.filter(npc => npc.id === 14282 && npc.getOwner() === p2 && !npc.removed).length, 1);
+  assert.equal(h2.npcs.filter(npc => npc.id === 14281 && npc.getOwner() === p2 && !npc.removed).length, 1);
+
+  h2.quest.setStage(p2, 60);
+  h2.hooks.onPlayerLogin[0]({ player: p2 });
+  assert.ok(!h2.npcs.some(npc => npc.id === 14282 && npc.getOwner() === p2 && !npc.removed), 'sun actor cleaned at stage60');
+  assert.ok(!h2.npcs.some(npc => npc.id === 14281 && npc.getOwner() === p2 && !npc.removed), 'moon actor cleaned at stage60');
+  assert.equal(h2.npcs.filter(npc => npc.id === 14279 && npc.getOwner() === p2 && !npc.removed).length, 1,
+    'stage60 restores one generic puzzle Itzla 14279');
+  const generic = () => h2.npcs.find(npc => npc.id === 14279 && npc.getOwner() === p2 && !npc.removed);
+  assert.deepEqual([generic().getLocation().getX(), generic().getLocation().getY(), generic().getLocation().getZ()], [1311, 9464, 1]);
+  h2.quest.setStage(p2, 62);
+  h2.hooks.onPlayerLogin[0]({ player: p2 });
+  assert.deepEqual([generic().getLocation().getX(), generic().getLocation().getY(), generic().getLocation().getZ()], [1311, 9497, 1],
+    'stage62 moves the existing generic Itzla to the Metzli chamber');
+  h2.quest.setStage(p2, 65);
+  h2.hooks.onPlayerLogin[0]({ player: p2 });
+  assert.deepEqual([generic().getLocation().getX(), generic().getLocation().getY(), generic().getLocation().getZ()], [1311, 9533, 1],
+    'stage65 moves the same Itzla to the explore chamber');
+  assert.equal(h2.npcs.filter(npc => npc.id === 14279 && npc.getOwner() === p2 && !npc.removed).length, 1,
+    'stage transitions do not duplicate Itzla');
+  for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
+  for (const fn of h2.hooks.onPlayerLogout) fn({ player: p2 });
+});
+
+test('The Final Dawn dispatches both resolved sun-puzzle Itzla content ids through real Talk-to', () => {
+  for (const [sunState, expectedId] of [[0, 14283], [1, 14284]]) {
+    const vars = { getVarbit: id => (id === 16663 ? 55 : id === 16712 ? sunState : 0), getVarp: () => 0 };
+    const definition = CacheDefinitions.resolveNpc(14282, vars);
+    assert.equal(definition?.id, expectedId, `stage55 sun state ${sunState} resolves ${expectedId}`);
+    assert.ok(definition.actions.includes('Talk-to'), `${expectedId} is Talk-to`);
+
+    const h = harness('TheFinalDawn'), p = player();
+    p.moveTo(new core.Location(1332, 9453, 1));
+    h.quest.setStage(p, 55);
+    h.hooks.onPlayerLogin[0]({ player: p });
+    const sun = h.npcs.find(npc => npc.id === 14282 && npc.getOwner() === p && !npc.removed);
+    assert.ok(sun, 'raw 14282 tracked actor exists');
+
+    // Real NPCOptionPacketListener passes npc.getContentId(player), i.e. 14283/14284.
+    h.namedNpcs.get('Prince Itzla Arkan')['Talk-to']({ player: p, npcId: definition.id });
+    for (let step = 0; step < 200 && p.manager.getCurrent() && !p.prompt; step++) p.manager.advance();
+    assert.ok(p.prompt?.options.includes('Can you go to an altar for me?'),
+      `resolved ${expectedId} dispatches the real altar dialogue`);
+    h.choose(p, 'Can you go to an altar for me?');
+    for (let step = 0; step < 200 && p.manager.getCurrent() && !p.prompt; step++) p.manager.advance();
+    h.choose(p, 'North.');
+    for (let step = 0; step < 200 && p.manager.getCurrent() && !p.prompt; step++) p.manager.advance();
+    assert.deepEqual([sun.getLocation().getX(), sun.getLocation().getY(), sun.getLocation().getZ()], [1330, 9454, 1],
+      `resolved ${expectedId} direction physically moves the tracked actor`);
+    assert.equal(h.quest.getStage(p), 55);
+    for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
+  }
 });
 
 test('The Final Dawn Strange Tiles step between the moon chamber and final floor', () => {

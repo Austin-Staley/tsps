@@ -17,11 +17,14 @@ const noop = () => {};
 
 before(async () => { await CachePipeline.initialize(path.resolve(__dirname, '..')); });
 
-function harness() {
+function harness({ realObjects = false } = {}) {
   const events = {}, tasks = [], npcs = [], removed = [], objects = [], variants = [], npcInteractions = new Map(), objectInteractions = new Map(), anyNpcHooks = [], objectHooks = [], itemOnObject = [];
   let failSpawnId = null, failSpawnCount = 0;
   const api = new Proxy({
-    core: { ...core, ObjectManager: { register: o => objects.push(o), deregister: noop },
+    core: { ...core, ObjectManager: realObjects
+      ? { register(o, update) { objects.push(o); core.ObjectManager.register(o, update); },
+        deregister(o, update) { core.ObjectManager.deregister(o, update); } }
+      : { register: o => objects.push(o), deregister: noop },
       CountdownTask: class { constructor(key, ticks, run) { Object.assign(this, { key, ticks, run, stopped: false }); } },
       TaskManager: { submit(task) { tasks.push(task); }, cancelTasks(key) { for (const task of tasks) if (task.key === key) task.stopped = true; } } },
     registerArea: noop,
@@ -80,7 +83,7 @@ function harness() {
 function player(name = 'Parity') {
   const attrs = new Map(), items = new Map(), varbits = new Map(), varbitHistory = [], configs = new Map(), messages = [], xp = [], equipment = new Map();
   let location = new core.Location(3210, 3220, 0), area = null;
-  const packets = { interfaces: [], closes: [], cameras: [], varbits: [] };
+  const packets = { interfaces: [], closes: [], cameras: [], varbits: [], scripts: [], strings: [] };
   const inv = { getAmount: id => items.get(id) ?? 0, contains: id => (items.get(id) ?? 0) > 0,
     getFreeSlots: () => 28, adds(id, n = 1) { items.set(id, (items.get(id) ?? 0) + n); },
     deleteNumber(id, n = 1) { items.set(id, (items.get(id) ?? 0) - n); } };
@@ -89,6 +92,8 @@ function player(name = 'Parity') {
     getVarbit(id) { return varbits.get(id) ?? 0; },
     sendSubInterface(...args) { packets.interfaces.push(args); return packet; },
     closeSubInterface(...args) { packets.closes.push(args); return packet; },
+    sendString(text, uid) { packets.strings.push([text, uid]); return packet; },
+    sendClientScript(id, ...args) { packets.scripts.push([id, ...args]); return packet; },
     sendCameraMoveTo(...args) { packets.cameras.push(['move', ...args]); return packet; },
     sendCameraLookAt(...args) { packets.cameras.push(['look', ...args]); return packet; },
     sendCameraReset() { packets.cameras.push(['reset']); return packet; },
@@ -1349,11 +1354,228 @@ test('siege fall-back login resumes the real 118 conversation and vqg4qO opens t
   assert.ok(p.manager.getCurrent(), 'canonical fall-back transcript started');
   continueUntil(p, () => p.attrs.get(SIEGE)?.phase === 'hall', 100);
   assert.equal(p.varbits.get(15464), 120);
-  assert.equal(p.attrs.get(SIEGE).integrity, 100);
+  assert.equal(p.attrs.get(SIEGE).integrity, 650, 'captured hall maximum');
+  assert.equal(p.attrs.get(SIEGE).timer, 300, 'captured siege timer');
   assert.equal(h.quest.getStage(p), 70);
   h.emit('npc-dialogue:action', { player: p, stepId: 'vqg4qO', kind: 'action' });
   assert.equal(p.attrs.get(SIEGE).phase, 'hall', 'repeat completion does not reset the hall');
-  assert.equal(p.attrs.get(SIEGE).integrity, 100);
+  assert.equal(p.attrs.get(SIEGE).integrity, 650);
+});
+
+test('hall ticks the measured per-source loss, publishes 9674, and fails back to 650', () => {
+  const h = harness(), p = player('HallTicks');
+  enablePrereqs(h, new Set(PREREQS));
+  const SIEGE = 'quest.the_blood_moon_rises.siege-defence';
+  h.quest.setStage(p, 70);
+  p.attrs.set(SIEGE, { phase: 'hall', integrity: 100, participation: 2, repaired: ['3176,7858'] });
+  p.varbits.set(15464, 120);
+  h.emit('player:login', { player: p });
+  const area = p.getPrivateArea();
+  assert.ok(area, 'login enters the private hall area');
+  assert.equal(p.attrs.get(SIEGE).integrity, 650, 'legacy 0-100 save migrates to the captured maximum');
+  assert.equal(p.attrs.get(SIEGE).timer, 300);
+  assert.equal(p.attrs.get(SIEGE).repaired, undefined, 'legacy permanent repair list is dropped');
+  assert.ok(p.packets.interfaces.some(([uid, group]) => uid === ((161 << 16) | 8) && group === 968),
+    'the captured integrity overlay opens');
+  assert.deepEqual(p.packets.scripts.find(([id]) => id === 9674),
+    [9674, 650, 650, 300, 300], 'current/max/timer/max timer');
+
+  for (let tick = 0; tick < 14; tick++) area.process(p);
+  assert.ok(p.attrs.get(SIEGE).damaged['3176,7858'], 'a window is damaged');
+  assert.equal(p.attrs.get(SIEGE).integrity, 650, 'damaged windows cost no integrity');
+
+  for (let tick = 0; tick < 14; tick++) area.process(p);
+  assert.ok(p.attrs.get(SIEGE).damaged['3174,7855'], 'a pillar is damaged');
+  assert.equal(p.attrs.get(SIEGE).integrity, 648, 'one damaged pillar costs 2 per tick');
+
+  for (let tick = 0; tick < 15; tick++) area.process(p);
+  assert.deepEqual(p.attrs.get(SIEGE).injured, { 0: true }, 'an Aranei falls');
+  assert.equal(p.attrs.get(SIEGE).integrity, 617, 'one pillar plus one injured Aranei costs 3 per tick');
+  assert.deepEqual(p.packets.scripts.filter(([id]) => id === 9674).at(-1),
+    [9674, 617, 650, 257, 300], 'every fault republishes the real values');
+
+  p.attrs.set(SIEGE, { ...p.attrs.get(SIEGE), integrity: 1, timer: 200 });
+  area.process(p);
+  assert.equal(p.attrs.get(SIEGE).integrity, 650, 'a breach before the timer fails to a fresh defence');
+  assert.equal(p.attrs.get(SIEGE).timer, 300);
+  assert.ok(p.messages.includes('You failed to defend the hideout!'));
+  assert.equal(h.quest.getStage(p), 70, 'failure keeps the siege chapter for a retry');
+
+  const qualified = player('HallQualified');
+  h.quest.setStage(qualified, 70);
+  qualified.attrs.set(SIEGE, { phase: 'hall', integrity: 40, qualified: true, participation: 4 });
+  h.emit('player:login', { player: qualified });
+  assert.equal(qualified.attrs.get(SIEGE).timer, 0,
+    'a qualified 20-minute legacy defence has already passed the 300-tick story timer');
+  assert.equal(qualified.attrs.get(SIEGE).integrity, 260, 'legacy integrity scales proportionally');
+  assert.equal(qualified.attrs.get(SIEGE).qualified, undefined, 'old gate state is dropped');
+});
+
+test('hall repairs always need a hammer, never add integrity, and repeat after re-damage', () => {
+  const h = harness(), p = player('HallRepair');
+  enablePrereqs(h, new Set(PREREQS));
+  const SIEGE = 'quest.the_blood_moon_rises.siege-defence';
+  h.quest.setStage(p, 70);
+  p.attrs.set(SIEGE, { version: 1, phase: 'hall', integrity: 500, timer: 250, elapsed: 100,
+    damaged: { '3174,7855': true }, injured: {}, nextPillarTick: 200, nextWindowTick: 200,
+    nextAraneiTick: 200 });
+  p.varbits.set(15464, 120);
+  h.emit('player:login', { player: p });
+  const area = p.getPrivateArea();
+  const repair = h.objectHooks.find(fn => fn.name === 'handleSiegeHallObject');
+  const pillar = { player: p, objectId: 62155, definition: { id: 62155 },
+    location: { x: 3174, y: 7855, z: 1 },
+    object: { getPrivateArea: () => area, getLocation: () => new core.Location(3174, 7855, 1),
+      getType: () => 10, getFace: () => 0 } };
+  repair(pillar);
+  assert.ok(p.attrs.get(SIEGE).damaged['3174,7855'], 'a damaged pillar still needs a hammer');
+  assert.ok(p.messages.some(line => line.includes('need a hammer')));
+  p.getInventory().adds(I.HAMMER, 1);
+  repair(pillar);
+  assert.deepEqual(p.attrs.get(SIEGE).damaged, {}, 'repair clears the pillar source');
+  assert.equal(p.attrs.get(SIEGE).integrity, 500, 'repair does not restore integrity');
+
+  p.attrs.set(SIEGE, { ...p.attrs.get(SIEGE), nextPillarTick: 101 });
+  area.process(p);
+  assert.ok(p.attrs.get(SIEGE).damaged['3174,7855'], 'the pillar is damaged again');
+  repair(pillar);
+  assert.deepEqual(p.attrs.get(SIEGE).damaged, {}, 'the same pillar can be repaired again');
+
+  p.attrs.set(SIEGE, { ...p.attrs.get(SIEGE), damaged: { '3176,7858': true } });
+  const window = { ...pillar, objectId: 62158, definition: { id: 62158 },
+    location: { x: 3176, y: 7858, z: 1 } };
+  repair(window);
+  assert.deepEqual(p.attrs.get(SIEGE).damaged, {}, 'window repair clears its cosmetic damage');
+  assert.ok(p.attrs.get(SIEGE).repaired === undefined, 'no permanent repaired list');
+});
+
+test('hall scheduled damage registers the real damaged loc and repair swaps it back', () => {
+  const h = harness({ realObjects: true }), p = player('HallScene');
+  enablePrereqs(h, new Set(PREREQS));
+  const SIEGE = 'quest.the_blood_moon_rises.siege-defence';
+  h.quest.setStage(p, 70);
+  p.attrs.set(SIEGE, { version: 1, phase: 'hall', integrity: 650, timer: 300, elapsed: 0,
+    damaged: {}, injured: {}, nextPillarTick: 1, nextWindowTick: 1, nextAraneiTick: 100 });
+  p.varbits.set(15464, 120);
+  h.emit('player:login', { player: p });
+  const area = p.getPrivateArea();
+  const at = (x, y) => core.ObjectManager.objectsAt(new core.Location(x, y, 1))
+    .filter(object => object.getPrivateArea() === area);
+  assert.equal(at(3174, 7855)[0].getId(), 62154, 'the private hall starts with the intact pillar');
+  assert.equal(at(3176, 7858)[0].getId(), 62157, 'the private hall starts with the intact window');
+  assert.deepEqual([62160, 3173, 7847, 10, 1], [at(3173, 7847)[0].getId(),
+    at(3173, 7847)[0].getLocation().getX(), at(3173, 7847)[0].getLocation().getY(),
+    at(3173, 7847)[0].getType(), at(3173, 7847)[0].getFace()], 'captured north hammer crate');
+  assert.deepEqual([62160, 3162, 7849, 10, 0], [at(3162, 7849)[0].getId(),
+    at(3162, 7849)[0].getLocation().getX(), at(3162, 7849)[0].getLocation().getY(),
+    at(3162, 7849)[0].getType(), at(3162, 7849)[0].getFace()], 'captured west hammer crate');
+  assert.deepEqual([62161, 3174, 7848, 11, 0], [at(3174, 7848)[0].getId(),
+    at(3174, 7848)[0].getLocation().getX(), at(3174, 7848)[0].getLocation().getY(),
+    at(3174, 7848)[0].getType(), at(3174, 7848)[0].getFace()], 'captured north potion crate');
+  assert.deepEqual([62161, 3163, 7847, 11, 3], [at(3163, 7847)[0].getId(),
+    at(3163, 7847)[0].getLocation().getX(), at(3163, 7847)[0].getLocation().getY(),
+    at(3163, 7847)[0].getType(), at(3163, 7847)[0].getFace()], 'captured west potion crate');
+  assert.deepEqual([62164, 3167, 7844, 10, 2], [at(3167, 7844)[0].getId(),
+    at(3167, 7844)[0].getLocation().getX(), at(3167, 7844)[0].getLocation().getY(),
+    at(3167, 7844)[0].getType(), at(3167, 7844)[0].getFace()], 'captured barricade');
+  for (const [x, y] of [[3176, 7858], [3172, 7858], [3174, 7858], [3160, 7858], [3162, 7858], [3164, 7858]]) {
+    assert.deepEqual([62157, 0, 3], [at(x, y)[0].getId(), at(x, y)[0].getType(),
+      at(x, y)[0].getFace()], `captured window at ${x},${y}`);
+  }
+
+  area.process(p);
+  assert.equal(at(3174, 7855).length, 1, 'refresh leaves one private pillar, no orphan');
+  assert.equal(at(3174, 7855)[0].getId(), 62155, 'scheduled damage is the registered damaged pillar');
+  assert.equal(at(3176, 7858)[0].getId(), 62158, 'scheduled damage is the registered damaged window');
+
+  p.getInventory().adds(I.HAMMER, 1);
+  const repair = h.objectHooks.find(fn => fn.name === 'handleSiegeHallObject');
+  const pillar = at(3174, 7855)[0];
+  repair({ player: p, objectId: pillar.getId(), definition: { id: pillar.getId() },
+    location: { x: 3174, y: 7855, z: 1 }, object: pillar });
+  assert.equal(at(3174, 7855).length, 1);
+  assert.equal(at(3174, 7855)[0].getId(), 62154, 'Repair swaps the real object back to intact');
+  const window = at(3176, 7858)[0];
+  repair({ player: p, objectId: window.getId(), definition: { id: window.getId() },
+    location: { x: 3176, y: 7858, z: 1 }, object: window });
+  assert.equal(at(3176, 7858)[0].getId(), 62157, 'window Repair also swaps the real object');
+
+  p.attrs.set(SIEGE, { ...p.attrs.get(SIEGE), nextPillarTick: 2, nextWindowTick: 2 });
+  area.process(p);
+  assert.equal(at(3174, 7855)[0].getId(), 62155, 're-damage registers the damaged pillar again');
+  assert.equal(at(3176, 7858)[0].getId(), 62158, 're-damage registers the damaged window again');
+
+  area.leave(p, true);
+  assert.equal(at(3174, 7855).length, 0, 'logout removes every private hall object');
+  for (const object of h.objects) core.ObjectManager.deregister(object, false);
+});
+
+test('hall crates take one item, refuse duplicates, and only report success when the item fits', () => {
+  const h = harness({ realObjects: true }), p = player('HallCrates');
+  enablePrereqs(h, new Set(PREREQS));
+  const SIEGE = 'quest.the_blood_moon_rises.siege-defence';
+  h.quest.setStage(p, 70);
+  p.attrs.set(SIEGE, { version: 1, phase: 'hall', integrity: 650, timer: 300, elapsed: 0,
+    damaged: {}, injured: {}, nextPillarTick: 100, nextWindowTick: 100, nextAraneiTick: 100 });
+  p.varbits.set(15464, 120);
+  h.emit('player:login', { player: p });
+  const area = p.getPrivateArea();
+  const at = (x, y) => core.ObjectManager.objectsAt(new core.Location(x, y, 1))
+    .filter(object => object.getPrivateArea() === area)[0];
+  const crate = h.objectHooks.find(fn => fn.name === 'handleSiegeHallObject');
+  const take = (object, handled = false) => crate({ player: p, objectId: object.getId(),
+    definition: { id: object.getId() }, location: { x: object.getLocation().getX(),
+      y: object.getLocation().getY(), z: 1 }, object, handled });
+  take(at(3173, 7847));
+  assert.equal(p.getInventory().getAmount(I.HAMMER), 1, 'the captured hammer crate gives a hammer');
+  take(at(3162, 7849));
+  assert.equal(p.getInventory().getAmount(I.HAMMER), 1, 'a second crate gives no duplicate hammer');
+  assert.ok(p.messages.some(line => line.includes('already have a hammer')));
+  take(at(3174, 7848));
+  assert.equal(p.getInventory().getAmount(I.HEALING_POTION), 1, 'the captured potion crate gives one potion');
+
+  p.getInventory().deleteNumber(I.HAMMER, 1);
+  const inv = p.getInventory();
+  const adds = inv.adds;
+  inv.adds = () => inv;
+  take(at(3173, 7847));
+  inv.adds = adds;
+  assert.equal(inv.getAmount(I.HAMMER), 0, 'a full inventory gains no hammer');
+  assert.ok(p.messages.some(line => line.includes('no room in your inventory')));
+  assert.ok(!p.messages.some(line => line.includes('You take a hammer') && line.includes('no room')));
+
+  area.leave(p, true);
+  for (const object of h.objects) core.ObjectManager.deregister(object, false);
+});
+
+test('hall maintains six Aranei and heals are repeatable after re-injury', () => {
+  const h = harness(), p = player('HallHeal');
+  enablePrereqs(h, new Set(PREREQS));
+  const SIEGE = 'quest.the_blood_moon_rises.siege-defence';
+  h.quest.setStage(p, 70);
+  p.attrs.set(SIEGE, { version: 1, phase: 'hall', integrity: 500, timer: 250, elapsed: 100,
+    damaged: {}, injured: { 0: true }, nextPillarTick: 200, nextWindowTick: 200,
+    nextAraneiTick: 200 });
+  p.varbits.set(15464, 120);
+  h.emit('player:login', { player: p });
+  const area = p.getPrivateArea();
+  const aranei = h.npcs.filter(npc => [16256, 16257, 16258, 16259, 16260, 16261,
+    16262, 16263, 16264, 16265, 16266, 16267].includes(npc.id));
+  assert.equal(aranei.length, 6, 'all six hall Aranei are spawned');
+  const heal = h.npcInteractions.get('Aranei').Heal;
+  const injured = h.npcs.find(npc => npc.id === 16262 && npc.getOwner() === p);
+  assert.ok(injured, 'the captured injured Aranei is present');
+  p.getInventory().adds(I.HEALING_POTION, 2);
+  heal({ player: p, npc: injured, npcId: 16262, handled: false });
+  assert.deepEqual(p.attrs.get(SIEGE).injured, {}, 'healing removes one injured source');
+  assert.equal(p.attrs.get(SIEGE).integrity, 500, 'healing does not add integrity');
+  assert.ok(!h.removed.includes(injured), 'the cured Aranei stays in the hall');
+
+  p.attrs.set(SIEGE, { ...p.attrs.get(SIEGE), injured: {}, nextAraneiTick: 101 });
+  area.process(p);
+  assert.deepEqual(p.attrs.get(SIEGE).injured, { 0: true }, 'the cadence can injure an Aranei again');
+  heal({ player: p, npc: injured, npcId: 16262, handled: false });
+  assert.deepEqual(p.attrs.get(SIEGE).injured, {}, 'the same Aranei can be healed again');
 });
 
 test('cog use on the Sangvesti mechanism is mandatory and consumes the earned cog once', () => {
