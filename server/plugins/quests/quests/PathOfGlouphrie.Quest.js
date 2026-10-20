@@ -62,6 +62,7 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
     Location,
     MapObjects,
     NpcIdentifiers,
+    ObjectDefinition,
     ObjectIdentifiers,
     ObjectManager,
     RegionManager,
@@ -942,12 +943,23 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
     return true;
   }
 
+  function placedObjectId(event) {
+    // ObjectActionPacketListener passes the placed map id (e.g. 49911) plus the resolved
+    // definition the client displays (e.g. 49615). Multi-locs such as the storeroom key
+    // chest must be matched by that resolved definition, not by the raw id alone.
+    const resolved = event.definition?.id;
+    if (Number.isInteger(resolved)) return resolved;
+    const definition = ObjectDefinition.forPlayer?.(event.objectId, event.player);
+    return Number.isInteger(definition?.id) ? definition.id : event.objectId;
+  }
+
   function handleChestSearch(event) {
-    const { player, objectId, location } = event;
+    const { player, location } = event;
+    const chestId = placedObjectId(event);
     if (
-      objectId !== WOOD_CHEST_OBJECT_ID &&
-      objectId !== KEY_CHEST_OBJECT_ID &&
-      objectId !== SEARCH_CHEST_OBJECT_ID
+      chestId !== WOOD_CHEST_OBJECT_ID &&
+      chestId !== KEY_CHEST_OBJECT_ID &&
+      chestId !== SEARCH_CHEST_OBJECT_ID
     ) {
       return false;
     }

@@ -1166,8 +1166,18 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
         return;
       case "HJ2S0x":
       case "r7ksPz":
-        if (evidence(player) & EVIDENCE_WALL) return;
-        markEvidence(player, EVIDENCE_WALL);
+        if ((evidence(player) & EVIDENCE_WALL) === 0) markEvidence(player, EVIDENCE_WALL);
+        // The shipped false-wall text is a message step, so this is the real
+        // NpcDialogues dispatch path (not the line event). Bind the per-player
+        // confirmation token only for the actual wall interaction at stage 2.
+        {
+          const interaction = falseWallInteraction.get(player);
+          const stage = quest.getStage(player);
+          if (interaction && interaction.objectId === FALSE_WALL && interaction.stage === stage && nearMansion(player)) {
+            pendingFalseWall.set(player, { stepId, at: Date.now() });
+            falseWallInteraction.delete(player);
+          }
+        }
         return;
       case "iHp8Db":
       case "VKTCTa":
@@ -1475,7 +1485,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
           pendingFalseWall.delete(player);
           falseWallInteraction.delete(player);
         } else {
-          falseWallInteraction.set(player, { stage, at: Date.now() });
+          falseWallInteraction.set(player, { objectId: FALSE_WALL, stage, at: Date.now() });
         }
         startTranscript(api, player, GUARD_NPC, PAGE, "a-death-in-the-family-knocking-at-the-false-wall");
         return;

@@ -2,7 +2,7 @@
 // Run after yarn build: node --test tests/remaining-goblin-glouphrie-bowl.test.cjs
 const assert = require('node:assert/strict');
 const path = require('node:path');
-const { after, before, test } = require('node:test');
+const { before, test } = require('node:test');
 const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const ROOT = path.resolve(__dirname, '..');
@@ -12,7 +12,7 @@ const BOWL = { raw: 49910, inspect: 49610, sing: 49611, eyes: 17239 };
 const ITEM = { seed: 28575, chime: 28577, redCircle: 9597 };
 const BOWL_TILE = { x: 2793, y: 4256 };
 
-let PluginManager, core, Player, CacheDefinitions, ObjectDefinition, MapObjects;
+let PluginManager, core, Player, CacheDefinitions, ObjectDefinition, MapObjects, ObjectActionPacketListener;
 
 before(async () => {
   await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(ROOT);
@@ -20,6 +20,7 @@ before(async () => {
   ({ CacheDefinitions } = require('../dist/game/cache/CacheDefinitions'));
   ({ ObjectDefinition } = require('../dist/game/definition/ObjectDefinition'));
   ({ MapObjects } = require('../dist/game/entity/impl/object/MapObjects'));
+  ({ ObjectActionPacketListener } = require('../dist/net/packet/impl/ObjectActionPacketListener'));
   PluginManager.loadPluginSwitches = () => ({ switches: new Map() });
   const quiet = [console.log, console.info, console.debug, console.warn];
   console.log = console.info = console.debug = console.warn = () => {};
@@ -27,7 +28,6 @@ before(async () => {
     PluginManager.loadFromDirectory(path.join(ROOT, 'plugins'));
     core = PluginManager.getCoreApi();
     core.RegionManager.init();
-    try { PluginManager.emitServerStartup({ timestamp: Date.now() }); } catch {}
   } finally {
     [console.log, console.info, console.debug, console.warn] = quiet;
   }
@@ -35,7 +35,6 @@ before(async () => {
   core.RegionManager.loadMapFiles(BOWL_TILE.x, BOWL_TILE.y);
 });
 
-after(() => setImmediate(() => process.exit()));
 
 function player(stage = 14, bits = (1 << 8) | (1 << 9) | (1 << 10)) {
   const p = new Player(null);
@@ -144,4 +143,37 @@ test('two players keep independent bowl bits, and making the chime early cannot 
   PluginManager.emitItemOnObject(itemEvent(b.p, ITEM.seed));
   assert.equal(b.p.getInventory().getAmount(ITEM.chime), 1);
   assert.equal(Number(b.p.getAttribute(POG_STAGE)), 6, 'early chime does not skip diary stages');
+});
+
+test('real ObjectActionPacketListener resolves the raw 49911 key chest before POG dispatch', () => {
+  const { p } = player(10, 1 << 12);
+  p.setLocation(new core.Location(2786, 4261, 0));
+  p.setAttribute('the-path-of-glouphrie:monoliths', JSON.stringify([
+    [2788, 4246], [2787, 4254], [2790, 4253], [2788, 4256], [2791, 4257],
+  ]));
+  const messages = [];
+  const sender = new Proxy({
+    getVarbit: (id) => (id === 15288 ? 10 : 0),
+    getVarp: () => 0,
+    sendVarbit: () => {},
+  }, { get: (target, key) => (key in target ? target[key] : () => sender) });
+  p.getPacketSender = () => sender;
+  p.getMovementQueue = () => ({
+    reset() { return this; },
+    walkToReset() { return this; },
+    walkToObject(_object, options) { options.execute(); return true; },
+  });
+  p.busy = () => false;
+  p.sendMessage = (text) => messages.push(text);
+
+  new ObjectActionPacketListener().executeAction(p, 49615, 2785, 4261, 1);
+  assert.equal(p.getInventory().getAmount(28573), 1, 'Chest key is earned through the real listener');
+  assert.equal(p.getInventory().getAmount(28579), 1, "Yewnock's notes are earned once");
+
+  new ObjectActionPacketListener().executeAction(p, 49615, 2785, 4261, 1);
+  assert.equal(p.getInventory().getAmount(28573), 1, 'repeat click does not duplicate the key');
+
+  // The same listener path at the golden chest stays gated by order/position.
+  new ObjectActionPacketListener().executeAction(p, 49612, 2789, 4258, 1);
+  assert.equal(p.getInventory().getAmount(28574), 0, 'golden chest is not blanket-opened');
 });

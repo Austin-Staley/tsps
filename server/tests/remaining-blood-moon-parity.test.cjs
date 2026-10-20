@@ -407,6 +407,7 @@ test('hideout departure runs the captured fade and hideout camera, then resets',
   assert.ok(p.packets.cameras.some(args => args[0] === 'look' && args[1] === 3602 && args[2] === 9610 && args[3] === 369));
   h.tick(2);
   assert.ok(p.packets.interfaces.some(args => args[3]?.postScripts?.[0]?.args?.[1] === 0), 'fade back in scheduled');
+  p.attrs.set('quest.the_blood_moon_rises.hideout-defense-complete', true);
   p.packets.cameras.length = 0;
   h.emit('npc-dialogue:action', { player: p, stepId: 'fiqzZ7', kind: 'action' });
   assert.ok(p.packets.cameras.some(args => args[0] === 'reset'), 'escape restores the camera');
@@ -617,4 +618,44 @@ test('relog at FENCE_FOUND clears a stale gathering scene without a live fight',
   assert.equal(p.getLocation().getY(), 9631);
   assert.equal(p.movementBlocked, false);
   assert.ok(p.packets.cameras.some(args => args[0] === 'reset'));
+});
+
+test('real escape action transports to the captured hideout landing and cleans the scene', () => {
+  const h = harness(), p = player('Alice');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 20);
+  p.attrs.set('quest.the_blood_moon_rises.hideout-defense-complete', true);
+  p.attrs.set('the-blood-moon-rises:gathering-scene-started', true);
+  p.moveTo(new core.Location(3574, 3362, 0));
+  p.movementBlocked = true;
+  startTranscript(h, p, 0, 'starting-out-escaping-the-vampyres');
+  for (let i = 0; i < 30 && h.quest.getStage(p) !== 25; i++) p.manager.advance();
+  assert.equal(h.quest.getStage(p), 25);
+  assert.equal(p.getLocation().getX(), 3599);
+  assert.equal(p.getLocation().getY(), 9615);
+  assert.equal(p.varbits.get(15464), 14);
+  assert.equal(p.movementBlocked, false);
+  assert.equal(p.attrs.get('the-blood-moon-rises:gathering-scene-started'), null);
+  assert.ok(p.packets.cameras.some(args => args[0] === 'reset'));
+  assert.ok(h.tasks.every(task => task.stopped || task.done), 'scene timers cancelled');
+});
+
+test('relog repairs only the stranded stage-25 courtyard save', () => {
+  const h = harness();
+  const stranded = player('Alice');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(stranded, 25);
+  stranded.moveTo(new core.Location(3574, 3362, 0));
+  h.emit('player:login', { player: stranded });
+  assert.equal(stranded.getLocation().getX(), 3599);
+  assert.equal(stranded.getLocation().getY(), 9615);
+  assert.ok(stranded.messages.some(m => m.includes('teleport sets you down')));
+
+  const elsewhere = player('Bob');
+  h.quest.setStage(elsewhere, 25);
+  elsewhere.moveTo(new core.Location(3200, 3200, 0));
+  h.emit('player:login', { player: elsewhere });
+  assert.equal(elsewhere.getLocation().getX(), 3200);
+  assert.equal(elsewhere.getLocation().getY(), 3200);
+  assert.equal(elsewhere.messages.some(m => m.includes('teleport sets you down')), false);
 });

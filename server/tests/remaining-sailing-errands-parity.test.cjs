@@ -400,6 +400,25 @@ test('Prying Times drink troll uses the real boat deck, retries spawn failure an
   assert.equal(resumed.getArea(), deck);
 });
 
+test('Prying Times login resends the completion reward mirror without repeating rewards', () => {
+  const complete = makeHarness('../plugins/quests/quests/PryingTimes.Quest', { Sailing: 12, Smithing: 30 });
+  const I = complete.core.ItemIdentifiers;
+  complete.quest.setStage(complete.player, 35);
+  complete.varbits.set(18320, 0);
+  complete.inventory.set(I.SAWMILL_COUPON_OAK_PLANK_, 25);
+  const xpBefore = complete.xp.length;
+  complete.hooks.logins[0]({ player: complete.player });
+  assert.equal(complete.varbits.get(18320), 1, 'completed save restores the reward mirror');
+  assert.equal(complete.xp.length, xpBefore, 'login does not repeat XP');
+  assert.equal(complete.inventory.get(I.SAWMILL_COUPON_OAK_PLANK_), 25, 'login does not repeat coupons');
+
+  const incomplete = makeHarness('../plugins/quests/quests/PryingTimes.Quest', { Sailing: 12, Smithing: 30 });
+  incomplete.quest.setStage(incomplete.player, 25);
+  incomplete.varbits.set(18320, 1);
+  incomplete.hooks.logins[0]({ player: incomplete.player });
+  assert.equal(incomplete.varbits.get(18320), 0, 'incomplete save clears a stale reward mirror');
+});
+
 function pathExists(RegionManager, start, goal, radius = 48) {
   const seen = new Set([`${start[0]},${start[1]}`]);
   const queue = [start];
@@ -895,4 +914,85 @@ test('Troubled Tortugans mandatory spawns match capture coordinates and are path
   h.emit('sailing:left', { reason: 'disembark' });
   const dockFloopa = h.spawned.find((npc) => npc.getId() === 14988);
   assert.deepEqual([dockFloopa.getLocation().getX(), dockFloopa.getLocation().getY()], [3186, 2370]);
+});
+
+test('actual Sailing.disembark payload carries the boat root for Troubled Tortugans', () => {
+  const { Sailing } = require('../dist/game/content/sailing/Sailing');
+  const { BoatManager } = require('../dist/game/content/sailing/BoatManager');
+  const { emptySailingState } = require('../dist/game/content/sailing/SailingState');
+  const { Mobile } = require('../dist/game/entity/impl/Mobile');
+  const { Location } = require('../dist/game/model/Location');
+  const { Inventory } = require('../dist/game/model/container/impl/Inventory');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+
+  Sailing.initialize();
+  Sailing.registerBoatType({
+    type: 'tt-test-raft', configId: 1, templateChunkX: 480, templateChunkY: 807,
+    sizeX: 8, sizeZ: 8, hull: { offsetX: 0, offsetY: 0, width: 128, length: 384 },
+    deckCentreX: 448, deckCentreY: 448, deckLevel: 1,
+    walkableDeck: [{ x: 3, y: 2 }, { x: 3, y: 3 }, { x: 3, y: 4 }],
+    boardingTile: { x: 3, y: 4 }, locs: [],
+  });
+  const dock = {
+    id: 'tt-native5-conch', mooringPoint: true,
+    mooring: { fineX: 3175 * 128 + 64, fineY: 2367 * 128 + 64, level: 0, angle: 1024 },
+    landing: { x: 3174, y: 2368, z: 0 },
+  };
+  Sailing.registerDock(dock);
+  let sailing = emptySailingState();
+  let location = new Location(3174, 2368, 0);
+  const player = Object.create(Mobile.prototype);
+  Object.assign(player, {
+    getIndex: () => 90601, isPlayer: () => true, isNpc: () => false, getAsPlayer: () => player,
+    getUsername: () => 'tt-native5', sendMessage() {}, getLocation: () => location,
+    setLocation: next => { location = next; return player; },
+    getMovementQueue: () => ({ reset() {}, handleRegionChange() {} }),
+    setNeedsPlacement() {}, setResetMovementQueue() {}, setMobileInteraction() {},
+    getSailing: () => sailing, setSailing: next => { sailing = next; },
+    getPacketSender: () => new Proxy({}, { get: (_t, _k, proxy) => () => proxy }),
+  });
+  player.inventory = new Inventory(player); player.inventory.resetItems();
+  player.getInventory = () => player.inventory;
+
+  const originalEmit = PluginManager.emitCustomEvent;
+  const emitted = [];
+  PluginManager.emitCustomEvent = (name, event) => { emitted.push({ name, event }); };
+  try {
+    Sailing.giveBoat(player, 'tt-test-raft', dock.id);
+    assert.equal(Sailing.board(player, dock.id), null);
+    assert.equal(Sailing.disembark(player, dock.id), null);
+  } finally {
+    PluginManager.emitCustomEvent = originalEmit;
+  }
+  const left = emitted.find(entry => entry.name === 'sailing:left')?.event;
+  assert.ok(left?.boat, 'disembark still carries the boat instance');
+  assert.deepEqual(left.boat.worldTile(), { x: 3175, y: 2367, level: 0 });
+  assert.deepEqual([player.getLocation().getX(), player.getLocation().getY()], [3174, 2368]);
+  assert.equal(BoatManager.getBoatAboard(player), undefined);
+
+  const h = makeHarness('../plugins/quests/quests/TroubledTortugans.Quest');
+  const N = h.core.NpcIdentifiers;
+  h.quest.setStage(h.player, 10);
+  h.player.moveTo(new h.core.Location(10116, 9604, 0)); // deck coords differ from the boat root
+  h.emit('sailing:left', { reason: 'disembark', boat: left.boat });
+  assert.equal(h.quest.getStage(h.player), 12, 'the real core payload advances the Conch disembark');
+  assert.ok(h.spawned.some(npc => npc.getId() === 14988));
+});
+
+test('Troubled Tortugans ignores wrong-port disembark and starts the Pearl arrival from the boat root', () => {
+  const h = makeHarness('../plugins/quests/quests/TroubledTortugans.Quest');
+  h.quest.setStage(h.player, 10);
+  h.player.moveTo(new h.core.Location(10116, 9604, 0));
+  h.emit('sailing:left', { reason: 'disembark', boat: { worldTile: () => ({ x: 2796, y: 3407, level: 0 }) } });
+  assert.equal(h.quest.getStage(h.player), 10, 'wrong port does not advance the Conch leg');
+  assert.ok(!h.spawned.some(npc => npc.getId() === 14988));
+
+  h.quest.setStage(h.player, 34);
+  h.player.moveTo(new h.core.Location(10116, 9604, 0));
+  h.emit('sailing:left', { reason: 'disembark', boat: { worldTile: () => ({ x: 3354, y: 2216, level: 0 }) } });
+  assert.equal(h.quest.getStage(h.player), 36, 'Pearl landing uses the boat root, not deck coords');
+  const sailor = h.spawned.find(npc => npc.getId() === 15001);
+  assert.ok(sailor, 'cutscene sailor spawned');
+  for (const logout of h.hooks.logouts) logout({ player: h.player });
+  assert.ok(h.removed.includes(sailor), 'Pearl actors are removed on logout');
 });

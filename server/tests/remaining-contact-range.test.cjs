@@ -18,6 +18,7 @@ const { World } = require('../dist/game/World');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { NPCOptionPacketListener } = require('../dist/net/packet/impl/NPCOptionPacketListener');
 const { NpcDialogue } = require('../dist/game/model/dialogues/entries/impl/NpcDialogue');
+const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
 const runtime = require('../plugins/quests/QuestRuntime');
 
 const ROOT = path.resolve(__dirname, '..');
@@ -44,7 +45,8 @@ function account(x = 2262, y = 4320) {
   const sender = new Proxy({}, {
     get: (target, key) => {
       if (key === 'getVarbit') return () => 0;
-      if (key === 'isSubInterfaceOpen' || key === 'isChatboxInterface') return () => false;
+      if (key === 'isSubInterfaceOpen') return () => false;
+      if (key === 'isChatboxInterface') return () => true;
       if (key === 'closeInterruptibleInterfaces') return () => {};
       return () => sender;
     },
@@ -91,6 +93,20 @@ test('Contact: real cache keeps Maisa on the west bank across the blocked chasm'
   const variant = dialogues['Contact!'].variants['kaleef-s-corpse-talking-to-maisa'];
   const options = variant.filter((step) => step.type === 'choice').flatMap((step) => step.options.map((option) => option.text));
   assert.ok(options.includes('Draynor Village.') && options.includes('Leela.'), 'shipped quiz answers are intact');
+
+  const lastChoice = variant.map((step, index) => ({ step, index })).filter((entry) => entry.step.type === 'choice').at(-1);
+  assert.deepEqual(
+    variant.slice(lastChoice.index + 1).filter((step) => step.type === 'condition'),
+    [],
+    'the three quiz guards are no longer eager top-level conditions'
+  );
+  for (const option of lastChoice.step.options) {
+    assert.deepEqual(
+      (option.steps ?? []).filter((step) => step.type === 'condition').map((step) => step.id),
+      ['IjxRNT', 'PeJYOi', 'qEP0VV'],
+      `conditions run after the "${option.text}" branch choice`
+    );
+  }
 });
 
 test('Contact: the route hook widens only real Maisa on stages 40-60', () => {
@@ -120,6 +136,47 @@ test('Contact: the route hook widens only real Maisa on stages 40-60', () => {
     World.getNpcs().remove(npc);
   }
 });
+
+function advanceToPromptOrEnd(player, seen) {
+  for (let i = 0; i < 200; i++) {
+    const pending = MultiChatboxPrompt.getPending(player);
+    if (pending) return pending;
+    const current = player.getDialogueManager().getCurrent();
+    if (!current) return null;
+    const text = current.getText?.();
+    if (text) seen.push(text);
+    if (!player.getDialogueManager().handleResume(231 << 16 | 5, 1)) return null;
+  }
+  throw new Error('dialogue did not finish');
+}
+
+function answerQuiz(player, answers) {
+  const seen = [];
+  for (;;) {
+    const pending = advanceToPromptOrEnd(player, seen);
+    if (!pending) break;
+    const answer = answers.shift();
+    assert.ok(answer, `unexpected prompt: ${pending.options.join(' | ')}`);
+    const index = pending.options.indexOf(answer);
+    assert.ok(index >= 0, `missing "${answer}" in ${pending.options.join(' | ')}`);
+    const handled = MultiChatboxPrompt.handleInterfaceActionClick({
+      player,
+      buttonId: MultiChatboxPrompt.OPTIONS_WIDGET_ID,
+      groupId: 219,
+      slot: index + 1,
+      action: index + 1,
+    });
+    assert.equal(handled, true, `selected "${answer}" through the real prompt dispatch`);
+  }
+  assert.equal(answers.length, 0, 'all quiz answers were offered');
+  return seen;
+}
+
+function startMaisaTalk(player) {
+  const npc = maisaNpc();
+  new NPCOptionPacketListener().executeOption(player, npc.getIndex(), 1);
+  return npc;
+}
 
 test('Contact: a normal Talk-to reaches the real Maisa dialogue across the chasm', () => {
   const player = account(2262, 4320);
@@ -154,6 +211,30 @@ test('Contact: the MovementQueue route uses range 10 and completes without the r
     player.getMovementQueue().walkToEntity(npc, () => opened++, event.range);
     assert.equal(opened, 1, 'the ranged interaction resolves on the initial route');
     assert.equal(player.getMovementQueue().points.length, 0, 'no walk was queued across the chasm');
+  } finally {
+    World.getNpcs().remove(npc);
+  }
+});
+
+test('Contact: real shipped NpcDialogues accepts both correct Maisa answers', () => {
+  const player = account(2262, 4320);
+  contactQuest.setStage(player, 50);
+  const npc = startMaisaTalk(player);
+  try {
+    answerQuiz(player, ['Draynor Village.', 'Leela.']);
+    assert.equal(contactQuest.getStage(player), 60, 'both right answers advance 50 -> 60');
+  } finally {
+    World.getNpcs().remove(npc);
+  }
+});
+
+test('Contact: real shipped NpcDialogues rejects wrong Maisa answers without advancing', () => {
+  const player = account(2262, 4320);
+  contactQuest.setStage(player, 50);
+  const npc = startMaisaTalk(player);
+  try {
+    answerQuiz(player, ['Pollnivneach.', 'Hassan.']);
+    assert.equal(contactQuest.getStage(player), 50, 'wrong answers do not convince Maisa');
   } finally {
     World.getNpcs().remove(npc);
   }

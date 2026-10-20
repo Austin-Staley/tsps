@@ -361,6 +361,16 @@ module.exports = function registerTroubledTortugansQuest(api) {
     return distanceFrom(worldTile(player), CONCH_DOCKS) <= 40;
   }
 
+  /** `sailing:left` carries the boat instance; its root tile survives deck disposal. */
+  function boatEventTile(boat) {
+    const tile = boat?.worldTile?.();
+    if (tile) return { x: tile.x, y: tile.y };
+    if (Number.isFinite(boat?.fineX) && Number.isFinite(boat?.fineY)) {
+      return { x: Math.floor(boat.fineX / FINE_UNITS_PER_TILE), y: Math.floor(boat.fineY / FINE_UNITS_PER_TILE) };
+    }
+    return null;
+  }
+
   function later(key, ticks, callback) {
     Scenes.later(key, ticks, callback);
   }
@@ -982,25 +992,28 @@ module.exports = function registerTroubledTortugansQuest(api) {
     if (stage === STAGE_PEARL_BRIEFED) startPearlApproachWatch(player);
   }
 
-  function handleLeft({ player, reason }) {
+  function handleLeft({ player, boat, reason }) {
     if (!player || reason !== "disembark" || quest.isComplete(player)) return;
     removeBoatFloopa(player);
     const stage = quest.getStage(player);
-    if (stage === STAGE_ARRIVED && nearConch(player)) {
+    const tile = boatEventTile(boat) ?? worldTile(player);
+    if (stage === STAGE_ARRIVED && distanceFrom(tile, CONCH_DOCKS) <= 40) {
       quest.setStage(player, STAGE_DISEMBARKED);
       spawnDockFloopa(player);
       return;
     }
     // Landing at the Little Pearl before the approach watcher fired still uses
     // the real disembark event, then plays the same cutscene ashore.
-    if (stage === STAGE_PEARL_BRIEFED && nearPearlMooring(player)) {
+    if (stage === STAGE_PEARL_BRIEFED &&
+      distanceFrom(tile, LITTLE_PEARL_MOORING) <= PEARL_APPROACH_DISTANCE) {
       stopPearlApproachWatch(player);
       startPearlCutscene(player);
       return;
     }
     // Leaving the deck mid-fight: keep the earned hitpoints and continue the
     // same fight on the island instead of stranding the boss on the boat.
-    if (stage === STAGE_PEARL_ARRIVED && nearPearl(player)) {
+    if (stage === STAGE_PEARL_ARRIVED &&
+      distanceFrom(tile, LITTLE_PEARL_MOORING) <= 40) {
       const boss = shellbaneByPlayer.get(player);
       if (boss?.isRegistered?.()) {
         const hitpoints = boss.getHitpoints?.();

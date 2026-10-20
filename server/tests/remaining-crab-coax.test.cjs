@@ -100,7 +100,7 @@ function setup() {
 const SIT_SPOTS = [
   { id: 62473, x: 3043, y: 2640, sit: [3042, 2640], bit: 1 << 0 },
   { id: 62470, x: 3042, y: 2637, sit: [3041, 2638], bit: 1 << 1 },
-  { id: 62475, x: 3037, y: 2644, sit: [3038, 2644], bit: 1 << 3 },
+  { id: 62475, x: 3037, y: 2644, sit: [3037, 2643], bit: 1 << 3 },
   { id: 62475, x: 3047, y: 2656, sit: [3046, 2655], bit: 1 << 9 },
 ];
 
@@ -188,6 +188,33 @@ test('Crab recruit pocket is reachable once the 3039,2644 flavor palm is skipped
   const open = reachable();
   assert.equal(open.has('3042,2640'), true, 'magic tree reachable once the flavor palm is skipped');
   assert.equal(open.has('3041,2637'), true, 'palm south reachable once the flavor palm is skipped');
+});
+
+test('Crab tree NW sits at 3037,2643; the 2x2 tree refuses 3038,2644', () => {
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const { GameObject } = require('../dist/game/entity/impl/object/GameObject');
+  const { Location } = require('../dist/game/model/Location');
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+  ObjectDefinition.init();
+  RegionManager.init();
+  MapObjects.add(new GameObject(62475, new Location(3037, 2644, 0), 10, 0, null));
+  assert.notEqual(RegionManager.getClipping(3038, 2644, 0, null), 0, '3038,2644 is inside the 2x2 tree');
+  assert.equal(RegionManager.getClipping(3037, 2643, 0, null), 0, '3037,2643 is walkable');
+
+  const h = setup();
+  const quest = h.loadQuest();
+  quest.setStage(h.player, 47);
+  h.setLocation(3037, 2643);
+  h.investigate(62475, 3037, 2644);
+  assert.ok((h.attrs.get('quest.crab_quest.scared') & (1 << 3)) !== 0, 'tree NW scared bit 3');
+  assert.equal(h.attrs.get('quest.crab_quest.met') & (1 << 3), 0, 'no auto-coax');
+  h.investigate(62475, 3037, 2644);
+  assert.equal(h.attrs.get('quest.crab_quest.met') & (1 << 3), 0, 'second investigate does not coax');
+  h.sit(3038, 2644);
+  assert.equal(h.attrs.get('quest.crab_quest.met') & (1 << 3), 0, 'Sit on the tree/NPC-spawn tile is refused');
+  h.sit(3037, 2643);
+  assert.ok((h.attrs.get('quest.crab_quest.met') & (1 << 3)) !== 0, 'captured Sit tile 3037,2643 coaxes');
 });
 
 test('Crab Sit uses the real cached slot 54 loop', () => {

@@ -650,6 +650,10 @@ module.exports = function registerTheBloodMoonRises(api) {
   // castle scene and its Lowerniel combat_3 encounter before Efaritay opens
   // the Vampyrium portal.
   const BLOOD_MOON_SCENE = Object.freeze({ x: 3570, y: 3351, z: 0 });
+  // RSProx P1: Ivan's escape teleports the party to (3599,9615,0) and spawns
+  // the hideout Ivan at (3597,9614,0).
+  const HIDEOUT_ESCAPE_LANDING = Object.freeze({ x: 3599, y: 9615, z: 0 });
+  const HIDEOUT_DEFENSE_COURTYARD = Object.freeze({ minX: 3561, maxX: 3589, minY: 3347, maxY: 3367, z: 0 });
   const BLOOD_MOON_DRAKAN_ID = NpcIdentifiers.LOWERNIEL_DRAKAN_18;
   const BLOOD_MOON_ALLIES = Object.freeze([NpcIdentifiers.IVAN_STROM_23,
     NpcIdentifiers.SUGADINTI_VITUR_6, NpcIdentifiers.ARANEI_92]);
@@ -1943,6 +1947,23 @@ module.exports = function registerTheBloodMoonRises(api) {
   function resetBloodMoonSceneOnLogin({ player } = {}) {
     resetBloodMoonScene(player);
     recoverGatheringFightOnLogin(player);
+    recoverHideoutEscapeLanding({ player });
+  }
+
+  function recoverHideoutEscapeLanding({ player } = {}) {
+    if (!player || stage(player) !== STAGE.RETURNED) return;
+    const location = player.getLocation?.();
+    const x = location?.getX?.() ?? location?.x;
+    const y = location?.getY?.() ?? location?.y;
+    const z = location?.getZ?.() ?? location?.z;
+    // Only the stranded courtyard save is repaired; stage 25 elsewhere is left alone.
+    if (z !== HIDEOUT_DEFENSE_COURTYARD.z ||
+      x < HIDEOUT_DEFENSE_COURTYARD.minX || x > HIDEOUT_DEFENSE_COURTYARD.maxX ||
+      y < HIDEOUT_DEFENSE_COURTYARD.minY || y > HIDEOUT_DEFENSE_COURTYARD.maxY) return;
+    resetBloodMoonScene(player);
+    player.moveTo(new Location(HIDEOUT_ESCAPE_LANDING.x, HIDEOUT_ESCAPE_LANDING.y,
+      HIDEOUT_ESCAPE_LANDING.z));
+    player.sendMessage("Ivan's teleport sets you down in the Myreque hideout.");
   }
 
   function recoverGatheringFightOnLogin(player) {
@@ -5450,10 +5471,15 @@ module.exports = function registerTheBloodMoonRises(api) {
       player.moveTo(new Location(3507, 9860, 0));
       return;
     }
-    if (event.stepId === "fiqzZ7") resetBloodMoonScene(player);
     if (event.stepId === "fiqzZ7" && !player.getAttribute(HIDEOUT_DEFENSE_COMPLETE)) {
       player.sendMessage("Keep the vyrewatch away from Ivan and let him complete the spell before escaping.");
       return;
+    }
+    if (event.stepId === "fiqzZ7") {
+      resetBloodMoonScene(player);
+      // Captured escape landing (P1): hideout, beside Ivan.
+      player.moveTo(new Location(HIDEOUT_ESCAPE_LANDING.x, HIDEOUT_ESCAPE_LANDING.y,
+        HIDEOUT_ESCAPE_LANDING.z));
     }
     const next = ACTION_STAGE[event.stepId];
     if (event.stepId === "vqg4qO") {

@@ -162,6 +162,13 @@ function setup() {
   return { api, core, hooks, player, attrs, persistentKeys, saveState, restoreState, relog, inventory, varbits, messages, xp, levels, sailing, location, emit, action, line, variant, tickOnce, answerPrompt, clickObject, clickInterface, interfaces, scripts, cameras, hints, get lastLineSpeakerId() { return lastLineSpeakerId; }, get closedInterfaces() { return closedInterfaces; }, prompt: () => lastPrompt, setLocation(value) { location = value; } };
 }
 
+function clickAction(h, objectId, name, actions, optionIndex) {
+  const event = { player: h.player, objectId, clickType: optionIndex + 1,
+    definition: { getName: () => name, getInteractions: () => actions }, handled: false };
+  for (const fn of h.hooks.objects) fn(event);
+  return event;
+}
+
 function load(harness, file) {
   require(path.join(__dirname, '..', 'plugins', 'quests', 'quests', file))(harness.api);
   return runtime.getRegisteredQuests().find((quest) => file.startsWith(quest.name.replace(/\s/g, '')) || file.toLowerCase().startsWith(quest.key.split('_').map((w) => w[0]).join(''))) ?? runtime.getRegisteredQuests().at(-1);
@@ -190,9 +197,11 @@ test('Pandemonium uses the captured varbit stages and the real raft cargo route'
   const { BoatManager } = require('../dist/game/content/sailing/BoatManager');
   const boat = BoatManager.all().find((entry) => entry.ownerPlayerId === 1);
   const helm = BoatManager.getSpec(boat).locs.find((loc) => loc.part === 'helm');
-  h.hooks.objects[0]({ player: h.player, objectId: helm.id, clickType: 1 });
+  assert.equal(clickAction(h, helm.id, 'Helm', ['Navigate', 'Escape'], 0).handled, true);
   assert.equal(quest.getStage(h.player), 10, 'helm alone waits for sails');
-  h.hooks.objects[0]({ player: h.player, objectId: 29506, clickType: 1 });
+  const sailActions = h.core.CacheDefinitions.getObject(29506).actions;
+  assert.equal(sailActions[1], 'Set', 'cache Sails Set is option 2');
+  assert.equal(clickAction(h, 29506, 'Sails', sailActions, 1).handled, true);
   assert.equal(quest.getStage(h.player), 10, 'sails start the voyage');
   boat.fineX = 3031 * 128 + 64;
   boat.fineY = 3039 * 128 + 64;
@@ -489,12 +498,15 @@ test('Pandemonium uses the actual static-ship blueprint and its lifecycle hooks'
   assert.ok(StaticShips.get(ship.boat.entityIndex), 'the shared registry owns it');
   quest.setStage(h.player, 10);
   const sail = BoatManager.getSpec(ship.boat).locs.find((loc) => loc.part === 'sails');
-  h.clickObject(29506);
+  const sailActions = h.core.CacheDefinitions.getObject(29506).actions;
+  assert.equal(clickAction(h, 29506, 'Sails', sailActions, 0).handled, false, 'the Trim option is not the tutorial raise-sails action');
+  assert.equal(ship.boat.moveMode, 0);
+  clickAction(h, 29506, 'Sails', sailActions, 1);
   assert.equal(quest.getStage(h.player), 10, 'sails alone do not reach the wreck');
   assert.equal(ship.boat.moveMode, 0, 'the ship does not move before the helm');
-  h.clickObject(59554);
+  clickAction(h, 59554, 'Helm', ['Navigate', 'Escape'], 0);
   assert.equal(quest.getStage(h.player), 10, 'helm alone does not reach the wreck');
-  h.clickObject(29506);
+  clickAction(h, 29506, 'Sails', sailActions, 1);
   assert.equal(quest.getStage(h.player), 10, 'raising sails starts the voyage, not arrival');
   assert.equal(ship.boat.moveMode, 2, 'the captured voyage runs under normal boat movement');
   const startY = ship.boat.fineY;

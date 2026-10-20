@@ -958,7 +958,9 @@ module.exports = function registerPandemoniumQuest(api) {
     const scene = tutorialScene(player);
     if (!scene) return false;
     const name = event.definition?.getName?.();
-    if (!tutorialPartIds(scene, "helm").has(event.objectId) && name !== "Helm") return false;
+    const option = event.definition?.getInteractions?.()?.[event.clickType - 1];
+    if (!tutorialPartIds(scene, "helm").has(event.objectId) && !(name === "Helm" && option === "Navigate")) return false;
+    if (option !== undefined && option !== "Navigate") return false;
     event.handled = true;
     if (scene.helmTaken) return true;
     scene.helmTaken = true;
@@ -974,8 +976,10 @@ module.exports = function registerPandemoniumQuest(api) {
     const scene = tutorialScene(player);
     if (!scene) return false;
     const name = event.definition?.getName?.();
+    const option = event.definition?.getInteractions?.()?.[event.clickType - 1];
     const sails = new Set([...tutorialPartIds(scene, "sails"), ...tutorialPartIds(scene, "sailCloth")]);
-    if (!sails.has(event.objectId) && name !== "Sails") return false;
+    if (!sails.has(event.objectId) && !(name === "Sails" && option === "Set")) return false;
+    if (option !== undefined && option !== "Set") return false;
     event.handled = true;
     if (!scene.helmTaken) {
       player.sendMessage("You need to take the helm before raising the sails.");
@@ -1024,9 +1028,11 @@ module.exports = function registerPandemoniumQuest(api) {
   }
 
   function handleObjectInteraction(event) {
-    if (event.clickType !== 1) return;
+    // The tutorial's Sails Set is option 2; handle the ordered helm/sails actions before the
+    // general clickType-1 guard used by the remaining interactions.
     if (handleTutorialHelm(event)) return;
     if (handleTutorialSails(event)) return;
+    if (event.clickType !== 1) return;
     switch (event.objectId) {
       case SALVAGING_HOOK_OBJECT_ID:
         deploySalvagingHook(event);

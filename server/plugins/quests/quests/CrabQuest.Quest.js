@@ -279,7 +279,7 @@ module.exports = function registerCrabQuestQuest(api) {
       objectId: CRAB_TREE_OBJECT_ID,
       x: 3037,
       y: 2644,
-      sitTile: { x: 3038, y: 2644 }, // QH sitForCrabNine
+      sitTile: { x: 3037, y: 2643 }, // capture: player sits south of the 2x2 avium tree
       first: "crab-hunting-investigating-the-tree-north-west-of-the-magic-tree",
       variant: "crab-hunting-investigating-the-tree-north-west-of-the-magic-tree-sitting-by-the-palm",
       joinBit: 1 << 2,

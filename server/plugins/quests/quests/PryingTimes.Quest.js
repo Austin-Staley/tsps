@@ -763,6 +763,7 @@ module.exports = function registerPryingTimesQuest(api) {
     refreshQuestList(player);
     installQuestObjects();
     ensureSteve(player);
+    player.getPacketSender().sendVarbit(VARBIT_REWARD, quest.isComplete(player) ? 1 : 0);
     const stage = quest.getStage(player);
     if (drankStout(player) && stage >= STAGE_TEST_KEY && stage < STAGE_OPEN_CRATE) {
       spawnDrinkTroll(player);

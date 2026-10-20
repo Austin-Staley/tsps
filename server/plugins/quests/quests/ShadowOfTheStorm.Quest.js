@@ -171,6 +171,10 @@ module.exports = function registerShadowOfTheStormQuest(api) {
   const STAGE_SUMMONED = 120;
   const STAGE_KILLED = 124;
   const STAGE_COMPLETE = 130;
+  // Capture 3333 ends the native agrith_quest varbit at 125 (t26125); the
+  // server's legacy internal completion stage is 130. The varbit is 7 bits
+  // (1372, bits 0-6), so mirror completion as 125 while keeping stage 130.
+  const VARBIT_QUEST_FINISHED = 125;
 
   const CRAFTING_REQUIREMENT = 30;
   const COMBAT_XP = 10000;
@@ -1726,6 +1730,9 @@ module.exports = function registerShadowOfTheStormQuest(api) {
     varbitId: VARBIT_AGRITH_QUEST,
     startedValue: STAGE_STARTED,
     completionValue: STAGE_COMPLETE,
+    varbitValue(stage) {
+      return stage >= STAGE_COMPLETE ? VARBIT_QUEST_FINISHED : stage | 0;
+    },
     questPoints: 1,
     xpRewards: [],
     scrollItemId: DARKLIGHT_ITEM_ID,

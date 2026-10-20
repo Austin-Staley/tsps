@@ -68,7 +68,7 @@ module.exports = function registerContactQuest(api) {
     StatementDialogue,
     TaskManager,
   } = api.core;
-  const { loadTranscripts, registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
+  const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
   const { createQuestScenes } = require("../QuestScenes");
 
   // ==========================================================================
@@ -1169,26 +1169,6 @@ module.exports = function registerContactQuest(api) {
   }
 
 
-/**
- * The transcript parser resolves top-level conditions eagerly, before a preceding
- * choice is answered. Move Maisa's three quiz guards into the second choice's
- * branches so they run after the choice event has credited the answer.
- */
-function deferMaisaQuizConditions(api) {
-  const transcripts = loadTranscripts(api);
-  const variant = transcripts?.[PAGE]?.variants?.["kaleef-s-corpse-talking-to-maisa"];
-  if (!Array.isArray(variant)) return;
-  const choiceIndex = variant.map((step) => step?.type).lastIndexOf("choice");
-  if (choiceIndex < 0) return;
-  const choice = variant[choiceIndex];
-  const conditions = variant.slice(choiceIndex + 1).filter((step) => step?.type === "condition");
-  if (!conditions.length || conditions.some((step) => step.__maisaDeferred)) return;
-  for (const option of choice.options ?? []) {
-    option.steps = [...(option.steps ?? []), ...conditions.map((step) => ({ ...step, __maisaDeferred: true }))];
-  }
-  variant.splice(choiceIndex + 1, conditions.length);
-}
-
   // ==========================================================================
   // Registration
   // ==========================================================================
@@ -1196,7 +1176,6 @@ function deferMaisaQuizConditions(api) {
   api.persistAttribute(BITS_ATTRIBUTE);
   api.persistAttribute(LAMP_WISHES_ATTRIBUTE, 0);
 
-  deferMaisaQuizConditions(api);
   quest = registerQuest(api, {
     key: "contact",
     name: "Contact!",

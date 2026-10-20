@@ -529,3 +529,25 @@ test('Shadow: real five-word menus use reverse for first and direct tome order f
   for (let i = 0; i < 3; i++) secondWrong.advance();
   assert.equal(secondWrong.quest.getStage(secondWrong.player), 110, 'reversed order fails the second ritual');
 });
+
+test('Shadow: server completion 130 mirrors the native 7-bit varbit as 125 on login', () => {
+  const h = setup((api) => require('../plugins/quests/quests/ShadowOfTheStorm.Quest')(api));
+  const quest = h.quest;
+  assert.equal(quest.completionValue, 130, 'legacy server completion stage is preserved');
+  assert.equal(quest.varbitValue(124, h.player), 124);
+  assert.equal(quest.varbitValue(130, h.player), 125, 'capture 3333 finished agrith_quest value');
+  for (const stage of [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 124, 130]) {
+    assert.ok(quest.varbitValue(stage, h.player) <= 127, `stage ${stage} fits the 7-bit varbit`);
+  }
+
+  h.quest.setStage(h.player, 130);
+  assert.equal(h.quest.getStage(h.player), 130, 'server stage remains 130');
+  assert.equal(h.varbits.get(1372), 125, 'setStage mirrors the native finished value');
+
+  h.varbits.clear();
+  // Same production function the login hook runs (registerQuestWidgets is
+  // registered once per process, so later test setups do not own that hook).
+  runtime.sendQuestVarps({ player: h.player });
+  assert.equal(h.varbits.get(1372), 125, 'login replays 125, not wrapped 0');
+  assert.equal(h.quest.getStage(h.player), 130);
+});

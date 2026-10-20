@@ -8,6 +8,17 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const runtime = require('../plugins/quests/QuestRuntime');
 const sotnRecord = require('../data/definitions/npc-dialogues.json')['Secrets of the North'];
 const dialogues = sotnRecord.variants;
+
+function messageSteps(steps, out = []) {
+  for (const step of steps ?? []) {
+    if (step.type === 'message' && step.id) out.push(step);
+    messageSteps(step.steps, out);
+    for (const option of step.options ?? []) messageSteps(option.steps, out);
+  }
+  return out;
+}
+const falseWallMessages = messageSteps(dialogues['a-death-in-the-family-knocking-at-the-false-wall']);
+const falseWallMessage = falseWallMessages.find(step => step.id === 'HJ2S0x') ?? falseWallMessages[0];
 const core = PluginManager.getCoreApi();
 const { NpcIdentifiers: N, ObjectIdentifiers: O, ItemIdentifiers: I, Skill } = core;
 const PAGE = 'Secrets of the North';
@@ -861,8 +872,11 @@ test('rev-241 hidden-room route: false wall claim reaches the ladder landing and
   assert.match(p.messages.at(-1), /wall is still closed/);
   assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [2572, 3270, 1]);
 
+  assert.ok(falseWallMessage, 'shipped false-wall page carries a message step');
   h.object(p, O.WALL_169, approach);
-  h.line(p, 'The wall looks to have been slightly damaged. You knock on it. It sounds like there\'s a hollow space on the other side.');
+  h.emit('npc-dialogue:action', {
+    player: p, stepId: falseWallMessage.id, kind: 'message', text: falseWallMessage.text,
+  });
   h.emit('npc-dialogue:choice', { player: p, option: 'Yes.' });
   assert.equal(p.attributes.get('secrets-of-the-north:hidden-passage'), true);
   assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [2572, 3270, 1]);
@@ -891,13 +905,15 @@ test('per-player false-wall tokens: concurrent Yes, canceled page and stale Yes'
     h.setStage(p, 2);
     p.moveTo(at(2572, 3269, 1));
   }
-  const wallLine = "The wall looks to have been slightly damaged. You knock on it. It sounds like there's a hollow space on the other side.";
+  const wallAction = p => h.emit('npc-dialogue:action', {
+    player: p, stepId: falseWallMessage.id, kind: 'message', text: falseWallMessage.text,
+  });
 
   // A and B both open the real false-wall page; their choices are independent.
   h.object(a, O.WALL_169, at(2572, 3270, 1));
-  h.line(a, wallLine);
+  wallAction(a);
   h.object(b, O.WALL_169, at(2572, 3270, 1));
-  h.line(b, wallLine);
+  wallAction(b);
   h.emit('npc-dialogue:choice', { player: a, option: 'Yes.' });
   assert.equal(a.attributes.get('secrets-of-the-north:hidden-passage'), true);
   assert.deepEqual([a.getLocation().getX(), a.getLocation().getY(), a.getLocation().getZ()], [2572, 3270, 1]);
@@ -907,7 +923,7 @@ test('per-player false-wall tokens: concurrent Yes, canceled page and stale Yes'
 
   // A canceled/wrong dialogue after the wall line consumes the token.
   h.object(c, O.WALL_169, at(2572, 3270, 1));
-  h.line(c, wallLine);
+  wallAction(c);
   h.line(c, 'Are you done looking around the crime scene?');
   h.emit('npc-dialogue:choice', { player: c, option: 'Yes.' });
   assert.equal(c.attributes.get('secrets-of-the-north:hidden-passage'), undefined);
@@ -915,12 +931,100 @@ test('per-player false-wall tokens: concurrent Yes, canceled page and stale Yes'
 
   // Closing the dialogue also clears it; an unrelated Yes near the house does nothing.
   h.object(c, O.WALL_169, at(2572, 3270, 1));
-  h.line(c, wallLine);
+  wallAction(c);
   h.emit('interface:closed', { player: c, interfaceId: 217 });
   h.emit('npc-dialogue:choice', { player: c, option: 'Yes.' });
   assert.equal(c.attributes.get('secrets-of-the-north:hidden-passage'), undefined);
   h.emit('npc-dialogue:choice', { player: c, option: 'Yes.' });
   assert.equal(c.attributes.get('secrets-of-the-north:hidden-passage'), undefined);
+});
+
+test('real NpcDialogues: false-wall message action arms Yes/No through the actual DialogueManager', async () => {
+  const path = require('node:path');
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { GameObject } = require('../dist/game/entity/impl/object/GameObject');
+  const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
+  const { PluginManager: PM } = require('../dist/plugins/PluginManager');
+  await CachePipeline.initialize(path.resolve('.'));
+  RegionManager.init();
+  new NpcDefinitionLoader().load();
+
+  const api = PM.createApi('remaining-north-real-dialogues');
+  require('../plugins/npcs/NpcDialogues.plugin').register(api);
+  require('../plugins/quests/quests/SecretsOfTheNorth.Quest')(api);
+  const north = runtime.getRegisteredQuests().filter(q => q.key === 'secrets_of_the_north').at(-1);
+
+  function account() {
+    const p = new Player(null);
+    const sender = new Proxy({}, {
+      get: (target, key) => {
+        if (key === 'getVarbit') return () => 0;
+        if (key === 'isSubInterfaceOpen') return () => false;
+        if (key === 'isChatboxInterface') return () => true;
+        if (key === 'closeInterruptibleInterfaces') return () => {};
+        return () => sender;
+      },
+    });
+    p.getPacketSender = () => sender;
+    p.moveTo(new core.Location(2572, 3269, 1));
+    p.setNeedsPlacement(false);
+    north.setStage(p, 2);
+    return p;
+  }
+
+  function openFalseWall(p) {
+    const object = new GameObject(46707, new core.Location(2572, 3270, 1), 10, 0, null);
+    PM.emitObjectInteraction({
+      player: p, object, objectId: 46707, definition: ObjectDefinition.forId(46707),
+      clickType: 1, location: object.getLocation(), handled: false,
+    });
+    assert.ok(p.getDialogueManager().isActive() || MultiChatboxPrompt.getPending(p), 'real NpcDialogues started');
+  }
+
+  function reachOptions(p) {
+    for (let i = 0; i < 100; i++) {
+      const pending = MultiChatboxPrompt.getPending(p);
+      if (pending) return pending;
+      const current = p.getDialogueManager().getCurrent();
+      if (!current) break;
+      if (!p.getDialogueManager().handleResume(231 << 16 | 5, 1)) break;
+    }
+    throw new Error('false-wall options did not open');
+  }
+
+  function choose(p, text) {
+    const pending = reachOptions(p);
+    const index = pending.options.indexOf(text);
+    assert.ok(index >= 0, `missing "${text}" in ${pending.options.join(' | ')}`);
+    assert.equal(MultiChatboxPrompt.handleInterfaceActionClick({
+      player: p, buttonId: MultiChatboxPrompt.OPTIONS_WIDGET_ID, groupId: 219,
+      slot: index + 1, action: index + 1,
+    }), true);
+  }
+
+  const yes = account();
+  openFalseWall(yes);
+  choose(yes, 'Yes.');
+  assert.equal(yes.getAttribute('secrets-of-the-north:hidden-passage'), true);
+  assert.deepEqual([yes.getLocation().getX(), yes.getLocation().getY(), yes.getLocation().getZ()], [2572, 3270, 1]);
+
+  const no = account();
+  openFalseWall(no);
+  choose(no, 'No.');
+  assert.notEqual(no.getAttribute('secrets-of-the-north:hidden-passage'), true);
+  assert.deepEqual([no.getLocation().getX(), no.getLocation().getY(), no.getLocation().getZ()], [2572, 3269, 1]);
+
+  const stale = account();
+  openFalseWall(stale);
+  reachOptions(stale);
+  stale.getDialogueManager().reset();
+  assert.notEqual(stale.getAttribute('secrets-of-the-north:hidden-passage'), true,
+    'closing the real page leaves the passage shut');
+  assert.deepEqual([stale.getLocation().getX(), stale.getLocation().getY(), stale.getLocation().getZ()], [2572, 3269, 1]);
 });
 
 test('login re-installs the exact SOTN objects at their real tiles', () => {

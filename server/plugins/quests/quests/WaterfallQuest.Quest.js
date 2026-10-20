@@ -106,6 +106,7 @@ module.exports = function registerWaterfallQuest(api) {
   // not 2512,3466 (the rock blocks the straight approach).
   const DEAD_TREE_ROUTE_TILE = new Location(2513, 3466, 0);
   const CROSSING_ROPE_TILES = [3469, 3470, 3471, 3472, 3473, 3474, 3475];
+  const IGNORE_CLIPPING_FLAG = "movement:ignore-clipping";
   const CROSSING_PATH_SOUTH = [
     [2512, 3476], [2512, 3475], [2512, 3474], [2512, 3473], [2512, 3472],
     [2512, 3471], [2512, 3470], [2512, 3469], [2513, 3468], [2513, 3467], [2513, 3466],
@@ -438,15 +439,49 @@ module.exports = function registerWaterfallQuest(api) {
   }
 
   const crossingRopes = new WeakMap();
+  const crossingMoves = new WeakMap();
 
-  /** Cache 241 floors block the diagonal/water tiles; walk the captured rope path. */
+  /** Restore any existing ignore-clipping state; never leave free water walking. */
+  function finishCrossingMove(player) {
+    const state = crossingMoves.get(player);
+    if (!state) return;
+    crossingMoves.delete(player);
+    if (state.previous) player.setFlag(IGNORE_CLIPPING_FLAG, true);
+    else player.removeFlag(IGNORE_CLIPPING_FLAG);
+  }
+
+  /** Ends the scoped flag as soon as the queued crossing has no steps left. */
+  function pollCrossingMove(player, token, ticks) {
+    if (crossingMoves.get(player)?.token !== token) return;
+    const queue = player.getMovementQueue();
+    if (queue.points?.length === 0 || ticks <= 0) {
+      finishCrossingMove(player);
+      return;
+    }
+    Scenes.later(player, 1, () => pollCrossingMove(player, token, ticks - 1));
+  }
+
+  /** Cache 241 floors block the crossing; this flag is scoped to these steps only. */
   function walkCrossing(player, path) {
+    finishCrossingMove(player);
+    const previous = player.hasFlag?.(IGNORE_CLIPPING_FLAG) === true;
+    const token = {};
+    crossingMoves.set(player, { previous, token });
+    player.setFlag(IGNORE_CLIPPING_FLAG, true);
     const queue = player.getMovementQueue();
     for (const [x, y] of path) queue.addSteps(new Location(x, y, 0));
+    // Clear on true path completion, with a bounded fallback and interaction cleanup.
+    pollCrossingMove(player, token, path.length + 6);
+  }
+
+  /** Any ordinary walk request cancels the scoped crossing movement. */
+  function cancelCrossingWalk(event) {
+    finishCrossingMove(event.player);
   }
 
   /** Remove this player's owned crossing scenery; the global map rock 1996 stays. */
   function clearCrossingRope(player) {
+    finishCrossingMove(player);
     const state = crossingRopes.get(player);
     if (!state) return;
     crossingRopes.delete(player);
@@ -550,6 +585,7 @@ module.exports = function registerWaterfallQuest(api) {
   }
 
   function widenHudonTalkRange(request) {
+    finishCrossingMove(request.player);
     if (request.npcId === HUDON_NPC_ID && stageOf(request.player) === STAGE_STARTED) request.range = 4;
   }
 
@@ -959,6 +995,7 @@ module.exports = function registerWaterfallQuest(api) {
   }
 
   function handleObjectInteraction(event) {
+    finishCrossingMove(event.player);
     switch (event.objectId) {
       case LOG_RAFT_ID:
         boardRaft(event);
@@ -1012,6 +1049,7 @@ module.exports = function registerWaterfallQuest(api) {
   }
 
   function handleItemOnObject(event) {
+    finishCrossingMove(event.player);
     const handled = usePebbleOnTombstone(event)
       || useRopeOnRock(event)
       || useRopeOnTree(event)
@@ -1063,5 +1101,6 @@ module.exports = function registerWaterfallQuest(api) {
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onObjectRoute(routeWaterfallCrossing);
+  api.onWalkRoute(cancelCrossingWalk);
   api.onPlayerLogin(sendWaterfallVarbits);
 };
