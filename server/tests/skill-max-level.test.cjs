@@ -666,8 +666,11 @@ test("burying resolves inventory and XP together on tick two; movement, logout a
   }
 });
 
-test("Fletching keeps going while moving, stops on the next click and never restarts its animation after a level-up", () => {
+test("Fletching keeps going while moving, stops on the next click and never restarts its animation after a level-up", async () => {
+  const { CachePipeline } = require("../dist/game/cache/CachePipeline");
   const { PluginManager } = require("../dist/plugins/PluginManager");
+  // Fletching names its animations by gameval; an earlier test may have opened the cache already.
+  try { CachePipeline.getActive(); } catch { await CachePipeline.initialize(require("node:path").resolve(__dirname, "..")); }
   const core = PluginManager.getCoreApi(), tasks = [];
   const hooks = registerFeedbackPlugin("skills/Fletching", core, {
     getTaskManager: () => ({ submit: task => { task.setRunning(true); tasks.push(task); } }),
