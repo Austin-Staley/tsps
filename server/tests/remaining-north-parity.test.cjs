@@ -1072,6 +1072,81 @@ test('real NpcDialogues: false-wall message action arms Yes/No through the actua
   assert.deepEqual([stale.getLocation().getX(), stale.getLocation().getY(), stale.getLocation().getZ()], [2572, 3269, 1]);
 });
 
+test('Secrets North6 cult travel: real cave 2852 lands at the raft and boards to the hideout', async () => {
+  const path = require('node:path');
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { GameObject } = require('../dist/game/entity/impl/object/GameObject');
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const { PathFinder } = require('../dist/game/model/movement/path/PathFinder');
+  const { PluginManager: PM } = require('../dist/plugins/PluginManager');
+  let cacheActive = true;
+  try { CachePipeline.getActive(); } catch { cacheActive = false; }
+  if (!cacheActive) await CachePipeline.initialize(path.resolve('.'));
+  const sewerRegion = RegionManager.regionIdForTile(2570, 9682);
+  if (!RegionManager.getRegionid(sewerRegion)) RegionManager.init();
+  // A prior test may have left a region mid-load; clear the transient guard so
+  // this real-cache regression can assert the actual loaded map.
+  RegionManager.loadingRegions?.clear?.();
+  const regionId = sewerRegion;
+  RegionManager.loadMapFiles(2570, 9682, true);
+  assert.ok(RegionManager.getRegionid(regionId)?.isLoaded(), 'real sewer map region loaded');
+  assert.ok(MapObjects.get(2852, new core.Location(2585, 3233, 0), null), 'raw cave 2852 exists');
+  const raft = MapObjects.get(2849, new core.Location(2567, 9679, 0), null);
+  assert.ok(raft, 'raw raft 2849 exists');
+
+  const api = PM.createApi('remaining-north-hazeel-route');
+  require('../plugins/quests/quests/HazeelCult.Quest')(api);
+  const hazeel = runtime.getRegisteredQuests().filter(q => q.key === 'hazeel_cult').at(-1);
+  const p = new Player(null);
+  const sender = new Proxy({}, { get: () => () => sender });
+  p.getPacketSender = () => sender;
+  p.moveTo(new core.Location(2587, 3237, 0));
+  p.setNeedsPlacement(false);
+  hazeel.setStage(p, 4); // chosen side; raft gate
+
+  const click = (id, x, y) => {
+    const object = new GameObject(id, new core.Location(x, y, 0), 10, 0, null);
+    PM.emitObjectInteraction({
+      player: p, object, objectId: id, definition: ObjectDefinition.forId(id),
+      clickType: 1, location: object.getLocation(), handled: false,
+    });
+  };
+
+  // Valve clicks are handler-level state setup, before the cave; they are not
+  // a movement-route assertion. The route proof below starts at the landing.
+  for (const [id, x, y] of [
+    [2844, 2562, 3247], [2845, 2572, 3263], [2846, 2585, 3245],
+    [2847, 2597, 3263], [2848, 2611, 3242],
+  ]) click(id, x, y);
+  assert.equal(Number(p.getAttribute('quest.hazeel_cult.valves')), 31, 'all five valves open');
+
+  click(2852, 2585, 3233); // cave entrance
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [2570, 9682, 0],
+    'cave landing is beside the raft (capture 1694 tick [6564])');
+
+  const standTile = new core.Location(2567, 9680, 0);
+  assert.equal(RegionManager.blocked(standTile, null), false, 'raft approach tile walkable');
+  const route = PathFinder.rsmodRouteFinding.findRoute({
+    level: 0, srcX: 2570, srcY: 9682, srcSize: 1,
+    destX: standTile.getX(), destY: standTile.getY(), destWidth: 1, destLength: 1,
+    locShape: -1, privateArea: null, moveNear: false,
+  });
+  assert.equal(route.success, true, 'RSMOD exact route to raft approach succeeds');
+  assert.deepEqual([route.endX, route.endY], [2567, 9680], 'RSMOD endpoint is the raft-adjacent tile');
+  const raftDef = ObjectDefinition.forId(2849);
+  assert.equal(PathFinder.reachedObject({
+    getLocation: () => standTile, getSize: () => 1, getPrivateArea: () => null,
+  }, 2567, 9679, raftDef.getSizeX(), raftDef.getSizeY(), raft.getFace(), raft.getType(), raftDef.getBlockingMask()),
+  true, 'approach tile legally reaches the raw raft');
+
+  click(2849, 2567, 9679); // raft Board
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [2606, 9692, 0],
+    'raft lands at the cult hideout');
+});
+
 test('login re-installs the exact SOTN objects at their real tiles', () => {
   const h = harness(), p = player();
   h.login(p);

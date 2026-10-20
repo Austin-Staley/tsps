@@ -283,14 +283,16 @@ module.exports = function registerPandemoniumQuest(api) {
 
   const QUEST_PORT_TASK_ID = 599; // "Pandemonium ship part delivery" (data/port-tasks.json)
   const PANDEMONIUM_DOCK_ID = "the_pandemonium";
-  const BASIC_CARGO_HOLD = "Basic cargo hold";
 
   /** Jim gives the cup's new owner a raft in their next free boat slot, as live does. */
   function grantRaft(player) {
     const state = player.getSailing?.();
     if (!state) return;
     if (state.boats.some((boat) => boat.type === "raft")) return;
-    Sailing.giveBoat(player, "raft", PANDEMONIUM_DOCK_ID);
+    const raft = Sailing.giveBoat(player, "raft", PANDEMONIUM_DOCK_ID);
+    if (!raft) return;
+    // The quest gives a bare raft: the cargo hold is built at the shipyard.
+    raft.facilities = new Array(BoatFacilities.hotspotsOf(raft.type).length).fill(0);
   }
 
   /** Puts Jim's cargo task in the player's first port-task slot, as the log does. */
@@ -927,19 +929,13 @@ module.exports = function registerPandemoniumQuest(api) {
     }
   }
 
-  /** The shipyard's hotspot placeholder builds the raft's basic cargo hold with both tools. */
-  function buildCargoHoldAtShipyard(event) {
-    const { player } = event;
-    if (quest.getStage(player) !== STAGE_BOAT_GRANTED) return;
-    if (!held(player, HAMMER_ITEM_ID) || !held(player, SAW_ITEM_ID)) return;
-    const visit = Shipyard.aboardVisit(player);
-    const boat = visit && Shipyard.ownedBoat(player, visit.slot);
-    const hold = BoatFacilities.facilityNamed(BASIC_CARGO_HOLD);
-    if (!boat || hold === undefined || !BoatFacilities.allows(boat, 0, hold)) return;
-    event.handled = true;
-    BoatFacilities.setFacility(boat, 0, hold);
-    Shipyard.refreshShownBoat(player);
-    if (quest.getStage(player) < STAGE_HOLD_BUILT) quest.setStage(player, STAGE_HOLD_BUILT);
+  /** The shipped shipyard UI's completed facility build advances the quest exactly once. */
+  function handleFacilityBuilt({ player, boat, hotspot, facility }) {
+    if (quest.getStage(player) !== STAGE_BOAT_GRANTED || hotspot !== 0) return;
+    const raft = questRaft(player);
+    if (!raft || raft.slot !== boat?.slot) return;
+    if (facility !== BoatFacilities.facilityNamed("Cargo hold")) return;
+    quest.setStage(player, STAGE_HOLD_BUILT);
     startTranscript(api, player, JIM_NPC_ID, PAGE, JIM_BUILD_VARIANT);
   }
 
@@ -1081,9 +1077,7 @@ module.exports = function registerPandemoniumQuest(api) {
       case ObjectIdentifiers.BOAT_SCHEMATICS:
         modifySchematics(event);
         return;
-      case ObjectIdentifiers.FACILITY_HOTSPOT_3:
-        buildCargoHoldAtShipyard(event);
-        return;
+
       case ObjectIdentifiers.LEDGER_TABLE_3:
         handleLedgerInteraction(event);
         return;
@@ -1322,6 +1316,7 @@ module.exports = function registerPandemoniumQuest(api) {
   api.onObjectInteraction(handleObjectInteraction);
   BoatManager.onAfterTick(watchTutorialVoyages);
   api.onObjectRoute(routeTutorialHook);
+  api.onCustomEvent("sailing:facility-built", handleFacilityBuilt);
   api.onCustomEvent("sailing:boarded", handleBoarded);
   api.onCustomEvent("sailing:left", handleLeft);
   api.onCustomEvent("interface:closed", ({ player, interfaceId }) => {

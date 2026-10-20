@@ -68,10 +68,13 @@ module.exports = function registerTheFinalDawnQuest(api) {
   const {
     CountdownTask,
     Equipment,
+    GameObject,
     Item,
     ItemIdentifiers,
     Location,
     NpcIdentifiers,
+    ObjectManager,
+    RegionManager,
     Skill,
     TaskManager,
   } = api.core;
@@ -313,6 +316,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
   // Janus safe house (captured base ids).
   const SAFEHOUSE_WINDOW_OBJECT = 56498;
   const SAFEHOUSE_DOOR_OBJECT = 56513;
+  const SAFEHOUSE_DOOR_OPEN = 56514; // vmq4_janus_house_puzzle_door_open at (1648,3093) face3
   const SAFEHOUSE_PLANT_OBJECT = 56470;
   const SAFEHOUSE_SAND_POT_OBJECT = 56472;
   const SAFEHOUSE_STAIRS_OBJECT = 52630;
@@ -498,6 +502,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
   const patrolStates = new WeakMap();
   /** Per-player owner-only quest NPCs. */
   const trackedNpcs = new Map();
+  const safehouseDoorNpcs = new WeakMap();
   const Scenes = createQuestScenes(api);
   let quest;
 
@@ -974,8 +979,35 @@ module.exports = function registerTheFinalDawnQuest(api) {
     return true;
   }
 
+  /** Owner-only open-door state at the captured west tile; global map door stays untouched. */
+  function ensureSafehouseDoorState(player) {
+    const stage = quest.getStage(player);
+    if (stage < STAGE_HOUSE_OPEN || stage >= STAGE_TRAP) return;
+    const current = Scenes.get(player);
+    if (current?.name === "safehouse-door") return;
+    const scene = Scenes.open(player, "safehouse-door", [
+      [1643, 1655, 3087, 3097, 0], [1643, 1655, 3087, 3097, 1],
+    ], { beforeEnd: (owner, ending) => {
+      for (const npc of safehouseDoorNpcs.get(owner) ?? []) ending.area?.leave(npc, false);
+      safehouseDoorNpcs.delete(owner);
+    } });
+    // Hide the shared closed door for this owner and remove only its private collision copy.
+    const closed = new GameObject(SAFEHOUSE_DOOR_OBJECT, new Location(1649, 3093, 0), 0, 0, scene.area);
+    ObjectManager.deregister(closed, false); // Replay this private removal after scene rebuilds.
+    RegionManager.removeObjectClipping(closed);
+    player.getPacketSender().sendObjectRemoval(closed);
+    Scenes.loc(scene, { id: SAFEHOUSE_DOOR_OPEN, x: 1648, y: 3093, z: 0, type: 0, face: 3 });
+    const attached = [];
+    for (const key of ["vibia-house", "guard-dog", "janus-captured"]) {
+      const npc = tracked(player, key);
+      if (npc) { scene.area.enter(npc); attached.push(npc); }
+    }
+    safehouseDoorNpcs.set(player, attached);
+  }
+
   function openSafehouseScene(player) {
-    if (Scenes.get(player)) return;
+    if (Scenes.get(player)?.name === "safehouse-trap") return;
+    if (Scenes.get(player)) Scenes.end(player, false);
     const scene = Scenes.open(player, "safehouse-trap", [[1643, 1652, 3091, 3096, 0]]);
     Scenes.controls(player, true, true);
     Scenes.fade(player, true);
@@ -1305,6 +1337,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
       if (stage !== STAGE_DOG || !hasBit(player, BIT_DOG_CALMED)) return;
       event.handled = true;
       setStage(player, STAGE_HOUSE_OPEN);
+      ensureSafehouseDoorState(player);
       player.moveTo(new Location(1651, 3094, 0));
       player.sendMessage("You unlock the door and call in Captain Vibia to join you.");
       return;
@@ -2230,6 +2263,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
       player.getPacketSender().sendVarbit(16668, 1);
     }
     ensureQuestNpcs(player);
+    ensureSafehouseDoorState(player);
     syncNeypotzliCheckpoint(player);
     if (quest.getStage(player) === STAGE_WAVES) spawnCultistWave(player);
     refreshQuestList(player);

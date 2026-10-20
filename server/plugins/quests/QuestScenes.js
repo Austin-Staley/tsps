@@ -146,6 +146,7 @@ function createQuestScenes(api, { onEnd } = {}) {
   function end(player, logout) {
     const scene = scenes.get(player);
     if (!scene) return;
+    scene.rules?.beforeEnd?.(player, scene);
     scenes.delete(player);
     TaskManager.cancelTasks(scene);
     for (const npc of scene.actors.splice(0)) if (npc?.isRegistered?.()) api.removeNpc(npc);

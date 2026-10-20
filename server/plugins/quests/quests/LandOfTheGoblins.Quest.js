@@ -1231,6 +1231,13 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
     ...ENTRANCE_GUARD_NPC_IDS,
   ]);
 
+  /** Wiki action/unavailable markers precede the real post-test Bighead questions. */
+  function withoutWikiMarkers(steps) {
+    let start = 0;
+    while (start < steps.length && ["action", "unavailable"].includes(steps[start].type)) start++;
+    return steps.slice(start);
+  }
+
   function handleNpcInteraction(event) {
     const { player, npcId, clickType, definition } = event;
     const option = definition?.getActions?.()?.[clickType - 1];
@@ -1240,6 +1247,14 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
       if (!variant) return;
       event.handled = true;
       startTranscript(api, player, npcId, PAGE, variant);
+      return;
+    }
+    if (option === "Talk-to" && npcId === HIGH_PRIEST_BIGHEAD_NPC_ID &&
+        questActive(player) && quest.getStage(player) >= STAGE_TEST) {
+      const variant = selectVariant({ npcId, player });
+      if (!variant) return;
+      event.handled = true;
+      startTranscript(api, player, npcId, PAGE, variant, withoutWikiMarkers);
       return;
     }
     if (option === "Buy-sphere" && npcId === OLDAK_RING_NPC_ID) {

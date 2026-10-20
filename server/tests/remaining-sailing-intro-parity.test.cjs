@@ -93,6 +93,7 @@ function setup() {
       adds(id, count) { inventory.set(id, (inventory.get(id) ?? 0) + count); },
       addItem(item) { this.adds(item.getId(), item.getAmount()); },
       deleteNumber(id, count) { inventory.set(id, Math.max(0, (inventory.get(id) ?? 0) - count)); },
+      delete(id, count) { this.deleteNumber(id, count); },
       getFreeSlots() { return 28 - [...inventory.values()].filter((count) => count > 0).length; },
       isFull() { return this.getFreeSlots() === 0; },
     }),
@@ -115,6 +116,7 @@ function setup() {
     getPrivateArea: () => null,
     getMovementQueue: () => ({ reset() { return this; }, setBlockMovement() { return this; } }),
     setUntargetable() {},
+    performAnimation() {},
     getArea: () => player.__area,
     setArea: (area) => { player.__area = area; },
     getUsername: () => 'parity',
@@ -226,6 +228,7 @@ test('Pandemonium uses the captured varbit stages and the real raft cargo route'
   assert.equal(quest.getStage(h.player), 28);
   assert.equal(h.sailing.boats.length, 1, 'Jim grants the raft');
   assert.equal(h.sailing.boats[0].type, 'raft');
+  assert.deepEqual(h.sailing.boats[0].facilities, [0], 'the quest raft starts without the default cargo hold');
   h.action(h.core.NpcIdentifiers.JUNIOR_JIM_2, '7jgwOg');
   assert.equal(quest.getStage(h.player), 32);
   h.action(h.core.NpcIdentifiers.JUNIOR_JIM_2, 'g4CUrq');
@@ -674,4 +677,61 @@ test('Pandemonium deck hook routes Deploy from the player pose instead of the al
   queue.walkToTile(new Location(event.destination.x, event.destination.y, 0), () => { dispatched++; });
   assert.equal(dispatched, 1, 'MovementQueue dispatches the action from the override destination');
   for (const stale of StaticShips.all()) StaticShips.dispose(stale);
+});
+
+test('stage 28 shipyard UI build consumes materials and advances once through the shipped handler', () => {
+  const h = setup();
+  const { Sailing } = require('../dist/game/content/sailing/Sailing');
+  const { BoatManager } = require('../dist/game/content/sailing/BoatManager');
+  const BoatFacilities = require('../plugins/skills/sailing/BoatFacilities.Sailing');
+  const Shipyard = require('../plugins/skills/sailing/Shipyard.plugin.js');
+  const raft = Sailing.giveBoat(h.player, 'raft', 'the_pandemonium');
+  raft.facilities = [0];
+  const hold = BoatFacilities.hotspotsOf('raft')[0].allowed.find((row) =>
+    /cargo hold$/i.test(BoatFacilities.facilityRequirements(row).name));
+  const materials = BoatFacilities.facilityRequirements(hold).materials;
+  for (const [item, count] of materials) h.inventory.set(item, count + 3);
+  const quest = load(h, 'Pandemonium.Quest.js');
+  h.attrs.set('quest.pandemonium.stage-version', 2);
+  quest.setStage(h.player, 28);
+  assert.equal(quest.getStage(h.player), 28, 'opening/modifying without a build stays 28');
+
+  const saved = {
+    aboardVisit: Shipyard.aboardVisit, ownedBoat: Shipyard.ownedBoat,
+    openCustomisation: Shipyard.openCustomisation, closeCustomisation: Shipyard.closeCustomisation,
+    isBuildTrigger: Shipyard.isBuildTrigger, readOptionRow: Shipyard.readOptionRow,
+    refusal: Shipyard.refusal, setDeckLoc: BoatManager.setDeckLoc,
+  };
+  const visit = { hotspot: 0, slot: raft.slot, shown: {} };
+  Shipyard.aboardVisit = () => visit;
+  Shipyard.ownedBoat = () => raft;
+  Shipyard.openCustomisation = () => {};
+  Shipyard.closeCustomisation = () => {};
+  Shipyard.isBuildTrigger = () => true;
+  Shipyard.readOptionRow = () => hold;
+  Shipyard.refusal = () => null;
+  BoatManager.setDeckLoc = () => {};
+  const modulePath = require.resolve('../plugins/skills/sailing/ShipyardFacilities.plugin.js');
+  delete require.cache[modulePath];
+  const Facilities = require(modulePath);
+  Facilities.register(h.api);
+  const event = { player: h.player, groupId: 939, childId: 17, scriptTrigger: true, argsData: Buffer.from([0]), handled: false };
+  try {
+    for (const handler of h.hooks.interfaceClicks) handler(event);
+    assert.equal(event.handled, true, 'the shipped shipyard build handler accepted the trigger');
+    for (const [item, count] of materials) assert.equal(h.inventory.get(item), 3, `${item} materials consumed`);
+    assert.equal(quest.getStage(h.player), 30, 'the real built cargo hold advances stage 28 to 30');
+    for (const handler of h.hooks.interfaceClicks) handler(event);
+    assert.equal(quest.getStage(h.player), 30, 'duplicate UI events keep stage 30');
+  } finally {
+    Shipyard.aboardVisit = saved.aboardVisit;
+    Shipyard.ownedBoat = saved.ownedBoat;
+    Shipyard.openCustomisation = saved.openCustomisation;
+    Shipyard.closeCustomisation = saved.closeCustomisation;
+    Shipyard.isBuildTrigger = saved.isBuildTrigger;
+    Shipyard.readOptionRow = saved.readOptionRow;
+    Shipyard.refusal = saved.refusal;
+    BoatManager.setDeckLoc = saved.setDeckLoc;
+    delete require.cache[modulePath];
+  }
 });

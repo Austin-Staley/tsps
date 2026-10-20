@@ -1520,8 +1520,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
       return;
     }
     if (objectId === DOOR_LEVERS_A || objectId === DOOR_LEVERS_B) {
-      event.handled = true;
-      openLeversDoor(player, event.location, objectId);
+      event.handled = openLeversDoor(player, event.location, objectId);
       return;
     }
     if (objectId === DOOR_UPPER) {
@@ -1682,12 +1681,9 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     const allowed = inner
       ? stage >= STAGE_URN_PUZZLE && urnPuzzleComplete(player)
       : stage >= STAGE_LEVERS_DONE;
-    if (allowed) {
-      stepThrough(player, location);
-      if (!inner && stage < STAGE_URN_CHAMBER) setStage(player, STAGE_URN_CHAMBER);
-      return;
-    }
+    if (allowed) return false;
     startTranscript(api, player, MAISA_CAMP, PAGE, "the-ruins-of-ullek-opening-the-downstairs-locked-door");
+    return true;
   }
 
   /** The Champion door (43960) beyond the altar. */
@@ -1706,8 +1702,9 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     if (request.handled) return;
     const { player, objectId, location } = request;
     if (objectId === DOOR_LEVERS_A || objectId === DOOR_LEVERS_B) {
-      request.handled = true;
-      openLeversDoor(player, location, objectId);
+      // Allowed doors must fall through to Doors.plugin: it swaps the captured closed
+      // leaf for the open leaf (43964) and normal MovementQueue walking crosses it.
+      request.handled = openLeversDoor(player, location, objectId);
       return;
     }
     if (objectId === DOOR_CHAMPION) {

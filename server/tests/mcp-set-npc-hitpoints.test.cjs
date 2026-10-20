@@ -11,6 +11,8 @@ const { NPC } = require('../dist/game/entity/impl/npc/NPC');
 const { Player } = require('../dist/game/entity/impl/player/Player');
 const { Location } = require('../dist/game/model/Location');
 const { World } = require('../dist/game/World');
+const { HitDamage } = require('../dist/game/content/combat/hit/HitDamage');
+const { HitMask } = require('../dist/game/content/combat/hit/HitMask');
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const z = require('zod');
 
@@ -74,6 +76,35 @@ test('set_npc_hitpoints rejects invalid targets/HP and lowers a real NPC for the
     assert.equal(lastHit.hitpoints, 1);
     assert.equal(npc.getHitpoints(), 1, 'never sets an anonymous 0-HP death');
     assert.notEqual(npc.isDyingFunction?.(), true, 'the NPC stays alive for the real killing hit');
+  } finally {
+    World.getNpcs().remove(npc);
+  }
+});
+
+test('NPC regeneration stays integer and a legacy fractional HP dies to a normal hit', () => {
+  const player = new Player(null);
+  player.setRegistered(true);
+  const npc = new NPC(797, new Location(2270, 4316, 0));
+  npc.setMaxHitpoints(5);
+  npc.setHitpoints(1);
+  assert.equal(World.getNpcs().add(npc, true), true, 'real NPC registered');
+  try {
+    // A fresh NPC's last attack is elapsed, so process() takes the regeneration path.
+    npc.process();
+    assert.equal(npc.getHitpoints(), 2, '10% of max 5 regenerates as one whole hitpoint');
+    assert.equal(Number.isInteger(npc.getHitpoints()), true, 'regeneration never stores a fraction');
+
+    // Legacy saves/runtime could still hold 0.5 HP. A normal integer hit must kill it and
+    // keep the player as the killer, not clamp the damage to a fractional 0.5.
+    npc.setHitpoints(0.5);
+    const killingHit = new HitDamage(1, HitMask.RED).setSource(player);
+    npc.getCombat().getHitQueue().addPendingDamage([killingHit]);
+    // The regeneration process above already drained this cycle; land the hit on the next one.
+    npc.getCombat().getHitQueue().process(World.getProcessCycle() + 1);
+    assert.equal(npc.getHitpoints(), 0, 'a normal 1-damage hit finishes a legacy 0.5 HP actor');
+    assert.equal(npc.isDyingFunction?.(), true, 'the real NPC death path ran');
+    assert.equal(npc.getCombat().getHitQueue().getLastAppliedHit(), killingHit);
+    assert.equal(killingHit.getSource(), player, 'the killer is the real hit source');
   } finally {
     World.getNpcs().remove(npc);
   }

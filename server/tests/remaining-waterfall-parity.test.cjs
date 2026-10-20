@@ -760,6 +760,48 @@ test('real MovementQueue walks the scripted crossing over both clipped tiles wit
   assert.equal(character.hasFlag('movement:ignore-clipping'), false, 'the scoped flag is removed when the queued path completes');
 });
 
+test('statue travel completes through the real 229 messagebox resume handler', () => {
+  const q = register(), p = player();
+  q.quest.setStage(p, STAGE.dungeon);
+  p.setAttribute('waterfall-quest:pillars', (1 << 18) - 1);
+  p.give(ID.amulet, 1);
+  const senderBase = {
+    chatboxGroupId: -1,
+    sendChatboxInterface(id) { this.chatboxGroupId = id; return this; },
+    sendString() { return this; }, sendClientScript() { return this; },
+    sendInterfaceFlagsRange() { return this; }, sendSubInterface() { return this; },
+    closeSubInterface() { return this; }, sendInterfaceRemoval() { this.removed = true; return this; },
+    isChatboxInterface(groupId) { return groupId === this.chatboxGroupId; },
+  };
+  const sender = new Proxy(senderBase, {
+    get(target, prop) { return prop in target ? target[prop] : () => sender; },
+  });
+  p.getPacketSender = () => sender;
+  const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+  const manager = new DialogueManager(p);
+  p.getDialogueManager = () => manager;
+  const handled = q.call('onItemOnObject', {
+    player: p, objectId: ID.statue, itemId: ID.amulet, itemSlot: 0, handled: false,
+  })[0];
+  assert.equal(handled, true);
+  assert.equal(q.quest.getStage(p), STAGE.amuletPlaced);
+  assert.equal(p.isMovementBlocked(), true, 'travel holds movement until the messagebox continue');
+  q.tick(2);
+  assert.ok(manager.getCurrent() instanceof core.StatementDialogue, 'the follow-up messagebox is managed');
+  assert.equal(p.isMovementBlocked(), true);
+  assert.equal(manager.handleResume(153 << 16, -1), false, 'interface 153 is not the messagebox control');
+  assert.equal(p.isMovementBlocked(), true);
+  const { decodeClientPacket } = require('../dist/net/protocol/ClientProtocol');
+  const { ClientPacketId } = require('../dist/net/protocol/NativeClientPackets');
+  // Native RESUME_PAUSEBUTTON: opcode 62, childIndex shortAddLE (-1), widgetId int (229 << 16).
+  const packet = decodeClientPacket(Buffer.from([ClientPacketId.RESUME_PAUSEBUTTON, 0xff, 0x7f, 0x00, 0xe5, 0x00, 0x00]));
+  assert.deepEqual(packet, { type: 'dialogue_continue', childIndex: 0xffff, widgetId: 229 << 16 });
+  assert.equal(manager.handleResume(packet.widgetId, packet.childIndex), true, 'real RESUME_PAUSEBUTTON handler on group 229');
+  assert.equal(p.isMovementBlocked(), false, 'normal continue unlocks movement');
+  assert.equal(q.quest.getStage(p), STAGE.amuletPlaced, 'no automatic stage change');
+  assert.equal(p.count(ID.amulet), 0, 'the amulet was consumed once');
+});
+
 test('raft travel locks movement until continue and a logout clears the lock', () => {
   const q = register(), p = player();
   q.quest.setStage(p, STAGE.started);

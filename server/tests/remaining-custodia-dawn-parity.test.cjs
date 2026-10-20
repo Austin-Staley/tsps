@@ -10,6 +10,11 @@ const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
 const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
 const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+const { RegionManager } = require('../dist/game/collision/RegionManager');
+const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+const { GameObject } = require('../dist/game/entity/impl/object/GameObject');
+const { ObjectManager } = require('../dist/game/entity/impl/object/ObjectManager');
+const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
 const runtime = require('../plugins/quests/QuestRuntime');
 const core = PluginManager.getCoreApi();
 const I = core.ItemIdentifiers, N = core.NpcIdentifiers, O = core.ObjectIdentifiers;
@@ -33,7 +38,7 @@ function harness(name) {
       ...core,
       TaskManager: { submit(task) { task.setRunning(true); tasks.push(task); }, cancelTasks() {} },
       World: { ...core.World, getNpcs: () => npcs },
-      ObjectManager: { register: object => objects.push(object), deregister: noop },
+      ObjectManager: { register: object => { objects.push(object); const area = object.getPrivateArea?.(); const owner = area?.getPlayers?.()[0]; if (owner) owner.getPacketSender().sendObject(object); }, deregister: noop },
     },
     persistAttribute: noop,
     onCustomEvent: (key, fn) => (events[key] ??= []).push(fn),
@@ -57,7 +62,9 @@ function harness(name) {
       let tile = new core.Location(definition.x, definition.y, definition.z);
       const npc = {
         ...definition, index: nextIndex++, getId: () => definition.id, isRegistered: () => !npc.removed,
-        getOwner: () => definition.owner, isDyingFunction: () => false, getHitpoints: () => 1, setArea: noop, setPositionToFace: noop,
+        getOwner: () => definition.owner, isDyingFunction: () => false, getHitpoints: () => 1, setArea: value => { npc.area = value; }, getArea: () => npc.area ?? null,
+        getPrivateArea: () => npc.area ?? null, isPlayer: () => false, isNpc: () => true,
+        getIndex: () => npc.index, getAsNpc: () => npc, setPositionToFace: noop,
         getLocation: () => tile, moveTo: value => { tile = value; }, forceChat: text => { npc.chat = text; },
         remove() { npc.removed = true; },
       };
@@ -135,7 +142,7 @@ function harness(name) {
 }
 
 function player(level = 99, current = 99) {
-  const attrs = new Map(), items = new Map(), configs = new Map(), varbits = new Map(), log = [];
+  const attrs = new Map(), items = new Map(), configs = new Map(), varbits = new Map(), log = [], clientRemovals = [], clientSpawns = [];
   let location = new core.Location(3210, 3220, 0), area = null;
   const packet = new Proxy({
     sendVarbit: (id, value) => varbits.set(id, value),
@@ -148,12 +155,13 @@ function player(level = 99, current = 99) {
     sendCameraShake: (...args) => { p.camera.push(['shake', ...args]); return packet; },
     sendSubInterface: (...args) => { p.camera.push(['sub', ...args]); return packet; },
     closeSubInterface: (...args) => { p.camera.push(['close', ...args]); return packet; },
-    sendObjectRemoval: noop,
+    sendObjectRemoval: object => { clientRemovals.push(object); return packet; },
+    sendObject: object => { clientSpawns.push(object); return packet; },
     sendInterface: id => { p.interface = id; return packet; },
     sendInterfaceScript: (id, args) => { p.interfaceScript = { id, args }; return packet; },
   }, { get: (t, key) => t[key] ?? (() => packet) });
   const p = {
-    attrs, items, configs, varbits, log, messages: [], camera: [], full: false,
+    attrs, items, configs, varbits, log, clientRemovals, clientSpawns, messages: [], camera: [], full: false,
     getAttribute: key => attrs.get(key),
     setAttribute: (key, value) => attrs.set(key, value),
     getInventory: () => ({
@@ -322,6 +330,7 @@ test('The Final Dawn safe-house follows captured stages 15 to 22', () => {
   for (const fn of h.hooks.onItemOnNpc) fn({ player: p, npcId: 14236, itemId: I.BONES, handled: false });
   assert.equal(h.quest.getStage(p), 17);
   h.object(p, 56513); assert.equal(h.quest.getStage(p), 18);
+  assert.ok(h.objects.some(object => object.id === 56514), 'door becomes the captured open loc');
   h.object(p, 52630); assert.equal(h.quest.getStage(p), 19);
   p.items.set(I.COIN_PURSE, 1);
   for (const fn of h.hooks.onItemAction) fn({ player: p, itemId: I.COIN_PURSE, option: 'Open', handled: false });
@@ -361,12 +370,65 @@ test('The Final Dawn safehouse dog accepts the real alert content id 14237', () 
     for (const fn of h.hooks.onItemOnNpc) fn(event);
     if (npcId === 14236) {
       assert.equal(h.quest.getStage(p), 17, 'base id still calms the dog');
-      assert.equal(p.items.get(I.BONES), undefined);
+      assert.equal(p.items.get(I.BONES) ?? 0, 0);
     } else {
       assert.equal(h.quest.getStage(p), 17, 'alert content id calms the dog');
-      assert.equal(p.items.get(I.BONES), undefined);
+      assert.equal(p.items.get(I.BONES) ?? 0, 0);
     }
   }
+});
+
+test('The Final Dawn safehouse door is owner-scoped and clears both stair routes', () => {
+  RegionManager.init();
+  RegionManager.loadMapFiles(1649, 3093, true);
+  const globalClosed = RegionManager.getClipping(1649, 3093, 0, null);
+  const globalOpenTile = RegionManager.getClipping(1648, 3093, 0, null);
+  assert.ok(MapObjects.get(56513, new core.Location(1649, 3093, 0), null),
+    'global safehouse door stays closed');
+  assert.notEqual(globalClosed, 0, 'other players still have the closed-door clip');
+
+  const h = harness('TheFinalDawn'), p = player();
+  h.api.core.ObjectManager.deregister = core.ObjectManager.deregister.bind(core.ObjectManager);
+  h.quest.setStage(p, 16);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  p.items.set(I.BONES, 1);
+  for (const fn of h.hooks.onItemOnNpc) fn({ player: p, npcId: 14237, itemId: I.BONES, handled: false });
+  assert.equal(h.quest.getStage(p), 17);
+  h.object(p, 56513);
+  assert.equal(h.quest.getStage(p), 18);
+  assert.ok(p.clientRemovals.some(object => object.getId() === 56513), 'owner receives closed-door removal');
+  assert.ok(h.objects.some(object => object.id === 56514), 'owner open loc registered');
+  assert.ok(p.clientSpawns.some(object => object.getId() === 56514), 'owner receives open-door addition');
+  const area = p.getArea();
+  assert.ok(area, 'owner private door area entered');
+  assert.ok(core.World.getRemovedObjects().some(object => object.getId() === 56513 && object.getPrivateArea() === area),
+    'private closed-door removal persists across client scene rebuilds');
+  assert.ok(area.hasClip(new core.Location(1649, 3093, 0)), 'only the door clip is copied');
+  assert.ok(area.getNpcs().some(npc => npc.id === 14236 || npc.id === 14238), 'tracked dog attached');
+  assert.ok(area.getNpcs().some(npc => npc.id === 14301 || npc.id === 14302 || npc.id === 14303), 'tracked Vibia attached');
+  assert.equal(RegionManager.getClipping(1649, 3093, 0, null), globalClosed, 'global 1649 clip unchanged');
+  assert.equal(RegionManager.getClipping(1648, 3093, 0, null), globalOpenTile, 'global 1648 clip unchanged');
+
+  const route = new RsmodRouteFinding((x, y, z, privateArea) => RegionManager.getClipping(x, y, z, privateArea));
+  const path = (srcX, srcY, destX, destY) => route.findRoute({
+    level: 0, srcX, srcY, srcSize: 1, destX, destY, destWidth: 1, destLength: 1,
+    locShape: -1, privateArea: area, moveNear: false,
+  }).success;
+  assert.equal(path(1650, 3094, 1646, 3091), true, 'owner east room to stairs');
+  assert.equal(path(1646, 3091, 1650, 3094), true, 'owner stairs back to east room');
+  assert.ok(MapObjects.get(56507, new core.Location(1647, 3096, 0), null),
+    'unrelated closed safehouse door stays unchanged');
+  for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
+  assert.equal(p.getArea(), null, 'logout clears the owner door area');
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.ok(p.getArea()?.getNpcs().length > 0, 'stage18 login restores owner door state + tracked NPCs');
+  h.quest.setStage(p, 22);
+  h.namedNpcs.get('Captain Vibia')['Talk-to']({ player: p, npcId: 14303 });
+  h.tick(3);
+  assert.ok(h.npcs.some(npc => npc.id === 14241 && !npc.removed), 'trap actor starts');
+  assert.ok(h.npcs.some(npc => (npc.id === 14301 || npc.id === 14302 || npc.id === 14303) && !npc.removed),
+    'tracked Vibia survives ending the door area');
+  for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
 });
 
 test('The Final Dawn basement, archive and safe-house hooks emit captured camera/fade beats and clean actors', () => {

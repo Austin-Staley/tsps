@@ -25,7 +25,7 @@ before(async () => {
 });
 
 function harness(name) {
-  const hooks = {}, events = {}, tasks = [], npcs = [], removed = [], ground = [], objects = [], npcActions = new Map(), completedQuests = new Set(), worldItems = [];
+  const hooks = {}, events = {}, tasks = [], npcs = [], removed = [], ground = [], objects = [], npcActions = new Map(), namedObjects = new Map(), completedQuests = new Set(), worldItems = [];
   function registerGround(p, item, position) {
     const object = {
       removed: false,
@@ -65,6 +65,11 @@ function harness(name) {
     },
     getObjectManager: () => ({ register: object => objects.push(object), deregister: object => { const i = objects.indexOf(object); if (i >= 0) objects.splice(i, 1); } }),
     registerArea: area => (hooks.registerArea ??= []).push(area),
+    getTaskManager: () => ({ submit: task => { task.setRunning(true); tasks.push(task); }, cancelTasks: noop }),
+    onObjectInteraction: (target, actions) => {
+      if (typeof target === 'function') (hooks.onObjectInteraction ??= []).push(target);
+      else namedObjects.set(target, actions);
+    },
     getItemOnGroundManager: () => ({
       registerLocation: (p, item, position) => registerGround(p, item, position),
       registerNonGlobals: (p, item, position) => { registerGround(p, item, position); },
@@ -96,7 +101,7 @@ function harness(name) {
     return null;
   };
   const h = {
-    api, hooks, events, tasks, npcs, removed, ground, objects, npcActions, completedQuests, worldItems,
+    api, hooks, events, tasks, npcs, removed, ground, objects, npcActions, namedObjects, completedQuests, worldItems,
     quest: Array.isArray(name) ? runtime.getRegisteredQuests().find(q => q.key === 'defender_of_varrock') : runtime.getRegisteredQuests().at(-1),
     quests: runtime.getRegisteredQuests(),
     emit: (name, event) => (events[name] ?? []).forEach(fn => fn(event)),
@@ -136,6 +141,7 @@ function player() {
   let location = new core.Location(3210, 3220, 0);
   const inv = {
     getAmount: id => items.get(id) ?? 0,
+    contains: id => (items.get(id) ?? 0) > 0,
     getFreeSlots: () => (p.full ? 0 : 28),
     isFull: () => Boolean(p.full),
     getItems: () => [...items].filter(([, amount]) => amount > 0).map(([id, amount]) => ({ getId: () => id, getAmount: () => amount, getDefinition: () => core.ItemDefinition.forId(id) })),
@@ -160,10 +166,11 @@ function player() {
       getCurrentLevel: skill => levels.get(skill.getIndex()) ?? 99,
       getMaxLevel: skill => levels.get(skill.getIndex()) ?? 99,
     }),
-    getMovementQueue: () => ({ reset() { return this; }, setBlockMovement: noop }),
+    getMovementQueue: () => ({ size() { return 0; }, reset() { return this; }, setBlockMovement: noop }),
+    getForceMovement: () => null,
     getLocation: () => location, moveTo: to => { location = to; },
     getArea: () => null, getPrivateArea: () => null, setArea: noop, getIndex: () => p.index, getSpellbook: () => p.spellbook ?? core.MagicSpellbook.NORMAL,
-    isPlayer: () => true, isNpc: () => false, getAsPlayer: () => p, isRegistered: () => true,
+    isPlayer: () => true, isNpc: () => false, getAsPlayer: () => p, isRegistered: () => true, getHitpoints: () => 99, performAnimation: animation => (p.animations ??= []).push(animation.getId()),
     getUsername: () => p.username ?? 'Parity', getAppearance: () => ({ isMale: () => true }),
     setPositionToFace: noop, forceChat: noop, sendMessage: text => p.messages.push(text),
   };
@@ -756,6 +763,10 @@ test('real ItemOnGroundManager respawns a captured bottle after four ticks', () 
 
 test('Camdozaal rubble transforms per owner with canonical drops and exact world-slot restore', () => {
   const h = harness('npcs/CamdozaalGolems.plugin');
+  const bounds = h.hooks.registerArea[0].getBoundaries()[0];
+  assert.equal(bounds.inside(new core.Location(3017, 5784, 0)), true);
+  assert.equal(bounds.inside(new core.Location(3100, 5784, 0)), false, 'area does not claim unrelated underground regions');
+  assert.equal(bounds.inside(new core.Location(3017, 5784, 1)), false);
   const rubbleDefinition = core.NpcDefinition.forId(10690);
   const golemDefinition = core.NpcDefinition.forId(10689);
   assert.equal(rubbleDefinition.getName(), '<col=00ffff>Rubble</col>');
@@ -1029,6 +1040,54 @@ test('Defender and Curse of Arrav share the placed trapdoor without skipping the
   curse.setStage(done, 20);
   const curseDone = h.object(done, DOV_TRAPDOOR, 'Open', 3343, 3515);
   assert.equal(curseDone.handled, true, 'Curse resumes ownership after Defender completion');
+});
+
+test('real Mining task yields normal Barronite deposit XP/message and canonical shards outcome', () => {
+  const Mining = require('../plugins/skills/Mining.plugin');
+  const rockTable = Mining.ROCKS.find(rock => rock.objectName === 'Barronite rocks');
+  assert.equal(rockTable.level, 14);
+  assert.equal(rockTable.xp, 32);
+  assert.equal(rockTable.respawnTicks, 100);
+  assert.deepEqual(rockTable.objectIds, [41547, 41548, 41549, 41550]);
+  assert.equal(rockTable.successLow, 82);
+  assert.equal(rockTable.successHigh, 101);
+  assert.deepEqual(rockTable.outcomes.map(outcome => [outcome.itemId, outcome.weight, outcome.xp]), [
+    [I.BARRONITE_SHARDS, 76, 16],
+    [I.BARRONITE_DEPOSIT, 24, 32],
+  ]);
+
+  const h = harness('skills/Mining.plugin');
+  const p = player();
+  p.moveTo(new core.Location(2941, 5809, 0));
+  p.items.set(I.BRONZE_PICKAXE, 1);
+  const rockObject = {
+    getId: () => 41547, getLocation: () => new core.Location(2941, 5810, 0),
+    getType: () => 10, getFace: () => 0, getPrivateArea: () => null,
+  };
+  const {
+    MapObjects,
+  } = require('../dist/game/entity/impl/object/MapObjects');
+  const originalGet = MapObjects.get;
+  const originalRandom = Math.random;
+  try {
+    MapObjects.get = () => rockObject;
+    // success roll 0 (hit), outcome roll 0.8 -> deposit (76..99), quantity roll 0.
+    const rolls = [0, 0.8, 0];
+    Math.random = () => rolls.shift() ?? 0;
+    h.namedObjects.get('Barronite rocks').Mine({
+      player: p, object: rockObject,
+      definition: { getName: () => 'Barronite rocks' }, handled: false,
+    });
+    h.tick(20);
+    assert.equal(h.tasks.length, 2, 'mining task + rock respawn task submitted');
+    assert.equal(p.items.get(I.BARRONITE_DEPOSIT), 1);
+    assert.equal(p.items.get(I.BARRONITE_SHARDS), undefined);
+    assert.ok(p.messages.includes('You manage to mine a barronite deposit.'));
+    assert.deepEqual(p.xp.at(-1), [core.Skill.MINING.getIndex(), 32]);
+  } finally {
+    MapObjects.get = originalGet;
+    Math.random = originalRandom;
+  }
 });
 
 test('Defender of Varrock library list, census, descendant and single completion', () => {

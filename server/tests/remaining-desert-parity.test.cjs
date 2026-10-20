@@ -635,20 +635,18 @@ test('Beneath Cursed Sands: tomb levers reset after 100 ticks and open only when
   assert.equal(h.quest.getStage(p), 46);
 });
 
-test('Beneath Cursed Sands: inner lever door is gated on the solved urn riddle', () => {
+test('Beneath Cursed Sands: inner lever door is denied before the solved urn riddle', () => {
   const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
   const p = player();
-  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
-  const doorDef = CacheDefinitions.getObject(43962);
-  const door = { ...doorDef, getId: () => doorDef.id, getName: () => doorDef.name, getInteractions: () => doorDef.actions };
   h.quest.setStage(p, 46);
-  p.moveTo(new core.Location(3390, 9248, 0));
-  h.object(p, 43962, 1, door, new core.Location(3389, 9248, 0));
-  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3390, 9248]);
+  const denied = { player: p, objectId: 43962, location: new core.Location(3389, 9248, 0), handled: false };
+  h.emit('door:toggle', denied);
+  assert.equal(denied.handled, true);
   h.quest.setStage(p, 48);
   p.attributes.set('beneath-cursed-sands:urns', (4) | (2 << 4) | (1 << 8) | (3 << 12));
-  h.object(p, 43962, 1, door, new core.Location(3389, 9248, 0));
-  assert.notDeepEqual([p.getLocation().getX(), p.getLocation().getY()], [3390, 9248]);
+  const allowed = { player: p, objectId: 43962, location: new core.Location(3389, 9248, 0), handled: false };
+  h.emit('door:toggle', allowed);
+  assert.equal(allowed.handled, false, 'Doors.plugin owns the allowed open leaf');
 });
 test('Beneath Cursed Sands: shipped guard transcript clears scene controls and spawns the fight', async () => {
   await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(path.resolve(__dirname, '..'));
@@ -706,4 +704,28 @@ test('Beneath Cursed Sands: tomb entry uses the captured z2 instance landing and
   assert.equal(RegionManager.blocked(new core.Location(3445, 9248, 2), null), false);
   assert.equal(RegionManager.blocked(new core.Location(3438, 9247, 2), null), false);
   assert.equal(RegionManager.blocked(new core.Location(3438, 9249, 2), null), false);
+});
+test('Beneath Cursed Sands: allowed inner/outer doors fall through to the normal Doors path', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 56);
+  p.attributes.set('beneath-cursed-sands:urns', (4) | (2 << 4) | (1 << 8) | (3 << 12));
+  for (const objectId of [43961, 43962]) {
+    const request = { player: p, objectId, location: new core.Location(3389, 9248, 0), handled: false };
+    h.emit('door:toggle', request);
+    assert.equal(request.handled, false, `allowed ${objectId} must be opened by Doors.plugin`);
+  }
+  h.quest.setStage(p, 46);
+  p.attributes.set('beneath-cursed-sands:urns', 0);
+  const denied = { player: p, objectId: 43962, location: new core.Location(3389, 9248, 0), handled: false };
+  h.emit('door:toggle', denied);
+  assert.equal(denied.handled, true, 'unsolved inner door stays claimed/denied');
+  assert.equal(h.transcripts.at(-1)[4], 'the-ruins-of-ullek-opening-the-downstairs-locked-door');
+});
+test('Beneath Cursed Sands: the key urn can replace a lost rusty key after stage 56', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 56);
+  h.action(p, 11474, 'ppIMnm');
+  assert.equal(p.items.get(I.RUSTY_KEY), 1);
 });

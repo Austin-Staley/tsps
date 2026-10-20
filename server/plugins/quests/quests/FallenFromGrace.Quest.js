@@ -203,6 +203,9 @@ module.exports = function registerFallenFromGraceQuest(api) {
   const CREVICE_WALL_Y = 8654;
   const CREVICE_NORTH_Y = 8652;
   const CREVICE_SOUTH_Y = 8656;
+  // Captured P2 line 7918: after the core powers the golem the player moves from the
+  // north front (2573,8649) to the south side of the wall at (2573,8655).
+  const GOLEM_PASSAGE_TILE = new Location(2573, 8655, 0);
 
   const SURFACE_ZONE = { minX: 2510, maxX: 2625, minY: 2150, maxY: 2310 };
   const CAVERN_ZONE = { minX: 2540, maxX: 2625, minY: 8580, maxY: 8645 };
@@ -834,6 +837,8 @@ module.exports = function registerFallenFromGraceQuest(api) {
     quest.setStage(player, STAGE_GOLEM_POWERED);
     ensureBasementItems(player);
     speak(player, CORMAC_NPC_ID, "entering-ardeaglais-putting-a-new-core-in-the-golem");
+    // The captured activation moves the player through the opened passage.
+    player.moveTo(GOLEM_PASSAGE_TILE);
     return true;
   }
 

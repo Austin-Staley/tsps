@@ -65,7 +65,9 @@ module.exports = function registerHazeelCultQuest(api) {
   const HIDEOUT_TILE = { x: 2606, y: 9692, z: 0 };
   const HIDEOUT_RAFT_TILE = { x: 2606, y: 9693, z: 0 };
   const RAFT_RETURN_TILE = { x: 2568, y: 9681, z: 0 };
-  const SEWER_LANDING = { x: 2584, y: 9633, z: 0 };
+  // Capture 1694 tick [6564]: cave 2852 lands beside the raft at (2570,9682),
+  // not the disconnected Clock Tower landing (2584,9633).
+  const SEWER_LANDING = { x: 2570, y: 9682, z: 0 };
   const SEWER_STAIRS_SURFACE = { x: 2570, y: 3283, z: 0 };
   const MANSION_BASEMENT = { x: 2544, y: 9695, z: 0 };
   const MANSION_FROM_BASEMENT = { x: 2570, y: 3268, z: 0 };

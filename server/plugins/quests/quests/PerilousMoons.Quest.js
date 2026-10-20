@@ -1418,7 +1418,6 @@ module.exports = function registerPerilousMoonsQuest(api) {
     const landing = entrance.landing;
     player.moveTo(new Location(landing.x, landing.y, landing.z));
     if (stage === STAGE_RITUAL) quest.setStage(player, STAGE_MOONS);
-    if (entrance.boss === "eclipse") ensureEclipseCutscene(player);
   }
 
   function handleCampSupplies(event) {

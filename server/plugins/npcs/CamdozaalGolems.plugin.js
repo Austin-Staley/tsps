@@ -80,7 +80,7 @@ function createArea() {
   const { Area, Boundary } = pluginApi.core;
   const [minX, minY, maxX, maxY, z] = CAMDOZAAL_BOUNDS;
   return new (class CamdozaalGolemArea extends Area {
-    constructor() { super([new Boundary(minX, minY, maxX, maxY, z)]); }
+    constructor() { super([new Boundary(minX, maxX, minY, maxY, z)]); }
     postLeave(actor, logout) {
       if (actor?.isPlayer?.()) restoreGolem(stateByPlayer.get(actor.getAsPlayer()));
       super.postLeave(actor, logout);

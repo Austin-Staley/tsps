@@ -1045,3 +1045,42 @@ test('stage-2 city arrival spawns canonical Zanik in the lab and Talk-to plays t
   assert.match(String(current.getText?.() ?? ''), /Hello, Parity!/);
   assert.equal(h.quest.getStage(p), 4, 'talking to Zanik advances stage 2 -> 4');
 });
+
+
+test('stage-32 Bighead uses the shipped questions instead of the wiki unavailable marker', () => {
+  const h = harness('LandOfTheGoblins');
+  const p = player();
+  h.quest.setStage(p, 32);
+  p.attrs.set('quest.land_of_the_goblins.bits', 0);
+  const bighead = { getId: () => N.HIGH_PRIEST_BIGHEAD, getLocation: () => p.getLocation() };
+  const talk = () => npcInteractionWith(h, p, bighead, 1, actions(['Talk-to']));
+
+  talk();
+  assert.ok(p.prompt, 'Bighead opens the real question menu');
+  assert.ok(p.prompt.options.includes("Me want to know about Yu'biusk."));
+
+  for (let i = 0; i < 100 && h.quest.getStage(p) < 34; i++) {
+    if (p.prompt) {
+      const options = p.prompt.options;
+      const wanted = ["Me want to know about Yu'biusk.", "Where is Yu'biusk?", "Can I talk to old high priests?"]
+        .find((text) => options.includes(text));
+      assert.ok(wanted, `unexpected options: ${options.join(' | ')}`);
+      const pair = p.prompt.pairs[options.indexOf(wanted) * 2 + 1];
+      p.prompt = null;
+      pair();
+    } else if (p.manager.isActive()) {
+      p.manager.advance();
+    } else {
+      break;
+    }
+  }
+  assert.equal(h.quest.getStage(p), 34, 'normal options reach the six-key crypt stage');
+  assert.ok(!p.messages.some((text) => /conversation isn't available/.test(text)));
+
+  p.manager.reset();
+  p.prompt = null;
+  h.login(p);
+  talk();
+  assert.ok(p.prompt, 'post-relog Bighead still opens options');
+  assert.ok(!p.messages.some((text) => /conversation isn't available/.test(text)));
+});
