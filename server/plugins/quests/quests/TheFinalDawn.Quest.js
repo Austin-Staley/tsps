@@ -78,7 +78,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
     Skill,
     TaskManager,
   } = api.core;
-  const { registerQuest, startTranscript, refreshQuestList } = require("../QuestRuntime");
+  const { registerQuest, startTranscript, loadTranscripts, refreshQuestList } = require("../QuestRuntime");
   const { createQuestScenes } = require("../QuestScenes");
   const { createQuestLockpicking } = require("../QuestLockpicking");
 
@@ -508,6 +508,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
   /** Per-player owner-only quest NPCs. */
   const trackedNpcs = new Map();
   const safehouseDoorNpcs = new WeakMap();
+  const safehouseTrapNpcs = new WeakMap();
   const safehouseTopObjects = new WeakMap();
   const strangeTileArrivals = new WeakMap();
   const Scenes = createQuestScenes(api);
@@ -576,8 +577,8 @@ module.exports = function registerTheFinalDawnQuest(api) {
     return body === ItemIdentifiers.EMISSARY_ROBE_TOP && legs === ItemIdentifiers.EMISSARY_ROBE_BOTTOM;
   }
 
-  function play(player, npcId, variant) {
-    return startTranscript(api, player, npcId, PAGE, variant);
+  function play(player, npcId, variant, select) {
+    return startTranscript(api, player, npcId, PAGE, variant, select);
   }
 
   function correctPassphrase(player) {
@@ -1076,14 +1077,71 @@ module.exports = function registerTheFinalDawnQuest(api) {
     if (Scenes.get(player)?.name === "safehouse-trap") return;
     clearSafehouseTopObjects(player);
     if (Scenes.get(player)) Scenes.end(player, false);
-    const scene = Scenes.open(player, "safehouse-trap", [[1643, 1652, 3091, 3106, 0]]);
+    const scene = Scenes.open(player, "safehouse-trap", [[1643, 1652, 3091, 3106, 0]], { beforeEnd: (owner, ending) => {
+      for (const npc of safehouseTrapNpcs.get(owner) ?? []) ending.area?.leave(npc, false);
+      safehouseTrapNpcs.delete(owner);
+    } });
     Scenes.controls(player, true, true);
     Scenes.fade(player, true);
+    // The capture's trap instance contains Vibia and the dog as well as Janus.
+    // Re-enter the tracked NPCs after the door scene detached them.
+    const attached = [];
+    for (const key of ["vibia-house", "guard-dog"]) {
+      const npc = tracked(player, key);
+      if (npc) { scene.area.enter(npc); attached.push(npc); }
+    }
+    safehouseTrapNpcs.set(player, attached);
     Scenes.later(scene, 2, () => {
       Scenes.actor(scene, 14241, [1648, 3104, 0], [1648, 3093]);
       Scenes.camera(player, [1648, 3104, 500], [1648, 3103, 499]);
       Scenes.fade(player, false);
     });
+  }
+
+  const TRAP_CONDITION_STEPS = new Set([COND_HAS_EMPTY_SACK, COND_HAS_BRANCH, COND_HAS_BLACKJACK]);
+
+  /** The captured repeat request when the trap still lacks a way to restrain Janus. */
+  function trapRecoverySteps() {
+    const steps = loadTranscripts(api)?.[PAGE]?.variants?.["home-invasion-in-janus-safehouse-talking-to-vibia-again"];
+    return Array.isArray(steps) && steps[0]?.type === "line" ? [steps[0]] : [];
+  }
+
+  /**
+   * The captured stage-22 conversation checks the sack, branch and blackjack one
+   * after another: with both the sack and the blackjack it gives the sack, then
+   * continues into the blackjack show and Janus capture. The wiki dump stores
+   * those checks as sibling conditions, which the shared flattener treats as
+   * alternatives. Resolve this variant's checks in order instead.
+   *
+   * Janus needs both the sack and the blackjack: the blackjack branch is only
+   * played once the sack is held or was already handed to Vibia. Otherwise the
+   * canonical request to keep searching is shown and the stage stays at 22.
+   */
+  function selectTrapSteps(player, npcId) {
+    return (steps) => {
+      const out = [];
+      const sackReady = hasBit(player, BIT_SACK_GIVEN) || held(player, EMPTY_SACK_ITEM);
+      for (let index = 0; index < steps.length; index++) {
+        const step = steps[index];
+        if (step.type !== "condition") {
+          out.push(step);
+          continue;
+        }
+        const run = [step];
+        while (steps[index + 1]?.type === "condition") run.push(steps[++index]);
+        if (!run.every((condition) => TRAP_CONDITION_STEPS.has(condition.id))) {
+          out.push(...run);
+          continue;
+        }
+        for (const condition of run) {
+          if (answerCondition({ player, npcId, stepId: condition.id }) === true) {
+            out.push(...(condition.steps ?? []));
+          }
+        }
+        if (!sackReady && held(player, MAKESHIFT_BLACKJACK_ITEM)) out.push(...trapRecoverySteps());
+      }
+      return out;
+    };
   }
 
   function talkVibia(event) {
@@ -1106,12 +1164,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
     }
     if (stage >= STAGE_TRAP && stage < STAGE_JANUS) {
       openSafehouseScene(player);
-      if (!held(player, EMPTY_SACK_ITEM)) player.getInventory().adds(EMPTY_SACK_ITEM, 1);
-      if (!held(player, MAKESHIFT_BLACKJACK_ITEM)) {
-        player.getInventory().adds(SANDY_COIN_PURSE_ITEM, 1);
-        player.getInventory().adds(BRANCH_ITEM, 1);
-      }
-      play(player, npcId, "home-invasion-talking-to-captain-vibia-2");
+      play(player, npcId, "home-invasion-talking-to-captain-vibia-2", selectTrapSteps(player, npcId));
       return true;
     }
     if (stage >= STAGE_JANUS && stage < STAGE_CAM_TORUM) {
@@ -2169,7 +2222,9 @@ module.exports = function registerTheFinalDawnQuest(api) {
       if (stepId === COND_NO_SACK) return !hasBit(player, BIT_SACK_GIVEN);
       if (stepId === COND_HAS_EMPTY_SACK) return !hasBit(player, BIT_SACK_GIVEN) && held(player, EMPTY_SACK_ITEM);
       if (stepId === COND_HAS_BRANCH) return held(player, BRANCH_ITEM) && !held(player, MAKESHIFT_BLACKJACK_ITEM);
-      if (stepId === COND_HAS_BLACKJACK) return held(player, MAKESHIFT_BLACKJACK_ITEM);
+      if (stepId === COND_HAS_BLACKJACK) {
+        return held(player, MAKESHIFT_BLACKJACK_ITEM) && (hasBit(player, BIT_SACK_GIVEN) || held(player, EMPTY_SACK_ITEM));
+      }
     }
     if (ITZLA_IDS.has(npcId)) {
       const sun = Number(player.getAttribute(SUN_ATTRIBUTE)) || 0;
@@ -2244,6 +2299,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
         return;
       case ACTION_SACK_GIVEN:
         if (!VIBIA_IDS.has(npcId)) return;
+        if (held(player, EMPTY_SACK_ITEM)) player.getInventory().deleteNumber(EMPTY_SACK_ITEM, 1);
         setBit(player, BIT_SACK_GIVEN);
         return;
       case ACTION_JANUS_CAPTURE:

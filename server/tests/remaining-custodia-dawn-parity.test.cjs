@@ -456,8 +456,72 @@ test('The Final Dawn safehouse door is owner-scoped and clears both stair routes
   h.tick(3);
   assert.ok(h.npcs.some(npc => npc.id === 14241 && !npc.removed), 'trap actor starts');
   assert.ok(p.getArea()?.entities.some(npc => npc.id === 14241 && npc.getPrivateArea() === p.getArea()), 'trap bounds include Janus actor');
-  assert.ok(h.npcs.some(npc => (npc.id === 14301 || npc.id === 14302 || npc.id === 14303) && !npc.removed),
-    'tracked Vibia survives ending the door area');
+  assert.ok(p.getArea()?.entities.some(npc => npc.id === 14303 && npc.getPrivateArea() === p.getArea()),
+    'trap bounds re-attach Vibia after the door scene detached her');
+  assert.ok(p.getArea()?.entities.some(npc => npc.id === 14236 || npc.id === 14238), 'trap bounds include the dog');
+  for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
+});
+
+test('The Final Dawn stage-22 Vibia plays the sack and blackjack branches in one conversation', () => {
+  const h = harness('TheFinalDawn'), p = player();
+  h.quest.setStage(p, 22);
+  p.items.set(I.EMPTY_SACK, 1);
+  p.items.set(I.MAKESHIFT_BLACKJACK, 1);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.ok(h.npcs.some(npc => npc.id === 14303 && !npc.removed), 'login restores Vibia');
+
+  h.namedNpcs.get('Captain Vibia')['Talk-to']({ player: p, npcId: 14303 });
+  h.tick(3);
+  const area = p.getArea();
+  assert.ok(area?.entities.some(npc => npc.id === 14303), 'Vibia is present for the trap conversation');
+  assert.ok(area?.entities.some(npc => npc.id === 14241), 'Janus is present for the trap conversation');
+
+  for (let step = 0; step < 200 && h.quest.getStage(p) === 22 && p.manager.getCurrent(); step++) {
+    p.manager.advance();
+  }
+  assert.equal(h.quest.getStage(p), 23, 'the real XR0VTA action captures Janus');
+  assert.ok(p.messages.includes('You give the sack to Captain Vibia.'), 'sack condition played');
+  assert.ok(p.messages.includes('You show the makeshift blackjack to Captain Vibia.'),
+    'blackjack condition continues after the sack condition');
+  assert.equal(p.items.get(I.EMPTY_SACK) ?? 0, 0, 'the given sack leaves the inventory');
+  assert.equal(p.getArea(), null, 'the trap scene ends after capture');
+  assert.ok(!area.entities.some(npc => npc.id === 14241 && !npc.removed), 'Janus scene actor is cleaned up');
+  for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
+});
+
+test('The Final Dawn stage-22 Vibia accepts a blackjack once the sack was already given', () => {
+  const h = harness('TheFinalDawn'), p = player();
+  h.quest.setStage(p, 22);
+  p.attrs.set('quest.the_final_dawn.bits', 1 << 1); // BIT_SACK_GIVEN
+  p.items.set(I.MAKESHIFT_BLACKJACK, 1);
+  h.namedNpcs.get('Captain Vibia')['Talk-to']({ player: p, npcId: 14303 });
+  h.tick(3);
+
+  for (let step = 0; step < 200 && h.quest.getStage(p) === 22 && p.manager.getCurrent(); step++) {
+    p.manager.advance();
+  }
+  assert.equal(h.quest.getStage(p), 23, 'already-given sack plus blackjack reaches XR0VTA');
+  assert.ok(!p.messages.includes('You give the sack to Captain Vibia.'), 'the sack is not given twice');
+  assert.ok(p.messages.includes('You show the makeshift blackjack to Captain Vibia.'));
+  for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
+});
+
+test('The Final Dawn stage-22 blackjack without a sack or a given sack stays at 22', () => {
+  const h = harness('TheFinalDawn'), p = player();
+  const lines = [];
+  (h.events['npc-dialogue:line'] ??= []).push(event => lines.push(String(event.text)));
+  h.quest.setStage(p, 22);
+  p.items.set(I.MAKESHIFT_BLACKJACK, 1);
+  h.namedNpcs.get('Captain Vibia')['Talk-to']({ player: p, npcId: 14303 });
+  h.tick(3);
+
+  for (let step = 0; step < 200 && p.manager.getCurrent(); step++) p.manager.advance();
+  assert.equal(h.quest.getStage(p), 22, 'Janus is not captured without a sack');
+  assert.ok(!p.messages.includes('You show the makeshift blackjack to Captain Vibia.'),
+    'the blackjack branch waits for the sack');
+  assert.ok(lines.some(line => line.startsWith(
+    "We need to prepare for the return of this Forebearer Janus. We'll need a way to restrain him")),
+    'Vibia gives the canonical request/recovery line');
   for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
 });
 

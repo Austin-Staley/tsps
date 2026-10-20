@@ -269,7 +269,8 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
   const LILY_PICKED = ObjectIdentifiers.LILY_3; // 43986, already picked
   const LILY_PLACED = 44593; // placed map loc; cache transforms it to 43984 at stage 76
   const STEPPING_STONE = ObjectIdentifiers.STEPPING_STONE_48; // 43988
-  const CHEMISTRY_TABLE = ObjectIdentifiers.CHEMISTRY_TABLE_3; // 43991
+  const CHEMISTRY_TABLE = ObjectIdentifiers.CHEMISTRY_TABLE_3; // 43991, resolved at stage 82
+  const CHEMISTRY_TABLE_PLACED = 44594; // placed multi-loc; cache transforms 82 -> 43991 (Use)
   const PILLAR_INTERFACE = 750;
   const PILLAR_BUTTONS = [8, 9].map((child) => (PILLAR_INTERFACE << 16) | child);
   const LORE_TABLET_INTERFACE = 748;
@@ -1628,7 +1629,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
       crossSteppingStone(player);
       return;
     }
-    if (objectId === CHEMISTRY_TABLE) {
+    if (objectId === CHEMISTRY_TABLE || objectId === CHEMISTRY_TABLE_PLACED) {
       event.handled = true;
       useChemistryTable(player);
       return;

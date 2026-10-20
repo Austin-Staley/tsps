@@ -997,3 +997,34 @@ test('Beneath Cursed Sands: stepping stone/lily cache and map support the captur
     assert.equal(RegionManager.blocked(new core.Location(x, y, 0), null), false, `${x},${y} walkable`);
   }
 });
+test('Beneath Cursed Sands: placed 44594 resolves to the Use chemistry table at stage 82', () => {
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 82);
+  p.varbits.set(13841, 82);
+  ObjectDefinition.init();
+  const resolved = ObjectDefinition.forPlayer(44594, p);
+  assert.equal(resolved?.id, 43991, 'cache transform 44594[82] -> 43991');
+  assert.ok(resolved.getInteractions().includes('Use'), 'real current menu offers Use');
+  const table = h.object(p, 44594, 1, resolved, new core.Location(3423, 2905, 0));
+  assert.equal(table.handled, true);
+  assert.ok(p.interfaces.includes(751), 'real 44594 click opens 751');
+
+  const h2 = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p2 = player();
+  h2.quest.setStage(p2, 82);
+  const base = h2.object(p2, 44594, 1, { id: 44594, getInteractions: () => ['Use'] }, new core.Location(3423, 2905, 0));
+  assert.equal(base.handled, true, 'placed base id alias handled');
+  assert.ok(p2.interfaces.includes(751));
+  for (let i = 0; i < 15; i++) h2.button(p2, (751 << 16) | 25);
+  for (let i = 0; i < 15; i++) h2.button(p2, (751 << 16) | 27);
+  h2.button(p2, (751 << 16) | 28);
+  h2.button(p2, (751 << 16) | 26);
+  h2.button(p2, (751 << 16) | 28);
+  h2.button(p2, (751 << 16) | 26);
+  assert.equal(h2.quest.getStage(p2), 84);
+  assert.equal(h2.transcripts.filter(t => t[4] === 'cure-me-pox-warming-up-the-equipment').length, 1, 'puzzle completes once');
+  h2.button(p2, (751 << 16) | 25);
+  assert.equal(h2.quest.getStage(p2), 84, 'no second completion');
+});

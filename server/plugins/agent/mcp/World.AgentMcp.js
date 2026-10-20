@@ -42,13 +42,14 @@ module.exports = function registerWorldTools(ctx) {
 
   tool(
     "observe",
-    "Snapshot of a player: position, area, visible world entities (boats/ships), stats, inventory, equipment, nearby NPCs/objects/ground items, game messages and client updates (varbits, varps, interface opens/closes/hides) since the last call. Pass varbits/varps to read their current values.",
+    "Snapshot of a player: position, area, visible world entities (boats/ships), stats, inventory, equipment, nearby NPCs/objects/ground items, game messages and client updates (varbits, varps, interface opens/closes/hides) since the last call. Pass varbits/varps to read their current values, and widgets (packed group << 16 | child) to read the last text sent to each widget.",
     {
       player, radius: z.number().int().min(1).max(32).default(15),
       varbits: z.array(z.number().int().min(0)).max(50).default([]),
       varps: z.array(z.number().int().min(0)).max(50).default([]),
+      widgets: z.array(z.number().int().min(0)).max(100).default([]),
     },
-    ({ player: username, radius, varbits, varps }) => {
+    ({ player: username, radius, varbits, varps, widgets }) => {
       const p = find(username);
       const sender = p.getPacketSender();
       const skills = p.getSkillManager();
@@ -61,6 +62,11 @@ module.exports = function registerWorldTools(ctx) {
         runEnergy: p.getRunEnergy(),
         ...(varbits.length ? { varbitValues: Object.fromEntries(varbits.map((id) => [id, sender.getVarbit(id)])) } : {}),
         ...(varps.length ? { varpValues: Object.fromEntries(varps.map((id) => [id, sender.getVarp(id)])) } : {}),
+        ...(widgets.length ? {
+          widgetTexts: Object.fromEntries(widgets.map((id) => [
+            id, p.getFrameUpdater().interfaceTextMap.get(id)?.currentState ?? null,
+          ])),
+        } : {}),
         skills: Object.fromEntries(Skill.values().map((skill) => [skill.getName(), {
           level: skills.getCurrentLevel(skill), max: skills.getMaxLevel(skill), xp: skills.getExperience(skill),
         }])),
