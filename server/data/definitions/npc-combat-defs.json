@@ -1,6 +1,6 @@
 {
   "$comment": "NPC combat definitions - server-side only. Client loads animations dynamically. `projectile` is the projectile graphic id an npc's ranged/magic attack draws; without it the default generic arrow/magic projectile is used. `deathTicks` is how long the death animation plays before the death itself (drops, removal); 2 when absent. `respawn` is the ticks from removal to respawn; 25 when absent, 0 to disable.",
-  "npcs": {
+  "npcs": {"11278":{"name":"Nex","anims":{"attack":9180,"block":-1,"death":9184}},"11279":{"name":"Nex","anims":{"attack":9180,"block":-1,"death":9184}},"11280":{"name":"Nex","anims":{"attack":9180,"block":-1,"death":9184}},"11281":{"name":"Nex","anims":{"attack":9180,"block":-1,"death":9184}},"11282":{"name":"Nex","anims":{"attack":9180,"block":-1,"death":9184}},"11283":{"name":"Fumus","anims":{"attack":1979,"block":424,"death":836}},"11284":{"name":"Umbra","anims":{"attack":1979,"block":424,"death":836}},"11285":{"name":"Cruor","anims":{"attack":1979,"block":424,"death":836}},"11286":{"name":"Glacies","anims":{"attack":1979,"block":424,"death":836}},"11290":{"name":"Spiritual Warrior","anims":{"attack":7054,"block":424,"death":836}},"11291":{"name":"Spiritual Ranger","anims":{"attack":426,"block":425,"death":836}},"11292":{"name":"Spiritual Mage","anims":{"attack":1979,"block":424,"death":836}},"11293":{"name":"Blood Reaver","anims":{"attack":9194,"block":9196,"death":9192}},"11294":{"name":"Blood Reaver","anims":{"attack":9194,"block":9196,"death":9192}},
     "73": {"name": "Skeleton", "anims": {"attack": 5485, "block": 5489, "death": 5491}},
     "86": {"name": "Ghost", "anims": {"attack": 5532, "block": 5533, "death": 5534, "spawn": 5530, "walk": 5531}},
     "87": {"name": "Ghost", "anims": {"attack": 5532, "block": 5533, "death": 5534, "spawn": 5530, "walk": 5531}},
@@ -12,6 +12,8 @@
     "319": {"name": "Corporeal Beast", "anims": {"attack": 1683, "block": 1677, "death": 1676}},
     "377": {"name": "Phosani's Nightmare", "anims": {"attack": -1, "block": -1, "death": -1}},
     "378": {"name": "The Nightmare", "anims": {"attack": -1, "block": -1, "death": -1}},
+    "498": {"name": "Smoke devil", "anims": {"attack": 3847, "block": 3848, "death": 3849}, "projectile": 644, "respawn": 7},
+    "499": {"name": "Thermonuclear smoke devil", "anims": {"attack": 3847, "block": 3848, "death": 3849}, "projectile": 644, "deathTicks": 5, "respawn": 15},
     "655": {"name": "Goblin", "anims": {"attack": 6185, "block": 6183, "death": 6182}, "sounds": {"death": 512}},
     "656": {"name": "Goblin", "anims": {"attack": 6188, "block": 6189, "death": 6190}, "sounds": {"death": 512}},
     "657": {"name": "Goblin", "anims": {"attack": 6185, "block": 6183, "death": 6182}, "sounds": {"death": 512}},
