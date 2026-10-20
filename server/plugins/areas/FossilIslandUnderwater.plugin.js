@@ -28,6 +28,8 @@ const FADE_OVERLAY = 174;
 const FADE_SCRIPT = 948;
 const FADE_CYCLES = 50;
 const BUBBLES_GRAPHIC = 603; // 100_pirate_bubbles_spotanim
+// Stand, turn, walk, turn around, turn right, turn left, run: human_real_swimming_ready / human_real_swimming.
+const SWIM_ANIMATIONS = [3418, 3415, 3415, 3415, 3415, 3415, 3415];
 const MOVE_TICKS = 2;
 const NO_DIVE_WARNING_ATTRIBUTE = "fossil-island:no-dive-warning";
 const SEA_FOUND_ATTRIBUTE = "fossil-island:sea-found";
@@ -165,7 +167,13 @@ function sendOxygen(player) {
   player.getPacketSender().sendVarbit(OXYGEN_VARBIT, oxygen.get(player));
 }
 
+function swim(player, swimming) {
+  player.setRenderAnimations(swimming ? SWIM_ANIMATIONS : null);
+  player.getUpdateFlag().flag(core.Flag.APPEARANCE);
+}
+
 function enterWater(player) {
+  swim(player, true);
   oxygen.set(player, DATA.oxygen.max);
   drainTicks.set(player, 0);
   const sender = player.getPacketSender();
@@ -177,7 +185,9 @@ function enterWater(player) {
 function leaveWater(player) {
   if (!oxygen.delete(player)) return;
   drainTicks.delete(player);
-  if (player.isRegistered()) player.getPacketSender().closeSubInterface(OVERLAY_ATMOSPHERE_UID);
+  if (!player.isRegistered()) return;
+  swim(player, false);
+  player.getPacketSender().closeSubInterface(OVERLAY_ATMOSPHERE_UID);
 }
 
 /** Wiki: drowning does no damage; 10-20 mermaid's tears carried are lost, and the player is back on the small island. */

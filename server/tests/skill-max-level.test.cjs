@@ -405,6 +405,16 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
     q.moveTo(anchor.getLocation().clone().add(0,1));q.options[1][1]();
     assert.equal(Drift.state(q).nets[anchor.getId()],undefined);assert.equal(q.counts.has(I.NUMULITE),false);
     assert.ok(q.banks.some(b=>b.items.size>0));Drift.cleanup({player:q});
+    // Ceto's transcript: its conditions follow the player's access and numulites.
+    const Ceto = require("../plugins/skills/hunter/Ceto.Hunter");
+    const cetoSays = text => Ceto.condition({ player: q, npcId: core.NpcIdentifiers.CETO, text });
+    Drift.state(q).until = 0; q.counts.set(I.NUMULITE, 200);
+    assert.equal(cetoSays("If the player has the level requirements to drift net fish, but has not paid for a day's access:"), true);
+    assert.equal(cetoSays("If the player has at least 200 numulites in their inventory:"), true);
+    assert.ok(Drift.buyDay(q)); assert.equal(q.counts.has(I.NUMULITE), false);
+    assert.equal(cetoSays("If the player has paid to access for the day:"), true);
+    assert.equal(cetoSays("If the player has paid for permanent access:"), false);
+    assert.equal(Ceto.condition({ player: q, npcId: core.NpcIdentifiers.ANNETTE, text: "If the player has paid for permanent access:" }), null);
     q.equipment.clear();q.counts.clear();q.moveTo(new core.Location(1370,3620));q.counts.set(I.KING_WORM,2);
     Aerial.borrow({player:q});const spot=prey(core.NpcIdentifiers.FISHING_SPOT_12,q.getLocation().clone().add(2,0));
     const preAerial=q.experience.get(Skill.HUNTER);Aerial.fish({player:q,npc:spot,npcId:spot.getId()});advance(1);

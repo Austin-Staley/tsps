@@ -63,32 +63,31 @@ function enter(player) {
   sync({ player });
 }
 
-function pay({ player, npc }) {
-  if (!C.nearby(player, npc)) return true;
-  C.choose(player, [["Enter drift net fishing", () => enter(player)],
-    ["Pay 200 numulite for today", () => purchase(player, 200)],
-    ["Pay 20,000 numulite for permanent access", () => purchase(player, 20000)]], npc);
+const DAY_MS = 86400000;
+const UNLIMITED_ACCESS_VARBIT = 242; // fossil_driftnet_unlimitedaccess: the tunnel drops its Pay option
+
+function levels(player) {
+  const m = player.getSkillManager();
+  return m.getMaxLevel(H.core.Skill.HUNTER) >= 44 && m.getMaxLevel(H.core.Skill.FISHING) >= 47;
+}
+
+function hasAccess(player) {
+  const until = state(player).until;
+  return until === -1 || until > Date.now();
+}
+
+/** Ceto's day pass runs to midnight UTC. */
+function buyDay(player) {
+  if (!C.exchange(player, [[H.core.ItemIdentifiers.NUMULITE, 200]], [])) return false;
+  state(player).until = (Math.floor(Date.now() / DAY_MS) + 1) * DAY_MS;
   return true;
 }
 
-/** The tunnel beside Ceto: Enter goes in once access is paid for, Pay asks as she does. */
-function tunnelEnter({ player, object, objectId }) {
-  if (objectId !== H.core.ObjectIdentifiers.TUNNEL_50) return false;
-  if (C.nearby(player, object)) enter(player);
+function buyPermanent(player) {
+  if (!C.exchange(player, [[H.core.ItemIdentifiers.NUMULITE, 20000]], [])) return false;
+  state(player).until = -1;
+  sync({ player });
   return true;
-}
-
-function tunnelPay({ player, object, objectId }) {
-  if (objectId !== H.core.ObjectIdentifiers.TUNNEL_50) return false;
-  return pay({ player, npc: object });
-}
-
-function purchase(player, cost) {
-  if (!permitted(player)) return;
-  if (state(player).until === -1) { enter(player); return; }
-  if (!C.exchange(player, [[H.core.ItemIdentifiers.NUMULITE, cost]], [])) return;
-  state(player).until = cost === 20000 ? -1 : (Math.floor(Date.now() / 86400000) + 1) * 86400000;
-  enter(player);
 }
 
 function login({ player }) {
@@ -101,6 +100,7 @@ function login({ player }) {
 }
 
 function sync({ player }) {
+  player.getPacketSender().sendVarbit(UNLIMITED_ACCESS_VARBIT, state(player).until === -1 ? 1 : 0);
   for (const [id, d] of bases) {
     const net = state(player).nets[id];
     player.getPacketSender().sendVarbit(d.transformVarbit, !net ? 0 : net.count >= 10 ? 3 : net.count ? 2 : 1);
@@ -272,36 +272,10 @@ function takeDown(event) {
   return true;
 }
 
-function storage({ player, object }) {
-  if (!C.nearby(player, object)) return true;
-  C.choose(player, [["Store all drift nets", () => { if (C.nearby(player, object)) store(player); }],
-    ["Withdraw 10 drift nets", () => { if (C.nearby(player, object)) withdraw(player, 10); }],
-    ["Withdraw all drift nets", () => { if (C.nearby(player, object)) withdraw(player, 2000); }]]);
-  return true;
-}
-
-function store(player) {
-  const I = H.core.ItemIdentifiers, s = state(player);
-  for (const id of [I.DRIFT_NET, H.core.ItemDefinition.forId(I.DRIFT_NET).getNoteId()]) {
-    const amount = Math.min(2000 - s.stored, player.getInventory().getAmount(id));
-    if (amount > 0 && C.exchange(player, [[id, amount]], [])) s.stored += amount;
-  }
-  player.sendMessage(`Annette is storing ${s.stored} drift nets.`);
-}
-
-function withdraw(player, n) {
-  const s = state(player), amount = Math.min(n, s.stored, player.getInventory().getFreeSlots());
-  if (amount > 0 && C.exchange(player, [], [[H.core.ItemIdentifiers.DRIFT_NET, amount]])) s.stored -= amount;
-}
-
 function use(event) {
   if (bases.has(event.objectId) && event.itemId === H.core.ItemIdentifiers.DRIFT_NET) {
     event.handled = true;
     setup(event);
-  } else if (event.objectId === H.core.ObjectIdentifiers.COL_FFFF00_ANNETTE_COL
-    && [H.core.ItemIdentifiers.DRIFT_NET, H.core.ItemDefinition.forId(H.core.ItemIdentifiers.DRIFT_NET).getNoteId()].includes(event.itemId)) {
-    event.handled = true;
-    if (C.nearby(event.player, event.object)) store(event.player);
   }
 }
 
@@ -341,5 +315,5 @@ function process() {
   }
 }
 
-module.exports = { ATTRIBUTE, initialize, state, enter, pay, tunnelEnter, tunnelPay, setup, chase, harvest, inspect, takeDown, storage, use, exit,
+module.exports = { ATTRIBUTE, initialize, state, enter, levels, permitted, hasAccess, buyDay, buyPermanent, setup, chase, harvest, inspect, takeDown, use, exit,
   cleanup, process, login, sync, experience, rewards, fossil, bases };
