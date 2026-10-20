@@ -52,9 +52,12 @@ function makeOne(player, recipe, itemId) {
 
 function start(player, recipe, itemId, amount) {
   if (!Number.isInteger(amount) || amount <= 0) return;
+  const inventory = player.getInventory();
+  const most = Math.min(inventory.getAmount(recipe.barId), inventory.getAmount(recipe.logId));
+  if (most <= 0) return;
   Sessions.start(player, {
     type: "spears",
-    remaining: amount,
+    remaining: Math.min(amount, most),
     interval: INTERVAL_TICKS,
     step: (smith) => makeOne(smith, recipe, itemId),
   });

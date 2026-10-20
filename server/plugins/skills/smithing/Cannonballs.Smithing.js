@@ -68,9 +68,12 @@ function start(player, cannonball, amount) {
     Smelting.statement(player, `You need a Smithing level of ${cannonball.level} to make ${cannonball.metal} cannonballs.`);
     return false;
   }
+  const mould = mouldOf(player);
+  const most = mould ? Math.ceil(player.getInventory().getAmount(cannonball.barId) / mould.bars) : 0;
+  if (most <= 0) return false;
   Sessions.start(player, {
     type: "cannonballs",
-    remaining: amount,
+    remaining: Math.min(amount, most),
     interval: INTERVAL_TICKS,
     finishDelay: FIRST_TICKS,
     begin: (smith) => begin(smith, cannonball),

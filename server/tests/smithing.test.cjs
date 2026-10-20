@@ -11,7 +11,7 @@ const Smithing = require("../plugins/skills/Smithing.plugin");
 
 const buttons = new Map(), objects = new Map(), itemActions = new Map(), events = new Map(), tasks = [], players = [];
 let disconnect, itemOnObject, CacheDefinitions;
-const extraItemOnObject = [];
+const extraItemOnObject = [], startups = [];
 let denyAnvil = false;
 function registerSmithing() {
   Smithing.register({
@@ -25,6 +25,7 @@ function registerSmithing() {
       for (const handler of events.get(name) ?? []) handler(request);
     },
     persistAttribute() {},
+    onServerStartup: handler => startups.push(handler),
     onItemAction: (name, actions) => itemActions.set(name, actions),
     onItemOnObject: (handler) => { if (!itemOnObject) itemOnObject = handler; else extraItemOnObject.push(handler); },
     onItemOnItem() {}, onSpellOnItem() {}, log() {},
@@ -37,6 +38,7 @@ before(async () => {
   ({ CacheDefinitions } = require("../dist/game/cache/CacheDefinitions"));
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
   registerSmithing();
+  for (const startup of startups) startup();
 });
 afterEach(() => { for (const player of players.splice(0)) disconnect({ player }); });
 
@@ -533,4 +535,21 @@ test("Smith with a draconic visage and anti-dragon shield makes an uncharged dra
   assert.equal(player.items.get(I.DRACONIC_VISAGE), 0);
   assert.equal(player.xp, 2000);
   assert.match(dialogueTexts(player).at(-1), /into a dragonfire shield/);
+});
+
+test("All stops at the bars held, without an out-of-bars message", () => {
+  const player = playerWith(I.BRONZE_BAR, 3);
+  open(player);
+  click(player, 7);
+  click(player, 9);
+  ticks();
+  assert.equal(player.items.get(I.BRONZE_DAGGER), 3);
+  assert.ok(!player.messages.some((message) => /enough bars/.test(message)));
+});
+
+test("lovakite ore alone isn't ore for a normal furnace", () => {
+  const player = furnaceWith([[I.LOVAKITE_ORE, 1], [I.COAL, 2]]);
+  objects.get("Furnace").Smelt({ player });
+  assert.equal(lastMenu(player), undefined);
+  assert.equal(player.statements.length, 1);
 });

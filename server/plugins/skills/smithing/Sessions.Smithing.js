@@ -107,8 +107,12 @@ function createTask() {
   return new SmithingTask();
 }
 
+function startTask() {
+  Core.api.getTaskManager().submit(createTask());
+}
+
 module.exports = function attach(api) {
-  api.getTaskManager().submit(createTask());
+  api.onServerStartup(startTask);
 };
 
 Object.assign(module.exports, { start, stop, typeOf, everyTick, timeline });

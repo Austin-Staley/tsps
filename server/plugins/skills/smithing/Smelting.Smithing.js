@@ -190,7 +190,7 @@ function recipeEntries(player, recipes, furnaceId) {
 
 /** "Smelt" on a furnace: the menu lists every bar; with nothing to smelt, a message box instead. */
 function smelt({ player, objectId }) {
-  const hasOre = Data.SMELTING_RECIPES.some((recipe) => !recipe.skill && recipe.ingredients.some(([id]) => id !== Core.ItemIdentifiers.COAL && available(player, id) > 0));
+  const hasOre = Data.SMELTING_RECIPES.some((recipe) => !recipe.skill && !recipe.furnace && recipe.ingredients.some(([id]) => id !== Core.ItemIdentifiers.COAL && available(player, id) > 0));
   const extras = extraEntries(player);
   if (!hasOre && extras.length === 0) {
     statement(player, NO_ORE_MESSAGE);
@@ -237,7 +237,7 @@ function fillFurnaceIds() {
 }
 
 module.exports = function attach(api) {
-  fillFurnaceIds();
+  api.onServerStartup(fillFurnaceIds);
   // Some furnaces (e.g. Tutorial Island 10082) only offer "Use".
   api.onObjectInteraction("Furnace", { Smelt: smelt, Use: smelt });
   api.onObjectInteraction("Small furnace", { Smelt: smelt });

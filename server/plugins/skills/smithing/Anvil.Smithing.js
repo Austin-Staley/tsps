@@ -85,9 +85,11 @@ function smithOnce(player, product) {
 
 function startSmithing(player, product, amount) {
   if (!product || !Number.isInteger(amount) || amount <= 0 || !unlocked(player, product) || !canSmith(player, product)) return false;
+  // All and X stop at what the bars cover, without an out-of-bars message.
+  const most = Math.floor(player.getInventory().getAmount(product.barId) / product.bars);
   Sessions.start(player, {
     type: "smith",
-    remaining: amount,
+    remaining: Math.min(amount, most),
     interval: SMITHING_INTERVAL_TICKS,
     firstDelay: FIRST_DELAY_TICKS,
     step: (smith) => smithOnce(smith, product),
@@ -148,8 +150,8 @@ function openInterface(player, preferredBarId = null) {
 }
 
 function closeInterface(player) {
-  if (!player?.isRegistered?.() || player.getInterfaceId() !== Data.smithingInterface()) return;
   OPEN_MENUS.delete(player);
+  if (!player?.isRegistered?.() || player.getInterfaceId() !== Data.smithingInterface()) return;
   player.setInterfaceId(-1);
   player.getPacketSender().closeSubInterface(mainModal());
 }
@@ -237,8 +239,12 @@ function forget(player) {
   SELECTED_QUANTITY.delete(player);
 }
 
-module.exports = function attach(api) {
+function watchMenus() {
   Sessions.everyTick(closeAbandonedMenus);
+}
+
+module.exports = function attach(api) {
+  api.onServerStartup(watchMenus);
   api.onObjectInteraction("Anvil", { Smith: smith });
   api.onObjectInteraction("An experimental anvil", { Use: smith });
   api.onObjectInteraction("Rusted anvil", { Smith: smithRustedAnvil });

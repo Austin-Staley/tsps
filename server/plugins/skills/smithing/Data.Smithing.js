@@ -31,21 +31,21 @@ function smithingInterface() {
 /** Resolves the item names in smithing.json. Safe to call again; any plugin's `api.core` will do. */
 function load(apiCore) {
   if (core) return;
-  core = apiCore;
   const item = (name) => {
-    const id = core.ItemIdentifiers[name];
+    const id = apiCore.ItemIdentifiers[name];
     if (!Number.isInteger(id)) throw new Error(`Smithing: unknown item ${name}`);
     return id;
   };
-  for (const recipe of data.smelting) {
-    SMELTING_RECIPES.push({
-      ...recipe,
-      barId: item(recipe.bar),
-      ingredients: recipe.ingredients.map(([name, amount]) => [item(name), amount]),
-      byproducts: (recipe.byproducts ?? []).map(([name, amount]) => [item(name), amount]),
-      skill: recipe.skill ? core.Skill[recipe.skill] : undefined,
-    });
-  }
+  // Resolve every recipe first: a bad name throws on every load, never leaving a partial list.
+  const recipes = data.smelting.map((recipe) => ({
+    ...recipe,
+    barId: item(recipe.bar),
+    ingredients: recipe.ingredients.map(([name, amount]) => [item(name), amount]),
+    byproducts: (recipe.byproducts ?? []).map(([name, amount]) => [item(name), amount]),
+    skill: recipe.skill ? apiCore.Skill[recipe.skill] : undefined,
+  }));
+  SMELTING_RECIPES.push(...recipes);
+  core = apiCore;
 }
 
 /** The bars the furnace's Smelt menu lists, in its order. */
