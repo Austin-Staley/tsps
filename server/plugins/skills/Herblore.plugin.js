@@ -5,6 +5,8 @@
  * Other plugins ask through custom events:
  *   api.emitCustomEvent("herblore:unfinished", { herbId, potion: null })
  *     -> sets `potion` to the unfinished potion a clean herb makes with a vial of water (Zahur).
+ *   api.emitCustomEvent("herblore:clean", { grimyId, clean: null })
+ *     -> sets `clean` to the herb a grimy herb cleans into (Zahur).
  */
 const Common = require("./herblore/Common.Herblore");
 
@@ -13,6 +15,7 @@ module.exports = {
   members: true,
   register(api) {
     Common.init(api);
+    api.onCustomEvent("herblore:clean", Common.answerClean);
     api.onCustomEvent("herblore:unfinished", Common.answerUnfinished);
     require("./herblore/Cleaning.Herblore")(api);
     require("./herblore/Mixing.Herblore")(api);

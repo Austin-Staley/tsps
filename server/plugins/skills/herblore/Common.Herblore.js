@@ -83,6 +83,12 @@ function recipesWith(firstId, secondId) {
       || recipe.ingredients.find(({ id }) => id === firstId).count >= 2));
 }
 
+/** "herblore:clean" `{ grimyId, clean }`: the clean herb a grimy one becomes (Zahur). */
+function answerClean(request) {
+  const herb = herbFor(request?.grimyId);
+  if (herb) request.clean = herb.cleanId;
+}
+
 /** "herblore:unfinished" `{ herbId, potion }`: the unfinished potion a clean herb makes (Zahur). */
 function answerUnfinished(request) {
   index();
@@ -149,7 +155,7 @@ function run(player, step) {
 
 module.exports = {
   MIX_ANIMATION, MIX_SOUND,
-  init, gameval, herbFor, grindFor, recipesWith, answerUnfinished, level, questDone, canUseHerblore,
+  init, gameval, herbFor, grindFor, recipesWith, answerClean, answerUnfinished, level, questDone, canUseHerblore,
   wearsHerbloreCape, spam, animate, sound, addXp, run,
   get api() { return api; },
   get core() { return core; },

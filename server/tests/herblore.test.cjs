@@ -8,6 +8,7 @@ Server.installProductionPathResolver();
 const { PluginManager } = require("../dist/plugins/PluginManager");
 const DATA = require("../plugins/skills/data/herblore.json");
 const Herblore = require("../plugins/skills/Herblore.plugin");
+const Zahur = require("../plugins/npcs/Zahur.plugin");
 
 let core;
 const hooks = { firstAction: [], itemOnItem: [], customEvents: new Map() };
@@ -17,7 +18,9 @@ const api = new Proxy({
   onItemFirstAction(handler) { hooks.firstAction.push(handler); },
   onItemOnItem(handler) { hooks.itemOnItem.push(handler); },
   onCustomEvent(name, handler) { hooks.customEvents.set(name, handler); },
+  sendMultiChatboxPrompt(who, title, ...pairs) { who.sent.prompt = { title, pick: (label) => pairs[pairs.indexOf(label) + 1]() }; return true; },
   emitCustomEvent(name, request) {
+    hooks.customEvents.get(name)?.(request);
     if (name === "quest:is-complete") request.complete = world.quests.get(request.key) ?? true;
     if (name === "quest:is-started") request.started = world.quests.get(`${request.key}:started`) ?? true;
     if (name === "skillcape:has-perk") request.result = world.cape;
@@ -30,6 +33,7 @@ before(async () => {
   await CachePipeline.initialize(path.resolve(__dirname, ".."));
   core = PluginManager.getCoreApi();
   Herblore.register(api);
+  Zahur.register(api);
 });
 
 beforeEach(() => {
@@ -65,6 +69,7 @@ function inventory(contents) {
       }
       return self;
     },
+    adds(id, amount) { return self.addItem(new core.Item(id, amount)); },
     count: (name) => self.getAmount(obj(name)),
   };
   return self;
@@ -87,6 +92,7 @@ function player(contents, level = 99) {
       addExperiences(skill, xp) { assert.equal(skill, core.Skill.HERBLORE); sent.xp += xp; },
     }),
     sendMessage(text) { sent.messages.push(text); },
+    getDialogueManager: () => ({ startDialogues(chain) { sent.dialogue = JSON.stringify(chain, (key, value) => value instanceof Map ? [...value.values()] : value); } }),
     performAnimation(animation) { sent.animations.push(animation.getId()); },
     getIndex: () => 1, isRegistered: () => true, getHitpoints: () => 99,
   };
@@ -374,4 +380,22 @@ test("a stack of crystal shards is crushed at once, ten dust each", () => {
 test("a pestle and mortar on anything else is left to other plugins", () => {
   const who = player([["pestle_and_mortar"], ["ashes"]]);
   assert.equal(use(who, "pestle_and_mortar", "ashes"), false);
+});
+
+test("Zahur cleans every grimy herb for 200 coins each, with no XP", () => {
+  const who = player([["unidentified_ranarr"], ["unidentified_ranarr"], ["unidentified_torstol"], ["coins", 500]], 1);
+  Zahur._test.cleanHerbs({ player: who, npcId: 4753 });
+  assert.equal(who.sent.prompt.title, "Clean all your herbs at 200 coins each?");
+  who.sent.prompt.pick("Yes");
+  assert.equal(who.inv.count("ranarr_weed"), 2);
+  assert.equal(who.inv.count("unidentified_torstol"), 1, "only as many as she is paid for");
+  assert.equal(who.inv.count("coins"), 100);
+  assert.equal(who.sent.xp, 0);
+  assert.match(who.sent.dialogue, /There, all done\./);
+  const broke = player([["unidentified_ranarr"], ["coins", 199]]);
+  Zahur._test.cleanHerbs({ player: broke, npcId: 4753 });
+  assert.match(broke.sent.dialogue, /I'll want 200 coins to clean each herb\./);
+  const nothing = player([["coins", 1000]]);
+  Zahur._test.cleanAll(nothing, 4753);
+  assert.match(nothing.sent.dialogue, /I didn't find anything that I could clean\./);
 });

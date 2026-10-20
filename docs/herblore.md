@@ -103,6 +103,32 @@ archive's message log.
 - **Crystal shards (Wiki):** 10 crystal dust each; a stack is crushed at once. Live also says
   "You crush some of your crystal shards down to a powdery form."; when is not known.
 
+## Doses
+
+`server/plugins/items/Potions.plugin.js` owns doses. A potion's family comes from cache enum 5583
+(every potion, mix and unfinished potion to its dose enum: key 0 the empty vial, 1-4 the doses),
+so potions without a drink effect and the barbarian mixes combine too; Guthix rest and the CoX
+gourds, which the enum lacks, keep their registered chains. Recordings 1104, 4100 and others.
+
+- **Combining:** the used potion pours into the target, any excess staying behind: "You have
+  combined the liquid into four doses." (the target's new count in words), synth 2401, spam
+  filter. The old "You pour from one container into the other." is gone.
+- **Dividing:** a potion used on its empty vial (or the vial on it) shares out, the larger half
+  staying in the potion: "You divide the liquid between the vessels.", synth 2401.
+- **Empty** on a potion, unfinished potion, weapon poison or a vial of water, coconut milk or
+  blood: the empty vial, "You empty the vial." (no sound captured).
+
+## Zahur
+
+Nardah's herbalist (`server/plugins/npcs/Zahur.plugin.js`). Recordings 333, 1834, 3159.
+
+- **Clean:** with less than 200 coins, "I'll want 200 coins to clean each herb."; otherwise the
+  chatbox asks "Clean all your herbs at 200 coins each?" (Yes/No). Yes cleans every grimy herb she
+  is paid for, noted ones only after the hard Desert Diary (Wiki), with no XP: "There, all done."
+  or "I didn't find anything that I could clean."
+- **Decant** opens the cache's `decant` interface (582) in live, as Bob Barter's does; it is not
+  in tsps yet.
+
 ## Druidic Ritual
 
 Herblore needs Druidic Ritual (dbrow `skill_feature_herblore_overview_0`). Without it, cleaning and
