@@ -3,6 +3,20 @@ import type { LoginRendererHost, RenderContext } from "../host";
 
 export function getTitleBackgroundLayout(host: LoginRendererHost) {
 
+        const art = host.titleBackgroundImage;
+        if (art && art.width === host.SCENE_WIDTH) {
+            // The cache's title art is the scene: drawn with it, as the OSRS client draws it, whole
+            // and at the scene's scale.
+            const scale = host.contentScale > 0 ? host.contentScale : 1;
+            return {
+                drawX: host.contentOriginX,
+                drawY: host.contentOriginY,
+                drawW: art.width * scale,
+                drawH: art.height * scale,
+                scale,
+            };
+        }
+        // The bundled widescreen image covers the viewport.
         const targetW = Math.max(1, host.containerWidth);
         const targetH = Math.max(1, host.containerHeight);
         const img = host.titleBackgroundImage;

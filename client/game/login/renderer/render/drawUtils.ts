@@ -35,12 +35,13 @@ export function drawLogoToCtx(host: LoginRendererHost, ctx: RenderContext): void
 
         withContentTransform(host, ctx, (ctx) => {
             const logoY = 18;
-            if (host.logoImageLoaded && host.logoImage) {
-                const logoX = host.LOGIN_BOX_CENTER - Math.floor(host.logoImage.width / 2);
-                ctx.drawImage(host.logoImage, logoX, logoY);
-            } else if (host.logoSprite) {
+            // The cache's logo sprite, as the OSRS client draws it; the bundled image only without one.
+            if (host.logoSprite) {
                 const logoX = host.LOGIN_BOX_CENTER - Math.floor(host.logoSprite.subWidth / 2);
                 drawSprite(host, ctx, host.logoSprite, logoX, logoY);
+            } else if (host.logoImageLoaded && host.logoImage) {
+                const logoX = host.LOGIN_BOX_CENTER - Math.floor(host.logoImage.width / 2);
+                ctx.drawImage(host.logoImage, logoX, logoY);
             }
         });
     
