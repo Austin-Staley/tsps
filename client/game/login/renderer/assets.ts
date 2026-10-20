@@ -66,18 +66,27 @@ export function loadLogoImage(host: LoginRendererHost): Promise<boolean> {
 }
 
 /**
- * The title background as the OSRS client builds it: the cache's title.jpg (binary index), the
- * left half, beside a mirrored copy that shares its middle column (765 wide for the 383-wide
- * art). It follows Jagex's login screens (the Raids 4 art from the 2026-10-20 cache).
+ * The title art in the cache's binary index, widest first. Each is the left half: `titlewide`
+ * (545x671) is the classic `title.jpg` (383x503) with 162 more columns on the outside and more
+ * floor below, the classic part at its top right.
+ */
+const TITLE_ART_NAMES = ["titlewide.png", "titlewide.jpg", "title.jpg"];
+
+/**
+ * The title background from the cache: the left half beside a mirrored copy that shares its
+ * middle column (1089x671 for titlewide, 765x503 for title.jpg). It follows Jagex's login
+ * screens (the Raids 4 art from the 2026-10-20 cache).
  */
 async function loadCacheTitleBackground(cache: CacheSystem): Promise<ImageBitmap | undefined> {
     const index = cache.getIndex(IndexType.DAT2.binary);
-    const archiveId = index.getArchiveId("title.jpg");
-    if (archiveId === -1) return undefined;
+    const name = TITLE_ART_NAMES.find((candidate) => index.getArchiveId(candidate) !== -1);
+    if (!name) return undefined;
+    const archiveId = index.getArchiveId(name);
     const file = index.getArchive(archiveId).getFile(0);
     if (!file) return undefined;
     const bytes = new Uint8Array(file.data.buffer, file.data.byteOffset, file.data.byteLength);
-    const half = await createImageBitmap(new Blob([bytes.slice()], { type: "image/jpeg" }));
+    const type = name.endsWith(".png") ? "image/png" : "image/jpeg";
+    const half = await createImageBitmap(new Blob([bytes.slice()], { type }));
     const width = half.width * 2 - 1;
     const canvas = new OffscreenCanvas(width, half.height);
     const ctx = canvas.getContext("2d");
@@ -101,6 +110,7 @@ export async function loadTitleBackground(host: LoginRendererHost, cache?: Cache
                 const image = await loadCacheTitleBackground(cache);
                 if (image) {
                     host.titleBackgroundImage = image;
+                    host.titleBackgroundFromCache = true;
                     console.log("[LoginRenderer] Title background loaded from the cache");
                     return true;
                 }

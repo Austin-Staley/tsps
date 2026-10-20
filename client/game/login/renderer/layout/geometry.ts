@@ -4,10 +4,11 @@ import type { LoginRendererHost, RenderContext } from "../host";
 export function getTitleBackgroundLayout(host: LoginRendererHost) {
 
         const art = host.titleBackgroundImage;
-        if (art && art.width === host.SCENE_WIDTH) {
-            // The cache's title art is the scene's backdrop: centred on the scene and drawn whole,
-            // growing past the scene's scale (up to TITLE_ART_MAX_GROWTH times) while the viewport
-            // still fits it, so large screens are not mostly black.
+        if (art && host.titleBackgroundFromCache) {
+            // The cache's title art: centred on the scene and drawn whole, growing past the scene's
+            // scale (up to TITLE_ART_MAX_GROWTH times) while the viewport still fits it, so large
+            // screens are not mostly black. Where even the scene's scale doesn't fit it whole, its
+            // classic 765x503 part (centred, at the top) lies under the scene, as in the classic client.
             const sceneScale = host.contentScale > 0 ? host.contentScale : 1;
             const centerX = host.contentOriginX + (host.SCENE_WIDTH * sceneScale) / 2;
             const centerY = host.contentOriginY + (host.SCENE_HEIGHT * sceneScale) / 2;
@@ -15,7 +16,17 @@ export function getTitleBackgroundLayout(host: LoginRendererHost) {
                 (2 * Math.min(centerX - host.containerX, host.containerX + host.containerWidth - centerX)) / art.width,
                 (2 * Math.min(centerY, host.containerHeight - centerY)) / art.height,
             );
-            const scale = Math.max(sceneScale, Math.min(sceneScale * LOGIN_LAYOUT.TITLE_ART_MAX_GROWTH, fit));
+            if (fit < sceneScale) {
+                const sceneX = (art.width - host.SCENE_WIDTH) / 2;
+                return {
+                    drawX: host.contentOriginX - sceneX * sceneScale,
+                    drawY: host.contentOriginY,
+                    drawW: art.width * sceneScale,
+                    drawH: art.height * sceneScale,
+                    scale: sceneScale,
+                };
+            }
+            const scale = Math.min(sceneScale * LOGIN_LAYOUT.TITLE_ART_MAX_GROWTH, fit);
             const drawW = art.width * scale;
             const drawH = art.height * scale;
             return { drawX: centerX - drawW / 2, drawY: centerY - drawH / 2, drawW, drawH, scale };
@@ -42,9 +53,9 @@ export function getTitleBackgroundLayout(host: LoginRendererHost) {
 export function getLogicalFirePositions(host: LoginRendererHost) {
 
         // Classic 765-scene fire edges (-22 and 765 - 128 + 22) in the title art, whose middle
-        // 765 columns are the scene: no crop for the cache's 765-wide art, (1089 - 765) / 2 = 162
-        // for the bundled 1089-wide image. Track those art-space X values through the cover-fit
-        // background transform.
+        // 765 columns (from the top) are the scene: (1089 - 765) / 2 = 162 in for the cache's
+        // titlewide art and the bundled image, none for title.jpg. Track those art-space values
+        // through the background's transform.
         const bg = getTitleBackgroundLayout(host);
         const artW = host.titleBackgroundImage?.width || LOGIN_LAYOUT.TITLE_BG_WIDTH;
         const cropX = Math.max(0, Math.floor((artW - host.SCENE_WIDTH) / 2));
