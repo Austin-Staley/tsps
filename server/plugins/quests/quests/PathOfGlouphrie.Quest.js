@@ -239,7 +239,7 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
   const BITS_ATTRIBUTE = "quest.the_path_of_glouphrie.bits";
   const LAMPS_ATTRIBUTE = "quest.the_path_of_glouphrie.lamps";
   const BIRD_ATTRIBUTE = "the-path-of-glouphrie:terrorbird";
-  const MONOLITH_ATTRIBUTE = "quest.the_path_of_glouphrie.monoliths";
+  const MONOLITH_ATTRIBUTE = "the-path-of-glouphrie:monoliths";
   const LAMP_VARBITS = [15305, 15306, 15307, 15308]; // pog_strength/slayer/thieving/magic_lamp
   const BIT_BOWL_EXAMINED = 1 << 0;
   const BIT_CHIME = 1 << 1;
@@ -360,7 +360,7 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
   const longrambleByPlayer = new Map();
   const machineProgress = new WeakMap();
   const Scenes = createQuestScenes(api);
-  const MACHINE_MIGRATION_ATTRIBUTE = "quest.the_path_of_glouphrie.migration";
+  const MACHINE_MIGRATION_ATTRIBUTE = "the-path-of-glouphrie:migration";
   const MACHINE_MIGRATION_VERSION = 2;
 
   const held = (player, itemId) => player.getInventory().getAmount(itemId) > 0;
@@ -1925,7 +1925,7 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
 
   api.persistAttribute(BITS_ATTRIBUTE);
   api.persistAttribute(LAMPS_ATTRIBUTE);
-  api.persistAttribute(MONOLITH_ATTRIBUTE, "");
+  api.persistAttribute(MONOLITH_ATTRIBUTE, null);
   api.persistAttribute(MACHINE_MIGRATION_ATTRIBUTE, 0);
 
   api.onNpcDialogueVariant(selectVariant);

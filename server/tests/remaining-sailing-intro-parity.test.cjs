@@ -222,7 +222,7 @@ test('Pandemonium uses the captured varbit stages and the real raft cargo route'
   assert.equal(quest.getStage(h.player), 34);
   assert.equal(require('../plugins/skills/sailing/porttasks/Common.PortTasks').slots(h.player)[0].id, 599);
   h.line(h.core.NpcIdentifiers.JUNIOR_JIM_2, 'Now, unless you fancy a cheeky dip, the gangplank down the docks will be your best bet for getting on board.').after?.();
-  assert.equal(h.attrs.get('quest.pandemonium.tutorials') & 1, 1, 'docking-point tutorial shown');
+  assert.equal(h.attrs.get('pandemonium:tutorials') & 1, 1, 'docking-point tutorial shown');
   h.emit('sailing:boarded', {});
   assert.equal(quest.getStage(h.player), 36);
   h.emit('sailing:left', { reason: 'disembark' });
@@ -238,7 +238,7 @@ test('Pandemonium uses the captured varbit stages and the real raft cargo route'
   assert.equal(quest.getStage(h.player), 44);
   h.line(h.core.NpcIdentifiers.JUNIOR_JIM_2, "Don't mention it, mate.").after?.();
   assert.equal(quest.getStage(h.player), 46);
-  assert.equal(h.attrs.get('quest.pandemonium.tutorials') & 6, 6, 'port-task and log tutorials shown');
+  assert.equal(h.attrs.get('pandemonium:tutorials') & 6, 6, 'port-task and log tutorials shown');
   h.action(h.core.NpcIdentifiers.SQUAWKING_STEVE_BEANIE, 'C5l2Ww');
   assert.equal(quest.getStage(h.player), 48);
   h.line(h.core.NpcIdentifiers.SQUAWKING_STEVE_BEANIE, 'Old Grog speaks.', { speaker: 'Old Grog' });
@@ -284,7 +284,7 @@ test('Crab Quest uses 5/25/30/45/47/50/55/60/63 and hands in all seven shells', 
   h.action(h.core.NpcIdentifiers.CRAB_9, 'zUZGcG');
   assert.equal(quest.getStage(h.player), 47);
   h.hooks.npcs[0]({ player: h.player, npcId: 16483, clickType: 1, definition: { getActions: () => ['Talk-to'], getName: () => 'Crab' } });
-  assert.equal(h.attrs.get('quest.crab_quest.shy-met'), true, 'the resolved shy-crab transform is reachable');
+  assert.equal(h.attrs.get('crab-quest:shy-met'), true, 'the resolved shy-crab transform is reachable');
 
   const joins = ['5WiO-g', 'OrHsAs', 'uxsvrh', 'XBEBvy', 'XffNTB', 'MVf-5E', 'yUuVKM', 'nJXHcW', 'ByoUzK', 'UtfH3c', 'beb_BL'];
   for (const stepId of joins) h.action(h.core.NpcIdentifiers.CRAB_9, stepId);
@@ -439,10 +439,10 @@ test('sailing-intro native stages survive a real save/load retaining only persis
     }
   }
 
-  h.attrs.set('quest.pandemonium.tutorials', 7);
+  h.attrs.set('pandemonium:tutorials', 7);
   h.attrs.set('quest.fallen_from_grace.troll-kills', 2);
   h.relog(h.saveState());
-  assert.equal(h.attrs.get('quest.pandemonium.tutorials'), 7, 'tutorial flags persist across save/load');
+  assert.equal(h.attrs.get('pandemonium:tutorials'), 7, 'tutorial flags persist across save/load');
   assert.equal(h.attrs.get('quest.fallen_from_grace.troll-kills'), 2, 'troll kills persist across save/load');
 });
 
@@ -559,7 +559,7 @@ test('Pandemonium spawns the captured crew on the static deck at interactable co
 test('Pandemonium salvage uses the real placed hook 60482, grants once and persists', () => {
   const h = setup();
   const quest = load(h, 'Pandemonium.Quest.js');
-  h.attrs.set('quest.pandemonium.stage-version', 2);
+  h.attrs.set('pandemonium:stage-version', 2);
   quest.setStage(h.player, 14);
   const click = (objectId) => {
     const event = { player: h.player, objectId, clickType: 1, definition: { getName: () => 'Salvaging hook', getInteractions: () => ['Deploy'], }, handled: false };
@@ -584,7 +584,7 @@ test('Pandemonium relog restores stages 12/14 at the earned wreck, docked and ar
   const { BoatManager } = require('../dist/game/content/sailing/BoatManager');
   for (const stale of StaticShips.all()) StaticShips.dispose(stale);
   const quest = load(h, 'Pandemonium.Quest.js');
-  h.attrs.set('quest.pandemonium.stage-version', 2);
+  h.attrs.set('pandemonium:stage-version', 2);
   quest.setStage(h.player, 12);
   for (const login of h.hooks.login) login({ player: h.player });
   let ship = StaticShips.all()[0];
@@ -608,8 +608,8 @@ test('Pandemonium relog restores stages 12/14 at the earned wreck, docked and ar
 
   // Logout at stage 14 and relog: restore at the earned wreck, still one hook, cup still once.
   quest.setStage(h.player, 14);
-  h.attrs.set('quest.pandemonium.tutorial-helm', true);
-  h.attrs.set('quest.pandemonium.tutorial-sails', true);
+  h.attrs.set('pandemonium:tutorial-helm', true);
+  h.attrs.set('pandemonium:tutorial-sails', true);
   for (const logout of h.hooks.logout) logout({ player: h.player });
   assert.equal(StaticShips.all().length, 0, 'logout disposes the temporary ship');
   for (const login of h.hooks.login) login({ player: h.player });

@@ -126,7 +126,7 @@ module.exports = function registerDefenderOfVarrockQuest(api) {
   const BITS_ATTRIBUTE = "quest.defender_of_varrock.bits";
   const KEY_ATTRIBUTE = "quest.defender_of_varrock.key";
   const DESCENDANT_ATTRIBUTE = "quest.defender_of_varrock.descendant";
-  const SCHEMA_ATTRIBUTE = "quest.defender_of_varrock.schema";
+  const SCHEMA_ATTRIBUTE = "defender-of-varrock:schema";
   const SCHEMA_VERSION = 3;
 
   // Quest Helper's prerequisite quests for Defender of Varrock. Shield of Arrav

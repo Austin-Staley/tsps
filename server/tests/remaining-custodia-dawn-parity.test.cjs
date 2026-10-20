@@ -290,12 +290,12 @@ test('The Final Dawn sun altar consumes essence and the barrel puzzle needs the 
   const h = harness('TheFinalDawn'), p = player();
   h.quest.setStage(p, 55);
   const [playerAltar, itzlaAltar] = sunPair(0);
-  p.attrs.set('quest.the_final_dawn.sun-itzla', (itzlaAltar + 1) % 8);
+  p.attrs.set('the-final-dawn:sun-itzla', (itzlaAltar + 1) % 8);
   p.items.set(I.KUHU_ESSENCE, 1);
   h.object(p, 56687, 1, { x: SUN_TILES[playerAltar][0], y: SUN_TILES[playerAltar][1], z: 1 });
   assert.equal(p.attrs.get('quest.the_final_dawn.sun'), undefined);
   assert.equal(p.items.get(I.KUHU_ESSENCE), 1);
-  p.attrs.set('quest.the_final_dawn.sun-itzla', itzlaAltar);
+  p.attrs.set('the-final-dawn:sun-itzla', itzlaAltar);
   h.object(p, 56687, 1, { x: SUN_TILES[playerAltar][0], y: SUN_TILES[playerAltar][1], z: 1 });
   assert.equal(p.attrs.get('quest.the_final_dawn.sun'), 1);
   assert.equal(p.items.get(I.KUHU_ESSENCE), 0);
@@ -373,7 +373,7 @@ test('The Final Dawn crypt uses six captured waves before Ennius', () => {
     const alive = h.npcs.filter(npc => !npc.removed && [14401, 14407].includes(npc.id));
     assert.ok(alive.length > 1);
     for (const npc of alive) { npc.removed = true; h.hooks.onNpcDeath[0]({ npc, npcId: npc.id, player: p }); }
-    assert.equal(p.attrs.get('quest.the_final_dawn.wave'), wave + 1);
+    assert.equal(p.attrs.get('the-final-dawn:wave'), wave + 1);
   }
   const alive = h.npcs.filter(npc => !npc.removed && [14401, 14407].includes(npc.id));
   for (const npc of alive) { npc.removed = true; h.hooks.onNpcDeath[0]({ npc, npcId: npc.id, player: p }); }

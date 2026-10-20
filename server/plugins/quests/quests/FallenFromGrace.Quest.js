@@ -66,7 +66,7 @@ module.exports = function registerFallenFromGraceQuest(api) {
   const MadAngelCommon = require("../../bosses/madangel/Common.MadAngel");
   const MadAngelInstance = require("../../bosses/madangel/Instance.MadAngel");
 
-  const STAGE_VERSION_ATTRIBUTE = "quest.fallen_from_grace.stage-version";
+  const STAGE_VERSION_ATTRIBUTE = "fallen-from-grace:stage-version";
   const STAGE_VERSION = 2;
   const PAGE = "Fallen From Grace";
   const START_HOOK = "quest:fallen-from-grace:start";

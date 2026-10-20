@@ -98,11 +98,21 @@ const foreignDeckNpc = {
     ...deckNpc, getIndex: () => 10, isOwnerOnly: () => true, getOwner: () => rival,
 };
 const boats = [
-    { entityIndex: 3000, configId: 9, tileX: 3222, tileY: 3218, level: 0, sizeX: 16, sizeZ: 32, ownerPlayerId: 1, ownerOnly: false, static: true },
-    { entityIndex: 3001, configId: 1, tileX: 3230, tileY: 3225, level: 0, sizeX: 8, sizeZ: 8, ownerPlayerId: 2, ownerOnly: false, static: false },
-    { entityIndex: 3002, configId: 13, tileX: 3223, tileY: 3218, level: 0, sizeX: 8, sizeZ: 16, ownerPlayerId: 2, ownerOnly: true, static: true },
-    { entityIndex: 3003, configId: 1, tileX: 3300, tileY: 3300, level: 0, sizeX: 8, sizeZ: 8, ownerPlayerId: 2, ownerOnly: false, static: false },
-    { entityIndex: 3004, configId: 1, tileX: 3222, tileY: 3218, level: 1, sizeX: 8, sizeZ: 8, ownerPlayerId: 2, ownerOnly: false, static: false },
+    { entityIndex: 3000, configId: 9, tileX: 3222, tileY: 3218, level: 0, sizeX: 16, sizeZ: 32,
+        fineX: 412416, fineY: 411904, angle: 1024, heading: 512, moveMode: 1,
+        ownerPlayerId: 1, ownerOnly: false, static: true },
+    { entityIndex: 3001, configId: 1, tileX: 3230, tileY: 3225, level: 0, sizeX: 8, sizeZ: 8,
+        fineX: 413440, fineY: 412800, angle: 0, heading: 0, moveMode: 0,
+        ownerPlayerId: 2, ownerOnly: false, static: false },
+    { entityIndex: 3002, configId: 13, tileX: 3223, tileY: 3218, level: 0, sizeX: 8, sizeZ: 16,
+        fineX: 412544, fineY: 411904, angle: 512, heading: 0, moveMode: 2,
+        ownerPlayerId: 2, ownerOnly: true, static: true },
+    { entityIndex: 3003, configId: 1, tileX: 3300, tileY: 3300, level: 0, sizeX: 8, sizeZ: 8,
+        fineX: 422400, fineY: 422400, angle: 0, heading: 0, moveMode: 0,
+        ownerPlayerId: 2, ownerOnly: false, static: false },
+    { entityIndex: 3004, configId: 1, tileX: 3222, tileY: 3218, level: 1, sizeX: 8, sizeZ: 8,
+        fineX: 412416, fineY: 411904, angle: 0, heading: 0, moveMode: 0,
+        ownerPlayerId: 2, ownerOnly: false, static: false },
 ];
 let aboardBoat: any = null;
 const dispatched: any[] = [];
@@ -294,8 +304,16 @@ else process.env.AGENT_MCP = previousMcpFlag;
     assert.deepEqual(snapshot.worldEntities.map((boat: any) => boat.entityIndex), [3000, 3001],
         "visible same-plane boats only; foreign private/far/other-plane ships stay hidden");
     assert.deepEqual(snapshot.worldEntities[0], {
-        entityIndex: 3000, configId: 9, x: 3222, y: 3218, z: 0, sizeX: 16, sizeZ: 32, aboard: false, owner: true,
+        entityIndex: 3000, configId: 9, x: 3222, y: 3218, z: 0, sizeX: 16, sizeZ: 32,
+        fineX: 412416, fineY: 411904, angle: 1024, heading: 512, moveMode: 1,
+        aboard: false, owner: true,
     });
+    assert.deepEqual(
+        ["fineX", "fineY", "angle", "heading", "moveMode"]
+            .map((key) => typeof snapshot.worldEntities[0][key]),
+        ["number", "number", "number", "number", "number"],
+        "observe exposes the boat's raw model pose/state for native sailing feedback",
+    );
     assert.deepEqual(snapshot.skills.Woodcutting, { level: 1, max: 1, xp: 0 });
     assert.deepEqual(snapshot.inventory[0], { slot: 0, id: 1351, name: "item 1351", amount: 1 });
     assert.equal(snapshot.npcs.length, 1, "another player’s owned NPC is not a menu target");

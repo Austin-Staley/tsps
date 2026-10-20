@@ -152,12 +152,12 @@ module.exports = function registerPandemoniumQuest(api) {
   const SAWMILL_COUPONS = 25;
   const REPAIR_KITS = 2;
 
-  const STAGE_VERSION_ATTRIBUTE = "quest.pandemonium.stage-version";
+  const STAGE_VERSION_ATTRIBUTE = "pandemonium:stage-version";
   const STAGE_VERSION = 2;
   const PAGE = "Pandemonium";
-  const TUTORIAL_ATTRIBUTE = "quest.pandemonium.tutorials";
-  const TUTORIAL_HELM_ATTRIBUTE = "quest.pandemonium.tutorial-helm";
-  const TUTORIAL_SAILS_ATTRIBUTE = "quest.pandemonium.tutorial-sails";
+  const TUTORIAL_ATTRIBUTE = "pandemonium:tutorials";
+  const TUTORIAL_HELM_ATTRIBUTE = "pandemonium:tutorial-helm";
+  const TUTORIAL_SAILS_ATTRIBUTE = "pandemonium:tutorial-sails";
   const HINT_ARROW_VARBIT = 14192;
   const OBJECTBOX = 193;
   const START_HOOK = "quest:pandemonium:start";

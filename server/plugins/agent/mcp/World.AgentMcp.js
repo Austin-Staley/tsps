@@ -25,6 +25,11 @@ module.exports = function registerWorldTools(ctx) {
         z: boat.level,
         sizeX: boat.sizeX,
         sizeZ: boat.sizeZ,
+        fineX: boat.fineX,
+        fineY: boat.fineY,
+        angle: boat.angle,
+        heading: boat.heading,
+        moveMode: boat.moveMode,
         aboard: boat === aboard,
         owner: boat.ownerPlayerId === p.getIndex(),
       }));

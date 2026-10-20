@@ -299,10 +299,10 @@ module.exports = function registerScrambledQuest(api) {
     [157, 103], [196, 105],
   ];
 
-  const STATE_PREFIX = "quest.scrambled.";
-  const VERSION_ATTRIBUTE = "quest.scrambled.version";
+  const STATE_PREFIX = "scrambled:";
+  const VERSION_ATTRIBUTE = "scrambled:version";
   const VERSION = 2;
-  const JIGSAW_ATTRIBUTE = "quest.scrambled.jigsaw";
+  const JIGSAW_ATTRIBUTE = "scrambled:jigsaw";
   const OLD_STAGE_MAP = new Map([[1, 6], [2, 8], [3, 14], [4, 16], [5, 18], [6, 20], [7, 24], [8, 30]]);
   const BITS_ATTRIBUTE = "quest.scrambled.bits";
   const BIT_CITIZEN_MET = 1;
@@ -338,7 +338,7 @@ module.exports = function registerScrambledQuest(api) {
   }
 
   function stateKey(kind, key) {
-    return `${STATE_PREFIX}${kind}.${key}`;
+    return `${STATE_PREFIX}${kind}-${key}`;
   }
 
   function varbitValue(player, varbit, kind, key) {

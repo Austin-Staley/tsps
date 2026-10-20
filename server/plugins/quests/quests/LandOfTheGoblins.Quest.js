@@ -109,9 +109,9 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
   const MACHINE_CONFIRM = 38;
   const MACHINE_TARGET = [9, 4, 1];
   const MACHINE_POWER_ATTRIBUTES = [
-    "quest.land_of_the_goblins.machine-1",
-    "quest.land_of_the_goblins.machine-2",
-    "quest.land_of_the_goblins.machine-3",
+    "land-of-the-goblins:machine-1",
+    "land-of-the-goblins:machine-2",
+    "land-of-the-goblins:machine-3",
   ];
   const GOBLIN_SELECTION_INTERFACE = 739;
   const GOBLIN_SELECT_BUTTONS = new Map([[12, 1], [15, 2], [18, 3], [21, 4], [24, 5], [27, 6]]);
@@ -127,8 +127,8 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
   ];
   const GOBLIN_TRANSFORM_GRAPHIC = 2039;
   const GOBLIN_TRANSFORM_ANIMATION = 9286;
-  const GOBLIN_TYPE_ATTRIBUTE = "quest.land_of_the_goblins.goblin-type";
-  const MIGRATION_ATTRIBUTE = "quest.land_of_the_goblins.migration";
+  const GOBLIN_TYPE_ATTRIBUTE = "land-of-the-goblins:goblin-type";
+  const MIGRATION_ATTRIBUTE = "land-of-the-goblins:migration";
   const MIGRATION_VERSION = 2;
   const CAVE_ENTRANCE_OBJECT_ID = 2; // mcannoncave, the Fishing Guild goblin cave entrance
   const CAVE_ENTRANCE_TILE = { x: 2624, y: 3393 };

@@ -389,7 +389,7 @@ module.exports = function registerTheFremennikExilesQuest(api) {
   const MONSTROUS_POINTS = 3;
   const BASILISK_TARGET = 31;
 
-  const SCHEMA_ATTRIBUTE = "quest.the_fremennik_exiles.schema";
+  const SCHEMA_ATTRIBUTE = "the-fremennik-exiles:schema";
   const SCHEMA_VERSION = 1;
   const LOCK_GROUP = 622;
   const LOCK_TARGET_UID = (164 << 16) | 16;

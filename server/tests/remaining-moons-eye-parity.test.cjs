@@ -124,7 +124,7 @@ test('Temple of the Eye accepts, declines and recovers; real stage scale and amu
   h.choose(p, 'No.');
   h.finish(p);
   assert.equal(h.quest.getStage(p), 0);
-  assert.equal(p.attrs.get('quest.temple_of_the_eye.declined'), 1);
+  assert.equal(p.attrs.get('temple-of-the-eye:declined'), 1);
   assert.equal(p.items.get(I.EYE_AMULET), undefined);
   h.talk(p, N.WIZARD_PERSTEN);
   h.continueUntil(p, () => Boolean(p.prompt));
@@ -132,7 +132,7 @@ test('Temple of the Eye accepts, declines and recovers; real stage scale and amu
   h.finish(p);
   assert.equal(h.quest.getStage(p), 10);
   assert.equal(p.items.get(I.EYE_AMULET), 1);
-  assert.equal(p.attrs.get('quest.temple_of_the_eye.declined'), 0);
+  assert.equal(p.attrs.get('temple-of-the-eye:declined'), 0);
 });
 
 test('Temple of the Eye follows varbit stages 5..125 through dialogue, items, altars and the tutorial', () => {
@@ -219,56 +219,56 @@ test('Temple of the Eye follows varbit stages 5..125 through dialogue, items, al
   assert.equal(stage(), 105);
   finishTo(N.WIZARD_PERSTEN_4);
   assert.equal(stage(), 115);
-  assert.equal(p.attrs.get('quest.temple_of_the_eye.tutorial'), 0);
+  assert.equal(p.attrs.get('temple-of-the-eye:tutorial'), 0);
   assert.ok(p.log.some(row => row[0] === 'sendCameraMoveTo' && row[1] === 2389 && row[2] === 5734), 'vision camera');
   assert.ok(p.log.some(row => row[0] === 'sendCameraShake' && row[1] === 0 && row[2] === 5), 'rift shake sequence');
   assert.ok(p.log.some(row => row[0] === 'sendCameraMoveTo' && row[1] === 2386 && row[2] === 5663), 'Great Guardian camera');
 
   finishTo(N.APPRENTICE_FELIX_4);
-  assert.equal(p.attrs.get('quest.temple_of_the_eye.tutorial'), 5);
+  assert.equal(p.attrs.get('temple-of-the-eye:tutorial'), 5);
   h.object(p, O.WEAK_CELLS, { x: 3614, y: 9499, z: 0 }, 1, ['Take-from']);
   assert.equal(p.items.get(I.WEAK_CELL), 1);
   finishTo(N.APPRENTICE_TAMARA_3);
-  assert.equal(p.attrs.get('quest.temple_of_the_eye.tutorial'), 10);
+  assert.equal(p.attrs.get('temple-of-the-eye:tutorial'), 10);
   h.object(p, O.INACTIVE_CELL_TILE, { x: 3610, y: 9509, z: 0 }, 1, ['Place']);
-  assert.equal(p.attrs.get('quest.temple_of_the_eye.tutorial'), 15);
+  assert.equal(p.attrs.get('temple-of-the-eye:tutorial'), 15);
   h.object(p, O.FLOOR_CHISEL_OBJECT_ID ?? O.COL_FF9040_CHISEL_COL, { x: 3621, y: 9485, z: 0 }, 1, ['Take']);
   for (const id of [I.WEAK_CELL, I.WEAK_CELL]) h.object(p, O.WEAK_CELLS, { x: 3614, y: 9499, z: 0 }, 1, ['Take-from']);
   assert.equal(p.items.get(I.CHISEL), 1);
   h.object(p, O.ESSENCE_PILE_ELEMENTAL_, { x: 3613, y: 9510, z: 0 }, 1, ['Assemble']);
   h.object(p, O.ESSENCE_PILE_CATALYTIC_, { x: 3618, y: 9510, z: 0 }, 1, ['Assemble']);
-  assert.equal(p.attrs.get('quest.temple_of_the_eye.tutorial'), 25);
+  assert.equal(p.attrs.get('temple-of-the-eye:tutorial'), 25);
   p.items.set(I.BRONZE_PICKAXE, 1);
   for (let i = 0; i < 5; i++) h.object(p, O.GUARDIAN_PARTS, { x: 3620, y: 9490, z: 0 }, 1, ['Mine']);
   assert.equal(p.items.get(I.GUARDIAN_FRAGMENTS), 5);
   h.object(p, O.WORKBENCH_21, { x: 3615, y: 9505, z: 0 }, 1, ['Work-at']);
-  assert.equal(p.attrs.get('quest.temple_of_the_eye.tutorial'), 30);
+  assert.equal(p.attrs.get('temple-of-the-eye:tutorial'), 30);
   h.object(p, O.UNCHARGED_CELLS, { x: 3611, y: 9500, z: 0 }, 1, ['Take-from']);
   h.object(p, O.GUARDIAN_OF_MIND, { x: 3613, y: 9498, z: 0 }, 1, ['Enter']);
   h.object(p, O.ALTAR_34, { x: 2793, y: 4827, z: 0 }, 1, ['Craft-rune']);
-  assert.equal(p.attrs.get('quest.temple_of_the_eye.tutorial'), 35);
+  assert.equal(p.attrs.get('temple-of-the-eye:tutorial'), 35);
   h.object(p, O.PORTAL_40, { x: 2793, y: 4830, z: 0 }, 1, ['Exit']);
   h.object(p, O.INACTIVE_CELL_TILE, { x: 3610, y: 9509, z: 0 }, 1, ['Place']);
-  assert.equal(p.attrs.get('quest.temple_of_the_eye.tutorial'), 40);
+  assert.equal(p.attrs.get('temple-of-the-eye:tutorial'), 40);
   for (const fn of h.hooks.onNpcInteraction?.get?.('The Great Guardian') ? [] : []);
   h.namedNpcs.get('The Great Guardian')['Power-up']({ player: p, npcId: N.THE_GREAT_GUARDIAN_3 });
-  assert.equal(p.attrs.get('quest.temple_of_the_eye.tutorial'), 45);
+  assert.equal(p.attrs.get('temple-of-the-eye:tutorial'), 45);
   h.object(p, O.UNCHARGED_CELLS, { x: 3611, y: 9500, z: 0 }, 1, ['Take-from']);
   h.object(p, O.GUARDIAN_OF_WATER, { x: 3613, y: 9498, z: 0 }, 1, ['Enter']);
   h.object(p, O.ALTAR_35, { x: 2720, y: 4831, z: 0 }, 1, ['Craft-rune']);
-  assert.equal(p.attrs.get('quest.temple_of_the_eye.tutorial'), 50);
+  assert.equal(p.attrs.get('temple-of-the-eye:tutorial'), 50);
   h.object(p, O.PORTAL_41, { x: 2720, y: 4835, z: 0 }, 1, ['Exit']);
   h.namedNpcs.get('The Great Guardian')['Power-up']({ player: p, npcId: N.THE_GREAT_GUARDIAN_3 });
-  assert.equal(p.attrs.get('quest.temple_of_the_eye.tutorial'), 55);
+  assert.equal(p.attrs.get('temple-of-the-eye:tutorial'), 55);
   h.object(p, O.ESSENCE_PILE_ELEMENTAL_, { x: 3613, y: 9510, z: 0 }, 1, ['Assemble']);
-  assert.equal(p.attrs.get('quest.temple_of_the_eye.tutorial'), 60);
+  assert.equal(p.attrs.get('temple-of-the-eye:tutorial'), 60);
   h.object(p, O.UNCHARGED_CELLS, { x: 3611, y: 9500, z: 0 }, 1, ['Take-from']);
   h.itemOnObject(p, I.PORTAL_TALISMAN_WATER_, O.GUARDIAN_OF_WATER, { x: 3613, y: 9498, z: 0 });
   h.object(p, O.ALTAR_35, { x: 2720, y: 4831, z: 0 }, 1, ['Craft-rune']);
-  assert.equal(p.attrs.get('quest.temple_of_the_eye.tutorial'), 65);
+  assert.equal(p.attrs.get('temple-of-the-eye:tutorial'), 65);
   h.object(p, O.PORTAL_41, { x: 2720, y: 4835, z: 0 }, 1, ['Exit']);
   h.object(p, O.INACTIVE_CELL_TILE, { x: 3610, y: 9509, z: 0 }, 1, ['Place']);
-  assert.equal(p.attrs.get('quest.temple_of_the_eye.tutorial'), 70);
+  assert.equal(p.attrs.get('temple-of-the-eye:tutorial'), 70);
   h.namedNpcs.get('The Great Guardian')['Power-up']({ player: p, npcId: N.THE_GREAT_GUARDIAN_3 });
   assert.ok(p.log.some(row => row[0] === 'sendCameraMoveTo' && row[1] === 2386 && row[2] === 5663), 'final rift camera');
   h.finish(p);
@@ -408,12 +408,12 @@ test('Perilous Moons refuses to start without its requirements', () => {
 test('Temple of the Eye tutorial progress survives relog and lost cells/chisel are re-obtainable', () => {
   const h = harness('TempleOfTheEye'), p = player();
   h.quest.setStage(p, 115);
-  p.attrs.set('quest.temple_of_the_eye.tutorial', 30);
-  p.attrs.set('quest.temple_of_the_eye.stage-schema', 2);
+  p.attrs.set('temple-of-the-eye:tutorial', 30);
+  p.attrs.set('temple-of-the-eye:stage-schema', 2);
   for (const fn of h.hooks.onPlayerLogout ?? []) fn({ player: p });
   for (const fn of h.hooks.onPlayerLogin ?? []) fn({ player: p });
   assert.equal(h.quest.getStage(p), 115);
-  assert.equal(p.attrs.get('quest.temple_of_the_eye.tutorial'), 30);
+  assert.equal(p.attrs.get('temple-of-the-eye:tutorial'), 30);
   h.object(p, O.WEAK_CELLS, { x: 3614, y: 9499, z: 0 }, 1, ['Take-from']);
   h.object(p, O.FLOOR_CHISEL_OBJECT_ID ?? O.COL_FF9040_CHISEL_COL, { x: 3621, y: 9485, z: 0 }, 1, ['Take']);
   assert.equal(p.items.get(I.WEAK_CELL), 1);
@@ -436,7 +436,7 @@ test('Perilous Moons entrance scene tasks are cancelled on logout without losing
 test('Temple of the Eye rift shake tasks stop on logout', () => {
   const h = harness('TempleOfTheEye'), p = player();
   h.quest.setStage(p, 110);
-  p.attrs.set('quest.temple_of_the_eye.stage-schema', 2);
+  p.attrs.set('temple-of-the-eye:stage-schema', 2);
   h.action(p, N.ARCHMAGE_SEDRIDOR, 'dUuNRU');
   const shakes = p.log.filter(row => row[0] === 'sendCameraShake').length;
   assert.ok(shakes > 0);
@@ -449,13 +449,13 @@ test('Temple of the Eye migrates an old 1-26 save once and re-syncs visible varb
   const h = harness('TempleOfTheEye');
   const legacy = player();
   legacy.attrs.set('quest.temple_of_the_eye.stage', 25);
-  legacy.attrs.set('quest.temple_of_the_eye.tutorial', 0);
+  legacy.attrs.set('temple-of-the-eye:tutorial', 0);
   for (const fn of h.hooks.onPlayerLogin ?? []) fn({ player: legacy });
   assert.equal(h.quest.getStage(legacy), 115);
-  assert.equal(legacy.attrs.get('quest.temple_of_the_eye.tutorial'), 70);
+  assert.equal(legacy.attrs.get('temple-of-the-eye:tutorial'), 70);
   assert.equal(legacy.varbits.get(13738), 115);
   assert.equal(legacy.varbits.get(13759), 70);
-  assert.equal(legacy.attrs.get('quest.temple_of_the_eye.stage-schema'), 2);
+  assert.equal(legacy.attrs.get('temple-of-the-eye:stage-schema'), 2);
 
   const done = player();
   done.attrs.set('quest.temple_of_the_eye.stage', 26);
@@ -466,16 +466,16 @@ test('Temple of the Eye migrates an old 1-26 save once and re-syncs visible varb
 
 test('Temple of the Eye registers its fixed persistence defaults', () => {
   const h = harness('TempleOfTheEye');
-  assert.equal(h.persisted.get('quest.temple_of_the_eye.declined'), false);
-  assert.equal(h.persisted.get('quest.temple_of_the_eye.tutorial'), 0);
-  assert.equal(h.persisted.get('quest.temple_of_the_eye.stage-schema'), 0);
+  assert.equal(h.persisted.get('temple-of-the-eye:declined'), false);
+  assert.equal(h.persisted.get('temple-of-the-eye:tutorial'), 0);
+  assert.equal(h.persisted.get('temple-of-the-eye:stage-schema'), 0);
 });
 
 test('Temple of the Eye restores the energy prefix on relog', () => {
   const h = harness('TempleOfTheEye');
   const p = player();
   h.quest.setStage(p, 35);
-  p.attrs.set('quest.temple_of_the_eye.stage-schema', 2);
+  p.attrs.set('temple-of-the-eye:stage-schema', 2);
   p.attrs.set('quest.temple_of_the_eye.dark-mage', 1);
   p.attrs.set('quest.temple_of_the_eye.energy-order', '012345');
   p.attrs.set('quest.temple_of_the_eye.energy-progress', 3);
@@ -642,7 +642,7 @@ test('shipped NpcDialogues resolves both Wizard Persten intro paths and decline/
   h.choose(declined, 'No.');
   h.finish(declined);
   assert.equal(h.quest.getStage(declined), 0);
-  assert.equal(declined.attrs.get('quest.temple_of_the_eye.declined'), 1);
+  assert.equal(declined.attrs.get('temple-of-the-eye:declined'), 1);
   start(declined);
   toMenu(declined);
   assert.ok(declined.prompt.options.includes('Yes.'), 're-talk offers acceptance');

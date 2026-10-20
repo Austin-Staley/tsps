@@ -223,16 +223,16 @@ module.exports = function registerShadesOfMorttonQuest(api) {
   const MET_RAZMIRE_ATTRIBUTE = "quest.shades_of_mortton.met_razmire";
   const OLIVE_OIL_ATTRIBUTE = "quest.shades_of_mortton.olive_oil";
   const TABLE_SEARCHED_ATTRIBUTE = "quest.shades_of_mortton.table_searched";
-  const TEMPLE_REPAIRED_ATTRIBUTE = "quest.shades_of_mortton.temple_repaired";
-  const TEMPLE_SANCTITY_ATTRIBUTE = "quest.shades_of_mortton.temple_sanctity";
+  const TEMPLE_REPAIRED_ATTRIBUTE = "shades-of-mortton:temple-repaired";
+  const TEMPLE_SANCTITY_ATTRIBUTE = "shades-of-mortton:temple-sanctity";
   // Older saves stored a 0..5 wall-repair count under this key.
   const LEGACY_TEMPLE_BUILD_ATTRIBUTE = "quest.shades_of_mortton.temple_build";
   const PYRE_LOGS_ATTRIBUTE = "quest.shades_of_mortton.pyre_logs";
   const PYRE_REMAINS_ATTRIBUTE = "quest.shades_of_mortton.pyre_remains";
-  const PERM_ULSQUIRE_ATTRIBUTE = "quest.shades_of_mortton.perm_ulsquire";
-  const PERM_RAZMIRE_ATTRIBUTE = "quest.shades_of_mortton.perm_razmire";
-  const MULTI_ATTRIBUTE = "quest.shades_of_mortton.multi";
-  const PERM_GIFT_ATTRIBUTE = "quest.shades_of_mortton.perm_gift";
+  const PERM_ULSQUIRE_ATTRIBUTE = "shades-of-mortton:perm-ulsquire";
+  const PERM_RAZMIRE_ATTRIBUTE = "shades-of-mortton:perm-razmire";
+  const MULTI_ATTRIBUTE = "shades-of-mortton:multi";
+  const PERM_GIFT_ATTRIBUTE = "shades-of-mortton:perm-gift";
 
   const DIARY_TITLE = "Diary of Herbi Flax";
   // Capture 1846 ticks 7163-7166: the book opens on the page 11 spread.
@@ -1075,14 +1075,14 @@ module.exports = function registerShadesOfMorttonQuest(api) {
   api.persistAttribute(MET_RAZMIRE_ATTRIBUTE);
   api.persistAttribute(OLIVE_OIL_ATTRIBUTE);
   api.persistAttribute(TABLE_SEARCHED_ATTRIBUTE);
-  api.persistAttribute(TEMPLE_REPAIRED_ATTRIBUTE);
-  api.persistAttribute(TEMPLE_SANCTITY_ATTRIBUTE);
+  api.persistAttribute(TEMPLE_REPAIRED_ATTRIBUTE, 0);
+  api.persistAttribute(TEMPLE_SANCTITY_ATTRIBUTE, 0);
   api.persistAttribute(PYRE_LOGS_ATTRIBUTE);
   api.persistAttribute(PYRE_REMAINS_ATTRIBUTE);
-  api.persistAttribute(PERM_ULSQUIRE_ATTRIBUTE);
-  api.persistAttribute(PERM_RAZMIRE_ATTRIBUTE);
+  api.persistAttribute(PERM_ULSQUIRE_ATTRIBUTE, false);
+  api.persistAttribute(PERM_RAZMIRE_ATTRIBUTE, false);
   api.persistAttribute(MULTI_ATTRIBUTE);
-  api.persistAttribute(PERM_GIFT_ATTRIBUTE);
+  api.persistAttribute(PERM_GIFT_ATTRIBUTE, false);
 
   quest = registerQuest(api, {
     key: "shades_of_mortton",

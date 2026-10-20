@@ -87,12 +87,12 @@ module.exports = function registerRedReefQuest(api) {
   const ZENITH_SHIP_ID = "the_zenith";
   const PIRATE_SHIP_IDS = ["red_reef_pirate_1", "red_reef_pirate_2"];
   const PIRATE_SHIPS_VARBIT = 13219;
-  const PIRATE_SHIPS_ATTRIBUTE = "quest.the_red_reef.pirate-ships";
-  const PIRATE_SUNK_ATTRIBUTE = "quest.the_red_reef.pirate-sunks";
+  const PIRATE_SHIPS_ATTRIBUTE = "the-red-reef:pirate-ships";
+  const PIRATE_SUNK_ATTRIBUTE = "the-red-reef:pirate-sunks";
   const SPENCER_DECK_X = 8;
   const SPENCER_DECK_Y = 13;
-  const NAVAL_STARTED_ATTRIBUTE = "quest.the_red_reef.naval-started";
-  const VERSION_ATTRIBUTE = "quest.the_red_reef.version";
+  const NAVAL_STARTED_ATTRIBUTE = "the-red-reef:naval-started";
+  const VERSION_ATTRIBUTE = "the-red-reef:version";
   const VERSION = 2;
   const OLD_STAGE_MAP = new Map([[16, 18], [20, 22], [22, 24], [24, 26], [26, 28], [28, 30], [30, 32]]);
   const BETHEL_CHARGE_ANIM = 13131;
@@ -180,7 +180,7 @@ module.exports = function registerRedReefQuest(api) {
   const DISPLAY_CASE_VARBITS = new Map(DISPLAY_CASES.map((entry) => [entry.objectId, entry.varbit]));
   const CORAL_DREDGER_REPAIR_OBJECT_ID = ObjectIdentifiers.CORAL_DREDGER_2; // 58500
   const CORAL_DREDGER_BASE_OBJECT_ID = 58497; // raw placed parent; transforms to 58500 at 32-34
-  const DISPLAY_CASE_ATTRIBUTE = "quest.the_red_reef.display-cases";
+  const DISPLAY_CASE_ATTRIBUTE = "the-red-reef:display-cases";
   const DISPLAY_CASE_IDS = [...DISPLAY_CASE_VARBITS.keys()];
 
   // ==========================================================================
@@ -1269,7 +1269,7 @@ module.exports = function registerRedReefQuest(api) {
   api.persistAttribute(DISPLAY_CASE_ATTRIBUTE, 0);
   api.persistAttribute(PIRATE_SHIPS_ATTRIBUTE, 0);
   api.persistAttribute(PIRATE_SUNK_ATTRIBUTE, 0);
-  api.persistAttribute(NAVAL_STARTED_ATTRIBUTE);
+  api.persistAttribute(NAVAL_STARTED_ATTRIBUTE, false);
   api.persistAttribute(VERSION_ATTRIBUTE, 0);
 
   StaticShips.attach(api);

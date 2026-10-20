@@ -194,8 +194,8 @@ function player(overrides = {}) {
     sendMessage: (text) => messages.push(text),
     ...overrides,
   };
-  p.attrs.set('quest.land_of_the_goblins.migration', 2);
-  p.attrs.set('quest.the_path_of_glouphrie.migration', 2);
+  p.attrs.set('land-of-the-goblins:migration', 2);
+  p.attrs.set('the-path-of-glouphrie:migration', 2);
   p.manager = new DialogueManager(p);
   return p;
 }
@@ -377,9 +377,9 @@ test('LOTG machine only runs at stage 50 and completes once through the box', ()
   press(25);
   assert.deepEqual([p.varbits.get(13603), p.varbits.get(13604), p.varbits.get(13605)], [9, 4, 1]);
   assert.deepEqual([
-    p.attrs.get('quest.land_of_the_goblins.machine-1'),
-    p.attrs.get('quest.land_of_the_goblins.machine-2'),
-    p.attrs.get('quest.land_of_the_goblins.machine-3'),
+    p.attrs.get('land-of-the-goblins:machine-1'),
+    p.attrs.get('land-of-the-goblins:machine-2'),
+    p.attrs.get('land-of-the-goblins:machine-3'),
   ], [9, 4, 1], 'relay values persist for relog');
   press(38);
   assert.ok(p.log.some((row) => row[0] === 'closeSubInterface' && row[1] === ((161 << 16) | 16)));
@@ -802,22 +802,22 @@ test('POG relog keeps progress bits and rebuilds the storeroom without duplicate
 test('LOTG migrates pre-capture stage saves without regressing or double-rewarding', () => {
   const h = harness('LandOfTheGoblins');
   const p = player();
-  p.attrs.delete('quest.land_of_the_goblins.migration');
+  p.attrs.delete('land-of-the-goblins:migration');
   p.attrs.set('quest.land_of_the_goblins.stage', 15);
   h.login(p);
   assert.equal(h.quest.getStage(p), 4, 'old city stage maps to the captured Zanik-talk stage');
-  assert.equal(p.attrs.get('quest.land_of_the_goblins.migration'), 2);
+  assert.equal(p.attrs.get('land-of-the-goblins:migration'), 2);
 
   const q = player();
-  q.attrs.delete('quest.land_of_the_goblins.migration');
+  q.attrs.delete('land-of-the-goblins:migration');
   q.attrs.set('quest.land_of_the_goblins.stage', 40);
   q.attrs.set('quest.land_of_the_goblins.bits', 1 << 12);
   h.login(q);
   assert.equal(h.quest.getStage(q), 38);
-  assert.equal(q.attrs.get('quest.land_of_the_goblins.migration'), 2);
+  assert.equal(q.attrs.get('land-of-the-goblins:migration'), 2);
 
   const done = player();
-  done.attrs.delete('quest.land_of_the_goblins.migration');
+  done.attrs.delete('land-of-the-goblins:migration');
   done.attrs.set('quest.land_of_the_goblins.stage', 60);
   h.login(done);
   assert.equal(h.quest.getStage(done), 56);
@@ -892,20 +892,20 @@ test('POG strongroom gate opens the real map clipping for earned players after r
 test('POG migrates pre-capture stage saves without replaying rewards', () => {
   const h = harness('PathOfGlouphrie');
   const p = player();
-  p.attrs.delete('quest.the_path_of_glouphrie.migration');
+  p.attrs.delete('the-path-of-glouphrie:migration');
   p.attrs.set('quest.the_path_of_glouphrie.stage', 4);
   h.login(p);
   assert.equal(h.quest.getStage(p), 14);
-  assert.equal(p.attrs.get('quest.the_path_of_glouphrie.migration'), 2);
+  assert.equal(p.attrs.get('the-path-of-glouphrie:migration'), 2);
 
   const q = player();
-  q.attrs.delete('quest.the_path_of_glouphrie.migration');
+  q.attrs.delete('the-path-of-glouphrie:migration');
   q.attrs.set('quest.the_path_of_glouphrie.stage', 5);
   h.login(q);
   assert.equal(h.quest.getStage(q), 18);
 
   const done = player();
-  done.attrs.delete('quest.the_path_of_glouphrie.migration');
+  done.attrs.delete('the-path-of-glouphrie:migration');
   done.attrs.set('quest.the_path_of_glouphrie.stage', 12);
   h.login(done);
   assert.equal(h.quest.getStage(done), 50);

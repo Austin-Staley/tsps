@@ -183,7 +183,7 @@ test('Haunted Mine captured stage route reaches the shard once through real inte
 
   h.api.emitCustomEvent('npc-dialogue:hook', { player: h.player, npcId: N.ZEALOT, hook: 'quest:haunted-mine:start' });
   assert.equal(h.quest.getStage(h.player), 1);
-  assert.equal(h.player.getAttribute('quest.haunted_mine.schema'), 1, 'new native saves are marked');
+  assert.equal(h.player.getAttribute('haunted-mine:schema'), 1, 'new native saves are marked');
   assert.equal(h.hooks.namedNpcs.get('Zealot').Pickpocket({ player: h.player, npcId: N.ZEALOT }), undefined);
   assert.equal(h.inventory.get(I.ZEALOTS_KEY), 1);
   assert.equal(h.varbits.get(2397), 1, 'heard-about-key varbit follows the start');
@@ -283,12 +283,12 @@ test('Haunted Mine legacy saves migrate once without replaying completion reward
     assert.equal(h.quest.getStage(h.player), expected, `legacy ${legacy} maps to ${expected}`);
     assert.equal(h.player.getAttribute('quest.points'), 0, 'migration must not pay quest points');
     assert.equal(h.xp.length, 0, 'migration must not pay XP');
-    assert.equal(h.player.getAttribute('quest.haunted_mine.schema'), 1);
+    assert.equal(h.player.getAttribute('haunted-mine:schema'), 1);
     h.hooks.logins[0]({ player: h.player });
     assert.equal(h.quest.getStage(h.player), expected, 'relog repeats no migration');
   }
   const native = setup('../plugins/quests/quests/HauntedMine.Quest', 'haunted_mine');
-  native.player.setAttribute('quest.haunted_mine.schema', 1);
+  native.player.setAttribute('haunted-mine:schema', 1);
   native.quest.setStage(native.player, 8);
   native.hooks.logins[0]({ player: native.player });
   assert.equal(native.quest.getStage(native.player), 8, 'new native stage 8 is Treus, not legacy complete');
@@ -326,7 +326,7 @@ test('Fremennik Exiles requirements follow Quest Helper (no Trials, Mining 60)',
   assert.equal(h.hooks.namedNpcs.get('Brundt the Chieftain')['Talk-to']({ player: h.player, npcId: N.BRUNDT_THE_CHIEFTAIN_6 }), true);
   h.choice(N.BRUNDT_THE_CHIEFTAIN_6, 'Yes.');
   assert.equal(h.quest.getStage(h.player), 5);
-  assert.equal(h.player.getAttribute('quest.the_fremennik_exiles.schema'), 1, 'new native saves are marked');
+  assert.equal(h.player.getAttribute('the-fremennik-exiles:schema'), 1, 'new native saves are marked');
   h.line(N.BRUNDT_THE_CHIEFTAIN_6, 'Freygerd and Reeso run the sandpit a little north of here.');
   assert.equal(h.quest.getStage(h.player), 10);
 });
@@ -459,7 +459,7 @@ test('Fremennik Exiles legacy save stages migrate once and keep completion rewar
     assert.equal(h.quest.getStage(h.player), expected, 'migration is one-time');
   }
   const native = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles');
-  native.player.setAttribute('quest.the_fremennik_exiles.schema', 1);
+  native.player.setAttribute('the-fremennik-exiles:schema', 1);
   native.quest.setStage(native.player, 110);
   native.hooks.logins[0]({ player: native.player });
   assert.equal(native.quest.getStage(native.player), 110, 'new native Jormungand phase is preserved');

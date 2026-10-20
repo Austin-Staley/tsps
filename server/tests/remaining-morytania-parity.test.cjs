@@ -360,7 +360,7 @@ test('Sins migrates every legacy overlapping stage once and leaves native saves 
     p.attrs.set('quest.sins_of_the_father.stage', oldStage);
     h.hooks.onPlayerLogin[0]({ player: p });
     assert.equal(h.quest.getStage(p), nativeStage, `legacy ${oldStage} maps to ${nativeStage}`);
-    assert.equal(p.attrs.get('quest.sins_of_the_father.schema'), 2);
+    assert.equal(p.attrs.get('sins-of-the-father:schema'), 2);
   }
   const oldComplete = harness('SinsOfTheFather'), done = player();
   done.attrs.set('quest.sins_of_the_father.stage', 300);
@@ -372,7 +372,7 @@ test('Sins migrates every legacy overlapping stage once and leaves native saves 
 
   const h = harness('SinsOfTheFather'), fresh = player();
   h.quest.setStage(fresh, 20); // real native transition writes the schema marker
-  assert.equal(fresh.attrs.get('quest.sins_of_the_father.schema'), 2);
+  assert.equal(fresh.attrs.get('sins-of-the-father:schema'), 2);
   h.hooks.onPlayerLogin[0]({ player: fresh });
   assert.equal(h.quest.getStage(fresh), 20, 'native stage 20 is not reinterpreted as Hameln');
 });
@@ -389,7 +389,7 @@ test('Children migrates old completed 22 to 24 without paying rewards twice', ()
 
   const fresh = player();
   h.quest.setStage(fresh, 22); // native transition writes the schema marker
-  assert.equal(fresh.attrs.get('quest.children_of_the_sun.schema'), 2);
+  assert.equal(fresh.attrs.get('children-of-the-sun:schema'), 2);
   h.hooks.onPlayerLogin[0]({ player: fresh });
   assert.equal(h.quest.getStage(fresh), 22, 'fresh native 22 stays Itzla-left, not complete');
   assert.equal(h.quest.isComplete(fresh), false);
@@ -411,7 +411,7 @@ test('Children cell scene places captured actors, walks Itzla and recovers on re
 
   const relog = player();
   relog.attrs.set('quest.children_of_the_sun.stage', 18);
-  relog.attrs.set('quest.children_of_the_sun.schema', 2);
+  relog.attrs.set('children-of-the-sun:schema', 2);
   h.hooks.onPlayerLogin[0]({ player: relog });
   assert.ok(h.npcs.some(npc => npc.getId() === N.BANDIT_20 && !npc.removed), 'relogging in 18 restores the cell scene');
 
@@ -455,9 +455,9 @@ test('Sins trek requires the vine, axe, logs, three bridge repairs and crossing 
   object(1365, 3441, 3403); object(1365, 3441, 3403); object(1365, 3441, 3403);
   assert.equal(p.items.get(1511), 3);
   assert.equal(object(13834).handled, true);
-  assert.equal(p.attrs.get('quest.sins_of_the_father.bridge-repairs'), 1);
+  assert.equal(p.attrs.get('sins-of-the-father:bridge-repairs'), 1);
   object(13835); object(13836);
-  assert.equal(p.attrs.get('quest.sins_of_the_father.bridge-repairs'), 3);
+  assert.equal(p.attrs.get('sins-of-the-father:bridge-repairs'), 3);
   assert.equal(p.items.get(1511), 0, 'three logs repair all three sections');
   assert.ok(!h.npcs.some(n => [9614, 9615].includes(n.getId()) && !n.removed), 'juvinates wait for the crossing');
   object(13837);

@@ -95,10 +95,10 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   const PREREQUISITE_KEY = "taste_of_hope";
   const BITS_ATTRIBUTE = "quest.sins_of_the_father.bits";
   const TOME_USES_ATTRIBUTE = "quest.sins_of_the_father.tome-chapters";
-  const BRIDGE_ATTRIBUTE = "quest.sins_of_the_father.bridge-repairs";
+  const BRIDGE_ATTRIBUTE = "sins-of-the-father:bridge-repairs";
   const VAMPYRE_NAME_ATTRIBUTE = "quest.sins_of_the_father.vampyre-name";
-  const SCHEMA_ATTRIBUTE = "quest.sins_of_the_father.schema";
-  const CARL_PROGRESS_ATTRIBUTE = "quest:sins-of-the-father:carl-progress";
+  const SCHEMA_ATTRIBUTE = "sins-of-the-father:schema";
+  const CARL_PROGRESS_ATTRIBUTE = "sins-of-the-father:carl-progress";
   const SCHEMA_VERSION = 2;
   const TOME_MAX_CHAPTERS = 6;
 

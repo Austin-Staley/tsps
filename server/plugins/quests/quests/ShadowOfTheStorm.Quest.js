@@ -180,7 +180,7 @@ module.exports = function registerShadowOfTheStormQuest(api) {
   const KILN_ATTRIBUTE = "quest.shadow_of_the_storm.kiln";
   const INCANTATION_ATTRIBUTE = "quest.shadow_of_the_storm.incantation";
   const REWARD_ATTRIBUTE = "quest.shadow_of_the_storm.reward";
-  const SUMMON_ASSEMBLED_ATTRIBUTE = "quest.shadow-of-the-storm.summon-assembled";
+  const SUMMON_ASSEMBLED_ATTRIBUTE = "shadow-of-the-storm:summon-assembled";
 
   const BIT_DAVE = 1 << 0;
   const BIT_BADDEN = 1 << 1;

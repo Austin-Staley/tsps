@@ -152,8 +152,8 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
   const STAGE_COMPLETE = 130;
 
   // Guardians of the Rift tutorial progress (the quest varbit stays at 115).
-  const TUTORIAL_ATTRIBUTE = "quest.temple_of_the_eye.tutorial";
-  const STAGE_SCHEMA_ATTRIBUTE = "quest.temple_of_the_eye.stage-schema";
+  const TUTORIAL_ATTRIBUTE = "temple-of-the-eye:tutorial";
+  const STAGE_SCHEMA_ATTRIBUTE = "temple-of-the-eye:stage-schema";
   const STAGE_SCHEMA_VERSION = 2;
   const TUTORIAL_VARBIT = 13759; // "GotR tutorial progress", captured in 5s to 115
   const TUTORIAL_START = 0;
@@ -336,7 +336,7 @@ module.exports = function registerTempleOfTheEyeQuest(api) {
 
   // Persisted attributes.
   const ASKED_WHO_ATTRIBUTE = "quest.temple_of_the_eye.asked-who";
-  const DECLINED_ATTRIBUTE = "quest.temple_of_the_eye.declined";
+  const DECLINED_ATTRIBUTE = "temple-of-the-eye:declined";
   const AMULET_GIVEN_ATTRIBUTE = "quest.temple_of_the_eye.amulet-given";
   const INCANTATION_GIVEN_ATTRIBUTE = "quest.temple_of_the_eye.incantation-given";
   const TEA_ATTRIBUTE = "quest.temple_of_the_eye.tea"; // 0 none, 1 seller gave, 2 mage drank

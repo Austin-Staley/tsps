@@ -12,7 +12,7 @@
  * cross-checked with RuneLite Quest Helper, pins the stage values:
  *   1 started, 3 second entrance found, 5 lift down, 7 Dayth room, 8 Treus appeared,
  *   9 Treus killed, 10 crystal-mine key taken, 11 shard cut/complete. Legacy saves (old
- *   mapping 1-8) are migrated once on login under "quest.haunted_mine.schema".
+ *   mapping 1-8) are migrated once on login under "haunted-mine:schema".
  * The lever/cart/lift sub-state is persisted in the "quest.haunted_mine.bits"
  * attribute; the cart and lift flags are also mirrored to the real cache varbits in
  * varp 383 (hauntedmine_begincart_fungus 2395, _endcart_fungus 2396,
@@ -210,9 +210,9 @@ module.exports = function registerHauntedMineQuest(api) {
   const BIT_PUZZLE_STARTED = 1 << 7;
   const BIT_CART_TUTORIAL_DONE = 1 << 8;
 
-  const SCHEMA_ATTRIBUTE = "quest.haunted_mine.schema";
+  const SCHEMA_ATTRIBUTE = "haunted-mine:schema";
   const SCHEMA_VERSION = 1;
-  const LEVERS_ATTRIBUTE = "quest.haunted_mine.levers";
+  const LEVERS_ATTRIBUTE = "haunted-mine:levers";
 
   // Interface 144 is the points/track panel. Component 155 is its Start button.
   const POINTS_SETTINGS_GROUP = 144;

@@ -51,7 +51,7 @@ module.exports = function registerCrabQuestQuest(api) {
   const { createQuestScenes } = require("../QuestScenes");
   const Scenes = createQuestScenes(api);
 
-  const STAGE_VERSION_ATTRIBUTE = "quest.crab_quest.stage-version";
+  const STAGE_VERSION_ATTRIBUTE = "crab-quest:stage-version";
   const STAGE_VERSION = 2;
   const PAGE = "Crab Quest";
   const START_HOOK = "quest:crab-quest:start";
@@ -180,7 +180,7 @@ module.exports = function registerCrabQuestQuest(api) {
   const PLAY_STYLE_OPTIONS = new Set(["Let me show you!", "I can try and explain.", BANJO_NAME]);
 
   const CUTSCENE_BOUNDS = [[3020, 3080, 2620, 2670, 0]];
-  const SHY_CRAB_ATTRIBUTE = "quest.crab_quest.shy-met";
+  const SHY_CRAB_ATTRIBUTE = "crab-quest:shy-met";
   const SHY_CRAB_LINES = [
     { speaker: "Crab", text: "Oh. Sorry. You've come to the wrong crab!" },
     { player: "How comes?" },

@@ -266,7 +266,7 @@ test('Shadow of the Storm: plane-2 portal, Eric, Tanya cutscene and capture word
   assert.equal(h.player.getLocation().x, 2721);
 
   h.transcripts.length = 0;
-  h.attrs.set('quest.shadow-of-the-storm.summon-assembled', true);
+  h.attrs.set('shadow-of-the-storm:summon-assembled', true);
   h.quest.setStage(h.player, 110);
   h.setLocation(2720, 4903, 2);
   h.hooks.itemActions[0]({ player: h.player, itemId: I.DEMONIC_SIGIL, option: 'Chant' });
@@ -336,7 +336,7 @@ test('Shadow of the Storm: second-ritual per-word camera/shake and Agrith-Naar s
   const h = setup((api) => require('../plugins/quests/quests/ShadowOfTheStorm.Quest')(api));
   const I = h.core.ItemIdentifiers, N = h.core.NpcIdentifiers;
   h.quest.setStage(h.player, 110);
-  h.attrs.set('quest.shadow-of-the-storm.summon-assembled', true);
+  h.attrs.set('shadow-of-the-storm:summon-assembled', true);
   h.inventory.set(I.DEMONIC_SIGIL, 1);
   h.inventory.set(I.SILVERLIGHT_2, 1);
   h.setLocation(2720, 4903, 2);
@@ -365,7 +365,7 @@ test('Shadow of the Storm: logout closes an active cutscene and restores the cam
   const h = setup((api) => require('../plugins/quests/quests/ShadowOfTheStorm.Quest')(api));
   const I = h.core.ItemIdentifiers, N = h.core.NpcIdentifiers;
   h.quest.setStage(h.player, 110);
-  h.attrs.set('quest.shadow-of-the-storm.summon-assembled', true);
+  h.attrs.set('shadow-of-the-storm:summon-assembled', true);
   h.inventory.set(I.DEMONIC_SIGIL, 1);
   h.inventory.set(I.SILVERLIGHT_2, 1);
   h.setLocation(2720, 4903, 2);
@@ -388,7 +388,7 @@ test('Shadow: real NpcDialogues Matthew Yes assembles only through the resolved 
 
   h.quest.setStage(h.player, 110);
   h.attrs.set('quest.shadow_of_the_storm.helpers', 15);
-  h.attrs.set('quest.shadow-of-the-storm.summon-assembled', false);
+  h.attrs.set('shadow-of-the-storm:summon-assembled', false);
   h.inventory.set(I.DEMONIC_SIGIL, 1);
   h.player.getEquipment = () => ({ getItems: () => [{ getId: () => I.SILVERLIGHT_2 }] });
   h.setLocation(2720, 4903, 2);
@@ -423,7 +423,7 @@ test('Shadow: real NpcDialogues Matthew Yes assembles only through the resolved 
     { player: h.player, npc: event.npc, npcId: N.MATTHEW, definition: event.definition, pages: [] });
   try {
     runMatthew();
-    assert.equal(h.attrs.get('quest.shadow-of-the-storm.summon-assembled'), true, 'assembly flag set from the real branch');
+    assert.equal(h.attrs.get('shadow-of-the-storm:summon-assembled'), true, 'assembly flag set from the real branch');
     assert.ok(said.some((line) => /here we go/i.test(line)), 'Matthew acceptance line played');
     assert.ok(seenConditions.includes('pblmt4') || actions.includes('pblmt4'), 'the pblmt4 branch was resolved by the real builder');
 
@@ -433,13 +433,13 @@ test('Shadow: real NpcDialogues Matthew Yes assembles only through the resolved 
     assert.ok(h.transcripts.length > before);
 
     // Early Chant is blocked, and a cancelled/cleared assembly recovers by rerunning Matthew.
-    h.attrs.set('quest.shadow-of-the-storm.summon-assembled', false);
+    h.attrs.set('shadow-of-the-storm:summon-assembled', false);
     const blocked = h.transcripts.length;
     h.hooks.itemActions[0]({ player: h.player, itemId: I.DEMONIC_SIGIL, option: 'Chant' });
     assert.equal(h.transcripts.length, blocked);
     assert.ok(h.messages.some((text) => /speak to Matthew/i.test(text)));
     runMatthew();
-    assert.equal(h.attrs.get('quest.shadow-of-the-storm.summon-assembled'), true);
+    assert.equal(h.attrs.get('shadow-of-the-storm:summon-assembled'), true);
     h.hooks.itemActions[0]({ player: h.player, itemId: I.DEMONIC_SIGIL, option: 'Chant' });
     assert.equal(h.transcripts.at(-1)?.variant, 'summoning-agrith-naar-in-position');
   } finally {
@@ -496,7 +496,7 @@ test('Shadow: real five-word menus use reverse for first and direct tome order f
     h.quest.setStage(h.player, stage);
     h.attrs.set('quest.shadow_of_the_storm.incantation', 4371);
     h.attrs.set('quest.shadow_of_the_storm.helpers', 15);
-    h.attrs.set('quest.shadow-of-the-storm.summon-assembled', true);
+    h.attrs.set('shadow-of-the-storm:summon-assembled', true);
     h.inventory.set(h.core.ItemIdentifiers.DEMONIC_SIGIL, 1);
     h.player.getEquipment = () => ({ getItems: () => [{ getId: () => h.core.ItemIdentifiers.SILVERLIGHT_2 }] });
     h.setLocation(2720, 4903, 2);

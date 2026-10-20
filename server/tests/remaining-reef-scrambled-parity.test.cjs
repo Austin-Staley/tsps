@@ -181,10 +181,10 @@ test('Scrambled King lines rally the men, all three hand-ins move 14->16->18->19
   const event = piece => ({ player: p, groupId: 922, childId: 7, slot: piece, scriptTrigger: true, handled: false });
   trigger({ ...event(3), scriptTrigger: false });
   trigger(event(99));
-  assert.equal(p.attrs.get('quest.scrambled.jigsaw'), undefined);
+  assert.equal(p.attrs.get('scrambled:jigsaw'), undefined);
   for (let piece = 0; piece < 26; piece++) trigger(event(piece));
   trigger(event(0));
-  assert.equal(p.attrs.get('quest.scrambled.jigsaw'), (1 << 26) - 1);
+  assert.equal(p.attrs.get('scrambled:jigsaw'), (1 << 26) - 1);
   assert.equal(p.configs.get(4749), (1 << 26) - 1);
   assert.equal(h.quest.getStage(p), 26);
   assert.ok(p.log.filter(row => row[0] === 'closeInterface' && row[1] === 922).length === 1);
@@ -368,28 +368,28 @@ test('Red Reef diving route reaches 42 through lobster, dredger messages and the
 test('Scrambled whetstone and cart repairs use the real locs, require their tools and hand over the axes', () => {
   const h = harness('Scrambled'), p = player();
   h.quest.setStage(p, 14);
-  p.attrs.set('quest.scrambled.man.acatzin', 3);
+  p.attrs.set('scrambled:man-acatzin', 3);
   const whetstone = h.namedObjects.get('Broken whetstone').Repair;
   whetstone({ player: p, objectId: 56936 });
-  assert.equal(p.attrs.get('quest.scrambled.man.acatzin'), 3);
+  assert.equal(p.attrs.get('scrambled:man-acatzin'), 3);
   assert.ok(p.messages.some(text => text.includes('need a hammer')));
   p.items.set(I.HAMMER, 1);
   whetstone({ player: p, objectId: 56936 });
-  assert.equal(p.attrs.get('quest.scrambled.man.acatzin'), 4);
+  assert.equal(p.attrs.get('scrambled:man-acatzin'), 4);
   h.action(p, N.BLACKSMITH_4, 'cXz59o');
   assert.equal(p.items.get(I.ACATZINS_AXE), 1);
   for (const handler of h.hooks.onItemOnObject) handler({ player: p, itemId: I.ACATZINS_AXE, objectId: 56936 });
   assert.equal(p.items.get(I.ACATZINS_AXE), 0);
   assert.equal(p.items.get(I.ACATZINS_AXE_2), 1);
 
-  p.attrs.set('quest.scrambled.man.kauayotl', 2);
+  p.attrs.set('scrambled:man-kauayotl', 2);
   const cart = h.namedObjects.get('Cart').Repair;
   cart({ player: p, objectId: 56941 });
-  assert.equal(p.attrs.get('quest.scrambled.man.kauayotl'), 2);
+  assert.equal(p.attrs.get('scrambled:man-kauayotl'), 2);
   assert.ok(p.messages.some(text => text.includes('two planks')));
   p.items.set(I.PLANK, 2); p.items.set(I.IRON_NAILS, 6); p.items.set(I.SAW, 1);
   cart({ player: p, objectId: 56941 });
-  assert.equal(p.attrs.get('quest.scrambled.man.kauayotl'), 3);
+  assert.equal(p.attrs.get('scrambled:man-kauayotl'), 3);
   assert.equal(p.items.get(I.PLANK), 0);
   assert.equal(p.items.get(I.IRON_NAILS), 0);
 });
@@ -430,7 +430,7 @@ test('Scrambled and Red Reef versioned migrations map old saves once and keep re
   sp.attrs.set('quest.scrambled.stage', 5);
   scrambled.hooks.onPlayerLogin[0]({ player: sp });
   assert.equal(scrambled.quest.getStage(sp), 18);
-  assert.equal(sp.attrs.get('quest.scrambled.version'), 2);
+  assert.equal(sp.attrs.get('scrambled:version'), 2);
   scrambled.hooks.onPlayerLogin[0]({ player: sp });
   assert.equal(scrambled.quest.getStage(sp), 18);
   assert.deepEqual(sp.xp, []);
@@ -439,7 +439,7 @@ test('Scrambled and Red Reef versioned migrations map old saves once and keep re
   rp.attrs.set('quest.the_red_reef.stage', 26);
   reef.hooks.onPlayerLogin[0]({ player: rp });
   assert.equal(reef.quest.getStage(rp), 28);
-  assert.equal(rp.attrs.get('quest.the_red_reef.version'), 2);
+  assert.equal(rp.attrs.get('the-red-reef:version'), 2);
   reef.hooks.onPlayerLogin[0]({ player: rp });
   assert.equal(reef.quest.getStage(rp), 28);
   assert.deepEqual(rp.xp, []);
@@ -452,7 +452,7 @@ test('Scrambled resumes a partly solved jigsaw with its locks and does not reope
   fix({ player: p, npcId: N.HUMPHREY_DUMPHREY_3 });
   assert.equal(p.configs.get(4756), undefined);
   h.quest.setStage(p, 24);
-  p.attrs.set('quest.scrambled.jigsaw', 0b101);
+  p.attrs.set('scrambled:jigsaw', 0b101);
   fix({ player: p, npcId: N.HUMPHREY_DUMPHREY_3 });
   assert.equal(p.configs.get(4756), 5397);
   assert.equal(p.configs.get(4749), 0b101);
@@ -517,10 +517,10 @@ test('Red Reef removes private ships on logout and resummons only unsunk pirate 
 test("Scrambled stage 26 opens King's men finale through the shipped transcript and completes once", () => {
   const h = harness('Scrambled'), p = player();
   h.quest.setStage(p, 24);
-  for (const key of ['acatzin', 'nezketi', 'kauayotl']) p.attrs.set(`quest.scrambled.man.${key}`, 7);
-  p.attrs.set('quest.scrambled.jigsaw', 0);
+  for (const key of ['acatzin', 'nezketi', 'kauayotl']) p.attrs.set(`scrambled:man-${key}`, 7);
+  p.attrs.set('scrambled:jigsaw', 0);
   assert.throws(() => h.talk(p, N.NEZKETI), 'stage 24 must stay gated on the unsolved jigsaw');
-  p.attrs.set('quest.scrambled.jigsaw', (1 << 26) - 1);
+  p.attrs.set('scrambled:jigsaw', (1 << 26) - 1);
   assert.throws(() => h.talk(p, N.NEZKETI), 'stage 24 must not start the finale even with a full mask');
   h.quest.setStage(p, 26);
   h.talk(p, N.NEZKETI);

@@ -139,7 +139,7 @@ test('Crab does not place the solid flavor palm that sealed the recruit pocket',
   assert.ok(h.placed.some((entry) => entry.id === 62473 && entry.x === 3043 && entry.y === 2640), 'magic tree placed');
   assert.ok(h.placed.some((entry) => entry.id === 62470 && entry.x === 3042 && entry.y === 2637), 'palm south placed');
   assert.ok(!h.placed.some((entry) => entry.id === 62470 && entry.x === 3039 && entry.y === 2644), 'the 3039,2644 flavor palm must not be placed');
-  assert.equal(h.persistentKeys.get('quest.crab_quest.shy-met'), false, 'shy-met defaults false');
+  assert.equal(h.persistentKeys.get('crab-quest:shy-met'), false, 'shy-met defaults false');
 });
 
 test('Crab recruit pocket is reachable once the 3039,2644 flavor palm is skipped (real cache pathfinder)', () => {

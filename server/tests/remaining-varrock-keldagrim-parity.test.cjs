@@ -692,7 +692,7 @@ test('Defender of Varrock migrates old stage values once and never repeats rewar
   h.quest.setStage(p, 42);
   h.hooks.onPlayerLogin[0]({ player: p });
   assert.equal(h.quest.getStage(p), 44, 'old list-found saves move to the new list stage');
-  assert.equal(Number(p.attrs.get('quest.defender_of_varrock.schema')), 3);
+  assert.equal(Number(p.attrs.get('defender-of-varrock:schema')), 3);
   h.quest.setStage(p, 42);
   h.hooks.onPlayerLogin[0]({ player: p });
   assert.equal(h.quest.getStage(p), 42, 'an already-migrated Reldo stage is not moved again');
