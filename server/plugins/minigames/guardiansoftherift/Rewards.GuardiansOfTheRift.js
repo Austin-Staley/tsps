@@ -12,7 +12,7 @@
  * (total_gotr_kills +1; 4,410 is 45 x level 98). The "attuned" numbers are the game's points:
  * 165 elemental and 407 catalytic energy gave 2 and 4.
  * Wiki: a point per 100 energy of each type, the remainder a chance of one more (73 energy is a
- * 73% chance); the XP needs 300 energy in the game.
+ * 73% chance); both the points and the XP need 300 energy in the game.
  */
 
 const Shared = require("./Shared.GuardiansOfTheRift");
@@ -32,8 +32,9 @@ function red(value) {
 }
 
 function closed({ player, state }) {
-  const elemental = pointsFor(state.elemental);
-  const catalytic = pointsFor(state.catalytic);
+  const earned = state.elemental + state.catalytic >= Shared.REWARD_ENERGY;
+  const elemental = earned ? pointsFor(state.elemental) : 0;
+  const catalytic = earned ? pointsFor(state.catalytic) : 0;
   const banked = Records.points(player);
   Records.setPoints(player, banked.elemental + elemental, banked.catalytic + catalytic);
   const total = Records.points(player);
@@ -43,7 +44,8 @@ function closed({ player, state }) {
   player.sendMessage(`Amount of rifts you have closed: <col=ff0000>${Shared.formatNumber(rifts)}</col>.`);
   player.sendMessage(`Elemental energy attuned: ${red(elemental)}. Catalytic energy attuned: ${red(catalytic)}.`);
   player.sendMessage(`Total elemental energy: ${red(total.elemental)}. Total catalytic energy: ${red(total.catalytic)}.`);
-  if (state.elemental + state.catalytic >= Shared.REWARD_ENERGY) awardXp(player);
+  if (earned) awardXp(player);
+  Shared.api().emitCustomEvent("collection-log:count", { player, category: "Guardians of the Rift" });
   Shared.api().emitCustomEvent("guardians-of-the-rift:rift-closed", { player, elemental, catalytic, rifts });
 }
 

@@ -24,6 +24,8 @@ module.exports = {
     require("./guardiansoftherift/RiftGuardians.GuardiansOfTheRift").attach(api);
     require("./guardiansoftherift/Creatures.GuardiansOfTheRift").attach(api);
     require("./guardiansoftherift/Rewards.GuardiansOfTheRift").attach(api);
+    require("./guardiansoftherift/RewardsGuardian.GuardiansOfTheRift").attach(api);
+    require("./guardiansoftherift/Apprentices.GuardiansOfTheRift").attach(api);
     require("./guardiansoftherift/Commands.GuardiansOfTheRift").attach(api);
   },
 };

@@ -4,10 +4,10 @@ The Runecraft minigame in the Temple of the Eye, built from the OSRS Wiki, live 
 the cache. It is one plugin, `server/plugins/minigames/GuardiansOfTheRift.plugin.js`, with one
 unit per part of the game in `server/plugins/minigames/guardiansoftherift/` (the Wintertodt layout).
 
-Status: phases 1-3 (lobby, barrier, game loop, HUD, Power-up, end-of-game rewards; mining,
-workbench, portals, rubble, Deposit Pool, essence pouches; Portal Guardians and altars; cells,
-barriers and rift guardians; abyssal creatures and the fight) are built. The
-phases are at the end.
+Status: all six phases are built: the lobby, barrier, game loop, HUD and Power-up; mining, the
+workbench, portals, rubble, Deposit Pool and essence pouches; the Portal Guardians and altars;
+cells, barriers and rift guardians; the abyssal creatures and the fight; the rewards. The phases
+are at the end.
 
 ## Sources
 
@@ -401,67 +401,76 @@ Ticks from the rift opening:
 
 ### Rewards
 
-- **End of game (rev 241 captures, on the close's tick):**
-  - `@mes_hl_gre@The Great Guardian successfully closed the rift!</col>`
-  - "Amount of rifts you have closed: <col=ff0000>1,713</col>." (`total_gotr_kills` +1)
-  - "Elemental energy attuned: <col=ef1020>2</col>. Catalytic energy attuned: <col=ef1020>4</col>."
-    (this game's points: 165 and 407 energy gave 2 and 4; 343/150 gave 3/2; 11/393 gave 0/4)
-  - "Total elemental energy: <col=ef1020>5</col>. Total catalytic energy: <col=ef1020>7</col>."
-    (the banked points)
-  - "You've been awarded 4,410 bonus Runecraft XP for closing the rift." (45 x level 98)
-  - Wiki: the XP needs 300 energy in the game; a point per 100 energy of each type, with the
-    remainder as a chance of one more.
-  - Energy is capped at 1,000 per type and 1,200 in all. At the cap: "You are fully attuned with runic energy and cannot earn anymore until the rift has been closed."
-- **Rewards Guardian, Check:** mesbox "You have N catalytic energy and N elemental energy. You can
-  use them to search the rift N times. You have searched the rift N times."
-- **Search / Big-search:**
-  - Anim `picking_low_shorter` and sound 2581. Then one reward every 3 ticks, 5 per Big-search (Wiki).
-  - Each reward: "You found some loot: N x <item>" (or "You found some loot: <item>").
-  - When the searches run out: mesbox "There doesn't seem to be anything else in the rift for you." (or "...anything in the rift for you.").
-  - Also: "You can find N more rewards in the rift.".
-  - Each search costs one point of each type, or 25 abyssal pearls.
-  - The loot table is on the Wiki's Rewards Guardian page: rare table, pouches, runes, talismans, pearls, intricate pouch, ashes, needle and the pet.
-- **Intricate pouch, Open:**
-  - Objectbox "You open the intricate pouch and find something inside!".
-  - Needs two free slots: "You need at least two free inventory spaces to open this pouch."
+- **End of game:** see the Power-up section above for the captured lines. The points and the XP
+  both need 300 energy in the game (Wiki). Each closed rift counts in the collection log's
+  Guardians of the Rift category.
+- **Rewards Guardian** (captured):
+  - Check: mesbox "You have 3 catalytic energy and 2 elemental energy. You can use them to search
+    the rift 2 times. You have searched the rift 4,003 times."
+  - Search: `picking_low_shorter` a tick after the click. Then a reward every 3 ticks (the
+    animation again): "You found some loot: 125 x Chaos rune" (spam), sound 2581.
+  - When the searches run out: mesbox "There doesn't seem to be anything else in the rift for
+    you." With none at all: "There doesn't seem to be anything in the rift for you."
+  - Big-search: the animation, and three ticks later up to five rewards at once.
+  - A search costs an elemental and a catalytic point (Wiki). Searching with 25 pearls instead
+    isn't built.
+- **Loot** (Wiki; `server/plugins/minigames/data/guardians-of-the-rift-rewards.json`):
+  - The main table out of 140: pouches, runes, talismans, pearls, the intricate pouch, ashes and
+    the needle.
+  - The rare table rolls apart: Atlax's diary (once), the catalytic talisman, the abyssal needle
+    (once), the lantern and the dyes. The Abyssal protector is 1/4,000, through the pets plugin.
+  - The pouch is the next one the player lacks, else the table rolls again.
+  - The law and death talismans need their quests.
+  - Runes past the player's level come at a third (ours; the Wiki doesn't give the reduction).
+  - New pouches don't come prefilled with pure essence yet.
+- **Intricate pouch** (Wiki): Open needs two free slots ("You need at least two free inventory
+  spaces to open this pouch."). Pre-roll, main and hard-clue tertiary tables. Objectbox "You open
+  the intricate pouch and find something inside!" (Leagues capture).
+- **A needle on the Rewards Guardian** makes an abyssal needle (Wiki). The abyssal needle on a
+  pouch stitches the four into a colossal pouch (see Essence pouches).
 - **Apprentice Felix:**
-  - Trade opens the existing "Temple Supplies" shop (shops.json 1466).
-  - Talk-to: "Hey, <name>. Got any abyssal pearls you want to trade?"
-  - Selling a lantern: "You present the Abyssal lantern to Felix.", then "An abyssal lantern? I can offer you 100 abyssal pearls for that." and "You sell your abyssal lantern for 100 abyssal pearls."
-  - A dye sells for 50 pearls (Wiki).
+  - Trade, and his transcript's shop, open the Omnishop at `gotr_reward_shop_all` (row 7142,
+    captured for an account with every quest). The other rows (`_none`, `_law`, `_death`,
+    `_blood`, `_law_death`, `_law_blood`, `_death_blood`) follow Troll Stronghold, Mourning's End
+    Part II and Sins of the Father.
+  - Felix's binding to the old Temple Supplies shop in shops.json is removed. The Temple of the
+    Eye quest copies keep it.
+  - A dye on Felix plays his transcript ("You show the abyssal red dye to Felix.", Leagues
+    capture) and swaps it. Selling dyes and lanterns isn't built.
+- **Apprentice Cordelia** (her transcript; the opening line is captured):
+  - 25 pearls unlock the repairs (`gotr_cordelia_repair_pouch`, which gives her the Repair
+    option). Each repair then costs 1 pearl and repairs every decayed pouch.
+  - The Repair option's chat lines are ours.
+- **Chatter:** Tamara and Cordelia say the captured lines during a game, every 25-50 ticks (ours).
+- **Not built:** the abyssal lantern's effects ("Your lantern gets you a bonus rune."),
+  combination runes and polyelemental stones, Tamara's barrier lock (themed worlds only), and
+  searching with pearls.
 
 ## Existing code it touches
 
-- **`plugins/quests/quests/TempleOfTheEye.Quest.js`** already runs the tutorial in this temple.
-  It covers the workbench, cells, essence piles, the Guardians of Mind and Water, and the Great
-  Guardian 11456. Its handlers only claim an action while the quest is at the matching stage, so
-  the minigame handles the same locs once the quest is complete. Playing needs the quest complete.
-- **`plugins/skills/Runecrafting.plugin.js`** crafts runes at the altars and handles essence pouches.
-  Guardian essence has to be crafted at the altars and stored in pouches ("The pouch contains
-  guardian essence, so you can fill it only with more guardian essence.").
-- **`plugins/interface/data/minigame-teleports.json`** already lists Guardians of the Rift (3615,9477).
-- **`data/definitions/shops.json`** already has Temple Supplies (1466).
+- **Temple of the Eye (`plugins/quests/quests/TempleOfTheEye.Quest.js`)** runs the tutorial in
+  the same temple. Minigame handlers register first (plugins load by path) and step aside for
+  anyone who hasn't finished the quest, so the tutorial plays as before. Once the quest is done it
+  no longer spawns its owner-only Cordelia, Felix, Tamara and Great Guardian.
+- **Runecrafting (`plugins/skills/Runecrafting.plugin.js`):**
+  - The essence pouches move to `runecrafting/Pouches.Runecrafting.js`.
+  - It answers "runecrafting:altar-rune" so GotR crafts with its rune data.
+  - Its XP table follows the Wiki.
+  - GotR's altar, exit-portal and pouch handlers only claim players in a game.
+- **Data:** the Great Guardian and the apprentices in `npc-spawns.json`, the fighters in
+  `npc-combat-defs.json`, and Felix's old shop binding dropped from `shops.json`.
+- **`plugins/interface/data/minigame-teleports.json`** already lists Guardians of the Rift
+  (3615,9477).
 
-## Phases
+## Phases (all built, one commit each)
 
-1. **Lobby, barrier and the game loop:**
-   - The temple `Area` and the barrier's four options.
-   - One game per world: lobby, the rift opening, creatures attacking, the end of the game.
-   - Power and its scaling, the HUD (746 + script 5980), the game varbits and the messages.
-   - Power-up on the Great Guardian, and the end-of-game points and XP.
-2. **Essence:**
-   - Mining fragments (parts, remains, large remains past the rubble), with the 250 cap.
-   - The workbench, the huge-remains portals and the huge remains.
-   - The Deposit Pool, and guardian essence in pouches.
-3. **Portal Guardians:**
-   - Altar rotation and Enter, with the overlay fade.
-   - Crafting guardian essence into runes, stones and charged cells; portal talismans; the altar exit back to the temple.
-4. **Cells, barriers and rift guardians:**
-   - The cell tables; placing, strengthening, recharging and repairing barriers.
-   - Assembling rift guardians and the rift guardians' AI.
-5. **Abyssal creatures:**
-   - Spawning from the rift and attacking barriers and the Great Guardian, with power drain.
-   - The 60% surge and losing the game.
-6. **Rewards:**
-   - The Rewards Guardian (Check, Search, Big-search and the loot table) and the intricate pouch.
-   - Felix's trades, Cordelia's pouch repair and the collection log.
+1. Lobby, barrier and the game loop: the temple Area, one world-wide game, power and the HUD,
+   Power-up, the end-of-game points and XP.
+2. Essence: mining and the 250 cap, the workbench, the huge-remains portals and the rubble, the
+   Deposit Pool, essence pouches (with guardian essence and the colossal pouch).
+3. Portal Guardians: altar rotation, Enter with the overlay, crafting guardian essence into
+   runes, stones and charged cells, portal talismans.
+4. Cells, barriers and rift guardians.
+5. Abyssal creatures and the fight.
+6. Rewards: the Rewards Guardian and its tables, the intricate pouch, Felix, Cordelia, the abyssal
+   needle.

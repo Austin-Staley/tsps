@@ -26,10 +26,12 @@ const Altars = require('../plugins/minigames/guardiansoftherift/Altars.Guardians
 const Cells = require('../plugins/minigames/guardiansoftherift/Cells.GuardiansOfTheRift');
 const RiftGuardians = require('../plugins/minigames/guardiansoftherift/RiftGuardians.GuardiansOfTheRift');
 const Creatures = require('../plugins/minigames/guardiansoftherift/Creatures.GuardiansOfTheRift');
+const RewardsGuardian = require('../plugins/minigames/guardiansoftherift/RewardsGuardian.GuardiansOfTheRift');
+const Apprentices = require('../plugins/minigames/guardiansoftherift/Apprentices.GuardiansOfTheRift');
 
 const hooks = {
   objects: {}, npcs: {}, items: {}, clicks: {}, custom: {}, login: [], logout: [], conditions: [], areas: [], prompts: [],
-  dialogues: [], canBankItem: [], itemOnObject: {}, drops: [], npcsSpawned: [], npcsRemoved: [],
+  dialogues: [], canBankItem: [], itemOnObject: {}, itemOnItem: {}, itemOnNpc: [], drops: [], npcsSpawned: [], npcsRemoved: [],
 };
 
 /** Enough of an NPC for barriers and guardians: hitpoints, transforms, a movement queue. */
@@ -74,6 +76,7 @@ function fakeApi() {
     onCustomEvent: (name, handler) => (hooks.custom[name] ??= []).push(handler),
     emitCustomEvent: (name, payload) => {
       if (name === 'quest:is-complete') payload.complete = payload.player.questDone && (payload.key === 'temple_of_the_eye' || QUESTS_DONE.has(payload.key));
+      if (name === 'omnishop:open') hooks.shops = [...(hooks.shops ?? []), payload.shop];
       if (name === 'runecrafting:altar-rune') payload.rune = { runeId: 557, level: 9, xp: 6.5, amount: 4, petBase: 1 };
       if (name === 'npc-dialogue:start') { hooks.dialogues.push(payload.variant); payload.handled = true; }
       if (name === 'mining:best-pickaxe') payload.pickaxe = payload.player.pickaxe ?? null;
@@ -85,6 +88,8 @@ function fakeApi() {
     onObjectClick: (ids, clickType, handler) => { hooks.clicks[`${ids}:${clickType}`] = handler; },
     onCanBankItem: (handler) => hooks.canBankItem.push(handler),
     onItemOnObject: (item, object, handler) => { hooks.itemOnObject[`${item}|${object}`] = handler; },
+    onItemOnItem: (a, b, handler) => { hooks.itemOnItem[`${a}|${b}`] = handler; },
+    onItemOnNpc: (handler) => hooks.itemOnNpc.push(handler),
     getTaskManager: () => TaskManager,
     onItemDropPolicy: (handler) => hooks.drops.push(handler),
     spawnNpc: (definition) => { const npc = fakeNpc(definition); hooks.npcsSpawned.push(npc); return npc; },
@@ -104,7 +109,7 @@ function container(size) {
     },
     /** Like ItemContainer.adds: stackables pile up, anything else takes a slot each. */
     adds(id, amount = 1) {
-      if (STACKABLE.has(id)) return self.add(id, amount);
+      if (STACKABLE.has(id) || Shared.core().ItemDefinition.forId(id)?.isStackable?.()) return self.add(id, amount);
       for (let i = 0; i < amount && slots.includes(null); i++) slots[slots.indexOf(null)] = { id, amount: 1 };
       return self;
     },
@@ -150,6 +155,8 @@ function fakePlayer(name = 'Tester', { runecraft = 99, questDone = true, x = 361
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     sendMessage: (message) => p.messages.push(message),
+    getEquipment: () => ({ contains: () => false }),
+    getBanks: () => [],
     getInventory: () => Object.assign(p.inventory, { full() { p.messages.push("You don't have enough inventory space."); } }),
     performAnimation: (animation) => p.animations.push(animation.getId?.() ?? animation.id),
     performGraphic() {},
@@ -246,6 +253,8 @@ before(() => {
   Cells.attach(api);
   RiftGuardians.attach(api);
   Creatures.attach(api);
+  RewardsGuardian.attach(api);
+  Apprentices.attach(api);
   Shared.core().PathFinder.calculateWalkRoute = (npc, x, y) => { npc.routes?.push([x, y]); return true; };
   for (const name of Shared.GAME_ITEMS) if (Shared.core().ItemDefinition.forId(Shared.obj(name)).isStackable()) STACKABLE.add(Shared.obj(name));
 });
@@ -923,4 +932,129 @@ test('full power kills every creature', () => {
   Game.setPower(100);
   assert.equal(leech.getHitpoints(), 0);
   assert.equal(Creatures.creatures.size, 0);
+});
+
+// ------------------------------------------------------------------ phase 6: rewards
+
+function rift(player, option) {
+  return hooks.objects['<col=ffff00>Rewards Guardian</col>'][option]({ player, objectId: Shared.loc('gotr_reward_rift') });
+}
+
+test('points need 300 energy in the game, like the XP', () => {
+  const player = fakePlayer();
+  openGame(player);
+  Game.stateOf(player).elemental = 150;
+  Game.stateOf(player).catalytic = 140;
+  Game.setPower(100);
+  ticks(32);
+  assert.ok(player.messages.includes('Elemental energy attuned: <col=ef1020>0</col>. Catalytic energy attuned: <col=ef1020>0</col>.'));
+  assert.ok(!player.messages.some((message) => message.includes('bonus Runecraft XP')));
+});
+
+test('Check counts the points and searches; Search takes one reward every 3 ticks until they run out', () => {
+  const player = fakePlayer();
+  Records.setPoints(player, 2, 3);
+  Records.addSearches(player, 4001);
+  rift(player, 'Check');
+  assert.match(statementText(player), /You have 3 catalytic energy and 2 elemental energy\. You can use them to search the rift 2 times\. You have searched the rift 4,001 times\./);
+  for (let i = 0; i < 28; i++) player.inventory.slots[i] = null;
+  rift(player, 'Search');
+  ticks(3);
+  assert.equal(Records.searches(player), 4001);
+  ticks(1);
+  assert.equal(Records.searches(player), 4002, 'the first reward three ticks after the animation');
+  assert.ok(player.messages.some((message) => message.startsWith('You found some loot: ')));
+  ticks(3);
+  assert.equal(Records.searches(player), 4003);
+  assert.deepEqual(Records.points(player), { elemental: 0, catalytic: 1 });
+  assert.match(statementText(player), /There doesn't seem to be anything else in the rift for you\./);
+  rift(player, 'Search');
+  assert.match(statementText(player), /There doesn't seem to be anything in the rift for you\./);
+});
+
+test('Big-search takes up to five at once', () => {
+  const player = fakePlayer();
+  Records.setPoints(player, 7, 7);
+  rift(player, 'Big-search');
+  ticks(4);
+  assert.deepEqual(Records.points(player), { elemental: 2, catalytic: 2 });
+});
+
+test('the reward tables: a missing pouch first, the weights add up, once-only items stay once', () => {
+  const data = RewardsGuardian.DATA;
+  assert.equal(data.search.main.reduce((sum, entry) => sum + entry.weight, 0), data.search.total);
+  assert.equal(data.search.talismans.entries.reduce((sum, entry) => sum + entry.weight, 0), data.search.talismans.total);
+  assert.equal(data.intricatePouch.main.reduce((sum, entry) => sum + entry.weight, 0), data.intricatePouch.total);
+  const player = fakePlayer();
+  assert.equal(RewardsGuardian.missingPouch(player), 'rcu_pouch_small');
+  player.inventory.add(Shared.obj('rcu_pouch_small'), 1);
+  assert.equal(RewardsGuardian.missingPouch(player), 'rcu_pouch_medium');
+  for (const name of [...data.search.pouches, 'abyssal_pearl']) Shared.obj(name);
+  for (let i = 0; i < 200; i++) for (const reward of RewardsGuardian.rollSearch(player)) assert.ok(Shared.obj(reward.item) > 0);
+  Records.setSetting(player, 'gotr_book_obtained', 1);
+  const random = Math.random;
+  Math.random = () => 0;
+  try {
+    assert.notEqual(RewardsGuardian.rollSearch(player)[0].item, 'gotr_book', 'the diary only once');
+  } finally {
+    Math.random = random;
+  }
+});
+
+test('the intricate pouch needs two free slots and gives its loot', () => {
+  const player = fakePlayer();
+  player.inventory.add(Shared.obj('gotr_intricate_pouch'), 1);
+  for (let i = 1; i < 27; i++) player.inventory.slots[i] = { id: 1, amount: 1 };
+  hooks.items['Intricate pouch'].Open({ player });
+  assert.equal(player.messages.at(-1), 'You need at least two free inventory spaces to open this pouch.');
+  player.inventory.slots[26] = null;
+  hooks.items['Intricate pouch'].Open({ player });
+  assert.equal(player.inventory.getAmount(Shared.obj('gotr_intricate_pouch')), 0);
+  assert.match(statementText(player), /You open the intricate pouch and find something inside!/);
+});
+
+test("Felix's shop row follows the player's quests; Cordelia unlocks repairs for 25 pearls and repairs for 1", () => {
+  const player = fakePlayer();
+  QUESTS_DONE.clear();
+  QUESTS_DONE.add('temple_of_the_eye');
+  assert.equal(Apprentices.shopFor(player), 'gotr_reward_shop_none');
+  QUESTS_DONE.add('troll_stronghold');
+  QUESTS_DONE.add('sins_of_the_father');
+  assert.equal(Apprentices.shopFor(player), 'gotr_reward_shop_law_blood');
+  QUESTS_DONE.add('mournings_end_part_ii');
+  assert.equal(Apprentices.shopFor(player), 'gotr_reward_shop_all');
+  hooks.npcs['Apprentice Felix'].Trade({ player, npcId: Shared.npc('gotr_reward_trader') });
+  assert.equal(hooks.shops.at(-1), 'gotr_reward_shop_all');
+
+  const cordelia = Shared.npc('gotr_cordelia_1op');
+  hooks.npcs['Apprentice Cordelia']['Talk-to']({ player, npcId: cordelia });
+  assert.equal(hooks.dialogues.at(-1), 'initial-dialogue');
+  const answer = (stepId) => hooks.conditions.map((handler) => handler({ npcId: cordelia, player, stepId })).find((value) => value !== null);
+  assert.equal(answer('ppW0Jx'), true, 'no pearls yet');
+  player.inventory.add(Shared.obj('abyssal_pearl'), 30);
+  assert.equal(answer('3bGUch'), true);
+  for (const handler of hooks.custom['npc-dialogue:action']) handler({ npcId: cordelia, player, stepId: 'Q4yVuM' });
+  assert.equal(player.inventory.getAmount(Shared.obj('abyssal_pearl')), 5);
+  assert.equal(player.varbit('gotr_cordelia_repair_pouch'), 1);
+  hooks.npcs['Apprentice Cordelia']['Talk-to']({ player, npcId: cordelia });
+  assert.equal(hooks.dialogues.at(-1), 'subsequent-dialogue');
+  player.inventory.add(Shared.obj('rcu_pouch_giant_degrade'), 1);
+  hooks.npcs['Apprentice Cordelia'].Repair({ player, npcId: Shared.npc('gotr_cordelia_2ops') });
+  assert.equal(player.inventory.getAmount(Shared.obj('rcu_pouch_giant')), 1);
+  assert.equal(player.inventory.getAmount(Shared.obj('abyssal_pearl')), 4);
+});
+
+test('the abyssal needle stitches the four pouches into a colossal pouch', () => {
+  const player = fakePlayer('Stitcher', { runecraft: 85 });
+  for (const pouch of ['rcu_pouch_small', 'rcu_pouch_medium', 'rcu_pouch_large', 'rcu_pouch_giant']) player.inventory.add(Shared.obj(pouch), 1);
+  player.levels.Crafting = 50;
+  const stitch = hooks.itemOnItem['Abyssal needle|Giant pouch'];
+  stitch({ player });
+  assert.equal(player.messages.at(-1), 'You need level 56 Crafting to even attempt stitching these together.');
+  player.levels.Crafting = 56;
+  stitch({ player });
+  assert.equal(player.inventory.getAmount(Shared.obj('rcu_pouch_colossal')), 1);
+  assert.equal(player.inventory.getAmount(Shared.obj('rcu_pouch_giant')), 0);
+  assert.deepEqual(player.messages.slice(-2), ['You attempt to stitch together all of the pouches.', 'Your colossal pouch can hold 40 essence.']);
+  assert.equal(player.xpBySkill.Crafting, 1000);
 });

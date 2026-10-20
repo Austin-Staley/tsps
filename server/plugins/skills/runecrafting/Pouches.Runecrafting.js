@@ -17,6 +17,12 @@
  * decay with essence stored (medium ~270, large ~261, giant ~120, colossal ~320), never while a
  * Runecraft or max cape is worn; a decayed pouch holds 3/7/9/35 until it is repaired.
  *
+ * The abyssal needle (Wiki): used on any of the four pouches with all of them, undecayed, in the
+ * inventory, it stitches them into a colossal pouch: "You attempt to stitch together all of the
+ * pouches.", 1,000 Crafting XP; 56 Crafting and 25 Runecraft, unboosted ("You need level 56 Crafting
+ * to even attempt stitching these together."). The capacity line and the refusal for pouches that
+ * still hold essence are ours.
+ *
  * Other plugins: "runecrafting:remove-guardian-essence" { player } empties guardian essence from
  * every pouch (it can't leave Guardians of the Rift), and "runecrafting:repair-pouches"
  * { player, repaired } repairs every decayed pouch.
@@ -301,6 +307,37 @@ function removeGuardianEssence({ player }) {
   }
 }
 
+// ------------------------------------------------------------------ the abyssal needle
+
+const STITCHED = ["small", "medium", "large", "giant"];
+const STITCH_CRAFTING = 56;
+const STITCH_RUNECRAFT = 25;
+const STITCH_XP = 1000;
+
+function stitch(event) {
+  const { player } = event;
+  const inventory = player.getInventory();
+  const pouches = STITCHED.map((key) => POUCHES.find((pouch) => pouch.key === key));
+  if (!pouches.every((pouch) => inventory.contains(objId(pouch.item)))) return false;
+  const skills = player.getSkillManager();
+  if (skills.getMaxLevel(core.Skill.CRAFTING) < STITCH_CRAFTING || runecraftLevel(player) < STITCH_RUNECRAFT) {
+    player.sendMessage("You need level 56 Crafting to even attempt stitching these together.");
+    return true;
+  }
+  if (pouches.some((pouch) => stateOf(player, pouch).amount > 0)) {
+    player.sendMessage("You should empty your pouches before stitching them together.");
+    return true;
+  }
+  for (const pouch of pouches) inventory.delete(objId(pouch.item), 1);
+  const colossal = POUCHES.find((pouch) => pouch.key === "colossal");
+  inventory.adds(objId(colossal.item), 1);
+  inventory.refreshItems();
+  skills.addExperiences(core.Skill.CRAFTING, STITCH_XP);
+  player.sendMessage("You attempt to stitch together all of the pouches.");
+  player.sendMessage(`Your colossal pouch can hold ${capacity(player, colossal)} essence.`);
+  return true;
+}
+
 function login({ player }) {
   for (const pouch of POUCHES) sync(player, pouch, stateOf(player, pouch));
 }
@@ -315,6 +352,10 @@ function attach(api) {
   api.onItemAction("Giant pouch", { Fill: fill, Check: check, Empty: empty });
   api.onItemAction("Colossal pouch", { Fill: fill, Check: check, Empty: empty });
   api.onCustomEvent("runecrafting:remove-guardian-essence", removeGuardianEssence);
+  api.onItemOnItem("Abyssal needle", "Small pouch", stitch);
+  api.onItemOnItem("Abyssal needle", "Medium pouch", stitch);
+  api.onItemOnItem("Abyssal needle", "Large pouch", stitch);
+  api.onItemOnItem("Abyssal needle", "Giant pouch", stitch);
   api.onCustomEvent("runecrafting:repair-pouches", repairPouches);
 }
 
