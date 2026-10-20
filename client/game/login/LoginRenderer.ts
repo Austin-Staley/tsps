@@ -207,8 +207,8 @@ export class LoginRenderer implements LoginRendererHost {
     loadTitleBackground(cache?: CacheSystem): Promise<boolean> {
         return assets.loadTitleBackground(this, cache);
     }
-    loadTitleSprites(cache: CacheSystem): boolean {
-        return assets.loadTitleSprites(this, cache);
+    loadTitleSprites(cache: CacheSystem, flamePalettes?: number[][]): boolean {
+        return assets.loadTitleSprites(this, cache, flamePalettes);
     }
     loadFonts(cache: CacheSystem): boolean {
         return assets.loadFonts(this, cache);

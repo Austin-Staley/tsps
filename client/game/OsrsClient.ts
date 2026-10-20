@@ -6548,7 +6548,15 @@ export class OsrsClient {
 
             // Phase 3: Loading sprites (cache parse)
             await showPhase(25, "Loading sprites...");
-            const spritesLoaded = this.loginRenderer.loadTitleSprites(this.cacheSystem);
+            // The flames' colours come from the cache (graphics defaults), like the title art.
+            let flamePalettes: number[][] | undefined;
+            try {
+                const { GraphicsDefaults } = require("../rs/config/defaults/GraphicsDefaults");
+                flamePalettes = GraphicsDefaults.load(cache.info, this.cacheSystem).flamePalettes;
+            } catch (e) {
+                console.warn("[OsrsClient] Flame palettes unavailable:", e);
+            }
+            const spritesLoaded = this.loginRenderer.loadTitleSprites(this.cacheSystem, flamePalettes);
             if (!spritesLoaded) {
                 console.warn("[OsrsClient] Title sprites failed to load");
             }

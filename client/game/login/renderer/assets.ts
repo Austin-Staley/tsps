@@ -124,7 +124,7 @@ export async function loadTitleBackground(host: LoginRendererHost, cache?: Cache
     
 }
 
-export function loadTitleSprites(host: LoginRendererHost, cache: CacheSystem) {
+export function loadTitleSprites(host: LoginRendererHost, cache: CacheSystem, flamePalettes?: number[][]) {
 
         try {
             // Note: Logo PNG image is loaded separately via loadLogoImage()
@@ -157,7 +157,7 @@ export function loadTitleSprites(host: LoginRendererHost, cache: CacheSystem) {
             host.worldSelectArrowSprites = loadSprites(spriteIndex, "sl_arrows");
 
             if (host.runesSprites) {
-                host.loginScreenRunesAnimation = new LoginScreenAnimation(host.runesSprites);
+                host.loginScreenRunesAnimation = new LoginScreenAnimation(host.runesSprites, flamePalettes);
             }
 
             return true;
