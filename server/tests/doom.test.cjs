@@ -993,7 +993,7 @@ test('the shield turns the HUD blue, shows its points on headbar 11, and larvae 
   player.colours.length = 0;
   run.attacks.phase = 'shield';
   run.shield.start();
-  assert.deepEqual(player.colours, [[13, 132], [14, 623], [15, 853]], 'blue (capture)');
+  assert.deepEqual(player.colours, [[14, 132], [15, 623], [16, 853]], 'blue (capture)');
   assert.deepEqual(player.scriptArgs.at(-1)[0], 2102);
   assert.deepEqual(run.boss.headbars.at(-1), { id: 81, fill: 0, endFill: 100, duration: 510 });
   player.weapon = 29591;
@@ -1004,7 +1004,7 @@ test('the shield turns the HUD blue, shows its points on headbar 11, and larvae 
   assert.deepEqual(run.boss.shown.at(-1), { damage: 100, splat: 17, health: { current: 357, max: 500, bar: { id: 11, width: 120 } } });
   player.colours.length = 0;
   run.shield.damage(1000);
-  assert.deepEqual(player.colours, [[13, 25600], [14, 576], [15, 800]], 'back to normal');
+  assert.deepEqual(player.colours, [[14, 25600], [15, 576], [16, 800]], 'back to normal');
   run.end('exit');
 });
 
@@ -1081,7 +1081,7 @@ test('the HUD opens as the capture does: hp hidden at the delve change, then col
   player.dialogueActive = false;
   ticks(1);
   assert.deepEqual(player.hudLog, [
-    ['colour', 13, 25600], ['colour', 14, 576], ['colour', 15, 800],
+    ['colour', 14, 25600], ['colour', 15, 576], ['colour', 16, 800],
     ['script', 2376, (303 << 16) | 3],
     ['script', 2887, 254],
   ], 'no un-hiding before 2376, and no 2102 on open');
