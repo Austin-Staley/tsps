@@ -17,8 +17,6 @@
     "attackSpeed": 2,
     "attackDistance": 8,
     "maxHit": 8,
-    "respawnTicks": 15,
-    "deathTicks": 5,
     "hitDelayTicks": 2
   },
   "anims": {

@@ -67,10 +67,11 @@ refused like the other restricted rooms).
 
 - **Smoke Devil Dungeon:** fairy ring `BKP` then north-east, or Castle Wars then
 south-west (Wiki). The dungeon mouth (30176 at (2411, 3061)) is captured.
-- **Crevice (535/536):** outside (2379, 9452) to inside (2376, 9452) and back (NR tiles;
-no capture of the click exists). Peek counts the room ("...no adventurers inside." when
-empty, "1 adventurer"/"N adventurers" otherwise - wording follows the other bosses'
-Peek lines, uncaptured). Private instances (NR: 100k) are not implemented.
+- **Crevice (535/536):** outside (2379, 9452) to inside (2376, 9452) and back (NR tiles).
+Cache: 535 offers Use/Peek, 536 offers Use - only those options are registered. Peek
+counts the room's Area player list ("...no adventurers inside." when empty,
+"1 adventurer"/"N adventurers" otherwise - wording follows the other bosses' Peek
+lines, uncaptured). Private instances (NR: 100k) are not implemented.
 - **::teleports** lands outside at (2379, 9452), so every entry starts on the right side
 of the crevice (as with Sarachnis landing outside its web).
 
@@ -93,8 +94,12 @@ negating them, as the Wiki states). The punishment fires when the NPC lands a hi
 there is no ambient smoke tick for standing in the cave (both devils are non-aggressive
 per the definitions, as are dust devils elsewhere).
 - **93 Slayer** to damage it (Wiki; enforced by `Combat.Slayer` from the definition).
+- **Max hit 8** comes from the engine (`monsters-complete.json` via
+`NpcDefinition.getMaxHit()`); the plugin creates a plain `PendingHit` and the test
+pins definition and data record together.
 - **Walk-through:** the boss moves through other monsters/players (Wiki, anti-safespot;
-`NPC.WALK_THROUGH_ENTITIES_FLAG`, as with Vardorvis).
+`NPC.WALK_THROUGH_ENTITIES_FLAG`, as with Vardorvis) - ensured for every room boss on
+every tick by `Area.process`, so fresh and respawned bosses never stick.
 - **Death:** 3849, drops and removal 5 ticks later (`deathTicks: 5` in
 `npc-combat-defs.json`, captured 399 to 404); respawn 15 ticks after removal
 (`respawn: 15`, Wiki's 9s; captured re-spawn ~20 ticks after the death tick).

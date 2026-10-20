@@ -11,7 +11,6 @@
  * 32-56 cycles) and impact spotanim 643 on the player with defend anim 1156.
  */
 const Common = require("./Common.ThermonuclearSmokeDevil");
-const Area = require("./Area.ThermonuclearSmokeDevil");
 
 let ThermonuclearMethod = null;
 
@@ -32,8 +31,7 @@ function methodClass() {
     }
 
     start(character, target) {
-      Area.ensureWalkThrough(character);
-      character.performAnimation(new Animation(Common.ANIM.attack));
+      character.performAnimation(new Animation(Common.ANIM_ATTACK));
       try {
         target.getPacketSender?.()?.sendSound?.(Common.ATTACK_SOUND, 1, 0);
       } catch {

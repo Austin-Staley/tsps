@@ -15,6 +15,7 @@ const { CacheDefinitions } = require("../dist/game/cache/CacheDefinitions");
 const { Gamevals, GamevalKind } = require("../dist/game/cache/Gamevals");
 const { RegionManager } = require("../dist/game/collision/RegionManager");
 const { NpcDefinitionLoader } = require("../dist/game/definition/loader/impl/NpcDefinitionLoader");
+const { NpcDefinition } = require("../dist/game/definition/NpcDefinition");
 const { Location } = require("../dist/game/model/Location");
 const { PluginManager } = require("../dist/plugins/PluginManager");
 const ThermonuclearSmokeDevil = require("../plugins/bosses/ThermonuclearSmokeDevil.plugin");
@@ -61,9 +62,9 @@ test("the ids are the cache's smoke devil gamevals", () => {
   assert.equal(npc.get(Common.BOSS_ID), "smoke_devil_boss");
   assert.equal(npc.get(Common.SMOKE_DEVIL_ID), "smoke_devil");
   const seq = gamevals.namesOf(GamevalKind.SEQ);
-  assert.equal(seq.get(Common.ANIM.attack), "lore_dust_devil_attack");
-  assert.equal(seq.get(Common.ANIM.block), "lore_dust_devil_defend");
-  assert.equal(seq.get(Common.ANIM.death), "lore_dust_devil_death");
+  assert.equal(seq.get(Common.ANIM_ATTACK), "lore_dust_devil_attack");
+  assert.equal(seq.get(Common.DATA.anims.block), "lore_dust_devil_defend");
+  assert.equal(seq.get(Common.DATA.anims.death), "lore_dust_devil_death");
   const spotanim = gamevals.namesOf(GamevalKind.SPOTANIM);
   assert.equal(spotanim.get(Common.PROJECTILE_ID), "smoke_devil_smoke_proj");
   assert.equal(spotanim.get(Common.IMPACT_ID), "smoke_devil_smoke_player_spotanim");
@@ -91,16 +92,16 @@ test("its stats and combat definitions match the captures", () => {
 });
 
 test("the spawn, teleport and crevice tiles agree with the logs", () => {
-  assert.deepEqual([...Common.SPAWN_TILE], [2360, 9452, 0]);
-  assert.deepEqual([...Common.TELEPORT_TILE], [2379, 9452, 0]);
+  assert.deepEqual([...Common.DATA.spawnTile], [2360, 9452, 0]);
+  assert.deepEqual([...Common.DATA.teleportTile], [2379, 9452, 0]);
   assert.deepEqual([...Common.OUTSIDE_TILE], [2379, 9452, 0]);
   assert.deepEqual([...Common.INSIDE_TILE], [2376, 9452, 0]);
-  assert.ok(Common.inLair(new Location(...Common.SPAWN_TILE)));
+  assert.ok(Common.inLair(new Location(...Common.DATA.spawnTile)));
   assert.ok(Common.inLair(new Location(...Common.INSIDE_TILE)));
   assert.ok(!Common.inLair(new Location(...Common.OUTSIDE_TILE)));
   const free = ([x, y]) => !RegionManager.blocked(new Location(x, y, 0), null);
-  assert.ok(free(Common.SPAWN_TILE), "spawn blocked");
-  assert.ok(free(Common.TELEPORT_TILE), "teleport landing blocked");
+  assert.ok(free(Common.DATA.spawnTile), "spawn blocked");
+  assert.ok(free(Common.DATA.teleportTile), "teleport landing blocked");
   assert.ok(free(Common.OUTSIDE_TILE), "outside crevice blocked");
   assert.ok(free(Common.INSIDE_TILE), "inside crevice blocked");
   const bosses = Teleports._test.DESTINATIONS[Teleports._test.TAB.BOSSES];
@@ -118,8 +119,11 @@ test("the combat method is the captured typeless magic style", () => {
   assert.equal(method.type(), core.CombatType.MAGIC);
   assert.equal(method.attackDistance(), 8);
   assert.equal(method.attackSpeed(), 2);
-  assert.equal(Common.MAX_HIT, 8);
   assert.equal(Common.HIT_DELAY_TICKS, 2);
+  // Max hit 8 comes from the engine (monsters-complete via NpcDefinition), not the
+  // plugin: the PendingHit it creates rolls 0-8. The data record must agree with it.
+  assert.equal(NpcDefinition.forId(Common.BOSS_ID).getMaxHit(), 8);
+  assert.equal(Common.DATA.combat.maxHit, NpcDefinition.forId(Common.BOSS_ID).getMaxHit());
 });
 
 test("protection prayers do not reduce the boss hit", () => {
@@ -135,9 +139,17 @@ test("protection prayers do not reduce the boss hit", () => {
 test("the room is multicombat and the boss walks through the room", () => {
   assert.equal(areas.length, 1);
   assert.equal(typeof areas[0].isMulti === "function" ? areas[0].isMulti() : areas[0].isMulti, true);
+  assert.ok(typeof core.NPC.WALK_THROUGH_ENTITIES_FLAG === "string" && core.NPC.WALK_THROUGH_ENTITIES_FLAG.length > 0, "walk-through flag missing from api.core.NPC");
   const flags = [];
-  Area.ensureWalkThrough({ setFlag: (flag) => flags.push(flag) });
+  const boss = { isNpc: () => true, getId: () => Common.BOSS_ID, setFlag: (flag) => flags.push(flag) };
+  // The flag is ensured on every tick for room bosses, so a fresh or respawned boss
+  // never sticks on the room's smoke devils - not just once it first attacks.
+  areas[0].process(boss);
   assert.ok(flags.includes(core.NPC.WALK_THROUGH_ENTITIES_FLAG));
+  const minionFlags = [];
+  areas[0].process({ isNpc: () => true, getId: () => Common.SMOKE_DEVIL_ID, setFlag: (flag) => minionFlags.push(flag) });
+  assert.deepEqual(minionFlags, []);
+  areas[0].process({ isPlayer: () => true });
 });
 
 test("smoke devils punish players without a mask", () => {
@@ -190,8 +202,12 @@ test("the crevice only moves players by the boss room", () => {
   assert.equal(Entrance.through({ player: outsidePlayer, location: new Location(2379, 9452, 0), objectId: Common.CREVICE_OUTSIDE_ID }), true);
   assert.deepEqual([moved[0].getX(), moved[0].getY()], [2376, 9452]);
   assert.equal(Entrance.through({ player: outsidePlayer, location: new Location(3000, 3000, 0), objectId: Common.CREVICE_OUTSIDE_ID }), false);
-  // The live menu offers Use (first option on both crevices), so Use must pass through.
-  assert.equal(typeof objectHooks["Crevice"].Use, "function");
+  // Cache: 535 offers Use/Peek, 536 offers Use - nothing else may be registered.
+  assert.deepEqual(Object.keys(objectHooks["Crevice"]).sort(), ["Peek", "Use"]);
   assert.equal(objectHooks["Crevice"].Use({ player: outsidePlayer, location: new Location(2379, 9452, 0), objectId: Common.CREVICE_OUTSIDE_ID }), true);
-  assert.equal(typeof objectHooks["Crevice"].Peek, "function");
+  const said = [];
+  const peeker = { sendMessage: (line) => said.push(line) };
+  assert.equal(Entrance.peek({ player: peeker, location: new Location(2379, 9452, 0), objectId: Common.CREVICE_OUTSIDE_ID }), true);
+  assert.deepEqual(said, ["You peek through the crevice and see no adventurers inside."]);
+  assert.equal(Entrance.peek({ player: peeker, location: new Location(3000, 3000, 0), objectId: Common.CREVICE_OUTSIDE_ID }), false);
 });
