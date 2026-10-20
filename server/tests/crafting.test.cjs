@@ -453,3 +453,27 @@ test('steel studs on a leather body make a studded body; a hide shield needs a h
   assert.equal(shield.player.amounts.get(ItemIds.BRONZE_NAILS), 0);
   assert.equal(shield.player.amounts.get(ItemIds.HAMMER), 1);
 });
+
+test('Smelt on a furnace opens the gold or silver menu when a bar and its mould are carried, else falls through', t => {
+  membersWorld(t, true);
+  const gold = playerWith([[ItemIds.GOLD_BAR, 1], [ItemIds.RING_MOULD, 1], [ItemIds.SILVER_BAR, 1], [ItemIds.TIARA_MOULD, 1]]);
+  assert.notEqual(namedObjects.Furnace.Smelt({ player: gold.player, handled: false }), false);
+  assert.ok(gold.player.log.some(row => row[0] === 'open' && row[1] === 446));
+
+  const silver = playerWith([[ItemIds.SILVER_BAR, 1], [ItemIds.TIARA_MOULD, 1]]);
+  namedObjects.Furnace.Smelt({ player: silver.player, handled: false });
+  assert.ok(silver.player.log.some(row => row[0] === 'open' && row[1] === 6));
+
+  // A bar without a mould, or ores, are Smithing's: the hook returns false to fall through.
+  const ores = playerWith([[ItemIds.GOLD_BAR, 1], [ItemIds.GOLD_ORE, 1]]);
+  assert.equal(namedObjects.Furnace.Smelt({ player: ores.player, handled: false }), false);
+  assert.equal(ores.player.log.some(row => row[0] === 'open'), false);
+});
+
+test('a hide shield short on hides says how many it needs', t => {
+  membersWorld(t, true);
+  const { player, getMenu } = playerWith([[ItemIds.HARD_LEATHER, 1], [ItemIds.OAK_SHIELD, 1], [ItemIds.BRONZE_NAILS, 15], [ItemIds.HAMMER, 1]], { level: 41 });
+  use(player, 'handleCombine', ItemIds.HARD_LEATHER, ItemIds.OAK_SHIELD);
+  assert.equal(getMenu(), undefined);
+  assert.deepEqual(messages(player.log), ['You need 2 hard leather to make this.']);
+});

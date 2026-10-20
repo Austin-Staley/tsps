@@ -139,19 +139,21 @@ test('restrictions, missing runes, wrong slots and cooldowns preserve items and 
   assert.equal(player.amounts.get(1727),1); assert.equal(player.amounts.get(564),1);
 });
 function openFurnace(player) {
-  crafting.handleGoldJewellery({player,itemId:2357,object:{getDefinition:() => ({getName:() => 'Furnace'})}});
+  crafting.handleBarOnFurnace({player,itemId:2357,object:{getDefinition:() => ({getName:() => 'Furnace'})}});
 }
 function button(player,component) { crafting.button({player,buttonId:(446 << 16)|component,handled:false}); }
 function tick(task,count) { for (let n=0;n<count;n++) task.execute(); }
-test('furnace uses group 446 and make-X, producing on tick 3 then every 3 ticks', () => {
+test('furnace uses group 446 and make-X, producing 2 ticks after the choice then every 3 ticks', () => {
   const player = playerWith([[2357,5],[1592,1]]);
   openFurnace(player); assert.ok(player.log.some(row => row[0] === 'open' && row[1] === 446));
   button(player,63); player.amountAction.execute(2); button(player,8);
-  const task = tasks.at(-1); tick(task,2); assert.equal(player.amounts.get(1635),undefined);
+  // rsprox 1102/1105: human_furnace and sound 2725 on the choice, the ring 2 ticks later.
+  assert.ok(player.log.some(row => row[0] === 'animation' && row[1] === 899));
+  const task = tasks.at(-1); tick(task,1); assert.equal(player.amounts.get(1635),undefined);
   tick(task,1); assert.equal(player.amounts.get(1635),1);
   tick(task,3); assert.equal(player.amounts.get(1635),2);
   assert.equal(player.amounts.get(1592),1); assert.equal(player.amounts.get(2357),3);
-  assert.equal(player.getAttribute('crafting:jewellery-task'),null);
+  assert.equal(player.getAttribute('crafting:task'),null);
   assert.equal(player.log.filter(row => row[0] === 'message').length,0);
   assert.ok(player.log.some(row => row[0] === 'sound' && row[1] === 2725));
 });
@@ -188,3 +190,4 @@ test('all eight amulets string in either order with real identifiers and the liv
     assert.ok(player.log.some(row => row[0] === 'xp' && row[2] === 4));
   }
 });
+
