@@ -9,18 +9,21 @@ const { ItemIdentifiers: I } = require("../dist/util/ItemIdentifiers");
 const { Skill } = require("../dist/game/model/Skill");
 const Smithing = require("../plugins/skills/Smithing.plugin");
 
-const buttons = new Map(), objects = new Map(), tasks = [], players = [];
+const buttons = new Map(), objects = new Map(), itemActions = new Map(), events = new Map(), tasks = [], players = [];
 let disconnect, itemOnObject, CacheDefinitions;
 let denyAnvil = false;
 Smithing.register({
   core: PluginManager.getCoreApi(),
   getTaskManager: () => ({ submit(task) { task.setRunning(true); tasks.push(task); } }),
   onPlayerDisconnect: handler => { disconnect = handler; },
-  onCustomEvent() {},
+  onCustomEvent: (name, handler) => events.set(name, [...(events.get(name) ?? []), handler]),
   emitCustomEvent(name, request) {
     if (name === "smithing:anvil-access") request.denied = denyAnvil;
     if (name === "quest:is-complete") request.complete = request.player.quests?.has(request.key) ?? false;
+    for (const handler of events.get(name) ?? []) handler(request);
   },
+  persistAttribute() {},
+  onItemAction: (name, actions) => itemActions.set(name, actions),
   onItemOnObject: handler => { itemOnObject = handler; }, onSpellOnItem() {}, log() {},
   onObjectInteraction: (name, actions) => objects.set(name, actions),
   onInterfaceActionButton: (ids, handler) => { for (const id of ids) buttons.set(id, handler); },
@@ -43,7 +46,13 @@ function playerWith(barId = I.BRONZE_BAR, bars = 27) {
       deleteNumber: (id, n) => items.set(id, items.get(id) - n),
       addItem: item => items.set(item.getId(), (items.get(item.getId()) ?? 0) + item.getAmount()),
     }),
-    getEquipment: () => ({ get: slot => player.equipped.has(slot) ? { getId: () => player.equipped.get(slot) } : null }),
+    getEquipment: () => ({
+      get: slot => player.equipped.has(slot) ? { getId: () => player.equipped.get(slot) } : null,
+      set: (slot, item) => item.getId() < 0 ? player.equipped.delete(slot) : player.equipped.set(slot, item.getId()),
+      refreshItems() {},
+    }),
+    getAttribute: key => player.attributes?.[key],
+    setAttribute: (key, value) => { (player.attributes ??= {})[key] = value; },
     getSkillManager: () => ({
       getCurrentLevel: () => player.level,
       addExperiences: (skill, xp) => { player.xpSkill = skill; player.xp += xp; },
@@ -409,4 +418,41 @@ test("a blurite bar on an anvil opens blurite bolts and limbs", () => {
   ticks(4);
   assert.equal(player.items.get(I.BLURITE_LIMBS), 1);
   assert.equal(player.xp, 17.5);
+});
+
+// Wiki: a worn ring of forging makes iron certain, a charge an ore, 140 charges; Varrock armour
+// smelts two bars 10% of the time at the Edgeville furnace.
+test("a ring of forging makes iron certain and melts after its charges", (t) => {
+  t.mock.method(Math, "random", () => 0.9);
+  const player = furnaceWith([[I.IRON_ORE, 3]]);
+  player.equipped.set(12, I.RING_OF_FORGING);
+  player.attributes = { "smithing:ring-of-forging-charges": 2 };
+  objects.get("Furnace").Smelt({ player, objectId: 1 });
+  lastMenu(player).execute(I.IRON_BAR, 3);
+  ticks(20);
+  assert.equal(player.items.get(I.IRON_BAR), 2);
+  assert.equal(player.equipped.has(12), false);
+  assert.match(player.messages.join("\n"), /Ring of Forging has melted/);
+  assert.equal(player.attributes["smithing:ring-of-forging-charges"], 140);
+  assert.equal(player.messages.at(-1), "The ore is too impure and you fail to refine it.");
+});
+
+test("Varrock armour smelts two bars at the Edgeville furnace", (t) => {
+  t.mock.method(Math, "random", () => 0.05);
+  const edgeville = CacheDefinitions.getLocId("varrock_diary_furnace");
+  const player = furnaceWith([[I.MITHRIL_ORE, 2], [I.COAL, 8]]);
+  player.equipped.set(4, I.VARROCK_ARMOUR_2);
+  objects.get("Furnace").Smelt({ player, objectId: edgeville });
+  lastMenu(player).execute(I.MITHRIL_BAR, 1);
+  ticks(6);
+  assert.equal(player.items.get(I.MITHRIL_BAR), 2);
+  assert.equal(player.items.get(I.MITHRIL_ORE), 0);
+  assert.equal(player.xp, 60);
+
+  const elsewhere = furnaceWith([[I.MITHRIL_ORE, 2], [I.COAL, 8]]);
+  elsewhere.equipped.set(4, I.VARROCK_ARMOUR_1);
+  objects.get("Furnace").Smelt({ player: elsewhere, objectId: edgeville });
+  lastMenu(elsewhere).execute(I.MITHRIL_BAR, 1);
+  ticks(6);
+  assert.equal(elsewhere.items.get(I.MITHRIL_BAR), 1);
 });

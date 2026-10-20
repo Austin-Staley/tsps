@@ -1,7 +1,7 @@
 /**
  * Smithing: smelting at furnaces and smithing at anvils. The units live in smithing/:
  * Data (cache products + data/smithing.json), Sessions (the make-X loops), Smelting, Anvil,
- * Cannonballs and Superheat. docs/smithing.md has the sources.
+ * Cannonballs, Gear (ring of forging, Varrock armour) and Superheat. docs/smithing.md has the sources.
  */
 const Core = require("./smithing/Core.Smithing");
 const Data = require("./smithing/Data.Smithing");
@@ -9,6 +9,7 @@ const Sessions = require("./smithing/Sessions.Smithing");
 const Smelting = require("./smithing/Smelting.Smithing");
 const Anvil = require("./smithing/Anvil.Smithing");
 const Cannonballs = require("./smithing/Cannonballs.Smithing");
+const Gear = require("./smithing/Gear.Smithing");
 const Superheat = require("./smithing/Superheat.Smithing");
 
 const FURNACE_NAMES = new Set(["Furnace", "Small furnace", "Lovakite furnace"]);
@@ -57,6 +58,7 @@ module.exports = {
     Smelting(api);
     Anvil(api);
     Cannonballs(api);
+    Gear(api);
     Superheat(api);
   },
 };

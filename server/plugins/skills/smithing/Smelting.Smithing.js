@@ -105,7 +105,7 @@ function beginSmelt(player, recipe) {
   return true;
 }
 
-function finishSmelt(player, recipe) {
+function finishSmelt(player, recipe, furnaceId) {
   if (!hasIngredients(player, recipe)) {
     player.sendMessage(recipe.missingMessage);
     return false;
@@ -113,7 +113,7 @@ function finishSmelt(player, recipe) {
   consumeIngredients(player, recipe);
   const inventory = player.getInventory();
   for (const [itemId, amount] of recipe.byproducts ?? []) inventory.addItem(new Core.Item(itemId, amount));
-  const outcome = { player, recipe, success: Math.random() < (recipe.successChance ?? 1), bars: 1 };
+  const outcome = { player, recipe, furnaceId, success: Math.random() < (recipe.successChance ?? 1), bars: 1 };
   Core.api.emitCustomEvent("smithing:smelt-outcome", outcome);
   if (!outcome.success) {
     player.sendMessage(recipe.failMessage);
@@ -127,7 +127,7 @@ function finishSmelt(player, recipe) {
   return true;
 }
 
-function startSmelting(player, chosen, amount) {
+function startSmelting(player, chosen, amount, furnaceId = -1) {
   if (!chosen || !Number.isInteger(amount) || amount <= 0) return false;
   const recipe = resolveRecipe(player, chosen);
   if (recipe.quest && !Core.questComplete(player, recipe.quest)) {
@@ -148,7 +148,7 @@ function startSmelting(player, chosen, amount) {
     interval: SMELT_INTERVAL_TICKS,
     finishDelay: SMELT_FINISH_TICKS,
     begin: (smelter) => beginSmelt(smelter, recipe),
-    step: (smelter) => finishSmelt(smelter, recipe),
+    step: (smelter) => finishSmelt(smelter, recipe, furnaceId),
   });
   return true;
 }
@@ -180,23 +180,23 @@ function openMenu(player, entries) {
   );
 }
 
-function recipeEntries(player, recipes) {
+function recipeEntries(player, recipes, furnaceId) {
   return recipes.map((recipe) => ({
     itemId: recipe.barId,
     most: batches(player, resolveRecipe(player, recipe)),
-    start: (smelter, amount) => startSmelting(smelter, recipe, amount),
+    start: (smelter, amount) => startSmelting(smelter, recipe, amount, furnaceId),
   }));
 }
 
 /** "Smelt" on a furnace: the menu lists every bar; with nothing to smelt, a message box instead. */
-function smelt({ player }) {
+function smelt({ player, objectId }) {
   const hasOre = Data.SMELTING_RECIPES.some((recipe) => !recipe.skill && recipe.ingredients.some(([id]) => id !== Core.ItemIdentifiers.COAL && available(player, id) > 0));
   const extras = extraEntries(player);
   if (!hasOre && extras.length === 0) {
     statement(player, NO_ORE_MESSAGE);
     return;
   }
-  openMenu(player, [...recipeEntries(player, Data.smeltMenuRecipes()), ...extras]);
+  openMenu(player, [...recipeEntries(player, Data.smeltMenuRecipes(), objectId), ...extras]);
 }
 
 /**
@@ -210,8 +210,12 @@ function useOnFurnace(event) {
   if (recipes.length === 0) return;
   event.handled = true;
   const offMenu = recipes.filter((recipe) => recipe.notInMenu);
-  if (offMenu.length > 0) openMenu(event.player, recipeEntries(event.player, offMenu));
-  else smelt(event);
+  if (offMenu.length > 0) openMenu(event.player, recipeEntries(event.player, offMenu, furnaceIdOf(event)));
+  else smelt({ player: event.player, objectId: furnaceIdOf(event) });
+}
+
+function furnaceIdOf(event) {
+  return event.objectId ?? event.object?.getId?.() ?? -1;
 }
 
 /** The Lovakengj furnace smelts lovakite only (Wiki: Lovakite bar). */
@@ -223,7 +227,7 @@ function smeltLovakite(event) {
     statement(event.player, NO_ORE_MESSAGE);
     return;
   }
-  openMenu(event.player, recipeEntries(event.player, recipes));
+  openMenu(event.player, recipeEntries(event.player, recipes, furnaceIdOf(event)));
 }
 
 function fillFurnaceIds() {
