@@ -39,6 +39,11 @@ export class PlayerSave {
         points: "shop:points",
         pcPoints: "pest-control:points",
         pouches: "runecrafting:pouches",
+        bankNoteWithdrawal: Player.BANK_NOTE_WITHDRAWAL_ATTRIBUTE,
+        bankInsertMode: Player.BANK_INSERT_MODE_ATTRIBUTE,
+        bankQuantityMode: Player.BANK_QUANTITY_MODE_ATTRIBUTE,
+        bankCustomQuantity: Player.BANK_CUSTOM_QUANTITY_ATTRIBUTE,
+        bankPlaceholders: Player.BANK_PLACEHOLDERS_ATTRIBUTE,
     };
     /** Core state kept as attributes: logging out doesn't reset aggression tolerance (Wiki). */
     private static readonly persistentAttributeKeys = new Set<string>([
@@ -132,11 +137,6 @@ export class PlayerSave {
     private fightType;
     private autocastSpellId: number;
     private autoRetaliate: boolean;
-    private bankNoteWithdrawal: boolean;
-    private bankInsertMode: boolean;
-    private bankQuantityMode: number;
-    private bankCustomQuantity: number;
-    private bankPlaceholders: boolean;
     private audioSettings: Record<number, number>;
     private hasVengeance: boolean;
     private lastVengeanceTimer: number;
@@ -567,11 +567,6 @@ export class PlayerSave {
         );
         player.getCombat().setCastSpell(null);
         player.setAutoRetaliate(this.autoRetaliate);
-        player.setNoteWithdrawal(this.bankNoteWithdrawal ?? false);
-        player.setInsertMode(this.bankInsertMode ?? false);
-        player.setBankQuantityMode(this.bankQuantityMode ?? 0);
-        player.setBankCustomQuantity(this.bankCustomQuantity ?? 0);
-        player.setPlaceholders(this.bankPlaceholders ?? false);
         player.setAudioSettings(this.audioSettings);
         player.setHasVengeance(this.hasVengeance);
         player.getVengeanceTimer().start(this.lastVengeanceTimer);
@@ -672,11 +667,6 @@ export class PlayerSave {
         playerSave.fightType = player.getFightType();
         playerSave.autocastSpellId = player.getCombat().getAutocastSpell()?.spellId?.() ?? -1;
         playerSave.autoRetaliate = player.autoRetaliateReturn();
-        playerSave.bankNoteWithdrawal = player.withdrawAsNote();
-        playerSave.bankInsertMode = player.insertModeReturn();
-        playerSave.bankQuantityMode = player.getBankQuantityMode();
-        playerSave.bankCustomQuantity = player.getBankCustomQuantity();
-        playerSave.bankPlaceholders = player.isPlaceholders();
         playerSave.audioSettings = { ...player.getAudioSettings() };
         playerSave.hasVengeance = player.hasVengeanceReturn();
         playerSave.lastVengeanceTimer = player.getVengeanceTimer().secondsRemaining();
@@ -707,6 +697,12 @@ export class PlayerSave {
             if (inventory.getFreeSlots() < slots) throw new Error("Cannot snapshot trade escrow: inventory is full");
             inventory.add(item.clone(), false);
         }
+
+        PlayerSave.persistAttribute(Player.BANK_NOTE_WITHDRAWAL_ATTRIBUTE, false);
+        PlayerSave.persistAttribute(Player.BANK_INSERT_MODE_ATTRIBUTE, false);
+        PlayerSave.persistAttribute(Player.BANK_QUANTITY_MODE_ATTRIBUTE, 0);
+        PlayerSave.persistAttribute(Player.BANK_CUSTOM_QUANTITY_ATTRIBUTE, 0);
+        PlayerSave.persistAttribute(Player.BANK_PLACEHOLDERS_ATTRIBUTE, false);
         playerSave.inventory = inventory.getCopiedItems();
         playerSave.equipment = player.getEquipment().getCopiedItems();
         playerSave.appearance = PlayerSave.sanitizeAppearance(player.getAppearance().getLook());
