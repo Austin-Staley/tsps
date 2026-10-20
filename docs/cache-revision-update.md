@@ -185,6 +185,7 @@ id moves with it: look for such keys in persisted attributes.
 | `hpbar_hud` (303) gained `hp_bar_extra` at 11 (and a second bar at 22-27): everything from 11 up moves by one | The HUD scripts get the wrong components (bar colours, fades, text) | `BossHud.plugin.js` component lists, Opponent Info's HUD text 20 → 21 |
 | `equipment` (84): weight 51 → 50, attack speed 53/54 → 52/53 | Wrong texts on the equipment stats screen | `EquipmentStats.plugin.js` |
 | A Combat Achievements monster (The Fractured Archive) inserted at key 26: every later key +1 | Saved kill counts (keyed by monster key) would attach to the next boss; tasks bumped the wrong boss's counter | `dump:ca-bosses`; kill counts now saved by monster name, old numeric saves read through `data/legacy-monster-keys.json` (the 2026-09-30 keys) |
+| Client script strings carry text templates: `<str_name=value>` defines a value, `<str_name>` draws it (2 scripts on 2026-09-30, 14 now: quest names in "Requires", "Quest:", the quest list and journal, region unlocks, Slayer unblock, Gauntlet shards) | The names were dropped (bitmap font) or the tags drawn as text (widget renderer) | `rs/font/textTemplates.ts`, resolved where text is drawn, measured or wrapped |
 | Six new weapons, one new Eat item (Leftovers) | `weapon-data` and `food-effects` tests | `sync:weapon-types` (the Wiki gives Obligator and Zorya's tome "Unarmed" for now); Leftovers listed as raid food |
 
 `compare:cache` reported only the Opponent Info literal; the rest were found by searching for the
@@ -209,6 +210,9 @@ packet), and the GE's Collect and Abort buttons were never wired (465:6 and 465:
 created by scripts 793 and 819).
 
 ## Known gaps
+
+- `<switch,pronoun,"he","she","they">` in script strings (scripts 5077/5078, with `text_pronoun`) is not
+  resolved: it needs the player's pronoun setting.
 
 - Input fields (component type 16) are not drawn or edited; their setters only store values.
 - GE: Modify offer and Repeat offer are not implemented.

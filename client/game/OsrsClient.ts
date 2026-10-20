@@ -177,6 +177,7 @@ import { Cs2Vm, ScriptArgMagic, type ScriptEvent, createScriptEvent } from "../r
 import { setSpawnSearch } from "../rs/cs2/spawnSearch";
 import { Opcodes as Cs2Opcodes } from "../rs/cs2/Opcodes";
 import { BitmapFont } from "../rs/font/BitmapFont";
+import { resolveTextTemplates } from "../rs/font/textTemplates";
 import { encodeInteractionIndex } from "../rs/interaction/InteractionIndex";
 import { Inventory, InventorySlotInput } from "../rs/inventory/Inventory";
 import type { InventorySlot } from "../rs/inventory/Inventory";
@@ -1836,7 +1837,7 @@ export class OsrsClient {
                     this.chatTextMetrics.measureTextWidthOsrsMarkup(s, font);
 
                 // Handle <br> tags and newlines first
-                const normalized = text.replace(/<br\s*\/?>/gi, "\n");
+                const normalized = resolveTextTemplates(text).replace(/<br\s*\/?>/gi, "\n");
                 const paragraphs = normalized.split(/\n/);
                 const lines: string[] = [];
 
