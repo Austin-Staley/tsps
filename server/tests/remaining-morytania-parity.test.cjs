@@ -944,3 +944,34 @@ test('Sins Carl first look-back respects the captured wall hiding obstruction', 
     assert.equal(h.quest.getStage(p), 12, 'captured hide spot stays hidden through the pause');
   }
 });
+
+
+test('Sins all captured Carl look-backs hide their captured player pose by edge LOS', () => {
+  const { RegionManager } = core;
+  RegionManager.init();
+  const blocked = (from, to) => {
+    const steps = Math.max(Math.abs(to[0] - from[0]), Math.abs(to[1] - from[1]));
+    let previous = { x: from[0], y: from[1] };
+    for (let step = 1; step <= steps; step++) {
+      const x = Math.round(from[0] + (to[0] - from[0]) * step / steps);
+      const y = Math.round(from[1] + (to[1] - from[1]) * step / steps);
+      if (RegionManager.canMove(previous.x, previous.y, x, y, 0, 1, 1, null) === false) return true;
+      previous = { x, y };
+    }
+    return false;
+  };
+  const windows = [
+    { npc: [3748, 3318], player: [3751, 3315], facing: [0, -1] },
+    { npc: [3734, 3328], player: [3740, 3324], facing: [1, 0] },
+    { npc: [3714, 3328], player: [3718, 3325], facing: [1, 0] },
+    { npc: [3702, 3319], player: [3700, 3323], facing: [0, 1] },
+    { npc: [3722, 3317], player: [3719, 3312], facing: [-1, 0] },
+  ];
+  for (const window of windows) {
+    const dx = window.player[0] - window.npc[0], dy = window.player[1] - window.npc[1];
+    const distance = Math.max(Math.abs(dx), Math.abs(dy));
+    assert.ok(distance > 1 && distance <= 10, `captured hide ${window.player} is inside Carl range`);
+    assert.ok(window.facing[0] * dx + window.facing[1] * dy > 0, 'captured hide is in the look-back cone');
+    assert.equal(blocked(window.npc, window.player), true, `cache wall/edge hides ${window.player}`);
+  }
+});

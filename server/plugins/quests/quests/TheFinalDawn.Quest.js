@@ -252,6 +252,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
   // Captured temple-family NPCs; 13744 is the visible transformed Ascended.
   const EMISSARY_TEMPLE_NPC_IDS = new Set([13706, 13707, 13708, 13709, 13710, 13711, 13712, 13713, 13720, 13721, 13744]);
   const GUARD_DOG_ID = 14236; // vmq4_janus_dog [Pet]
+  const GUARD_DOG_IDS = new Set([GUARD_DOG_ID, 14237]); // calm/base + alert content id
   const ENFORCER_ID = NpcIdentifiers.EMISSARY_ENFORCER_3; // 14268
   const TEMPLE_PATROL_ID = 14266; // vmq4_temple_guard_boss_patrol
   const CHIMALLI_ID = NpcIdentifiers.CHIMALLI; // 14362
@@ -1105,7 +1106,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
 
   function petDog(event) {
     const npcId = npcIdOf(event);
-    if (npcId !== GUARD_DOG_ID) return false;
+    if (!GUARD_DOG_IDS.has(npcId)) return false;
     const { player } = event;
     if (!hasBit(player, BIT_DOG_CALMED)) {
       play(player, npcId, "home-invasion-attempting-to-open-the-safe-house-door-or-using-bones-raw-or-cooked-meat-on-the-guard-dog");
@@ -1122,7 +1123,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
   function handleItemOnNpc(event) {
     const npcId = npcIdOf(event);
     const { player, itemId } = event;
-    if (npcId === GUARD_DOG_ID) {
+    if (GUARD_DOG_IDS.has(npcId)) {
       const stage = quest.getStage(player);
       if (stage < STAGE_REPORTED || stage > STAGE_JANUS) return;
       if (itemId !== BONES_ITEM && itemId !== COOKED_MEAT_ITEM && itemId !== ALANS_BONES_ITEM && !RAW_MEAT_IDS.has(itemId)) {

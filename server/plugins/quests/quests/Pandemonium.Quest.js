@@ -1006,6 +1006,19 @@ module.exports = function registerPandemoniumQuest(api) {
     scene.boat.moveMode = sailingContent.MOVE_MODE.HALF;
   }
 
+  /**
+   * A boat-mounted hook is operated over the side from where the player already stands; the
+   * cache's 1x1 hook carries clipMask 15, so the generic object route cannot find a reachable
+   * side. Use the engine's route destination contract to operate from the current deck tile.
+   */
+  function routeTutorialHook(event) {
+    if (event.objectId !== SALVAGING_HOOK_OBJECT_ID || !tutorialScene(event.player)) return;
+    const at = event.player.getLocation();
+    const object = event.object.getLocation();
+    if (Math.max(Math.abs(object.getX() - at.getX()), Math.abs(object.getY() - at.getY())) > 3) return;
+    event.destination = { x: at.getX(), y: at.getY(), z: at.getZ() };
+  }
+
   /** Follow a collision-checked route between the captured start and wreck positions. */
   function watchTutorialVoyages() {
     for (const [player, scene] of tutorialScenes) {
@@ -1308,6 +1321,7 @@ module.exports = function registerPandemoniumQuest(api) {
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onObjectInteraction(handleObjectInteraction);
   BoatManager.onAfterTick(watchTutorialVoyages);
+  api.onObjectRoute(routeTutorialHook);
   api.onCustomEvent("sailing:boarded", handleBoarded);
   api.onCustomEvent("sailing:left", handleLeft);
   api.onCustomEvent("interface:closed", ({ player, interfaceId }) => {

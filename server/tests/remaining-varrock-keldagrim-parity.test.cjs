@@ -64,6 +64,7 @@ function harness(name) {
       else (events[key] ?? []).forEach(fn => fn(event));
     },
     getObjectManager: () => ({ register: object => objects.push(object), deregister: object => { const i = objects.indexOf(object); if (i >= 0) objects.splice(i, 1); } }),
+    registerArea: area => (hooks.registerArea ??= []).push(area),
     getItemOnGroundManager: () => ({
       registerLocation: (p, item, position) => registerGround(p, item, position),
       registerNonGlobals: (p, item, position) => { registerGround(p, item, position); },
@@ -86,7 +87,10 @@ function harness(name) {
     },
     removeNpc: npc => { npc.removed = true; removed.push(npc); },
   }, { get: (target, key) => target[key] ?? ((...args) => (hooks[key] ??= []).push(args.find(x => typeof x === 'function'))) });
-  for (const questName of (Array.isArray(name) ? name : [name])) require(`../plugins/quests/quests/${questName}.Quest`)(api);
+  for (const questName of (Array.isArray(name) ? name : [name])) {
+    const loaded = questName.includes('/') ? require(`../plugins/${questName}`) : require(`../plugins/quests/quests/${questName}.Quest`);
+    (typeof loaded === 'function' ? loaded : loaded.register)(api);
+  }
   PluginManager.emitNpcDialogueCondition = event => {
     for (const fn of hooks.onNpcDialogueCondition ?? []) { const answer = fn(event); if (answer !== null && answer !== undefined) return answer; }
     return null;
@@ -748,6 +752,112 @@ test('real ItemOnGroundManager respawns a captured bottle after four ticks', () 
   ItemOnGroundManager.deregister(blocked);
   tick();
   for (const item of [...ours()]) { ItemOnGroundManager.deregister(item); tick(); }
+});
+
+test('Camdozaal rubble transforms per owner with canonical drops and exact world-slot restore', () => {
+  const h = harness('npcs/CamdozaalGolems.plugin');
+  const rubbleDefinition = core.NpcDefinition.forId(10690);
+  const golemDefinition = core.NpcDefinition.forId(10689);
+  assert.equal(rubbleDefinition.getName(), '<col=00ffff>Rubble</col>');
+  assert.equal(rubbleDefinition.getActions()[0], 'Awaken');
+  assert.ok(golemDefinition.getActions().includes('Attack'));
+  assert.equal(require('../plugins/npcs/CamdozaalGolems.plugin').members, true, 'Chaos Golems are members-only');
+  core.RegionManager.loadMapFiles(3017, 5784);
+  assert.equal(core.RegionManager.blocked(new core.Location(3017, 5784, 0), null), false);
+
+  function rubble(x, y) {
+    let transformation = -1;
+    let hitpoints = rubbleDefinition.getHitpoints();
+    let owner = null;
+    let location = new core.Location(x, y, 0);
+    const state = { movementResets: 0, combatResets: 0, registered: true };
+    const npc = {
+      ...state,
+      getNpcTransformationId: () => transformation,
+      setNpcTransformationId(id) { transformation = id; return npc; },
+      getCurrentDefinition: () => core.NpcDefinition.forId(transformation !== -1 ? transformation : 10690),
+      getContentId: () => transformation !== -1 ? transformation : 10690,
+      getId: () => transformation !== -1 ? transformation : 10690,
+      getRealId: () => 10690,
+      getMaxHitpoints() { return this.getCurrentDefinition().getHitpoints(); },
+      getHitpoints: () => hitpoints,
+      setHitpoints(value) { hitpoints = value; return npc; },
+      getOwner: () => owner,
+      setOwner(value) { owner = value; return npc; },
+      getLocation: () => location,
+      moveTo(to) { location = to; return npc; },
+      getMovementQueue: () => ({ reset() { npc.movementResets++; } }),
+      getCombat: () => ({ reset() { npc.combatResets++; } }),
+      isRegistered: () => npc.registered,
+    };
+    return npc;
+  }
+
+  const awaken = h.npcActions.get('<col=00ffff>Rubble</col>')['Awaken'];
+  const invoke = (p, npc) => awaken({ player: p, npcId: 10690, npc, definition: rubbleDefinition, clickType: 1 });
+  const p1 = player(); p1.username = 'One'; p1.moveTo(new core.Location(3022, 5782, 0));
+  const p2 = player(); p2.username = 'Two'; p2.moveTo(new core.Location(3022, 5782, 0));
+  const one = rubble(3017, 5784), two = rubble(3015, 5806);
+  invoke(p1, one); invoke(p2, two);
+  assert.equal(one.getNpcTransformationId(), 10689);
+  assert.equal(two.getNpcTransformationId(), 10689, 'two players may own different golems concurrently');
+  assert.equal(one.getOwner(), p1);
+  assert.equal(two.getOwner(), p2);
+  assert.equal(one.getHitpoints(), golemDefinition.getHitpoints());
+  assert.equal(two.getHitpoints(), golemDefinition.getHitpoints());
+
+  const third = rubble(3023, 5775);
+  invoke(p1, third);
+  assert.equal(third.getNpcTransformationId(), -1, 'same player cannot awaken a second golem');
+  assert.ok(p1.messages.some(text => text.includes('already in combat with a golem')));
+  const p3 = player(); p3.username = 'Three';
+  invoke(p3, one);
+  assert.equal(one.getOwner(), p1, 'another player cannot steal the same owned golem');
+
+  // Canonical npc-drops: Chaos core is tertiary 2/15, not guaranteed and not quest-gated.
+  const drops = require('../plugins/npcs/NpcDrops.plugin').__internals;
+  drops.loadDrops();
+  const table10689 = drops.tablesByNpc.get(10689)[0];
+  const table10690 = drops.tablesByNpc.get(10690)[0];
+  assert.equal(table10689, table10690);
+  assert.equal(table10689.entries.some(entry => entry.item_id === I.CHAOS_CORE), false);
+  const coreEntry = table10689.tertiary.find(entry => entry.item_id === I.CHAOS_CORE);
+  assert.equal(coreEntry.weight, 2);
+  assert.equal(coreEntry.out_of, 15);
+  const originalRandom = Math.random;
+  try {
+    Math.random = () => 0;
+    assert.ok(drops.rollTable(table10689, {}, one).some(drop => drop.itemId === I.CHAOS_CORE));
+    Math.random = () => 0.9999;
+    assert.equal(drops.rollTable(table10690, {}, two).some(drop => drop.itemId === I.CHAOS_CORE), false);
+  } finally { Math.random = originalRandom; }
+
+  // Death restores real rubble ownership/id for the normal respawn, with no quest grant.
+  h.hooks.onNpcDeath[0]({ npcId: 10689, npc: one });
+  assert.equal(one.getNpcTransformationId(), 10690, 'death restores the real rubble id');
+  assert.equal(one.getOwner(), null, 'normal world rubble owner is cleared');
+  assert.equal(h.worldItems.some(item => item.getItem().getId() === I.CHAOS_CORE), false);
+
+  // Retreat: a moving golem returns to its original world slot, owner and HP once.
+  two.moveTo(new core.Location(3035, 5760, 0));
+  h.hooks.registerArea[0].postLeave(p2, false);
+  assert.equal(two.getNpcTransformationId(), 10690);
+  assert.equal(two.getOwner(), null);
+  assert.deepEqual([two.getLocation().getX(), two.getLocation().getY()], [3015, 5806]);
+  assert.equal(two.getHitpoints(), rubbleDefinition.getHitpoints());
+  assert.ok(two.movementResets >= 1 && two.combatResets >= 1 && p2.log.length >= 0);
+  const resets = [two.movementResets, two.combatResets];
+  h.hooks.registerArea[0].postLeave(p2, false);
+  assert.deepEqual([two.movementResets, two.combatResets], resets, 'restore happens only once');
+
+  // Logout restores another owned slot, then the same rubble can be awakened again.
+  const three = rubble(3023, 5775);
+  invoke(p1, three);
+  assert.equal(three.getNpcTransformationId(), 10689);
+  h.hooks.onPlayerLogout[0]({ player: p1 });
+  assert.equal(three.getNpcTransformationId(), 10690);
+  invoke(p1, three);
+  assert.equal(three.getNpcTransformationId(), 10689);
 });
 
 test('Defender of Varrock keeps an owner-only Elias at the base landing', () => {

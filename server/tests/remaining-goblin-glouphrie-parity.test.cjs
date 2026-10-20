@@ -308,6 +308,26 @@ test('LOTG potion needs no equipment and the temple route reaches freed Zanik', 
   assert.equal(h.quest.getStage(p), 26);
 });
 
+test('LOTG potion ignores empty equipment placeholders but refuses a real worn item', () => {
+  const h = harness('LandOfTheGoblins');
+  const empty = player();
+  h.quest.setStage(empty, 16);
+  empty.equipment.push(...Array.from({ length: 14 }, () => new core.Item(-1, 0)));
+  empty.items.set(I.GOBLIN_POTION_4_, 1);
+  h.hooks.onItemAction[0]({ player: empty, itemId: I.GOBLIN_POTION_4_, option: 'Drink' });
+  assert.equal(empty.prompt, undefined);
+  for (const fn of h.hooks.onInterfaceActionButton ?? []) fn({ player: empty, buttonId: (739 << 16) | 30 });
+  assert.equal(h.quest.getStage(empty), 18, 'placeholder equipment does not block the potion');
+
+  const worn = player();
+  h.quest.setStage(worn, 16);
+  worn.equipment.push(new core.Item(I.GOBLIN_MAIL, 1));
+  worn.items.set(I.GOBLIN_POTION_4_, 1);
+  h.hooks.onItemAction[0]({ player: worn, itemId: I.GOBLIN_POTION_4_, option: 'Drink' });
+  assert.match(worn.messages.at(-1), /remove your equipment/);
+  assert.equal(h.quest.getStage(worn), 16, 'a real equipped item still refuses the potion');
+});
+
 test('LOTG Bighead unlocks keys and the six keys open the crypt', () => {
   const h = harness('LandOfTheGoblins');
   const p = player();

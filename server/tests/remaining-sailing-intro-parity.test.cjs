@@ -14,7 +14,7 @@ before(async () => {
 });
 
 function setup() {
-  const hooks = { variants: [], conditions: [], npcs: [], named: new Map(), objects: [], items: [], itemOnNpc: [], itemActions: [], interfaceClicks: [], groundClick: [], groundPickup: [], deaths: [], zones: [], ladders: [], login: [], logout: [], custom: new Map() };
+  const hooks = { variants: [], conditions: [], npcs: [], named: new Map(), objects: [], routes: [], items: [], itemOnNpc: [], itemActions: [], interfaceClicks: [], groundClick: [], groundPickup: [], deaths: [], zones: [], ladders: [], login: [], logout: [], custom: new Map() };
   const tasks = [];
   let lastPrompt = null;
   let tick = 0;
@@ -35,6 +35,7 @@ function setup() {
     onNpcDialogueCondition(fn) { hooks.conditions.push(fn); },
     onNpcInteraction(target, actions) { if (typeof target === 'string') hooks.named.set(target, actions); else hooks.npcs.push(target); },
     onObjectInteraction(fn) { hooks.objects.push(fn); },
+    onObjectRoute(fn) { hooks.routes.push(fn); },
     onCustomEvent(name, fn) { const list = hooks.custom.get(name) ?? []; list.push(fn); hooks.custom.set(name, list); },
     emitCustomEvent(name, event) {
       if (name === 'quest:is-complete') {
@@ -639,5 +640,38 @@ test('Pandemonium relog restores stages 12/14 at the earned wreck, docked and ar
   assert.equal(h.inventory.get(h.core.ItemIdentifiers.OLD_CUP), 1);
   h.action(h.core.NpcIdentifiers.WILL, 'p40qKY');
   assert.equal(h.inventory.get(h.core.ItemIdentifiers.OLD_CUP), 1);
+  for (const stale of StaticShips.all()) StaticShips.dispose(stale);
+});
+
+test('Pandemonium deck hook routes Deploy from the player pose instead of the all-edge mask', () => {
+  const h = setup();
+  const StaticShips = require('../plugins/skills/sailing/StaticShips.Sailing');
+  const { MovementQueue } = require('../dist/game/model/movement/MovementQueue');
+  const { Location } = require('../dist/game/model/Location');
+  const quest = load(h, 'Pandemonium.Quest.js');
+  h.action(h.core.NpcIdentifiers.WILL, 'BDfVg8');
+  const ship = StaticShips.all()[0];
+  h.player.moveTo(new Location(ship.boat.deckBaseX + 3, ship.boat.deckBaseY + 3, 0));
+  const object = { getLocation: () => new Location(ship.boat.deckBaseX + 2, ship.boat.deckBaseY + 3, 0) };
+  const event = { player: h.player, objectId: 60482, object, blockAccessFlags: 15 };
+  for (const fn of h.hooks.routes) fn(event);
+  assert.deepEqual(event.destination, {
+    x: ship.boat.deckBaseX + 3, y: ship.boat.deckBaseY + 3, z: 0,
+  }, 'the normal route targets the deck tile the player stands on');
+  const other = { player: h.player, objectId: 60464, object, blockAccessFlags: 15 };
+  for (const fn of h.hooks.routes) fn(other);
+  assert.equal(other.destination, undefined, 'other deck locs keep their normal route');
+
+  // The engine's destination contract executes the normal object action from that tile;
+  // no cache mask/definition is mutated.
+  const player = {
+    isPlayer: () => true, isNpc: () => false, getAsPlayer() { return this; },
+    getLocation: () => new Location(event.destination.x, event.destination.y, 0),
+    getPrivateArea: () => ship.deck, getSize: () => 1,
+  };
+  const queue = new MovementQueue(player);
+  let dispatched = 0;
+  queue.walkToTile(new Location(event.destination.x, event.destination.y, 0), () => { dispatched++; });
+  assert.equal(dispatched, 1, 'MovementQueue dispatches the action from the override destination');
   for (const stale of StaticShips.all()) StaticShips.dispose(stale);
 });

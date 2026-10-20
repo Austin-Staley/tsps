@@ -93,6 +93,7 @@ module.exports = function registerTroubledTortugansQuest(api) {
   const DOCK_FLOOPA_NPC_ID = 14988; // tt_floopa_conch_docks, Great Conch arrival
   const PEARL_SAILOR_NPC_ID = NpcIdentifiers.SAILOR_12; // 15001, captured cutscene sailor
   const PEARL_KOREL_NPC_ID = NpcIdentifiers.ELDER_KOREL_2; // 14999
+  const PEARL_KOREL_DONE_NPC_ID = NpcIdentifiers.ELDER_KOREL_3; // 15000, Talk-to after Shellbane
   const PEARL_HUBBER_NPC_ID = NpcIdentifiers.ELDER_HUBBER_2; // 15004
   const PEARL_ROOT_NPC_ID = NpcIdentifiers.ELDER_ROOT_2; // 15007
 
@@ -1031,6 +1032,12 @@ module.exports = function registerTroubledTortugansQuest(api) {
     }
   }
 
+  /** Capture 3456: Korel turns into his Talk-to combat_done form after Shellbane. */
+  function transformPearlKorel(player) {
+    const korel = pearlActorsByPlayer.get(player)?.korel;
+    if (korel?.isRegistered?.()) korel.setNpcTransformationId?.(PEARL_KOREL_DONE_NPC_ID);
+  }
+
   function spawnPearlActors(player) {
     const existing = pearlActorsByPlayer.get(player) ?? {};
     const place = (key, id, tile) => {
@@ -1248,6 +1255,11 @@ module.exports = function registerTroubledTortugansQuest(api) {
 
   function handlePearlZoneEnter({ player }) {
     if (quest.isComplete(player)) return;
+    if (quest.getStage(player) === STAGE_SHELLBANE_DEAD && nearPearl(player)) {
+      spawnPearlActors(player);
+      transformPearlKorel(player);
+      return;
+    }
     // Recovery only: the mandatory arrival is the boat approach. A player on
     // the island after a relog can still resume the boss onto the land tiles.
     if (quest.getStage(player) === STAGE_PEARL_ARRIVED && !aboard(player) && nearPearl(player)) {
@@ -1273,6 +1285,7 @@ module.exports = function registerTroubledTortugansQuest(api) {
       pearlFightKeys.delete(killer);
       endPearlCutscene(killer);
       if (quest.getStage(killer) === STAGE_PEARL_ARRIVED) quest.setStage(killer, STAGE_SHELLBANE_DEAD);
+      transformPearlKorel(killer);
     }
   }
 
@@ -1351,6 +1364,9 @@ module.exports = function registerTroubledTortugansQuest(api) {
       spawnDockFloopa(player);
     } else if (stage === STAGE_PEARL_ARRIVED && nearPearl(player)) {
       beginPearlAssault(player);
+    } else if (stage === STAGE_SHELLBANE_DEAD && nearPearl(player)) {
+      spawnPearlActors(player);
+      transformPearlKorel(player);
     } else if (stage === STAGE_PEARL_BRIEFED && aboard(player)) {
       if (nearPearlMooring(player)) startPearlCutscene(player);
       else startPearlApproachWatch(player);

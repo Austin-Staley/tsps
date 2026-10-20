@@ -497,6 +497,13 @@ test('the Waterfall dungeon doors swap to their cache open locs', () => {
     assert.deepEqual(deregistered, [closedId], `door ${closedId} is removed`);
     assert.ok(registered.includes(openId), `door ${closedId} becomes open loc ${openId}`);
   }
+  // Do not leave the 2002 open-door state for the real-map door test below.
+  names.Close({
+    player: { getPrivateArea: () => null },
+    object: new core.GameObject(2003, new core.Location(2566, 9902, 0), 0, 2, null),
+    objectId: 2003, definition: { id: 2003 },
+    location: new core.Location(2566, 9902, 0), clickType: 1, handled: false,
+  });
 });
 
 test('north Waterfall large doors match the captured west swing and keep the threshold routable', () => {
@@ -546,6 +553,87 @@ test('north Waterfall large doors match the captured west swing and keep the thr
     location: new core.Location(2581, 9876, 0), clickType: 1, handled: false,
   });
   assert.ok(MapObjects.get(1521, new core.Location(2582, 9875, 0), null), 'close restores the north pair');
+});
+
+test('normal defaults reach and open both Baxtorian 2002 doors through the real door callback', () => {
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
+  const { ObjectManager } = require('../dist/game/entity/impl/object/ObjectManager');
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+  RegionManager.init();
+  for (const [x, y] of [[2572, 9896], [2576, 9884], [2565, 9881], [2568, 9893], [2566, 9901], [2565, 9908]]) {
+    RegionManager.loadMapFiles(x, y);
+  }
+  const q = register(), p = player();
+  q.quest.setStage(p, STAGE.dungeon);
+  p.give(ID.baxKey, 1);
+  p.moveTo(new core.Location(2572, 9896, 0));
+  const names = {};
+  const doorCore = {
+    ...core, ObjectManager, MapObjects,
+    Sounds: { sendSound() {} },
+    TaskManager: { submit() {}, cancelTasks() {} },
+  };
+  require('../plugins/objects/Doors.plugin.js').register({
+    core: doorCore,
+    onObjectInteraction: (name, actions) => {
+      if (name === 'Large door') names.large = actions;
+      if (name === 'Door') names.door = actions;
+    },
+    onRegionLoaded() {}, onServerStartup() {}, onObjectRoute() {},
+    emitCustomEvent: (event, payload) => q.emit(event, payload),
+  });
+  const finder = new RsmodRouteFinding();
+  const route = (srcX, srcY, destX, destY) => finder.findRoute({
+    level: 0, srcX, srcY, srcSize: 1, destX, destY,
+    destWidth: 1, destLength: 1, locAngle: 0, locShape: -1, moveNear: false,
+    blockAccessFlags: 0, maxWaypoints: 25, privateArea: null,
+  });
+  const open = (id, x, y) => {
+    const object = MapObjects.get(id, new core.Location(x, y, 0), null);
+    assert.ok(object, `map object ${id}@${x},${y}`);
+    (id === ID.baxDoor ? names.door : names.large).Open({
+      player: p, object, objectId: id, definition: { id },
+      location: new core.Location(x, y, 0), clickType: 1, handled: false,
+    });
+  };
+  // Normal route from the post-crate room: one Open leaf per large-door pair.
+  open(1521, 2576, 9884);
+  open(1521, 2576, 9882);
+  open(1521, 2564, 9881);
+
+  const assertDefaultRoute = (x, y, sourceX, sourceY) => {
+    const object = { getLocation: () => new core.Location(x, y, 0) };
+    const event = {
+      player: p, objectId: ID.baxDoor, object,
+      sourceLocation: { x: sourceX, y: sourceY, z: 0 }, destination: null,
+    };
+    q.call('onObjectRoute', event);
+    assert.equal(event.destination, null, `2002@${x},${y} keeps the normal destination from (${sourceX},${sourceY})`);
+  };
+  assertDefaultRoute(2568, 9893, 2572, 9896);
+  assertDefaultRoute(2568, 9893, 2568, 9895);
+  assertDefaultRoute(2566, 9901, 2568, 9895);
+  assertDefaultRoute(2566, 9901, 2566, 9903);
+
+  assert.equal(route(2572, 9896, 2568, 9892).success, true, 'default route reaches the north side of the first 2002');
+  p.moveTo(new core.Location(2568, 9892, 0));
+  open(ID.baxDoor, 2568, 9893);
+  assert.equal(q.quest.getStage(p), STAGE.door);
+  assert.ok(MapObjects.get(2003, new core.Location(2568, 9894, 0), null), 'physical 2003 at 2568,9894');
+  assert.equal(MapObjects.get(2002, new core.Location(2568, 9893, 0), null), null);
+  assert.equal(route(2568, 9892, 2568, 9895).success, true, 'open 2003 passes south');
+  assert.equal(route(2568, 9895, 2568, 9892).success, true, 'open 2003 passes north');
+
+  assert.equal(route(2568, 9895, 2566, 9900).success, true, 'default route reaches the north side of the second 2002');
+  p.moveTo(new core.Location(2566, 9900, 0));
+  open(ID.baxDoor, 2566, 9901);
+  assert.equal(q.quest.getStage(p), STAGE.door);
+  assert.ok(MapObjects.get(2003, new core.Location(2566, 9902, 0), null), 'physical 2003 at 2566,9902');
+  assert.equal(MapObjects.get(2002, new core.Location(2566, 9901, 0), null), null);
+  assert.equal(route(2566, 9900, 2566, 9903).success, true, 'open 2003 passes south into the pillar room');
+  assert.equal(route(2566, 9903, 2566, 9900).success, true, 'pillar room returns north through open 2003');
+  assert.equal(p.hasFlag('movement:ignore-clipping'), false, 'no scoped clip flag is involved');
 });
 
 test('rope crossing uses owner objects, leaves the base rock, and keeps two players isolated', () => {

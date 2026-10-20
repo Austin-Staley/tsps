@@ -1629,7 +1629,7 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
   }
 
   function openGoblinSelection(player, itemId) {
-    if (player.getEquipment().getItems().some((item) => item)) {
+    if (player.getEquipment().getItems().some((item) => (item?.getId?.() ?? -1) > 0)) {
       player.sendMessage("You should remove your equipment before drinking the potion.");
       return;
     }

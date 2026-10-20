@@ -612,6 +612,20 @@ test('Fremennik Exiles negative: basilisk kills before the invasion do nothing',
   assert.equal(h.player.getAttribute('quest.the_fremennik_exiles.basilisk-kills'), undefined);
 });
 
+test('Fremennik Exiles market death callback advances killPercent and stage', () => {
+  const h = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles');
+  const N = NPCS(h);
+  h.quest.setStage(h.player, 80);
+  h.death(N.MONSTROUS_BASILISK_2, null);
+  assert.equal(h.player.getAttribute('quest.the_fremennik_exiles.basilisk-kills'), 3);
+  assert.equal(h.varbits.get(9466), 3);
+  assert.equal(h.quest.getStage(h.player), 80);
+  for (let i = 0; i < 28; i++) h.death(N.BASILISK, null);
+  assert.equal(h.player.getAttribute('quest.the_fremennik_exiles.basilisk-kills'), 31);
+  assert.equal(h.varbits.get(9466), 31);
+  assert.equal(h.quest.getStage(h.player), 85);
+});
+
 test('combined real dispatch: Brundt 9263 offers Exiles before Lunar/FremennikTrials and keeps seal reclaim', () => {
   const plugin = (name) => {
     const api = PluginManager.createApi(name);

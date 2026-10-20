@@ -8,6 +8,7 @@ const { PluginManager } = require('../dist/plugins/PluginManager');
 const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
 const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
+const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
 const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
 const runtime = require('../plugins/quests/QuestRuntime');
 const core = PluginManager.getCoreApi();
@@ -343,6 +344,29 @@ test('Shadows of Custodia den entry plays the captured fade and rockslide locs',
   assert.ok(p.camera.some(packet => packet[0] === 'sub'));
   assert.ok(h.objects.some(object => [57642, 57643, 57645, 11426].includes(object.getId?.() ?? object.id)));
   assert.equal(h.quest.getStage(p), 12);
+});
+
+test('The Final Dawn safehouse dog accepts the real alert content id 14237', () => {
+  const base = NpcDefinition.forId(14236), alert = NpcDefinition.forId(14237);
+  assert.equal(base.getId(), 14236);
+  assert.equal(alert.getId(), 14237);
+  assert.ok([null, 'null'].includes(CacheDefinitions.getNpc(14236).name), 'base cache entry is the unnamed parent');
+  assert.equal(CacheDefinitions.getNpc(14237).name, 'Dog', 'alert is the real cache-backed child');
+
+  for (const npcId of [14236, 14237]) {
+    const h = harness('TheFinalDawn'), p = player();
+    h.quest.setStage(p, 16);
+    p.items.set(I.BONES, 1);
+    const event = { player: p, npcId, itemId: I.BONES, handled: false };
+    for (const fn of h.hooks.onItemOnNpc) fn(event);
+    if (npcId === 14236) {
+      assert.equal(h.quest.getStage(p), 17, 'base id still calms the dog');
+      assert.equal(p.items.get(I.BONES), undefined);
+    } else {
+      assert.equal(h.quest.getStage(p), 17, 'alert content id calms the dog');
+      assert.equal(p.items.get(I.BONES), undefined);
+    }
+  }
 });
 
 test('The Final Dawn basement, archive and safe-house hooks emit captured camera/fade beats and clean actors', () => {

@@ -204,3 +204,29 @@ test('sewer ladders clear queued walks and land on the captured tile both direct
   assert.deepEqual([up.p.getLocation().getX(), up.p.getLocation().getY(), up.p.getLocation().getZ()], [1479, 4239, 1]);
   assert.equal(PathFinder.findWalkable(up.p, 1484, 4238, 1), true, 'upper landing can reach the gate corridor');
 });
+
+test('POG completed Hazelmere uses the canonical Path postquest variant without re-rewarding', () => {
+  const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
+  new NpcDefinitionLoader().load();
+  const { p } = player(50, 0);
+  p.setAttribute('quest.the_path_of_glouphrie.lamps', 4);
+  p.setLocation(new core.Location(2678, 3086, 1));
+  const messages = [];
+  p.sendMessage = (text) => messages.push(text);
+  const skills = [core.Skill.MAGIC, core.Skill.STRENGTH, core.Skill.SLAYER, core.Skill.THIEVING];
+  const xpBefore = skills.map((skill) => p.getSkillManager().getExperience(skill));
+  const handled = PluginManager.emitNpcInteraction({
+    player: p,
+    npc: { getId: () => 1422 },
+    npcId: 1422,
+    clickType: 1,
+    definition: { getName: () => 'Hazelmere', getActions: () => ['Talk-to'] },
+    handled: false,
+  });
+  assert.equal(handled, true, 'Hazelmere Talk-to is handled by POG');
+  assert.equal(p.getDialogueManager().isActive(), true, 'the shipped Path postquest dialogue starts');
+  assert.equal(messages.some((line) => /conversation isn't available/.test(line)), false);
+  for (const lamp of [28587, 28588, 28589, 28590]) assert.equal(p.getInventory().getAmount(lamp), 0, 'no lamp re-award');
+  assert.equal(p.getAttribute('quest.the_path_of_glouphrie.lamps'), 4, 'lamp claim count unchanged');
+  assert.deepEqual(skills.map((skill) => p.getSkillManager().getExperience(skill)), xpBefore, 'no XP re-awarded');
+});

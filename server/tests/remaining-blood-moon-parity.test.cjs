@@ -49,7 +49,7 @@ function harness() {
     onNpcHitModify(fn) { (events['npc-hit-modify'] ??= []).push(fn); },
     onPlayerLogin(fn) { (events['player:login'] ??= []).push(fn); },
     onPlayerLogout(fn) { (events['player:logout'] ??= []).push(fn); },
-    onNpcDeath() {},
+    onNpcDeath(fn) { (events['npc-death'] ??= []).push(fn); },
     onWalkRoute() {},
     registerCommand() {},
     persistAttribute: noop,
@@ -58,7 +58,7 @@ function harness() {
     emitCustomEvent(key, event) { for (const fn of events[key] ?? []) fn(event); },
     spawnNpc(definition) {
       if (failSpawnId === definition.id && failSpawnCount > 0) { failSpawnCount--; return null; }
-      const npc = { ...definition, getId: () => definition.id, getIndex: () => nextIndex++, isNpc: () => true,
+      const npc = { ...definition, getId: () => definition.id, getIndex: () => nextIndex++, isNpc: () => true, isRegistered: () => !removed.includes(npc),
         isPlayer: () => false, getAsNpc() { return npc; }, getLocation: () => new core.Location(definition.x, definition.y, definition.z),
         getHitpoints: () => npc.hp ?? 1, setHitpoints(value) { npc.hp = value; }, getArea: () => npc.area ?? null, setArea(value) { npc.area = value; }, getOwner: () => definition.owner,
         getMovementQueue: () => ({ reset() { return this; }, setBlockMovement: noop, addFirstStep: noop }),
@@ -230,7 +230,7 @@ test('Slepe/Paterdomus chapters mirror Quest Helper native stages and defer to t
   p.attrs.set(STORY, { journalGiven: true, journalRead: true }); run(); assert.equal(p.varbits.get(15464), 28);
   p.attrs.set(STORY, { journalRead: true, upstairsTalked: true }); run(); assert.equal(p.varbits.get(15464), 30);
   p.attrs.set(STORY, { upstairsTalked: true, monksRequested: true }); run(); assert.equal(p.varbits.get(15464), 32);
-  p.attrs.set(STORY, { monksRequested: true, monkKills: ['one'] }); run(); assert.equal(p.varbits.get(15464), 34);
+  p.attrs.set(STORY, { monksRequested: true, monksBattleStarted: true }); run(); assert.equal(p.varbits.get(15464), 34);
   p.attrs.set(STORY, { monksCleared: true }); run(); assert.equal(p.varbits.get(15464), 36);
   p.attrs.set(STORY, { booksPlaced: true }); run(); assert.equal(p.varbits.get(15464), 38);
   p.attrs.set(STORY, { writingsGiven: true }); run(); assert.equal(p.varbits.get(15464), 40);
@@ -658,4 +658,363 @@ test('relog repairs only the stranded stage-25 courtyard save', () => {
   assert.equal(elsewhere.getLocation().getX(), 3200);
   assert.equal(elsewhere.getLocation().getY(), 3200);
   assert.equal(elsewhere.messages.some(m => m.includes('teleport sets you down')), false);
+});
+
+test('shipped Roy index selects the Blood Moon variant at stage 30 and reaches royClue', () => {
+  const h = harness(), p = player('Alice');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 30);
+  p.attrs.set('quest.the_blood_moon_rises.slepe-story', { ivanFollowing: true });
+  const def = core.NpcDefinition.forId(9768);
+  assert.equal(def?.getName?.(), 'Roy');
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  PluginManager.emitNpcDialogueVariant = event => {
+    for (const fn of h.variants) { const result = fn(event); if (result) return result; }
+    return null;
+  };
+
+  const dialogueHooks = [];
+  const api2 = new Proxy({}, { get: (_, key) => key === 'onAnyNpcInteraction'
+    ? actions => dialogueHooks.push(actions) : h.api[key] });
+  require('../plugins/npcs/NpcDialogues.plugin').register(api2);
+  dialogueHooks[0]['Talk-to']({ player: p, npc: { getId: () => 9768 }, npcId: 9768, definition: def });
+
+  assert.ok(String(p.manager.getCurrent()?.getText?.()).startsWith('Good day, sir.'),
+    'real Blood Moon Roy page selected, not the flat Sins page');
+  continueUntil(p, () => Boolean(p.prompt));
+  choose(p, "We're looking for a friend of ours.");
+  continueUntil(p, () => String(p.manager.getCurrent()?.getText?.()).includes('commotion up at Crombwick Manor'));
+  p.manager.advance();
+  assert.equal(p.attrs.get('quest.the_blood_moon_rises.slepe-story').royClue, true);
+  h.emit('player:process', { player: p });
+  assert.equal(p.varbits.get(15464), 18, 'royClue mirrors native 18');
+});
+
+test('inactive Roy keeps the default Sins/flat page', () => {
+  const h = harness(), p = player('Alice');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 0);
+  const def = core.NpcDefinition.forId(9768);
+  const dialogueHooks = [];
+  const api2 = new Proxy({}, { get: (_, key) => key === 'onAnyNpcInteraction'
+    ? actions => dialogueHooks.push(actions) : h.api[key] });
+  require('../plugins/npcs/NpcDialogues.plugin').register(api2);
+  dialogueHooks[0]['Talk-to']({ player: p, npc: { getId: () => 9768 }, npcId: 9768, definition: def });
+  assert.ok(String(p.manager.getCurrent()?.getText?.()).startsWith('Good day sir.'),
+    'default Roy page is used when Blood Moon is inactive');
+});
+
+test('Paterdomus 32 -> 34 spawns only the captured 16154/55/56 battle roster', () => {
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const { World } = require('../dist/game/World');
+  const { BoatManager } = require('../dist/game/content/sailing/BoatManager');
+  const { NPC } = require('../dist/game/entity/impl/npc/NPC');
+  const m1 = CacheDefinitions.getNpc(3484), m2 = CacheDefinitions.getNpc(3485), m3 = CacheDefinitions.getNpc(3486);
+  assert.equal(m1.transformVarbit, 15464, '3484 morphs on the myq6 varbit');
+  assert.equal(m2.transformVarbit, 15464, '3485 morphs on the myq6 varbit');
+  assert.deepEqual([m1.transforms[32], m1.transforms[34], m1.transforms[35]], [16271, 16271, -1],
+    'ground-floor 3484 is 16271 until myq6 34, then hidden');
+  assert.deepEqual([m2.transforms[32], m2.transforms[34], m2.transforms[35]], [16272, 16272, -1],
+    'ground-floor 3485 is 16272 until myq6 34, then hidden');
+  assert.deepEqual([m3.transformVarbit, m3.transforms], [15615, [16273, -1]],
+    '3486 is the separate 16273 dead-monk morph');
+
+  const h = harness(), p = player('Alice');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 30);
+  const STORY = 'quest.the_blood_moon_rises.slepe-story';
+  p.attrs.set(STORY, { manorComplete: true, monksRequested: true });
+  p.moveTo(new core.Location(3423, 3485, 0));
+  h.emit('player:process', { player: p });
+  assert.equal(h.npcs.some(npc => [16154, 16155, 16156, 15863, 16271, 16272, 16273].includes(npc.id)), false,
+    'no pre-battle owner actors outside the temple front-door zone');
+  assert.equal(p.varbits.get(15464), 32, 'monks requested is native 32 before entry');
+
+  p.moveTo(new core.Location(3409, 3489, 0));
+  h.emit('player:process', { player: p });
+  const expected = [
+    [15863, 3409, 3488],
+    [16154, 3413, 3489], [16155, 3411, 3492], [16156, 3415, 3491],
+    [16154, 3410, 3485], [16155, 3414, 3484], [16156, 3417, 3486],
+  ].sort();
+  const actors = h.npcs.filter(npc => [15863, 16154, 16155, 16156].includes(npc.id))
+    .map(npc => [npc.id, npc.getLocation().getX(), npc.getLocation().getY()]).sort();
+  assert.deepEqual(actors, expected, 'only the P1 tick-1740 battle adds, at their exact tiles');
+  assert.equal(actors.length, 7, 'Ivan plus two of each combat monk');
+  assert.equal(actors.filter(([id]) => id === 16154).length, 2);
+  assert.equal(actors.filter(([id]) => id === 16155).length, 2);
+  assert.equal(actors.filter(([id]) => id === 16156).length, 2);
+  assert.equal(h.npcs.some(npc => [16271, 16272, 16273].includes(npc.id)), false,
+    'the pre-fight 16271/72 world morphs are never duplicated as owner NPCs');
+  assert.equal(h.npcs.filter(npc => [15863, 16154, 16155, 16156].includes(npc.id)).every(npc => npc.getOwner() === p), true);
+  assert.equal(p.attrs.get(STORY).monksBattleStarted, true);
+  assert.equal(p.varbits.get(15464), 34, 'normal temple entry advances native 32 -> 34');
+
+  const battleArea = p.getArea();
+  assert.ok(battleArea && battleArea.countsAsMainWorld() === false, 'the fight runs in a private area');
+  assert.equal(p.getPrivateArea(), battleArea, 'the owner is inside the private battle area');
+  assert.equal(BoatManager.syncArea(p), battleArea);
+  assert.equal(battleArea.isMulti(), true, 'the captured fight is multi-combat');
+  for (const npc of h.npcs.filter(n => [15863, 16154, 16155, 16156].includes(n.id))) {
+    assert.equal(npc.getArea(), battleArea, 'every battle actor is attached to the private area');
+  }
+  const firstMonk = h.npcs.find(n => n.id === 16154);
+  assert.equal(battleArea.canAttack(firstMonk, p), true);
+  assert.equal(battleArea.canAttack(p, firstMonk), true);
+  assert.ok(battleArea.getObjects().some(o => o.getId() === core.ObjectIdentifiers.LARGE_DOOR_110 &&
+    o.getLocation().getX() === 3408 && o.getLocation().getY() === 3489), 'captured escape door 61187 at 3408,3489');
+  assert.ok(battleArea.getObjects().some(o => o.getId() === core.ObjectIdentifiers.LARGE_DOOR_111 &&
+    o.getLocation().getX() === 3408 && o.getLocation().getY() === 3488), 'captured escape door 61188 at 3408,3488');
+
+  // Real World local-NPC sync: the main-world 3484 morph is dropped while the owner is in
+  // the private area; an actor attached to that area is kept.
+  const worldMonk = NPC.create(3484, new core.Location(3410, 3484, 0));
+  const areaMonk = NPC.create(16154, new core.Location(3413, 3489, 0));
+  try {
+    assert.equal(World.getNpcs().add(worldMonk), true);
+    assert.equal(World.getNpcs().add(areaMonk), true);
+    battleArea.enter(areaMonk);
+    assert.equal(BoatManager.syncArea(worldMonk), null);
+    assert.equal(BoatManager.syncArea(areaMonk), battleArea);
+    assert.equal(battleArea.canAttack(worldMonk, p), false, 'outside actors cannot attack into the private fight');
+    const localNpcs = [];
+    World.updateLocalNpcs({
+      getLocalNpcs: () => localNpcs,
+      getLocation: () => new core.Location(3410, 3489, 0),
+      getPrivateArea: () => battleArea,
+      getArea: () => battleArea,
+      getNpcViewDistance: () => 15,
+      getIndex: () => 9999,
+      isNeedsPlacement: () => false,
+      getAttribute: () => undefined,
+    }, [worldMonk, areaMonk]);
+    assert.equal(localNpcs.includes(worldMonk), false,
+      'native-34 world 3484/16271 is not sent while the private fight is active');
+    assert.equal(localNpcs.includes(areaMonk), true, 'the private battle actor is visible');
+  } finally {
+    World.getNpcs().remove(worldMonk);
+    World.getNpcs().remove(areaMonk);
+    battleArea.detach(areaMonk);
+  }
+});
+
+test('Paterdomus battle clears native 34 -> 36 only after all six combat monks die', () => {
+  const { BoatManager } = require('../dist/game/content/sailing/BoatManager');
+  const h = harness(), p = player('Alice');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 30);
+  const STORY = 'quest.the_blood_moon_rises.slepe-story';
+  p.attrs.set(STORY, { manorComplete: true, monksRequested: true, monksBattleStarted: true });
+  p.moveTo(new core.Location(3409, 3489, 0));
+  h.emit('player:process', { player: p });
+  const actors = h.npcs.filter(npc => [15863, 16154, 16155, 16156].includes(npc.id));
+  assert.equal(actors.length, 7, 'the replay starts the whole captured roster');
+  const battleArea = p.getArea();
+  const ivan = actors.find(npc => npc.id === 15863);
+  const monks = actors.filter(npc => npc.id !== 15863);
+  for (const npc of monks.slice(0, 5)) h.emit('npc-death', { npc, killer: p });
+  assert.equal(p.attrs.get(STORY).monksCleared, undefined, 'five kills do not clear the fight');
+  assert.equal(p.varbits.get(15464), 34, 'native stays 34 until the last monk');
+  h.emit('npc-death', { npc: monks[5], killer: p });
+  assert.equal(p.attrs.get(STORY).monksCleared, true);
+  assert.equal(p.varbits.get(15464), 36, 'the sixth death advances native 34 -> 36');
+  assert.ok(h.removed.includes(ivan), 'the captured Ivan combat actor is removed with the scene');
+  assert.ok(p.manager.getCurrent(), 'upon-killing-monks transcript starts');
+  assert.equal(p.getArea(), null, 'the fight ends back in the ordinary temple');
+  assert.equal(p.getPrivateArea(), null);
+  assert.equal(BoatManager.syncArea(p), null);
+  assert.equal(battleArea.isDestroyed(), true);
+  assert.equal(battleArea.getObjects().length, 0, 'captured escape doors are removed with the scene');
+
+  p.moveTo(new core.Location(3417, 3487, 1));
+  h.emit('player:process', { player: p });
+  assert.ok(h.npcs.some(npc => npc.id === N.IVAN_STROM_4 && npc.getLocation().getX() === 3417 &&
+    npc.getLocation().getY() === 3487 && npc.getLocation().getZ() === 1),
+  'the stage-36 Ivan is reachable on the temple first floor');
+});
+
+test('Paterdomus battle actors clean up on exit and restart as the full roster', () => {
+  const h = harness(), p = player('Alice');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 30);
+  const STORY = 'quest.the_blood_moon_rises.slepe-story';
+  p.attrs.set(STORY, { manorComplete: true, monksRequested: true, monksBattleStarted: true });
+  p.moveTo(new core.Location(3409, 3489, 0));
+  h.emit('player:process', { player: p });
+  const first = h.npcs.filter(npc => [15863, 16154, 16155, 16156].includes(npc.id));
+  assert.equal(first.length, 7);
+  const monks = first.filter(npc => npc.id !== 15863);
+  h.emit('npc-death', { npc: monks[0], killer: p });
+  h.emit('npc-death', { npc: monks[1], killer: p });
+  assert.equal(p.attrs.get(STORY).monksCleared, undefined);
+  assert.equal(p.attrs.get(STORY).monkKills, undefined, 'partial kills are not persisted');
+
+  p.moveTo(new core.Location(3200, 3200, 0));
+  h.emit('player:process', { player: p });
+  for (const npc of first) if (![monks[0], monks[1]].includes(npc)) {
+    assert.ok(h.removed.includes(npc), 'leaving the temple removes every surviving battle actor');
+  }
+
+  p.moveTo(new core.Location(3409, 3489, 0));
+  h.emit('player:process', { player: p });
+  const replay = h.npcs.filter(npc => [15863, 16154, 16155, 16156].includes(npc.id) && !first.includes(npc));
+  assert.equal(replay.length, 7, 're-entry restarts the full captured roster');
+  assert.equal(p.attrs.get(STORY).monksCleared, undefined);
+  h.emit('player:logout', { player: p });
+  for (const npc of replay) assert.ok(h.removed.includes(npc), 'logout removes every battle actor');
+});
+
+test('Paterdomus fight is reached through the captured side trapdoor, cellar ladder and front door', async () => {
+  // Primary capture BloodMoonRisesP1: surface side trapdoor 3432 at 3422,3485 opens to
+  // 3433 in place, Climb-down lands 3440,9887; later the cellar ladder 17385 at 3405,9907
+  // Climb-up lands 3405,3506; the player opens the large front doors 3489/3490 before the
+  // monk scene. The previous blockers searched from outside with every door still closed.
+  const path = require('node:path');
+  const fs = require('node:fs');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+  const { ObjectManager } = require('../dist/game/entity/impl/object/ObjectManager');
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const { GameObject } = require('../dist/game/entity/impl/object/GameObject');
+  const { Location } = require('../dist/game/model/Location');
+  const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
+  const { Sounds } = require('../dist/game/Sounds');
+  const { Task } = require('../dist/game/task/Task');
+  const { ObjectIdentifiers } = require('../dist/util/ObjectIdentifiers');
+  const { Sound } = require('../dist/game/Sound');
+  const { Animation } = require('../dist/game/model/Animation');
+  const { DialogueChainBuilder } = require('../dist/game/model/dialogues/builders/DialogueChainBuilder');
+  const { StatementDialogue } = require('../dist/game/model/dialogues/entries/impl/StatementDialogue');
+  const { NpcDialogue } = require('../dist/game/model/dialogues/entries/impl/NpcDialogue');
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+
+  await CachePipeline.initialize(path.resolve(__dirname, '..'));
+  ObjectDefinition.init();
+  RegionManager.init();
+  for (const [x, y] of [[3408, 3489], [3405, 9907]]) {
+    RegionManager.loadMapFiles(x, y, true);
+    assert.ok(RegionManager.getRegionid(RegionManager.regionIdForTile(x, y))?.isLoaded(),
+      `real map region around ${x},${y} is loaded`);
+  }
+  const raw = (id, x, y, z = 0) => MapObjects.get(id, new Location(x, y, z), null);
+  assert.equal(raw(3432, 3422, 3485)?.isMapOriginal?.(), true, 'cache places the side trapdoor 3432 at 3422,3485');
+  assert.equal(raw(3489, 3408, 3489)?.isMapOriginal?.(), true, 'cache places the south front-door leaf 3489');
+  assert.equal(raw(3490, 3408, 3488)?.isMapOriginal?.(), true, 'cache places the north front-door leaf 3490');
+
+  const swaps = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../plugins/world/data/loc-swaps.json'), 'utf8')).swaps;
+  assert.deepEqual(
+    swaps.find((swap) => swap.id === 3432 && swap.op === 1 && swap.option === 'Open')?.becomes,
+    3433, 'the side trapdoor is canonical Open-in-place data');
+  const locs = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../plugins/world/data/loc-teleports.json'), 'utf8')).locs;
+  assert.deepEqual([locs.find((loc) => loc.id === 3433 && loc.x === 3422 && loc.y === 3485)?.to,
+    locs.find((loc) => loc.id === 17385 && loc.x === 3405 && loc.y === 9907)?.to],
+  [[3440, 9887, 0], [3405, 3506, 0]], 'the captured trapdoor and cellar-ladder landings are canonical');
+
+  // Register the real generic doors and teleports exactly as the loader does (Doors first,
+  // then LocTeleports). No clipping is cleared by hand: every change below comes from the
+  // registered handlers through ObjectManager/MapObjects.
+  const pending = [];
+  const TaskManager = { submit: task => pending.push(task), cancelTasks: () => {} };
+  const custom = new Map(), generic = [], named = new Map();
+  const pluginApi = {
+    core: { CacheDefinitions, GameObject, Location, MapObjects,
+      Sounds, ObjectIdentifiers, ObjectDefinition, Sound, Task, TaskManager, Animation,
+      DialogueChainBuilder, StatementDialogue, NpcDialogue, ObjectManager },
+    getObjectManager: () => ObjectManager,
+    getTaskManager: () => TaskManager,
+    emitCustomEvent: (name, event) => { for (const fn of custom.get(name) ?? []) fn(event); },
+    onCustomEvent: (name, fn) => { if (!custom.has(name)) custom.set(name, []); custom.get(name).push(fn); },
+    onObjectInteraction: (target, actions) => {
+      if (typeof target === 'function') { generic.push(target); return; }
+      for (const [option, fn] of Object.entries(actions)) {
+        const key = `${target}|${option}`;
+        if (!named.has(key)) named.set(key, []);
+        named.get(key).push(fn);
+      }
+    },
+    onRegionLoaded: noop, onObjectRoute: noop, onServerStartup: noop, onPlayerProcess: noop,
+    onItemOnObject: noop, persistAttribute: noop, registerArea: noop, sendMultiChatboxPrompt: () => true,
+  };
+  delete require.cache[require.resolve('../plugins/objects/Doors.plugin')];
+  delete require.cache[require.resolve('../plugins/world/LocTeleports.plugin')];
+  require('../plugins/objects/Doors.plugin').register(pluginApi);
+  require('../plugins/world/LocTeleports.plugin').register(pluginApi);
+  const tick = (count) => {
+    while (count-- > 0) {
+      const run = pending.splice(0);
+      for (const task of run) {
+        if (!task.stopped) task.execute();
+        if (!task.stopped) pending.push(task);
+      }
+    }
+  };
+  const dispatch = (name, option, event) => {
+    for (const fn of named.get(`${name}|${option}`) ?? []) {
+      if (event.handled) break;
+      if (fn(event) !== false) event.handled = true;
+    }
+    for (const fn of generic) if (!event.handled) fn(event);
+    return event;
+  };
+
+  let position = new Location(3423, 3485, 0);
+  const packets = { sendSound: noop, sendSoundEffect: noop, sendVarbit: noop, sendSubInterface: noop, closeSubInterface: noop };
+  const player = {
+    getUsername: () => 'QA7', isPlayerBot: () => false, getPrivateArea: () => null,
+    getLocation: () => position, moveTo: (to) => { position = to; },
+    getAttribute: () => undefined, setAttribute: noop,
+    getPacketSender: () => packets,
+    getMovementQueue: () => ({ isMovementBlocked: () => false, setBlockMovement() { return this; }, reset() { return this; } }),
+    isRegistered: () => true, getHitpoints: () => 99, performAnimation: noop,
+    getSkillManager: () => ({ getTotalLevel: () => 2000 }),
+    getEquipment: () => ({ contains: () => true }), getInventory: () => ({ contains: () => true }),
+    getDialogueManager: () => ({ startDialogues: noop }),
+  };
+  const click = (id, x, y, option, name, z = 0) => {
+    const object = raw(id, x, y, z);
+    assert.ok(object, `real map object ${id} at ${x},${y},${z}`);
+    return dispatch(name, option, { player, object, objectId: id, clickType: 1, option,
+      location: object.getLocation(), definition: { id, getName: () => name }, handled: false });
+  };
+
+  // 1. Side trapdoor opens in place, then Climb-down uses the captured landing.
+  assert.equal(click(3432, 3422, 3485, 'Open', 'Trapdoor').handled, true);
+  assert.equal(raw(3433, 3422, 3485)?.getId(), 3433, 'trapdoor 3433 replaces 3432 on the same tile');
+  assert.equal(raw(3433, 3422, 3486), null, 'the open trapdoor is not swung into the tile north');
+  assert.equal(click(3433, 3422, 3485, 'Climb-down', 'Trapdoor').handled, true);
+  tick(2);
+  assert.deepEqual([position.getX(), position.getY(), position.getZ()], [3440, 9887, 0],
+    'Climb-down lands on the captured cellar tile');
+
+  // 2. The cellar ladder emerges beside the temple front door.
+  position = new Location(3405, 9907, 0);
+  assert.equal(click(17385, 3405, 9907, 'Climb-up', 'Ladder').handled, true);
+  tick(3);
+  assert.deepEqual([position.getX(), position.getY(), position.getZ()], [3405, 3506, 0],
+    'Climb-up lands on the captured surface tile at the front door');
+
+  // 3. With the front doors still closed the monks inside are unreachable, exactly as the
+  //    rejected BFS showed. Opening the real double door through its registered handler is
+  //    what frees the doorway, not any manual clip removal.
+  const route = new RsmodRouteFinding((x, y, z, area) => RegionManager.getClipping(x, y, z, area));
+  const routeTo = (x, y) => route.findRoute({ level: 0, srcX: 3405, srcY: 3506, srcSize: 1,
+    destX: x, destY: y, privateArea: null, moveNear: false });
+  const monks = [[3418, 3491], [3415, 3486], [3414, 3490], [3409, 3488]];
+  for (const [x, y] of monks) assert.equal(routeTo(x, y).success, false,
+    `closed front door keeps ${x},${y} unreachable`);
+  assert.notEqual(RegionManager.getClipping(3409, 3489, 0, null), 0, 'the closed leaf blocks entry');
+
+  assert.equal(click(3489, 3408, 3489, 'Open', 'Large door').handled, true);
+  assert.equal(raw(3491, 3409, 3489)?.getId(), 3491, 'south leaf swings east into open loc 3491');
+  assert.equal(raw(3492, 3409, 3488)?.getId(), 3492, 'north leaf swings east into open loc 3492');
+  assert.equal(RegionManager.getClipping(3408, 3489, 0, null), 0, 'the door handler clears the doorway tile');
+  for (const [x, y] of monks) {
+    const path = routeTo(x, y);
+    assert.equal(path.success, true, `open front door gives an ordinary route to ${x},${y}`);
+    assert.deepEqual([path.endX, path.endY], [x, y], 'RSMOD reaches the actual monk tile, not a nearer tile');
+  }
+  assert.ok(raw(61189, 3417, 3492), 'the captured spiral stairs remain in the ordinary temple');
+  const toStairs = route.findRoute({ level: 0, srcX: 3409, srcY: 3489, srcSize: 1,
+    destX: 3417, destY: 3491, privateArea: null, moveNear: false });
+  assert.equal(toStairs.success, true, 'after the fight the stairs to Ivan are reachable by ordinary walking');
 });

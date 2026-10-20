@@ -544,13 +544,23 @@ module.exports = function registerTheBloodMoonRises(api) {
     { x: 3408, y: 3492, window: "Friar", itemId: ItemIdentifiers.THE_LIFE_OF_FRIAR },
     { x: 3409, y: 3494, window: "Erysail", itemId: ItemIdentifiers.PIOUS_PROCEEDINGS },
   ];
-  const SLEPE_MONK_TILES = [
-    [3410, 3484], [3410, 3493], [3411, 3489], [3415, 3485], [3415, 3489],
-  ];
-  const SLEPE_MONK_IDS = new Set([
-    NpcIdentifiers.MONK_OF_ZAMORAK_4, NpcIdentifiers.MONK_OF_ZAMORAK_5, NpcIdentifiers.MONK_OF_ZAMORAK_6,
-    16154, 16155, 16156, 16271, 16272, 16273,
+  // P1 tick 1740 (30205-30217): Ivan 15863 plus two each 16154/16155/16156 at the captured
+  // tiles; the 16271/16272 walkers (28371/29985) are world 3484/3485 morphs on varbit 15464.
+  const PATERDOMUS_BATTLE_SPAWNS = Object.freeze([
+    { id: NpcIdentifiers.IVAN_STROM_21, x: 3409, y: 3488, face: 1536 },
+    { id: NpcIdentifiers.MONK_OF_ZAMORAK_12, x: 3413, y: 3489 },
+    { id: NpcIdentifiers.MONK_OF_ZAMORAK_13, x: 3411, y: 3492 },
+    { id: NpcIdentifiers.MONK_OF_ZAMORAK_14, x: 3415, y: 3491 },
+    { id: NpcIdentifiers.MONK_OF_ZAMORAK_12, x: 3410, y: 3485 },
+    { id: NpcIdentifiers.MONK_OF_ZAMORAK_13, x: 3414, y: 3484 },
+    { id: NpcIdentifiers.MONK_OF_ZAMORAK_14, x: 3417, y: 3486 },
   ]);
+  const PATERDOMUS_BATTLE_TARGET = Object.freeze({ x: 3408, y: 3488, z: 0 });
+  const PATERDOMUS_ESCAPE_DOORS = Object.freeze([
+    { id: ObjectIdentifiers.LARGE_DOOR_110, x: 3408, y: 3489 },
+    { id: ObjectIdentifiers.LARGE_DOOR_111, x: 3408, y: 3488 },
+  ]);
+  const paterdomusBattles = new Map();
   const SLEPE_WINDOW_ROUTES = new Map([
     [61280, { x: 3408, y: 3485, destination: { x: 3409, y: 3485, z: 1 } }],
     [61282, { x: 3408, y: 3485, destination: { x: 3409, y: 3485, z: 1 } }],
@@ -736,6 +746,24 @@ module.exports = function registerTheBloodMoonRises(api) {
     [Skill.HERBLORE, 64, "Herblore"], [Skill.MAGIC, 57, "Magic"],
   ];
   let quest;
+
+  // Private ground-floor fight. As in the other quest fights, the area is at the live temple
+  // coordinates: entering it drops the main-world 3484/3485 morphs from the owner's NPC view
+  // and exposes only the battle actors. The front-door threshold is included so stepping back
+  // one tile does not end the fight.
+  class PaterdomusBattleArea extends PrivateArea {
+    constructor(owner) {
+      super([new Boundary(3408, 3418, 3483, 3494, 0)]);
+      this.owner = owner;
+    }
+    isMulti() { return true; }
+    canAttack(attacker, target) {
+      const attackerHere = attacker?.getArea?.() === this;
+      const targetHere = target?.getArea?.() === this;
+      if (attackerHere || targetHere) return attackerHere && targetHere;
+      return null;
+    }
+  }
 
   class WyrdEncounterArea extends PrivateArea {
     constructor(owner) {
@@ -3013,7 +3041,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (story.writingsGiven) return 40;
     if (story.booksPlaced) return 38;
     if (story.monksCleared) return 36;
-    if (story.monksRequested) return Array.isArray(story.monkKills) && story.monkKills.length ? 34 : 32;
+    if (story.monksRequested) return story.monksBattleStarted ? 34 : 32;
     if (story.upstairsTalked) return 30;
     if (story.journalRead) return 28;
     if (story.journalGiven) return 26;
@@ -3034,11 +3062,94 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.getPacketSender().sendVarbit(15464, value);
   }
 
+  // Quest Helper's ground floor for this scene: the front-door threshold plus the
+  // temple interior (3409-3418, 3483-3494). The captured 32 -> 34 transition happens
+  // on the tick after the player steps through the opened 3489/3490 doors.
+  function inPaterdomusBattleZone(player) {
+    const { x, y, z } = paterdomusLocation(player) ?? {};
+    return z === 0 && x >= 3409 && x <= 3418 && y >= 3483 && y <= 3494;
+  }
+
+  function inPaterdomusBattleBounds(player) {
+    const { x, y, z } = paterdomusLocation(player) ?? {};
+    return z === 0 && x >= 3408 && x <= 3418 && y >= 3483 && y <= 3494;
+  }
+
+  function cleanupPaterdomusBattle(player) {
+    const battle = player && paterdomusBattles.get(player);
+    if (!battle) return;
+    paterdomusBattles.delete(player);
+    for (const npc of battle.actors) if (npc?.isRegistered?.() !== false) api.removeNpc(npc);
+    for (const object of battle.locs) player.getPacketSender?.().sendObjectRemoval?.(object);
+    if (battle.area && player.getArea?.() === battle.area) battle.area.leave(player, false);
+  }
+
+  function cleanupPaterdomusBattleOnLogout({ player } = {}) {
+    cleanupPaterdomusBattle(player);
+  }
+
+  function startPaterdomusBattle(player) {
+    if (!player || paterdomusBattles.has(player)) return;
+    const story = slepeStory(player);
+    if (stage(player) !== STAGE.SLEPE || !story.monksRequested || story.monksCleared) return;
+    const area = new PaterdomusBattleArea(player);
+    const battle = { area, actors: [], monks: new Set(), locs: [] };
+    paterdomusBattles.set(player, battle);
+    area.enter(player);
+    const target = new Location(PATERDOMUS_BATTLE_TARGET.x, PATERDOMUS_BATTLE_TARGET.y, PATERDOMUS_BATTLE_TARGET.z);
+    for (const spawn of PATERDOMUS_BATTLE_SPAWNS) {
+      const npc = api.spawnNpc({ id: spawn.id, x: spawn.x, y: spawn.y, z: 0, wanderRadius: 0,
+        owner: player, ownerOnly: true, ...(spawn.face === undefined ? {} : { face: spawn.face }) });
+      if (!npc) continue;
+      battle.actors.push(npc);
+      area.enter(npc);
+      if (spawn.id === NpcIdentifiers.IVAN_STROM_21) continue;
+      npc.setMultiCombat?.(true);
+      npc.setPositionToFace?.(target);
+      npc.getCombat?.().attack?.(player);
+      battle.monks.add(npc);
+    }
+    for (const door of PATERDOMUS_ESCAPE_DOORS) {
+      const object = new api.core.GameObject(door.id, new Location(door.x, door.y, 0), 0, 2, area);
+      area.add(object);
+      api.core.ObjectManager.register(object, true);
+      battle.locs.push(object);
+    }
+    const expectedMonks = PATERDOMUS_BATTLE_SPAWNS.length - 1;
+    if (battle.monks.size !== expectedMonks) {
+      cleanupPaterdomusBattle(player);
+      return;
+    }
+    if (!story.monksBattleStarted) {
+      player.setAttribute(SLEPE_STORY_ATTRIBUTE, { ...story, monksBattleStarted: true });
+      syncSlepeNativeStage(player);
+    }
+  }
+
+  function processPaterdomusBattle(player) {
+    const story = slepeStory(player);
+    if (stage(player) !== STAGE.SLEPE || !story.monksRequested || story.monksCleared) {
+      cleanupPaterdomusBattle(player);
+      return;
+    }
+    const battle = paterdomusBattles.get(player);
+    if (battle) {
+      // AreaManager also leaves the scene at its bounds; cleaning up here keeps the
+      // captured exit prompt and covers a direct move/logout between area ticks.
+      if (player.getArea?.() !== battle.area || !inPaterdomusBattleBounds(player)) {
+        cleanupPaterdomusBattle(player);
+      }
+      return;
+    }
+    if (inPaterdomusBattleZone(player)) startPaterdomusBattle(player);
+  }
+
   function processSlepeProgress({ player }) {
     if (!player || stage(player) !== STAGE.SLEPE) return;
     syncSlepeNativeStage(player);
     const story = slepeStory(player);
     if (!story.manorComplete) return;
+    processPaterdomusBattle(player);
     if (story.monksCleared && inPaterdomusTemple(player, 1)) {
       spawnPaterdomusIvan(player, { x: 3417, y: 3487, z: 1 });
       return;
@@ -3204,24 +3315,21 @@ module.exports = function registerTheBloodMoonRises(api) {
     startTranscript(api, player, NpcIdentifiers.IVAN_STROM_4, PAGE, "the-truth-hurtz-upon-completing-the-book-puzzle");
   }
 
-  function handlePaterdomusMonkDeath(event) {
+  function handlePaterdomusBattleDeath(event) {
     const player = event?.killer;
     const npc = event?.npc;
     if (!player?.isPlayer?.() || !npc || stage(player) !== STAGE.SLEPE) return;
+    const battle = paterdomusBattles.get(player);
+    if (!battle?.monks.has(npc)) return;
+    battle.monks.delete(npc);
+    if (battle.monks.size > 0) return;
     const story = slepeStory(player);
     if (!story.monksRequested || story.monksCleared) return;
-    const spawn = npc.getSpawnPosition?.() ?? npc.getLocation?.();
-    if (!SLEPE_MONK_IDS.has(npc.getId?.() ?? event.npcId) || !spawn || spawn.getZ() !== 0) return;
-    const x = spawn.getX(), y = spawn.getY();
-    if (!SLEPE_MONK_TILES.some(([tx, ty]) => tx === x && ty === y)) return;
-    const kills = new Set(story.monkKills ?? []);
-    kills.add(`${x},${y}`);
-    const allDefeated = kills.size >= SLEPE_MONK_TILES.length;
-    player.setAttribute(SLEPE_STORY_ATTRIBUTE, { ...story, monkKills: [...kills], ...(allDefeated ? { monksCleared: true } : {}) });
-    if (allDefeated) {
-      player.sendMessage("The Zamorakian monks are defeated. Ivan is waiting upstairs in the temple.");
-      startTranscript(api, player, NpcIdentifiers.IVAN_STROM_4, PAGE, "the-truth-hurtz-upon-killing-the-monks-of-zamorak");
-    }
+    player.setAttribute(SLEPE_STORY_ATTRIBUTE, { ...story, monksCleared: true });
+    cleanupPaterdomusBattle(player);
+    syncSlepeNativeStage(player);
+    player.sendMessage("The Zamorakian monks are defeated. Ivan is waiting upstairs in the temple.");
+    startTranscript(api, player, NpcIdentifiers.IVAN_STROM_4, PAGE, "the-truth-hurtz-upon-killing-the-monks-of-zamorak");
   }
 
   function readPaterdomusBook(event) {
@@ -8193,6 +8301,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogout(cleanupBloodHuntActors);
   api.onPlayerLogout(cleanupFirstBloodEncounter);
   api.onPlayerLogout(cleanupGatheringDrakanOnLogout);
+  api.onPlayerLogout(cleanupPaterdomusBattleOnLogout);
   api.onPlayerLogout(({ player } = {}) => { if (player) Scenes.cancel(player); });
   api.onPlayerLogout(cleanupFinalEfaritay);
   api.onPlayerLogout(cleanupFinalCutsceneActors);
@@ -8210,7 +8319,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onCustomEvent("world:object-examine", inspectWyrdFence);
   api.onObjectInteraction("Fence", { Inspect: inspectWyrdFence });
   api.onNpcDeath(handleSlepeManorDeath);
-  api.onNpcDeath(handlePaterdomusMonkDeath);
+  api.onNpcDeath(handlePaterdomusBattleDeath);
   api.onNpcDeath(handleCastleNpcDeath);
   api.onNpcDeath(handleBloodHuntPursuerDeath);
   api.onPlayerBeforeDeath(handleFinalDrakanBeforeDeath);

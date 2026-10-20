@@ -546,15 +546,26 @@ test('Troubled Tortugans Shieldbane fight and final hand-in complete once', () =
 
   h.hooks.deaths[0]({ killer: h.player, npc: shellbane, npcId: N.SHELLBANE_GRYPHON_2 });
   assert.equal(h.quest.getStage(h.player), 38);
-  h.line(N.ELDER_KOREL_2, 'Very good work, human! I saw the ship with red sails.');
+  const korel = h.spawned.find((npc) => npc.getId() === 14999);
+  assert.equal(korel.transformedId, 15000, 'captured combat_done Korel transform');
+  assert.ok(!h.core.NpcDefinition.forId(14999).getActions().includes('Talk-to'));
+  assert.ok(h.core.NpcDefinition.forId(15000).getActions().includes('Talk-to'));
+  const shippedKorel = runtime.loadTranscripts(h.api)['Troubled Tortugans'].variants['part-3-talking-to-elder-korel'];
+  h.line(15000, shippedKorel[0].text);
   assert.equal(h.quest.getStage(h.player), 40);
-  h.line(N.ELDER_KOREL_2, "Alright. I'll head back right away.");
+  h.line(15000, shippedKorel.at(-1).player);
   assert.equal(h.quest.getStage(h.player), 42);
 
-  h.line(N.ELDER_RALEY, 'No, no, no! Thank you for your help.');
+  const shippedFinal = runtime.loadTranscripts(h.api)['Troubled Tortugans'].variants['part-3-talking-to-floopa-or-elder-raley'];
+  h.line(N.ELDER_RALEY, shippedFinal.find(step => step.text?.startsWith('No, no, no!')).text);
   assert.equal(h.quest.getStage(h.player), 44);
-  assert.ok(h.xp.some((entry) => entry.amount === 10000));
-  assert.ok(h.xp.some((entry) => entry.amount === 8000));
+  assert.equal(h.xp.filter((entry) => entry.amount === 10000).length, 1);
+  assert.equal(h.xp.filter((entry) => entry.amount === 8000).length, 1);
+  const xpBeforeRelog = h.xp.length;
+  for (const logout of h.hooks.logouts) logout({ player: h.player });
+  for (const login of h.hooks.logins) login({ player: h.player });
+  assert.equal(h.quest.getStage(h.player), 44);
+  assert.equal(h.xp.length, xpBeforeRelog, 'completion reward is not re-awarded on relog');
   assert.equal(h.quest.complete(h.player), false, 'completion is awarded once');
 });
 
@@ -1039,4 +1050,19 @@ test('Troubled Tortugans Shellbane joins the real boat deck on the shipped arriv
   const retryBoss = h.spawned.filter(npc => npc.getId() === N.SHELLBANE_GRYPHON_2).at(-1);
   assert.ok(retryBoss && retryBoss !== landBoss, 'zone re-entry retries the Shellbane');
   assert.deepEqual([retryBoss.getLocation().getX(), retryBoss.getLocation().getY()], [3356, 2208]);
+});
+
+test('Troubled Tortugans restores the captured combat_done Korel at stage 38 login', () => {
+  const h = makeHarness('../plugins/quests/quests/TroubledTortugans.Quest');
+  h.quest.setStage(h.player, 38);
+  h.player.moveTo(new h.core.Location(3354, 2215, 0));
+  for (const login of h.hooks.logins) login({ player: h.player });
+  const korel = h.spawned.find((npc) => npc.getId() === 14999);
+  assert.ok(korel, 'Pearl Korel actor restored');
+  assert.equal(korel.transformedId, 15000, 'login restores the Talk-to combat_done form');
+  assert.ok(h.core.NpcDefinition.forId(15000).getActions().includes('Talk-to'));
+  const variant = h.hooks.variants[0]({ player: h.player, npcId: 15000 });
+  assert.equal(typeof variant === 'string' ? variant : variant.variant,
+    'part-3-talking-to-elder-korel');
+  assert.equal(h.quest.getStage(h.player), 38, 'restoration does not inject progress');
 });

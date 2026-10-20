@@ -74,7 +74,6 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
   const { createQuestScenes } = require("../QuestScenes");
 
   const PAGE = "The Path of Glouphrie";
-  const HAZELMERE_PAGE = "Hazelmere";
   const GOLRIE_PAGE = "Golrie";
   const START_HOOK = "quest:the-path-of-glouphrie:start";
 
@@ -205,7 +204,6 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
   const HAZELMERE_LAMPS_VARIANT =
     "post-quest-talking-to-hazelmere-to-receive-unused-lamps-if-the-player-has-sufficient-inventory-space";
   const HAZELMERE_POST_VARIANT = "post-quest-talking-to-hazelmere-after-the-quest";
-  const HAZELMERE_STANDARD_VARIANT = "standard-dialogue-after-the-path-of-glouphrie";
   const FINAL_VARIANT = "the-warped-depths";
   const DIARY_VARIANTS = [
     "yewnock-s-legacy-bolrie-s-diary-chapter-1-bad-advice",
@@ -843,7 +841,7 @@ module.exports = function registerPathOfGlouphrieQuest(api) {
         player.sendMessage("You need more inventory space for Hazelmere's lamps.");
         playVariant(player, npcId, HAZELMERE_POST_VARIANT);
       } else {
-        startTranscript(api, player, npcId, HAZELMERE_PAGE, HAZELMERE_STANDARD_VARIANT);
+        playVariant(player, npcId, HAZELMERE_POST_VARIANT);
       }
       return true;
     }

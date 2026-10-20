@@ -682,3 +682,28 @@ test('Beneath Cursed Sands: shipped guard transcript clears scene controls and s
   assert.equal(p.movementBlocked, false);
   assert.ok(h.npcs.some(npc => npc.id === 11529));
 });
+test('Beneath Cursed Sands: tomb entry uses the captured z2 instance landing and actors', async () => {
+  await require('../dist/game/cache/CachePipeline').CachePipeline.initialize(path.resolve(__dirname, '..'));
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 38);
+  p.moveTo(new core.Location(3412, 2848, 0));
+  const entryRaw = CacheDefinitions.getObject(43954);
+  const entry = { ...entryRaw, getId: () => entryRaw.id, getName: () => entryRaw.name, getInteractions: () => entryRaw.actions };
+  h.object(p, 43954, 1, entry, new core.Location(3408, 2847, 0));
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [3445, 9248, 2]);
+  assert.equal(h.quest.getStage(p), 40);
+  assert.equal(h.transcripts.at(-1)[4], 'the-ruins-of-ullek-entering-the-ruins');
+  const mage1 = h.npcs.find(npc => npc.id === 11508 && npc.x === 3438 && npc.y === 9247);
+  const mage2 = h.npcs.find(npc => npc.id === 11508 && npc.x === 3438 && npc.y === 9249);
+  assert.equal(mage1?.z, 2);
+  assert.equal(mage2?.z, 2);
+  assert.ok(h.npcs.some(npc => npc.id === 11481 && npc.x === 3410 && npc.y === 9248 && npc.z === 2));
+  assert.ok(h.npcs.some(npc => npc.id === 11482 && npc.x === 3411 && npc.y === 9251 && npc.z === 2));
+  RegionManager.loadMapFiles(3445, 9248, true);
+  assert.equal(RegionManager.blocked(new core.Location(3445, 9248, 2), null), false);
+  assert.equal(RegionManager.blocked(new core.Location(3438, 9247, 2), null), false);
+  assert.equal(RegionManager.blocked(new core.Location(3438, 9249, 2), null), false);
+});

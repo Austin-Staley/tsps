@@ -160,6 +160,8 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
   const ZAHUR = NpcIdentifiers.ZAHUR; // 4753
   const MEHHAR = NpcIdentifiers.MEHHAR; // 11479
   const HIGH_PRIEST_OF_SCABARAS = NpcIdentifiers.HIGH_PRIEST_OF_SCABARAS; // 11480
+  const HIGH_PRIEST_CUTSCENE = 11481;
+  const CHAMPION_CUTSCENE = 11482;
   const HIGH_PRIEST_IDS = new Set([
     NpcIdentifiers.HIGH_PRIEST_2, // 4206, the town High Priest (cache transform)
     NpcIdentifiers.HIGH_PRIEST_4, // 11502
@@ -615,8 +617,10 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     );
     ensureNpc(player, "osman", OSMAN, 3380, 2789, 0, stage >= STAGE_AKH_DEAD && stage <= STAGE_AKH_DEAD + 1);
     ensureNpc(player, "guard", HEAD_MENAPHITE_GUARD, 3348, 2740, 0, stage === STAGE_GUARD_FIGHT);
-    ensureNpc(player, "mage1", SCARAB_MAGE, 3434, 9245, 0, stage === STAGE_TOMB_ENTERED);
-    ensureNpc(player, "mage2", SCARAB_MAGE, 3434, 9251, 0, stage === STAGE_TOMB_ENTERED);
+    ensureNpc(player, "mage1", SCARAB_MAGE, 3438, 9247, 2, stage === STAGE_TOMB_ENTERED);
+    ensureNpc(player, "mage2", SCARAB_MAGE, 3438, 9249, 2, stage === STAGE_TOMB_ENTERED);
+    ensureNpc(player, "tomb-high-priest", HIGH_PRIEST_CUTSCENE, 3410, 9248, 2, stage === STAGE_TOMB_ENTERED);
+    ensureNpc(player, "tomb-champion", CHAMPION_CUTSCENE, 3411, 9251, 2, stage === STAGE_TOMB_ENTERED);
     ensureNpc(player, "champion", CHAMPION_OF_SCABARAS, 3436, 9248, 2, stage === STAGE_UPPER_OPEN);
     ensureNpc(player, "akh", MENAPHITE_AKH, 3378, 2786, 0, stage === STAGE_AKH_FIGHT);
   }
@@ -1605,9 +1609,12 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
       startTranscript(api, player, MAISA_CAMP, PAGE, "the-ruins-of-ullek-interacting-with-objects-entry");
       return;
     }
-    player.moveTo(new Location(3438, 9248, 0));
+    player.moveTo(new Location(3445, 9248, 2));
     showCamera(player, [3420, 9241, 580], [3410, 9252, 380], { resetAt: 12 });
-    if (stage < STAGE_TOMB_ENTERED) setStage(player, STAGE_TOMB_ENTERED);
+    if (stage < STAGE_TOMB_ENTERED) {
+      setStage(player, STAGE_TOMB_ENTERED);
+      startTranscript(api, player, MAISA_CAMP, PAGE, "the-ruins-of-ullek-entering-the-ruins");
+    }
   }
 
   function pullTombLever(player, location) {

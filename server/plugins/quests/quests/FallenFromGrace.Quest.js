@@ -533,7 +533,7 @@ module.exports = function registerFallenFromGraceQuest(api) {
   function handleDialogueCondition({ player, stepId }) {
     if (stepId !== GOLEM_SPACE_CONDITION_ID) return;
     if (quest.getStage(player) !== STAGE_GOLEM) return;
-    if (!give(player, DULL_SUNSTONE_CORE_ITEM_ID)) return;
+    if (!held(player, DULL_SUNSTONE_CORE_ITEM_ID) && !give(player, DULL_SUNSTONE_CORE_ITEM_ID)) return;
     quest.setStage(player, STAGE_CORE);
   }
 
@@ -846,7 +846,7 @@ module.exports = function registerFallenFromGraceQuest(api) {
     speak(
       player,
       CORMAC_NPC_ID,
-      stage === STAGE_TROLLS
+      stage <= STAGE_GOLEM
         ? "the-way-under-ardeaglais-searching-the-golem"
         : "the-way-under-ardeaglais-searching-the-golem-after-taking-the-dull-core"
     );
