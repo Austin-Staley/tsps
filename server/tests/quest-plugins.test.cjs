@@ -4672,7 +4672,7 @@ test('Blood Moon crossing preserves the captured native stages and starts the sh
   attributes.set('quest.the_blood_moon_rises.blood-hunt', { drawbridgeRepaired: true });
   const action = handlers.custom.get('npc-dialogue:action').find(handler => handler.name === 'onTranscriptAction');
   action({ player, stepId: 'lKvIyH' });
-  assert.deepEqual(sentVarbits.at(-1), [15464, 86]);
+  assert.deepEqual(sentVarbits.at(-1), [15464, 88]);
   action({ player, stepId: 'D5qF0g' });
   assert.deepEqual(sentVarbits.at(-1), [15464, 88]);
   action({ player, stepId: 'sw9z49' });
@@ -4936,6 +4936,7 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
     getPacketSender: () => new Proxy({ sendVarbit: (id, value) => sentVarbits.push([id, value]) }, {
       get: (target, key) => target[key] ?? (() => {}),
     }),
+    getDialogueManager: () => ({ reset() {}, startDialogues() {}, getCurrent() { return undefined; } }),
     sendMessage: (message) => messages.push(message),
   };
   quest.setStage(player, 50);
@@ -5277,11 +5278,19 @@ test('Blood Moon hunt restores both ten-turn cranks and gates the keyed house an
   const repairLine = { player, step: { player: true },
     text: "We don't have time for this. Whatever we do next, we can't stay here. Let's get across that bridge." };
   cogLine(repairLine);
-  assert.equal(typeof repairLine.after, 'function', 'the player hand-in line waits for its post-line cog check');
+  assert.equal(typeof repairLine.after, 'function', 'the found-cog line waits for its post-line check');
   repairLine.after();
-  assert.equal(inventory.contains(ids.OLD_COG), false, 'the bridge handoff consumes the real cog');
+  assert.equal(inventory.contains(ids.OLD_COG), true, 'the dialogue only reports finding the cog');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').drawbridgeRepaired, undefined,
+    'finding the cog does not repair the bridge');
+  assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').cogFound, true);
+  assert.deepEqual(sentVarbits.at(-1), [15485, 1], 'the captured found-cog varbit is saved');
+  const cogUse = { player, itemId: ids.OLD_COG, objectId: 61804, definition: { id: 61804 },
+    location: { x: 2633, y: 7831, z: 0 }, handled: false };
+  useItemOnObject(cogUse);
+  assert.equal(cogUse.handled, true, 'the raw 61804 mechanism owns the cog item-use');
+  assert.equal(inventory.contains(ids.OLD_COG), false, 'the real machine consumes the held cog');
   assert.equal(attributes.get('quest.the_blood_moon_rises.blood-hunt').drawbridgeRepaired, true);
-  assert.deepEqual(sentVarbits.at(-1), [15485, 1], 'the captured drawbridge-found-cog varbit is saved');
   const crossing = { player, stepId: 'lKvIyH', handled: false, end: false };
   transcriptAction(crossing);
   assert.equal(attributes.get('quest.the_blood_moon_rises.stage'), 50, 'the repaired drawbridge permits the captured crossing transition');
@@ -5996,21 +6005,25 @@ test('Blood Moon northern-door transcript starts the private Lowerniel encounter
   action({ player, stepId: 'R8kt3U' });
   assert.equal(attributes.get('quest.the_blood_moon_rises.final-portal-used'), true);
   assert.deepEqual(player.destination, [2507, 7383, 0], 'the portal uses its captured Castle arrival');
+  const opens = [];
+  handlers.custom.set('omnishop:open', [event => opens.push(event)]);
   const chest = handlers.objects.find(handler => handler.name === 'handleFinalDrakanSupplyChest');
   const chestAction = { player, objectId: 61764, definition: { id: 61765 },
     location: new api.core.Location(2503, 7386, 0), option: 'take-supplies', handled: false };
   assert.equal(chest(chestAction), true);
   assert.equal(chestAction.handled, true);
-  action({ player, stepId: 'huhOGU', kind: 'action' });
+  assert.equal(opens.length, 1, 'Take-supplies opens the real vampyrium omnishop');
+  assert.equal(opens[0].shop, 16873);
   assert.equal(attributes.get('quest.the_blood_moon_rises.final-drakan-supplies'), true,
-    'supplies are obtained through the actual castle chest action');
+    'opening the chest records that the supplies were checked');
   const congealedBlood = api.core.ItemIdentifiers.JAR_OF_CONGEALED_BLOOD;
-  assert.equal(items.get(congealedBlood), 1, 'the final chest gives one congealed-blood jar');
+  assert.equal(items.get(congealedBlood), undefined, 'the chest no longer auto-grants a jar');
   action({ player, stepId: 'huhOGU', kind: 'action' });
-  assert.equal(items.get(congealedBlood), 1, 'reopening the chest cannot give a second jar while one is held');
-  items.delete(congealedBlood);
-  action({ player, stepId: 'huhOGU', kind: 'action' });
-  assert.equal(items.get(congealedBlood), 1, 'the chest can replace the jar after it has been consumed or dropped');
+  assert.equal(opens.length, 2, 'the canonical Take choice opens the same omnishop');
+  assert.equal(opens[1].shop, 16873);
+  assert.equal(items.get(congealedBlood), undefined, 'opening the shop grants nothing');
+  chest({ ...chestAction, handled: false });
+  assert.equal(opens.length, 3, 'the player may resupply again after losing the jar');
   const door = handlers.objects.find(handler => handler.name === 'handleFinalDrakanRoofDoor');
   const doorAction = { player, objectId: 61628, definition: { id: 61628 },
     location: new api.core.Location(2506, 7387, 0), option: 'enter', handled: false };

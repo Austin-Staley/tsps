@@ -1286,6 +1286,134 @@ test('Ghorrock persistent NPCs use Talk-to ids and real NpcDialogues reaches 17-
   assert.equal(north.getStage(final), 33, 'final Hazeel teleport advances to 33');
 });
 
+test('solved dungeon gates tick the real runner across, reverse, and close on the captured trigger', async () => {
+  const path = require('node:path');
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { GameObject } = require('../dist/game/entity/impl/object/GameObject');
+  const { PluginManager: PM } = require('../dist/plugins/PluginManager');
+  const { TaskManager } = require('../dist/game/task/TaskManager');
+  const ObstacleRunner = require('../plugins/skills/agility/ObstacleRunner.Agility');
+  const { PathFinder } = require('../dist/game/model/movement/path/PathFinder');
+  let active = true;
+  try { CachePipeline.getActive(); } catch { active = false; }
+  if (!active) await CachePipeline.initialize(path.resolve('.'));
+  RegionManager.init();
+  RegionManager.loadMapFiles(2916, 10338);
+
+  const api = PM.createApi('remaining-north-solved-gates');
+  require('../plugins/quests/quests/SecretsOfTheNorth.Quest')(api);
+  const north = runtime.getRegisteredQuests().filter(q => q.key === 'secrets_of_the_north').at(-1);
+
+  let nextGatePlayerIndex = 100;
+  function account() {
+    const p = new Player(null);
+    p.setIndex(nextGatePlayerIndex++);
+    const sent = [];
+    const sender = new Proxy({}, { get: (_, key) => (...args) => {
+      if (key === 'sendObject' || key === 'sendObjectRemoval') sent.push([key, args[0]?.getId?.(), args[0]?.getLocation?.().getX?.(), args[0]?.getLocation?.().getY?.()]);
+      return sender;
+    } });
+    p.getPacketSender = () => sender;
+    p.setNeedsPlacement(false);
+    p.isRegistered = () => true;
+    p.getHitpoints = () => 99;
+    return { p, sent };
+  }
+  const gate = (id, x, y, face) => new GameObject(id, new core.Location(x, y, 0), 0, face, null);
+  const toggle = (p, object) => PM.emitCustomEvent('door:toggle', {
+    player: p, object, objectId: object.getId(), location: object.getLocation(), handled: false,
+  });
+  function runUntilCrossed(p) {
+    for (let i = 0; i < 32; i++) {
+      p.setNeedsPlacement(false); // normal end-of-tick player sync clears placement
+      p.getMovementQueue().process();
+      TaskManager.process();
+      TaskManager.processWalkTo(p.getIndex());
+    }
+    assert.equal(ObstacleRunner.isBusy(p), false, 'runner permission released after the real task');
+  }
+  const openPair = sent => sent.slice(0, 3);
+  const closePair = sent => sent.slice(-3);
+
+  const solved = account();
+  north.setStage(solved.p, 19);
+  const direction = gate(46601, 2916, 10338, 3);
+  solved.p.moveTo(new core.Location(2916, 10337, 0));
+  toggle(solved.p, direction);
+  assert.deepEqual(openPair(solved.sent), [
+    ['sendObjectRemoval', 46601, 2916, 10338],
+    ['sendObject', 38848, 2916, 10338],
+    ['sendObject', 46604, 2916, 10337],
+  ], 'captured direction Open pair is sent to the crossing player');
+  assert.equal(ObstacleRunner.isBusy(solved.p), true, 'crossing starts scoped to the player');
+  runUntilCrossed(solved.p);
+  assert.deepEqual([solved.p.getLocation().getX(), solved.p.getLocation().getY()], [2916, 10338],
+    'actual runner task lands on the gate threshold');
+  assert.equal(solved.sent.length, 3, 'direction gate stays open through the walk (capture [7475])');
+
+  // Exercise the real client-walk entry point and plain route payload, including
+  // the gate anchor (dot=0) and a full pocket-to-outside walk with no handle.
+  solved.p.getMovementQueue().requestWalk(new core.Location(2916, 10337, 0));
+  runUntilCrossed(solved.p);
+  assert.deepEqual([solved.p.getLocation().getX(), solved.p.getLocation().getY()], [2916, 10337],
+    'immediate anchor backtrack works before obtaining a lever handle');
+  solved.p.getMovementQueue().requestWalk(new core.Location(2917, 10341, 0));
+  runUntilCrossed(solved.p);
+  assert.deepEqual([solved.p.getLocation().getX(), solved.p.getLocation().getY()], [2917, 10341],
+    'one forward click crosses and reaches its original requested tile');
+  solved.p.getMovementQueue().requestWalk(new core.Location(2916, 10337, 0));
+  runUntilCrossed(solved.p);
+  assert.deepEqual([solved.p.getLocation().getX(), solved.p.getLocation().getY()], [2916, 10337],
+    'one click from the lever pocket approaches, crosses, and returns outside');
+  solved.p.moveTo(new core.Location(2917, 10341, 0));
+  north.setStage(solved.p, 24);
+  PM.emitObjectInteraction({ player: solved.p, objectId: 46611, object: gate(46611, 2917, 10342, 2),
+    definition: { id: 46611, getName: () => 'Lever', getInteractions: () => ['Pull'] }, clickType: 1,
+    location: new core.Location(2917, 10342, 0), handled: false });
+  assert.deepEqual(closePair(solved.sent), [
+    ['sendObjectRemoval', 38848, 2916, 10338],
+    ['sendObjectRemoval', 46604, 2916, 10337],
+    ['sendObject', 46601, 2916, 10338],
+  ], 'lever op closes direction gate (capture [7477])');
+  const lever = PathFinder.rsmodRouteFinding.findRoute({ level: 0, srcX: 2916, srcY: 10338, srcSize: 1,
+    destX: 2917, destY: 10341, destWidth: 1, destLength: 1, locShape: -1, privateArea: null, moveNear: false });
+  assert.equal(lever.success, true, 'normal RSMOD route reaches the lever tile');
+
+
+  const denied = account();
+  north.setStage(denied.p, 18);
+  denied.p.moveTo(new core.Location(2916, 10337, 0));
+  toggle(denied.p, direction);
+  assert.equal(denied.sent.length, 0, 'unsolved player gets no open pair');
+  assert.equal(ObstacleRunner.isBusy(denied.p), false, 'unsolved player cannot cross');
+
+  for (const [id, x, y, face, stage, fromX] of [[46602, 2924, 10329, 2, 24, 2925], [46603, 2918, 10321, 2, 30, 2919]]) {
+    const a = account();
+    north.setStage(a.p, stage);
+    a.p.moveTo(new core.Location(fromX, y, 0));
+    toggle(a.p, gate(id, x, y, face));
+    assert.deepEqual(openPair(a.sent).map(entry => entry[1]), [id, 38848, 46604], `blood/icy ${id} captured pair`);
+    runUntilCrossed(a.p);
+    assert.deepEqual([a.p.getLocation().getX(), a.p.getLocation().getY()], [x, y], `blood/icy ${id} actual cross`);
+    assert.deepEqual(closePair(a.sent).map(entry => entry[1]), [38848, 46604, id], `blood/icy ${id} closes after crossing`);
+  }
+
+  // Global world is untouched and logout cleans a still-open direction gate.
+  assert.equal(MapObjects.get(38848, new core.Location(2916, 10338, 0), null), null,
+    'open pair is never a global loc');
+  const leaver = account();
+  north.setStage(leaver.p, 19);
+  leaver.p.moveTo(new core.Location(2916, 10337, 0));
+  toggle(leaver.p, direction);
+  const beforeLogout = leaver.sent.length;
+  PM.emitPlayerDisconnect({ player: leaver.p, username: 'Q6north3b' });
+  assert.deepEqual(leaver.sent.slice(beforeLogout).map(entry => entry[1]), [38848, 46604, 46601],
+    'logout closes the owner-only direction gate');
+});
+
 test('login re-installs the exact SOTN objects at their real tiles', () => {
   const h = harness(), p = player();
   h.login(p);

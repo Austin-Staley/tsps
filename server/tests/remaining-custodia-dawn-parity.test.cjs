@@ -525,6 +525,128 @@ test('The Final Dawn stage-22 blackjack without a sack or a given sack stays at 
   for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
 });
 
+test('The Final Dawn stage23 reopens the owner door, reaches Janus and starts interrogation', () => {
+  RegionManager.init();
+  RegionManager.loadMapFiles(1649, 3093, true);
+  const h = harness('TheFinalDawn'), p = player();
+  h.quest.setStage(p, 22);
+  p.attrs.set('quest.the_final_dawn.bits', 1 << 1); // BIT_SACK_GIVEN
+  p.items.set(I.MAKESHIFT_BLACKJACK, 1);
+  p.moveTo(new core.Location(1650, 3093, 0));
+  h.hooks.onPlayerLogin[0]({ player: p });
+  h.namedNpcs.get('Captain Vibia')['Talk-to']({ player: p, npcId: 14303 });
+  h.tick(3);
+  for (let step = 0; step < 200 && h.quest.getStage(p) === 22 && p.manager.getCurrent(); step++) p.manager.advance();
+  assert.equal(h.quest.getStage(p), 23);
+
+  const area = p.getArea();
+  assert.ok(area, 'stage23 restores the owner private house area');
+  assert.ok(h.objects.some(object => object.id === 56514 && object.getLocation?.().getX() === 1648 && object.getLocation?.().getY() === 3093),
+    'captured open door 56514 is registered at 1648,3093');
+  assert.ok(p.clientRemovals.some(object => object.getId() === 56513), 'closed door 56513 is hidden for the owner');
+  const janus = h.npcs.find(npc => npc.id === 14243 && !npc.removed);
+  assert.ok(janus, 'unconscious Janus is spawned');
+  assert.deepEqual([janus.getLocation().getX(), janus.getLocation().getY(), janus.getLocation().getZ()], [1647, 3093, 0],
+    'Janus uses the captured tile, not the old closed-door tile');
+  assert.ok(area.entities.some(npc => npc.id === 14243 && npc.getPrivateArea() === area), 'Janus is attached to the owner area');
+  assert.ok(area.entities.some(npc => npc.id === 14303), 'Vibia is attached to the owner area');
+  assert.ok(area.entities.some(npc => npc.id === 14236 || npc.id === 14238), 'dog is attached to the owner area');
+
+  const route = new RsmodRouteFinding((x, y, z, privateArea) => RegionManager.getClipping(x, y, z, privateArea));
+  assert.equal(route.findRoute({
+    level: 0, srcX: 1650, srcY: 3093, srcSize: 1, destX: 1647, destY: 3093,
+    destWidth: 1, destLength: 1, locShape: -1, privateArea: area, moveNear: false,
+  }).success, true, 'normal walking route reaches Janus through the open door');
+
+  h.namedNpcs.get('Forebearer Janus').Search({ player: p, npcId: 14243 });
+  assert.equal(h.quest.getStage(p), 24, 'Search starts the basement-key stage');
+  h.advanceToPrompt(p, 400);
+  h.tick(3);
+  assert.equal(h.quest.getStage(p), 25, 'the real ZWqy3O action advances to the Queen reveal');
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1650, 9493, 0],
+    'player lands on the captured basement tile');
+  const basement = p.getArea();
+  for (const id of [14307, 14245, 14290, 14368, 14367, 14371, 14299]) {
+    assert.ok(basement?.entities.some(npc => npc.id === id), `interrogation actor ${id} attached`);
+  }
+  assert.ok(p.prompt?.options.includes("Yes, let's go."), 'the travel choice is reachable from the real transcript');
+  h.choose(p, "Yes, let's go.");
+  for (let step = 0; step < 20 && h.quest.getStage(p) === 25; step++) {
+    if (p.manager.getCurrent()) p.manager.advance();
+    h.tick(1);
+  }
+  assert.equal(h.quest.getStage(p), 27, 'real Yes/U0zok7 reaches the Cam Torum travel stage');
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1440, 9560, 1],
+    'real U0zok7 lands at the captured Cam Torum tile');
+  assert.equal(p.getArea(), null, 'interrogation scene is cleaned on U0zok7');
+  for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
+});
+
+test('The Final Dawn interrogation decline restores movement and stage25 login resumes the choice', () => {
+  RegionManager.init();
+  RegionManager.loadMapFiles(1649, 3093, true);
+  const h = harness('TheFinalDawn'), p = player();
+  h.quest.setStage(p, 23);
+  p.attrs.set('quest.the_final_dawn.bits', (1 << 1) | (1 << 2)); // sack given + Janus captured
+  p.moveTo(new core.Location(1650, 3093, 0));
+  h.hooks.onPlayerLogin[0]({ player: p });
+  h.namedNpcs.get('Forebearer Janus').Search({ player: p, npcId: 14243 });
+  h.advanceToPrompt(p, 400);
+  h.choose(p, "I'll make my own way there.");
+  for (let step = 0; step < 200 && p.manager.getCurrent(); step++) p.manager.advance();
+  h.tick(4);
+
+  assert.equal(h.quest.getStage(p), 25, 'declining does not advance the stage');
+  assert.equal(p.blocked, false, 'declining restores normal movement');
+  assert.ok(p.getArea()?.entities.some(npc => npc.id === 14290), 'usable Queen remains in the scene');
+  const keyCount = [...p.items.values()].reduce((sum, value) => sum + value, 0);
+  assert.ok(CacheDefinitions.getNpc(14290).actions.includes('Talk-to'), 'Queen retry actor has a real Talk-to action');
+  h.namedNpcs.get('Queen Zyanyi Arkan')['Talk-to']({ player: p, npcId: 14290 });
+  assert.equal(h.quest.getStage(p), 25, 'Queen retry keeps stage25 until a real Yes');
+  h.advanceToPrompt(p, 200);
+  assert.ok(p.prompt?.options.includes("Yes, let's go."), 'Queen retry reaches the canonical travel choice');
+  h.choose(p, "I'll make my own way there.");
+  for (let step = 0; step < 200 && p.manager.getCurrent(); step++) p.manager.advance();
+
+  for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
+  assert.equal(p.getArea(), null, 'logout cleans the interrogation scene');
+  h.hooks.onPlayerLogin[0]({ player: p });
+  h.tick(3);
+  assert.equal(h.quest.getStage(p), 25, 'stage25 login does not auto-progress');
+  assert.equal(p.getArea()?.entities.some(npc => npc.id === 14290), true, 'stage25 login restores the Queen scene');
+  assert.equal([...p.items.values()].reduce((sum, value) => sum + value, 0), keyCount, 'login grants no items');
+  h.advanceToPrompt(p, 400);
+  assert.ok(p.prompt?.options.includes("Yes, let's go."), 'resumed continuation still reaches the real choice');
+  h.choose(p, "Yes, let's go.");
+  for (let step = 0; step < 20 && h.quest.getStage(p) === 25; step++) {
+    if (p.manager.getCurrent()) p.manager.advance();
+    h.tick(1);
+  }
+  assert.equal(h.quest.getStage(p), 27, 'real Yes after login reaches Cam Torum');
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1440, 9560, 1]);
+  for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
+});
+
+test('The Final Dawn stage23 login restores the open owner door and captured NPCs without grants', () => {
+  const h = harness('TheFinalDawn'), p = player();
+  h.quest.setStage(p, 23);
+  p.attrs.set('quest.the_final_dawn.bits', (1 << 1) | (1 << 2)); // sack given + Janus captured
+  p.moveTo(new core.Location(1650, 3093, 0));
+  p.items.set(I.MAKESHIFT_BLACKJACK, 1);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  h.hooks.onPlayerLogin[0]({ player: p });
+
+  assert.equal(h.quest.getStage(p), 23, 'login does not duplicate or advance the stage');
+  assert.equal(p.items.get(I.MAKESHIFT_BLACKJACK), 1, 'login grants no quest items');
+  const area = p.getArea();
+  assert.ok(area, 'login restores the owner private house area');
+  assert.ok(h.objects.some(object => object.id === 56514), 'login restores open door 56514');
+  assert.ok(area.entities.some(npc => npc.id === 14243 && npc.getLocation?.().getX() === 1647 && npc.getLocation?.().getY() === 3093),
+    'login restores unconscious Janus on the captured tile');
+  assert.ok(area.entities.some(npc => npc.id === 14303), 'login restores Vibia in the house');
+  for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
+});
+
 test('The Final Dawn registers the captured z2 plant/pot owner-scoped', () => {
   const plantDef = CacheDefinitions.getObject(56470), potDef = CacheDefinitions.getObject(56472);
   assert.ok(plantDef && potDef, 'real cache definitions load');

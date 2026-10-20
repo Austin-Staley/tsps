@@ -101,6 +101,8 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
   const { registerQuest, startTranscript } = require("../QuestRuntime");
   const { createQuestScenes } = require("../QuestScenes");
   const { createCombinationLock, createDirectionalLock } = require("../QuestPuzzleLocks");
+  const { crossingFor } = require("../../objects/WallDoor.Doors");
+  const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
 
   const PAGE = "Secrets of the North";
   const START_HOOK = "quest:secrets-of-the-north:start";
@@ -390,6 +392,8 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
   const DUNGEON_GATE_DIRECTION = ObjectIdentifiers.GATE_248; // 46601 (2916,10338)
   const DUNGEON_GATE_BLOOD = ObjectIdentifiers.GATE_249; // 46602 (2924,10329)
   const DUNGEON_GATE_ICY = ObjectIdentifiers.GATE_250; // 46603 (2918,10321)
+  const GATE_OPEN_INVISWALL = 38848; // captured open gate state
+  const GATE_OPEN_LEAF = 46604; // captured paired open leaf
   const DUNGEON_CREVICE_39 = ObjectIdentifiers.CREVICE_39; // 46596 exit (2901,10338)
   const DUNGEON_CREVICE_40 = ObjectIdentifiers.CREVICE_40; // 46597 creature entrance (2908,10316)
   const MINE_CAVE_ENTRANCE = ObjectIdentifiers.CAVE_94; // 46839 (2845,10332)
@@ -1617,6 +1621,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
       case DUNGEON_LEVER:
         if (stage < STAGE_HANDLE) return;
         event.handled = true;
+        closeSolvedGate(player, DUNGEON_GATE_DIRECTION);
         player.getPacketSender().sendVarbit(LEVER_VARBIT, 2);
         player.sendMessage("As you pull the lever, you hear a strange click coming from the north east.");
         advanceTo(player, STAGE_LEVER);
@@ -1636,6 +1641,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
       case DUNGEON_GATE_DIRECTION:
       case DUNGEON_GATE_BLOOD:
       case DUNGEON_GATE_ICY:
+        if (crossSolvedGate(event)) return;
         event.handled = true;
         handleDungeonGate(player, objectId, location);
         return;
@@ -1711,6 +1717,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
       && request.objectId !== DUNGEON_GATE_BLOOD
       && request.objectId !== DUNGEON_GATE_ICY) return;
     request.handled = true;
+    if (crossSolvedGate(request)) return;
     handleDungeonGate(request.player, request.objectId, request.location);
   }
 
@@ -1735,6 +1742,122 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
     give(player, ICY_CHEST);
     advanceTo(player, STAGE_ICY_CHEST);
     player.sendMessage("You unlock the chest and find a smaller chest inside.");
+  }
+
+  /**
+   * Captured solved-gate states: 46601/46602/46603 close; 38848 + 46604 open.
+   * The pair is sent only to the crossing player, the server keeps the wall
+   * clipping, and ObstacleRunner walks the captured threshold. A solved gate
+   * therefore never unlocks the same gate for another player.
+   */
+  const SOLVED_GATES = [
+    { closed: DUNGEON_GATE_DIRECTION, x: 2916, y: 10338, face: 3, leafFace: 0, stage: STAGE_DIRECTION_GATE },
+    { closed: DUNGEON_GATE_BLOOD, x: 2924, y: 10329, face: 2, leafFace: 3, stage: STAGE_BLOOD_GATE },
+    { closed: DUNGEON_GATE_ICY, x: 2918, y: 10321, face: 2, leafFace: 3, stage: STAGE_ICY_GATE },
+  ];
+  const gateCrossings = new WeakMap();
+  const openSolvedGates = new WeakMap();
+
+  function sendQuestGateState(player, gate, open) {
+    const sender = player.getPacketSender();
+    const at = new Location(gate.x, gate.y, 0);
+    const [dx, dy] = [[-1, 0], [0, 1], [1, 0], [0, -1]][gate.face & 3];
+    const leafAt = new Location(gate.x + dx, gate.y + dy, 0);
+    const raw = (id, location, face) => new api.core.GameObject(id, location.clone(), 0, face, null);
+    if (open) {
+      sender.sendObjectRemoval(raw(gate.closed, at, gate.face));
+      sender.sendObject(raw(GATE_OPEN_INVISWALL, at, gate.face));
+      sender.sendObject(raw(GATE_OPEN_LEAF, leafAt, gate.leafFace));
+    } else {
+      sender.sendObjectRemoval(raw(GATE_OPEN_INVISWALL, at, gate.face));
+      sender.sendObjectRemoval(raw(GATE_OPEN_LEAF, leafAt, gate.leafFace));
+      sender.sendObject(raw(gate.closed, at, gate.face));
+    }
+  }
+
+  function closeSolvedGate(player, closedId) {
+    const gate = gateCrossings.get(player) ?? openSolvedGates.get(player);
+    if (!gate || (closedId !== undefined && gate.closed !== closedId)) return false;
+    sendQuestGateState(player, gate, false);
+    gateCrossings.delete(player);
+    openSolvedGates.delete(player);
+    return true;
+  }
+
+  /**
+   * Ordinary walk through a direction gate left open until the lever. The
+   * captured open leaf 46604 has no actions, so the server keeps its own
+   * clipping and scopes the threshold walk to this request. `destination` is
+   * the MovementQueue plain payload `{x,y,z}` (never a Location).
+   */
+  function routeOpenGateWalk(event) {
+    const gate = openSolvedGates.get(event.player);
+    const destination = event.destination;
+    if (!gate || !destination) return;
+    if (ObstacleRunner.isBusy(event.player) || gateCrossings.has(event.player)) return;
+    const from = event.player.getLocation();
+    if (from.getZ() !== 0 || destination.z !== 0) return;
+    if (Math.abs(from.getX() - gate.x) > 3 || Math.abs(from.getY() - gate.y) > 3) return;
+    const [dx, dy] = [[-1, 0], [0, 1], [1, 0], [0, -1]][gate.face & 3];
+    const sideFrom = (from.getX() - gate.x) * dx + (from.getY() - gate.y) * dy;
+    const sideTo = (destination.x - gate.x) * dx + (destination.y - gate.y) * dy;
+    const fromFront = sideFrom > 0;
+    const front = sideTo > 0;
+    if (fromFront === front) return;
+    event.handled = true;
+    const thresholdX = front ? gate.x + dx : gate.x;
+    const thresholdY = front ? gate.y + dy : gate.y;
+    const resume = () => {
+      if (event.player.getLocation().getX() === destination.x && event.player.getLocation().getY() === destination.y) return;
+      event.player.getMovementQueue().walkToTile(new Location(destination.x, destination.y, 0), () => {});
+    };
+    const cross = () => {
+      ObstacleRunner.run({ player: event.player }, [{ wait: 1 }, { walk: [[thresholdX, thresholdY]] }], {
+        onFinish: (completed) => { if (completed) resume(); },
+      });
+    };
+    const approachX = gate.x + dx * (fromFront ? 1 : -1);
+    const approachY = gate.y + dy * (fromFront ? 1 : -1);
+    const atAnchor = from.getX() === gate.x && from.getY() === gate.y;
+    if (atAnchor || (from.getX() === approachX && from.getY() === approachY)) cross();
+    else event.player.getMovementQueue().walkToTile(new Location(approachX, approachY, 0), cross);
+  }
+
+  function crossSolvedGate(event) {
+    const { player, objectId } = event;
+    const gate = SOLVED_GATES.find((entry) => entry.closed === objectId);
+    if (!gate) return false;
+    if (quest.getStage(player) < gate.stage) return false;
+    const at = event.object?.getLocation?.() ?? event.location;
+    if (!at || at.getX() !== gate.x || at.getY() !== gate.y || at.getZ() !== 0) return false;
+    const from = player.getLocation();
+    if (from.getZ() !== 0
+      || Math.abs(from.getX() - gate.x) > 1 || Math.abs(from.getY() - gate.y) > 1) return false;
+    if (gateCrossings.has(player) || ObstacleRunner.isBusy(player)) {
+      event.handled = true;
+      return true;
+    }
+    const door = event.object ?? api.core.MapObjects.get(
+      gate.closed, new Location(gate.x, gate.y, 0), player.getPrivateArea?.() ?? null);
+    const crossing = crossingFor(door, from);
+    if (!crossing) return false;
+    event.handled = true;
+    gateCrossings.set(player, gate);
+    sendQuestGateState(player, gate, true);
+    ObstacleRunner.run({ player, object: door }, [{ wait: 1 }, { walk: [[crossing.destination.x, crossing.destination.y]] }], {
+      onFinish: (completed) => {
+        // Capture 1694 [7475]..[7477]: the direction gate stays open through the
+        // threshold walk and closes when the player operates the lever. Blood/icy
+        // close after their crossing; never claim a tick we did not capture.
+        if (gate.closed === DUNGEON_GATE_DIRECTION && completed) {
+          gateCrossings.delete(player);
+          openSolvedGates.set(player, gate);
+          return;
+        }
+        closeSolvedGate(player, gate.closed);
+      },
+    });
+    return true;
   }
 
   function handleDungeonGate(player, objectId, location) {
@@ -2010,6 +2133,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
     if (!player) return;
     pendingFalseWall.delete(player);
     falseWallInteraction.delete(player);
+    closeSolvedGate(player);
     if (scenes.get(player)) scenes.end(player, true);
   }
 
@@ -2180,6 +2304,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
   });
 
   scenes = createQuestScenes(api, { onEnd: handleSceneEnd });
+  ObstacleRunner.init(api);
   directionLock = createDirectionalLock(api, { solution: [3, 0, 3, 2], onSolved: solvedDirectionGate });
   bloodLock = createCombinationLock(api, { digits: [3, 5, 9, 4, 7], datasetRow: 2340, onSolved: solvedBloodGate });
   chestLock = createCombinationLock(api, { digits: [7, 4, 0, 2], datasetRow: 2339, onSolved: solvedIcyChest });
@@ -2190,6 +2315,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("npc-dialogue:action", handleAction);
   api.onCustomEvent("npc-dialogue:line", handleLine);
+  api.onWalkRoute(routeOpenGateWalk);
   api.onObjectRoute(routeHiddenLadder);
   api.onCustomEvent("ladders:climb", claimHiddenLadder);
   api.onCustomEvent("door:toggle", handleDoorToggle);

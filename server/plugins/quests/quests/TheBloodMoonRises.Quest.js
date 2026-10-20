@@ -583,6 +583,10 @@ module.exports = function registerTheBloodMoonRises(api) {
   const HIDEOUT_CHEST_TILE = { x: 3600, y: 9617, z: 0 };
   const VYRE_NOBLE_OUTFIT = [ItemIdentifiers.VYRE_NOBLE_TOP, ItemIdentifiers.VYRE_NOBLE_LEGS, ItemIdentifiers.VYRE_NOBLE_SHOES];
   const HUNT_TRAPDOOR_ID = 61848;
+  // Raw cache loc at the Sangvesti drawbridge; 61804 transforms to 61805/61806.
+  const HUNT_DRAWBRIDGE_MECHANISM_ID = 61804;
+  const HUNT_DRAWBRIDGE_MECHANISM_TILE = Object.freeze({ x: 2633, y: 7831, z: 0 });
+  const HUNT_FOUND_COG_VARBIT = 15485;
   const HUNT_ITEMS = {
     crank: ItemIdentifiers.CRANK_WHEEL, dustyBook: ItemIdentifiers.DUSTY_BOOK, viturKey: ItemIdentifiers.VITUR_KEY,
     boltCutters: ItemIdentifiers.BOLT_CUTTERS, toothHalf: ItemIdentifiers.TOOTH_HALF_OF_KEY_6,
@@ -679,8 +683,14 @@ module.exports = function registerTheBloodMoonRises(api) {
   const FINAL_CASTLE_ARRIVAL = Object.freeze({ x: 2507, y: 7383, z: 0 });
   const FINAL_GRAVEYARD_AFTER_FIGHT = Object.freeze({ x: 3731, y: 3220, z: 0 });
   const FINAL_EFARITAY_TILE = Object.freeze({ x: 3706, y: 3211, z: 0 });
+  // RSProx: the gathering threshold conversation ends at the castle landing with
+  // Ivan 15852 (transform parent of 15855) waiting beside the player.
+  const GATHERING_CASTLE_LANDING = Object.freeze({ x: 2846, y: 7391, z: 0 });
+  const GATHERING_CASTLE_IVAN = Object.freeze({ id: 15852, x: 2845, y: 7387, z: 0 });
   // Cache loc 61764 becomes child 61765 (Take-supplies) during native stages 168–170.
   const FINAL_DRAKAN_SUPPLY_CHEST = Object.freeze({ id: 61764, x: 2503, y: 7386, z: 0 });
+  // Cache DB row 16873: vampyrium_consumable_shop (omnishop_main 819 / side 806).
+  const FINAL_SUPPLY_SHOP_ROW = 16873;
   const FINAL_DRAKAN_ROOF_DOOR = Object.freeze({ id: 61628, x: 2506, y: 7387, z: 0 });
   const FINAL_DRAKAN_WAVES = Object.freeze([
     "left", "right", "north", "left", "right", "left", "north", "pincer",
@@ -709,6 +719,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const siegeDrakanEncounters = new Map();
   const siegeHallInjured = new Map();
   const theatreActors = new Map();
+  const gatheringCastleIvans = new Map();
   function preparationStoryReady(player) {
     const prep = player?.getAttribute(PREP_ATTRIBUTE) ?? {};
     return prep.introComplete && prep.stewFed && prep.safalaanAnswered && prep.preparationsDiscussed &&
@@ -1651,6 +1662,17 @@ module.exports = function registerTheBloodMoonRises(api) {
     return handleDrakanDodgeRoll(event, fight, api.core);
   }
 
+  function openFinalSupplyShop(player) {
+    if (!player || stage(player) !== STAGE.FINAL) return false;
+    // The supply chest is the cache-owned vampyrium consumables omnishop. This
+    // flag records that the player has checked/opened the supplies for the roof
+    // warning; it never blocks opening the shop again or buying more.
+    player.setAttribute(DRAKAN_SUPPLY_ATTRIBUTE, true);
+    const request = { player, shop: FINAL_SUPPLY_SHOP_ROW, handled: false };
+    api.emitCustomEvent("omnishop:open", request);
+    return request.handled === true;
+  }
+
   function handleFinalDrakanSupplyChest(event) {
     const player = event?.player;
     const tile = event?.location;
@@ -1658,51 +1680,25 @@ module.exports = function registerTheBloodMoonRises(api) {
     const y = tile?.y ?? tile?.getY?.();
     const z = tile?.z ?? tile?.getZ?.();
     const ids = [event?.objectId, event?.definition?.id];
+    const option = String(event?.option ?? "").toLowerCase();
     if (!player || !ids.some(id => id === FINAL_DRAKAN_SUPPLY_CHEST.id || id === 61765) ||
       x !== FINAL_DRAKAN_SUPPLY_CHEST.x || y !== FINAL_DRAKAN_SUPPLY_CHEST.y || z !== FINAL_DRAKAN_SUPPLY_CHEST.z ||
-      String(event?.option ?? "").toLowerCase() !== "take-supplies") return false;
+      !["search", "take-supplies"].includes(option)) return false;
     event.handled = true;
     if (quest.isComplete(player) || stage(player) !== STAGE.FINAL) {
       player.sendMessage("The chest's Vampyrium supplies are only for the final pursuit of Lowerniel.");
       return true;
     }
-    startTranscript(api, player, 0, PAGE, "night-of-the-blood-moon-searching-the-supply-chest");
-    return true;
-  }
-
-  function giveFinalDrakanSupplies(player) {
-    const inventory = player.getInventory();
-    const planned = [
-      [ItemIdentifiers.JAR_OF_CONGEALED_BLOOD, 1],
-      [ItemIdentifiers.RANK_FROTHY_POTION_4_, 2],
-      [ItemIdentifiers.FOUL_CHUNKY_POTION_4_, 4],
-    ];
-    let free = inventory.getFreeSlots?.() ?? 0;
-    let added = 0;
-    for (const [id, amount] of planned) {
-      if (id === ItemIdentifiers.JAR_OF_CONGEALED_BLOOD && hasItem(player, id)) continue;
-      for (let count = 0; count < amount && free > 0; count++) {
-        if (!inventory.adds(id, 1)) break;
-        free--;
-        added++;
-      }
+    if (option === "search") {
+      // Captured oploc1: Search opens the two-option useful-supplies menu and
+      // sets the final-fight supply warning bit before the choice is made.
+      player.setAttribute(DRAKAN_SUPPLY_ATTRIBUTE, true);
+      player.getPacketSender?.().sendVarbit?.(15480, 1);
+      startTranscript(api, player, 0, PAGE, "night-of-the-blood-moon-searching-the-supply-chest");
+      return true;
     }
-    if (free > 0 && !hasItem(player, ItemIdentifiers.DRAKANS_MEDALLION) &&
-      inventory.adds(ItemIdentifiers.DRAKANS_MEDALLION, 1)) {
-      free--;
-      added++;
-    }
-    while (free > 0) {
-      if (!inventory.adds(ItemIdentifiers.RANCID_SLIMY_POTION_4_, 1)) break;
-      free--;
-      added++;
-    }
-    if (!added) {
-      player.sendMessage("Make room in your inventory before taking supplies from the chest.");
-      return false;
-    }
-    player.setAttribute(DRAKAN_SUPPLY_ATTRIBUTE, true);
-    player.sendMessage("You take Vampyrium potions and emergency blood from the supply chest.");
+    // Captured oploc2: Take-supplies opens the real omnishop directly.
+    openFinalSupplyShop(player);
     return true;
   }
 
@@ -2005,7 +2001,9 @@ module.exports = function registerTheBloodMoonRises(api) {
     cleanupGatheringDrakan(player);
     player.setAttribute(BLOOD_MOON_FIGHT_ATTRIBUTE, null);
     if (Number(player.getAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE)) >= 152 &&
-      Number(player.getAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE)) < 164) {
+      Number(player.getAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE)) < 158) {
+      // 158+ means the threshold conversation already moved the group to the
+      // castle; keep that earned landing and let the login sync spawn Ivan.
       player.moveTo(new Location(WYRD_BURGH_RETURN.x, WYRD_BURGH_RETURN.y, WYRD_BURGH_RETURN.z));
       player.sendMessage("The gathering was interrupted. Inspect the broken fence again to continue.");
     }
@@ -2113,6 +2111,46 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function cleanupGatheringDrakanOnLogout({ player } = {}) {
     cleanupGatheringDrakan(player);
+  }
+
+  function spawnGatheringCastleIvan(player) {
+    if (!player || stage(player) !== STAGE.FENCE_FOUND) return null;
+    const native = Number(player.getAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE));
+    if (!(native >= 158 && native < 164)) return null;
+    const existing = gatheringCastleIvans.get(player);
+    if (existing && !existing.isDestroyed?.() && existing.getHitpoints?.() > 0) return existing;
+    const npc = api.spawnNpc({ id: GATHERING_CASTLE_IVAN.id, x: GATHERING_CASTLE_IVAN.x,
+      y: GATHERING_CASTLE_IVAN.y, z: GATHERING_CASTLE_IVAN.z,
+      wanderRadius: 0, owner: player, ownerOnly: true });
+    if (!npc) return null;
+    npc.setScriptedMovement?.(true);
+    gatheringCastleIvans.set(player, npc);
+    return npc;
+  }
+
+  function cleanupGatheringCastleIvan({ player } = {}) {
+    const npc = player && gatheringCastleIvans.get(player);
+    if (npc) api.removeNpc(npc);
+    if (player) gatheringCastleIvans.delete(player);
+  }
+
+  // The threshold transcript is a real conversation; only leave the gathering
+  // scene after its final canonical line. gaf5Xw ("Efaritay flies away.") is a
+  // mid-transcript action, so it must not move the player.
+  function finishGatheringThresholdConversation(player) {
+    if (!player || stage(player) !== STAGE.FENCE_FOUND ||
+      Number(player.getAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE)) !== 156) return;
+    cleanupGatheringDrakan(player);
+    resetBloodMoonScene(player);
+    player.setAttribute(BLOOD_MOON_SCENE_ATTRIBUTE, null);
+    setFinalNativeStage(player, 158);
+    player.moveTo(new Location(GATHERING_CASTLE_LANDING.x, GATHERING_CASTLE_LANDING.y,
+      GATHERING_CASTLE_LANDING.z));
+    spawnGatheringCastleIvan(player);
+  }
+
+  function syncGatheringCastleIvanOnLogin({ player } = {}) {
+    if (player) spawnGatheringCastleIvan(player);
   }
 
   function syncFinalEfaritay(player) {
@@ -2414,6 +2452,16 @@ module.exports = function registerTheBloodMoonRises(api) {
   function handleSiegeLogin({ player }) {
     if (!player || stage(player) !== STAGE.SIEGE) return;
     const state = hallDefenceState(player);
+    if (state.phase === "fall-back") {
+      // The logout removed the bridge session. Resume the captured fall-back
+      // conversation instead of skipping to phase hall; stage stays 118 until
+      // the player really finishes vqg4qO.
+      if (!player.getDialogueManager?.()?.getCurrent?.()) {
+        startTranscript(api, player, NpcIdentifiers.SAREI_5, PAGE,
+          "drakan-s-siege-upon-reaching-0-defender-integrity");
+      }
+      return;
+    }
     hall.enter(player);
     if (state.phase === "hall") player.setAttribute(SIEGE_DEFENCE_ATTRIBUTE,
       { ...state, nextIntegrityLossCycle: World.getProcessCycle() + HALL_INTEGRITY_INTERVAL });
@@ -2806,7 +2854,12 @@ module.exports = function registerTheBloodMoonRises(api) {
         // The native recording places Sugadinti just west of the Theatre entrance.
         : native >= 132 && native <= 136
           ? [[15956, 3670, 3219, 0]]
-          : [];
+          // RSProx places the post-Theatre Veliaf and Ivan outside the old lab.
+          // 15874/15851 are transform parents that resolve to their Talk-to
+          // children (15878/15855) on native 140-142.
+          : native >= 140 && native <= 142
+            ? [[15874, 3541, 3257, 0], [15851, 3541, 3260, 0]]
+            : [];
     if (actors.length === desired.length && actors.every((npc, index) =>
       !npc.isDestroyed?.() && npc.getId?.() === desired[index][0])) return;
     cleanupTheatreActors(player);
@@ -5483,7 +5536,8 @@ module.exports = function registerTheBloodMoonRises(api) {
       return;
     }
     if (event.stepId === "lKvIyH" && stage(player) === STAGE.BLOOD_HUNT) {
-      setBloodHuntNativeStage(player, 86);
+      // Captured P1: fitting the cog lowers the bridge and advances 86 -> 88.
+      setBloodHuntNativeStage(player, 88);
     }
     if (event.stepId === "D5qF0g" && stage(player) === STAGE.BLOOD_HUNT) {
       setBloodHuntNativeStage(player, 88);
@@ -5554,7 +5608,12 @@ module.exports = function registerTheBloodMoonRises(api) {
     }
     if (event.stepId === "huhOGU" && stage(player) === STAGE.FINAL) {
       event.handled = true;
-      giveFinalDrakanSupplies(player);
+      openFinalSupplyShop(player);
+      return;
+    }
+    if (event.stepId === "5E6Et6" && stage(player) === STAGE.FINAL) {
+      event.handled = true;
+      api.emitCustomEvent("bank:open-deposit-box", { player });
       return;
     }
     if (event.stepId === "W2h12S" && stage(player) === STAGE.FINAL) {
@@ -6132,6 +6191,16 @@ module.exports = function registerTheBloodMoonRises(api) {
       return;
     }
     if (stage(player) === STAGE.FENCE_FOUND &&
+      Number(player.getAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE)) === 156 &&
+      isQuestLine(request, "night-of-the-blood-moon-upon-lowerniel-reaching-30-hp",
+        "I promise you, we will discuss this matter properly, but first, the crowd needs to be placated. I must address them. Please, wait for me inside the castle...",
+        "Sugadinti Vitur")) {
+      // The conversation ends here; only now does the captured script move the
+      // group to the castle and leave Ivan waiting inside.
+      request.after = () => finishGatheringThresholdConversation(player);
+      return;
+    }
+    if (stage(player) === STAGE.FENCE_FOUND &&
       Number(player.getAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE)) === 158 &&
       isQuestLine(request, "night-of-the-blood-moon-talking-to-ivan",
         "My children, I'm sorry for rushing you inside.", "Sugadinti Vitur")) {
@@ -6142,6 +6211,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       isQuestLine(request, "night-of-the-blood-moon-talking-to-ivan",
         "Thank you, and good luck, my child.", "Sugadinti Vitur")) {
       cleanupGatheringDrakan(player);
+      cleanupGatheringCastleIvan({ player });
       resetBloodMoonScene(player);
       player.setAttribute(BLOOD_MOON_SCENE_ATTRIBUTE, null);
       setFinalNativeStage(player, 164);
@@ -6246,17 +6316,18 @@ module.exports = function registerTheBloodMoonRises(api) {
     if ([STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(stage(player)) && request.step?.player &&
       request.text === "We don't have time for this. Whatever we do next, we can't stay here. Let's get across that bridge." &&
       !player.getAttribute(HUNT_ATTRIBUTE)?.drawbridgeRepaired) {
+      // This conversation only reports that the cog was found (captured varbit
+      // 15485). Fitting it to the mechanism at 2633,7831 is the mandatory next
+      // interaction; do not repair or consume it during the dialogue.
       request.after = () => {
         const state = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
-        if (state.drawbridgeRepaired) return;
-        const inventory = player.getInventory();
-        if (!inventory.contains(HUNT_ITEMS.oldCog)) {
+        if (state.cogFound || state.drawbridgeRepaired) return;
+        if (!player.getInventory().contains(HUNT_ITEMS.oldCog)) {
           player.sendMessage("The drawbridge still needs the old cog from the Jovkai smithy.");
           return;
         }
-        inventory.deleteNumber(HUNT_ITEMS.oldCog, 1);
-        player.setAttribute(HUNT_ATTRIBUTE, { ...state, drawbridgeRepaired: true, cogHandedIn: true });
-        player.getPacketSender().sendVarbit(15485, 1);
+        player.setAttribute(HUNT_ATTRIBUTE, { ...state, cogFound: true });
+        player.getPacketSender().sendVarbit(HUNT_FOUND_COG_VARBIT, 1);
       };
       return;
     }
@@ -7798,6 +7869,23 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (z !== 0) return;
     const itemId = event.itemId;
     const inventory = player.getInventory();
+    if (x === HUNT_DRAWBRIDGE_MECHANISM_TILE.x && y === HUNT_DRAWBRIDGE_MECHANISM_TILE.y &&
+      [event.objectId, event.definition?.id].includes(HUNT_DRAWBRIDGE_MECHANISM_ID) &&
+      itemId === HUNT_ITEMS.oldCog) {
+      event.handled = true;
+      const state = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
+      if (state.drawbridgeRepaired) {
+        player.sendMessage("The drawbridge mechanism is already repaired.");
+        return;
+      }
+      if (!inventory.contains(HUNT_ITEMS.oldCog)) return;
+      inventory.deleteNumber(HUNT_ITEMS.oldCog, 1);
+      player.setAttribute(HUNT_ATTRIBUTE, { ...state, drawbridgeRepaired: true, cogHandedIn: true });
+      player.getPacketSender().sendVarbit(HUNT_FOUND_COG_VARBIT, 1);
+      startTranscript(api, player, NpcIdentifiers.VANESCULA_DRAKAN_10, PAGE,
+        "blood-hunt-crossing-the-bridge");
+      return;
+    }
     if (x === 2591 && y === 7825 && itemId === HUNT_ITEMS.bucket) {
       handleBloodHuntObjects({ ...event, player, itemId });
     } else if (x === 2592 && y === 7833 && itemId === HUNT_ITEMS.bucketWater) {
@@ -8370,12 +8458,14 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogin(syncCastleChapelPortalOnLogin);
   api.onPlayerLogin(recoverFinalDrakanLanding);
   api.onPlayerLogin(syncFinalEfaritayOnLogin);
+  api.onPlayerLogin(syncGatheringCastleIvanOnLogin);
   api.onPlayerLogin(resumeFinalDrakanVictory);
   api.onPlayerLogout(cleanupCastleActors);
   api.onPlayerLogout(cleanupPalaceActors);
   api.onPlayerLogout(cleanupBloodHuntActors);
   api.onPlayerLogout(cleanupFirstBloodEncounter);
   api.onPlayerLogout(cleanupGatheringDrakanOnLogout);
+  api.onPlayerLogout(cleanupGatheringCastleIvan);
   api.onPlayerLogout(cleanupPaterdomusBattleOnLogout);
   api.onPlayerLogout(({ player } = {}) => { if (player) Scenes.cancel(player); });
   api.onPlayerLogout(cleanupFinalEfaritay);

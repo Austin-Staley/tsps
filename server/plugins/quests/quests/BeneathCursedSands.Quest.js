@@ -1176,7 +1176,9 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
         event.handled = true;
         player.moveTo(new Location(3369, 2803, 0));
         setStage(player, STAGE_AKH_FIGHT);
-        showCamera(player, [3363, 2804, 300], [3374, 2800, 200], { shake: [[2, 0, 5]] });
+        // Capture101: cam_reset one tick after the final Akh transformation (stage 98),
+        // before the fight; release controls so the player can attack.
+        showCamera(player, [3363, 2804, 300], [3374, 2800, 200], { shake: [[2, 0, 5]], resetAt: 1 });
         return;
       case "1WDBi3": // Osman departs
         removeTracked(player, "osman");

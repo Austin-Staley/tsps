@@ -1207,3 +1207,161 @@ test('Vanescula cracked wall 61611 burns once and opens the Venator/third-emblem
   assert.equal(p.getInventory().contains(I.DRAKAN_EMBLEM_3), true, 'the third emblem is earned after the real Venator death');
   assert.equal(p.attrs.get(STORY).thirdEmblemClaimed, true);
 });
+
+test('native 128 raw theatre parents resolve and native 140 spawns the captured Veliaf/Ivan', () => {
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const sender = value => ({ getVarbit: id => id === 15464 ? value : 0, getVarp: () => 0 });
+  assert.equal(CacheDefinitions.resolveNpc(15872, sender(128))?.id, 15878,
+    'raw 15872 resolves to the named Veliaf at native 128');
+  assert.equal(CacheDefinitions.resolveNpc(15955, sender(128))?.id, 15960,
+    'raw 15955 resolves to the named Sugadinti at native 128');
+  assert.equal(CacheDefinitions.resolveNpc(15956, sender(132))?.id, 15962,
+    'raw 15956 resolves to the named Sugadinti at the theatre entrance');
+  assert.equal(CacheDefinitions.resolveNpc(15872, sender(128))?.name, 'Veliaf Hurtz');
+  assert.equal(CacheDefinitions.resolveNpc(15955, sender(128))?.name, 'Sugadinti Vitur');
+
+  const h = harness(), p = player('Theatre140');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 80);
+  p.attrs.set('quest.the_blood_moon_rises.theatre-native-stage', 140);
+  h.emit('quest:stage-changed', { player: p });
+  const actors = h.npcs.filter(npc => [15874, 15851].includes(npc.id))
+    .map(npc => [npc.id, npc.getLocation().getX(), npc.getLocation().getY()]).sort();
+  assert.deepEqual(actors, [[15851, 3541, 3260], [15874, 3541, 3257]],
+    'captured raw parents outside the old lab');
+  assert.equal(CacheDefinitions.resolveNpc(15874, sender(140))?.id, 15878);
+  assert.equal(CacheDefinitions.resolveNpc(15851, sender(140))?.id, 15855);
+
+  const talk = h.npcInteractions.get('Veliaf Hurtz')['Talk-to'];
+  assert.ok(talk({ player: p, npcId: 15874, definition: { getName: () => 'Veliaf Hurtz' } }));
+  assert.equal(p.varbits.get(15464), 142);
+  assert.ok(p.manager.getCurrent(), 'canonical fighting-wyrds conversation starts');
+});
+
+test('gathering threshold finishes at the castle landing and spawns Ivan only at the real end', () => {
+  const h = harness(), p = player('GatherEnd');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 96);
+  p.attrs.set('quest.the_blood_moon_rises.final-native-stage', 156);
+  startTranscript(h, p, 0, 'night-of-the-blood-moon-upon-lowerniel-reaching-30-hp');
+  continueUntil(p, () => p.manager.getCurrent()?.getText?.()?.startsWith("Efaritay's right!"));
+  assert.equal(Number(p.attrs.get('quest.the_blood_moon_rises.final-native-stage')), 156,
+    'gaf5Xw does not skip the conversation');
+  assert.notEqual(p.getLocation().getX(), 2846);
+  continueUntil(p, () => p.varbits.get(15464) === 158, 300);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [2846, 7391]);
+  const ivan = h.npcs.find(npc => npc.id === 15852);
+  assert.ok(ivan, 'raw Ivan parent spawns at the castle');
+  assert.deepEqual([ivan.getLocation().getX(), ivan.getLocation().getY()], [2845, 7387]);
+  h.emit('player:logout', { player: p });
+  assert.ok(h.removed.includes(ivan), 'logout removes the castle Ivan');
+  h.emit('player:login', { player: p });
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [2846, 7391],
+    'a 158 relog stays at the captured castle landing');
+  assert.ok(h.npcs.some(npc => npc.id === 15852 && !h.removed.includes(npc)),
+    'the login sync restores castle Ivan');
+});
+
+test('supply chest opens the cache-owned vampyrium omnishop repeatedly, with no auto grant', () => {
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const base = CacheDefinitions.getObject(61764);
+  assert.equal(base.transformVarbit, 15464);
+  assert.equal(base.transforms[168], 61765, 'base chest resolves to the Search/Take/Deposit child');
+  assert.deepEqual(CacheDefinitions.getObject(61765).actions.slice(0, 3),
+    ['Search', 'Take-supplies', 'Deposit']);
+  assert.equal(CacheDefinitions.getDbRowName(16873), 'vampyrium_consumable_shop');
+  assert.ok(CacheDefinitions.getDbRow(16873), 'cache owns the vampyrium shop row');
+
+  const h = harness(), p = player('Supplies');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 100);
+  p.getInventory().adds(I.HALLOWED_FLAIL, 1);
+  const opens = [], deposits = [];
+  h.api.onCustomEvent('omnishop:open', event => opens.push(event));
+  h.api.onCustomEvent('bank:open-deposit-box', event => deposits.push(event));
+  const chest = h.objectHooks.find(fn => fn.name === 'handleFinalDrakanSupplyChest');
+  const roof = h.objectHooks.find(fn => fn.name === 'handleFinalDrakanRoofDoor');
+  assert.ok(chest && roof, 'named supply/roof handlers are registered');
+
+  const search = { player: p, objectId: 61764, definition: { id: 61764, getName: () => 'Chest' },
+    location: { x: 2503, y: 7386, z: 0 }, option: 'Search', handled: false };
+  assert.equal(chest(search), true);
+  assert.equal(search.handled, true);
+  assert.equal(p.varbits.get(15480), 1, 'captured supply warning bit is set on Search');
+  continueUntil(p, () => Boolean(p.prompt));
+  assert.deepEqual(p.prompt.options, ['Take some supplies.', 'Deposit some items.']);
+  choose(p, 'Take some supplies.');
+  assert.equal(opens.length, 1, 'Take some supplies opens the real omnishop');
+  assert.equal(opens[0].shop, 16873);
+  assert.equal(p.attrs.get('quest.the_blood_moon_rises.final-drakan-supplies'), true);
+  assert.equal(p.getInventory().getAmount(I.JAR_OF_CONGEALED_BLOOD), 0, 'no items are auto-granted');
+
+  const explicit = { ...search, option: 'Take-supplies', handled: false };
+  assert.equal(chest(explicit), true);
+  assert.equal(opens.length, 2, 'explicit Take-supplies opens the same shop');
+  assert.equal(opens[1].shop, 16873);
+  const again = { ...explicit, handled: false };
+  chest(again);
+  assert.equal(opens.length, 3, 'resupplying after losing supplies is always allowed');
+  assert.equal(p.getInventory().getAmount(I.JAR_OF_CONGEALED_BLOOD), 0, 'repeat open adds nothing');
+
+  chest(search);
+  continueUntil(p, () => Boolean(p.prompt));
+  choose(p, 'Deposit some items.');
+  assert.equal(deposits.length, 1, 'Deposit uses the existing deposit-box API');
+
+  const enter = { player: p, objectId: 61628, definition: { id: 61628, getName: () => 'Door' },
+    location: { x: 2506, y: 7387, z: 0 }, option: 'Enter', handled: false };
+  assert.equal(roof(enter), true);
+  continueUntil(p, () => h.npcs.some(npc => npc.id === N.LOWERNIEL_DRAKAN_17), 400);
+  assert.ok(h.npcs.some(npc => npc.id === N.LOWERNIEL_DRAKAN_17), 'normal choice reaches the roof encounter');
+});
+
+test('siege fall-back login resumes the real 118 conversation and vqg4qO opens the hall', () => {
+  const h = harness(), p = player('Fallback');
+  enablePrereqs(h, new Set(PREREQS));
+  const SIEGE = 'quest.the_blood_moon_rises.siege-defence';
+  h.quest.setStage(p, 70);
+  p.attrs.set(SIEGE, { phase: 'fall-back', integrity: 0, qualified: true });
+  p.varbits.set(15464, 118);
+  h.emit('player:login', { player: p });
+  assert.equal(h.quest.getStage(p), 70);
+  assert.equal(p.varbits.get(15464), 118, 'login does not skip to 120');
+  assert.equal(p.attrs.get(SIEGE).phase, 'fall-back');
+  assert.ok(p.manager.getCurrent(), 'canonical fall-back transcript started');
+  continueUntil(p, () => p.attrs.get(SIEGE)?.phase === 'hall', 100);
+  assert.equal(p.varbits.get(15464), 120);
+  assert.equal(p.attrs.get(SIEGE).integrity, 100);
+  assert.equal(h.quest.getStage(p), 70);
+  h.emit('npc-dialogue:action', { player: p, stepId: 'vqg4qO', kind: 'action' });
+  assert.equal(p.attrs.get(SIEGE).phase, 'hall', 'repeat completion does not reset the hall');
+  assert.equal(p.attrs.get(SIEGE).integrity, 100);
+});
+
+test('cog use on the Sangvesti mechanism is mandatory and consumes the earned cog once', () => {
+  const h = harness(), p = player('Cog');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 50);
+  p.attrs.set('quest.the_blood_moon_rises.blood-hunt', { nativeStage: 86 });
+  p.getInventory().adds(I.OLD_COG, 1);
+  const line = { player: p,
+    text: "We don't have time for this. Whatever we do next, we can't stay here. Let's get across that bridge.",
+    pages: [{ page: 'The Blood Moon Rises', variants: ['blood-hunt-after-finding-the-cog'] }],
+    step: { player: "We don't have time for this." } };
+  h.emit('npc-dialogue:line', line);
+  line.after();
+  assert.equal(p.getInventory().getAmount(I.OLD_COG), 1, 'the found-cog dialogue leaves the cog held');
+  assert.equal(p.attrs.get('quest.the_blood_moon_rises.blood-hunt').drawbridgeRepaired, undefined);
+  assert.equal(p.varbits.get(15485), 1, 'captured found-cog varbit is set');
+
+  const use = h.itemOnObject.find(fn => fn.name === 'handleBloodHuntItemOnObject');
+  const event = { player: p, objectId: 61804, definition: { id: 61804, getName: () => 'Drawbridge mechanism' },
+    itemId: I.OLD_COG, location: { x: 2633, y: 7831, z: 0 }, handled: false };
+  use(event);
+  assert.equal(event.handled, true);
+  assert.equal(p.getInventory().getAmount(I.OLD_COG), 0, 'the cog is consumed by the mechanism');
+  assert.equal(p.attrs.get('quest.the_blood_moon_rises.blood-hunt').drawbridgeRepaired, true);
+  assert.ok(p.manager.getCurrent(), 'the canonical crossing conversation starts');
+  continueUntil(p, () => p.varbits.get(15464) === 88, 100);
+  assert.equal(p.varbits.get(15464), 88, 'bridge lowering advances 86 -> 88');
+});

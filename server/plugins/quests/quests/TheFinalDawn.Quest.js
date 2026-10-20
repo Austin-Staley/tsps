@@ -250,6 +250,20 @@ module.exports = function registerTheFinalDawnQuest(api) {
   const KATLO_TALK_ID = 14347; // vmq4_highlord_katlo_cs
   const JANUS_TALK_ID = 14241; // vmq4_janus_house_janus
   const JANUS_UNCONSCIOUS_ID = NpcIdentifiers.FOREBEARER_JANUS_5; // 14243 [Search]
+  // Capture 3128 basement interrogation cast and tiles after the trap capture.
+  const JANUS_BASEMENT_ID = 14245; // vmq4_janus_basement_cs
+  const QUEEN_INTERROGATION_ID = NpcIdentifiers.QUEEN_ZYANYI_ARKAN_6; // 14290 has Talk-to (14287 CS is actionless)
+  const INTERROGATION_BOUNDS = [[1644, 1660, 9486, 9500, 0]];
+  const INTERROGATION_PLAYER_TILE = { x: 1650, y: 9493, z: 0 };
+  const INTERROGATION_CAST = [
+    [14307, 1651, 9491, 1652, 9492], // Servius
+    [JANUS_BASEMENT_ID, 1655, 9492, 1652, 9492], // Janus
+    [QUEEN_INTERROGATION_ID, 1652, 9492, 1655, 9492], // Queen
+    [14368, 1651, 9495, 1652, 9492], // Kualti scimitar
+    [14367, 1649, 9490, 1652, 9492], // Kualti warhammer
+    [14371, 1648, 9495, 1652, 9492], // Kualti hasta
+    [NpcIdentifiers.CAPTAIN_VIBIA_2, 1652, 9490, 1652, 9492], // Vibia
+  ];
   const FURIA_TALK_ID = NpcIdentifiers.FURIA_TULLUS_10; // 14330 prisoner
   const EMISSARY_TEMPLE_ID = NpcIdentifiers.EMISSARY_ASCENDED; // 13706
   // Captured temple-family NPCs; 13744 is the visible transformed Ascended.
@@ -762,10 +776,10 @@ module.exports = function registerTheFinalDawnQuest(api) {
         : { id: VIBIA_OUTSIDE_ID, x: 1653, y: 3087, z: 0, wanderRadius: 0 })
       : null);
     syncTracked(player, "guard-dog", homeInvasion
-      ? { id: GUARD_DOG_ID, x: 1651, y: 3094, z: 0, wanderRadius: 0 }
+      ? { id: GUARD_DOG_ID, x: stage === STAGE_JANUS ? 1650 : 1651, y: 3094, z: 0, wanderRadius: 0 }
       : null);
     syncTracked(player, "janus-captured", stage === STAGE_JANUS && hasBit(player, BIT_JANUS_CAPTURED)
-      ? { id: JANUS_UNCONSCIOUS_ID, x: 1648, y: 3093, z: 0, wanderRadius: 0 }
+      ? { id: JANUS_UNCONSCIOUS_ID, x: 1647, y: 3093, z: 0, wanderRadius: 0 }
       : null);
     syncTracked(player, "galna", stage >= STAGE_MARKET && stage < STAGE_NEYPOTZLI
       ? { id: GALNA_ID, x: TEUMO_HOUSE_TILE.x, y: TEUMO_HOUSE_TILE.y, z: TEUMO_HOUSE_TILE.z, wanderRadius: 0 }
@@ -1021,7 +1035,8 @@ module.exports = function registerTheFinalDawnQuest(api) {
   /** Owner-only open-door state at the captured west tile; global map door stays untouched. */
   function ensureSafehouseDoorState(player) {
     const stage = quest.getStage(player);
-    if (stage < STAGE_HOUSE_OPEN || stage >= STAGE_TRAP || !inSafehouseZone(player)) return;
+    const doorOpen = stage >= STAGE_HOUSE_OPEN && (stage < STAGE_TRAP || stage === STAGE_JANUS);
+    if (!doorOpen || !inSafehouseZone(player)) return;
     const current = Scenes.get(player);
     if (current?.name === "safehouse-door") return;
     const scene = Scenes.open(player, "safehouse-door", [
@@ -1067,7 +1082,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
 
   function handleSafehouseZoneEnter({ player }) {
     const stage = quest.getStage(player);
-    if (stage < STAGE_HOUSE_OPEN || stage >= STAGE_TRAP) return;
+    if (stage < STAGE_HOUSE_OPEN || (stage >= STAGE_TRAP && stage !== STAGE_JANUS)) return;
     ensureQuestNpcs(player);
     ensureSafehouseDoorState(player);
     ensureSafehouseTopObjects(player);
@@ -1142,6 +1157,53 @@ module.exports = function registerTheFinalDawnQuest(api) {
       }
       return out;
     };
+  }
+
+  function inInterrogationZone(player) {
+    const location = player.getLocation();
+    if (!location || location.getZ() !== 0) return false;
+    const [[minX, maxX, minY, maxY]] = INTERROGATION_BOUNDS;
+    return location.getX() >= minX && location.getX() <= maxX
+      && location.getY() >= minY && location.getY() <= maxY;
+  }
+
+  /** Owner-only basement interrogation scene, reused by the capture action and login resume. */
+  function openInterrogationScene(player, movePlayer) {
+    if (Scenes.get(player)?.name === "janus-interrogation") return Scenes.get(player);
+    Scenes.end(player, false);
+    const scene = Scenes.open(player, "janus-interrogation", INTERROGATION_BOUNDS);
+    Scenes.controls(player, true, true);
+    Scenes.fade(player, true);
+    if (movePlayer) player.moveTo(new Location(INTERROGATION_PLAYER_TILE.x, INTERROGATION_PLAYER_TILE.y, INTERROGATION_PLAYER_TILE.z));
+    Scenes.later(scene, 2, () => {
+      for (const [id, x, y, faceX, faceY] of INTERROGATION_CAST) Scenes.actor(scene, id, [x, y, 0], [faceX, faceY]);
+      Scenes.camera(player, [1650, 9485, 590], [1652, 9492, 130]);
+      Scenes.fade(player, false);
+    });
+    return scene;
+  }
+
+  /** The part of the captured transcript after ZWqy3O, so login resumes at the Queen scene. */
+  function interrogationContinuationSteps() {
+    const steps = loadTranscripts(api)?.[PAGE]?.variants?.["home-invasion-interrogating-janus"];
+    if (!Array.isArray(steps)) return [];
+    const arrival = steps.findIndex((step) => step.id === ACTION_INTERROGATE_ARRIVE);
+    return arrival >= 0 ? steps.slice(arrival + 1) : [];
+  }
+
+  function restoreInterrogationControls(player) {
+    if (quest.getStage(player) !== STAGE_QUEEN_CAM) return;
+    if (Scenes.get(player)?.name !== "janus-interrogation") return;
+    Scenes.controls(player, false);
+  }
+
+  function resumeInterrogation(player) {
+    openInterrogationScene(player, false);
+    const continuation = interrogationContinuationSteps();
+    if (continuation.length) {
+      play(player, JANUS_UNCONSCIOUS_ID, "home-invasion-interrogating-janus", () => continuation);
+    }
+    whenIdle(player, () => restoreInterrogationControls(player));
   }
 
   function talkVibia(event) {
@@ -1225,6 +1287,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
     if (quest.getStage(player) !== STAGE_JANUS || !hasBit(player, BIT_JANUS_CAPTURED)) return false;
     play(player, JANUS_UNCONSCIOUS_ID, "home-invasion-interrogating-janus");
     setStage(player, STAGE_BASEMENT_KEY);
+    whenIdle(player, () => restoreInterrogationControls(player));
     return true;
   }
 
@@ -2308,15 +2371,17 @@ module.exports = function registerTheFinalDawnQuest(api) {
         cameraBeat(player, [1652, 3093, 330], [1651, 3093, 329], 30);
         setBit(player, BIT_JANUS_CAPTURED);
         setStage(player, STAGE_JANUS);
+        // Capture 3128 returns from the trap instance to the house with the door open.
+        ensureSafehouseDoorState(player);
         return;
       case ACTION_INTERROGATE_ARRIVE:
         if (npcId !== JANUS_UNCONSCIOUS_ID) return;
-        cameraBeat(player, [1650, 9485, 590], [1652, 9492, 130], 60);
-        fadePulse(player);
+        openInterrogationScene(player, true);
         setStage(player, STAGE_QUEEN_CAM);
         return;
       case ACTION_TRAVEL_CAM_TORUM:
         if (npcId !== JANUS_UNCONSCIOUS_ID && !QUEEN_IDS.has(npcId)) return;
+        Scenes.end(player, false);
         setStage(player, STAGE_TRAVEL);
         setStage(player, STAGE_ARRIVED);
         player.moveTo(new Location(CAM_TORUM_TILE.x, CAM_TORUM_TILE.y, CAM_TORUM_TILE.z));
@@ -2427,6 +2492,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
     ensureSafehouseTopObjects(player);
     syncNeypotzliCheckpoint(player);
     if (quest.getStage(player) === STAGE_WAVES) spawnCultistWave(player);
+    if (quest.getStage(player) === STAGE_QUEEN_CAM && inInterrogationZone(player)) resumeInterrogation(player);
     refreshQuestList(player);
   }
 
