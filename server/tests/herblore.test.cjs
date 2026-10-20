@@ -268,3 +268,67 @@ test("the Herblore cape's grimy herbs start at once and go every tick", () => {
   assert.equal(who.inv.count("marrentillvial"), 3);
   assert.deepEqual(who.sent.animations, []);
 });
+
+test("stackable secondaries go in one per dose", () => {
+  const who = player([["4dose2energy"], ["amylase", 10]], 77);
+  use(who, "amylase", "4dose2energy");
+  assert.equal(who.inv.count("4dosestamina"), 1);
+  assert.equal(who.inv.count("amylase"), 6);
+  assert.equal(who.sent.xp, 102);
+  assert.deepEqual(who.sent.spam, ["You mix 4 crystals of amylase into your potion."]);
+  const scales = player([["antidote++3"], ["snakeboss_scale", 100]], 87);
+  use(scales, "antidote++3", "snakeboss_scale");
+  assert.equal(scales.inv.count("antivenom3"), 1);
+  assert.equal(scales.inv.count("snakeboss_scale"), 85);
+});
+
+test("upgrading a finished potion below the level says so", () => {
+  const who = player([["4dose2energy"], ["amylase", 4]], 76);
+  use(who, "amylase", "4dose2energy");
+  assert.deepEqual(who.sent.messages, ["You need level 77 Herblore to upgrade the potion."]);
+});
+
+test("super combat takes the three super potions and torstol, leaving two vials", () => {
+  const who = player([["4dose2attack"], ["4dose2strength"], ["4dose2defense"], ["torstol"]], 90);
+  use(who, "torstol", "4dose2attack");
+  assert.equal(who.inv.count("4dose2combat"), 1);
+  assert.equal(who.inv.count("vial_empty"), 2);
+  assert.equal(who.inv.count("torstol"), 0);
+  assert.deepEqual(who.sent.spam, ["You carefully mix the potions and torstol together."]);
+  const missing = player([["4dose2attack"], ["torstol"]], 90);
+  use(missing, "torstol", "4dose2attack");
+  assert.deepEqual(missing.sent.messages, ["Nothing interesting happens."]);
+});
+
+test("super antifire needs Dragon Slayer II", () => {
+  world.quests.set("dragon_slayer_ii", false);
+  const who = player([["4dose1antidragon"], ["crushed_dragon_bones"]], 92);
+  use(who, "crushed_dragon_bones", "4dose1antidragon");
+  assert.deepEqual(who.sent.messages, ["You don't know how to make super antifire potions yet. Maybe someone can teach you."]);
+  world.quests.set("dragon_slayer_ii", true);
+  use(who, "crushed_dragon_bones", "4dose1antidragon");
+  assert.equal(who.inv.count("4dose3antidragon"), 1);
+  assert.deepEqual(who.sent.spam, ["You mix the crushed superior dragon bones into your antifire potion."]);
+});
+
+test("sanfew serum is made in three steps", () => {
+  const who = player([["3dose2restore"], ["unicorn_horn_dust"], ["snake_weed"], ["nail_beast_nail"]], 65);
+  use(who, "unicorn_horn_dust", "3dose2restore");
+  use(who, "snake_weed", "sanfew_salve_step_1_3_dose");
+  use(who, "nail_beast_nail", "sanfew_salve_step_2_3_dose");
+  assert.equal(who.inv.count("sanfew_salve_3_dose"), 1);
+  assert.equal(who.sent.xp, 47.5 + 52.5 + 60);
+  assert.deepEqual(who.sent.spam, [
+    "You mix the unicorn horn dust into your potion.",
+    "You mix the snake weed into your potion.",
+    "You mix the nail beast nail into your potion and make a 3-dose Sanfew Serum.",
+  ]);
+});
+
+test("divine potions take a crystal dust per dose", () => {
+  const who = player([["2dose2attack"], ["prif_crystal_shard_crushed", 50]], 70);
+  use(who, "prif_crystal_shard_crushed", "2dose2attack");
+  assert.equal(who.inv.count("2dosedivineattack"), 1);
+  assert.equal(who.inv.count("prif_crystal_shard_crushed"), 48);
+  assert.deepEqual(who.sent.spam, ["You mix 2 pieces of crushed crystal into your potion."]);
+});

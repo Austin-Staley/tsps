@@ -61,6 +61,30 @@ Ticks count from the click in the menu:
 The Herblore cape's grimy herbs (recording 3140) start on tick 0 and go every tick. The Wiki's
 recipe data gives the same ticks per recipe.
 
+### Potions made from potions
+
+The Wiki's recipes, one row per dose where the dose count matters:
+
+- **One secondary per dose:** stamina (amylase), extended antifire and extended super antifire
+  (lava scale shards), extended stamina (marlin scales), extreme energy (yellow fin), the divine
+  potions (crystal dust), extended anti-venom+ (araxyte venom sac). Anti-venom takes 5 Zulrah's
+  scales per dose, forgotten brew 20 ancient essence. The message counts them: "You mix 4
+  crystals of amylase into your potion.", "You mix 4 pieces of crushed crystal into your potion.",
+  "You mix 4 lava scale shards into your potion." (captured).
+- **Four-dose only:** super combat (super attack, strength and defence (4) with a torstol or torstol
+  potion (unf); captured: "You carefully mix the potions and torstol together.", the attack and
+  strength potions leave empty vials), super antifire (crushed superior dragon bones, captured
+  message), anti-venom+ (torstol).
+- **Sanfew serum** in three steps, each its own XP (Wiki): unicorn horn dust into a super restore,
+  then snake weed, then a nail beast nail: "You mix the nail beast nail into your potion and make a
+  3-dose Sanfew Serum." (captured).
+- **Below the level:** "You need level 77 Herblore to upgrade the potion." (captured).
+- **Quests (Wiki):** super antifire and extended super antifire need Dragon Slayer II, with the
+  captured "You don't know how to make super antifire potions yet. Maybe someone can teach you.";
+  the divine potions need Song of the Elves; the sanfew steps need Zogre Flesh Eaters started, the
+  last one finished. Those other refusals have no capture and say "Nothing interesting happens."
+  as a missing ingredient does.
+
 ## Druidic Ritual
 
 Herblore needs Druidic Ritual (dbrow `skill_feature_herblore_overview_0`). Without it, cleaning and
@@ -80,6 +104,9 @@ These messages follow the captured pattern but have no recording of their own:
 - "You mix the poison ivy berries into your potion." (weapon poison++)
 - "You mix the nihil dust into your potion." (ancient brew)
 - "You put the Toadflax into the coconut milk." (the four coconut milk unfinished potions)
+- "You mix the ancient essence into your potion." (forgotten brew)
+- "You mix the torstol into your potion." (anti-venom+)
+- A super combat made with a torstol potion (unf) leaving three empty vials, not two
 - Superantipoison reuses antipoison's "You mix the unicorn horn into your potion."
 - Goading and prayer regeneration were both captured with aldarium, once as "the Aldarium" and
   once as "the aldarium"; which is which is a guess.
