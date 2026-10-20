@@ -295,6 +295,7 @@ import { TileMarkersPlugin } from "./plugins/tilemarkers/TileMarkersPlugin";
 import { createHelmSteeringDeps, handleTileClick } from "./sailing/HelmSteering";
 import { headingIndicator } from "./sailing/HeadingIndicator";
 import { retryOnMissingGroup } from "../rs/cache/js5/retryOnMissingGroup";
+import type { GraphicsDefaults } from "../rs/config/defaults/GraphicsDefaults";
 import { interactionModes } from "./InteractionModes";
 import { VengeanceTimerPlugin } from "./plugins/vengeancetimer/VengeanceTimerPlugin";
 import { FreezeTimerPlugin, PoisonTimerPlugin } from "./plugins/statustimer/StatusTimerPlugin";
@@ -6548,15 +6549,18 @@ export class OsrsClient {
 
             // Phase 3: Loading sprites (cache parse)
             await showPhase(25, "Loading sprites...");
-            // The flames' colours come from the cache (graphics defaults), like the title art.
-            let flamePalettes: number[][] | undefined;
+            // The graphics defaults, decoded once: the login flames' colours, then the compass,
+            // scrollbars and heading arrows below.
+            let graphicsDefaults: GraphicsDefaults | undefined;
             try {
-                const { GraphicsDefaults } = require("../rs/config/defaults/GraphicsDefaults");
-                flamePalettes = GraphicsDefaults.load(cache.info, this.cacheSystem).flamePalettes;
+                graphicsDefaults = require("../rs/config/defaults/GraphicsDefaults").GraphicsDefaults.load(
+                    cache.info,
+                    this.cacheSystem,
+                );
             } catch (e) {
-                console.warn("[OsrsClient] Flame palettes unavailable:", e);
+                console.warn("[OsrsClient] Failed to load GraphicsDefaults:", e);
             }
-            const spritesLoaded = this.loginRenderer.loadTitleSprites(this.cacheSystem, flamePalettes);
+            const spritesLoaded = this.loginRenderer.loadTitleSprites(this.cacheSystem, graphicsDefaults?.flamePalettes);
             if (!spritesLoaded) {
                 console.warn("[OsrsClient] Title sprites failed to load");
             }
@@ -6770,25 +6774,22 @@ export class OsrsClient {
             this.widgetManager.onGroupLoaded = (groupId) => {
                 for (const held of this.heldWidgetProperties.take(groupId)) this.handleWidgetPayload?.(held);
             };
-            try {
-                const { GraphicsDefaults } = require("../rs/config/defaults/GraphicsDefaults");
-                const graphicsDefaults = GraphicsDefaults.load(cache.info, this.cacheSystem);
-                if (graphicsDefaults?.compass >= 0) {
-                    this.widgetManager.compassSpriteId = graphicsDefaults.compass;
-                }
-                if (graphicsDefaults?.scrollBars >= 0) {
-                    this.widgetManager.scrollbarSpriteArchiveId = graphicsDefaults.scrollBars;
-                }
-            } catch (e) {
-                console.warn("[OsrsClient] Failed to load GraphicsDefaults:", e);
+            if (graphicsDefaults && graphicsDefaults.compass >= 0) {
+                this.widgetManager.compassSpriteId = graphicsDefaults.compass;
             }
-            // The helm's heading arrows. Read apart from the above, waiting for the group to
-            // stream in: on a fresh browser cache it isn't there yet, and the arrows would be
-            // missing for the whole session.
+            if (graphicsDefaults && graphicsDefaults.scrollBars >= 0) {
+                this.widgetManager.scrollbarSpriteArchiveId = graphicsDefaults.scrollBars;
+            }
+            // The helm's heading arrows. When the load above failed, the group may not have
+            // streamed in yet (a fresh browser cache): wait for it, or the arrows would be missing
+            // for the whole session.
             const cacheInfo = cache.info;
+            const loadedDefaults = graphicsDefaults;
             headingIndicator.loadStatus = "loading";
-            void retryOnMissingGroup(() =>
-                require("../rs/config/defaults/GraphicsDefaults").GraphicsDefaults.load(cacheInfo, this.cacheSystem),
+            void retryOnMissingGroup(
+                () =>
+                    loadedDefaults ??
+                    require("../rs/config/defaults/GraphicsDefaults").GraphicsDefaults.load(cacheInfo, this.cacheSystem),
             ).then((defaults) => {
                 headingIndicator.loadStatus = defaults
                     ? `loaded ${JSON.stringify(defaults.headingIndicatorModels)} (${cacheInfo.game} ${cacheInfo.revision}, index 17 ${this.cacheSystem.indexExists(17) ? "present" : "missing"})`
