@@ -47,12 +47,17 @@ function carriedMaterial(player, recipe) {
   return recipe.materials.find((id) => player.getInventory().getAmount(id) >= recipe.amount);
 }
 
-function makeOne(player, recipe) {
+/**
+ * Makes one item. A spun one is announced as "crafting:spun" { player, itemId, amount }, so a
+ * carried bow string spool (Fletching) can take spun bow strings.
+ */
+function makeOne(player, recipe, spinning) {
   const material = carriedMaterial(player, recipe);
   if (material === undefined) return false;
   player.getInventory().deleteNumber(material, recipe.amount);
   player.getInventory().addItem(new (Shared.getCore().Item)(recipe.itemId, 1));
   Shared.addCraftingXp(player, recipe.xp);
+  if (spinning) Shared.getApi().emitCustomEvent("crafting:spun", { player, itemId: recipe.itemId, amount: 1 });
   return true;
 }
 
@@ -67,11 +72,11 @@ function start(player, station, recipe, amount, spinning) {
     amount, startTick: 1, firstTick: 3, interval: 2, animation: tables.spinningAnimation, sound: tables.spinningSound,
     onAnimate: () => player.getPacketSender().sendObjectAnimation(station, tables.wheelAnimation),
     has: () => carriedMaterial(player, recipe) !== undefined,
-    make: () => makeOne(player, recipe),
+    make: () => makeOne(player, recipe, true),
   } : {
     amount, startTick: 1, firstTick: 4, interval: 3, animation: tables.weavingAnimation, sound: tables.weavingSound,
     has: () => carriedMaterial(player, recipe) !== undefined,
-    make: () => makeOne(player, recipe),
+    make: () => makeOne(player, recipe, false),
   });
 }
 
