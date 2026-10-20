@@ -17,7 +17,7 @@
  * Those siblings and 1381/1382 also drive the legacy Uzer spawns' transforms
  * (1984-1988 -> 893/895/902/912), so they are kept in step with player state.
  *
- * Sources: capture 3333 (/tmp/tsps-600-parallel/transcripts/3333.txt), cache varp
+ * Sources: RSProx capture 3333, cache varp
  * dump, OSRS Wiki transcripts, and Quest Helper pinned at
  * https://github.com/Zoinkwiz/quest-helper/blob/06da90f982518a093f2fe1c9cfac5547fa7053d3/src/main/java/com/questhelper/helpers/quests/shadowofthestorm/ShadowOfTheStorm.java
  * (stages and IncantationStep ordering). The capture confirms the plane-2 throne

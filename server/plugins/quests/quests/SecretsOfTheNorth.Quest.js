@@ -48,9 +48,7 @@
  *    (Guard 12045, Snowflake 8431, My Arm 8411, Hazeel/Khazard variants) per
  *    player while they are needed. Both paired Weiss speakers are spawned at
  *    the captured tiles (My Arm 742 at 2874,3934, Snowflake 8431 at 2872,3934)
- *    and this plugin owns My Arm's Talk-to at SOTN stages 12-14. Earlier quest
- *    handlers still claim it for players who started My Arm's Big Adventure;
- *    the exact 3-line yield is in /tmp/tsps-600-parallel/jobs/north.shared.md.
+ *    and this plugin owns My Arm's Talk-to at SOTN stages 12-14.
  *  - The mansion crime-scene chest keeps its captured room but moves one tile
  *    to (2572,3270,2), because rev-241 clips the captured (2571,3269) pocket.
  *    The false-wall "Yes." choice opens a personal passage flag and steps the

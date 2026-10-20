@@ -1,6 +1,6 @@
 // From server/: node --test tests/remaining-morytania-parity.test.cjs (after yarn build).
 // Focused Sins of the Father / Children of the Sun parity checks against the
-// live 226 rsprox transcript (/tmp/tsps-600-parallel/transcripts/1637.txt).
+// RSProx capture 1637.
 const assert = require('node:assert/strict');
 const { test, before } = require('node:test');
 const path = require('node:path');

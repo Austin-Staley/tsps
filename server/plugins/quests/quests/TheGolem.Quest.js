@@ -13,7 +13,7 @@
  *
  * Route source: Quest Helper pinned at
  * https://github.com/Zoinkwiz/quest-helper/blob/06da90f982518a093f2fe1c9cfac5547fa7053d3/src/main/java/com/questhelper/helpers/quests/thegolem/TheGolem.java
- * Packet evidence: /tmp/tsps-600-parallel/transcripts/3333.txt (capture 3333), which shows
+ * Packet evidence: RSProx capture 3333, which shows
  * seen_underground set on first ruin entry, golem_b 1/2/3 on letter/Elissa/notes,
  * stage 3 on the curator talk, and head_open cleared two ticks after completion.
  * Cache state follows varp 437: 347 golem_b (letter/Elissa/notes/curator),
