@@ -7,12 +7,16 @@ const Common = require("./Common.Herblore");
 
 const GRIND_ANIMATION = "human_herbing_grind";
 
-/** Lava scale shards (Wiki): 3 to 6, half as many again with the hard Wilderness Diary, rounded down. */
+/**
+ * How many one grind makes, rolled evenly in its range; a `diaryBonus` diary (lava scales, Wiki:
+ * the hard Wilderness Diary) gives half as many again, rounded down.
+ */
 function amount(player, grind) {
   const [low, high] = grind.amount;
   const rolled = low + Math.floor(Math.random() * (high - low + 1));
-  if (grind.product !== "lava_shard") return rolled;
-  const diary = { player, diary: "wilderness", tier: "hard", complete: false };
+  if (!grind.diaryBonus) return rolled;
+  const [name, tier] = grind.diaryBonus;
+  const diary = { player, diary: name, tier, complete: false };
   Common.api.emitCustomEvent("diary:is-complete", diary);
   return diary.complete === true ? Math.floor(rolled * 1.5) : rolled;
 }
