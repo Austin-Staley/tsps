@@ -796,19 +796,32 @@ test("client feedback IDs and per-gem animations exist in the active OSRS cache"
     assert.ok(interfaces.getFile(233, child)?.data.length, `level-up component ${child}`);
   const configs = CacheIndexDat2.fromStore(IndexType.DAT2.configs, store);
   const core = PluginManager.getCoreApi();
-  const hooks = registerFeedbackPlugin("skills/Crafting", core);
-  for (const [uncut, cut, animation] of [["OPAL", "OPAL", 890], ["JADE", "JADE", 891],
-    ["RED_TOPAZ", "RED_TOPAZ", 892], ["SAPPHIRE", "SAPPHIRE", 888], ["EMERALD", "EMERALD", 889],
-    ["RUBY", "RUBY", 887], ["DIAMOND", "DIAMOND", 886], ["DRAGONSTONE", "DRAGONSTONE", 885],
-    ["ONYX", "ONYX", 2717], ["ZENYTE", "ZENYTE", 7185]]) {
-    assert.ok(configs.getFile(ConfigType.DAT2.seqs, animation)?.data.length, `gem sequence ${animation}`);
-    const p = feedbackPlayer(core), I = core.ItemIdentifiers;
-    p.skills = { getCurrentLevel: () => 99, addExperiences() {} };
-    p.counts.set(I.CHISEL, 1); p.counts.set(I[`UNCUT_${uncut}`], 1);
-    hooks.onItemOnItem({ player: p, usedItemId: I.CHISEL, usedWithItemId: I[`UNCUT_${uncut}`] });
-    assert.equal(p.animations.at(-1), animation, uncut);
-    assert.equal(p.counts.get(I[cut]), 1);
-    assert.equal(p.sent.filter(([type, id]) => type === "sendSoundEffect" && id === 2586).length, 1);
+  const tasks = [];
+  const hooks = registerFeedbackPlugin("skills/Crafting", core, { getTaskManager: () => ({ submit: task => tasks.push(task) }) });
+  const members = core.WorldDefinition.isMembersWorld, random = Math.random;
+  core.WorldDefinition.isMembersWorld = () => true;
+  Math.random = () => 0;
+  try {
+    for (const [uncut, cut, animation] of [["OPAL", "OPAL", 890], ["JADE", "JADE", 891],
+      ["RED_TOPAZ", "RED_TOPAZ", 892], ["SAPPHIRE", "SAPPHIRE", 888], ["EMERALD", "EMERALD", 889],
+      ["RUBY", "RUBY", 887], ["DIAMOND", "DIAMOND", 886], ["DRAGONSTONE", "DRAGONSTONE", 885],
+      ["ONYX", "ONYX", 2717], ["ZENYTE", "ZENYTE", 7185]]) {
+      assert.ok(configs.getFile(ConfigType.DAT2.seqs, animation)?.data.length, `gem sequence ${animation}`);
+      const p = feedbackPlayer(core), I = core.ItemIdentifiers;
+      p.skills = { getCurrentLevel: () => 99, addExperiences() {} };
+      p.getInterfaceId = () => -1;
+      p.counts.set(I.CHISEL, 1); p.counts.set(I[`UNCUT_${uncut}`], 1);
+      hooks.onItemOnItem({ player: p, usedItemId: I.CHISEL, usedWithItemId: I[`UNCUT_${uncut}`] });
+      // rsprox 1875: the gem is cut on the tick after it is chosen in the skillmulti menu.
+      p.menu().execute(I[`UNCUT_${uncut}`], 1);
+      tasks.at(-1).execute();
+      assert.equal(p.animations.at(-1), animation, uncut);
+      assert.equal(p.counts.get(I[cut]), 1);
+      assert.equal(p.sent.filter(([type, id]) => type === "sendSoundEffect" && id === 2586).length, 1);
+    }
+  } finally {
+    core.WorldDefinition.isMembersWorld = members;
+    Math.random = random;
   }
 });
 
