@@ -47,6 +47,8 @@ export const LOGIN_LAYOUT = {
     SCENE_WIDTH: 765,
     SCENE_HEIGHT: 503,
     TITLE_BG_WIDTH: 1089,
+    /** How much larger than the scene the cache's title art may be drawn on large viewports. */
+    TITLE_ART_MAX_GROWTH: 2,
     MAX_BG_WIDTH: 765,
     MAX_BG_HEIGHT: 503,
     // Viewport height (CSS px) at which the classic scene draws 1:1, about a maximised

@@ -5,16 +5,20 @@ export function getTitleBackgroundLayout(host: LoginRendererHost) {
 
         const art = host.titleBackgroundImage;
         if (art && art.width === host.SCENE_WIDTH) {
-            // The cache's title art is the scene: drawn with it, as the OSRS client draws it, whole
-            // and at the scene's scale.
-            const scale = host.contentScale > 0 ? host.contentScale : 1;
-            return {
-                drawX: host.contentOriginX,
-                drawY: host.contentOriginY,
-                drawW: art.width * scale,
-                drawH: art.height * scale,
-                scale,
-            };
+            // The cache's title art is the scene's backdrop: centred on the scene and drawn whole,
+            // growing past the scene's scale (up to TITLE_ART_MAX_GROWTH times) while the viewport
+            // still fits it, so large screens are not mostly black.
+            const sceneScale = host.contentScale > 0 ? host.contentScale : 1;
+            const centerX = host.contentOriginX + (host.SCENE_WIDTH * sceneScale) / 2;
+            const centerY = host.contentOriginY + (host.SCENE_HEIGHT * sceneScale) / 2;
+            const fit = Math.min(
+                (2 * Math.min(centerX - host.containerX, host.containerX + host.containerWidth - centerX)) / art.width,
+                (2 * Math.min(centerY, host.containerHeight - centerY)) / art.height,
+            );
+            const scale = Math.max(sceneScale, Math.min(sceneScale * LOGIN_LAYOUT.TITLE_ART_MAX_GROWTH, fit));
+            const drawW = art.width * scale;
+            const drawH = art.height * scale;
+            return { drawX: centerX - drawW / 2, drawY: centerY - drawH / 2, drawW, drawH, scale };
         }
         // The bundled widescreen image covers the viewport.
         const targetW = Math.max(1, host.containerWidth);
