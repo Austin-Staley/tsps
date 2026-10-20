@@ -299,6 +299,16 @@ test("stackable secondaries go in one per dose", () => {
   assert.equal(scales.inv.count("snakeboss_scale"), 85);
 });
 
+test("too few secondaries lists what the potion takes, as captured", () => {
+  const who = player([["4dose2energy"], ["amylase", 1]], 77);
+  assert.equal(use(who, "amylase", "4dose2energy"), true);
+  assert.match(who.sent.dialogue, /You don't have the right ingredients: 1 x Super energy\(4\) 4 x Amylase crystal/);
+  assert.equal(who.inv.count("amylase"), 1);
+  const venom = player([["antivenom+4"], ["araxyte_venom_sack", 1]], 94);
+  use(venom, "araxyte_venom_sack", "antivenom+4");
+  assert.match(venom.sent.dialogue, /You don't have the right ingredients: 1 x Anti-venom\+\(4\) 4 x Araxyte venom sac/);
+});
+
 test("upgrading a finished potion below the level says so", () => {
   const who = player([["4dose2energy"], ["amylase", 4]], 76);
   use(who, "amylase", "4dose2energy");
@@ -314,7 +324,7 @@ test("super combat takes the three super potions and torstol, leaving two vials"
   assert.deepEqual(who.sent.spam, ["You carefully mix the potions and torstol together."]);
   const missing = player([["4dose2attack"], ["torstol"]], 90);
   use(missing, "torstol", "4dose2attack");
-  assert.deepEqual(missing.sent.messages, ["Nothing interesting happens."]);
+  assert.match(missing.sent.dialogue, /You don't have the right ingredients: 1 x Super attack\(4\) 1 x Super defence\(4\) 1 x Super strength\(4\) 1 x Torstol/);
 });
 
 test("super antifire needs Dragon Slayer II", () => {

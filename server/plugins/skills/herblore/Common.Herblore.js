@@ -127,6 +127,11 @@ function spam(player, text) {
   player.getPacketSender().sendTypedMessage(core.ChatType.SPAM, text);
 }
 
+function mesbox(player, text) {
+  const { DialogueChainBuilder, StatementDialogue } = core;
+  player.getDialogueManager().startDialogues(new DialogueChainBuilder().add(new StatementDialogue(0, text)));
+}
+
 function animate(player, seq) {
   player.performAnimation(new core.Animation(gameval("seq", seq)));
 }
@@ -158,7 +163,7 @@ function run(player, step) {
 module.exports = {
   MIX_ANIMATION, MIX_SOUND,
   init, gameval, herbFor, grindFor, recipesWith, answerClean, answerUnfinished, level, questDone, canUseHerblore,
-  wearsHerbloreCape, spam, animate, sound, addXp, run,
+  wearsHerbloreCape, spam, mesbox, animate, sound, addXp, run,
   get api() { return api; },
   get core() { return core; },
 };

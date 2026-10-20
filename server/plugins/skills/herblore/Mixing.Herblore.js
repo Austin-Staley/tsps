@@ -68,6 +68,16 @@ function capeRecipes(player, firstId, secondId) {
   return [];
 }
 
+/**
+ * What a recipe takes, when the player is short of something (rsprox captures, recording 1438:
+ * one araxyte venom sac on an anti-venom+(4)).
+ */
+function missingIngredients(recipe) {
+  const { ItemDefinition } = Common.core;
+  const list = recipe.ingredients.map(({ id, count }) => `${count} x ${ItemDefinition.forId(id).getName()}`);
+  return `You don't have the right ingredients: ${list.join(" ")}`;
+}
+
 /** The recipe these two items make for this player, or null after saying why not. */
 function chooseRecipe(player, recipes) {
   if (!Common.canUseHerblore(player)) return null;
@@ -85,7 +95,7 @@ function chooseRecipe(player, recipes) {
     return null;
   }
   const recipe = able.find((candidate) => hasIngredients(player.getInventory(), candidate));
-  if (!recipe) player.sendMessage("Nothing interesting happens.");
+  if (!recipe) Common.mesbox(player, missingIngredients(able[0]));
   return recipe ?? null;
 }
 

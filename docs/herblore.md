@@ -79,6 +79,10 @@ The Wiki's recipes, one row per dose where the dose count matters:
   then snake weed, then a nail beast nail: "You mix the nail beast nail into your potion and make a
   3-dose Sanfew Serum." (captured).
 - **Below the level:** "You need level 77 Herblore to upgrade the potion." (captured).
+- **Short of an ingredient:** a mesbox listing what the potion takes, "You don't have the right
+  ingredients: 1 x Anti-venom+(4) 4 x Araxyte venom sac" (recording 1438, one sac on an
+  anti-venom+(4); live's rev 224 still called it "sack"). The same goes for super combat
+  without all three potions.
 - **Quests (Wiki):** super antifire and extended super antifire need Dragon Slayer II, with the
   captured "You don't know how to make super antifire potions yet. Maybe someone can teach you.";
   the divine potions need Song of the Elves; the sanfew steps need Zogre Flesh Eaters started, the
