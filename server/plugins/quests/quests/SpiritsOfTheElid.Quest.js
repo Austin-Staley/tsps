@@ -159,8 +159,14 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
   const MINING_CHANNEL_OBJECT_ID = 10396; // elid_waterchannel_mining_multiloc
   // Cache gameval elid_ranging_target (not yet in generated identifiers).
   const RANGING_TARGET_NPC_IDS = new Set([4763, 4765]);
+  // The map places the multiloc 10389 at (3426,2930); varbit 1444 resolves it to
+  // 10438 while the statuette is missing and 10439 once it is returned.
+  const PLINTH_MULTILOC_OBJECT_ID = 10389; // elid_statuette_multiloc
   const PLINTH_OBJECT_ID = ObjectIdentifiers.STATUETTE_PLINTH; // 10438
   const STATUETTE_OBJECT_ID = ObjectIdentifiers.ELIDINIS_STATUETTE; // 10439
+  // The client sends the map parent id; keep the resolved children for direct use.
+  const PLINTH_OBJECT_IDS = new Set([PLINTH_MULTILOC_OBJECT_ID, PLINTH_OBJECT_ID]);
+  const STATUETTE_OBJECT_IDS = new Set([PLINTH_MULTILOC_OBJECT_ID, STATUETTE_OBJECT_ID]);
   const CUPBOARD_SEARCH_IDS = new Set([
     ObjectIdentifiers.CUPBOARD_36, // 10383 opened cupboard
     ObjectIdentifiers.CUPBOARD_38, // 10385 opened cupboard with robes
@@ -182,8 +188,6 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
     ObjectIdentifiers.DOOR_247, // 10421
   ]);
 
-  // Shrine to Elidinis (wiki map pin) and Awusah's doorway.
-  const SHRINE_TILE = new Location(3426, 2932, 0);
   // The ancestral key sits on the shrine's wooden table (elid_wooden_table).
   const ANCESTRAL_KEY_TILE = new Location(3432, 2928, 0);
   const SHOES_TILE = new Location(3442, 2917, 0);
@@ -283,7 +287,6 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
   const ROOM_BY_DOOR = new Map(ROOMS.map((room) => [room.doorId, room]));
 
   let quest;
-  let shrineObject = null;
   let dungeonExitPlaced = false;
   const trackedGolems = new Map(); // "<username>:<doorId>" -> npc
   /** Where each player clicked a quest door, captured before the walk: the black
@@ -386,14 +389,6 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
     const object = new GameObject(id, new Location(tile.getX(), tile.getY(), tile.getZ()), type, 0, null);
     ObjectManager.register(object, true);
     return object;
-  }
-
-  function placeShrineObject(id) {
-    if (shrineObject) {
-      ObjectManager.deregister(shrineObject, true);
-      shrineObject = null;
-    }
-    shrineObject = placeWorldObject(id, SHRINE_TILE);
   }
 
   function ensureDungeonExit() {
@@ -620,7 +615,6 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
       event.handled = true;
       event.end = true;
       if (!quest.isComplete(player) && quest.getStage(player) >= STAGE_STATUETTE) {
-        placeShrineObject(STATUETTE_OBJECT_ID);
         quest.complete(player);
       }
     }
@@ -731,7 +725,7 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
       player.sendMessage("You tie the rope to the crevice.");
       return;
     }
-    if (itemId === STATUETTE_ITEM_ID && objectId === PLINTH_OBJECT_ID) {
+    if (itemId === STATUETTE_ITEM_ID && PLINTH_OBJECT_IDS.has(objectId)) {
       event.handled = true;
       if (!questActive(player) || quest.getStage(player) < STAGE_STATUETTE) return;
       player.getInventory().deleteNumber(STATUETTE_ITEM_ID, 1);
@@ -1120,7 +1114,7 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
       player.moveTo(WATERFALL_SURFACE_TILE);
       return;
     }
-    if (objectId === STATUETTE_OBJECT_ID && option === "pray-at") {
+    if (STATUETTE_OBJECT_IDS.has(objectId) && option === "pray-at") {
       event.handled = true;
       prayAtStatuette(player);
     }
@@ -1263,7 +1257,6 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
     syncVarbits(player);
     ensureAncestralKey(player);
     ensureShoes(player);
-    if (quest.isComplete(player)) placeShrineObject(STATUETTE_OBJECT_ID);
   }
 
   // ==========================================================================
@@ -1300,7 +1293,6 @@ module.exports = function registerSpiritsOfTheElidQuest(api) {
     },
   });
 
-  placeShrineObject(PLINTH_OBJECT_ID);
   ensureDungeonExit();
 
   api.onNpcDialogueVariant(selectVariant);

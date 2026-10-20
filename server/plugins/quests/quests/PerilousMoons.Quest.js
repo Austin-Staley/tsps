@@ -110,8 +110,10 @@ module.exports = function registerPerilousMoonsQuest(api) {
   const ATTALA_NPC_ID = NpcIdentifiers.ATTALA; // 12861, quest copies
   const ATTALA_CITY_NPC_ID = NpcIdentifiers.ATTALA_2; // 13099, the city spawn
   const ATTALA_NPC_IDS = new Set([ATTALA_NPC_ID, ATTALA_CITY_NPC_ID]);
-  const ZUMA_NPC_ID = NpcIdentifiers.ZUMA_3; // 13347
-  const ZUMA_NPC_IDS = new Set([ZUMA_NPC_ID]);
+  const ZUMA_SURFACE_RAW_NPC_ID = 13363; // surface base; cache publishes Zuma (12860)
+  const ZUMA_NEY_RAW_NPC_ID = 13365; // Neypotzli base; cache publishes Zuma (12860)
+  const ZUMA_NPC_ID = NpcIdentifiers.ZUMA_2; // 12860, the actual Zuma content id
+  const ZUMA_NPC_IDS = new Set([ZUMA_NPC_ID, NpcIdentifiers.ZUMA_3]); // 13347 kept for legacy routes
   const JESSAMINE_NPC_ID = NpcIdentifiers.JESSAMINE; // 12862, Neypotzli spawn
   const JESSAMINE_CITY_NPC_ID = NpcIdentifiers.JESSAMINE_2; // 12865, quest copy
   const JESSAMINE_NPC_IDS = new Set([JESSAMINE_NPC_ID, JESSAMINE_CITY_NPC_ID]);
@@ -676,7 +678,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
       spawnTracked(player, "surface-attala", { id: ATTALA_NPC_ID, ...SURFACE_ATTALA_TILE, wanderRadius: 0 });
     }
     if (wanted.has("surface-zuma")) {
-      spawnTracked(player, "surface-zuma", { id: ZUMA_NPC_ID, ...SURFACE_ZUMA_TILE, wanderRadius: 0 });
+      spawnTracked(player, "surface-zuma", { id: ZUMA_SURFACE_RAW_NPC_ID, ...SURFACE_ZUMA_TILE, wanderRadius: 0 });
     }
     if (wanted.has("city-jessamine")) {
       spawnTracked(player, "city-jessamine", { id: JESSAMINE_CITY_NPC_ID, ...CITY_JESSAMINE_TILE, wanderRadius: 0 });
@@ -685,7 +687,7 @@ module.exports = function registerPerilousMoonsQuest(api) {
       spawnTracked(player, "ney-attala", { id: ATTALA_NPC_ID, ...NEY_ATTALA_TILE, wanderRadius: 0 });
     }
     if (wanted.has("ney-zuma")) {
-      spawnTracked(player, "ney-zuma", { id: ZUMA_NPC_ID, ...NEY_ZUMA_TILE, wanderRadius: 0 });
+      spawnTracked(player, "ney-zuma", { id: ZUMA_NEY_RAW_NPC_ID, ...NEY_ZUMA_TILE, wanderRadius: 0 });
     }
     if (wanted.has("eyatlalli")) {
       spawnTracked(player, "eyatlalli", { id: EYATLALLI_NPC_ID, ...EYATLALLI_TILE, wanderRadius: 0 });

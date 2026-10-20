@@ -1128,6 +1128,13 @@ module.exports = function registerFallenFromGraceQuest(api) {
   // Stairs, zones and login
   // ==========================================================================
 
+  function answerMadAngelVariant(request) {
+    const player = request?.player;
+    if (!player) return;
+    const stage = quest.getStage(player);
+    if (stage >= STAGE_CATHEDRAL && stage < STAGE_ANGEL_DEAD) request.variant = "quest";
+  }
+
   function enterCathedralInstance(player) {
     if (!MadAngelCommon.core) return;
     const session = MadAngelInstance.open(player);
@@ -1372,6 +1379,7 @@ module.exports = function registerFallenFromGraceQuest(api) {
   api.onCustomEvent("player:bootstrap-complete", sendFlagVarps);
   api.onObjectInteraction(handleObjectInteraction);
   api.onCustomEvent("madangel:cathedral-door", handleCathedralDoor);
+  api.onCustomEvent("madangel:instance-variant", answerMadAngelVariant);
   api.onItemOnItem(handleItemOnItem);
   api.onItemOnObject(handleShortcutItem, { noted: false });
   api.onItemOnNpc(handleItemOnNpc);

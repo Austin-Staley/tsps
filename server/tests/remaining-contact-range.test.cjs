@@ -8,6 +8,7 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 
 const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
 const { RegionManager } = require('../dist/game/collision/RegionManager');
 const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
 const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
@@ -238,4 +239,63 @@ test('Contact: real shipped NpcDialogues rejects wrong Maisa answers without adv
   } finally {
     World.getNpcs().remove(npc);
   }
+});
+
+test('Contact: Osman world rows and dungeon actor use the primary cache parents', () => {
+  const spawns = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/definitions/npc-spawns.json'), 'utf8'));
+  const at = (x, y) => spawns.find((entry) => entry.name === 'Osman' && entry.x === x && entry.y === y);
+  assert.equal(at(3286, 3180)?.id, 6165, 'Al Kharid Osman uses contact_osman_multi');
+  assert.equal(at(3289, 2818)?.id, 6166, 'Sophanem Osman uses contact_osman_desert_multi');
+
+  const resolve = (id, varbitId, value) => CacheDefinitions.resolveNpc(id, {
+    getVarbit: (queried) => (queried === varbitId ? value : 0),
+    getVarp: () => 0,
+  });
+  assert.equal(resolve(6165, 13841, 0)?.id, 4286, 'Al Kharid parent resolves to Osman before BCS');
+  assert.equal(resolve(6166, 3274, 70)?.id, 4286, 'Sophanem parent resolves at Contact stage 70');
+  assert.equal(resolve(6166, 3274, 60), undefined, 'Sophanem parent stays hidden before stage 70');
+  assert.equal(resolve(11568, 3274, 110)?.id, 4286, 'dungeon parent resolves when the scarab is dead');
+});
+
+test('Native18 primary spawn rows: Zembo, docks Korel and Sarim Will/Anne', () => {
+  const spawns = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/definitions/npc-spawns.json'), 'utf8'));
+  const row = (x, y, name) => spawns.find((entry) => entry.name === name && entry.x === x && entry.y === y);
+
+  assert.deepEqual(row(2927, 3143, 'Zembo'), { level: 0, name: 'Zembo', x: 2927, y: 3143, id: 13655 });
+  assert.equal(spawns.some((entry) => entry.id === 3205 && entry.x === 2925 && entry.y === 3143), false,
+    'the stale Surok transition row is gone');
+  assert.equal(CacheDefinitions.getNpc(13655)?.name, 'Zembo');
+
+  assert.equal(row(3185, 2371, 'Elder Korel')?.id, 14995, 'docks Korel uses the Tortugans transform parent');
+  assert.equal(spawns.some((entry) => entry.id === 14998 && entry.x === 3185 && entry.y === 2371), false);
+  assert.equal(CacheDefinitions.getNpc(14995)?.transformVarbit, 18321);
+
+  assert.deepEqual(row(3024, 3208, 'Will'), { level: 0, name: 'Will', x: 3024, y: 3208, id: 14957, direction: 4, wanderRadius: 0 });
+  assert.deepEqual(row(3025, 3209, 'Anne'), { level: 0, name: 'Anne', x: 3025, y: 3209, id: 14962, direction: 6, wanderRadius: 0 });
+});
+
+test('Native18 Junior Jim world row uses parent 14972 and keeps both cache children', () => {
+  const spawns = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/definitions/npc-spawns.json'), 'utf8'));
+  const jimRows = spawns.filter((entry) => entry.name === 'Junior Jim');
+  assert.equal(jimRows.length, 1, 'exactly one Junior Jim world row');
+  assert.deepEqual(jimRows[0], {
+    level: 0,
+    name: 'Junior Jim',
+    x: 3058,
+    y: 2979,
+    id: 14972,
+    direction: 6,
+    wanderRadius: 0,
+  });
+
+  const resolve = (value) => CacheDefinitions.resolveNpc(14972, {
+    getVarbit: (id) => (id === 18314 ? value : 0),
+    getVarp: () => 0,
+  });
+  assert.equal(resolve(0)?.id, 14974, 'pre-quest Jim uses the Talk-to child');
+  assert.equal(resolve(48)?.id, 14974, 'stage 48 still uses the Talk-to child');
+  assert.equal(resolve(49)?.id, 14975, 'stage 49 switches to the post-quest child');
+  assert.equal(resolve(50)?.id, 14975, 'completed Pandemonium keeps the post-quest child');
+  assert.ok(CacheDefinitions.getNpc(14975)?.actions.includes('Buy-boat'),
+    'post-quest Jim keeps his shipwright actions');
 });

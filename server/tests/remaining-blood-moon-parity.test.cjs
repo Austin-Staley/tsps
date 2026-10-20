@@ -1523,20 +1523,85 @@ test('Quest Helper sub-progress varbits publish from modeled actions and login r
   };
   assert.equal(realm(45, 2576, 7838), 1, 'native-88 town');
   assert.equal(realm(50, 2950, 7831), 1, 'native-94/98 refuge');
+  assert.equal(realm(50, 2700, 7840), 1, 'native-90/92 First Blood arena');
   assert.equal(realm(60, 3157, 7839, 1), 1, 'preparations palace');
   assert.equal(realm(70, 3168, 7855, 1), 1, 'siege hall');
   assert.equal(realm(60, 3161, 7710), 0, 'Morytania castle entry stays outside');
   assert.equal(realm(60, 2846, 7391), 0, 'Morytania gathering landing stays outside');
   assert.equal(realm(60, 2843, 7646), 1, 'temporary Vampyrium resupply remains inside');
 
+  h.quest.setStage(p, 30);
+  p.attrs.set('the-blood-moon-rises:refinery-progress', { started: true, phase: 'pickaxe' });
+  h.emit('npc-dialogue:action', { player: p, stepId: 'O3RVAV', kind: 'action' });
+  assert.equal(p.getInventory().getAmount(I.BRONZE_PICKAXE), 1, 'actual handover grants the pickaxe');
+  assert.equal(p.attrs.get('the-blood-moon-rises:refinery-progress').borrowedPickaxe, true);
+  assert.equal(p.varbits.get(15469), 1, 'actual Ivan pickaxe handover publishes 15469');
+
+  const wrongPhase = player('WrongPhase');
+  h.quest.setStage(wrongPhase, 30);
+  wrongPhase.attrs.set('the-blood-moon-rises:refinery-progress', { started: true, phase: 'tomb' });
+  h.emit('npc-dialogue:action', { player: wrongPhase, stepId: 'O3RVAV', kind: 'action' });
+  assert.equal(wrongPhase.varbits.get(15469), 0, 'wrong phase does not publish the pickaxe flag');
+
+  const fullBag = player('FullBag');
+  h.quest.setStage(fullBag, 30);
+  fullBag.attrs.set('the-blood-moon-rises:refinery-progress', { started: true, phase: 'pickaxe' });
+  const fullInventory = { contains: () => false, adds: () => false, getFreeSlots: () => 0,
+    isFull: () => true, deleteNumber: noop, getAmount: () => 0 };
+  fullBag.getInventory = () => fullInventory;
+  h.emit('npc-dialogue:action', { player: fullBag, stepId: 'O3RVAV', kind: 'action' });
+  assert.equal(fullBag.varbits.get(15469), 0, 'full bag does not set the borrowed flag');
+  assert.equal(fullBag.attrs.get('the-blood-moon-rises:refinery-progress').borrowedPickaxe, undefined);
+
+  const noPickaxe = player('NoPickaxe');
+  h.quest.setStage(noPickaxe, 30);
+  noPickaxe.attrs.set('the-blood-moon-rises:refinery-progress', { phase: 'mined' });
+  h.emit('player:login', { player: noPickaxe });
+  assert.equal(noPickaxe.varbits.get(15469), 0, 'own-pickaxe progress does not claim Ivan\'s spare');
+  const borrowed = player('Borrowed');
+  h.quest.setStage(borrowed, 30);
+  borrowed.attrs.set('the-blood-moon-rises:refinery-progress', { phase: 'mined', borrowedPickaxe: true });
+  h.emit('player:login', { player: borrowed });
+  assert.equal(borrowed.varbits.get(15469), 1, 'login restores the borrowed pickaxe flag');
+
   h.quest.setStage(p, 100);
   p.attrs.set('quest.the_blood_moon_rises.final-portal-used', true);
   p.attrs.set('quest.the_blood_moon_rises.final-native-stage', 168);
+  p.moveTo(new core.Location(3000, 3000, 0));
+  h.emit('player:login', { player: p });
+  assert.equal(p.varbits.get(15482), 0, 'portal-used alone outside the final realm is false');
   p.moveTo(new core.Location(2507, 7383, 0));
   h.emit('player:login', { player: p });
-  assert.equal(p.varbits.get(15482), 1, 'final Vampyrium realm is true at 168');
+  assert.equal(p.varbits.get(15482), 1, 'final Vampyrium staging is true at 168');
   p.attrs.set('quest.the_blood_moon_rises.final-native-stage', 174);
   p.moveTo(new core.Location(3731, 3220, 0));
   h.emit('quest:stage-changed', { player: p });
   assert.equal(p.varbits.get(15482), 0, '174 outside Vampyrium is false');
+});
+
+test('prepared lobby portal returns to the captured palace entrance without resetting progress', () => {
+  const h = harness();
+  const portal = h.objectHooks.find(fn => fn.name === 'enterVampyriumPortal');
+  assert.ok(portal);
+  for (const [native, prep] of [[102, { introComplete: true, gatherStarted: true }],
+    [114, { introComplete: true, flail: true, stakes: true }]]) {
+    const p = player(`PrepPortal${native}`);
+    enablePrereqs(h, new Set(PREREQS));
+    p.attrs.set('quest.the_blood_moon_rises.slepe-story', { refineryComplete: true });
+    p.attrs.set('quest.the_blood_moon_rises.castle-shrine-prayed', true);
+    p.attrs.set('quest.the_blood_moon_rises.preparations', prep);
+    h.quest.setStage(p, 60);
+    assert.equal(p.varbits.get(15464), native);
+    const event = { player: p, objectId: 61214, definition: { id: 61214, getName: () => 'Portal' },
+      location: { x: 3161, y: 7710, z: 0 }, option: 'Enter', handled: false };
+    assert.equal(portal(event), true);
+    assert.equal(event.handled, true);
+    assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [3168, 7859, 1]);
+    assert.equal(h.quest.getStage(p), 60, 'preparations stage is preserved');
+    assert.equal(p.varbits.get(15464), native, 'native preparation stage is preserved');
+    assert.deepEqual(p.attrs.get('quest.the_blood_moon_rises.preparations'), prep,
+      'preparation progress and items are untouched');
+    assert.ok(h.npcs.some(npc => npc.getLocation().getX() === 3157 && npc.getLocation().getY() === 7841),
+      'normal palace actors sync on the return');
+  }
 });

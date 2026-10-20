@@ -565,8 +565,11 @@ test('Pandemonium spawns the captured crew on the static deck at interactable co
     h.action(h.core.NpcIdentifiers.WILL, 'BDfVg8');
     const ship = StaticShips.all()[0];
     assert.ok(ship, 'static tutorial ship spawned');
-    const will = calls.find((call) => call.npcId === h.core.NpcIdentifiers.WILL);
-    const anne = calls.find((call) => call.npcId === h.core.NpcIdentifiers.ANNE_3);
+    const will = calls.find((call) => call.npcId === 14958);
+    const anne = calls.find((call) => call.npcId === 14963);
+    assert.ok(will && anne, 'the deck crew spawns the canonical boat parents 14958/14963');
+    assert.equal(calls.some((call) => call.npcId === 14959 || call.npcId === 14964), false,
+      'the deck does not spawn the dialogue children directly');
     assert.deepEqual([will.x, will.y], [3, 2], 'Will uses the captured placeholder deck tile');
     assert.deepEqual([anne.x, anne.y], [4, 3], 'Anne uses the captured deck tile beside the helm');
     const boarding = ship.spec.boardingTile;
@@ -580,6 +583,33 @@ test('Pandemonium spawns the captured crew on the static deck at interactable co
   } finally {
     StaticShips.addDeckNpc = original;
     for (const ship of StaticShips.all()) StaticShips.dispose(ship);
+  }
+});
+
+test('Pandemonium owner spawns canonical parents and keeps the cache dialogue children', () => {
+  const h = setup();
+  const spawned = [];
+  const originalSpawn = h.api.spawnNpc;
+  h.api.spawnNpc = (definition) => { spawned.push(definition); return originalSpawn(definition); };
+  try {
+    load(h, 'Pandemonium.Quest.js');
+    for (const login of h.hooks.login) login({ player: h.player });
+    h.tickOnce();
+    assert.ok(spawned.some((entry) => entry.id === 14970), 'Ribs spawns the canonical parent 14970');
+    assert.ok(spawned.some((entry) => entry.id === 14967), 'Steve spawns the canonical parent 14967');
+    assert.equal(spawned.some((entry) => entry.id === 14971 || entry.id === 14968 || entry.id === 14969), false,
+      'Ribs/Steve children are not spawned directly');
+    const vars = { getVarbit: () => 0, getVarp: () => 0 };
+    const resolve = (id) => h.core.CacheDefinitions.resolveNpc(id, vars)?.id;
+    assert.equal(resolve(14957), 14959, 'dock Will base resolves to the Will dialogue child');
+    assert.equal(resolve(14958), 14959, 'boat Will base resolves to the Will dialogue child');
+    assert.equal(resolve(14962), 14964, 'dock Anne base resolves to the Anne dialogue child');
+    assert.equal(resolve(14963), 14964, 'boat Anne base resolves to the Anne dialogue child');
+    assert.equal(resolve(14967), 14968, 'Steve base resolves to the one-op dialogue child');
+    assert.equal(resolve(14970), 14971, 'Ribs base resolves to the Ribs dialogue child');
+    assert.equal(resolve(14972), 14974, 'Jim base resolves to the Junior Jim dialogue child');
+  } finally {
+    h.api.spawnNpc = originalSpawn;
   }
 });
 

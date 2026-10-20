@@ -291,6 +291,37 @@ test('Shadow of the Storm: requirement refusal and shared portal teleports', () 
   assert.deepEqual([h.player.getLocation().x, h.player.getLocation().y, h.player.getLocation().z], [2721, 4911, 0]);
 });
 
+test('Shadow of the Storm: surface kiln 10242 is the tome and wrong kilns only raise 1378', () => {
+  const h = setup((api) => require('../plugins/quests/quests/ShadowOfTheStorm.Quest')(api));
+  const I = h.core.ItemIdentifiers;
+  h.quest.setStage(h.player, 60);
+
+  h.setLocation(3467, 3123);
+  h.transcripts.length = 0;
+  h.hooks.objects[0]({ player: h.player, objectId: 10242, location: new h.core.Location(3467, 3123, 0) });
+  assert.equal(h.transcripts.at(-1)?.variant, 'infiltrating-the-wizards-searching-kilns');
+  assert.equal(h.hooks.conditions[0]({ player: h.player, stepId: '3DMFjV' }), true,
+    'the capture surface kiln is the correct search');
+  h.emit('npc-dialogue:condition', { stepId: '3DMFjV' });
+  assert.equal(h.inventory.get(I.DEMONIC_TOME), 1, 'the native surface kiln gives the tome');
+  assert.equal(h.quest.getStage(h.player), 60, 'searching does not advance the quest stage');
+
+  h.inventory.delete(I.DEMONIC_TOME);
+  h.setLocation(3478, 3082);
+  h.hooks.objects[0]({ player: h.player, objectId: 10243, location: new h.core.Location(3478, 3082, 0) });
+  assert.equal(h.varbits.get(1378), 1, 'the next surface kiln only raises the wrong-search counter');
+  assert.equal(h.hooks.conditions[0]({ player: h.player, stepId: '3DMFjV' }), false,
+    'wrong surface kilns are not the tome');
+  assert.equal(h.inventory.get(I.DEMONIC_TOME) ?? 0, 0);
+
+  h.setLocation(2733, 4904);
+  h.hooks.objects[0]({ player: h.player, objectId: 6327, location: new h.core.Location(2733, 4904, 0) });
+  assert.equal(h.varbits.get(1378), 2, 'the underground child remains a wrong search');
+  assert.equal(h.hooks.conditions[0]({ player: h.player, stepId: '3DMFjV' }), false,
+    'the underground kiln is not another correct target');
+  assert.equal(h.quest.getStage(h.player), 60, 'wrong kilns do not advance the quest');
+});
+
 test('Shadow of the Storm: first-ritual camera, BOOM, portal loc and Tanya actors', () => {
   const h = setup((api) => require('../plugins/quests/quests/ShadowOfTheStorm.Quest')(api));
   const I = h.core.ItemIdentifiers, N = h.core.NpcIdentifiers;

@@ -295,10 +295,25 @@ test('Perilous Moons completes naturally from Attala to the Moons on the real st
   h.events['quest:is-complete'].push(request => { if (request.key === 'twilights_promise') request.complete = true; });
   const stage = () => h.quest.getStage(p);
   const finish = () => h.finish(p);
+  const vars = value => ({ getVarbit: id => (id === 9819 ? value : 0), getVarp: () => 0 });
+  const surfaceZuma = CacheDefinitions.getNpc(13363);
+  const neyZuma = CacheDefinitions.getNpc(13365);
+  assert.equal(surfaceZuma.transformVarbit, 9819);
+  assert.ok(surfaceZuma.transforms.includes(12860), 'surface raw 13363 transforms to Zuma 12860');
+  assert.equal(neyZuma.transformVarbit, 9819);
+  assert.ok(neyZuma.transforms.includes(12860), 'Ney raw 13365 transforms to Zuma 12860');
+  assert.equal(CacheDefinitions.resolveNpc(13363, vars(2)).name, 'Zuma');
+  assert.equal(CacheDefinitions.resolveNpc(13363, vars(5)), undefined, 'surface Zuma is gone after the city stage');
+  assert.equal(CacheDefinitions.resolveNpc(13365, vars(7)), undefined, 'Ney Zuma is not shown before the expedition');
+  assert.equal(CacheDefinitions.resolveNpc(13365, vars(8)).name, 'Zuma');
+  assert.equal(CacheDefinitions.resolveNpc(13365, vars(30)).name, 'Zuma');
 
   h.talk(p, N.ATTALA); h.continueUntil(p, () => Boolean(p.prompt)); h.choose(p, 'Yes.'); finish();
   assert.equal(stage(), 2);
   assert.equal(p.attrs.get('perilous-moons:stage-schema'), 2);
+  const surfaceZumaNpc = h.npcs.find(npc => npc.id === 13363);
+  assert.ok(surfaceZumaNpc, 'the surface Zuma spawns its raw base id 13363');
+  assert.ok(!h.npcs.some(npc => npc.id === 13347), 'the wrong Teomat Zuma is never spawned');
   const nagua = h.npcs.find(npc => npc.id === N.SULPHUR_NAGUA);
   assert.ok(nagua, 'the sulphur nagua spawned');
   for (const fn of h.hooks.onNpcDeath ?? []) fn({ npcId: N.SULPHUR_NAGUA, npc: nagua, killer: p });
@@ -318,9 +333,11 @@ test('Perilous Moons completes naturally from Attala to the Moons on the real st
   assert.ok(p.log.some(row => row[0] === 'sendCameraMoveTo' && row[1] === 1448 && row[2] === 9580 && row[3] === 1400), 'Neypotzli entrance camera');
   assert.ok(p.log.some(row => row[0] === 'sendCameraReset'), 'Neypotzli camera resets');
   h.talk(p, N.ATTALA); finish();
-  h.talk(p, N.ZUMA_3); finish();
+  h.talk(p, N.ZUMA_2); finish();
   h.talk(p, N.JESSAMINE); finish();
   assert.equal(stage(), 10);
+  assert.ok(h.npcs.some(npc => npc.id === 13365), 'Neypotzli Zuma spawns its raw base id 13365');
+  assert.ok(!h.npcs.some(npc => npc.id === 13347), 'the wrong Teomat Zuma is never spawned in Neypotzli');
 
   h.object(p, O.BUILDING_SUPPLIES_3, { x: 1436, y: 9637, z: 1 }, 1, ['Take-from']);
   finish();
@@ -390,10 +407,10 @@ test('Perilous Moons completes naturally from Attala to the Moons on the real st
   assert.equal(arenaCameras(), 1, 'Eclipse scene camera starts for unfinished stage28 even with legacy seen=true');
   for (const fn of h.hooks.onZoneEnter ?? []) fn({ player: p, x: 1478, y: 9632, z: 0 });
   assert.equal(arenaCameras(), 1, 'duplicate active arena entry does not start a second scene');
-  h.line(p, N.ZUMA_3, "I can't believe it... An emissary of my god, standing before me...");
+  h.line(p, N.ZUMA_2, "I can't believe it... An emissary of my god, standing before me...");
   assert.ok(p.log.some(row => row[0] === 'sendCameraMoveTo' && row[1] === 1475 && row[2] === 9632 && row[3] === 875), 'Eclipse camera cycle 1');
-  h.line(p, N.ZUMA_3, 'Zuma, no! Step back!');
-  h.line(p, N.ZUMA_3, 'Get out of here!'); h.tick(8);
+  h.line(p, N.ZUMA_2, 'Zuma, no! Step back!');
+  h.line(p, N.ZUMA_2, 'Get out of here!'); h.tick(8);
   assert.ok(p.log.some(row => row[0] === 'sendCameraReset'), 'Eclipse camera resets');
   assert.equal(stage(), 29);
   assert.equal(p.attrs.get('perilous-moons:eclipse-cutscene'), true, 'seen marks only when the final callback completes');
@@ -409,7 +426,7 @@ test('Perilous Moons completes naturally from Attala to the Moons on the real st
   h.talk(p, N.JESSAMINE); finish();
   h.talk(p, N.EYATLALLI); finish();
   assert.equal(h.quest.isComplete(p), false, 'Zuma is still needed');
-  h.talk(p, N.ZUMA_3); finish();
+  h.talk(p, N.ZUMA_2); finish();
   assert.equal(stage(), 31, 'the Zuma finishing line is the 31 boundary');
   h.talk(p, N.EYATLALLI); finish();
   assert.equal(stage(), 36);

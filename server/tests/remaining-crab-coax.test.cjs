@@ -5,6 +5,7 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const runtime = require('../plugins/quests/QuestRuntime');
+const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
 
 const CACHE = path.resolve(__dirname, '..');
 const SIT_SLOT = 54;
@@ -27,6 +28,7 @@ function setup() {
   const tasks = [];
   const xp = [];
   const varbits = [];
+  const varValues = new Map();
   const groundItems = [];
   let area = null;
   let currentDialogue = null;
@@ -61,6 +63,7 @@ function setup() {
         registered: true,
         getIndex: () => 100 + spawned.length,
         getId: () => definition.id,
+        getRealId: () => definition.id,
         getLocation: () => new core.Location(definition.x ?? 0, definition.y ?? 0, definition.z ?? 0),
         getArea: () => npc.__area,
         setArea: (value) => { npc.__area = value; },
@@ -79,7 +82,10 @@ function setup() {
     getItemOnGroundManager() { return { getGroundItem: () => undefined, registerLocation(_player, item, position) { groundItems.push({ id: item.getId(), x: position.getX(), y: position.getY() }); } }; },
   }, { get(target, key) { return target[key] ?? (() => {}); } });
   const sender = new Proxy({
-    sendVarbit(id, value) { varbits.push({ id, value }); return sender; },
+    sendVarbit(id, value) { varbits.push({ id, value }); varValues.set(id, value); return sender; },
+    sendConfig(id, value) { varValues.set(id, value); return sender; },
+    getVarbit(id) { return varValues.get(id) ?? 0; },
+    getVarp(id) { return varValues.get(id) ?? 0; },
     sendInterface() { return sender; },
     sendInterfaceScript() { return sender; },
     sendInterfaceRemoval() { return sender; },
@@ -137,7 +143,7 @@ function setup() {
     player.moveTo({ x, y, z: 0 });
     emit('player:emote', { slot, sequence: SIT_LOOP });
   };
-  return { core, hooks, attrs, inventory, messages, persistentKeys, placed, spawned, removed, tasks, xp, varbits, groundItems, player, loadQuest, emit, investigate, pickup, sit, tick, setLocation(x, y) { location = { x, y, z: 0 }; }, get area() { return area; }, get currentDialogue() { return currentDialogue; } };
+  return { core, hooks, attrs, inventory, messages, persistentKeys, placed, spawned, removed, tasks, xp, varbits, varValues, groundItems, player, loadQuest, emit, investigate, pickup, sit, tick, setLocation(x, y) { location = { x, y, z: 0 }; }, get area() { return area; }, get currentDialogue() { return currentDialogue; } };
 }
 
 // `bit` is the spot-array index bit used by SCARED/MET (join bits differ).
@@ -184,6 +190,103 @@ test('Crab does not place the solid flavor palm that sealed the recruit pocket',
   assert.ok(h.placed.some((entry) => entry.id === 62470 && entry.x === 3042 && entry.y === 2637), 'palm south placed');
   assert.ok(!h.placed.some((entry) => entry.id === 62470 && entry.x === 3039 && entry.y === 2644), 'the 3039,2644 flavor palm must not be placed');
   assert.equal(h.persistentKeys.get('crab-quest:shy-met'), false, 'shy-met defaults false');
+});
+
+test('Crab spawns raw NPC/object parents and lets the cache publish content children', () => {
+  const h = setup();
+  const quest = h.loadQuest();
+  const vars = h.player.getPacketSender();
+  const resolvedNpc = (id) => CacheDefinitions.resolveNpc(id, vars)?.id;
+
+  quest.setStage(h.player, 25);
+  for (const fn of h.hooks.login) fn({ player: h.player });
+
+  assert.ok(h.spawned.some((npc) => npc.getId() === 16469), 'main crab spawns raw 16469');
+  assert.equal(resolvedNpc(16469), 16471, 'cache publishes the stage-25 child 16471');
+  assert.deepEqual(h.core.NpcDefinition.forId(16471).getActions().filter(Boolean), ['Talk-to'], 'dialogue head remains 16471');
+  const rawInteraction = {
+    player: h.player,
+    npcId: 16469,
+    clickType: 1,
+    definition: h.core.NpcDefinition.forId(16471),
+    handled: false,
+  };
+  h.hooks.npcs.at(-1)(rawInteraction);
+  assert.equal(rawInteraction.handled, true, 'raw main-crab packet id routes to the main dialogue');
+
+  assert.ok(h.placed.some((entry) => entry.id === 62438 && entry.x === 3055 && entry.y === 2639), 'raw bottle 62438 is registered');
+  assert.ok(!h.placed.some((entry) => entry.id === 62439 || entry.id === 62440), 'bottle children are not registered directly');
+  assert.ok(!h.placed.some((entry) => entry.id === 34588), 'stale QH bottle 34588 is never registered');
+  assert.equal(h.core.ObjectDefinition.forPlayer(62438, h.player).getInteractions()[0], 'Drink', 'stage 25 bottle resolves to 62439 Drink');
+  const bottleEvent = {
+    player: h.player,
+    objectId: 62438,
+    clickType: 1,
+    location: { x: 3055, y: 2639, z: 0 },
+    definition: h.core.ObjectDefinition.forPlayer(62438, h.player),
+    handled: false,
+  };
+  for (const fn of h.hooks.objects) fn(bottleEvent);
+  assert.equal(bottleEvent.handled, true, 'raw bottle packet id is clickable');
+
+  const recruiting = setup();
+  const recruitingQuest = recruiting.loadQuest();
+  recruitingQuest.setStage(recruiting.player, 47);
+  for (const fn of recruiting.hooks.login) fn({ player: recruiting.player });
+  assert.ok(recruiting.spawned.some((npc) => npc.getId() === 16470), 'recruiting spawns raw practising 16470');
+  assert.equal(CacheDefinitions.resolveNpc(16470, recruiting.player.getPacketSender())?.id, 16474, 'stage 47 resolves to 16474');
+
+  recruitingQuest.setStage(recruiting.player, 45);
+  assert.equal(CacheDefinitions.resolveNpc(16470, recruiting.player.getPacketSender())?.id, 16473, 'stage 45 resolves to 16473');
+
+  const complete = setup();
+  const completeQuest = complete.loadQuest();
+  completeQuest.setStage(complete.player, 63);
+  for (const fn of complete.hooks.login) fn({ player: complete.player });
+  assert.ok(!complete.spawned.some((npc) => [16469, 16470].includes(npc.getId())), 'completion removes the main crab spawn');
+  assert.equal(complete.core.ObjectDefinition.forPlayer(62438, complete.player).getInteractions()[0], 'Reminisce', 'stage 63 bottle resolves to 62440 Reminisce');
+});
+
+test('Crab replaces 16469 with 16470 once for one continuous player and clears on completion', () => {
+  const h = setup();
+  const quest = h.loadQuest();
+  const vars = h.player.getPacketSender();
+  const mainSpawns = () => h.spawned.filter((npc) => [16469, 16470].includes(npc.getId()));
+
+  quest.setStage(h.player, 40);
+  for (const fn of h.hooks.login) fn({ player: h.player });
+  assert.equal(mainSpawns().length, 1, 'one main actor after login');
+  assert.equal(mainSpawns()[0].getId(), 16469, 'stages below 45 use raw 16469');
+  assert.equal(CacheDefinitions.resolveNpc(16469, vars)?.id, 16471, 'stage 40 content is 16471');
+
+  h.emit('npc-dialogue:action', { npcId: 16471, stepId: 'YAKnYw' });
+  assert.equal(quest.getStage(h.player), 45);
+  const liveAt45 = mainSpawns().filter((npc) => npc.isRegistered());
+  assert.equal(liveAt45.length, 1, 'exactly one live main actor at 45');
+  assert.equal(liveAt45[0].getId(), 16470, 'raw actor switched to 16470');
+  assert.equal(h.spawned.filter((npc) => npc.getId() === 16469).length, 1, '16469 was not spawned twice');
+  assert.equal(h.spawned.filter((npc) => npc.getId() === 16470).length, 1, '16470 was spawned exactly once');
+  assert.equal(mainSpawns().find((npc) => npc.getId() === 16469).isRegistered(), false, 'old 16469 actor removed');
+  assert.equal(CacheDefinitions.resolveNpc(16470, vars)?.id, 16473, 'stage 45 content is 16473');
+
+  h.emit('npc-dialogue:action', { npcId: 16471, stepId: 'zUZGcG' });
+  assert.equal(quest.getStage(h.player), 47);
+  assert.equal(h.spawned.filter((npc) => npc.getId() === 16470).length, 1, '47 does not replace again');
+  assert.equal(CacheDefinitions.resolveNpc(16470, vars)?.id, 16474, 'stage 47 content is 16474');
+
+  const joins = ['5WiO-g', 'OrHsAs', 'uxsvrh', 'XBEBvy', 'XffNTB', 'MVf-5E', 'yUuVKM', 'nJXHcW', 'ByoUzK', 'UtfH3c', 'beb_BL'];
+  for (const stepId of joins) h.emit('npc-dialogue:action', { npcId: 16471, stepId });
+  assert.equal(quest.getStage(h.player), 50);
+  assert.equal(h.spawned.filter((npc) => npc.getId() === 16470).length, 1, 'recruiting does not duplicate the actor');
+
+  h.emit('npc-dialogue:action', { npcId: 16471, stepId: 'uZozUI' });
+  assert.equal(quest.getStage(h.player), 55);
+  h.emit('npc-dialogue:action', { npcId: 16474, stepId: 'UOa-Sd' });
+  assert.equal(quest.getStage(h.player), 60);
+  h.emit('npc-dialogue:action', { npcId: 16474, stepId: 'twF4TG' });
+  h.emit('npc-dialogue:action', { npcId: 16474, stepId: 'Wk9imR' });
+  assert.equal(quest.getStage(h.player), 63);
+  assert.equal(mainSpawns().filter((npc) => npc.isRegistered()).length, 0, 'completion leaves no live main actor');
 });
 
 test('Crab recruit pocket is reachable once the 3039,2644 flavor palm is skipped (real cache pathfinder)', () => {

@@ -63,8 +63,12 @@ module.exports = function registerTroubledTortugansQuest(api) {
   const { createQuestScenes } = require("../QuestScenes");
   const woodcutting = require("../../skills/Woodcutting.plugin.js");
 
-  // NPCs (cache ids; NpcIdentifiers comments).
+  // NPCs (cache ids; NpcIdentifiers comments). The island spawn uses the base
+  // 14986, whose cache transform publishes 14990/14991/14992 by stage.
+  const ISLAND_TORTUGAN_RAW_NPC_ID = 14986; // tt_floopa_injured, multinpc 14990
+  const ELDER_KOREL_DOCKS_RAW_NPC_ID = 14995; // tt_korel_conch_docks, multinpc 14998
   const INJURED_TORTUGAN_NPC_IDS = new Set([
+    ISLAND_TORTUGAN_RAW_NPC_ID,
     NpcIdentifiers.INJURED_TORTUGAN, // 14990, island and Floopa at Elder Raley's
     NpcIdentifiers.INJURED_TORTUGAN_2, // 14991
   ]);
@@ -75,7 +79,8 @@ module.exports = function registerTroubledTortugansQuest(api) {
     NpcIdentifiers.FLOOPA_4, // 15012
   ]);
   const KOREL_NPC_IDS = new Set([
-    NpcIdentifiers.ELDER_KOREL, // 14998, docks
+    ELDER_KOREL_DOCKS_RAW_NPC_ID, // 14995, docks base spawn
+    NpcIdentifiers.ELDER_KOREL, // 14998, docks content id
     NpcIdentifiers.ELDER_KOREL_2, // 14999, Little Pearl
     NpcIdentifiers.ELDER_KOREL_3, // 15000
   ]);
@@ -880,7 +885,7 @@ module.exports = function registerTroubledTortugansQuest(api) {
     const existing = islandTortuganByPlayer.get(player);
     if (existing?.isRegistered?.()) return;
     const npc = api.spawnNpc({
-      id: NpcIdentifiers.INJURED_TORTUGAN,
+      id: ISLAND_TORTUGAN_RAW_NPC_ID,
       x: ISLAND_TORTUGAN_SPAWN.x,
       y: ISLAND_TORTUGAN_SPAWN.y,
       z: ISLAND_TORTUGAN_SPAWN.z,

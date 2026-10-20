@@ -8,7 +8,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const { registerQuest, loadTranscripts, startTranscript } = require("../QuestRuntime");
   const { createQuestScenes } = require("../QuestScenes");
   const { handleDrakanDodgeRoll } = require("../bmr/DrakanDodgeRoll.TheBloodMoonRises");
-  require("../bmr/Refinery.TheBloodMoonRises")(api, stage);
+  const refinery = require("../bmr/Refinery.TheBloodMoonRises")(api, stage);
   require("../bmr/FinalCastleDeposit.TheBloodMoonRises")(api);
   const PAGE = "The Blood Moon Rises";
   const Scenes = createQuestScenes(api);
@@ -18,6 +18,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const TOME_ID = ItemIdentifiers.TOME_OF_EXPERIENCE_3;
   const PREP_ATTRIBUTE = "quest.the_blood_moon_rises.preparations";
   // Quest Helper's actual sub-progress varbits (primary-captured, not hints).
+  const IVAN_GIVEN_PICKAXE_VARBIT = 15469;
   const IVAN_HIDEOUT_PROGRESS_VARBIT = 15473;
   const VELIAF_HIDEOUT_PROGRESS_VARBIT = 15474;
   const SANGVESTI_SUPPLY_WARNING_VARBIT = 15481;
@@ -533,6 +534,9 @@ module.exports = function registerTheBloodMoonRises(api) {
   // the siege hall has been earned. This is an explicit portal transition;
   // login/death recovery never moves a player here automatically.
   const CASTLE_SIEGE_HALL_ARRIVAL = Object.freeze({ x: 3168, y: 7857, z: 1 });
+  // Bridge's captured 62144 entrance landing; used as the safe current-chapter
+  // return when a prepared player uses the Castle Drakan lobby portal again.
+  const CASTLE_PALACE_ENTRANCE_ARRIVAL = Object.freeze({ x: 3168, y: 7859, z: 1 });
   const CASTLE_VAMPYRIUM_RETURN = Object.freeze({ id: 61221, x: 2323, y: 7370, z: 0 });
   const CASTLE_LEGACY_BLOCKED_ARRIVAL = Object.freeze({ x: 2310, y: 7404, z: 0 });
   const REFINERY_COMPLETED_EVENT = "bmr:refinery-completed";
@@ -751,12 +755,14 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (typeof sender?.sendVarbit !== "function") return;
     const prep = player.getAttribute(PREP_ATTRIBUTE) ?? {};
     const hunt = player.getAttribute(HUNT_ATTRIBUTE) ?? {};
+    const refineryProgress = refinery.progress(player);
     const ivanProgress = prep.sugadintiReady || prep.veliafFollowupComplete ||
       prep.vanesculaTalkComplete || prep.veliafFirstTalkComplete || prep.ivanStakesComplete ? 3
       : prep.stakes ? 2 : prep.stakesConversationComplete ? 1 : 0;
     const veliafProgress = prep.veliafFollowupComplete ? 3
       : prep.vanesculaTalkComplete ? 2 : prep.veliafFirstTalkComplete ? 1 : 0;
     const inVampyrium = isInVampyriumRealm(player);
+    sender.sendVarbit(IVAN_GIVEN_PICKAXE_VARBIT, refineryProgress.borrowedPickaxe ? 1 : 0);
     sender.sendVarbit(IVAN_HIDEOUT_PROGRESS_VARBIT, ivanProgress);
     sender.sendVarbit(VELIAF_HIDEOUT_PROGRESS_VARBIT, veliafProgress);
     sender.sendVarbit(SANGVESTI_SUPPLY_WARNING_VARBIT, hunt.suppliesClaimed ? 1 : 0);
@@ -3558,15 +3564,22 @@ module.exports = function registerTheBloodMoonRises(api) {
       x >= 2300 && x <= 2600 && y >= 7300 && y <= 7440;
     const inTown = [STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(currentStage) &&
       x >= 2560 && x <= 2660 && y >= 7780 && y <= 7900;
+    const inFirstBlood = [STAGE.ESCAPE, STAGE.BLOOD_HUNT].includes(currentStage) &&
+      x >= FIRST_BLOOD_ARENA.minX && x <= FIRST_BLOOD_ARENA.maxX &&
+      y >= FIRST_BLOOD_ARENA.minY && y <= FIRST_BLOOD_ARENA.maxY && z === FIRST_BLOOD_ARENA.z;
     // QH inResupplyZone/refuge and the palace approach remain Vampyrium.
     const inRefuge = [STAGE.ESCAPE, STAGE.BLOOD_HUNT, STAGE.PREPARATIONS, STAGE.SIEGE].includes(currentStage) &&
       x >= 2830 && x <= 3060 && y >= 7630 && y <= 7930;
     const inPalace = [STAGE.PREPARATIONS, STAGE.SIEGE].includes(currentStage) &&
       x >= 3154 && x <= 3183 && y >= 7823 && y <= 7861;
-    const native = Number(player.getAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE)) || 0;
-    const inFinalRealm = currentStage === STAGE.FINAL &&
-      Boolean(player.getAttribute(FINAL_PORTAL_USED_ATTRIBUTE)) && native < 174;
-    return inCastle || inTown || inRefuge || inPalace || inFinalRealm;
+    const drakanArea = player.getAttribute(DRAKAN_AREA_ATTRIBUTE);
+    const inFinalEncounter = currentStage === STAGE.FINAL && drakanArea != null &&
+      player.getArea?.() === drakanArea;
+    const inFinalStaging = currentStage === STAGE.FINAL &&
+      Boolean(player.getAttribute(FINAL_PORTAL_USED_ATTRIBUTE)) && z === 0 &&
+      x >= 2500 && x <= 2516 && y >= 7378 && y <= 7390;
+    return inCastle || inTown || inFirstBlood || inRefuge || inPalace ||
+      inFinalEncounter || inFinalStaging;
   }
 
   function handleVampyriumPotionArea(request) {
@@ -5514,6 +5527,14 @@ module.exports = function registerTheBloodMoonRises(api) {
         CASTLE_VAMPYRIUM_ARRIVAL.z));
       player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.LOBBY);
       syncCastleRoom(player);
+    } else if (currentStage === STAGE.PREPARATIONS) {
+      // QH returnToVampyrium* proves the lobby portal is the bank/resupply
+      // return. The exact resume tile is uncaptured; reuse the recorded normal
+      // palace entrance landing (Bridge 62144 -> 3168,7859,1), preserving stage,
+      // progress and inventory.
+      player.moveTo(new Location(CASTLE_PALACE_ENTRANCE_ARRIVAL.x,
+        CASTLE_PALACE_ENTRANCE_ARRIVAL.y, CASTLE_PALACE_ENTRANCE_ARRIVAL.z));
+      palace.sync(player);
     } else if (currentStage === STAGE.SIEGE) {
       const existing = player.getAttribute(SIEGE_DRAKAN_AREA_ATTRIBUTE);
       if (existing && existing.isDestroyed?.() !== true) {
@@ -5558,6 +5579,10 @@ module.exports = function registerTheBloodMoonRises(api) {
   function onTranscriptAction(event) {
     const player = event?.player;
     if (!player || quest.isComplete(player)) return;
+    if (event.stepId === "O3RVAV") {
+      // Refinery runs first and owns the actual grant; publish from its state.
+      publishHelperVarbits(player);
+    }
     if (event.stepId === "1JPVz5" && stage(player) === STAGE.THEATRE) {
       setTheatreNativeStage(player, 126);
     }

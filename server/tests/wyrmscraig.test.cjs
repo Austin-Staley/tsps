@@ -28,10 +28,28 @@ const { SHORTCUTS } = require("../plugins/skills/agility/shortcuts/Shortcuts.Agi
 const core = PluginManager.getCoreApi();
 const objectHooks = new Map();
 const loginHooks = [];
+const customHooks = new Map();
+const spawnedNpcs = [];
 const api = new Proxy({
   core,
   onObjectInteraction: (name, actions) => objectHooks.set(name, { ...(objectHooks.get(name) ?? {}), ...actions }),
   onPlayerLogin: (handler) => loginHooks.push(handler),
+  onCustomEvent: (name, handler) => customHooks.set(name, [...(customHooks.get(name) ?? []), handler]),
+  emitCustomEvent: (name, event) => { for (const handler of customHooks.get(name) ?? []) handler(event); },
+  spawnNpc: (definition) => {
+    const npc = {
+      ...definition,
+      getId: () => definition.id,
+      getRealId: () => definition.id,
+      getLocation: () => new Location(definition.x, definition.y, definition.z ?? 0),
+      setArea() {},
+      setNpcTransformationId() {},
+      isRegistered: () => true,
+    };
+    spawnedNpcs.push(npc);
+    return npc;
+  },
+  removeNpc: () => {},
 }, { get: (target, key) => target[key] ?? (() => {}) });
 
 let gamevals = null;
@@ -100,6 +118,8 @@ test("the data: every id is the cache's, under the names the captures print", ()
 
   const data = Common.data;
   for (const id of Object.values(data.npcs).filter((id) => id !== data.npcs.cathedral)) assert.equal(CacheDefinitions.getNpc(id).name, "Mad Angel");
+  assert.deepEqual(data.questNpcs, { dormant: 16306, waking: 16311, fighting: 16309, dead: 16312 });
+  assert.equal(NpcDefinition.forId(data.questNpcs.fighting).getHitpoints(), 565, "quest fight hp");
   assert.equal(CacheDefinitions.getNpc(data.npcs.dormant).actions[0], "Wake");
   assert.equal(CacheDefinitions.getNpc(data.npcs.fighting).actions[1], "Attack");
   assert.deepEqual(loc(data.pew.climbId).actions.slice(0, 1), ["Climb"]);
@@ -227,6 +247,40 @@ test("the drop table, corrected: no quest crystal, a 1/25 teleport, the supply b
   }
 });
 
+test("quest Mad Angel instance spawns raw 16306 and uses the 16311/16309/16312 chain", () => {
+  const Instance = require("../plugins/bosses/madangel/Instance.MadAngel");
+  Common.init(api);
+  customHooks.set("madangel:instance-variant", [(request) => { request.variant = "quest"; }]);
+  const questPlayer = createPlayer({ x: 2532, y: 2215 });
+  const questSession = Instance.open(questPlayer);
+  assert.equal(questSession.variant, "quest");
+  assert.equal(spawnedNpcs.at(-1).getId(), 16306, "instance starts from the captured raw dormant base");
+  assert.equal(questSession.npcs.fighting, 16309);
+
+  customHooks.delete("madangel:instance-variant");
+  const normalPlayer = createPlayer({ x: 2532, y: 2215 });
+  const normalSession = Instance.open(normalPlayer);
+  assert.equal(normalSession.variant, "normal");
+  assert.equal(spawnedNpcs.at(-1).getId(), 16305, "ordinary boss spawn is unchanged");
+  assert.equal(normalSession.npcs.fighting, 16305);
+});
+
+test("the quest fight transforms to 16311 then 16309 and resets HP to 565; ordinary stays 755", () => {
+  const quest = fightAt(createPlayer(), { hitpoints: 755, maxHitpoints: 565, npcs: Common.data.questNpcs });
+  quest.fight.wake();
+  assert.ok(quest.npcLog.includes("transform 16311"), "quest waking form");
+  quest.fight.begin();
+  assert.ok(quest.npcLog.includes("transform 16309"), "quest fighting form");
+  assert.equal(quest.npc.getHitpoints(), 565, "quest fight HP from the 16309 definition");
+
+  const normal = fightAt(createPlayer(), { npcs: Common.data.npcs });
+  normal.fight.wake();
+  normal.fight.begin();
+  assert.ok(normal.npcLog.includes("transform 16307"), "ordinary waking form");
+  assert.ok(normal.npcLog.includes("transform 16305"), "ordinary fighting form");
+  assert.equal(normal.npc.getHitpoints(), 755, "ordinary boss HP unchanged");
+});
+
 // ------------------------------------------------------------------ the fight's rules
 
 test("as captured: each cleave hits the quarter between the front a step before and the sword's side", () => {
@@ -237,7 +291,7 @@ test("as captured: each cleave hits the quarter between the front a step before 
 });
 
 /** A fight against a fake angel in a fake cathedral (instance tiles = world tiles). */
-function fightAt(player, { hitpoints = 755 } = {}) {
+function fightAt(player, { hitpoints = 755, maxHitpoints = 755, npcs = Common.data.npcs } = {}) {
   let hp = hitpoints;
   const npcLog = [];
   const bossHits = [];
@@ -246,6 +300,7 @@ function fightAt(player, { hitpoints = 755 } = {}) {
     getLocation: () => new Location(2532, 2215, 0),
     getHitpoints: () => hp,
     setHitpoints: (value) => { hp = value; },
+    getMaxHitpoints: () => maxHitpoints,
     getDefinition: () => ({ getHitpoints: () => 755 }),
     setNpcTransformationId: (id) => npcLog.push(`transform ${id}`),
     performAnimation: (animation) => npcLog.push(`anim ${animation.getId?.() ?? animation.id}`),
@@ -265,6 +320,7 @@ function fightAt(player, { hitpoints = 755 } = {}) {
   };
   const session = {
     player,
+    npcs,
     area: null,
     tile: ([x, y, z]) => new Location(x, y, z ?? 0),
     worldTile: (location) => [location.getX(), location.getY()],

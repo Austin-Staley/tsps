@@ -380,7 +380,11 @@ module.exports = function registerRefinery(api, getQuestStage) {
     const player = event?.player;
     if (!player) return;
     if (event.stepId === "O3RVAV" && progress(player).phase === "pickaxe") {
-      if (!player.getInventory().contains(PICKAXE_ITEM)) player.getInventory().adds(PICKAXE_ITEM, 1);
+      const inventory = player.getInventory();
+      if (!inventory.contains(PICKAXE_ITEM) && inventory.adds(PICKAXE_ITEM, 1) === false) {
+        player.sendMessage("Make room in your inventory before taking Ivan's spare pickaxe.");
+        return;
+      }
       setProgress(player, { phase: "pickaxe", borrowedPickaxe: true });
     } else if (event.stepId === "iYSMco" && progress(player).phase === "tomb" && mining.findBestPickaxe(player)) {
       setProgress(player, { phase: "mined" });

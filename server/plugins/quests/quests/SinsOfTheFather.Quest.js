@@ -100,6 +100,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   const BITS_ATTRIBUTE = "quest.sins_of_the_father.bits";
   const TOME_USES_ATTRIBUTE = "quest.sins_of_the_father.tome-chapters";
   const BRIDGE_ATTRIBUTE = "sins-of-the-father:bridge-repairs";
+  const VINE_ATTACHED_ATTRIBUTE = "sins-of-the-father:vine-attached";
   const VAMPYRE_NAME_ATTRIBUTE = "quest.sins_of_the_father.vampyre-name";
   const SCHEMA_ATTRIBUTE = "sins-of-the-father:schema";
   const CARL_PROGRESS_ATTRIBUTE = "sins-of-the-father:carl-progress";
@@ -298,6 +299,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   const CHISEL_ITEM_ID = ItemIdentifiers.CHISEL; // 1755
   const COSMIC_RUNE_ITEM_ID = ItemIdentifiers.COSMIC_RUNE; // 564
   const FIRE_RUNE_ITEM_ID = ItemIdentifiers.FIRE_RUNE; // 554
+  const ENCHANT_RUBY_TABLET_ITEM_ID = ItemIdentifiers.ENCHANT_RUBY_OR_TOPAZ; // 8018
   const SILVER_SICKLE_BLESSED_ITEM_ID = ItemIdentifiers.SILVER_SICKLE_B_; // 2963
   const VYREWATCH_ITEM_IDS = [
     ItemIdentifiers.VYREWATCH_TOP, // 9634
@@ -345,9 +347,20 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   const ARBORETUM_SHELVES_OBJECT_ID = 37999; // "Shelves" Search (old note)
   const VALVE_NORTH_OBJECT_ID = 37997; // "Valve" Turn (+7)
   const VALVE_SOUTH_OBJECT_ID = 37998; // "Valve" Turn (+4)
+  // Cache valve menu: script 217 writes the "set the valve to" options into 187:3.
+  const VALVE_MENU = 187;
+  const VALVE_MENU_CHOICES = 3;
+  const VALVE_MENU_SLOTS = 127;
+  const VALVE_MAIN_MODAL = (161 << 16) | 16;
+  const VALVE_SCRIPT_MAINMODAL_OPEN = 2524;
+  const VALVE_SCRIPT_MENU = 217;
+  const VALVE_SCRIPT_RESTORE_INPUT = 2158;
+  const VALVE_PAUSE_BUTTON = 1;
+  const VALVE_MENU_UID = (VALVE_MENU << 16) | VALVE_MENU_CHOICES;
   const ARBORETUM_DOOR_IDS = new Set([39251, 39253]); // "Large door" Open
   const CRACKED_WALL_OBJECT_ID = 39170; // "Cracked wall" Enter
   const BOAT_OBJECT_ID = 38089; // "Boat" Board (installed at both docks)
+  const SWAMP_BRANCH_OBJECT_ID = 38004; // "Swamp tree branch" Use long vine
   const SWAMP_TREE_OBJECT_ID = 38005; // "Swamp tree branch" Swing-from
   const SWAMP_VINES_OBJECT_ID = 13847; // templetrek_swamptree_small_vines
   const SWAMP_RUCKSACK_OBJECT_ID = 13872; // templetrek_swing_rucksack
@@ -654,6 +667,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   let quest;
   const spawnedByPlayer = new Map();
   const tombPuzzleByPlayer = new WeakMap();
+  const valveMenus = new WeakMap();
   const vanstromFights = new WeakMap();
   const vanstromNpcMeta = new WeakMap();
   const carlFollowSessions = new WeakMap();
@@ -741,6 +755,15 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     player.getPacketSender().sendCameraReset();
   }
 
+  function beginCastleFight(player) {
+    if (quest.getStage(player) < STAGE_CASTLE) advance(player, STAGE_CASTLE);
+    teleport(player, CASTLE_ARENA);
+    playCamera(player, CAMERA_CASTLE);
+    later(player, 1, () =>
+      play(player, VANSTROM_FIGHT_ID, "a-bloody-show-face-to-face-with-the-lord-of-vampyrium")
+    );
+  }
+
   function later(player, ticks, fn) {
     const { CountdownTask, TaskManager } = api.core;
     if (!CountdownTask || !TaskManager) {
@@ -820,7 +843,10 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   // Requirements
   // ---------------------------------------------------------------------------
 
-  const REQUIRED_QUESTS = [{ key: PREREQUISITE_KEY, name: "A Taste of Hope" }];
+  const REQUIRED_QUESTS = [
+    { key: "vampyre_slayer", name: "Vampyre Slayer" },
+    { key: PREREQUISITE_KEY, name: "A Taste of Hope" },
+  ];
   const REQUIRED_SKILLS = [
     { skill: Skill.WOODCUTTING, level: 62, label: "Woodcutting" },
     { skill: Skill.FLETCHING, level: 60, label: "Fletching" },
@@ -844,7 +870,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   }
 
   function meetsRequirements(player) {
-    if (!questComplete(player, PREREQUISITE_KEY)) return false;
+    if (!REQUIRED_QUESTS.every((requirement) => questComplete(player, requirement.key))) return false;
     const skills = player.getSkillManager();
     return REQUIRED_SKILLS.every((entry) => skills.getMaxLevel(entry.skill) >= entry.level);
   }
@@ -1334,13 +1360,13 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     }
     if (stage >= STAGE_ESCORT && stage < STAGE_ESCORT_DONE) {
       if (!hasBit(player, BIT_TREK)) {
-        // Once the captured long vine exists, the tree offers Swing-from directly.
-        // Before that the small-vines Cut-vine object is the only interaction.
-        syncPersonalObject(
-          player,
-          TREK_TREE_TILE,
-          held(player, LONG_VINE_ITEM_ID) ? SWAMP_TREE_OBJECT_ID : SWAMP_VINES_OBJECT_ID,
-        );
+        // With the long vine, the branch accepts Use; only after the throw/wrap
+        // does the Swing-from object 38005 replace it. Before that the small-vines
+        // Cut-vine object is the only interaction.
+        const treeObject = held(player, LONG_VINE_ITEM_ID)
+          ? SWAMP_BRANCH_OBJECT_ID
+          : player.getAttribute(VINE_ATTACHED_ATTRIBUTE) ? SWAMP_TREE_OBJECT_ID : SWAMP_VINES_OBJECT_ID;
+        syncPersonalObject(player, TREK_TREE_TILE, treeObject);
         syncPersonalObject(player, TREK_RUCKSACK_TILE, SWAMP_RUCKSACK_OBJECT_ID);
       } else {
         syncPersonalObject(player, TREK_TREE_TILE, SWAMP_TREE_OBJECT_ID);
@@ -1823,12 +1849,11 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
         if (quest.getStage(player) < STAGE_READY) advance(player, STAGE_READY);
         return;
       case "HgxSdS": // The player, Vanescula, and the Myreque go to Castle Drakan.
-        if (quest.getStage(player) < STAGE_CASTLE) advance(player, STAGE_CASTLE);
-        teleport(player, CASTLE_ARENA);
-        playCamera(player, CAMERA_CASTLE);
-        later(player, 1, () =>
-          play(player, VANSTROM_FIGHT_ID, "a-bloody-show-face-to-face-with-the-lord-of-vampyrium")
-        );
+        beginCastleFight(player);
+        return;
+      case "ntch-j": // Vanescula's "I'm ready." in the canonical post-Safalaan variant.
+        if (quest.getStage(player) < STAGE_READY || !hasBlisterwoodFlail(player)) return;
+        beginCastleFight(player);
         return;
       case "2PLAE9": // Vanstrom attacks the player.
         resetCamera(player);
@@ -3089,15 +3114,15 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
       if (quest.getStage(player) !== STAGE_ESCORT) return;
       event.handled = true;
       if (!hasBit(player, BIT_TREK)) {
-        if (held(player, LONG_VINE_ITEM_ID)) {
-          play(player, IVAN_ESCORT_ID, "an-unwelcome-surprise-escorting-ivan-again-after-crossing");
-          setBit(player, BIT_TREK);
-          teleport(player, TREK_CROSSED);
-          applyStageSpawns(player);
-          syncQuestObjects(player);
-        } else {
+        if (!player.getAttribute(VINE_ATTACHED_ATTRIBUTE)) {
           play(player, IVAN_ESCORT_ID, "an-unwelcome-surprise-escorting-ivan-again-vine-puzzle");
+          return;
         }
+        play(player, IVAN_ESCORT_ID, "an-unwelcome-surprise-escorting-ivan-again-after-crossing");
+        setBit(player, BIT_TREK);
+        teleport(player, TREK_CROSSED);
+        applyStageSpawns(player);
+        syncQuestObjects(player);
       } else {
         teleport(player, TREK_CROSSED);
       }
@@ -3297,22 +3322,61 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     return true;
   }
 
+  function closeValveMenu(player) {
+    if (!valveMenus.has(player)) return;
+    valveMenus.delete(player);
+    const sender = player.getPacketSender();
+    sender.closeSubInterface(VALVE_MAIN_MODAL);
+    sender.sendInterfaceScript(VALVE_SCRIPT_RESTORE_INPUT);
+    player.setInterfaceId(-1);
+  }
+
+  function valveMenuClosed({ player, interfaceId }) {
+    if (interfaceId !== VALVE_MENU || !valveMenus.has(player)) return;
+    valveMenus.delete(player);
+    player.getPacketSender().sendInterfaceScript(VALVE_SCRIPT_RESTORE_INPUT);
+    player.setInterfaceId(-1);
+  }
+
   function turnValve(event) {
     const { player, objectId } = event;
     if (objectId !== VALVE_NORTH_OBJECT_ID && objectId !== VALVE_SOUTH_OBJECT_ID) return false;
     if (quest.getStage(player) < STAGE_ARBORETUM) return false;
     event.handled = true;
     const shift = objectId === VALVE_NORTH_OBJECT_ID ? VALVE_NORTH_SHIFT : VALVE_SOUTH_SHIFT;
-    const step = objectId === VALVE_NORTH_OBJECT_ID ? 7 : 4;
     const current = field(player, shift, 3);
-    setField(player, shift, 3, (current + 1) % 6);
-    const required = requiredGallons(player);
-    if (waterTotal(player) === required) {
-      player.sendMessage("Water begins to flow through the arboretum's irrigation.");
-    } else {
-      player.sendMessage(`The valve turns. ${step} more gallons flow per interval.`);
+    const options = [];
+    for (let value = 0; value <= 5; value++) {
+      options.push(value === current ? `${value} (current)` : String(value));
     }
+    options.push("(Cancel)");
+    valveMenus.set(player, { shift });
+    const sender = player.getPacketSender();
+    sender.sendInterfaceScript(VALVE_SCRIPT_MAINMODAL_OPEN, [-1, -1]);
+    player.setInterfaceId(VALVE_MENU);
+    sender.sendSubInterface(VALVE_MAIN_MODAL, VALVE_MENU, 0);
+    sender.sendClientScript(VALVE_SCRIPT_MENU, "What would you like to set the valve to?", options.join("|"), false);
+    sender.sendInterfaceFlagsRange(VALVE_MENU_UID, 0, VALVE_MENU_SLOTS, VALVE_PAUSE_BUTTON);
     return true;
+  }
+
+  function chooseValve(event) {
+    const { player } = event;
+    const buttonId = Number(event.buttonId ?? 0);
+    if ((event.groupId ?? (buttonId >>> 16)) !== VALVE_MENU ||
+        (event.childId ?? (buttonId & 0xffff)) !== VALVE_MENU_CHOICES) return;
+    const pending = player && valveMenus.get(player);
+    if (!pending) return;
+    const choice = Number(event.action);
+    if (!Number.isInteger(choice) || choice < 0 || choice > 6) return;
+    event.handled = true;
+    closeValveMenu(player);
+    if (choice === 6) return;
+    setField(player, pending.shift, 3, choice);
+    player.sendMessage(`You set the valve to ${choice}.`);
+    if (waterTotal(player) === requiredGallons(player)) {
+      player.sendMessage("Water begins to flow through the arboretum's irrigation.");
+    }
   }
 
   function chopBlisterwood(event) {
@@ -3364,6 +3428,20 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
       cutTrekVines(event);
       return;
     }
+    if (objectId === SWAMP_BRANCH_OBJECT_ID && itemId === LONG_VINE_ITEM_ID) {
+      if (quest.getStage(player) !== STAGE_ESCORT || hasBit(player, BIT_TREK)) return;
+      event.handled = true;
+      player.getInventory().deleteNumber(LONG_VINE_ITEM_ID, 1);
+      player.setAttribute(VINE_ATTACHED_ATTRIBUTE, true);
+      player.sendMessage("You throw the vine up and wrap it around the branch.");
+      syncQuestObjects(player);
+      return;
+    }
+    if (objectId === SWAMP_BRANCH_OBJECT_ID && itemId === SHORT_VINE_ITEM_ID) {
+      event.handled = true;
+      player.sendMessage("You don't think the short vine will reach, but something similar might.");
+      return;
+    }
   }
 
   function handleItemOnItem(event) {
@@ -3406,6 +3484,15 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
       }
       player.getInventory().deleteNumber(COSMIC_RUNE_ITEM_ID, 1);
       player.getInventory().deleteNumber(FIRE_RUNE_ITEM_ID, 5);
+      player.getInventory().deleteNumber(RUBY_SICKLE_ITEM_ID, 1);
+      give(player, ENCHANTED_RUBY_SICKLE_ITEM_ID, 1);
+      player.sendMessage("You enchant the ruby sickle.");
+      return;
+    }
+    if (pair.has(ENCHANT_RUBY_TABLET_ITEM_ID) && pair.has(RUBY_SICKLE_ITEM_ID)) {
+      if (stage < STAGE_LOGS_GIVEN || stage >= STAGE_FLAIL) return;
+      event.handled = true;
+      player.getInventory().deleteNumber(ENCHANT_RUBY_TABLET_ITEM_ID, 1);
       player.getInventory().deleteNumber(RUBY_SICKLE_ITEM_ID, 1);
       give(player, ENCHANTED_RUBY_SICKLE_ITEM_ID, 1);
       player.sendMessage("You enchant the ruby sickle.");
@@ -3539,6 +3626,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   }
 
   function handleLogout({ player }) {
+    valveMenus.delete(player);
     resetCamera(player);
     cleanupVanstromFight(player);
     clearPersonalObjects(player);
@@ -3554,6 +3642,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
   api.persistAttribute(TOME_USES_ATTRIBUTE);
   api.persistAttribute(VAMPYRE_NAME_ATTRIBUTE);
   api.persistAttribute(BRIDGE_ATTRIBUTE, 0);
+  api.persistAttribute(VINE_ATTACHED_ATTRIBUTE, false);
   api.persistAttribute(SCHEMA_ATTRIBUTE, 0);
   api.persistAttribute(CARL_PROGRESS_ATTRIBUTE, 0);
 
@@ -3615,6 +3704,8 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     MAUSOLEUM_DOOR_OPEN_OBJECT_ID, MAUSOLEUM_DOOR_UNLOCKED_OBJECT_ID],
   { Unlock: unlockMausoleum, Open: openMausoleum });
   api.onInterfaceActionButton(TOMB_PUZZLE_BUTTONS, handleTombPuzzleButton);
+  api.onInterfaceActionClick(chooseValve);
+  api.onCustomEvent("interface:closed", valveMenuClosed);
   api.onObjectInteraction(handleObjectInteraction);
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemOnItem(handleItemOnItem);

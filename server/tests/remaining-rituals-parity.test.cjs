@@ -494,6 +494,79 @@ test('Tai Bwo Wannai Trio migrates old completion without replaying the reward',
   assert.equal(h.inventory.get(h.core.ItemIdentifiers.COINS) ?? 0, 0);
 });
 
+test('Tai Bwo Wannai Trio journal exposes QH group 119 predicates only at earned progress', () => {
+  const h = setup('../plugins/quests/quests/TaiBwoWannaiTrio.Quest');
+  const A = h.attrs;
+  h.quest.setStage(h.player, 3);
+  const journal = () => h.quest.buildJournal(h.player, h.quest).join('\n');
+  const has = (text) => journal().includes(text);
+
+  assert.equal(has('I must take a'), false);
+  assert.equal(has('He will only return'), false);
+  assert.equal(has('He has successfully caught'), false);
+
+  A.set('quest.tai_bwo_wannai_trio.tiadeche', 2);
+  assert.equal(has('<col=000080>I must take a <col=800000>Karambwan vessel<col=000080> to <col=800000>Tinsay<col=000080> and retrieve the crafting manual.</col>'), true);
+  assert.equal(has('<col=000080>He will only return to the village once he has caught a Karambwan.</col>'), true);
+  assert.equal(has('<str>He has successfully caught a Karambwan.</str>'), false);
+
+  A.set('quest.tai_bwo_wannai_trio.karambwan', 1);
+  assert.equal(has('<col=000080>He will only return'), false, 'the catch clears the pending line');
+  assert.equal(has('<str>He has successfully caught a Karambwan.</str>'), true);
+  A.set('quest.tai_bwo_wannai_trio.tiadeche', 5);
+  assert.equal(has('<str>retrieved crafting instructions for Tiadeche.</str>'), true);
+
+  A.set('quest.tai_bwo_wannai_trio.tinsay', 2);
+  assert.equal(has('<col=000080>He requires <col=800000>banana in Karamja rum<col=000080> to repair the tribal statue.</col>'), true);
+  assert.equal(has('<str>I have given him sliced banana in Karamja rum.</str>'), false);
+  A.set('quest.tai_bwo_wannai_trio.tinsay', 4);
+  assert.equal(has('<str>I have given him sliced banana in Karamja rum.</str>'), true);
+  A.set('quest.tai_bwo_wannai_trio.tinsay', 6);
+  assert.equal(has('<str>I have given him a seaweed in monkey skin sandwich.</str>'), true);
+  A.set('quest.tai_bwo_wannai_trio.tinsay', 7);
+  assert.equal(has('<str>I have given him a burnt Jogre bones marinated in raw Karambwanji paste.</str>'), true);
+
+  A.set('quest.tai_bwo_wannai_trio.tamayu', 3);
+  assert.equal(has('He appears to be having difficulty in the hunt.'), true);
+  assert.equal(has('<str>Tamayu has slain the Shaikahan!</str>'), false);
+  A.set('quest.tai_bwo_wannai_trio.agility', 4);
+  assert.equal(has("<str>I have increased his agility to match the Shaikahan's.</str>"), true);
+  A.set('quest.tai_bwo_wannai_trio.spear', 2);
+  assert.equal(has('<str>I have give him a stronger and Karambwan poisoned spear.</str>'), true);
+  A.set('quest.tai_bwo_wannai_trio.tamayu', 4);
+  assert.equal(has('He appears to be having difficulty'), false, 'the hunt line clears after the kill');
+  assert.equal(has('<str>Tamayu has slain the Shaikahan!</str>'), true);
+
+  A.set('quest.tai_bwo_wannai_trio.lubufu', 5);
+  assert.equal(has('Lubufu will teach me to catch Karambwan once I bring him 20 Karambwanji.'), true);
+  assert.equal(has('<str>I have given Lubufu 20 Karambwanji.</str>'), false);
+  A.set('quest.tai_bwo_wannai_trio.lubufu', 25);
+  assert.equal(h.inventory.get(h.core.ItemIdentifiers.KARAMBWAN_VESSEL) ?? 0, 0, 'Lubufu hand-in is truthful without a held vessel');
+  assert.equal(has('Lubufu will teach me'), false, 'the pending line clears once the Karambwanji are handed in');
+  assert.equal(has('<str>I have given Lubufu 20 Karambwanji.</str>'), true);
+  assert.equal(has('<str>Lubufu trained me to catch Karambwan.</str>'), false);
+
+  assert.equal(h.quest.getStage(h.player), 3, 'journal reads never advance the quest');
+  assert.equal(h.quest.isComplete(h.player), false);
+  runtime.openJournal(h.player, h.quest);
+  assert.match(h.strings.get((119 << 16) | 5), /Tai Bwo Wannai Trio/);
+  const rendered = [...h.strings.entries()]
+    .filter(([uid]) => uid >= ((119 << 16) | 11) && uid <= ((119 << 16) | 60))
+    .map(([, text]) => text)
+    .join('\n');
+  assert.match(rendered, /<str>I have given Lubufu 20 Karambwanji\.<\/str>/);
+  assert.match(rendered, /<str>Tamayu has slain the Shaikahan!<\/str>/);
+  assert.doesNotMatch(rendered, /QUEST COMPLETE!/);
+  assert.equal(h.quest.getStage(h.player), 3);
+
+  A.set('quest.tai_bwo_wannai_trio.lubufu', 31);
+  assert.equal(h.inventory.get(h.core.ItemIdentifiers.KARAMBWAN_VESSEL) ?? 0, 0, 'completed hand-in stays truthful with no held vessel');
+  assert.equal(has('<str>I have given Lubufu 20 Karambwanji.</str>'), true, 'completed hand-in line survives apprenticeship');
+  assert.equal(has('<str>Lubufu trained me to catch Karambwan.</str>'), true);
+  assert.equal(has('Lubufu will teach me'), false, 'only the pending fetch line clears');
+  assert.equal(h.quest.getStage(h.player), 3, 'apprenticeship journal does not advance the quest');
+});
+
 test("Shades of Mort'ton migrates old saves and publishes the native 207/208 cure bits", () => {
   const legacy = setup('../plugins/quests/quests/ShadesOfMortton.Quest');
   legacy.attrs.set('quest.shades_of_mortton.stage', 100);

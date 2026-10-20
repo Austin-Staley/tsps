@@ -112,6 +112,20 @@ test('cathedral chest uses directional 810 [1,3,2,2] and only unlocks once', () 
   assert.equal(p.interface, interfaceBefore, 'the unlocked chest does not reopen the lock');
 });
 
+test('the Mad Angel instance variant is answered from the FFG stage, not a boss-side quest check', () => {
+  const h = setup(), p = h.p;
+  const ask = (stage) => {
+    h.quest.setStage(p, stage);
+    const request = { player: p, variant: null };
+    for (const fn of h.hooks.custom.get('madangel:instance-variant') ?? []) fn(request);
+    return request.variant;
+  };
+  assert.equal(ask(16), 'quest');
+  assert.equal(ask(17), 'quest');
+  assert.equal(ask(18), null, 'after the kill the ordinary boss variant is used');
+  assert.equal(ask(20), null, 'post-quest is not the FFG instance');
+});
+
 test('cathedral door uses the real 5-pin 811 after the angel and then releases to MadAngel', () => {
   const h = setup(), p = h.p;
   h.quest.setStage(p, 18);

@@ -93,13 +93,27 @@ module.exports = function registerCrabQuestQuest(api) {
   const REQUIREMENTS_MESSAGE =
     "You need a Sailing level of 40 and a Fishing level of 30 to start this quest.";
 
+  // Spawn the cache's raw parents; their stage varbit transform selects the
+  // visible/content child. 16469 covers stages 5-40 (16471/16472), 16470 covers
+  // 45-60 (16473/16474); 16471/16474 remain the dialogue-head ids.
+  const MAIN_CRAB_RAW_NPC_ID = 16469; // crab_maincrab
+  const MAIN_CRAB_PRACTISING_RAW_NPC_ID = 16470; // crab_maincrab_practising
   const MAIN_CRAB_NPC_ID = NpcIdentifiers.CRAB_9; // 16471, "Crab", Talk-to
   const MAIN_CRAB_END_NPC_ID = 16474; // captured crab_maincrab_end, Talk-to in the dance/ceremony scene
   const SHY_CRAB_NPC_ID = 16484; // crab_shycrab parent, multinpc Crab
   const BAND_CRAB_NPC_ID = 16483; // resolved crab_bandcrab transform (QH/capture chathead)
   const SHY_CRAB_CONTENT_ID = BAND_CRAB_NPC_ID;
   const PENGUIN_CRAB_NPC_ID = NpcIdentifiers.CRAB_18; // 16485, "'Crab'"
-  const CRAB_NPC_IDS = new Set([MAIN_CRAB_NPC_ID, MAIN_CRAB_END_NPC_ID, PENGUIN_CRAB_NPC_ID, BAND_CRAB_NPC_ID]);
+  // Raw packet ids and every cache-resolved content id for the main crab.
+  const MAIN_CRAB_NPC_IDS = new Set([
+    MAIN_CRAB_RAW_NPC_ID,
+    MAIN_CRAB_PRACTISING_RAW_NPC_ID,
+    16472, // blushing (stage 20)
+    16473, // practising (stage 45)
+    MAIN_CRAB_NPC_ID,
+    MAIN_CRAB_END_NPC_ID,
+  ]);
+  const CRAB_NPC_IDS = new Set([...MAIN_CRAB_NPC_IDS, PENGUIN_CRAB_NPC_ID, BAND_CRAB_NPC_ID]);
   // Interface 216 slot 54 (cache enum 1001 -> sprite 5248) is the real Sit emote;
   // the capture's op=1 plays emote_sit_loop 10061.
   const SIT_EMOTE_SLOT = 54;
@@ -130,6 +144,7 @@ module.exports = function registerCrabQuestQuest(api) {
   ]);
 
   // Objects from the 2026 quest, absent from the generated ObjectIdentifiers.
+  const CRAB_BOTTLE_RAW_OBJECT_ID = 62438; // crab_bottle_multi; cache shows 62439/62440
   const CRAB_BOTTLE_OBJECT_ID = 62439; // "Bottle", Drink
   const CRAB_BOTTLE_POST_OBJECT_ID = 62440; // "Bottle", Reminisce
   const CRAB_PALM_OBJECT_ID = 62470; // "Palm", Investigate
@@ -614,16 +629,12 @@ module.exports = function registerCrabQuestQuest(api) {
   function installObjects() {
     if (objectsInstalled) return;
     objectsInstalled = true;
-    registerObject(CRAB_BOTTLE_OBJECT_ID, BOTTLE_TILE);
+    registerObject(CRAB_BOTTLE_RAW_OBJECT_ID, BOTTLE_TILE);
     registerObject(CRAB_SHY_PALM_OBJECT_ID, SHY_CRAB_PALM_TILE);
     for (const spot of SPOTS) {
       if (spot.place === false) continue;
       registerObject(spot.objectId, spot, spot.rotation ?? 0);
     }
-  }
-
-  function swapBottleToPost() {
-    registerObject(CRAB_BOTTLE_POST_OBJECT_ID, BOTTLE_TILE);
   }
 
   function tracked(player) {
@@ -635,9 +646,21 @@ module.exports = function registerCrabQuestQuest(api) {
     return map;
   }
 
+  function trackedBaseId(npc) {
+    const realId = npc?.getRealId?.();
+    return Number.isFinite(realId) ? realId : npc?.getId?.();
+  }
+
   function spawnTracked(player, key, definition) {
     const map = tracked(player);
-    if (map.get(key)) return map.get(key);
+    const existing = map.get(key);
+    if (existing) {
+      if (trackedBaseId(existing) === definition.id) return existing;
+      // The stage moved across a base-id change (16469 -> 16470): remove the old
+      // owner actor and spawn the new parent instead of keeping the hidden one.
+      api.removeNpc(existing);
+      map.delete(key);
+    }
     const npc = api.spawnNpc({ ...definition, owner: player, ownerOnly: true });
     if (npc) map.set(key, npc);
     return npc;
@@ -731,8 +754,11 @@ module.exports = function registerCrabQuestQuest(api) {
     if (!player || player.isPlayerBot?.() === true) return;
     const stage = quest.getStage(player);
     if (stage >= STAGE_START && !quest.isComplete(player)) {
+      const rawNpcId = stage >= STAGE_RECRUITING
+        ? MAIN_CRAB_PRACTISING_RAW_NPC_ID
+        : MAIN_CRAB_RAW_NPC_ID;
       spawnTracked(player, "main-crab", {
-        id: MAIN_CRAB_NPC_ID,
+        id: rawNpcId,
         ...MAIN_CRAB_TILE,
         z: 0,
         wanderRadius: 0,
@@ -907,7 +933,7 @@ module.exports = function registerCrabQuestQuest(api) {
   function handleNpcInteraction(event) {
     const { player, npcId, clickType, definition } = event;
     const action = definition?.getActions?.()[clickType - 1];
-    if (npcId === MAIN_CRAB_NPC_ID || npcId === MAIN_CRAB_END_NPC_ID) {
+    if (MAIN_CRAB_NPC_IDS.has(npcId)) {
       if (action !== "Talk-to") return;
       event.handled = true;
       talkToMainCrab(player);
@@ -1166,8 +1192,8 @@ module.exports = function registerCrabQuestQuest(api) {
     if (stepId === CEREMONY_COMPLETE_STEP) {
       event.handled = true;
       Scenes.end(player, false);
-      swapBottleToPost();
       if (!quest.isComplete(player)) quest.complete(player);
+      syncNpcs(player);
       syncVarbits(player);
       return;
     }
@@ -1284,10 +1310,13 @@ module.exports = function registerCrabQuestQuest(api) {
 
   function handleObjectInteraction(event) {
     const { player, objectId, clickType, location, definition } = event;
-    if (objectId === CRAB_BOTTLE_OBJECT_ID || objectId === CRAB_BOTTLE_POST_OBJECT_ID) {
+    if (
+      objectId === CRAB_BOTTLE_RAW_OBJECT_ID ||
+      objectId === CRAB_BOTTLE_OBJECT_ID ||
+      objectId === CRAB_BOTTLE_POST_OBJECT_ID
+    ) {
       const action = definition?.getActions?.()[clickType - 1];
-      if (objectId === CRAB_BOTTLE_OBJECT_ID && action !== "Drink") return;
-      if (objectId === CRAB_BOTTLE_POST_OBJECT_ID && action !== "Reminisce") return;
+      if (action !== "Drink" && action !== "Reminisce") return;
       event.handled = true;
       drinkFromBottle(player);
       return;

@@ -143,14 +143,20 @@ module.exports = function registerShadowOfTheStormQuest(api) {
   const SILVER_BAR_ITEM_ID = ItemIdentifiers.SILVER_BAR; // 2355
 
   const BLACK_MUSHROOM_OBJECT_ID = ObjectIdentifiers.BLACK_MUSHROOMS; // 6311
+  // The surface agrith kilns are the objects normal play clicks (capture 3333:
+  // 10242 at 3467,3123). Their map children 6327-6330 are separate underground
+  // placements, so they stay searchable but are not the correct kiln.
+  const SURFACE_KILN_OBJECT_IDS = [10242, 10243, 10244, 10245]; // agrith_kiln_1..4
   const KILN_OBJECT_IDS = new Set([
+    ...SURFACE_KILN_OBJECT_IDS,
     ObjectIdentifiers.BROKEN_KILN, // 6327
     ObjectIdentifiers.BROKEN_KILN_2, // 6328
     ObjectIdentifiers.BROKEN_KILN_3, // 6329
     ObjectIdentifiers.BROKEN_KILN_4, // 6330
   ]);
-  /** The kiln Josef hid the tome in (east side of the Uzer underground). */
-  const CORRECT_KILN_TILE = { x: 2733, y: 4904 };
+  /** The kiln Josef hid the tome in (capture 3333, surface Uzer). */
+  const CORRECT_KILN_OBJECT_ID = 10242; // agrith_kiln_1
+  const CORRECT_KILN_TILE = { x: 3467, y: 3123 };
 
   // ============================================================================
   // Stages and state
@@ -1412,7 +1418,8 @@ module.exports = function registerShadowOfTheStormQuest(api) {
       player.sendMessage("You don't know what you are looking for.");
       return;
     }
-    const correct = location?.x === CORRECT_KILN_TILE.x && location?.y === CORRECT_KILN_TILE.y;
+    const correct = objectId === CORRECT_KILN_OBJECT_ID &&
+      location?.x === CORRECT_KILN_TILE.x && location?.y === CORRECT_KILN_TILE.y;
     kilnSearchCorrect.set(player, correct);
     if (!correct && kilnProgress(player) < 3) {
       const progress = kilnProgress(player) + 1;

@@ -396,6 +396,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
   const EARTHBOUND_TILE = { x: 1390, y: 9676, z: 0 };
   const ANCIENT_PRISON_TILE = { x: 1347, y: 9590, z: 0 };
   const TWINS_ARENA_TILE = { x: 1362, y: 9520, z: 0 };
+  const TWINS_ARENA_LANDING = { x: 1363, y: 9518, z: 0 }; // capture 3128 after the twins cutscene
   const TONALI_CAVERN_TILE = { x: 1330, y: 9450, z: 1 };
   const METZLI_CHAMBER_TILE = { x: 1311, y: 9497, z: 1 };
 
@@ -821,6 +822,12 @@ module.exports = function registerTheFinalDawnQuest(api) {
     syncTracked(player, "eyatlalli", stage >= STAGE_NEYPOTZLI_ENTRY && stage < STAGE_LOCATE
       ? { id: EYATLALLI_TALK_ID, x: 1439, y: 9627, z: 1, wanderRadius: 0 }
       : null);
+    if (stage === STAGE_TWINS_FIGHT) {
+      spawnTwins(player);
+    } else {
+      syncTracked(player, "chimalli", null);
+      syncTracked(player, "lucius", null);
+    }
     syncTracked(player, "servius-teklan", stage === STAGE_TWINS || stage === STAGE_ATTALA_DONE || stage === STAGE_CRYPT
       ? { id: SERVIUS_CRYPT_ID, x: 1236, y: 3105, z: 0, wanderRadius: 0 }
       : null);
@@ -2145,11 +2152,17 @@ module.exports = function registerTheFinalDawnQuest(api) {
   function handleGlowingSymbol(event) {
     if (event.objectId !== GLOWING_SYMBOL_OBJECT) return;
     const { player } = event;
-    event.handled = true;
-    if (quest.getStage(player) !== STAGE_SYMBOL) return;
+    const stage = quest.getStage(player);
     const tile = plainTile(event.location);
-    if (tile && tile.x === 1375 && tile.y === 9537) {
+    if (!tile || tile.x !== 1375 || tile.y !== 9537) return;
+    event.handled = true;
+    if (stage === STAGE_SYMBOL) {
       play(player, ENNIUS_BOSS_ID, "interlopers-in-neypotzli-confronting-the-twins");
+      return;
+    }
+    // Saved stage43 outside the arena: the visible symbol remains the normal re-entry.
+    if (stage === STAGE_TWINS_FIGHT) {
+      fadedStep(player, () => enterTwinsArena(player), 2);
     }
   }
 
@@ -2225,8 +2238,16 @@ module.exports = function registerTheFinalDawnQuest(api) {
   }
 
   function spawnTwins(player) {
-    api.spawnNpc({ id: CHIMALLI_ID, x: TWINS_ARENA_TILE.x - 1, y: TWINS_ARENA_TILE.y, z: TWINS_ARENA_TILE.z, wanderRadius: 0, owner: player, ownerOnly: true });
-    api.spawnNpc({ id: LUCIUS_ID, x: TWINS_ARENA_TILE.x + 1, y: TWINS_ARENA_TILE.y, z: TWINS_ARENA_TILE.z, wanderRadius: 0, owner: player, ownerOnly: true });
+    syncTracked(player, "chimalli", { id: CHIMALLI_ID, x: TWINS_ARENA_TILE.x - 1, y: TWINS_ARENA_TILE.y, z: TWINS_ARENA_TILE.z, wanderRadius: 0 });
+    syncTracked(player, "lucius", { id: LUCIUS_ID, x: TWINS_ARENA_TILE.x + 1, y: TWINS_ARENA_TILE.y, z: TWINS_ARENA_TILE.z, wanderRadius: 0 });
+  }
+
+  /** Capture 3128: fade out, land inside the twins arena, then release controls and fight. */
+  function enterTwinsArena(player) {
+    player.getPacketSender().sendCameraReset();
+    player.moveTo(new Location(TWINS_ARENA_LANDING.x, TWINS_ARENA_LANDING.y, TWINS_ARENA_LANDING.z));
+    spawnTwins(player);
+    Scenes.controls(player, false);
   }
 
   function spawnEnforcer(player) {
@@ -2567,7 +2588,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
         if (npcId !== ENNIUS_BOSS_ID) return;
         cameraBeat(player, [1371, 9520, 490], [1357, 9513, 390], 50);
         setStage(player, STAGE_TWINS_FIGHT);
-        spawnTwins(player);
+        fadedStep(player, () => enterTwinsArena(player), 2);
         return;
       case ACTION_TWINS_DEFEATED:
         if (!ATTALA_IDS.has(npcId)) return;

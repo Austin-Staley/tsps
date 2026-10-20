@@ -210,8 +210,9 @@ test('Children tail failure returns to Alina and restarts through the captured v
   h.quest.setStage(p, 4);
   h.action(p, N.ALINA, 'r2Pt3E');
   assert.equal(h.quest.getStage(p), 6);
-  const guard = h.npcs.find(npc => npc.getId() === N.GUARD_186);
-  assert.ok(guard, 'the bag guard spawns when tailing starts');
+  const guard = h.npcs.find(npc => npc.getId() === N.GUARD_185);
+  assert.ok(guard, 'the primary bag guard spawns when tailing starts');
+  assert.ok(!h.npcs.some(npc => npc.getId() === N.GUARD_186), 'the visible sibling is not spawned');
   for (let i = 0; i < 5; i++) {
     p.moveTo(guard.getLocation());
     h.hooks.onPlayerProcess[0]({ player: p });
@@ -243,7 +244,7 @@ test('Children marking rejects a wrong guard and completes the set of four bandi
 
 test('Sins uses native myq5 values and Kroy table varbits 1 after death, 2 after smashing', () => {
   const h = harness('SinsOfTheFather'), p = player();
-  completeQuests(h, ['taste_of_hope']);
+  completeQuests(h, ['taste_of_hope', 'vampyre_slayer']);
   p.moveTo(new core.Location(3729, 3318, 0));
   h.emit('npc-dialogue:choice', { player: p, npcId: N.VELIAF_HURTZ_2, option: 'Yes.' });
   assert.equal(h.quest.getStage(p), 2, 'start message sets myq5=2');
@@ -442,6 +443,10 @@ test('Sins trek requires the vine, axe, logs, three bridge repairs and crossing 
   assert.equal(p.items.get(7778), 3);
   h.hooks.onItemOnItem[0]({ player: p, usedItemId: 7778, usedWithItemId: 7778 });
   assert.equal(p.items.get(7777), 1, 'three short vines make the long vine');
+  const useBranch = { player: p, itemId: 7777, objectId: 38004, location: { x: 3442, y: 3408, z: 0 }, handled: false };
+  h.hooks.onItemOnObject.at(-1)(useBranch);
+  assert.equal(useBranch.handled, true, 'the long vine is used on the branch before swinging');
+  assert.equal(p.items.get(7777) ?? 0, 0, 'using the branch consumes the long vine');
   object(38005, 3442, 3408);
   assert.equal(h.quest.getStage(p), 36);
 
@@ -489,13 +494,19 @@ test('Sins long vine installs the real Swamp tree branch and normal Swing-from c
   p.items.set(7777, 1);
   h.quest.setStage(p, 36);
   h.hooks.onPlayerLogin[0]({ player: p });
-  assert.ok(ownedIds(p).includes(38005), 'stage36 + long vine installs real 38005 Swamp tree branch');
+  assert.ok(ownedIds(p).includes(38004), 'stage36 + long vine installs the real 38004 Use branch');
+  assert.ok(!ownedIds(p).includes(38005), 'Swing-from 38005 waits until the vine is attached');
   assert.ok(!ownedIds(p).includes(13847), 'the Cut-vine object is replaced, not layered');
+  const branchUse = { player: p, itemId: 7777, objectId: 38004, location: { x: 3442, y: 3408, z: 0 }, handled: false };
+  h.hooks.onItemOnObject.at(-1)(branchUse);
+  assert.equal(branchUse.handled, true, 'long vine Use on 38004 is handled');
+  assert.ok(ownedIds(p).includes(38005), 'Use swaps the branch to real 38005 Swing-from');
+  assert.ok(!ownedIds(p).includes(38004), 'the Use branch object is replaced, not layered');
   const event = swing(h, p);
   assert.equal(event.handled, true, 'normal Swing-from object interaction handles the branch');
   assert.equal(p.attrs.get('quest.sins_of_the_father.bits') & (1 << 13), 1 << 13, 'Swing-from sets BIT_TREK');
   assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3437, 3402], 'Swing-from crosses to the captured trek tile');
-  assert.equal(p.items.get(7777), 1, 'crossing does not duplicate or consume the long vine');
+  assert.equal(p.items.get(7777) ?? 0, 0, 'branch Use consumed exactly one long vine; crossing adds none');
   assert.equal(h.quest.getStage(p), 36, 'the crossing does not grant a target stage');
 
   // Combining three short vines must sync the tree immediately.
@@ -508,8 +519,13 @@ test('Sins long vine installs the real Swamp tree branch and normal Swing-from c
   c.hooks.onItemOnItem[0]({ player: q, usedItemId: 7778, usedWithItemId: 7778 });
   assert.equal(q.items.get(7777), 1, 'combine yields exactly one long vine');
   assert.equal(q.items.get(7778), 0, 'combine consumes all three short vines');
-  assert.ok(ownedIds(q).includes(38005), 'combine syncs the real Swing-from branch at once');
+  assert.ok(ownedIds(q).includes(38004), 'combine syncs the real 38004 Use branch at once');
+  assert.ok(!ownedIds(q).includes(38005), 'combine does not skip the Use step');
   assert.ok(!ownedIds(q).includes(13847), 'combine removes the Cut-vine object');
+  const combineUse = { player: q, itemId: 7777, objectId: 38004, location: { x: 3442, y: 3408, z: 0 }, handled: false };
+  c.hooks.onItemOnObject.at(-1)(combineUse);
+  assert.equal(combineUse.handled, true);
+  assert.ok(ownedIds(q).includes(38005), 'Use after combine installs the real Swing-from branch');
 
   // Negative: no long vine.
   const n = harness('SinsOfTheFather', null, { realObjects: true }), r = player();
@@ -518,6 +534,7 @@ test('Sins long vine installs the real Swamp tree branch and normal Swing-from c
   n.hooks.onPlayerLogin[0]({ player: r });
   assert.ok(ownedIds(r).includes(13847), 'without the long vine the Cut-vine object stays');
   assert.ok(!ownedIds(r).includes(38005), 'without the long vine there is no Swing-from branch');
+  assert.ok(!ownedIds(r).includes(38004), 'without the long vine there is no Use branch');
   const noVine = swing(n, r);
   assert.equal(noVine.handled, true, 'the no-vine branch option is still a normal handled interaction');
   assert.equal(r.attrs.get('quest.sins_of_the_father.bits') & (1 << 13), 0, 'no vine never sets BIT_TREK');
@@ -530,6 +547,7 @@ test('Sins long vine installs the real Swamp tree branch and normal Swing-from c
   w.quest.setStage(v, 34);
   w.hooks.onPlayerLogin[0]({ player: v });
   assert.ok(!ownedIds(v).includes(38005), 'pre-escort stage does not install the branch');
+  assert.ok(!ownedIds(v).includes(38004), 'pre-escort stage does not install the Use branch');
   const wrongStage = swing(w, v);
   assert.equal(wrongStage.handled, false, 'wrong-stage branch is not handled');
   assert.equal(v.attrs.get('quest.sins_of_the_father.bits') & (1 << 13), 0, 'wrong stage never sets BIT_TREK');
@@ -546,6 +564,9 @@ test('Sins trek nail spawns and broken bridge use real walkable cache hooks', ()
   p.items.set(7777, 1);
   h.quest.setStage(p, 36);
   h.hooks.onPlayerLogin[0]({ player: p });
+  const useBranch = { player: p, itemId: 7777, objectId: 38004, location: { x: 3442, y: 3408, z: 0 }, handled: false };
+  h.hooks.onItemOnObject.at(-1)(useBranch);
+  assert.equal(useBranch.handled, true, 'long vine Use precedes the swing');
   const swing = { player: p, objectId: 38005, location: { x: 3442, y: 3408, z: 0 }, handled: false };
   h.hooks.onObjectInteraction.at(-1)(swing);
   assert.equal(swing.handled, true);
@@ -726,7 +747,7 @@ test('Children replay sends the captured delegation, eavesdrop and roof cameras 
   assert.ok(resets() > delegationResets, 'delegation camera resets');
 
   h.quest.setStage(p, 8);
-  h.action(p, N.BAG_GUARD_NPC_ID ?? 12662, 'V-D092');
+  h.action(p, N.GUARD_185, 'V-D092');
   h.tick(3);
   assert.ok(moves().some(row => row[1] === 3252 && row[2] === 3396), 'eavesdrop camera');
   const eavesdropResets = resets();
@@ -847,7 +868,7 @@ test('Children tail follows the collision-valid captured route to the door and o
   h.quest.setStage(p, 4);
   h.action(p, N.ALINA, 'r2Pt3E');
   assert.equal(h.quest.getStage(p), 6);
-  const guard = () => h.npcs.find(npc => npc.getId() === N.GUARD_186 && !npc.removed);
+  const guard = () => h.npcs.find(npc => npc.getId() === N.GUARD_185 && !npc.removed);
   assert.ok(guard());
   let finishedEarly = false;
   for (let tick = 0; tick < 700; tick++) {

@@ -1053,6 +1053,46 @@ test('The Final Dawn claims only its Neypotzli realm transports through Perilous
   assert.equal(h.quest.getStage(p4), 40, 'Ancient Prison keeps stage40');
 });
 
+test('The Final Dawn twins cutscene lands in the arena, and stage43 symbol re-entry does not duplicate actors', () => {
+  const h = harness('TheFinalDawn'), p = player();
+  h.quest.setStage(p, 41);
+  p.moveTo(new core.Location(1375, 9538, 0));
+  h.object(p, 56620, 1, { x: 1375, y: 9537, z: 0 });
+  for (let step = 0; step < 400 && h.quest.getStage(p) === 41 && p.manager.getCurrent(); step++) {
+    p.manager.advance();
+  }
+  assert.equal(h.quest.getStage(p), 43, 'real twins dialogue action reaches stage43');
+  h.tick(8);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1363, 9518, 0],
+    'captured twins arena landing');
+  assert.equal(p.blocked, false, 'cutscene releases movement after landing');
+  assert.ok(CacheDefinitions.getNpc(14362).actions.includes('Attack'), 'Chimalli is cache-attackable');
+  assert.ok(CacheDefinitions.getNpc(14363).actions.includes('Attack'), 'Lucius is cache-attackable');
+  const twins = () => [14362, 14363].map(id => h.npcs.filter(npc => npc.id === id && npc.getOwner() === p && !npc.removed));
+  for (const live of twins()) assert.equal(live.length, 1, 'exactly one owner twin spawned');
+
+  p.moveTo(new core.Location(1375, 9538, 0));
+  h.object(p, 56620, 1, { x: 1375, y: 9537, z: 0 });
+  h.tick(8);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1363, 9518, 0],
+    'stage43 symbol Touch re-enters the arena');
+  for (const live of twins()) assert.equal(live.length, 1, 're-entry does not duplicate twins');
+  assert.equal(h.quest.getStage(p), 43, 're-entry does not change the stage');
+
+  const h2 = harness('TheFinalDawn'), p2 = player();
+  h2.quest.setStage(p2, 43);
+  p2.moveTo(new core.Location(1375, 9538, 0));
+  h2.hooks.onPlayerLogin[0]({ player: p2 });
+  assert.deepEqual([p2.getLocation().getX(), p2.getLocation().getY(), p2.getLocation().getZ()], [1375, 9538, 0],
+    'stage43 login outside the arena is not teleported');
+  for (const id of [14362, 14363]) {
+    assert.equal(h2.npcs.filter(npc => npc.id === id && npc.getOwner() === p2 && !npc.removed).length, 1,
+      'login restores one owner twin in the arena');
+  }
+  for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
+  for (const fn of h2.hooks.onPlayerLogout) fn({ player: p2 });
+});
+
 test('The Final Dawn Strange Tiles step between the moon chamber and final floor', () => {
   RegionManager.init();
   RegionManager.loadMapFiles(1299, 9455, true);

@@ -284,13 +284,63 @@ module.exports = function registerTaiBwoWannaiTrioQuest(api) {
       brotherLine(player, TINSAY_KEY, TINSAY_DONE, "Tinsay"),
       brotherLine(player, TIADECHE_KEY, TIADECHE_DONE, "Tiadeche"),
     ];
-    if (state(player, LUBUFU_KEY) >= LUBUFU_FETCH) {
-      lines.push(
-        state(player, LUBUFU_KEY) >= LUBUFU_APPRENTICE
-          ? "<str>Lubufu trained me to catch Karambwan.</str>"
-          : "Lubufu will teach me to catch Karambwan once I bring him 20 Karambwanji."
-      );
+
+    const tiadeche = state(player, TIADECHE_KEY);
+    const tinsay = state(player, TINSAY_KEY);
+    const tamayu = state(player, TAMAYU_KEY);
+    const lubufu = state(player, LUBUFU_KEY);
+    const agility = state(player, AGILITY_KEY);
+    const spear = state(player, SPEAR_KEY);
+    const karambwan = state(player, KARAMBWAN_KEY);
+
+    if (tiadeche >= TIADECHE_WAITING && tinsay < TINSAY_DONE) {
+      lines.push("<col=000080>I must take a <col=800000>Karambwan vessel<col=000080> to <col=800000>Tinsay<col=000080> and retrieve the crafting manual.</col>");
     }
+    if (tiadeche >= TIADECHE_WAITING && karambwan < 1 && tiadeche < TIADECHE_MANUAL) {
+      lines.push("<col=000080>He will only return to the village once he has caught a Karambwan.</col>");
+    }
+    if (tiadeche >= TIADECHE_MANUAL || karambwan >= 1) {
+      lines.push("<str>He has successfully caught a Karambwan.</str>");
+    }
+    if (tiadeche >= TIADECHE_HAS_MANUAL) {
+      lines.push("<str>retrieved crafting instructions for Tiadeche.</str>");
+    }
+
+    if (tinsay >= TINSAY_BANANA && tinsay < TINSAY_SANDWICH) {
+      lines.push("<col=000080>He requires <col=800000>banana in Karamja rum<col=000080> to repair the tribal statue.</col>");
+    }
+    if (tinsay >= TINSAY_SANDWICH) {
+      lines.push("<str>I have given him sliced banana in Karamja rum.</str>");
+    }
+    if (tinsay >= TINSAY_BONES) {
+      lines.push("<str>I have given him a seaweed in monkey skin sandwich.</str>");
+    }
+    if (tinsay >= TINSAY_DONE) {
+      lines.push("<str>I have given him a burnt Jogre bones marinated in raw Karambwanji paste.</str>");
+    }
+
+    if (tamayu >= TAMAYU_WATCHED && tamayu < TAMAYU_DONE) {
+      lines.push("He appears to be having difficulty in the hunt.");
+    }
+    if (agility >= 4) {
+      lines.push("<str>I have increased his agility to match the Shaikahan's.</str>");
+    }
+    if ((spear & 2) !== 0) {
+      lines.push("<str>I have give him a stronger and Karambwan poisoned spear.</str>");
+    }
+    if (tamayu >= TAMAYU_DONE) {
+      lines.push("<str>Tamayu has slain the Shaikahan!</str>");
+    }
+
+    if (lubufu >= LUBUFU_GIVEN) {
+      lines.push("<str>I have given Lubufu 20 Karambwanji.</str>");
+    } else if (lubufu >= LUBUFU_FETCH) {
+      lines.push("Lubufu will teach me to catch Karambwan once I bring him 20 Karambwanji.");
+    }
+    if (lubufu >= LUBUFU_APPRENTICE) {
+      lines.push("<str>Lubufu trained me to catch Karambwan.</str>");
+    }
+
     if (stage >= STAGE_BROTHERS_DONE) {
       lines.push("", "I have convinced all three sons. I must speak with <col=800000>Timfraku</col>.");
     }

@@ -20,8 +20,9 @@
  * are real guards; marking any of them is what Tobyn's "incorrectly marked" branch
  * answers. All ten guard NPCs use the cache's Mark 12668+3i / Unmark 12669+3i ids.
  *
- * The suspicious guard is 12662 ("Guard" with the big bag, visible variant);
- * Alina/Noah are 12644/12646, Sergeant Tobyn 12648 and Prince Itzla Arkan 12650.
+ * The suspicious guard is the primary 12661 ("Guard" with the big bag); 12662
+ * is the cache's visible sibling and has no transform. Alina/Noah are
+ * 12644/12646, Sergeant Tobyn 12648 and Prince Itzla Arkan 12650.
  * The bandit house door is object 50048 at (3259,3400), claimed through the shared
  * Doors plugin's "door:toggle" event.
  *
@@ -86,7 +87,7 @@ module.exports = function registerChildrenOfTheSunQuest(api) {
   const NOAH_NPC_ID = NpcIdentifiers.NOAH; // 12646
   const TOBYN_NPC_ID = NpcIdentifiers.SERGEANT_TOBYN; // 12648
   const ITZLA_NPC_ID = NpcIdentifiers.PRINCE_ITZLA_ARKAN; // 12650
-  const BAG_GUARD_NPC_ID = NpcIdentifiers.GUARD_186; // 12662, visible bag guard
+  const BAG_GUARD_NPC_ID = NpcIdentifiers.GUARD_185; // 12661 primary; 12662 is the visible sibling
 
   const ALINA_NPC_IDS = new Set([NpcIdentifiers.ALINA, NpcIdentifiers.ALINA_2]);
   const NOAH_NPC_IDS = new Set([NpcIdentifiers.NOAH, NpcIdentifiers.NOAH_2]);

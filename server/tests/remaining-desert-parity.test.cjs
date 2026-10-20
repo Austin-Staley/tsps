@@ -165,6 +165,24 @@ test('Contact: the captured Osman stage-70 choice does not reference a sent-bit'
   assert.equal(h.quest.getStage(p), 70, 'the choice keeps the captured Osman-agreed stage');
 });
 
+test('Contact: dungeon Osman uses the 11568 cache parent and is cleaned up on logout', () => {
+  const h = harness('../plugins/quests/quests/Contact.Quest');
+  const p = player();
+  h.quest.setStage(p, 90);
+  h.action(p, core.NpcIdentifiers.GIANT_SCARAB, '_dkntA');
+  assert.equal(h.quest.getStage(p), 100);
+  const boss = h.npcs.find(n => n.getId() === core.NpcIdentifiers.GIANT_SCARAB);
+  assert.ok(boss, 'the scarab is spawned for the fight');
+  h.hooks.onNpcDeath[0]({ killer: p, npc: boss, npcId: boss.getId() });
+  assert.equal(h.quest.getStage(p), 110);
+  const osman = h.npcs.find(n => n.getId() === 11568);
+  assert.ok(osman, 'dungeon Osman spawns as the primary cache parent');
+  assert.equal(osman.getOwner(), p);
+  assert.deepEqual([osman.getLocation().getX(), osman.getLocation().getY(), osman.getLocation().getZ()], [2274, 4315, 0]);
+  h.hooks.onPlayerLogout[0]({ player: p });
+  assert.equal(osman.removed, true, 'logout removes the parent-id dungeon Osman');
+});
+
 test('Contact: Maisa stops replaying the quiz once Osman has been sent for', () => {
   const h = harness('../plugins/quests/quests/Contact.Quest');
   const p = player();

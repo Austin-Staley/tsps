@@ -123,7 +123,11 @@ module.exports = function registerContactQuest(api) {
   // chasm from the east landing (dialogue opens at 2263,4320); QH also names the
   // west side. Keep this reach on her quiz stages only; range 1 stays the default.
   const MAISA_TALK_RANGE = 10;
-  const OSMAN_NPC_ID = NpcIdentifiers.OSMAN_9; // 4286, Al Kharid / Sophanem gates
+  const OSMAN_NPC_ID = NpcIdentifiers.OSMAN_9; // 4286, resolved content id for handlers/chatheads
+  // The dungeon actor spawns as the cache parent; at stage 110 varbit 3274
+  // resolves 11568 contact_osman_cave_instance to 4286. The world rows use the
+  // matching Al Kharid (6165) and Sophanem (6166) cache parents.
+  const OSMAN_DUNGEON_NPC_ID = 11568;
   const COENUS_NPC_ID = NpcIdentifiers.COENUS; // 11499, cut scene 1 speaker
   const GIANT_SCARAB_NPC_ID = NpcIdentifiers.GIANT_SCARAB; // 797, level 191
   const SOPHANEM_GUARD_NPC_IDS = new Set([
@@ -134,7 +138,12 @@ module.exports = function registerContactQuest(api) {
   ]);
   const SOPHANEM_GUARD_CHATHEAD_ID = NpcIdentifiers.SOPHANEM_GUARD; // 3881
   /** Owner-only NPCs this plugin spawns (dedupe + cleanup). */
-  const OWNED_NPC_IDS = new Set([MAISA_NPC_ID, OSMAN_NPC_ID, GIANT_SCARAB_NPC_ID]);
+  const OWNED_NPC_IDS = new Set([
+    MAISA_NPC_ID,
+    OSMAN_NPC_ID,
+    OSMAN_DUNGEON_NPC_ID,
+    GIANT_SCARAB_NPC_ID,
+  ]);
 
   // ==========================================================================
   // Objects (no generated identifier exists; names from the gameval loc dump)
@@ -402,7 +411,7 @@ module.exports = function registerContactQuest(api) {
   function ensureDungeonOsman(player) {
     if (quest.getStage(player) !== STAGE_BOSS_DEAD) return;
     trackNpc(player, "osman", {
-      id: OSMAN_NPC_ID,
+      id: OSMAN_DUNGEON_NPC_ID,
       x: OSMAN_SPAWN.x,
       y: OSMAN_SPAWN.y,
       z: OSMAN_SPAWN.z,

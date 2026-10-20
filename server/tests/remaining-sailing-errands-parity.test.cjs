@@ -4,6 +4,7 @@ const { Server } = require('../dist/Server');
 Server.installProductionPathResolver();
 const { PluginManager } = require('../dist/plugins/PluginManager');
 const { BoatDeckArea } = require('../dist/game/content/sailing/BoatDeckArea');
+const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
 const runtime = require('../plugins/quests/QuestRuntime');
 const npcDialogues = require('../plugins/npcs/NpcDialogues.plugin.js');
 
@@ -282,6 +283,13 @@ test('Prying Times writes the real port task and only advances when the crate is
     if (event.key === 'pandemonium' || event.key === 'the_knights_sword') event.complete = true;
   }]);
   h.inventory.set(I.CAPTAINS_LOG, 1);
+  for (const login of h.hooks.logins) login({ player: h.player });
+  const steve = h.spawned.find((npc) => npc.getId() === 14967);
+  assert.ok(steve, 'Steve spawns as the cache base 14967');
+  assert.equal(h.spawned.some((npc) => npc.getId() === 14968), false, 'no resolved duplicate spawn');
+  assert.equal(CacheDefinitions.getNpc(14967).transformVarbit, 18314);
+  assert.equal(CacheDefinitions.resolveNpc(14967, { getVarbit: () => 0, getVarp: () => 0 }).id, 14968);
+  assert.equal(CacheDefinitions.resolveNpc(14967, { getVarbit: () => 19, getVarp: () => 0 }).id, 14969);
   assert.equal(h.hooks.variants[0]({ player: h.player, npcId: N.SQUAWKING_STEVE_BEANIE }), 'starting-off');
 
   h.action(N.SQUAWKING_STEVE_BEANIE, 'nbTB-L');
@@ -922,7 +930,23 @@ test('Troubled Tortugans mandatory spawns match capture coordinates and are path
   const N = h.core.NpcIdentifiers, I = h.core.ItemIdentifiers, R = h.core.RegionManager;
   assert.ok(h.persisted.some(([key, value]) => key === 'troubled-tortugans:stage-v2' && value === false));
 
-  h.emit('npc-dialogue:hook', { npcId: N.INJURED_TORTUGAN, hook: 'quest:troubled-tortugans:start' });
+  for (const login of h.hooks.logins) login({ player: h.player });
+  h.emit('npc-dialogue:hook', { npcId: 14986, hook: 'quest:troubled-tortugans:start' });
+  assert.equal(h.quest.getStage(h.player), 2, 'the raw island base id starts the quest');
+  assert.ok(h.spawned.some((npc) => npc.getId() === 14986), 'the island tortugan is the raw base 14986');
+  assert.equal(h.spawned.some((npc) => npc.getId() === 14990), false, 'no resolved duplicate spawn');
+  assert.equal(CacheDefinitions.getNpc(14986).transformVarbit, 18321);
+  assert.equal(CacheDefinitions.resolveNpc(14986, { getVarbit: () => 2, getVarp: () => 0 }).id, 14990);
+  assert.equal(CacheDefinitions.resolveNpc(14986, { getVarbit: () => 6, getVarp: () => 0 }).id, 14991);
+  assert.equal(CacheDefinitions.resolveNpc(14986, { getVarbit: () => 8, getVarp: () => 0 }).id, 14992);
+  assert.deepEqual(h.hooks.variants[0]({ player: h.player, npcId: 14986 }),
+    h.hooks.variants[0]({ player: h.player, npcId: N.INJURED_TORTUGAN }),
+    'raw and resolved island ids select the same dialogue');
+  assert.equal(CacheDefinitions.getNpc(14995).transformVarbit, 18321);
+  assert.equal(CacheDefinitions.resolveNpc(14995, { getVarbit: () => 12, getVarp: () => 0 }).id, 14998);
+  assert.deepEqual(h.hooks.variants[0]({ player: h.player, npcId: 14995 }),
+    h.hooks.variants[0]({ player: h.player, npcId: N.ELDER_KOREL }),
+    'raw and resolved docks Korel ids select the same dialogue');
   const seaweed = h.groundSpawns.find((spawn) => spawn.itemId === I.SEAWEED);
   assert.deepEqual({ x: seaweed.x, y: seaweed.y }, { x: 2962, y: 2600 });
   assert.equal(pathExists(R, [2962, 2604], [2962, 2600]), true, 'capture seaweed tile is reachable');

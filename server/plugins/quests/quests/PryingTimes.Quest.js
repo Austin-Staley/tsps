@@ -62,7 +62,9 @@ module.exports = function registerPryingTimesQuest(api) {
   const portTasks = require("../../skills/sailing/porttasks/Common.PortTasks");
   portTasks.init(api);
 
-  // NPCs (cache ids; NpcIdentifiers comments).
+  // NPCs (cache ids; NpcIdentifiers comments). Steve spawns as the base 14967,
+  // whose cache transform (sailing_intro 18314) publishes 14968/14969.
+  const STEVE_BASE_NPC_ID = 14967; // steve_beanie, multinpc 14968/14969
   const STEVE_NPC_ID = NpcIdentifiers.SQUAWKING_STEVE_BEANIE; // 14968
   const STEVE_NPC_ID_2 = NpcIdentifiers.SQUAWKING_STEVE_BEANIE_2; // 14969
   const THURGO_NPC_ID = NpcIdentifiers.THURGO; // 4733
@@ -737,7 +739,7 @@ module.exports = function registerPryingTimesQuest(api) {
     const existing = steveByPlayer.get(player);
     if (existing?.isRegistered?.()) return;
     const npc = api.spawnNpc({
-      id: STEVE_NPC_ID,
+      id: STEVE_BASE_NPC_ID,
       x: STEVE_SPAWN.x,
       y: STEVE_SPAWN.y,
       z: 0,

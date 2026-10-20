@@ -80,10 +80,18 @@ module.exports = function registerPandemoniumQuest(api) {
   // NPCs (cache ids; NpcIdentifiers comments).
   const WILL_NPC_ID = NpcIdentifiers.WILL; // 14959, the cached boat scene's Will
   const ANNE_NPC_ID = NpcIdentifiers.ANNE_3; // 14964, the cached boat scene's Anne
-  const WILL_DOCK_HEAD_ID = 14957;
-  const WILL_BOAT_HEAD_ID = 14958;
-  const ANNE_DOCK_HEAD_ID = 14962;
-  const ANNE_BOAT_HEAD_ID = 14963;
+  // Canonical base ids: the cache transform publishes the dialogue children above.
+  const WILL_DOCK_RAW_NPC_ID = 14957; // sailing_intro_will_sarim -> 14959
+  const WILL_BOAT_RAW_NPC_ID = 14958; // sailing_intro_will_boat -> 14959
+  const ANNE_DOCK_RAW_NPC_ID = 14962; // sailing_intro_anne_sarim -> 14964
+  const ANNE_BOAT_RAW_NPC_ID = 14963; // sailing_intro_anne_boat -> 14964
+  const STEVE_RAW_NPC_ID = 14967; // steve_beanie -> 14968/14969
+  const RIBS_RAW_NPC_ID = 14970; // sailing_intro_ribs -> 14971
+  const JIM_RAW_NPC_ID = 14972; // junior_jim -> 14974
+  const WILL_DOCK_HEAD_ID = WILL_DOCK_RAW_NPC_ID;
+  const WILL_BOAT_HEAD_ID = WILL_BOAT_RAW_NPC_ID;
+  const ANNE_DOCK_HEAD_ID = ANNE_DOCK_RAW_NPC_ID;
+  const ANNE_BOAT_HEAD_ID = ANNE_BOAT_RAW_NPC_ID;
   const OLD_GROG_HEAD_ID = 14976;
   const STEVE_NPC_ID = NpcIdentifiers.SQUAWKING_STEVE_BEANIE; // 14968
   const STEVE_NPC_ID_2 = NpcIdentifiers.SQUAWKING_STEVE_BEANIE_2; // 14969
@@ -465,8 +473,8 @@ module.exports = function registerPandemoniumQuest(api) {
     });
     if (!ship) return false;
     const deck = BoatManager.getDeck(ship.boat);
-    const will = StaticShips.addDeckNpc(ship, WILL_NPC_ID, TUTORIAL_WILL_TILE.x, TUTORIAL_WILL_TILE.y, player);
-    const anne = StaticShips.addDeckNpc(ship, ANNE_NPC_ID, TUTORIAL_ANNE_TILE.x, TUTORIAL_ANNE_TILE.y, player);
+    const will = StaticShips.addDeckNpc(ship, WILL_BOAT_RAW_NPC_ID, TUTORIAL_WILL_TILE.x, TUTORIAL_WILL_TILE.y, player);
+    const anne = StaticShips.addDeckNpc(ship, ANNE_BOAT_RAW_NPC_ID, TUTORIAL_ANNE_TILE.x, TUTORIAL_ANNE_TILE.y, player);
     StaticShips.board(player, ship);
     const helmTaken = atWreck || (stage >= STAGE_SAIL_ACCEPTED && player.getAttribute(TUTORIAL_HELM_ATTRIBUTE) === true);
     const sailsRaised = atWreck || (stage >= STAGE_SAIL_ACCEPTED && player.getAttribute(TUTORIAL_SAILS_ATTRIBUTE) === true);
@@ -529,7 +537,7 @@ module.exports = function registerPandemoniumQuest(api) {
 
   function ensureRibs(player) {
     if (ribsByPlayer.get(player)?.isRegistered?.()) return;
-    const npc = spawnOwnerNpc(RIBS_NPC_ID, RIBS_SPAWN_TILE, player);
+    const npc = spawnOwnerNpc(RIBS_RAW_NPC_ID, RIBS_SPAWN_TILE, player);
     if (npc) ribsByPlayer.set(player, npc);
   }
 
@@ -545,8 +553,9 @@ module.exports = function registerPandemoniumQuest(api) {
 
   function ensureSteve(player) {
     if (steveByPlayer.get(player)?.isRegistered?.()) return;
-    if (hasNpcNear(player, STEVE_NPC_ID, STEVE_SPAWN_TILE)) return;
-    const npc = spawnOwnerNpc(STEVE_NPC_ID, STEVE_SPAWN_TILE, player);
+    // Prying Times already owner-spawns the raw base 14967 here.
+    if (hasNpcNear(player, STEVE_RAW_NPC_ID, STEVE_SPAWN_TILE)) return;
+    const npc = spawnOwnerNpc(STEVE_RAW_NPC_ID, STEVE_SPAWN_TILE, player);
     if (npc) steveByPlayer.set(player, npc);
   }
 
