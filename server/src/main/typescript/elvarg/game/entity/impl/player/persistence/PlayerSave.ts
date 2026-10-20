@@ -132,6 +132,11 @@ export class PlayerSave {
     private fightType;
     private autocastSpellId: number;
     private autoRetaliate: boolean;
+    private bankNoteWithdrawal: boolean;
+    private bankInsertMode: boolean;
+    private bankQuantityMode: number;
+    private bankCustomQuantity: number;
+    private bankPlaceholders: boolean;
     private audioSettings: Record<number, number>;
     private hasVengeance: boolean;
     private lastVengeanceTimer: number;
@@ -562,6 +567,11 @@ export class PlayerSave {
         );
         player.getCombat().setCastSpell(null);
         player.setAutoRetaliate(this.autoRetaliate);
+        player.setNoteWithdrawal(this.bankNoteWithdrawal ?? false);
+        player.setInsertMode(this.bankInsertMode ?? false);
+        player.setBankQuantityMode(this.bankQuantityMode ?? 0);
+        player.setBankCustomQuantity(this.bankCustomQuantity ?? 0);
+        player.setPlaceholders(this.bankPlaceholders ?? false);
         player.setAudioSettings(this.audioSettings);
         player.setHasVengeance(this.hasVengeance);
         player.getVengeanceTimer().start(this.lastVengeanceTimer);
@@ -662,6 +672,11 @@ export class PlayerSave {
         playerSave.fightType = player.getFightType();
         playerSave.autocastSpellId = player.getCombat().getAutocastSpell()?.spellId?.() ?? -1;
         playerSave.autoRetaliate = player.autoRetaliateReturn();
+        playerSave.bankNoteWithdrawal = player.withdrawAsNote();
+        playerSave.bankInsertMode = player.insertModeReturn();
+        playerSave.bankQuantityMode = player.getBankQuantityMode();
+        playerSave.bankCustomQuantity = player.getBankCustomQuantity();
+        playerSave.bankPlaceholders = player.isPlaceholders();
         playerSave.audioSettings = { ...player.getAudioSettings() };
         playerSave.hasVengeance = player.hasVengeanceReturn();
         playerSave.lastVengeanceTimer = player.getVengeanceTimer().secondsRemaining();

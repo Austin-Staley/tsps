@@ -27,6 +27,55 @@ test("a snapshot retains trade escrow without changing the live trade", () => {
   }
 });
 
+test("bank preferences survive a save and load", () => {
+  const player = new Player(null);
+  player.setNoteWithdrawal(true);
+  player.setInsertMode(true);
+  player.setBankQuantityMode(4);
+  player.setBankCustomQuantity(137);
+  player.setPlaceholders(true);
+
+  const save = PlayerSave.fromPlayer(player);
+  const loaded = new Player(null);
+  save.applyToPlayer(loaded);
+
+  assert.equal(loaded.withdrawAsNote(), true);
+  assert.equal(loaded.insertModeReturn(), true);
+  assert.equal(loaded.getBankQuantityMode(), 4);
+  assert.equal(loaded.getBankCustomQuantity(), 137);
+  assert.equal(loaded.isPlaceholders(), true);
+
+  const resaved = PlayerSave.fromPlayer(loaded);
+  assert.equal(resaved.bankNoteWithdrawal, true);
+  assert.equal(resaved.bankInsertMode, true);
+  assert.equal(resaved.bankQuantityMode, 4);
+  assert.equal(resaved.bankCustomQuantity, 137);
+  assert.equal(resaved.bankPlaceholders, true);
+});
+
+test("older saves without bank preferences retain the defaults", () => {
+  const save = PlayerSave.fromPlayer(new Player(null));
+  delete save.bankNoteWithdrawal;
+  delete save.bankInsertMode;
+  delete save.bankQuantityMode;
+  delete save.bankCustomQuantity;
+  delete save.bankPlaceholders;
+
+  const loaded = new Player(null);
+  loaded.setNoteWithdrawal(true);
+  loaded.setInsertMode(true);
+  loaded.setBankQuantityMode(4);
+  loaded.setBankCustomQuantity(137);
+  loaded.setPlaceholders(true);
+  save.applyToPlayer(loaded);
+
+  assert.equal(loaded.withdrawAsNote(), false);
+  assert.equal(loaded.insertModeReturn(), false);
+  assert.equal(loaded.getBankQuantityMode(), 0);
+  assert.equal(loaded.getBankCustomQuantity(), 0);
+  assert.equal(loaded.isPlaceholders(), false);
+});
+
 test("an older save's player fields load as attributes and are saved back as attributes", () => {
   const save = Object.assign(PlayerSave.fromPlayer(new Player(null)), {
     pcPoints: 250,
