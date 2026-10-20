@@ -156,26 +156,46 @@ function isSmeltingActive(player) {
   return Sessions.typeOf(player) === "smelt";
 }
 
-function openMenu(player, recipes) {
+/** Other furnace products (cannonballs) offered beside the bars: (player) => [{ itemId, most, start }]. */
+const MENU_EXTRAS = [];
+
+function addMenuEntries(provider) {
+  MENU_EXTRAS.push(provider);
+}
+
+function extraEntries(player) {
+  return MENU_EXTRAS.flatMap((provider) => provider(player));
+}
+
+/** entries: [{ itemId, most, start(player, amount) }], shown in order. */
+function openMenu(player, entries) {
   const { CreationMenu } = Core;
-  const byBar = new Map(recipes.map((recipe) => [recipe.barId, recipe]));
-  const most = Math.max(1, ...recipes.map((recipe) => batches(player, resolveRecipe(player, recipe))));
+  const byItem = new Map(entries.map((entry) => [entry.itemId, entry]));
+  const most = Math.max(1, ...entries.map((entry) => entry.most));
   player.getPacketSender().sendCreationMenu(
-    new CreationMenu(SMELT_TITLE, [...byBar.keys()], { execute: (barId, amount) => startSmelting(player, byBar.get(barId), amount) }, {
+    new CreationMenu(SMELT_TITLE, [...byItem.keys()], { execute: (itemId, amount) => byItem.get(itemId)?.start(player, amount) }, {
       maxAmount: Math.min(most, MAX_QUANTITY),
     })
   );
 }
 
-/** "Smelt" on a furnace: the menu lists every bar; with no ore at all, a message box instead. */
+function recipeEntries(player, recipes) {
+  return recipes.map((recipe) => ({
+    itemId: recipe.barId,
+    most: batches(player, resolveRecipe(player, recipe)),
+    start: (smelter, amount) => startSmelting(smelter, recipe, amount),
+  }));
+}
+
+/** "Smelt" on a furnace: the menu lists every bar; with nothing to smelt, a message box instead. */
 function smelt({ player }) {
-  const recipes = Data.smeltMenuRecipes();
   const hasOre = Data.SMELTING_RECIPES.some((recipe) => !recipe.skill && recipe.ingredients.some(([id]) => id !== Core.ItemIdentifiers.COAL && available(player, id) > 0));
-  if (!hasOre) {
+  const extras = extraEntries(player);
+  if (!hasOre && extras.length === 0) {
     statement(player, NO_ORE_MESSAGE);
     return;
   }
-  openMenu(player, recipes);
+  openMenu(player, [...recipeEntries(player, Data.smeltMenuRecipes()), ...extras]);
 }
 
 /**
@@ -187,7 +207,7 @@ function useOnFurnace(event) {
   if (recipes.length === 0) return;
   event.handled = true;
   const offMenu = recipes.filter((recipe) => recipe.notInMenu);
-  if (offMenu.length > 0) openMenu(event.player, offMenu);
+  if (offMenu.length > 0) openMenu(event.player, recipeEntries(event.player, offMenu));
   else smelt(event);
 }
 
@@ -214,4 +234,7 @@ Object.assign(module.exports, {
   startSmelting,
   isSmeltingActive,
   useOnFurnace,
+  addMenuEntries,
+  openMenu,
+  statement,
 });

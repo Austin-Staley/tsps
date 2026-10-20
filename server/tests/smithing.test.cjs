@@ -337,3 +337,36 @@ test("blurite needs The Knight's Sword", () => {
   assert.equal(player.items.get(I.BLURITE_BAR), 1);
   assert.equal(player.xp, 8);
 });
+
+// Cannonballs (Wiki): 4 a bar in an ammo mould, 8 for two bars in a double mould, 8 ticks then 10.
+test("cannonballs pour from bars in an ammo mould after Dwarf Cannon", () => {
+  const player = furnaceWith([[I.STEEL_BAR, 3], [I.AMMO_MOULD, 1]]);
+  objects.get("Furnace").Smelt({ player });
+  assert.ok(lastMenu(player).getItems().includes(I.STEEL_CANNONBALL));
+  lastMenu(player).execute(I.STEEL_CANNONBALL, 2);
+  ticks(10);
+  assert.equal(player.items.get(I.STEEL_CANNONBALL) ?? 0, 0);
+  assert.match(player.messages.at(-1), /Dwarf Cannon/);
+
+  player.quests = new Set(["dwarf_cannon"]);
+  itemOnObject({ player, itemId: I.STEEL_BAR, object: furnace });
+  assert.deepEqual(lastMenu(player).getItems(), [I.STEEL_CANNONBALL]);
+  lastMenu(player).execute(I.STEEL_CANNONBALL, 2);
+  ticks(8);
+  assert.equal(player.items.get(I.STEEL_CANNONBALL) ?? 0, 0);
+  ticks(1);
+  assert.equal(player.items.get(I.STEEL_CANNONBALL), 4);
+  assert.equal(player.xp, 25.6);
+  ticks(10);
+  assert.equal(player.items.get(I.STEEL_CANNONBALL), 8);
+  assert.equal(player.items.get(I.STEEL_BAR), 1);
+
+  const double = furnaceWith([[I.MITHRIL_BAR, 3], [I.DOUBLE_AMMO_MOULD, 1]]);
+  double.quests = new Set(["dwarf_cannon"]);
+  itemOnObject({ player: double, itemId: I.MITHRIL_BAR, object: furnace });
+  lastMenu(double).execute(I.MITHRIL_CANNONBALL, 5);
+  ticks(40);
+  assert.equal(double.items.get(I.MITHRIL_CANNONBALL), 12);
+  assert.equal(double.items.get(I.MITHRIL_BAR), 0);
+  assert.equal(double.xp, 34 * 3);
+});

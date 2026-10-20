@@ -1,20 +1,21 @@
 /**
  * Smithing: smelting at furnaces and smithing at anvils. The units live in smithing/:
- * Data (cache products + data/smithing.json), Sessions (the make-X loops), Smelting, Anvil and
- * Superheat. docs/smithing.md has the sources.
+ * Data (cache products + data/smithing.json), Sessions (the make-X loops), Smelting, Anvil,
+ * Cannonballs and Superheat. docs/smithing.md has the sources.
  */
 const Core = require("./smithing/Core.Smithing");
 const Data = require("./smithing/Data.Smithing");
 const Sessions = require("./smithing/Sessions.Smithing");
 const Smelting = require("./smithing/Smelting.Smithing");
 const Anvil = require("./smithing/Anvil.Smithing");
+const Cannonballs = require("./smithing/Cannonballs.Smithing");
 const Superheat = require("./smithing/Superheat.Smithing");
 
 const FURNACE_NAMES = new Set(["Furnace", "Small furnace"]);
 
 function useItemOnObject(event) {
   const name = event.object.getDefinition().getName();
-  if (FURNACE_NAMES.has(name)) Smelting.useOnFurnace(event);
+  if (FURNACE_NAMES.has(name)) Cannonballs.useOnFurnace(event) || Smelting.useOnFurnace(event);
   else if (Anvil.ANVIL_NAMES.includes(name)) Anvil.useOnAnvil(event);
 }
 
@@ -55,6 +56,7 @@ module.exports = {
     api.onItemOnObject(useItemOnObject, { noted: false });
     Smelting(api);
     Anvil(api);
+    Cannonballs(api);
     Superheat(api);
   },
 };

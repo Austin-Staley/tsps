@@ -22,6 +22,7 @@ const BAR_TYPE_BY_BAR = new Map(layout.bars.map(({ barType, bar }) => [bar, barT
 
 let core = null;
 let products = null;
+let cannonballList = null;
 
 /** Resolves the item names in smithing.json. Safe to call again; any plugin's `api.core` will do. */
 function load(apiCore) {
@@ -84,6 +85,18 @@ function productsByBar() {
   return products;
 }
 
+/** The cannonball each bar pours into: { ballId, barId, metal, level, xpPerBar }. */
+function cannonballs() {
+  cannonballList ??= data.cannonballs.map((entry) => ({
+    ballId: core.ItemIdentifiers[entry.ball],
+    barId: core.ItemIdentifiers[entry.bar],
+    metal: entry.bar.replace(/_BAR$/, "").toLowerCase(),
+    level: entry.level,
+    xpPerBar: entry.xpPerBar,
+  }));
+  return cannonballList;
+}
+
 function questName(key) {
   return data.questNames[key] ?? key;
 }
@@ -106,4 +119,5 @@ module.exports = {
   productsFor,
   anvilBars,
   questName,
+  cannonballs,
 };
