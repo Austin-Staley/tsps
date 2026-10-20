@@ -11,6 +11,7 @@ const DriftNets = require("./DriftNets.Hunter");
 const DRIFT_NET_TUNNEL = 30958;
 const ENTERS_LINE = "The player enters the drift net fishing instance.";
 const PERMANENT_LINE = "Thanks - no more entry fees for you!";
+const PAY_TEXT = "200 numulites to Ceto";
 
 function isCeto(npcId) {
   return npcId === H.core.NpcIdentifiers.CETO;
@@ -51,7 +52,7 @@ function condition({ player, npcId, text }) {
 /** "gives 200 numulites to Ceto" pays for the day; "enters the instance" goes in. */
 function action(event) {
   if (!isCeto(event.npcId) || event.kind === "message") return;
-  if (event.action === "give" && /200 numulites/.test(event.text)) {
+  if (event.action === "give" && event.text === PAY_TEXT) {
     event.handled = true;
     if (!DriftNets.buyDay(event.player)) event.end = true;
   } else if (event.text === ENTERS_LINE) {
@@ -81,9 +82,8 @@ function pay({ player, npc }) {
 
 function tunnel(event, variant) {
   if (event.object?.getId() !== DRIFT_NET_TUNNEL) return false;
-  if (!C.nearby(event.player, event.object)) return true;
-  if (DriftNets.state(event.player).until === -1) DriftNets.enter(event.player);
-  else play(event.player, null, variant);
+  // The transcript checks levels first, then lets permanent access straight in.
+  if (C.nearby(event.player, event.object)) play(event.player, null, variant);
   return true;
 }
 
@@ -95,4 +95,4 @@ function tunnelPay(event) {
   return tunnel(event, "entering-the-tunnel-right-click-pay-option");
 }
 
-module.exports = { condition, action, line, pay, tunnelEnter, tunnelPay, DRIFT_NET_TUNNEL };
+module.exports = { condition, action, line, pay, tunnelEnter, tunnelPay, DRIFT_NET_TUNNEL, ENTERS_LINE, PERMANENT_LINE, PAY_TEXT };

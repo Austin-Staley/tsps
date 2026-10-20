@@ -35,12 +35,15 @@ function materials(def, player) {
   return [[def.item, 1]];
 }
 
-// Nickolaus teaches box traps at the camp once he is rescued (Eagles' Peak stage 6); the Wiki
-// asks only for partial completion. ponytail: no captured refusal; the message is ours.
+// The Wiki asks for partial completion of Eagles' Peak: Nickolaus teaches box traps at the camp.
+// EaglesPeak.Quest.js's stage table: 6 (STAGE_RESCUED) puts him at the camp for the ferret lesson,
+// 8 completes the quest. The quest runtime keeps the stage in this attribute, so the stage alone
+// decides (questComplete's ">= 2" fallback would let stages 2-5 through).
+// ponytail: no captured refusal; the message is ours.
 const EAGLES_PEAK_BOX_TRAP_STAGE = 6;
 
 function boxTrapsUnlocked(player) {
-  return questComplete(player, "eagles_peak") || questStage(player, "eagles_peak") >= EAGLES_PEAK_BOX_TRAP_STAGE;
+  return questStage(player, "eagles_peak") >= EAGLES_PEAK_BOX_TRAP_STAGE;
 }
 
 function canLay(player, kind, location, base, ground) {

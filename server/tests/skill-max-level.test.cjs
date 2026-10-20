@@ -415,6 +415,19 @@ test("Hunter cache data, trap ownership, transactions, cancellation and persiste
     assert.equal(cetoSays("If the player has paid to access for the day:"), true);
     assert.equal(cetoSays("If the player has paid for permanent access:"), false);
     assert.equal(Ceto.condition({ player: q, npcId: core.NpcIdentifiers.ANNETTE, text: "If the player has paid for permanent access:" }), null);
+    // The lines the payments hang on are the transcript's own words.
+    const transcript = JSON.stringify(require("../data/definitions/npc-dialogues.json").Ceto);
+    for (const words of [Ceto.PAY_TEXT, Ceto.ENTERS_LINE, Ceto.PERMANENT_LINE]) assert.ok(transcript.includes(JSON.stringify(words)), words);
+    Drift.state(q).until = 0; q.counts.set(I.NUMULITE, 200);
+    const give = { player: q, npcId: core.NpcIdentifiers.CETO, action: "give", text: Ceto.PAY_TEXT, handled: false };
+    Ceto.action(give);
+    assert.ok(give.handled && !give.end && Drift.state(q).until > Date.now(), "the give step pays for the day");
+    const broke = { player: q, npcId: core.NpcIdentifiers.CETO, action: "give", text: Ceto.PAY_TEXT, handled: false };
+    Ceto.action(broke); assert.ok(broke.end, "no numulites ends the conversation");
+    q.counts.set(I.NUMULITE, 20000);
+    const thanks = { player: q, npcId: core.NpcIdentifiers.CETO, text: Ceto.PERMANENT_LINE, skip: false };
+    Ceto.line(thanks);
+    assert.equal(Drift.state(q).until, -1); assert.equal(q.counts.has(I.NUMULITE), false);
     q.equipment.clear();q.counts.clear();q.moveTo(new core.Location(1370,3620));q.counts.set(I.KING_WORM,2);
     Aerial.borrow({player:q});const spot=prey(core.NpcIdentifiers.FISHING_SPOT_12,q.getLocation().clone().add(2,0));
     const preAerial=q.experience.get(Skill.HUNTER);Aerial.fish({player:q,npc:spot,npcId:spot.getId()});advance(1);

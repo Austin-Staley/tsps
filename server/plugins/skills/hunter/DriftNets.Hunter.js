@@ -92,7 +92,7 @@ function buyPermanent(player) {
 
 function login({ player }) {
   const l = player.getLocation();
-  if (l.getZ() === 1 && l.getX() >= 3730 && l.getX() <= 3752 && l.getY() >= 10285 && l.getY() <= 10305) {
+  if (inCavern(l)) {
     if (permitted(player) && (state(player).until === -1 || state(player).until > Date.now())) enter(player);
     else player.moveTo(new H.core.Location(...OUTSIDE_TILE));
   }
@@ -295,8 +295,16 @@ function cleanup({ player }) {
   session.area.destroy();
 }
 
+function inCavern(location) {
+  return location.getZ() === 1 && location.getX() >= 3730 && location.getX() <= 3752 && location.getY() >= 10285 && location.getY() <= 10305;
+}
+
 // ponytail: one passive shoal per minute; exact passive timing is unpublished.
 function process() {
+  // Drowning, a teleport or anything else that moves a player out of the cavern ends their session.
+  for (const [player, session] of sessions) {
+    if (!player.isRegistered() || player.getPrivateArea() !== session.area || !inCavern(player.getLocation())) cleanup({ player });
+  }
   for (const [npc, run] of chasing) {
     const net = state(run.player).nets[run.id], target = anchor(run.player, run.id);
     if (H.tick >= run.due || !npc.isRegistered() || !npc.isVisible() || !C.active(run.player)
