@@ -12,17 +12,16 @@
 const Common = require("./Common.DagannothKings");
 const Hud = require("./Hud.DagannothKings");
 
-/** [minX, minY, maxX, maxY] of each lair island. */
-const PUBLIC = [2894, 4430, 2932, 4470];
-const TASK = [2894, 4366, 2932, 4406];
-
 function areaClass() {
   const { Area, Boundary } = Common.core;
   return class DagannothKingsArea extends Area {
     constructor() {
+      // Bounds live in the data file (Common.PUBLIC_LAIR / Common.TASK_LAIR).
+      const publicLair = Common.PUBLIC_LAIR;
+      const taskLair = Common.TASK_LAIR;
       super([
-        new Boundary(PUBLIC[0], PUBLIC[2], PUBLIC[1], PUBLIC[3], 0),
-        new Boundary(TASK[0], TASK[2], TASK[1], TASK[3], 0),
+        new Boundary(publicLair.minX, publicLair.maxX, publicLair.minY, publicLair.maxY, 0),
+        new Boundary(taskLair.minX, taskLair.maxX, taskLair.minY, taskLair.maxY, 0),
       ]);
     }
 
@@ -69,4 +68,4 @@ function attach(api) {
   api.registerArea(area);
 }
 
-module.exports = { attach, areaClass, playersInside, PUBLIC, TASK };
+module.exports = { attach, areaClass, playersInside };

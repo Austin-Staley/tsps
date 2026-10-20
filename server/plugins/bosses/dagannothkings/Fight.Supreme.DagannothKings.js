@@ -39,7 +39,8 @@ function methodClass() {
 
     hits(character, target) {
       const victims = [target];
-      for (const player of Common.playersAround(character, target.getLocation(), Common.SUPREME_SPLASH_RADIUS)) {
+      const at = target.getLocation();
+      for (const player of Common.playersAround(character, at, Common.SUPREME_SPLASH_RADIUS, Common.SUPREME_DISTANCE + Common.SUPREME_SPLASH_RADIUS)) {
         if (player !== target) victims.push(player);
       }
       return victims.map((victim) => new PendingHit(character, victim, this, Common.HIT_DELAY.supreme));

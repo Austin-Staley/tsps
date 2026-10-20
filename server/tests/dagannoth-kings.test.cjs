@@ -45,7 +45,7 @@ const api = new Proxy(
     core,
     persistAttribute: () => {},
     registerArea: (area) => areas.push(area),
-    registerNpcCombatMethodProvider: (ids, method) => combatProviders.push({ ids, method }),
+    registerNpcCombatMethodProvider: (ids, method, options) => combatProviders.push({ ids, method, options }),
     onCombatHitRoll: (handler) => hitRollHandlers.push(handler),
     onCanAttack: (handler) => canAttackHandlers.push(handler),
     onCombatHitResolved: (handler) => hitResolvedHandlers.push(handler),
@@ -181,21 +181,36 @@ test("each king fights its own style at its own range and speed", () => {
   assert.equal(rex.attackDistance(), 1);
   assert.equal(rex.attackSpeed(), 4);
   assert.ok(Common.SPINOLYP_IDS.every((id) => byId.has(id)), "every spinolyp form needs the method");
+  // Spinolyps share a room and attack on the same tick, so each needs its own method
+  // instance (this.style lives on it between start and the landing hit).
+  const spinolypRegistration = combatProviders.find(({ ids }) => ids.includes(Common.SPINOLYP_IDS[0]));
+  assert.deepEqual(spinolypRegistration.options, { singleton: false });
+  for (const { ids, options } of combatProviders) {
+    if (ids.some((id) => Common.KING_IDS.includes(id))) assert.equal(options, undefined);
+  }
 });
 
 test("Prime splashes his 3x3 around the target", () => {
   const at = (x, y) => new Location(x, y, 0);
   const seen = new Map();
+  const fetched = [];
   const npc = {
     ...fakeNpc(Common.PRIME_ID, 2911, 4451),
-    getPlayersWithinDistance: () => [...seen.values()],
+    getPlayersWithinDistance: (radius) => {
+      fetched.push(radius);
+      return [...seen.values()];
+    },
     getPrivateArea: () => null,
   };
   const target = { getLocation: () => at(2900, 4449), getHitpoints: () => 99, getPrivateArea: () => null };
   const nextTo = { getLocation: () => at(2901, 4449), getHitpoints: () => 99, getPrivateArea: () => null };
   const far = { getLocation: () => at(2905, 4449), getHitpoints: () => 99, getPrivateArea: () => null };
   for (const [name, player] of [["target", target], ["nextTo", nextTo], ["far", far]]) seen.set(name, player);
-  const victims = Common.playersAround(npc, target.getLocation(), Common.PRIME_SPLASH_RADIUS);
+  // Fetching covers the target's splash zone, not just the king's own tile: the
+  // target can stand a full attack range away (bug: fetching only radius 1 here
+  // used to miss everyone except players hugging the boss).
+  const victims = Common.playersAround(npc, target.getLocation(), Common.PRIME_SPLASH_RADIUS, Common.PRIME_DISTANCE + Common.PRIME_SPLASH_RADIUS);
+  assert.deepEqual(fetched, [Common.PRIME_DISTANCE + Common.PRIME_SPLASH_RADIUS]);
   assert.ok(victims.includes(target));
   assert.ok(victims.includes(nextTo));
   assert.ok(!victims.includes(far));
@@ -295,14 +310,13 @@ test("spinolyps dive and re-emerge, and water cannot be attacked", () => {
 });
 
 test("the ladder takes players down, gates the task lair, and peeks", () => {
-  // The interaction carries the resolved multiloc child, so all three ids hook.
-  for (const id of [Common.LADDER_ID, 40417, 40418]) {
-    assert.ok(objectClicks[`${id}:1`], `Standard missing for ${id}`);
-    assert.ok(objectClicks[`${id}:2`], `Slayer missing for ${id}`);
-    assert.ok(objectClicks[`${id}:3`], `Private missing for ${id}`);
-    assert.ok(objectClicks[`${id}:4`], `Peek missing for ${id}`);
-  }
-  assert.ok(objectClicks[`${Common.EXIT_LADDER_ID}:1`], "exit missing");
+  // The interaction carries the multiloc id 3831 (verified live: entry, gate and
+  // Peek all fired on it). A name hook cannot work here - the server-side definition
+  // has no name or options; those live on the resolved children, client-side only.
+  assert.deepEqual(
+    Object.keys(objectClicks).sort(),
+    [`${Common.EXIT_LADDER_ID}:1`, `${Common.LADDER_ID}:1`, `${Common.LADDER_ID}:2`, `${Common.LADDER_ID}:3`, `${Common.LADDER_ID}:4`].sort()
+  );
   const moved = [];
   const player = {
     getLocation: () => new Location(1910, 4367, 0),

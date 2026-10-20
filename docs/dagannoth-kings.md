@@ -24,7 +24,7 @@ all three kings.
 | File | What it owns |
 | --- | --- |
 | `Common.DagannothKings.js` | Ids, tiles, animations, projectiles, sounds, small helpers. |
-| `Fight.Prime.DagannothKings.js` | Prime's AoE magic (water wave, max 50, typeless-prayer note below). |
+| `Fight.Prime.DagannothKings.js` | Prime's AoE magic (water wave, max 50, prayable). |
 | `Fight.Supreme.DagannothKings.js` | Supreme's multi-target ranged (spine, max 30). |
 | `Fight.Rex.DagannothKings.js` | Rex's melee (max 26, walks up to the player). |
 | `Fight.Spinolyp.DagannothKings.js` | Spinolyp ranged (poison) and magic (prayer drain). |
@@ -63,10 +63,13 @@ implemented); the task lair needs no modal.
 - **Cache (rev 241):** NPCs 2265/2266/2267; SEQs 2852-2856
 (`dagannoth_meganoth_defend/melee/mage/range/death`); spotanims 162
 `waterwave_travel`, 475/476 `dagannoth_spine_spotanim_travel[/travel2]`, 474
-`dagannoth_arrow_spotanim_hit`, 477 `dagannoth_whirlpool`; locs 3831 (multiloc:
-40417/40418 "Kings' ladder": Standard/Slayer[/Private]/Peek) and 10229 (Climb-up
-ladders in both lairs); `monsters-complete.json`: 255 HP, max 30/50/26, speed 4,
-Aggressive, size 3, spinolyps max 10 speed 4 aggressive.
+`dagannoth_arrow_spotanim_hit`, 477 `dagannoth_whirlpool`; loc 3831 (multiloc
+whose resolved children 40417/40418 are named "Kings' ladder" with
+Standard/Slayer[/Private]/Peek - but only 3831 ever arrives as an interaction,
+so only it is hooked; a name hook cannot work as the server-side definition is
+unnamed) and 10229 (Climb-up ladders in both lairs); `monsters-complete.json`:
+255 HP, max 30/50/26, speed 4, Aggressive, size 3, spinolyps max 10 speed 4
+aggressive.
 - **Wiki corrections applied:** respawn 150 ticks (90s) over ReasonPS' 25 (the
 captures' kill gaps and the strategies' rotation downtime agree); attack range 12
 for Prime (captured at 11; ReasonPS says 6) and 10 for Supreme (captured 7+);

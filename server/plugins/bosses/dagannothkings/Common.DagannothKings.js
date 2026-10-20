@@ -14,10 +14,11 @@ const REX_ID = DATA.npcs.rex;
 const SPINOLYP_IDS = Object.freeze([...DATA.npcs.spinolyp]);
 const WATER_IDS = Object.freeze([...DATA.npcs.spinolypWater]);
 
-/** Cache: the Kings' ladder. 3831 is the multiloc; interactions carry the resolved
- * child (40417/40418, both "Kings' ladder"), so all three ids hook. */
+/** Cache: the Kings' ladder multiloc. 3831's own definition is unnamed and optionless;
+ * the names and options live on its resolved children (40417/40418), which never exist
+ * as server objects - the interaction event carries 3831, verified live. A name-based
+ * hook cannot work here: the server-side definition has no name to match. */
 const LADDER_ID = DATA.locs.ladder;
-const LADDER_IDS = Object.freeze([3831, 40417, 40418]);
 /** Cache: the Climb-up ladders back out of each lair. */
 const EXIT_LADDER_ID = DATA.locs.exitLadder;
 
@@ -28,6 +29,8 @@ const PUBLIC_SPAWN = Object.freeze([...DATA.lairs.public.spawnTile]);
 const TASK_SPAWN = Object.freeze([...DATA.lairs.task.spawnTile]);
 /** Dungeon side: the player stands here before climbing down. */
 const OUTSIDE_TILE = Object.freeze([...DATA.outsideTile]);
+/** The ladder's own tile, as clicked in captures 89/3433 (oploc 3831 at 1911, 4367). */
+const ENTRANCE_TILE = Object.freeze([...DATA.entranceTile]);
 /** The ::teleports landing, by the ladder room. */
 const TELEPORT_TILE = Object.freeze([...DATA.teleportTile]);
 
@@ -134,10 +137,13 @@ function edgeDistance(base, npcSize, pos) {
   return Math.max(dx, dy);
 }
 
-/** Players within `radius` tiles (Chebyshev) of `at`, alive, in the same area. */
-function playersAround(npc, at, radius) {
+/** Players within `radius` tiles (Chebyshev) of `at`, alive, in the same area.
+ * `fetchRadius` is how far from the NPC to look: splash victims cluster around the
+ * target, which can stand up to a full attack range away (getPlayersWithinDistance
+ * measures from the NPC, not from `at`). */
+function playersAround(npc, at, radius, fetchRadius = radius) {
   const area = npc.getPrivateArea?.() ?? null;
-  return npc.getPlayersWithinDistance(radius).filter((player) =>
+  return npc.getPlayersWithinDistance(fetchRadius).filter((player) =>
     player.getPrivateArea?.() === area
     && tileDistance(player.getLocation(), at) <= radius
     && player.getHitpoints() > 0);
@@ -145,7 +151,7 @@ function playersAround(npc, at, radius) {
 
 module.exports = {
   DATA, SUPREME_ID, PRIME_ID, REX_ID, SPINOLYP_IDS, WATER_IDS, KING_IDS,
-  LADDER_ID, LADDER_IDS, EXIT_LADDER_ID,
+  LADDER_ID, EXIT_LADDER_ID, ENTRANCE_TILE,
   PUBLIC_LAIR, TASK_LAIR, PUBLIC_SPAWN, TASK_SPAWN, OUTSIDE_TILE, TELEPORT_TILE,
   AGGRO_TILES, ANIM, PROJECTILE, PRIME_CAST_SOUND, SUPREME_IMPACT_SOUND,
   ATTACK_SPEED, PRIME_DISTANCE, SUPREME_DISTANCE,

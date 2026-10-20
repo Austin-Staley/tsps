@@ -4,10 +4,11 @@
  * Spinolyps diving (see ../DagannothKings.plugin.js for behaviour and sources).
  *
  * Wiki (Spinolyp): they turn into level-34 suspicious water, becoming non-attackable
- * ("You can't attack this npc."), and emerge again after a while. ReasonPS dives on
- * unblocked damage taken (1/3) and after its own attacks (1/7): dive anim, transform
- * to the paired water form, wait, teleport nearby, transform back, emerge.
- * The pairing is order-matched (an estimate); the anims and waits are ReasonPS'.
+ * ("You can't attack this npc."), and emerge again after a while; the Wiki pairs the
+ * surfaced and submerged forms in order (5947/5961/5963 with 5946/5948/5962).
+ * Trigger chances, style odds, wait lengths and the dive/emerge anims have no Wiki or
+ * capture source: they follow the only available implementation (ReasonPS) as
+ * behavior-oracle estimates, stated as such in the PR.
  */
 const Common = require("./Common.DagannothKings");
 
@@ -53,14 +54,21 @@ function emerge(npc) {
   const waterId = submerged.get(npc);
   if (waterId === undefined) return;
   submerged.delete(npc);
-  if (!npc.isRegistered?.() || (npc.getHitpoints?.() ?? 1) <= 0) return;
+  // Restore the surfaced form even for a corpse: the engine clears transformations on
+  // death anyway (NPCDeathTask), and this keeps a poisoned water death from respawning
+  // stuck as water.
   const homeId = Common.EMERGE_PAIRS.get(waterId) ?? npc.getId?.();
+  try {
+    if (Number.isInteger(homeId)) npc.setNpcTransformationId?.(homeId);
+  } catch {
+    // Best-effort; the engine's death cleanup is the backstop.
+  }
+  if (!npc.isRegistered?.() || (npc.getHitpoints?.() ?? 1) <= 0) return;
   try {
     const at = npc.getLocation();
     const dx = core.Misc.randomInclusive(-2, 2);
     const dy = core.Misc.randomInclusive(-2, 2);
     npc.moveTo?.(new core.Location(at.getX() + dx, at.getY() + dy, at.getZ()));
-    npc.setNpcTransformationId?.(homeId);
     npc.performAnimation?.(new core.Animation(Common.ANIM.spinolypEmerge));
   } catch {
     // Garrison the visuals: the transform above is the behaviour.

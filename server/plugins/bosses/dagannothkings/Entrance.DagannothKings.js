@@ -17,11 +17,12 @@ const Hud = require("./Hud.DagannothKings");
 
 /** Only the ladder room's Kings' ladder takes players down; every other ladder is untouched. */
 function isEntrance(event) {
-  if (!Common.LADDER_IDS.includes(event?.objectId)) return false;
+  if (event?.objectId !== Common.LADDER_ID) return false;
   const at = event?.location;
   if (!at) return false;
-  const dx = at.x - 1911;
-  const dy = at.y - 4367;
+  const [tileX, tileY] = Common.ENTRANCE_TILE;
+  const dx = at.x - tileX;
+  const dy = at.y - tileY;
   return dx * dx + dy * dy <= 10 * 10;
 }
 
@@ -85,12 +86,10 @@ function climbOut({ player, location, objectId }) {
 }
 
 function attach(api) {
-  for (const id of Common.LADDER_IDS) {
-    api.onObjectClick(id, 1, goPublic);
-    api.onObjectClick(id, 2, goTask);
-    api.onObjectClick(id, 3, goPrivate);
-    api.onObjectClick(id, 4, peek);
-  }
+  api.onObjectClick(Common.LADDER_ID, 1, goPublic);
+  api.onObjectClick(Common.LADDER_ID, 2, goTask);
+  api.onObjectClick(Common.LADDER_ID, 3, goPrivate);
+  api.onObjectClick(Common.LADDER_ID, 4, peek);
   api.onObjectClick(Common.EXIT_LADDER_ID, 1, climbOut);
 }
 

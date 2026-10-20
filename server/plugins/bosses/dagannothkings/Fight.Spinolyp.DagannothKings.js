@@ -75,8 +75,10 @@ function wearsSpectral(player) {
     || id === ItemIdentifiers.SPECTRAL_SPIRIT_SHIELD_3;
 }
 
+// One method instance per spinolyp: the style lives on `this` between start() and
+// the landing hit, and several spinolyps share the room and attack on the same tick.
 function attach(api) {
-  api.registerNpcCombatMethodProvider([...Common.SPINOLYP_IDS], methodClass());
+  api.registerNpcCombatMethodProvider([...Common.SPINOLYP_IDS], methodClass(), { singleton: false });
 }
 
 module.exports = { attach, methodClass, wearsSpectral };

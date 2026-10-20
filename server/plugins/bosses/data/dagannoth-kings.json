@@ -23,6 +23,7 @@
   },
   "outsideTile": [1910, 4367, 0],
   "teleportTile": [1908, 4367, 0],
+  "entranceTile": [1911, 4367, 0],
   "combat": {
     "attackSpeed": 4,
     "primeDistance": 12,
