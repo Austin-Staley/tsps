@@ -370,3 +370,43 @@ test("cannonballs pour from bars in an ammo mould after Dwarf Cannon", () => {
   assert.equal(double.items.get(I.MITHRIL_BAR), 0);
   assert.equal(double.xp, 34 * 3);
 });
+
+test("Shayzien armour from lovakite and keel parts after Pandemonium use the Wiki experience", () => {
+  const lovakite = playerWith(I.LOVAKITE_BAR, 4);
+  open(lovakite);
+  assert.equal(click(lovakite, 13), true); // Platebody (1): 4 bars, 240 XP
+  ticks(4);
+  assert.equal(lovakite.items.get(I.SHAYZIEN_PLATEBODY_1_), 1);
+  assert.equal(lovakite.xp, 240);
+
+  const keel = playerWith(I.STEEL_BAR, 5);
+  keel.quests = new Set(["pandemonium"]);
+  open(keel);
+  assert.equal(click(keel, 36), true);
+  ticks(4);
+  assert.equal(keel.items.get(I.STEEL_BAR), 0);
+  assert.equal(keel.xp, 187.5);
+  assert.equal(keel.messages.at(-1), "You hammer the steel and make some keel parts.");
+});
+
+test("the Lovakite furnace smelts lovakite, which other furnaces don't offer", () => {
+  const player = furnaceWith([[I.LOVAKITE_ORE, 1], [I.COAL, 2]]);
+  objects.get("Lovakite furnace").Smelt({ player });
+  assert.deepEqual(lastMenu(player).getItems(), [I.LOVAKITE_BAR]);
+  lastMenu(player).execute(I.LOVAKITE_BAR, 1);
+  ticks(6);
+  assert.equal(player.items.get(I.LOVAKITE_BAR), 1);
+  assert.equal(player.xp, 20);
+  assert.ok(!Smithing.SMELTING_RECIPES.filter((r) => !r.notInMenu).some((r) => r.barId === I.LOVAKITE_BAR));
+});
+
+test("a blurite bar on an anvil opens blurite bolts and limbs", () => {
+  const player = playerWith(I.BLURITE_BAR, 2);
+  player.quests = new Set(["the_knights_sword"]);
+  itemOnObject({ player, itemId: I.BLURITE_BAR, object: { getDefinition: () => ({ getName: () => "Anvil" }) } });
+  assert.deepEqual(lastMenu(player).getItems(), [I.BLURITE_BOLTS_UNF_, I.BLURITE_LIMBS]);
+  lastMenu(player).execute(I.BLURITE_LIMBS, 1);
+  ticks(4);
+  assert.equal(player.items.get(I.BLURITE_LIMBS), 1);
+  assert.equal(player.xp, 17.5);
+});

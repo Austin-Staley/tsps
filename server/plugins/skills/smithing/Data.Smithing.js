@@ -97,6 +97,21 @@ function cannonballs() {
   return cannonballList;
 }
 
+/** Blurite's anvil products, as anvil products of the blurite bar (The Knight's Sword). */
+function bluriteProducts() {
+  return data.blurite.map((entry) => ({
+    barId: core.ItemIdentifiers.BLURITE_BAR,
+    metal: "blurite",
+    itemId: core.ItemIdentifiers[entry.item],
+    level: entry.level,
+    bars: 1,
+    amount: entry.amount,
+    xp: entry.xp,
+    phrase: entry.phrase,
+    quest: "the_knights_sword",
+  }));
+}
+
 function questName(key) {
   return data.questNames[key] ?? key;
 }
@@ -120,4 +135,5 @@ module.exports = {
   anvilBars,
   questName,
   cannonballs,
+  bluriteProducts,
 };

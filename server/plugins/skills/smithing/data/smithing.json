@@ -106,6 +106,20 @@
       "missingMessage": "You need at least one runite ore and eight coal to smelt a runite bar."
     },
     {
+      "$comment": "https://oldschool.runescape.wiki/w/Lovakite_bar - only at the Lovakite furnace in Lovakengj.",
+      "name": "Lovakite bar",
+      "bar": "LOVAKITE_BAR",
+      "level": 45,
+      "xp": 20,
+      "ingredients": [["LOVAKITE_ORE", 1], ["COAL", 2]],
+      "barPhrase": "a lovakite bar",
+      "smeltMessage": "You smelt the lovakite in the furnace along with two heaps of coal.",
+      "retrieveMessage": "You retrieve a bar of lovakite.",
+      "missingMessage": "You need at least one lovakite ore and two coal to smelt a lovakite bar.",
+      "notInMenu": true,
+      "furnace": "Lovakite furnace"
+    },
+    {
       "name": "'perfect' gold bar",
       "bar": "PERFECT_GOLD_BAR",
       "level": 40,
@@ -142,6 +156,11 @@
     {"ball": "MITHRIL_CANNONBALL", "bar": "MITHRIL_BAR", "level": 55, "xpPerBar": 34},
     {"ball": "ADAMANT_CANNONBALL", "bar": "ADAMANTITE_BAR", "level": 75, "xpPerBar": 42.4},
     {"ball": "RUNE_CANNONBALL", "bar": "RUNITE_BAR", "level": 90, "xpPerBar": 50.8}
+  ],
+  "$blurite": "https://oldschool.runescape.wiki/w/Blurite_bar - blurite isn't on the smithing interface; a blurite bar used on an anvil (or Smith with only blurite) opens a menu of these. The Knight's Sword.",
+  "blurite": [
+    {"item": "BLURITE_BOLTS_UNF_", "level": 8, "xp": 17.5, "amount": 10, "phrase": "ten blurite crossbow bolts"},
+    {"item": "BLURITE_LIMBS", "level": 13, "xp": 17.5, "amount": 1, "phrase": "a pair of crossbow limbs"}
   ],
   "$phrases": "The end of 'You hammer the <metal> and make <phrase>' per anvil slot label (Shayzien labels without their tier); objPhrases win for one product. rsprox captures (rev 237) where docs/smithing.md says so, the same wording otherwise.",
   "phrases": {
@@ -201,7 +220,8 @@
     "STEEL_BAR": 37.5,
     "MITHRIL_BAR": 50,
     "ADAMANTITE_BAR": 62.5,
-    "RUNITE_BAR": 75
+    "RUNITE_BAR": 75,
+    "LOVAKITE_BAR": 60
   },
   "$productXp": "Products whose experience isn't the bar's per-bar rate times the bars used.",
   "productXp": {}

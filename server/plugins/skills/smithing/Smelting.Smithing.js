@@ -17,6 +17,7 @@ const SMELT_ANIMATION = 899;
 // Wiki: goldsmith gauntlets (or the Smithing or max cape) raise gold bar XP from 22.5 to 56.2.
 const GOLDSMITH_GAUNTLETS_BONUS_XP = 33.7;
 const SMELT_TITLE = "What would you like to smelt?";
+const LOVAKITE_FURNACE = "Lovakite furnace";
 const NO_ORE_MESSAGE = "You don't have any ore to smelt.";
 const SMELT_INTERVAL_TICKS = 5;
 const SMELT_FINISH_TICKS = 4;
@@ -203,12 +204,26 @@ function smelt({ player }) {
  * which aren't on it, open a menu of their own product.
  */
 function useOnFurnace(event) {
-  const recipes = Data.SMELTING_RECIPES.filter((recipe) => recipe.ingredients.some(([id]) => id === event.itemId));
+  const furnace = event.object.getDefinition().getName();
+  if (furnace === LOVAKITE_FURNACE) return smeltLovakite(event);
+  const recipes = Data.SMELTING_RECIPES.filter((recipe) => !recipe.furnace && recipe.ingredients.some(([id]) => id === event.itemId));
   if (recipes.length === 0) return;
   event.handled = true;
   const offMenu = recipes.filter((recipe) => recipe.notInMenu);
   if (offMenu.length > 0) openMenu(event.player, recipeEntries(event.player, offMenu));
   else smelt(event);
+}
+
+/** The Lovakengj furnace smelts lovakite only (Wiki: Lovakite bar). */
+function smeltLovakite(event) {
+  const recipes = Data.SMELTING_RECIPES.filter((recipe) => recipe.furnace === LOVAKITE_FURNACE);
+  if (event.itemId !== undefined && !recipes.some((recipe) => recipe.ingredients.some(([id]) => id === event.itemId))) return;
+  if (event.itemId !== undefined) event.handled = true;
+  if (!recipes.some((recipe) => available(event.player, recipe.ingredients[0][0]) > 0)) {
+    statement(event.player, NO_ORE_MESSAGE);
+    return;
+  }
+  openMenu(event.player, recipeEntries(event.player, recipes));
 }
 
 function fillFurnaceIds() {
@@ -222,6 +237,7 @@ module.exports = function attach(api) {
   // Some furnaces (e.g. Tutorial Island 10082) only offer "Use".
   api.onObjectInteraction("Furnace", { Smelt: smelt, Use: smelt });
   api.onObjectInteraction("Small furnace", { Smelt: smelt });
+  api.onObjectInteraction(LOVAKITE_FURNACE, { Smelt: smeltLovakite });
 };
 
 Object.assign(module.exports, {

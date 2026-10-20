@@ -123,7 +123,24 @@ function chooseBar(player, preferredBarId) {
   return workable.at(-1) ?? carried[0] ?? null;
 }
 
+/** Blurite isn't on the smithing interface: its bolts and limbs come from a make-X menu. */
+function openBluriteMenu(player) {
+  const { CreationMenu } = Core;
+  const products = Data.bluriteProducts();
+  const bars = player.getInventory().getAmount(Core.ItemIdentifiers.BLURITE_BAR);
+  player.getPacketSender().sendCreationMenu(
+    new CreationMenu("What would you like to make?", products.map((product) => product.itemId), {
+      execute: (itemId, amount) => startSmithing(player, products.find((product) => product.itemId === itemId), amount),
+    }, { maxAmount: Math.max(1, bars) })
+  );
+}
+
 function openInterface(player, preferredBarId = null) {
+  const blurite = Core.ItemIdentifiers.BLURITE_BAR;
+  if (preferredBarId === blurite || preferredBarId == null && chooseBar(player, null) == null && player.getInventory().contains(blurite)) {
+    openBluriteMenu(player);
+    return true;
+  }
   const bar = chooseBar(player, preferredBarId);
   if (bar == null) {
     statement(player, NO_BAR_MESSAGE);
@@ -213,7 +230,7 @@ function smithRustedAnvil(event) {
 /** A bar used on an anvil opens the interface on that bar. */
 function useOnAnvil(event) {
   const { player, object, itemId } = event;
-  if (!Data.BAR_TYPE_BY_BAR.has(itemId)) return;
+  if (!Data.BAR_TYPE_BY_BAR.has(itemId) && itemId !== Core.ItemIdentifiers.BLURITE_BAR) return;
   event.handled = true;
   if (!anvilAccess(event)) return;
   if (object.getDefinition().getName() === "Rusted anvil" && itemId !== Core.ItemIdentifiers.BRONZE_BAR) {
