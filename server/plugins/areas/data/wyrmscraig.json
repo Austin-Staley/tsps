@@ -1,11 +1,5 @@
 {
   "about": "Wyrmscraig (https://oldschool.runescape.wiki/w/Wyrmscraig), as captured: the open-access quest state, the cave under Ardeaglais, and the Mad Angel. See docs/wyrmscraig.md.",
-  "openAccess": {
-    "about": "Wyrmscraig open access unlocks the cliff shortcut for every player. Fallen From Grace owns varbit 15759 now, so no quest state is forced here.",
-    "varbits": [
-      { "id": 15720, "name": "wyrmscraig_cliff_shortcut", "value": 1 }
-    ]
-  },
   "cave": {
     "anim": 2796,
     "sound": { "id": 2454, "loops": 3, "delay": 4 },

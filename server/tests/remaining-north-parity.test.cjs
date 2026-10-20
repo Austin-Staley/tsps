@@ -579,8 +579,8 @@ test('Weiss stairs and cave entrance are traversable in the mandatory route', ()
   assert.equal(assassin.getLocation().getX(), 2927);
   assert.equal(assassin.getLocation().getY(), 10352);
   assert.deepEqual([assassin.faced.getX(), assassin.faced.getY()], [2927, 10357]);
-  assert.ok(h.npcs.some(n => n.id === 12052 && n.getLocation().getX() === 2902), 'Hazeel waits west');
-  assert.ok(h.npcs.some(n => n.id === 12058 && n.getLocation().getY() === 10347), 'Khazard waits by the fight room');
+  assert.ok(h.npcs.some(n => n.id === 12051 && n.getLocation().getX() === 2902), 'interactive Hazeel waits west');
+  assert.ok(h.npcs.some(n => n.id === 12056 && n.getLocation().getY() === 10347), 'interactive Khazard waits by the fight room');
 });
 
 test('assassin death, Hazeel report and dungeon progress are recoverable', () => {
@@ -588,7 +588,7 @@ test('assassin death, Hazeel report and dungeon progress are recoverable', () =>
   h.setStage(p, 16);
   h.action(p, '2rSlND');
   const assassin = h.npcs.find(n => n.id === N.ASSASSIN_6);
-  const khazard = h.npcs.find(n => n.id === N.GENERAL_KHAZARD_9 && !n.removed);
+  const khazard = h.npcs.find(n => n.id === 12056 && !n.removed);
   h.death(p, assassin);
   assert.equal(stage(h, p), 17);
   assert.equal(khazard.transformed, 12055);
@@ -730,7 +730,7 @@ test('accepted Hazeel teleport lands in Ardougne and the guard still completes t
   const h = harness(), p = startQuest(h);
   h.setStage(p, 32);
   h.talk('Hazeel', p, N.HAZEEL_2);
-  assert.equal(variant(h), 'more-mahjarrat-more-problems-talking-to-hazeel-or-general-khazard-after-declining-the-teleport');
+  assert.equal(variant(h), 'more-mahjarrat-more-problems-defeating-the-creature');
   h.action(p, 'kQnPVV');
   assert.equal(stage(h, p), 33);
   assert.equal(p.varbits.get(14745), 1);
@@ -797,8 +797,8 @@ test('the captured lair cutscene spawns its actors, camera and music, then retur
   assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [2927, 10344]);
   assert.deepEqual(p.cameras.slice(-2), [['move', 2927, 10341, 494], ['look', 2927, 10358, 294]]);
   h.action(p, 'BsyVHb');
-  assert.ok(h.npcs.some(n => n.id === N.HAZEEL_4 && n.getLocation().getX() === 2925));
-  assert.ok(h.npcs.some(n => n.id === N.GENERAL_KHAZARD_9 && n.getLocation().getX() === 2928));
+  assert.ok(h.npcs.some(n => n.id === 12051 && n.getLocation().getX() === 2925));
+  assert.ok(h.npcs.some(n => n.id === 12056 && n.getLocation().getX() === 2928));
 });
 
 test('relogging during the lair cutscene recovers in the dungeon with the final pair', () => {
@@ -810,8 +810,8 @@ test('relogging during the lair cutscene recovers in the dungeon with the final 
   h.login(p);
   assert.equal(p.getArea(), null);
   assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [2927, 10344]);
-  assert.ok(h.npcs.some(n => n.id === N.HAZEEL_4 && !n.removed));
-  assert.ok(h.npcs.some(n => n.id === N.GENERAL_KHAZARD_9 && !n.removed));
+  assert.ok(h.npcs.some(n => n.id === 12051 && !n.removed));
+  assert.ok(h.npcs.some(n => n.id === 12056 && !n.removed));
   assert.equal(p.cameras.at(-1)[0], 'reset');
 });
 
@@ -1145,6 +1145,145 @@ test('Secrets North6 cult travel: real cave 2852 lands at the raft and boards to
   click(2849, 2567, 9679); // raft Board
   assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [2606, 9692, 0],
     'raft lands at the cult hideout');
+});
+
+test('Hazeel basement ladder claim: 46717 down to Claus landing and 46716 back', async () => {
+  const path = require('node:path');
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { GameObject } = require('../dist/game/entity/impl/object/GameObject');
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const { PathFinder } = require('../dist/game/model/movement/path/PathFinder');
+  const { PluginManager: PM } = require('../dist/plugins/PluginManager');
+  let active = true;
+  try { CachePipeline.getActive(); } catch { active = false; }
+  if (!active) await CachePipeline.initialize(path.resolve('.'));
+  if (!RegionManager.getRegionid(RegionManager.regionIdForTile(2570, 3267))) RegionManager.init();
+  RegionManager.loadingRegions?.clear?.();
+
+  const api = PM.createApi('remaining-north-hazeel-ladder');
+  require('../plugins/quests/quests/HazeelCult.Quest')(api);
+  require('../plugins/objects/Ladders.plugin').register(api);
+  const hazeel = runtime.getRegisteredQuests().filter(q => q.key === 'hazeel_cult').at(-1);
+  const p = new Player(null);
+  const sender = new Proxy({}, { get: () => () => sender });
+  p.getPacketSender = () => sender;
+  p.moveTo(new core.Location(2569, 3271, 0));
+  p.setNeedsPlacement(false);
+  hazeel.setStage(p, 4);
+
+  const click = (id, x, y, z = 0) => {
+    const object = new GameObject(id, new core.Location(x, y, z), 10, 0, null);
+    PM.emitObjectInteraction({
+      player: p, object, objectId: id, definition: ObjectDefinition.forId(id),
+      clickType: 1, location: object.getLocation(), handled: false,
+    });
+  };
+
+  click(46717, 2570, 3267); // real blocked ladder through Ladders' claim path
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [2544, 9695, 0],
+    'ladder claim lands in the mansion basement');
+  const claus = new core.Location(2540, 9699, 0);
+  assert.equal(RegionManager.blocked(claus, null), false, 'Claus tile walkable');
+  const route = PathFinder.rsmodRouteFinding.findRoute({
+    level: 0, srcX: 2544, srcY: 9695, srcSize: 1,
+    destX: claus.getX(), destY: claus.getY(), destWidth: 1, destLength: 1,
+    locShape: -1, privateArea: null, moveNear: false,
+  });
+  assert.equal(route.success, true, 'RSMOD route basement landing -> Claus succeeds');
+
+  click(46716, 2544, 9694); // normal return
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [2570, 3268, 0],
+    'basement ladder returns to the mansion');
+
+  // A different ladder tile is not claimed as the mansion basement.
+  const other = new Player(null);
+  other.getPacketSender = () => sender;
+  other.moveTo(new core.Location(2572, 3269, 1));
+  other.setNeedsPlacement(false);
+  const object = new GameObject(16683, new core.Location(2573, 3271, 1), 10, 0, null);
+  PM.emitObjectInteraction({
+    player: other, object, objectId: 16683, definition: ObjectDefinition.forId(16683),
+    clickType: 1, location: object.getLocation(), handled: false,
+  });
+  assert.notDeepEqual([other.getLocation().getX(), other.getLocation().getY(), other.getLocation().getZ()],
+    [2544, 9695, 0], 'unrelated ladder is not claimed as the basement');
+});
+
+test('Ghorrock persistent NPCs use Talk-to ids and real NpcDialogues reaches 17->18 and final return', async () => {
+  const path = require('node:path');
+  const { CachePipeline } = require('../dist/game/cache/CachePipeline');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { NpcDefinitionLoader } = require('../dist/game/definition/loader/impl/NpcDefinitionLoader');
+  const { NpcDefinition } = require('../dist/game/definition/NpcDefinition');
+  const { Player } = require('../dist/game/entity/impl/player/Player');
+  const { MultiChatboxPrompt } = require('../dist/game/model/menu/MultiChatboxPrompt');
+  const { PluginManager: PM } = require('../dist/plugins/PluginManager');
+  let active = true;
+  try { CachePipeline.getActive(); } catch { active = false; }
+  if (!active) await CachePipeline.initialize(path.resolve('.'));
+  RegionManager.init();
+  new NpcDefinitionLoader().load();
+
+  assert.ok(NpcDefinition.forId(12051).getActions().includes('Talk-to'), 'interactive Hazeel 12051 has Talk-to');
+  assert.ok(NpcDefinition.forId(12056).getActions().includes('Talk-to'), 'interactive Khazard 12056 has Talk-to');
+  assert.ok(!NpcDefinition.forId(12052).getActions().includes('Talk-to'), 'cutscene Hazeel 12052 has no Talk-to');
+  assert.ok(!NpcDefinition.forId(12058).getActions().includes('Talk-to'), 'cutscene Khazard 12058 has no Talk-to');
+
+  const api = PM.createApi('remaining-north-ghorrock-npcs');
+  require('../plugins/npcs/NpcDialogues.plugin').register(api);
+  require('../plugins/quests/quests/SecretsOfTheNorth.Quest')(api);
+  const north = runtime.getRegisteredQuests().filter(q => q.key === 'secrets_of_the_north').at(-1);
+
+  function account() {
+    const p = new Player(null);
+    const sender = new Proxy({}, { get: () => () => sender });
+    p.getPacketSender = () => sender;
+    p.moveTo(new core.Location(2902, 10334, 0));
+    p.setNeedsPlacement(false);
+    return p;
+  }
+  function talk(p, id) {
+    const definition = NpcDefinition.forId(id);
+    PM.emitNpcInteraction({
+      player: p, npcId: id, definition,
+      npc: { getId: () => id, getCurrentDefinition: () => definition },
+      clickType: 1, handled: false,
+    });
+  }
+
+  const before = account();
+  north.setStage(before, 17);
+  talk(before, 12051);
+  for (let i = 0; i < 100 && north.getStage(before) < 18; i++) {
+    if (!before.getDialogueManager().getCurrent()) break;
+    before.getDialogueManager().handleResume(231 << 16 | 5, 1);
+  }
+  assert.equal(north.getStage(before), 18, 'real stage-17 Hazeel transcript advances to 18');
+
+  const final = account();
+  north.setStage(final, 32);
+  talk(final, 12051);
+  let pending;
+  for (let i = 0; i < 100; i++) {
+    pending = MultiChatboxPrompt.getPending(final);
+    if (pending) break;
+    const current = final.getDialogueManager().getCurrent();
+    if (!current) break;
+    final.getDialogueManager().handleResume(231 << 16 | 5, 1);
+  }
+  assert.ok(pending?.options?.includes('Yes.'), 'final Hazeel offers the Ardougne teleport');
+  const yes = pending.options.indexOf('Yes.');
+  MultiChatboxPrompt.handleInterfaceActionClick({
+    player: final, buttonId: MultiChatboxPrompt.OPTIONS_WIDGET_ID, groupId: 219,
+    slot: yes + 1, action: yes + 1,
+  });
+  for (let i = 0; i < 20 && north.getStage(final) < 33; i++) {
+    if (!final.getDialogueManager().getCurrent()) break;
+    final.getDialogueManager().handleResume(231 << 16 | 5, 1);
+  }
+  assert.equal(north.getStage(final), 33, 'final Hazeel teleport advances to 33');
 });
 
 test('login re-installs the exact SOTN objects at their real tiles', () => {

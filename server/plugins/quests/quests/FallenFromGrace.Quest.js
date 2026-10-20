@@ -63,6 +63,8 @@ module.exports = function registerFallenFromGraceQuest(api) {
   const mining = require("../../skills/Mining.plugin.js");
   const { Sailing } = require("../../../src/main/typescript/elvarg/game/content/sailing/Sailing");
   const { BoatManager } = require("../../../src/main/typescript/elvarg/game/content/sailing/BoatManager");
+  const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
+  const WyrmscraigAgility = require("../../skills/agility/shortcuts/Wyrmscraig.Agility");
   const MadAngelCommon = require("../../bosses/madangel/Common.MadAngel");
   const MadAngelInstance = require("../../bosses/madangel/Instance.MadAngel");
 
@@ -177,6 +179,12 @@ module.exports = function registerFallenFromGraceQuest(api) {
   const BASEMENT_STAIRS_OBJECT_ID = ObjectIdentifiers.STAIRCASE_273; // 62255 Climb-up
   const CATHEDRAL_STAIRS_OBJECT_ID = ObjectIdentifiers.STAIRCASE_272; // 62254 Climb-down
   const CAVE_ENTRANCE_SAILABLE_OBJECT_ID = 62217; // wyrmscraig_cave_entrance_sailable, Sail
+  const SHORTCUT_BLOCKAGE_OBJECT_ID = 62263; // wyrmscraig_cliff_shortcut_blockage -> Rocks/Mine
+  const SHORTCUT_BLOCKED_ROCKS_OBJECT_ID = 62264;
+  const SHORTCUT_TOP_OBJECT_IDS = new Set([62265, 62266, 62267]); // climbed rocks at the top
+  const SHORTCUT_VARBIT = 15720; // wyrmscraig_cliff_shortcut: 0 blockage, 1 climbable
+  const SHORTCUT_CLEARED_ATTRIBUTE = "fallen-from-grace:shortcut-cleared";
+  const SHORTCUT_ENDS = [[2554, 2209, 0], [2550, 2209, 0]];
   // Captured P2 tick 29: the skiff crosses the south-west cave mouth without an object click.
   // The cache pool at 2562,2203 is the portal face, and a real east-facing skiff hull stops at
   // x2539 on the y2188 approach (open water ends at x2543); the recorded boat root then
@@ -299,6 +307,7 @@ module.exports = function registerFallenFromGraceQuest(api) {
   }
 
   function sendFlagVarps({ player }) {
+    syncShortcutVarbit(player);
     const sender = player.getPacketSender();
     const value = flags(player);
     for (const [bit, varbitId] of FLAG_VARBITS) {
@@ -787,7 +796,67 @@ module.exports = function registerFallenFromGraceQuest(api) {
     return false;
   }
 
+  function shortcutCleared(player) {
+    return Boolean(player.getAttribute(SHORTCUT_CLEARED_ATTRIBUTE)) || quest.isComplete(player);
+  }
+
+  function syncShortcutVarbit(player) {
+    player.getPacketSender().sendVarbit(SHORTCUT_VARBIT, shortcutCleared(player) ? 1 : 0);
+  }
+
+  function clearShortcutBlockage(event, player, pickaxe) {
+    event.handled = true;
+    player.performAnimation(pickaxe.animation);
+    player.setAttribute(SHORTCUT_CLEARED_ATTRIBUTE, true);
+    player.getPacketSender().sendVarbit(SHORTCUT_VARBIT, 1);
+    player.sendMessage("You swing your pickaxe at the rocks...");
+    player.sendMessage("...and successfully manage to clear them.");
+    return true;
+  }
+
+  /** The captured shortcut blockage: only after the body/cathedral and with a usable pickaxe. */
+  function handleShortcutBlockage(event) {
+    const { player, objectId } = event;
+    if (objectId !== SHORTCUT_BLOCKAGE_OBJECT_ID && objectId !== SHORTCUT_BLOCKED_ROCKS_OBJECT_ID) return false;
+    if (quest.getStage(player) < STAGE_BODY || quest.isComplete(player) || shortcutCleared(player)) return false;
+    event.handled = true;
+    const pickaxe = mining.findBestPickaxe(player);
+    if (!pickaxe) {
+      player.sendMessage("You need a pickaxe to clear the rocks.");
+      return true;
+    }
+    return clearShortcutBlockage(event, player, pickaxe);
+  }
+
+  function handleShortcutItem(event) {
+    const { player, objectId, itemId } = event;
+    if (objectId !== SHORTCUT_BLOCKAGE_OBJECT_ID && objectId !== SHORTCUT_BLOCKED_ROCKS_OBJECT_ID) return false;
+    if (quest.getStage(player) < STAGE_BODY || quest.isComplete(player) || shortcutCleared(player)) return false;
+    const pickaxe = mining.findBestPickaxe(player);
+    if (!pickaxe || itemId !== pickaxe.id) return false;
+    return clearShortcutBlockage(event, player, pickaxe);
+  }
+
+  function handleShortcutClimb(event) {
+    const { player, objectId, clickType } = event;
+    if (!SHORTCUT_TOP_OBJECT_IDS.has(objectId) || clickType !== 1) return false;
+    if (quest.getStage(player) < STAGE_BODY || !shortcutCleared(player)) return false;
+    event.handled = true;
+    if (ObstacleRunner.isBusy(player)) return true;
+    const spec = WyrmscraigAgility.wyrmscraigCliff({ ends: SHORTCUT_ENDS });
+    const context = {
+      player,
+      pos: player.getLocation(),
+      obj: { x: 2551, y: 2209, z: player.getLocation().getZ() },
+      object: event.object,
+    };
+    ObstacleRunner.run(context, spec.steps(context));
+    return true;
+  }
+
   function handleObjectInteraction(event) {
+    if (handleShortcutBlockage(event)) return;
+    if (handleShortcutClimb(event)) return;
     if (handleCathedralDoor(event)) return;
     if (handleCaveEntrance(event)) return;
     if (handleMonolith(event)) return;
@@ -1131,6 +1200,7 @@ module.exports = function registerFallenFromGraceQuest(api) {
   function handleLogin({ player }) {
     refreshQuestList(player);
     ensureHat(player);
+    syncShortcutVarbit(player);
     startCavernApproachWatch(player);
   }
 
@@ -1274,6 +1344,7 @@ module.exports = function registerFallenFromGraceQuest(api) {
   api.persistAttribute(FLAGS_ATTRIBUTE);
   api.persistAttribute(STAGE_VERSION_ATTRIBUTE, 0);
   api.persistAttribute(TROLL_KILLS_ATTRIBUTE, 0);
+  api.persistAttribute(SHORTCUT_CLEARED_ATTRIBUTE, false);
 
   quest = registerQuest(api, {
     key: "fallen_from_grace",
@@ -1302,6 +1373,7 @@ module.exports = function registerFallenFromGraceQuest(api) {
   api.onObjectInteraction(handleObjectInteraction);
   api.onCustomEvent("madangel:cathedral-door", handleCathedralDoor);
   api.onItemOnItem(handleItemOnItem);
+  api.onItemOnObject(handleShortcutItem, { noted: false });
   api.onItemOnNpc(handleItemOnNpc);
   api.onItemAction(handleItemAction);
   api.onNpcInteraction("Broken golem", { Investigate: handleGolemInvestigate });

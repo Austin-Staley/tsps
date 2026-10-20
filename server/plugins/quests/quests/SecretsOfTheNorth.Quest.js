@@ -304,9 +304,12 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
   const JHALLAN = NpcIdentifiers.JHALLAN; // 12064
   const JHALLAN_CUTSCENE = NpcIdentifiers.JHALLAN_2; // 12065, the lair vision
   const ASSASSIN_CUTSCENE = NpcIdentifiers.ASSASSIN_5; // 12061, the vision only
-  const HAZEEL_GHORROCK = NpcIdentifiers.HAZEEL_4; // 12052
-  const KHAZARD_GHORROCK = NpcIdentifiers.GENERAL_KHAZARD_8; // 12057
-  const KHAZARD_RUINS = NpcIdentifiers.GENERAL_KHAZARD_9; // 12058
+  // Scene actors (cutscene variants) keep their captured ids.
+  const HAZEEL_GHORROCK = NpcIdentifiers.HAZEEL_4; // 12052, no Talk-to
+  const KHAZARD_GHORROCK = NpcIdentifiers.GENERAL_KHAZARD_8; // 12057, no Talk-to
+  // Persistent Ghorrock NPCs use interactive variants with Talk-to.
+  const HAZEEL_INTERACTIVE = NpcIdentifiers.HAZEEL_3; // 12051
+  const KHAZARD_INTERACTIVE = NpcIdentifiers.GENERAL_KHAZARD_7; // 12056
   const CREATURE_LAIR_EXIT = ObjectIdentifiers.CREVICE_41; // 46598
   const GHORROCK_ENTRANCE = ObjectIdentifiers.CREVICE_43; // 46638
   // Captured midi_song ids: the quest theme and "In the Shadows".
@@ -577,17 +580,17 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
     ensureNpc(player, "snowflake-sotn", NpcIdentifiers.SNOWFLAKE, 2872, 3934, 0, atWeiss);
     // Captured as multinpc 8417 rendering child 742 at (2874,3934).
     ensureNpc(player, "my-arm-sotn", NpcIdentifiers.MY_ARM_3, 2874, 3934, 0, atWeiss);
-    // Hazeel (12052) and Khazard (12058) at the captured dungeon tiles; the
+    // Interactive Hazeel and Khazard at the captured dungeon tiles; the
     // assassin waits in the east fight room (2927,10352).
     const inDungeon = stage >= STAGE_ASSASSIN && stage < STAGE_FINALE;
-    ensureNpc(player, "hazeel:dungeon", HAZEEL_GHORROCK, 2902, 10334, 0, inDungeon);
-    ensureNpc(player, "khazard:dungeon", KHAZARD_RUINS, 2928, 10347, 0, inDungeon);
+    ensureNpc(player, "hazeel:dungeon", HAZEEL_INTERACTIVE, 2902, 10334, 0, inDungeon);
+    ensureNpc(player, "khazard:dungeon", KHAZARD_INTERACTIVE, 2928, 10347, 0, inDungeon);
     ensureNpc(player, "assassin", ASSASSIN, 2927, 10352, 0, stage === STAGE_ASSASSIN);
     // After the lair vision the player is back in the dungeon's entrance room,
-    // where Hazeel (12052) and Khazard (12058) await (captured coords).
+    // where interactive Hazeel and Khazard await (captured coords).
     const atLair = stage === STAGE_FINALE;
-    ensureNpc(player, "hazeel:lair", HAZEEL_GHORROCK, 2925, 10349, 0, atLair);
-    ensureNpc(player, "khazard:lair", KHAZARD_RUINS, 2928, 10349, 0, atLair);
+    ensureNpc(player, "hazeel:lair", HAZEEL_INTERACTIVE, 2925, 10349, 0, atLair);
+    ensureNpc(player, "khazard:lair", KHAZARD_INTERACTIVE, 2928, 10349, 0, atLair);
     ensureNpc(player, "creature", STRANGE_CREATURE_ATTACKABLE, 2845, 4257, 0, stage === STAGE_CREATURE);
   }
 
@@ -883,6 +886,15 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
     return true;
   }
 
+  /** A fresh Talk-to must reopen the full transcript's captured teleport choice. */
+  function startFinalTeleport(player, npcId) {
+    startTranscript(api, player, npcId, PAGE, "more-mahjarrat-more-problems-defeating-the-creature", (steps) => {
+      const teleport = (steps || []).find((step) =>
+        step.type === "choice" && String(step.prompt ?? "").startsWith("Teleport to East Ardougne"));
+      return teleport ? [teleport] : steps;
+    });
+  }
+
   function talkHazeel(event) {
     const { player, npcId } = event;
     if (!HAZEEL_IDS.has(npcId)) return false;
@@ -917,7 +929,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
       return true;
     }
     if (stage === STAGE_FINALE) {
-      startTranscript(api, player, npcId, PAGE, "more-mahjarrat-more-problems-talking-to-hazeel-or-general-khazard-after-declining-the-teleport");
+      startFinalTeleport(player, npcId);
       return true;
     }
     return false;
@@ -940,7 +952,7 @@ module.exports = function registerSecretsOfTheNorthQuest(api) {
       return true;
     }
     if (stage === STAGE_FINALE) {
-      startTranscript(api, player, npcId, PAGE, "more-mahjarrat-more-problems-talking-to-hazeel-or-general-khazard-after-declining-the-teleport");
+      startFinalTeleport(player, npcId);
       return true;
     }
     return false;

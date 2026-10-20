@@ -317,6 +317,11 @@ module.exports = function registerTheFinalDawnQuest(api) {
   const SAFEHOUSE_WINDOW_OBJECT = 56498;
   const SAFEHOUSE_DOOR_OBJECT = 56513;
   const SAFEHOUSE_DOOR_OPEN = 56514; // vmq4_janus_house_puzzle_door_open at (1648,3093) face3
+  const SAFEHOUSE_ZONE = { minX: 1643, maxX: 1655, minY: 3087, maxY: 3099, levels: [0, 1, 2] };
+  const STRANGE_TILE_LINKS = new Map([
+    ["1299,9455,1", [1304, 9446, 2]], ["1304,9446,2", [1299, 9455, 1]],
+    ["1323,9443,1", [1316, 9446, 2]], ["1316,9446,2", [1323, 9443, 1]],
+  ]);
   const SAFEHOUSE_PLANT_OBJECT = 56470;
   const SAFEHOUSE_SAND_POT_OBJECT = 56472;
   const SAFEHOUSE_STAIRS_OBJECT = 52630;
@@ -503,6 +508,8 @@ module.exports = function registerTheFinalDawnQuest(api) {
   /** Per-player owner-only quest NPCs. */
   const trackedNpcs = new Map();
   const safehouseDoorNpcs = new WeakMap();
+  const safehouseTopObjects = new WeakMap();
+  const strangeTileArrivals = new WeakMap();
   const Scenes = createQuestScenes(api);
   let quest;
 
@@ -979,17 +986,51 @@ module.exports = function registerTheFinalDawnQuest(api) {
     return true;
   }
 
+  function clearSafehouseTopObjects(player) {
+    const existing = safehouseTopObjects.get(player);
+    if (!existing) return;
+    ObjectManager.deregister(existing.plant, true);
+    ObjectManager.deregister(existing.pot, true);
+    safehouseTopObjects.delete(player);
+  }
+
+  function inSafehouseZone(player) {
+    const l = player.getLocation();
+    return l && SAFEHOUSE_ZONE.levels.includes(l.getZ())
+      && l.getX() >= SAFEHOUSE_ZONE.minX && l.getX() <= SAFEHOUSE_ZONE.maxX
+      && l.getY() >= SAFEHOUSE_ZONE.minY && l.getY() <= SAFEHOUSE_ZONE.maxY;
+  }
+
+  /** Captured dynamic top-floor blackjack objects; owner-only, no global map mutation. */
+  function ensureSafehouseTopObjects(player) {
+    const stage = quest.getStage(player);
+    if (stage < STAGE_PURSE_OPEN || stage > STAGE_JANUS || !inSafehouseZone(player)) {
+      clearSafehouseTopObjects(player);
+      return;
+    }
+    if (safehouseTopObjects.has(player)) return;
+    const area = player.getPrivateArea() ?? null;
+    const plant = new GameObject(SAFEHOUSE_PLANT_OBJECT, new Location(1650, 3095, 2), 10, 1, area).setOwner(player);
+    const pot = new GameObject(SAFEHOUSE_SAND_POT_OBJECT, new Location(1645, 3098, 2), 10, 0, area).setOwner(player);
+    ObjectManager.register(plant, true);
+    ObjectManager.register(pot, true);
+    safehouseTopObjects.set(player, { plant, pot });
+  }
+
   /** Owner-only open-door state at the captured west tile; global map door stays untouched. */
   function ensureSafehouseDoorState(player) {
     const stage = quest.getStage(player);
-    if (stage < STAGE_HOUSE_OPEN || stage >= STAGE_TRAP) return;
+    if (stage < STAGE_HOUSE_OPEN || stage >= STAGE_TRAP || !inSafehouseZone(player)) return;
     const current = Scenes.get(player);
     if (current?.name === "safehouse-door") return;
     const scene = Scenes.open(player, "safehouse-door", [
-      [1643, 1655, 3087, 3097, 0], [1643, 1655, 3087, 3097, 1],
+      [SAFEHOUSE_ZONE.minX, SAFEHOUSE_ZONE.maxX, SAFEHOUSE_ZONE.minY, SAFEHOUSE_ZONE.maxY, 0],
+      [SAFEHOUSE_ZONE.minX, SAFEHOUSE_ZONE.maxX, SAFEHOUSE_ZONE.minY, SAFEHOUSE_ZONE.maxY, 1],
+      [SAFEHOUSE_ZONE.minX, SAFEHOUSE_ZONE.maxX, SAFEHOUSE_ZONE.minY, SAFEHOUSE_ZONE.maxY, 2],
     ], { beforeEnd: (owner, ending) => {
       for (const npc of safehouseDoorNpcs.get(owner) ?? []) ending.area?.leave(npc, false);
       safehouseDoorNpcs.delete(owner);
+      clearSafehouseTopObjects(owner);
     } });
     // Hide the shared closed door for this owner and remove only its private collision copy.
     const closed = new GameObject(SAFEHOUSE_DOOR_OBJECT, new Location(1649, 3093, 0), 0, 0, scene.area);
@@ -1005,10 +1046,37 @@ module.exports = function registerTheFinalDawnQuest(api) {
     safehouseDoorNpcs.set(player, attached);
   }
 
+  function handleStrangeTileStep({ player }) {
+    const stage = quest.getStage(player);
+    if (stage < STAGE_PUZZLES_DONE || stage > STAGE_DOORS) return;
+    const location = player.getLocation();
+    const key = `${location.getX()},${location.getY()},${location.getZ()}`;
+    const landing = strangeTileArrivals.get(player);
+    if (landing === key) {
+      strangeTileArrivals.delete(player);
+      return;
+    }
+    const destination = STRANGE_TILE_LINKS.get(key);
+    if (!destination) return;
+    const [x, y, z] = destination;
+    strangeTileArrivals.set(player, `${x},${y},${z}`);
+    player.getMovementQueue().reset();
+    player.moveTo(new Location(x, y, z));
+  }
+
+  function handleSafehouseZoneEnter({ player }) {
+    const stage = quest.getStage(player);
+    if (stage < STAGE_HOUSE_OPEN || stage >= STAGE_TRAP) return;
+    ensureQuestNpcs(player);
+    ensureSafehouseDoorState(player);
+    ensureSafehouseTopObjects(player);
+  }
+
   function openSafehouseScene(player) {
     if (Scenes.get(player)?.name === "safehouse-trap") return;
+    clearSafehouseTopObjects(player);
     if (Scenes.get(player)) Scenes.end(player, false);
-    const scene = Scenes.open(player, "safehouse-trap", [[1643, 1652, 3091, 3096, 0]]);
+    const scene = Scenes.open(player, "safehouse-trap", [[1643, 1652, 3091, 3106, 0]]);
     Scenes.controls(player, true, true);
     Scenes.fade(player, true);
     Scenes.later(scene, 2, () => {
@@ -1236,10 +1304,25 @@ module.exports = function registerTheFinalDawnQuest(api) {
     }
     if (pair.has(KNIFE_BLADE_ITEM) && pair.has(ANCIENT_ROOTS_ITEM)) {
       event.handled = true;
-      player.getInventory().deleteNumber(ANCIENT_ROOTS_ITEM, 1);
-      player.getInventory().adds(ROOT_KINDLING_ITEM, 4);
-      player.sendMessage("You fletch the ancient roots into root kindling.");
+      fletchAncientRoots(player);
     }
+  }
+
+  function fletchAncientRoots(player) {
+    if (!held(player, KNIFE_BLADE_ITEM)) {
+      player.sendMessage("You need a knife blade to fletch the ancient roots.");
+      return false;
+    }
+    player.getInventory().deleteNumber(ANCIENT_ROOTS_ITEM, 1);
+    player.getInventory().adds(ROOT_KINDLING_ITEM, 4);
+    player.sendMessage("You fletch the ancient roots into root kindling.");
+    return true;
+  }
+
+  function handleFletchAncientRoots(event) {
+    if (event.itemId !== ANCIENT_ROOTS_ITEM || event.option !== "Fletch") return;
+    event.handled = true;
+    fletchAncientRoots(event.player);
   }
 
   function readEmissaryScroll(event) {
@@ -1271,7 +1354,10 @@ module.exports = function registerTheFinalDawnQuest(api) {
     player.getInventory().adds(EMPTY_COIN_PURSE_ITEM, 1);
     if (itemId === COIN_PURSE_ITEM) player.sendMessage("You open the coin purse and find a few coins inside.");
     else player.sendMessage("You empty the sand from the coin purse.");
-    if (quest.getStage(player) === STAGE_UPSTAIRS) setStage(player, STAGE_PURSE_OPEN);
+    if (quest.getStage(player) === STAGE_UPSTAIRS) {
+      setStage(player, STAGE_PURSE_OPEN);
+      ensureSafehouseTopObjects(player);
+    }
   }
 
   // ==========================================================================
@@ -1774,7 +1860,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
 
   /** The fragment's own Locate op; coordinates and varbit16671 are mandatory. */
   function handleLocateKeystone(event) {
-    if (event.itemId !== KEYSTONE_FRAGMENT_ITEM || event.option !== "Locate") return;
+    if (event.itemId !== KEYSTONE_FRAGMENT_ITEM || (event.option !== "Locate" && event.option !== "Touch")) return;
     event.handled = true;
     const { player } = event;
     if (quest.getStage(player) !== STAGE_LOCATE || !held(player, KEYSTONE_FRAGMENT_ITEM)) return;
@@ -1854,6 +1940,13 @@ module.exports = function registerTheFinalDawnQuest(api) {
     [56808, 1318, 9357, 2], [56808, 1315, 9358, 2], [56808, 1308, 9351, 3],
   ];
 
+  function spawnSceneNpc(player, definition) {
+    const npc = api.spawnNpc(definition);
+    const area = Scenes.get(player)?.area;
+    if (npc && area) area.enter(npc);
+    return npc;
+  }
+
   function openCryptScene(player) {
     if (Scenes.get(player)) return;
     const scene = Scenes.open(player, "crypt-assault", [[1300, 1343, 9340, 9385, 2]]);
@@ -1870,10 +1963,10 @@ module.exports = function registerTheFinalDawnQuest(api) {
     const [melee, ranged] = WAVE_COMPOSITION[wave - 1];
     const tile = player.getLocation();
     for (let i = 0; i < melee; i++) {
-      api.spawnNpc({ id: CULTIST_MELEE_ID, x: tile.getX() + 1 + (i % 2), y: tile.getY() + Math.floor(i / 2), z: tile.getZ(), wanderRadius: 2, owner: player, ownerOnly: true });
+      spawnSceneNpc(player, { id: CULTIST_MELEE_ID, x: tile.getX() + 1 + (i % 2), y: tile.getY() + Math.floor(i / 2), z: tile.getZ(), wanderRadius: 2, owner: player, ownerOnly: true });
     }
     for (let i = 0; i < ranged; i++) {
-      api.spawnNpc({ id: CULTIST_RANGED_ID, x: tile.getX() - 1 - (i % 2), y: tile.getY() + Math.floor(i / 2), z: tile.getZ(), wanderRadius: 2, owner: player, ownerOnly: true });
+      spawnSceneNpc(player, { id: CULTIST_RANGED_ID, x: tile.getX() - 1 - (i % 2), y: tile.getY() + Math.floor(i / 2), z: tile.getZ(), wanderRadius: 2, owner: player, ownerOnly: true });
     }
   }
 
@@ -1897,13 +1990,14 @@ module.exports = function registerTheFinalDawnQuest(api) {
     if (tracked(player, "ennius-boss")) return;
     cameraBeat(player, [1327, 9349, 420], [1336, 9359, 419], 80);
     const tile = player.getLocation();
-    syncTracked(player, "ennius-boss", {
+    const boss = syncTracked(player, "ennius-boss", {
       id: ENNIUS_BOSS_ID,
       x: tile.getX(),
       y: tile.getY() + 2,
       z: tile.getZ(),
       wanderRadius: 0,
     });
+    if (boss) Scenes.get(player)?.area?.enter(boss);
     setStage(player, STAGE_ENNIUS);
   }
 
@@ -2200,7 +2294,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
         player.moveTo(new Location(TEUMO_BASEMENT_TILE.x, TEUMO_BASEMENT_TILE.y, TEUMO_BASEMENT_TILE.z));
         return;
       case ACTION_REPORT2_DEPART:
-        if (!ATTALA_IDS.has(npcId) && npcId !== SERVIUS_BASEMENT_ID) return;
+        if (!ATTALA_IDS.has(npcId) && !SERVIUS_IDS.has(npcId)) return;
         setStage(player, STAGE_REPORT2);
         player.moveTo(new Location(NEYPOTZLI_TILE.x, NEYPOTZLI_TILE.y, NEYPOTZLI_TILE.z));
         setStage(player, STAGE_NEYPOTZLI_ENTRY);
@@ -2274,6 +2368,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
     }
     ensureQuestNpcs(player);
     ensureSafehouseDoorState(player);
+    ensureSafehouseTopObjects(player);
     syncNeypotzliCheckpoint(player);
     if (quest.getStage(player) === STAGE_WAVES) spawnCultistWave(player);
     refreshQuestList(player);
@@ -2292,6 +2387,7 @@ module.exports = function registerTheFinalDawnQuest(api) {
     if (!player) return;
     Scenes.end(player, true);
     stopTemplePatrol(player);
+    clearSafehouseTopObjects(player);
     clearTrackedNpcs(player);
   }
 
@@ -2420,7 +2516,8 @@ module.exports = function registerTheFinalDawnQuest(api) {
   api.onItemOnNpc(handleItemOnNpc, { noted: false });
   api.onItemOnObject(handleItemOnObject, { noted: false });
   api.onItemOnItem(handleItemOnItem, { noted: false });
-  api.onItemAction("Keystone fragment", { Locate: handleLocateKeystone });
+  api.onItemAction("Keystone fragment", { Locate: handleLocateKeystone, Touch: handleLocateKeystone });
+  api.onItemAction("Ancient roots", { Fletch: handleFletchAncientRoots });
   api.onItemAction("Potatoes(3)", { Empty: emptyPotatoSack });
   api.onItemAction("Sandy coin purse", { Empty: emptyCoinPurse });
   api.onItemAction("Coin purse", { Open: emptyCoinPurse, Empty: emptyCoinPurse });
@@ -2437,6 +2534,11 @@ module.exports = function registerTheFinalDawnQuest(api) {
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("door:toggle", handleDoorToggle);
+  for (const key of STRANGE_TILE_LINKS.keys()) {
+    const [x, y, z] = key.split(",").map(Number);
+    api.onZoneEnter({ minX: x, maxX: x, minY: y, maxY: y, levels: [z] }, handleStrangeTileStep);
+  }
+  api.onZoneEnter(SAFEHOUSE_ZONE, handleSafehouseZoneEnter);
   api.onCustomEvent("ladders:climb", advanceSafehouseStairs);
   api.onCustomEvent("ladders:climb", claimTempleStairs);
 };

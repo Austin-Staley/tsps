@@ -59,6 +59,8 @@ module.exports = function registerRedReefQuest(api) {
   const { Equipment, ItemIdentifiers, Location, NpcIdentifiers, ObjectIdentifiers, Skill } = api.core;
   const { registerQuest, refreshQuestList, startTranscript } = require("../QuestRuntime");
   const StaticShips = require("../../skills/sailing/StaticShips.Sailing");
+  const { crossingFor } = require("../../objects/WallDoor.Doors");
+  const ObstacleRunner = require("../../skills/agility/ObstacleRunner.Agility");
 
   // ==========================================================================
   // Ids
@@ -180,6 +182,18 @@ module.exports = function registerRedReefQuest(api) {
   const DISPLAY_CASE_VARBITS = new Map(DISPLAY_CASES.map((entry) => [entry.objectId, entry.varbit]));
   const CORAL_DREDGER_REPAIR_OBJECT_ID = ObjectIdentifiers.CORAL_DREDGER_2; // 58500
   const CORAL_DREDGER_BASE_OBJECT_ID = 58497; // raw placed parent; transforms to 58500 at 32-34
+  // Last Light's lighthouse doorway, as captured (transcripts/RedReefDiscord capture 4152,
+  // ticks 1345-1347 and the reverse at 1474-1478): the normal Open click swaps the closed
+  // leaf 60018 for the inactive doorway 60019 and the invisible wall 38848 in the SAME tile
+  // (both shape 0 / face 0), walks the player one tile through the clipped edge, and puts
+  // 60018 back two ticks later. The crossing is scripted per player, not a global open door.
+  const LAST_LIGHT_DOORWAY_OBJECT_ID = 60018; // last_light_doorway, Open
+  const LAST_LIGHT_DOORWAY_OPEN_OBJECT_ID = 60019; // last_light_doorway_inactive
+  const LAST_LIGHT_INVISWALL_OBJECT_ID = 38848; // inviswall shown in the open doorway
+  const LAST_LIGHT_DOOR_TILE = { x: 2858, y: 2323, z: 0 };
+  const LAST_LIGHT_DOOR_OPEN_TICKS = 2; // capture 1345 open -> 1347 closed; same on exit
+  /** player -> { key, destination } while their scripted threshold crossing is in flight. */
+  const lastLightDoorCrossings = new WeakMap();
   const DISPLAY_CASE_ATTRIBUTE = "the-red-reef:display-cases";
   const DISPLAY_CASE_IDS = [...DISPLAY_CASE_VARBITS.keys()];
 
@@ -262,13 +276,16 @@ module.exports = function registerRedReefQuest(api) {
   const BETHEL_TILE = { x: 2862, y: 2323, z: 2 };
   const LOBSTER_TILE = { x: 2841, y: 8946, z: 1 };
   // Walkable (object-free) tiles on the Last Light isle from the loc dump.
+  // The last two tiles are the primary capture's trr_pirate adds (RedReefDiscord ticks
+  // 626-1246), replacing the old QH points 2847,2326 (water) and 2855,2333 (ocean-clipped);
+  // both replacements are walkable and already-earned kills are unaffected.
   const PIRATE_TILES = [
     { x: 2849, y: 2324 },
     { x: 2852, y: 2321 },
     { x: 2852, y: 2325 },
     { x: 2856, y: 2321 },
-    { x: 2847, y: 2326 },
-    { x: 2855, y: 2333 },
+    { x: 2852, y: 2328 },
+    { x: 2858, y: 2322 },
   ];
 
   let quest;
@@ -851,8 +868,83 @@ module.exports = function registerRedReefQuest(api) {
   // World interactions
   // ==========================================================================
 
+  function atLastLightDoor(location) {
+    return !!location
+      && location.getX() === LAST_LIGHT_DOOR_TILE.x
+      && location.getY() === LAST_LIGHT_DOOR_TILE.y
+      && location.getZ() === LAST_LIGHT_DOOR_TILE.z;
+  }
+
+  /** The capture's raw client states, in both directions, over normal packets. */
+  function sendLastLightDoorState(player, open) {
+    const sender = player.getPacketSender();
+    const location = new Location(LAST_LIGHT_DOOR_TILE.x, LAST_LIGHT_DOOR_TILE.y, LAST_LIGHT_DOOR_TILE.z);
+    const raw = (id) => new api.core.GameObject(id, location.clone(), 0, 0, null);
+    if (open) {
+      sender.sendObjectRemoval(raw(LAST_LIGHT_DOORWAY_OBJECT_ID));
+      sender.sendObject(raw(LAST_LIGHT_INVISWALL_OBJECT_ID));
+      sender.sendObject(raw(LAST_LIGHT_DOORWAY_OPEN_OBJECT_ID));
+    } else {
+      sender.sendObjectRemoval(raw(LAST_LIGHT_INVISWALL_OBJECT_ID));
+      sender.sendObjectRemoval(raw(LAST_LIGHT_DOORWAY_OPEN_OBJECT_ID));
+      sender.sendObject(raw(LAST_LIGHT_DOORWAY_OBJECT_ID));
+    }
+  }
+
+  function closeLastLightDoorLater(player, key) {
+    const task = new api.core.Task(LAST_LIGHT_DOOR_OPEN_TICKS, key);
+    task.execute = () => {
+      task.stop();
+      sendLastLightDoorState(player, false);
+      const state = lastLightDoorCrossings.get(player);
+      if (state?.key === key) lastLightDoorCrossings.delete(player);
+    };
+    api.core.TaskManager.submit(task);
+  }
+
+  /**
+   * The captured threshold walk, like the AlKharid gate / wall-door helper: claim the click,
+   * show the two open locs, then have the agility runner walk the player one tile through the
+   * closed leaf's clipping (the client draws a normal walk). The server keeps the wall's
+   * clipping, so this permission is scoped to the crossing player and is never a global open.
+   */
+  function crossLastLightDoor(event) {
+    const { player } = event;
+    const location = event.object?.getLocation?.() ?? event.location;
+    if (!atLastLightDoor(location)) return false;
+    const from = player.getLocation();
+    if (from.getZ() !== LAST_LIGHT_DOOR_TILE.z) return false;
+    if (Math.abs(from.getX() - LAST_LIGHT_DOOR_TILE.x) > 1
+      || Math.abs(from.getY() - LAST_LIGHT_DOOR_TILE.y) > 1) return false;
+    if (lastLightDoorCrossings.has(player) || ObstacleRunner.isBusy(player)) return true;
+    const door = event.object
+      ?? api.core.MapObjects.get(
+        LAST_LIGHT_DOORWAY_OBJECT_ID,
+        new Location(LAST_LIGHT_DOOR_TILE.x, LAST_LIGHT_DOOR_TILE.y, LAST_LIGHT_DOOR_TILE.z),
+        player.getPrivateArea?.() ?? null
+      );
+    const crossing = crossingFor(door, from);
+    if (!crossing) return false;
+    event.handled = true;
+    const key = `red-reef:last-light-door:${player.getIndex()}`;
+    lastLightDoorCrossings.set(player, { key, destination: crossing.destination });
+    sendLastLightDoorState(player, true);
+    closeLastLightDoorLater(player, key);
+    // Leading wait: one tile per tick, as the captured walk, and the runner cancels on logout.
+    const task = ObstacleRunner.run({ player, object: door }, [{ wait: 1 }, { walk: [[crossing.destination.x, crossing.destination.y]] }], {
+      onFinish: () => {
+        const state = lastLightDoorCrossings.get(player);
+        if (state?.key === key) lastLightDoorCrossings.delete(player);
+      },
+    });
+    const state = lastLightDoorCrossings.get(player);
+    if (state?.key === key) state.task = task;
+    return true;
+  }
+
   function handleObjectInteraction(event) {
     const { player, objectId } = event;
+    if (objectId === LAST_LIGHT_DOORWAY_OBJECT_ID && crossLastLightDoor(event)) return;
     const varbit = DISPLAY_CASE_VARBITS.get(objectId);
     if (varbit !== undefined) {
       event.handled = true;
@@ -1096,6 +1188,12 @@ module.exports = function registerRedReefQuest(api) {
   }
 
   function handleLogout({ player }) {
+    const doorCrossing = lastLightDoorCrossings.get(player);
+    if (doorCrossing) {
+      api.core.TaskManager.cancelTasks(doorCrossing.key);
+      doorCrossing.task?.stop();
+      lastLightDoorCrossings.delete(player);
+    }
     finaleRewardPending.delete(player);
     clearSpawns(player);
     playerShips.delete(player);
@@ -1273,6 +1371,7 @@ module.exports = function registerRedReefQuest(api) {
   api.persistAttribute(VERSION_ATTRIBUTE, 0);
 
   StaticShips.attach(api);
+  ObstacleRunner.init(api);
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);

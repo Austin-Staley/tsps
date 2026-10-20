@@ -383,7 +383,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     { x: 3737, y: 3328 },
     { x: 3736, y: 3328 },
     { x: 3735, y: 3328 },
-    { x: 3734, y: 3328, lookBack: true, lookBackTicks: 12 },
+    { x: 3734, y: 3328, lookBack: true, lookBackTicks: 15 },
     { x: 3733, y: 3328 },
     { x: 3732, y: 3327 },
     { x: 3731, y: 3326 },
@@ -403,7 +403,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     { x: 3717, y: 3328 },
     { x: 3716, y: 3328 },
     { x: 3715, y: 3328 },
-    { x: 3714, y: 3328, lookBack: true, lookBackTicks: 12 },
+    { x: 3714, y: 3328, lookBack: true, lookBackTicks: 15 },
     { x: 3713, y: 3328 },
     { x: 3712, y: 3328 },
     { x: 3711, y: 3328 },
@@ -418,7 +418,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     { x: 3702, y: 3322 },
     { x: 3702, y: 3321 },
     { x: 3702, y: 3320 },
-    { x: 3702, y: 3319, lookBack: true, lookBackTicks: 12 },
+    { x: 3702, y: 3319, lookBack: true, lookBackTicks: 15 },
     { x: 3702, y: 3318 },
     { x: 3703, y: 3317 },
     { x: 3703, y: 3316 },
@@ -444,7 +444,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
     { x: 3719, y: 3317 },
     { x: 3720, y: 3317 },
     { x: 3721, y: 3317 },
-    { x: 3722, y: 3317, lookBack: true, lookBackTicks: 12 },
+    { x: 3722, y: 3317, lookBack: true, lookBackTicks: 15 },
     { x: 3723, y: 3317 },
     { x: 3724, y: 3317 },
     { x: 3725, y: 3317 },
@@ -473,7 +473,7 @@ module.exports = function registerSinsOfTheFatherQuest(api) {
 
   const CARL_FOLLOW_FAIL_DISTANCE = 14;
   const CARL_VIEW_RANGE = 10;
-  const CARL_LOOKBACK_TICKS = 12; // fallback; captured pauses carry exact ticks
+  const CARL_LOOKBACK_TICKS = 15; // capture 1637: every look-back pauses for 15 ticks
   const HIDEOUT_CRATE_OBJECT_ID = 17987; // "Crate" Search (silver sickle (b))
   const LAB_ESCAPE_GATE_ID = 37992; // "Gate" Escape (Kroy's lab)
   const SLEPE_ROWBOAT_OBJECT_ID = 32602; // cache "Row boat" Travel at Slepe

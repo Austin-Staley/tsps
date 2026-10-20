@@ -70,9 +70,9 @@
  *  - Grubfoot's follower walk is talk-driven: he is teleported to the lab when the
  *    player enters the city; the walk-in cutscene lines and the pet-following lines
  *    are not simulated (pet conditions answer false).
- *  - Temple/enclave NPC tiles are eyeballed from the cache map (no room names in the
- *    dump), then verified against the server's own collision map; each tribe's
- *    priest/guard pair stands on the hall's edge. The Preacher's sermon has no
+ *  - Temple/enclave NPC ids and tiles come from the RSProx 1694 actor adds, cross-checked
+ *    against Quest Helper's guard/priest names (the ids are not sequential by tribe).
+ *    Each tribe's priest/guard pair stands in its enclave. The Preacher's sermon has no
  *    interaction in the cache and is not played.
  *  - Crypt priests are summoned by Say-name (a message, the wiki has no line), turn
  *    into their Talk-to ghosts on death, and are owned per player.
@@ -221,23 +221,26 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
 
   // The six tribes: Saragorgak white/west, Yurkolgokh yellow/north-west, Huzamogaarb
   // black/north-east, Ekeleshuun blue/east, Narogoshuun orange/south-east,
-  // Horogothgar purple/south-west (wiki). Priests are the Pickpocket-id of each pair.
+  // Horogothgar purple/south-west (wiki). The ids are NOT sequential by tribe: the
+  // capture's actor adds and Quest Helper's guard/priest names put white=11319/11309,
+  // yellow=11321/11313, black=11318/11307, blue=11316/11303, orange=11317/11305 and
+  // purple=11320/11311. Mail and key arrays below stay in this same tribe order.
   const TRIBE_COUNT = 6;
   const TRIBE_PRIEST_IDS = [
-    NpcIdentifiers.PRIEST_8, // 11305
-    NpcIdentifiers.PRIEST_10, // 11307
-    NpcIdentifiers.PRIEST_6, // 11303
-    NpcIdentifiers.PRIEST_12, // 11309
-    NpcIdentifiers.PRIEST_14, // 11311
-    NpcIdentifiers.PRIEST_16, // 11313
+    NpcIdentifiers.PRIEST_12, // 11309, white
+    NpcIdentifiers.PRIEST_16, // 11313, yellow
+    NpcIdentifiers.PRIEST_10, // 11307, black
+    NpcIdentifiers.PRIEST_6, // 11303, blue
+    NpcIdentifiers.PRIEST_8, // 11305, orange
+    NpcIdentifiers.PRIEST_14, // 11311, purple
   ];
   const TRIBE_GUARD_IDS = [
-    NpcIdentifiers.GUARD_152, // 11316
-    NpcIdentifiers.GUARD_153, // 11317
-    NpcIdentifiers.GUARD_154, // 11318
-    NpcIdentifiers.GUARD_155, // 11319
-    NpcIdentifiers.GUARD_156, // 11320
-    NpcIdentifiers.GUARD_157, // 11321
+    NpcIdentifiers.GUARD_155, // 11319, white
+    NpcIdentifiers.GUARD_157, // 11321, yellow
+    NpcIdentifiers.GUARD_154, // 11318, black
+    NpcIdentifiers.GUARD_152, // 11316, blue
+    NpcIdentifiers.GUARD_153, // 11317, orange
+    NpcIdentifiers.GUARD_156, // 11320, purple
   ];
   const TRIBE_MAIL_IDS = [
     ItemIdentifiers.WHITE_GOBLIN_MAIL, // 26567
@@ -413,8 +416,7 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
     AGGIE_WHITE_MAIL_ACTION_ID,
   ]);
 
-  // Spawn tiles (cache placements; temple interior eyeballed from the loc dump and
-  // verified walkable against the server's own collision map).
+  // Spawn tiles (cache placements; temple interior from the capture actor adds).
   const GRUBFOOT_MINE_TILE = { x: 3318, y: 9613 };
   const GRUBFOOT_LAB_TILE = { x: 2702, y: 5369 };
   const GRUBFOOT_VILLAGE_TILE = { x: 2957, y: 3514 };
@@ -429,22 +431,36 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
   const TEMPLE_INSIDE_TILE = { x: 3744, y: 4306 };
   const HIGH_PRIEST_TILE = { x: 3744, y: 4326 };
   const PREACHER_TILE = { x: 3748, y: 4317 };
+  // Temple spawn tiles are the capture 1694 actor adds (not the Quest Helper
+  // interaction points, which are where the player stands). Order matches the tribes.
   const TRIBE_GUARD_TILES = [
-    { x: 3725, y: 4319 },
-    { x: 3728, y: 4333 },
-    { x: 3753, y: 4339 },
-    { x: 3754, y: 4330 },
-    { x: 3752, y: 4322 },
-    { x: 3739, y: 4322 },
+    { x: 3732, y: 4320 }, // white
+    { x: 3735, y: 4329 }, // yellow
+    { x: 3753, y: 4329 }, // black
+    { x: 3756, y: 4320 }, // blue
+    { x: 3753, y: 4311 }, // orange
+    { x: 3735, y: 4311 }, // purple
   ];
   const TRIBE_PRIEST_TILES = [
-    { x: 3727, y: 4319 },
-    { x: 3730, y: 4333 },
-    { x: 3755, y: 4340 },
-    { x: 3756, y: 4330 },
-    { x: 3754, y: 4322 },
-    { x: 3741, y: 4322 },
+    { x: 3724, y: 4316 }, // white
+    { x: 3724, y: 4332 }, // yellow
+    { x: 3757, y: 4340 }, // black
+    { x: 3760, y: 4319 }, // blue
+    { x: 3761, y: 4307 }, // orange
+    { x: 3734, y: 4302 }, // purple
   ];
+  // Captured enclave pass: the guard shoves the player across one blocked mouth tile.
+  // `from` is the hall side, `to` the enclave side (1694 lines 19275/31040/31912/32582/
+  // 33158/33802). This is the only movement that may ignore clipping.
+  const TRIBE_GUARD_PASS = [
+    { from: { x: 3733, y: 4320 }, to: { x: 3731, y: 4320 } }, // white
+    { from: { x: 3736, y: 4328 }, to: { x: 3734, y: 4330 } }, // yellow
+    { from: { x: 3752, y: 4328 }, to: { x: 3754, y: 4330 } }, // black
+    { from: { x: 3755, y: 4320 }, to: { x: 3757, y: 4320 } }, // blue
+    { from: { x: 3752, y: 4312 }, to: { x: 3754, y: 4310 } }, // orange
+    { from: { x: 3736, y: 4312 }, to: { x: 3734, y: 4310 } }, // purple
+  ];
+  const IGNORE_CLIPPING_FLAG = "movement:ignore-clipping";
   const RING_OLDAK_TILE = { x: 2743, y: 5221 };
   const RING_ZANIK_TILE = { x: 2733, y: 5222 };
   const YUBIUSK_OLDAK_TILE = { x: 3540, y: 4384 };
@@ -471,6 +487,8 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
 
   /** Transient tribe context for the enclave-guard prose conditions (never persisted). */
   const enclaveTribe = new WeakMap();
+  /** Scoped ignore-clipping movement for an accepted guard pass. */
+  const guardPassMoves = new WeakMap();
   /** Potion showed the makeover interface but has not been confirmed. */
   const pendingGoblinPotion = new WeakMap();
   /** The 9-4-1 relay values while the player is using interface 738. */
@@ -643,6 +661,44 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
     trackedNpcs.delete(player);
   }
 
+  /** Restore any existing ignore-clipping state; never leave free temple walking. */
+  function finishGuardPass(player) {
+    const state = guardPassMoves.get(player);
+    if (!state) return;
+    guardPassMoves.delete(player);
+    if (state.previous) player.setFlag(IGNORE_CLIPPING_FLAG, true);
+    else player.removeFlag(IGNORE_CLIPPING_FLAG);
+  }
+
+  /** Ends the scoped flag as soon as the queued pass has no steps left. */
+  function pollGuardPass(player, token, ticks) {
+    if (guardPassMoves.get(player)?.token !== token) return;
+    const queue = player.getMovementQueue();
+    if (queue.points?.length === 0 || ticks <= 0) {
+      finishGuardPass(player);
+      return;
+    }
+    Scenes.later(player, 1, () => pollGuardPass(player, token, ticks - 1));
+  }
+
+  /** Captured guard shove: only these exact two tiles may ignore clipping. */
+  function walkGuardPass(player, destination) {
+    finishGuardPass(player);
+    const previous = player.hasFlag?.(IGNORE_CLIPPING_FLAG) === true;
+    const token = {};
+    guardPassMoves.set(player, { previous, token });
+    player.setFlag(IGNORE_CLIPPING_FLAG, true);
+    const queue = player.getMovementQueue();
+    queue.reset();
+    queue.addSteps(new Location(destination.x, destination.y, 0));
+    pollGuardPass(player, token, 4);
+  }
+
+  /** Any ordinary walk request cancels the scoped pass movement. */
+  function cancelGuardPass(event) {
+    finishGuardPass(event.player);
+  }
+
   /** Spawns exactly the NPCs the player's current stage/state calls for. */
   function syncQuestNpcs(player) {
     if (!player || player.isPlayerBot?.() === true) return;
@@ -678,7 +734,7 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
       removeTracked(player, "entrance-guard-2");
     }
 
-    const inTemple = questActive(player) && stage >= STAGE_TEMPLE && stage < STAGE_MACHINE;
+    const inTemple = stage >= STAGE_TEMPLE && (stage < STAGE_MACHINE || complete);
     if (inTemple) {
       moveTracked(player, "bighead", HIGH_PRIEST_BIGHEAD_NPC_ID, HIGH_PRIEST_TILE);
       moveTracked(player, "preacher", PREACHER_NPC_ID, PREACHER_TILE);
@@ -885,11 +941,13 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
   // ==========================================================================
 
   function answerEnclaveCondition(player, stepId) {
-    const tribe = enclaveTribe.get(player);
-    if (tribe === undefined) return null;
-    const correct = wornBodyId(player) === TRIBE_MAIL_IDS[tribe];
-    if (stepId === ENCLAVE_WRONG_MAIL_CONDITION_ID) return !correct;
-    if (stepId === ENCLAVE_RIGHT_MAIL_CONDITION_ID) return correct;
+    const state = enclaveTribe.get(player);
+    if (!state) return null;
+    const correct = wornBodyId(player) === TRIBE_MAIL_IDS[state.tribe];
+    if (stepId === ENCLAVE_WRONG_MAIL_CONDITION_ID) return !state.leaving && !correct;
+    if (stepId === ENCLAVE_RIGHT_MAIL_CONDITION_ID) return !state.leaving && correct;
+    if (stepId === ENCLAVE_LEAVE_WRONG_CONDITION_ID) return state.leaving && !correct;
+    if (stepId === ENCLAVE_LEAVE_RIGHT_CONDITION_ID) return state.leaving && correct;
     return false;
   }
 
@@ -1194,9 +1252,27 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
   // ==========================================================================
 
   function passEnclaveGuard(player, npcId) {
-    if (!questActive(player) || quest.getStage(player) < STAGE_TEMPLE) return;
-    enclaveTribe.set(player, GUARD_TRIBE_BY_ID.get(npcId));
+    // Post-quest entry is still canonical; it grants no stage, key or item progress.
+    if (quest.getStage(player) < STAGE_TEMPLE) return;
+    const tribe = GUARD_TRIBE_BY_ID.get(npcId);
+    if (tribe === undefined) return;
+    const pass = TRIBE_GUARD_PASS[tribe];
+    const location = player.getLocation();
+    const at = (tile) =>
+      location.getX() === tile.x && location.getY() === tile.y && location.getZ() === 0;
+    const fromDistance = Math.abs(location.getX() - pass.from.x) + Math.abs(location.getY() - pass.from.y);
+    const toDistance = Math.abs(location.getX() - pass.to.x) + Math.abs(location.getY() - pass.to.y);
+    const leaving = !at(pass.from) && toDistance < fromDistance;
+    const correct = wornBodyId(player) === TRIBE_MAIL_IDS[tribe];
+    enclaveTribe.set(player, { tribe, leaving });
     startTranscript(api, player, npcId, PAGE, "the-temple-of-tribes-talking-to-enclave-guards");
+    if (correct) {
+      if (at(pass.from)) walkGuardPass(player, pass.to);
+      else if (at(pass.to)) walkGuardPass(player, pass.from);
+    } else if (leaving) {
+      // Captured throw-out (1694): player is moved back to the hall-side mouth.
+      player.moveTo(new Location(pass.from.x, pass.from.y, 0));
+    }
   }
 
   function pickpocketPriest(player, npcId) {
@@ -1754,6 +1830,7 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
   }
 
   function handleLogout({ player }) {
+    finishGuardPass(player);
     finishCutscene(player);
     machinePower.delete(player);
     removeAllTracked(player);
@@ -1937,4 +2014,5 @@ module.exports = function registerLandOfTheGoblinsQuest(api) {
   api.onZoneEnter(YUBIUSK_ZONE, handleQuestZoneEnter);
   api.onPlayerLogin(handleLogin);
   api.onPlayerLogout(handleLogout);
+  api.onWalkRoute(cancelGuardPass);
 };

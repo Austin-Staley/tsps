@@ -18,7 +18,7 @@ const noop = () => {};
 before(async () => { await CachePipeline.initialize(path.resolve(__dirname, '..')); });
 
 function harness() {
-  const events = {}, tasks = [], npcs = [], removed = [], objects = [], variants = [], npcInteractions = new Map(), objectInteractions = new Map(), anyNpcHooks = [];
+  const events = {}, tasks = [], npcs = [], removed = [], objects = [], variants = [], npcInteractions = new Map(), objectInteractions = new Map(), anyNpcHooks = [], objectHooks = [], itemOnObject = [];
   let failSpawnId = null, failSpawnCount = 0;
   const api = new Proxy({
     core: { ...core, ObjectManager: { register: o => objects.push(o), deregister: noop },
@@ -31,9 +31,9 @@ function harness() {
     onNpcDialogueCondition() {},
     onNpcInteraction(name, actions) { npcInteractions.set(name, actions); },
     onAnyNpcInteraction(actions) { anyNpcHooks.push(actions); },
-    onObjectInteraction(target, actions) { if (typeof target === 'string') objectInteractions.set(target, actions); },
+    onObjectInteraction(target, actions) { if (typeof target === 'string') objectInteractions.set(target, actions); else objectHooks.push(target); },
     onObjectRoute() {},
-    onItemOnObject() {},
+    onItemOnObject(fn) { itemOnObject.push(fn); },
     onItemOnItem() {},
     onItemOnNpc() {},
     onItemAction() {},
@@ -71,7 +71,7 @@ function harness() {
     removeNpc: npc => removed.push(npc),
   }, { get: (target, key) => target[key] ?? (() => {}) });
   require('../plugins/quests/quests/TheBloodMoonRises.Quest')(api);
-  return { api, events, tasks, npcs, removed, objects, variants, npcInteractions, objectInteractions, anyNpcHooks, quest: runtime.getRegisteredQuests().at(-1),
+  return { api, events, tasks, npcs, removed, objects, variants, npcInteractions, objectInteractions, anyNpcHooks, objectHooks, itemOnObject, quest: runtime.getRegisteredQuests().at(-1),
     emit: (name, event) => { for (const fn of events[name] ?? []) fn(event); },
     tick(count) { while (count-- > 0) for (const task of [...tasks]) if (!task.stopped && !task.done) { task.done = true; task.run(); } },
     failNextSpawns(id, count = 1) { failSpawnId = id; failSpawnCount = count; } };
@@ -1110,4 +1110,100 @@ test('escaped Castle-labyrinth reverse route returns to the landing and keeps th
   const routePath = route.findRoute({ level: 0, srcX: 3166, srcY: 7577, srcSize: 1,
     destX: 3147, destY: 7584, privateArea: null, moveNear: false });
   assert.equal(routePath.success, true, 'the landing connects by ordinary walking to the stairs');
+});
+
+test('Vanescula cracked wall 61611 burns once and opens the Venator/third-emblem path', () => {
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+  const STORY = 'quest.the_blood_moon_rises.castle-story';
+  const ROOM = 'quest.the_blood_moon_rises.castle-room';
+  const FLOOR = 'quest.the_blood_moon_rises.castle-floor';
+  const NATIVE = 'quest.the_blood_moon_rises.castle-native-stage';
+
+  const wall = CacheDefinitions.getObject(61611);
+  assert.equal(wall.transformVarbit, 15511);
+  assert.deepEqual(wall.transforms, [61613, 61614], '61611 is the cached cracked-wall transform parent');
+  assert.equal(CacheDefinitions.getObject(61613).actions[0], 'Inspect');
+  assert.equal(CacheDefinitions.getObject(61614).actions[0], 'Enter');
+  const definitionAt = (value) => ObjectDefinition.forPlayer(61611, {
+    getPacketSender: () => ({ getVarbit: (id) => id === 15511 ? value : 0, getVarp: () => 0 }),
+  });
+  assert.equal(definitionAt(0).id, 61613, 'unblown state resolves to the cracked wall');
+  assert.equal(definitionAt(1).id, 61614, 'blown state resolves to the hole in the wall');
+
+  RegionManager.init();
+  RegionManager.loadMapFiles(2492, 7364, true);
+  assert.equal(RegionManager.getRegionid(RegionManager.regionIdForTile(2487, 7421))?.isLoaded(), true);
+  assert.equal(RegionManager.getClipping(2487, 7421, 0, null) & RegionManager.BLOCKED_TILE, 0,
+    'the Venator-room landing is walkable');
+  assert.ok(MapObjects.get(61637, new core.Location(2486, 7421, 0), null), 'third-emblem receptacle is in cache');
+
+  const h = harness(), p = player('Wall');
+  h.quest.setStage(p, 40);
+  p.attrs.set(NATIVE, 72);
+  p.attrs.set(ROOM, 24);
+  p.attrs.set(FLOOR, 2);
+  p.attrs.set(STORY, { defeated: [] });
+  p.getInventory().adds(I.EXPLOSIVE_BARREL, 2);
+  p.getInventory().adds(I.TINDERBOX, 1);
+
+  const wallHandler = h.objectHooks.find(fn => fn.name === 'handleCastleVanesculaWall');
+  const itemHandler = h.itemOnObject.find(fn => fn.name === 'handleCastleVanesculaWallItem');
+  const thirdHandler = h.objectHooks.find(fn => fn.name === 'handleCastleThirdEmblemReceptacle');
+  assert.ok(wallHandler && itemHandler && thirdHandler);
+
+  const objectEvent = (option, objectId = 61611, definitionId = 61613, x = 2492, y = 7364) => ({
+    player: p, objectId, definition: { id: definitionId, getName: () => 'Cracked wall' },
+    location: { x, y, z: 0 }, option, handled: false,
+  });
+  const inspect = objectEvent('Inspect');
+  wallHandler(inspect);
+  assert.equal(inspect.handled, true);
+  assert.ok(p.messages.some(message => message.includes('cracked')), 'cracked wall inspection is informative');
+  assert.equal(p.getInventory().getAmount(I.EXPLOSIVE_BARREL), 2, 'inspection consumes nothing');
+  const otherWall = objectEvent('Inspect', 61612, 61612, 2482, 7412);
+  assert.equal(wallHandler(otherWall), undefined);
+  assert.equal(otherWall.handled, false, 'the separate 61612 return wall is not claimed by this handler');
+
+  const use = { player: p, objectId: 61611, definition: { id: 61613, getName: () => 'Cracked wall' },
+    location: { x: 2492, y: 7364, z: 0 }, itemId: I.EXPLOSIVE_BARREL, handled: false };
+  itemHandler(use);
+  assert.equal(use.handled, true);
+  assert.equal(p.getInventory().getAmount(I.EXPLOSIVE_BARREL), 1, 'one explosive barrel is consumed');
+  assert.equal(p.getInventory().getAmount(I.TINDERBOX), 1, 'the tinderbox is not consumed');
+  assert.equal(p.varbits.get(15511), 1);
+  assert.equal(p.attrs.get(STORY).vanesculaWallBlown, true);
+
+  const secondUse = { ...use, handled: false };
+  itemHandler(secondUse);
+  assert.equal(secondUse.handled, true);
+  assert.equal(p.getInventory().getAmount(I.EXPLOSIVE_BARREL), 1, 'a second barrel is not consumed once open');
+  assert.ok(p.messages.some(message => message.includes('already broken')), 'duplicate use is refused');
+
+  const enter = objectEvent('Enter', 61611, 61614);
+  wallHandler(enter);
+  assert.equal(enter.handled, true);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [2487, 7421, 0]);
+  assert.equal(p.attrs.get(ROOM), 37);
+  assert.equal(p.attrs.get(FLOOR), 2);
+  const venator = h.npcs.find(npc => npc.id === 16213);
+  assert.ok(venator, 'the crescent Venator spawns in the opened room');
+  assert.equal(venator.getOwner(), p);
+
+  const receptacle = { player: p, objectId: 61637,
+    definition: { id: 61637, getName: () => 'Receptacle' }, location: { x: 2486, y: 7421, z: 0 },
+    option: 'Remove-emblem', handled: false };
+  thirdHandler(receptacle);
+  assert.equal(receptacle.handled, true);
+  assert.equal(p.getInventory().contains(I.DRAKAN_EMBLEM_3), false, 'the living Venator still guards the emblem');
+  assert.ok(p.messages.some(message => message.includes('still guards')));
+
+  h.emit('npc-death', { npc: venator, killer: p });
+  const take = { ...receptacle, handled: false };
+  thirdHandler(take);
+  assert.equal(take.handled, true);
+  assert.equal(p.getInventory().contains(I.DRAKAN_EMBLEM_3), true, 'the third emblem is earned after the real Venator death');
+  assert.equal(p.attrs.get(STORY).thirdEmblemClaimed, true);
 });

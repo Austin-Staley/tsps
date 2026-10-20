@@ -94,9 +94,7 @@ test("the data: every id is the cache's, under the names the captures print", ()
   const loc = (id) => CacheDefinitions.getObject(id);
   const seq = gamevals.namesOf(GamevalKind.SEQ);
   const spotanim = gamevals.namesOf(GamevalKind.SPOTANIM);
-  const varbit = gamevals.namesOf(GamevalKind.VARBIT);
-  const { cave, openAccess } = AreaCommon.data;
-  assert.deepEqual(openAccess.varbits.map(({ id }) => varbit.get(id)), ["wyrmscraig_cliff_shortcut"]);
+  const { cave } = AreaCommon.data;
   assert.deepEqual([loc(cave.entrance.id).name, loc(cave.entrance.id).actions[0]], ["Cave", "Enter"]);
   assert.deepEqual([loc(cave.exit.id).name, loc(cave.exit.id).actions[0]], ["Cave", "Exit"]);
 
@@ -136,10 +134,11 @@ test("the shortcuts: levels and ends as the Wiki and the capture have them", () 
 
 // ------------------------------------------------------------------ open access and the cave
 
-test("open access: login unlocks only the cliff shortcut and never forces Fallen From Grace", () => {
+test("Wyrmscraig leaves the quest and mined shortcut state to Fallen From Grace", () => {
   const player = createPlayer();
   for (const hook of loginHooks) hook({ player });
-  assert.ok(player.log.includes("sendVarbit 15720 1"));
+  assert.equal(player.log.some((line) => line.startsWith("sendVarbit 15720")), false,
+    "Fallen From Grace owns the mined shortcut state");
   assert.equal(player.log.some((line) => line.startsWith("sendVarbit 15759")), false,
     "Fallen From Grace owns 15759; Wyrmscraig must not force its finished state");
 });

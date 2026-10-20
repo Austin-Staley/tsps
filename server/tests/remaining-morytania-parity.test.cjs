@@ -946,6 +946,65 @@ test('Sins Carl first look-back respects the captured wall hiding obstruction', 
 });
 
 
+test('Sins Carl five look-backs use the same captured 15-tick pause and hide4 approach', () => {
+  const h = harness('SinsOfTheFather'), p = player();
+  p.moveTo(new core.Location(3750, 3296, 0));
+  h.quest.setStage(p, 12);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  const area = h.areas.find(entry => entry.constructor.name === 'CarlFollowArea');
+  const carl = () => h.npcs.find(npc => npc.getId() === 9558 && !npc.removed);
+  const pauseAt = new Map([[`3748,3318`, 0], [`3734,3328`, 0], [`3714,3328`, 0], [`3702,3319`, 0], [`3722,3317`, 0]]);
+  let previous = null, run = 0, finished = false;
+  for (let tick = 0; tick < 400; tick++) {
+    const npc = carl();
+    if (!npc) { finished = true; break; }
+    p.moveTo(new core.Location(npc.getLocation().getX() - 12, npc.getLocation().getY(), 0));
+    area.process(p);
+    assert.equal(h.quest.getStage(p), 12, 'trailing at the 14-tile fail boundary never resets Carl');
+    const key = `${npc.getLocation().getX()},${npc.getLocation().getY()}`;
+    if (key === previous) run++;
+    else {
+      if (previous && pauseAt.has(previous)) pauseAt.set(previous, Math.max(pauseAt.get(previous), run));
+      previous = key;
+      run = 1;
+    }
+  }
+  if (previous && pauseAt.has(previous)) pauseAt.set(previous, Math.max(pauseAt.get(previous), run));
+  assert.equal(finished || !carl(), true, 'Carl reaches the crypt and leaves');
+  assert.equal(p.attrs.get('quest.sins_of_the_father.bits') & (1 << 9), 1 << 9, 'the tail sets the trail bit');
+  assert.deepEqual([...pauseAt.values()], [17, 17, 17, 17, 17], 'all five look-backs hold the same captured window, including pause5');
+
+  const h4 = harness('SinsOfTheFather'), q = player();
+  q.moveTo(new core.Location(3750, 3296, 0));
+  h4.quest.setStage(q, 12);
+  h4.hooks.onPlayerLogin[0]({ player: q });
+  const area4 = h4.areas.find(entry => entry.constructor.name === 'CarlFollowArea');
+  const carl4 = () => h4.npcs.find(npc => npc.getId() === 9558 && !npc.removed);
+  let hide4 = false, hide5 = false;
+  for (let tick = 0; tick < 400; tick++) {
+    const npc = carl4();
+    if (!npc) break;
+    const x = npc.getLocation().getX(), y = npc.getLocation().getY();
+    if (hide4 !== true) {
+      q.moveTo(new core.Location(x - 12, y, 0));
+      if (x === 3703 && y === 3323) { q.moveTo(new core.Location(3703, 3325, 0)); hide4 = 'crossing'; }
+      else if (hide4 === 'crossing' && x === 3702 && y === 3322) q.moveTo(new core.Location(3701, 3324, 0));
+      else if (hide4 === 'crossing' && x === 3702 && y === 3321) { q.moveTo(new core.Location(3700, 3323, 0)); hide4 = true; }
+    } else if (!hide5) {
+      q.moveTo(new core.Location(3700, 3323, 0));
+      if (y <= 3318 && x >= 3708) { q.moveTo(new core.Location(3719, 3312, 0)); hide5 = true; }
+    } else {
+      q.moveTo(new core.Location(3719, 3312, 0));
+    }
+    area4.process(q);
+    assert.equal(h4.quest.getStage(q), 12, `captured hide pose survives Carl at ${x},${y}, tick ${tick}`);
+  }
+  assert.equal(hide4, true, 'captured hide4 pose 3700,3323 is reached through the real 3703,3325 crossing');
+  assert.equal(hide5, true, 'captured hide5 pose 3719,3312 is reached after pause4');
+  assert.equal(h4.quest.getStage(q), 12, 'hide4/hide5 never reset the tail');
+  assert.equal((q.attrs.get('quest.sins_of_the_father.bits') || 0) & (1 << 9), 1 << 9, 'the hide4/hide5 continuation reaches the crypt');
+});
+
 test('Sins all captured Carl look-backs hide their captured player pose by edge LOS', () => {
   const { RegionManager } = core;
   RegionManager.init();

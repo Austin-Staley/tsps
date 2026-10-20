@@ -28,7 +28,7 @@ before(async () => {
 
 function harness(name) {
   const hooks = {}, events = [], tasks = [], npcs = [], objects = [], namedNpcs = new Map(), npcHandlers = [], namedObjects = new Map();
-  const ground = new Map();
+  const ground = new Map(), zones = [];
   const groundManager = {
     getGroundItem(username, id, tile) { return ground.get(`${username}:${id}:${tile.getX()}:${tile.getY()}:${tile.getZ()}`) ?? null; },
     registerLocation(player, item, tile) { ground.set(`${player.getUsername()}:${item.getId()}:${tile.getX()}:${tile.getY()}:${tile.getZ()}`, item); },
@@ -44,6 +44,7 @@ function harness(name) {
     persistAttribute: noop,
     onCustomEvent: (key, fn) => (events[key] ??= []).push(fn),
     emitCustomEvent: (key, event) => (events[key] ?? []).forEach(fn => fn(event)),
+    onZoneEnter: (zone, fn) => { zones.push({ zone, fn }); (hooks.onZoneEnter ??= []).push(fn); },
     onObjectClick: noop,
     onObjectFirstClick: noop,
     getObjectManager: () => ({ register: object => objects.push(object), deregister: noop }),
@@ -84,7 +85,7 @@ function harness(name) {
     return null;
   };
   return {
-    api, hooks, events, objects, npcs, namedNpcs, npcHandlers, namedObjects, ground, quests: runtime.getRegisteredQuests().slice(-[].concat(name).length), quest: runtime.getRegisteredQuests().at(-1),
+    api, hooks, events, objects, npcs, namedNpcs, npcHandlers, namedObjects, ground, zones, quests: runtime.getRegisteredQuests().slice(-[].concat(name).length), quest: runtime.getRegisteredQuests().at(-1),
     emit: (name, event) => (events[name] ?? []).forEach(fn => fn(event)),
     object(player, objectId, clickType = 1, location = null) {
       const tile = location?.getX ? { x: location.getX(), y: location.getY(), z: location.getZ() } : location ?? {
@@ -392,6 +393,7 @@ test('The Final Dawn safehouse door is owner-scoped and clears both stair routes
 
   const h = harness('TheFinalDawn'), p = player();
   h.api.core.ObjectManager.deregister = core.ObjectManager.deregister.bind(core.ObjectManager);
+  p.moveTo(new core.Location(1650, 3094, 0));
   h.quest.setStage(p, 16);
   h.hooks.onPlayerLogin[0]({ player: p });
   p.items.set(I.BONES, 1);
@@ -423,14 +425,47 @@ test('The Final Dawn safehouse door is owner-scoped and clears both stair routes
     'unrelated closed safehouse door stays unchanged');
   for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
   assert.equal(p.getArea(), null, 'logout clears the owner door area');
+  p.moveTo(new core.Location(3210, 3220, 0));
   h.hooks.onPlayerLogin[0]({ player: p });
-  assert.ok(p.getArea()?.getNpcs().length > 0, 'stage18 login restores owner door state + tracked NPCs');
+  assert.equal(p.getArea(), null, 'far-away login does not open the house area');
+  p.moveTo(new core.Location(1651, 3094, 0));
+  for (const fn of h.hooks.onZoneEnter ?? []) fn({ player: p });
+  assert.ok(p.getArea()?.getNpcs().length > 0, 'zone re-entry restores owner door state + tracked NPCs');
   h.quest.setStage(p, 22);
   h.namedNpcs.get('Captain Vibia')['Talk-to']({ player: p, npcId: 14303 });
   h.tick(3);
   assert.ok(h.npcs.some(npc => npc.id === 14241 && !npc.removed), 'trap actor starts');
+  assert.ok(p.getArea()?.entities.some(npc => npc.id === 14241 && npc.getPrivateArea() === p.getArea()), 'trap bounds include Janus actor');
   assert.ok(h.npcs.some(npc => (npc.id === 14301 || npc.id === 14302 || npc.id === 14303) && !npc.removed),
     'tracked Vibia survives ending the door area');
+  for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
+});
+
+test('The Final Dawn registers the captured z2 plant/pot owner-scoped', () => {
+  const plantDef = CacheDefinitions.getObject(56470), potDef = CacheDefinitions.getObject(56472);
+  assert.ok(plantDef && potDef, 'real cache definitions load');
+  RegionManager.init();
+  RegionManager.loadMapFiles(1650, 3095, true);
+  assert.equal(MapObjects.get(56470, new core.Location(1650, 3095, 2), null), null,
+    'plant is not a global z2 map object');
+  assert.equal(MapObjects.get(56472, new core.Location(1645, 3098, 2), null), null,
+    'pot is not a global z2 map object');
+  assert.equal(MapObjects.get(56470, new core.Location(1650, 3095, 1), null), null,
+    'other plane remains unchanged');
+
+  const h = harness('TheFinalDawn'), p = player();
+  p.moveTo(new core.Location(1646, 3092, 2));
+  h.quest.setStage(p, 20);
+  h.hooks.onPlayerLogin[0]({ player: p });
+  assert.ok(h.objects.some(object => object.id === 56470), 'owner plant registered');
+  assert.ok(h.objects.some(object => object.id === 56472), 'owner pot registered');
+
+  p.items.set(I.EMPTY_COIN_PURSE, 1);
+  for (const fn of h.hooks.onItemOnObject) fn({ player: p, objectId: 56472, itemId: I.EMPTY_COIN_PURSE, handled: false });
+  assert.equal(h.quest.getStage(p), 21);
+  p.items.set(I.KNIFE, 1);
+  for (const fn of h.hooks.onItemOnObject) fn({ player: p, objectId: 56470, itemId: I.KNIFE, handled: false });
+  assert.equal(h.quest.getStage(p), 22);
   for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
 });
 
@@ -490,6 +525,9 @@ test('The Final Dawn crypt uses six captured waves before Ennius', () => {
   const event = { player: p, objectId: 56636, clickType: 1, definition: { getInteractions: () => ['Enter'] } };
   for (const fn of h.hooks.onObjectInteraction) fn(event);
   assert.equal(h.quest.getStage(p), 47);
+  const sceneArea = p.getArea();
+  assert.ok(sceneArea && h.npcs.some(npc => [14401, 14407].includes(npc.id) && sceneArea.entities.includes(npc)),
+    'cultists attach to the crypt private area');
   for (let wave = 1; wave <= 5; wave++) {
     const alive = h.npcs.filter(npc => !npc.removed && [14401, 14407].includes(npc.id));
     assert.ok(alive.length > 1);
@@ -499,6 +537,68 @@ test('The Final Dawn crypt uses six captured waves before Ennius', () => {
   const alive = h.npcs.filter(npc => !npc.removed && [14401, 14407].includes(npc.id));
   for (const npc of alive) { npc.removed = true; h.hooks.onNpcDeath[0]({ npc, npcId: npc.id, player: p }); }
   assert.equal(h.quest.getStage(p), 50);
+  h.action(p, 14293, 'QwN4C2');
+  assert.equal(h.quest.getStage(p), 51);
+  const ennius = h.npcs.find(npc => npc.id === 14331 && !npc.removed);
+  assert.ok(ennius && p.getArea().entities.includes(ennius), 'Ennius attaches to the crypt private area');
+});
+
+test('The Final Dawn fragment Touch uses the captured inventory action', () => {
+  assert.equal(CacheDefinitions.getItem(30961).inventoryActions[0], 'Touch');
+  const h = harness('TheFinalDawn'), p = player();
+  h.quest.setStage(p, 40);
+  p.items.set(I.KEYSTONE_FRAGMENT, 1);
+  p.moveTo(new core.Location(1511, 9702, 0));
+  for (const fn of h.hooks.onItemAction) fn({ player: p, itemId: I.KEYSTONE_FRAGMENT, option: 'Touch', handled: false });
+  assert.equal(p.varbits.get(16671), 1);
+  assert.equal(h.quest.getStage(p), 40);
+});
+
+test('The Final Dawn Servius Teumo basement report accepts content id 14311', () => {
+  const h = harness('TheFinalDawn'), p = player();
+  h.quest.setStage(p, 35);
+  h.action(p, 14311, 'AxIldc');
+  assert.equal(h.quest.getStage(p), 37);
+});
+
+test('The Final Dawn Strange Tiles step between the moon chamber and final floor', () => {
+  RegionManager.init();
+  RegionManager.loadMapFiles(1299, 9455, true);
+  assert.ok(MapObjects.get(56670, new core.Location(1299, 9455, 1), null), 'real tile 56670 exists');
+  assert.ok(MapObjects.get(56669, new core.Location(1323, 9443, 1), null), 'real tile 56669 exists');
+  const h = harness('TheFinalDawn'), p = player();
+  h.quest.setStage(p, 60);
+  const enterCurrentZone = () => {
+    const at = p.getLocation();
+    for (const { zone, fn } of h.zones) {
+      if (zone.levels.includes(at.getZ()) && at.getX() >= zone.minX && at.getX() <= zone.maxX
+        && at.getY() >= zone.minY && at.getY() <= zone.maxY) fn({ player: p });
+    }
+  };
+  const step = (x, y, z) => {
+    p.moveTo(new core.Location(x, y, z));
+    enterCurrentZone();
+  };
+  step(1299, 9455, 1);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1304, 9446, 2]);
+  enterCurrentZone();
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1304, 9446, 2],
+    'landing does not ping-pong');
+  step(1323, 9443, 1);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1316, 9446, 2]);
+});
+
+test('The Final Dawn Ancient roots Fletch uses the captured action and knife blade', () => {
+  assert.equal(CacheDefinitions.getItem(30963).inventoryActions[0], 'Fletch');
+  const h = harness('TheFinalDawn'), p = player();
+  h.quest.setStage(p, 55);
+  p.items.set(I.ANCIENT_ROOTS, 1);
+  for (const fn of h.hooks.onItemAction) fn({ player: p, itemId: I.ANCIENT_ROOTS, option: 'Fletch', handled: false });
+  assert.equal(p.items.get(I.ANCIENT_ROOTS), 1, 'no knife blade leaves roots');
+  p.items.set(I.KNIFE_BLADE, 1);
+  for (const fn of h.hooks.onItemAction) fn({ player: p, itemId: I.ANCIENT_ROOTS, option: 'Fletch', handled: false });
+  assert.equal(p.items.get(I.ANCIENT_ROOTS), 0);
+  assert.equal(p.items.get(I.ROOT_KINDLING), 4);
 });
 
 test('The Final Dawn moon statue asks for the captured kindling count', () => {
@@ -597,6 +697,7 @@ test('The Final Dawn Enforcer patrol spots the player and cleans up at the fight
 
 test('The Final Dawn safehouse loot is a ground pickup and the sack empties naturally', () => {
   const h = harness('TheFinalDawn'), p = player();
+  p.moveTo(new core.Location(1651, 3094, 0));
   h.quest.setStage(p, 16);
   h.hooks.onPlayerLogin[0]({ player: p });
   assert.ok(h.ground.has('Parity:5424:1645:3091:0'), 'potato sack ground spawn');
@@ -625,7 +726,7 @@ test('The Final Dawn keystone Locate uses the three captured tiles, varbit 16671
   h.quest.setStage(p, 40);
   p.items.set(I.KEYSTONE_FRAGMENT, 1);
   const locate = () => {
-    for (const fn of h.hooks.onItemAction) fn({ player: p, itemId: I.KEYSTONE_FRAGMENT, option: 'Locate', handled: false });
+    for (const fn of h.hooks.onItemAction) fn({ player: p, itemId: I.KEYSTONE_FRAGMENT, option: 'Touch', handled: false });
   };
   p.moveTo(new core.Location(1500, 9700, 0));
   locate();

@@ -87,6 +87,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   const CASTLE_THIRD_EMBLEM_RECEPTACLE_VARBIT = 15507;
   const CASTLE_THIRD_EMBLEM_FOUND_VARBIT = 15567;
   const CASTLE_THIRD_EMBLEM_RECEPTACLE = Object.freeze({ id: 61637, x: 2486, y: 7421, z: 0 });
+  const CASTLE_VANESCULA_WALL_VARBIT = 15511;
+  const CASTLE_VANESCULA_WALL = Object.freeze({ id: 61611, crackedId: 61613, holeId: 61614, x: 2492, y: 7364, z: 0 });
   const CASTLE_VANESCULA_STUDY_EMBLEM_VARBIT = 15503;
   const CASTLE_VANESCULA_STUDY_RECEPTACLE = Object.freeze({ id: 61633, x: 2476, y: 7367, z: 0 });
   const CASTLE_VANESCULA_EMBLEM_RECEPTACLE = Object.freeze({ id: 61634, x: 2469, y: 7408, z: 0 });
@@ -3608,6 +3610,7 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.getPacketSender().sendVarbit(CASTLE_LAST_ROOM_VARBIT, room);
     player.getPacketSender().sendVarbit(CASTLE_LAST_FLOOR_VARBIT, floor);
     const story = castleStory(player);
+    player.getPacketSender().sendVarbit(CASTLE_VANESCULA_WALL_VARBIT, story.vanesculaWallBlown ? 1 : 0);
     player.getPacketSender().sendVarbit(CASTLE_VANESCULA_EMBLEM_VARBIT, story.vanesculaEmblemPlaced
       ? castleEmblemVarbitValue(story.vanesculaEmblemId ?? ItemIdentifiers.DRAKAN_EMBLEM) : 0);
     player.getPacketSender().sendVarbit(CASTLE_RANIS_PARLOUR_EMBLEM_VARBIT, story.ranisParlourEmblemPlaced
@@ -4902,6 +4905,10 @@ module.exports = function registerTheBloodMoonRises(api) {
       return;
     }
     const story = castleStory(player);
+    if (!story.defeated?.includes("crescent-venator")) {
+      player.sendMessage("The Venator still guards the emblem.");
+      return;
+    }
     if (story.thirdEmblemClaimed || hasItem(player, ItemIdentifiers.DRAKAN_EMBLEM_3)) {
       player.sendMessage("You have already taken this emblem.");
       return;
@@ -4912,6 +4919,72 @@ module.exports = function registerTheBloodMoonRises(api) {
     player.getPacketSender().sendVarbit(CASTLE_THIRD_EMBLEM_RECEPTACLE_VARBIT, 0);
     player.getPacketSender().sendVarbit(CASTLE_THIRD_EMBLEM_FOUND_VARBIT, 1);
     player.sendMessage("You take the emblem from the receptacle.");
+  }
+
+  function handleCastleVanesculaWall(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      x !== CASTLE_VANESCULA_WALL.x || y !== CASTLE_VANESCULA_WALL.y || z !== CASTLE_VANESCULA_WALL.z ||
+      (!castleEventHasObjectId(event, CASTLE_VANESCULA_WALL.id) &&
+        !castleEventHasObjectId(event, CASTLE_VANESCULA_WALL.crackedId) &&
+        !castleEventHasObjectId(event, CASTLE_VANESCULA_WALL.holeId))) return;
+    const option = String(event?.option ?? "").toLowerCase();
+    const story = castleStory(player);
+    if (option === "inspect" && !story.vanesculaWallBlown) {
+      event.handled = true;
+      player.sendMessage("The wall is cracked. An explosive barrel could break through it.");
+      return;
+    }
+    if (option !== "enter" || !story.vanesculaWallBlown) return;
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.VANESCULA_CHAMBER ||
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== 2) {
+      player.sendMessage("There is no opening here.");
+      return;
+    }
+    event.handled = true;
+    player.moveTo(new Location(2487, 7421, 0));
+    player.setAttribute(CASTLE_ROOM_ATTRIBUTE, CASTLE_ROOM.VENATOR_ROOM);
+    player.setAttribute(CASTLE_FLOOR_ATTRIBUTE, 2);
+    syncCastleRoom(player, 4);
+    syncCastleActors(player);
+  }
+
+  function handleCastleVanesculaWallItem(event) {
+    const player = event?.player;
+    const tile = event?.location;
+    const x = tile?.x ?? tile?.getX?.();
+    const y = tile?.y ?? tile?.getY?.();
+    const z = tile?.z ?? tile?.getZ?.();
+    if (!player || quest.isComplete(player) || stage(player) !== STAGE.CASTLE ||
+      x !== CASTLE_VANESCULA_WALL.x || y !== CASTLE_VANESCULA_WALL.y || z !== CASTLE_VANESCULA_WALL.z ||
+      (!castleEventHasObjectId(event, CASTLE_VANESCULA_WALL.id) &&
+        !castleEventHasObjectId(event, CASTLE_VANESCULA_WALL.crackedId) &&
+        !castleEventHasObjectId(event, CASTLE_VANESCULA_WALL.holeId)) ||
+      event?.itemId !== ItemIdentifiers.EXPLOSIVE_BARREL) return;
+    event.handled = true;
+    if (Number(player.getAttribute(CASTLE_ROOM_ATTRIBUTE)) !== CASTLE_ROOM.VANESCULA_CHAMBER ||
+      Number(player.getAttribute(CASTLE_FLOOR_ATTRIBUTE)) !== 2) return;
+    const story = castleStory(player);
+    if (story.vanesculaWallBlown) {
+      player.sendMessage("The wall is already broken open.");
+      return;
+    }
+    if (!hasItem(player, ItemIdentifiers.TINDERBOX)) {
+      player.sendMessage("You need a tinderbox to light the barrel.");
+      return;
+    }
+    if (!hasItem(player, ItemIdentifiers.EXPLOSIVE_BARREL)) {
+      player.sendMessage("You need an explosive barrel.");
+      return;
+    }
+    player.getInventory().deleteNumber(ItemIdentifiers.EXPLOSIVE_BARREL, 1);
+    player.setAttribute(CASTLE_STORY_ATTRIBUTE, { ...story, vanesculaWallBlown: true });
+    player.getPacketSender().sendVarbit(CASTLE_VANESCULA_WALL_VARBIT, 1);
+    player.sendMessage("You wedge the explosive barrel into the crack and light it. The wall collapses.");
   }
 
   function inspectRanisCrackedWall(event) {
@@ -8228,6 +8301,8 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onObjectInteraction(handleCastleEmblemReceptaclePlacement);
   api.onObjectInteraction(handleCastleEmblemReceptacleRemoval);
   api.onObjectInteraction(handleCastleThirdEmblemReceptacle);
+  api.onObjectInteraction(handleCastleVanesculaWall);
+  api.onItemOnObject(handleCastleVanesculaWallItem, { noted: false });
   api.onObjectInteraction(inspectRanisCrackedWall);
   api.onItemOnItem(handleCastleKeyItemOnItem);
   api.onItemOnItem(handleCastleChunkyPotionCombine, { noted: false });

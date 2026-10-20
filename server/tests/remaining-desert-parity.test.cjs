@@ -757,3 +757,167 @@ test('Beneath Cursed Sands: 43963 is the normal champion door after the keyed do
   h.object(p, 43963, 1, null, new core.Location(3421, 9248, 2));
   assert.equal(h.quest.getStage(p), 62);
 });
+test('Beneath Cursed Sands: 43960 starts the west Champion intro and reaches stage 60', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 56);
+  p.items.set(I.RUSTY_KEY, 1);
+  p.moveTo(new core.Location(3433, 9248, 2));
+  h.object(p, 43960, 1, null, new core.Location(3432, 9248, 2));
+  assert.equal(h.transcripts.at(-1)[4], 'the-ruins-of-ullek-opening-the-upstairs-locked-door');
+  h.action(p, 11474, 'MQFYdD');
+  assert.equal(p.items.get(I.RUSTY_KEY), 0);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [3420, 9248, 2]);
+  assert.equal(h.quest.getStage(p), 58);
+  const keyedDoor = { player: p, objectId: 43960, location: new core.Location(3432, 9248, 2), handled: false };
+  h.emit('door:toggle', keyedDoor);
+  assert.equal(keyedDoor.handled, true, 'keyed phase still owns 43960');
+  h.tick(2);
+  assert.ok(h.transcripts.some(t => t[4] === 'the-ruins-of-ullek-the-champion-of-scabaras'), 'captured intro starts');
+  assert.ok(h.npcs.some(n => n.id === 11481 && n.x === 3410 && n.y === 9248 && n.z === 2));
+  assert.ok(h.npcs.some(n => n.id === 11482 && n.x === 3411 && n.y === 9251 && n.z === 2));
+  h.emit('npc-dialogue:line', { player: p, npcId: 11481, text: "Fine. We'll do it your way." });
+  assert.equal(h.quest.getStage(p), 60);
+  assert.ok(h.npcs.some(n => n.id === 11483 && n.x === 3411 && n.y === 9251 && n.z === 2), 'combat champion spawns west');
+  const champion = h.npcs.find(n => n.id === 11483 && !n.removed);
+  h.hooks.onNpcDeath[0]({ killer: p, npc: champion });
+  assert.equal(h.quest.getStage(p), 62);
+  assert.ok(h.npcs.some(n => n.id === 11480 && n.x === 3407 && n.y === 9248 && n.z === 2), 'High Priest reachable west tile');
+  const afterDoor = { player: p, objectId: 43960, location: new core.Location(3432, 9248, 2), handled: false };
+  h.emit('door:toggle', afterDoor);
+  assert.equal(afterDoor.handled, false, 'post-fight 43960 falls through to Doors.plugin');
+  const afterObject = h.object(p, 43960, 1, null, new core.Location(3432, 9248, 2));
+  assert.equal(afterObject.handled, false, 'post-fight Open uses the normal Doors path');
+  const championDoor = { player: p, objectId: 43963, location: new core.Location(3421, 9248, 2), handled: false };
+  h.emit('door:toggle', championDoor);
+  assert.equal(championDoor.handled, true, '43963 remains the quest champion door');
+  h.emit('npc-dialogue:line', { player: p, npcId: 11480, text: 'Good luck in your fight, adventurer. May Scabaras guide you.' });
+  assert.equal(h.quest.getStage(p), 68);
+});
+test('Beneath Cursed Sands: captured boss-area tiles are walkable and connected on the real map', () => {
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  RegionManager.loadMapFiles(3420, 9248, true);
+  const at = (x, y) => new core.Location(x, y, 2);
+  assert.equal(RegionManager.blocked(at(3420, 9248), null), false, 'keyed landing walkable');
+  assert.equal(RegionManager.blocked(at(3411, 9251), null), false, 'champion tile walkable');
+  assert.equal(RegionManager.blocked(at(3407, 9248), null), false, 'High Priest tile walkable');
+  const seen = new Set(['3420,9248']);
+  const queue = [[3420, 9248]];
+  const goals = new Set(['3411,9251', '3407,9248']);
+  const reached = new Set();
+  while (queue.length) {
+    const [x, y] = queue.shift();
+    if (goals.has(`${x},${y}`)) reached.add(`${x},${y}`);
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
+      if (seen.has(key) || nx < 3380 || nx > 3450 || ny < 9230 || ny > 9270) continue;
+      if (RegionManager.blocked(at(nx, ny), null)) continue;
+      seen.add(key);
+      queue.push([nx, ny]);
+    }
+  }
+  assert.ok(reached.has('3411,9251'), 'champion reachable from the landing');
+  assert.ok(reached.has('3407,9248'), 'High Priest reachable from the landing');
+  const closed = CacheDefinitions.getObject(43960);
+  const open = CacheDefinitions.getObject(43964);
+  assert.ok(closed.actions.includes('Open'));
+  assert.deepEqual(open.models, closed.models);
+  assert.ok(!open.actions?.some(Boolean), '43964 is the actionless open leaf');
+  assert.equal(CacheDefinitions.getNpc(11483).name, 'Champion of Scabaras');
+});
+test('Beneath Cursed Sands: saved 58 outside re-enters 43960 without a key and starts the intro', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 58);
+  p.moveTo(new core.Location(3432, 9248, 2));
+  let resets = 0;
+  p.getMovementQueue = () => ({ reset() { resets++; return this; }, setBlockMovement() { return this; } });
+  h.hooks.onPlayerLogin[0]({ player: p });
+  h.tick(2);
+  assert.ok(!h.transcripts.some(t => t[4] === 'the-ruins-of-ullek-the-champion-of-scabaras'), 'login outside the arena must not auto-start');
+  const ev = h.object(p, 43960, 1, null, new core.Location(3432, 9248, 2));
+  assert.equal(ev.handled, true);
+  assert.equal(p.items.get(I.RUSTY_KEY) ?? 0, 0, 'unlocked re-entry grants no key');
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [3420, 9248, 2]);
+  assert.equal(h.quest.getStage(p), 58);
+  assert.ok(resets > 0, 'queued movement reset before the captured move');
+  h.tick(2);
+  assert.ok(h.transcripts.some(t => t[4] === 'the-ruins-of-ullek-the-champion-of-scabaras'), 'intro starts after re-entry');
+  h.emit('npc-dialogue:line', { player: p, npcId: 11481, text: "Fine. We'll do it your way." });
+  assert.equal(h.quest.getStage(p), 60);
+  assert.ok(h.npcs.some(n => n.id === 11483 && n.x === 3411 && n.y === 9251 && n.z === 2));
+
+  const h2 = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p2 = player();
+  h2.quest.setStage(p2, 58);
+  p2.moveTo(new core.Location(3432, 9248, 2));
+  const req = { player: p2, objectId: 43960, location: new core.Location(3432, 9248, 2), handled: false };
+  h2.emit('door:toggle', req);
+  assert.equal(req.handled, true, 'Doors-first claim also re-enters');
+  assert.deepEqual([p2.getLocation().getX(), p2.getLocation().getY(), p2.getLocation().getZ()], [3420, 9248, 2]);
+  h2.tick(2);
+  assert.ok(h2.transcripts.some(t => t[4] === 'the-ruins-of-ullek-the-champion-of-scabaras'));
+});
+test('Beneath Cursed Sands: login inside the west arena resumes the unfinished 58 intro', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 58);
+  p.moveTo(new core.Location(3420, 9248, 2));
+  h.hooks.onPlayerLogin[0]({ player: p });
+  h.tick(2);
+  assert.ok(h.transcripts.some(t => t[4] === 'the-ruins-of-ullek-the-champion-of-scabaras'), 'inside-room login resumes the intro');
+  assert.equal(h.quest.getStage(p), 58);
+});
+test('Beneath Cursed Sands: captured Akh and finale Osman complete 96 -> 102', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 96);
+  h.emit('npc-dialogue:action', { player: p, stepId: '31LmTQ' });
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [3368, 2788, 0]);
+  const fight = { player: p, stepId: 'VNowdJ', handled: false };
+  h.emit('npc-dialogue:action', fight);
+  assert.equal(fight.handled, true);
+  assert.equal(h.quest.getStage(p), 98);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [3369, 2803, 0]);
+  assert.ok(h.npcs.some(n => n.id === 11492 && n.x === 3369 && n.y === 2805 && n.z === 0), 'Akh combat at captured tile');
+  const akh = h.npcs.find(n => n.id === 11492 && !n.removed);
+  h.hooks.onNpcDeath[0]({ killer: p, npc: akh });
+  assert.equal(h.quest.getStage(p), 100);
+  assert.ok(h.npcs.some(n => n.id === 11486 && n.x === 3371 && n.y === 2801 && n.z === 0), 'raw/content Osman at captured tile');
+  assert.ok(!h.npcs.some(n => n.id === 1809), 'no town Osman spawn');
+  const talk = { player: p, npcId: 11486, clickType: 1, definition: { getActions: () => ['Talk-to'] }, handled: false };
+  for (const hook of h.hooks.onNpcInteraction) hook(talk);
+  assert.equal(talk.handled, true, 'Talk-to dispatches the BCS Osman family');
+  const transcript = h.transcripts.at(-1);
+  assert.equal(transcript[2], 11486, 'correct non-town head id');
+  assert.equal(transcript[3], 'Beneath Cursed Sands');
+  assert.equal(transcript[4], 'fight-with-the-menaphite-akh-defeating-the-menaphite-akh');
+  h.emit('npc-dialogue:action', { player: p, stepId: '1WDBi3' });
+  assert.equal(h.quest.getStage(p), 102);
+});
+test('Beneath Cursed Sands: captured Akh/Osman tiles are walkable and connected', () => {
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  RegionManager.loadMapFiles(3369, 2803, true);
+  const at = (x, y) => new core.Location(x, y, 0);
+  for (const [x, y] of [[3368, 2788], [3369, 2803], [3369, 2805], [3371, 2801]]) {
+    assert.equal(RegionManager.blocked(at(x, y), null), false, `${x},${y} walkable`);
+  }
+  const seen = new Set(['3369,2803']);
+  const queue = [[3369, 2803]];
+  const goals = new Set(['3369,2805', '3371,2801']);
+  const reached = new Set();
+  while (queue.length) {
+    const [x, y] = queue.shift();
+    if (goals.has(`${x},${y}`)) reached.add(`${x},${y}`);
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
+      if (seen.has(key) || nx < 3350 || nx > 3390 || ny < 2770 || ny > 2820) continue;
+      if (RegionManager.blocked(at(nx, ny), null)) continue;
+      seen.add(key);
+      queue.push([nx, ny]);
+    }
+  }
+  assert.ok(reached.has('3369,2805'), 'player can reach the Akh');
+  assert.ok(reached.has('3371,2801'), 'player can reach Osman');
+});

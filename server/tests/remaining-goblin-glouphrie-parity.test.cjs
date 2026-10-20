@@ -143,11 +143,21 @@ function harness(pluginName, options = {}) {
 function player(overrides = {}) {
   const attrs = new Map(), items = new Map(), varbits = new Map(), messages = [], xp = [], equipment = [], log = [];
   let location = new core.Location(3210, 3220, 0);
+  const flags = new Set();
+  const movementQueue = {
+    points: [],
+    reset() { movementQueue.points.length = 0; return movementQueue; },
+    setBlockMovement(value) { p.blocked = value; return movementQueue; },
+    addSteps(step) { movementQueue.points.length = 0; p.moveTo(step); return movementQueue; },
+  };
   const p = {
-    attrs, items, varbits, messages, xp, equipment, log,
+    attrs, items, varbits, messages, xp, equipment, log, flags,
     skills: { 1: 99, 6: 99, 10: 99, 11: 99, 15: 99, 16: 99, 17: 99, 18: 99, 19: 99, 20: 99, 21: 99 },
     getAttribute: (key) => attrs.get(key),
     setAttribute: (key, value) => attrs.set(key, value),
+    hasFlag: (flag) => flags.has(flag),
+    setFlag: (flag, enabled = true) => { if (enabled) flags.add(flag); else flags.delete(flag); return p; },
+    removeFlag: (flag) => { flags.delete(flag); return p; },
     getLocation: () => location,
     moveTo: (to) => { location = to; },
     getInventory: () => ({
@@ -161,7 +171,7 @@ function player(overrides = {}) {
       },
     }),
     getEquipment: () => ({ getItems: () => equipment, get: () => null }),
-    getMovementQueue: () => ({ reset() { return this; }, setBlockMovement(value) { p.blocked = value; return this; } }),
+    getMovementQueue: () => movementQueue,
     setUntargetable: (value) => { p.untargetable = value; },
     setNpcTransformationId: (id) => { p.transformId = id; },
     getUpdateFlag: () => ({ flag: () => {} }),
@@ -328,6 +338,72 @@ test('LOTG potion ignores empty equipment placeholders but refuses a real worn i
   assert.equal(h.quest.getStage(worn), 16, 'a real equipped item still refuses the potion');
 });
 
+test('LOTG temple spawns and guard mail use the capture 1694 ids and tiles', () => {
+  const h = harness('LandOfTheGoblins');
+  const p = player();
+  h.quest.setStage(p, 34);
+  h.login(p);
+
+  const tileOf = (id) => {
+    const npc = h.npcs.find((entry) => entry.getId?.() === id && entry.owner === p);
+    assert.ok(npc, `missing temple spawn ${id}`);
+    const location = npc.getLocation();
+    return [location.getX(), location.getY()];
+  };
+  const guards = [
+    [N.GUARD_155, 3732, 4320], [N.GUARD_157, 3735, 4329], [N.GUARD_154, 3753, 4329],
+    [N.GUARD_152, 3756, 4320], [N.GUARD_153, 3753, 4311], [N.GUARD_156, 3735, 4311],
+  ];
+  const priests = [
+    [N.PRIEST_12, 3724, 4316], [N.PRIEST_16, 3724, 4332], [N.PRIEST_10, 3757, 4340],
+    [N.PRIEST_6, 3760, 4319], [N.PRIEST_8, 3761, 4307], [N.PRIEST_14, 3734, 4302],
+  ];
+  for (const [id, x, y] of [...guards, ...priests]) assert.deepEqual(tileOf(id), [x, y]);
+
+  const condition = h.hooks.onNpcDialogueCondition[0];
+  const guardMouths = [
+    [3733, 4320], [3736, 4328], [3752, 4328], [3755, 4320], [3752, 4312], [3736, 4312],
+  ];
+  const mailFor = (guard, mail, fromX, fromY) => {
+    p.getEquipment = () => ({ get: () => ({ getId: () => mail }) });
+    p.moveTo(new core.Location(fromX, fromY, 0));
+    npcInteraction(h, p, guard, 2, actions(['Talk-to', 'Pass']));
+    return condition({ player: p, npcId: guard, stepId: 'TTlqPM' });
+  };
+  const mails = [I.WHITE_GOBLIN_MAIL, I.YELLOW_GOBLIN_MAIL, I.BLACK_GOBLIN_MAIL,
+    I.BLUE_GOBLIN_MAIL, I.ORANGE_GOBLIN_MAIL, I.PURPLE_GOBLIN_MAIL];
+  guards.forEach(([guard], index) => {
+    const [fromX, fromY] = guardMouths[index];
+    assert.equal(mailFor(guard, mails[index], fromX, fromY), true, `guard ${guard} accepts its tribe's mail`);
+  });
+  assert.equal(mailFor(N.GUARD_155, I.BLACK_GOBLIN_MAIL, 3733, 4320), false, 'white guard rejects black mail');
+
+  const passAt = (x, y, mail) => {
+    p.getEquipment = () => ({ get: () => ({ getId: () => mail }) });
+    p.moveTo(new core.Location(x, y, 0));
+    npcInteraction(h, p, N.GUARD_155, 2, actions(['Talk-to', 'Pass']));
+    return [p.getLocation().getX(), p.getLocation().getY()];
+  };
+  assert.deepEqual(passAt(3733, 4320, I.WHITE_GOBLIN_MAIL), [3731, 4320], 'accepted pass crosses the mouth');
+  assert.deepEqual(passAt(3733, 4320, I.BLACK_GOBLIN_MAIL), [3733, 4320], 'denied pass does not move');
+  assert.deepEqual(passAt(3731, 4320, I.WHITE_GOBLIN_MAIL), [3733, 4320], 'accepted exit crosses back');
+  assert.deepEqual(passAt(3731, 4320, I.BLACK_GOBLIN_MAIL), [3733, 4320], 'wrong mail exit is thrown out');
+  assert.equal(condition({ player: p, npcId: N.GUARD_155, stepId: 'uDN0yd' }), true);
+  assert.equal(p.flags.has('movement:ignore-clipping'), false, 'scoped clipping flag is restored');
+
+  const done = player();
+  h.quest.setStage(done, 56);
+  h.login(done);
+  assert.ok(h.npcs.some((entry) => entry.getId?.() === N.GUARD_155 && entry.owner === done),
+    'completed players still see the temple guards');
+  done.getEquipment = () => ({ get: () => ({ getId: () => I.WHITE_GOBLIN_MAIL }) });
+  done.moveTo(new core.Location(3733, 4320, 0));
+  npcInteraction(h, done, N.GUARD_155, 2, actions(['Talk-to', 'Pass']));
+  assert.deepEqual([done.getLocation().getX(), done.getLocation().getY()], [3731, 4320],
+    'post-quest pass still crosses without progress');
+  assert.equal(h.quest.getStage(done), 56);
+});
+
 test('LOTG Bighead unlocks keys and the six keys open the crypt', () => {
   const h = harness('LandOfTheGoblins');
   const p = player();
@@ -343,12 +419,22 @@ test('LOTG Bighead unlocks keys and the six keys open the crypt', () => {
   assert.equal(h.quest.getStage(p), 34);
 
   h.quest.setStage(p, 32);
-  npcInteraction(h, p, N.PRIEST_8, 2, actions(['Talk-to', 'Pickpocket', null, null]));
+  npcInteraction(h, p, N.PRIEST_12, 2, actions(['Talk-to', 'Pickpocket', null, null]));
   assert.equal(p.items.get(I.SARAGORGAK_KEY), undefined, 'keys are not stealable before Bighead explains the crypt');
   h.quest.setStage(p, 34);
-  npcInteraction(h, p, N.PRIEST_8, 2, actions(['Talk-to', 'Pickpocket', null, null]));
-  assert.equal(p.items.get(I.SARAGORGAK_KEY), 1);
-  npcInteraction(h, p, N.PRIEST_8, 2, actions(['Talk-to', 'Pickpocket', null, null]));
+  const priestKeys = [
+    [N.PRIEST_12, I.SARAGORGAK_KEY, 'white'],
+    [N.PRIEST_16, I.YURKOLGOKH_KEY, 'yellow'],
+    [N.PRIEST_10, I.HUZAMOGAARB_KEY, 'black'],
+    [N.PRIEST_6, I.EKELESHUUN_KEY, 'blue'],
+    [N.PRIEST_8, I.NAROGOSHUUN_KEY, 'orange'],
+    [N.PRIEST_14, I.HOROGOTHGAR_KEY, 'purple'],
+  ];
+  for (const [priest, key, tribe] of priestKeys) {
+    npcInteraction(h, p, priest, 2, actions(['Talk-to', 'Pickpocket', null, null]));
+    assert.equal(p.items.get(key), 1, `${tribe} priest ${priest} gives its own key`);
+  }
+  npcInteraction(h, p, N.PRIEST_12, 2, actions(['Talk-to', 'Pickpocket', null, null]));
   assert.match(p.messages.at(-1), /already stolen/);
 
   const keys = [I.SARAGORGAK_KEY, I.YURKOLGOKH_KEY, I.HUZAMOGAARB_KEY, I.EKELESHUUN_KEY, I.NAROGOSHUUN_KEY, I.HOROGOTHGAR_KEY];

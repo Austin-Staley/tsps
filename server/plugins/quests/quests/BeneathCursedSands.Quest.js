@@ -125,6 +125,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
   const STAGE_KEY_KNOWN = 54;
   const STAGE_KEY_TAKEN = 56;
   const STAGE_UPPER_OPEN = 58;
+  const STAGE_CHAMPION_FIGHT = 60;
   const STAGE_CHAMPION_DEAD = 62;
   const STAGE_ALTAR = 62;
   const STAGE_PRIEST_FREED = 68;
@@ -166,7 +167,9 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     NpcIdentifiers.HIGH_PRIEST_2, // 4206, the town High Priest (cache transform)
     NpcIdentifiers.HIGH_PRIEST_4, // 11502
   ]);
-  const OSMAN = NpcIdentifiers.OSMAN; // 1809, the indexed Osman; 11486 has no dialogue index entry
+  const OSMAN = NpcIdentifiers.OSMAN; // 1809, the indexed Osman (town/Contact)
+  const OSMAN_BCS = NpcIdentifiers.OSMAN_10; // 11486, captured raw/content id; visual 11488
+  const OSMAN_BCS_IDS = new Set([11486, 11488]); // raw/content + visual multinpc aliases
   const MENAPHITE_AKH = NpcIdentifiers.MENAPHITE_AKH_3; // 11492, level 351
   const SCARAB_MAGE = NpcIdentifiers.SCARAB_MAGE_3; // 11508, level 119
   const CHAMPION_OF_SCABARAS = NpcIdentifiers.CHAMPION_OF_SCABARAS_2; // 11483, level 379
@@ -610,19 +613,36 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
       player,
       "scabaras-priest",
       HIGH_PRIEST_OF_SCABARAS,
-      3405,
-      9250,
+      3407,
+      9248,
       2,
-      stage >= STAGE_UPPER_OPEN && stage <= STAGE_PRIEST_FREED + 3
+      stage >= STAGE_CHAMPION_DEAD && stage <= STAGE_PRIEST_FREED + 3
     );
-    ensureNpc(player, "osman", OSMAN, 3380, 2789, 0, stage >= STAGE_AKH_DEAD && stage <= STAGE_AKH_DEAD + 1);
+    ensureNpc(player, "osman", OSMAN_BCS, 3371, 2801, 0, stage >= STAGE_AKH_DEAD && stage <= STAGE_AKH_DEAD + 1);
     ensureNpc(player, "guard", HEAD_MENAPHITE_GUARD, 3348, 2740, 0, stage === STAGE_GUARD_FIGHT);
     ensureNpc(player, "mage1", SCARAB_MAGE, 3438, 9247, 2, stage === STAGE_TOMB_ENTERED);
     ensureNpc(player, "mage2", SCARAB_MAGE, 3438, 9249, 2, stage === STAGE_TOMB_ENTERED);
-    ensureNpc(player, "tomb-high-priest", HIGH_PRIEST_CUTSCENE, 3410, 9248, 2, stage === STAGE_TOMB_ENTERED);
-    ensureNpc(player, "tomb-champion", CHAMPION_CUTSCENE, 3411, 9251, 2, stage === STAGE_TOMB_ENTERED);
-    ensureNpc(player, "champion", CHAMPION_OF_SCABARAS, 3436, 9248, 2, stage === STAGE_UPPER_OPEN);
-    ensureNpc(player, "akh", MENAPHITE_AKH, 3378, 2786, 0, stage === STAGE_AKH_FIGHT);
+    const championIntro = stage >= STAGE_UPPER_OPEN && stage < STAGE_CHAMPION_DEAD;
+    ensureNpc(
+      player,
+      "tomb-high-priest",
+      HIGH_PRIEST_CUTSCENE,
+      3410,
+      9248,
+      2,
+      stage === STAGE_TOMB_ENTERED || championIntro
+    );
+    ensureNpc(
+      player,
+      "tomb-champion",
+      CHAMPION_CUTSCENE,
+      3411,
+      9251,
+      2,
+      stage === STAGE_TOMB_ENTERED || stage === STAGE_UPPER_OPEN
+    );
+    ensureNpc(player, "champion", CHAMPION_OF_SCABARAS, 3411, 9251, 2, stage === STAGE_CHAMPION_FIGHT);
+    ensureNpc(player, "akh", MENAPHITE_AKH, 3369, 2805, 0, stage === STAGE_AKH_FIGHT);
   }
 
   // ==========================================================================
@@ -745,6 +765,23 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     return null;
   }
 
+  /**
+   * The finale Osman is spawned as raw/content 11486 (visual 11488), which has no
+   * dialogue-index entry. Dispatch Talk-to explicitly so the canonical BCS variant plays
+   * with the correct (non-town) head.
+   */
+  function handleOsmanTalk(event) {
+    const { player, npcId } = event ?? {};
+    if (!player || !OSMAN_BCS_IDS.has(npcId)) return;
+    const definition = event.definition ?? api.core.NpcDefinition.forId(npcId);
+    const action = String(definition?.getActions?.()?.[event.clickType - 1] ?? "");
+    if (action.toLowerCase() !== "talk-to") return;
+    const variant = selectOsmanVariant(quest.getStage(player));
+    if (!variant) return;
+    event.handled = true;
+    startTranscript(api, player, OSMAN_BCS, PAGE, variant, null, event.npc ?? null);
+  }
+
   function selectCitizenVariant(stage) {
     if (stage >= STAGE_NECROPOLIS && stage <= STAGE_GUARD_FIGHT) return "starting-off-talking-to-a-citizen";
     // The BCS page default is Jamila, so never leave a citizen unanswered.
@@ -759,7 +796,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     if (npcId === MEHHAR) return selectMehharVariant(stage);
     if (npcId === HIGH_PRIEST_OF_SCABARAS) return selectScabarasPriestVariant(stage);
     if (HIGH_PRIEST_IDS.has(npcId)) return selectHighPriestVariant(stage, player);
-    if (npcId === OSMAN) return selectOsmanVariant(stage);
+    if (npcId === OSMAN || OSMAN_BCS_IDS.has(npcId)) return selectOsmanVariant(stage);
     if (BCS_NECROPOLIS_CITIZEN_IDS.has(npcId)) return selectCitizenVariant(stage);
     return null;
   }
@@ -1073,8 +1110,8 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
         event.handled = true;
         doorLocationByPlayer.delete(player);
         if (hasItem(player, RUSTY_KEY_ITEM)) player.getInventory().deleteNumber(RUSTY_KEY_ITEM, 1);
-        player.moveTo(new Location(3420, 9248, 2));
         if (quest.getStage(player) < STAGE_UPPER_OPEN) setStage(player, STAGE_UPPER_OPEN);
+        enterChampionArena(player);
         return;
       case "ppIMnm": // rusty key found in the urn
         if (!hasItem(player, RUSTY_KEY_ITEM)) player.getInventory().adds(RUSTY_KEY_ITEM, 1);
@@ -1131,11 +1168,11 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
         });
         return;
       case "31LmTQ": // scene pans to Maisa's camp
-        player.moveTo(new Location(3378, 2790, 0));
+        player.moveTo(new Location(3368, 2788, 0));
         return;
       case "VNowdJ": // the Akh fight begins
         event.handled = true;
-        player.moveTo(new Location(3378, 2790, 0));
+        player.moveTo(new Location(3369, 2803, 0));
         setStage(player, STAGE_AKH_FIGHT);
         showCamera(player, [3363, 2804, 300], [3374, 2800, 200], { shake: [[2, 0, 5]] });
         return;
@@ -1263,6 +1300,14 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
         setStage(player, STAGE_KEY_KNOWN);
         return;
       }
+    }
+    if (
+      text === "Fine. We'll do it your way." &&
+      stage === STAGE_UPPER_OPEN &&
+      (npcId === HIGH_PRIEST_CUTSCENE || npcId === HIGH_PRIEST_OF_SCABARAS)
+    ) {
+      setStage(player, STAGE_CHAMPION_FIGHT);
+      return;
     }
     if (npcId === HIGH_PRIEST_OF_SCABARAS && text === "Good luck in your fight, adventurer. May Scabaras guide you.") {
       if (stage < STAGE_PRIEST_FREED) setStage(player, STAGE_PRIEST_FREED);
@@ -1525,8 +1570,12 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
       return;
     }
     if (objectId === DOOR_UPPER) {
+      // After the Champion dies the captured route walks straight through this door;
+      // leave it to Doors.plugin so a normal Open swaps in the open leaf.
+      if (stage >= STAGE_CHAMPION_DEAD) return;
       event.handled = true;
-      openUpperDoor(player, event.location);
+      if (stage >= STAGE_UPPER_OPEN) enterChampionArena(player);
+      else openUpperDoor(player, event.location);
       return;
     }
     if (objectId === DOOR_CHAMPION) {
@@ -1675,6 +1724,25 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     startTranscript(api, player, MAISA_CAMP, PAGE, "the-ruins-of-ullek-opening-the-upstairs-locked-door");
   }
 
+  /** The captured west arena; logging in here resumes the unfinished Champion intro. */
+  function inChampionArena(player) {
+    const at = player.getLocation?.();
+    if (!at || at.getZ?.() !== 2) return false;
+    return at.getX() >= 3404 && at.getX() <= 3420 && at.getY() >= 9240 && at.getY() <= 9256;
+  }
+
+  function startChampionIntro(player) {
+    if (quest.getStage(player) !== STAGE_UPPER_OPEN) return;
+    startTranscriptDeferred(player, HIGH_PRIEST_CUTSCENE, "the-ruins-of-ullek-the-champion-of-scabaras");
+  }
+
+  /** Normal entry once the door is unlocked at stage 58: no key is granted or consumed. */
+  function enterChampionArena(player) {
+    player.getMovementQueue?.().reset?.();
+    player.moveTo(new Location(3420, 9248, 2));
+    startChampionIntro(player);
+  }
+
   /** The lever-opened downstairs door (43961/43962); both leaves route here. */
   function openLeversDoor(player, location, objectId) {
     const stage = quest.getStage(player);
@@ -1714,8 +1782,11 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
       return;
     }
     if (objectId === DOOR_UPPER) {
+      const stage = quest.getStage(player);
+      if (stage >= STAGE_CHAMPION_DEAD) return;
       request.handled = true;
-      openUpperDoor(player, location);
+      if (stage >= STAGE_UPPER_OPEN) enterChampionArena(player);
+      else openUpperDoor(player, location);
     }
   }
 
@@ -1832,7 +1903,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     }
     if (tracked.get("champion") === npc) {
       tracked.delete("champion");
-      if (stage === STAGE_UPPER_OPEN) setStage(killer, STAGE_CHAMPION_DEAD);
+      if (stage === STAGE_CHAMPION_FIGHT || stage === STAGE_UPPER_OPEN) setStage(killer, STAGE_CHAMPION_DEAD);
       return;
     }
     if (tracked.get("akh") === npc) {
@@ -1850,6 +1921,9 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     installTombLevers();
     syncNpcs(player);
     sendQuestBits(player);
+    // Only resume a genuinely unfinished intro when physically inside the west arena;
+    // stage 58 outside (e.g. 3432,9248) must re-enter through 43960 first.
+    if (inChampionArena(player)) startChampionIntro(player);
   }
 
   function handleLogout({ player }) {
@@ -1988,6 +2062,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     event.handled = true;
     startTranscript(api, event.player, CITIZEN, PAGE, variant);
   });
+  api.onNpcInteraction(handleOsmanTalk);
   api.onNpcDialogueVariant(selectVariant);
   api.onNpcDialogueCondition(answerCondition);
   api.onCustomEvent("npc-dialogue:hook", handleHook);
