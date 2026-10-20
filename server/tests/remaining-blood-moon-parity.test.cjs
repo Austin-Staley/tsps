@@ -213,6 +213,203 @@ test('final council scene completes once, awards 4 QP and a single Tome', () => 
   assert.equal(p.attrs.get('quest.points'), 4);
 });
 
+test('post-quest Efaritay reclaims a lost Tome once and never duplicates or loses it', () => {
+  const h = harness(), p = player('LostTome');
+  const TOME = I.TOME_OF_EXPERIENCE_3;
+  const USES = 'quest.the_blood_moon_rises.tome-uses';
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 100);
+  p.attrs.set('quest.the_blood_moon_rises.drakan-defeated', true);
+
+  // The real QA completion happened with 28/28 slots. The shared completion
+  // add cannot store the Tome there; Efaritay's canonical reclaim covers it.
+  const realInventory = p.getInventory;
+  p.getInventory = () => ({ contains: () => false, adds: () => false, getFreeSlots: () => 0 });
+  h.emit('npc-dialogue:action', { player: p, stepId: 'BzMe5D' });
+  assert.equal(h.quest.getStage(p), 110);
+  assert.equal(p.items.get(TOME), undefined, 'a full inventory does not drop the reward on the floor');
+  p.getInventory = realInventory;
+
+  const postQuest = () => h.npcs.find(npc => npc.id === core.NpcIdentifiers.EFARITAY_HALLOW_3 && !h.removed.includes(npc));
+  const efaritay = postQuest();
+  assert.ok(efaritay, 'normal post-quest Efaritay spawns in Castle Drakan');
+  assert.deepEqual([efaritay.getLocation().getX(), efaritay.getLocation().getY()],
+    [3163, 7717], 'the wiki map pin inside Castle Drakan');
+
+  const variant = () => h.variants.map(fn => fn({ player: p,
+    definition: { getName: () => 'Efaritay Hallow' },
+    pages: [
+      { page: 'Efaritay Hallow', variants: ['standard-dialogue', 'if-the-tome-of-experience-was-destroyed'] },
+      { page: 'The Blood Moon Rises', variants: ['post-quest-dialogue-efaritay'] },
+    ] })).find(Boolean) ?? null;
+  const reclaim = () => ({ player: p, stepId: '8qI8YD', handled: false });
+  assert.deepEqual(variant(), { page: 'Efaritay Hallow', variant: 'if-the-tome-of-experience-was-destroyed' });
+
+  const { PluginManager } = require('../dist/plugins/PluginManager');
+  const originalVariant = PluginManager.emitNpcDialogueVariant;
+  const talkToEfaritay = () => {
+    PluginManager.emitNpcDialogueVariant = event => {
+      for (const fn of h.variants) { const result = fn(event); if (result) return result; }
+      return null;
+    };
+    const hooks = [];
+    const api2 = new Proxy({}, { get: (_, key) => key === 'onAnyNpcInteraction'
+      ? actions => hooks.push(actions) : h.api[key] });
+    require('../plugins/npcs/NpcDialogues.plugin').register(api2);
+    const definition = core.NpcDefinition.forId(core.NpcIdentifiers.EFARITAY_HALLOW_3);
+    hooks[0]['Talk-to']({ player: p, npc: { getId: () => core.NpcIdentifiers.EFARITAY_HALLOW_3 },
+      npcId: core.NpcIdentifiers.EFARITAY_HALLOW_3, definition });
+    PluginManager.emitNpcDialogueVariant = originalVariant;
+  };
+  const endDialogue = () => {
+    if (p.prompt) choose(p, 'I\'d best get going.');
+    continueUntil(p, () => !p.manager.isActive(), 100);
+  };
+
+  // The real shipped transcript graph refuses cleanly with a full bag.
+  p.getInventory = () => ({ contains: () => false, adds: () => false, getFreeSlots: () => 0 });
+  talkToEfaritay();
+  assert.ok(String(p.manager.getCurrent()?.getText?.()).startsWith('I have a tome here for you'),
+    'the destroyed-Tome variant is selected by the real Talk-to dispatch');
+  continueUntil(p, () => p.messages.some(line => line.includes('empty inventory slot')), 100);
+  assert.equal(p.items.get(TOME), undefined, 'a full bag does not lose or create the Tome');
+  assert.equal(p.manager.isActive(), false, 'the refusal closes cleanly');
+  p.getInventory = realInventory;
+
+  // The same real graph hands over exactly one Tome and finishes its tail.
+  talkToEfaritay();
+  continueUntil(p, () => p.items.get(TOME) === 1, 100);
+  assert.equal(p.items.get(TOME), 1, 'the empty slot receives one Tome');
+  continueUntil(p, () => !p.manager.isActive(), 100);
+
+  // The wiki "same as above" tail is reached by the next normal Talk-to.
+  talkToEfaritay();
+  assert.ok(String(p.manager.getCurrent()?.getText?.()).startsWith('Hello there'),
+    'the next Talk-to uses the canonical standard dialogue');
+  continueUntil(p, () => Boolean(p.prompt), 100);
+  assert.ok(p.prompt.options.includes('I could use a new weapon.'), 'standard shop option is available');
+  endDialogue();
+
+  // A repeated real Talk-to with the Tome held opens the standard dialogue.
+  talkToEfaritay();
+  assert.ok(String(p.manager.getCurrent()?.getText?.()).startsWith('Hello there'),
+    'a held Tome falls through to the standard dialogue');
+  endDialogue();
+  assert.equal(p.items.get(TOME), 1, 'talking again cannot duplicate a held Tome');
+  assert.equal(variant(), null, 'the dispatcher also refuses the reclaim variant when held');
+
+  p.items.delete(TOME);
+  p.equipment.set(core.Equipment.WEAPON_SLOT, { getId: () => TOME });
+  h.emit('npc-dialogue:action', reclaim());
+  assert.equal(p.items.get(TOME), undefined, 'an equipped Tome counts as owned');
+  p.equipment.clear();
+
+  p.getBank = () => ({ contains: id => id === TOME });
+  h.emit('npc-dialogue:action', reclaim());
+  assert.equal(p.items.get(TOME), undefined, 'a banked Tome counts as owned');
+  p.getBank = () => ({ contains: () => false });
+
+  p.attrs.set(USES, 6);
+  h.emit('npc-dialogue:action', reclaim());
+  assert.equal(p.items.get(TOME), undefined, 'six spent chapters need no replacement');
+  assert.equal(variant(), null, 'a fully read Tome is not offered again');
+
+  p.attrs.set(USES, 3);
+  h.emit('npc-dialogue:action', reclaim());
+  assert.equal(p.items.get(TOME), 1, 'remaining chapters are reclaimed from a destroyed Tome');
+  assert.equal(p.attrs.get(USES), 3, 'the six-chapter counter is never reset by reclaiming');
+
+  h.emit('player:logout', { player: p });
+  assert.ok(h.removed.includes(efaritay), 'logout cleans up the post-quest actor');
+  h.emit('player:login', { player: p });
+  assert.ok(postQuest(), 'a normal relog restores post-quest Efaritay for the earned completion');
+  assert.equal(h.quest.getStage(p), 110, 'the completed stage is not reset');
+});
+
+test('post-quest Castle Drakan medallion destination is unlocked and reaches Efaritay on foot', () => {
+  const h = harness(), p = player('PostRoute');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 110);
+  p.attrs.set('quest.the_blood_moon_rises.slepe-story', { refineryComplete: true });
+  p.attrs.set('quest.the_blood_moon_rises.castle-shrine-prayed', true);
+  const destinations = [];
+  h.emit('drakan-medallion:destinations', { player: p, destinations });
+  const castle = destinations.find(entry => entry.label === 'Castle Drakan.');
+  assert.deepEqual(castle?.tile, { x: 3167, y: 7707, z: 0 },
+    'the completed quest keeps the canonical medallion destination');
+});
+
+test('earned 158/160 castle handoffs survive logout/login without moving or regressing native', () => {
+  const h = harness(), p = player('Relog158');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 96);
+  const NATIVE = 'quest.the_blood_moon_rises.final-native-stage';
+  p.attrs.set(NATIVE, 158);
+  p.moveTo(new core.Location(2845, 7388, 0));
+
+  // Exercise QuestRuntime's real login varp refresh, the same function its
+  // onPlayerLogin/bootstrap hooks call. The plugin login hooks add no second
+  // correction layer.
+  p.varbits.clear();
+  runtime.sendQuestVarps({ player: p });
+  assert.equal(p.varbits.get(15464), 158, 'QuestRuntime login refresh publishes the earned 158');
+  assert.equal(h.quest.varbitValue(96, p), 158, 'the quest mapper also keeps 158');
+  p.varbitHistory.length = 0;
+  h.emit('player:login', { player: p });
+  assert.equal(p.varbitHistory.some(([id]) => id === 15464), false,
+    'the plugin login hooks do not resend a second 15464 correction');
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [2845, 7388]);
+
+  const ivan = h.npcs.find(npc => npc.id === 15852 && !h.removed.includes(npc));
+  assert.ok(ivan, 'castle Ivan is present with his cache morph');
+  h.emit('player:logout', { player: p });
+  assert.ok(h.removed.includes(ivan), 'logout removes castle Ivan');
+  p.varbits.clear();
+  runtime.sendQuestVarps({ player: p });
+  assert.equal(p.varbits.get(15464), 158, 'a fresh login refresh still publishes 158');
+  h.emit('player:login', { player: p });
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [2845, 7388],
+    'the earned castle landing is preserved');
+  assert.ok(h.npcs.some(npc => npc.id === 15852 && !h.removed.includes(npc)),
+    'castle Ivan is restored after relog');
+
+  p.attrs.set(NATIVE, 160);
+  p.varbits.clear();
+  runtime.sendQuestVarps({ player: p });
+  h.emit('player:logout', { player: p });
+  h.emit('player:login', { player: p });
+  assert.equal(p.varbits.get(15464), 160, 'the Sugadinti handoff also survives relog');
+  assert.ok(h.npcs.some(npc => npc.id === 15957 && !h.removed.includes(npc)),
+    'castle Sugadinti is restored at native 160');
+});
+
+test('a stale 158 attribute cannot override another stage on login refresh', () => {
+  const h = harness(), p = player('RelogFinal');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 100);
+  p.attrs.set('quest.the_blood_moon_rises.final-native-stage', 158);
+  p.varbits.clear();
+  runtime.sendQuestVarps({ player: p });
+  assert.equal(p.varbits.get(15464), 164, 'STAGE.FINAL uses its own mapper, not the stale fence attr');
+});
+
+test('interrupted 152-156 gathering saves retry at Burgh instead of faking a castle handoff', () => {
+  const h = harness(), p = player('Relog156');
+  enablePrereqs(h, new Set(PREREQS));
+  h.quest.setStage(p, 96);
+  p.attrs.set('quest.the_blood_moon_rises.final-native-stage', 156);
+  p.moveTo(new core.Location(2845, 7388, 0));
+  p.varbits.clear();
+  runtime.sendQuestVarps({ player: p });
+  assert.equal(p.varbits.get(15464), 150, 'QuestRuntime publishes 150 for an unfinished gathering');
+  h.emit('player:login', { player: p });
+  assert.equal(p.varbits.get(15464), 150, 'the login hooks do not fake 156');
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY()], [3490, 9631],
+    'the canonical Burgh retry landing');
+  assert.equal(h.npcs.some(npc => npc.id === 15852 && !h.removed.includes(npc)), false,
+    'no unearned castle Ivan is spawned');
+});
+
 test('the ending scene cannot complete from an earlier chapter', () => {
   const h = harness(), p = player();
   enablePrereqs(h, new Set(PREREQS)); h.quest.setStage(p, 70);

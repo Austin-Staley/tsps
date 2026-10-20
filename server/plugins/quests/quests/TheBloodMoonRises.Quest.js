@@ -673,6 +673,12 @@ module.exports = function registerTheBloodMoonRises(api) {
   const FINAL_EFARITAY_ID = NpcIdentifiers.EFARITAY_HALLOW_3;
   const FINAL_EFARITAY_CUTSCENE_ID = NpcIdentifiers.EFARITAY_HALLOW_5;
   const FINAL_WYRD_ID = NpcIdentifiers.WYRD_4;
+  // Wiki Efaritay's Supplies page: location Castle Drakan, run by Efaritay
+  // "after the completion of The Blood Moon Rises", map x=3163 y=7717 plane=0.
+  // Cache 15943 is the named Efaritay with the Trade option.
+  const POST_QUEST_EFARITAY = Object.freeze({ id: NpcIdentifiers.EFARITAY_HALLOW_3, x: 3163, y: 7717, z: 0 });
+  const TOME_RECLAIM_PAGE = "Efaritay Hallow";
+  const TOME_RECLAIM_VARIANT = "if-the-tome-of-experience-was-destroyed";
   // Night of the Blood Moon gathering (native stages 152-164): the captured
   // castle scene and its Lowerniel combat_3 encounter before Efaritay opens
   // the Vampyrium portal.
@@ -730,6 +736,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   const slepeManors = new Map();
   const drakanEncounters = new Map();
   const finalEfaritays = new Map();
+  const postQuestEfaritays = new Map();
   const finalCutsceneActors = new Map();
   const siegeDrakanEncounters = new Map();
   const siegeAranei = new Map();
@@ -2254,6 +2261,30 @@ module.exports = function registerTheBloodMoonRises(api) {
     finalEfaritays.delete(player);
   }
 
+  function syncPostQuestEfaritay({ player } = {}) {
+    if (!player) return null;
+    if (!quest.isComplete(player)) {
+      cleanupPostQuestEfaritay({ player });
+      return null;
+    }
+    const existing = postQuestEfaritays.get(player);
+    if (existing && !existing.isDestroyed?.() && existing.getHitpoints?.() > 0) return existing;
+    const npc = api.spawnNpc({ id: POST_QUEST_EFARITAY.id, x: POST_QUEST_EFARITAY.x,
+      y: POST_QUEST_EFARITAY.y, z: POST_QUEST_EFARITAY.z, wanderRadius: 0,
+      owner: player, ownerOnly: true });
+    if (!npc) return null;
+    npc.setScriptedMovement?.(true);
+    postQuestEfaritays.set(player, npc);
+    return npc;
+  }
+
+  function cleanupPostQuestEfaritay({ player } = {}) {
+    const npc = player && postQuestEfaritays.get(player);
+    if (!npc) return;
+    api.removeNpc(npc);
+    postQuestEfaritays.delete(player);
+  }
+
   function spawnFinalCutsceneActors(player) {
     cleanupFinalEfaritay({ player });
     const actors = [];
@@ -2958,7 +2989,12 @@ module.exports = function registerTheBloodMoonRises(api) {
     if (value === STAGE.SLEPE) return slepeNativeStage(player);
     if (value === STAGE.WYRDS) return player?.getAttribute(WYRD_CUTSCENE_ATTRIBUTE) ? 146 : 144;
     if (value === STAGE.WYRD_DEFEATED) return 148;
-    if (value === STAGE.FENCE_FOUND) return 150;
+    if (value === STAGE.FENCE_FOUND) {
+      // 158/160/162 are the earned Castle Drakan handoff sub-stages inside the
+      // same quest stage. A login resync must not publish 150 and hide Ivan.
+      const saved = Number(player?.getAttribute(FINAL_NATIVE_STAGE_ATTRIBUTE));
+      return Number.isInteger(saved) && saved >= 158 && saved < 164 ? saved : 150;
+    }
     if (value === STAGE.COMPLETE) return 178;
     if (value === STAGE.STARTED) {
       // Captured start: accepting Sarius sets 2, the closing line sets 4, the
@@ -3763,7 +3799,14 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function selectVariant(event) {
     const player = event?.player;
-    if (!player || quest.isComplete(player)) return null;
+    if (!player) return null;
+    if (quest.isComplete(player)) {
+      if (event.definition?.getName?.() !== "Efaritay Hallow") return null;
+      const efaritayPage = event.pages?.find((entry) => entry.page === TOME_RECLAIM_PAGE);
+      if (!efaritayPage?.variants?.includes(TOME_RECLAIM_VARIANT)) return null;
+      return !hasTome(player) && tomeUses(player) < 6
+        ? { page: TOME_RECLAIM_PAGE, variant: TOME_RECLAIM_VARIANT } : null;
+    }
     const page = event.pages?.find((entry) => entry.page === PAGE);
     if (!page) return null;
     const value = stage(player);
@@ -5611,8 +5654,10 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function addCastleMedallionDestination(event) {
     const player = event?.player;
-    if (!player || !Array.isArray(event.destinations) ||
-      stage(player) < STAGE.SLEPE || stage(player) > STAGE.SIEGE ||
+    // The medallion's Castle Drakan option is unlocked by inspecting the
+    // shrine and stays available after the quest, so completed players can
+    // walk from the medallion landing to the post-quest Efaritay normally.
+    if (!player || !Array.isArray(event.destinations) || stage(player) < STAGE.SLEPE ||
       !slepeStory(player).refineryComplete || !player.getAttribute(CASTLE_SHRINE_ATTRIBUTE)) return;
     event.destinations.push({
       label: "Castle Drakan.",
@@ -5704,7 +5749,27 @@ module.exports = function registerTheBloodMoonRises(api) {
   // puzzle and boss handlers below remain responsible for the actual mechanics.
   function onTranscriptAction(event) {
     const player = event?.player;
-    if (!player || quest.isComplete(player)) return;
+    if (!player) return;
+    if (quest.isComplete(player)) {
+      if (event.stepId === "8qI8YD") {
+        // Canonical post-quest Efaritay recovery for a lost/destroyed tome.
+        // The shared completion add cannot place it in a full inventory, so
+        // this is the normal route to reclaim it without duplicating a held,
+        // equipped, banked or fully-read copy.
+        event.handled = true;
+        if (hasTome(player) || tomeUses(player) >= 6) {
+          event.end = true;
+          return;
+        }
+        const inventory = player.getInventory();
+        if ((inventory.getFreeSlots?.() ?? 0) < 1 || inventory.adds(TOME_ID, 1) === false) {
+          player.sendMessage("You need an empty inventory slot to reclaim the tome of experience.");
+          event.end = true;
+          return;
+        }
+      }
+      return;
+    }
     if (event.stepId === "O3RVAV") {
       // Refinery runs first and owns the actual grant; publish from its state.
       publishHelperVarbits(player);
@@ -6117,6 +6182,7 @@ module.exports = function registerTheBloodMoonRises(api) {
       cleanupFinalCutsceneActors({ player });
       cleanupFinalEfaritay({ player });
       quest.complete(player);
+      syncPostQuestEfaritay({ player });
       if (sceneReady(player)) {
         Scenes.fade(player, true);
         Scenes.later(player, 2, () => {
@@ -6955,6 +7021,16 @@ module.exports = function registerTheBloodMoonRises(api) {
 
   function hasItem(player, itemId) {
     return player.getInventory().contains(itemId) || player.getEquipment?.().contains?.(itemId) === true;
+  }
+
+  function tomeUses(player) {
+    return Number(player?.getAttribute?.(ATTRIBUTE)) || 0;
+  }
+
+  // The tome is unbankable in OSRS, but a stale/manual bank copy still counts as
+  // owned so the reclaim can never duplicate it.
+  function hasTome(player) {
+    return hasItem(player, TOME_ID) || hasBankedItem(player, TOME_ID);
   }
 
   function giveInventoryItem(player, itemId, fullMessage = "Make room in your inventory before taking that item.") {
@@ -8762,6 +8838,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogin(recoverFinalDrakanLanding);
   api.onPlayerLogin(syncFinalEfaritayOnLogin);
   api.onPlayerLogin(syncGatheringCastleActorsOnLogin);
+  api.onPlayerLogin(syncPostQuestEfaritay);
   api.onPlayerLogin(publishHelperVarbitsOnLogin);
   api.onPlayerLogin(resumeFinalDrakanVictory);
   api.onPlayerLogout(cleanupCastleActors);
@@ -8773,6 +8850,7 @@ module.exports = function registerTheBloodMoonRises(api) {
   api.onPlayerLogout(cleanupPaterdomusBattleOnLogout);
   api.onPlayerLogout(({ player } = {}) => { if (player) Scenes.cancel(player); });
   api.onPlayerLogout(cleanupFinalEfaritay);
+  api.onPlayerLogout(cleanupPostQuestEfaritay);
   api.onPlayerLogout(cleanupFinalCutsceneActors);
   api.onPlayerLogout(handleFinalDrakanLogout);
   api.onPlayerLogout(handleSiegeLogout);
