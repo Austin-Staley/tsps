@@ -93,6 +93,8 @@ const game = {
   /** How many adventurers were inside when the rift opened (Peek). */
   startingPlayers: 0,
   chargedAt: 0,
+  /** Ticks since the server started: the clock the fighters' attack timers run on. */
+  clock: 0,
   task: null,
   listeners: new Map(),
 };
@@ -459,6 +461,7 @@ function tickCharged() {
 }
 
 function tick() {
+  game.clock++;
   switch (game.phase) {
     case PHASE.LOBBY:
       tickLobby();
@@ -483,7 +486,7 @@ function tick() {
       break;
   }
   emit("tick", { phase: game.phase });
-  if (Shared.now() % Shared.HUD_PERIOD === 0) broadcastHud();
+  if (game.clock % Shared.HUD_PERIOD === 0) broadcastHud();
 }
 
 /** The loop runs from server start, whether or not anyone is in the temple. */
@@ -523,7 +526,7 @@ module.exports = {
   on, phase, isRunning, altarsOpen, isPlaying, stateOf, players, powerPercent, activeAltars, portal,
   setRiftGuardians, maxPowerFor, addPower, setPower, addEnergy, syncEnergy, join, leave,
   openHud, closeHud, sendHud, message, greatGuardian, startingPlayers: () => game.startingPlayers,
-  tick, start, skip, advanceTime, describe,
+  tick, start, skip, advanceTime, describe, clock: () => game.clock,
   _game: game,
   attach(api) {
     api.onServerStartup(start);

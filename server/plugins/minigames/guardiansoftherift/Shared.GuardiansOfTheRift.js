@@ -288,6 +288,22 @@ function graphic(player, name, height = 0) {
   player.performGraphic(height > 0 ? new Graphic(spotanim(name), 0, height) : new Graphic(spotanim(name)));
 }
 
+/** Damage that lands now: the splat and health bar show and a lethal hit starts the NPC's death. */
+function damageNpc(npc, damage) {
+  const { HitDamage, HitMask } = core();
+  if (!npc.isRegistered() || npc.getHitpoints() <= 0) return;
+  npc.addTickHit(npc.decrementHealth(new HitDamage(damage, damage > 0 ? HitMask.RED : HitMask.BLUE)));
+}
+
+/**
+ * The minigame's fighters: no regeneration between hits (they're never attacked through the
+ * combat system, which would otherwise heal them 10% a tick), and, for walkers, no blocking.
+ */
+function prepareNpc(npc, { walkThrough = false } = {}) {
+  npc.setFlag("combat:no-regen");
+  if (walkThrough) npc.setFlag(core().NPC.WALK_THROUGH_ENTITIES_FLAG);
+}
+
 function sound(player, id, delay = 0) {
   player.getPacketSender().sendSound(id, 1, delay);
 }
@@ -340,5 +356,5 @@ module.exports = {
   LOC, NPC, ITEM, GAME_ITEMS, VARBIT, VARP, INTERFACE, SCRIPT, OVERLAY_HUD_UID, OVERLAY_ATMOSPHERE_UID,
   loc, isLoc, npc, obj, seq, spotanim, iface, setVarbit, getVarbit, setVarp,
   location, inTemple, inGameSide, now, later, repeat, startAction, stopAction, statement, itemStatement, options, npcSays, spam, highlight,
-  animate, graphic, sound, runecraftLevel, addXp, questComplete, count, removeItems, formatNumber, random,
+  animate, graphic, damageNpc, prepareNpc, sound, runecraftLevel, addXp, questComplete, count, removeItems, formatNumber, random,
 };

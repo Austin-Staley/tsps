@@ -24,6 +24,7 @@
 const Shared = require("./Shared.GuardiansOfTheRift");
 const Game = require("./Game.GuardiansOfTheRift");
 const Cells = require("./Cells.GuardiansOfTheRift");
+const Creatures = require("./Creatures.GuardiansOfTheRift");
 
 const PILES = [
   { loc: "gotr_guardian_spawn_east", type: "elemental", tile: { x: 3618, y: 9490 }, face: 0, guardians: ["air", "water", "earth", "fire"] },
@@ -39,6 +40,11 @@ const PILE_SIZE = 2;
 const GUARDIAN_ENERGY = [0, 6, 15, 27, 45];
 const CRAFTING_XP = 80;
 const SOUND = { SCRAPE: 942, CARVE: 2586, ALIVE: 956 };
+/** Ours: guardians hit 0-6 (rsprox captures), up by their cell's tier, every 4 ticks. */
+const MAX_HIT = [0, 3, 4, 5, 6];
+const ATTACK_TICKS = 4;
+const SIGHT = 10;
+const RANGED_REACH = 7;
 /** Where the guardians hold, between the barriers and the rift. */
 const POST = { minX: 3605, maxX: 3626, minY: 9512, maxY: 9517 };
 
@@ -120,8 +126,10 @@ function spawn(pile, tier) {
   const npc = api.spawnNpc({ id, x: pile.tile.x, y: pile.tile.y + PILE_SIZE, z: 0, wanderRadius: 0 });
   if (!npc) return;
   guardians.add(npc);
+  npc.__gotrTier = tier;
+  npc.__gotrNextAttack = 0;
   // Guardians rise among the crowd at the pile; nothing standing there should pin them in.
-  npc.canWalkThroughNPCs = () => true;
+  Shared.prepareNpc(npc, { walkThrough: true });
   npc.performAnimation(new (Shared.core().Animation)(Shared.seq("rift_guardian_spawn")));
   Shared.later(2, () => npc.isRegistered() && Shared.core().PathFinder.calculateWalkRoute(npc,
     Shared.random(POST.minX, POST.maxX), Shared.random(POST.minY, POST.maxY)));
@@ -130,13 +138,35 @@ function spawn(pile, tier) {
 
 /** Full power: every guardian dies with the creatures (Wiki). */
 function dismissAll() {
-  for (const npc of guardians) if (npc.isRegistered?.()) api.removeNpc(npc);
+  for (const npc of guardians) if (npc.isRegistered() && npc.getHitpoints() > 0) npc.setHitpoints(0);
   guardians.clear();
   Game.setRiftGuardians(0);
 }
 
-function tick() {
+/** A guardian goes for the nearest creature it can see: melee beside it, ranged within 7. */
+function guardianTurn(npc, now) {
+  const from = Creatures.tileOf(npc);
+  const target = Creatures.nearestCreature(from, Creatures.sizeOf(npc), SIGHT);
+  if (!target) return;
+  if (target.gap > RANGED_REACH) {
+    const at = Creatures.tileOf(target.npc);
+    Creatures.route(npc, at.x, at.y);
+    return;
+  }
+  npc.getMovementQueue().reset();
+  if (now < npc.__gotrNextAttack) return;
+  npc.__gotrNextAttack = now + ATTACK_TICKS;
+  npc.setPositionToFace?.(target.npc.getLocation());
+  Creatures.animate(npc, target.gap <= 1 ? "rift_guardian_attack_melee" : "rift_guardian_attack_ranged");
+  Creatures.hit(target.npc, MAX_HIT[npc.__gotrTier ?? 1]);
+  Creatures.struckBy(target.npc, npc);
+}
+
+function tick({ phase }) {
   Game.setRiftGuardians(alive());
+  if (phase !== Game.PHASE.ATTACK) return;
+  const now = Game.clock();
+  for (const npc of guardians) guardianTurn(npc, now);
 }
 
 module.exports = {

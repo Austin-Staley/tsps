@@ -104,7 +104,10 @@ function raiseBarrier(tile) {
     tile.npc.setHitpoints(tile.npc.getMaxHitpoints());
   } else {
     tile.npc = api.spawnNpc({ id: Shared.npc(barrierNpcName(tile.tier, tile.large)), x: barrier.x, y: barrier.y, z: 0, wanderRadius: 0 });
-    tile.npc?.getMovementQueue?.()?.setBlockMovement?.(true);
+    if (tile.npc) {
+      Shared.prepareNpc(tile.npc);
+      tile.npc.getMovementQueue().setBlockMovement(true);
+    }
   }
   tileLoc(tile);
 }
@@ -116,8 +119,9 @@ function lowerBarrier(tile) {
   tile.npc = null;
 }
 
-/** A barrier's NPC died: the tile breaks and needs fragments (Wiki). */
+/** A barrier's NPC died: the tile breaks and needs fragments (Wiki). The NPC's death removes it. */
 function destroyed(tile) {
+  tile.npc = null;
   lowerBarrier(tile);
   tile.tier = 0;
   tile.broken = true;
@@ -142,12 +146,16 @@ function surge() {
   }
 }
 
-/** Creatures and the surge hurt barriers through here. */
+/** The surge and the creatures hurt a barrier through its NPC's hit queue. */
 function damage(tile, amount) {
-  if (!tile.npc) return;
-  const left = tile.npc.getHitpoints() - amount;
-  if (left <= 0) destroyed(tile);
-  else tile.npc.setHitpoints(left);
+  if (tile.npc) Shared.damageNpc(tile.npc, amount);
+}
+
+/** A barrier whose NPC has died breaks. */
+function checkBarriers() {
+  for (const tile of tiles) {
+    if (tile.npc && (tile.npc.getHitpoints() <= 0 || !tile.npc.isRegistered())) destroyed(tile);
+  }
 }
 
 function barrierNpcs() {
@@ -326,5 +334,6 @@ module.exports = {
     pluginApi.onItemDropPolicy(dropDestroys);
     Game.on("surge", surge);
     Game.on("ended", reset);
+    Game.on("tick", checkBarriers);
   },
 };

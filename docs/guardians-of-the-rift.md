@@ -6,7 +6,7 @@ unit per part of the game in `server/plugins/minigames/guardiansoftherift/` (the
 
 Status: phases 1-3 (lobby, barrier, game loop, HUD, Power-up, end-of-game rewards; mining,
 workbench, portals, rubble, Deposit Pool, essence pouches; Portal Guardians and altars; cells,
-barriers and rift guardians) are built. The
+barriers and rift guardians; abyssal creatures and the fight) are built. The
 phases are at the end.
 
 ## Sources
@@ -364,6 +364,40 @@ Ticks from the rift opening:
   the barriers and the guardians carry into the game.
 - Once the quest is done, Temple of the Eye no longer spawns its owner-only Cordelia, Felix, Tamara
   and Great Guardian. The minigame's world spawns stand there.
+
+### Abyssal creatures and the fight (rev 241)
+
+- **Batches** (captured):
+  - From the creatures' attack, they come out of the rift in batches 76 ticks apart, with
+    `abyssal_demon_teleport` map anims (height 90) where they appear (3613-3617, 9522-9525).
+  - A busy world (about 450 players) had batches of 13-22: two thirds leeches, a quarter walkers,
+    the rest abyssal guardians.
+  - The plugin sends max(2, min(22, players/30 + 2)): two on a quiet world, 17 at 450 players.
+  - After the 60% surge the mix leans to walkers and abyssal guardians (Wiki).
+- **Stats:** the cache gives the leech 5, the walker 30 and the abyssal guardian 50 hitpoints.
+  Rift guardians have 10-50 and barriers 50/100/200/400.
+- **Hits** (captured hitsplats):
+  - Creatures on barriers and rift guardians, and rift guardians on creatures, hit 0-6. About
+    four in ten are zeros.
+  - The plugin uses a 60% hit chance and max hits of leech 2, walker 4, abyssal guardian 6, and
+    rift guardians 3-6 by cell tier. Everyone attacks every 4 ticks. These are ours.
+- **Animations** (`npc-combat-defs.json`):
+  - The creatures use their `gotr_abyssal_*` attack, defend and death sequences.
+  - Rift guardians use `rift_guardian_attack_melee` (beside the target) or `_attack_ranged`
+    (within 7), `rift_guardian_defend_melee` and `rift_guardian_death`.
+  - Barrier NPCs have none. Every one has respawn 0.
+  - The rift guardians' captured projectile has no graphic (spotanim -1), so none is drawn.
+- **Targets** (Wiki):
+  - Creatures go for the nearest standing barrier, else the Great Guardian.
+  - They fight back only against a rift guardian that struck them, while it's beside them.
+  - Rift guardians go for the nearest creature within 10 tiles.
+- **The Great Guardian:** each creature hit drains its power. The busy world's barriers never let
+  one through, so the drain (leech 1, walker 2, abyssal guardian 3 a hit) is ours. At 0% the game
+  is lost.
+- **At full power** every creature and rift guardian dies (Wiki).
+- **Damage to these NPCs** lands directly, with their splat. Core NPCs heal 10% a tick when the
+  combat system hasn't hit them for 20 seconds, so every GotR NPC is flagged `combat:no-regen`.
+  Walkers and guardians are flagged to walk through other entities.
 
 ### Rewards
 

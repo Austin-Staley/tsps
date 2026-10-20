@@ -25,6 +25,7 @@ const Pouches = require('../plugins/skills/runecrafting/Pouches.Runecrafting');
 const Altars = require('../plugins/minigames/guardiansoftherift/Altars.GuardiansOfTheRift');
 const Cells = require('../plugins/minigames/guardiansoftherift/Cells.GuardiansOfTheRift');
 const RiftGuardians = require('../plugins/minigames/guardiansoftherift/RiftGuardians.GuardiansOfTheRift');
+const Creatures = require('../plugins/minigames/guardiansoftherift/Creatures.GuardiansOfTheRift');
 
 const hooks = {
   objects: {}, npcs: {}, items: {}, clicks: {}, custom: {}, login: [], logout: [], conditions: [], areas: [], prompts: [],
@@ -43,9 +44,15 @@ function fakeNpc(definition) {
     setHitpoints: (hp) => { npc.hp = hp; return npc; },
     heal: (amount) => { npc.hp = Math.min(npc.getMaxHitpoints(), npc.hp + amount); },
     setNpcTransformationId: (id) => { npc.transform = id; return npc; },
-    getMovementQueue: () => ({ setBlockMovement() {}, reset() {} }),
-    performAnimation() {},
+    getMovementQueue: () => ({ setBlockMovement() {}, reset() {}, size: () => 0, routes: npc.routes }),
+    performAnimation: (animation) => npc.animations.push(animation.getId?.() ?? animation.id),
     forceChat() {},
+    flags: new Set(), routes: [], animations: [], splats: [],
+    setFlag: (flag) => npc.flags.add(flag),
+    getSize: () => Shared.core().NpcDefinition.forId(npc.id).getSize?.() ?? 1,
+    setPositionToFace() {},
+    decrementHealth: (hit) => { const d = Math.min(npc.hp, hit.getDamage()); npc.hp -= d; hit.setDamage(d); return hit; },
+    addTickHit: (hit) => npc.splats.push(hit.getDamage()),
   };
   npc.hp = npc.getMaxHitpoints();
   return npc;
@@ -217,6 +224,7 @@ function resetGame() {
   game.portal = { direction: 0, closesIn: 0, opensIn: 0 };
   Cells.reset();
   RiftGuardians.dismissAll();
+  Creatures.clear();
 }
 
 before(() => {
@@ -237,7 +245,8 @@ before(() => {
   Altars.attach(api);
   Cells.attach(api);
   RiftGuardians.attach(api);
-  Shared.core().PathFinder.calculateWalkRoute = () => true;
+  Creatures.attach(api);
+  Shared.core().PathFinder.calculateWalkRoute = (npc, x, y) => { npc.routes?.push([x, y]); return true; };
   for (const name of Shared.GAME_ITEMS) if (Shared.core().ItemDefinition.forId(Shared.obj(name)).isStackable()) STACKABLE.add(Shared.obj(name));
 });
 
@@ -301,7 +310,7 @@ test('the lobby counts down 30/10/5 seconds and 3, 2, 1, then the rift opens at 
   ticks(1);
   const hud = player.lastHud();
   assert.deepEqual(hud.slice(0, 4), [0, 0, 25, 250], 'a solo game: 25 of 250');
-  assert.equal(hud[9], 198, 'the timer counts to the attack');
+  assert.ok(hud[9] >= 198 && hud[9] <= 199, 'the timer counts to the attack (the HUD goes out every other tick)');
 });
 
 test('the creatures attack at 200 ticks and the altars change every 33', () => {
@@ -765,6 +774,7 @@ test('the surge hits every barrier for 50; a broken tile takes 12 fragments to r
   player.inventory.add(CELL(1), 1);
   place(player, tile);
   Game.setPower(60);
+  ticks(1);
   assert.equal(tile.broken, true, '50 health: the surge breaks a weak barrier');
   assert.ok(player.messages.includes('<col=ef1020>A barrier has been destroyed!</col>'));
   assert.equal(tile.npc, null);
@@ -819,4 +829,98 @@ test('at full power every rift guardian goes, and the close resets the tiles', (
   assert.equal(RiftGuardians.alive(), 0);
   ticks(32);
   assert.ok(Cells.tiles.every((tile) => tile.tier === 0 && !tile.npc && !tile.broken));
+});
+
+// ------------------------------------------------------------------ phase 5: creatures
+
+test('creature batches: two on a quiet world, up to 22 as on the captured busy world; mostly leeches', () => {
+  assert.equal(Creatures.batchSize(1), 2);
+  assert.equal(Creatures.batchSize(450), 17);
+  assert.equal(Creatures.batchSize(2000), 22);
+  assert.equal(Creatures.pickKind({ leech: 0.7, walker: 0.2, guardian: 0.1 }, 0.5), 'leech');
+  assert.equal(Creatures.pickKind({ leech: 0.7, walker: 0.2, guardian: 0.1 }, 0.85), 'walker');
+  assert.equal(Creatures.pickKind({ leech: 0.7, walker: 0.2, guardian: 0.1 }, 0.95), 'guardian');
+  assert.equal(Creatures.gap({ x: 3604, y: 9505 }, 1, { x: 3605, y: 9502 }, 3), 1, 'touching a 3x3 barrier');
+  assert.equal(Creatures.gap({ x: 3615, y: 9522 }, 1, { x: 3613, y: 9501 }, 5), 17);
+});
+
+test('the attack sends a batch out of the rift, and one every 76 ticks after', () => {
+  const player = fakePlayer();
+  openGame(player);
+  Game._game.elapsed = 199;
+  const before = hooks.npcsSpawned.length;
+  ticks(1);
+  const first = hooks.npcsSpawned.slice(before);
+  assert.equal(first.length, 2);
+  assert.ok(first.every((npc) => npc.flags.has('combat:no-regen')));
+  assert.ok(first.every((npc) => npc.y >= 9522 && npc.y <= 9525), 'out of the rift');
+  ticks(75);
+  assert.equal(hooks.npcsSpawned.length - before, 2);
+  ticks(1);
+  assert.equal(hooks.npcsSpawned.length - before, 4);
+});
+
+test('a creature beside a barrier hits it; with none standing it drains the Great Guardian', () => {
+  const player = fakePlayer();
+  openGame(player);
+  player.inventory.add(CELL(1), 1);
+  place(player, Cells.tiles[0]);
+  Game._game.phase = Game.PHASE.ATTACK;
+  const walker = fakeNpc({ id: Shared.npc('gotr_abyssal_walker'), x: 3604, y: 9505 });
+  Creatures.creatures.set(walker, { kind: 'walker', nextAttack: 0, attacker: null });
+  const barrier = Cells.tiles[0].npc;
+  const random = Math.random;
+  Math.random = () => 0.1;
+  try {
+    ticks(1);
+    assert.equal(barrier.getHitpoints(), 49, 'a walker hit');
+    assert.ok(walker.animations.includes(Shared.seq('gotr_abyssal_walker_attack')));
+    ticks(3);
+    assert.equal(barrier.getHitpoints(), 49, 'every 4 ticks');
+    ticks(1);
+    assert.equal(barrier.getHitpoints(), 48);
+    barrier.hp = 0;
+    ticks(1);
+    assert.equal(Cells.tiles[0].broken, true, 'a dead barrier NPC breaks its tile');
+
+    walker.x = 3615; walker.y = 9506;
+    Game._game.power = 100;
+    ticks(4);
+    assert.equal(Game._game.power, 98, 'a walker drains 2');
+  } finally {
+    Math.random = random;
+  }
+});
+
+test('rift guardians hit the nearest creature, and that creature turns on them', () => {
+  const player = fakePlayer();
+  openGame(player);
+  Game._game.phase = Game.PHASE.ATTACK;
+  const guardian = fakeNpc({ id: Shared.npc('gotr_guardian_fire'), x: 3610, y: 9512 });
+  guardian.__gotrTier = 4;
+  guardian.__gotrNextAttack = 0;
+  RiftGuardians.guardians.add(guardian);
+  const leech = fakeNpc({ id: Shared.npc('gotr_abyssal_leech'), x: 3611, y: 9517 });
+  Creatures.creatures.set(leech, { kind: 'leech', nextAttack: Infinity, attacker: null });
+  const random = Math.random;
+  Math.random = () => 0.1;
+  try {
+    ticks(1);
+  } finally {
+    Math.random = random;
+  }
+  assert.ok(guardian.animations.includes(Shared.seq('rift_guardian_attack_ranged')), 'two tiles off: ranged');
+  assert.equal(leech.getHitpoints(), 4);
+  assert.equal(Creatures.creatures.get(leech).attacker, guardian, 'the leech fights back');
+});
+
+test('full power kills every creature', () => {
+  const player = fakePlayer();
+  openGame(player);
+  Game._game.phase = Game.PHASE.ATTACK;
+  const leech = fakeNpc({ id: Shared.npc('gotr_abyssal_leech'), x: 3611, y: 9515 });
+  Creatures.creatures.set(leech, { kind: 'leech', nextAttack: 0, attacker: null });
+  Game.setPower(100);
+  assert.equal(leech.getHitpoints(), 0);
+  assert.equal(Creatures.creatures.size, 0);
 });
