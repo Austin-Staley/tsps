@@ -23,11 +23,33 @@ const Portals = require('../plugins/minigames/guardiansoftherift/Portals.Guardia
 const DepositPool = require('../plugins/minigames/guardiansoftherift/DepositPool.GuardiansOfTheRift');
 const Pouches = require('../plugins/skills/runecrafting/Pouches.Runecrafting');
 const Altars = require('../plugins/minigames/guardiansoftherift/Altars.GuardiansOfTheRift');
+const Cells = require('../plugins/minigames/guardiansoftherift/Cells.GuardiansOfTheRift');
+const RiftGuardians = require('../plugins/minigames/guardiansoftherift/RiftGuardians.GuardiansOfTheRift');
 
 const hooks = {
   objects: {}, npcs: {}, items: {}, clicks: {}, custom: {}, login: [], logout: [], conditions: [], areas: [], prompts: [],
-  dialogues: [], canBankItem: [], itemOnObject: {},
+  dialogues: [], canBankItem: [], itemOnObject: {}, drops: [], npcsSpawned: [], npcsRemoved: [],
 };
+
+/** Enough of an NPC for barriers and guardians: hitpoints, transforms, a movement queue. */
+function fakeNpc(definition) {
+  const npc = {
+    id: definition.id, transform: -1, hp: 0, x: definition.x, y: definition.y, registered: true,
+    getId: () => npc.id,
+    getLocation: () => new Location(npc.x, npc.y, 0),
+    isRegistered: () => npc.registered,
+    getMaxHitpoints: () => Shared.core().NpcDefinition.forId(npc.transform !== -1 ? npc.transform : npc.id).getHitpoints(),
+    getHitpoints: () => npc.hp,
+    setHitpoints: (hp) => { npc.hp = hp; return npc; },
+    heal: (amount) => { npc.hp = Math.min(npc.getMaxHitpoints(), npc.hp + amount); },
+    setNpcTransformationId: (id) => { npc.transform = id; return npc; },
+    getMovementQueue: () => ({ setBlockMovement() {}, reset() {} }),
+    performAnimation() {},
+    forceChat() {},
+  };
+  npc.hp = npc.getMaxHitpoints();
+  return npc;
+}
 const QUESTS_DONE = new Set(['temple_of_the_eye']);
 
 function fakeApi() {
@@ -57,6 +79,9 @@ function fakeApi() {
     onCanBankItem: (handler) => hooks.canBankItem.push(handler),
     onItemOnObject: (item, object, handler) => { hooks.itemOnObject[`${item}|${object}`] = handler; },
     getTaskManager: () => TaskManager,
+    onItemDropPolicy: (handler) => hooks.drops.push(handler),
+    spawnNpc: (definition) => { const npc = fakeNpc(definition); hooks.npcsSpawned.push(npc); return npc; },
+    removeNpc: (npc) => { npc.registered = false; hooks.npcsRemoved.push(npc); },
   };
 }
 
@@ -118,7 +143,7 @@ function fakePlayer(name = 'Tester', { runecraft = 99, questDone = true, x = 361
     getAttribute: (key) => attributes.get(key),
     setAttribute: (key, value) => attributes.set(key, value),
     sendMessage: (message) => p.messages.push(message),
-    getInventory: () => p.inventory,
+    getInventory: () => Object.assign(p.inventory, { full() { p.messages.push("You don't have enough inventory space."); } }),
     performAnimation: (animation) => p.animations.push(animation.getId?.() ?? animation.id),
     performGraphic() {},
     getSpecialPercentage: () => p.special,
@@ -150,6 +175,7 @@ function fakePlayer(name = 'Tester', { runecraft = 99, questDone = true, x = 361
         sendRunEnergy: () => sender,
         sendProjectile: () => sender,
         sendObjectAnimation: () => sender,
+        sendSoundEffect: (id) => { p.sounds.push(id); return sender; },
       };
       return sender;
     },
@@ -189,6 +215,8 @@ function resetGame() {
   Object.assign(game, { phase: Game.PHASE.LOBBY, timer: 100, elapsed: 0, power: 0, surged: false });
   game.altars = { elemental: 0, catalytic: 0, changesIn: 0 };
   game.portal = { direction: 0, closesIn: 0, opensIn: 0 };
+  Cells.reset();
+  RiftGuardians.dismissAll();
 }
 
 before(() => {
@@ -207,6 +235,9 @@ before(() => {
   DepositPool.attach(api);
   Pouches.attach(api);
   Altars.attach(api);
+  Cells.attach(api);
+  RiftGuardians.attach(api);
+  Shared.core().PathFinder.calculateWalkRoute = () => true;
   for (const name of Shared.GAME_ITEMS) if (Shared.core().ItemDefinition.forId(Shared.obj(name)).isStackable()) STACKABLE.add(Shared.obj(name));
 });
 
@@ -662,4 +693,130 @@ test('a portal talisman opens its dormant Guardian and shatters; Toggle-talisman
   hooks.objects['Guardian of Air']['Toggle-talisman']({ player: toggler, objectId: Shared.loc(air.guardian) });
   assert.equal(toggler.varbit(air.toggle), 1);
   assert.equal(Records.setting(toggler, air.toggle), 1);
+});
+
+// ------------------------------------------------------------------ phase 4: cells, barriers, rift guardians
+
+const UNCHARGED = () => Shared.obj(Shared.ITEM.UNCHARGED_CELL);
+const CELL = (tier) => Shared.obj(Shared.ITEM.CELLS[tier - 1]);
+
+function place(player, tile) {
+  const name = tile.broken ? 'Cell tile (broken)' : ['Inactive cell tile', 'Weak cell tile', 'Medium cell tile', 'Strong cell tile', 'Overpowered cell tile'][tile.tier];
+  const option = tile.broken ? 'Repair' : 'Place-cell';
+  return hooks.objects[name][option]({ player, location: { x: tile.x, y: tile.y, z: 0 } });
+}
+
+test('the cell tables: ten uncharged at most, one weak cell, a chisel; dropped cells are destroyed', () => {
+  const player = fakePlayer();
+  openGame(player);
+  const uncharged = { player, objectId: Shared.loc('gotr_uncharged_cells') };
+  hooks.objects['Uncharged cells']['Take-1'](uncharged);
+  assert.equal(player.inventory.getAmount(UNCHARGED()), 1);
+  hooks.objects['Uncharged cells']['Take-10'](uncharged);
+  assert.equal(player.inventory.getAmount(UNCHARGED()), 10);
+  hooks.objects['Uncharged cells']['Take-1'](uncharged);
+  assert.match(statementText(player), /You can only carry ten of these at a time\./);
+  const weak = { player, objectId: Shared.loc('gotr_weak_cells') };
+  hooks.objects['Weak cells'].Take(weak);
+  assert.equal(player.inventory.getAmount(CELL(1)), 1);
+  hooks.objects['Weak cells']['Take-chisel'](weak);
+  assert.equal(player.inventory.getAmount(Shared.obj('chisel')), 1);
+  const drop = { player, itemId: UNCHARGED(), handled: false };
+  for (const handler of hooks.drops) handler(drop);
+  assert.equal(drop.handled, true);
+  assert.equal(player.inventory.getAmount(UNCHARGED()), 0);
+  assert.equal(player.messages.at(-1), 'The Uncharged cell is destroyed as you drop it.');
+});
+
+test('cells raise, strengthen and recharge barriers with the captured messages, energy and XP', () => {
+  const player = fakePlayer();
+  openGame(player);
+  const tile = Cells.tiles[0];
+  player.inventory.add(CELL(1), 1);
+  place(player, tile);
+  assert.equal(tile.tier, 1);
+  assert.equal(tile.npc.getId(), Shared.npc('gotr_barrier_npc_tier1_large'));
+  assert.equal(tile.npc.getHitpoints(), 50);
+  assert.equal(player.varbit(Shared.VARBIT.ELEMENTAL_EARNED), 17, 'placing a weak cell: 17 of both');
+  assert.equal(player.varbit(Shared.VARBIT.CATALYTIC_EARNED), 17);
+  assert.equal(player.xpBySkill.Runecrafting, 30);
+
+  player.inventory.add(CELL(3), 1);
+  place(player, tile);
+  assert.equal(tile.tier, 3);
+  assert.equal(tile.npc.transform, Shared.npc('gotr_barrier_npc_tier3_large'));
+  assert.equal(tile.npc.getHitpoints(), 200);
+  assert.equal(player.messages.at(-1), 'The strong cell is consumed as it <col=ff0000>strengthens</col> the barrier.');
+  assert.equal(player.varbit(Shared.VARBIT.ELEMENTAL_EARNED), 30, '+13');
+  assert.equal(player.xpBySkill.Runecrafting, 30 + 190);
+
+  tile.npc.setHitpoints(150);
+  player.inventory.add(CELL(2), 1);
+  place(player, tile);
+  assert.equal(player.messages.at(-1), 'The medium cell is consumed as it <col=ff0000>recharges</col> the barrier.');
+  assert.equal(tile.npc.getHitpoints(), 175);
+  assert.equal(player.varbit(Shared.VARBIT.ELEMENTAL_EARNED), 35, '+5');
+});
+
+test('the surge hits every barrier for 50; a broken tile takes 12 fragments to repair', () => {
+  const player = fakePlayer();
+  openGame(player);
+  const tile = Cells.tiles[1];
+  player.inventory.add(CELL(1), 1);
+  place(player, tile);
+  Game.setPower(60);
+  assert.equal(tile.broken, true, '50 health: the surge breaks a weak barrier');
+  assert.ok(player.messages.includes('<col=ef1020>A barrier has been destroyed!</col>'));
+  assert.equal(tile.npc, null);
+  place(player, tile);
+  assert.match(statementText(player), /12 guardian fragments/);
+  player.inventory.add(Shared.obj(Shared.ITEM.FRAGMENTS), 15);
+  const before = player.varbit(Shared.VARBIT.ELEMENTAL_EARNED);
+  place(player, tile);
+  assert.equal(tile.broken, false);
+  assert.equal(player.inventory.getAmount(Shared.obj(Shared.ITEM.FRAGMENTS)), 3);
+  assert.equal(player.varbit(Shared.VARBIT.ELEMENTAL_EARNED), before + 25);
+});
+
+test('assembling a guardian: the captured steps, the pile energy, and nothing past ten', () => {
+  const player = fakePlayer();
+  openGame(player);
+  const pile = { player, objectId: Shared.loc('gotr_guardian_spawn_east') };
+  hooks.objects['Essence pile (elemental)'].Assemble(pile);
+  assert.match(statementText(player), /chisel/);
+  player.inventory.add(Shared.obj('chisel'), 1);
+  hooks.objects['Essence pile (elemental)'].Assemble(pile);
+  assert.match(statementText(player), /You will need a charged cell to power any rift guardians/);
+  player.inventory.add(CELL(4), 1);
+  hooks.objects['Essence pile (elemental)'].Assemble(pile);
+  assert.equal(player.messages.at(-1), 'You scrape together what usable components you can find.');
+  ticks(2);
+  assert.equal(player.messages.at(-1), 'You carve out a place for the cell and carefully place it inside the guardian.');
+  ticks(3);
+  assert.equal(player.messages.at(-1), 'The powers of the overcharged cell extend into the essence. A Guardian comes to life.');
+  assert.equal(hooks.npcsSpawned.at(-1).id, Shared.npc('gotr_guardian_fire'));
+  assert.equal(player.varbit(Shared.VARBIT.ELEMENTAL_EARNED), 45);
+  assert.equal(player.varbit(Shared.VARBIT.CATALYTIC_EARNED), 0, 'only the pile type');
+  assert.equal(player.xpBySkill.Crafting, 80);
+  assert.equal(player.xpBySkill.Runecrafting, 250);
+  assert.equal(player.inventory.getAmount(CELL(4)), 0);
+
+  for (let i = 0; i < 9; i++) RiftGuardians.guardians.add(fakeNpc({ id: Shared.npc('gotr_guardian_air'), x: 0, y: 0 }));
+  player.inventory.add(CELL(1), 1);
+  hooks.objects['Essence pile (elemental)'].Assemble(pile);
+  ticks(5);
+  assert.equal(player.messages.at(-1), 'The powers of the cell extend into the essence, but no guardian forms.');
+  assert.equal(Game.stateOf(player).elemental, 45 + 6, 'the energy still comes');
+});
+
+test('at full power every rift guardian goes, and the close resets the tiles', () => {
+  const player = fakePlayer();
+  openGame(player);
+  player.inventory.add(CELL(2), 1);
+  place(player, Cells.tiles[3]);
+  RiftGuardians.guardians.add(fakeNpc({ id: Shared.npc('gotr_guardian_air'), x: 0, y: 0 }));
+  Game.setPower(100);
+  assert.equal(RiftGuardians.alive(), 0);
+  ticks(32);
+  assert.ok(Cells.tiles.every((tile) => tile.tier === 0 && !tile.npc && !tile.broken));
 });

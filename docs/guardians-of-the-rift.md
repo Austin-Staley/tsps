@@ -5,7 +5,8 @@ the cache. It is one plugin, `server/plugins/minigames/GuardiansOfTheRift.plugin
 unit per part of the game in `server/plugins/minigames/guardiansoftherift/` (the Wintertodt layout).
 
 Status: phases 1-3 (lobby, barrier, game loop, HUD, Power-up, end-of-game rewards; mining,
-workbench, portals, rubble, Deposit Pool, essence pouches; Portal Guardians and altars) are built. The
+workbench, portals, rubble, Deposit Pool, essence pouches; Portal Guardians and altars; cells,
+barriers and rift guardians) are built. The
 phases are at the end.
 
 ## Sources
@@ -298,31 +299,71 @@ Ticks from the rift opening:
 - **Deposit Pool, Deposit-runes:** anim `human_leverdown_walkmerge`, every rune banked, and "You
   deposit all of your runes into the pool."
 
-### Cells, barriers and rift guardians
+### Cells, barriers and rift guardians (rev 241)
 
-- **Weak cells, Take:** anim `human_pickuptable_walkmerge`, sound 2581, +1 weak cell.
-- **Uncharged cells:** Take-10 and Take-1 (up to 10 held, Wiki).
-- **Place-cell on a cell tile:**
-  - Anim `human_pickupfloor` and sound 5428.
-  - "The <tier> cell is consumed as it <col=ff0000>recharges</col> the barrier." and both energies go up.
-  - Wiki energy per cell:
+- **Cell tables:**
+  - Both tables: `human_pickuptable_walkmerge`, sound 2581.
+  - Uncharged cells: Take-10 tops the stack up to ten, Take-1 adds one. At ten: mesbox "You can
+    only carry ten of these at a time."
+  - Weak cells: Take gives one weak cell. Take-chisel gives a chisel (`human_pickuptable`, sound
+    2582).
+  - The cells and talismans are destroyed when dropped: "The Uncharged cell is destroyed as you
+    drop it." (spam), sound 2739.
+- **The seven cell tiles** (`gotr_cell_tile_*`, shape 22) and their barriers (captured):
 
-    | Cell | Placing | Strengthening | Recharging | Health restored |
-    | --- | --- | --- | --- | --- |
-    | Weak | 17 | - | 2 | 10 |
-    | Medium | 20 | 7 | 5 | 25 |
-    | Strong | 24 | 13 | 9 | 50 |
-    | Overcharged | 30 | 22 | 15 | 100 |
+  | Tile | Barrier |
+  | --- | --- |
+  | 3608,9503 | 3605,9502, 3x3 |
+  | 3609,9507 | 3607,9507 |
+  | 3611,9509 | 3610,9510 |
+  | 3615,9510 | 3614,9511, 3x3 |
+  | 3619,9509 | 3619,9510 |
+  | 3621,9507 | 3622,9507 |
+  | 3622,9503 | 3623,9502, 3x3 |
 
-  - Runecraft XP for barriers is 30/100/180/250 (Wiki).
-  - Repairing a broken tile costs 12 guardian fragments and gives 25 of each energy.
-  - On a tile where a barrier is already standing: "Your cell absorbs a small / high amount of excess energy."
-- **Assemble at an essence pile:**
-  - Needs a chisel and a charged cell.
-  - Anim `gotr_chisel_guardian`, sounds 942 and 956.
-  - Messages: "You scrape together what usable components you can find." then "You carve out a place for the cell and carefully place it inside the guardian." and then "The powers of the <tier> cell extend into the essence. A Guardian comes to life."
-  - The cap is 10 rift guardians.
-  - Energy is 2x+1 of the strengthening value, of the pile's type only, plus 80 Crafting XP (Wiki).
+  Each barrier has an invisible NPC on its tile (`gotr_barrier_npc_tier<n>[_large]`; the cache
+  gives 50/100/200/400 hitpoints).
+- **Place-cell** (`human_pickupfloor`; the best charged cell held):
+  - **Inactive tile:** the tile and barrier take the cell's tier, sound 5455 (tutorial capture).
+    Wiki energy 17/20/24/30 of both kinds.
+  - **A stronger cell:** "The strong cell is consumed as it <col=ff0000>strengthens</col> the
+    barrier.", sound 5441. The barrier and its NPC go up a tier. Energy +7/+13/+22 (medium,
+    strong, overcharged), XP +10 over recharging (190, 260 captured).
+  - **Otherwise:** "The weak cell is consumed as it <col=ff0000>recharges</col> the barrier.",
+    sound 5428. Energy +2/+5/+9/+15, Runecraft XP 30/100/180/250 (captured), and 10/25/50/100
+    health back (Wiki).
+  - Recharging a full barrier stops paying at 2,500 XP and 450 energy a game (Wiki).
+  - With no charged cell, the plugin shows an objectbox: "You need a charged cell to place on the
+    tile." (our wording).
+- **A barrier destroyed:** "<col=ef1020>A barrier has been destroyed!</col>" (Leagues capture).
+  - The tile becomes `gotr_cell_tile_broken_repairable`. Repair takes 12 guardian fragments and
+    gives 25 of each energy (Wiki).
+  - The plugin's refusal ("You need 12 guardian fragments to repair the cell tile.") is ours.
+- **At 60% power** every barrier takes 50 damage (Wiki). **At the close** every tile goes back to
+  inactive and the barriers go (captured).
+- **Assemble at an essence pile** (captured, from arrival):
+  - 0: "You scrape together what usable components you can find." (spam), `human_pickupfloor`,
+    sound 942 x2.
+  - +2: "You carve out a place for the cell and carefully place it inside the guardian." (spam),
+    `gotr_chisel_guardian`, sound 2586 x2.
+  - +4: the guardian rises (`rift_guardian_spawn`). The pile is removed for 6 ticks.
+  - +5: the cell is used up, "The powers of the weak cell extend into the essence. A Guardian
+    comes to life.", sound 956, 80 Crafting XP and the cell's Runecraft XP. The pile's energy is
+    6/15/27/45 (Wiki: 2x+1 of the strengthening value), of the pile's kind only.
+  - With ten guardians up: "The powers of the cell extend into the essence, but no guardian
+    forms." The energy still comes.
+  - No charged cell: objectbox (weak cell) "You will need a charged cell to power any rift
+    guardians you create from this essence pile."
+  - No chisel (Wiki: needed): "You need a chisel to carve the essence into a guardian." (ours).
+  - Guardians: weak air or mind, medium water or chaos, strong earth or death, overcharged fire or
+    blood.
+  - Live raises a guardian on the pile itself. Here it stands up on the pile's north edge, so the
+    2x2 and 3x3 guardians can walk out to their posts between the barriers and the rift.
+  - All guardians die at full power (Wiki). The HUD's "n/10" counts them.
+- **Players may place cells and assemble guardians in the lobby** (captured between games). Both
+  the barriers and the guardians carry into the game.
+- Once the quest is done, Temple of the Eye no longer spawns its owner-only Cordelia, Felix, Tamara
+  and Great Guardian. The minigame's world spawns stand there.
 
 ### Rewards
 

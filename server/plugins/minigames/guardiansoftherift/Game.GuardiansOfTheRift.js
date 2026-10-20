@@ -99,7 +99,10 @@ const game = {
 
 // ------------------------------------------------------------------ in-plugin events
 
-/** Units listen for the game's moments: open, attack, surge, charged, closed, lost, rifts-closed, portal-open, portal-close, altars, tick, join, leave. */
+/**
+ * Units listen for the game's moments: open, attack, surge, charged, closed (per player), lost,
+ * ended (once, won or lost), rifts-closed, portal-open, portal-close, altars, tick, join, leave.
+ */
 function on(event, handler) {
   if (!game.listeners.has(event)) game.listeners.set(event, []);
   game.listeners.get(event).push(handler);
@@ -368,6 +371,7 @@ function closeRift() {
     player.getPacketSender().sendJingle(VICTORY_JINGLE, 0);
     player.sendMessage("The Portal Guardians will keep their rifts open for another 30 seconds.");
   }
+  emit("ended", { won: true });
   broadcastHud();
 }
 
@@ -382,6 +386,7 @@ function lose() {
   message("<col=ef1020>The Great Guardian has been defeated. The rift remains open.</col>");
   for (const player of game.players.keys()) Shared.setVarbit(player, Shared.VARBIT.FINISHED_GAME, 1);
   emit("lost", {});
+  emit("ended", { won: false });
   broadcastHud();
 }
 
