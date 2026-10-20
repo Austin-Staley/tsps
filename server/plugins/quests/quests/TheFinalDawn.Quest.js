@@ -1197,7 +1197,9 @@ module.exports = function registerTheFinalDawnQuest(api) {
 
   function handleStrangeTileStep({ player }) {
     const stage = quest.getStage(player);
-    if (stage < STAGE_PUZZLES_DONE || stage > STAGE_DOORS) return;
+    // Sun and moon are both available from stage55; their mandatory Strange-Tile links
+    // are what let the player reach the moon room and earn stage60.
+    if (stage < STAGE_CAVERN || stage > STAGE_DOORS) return;
     const location = player.getLocation();
     const key = `${location.getX()},${location.getY()},${location.getZ()}`;
     const landing = strangeTileArrivals.get(player);

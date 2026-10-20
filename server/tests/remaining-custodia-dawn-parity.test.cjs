@@ -1244,6 +1244,39 @@ test('The Final Dawn Strange Tiles step between the moon chamber and final floor
   assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1316, 9446, 2]);
 });
 
+test('The Final Dawn Strange Tiles work at stage55 before the sun/moon puzzles are complete', () => {
+  const h = harness('TheFinalDawn'), p = player();
+  h.quest.setStage(p, 55);
+  p.attrs.set('quest.the_final_dawn.sun', 3);
+  p.attrs.set('quest.the_final_dawn.moon', 0);
+  const enterCurrentZone = () => {
+    const at = p.getLocation();
+    for (const { zone, fn } of h.zones) {
+      if (zone.levels.includes(at.getZ()) && at.getX() >= zone.minX && at.getX() <= zone.maxX
+        && at.getY() >= zone.minY && at.getY() <= zone.maxY) fn({ player: p });
+    }
+  };
+  const step = (x, y, z) => {
+    p.moveTo(new core.Location(x, y, z));
+    enterCurrentZone();
+  };
+  const at = () => [p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()];
+
+  step(1323, 9443, 1);
+  assert.deepEqual(at(), [1316, 9446, 2], 'sun room -> central floor2 at stage55');
+  step(1304, 9446, 2);
+  assert.deepEqual(at(), [1299, 9455, 1], 'central floor2 -> moon room at stage55');
+  enterCurrentZone(); // landing tick clears the one-shot cooldown
+  step(1299, 9455, 1);
+  assert.deepEqual(at(), [1304, 9446, 2], 'moon room -> central floor2 return');
+  enterCurrentZone();
+  step(1316, 9446, 2);
+  assert.deepEqual(at(), [1323, 9443, 1], 'central floor2 -> sun room return');
+  assert.equal(h.quest.getStage(p), 55, 'strange tiles do not advance the stage');
+  assert.equal(p.attrs.get('quest.the_final_dawn.sun'), 3, 'sun progress untouched');
+  assert.equal(p.attrs.get('quest.the_final_dawn.moon'), 0, 'moon progress untouched');
+});
+
 test('The Final Dawn Ancient roots Fletch uses the captured action and knife blade', () => {
   assert.equal(CacheDefinitions.getItem(30963).inventoryActions[0], 'Fletch');
   const h = harness('TheFinalDawn'), p = player();
