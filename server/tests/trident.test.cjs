@@ -5,9 +5,16 @@ const { test } = require("node:test");
 const { Server } = require("../dist/Server");
 Server.installProductionPathResolver();
 
+const { PluginManager } = require("../dist/plugins/PluginManager");
 const { Item } = require("../dist/game/model/Item");
 const { ItemIdentifiers } = require("../dist/util/ItemIdentifiers");
 const Trident = require("../plugins/items/Trident.plugin");
+const actions = new Map();
+Trident.register({
+  core: PluginManager.getCoreApi(),
+  onItemAction: (name, itemActions) => actions.set(name, itemActions),
+  onItemOnItem() {},
+});
 
 function makePlayer(trident, resources = {}) {
   const items = [trident];
@@ -111,12 +118,6 @@ test("uncharging restores runes and swamp scales but not sea-trident coins", () 
 });
 
 test("named inventory actions expose Charge, Check, and Uncharge", () => {
-  const actions = new Map();
-  Trident.register({
-    onItemAction: (name, itemActions) => actions.set(name, itemActions),
-    onItemOnItem() {},
-  });
-
   assert.equal(typeof actions.get("Uncharged trident").Charge, "function");
   assert.equal(typeof actions.get("Trident of the Seas").Check, "function");
   assert.equal(typeof actions.get("Trident of the Seas").Uncharge, "function");

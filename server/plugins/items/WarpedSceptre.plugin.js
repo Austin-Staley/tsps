@@ -1,22 +1,19 @@
-/**
- * Warped Sceptre (https://oldschool.runescape.wiki/w/Warped_sceptre).
- *
- * Charged with two chaos runes and five earth runes per charge (20,000 max).
- * Uncharging returns the runes used for the remaining charges.
- */
-const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
-
+// OSRS Wiki: https://oldschool.runescape.wiki/w/Warped_sceptre
 const MAX_CHARGES = 20000;
 const CHAOS_RUNES_PER_CHARGE = 2;
 const EARTH_RUNES_PER_CHARGE = 5;
 const CHARGES_META_KEY = "warped-sceptre";
-const ATTACK_SPEED = 4;
-const ATTACK_RANGE = 7;
-const CAST_ANIMATION = 10501;
-const CAST_GRAPHIC = { START: 2567, PROJECTILE: 2569, IMPACT: 2568 };
-const WORN_CHARGES_VARBIT = 16155;
+const ATTACK_SPEED = 4; // Wiki combat stats: 25 casts per minute.
+const ATTACK_RANGE = 7; // Wiki combat stats; Powered Staff Longrange adds two tiles.
+const CAST_ANIMATION = 10500; // client gameval AnimationID.VFX_WARPED_SCEPTRE_CAST
+const CAST_START_GRAPHIC = 2567; // client gameval SpotanimID.VFX_WARPED_SCEPTRE_CAST
+const CAST_PROJECTILE_GRAPHIC = 2569; // client gameval SpotanimID.VFX_WARPED_SCEPTRE_PROJECTILE_PROJECTILE
+const CAST_IMPACT_GRAPHIC = 2568; // client gameval SpotanimID.VFX_WARPED_SCEPTRE_PROJECTILE_IMPACT
+const CHARGES_WARPED_SCEPTRE_QUANTITY_VARBIT = 16155; // client gameval VarbitID.CHARGES_WARPED_SCEPTRE_QUANTITY
+const MAGIC_LEVEL_REQUIRED = 62; // OSRS Wiki item page
 
 let core = null;
+let ItemIdentifiers = null;
 let chargedIds = new Set();
 let unchargedByCharged = new Map();
 let chargedByUncharged = new Map();
@@ -40,7 +37,7 @@ function weaponOf(player) {
 function syncWornCharges(player) {
   const weapon = weaponOf(player);
   const wornCharges = chargedIds.has(Number(weapon?.getId?.() ?? -1)) ? charges(weapon) : 0;
-  player.getPacketSender().sendVarbit(WORN_CHARGES_VARBIT, wornCharges);
+  player.getPacketSender().sendVarbit(CHARGES_WARPED_SCEPTRE_QUANTITY_VARBIT, wornCharges);
 }
 
 function wieldsSceptre(player, chargedOnly = false) {
@@ -49,6 +46,7 @@ function wieldsSceptre(player, chargedOnly = false) {
 }
 
 function baseMaxHit(player) {
+  // Wiki formula: floor((8 * current Magic level + 96) / 37).
   const magic = player.getSkillManager().getCurrentLevel(core.Skill.MAGIC);
   return Math.floor((8 * magic + 96) / 37);
 }
@@ -61,12 +59,12 @@ function spellFor(player) {
     spellId: () => core.ItemIdentifiers.WARPED_SCEPTRE,
     maximumHit: () => baseMaxHit(player),
     castAnimation: () => new Animation(CAST_ANIMATION),
-    startGraphic: () => new Graphic(CAST_GRAPHIC.START, GraphicHeight.HIGH),
+    startGraphic: () => new Graphic(CAST_START_GRAPHIC, GraphicHeight.HIGH),
     castProjectile: (cast, castOn) =>
-      Projectile.createProjectile(cast, castOn, CAST_GRAPHIC.PROJECTILE, 0, 20, 43, 31),
-    endGraphic: () => new Graphic(CAST_GRAPHIC.IMPACT),
+      Projectile.createProjectile(cast, castOn, CAST_PROJECTILE_GRAPHIC, 0, 20, 43, 31),
+    endGraphic: () => new Graphic(CAST_IMPACT_GRAPHIC),
     baseExperience: () => 0,
-    levelRequired: () => 62,
+    levelRequired: () => MAGIC_LEVEL_REQUIRED,
   });
   spells.set(player, spell);
   return spell;
@@ -177,13 +175,13 @@ function sceptreMethod() {
   if (SceptreCombatMethod) return SceptreCombatMethod;
   const { MagicCombatMethod, PendingHit } = core;
   SceptreCombatMethod = new (class extends MagicCombatMethod {
+    constructor() {
+      super();
+      this.warpedSceptreBuiltInSpell = true;
+    }
+
     canAttack(character, target) {
       const player = character.getAsPlayer();
-      if (target?.isPlayer?.() && core.Wilderness?.isIn?.(target)) {
-        player.sendMessage("You cannot use the warped sceptre against players in the Wilderness.");
-        player.getCombat().reset();
-        return false;
-      }
       const staff = weaponOf(player);
       if (!chargedIds.has(staff?.getId?.()) || charges(staff) <= 0) {
         player.sendMessage("Your warped sceptre has no charges left. Charge it with runes to use its built-in spell.");
@@ -191,15 +189,18 @@ function sceptreMethod() {
         return false;
       }
       player.getCombat().setCastSpell(spellFor(player));
-      useCharge(player, staff);
       return true;
     }
 
-    canPursue(character, target) {
+    start(character, target) {
       const player = character.getAsPlayer();
-      return wieldsSceptre(player, true) &&
-        charges(weaponOf(player)) > 0 &&
-        !(target?.isPlayer?.() && core.Wilderness?.isIn?.(target));
+      useCharge(player, weaponOf(player));
+      super.start(character, target);
+    }
+
+    canPursue(character) {
+      const player = character.getAsPlayer();
+      return wieldsSceptre(player, true) && charges(weaponOf(player)) > 0;
     }
 
     hits(character, target) {
@@ -255,12 +256,13 @@ module.exports = {
     ATTACK_SPEED,
     ATTACK_RANGE,
     CHARGES_META_KEY,
-    WORN_CHARGES_VARBIT,
+    CHARGES_WARPED_SCEPTRE_QUANTITY_VARBIT,
     syncWornCharges,
   },
   register(api) {
     core = api.core;
-    const I = api.core.ItemIdentifiers;
+    ItemIdentifiers = core.ItemIdentifiers;
+    const I = ItemIdentifiers;
     chargedIds = new Set([I.WARPED_SCEPTRE, I.WARPED_SCEPTRE_2]);
     unchargedByCharged = new Map([
       [I.WARPED_SCEPTRE, I.WARPED_SCEPTRE_UNCHARGED_],

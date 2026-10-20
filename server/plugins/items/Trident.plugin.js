@@ -1,47 +1,53 @@
-const { Flag } = require("../../src/main/typescript/elvarg/game/model/Flag");
-const { Item } = require("../../src/main/typescript/elvarg/game/model/Item");
-const { ItemIdentifiers } = require("../../src/main/typescript/elvarg/util/ItemIdentifiers");
-const {
-  TRIDENT_CHARGE_META_KEY,
-  TRIDENT_MAX_CHARGES,
-} = require("../../src/main/typescript/elvarg/game/content/combat/magic/CombatSpells");
-
-// OSRS charges: 1 death rune + 1 chaos rune + 5 fire runes, plus the
-// weapon-specific resource below, added all at once per charge.
-const DEATH_RUNE_ID = ItemIdentifiers.DEATH_RUNE;
-const CHAOS_RUNE_ID = ItemIdentifiers.CHAOS_RUNE;
-const FIRE_RUNE_ID = ItemIdentifiers.FIRE_RUNE;
+// OSRS Wiki: https://oldschool.runescape.wiki/w/Trident_of_the_seas
+// and https://oldschool.runescape.wiki/w/Trident_of_the_Swamp
+const TRIDENT_CHARGE_META_KEY = "trident-charges";
+const TRIDENT_MAX_CHARGES = 2500;
+let core = null;
+let ItemIdentifiers = null;
+let DEATH_RUNE_ID = 0;
+let CHAOS_RUNE_ID = 0;
+let FIRE_RUNE_ID = 0;
 const FIRE_RUNES_PER_CHARGE = 5;
-const COINS_ID = ItemIdentifiers.COINS;
-const ZULRAH_SCALES_ID = 12934;
+let COINS_ID = 0;
+let ZULRAH_SCALES_ID = 0;
+let RECIPES = [];
 
-const RECIPES = [
-  {
-    unchargedId: ItemIdentifiers.UNCHARGED_TRIDENT,
-    chargedId: ItemIdentifiers.TRIDENT_OF_THE_SEAS,
-    primaryResourceId: COINS_ID,
-    primaryPerCharge: 10,
-    primaryName: "coins",
-    refundResources: [
-      [DEATH_RUNE_ID, 1],
-      [CHAOS_RUNE_ID, 1],
-      [FIRE_RUNE_ID, FIRE_RUNES_PER_CHARGE],
-    ],
-  },
-  {
-    unchargedId: ItemIdentifiers.UNCHARGED_TOXIC_TRIDENT,
-    chargedId: ItemIdentifiers.TRIDENT_OF_THE_SWAMP,
-    primaryResourceId: ZULRAH_SCALES_ID,
-    primaryPerCharge: 1,
-    primaryName: "Zulrah scales",
-    refundResources: [
-      [DEATH_RUNE_ID, 1],
-      [CHAOS_RUNE_ID, 1],
-      [FIRE_RUNE_ID, FIRE_RUNES_PER_CHARGE],
-      [ZULRAH_SCALES_ID, 1],
-    ],
-  },
-];
+function initialize(api) {
+  core = api.core;
+  ItemIdentifiers = core.ItemIdentifiers;
+  DEATH_RUNE_ID = ItemIdentifiers.DEATH_RUNE;
+  CHAOS_RUNE_ID = ItemIdentifiers.CHAOS_RUNE;
+  FIRE_RUNE_ID = ItemIdentifiers.FIRE_RUNE;
+  COINS_ID = ItemIdentifiers.COINS;
+  ZULRAH_SCALES_ID = ItemIdentifiers.ZULRAHS_SCALES;
+  RECIPES = [
+    {
+      unchargedId: ItemIdentifiers.UNCHARGED_TRIDENT,
+      chargedId: ItemIdentifiers.TRIDENT_OF_THE_SEAS,
+      primaryResourceId: COINS_ID,
+      primaryPerCharge: 10,
+      primaryName: "coins",
+      refundResources: [
+        [DEATH_RUNE_ID, 1],
+        [CHAOS_RUNE_ID, 1],
+        [FIRE_RUNE_ID, FIRE_RUNES_PER_CHARGE],
+      ],
+    },
+    {
+      unchargedId: ItemIdentifiers.UNCHARGED_TOXIC_TRIDENT,
+      chargedId: ItemIdentifiers.TRIDENT_OF_THE_SWAMP,
+      primaryResourceId: ZULRAH_SCALES_ID,
+      primaryPerCharge: 1,
+      primaryName: "Zulrah scales",
+      refundResources: [
+        [DEATH_RUNE_ID, 1],
+        [CHAOS_RUNE_ID, 1],
+        [FIRE_RUNE_ID, FIRE_RUNES_PER_CHARGE],
+        [ZULRAH_SCALES_ID, 1],
+      ],
+    },
+  ];
+}
 
 function recipeForTridentId(itemId) {
   return RECIPES.find((r) => r.unchargedId === itemId || r.chargedId === itemId) ?? null;
@@ -175,7 +181,7 @@ function unchargeTrident({ player, item }) {
   }
 
   for (const [resourceId, amountPerCharge] of recipe.refundResources) {
-    inventory.addItem(new Item(resourceId, current * amountPerCharge));
+    inventory.addItem(new core.Item(resourceId, current * amountPerCharge));
   }
   setCharges(item, 0);
   refreshTridentState(player, item, recipe);
@@ -191,9 +197,9 @@ module.exports = {
   name: "Trident",
   members: true,
   _test: {
-    RECIPES,
-    TRIDENT_CHARGE_META_KEY,
-    TRIDENT_MAX_CHARGES,
+    get RECIPES() { return RECIPES; },
+    get TRIDENT_CHARGE_META_KEY() { return TRIDENT_CHARGE_META_KEY; },
+    get TRIDENT_MAX_CHARGES() { return TRIDENT_MAX_CHARGES; },
     recipeForTridentId,
     getCharges,
     setCharges,
@@ -202,6 +208,7 @@ module.exports = {
     unchargeTrident,
   },
   register(api) {
+    initialize(api);
     api.onItemOnItem(chargeWithResources, { noted: false });
     api.onItemAction("Trident of the Seas", {
       Check: sendChargeStatus,
