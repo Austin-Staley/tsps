@@ -52,8 +52,8 @@ module.exports = function registerShieldOfArravQuest(api) {
   const JONNY_NPC_IDS = new Set([JONNY_REFERENCE_NPC_ID, NpcIdentifiers.JONNY_THE_BEARD, NpcIdentifiers.JONNY_THE_BEARD_2]);
 
   const BOOKCASE_ID = ObjectIdentifiers.BOOKCASE_10;
-  const PHOENIX_CHEST_ID = ObjectIdentifiers.CHEST_11;
-  const BLACKARM_CUPBOARD_ID = ObjectIdentifiers.CUPBOARD_12;
+  const PHOENIX_CHEST_IDS = new Set([ObjectIdentifiers.CHEST_11, ObjectIdentifiers.CHEST_12]);
+  const BLACKARM_CUPBOARD_IDS = new Set([ObjectIdentifiers.CUPBOARD_12, ObjectIdentifiers.CUPBOARD_13]);
   const WEAPON_STORE_DOOR_ID = ObjectIdentifiers.DOOR_70;
   const BLACKARM_DOOR_ID = ObjectIdentifiers.DOOR_71;
   const PHOENIX_HIDEOUT_DOOR_ID = ObjectIdentifiers.DOOR_69;
@@ -64,7 +64,14 @@ module.exports = function registerShieldOfArravQuest(api) {
   const GANG_ATTRIBUTE = "shield-of-arrav.gang";
   const PHOENIX_LOCATION_ATTRIBUTE = "shield-of-arrav.phoenix-location-known";
   const CHARLIE_PAID_ATTRIBUTE = "shield-of-arrav.charlie-paid";
+  const CHARLIE_MET_ATTRIBUTE = "shield-of-arrav:charlie-met";
   const RELDO_MET_ATTRIBUTE = "shield-of-arrav.reldo-met";
+
+  const SHIELDOFARRAV_VARBIT = 13716;
+  const RELDO_MET_VARBIT = 11509;
+  const CHARLIE_MET_VARBIT = 11510;
+  const CHARLIE_PAID_VARBIT = 11511;
+  const CHARLIE_FULL_PAYMENT = 10;
 
   const DIRECTIONS_ATTRIBUTE = "shield-of-arrav:reldo-directions";
   const PHOENIX_TASK_ATTRIBUTE = "shield-of-arrav:phoenix-task";
@@ -88,14 +95,20 @@ module.exports = function registerShieldOfArravQuest(api) {
   const CURATOR_SHIELD_VARIANT = "finishing-up-talking-to-curator-haig-halen";
   const CURATOR_REPLACE_VARIANT = "finishing-up-talking-to-the-curator-again-after-giving-him-the-shield-half";
   const KING_COMPLETE_ACTIONS = new Set(["25_j1f", "e0pTWp"]);
+  const WEAPONMASTER_ATTACK_STEP = "12WBZW";
 
 
   let quest;
   let groundItems;
 
   const reldoFirstTalk = new WeakMap();
+  const charlieFirstAsk = new WeakMap();
 
   const attr = (player, key) => Number(player.getAttribute(key)) || 0;
+  const charliePaid = (player) => {
+    const value = player.getAttribute(CHARLIE_PAID_ATTRIBUTE);
+    return value === true ? CHARLIE_FULL_PAYMENT : Number(value) || 0;
+  };
   const gang = (player) => attr(player, GANG_ATTRIBUTE);
   const gangChosen = (player) => gang(player) !== 0;
   const isPhoenix = (player) => gang(player) === GANG_PHOENIX;
@@ -116,10 +129,24 @@ module.exports = function registerShieldOfArravQuest(api) {
 
   function syncGangProgress(player) {
     const stage = quest.getStage(player);
-    player.getPacketSender().sendConfig(VARP_SHIELD_OF_ARRAV, phoenixProgress(player));
-    player.getPacketSender().sendConfig(VARP_BLACK_ARM_GANG,
+    const packet = player.getPacketSender();
+    packet.sendConfig(VARP_SHIELD_OF_ARRAV, phoenixProgress(player));
+    packet.sendConfig(VARP_BLACK_ARM_GANG,
       joinedGang(player) && isBlackArm(player) ? stage >= STAGE_COMPLETE ? 4 : 3
         : blackArmTask(player) ? 2 : attr(player, DIRECTIONS_ATTRIBUTE) ? 1 : 0);
+    // Current-cache quest state bits read by the client's quest list and by
+    // Quest Helper's Shield of Arrav condition checks.
+    packet.sendVarbit(SHIELDOFARRAV_VARBIT,
+      stage >= STAGE_COMPLETE ? 2 : stage >= STAGE_STARTED ? 1 : 0);
+    packet.sendVarbit(RELDO_MET_VARBIT, attr(player, RELDO_MET_ATTRIBUTE) ? 1 : 0);
+    packet.sendVarbit(CHARLIE_MET_VARBIT, attr(player, CHARLIE_MET_ATTRIBUTE) ? 1 : 0);
+    packet.sendVarbit(CHARLIE_PAID_VARBIT, charliePaid(player) >= CHARLIE_FULL_PAYMENT ? 1 : 0);
+  }
+
+  function markCharlieMet(player) {
+    if (attr(player, CHARLIE_MET_ATTRIBUTE)) return;
+    player.setAttribute(CHARLIE_MET_ATTRIBUTE, true);
+    syncGangProgress(player);
   }
 
   function setGang(player, value) {
@@ -254,6 +281,7 @@ module.exports = function registerShieldOfArravQuest(api) {
         // transcript; remember which one this talk is before they are resolved.
         reldoFirstTalk.set(player, !attr(player, RELDO_MET_ATTRIBUTE));
         player.setAttribute(RELDO_MET_ATTRIBUTE, true);
+        syncGangProgress(player);
         return { page: PAGE, variant: "shared-starting-talking-to-reldo" };
       }
       if (stage === STAGE_STARTED) {
@@ -263,6 +291,11 @@ module.exports = function registerShieldOfArravQuest(api) {
       }
       if (stage >= STAGE_READ_BOOK && stage < STAGE_JOINED_GANG) {
         return { page: PAGE, variant: "shared-starting-talking-to-reldo-after-reading-the-book" };
+      }
+      if (stage >= STAGE_JOINED_GANG && stage < STAGE_COMPLETE && hasShieldHalf(player)) {
+        return hasItem(player, PHOENIX_HALF_ID)
+          ? { page: PAGE, variant: "phoenix-gang-talking-to-reldo-with-half-of-the-shield" }
+          : { page: PAGE, variant: "black-arm-gang-talking-to-reldo-with-half-of-the-shield" };
       }
       return null;
     }
@@ -276,12 +309,16 @@ module.exports = function registerShieldOfArravQuest(api) {
 
     if (npcId === CHARLIE_NPC_ID) {
       if (isPhoenix(player) && joinedGang(player)) {
+        markCharlieMet(player);
         return { page: PAGE, variant: "phoenix-gang-learning-the-location-of-the-black-arm-gang-from-charlie-the-tramp" };
       }
       if (stage === STAGE_GANG_TASK && blackArmTask(player)) {
+        markCharlieMet(player);
         return { page: PAGE, variant: "black-arm-gang-talking-to-charlie-the-tramp-after-accepting-katrine-s-task" };
       }
       if (stage >= STAGE_READ_BOOK && attr(player, DIRECTIONS_ATTRIBUTE)) {
+        charlieFirstAsk.set(player, !attr(player, CHARLIE_MET_ATTRIBUTE));
+        markCharlieMet(player);
         return { page: PAGE, variant: "black-arm-gang-talking-to-charlie-the-tramp" };
       }
       return null;
@@ -345,7 +382,12 @@ module.exports = function registerShieldOfArravQuest(api) {
   }
 
   function answerDialogueCondition({ npcId, player, text, stepId, pages }) {
-    if (["Vl3BPs", "JaT1Z6"].includes(stepId) && pages?.some(entry => entry.page === PAGE)) return player.getInventory().isFull();
+    // Production always supplies the resolved pages. When they are present, a
+    // Shield-specific prose condition must not answer for another NPC page that
+    // shares the same wording; direct hook calls without pages keep the legacy
+    // single-quest behaviour.
+    const onShieldPage = Array.isArray(pages) ? pages.some(entry => entry.page === PAGE) : undefined;
+    if (["Vl3BPs", "JaT1Z6"].includes(stepId) && onShieldPage !== false) return player.getInventory().isFull();
     const value = String(text).toLowerCase();
 
     if (RELDO_NPC_IDS.has(npcId)) {
@@ -365,12 +407,15 @@ module.exports = function registerShieldOfArravQuest(api) {
 
     if (npcId === CHARLIE_NPC_ID) {
       if (value.includes("combat level is less than 10")) return player.getSkillManager().getCombatLevel() < 10;
+      if (onShieldPage === false) return null;
       if (value.includes("haven't yet paid charlie") || value.includes("hasn't yet paid charlie")) {
-        return !attr(player, CHARLIE_PAID_ATTRIBUTE);
+        return charliePaid(player) < CHARLIE_FULL_PAYMENT;
       }
-      if (value.includes("already paying charlie")) return attr(player, CHARLIE_PAID_ATTRIBUTE) !== 0;
-      if (value.includes("first time")) return true;
-      if (value.includes("otherwise")) return true;
+      if (value.includes("already paying charlie")) return charliePaid(player) >= CHARLIE_FULL_PAYMENT;
+      if (value.includes("first time") || value.includes("otherwise")) {
+        const first = charlieFirstAsk.has(player) ? charlieFirstAsk.get(player) : !attr(player, CHARLIE_MET_ATTRIBUTE);
+        return value.includes("first time") ? first : !first;
+      }
       return null;
     }
 
@@ -466,11 +511,19 @@ module.exports = function registerShieldOfArravQuest(api) {
     }
 
     if (npcId === CHARLIE_NPC_ID && (CHARLIE_TEN_COIN_MESSAGES.has(stepId) || CHARLIE_FIVE_COIN_MESSAGES.has(stepId))) {
-      const cost = CHARLIE_TEN_COIN_MESSAGES.has(stepId) ? 10 : 5;
+      const cost = CHARLIE_TEN_COIN_MESSAGES.has(stepId) ? CHARLIE_FULL_PAYMENT : 5;
       if (coins(player) < cost) return;
       player.getInventory().deleteNumber(COINS_ID, cost);
-      player.setAttribute(CHARLIE_PAID_ATTRIBUTE, true);
+      // Five coins only buys half the information; the second five completes it.
+      player.setAttribute(CHARLIE_PAID_ATTRIBUTE, Math.min(CHARLIE_FULL_PAYMENT, charliePaid(player) + cost));
+      syncGangProgress(player);
       return; // leave the message to the runtime
+    }
+
+    if (WEAPONSMASTER_NPC_IDS.has(npcId) && stepId === WEAPONMASTER_ATTACK_STEP) {
+      if (!isPhoenix(player)) event.npc?.getCombat?.().attack?.(player);
+      event.handled = true;
+      return;
     }
 
     if (npcId === STRAVEN_NPC_ID) {
@@ -661,12 +714,12 @@ module.exports = function registerShieldOfArravQuest(api) {
       event.handled = true;
       return;
     }
-    if (objectId === PHOENIX_CHEST_ID && (option.includes("open") || option.includes("search"))) {
+    if (PHOENIX_CHEST_IDS.has(objectId) && (option.includes("open") || option.includes("search"))) {
       searchShieldCache(player, quest, true);
       event.handled = true;
       return;
     }
-    if (objectId === BLACKARM_CUPBOARD_ID && (option.includes("open") || option.includes("search"))) {
+    if (BLACKARM_CUPBOARD_IDS.has(objectId) && (option.includes("open") || option.includes("search"))) {
       searchShieldCache(player, quest, false);
       event.handled = true;
       return;
@@ -685,10 +738,12 @@ module.exports = function registerShieldOfArravQuest(api) {
       }
       player.sendMessage("You unlock the door using the key you're carrying.");
     } else if (objectId === BLACKARM_DOOR_ID && (!isBlackArm(player) || quest.getStage(player) < STAGE_JOINED_GANG)) {
-      player.sendMessage("This door is locked from the inside.");
+      player.sendMessage(isPhoenix(player) && joinedGang(player)
+        ? "The door is securely locked."
+        : "This door seems to be locked from the inside.");
       return;
     } else if (objectId === PHOENIX_HIDEOUT_DOOR_ID && (!isPhoenix(player) || quest.getStage(player) < STAGE_JOINED_GANG)) {
-      player.sendMessage("Only Phoenix Gang members may pass.");
+      player.sendMessage("The door is securely locked.");
       return;
     }
     crossDoor(player, object);
@@ -727,10 +782,10 @@ module.exports = function registerShieldOfArravQuest(api) {
     if (!weaponsmaster) return;
     event.handled = true;
     if (joinedGang(event.player) && isPhoenix(event.player)) {
-      weaponsmaster.forceChat("Hey! That's Phoenix Gang property!");
+      weaponsmaster.forceChat("Hey! That's Straven's! He won't like you messing with that!");
       return;
     }
-    weaponsmaster.forceChat("Hey! Put that back!");
+    weaponsmaster.forceChat("Stop! Thief!");
     weaponsmaster.getCombat().attack(event.player);
   }
 
@@ -753,10 +808,15 @@ module.exports = function registerShieldOfArravQuest(api) {
     }
     const itemId = phoenix ? PHOENIX_HALF_ID : BLACKARM_HALF_ID;
     if (hasItem(player, itemId)) {
-      player.sendMessage("You open the cupboard, but don't find anything of interest inside.");
+      player.sendMessage(phoenix
+        ? "You open the chest, but don't find anything of interest inside."
+        : "You open the cupboard, but don't find anything of interest inside.");
       return;
     }
-    giveItem(player, itemId, phoenix ? "You find half of a shield in the chest." : "You open the cupboard and find half of a shield inside.");
+    if (phoenix) player.sendMessage("You search the chest.");
+    giveItem(player, itemId, phoenix
+      ? "You open the chest and find half of a shield inside."
+      : "You open the cupboard and find half of a shield inside.");
   }
 
   function crossDoor(player, door) {
@@ -784,8 +844,9 @@ module.exports = function registerShieldOfArravQuest(api) {
   api.persistAttribute(BLACKARM_TASK_ATTRIBUTE, false);
   api.persistAttribute(GANG_ATTRIBUTE);
   api.persistAttribute(PHOENIX_LOCATION_ATTRIBUTE);
-  api.persistAttribute(CHARLIE_PAID_ATTRIBUTE);
-  api.persistAttribute(RELDO_MET_ATTRIBUTE);
+  api.persistAttribute(CHARLIE_PAID_ATTRIBUTE, 0);
+  api.persistAttribute(CHARLIE_MET_ATTRIBUTE, false);
+  api.persistAttribute(RELDO_MET_ATTRIBUTE, false);
 
   groundItems = api.getItemOnGroundManager();
 

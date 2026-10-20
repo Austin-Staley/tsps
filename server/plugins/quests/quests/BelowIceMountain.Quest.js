@@ -332,6 +332,20 @@ module.exports = function registerBelowIceMountainQuest(api) {
       && memberState(player, BURNTOF_ATTRIBUTE) >= MEMBER_RECRUITED;
   }
 
+  /**
+   * The last/not-last lines are resolved before the speaker's own state moves to
+   * 40, so ask whether everyone *else* is already recruited.
+   */
+  function finalRecruit(player, npcId) {
+    const current = npcId === CHECKAL_NPC_ID ? CHECKAL_ATTRIBUTE
+      : npcId === MARLEY_NPC_ID ? MARLEY_ATTRIBUTE
+      : npcId === BURNTOF_NPC_ID || npcId === BURNTOF_2_NPC_ID ? BURNTOF_ATTRIBUTE
+      : null;
+    if (!current) return false;
+    return [CHECKAL_ATTRIBUTE, MARLEY_ATTRIBUTE, BURNTOF_ATTRIBUTE]
+      .every((attribute) => attribute === current || memberState(player, attribute) >= MEMBER_RECRUITED);
+  }
+
   function moveTo(player, tile) {
     player.moveTo(new Location(tile.x, tile.y, 0));
   }
@@ -520,11 +534,11 @@ module.exports = function registerBelowIceMountainQuest(api) {
       case CONDITION_NOT_LAST_RECRUIT:
       case CONDITION_BURNTOF_NOT_LAST:
       case CONDITION_MARLEY_NOT_LAST:
-        return !allRecruited(player);
+        return !finalRecruit(player, npcId);
       case CONDITION_LAST_RECRUIT:
       case CONDITION_BURNTOF_LAST:
       case CONDITION_MARLEY_LAST:
-        return allRecruited(player);
+        return finalRecruit(player, npcId);
       case CONDITION_BURNTOF_NO_DRINK:
       case CONDITION_BURNTOF_NO_DRINK_AGAIN:
         return !hasAlcohol(player);

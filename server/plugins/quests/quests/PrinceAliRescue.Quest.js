@@ -362,7 +362,7 @@ module.exports = function registerPrinceAliRescueQuest(api) {
         return !held(player, SOFT_CLAY_ITEM_ID) || held(player, KEY_PRINT_ITEM_ID);
       }
       if (value.includes("if the player is not ready")) {
-        return !(stage >= STAGE_GUARD_DRUNK && held(player, ROPE_ITEM_ID));
+        return stage < STAGE_GUARD_DRUNK || (stage < STAGE_KELI_TIED && !held(player, ROPE_ITEM_ID));
       }
       if (value.includes("used rope on lady keli")) return stage >= STAGE_KELI_TIED;
       if (value.includes("is ready and talks to lady keli")) {
@@ -540,7 +540,7 @@ module.exports = function registerPrinceAliRescueQuest(api) {
       return;
     }
 
-    if (stepId === KELI_TIED_UP || stepId === "vpUraQ") {
+    if (stepId === KELI_TIED_UP) {
       if (!tieKeli(player)) { event.handled = true; return; }
       event.box = { statement: true };
       return;

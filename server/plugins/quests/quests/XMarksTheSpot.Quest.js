@@ -223,10 +223,9 @@ module.exports = function registerXMarksTheSpotQuest(api) {
       return POST_QUEST_VARIANT;
     }
     if (stage >= STAGE_CASKET) {
-      if (player.getAttribute(HANDED_CASKET_ATTRIBUTE)) return FINISHING_VARIANT;
-      if (held(player, ANCIENT_CASKET)) return FINISHING_VARIANT;
-      if (held(player, TREASURE_SCROLL_3)) return CLUE_VARIANT_BY_STAGE.get(STAGE_FOURTH_CLUE);
-      return LOST_ITEM_VARIANT;
+      if (player.getAttribute(HANDED_CASKET_ATTRIBUTE) || held(player, ANCIENT_CASKET)) return FINISHING_VARIANT;
+      // A lost casket is re-dug at the fourth clue; Veos only replaces scrolls and orbs.
+      return CLUE_VARIANT_BY_STAGE.get(STAGE_FOURTH_CLUE);
     }
     if (stage <= 0) {
       if (awaitingScroll(player)) return RETAKE_SCROLL_VARIANT;

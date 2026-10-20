@@ -528,7 +528,7 @@ module.exports = function registerBlackKnightsFortressQuest(api) {
     }
     if (itemId === DRAYNOR_MANOR_CABBAGE_ITEM_ID) {
       if (stage !== STAGE_SABOTAGE) {
-        player.sendMessage("Why would I want to do that?");
+        playVariant(pluginApi, player, FORTRESS_WITCH_NPC_ID, BKF_PAGE, V_CABBAGE_BEFORE);
       } else {
         playVariant(pluginApi, player, FORTRESS_WITCH_NPC_ID, BKF_PAGE, V_CABBAGE_DRAYNOR);
       }

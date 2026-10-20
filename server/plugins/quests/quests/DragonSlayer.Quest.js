@@ -1,7 +1,7 @@
 /** Dragon Slayer I: revision240 RSProx stages, offerings, voyage and Elvarg proof. See docs/f2p-adventure-parity.md. */
 module.exports = function registerDragonSlayerQuest(api) {
   const { Skill, Item, Location, Animation, Graphic, GameObject, ForceMovement, TaskManager, CountdownTask, TemplatedInstanceArea, DialogueChainBuilder, ActionDialogue, StatementDialogue, ItemIdentifiers, NpcIdentifiers, ObjectIdentifiers } = api.core;
-  const { registerQuest, startTranscript } = require("../QuestRuntime");
+  const { registerQuest, startTranscript, getRegisteredQuests } = require("../QuestRuntime");
 
   const GUILDMASTER_NPC_ID = NpcIdentifiers.GUILDMASTER;
   const DUKE_HORACIO_NPC_ID = NpcIdentifiers.DUKE_HORACIO;
@@ -95,6 +95,7 @@ module.exports = function registerDragonSlayerQuest(api) {
     crandorOpening: ObjectIdentifiers.HOLE_40,
     crandorRope: ObjectIdentifiers.CLIMBING_ROPE_13,
     crandorWall: ObjectIdentifiers.WALL_161,
+    crandorShortcut: ObjectIdentifiers.WALL_9,
   };
 
   const TILE = {
@@ -117,6 +118,9 @@ module.exports = function registerDragonSlayerQuest(api) {
   const EXPLAINED_ATTRIBUTE = "dragon-slayer:champion-explained-elvarg";
   const OFFERING_VARBITS = [3747, 3748, 3749, 3750];
   const SHIP_VARBITS = [1835, 1836, 1837];
+  /** Guildmaster follow-up answers; set means the question has not been asked yet. */
+  const INSTRUCTION = { melzar: 0, oracle: 1, wormbrain: 2, ship: 3, shield: 4 };
+  const SHORTCUT_VARBIT = 3741;
   const VOYAGE = "the-dragon-of-crandor-sailing-to-crandor";
   const NED_SCENE_ID = 824, JENKINS_SCENE_ID = 826;
   const FIRE_SMALL = 25156, FIRE_LARGE = 25155, FIREBALL = 1155, FIRE_IMPACT_GRAPHIC = 1154;
@@ -124,8 +128,15 @@ module.exports = function registerDragonSlayerQuest(api) {
   const SCENE_OVERLAY_UID = (161 << 16) | 1;
   const SCENE_INTERFACE = { journey: 299, route: 544, clouds: 543, elvarg: 545, fly: 546, fade: 174 };
   const ELVARG_BODY = 25202, ELVARG_HEADLESS = 25203;
+  // Cache rev241: dragonsecretdoor 2606 is a shape-0 wall at 2836,9600 face3; the
+  // Crandor side is north (walkable 2836,9601) and Karamja is south (2836,9598).
+  const SHORTCUT_TILE = new Location(2836, 9600, 0);
+  const SHORTCUT_NORTH = new Location(2836, 9601, 0);
+  const SHORTCUT_SOUTH = new Location(2836, 9598, 0);
   const scenes = new WeakMap(), actions = new WeakMap(), pendingStart = new WeakSet();
   const saved = (player, key) => Number(player.getAttribute(key)) || 0;
+  const askedAbout = (player, bit) => (saved(player, INSTRUCTIONS_ATTRIBUTE) & (1 << bit)) === 0;
+  const completedQuest = (player, key) => getRegisteredQuests().find(entry => entry.key === key)?.isComplete?.(player) === true;
   const later = (key, ticks, action) => TaskManager.submit(new CountdownTask(key, ticks, action));
   const offerings = player => saved(player, OFFERINGS_ATTRIBUTE) || (oracleState(player) >= 3 ? 15 : 0);
   function wireStage(stage, player) {
@@ -136,8 +147,10 @@ module.exports = function registerDragonSlayerQuest(api) {
     return stage;
   }
   function syncState({player}) {
+    unlockShortcutAfterLeaving(player);
     const stage = quest.getStage(player), sender = player.getPacketSender();
-    sender.sendVarbit(1832, oracleState(player) >= 2 ? 1 : 0).sendVarbit(3751, player.getAttribute(ATTR_NED_ASKED) === true ? 1 : 0)
+    sender.sendVarbit(1832, oracleState(player) >= 2 ? 1 : 0).sendVarbit(SHORTCUT_VARBIT, player.getAttribute(ATTR_SHORTCUT) === true ? 1 : 0)
+      .sendVarbit(3751, player.getAttribute(ATTR_NED_ASKED) === true ? 1 : 0)
       .sendVarbit(3752, saved(player, NED_KNOWS_ATTRIBUTE)).sendVarbit(18306, saved(player, EXPLAINED_ATTRIBUTE));
     OFFERING_VARBITS.forEach((id, bit) => sender.sendVarbit(id, (offerings(player) >> bit) & 1));
     SHIP_VARBITS.forEach((id, bit) => sender.sendVarbit(id, stage < STAGE_CRANDOR && stage >= [STAGE_REPAIR_1, STAGE_REPAIR_2, STAGE_REPAIR_3][bit] ? 1 : 0));
@@ -453,11 +466,11 @@ module.exports = function registerDragonSlayerQuest(api) {
     }
 
     if (npcId === ORACLE_NPC_ID) {
-      if (stage >= STAGE_OZIACH && !ownsMapPiece(player, ITEM.mapOracle)) {
+      if (stage < STAGE_OZIACH || !askedAbout(player, INSTRUCTION.oracle)) return null;
+      if (!ownsMapPiece(player, ITEM.mapOracle)) {
         return { page: PAGE, variant: "thalzar-s-map-piece-talking-to-the-oracle" };
       }
-      if (stage >= STAGE_OZIACH) return { page: ORACLE_PAGE, variant: "standard-dialogue" };
-      return null;
+      return { page: ORACLE_PAGE, variant: "standard-dialogue" };
     }
 
     if (npcId === KLARENSE_NPC_ID) {
@@ -474,7 +487,7 @@ module.exports = function registerDragonSlayerQuest(api) {
     }
 
     if (npcId === WORMBRAIN_NPC_ID) {
-      if (stage < STAGE_OZIACH || ownsMapPiece(player, ITEM.mapWormbrain)) return null;
+      if (stage < STAGE_OZIACH || !askedAbout(player, INSTRUCTION.wormbrain) || ownsMapPiece(player, ITEM.mapWormbrain)) return null;
       return { page: PAGE, variant: "lozar-s-map-piece-talking-to-wormbrain" };
     }
 
@@ -517,6 +530,7 @@ module.exports = function registerDragonSlayerQuest(api) {
     const stage = quest.getStage(player);
 
     if (npcId === GUILDMASTER_NPC_ID) {
+      if (value.includes("completed pandemonium")) return completedQuest(player, "pandemonium");
       if (value.includes("45 combat or 33 magic")) {
         return (
           player.getSkillManager().getCombatLevel() < 45 ||
@@ -530,7 +544,7 @@ module.exports = function registerDragonSlayerQuest(api) {
     }
 
     if (npcId === OZIACH_NPC_ID) {
-      if (value.includes("murder mystery has been completed")) return false;
+      if (value.includes("murder mystery has been completed")) return completedQuest(player, "murder_mystery");
       if (value.includes("elvarg's head")) return hasItem(player, ITEM.elvargsHead);
       return null;
     }
@@ -804,14 +818,58 @@ module.exports = function registerDragonSlayerQuest(api) {
     event.player.sendMessage("You must buy the ship before boarding it.");
   }
 
+  function plainLocation(value) {
+    if (!value) return null;
+    return { x: value.getX?.() ?? value.x, y: value.getY?.() ?? value.y, z: value.getZ?.() ?? value.z };
+  }
+
   function crossMagicDoor(player, loc) {
     const px = player.getLocation().getX();
     player.moveTo(new Location(px <= loc.x ? loc.x + 1 : loc.x - 1, loc.y, loc.z));
   }
 
   function handleMagicDoorClick(event) {
-    if (offerings(event.player) !== 15) { event.player.sendMessage("You can't see any way to open the door."); return; }
-    crossMagicDoor(event.player, event.location);
+    const { player } = event;
+    event.handled = true;
+    if (offerings(player) !== 15) { player.sendMessage("You can't see any way to open the door."); return; }
+    const at = plainLocation(event.location ?? event.object?.getLocation?.());
+    if (at) crossMagicDoor(player, at);
+  }
+
+  function handleMelzarEntranceClick(event) {
+    const { player } = event;
+    event.handled = true;
+    if (quest.getStage(player) < STAGE_OZIACH || !hasItem(player, ITEM.mazeKey)) {
+      player.sendMessage("The door is locked.");
+      return;
+    }
+    player.moveTo(TILE.melzarInside.clone());
+  }
+
+  function handleMazeDoorClick(event) {
+    const doorIndex = MAZE_DOORS.indexOf(event.objectId ?? event.object?.getId?.());
+    if (doorIndex < 0) return;
+    const { player } = event;
+    event.handled = true;
+    const key = MAZE_KEYS[doorIndex];
+    if (!hasItem(player, key)) { player.sendMessage("The door is locked."); return; }
+    player.getInventory().deleteNumber(key, 1);
+    player.sendMessage("The key disintegrates as it unlocks the door.");
+    const at = plainLocation(event.location ?? event.object?.getLocation?.());
+    crossMazeDoor(player, event.object, at);
+  }
+
+  /** Doors.plugin claims Open first; these quest doors answer its door:toggle event. */
+  function claimQuestDoor(request) {
+    if (request.handled) return;
+    const id = request.objectId ?? request.object?.getId?.();
+    if (id !== LOC.crandorShortcut && id !== LOC.magicDoor && id !== LOC.melzarEntrance && !MAZE_DOORS.includes(id)) return;
+    const option = request.option ?? request.definition?.getInteractions?.()[request.clickType - 1];
+    if (option !== "Open") return;
+    if (id === LOC.crandorShortcut) return handleCrandorShortcutClick(request);
+    if (id === LOC.magicDoor) return handleMagicDoorClick(request);
+    if (id === LOC.melzarEntrance) return handleMelzarEntranceClick(request);
+    return handleMazeDoorClick(request);
   }
 
   function handleOracleChestClick(event) {
@@ -866,13 +924,55 @@ module.exports = function registerDragonSlayerQuest(api) {
    */
   function climbCrandorRope(player) {
     if (scenes.has(player) || actions.has(player)) return;
-    player.setAttribute(ATTR_SHORTCUT, true);
     const inLair = player.getLocation().getY() >= 6400;
     player.moveTo((inLair ? TILE.crandorSurface : TILE.crandorLair).clone());
   }
 
+  /** Crandor surface plus the dungeon north of the secret wall; the Karamja side is y<=9600. */
+  function onCrandor(player) {
+    const at = player.getLocation(), x = at.getX(), y = at.getY();
+    if (at.getZ() !== 0) return false;
+    return (x >= 2810 && x <= 2872 && y >= 3228 && y <= 3312)
+      || (x >= 2821 && x <= 2872 && y >= 9601 && y <= 9663);
+  }
+
+  function openCrandorShortcut(player) {
+    if (player.getAttribute(ATTR_SHORTCUT) === true) return;
+    player.setAttribute(ATTR_SHORTCUT, true);
+    player.getPacketSender().sendVarbit(SHORTCUT_VARBIT, 1);
+  }
+
+  /**
+   * https://oldschool.runescape.wiki/w/Dragon_Slayer_I (Trivia): "If you sail to Crandor
+   * and then teleport out without opening the secret entrance from Karamja to Crandor,
+   * the shortcut will unlock by itself." Death respawn takes the same leave-Crandor path.
+   * Private scenes are not the island, so their map-square changes must not unlock it.
+   */
+  function unlockShortcutAfterLeaving(player) {
+    if (quest.getStage(player) !== STAGE_CRANDOR || saved(player, ELVARG_KILLED_ATTRIBUTE)) return;
+    if (player.getAttribute(ATTR_SHORTCUT) === true || onCrandor(player)) return;
+    if (scenes.has(player) || actions.has(player) || player.getPrivateArea?.()) return;
+    openCrandorShortcut(player);
+  }
+
+  function crossCrandorShortcut(player) {
+    player.moveTo((player.getLocation().getY() > SHORTCUT_TILE.getY() ? SHORTCUT_SOUTH : SHORTCUT_NORTH).clone());
+  }
+
+  function handleCrandorShortcutClick(event) {
+    const { player } = event;
+    event.handled = true;
+    if (quest.getStage(player) < STAGE_CRANDOR) return;
+    openCrandorShortcut(player);
+    crossCrandorShortcut(player);
+  }
+
   function handleCrandorRopeClick(event) {
     climbCrandorRope(event.player);
+  }
+
+  function handleMapSquareChange({ player }) {
+    unlockShortcutAfterLeaving(player);
   }
 
   /** The rope's "Climb" is claimed before Ladders' generic climb prompt can guess a plane. */
@@ -941,7 +1041,7 @@ module.exports = function registerDragonSlayerQuest(api) {
     }
 
     if (npcId === WORMBRAIN_NPC_ID) {
-      if (stage >= STAGE_OZIACH && !ownsMapPiece(killer, ITEM.mapWormbrain)) {
+      if (stage >= STAGE_OZIACH && askedAbout(killer, INSTRUCTION.wormbrain) && !ownsMapPiece(killer, ITEM.mapWormbrain)) {
         dropItem(killer, ITEM.mapWormbrain, event.location);
         killer.sendMessage("Wormbrain drops a map piece on the floor.");
       }
@@ -951,6 +1051,12 @@ module.exports = function registerDragonSlayerQuest(api) {
 
   function repairShip(player) {
     const stage = quest.getStage(player);
+    if (stage >= STAGE_CRANDOR) {
+      player.sendMessage(saved(player, ATTR_SHORTCUT)
+        ? "You don't need to mess about with broken ships now that you have found the secret passage from Karamja."
+        : "The ship doesn't need repairing.");
+      return;
+    }
     if (stage < STAGE_BOUGHT_SHIP || stage >= STAGE_REPAIR_3) {
       player.sendMessage("The ship doesn't need repairing.");
       return;
@@ -1017,6 +1123,7 @@ module.exports = function registerDragonSlayerQuest(api) {
   api.onCustomEvent("npc-dialogue:hook", handleStartHook);
   api.onCustomEvent("npc-dialogue:line", handleLine);
   api.onPlayerLogin(syncState);
+  api.onPlayerMapSquareChange(handleMapSquareChange);
   api.onPlayerLogout(cleanup);
   api.onPlayerDisconnect(cleanup);
   api.onCustomEvent("npc-dialogue:action", handleDialogueAction);
@@ -1026,11 +1133,15 @@ module.exports = function registerDragonSlayerQuest(api) {
   api.onObjectFirstClick(LOC.shipGangplanks, handleGangplankClick);
   api.onCustomEvent("ladders:climb", claimShipGangplank);
   api.onCustomEvent("ladders:climb", claimCrandorRope);
+  api.onCustomEvent("door:toggle", claimQuestDoor);
   api.onObjectFirstClick(LOC.magicDoor, handleMagicDoorClick);
+  api.onObjectFirstClick(LOC.melzarEntrance, handleMelzarEntranceClick);
+  api.onObjectFirstClick(MAZE_DOORS, handleMazeDoorClick);
   api.onObjectFirstClick(LOC.oracleChest, handleOracleChestClick);
   api.onObjectFirstClick(LOC.melzarChest, handleMelzarChestClick);
   api.onObjectFirstClick(LOC.crandorOpening, handleCrandorOpeningClick);
   api.onObjectFirstClick(LOC.crandorRope, handleCrandorRopeClick);
   api.onObjectFirstClick(LOC.crandorWall, handleCrandorWallClick);
+  api.onObjectFirstClick(LOC.crandorShortcut, handleCrandorShortcutClick);
   api.onNpcDeath(handleNpcDeath);
 };

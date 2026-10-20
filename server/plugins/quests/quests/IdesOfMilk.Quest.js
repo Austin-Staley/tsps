@@ -431,10 +431,11 @@ module.exports = function registerIdesOfMilkQuest(api) {
     if (stepId === "bo0hmW" || stepId === "gROlcY") return held(player, SECOND_SAMPLE_ITEM_ID);
     if (stepId === "g99Opl" || stepId === "1qWPVz" || stepId === "wgvV7v") return freeSlots(player) < 1;
     if (stepId === "Si4XUQ" || stepId === "Q-sZIb" || stepId === "CltN0x") return freeSlots(player) >= 1;
-    if (stepId === "rQeSSv" || stepId === "m2cjiq" || stepId === "eeHo4c") {
-      return player.getInventory().isFull();
-    }
-    if (stepId === "0MczJn") return !player.getInventory().isFull();
+    if (stepId === "rQeSSv" || stepId === "eeHo4c") return freeSlots(player) < 1;
+    // Gillie's amulet is handed over earlier in this same transcript, so the
+    // lamp's space check must count that slot.
+    if (stepId === "m2cjiq") return freeSlots(player) - (hasAmulet(player) ? 0 : 1) < 1;
+    if (stepId === "0MczJn") return freeSlots(player) - (hasAmulet(player) ? 0 : 1) >= 1;
     return null;
   }
 

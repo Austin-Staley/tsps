@@ -37,7 +37,7 @@ module.exports = function registerWorldTools(ctx) {
 
   tool("list_players", "Online players and where they are.", {}, () =>
     World.getPlayers().stream().filter(Boolean).map((p) => ({
-      username: p.getUsername(), bot: !!p.isPlayerBot?.(), ...tile(p.getLocation()),
+      index: p.getIndex(), username: p.getUsername(), bot: !!p.isPlayerBot?.(), ...tile(p.getLocation()),
     })));
 
   tool(
