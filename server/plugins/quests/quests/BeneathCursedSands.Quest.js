@@ -250,10 +250,10 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
   const WELL_SEARCH = ObjectIdentifiers.WELL_23; // 43903
   const ENTRY_SEALED = ObjectIdentifiers.ENTRY_4; // 43953, Inspect
   const ENTRY_OPEN = ObjectIdentifiers.ENTRY_5; // 43954, Enter
-  const DOOR_CHAMPION = ObjectIdentifiers.DOOR_658; // 43960, z2
+  const DOOR_CHAMPION = ObjectIdentifiers.DOOR_661; // 43963, z2, normal door into the champion area
   const DOOR_LEVERS_A = ObjectIdentifiers.DOOR_659; // 43961, z0
   const DOOR_LEVERS_B = ObjectIdentifiers.DOOR_660; // 43962, z0
-  const DOOR_UPPER = ObjectIdentifiers.DOOR_661; // 43963, z2, rusty key
+  const DOOR_UPPER = ObjectIdentifiers.DOOR_658; // 43960, z2, rusty key
   const LEVER_TOMB_ON = ObjectIdentifiers.LEVER_58; // 43967
   const LEVER_TOMB_OFF = ObjectIdentifiers.LEVER_59; // 43968
   const LEVER_URN = ObjectIdentifiers.LEVER_60; // 43969
@@ -1071,8 +1071,9 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
         return;
       case "MQFYdD": // rusty key opens the upper door
         event.handled = true;
-        stepThrough(player, doorLocationByPlayer.get(player));
         doorLocationByPlayer.delete(player);
+        if (hasItem(player, RUSTY_KEY_ITEM)) player.getInventory().deleteNumber(RUSTY_KEY_ITEM, 1);
+        player.moveTo(new Location(3420, 9248, 2));
         if (quest.getStage(player) < STAGE_UPPER_OPEN) setStage(player, STAGE_UPPER_OPEN);
         return;
       case "ppIMnm": // rusty key found in the urn
@@ -1686,7 +1687,7 @@ module.exports = function registerBeneathCursedSandsQuest(api) {
     return true;
   }
 
-  /** The Champion door (43960) beyond the altar. */
+  /** The Champion door (43963), the normal door into the champion area after the keyed door. */
   function openChampionDoor(player, location) {
     stepThrough(player, location);
     const stage = quest.getStage(player);

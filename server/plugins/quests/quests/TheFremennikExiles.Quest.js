@@ -1356,6 +1356,14 @@ module.exports = function registerTheFremennikExilesQuest(api) {
   // Transcript action/message handler
   // ==========================================================================
 
+  function finishCelebration(player) {
+    if (quest.isComplete(player)) return;
+    if (stageOf(player) < STAGE_FINISHING) setStage(player, STAGE_FINISHING);
+    quest.complete(player);
+    player.getPacketSender().sendCameraReset();
+    Scenes.controls(player, false);
+  }
+
   function handleAction(event) {
     const { player } = event;
     if (!player) return;
@@ -1449,9 +1457,7 @@ module.exports = function registerTheFremennikExilesQuest(api) {
         player.getPacketSender().sendVarbit(VARBIT_BALLAD, 1);
         return;
       case "2pgrdA":
-        if (!quest.isComplete(player)) quest.complete(player);
-        player.getPacketSender().sendCameraReset();
-        Scenes.controls(player, false);
+        finishCelebration(player);
         return;
       default:
         return;
@@ -1769,6 +1775,10 @@ module.exports = function registerTheFremennikExilesQuest(api) {
 
     if (stageOf(player) >= STAGE_CELEBRATION && text.startsWith("Uh oh")) {
       if (stageOf(player) < STAGE_FINISHING) setStage(player, STAGE_FINISHING);
+      // The wiki transcript puts its final completion action after an explicit
+      // `end`, which the dialogue chain closes before reaching. Run the canonical
+      // completion once the player continues past this final line instead.
+      event.after = () => finishCelebration(player);
       return;
     }
   }

@@ -40,6 +40,7 @@ function harness(name) {
       World: { ...core.World, getNpcs: () => npcs },
       ObjectManager: { register: object => { objects.push(object); const area = object.getPrivateArea?.(); const owner = area?.getPlayers?.()[0]; if (owner) owner.getPacketSender().sendObject(object); }, deregister: noop },
     },
+    getTaskManager: () => api.core.TaskManager,
     persistAttribute: noop,
     onCustomEvent: (key, fn) => (events[key] ??= []).push(fn),
     emitCustomEvent: (key, event) => (events[key] ?? []).forEach(fn => fn(event)),
@@ -182,7 +183,9 @@ function player(level = 99, current = 99) {
     moveTo: to => { location = to; },
     getArea: () => area,
     setArea: value => { area = value; },
-    getMovementQueue: () => ({ reset() { return this; }, setBlockMovement(value) { p.blocked = value; return this; } }),
+    getMovementQueue: () => ({ reset() { return this; }, setBlockMovement(value) { p.blocked = value; return this; },
+      isMovementBlocked: () => p.blocked === true, didMovePreviousCycle: () => false }),
+    getPrivateArea: () => area, getHitpoints: () => 99, performAnimation: noop,
     setUntargetable: value => { p.untargetable = value; },
 
     getUsername: () => 'Parity',
@@ -429,6 +432,38 @@ test('The Final Dawn safehouse door is owner-scoped and clears both stair routes
   assert.ok(h.npcs.some(npc => (npc.id === 14301 || npc.id === 14302 || npc.id === 14303) && !npc.removed),
     'tracked Vibia survives ending the door area');
   for (const fn of h.hooks.onPlayerLogout) fn({ player: p });
+});
+
+test('The Final Dawn safehouse stairs advance 18 to 19 on the normal Ladders click', () => {
+  RegionManager.init();
+  RegionManager.loadMapFiles(1647, 3091, true);
+  const bottom = MapObjects.get(52630, new core.Location(1647, 3091, 0), null);
+  assert.ok(bottom, 'real bottom staircase exists');
+  const h = harness('TheFinalDawn'), p = player();
+  require('../plugins/objects/Ladders.plugin').register(h.api);
+  p.moveTo(new core.Location(1646, 3091, 0));
+  h.quest.setStage(p, 18);
+  const click = { player: p, objectId: 52630, clickType: 1, object: bottom,
+    definition: { getName: () => 'Staircase' }, location: bottom.getLocation(), sourceLocation: p.getLocation(), handled: false };
+  h.namedObjects.get('Staircase')['Climb-up'](click);
+  h.tick(3);
+  assert.equal(h.quest.getStage(p), 19);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [1646, 3091, 1]);
+  h.namedObjects.get('Staircase')['Climb-up']({ ...click, handled: false });
+  h.tick(2);
+  assert.equal(h.quest.getStage(p), 19, 'repeat click does not advance past 19');
+
+  const h2 = harness('TheFinalDawn'), p2 = player();
+  require('../plugins/objects/Ladders.plugin').register(h2.api);
+  h2.quest.setStage(p2, 20);
+  h2.namedObjects.get('Staircase')['Climb-up']({ player: p2, objectId: 52630, clickType: 1,
+    object: bottom, definition: { getName: () => 'Staircase' }, handled: false });
+  h2.tick(2);
+  assert.equal(h2.quest.getStage(p2), 20, 'other stages do not regress');
+  h2.quest.setStage(p2, 18);
+  h2.api.emitCustomEvent('ladders:climb', { player: p2, objectId: 52630, handled: false,
+    object: { getLocation: () => new core.Location(1647, 3100, 0) } });
+  assert.equal(h2.quest.getStage(p2), 18, 'the same staircase model elsewhere does not advance the quest');
 });
 
 test('The Final Dawn basement, archive and safe-house hooks emit captured camera/fade beats and clean actors', () => {

@@ -253,8 +253,11 @@ module.exports = function registerPerilousMoonsQuest(api) {
     { name: "Streambound Cavern", x: 1510, y: 9693, z: 0, varbit: CAMP_VARBITS[2], bit: 4 },
   ];
 
-  // The Eclipse Moon's room (Quest Helper zone): Zuma's first meeting with it.
-  const ECLIPSE_MOON_ZONE = { minX: 1457, minY: 9614, maxX: 1506, maxY: 9650, levels: [0] };
+  // The actual Eclipse Moon arena, from the canonical MoonsOfPeril data. The 1461,9632 tunnel
+  // landing and the 1467,9631 statue are outside it, so the intro starts only after the portal
+  // lands the player in the arena.
+  const [ECLIPSE_MIN_X, ECLIPSE_MAX_X, ECLIPSE_MIN_Y, ECLIPSE_MAX_Y] = require("../../bosses/data/moons-of-peril.json").moons.eclipse.area;
+  const ECLIPSE_MOON_ZONE = { minX: ECLIPSE_MIN_X, minY: ECLIPSE_MIN_Y, maxX: ECLIPSE_MAX_X, maxY: ECLIPSE_MAX_Y, levels: [0] };
 
   // ==========================================================================
   // Transcript variants ("Perilous Moons" page)
@@ -1563,8 +1566,8 @@ module.exports = function registerPerilousMoonsQuest(api) {
   // ==========================================================================
 
   function ensureEclipseCutscene(player) {
-    if (player.getAttribute(ECLIPSE_SEEN_ATTRIBUTE) === true) return;
-    player.setAttribute(ECLIPSE_SEEN_ATTRIBUTE, true);
+    if (eclipseScene.has(player)) return;
+    if (stageOf(player) !== STAGE_MOONS) return;
     eclipseScene.add(player);
     Scenes.controls(player, true, true);
     player.getPacketSender()
@@ -1595,13 +1598,19 @@ module.exports = function registerPerilousMoonsQuest(api) {
       eclipseScene.delete(player);
       player.getPacketSender().sendCameraReset();
       Scenes.controls(player, false);
-      if (stageOf(player) === STAGE_MOONS) quest.setStage(player, STAGE_MOONS + 1);
+      if (stageOf(player) === STAGE_MOONS) {
+        quest.setStage(player, STAGE_MOONS + 1);
+        player.setAttribute(ECLIPSE_SEEN_ATTRIBUTE, true);
+      }
     });
   }
 
-  /** Teleporting into the Eclipse Moon's room also plays Zuma's first meeting with it. */
+  /** Entering the real Eclipse Moon arena plays Zuma's first meeting with it. */
   function handleEclipseMoonEnter({ player }) {
-    if (isMoonFightActive(player)) ensureEclipseCutscene(player);
+    const at = player.getLocation();
+    const inside = at.getX() >= ECLIPSE_MIN_X && at.getX() <= ECLIPSE_MAX_X
+      && at.getY() >= ECLIPSE_MIN_Y && at.getY() <= ECLIPSE_MAX_Y && at.getZ() === 0;
+    if (inside && isMoonFightActive(player)) ensureEclipseCutscene(player);
   }
 
   function isMoonFightActive(player) {

@@ -612,6 +612,28 @@ test('Fremennik Exiles negative: basilisk kills before the invasion do nothing',
   assert.equal(h.player.getAttribute('quest.the_fremennik_exiles.basilisk-kills'), undefined);
 });
 
+test('Fremennik Exiles celebration final line completes once with rewards', () => {
+  const h = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles');
+  const N = NPCS(h);
+  h.quest.setStage(h.player, 125);
+  h.player.setAttribute('quest.points', 0);
+  const beforeXp = h.xp.length;
+  const line = h.line(N.BRUNDT_THE_CHIEFTAIN, 'Uh oh...');
+  assert.equal(h.quest.getStage(h.player), 125);
+  assert.equal(typeof line.after, 'function', 'the final line owns the completion continuation');
+  line.after();
+  assert.equal(h.quest.getStage(h.player), 130);
+  assert.ok(h.xp.length > beforeXp, 'completion grants XP rewards');
+  const points = h.player.getAttribute('quest.points');
+  const xpCount = h.xp.length;
+  line.after();
+  assert.equal(h.quest.getStage(h.player), 130, 'completion is idempotent');
+  assert.equal(h.xp.length, xpCount, 'replaying the continuation does not duplicate XP');
+  assert.equal(h.player.getAttribute('quest.points'), points, 'replaying does not duplicate quest points');
+  h.hooks.logins[0]({ player: h.player });
+  assert.equal(h.quest.getStage(h.player), 130, 'completion persists across relog');
+});
+
 test('Fremennik Exiles market death callback advances killPercent and stage', () => {
   const h = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles');
   const N = NPCS(h);
@@ -1014,4 +1036,33 @@ test('Waterbirth handler opens the real base-map door clipping and restores it',
   h.tick(25);
   assert.ok(MapObjects.get(8967, tile, null), 'the base door is restored with the support respawn');
   assert.equal(RegionManager.blocked(tile, null), true, 'base-map clipping closes again');
+});
+
+test('Fremennik Exiles celebration plays through real NpcDialogues/DialogueManager and completes once', () => {
+  const { DialogueManager } = require('../dist/game/model/dialogues/DialogueManager');
+  const { startDialogue } = require('../plugins/npcs/NpcDialogues.plugin');
+  const data = require('../data/definitions/npc-dialogues.json');
+  const h = setup('../plugins/quests/quests/TheFremennikExiles.Quest', 'the_fremennik_exiles');
+  h.quest.setStage(h.player, 125);
+  h.player.setAttribute('quest.points', 0);
+  const manager = new DialogueManager(h.player);
+  h.player.getDialogueManager = () => manager;
+  const definition = { getId: () => 9263, getName: () => 'Brundt the Chieftain' };
+  const event = { player: h.player, npc: { getId: () => 9263 }, npcId: 9263, definition };
+  const record = data['The Fremennik Exiles'];
+  startDialogue(h.api, event, record.variants['longhall-celebration'], record.branches, {
+    player: h.player, npc: event.npc, npcId: 9263, definition, pages: [{ page: 'The Fremennik Exiles' }],
+  });
+  const beforeXp = h.xp.length;
+  let guard = 0;
+  while (manager.getCurrent() && guard++ < 80) manager.advance();
+  assert.equal(h.quest.getStage(h.player), 130, 'normal playback reaches completion');
+  assert.ok(h.xp.length > beforeXp, 'completion grants rewards');
+  const xpCount = h.xp.length;
+  const points = h.player.getAttribute('quest.points');
+  manager.advance();
+  assert.equal(h.xp.length, xpCount, 'completion rewards are not duplicated');
+  assert.equal(h.player.getAttribute('quest.points'), points);
+  h.hooks.logins[0]({ player: h.player });
+  assert.equal(h.quest.getStage(h.player), 130, 'completion persists across relog');
 });

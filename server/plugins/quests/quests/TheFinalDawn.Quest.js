@@ -1302,6 +1302,16 @@ module.exports = function registerTheFinalDawnQuest(api) {
     onSolved: finishTempleChestLockpick,
   });
 
+  /** Let the real Ladders move happen, but advance the safehouse leg on its normal click. */
+  function advanceSafehouseStairs(request) {
+    if (!request || request.handled || request.objectId !== SAFEHOUSE_STAIRS_OBJECT) return;
+    const { player } = request;
+    if (!player || quest.getStage(player) !== STAGE_HOUSE_OPEN) return;
+    const location = request.object?.getLocation?.();
+    if (!location?.equals(new Location(1647, 3091, 0))) return;
+    setStage(player, STAGE_UPSTAIRS);
+  }
+
   /** Claim the generic Ladders climb for the captured temple-stairs passphrase. */
   function claimTempleStairs(request) {
     if (!request || request.handled || request.objectId !== TEMPLE_STAIRS_OBJECT) return;
@@ -2427,5 +2437,6 @@ module.exports = function registerTheFinalDawnQuest(api) {
   api.onCustomEvent("npc-dialogue:line", handleDialogueLine);
   api.onCustomEvent("npc-dialogue:choice", handleChoice);
   api.onCustomEvent("door:toggle", handleDoorToggle);
+  api.onCustomEvent("ladders:climb", advanceSafehouseStairs);
   api.onCustomEvent("ladders:climb", claimTempleStairs);
 };

@@ -1018,3 +1018,96 @@ test('Paterdomus fight is reached through the captured side trapdoor, cellar lad
     destX: 3417, destY: 3491, privateArea: null, moveNear: false });
   assert.equal(toStairs.success, true, 'after the fight the stairs to Ivan are reachable by ordinary walking');
 });
+
+test('escaped Castle-labyrinth reverse route returns to the landing and keeps the 61208 stairs usable', () => {
+  const fs = require('node:fs');
+  const { CacheDefinitions } = require('../dist/game/cache/CacheDefinitions');
+  const { RegionManager } = require('../dist/game/collision/RegionManager');
+  const { ObjectDefinition } = require('../dist/game/definition/ObjectDefinition');
+  const { MapObjects } = require('../dist/game/entity/impl/object/MapObjects');
+  const { RsmodRouteFinding } = require('../dist/game/model/movement/path/RsmodRouteFinding');
+  const STORY = 'quest.the_blood_moon_rises.slepe-story';
+  const PROGRESS = 'the-blood-moon-rises:refinery-progress';
+
+  // The normal reverse packet is canonical LocTeleports data: castle landing -> lab source.
+  const locs = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../plugins/world/data/loc-teleports.json'), 'utf8')).locs;
+  const reverse = locs.find((loc) => loc.id === 61206 && loc.x === 3170 && loc.y === 7572 && loc.z === 0);
+  assert.deepEqual(reverse?.to, [3182, 7469, 0], 'normal 61206 returns to the lab source');
+  const labTunnel = locs.find((loc) => loc.id === 61201 && loc.x === 3168 && loc.y === 7456 && loc.z === 0);
+  assert.deepEqual(labTunnel?.to, [3116, 7473, 2], 'normal 61201 remains the lab-side tunnel exit');
+
+  let npcIndex = 50000;
+  const spawnNpc = () => {
+    const npc = { isPlayer: () => false, isNpc: () => true, getAsNpc() { return npc; },
+      getIndex: () => ++npcIndex, getLocation: () => new core.Location(0, 0, 0),
+      setScriptedMovement: noop, getMovementQueue: () => ({ setBlockMovement: noop }),
+      getArea: () => null, setArea: noop, isRegistered: () => true };
+    return npc;
+  };
+  const makeRefinery = () => {
+    const api = { core, registerArea: noop, persistAttribute: noop, spawnNpc,
+      onCustomEvent: noop, onNpcDialogueCondition: noop, onNpcInteraction: noop,
+      onObjectInteraction: noop, onNpcDeath: noop, onNpcHitModify: noop, onPlayerLogin: noop };
+    return require('../plugins/quests/bmr/Refinery.TheBloodMoonRises')(api, () => 30);
+  };
+  const entryEvent = (player, x, y, id = 61203, name = 'Entry', z = 0) => ({
+    player, objectId: id,
+    definition: { id: id === 61203 ? core.ObjectIdentifiers.ENTRY_27 : id, getName: () => name },
+    location: { x, y, z }, option: 'Enter', handled: false,
+  });
+
+  const refinery = makeRefinery();
+  const p1 = player('Recovery');
+  p1.getCombat = () => ({ reset: noop });
+  p1.attrs.set(STORY, { tombRouteStarted: true });
+  p1.attrs.set(PROGRESS, { started: true, phase: 'escaped', killed: [0, 1, 2, 3, 4] });
+  p1.moveTo(new core.Location(3182, 7469, 0));
+
+  // Phase escaped: the lab Entry is the ordinary return to the Castle landing.
+  const back = entryEvent(p1, 3182, 7470);
+  assert.equal(refinery.tombPassage(back), true);
+  assert.equal(back.handled, true);
+  assert.deepEqual([p1.getLocation().getX(), p1.getLocation().getY(), p1.getLocation().getZ()], [3166, 7577, 0]);
+  assert.equal(p1.attrs.get(PROGRESS).phase, 'escaped', 'the earned escape state is preserved');
+
+  // From the tunnel, the same phase may re-enter the cleared lab and then use the Entry.
+  const p2 = player('Recovery2');
+  p2.getCombat = () => ({ reset: noop });
+  p2.attrs.set(STORY, { tombRouteStarted: true });
+  p2.attrs.set(PROGRESS, { started: true, phase: 'escaped', killed: [0, 1, 2, 3, 4] });
+  p2.moveTo(new core.Location(3116, 7473, 2));
+  const tunnelEvent = entryEvent(p2, 3117, 7472, 61197, 'Tunnel', 2);
+  assert.equal(refinery.tombPassage(tunnelEvent), true, 'escaped tunnel Enter re-opens the cleared lab');
+  assert.ok(p2.getLocation().getX() >= 8192, 'the normal tunnel packet enters the exact lab scene');
+  const area = refinery.sessions.get(p2);
+  assert.ok(area, 'the lab session is the same normal RefineryArea');
+  const labExit = entryEvent(p2,
+    area.getBaseX() + (3182 - 3136), area.getBaseY() + (7470 - 7424), 61203, 'Entry');
+  assert.equal(refinery.tombPassage(labExit), true, 'lab Entry maps back to the landing source tile');
+  assert.deepEqual([p2.getLocation().getX(), p2.getLocation().getY(), p2.getLocation().getZ()], [3166, 7577, 0]);
+
+  // Other phases keep the old gates.
+  const p3 = player('Recovery3');
+  p3.getCombat = () => ({ reset: noop });
+  p3.attrs.set(PROGRESS, { started: true, phase: 'route', killed: [] });
+  p3.moveTo(new core.Location(3182, 7469, 0));
+  assert.equal(refinery.tombPassage(entryEvent(p3, 3182, 7470)), false);
+  assert.equal(refinery.tombPassage(entryEvent(p3, 3117, 7472, 61197, 'Tunnel', 2)), false);
+  // The source-lab Tunnel 61201 is deliberately not claimed by the quest handler, so the
+  // shipped LocTeleports entry above still carries an escaped player to the tunnel.
+  assert.equal(refinery.tombPassage(entryEvent(p3, 3168, 7456, 61201, 'Tunnel')), false);
+
+  // Real cache/region: the normal castle stairs from the landing are present and reachable.
+  ObjectDefinition.init();
+  RegionManager.init();
+  RegionManager.loadMapFiles(3147, 7585, true);
+  assert.equal(RegionManager.getRegionid(RegionManager.regionIdForTile(3147, 7585))?.isLoaded(), true);
+  const stairs = MapObjects.get(61208, new core.Location(3147, 7585, 0), null);
+  assert.ok(stairs, 'cache places the Castle Drakan dungeon stairs 61208 at 3147,7585');
+  assert.equal(CacheDefinitions.getObject(61208)?.name, 'Stairs');
+  assert.deepEqual(locs.find((loc) => loc.id === 61208 && loc.x === 3147 && loc.y === 7585)?.to, [3150, 7717, 0]);
+  const route = new RsmodRouteFinding((x, y, z, area) => RegionManager.getClipping(x, y, z, area));
+  const routePath = route.findRoute({ level: 0, srcX: 3166, srcY: 7577, srcSize: 1,
+    destX: 3147, destY: 7584, privateArea: null, moveNear: false });
+  assert.equal(routePath.success, true, 'the landing connects by ordinary walking to the stairs');
+});

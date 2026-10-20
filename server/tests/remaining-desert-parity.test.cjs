@@ -729,3 +729,31 @@ test('Beneath Cursed Sands: the key urn can replace a lost rusty key after stage
   h.action(p, 11474, 'ppIMnm');
   assert.equal(p.items.get(I.RUSTY_KEY), 1);
 });
+test('Beneath Cursed Sands: 43960 is the keyed upper door, applying 56 -> 58 once', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 56);
+  p.items.set(I.RUSTY_KEY, 1);
+  p.moveTo(new core.Location(3433, 9248, 2));
+  const door = h.object(p, 43960, 1, null, new core.Location(3432, 9248, 2));
+  assert.equal(door.handled, true);
+  assert.equal(h.transcripts.at(-1)[4], 'the-ruins-of-ullek-opening-the-upstairs-locked-door');
+  h.action(p, 11474, 'MQFYdD');
+  assert.equal(p.items.get(I.RUSTY_KEY), 0);
+  assert.deepEqual([p.getLocation().getX(), p.getLocation().getY(), p.getLocation().getZ()], [3420, 9248, 2]);
+  assert.equal(h.quest.getStage(p), 58);
+  h.action(p, 11474, 'MQFYdD');
+  assert.equal(h.quest.getStage(p), 58, 'stage 58 must be applied once');
+});
+test('Beneath Cursed Sands: 43963 is the normal champion door after the keyed door', () => {
+  const h = harness('../plugins/quests/quests/BeneathCursedSands.Quest');
+  const p = player();
+  h.quest.setStage(p, 58);
+  p.moveTo(new core.Location(3420, 9248, 2));
+  const door = h.object(p, 43963, 1, null, new core.Location(3421, 9248, 2));
+  assert.equal(door.handled, true);
+  assert.equal(h.quest.getStage(p), 58);
+  h.quest.setStage(p, 62);
+  h.object(p, 43963, 1, null, new core.Location(3421, 9248, 2));
+  assert.equal(h.quest.getStage(p), 62);
+});
